@@ -1032,6 +1032,9 @@ struct mm_struct {
 
 #ifdef CONFIG_RMAP_ID
 		int mm_rmap_id;
+		unsigned long mm_rmap_subid_1;
+		unsigned long mm_rmap_subid_2[2];
+		unsigned long mm_rmap_subid_3[3];
 #endif /* CONFIG_RMAP_ID */
 	} __randomize_layout;
 

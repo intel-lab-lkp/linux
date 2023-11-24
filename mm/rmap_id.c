@@ -88,6 +88,39 @@ static DEFINE_IDA(rmap_ida);
  */
 
 /*
+ * With 4 (order-2) possible exclusive mappings per folio, we can have
+ * 16777216 = 16M sub-IDs per 64bit value.
+ */
+static unsigned long get_rmap_subid_1(struct mm_struct *mm)
+{
+	return mm->mm_rmap_subid_1;
+}
+
+/*
+ * With 32 (order-5) possible exclusive mappings per folio, we can have
+ * 4096 sub-IDs per 64bit value.
+ *
+ * With 2 such 64bit values, we can support 4096^2 == 16M IDs.
+ */
+static unsigned long get_rmap_subid_2(struct mm_struct *mm, int nr)
+{
+	VM_WARN_ON_ONCE(nr > 1);
+	return mm->mm_rmap_subid_2[nr];
+}
+
+/*
+ * With 512 (order-9) possible exclusive mappings per folio, we can have
+ * 128 sub-IDs per 64bit value.
+ *
+ * With 3 such 64bit values, we can support 128^3 == 16M IDs.
+ */
+static unsigned long get_rmap_subid_3(struct mm_struct *mm, int nr)
+{
+	VM_WARN_ON_ONCE(nr > 2);
+	return mm->mm_rmap_subid_3[nr];
+}
+
+/*
  * With 1024 (order-10) possible exclusive mappings per folio, we can have 64
  * sub-IDs per 64bit value.
  *
@@ -279,11 +312,23 @@ void __folio_set_large_rmap_val(struct folio *folio, int count,
 		atomic_long_set(&folio->_rmap_val4, get_rmap_subid_5(mm, 4) * count);
 		break;
 #endif
-	default:
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
 		atomic_long_set(&folio->_rmap_val0, get_rmap_subid_4(mm, 0) * count);
 		atomic_long_set(&folio->_rmap_val1, get_rmap_subid_4(mm, 1) * count);
 		atomic_long_set(&folio->_rmap_val2, get_rmap_subid_4(mm, 2) * count);
 		atomic_long_set(&folio->_rmap_val3, get_rmap_subid_4(mm, 3) * count);
+		break;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
+		atomic_long_set(&folio->_rmap_val0, get_rmap_subid_3(mm, 0) * count);
+		atomic_long_set(&folio->_rmap_val1, get_rmap_subid_3(mm, 1) * count);
+		atomic_long_set(&folio->_rmap_val2, get_rmap_subid_3(mm, 2) * count);
+		break;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
+		atomic_long_set(&folio->_rmap_val0, get_rmap_subid_2(mm, 0) * count);
+		atomic_long_set(&folio->_rmap_val1, get_rmap_subid_2(mm, 1) * count);
+		break;
+	default:
+		atomic_long_set(&folio->_rmap_val0, get_rmap_subid_1(mm) * count);
 		break;
 	}
 }
@@ -313,11 +358,23 @@ void __folio_add_large_rmap_val(struct folio *folio, int count,
 		atomic_long_add(get_rmap_subid_5(mm, 4) * count, &folio->_rmap_val4);
 		break;
 #endif
-	default:
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
 		atomic_long_add(get_rmap_subid_4(mm, 0) * count, &folio->_rmap_val0);
 		atomic_long_add(get_rmap_subid_4(mm, 1) * count, &folio->_rmap_val1);
 		atomic_long_add(get_rmap_subid_4(mm, 2) * count, &folio->_rmap_val2);
 		atomic_long_add(get_rmap_subid_4(mm, 3) * count, &folio->_rmap_val3);
+		break;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
+		atomic_long_add(get_rmap_subid_3(mm, 0) * count, &folio->_rmap_val0);
+		atomic_long_add(get_rmap_subid_3(mm, 1) * count, &folio->_rmap_val1);
+		atomic_long_add(get_rmap_subid_3(mm, 2) * count, &folio->_rmap_val2);
+		break;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
+		atomic_long_add(get_rmap_subid_2(mm, 0) * count, &folio->_rmap_val0);
+		atomic_long_add(get_rmap_subid_2(mm, 1) * count, &folio->_rmap_val1);
+		break;
+	default:
+		atomic_long_add(get_rmap_subid_1(mm) * count, &folio->_rmap_val0);
 		break;
 	}
 }
@@ -330,7 +387,7 @@ bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
 
 	switch (order) {
 #if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
-	case RMAP_SUBID_6_MIN_ORDER .. RMAP_SUBID_6_MAX_ORDER:
+	case RMAP_SUBID_6_MIN_ORDER ... RMAP_SUBID_6_MAX_ORDER:
 		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_6(mm, 0) * count);
 		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_6(mm, 1) * count);
 		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_6(mm, 2) * count);
@@ -340,7 +397,7 @@ bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
 		break;
 #endif
 #if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
-	case RMAP_SUBID_5_MIN_ORDER .. RMAP_SUBID_5_MAX_ORDER:
+	case RMAP_SUBID_5_MIN_ORDER ... RMAP_SUBID_5_MAX_ORDER:
 		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_5(mm, 0) * count);
 		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_5(mm, 1) * count);
 		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_5(mm, 2) * count);
@@ -348,11 +405,23 @@ bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
 		diff |= atomic_long_read(&folio->_rmap_val4) ^ (get_rmap_subid_5(mm, 4) * count);
 		break;
 #endif
-	default:
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
 		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_4(mm, 0) * count);
 		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_4(mm, 1) * count);
 		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_4(mm, 2) * count);
 		diff |= atomic_long_read(&folio->_rmap_val3) ^ (get_rmap_subid_4(mm, 3) * count);
+		break;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_3(mm, 0) * count);
+		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_3(mm, 1) * count);
+		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_3(mm, 2) * count);
+		break;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_2(mm, 0) * count);
+		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_2(mm, 1) * count);
+		break;
+	default:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_1(mm) * count);
 		break;
 	}
 	return !diff;

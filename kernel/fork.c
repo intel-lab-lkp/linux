@@ -822,6 +822,12 @@ static inline int mm_alloc_rmap_id(struct mm_struct *mm)
 	if (id < 0)
 		return id;
 	mm->mm_rmap_id = id;
+	mm->mm_rmap_subid_1 = calc_rmap_subid_1(id);
+	mm->mm_rmap_subid_2[0] = calc_rmap_subid_2(id, 0);
+	mm->mm_rmap_subid_2[1] = calc_rmap_subid_2(id, 1);
+	mm->mm_rmap_subid_3[0] = calc_rmap_subid_3(id, 0);
+	mm->mm_rmap_subid_3[1] = calc_rmap_subid_3(id, 1);
+	mm->mm_rmap_subid_3[2] = calc_rmap_subid_3(id, 2);
 	return 0;
 }
 

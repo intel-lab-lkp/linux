@@ -180,11 +180,53 @@ struct anon_vma *folio_get_anon_vma(struct folio *folio);
 void free_rmap_id(int id);
 int alloc_rmap_id(void);
 
+#define RMAP_SUBID_1_MAX_ORDER		2
+#define RMAP_SUBID_2_MIN_ORDER		3
+#define RMAP_SUBID_2_MAX_ORDER		5
+#define RMAP_SUBID_3_MIN_ORDER		6
+#define RMAP_SUBID_3_MAX_ORDER		9
+#define RMAP_SUBID_4_MIN_ORDER		10
 #define RMAP_SUBID_4_MAX_ORDER		10
 #define RMAP_SUBID_5_MIN_ORDER		11
 #define RMAP_SUBID_5_MAX_ORDER		12
 #define RMAP_SUBID_6_MIN_ORDER		13
 #define RMAP_SUBID_6_MAX_ORDER		15
+
+static inline unsigned long calc_rmap_subid(unsigned int n, unsigned int i)
+{
+	unsigned long nr = 0, mult = 1;
+
+	while (i) {
+		if (i & 1)
+			nr += mult;
+		mult *= (n + 1);
+		i >>= 1;
+	}
+	return nr;
+}
+
+static inline unsigned long calc_rmap_subid_1(int rmap_id)
+{
+	VM_WARN_ON_ONCE(rmap_id < RMAP_ID_MIN || rmap_id > RMAP_ID_MAX);
+
+	return calc_rmap_subid(1u << RMAP_SUBID_1_MAX_ORDER, rmap_id);
+}
+
+static inline unsigned long calc_rmap_subid_2(int rmap_id, int nr)
+{
+	VM_WARN_ON_ONCE(rmap_id < RMAP_ID_MIN || rmap_id > RMAP_ID_MAX || nr > 1);
+
+	return calc_rmap_subid(1u << RMAP_SUBID_2_MAX_ORDER,
+			       (rmap_id >> (nr * 12)) & 0xfff);
+}
+
+static inline unsigned long calc_rmap_subid_3(int rmap_id, int nr)
+{
+	VM_WARN_ON_ONCE(rmap_id < RMAP_ID_MIN || rmap_id > RMAP_ID_MAX || nr > 2);
+
+	return calc_rmap_subid(1u << RMAP_SUBID_3_MAX_ORDER,
+			       (rmap_id >> (nr * 8)) & 0xff);
+}
 
 static inline void __folio_prep_large_rmap(struct folio *folio)
 {
@@ -202,10 +244,16 @@ static inline void __folio_prep_large_rmap(struct folio *folio)
 		atomic_long_set(&folio->_rmap_val4, 0);
 		fallthrough;
 #endif
-	default:
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
 		atomic_long_set(&folio->_rmap_val3, 0);
+		fallthrough;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
 		atomic_long_set(&folio->_rmap_val2, 0);
+		fallthrough;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
 		atomic_long_set(&folio->_rmap_val1, 0);
+		fallthrough;
+	default:
 		atomic_long_set(&folio->_rmap_val0, 0);
 		break;
 	}
@@ -227,10 +275,16 @@ static inline void __folio_undo_large_rmap(struct folio *folio)
 		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val4));
 		fallthrough;
 #endif
-	default:
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
 		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val3));
+		fallthrough;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
 		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val2));
+		fallthrough;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
 		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val1));
+		fallthrough;
+	default:
 		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val0));
 		break;
 	}
