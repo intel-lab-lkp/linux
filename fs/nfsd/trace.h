@@ -651,7 +651,8 @@ DEFINE_STATESEQID_EVENT(open_confirm);
 #define show_stid_status(x)						\
 	__print_flags(x, "|",						\
 		{ NFS4_STID_CLOSED,		"CLOSED" },		\
-		{ NFS4_STID_REVOKED,		"REVOKED" })		\
+		{ NFS4_STID_REVOKED,		"REVOKED" },		\
+		{ NFS4_STID_ADMIN_REVOKED,	"ADMIN_REVOKED" })
 
 DECLARE_EVENT_CLASS(nfsd_stid_class,
 	TP_PROTO(
