@@ -3360,6 +3360,95 @@ static vm_fault_t wp_page_shared(struct vm_fault *vmf, struct folio *folio)
 static bool wp_can_reuse_anon_folio(struct folio *folio,
 				    struct vm_area_struct *vma)
 {
+#ifdef CONFIG_RMAP_ID
+	if (folio_test_large(folio)) {
+		bool retried = false;
+		unsigned long start;
+		int mapcount, i;
+
+		/*
+		 * The assumption for anonymous folios is that each page can
+		 * only get mapped once into a MM.  This also holds for
+		 * small folios -- except when KSM is involved. KSM does
+		 * currently not apply to large folios.
+		 *
+		 * Further, each taken mapcount must be paired with exactly one
+		 * taken reference, whereby references must be incremented
+		 * before the mapcount when mapping a page, and references must
+		 * be decremented after the mapcount when unmapping a page.
+		 *
+		 * So if all references to a folio are from mappings, and all
+		 * mappings are due to our (MM) page tables, and there was no
+		 * concurrent (un)mapping, this folio is certainly exclusive.
+		 *
+		 * We currently don't optimize for:
+		 * (a) folio is mapped into multiple page tables in this
+		 *     MM (e.g., mremap) and other page tables are
+		 *     concurrently (un)mapping the folio.
+		 * (b) the folio is in the swapcache. Likely the other PTEs
+		 *     are still swap entries and folio_free_swap() would fail.
+		 * (c) the folio is in the LRU cache.
+		 */
+retry:
+		start = raw_read_atomic_seqcount(&folio->_rmap_atomic_seqcount);
+		if (start & ATOMIC_SEQCOUNT_WRITERS_MASK)
+			return false;
+		mapcount = folio_mapcount(folio);
+
+		/* Is this folio possibly exclusive ... */
+		if (mapcount > folio_nr_pages(folio) || folio_entire_mapcount(folio))
+			return false;
+
+		/* ... and are all references from mappings ... */
+		if (folio_ref_count(folio) != mapcount)
+			return false;
+
+		/* ... and do all mappings belong to us ... */
+		if (!__folio_has_large_matching_rmap_val(folio, mapcount, vma->vm_mm))
+			return false;
+
+		/* ... and was there no concurrent (un)mapping ? */
+		if (raw_read_atomic_seqcount_retry(&folio->_rmap_atomic_seqcount,
+						   start))
+			return false;
+
+		/* Safety checks we might want to drop in the future. */
+		if (IS_ENABLED(CONFIG_DEBUG_VM)) {
+			unsigned int mapcount;
+
+			if (WARN_ON_ONCE(folio_test_ksm(folio)))
+				return false;
+			/*
+			 * We might have raced against swapout code adding
+			 * the folio to the swapcache (which, by itself, is not
+			 * problematic). Let's simply check again if we would
+			 * properly detect the additional reference now and
+			 * properly fail.
+			 */
+			if (unlikely(folio_test_swapcache(folio))) {
+				if (WARN_ON_ONCE(retried))
+					return false;
+				retried = true;
+				goto retry;
+			}
+			for (i = 0; i < folio_nr_pages(folio); i++) {
+				mapcount = page_mapcount(folio_page(folio, i));
+				if (WARN_ON_ONCE(mapcount > 1))
+					return false;
+			}
+		}
+
+		/*
+		 * This folio is exclusive to us. Do we need the page lock?
+		 * Likely not, and a trylock would be unfortunate if this
+		 * folio is mapped into multiple page tables and we get
+		 * concurrent page faults. If there would be references from
+		 * page migration/swapout/swapcache, we would have detected
+		 * an additional reference and never ended up here.
+		 */
+		return true;
+	}
+#endif /* CONFIG_RMAP_ID */
 	/*
 	 * We have to verify under folio lock: these early checks are
 	 * just an optimization to avoid locking the folio and freeing
