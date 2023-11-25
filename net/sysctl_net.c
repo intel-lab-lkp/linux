@@ -132,8 +132,9 @@ static void ensure_safe_net_sysctl(struct net *net, const char *path,
 		unsigned long addr;
 		const char *where;
 
-		pr_debug("  procname=%s mode=%o proc_handler=%ps data=%p\n",
-			 ent->procname, ent->mode, ent->proc_handler, ent->data);
+		pr_debug("  procname=%s mode=%o proc_handler=%ps/%ps data=%p\n",
+			 ent->procname, ent->mode, ent->proc_handler,
+			 ent->proc_handler_new, ent->data);
 
 		/* If it's not writable inside the netns, then it can't hurt. */
 		if ((ent->mode & 0222) == 0) {
