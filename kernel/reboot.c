@@ -1267,7 +1267,7 @@ static struct ctl_table kern_reboot_table[] = {
 		.data           = &poweroff_cmd,
 		.maxlen         = POWEROFF_CMD_PATH_LEN,
 		.mode           = 0644,
-		.proc_handler   = proc_dostring,
+		.proc_handler_new   = proc_dostring,
 	},
 	{
 		.procname       = "ctrl-alt-del",

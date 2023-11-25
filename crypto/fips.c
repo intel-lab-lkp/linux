@@ -54,14 +54,14 @@ static struct ctl_table crypto_sysctl_table[] = {
 		.data		= &fips_name,
 		.maxlen		= 64,
 		.mode		= 0444,
-		.proc_handler	= proc_dostring
+		.proc_handler_new	= proc_dostring
 	},
 	{
 		.procname	= "fips_version",
 		.data		= &fips_version,
 		.maxlen		= 64,
 		.mode		= 0444,
-		.proc_handler	= proc_dostring
+		.proc_handler_new	= proc_dostring
 	},
 	{}
 };

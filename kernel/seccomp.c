@@ -2438,7 +2438,7 @@ static struct ctl_table seccomp_sysctl_table[] = {
 		.data		= (void *) &seccomp_actions_avail,
 		.maxlen		= sizeof(seccomp_actions_avail),
 		.mode		= 0444,
-		.proc_handler	= proc_dostring,
+		.proc_handler_new	= proc_dostring,
 	},
 	{
 		.procname	= "actions_logged",

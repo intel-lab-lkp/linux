@@ -972,7 +972,7 @@ static struct ctl_table coredump_sysctls[] = {
 		.data		= core_pattern,
 		.maxlen		= CORENAME_MAX_SIZE,
 		.mode		= 0644,
-		.proc_handler	= proc_dostring_coredump,
+		.proc_handler_new	= proc_dostring_coredump,
 	},
 	{
 		.procname	= "core_pipe_limit",
