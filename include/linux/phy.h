@@ -895,6 +895,8 @@ struct phy_led {
  *  global PHYs for PHY package global configuration.
  * @phy_package_global_phys_num: Num of the required global PHYs
  *   for PHY package global configuration.
+ * @phy_package_priv_data_size: Size of the priv data to alloc
+ *   for shared struct of PHY package.
  *
  * All functions are optional. If config_aneg or read_status
  * are not implemented, the phy core uses the genphy versions.
@@ -914,6 +916,7 @@ struct phy_driver {
 	const void *driver_data;
 	const u8 *phy_package_global_phys_offset;
 	const u8 phy_package_global_phys_num;
+	unsigned int phy_package_priv_data_size;
 
 	/**
 	 * @soft_reset: Called to issue a PHY software reset

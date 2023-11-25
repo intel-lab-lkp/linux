@@ -3198,6 +3198,7 @@ static int of_phy_package(struct phy_device *phydev)
 	struct device_node *node = phydev->mdio.dev.of_node;
 	struct device_node *package_node;
 	const u8 *global_phys_offset;
+	int shared_priv_data_size;
 	int *global_phys_addr;
 	u8 global_phys_num;
 	u32 base_addr;
@@ -3236,8 +3237,12 @@ static int of_phy_package(struct phy_device *phydev)
 		global_phys_addr[i] = addr;
 	}
 
+	shared_priv_data_size = 0;
+	if (phydev->drv->phy_package_priv_data_size)
+		shared_priv_data_size = phydev->drv->phy_package_priv_data_size;
+
 	ret = devm_phy_package_join(&phydev->mdio.dev, phydev, global_phys_addr,
-				    global_phys_num, 0);
+				    global_phys_num, shared_priv_data_size);
 	if (ret)
 		goto exit;
 
