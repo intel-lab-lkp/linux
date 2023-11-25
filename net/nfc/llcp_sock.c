@@ -795,34 +795,32 @@ static int llcp_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return -ENODEV;
 	}
 
-	if (sk->sk_type == SOCK_DGRAM) {
-		if (sk->sk_state != LLCP_BOUND) {
-			release_sock(sk);
-			return -ENOTCONN;
-		}
-
-		DECLARE_SOCKADDR(struct sockaddr_nfc_llcp *, addr,
-				 msg->msg_name);
-
-		if (msg->msg_namelen < sizeof(*addr)) {
-			release_sock(sk);
-			return -EINVAL;
-		}
-
+	if (sk->sk_type != SOCK_DGRAM) {
 		release_sock(sk);
 
-		return nfc_llcp_send_ui_frame(llcp_sock, addr->dsap, addr->ssap,
-					      msg, len);
+		if (sk->sk_state != LLCP_CONNECTED)
+			return -ENOTCONN;
+
+		return nfc_llcp_send_i_frame(llcp_sock, msg, len);
 	}
 
-	if (sk->sk_state != LLCP_CONNECTED) {
+	if (sk->sk_state != LLCP_BOUND) {
 		release_sock(sk);
 		return -ENOTCONN;
 	}
 
+	DECLARE_SOCKADDR(struct sockaddr_nfc_llcp *, addr, msg->msg_name);
+
+	if (msg->msg_namelen < sizeof(*addr)) {
+		release_sock(sk);
+		return -EINVAL;
+	}
+
 	release_sock(sk);
 
-	return nfc_llcp_send_i_frame(llcp_sock, msg, len);
+	return nfc_llcp_send_ui_frame(llcp_sock, addr->dsap, addr->ssap,
+				      msg, len);
+
 }
 
 static int llcp_sock_recvmsg(struct socket *sock, struct msghdr *msg,
