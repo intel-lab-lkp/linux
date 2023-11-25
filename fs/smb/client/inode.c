@@ -1142,6 +1142,8 @@ static int cifs_get_fattr(struct cifs_open_info_data *data,
 	 */
 
 	if (!data) {
+		if (*inode && CIFS_I(*inode)->reparse)
+			tmp_data.reparse_point = true;
 		rc = server->ops->query_path_info(xid, tcon, cifs_sb,
 						  full_path, &tmp_data);
 		data = &tmp_data;
