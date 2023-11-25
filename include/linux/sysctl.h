@@ -298,4 +298,10 @@ static inline bool sysctl_is_alias(char *param)
 int sysctl_max_threads(struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
 
+static inline int sysctl_run_handler(struct ctl_table *ctl, int write,
+				     void *buffer, size_t *lenp, loff_t *ppos)
+{
+	return ctl->proc_handler(ctl, write, buffer, lenp, ppos);
+}
+
 #endif /* _LINUX_SYSCTL_H */
