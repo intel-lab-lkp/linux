@@ -27,7 +27,7 @@ static struct ctl_table dnotify_sysctls[] = {
 		.data		= &dir_notify_enable,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{}
 };

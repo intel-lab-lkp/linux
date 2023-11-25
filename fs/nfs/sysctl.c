@@ -27,7 +27,7 @@ static struct ctl_table nfs_cb_sysctls[] = {
 		.data		= &nfs_congestion_kb,
 		.maxlen		= sizeof(nfs_congestion_kb),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{ }
 };

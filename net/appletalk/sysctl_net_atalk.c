@@ -31,7 +31,7 @@ static struct ctl_table atalk_table[] = {
 		.data		= &sysctl_aarp_retransmit_limit,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "aarp-resolve-time",

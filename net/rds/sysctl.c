@@ -73,21 +73,21 @@ static struct ctl_table rds_sysctl_rds_table[] = {
 		.data		= &rds_sysctl_max_unacked_packets,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 	{
 		.procname	= "max_unacked_bytes",
 		.data		= &rds_sysctl_max_unacked_bytes,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 	{
 		.procname	= "ping_enable",
 		.data		= &rds_sysctl_ping_enable,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 	{ }
 };

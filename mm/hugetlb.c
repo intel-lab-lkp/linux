@@ -4942,7 +4942,7 @@ static struct ctl_table hugetlb_table[] = {
 		.data		= &sysctl_hugetlb_shm_group,
 		.maxlen		= sizeof(gid_t),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "nr_overcommit_hugepages",

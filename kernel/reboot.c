@@ -1274,7 +1274,7 @@ static struct ctl_table kern_reboot_table[] = {
 		.data           = &C_A_D,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 	{ }
 };

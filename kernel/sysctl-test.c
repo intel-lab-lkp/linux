@@ -25,7 +25,7 @@ static void sysctl_test_api_dointvec_null_tbl_data(struct kunit *test)
 		.data		= NULL,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -75,7 +75,7 @@ static void sysctl_test_api_dointvec_table_maxlen_unset(struct kunit *test)
 		 */
 		.maxlen		= 0,
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -118,7 +118,7 @@ static void sysctl_test_api_dointvec_table_len_is_zero(struct kunit *test)
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -152,7 +152,7 @@ static void sysctl_test_api_dointvec_table_read_but_position_set(
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -187,7 +187,7 @@ static void sysctl_test_dointvec_read_happy_single_positive(struct kunit *test)
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -218,7 +218,7 @@ static void sysctl_test_dointvec_read_happy_single_negative(struct kunit *test)
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -247,7 +247,7 @@ static void sysctl_test_dointvec_write_happy_single_positive(struct kunit *test)
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -277,7 +277,7 @@ static void sysctl_test_dointvec_write_happy_single_negative(struct kunit *test)
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -309,7 +309,7 @@ static void sysctl_test_api_dointvec_write_single_less_int_min(
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};
@@ -347,7 +347,7 @@ static void sysctl_test_api_dointvec_write_single_greater_int_max(
 		.data		= &data,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE_HUNDRED,
 	};

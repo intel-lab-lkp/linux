@@ -398,7 +398,7 @@ static struct ctl_table nf_log_sysctl_ftable[] = {
 		.data		= &sysctl_nf_log_all_netns,
 		.maxlen		= sizeof(sysctl_nf_log_all_netns),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{ }
 };

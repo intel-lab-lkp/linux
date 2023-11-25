@@ -227,14 +227,14 @@ static struct ctl_table mac_hid_files[] = {
 		.data		= &mouse_button2_keycode,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "mouse_button3_keycode",
 		.data		= &mouse_button3_keycode,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 };
 

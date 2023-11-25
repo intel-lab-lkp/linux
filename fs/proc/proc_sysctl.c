@@ -1134,7 +1134,7 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 	list_for_each_table_entry(entry, header) {
 		if ((entry->proc_handler_new == proc_dostring) ||
 		    (entry->proc_handler_new == proc_dobool) ||
-		    (entry->proc_handler == proc_dointvec) ||
+		    (entry->proc_handler_new == proc_dointvec) ||
 		    (entry->proc_handler == proc_douintvec) ||
 		    (entry->proc_handler == proc_douintvec_minmax) ||
 		    (entry->proc_handler == proc_dointvec_minmax) ||

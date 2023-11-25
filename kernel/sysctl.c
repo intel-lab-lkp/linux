@@ -468,7 +468,7 @@ static int do_proc_douintvec_conv(unsigned long *lvalp,
 
 static const char proc_wspace_sep[] = { ' ', '\t', '\n' };
 
-static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
+static int __do_proc_dointvec(void *tbl_data, const struct ctl_table *table,
 		  int write, void *buffer,
 		  size_t *lenp, loff_t *ppos,
 		  int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
@@ -541,7 +541,7 @@ out:
 	return err;
 }
 
-static int do_proc_dointvec(struct ctl_table *table, int write,
+static int do_proc_dointvec(const struct ctl_table *table, int write,
 		  void *buffer, size_t *lenp, loff_t *ppos,
 		  int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
 			      int write, void *data),
@@ -739,7 +739,7 @@ int proc_dobool(const struct ctl_table *table, int write, void *buffer,
  *
  * Returns 0 on success.
  */
-int proc_dointvec(struct ctl_table *table, int write, void *buffer,
+int proc_dointvec(const struct ctl_table *table, int write, void *buffer,
 		  size_t *lenp, loff_t *ppos)
 {
 	return do_proc_dointvec(table, write, buffer, lenp, ppos, NULL, NULL);
@@ -1510,7 +1510,7 @@ int proc_dobool(const struct ctl_table *table, int write,
 	return -ENOSYS;
 }
 
-int proc_dointvec(struct ctl_table *table, int write,
+int proc_dointvec(const struct ctl_table *table, int write,
 		  void *buffer, size_t *lenp, loff_t *ppos)
 {
 	return -ENOSYS;
@@ -1621,7 +1621,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &panic_timeout,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #ifdef CONFIG_PROC_SYSCTL
 	{
@@ -1645,7 +1645,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &print_fatal_signals,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #ifdef CONFIG_SPARC
 	{
@@ -1660,14 +1660,14 @@ static struct ctl_table kern_table[] = {
 		.data		= &stop_a_enabled,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "scons-poweroff",
 		.data		= &scons_pwroff,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_SPARC64
@@ -1676,7 +1676,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_tsb_ratio,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_PARISC
@@ -1685,7 +1685,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &pwrsw_enabled,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_SYSCTL_ARCH_UNALIGN_ALLOW
@@ -1694,7 +1694,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &unaligned_enabled,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_STACK_TRACER
@@ -1712,14 +1712,14 @@ static struct ctl_table kern_table[] = {
 		.data		= &ftrace_dump_on_oops,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "traceoff_on_warning",
 		.data		= &__disable_trace_on_warning,
 		.maxlen		= sizeof(__disable_trace_on_warning),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "tracepoint_printk",
@@ -1806,7 +1806,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &show_unhandled_signals,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 	{
@@ -1823,7 +1823,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &panic_on_oops,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "panic_print",
@@ -1837,14 +1837,14 @@ static struct ctl_table kern_table[] = {
 		.data		= (void *)&ngroups_max,
 		.maxlen		= sizeof (int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "cap_last_cap",
 		.data		= (void *)&cap_last_cap,
 		.maxlen		= sizeof(int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #if defined(CONFIG_X86_LOCAL_APIC) && defined(CONFIG_X86)
 	{
@@ -1852,7 +1852,7 @@ static struct ctl_table kern_table[] = {
 		.data           = &unknown_nmi_panic,
 		.maxlen         = sizeof (int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 #endif
 
@@ -1863,7 +1863,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_panic_on_stackoverflow,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #if defined(CONFIG_X86)
@@ -1872,35 +1872,35 @@ static struct ctl_table kern_table[] = {
 		.data		= &panic_on_unrecovered_nmi,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "panic_on_io_nmi",
 		.data		= &panic_on_io_nmi,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "bootloader_type",
 		.data		= &bootloader_type,
 		.maxlen		= sizeof (int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "bootloader_version",
 		.data		= &bootloader_version,
 		.maxlen		= sizeof (int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "io_delay_type",
 		.data		= &io_delay_type,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #if defined(CONFIG_MMU)
@@ -1909,7 +1909,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &randomize_va_space,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #if defined(CONFIG_S390) && defined(CONFIG_SMP)
@@ -1918,7 +1918,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &spin_retry,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #if	defined(CONFIG_ACPI_SLEEP) && defined(CONFIG_X86)
@@ -1936,7 +1936,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &no_unaligned_warning,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_RT_MUTEXES
@@ -1945,7 +1945,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &max_lock_depth,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_PERF_EVENTS
@@ -1960,14 +1960,14 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_perf_event_paranoid,
 		.maxlen		= sizeof(sysctl_perf_event_paranoid),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "perf_event_mlock_kb",
 		.data		= &sysctl_perf_event_mlock,
 		.maxlen		= sizeof(sysctl_perf_event_mlock),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{
 		.procname	= "perf_event_max_sample_rate",
@@ -2200,7 +2200,7 @@ static struct ctl_table vm_table[] = {
 		.maxlen		= sizeof(vdso_enabled),
 #endif
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 		.extra1		= SYSCTL_ZERO,
 	},
 #endif

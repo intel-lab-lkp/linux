@@ -2966,7 +2966,7 @@ static struct ctl_table fs_dqstats_table[] = {
 		.data		= &flag_print_warnings,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif
 	{ },

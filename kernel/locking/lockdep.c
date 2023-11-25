@@ -85,7 +85,7 @@ static struct ctl_table kern_lockdep_table[] = {
 		.data           = &prove_locking,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 #endif /* CONFIG_PROVE_LOCKING */
 #ifdef CONFIG_LOCK_STAT
@@ -94,7 +94,7 @@ static struct ctl_table kern_lockdep_table[] = {
 		.data           = &lock_stat,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
+		.proc_handler_new   = proc_dointvec,
 	},
 #endif /* CONFIG_LOCK_STAT */
 	{ }

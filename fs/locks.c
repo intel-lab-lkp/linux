@@ -100,7 +100,7 @@ static struct ctl_table locks_sysctls[] = {
 		.data		= &leases_enable,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #ifdef CONFIG_MMU
 	{
@@ -108,7 +108,7 @@ static struct ctl_table locks_sysctls[] = {
 		.data		= &lease_break_time,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 #endif /* CONFIG_MMU */
 	{}

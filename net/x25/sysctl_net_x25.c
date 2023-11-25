@@ -69,7 +69,7 @@ static struct ctl_table x25_table[] = {
 		.data = 	&sysctl_x25_forward,
 		.maxlen = 	sizeof(int),
 		.mode = 	0644,
-		.proc_handler = proc_dointvec,
+		.proc_handler_new = proc_dointvec,
 	},
 	{ },
 };

@@ -171,7 +171,7 @@ static struct ctl_table kernel_io_uring_disabled_table[] = {
 		.data		= &sysctl_io_uring_group,
 		.maxlen		= sizeof(gid_t),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 	{},
 };

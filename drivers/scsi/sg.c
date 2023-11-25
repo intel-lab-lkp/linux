@@ -1648,7 +1648,7 @@ static struct ctl_table sg_sysctls[] = {
 		.data		= &sg_big_buff,
 		.maxlen		= sizeof(int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler_new	= proc_dointvec,
 	},
 };
 

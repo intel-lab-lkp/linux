@@ -4809,7 +4809,7 @@ static struct ctl_table signal_debug_table[] = {
 		.data		= &show_unhandled_signals,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler_new	= proc_dointvec
 	},
 #endif
 	{ }
