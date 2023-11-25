@@ -105,7 +105,7 @@ static void xen_update_blkif_status(struct xen_blkif *blkif)
 		return;
 	}
 	invalidate_inode_pages2(
-			blkif->vbd.bdev_handle->bdev->bd_inode->i_mapping);
+			bdev_inode(blkif->vbd.bdev_handle->bdev)->i_mapping);
 
 	for (i = 0; i < blkif->nr_rings; i++) {
 		ring = &blkif->rings[i];

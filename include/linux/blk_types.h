@@ -50,8 +50,7 @@ struct block_device {
 	bool			bd_has_submit_bio;
 	dev_t			bd_dev;
 	atomic_t		bd_openers;
-	spinlock_t		bd_size_lock; /* for bd_inode->i_size updates */
-	struct inode *		bd_inode;	/* will die */
+	spinlock_t		bd_size_lock; /* for inode i_size updates */
 	void *			bd_claiming;
 	void *			bd_holder;
 	const struct blk_holder_ops *bd_holder_ops;
@@ -84,6 +83,13 @@ struct block_device {
 
 #define bdev_kobj(_bdev) \
 	(&((_bdev)->bd_device.kobj))
+
+static inline struct inode *bdev_inode(struct block_device *bdev)
+{
+	void *inode = bdev + 1;
+
+	return inode;
+}
 
 /*
  * Block error status values.  See block/blk-core:blk_errors for the details.
