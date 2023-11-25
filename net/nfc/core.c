@@ -705,25 +705,25 @@ EXPORT_SYMBOL(nfc_tm_deactivated);
 /**
  * nfc_alloc_send_skb - allocate a skb for data exchange responses
  *
- * @dev: device sending the response
  * @sk: socket sending the response
  * @flags: MSG_DONTWAIT flag
  * @size: size to allocate
+ * @headroom: Extra headroom, in addition to size
+ * @tailroom: Extra tailroom, in addition to size
  * @err: pointer to memory to store the error code
  */
-struct sk_buff *nfc_alloc_send_skb(struct nfc_dev *dev, struct sock *sk,
-				   unsigned int flags, unsigned int size,
-				   unsigned int *err)
+struct sk_buff *nfc_alloc_send_skb(struct sock *sk, unsigned int flags,
+				   unsigned int size, int headroom,
+				   int tailroom, unsigned int *err)
 {
 	struct sk_buff *skb;
 	unsigned int total_size;
 
-	total_size = size +
-		dev->tx_headroom + dev->tx_tailroom + NFC_HEADER_SIZE;
+	total_size = size + headroom + tailroom + NFC_HEADER_SIZE;
 
 	skb = sock_alloc_send_skb(sk, total_size, flags & MSG_DONTWAIT, err);
 	if (skb)
-		skb_reserve(skb, dev->tx_headroom + NFC_HEADER_SIZE);
+		skb_reserve(skb, headroom + NFC_HEADER_SIZE);
 
 	return skb;
 }

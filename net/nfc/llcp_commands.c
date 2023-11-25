@@ -314,13 +314,17 @@ static struct sk_buff *llcp_allocate_pdu(struct nfc_llcp_sock *sock,
 					 u8 cmd, u16 size)
 {
 	struct sk_buff *skb;
-	int err;
+	int err, headroom, tailroom;
 
 	if (sock->ssap == 0)
 		return NULL;
 
-	skb = nfc_alloc_send_skb(sock->dev, &sock->sk, MSG_DONTWAIT,
-				 size + LLCP_HEADER_SIZE, &err);
+	headroom = sock->dev->tx_headroom;
+	tailroom = sock->dev->tx_tailroom;
+
+	skb = nfc_alloc_send_skb(&sock->sk, MSG_DONTWAIT,
+				 size + LLCP_HEADER_SIZE, headroom, tailroom,
+				 &err);
 	if (skb == NULL) {
 		pr_err("Could not allocate PDU\n");
 		return NULL;
@@ -734,7 +738,7 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 	size_t frag_len = 0, remaining_len;
 	u8 *msg_ptr, *msg_data;
 	u16 remote_miu;
-	int err;
+	int err, headroom, tailroom;
 
 	pr_debug("Send UI frame len %zd\n", len);
 
@@ -751,6 +755,9 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 		return -EFAULT;
 	}
 
+	headroom = sock->dev->tx_headroom;
+	tailroom = sock->dev->tx_tailroom;
+
 	remaining_len = len;
 	msg_ptr = msg_data;
 
@@ -763,8 +770,9 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 		pr_debug("Fragment %zd bytes remaining %zd",
 			 frag_len, remaining_len);
 
-		pdu = nfc_alloc_send_skb(sock->dev, &sock->sk, 0,
-					 frag_len + LLCP_HEADER_SIZE, &err);
+		pdu = nfc_alloc_send_skb(&sock->sk, 0,
+					 frag_len + LLCP_HEADER_SIZE,
+					 headroom, tailroom, &err);
 		if (pdu == NULL) {
 			pr_err("Could not allocate PDU (error=%d)\n", err);
 			len -= remaining_len;
