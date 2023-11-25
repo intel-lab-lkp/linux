@@ -327,6 +327,7 @@ struct mdio_bus_stats {
 
 /**
  * struct phy_package_shared - Shared information in PHY packages
+ * @np: Pointer to the Device Node if PHY package defined in DT
  * @addrs: List of common PHY addresses used to combine PHYs in one package
  * @addrs_num: Number of common PHY addresses in addrs list
  * @refcnt: Number of PHYs connected to this shared data
@@ -339,6 +340,8 @@ struct mdio_bus_stats {
  * phy_package_leave().
  */
 struct phy_package_shared {
+	/* With PHY package defined in DT this points to the PHY package node */
+	struct device_node *np;
 	/* addrs list pointer */
 	/* note that this pointer is shared between different phydevs.
 	 * It is allocated and freed automatically by phy_package_join() and
@@ -888,6 +891,10 @@ struct phy_led {
  * @flags: A bitfield defining certain other features this PHY
  *   supports (like interrupts)
  * @driver_data: Static driver data
+ * @phy_package_global_phys_offset: Table of offset of the required
+ *  global PHYs for PHY package global configuration.
+ * @phy_package_global_phys_num: Num of the required global PHYs
+ *   for PHY package global configuration.
  *
  * All functions are optional. If config_aneg or read_status
  * are not implemented, the phy core uses the genphy versions.
@@ -905,6 +912,8 @@ struct phy_driver {
 	const unsigned long * const features;
 	u32 flags;
 	const void *driver_data;
+	const u8 *phy_package_global_phys_offset;
+	const u8 phy_package_global_phys_num;
 
 	/**
 	 * @soft_reset: Called to issue a PHY software reset
