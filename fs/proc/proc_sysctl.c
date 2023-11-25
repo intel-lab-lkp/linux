@@ -573,7 +573,7 @@ static ssize_t proc_sys_call_handler(struct kiocb *iocb, struct iov_iter *iter,
 
 	/* if that can happen at all, it should be -EINVAL, not -EISDIR */
 	error = -EINVAL;
-	if (!table->proc_handler)
+	if (!table->proc_handler && !table->proc_handler_new)
 		goto out;
 
 	/* don't even try if the size is too large */
@@ -655,7 +655,7 @@ static __poll_t proc_sys_poll(struct file *filp, poll_table *wait)
 	if (IS_ERR(head))
 		return EPOLLERR | EPOLLHUP;
 
-	if (!table->proc_handler)
+	if (!table->proc_handler && !table->proc_handler_new)
 		goto out;
 
 	if (!table->poll)
@@ -1332,6 +1332,8 @@ static struct ctl_dir *sysctl_mkdir_p(struct ctl_dir *dir, const char *path)
  * child - must be %NULL.
  *
  * proc_handler - the text handler routine (described below)
+ *
+ * proc_handler_new - const variant of the text handler routine (described below)
  *
  * extra1, extra2 - extra pointers usable by the proc handler routines
  * XXX: we should eventually modify these to use long min / max [0]

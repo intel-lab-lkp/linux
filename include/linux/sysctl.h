@@ -63,6 +63,8 @@ extern const unsigned long sysctl_long_vals[];
 
 typedef int proc_handler(struct ctl_table *ctl, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
+typedef int proc_handler_new(const struct ctl_table *ctl, int write,
+		void *buffer, size_t *lenp, loff_t *ppos);
 
 int proc_dostring(struct ctl_table *, int, void *, size_t *, loff_t *);
 int proc_dobool(struct ctl_table *table, int write, void *buffer,
@@ -107,10 +109,10 @@ int proc_do_static_key(struct ctl_table *table, int write, void *buffer,
  * struct enable minimal validation of the values being written to be
  * performed, and the mode field allows minimal authentication.
  * 
- * There must be a proc_handler routine for any terminal nodes
- * mirrored under /proc/sys (non-terminals are handled by a built-in
- * directory handler).  Several default handlers are available to
- * cover common cases.
+ * There must be one proc_handler/proc_handler_new routine for any terminal
+ * nodes mirrored under /proc/sys (non-terminals are handled by a built-in
+ * directory handler).
+ * Several default handlers are available to cover common cases.
  */
 
 /* Support for userspace poll() to watch for changes */
@@ -149,6 +151,7 @@ struct ctl_table {
 		SYSCTL_TABLE_TYPE_PERMANENTLY_EMPTY
 	} type;
 	proc_handler *proc_handler;	/* Callback for text formatting */
+	proc_handler_new *proc_handler_new;	/* Callback for text formatting */
 	struct ctl_table_poll *poll;
 	void *extra1;
 	void *extra2;
@@ -301,6 +304,12 @@ int sysctl_max_threads(struct ctl_table *table, int write, void *buffer,
 static inline int sysctl_run_handler(struct ctl_table *ctl, int write,
 				     void *buffer, size_t *lenp, loff_t *ppos)
 {
+	if (ctl->proc_handler_new && ctl->proc_handler)
+		pr_warn_ratelimited("sysctl table %s has both proc_handler and proc_handler_new, this is a but\n",
+				    ctl->procname);
+
+	if (ctl->proc_handler_new)
+		return ctl->proc_handler_new(ctl, write, buffer, lenp, ppos);
 	return ctl->proc_handler(ctl, write, buffer, lenp, ppos);
 }
 
