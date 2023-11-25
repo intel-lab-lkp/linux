@@ -1119,7 +1119,7 @@ static int sysctl_check_table_array(const char *path, struct ctl_table *table)
 			err |= sysctl_err(path, table, "array not allowed");
 	}
 
-	if (table->proc_handler == proc_dobool) {
+	if (table->proc_handler_new == proc_dobool) {
 		if (table->maxlen != sizeof(bool))
 			err |= sysctl_err(path, table, "array not allowed");
 	}
@@ -1133,7 +1133,7 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 	int err = 0;
 	list_for_each_table_entry(entry, header) {
 		if ((entry->proc_handler_new == proc_dostring) ||
-		    (entry->proc_handler == proc_dobool) ||
+		    (entry->proc_handler_new == proc_dobool) ||
 		    (entry->proc_handler == proc_dointvec) ||
 		    (entry->proc_handler == proc_douintvec) ||
 		    (entry->proc_handler == proc_douintvec_minmax) ||

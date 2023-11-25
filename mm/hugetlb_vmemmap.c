@@ -779,7 +779,7 @@ static struct ctl_table hugetlb_vmemmap_sysctls[] = {
 		.data		= &vmemmap_optimize_enabled,
 		.maxlen		= sizeof(vmemmap_optimize_enabled),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler_new	= proc_dobool,
 	},
 	{ }
 };

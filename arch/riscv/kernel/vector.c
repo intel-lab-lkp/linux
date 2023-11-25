@@ -253,7 +253,7 @@ static struct ctl_table riscv_v_default_vstate_table[] = {
 		.data		= &riscv_v_implicit_uacc,
 		.maxlen		= sizeof(riscv_v_implicit_uacc),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler_new	= proc_dobool,
 	},
 };
 

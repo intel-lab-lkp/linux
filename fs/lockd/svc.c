@@ -466,7 +466,7 @@ static struct ctl_table nlm_sysctls[] = {
 		.data		= &nsm_use_hostnames,
 		.maxlen		= sizeof(bool),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler_new	= proc_dobool,
 	},
 	{
 		.procname	= "nsm_local_state",

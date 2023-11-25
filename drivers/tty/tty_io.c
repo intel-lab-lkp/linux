@@ -3601,7 +3601,7 @@ static struct ctl_table tty_table[] = {
 		.data		= &tty_legacy_tiocsti,
 		.maxlen		= sizeof(tty_legacy_tiocsti),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler_new	= proc_dobool,
 	},
 	{
 		.procname	= "ldisc_autoload",
