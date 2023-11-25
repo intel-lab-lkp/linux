@@ -197,7 +197,7 @@ static int mxsfb_irq_install(struct drm_device *dev, int irq)
 
 	mxsfb_irq_disable(dev);
 
-	return request_irq(irq, mxsfb_irq_handler, 0,  dev->driver->name, dev);
+	return request_irq(irq, mxsfb_irq_handler, 0, dev->driver->name, dev);
 }
 
 static void mxsfb_irq_uninstall(struct drm_device *dev)
