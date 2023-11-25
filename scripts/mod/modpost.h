@@ -215,4 +215,4 @@ modpost_log(enum loglevel loglevel, const char *fmt, ...);
  */
 #define warn(fmt, args...)	modpost_log(LOG_WARN, fmt, ##args)
 #define error(fmt, args...)	modpost_log(LOG_ERROR, fmt, ##args)
-#define fatal(fmt, args...)	modpost_log(LOG_FATAL, fmt, ##args)
+#define fatal(fmt, args...)	do { modpost_log(LOG_FATAL, fmt, ##args); exit(1); } while (1)

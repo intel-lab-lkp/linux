@@ -84,8 +84,6 @@ void modpost_log(enum loglevel loglevel, const char *fmt, ...)
 	vfprintf(stderr, fmt, arglist);
 	va_end(arglist);
 
-	if (loglevel == LOG_FATAL)
-		exit(1);
 	if (loglevel == LOG_ERROR)
 		error_occurred = true;
 }
@@ -1415,7 +1413,7 @@ static void section_rel(struct module *mod, struct elf_info *elf,
 
 	for (rel = start; rel < stop; rel++) {
 		Elf_Sym *tsym;
-		Elf_Addr taddr = 0, r_offset;
+		Elf_Addr taddr, r_offset;
 		unsigned int r_type, r_sym;
 		void *loc;
 
