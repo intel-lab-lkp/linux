@@ -1648,59 +1648,80 @@ EXPORT_SYMBOL_GPL(phy_driver_is_genphy_10g);
 /**
  * phy_package_join - join a common PHY group
  * @phydev: target phy_device struct
- * @addr: cookie and PHY address for global register access
+ * @addrs: list of cookies and PHY addresses for global register access
+ * @addrs_num: num of cookies and PHY address in addrs list
  * @priv_size: if non-zero allocate this amount of bytes for private data
  *
  * This joins a PHY group and provides a shared storage for all phydevs in
  * this group. This is intended to be used for packages which contain
  * more than one PHY, for example a quad PHY transceiver.
  *
- * The addr parameter serves as a cookie which has to have the same value
+ * The addrs parameters serves as cookies which has to have the same values
  * for all members of one group and as a PHY address to access generic
  * registers of a PHY package. Usually, one of the PHY addresses of the
  * different PHYs in the package provides access to these global registers.
- * The address which is given here, will be used in the phy_package_read()
+ * The addresses which is given here, will be used in the phy_package_read()
  * and phy_package_write() convenience functions. If your PHY doesn't have
  * global registers you can just pick any of the PHY addresses.
+ * In some special PHY package, multiple PHY are used for global init of
+ * the entire PHY package. In the scenario, multiple address are defined.
+ * phy_package_read() and phy_package_write() requires an index to be passed
+ * to communicate which PHY to use for global init on read/write.
  *
  * This will set the shared pointer of the phydev to the shared storage.
  * If this is the first call for a this cookie the shared storage will be
  * allocated. If priv_size is non-zero, the given amount of bytes are
  * allocated for the priv member.
+ * A list is allocated based on the addrs_num value and the passed list in
+ * addrs is copied to the just allocated list.
  *
  * Returns < 1 on error, 0 on success. Esp. calling phy_package_join()
  * with the same cookie but a different priv_size is an error.
  */
-int phy_package_join(struct phy_device *phydev, int addr, size_t priv_size)
+int phy_package_join(struct phy_device *phydev, int *addrs, size_t addrs_num,
+		     size_t priv_size)
 {
 	struct mii_bus *bus = phydev->mdio.bus;
 	struct phy_package_shared *shared;
-	int ret;
+	int *shared_addrs;
+	int i, addr, ret;
 
-	if (addr < 0 || addr >= PHY_MAX_ADDR)
+	if (!addrs || !addrs_num)
 		return -EINVAL;
 
+	for (i = 0; i < addrs_num; i++)
+		if (addrs[i] < 0 || addrs[i] >= PHY_MAX_ADDR)
+			return -EINVAL;
+
 	mutex_lock(&bus->shared_lock);
-	shared = bus->shared[addr];
-	if (!shared) {
-		ret = -ENOMEM;
-		shared = kzalloc(sizeof(*shared), GFP_KERNEL);
-		if (!shared)
-			goto err_unlock;
-		if (priv_size) {
-			shared->priv = kzalloc(priv_size, GFP_KERNEL);
-			if (!shared->priv)
-				goto err_free;
-			shared->priv_size = priv_size;
+	for (i = 0; i < addrs_num; i++) {
+		addr = addrs[i];
+		shared = bus->shared[addr];
+		if (!shared) {
+			ret = -ENOMEM;
+			shared = kzalloc(sizeof(*shared), GFP_KERNEL);
+			if (!shared)
+				goto err_unlock;
+			if (priv_size) {
+				shared->priv = kzalloc(priv_size, GFP_KERNEL);
+				if (!shared->priv)
+					goto err_free;
+				shared->priv_size = priv_size;
+			}
+			shared_addrs = kmalloc_array(addrs_num, sizeof(*addrs), GFP_KERNEL);
+			if (!shared_addrs)
+				goto err_free_priv;
+			memcpy(shared_addrs, addrs, sizeof(*addrs) * addrs_num);
+			shared->addrs = shared_addrs;
+			shared->addrs_num = addrs_num;
+			refcount_set(&shared->refcnt, 1);
+			bus->shared[addr] = shared;
+		} else {
+			ret = -EINVAL;
+			if (priv_size && priv_size != shared->priv_size)
+				goto err_unlock;
+			refcount_inc(&shared->refcnt);
 		}
-		shared->addr = addr;
-		refcount_set(&shared->refcnt, 1);
-		bus->shared[addr] = shared;
-	} else {
-		ret = -EINVAL;
-		if (priv_size && priv_size != shared->priv_size)
-			goto err_unlock;
-		refcount_inc(&shared->refcnt);
 	}
 	mutex_unlock(&bus->shared_lock);
 
@@ -1708,6 +1729,8 @@ int phy_package_join(struct phy_device *phydev, int addr, size_t priv_size)
 
 	return 0;
 
+err_free_priv:
+	kfree(shared->priv);
 err_free:
 	kfree(shared);
 err_unlock:
@@ -1728,13 +1751,16 @@ void phy_package_leave(struct phy_device *phydev)
 {
 	struct phy_package_shared *shared = phydev->shared;
 	struct mii_bus *bus = phydev->mdio.bus;
+	int i;
 
 	if (!shared)
 		return;
 
 	if (refcount_dec_and_mutex_lock(&shared->refcnt, &bus->shared_lock)) {
-		bus->shared[shared->addr] = NULL;
+		for (i = 0; i < shared->addrs_num; i++)
+			bus->shared[shared->addrs[i]] = NULL;
 		mutex_unlock(&bus->shared_lock);
+		kfree(shared->addrs);
 		kfree(shared->priv);
 		kfree(shared);
 	}
@@ -1752,7 +1778,8 @@ static void devm_phy_package_leave(struct device *dev, void *res)
  * devm_phy_package_join - resource managed phy_package_join()
  * @dev: device that is registering this PHY package
  * @phydev: target phy_device struct
- * @addr: cookie and PHY address for global register access
+ * @addrs: list of cookies and PHY addresses for global register access
+ * @addrs_num: num of cookies and PHY address in addrs list
  * @priv_size: if non-zero allocate this amount of bytes for private data
  *
  * Managed phy_package_join(). Shared storage fetched by this function,
@@ -1760,7 +1787,7 @@ static void devm_phy_package_leave(struct device *dev, void *res)
  * phy_package_join() for more information.
  */
 int devm_phy_package_join(struct device *dev, struct phy_device *phydev,
-			  int addr, size_t priv_size)
+			  int *addrs, size_t addrs_num, size_t priv_size)
 {
 	struct phy_device **ptr;
 	int ret;
@@ -1770,7 +1797,7 @@ int devm_phy_package_join(struct device *dev, struct phy_device *phydev,
 	if (!ptr)
 		return -ENOMEM;
 
-	ret = phy_package_join(phydev, addr, priv_size);
+	ret = phy_package_join(phydev, addrs, addrs_num, priv_size);
 
 	if (!ret) {
 		*ptr = phydev;

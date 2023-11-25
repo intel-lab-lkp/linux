@@ -328,6 +328,12 @@ struct kszphy_ptp_priv {
 	spinlock_t seconds_lock;
 };
 
+enum ksz_global_phy {
+	KSZ_BASE_ADDR = 0,
+
+	__KZS_GLOBAL_PHY_MAX,
+};
+
 struct kszphy_priv {
 	struct kszphy_ptp_priv ptp_priv;
 	const struct kszphy_type *type;
@@ -3272,8 +3278,8 @@ static int lan8814_release_coma_mode(struct phy_device *phydev)
 static int lan8814_probe(struct phy_device *phydev)
 {
 	const struct kszphy_type *type = phydev->drv->driver_data;
+	int addrs[__KZS_GLOBAL_PHY_MAX];
 	struct kszphy_priv *priv;
-	u16 addr;
 	int err;
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(*priv), GFP_KERNEL);
@@ -3289,9 +3295,10 @@ static int lan8814_probe(struct phy_device *phydev)
 	/* Strap-in value for PHY address, below register read gives starting
 	 * phy address value
 	 */
-	addr = lanphy_read_page_reg(phydev, 4, 0) & 0x1F;
+	addrs[KSZ_BASE_ADDR] = lanphy_read_page_reg(phydev, 4, 0) & 0x1F;
 	devm_phy_package_join(&phydev->mdio.dev, phydev,
-			      addr, sizeof(struct lan8814_shared_priv));
+			      addrs, ARRAY_SIZE(addrs),
+			      sizeof(struct lan8814_shared_priv));
 
 	if (phy_package_init_once(phydev)) {
 		err = lan8814_release_coma_mode(phydev);

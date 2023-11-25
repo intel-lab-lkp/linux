@@ -327,7 +327,8 @@ struct mdio_bus_stats {
 
 /**
  * struct phy_package_shared - Shared information in PHY packages
- * @addr: Common PHY address used to combine PHYs in one package
+ * @addrs: List of common PHY addresses used to combine PHYs in one package
+ * @addrs_num: Number of common PHY addresses in addrs list
  * @refcnt: Number of PHYs connected to this shared data
  * @flags: Initialization of PHY package
  * @priv_size: Size of the shared private data @priv
@@ -338,7 +339,14 @@ struct mdio_bus_stats {
  * phy_package_leave().
  */
 struct phy_package_shared {
-	int addr;
+	/* addrs list pointer */
+	/* note that this pointer is shared between different phydevs.
+	 * It is allocated and freed automatically by phy_package_join() and
+	 * phy_package_leave(), the list passed to phy_package_join() is copied
+	 * to the new allocated list.
+	 */
+	int *addrs;
+	size_t addrs_num;
 	refcount_t refcnt;
 	unsigned long flags;
 	size_t priv_size;
@@ -1972,10 +1980,11 @@ int phy_ethtool_get_link_ksettings(struct net_device *ndev,
 int phy_ethtool_set_link_ksettings(struct net_device *ndev,
 				   const struct ethtool_link_ksettings *cmd);
 int phy_ethtool_nway_reset(struct net_device *ndev);
-int phy_package_join(struct phy_device *phydev, int addr, size_t priv_size);
+int phy_package_join(struct phy_device *phydev, int *addrs, size_t addrs_num,
+		     size_t priv_size);
 void phy_package_leave(struct phy_device *phydev);
 int devm_phy_package_join(struct device *dev, struct phy_device *phydev,
-			  int addr, size_t priv_size);
+			  int *addrs, size_t addrs_num, size_t priv_size);
 
 int __init mdio_bus_init(void);
 void mdio_bus_exit(void);
@@ -1998,46 +2007,56 @@ int __phy_hwtstamp_set(struct phy_device *phydev,
 		       struct kernel_hwtstamp_config *config,
 		       struct netlink_ext_ack *extack);
 
-static inline int phy_package_read(struct phy_device *phydev, u32 regnum)
+static inline int phy_package_read(struct phy_device *phydev,
+				   int global_phy_index, u32 regnum)
 {
 	struct phy_package_shared *shared = phydev->shared;
+	int addr;
 
-	if (!shared)
+	if (!shared || global_phy_index > shared->addrs_num - 1)
 		return -EIO;
 
-	return mdiobus_read(phydev->mdio.bus, shared->addr, regnum);
+	addr = shared->addrs[global_phy_index];
+	return mdiobus_read(phydev->mdio.bus, addr, regnum);
 }
 
-static inline int __phy_package_read(struct phy_device *phydev, u32 regnum)
+static inline int __phy_package_read(struct phy_device *phydev,
+				     int global_phy_index, u32 regnum)
 {
 	struct phy_package_shared *shared = phydev->shared;
+	int addr;
 
-	if (!shared)
+	if (!shared || global_phy_index > shared->addrs_num - 1)
 		return -EIO;
 
-	return __mdiobus_read(phydev->mdio.bus, shared->addr, regnum);
+	addr = shared->addrs[global_phy_index];
+	return __mdiobus_read(phydev->mdio.bus, addr, regnum);
 }
 
 static inline int phy_package_write(struct phy_device *phydev,
-				    u32 regnum, u16 val)
+				    int global_phy_index, u32 regnum, u16 val)
 {
 	struct phy_package_shared *shared = phydev->shared;
+	int addr;
 
-	if (!shared)
+	if (!shared || global_phy_index > shared->addrs_num - 1)
 		return -EIO;
 
-	return mdiobus_write(phydev->mdio.bus, shared->addr, regnum, val);
+	addr = shared->addrs[global_phy_index];
+	return mdiobus_write(phydev->mdio.bus, addr, regnum, val);
 }
 
 static inline int __phy_package_write(struct phy_device *phydev,
-				      u32 regnum, u16 val)
+				      int global_phy_index, u32 regnum, u16 val)
 {
 	struct phy_package_shared *shared = phydev->shared;
+	int addr;
 
-	if (!shared)
+	if (!shared || global_phy_index > shared->addrs_num - 1)
 		return -EIO;
 
-	return __mdiobus_write(phydev->mdio.bus, shared->addr, regnum, val);
+	addr = shared->addrs[global_phy_index];
+	return __mdiobus_write(phydev->mdio.bus, addr, regnum, val);
 }
 
 static inline bool __phy_package_set_once(struct phy_device *phydev,
