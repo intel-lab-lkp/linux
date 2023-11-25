@@ -315,12 +315,23 @@ static struct sk_buff *llcp_allocate_pdu(struct nfc_llcp_sock *sock,
 {
 	struct sk_buff *skb;
 	int err, headroom, tailroom;
+	unsigned long irq_flags;
 
 	if (sock->ssap == 0)
 		return NULL;
 
+	read_lock_irqsave(&sock->rw_dev_lock, irq_flags);
+
+	if (!sock->dev) {
+		read_unlock_irqrestore(&sock->rw_dev_lock, irq_flags);
+		pr_err("NFC device does not exit\n");
+		return NULL;
+	}
+
 	headroom = sock->dev->tx_headroom;
 	tailroom = sock->dev->tx_tailroom;
+
+	read_unlock_irqrestore(&sock->rw_dev_lock, irq_flags);
 
 	skb = nfc_alloc_send_skb(&sock->sk, MSG_DONTWAIT,
 				 size + LLCP_HEADER_SIZE, headroom, tailroom,
@@ -739,12 +750,25 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 	u8 *msg_ptr, *msg_data;
 	u16 remote_miu;
 	int err, headroom, tailroom;
+	unsigned long irq_flags;
 
 	pr_debug("Send UI frame len %zd\n", len);
 
 	local = sock->local;
 	if (local == NULL)
 		return -ENODEV;
+
+	read_lock_irqsave(&sock->rw_dev_lock, irq_flags);
+
+	if (!sock->dev) {
+		read_unlock_irqrestore(&sock->rw_dev_lock, irq_flags);
+		return -ENODEV;
+	}
+
+	headroom = sock->dev->tx_headroom;
+	tailroom = sock->dev->tx_tailroom;
+
+	read_unlock_irqrestore(&sock->rw_dev_lock, irq_flags);
 
 	msg_data = kmalloc(len, GFP_USER | __GFP_NOWARN);
 	if (msg_data == NULL)
@@ -754,9 +778,6 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 		kfree(msg_data);
 		return -EFAULT;
 	}
-
-	headroom = sock->dev->tx_headroom;
-	tailroom = sock->dev->tx_tailroom;
 
 	remaining_len = len;
 	msg_ptr = msg_data;

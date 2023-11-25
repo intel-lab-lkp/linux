@@ -102,6 +102,7 @@ struct nfc_llcp_local {
 struct nfc_llcp_sock {
 	struct sock sk;
 	struct nfc_dev *dev;
+	rwlock_t rw_dev_lock;
 	struct nfc_llcp_local *local;
 	u32 target_idx;
 	u32 nfc_protocol;

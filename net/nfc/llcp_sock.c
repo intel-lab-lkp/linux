@@ -983,6 +983,8 @@ struct sock *nfc_llcp_sock_alloc(struct socket *sock, int type, gfp_t gfp, int k
 	sk->sk_type = type;
 	sk->sk_destruct = llcp_sock_destruct;
 
+	rwlock_init(&llcp_sock->rw_dev_lock);
+
 	llcp_sock->ssap = 0;
 	llcp_sock->dsap = LLCP_SAP_SDP;
 	llcp_sock->rw = LLCP_MAX_RW + 1;

@@ -20,6 +20,22 @@ static LIST_HEAD(llcp_devices);
 /* Protects llcp_devices list */
 static DEFINE_SPINLOCK(llcp_devices_lock);
 
+static inline void nfc_llcp_sock_close(struct nfc_llcp_sock *llcp_sock, int err)
+{
+	struct sock *sk = &llcp_sock->sk;
+	unsigned long irq_flags;
+
+	if (err)
+		sk->sk_err = err;
+
+	sk->sk_state = LLCP_CLOSED;
+	sk->sk_state_change(sk);
+
+	write_lock_irqsave(&llcp_sock->rw_dev_lock, irq_flags);
+	llcp_sock->dev = NULL;
+	write_unlock_irqrestore(&llcp_sock->rw_dev_lock, irq_flags);
+}
+
 static void nfc_llcp_rx_skb(struct nfc_llcp_local *local, struct sk_buff *skb);
 
 void nfc_llcp_sock_link(struct llcp_sock_list *l, struct sock *sk)
@@ -96,19 +112,13 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 
 				nfc_llcp_accept_unlink(accept_sk);
 
-				if (err)
-					accept_sk->sk_err = err;
-				accept_sk->sk_state = LLCP_CLOSED;
-				accept_sk->sk_state_change(sk);
+				nfc_llcp_sock_close(lsk, err);
 
 				bh_unlock_sock(accept_sk);
 			}
 		}
 
-		if (err)
-			sk->sk_err = err;
-		sk->sk_state = LLCP_CLOSED;
-		sk->sk_state_change(sk);
+		nfc_llcp_sock_close(llcp_sock, err);
 
 		bh_unlock_sock(sk);
 
@@ -130,10 +140,7 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 
 		nfc_llcp_socket_purge(llcp_sock);
 
-		if (err)
-			sk->sk_err = err;
-		sk->sk_state = LLCP_CLOSED;
-		sk->sk_state_change(sk);
+		nfc_llcp_sock_close(llcp_sock, err);
 
 		bh_unlock_sock(sk);
 
