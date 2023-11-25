@@ -4144,6 +4144,8 @@ static inline int seal_check_write(int seals, struct vm_area_struct *vma)
 }
 
 #ifdef CONFIG_ANON_VMA_NAME
+const struct anon_vma_name *madvise_get_anon_name(struct mm_struct *mm,
+						  unsigned long start);
 int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
 			  unsigned long len_in,
 			  struct anon_vma_name *anon_name);
@@ -4152,6 +4154,11 @@ static inline int
 madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
 		      unsigned long len_in, struct anon_vma_name *anon_name) {
 	return 0;
+}
+static inline
+const struct anon_vma_name *madvise_get_anon_name(struct mm_struct *mm,
+						  unsigned long start) {
+	return NULL;
 }
 #endif
 

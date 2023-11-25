@@ -2359,9 +2359,50 @@ static int prctl_set_vma(unsigned long opt, unsigned long addr,
 	return error;
 }
 
+static int prctl_get_vma(unsigned long opt, unsigned long addr,
+			 unsigned long buf, unsigned long arg)
+{
+	struct mm_struct *mm = current->mm;
+	const char __user *u_buf;
+	int error;
+
+	switch (opt) {
+	case PR_GET_VMA_ANON_NAME:
+		const struct anon_vma_name *anon_name = NULL;
+
+		u_buf = (const char __user *)buf;
+		error = 0;
+
+		mmap_read_lock(mm);
+		anon_name = madvise_get_anon_name(mm, addr);
+		if (!anon_name) {
+			mmap_read_unlock(mm);
+			error = -EFAULT;
+			break;
+		}
+
+		if (copy_to_user((char __user *)u_buf, anon_name->name,
+				 strlen(anon_name->name) + 1))
+			error = -EFAULT;
+
+		mmap_read_unlock(mm);
+		anon_vma_name_put(anon_name);
+		break;
+	default:
+		error = -EINVAL;
+	}
+	return error;
+}
+
 #else /* CONFIG_ANON_VMA_NAME */
 static int prctl_set_vma(unsigned long opt, unsigned long start,
 			 unsigned long size, unsigned long arg)
+{
+	return -EINVAL;
+}
+
+static int prctl_get_vma(unsigned long opt, unsigned long start,
+			 unsigned long u_buf, unsigned long arg)
 {
 	return -EINVAL;
 }
@@ -2711,6 +2752,9 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		break;
 	case PR_SET_VMA:
 		error = prctl_set_vma(arg2, arg3, arg4, arg5);
+		break;
+	case PR_GET_VMA:
+		error = prctl_get_vma(arg2, arg3, arg4, arg5);
 		break;
 	case PR_GET_AUXV:
 		if (arg4 || arg5)
