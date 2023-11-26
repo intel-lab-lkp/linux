@@ -604,6 +604,15 @@
 			};
 		};
 
+		xhci: usb@7e9c0000 {
+			compatible = "generic-xhci";
+			reg = <0x0 0x7e9c0000 0x100000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <GIC_SPI 176 IRQ_TYPE_LEVEL_HIGH>;
+			status = "disabled";
+		};
+
 		v3d: gpu@7ec00000 {
 			compatible = "brcm,2711-v3d";
 			reg = <0x0 0x7ec00000 0x4000>,
