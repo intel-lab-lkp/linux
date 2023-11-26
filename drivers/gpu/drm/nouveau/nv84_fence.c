@@ -85,7 +85,7 @@ nv84_fence_chid(struct nouveau_channel *chan)
 static int
 nv84_fence_emit(struct nouveau_fence *fence)
 {
-	struct nouveau_channel *chan = fence->channel;
+	struct nouveau_channel *chan = unrcu_pointer(fence->channel);
 	struct nv84_fence_chan *fctx = chan->fence;
 	u64 addr = fctx->vma->addr + nv84_fence_chid(chan) * 16;
 
