@@ -120,6 +120,8 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/media/video-interfaces.h>
+
     isp@19840000 {
         compatible = "starfive,jh7110-camss";
         reg = <0x19840000 0x10000>,
@@ -161,7 +163,7 @@ examples:
                 reg = <0>;
                 vin_from_sc2235: endpoint {
                     remote-endpoint = <&sc2235_to_vin>;
-                    bus-type = <5>;
+                    bus-type = <MEDIA_BUS_TYPE_PARALLEL>;
                     bus-width = <8>;
                     data-shift = <2>;
                     hsync-active = <1>;

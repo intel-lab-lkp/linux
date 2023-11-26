@@ -58,6 +58,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/media/video-interfaces.h>
     #include <dt-bindings/soc/ti,sci_pm_domain.h>
 
     ti_csi2rx0: ticsi2rx@4500000 {
@@ -90,7 +91,7 @@ examples:
 
                     csi2rx0_in_sensor: endpoint {
                         remote-endpoint = <&csi2_cam0>;
-                        bus-type = <4>; /* CSI2 DPHY. */
+                        bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
                         clock-lanes = <0>;
                         data-lanes = <1 2>;
                     };

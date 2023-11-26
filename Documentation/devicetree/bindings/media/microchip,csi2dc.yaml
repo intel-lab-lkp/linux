@@ -142,6 +142,8 @@ examples:
   # Example for connecting to a parallel sensor controller block (video pipe)
   # and the input is received from Synopsys IDI interface
   - |
+    #include <dt-bindings/media/video-interfaces.h>
+
     csi2dc@e1404000 {
         compatible = "microchip,sama7g5-csi2dc";
         reg = <0xe1404000 0x500>;
@@ -154,7 +156,7 @@ examples:
                port@0 {
                        reg = <0>; /* must be 0, first child port */
                        csi2dc_in: endpoint { /* input from IDI interface */
-                               bus-type = <4>; /* MIPI CSI2 D-PHY */
+                               bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
                                remote-endpoint = <&csi2host_out>;
                        };
                };
