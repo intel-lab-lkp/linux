@@ -225,17 +225,18 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 			goto out;
 		}
 
-		if (mutex_lock_interruptible(&reading_mutex)) {
-			err = -ERESTARTSYS;
-			goto out_put;
-		}
 		if (!data_avail) {
+			if (mutex_lock_interruptible(&reading_mutex)) {
+				err = -ERESTARTSYS;
+				goto out_put;
+			}
 			bytes_read = rng_get_data(rng, rng_buffer,
 				rng_buffer_size(),
 				!(filp->f_flags & O_NONBLOCK));
+			mutex_unlock(&reading_mutex);
 			if (bytes_read < 0) {
 				err = bytes_read;
-				goto out_unlock_reading;
+				goto out_put;
 			}
 			data_avail = bytes_read;
 		}
@@ -243,7 +244,7 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 		if (!data_avail) {
 			if (filp->f_flags & O_NONBLOCK) {
 				err = -EAGAIN;
-				goto out_unlock_reading;
+				goto out_put;
 			}
 		} else {
 			len = data_avail;
@@ -255,14 +256,13 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 			if (copy_to_user(buf + ret, rng_buffer + data_avail,
 								len)) {
 				err = -EFAULT;
-				goto out_unlock_reading;
+				goto out_put;
 			}
 
 			size -= len;
 			ret += len;
 		}
 
-		mutex_unlock(&reading_mutex);
 		put_rng(rng);
 
 		if (need_resched())
@@ -276,8 +276,6 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 out:
 	return ret ? : err;
 
-out_unlock_reading:
-	mutex_unlock(&reading_mutex);
 out_put:
 	put_rng(rng);
 	goto out;
@@ -501,7 +499,10 @@ static int hwrng_fillfn(void *unused)
 		rng = get_current_rng();
 		if (IS_ERR(rng) || !rng)
 			break;
-		mutex_lock(&reading_mutex);
+		if (mutex_lock_interruptible(&reading_mutex)) {
+			put_rng(rng);
+			return -ERESTARTSYS;
+		}
 		rc = rng_get_data(rng, rng_fillbuf,
 				  rng_buffer_size(), 1);
 		if (current_quality != rng->quality)
