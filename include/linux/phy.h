@@ -1330,6 +1330,28 @@ static inline void mmd_phy_indirect(struct mii_bus *bus, int phy_addr, int devad
 			devad | MII_MMD_CTRL_NOINCR);
 }
 
+static inline int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
+			       int devad, u32 regnum)
+{
+	if (is_c45)
+		return __mdiobus_c45_read(bus, phy_addr, devad, regnum);
+
+	mmd_phy_indirect(bus, phy_addr, devad, regnum);
+	/* Read the content of the MMD's selected register */
+	return __mdiobus_read(bus, phy_addr, MII_MMD_DATA);
+}
+
+static inline int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
+				int devad, u32 regnum, u16 val)
+{
+	if (is_c45)
+		return __mdiobus_c45_write(bus, phy_addr, devad, regnum, val);
+
+	mmd_phy_indirect(bus, phy_addr, devad, regnum);
+	/* Write the data into MMD's selected register */
+	return __mdiobus_write(bus, phy_addr, MII_MMD_DATA, val);
+}
+
 /*
  * phy_read_mmd - Convenience function for reading a register
  * from an MMD on a given PHY.
