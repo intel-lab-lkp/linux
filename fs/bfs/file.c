@@ -38,7 +38,12 @@ static int bfs_move_block(unsigned long from, unsigned long to,
 	bh = sb_bread(sb, from);
 	if (!bh)
 		return -EIO;
+
 	new = sb_getblk(sb, to);
+	if (!new) {
+		bforget(bh);
+		return -ENOMEM;
+	}
 	memcpy(new->b_data, bh->b_data, bh->b_size);
 	mark_buffer_dirty(new);
 	bforget(bh);
