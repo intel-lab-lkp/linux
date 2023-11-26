@@ -1344,10 +1344,18 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 
 	input_report_abs(ds->gamepad, ABS_X,  ds_report->x);
 	input_report_abs(ds->gamepad, ABS_Y,  ds_report->y);
-	input_report_abs(ds->gamepad, ABS_RX, ds_report->rx);
-	input_report_abs(ds->gamepad, ABS_RY, ds_report->ry);
-	input_report_abs(ds->gamepad, ABS_Z,  ds_report->z);
-	input_report_abs(ds->gamepad, ABS_RZ, ds_report->rz);
+
+	if (hdev->product == USB_DEVICE_ID_SONY_PS5_CONTROLLER_2) {
+		input_report_abs(ds->gamepad, ABS_RX, ds_report->z);
+		input_report_abs(ds->gamepad, ABS_RY, ds_report->rz);
+		input_report_abs(ds->gamepad, ABS_Z,  ds_report->rx);
+		input_report_abs(ds->gamepad, ABS_RZ, ds_report->ry);
+	} else {
+		input_report_abs(ds->gamepad, ABS_RX, ds_report->rx);
+		input_report_abs(ds->gamepad, ABS_RY, ds_report->ry);
+		input_report_abs(ds->gamepad, ABS_Z,  ds_report->z);
+		input_report_abs(ds->gamepad, ABS_RZ, ds_report->rz);
+	}
 
 	value = ds_report->buttons[0] & DS_BUTTONS0_HAT_SWITCH;
 	if (value >= ARRAY_SIZE(ps_gamepad_hat_mapping))
@@ -1355,19 +1363,49 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 	input_report_abs(ds->gamepad, ABS_HAT0X, ps_gamepad_hat_mapping[value].x);
 	input_report_abs(ds->gamepad, ABS_HAT0Y, ps_gamepad_hat_mapping[value].y);
 
-	input_report_key(ds->gamepad, BTN_WEST,   ds_report->buttons[0] & DS_BUTTONS0_SQUARE);
-	input_report_key(ds->gamepad, BTN_SOUTH,  ds_report->buttons[0] & DS_BUTTONS0_CROSS);
-	input_report_key(ds->gamepad, BTN_EAST,   ds_report->buttons[0] & DS_BUTTONS0_CIRCLE);
-	input_report_key(ds->gamepad, BTN_NORTH,  ds_report->buttons[0] & DS_BUTTONS0_TRIANGLE);
+	if (hdev->product == USB_DEVICE_ID_SONY_PS5_CONTROLLER_2) {
+		input_report_key(ds->gamepad, BTN_WEST,
+				ds_report->buttons[0] & DS_BUTTONS0_TRIANGLE);
+		input_report_key(ds->gamepad, BTN_SOUTH,
+				ds_report->buttons[0] & DS_BUTTONS0_SQUARE);
+		input_report_key(ds->gamepad, BTN_EAST,
+				ds_report->buttons[0] & DS_BUTTONS0_CROSS);
+		input_report_key(ds->gamepad, BTN_NORTH,
+				ds_report->buttons[0] & DS_BUTTONS0_CIRCLE);
+	} else {
+		input_report_key(ds->gamepad, BTN_WEST,
+				ds_report->buttons[0] & DS_BUTTONS0_SQUARE);
+		input_report_key(ds->gamepad, BTN_SOUTH,
+				ds_report->buttons[0] & DS_BUTTONS0_CROSS);
+		input_report_key(ds->gamepad, BTN_EAST,
+				ds_report->buttons[0] & DS_BUTTONS0_CIRCLE);
+		input_report_key(ds->gamepad, BTN_NORTH,
+				ds_report->buttons[0] & DS_BUTTONS0_TRIANGLE);
+	}
+
 	input_report_key(ds->gamepad, BTN_TL,     ds_report->buttons[1] & DS_BUTTONS1_L1);
 	input_report_key(ds->gamepad, BTN_TR,     ds_report->buttons[1] & DS_BUTTONS1_R1);
 	input_report_key(ds->gamepad, BTN_TL2,    ds_report->buttons[1] & DS_BUTTONS1_L2);
 	input_report_key(ds->gamepad, BTN_TR2,    ds_report->buttons[1] & DS_BUTTONS1_R2);
 	input_report_key(ds->gamepad, BTN_SELECT, ds_report->buttons[1] & DS_BUTTONS1_CREATE);
 	input_report_key(ds->gamepad, BTN_START,  ds_report->buttons[1] & DS_BUTTONS1_OPTIONS);
-	input_report_key(ds->gamepad, BTN_THUMBL, ds_report->buttons[1] & DS_BUTTONS1_L3);
-	input_report_key(ds->gamepad, BTN_THUMBR, ds_report->buttons[1] & DS_BUTTONS1_R3);
-	input_report_key(ds->gamepad, BTN_MODE,   ds_report->buttons[2] & DS_BUTTONS2_PS_HOME);
+
+	if (hdev->product == USB_DEVICE_ID_SONY_PS5_CONTROLLER_2) {
+		input_report_key(ds->gamepad, BTN_THUMBL,
+				ds_report->buttons[1] & DS_BUTTONS1_R3);
+		input_report_key(ds->gamepad, BTN_THUMBR,
+				ds_report->buttons[2] & DS_BUTTONS2_PS_HOME);
+		input_report_key(ds->gamepad, BTN_MODE,
+				ds_report->buttons[1] & DS_BUTTONS1_L3);
+	} else {
+		input_report_key(ds->gamepad, BTN_THUMBL,
+				ds_report->buttons[1] & DS_BUTTONS1_L3);
+		input_report_key(ds->gamepad, BTN_THUMBR,
+				ds_report->buttons[1] & DS_BUTTONS1_R3);
+		input_report_key(ds->gamepad, BTN_MODE,
+				ds_report->buttons[2] & DS_BUTTONS2_PS_HOME);
+	}
+
 	input_sync(ds->gamepad);
 
 	/*
