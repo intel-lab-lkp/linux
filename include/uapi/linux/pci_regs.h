@@ -737,6 +737,7 @@
 #define PCI_EXT_CAP_ID_DPC	0x1D	/* Downstream Port Containment */
 #define PCI_EXT_CAP_ID_L1SS	0x1E	/* L1 PM Substates */
 #define PCI_EXT_CAP_ID_PTM	0x1F	/* Precision Time Measurement */
+#define PCI_EXT_CAP_ID_RTR	0x22	/* Readiness Time Reporting */
 #define PCI_EXT_CAP_ID_DVSEC	0x23	/* Designated Vendor-Specific */
 #define PCI_EXT_CAP_ID_DLF	0x25	/* Data Link Feature */
 #define PCI_EXT_CAP_ID_PL_16GT	0x26	/* Physical Layer 16.0 GT/s */
@@ -1078,6 +1079,14 @@
 #define PCI_PTM_CTRL			0x08	    /* PTM Control */
 #define  PCI_PTM_CTRL_ENABLE		0x00000001  /* PTM enable */
 #define  PCI_PTM_CTRL_ROOT		0x00000002  /* Root select */
+
+/* Readiness Time Reporting */
+#define PCI_RTR_CAP			0x04	    /* RTR Capability */
+#define  PCI_RTR_RST_TIME_MASK		0xFFF	    /* RTR Reset Time Mask */
+#define  PCI_RTR_DLUP_TIME_MASK		0xFFF000    /* RTR Downstream Link UP Time Mask */
+#define PCI_RTR_CAP2			0x08	    /* RTR Capability 2 */
+#define  PCI_RTR_FLR_TIME_MASK		0xFFF	    /* RTR Function Level Reset Time Mask */
+#define  PCI_RTR_D3_TO_D0_TIME_MASK	0xFFF000    /* RTR D3-hot To D0 Time Mask */
 
 /* ASPM L1 PM Substates */
 #define PCI_L1SS_CAP		0x04	/* Capabilities Register */
