@@ -165,7 +165,7 @@ EXPORT_SYMBOL_GPL(phy_get_rate_matching);
 static int phy_config_interrupt(struct phy_device *phydev, bool interrupts)
 {
 	phydev->interrupts = interrupts ? 1 : 0;
-	if (phydev->drv->config_intr)
+	if (phydev->drv && phydev->drv->config_intr)
 		return phydev->drv->config_intr(phydev);
 
 	return 0;
