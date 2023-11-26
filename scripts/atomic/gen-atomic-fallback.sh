@@ -102,7 +102,8 @@ gen_proto_order_variant()
 	fi
 
 	# Allow ACQUIRE/RELEASE/RELAXED ops to be defined in terms of FULL ops
-	if [ ! -z "${order}" ]; then
+	# Exclude arch_atomic(64)_read(set) mappings because these are not FULL ops.
+	if [ ! -z "${order}" ] && [ "${name}" != "read" ] && [ "${name}" != "set" ]; then
 		printf "#elif defined(arch_${basename})\n"
 		printf "\t${retstmt}arch_${basename}(${args});\n"
 	fi
