@@ -17,7 +17,7 @@
 static struct lock_class_key etnaviv_shm_lock_class;
 static struct lock_class_key etnaviv_userptr_lock_class;
 
-static void etnaviv_gem_scatter_map(struct etnaviv_gem_object *etnaviv_obj)
+static int etnaviv_gem_scatter_map(struct etnaviv_gem_object *etnaviv_obj)
 {
 	struct drm_device *dev = etnaviv_obj->base.dev;
 	struct sg_table *sgt = etnaviv_obj->sgt;
@@ -27,7 +27,9 @@ static void etnaviv_gem_scatter_map(struct etnaviv_gem_object *etnaviv_obj)
 	 * because display controller, GPU, etc. are not coherent.
 	 */
 	if (etnaviv_obj->flags & ETNA_BO_CACHE_MASK)
-		dma_map_sgtable(dev->dev, sgt, DMA_BIDIRECTIONAL, 0);
+		return dma_map_sgtable(dev->dev, sgt, DMA_BIDIRECTIONAL, 0);
+
+	return 0;
 }
 
 static void etnaviv_gem_scatterlist_unmap(struct etnaviv_gem_object *etnaviv_obj)
@@ -113,7 +115,13 @@ struct page **etnaviv_gem_get_pages(struct etnaviv_gem_object *etnaviv_obj)
 
 		etnaviv_obj->sgt = sgt;
 
-		etnaviv_gem_scatter_map(etnaviv_obj);
+		ret = etnaviv_gem_scatter_map(etnaviv_obj);
+		if (ret < 0) {
+			sg_free_table(etnaviv_obj->sgt);
+			kfree(etnaviv_obj->sgt);
+			etnaviv_obj->sgt = NULL;
+			return ERR_PTR(ret);
+		}
 	}
 
 	return etnaviv_obj->pages;
