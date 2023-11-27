@@ -2415,11 +2415,22 @@ static void rtl_jumbo_config(struct rtl8169_private *tp)
 
 	/* Chip doesn't support pause in jumbo mode */
 	if (jumbo) {
+		int lock;
+
 		linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT,
 				   tp->phydev->advertising);
 		linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
 				   tp->phydev->advertising);
-		phy_start_aneg(tp->phydev);
+
+		if (!mutex_trylock(&tp->phydev->lock))
+			lock = 0;
+		else
+			lock = 1;
+
+		_phy_start_aneg(tp->phydev);
+
+		if (lock)
+			mutex_unlock(&tp->phydev->lock);
 	}
 }
 
