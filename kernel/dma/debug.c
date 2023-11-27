@@ -1198,10 +1198,6 @@ void debug_dma_map_single(struct device *dev, const void *addr,
 	if (!virt_addr_valid(addr))
 		err_printk(dev, NULL, "device driver maps memory from invalid area [addr=%p] [len=%lu]\n",
 			   addr, len);
-
-	if (is_vmalloc_addr(addr))
-		err_printk(dev, NULL, "device driver maps memory from vmalloc area [addr=%p] [len=%lu]\n",
-			   addr, len);
 }
 EXPORT_SYMBOL(debug_dma_map_single);
 
