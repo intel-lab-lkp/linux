@@ -208,8 +208,13 @@ static cpumask_var_t	subpartitions_cpus;
 
 /*
  * Exclusive CPUs in isolated partitions
+ *
+ * The isolcpus_seq is used to protect read access to isolated_cpus without
+ * taking callback_lock or cpuset_mutex while write access requires taking
+ * both cpuset_mutex and callback_lock.
  */
 static cpumask_var_t	isolated_cpus;
+static seqcount_t isolcpus_seq = SEQCNT_ZERO(isolcpus_seq);
 
 /* List of remote partition root children */
 static struct list_head remote_children;
@@ -1435,10 +1440,12 @@ static void reset_partition_data(struct cpuset *cs)
 static void partition_xcpus_newstate(int old_prs, int new_prs, struct cpumask *xcpus)
 {
 	WARN_ON_ONCE(old_prs == new_prs);
+	write_seqcount_begin(&isolcpus_seq);
 	if (new_prs == PRS_ISOLATED)
 		cpumask_or(isolated_cpus, isolated_cpus, xcpus);
 	else
 		cpumask_andnot(isolated_cpus, isolated_cpus, xcpus);
+	write_seqcount_end(&isolcpus_seq);
 }
 
 /*
@@ -1517,6 +1524,24 @@ static void update_unbound_workqueue_cpumask(bool isolcpus_updated)
 	ret = workqueue_unbound_exclude_cpumask(isolated_cpus);
 	WARN_ON_ONCE(ret < 0);
 }
+
+/**
+ * cpuset_cpu_is_isolated - Check if the given CPU is isolated
+ * @cpu: the CPU number to be checked
+ * Return: true if CPU is used in an isolated partition, false otherwise
+ */
+bool cpuset_cpu_is_isolated(int cpu)
+{
+	unsigned int seq;
+	bool ret;
+
+	do {
+		seq = read_seqcount_begin(&isolcpus_seq);
+		ret = cpumask_test_cpu(cpu, isolated_cpus);
+	} while (read_seqcount_retry(&isolcpus_seq, seq));
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cpuset_cpu_is_isolated);
 
 /*
  * compute_effective_exclusive_cpumask - compute effective exclusive CPUs
