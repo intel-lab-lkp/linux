@@ -1210,7 +1210,7 @@ OF_EARLYCON_DECLARE(cdns, "xlnx,xuartps", cdns_early_console_setup);
 OF_EARLYCON_DECLARE(cdns, "cdns,uart-r1p8", cdns_early_console_setup);
 OF_EARLYCON_DECLARE(cdns, "cdns,uart-r1p12", cdns_early_console_setup);
 OF_EARLYCON_DECLARE(cdns, "xlnx,zynqmp-uart", cdns_early_console_setup);
-
+OF_EARLYCON_DECLARE(cdns, "starfive,jh8100-uart", cdns_early_console_setup);
 
 /* Static pointer to console port */
 static struct uart_port *console_port;
@@ -1448,6 +1448,7 @@ static const struct of_device_id cdns_uart_of_match[] = {
 	{ .compatible = "cdns,uart-r1p8", },
 	{ .compatible = "cdns,uart-r1p12", .data = &zynqmp_uart_def },
 	{ .compatible = "xlnx,zynqmp-uart", .data = &zynqmp_uart_def },
+	{ .compatible = "starfive,jh8100-uart", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, cdns_uart_of_match);
