@@ -271,16 +271,9 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 				cachemode2protval(_PAGE_CACHE_MODE_UC));
 		break;
 	case _PAGE_CACHE_MODE_UC_MINUS:
-		prot = __pgprot(pgprot_val(prot) |
-				cachemode2protval(_PAGE_CACHE_MODE_UC_MINUS));
-		break;
 	case _PAGE_CACHE_MODE_WC:
-		prot = __pgprot(pgprot_val(prot) |
-				cachemode2protval(_PAGE_CACHE_MODE_WC));
-		break;
 	case _PAGE_CACHE_MODE_WT:
-		prot = __pgprot(pgprot_val(prot) |
-				cachemode2protval(_PAGE_CACHE_MODE_WT));
+		prot = __pgprot(pgprot_val(prot) | cachemode2protval(pcm));
 		break;
 	case _PAGE_CACHE_MODE_WB:
 		break;
