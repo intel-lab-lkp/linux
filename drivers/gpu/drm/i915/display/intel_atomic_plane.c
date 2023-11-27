@@ -42,6 +42,7 @@
 #include "i915_reg.h"
 #include "intel_atomic_plane.h"
 #include "intel_cdclk.h"
+#include "intel_cursor.h"
 #include "intel_display_rps.h"
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
@@ -1163,7 +1164,21 @@ intel_cleanup_plane_fb(struct drm_plane *plane,
 
 	intel_display_rps_mark_interactive(dev_priv, state, false);
 
-	/* Should only be called after a successful intel_prepare_plane_fb()! */
+	/*
+	 * This branch can only ever be called after plane update is succesful,
+	 * the error path will not cause unpin_work to be set.
+	 */
+	if (old_plane_state->unpin_work.vblank) {
+		int i = drm_plane_index(old_plane_state->uapi.plane);
+
+		/*
+		 * Remove plane from atomic commit,
+		 * free is done from vblank worker
+		 */
+		memset(&state->base.planes[i], 0, sizeof(*state->base.planes));
+		return;
+	}
+
 	intel_plane_unpin_fb(old_plane_state);
 }
 
@@ -1175,4 +1190,15 @@ static const struct drm_plane_helper_funcs intel_plane_helper_funcs = {
 void intel_plane_helper_add(struct intel_plane *plane)
 {
 	drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
+}
+
+void intel_plane_init_cursor_vblank_work(struct intel_plane_state *old_plane_state,
+					 struct intel_plane_state *new_plane_state)
+{
+	if (!old_plane_state->ggtt_vma ||
+	    old_plane_state->ggtt_vma == new_plane_state->ggtt_vma)
+		return;
+
+	drm_vblank_work_init(&old_plane_state->unpin_work, old_plane_state->uapi.crtc,
+			     intel_cursor_unpin_work);
 }
