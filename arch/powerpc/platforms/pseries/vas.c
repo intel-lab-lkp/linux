@@ -18,6 +18,7 @@
 #include <asm/plpar_wrappers.h>
 #include <asm/firmware.h>
 #include <asm/vphn.h>
+#include <asm/rtas.h>
 #include <asm/vas.h>
 #include "vas.h"
 
@@ -38,7 +39,13 @@ static long hcall_return_busy_check(long rc)
 {
 	/* Check if we are stalled for some time */
 	if (H_IS_LONG_BUSY(rc)) {
-		msleep(get_longbusy_msecs(rc));
+		/*
+		 * Allocate, Modify and Deallocate HCALLs can return
+		 * H_LONG_BUSY_ORDER_1_MSEC or H_LONG_BUSY_ORDER_10_MSEC
+		 * and expects OS to reissue HCALL after 1msec or
+		 * 10msecs.
+		 */
+		rtas_busy_sleep(rc);
 		rc = H_BUSY;
 	} else if (rc == H_BUSY) {
 		cond_resched();
