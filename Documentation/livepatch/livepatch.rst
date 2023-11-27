@@ -35,11 +35,11 @@ and livepatching:
     compiler using the '-pg' gcc option.
 
   - Livepatching typically needs to redirect the code at the very beginning
-    of the function entry before the function parameters or the stack
+    of the function entry, before the function parameters or the stack
     are in any way modified.
 
 All three approaches need to modify the existing code at runtime. Therefore
-they need to be aware of each other and not step over each other's toes.
+they need to be aware of each other and not step over each others' toes.
 Most of these problems are solved by using the dynamic ftrace framework as
 a base. A Kprobe is registered as a ftrace handler when the function entry
 is probed, see CONFIG_KPROBES_ON_FTRACE. Also an alternative function from
@@ -50,8 +50,8 @@ some limitations, see below.
 3. Consistency model
 ====================
 
-Functions are there for a reason. They take some input parameters, get or
-release locks, read, process, and even write some data in a defined way,
+Functions are there for a reason. They take some input parameters, acquire or
+release locks, read, process, write some data in a defined way, and also
 have return values. In other words, each function has a defined semantic.
 
 Many fixes do not change the semantic of the modified functions. For
