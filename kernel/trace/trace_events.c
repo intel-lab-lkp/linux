@@ -633,9 +633,6 @@ static int __ftrace_event_enable_disable(struct trace_event_file *file,
 			if (atomic_dec_return(&file->sm_ref) > 0)
 				break;
 			disable = file->flags & EVENT_FILE_FL_SOFT_DISABLED;
-			clear_bit(EVENT_FILE_FL_SOFT_MODE_BIT, &file->flags);
-			/* Disable use of trace_buffered_event */
-			trace_buffered_event_disable();
 		} else
 			disable = !(file->flags & EVENT_FILE_FL_SOFT_MODE);
 
@@ -653,11 +650,17 @@ static int __ftrace_event_enable_disable(struct trace_event_file *file,
 
 			call->class->reg(call, TRACE_REG_UNREGISTER, file);
 		}
-		/* If in SOFT_MODE, just set the SOFT_DISABLE_BIT, else clear it */
-		if (file->flags & EVENT_FILE_FL_SOFT_MODE)
-			set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags);
-		else
+
+		if (soft_disable) {
+			/* Complete going out of SOFT_MODE */
 			clear_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags);
+			clear_bit(EVENT_FILE_FL_SOFT_MODE_BIT, &file->flags);
+			/* Disable use of trace_buffered_event */
+			trace_buffered_event_disable();
+		} else if (file->flags & EVENT_FILE_FL_SOFT_MODE) {
+			/* If in SOFT_MODE, just set the SOFT_DISABLE_BIT */
+			set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &file->flags);
+		}
 		break;
 	case 1:
 		/*
