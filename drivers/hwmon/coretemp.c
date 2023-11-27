@@ -43,9 +43,17 @@ MODULE_PARM_DESC(tjmax, "TjMax value in degrees Celsius");
 #define BASE_SYSFS_ATTR_NO	2	/* Sysfs Base attr no for coretemp */
 #define NUM_REAL_CORES		128	/* Number of Real cores per cpu */
 #define CORETEMP_NAME_LENGTH	28	/* String Length of attrs */
-#define MAX_CORE_ATTRS		4	/* Maximum no of basic attrs */
-#define TOTAL_ATTRS		(MAX_CORE_ATTRS + 1)
 #define MAX_CORE_DATA		(NUM_REAL_CORES + BASE_SYSFS_ATTR_NO)
+
+enum coretemp_attr_index {
+	ATTR_LABEL,
+	ATTR_CRIT_ALARM,
+	ATTR_TEMP,
+	ATTR_TJMAX,
+	ATTR_TTARGET,
+	TOTAL_ATTRS,			/* Maximum no of possible attrs */
+	MAX_CORE_ATTRS = ATTR_TJMAX + 1	/* Maximum no of basic attrs */
+};
 
 #ifdef CONFIG_SMP
 #define for_each_sibling(i, cpu) \
