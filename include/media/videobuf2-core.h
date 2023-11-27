@@ -549,10 +549,16 @@ struct vb2_buf_ops {
  * @min_buffers_needed: the minimum number of buffers needed before
  *		@start_streaming can be called. Used when a DMA engine
  *		cannot be started unless at least this number of buffers
+ *		have been queued into the driver. (Deprecated)
+ * @min_dma_buffers_needed: the minimum number of buffers needed before
+ *		@start_streaming can be called. Used when a DMA engine
+ *		cannot be started unless at least this number of buffers
  *		have been queued into the driver.
  * @min_reqbufs_allocation: the minimum number of buffers allocated when
  *		calling VIDIOC_REQBUFS. Used when drivers need a to
  *		specify a minimum buffers allocation before setup a queue.
+ *		If set to 0 then min_dma_buffers_needed + 1 value is used
+ *		as minimum numbers of buffers value.
  */
 /*
  * Private elements (won't appear at the uAPI book):
@@ -618,6 +624,7 @@ struct vb2_queue {
 	u32				timestamp_flags;
 	gfp_t				gfp_flags;
 	u32				min_buffers_needed;
+	u32				min_dma_buffers_needed;
 	u32				min_reqbufs_allocation;
 
 	struct device			*alloc_devs[VB2_MAX_PLANES];

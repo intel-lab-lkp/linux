@@ -816,7 +816,7 @@ static bool verify_coherency_flags(struct vb2_queue *q, bool non_coherent_mem)
 int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 		     unsigned int flags, unsigned int *count)
 {
-	unsigned int num_buffers, allocated_buffers, num_planes = 0;
+	unsigned int num_buffers, allocated_buffers, min_reqbufs_needed, num_planes = 0;
 	unsigned int q_num_bufs = vb2_get_num_buffers(q);
 	unsigned plane_sizes[VB2_MAX_PLANES] = { };
 	bool non_coherent_mem = flags & V4L2_MEMORY_FLAG_NON_COHERENT;
@@ -866,7 +866,11 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	 * Make sure the requested values and current defaults are sane.
 	 */
 	num_buffers = max_t(unsigned int, *count, q->min_buffers_needed);
-	num_buffers = max_t(unsigned int, num_buffers, q->min_reqbufs_allocation);
+	if (q->min_reqbufs_allocation)
+		num_buffers = max_t(unsigned int, num_buffers, q->min_reqbufs_allocation);
+	else
+		num_buffers = max_t(unsigned int, num_buffers, q->min_dma_buffers_needed + 1);
+	min_reqbufs_needed = num_buffers;
 	num_buffers = min_t(unsigned int, num_buffers, q->max_num_buffers);
 	memset(q->alloc_devs, 0, sizeof(q->alloc_devs));
 	/*
@@ -918,7 +922,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	 * There is no point in continuing if we can't allocate the minimum
 	 * number of buffers needed by this vb2_queue.
 	 */
-	if (allocated_buffers < q->min_buffers_needed)
+	if (allocated_buffers < min_reqbufs_needed)
 		ret = -ENOMEM;
 
 	/*
@@ -1654,7 +1658,7 @@ EXPORT_SYMBOL_GPL(vb2_core_prepare_buf);
  * @q:		videobuf2 queue
  *
  * Attempt to start streaming. When this function is called there must be
- * at least q->min_buffers_needed buffers queued up (i.e. the minimum
+ * at least q->min_dma_buffers_needed queued up (i.e. the minimum
  * number of buffers required for the DMA engine to function). If the
  * @start_streaming op fails it is supposed to return all the driver-owned
  * buffers back to vb2 in state QUEUED. Check if that happened and if
@@ -1847,7 +1851,8 @@ int vb2_core_qbuf(struct vb2_queue *q, struct vb2_buffer *vb, void *pb,
 	 * then we can finally call start_streaming().
 	 */
 	if (q->streaming && !q->start_streaming_called &&
-	    q->queued_count >= q->min_buffers_needed) {
+	    ((q->queued_count >= q->min_buffers_needed) ||
+	    (q->queued_count >= q->min_dma_buffers_needed))) {
 		ret = vb2_start_streaming(q);
 		if (ret) {
 			/*
@@ -2217,6 +2222,12 @@ int vb2_core_streamon(struct vb2_queue *q, unsigned int type)
 		return -EINVAL;
 	}
 
+	if (q_num_bufs < q->min_dma_buffers_needed) {
+		dprintk(q, 1, "need at least %u allocated buffers\n",
+			q->min_dma_buffers_needed);
+		return -EINVAL;
+	}
+
 	ret = call_qop(q, prepare_streaming, q);
 	if (ret)
 		return ret;
@@ -2225,7 +2236,8 @@ int vb2_core_streamon(struct vb2_queue *q, unsigned int type)
 	 * Tell driver to start streaming provided sufficient buffers
 	 * are available.
 	 */
-	if (q->queued_count >= q->min_buffers_needed) {
+	if (q->queued_count >= q->min_buffers_needed &&
+	    q->queued_count >= q->min_dma_buffers_needed) {
 		ret = vb2_start_streaming(q);
 		if (ret)
 			goto unprepare;
@@ -2505,6 +2517,7 @@ int vb2_core_queue_init(struct vb2_queue *q)
 		return -EINVAL;
 
 	if (WARN_ON(q->max_num_buffers > MAX_BUFFER_INDEX) ||
+	    WARN_ON(q->min_dma_buffers_needed > q->max_num_buffers) ||
 	    WARN_ON(q->min_buffers_needed > q->max_num_buffers))
 		return -EINVAL;
 
@@ -2519,7 +2532,8 @@ int vb2_core_queue_init(struct vb2_queue *q)
 	 * in that request) will always succeed. There is no method of
 	 * propagating an error back to userspace.
 	 */
-	if (WARN_ON(q->supports_requests && q->min_buffers_needed))
+	if (WARN_ON(q->supports_requests &&
+		    (q->min_buffers_needed || q->min_dma_buffers_needed)))
 		return -EINVAL;
 
 	INIT_LIST_HEAD(&q->queued_list);
