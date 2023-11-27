@@ -12,6 +12,7 @@
 #include <linux/phy.h>
 
 #define PHY_ID_LAN867X_REVB1 0x0007C162
+#define PHY_ID_LAN867X_REVC1 0x0007C164
 #define PHY_ID_LAN865X_REVB0 0x0007C1B3
 
 #define LAN867X_REG_STS2 0x0019
@@ -57,6 +58,22 @@ static const u16 lan867x_revb1_fixup_masks[12] = {
 	0x0E03, 0x0300, 0xFFC0, 0x000F,
 	0xF800, 0x801C, 0x1FFF, 0xFFFF,
 	0x0600, 0x7F00, 0x2000, 0xFFFF,
+};
+
+static const u16 lan867x_revc1_fixup_registers[12] = {
+	0x00D0, 0x00E0, 0x0084, 0x008A,
+	0x00E9, 0x00F5, 0x00F4, 0x00F8,
+	0x00F9, 0x0081, 0x0091, 0x0093,
+};
+
+/* Index 2 & 3 will not be used, these are runtime populated/calculated.
+ * It makes the code a lot easier to read having this arr the same len
+ * as the _fixup_registers arr though
+ */
+static const u16 lan867x_revc1_fixup_values[12] = {
+	0x3F31, 0xC000, 0xFFFF, 0xFFFF,
+	0x9E50, 0x1CF8, 0xC020, 0x9B00,
+	0x4E53, 0x0080, 0x9660, 0x06E9,
 };
 
 /* LAN865x Rev.B0 configuration parameters from AN1760 */
@@ -263,6 +280,74 @@ static int lan867x_revb1_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+static int lan867x_revc1_read_fixup_value(struct phy_device *phydev, u16 addr)
+{
+	int regval;
+	/* The AN pretty much just states 'trust us' regarding these magic vals */
+	const u16 magic_or = 0xE0;
+	const u16 magic_reg_mask = 0x1F;
+	const u16 magic_check_mask = 0x10;
+
+	regval = lan865x_revb0_indirect_read(phydev, addr);
+	if (regval < 0)
+		return regval;
+
+	regval &= magic_reg_mask;
+
+	return (regval & magic_check_mask) ? regval | magic_or : regval;
+}
+
+static int lan867x_revc1_config_init(struct phy_device *phydev)
+{
+	int err;
+	int regval;
+	u16 override0;
+	u16 override1;
+	const u16 override_addr0 = 0x4;
+	const u16 override_addr1 = 0x8;
+	const u8 index_to_override0 = 2;
+	const u8 index_to_override1 = 3;
+
+	err = lan867x_wait_for_reset_complete(phydev);
+	if (err)
+		return err;
+
+	/* The application note specifies a super convenient process
+	 * where 2 of the fixup regs needs a write with a value that is
+	 * a modified result of another reg read.
+	 * Enjoy the magic show.
+	 */
+	regval = lan867x_revc1_read_fixup_value(phydev, override_addr0);
+	if (regval < 0)
+		return regval;
+	override0 = ((regval + 9) << 10) | ((regval + 14) << 4) | 0x3;
+
+	regval = lan867x_revc1_read_fixup_value(phydev, override_addr1);
+	if (regval < 0)
+		return regval;
+	override1 = (regval + 40) << 10;
+
+	for (int i = 0; i < ARRAY_SIZE(lan867x_revc1_fixup_registers); i++) {
+		/* The hardcoded  */
+		if (i == index_to_override0)
+			err = phy_write_mmd(phydev, MDIO_MMD_VEND2,
+					    lan867x_revc1_fixup_registers[i],
+					    override0);
+		else if (i == index_to_override1)
+			err = phy_write_mmd(phydev, MDIO_MMD_VEND2,
+					    lan867x_revc1_fixup_registers[i],
+					    override1);
+		else
+			err = phy_write_mmd(phydev, MDIO_MMD_VEND2,
+					    lan867x_revc1_fixup_registers[i],
+					    lan867x_revc1_fixup_values[i]);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int lan86xx_read_status(struct phy_device *phydev)
 {
 	/* The phy has some limitations, namely:
@@ -290,6 +375,16 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.get_plca_status    = genphy_c45_plca_get_status,
 	},
 	{
+		PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVC1),
+		.name               = "LAN867X Rev.C1",
+		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
+		.config_init        = lan867x_revc1_config_init,
+		.read_status        = lan86xx_read_status,
+		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
+		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
+		.get_plca_status    = genphy_c45_plca_get_status,
+	},
+	{
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN865X_REVB0),
 		.name               = "LAN865X Rev.B0 Internal Phy",
 		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
@@ -305,6 +400,7 @@ module_phy_driver(microchip_t1s_driver);
 
 static struct mdio_device_id __maybe_unused tbl[] = {
 	{ PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVB1) },
+	{ PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVC1) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_LAN865X_REVB0) },
 	{ }
 };
