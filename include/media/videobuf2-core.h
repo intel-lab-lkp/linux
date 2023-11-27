@@ -546,10 +546,6 @@ struct vb2_buf_ops {
  * @gfp_flags:	additional gfp flags used when allocating the buffers.
  *		Typically this is 0, but it may be e.g. %GFP_DMA or %__GFP_DMA32
  *		to force the buffer allocation to a specific memory zone.
- * @min_buffers_needed: the minimum number of buffers needed before
- *		@start_streaming can be called. Used when a DMA engine
- *		cannot be started unless at least this number of buffers
- *		have been queued into the driver. (Deprecated)
  * @min_dma_buffers_needed: the minimum number of buffers needed before
  *		@start_streaming can be called. Used when a DMA engine
  *		cannot be started unless at least this number of buffers
@@ -623,7 +619,6 @@ struct vb2_queue {
 	unsigned int			buf_struct_size;
 	u32				timestamp_flags;
 	gfp_t				gfp_flags;
-	u32				min_buffers_needed;
 	u32				min_dma_buffers_needed;
 	u32				min_reqbufs_allocation;
 

@@ -865,11 +865,10 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	/*
 	 * Make sure the requested values and current defaults are sane.
 	 */
-	num_buffers = max_t(unsigned int, *count, q->min_buffers_needed);
 	if (q->min_reqbufs_allocation)
-		num_buffers = max_t(unsigned int, num_buffers, q->min_reqbufs_allocation);
+		num_buffers = max_t(unsigned int, *count, q->min_reqbufs_allocation);
 	else
-		num_buffers = max_t(unsigned int, num_buffers, q->min_dma_buffers_needed + 1);
+		num_buffers = max_t(unsigned int, *count, q->min_dma_buffers_needed + 1);
 	min_reqbufs_needed = num_buffers;
 	num_buffers = min_t(unsigned int, num_buffers, q->max_num_buffers);
 	memset(q->alloc_devs, 0, sizeof(q->alloc_devs));
@@ -1851,8 +1850,7 @@ int vb2_core_qbuf(struct vb2_queue *q, struct vb2_buffer *vb, void *pb,
 	 * then we can finally call start_streaming().
 	 */
 	if (q->streaming && !q->start_streaming_called &&
-	    ((q->queued_count >= q->min_buffers_needed) ||
-	    (q->queued_count >= q->min_dma_buffers_needed))) {
+	    q->queued_count >= q->min_dma_buffers_needed) {
 		ret = vb2_start_streaming(q);
 		if (ret) {
 			/*
@@ -2216,12 +2214,6 @@ int vb2_core_streamon(struct vb2_queue *q, unsigned int type)
 		return -EINVAL;
 	}
 
-	if (q_num_bufs < q->min_buffers_needed) {
-		dprintk(q, 1, "need at least %u allocated buffers\n",
-				q->min_buffers_needed);
-		return -EINVAL;
-	}
-
 	if (q_num_bufs < q->min_dma_buffers_needed) {
 		dprintk(q, 1, "need at least %u allocated buffers\n",
 			q->min_dma_buffers_needed);
@@ -2236,8 +2228,7 @@ int vb2_core_streamon(struct vb2_queue *q, unsigned int type)
 	 * Tell driver to start streaming provided sufficient buffers
 	 * are available.
 	 */
-	if (q->queued_count >= q->min_buffers_needed &&
-	    q->queued_count >= q->min_dma_buffers_needed) {
+	if (q->queued_count >= q->min_dma_buffers_needed) {
 		ret = vb2_start_streaming(q);
 		if (ret)
 			goto unprepare;
@@ -2517,8 +2508,7 @@ int vb2_core_queue_init(struct vb2_queue *q)
 		return -EINVAL;
 
 	if (WARN_ON(q->max_num_buffers > MAX_BUFFER_INDEX) ||
-	    WARN_ON(q->min_dma_buffers_needed > q->max_num_buffers) ||
-	    WARN_ON(q->min_buffers_needed > q->max_num_buffers))
+	    WARN_ON(q->min_dma_buffers_needed > q->max_num_buffers))
 		return -EINVAL;
 
 	if (WARN_ON(q->requires_requests && !q->supports_requests))
@@ -2526,14 +2516,13 @@ int vb2_core_queue_init(struct vb2_queue *q)
 
 	/*
 	 * This combination is not allowed since a non-zero value of
-	 * q->min_buffers_needed can cause vb2_core_qbuf() to fail if
+	 * q->min_dma_buffers_needed can cause vb2_core_qbuf() to fail if
 	 * it has to call start_streaming(), and the Request API expects
 	 * that queueing a request (and thus queueing a buffer contained
 	 * in that request) will always succeed. There is no method of
 	 * propagating an error back to userspace.
 	 */
-	if (WARN_ON(q->supports_requests &&
-		    (q->min_buffers_needed || q->min_dma_buffers_needed)))
+	if (WARN_ON(q->supports_requests && q->min_dma_buffers_needed))
 		return -EINVAL;
 
 	INIT_LIST_HEAD(&q->queued_list);
