@@ -929,7 +929,7 @@ ieee80211_set_probe_resp(struct ieee80211_sub_if_data *sdata,
 
 	old = sdata_dereference(link->u.ap.probe_resp, sdata);
 
-	new = kzalloc(sizeof(struct probe_resp) + resp_len, GFP_KERNEL);
+	new = kzalloc(struct_size(new, data, resp_len), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
 
@@ -970,7 +970,8 @@ static int ieee80211_set_fils_discovery(struct ieee80211_sub_if_data *sdata,
 		kfree_rcu(old, rcu_head);
 
 	if (params->tmpl && params->tmpl_len) {
-		new = kzalloc(sizeof(*new) + params->tmpl_len, GFP_KERNEL);
+		new = kzalloc(struct_size(new, data, params->tmpl_len),
+			      GFP_KERNEL);
 		if (!new)
 			return -ENOMEM;
 		new->len = params->tmpl_len;
@@ -1001,7 +1002,7 @@ ieee80211_set_unsol_bcast_probe_resp(struct ieee80211_sub_if_data *sdata,
 		kfree_rcu(old, rcu_head);
 
 	if (params->tmpl && params->tmpl_len) {
-		new = kzalloc(sizeof(*new) + params->tmpl_len, GFP_KERNEL);
+		new = kzalloc(struct_size(new, data, params->tmpl_len), GFP_KERNEL);
 		if (!new)
 			return -ENOMEM;
 		new->len = params->tmpl_len;

@@ -7322,8 +7322,9 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	}
 	rcu_read_unlock();
 
-	auth_data = kzalloc(sizeof(*auth_data) + req->auth_data_len +
-			    req->ie_len, GFP_KERNEL);
+	auth_data = kzalloc(struct_size(auth_data, data,
+					req->auth_data_len +
+					req->ie_len), GFP_KERNEL);
 	if (!auth_data)
 		return -ENOMEM;
 
@@ -7340,9 +7341,9 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 			auth_data->sae_trans = le16_to_cpu(pos[0]);
 			auth_data->sae_status = le16_to_cpu(pos[1]);
 		}
+		auth_data->data_len += req->auth_data_len - 4;
 		memcpy(auth_data->data, req->auth_data + 4,
 		       req->auth_data_len - 4);
-		auth_data->data_len += req->auth_data_len - 4;
 	}
 
 	/* Check if continuing authentication or trying to authenticate with the
@@ -7354,9 +7355,9 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		    ifmgd->auth_data->link_id == req->link_id;
 
 	if (req->ie && req->ie_len) {
+		auth_data->data_len += req->ie_len;
 		memcpy(&auth_data->data[auth_data->data_len],
 		       req->ie, req->ie_len);
-		auth_data->data_len += req->ie_len;
 	}
 
 	if (req->key && req->key_len) {
@@ -7637,16 +7638,16 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_bss *bss;
 	bool override;
 	int i, err;
-	size_t size = sizeof(*assoc_data) + req->ie_len;
+	size_t extra = req->ie_len;
 
 	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++)
-		size += req->links[i].elems_len;
+		extra += req->links[i].elems_len;
 
 	/* FIXME: no support for 4-addr MLO yet */
 	if (sdata->u.mgd.use_4addr && req->link_id >= 0)
 		return -EOPNOTSUPP;
 
-	assoc_data = kzalloc(size, GFP_KERNEL);
+	assoc_data = kzalloc(struct_size(assoc_data, ie, extra), GFP_KERNEL);
 	if (!assoc_data)
 		return -ENOMEM;
 
@@ -7811,8 +7812,8 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	       sizeof(ifmgd->s1g_capa_mask));
 
 	if (req->ie && req->ie_len) {
-		memcpy(assoc_data->ie, req->ie, req->ie_len);
 		assoc_data->ie_len = req->ie_len;
+		memcpy(assoc_data->ie, req->ie, req->ie_len);
 		assoc_data->ie_pos = assoc_data->ie + assoc_data->ie_len;
 	} else {
 		assoc_data->ie_pos = assoc_data->ie;

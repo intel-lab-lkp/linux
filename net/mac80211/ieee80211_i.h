@@ -278,19 +278,19 @@ struct probe_resp {
 	struct rcu_head rcu_head;
 	int len;
 	u16 cntdwn_counter_offsets[IEEE80211_MAX_CNTDWN_COUNTERS_NUM];
-	u8 data[];
+	u8 data[] __counted_by(len);
 };
 
 struct fils_discovery_data {
 	struct rcu_head rcu_head;
 	int len;
-	u8 data[];
+	u8 data[] __counted_by(len);
 };
 
 struct unsol_bcast_probe_resp_data {
 	struct rcu_head rcu_head;
 	int len;
-	u8 data[];
+	u8 data[] __counted_by(len);
 };
 
 struct ps_data {
@@ -397,7 +397,7 @@ struct ieee80211_mgd_auth_data {
 
 	u16 sae_trans, sae_status;
 	size_t data_len;
-	u8 data[];
+	u8 data[] __counted_by(data_len);
 };
 
 struct ieee80211_mgd_assoc_data {
@@ -446,7 +446,7 @@ struct ieee80211_mgd_assoc_data {
 
 	size_t ie_len;
 	u8 *ie_pos; /* used to fill ie[] with link[].elems */
-	u8 ie[];
+	u8 ie[] __counted_by(ie_len);
 };
 
 struct ieee80211_sta_tx_tspec {
