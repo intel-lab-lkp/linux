@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: GPL-2.0 OR MIT
+/*
+ * Copyright (c) 2021-2023 StarFive Technology Co., Ltd.
+ */
+
+#include "jh8100.dtsi"
+
+/ {
+	model = "StarFive JH8100 EVB";
+	compatible = "starfive,jh8100-evb", "starfive,jh8100";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	cpus {
+		timebase-frequency = <4000000>;
+
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x2 0x00000000>; /* 8GB */
+	};
+
+	soc {
+		clk_uart: clk_uart {
+			compatible = "fixed-clock"; /* Initial clock handler for UART */
+			#clock-cells = <0>;
+			clock-frequency = <24000000>;
+		};
+	};
+};
+
+&uart0 {
+	status = "okay";
+	clocks = <&clk_uart>, <&clk_uart>;
+};
