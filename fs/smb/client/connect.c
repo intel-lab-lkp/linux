@@ -2056,6 +2056,7 @@ void __cifs_put_smb_ses(struct cifs_ses *ses)
 	spin_unlock(&cifs_tcp_ses_lock);
 
 	/* close any extra channels */
+	spin_lock(&ses->chan_lock);
 	for (i = 1; i < ses->chan_count; i++) {
 		if (ses->chans[i].iface) {
 			kref_put(&ses->chans[i].iface->refcount, release_iface);
@@ -2064,11 +2065,14 @@ void __cifs_put_smb_ses(struct cifs_ses *ses)
 		cifs_put_tcp_session(ses->chans[i].server, 0);
 		ses->chans[i].server = NULL;
 	}
+	spin_unlock(&ses->chan_lock);
 
 	/* we now account for primary channel in iface->refcount */
 	if (ses->chans[0].iface) {
 		kref_put(&ses->chans[0].iface->refcount, release_iface);
+		spin_lock(&ses->chan_lock);
 		ses->chans[0].server = NULL;
+		spin_unlock(&ses->chan_lock);
 	}
 
 	sesInfoFree(ses);
