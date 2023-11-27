@@ -17,6 +17,7 @@
 #include <linux/cpufreq.h>
 #include <linux/init.h>
 #include <linux/percpu.h>
+#include <linux/sched/isolation.h>
 
 #include <asm/cpu.h>
 #include <asm/cputype.h>
@@ -179,6 +180,44 @@ static void amu_scale_freq_tick(void)
 
 	scale = min_t(unsigned long, scale, SCHED_CAPACITY_SCALE);
 	this_cpu_write(arch_freq_scale, (unsigned long)scale);
+}
+
+unsigned int arch_freq_get_on_cpu(int cpu)
+{
+	unsigned int freq;
+	u64 scale;
+
+	if (!cpumask_test_cpu(cpu, amu_fie_cpus))
+		return 0;
+
+	/*
+	 * For those CPUs that are in full dynticks mode, try an alternative
+	 * source for the counters (and thus freq scale),
+	 * if available for given policy
+	 */
+	if (!housekeeping_cpu(cpu, HK_TYPE_TICK)) {
+		struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+		int ref_cpu = nr_cpu_ids;
+
+		if (cpumask_intersects(housekeeping_cpumask(HK_TYPE_TICK),
+				       policy->cpus))
+			ref_cpu = cpumask_nth_and(cpu, policy->cpus,
+						  housekeeping_cpumask(HK_TYPE_TICK));
+		cpufreq_cpu_put(policy);
+		if (ref_cpu >= nr_cpu_ids)
+			return 0;
+		cpu = ref_cpu;
+	}
+
+	/*
+	 * Reversed computation to the one used to determine
+	 * the arch_freq_scale value
+	 * (see amu_scale_freq_tick for details)
+	 */
+	scale = per_cpu(arch_freq_scale, cpu);
+	freq = cpufreq_get_hw_max_freq(cpu) >> SCHED_CAPACITY_SHIFT;
+	freq *= scale;
+	return freq;
 }
 
 static struct scale_freq_data amu_sfd = {
