@@ -209,7 +209,6 @@ static int wave5_vpu_probe(struct platform_device *pdev)
 
 	dev->irq = platform_get_irq(pdev, 0);
 	if (dev->irq < 0) {
-		dev_err(&pdev->dev, "failed to get irq resource\n");
 		ret = -ENXIO;
 		goto err_enc_unreg;
 	}
