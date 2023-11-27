@@ -75,6 +75,7 @@ static int set_audio_clock_rate(unsigned long epll_rate,
 				unsigned long audio_rate)
 {
 	struct clk *fout_epll, *sclk_spdif;
+	int ret;
 
 	fout_epll = clk_get(NULL, "fout_epll");
 	if (IS_ERR(fout_epll)) {
@@ -82,7 +83,14 @@ static int set_audio_clock_rate(unsigned long epll_rate,
 		return -ENOENT;
 	}
 
-	clk_set_rate(fout_epll, epll_rate);
+	ret = clk_set_rate(fout_epll, epll_rate);
+	if (ret) {
+		printk(KERN_ERR "%s: failed to set rate for fout_epll\n",
+				__func__);
+		clk_put(fout_epll);
+		return ret;
+	}
+
 	clk_put(fout_epll);
 
 	sclk_spdif = clk_get(NULL, "sclk_spdif");
@@ -91,7 +99,15 @@ static int set_audio_clock_rate(unsigned long epll_rate,
 		return -ENOENT;
 	}
 
-	clk_set_rate(sclk_spdif, audio_rate);
+	ret = clk_set_rate(sclk_spdif, audio_rate);
+	if (ret) {
+		printk(KERN_ERR "%s: failed to set rate for sclk_spdif\n",
+				__func__);
+		clk_put(sclk_spdif);
+		clk_put(fout_epll);
+		return ret;
+	}
+
 	clk_put(sclk_spdif);
 
 	return 0;
