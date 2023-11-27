@@ -159,8 +159,8 @@ static void dcmipp_byteproc_adjust_fmt(struct v4l2_mbus_framefmt *fmt)
 	dcmipp_colorimetry_clamp(fmt);
 }
 
-static int dcmipp_byteproc_init_cfg(struct v4l2_subdev *sd,
-				    struct v4l2_subdev_state *sd_state)
+static int dcmipp_byteproc_init_state(struct v4l2_subdev *sd,
+				      struct v4l2_subdev_state *sd_state)
 {
 	unsigned int i;
 
@@ -383,7 +383,6 @@ static int dcmipp_byteproc_set_selection(struct v4l2_subdev *sd,
 }
 
 static const struct v4l2_subdev_pad_ops dcmipp_byteproc_pad_ops = {
-	.init_cfg		= dcmipp_byteproc_init_cfg,
 	.enum_mbus_code		= dcmipp_byteproc_enum_mbus_code,
 	.enum_frame_size	= dcmipp_byteproc_enum_frame_size,
 	.get_fmt		= v4l2_subdev_get_fmt,
@@ -518,6 +517,7 @@ static void dcmipp_byteproc_release(struct v4l2_subdev *sd)
 }
 
 static const struct v4l2_subdev_internal_ops dcmipp_byteproc_int_ops = {
+	.init_state = dcmipp_byteproc_init_state,
 	.release = dcmipp_byteproc_release,
 };
 

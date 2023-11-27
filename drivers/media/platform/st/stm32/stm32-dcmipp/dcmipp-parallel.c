@@ -143,8 +143,8 @@ static const struct v4l2_mbus_framefmt fmt_default = {
 	.xfer_func = DCMIPP_XFER_FUNC_DEFAULT,
 };
 
-static int dcmipp_par_init_cfg(struct v4l2_subdev *sd,
-			       struct v4l2_subdev_state *sd_state)
+static int dcmipp_par_init_state(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *sd_state)
 {
 	unsigned int i;
 
@@ -262,7 +262,6 @@ static int dcmipp_par_set_fmt(struct v4l2_subdev *sd,
 }
 
 static const struct v4l2_subdev_pad_ops dcmipp_par_pad_ops = {
-	.init_cfg		= dcmipp_par_init_cfg,
 	.enum_mbus_code		= dcmipp_par_enum_mbus_code,
 	.enum_frame_size	= dcmipp_par_enum_frame_size,
 	.get_fmt		= v4l2_subdev_get_fmt,
@@ -394,6 +393,7 @@ static void dcmipp_par_release(struct v4l2_subdev *sd)
 }
 
 static const struct v4l2_subdev_internal_ops dcmipp_par_int_ops = {
+	.init_state = dcmipp_par_init_state,
 	.release = dcmipp_par_release,
 };
 
