@@ -789,6 +789,7 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 	resource_size_t membar2_offset = 0x2000;
 	struct pci_bus *child;
 	struct pci_dev *dev;
+	struct pci_host_bridge *vmd_bridge;
 	int ret;
 
 	/*
@@ -958,8 +959,16 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 	 * and will fail pcie_bus_configure_settings() early. It can instead be
 	 * run on each of the real root ports.
 	 */
-	list_for_each_entry(child, &vmd->bus->children, node)
+	vmd_bridge = to_pci_host_bridge(vmd->bus->bridge);
+	list_for_each_entry(child, &vmd->bus->children, node) {
 		pcie_bus_configure_settings(child);
+		/*
+		 * When Hotplug is enabled on vmd root-port, enable it on vmd
+		 * bridge.
+		 */
+		if (child->self->is_hotplug_bridge)
+			vmd_bridge->native_pcie_hotplug = 1;
+	}
 
 	pci_bus_add_devices(vmd->bus);
 
