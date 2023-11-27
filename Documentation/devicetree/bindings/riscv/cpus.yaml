@@ -48,6 +48,8 @@ properties:
               - thead,c906
               - thead,c910
               - thead,c920
+              - starfive,dubhe-80
+              - starfive,dubhe-90
           - const: riscv
       - items:
           - enum:
