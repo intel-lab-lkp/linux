@@ -435,6 +435,7 @@ extern void rtas_get_rtc_time(struct rtc_time *rtc_time);
 extern int rtas_set_rtc_time(struct rtc_time *rtc_time);
 
 extern unsigned int rtas_busy_delay_time(int status);
+extern void rtas_busy_sleep(int value);
 bool rtas_busy_delay(int status);
 
 extern int early_init_dt_scan_rtas(unsigned long node,

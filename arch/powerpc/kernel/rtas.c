@@ -1250,6 +1250,36 @@ static bool __init rtas_busy_delay_early(int status)
 	return retry;
 }
 
+void rtas_busy_sleep(int value)
+{
+	unsigned int ms;
+
+	ms = rtas_busy_delay_time(value);
+	/*
+	 * The extended delay hint can be as high as 100 seconds.
+	 * Surely any function returning such a status is either
+	 * buggy or isn't going to be significantly slowed by us
+	 * polling at 1HZ. Clamp the sleep time to one second.
+	 */
+	ms = clamp(ms, 1U, 1000U);
+	/*
+	 * The delay hint is an order-of-magnitude suggestion, not
+	 * a minimum. It is fine, possibly even advantageous, for
+	 * us to pause for less time than hinted. For small values,
+	 * use usleep_range() to ensure we don't sleep much longer
+	 * than actually needed.
+	 *
+	 * See Documentation/timers/timers-howto.rst for
+	 * explanation of the threshold used here. In effect we use
+	 * usleep_range() for 9900 and 9901, msleep() for
+	 * 9902-9905.
+	 */
+	if (ms <= 20)
+		usleep_range(ms * 100, ms * 1000);
+	else
+		msleep(ms);
+}
+
 /**
  * rtas_busy_delay() - helper for RTAS busy and extended delay statuses
  *
@@ -1270,7 +1300,6 @@ static bool __init rtas_busy_delay_early(int status)
  */
 bool __ref rtas_busy_delay(int status)
 {
-	unsigned int ms;
 	bool ret;
 
 	/*
@@ -1282,30 +1311,7 @@ bool __ref rtas_busy_delay(int status)
 	switch (status) {
 	case RTAS_EXTENDED_DELAY_MIN...RTAS_EXTENDED_DELAY_MAX:
 		ret = true;
-		ms = rtas_busy_delay_time(status);
-		/*
-		 * The extended delay hint can be as high as 100 seconds.
-		 * Surely any function returning such a status is either
-		 * buggy or isn't going to be significantly slowed by us
-		 * polling at 1HZ. Clamp the sleep time to one second.
-		 */
-		ms = clamp(ms, 1U, 1000U);
-		/*
-		 * The delay hint is an order-of-magnitude suggestion, not
-		 * a minimum. It is fine, possibly even advantageous, for
-		 * us to pause for less time than hinted. For small values,
-		 * use usleep_range() to ensure we don't sleep much longer
-		 * than actually needed.
-		 *
-		 * See Documentation/timers/timers-howto.rst for
-		 * explanation of the threshold used here. In effect we use
-		 * usleep_range() for 9900 and 9901, msleep() for
-		 * 9902-9905.
-		 */
-		if (ms <= 20)
-			usleep_range(ms * 100, ms * 1000);
-		else
-			msleep(ms);
+		rtas_busy_sleep(status);
 		break;
 	case RTAS_BUSY:
 		ret = true;
