@@ -17,7 +17,7 @@ struct comm_str {
 
 /* Should perhaps be moved to struct machine */
 static struct rb_root comm_str_root;
-static struct rw_semaphore comm_str_lock = {.lock = PTHREAD_RWLOCK_INITIALIZER,};
+static struct mutex comm_str_lock = {.lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP,};
 
 static struct comm_str *comm_str__get(struct comm_str *cs)
 {
@@ -30,9 +30,9 @@ static struct comm_str *comm_str__get(struct comm_str *cs)
 static void comm_str__put(struct comm_str *cs)
 {
 	if (cs && refcount_dec_and_test(&cs->refcnt)) {
-		down_write(&comm_str_lock);
+		mutex_lock(&comm_str_lock);
 		rb_erase(&cs->rb_node, &comm_str_root);
-		up_write(&comm_str_lock);
+		mutex_unlock(&comm_str_lock);
 		zfree(&cs->str);
 		free(cs);
 	}
@@ -98,9 +98,9 @@ static struct comm_str *comm_str__findnew(const char *str, struct rb_root *root)
 {
 	struct comm_str *cs;
 
-	down_write(&comm_str_lock);
+	mutex_lock(&comm_str_lock);
 	cs = __comm_str__findnew(str, root);
-	up_write(&comm_str_lock);
+	mutex_unlock(&comm_str_lock);
 
 	return cs;
 }
