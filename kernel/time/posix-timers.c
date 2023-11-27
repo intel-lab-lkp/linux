@@ -1426,6 +1426,68 @@ SYSCALL_DEFINE4(clock_nanosleep_time32, clockid_t, which_clock, int, flags,
 
 #endif
 
+SYSCALL_DEFINE1(multi_clock_gettime, struct __ptp_multi_clock_get __user *, ptp_multi_clk_get)
+{
+	const struct k_clock *kc;
+	struct timespec64 kernel_tp;
+	struct __ptp_multi_clock_get multi_clk_get;
+	int error;
+	unsigned int i, j;
+
+	if (copy_from_user(&multi_clk_get, ptp_multi_clk_get, sizeof(multi_clk_get)))
+		return -EFAULT;
+
+	if (multi_clk_get.n_samples > MULTI_PTP_MAX_SAMPLES)
+		return -EINVAL;
+	if (multi_clk_get.n_clocks > MULTI_PTP_MAX_CLOCKS)
+		return -EINVAL;
+
+	for (j = 0; j < multi_clk_get.n_samples; j++) {
+		for (i = 0; i < multi_clk_get.n_clocks; i++) {
+			kc = clockid_to_kclock(multi_clk_get.clkid_arr[i]);
+			if (!kc)
+				return -EINVAL;
+			error = kc->clock_get_timespec(multi_clk_get.clkid_arr[i], &kernel_tp);
+			if (!error && put_timespec64(&kernel_tp, (struct __kernel_timespec __user *)
+						     &ptp_multi_clk_get->ts[j][i]))
+				error = -EFAULT;
+		}
+	}
+
+	return error;
+}
+
+SYSCALL_DEFINE1(multi_clock_gettime32, struct __ptp_multi_clock_get32 __user *, ptp_multi_clk_get)
+{
+	const struct k_clock *kc;
+	struct timespec64 kernel_tp;
+	struct __ptp_multi_clock_get multi_clk_get;
+	int error;
+	unsigned int i, j;
+
+	if (copy_from_user(&multi_clk_get, ptp_multi_clk_get, sizeof(multi_clk_get)))
+		return -EFAULT;
+
+	if (multi_clk_get.n_samples > MULTI_PTP_MAX_SAMPLES)
+		return -EINVAL;
+	if (multi_clk_get.n_clocks > MULTI_PTP_MAX_CLOCKS)
+		return -EINVAL;
+
+	for (j = 0; j < multi_clk_get.n_samples; j++) {
+		for (i = 0; i < multi_clk_get.n_clocks; i++) {
+			kc = clockid_to_kclock(multi_clk_get.clkid_arr[i]);
+			if (!kc)
+				return -EINVAL;
+			error = kc->clock_get_timespec(multi_clk_get.clkid_arr[i], &kernel_tp);
+			if (!error && put_old_timespec32(&kernel_tp, (struct old_timespec32 __user *)
+							&ptp_multi_clk_get->ts[j][i]))
+				error = -EFAULT;
+		}
+	}
+
+	return error;
+}
+
 static const struct k_clock clock_realtime = {
 	.clock_getres		= posix_get_hrtimer_res,
 	.clock_get_timespec	= posix_get_realtime_timespec,

@@ -260,4 +260,28 @@ void set_process_cpu_timer(struct task_struct *task, unsigned int clock_idx,
 int update_rlimit_cpu(struct task_struct *task, unsigned long rlim_new);
 
 void posixtimer_rearm(struct kernel_siginfo *info);
+
+#define MULTI_PTP_MAX_CLOCKS 12 /* Max number of clocks */
+#define MULTI_PTP_MAX_SAMPLES 10 /* Max allowed offset measurement samples. */
+
+struct __ptp_multi_clock_get {
+	unsigned int n_clocks; /* Desired number of clocks. */
+	unsigned int n_samples; /* Desired number of measurements per clock. */
+	const clockid_t clkid_arr[MULTI_PTP_MAX_CLOCKS]; /* list of clock IDs */
+	/*
+	 * Array of list of n_clocks clocks time samples n_samples times.
+	 */
+	struct  __kernel_timespec ts[MULTI_PTP_MAX_SAMPLES][MULTI_PTP_MAX_CLOCKS];
+};
+
+struct __ptp_multi_clock_get32 {
+	unsigned int n_clocks; /* Desired number of clocks. */
+	unsigned int n_samples; /* Desired number of measurements per clock. */
+	const clockid_t clkid_arr[MULTI_PTP_MAX_CLOCKS]; /* list of clock IDs */
+	/*
+	 * Array of list of n_clocks clocks time samples n_samples times.
+	 */
+	struct  old_timespec32 ts[MULTI_PTP_MAX_SAMPLES][MULTI_PTP_MAX_CLOCKS];
+};
+
 #endif

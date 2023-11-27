@@ -829,8 +829,18 @@ __SYSCALL(__NR_futex_wait, sys_futex_wait)
 #define __NR_futex_requeue 456
 __SYSCALL(__NR_futex_requeue, sys_futex_requeue)
 
+#if defined(__ARCH_WANT_TIME32_SYSCALLS) || __BITS_PER_LONG != 32
+#define __NR_multi_clock_gettime 457
+__SC_3264(__NR_multi_clock_gettime, sys_multi_clock_gettime32, sys_multi_clock_gettime)
+#endif
+
+#if defined(__SYSCALL_COMPAT) || __BITS_PER_LONG == 32
+#define __NR_multi_clock_gettime64 458
+__SYSCALL(__NR_multi_clock_gettime64, sys_multi_clock_gettime)
+#endif
+
 #undef __NR_syscalls
-#define __NR_syscalls 457
+#define __NR_syscalls 459
 
 /*
  * 32 bit systems traditionally used different
