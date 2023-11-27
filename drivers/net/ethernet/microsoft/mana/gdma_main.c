@@ -1243,15 +1243,144 @@ void mana_gd_free_res_map(struct gdma_resource *r)
 	r->size = 0;
 }
 
+static int get_node_with_cpu(int node, int *cpu_count)
+{
+	int next_node = node;
+	int node_cpu_count = nr_cpus_node(node);
+
+#if MAX_NUMNODES > 1
+	if (!node_cpu_count || *cpu_count == node_cpu_count) {
+		next_node = next_online_node(next_node);
+		while (next_node <= MAX_NUMNODES) {
+			if (next_node == MAX_NUMNODES)
+				next_node = first_online_node;
+			if (nr_cpus_node(next_node))
+				break;
+			next_node = next_online_node(next_node);
+		}
+		*cpu_count = 0;
+	}
+	return next_node;
+#endif
+	if (nr_cpus_node(next_node))
+		return next_node;
+	return NUMA_NO_NODE;
+}
+
+static int irq_setup(int *irqs, int nvec, int start_numa_node)
+{
+	int *core_id_list;
+	cpumask_var_t avail_cpus;
+	int i, cpu, cpu_first, core_count = 0, cpu_count = 0, err = 0;
+	int irq_start, cores = 0, numa_node = start_numa_node, real_start_node;
+
+	if (!nr_cpus_node(start_numa_node))
+		return -ENODEV;
+
+	if (!alloc_cpumask_var(&avail_cpus, GFP_KERNEL)) {
+		err = -ENOMEM;
+		goto free_irq;
+	}
+	cpumask_copy(avail_cpus, cpu_online_mask);
+	/* count the number of cores
+	 */
+	for_each_cpu(cpu, avail_cpus) {
+		cpumask_andnot(avail_cpus, avail_cpus, topology_sibling_cpumask(cpu));
+		cores++;
+	}
+	core_id_list = kcalloc(cores, sizeof(unsigned int), GFP_KERNEL);
+	if (!core_id_list) {
+		err = -ENOMEM;
+		goto free_irq;
+	}
+	cpumask_copy(avail_cpus, cpu_online_mask);
+	/* initialize core_id_list array */
+	for_each_cpu(cpu, avail_cpus) {
+		core_id_list[core_count] = cpu;
+		cpumask_andnot(avail_cpus, avail_cpus, topology_sibling_cpumask(cpu));
+		core_count++;
+	}
+
+	cpumask_copy(avail_cpus, cpu_online_mask);
+
+	/* if number of cpus are equal to max_queues per port, then
+	 * irqs[0] which is used for hardware channel communication,
+	 * is treated differently and is assigned to first CPU.
+	 */
+	if (nvec - 1 == num_online_cpus()) {
+		irq_start = 1;
+		cpu_first = cpumask_first(cpu_online_mask);
+		irq_set_affinity_and_hint(irqs[0], cpumask_of(cpu_first));
+	} else {
+		irq_start = 0;
+	}
+
+	/* reset the core_count to reuse.
+	 */
+	core_count = 0;
+
+	/* for each interrupt find the cpu of a particular
+	 * sibling set and if it belongs to the specific numa
+	 * then assign irq to it and clear the cpu bit from
+	 * the corresponding avail_cpus.
+	 * Increase the cpu_count for that node.
+	 * Once all cpus for a numa node is assigned, then
+	 * move to different numa node and continue the same.
+	 */
+	numa_node = get_node_with_cpu(numa_node, &cpu_count);
+	real_start_node = numa_node;
+	for (i = irq_start; i < nvec; ) {
+		/* check if the numa node has cpu or not
+		 * to avoid infinite loop.
+		 */
+		cpu_first = cpumask_first_and(avail_cpus,
+					      topology_sibling_cpumask(core_id_list[core_count]));
+		if (cpu_first < nr_cpu_ids && cpu_to_node(cpu_first) == numa_node) {
+			irq_set_affinity_and_hint(irqs[i], cpumask_of(cpu_first));
+			cpumask_clear_cpu(cpu_first, avail_cpus);
+			cpu_count++;
+			i++;
+			/* Get the new numa node based on cpu_count
+			 */
+			numa_node = get_node_with_cpu(numa_node, &cpu_count);
+			if (numa_node == NUMA_NO_NODE) {
+				err = -ENODEV;
+				goto free_core_id_list;
+			}
+			/* wrap over if the numa_node is the starting node
+			 */
+			if (numa_node == real_start_node)
+				cpumask_copy(avail_cpus, cpu_online_mask);
+
+			/* change of numa node, changes cpu_count to 0, change the core count
+			 * to 0 based on that.
+			 */
+			if (!cpu_count) {
+				core_count = 0;
+				continue;
+			}
+		}
+		if (++core_count == cores)
+			core_count = 0;
+	}
+free_core_id_list:
+	kfree(core_id_list);
+free_irq:
+	free_cpumask_var(avail_cpus);
+	return err;
+}
+
 static int mana_gd_setup_irqs(struct pci_dev *pdev)
 {
-	unsigned int max_queues_per_port = num_online_cpus();
+	unsigned int max_queues_per_port;
 	struct gdma_context *gc = pci_get_drvdata(pdev);
 	struct gdma_irq_context *gic;
-	unsigned int max_irqs, cpu;
-	int nvec, irq;
+	unsigned int max_irqs;
+	int nvec, *irqs, irq;
 	int err, i = 0, j;
 
+	cpus_read_lock();
+	max_queues_per_port = num_online_cpus();
 	if (max_queues_per_port > MANA_MAX_NUM_QUEUES)
 		max_queues_per_port = MANA_MAX_NUM_QUEUES;
 
@@ -1261,6 +1390,11 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 	nvec = pci_alloc_irq_vectors(pdev, 2, max_irqs, PCI_IRQ_MSIX);
 	if (nvec < 0)
 		return nvec;
+	irqs = kmalloc_array(nvec, sizeof(int), GFP_KERNEL);
+	if (!irqs) {
+		err = -ENOMEM;
+		goto free_irq_vector;
+	}
 
 	gc->irq_contexts = kcalloc(nvec, sizeof(struct gdma_irq_context),
 				   GFP_KERNEL);
@@ -1281,27 +1415,27 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 			snprintf(gic->name, MANA_IRQ_NAME_SZ, "mana_q%d@pci:%s",
 				 i - 1, pci_name(pdev));
 
-		irq = pci_irq_vector(pdev, i);
-		if (irq < 0) {
-			err = irq;
+		irqs[i] = pci_irq_vector(pdev, i);
+		if (irqs[i] < 0) {
+			err = irqs[i];
 			goto free_irq;
 		}
 
-		err = request_irq(irq, mana_gd_intr, 0, gic->name, gic);
+		err = request_irq(irqs[i], mana_gd_intr, 0, gic->name, gic);
 		if (err)
 			goto free_irq;
-
-		cpu = cpumask_local_spread(i, gc->numa_node);
-		irq_set_affinity_and_hint(irq, cpumask_of(cpu));
 	}
 
+	err = irq_setup(irqs, nvec, gc->numa_node);
+	if (err)
+		goto free_irq;
 	err = mana_gd_alloc_res_map(nvec, &gc->msix_resource);
 	if (err)
 		goto free_irq;
 
 	gc->max_num_msix = nvec;
 	gc->num_msix_usable = nvec;
-
+	cpus_read_unlock();
 	return 0;
 
 free_irq:
@@ -1314,8 +1448,10 @@ free_irq:
 	}
 
 	kfree(gc->irq_contexts);
+	kfree(irqs);
 	gc->irq_contexts = NULL;
 free_irq_vector:
+	cpus_read_unlock();
 	pci_free_irq_vectors(pdev);
 	return err;
 }
