@@ -1231,6 +1231,11 @@ static struct file *ocxlflash_get_fd(void *ctx_cookie,
 		fops = (struct file_operations *)&ocxl_afu_fops;
 
 	name = kasprintf(GFP_KERNEL, "ocxlflash:%d", ctx->pe);
+	if (!name) {
+		rc = -ENOMEM;
+		dev_err(dev, "%s: kasprintf allocation failed\n", __func__);
+		goto err2;
+	}
 	file = ocxlflash_getfile(dev, name, fops, ctx, flags);
 	kfree(name);
 	if (IS_ERR(file)) {
