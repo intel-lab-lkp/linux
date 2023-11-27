@@ -488,6 +488,8 @@ struct nvme_ns {
 	struct nvme_ns_head *head;
 
 	int lba_shift;
+	u64 nsze;
+	u64 nuse;
 	u16 ms;
 	u16 pi_size;
 	u16 sgs;

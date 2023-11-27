@@ -114,12 +114,84 @@ static ssize_t nsid_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(nsid);
 
+static struct nvme_ns *dev_to_nvme_ns(struct device *dev)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+
+	if (disk->fops == &nvme_bdev_ops)
+		return nvme_get_ns_from_dev(dev);
+	else {
+		struct nvme_ns_head *head = disk->private_data;
+		struct nvme_subsystem *subsys = head->subsys;
+		struct nvme_ctrl *ctrl;
+		struct nvme_ns *ns, *ret = NULL;
+
+		list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
+			down_read(&ctrl->namespaces_rwsem);
+			list_for_each_entry(ns, &ctrl->namespaces, list) {
+				ret = ns;
+				break;
+			}
+			up_read(&ctrl->namespaces_rwsem);
+		}
+		return ret;
+	}
+}
+
+static ssize_t csi_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return sysfs_emit(buf, "%d\n", dev_to_ns_head(dev)->ids.csi);
+}
+static DEVICE_ATTR_RO(csi);
+
+static ssize_t lba_ds_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct nvme_ns *ns = dev_to_nvme_ns(dev);
+
+	return sysfs_emit(buf, "%d\n", ns->lba_shift);
+}
+static DEVICE_ATTR_RO(lba_ds);
+
+static ssize_t lba_ms_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct nvme_ns *ns = dev_to_nvme_ns(dev);
+
+	return sysfs_emit(buf, "%d\n", ns->ms);
+}
+static DEVICE_ATTR_RO(lba_ms);
+
+static ssize_t nsze_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct nvme_ns *ns = dev_to_nvme_ns(dev);
+
+	return sysfs_emit(buf, "%llu\n", ns->nsze);
+}
+static DEVICE_ATTR_RO(nsze);
+
+static ssize_t nuse_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct nvme_ns *ns = dev_to_nvme_ns(dev);
+
+	return sysfs_emit(buf, "%llu\n", ns->nuse);
+}
+static DEVICE_ATTR_RO(nuse);
+
 static struct attribute *nvme_ns_id_attrs[] = {
 	&dev_attr_wwid.attr,
 	&dev_attr_uuid.attr,
 	&dev_attr_nguid.attr,
 	&dev_attr_eui.attr,
+	&dev_attr_csi.attr,
 	&dev_attr_nsid.attr,
+	&dev_attr_lba_ds.attr,
+	&dev_attr_lba_ms.attr,
+	&dev_attr_nsze.attr,
+	&dev_attr_nuse.attr,
 #ifdef CONFIG_NVME_MULTIPATH
 	&dev_attr_ana_grpid.attr,
 	&dev_attr_ana_state.attr,
