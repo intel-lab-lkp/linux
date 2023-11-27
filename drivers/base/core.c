@@ -497,6 +497,18 @@ static struct attribute *devlink_attrs[] = {
 };
 ATTRIBUTE_GROUPS(devlink);
 
+static bool device_node_overlay_removal(struct device *dev)
+{
+	if (!dev_of_node(dev))
+		return false;
+	if (!of_node_check_flag(dev->of_node, OF_DETACHED))
+		return false;
+	if (!of_node_check_flag(dev->of_node, OF_OVERLAY))
+		return false;
+
+	return true;
+}
+
 static void device_link_release_fn(struct work_struct *work)
 {
 	struct device_link *link = container_of(work, struct device_link, rm_work);
@@ -532,8 +544,19 @@ static void devlink_dev_release(struct device *dev)
 	 * synchronization in device_link_release_fn() and if the consumer or
 	 * supplier devices get deleted when it runs, so put it into the "long"
 	 * workqueue.
+	 *
+	 * However, if any of the supplier, consumer nodes is being removed
+	 * through overlay removal, the expectation in
+	 * __of_changeset_entry_destroy() is for the node 'kref' to be 1 which
+	 * cannot be guaranteed with the async nature of
+	 * device_link_release_fn(). Hence, do it synchronously for the overlay
+	 * case.
 	 */
-	queue_work(system_long_wq, &link->rm_work);
+	if (device_node_overlay_removal(link->consumer) ||
+	    device_node_overlay_removal(link->supplier))
+		device_link_release_fn(&link->rm_work);
+	else
+		queue_work(system_long_wq, &link->rm_work);
 }
 
 static struct class devlink_class = {
