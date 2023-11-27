@@ -53,12 +53,20 @@ struct cdns_dsi;
  * @deinit: Called in the CDNS DSI remove
  * @enable: Called at the beginning of CDNS DSI bridge enable
  * @disable: Called at the end of CDNS DSI bridge disable
+ * @resume: Called at the resume of CDNS DSI
+ * @suspend: Called at the suspend of CDNS DSI
+ * @update: Called at the middle of CDNS DSI bridge enable
  */
 struct cdns_dsi_platform_ops {
 	int (*init)(struct cdns_dsi *dsi);
 	void (*deinit)(struct cdns_dsi *dsi);
 	void (*enable)(struct cdns_dsi *dsi);
 	void (*disable)(struct cdns_dsi *dsi);
+	void (*resume)(struct cdns_dsi *dsi);
+	void (*suspend)(struct cdns_dsi *dsi);
+	void (*update)(struct cdns_dsi *dsi, struct cdns_dsi_cfg *dsi_cfg,
+		       const struct drm_display_mode *mode);
+	void (*transfer)(struct cdns_dsi *dsi);
 };
 
 struct cdns_dsi {
@@ -79,6 +87,17 @@ struct cdns_dsi {
 	bool link_initialized;
 	bool phy_initialized;
 	struct phy *dphy;
+
+#ifdef CONFIG_DRM_CDNS_DSI_JH7110
+	struct clk *apb_clk;
+	struct clk *txesc_clk;
+	struct reset_control *dpi_rst;
+	struct reset_control *apb_rst;
+	struct reset_control *txesc_rst;
+	struct reset_control *txbytehs_rst;
+#endif
 };
+
+void cdns_dsi_hs_init(struct cdns_dsi *dsi);
 
 #endif /* !__CDNS_DSI_H__ */
