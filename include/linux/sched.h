@@ -1137,6 +1137,7 @@ struct task_struct {
 	unsigned int			sas_ss_flags;
 
 	struct callback_head		*task_works;
+#define	TASK_WORKS_DISABLED	((void*)1)
 
 #ifdef CONFIG_AUDIT
 #ifdef CONFIG_AUDITSYSCALL

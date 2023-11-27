@@ -49,7 +49,8 @@ int task_work_add(struct task_struct *task, struct callback_head *work,
 
 	head = READ_ONCE(task->task_works);
 	do {
-		if (unlikely(head == &work_exited))
+		if (unlikely(head == &work_exited ||
+			     head == TASK_WORKS_DISABLED))
 			return -ESRCH;
 		work->next = head;
 	} while (!try_cmpxchg(&task->task_works, &head, work));
@@ -157,7 +158,7 @@ void task_work_run(void)
 		work = READ_ONCE(task->task_works);
 		do {
 			head = NULL;
-			if (!work) {
+			if (!work || work == TASK_WORKS_DISABLED) {
 				if (task->flags & PF_EXITING)
 					head = &work_exited;
 				else
@@ -165,7 +166,7 @@ void task_work_run(void)
 			}
 		} while (!try_cmpxchg(&task->task_works, &work, head));
 
-		if (!work)
+		if (!work || work == TASK_WORKS_DISABLED)
 			break;
 		/*
 		 * Synchronize with task_work_cancel(). It can not remove

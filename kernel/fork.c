@@ -2577,7 +2577,7 @@ __latent_entropy struct task_struct *copy_process(
 	p->dirty_paused_when = 0;
 
 	p->pdeath_signal = 0;
-	p->task_works = NULL;
+	p->task_works = args->kthread ? TASK_WORKS_DISABLED : NULL;
 	clear_posix_cputimers_work(p);
 
 #ifdef CONFIG_KRETPROBES

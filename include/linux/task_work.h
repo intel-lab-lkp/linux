@@ -22,7 +22,9 @@ enum task_work_notify_mode {
 
 static inline bool task_work_pending(struct task_struct *task)
 {
-	return READ_ONCE(task->task_works);
+	struct callback_head *works = READ_ONCE(task->task_works);
+
+	return works && works != TASK_WORKS_DISABLED;
 }
 
 int task_work_add(struct task_struct *task, struct callback_head *twork,

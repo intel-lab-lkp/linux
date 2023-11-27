@@ -13,6 +13,7 @@
 #include <linux/fs_struct.h>
 #include <linux/swap.h>
 #include <linux/siphash.h>
+#include <linux/task_work.h>
 
 #include <linux/sunrpc/stats.h>
 #include <linux/sunrpc/svcsock.h>
@@ -942,6 +943,7 @@ nfsd(void *vrqstp)
 	}
 
 	current->fs->umask = 0;
+	current->task_works = NULL; /* Declare that I will call task_work_run() */
 
 	atomic_inc(&nfsdstats.th_cnt);
 
@@ -956,6 +958,8 @@ nfsd(void *vrqstp)
 
 		svc_recv(rqstp);
 		validate_process_creds();
+		if (task_work_pending(current))
+			task_work_run();
 	}
 
 	atomic_dec(&nfsdstats.th_cnt);
