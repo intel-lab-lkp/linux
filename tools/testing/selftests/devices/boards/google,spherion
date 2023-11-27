@@ -1,0 +1,12 @@
+# Example test definition for Google Spherion Chromebook
+#
+# Format:
+#   usb|pci test_name number_of_matches field=value [ field=value ... ]
+#
+# The available match fields vary by bus. The field-value match pairs for a
+# device can be retrieved from the device's modalias attribute in sysfs. A
+# subset of the fields may be used to make the match more generic so it can work
+# with the different hardware variants of a device on the machine.
+usb camera 1 ic=0e isc=01 ip=00
+usb bluetooth 1 ic=e0 isc=01 ip=01 in=00
+pci wifi 1 v=14c3 d=7961
