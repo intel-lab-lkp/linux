@@ -39,11 +39,7 @@ static int force_tjmax;
 module_param_named(tjmax, force_tjmax, int, 0444);
 MODULE_PARM_DESC(tjmax, "TjMax value in degrees Celsius");
 
-#define PKG_SYSFS_ATTR_NO	1	/* Sysfs attribute for package temp */
-#define BASE_SYSFS_ATTR_NO	2	/* Sysfs Base attr no for coretemp */
-#define NUM_REAL_CORES		128	/* Number of Real cores per cpu */
 #define CORETEMP_NAME_LENGTH	28	/* String Length of attrs */
-#define MAX_CORE_DATA		(NUM_REAL_CORES + BASE_SYSFS_ATTR_NO)
 
 enum coretemp_attr_index {
 	ATTR_LABEL,
@@ -90,17 +86,17 @@ struct temp_data {
 	struct attribute *attrs[TOTAL_ATTRS + 1];
 	struct attribute_group attr_group;
 	struct mutex update_lock;
+	struct list_head node;
 };
 
 /* Platform Data per Physical CPU */
 struct platform_data {
 	struct device		*hwmon_dev;
 	u16			pkg_id;
-	u16			cpu_map[NUM_REAL_CORES];
-	struct ida		ida;
 	struct cpumask		cpumask;
-	struct temp_data	*core_data[MAX_CORE_DATA];
 	struct device_attribute name_attr;
+	struct mutex		core_data_lock;
+	struct list_head	core_data_list;
 };
 
 struct tjmax_pci {
@@ -491,6 +487,23 @@ static struct temp_data *init_temp_data(unsigned int cpu, int pkg_flag)
 	return tdata;
 }
 
+static struct temp_data *get_tdata(struct platform_data *pdata, int cpu)
+{
+	struct temp_data *tdata;
+
+	mutex_lock(&pdata->core_data_lock);
+	list_for_each_entry(tdata, &pdata->core_data_list, node) {
+		if (cpu >= 0 && !tdata->is_pkg_data && tdata->cpu_core_id == topology_core_id(cpu))
+			goto found;
+		if (cpu < 0 && tdata->is_pkg_data)
+			goto found;
+	}
+	tdata = NULL;
+found:
+	mutex_unlock(&pdata->core_data_lock);
+	return tdata;
+}
+
 static int create_core_data(struct platform_device *pdev, unsigned int cpu,
 			    int pkg_flag)
 {
@@ -498,10 +511,18 @@ static int create_core_data(struct platform_device *pdev, unsigned int cpu,
 	struct platform_data *pdata = platform_get_drvdata(pdev);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 	u32 eax, edx;
-	int err, index, attr_no;
+	int err, attr_no;
 
 	if (!housekeeping_cpu(cpu, HK_TYPE_MISC))
 		return 0;
+
+	tdata = get_tdata(pdata, pkg_flag ? -1 : cpu);
+	if (tdata)
+		return -EEXIST;
+
+	tdata = init_temp_data(cpu, pkg_flag);
+	if (!tdata)
+		return -ENOMEM;
 
 	/*
 	 * Find attr number for sysfs:
@@ -509,26 +530,10 @@ static int create_core_data(struct platform_device *pdev, unsigned int cpu,
 	 * The attr number is always core id + 2
 	 * The Pkgtemp will always show up as temp1_*, if available
 	 */
-	if (pkg_flag) {
-		attr_no = PKG_SYSFS_ATTR_NO;
-	} else {
-		index = ida_alloc(&pdata->ida, GFP_KERNEL);
-		if (index < 0)
-			return index;
-		pdata->cpu_map[index] = topology_core_id(cpu);
-		attr_no = index + BASE_SYSFS_ATTR_NO;
-	}
-
-	if (attr_no > MAX_CORE_DATA - 1) {
-		err = -ERANGE;
-		goto ida_free;
-	}
-
-	tdata = init_temp_data(cpu, pkg_flag);
-	if (!tdata) {
-		err = -ENOMEM;
-		goto ida_free;
-	}
+	if (pkg_flag)
+		attr_no = 1;
+	else
+		attr_no = tdata->cpu_core_id + 2;
 
 	/* Test if we can access the status register */
 	err = rdmsr_safe_on_cpu(cpu, tdata->status_reg, &eax, &edx);
@@ -547,20 +552,18 @@ static int create_core_data(struct platform_device *pdev, unsigned int cpu,
 		if (get_ttarget(tdata, &pdev->dev) >= 0)
 			tdata->attr_size++;
 
-	pdata->core_data[attr_no] = tdata;
-
 	/* Create sysfs interfaces */
 	err = create_core_attrs(tdata, pdata->hwmon_dev, attr_no);
 	if (err)
 		goto exit_free;
 
+	mutex_lock(&pdata->core_data_lock);
+	list_add(&tdata->node, &pdata->core_data_list);
+	mutex_unlock(&pdata->core_data_lock);
+
 	return 0;
 exit_free:
-	pdata->core_data[attr_no] = NULL;
 	kfree(tdata);
-ida_free:
-	if (!pkg_flag)
-		ida_free(&pdata->ida, index);
 	return err;
 }
 
@@ -571,9 +574,9 @@ coretemp_add_core(struct platform_device *pdev, unsigned int cpu, int pkg_flag)
 		dev_err(&pdev->dev, "Adding Core %u failed\n", cpu);
 }
 
-static void coretemp_remove_core(struct platform_data *pdata, int indx)
+static void coretemp_remove_core(struct platform_data *pdata, int cpu)
 {
-	struct temp_data *tdata = pdata->core_data[indx];
+	struct temp_data *tdata = get_tdata(pdata, cpu);
 
 	/* if we errored on add then this is already gone */
 	if (!tdata)
@@ -582,11 +585,11 @@ static void coretemp_remove_core(struct platform_data *pdata, int indx)
 	/* Remove the sysfs attributes */
 	sysfs_remove_group(&pdata->hwmon_dev->kobj, &tdata->attr_group);
 
-	kfree(pdata->core_data[indx]);
-	pdata->core_data[indx] = NULL;
+	mutex_lock(&pdata->core_data_lock);
+	list_del(&tdata->node);
+	mutex_unlock(&pdata->core_data_lock);
 
-	if (indx >= BASE_SYSFS_ATTR_NO)
-		ida_free(&pdata->ida, indx - BASE_SYSFS_ATTR_NO);
+	kfree(tdata);
 }
 
 static int coretemp_device_add(int zoneid)
@@ -601,7 +604,8 @@ static int coretemp_device_add(int zoneid)
 		return -ENOMEM;
 
 	pdata->pkg_id = zoneid;
-	ida_init(&pdata->ida);
+	mutex_init(&pdata->core_data_lock);
+	INIT_LIST_HEAD(&pdata->core_data_list);
 
 	pdev = platform_device_alloc(DRVNAME, zoneid);
 	if (!pdev) {
@@ -629,7 +633,6 @@ static void coretemp_device_remove(int zoneid)
 	struct platform_device *pdev = zone_devices[zoneid];
 	struct platform_data *pdata = platform_get_drvdata(pdev);
 
-	ida_destroy(&pdata->ida);
 	kfree(pdata);
 	platform_device_unregister(pdev);
 }
@@ -699,7 +702,7 @@ static int coretemp_cpu_offline(unsigned int cpu)
 	struct platform_device *pdev = coretemp_get_pdev(cpu);
 	struct platform_data *pd;
 	struct temp_data *tdata;
-	int i, indx = -1, target;
+	int target;
 
 	/* No need to tear down any interfaces for suspend */
 	if (cpuhp_tasks_frozen)
@@ -710,18 +713,9 @@ static int coretemp_cpu_offline(unsigned int cpu)
 	if (!pd->hwmon_dev)
 		return 0;
 
-	for (i = 0; i < NUM_REAL_CORES; i++) {
-		if (pd->cpu_map[i] == topology_core_id(cpu)) {
-			indx = i + BASE_SYSFS_ATTR_NO;
-			break;
-		}
-	}
-
-	/* Too many cores and this core is not populated, just return */
-	if (indx < 0)
+	tdata = get_tdata(pd, cpu);
+	if (!tdata)
 		return 0;
-
-	tdata = pd->core_data[indx];
 
 	cpumask_clear_cpu(cpu, &pd->cpumask);
 
@@ -732,20 +726,20 @@ static int coretemp_cpu_offline(unsigned int cpu)
 	 */
 	target = cpumask_any_and(&pd->cpumask, topology_sibling_cpumask(cpu));
 	if (target >= nr_cpu_ids) {
-		coretemp_remove_core(pd, indx);
-	} else if (tdata && tdata->cpu == cpu) {
+		coretemp_remove_core(pd, cpu);
+	} else if (tdata->cpu == cpu) {
 		mutex_lock(&tdata->update_lock);
 		tdata->cpu = target;
 		mutex_unlock(&tdata->update_lock);
 	}
 
+	tdata = get_tdata(pd, -1);
 	/*
 	 * If all cores in this pkg are offline, remove the interface.
 	 */
-	tdata = pd->core_data[PKG_SYSFS_ATTR_NO];
 	if (cpumask_empty(&pd->cpumask)) {
 		if (tdata)
-			coretemp_remove_core(pd, PKG_SYSFS_ATTR_NO);
+			coretemp_remove_core(pd, -1);
 		hwmon_device_unregister(pd->hwmon_dev);
 		pd->hwmon_dev = NULL;
 		return 0;
