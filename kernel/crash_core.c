@@ -611,6 +611,9 @@ int crash_exclude_mem_range(struct crash_mem *mem,
 		}
 
 		if (p_start > start && p_end < end) {
+			/* Split happened */
+			if (mem->nr_ranges == mem->max_nr_ranges)
+				return -ENOMEM;
 			/* Split original range */
 			mem->ranges[i].end = p_start - 1;
 			temp_range.start = p_end + 1;
@@ -626,9 +629,6 @@ int crash_exclude_mem_range(struct crash_mem *mem,
 	if (!temp_range.end)
 		return 0;
 
-	/* Split happened */
-	if (i == mem->max_nr_ranges - 1)
-		return -ENOMEM;
 
 	/* Location where new range should go */
 	j = i + 1;
