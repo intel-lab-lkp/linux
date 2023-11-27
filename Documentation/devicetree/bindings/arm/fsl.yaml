@@ -900,6 +900,13 @@ properties:
           - const: toradex,colibri-imx7d-emmc
           - const: fsl,imx7d
 
+      - description: Variscite VAR-SOM-MX7 based boards
+        items:
+          - enum:
+              - gome,e143_01                 # Gossen Metrawatt Profitest MF (e143_01)
+          - const: variscite,var-som-mx7
+          - const: fsl,imx7d
+
       - description: i.MX7ULP based Boards
         items:
           - enum:

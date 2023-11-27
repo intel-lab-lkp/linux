@@ -363,6 +363,7 @@ dtb-$(CONFIG_SOC_IMX7D) += \
 	imx7d-colibri-iris-v2.dtb \
 	imx7d-flex-concentrator.dtb \
 	imx7d-flex-concentrator-mfg.dtb \
+	imx7d-gome-e143_01.dtb \
 	imx7d-mba7.dtb \
 	imx7d-meerkat96.dtb \
 	imx7d-nitrogen7.dtb \
