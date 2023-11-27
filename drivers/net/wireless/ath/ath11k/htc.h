@@ -151,7 +151,7 @@ struct ath11k_htc_credit_report {
 struct ath11k_htc_record {
 	struct ath11k_htc_record_hdr hdr;
 	union {
-		struct ath11k_htc_credit_report credit_report[0];
+		DECLARE_FLEX_ARRAY(struct ath11k_htc_credit_report, credit_report);
 	};
 } __packed __aligned(4);
 
