@@ -1770,7 +1770,6 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 			tcp_ses, (struct sockaddr *)&ctx->dstaddr);
 		if (tcp_ses->smbd_conn) {
 			cifs_dbg(VFS, "RDMA transport established\n");
-			rc = 0;
 			goto smbd_connected;
 		} else {
 			rc = -ENOENT;
