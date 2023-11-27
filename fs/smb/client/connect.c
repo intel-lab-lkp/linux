@@ -2711,7 +2711,9 @@ cifs_get_tcon(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 	tcon->nodelete = ctx->nodelete;
 	tcon->local_lease = ctx->local_lease;
 	INIT_LIST_HEAD(&tcon->pending_opens);
+	spin_lock(&tcon->tc_lock);
 	tcon->status = TID_GOOD;
+	spin_unlock(&tcon->tc_lock);
 
 	INIT_DELAYED_WORK(&tcon->query_interfaces,
 			  smb2_query_server_interfaces);
