@@ -48,7 +48,7 @@ static int wg_open(struct net_device *dev)
 		dev_v6->cnf.addr_gen_mode = IN6_ADDR_GEN_MODE_NONE;
 
 	mutex_lock(&wg->device_update_lock);
-	ret = wg_socket_init(wg, wg->incoming_port);
+	ret = wg_socket_init(wg, wg->port_cfg);
 	if (ret < 0)
 		goto out;
 	list_for_each_entry(peer, &wg->peer_list, peer_list) {
@@ -249,7 +249,7 @@ static void wg_destruct(struct net_device *dev)
 	rtnl_unlock();
 	mutex_lock(&wg->device_update_lock);
 	rcu_assign_pointer(wg->creating_net, NULL);
-	wg->incoming_port = 0;
+	memzero_explicit(&wg->port_cfg, sizeof(wg->port_cfg));
 	wg_socket_reinit(wg, NULL, NULL);
 	/* The final references are cleared in the below calls to destroy_workqueue. */
 	wg_peer_remove_all(wg);

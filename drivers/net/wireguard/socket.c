@@ -346,7 +346,7 @@ static void set_sock_opts(struct socket *sock)
 	sk_set_memalloc(sock->sk);
 }
 
-int wg_socket_init(struct wg_device *wg, u16 port)
+int wg_socket_init(struct wg_device *wg, struct udp_port_cfg port_cfg)
 {
 	struct net *net;
 	int ret;
@@ -356,12 +356,7 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 		.encap_rcv = wg_receive
 	};
 	struct socket *new4 = NULL, *new6 = NULL;
-	struct udp_port_cfg port4 = {
-		.family = AF_INET,
-		.local_ip.s_addr = htonl(INADDR_ANY),
-		.local_udp_port = htons(port),
-		.use_udp_checksums = true
-	};
+	struct udp_port_cfg port4;
 #if IS_ENABLED(CONFIG_IPV6)
 	int retries = 0;
 	struct udp_port_cfg port6 = {
@@ -373,16 +368,29 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 	};
 #endif
 
+	if (port_cfg.family == AF_UNSPEC) {
+		port4 = (struct udp_port_cfg) {
+			.family = AF_INET,
+			.local_ip.s_addr = htonl(INADDR_ANY),
+			.local_udp_port = port_cfg.local_udp_port,
+			.use_udp_checksums = true
+		};
+	} else {
+		port4 = port_cfg;
+		port4.use_udp_checksums = true;
+		if (IS_ENABLED(CONFIG_IPV6) && port_cfg.family == AF_INET6) {
+			port4.use_udp6_tx_checksums = true;
+			port4.use_udp6_rx_checksums = true;
+			port4.ipv6_v6only = true;
+		}
+	}
+
 	rcu_read_lock();
 	net = rcu_dereference(wg->creating_net);
 	net = net ? maybe_get_net(net) : NULL;
 	rcu_read_unlock();
 	if (unlikely(!net))
 		return -ENONET;
-
-#if IS_ENABLED(CONFIG_IPV6)
-retry:
-#endif
 
 	ret = udp_sock_create(net, &port4, &new4);
 	if (ret < 0) {
@@ -392,13 +400,18 @@ retry:
 	set_sock_opts(new4);
 	setup_udp_tunnel_sock(net, new4, &cfg);
 
+	if (port_cfg.family != AF_UNSPEC)
+		goto reinit;
+
 #if IS_ENABLED(CONFIG_IPV6)
+retry:
 	if (ipv6_mod_enabled()) {
 		port6.local_udp_port = inet_sk(new4->sk)->inet_sport;
 		ret = udp_sock_create(net, &port6, &new6);
 		if (ret < 0) {
 			udp_tunnel_sock_release(new4);
-			if (ret == -EADDRINUSE && !port && retries++ < 100)
+			if (ret == -EADDRINUSE && !port_cfg.local_udp_port &&
+			    retries++ < 100)
 				goto retry;
 			pr_err("%s: Could not create IPv6 socket\n",
 			       wg->dev->name);
@@ -409,6 +422,8 @@ retry:
 	}
 #endif
 
+reinit:
+	wg->port_cfg = port_cfg;
 	wg_socket_reinit(wg, new4->sk, new6 ? new6->sk : NULL);
 	ret = 0;
 out:
@@ -428,8 +443,6 @@ void wg_socket_reinit(struct wg_device *wg, struct sock *new4,
 				lockdep_is_held(&wg->socket_update_lock));
 	rcu_assign_pointer(wg->sock4, new4);
 	rcu_assign_pointer(wg->sock6, new6);
-	if (new4)
-		wg->incoming_port = ntohs(inet_sk(new4)->inet_sport);
 	mutex_unlock(&wg->socket_update_lock);
 	synchronize_net();
 	sock_free(old4);

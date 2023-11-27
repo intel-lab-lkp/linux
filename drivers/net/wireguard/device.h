@@ -17,6 +17,7 @@
 #include <linux/mutex.h>
 #include <linux/net.h>
 #include <linux/ptr_ring.h>
+#include <net/udp_tunnel.h>
 
 struct wg_device;
 
@@ -53,7 +54,7 @@ struct wg_device {
 	atomic_t handshake_queue_len;
 	unsigned int num_peers, device_update_gen;
 	u32 fwmark;
-	u16 incoming_port;
+	struct udp_port_cfg port_cfg;
 };
 
 int wg_device_init(void);

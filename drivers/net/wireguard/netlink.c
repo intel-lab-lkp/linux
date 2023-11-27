@@ -26,6 +26,8 @@ static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 	[WGDEVICE_A_PUBLIC_KEY]		= NLA_POLICY_EXACT_LEN(NOISE_PUBLIC_KEY_LEN),
 	[WGDEVICE_A_FLAGS]		= { .type = NLA_U32 },
 	[WGDEVICE_A_LISTEN_PORT]	= { .type = NLA_U16 },
+	[WGDEVICE_A_LISTEN_ADDR]	= NLA_POLICY_MIN_LEN(sizeof(struct in_addr)),
+	[WGDEVICE_A_LISTEN_IFINDEX]	= { .type = NLA_U32 },
 	[WGDEVICE_A_FWMARK]		= { .type = NLA_U32 },
 	[WGDEVICE_A_PEERS]		= { .type = NLA_NESTED }
 };
@@ -230,11 +232,22 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 
 	if (!ctx->next_peer) {
 		if (nla_put_u16(skb, WGDEVICE_A_LISTEN_PORT,
-				wg->incoming_port) ||
+				ntohs(wg->port_cfg.local_udp_port)) ||
+		    nla_put_u32(skb, WGDEVICE_A_LISTEN_IFINDEX, wg->port_cfg.bind_ifindex) ||
 		    nla_put_u32(skb, WGDEVICE_A_FWMARK, wg->fwmark) ||
 		    nla_put_u32(skb, WGDEVICE_A_IFINDEX, wg->dev->ifindex) ||
 		    nla_put_string(skb, WGDEVICE_A_IFNAME, wg->dev->name))
 			goto out;
+	        if (wg->port_cfg.family == AF_INET &&
+		    nla_put_in_addr(skb, WGDEVICE_A_LISTEN_ADDR,
+				    wg->port_cfg.local_ip.s_addr))
+				goto out;
+#if IS_ENABLED(CONFIG_IPV6)
+	        if (wg->port_cfg.family == AF_INET6 &&
+		    nla_put_in6_addr(skb, WGDEVICE_A_LISTEN_ADDR,
+				     &wg->port_cfg.local_ip6))
+				goto out;
+#endif
 
 		down_read(&wg->static_identity.lock);
 		if (wg->static_identity.has_identity) {
@@ -311,19 +324,49 @@ static int wg_get_device_done(struct netlink_callback *cb)
 	return 0;
 }
 
-static int set_port(struct wg_device *wg, u16 port)
+static int set_port_cfg(struct wg_device *wg, struct nlattr **attrs)
 {
 	struct wg_peer *peer;
+	struct udp_port_cfg port_cfg = {
+		.family = AF_UNSPEC,
+	};
 
-	if (wg->incoming_port == port)
+	if (attrs[WGDEVICE_A_LISTEN_PORT])
+		port_cfg.local_udp_port =
+			htons(nla_get_u16(attrs[WGDEVICE_A_LISTEN_PORT]));
+	if (attrs[WGDEVICE_A_LISTEN_ADDR]) {
+		union {
+			struct in_addr addr4;
+			struct in6_addr addr6;
+		} *u_addr = nla_data(attrs[WGDEVICE_A_LISTEN_ADDR]);
+		size_t len = nla_len(attrs[WGDEVICE_A_LISTEN_ADDR]);
+		if (len == sizeof(struct in_addr)) {
+			port_cfg.family = AF_INET;
+			port_cfg.local_ip = u_addr->addr4;
+		} else if (len == sizeof(struct in6_addr)) {
+#if IS_ENABLED(CONFIG_IPV6)
+			port_cfg.family = AF_INET6;
+			port_cfg.local_ip6 = u_addr->addr6;
+#else
+			return -EAFNOSUPPORT;
+#endif
+
+		}
+	}
+	if (attrs[WGDEVICE_A_LISTEN_IFINDEX]) {
+		port_cfg.bind_ifindex =
+			nla_get_u32(attrs[WGDEVICE_A_LISTEN_IFINDEX]);
+	}
+
+	if (memcmp(&port_cfg, &wg->port_cfg, sizeof(port_cfg)) == 0)
 		return 0;
 	list_for_each_entry(peer, &wg->peer_list, peer_list)
 		wg_socket_clear_peer_endpoint_src(peer);
 	if (!netif_running(wg->dev)) {
-		wg->incoming_port = port;
+		wg->port_cfg = port_cfg;
 		return 0;
 	}
-	return wg_socket_init(wg, port);
+	return wg_socket_init(wg, port_cfg);
 }
 
 static int set_allowedip(struct wg_peer *peer, struct nlattr **attrs)
@@ -531,8 +574,7 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[WGDEVICE_A_LISTEN_PORT]) {
-		ret = set_port(wg,
-			nla_get_u16(info->attrs[WGDEVICE_A_LISTEN_PORT]));
+		ret = set_port_cfg(wg, info->attrs);
 		if (ret)
 			goto out;
 	}
