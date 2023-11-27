@@ -2741,6 +2741,7 @@ trace_buffer_lock_reserve(struct trace_buffer *buffer,
 DEFINE_PER_CPU(struct ring_buffer_event *, trace_buffered_event);
 DEFINE_PER_CPU(int, trace_buffered_event_cnt);
 static int trace_buffered_event_ref;
+static bool trace_buffered_event_enabled;
 
 /**
  * trace_buffered_event_enable - enable buffering events
@@ -2764,7 +2765,9 @@ void trace_buffered_event_enable(void)
 
 	WARN_ON_ONCE(!mutex_is_locked(&event_mutex));
 
-	if (trace_buffered_event_ref++)
+	trace_buffered_event_ref++;
+
+	if (trace_buffered_event_enabled)
 		return;
 
 	for_each_tracing_cpu(cpu) {
@@ -2777,30 +2780,21 @@ void trace_buffered_event_enable(void)
 		memset(event, 0, sizeof(*event));
 
 		per_cpu(trace_buffered_event, cpu) = event;
-
-		preempt_disable();
-		if (cpu == smp_processor_id() &&
-		    __this_cpu_read(trace_buffered_event) !=
-		    per_cpu(trace_buffered_event, cpu))
-			WARN_ON_ONCE(1);
-		preempt_enable();
 	}
 
+	/*
+	 * Ensure all initialization changes are visible and publish
+	 * availability of trace_buffered_event.
+	 */
+	smp_wmb();
+	WRITE_ONCE(trace_buffered_event_enabled, true);
 	return;
+
  failed:
-	trace_buffered_event_disable();
-}
-
-static void enable_trace_buffered_event(void *data)
-{
-	/* Probably not needed, but do it anyway */
-	smp_rmb();
-	this_cpu_dec(trace_buffered_event_cnt);
-}
-
-static void disable_trace_buffered_event(void *data)
-{
-	this_cpu_inc(trace_buffered_event_cnt);
+	for_each_tracing_cpu(cpu) {
+		free_page((unsigned long)per_cpu(trace_buffered_event, cpu));
+		per_cpu(trace_buffered_event, cpu) = NULL;
+	}
 }
 
 /**
@@ -2820,33 +2814,19 @@ void trace_buffered_event_disable(void)
 	if (WARN_ON_ONCE(!trace_buffered_event_ref))
 		return;
 
-	if (--trace_buffered_event_ref)
+	if (--trace_buffered_event_ref || !trace_buffered_event_enabled)
 		return;
 
-	preempt_disable();
-	/* For each CPU, set the buffer as used. */
-	smp_call_function_many(tracing_buffer_mask,
-			       disable_trace_buffered_event, NULL, 1);
-	preempt_enable();
+	WRITE_ONCE(trace_buffered_event_enabled, false);
 
 	/* Wait for all current users to finish */
 	synchronize_rcu();
 
 	for_each_tracing_cpu(cpu) {
+		WARN_ON_ONCE(per_cpu(trace_buffered_event_cnt, cpu) != 0);
 		free_page((unsigned long)per_cpu(trace_buffered_event, cpu));
 		per_cpu(trace_buffered_event, cpu) = NULL;
 	}
-	/*
-	 * Make sure trace_buffered_event is NULL before clearing
-	 * trace_buffered_event_cnt.
-	 */
-	smp_wmb();
-
-	preempt_disable();
-	/* Do the work on each cpu */
-	smp_call_function_many(tracing_buffer_mask,
-			       enable_trace_buffered_event, NULL, 1);
-	preempt_enable();
 }
 
 static struct trace_buffer *temp_buffer;
@@ -2883,8 +2863,15 @@ trace_event_buffer_lock_reserve(struct trace_buffer **current_rb,
 		 * is still quicker than no copy on match, but having
 		 * to discard out of the ring buffer on a failed match.
 		 */
-		if ((entry = __this_cpu_read(trace_buffered_event))) {
+		if (READ_ONCE(trace_buffered_event_enabled)) {
 			int max_len = PAGE_SIZE - struct_size(entry, array, 1);
+
+			/*
+			 * Ensure per-CPU variables trace_buffered_event(_cnt)
+			 * are read after trace_buffered_event_enabled, pairs
+			 * with smp_wmb() in trace_buffered_event_enable().
+			 */
+			smp_rmb();
 
 			val = this_cpu_inc_return(trace_buffered_event_cnt);
 
@@ -2906,6 +2893,7 @@ trace_event_buffer_lock_reserve(struct trace_buffer **current_rb,
 			 * handle the failure in that case.
 			 */
 			if (val == 1 && likely(len <= max_len)) {
+				entry = __this_cpu_read(trace_buffered_event);
 				trace_event_setup(entry, type, trace_ctx);
 				entry->array[0] = len;
 				/* Return with preemption disabled */
