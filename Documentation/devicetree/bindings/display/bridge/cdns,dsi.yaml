@@ -17,6 +17,7 @@ properties:
     enum:
       - cdns,dsi
       - ti,j721e-dsi
+      - starfive,cdns-dsi
 
   reg:
     minItems: 1
@@ -27,14 +28,20 @@ properties:
           Register block for wrapper settings registers in case of TI J7 SoCs.
 
   clocks:
+    minItems: 2
     items:
       - description: PSM clock, used by the IP
       - description: sys clock, used by the IP
+      - description: apb clock, used by the IP
+      - description: txesc clock, used by the IP
 
   clock-names:
+    minItems: 2
     items:
       - const: dsi_p_clk
       - const: dsi_sys_clk
+      - const: apb
+      - const: txesc
 
   phys:
     maxItems: 1
@@ -46,10 +53,21 @@ properties:
     maxItems: 1
 
   resets:
-    maxItems: 1
+    minItems: 1
+    items:
+      - description: dsi sys reset line
+      - description: dsi dpi reset line
+      - description: dsi apb reset line
+      - description: dsi txesc reset line
+      - description: dsi txbytehs reset line
 
   reset-names:
-    const: dsi_p_rst
+    items:
+      - const: dsi_p_rst
+      - const: dsi_dpi
+      - const: dsi_apb
+      - const: dsi_txesc
+      - const: dsi_txbytehs
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
@@ -89,6 +107,22 @@ allOf:
       properties:
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: starfive,cdns-dsi
+    then:
+      properties:
+        clocks:
+          minItems: 4
+          maxItems: 4
+        resets:
+          minItems: 5
+          maxItems: 5
+      required:
+        - reset-names
 
 required:
   - compatible
