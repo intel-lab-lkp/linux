@@ -884,6 +884,27 @@ acpi_status pci_acpi_add_pm_notifier(struct acpi_device *dev,
 	return acpi_add_pm_notifier(dev, &pci_dev->dev, pci_acpi_wake_dev);
 }
 
+#define SLOT_NAME_SIZE  5
+
+static void pci_check_extra_slot_register(struct pci_bus *bus)
+{
+	struct pci_dev *pdev = bus->self;
+	char slot_name[SLOT_NAME_SIZE];
+	struct pci_slot *pci_slot;
+	u32 slot_cap, slot_nr;
+
+	if (!is_vmd(bus) || !pdev || pcie_capability_read_dword(pdev, PCI_EXP_SLTCAP, &slot_cap))
+		return;
+
+	if (!(slot_cap & PCI_EXP_SLTCAP_HPC)) {
+		slot_nr = (slot_cap & PCI_EXP_SLTCAP_PSN) >> 19;
+		snprintf(slot_name, SLOT_NAME_SIZE, "%u", slot_nr);
+		pci_slot = pci_create_slot(bus, 0, slot_name, NULL);
+		if (IS_ERR(pci_slot))
+			pr_err("pci_create_slot returned %ld\n", PTR_ERR(pci_slot));
+	}
+}
+
 /*
  * _SxD returns the D-state with the highest power
  * (lowest D-state number) supported in the S-state "x".
@@ -1202,8 +1223,15 @@ void acpi_pci_add_bus(struct pci_bus *bus)
 	union acpi_object *obj;
 	struct pci_host_bridge *bridge;
 
-	if (acpi_pci_disabled || !bus->bridge || !ACPI_HANDLE(bus->bridge))
+	if (acpi_pci_disabled || !bus->bridge)
 		return;
+
+
+	if (!ACPI_HANDLE(bus->bridge)) {
+		pci_check_extra_slot_register(bus);
+		return;
+	}
+
 
 	acpi_pci_slot_enumerate(bus);
 	acpiphp_enumerate_slots(bus);
