@@ -14,6 +14,12 @@
 
 #define QCOM_DUMMY_VAL	-1
 
+struct actlr_config {
+	u16 sid;
+	u16 mask;
+	u32 actlr;
+};
+
 static struct qcom_smmu *to_qcom_smmu(struct arm_smmu_device *smmu)
 {
 	return container_of(smmu, struct qcom_smmu, smmu);
@@ -205,10 +211,40 @@ static bool qcom_adreno_can_do_ttbr1(struct arm_smmu_device *smmu)
 	return true;
 }
 
+static void arm_smmu_set_actlr(struct device *dev, struct arm_smmu_device *smmu, int cbndx,
+		const struct actlr_config *actlrcfg, size_t actlrcfg_size)
+{
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct arm_smmu_master_cfg *cfg = dev_iommu_priv_get(dev);
+	struct arm_smmu_smr *smr;
+	int i;
+	int j;
+	u16 id;
+	u16 mask;
+	int idx;
+
+	for (i = 0; i < actlrcfg_size; ++i) {
+		id = (actlrcfg + i)->sid;
+		mask = (actlrcfg + i)->mask;
+
+		for_each_cfg_sme(cfg, fwspec, j, idx) {
+			smr = &smmu->smrs[idx];
+			if (smr_is_subset(*smr, id, mask))
+				arm_smmu_cb_write(smmu, cbndx, ARM_SMMU_CB_ACTLR,
+						(actlrcfg + i)->actlr);
+		}
+	}
+}
+
 static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 		struct io_pgtable_cfg *pgtbl_cfg, struct device *dev)
 {
 	struct adreno_smmu_priv *priv;
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	struct qcom_smmu *qsmmu = to_qcom_smmu(smmu);
+	const struct actlr_config *actlrcfg;
+	size_t actlrcfg_size;
+	int cbndx = smmu_domain->cfg.cbndx;
 
 	smmu_domain->cfg.flush_walk_prefer_tlbiasid = true;
 
@@ -238,6 +274,12 @@ static int qcom_adreno_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 	priv->set_stall = qcom_adreno_smmu_set_stall;
 	priv->resume_translation = qcom_adreno_smmu_resume_translation;
 
+	if (qsmmu->data->actlrcfg_gfx) {
+		actlrcfg = qsmmu->data->actlrcfg_gfx;
+		actlrcfg_size = qsmmu->data->actlrcfg_gfx_size;
+		arm_smmu_set_actlr(dev, smmu, cbndx, actlrcfg, actlrcfg_size);
+	}
+
 	return 0;
 }
 
@@ -264,6 +306,18 @@ static const struct of_device_id qcom_smmu_client_of_match[] __maybe_unused = {
 static int qcom_smmu_init_context(struct arm_smmu_domain *smmu_domain,
 		struct io_pgtable_cfg *pgtbl_cfg, struct device *dev)
 {
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	struct qcom_smmu *qsmmu = to_qcom_smmu(smmu);
+	const struct actlr_config *actlrcfg;
+	size_t actlrcfg_size;
+	int cbndx = smmu_domain->cfg.cbndx;
+
+	if (qsmmu->data->actlrcfg) {
+		actlrcfg = qsmmu->data->actlrcfg;
+		actlrcfg_size = qsmmu->data->actlrcfg_size;
+		arm_smmu_set_actlr(dev, smmu, cbndx, actlrcfg, actlrcfg_size);
+	}
+
 	smmu_domain->cfg.flush_walk_prefer_tlbiasid = true;
 
 	return 0;
@@ -465,7 +519,7 @@ static struct arm_smmu_device *qcom_smmu_create(struct arm_smmu_device *smmu,
 		return ERR_PTR(-ENOMEM);
 
 	qsmmu->smmu.impl = impl;
-	qsmmu->cfg = data->cfg;
+	qsmmu->data = data;
 
 	return &qsmmu->smmu;
 }
