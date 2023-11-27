@@ -1756,7 +1756,8 @@ static unsigned int cpufreq_verify_current_freq(struct cpufreq_policy *policy, b
 {
 	unsigned int new_freq;
 
-	new_freq = cpufreq_driver->get(policy->cpu);
+	new_freq = arch_freq_get_on_cpu(policy->cpu);
+	new_freq = new_freq ?: cpufreq_driver->get(policy->cpu);
 	if (!new_freq)
 		return 0;
 
