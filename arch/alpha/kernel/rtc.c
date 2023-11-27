@@ -209,6 +209,9 @@ alpha_rtc_init(void)
 	init_rtc_epoch();
 
 	pdev = platform_device_register_simple("rtc-alpha", -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
 	rtc = devm_rtc_allocate_device(&pdev->dev);
 	if (IS_ERR(rtc))
 		return PTR_ERR(rtc);
