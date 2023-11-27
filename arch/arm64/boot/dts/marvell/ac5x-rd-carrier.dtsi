@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2023 Marvell International Ltd.
+ *
+ * Device tree for the AC5X RD Type 7 Com Express carrier board,
+ * This specific board only maintains a PCIe link with the CPU CPU module
+ * module, which does not require any special DTS definitions.
+ */
+
+/ {
+	model = "Marvell Armada AC5X RD COM EXPRESS type 7 carrier board";
+	compatible = "marvell,rd-ac5x-carrier";
+
+};
