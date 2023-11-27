@@ -72,7 +72,7 @@
  */
 struct vmmouse_data {
 	struct input_dev *abs_dev;
-	char phys[32];
+	char phys[64];
 	char dev_name[128];
 };
 
