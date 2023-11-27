@@ -3205,14 +3205,37 @@ static struct notifier_block trace_module_nb = {
 };
 #endif /* CONFIG_MODULES */
 
+static bool event_in_systems(struct trace_event_call *call,
+			     const char *systems)
+{
+	const char *system;
+	const char *p;
+
+	if (!systems)
+		return true;
+
+	system = call->class->system;
+	p = strstr(systems, system);
+	if (!p)
+		return false;
+
+	if (p != systems && !isspace(*(p - 1)) && *(p - 1) != ',')
+		return false;
+
+	p += strlen(system);
+	return !*p || isspace(*p) || *p == ',';
+}
+
 /* Create a new event directory structure for a trace directory. */
 static void
-__trace_add_event_dirs(struct trace_array *tr)
+__trace_add_event_dirs(struct trace_array *tr, const char *systems)
 {
 	struct trace_event_call *call;
 	int ret;
 
 	list_for_each_entry(call, &ftrace_events, list) {
+		if (!event_in_systems(call, systems))
+			continue;
 		ret = __trace_add_new_event(call, tr);
 		if (ret < 0)
 			pr_warn("Could not create directory for event %s\n",
@@ -3820,6 +3843,7 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
  * event_trace_add_tracer - add a instance of a trace_array to events
  * @parent: The parent dentry to place the files/directories for events in
  * @tr: The trace array associated with these events
+ * @systems: comma separated list of event systems to create (NULL for all)
  *
  * When a new instance is created, it needs to set up its events
  * directory, as well as other files associated with events. It also
@@ -3829,7 +3853,8 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
  *
  * Must be called with event_mutex held.
  */
-int event_trace_add_tracer(struct dentry *parent, struct trace_array *tr)
+int event_trace_add_tracer(struct dentry *parent, struct trace_array *tr,
+			   const char *systems)
 {
 	int ret;
 
@@ -3844,7 +3869,7 @@ int event_trace_add_tracer(struct dentry *parent, struct trace_array *tr)
 	if (unlikely(!list_empty(&tr->events)))
 		__trace_early_add_event_dirs(tr);
 	else
-		__trace_add_event_dirs(tr);
+		__trace_add_event_dirs(tr, systems);
 	up_write(&trace_event_sem);
 
  out:

@@ -9500,7 +9500,7 @@ struct trace_array *trace_array_find_get(const char *instance)
 	return tr;
 }
 
-static int trace_array_create_dir(struct trace_array *tr)
+static int trace_array_create_dir(struct trace_array *tr, const char *systems)
 {
 	int ret;
 
@@ -9508,7 +9508,7 @@ static int trace_array_create_dir(struct trace_array *tr)
 	if (!tr->dir)
 		return -EINVAL;
 
-	ret = event_trace_add_tracer(tr->dir, tr);
+	ret = event_trace_add_tracer(tr->dir, tr, systems);
 	if (ret) {
 		tracefs_remove(tr->dir);
 		return ret;
@@ -9520,7 +9520,8 @@ static int trace_array_create_dir(struct trace_array *tr)
 	return ret;
 }
 
-static struct trace_array *trace_array_create(const char *name)
+static struct trace_array *
+trace_array_create_systems(const char *name, const char *systems)
 {
 	struct trace_array *tr;
 	int ret;
@@ -9569,7 +9570,7 @@ static struct trace_array *trace_array_create(const char *name)
 	init_trace_flags_index(tr);
 
 	if (trace_instance_dir) {
-		ret = trace_array_create_dir(tr);
+		ret = trace_array_create_dir(tr, systems);
 		if (ret)
 			goto out_free_tr;
 	} else
@@ -9590,6 +9591,11 @@ static struct trace_array *trace_array_create(const char *name)
 	kfree(tr);
 
 	return ERR_PTR(ret);
+}
+
+static struct trace_array *trace_array_create(const char *name)
+{
+	return trace_array_create_systems(name, NULL);
 }
 
 static int instance_mkdir(const char *name)
@@ -9630,7 +9636,7 @@ out_unlock:
  * trace_array_put() is called, user space can not delete it.
  *
  */
-struct trace_array *trace_array_get_by_name(const char *name)
+struct trace_array *trace_array_get_by_name(const char *name, const char *systems)
 {
 	struct trace_array *tr;
 
@@ -9642,7 +9648,7 @@ struct trace_array *trace_array_get_by_name(const char *name)
 			goto out_unlock;
 	}
 
-	tr = trace_array_create(name);
+	tr = trace_array_create_systems(name, systems);
 
 	if (IS_ERR(tr))
 		tr = NULL;
@@ -9758,7 +9764,7 @@ static __init void create_trace_instances(struct dentry *d_tracer)
 	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
 		if (!tr->name)
 			continue;
-		if (MEM_FAIL(trace_array_create_dir(tr) < 0,
+		if (MEM_FAIL(trace_array_create_dir(tr, NULL) < 0,
 			     "Failed to create instance directory\n"))
 			break;
 	}
@@ -10407,7 +10413,7 @@ __init static void enable_instances(void)
 		if (IS_ENABLED(CONFIG_TRACER_MAX_TRACE))
 			do_allocate_snapshot(tok);
 
-		tr = trace_array_get_by_name(tok);
+		tr = trace_array_get_by_name(tok, NULL);
 		if (!tr) {
 			pr_warn("Failed to create instance buffer %s\n", curr_str);
 			continue;
