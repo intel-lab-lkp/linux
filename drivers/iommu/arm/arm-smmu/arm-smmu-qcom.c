@@ -27,6 +27,20 @@ struct actlr_config {
 #define CPRE			BIT(1)		/* Enable context caching in the prefetch buffer */
 #define CMTLB			BIT(0)		/* Enable context caching in the macro TLB */
 
+static const struct actlr_config sc7280_apps_actlr_cfg[] = {
+	{ 0x0800, 0x24E1, PREFETCH_DISABLE | CMTLB },
+	{ 0x2000, 0x0163, PREFETCH_DISABLE | CMTLB },
+	{ 0x2080, 0x0461, PREFETCH_DISABLE | CMTLB },
+	{ 0x2100, 0x0161, PREFETCH_DISABLE | CMTLB },
+	{ 0x0900, 0x0407, PREFETCH_SHALLOW | CPRE | CMTLB },
+	{ 0x2180, 0x0027, PREFETCH_SHALLOW | CPRE | CMTLB },
+	{ 0x1000, 0x07ff, PREFETCH_DEEP | CPRE | CMTLB },
+};
+
+static const struct actlr_config sc7280_gfx_actlr_cfg[] = {
+	{ 0x0000, 0x07ff, PREFETCH_DEEP_GFX | CPRE | CMTLB },
+};
+
 static const struct actlr_config sm8550_apps_actlr_cfg[] = {
 	{ 0x18a0, 0x0000, PREFETCH_SHALLOW | CPRE | CMTLB },
 	{ 0x18e0, 0x0000, PREFETCH_SHALLOW | CPRE | CMTLB },
@@ -627,6 +641,15 @@ static const struct qcom_smmu_match_data sdm845_smmu_500_data = {
 	/* Also no debug configuration. */
 };
 
+static const struct qcom_smmu_match_data sc7280_smmu_500_impl0_data = {
+	.impl = &qcom_smmu_500_impl,
+	.adreno_impl = &qcom_adreno_smmu_500_impl,
+	.cfg = &qcom_smmu_impl0_cfg,
+	.actlrcfg = sc7280_apps_actlr_cfg,
+	.actlrcfg_size = ARRAY_SIZE(sc7280_apps_actlr_cfg),
+	.actlrcfg_gfx = sc7280_gfx_actlr_cfg,
+	.actlrcfg_gfx_size = ARRAY_SIZE(sc7280_gfx_actlr_cfg),
+};
 
 static const struct qcom_smmu_match_data sm8550_smmu_500_impl0_data = {
 	.impl = &qcom_smmu_500_impl,
@@ -655,7 +678,7 @@ static const struct of_device_id __maybe_unused qcom_smmu_impl_of_match[] = {
 	{ .compatible = "qcom,qdu1000-smmu-500", .data = &qcom_smmu_500_impl0_data  },
 	{ .compatible = "qcom,sc7180-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,sc7180-smmu-v2", .data = &qcom_smmu_v2_data },
-	{ .compatible = "qcom,sc7280-smmu-500", .data = &qcom_smmu_500_impl0_data },
+	{ .compatible = "qcom,sc7280-smmu-500", .data = &sc7280_smmu_500_impl0_data },
 	{ .compatible = "qcom,sc8180x-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,sc8280xp-smmu-500", .data = &qcom_smmu_500_impl0_data },
 	{ .compatible = "qcom,sdm630-smmu-v2", .data = &qcom_smmu_v2_data },
