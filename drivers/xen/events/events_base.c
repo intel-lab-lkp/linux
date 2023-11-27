@@ -1105,13 +1105,17 @@ int xen_bind_pirq_msi_to_irq(struct pci_dev *dev, struct msi_desc *msidesc,
 	mutex_lock(&irq_mapping_update_lock);
 
 	irq = irq_alloc_descs(-1, 0, nvec, -1);
-	if (irq < 0)
+	if (irq < 0) {
+		ret = irq;
 		goto out;
+	}
 
 	for (i = 0; i < nvec; i++) {
 		info = xen_irq_init(irq + i);
-		if (!info)
+		if (!info) {
+			ret = -ENOMEM;
 			goto error_irq;
+		}
 
 		irq_set_chip_and_handler_name(irq + i, &xen_pirq_chip, handle_edge_irq, name);
 
