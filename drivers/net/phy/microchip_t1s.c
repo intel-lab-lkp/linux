@@ -23,8 +23,10 @@
 #define LAN865X_REG_CFGPARAM_DATA 0x00D9
 #define LAN865X_REG_CFGPARAM_CTRL 0x00DA
 #define LAN865X_REG_STS2 0x0019
+#define LAN86XX_REG_COLLISION_DETECT 0x0087
 
 #define LAN865X_CFGPARAM_READ_ENABLE BIT(1)
+#define LAN86XX_COLLISION_DETECT_ENABLE BIT(15)
 
 /* The arrays below are pulled from the following table from AN1699
  * Access MMD Address Value Mask
@@ -363,6 +365,27 @@ static int lan86xx_read_status(struct phy_device *phydev)
 	return 0;
 }
 
+static int lan86xx_plca_set_cfg(struct phy_device *phydev,
+				const struct phy_plca_cfg *plca_cfg)
+{
+	int err;
+
+	err = genphy_c45_plca_set_cfg(phydev, plca_cfg);
+	if (err)
+		return err;
+
+	/* Disable collision detect on the phy when PLCA is enabled.
+	 * Noise can be picked up as a false positive for collisions
+	 * leading to the phy dropping legitimate packets.
+	 * No collisions should be possible when all nodes are setup
+	 * for running PLCA.
+	 */
+	return phy_modify_mmd(phydev, MDIO_MMD_VEND2,
+			LAN86XX_REG_COLLISION_DETECT,
+			LAN86XX_COLLISION_DETECT_ENABLE,
+			plca_cfg->enabled ? 0 : LAN86XX_COLLISION_DETECT_ENABLE);
+}
+
 static struct phy_driver microchip_t1s_driver[] = {
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVB1),
@@ -371,7 +394,7 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.config_init        = lan867x_revb1_config_init,
 		.read_status        = lan86xx_read_status,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
-		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
+		.set_plca_cfg	    = lan86xx_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
 	},
 	{
@@ -381,7 +404,7 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.config_init        = lan867x_revc1_config_init,
 		.read_status        = lan86xx_read_status,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
-		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
+		.set_plca_cfg	    = lan86xx_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
 	},
 	{
@@ -391,7 +414,7 @@ static struct phy_driver microchip_t1s_driver[] = {
 		.config_init        = lan865x_revb0_config_init,
 		.read_status        = lan86xx_read_status,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
-		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
+		.set_plca_cfg	    = lan86xx_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
 	},
 };
