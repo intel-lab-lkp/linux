@@ -20,6 +20,9 @@ properties:
         items:
           - const: xlnx,zynqmp-uart
           - const: cdns,uart-r1p12
+      - description: UART controller for StarFive JH8100 SoC
+        items:
+          - const: starfive,jh8100-uart
 
   reg:
     maxItems: 1
