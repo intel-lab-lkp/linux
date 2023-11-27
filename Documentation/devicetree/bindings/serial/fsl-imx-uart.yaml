@@ -103,6 +103,12 @@ properties:
       are sensible for most use cases. If you need low latency processing on
       slow connections this needs to be configured appropriately.
 
+  assigned-clock-parents:
+    maxItems: 1
+
+  assigned-clocks:
+    maxItems: 1
+
 required:
   - compatible
   - reg
