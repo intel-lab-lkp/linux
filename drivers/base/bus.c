@@ -10,6 +10,7 @@
  */
 
 #include <linux/async.h>
+#include <linux/capability.h>
 #include <linux/device/bus.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -635,6 +636,46 @@ static ssize_t uevent_store(struct device_driver *drv, const char *buf,
 }
 static DRIVER_ATTR_WO(uevent);
 
+static ssize_t async_shutdown_show(struct device_driver *drv, char *buf)
+{
+	char *output;
+
+	switch (drv->shutdown_type) {
+	case SHUTDOWN_DEFAULT_STRATEGY:
+		output = "default";
+		break;
+	case SHUTDOWN_PREFER_ASYNCHRONOUS:
+		output = "enabled";
+		break;
+	case SHUTDOWN_FORCE_SYNCHRONOUS:
+		output = "disabled";
+		break;
+	default:
+		output = "unknown";
+	}
+	return sysfs_emit(buf, "%s\n", output);
+}
+
+static ssize_t async_shutdown_store(struct device_driver *drv, const char *buf,
+			      size_t count)
+{
+	if (!capable(CAP_SYS_BOOT))
+		return -EPERM;
+
+	if (!strncmp(buf, "disabled", 8))
+		drv->shutdown_type = SHUTDOWN_FORCE_SYNCHRONOUS;
+	else if (!strncmp(buf, "enabled", 2))
+		drv->shutdown_type = SHUTDOWN_PREFER_ASYNCHRONOUS;
+	else if (!strncmp(buf, "default", 4))
+		drv->shutdown_type = SHUTDOWN_DEFAULT_STRATEGY;
+	else
+		return -EINVAL;
+
+	return count;
+}
+
+static DRIVER_ATTR_RW(async_shutdown);
+
 /**
  * bus_add_driver - Add a driver to the bus.
  * @drv: driver.
@@ -661,6 +702,7 @@ int bus_add_driver(struct device_driver *drv)
 	}
 	klist_init(&priv->klist_devices, NULL, NULL);
 	priv->driver = drv;
+	priv->shutdown_cookie = 0;
 	drv->p = priv;
 	priv->kobj.kset = sp->drivers_kset;
 	error = kobject_init_and_add(&priv->kobj, &driver_ktype, NULL,
@@ -695,6 +737,11 @@ int bus_add_driver(struct device_driver *drv)
 			printk(KERN_ERR "%s: add_bind_files(%s) failed\n",
 				__func__, drv->name);
 		}
+	}
+	error = driver_create_file(drv, &driver_attr_async_shutdown);
+	if (error) {
+		pr_err("%s: async_shutdown attr (%s) failed\n",
+			__func__, drv->name);
 	}
 
 	return 0;

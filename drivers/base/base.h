@@ -11,6 +11,7 @@
  *
  */
 #include <linux/notifier.h>
+#include <linux/async.h>
 
 /**
  * struct subsys_private - structure to hold the private to the driver core portions of the bus_type/class structure.
@@ -75,12 +76,21 @@ static inline void subsys_put(struct subsys_private *sp)
 
 struct subsys_private *class_to_subsys(const struct class *class);
 
+/**
+ * struct driver_private - structure to hold the private to the driver core portions of the driver
+ * structure.
+ *
+ * @shutdown_cookie - cookie used to synchronize shutdown of devices used by this driver, used when
+ *                    async device shutdown is enabled system-wide, but not allowed for devices
+ *                    using this driver
+ */
 struct driver_private {
 	struct kobject kobj;
 	struct klist klist_devices;
 	struct klist_node knode_bus;
 	struct module_kobject *mkobj;
 	struct device_driver *driver;
+	async_cookie_t shutdown_cookie;
 };
 #define to_driver(obj) container_of(obj, struct driver_private, kobj)
 
@@ -97,6 +107,7 @@ struct driver_private {
  *	the device; typically because it depends on another driver getting
  *	probed first.
  * @async_driver - pointer to device driver awaiting probe via async_probe
+ * @shutdown_cookie - cookie used during async shutdown to ensure correct shutdown ordering.
  * @device - pointer back to the struct device that this structure is
  * associated with.
  * @dead - This device is currently either in the process of or has been
@@ -114,6 +125,7 @@ struct device_private {
 	struct list_head deferred_probe;
 	struct device_driver *async_driver;
 	char *deferred_probe_reason;
+	async_cookie_t shutdown_cookie;
 	struct device *device;
 	u8 dead:1;
 };

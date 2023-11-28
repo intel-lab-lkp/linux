@@ -9,6 +9,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/async.h>
 #include <linux/cpufreq.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -44,6 +45,64 @@ static bool fw_devlink_is_permissive(void);
 static void __fw_devlink_link_to_consumers(struct device *dev);
 static bool fw_devlink_drv_reg_done;
 static bool fw_devlink_best_effort;
+
+enum async_device_shutdown_enabled {
+	ASYNC_DEV_SHUTDOWN_DISABLED,
+	ASYNC_DEV_SHUTDOWN_SAFE,
+	ASYNC_DEV_SHUTDOWN_ENABLED,
+};
+
+static enum async_device_shutdown_enabled async_device_shutdown_enabled;
+
+static ssize_t async_device_shutdown_show(struct kobject *kobj,
+					  struct kobj_attribute *attr, char *buf)
+{
+	const char *output;
+
+	switch (async_device_shutdown_enabled) {
+	case ASYNC_DEV_SHUTDOWN_DISABLED:
+		output = "off";
+		break;
+	case ASYNC_DEV_SHUTDOWN_SAFE:
+		output = "safe";
+		break;
+	case ASYNC_DEV_SHUTDOWN_ENABLED:
+		output = "on";
+		break;
+	default:
+		output = "unknown";
+	}
+
+	return sysfs_emit(buf, "%s\n", output);
+}
+
+static ssize_t async_device_shutdown_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf, size_t count)
+{
+	if (!capable(CAP_SYS_BOOT))
+		return -EPERM;
+
+	if (!strncmp(buf, "off", 3))
+		async_device_shutdown_enabled = ASYNC_DEV_SHUTDOWN_DISABLED;
+	else if (!strncmp(buf, "safe", 4))
+		async_device_shutdown_enabled = ASYNC_DEV_SHUTDOWN_SAFE;
+	else if (!strncmp(buf, "on", 2))
+		async_device_shutdown_enabled = ASYNC_DEV_SHUTDOWN_ENABLED;
+	else
+		return -EINVAL;
+
+	return count;
+}
+
+static struct kobj_attribute async_device_shutdown_attr = __ATTR_RW(async_device_shutdown);
+
+static int __init async_shutdown_sysfs_init(void)
+{
+	return sysfs_create_file(kernel_kobj, &async_device_shutdown_attr.attr);
+}
+
+late_initcall(async_shutdown_sysfs_init);
 
 /**
  * __fwnode_link_add - Create a link between two fwnode_handles.
@@ -3474,6 +3533,7 @@ static int device_private_init(struct device *dev)
 	klist_init(&dev->p->klist_children, klist_children_get,
 		   klist_children_put);
 	INIT_LIST_HEAD(&dev->p->deferred_probe);
+	dev->p->shutdown_cookie = 0;
 	return 0;
 }
 
@@ -4719,12 +4779,112 @@ out:
 }
 EXPORT_SYMBOL_GPL(device_change_owner);
 
+ASYNC_DOMAIN(sd_domain);
+async_cookie_t big_shutdown_cookie;
+
+static async_cookie_t *dev_shutdown_synchronization_cookie(struct device *dev)
+{
+
+	switch (async_device_shutdown_enabled) {
+	case ASYNC_DEV_SHUTDOWN_ENABLED:
+		if (!dev->driver)
+			return NULL;
+		/*
+		 * async unless the driver forbids it
+		 */
+		if (dev->driver->shutdown_type != SHUTDOWN_FORCE_SYNCHRONOUS)
+			return NULL;
+		break;
+	case ASYNC_DEV_SHUTDOWN_SAFE:
+		if (!dev->driver)
+			return NULL;
+		/*
+		 * async only if the driver prefers it
+		 */
+		if (dev->driver->shutdown_type == SHUTDOWN_PREFER_ASYNCHRONOUS)
+			return NULL;
+		break;
+	case ASYNC_DEV_SHUTDOWN_DISABLED:
+	default:
+		/*
+		 * synchronize everything
+		 */
+		return &big_shutdown_cookie;
+	}
+
+	/*
+	 * synchronize with other devices with this driver
+	 */
+	if (dev->driver->p)
+		return &dev->driver->p->shutdown_cookie;
+
+	/*
+	 * device with unregistered driver
+	 */
+	return &big_shutdown_cookie;
+}
+
+/**
+ * shutdown_device - shutdown one device
+ * @data: the pointer to the struct device to be shutdown
+ * @cookie: not used
+ *
+ * This shuts down one device, after waiting for children to finish
+ * shutdown.  This should be scheduled for any children first.
+ */
+static void shutdown_device(void *data, async_cookie_t cookie)
+{
+	struct device *dev = data;
+
+	/*
+	 * Wait for other devices to finish shutdown if needed
+	 */
+	async_synchronize_cookie_domain(dev->p->shutdown_cookie + 1, &sd_domain);
+
+	/*
+	 * Make sure the device is off the kset list, in the
+	 * event that dev->*->shutdown() doesn't remove it.
+	 */
+	spin_lock(&devices_kset->list_lock);
+	list_del_init(&dev->kobj.entry);
+	spin_unlock(&devices_kset->list_lock);
+
+	/* hold lock to avoid race with probe/release */
+	if (dev->parent)
+		device_lock(dev->parent);
+	device_lock(dev);
+
+	/* Don't allow any more runtime suspends */
+	pm_runtime_get_noresume(dev);
+	pm_runtime_barrier(dev);
+
+	if (dev->class && dev->class->shutdown_pre) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown_pre\n");
+		dev->class->shutdown_pre(dev);
+	}
+	if (dev->bus && dev->bus->shutdown) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown\n");
+		dev->bus->shutdown(dev);
+	} else if (dev->driver && dev->driver->shutdown) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown\n");
+		dev->driver->shutdown(dev);
+	}
+
+	device_unlock(dev);
+	if (dev->parent)
+		device_unlock(dev->parent);
+	put_device(dev);
+}
+
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
  */
 void device_shutdown(void)
 {
-	struct device *dev, *parent;
+	struct device *dev;
 
 	wait_for_device_probe();
 	device_block_probing();
@@ -4733,20 +4893,16 @@ void device_shutdown(void)
 
 	spin_lock(&devices_kset->list_lock);
 	/*
-	 * Walk the devices list backward, shutting down each in turn.
-	 * Beware that device unplug events may also start pulling
+	 * Walk the devices list backward, scheduling shutdown of each in
+	 * turn. Beware that device unplug events may also start pulling
 	 * devices offline, even as the system is shutting down.
 	 */
 	while (!list_empty(&devices_kset->list)) {
+		async_cookie_t *dev_sdsync_cookie, cookie;
+
 		dev = list_entry(devices_kset->list.prev, struct device,
 				kobj.entry);
 
-		/*
-		 * hold reference count of device's parent to
-		 * prevent it from being freed because parent's
-		 * lock is to be held
-		 */
-		parent = get_device(dev->parent);
 		get_device(dev);
 		/*
 		 * Make sure the device is off the kset list, in the
@@ -4755,40 +4911,28 @@ void device_shutdown(void)
 		list_del_init(&dev->kobj.entry);
 		spin_unlock(&devices_kset->list_lock);
 
-		/* hold lock to avoid race with probe/release */
-		if (parent)
-			device_lock(parent);
-		device_lock(dev);
+		/*
+		 * set cookie to ensure desired shutdown synchronization
+		 */
+		dev_sdsync_cookie = dev_shutdown_synchronization_cookie(dev);
+		if ((dev_sdsync_cookie) && (*dev_sdsync_cookie > dev->p->shutdown_cookie))
+			dev->p->shutdown_cookie = *dev_sdsync_cookie;
 
-		/* Don't allow any more runtime suspends */
-		pm_runtime_get_noresume(dev);
-		pm_runtime_barrier(dev);
+		cookie = async_schedule_domain(shutdown_device, dev, &sd_domain);
 
-		if (dev->class && dev->class->shutdown_pre) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown_pre\n");
-			dev->class->shutdown_pre(dev);
-		}
-		if (dev->bus && dev->bus->shutdown) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
-			dev->bus->shutdown(dev);
-		} else if (dev->driver && dev->driver->shutdown) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
-			dev->driver->shutdown(dev);
-		}
+		if (dev_sdsync_cookie)
+			*dev_sdsync_cookie = cookie;
 
-		device_unlock(dev);
-		if (parent)
-			device_unlock(parent);
-
-		put_device(dev);
-		put_device(parent);
+		/*
+		 * ensure parent devs don't get shut down before their children
+		 */
+		if (dev->parent)
+			dev->parent->p->shutdown_cookie = cookie;
 
 		spin_lock(&devices_kset->list_lock);
 	}
 	spin_unlock(&devices_kset->list_lock);
+	async_synchronize_full_domain(&sd_domain);
 }
 
 /*
