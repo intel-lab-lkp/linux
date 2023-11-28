@@ -21,4 +21,7 @@ const char *const x86_power_flags[32] = {
 	"eff_freq_ro", /* Readonly aperf/mperf */
 	"proc_feedback", /* processor feedback interface */
 	"acc_power", /* accumulated power mechanism */
+	"connected_standby", /* connected standby */
+	"rapl", /* running average power limit */
+	"fast_cppc", /* fast collaborative processor performance control */
 };
