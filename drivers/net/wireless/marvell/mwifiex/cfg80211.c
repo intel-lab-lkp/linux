@@ -4306,6 +4306,8 @@ mwifiex_cfg80211_authenticate(struct wiphy *wiphy,
 		if (!ret) {
 			priv->roc_cfg.cookie = get_random_u32() | 1;
 			priv->roc_cfg.chan = *req->bss->channel;
+		} else {
+			return -EFAULT;
 		}
 	}
 
@@ -4417,6 +4419,16 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 
 	if (priv->auth_flag && !(priv->auth_flag & HOST_MLME_AUTH_DONE))
 		return -EBUSY;
+
+	if (priv->roc_cfg.cookie) {
+		ret = mwifiex_remain_on_chan_cfg(priv, HostCmd_ACT_GEN_REMOVE,
+						 &priv->roc_cfg.chan, 0);
+		if (!ret)
+			memset(&priv->roc_cfg, 0,
+			       sizeof(struct mwifiex_roc_cfg));
+		else
+			return -EFAULT;
+	}
 
 	if (!mwifiex_stop_bg_scan(priv))
 		cfg80211_sched_scan_stopped_locked(priv->wdev.wiphy, 0);
