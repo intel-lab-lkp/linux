@@ -8,6 +8,8 @@
 #include <linux/slab.h>
 #include <linux/highmem.h>
 
+#include "../iommu-pages.h"
+
 #define BITS_PER_PAGE (PAGE_SIZE * BITS_PER_BYTE)
 
 /*
