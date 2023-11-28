@@ -148,4 +148,6 @@ struct iommu_hwpt_selftest {
 	__u32 iotlb;
 };
 
+extern struct bus_type iommufd_mock_bus_type;
+
 #endif

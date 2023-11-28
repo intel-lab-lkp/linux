@@ -530,15 +530,8 @@ get_md_pagetable_nested(struct iommufd_ucmd *ucmd, u32 mockpt_id,
 	return hwpt;
 }
 
-struct mock_bus_type {
-	struct bus_type bus;
-	struct notifier_block nb;
-};
-
-static struct mock_bus_type iommufd_mock_bus_type = {
-	.bus = {
-		.name = "iommufd_mock",
-	},
+struct bus_type iommufd_mock_bus_type = {
+	.name = "iommufd_mock",
 };
 
 static atomic_t mock_dev_num;
@@ -566,7 +559,7 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 	device_initialize(&mdev->dev);
 	mdev->flags = dev_flags;
 	mdev->dev.release = mock_dev_release;
-	mdev->dev.bus = &iommufd_mock_bus_type.bus;
+	mdev->dev.bus = &iommufd_mock_bus_type;
 
 	rc = dev_set_name(&mdev->dev, "iommufd_mock%u",
 			  atomic_inc_return(&mock_dev_num));
@@ -1327,6 +1320,12 @@ bool iommufd_should_fail(void)
 	return should_fail(&fail_iommufd, 1);
 }
 
+int __init iommufd_bus_init(void)
+{
+	return bus_register(&iommufd_mock_bus_type);
+}
+subsys_initcall(iommufd_bus_init);
+
 int __init iommufd_test_init(void)
 {
 	struct platform_device_info pdevinfo = {
@@ -1343,27 +1342,19 @@ int __init iommufd_test_init(void)
 		goto err_dbgfs;
 	}
 
-	rc = bus_register(&iommufd_mock_bus_type.bus);
-	if (rc)
-		goto err_platform;
-
 	rc = iommu_device_sysfs_add(&mock_iommu_device,
 				    &selftest_iommu_dev->dev, NULL, "%s",
 				    dev_name(&selftest_iommu_dev->dev));
 	if (rc)
-		goto err_bus;
+		goto err_platform;
 
-	rc = iommu_device_register_bus(&mock_iommu_device, &mock_ops,
-				  &iommufd_mock_bus_type.bus,
-				  &iommufd_mock_bus_type.nb);
+	rc = iommu_device_register(&mock_iommu_device, &mock_ops, NULL);
 	if (rc)
 		goto err_sysfs;
 	return 0;
 
 err_sysfs:
 	iommu_device_sysfs_remove(&mock_iommu_device);
-err_bus:
-	bus_unregister(&iommufd_mock_bus_type.bus);
 err_platform:
 	platform_device_unregister(selftest_iommu_dev);
 err_dbgfs:
@@ -1374,10 +1365,7 @@ err_dbgfs:
 void iommufd_test_exit(void)
 {
 	iommu_device_sysfs_remove(&mock_iommu_device);
-	iommu_device_unregister_bus(&mock_iommu_device,
-				    &iommufd_mock_bus_type.bus,
-				    &iommufd_mock_bus_type.nb);
-	bus_unregister(&iommufd_mock_bus_type.bus);
+	iommu_device_unregister(&mock_iommu_device);
 	platform_device_unregister(selftest_iommu_dev);
 	debugfs_remove_recursive(dbgfs_root);
 }
