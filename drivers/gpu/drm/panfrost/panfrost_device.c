@@ -407,6 +407,7 @@ static int panfrost_device_runtime_resume(struct device *dev)
 {
 	struct panfrost_device *pfdev = dev_get_drvdata(dev);
 
+	bitmap_zero(pfdev->is_suspending, PANFROST_COMP_BIT_MAX);
 	panfrost_device_reset(pfdev);
 	panfrost_devfreq_resume(pfdev);
 
@@ -421,6 +422,9 @@ static int panfrost_device_runtime_suspend(struct device *dev)
 		return -EBUSY;
 
 	panfrost_devfreq_suspend(pfdev);
+	panfrost_job_suspend_irq(pfdev);
+	panfrost_mmu_suspend_irq(pfdev);
+	panfrost_gpu_suspend_irq(pfdev);
 	panfrost_gpu_power_off(pfdev);
 
 	return 0;

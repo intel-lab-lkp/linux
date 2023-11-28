@@ -413,6 +413,14 @@ void panfrost_job_enable_interrupts(struct panfrost_device *pfdev)
 	job_write(pfdev, JOB_INT_MASK, irq_mask);
 }
 
+void panfrost_job_suspend_irq(struct panfrost_device *pfdev)
+{
+	set_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspending);
+
+	job_write(pfdev, JOB_INT_MASK, 0);
+	synchronize_irq(pfdev->js->irq);
+}
+
 static void panfrost_job_handle_err(struct panfrost_device *pfdev,
 				    struct panfrost_job *job,
 				    unsigned int js)
@@ -792,9 +800,13 @@ static irqreturn_t panfrost_job_irq_handler_thread(int irq, void *data)
 	struct panfrost_device *pfdev = data;
 
 	panfrost_job_handle_irqs(pfdev);
-	job_write(pfdev, JOB_INT_MASK,
-		  GENMASK(16 + NUM_JOB_SLOTS - 1, 16) |
-		  GENMASK(NUM_JOB_SLOTS - 1, 0));
+
+	/* Enable interrupts only if we're not about to get suspended */
+	if (!test_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspending))
+		job_write(pfdev, JOB_INT_MASK,
+			  GENMASK(16 + NUM_JOB_SLOTS - 1, 16) |
+			  GENMASK(NUM_JOB_SLOTS - 1, 0));
+
 	return IRQ_HANDLED;
 }
 

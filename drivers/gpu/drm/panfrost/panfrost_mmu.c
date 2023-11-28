@@ -744,9 +744,12 @@ static irqreturn_t panfrost_mmu_irq_handler_thread(int irq, void *data)
 			status = mmu_read(pfdev, MMU_INT_RAWSTAT) & ~pfdev->as_faulty_mask;
 	}
 
-	spin_lock(&pfdev->as_lock);
-	mmu_write(pfdev, MMU_INT_MASK, ~pfdev->as_faulty_mask);
-	spin_unlock(&pfdev->as_lock);
+	/* Enable interrupts only if we're not about to get suspended */
+	if (!test_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspending)) {
+		spin_lock(&pfdev->as_lock);
+		mmu_write(pfdev, MMU_INT_MASK, ~pfdev->as_faulty_mask);
+		spin_unlock(&pfdev->as_lock);
+	}
 
 	return IRQ_HANDLED;
 };
@@ -776,4 +779,12 @@ int panfrost_mmu_init(struct panfrost_device *pfdev)
 void panfrost_mmu_fini(struct panfrost_device *pfdev)
 {
 	mmu_write(pfdev, MMU_INT_MASK, 0);
+}
+
+void panfrost_mmu_suspend_irq(struct panfrost_device *pfdev)
+{
+	set_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspending);
+
+	mmu_write(pfdev, MMU_INT_MASK, 0);
+	synchronize_irq(pfdev->mmu_irq);
 }
