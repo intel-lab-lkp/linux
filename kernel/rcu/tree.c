@@ -1391,19 +1391,6 @@ static void rcu_poll_gp_seq_end_unlocked(unsigned long *snap)
 }
 
 /*
- * A max threshold for synchronize_rcu() users which are
- * awaken directly by the rcu_gp_kthread(). Left part is
- * deferred to the main worker.
- */
-#define SR_MAX_USERS_WAKE_FROM_GP 5
-#define SR_NORMAL_GP_WAIT_HEAD_MAX 5
-
-struct sr_wait_node {
-	atomic_t inuse;
-	struct llist_node node;
-};
-
-/*
  * There is a single llist, which is used for handling
  * synchronize_rcu() users' enqueued rcu_synchronize nodes.
  * Within this llist, there are two tail pointers:
@@ -1529,17 +1516,10 @@ struct sr_wait_node {
  * +----------+     +--------+
  *
  */
-static struct sr_normal_state {
-	struct llist_head srs_next;	/* request a GP users. */
-	struct llist_node *srs_wait_tail; /* wait for GP users. */
-	struct llist_node *srs_done_tail; /* ready for GP users. */
-	struct sr_wait_node srs_wait_nodes[SR_NORMAL_GP_WAIT_HEAD_MAX];
-} sr;
-
 static bool rcu_sr_is_wait_head(struct llist_node *node)
 {
-	return &(sr.srs_wait_nodes)[0].node <= node &&
-		node <= &(sr.srs_wait_nodes)[SR_NORMAL_GP_WAIT_HEAD_MAX - 1].node;
+	return &(rcu_state.srs_wait_nodes)[0].node <= node &&
+		node <= &(rcu_state.srs_wait_nodes)[SR_NORMAL_GP_WAIT_HEAD_MAX - 1].node;
 }
 
 static struct llist_node *rcu_sr_get_wait_head(void)
@@ -1548,7 +1528,7 @@ static struct llist_node *rcu_sr_get_wait_head(void)
 	int i;
 
 	for (i = 0; i < SR_NORMAL_GP_WAIT_HEAD_MAX; i++) {
-		sr_wn = &(sr.srs_wait_nodes)[i];
+		sr_wn = &(rcu_state.srs_wait_nodes)[i];
 
 		if (!atomic_cmpxchg_acquire(&sr_wn->inuse, 0, 1))
 			return &sr_wn->node;
@@ -1596,7 +1576,7 @@ static void rcu_sr_normal_gp_cleanup_work(struct work_struct *work)
 	 * cannot execute concurrently by multiple kworkers,
 	 * the done tail list manipulations are protected here.
 	 */
-	done = smp_load_acquire(&sr.srs_done_tail);
+	done = smp_load_acquire(&rcu_state.srs_done_tail);
 	if (!done)
 		return;
 
@@ -1632,12 +1612,12 @@ static void rcu_sr_normal_gp_cleanup(void)
 	struct llist_node *wait_tail, *head, *rcu;
 	int done = 0;
 
-	wait_tail = sr.srs_wait_tail;
+	wait_tail = rcu_state.srs_wait_tail;
 	if (wait_tail == NULL)
 		return;
 
-	sr.srs_wait_tail = NULL;
-	ASSERT_EXCLUSIVE_WRITER(sr.srs_wait_tail);
+	rcu_state.srs_wait_tail = NULL;
+	ASSERT_EXCLUSIVE_WRITER(rcu_state.srs_wait_tail);
 
 	WARN_ON_ONCE(!rcu_sr_is_wait_head(wait_tail));
 	head = wait_tail->next;
@@ -1668,8 +1648,8 @@ static void rcu_sr_normal_gp_cleanup(void)
 	}
 
 	// concurrent sr_normal_gp_cleanup work might observe this update.
-	smp_store_release(&sr.srs_done_tail, wait_tail);
-	ASSERT_EXCLUSIVE_WRITER(sr.srs_done_tail);
+	smp_store_release(&rcu_state.srs_done_tail, wait_tail);
+	ASSERT_EXCLUSIVE_WRITER(rcu_state.srs_done_tail);
 
 	if (wait_tail->next)
 		queue_work(system_highpri_wq, &sr_normal_gp_cleanup);
@@ -1684,7 +1664,7 @@ static bool rcu_sr_normal_gp_init(void)
 	struct llist_node *wait_head;
 	bool start_new_poll = false;
 
-	first = READ_ONCE(sr.srs_next.first);
+	first = READ_ONCE(rcu_state.srs_next.first);
 	if (!first || rcu_sr_is_wait_head(first))
 		return start_new_poll;
 
@@ -1696,23 +1676,23 @@ static bool rcu_sr_normal_gp_init(void)
 	}
 
 	/* Inject a wait-dummy-node. */
-	llist_add(wait_head, &sr.srs_next);
+	llist_add(wait_head, &rcu_state.srs_next);
 
 	/*
 	 * A waiting list of rcu_synchronize nodes should be empty on
 	 * this step, since a GP-kthread, rcu_gp_init() -> gp_cleanup(),
 	 * rolls it over. If not, it is a BUG, warn a user.
 	 */
-	WARN_ON_ONCE(sr.srs_wait_tail != NULL);
-	sr.srs_wait_tail = wait_head;
-	ASSERT_EXCLUSIVE_WRITER(sr.srs_wait_tail);
+	WARN_ON_ONCE(rcu_state.srs_wait_tail != NULL);
+	rcu_state.srs_wait_tail = wait_head;
+	ASSERT_EXCLUSIVE_WRITER(rcu_state.srs_wait_tail);
 
 	return start_new_poll;
 }
 
 static void rcu_sr_normal_add_req(struct rcu_synchronize *rs)
 {
-	llist_add((struct llist_node *) &rs->head, &sr.srs_next);
+	llist_add((struct llist_node *) &rs->head, &rcu_state.srs_next);
 }
 
 /*
