@@ -4556,7 +4556,8 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 	if (priv->assoc_rsp_size) {
 		priv->req_bss = req->bss;
 		adapter->assoc_resp_received = true;
-		queue_work(adapter->workqueue, &adapter->main_work);
+		queue_work(adapter->host_mlme_workqueue,
+			   &adapter->host_mlme_work);
 	}
 
 	cfg80211_put_bss(priv->adapter->wiphy, req->bss);

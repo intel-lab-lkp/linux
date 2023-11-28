@@ -365,12 +365,6 @@ process_start:
 			}
 		}
 
-		/* Chekc for Assoc Resp */
-		if (adapter->assoc_resp_received) {
-			adapter->assoc_resp_received = false;
-			mwifiex_process_assoc_resp(adapter);
-		}
-
 		/* Check if we need to confirm Sleep Request
 		   received previously */
 		if (adapter->ps_state == PS_STATE_PRE_SLEEP)
@@ -535,6 +529,11 @@ static void mwifiex_terminate_workqueue(struct mwifiex_adapter *adapter)
 	if (adapter->rx_workqueue) {
 		destroy_workqueue(adapter->rx_workqueue);
 		adapter->rx_workqueue = NULL;
+	}
+
+	if (adapter->host_mlme_workqueue) {
+		destroy_workqueue(adapter->host_mlme_workqueue);
+		adapter->host_mlme_workqueue = NULL;
 	}
 }
 
@@ -1394,6 +1393,35 @@ int is_command_pending(struct mwifiex_adapter *adapter)
 	return !is_cmd_pend_q_empty;
 }
 
+/* This is the host mlme work queue function.
+ * It handles the host mlme operations.
+ */
+static void mwifiex_host_mlme_work_queue(struct work_struct *work)
+{
+	struct mwifiex_adapter *adapter =
+		container_of(work, struct mwifiex_adapter, host_mlme_work);
+
+	if (test_bit(MWIFIEX_SURPRISE_REMOVED, &adapter->work_flags))
+		return;
+
+	/* Check for host mlme disconnection */
+	if (adapter->host_mlme_link_lost) {
+		if (adapter->priv_link_lost) {
+			mwifiex_reset_connect_state(adapter->priv_link_lost,
+						    WLAN_REASON_DEAUTH_LEAVING,
+						    true);
+			adapter->priv_link_lost = NULL;
+		}
+		adapter->host_mlme_link_lost = false;
+	}
+
+	/* Check for host mlme Assoc Resp */
+	if (adapter->assoc_resp_received) {
+		mwifiex_process_assoc_resp(adapter);
+		adapter->assoc_resp_received = false;
+	}
+}
+
 /*
  * This is the RX work queue function.
  *
@@ -1568,6 +1596,14 @@ mwifiex_reinit_sw(struct mwifiex_adapter *adapter)
 		INIT_WORK(&adapter->rx_work, mwifiex_rx_work_queue);
 	}
 
+	adapter->host_mlme_workqueue =
+		alloc_workqueue("MWIFIEX_HOST_MLME_WORK_QUEUE",
+				WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
+	if (!adapter->host_mlme_workqueue)
+		goto err_kmalloc;
+
+	INIT_WORK(&adapter->host_mlme_work, mwifiex_host_mlme_work_queue);
+
 	/* Register the device. Fill up the private data structure with
 	 * relevant information from the card. Some code extracted from
 	 * mwifiex_register_dev()
@@ -1723,6 +1759,14 @@ mwifiex_add_card(void *card, struct completion *fw_done,
 
 		INIT_WORK(&adapter->rx_work, mwifiex_rx_work_queue);
 	}
+
+	adapter->host_mlme_workqueue =
+		alloc_workqueue("MWIFIEX_HOST_MLME_WORK_QUEUE",
+				WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
+	if (!adapter->host_mlme_workqueue)
+		goto err_kmalloc;
+
+	INIT_WORK(&adapter->host_mlme_work, mwifiex_host_mlme_work_queue);
 
 	/* Register the device. Fill up the private data structure with relevant
 	   information from the card. */
