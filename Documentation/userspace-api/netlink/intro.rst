@@ -234,6 +234,13 @@ ACK attributes may be present::
   | ** optionally extended ACK                 |
   ----------------------------------------------
 
+If ``NLMSG_DONE`` is sent as a reply to ``do`` action request, the error
+and extended ACK may be omitted::
+
+  ----------------------------------------------
+  | struct nlmsghdr - response header          |
+  ----------------------------------------------
+
 .. _res_fam:
 
 Resolving the Family ID
