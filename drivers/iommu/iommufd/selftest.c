@@ -432,7 +432,11 @@ static bool mock_domain_capable(struct device *dev, enum iommu_cap cap)
 	return false;
 }
 
+static struct fwnode_handle mock_fwnode = {
+};
+
 static struct iommu_device mock_iommu_device = {
+	.fwnode = &mock_fwnode,
 };
 
 static struct iommu_device *mock_probe_device(struct device *dev)
@@ -569,12 +573,17 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 	if (rc)
 		goto err_put;
 
+	rc = iommu_fwspec_init(&mdev->dev, &mock_fwnode, &mock_ops);
+	if (rc)
+		goto err_put;
+
 	rc = device_add(&mdev->dev);
 	if (rc)
 		goto err_put;
 	return mdev;
 
 err_put:
+	iommu_fwspec_free(&mdev->dev);
 	put_device(&mdev->dev);
 	return ERR_PTR(rc);
 }
