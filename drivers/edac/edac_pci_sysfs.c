@@ -370,12 +370,14 @@ static int edac_pci_main_kobj_setup(void)
 
 	/* Instanstiate the pci object */
 	dev_root = bus_get_dev_root(edac_subsys);
-	if (dev_root) {
-		err = kobject_init_and_add(edac_pci_top_main_kobj,
-					   &ktype_edac_pci_main_kobj,
-					   &dev_root->kobj, "pci");
-		put_device(dev_root);
-	}
+	if (!dev_root)
+		goto kzalloc_fail;
+
+	err = kobject_init_and_add(edac_pci_top_main_kobj,
+				   &ktype_edac_pci_main_kobj,
+				   &dev_root->kobj, "pci");
+	put_device(dev_root);
+
 	if (err) {
 		edac_dbg(1, "Failed to register '.../edac/pci'\n");
 		goto kobject_init_and_add_fail;
