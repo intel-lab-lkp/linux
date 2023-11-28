@@ -1553,7 +1553,8 @@ static void rcu_sr_normal_complete(struct llist_node *node)
 		(struct rcu_head *) node, struct rcu_synchronize, head);
 	unsigned long oldstate = (unsigned long) rs->head.func;
 
-	WARN_ONCE(!rcu_gp_is_expedited() && !poll_state_synchronize_rcu(oldstate),
+	WARN_ONCE(IS_ENABLED(CONFIG_RCU_SR_NORMAL_DEBUG_GP) &&
+		!poll_state_synchronize_rcu(oldstate),
 		"A full grace period is not passed yet: %lu",
 		rcu_seq_diff(get_state_synchronize_rcu(), oldstate));
 
@@ -3860,7 +3861,9 @@ static void synchronize_rcu_normal(void)
 	 * This code might be preempted, therefore take a GP
 	 * snapshot before adding a request.
 	 */
-	rs.head.func = (void *) get_state_synchronize_rcu();
+	if (IS_ENABLED(CONFIG_RCU_SR_NORMAL_DEBUG_GP))
+		rs.head.func = (void *) get_state_synchronize_rcu();
+
 	rcu_sr_normal_add_req(&rs);
 
 	/* Kick a GP and start waiting. */
