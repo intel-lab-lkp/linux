@@ -18,6 +18,30 @@
  */
 
 /**
+ * __iommu_alloc_account - account for newly allocated page.
+ * @pages: head struct page of the page.
+ * @order: order of the page
+ */
+static inline void __iommu_alloc_account(struct page *pages, int order)
+{
+	const long pgcnt = 1l << order;
+
+	mod_node_page_state(page_pgdat(pages), NR_IOMMU_PAGES, pgcnt);
+}
+
+/**
+ * __iommu_free_account - account a page that is about to be freed.
+ * @pages: head struct page of the page.
+ * @order: order of the page
+ */
+static inline void __iommu_free_account(struct page *pages, int order)
+{
+	const long pgcnt = 1l << order;
+
+	mod_node_page_state(page_pgdat(pages), NR_IOMMU_PAGES, -pgcnt);
+}
+
+/**
  * __iommu_alloc_pages_node - allocate a zeroed page of a given order from
  * specific NUMA node.
  * @nid: memory NUMA node id
@@ -34,6 +58,8 @@ static inline struct page *__iommu_alloc_pages_node(int nid, gfp_t gfp,
 	pages = alloc_pages_node(nid, gfp | __GFP_ZERO, order);
 	if (!pages)
 		return NULL;
+
+	__iommu_alloc_account(pages, order);
 
 	return pages;
 }
@@ -52,6 +78,8 @@ static inline struct page *__iommu_alloc_pages(gfp_t gfp, int order)
 	pages = alloc_pages(gfp | __GFP_ZERO, order);
 	if (!pages)
 		return NULL;
+
+	__iommu_alloc_account(pages, order);
 
 	return pages;
 }
@@ -89,6 +117,7 @@ static inline void __iommu_free_pages(struct page *pages, int order)
 	if (!pages)
 		return;
 
+	__iommu_free_account(pages, order);
 	__free_pages(pages, order);
 }
 
@@ -192,6 +221,7 @@ static inline void iommu_free_pages_list(struct list_head *pages)
 		struct page *p = list_entry(pages->prev, struct page, lru);
 
 		list_del(&p->lru);
+		__iommu_free_account(p, 0);
 		put_page(p);
 	}
 }
