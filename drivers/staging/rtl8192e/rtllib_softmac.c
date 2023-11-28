@@ -1556,33 +1556,6 @@ void rtllib_ps_tx_ack(struct rtllib_device *ieee, short success)
 }
 EXPORT_SYMBOL(rtllib_ps_tx_ack);
 
-static void rtllib_process_action(struct rtllib_device *ieee,
-				  struct sk_buff *skb)
-{
-	u8 *act = skb->data + RTLLIB_3ADDR_LEN;
-	u8 category = 0;
-
-	category = *act;
-	act++;
-	switch (category) {
-	case ACT_CAT_BA:
-		switch (*act) {
-		case ACT_ADDBAREQ:
-			rtllib_rx_ADDBAReq(ieee, skb);
-			break;
-		case ACT_ADDBARSP:
-			rtllib_rx_ADDBARsp(ieee, skb);
-			break;
-		case ACT_DELBA:
-			rtllib_rx_DELBA(ieee, skb);
-			break;
-		}
-		break;
-	default:
-		break;
-	}
-}
-
 static inline int
 rtllib_rx_assoc_resp(struct rtllib_device *ieee, struct sk_buff *skb,
 		     struct rtllib_rx_stats *rx_stats)
@@ -1788,9 +1761,6 @@ inline int rtllib_rx_frame_softmac(struct rtllib_device *ieee,
 	case IEEE80211_STYPE_DISASSOC:
 	case IEEE80211_STYPE_DEAUTH:
 		rtllib_rx_deauth(ieee, skb);
-		break;
-	case IEEE80211_STYPE_ACTION:
-		rtllib_process_action(ieee, skb);
 		break;
 	default:
 		return -1;
