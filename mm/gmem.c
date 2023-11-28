@@ -9,6 +9,8 @@
 #include <linux/mm.h>
 #include <linux/gmem.h>
 #include <linux/dma-mapping.h>
+#include <linux/syscalls.h>
+#include <linux/mman.h>
 
 DEFINE_STATIC_KEY_FALSE(gmem_status);
 EXPORT_SYMBOL_GPL(gmem_status);
@@ -484,3 +486,223 @@ int gm_as_attach(struct gm_as *as, struct gm_dev *dev, enum gm_mmu_mode mode,
 	return GM_RET_SUCCESS;
 }
 EXPORT_SYMBOL_GPL(gm_as_attach);
+
+struct prefetch_data {
+	struct mm_struct *mm;
+	struct gm_dev *dev;
+	unsigned long addr;
+	size_t size;
+	struct work_struct work;
+	int *res;
+};
+
+static void prefetch_work_cb(struct work_struct *work)
+{
+	struct prefetch_data *d =
+		container_of(work, struct prefetch_data, work);
+	unsigned long addr = d->addr, end = d->addr + d->size;
+	int page_size = HPAGE_SIZE;
+	int ret;
+
+	do {
+		/*
+		 * Pass a hint to tell gm_dev_fault() to invoke peer_map anyways
+		 * and implicitly mark the mapped physical page as recently-used.
+		 */
+		ret = gm_dev_fault(d->mm, addr, d->dev, GM_FAULT_HINT_MARK_HOT);
+		if (ret == GM_RET_PAGE_EXIST) {
+			pr_info("%s: device has done page fault, ignore prefetch\n", __func__);
+		} else if (ret != GM_RET_SUCCESS) {
+			*d->res = -EFAULT;
+			pr_err("%s: call dev fault error %d\n", __func__, ret);
+		}
+	} while (addr += page_size, addr != end);
+
+	kfree(d);
+}
+
+static int hmadvise_do_prefetch(struct gm_dev *dev, unsigned long addr, size_t size)
+{
+	unsigned long start, end, per_size;
+	int page_size = HPAGE_SIZE;
+	struct prefetch_data *data;
+	struct vm_area_struct *vma;
+	int res = GM_RET_SUCCESS;
+
+	end = round_up(addr + size, page_size);
+	start = round_down(addr, page_size);
+	size = end - start;
+
+	mmap_read_lock(current->mm);
+	vma = find_vma(current->mm, start);
+	if (!vma || start < vma->vm_start || end > vma->vm_end) {
+		mmap_read_unlock(current->mm);
+		return GM_RET_FAILURE_UNKNOWN;
+	}
+	mmap_read_unlock(current->mm);
+
+	per_size = (size / GM_WORK_CONCURRENCY) & ~(page_size - 1);
+
+	while (start < end) {
+		data = kzalloc(sizeof(struct prefetch_data), GFP_KERNEL);
+		if (!data) {
+			flush_workqueue(prefetch_wq);
+			return GM_RET_NOMEM;
+		}
+
+		INIT_WORK(&data->work, prefetch_work_cb);
+		data->mm = current->mm;
+		data->dev = dev;
+		data->addr = start;
+		data->res = &res;
+		if (per_size == 0)
+			data->size = size;
+		else
+			data->size = (end - start < 2 * per_size) ? (end - start) : per_size;
+		queue_work(prefetch_wq, &data->work);
+		start += data->size;
+	}
+
+	flush_workqueue(prefetch_wq);
+	return res;
+}
+
+static int gm_unmap_page_range(struct vm_area_struct *vma, unsigned long start,
+			       unsigned long end, int page_size)
+{
+	struct gm_fault_t gmf = {
+		.mm = current->mm,
+		.size = page_size,
+		.copy = false,
+	};
+	struct gm_mapping *gm_mapping;
+	struct vm_object *obj;
+	int ret;
+
+	obj = current->mm->vm_obj;
+	if (!obj) {
+		pr_err("gmem: peer-shared vma should have vm_object\n");
+		return -EINVAL;
+	}
+
+	for (; start < end; start += page_size) {
+		xa_lock(obj->logical_page_table);
+		gm_mapping = vm_object_lookup(obj, start);
+		if (!gm_mapping) {
+			xa_unlock(obj->logical_page_table);
+			continue;
+		}
+		xa_unlock(obj->logical_page_table);
+		mutex_lock(&gm_mapping->lock);
+		if (gm_mapping_nomap(gm_mapping)) {
+			mutex_unlock(&gm_mapping->lock);
+			continue;
+		} else if (gm_mapping_cpu(gm_mapping)) {
+			zap_page_range_single(vma, start, page_size, NULL);
+		} else {
+			gmf.va = start;
+			gmf.dev = gm_mapping->dev;
+			ret = gm_mapping->dev->mmu->peer_unmap(&gmf);
+			if (ret) {
+				pr_err("gmem: peer_unmap failed. ret %d\n",
+				       ret);
+				mutex_unlock(&gm_mapping->lock);
+				continue;
+			}
+		}
+		gm_mapping_flags_set(gm_mapping, GM_PAGE_NOMAP);
+		mutex_unlock(&gm_mapping->lock);
+	}
+
+	return 0;
+}
+
+static int hmadvise_do_eagerfree(unsigned long addr, size_t size)
+{
+	unsigned long start, end, i_start, i_end;
+	int page_size = HPAGE_SIZE;
+	struct vm_area_struct *vma;
+	int ret = GM_RET_SUCCESS;
+	unsigned long old_start;
+
+	if (check_add_overflow(addr, size, &end))
+		return -EINVAL;
+
+	old_start = addr;
+
+	end = round_down(addr + size, page_size);
+	start = round_up(addr, page_size);
+	if (start >= end)
+		return ret;
+
+	mmap_read_lock(current->mm);
+	do {
+		vma = find_vma_intersection(current->mm, start, end);
+		if (!vma) {
+			pr_info("gmem: there is no valid vma\n");
+			break;
+		}
+
+		if (!vma_is_peer_shared(vma)) {
+			pr_debug("gmem: not peer-shared vma, skip dontneed\n");
+			start = vma->vm_end;
+			continue;
+		}
+
+		i_start = start > vma->vm_start ? start : vma->vm_start;
+		i_end = end < vma->vm_end ? end : vma->vm_end;
+		ret = gm_unmap_page_range(vma, i_start, i_end, page_size);
+		if (ret)
+			break;
+
+		start = vma->vm_end;
+	} while (start < end);
+
+	mmap_read_unlock(current->mm);
+	return ret;
+}
+
+static bool check_hmadvise_behavior(int behavior)
+{
+	return behavior == MADV_DONTNEED;
+}
+
+SYSCALL_DEFINE4(hmadvise, int, hnid, unsigned long, start, size_t, len_in, int, behavior)
+{
+	int error = -EINVAL;
+	struct hnode *node;
+
+	if (hnid == -1) {
+		if (check_hmadvise_behavior(behavior)) {
+			goto no_hnid;
+		} else {
+			pr_err("hmadvise: behavior %d need hnid or is invalid\n",
+				behavior);
+			return error;
+		}
+	}
+
+	if (hnid < 0)
+		return error;
+
+	if (!is_hnode(hnid) || !is_hnode_allowed(hnid))
+		return error;
+
+	node = get_hnode(hnid);
+	if (!node) {
+		pr_err("hmadvise: hnode id %d is invalid\n", hnid);
+		return error;
+	}
+
+no_hnid:
+	switch (behavior) {
+	case MADV_PREFETCH:
+		return hmadvise_do_prefetch(node->dev, start, len_in);
+	case MADV_DONTNEED:
+		return hmadvise_do_eagerfree(start, len_in);
+	default:
+		pr_err("hmadvise: unsupported behavior %d\n", behavior);
+	}
+
+	return error;
+}

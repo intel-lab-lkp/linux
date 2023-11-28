@@ -79,6 +79,9 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+/* for hmadvise */
+#define MADV_PREFETCH	26		/* prefetch pages for hNUMA node */
+
 /* compatibility flags */
 #define MAP_FILE	0
 

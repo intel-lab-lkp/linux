@@ -22,6 +22,11 @@ static inline bool gmem_is_enabled(void)
 	return static_branch_likely(&gmem_status);
 }
 
+static inline bool vma_is_peer_shared(struct vm_area_struct *vma)
+{
+	return false;
+}
+
 struct gm_dev {
 	int id;
 
@@ -280,6 +285,10 @@ int gm_as_attach(struct gm_as *as, struct gm_dev *dev, enum gm_mmu_mode mode,
 		 bool activate, struct gm_context **out_ctx);
 #else
 static inline bool gmem_is_enabled(void) { return false; }
+static inline bool vma_is_peer_shared(struct vm_area_struct *vma)
+{
+	return false;
+}
 static inline void hnuma_init(void) {}
 static inline void __init vm_object_init(void)
 {
