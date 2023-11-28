@@ -18,6 +18,8 @@
 #define DAMON_MIN_REGION	PAGE_SIZE
 /* Max priority score for DAMON-based operation schemes */
 #define DAMOS_MAX_SCORE		(99)
+/* set last_nr_accesses weight */
+#define LAST_NR_ACCESSES_WEIGHT	0
 
 #define MIN_RECORD_BUFFER_LEN	1024
 #define MAX_RECORD_BUFFER_LEN	(4 * 1024 * 1024)
@@ -522,6 +524,7 @@ struct damon_attrs {
 	unsigned long ops_update_interval;
 	unsigned long min_nr_regions;
 	unsigned long max_nr_regions;
+	unsigned int last_nr_accesses_weight;
 };
 
 /**

@@ -544,6 +544,7 @@ struct damon_sysfs_attrs {
 	struct kobject kobj;
 	struct damon_sysfs_intervals *intervals;
 	struct damon_sysfs_ul_range *nr_regions_range;
+	unsigned int last_nr_accesses_weight;
 };
 
 static struct damon_sysfs_attrs *damon_sysfs_attrs_alloc(void)
@@ -553,6 +554,7 @@ static struct damon_sysfs_attrs *damon_sysfs_attrs_alloc(void)
 	if (!attrs)
 		return NULL;
 	attrs->kobj = (struct kobject){};
+	attrs->last_nr_accesses_weight = LAST_NR_ACCESSES_WEIGHT;
 	return attrs;
 }
 
@@ -602,12 +604,40 @@ static void damon_sysfs_attrs_rm_dirs(struct damon_sysfs_attrs *attrs)
 	kobject_put(&attrs->intervals->kobj);
 }
 
+static ssize_t last_nr_accesses_weight_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct damon_sysfs_attrs *attrs = container_of(kobj,
+			struct damon_sysfs_attrs, kobj);
+
+	return sysfs_emit(buf, "%u\n", attrs->last_nr_accesses_weight);
+}
+
+static ssize_t last_nr_accesses_weight_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	struct damon_sysfs_attrs *attrs = container_of(kobj,
+			struct damon_sysfs_attrs, kobj);
+	int err = kstrtoint(buf, 0, &attrs->last_nr_accesses_weight);
+
+	if (err)
+		return -EINVAL;
+	if (attrs->last_nr_accesses_weight > 100)
+		return -EINVAL;
+
+	return count;
+}
+
 static void damon_sysfs_attrs_release(struct kobject *kobj)
 {
 	kfree(container_of(kobj, struct damon_sysfs_attrs, kobj));
 }
 
+static struct kobj_attribute damon_sysfs_attrs_last_nr_accesses_weight_attr =
+		__ATTR_RW_MODE(last_nr_accesses_weight, 0600);
+
 static struct attribute *damon_sysfs_attrs_attrs[] = {
+	&damon_sysfs_attrs_last_nr_accesses_weight_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(damon_sysfs_attrs);
@@ -1083,6 +1113,7 @@ static int damon_sysfs_set_attrs(struct damon_ctx *ctx,
 		.ops_update_interval = sys_intervals->update_us,
 		.min_nr_regions = sys_nr_regions->min,
 		.max_nr_regions = sys_nr_regions->max,
+		.last_nr_accesses_weight = sys_attrs->last_nr_accesses_weight,
 	};
 	return damon_set_attrs(ctx, &attrs);
 }

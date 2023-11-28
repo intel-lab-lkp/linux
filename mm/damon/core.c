@@ -1142,6 +1142,34 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 	}
 }
 
+static unsigned int __calculate_nr_accesses(struct damon_ctx *c, struct damon_region *r)
+{
+	unsigned int rem_old, rem_new;
+	unsigned int res;
+	unsigned int weight = c->attrs.last_nr_accesses_weight;
+
+	res = div_u64_rem(r->nr_accesses, 100, &rem_new) * (100 - weight)
+		+ div_u64_rem(r->last_nr_accesses, 100, &rem_old) * weight;
+
+	if (rem_new)
+		res += rem_new * (100 - weight) / 100;
+	if (rem_old)
+		res += rem_old * weight / 100;
+
+	return res;
+}
+
+static void kdamon_update_nr_accesses(struct damon_ctx *c)
+{
+	struct damon_target *t;
+	struct damon_region *r;
+
+	damon_for_each_target(t, c) {
+		damon_for_each_region(r, t)
+			r->nr_accesses = __calculate_nr_accesses(c, r);
+	}
+}
+
 /*
  * Merge two adjacent regions into one region
  */
@@ -1470,6 +1498,7 @@ static int kdamond_fn(void *data)
 			max_nr_accesses = ctx->ops.check_accesses(ctx);
 
 		if (ctx->passed_sample_intervals == next_aggregation_sis) {
+			kdamon_update_nr_accesses(ctx);
 			kdamond_merge_regions(ctx,
 					max_nr_accesses / 10,
 					sz_limit);

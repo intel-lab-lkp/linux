@@ -74,6 +74,12 @@ Description:	Writing a keyword for a monitoring operations set ('vaddr' for
 		Note that only the operations sets that listed in
 		'avail_operations' file are valid inputs.
 
+What:		/sys/kernel/mm/damon/admin/kdamonds/<K>/contexts/<C>/monitoring_attrs/last_nr_accesses_weight
+Date:		Nov 2023
+Contact:	Ping Xiong <xiongping1@xiaomi.com>
+Description:	Writing a value to this file sets last_nr_accesses weight
+		of the DAMON context. Reading this file returns the value.
+
 What:		/sys/kernel/mm/damon/admin/kdamonds/<K>/contexts/<C>/monitoring_attrs/intervals/sample_us
 Date:		Mar 2022
 Contact:	SeongJae Park <sj@kernel.org>
