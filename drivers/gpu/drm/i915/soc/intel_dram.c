@@ -647,6 +647,8 @@ static int xelpdp_get_dram_info(struct drm_i915_private *i915)
 
 	dram_info->num_channels = REG_FIELD_GET(MTL_N_OF_POPULATED_CH_MASK, val);
 	dram_info->num_qgv_points = REG_FIELD_GET(MTL_N_OF_ENABLED_QGV_POINTS_MASK, val);
+	drm_dbg_kms(&i915->drm, "Num qgv points from MTL_N_OF_ENABLED_QGV_POINTS_MASK reg: %d\n",
+		    dram_info->num_qgv_points);
 	/* PSF GV points not supported in D14+ */
 
 	return 0;
