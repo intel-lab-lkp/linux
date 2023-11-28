@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2023 Raptor Engineering, LLC
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/sony,cronos-cpld.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sony Cronos Platform Controller CPLD multi-function device
+
+maintainers:
+  - Timothy Pearson <tpearson@raptorengineering.com>
+
+description: |
+  The Sony Cronos Platform Controller CPLD is a multi-purpose platform
+  controller that provides both a watchdog timer and an LED controller for the
+  Sony Interactive Entertainment Cronos x86 server platform. As both functions
+  are provided by the same CPLD, a multi-function device is exposed as the
+  parent of both functions.
+
+properties:
+  compatible:
+    const: sony,cronos-cpld
+
+  reg:
+    maxItems: 1
+
+  leds:
+    type: object
+    description: Cronos Platform Status LEDs
+
+    properties:
+      compatible:
+        const: sony,cronos-leds
+
+      sony,led-mask:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0x0
+        maximum: 0x7fff
+        description: |
+          A bitmask that specifies which LEDs are present and can be controlled
+          by the Cronos CPLD. Bits 0-5 correspond to platform Status LEDs, bits
+          6-10 correspond to Link LEDs, and bits 11-14 correspond to the Power
+          State LEDs. All other bits are unused. The default value is 0x7fff
+          (all possible LEDs enabled).
+
+    additionalProperties: false
+
+  watchdog:
+    type: object
+    description: Cronos Platform Watchdog Timer
+
+    properties:
+      compatible:
+        const: sony,cronos-watchdog
+
+      sony,default-timeout:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: |
+          The default timeout with which the watchdog timer is initialized, in
+          seconds. Supported values are: 10, 20, 30, 40, 50, 60, 70, 80. All
+          other values will be rounded down to the nearest supported value.  The
+          default value is 80.
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      cpld@3f {
+        compatible = "sony,cronos-cpld";
+        reg = <0x3f>;
+
+        watchdog {
+          compatible = "sony,cronos-watchdog";
+          sony,default-timeout = <20>;
+        };
+
+        leds {
+          compatible = "sony,cronos-leds";
+          sony,led-mask = <0x7fff>;
+        };
+      };
+    };
