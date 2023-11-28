@@ -11,6 +11,9 @@ config ACPI_APEI
 	select PSTORE
 	select UEFI_CPER
 	depends on HAVE_ACPI_APEI
+	imply CXL_BUS
+	imply CXL_ACPI
+	imply CXL_PORT
 	help
 	  APEI allows to report errors (for example from the chipset)
 	  to the operating system. This improves NMI handling
