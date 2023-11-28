@@ -783,6 +783,9 @@ static int mwifiex_check_fw_status(struct mwifiex_adapter *adapter,
 		ret = -1;
 	}
 
+	if (!ret)
+		msleep(100);
+
 	return ret;
 }
 
