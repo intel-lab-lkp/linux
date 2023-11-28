@@ -342,6 +342,9 @@ void i915_active_unlock_wait(struct i915_active *ref)
 		rcu_read_unlock();
 
 		i915_active_release(ref);
+
+		___wait_var_event(ref, i915_active_is_idle(ref),
+				  TASK_INTERRUPTIBLE, 0, 0, schedule());
 	}
 
 	/* And wait for the retire callback */
