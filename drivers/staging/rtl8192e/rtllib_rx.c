@@ -488,39 +488,6 @@ void rtllib_indicate_packets(struct rtllib_device *ieee,
 	}
 }
 
-void rtllib_FlushRxTsPendingPkts(struct rtllib_device *ieee,
-				 struct rx_ts_record *ts)
-{
-	struct rx_reorder_entry *pRxReorderEntry;
-	u8 RfdCnt = 0;
-
-	del_timer_sync(&ts->rx_pkt_pending_timer);
-	while (!list_empty(&ts->rx_pending_pkt_list)) {
-		if (RfdCnt >= REORDER_WIN_SIZE) {
-			netdev_info(ieee->dev,
-				    "-------------->%s() error! RfdCnt >= REORDER_WIN_SIZE\n",
-				    __func__);
-			break;
-		}
-
-		pRxReorderEntry = (struct rx_reorder_entry *)
-				  list_entry(ts->rx_pending_pkt_list.prev,
-					     struct rx_reorder_entry, List);
-		netdev_dbg(ieee->dev, "%s(): Indicate SeqNum %d!\n", __func__,
-			   pRxReorderEntry->SeqNum);
-		list_del_init(&pRxReorderEntry->List);
-
-		ieee->RfdArray[RfdCnt] = pRxReorderEntry->prxb;
-
-		RfdCnt = RfdCnt + 1;
-		list_add_tail(&pRxReorderEntry->List,
-			      &ieee->RxReorder_Unused_List);
-	}
-	rtllib_indicate_packets(ieee, ieee->RfdArray, RfdCnt);
-
-	ts->rx_indicate_seq = 0xffff;
-}
-
 static void RxReorderIndicatePacket(struct rtllib_device *ieee,
 				    struct rtllib_rxb *prxb,
 				    struct rx_ts_record *ts, u16 SeqNum)
