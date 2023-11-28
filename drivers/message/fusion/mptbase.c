@@ -8076,8 +8076,8 @@ mpt_sas_log_info(MPT_ADAPTER *ioc, u32 log_info, u8 cb_idx)
 	char *sub_code_desc = NULL;
 
 	sas_loginfo.loginfo = log_info;
-	if ((sas_loginfo.dw.bus_type != 3 /*SAS*/) &&
-	    (sas_loginfo.dw.originator < ARRAY_SIZE(originator_str)))
+	if ((sas_loginfo.dw.bus_type != 3 /*SAS*/) ||
+	    (sas_loginfo.dw.originator >= ARRAY_SIZE(originator_str)))
 		return;
 
 	originator_desc = originator_str[sas_loginfo.dw.originator];
