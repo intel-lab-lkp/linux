@@ -977,6 +977,7 @@ struct mm_struct {
 #endif /* CONFIG_LRU_GEN */
 #ifdef CONFIG_GMEM
 		struct vm_object *vm_obj;
+		struct gm_as *gm_as;
 #endif
 	} __randomize_layout;
 
