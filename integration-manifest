@@ -1,0 +1,30 @@
+drm drm-fixes 2cc14f52aeb78ce3f29677c2de1f06c0e91471ab
+	Linux 6.7-rc3
+drm-misc drm-misc-fixes b9c02e1052650af56d4487efa5fade3fb70e3653
+	drm/gpuvm: Fix deprecated license identifier
+drm-intel drm-intel-fixes 2cc14f52aeb78ce3f29677c2de1f06c0e91471ab
+	Linux 6.7-rc3
+drm drm-next a13fee31f56449fc600d9e064c7b32302f92dcef
+	Merge v6.7-rc3 into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next e17049148678725248a57ecbf9c21df0fde3b434
+	drm: Use device_get_match_data()
+drm-intel drm-intel-next a4f477e6ac171ccdea38556437493c3c5222bbe5
+	drm/i915/psr: Add proper handling for disabling sel fetch for planes
+drm-intel drm-intel-gt-next 5032c607e886e0c40749a05d37b835c1757d38ff
+	drm/i915: ATS-M device ID update
+drm-intel topic/core-for-CI a2458d8f618a30e57b7ea70a93e66975d2273f25
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
