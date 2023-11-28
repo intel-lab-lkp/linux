@@ -1290,12 +1290,10 @@ void tcf_idr_insert_many(struct tc_action *actions[], int init_res[])
 {
 	int i;
 
-	for (i = 0; i < TCA_ACT_MAX_PRIO; i++) {
+	for (i = 0; i < TCA_ACT_MAX_PRIO && actions[i]; i++) {
 		struct tc_action *a = actions[i];
 		struct tcf_idrinfo *idrinfo;
 
-		if (!a)
-			continue;
 		if (init_res[i] == 0) /* Bound */
 			continue;
 
