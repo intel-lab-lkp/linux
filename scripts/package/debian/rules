@@ -5,6 +5,8 @@ include debian/rules.vars
 
 srctree ?= .
 
+export DEB_RULES_REQUIRES_ROOT := no
+
 ifneq (,$(filter-out parallel=1,$(filter parallel=%,$(DEB_BUILD_OPTIONS))))
     NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     MAKEFLAGS += -j$(NUMJOBS)
