@@ -413,8 +413,7 @@ static int btrfs_parse_param(struct fs_context *fc,
 			fc->sb_flags |= SB_POSIXACL;
 #else
 			btrfs_err(NULL, "support for ACL not compiled in!");
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 #endif
 		}
 		/*
