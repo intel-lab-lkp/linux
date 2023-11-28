@@ -731,4 +731,25 @@ struct pci_dev *pci_real_dma_dev(struct pci_dev *dev)
 
 	return dev;
 }
+
+#define SLOT_NAME_SIZE  5
+
+void pci_check_extra_slot_register(struct pci_bus *bus)
+{
+	struct pci_dev *pdev = bus->self;
+	char slot_name[SLOT_NAME_SIZE];
+	struct pci_slot *pci_slot;
+	u32 slot_cap, slot_nr;
+
+	if (!is_vmd(bus) || !pdev || pcie_capability_read_dword(pdev, PCI_EXP_SLTCAP, &slot_cap))
+		return;
+
+	if (!(slot_cap & PCI_EXP_SLTCAP_HPC)) {
+		slot_nr = (slot_cap & PCI_EXP_SLTCAP_PSN) >> 19;
+		snprintf(slot_name, SLOT_NAME_SIZE, "%u", slot_nr);
+		pci_slot = pci_create_slot(bus, 0, slot_name, NULL);
+		if (IS_ERR(pci_slot))
+			pr_err("pci_create_slot returned %ld\n", PTR_ERR(pci_slot));
+	}
+}
 #endif
