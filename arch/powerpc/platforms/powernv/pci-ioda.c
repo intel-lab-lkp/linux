@@ -2325,11 +2325,18 @@ static resource_size_t pnv_pci_default_alignment(void)
 static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 {
 	struct pci_dn *pdn;
+	struct pnv_ioda_pe *pe;
 
 	pdn = pci_get_pdn(dev);
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE) {
-		pci_err(dev, "pci_enable_device() blocked, no PE assigned.\n");
+	if (!pdn)
 		return false;
+
+	if (pdn->pe_number == IODA_INVALID_PE) {
+		pe = pnv_ioda_setup_dev_PE(dev);
+		if (!pe) {
+			pci_err(dev, "pci_enable_device() blocked, no PE assigned.\n");
+			return false;
+		}
 	}
 
 	return true;
