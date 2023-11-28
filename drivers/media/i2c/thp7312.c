@@ -1805,11 +1805,14 @@ static enum fw_upload_err thp7312_fw_write(struct fw_upload *fw_upload,
 	struct device *dev = thp7312->dev;
 	u16 header_size = size - THP7312_FW_RAM_SIZE;
 	enum fw_upload_err ret;
+	bool cancel;
 
 	mutex_lock(&thp7312->fw_lock);
-	if (thp7312->fw_cancel)
-		return FW_UPLOAD_ERR_CANCELED;
+	cancel = thp7312->fw_cancel;
 	mutex_unlock(&thp7312->fw_lock);
+
+	if (cancel)
+		return FW_UPLOAD_ERR_CANCELED;
 
 	ret = thp7312_flash_erase(thp7312);
 	if (ret != FW_UPLOAD_ERR_NONE)
