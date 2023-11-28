@@ -119,6 +119,9 @@ do {									\
 extern void __mutex_init(struct mutex *lock, const char *name,
 			 struct lock_class_key *key);
 
+int devm_mutex_init(struct device *dev, struct mutex *lock);
+void devm_mutex_destroy(struct device *dev, struct mutex *lock);
+
 /**
  * mutex_is_locked - is the mutex locked
  * @lock: the mutex to be queried

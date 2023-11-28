@@ -56,6 +56,43 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 }
 EXPORT_SYMBOL(__mutex_init);
 
+static void devm_mutex_release(struct device *dev, void *res)
+{
+	mutex_destroy(*(struct mutex **)res);
+}
+
+static int devm_mutex_match(struct device *dev, void *res, void *data)
+{
+	struct mutex **r = res;
+
+	if (WARN_ON(!r || !*r))
+		return 0;
+
+	return *r == data;
+}
+
+int devm_mutex_init(struct device *dev, struct mutex *lock)
+{
+	struct mutex **ptr;
+
+	ptr = devres_alloc(devm_mutex_release, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	mutex_init(lock);
+
+	*ptr = lock;
+	devres_add(dev, ptr);
+	return 0;
+}
+EXPORT_SYMBOL(devm_mutex_init);
+
+void devm_mutex_destroy(struct device *dev, struct mutex *lock)
+{
+	devres_release(dev, devm_mutex_release, devm_mutex_match, lock);
+}
+EXPORT_SYMBOL(devm_mutex_destroy);
+
 /*
  * @owner: contains: 'struct task_struct *' to the current lock owner,
  * NULL means not owned. Since task_struct pointers are aligned at
