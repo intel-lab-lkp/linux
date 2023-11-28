@@ -181,6 +181,18 @@ You should see something like this in dmesg::
   [22715.834759] EDAC sbridge MC3: PROCESSOR 0:306e7 TIME 1422553404 SOCKET 0 APIC 0
   [22716.616173] EDAC MC3: 1 CE memory read error on CPU_SrcID#0_Channel#0_DIMM#0 (channel:0 slot:0 page:0x12345 offset:0x0 grain:32 syndrome:0x0 -  area:DRAM err_code:0001:0090 socket:0 channel_mask:1 rank:0)
 
+CXL error types are supported from ACPI 6.5 onwards. These error types
+are not available in the legacy interface at /sys/kernel/debug/apei/einj,
+but are instead at /sys/kernel/debug/cxl/portX/dportY. Inside the dportY
+directory are two files, einj_types and einj_inject. These files work the
+same as the available_error_type and error_inject files (read the error
+types from einj_types and write the type to inject to einj_inject).
+
+To use these error types one of (or both) ``CONFIG_CXL_ACPI`` or
+``CONFIG_CXL_PORT`` must be reachable by the EINJ module; if
+``CONFIG_ACPI_APEI_EINJ`` == y/m, then at least one of ``CONFIG_CXL_ACPI``
+or ``CONFIG_CXL_PORT`` must also be set to y/m.
+
 Special notes for injection into SGX enclaves:
 
 There may be a separate BIOS setup option to enable SGX injection.
