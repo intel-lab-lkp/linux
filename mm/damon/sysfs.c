@@ -994,6 +994,8 @@ enum damon_sysfs_cmd {
 	DAMON_SYSFS_CMD_OFF,
 	/* @DAMON_SYSFS_CMD_COMMIT: Update kdamond inputs. */
 	DAMON_SYSFS_CMD_COMMIT,
+	/* @DAMON_SYSFS_CMD_RECORD: Save the monitoring results to file. */
+	DAMON_SYSFS_CMD_RECORD,
 	/*
 	 * @DAMON_SYSFS_CMD_UPDATE_SCHEMES_STATS: Update scheme stats sysfs
 	 * files.
@@ -1025,6 +1027,7 @@ static const char * const damon_sysfs_cmd_strs[] = {
 	"on",
 	"off",
 	"commit",
+	"record",
 	"update_schemes_stats",
 	"update_schemes_tried_bytes",
 	"update_schemes_tried_regions",
@@ -1352,6 +1355,160 @@ static int damon_sysfs_commit_input(struct damon_sysfs_kdamond *kdamond)
 }
 
 /*
+ * Flush the content in the result buffer to the result file
+ */
+static int sysfs_flush_rbuffer(struct sysfs_recorder *rec)
+{
+	ssize_t sz;
+	loff_t pos = 0;
+	struct file *rfile;
+
+	if (!rec->rbuf_offset)
+		return 0;
+
+	rfile = filp_open(rec->rfile_path,
+			O_CREAT | O_RDWR | O_APPEND | O_LARGEFILE, 0644);
+	if (IS_ERR(rfile)) {
+		pr_err("Cannot open the result file %s\n",
+				rec->rfile_path);
+		return PTR_ERR(rfile);
+	}
+
+	while (rec->rbuf_offset) {
+		sz = kernel_write(rfile, rec->rbuf, rec->rbuf_offset, &pos);
+		if (sz < 0) {
+			filp_close(rfile, NULL);
+			return sz;
+		}
+		rec->rbuf_offset -= sz;
+	}
+	filp_close(rfile, NULL);
+
+	return 0;
+}
+
+/*
+ * Write a data into the result buffer
+ */
+static void sysfs_write_rbuf(struct damon_ctx *ctx, char *data, int size)
+{
+	struct sysfs_recorder *rec = ctx->callback.private;
+
+	if (!rec->rbuf_len || !rec->rbuf || !rec->rfile_path)
+		return;
+	if (rec->rbuf_offset + size > rec->rbuf_len)
+		sysfs_flush_rbuffer(ctx->callback.private);
+	if (rec->rbuf_offset + size > rec->rbuf_len) {
+		pr_warn("%s: flush failed, or wrong size given(%u, %d)\n",
+				__func__, rec->rbuf_offset, size);
+		return;
+	}
+
+	memcpy(&rec->rbuf[rec->rbuf_offset], data, size);
+	rec->rbuf_offset += size;
+}
+
+static unsigned int nr_damon_targets(struct damon_ctx *ctx)
+{
+	struct damon_target *t;
+	unsigned int nr_targets = 0;
+	int count = 0;
+
+	damon_for_each_target(t, ctx) {
+		count++;
+		nr_targets++;
+	}
+
+	return nr_targets;
+}
+
+/*
+ * Store the aggregated monitoring results to the result buffer
+ *
+ * The format for the result buffer is as below:
+ *
+ *   <time> <number of targets>
+ *
+ *   target info: <pid> <number of regions>
+ *   region info: <start address> <region size> <nr_accesses>
+ */
+static int damon_flush_aggregation(struct damon_ctx *c)
+{
+	struct damon_target *t;
+	struct timespec64 now;
+	struct task_struct *tsk;
+	int tsk_pid = -1;
+	unsigned int nr = 0;
+	char buf[128];
+	int rc = 0;
+
+	memset(buf, 0, sizeof(buf));
+	ktime_get_coarse_ts64(&now);
+	nr = nr_damon_targets(c);
+	rc = scnprintf(buf, sizeof(buf), "time: %lld.%09ld, nr: %u\n",
+			(long long)now.tv_sec, now.tv_nsec, nr);
+	if (!rc)
+		return -ENOMEM;
+
+	sysfs_write_rbuf(c, buf, rc);
+	memset(buf, 0, sizeof(buf));
+
+	damon_for_each_target(t, c) {
+		struct damon_region *r;
+
+		tsk = get_pid_task(t->pid, PIDTYPE_PID);
+		tsk_pid = tsk->pid;
+		nr = damon_nr_regions(t);
+		rc = scnprintf(buf, sizeof(buf), "pid: %d, nr: %u\n", tsk_pid, nr);
+		if (!rc)
+			return -ENOMEM;
+
+		sysfs_write_rbuf(c, buf, rc);
+		memset(buf, 0, sizeof(buf));
+
+		damon_for_each_region(r, t) {
+
+			rc = scnprintf(buf, sizeof(buf), "%lu, %lu, %d\n",
+					r->ar.start, r->ar.end - r->ar.start, r->nr_accesses);
+			if (!rc)
+				return -ENOMEM;
+
+			sysfs_write_rbuf(c, buf, rc);
+			memset(buf, 0, sizeof(buf));
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * damon_sysfs_record() - Save the monitoring results to file.
+ * @kdamond:	The kobject wrapper for the associated kdamond.
+ *
+ * If the sysfs input is wrong, the kdamond will be terminated.
+ */
+static int damon_sysfs_record(struct damon_sysfs_kdamond *kdamond)
+{
+	struct damon_ctx *ctx = kdamond->damon_ctx;
+	struct sysfs_recorder *rec = ctx->callback.private;
+	int err = 0;
+
+	if (!damon_sysfs_kdamond_running(kdamond))
+		return -EINVAL;
+	/* TODO: Support multiple contexts per kdamond */
+	if (kdamond->contexts->nr != 1)
+		return -EINVAL;
+
+	err = damon_flush_aggregation(ctx);
+	if (!err) {
+		if (rec->rbuf_offset)
+			err = sysfs_flush_rbuffer(rec);
+	}
+
+	return err;
+}
+
+/*
  * damon_sysfs_cmd_request_callback() - DAMON callback for handling requests.
  * @c:		The DAMON context of the callback.
  * @active:	Whether @c is not deactivated due to watermarks.
@@ -1373,6 +1530,9 @@ static int damon_sysfs_cmd_request_callback(struct damon_ctx *c, bool active)
 	if (!kdamond || kdamond->damon_ctx != c)
 		goto out;
 	switch (damon_sysfs_cmd_request.cmd) {
+	case DAMON_SYSFS_CMD_RECORD:
+		err = damon_sysfs_record(kdamond);
+		break;
 	case DAMON_SYSFS_CMD_UPDATE_SCHEMES_STATS:
 		err = damon_sysfs_upd_schemes_stats(kdamond);
 		break;
@@ -1435,6 +1595,65 @@ static int damon_sysfs_after_aggregation(struct damon_ctx *c)
 	return damon_sysfs_cmd_request_callback(c, true);
 }
 
+/*
+ * sysfs_set_recording() - Set attributes for the recording.
+ * @ctx:	target kdamond context
+ * @rbuf_len:	length of the result buffer
+ * @rfile_path:	path to the monitor result files
+ *
+ * Setting 'rbuf_len' 0 disables recording.
+ *
+ * This function should not be called while the kdamond is running.
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+static int sysfs_set_recording(struct damon_ctx *ctx,
+			unsigned int rbuf_len, char *rfile_path)
+{
+	struct sysfs_recorder *recorder;
+	size_t rfile_path_len;
+
+	if (rbuf_len && (rbuf_len > MAX_RECORD_BUFFER_LEN ||
+			rbuf_len < MIN_RECORD_BUFFER_LEN)) {
+		pr_err("result buffer size (%u) is out of [%d,%d]\n",
+				rbuf_len, MIN_RECORD_BUFFER_LEN,
+				MAX_RECORD_BUFFER_LEN);
+		return -EINVAL;
+	}
+	rfile_path_len = strnlen(rfile_path, MAX_RFILE_PATH_LEN);
+	if (rfile_path_len >= MAX_RFILE_PATH_LEN) {
+		pr_err("too long (>%d) result file path %s\n",
+				MAX_RFILE_PATH_LEN, rfile_path);
+		return -EINVAL;
+	}
+
+	recorder = ctx->callback.private;
+	if (!recorder) {
+		recorder = kzalloc(sizeof(*recorder), GFP_KERNEL);
+		if (!recorder)
+			return -ENOMEM;
+		ctx->callback.private = recorder;
+	}
+
+	recorder->rbuf_len = rbuf_len;
+	kfree(recorder->rbuf);
+	recorder->rbuf = NULL;
+	kfree(recorder->rfile_path);
+	recorder->rfile_path = NULL;
+
+	if (rbuf_len) {
+		recorder->rbuf = kvmalloc(rbuf_len, GFP_KERNEL);
+		if (!recorder->rbuf)
+			return -ENOMEM;
+	}
+	recorder->rfile_path = kmalloc(rfile_path_len + 1, GFP_KERNEL);
+	if (!recorder->rfile_path)
+		return -ENOMEM;
+	strscpy(recorder->rfile_path, rfile_path, rfile_path_len + 1);
+
+	return 0;
+}
+
 static struct damon_ctx *damon_sysfs_build_ctx(
 		struct damon_sysfs_context *sys_ctx)
 {
@@ -1443,6 +1662,12 @@ static struct damon_ctx *damon_sysfs_build_ctx(
 
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
+
+	err = sysfs_set_recording(ctx, 0, "none");
+	if (err) {
+		damon_destroy_ctx(ctx);
+		return ERR_PTR(err);
+	}
 
 	err = damon_sysfs_apply_inputs(ctx, sys_ctx);
 	if (err) {
@@ -1601,6 +1826,59 @@ out:
 	return sysfs_emit(buf, "%d\n", pid);
 }
 
+static ssize_t record_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct damon_sysfs_kdamond *kdamond = container_of(kobj,
+			struct damon_sysfs_kdamond, kobj);
+	struct damon_ctx *ctx;
+	struct sysfs_recorder *rec;
+	int len = 0;
+
+	if (!mutex_trylock(&damon_sysfs_lock))
+		return -EBUSY;
+	ctx = kdamond->damon_ctx;
+	if (!ctx)
+		goto out;
+	rec = ctx->callback.private;
+	len = sysfs_emit(buf, "%u %s\n", rec->rbuf_len, rec->rfile_path);
+
+out:
+	mutex_unlock(&damon_sysfs_lock);
+	return len;
+}
+
+static ssize_t record_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	struct damon_sysfs_kdamond *kdamond = container_of(kobj,
+			struct damon_sysfs_kdamond, kobj);
+	struct damon_ctx *ctx;
+	unsigned int rbuf_len;
+	char rfile_path[MAX_RFILE_PATH_LEN];
+	ssize_t ret = count;
+	int err;
+
+	if (sscanf(buf, "%10u %128s", &rbuf_len, rfile_path) != 2) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!mutex_trylock(&damon_sysfs_lock))
+		return -EBUSY;
+	ctx = kdamond->damon_ctx;
+	if (!ctx)
+		goto unlock_out;
+
+	err = sysfs_set_recording(ctx, rbuf_len, rfile_path);
+	if (err)
+		ret = err;
+unlock_out:
+	mutex_unlock(&damon_sysfs_lock);
+out:
+	return ret;
+}
+
 static void damon_sysfs_kdamond_release(struct kobject *kobj)
 {
 	struct damon_sysfs_kdamond *kdamond = container_of(kobj,
@@ -1617,9 +1895,13 @@ static struct kobj_attribute damon_sysfs_kdamond_state_attr =
 static struct kobj_attribute damon_sysfs_kdamond_pid_attr =
 		__ATTR_RO_MODE(pid, 0400);
 
+static struct kobj_attribute damon_sysfs_kdamond_record_attr =
+		__ATTR_RW_MODE(record, 0600);
+
 static struct attribute *damon_sysfs_kdamond_attrs[] = {
 	&damon_sysfs_kdamond_state_attr.attr,
 	&damon_sysfs_kdamond_pid_attr.attr,
+	&damon_sysfs_kdamond_record_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(damon_sysfs_kdamond);
