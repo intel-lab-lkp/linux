@@ -186,18 +186,6 @@ static void rtllib_send_ADDBAReq(struct rtllib_device *ieee, u8 *dst,
 		netdev_dbg(ieee->dev, "Failed to generate ADDBAReq packet.\n");
 }
 
-static void rtllib_send_ADDBARsp(struct rtllib_device *ieee, u8 *dst,
-				 struct ba_record *ba, u16 status_code)
-{
-	struct sk_buff *skb;
-
-	skb = rtllib_ADDBA(ieee, dst, ba, status_code, ACT_ADDBARSP);
-	if (skb)
-		softmac_mgmt_xmit(skb, ieee);
-	else
-		netdev_dbg(ieee->dev, "Failed to generate ADDBARsp packet.\n");
-}
-
 static void rtllib_send_DELBA(struct rtllib_device *ieee, u8 *dst,
 			      struct ba_record *ba, enum tr_select TxRxSelect,
 			      u16 reason_code)
