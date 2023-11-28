@@ -47,6 +47,7 @@
 #include <linux/oom.h>
 #include <linux/sched/mm.h>
 #include <linux/ksm.h>
+#include <linux/gmem.h>
 
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -1376,6 +1377,9 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			vm_flags |= VM_NORESERVE;
 	}
 
+	if (gmem_is_enabled() && (flags & MAP_PEER_SHARED))
+		vm_flags |= VM_PEER_SHARED;
+
 	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
 	if (!IS_ERR_VALUE(addr) &&
 	    ((vm_flags & VM_LOCKED) ||
@@ -1832,6 +1836,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	}
 
 	addr = get_area(file, addr, len, pgoff, flags);
+
 	if (IS_ERR_VALUE(addr))
 		return addr;
 
@@ -2756,7 +2761,10 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	pgoff_t vm_pgoff;
 	int error;
 	VMA_ITERATOR(vmi, mm, addr);
+	unsigned int retry_times = 0;
+	LIST_HEAD(reserve_list);
 
+retry:
 	/* Check against address space limit. */
 	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
 		unsigned long nr_pages;
@@ -2768,21 +2776,27 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		nr_pages = count_vma_pages_range(mm, addr, end);
 
 		if (!may_expand_vm(mm, vm_flags,
-					(len >> PAGE_SHIFT) - nr_pages))
+					(len >> PAGE_SHIFT) - nr_pages)) {
+			gm_release_vma(mm, &reserve_list);
 			return -ENOMEM;
+		}
 	}
 
 	/* Unmap any existing mapping in the area */
-	if (do_vmi_munmap(&vmi, mm, addr, len, uf, false))
+	if (do_vmi_munmap(&vmi, mm, addr, len, uf, false)) {
+		gm_release_vma(mm, &reserve_list);
 		return -ENOMEM;
+	}
 
 	/*
 	 * Private writable mapping: check memory availability
 	 */
 	if (accountable_mapping(file, vm_flags)) {
 		charged = len >> PAGE_SHIFT;
-		if (security_vm_enough_memory_mm(mm, charged))
+		if (security_vm_enough_memory_mm(mm, charged)) {
+			gm_release_vma(mm, &reserve_list);
 			return -ENOMEM;
+		}
 		vm_flags |= VM_ACCOUNT;
 	}
 
@@ -2945,6 +2959,21 @@ unmap_writable:
 	file = vma->vm_file;
 	ksm_add_vma(vma);
 expanded:
+	if (vma_is_peer_shared(vma)) {
+		int ret = gm_alloc_va_in_peer_devices(mm, vma, addr, len, vm_flags);
+
+		if (ret == GM_RET_NOMEM && retry_times < GMEM_MMAP_RETRY_TIMES) {
+			retry_times++;
+			addr = get_unmapped_area(file, addr, len, pgoff, 0);
+			gm_reserve_vma(vma, &reserve_list);
+			goto retry;
+		} else if (ret != GM_RET_SUCCESS) {
+			pr_debug("gmem: alloc_vma ret %d\n", ret);
+			error = -ENOMEM;
+			goto free_vma;
+		}
+		gm_release_vma(mm, &reserve_list);
+	}
 	perf_event_mmap(vma);
 
 	vm_stat_account(mm, vm_flags, len >> PAGE_SHIFT);
@@ -2995,6 +3024,7 @@ free_vma:
 unacct_error:
 	if (charged)
 		vm_unacct_memory(charged);
+	gm_release_vma(mm, &reserve_list);
 	validate_mm(mm);
 	return error;
 }
@@ -3335,6 +3365,8 @@ void exit_mmap(struct mm_struct *mm)
 	} while ((vma = mas_find(&mas, ULONG_MAX)) != NULL);
 
 	BUG_ON(count != mm->map_count);
+
+	vm_object_drop_locked(mm);
 
 	trace_exit_mmap(mm);
 	__mt_destroy(&mm->mm_mt);

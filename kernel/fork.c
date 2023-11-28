@@ -99,6 +99,7 @@
 #include <linux/stackprotector.h>
 #include <linux/user_events.h>
 #include <linux/iommu.h>
+#include <linux/gmem.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -1692,6 +1693,9 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 	if (err)
 		goto free_pt;
 
+#ifdef CONFIG_GMEM
+	mm->vm_obj = NULL;
+#endif
 	mm->hiwater_rss = get_mm_rss(mm);
 	mm->hiwater_vm = mm->total_vm;
 

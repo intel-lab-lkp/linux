@@ -24,7 +24,10 @@ static inline bool gmem_is_enabled(void)
 
 static inline bool vma_is_peer_shared(struct vm_area_struct *vma)
 {
-	return false;
+	if (!gmem_is_enabled())
+		return false;
+
+	return !!(vma->vm_flags & VM_PEER_SHARED);
 }
 
 struct gm_dev {
@@ -130,6 +133,8 @@ void unmap_gm_mappings_range(struct vm_area_struct *vma, unsigned long start,
 			     unsigned long end);
 void munmap_in_peer_devices(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
+void gm_reserve_vma(struct vm_area_struct *value, struct list_head *head);
+void gm_release_vma(struct mm_struct *mm, struct list_head *head);
 
 /* core gmem */
 enum gm_ret {
@@ -283,6 +288,10 @@ int gm_as_create(unsigned long begin, unsigned long end, struct gm_as **new_as);
 int gm_as_destroy(struct gm_as *as);
 int gm_as_attach(struct gm_as *as, struct gm_dev *dev, enum gm_mmu_mode mode,
 		 bool activate, struct gm_context **out_ctx);
+
+int gm_alloc_va_in_peer_devices(struct mm_struct *mm,
+				struct vm_area_struct *vma, unsigned long addr,
+				unsigned long len, vm_flags_t vm_flags);
 #else
 static inline bool gmem_is_enabled(void) { return false; }
 static inline bool vma_is_peer_shared(struct vm_area_struct *vma)
@@ -336,6 +345,21 @@ int gm_as_destroy(struct gm_as *as)
 }
 int gm_as_attach(struct gm_as *as, struct gm_dev *dev, enum gm_mmu_mode mode,
 		 bool activate, struct gm_context **out_ctx)
+{
+	return 0;
+}
+static inline void gm_reserve_vma(struct vm_area_struct *value,
+				  struct list_head *head)
+{
+}
+static inline void gm_release_vma(struct mm_struct *mm, struct list_head *head)
+{
+}
+static inline int gm_alloc_va_in_peer_devices(struct mm_struct *mm,
+					      struct vm_area_struct *vma,
+					      unsigned long addr,
+					      unsigned long len,
+					      vm_flags_t vm_flags)
 {
 	return 0;
 }

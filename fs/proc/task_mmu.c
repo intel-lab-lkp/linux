@@ -702,6 +702,9 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 #ifdef CONFIG_X86_USER_SHADOW_STACK
 		[ilog2(VM_SHADOW_STACK)] = "ss",
 #endif
+#ifdef CONFIG_GMEM
+		[ilog2(VM_PEER_SHARED)]	= "ps",
+#endif
 	};
 	size_t i;
 

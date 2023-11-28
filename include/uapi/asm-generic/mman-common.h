@@ -32,6 +32,7 @@
 
 #define MAP_UNINITIALIZED 0x4000000	/* For anonymous mmap, memory could be
 					 * uninitialized */
+#define MAP_PEER_SHARED		0x8000000	/* Coherent memory available for both CPU and attached devices. */
 
 /*
  * Flags for mlock

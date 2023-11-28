@@ -617,6 +617,44 @@ static int gm_unmap_page_range(struct vm_area_struct *vma, unsigned long start,
 	return 0;
 }
 
+int gm_alloc_va_in_peer_devices(struct mm_struct *mm,
+				struct vm_area_struct *vma, unsigned long addr,
+				unsigned long len, vm_flags_t vm_flags)
+{
+	struct gm_context *ctx, *tmp;
+	int ret;
+
+	pr_debug("gmem: start mmap, as %p\n", mm->gm_as);
+	if (!mm->gm_as)
+		return -ENODEV;
+
+	if (!mm->vm_obj)
+		mm->vm_obj = vm_object_create(mm);
+	if (!mm->vm_obj)
+		return -ENOMEM;
+	/*
+	 * TODO: solve the race condition if a device is concurrently attached
+	 * to mm->gm_as.
+	 */
+	list_for_each_entry_safe(ctx, tmp, &mm->gm_as->gm_ctx_list, gm_as_link) {
+		if (!gm_dev_is_peer(ctx->dev))
+			continue;
+
+		if (!ctx->dev->mmu->peer_va_alloc_fixed) {
+			pr_debug("gmem: mmu ops has no alloc_vma\n");
+			continue;
+		}
+
+		ret = ctx->dev->mmu->peer_va_alloc_fixed(mm, addr, len, vm_flags);
+		if (ret != GM_RET_SUCCESS) {
+			pr_debug("gmem: alloc_vma ret %d\n", ret);
+			return ret;
+		}
+	}
+
+	return GM_RET_SUCCESS;
+}
+
 static int hmadvise_do_eagerfree(unsigned long addr, size_t size)
 {
 	unsigned long start, end, i_start, i_end;

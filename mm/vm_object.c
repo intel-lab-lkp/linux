@@ -163,6 +163,9 @@ void unmap_gm_mappings_range(struct vm_area_struct *vma, unsigned long start,
 	struct gm_mapping *gm_mapping;
 	struct page *page = NULL;
 
+	if (!vma_is_peer_shared(vma))
+		return;
+
 	if (!vma->vm_mm->vm_obj)
 		return;
 
@@ -181,4 +184,42 @@ void unmap_gm_mappings_range(struct vm_area_struct *vma, unsigned long start,
 		}
 	}
 	xa_unlock(logical_page_table);
+}
+
+struct gm_vma_list {
+	struct vm_area_struct *vma;
+	struct list_head list;
+};
+
+void gm_reserve_vma(struct vm_area_struct *value, struct list_head *head)
+{
+	struct gm_vma_list *node;
+
+	if (!gmem_is_enabled())
+		return;
+
+	node = kmalloc(sizeof(struct gm_vma_list), GFP_KERNEL);
+	if (!node)
+		return;
+
+	node->vma = value;
+	list_add_tail(&node->list, head);
+}
+
+void gm_release_vma(struct mm_struct *mm, struct list_head *head)
+{
+	struct gm_vma_list *node, *next;
+
+	if (!gmem_is_enabled())
+		return;
+
+	list_for_each_entry_safe(node, next, head, list) {
+		struct vm_area_struct *vma = node->vma;
+
+		if (vma != NULL)
+			vm_area_free(vma);
+
+		list_del(&node->list);
+		kfree(node);
+	}
 }
