@@ -31,6 +31,7 @@
 
 struct address_space;
 struct mem_cgroup;
+struct vm_object;
 
 /*
  * Each physical page in the system has a struct page associated with
@@ -974,6 +975,9 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN */
+#ifdef CONFIG_GMEM
+		struct vm_object *vm_obj;
+#endif
 	} __randomize_layout;
 
 	/*
