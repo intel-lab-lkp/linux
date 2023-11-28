@@ -482,8 +482,15 @@ mwifiex_process_mgmt_packet(struct mwifiex_private *priv,
 				return 0;
 
 			if (ieee80211_is_deauth(ieee_hdr->frame_control)) {
+				mwifiex_dbg(priv->adapter, MSG,
+					    "auth: receive deauth from %pM\n",
+					    ieee_hdr->addr3);
 				priv->auth_flag = 0;
 				priv->auth_alg = 0xFFFF;
+			} else {
+				mwifiex_dbg(priv->adapter, MSG,
+					    "assoc: receive disasso from %pM\n",
+					    ieee_hdr->addr3);
 			}
 		}
 
