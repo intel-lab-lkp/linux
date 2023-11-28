@@ -2144,6 +2144,27 @@ of_node_put:
 	return ret;
 }
 
+static int am65_cpsw_nuss_resume_slave_ports(struct am65_cpsw_common *common)
+{
+	struct device *dev = common->dev;
+	int i;
+
+	for (i = 1; i <= common->port_num; i++) {
+		struct am65_cpsw_port *port;
+		int ret;
+
+		port = am65_common_get_port(common, i);
+
+		ret = phy_set_mode_ext(port->slave.ifphy, PHY_MODE_ETHERNET, port->slave.phy_if);
+		if (ret) {
+			dev_err(dev, "port %d error setting phy mode %d\n", i, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static void am65_cpsw_pcpu_stats_free(void *data)
 {
 	struct am65_cpsw_ndev_stats __percpu *stats = data;
@@ -3115,6 +3136,10 @@ static int am65_cpsw_nuss_resume(struct device *dev)
 	/* If RX IRQ was disabled before suspend, keep it disabled */
 	if (common->rx_irq_disabled)
 		disable_irq(common->rx_chns.irq);
+
+	ret = am65_cpsw_nuss_resume_slave_ports(common);
+	if (ret)
+		dev_err(dev, "failed to resume slave ports: %d", ret);
 
 	am65_cpts_resume(common->cpts);
 

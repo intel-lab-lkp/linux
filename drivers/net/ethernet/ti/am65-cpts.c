@@ -1189,7 +1189,11 @@ void am65_cpts_suspend(struct am65_cpts *cpts)
 	cpts->sr_cpts_ns = am65_cpts_gettime(cpts, NULL);
 	cpts->sr_ktime_ns = ktime_to_ns(ktime_get_real());
 	am65_cpts_disable(cpts);
-	clk_disable(cpts->refclk);
+
+	/* During suspend the SoC can be power off, so let's not only
+	 * disable but also unprepare the clock
+	 */
+	clk_disable_unprepare(cpts->refclk);
 
 	/* Save GENF state */
 	memcpy_fromio(&cpts->sr_genf, &cpts->reg->genf, sizeof(cpts->sr_genf));
@@ -1204,8 +1208,11 @@ void am65_cpts_resume(struct am65_cpts *cpts)
 	int i;
 	s64 ktime_ns;
 
+	/* During suspend the SoC can be power off, so let's not only
+	 * enable but also prepare the clock
+	 */
+	clk_prepare_enable(cpts->refclk);
 	/* restore state and enable CPTS */
-	clk_enable(cpts->refclk);
 	am65_cpts_write32(cpts, cpts->sr_rftclk_sel, rftclk_sel);
 	am65_cpts_set_add_val(cpts);
 	am65_cpts_write32(cpts, cpts->sr_control, control);
