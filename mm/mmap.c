@@ -2616,6 +2616,8 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 #endif
 	} for_each_vma_range(*vmi, next, end);
 
+	munmap_in_peer_devices(mm, start, end);
+
 #if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
 	/* Make sure no VMAs are about to be lost. */
 	{

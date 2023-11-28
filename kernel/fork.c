@@ -543,6 +543,7 @@ static void vm_area_free_rcu_cb(struct rcu_head *head)
 
 void vm_area_free(struct vm_area_struct *vma)
 {
+	free_gm_mappings(vma);
 #ifdef CONFIG_PER_VMA_LOCK
 	call_rcu(&vma->vm_rcu, vm_area_free_rcu_cb);
 #else

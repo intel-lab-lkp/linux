@@ -142,6 +142,9 @@ void free_gm_mappings(struct vm_area_struct *vma)
 	struct gm_mapping *gm_mapping;
 	struct vm_object *obj;
 
+	if (vma_is_peer_shared(vma))
+		return;
+
 	obj = vma->vm_mm->vm_obj;
 	if (!obj)
 		return;
@@ -222,4 +225,85 @@ void gm_release_vma(struct mm_struct *mm, struct list_head *head)
 		list_del(&node->list);
 		kfree(node);
 	}
+}
+
+static int munmap_in_peer_devices_inner(struct mm_struct *mm,
+					struct vm_area_struct *vma,
+					unsigned long start, unsigned long end,
+					int page_size)
+{
+	struct vm_object *obj = mm->vm_obj;
+	struct gm_mapping *gm_mapping;
+	struct gm_fault_t gmf = {
+		.mm = mm,
+		.copy = false,
+	};
+	int ret;
+
+	start = start > vma->vm_start ? start : vma->vm_start;
+	end = end < vma->vm_end ? end : vma->vm_end;
+
+	for (; start < end; start += page_size) {
+		xa_lock(obj->logical_page_table);
+		gm_mapping = vm_object_lookup(obj, start);
+		if (!gm_mapping) {
+			xa_unlock(obj->logical_page_table);
+			continue;
+		}
+		xa_unlock(obj->logical_page_table);
+
+		mutex_lock(&gm_mapping->lock);
+		if (!gm_mapping_device(gm_mapping)) {
+			mutex_unlock(&gm_mapping->lock);
+			continue;
+		}
+
+		gmf.va = start;
+		gmf.size = page_size;
+		gmf.dev = gm_mapping->dev;
+		ret = gm_mapping->dev->mmu->peer_unmap(&gmf);
+		if (ret != GM_RET_SUCCESS) {
+			pr_err("%s: call dev peer_unmap error %d\n", __func__,
+			       ret);
+			mutex_unlock(&gm_mapping->lock);
+			continue;
+		}
+		mutex_unlock(&gm_mapping->lock);
+	}
+
+	return 0;
+}
+
+void munmap_in_peer_devices(struct mm_struct *mm, unsigned long start,
+			    unsigned long end)
+{
+	struct vm_object *obj = mm->vm_obj;
+	struct vm_area_struct *vma;
+
+	if (!gmem_is_enabled())
+		return;
+
+	if (!obj)
+		return;
+
+	if (!mm->gm_as)
+		return;
+
+	mmap_read_lock(mm);
+	do {
+		vma = find_vma_intersection(mm, start, end);
+		if (!vma) {
+			pr_debug("gmem: there is no valid vma\n");
+			break;
+		}
+
+		if (!vma_is_peer_shared(vma)) {
+			pr_debug("gmem: not peer-shared vma, skip dontneed\n");
+			start = vma->vm_end;
+			continue;
+		}
+
+		munmap_in_peer_devices_inner(mm, vma, start, end, HPAGE_SIZE);
+	} while (start < end);
+	mmap_read_unlock(mm);
 }

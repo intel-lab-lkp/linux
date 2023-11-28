@@ -44,6 +44,7 @@
 #include <linux/kthread.h>
 #include <linux/init.h>
 #include <linux/mmu_notifier.h>
+#include <linux/gmem.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -547,6 +548,7 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 				continue;
 			}
 			unmap_page_range(&tlb, vma, range.start, range.end, NULL);
+			unmap_gm_mappings_range(vma, range.start, range.end);
 			mmu_notifier_invalidate_range_end(&range);
 			tlb_finish_mmu(&tlb);
 		}

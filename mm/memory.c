@@ -78,6 +78,7 @@
 #include <linux/ptrace.h>
 #include <linux/vmalloc.h>
 #include <linux/sched/sysctl.h>
+#include <linux/gmem.h>
 
 #include <trace/events/kmem.h>
 
@@ -1695,8 +1696,10 @@ static void unmap_single_vma(struct mmu_gather *tlb,
 				__unmap_hugepage_range(tlb, vma, start, end,
 							     NULL, zap_flags);
 			}
-		} else
+		} else {
 			unmap_page_range(tlb, vma, start, end, details);
+			unmap_gm_mappings_range(vma, start, end);
+		}
 	}
 }
 
@@ -4126,7 +4129,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 {
 	bool uffd_wp = vmf_orig_pte_uffd_wp(vmf);
 	struct vm_area_struct *vma = vmf->vma;
-	struct folio *folio;
+	struct gm_mapping *gm_mapping;
+	bool skip_put_page = false;
+	struct folio *folio = NULL;
 	vm_fault_t ret = 0;
 	pte_t entry;
 
@@ -4141,8 +4146,25 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (pte_alloc(vma->vm_mm, vmf->pmd))
 		return VM_FAULT_OOM;
 
+	if (vma_is_peer_shared(vma)) {
+		xa_lock(vma->vm_mm->vm_obj->logical_page_table);
+		gm_mapping = vm_object_lookup(vma->vm_mm->vm_obj, vmf->address);
+		if (!gm_mapping) {
+			vm_object_mapping_create(vma->vm_mm->vm_obj, vmf->address);
+			gm_mapping = vm_object_lookup(vma->vm_mm->vm_obj, vmf->address);
+		}
+		xa_unlock(vma->vm_mm->vm_obj->logical_page_table);
+		mutex_lock(&gm_mapping->lock);
+
+		if (gm_mapping_cpu(gm_mapping)) {
+			folio = page_folio(gm_mapping->page);
+			skip_put_page = true;
+		}
+	}
+
 	/* Use the zero-page for reads */
 	if (!(vmf->flags & FAULT_FLAG_WRITE) &&
+			!vma_is_peer_shared(vma) &&
 			!mm_forbids_zeropage(vma->vm_mm)) {
 		entry = pte_mkspecial(pfn_pte(my_zero_pfn(vmf->address),
 						vma->vm_page_prot));
@@ -4168,7 +4190,8 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	/* Allocate our own private page. */
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
-	folio = vma_alloc_zeroed_movable_folio(vma, vmf->address);
+	if (!folio)
+		folio = vma_alloc_zeroed_movable_folio(vma, vmf->address);
 	if (!folio)
 		goto oom;
 
@@ -4211,6 +4234,14 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	inc_mm_counter(vma->vm_mm, MM_ANONPAGES);
 	folio_add_new_anon_rmap(folio, vma, vmf->address);
 	folio_add_lru_vma(folio, vma);
+	if (vma_is_peer_shared(vma)) {
+		if (gm_mapping_device(gm_mapping)) {
+			vmf->page = &folio->page;
+			gm_host_fault_locked(vmf, 0);
+		}
+		gm_mapping_flags_set(gm_mapping, GM_PAGE_CPU);
+		gm_mapping->page = &folio->page;
+	}
 setpte:
 	if (uffd_wp)
 		entry = pte_mkuffd_wp(entry);
@@ -4221,9 +4252,12 @@ setpte:
 unlock:
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
+	if (vma_is_peer_shared(vma))
+		mutex_unlock(&gm_mapping->lock);
 	return ret;
 release:
-	folio_put(folio);
+	if (!skip_put_page)
+		folio_put(folio);
 	goto unlock;
 oom_free_page:
 	folio_put(folio);
