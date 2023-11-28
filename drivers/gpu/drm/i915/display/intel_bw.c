@@ -679,6 +679,9 @@ void intel_bw_init_hw(struct drm_i915_private *dev_priv)
 		tgl_get_bw_info(dev_priv, &tgl_sa_info);
 	else if (DISPLAY_VER(dev_priv) == 11)
 		icl_get_bw_info(dev_priv, &icl_sa_info);
+
+	if (DISPLAY_VER(dev_priv) < 14)
+		icl_force_disable_sagv(dev_priv);
 }
 
 static unsigned int intel_bw_crtc_num_active_planes(const struct intel_crtc_state *crtc_state)
@@ -844,7 +847,7 @@ static unsigned int icl_max_bw_qgv_point(struct drm_i915_private *i915,
 	return max_bw_point;
 }
 
-unsigned int icl_max_bw_psf_gv_point(struct drm_i915_private *i915)
+static unsigned int icl_max_bw_psf_gv_point(struct drm_i915_private *i915)
 {
 	unsigned int num_psf_gv_points = i915->display.bw.max[0].num_psf_gv_points;
 	unsigned int max_bw = 0;
@@ -861,6 +864,21 @@ unsigned int icl_max_bw_psf_gv_point(struct drm_i915_private *i915)
 	}
 
 	return max_bw_point;
+}
+
+int icl_force_disable_sagv(struct drm_i915_private *i915)
+{
+	unsigned int max_bw_qgv_point = icl_max_bw_qgv_point(i915, 0);
+	unsigned int max_bw_psf_gv_point = icl_max_bw_psf_gv_point(i915);
+	unsigned int qgv_points;
+	unsigned int psf_points;
+
+	qgv_points = BIT(max_bw_qgv_point);
+	psf_points = BIT(max_bw_psf_gv_point);
+
+	return icl_pcode_restrict_qgv_points(i915, ~(ICL_PCODE_REQ_QGV_PT(qgv_points) |
+					     ADLS_PCODE_REQ_PSF_PT(psf_points)) &
+					     icl_qgv_points_mask(i915));
 }
 
 static int mtl_find_qgv_points(struct drm_i915_private *i915,
