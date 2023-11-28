@@ -634,10 +634,10 @@ void kasan_non_canonical_hook(unsigned long addr)
 {
 	unsigned long orig_addr;
 	const char *bug_type;
-
+#if KASAN_SHADOW_OFFSET > 0
 	if (addr < KASAN_SHADOW_OFFSET)
 		return;
-
+#endif
 	orig_addr = (addr - KASAN_SHADOW_OFFSET) << KASAN_SHADOW_SCALE_SHIFT;
 	/*
 	 * For faults near the shadow address for NULL, we can be fairly certain
