@@ -910,7 +910,7 @@ static int mwifiex_cmd_uap_add_station(struct mwifiex_private *priv,
 		tlv->header.type = cpu_to_le16(WLAN_EID_OPMODE_NOTIF);
 		tlv_len = sizeof(u8);
 		tlv->header.len = cpu_to_le16(tlv_len);
-		memcpy(tlv->data, params->link_sta_params.opmode_notif,
+		memcpy(tlv->data, &params->link_sta_params.opmode_notif,
 		       tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);

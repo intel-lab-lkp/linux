@@ -928,7 +928,7 @@ int mwifiex_process_cmdresp(struct mwifiex_adapter *adapter)
 
 void mwifiex_process_assoc_resp(struct mwifiex_adapter *adapter)
 {
-	struct cfg80211_rx_assoc_resp assoc_resp = {
+	struct cfg80211_rx_assoc_resp_data assoc_resp = {
 		.uapsd_queues = -1,
 	};
 	struct mwifiex_private *priv =
