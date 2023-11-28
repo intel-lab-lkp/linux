@@ -654,7 +654,7 @@ int mwifiex_send_cmd(struct mwifiex_private *priv, u16 cmd_no,
 	if (ret) {
 		mwifiex_dbg(adapter, ERROR,
 			    "PREP_CMD: cmd %#x preparation failed\n",
-			cmd_no);
+			    cmd_no);
 		mwifiex_insert_cmd_to_free_q(adapter, cmd_node);
 		return -1;
 	}
@@ -1477,6 +1477,17 @@ int mwifiex_cmd_get_hw_spec(struct mwifiex_private *priv,
 	return 0;
 }
 
+static void mwifiex_check_key_api_ver(struct mwifiex_adapter *adapter)
+{
+	if (adapter->host_mlme) {
+		if (adapter->key_api_major_ver != KEY_API_VER_MAJOR_V2)
+			adapter->host_mlme = false;
+		mwifiex_dbg(adapter, MSG, "host_mlme: %s, key_api: %d\n",
+			    adapter->host_mlme ? "enable" : "disable",
+			    adapter->key_api_major_ver);
+	}
+}
+
 /*
  * This function handles the command response of get hardware
  * specifications.
@@ -1586,6 +1597,7 @@ int mwifiex_ret_get_hw_spec(struct mwifiex_private *priv,
 						    "key_api v%d.%d\n",
 						    adapter->key_api_major_ver,
 						    adapter->key_api_minor_ver);
+					mwifiex_check_key_api_ver(adapter);
 					break;
 				case FW_API_VER_ID:
 					adapter->fw_api_ver =

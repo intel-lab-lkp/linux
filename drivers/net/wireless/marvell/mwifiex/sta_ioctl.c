@@ -136,6 +136,7 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	const struct cfg80211_bss_ies *ies;
 
 	rcu_read_lock();
+	bss_desc->bss = bss;
 	ies = rcu_dereference(bss->ies);
 	beacon_ie = kmemdup(ies->data, ies->len, GFP_ATOMIC);
 	beacon_ie_len = ies->len;
@@ -339,7 +340,7 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 			ret = mwifiex_associate(priv, bss_desc);
 		}
 
-		if (bss)
+		if (bss && !priv->adapter->host_mlme)
 			cfg80211_put_bss(priv->adapter->wiphy, bss);
 	} else {
 		/* Adhoc mode */
