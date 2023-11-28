@@ -723,6 +723,9 @@ int mwifiex_ret_802_11_associate(struct mwifiex_private *priv,
 				mwifiex_dbg(priv->adapter, ERROR,
 					    "ASSOC_RESP: UNSPECIFIED failure\n");
 			}
+
+			if (priv->adapter->host_mlme)
+				priv->assoc_rsp_size = 0;
 		} else {
 			ret = status_code;
 		}
