@@ -2318,8 +2318,18 @@ xfs_da3_swap_lastblock(
 	 * Copy the last block into the dead buffer and log it.
 	 */
 	memcpy(dead_buf->b_addr, last_buf->b_addr, args->geo->blksize);
-	xfs_trans_log_buf(tp, dead_buf, 0, args->geo->blksize - 1);
 	dead_info = dead_buf->b_addr;
+	/*
+	 * Update the moved block's blkno if it's a dir3 leaf block
+	 */
+	if (dead_info->magic == cpu_to_be16(XFS_DIR3_LEAF1_MAGIC) ||
+	    dead_info->magic == cpu_to_be16(XFS_DIR3_LEAFN_MAGIC) ||
+	    dead_info->magic == cpu_to_be16(XFS_ATTR3_LEAF_MAGIC)) {
+		struct xfs_da3_blkinfo *dap = (struct xfs_da3_blkinfo *)dead_info;
+
+		dap->blkno = cpu_to_be64(dead_buf->b_bn);
+	}
+	xfs_trans_log_buf(tp, dead_buf, 0, args->geo->blksize - 1);
 	/*
 	 * Get values from the moved block.
 	 */
