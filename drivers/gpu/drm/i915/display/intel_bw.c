@@ -805,6 +805,64 @@ intel_atomic_get_bw_state(struct intel_atomic_state *state)
 	return to_intel_bw_state(bw_state);
 }
 
+static unsigned int icl_max_bw_qgv_point(struct drm_i915_private *i915,
+					 int num_active_planes)
+{
+	unsigned int max_bw_point = 0;
+	unsigned int max_bw = 0;
+	unsigned int num_qgv_points = i915->display.bw.max[0].num_qgv_points;
+	int i;
+
+	for (i = 0; i < num_qgv_points; i++) {
+		unsigned int idx;
+		unsigned int max_data_rate;
+
+		if (DISPLAY_VER(i915) > 11)
+			idx = tgl_max_bw_index(i915, num_active_planes, i);
+		else
+			idx = icl_max_bw_index(i915, num_active_planes, i);
+
+		if (idx >= ARRAY_SIZE(i915->display.bw.max))
+			continue;
+
+		max_data_rate = i915->display.bw.max[idx].deratedbw[i];
+
+		/*
+		 * We need to know which qgv point gives us
+		 * maximum bandwidth in order to disable SAGV
+		 * if we find that we exceed SAGV block time
+		 * with watermarks. By that moment we already
+		 * have those, as it is calculated earlier in
+		 * intel_atomic_check,
+		 */
+		if (max_data_rate > max_bw) {
+			max_bw_point = i;
+			max_bw = max_data_rate;
+		}
+	}
+
+	return max_bw_point;
+}
+
+unsigned int icl_max_bw_psf_gv_point(struct drm_i915_private *i915)
+{
+	unsigned int num_psf_gv_points = i915->display.bw.max[0].num_psf_gv_points;
+	unsigned int max_bw = 0;
+	unsigned int max_bw_point = 0;
+	int i;
+
+	for (i = 0; i < num_psf_gv_points; i++) {
+		unsigned int max_data_rate = adl_psf_bw(i915, i);
+
+		if (max_data_rate > max_bw) {
+			max_bw_point = i;
+			max_bw = max_data_rate;
+		}
+	}
+
+	return max_bw_point;
+}
+
 static int mtl_find_qgv_points(struct drm_i915_private *i915,
 			       unsigned int data_rate,
 			       unsigned int num_active_planes,
@@ -882,8 +940,6 @@ static int icl_find_qgv_points(struct drm_i915_private *i915,
 			       const struct intel_bw_state *old_bw_state,
 			       struct intel_bw_state *new_bw_state)
 {
-	unsigned int max_bw_point = 0;
-	unsigned int max_bw = 0;
 	unsigned int num_psf_gv_points = i915->display.bw.max[0].num_psf_gv_points;
 	unsigned int num_qgv_points = i915->display.bw.max[0].num_qgv_points;
 	u16 psf_points = 0;
@@ -909,18 +965,6 @@ static int icl_find_qgv_points(struct drm_i915_private *i915,
 
 		max_data_rate = i915->display.bw.max[idx].deratedbw[i];
 
-		/*
-		 * We need to know which qgv point gives us
-		 * maximum bandwidth in order to disable SAGV
-		 * if we find that we exceed SAGV block time
-		 * with watermarks. By that moment we already
-		 * have those, as it is calculated earlier in
-		 * intel_atomic_check,
-		 */
-		if (max_data_rate > max_bw) {
-			max_bw_point = i;
-			max_bw = max_data_rate;
-		}
 		if (max_data_rate >= data_rate)
 			qgv_points |= BIT(i);
 
@@ -964,9 +1008,13 @@ static int icl_find_qgv_points(struct drm_i915_private *i915,
 	 * cause.
 	 */
 	if (!intel_can_enable_sagv(i915, new_bw_state)) {
-		qgv_points = BIT(max_bw_point);
-		drm_dbg_kms(&i915->drm, "No SAGV, using single QGV point %d\n",
-			    max_bw_point);
+		unsigned int max_bw_qgv_point = icl_max_bw_qgv_point(i915, num_active_planes);
+		unsigned int max_bw_psf_gv_point = icl_max_bw_psf_gv_point(i915);
+
+		qgv_points = BIT(max_bw_qgv_point);
+		psf_points = BIT(max_bw_psf_gv_point);
+		drm_dbg_kms(&i915->drm, "No SAGV, using single QGV point %d PSF GV point %d\n",
+			    max_bw_qgv_point, max_bw_psf_gv_point);
 	}
 
 	/*
