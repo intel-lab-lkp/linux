@@ -338,9 +338,6 @@ static inline int is_fnic_fip_flogi_reject(struct fcoe_ctlr *fip,
 		els = (struct fip_encaps *)desc;
 		fh = (struct fc_frame_header *)(els + 1);
 
-		if (!fh)
-			return 0;
-
 		/*
 		 * ELS command code, reason and explanation should be = Reject,
 		 * unsupported command and insufficient resource
