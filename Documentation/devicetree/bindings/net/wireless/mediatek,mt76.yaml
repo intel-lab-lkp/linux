@@ -19,9 +19,6 @@ description: |
   Alternatively, it can specify the wireless part of the MT7628/MT7688
   or MT7622/MT7986 SoC.
 
-allOf:
-  - $ref: ieee80211.yaml#
-
 properties:
   compatible:
     enum:
@@ -38,7 +35,8 @@ properties:
       MT7986 should contain 3 regions consys, dcm, and sku, in this order.
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
 
   power-domains:
     maxItems: 1
@@ -218,6 +216,24 @@ required:
   - reg
 
 unevaluatedProperties: false
+
+allOf:
+  - $ref: ieee80211.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt7986-wmac
+    then:
+      properties:
+        interrupts:
+          minItems: 1
+          items:
+            - description: major interrupt for rings
+            - description: addditional interrupt for ring 19
+            - description: addditional interrupt for ring 4
+            - description: addditional interrupt for ring 5
 
 examples:
   - |
