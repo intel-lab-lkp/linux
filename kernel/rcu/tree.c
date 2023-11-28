@@ -1390,6 +1390,12 @@ static void rcu_poll_gp_seq_end_unlocked(unsigned long *snap)
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 }
 
+/*
+ * A max threshold for synchronize_rcu() users which are
+ * awaken directly by the rcu_gp_kthread(). Left part is
+ * deferred to the main worker.
+ */
+#define SR_MAX_USERS_WAKE_FROM_GP 5
 #define SR_NORMAL_GP_WAIT_HEAD_MAX 5
 
 struct sr_wait_node {
@@ -1623,7 +1629,8 @@ static DECLARE_WORK(sr_normal_gp_cleanup, rcu_sr_normal_gp_cleanup_work);
  */
 static void rcu_sr_normal_gp_cleanup(void)
 {
-	struct llist_node *wait_tail;
+	struct llist_node *wait_tail, *head, *rcu;
+	int done = 0;
 
 	wait_tail = sr.srs_wait_tail;
 	if (wait_tail == NULL)
@@ -1632,11 +1639,39 @@ static void rcu_sr_normal_gp_cleanup(void)
 	sr.srs_wait_tail = NULL;
 	ASSERT_EXCLUSIVE_WRITER(sr.srs_wait_tail);
 
+	WARN_ON_ONCE(!rcu_sr_is_wait_head(wait_tail));
+	head = wait_tail->next;
+
+	/*
+	 * Process (a) and (d) cases. See an illustration. Apart of
+	 * that it handles the scenario when all clients are done,
+	 * wait-head is released if last. The worker is not kicked.
+	 */
+	llist_for_each_safe(rcu, head, head) {
+		if (rcu_sr_is_wait_head(rcu)) {
+			if (!rcu->next) {
+				rcu_sr_put_wait_head(rcu);
+				wait_tail->next = NULL;
+			} else {
+				wait_tail->next = rcu;
+			}
+
+			break;
+		}
+
+		rcu_sr_normal_complete(rcu);
+		// It can be last, update a next on this step.
+		wait_tail->next = head;
+
+		if (++done == SR_MAX_USERS_WAKE_FROM_GP)
+			break;
+	}
+
 	// concurrent sr_normal_gp_cleanup work might observe this update.
 	smp_store_release(&sr.srs_done_tail, wait_tail);
 	ASSERT_EXCLUSIVE_WRITER(sr.srs_done_tail);
 
-	if (wait_tail)
+	if (wait_tail->next)
 		queue_work(system_highpri_wq, &sr_normal_gp_cleanup);
 }
 
