@@ -2504,7 +2504,7 @@ static int mwifiex_register_dev(struct mwifiex_adapter *adapter)
 		adapter->num_mem_types = ARRAY_SIZE(mem_type_mapping_tbl);
 	}
 
-	adapter->host_mlme = card->host_mlme;
+	adapter->host_mlme_enabled = card->host_mlme;
 
 	return 0;
 }

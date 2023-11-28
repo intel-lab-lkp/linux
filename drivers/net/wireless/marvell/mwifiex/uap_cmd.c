@@ -765,7 +765,7 @@ static int mwifiex_cmd_uap_bss_start(struct mwifiex_private *priv,
 	cmd->command = cpu_to_le16(HostCmd_CMD_UAP_BSS_START);
 	cmd->size = S_DS_GEN;
 
-	if (priv->adapter->host_mlme) {
+	if (priv->adapter->host_mlme_enabled) {
 		tlv = (struct mwifiex_ie_types_host_mlme *)((u8 *)cmd + cmd->size);
 		tlv->header.type = cpu_to_le16(TLV_TYPE_HOST_MLME);
 		tlv->header.len = cpu_to_le16(sizeof(tlv->host_mlme));

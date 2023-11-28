@@ -57,31 +57,6 @@ ieee80211_iface_combination mwifiex_iface_comb_ap_sta_drcs = {
 	.beacon_int_infra_match = true,
 };
 
-struct mwifiex_ieee80211_mgmt {
-	__le16 frame_control;
-	__le16 duration;
-	u8 da[ETH_ALEN];
-	u8 sa[ETH_ALEN];
-	u8 bssid[ETH_ALEN];
-	__le16 seq_ctrl;
-	u8 addr4[ETH_ALEN];
-	union {
-		struct {
-			__le16 auth_alg;
-			__le16 auth_transaction;
-			__le16 status_code;
-			/* possibly followed by Challenge text */
-			u8 variable[];
-		} __packed auth;
-		struct {
-			__le16 capab_info;
-			__le16 listen_interval;
-			/* followed by SSID and Supported rates */
-			u8 variable[];
-		} __packed assoc_req;
-	} u;
-} __pack;
-
 /*
  * This function maps the nl802.11 channel type into driver channel type.
  *
@@ -551,7 +526,7 @@ mwifiex_cfg80211_set_default_mgmt_key(struct wiphy *wiphy,
 
 	wiphy_dbg(wiphy, "set default mgmt key, key index=%d\n", key_index);
 
-	if (priv->adapter->host_mlme)
+	if (priv->adapter->host_mlme_enabled)
 		return 0;
 
 	memset(&encrypt_key, 0, sizeof(struct mwifiex_ds_encrypt_key));
@@ -3683,7 +3658,7 @@ static int mwifiex_set_rekey_data(struct wiphy *wiphy, struct net_device *dev,
 	if (!ISSUPP_FIRMWARE_SUPPLICANT(priv->adapter->fw_cap_info))
 		return -EOPNOTSUPP;
 
-	if (priv->adapter->host_mlme)
+	if (priv->adapter->host_mlme_enabled)
 		return 0;
 
 	return mwifiex_send_cmd(priv, HostCmd_CMD_GTK_REKEY_OFFLOAD_CFG,
@@ -4033,7 +4008,7 @@ mwifiex_cfg80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 
-	if (priv->adapter->host_mlme &&
+	if (priv->adapter->host_mlme_enabled &&
 	    (GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_UAP))
 		return mwifiex_cfg80211_uap_add_station(priv, mac, params);
 
@@ -4274,7 +4249,7 @@ mwifiex_cfg80211_change_station(struct wiphy *wiphy, struct net_device *dev,
 	int ret;
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 
-	if (priv->adapter->host_mlme &&
+	if (priv->adapter->host_mlme_enabled &&
 	    (GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_UAP))
 		return 0;
 
@@ -4426,8 +4401,8 @@ mwifiex_cfg80211_authenticate(struct wiphy *wiphy,
 	}
 
 	mgmt->u.auth.auth_alg = cpu_to_le16(auth_alg);
-	mgmt->u.auth.auth_transaction = trans;
-	mgmt->u.auth.status_code = status_code;
+	mgmt->u.auth.auth_transaction = cpu_to_le16(trans);
+	mgmt->u.auth.status_code = cpu_to_le16(status_code);
 
 	if (req->ie && req->ie_len) {
 		if (!varptr)
@@ -4545,7 +4520,7 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 
 	if (ret) {
 		priv->auth_flag = 0;
-		priv->auth_alg = 0xFFFF;
+		priv->auth_alg = WLAN_AUTH_NONE;
 		eth_zero_addr(priv->cfg_bssid);
 	}
 
@@ -4735,7 +4710,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			    "%s: creating new wiphy\n", __func__);
 		return -ENOMEM;
 	}
-	if (adapter->host_mlme) {
+	if (adapter->host_mlme_enabled) {
 		mwifiex_cfg80211_ops.auth = mwifiex_cfg80211_authenticate;
 		mwifiex_cfg80211_ops.assoc = mwifiex_cfg80211_associate;
 		mwifiex_cfg80211_ops.deauth = mwifiex_cfg80211_deauthenticate;
@@ -4747,7 +4722,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 	}
 	wiphy->max_scan_ssids = MWIFIEX_MAX_SSID_LIST_LENGTH;
 	wiphy->max_scan_ie_len = MWIFIEX_MAX_VSIE_LEN;
-	if (adapter->host_mlme) {
+	if (adapter->host_mlme_enabled) {
 		mwifiex_mgmt_stypes[NL80211_IFTYPE_AP].tx = 0xffff;
 		mwifiex_mgmt_stypes[NL80211_IFTYPE_AP].rx =
 			BIT(IEEE80211_STYPE_ASSOC_REQ >> 4) |
@@ -4807,7 +4782,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			WIPHY_FLAG_NETNS_OK |
 			WIPHY_FLAG_PS_ON_BY_DEFAULT;
 
-	if (adapter->host_mlme)
+	if (adapter->host_mlme_enabled)
 		wiphy->flags |= WIPHY_FLAG_REPORTS_OBSS;
 	else
 		wiphy->flags |= WIPHY_FLAG_HAVE_AP_SME;
@@ -4841,7 +4816,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			   NL80211_FEATURE_LOW_PRIORITY_SCAN |
 			   NL80211_FEATURE_NEED_OBSS_SCAN;
 
-	if (adapter->host_mlme)
+	if (adapter->host_mlme_enabled)
 		wiphy->features |= NL80211_FEATURE_SAE;
 
 	if (ISSUPP_ADHOC_ENABLED(adapter->fw_cap_info))

@@ -392,7 +392,7 @@ void mwifiex_host_mlme_disconnect(struct mwifiex_private *priv,
 		       ETH_ALEN);
 		memcpy(mgmt->bssid, priv->cfg_bssid, ETH_ALEN);
 		priv->auth_flag = 0;
-		priv->auth_alg = 0xFFFF;
+		priv->auth_alg = WLAN_AUTH_NONE;
 	} else {
 		memcpy(mgmt->da, priv->curr_addr, ETH_ALEN);
 		memcpy(mgmt->sa, sa, ETH_ALEN);
@@ -486,7 +486,7 @@ mwifiex_process_mgmt_packet(struct mwifiex_private *priv,
 					    "auth: receive deauth from %pM\n",
 					    ieee_hdr->addr3);
 				priv->auth_flag = 0;
-				priv->auth_alg = 0xFFFF;
+				priv->auth_alg = WLAN_AUTH_NONE;
 			} else {
 				mwifiex_dbg(priv->adapter, MSG,
 					    "assoc: receive disasso from %pM\n",
@@ -497,7 +497,7 @@ mwifiex_process_mgmt_packet(struct mwifiex_private *priv,
 		cfg80211_rx_mlme_mgmt(priv->netdev, skb->data, pkt_len);
 	}
 
-	if (priv->adapter->host_mlme &&
+	if (priv->adapter->host_mlme_enabled &&
 	    (GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_UAP)) {
 		if (ieee80211_is_auth(ieee_hdr->frame_control))
 			mwifiex_dbg(priv->adapter, MSG,

@@ -24,10 +24,24 @@
 #define MWIFIEX_RX_HEADROOM	    64
 #define MAX_TXPD_SZ		    32
 #define INTF_HDR_ALIGN		     4
-/* frmctl + durationid + addr1 + addr2 + addr3 + seqctl + addr4 */
-#define MWIFIEX_MGMT_HEADER_LEN   (2 + 2 + 6 + 6 + 6 + 2 + 6)
-/* 6   = auth_alg + auth_transaction + auth_status */
-#define MWIFIEX_AUTH_BODY_LEN     6
+#define MWIFIEX_MIN_DATA_HEADER_LEN (MWIFIEX_DMA_ALIGN_SZ + INTF_HDR_ALIGN + \
+				     MAX_TXPD_SZ)
+
+#define MWIFIEX_MGMT_FRAME_HEADER_SIZE	8	/* sizeof(pkt_type)
+						 *   + sizeof(tx_control)
+						 */
+
+#define FRMCTL_LEN                2
+#define DURATION_LEN              2
+#define SEQCTL_LEN                2
+#define MWIFIEX_MGMT_HEADER_LEN   (FRMCTL_LEN + FRMCTL_LEN + ETH_ALEN + \
+				   ETH_ALEN + ETH_ALEN + SEQCTL_LEN + ETH_ALEN)
+
+#define AUTH_ALG_LEN              2
+#define AUTH_TRANSACTION_LEN      2
+#define AUTH_STATUS_LEN           2
+#define MWIFIEX_AUTH_BODY_LEN     (AUTH_ALG_LEN + AUTH_TRANSACTION_LEN + \
+				   AUTH_STATUS_LEN)
 
 #define HOST_MLME_AUTH_PENDING    BIT(0)
 #define HOST_MLME_AUTH_DONE       BIT(1)
@@ -35,13 +49,10 @@
 #define HOST_MLME_MGMT_MASK       (BIT(IEEE80211_STYPE_AUTH >> 4) | \
 				   BIT(IEEE80211_STYPE_DEAUTH >> 4) | \
 				   BIT(IEEE80211_STYPE_DISASSOC >> 4))
+
 #define AUTH_TX_DEFAULT_WAIT_TIME 2400
 
-#define MWIFIEX_MIN_DATA_HEADER_LEN (MWIFIEX_DMA_ALIGN_SZ + INTF_HDR_ALIGN + \
-				     MAX_TXPD_SZ)
-#define MWIFIEX_MGMT_FRAME_HEADER_SIZE	8	/* sizeof(pkt_type)
-						 *   + sizeof(tx_control)
-						 */
+#define WLAN_AUTH_NONE            0xFFFF
 
 #define MWIFIEX_MAX_TX_BASTREAM_SUPPORTED	2
 #define MWIFIEX_MAX_RX_BASTREAM_SUPPORTED	16

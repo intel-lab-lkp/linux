@@ -1499,11 +1499,11 @@ int mwifiex_cmd_get_hw_spec(struct mwifiex_private *priv,
 
 static void mwifiex_check_key_api_ver(struct mwifiex_adapter *adapter)
 {
-	if (adapter->host_mlme) {
+	if (adapter->host_mlme_enabled) {
 		if (adapter->key_api_major_ver != KEY_API_VER_MAJOR_V2)
-			adapter->host_mlme = false;
+			adapter->host_mlme_enabled = false;
 		mwifiex_dbg(adapter, MSG, "host_mlme: %s, key_api: %d\n",
-			    adapter->host_mlme ? "enable" : "disable",
+			    adapter->host_mlme_enabled ? "enable" : "disable",
 			    adapter->key_api_major_ver);
 	}
 }
@@ -1617,7 +1617,6 @@ int mwifiex_ret_get_hw_spec(struct mwifiex_private *priv,
 						    "key_api v%d.%d\n",
 						    adapter->key_api_major_ver,
 						    adapter->key_api_minor_ver);
-					mwifiex_check_key_api_ver(adapter);
 					break;
 				case FW_API_VER_ID:
 					adapter->fw_api_ver =
@@ -1711,6 +1710,8 @@ int mwifiex_ret_get_hw_spec(struct mwifiex_private *priv,
 
 	if (adapter->fw_api_ver == MWIFIEX_FW_V15)
 		adapter->scan_chan_gap_enabled = true;
+
+	mwifiex_check_key_api_ver(adapter);
 
 	return 0;
 }

@@ -511,7 +511,7 @@ int mwifiex_cmd_802_11_associate(struct mwifiex_private *priv,
 			sizeof(struct mwifiex_chan_scan_param_set);
 	}
 
-	if (priv->adapter->host_mlme) {
+	if (priv->adapter->host_mlme_enabled) {
 		host_mlme_tlv = (struct mwifiex_ie_types_host_mlme *)pos;
 		host_mlme_tlv->header.type = cpu_to_le16(TLV_TYPE_HOST_MLME);
 		host_mlme_tlv->header.len =
@@ -672,7 +672,7 @@ int mwifiex_ret_802_11_associate(struct mwifiex_private *priv,
 		goto done;
 	}
 
-	if (adapter->host_mlme) {
+	if (adapter->host_mlme_enabled) {
 		hdr = (struct ieee80211_mgmt *)&resp->params;
 		if (!memcmp(hdr->bssid,
 			    priv->attempted_bss_desc->mac_address,
@@ -724,7 +724,7 @@ int mwifiex_ret_802_11_associate(struct mwifiex_private *priv,
 					    "ASSOC_RESP: UNSPECIFIED failure\n");
 			}
 
-			if (priv->adapter->host_mlme)
+			if (priv->adapter->host_mlme_enabled)
 				priv->assoc_rsp_size = 0;
 		} else {
 			ret = status_code;
@@ -1538,9 +1538,9 @@ int mwifiex_deauthenticate(struct mwifiex_private *priv, u8 *mac)
 	if (!priv->media_connected)
 		return 0;
 
-	if (priv->adapter->host_mlme) {
+	if (priv->adapter->host_mlme_enabled) {
 		priv->auth_flag = 0;
-		priv->auth_alg = 0xFFFF;
+		priv->auth_alg = WLAN_AUTH_NONE;
 		priv->host_mlme_reg = false;
 		priv->mgmt_frame_mask = 0;
 		if (mwifiex_send_cmd(priv, HostCmd_CMD_MGMT_FRAME_REG,
