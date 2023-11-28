@@ -85,6 +85,8 @@ void __init mem_encrypt_init(void)
 	/* Call into SWIOTLB to update the SWIOTLB DMA buffers */
 	swiotlb_update_mem_attributes();
 
+	x86_platform.guest.enc_init();
+
 	print_mem_encrypt_feature_info();
 }
 
