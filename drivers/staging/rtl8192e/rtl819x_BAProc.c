@@ -199,68 +199,6 @@ static void rtllib_send_DELBA(struct rtllib_device *ieee, u8 *dst,
 		netdev_dbg(ieee->dev, "Failed to generate DELBA packet.\n");
 }
 
-int rtllib_rx_DELBA(struct rtllib_device *ieee, struct sk_buff *skb)
-{
-	struct ieee80211_hdr_3addr *delba = NULL;
-	union delba_param_set *pDelBaParamSet = NULL;
-	u8 *dst = NULL;
-
-	if (skb->len < sizeof(struct ieee80211_hdr_3addr) + 6) {
-		netdev_warn(ieee->dev, "Invalid skb len in DELBA(%d / %d)\n",
-			    (int)skb->len,
-			    (int)(sizeof(struct ieee80211_hdr_3addr) + 6));
-		return -1;
-	}
-
-	if (!ieee->current_network.qos_data.active ||
-	    !ieee->ht_info->current_ht_support) {
-		netdev_warn(ieee->dev,
-			    "received DELBA while QOS or HT is not supported(%d, %d)\n",
-			    ieee->current_network. qos_data.active,
-			    ieee->ht_info->current_ht_support);
-		return -1;
-	}
-
-#ifdef VERBOSE_DEBUG
-	print_hex_dump_bytes("%s: ", DUMP_PREFIX_NONE, skb->data,
-			     __func__, skb->len);
-#endif
-	delba = (struct ieee80211_hdr_3addr *)skb->data;
-	dst = (u8 *)(&delba->addr2[0]);
-	pDelBaParamSet = (union delba_param_set *)&delba->seq_ctrl + 2;
-
-	if (pDelBaParamSet->field.initiator == 1) {
-		struct rx_ts_record *ts;
-
-		if (!rtllib_get_ts(ieee, (struct ts_common_info **)&ts, dst,
-			   (u8)pDelBaParamSet->field.tid, RX_DIR, false)) {
-			netdev_warn(ieee->dev,
-				    "%s(): can't get TS for RXTS. dst:%pM TID:%d\n",
-				    __func__, dst,
-				    (u8)pDelBaParamSet->field.tid);
-			return -1;
-		}
-
-		rx_ts_delete_ba(ieee, ts);
-	} else {
-		struct tx_ts_record *ts;
-
-		if (!rtllib_get_ts(ieee, (struct ts_common_info **)&ts, dst,
-			   (u8)pDelBaParamSet->field.tid, TX_DIR, false)) {
-			netdev_warn(ieee->dev, "%s(): can't get TS for TXTS\n",
-				    __func__);
-			return -1;
-		}
-
-		ts->using_ba = false;
-		ts->add_ba_req_in_progress = false;
-		ts->add_ba_req_delayed = false;
-		del_timer_sync(&ts->ts_add_ba_timer);
-		tx_ts_delete_ba(ieee, ts);
-	}
-	return 0;
-}
-
 void rtllib_ts_init_add_ba(struct rtllib_device *ieee, struct tx_ts_record *ts,
 			   u8 policy, u8	overwrite_pending)
 {
