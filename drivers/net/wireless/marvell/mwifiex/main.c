@@ -365,6 +365,12 @@ process_start:
 			}
 		}
 
+		/* Chekc for Assoc Resp */
+		if (adapter->assoc_resp_received) {
+			adapter->assoc_resp_received = false;
+			mwifiex_process_assoc_resp(adapter);
+		}
+
 		/* Check if we need to confirm Sleep Request
 		   received previously */
 		if (adapter->ps_state == PS_STATE_PRE_SLEEP)

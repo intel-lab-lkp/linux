@@ -4395,9 +4395,6 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 	int ret;
 	struct cfg80211_ssid req_ssid;
 	const u8 *ssid_ie;
-	struct cfg80211_rx_assoc_resp assoc_resp = {
-		.uapsd_queues = -1,
-	};
 
 	if (GET_BSS_ROLE(priv) != MWIFIEX_BSS_ROLE_STA) {
 		mwifiex_dbg(adapter, ERROR,
@@ -4433,13 +4430,13 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 
 	req_ssid.ssid_len = ssid_ie[1];
 	if (req_ssid.ssid_len > IEEE80211_MAX_SSID_LEN) {
-		mwifiex_dbg(priv->adapter, ERROR, "invalid SSID - aborting\n");
+		mwifiex_dbg(adapter, ERROR, "invalid SSID - aborting\n");
 		goto ssid_err;
 	}
 
 	memcpy(req_ssid.ssid, ssid_ie + 2, req_ssid.ssid_len);
 	if (!req_ssid.ssid_len || req_ssid.ssid[0] < 0x20) {
-		mwifiex_dbg(priv->adapter, ERROR, "invalid SSID - aborting\n");
+		mwifiex_dbg(adapter, ERROR, "invalid SSID - aborting\n");
 		goto ssid_err;
 	}
 	rcu_read_unlock();
@@ -4466,23 +4463,23 @@ mwifiex_cfg80211_associate(struct wiphy *wiphy, struct net_device *dev,
 
 	memcpy(priv->cfg_bssid, req->bss->bssid, ETH_ALEN);
 
-	mwifiex_dbg(priv->adapter, MSG,
+	mwifiex_dbg(adapter, MSG,
 		    "assoc: send association to %pM\n", req->bss->bssid);
 
-	cfg80211_ref_bss(priv->adapter->wiphy, req->bss);
+	cfg80211_ref_bss(adapter->wiphy, req->bss);
 
 	ret = mwifiex_bss_start(priv, req->bss, &req_ssid);
 
-	if (!ret) {
-		assoc_resp.links[0].bss = priv->attempted_bss_desc->bss;
-		assoc_resp.buf = priv->assoc_rsp_buf;
-		assoc_resp.len = priv->assoc_rsp_size;
-		cfg80211_rx_assoc_resp(priv->netdev,
-				       &assoc_resp);
-	} else {
+	if (ret) {
 		priv->auth_flag = 0;
 		priv->auth_alg = 0xFFFF;
 		eth_zero_addr(priv->cfg_bssid);
+	}
+
+	if (priv->assoc_rsp_size) {
+		priv->req_bss = req->bss;
+		adapter->assoc_resp_received = true;
+		queue_work(adapter->workqueue, &adapter->main_work);
 	}
 
 	cfg80211_put_bss(priv->adapter->wiphy, req->bss);
