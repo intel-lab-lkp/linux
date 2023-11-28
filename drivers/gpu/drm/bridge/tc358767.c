@@ -1646,9 +1646,17 @@ tc_connector_detect(struct drm_connector *connector, bool force)
 		return connector_status_unknown;
 }
 
+static int tc_fill_modes(struct drm_connector *connector, uint32_t maxX,
+			 uint32_t maxY)
+{
+	return drm_helper_probe_single_connector_modes(connector,
+						       min(maxX, 1920U),
+						       min(maxY, 1200U));
+}
+
 static const struct drm_connector_funcs tc_connector_funcs = {
 	.detect = tc_connector_detect,
-	.fill_modes = drm_helper_probe_single_connector_modes,
+	.fill_modes = tc_fill_modes,
 	.destroy = drm_connector_cleanup,
 	.reset = drm_atomic_helper_connector_reset,
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
