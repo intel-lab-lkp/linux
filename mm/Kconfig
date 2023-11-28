@@ -1270,6 +1270,20 @@ config LOCK_MM_AND_FIND_VMA
 	bool
 	depends on !STACK_GROWSUP
 
+config GMEM
+	bool "generalized memory management for external memory devices"
+	depends on (ARM64 || X86_64) && MMU && TRANSPARENT_HUGEPAGE
+	select ARCH_USES_HIGH_VMA_FLAGS
+	default y
+	help
+	  Supporting GMEM (generalized memory management) for external memory
+	  devices
+
+	  GMEM extends Linux MM to share its machine-independent MM code. Only
+	  high-level interface is provided for device drivers. This prevents
+	  accelerator drivers from reinventing the wheel, but relies on drivers to
+	  implement their hardware-dependent functions declared by GMEM.
+
 source "mm/damon/Kconfig"
 
 endmenu

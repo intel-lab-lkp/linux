@@ -100,6 +100,7 @@
 #include <linux/stackdepot.h>
 #include <linux/randomize_kstack.h>
 #include <net/net_namespace.h>
+#include <linux/gmem.h>
 
 #include <asm/io.h>
 #include <asm/setup.h>
@@ -901,6 +902,7 @@ void start_kernel(void)
 	setup_per_cpu_areas();
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
 	boot_cpu_hotplug_init();
+	hnuma_init();
 
 	pr_notice("Kernel command line: %s\n", saved_command_line);
 	/* parameters may set static keys */
