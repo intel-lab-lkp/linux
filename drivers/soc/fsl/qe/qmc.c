@@ -1386,8 +1386,10 @@ static int qmc_probe(struct platform_device *pdev)
 	qmc_write16(qmc->scc_regs + SCC_SCCM, 0x0000);
 	qmc_write16(qmc->scc_regs + SCC_SCCE, 0x000F);
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
+	if (irq < 0) {
+		ret = irq;
 		goto err_tsa_serial_disconnect;
+	}
 	ret = devm_request_irq(qmc->dev, irq, qmc_irq_handler, 0, "qmc", qmc);
 	if (ret < 0)
 		goto err_tsa_serial_disconnect;
