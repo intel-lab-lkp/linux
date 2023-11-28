@@ -83,6 +83,7 @@ struct wep_key {
 #define MWIFIEX_OPERATING_CLASSES		16
 
 struct mwifiex_uap_bss_param {
+	u8 mac_addr[ETH_ALEN];
 	u8 channel;
 	u8 band_cfg;
 	u16 rts_threshold;
