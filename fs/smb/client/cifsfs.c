@@ -1267,6 +1267,7 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 	struct cifsFileInfo *smb_file_target;
 	struct cifs_tcon *src_tcon;
 	struct cifs_tcon *target_tcon;
+	unsigned long long destend;
 	ssize_t rc;
 
 	cifs_dbg(FYI, "copychunk range\n");
@@ -1306,13 +1307,30 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 	if (rc)
 		goto unlock;
 
-	/* should we flush first and last page first */
-	truncate_inode_pages(&target_inode->i_data, 0);
+	destend = destoff + len - 1;
+
+	/* Flush the folios at either end of the destination range to prevent
+	 * accidental loss of dirty data outside of the range.
+	 */
+	rc = filemap_write_and_wait_range(target_inode->i_mapping, destoff, destoff);
+	if (rc)
+		goto unlock;
+	if (destend > destoff) {
+		rc = filemap_write_and_wait_range(target_inode->i_mapping, destend, destend);
+		if (rc)
+			goto unlock;
+	}
+
+	/* Discard all the folios that overlap the destination region. */
+	discard_inode_pages_range(&target_inode->i_data, destoff, destend);
 
 	rc = file_modified(dst_file);
-	if (!rc)
+	if (!rc) {
 		rc = target_tcon->ses->server->ops->copychunk_range(xid,
 			smb_file_src, smb_file_target, off, len, destoff);
+		if (rc > 0 && destoff + rc > i_size_read(target_inode))
+			truncate_setsize(target_inode, destoff + rc);
+	}
 
 	file_accessed(src_file);
 

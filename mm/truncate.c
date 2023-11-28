@@ -294,10 +294,11 @@ long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
 }
 
 /**
- * truncate_inode_pages_range - truncate range of pages specified by start & end byte offsets
+ * __truncate_inode_pages_range - truncate range of pages specified by start & end byte offsets
  * @mapping: mapping to truncate
  * @lstart: offset from which to truncate
  * @lend: offset to which to truncate (inclusive)
+ * @round_out: Discard all overlapping folios
  *
  * Truncate the page cache, removing the pages that are between
  * specified offsets (and zeroing out partial pages
@@ -317,8 +318,9 @@ long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
  * truncate_inode_pages_range is able to handle cases where lend + 1 is not
  * page aligned properly.
  */
-void truncate_inode_pages_range(struct address_space *mapping,
-				loff_t lstart, loff_t lend)
+static void __truncate_inode_pages_range(struct address_space *mapping,
+					 loff_t lstart, loff_t lend,
+					 bool round_out)
 {
 	pgoff_t		start;		/* inclusive */
 	pgoff_t		end;		/* exclusive */
@@ -366,7 +368,15 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	same_folio = (lstart >> PAGE_SHIFT) == (lend >> PAGE_SHIFT);
 	folio = __filemap_get_folio(mapping, lstart >> PAGE_SHIFT, FGP_LOCK, 0);
 	if (!IS_ERR(folio)) {
-		same_folio = lend < folio_pos(folio) + folio_size(folio);
+		loff_t fend = folio_pos(folio) + folio_size(folio) - 1;
+
+		if (unlikely(round_out)) {
+			if (folio_pos(folio) < lstart)
+				lstart = folio_pos(folio);
+			if (lend < fend)
+				lend = fend;
+		}
+		same_folio = lend <= fend;
 		if (!truncate_inode_partial_folio(folio, lstart, lend)) {
 			start = folio_next_index(folio);
 			if (same_folio)
@@ -381,6 +391,12 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		folio = __filemap_get_folio(mapping, lend >> PAGE_SHIFT,
 						FGP_LOCK, 0);
 		if (!IS_ERR(folio)) {
+			if (unlikely(round_out)) {
+				loff_t fend = folio_pos(folio) + folio_size(folio) - 1;
+
+				if (lend < fend)
+					lend = fend;
+			}
 			if (!truncate_inode_partial_folio(folio, lstart, lend))
 				end = folio->index;
 			folio_unlock(folio);
@@ -419,7 +435,20 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		folio_batch_release(&fbatch);
 	}
 }
+
+void truncate_inode_pages_range(struct address_space *mapping,
+				loff_t lstart, loff_t lend)
+{
+	__truncate_inode_pages_range(mapping, lstart, lend, false);
+}
 EXPORT_SYMBOL(truncate_inode_pages_range);
+
+void discard_inode_pages_range(struct address_space *mapping,
+			       loff_t lstart, loff_t lend)
+{
+	__truncate_inode_pages_range(mapping, lstart, lend, true);
+}
+EXPORT_SYMBOL(discard_inode_pages_range);
 
 /**
  * truncate_inode_pages - truncate *all* the pages from an offset
