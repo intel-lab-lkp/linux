@@ -488,8 +488,10 @@ void __init sme_early_init(void)
 	if (sev_status & MSR_AMD64_SEV_ES_ENABLED)
 		x86_cpuinit.parallel_bringup = false;
 
-	if (sev_status & MSR_AMD64_SNP_SECURE_TSC)
+	if (sev_status & MSR_AMD64_SNP_SECURE_TSC) {
+		setup_force_cpu_cap(X86_FEATURE_SNP_SECURE_TSC);
 		setup_force_cpu_cap(X86_FEATURE_TSC_RELIABLE);
+	}
 }
 
 void __init mem_encrypt_free_decrypted_mem(void)
