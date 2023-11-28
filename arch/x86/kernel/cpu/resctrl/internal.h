@@ -59,6 +59,7 @@ struct rdt_fs_context {
 	bool				enable_cdpl2;
 	bool				enable_cdpl3;
 	bool				enable_mba_mbps;
+	bool				use_mbm_total;
 	bool				enable_debug;
 };
 
@@ -427,6 +428,8 @@ extern struct mutex rdtgroup_mutex;
 extern struct rdt_hw_resource rdt_resources_all[];
 extern struct rdtgroup rdtgroup_default;
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
+
+extern enum resctrl_event_id mba_mbps_evt_id;
 
 extern struct dentry *debugfs_resctrl;
 

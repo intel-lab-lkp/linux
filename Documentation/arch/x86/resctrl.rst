@@ -46,6 +46,9 @@ mount options are:
 "mba_MBps":
 	Enable the MBA Software Controller(mba_sc) to specify MBA
 	bandwidth in MBps
+"total":
+	Use total instead of local memory bandwidth to drive the
+	MBA Software Controller
 "debug":
 	Make debug files accessible. Available debug files are annotated with
 	"Available only with debug option".

@@ -57,6 +57,8 @@ static char last_cmd_status_buf[512];
 static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
 static void rdtgroup_destroy_root(void);
 
+enum resctrl_event_id mba_mbps_evt_id;
+
 struct dentry *debugfs_resctrl;
 
 static bool resctrl_debug;
@@ -2294,7 +2296,7 @@ static bool supports_mba_mbps(void)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_MBA].r_resctrl;
 
-	return (is_mbm_local_enabled() &&
+	return (is_mbm_enabled() &&
 		r->alloc_capable && is_mba_linear());
 }
 
@@ -2470,6 +2472,10 @@ static int rdt_enable_ctx(struct rdt_fs_context *ctx)
 		ret = set_mba_sc(true);
 		if (ret)
 			goto out_cdpl3;
+		if (ctx->use_mbm_total || !is_mbm_local_enabled())
+			mba_mbps_evt_id = QOS_L3_MBM_TOTAL_EVENT_ID;
+		else
+			mba_mbps_evt_id = QOS_L3_MBM_LOCAL_EVENT_ID;
 	}
 
 	if (ctx->enable_debug)
@@ -2683,6 +2689,7 @@ enum rdt_param {
 	Opt_cdp,
 	Opt_cdpl2,
 	Opt_mba_mbps,
+	Opt_mba_mbps_total,
 	Opt_debug,
 	nr__rdt_params
 };
@@ -2691,6 +2698,7 @@ static const struct fs_parameter_spec rdt_fs_parameters[] = {
 	fsparam_flag("cdp",		Opt_cdp),
 	fsparam_flag("cdpl2",		Opt_cdpl2),
 	fsparam_flag("mba_MBps",	Opt_mba_mbps),
+	fsparam_flag("total",		Opt_mba_mbps_total),
 	fsparam_flag("debug",		Opt_debug),
 	{}
 };
@@ -2716,6 +2724,11 @@ static int rdt_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		if (!supports_mba_mbps())
 			return -EINVAL;
 		ctx->enable_mba_mbps = true;
+		return 0;
+	case Opt_mba_mbps_total:
+		if (!is_mbm_total_enabled())
+			return -EINVAL;
+		ctx->use_mbm_total = true;
 		return 0;
 	case Opt_debug:
 		ctx->enable_debug = true;
