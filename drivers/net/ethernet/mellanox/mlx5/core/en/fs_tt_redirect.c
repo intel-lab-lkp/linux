@@ -434,7 +434,6 @@ static int fs_any_create_groups(struct mlx5e_flow_table *ft)
 	ft->g = kcalloc(MLX5E_FS_UDP_NUM_GROUPS, sizeof(*ft->g), GFP_KERNEL);
 	in = kvzalloc(inlen, GFP_KERNEL);
 	if  (!in || !ft->g) {
-		kfree(ft->g);
 		kvfree(in);
 		return -ENOMEM;
 	}
