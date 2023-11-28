@@ -809,7 +809,7 @@ static int mwifiex_cmd_uap_add_station(struct mwifiex_private *priv,
 	u8 qos_capa;
 	u16 header_len = sizeof(struct mwifiex_ie_types_header);
 	u16 tlv_len;
-	struct mwifiex_ie_types_header *tlv;
+	struct mwifiex_ie_types_data *tlv;
 	struct mwifiex_ie_types_sta_flag *sta_flag;
 	int i;
 
@@ -846,45 +846,44 @@ static int mwifiex_cmd_uap_add_station(struct mwifiex_private *priv,
 	cmd->size += sizeof(struct mwifiex_ie_types_sta_flag);
 
 	if (params->ext_capab_len) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_EXT_CAPABILITY);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_EXT_CAPABILITY);
 		tlv_len = params->ext_capab_len;
-		tlv->len = cpu_to_le16(tlv_len);
-		memcpy(tlv + header_len, params->ext_capab, tlv_len);
+		tlv->header.len = cpu_to_le16(tlv_len);
+		memcpy(tlv->data, params->ext_capab, tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
 	}
 
 	if (params->link_sta_params.supported_rates_len) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_SUPP_RATES);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_SUPP_RATES);
 		tlv_len = params->link_sta_params.supported_rates_len;
-		tlv->len = cpu_to_le16(tlv_len);
-		memcpy(tlv + header_len,
+		tlv->header.len = cpu_to_le16(tlv_len);
+		memcpy(tlv->data,
 		       params->link_sta_params.supported_rates, tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
 	}
 
 	if (params->uapsd_queues || params->max_sp) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_QOS_CAPA);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_QOS_CAPA);
 		tlv_len = sizeof(qos_capa);
-		tlv->len = cpu_to_le16(tlv_len);
+		tlv->header.len = cpu_to_le16(tlv_len);
 		qos_capa = params->uapsd_queues | (params->max_sp << 5);
-		memcpy(tlv + header_len, &qos_capa, tlv_len);
+		memcpy(tlv->data, &qos_capa, tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
 		sta_ptr->is_wmm_enabled = 1;
 	}
 
 	if (params->link_sta_params.ht_capa) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_HT_CAPABILITY);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_HT_CAPABILITY);
 		tlv_len = sizeof(struct ieee80211_ht_cap);
-		tlv->len = cpu_to_le16(tlv_len);
-		memcpy(tlv + header_len, params->link_sta_params.ht_capa,
-		       tlv_len);
+		tlv->header.len = cpu_to_le16(tlv_len);
+		memcpy(tlv->data, params->link_sta_params.ht_capa, tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
 		sta_ptr->is_11n_enabled = 1;
@@ -896,23 +895,22 @@ static int mwifiex_cmd_uap_add_station(struct mwifiex_private *priv,
 	}
 
 	if (params->link_sta_params.vht_capa) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_VHT_CAPABILITY);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_VHT_CAPABILITY);
 		tlv_len = sizeof(struct ieee80211_vht_cap);
-		tlv->len = cpu_to_le16(tlv_len);
-		memcpy(tlv + header_len, params->link_sta_params.vht_capa,
-		       tlv_len);
+		tlv->header.len = cpu_to_le16(tlv_len);
+		memcpy(tlv->data, params->link_sta_params.vht_capa, tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
 		sta_ptr->is_11ac_enabled = 1;
 	}
 
 	if (params->link_sta_params.opmode_notif_used) {
-		tlv = (struct mwifiex_ie_types_header *)pos;
-		tlv->type = cpu_to_le16(WLAN_EID_OPMODE_NOTIF);
+		tlv = (struct mwifiex_ie_types_data *)pos;
+		tlv->header.type = cpu_to_le16(WLAN_EID_OPMODE_NOTIF);
 		tlv_len = sizeof(u8);
-		tlv->len = cpu_to_le16(tlv_len);
-		memcpy(tlv + header_len, params->link_sta_params.opmode_notif,
+		tlv->header.len = cpu_to_le16(tlv_len);
+		memcpy(tlv->data, params->link_sta_params.opmode_notif,
 		       tlv_len);
 		pos += (header_len + tlv_len);
 		cmd->size += (header_len + tlv_len);
