@@ -87,6 +87,7 @@ lasi700_probe(struct parisc_device *dev)
 	unsigned long base = dev->hpa.start + LASI_SCSI_CORE_OFFSET;
 	struct NCR_700_Host_Parameters *hostdata;
 	struct Scsi_Host *host;
+	int err;
 
 	hostdata = kzalloc(sizeof(*hostdata), GFP_KERNEL);
 	if (!hostdata) {
@@ -95,8 +96,20 @@ lasi700_probe(struct parisc_device *dev)
 	}
 
 	hostdata->dev = &dev->dev;
-	dma_set_mask(&dev->dev, DMA_BIT_MASK(32));
+	err = dma_set_mask(&dev->dev, DMA_BIT_MASK(32));
+	if (err) {
+		dev_err(&dev->dev, "Failed to set DMA mask: %d\n", err);
+		kfree(hostdata);
+		return err;
+	}
+
 	hostdata->base = ioremap(base, 0x100);
+	if (!hostdata->base) {
+		dev_err(&dev->dev, "ioremap failed\n");
+		kfree(hostdata);
+		return -ENOMEM;
+	}
+
 	hostdata->differential = 0;
 
 	if (dev->id.sversion == LASI_700_SVERSION) {
