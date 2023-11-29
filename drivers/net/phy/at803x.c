@@ -886,15 +886,6 @@ static int at803x_probe(struct phy_device *phydev)
 			priv->is_fiber = true;
 			break;
 		}
-
-		/* Disable WoL in 1588 register which is enabled
-		 * by default
-		 */
-		ret = phy_modify_mmd(phydev, MDIO_MMD_PCS,
-				     AT803X_PHY_MMD3_WOL_CTRL,
-				     AT803X_WOL_EN, 0);
-		if (ret)
-			return ret;
 	}
 
 	return 0;
@@ -1008,6 +999,15 @@ static int at803x_config_init(struct phy_device *phydev)
 	int ret;
 
 	if (phydev->drv->phy_id == ATH8031_PHY_ID) {
+		/* Disable WoL in 1588 register which is enabled
+		 * by default
+		 */
+		ret = phy_modify_mmd(phydev, MDIO_MMD_PCS,
+				     AT803X_PHY_MMD3_WOL_CTRL,
+				     AT803X_WOL_EN, 0);
+		if (ret)
+			return ret;
+
 		/* Some bootloaders leave the fiber page selected.
 		 * Switch to the appropriate page (fiber or copper), as otherwise we
 		 * read the PHY capabilities from the wrong page.
