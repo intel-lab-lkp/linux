@@ -10,3 +10,8 @@ config QCA83XX_PHY
 	tristate "Qualcomm Atheros QCA833x PHYs"
 	help
 	  Currently supports the internal QCA8337(Internal qca8k PHY) model
+
+config QCA808X_PHY
+	tristate "Qualcomm QCA808x PHYs"
+	help
+	  Currently supports the QCA8081 model
