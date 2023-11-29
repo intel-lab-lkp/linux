@@ -202,7 +202,7 @@ properties:
                 description: The netlink attribute type
                 enum: [ unused, pad, flag, binary, bitfield32,
                         u8, u16, u32, u64, s8, s16, s32, s64,
-                        string, nest, array-nest, nest-type-value ]
+                        string, nest, array-nest, nest-type-value, dynamic ]
               doc:
                 description: Documentation of the attribute.
                 type: string
@@ -261,6 +261,42 @@ properties:
                 description: Name of the struct type used for the attribute.
                 type: string
               # End genetlink-legacy
+              # Start netlink-raw
+              selector:
+                description:
+                  Map of attribute definitions for dynamic selection of type
+                  specific attribute spaces.
+                type: object
+                required: [ attribute, list ]
+                additionalProperties: false
+                properties:
+                  attribute:
+                    description:
+                      Name of the attribute that contains the type identifier
+                      string.
+                    type: string
+                  list:
+                    type: array
+                    items:
+                      type: object
+                      required: [ value, type ]
+                      additionalProperties: false
+                      properties:
+                        value:
+                          description: Type identifier string to match.
+                          type: string
+                        type:
+                          description: The netlink attribute type.
+                          enum: [ binary, nest ]
+                        nested-attributes:
+                          description:
+                            Name of the sub-space used inside the attribute.
+                          type: string
+                        struct:
+                          description:
+                            Name of the struct type used for the attribute.
+                          type: string
+              # End netlink-raw
 
       # Make sure name-prefix does not appear in subsets (subsets inherit naming)
       dependencies:
