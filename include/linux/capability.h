@@ -209,6 +209,16 @@ static inline bool checkpoint_restore_ns_capable(struct user_namespace *ns)
 		ns_capable(ns, CAP_SYS_ADMIN);
 }
 
+/* helpers to convert between xattr and in-kernel representations */
+int vfs_caps_from_xattr(struct mnt_idmap *idmap,
+			struct user_namespace *src_userns,
+			struct vfs_caps *vfs_caps,
+			const void *data, int size);
+int vfs_caps_to_xattr(struct mnt_idmap *idmap,
+		      struct user_namespace *dest_userns,
+		      const struct vfs_caps *vfs_caps,
+		      void *data, int size);
+
 /* audit system wants to get cap info from files as well */
 int get_vfs_caps_from_disk(struct mnt_idmap *idmap,
 			   const struct dentry *dentry,

@@ -618,6 +618,178 @@ static inline int bprm_caps_from_vfs_caps(struct vfs_caps *caps,
 }
 
 /**
+ * vfs_caps_from_xattr - convert raw caps xattr data to vfs_caps
+ *
+ * @idmap:      idmap of the mount the inode was found from
+ * @src_userns: user namespace for ids in xattr data
+ * @vfs_caps:   destination buffer for vfs_caps data
+ * @data:       rax xattr caps data
+ * @size:       size of xattr data
+ *
+ * Converts a raw security.capability xattr into the kernel-internal
+ * capabilities format.
+ *
+ * If the xattr is being read or written through an idmapped mount the
+ * idmap of the vfsmount must be passed through @idmap. This function
+ * will then take care to map the rootid according to @idmap.
+ *
+ * Return: On success, return 0; on error, return < 0.
+ */
+int vfs_caps_from_xattr(struct mnt_idmap *idmap,
+			struct user_namespace *src_userns,
+			struct vfs_caps *vfs_caps,
+			const void *data, int size)
+{
+	__u32 magic_etc;
+	const struct vfs_ns_cap_data *ns_caps = data;
+	struct vfs_cap_data *caps = (struct vfs_cap_data *)ns_caps;
+	kuid_t rootkuid;
+
+	memset(vfs_caps, 0, sizeof(*vfs_caps));
+
+	if (size < sizeof(magic_etc))
+		return -EINVAL;
+
+	vfs_caps->magic_etc = magic_etc = le32_to_cpu(caps->magic_etc);
+
+	rootkuid = make_kuid(src_userns, 0);
+	switch (magic_etc & VFS_CAP_REVISION_MASK) {
+	case VFS_CAP_REVISION_1:
+		if (size != XATTR_CAPS_SZ_1)
+			return -EINVAL;
+		break;
+	case VFS_CAP_REVISION_2:
+		if (size != XATTR_CAPS_SZ_2)
+			return -EINVAL;
+		break;
+	case VFS_CAP_REVISION_3:
+		if (size != XATTR_CAPS_SZ_3)
+			return -EINVAL;
+		rootkuid = make_kuid(src_userns, le32_to_cpu(ns_caps->rootid));
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	vfs_caps->rootid = make_vfsuid(idmap, src_userns, rootkuid);
+	if (!vfsuid_valid(vfs_caps->rootid))
+		return -EOVERFLOW;
+
+	vfs_caps->permitted.val = le32_to_cpu(caps->data[0].permitted);
+	vfs_caps->inheritable.val = le32_to_cpu(caps->data[0].inheritable);
+
+	/*
+	 * Rev1 had just a single 32-bit word, later expanded
+	 * to a second one for the high bits
+	 */
+	if ((magic_etc & VFS_CAP_REVISION_MASK) != VFS_CAP_REVISION_1) {
+		vfs_caps->permitted.val += (u64)le32_to_cpu(caps->data[1].permitted) << 32;
+		vfs_caps->inheritable.val += (u64)le32_to_cpu(caps->data[1].inheritable) << 32;
+	}
+
+	vfs_caps->permitted.val &= CAP_VALID_MASK;
+	vfs_caps->inheritable.val &= CAP_VALID_MASK;
+
+	return 0;
+}
+
+/*
+ * Inner implementation of vfs_caps_to_xattr() which does not return an
+ * error if the rootid does not map into @dest_userns.
+ */
+static int __vfs_caps_to_xattr(struct mnt_idmap *idmap,
+			       struct user_namespace *dest_userns,
+			       const struct vfs_caps *vfs_caps,
+			       void *data, int size)
+{
+	struct vfs_ns_cap_data *ns_caps = data;
+	struct vfs_cap_data *caps = (struct vfs_cap_data *)ns_caps;
+	kuid_t rootkuid;
+	uid_t rootid;
+
+	memset(ns_caps, 0, size);
+
+	rootid = 0;
+	switch (vfs_caps->magic_etc & VFS_CAP_REVISION_MASK) {
+	case VFS_CAP_REVISION_1:
+		if (size < XATTR_CAPS_SZ_1)
+			return -EINVAL;
+		size = XATTR_CAPS_SZ_1;
+		break;
+	case VFS_CAP_REVISION_2:
+		if (size < XATTR_CAPS_SZ_2)
+			return -EINVAL;
+		size = XATTR_CAPS_SZ_2;
+		break;
+	case VFS_CAP_REVISION_3:
+		if (size < XATTR_CAPS_SZ_3)
+			return -EINVAL;
+		size = XATTR_CAPS_SZ_3;
+		rootkuid = from_vfsuid(idmap, dest_userns, vfs_caps->rootid);
+		rootid = from_kuid(dest_userns, rootkuid);
+		ns_caps->rootid = cpu_to_le32(rootid);
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	caps->magic_etc = cpu_to_le32(vfs_caps->magic_etc);
+
+	caps->data[0].permitted = cpu_to_le32(lower_32_bits(vfs_caps->permitted.val));
+	caps->data[0].inheritable = cpu_to_le32(lower_32_bits(vfs_caps->inheritable.val));
+
+	/*
+	 * Rev1 had just a single 32-bit word, later expanded
+	 * to a second one for the high bits
+	 */
+	if ((vfs_caps->magic_etc & VFS_CAP_REVISION_MASK) != VFS_CAP_REVISION_1) {
+		caps->data[1].permitted =
+			cpu_to_le32(upper_32_bits(vfs_caps->permitted.val));
+		caps->data[1].inheritable =
+			cpu_to_le32(upper_32_bits(vfs_caps->inheritable.val));
+	}
+
+	return size;
+}
+
+
+/**
+ * vfs_caps_to_xattr - convert vfs_caps to raw caps xattr data
+ *
+ * @idmap:       idmap of the mount the inode was found from
+ * @dest_userns: user namespace for ids in xattr data
+ * @vfs_caps:    source vfs_caps data
+ * @data:        destination buffer for rax xattr caps data
+ * @size:        size of the @data buffer
+ *
+ * Converts a kernel-interrnal capability into the raw security.capability
+ * xattr format.
+ *
+ * If the xattr is being read or written through an idmapped mount the
+ * idmap of the vfsmount must be passed through @idmap. This function
+ * will then take care to map the rootid according to @idmap.
+ *
+ * Return: On success, return 0; on error, return < 0.
+ */
+int vfs_caps_to_xattr(struct mnt_idmap *idmap,
+		      struct user_namespace *dest_userns,
+		      const struct vfs_caps *vfs_caps,
+		      void *data, int size)
+{
+	struct vfs_ns_cap_data *caps = data;
+	int ret;
+
+	ret = __vfs_caps_to_xattr(idmap, dest_userns, vfs_caps, data, size);
+	if (ret > 0 &&
+	    (vfs_caps->magic_etc & VFS_CAP_REVISION_MASK) == VFS_CAP_REVISION_3 &&
+	     le32_to_cpu(caps->rootid) == (uid_t)-1)
+		return -EOVERFLOW;
+	return ret;
+}
+
+/**
  * get_vfs_caps_from_disk - retrieve vfs caps from disk
  *
  * @idmap:	idmap of the mount the inode was found from
@@ -637,20 +809,12 @@ int get_vfs_caps_from_disk(struct mnt_idmap *idmap,
 			   struct vfs_caps *cpu_caps)
 {
 	struct inode *inode = d_backing_inode(dentry);
-	__u32 magic_etc;
-	int size;
+	int size, ret;
 	struct vfs_ns_cap_data data, *nscaps = &data;
-	struct vfs_cap_data *caps = (struct vfs_cap_data *) &data;
-	kuid_t rootkuid;
-	vfsuid_t rootvfsuid;
-	struct user_namespace *fs_ns;
-
-	memset(cpu_caps, 0, sizeof(struct vfs_caps));
 
 	if (!inode)
 		return -ENODATA;
 
-	fs_ns = inode->i_sb->s_user_ns;
 	size = __vfs_getxattr((struct dentry *)dentry, inode,
 			      XATTR_NAME_CAPS, &data, XATTR_CAPS_SZ);
 	if (size == -ENODATA || size == -EOPNOTSUPP)
@@ -660,57 +824,18 @@ int get_vfs_caps_from_disk(struct mnt_idmap *idmap,
 	if (size < 0)
 		return size;
 
-	if (size < sizeof(magic_etc))
-		return -EINVAL;
-
-	cpu_caps->magic_etc = magic_etc = le32_to_cpu(caps->magic_etc);
-
-	rootkuid = make_kuid(fs_ns, 0);
-	switch (magic_etc & VFS_CAP_REVISION_MASK) {
-	case VFS_CAP_REVISION_1:
-		if (size != XATTR_CAPS_SZ_1)
-			return -EINVAL;
-		break;
-	case VFS_CAP_REVISION_2:
-		if (size != XATTR_CAPS_SZ_2)
-			return -EINVAL;
-		break;
-	case VFS_CAP_REVISION_3:
-		if (size != XATTR_CAPS_SZ_3)
-			return -EINVAL;
-		rootkuid = make_kuid(fs_ns, le32_to_cpu(nscaps->rootid));
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	rootvfsuid = make_vfsuid(idmap, fs_ns, rootkuid);
-	if (!vfsuid_valid(rootvfsuid))
+	ret = vfs_caps_from_xattr(idmap, inode->i_sb->s_user_ns,
+				  cpu_caps, nscaps, size);
+	if (ret == -EOVERFLOW)
 		return -ENODATA;
+	if (ret)
+		return ret;
 
 	/* Limit the caps to the mounter of the filesystem
 	 * or the more limited uid specified in the xattr.
 	 */
-	if (!rootid_owns_currentns(rootvfsuid))
+	if (!rootid_owns_currentns(cpu_caps->rootid))
 		return -ENODATA;
-
-	cpu_caps->permitted.val = le32_to_cpu(caps->data[0].permitted);
-	cpu_caps->inheritable.val = le32_to_cpu(caps->data[0].inheritable);
-
-	/*
-	 * Rev1 had just a single 32-bit word, later expanded
-	 * to a second one for the high bits
-	 */
-	if ((magic_etc & VFS_CAP_REVISION_MASK) != VFS_CAP_REVISION_1) {
-		cpu_caps->permitted.val += (u64)le32_to_cpu(caps->data[1].permitted) << 32;
-		cpu_caps->inheritable.val += (u64)le32_to_cpu(caps->data[1].inheritable) << 32;
-	}
-
-	cpu_caps->permitted.val &= CAP_VALID_MASK;
-	cpu_caps->inheritable.val &= CAP_VALID_MASK;
-
-	cpu_caps->rootid = rootvfsuid;
 
 	return 0;
 }
