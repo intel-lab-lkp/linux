@@ -8,6 +8,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/mfd/syscon.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_clk.h>
 #include <linux/platform_device.h>
@@ -55,6 +56,7 @@ struct scpsys {
 	struct device *dev;
 	struct regmap *base;
 	const struct scpsys_soc_data *soc_data;
+	struct mutex mutex;
 	struct genpd_onecell_data pd_data;
 	struct generic_pm_domain *domains[];
 };
@@ -237,9 +239,13 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	bool tmp;
 	int ret;
 
+	mutex_lock(&scpsys->mutex);
+
 	ret = scpsys_regulator_enable(pd->supply);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&scpsys->mutex);
 		return ret;
+	}
 
 	ret = clk_bulk_prepare_enable(pd->num_clks, pd->clks);
 	if (ret)
@@ -290,6 +296,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 			goto err_enable_bus_protect;
 	}
 
+	mutex_unlock(&scpsys->mutex);
 	return 0;
 
 err_enable_bus_protect:
@@ -304,6 +311,7 @@ err_pwr_ack:
 	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
 err_reg:
 	scpsys_regulator_disable(pd->supply);
+	mutex_unlock(&scpsys->mutex);
 	return ret;
 }
 
@@ -314,13 +322,15 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	bool tmp;
 	int ret;
 
+	mutex_lock(&scpsys->mutex);
+
 	ret = scpsys_bus_protect_enable(pd);
 	if (ret < 0)
-		return ret;
+		goto err_mutex_unlock;
 
 	ret = scpsys_sram_disable(pd);
 	if (ret < 0)
-		return ret;
+		goto err_mutex_unlock;
 
 	if (pd->data->ext_buck_iso_offs && MTK_SCPD_CAPS(pd, MTK_SCPD_EXT_BUCK_ISO))
 		regmap_set_bits(scpsys->base, pd->data->ext_buck_iso_offs,
@@ -339,13 +349,15 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	ret = readx_poll_timeout(scpsys_domain_is_on, pd, tmp, !tmp, MTK_POLL_DELAY_US,
 				 MTK_POLL_TIMEOUT);
 	if (ret < 0)
-		return ret;
+		goto err_mutex_unlock;
 
 	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
 
 	scpsys_regulator_disable(pd->supply);
 
-	return 0;
+err_mutex_unlock:
+	mutex_unlock(&scpsys->mutex);
+	return ret;
 }
 
 static struct
@@ -697,6 +709,8 @@ static int scpsys_probe(struct platform_device *pdev)
 		dev_err(dev, "no regmap available\n");
 		return PTR_ERR(scpsys->base);
 	}
+
+	mutex_init(&scpsys->mutex);
 
 	ret = -ENODEV;
 	for_each_available_child_of_node(np, node) {
