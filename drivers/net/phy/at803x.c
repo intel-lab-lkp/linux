@@ -301,6 +301,10 @@ static struct at803x_hw_stat qca83xx_hw_stats[] = {
 	{ "eee_wake_errors", 0x16, GENMASK(15, 0), MMD},
 };
 
+struct qca83xx_priv {
+	u64 stats[ARRAY_SIZE(qca83xx_hw_stats)];
+};
+
 struct at803x_priv {
 	int flags;
 	u16 clk_25m_reg;
@@ -311,7 +315,6 @@ struct at803x_priv {
 	bool is_1000basex;
 	struct regulator_dev *vddio_rdev;
 	struct regulator_dev *vddh_rdev;
-	u64 stats[ARRAY_SIZE(qca83xx_hw_stats)];
 };
 
 struct at803x_context {
@@ -547,7 +550,7 @@ static void qca83xx_get_strings(struct phy_device *phydev, u8 *data)
 static u64 qca83xx_get_stat(struct phy_device *phydev, int i)
 {
 	struct at803x_hw_stat stat = qca83xx_hw_stats[i];
-	struct at803x_priv *priv = phydev->priv;
+	struct qca83xx_priv *priv = phydev->priv;
 	int val;
 	u64 ret;
 
@@ -1591,6 +1594,20 @@ static int at803x_cable_test_start(struct phy_device *phydev)
 	return 0;
 }
 
+static int qca83xx_probe(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	struct qca83xx_priv *priv;
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	phydev->priv = priv;
+
+	return 0;
+}
+
 static int qca83xx_config_init(struct phy_device *phydev)
 {
 	u8 switch_revision;
@@ -2164,7 +2181,7 @@ static struct phy_driver at803x_driver[] = {
 	.name			= "Qualcomm Atheros 8337 internal PHY",
 	/* PHY_GBIT_FEATURES */
 	.link_change_notify	= qca83xx_link_change_notify,
-	.probe			= at803x_probe,
+	.probe			= qca83xx_probe,
 	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca83xx_config_init,
 	.soft_reset		= genphy_soft_reset,
@@ -2180,7 +2197,7 @@ static struct phy_driver at803x_driver[] = {
 	.name			= "Qualcomm Atheros 8327-A internal PHY",
 	/* PHY_GBIT_FEATURES */
 	.link_change_notify	= qca83xx_link_change_notify,
-	.probe			= at803x_probe,
+	.probe			= qca83xx_probe,
 	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca83xx_config_init,
 	.soft_reset		= genphy_soft_reset,
@@ -2196,7 +2213,7 @@ static struct phy_driver at803x_driver[] = {
 	.name			= "Qualcomm Atheros 8327-B internal PHY",
 	/* PHY_GBIT_FEATURES */
 	.link_change_notify	= qca83xx_link_change_notify,
-	.probe			= at803x_probe,
+	.probe			= qca83xx_probe,
 	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca83xx_config_init,
 	.soft_reset		= genphy_soft_reset,
