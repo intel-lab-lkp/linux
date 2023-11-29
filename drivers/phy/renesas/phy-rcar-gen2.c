@@ -80,6 +80,7 @@ static int rcar_gen2_phy_init(struct phy *p)
 	struct rcar_gen2_phy_driver *drv = channel->drv;
 	unsigned long flags;
 	u32 ugctrl2;
+	int ret;
 
 	/*
 	 * Try to acquire exclusive access to PHY.  The first driver calling
@@ -90,7 +91,11 @@ static int rcar_gen2_phy_init(struct phy *p)
 	if (cmpxchg(&channel->selected_phy, -1, phy->number) != -1)
 		return -EBUSY;
 
-	clk_prepare_enable(drv->clk);
+	ret = clk_prepare_enable(drv->clk);
+	if (ret) {
+		dev_err(&p->dev, "Failed to enable clock: %d\n", ret);
+		return ret;
+	}
 
 	spin_lock_irqsave(&drv->lock, flags);
 	ugctrl2 = readl(drv->base + USBHS_UGCTRL2);
