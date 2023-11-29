@@ -543,8 +543,10 @@ char *gpiochip_dup_line_label(struct gpio_chip *gc, unsigned int offset);
  * @label:	label of current GPIO
  */
 #define for_each_requested_gpio_in_range(chip, i, base, size, label)			\
-	for (i = 0; i < size; i++)							\
-		if ((label = gpiochip_is_requested(chip, base + i)) == NULL) {} else
+	for (i = 0; i < size; i++, kfree(label))					\
+		if ((label = gpiochip_dup_line_label(chip, base + i)) == NULL) {}	\
+		else if (IS_ERR(label)) {}						\
+		else
 
 /* Iterates over all requested GPIO of the given @chip */
 #define for_each_requested_gpio(chip, i, label)						\
