@@ -7,8 +7,9 @@
 #include <vpmu.h>
 #include <perf/arm_pmuv3.h>
 
-/* Create a VM that has one vCPU with PMUv3 configured. */
-struct vpmu_vm *create_vpmu_vm(void *guest_code)
+struct vpmu_vm *__create_vpmu_vm(void *guest_code,
+				 void (*init_pmu)(struct vpmu_vm *vm, void *arg),
+				 void *arg)
 {
 	struct kvm_vcpu_init init;
 	uint8_t pmuver;
@@ -50,10 +51,19 @@ struct vpmu_vm *create_vpmu_vm(void *guest_code)
 		    "Unexpected PMUVER (0x%x) on the vCPU with PMUv3", pmuver);
 
 	/* Initialize vPMU */
+	if (init_pmu)
+		init_pmu(vpmu_vm, arg);
+
 	vcpu_ioctl(vpmu_vm->vcpu, KVM_SET_DEVICE_ATTR, &irq_attr);
 	vcpu_ioctl(vpmu_vm->vcpu, KVM_SET_DEVICE_ATTR, &init_attr);
 
 	return vpmu_vm;
+}
+
+/* Create a VM that has one vCPU with PMUv3 configured. */
+struct vpmu_vm *create_vpmu_vm(void *guest_code)
+{
+	return __create_vpmu_vm(guest_code, NULL, NULL);
 }
 
 void destroy_vpmu_vm(struct vpmu_vm *vpmu_vm)

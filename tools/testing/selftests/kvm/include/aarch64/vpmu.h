@@ -18,6 +18,10 @@ struct vpmu_vm {
 	int gic_fd;
 };
 
+struct vpmu_vm *__create_vpmu_vm(void *guest_code,
+				 void (*init_pmu)(struct vpmu_vm *vm, void *arg),
+				 void *arg);
+
 struct vpmu_vm *create_vpmu_vm(void *guest_code);
 
 void destroy_vpmu_vm(struct vpmu_vm *vpmu_vm);
