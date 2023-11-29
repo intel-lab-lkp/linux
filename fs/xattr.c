@@ -540,13 +540,6 @@ vfs_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	const void  *orig_value = value;
 	int error;
 
-	if (size && strcmp(name, XATTR_NAME_CAPS) == 0) {
-		error = cap_convert_nscap(idmap, dentry, &value, size);
-		if (error < 0)
-			return error;
-		size = error;
-	}
-
 retry_deleg:
 	inode_lock(inode);
 	error = __vfs_setxattr_locked(idmap, dentry, name, value, size,
@@ -857,6 +850,24 @@ int do_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		return do_set_acl(idmap, dentry, ctx->kname->name,
 				  ctx->kvalue, ctx->size);
 
+	if (strcmp(ctx->kname->name, XATTR_NAME_CAPS) == 0) {
+		struct vfs_caps caps;
+		int ret;
+
+		/*
+		 * rootid is already in the mount idmap, so pass nop_mnt_idmap
+		 * so that it won't be mapped.
+		 */
+		ret = vfs_caps_from_xattr(&nop_mnt_idmap, current_user_ns(),
+					  &caps, ctx->kvalue, ctx->size);
+		if (ret)
+			return ret;
+		ret = cap_convert_nscap(idmap, dentry, &caps);
+		if (ret)
+			return ret;
+		return vfs_set_fscaps(idmap, dentry, &caps, ctx->flags);
+	}
+
 	return vfs_setxattr(idmap, dentry, ctx->kname->name,
 			ctx->kvalue, ctx->size, ctx->flags);
 }
@@ -954,6 +965,27 @@ do_getxattr(struct mnt_idmap *idmap, struct dentry *d,
 {
 	ssize_t error;
 	char *kname = ctx->kname->name;
+
+	if (strcmp(kname, XATTR_NAME_CAPS) == 0) {
+		struct vfs_caps caps;
+		struct vfs_ns_cap_data data;
+		int ret;
+
+		ret = vfs_get_fscaps(idmap, d, &caps);
+		if (ret)
+			return ret;
+		/*
+		 * rootid is already in the mount idmap, so pass nop_mnt_idmap
+		 * so that it won't be mapped.
+		 */
+		ret = vfs_caps_to_user_xattr(&nop_mnt_idmap, current_user_ns(),
+					     &caps, &data, ctx->size);
+		if (ret < 0)
+			return ret;
+		if (ctx->size && copy_to_user(ctx->value, &data, ret))
+			return -EFAULT;
+		return ret;
+	}
 
 	if (ctx->size) {
 		if (ctx->size > XATTR_SIZE_MAX)
@@ -1144,6 +1176,9 @@ removexattr(struct mnt_idmap *idmap, struct dentry *d,
 
 	if (is_posix_acl_xattr(kname))
 		return vfs_remove_acl(idmap, d, kname);
+
+	if (strcmp(kname, XATTR_NAME_CAPS) == 0)
+		return vfs_remove_fscaps(idmap, d);
 
 	return vfs_removexattr(idmap, d, kname);
 }

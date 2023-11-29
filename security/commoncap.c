@@ -484,27 +484,21 @@ out_free:
 }
 
 /**
- * rootid_from_xattr - translate root uid of vfs caps
+ * rootid_from_vfs_caps - translate root uid of vfs caps
  *
- * @value:	vfs caps value which may be modified by this function
- * @size:	size of @ivalue
+ * @caps:	vfs caps value which may be modified by this function
  * @task_ns:	user namespace of the caller
+ *
+ * Return the rootid from a v3 fs cap, or the id of root in the task's user
+ * namespace for v1 and v2 fs caps.
  */
-static vfsuid_t rootid_from_xattr(const void *value, size_t size,
-				  struct user_namespace *task_ns)
+static vfsuid_t rootid_from_vfs_caps(const struct vfs_caps *caps,
+				     struct user_namespace *task_ns)
 {
-	const struct vfs_ns_cap_data *nscap = value;
-	uid_t rootid = 0;
+	if ((caps->magic_etc & VFS_CAP_REVISION_MASK) == VFS_CAP_REVISION_3)
+		return caps->rootid;
 
-	if (size == XATTR_CAPS_SZ_3)
-		rootid = le32_to_cpu(nscap->rootid);
-
-	return VFSUIDT_INIT(make_kuid(task_ns, rootid));
-}
-
-static bool validheader(size_t size, const struct vfs_cap_data *cap)
-{
-	return is_v2header(size, cap) || is_v3header(size, cap);
+	return VFSUIDT_INIT(make_kuid(task_ns, 0));
 }
 
 /**
@@ -512,11 +506,10 @@ static bool validheader(size_t size, const struct vfs_cap_data *cap)
  *
  * @idmap:	idmap of the mount the inode was found from
  * @dentry:	used to retrieve inode to check permissions on
- * @ivalue:	vfs caps value which may be modified by this function
- * @size:	size of @ivalue
+ * @caps:	vfs caps which may be modified by this function
  *
- * User requested a write of security.capability.  If needed, update the
- * xattr to change from v2 to v3, or to fixup the v3 rootid.
+ * User requested a write of security.capability.  Check permissions, and if
+ * needed, update the xattr to change from v2 to v3.
  *
  * If the inode has been found through an idmapped mount the idmap of
  * the vfsmount must be passed through @idmap. This function will then
@@ -524,59 +517,39 @@ static bool validheader(size_t size, const struct vfs_cap_data *cap)
  * permissions. On non-idmapped mounts or if permission checking is to be
  * performed on the raw inode simply pass @nop_mnt_idmap.
  *
- * Return: On success, return the new size; on error, return < 0.
+ * Return: On success, return 0; on error, return < 0.
  */
 int cap_convert_nscap(struct mnt_idmap *idmap, struct dentry *dentry,
-		      const void **ivalue, size_t size)
+		      struct vfs_caps *caps)
 {
-	struct vfs_ns_cap_data *nscap;
-	uid_t nsrootid;
-	const struct vfs_cap_data *cap = *ivalue;
-	__u32 magic, nsmagic;
 	struct inode *inode = d_backing_inode(dentry);
 	struct user_namespace *task_ns = current_user_ns(),
 		*fs_ns = inode->i_sb->s_user_ns;
-	kuid_t rootid;
 	vfsuid_t vfsrootid;
-	size_t newsize;
+	__u32 revision;
 
-	if (!*ivalue)
-		return -EINVAL;
-	if (!validheader(size, cap))
+	revision = sansflags(caps->magic_etc);
+	if (revision != VFS_CAP_REVISION_2 && revision != VFS_CAP_REVISION_3)
 		return -EINVAL;
 	if (!capable_wrt_inode_uidgid(idmap, inode, CAP_SETFCAP))
 		return -EPERM;
-	if (size == XATTR_CAPS_SZ_2 && (idmap == &nop_mnt_idmap))
+	if (revision == VFS_CAP_REVISION_2 && (idmap == &nop_mnt_idmap))
 		if (ns_capable(inode->i_sb->s_user_ns, CAP_SETFCAP))
 			/* user is privileged, just write the v2 */
-			return size;
+			return 0;
 
-	vfsrootid = rootid_from_xattr(*ivalue, size, task_ns);
+	vfsrootid = rootid_from_vfs_caps(caps, task_ns);
 	if (!vfsuid_valid(vfsrootid))
 		return -EINVAL;
 
-	rootid = from_vfsuid(idmap, fs_ns, vfsrootid);
-	if (!uid_valid(rootid))
+	if (!vfsuid_has_fsmapping(idmap, fs_ns, vfsrootid))
 		return -EINVAL;
 
-	nsrootid = from_kuid(fs_ns, rootid);
-	if (nsrootid == -1)
-		return -EINVAL;
+	caps->rootid = vfsrootid;
+	caps->magic_etc = VFS_CAP_REVISION_3 |
+			  (caps->magic_etc & VFS_CAP_FLAGS_EFFECTIVE);
 
-	newsize = sizeof(struct vfs_ns_cap_data);
-	nscap = kmalloc(newsize, GFP_ATOMIC);
-	if (!nscap)
-		return -ENOMEM;
-	nscap->rootid = cpu_to_le32(nsrootid);
-	nsmagic = VFS_CAP_REVISION_3;
-	magic = le32_to_cpu(cap->magic_etc);
-	if (magic & VFS_CAP_FLAGS_EFFECTIVE)
-		nsmagic |= VFS_CAP_FLAGS_EFFECTIVE;
-	nscap->magic_etc = cpu_to_le32(nsmagic);
-	memcpy(&nscap->data, &cap->data, sizeof(__le32) * 2 * VFS_CAP_U32);
-
-	*ivalue = nscap;
-	return newsize;
+	return 0;
 }
 
 /*
