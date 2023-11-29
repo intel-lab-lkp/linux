@@ -12,12 +12,29 @@ static unsigned int nf_hook_run_bpf(void *bpf_prog, struct sk_buff *skb,
 				    const struct nf_hook_state *s)
 {
 	const struct bpf_prog *prog = bpf_prog;
+	unsigned int verdict;
 	struct bpf_nf_ctx ctx = {
 		.state = s,
 		.skb = skb,
 	};
 
-	return bpf_prog_run(prog, &ctx);
+	verdict = bpf_prog_run(prog, &ctx);
+	switch (verdict) {
+	case NF_STOLEN:
+		consume_skb(skb);
+		fallthrough;
+	case NF_ACCEPT:
+	case NF_DROP:
+	case NF_QUEUE:
+		/* restrict the retval of the ebpf programs */
+		break;
+	default:
+		/* force it to be dropped */
+		verdict = NF_DROP_ERR(-EINVAL);
+		break;
+	}
+
+	return verdict;
 }
 
 struct bpf_nf_link {
