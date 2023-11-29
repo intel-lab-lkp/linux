@@ -2637,24 +2637,6 @@
 			};
 		};
 
-		funnel@3023000 {
-			compatible = "arm,coresight-dynamic-funnel", "arm,primecell";
-			reg = <0x3023000 0x1000>;
-
-			clocks = <&rpmcc RPM_QDSS_CLK>, <&rpmcc RPM_QDSS_A_CLK>;
-			clock-names = "apb_pclk", "atclk";
-
-
-			out-ports {
-				port {
-					funnel2_out: endpoint {
-						remote-endpoint =
-						  <&merge_funnel_in2>;
-					};
-				};
-			};
-		};
-
 		funnel@3025000 {
 			compatible = "arm,coresight-dynamic-funnel", "arm,primecell";
 			reg = <0x3025000 0x1000>;
@@ -2679,14 +2661,6 @@
 					merge_funnel_in1: endpoint {
 						remote-endpoint =
 						  <&funnel1_out>;
-					};
-				};
-
-				port@2 {
-					reg = <2>;
-					merge_funnel_in2: endpoint {
-						remote-endpoint =
-						  <&funnel2_out>;
 					};
 				};
 			};
