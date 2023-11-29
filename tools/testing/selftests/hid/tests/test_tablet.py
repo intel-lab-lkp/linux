@@ -109,7 +109,7 @@ class PenState(Enum):
 
         return cls((touch, tool, button))
 
-    def apply(self, events) -> "PenState":
+    def apply(self, events, strict) -> "PenState":
         if libevdev.EV_SYN.SYN_REPORT in events:
             raise ValueError("EV_SYN is in the event sequence")
         touch = self.touch
@@ -148,13 +148,97 @@ class PenState(Enum):
             button = None
 
         new_state = PenState((touch, tool, button))
-        assert (
-            new_state in self.valid_transitions()
-        ), f"moving from {self} to {new_state} is forbidden"
+        if strict:
+            assert (
+                new_state in self.valid_transitions()
+            ), f"moving from {self} to {new_state} is forbidden"
+        else:
+            assert (
+                new_state in self.historical_tolerated_transitions()
+            ), f"moving from {self} to {new_state} is forbidden"
 
         return new_state
 
     def valid_transitions(self) -> Tuple["PenState", ...]:
+        """Following the state machine in the URL above.
+
+        Note that those transitions are from the evdev point of view, not HID"""
+        if self == PenState.PEN_IS_OUT_OF_RANGE:
+            return (
+                PenState.PEN_IS_OUT_OF_RANGE,
+                PenState.PEN_IS_IN_RANGE,
+                PenState.PEN_IS_IN_RANGE_WITH_BUTTON,
+                PenState.PEN_IS_IN_RANGE_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_IN_RANGE_WITH_ERASING_INTENT,
+                PenState.PEN_IS_IN_CONTACT,
+                PenState.PEN_IS_IN_CONTACT_WITH_BUTTON,
+                PenState.PEN_IS_IN_CONTACT_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_ERASING,
+            )
+
+        if self == PenState.PEN_IS_IN_RANGE:
+            return (
+                PenState.PEN_IS_IN_RANGE,
+                PenState.PEN_IS_IN_RANGE_WITH_BUTTON,
+                PenState.PEN_IS_IN_RANGE_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_OUT_OF_RANGE,
+                PenState.PEN_IS_IN_CONTACT,
+            )
+
+        if self == PenState.PEN_IS_IN_CONTACT:
+            return (
+                PenState.PEN_IS_IN_CONTACT,
+                PenState.PEN_IS_IN_CONTACT_WITH_BUTTON,
+                PenState.PEN_IS_IN_CONTACT_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_IN_RANGE,
+            )
+
+        if self == PenState.PEN_IS_IN_RANGE_WITH_ERASING_INTENT:
+            return (
+                PenState.PEN_IS_IN_RANGE_WITH_ERASING_INTENT,
+                PenState.PEN_IS_OUT_OF_RANGE,
+                PenState.PEN_IS_ERASING,
+            )
+
+        if self == PenState.PEN_IS_ERASING:
+            return (
+                PenState.PEN_IS_ERASING,
+                PenState.PEN_IS_IN_RANGE_WITH_ERASING_INTENT,
+            )
+
+        if self == PenState.PEN_IS_IN_RANGE_WITH_BUTTON:
+            return (
+                PenState.PEN_IS_IN_RANGE_WITH_BUTTON,
+                PenState.PEN_IS_IN_RANGE,
+                PenState.PEN_IS_OUT_OF_RANGE,
+                PenState.PEN_IS_IN_CONTACT_WITH_BUTTON,
+            )
+
+        if self == PenState.PEN_IS_IN_CONTACT_WITH_BUTTON:
+            return (
+                PenState.PEN_IS_IN_CONTACT_WITH_BUTTON,
+                PenState.PEN_IS_IN_CONTACT,
+                PenState.PEN_IS_IN_RANGE_WITH_BUTTON,
+            )
+
+        if self == PenState.PEN_IS_IN_RANGE_WITH_SECOND_BUTTON:
+            return (
+                PenState.PEN_IS_IN_RANGE_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_IN_RANGE,
+                PenState.PEN_IS_OUT_OF_RANGE,
+                PenState.PEN_IS_IN_CONTACT_WITH_SECOND_BUTTON,
+            )
+
+        if self == PenState.PEN_IS_IN_CONTACT_WITH_SECOND_BUTTON:
+            return (
+                PenState.PEN_IS_IN_CONTACT_WITH_SECOND_BUTTON,
+                PenState.PEN_IS_IN_CONTACT,
+                PenState.PEN_IS_IN_RANGE_WITH_SECOND_BUTTON,
+            )
+
+        return tuple()
+
+    def historical_tolerated_transitions(self) -> Tuple["PenState", ...]:
         """Following the state machine in the URL above, with a couple of addition
         for skipping the in-range state, due to historical reasons.
 
@@ -678,9 +762,11 @@ class BaseTest:
             self.debug_reports(r, uhdev, events)
             return events
 
-        def validate_transitions(self, from_state, pen, evdev, events):
+        def validate_transitions(self, from_state, pen, evdev, events, allow_intermediate_states):
             # check that the final state is correct
             pen.assert_expected_input_events(evdev)
+
+            state = from_state
 
             # check that the transitions are valid
             sync_events = []
@@ -691,12 +777,12 @@ class BaseTest:
                 events = events[idx + 1 :]
 
                 # now check for a valid transition
-                from_state = from_state.apply(sync_events)
+                state = state.apply(sync_events, not allow_intermediate_states)
 
             if events:
-                from_state = from_state.apply(sync_events)
+                state = state.apply(sync_events, not allow_intermediate_states)
 
-        def _test_states(self, state_list, scribble):
+        def _test_states(self, state_list, scribble, allow_intermediate_states):
             """Internal method to test against a list of
             transition between states.
             state_list is a list of PenState objects
@@ -711,7 +797,7 @@ class BaseTest:
             p = Pen(50, 60)
             uhdev.move_to(p, PenState.PEN_IS_OUT_OF_RANGE)
             events = self.post(uhdev, p)
-            self.validate_transitions(cur_state, p, evdev, events)
+            self.validate_transitions(cur_state, p, evdev, events, allow_intermediate_states)
 
             cur_state = p.current_state
 
@@ -720,14 +806,14 @@ class BaseTest:
                     p.x += 1
                     p.y -= 1
                     events = self.post(uhdev, p)
-                    self.validate_transitions(cur_state, p, evdev, events)
+                    self.validate_transitions(cur_state, p, evdev, events, allow_intermediate_states)
                     assert len(events) >= 3  # X, Y, SYN
                 uhdev.move_to(p, state)
                 if scribble and state != PenState.PEN_IS_OUT_OF_RANGE:
                     p.x += 1
                     p.y -= 1
                 events = self.post(uhdev, p)
-                self.validate_transitions(cur_state, p, evdev, events)
+                self.validate_transitions(cur_state, p, evdev, events, allow_intermediate_states)
                 cur_state = p.current_state
 
         @pytest.mark.parametrize("scribble", [True, False], ids=["scribble", "static"])
@@ -740,7 +826,7 @@ class BaseTest:
             we don't have Invert nor Erase bits, so just move in/out-of-range or proximity.
             https://docs.microsoft.com/en-us/windows-hardware/design/component-guidelines/windows-pen-states
             """
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, False)
 
         @pytest.mark.parametrize("scribble", [True, False], ids=["scribble", "static"])
         @pytest.mark.parametrize(
@@ -754,7 +840,7 @@ class BaseTest:
             """This is not adhering to the Windows Pen Implementation state machine
             but we should expect the kernel to behave properly, mostly for historical
             reasons."""
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, True)
 
         @pytest.mark.skip_if_uhdev(
             lambda uhdev: "Barrel Switch" not in uhdev.fields,
@@ -770,7 +856,7 @@ class BaseTest:
         )
         def test_valid_primary_button_pen_states(self, state_list, scribble):
             """Rework the transition state machine by adding the primary button."""
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, False)
 
         @pytest.mark.skip_if_uhdev(
             lambda uhdev: "Secondary Barrel Switch" not in uhdev.fields,
@@ -786,7 +872,7 @@ class BaseTest:
         )
         def test_valid_secondary_button_pen_states(self, state_list, scribble):
             """Rework the transition state machine by adding the secondary button."""
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, False)
 
         @pytest.mark.skip_if_uhdev(
             lambda uhdev: "Invert" not in uhdev.fields,
@@ -806,7 +892,7 @@ class BaseTest:
             to erase.
             https://docs.microsoft.com/en-us/windows-hardware/design/component-guidelines/windows-pen-states
             """
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, False)
 
         @pytest.mark.skip_if_uhdev(
             lambda uhdev: "Invert" not in uhdev.fields,
@@ -826,7 +912,7 @@ class BaseTest:
             to erase.
             https://docs.microsoft.com/en-us/windows-hardware/design/component-guidelines/windows-pen-states
             """
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, True)
 
         @pytest.mark.skip_if_uhdev(
             lambda uhdev: "Invert" not in uhdev.fields,
@@ -843,7 +929,7 @@ class BaseTest:
             For example, a pen that has the eraser button might wobble between
             touching and erasing if the tablet doesn't enforce the Windows
             state machine."""
-            self._test_states(state_list, scribble)
+            self._test_states(state_list, scribble, True)
 
 
 class GXTP_pen(PenDigitizer):
