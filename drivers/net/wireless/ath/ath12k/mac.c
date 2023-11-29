@@ -7474,7 +7474,7 @@ static int __ath12k_mac_register(struct ath12k *ar)
 	ar->hw->queues = ATH12K_HW_MAX_QUEUES;
 	ar->hw->wiphy->tx_queue_len = ATH12K_QUEUE_LEN;
 	ar->hw->offchannel_tx_hw_queue = ATH12K_HW_MAX_QUEUES - 1;
-	ar->hw->max_rx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF_HE;
+	ar->hw->max_rx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF_EHT;
 
 	ar->hw->vif_data_size = sizeof(struct ath12k_vif);
 	ar->hw->sta_data_size = sizeof(struct ath12k_sta);
