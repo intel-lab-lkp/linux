@@ -239,8 +239,6 @@ static int vidioc_querycap(struct file *file, void  *priv,
 
 	strscpy(cap->driver, "vivid", sizeof(cap->driver));
 	strscpy(cap->card, "vivid", sizeof(cap->card));
-	snprintf(cap->bus_info, sizeof(cap->bus_info),
-		 "platform:%s-%03d", VIVID_MODULE_NAME, dev->inst);
 
 	cap->capabilities = dev->vid_cap_caps | dev->vid_out_caps |
 		dev->vbi_cap_caps | dev->vbi_out_caps |
@@ -1762,8 +1760,6 @@ static int vivid_create_instance(struct platform_device *pdev, int inst)
 
 	/* Initialize media device */
 	strscpy(dev->mdev.model, VIVID_MODULE_NAME, sizeof(dev->mdev.model));
-	snprintf(dev->mdev.bus_info, sizeof(dev->mdev.bus_info),
-		 "platform:%s-%03d", VIVID_MODULE_NAME, inst);
 	dev->mdev.dev = &pdev->dev;
 	media_device_init(&dev->mdev);
 	dev->mdev.ops = &vivid_media_ops;
