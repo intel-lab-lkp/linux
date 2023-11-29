@@ -9,6 +9,8 @@
 
 #ifdef CONFIG_IOMMU_DMA
 
+void iommu_setup_dma_ops(struct device *dev);
+
 int iommu_get_dma_cookie(struct iommu_domain *domain);
 void iommu_put_dma_cookie(struct iommu_domain *domain);
 
@@ -23,6 +25,10 @@ static inline void iommu_dma_set_pci_32bit_workaround(struct device *dev)
 }
 
 #else /* CONFIG_IOMMU_DMA */
+
+static inline void iommu_setup_dma_ops(struct device *dev)
+{
+}
 
 static inline int iommu_dma_init_fq(struct iommu_domain *domain)
 {

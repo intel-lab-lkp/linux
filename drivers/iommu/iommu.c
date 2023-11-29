@@ -577,6 +577,8 @@ int iommu_probe_device(struct device *dev)
 	if (ret)
 		return ret;
 
+	iommu_setup_dma_ops(dev);
+
 	ops = dev_iommu_ops(dev);
 	if (ops->probe_finalize)
 		ops->probe_finalize(dev);
