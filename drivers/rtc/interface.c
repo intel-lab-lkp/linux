@@ -179,6 +179,7 @@ static int rtc_read_alarm_internal(struct rtc_device *rtc,
 				   struct rtc_wkalrm *alarm)
 {
 	int err;
+	time64_t trace_time = -1;
 
 	err = mutex_lock_interruptible(&rtc->ops_lock);
 	if (err)
@@ -201,11 +202,12 @@ static int rtc_read_alarm_internal(struct rtc_device *rtc,
 		alarm->time.tm_yday = -1;
 		alarm->time.tm_isdst = -1;
 		err = rtc->ops->read_alarm(rtc->dev.parent, alarm);
+		trace_time = rtc_tm_to_time64(&alarm->time);
 	}
 
 	mutex_unlock(&rtc->ops_lock);
 
-	trace_rtc_read_alarm(rtc_tm_to_time64(&alarm->time), err);
+	trace_rtc_read_alarm(trace_time, err);
 	return err;
 }
 
