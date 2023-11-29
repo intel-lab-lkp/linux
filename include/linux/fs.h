@@ -2002,6 +2002,11 @@ struct inode_operations {
 				     int);
 	int (*set_acl)(struct mnt_idmap *, struct dentry *,
 		       struct posix_acl *, int);
+	int (*get_fscaps)(struct mnt_idmap *, struct dentry *,
+			  struct vfs_caps *);
+	int (*set_fscaps)(struct mnt_idmap *, struct dentry *,
+			  const struct vfs_caps *, int flags);
+	int (*remove_fscaps)(struct mnt_idmap *, struct dentry *);
 	int (*fileattr_set)(struct mnt_idmap *idmap,
 			    struct dentry *dentry, struct fileattr *fa);
 	int (*fileattr_get)(struct dentry *dentry, struct fileattr *fa);
