@@ -5581,9 +5581,9 @@ static int __assign_cfs_rq_runtime(struct cfs_bandwidth *cfs_b,
 	/* note: this is a positive sum as runtime_remaining <= 0 */
 	min_amount = target_runtime - cfs_rq->runtime_remaining;
 
-	if (cfs_b->quota == RUNTIME_INF)
+	if (cfs_b->quota == RUNTIME_INF) {
 		amount = min_amount;
-	else {
+	} else {
 		start_cfs_bandwidth(cfs_b);
 
 		if (cfs_b->runtime > 0) {
