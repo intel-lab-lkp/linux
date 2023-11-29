@@ -1652,6 +1652,21 @@ static int apq_status_check(int apqn, struct ap_queue_status *status)
 		 * a value indicating a reset needs to be performed again.
 		 */
 		return -EAGAIN;
+	case AP_RESPONSE_Q_NOT_AVAIL:
+		/*
+		 * This response code indicates the queue is not available.
+		 * Barring a bug, response code 01 will occur only when a queue
+		 * has been externally removed from the host's AP configuration;
+		 * in which case, the queue must be reset by the machine in
+		 * order to avoid leaking crypto data if/when the queue is
+		 * returned to the host's configuration. In this case, let's go
+		 * ahead and log a warning message and return 0 so the AQIC
+		 * resources get cleaned up by the caller.
+		 */
+		WARN(true,
+		     "Unable to reset queue %02x.%04x: not in host AP configuration\n",
+		     AP_QID_CARD(apqn), AP_QID_QUEUE(apqn));
+			return 0;
 	default:
 		WARN(true,
 		     "failed to verify reset of queue %02x.%04x: TAPQ rc=%u\n",
@@ -1734,6 +1749,22 @@ static void vfio_ap_mdev_reset_queue(struct vfio_ap_queue *q)
 		 * so the queue may be passed through (i.e., not filtered).
 		 */
 		q->reset_status.response_code = 0;
+		vfio_ap_free_aqic_resources(q);
+		break;
+	case AP_RESPONSE_Q_NOT_AVAIL:
+		/*
+		 * This response code indicates the queue is not available.
+		 * Barring a bug, response code 01 will occur only when a queue
+		 * has been externally removed from the host's AP configuration;
+		 * in which case, the queue must be reset by the machine in
+		 * order to avoid leaking crypto data if/when the queue is
+		 * returned to the host's configuration. In this case, let's go
+		 * ahead and log a warning message then clean up the AQIC
+		 * resources.
+		 */
+		WARN(true,
+		     "Unable to reset queue %02x.%04x: not in host AP configuration\n",
+		     AP_QID_CARD(q->apqn), AP_QID_QUEUE(q->apqn));
 		vfio_ap_free_aqic_resources(q);
 		break;
 	default:
