@@ -393,6 +393,10 @@ static int __init setup_tcm_pool(void)
 	 * line alignments does not matter in TCM!
 	 */
 	tcm_pool = gen_pool_create(2, -1);
+	if (!tcm_pool) {
+		pr_err("Failed to create TCM memory pool\n");
+		return -ENOMEM;
+	}
 
 	pr_debug("Setting up TCM memory pool\n");
 
