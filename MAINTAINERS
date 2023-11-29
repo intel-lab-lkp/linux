@@ -10260,6 +10260,7 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/vfs/idmapping.git
 F:	Documentation/filesystems/idmappings.rst
 F:	include/linux/mnt_idmapping.*
+F:	include/linux/vfsid.h
 F:	tools/testing/selftests/mount_setattr/
 
 IDT VersaClock 5 CLOCK DRIVER
