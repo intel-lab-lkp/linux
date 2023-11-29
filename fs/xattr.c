@@ -334,6 +334,83 @@ out_inode_unlock:
 }
 EXPORT_SYMBOL(vfs_set_fscaps);
 
+static int generic_remove_fscaps(struct mnt_idmap *idmap, struct dentry *dentry)
+{
+	return __vfs_removexattr(idmap, dentry, XATTR_NAME_CAPS);
+}
+
+/**
+ * __vfs_remove_fscaps - remove filesystem capabilities without security checks
+ * @idmap: idmap of the mount the inode was found from
+ * @dentry: the dentry from which to remove filesystem capabilities
+ *
+ * This function removes any filesystem capabilities from the specified
+ * dentry. Does not perform any security checks, and callers must hold the
+ * inode lock.
+ *
+ * Return: 0 on success, a negative errno on error.
+ */
+int __vfs_remove_fscaps(struct mnt_idmap *idmap, struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	int error;
+
+	if (inode->i_op->remove_fscaps)
+		error =  inode->i_op->remove_fscaps(idmap, dentry);
+	else
+		error = generic_remove_fscaps(idmap, dentry);
+
+	return error;
+}
+
+/**
+ * vfs_remove_fscaps - remove filesystem capabilities
+ * @idmap: idmap of the mount the inode was found from
+ * @dentry: the dentry from which to remove filesystem capabilities
+ *
+ * This function removes any filesystem capabilities from the specified
+ * dentry.
+ *
+ * Return: 0 on success, a negative errno on error.
+ */
+int vfs_remove_fscaps(struct mnt_idmap *idmap, struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	struct inode *delegated_inode = NULL;
+	int error;
+
+retry_deleg:
+	inode_lock(inode);
+
+	error = xattr_permission(idmap, inode, XATTR_NAME_CAPS, MAY_WRITE);
+	if (error)
+		goto out_inode_unlock;
+
+	error = security_inode_removexattr(idmap, dentry, XATTR_NAME_CAPS);
+	if (error)
+		goto out_inode_unlock;
+
+	error = try_break_deleg(inode, &delegated_inode);
+	if (error)
+		goto out_inode_unlock;
+
+	error = __vfs_remove_fscaps(idmap, dentry);
+	if (!error)
+		fsnotify_xattr(dentry);
+
+out_inode_unlock:
+	inode_unlock(inode);
+
+	if (delegated_inode) {
+		error = break_deleg_wait(&delegated_inode);
+		if (!error)
+			goto retry_deleg;
+	}
+
+	return error;
+}
+EXPORT_SYMBOL(vfs_remove_fscaps);
+
 int
 __vfs_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	       struct inode *inode, const char *name, const void *value,
