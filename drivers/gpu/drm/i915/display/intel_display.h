@@ -29,6 +29,7 @@
 
 #include "i915_reg_defs.h"
 #include "intel_display_limits.h"
+#include "i915_drv.h"
 
 enum drm_scaling_filter;
 struct dpll;
