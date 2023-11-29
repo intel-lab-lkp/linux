@@ -17,13 +17,7 @@
 
 #include "cs42l43.h"
 
-enum cs42l43_sdw_ports {
-	CS42L43_DMIC_DEC_ASP_PORT = 1,
-	CS42L43_SPK_TX_PORT,
-	CS42L43_SPDIF_HP_PORT,
-	CS42L43_SPK_RX_PORT,
-	CS42L43_ASP_PORT,
-};
+#define CS42L43_SDW_PORT(port) BIT(port)
 
 static const struct regmap_config cs42l43_sdw_regmap = {
 	.reg_bits		= 32,
@@ -55,9 +49,10 @@ static int cs42l43_read_prop(struct sdw_slave *sdw)
 	prop->use_domain_irq = true;
 	prop->paging_support = true;
 	prop->wake_capable = true;
-	prop->source_ports = BIT(CS42L43_DMIC_DEC_ASP_PORT) | BIT(CS42L43_SPK_TX_PORT);
-	prop->sink_ports = BIT(CS42L43_SPDIF_HP_PORT) |
-			   BIT(CS42L43_SPK_RX_PORT) | BIT(CS42L43_ASP_PORT);
+	prop->source_ports = CS42L43_SDW_PORT(1) | CS42L43_SDW_PORT(2) |
+			     CS42L43_SDW_PORT(3) | CS42L43_SDW_PORT(4);
+	prop->sink_ports = CS42L43_SDW_PORT(5) | CS42L43_SDW_PORT(6) |
+			   CS42L43_SDW_PORT(7);
 	prop->quirks = SDW_SLAVE_QUIRKS_INVALID_INITIAL_PARITY;
 	prop->scp_int1_mask = SDW_SCP_INT1_BUS_CLASH | SDW_SCP_INT1_PARITY |
 			      SDW_SCP_INT1_IMPL_DEF;
@@ -78,11 +73,8 @@ static int cs42l43_read_prop(struct sdw_slave *sdw)
 		dpn[i].max_word = 24;
 		i++;
 	}
-	/*
-	 * All ports are 2 channels max, except the first one,
-	 * CS42L43_DMIC_DEC_ASP_PORT.
-	 */
-	dpn[CS42L43_DMIC_DEC_ASP_PORT].max_ch = 4;
+	/* All ports are 2 channels max, except the first one. */
+	dpn[0].max_ch = 4;
 
 	nval = hweight32(prop->sink_ports);
 	prop->sink_dpn_prop = devm_kcalloc(dev, nval, sizeof(*prop->sink_dpn_prop),
