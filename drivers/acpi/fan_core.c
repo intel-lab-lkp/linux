@@ -154,6 +154,12 @@ static int fan_set_state_acpi4(struct acpi_device *device, unsigned long state)
 	u64 value = state;
 	int max_state;
 
+	if (!fan) {
+		pr_err("%s: No ACPI fan data "
+			"associated with the device\n", __func__);
+		return -ENODEV;
+	}
+
 	if (fan->fif.fine_grain_ctrl)
 		max_state = 100 / fan->fif.step_size;
 	else
