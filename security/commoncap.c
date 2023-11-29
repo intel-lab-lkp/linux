@@ -295,11 +295,12 @@ int cap_capset(struct cred *new,
  */
 int cap_inode_need_killpriv(struct dentry *dentry)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct vfs_caps caps;
 	int error;
 
-	error = __vfs_getxattr(dentry, inode, XATTR_NAME_CAPS, NULL, 0);
-	return error > 0;
+	/* Use nop_mnt_idmap for no mapping here as mapping is unimportant */
+	error= __vfs_get_fscaps(&nop_mnt_idmap, dentry, &caps);
+	return error == 0;
 }
 
 /**
@@ -322,7 +323,7 @@ int cap_inode_killpriv(struct mnt_idmap *idmap, struct dentry *dentry)
 {
 	int error;
 
-	error = __vfs_removexattr(idmap, dentry, XATTR_NAME_CAPS);
+	error = __vfs_remove_fscaps(idmap, dentry);
 	if (error == -EOPNOTSUPP)
 		error = 0;
 	return error;
