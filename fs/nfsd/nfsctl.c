@@ -717,18 +717,16 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
  * A transport listener is added by writing its transport name and
  * a port number.
  */
-static ssize_t __write_ports_addxprt(char *buf, struct net *net, const struct cred *cred)
+static ssize_t ___write_ports_addxprt(struct net *net, const struct cred *cred,
+				      const char *transport, const int port)
 {
-	char transport[16];
-	struct svc_xprt *xprt;
-	int port, err;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-
-	if (sscanf(buf, "%15s %5u", transport, &port) != 2)
-		return -EINVAL;
+	struct svc_xprt *xprt;
+	int err;
 
 	if (port < 1 || port > USHRT_MAX)
 		return -EINVAL;
+
 	trace_nfsd_ctl_ports_addxprt(net, transport, port);
 
 	err = nfsd_create_serv(net);
@@ -759,6 +757,17 @@ out_close:
 out_err:
 	nfsd_put(net);
 	return err;
+}
+
+static ssize_t __write_ports_addxprt(char *buf, struct net *net, const struct cred *cred)
+{
+	char transport[16];
+	int port;
+
+	if (sscanf(buf, "%15s %5u", transport, &port) != 2)
+		return -EINVAL;
+
+	return ___write_ports_addxprt(net, cred, transport, port);
 }
 
 static ssize_t __write_ports(struct file *file, char *buf, size_t size,
@@ -1851,6 +1860,87 @@ int nfsd_nl_version_get_dumpit(struct sk_buff *skb,
 	cb->args[0] = i;
 	ret = skb->len;
 out:
+	mutex_unlock(&nfsd_mutex);
+
+	return ret;
+}
+
+/**
+ * nfsd_nl_listener_start_doit - start the provided nfs server listener
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_listener_start_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_LISTENER_TRANSPORT_NAME) ||
+	    GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_LISTENER_PORT))
+		return -EINVAL;
+
+	mutex_lock(&nfsd_mutex);
+	ret = ___write_ports_addxprt(genl_info_net(info), get_current_cred(),
+			nla_data(info->attrs[NFSD_A_SERVER_LISTENER_TRANSPORT_NAME]),
+			nla_get_u32(info->attrs[NFSD_A_SERVER_LISTENER_PORT]));
+	mutex_unlock(&nfsd_mutex);
+
+	return 0;
+}
+
+/**
+ * nfsd_nl_version_get_dumpit - Handle listener_get dumpit
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_listener_get_dumpit(struct sk_buff *skb,
+				struct netlink_callback *cb)
+{
+	struct nfsd_net *nn = net_generic(sock_net(skb->sk), nfsd_net_id);
+	int i = 0, ret = -ENOMEM;
+	struct svc_xprt *xprt;
+	struct svc_serv *serv;
+
+	mutex_lock(&nfsd_mutex);
+
+	serv = nn->nfsd_serv;
+	if (!serv) {
+		mutex_unlock(&nfsd_mutex);
+		return 0;
+	}
+
+	spin_lock_bh(&serv->sv_lock);
+	list_for_each_entry(xprt, &serv->sv_permsocks, xpt_list) {
+		void *hdr;
+
+		if (i < cb->args[0]) /* already consumed */
+			continue;
+
+		hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+				  cb->nlh->nlmsg_seq, &nfsd_nl_family,
+				  0, NFSD_CMD_LISTENER_GET);
+		if (!hdr)
+			goto out;
+
+		if (nla_put_string(skb, NFSD_A_SERVER_LISTENER_TRANSPORT_NAME,
+				   xprt->xpt_class->xcl_name))
+			goto out;
+
+		if (nla_put_u32(skb, NFSD_A_SERVER_LISTENER_PORT,
+				svc_xprt_local_port(xprt)))
+			goto out;
+
+		genlmsg_end(skb, hdr);
+		i++;
+	}
+	cb->args[0] = i;
+	ret = skb->len;
+out:
+	spin_unlock_bh(&serv->sv_lock);
+
 	mutex_unlock(&nfsd_mutex);
 
 	return ret;

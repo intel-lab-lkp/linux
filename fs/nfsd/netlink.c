@@ -22,6 +22,12 @@ static const struct nla_policy nfsd_version_set_nl_policy[NFSD_A_SERVER_VERSION_
 	[NFSD_A_SERVER_VERSION_STATUS] = { .type = NLA_U8, },
 };
 
+/* NFSD_CMD_LISTENER_START - do */
+static const struct nla_policy nfsd_listener_start_nl_policy[NFSD_A_SERVER_LISTENER_PORT + 1] = {
+	[NFSD_A_SERVER_LISTENER_TRANSPORT_NAME] = { .type = NLA_NUL_STRING, },
+	[NFSD_A_SERVER_LISTENER_PORT] = { .type = NLA_U32, },
+};
+
 /* Ops table for nfsd */
 static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
@@ -53,6 +59,18 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
 		.cmd	= NFSD_CMD_VERSION_GET,
 		.dumpit	= nfsd_nl_version_get_dumpit,
+		.flags	= GENL_CMD_CAP_DUMP,
+	},
+	{
+		.cmd		= NFSD_CMD_LISTENER_START,
+		.doit		= nfsd_nl_listener_start_doit,
+		.policy		= nfsd_listener_start_nl_policy,
+		.maxattr	= NFSD_A_SERVER_LISTENER_PORT,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd	= NFSD_CMD_LISTENER_GET,
+		.dumpit	= nfsd_nl_listener_get_dumpit,
 		.flags	= GENL_CMD_CAP_DUMP,
 	},
 };

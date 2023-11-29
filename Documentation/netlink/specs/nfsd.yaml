@@ -80,6 +80,15 @@ attribute-sets:
       -
         name: status
         type: u8
+  -
+    name: server-listener
+    attributes:
+      -
+        name: transport-name
+        type: string
+      -
+        name: port
+        type: u32
 
 operations:
   list:
@@ -142,3 +151,22 @@ operations:
           attributes:
             - major
             - minor
+    -
+      name: listener-start
+      doc: start server listener
+      attribute-set: server-listener
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - transport-name
+            - port
+    -
+      name: listener-get
+      doc: dump server listeners
+      attribute-set: server-listener
+      dump:
+        reply:
+          attributes:
+            - transport-name
+            - port
