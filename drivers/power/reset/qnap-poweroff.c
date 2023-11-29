@@ -77,6 +77,11 @@ static int qnap_power_off_probe(struct platform_device *pdev)
 
 	const struct of_device_id *match =
 		of_match_node(qnap_power_off_of_match_table, np);
+	if (!match) {
+		dev_err(&pdev->dev, "No matching device found\n");
+		return -ENODEV;
+	}
+
 	cfg = match->data;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
