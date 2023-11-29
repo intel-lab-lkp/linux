@@ -6830,6 +6830,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/samsung,s6d7aa0.yaml
 F:	drivers/gpu/drm/panel/panel-samsung-s6d7aa0.c
 
+DRM DRIVER FOR SHARP LS027B7DH01 Memory LCD
+M:	Mehdi Djait <mehdi.djait@bootlin.com>
+S:	Maintained
+T:	git git://anongit.freedesktop.org/drm/drm-misc
+F:	Documentation/devicetree/bindings/display/sharp,ls027b7dh01.yaml
+F:	drivers/gpu/drm/tiny/sharp-ls027b7dh01.c
+
 DRM DRIVER FOR SITRONIX ST7586 PANELS
 M:	David Lechner <david@lechnology.com>
 S:	Maintained
