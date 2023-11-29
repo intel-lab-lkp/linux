@@ -1752,6 +1752,111 @@ err_free_msg:
 }
 
 /**
+ * nfsd_nl_version_set_doit - enable/disable the provided nfs server version
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+	enum vers_op cmd;
+	u32 major, minor;
+	u8 status;
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_VERSION_MAJOR) ||
+	    GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_VERSION_MINOR) ||
+	    GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_VERSION_STATUS))
+		return -EINVAL;
+
+	major = nla_get_u32(info->attrs[NFSD_A_SERVER_VERSION_MAJOR]);
+	minor = nla_get_u32(info->attrs[NFSD_A_SERVER_VERSION_MINOR]);
+
+	status = nla_get_u32(info->attrs[NFSD_A_SERVER_VERSION_STATUS]);
+	cmd = !!status ? NFSD_SET : NFSD_CLEAR;
+
+	mutex_lock(&nfsd_mutex);
+	switch (major) {
+	case 4:
+		ret = nfsd_minorversion(nn, minor, cmd);
+		break;
+	case 2:
+	case 3:
+		if (!minor) {
+			ret = nfsd_vers(nn, major, cmd);
+			break;
+		}
+		fallthrough;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	mutex_unlock(&nfsd_mutex);
+
+	return ret;
+}
+
+/**
+ * nfsd_nl_version_get_doit - Handle verion_get dumpit
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_version_get_dumpit(struct sk_buff *skb,
+			       struct netlink_callback *cb)
+{
+	struct nfsd_net *nn = net_generic(sock_net(skb->sk), nfsd_net_id);
+	int i, ret = -ENOMEM;
+
+	mutex_lock(&nfsd_mutex);
+
+	for (i = 2; i <= 4; i++) {
+		int j;
+
+		if (i < cb->args[0]) /* already consumed */
+			continue;
+
+		if (!nfsd_vers(nn, i, NFSD_AVAIL))
+			continue;
+
+		for (j = 0; j <= NFSD_SUPPORTED_MINOR_VERSION; j++) {
+			void *hdr;
+
+			if (!nfsd_vers(nn, i, NFSD_TEST))
+				continue;
+
+			/* NFSv{2,3} does not support minor numbers */
+			if (i < 4 && j)
+				continue;
+
+			if (i == 4 && !nfsd_minorversion(nn, j, NFSD_TEST))
+				continue;
+
+			hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+					  cb->nlh->nlmsg_seq, &nfsd_nl_family,
+					  0, NFSD_CMD_VERSION_GET);
+			if (!hdr)
+				goto out;
+
+			if (nla_put_u32(skb, NFSD_A_SERVER_VERSION_MAJOR, i) ||
+			    nla_put_u32(skb, NFSD_A_SERVER_VERSION_MINOR, j))
+				goto out;
+
+			genlmsg_end(skb, hdr);
+		}
+	}
+	cb->args[0] = i;
+	ret = skb->len;
+out:
+	mutex_unlock(&nfsd_mutex);
+
+	return ret;
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *
