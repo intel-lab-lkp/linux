@@ -69,6 +69,7 @@ enum {
 	BTRFS_INODE_VERITY_IN_PROGRESS,
 	/* Set when this inode is a free space inode. */
 	BTRFS_INODE_FREE_SPACE_INODE,
+	BTRFS_INODE_NO_CAP_XATTR,
 };
 
 /* in memory btrfs inode */
