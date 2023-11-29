@@ -21,6 +21,12 @@ static irqreturn_t psw_irq_handler(int irq, void *arg)
 	unsigned int l, mask;
 	int ret = 0;
 
+	if (!psw) {
+		pr_err("psw_irq_handler: No push_switch data associated "
+			"with platform_device\n");
+		return IRQ_NONE;
+	}
+
 	l = __raw_readw(PA_DBSW);
 
 	/* Nothing to do if there's no state change */
