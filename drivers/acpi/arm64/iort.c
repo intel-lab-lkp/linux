@@ -2011,7 +2011,8 @@ phys_addr_t __init acpi_iort_dma_get_max_cpu_address(void)
 
 		case ACPI_IORT_NODE_NAMED_COMPONENT:
 			ncomp = (struct acpi_iort_named_component *)node->node_data;
-			local_limit = DMA_BIT_MASK(ncomp->memory_address_limit);
+			local_limit = (phys_addr_t)DMA_BIT_MASK(
+				ncomp->memory_address_limit);
 			limit = min_not_zero(limit, local_limit);
 			break;
 
@@ -2020,7 +2021,8 @@ phys_addr_t __init acpi_iort_dma_get_max_cpu_address(void)
 				break;
 
 			rc = (struct acpi_iort_root_complex *)node->node_data;
-			local_limit = DMA_BIT_MASK(rc->memory_address_limit);
+			local_limit = (phys_addr_t)DMA_BIT_MASK(
+				rc->memory_address_limit);
 			limit = min_not_zero(limit, local_limit);
 			break;
 		}
