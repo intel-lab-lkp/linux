@@ -59,6 +59,11 @@ static int tc_dwc_g210_pltfm_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 
 	of_id = of_match_node(tc_dwc_g210_pltfm_match, dev->of_node);
+	if (!of_id) {
+		dev_err(dev, "No matching device found\n");
+		return -ENODEV;
+	}
+
 	vops = (struct ufs_hba_variant_ops *)of_id->data;
 
 	/* Perform generic probe */
