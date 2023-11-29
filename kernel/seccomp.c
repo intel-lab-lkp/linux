@@ -883,8 +883,11 @@ static long seccomp_attach_filter(unsigned int flags,
 
 	/* Validate resulting filter length. */
 	total_insns = filter->prog->len;
-	for (walker = current->seccomp.filter; walker; walker = walker->prev)
+	for (walker = current->seccomp.filter; walker; walker = walker->prev) {
 		total_insns += walker->prog->len + 4;  /* 4 instr penalty */
+		if (walker == filter)
+			return -EEXIST;
+	}
 	if (total_insns > MAX_INSNS_PER_PATH)
 		return -ENOMEM;
 
@@ -1898,6 +1901,38 @@ static const struct file_operations seccomp_filter_fops = {
 };
 
 /**
+ * seccomp_prepare_filter_from_fd - prepares filter from a user-supplied fd
+ * @ufd: pointer to fd that refers to a seccomp filter.
+ *
+ * Returns filter on success or an ERR_PTR on failure.
+ */
+static struct seccomp_filter *
+seccomp_prepare_filter_from_fd(const char __user *ufd)
+{
+	struct seccomp_filter *sfilter;
+	struct fd f;
+	int fd;
+
+	if (copy_from_user(&fd, ufd, sizeof(fd)))
+		return ERR_PTR(-EFAULT);
+
+	f = fdget(fd);
+	if (!f.file)
+		return ERR_PTR(-EBADF);
+
+	if (f.file->f_op != &seccomp_filter_fops) {
+		fdput(f);
+		return ERR_PTR(-EINVAL);
+	}
+
+	sfilter = f.file->private_data;
+	__get_seccomp_filter(sfilter);
+
+	fdput(f);
+	return sfilter;
+}
+
+/**
  * seccomp_set_mode_filter: internal function for setting seccomp filter
  * @flags:  flags to change filter behavior
  * @filter: struct sock_fprog containing filter
@@ -1944,7 +1979,10 @@ static long seccomp_set_mode_filter(unsigned int flags,
 		return -EINVAL;
 
 	/* Prepare the new filter before holding any locks. */
-	prepared = seccomp_prepare_user_filter(filter);
+	if (flags & SECCOMP_FILTER_FLAG_FILTER_FD)
+		prepared = seccomp_prepare_filter_from_fd(filter);
+	else
+		prepared = seccomp_prepare_user_filter(filter);
 	if (IS_ERR(prepared))
 		return PTR_ERR(prepared);
 
@@ -2005,7 +2043,7 @@ out_put_fd:
 		}
 	}
 out_free:
-	seccomp_filter_free(prepared);
+	__put_seccomp_filter(prepared);
 	return ret;
 }
 

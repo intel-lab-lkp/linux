@@ -26,6 +26,8 @@
 #define SECCOMP_FILTER_FLAG_TSYNC_ESRCH		(1UL << 4)
 /* Received notifications wait in killable state (only respond to fatal signals) */
 #define SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV	(1UL << 5)
+/* Indicates that the filter is a fd obtained from SECCOMP_LOAD_FILTER */
+#define SECCOMP_FILTER_FLAG_FILTER_FD		(1UL << 6)
 
 /*
  * All BPF programs must return a 32-bit value.
