@@ -219,6 +219,7 @@
 #include "i915_perf.h"
 #include "i915_perf_oa_regs.h"
 #include "i915_reg.h"
+#include "intel_uncore.h"
 
 /* HW requires this to be a power of two, between 128k and 16M, though driver
  * is currently generally designed assuming the largest 16M size is used such
@@ -4321,18 +4322,6 @@ static bool gen8_is_valid_flex_addr(struct i915_perf *perf, u32 addr)
 		if (i915_mmio_reg_offset(flex_eu_regs[i]) == addr)
 			return true;
 	}
-	return false;
-}
-
-static bool reg_in_range_table(u32 addr, const struct i915_range *table)
-{
-	while (table->start || table->end) {
-		if (addr >= table->start && addr <= table->end)
-			return true;
-
-		table++;
-	}
-
 	return false;
 }
 
