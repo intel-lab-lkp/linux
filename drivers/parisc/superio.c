@@ -187,9 +187,23 @@ superio_init(struct pci_dev *pcidev)
 	sio->acpi_base &= ~1;
 	printk(KERN_INFO PFX "ACPI at 0x%x\n", sio->acpi_base);
 
-	request_region (IC_PIC1, 0x1f, "pic1");
-	request_region (IC_PIC2, 0x1f, "pic2");
-	request_region (sio->acpi_base, 0x1f, "acpi");
+	if (!request_region(IC_PIC1, 0x1f, "pic1")) {
+		printk(KERN_ERR PFX "request_region failed for pic1\n");
+		return;
+	}
+
+	if (!request_region(IC_PIC2, 0x1f, "pic2")) {
+		printk(KERN_ERR PFX "request_region failed for pic2\n");
+		release_region(IC_PIC1, 0x1f);
+		return;
+	}
+
+	if (!request_region(sio->acpi_base, 0x1f, "acpi")) {
+		printk(KERN_ERR PFX "request_region failed for acpi\n");
+		release_region(IC_PIC1, 0x1f);
+		release_region(IC_PIC2, 0x1f);
+		return;
+	}
 
 	/* Enable the legacy I/O function */
 	pci_read_config_word (pdev, PCI_COMMAND, &word);
