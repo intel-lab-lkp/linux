@@ -1043,24 +1043,6 @@ static int at803x_config_aneg(struct phy_device *phydev)
 	 */
 	ret = 0;
 
-	if (phydev->drv->phy_id == QCA8081_PHY_ID) {
-		int phy_ctrl = 0;
-
-		/* The reg MII_BMCR also needs to be configured for force mode, the
-		 * genphy_config_aneg is also needed.
-		 */
-		if (phydev->autoneg == AUTONEG_DISABLE)
-			genphy_c45_pma_setup_forced(phydev);
-
-		if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, phydev->advertising))
-			phy_ctrl = MDIO_AN_10GBT_CTRL_ADV2_5G;
-
-		ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL,
-				MDIO_AN_10GBT_CTRL_ADV2_5G, phy_ctrl);
-		if (ret < 0)
-			return ret;
-	}
-
 	return __genphy_config_aneg(phydev, ret);
 }
 
@@ -1197,14 +1179,8 @@ static int at803x_cdt_start(struct phy_device *phydev, int pair)
 {
 	u16 cdt;
 
-	/* qca8081 takes the different bit 15 to enable CDT test */
-	if (phydev->drv->phy_id == QCA8081_PHY_ID)
-		cdt = QCA808X_CDT_ENABLE_TEST |
-			QCA808X_CDT_LENGTH_UNIT |
-			QCA808X_CDT_INTER_CHECK_DIS;
-	else
-		cdt = FIELD_PREP(AT803X_CDT_MDI_PAIR_MASK, pair) |
-			AT803X_CDT_ENABLE_TEST;
+	cdt = FIELD_PREP(AT803X_CDT_MDI_PAIR_MASK, pair) |
+	      AT803X_CDT_ENABLE_TEST;
 
 	return phy_write(phydev, AT803X_CDT, cdt);
 }
@@ -1212,16 +1188,10 @@ static int at803x_cdt_start(struct phy_device *phydev, int pair)
 static int at803x_cdt_wait_for_completion(struct phy_device *phydev)
 {
 	int val, ret;
-	u16 cdt_en;
-
-	if (phydev->drv->phy_id == QCA8081_PHY_ID)
-		cdt_en = QCA808X_CDT_ENABLE_TEST;
-	else
-		cdt_en = AT803X_CDT_ENABLE_TEST;
 
 	/* One test run takes about 25ms */
 	ret = phy_read_poll_timeout(phydev, AT803X_CDT, val,
-				    !(val & cdt_en),
+				    !(val & AT803X_CDT_ENABLE_TEST),
 				    30000, 100000, true);
 
 	return ret < 0 ? ret : 0;
@@ -1845,6 +1815,47 @@ static int qca8327_suspend(struct phy_device *phydev)
 	return qca83xx_suspend(phydev);
 }
 
+static int qca808x_config_aneg(struct phy_device *phydev)
+{
+	int phy_ctrl = 0;
+	int ret;
+
+	ret = at803x_config_mdix(phydev, phydev->mdix_ctrl);
+	if (ret < 0)
+		return ret;
+
+	/* Changes of the midx bits are disruptive to the normal operation;
+	 * therefore any changes to these registers must be followed by a
+	 * software reset to take effect.
+	 */
+	if (ret == 1) {
+		ret = genphy_soft_reset(phydev);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Do not restart auto-negotiation by setting ret to 0 defautly,
+	 * when calling __genphy_config_aneg later.
+	 */
+	ret = 0;
+
+	/* The reg MII_BMCR also needs to be configured for force mode, the
+	 * genphy_config_aneg is also needed.
+	 */
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		genphy_c45_pma_setup_forced(phydev);
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, phydev->advertising))
+		phy_ctrl = MDIO_AN_10GBT_CTRL_ADV2_5G;
+
+	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL,
+				     MDIO_AN_10GBT_CTRL_ADV2_5G, phy_ctrl);
+	if (ret < 0)
+		return ret;
+
+	return __genphy_config_aneg(phydev, ret);
+}
+
 static int qca808x_phy_fast_retrain_config(struct phy_device *phydev)
 {
 	int ret;
@@ -2104,6 +2115,30 @@ static int qca808x_cable_test_start(struct phy_device *phydev)
 	return 0;
 }
 
+static int qca808x_cdt_start(struct phy_device *phydev)
+{
+	u16 cdt;
+
+	/* qca8081 takes the different bit 15 to enable CDT test */
+	cdt = QCA808X_CDT_ENABLE_TEST |
+	      QCA808X_CDT_LENGTH_UNIT |
+	      QCA808X_CDT_INTER_CHECK_DIS;
+
+	return phy_write(phydev, AT803X_CDT, cdt);
+}
+
+static int qca808x_cdt_wait_for_completition(struct phy_device *phydev)
+{
+	int val, ret;
+
+	/* One test run takes about 25ms */
+	ret = phy_read_poll_timeout(phydev, AT803X_CDT, val,
+				    !(val & QCA808X_CDT_ENABLE_TEST),
+				    30000, 100000, true);
+
+	return ret < 0 ? ret : 0;
+}
+
 static int qca808x_cable_test_get_status(struct phy_device *phydev, bool *finished)
 {
 	int ret, val;
@@ -2111,11 +2146,11 @@ static int qca808x_cable_test_get_status(struct phy_device *phydev, bool *finish
 
 	*finished = false;
 
-	ret = at803x_cdt_start(phydev, 0);
+	ret = qca808x_cdt_start(phydev);
 	if (ret)
 		return ret;
 
-	ret = at803x_cdt_wait_for_completion(phydev);
+	ret = qca808x_cdt_wait_for_completition(phydev);
 	if (ret)
 		return ret;
 
@@ -2360,7 +2395,7 @@ static struct phy_driver at803x_driver[] = {
 	.set_wol		= at803x_set_wol,
 	.get_wol		= at803x_get_wol,
 	.get_features		= qca808x_get_features,
-	.config_aneg		= at803x_config_aneg,
+	.config_aneg		= qca808x_config_aneg,
 	.suspend		= genphy_suspend,
 	.resume			= genphy_resume,
 	.read_status		= qca808x_read_status,
