@@ -39,7 +39,7 @@ and livepatching:
     are in any way modified.
 
 All three approaches need to modify the existing code at runtime. Therefore
-they need to be aware of each other and not step over each other's toes.
+they need to be aware of each other and not step on each other's toes.
 Most of these problems are solved by using the dynamic ftrace framework as
 a base. A Kprobe is registered as a ftrace handler when the function entry
 is probed, see CONFIG_KPROBES_ON_FTRACE. Also an alternative function from
