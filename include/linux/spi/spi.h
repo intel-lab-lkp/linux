@@ -1040,6 +1040,7 @@ struct spi_transfer {
 	unsigned	len;
 
 #define SPI_TRANS_FAIL_NO_START	BIT(0)
+#define SPI_TRANS_FAIL_IO	BIT(1)
 	u16		error;
 
 	dma_addr_t	tx_dma;
