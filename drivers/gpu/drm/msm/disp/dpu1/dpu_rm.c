@@ -466,24 +466,94 @@ static int _dpu_rm_reserve_dsc(struct dpu_rm *rm,
 			       struct drm_encoder *enc,
 			       const struct msm_display_topology *top)
 {
-	int num_dsc = top->num_dsc;
-	int i;
+	int num_dsc = 0;
+	int i, pp_idx;
+	bool pair = false;
+	int dsc_idx[DSC_MAX - DSC_0];
+	uint32_t pp_to_enc_id[PINGPONG_MAX - PINGPONG_0];
+	int pp_max = PINGPONG_MAX - PINGPONG_0;
 
-	/* check if DSC required are allocated or not */
-	for (i = 0; i < num_dsc; i++) {
-		if (!rm->dsc_blks[i]) {
-			DPU_ERROR("DSC %d does not exist\n", i);
-			return -EIO;
+	if (!top->num_dsc || !top->num_intf)
+		return 0;
+
+	/*
+	 * Truth:
+	 * 1) every layer mixer only connects to one pingpong
+	 * 2) no pingpong split -- two layer mixers shared one pingpong
+	 * 3) each DSC engine contains two dsc encoders
+	 *    -- index(0,1), index (2,3),... etc
+	 * 4) dsc pair can only happens with same DSC engine except 4 dsc
+	 *    merge mode application (8k) which need two DSC engines
+	 * 5) odd pingpong connect to odd dsc
+	 * 6) even pingpong connect even dsc
+	 */
+
+	/* num_dsc should be either 1, 2 or 4 */
+	if (top->num_dsc > top->num_intf)	/* merge mode */
+		pair = true;
+
+	/* fill working copy with pingpong list */
+	memcpy(pp_to_enc_id, global_state->pingpong_to_enc_id, sizeof(pp_to_enc_id));
+
+	for (i = 0; i < ARRAY_SIZE(rm->dsc_blks); i++) {
+		if (!rm->dsc_blks[i])	/* end of dsc list */
+			break;
+
+		if (global_state->dsc_to_enc_id[i]) {	/* used */
+			/* consective dsc index to be paired */
+			if (pair && num_dsc) {	/* already start pairing, re start */
+				num_dsc = 0;
+				/* fill working copy with pingpong list */
+				memcpy(pp_to_enc_id, global_state->pingpong_to_enc_id,
+								sizeof(pp_to_enc_id));
+			}
+			continue;
 		}
 
-		if (global_state->dsc_to_enc_id[i]) {
-			DPU_ERROR("DSC %d is already allocated\n", i);
-			return -EIO;
+		/* odd index can not become start of pairing */
+		if (pair && (i & 0x01) && !num_dsc)
+			continue;
+
+		/*
+		 * find the pingpong index which had been reserved
+		 * previously at layer mixer allocation
+		 */
+		for (pp_idx = 0; pp_idx < pp_max; pp_idx++) {
+			if (pp_to_enc_id[pp_idx] == enc->base.id)
+				break;
 		}
+
+		/*
+		 * dsc even index must map to pingpong even index
+		 * dsc odd index must map to pingpong odd index
+		 */
+		if ((i & 0x01) != (pp_idx & 0x01))
+			continue;
+
+		/*
+		 * delete pp_idx so that it can not be found at next search
+		 * in the case of pairing
+		 */
+		pp_to_enc_id[pp_idx] = NULL;
+
+		dsc_idx[num_dsc++] = i;
+		if (num_dsc >= top->num_dsc)
+			break;
 	}
 
-	for (i = 0; i < num_dsc; i++)
-		global_state->dsc_to_enc_id[i] = enc->base.id;
+	if (num_dsc < top->num_dsc) {
+		DPU_ERROR("DSC allocation failed num_dsc=%d required=%d\n",
+						num_dsc, top->num_dsc );
+		return -ENAVAIL;
+	}
+
+	/* reserve dsc */
+	for (i = 0; i < top->num_dsc; i++) {
+		int j;
+
+		j = dsc_idx[i];
+		global_state->dsc_to_enc_id[j] = enc->base.id;
+	}
 
 	return 0;
 }
