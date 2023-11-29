@@ -1625,6 +1625,12 @@ static void fast_isolate_freepages(struct compact_control *cc)
 	cc->total_free_scanned += nr_scanned;
 	if (!page)
 		return;
+	/*
+	 * Otherwise, we can blindly choose an improper pageblock especially
+	 * while using the min mark
+	 */
+	if (!suitable_migration_target(cc, page))
+		return;
 
 	low_pfn = page_to_pfn(page);
 	fast_isolate_around(cc, low_pfn);
