@@ -69,8 +69,19 @@ static int snirm710_probe(struct platform_device *dev)
 		return -ENOMEM;
 
 	hostdata->dev = &dev->dev;
-	dma_set_mask(&dev->dev, DMA_BIT_MASK(32));
+	rc = dma_set_mask(&dev->dev, DMA_BIT_MASK(32));
+	if (rc) {
+		printk(KERN_ERR "snirm710: dma_set_mask failed!\n");
+		goto out_kfree;
+	}
+
 	hostdata->base = ioremap(base, 0x100);
+	if (!hostdata->base) {
+		printk(KERN_ERR "snirm710: ioremap failed!\n");
+		rc = -ENOMEM;
+		goto out_kfree;
+	}
+
 	hostdata->differential = 0;
 
 	hostdata->clock = SNIRM710_CLOCK;
