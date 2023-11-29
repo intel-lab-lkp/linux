@@ -60,7 +60,11 @@ static int mv_hsic_phy_init(struct phy *phy)
 	void __iomem *base = mv_phy->base;
 	int ret;
 
-	clk_prepare_enable(mv_phy->clk);
+	ret = clk_prepare_enable(mv_phy->clk);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to enable clock: %d\n", ret);
+		return ret;
+	}
 
 	/* Set reference clock */
 	writel(0x1 << PHY_28NM_HSIC_PLL_SELLPFR_SHIFT |
