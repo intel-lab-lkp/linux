@@ -487,7 +487,13 @@ static int __init renesas_soc_init(void)
 	}
 
 	np = of_find_node_by_path("/");
-	of_property_read_string(np, "model", &soc_dev_attr->machine);
+	ret = of_property_read_string(np, "model", &soc_dev_attr->machine);
+	if (ret) {
+		dev_err(dev, "Failed to read model property: %d\n", ret);
+		kfree(soc_dev_attr);
+		return ret;
+	}
+
 	of_node_put(np);
 
 	soc_dev_attr->family = kstrdup_const(family->name, GFP_KERNEL);
