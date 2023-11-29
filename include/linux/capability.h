@@ -218,6 +218,10 @@ int vfs_caps_to_xattr(struct mnt_idmap *idmap,
 		      struct user_namespace *dest_userns,
 		      const struct vfs_caps *vfs_caps,
 		      void *data, int size);
+int vfs_caps_to_user_xattr(struct mnt_idmap *idmap,
+			   struct user_namespace *dest_userns,
+			   const struct vfs_caps *vfs_caps,
+			   void *data, int size);
 
 /* audit system wants to get cap info from files as well */
 int get_vfs_caps_from_disk(struct mnt_idmap *idmap,
