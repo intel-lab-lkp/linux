@@ -2573,6 +2573,19 @@ static struct ib_pd *free_mr_init_pd(struct hns_roce_dev *hr_dev)
 	return pd;
 }
 
+static void free_mr_uninit_pd(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_v2_priv *priv = hr_dev->priv;
+	struct hns_roce_v2_free_mr *free_mr = &priv->free_mr;
+
+	if (!free_mr->rsv_pd)
+		return;
+
+	hns_roce_dealloc_pd(&free_mr->rsv_pd->ibpd, NULL);
+	kfree(free_mr->rsv_pd);
+	free_mr->rsv_pd = NULL;
+}
+
 static struct ib_cq *free_mr_init_cq(struct hns_roce_dev *hr_dev)
 {
 	struct hns_roce_v2_priv *priv = hr_dev->priv;
@@ -2607,6 +2620,19 @@ static struct ib_cq *free_mr_init_cq(struct hns_roce_dev *hr_dev)
 	return cq;
 }
 
+static void free_mr_uninit_cq(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_v2_priv *priv = hr_dev->priv;
+	struct hns_roce_v2_free_mr *free_mr = &priv->free_mr;
+
+	if (!free_mr->rsv_cq)
+		return;
+
+	hns_roce_destroy_cq(&free_mr->rsv_cq->ib_cq, NULL);
+	kfree(free_mr->rsv_cq);
+	free_mr->rsv_cq = NULL;
+}
+
 static int free_mr_init_qp(struct hns_roce_dev *hr_dev, struct ib_cq *cq,
 			   struct ib_qp_init_attr *init_attr, int i)
 {
@@ -2638,6 +2664,19 @@ static int free_mr_init_qp(struct hns_roce_dev *hr_dev, struct ib_cq *cq,
 	return 0;
 }
 
+static void free_mr_uninit_qp(struct hns_roce_dev *hr_dev, int i)
+{
+	struct hns_roce_v2_priv *priv = hr_dev->priv;
+	struct hns_roce_v2_free_mr *free_mr = &priv->free_mr;
+
+	if (!free_mr->rsv_qp[i])
+		return;
+
+	hns_roce_v2_destroy_qp(&free_mr->rsv_qp[i]->ibqp, NULL);
+	kfree(free_mr->rsv_qp[i]);
+	free_mr->rsv_qp[i] = NULL;
+}
+
 static void free_mr_exit(struct hns_roce_dev *hr_dev)
 {
 	struct hns_roce_v2_priv *priv = hr_dev->priv;
@@ -2645,26 +2684,12 @@ static void free_mr_exit(struct hns_roce_dev *hr_dev)
 	struct ib_qp *qp;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(free_mr->rsv_qp); i++) {
-		if (free_mr->rsv_qp[i]) {
-			qp = &free_mr->rsv_qp[i]->ibqp;
-			hns_roce_v2_destroy_qp(qp, NULL);
-			kfree(free_mr->rsv_qp[i]);
-			free_mr->rsv_qp[i] = NULL;
-		}
-	}
+	for (i = 0; i < ARRAY_SIZE(free_mr->rsv_qp); i++)
+		free_mr_uninit_qp(hr_dev, i);
 
-	if (free_mr->rsv_cq) {
-		hns_roce_destroy_cq(&free_mr->rsv_cq->ib_cq, NULL);
-		kfree(free_mr->rsv_cq);
-		free_mr->rsv_cq = NULL;
-	}
+	free_mr_uninit_cq(hr_dev);
 
-	if (free_mr->rsv_pd) {
-		hns_roce_dealloc_pd(&free_mr->rsv_pd->ibpd, NULL);
-		kfree(free_mr->rsv_pd);
-		free_mr->rsv_pd = NULL;
-	}
+	free_mr_uninit_pd(hr_dev);
 }
 
 static int free_mr_alloc_res(struct hns_roce_dev *hr_dev)
@@ -2705,16 +2730,12 @@ static int free_mr_alloc_res(struct hns_roce_dev *hr_dev)
 	return 0;
 
 create_failed_qp:
-	for (i--; i >= 0; i--) {
-		hns_roce_v2_destroy_qp(&free_mr->rsv_qp[i]->ibqp, NULL);
-		kfree(free_mr->rsv_qp[i]);
-	}
-	hns_roce_destroy_cq(cq, NULL);
-	kfree(cq);
+	for (i--; i >= 0; i--)
+		free_mr_uninit_qp(hr_dev, i);
+	free_mr_uninit_cq(hr_dev);
 
 create_failed_cq:
-	hns_roce_dealloc_pd(pd, NULL);
-	kfree(pd);
+	free_mr_uninit_pd(hr_dev);
 
 	return ret;
 }
