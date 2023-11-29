@@ -35,11 +35,18 @@ static void do_msm_poweroff(void)
 
 static int msm_restart_probe(struct platform_device *pdev)
 {
+	int ret;
+
 	msm_ps_hold = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(msm_ps_hold))
 		return PTR_ERR(msm_ps_hold);
 
-	register_restart_handler(&restart_nb);
+	ret = register_restart_handler(&restart_nb);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Failed to register restart handler: %d\n", ret);
+		return ret;
+	}
 
 	pm_power_off = do_msm_poweroff;
 
