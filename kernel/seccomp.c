@@ -1885,6 +1885,18 @@ static bool has_duplicate_listener(struct seccomp_filter *new_child)
 	return false;
 }
 
+static int seccomp_filter_put(struct inode *inode, struct file *file)
+{
+	struct seccomp_filter *filter = file->private_data;
+
+	__put_seccomp_filter(filter);
+	return 0;
+}
+
+static const struct file_operations seccomp_filter_fops = {
+	.release = seccomp_filter_put,
+};
+
 /**
  * seccomp_set_mode_filter: internal function for setting seccomp filter
  * @flags:  flags to change filter behavior
@@ -1996,9 +2008,26 @@ out_free:
 	seccomp_filter_free(prepared);
 	return ret;
 }
+
+static long seccomp_load_filter(const char __user *filter)
+{
+	struct seccomp_filter *sfilter;
+
+	sfilter = seccomp_prepare_user_filter(filter);
+	if (IS_ERR(sfilter))
+		return PTR_ERR(sfilter);
+
+	return anon_inode_getfd("seccomp-filter", &seccomp_filter_fops,
+				sfilter, O_CLOEXEC);
+}
 #else
 static inline long seccomp_set_mode_filter(unsigned int flags,
 					   const char __user *filter)
+{
+	return -EINVAL;
+}
+
+static inline long seccomp_load_filter(const char __user *filter)
 {
 	return -EINVAL;
 }
@@ -2063,6 +2092,11 @@ static long do_seccomp(unsigned int op, unsigned int flags,
 			return -EINVAL;
 
 		return seccomp_get_notif_sizes(uargs);
+	case SECCOMP_LOAD_FILTER:
+		if (flags != 0)
+			return -EINVAL;
+
+		return seccomp_load_filter(uargs);
 	default:
 		return -EINVAL;
 	}
