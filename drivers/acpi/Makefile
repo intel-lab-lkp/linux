@@ -128,7 +128,7 @@ obj-y				+= pmic/
 video-objs			+= acpi_video.o video_detect.o
 obj-y				+= dptf/
 
-obj-$(CONFIG_ARM64)		+= arm64/
+obj-y				+= arm64/
 
 obj-$(CONFIG_ACPI_VIOT)		+= viot.o
 

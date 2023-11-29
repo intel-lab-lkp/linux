@@ -11,6 +11,7 @@ config ACPI_GTDT
 
 config ACPI_AGDI
 	bool "Arm Generic Diagnostic Dump and Reset Device Interface"
+	depends on ARM64
 	depends on ARM_SDE_INTERFACE
 	help
 	  Arm Generic Diagnostic Dump and Reset Device Interface (AGDI) is

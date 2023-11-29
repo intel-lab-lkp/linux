@@ -546,9 +546,7 @@ config ACPI_PFRUT
 	  To compile the drivers as modules, choose M here:
 	  the modules will be called pfr_update and pfr_telemetry.
 
-if ARM64
 source "drivers/acpi/arm64/Kconfig"
-endif
 
 config ACPI_PPTT
 	bool

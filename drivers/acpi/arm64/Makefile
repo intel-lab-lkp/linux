@@ -4,4 +4,4 @@ obj-$(CONFIG_ACPI_IORT) 	+= iort.o
 obj-$(CONFIG_ACPI_GTDT) 	+= gtdt.o
 obj-$(CONFIG_ACPI_APMT) 	+= apmt.o
 obj-$(CONFIG_ARM_AMBA)		+= amba.o
-obj-y				+= dma.o init.o
+obj-$(CONFIG_ARM64)		+= dma.o init.o
