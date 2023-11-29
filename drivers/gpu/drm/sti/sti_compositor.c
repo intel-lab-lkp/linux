@@ -69,6 +69,7 @@ static int sti_compositor_bind(struct device *dev,
 	struct drm_plane *primary = NULL;
 	struct sti_compositor_subdev_descriptor *desc = compo->data.subdev_desc;
 	unsigned int array_size = compo->data.nb_subdev;
+	int ret;
 
 	dev_priv->compo = compo;
 
@@ -145,7 +146,11 @@ static int sti_compositor_bind(struct device *dev,
 		}
 	}
 
-	drm_vblank_init(drm_dev, crtc_id);
+	ret = drm_vblank_init(drm_dev, crtc_id);
+	if (ret) {
+		DRM_ERROR("Failed to initialize vblank\n");
+		return ret;
+	}
 
 	return 0;
 }
