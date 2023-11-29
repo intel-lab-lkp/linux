@@ -388,6 +388,9 @@ struct intel_engine_cs {
 	u32 context_size;
 	u32 mmio_base;
 
+	u32 *ctx_wa_bb;
+	struct i915_vma *vma;
+
 	struct intel_engine_tlb_inv tlb_inv;
 
 	/*

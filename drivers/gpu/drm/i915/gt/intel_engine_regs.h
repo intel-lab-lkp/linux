@@ -245,6 +245,10 @@
 #define GEN11_VECS_SFC_USAGE(base)		_MMIO((base) + 0x2014)
 #define   GEN11_VECS_SFC_USAGE_BIT		(1 << 0)
 
+#define CTX_WA_PTR(base)			_MMIO((base) + 0x2058)
+#define   CTX_WA_PTR_ADDR_MASK			REG_GENMASK(31, 12)
+#define   CTX_WA_VALID				REG_BIT(0)
+
 #define RING_HWS_PGA_GEN6(base)	_MMIO((base) + 0x2080)
 
 #define GEN12_HCP_SFC_LOCK_STATUS(base)		_MMIO((base) + 0x2914)

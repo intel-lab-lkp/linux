@@ -5,6 +5,8 @@
 
 #include "i915_drv.h"
 #include "i915_reg.h"
+#include "i915_perf.h"
+#include "gem/i915_gem_internal.h"
 #include "intel_context.h"
 #include "intel_engine_pm.h"
 #include "intel_engine_regs.h"
@@ -14,6 +16,7 @@
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 #include "intel_ring.h"
+#include "intel_uncore.h"
 #include "intel_workarounds.h"
 
 /**
@@ -2965,6 +2968,105 @@ general_render_compute_wa_init(struct intel_engine_cs *engine, struct i915_wa_li
 	}
 }
 
+static const struct i915_range tdl_power_ctx[] = {
+	{ .start = 0xe100, .end = 0xe100 },
+	{ .start = 0xe180, .end = 0xe194 },
+	{},
+};
+
+static void
+emit_ctx_wa_bb(struct intel_engine_cs *engine, struct i915_wa_list *wal)
+{
+	const struct i915_wa *wa;
+	struct intel_uncore *uncore = engine->gt->uncore;
+	int i, count = 0;
+	u32 *cs = engine->ctx_wa_bb;
+
+	*cs++ = MI_LOAD_REGISTER_IMM(1);
+	for (i = 0, wa = wal->list; i < wal->count; i++, wa++) {
+		if (reg_in_range_table(i915_mmio_reg_offset(wa->mcr_reg), tdl_power_ctx)) {
+			*cs++ = i915_mmio_reg_offset(wa->mcr_reg);
+			*cs++ = wa->set;
+			count++;
+		}
+	}
+	*cs++ = MI_BATCH_BUFFER_END;
+
+	if (count != 0) {
+		i915_gem_object_flush_map(engine->vma->obj);
+		intel_uncore_write(uncore, CTX_WA_PTR(engine->mmio_base),
+				   REG_FIELD_PREP(CTX_WA_PTR_ADDR_MASK,
+						  i915_vma_offset(engine->vma) & GENMASK(31, 12)) |
+				   CTX_WA_VALID);
+	}
+}
+
+static int ctx_wa_bb_init(struct intel_engine_cs *engine)
+{
+	struct drm_i915_private *i915 = engine->i915;
+	struct intel_gt *gt = engine->gt;
+	struct drm_i915_gem_object *obj;
+	struct i915_vma *vma;
+	void *batch;
+	struct i915_gem_ww_ctx ww;
+	int err;
+
+	obj = i915_gem_object_create_internal(i915, PAGE_SIZE);
+	if (IS_ERR(obj))
+		return PTR_ERR(obj);
+
+	vma = i915_vma_instance(obj, &gt->ggtt->vm, NULL);
+	if (IS_ERR(vma)) {
+		err = PTR_ERR(vma);
+		goto err;
+	}
+
+	engine->vma = vma;
+	i915_gem_ww_ctx_init(&ww, true);
+
+retry:
+	err = i915_gem_object_lock(obj, &ww);
+	if (!err)
+		err = i915_ggtt_pin(engine->vma, &ww, 0, PIN_HIGH);
+	if (err)
+		goto err_ww_fini;
+
+	batch = i915_gem_object_pin_map(obj, I915_MAP_WB);
+	if (IS_ERR(batch)) {
+		err = PTR_ERR(batch);
+		goto err_unpin;
+	}
+	engine->ctx_wa_bb = batch;
+
+	return 0;
+
+err_unpin:
+	i915_vma_unpin(engine->vma);
+
+err_ww_fini:
+	if (err == -EDEADLK) {
+		err = i915_gem_ww_ctx_backoff(&ww);
+		if (!err)
+			goto retry;
+	}
+
+	i915_gem_ww_ctx_fini(&ww);
+	i915_vma_put(engine->vma);
+
+err:
+	i915_gem_object_put(obj);
+	return err;
+}
+
+void intel_ctx_wa_bb_fini(struct intel_engine_cs *engine)
+{
+	i915_vma_unpin_and_release(&engine->vma, I915_VMA_RELEASE_MAP);
+}
+
+#define NEEDS_CTX_WABB(engine) ( \
+	IS_GFX_GT_IP_RANGE(engine->gt, IP_VER(12, 0), IP_VER(12, 55)) && \
+	engine->class == RENDER_CLASS)
+
 static void
 engine_init_workarounds(struct intel_engine_cs *engine, struct i915_wa_list *wal)
 {
@@ -2987,6 +3089,18 @@ engine_init_workarounds(struct intel_engine_cs *engine, struct i915_wa_list *wal
 		rcs_engine_wa_init(engine, wal);
 	else
 		xcs_engine_wa_init(engine, wal);
+
+	/* Wa_14011274333
+	 * After the workaround list has been populated some platforms have
+	 * regions of addresses that do not retain their values after resuming
+	 * from rc6. For these platforms, add all workarounds in these regions
+	 * to a batch buffer, this batch buffer is stored in memory and
+	 * executes on every rc6 resume.
+	 */
+	if (NEEDS_CTX_WABB(engine)) {
+		ctx_wa_bb_init(engine);
+		emit_ctx_wa_bb(engine, wal);
+	}
 }
 
 void intel_engine_init_workarounds(struct intel_engine_cs *engine)

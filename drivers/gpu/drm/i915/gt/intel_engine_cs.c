@@ -1573,6 +1573,8 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	intel_wa_list_free(&engine->ctx_wa_list);
 	intel_wa_list_free(&engine->wa_list);
 	intel_wa_list_free(&engine->whitelist);
+
+	intel_ctx_wa_bb_fini(engine);
 }
 
 /**

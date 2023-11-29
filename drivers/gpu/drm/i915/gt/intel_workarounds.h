@@ -36,4 +36,5 @@ void intel_engine_apply_workarounds(struct intel_engine_cs *engine);
 int intel_engine_verify_workarounds(struct intel_engine_cs *engine,
 				    const char *from);
 
+void intel_ctx_wa_bb_fini(struct intel_engine_cs *engine);
 #endif
