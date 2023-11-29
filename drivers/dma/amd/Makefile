@@ -2,3 +2,5 @@
 #
 # Copyright (C) 2023, Advanced Micro Devices, Inc.
 #
+
+obj-$(CONFIG_AMD_QDMA) += qdma/
