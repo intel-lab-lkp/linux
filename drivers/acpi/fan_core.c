@@ -215,6 +215,13 @@ static int acpi_fan_get_fif(struct acpi_device *device)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 	struct acpi_fan *fan = acpi_driver_data(device);
+
+	if (!fan) {
+		dev_err(&device->dev, "No ACPI fan data associated "
+			"with the device\n");
+		return -EINVAL;
+	}
+
 	struct acpi_buffer format = { sizeof("NNNN"), "NNNN" };
 	u64 fields[4];
 	struct acpi_buffer fif = { sizeof(fields), fields };
@@ -265,6 +272,12 @@ static int acpi_fan_speed_cmp(const void *a, const void *b)
 static int acpi_fan_get_fps(struct acpi_device *device)
 {
 	struct acpi_fan *fan = acpi_driver_data(device);
+
+	if (!fan) {
+		dev_err(&device->dev, "Failed to retrieve ACPI fan data\n");
+		return -ENODEV;
+	}
+
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 	union acpi_object *obj;
 	acpi_status status;
