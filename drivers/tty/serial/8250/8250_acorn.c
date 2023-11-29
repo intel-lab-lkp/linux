@@ -43,6 +43,7 @@ serial_card_probe(struct expansion_card *ec, const struct ecard_id *id)
 	struct uart_8250_port uart;
 	unsigned long bus_addr;
 	unsigned int i;
+	int ret;
 
 	info = kzalloc(sizeof(struct serial_card_info), GFP_KERNEL);
 	if (!info)
@@ -72,6 +73,14 @@ serial_card_probe(struct expansion_card *ec, const struct ecard_id *id)
 		uart.port.mapbase = bus_addr + type->offset[i];
 
 		info->ports[i] = serial8250_register_8250_port(&uart);
+		if (IS_ERR(info->ports[i])) {
+			ret = PTR_ERR(info->ports[i]);
+			while (i--)
+				serial8250_unregister_port(info->ports[i]);
+
+			kfree(info);
+			return ret;
+		}
 	}
 
 	return 0;
