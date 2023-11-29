@@ -292,6 +292,8 @@ properties:
                           description:
                             Name of the sub-space used inside the attribute.
                           type: string
+                        fixed-header:
+                          type: string
                         struct:
                           description:
                             Name of the struct type used for the attribute.

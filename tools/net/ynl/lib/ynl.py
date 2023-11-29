@@ -170,10 +170,9 @@ class NlAttr:
 
 
 class NlAttrs:
-    def __init__(self, msg):
+    def __init__(self, msg, offset=0):
         self.attrs = []
 
-        offset = 0
         while offset < len(msg):
             attr = NlAttr(msg, offset)
             offset += attr.full_len
@@ -371,8 +370,8 @@ class NetlinkProtocol:
         fixed_header_size = 0
         if ynl:
             op = ynl.rsp_by_value[msg.cmd()]
-            fixed_header_size = ynl._fixed_header_size(op)
-        msg.raw_attrs = NlAttrs(msg.raw[fixed_header_size:])
+            fixed_header_size = ynl._fixed_header_size(op.fixed_header)
+        msg.raw_attrs = NlAttrs(msg.raw, fixed_header_size)
         return msg
 
     def get_mcast_id(self, mcast_name, mcast_groups):
@@ -571,8 +570,15 @@ class YnlFamily(SpecFamily):
             decoded = self._decode_binary(attr, dyn_spec)
         elif dyn_spec['type'] == 'nest':
             attr_space = dyn_spec['nested-attributes']
+            fixed_header_name = dyn_spec.yaml.get('fixed-header')
             if attr_space in self.attr_sets:
-                decoded = self._decode(NlAttrs(attr.raw), attr_space)
+                decoded = {}
+                offset = 0
+                if fixed_header_name:
+                    decoded.update(self._decode_fixed_header(attr, fixed_header_name));
+                    offset = self._fixed_header_size(fixed_header_name)
+                subdict = self._decode(NlAttrs(attr.raw, offset), attr_space)
+                decoded.update(subdict)
             else:
                 raise Exception(f"Unknown attribute-set '{attr_space}'")
         else:
@@ -658,16 +664,16 @@ class YnlFamily(SpecFamily):
             return
 
         msg = self.nlproto.decode(self, NlMsg(request, 0, op.attr_set))
-        offset = 20 + self._fixed_header_size(op)
+        offset = 20 + self._fixed_header_size(op.fixed_header)
         path = self._decode_extack_path(msg.raw_attrs, op.attr_set, offset,
                                         extack['bad-attr-offs'])
         if path:
             del extack['bad-attr-offs']
             extack['bad-attr'] = path
 
-    def _fixed_header_size(self, op):
-        if op.fixed_header:
-            fixed_header_members = self.consts[op.fixed_header].members
+    def _fixed_header_size(self, name):
+        if name:
+            fixed_header_members = self.consts[name].members
             size = 0
             for m in fixed_header_members:
                 format = NlAttr.get_format(m.type, m.byte_order)
