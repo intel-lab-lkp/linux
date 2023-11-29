@@ -146,7 +146,6 @@ struct iommu_group_attribute iommu_group_attr_##_name =		\
 	container_of(_kobj, struct iommu_group, kobj)
 
 static LIST_HEAD(iommu_device_list);
-static DEFINE_SPINLOCK(iommu_device_lock);
 
 static const struct bus_type * const iommu_buses[] = {
 	&platform_bus_type,
@@ -262,9 +261,9 @@ int iommu_device_register(struct iommu_device *iommu,
 	if (hwdev)
 		iommu->fwnode = dev_fwnode(hwdev);
 
-	spin_lock(&iommu_device_lock);
+	mutex_lock(&iommu_probe_device_lock);
 	list_add_tail(&iommu->list, &iommu_device_list);
-	spin_unlock(&iommu_device_lock);
+	mutex_unlock(&iommu_probe_device_lock);
 
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses) && !err; i++)
 		err = bus_iommu_probe(iommu_buses[i]);
@@ -279,9 +278,9 @@ void iommu_device_unregister(struct iommu_device *iommu)
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses); i++)
 		bus_for_each_dev(iommu_buses[i], NULL, iommu, remove_iommu_group);
 
-	spin_lock(&iommu_device_lock);
+	mutex_lock(&iommu_probe_device_lock);
 	list_del(&iommu->list);
-	spin_unlock(&iommu_device_lock);
+	mutex_unlock(&iommu_probe_device_lock);
 
 	/* Pairs with the alloc in generic_single_device_group() */
 	iommu_group_put(iommu->singleton_group);
@@ -316,9 +315,9 @@ int iommu_device_register_bus(struct iommu_device *iommu,
 	if (err)
 		return err;
 
-	spin_lock(&iommu_device_lock);
+	mutex_lock(&iommu_probe_device_lock);
 	list_add_tail(&iommu->list, &iommu_device_list);
-	spin_unlock(&iommu_device_lock);
+	mutex_unlock(&iommu_probe_device_lock);
 
 	err = bus_iommu_probe(bus);
 	if (err) {
@@ -2033,9 +2032,9 @@ bool iommu_present(const struct bus_type *bus)
 
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses); i++) {
 		if (iommu_buses[i] == bus) {
-			spin_lock(&iommu_device_lock);
+			mutex_lock(&iommu_probe_device_lock);
 			ret = !list_empty(&iommu_device_list);
-			spin_unlock(&iommu_device_lock);
+			mutex_unlock(&iommu_probe_device_lock);
 		}
 	}
 	return ret;
@@ -2980,17 +2979,14 @@ EXPORT_SYMBOL_GPL(iommu_default_passthrough);
 
 const struct iommu_ops *iommu_ops_from_fwnode(struct fwnode_handle *fwnode)
 {
-	const struct iommu_ops *ops = NULL;
 	struct iommu_device *iommu;
 
-	spin_lock(&iommu_device_lock);
+	lockdep_assert_held(&iommu_probe_device_lock);
+
 	list_for_each_entry(iommu, &iommu_device_list, list)
-		if (iommu->fwnode == fwnode) {
-			ops = iommu->ops;
-			break;
-		}
-	spin_unlock(&iommu_device_lock);
-	return ops;
+		if (iommu->fwnode == fwnode)
+			return iommu->ops;
+	return NULL;
 }
 
 int iommu_fwspec_init(struct device *dev, struct fwnode_handle *iommu_fwnode,
