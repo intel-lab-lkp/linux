@@ -243,7 +243,7 @@ static int vesafb_setup(char *options)
 
 static int vesafb_probe(struct platform_device *dev)
 {
-	struct screen_info *si = &screen_info;
+	struct screen_info *si;
 	struct fb_info *info;
 	struct vesafb_par *par;
 	int i, err;
@@ -251,6 +251,13 @@ static int vesafb_probe(struct platform_device *dev)
 	unsigned int size_remap;
 	unsigned int size_total;
 	char *option = NULL;
+
+	si = dev_get_platdata(&dev->dev);
+	if (!si)
+		return -ENODEV;
+	si = devm_kmemdup(&dev->dev, si, sizeof(*si), GFP_KERNEL);
+	if (!si)
+		return -ENOMEM;
 
 	/* ignore error return of fb_get_options */
 	fb_get_options("vesafb", &option);
