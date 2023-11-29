@@ -296,11 +296,23 @@ static int pwm_regulator_init_continuous(struct platform_device *pdev,
 	drvdata->desc.ops = &pwm_regulator_voltage_continuous_ops;
 	drvdata->desc.continuous_voltage_range = true;
 
-	of_property_read_u32_array(pdev->dev.of_node,
-				   "pwm-dutycycle-range",
-				   dutycycle_range, 2);
-	of_property_read_u32(pdev->dev.of_node, "pwm-dutycycle-unit",
-			     &dutycycle_unit);
+	ret = of_property_read_u32_array(pdev->dev.of_node,
+					"pwm-dutycycle-range",
+					dutycycle_range, 2);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Failed to read pwm-dutycycle-range: %d\n", ret);
+		return ret;
+	}
+
+	ret = of_property_read_u32(pdev->dev.of_node,
+					"pwm-dutycycle-unit",
+					&dutycycle_unit);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Failed to read pwm-dutycycle-unit: %d\n", ret);
+		return ret;
+	}
 
 	if (dutycycle_range[0] > dutycycle_unit ||
 	    dutycycle_range[1] > dutycycle_unit)
