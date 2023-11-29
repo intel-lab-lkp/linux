@@ -267,6 +267,12 @@ static int acpi_smbus_hc_add(struct acpi_device *device)
 	init_waitqueue_head(&hc->wait);
 
 	hc->ec = acpi_driver_data(acpi_dev_parent(device));
+	if (!hc->ec) {
+		pr_err("Failed to retrieve parent ACPI device data\n");
+		kfree(hc);
+		return -ENODEV;
+	}
+
 	hc->offset = (val >> 8) & 0xff;
 	hc->query_bit = val & 0xff;
 	device->driver_data = hc;
@@ -288,6 +294,11 @@ static void acpi_smbus_hc_remove(struct acpi_device *device)
 		return;
 
 	hc = acpi_driver_data(device);
+	if (!hc) {
+		pr_err("Failed to retrieve ACPI SMBus HC data\n");
+		return;
+	}
+
 	acpi_ec_remove_query_handler(hc->ec, hc->query_bit);
 	acpi_os_wait_events_complete();
 	kfree(hc);
