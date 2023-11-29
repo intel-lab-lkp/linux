@@ -24,7 +24,7 @@ extern int file_caps_enabled;
 typedef struct { u64 val; } kernel_cap_t;
 
 /* same as vfs_ns_cap_data but in cpu endian and always filled completely */
-struct cpu_vfs_cap_data {
+struct vfs_caps {
 	__u32 magic_etc;
 	kuid_t rootid;
 	kernel_cap_t permitted;
@@ -211,7 +211,7 @@ static inline bool checkpoint_restore_ns_capable(struct user_namespace *ns)
 /* audit system wants to get cap info from files as well */
 int get_vfs_caps_from_disk(struct mnt_idmap *idmap,
 			   const struct dentry *dentry,
-			   struct cpu_vfs_cap_data *cpu_caps);
+			   struct vfs_caps *cpu_caps);
 
 int cap_convert_nscap(struct mnt_idmap *idmap, struct dentry *dentry,
 		      const void **ivalue, size_t size);

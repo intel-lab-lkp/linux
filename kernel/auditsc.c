@@ -2247,7 +2247,7 @@ void __audit_getname(struct filename *name)
 static inline int audit_copy_fcaps(struct audit_names *name,
 				   const struct dentry *dentry)
 {
-	struct cpu_vfs_cap_data caps;
+	struct vfs_caps caps;
 	int rc;
 
 	if (!dentry)
@@ -2800,7 +2800,7 @@ int __audit_log_bprm_fcaps(struct linux_binprm *bprm,
 {
 	struct audit_aux_data_bprm_fcaps *ax;
 	struct audit_context *context = audit_context();
-	struct cpu_vfs_cap_data vcaps;
+	struct vfs_caps vcaps;
 
 	ax = kmalloc(sizeof(*ax), GFP_KERNEL);
 	if (!ax)
