@@ -130,6 +130,13 @@ static const struct mmc_fixup __maybe_unused mmc_blk_fixups[] = {
 	MMC_FIXUP(CID_NAME_ANY, CID_MANFID_SANDISK_SD, 0x5344, add_quirk_sd,
 		  MMC_QUIRK_BROKEN_SD_DISCARD),
 
+	/*
+	 * SanDisk iNAND 7250 DDG4064, this quirk shall disable the retune
+	 * operation enforced by default when switching to RPMB.
+	 */
+	MMC_FIXUP("DG4064", CIF_MANFID_SANDISK2, 0x100, add_quirk_mmc,
+		  MMC_QUIRK_BROKEN_RPMB_RETUNE),
+
 	END_FIXUP
 };
 

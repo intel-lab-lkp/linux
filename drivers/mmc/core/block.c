@@ -860,6 +860,11 @@ static int mmc_blk_part_switch_pre(struct mmc_card *card,
 				return ret;
 		}
 		mmc_retune_pause(card->host);
+
+		/* Do not force retune before RPMB switch */
+		if (mmc_can_retune(card->host) &&
+		    mmc_card_broken_rpmb_retune(card))
+			card->host->need_retune = 0;
 	}
 
 	return ret;
@@ -3143,4 +3148,3 @@ module_exit(mmc_blk_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Multimedia Card (MMC) block device driver");
-
