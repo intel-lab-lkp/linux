@@ -36,9 +36,31 @@ static bool migration_in_progress;
 
 static long hcall_return_busy_check(long rc)
 {
+	unsigned int ms;
+
 	/* Check if we are stalled for some time */
 	if (H_IS_LONG_BUSY(rc)) {
-		msleep(get_longbusy_msecs(rc));
+		ms = get_longbusy_msecs(rc);
+		/*
+		 * Allocate, Modify and Deallocate HCALLs returns
+		 * H_LONG_BUSY_ORDER_1_MSEC or H_LONG_BUSY_ORDER_10_MSEC
+		 * for the long delay. So the delay should always be 1
+		 * or 10msecs, but sleeps 1msec in case if the long
+		 * delay is > H_LONG_BUSY_ORDER_10_MSEC.
+		 */
+		if (ms > 10)
+			ms = 1;
+
+		/*
+		 * msleep() will often sleep at least 20 msecs even
+		 * though the hypervisor expects to reissue these
+		 * HCALLs after 1 or 10msecs. So use usleep_range()
+		 * to sleep with the expected value.
+		 *
+		 * See Documentation/timers/timers-howto.rst on using
+		 * the value range in usleep_range().
+		 */
+		usleep_range(ms * 100, ms * 1000);
 		rc = H_BUSY;
 	} else if (rc == H_BUSY) {
 		cond_resched();
