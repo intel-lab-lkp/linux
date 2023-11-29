@@ -154,7 +154,11 @@ static int mv_usb2_phy_28nm_init(struct phy *phy)
 	u32 reg;
 	int ret;
 
-	clk_prepare_enable(mv_phy->clk);
+	ret = clk_prepare_enable(mv_phy->clk);
+	if (ret) {
+		dev_err(&phy->dev, "Failed to enable clock: %d\n", ret);
+		return ret;
+	}
 
 	/* PHY_28NM_PLL_REG0 */
 	reg = readl(base + PHY_28NM_PLL_REG0) &
