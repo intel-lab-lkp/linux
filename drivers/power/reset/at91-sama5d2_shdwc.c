@@ -353,6 +353,11 @@ static int at91_shdwc_probe(struct platform_device *pdev)
 		return PTR_ERR(at91_shdwc->shdwc_base);
 
 	match = of_match_node(at91_shdwc_of_match, pdev->dev.of_node);
+	if (!match) {
+		dev_err(&pdev->dev, "No matching device found\n");
+		return -ENODEV;
+	}
+
 	at91_shdwc->rcfg = match->data;
 
 	at91_shdwc->sclk = devm_clk_get(&pdev->dev, NULL);
