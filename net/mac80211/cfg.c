@@ -1787,6 +1787,13 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 		rcu_dereference_protected(sta->link[link_id],
 					  lockdep_is_held(&local->hw.wiphy->mtx));
 
+	if (!link || !link_sta)
+		return -EINVAL;
+
+	sband = ieee80211_get_link_sband(link);
+	if (!sband)
+		return -EINVAL;
+
 	/*
 	 * If there are no changes, then accept a link that doesn't exist,
 	 * unless it's a new link.
@@ -1798,13 +1805,6 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 	    !params->he_capa && !params->eht_capa &&
 	    !params->opmode_notif_used)
 		return 0;
-
-	if (!link || !link_sta)
-		return -EINVAL;
-
-	sband = ieee80211_get_link_sband(link);
-	if (!sband)
-		return -EINVAL;
 
 	if (params->link_mac) {
 		if (new_link) {
