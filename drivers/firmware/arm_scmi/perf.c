@@ -804,9 +804,9 @@ static int scmi_dvfs_device_opps_add(const struct scmi_protocol_handle *ph,
 
 	for (idx = 0; idx < dom->opp_count; idx++) {
 		if (!dom->level_indexing_mode)
-			freq = dom->opp[idx].perf * dom->mult_factor;
+			freq = (unsigned long)dom->opp[idx].perf * dom->mult_factor;
 		else
-			freq = dom->opp[idx].indicative_freq * 1000;
+			freq = (unsigned long)dom->opp[idx].indicative_freq * 1000;
 
 		data.level = dom->opp[idx].perf;
 		data.freq = freq;
@@ -879,7 +879,7 @@ static int scmi_dvfs_freq_get(const struct scmi_protocol_handle *ph, u32 domain,
 		return ret;
 
 	if (!dom->level_indexing_mode) {
-		*freq = level * dom->mult_factor;
+		*freq = (unsigned long)level * dom->mult_factor;
 	} else {
 		struct scmi_opp *opp;
 
@@ -887,7 +887,7 @@ static int scmi_dvfs_freq_get(const struct scmi_protocol_handle *ph, u32 domain,
 		if (!opp)
 			return -EIO;
 
-		*freq = opp->indicative_freq * 1000;
+		*freq = (unsigned long)opp->indicative_freq * 1000;
 	}
 
 	return ret;
@@ -908,9 +908,9 @@ static int scmi_dvfs_est_power_get(const struct scmi_protocol_handle *ph,
 
 	for (opp = dom->opp, idx = 0; idx < dom->opp_count; idx++, opp++) {
 		if (!dom->level_indexing_mode)
-			opp_freq = opp->perf * dom->mult_factor;
+			opp_freq = (unsigned long)opp->perf * dom->mult_factor;
 		else
-			opp_freq = opp->indicative_freq * 1000;
+			opp_freq = (unsigned long)opp->indicative_freq * 1000;
 
 		if (opp_freq < *freq)
 			continue;
