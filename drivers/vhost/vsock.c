@@ -449,8 +449,9 @@ static struct virtio_transport vhost_transport = {
 		.notify_send_pre_enqueue  = virtio_transport_notify_send_pre_enqueue,
 		.notify_send_post_enqueue = virtio_transport_notify_send_post_enqueue,
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
+		.notify_set_rcvlowat      = virtio_transport_notify_set_rcvlowat,
 
-		.read_skb = virtio_transport_read_skb,
+		.read_skb = virtio_transport_read_skb
 	},
 
 	.send_pkt = vhost_transport_send_pkt,
