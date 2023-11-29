@@ -107,4 +107,6 @@ struct qcaspi {
 	u16 burst_len;
 };
 
+void qcaspi_flush_tx_ring(struct qcaspi *qca);
+
 #endif /* _QCA_SPI_H */

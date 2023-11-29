@@ -467,7 +467,7 @@ qcaspi_tx_ring_has_space(struct tx_ring *txr)
  *   call from the qcaspi_spi_thread.
  */
 
-static void
+void
 qcaspi_flush_tx_ring(struct qcaspi *qca)
 {
 	int i;
@@ -580,6 +580,11 @@ qcaspi_spi_thread(void *data)
 	netdev_info(qca->net_dev, "SPI thread created\n");
 	while (!kthread_should_stop()) {
 		set_current_state(TASK_INTERRUPTIBLE);
+		if (kthread_should_park()) {
+			kthread_parkme();
+			continue;
+		}
+
 		if ((qca->intr_req == qca->intr_svc) &&
 		    !qca->txr.skb[qca->txr.head])
 			schedule();
