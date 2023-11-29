@@ -181,6 +181,72 @@ xattr_supports_user_prefix(struct inode *inode)
 }
 EXPORT_SYMBOL(xattr_supports_user_prefix);
 
+static int generic_get_fscaps(struct mnt_idmap *idmap, struct dentry *dentry,
+			      struct vfs_caps *caps)
+{
+	struct inode *inode = d_inode(dentry);
+	struct vfs_ns_cap_data *nscaps = NULL;
+	int ret;
+
+	ret = (int)vfs_getxattr_alloc(idmap, dentry, XATTR_NAME_CAPS,
+				      (char **)&nscaps, 0, GFP_NOFS);
+
+	if (ret >= 0)
+		ret = vfs_caps_from_xattr(idmap, i_user_ns(inode), caps, nscaps, ret);
+
+	kfree(nscaps);
+	return ret;
+}
+
+/**
+ * __vfs_get_fscaps - get filesystem capabilities without security checks
+ * @idmap: idmap of the mount the inode was found from
+ * @dentry: the dentry from which to get filesystem capabilities
+ * @caps: storage in which to return the filesystem capabilities
+ *
+ * This function gets the filesystem capabilities for the dentry and returns
+ * them in @caps. It does not perform security checks.
+ *
+ * Return: 0 on success, a negative errno on error.
+ */
+int __vfs_get_fscaps(struct mnt_idmap *idmap, struct dentry *dentry,
+		     struct vfs_caps *caps)
+{
+	struct inode *inode = d_inode(dentry);
+
+	if (inode->i_op->get_fscaps)
+		return inode->i_op->get_fscaps(idmap, dentry, caps);
+	return generic_get_fscaps(idmap, dentry, caps);
+}
+
+/**
+ * vfs_get_fscaps - get filesystem capabilities
+ * @idmap: idmap of the mount the inode was found from
+ * @dentry: the dentry from which to get filesystem capabilities
+ * @caps: storage in which to return the filesystem capabilities
+ *
+ * This function gets the filesystem capabilities for the dentry and returns
+ * them in @caps.
+ *
+ * Return: 0 on success, a negative errno on error.
+ */
+int vfs_get_fscaps(struct mnt_idmap *idmap, struct dentry *dentry,
+		   struct vfs_caps *caps)
+{
+	int error;
+
+	/*
+	 * The VFS has no restrictions on reading security.* xattrs, so
+	 * xattr_permission() isn't needed. Only LSMs get a say.
+	 */
+	error = security_inode_getxattr(dentry, XATTR_NAME_CAPS);
+	if (error)
+		return error;
+
+	return __vfs_get_fscaps(idmap, dentry, caps);
+}
+EXPORT_SYMBOL(vfs_get_fscaps);
+
 int
 __vfs_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	       struct inode *inode, const char *name, const void *value,
