@@ -549,6 +549,36 @@ class YnlFamily(SpecFamily):
         else:
             rsp[name] = [decoded]
 
+    def _resolve_selector(self, attr_spec, vals):
+        if 'selector' in attr_spec:
+            selector = attr_spec['selector']
+            key = selector['attribute']
+            if key in vals:
+                value = vals[key]
+                if value in attr_spec.dynamic_types:
+                    spec = attr_spec.dynamic_types[value]
+                    return spec
+                else:
+                    raise Exception(f"No entry for {key}={value} in selector for '{attr_spec['name']}'")
+            else:
+                raise Exception(f"There is no value for {key} to use in selector for '{attr_spec['name']}'")
+        else:
+            raise Exception("type=dynamic requires a selector in '{attr_spec['name']}'")
+
+    def _decode_dynamic(self, attr, attr_spec, rsp):
+        dyn_spec = self._resolve_selector(attr_spec, rsp)
+        if dyn_spec['type'] == 'binary':
+            decoded = self._decode_binary(attr, dyn_spec)
+        elif dyn_spec['type'] == 'nest':
+            attr_space = dyn_spec['nested-attributes']
+            if attr_space in self.attr_sets:
+                decoded = self._decode(NlAttrs(attr.raw), attr_space)
+            else:
+                raise Exception(f"Unknown attribute-set '{attr_space}'")
+        else:
+            raise Exception(f"Unknown type '{spec['type']}' for value '{value}'")
+        return decoded
+
     def _decode(self, attrs, space):
         if space:
             attr_space = self.attr_sets[space]
@@ -586,6 +616,8 @@ class YnlFamily(SpecFamily):
                     value = self._decode_enum(value, attr_spec)
                     selector = self._decode_enum(selector, attr_spec)
                 decoded = {"value": value, "selector": selector}
+            elif attr_spec["type"] == 'dynamic':
+                decoded = self._decode_dynamic(attr, attr_spec, rsp)
             else:
                 if not self.process_unknown:
                     raise Exception(f'Unknown {attr_spec["type"]} with name {attr_spec["name"]}')

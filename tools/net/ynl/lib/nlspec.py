@@ -142,6 +142,29 @@ class SpecEnumSet(SpecElement):
             mask += e.user_value(as_flags)
         return mask
 
+class SpecDynAttr(SpecElement):
+    """ Single Dynamic Netlink atttribute type
+
+    Represents a choice of dynamic attribute type within an attr space.
+
+    Attributes:
+        value         attribute value to match against dynamic type selector
+        struct_name   string, name of struct definition
+        sub_type      string, name of sub type
+        len           integer, optional byte length of binary types
+        display_hint  string, hint to help choose format specifier
+                      when displaying the value
+    """
+    def __init__(self, family, parent, yaml):
+        super().__init__(family, yaml)
+
+        self.value = yaml.get('value')
+        self.struct_name = yaml.get('struct')
+        self.sub_type = yaml.get('sub-type')
+        self.byte_order = yaml.get('byte-order')
+        self.len = yaml.get('len')
+        self.display_hint = yaml.get('display-hint')
+
 
 class SpecAttr(SpecElement):
     """ Single Netlink atttribute type
@@ -173,9 +196,13 @@ class SpecAttr(SpecElement):
         self.byte_order = yaml.get('byte-order')
         self.len = yaml.get('len')
         self.display_hint = yaml.get('display-hint')
+        self.dynamic_types = {}
 
         self.is_auto_scalar = self.type == "sint" or self.type == "uint"
 
+        if 'selector' in yaml:
+            for item in yaml.get('selector').get('list', []):
+                self.dynamic_types[item['value']] = SpecDynAttr(family, self, item)
 
 class SpecAttrSet(SpecElement):
     """ Netlink Attribute Set class.
