@@ -16,7 +16,6 @@
 #include <asm/stackframe.h>
 #include <asm/thread_info.h>
 
-	.align	5
 SYM_FUNC_START(__arch_cpu_idle)
 	/* start of rollback region */
 	LONG_L	t0, tp, TI_FLAGS
@@ -32,6 +31,7 @@ SYM_FUNC_START(__arch_cpu_idle)
 SYM_FUNC_END(__arch_cpu_idle)
 
 SYM_CODE_START(handle_vint)
+	UNWIND_HINT_UNDEFINED
 	BACKUP_T0T1
 	SAVE_ALL
 	la_abs	t1, __arch_cpu_idle
@@ -49,6 +49,7 @@ SYM_CODE_START(handle_vint)
 SYM_CODE_END(handle_vint)
 
 SYM_CODE_START(except_vec_cex)
+	UNWIND_HINT_UNDEFINED
 	b	cache_parity_error
 SYM_CODE_END(except_vec_cex)
 
@@ -65,8 +66,8 @@ SYM_CODE_END(except_vec_cex)
 	.endm
 
 	.macro	BUILD_HANDLER exception handler prep
-	.align	5
 	SYM_CODE_START(handle_\exception)
+	UNWIND_HINT_UNDEFINED
 	666:
 	BACKUP_T0T1
 	SAVE_ALL
@@ -94,6 +95,7 @@ SYM_CODE_END(except_vec_cex)
 	BUILD_HANDLER reserved reserved none	/* others */
 
 SYM_CODE_START(handle_sys)
+	UNWIND_HINT_UNDEFINED
 	la_abs	t0, handle_syscall
 	jr	t0
 SYM_CODE_END(handle_sys)
