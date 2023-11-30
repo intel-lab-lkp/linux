@@ -165,6 +165,8 @@ static int ses_set_page2_descriptor(struct enclosure_device *edev,
 	for (i = 0; i < ses_dev->page1_num_types; i++, type_ptr += 4) {
 		for (j = 0; j < type_ptr[1]; j++) {
 			desc_ptr += 4;
+			if (desc_ptr - ses_dev->page2 + 4 > ses_dev->page2_len)
+				break;
 			if (type_ptr[0] != ENCLOSURE_COMPONENT_DEVICE &&
 			    type_ptr[0] != ENCLOSURE_COMPONENT_ARRAY_DEVICE)
 				continue;
@@ -196,6 +198,8 @@ static unsigned char *ses_get_page2_descriptor(struct enclosure_device *edev,
 	for (i = 0; i < ses_dev->page1_num_types; i++, type_ptr += 4) {
 		for (j = 0; j < type_ptr[1]; j++) {
 			desc_ptr += 4;
+			if (desc_ptr - ses_dev->page2 + 4 > ses_dev->page2_len)
+				return NULL;
 			if (type_ptr[0] != ENCLOSURE_COMPONENT_DEVICE &&
 			    type_ptr[0] != ENCLOSURE_COMPONENT_ARRAY_DEVICE)
 				continue;
