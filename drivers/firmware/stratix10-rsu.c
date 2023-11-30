@@ -235,7 +235,9 @@ static void rsu_dcmf_version_callback(struct stratix10_svc_client *client,
 		priv->dcmf_version.dcmf1 = FIELD_GET(RSU_DCMF1_MASK, *value1);
 		priv->dcmf_version.dcmf2 = FIELD_GET(RSU_DCMF2_MASK, *value2);
 		priv->dcmf_version.dcmf3 = FIELD_GET(RSU_DCMF3_MASK, *value2);
-	} else
+	} else if (data->status == BIT(SVC_STATUS_NO_SUPPORT))
+		dev_warn(client->dev, "Secure FW doesn't support DCMF version.");
+	else
 		dev_err(client->dev, "failed to get DCMF version\n");
 
 	complete(&priv->completion);
@@ -264,7 +266,9 @@ static void rsu_dcmf_status_callback(struct stratix10_svc_client *client,
 						    *value);
 		priv->dcmf_status.dcmf3 = FIELD_GET(RSU_DCMF3_STATUS_MASK,
 						    *value);
-	} else
+	} else if (data->status == BIT(SVC_STATUS_NO_SUPPORT))
+		dev_warn(client->dev, "Secure FW doesn't support DCMF status.");
+	else
 		dev_err(client->dev, "failed to get DCMF status\n");
 
 	complete(&priv->completion);
