@@ -718,11 +718,13 @@ static void on_stop_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 {
 	if (ssif_bmc->state == SSIF_READY ||
 	    ssif_bmc->state == SSIF_START ||
-	    ssif_bmc->state == SSIF_SMBUS_CMD ||
-	    ssif_bmc->state == SSIF_ABORTING) {
+	    ssif_bmc->state == SSIF_SMBUS_CMD) {
 		dev_warn(&ssif_bmc->client->dev,
 			 "Warn: %s unexpected SLAVE STOP in state=%s\n",
 			 __func__, state_to_string(ssif_bmc->state));
+		ssif_bmc->state = SSIF_READY;
+
+	} else if (ssif_bmc->state == SSIF_ABORTING) {
 		ssif_bmc->state = SSIF_READY;
 
 	} else if (ssif_bmc->state == SSIF_REQ_RECVING) {
