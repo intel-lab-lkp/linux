@@ -903,9 +903,9 @@ out:
 	return newfg;
 }
 
-static struct zspage *get_zspage(struct page *page)
+static struct zspage *get_zspage(struct zsdesc *zsdesc)
 {
-	struct zspage *zspage = (struct zspage *)page_private(page);
+	struct zspage *zspage = zsdesc->zspage;
 
 	BUG_ON(zspage->magic != ZSPAGE_MAGIC);
 	return zspage;
@@ -913,7 +913,7 @@ static struct zspage *get_zspage(struct page *page)
 
 static __maybe_unused struct page *get_next_page(struct page *page)
 {
-	struct zspage *zspage = get_zspage(page);
+	struct zspage *zspage = get_zspage(page_zsdesc(page));
 
 	if (unlikely(ZsHugePage(zspage)))
 		return NULL;
@@ -923,7 +923,7 @@ static __maybe_unused struct page *get_next_page(struct page *page)
 
 static __maybe_unused struct zsdesc *get_next_zsdesc(struct zsdesc *zsdesc)
 {
-	struct zspage *zspage = get_zspage(zsdesc_page(zsdesc));
+	struct zspage *zspage = get_zspage(zsdesc);
 
 	if (unlikely(ZsHugePage(zspage)))
 		return NULL;
@@ -976,7 +976,7 @@ static inline bool obj_allocated(struct zsdesc *zsdesc, void *obj,
 				 unsigned long *phandle)
 {
 	unsigned long handle;
-	struct zspage *zspage = get_zspage(zsdesc_page(zsdesc));
+	struct zspage *zspage = get_zspage(zsdesc);
 
 	if (unlikely(ZsHugePage(zspage))) {
 		VM_BUG_ON_PAGE(!is_first_zsdesc(zsdesc), zsdesc_page(zsdesc));
@@ -1381,7 +1381,7 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 	spin_lock(&pool->lock);
 	obj = handle_to_obj(handle);
 	obj_to_location(obj, &zsdesc, &obj_idx);
-	zspage = get_zspage(zsdesc_page(zsdesc));
+	zspage = get_zspage(zsdesc);
 
 	/*
 	 * migration cannot move any zpages in this zspage. Here, pool->lock
@@ -1431,7 +1431,7 @@ void zs_unmap_object(struct zs_pool *pool, unsigned long handle)
 
 	obj = handle_to_obj(handle);
 	obj_to_location(obj, &zsdesc, &obj_idx);
-	zspage = get_zspage(zsdesc_page(zsdesc));
+	zspage = get_zspage(zsdesc);
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
 
@@ -1595,7 +1595,7 @@ static void obj_free(int class_size, unsigned long obj)
 
 	obj_to_location(obj, &f_zsdesc, &f_objidx);
 	f_offset = offset_in_page(class_size * f_objidx);
-	zspage = get_zspage(zsdesc_page(f_zsdesc));
+	zspage = get_zspage(f_zsdesc);
 
 	vaddr = zsdesc_kmap_atomic(f_zsdesc);
 	link = (struct link_free *)(vaddr + f_offset);
@@ -1629,7 +1629,7 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	spin_lock(&pool->lock);
 	obj = handle_to_obj(handle);
 	obj_to_zsdesc(obj, &f_zsdesc);
-	zspage = get_zspage(zsdesc_page(f_zsdesc));
+	zspage = get_zspage(f_zsdesc);
 	class = zspage_class(pool, zspage);
 
 	class_stat_dec(class, ZS_OBJS_INUSE, 1);
@@ -1956,7 +1956,7 @@ static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 	 */
 	VM_BUG_ON_PAGE(zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
-	zspage = get_zspage(zsdesc_page(zsdesc));
+	zspage = get_zspage(zsdesc);
 	pool = zspage->pool;
 	spin_lock(&pool->lock);
 	inc_zspage_isolation(zspage);
@@ -1991,7 +1991,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	VM_BUG_ON_PAGE(!zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
 	/* The page is locked, so this pointer must remain valid */
-	zspage = get_zspage(zsdesc_page(zsdesc));
+	zspage = get_zspage(zsdesc);
 	pool = zspage->pool;
 
 	/*
@@ -2056,7 +2056,7 @@ static void zs_page_putback(struct page *page)
 
 	VM_BUG_ON_PAGE(!zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
-	zspage = get_zspage(zsdesc_page(zsdesc));
+	zspage = get_zspage(zsdesc);
 	pool = zspage->pool;
 	spin_lock(&pool->lock);
 	dec_zspage_isolation(zspage);
