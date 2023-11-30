@@ -327,6 +327,48 @@ static inline void *zsdesc_kmap_atomic(struct zsdesc *zsdesc)
 	return kmap_atomic(zsdesc_page(zsdesc));
 }
 
+static inline void zsdesc_set_zspage(struct zsdesc *zsdesc,
+				     struct zspage *zspage)
+{
+	zsdesc->zspage = zspage;
+}
+
+static inline void zsdesc_set_first(struct zsdesc *zsdesc)
+{
+	SetPagePrivate(zsdesc_page(zsdesc));
+}
+
+static const struct movable_operations zsmalloc_mops;
+
+static inline void zsdesc_set_movable(struct zsdesc *zsdesc)
+{
+	__SetPageMovable(zsdesc_page(zsdesc), &zsmalloc_mops);
+}
+
+static inline void zsdesc_inc_zone_page_state(struct zsdesc *zsdesc)
+{
+	inc_zone_page_state(zsdesc_page(zsdesc), NR_ZSPAGES);
+}
+
+static inline void zsdesc_dec_zone_page_state(struct zsdesc *zsdesc)
+{
+	dec_zone_page_state(zsdesc_page(zsdesc), NR_ZSPAGES);
+}
+
+static inline struct zsdesc *alloc_zsdesc(gfp_t gfp)
+{
+	struct page *page = alloc_page(gfp);
+
+	return page_zsdesc(page);
+}
+
+static inline void free_zsdesc(struct zsdesc *zsdesc)
+{
+	struct page *page = zsdesc_page(zsdesc);
+
+	__free_page(page);
+}
+
 struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
@@ -1051,35 +1093,35 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 }
 
 static void create_page_chain(struct size_class *class, struct zspage *zspage,
-				struct page *pages[])
+				struct zsdesc *zsdescs[])
 {
 	int i;
-	struct page *page;
-	struct page *prev_page = NULL;
-	int nr_pages = class->pages_per_zspage;
+	struct zsdesc *zsdesc;
+	struct zsdesc *prev_zsdesc = NULL;
+	int nr_zsdescs = class->pages_per_zspage;
 
 	/*
 	 * Allocate individual pages and link them together as:
-	 * 1. all pages are linked together using page->index
-	 * 2. each sub-page point to zspage using page->private
+	 * 1. all pages are linked together using zsdesc->next
+	 * 2. each sub-page point to zspage using zsdesc->zspage
 	 *
-	 * we set PG_private to identify the first page (i.e. no other sub-page
+	 * we set PG_private to identify the first zsdesc (i.e. no other zsdesc
 	 * has this flag set).
 	 */
-	for (i = 0; i < nr_pages; i++) {
-		page = pages[i];
-		set_page_private(page, (unsigned long)zspage);
-		page->index = 0;
+	for (i = 0; i < nr_zsdescs; i++) {
+		zsdesc = zsdescs[i];
+		zsdesc_set_zspage(zsdesc, zspage);
+		zsdesc->next = NULL;
 		if (i == 0) {
-			zspage->first_zsdesc = page_zsdesc(page);
-			SetPagePrivate(page);
+			zspage->first_zsdesc = zsdesc;
+			zsdesc_set_first(zsdesc);
 			if (unlikely(class->objs_per_zspage == 1 &&
 					class->pages_per_zspage == 1))
 				SetZsHugePage(zspage);
 		} else {
-			prev_page->index = (unsigned long)page;
+			prev_zsdesc->next = zsdesc;
 		}
-		prev_page = page;
+		prev_zsdesc = zsdesc;
 	}
 }
 
@@ -1091,7 +1133,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 					gfp_t gfp)
 {
 	int i;
-	struct page *pages[ZS_MAX_PAGES_PER_ZSPAGE];
+	struct zsdesc *zsdescs[ZS_MAX_PAGES_PER_ZSPAGE];
 	struct zspage *zspage = cache_alloc_zspage(pool, gfp);
 
 	if (!zspage)
@@ -1101,23 +1143,23 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	migrate_lock_init(zspage);
 
 	for (i = 0; i < class->pages_per_zspage; i++) {
-		struct page *page;
+		struct zsdesc *zsdesc;
 
-		page = alloc_page(gfp);
-		if (!page) {
+		zsdesc = alloc_zsdesc(gfp);
+		if (!zsdesc) {
 			while (--i >= 0) {
-				dec_zone_page_state(pages[i], NR_ZSPAGES);
-				__free_page(pages[i]);
+				zsdesc_dec_zone_page_state(zsdescs[i]);
+				free_zsdesc(zsdescs[i]);
 			}
 			cache_free_zspage(pool, zspage);
 			return NULL;
 		}
 
-		inc_zone_page_state(page, NR_ZSPAGES);
-		pages[i] = page;
+		zsdesc_inc_zone_page_state(zsdesc);
+		zsdescs[i] = zsdesc;
 	}
 
-	create_page_chain(class, zspage, pages);
+	create_page_chain(class, zspage, zsdescs);
 	init_zspage(class, zspage);
 	zspage->pool = pool;
 
@@ -1860,29 +1902,29 @@ static void dec_zspage_isolation(struct zspage *zspage)
 	zspage->isolated--;
 }
 
-static const struct movable_operations zsmalloc_mops;
-
 static void replace_sub_page(struct size_class *class, struct zspage *zspage,
-				struct page *newpage, struct page *oldpage)
+				struct zsdesc *new_zsdesc, struct zsdesc *old_zsdesc)
 {
-	struct page *page;
-	struct page *pages[ZS_MAX_PAGES_PER_ZSPAGE] = {NULL, };
+	struct zsdesc *zsdesc;
+	struct zsdesc *zsdescs[ZS_MAX_PAGES_PER_ZSPAGE] = {NULL, };
+	unsigned int first_obj_offset;
 	int idx = 0;
 
-	page = get_first_page(zspage);
+	zsdesc = get_first_zsdesc(zspage);
 	do {
-		if (page == oldpage)
-			pages[idx] = newpage;
+		if (zsdesc == old_zsdesc)
+			zsdescs[idx] = new_zsdesc;
 		else
-			pages[idx] = page;
+			zsdescs[idx] = zsdesc;
 		idx++;
-	} while ((page = get_next_page(page)) != NULL);
+	} while ((zsdesc = get_next_zsdesc(zsdesc)) != NULL);
 
-	create_page_chain(class, zspage, pages);
-	set_first_obj_offset(newpage, get_first_obj_offset(oldpage));
+	create_page_chain(class, zspage, zsdescs);
+	first_obj_offset = get_first_obj_offset(zsdesc_page(old_zsdesc));
+	set_first_obj_offset(zsdesc_page(new_zsdesc), first_obj_offset);
 	if (unlikely(ZsHugePage(zspage)))
-		newpage->index = oldpage->index;
-	__SetPageMovable(newpage, &zsmalloc_mops);
+		new_zsdesc->handle = old_zsdesc->handle;
+	zsdesc_set_movable(new_zsdesc);
 }
 
 static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
@@ -1965,7 +2007,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	}
 	kunmap_atomic(s_addr);
 
-	replace_sub_page(class, zspage, newpage, page);
+	replace_sub_page(class, zspage, page_zsdesc(newpage), page_zsdesc(page));
 	dec_zspage_isolation(zspage);
 	/*
 	 * Since we complete the data copy and set up new zspage structure,
