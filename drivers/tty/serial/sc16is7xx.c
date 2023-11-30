@@ -20,6 +20,7 @@
 #include <linux/regmap.h>
 #include <linux/serial_core.h>
 #include <linux/serial.h>
+#include <linux/stringify.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/spi/spi.h>
@@ -27,6 +28,7 @@
 #include <uapi/linux/sched/types.h>
 
 #define SC16IS7XX_NAME			"sc16is7xx"
+#define SC16IS7XX_PORT_NAME_SUFFIX	"port" /* Used for regmap name. */
 #define SC16IS7XX_MAX_DEVS		8
 #define SC16IS7XX_MAX_PORTS		2 /* Maximum number of UART ports per IC. */
 
@@ -1700,9 +1702,9 @@ static struct regmap_config regcfg = {
 
 static const char *sc16is7xx_regmap_name(unsigned int port_id)
 {
-	static char buf[6];
+	static char buf[sizeof(SC16IS7XX_PORT_NAME_SUFFIX __stringify(SC16IS7XX_MAX_PORTS))];
 
-	snprintf(buf, sizeof(buf), "port%u", port_id);
+	snprintf(buf, sizeof(buf), SC16IS7XX_PORT_NAME_SUFFIX "%u", port_id);
 
 	return buf;
 }
