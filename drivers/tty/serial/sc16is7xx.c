@@ -1700,7 +1700,7 @@ static const char *sc16is7xx_regmap_name(unsigned int port_id)
 {
 	static char buf[6];
 
-	snprintf(buf, sizeof(buf), "port%d", port_id);
+	snprintf(buf, sizeof(buf), "port%u", port_id);
 
 	return buf;
 }
