@@ -502,6 +502,11 @@ static __maybe_unused int is_first_page(struct page *page)
 	return PagePrivate(page);
 }
 
+static __maybe_unused int is_first_zsdesc(struct zsdesc *zsdesc)
+{
+	return PagePrivate(zsdesc_page(zsdesc));
+}
+
 /* Protected by pool->lock */
 static inline int get_zspage_inuse(struct zspage *zspage)
 {
@@ -514,12 +519,20 @@ static inline void mod_zspage_inuse(struct zspage *zspage, int val)
 	zspage->inuse += val;
 }
 
-static inline struct page *get_first_page(struct zspage *zspage)
+static __maybe_unused inline struct page *get_first_page(struct zspage *zspage)
 {
 	struct page *first_page = zsdesc_page(zspage->first_zsdesc);
 
 	VM_BUG_ON_PAGE(!is_first_page(first_page), first_page);
 	return first_page;
+}
+
+static __maybe_unused struct zsdesc *get_first_zsdesc(struct zspage *zspage)
+{
+	struct zsdesc *first_zsdesc = zspage->first_zsdesc;
+
+	VM_BUG_ON_PAGE(!is_first_zsdesc(first_zsdesc), zsdesc_page(first_zsdesc));
+	return first_zsdesc;
 }
 
 static inline unsigned int get_first_obj_offset(struct page *page)
@@ -810,7 +823,7 @@ static struct zspage *get_zspage(struct page *page)
 	return zspage;
 }
 
-static struct page *get_next_page(struct page *page)
+static __maybe_unused struct page *get_next_page(struct page *page)
 {
 	struct zspage *zspage = get_zspage(page);
 
@@ -818,6 +831,16 @@ static struct page *get_next_page(struct page *page)
 		return NULL;
 
 	return (struct page *)page->index;
+}
+
+static __maybe_unused struct zsdesc *get_next_zsdesc(struct zsdesc *zsdesc)
+{
+	struct zspage *zspage = get_zspage(zsdesc_page(zsdesc));
+
+	if (unlikely(ZsHugePage(zspage)))
+		return NULL;
+
+	return zsdesc->next;
 }
 
 /**
