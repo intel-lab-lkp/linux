@@ -17,6 +17,7 @@
 #include <linux/pci.h>
 #include <rdma/ib_verbs.h>
 #include <net/genetlink.h>
+#include <net/smc.h>
 
 #include "smc.h"
 #include "smc_ib.h"
@@ -355,7 +356,7 @@ struct smc_link_group {
 						/* max links can be added in lgr */
 		};
 		struct { /* SMC-D */
-			u64			peer_gid;
+			struct smcd_gid		peer_gid;
 						/* Peer GID (remote) */
 			struct smcd_dev		*smcd;
 						/* ISM device for VLAN reg. */
@@ -417,7 +418,7 @@ struct smc_init_info {
 	u32			ib_clcqpn;
 	struct smc_init_info_smcrv2 smcrv2;
 	/* SMC-D */
-	u64			ism_peer_gid[SMC_MAX_ISM_DEVS + 1];
+	struct smcd_gid		ism_peer_gid[SMC_MAX_ISM_DEVS + 1];
 	struct smcd_dev		*ism_dev[SMC_MAX_ISM_DEVS + 1];
 	u16			ism_chid[SMC_MAX_ISM_DEVS + 1];
 	u8			ism_offered_cnt; /* # of ISM devices offered */
@@ -545,7 +546,7 @@ void smc_lgr_hold(struct smc_link_group *lgr);
 void smc_lgr_put(struct smc_link_group *lgr);
 void smcr_port_add(struct smc_ib_device *smcibdev, u8 ibport);
 void smcr_port_err(struct smc_ib_device *smcibdev, u8 ibport);
-void smc_smcd_terminate(struct smcd_dev *dev, u64 peer_gid,
+void smc_smcd_terminate(struct smcd_dev *dev, struct smcd_gid *peer_gid,
 			unsigned short vlan);
 void smc_smcd_terminate_all(struct smcd_dev *dev);
 void smc_smcr_terminate_all(struct smc_ib_device *smcibdev);
