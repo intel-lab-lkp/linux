@@ -2125,13 +2125,13 @@ static void init_deferred_free(struct zs_pool *pool)
 
 static void SetZsPageMovable(struct zs_pool *pool, struct zspage *zspage)
 {
-	struct page *page = get_first_page(zspage);
+	struct zsdesc *zsdesc = get_first_zsdesc(zspage);
 
 	do {
-		WARN_ON(!trylock_page(page));
-		__SetPageMovable(page, &zsmalloc_mops);
-		unlock_page(page);
-	} while ((page = get_next_page(page)) != NULL);
+		WARN_ON(!trylock_zsdesc(zsdesc));
+		zsdesc_set_movable(zsdesc);
+		unlock_zsdesc(zsdesc);
+	} while ((zsdesc = get_next_zsdesc(zsdesc)) != NULL);
 }
 #else
 static inline void zs_flush_migration(struct zs_pool *pool) { }
