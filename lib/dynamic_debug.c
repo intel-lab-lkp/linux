@@ -80,14 +80,24 @@ module_param(verbose, int, 0644);
 MODULE_PARM_DESC(verbose, " dynamic_debug/control processing "
 		 "( 0 = off (default), 1 = module add/rm, 2 = >control summary, 3 = parsing, 4 = per-site changes)");
 
+static inline struct dd_ctrl *get_ctrl(struct _ddebug *desc)
+{
+	return &desc->ctrl;
+}
+
+static inline void set_ctrl(struct _ddebug *desc, struct dd_ctrl *ctrl)
+{
+	desc->ctrl = *ctrl;
+}
+
 static inline unsigned int get_flags(const struct _ddebug *desc)
 {
 	return desc->ctrl.flags;
 }
 
-static inline void set_flags(struct _ddebug *desc, unsigned int val)
+static inline unsigned int get_trace_dst(const struct _ddebug *desc)
 {
-	desc->ctrl.flags = val;
+	return desc->ctrl.trace_dst;
 }
 
 /* Return the path relative to source root */
@@ -190,8 +200,8 @@ static int ddebug_change(const struct ddebug_query *query,
 {
 	int i;
 	struct ddebug_table *dt;
-	unsigned int newflags;
 	unsigned int nfound = 0;
+	struct dd_ctrl nctrl = {0};
 	struct flagsbuf fbuf, nbuf;
 	struct ddebug_class_map *map = NULL;
 	int __outvar valid_class;
@@ -257,14 +267,14 @@ static int ddebug_change(const struct ddebug_query *query,
 
 			nfound++;
 
-			newflags = (get_flags(dp) & modifiers->mask) | modifiers->flags;
-			if (newflags == get_flags(dp))
+			nctrl.flags = (get_flags(dp) & modifiers->mask) | modifiers->flags;
+			if (!memcmp(&nctrl, get_ctrl(dp), sizeof(struct dd_ctrl)))
 				continue;
 #ifdef CONFIG_JUMP_LABEL
 			if (get_flags(dp) & _DPRINTK_FLAGS_ENABLED) {
-				if (!(newflags & _DPRINTK_FLAGS_ENABLED))
+				if (!(nctrl.flags & _DPRINTK_FLAGS_ENABLED))
 					static_branch_disable(&dp->key.dd_key_true);
-			} else if (newflags & _DPRINTK_FLAGS_ENABLED) {
+			} else if (nctrl.flags & _DPRINTK_FLAGS_ENABLED) {
 				static_branch_enable(&dp->key.dd_key_true);
 			}
 #endif
@@ -272,8 +282,8 @@ static int ddebug_change(const struct ddebug_query *query,
 				  trim_prefix(dp->filename), dp->lineno,
 				  dt->mod_name, dp->function,
 				  ddebug_describe_flags(get_flags(dp), &fbuf),
-				  ddebug_describe_flags(newflags, &nbuf));
-			set_flags(dp, newflags);
+				  ddebug_describe_flags(nctrl.flags, &nbuf));
+			set_ctrl(dp, &nctrl);
 		}
 	}
 	mutex_unlock(&ddebug_lock);
