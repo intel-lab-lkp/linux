@@ -508,6 +508,7 @@ enum cxl_opcode {
 	CXL_MBOX_OP_GET_LOG		= 0x0401,
 	CXL_MBOX_OP_GET_SUPPORTED_FEATURES	= 0x0500,
 	CXL_MBOX_OP_GET_FEATURE		= 0x0501,
+	CXL_MBOX_OP_SET_FEATURE		= 0x0502,
 	CXL_MBOX_OP_IDENTIFY		= 0x4000,
 	CXL_MBOX_OP_GET_PARTITION_INFO	= 0x4100,
 	CXL_MBOX_OP_SET_PARTITION_INFO	= 0x4101,
@@ -817,6 +818,31 @@ struct cxl_mbox_get_feat_in {
 	u8 selection;
 }  __packed;
 
+/* Set Feature CXL 3.0 Spec 8.2.9.6.3 */
+/*
+ * Set Feature input payload
+ * CXL rev 3.0 section 8.2.9.6.3; Table 8-81
+ */
+/* Set Feature : Payload in flags */
+#define CXL_SET_FEAT_FLAG_DATA_TRANSFER_MASK	GENMASK(2, 0)
+enum cxl_set_feat_flag_data_transfer {
+	CXL_SET_FEAT_FLAG_FULL_DATA_TRANSFER = 0x0,
+	CXL_SET_FEAT_FLAG_INITIATE_DATA_TRANSFER = 0x1,
+	CXL_SET_FEAT_FLAG_CONTINUE_DATA_TRANSFER = 0x2,
+	CXL_SET_FEAT_FLAG_FINISH_DATA_TRANSFER = 0x3,
+	CXL_SET_FEAT_FLAG_ABORT_DATA_TRANSFER = 0x4,
+	CXL_SET_FEAT_FLAG_DATA_TRANSFER_MAX
+};
+#define CXL_SET_FEAT_FLAG_MOD_VALUE_SAVED_ACROSS_RESET	BIT(3)
+
+struct cxl_mbox_set_feat_in {
+	uuid_t uuid;
+	__le32 flags;
+	__le16 offset;
+	u8 version;
+	u8 rsvd[9];
+}  __packed;
+
 /* Get Poison List  CXL 3.0 Spec 8.2.9.8.4.1 */
 struct cxl_mbox_poison_in {
 	__le64 offset;
@@ -949,6 +975,7 @@ int cxl_get_supported_features(struct cxl_memdev_state *mds,
 			       void *feats_out);
 int cxl_get_feature(struct cxl_memdev_state *mds,
 		    struct cxl_mbox_get_feat_in *pi, void *feat_out);
+int cxl_set_feature(struct cxl_memdev_state *mds, void *feat_in, size_t size);
 int cxl_poison_state_init(struct cxl_memdev_state *mds);
 int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 		       struct cxl_region *cxlr);
