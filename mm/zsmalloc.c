@@ -585,12 +585,7 @@ static DEFINE_PER_CPU(struct mapping_area, zs_map_area) = {
 	.lock	= INIT_LOCAL_LOCK(lock),
 };
 
-static __maybe_unused int is_first_page(struct page *page)
-{
-	return PagePrivate(page);
-}
-
-static __maybe_unused int is_first_zsdesc(struct zsdesc *zsdesc)
+static int is_first_zsdesc(struct zsdesc *zsdesc)
 {
 	return PagePrivate(zsdesc_page(zsdesc));
 }
@@ -607,15 +602,7 @@ static inline void mod_zspage_inuse(struct zspage *zspage, int val)
 	zspage->inuse += val;
 }
 
-static __maybe_unused inline struct page *get_first_page(struct zspage *zspage)
-{
-	struct page *first_page = zsdesc_page(zspage->first_zsdesc);
-
-	VM_BUG_ON_PAGE(!is_first_page(first_page), first_page);
-	return first_page;
-}
-
-static __maybe_unused struct zsdesc *get_first_zsdesc(struct zspage *zspage)
+static struct zsdesc *get_first_zsdesc(struct zspage *zspage)
 {
 	struct zsdesc *first_zsdesc = zspage->first_zsdesc;
 
@@ -911,17 +898,7 @@ static struct zspage *get_zspage(struct zsdesc *zsdesc)
 	return zspage;
 }
 
-static __maybe_unused struct page *get_next_page(struct page *page)
-{
-	struct zspage *zspage = get_zspage(page_zsdesc(page));
-
-	if (unlikely(ZsHugePage(zspage)))
-		return NULL;
-
-	return (struct page *)page->index;
-}
-
-static __maybe_unused struct zsdesc *get_next_zsdesc(struct zsdesc *zsdesc)
+static struct zsdesc *get_next_zsdesc(struct zsdesc *zsdesc)
 {
 	struct zspage *zspage = get_zspage(zsdesc);
 
