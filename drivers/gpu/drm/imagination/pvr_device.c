@@ -105,12 +105,12 @@ static int pvr_device_clk_init(struct pvr_device *pvr_dev)
 
 	sys_clk = devm_clk_get_optional(drm_dev->dev, "sys");
 	if (IS_ERR(sys_clk))
-		return dev_err_probe(drm_dev->dev, PTR_ERR(core_clk),
+		return dev_err_probe(drm_dev->dev, PTR_ERR(sys_clk),
 				     "failed to get sys clock\n");
 
 	mem_clk = devm_clk_get_optional(drm_dev->dev, "mem");
 	if (IS_ERR(mem_clk))
-		return dev_err_probe(drm_dev->dev, PTR_ERR(core_clk),
+		return dev_err_probe(drm_dev->dev, PTR_ERR(mem_clk),
 				     "failed to get mem clock\n");
 
 	pvr_dev->core_clk = core_clk;
@@ -286,8 +286,8 @@ pvr_request_firmware(struct pvr_device *pvr_dev)
 
 	filename = pvr_build_firmware_filename(pvr_dev, "powervr/rogue",
 					       PVR_FW_VERSION_MAJOR);
-	if (IS_ERR(filename))
-		return PTR_ERR(filename);
+	if (!filename)
+		return -ENOMEM;
 
 	/*
 	 * This function takes a copy of &filename, meaning we can free our
