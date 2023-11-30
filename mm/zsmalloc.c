@@ -307,6 +307,21 @@ static inline void zsdesc_put(struct zsdesc *zsdesc)
 	folio_put(folio);
 }
 
+static inline int trylock_zsdesc(struct zsdesc *zsdesc)
+{
+	return trylock_page(zsdesc_page(zsdesc));
+}
+
+static inline void unlock_zsdesc(struct zsdesc *zsdesc)
+{
+	unlock_page(zsdesc_page(zsdesc));
+}
+
+static inline void wait_on_zsdesc_locked(struct zsdesc *zsdesc)
+{
+	wait_on_page_locked(zsdesc_page(zsdesc));
+}
+
 struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
@@ -915,11 +930,11 @@ static void reset_page(struct page *page)
 
 static int trylock_zspage(struct zspage *zspage)
 {
-	struct page *cursor, *fail;
+	struct zsdesc *cursor, *fail;
 
-	for (cursor = get_first_page(zspage); cursor != NULL; cursor =
-					get_next_page(cursor)) {
-		if (!trylock_page(cursor)) {
+	for (cursor = get_first_zsdesc(zspage); cursor != NULL; cursor =
+					get_next_zsdesc(cursor)) {
+		if (!trylock_zsdesc(cursor)) {
 			fail = cursor;
 			goto unlock;
 		}
@@ -927,9 +942,9 @@ static int trylock_zspage(struct zspage *zspage)
 
 	return 1;
 unlock:
-	for (cursor = get_first_page(zspage); cursor != fail; cursor =
-					get_next_page(cursor))
-		unlock_page(cursor);
+	for (cursor = get_first_zsdesc(zspage); cursor != fail; cursor =
+					get_next_zsdesc(cursor))
+		unlock_zsdesc(cursor);
 
 	return 0;
 }
@@ -1759,7 +1774,7 @@ static int putback_zspage(struct size_class *class, struct zspage *zspage)
  */
 static void lock_zspage(struct zspage *zspage)
 {
-	struct page *curr_page, *page;
+	struct zsdesc *curr_zsdesc, *zsdesc;
 
 	/*
 	 * Pages we haven't locked yet can be migrated off the list while we're
@@ -1771,24 +1786,24 @@ static void lock_zspage(struct zspage *zspage)
 	 */
 	while (1) {
 		migrate_read_lock(zspage);
-		page = get_first_page(zspage);
-		if (trylock_page(page))
+		zsdesc = get_first_zsdesc(zspage);
+		if (trylock_zsdesc(zsdesc))
 			break;
-		get_page(page);
+		zsdesc_get(zsdesc);
 		migrate_read_unlock(zspage);
-		wait_on_page_locked(page);
-		put_page(page);
+		wait_on_zsdesc_locked(zsdesc);
+		zsdesc_put(zsdesc);
 	}
 
-	curr_page = page;
-	while ((page = get_next_page(curr_page))) {
-		if (trylock_page(page)) {
-			curr_page = page;
+	curr_zsdesc = zsdesc;
+	while ((zsdesc = get_next_zsdesc(curr_zsdesc))) {
+		if (trylock_zsdesc(zsdesc)) {
+			curr_zsdesc = zsdesc;
 		} else {
-			get_page(page);
+			zsdesc_get(zsdesc);
 			migrate_read_unlock(zspage);
-			wait_on_page_locked(page);
-			put_page(page);
+			wait_on_zsdesc_locked(zsdesc);
+			zsdesc_put(zsdesc);
 			migrate_read_lock(zspage);
 		}
 	}
