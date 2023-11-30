@@ -1750,14 +1750,14 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 	unsigned long used_obj, free_obj;
 	unsigned long handle;
 	int obj_idx = 0;
-	struct page *s_page = get_first_page(src_zspage);
+	struct zsdesc *s_zsdesc = get_first_zsdesc(src_zspage);
 	struct size_class *class = pool->size_class[src_zspage->class];
 
 	while (1) {
-		handle = find_alloced_obj(class, page_zsdesc(s_page), &obj_idx);
+		handle = find_alloced_obj(class, s_zsdesc, &obj_idx);
 		if (!handle) {
-			s_page = get_next_page(s_page);
-			if (!s_page)
+			s_zsdesc = get_next_zsdesc(s_zsdesc);
+			if (!s_zsdesc)
 				break;
 			obj_idx = 0;
 			continue;
