@@ -49,6 +49,9 @@ properties:
       - const: core
       - const: reg
 
+  power-domains:
+    maxItems: 1
+
 unevaluatedProperties: false
 
 required:
