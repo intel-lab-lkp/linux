@@ -15,46 +15,37 @@
 DECLARE_EVENT_CLASS(dyndbg_template,
 
 	TP_PROTO(const struct _ddebug *desc, const struct device *dev,
-		 const char *msg, size_t len),
+		 const char *msg),
 
-	TP_ARGS(desc, dev, msg, len),
+	TP_ARGS(desc, dev, msg),
 
 	TP_STRUCT__entry(
-		__dynamic_array(char, s, len+1)
+		__string(s, msg)
 	    ),
 
 	TP_fast_assign(
-		/*
-		 * Each trace entry is printed in a new line.
-		 * If the msg finishes with '\n', cut it off
-		 * to avoid blank lines in the trace.
-		 */
-		if (len > 0 && (msg[len-1] == '\n'))
-			len -= 1;
-
-		memcpy(__get_str(s), msg, len);
-		__get_str(s)[len] = 0;
+		__assign_str(s, msg);
 	    ),
 
-	TP_printk("%s", __get_str(s))
+	TP_printk("%s", __get_str_strip_nl(s))
 );
 
 /* captures pr_debug() callsites */
 DEFINE_EVENT(dyndbg_template, prdbg,
 
 	TP_PROTO(const struct _ddebug *desc, const struct device *dev,
-		 const char *msg, size_t len),
+		 const char *msg),
 
-	TP_ARGS(desc, dev, msg, len)
+	TP_ARGS(desc, dev, msg)
 );
 
 /* captures dev_dbg() callsites */
 DEFINE_EVENT(dyndbg_template, devdbg,
 
 	TP_PROTO(const struct _ddebug *desc, const struct device *dev,
-		 const char *msg, size_t len),
+		 const char *msg),
 
-	TP_ARGS(desc, dev, msg, len)
+	TP_ARGS(desc, dev, msg)
 );
 
 #endif /* _TRACE_DYNDBG_H */

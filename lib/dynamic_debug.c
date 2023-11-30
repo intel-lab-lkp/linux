@@ -886,7 +886,6 @@ static void ddebug_trace(struct _ddebug *desc, const struct device *dev,
 {
 	struct ddebug_trace_buf *buf;
 	int bufidx;
-	int len;
 
 	preempt_disable_notrace();
 
@@ -900,12 +899,12 @@ static void ddebug_trace(struct _ddebug *desc, const struct device *dev,
 
 	buf = this_cpu_ptr(ddebug_trace_bufs.bufs) + bufidx;
 
-	len = vscnprintf(buf->buf, sizeof(buf->buf), fmt, args);
+	vscnprintf(buf->buf, sizeof(buf->buf), fmt, args);
 
 	if (!dev)
-		trace_prdbg(desc, NULL, buf->buf, len);
+		trace_prdbg(desc, NULL, buf->buf);
 	else
-		trace_devdbg(desc, dev, buf->buf, len);
+		trace_devdbg(desc, dev, buf->buf);
 
 out:
 	/* As above. */
