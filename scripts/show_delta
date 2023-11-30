@@ -13,7 +13,7 @@ import sys
 import string
 
 def usage():
-	print ("""usage: show_delta [<options>] <filename>
+	print("""usage: show_delta [<options>] <filename>
 
 This program parses the output from a set of printk message lines which
 have time data prefixed because the CONFIG_PRINTK_TIME option is set, or
@@ -46,7 +46,7 @@ def get_time(line):
 		raise ValueError
 
 	# split on closing bracket
-	(time_str, rest) = string.split(line[1:],']',1)
+	(time_str, rest) = string.split(line[1:], ']', 1)
 	time = string.atof(time_str)
 
 	#print "time=", time
@@ -82,7 +82,7 @@ def main():
 	filein = ""
 	for arg in sys.argv[1:]:
 		if arg=="-b":
-			base_str = sys.argv[sys.argv.index("-b")+1]
+			base_str = sys.argv[sys.argv.index("-b") + 1]
 		elif arg=="-h":
 			usage()
 		else:
@@ -111,19 +111,19 @@ def main():
 					(time, rest) = get_time(line)
 				except:
 					continue
-				if string.find(rest, base_str)==1:
+				if string.find(rest, base_str) == 1:
 					base_time = time
 					found = 1
 					# stop at first match
 					break
 			if not found:
-				print ('Couldn\'t find line matching base pattern "%s"' % base_str)
+				print('Couldn\'t find line matching base pattern "%s"' % base_str)
 				sys.exit(1)
 	else:
 		base_time = 0.0
 
 	for line in lines:
-		print (convert_line(line, base_time),)
+		print(convert_line(line, base_time),)
 
 if __name__ == "__main__":
 	main()
