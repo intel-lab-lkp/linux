@@ -539,6 +539,7 @@ static struct virtio_transport virtio_transport = {
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
 
 		.read_skb = virtio_transport_read_skb,
+		.notify_set_rcvlowat      = virtio_transport_notify_set_rcvlowat
 	},
 
 	.send_pkt = virtio_transport_send_pkt,
