@@ -49,8 +49,8 @@ static const struct ds2433_config config_f23 = {
 
 struct w1_f23_data {
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	u8	*memory;
-	u32	validcrc;
+	u8		*memory;
+	unsigned long	*validcrc;
 #endif
 	const struct ds2433_config *cfg;
 };
@@ -77,11 +77,11 @@ static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_f23_data *data,
 	u8	wrbuf[3];
 	int	off = block * W1_PAGE_SIZE;
 
-	if (data->validcrc & (1 << block))
+	if (test_bit(block, data->validcrc))
 		return 0;
 
 	if (w1_reset_select_slave(sl)) {
-		data->validcrc = 0;
+		bitmap_zero(data->validcrc, data->cfg->page_count);
 		return -EIO;
 	}
 
@@ -93,7 +93,7 @@ static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_f23_data *data,
 
 	/* cache the block if the CRC is valid */
 	if (crc16(CRC16_INIT, &data->memory[off], W1_PAGE_SIZE) == CRC16_VALID)
-		data->validcrc |= (1 << block);
+		set_bit(block, data->validcrc);
 
 	return 0;
 }
@@ -208,7 +208,7 @@ static int w1_f23_write(struct w1_slave *sl, int addr, int len, const u8 *data)
 	/* Reset the bus to wake up the EEPROM (this may not be needed) */
 	w1_reset_bus(sl->master);
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	f23->validcrc &= ~(1 << (addr >> W1_PAGE_BITS));
+	clear_bit(addr >> W1_PAGE_BITS, f23->validcrc);
 #endif
 	return 0;
 }
@@ -296,6 +296,13 @@ static int w1_f23_add_slave(struct w1_slave *sl)
 		kfree(data);
 		return -ENOMEM;
 	}
+	data->validcrc = bitmap_zalloc(data->cfg->page_count,
+				       GFP_KERNEL);
+	if (!data->validcrc) {
+		kfree(data->memory);
+		kfree(data);
+		return -ENOMEM;
+	}
 #endif /* CONFIG_W1_SLAVE_DS2433_CRC */
 	sl->family_data = data;
 
@@ -307,6 +314,7 @@ static void w1_f23_remove_slave(struct w1_slave *sl)
 	struct w1_f23_data *data = sl->family_data;
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
 	kfree(data->memory);
+	bitmap_free(data->validcrc);
 #endif /* CONFIG_W1_SLAVE_DS2433_CRC */
 	kfree(data);
 	sl->family_data = NULL;
