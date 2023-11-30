@@ -610,14 +610,14 @@ static struct zsdesc *get_first_zsdesc(struct zspage *zspage)
 	return first_zsdesc;
 }
 
-static inline unsigned int get_first_obj_offset(struct page *page)
+static inline unsigned int get_first_obj_offset(struct zsdesc *zsdesc)
 {
-	return page->page_type;
+	return zsdesc->first_obj_offset;
 }
 
-static inline void set_first_obj_offset(struct page *page, unsigned int offset)
+static inline void set_first_obj_offset(struct zsdesc *zsdesc, unsigned int offset)
 {
-	page->page_type = offset;
+	zsdesc->first_obj_offset = offset;
 }
 
 static inline unsigned int get_freeobj(struct zspage *zspage)
@@ -1053,7 +1053,7 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 		struct link_free *link;
 		void *vaddr;
 
-		set_first_obj_offset(zsdesc_page(zsdesc), off);
+		set_first_obj_offset(zsdesc, off);
 
 		vaddr = zsdesc_kmap_atomic(zsdesc);
 		link = (struct link_free *)vaddr + off / sizeof(*link);
@@ -1703,7 +1703,7 @@ static unsigned long find_alloced_obj(struct size_class *class,
 	unsigned long handle = 0;
 	void *addr = zsdesc_kmap_atomic(zsdesc);
 
-	offset = get_first_obj_offset(zsdesc_page(zsdesc));
+	offset = get_first_obj_offset(zsdesc);
 	offset += class->size * index;
 
 	while (offset < PAGE_SIZE) {
@@ -1914,8 +1914,8 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 	} while ((zsdesc = get_next_zsdesc(zsdesc)) != NULL);
 
 	create_page_chain(class, zspage, zsdescs);
-	first_obj_offset = get_first_obj_offset(zsdesc_page(old_zsdesc));
-	set_first_obj_offset(zsdesc_page(new_zsdesc), first_obj_offset);
+	first_obj_offset = get_first_obj_offset(old_zsdesc);
+	set_first_obj_offset(new_zsdesc, first_obj_offset);
 	if (unlikely(ZsHugePage(zspage)))
 		new_zsdesc->handle = old_zsdesc->handle;
 	zsdesc_set_movable(new_zsdesc);
@@ -1981,7 +1981,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	/* the migrate_write_lock protects zpage access via zs_map_object */
 	migrate_write_lock(zspage);
 
-	offset = get_first_obj_offset(zsdesc_page(zsdesc));
+	offset = get_first_obj_offset(zsdesc);
 	s_addr = zsdesc_kmap_atomic(zsdesc);
 
 	/*
