@@ -250,6 +250,21 @@ static inline pte_t pud_pte(pud_t pud)
 	return __pte(pud_val(pud));
 }
 #endif
+
+static inline bool pmd_user_accessible_page(pmd_t pmd)
+{
+	pte_t pte = pmd_pte(pmd);
+
+	return pte_user_accessible_page(pte);
+}
+
+static inline bool pud_user_accessible_page(pud_t pud)
+{
+	pte_t pte = pud_pte(pud);
+
+	return pte_user_accessible_page(pte);
+}
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_POWERPC_PGTABLE_H */
