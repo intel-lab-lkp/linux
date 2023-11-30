@@ -26,6 +26,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/of_gpio.h>
 
 #define MV64XXX_I2C_ADDR_ADDR(val)			((val & 0x7f) << 1)
 #define MV64XXX_I2C_BAUD_DIV_N(val)			(val & 0x7)
@@ -104,6 +105,7 @@ enum {
 	MV64XXX_I2C_ACTION_RCV_DATA,
 	MV64XXX_I2C_ACTION_RCV_DATA_STOP,
 	MV64XXX_I2C_ACTION_SEND_STOP,
+	MV64XXX_I2C_ACTION_UNLOCK_BUS
 };
 
 struct mv64xxx_i2c_regs {
@@ -150,6 +152,11 @@ struct mv64xxx_i2c_data {
 	bool			clk_n_base_0;
 	struct i2c_bus_recovery_info	rinfo;
 	bool			atomic;
+	/* I2C mpp states & gpios needed for arbitration lost recovery */
+	int			scl_gpio, sda_gpio;
+	bool			arb_lost_recovery_ena;
+	struct pinctrl_state *i2c_mpp_state;
+	struct pinctrl_state *i2c_gpio_state;
 };
 
 static struct mv64xxx_i2c_regs mv64xxx_i2c_regs_mv64xxx = {
@@ -318,6 +325,11 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 		drv_data->state = MV64XXX_I2C_STATE_IDLE;
 		break;
 
+	case MV64XXX_I2C_STATUS_MAST_LOST_ARB: /*0x38*/
+		drv_data->action = MV64XXX_I2C_ACTION_UNLOCK_BUS;
+		drv_data->state = MV64XXX_I2C_STATE_IDLE;
+		break;
+
 	case MV64XXX_I2C_STATUS_MAST_WR_ADDR_NO_ACK: /* 0x20 */
 	case MV64XXX_I2C_STATUS_MAST_WR_NO_ACK: /* 30 */
 	case MV64XXX_I2C_STATUS_MAST_RD_ADDR_NO_ACK: /* 48 */
@@ -356,6 +368,9 @@ static void mv64xxx_i2c_send_start(struct mv64xxx_i2c_data *drv_data)
 static void
 mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 {
+	struct pinctrl *pc;
+	int i, ret;
+
 	switch(drv_data->action) {
 	case MV64XXX_I2C_ACTION_SEND_RESTART:
 		/* We should only get here if we have further messages */
@@ -408,6 +423,48 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 		writel(drv_data->cntl_bits,
 			drv_data->reg_base + drv_data->reg_offsets.control);
 		break;
+
+	case MV64XXX_I2C_ACTION_UNLOCK_BUS:
+
+		if (!drv_data->arb_lost_recovery_ena)
+			break;
+
+		pc = devm_pinctrl_get(drv_data->adapter.dev.parent);
+		if (IS_ERR(pc))
+			break;
+
+		/* Change i2c MPPs state to act as GPIOs: */
+		if (pinctrl_select_state(pc, drv_data->i2c_gpio_state) >= 0) {
+			ret = devm_gpio_request_one(drv_data->adapter.dev.parent,
+					 drv_data->scl_gpio, GPIOF_DIR_OUT, NULL);
+			ret |= devm_gpio_request_one(drv_data->adapter.dev.parent,
+					 drv_data->sda_gpio, GPIOF_DIR_OUT, NULL);
+			if (!ret) {
+				/* Toggle i2c scl (serial clock) 10 times.
+				 * This allows the slave that occupies
+				 * the bus to transmit its remaining data,
+				 * so it can release the i2c bus:
+				 */
+				for (i = 0; i < 10; i++) {
+					gpio_set_value(drv_data->scl_gpio, 1);
+					mdelay(1);
+					gpio_set_value(drv_data->scl_gpio, 0);
+				};
+
+				devm_gpiod_put(drv_data->adapter.dev.parent,
+					gpio_to_desc(drv_data->scl_gpio));
+				devm_gpiod_put(drv_data->adapter.dev.parent,
+					gpio_to_desc(drv_data->sda_gpio));
+			}
+
+			/* restore i2c pin state to MPPs: */
+			pinctrl_select_state(pc, drv_data->i2c_mpp_state);
+		}
+
+		/* Trigger controller soft reset: */
+		writel(0x1, drv_data->reg_base + drv_data->reg_offsets.soft_reset);
+		mdelay(1);
+		fallthrough;
 
 	case MV64XXX_I2C_ACTION_RCV_DATA_STOP:
 		drv_data->msg->buf[drv_data->byte_posn++] =
@@ -985,6 +1042,7 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 {
 	struct mv64xxx_i2c_data		*drv_data;
 	struct mv64xxx_i2c_pdata	*pdata = dev_get_platdata(&pd->dev);
+	struct pinctrl *pc;
 	int	rc;
 
 	if ((!pdata && !pd->dev.of_node))
@@ -1039,6 +1097,29 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 	rc = mv64xxx_i2c_init_recovery_info(drv_data, &pd->dev);
 	if (rc == -EPROBE_DEFER)
 		return rc;
+
+	drv_data->arb_lost_recovery_ena = false;
+	pc = devm_pinctrl_get(&pd->dev);
+	if (!IS_ERR(pc)) {
+		drv_data->i2c_mpp_state =
+			pinctrl_lookup_state(pc, "default");
+		drv_data->i2c_gpio_state =
+			pinctrl_lookup_state(pc, "gpio");
+		drv_data->scl_gpio =
+			of_get_named_gpio(pd->dev.of_node, "scl-gpios", 0);
+		drv_data->sda_gpio =
+			of_get_named_gpio(pd->dev.of_node, "sda-gpios", 0);
+
+		if (!IS_ERR(drv_data->i2c_gpio_state) &&
+			!IS_ERR(drv_data->i2c_mpp_state) &&
+			gpio_is_valid(drv_data->scl_gpio) &&
+			gpio_is_valid(drv_data->sda_gpio))
+			drv_data->arb_lost_recovery_ena = true;
+	}
+
+	if (!drv_data->arb_lost_recovery_ena)
+		dev_info(&pd->dev,
+			"mv64xxx: missing arbitration-lost recovery definitions in dts file\n");
 
 	drv_data->adapter.dev.parent = &pd->dev;
 	drv_data->adapter.algo = &mv64xxx_i2c_algo;
