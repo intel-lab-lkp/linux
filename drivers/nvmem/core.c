@@ -746,7 +746,9 @@ static int nvmem_add_cells_from_legacy_of(struct nvmem_device *nvmem)
 	return nvmem_add_cells_from_dt(nvmem, nvmem->dev.of_node);
 }
 
-static int nvmem_add_cells_from_fixed_layout(struct nvmem_device *nvmem)
+static int nvmem_add_cells_from_fixed_layout(struct device *dev,
+					     struct nvmem_device *nvmem,
+					     struct nvmem_layout *layout)
 {
 	struct device_node *layout_np;
 	int err = 0;
@@ -755,8 +757,7 @@ static int nvmem_add_cells_from_fixed_layout(struct nvmem_device *nvmem)
 	if (!layout_np)
 		return 0;
 
-	if (of_device_is_compatible(layout_np, "fixed-layout"))
-		err = nvmem_add_cells_from_dt(nvmem, layout_np);
+	err = nvmem_add_cells_from_dt(nvmem, layout_np);
 
 	of_node_put(layout_np);
 
@@ -1002,10 +1003,6 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 		if (rval)
 			goto err_remove_cells;
 	}
-
-	rval = nvmem_add_cells_from_fixed_layout(nvmem);
-	if (rval)
-		goto err_remove_cells;
 
 	rval = nvmem_add_cells_from_layout(nvmem);
 	if (rval)
@@ -2125,6 +2122,19 @@ const char *nvmem_dev_name(struct nvmem_device *nvmem)
 	return dev_name(&nvmem->dev);
 }
 EXPORT_SYMBOL_GPL(nvmem_dev_name);
+
+static const struct of_device_id fixed_layout_of_match_table[] = {
+	{ .compatible = "fixed-layout", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, fixed_layout_of_match_table);
+
+static struct nvmem_layout fixed_layout = {
+	.name = "NVMEM fixed layout",
+	.of_match_table = fixed_layout_of_match_table,
+	.add_cells = nvmem_add_cells_from_fixed_layout,
+};
+module_nvmem_layout_driver(fixed_layout);
 
 static int __init nvmem_init(void)
 {
