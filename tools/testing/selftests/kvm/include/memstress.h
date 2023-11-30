@@ -13,7 +13,9 @@
 #include "kvm_util.h"
 
 /* Default guest test virtual memory offset */
+#ifndef DEFAULT_GUEST_TEST_MEM
 #define DEFAULT_GUEST_TEST_MEM		0xc0000000
+#endif
 
 #define DEFAULT_PER_VCPU_MEM_SIZE	(1 << 30) /* 1G */
 
