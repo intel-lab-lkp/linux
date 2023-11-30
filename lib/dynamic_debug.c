@@ -36,6 +36,7 @@
 #include <linux/sched.h>
 #include <linux/device.h>
 #include <linux/netdevice.h>
+#include <linux/trace.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dyndbg.h>
@@ -73,12 +74,33 @@ struct flag_settings {
 	unsigned int mask;
 };
 
+#define DD_OPEN_CMD	"open"
+#define DD_CLOSE_CMD	"close"
+#define DD_TR_EVENT	"0"
+
+struct ddebug_trace_inst {
+	const char *name;
+	struct trace_array *arr;
+};
+
+/*
+ * TRACE_DST_MAX value is reserved for writing
+ * debug logs to trace events (prdbg, devdbg)
+ */
+struct ddebug_trace {
+	struct ddebug_trace_inst inst[TRACE_DST_MAX-1];
+	DECLARE_BITMAP(bmap, TRACE_DST_MAX-1);
+	int bmap_size;
+};
+
 static DEFINE_MUTEX(ddebug_lock);
 static LIST_HEAD(ddebug_tables);
 static int verbose;
 module_param(verbose, int, 0644);
 MODULE_PARM_DESC(verbose, " dynamic_debug/control processing "
 		 "( 0 = off (default), 1 = module add/rm, 2 = >control summary, 3 = parsing, 4 = per-site changes)");
+
+static struct ddebug_trace tr = { .bmap_size = TRACE_DST_MAX-1 };
 
 static inline struct dd_ctrl *get_ctrl(struct _ddebug *desc)
 {
@@ -169,6 +191,148 @@ static void vpr_info_dq(const struct ddebug_query *query, const char *msg)
 		  query->module ?: "",
 		  fmtlen, query->format ?: "",
 		  query->first_lineno, query->last_lineno, query->class_string);
+}
+
+static bool is_ddebug_cmd(const char *str)
+{
+	if (!strcmp(str, DD_OPEN_CMD) ||
+	    !strcmp(str, DD_CLOSE_CMD))
+		return true;
+
+	return false;
+}
+
+static bool validate_tr_name(const char *str)
+{
+	/* "0" is reserved for writing debug logs to trace events (prdbg, devdbg) */
+	if (!strcmp(str, DD_TR_EVENT))
+		return false;
+
+	/* we allow trace instance names to include ^\w+ and underscore */
+	while (*str != '\0') {
+		if (!isalnum(*str) && *str != '_')
+			return false;
+		str++;
+	}
+
+	return true;
+}
+
+static int find_tr_instance(const char *name)
+{
+	int idx;
+
+	for_each_set_bit(idx, tr.bmap, tr.bmap_size)
+		if (!strcmp(tr.inst[idx].name, name))
+			return idx;
+
+	return -ENOENT;
+}
+
+static int handle_tr_opend_cmd(const char *arg)
+{
+	struct ddebug_trace_inst *inst;
+	int idx, ret = 0;
+
+	mutex_lock(&ddebug_lock);
+
+	idx = find_first_zero_bit(tr.bmap, tr.bmap_size);
+	if (idx == tr.bmap_size) {
+		ret = -ENOSPC;
+		goto end;
+	}
+
+	if (!validate_tr_name(arg)) {
+		pr_err("invalid instance name:%s\n", arg);
+		ret = -EINVAL;
+		goto end;
+	}
+
+	if (find_tr_instance(arg) >= 0) {
+		pr_err("instance is already opened name:%s\n ", arg);
+		ret = -EEXIST;
+		goto end;
+	}
+
+	inst = &tr.inst[idx];
+	inst->name = kstrdup(arg, GFP_KERNEL);
+	if (!inst->name) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	inst->arr = trace_array_get_by_name(inst->name);
+	if (!inst->arr) {
+		ret = -EINVAL;
+		goto end;
+	}
+
+	ret = trace_array_init_printk(inst->arr);
+	if (ret) {
+		trace_array_put(inst->arr);
+		trace_array_destroy(inst->arr);
+		goto end;
+	}
+
+	set_bit(idx, tr.bmap);
+	v3pr_info("opened trace instance idx=%d, name=%s\n", idx, arg);
+end:
+	mutex_unlock(&ddebug_lock);
+	return ret;
+}
+
+static int handle_tr_close_cmd(const char *arg)
+{
+	struct ddebug_trace_inst *inst;
+	int idx, ret = 0;
+
+	mutex_lock(&ddebug_lock);
+
+	idx = find_tr_instance(arg);
+	if (idx < 0) {
+		ret = idx;
+		goto end;
+	}
+
+	inst = &tr.inst[idx];
+
+	trace_array_put(inst->arr);
+	/*
+	 * don't destroy trace instance but let user do it manually
+	 * with rmdir command at a convenient time later, if it is
+	 * destroyed here all debug logs will be lost
+	 *
+	 * trace_array_destroy(inst->arr);
+	 */
+	inst->arr = NULL;
+
+	kfree(inst->name);
+	inst->name = NULL;
+
+	clear_bit(idx, tr.bmap);
+	v3pr_info("closed trace instance idx=%d, name=%s\n", idx, arg);
+end:
+	mutex_unlock(&ddebug_lock);
+	return ret;
+}
+
+static int ddebug_parse_cmd(char *words[], int nwords)
+{
+	int ret;
+
+	if (nwords != 1)
+		return -EINVAL;
+
+	if (!strcmp(words[0], DD_OPEN_CMD))
+		ret = handle_tr_opend_cmd(words[1]);
+	else if (!strcmp(words[0], DD_CLOSE_CMD))
+		ret = handle_tr_close_cmd(words[1]);
+	else {
+		pr_err("invalid command %s\n", words[0]);
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 static struct ddebug_class_map *ddebug_find_valid_class(struct ddebug_table const *dt,
@@ -567,6 +731,11 @@ static int ddebug_exec_query(char *query_string, const char *modname)
 		pr_err("tokenize failed\n");
 		return -EINVAL;
 	}
+
+	/* check for open, close commands */
+	if (is_ddebug_cmd(words[0]))
+		return ddebug_parse_cmd(words, nwords-1);
+
 	/* check flags 1st (last arg) so query is pairs of spec,val */
 	if (ddebug_parse_flags(words[nwords-1], &modifiers)) {
 		pr_err("flags parse failed\n");
@@ -1192,6 +1361,20 @@ static struct _ddebug *ddebug_iter_next(struct ddebug_iter *iter)
 }
 
 /*
+ * Check if the iterator points to the last _ddebug object
+ * to traverse.
+ */
+static bool ddebug_iter_is_last(struct ddebug_iter *iter)
+{
+	if (iter->table == NULL)
+		return false;
+	if (iter->idx-1 < 0 &&
+	    list_is_last(&iter->table->link, &ddebug_tables))
+		return true;
+	return false;
+}
+
+/*
  * Seq_ops start method.  Called at the start of every
  * read() call from userspace.  Takes the ddebug_lock and
  * seeks the seq_file's iterator to the given position.
@@ -1280,6 +1463,16 @@ static int ddebug_proc_show(struct seq_file *m, void *p)
 			seq_printf(m, " class unknown, _id:%d", dp->class_id);
 	}
 	seq_puts(m, "\n");
+
+	if (ddebug_iter_is_last(iter) &&
+	    !bitmap_empty(tr.bmap, tr.bmap_size)) {
+		int idx;
+
+		seq_puts(m, "\n");
+		seq_puts(m, "Opened trace instances:\n");
+		for_each_set_bit(idx, tr.bmap, tr.bmap_size)
+			seq_printf(m, "%s\n", tr.inst[idx].name);
+	}
 
 	return 0;
 }
