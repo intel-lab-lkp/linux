@@ -2,7 +2,6 @@
 #ifndef _ASM_X86_IA32_H
 #define _ASM_X86_IA32_H
 
-
 #ifdef CONFIG_IA32_EMULATION
 
 #include <linux/compat.h>
@@ -83,5 +82,13 @@ static inline bool ia32_enabled(void)
 }
 
 #endif
+
+static inline bool ia32_enabled_verbose(void)
+{
+#ifdef CONFIG_IA32_EMULATION
+	pr_notice_once("32-bit emulation disabled. You can reenable with ia32_emulation=on\n");
+#endif
+	return ia32_enabled();
+}
 
 #endif /* _ASM_X86_IA32_H */
