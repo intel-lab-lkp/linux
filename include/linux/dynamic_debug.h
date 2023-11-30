@@ -186,7 +186,8 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 		.filename = __FILE__,				\
 		.format = (fmt),				\
 		.lineno = __LINE__,				\
-		.ctrl = { .flags = _DPRINTK_FLAGS_DEFAULT },	\
+		.ctrl = { .flags = _DPRINTK_FLAGS_DEFAULT,	\
+			  .trace_dst = TRACE_DST_MAX },		\
 		.class_id = cls,				\
 		_DPRINTK_KEY_INIT				\
 	};							\

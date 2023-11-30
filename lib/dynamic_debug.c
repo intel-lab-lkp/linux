@@ -81,6 +81,7 @@ struct flag_settings {
 struct ddebug_trace_inst {
 	const char *name;
 	struct trace_array *arr;
+	int use_cnt;
 };
 
 /*
@@ -274,6 +275,7 @@ static int handle_tr_opend_cmd(const char *arg)
 		goto end;
 	}
 
+	inst->use_cnt = 0;
 	set_bit(idx, tr.bmap);
 	v3pr_info("opened trace instance idx=%d, name=%s\n", idx, arg);
 end:
@@ -296,6 +298,14 @@ static int handle_tr_close_cmd(const char *arg)
 
 	inst = &tr.inst[idx];
 
+	WARN_ON(inst->use_cnt < 0);
+	if (inst->use_cnt) {
+		pr_err("trace instance is being used name=%s, use_cnt=%d\n",
+		       inst->name, inst->use_cnt);
+		ret = -EBUSY;
+		goto end;
+	}
+
 	trace_array_put(inst->arr);
 	/*
 	 * don't destroy trace instance but let user do it manually
@@ -314,6 +324,26 @@ static int handle_tr_close_cmd(const char *arg)
 end:
 	mutex_unlock(&ddebug_lock);
 	return ret;
+}
+
+static
+void update_tr_dst(const struct _ddebug *desc, const struct dd_ctrl *nctrl)
+{
+	int oflags = get_flags(desc), odst = get_trace_dst(desc);
+	int nflags = nctrl->flags, ndst = nctrl->trace_dst;
+
+	if (oflags & _DPRINTK_FLAGS_TRACE &&
+	    nflags & _DPRINTK_FLAGS_TRACE &&
+	    odst == ndst)
+		return;
+
+	if (oflags & _DPRINTK_FLAGS_TRACE &&
+	    odst != TRACE_DST_MAX)
+		tr.inst[odst].use_cnt--;
+
+	if (nflags & _DPRINTK_FLAGS_TRACE &&
+	    ndst != TRACE_DST_MAX)
+		tr.inst[ndst].use_cnt++;
 }
 
 static int ddebug_parse_cmd(char *words[], int nwords)
@@ -447,6 +477,7 @@ static int ddebug_change(const struct ddebug_query *query,
 				  dt->mod_name, dp->function,
 				  ddebug_describe_flags(get_flags(dp), &fbuf),
 				  ddebug_describe_flags(nctrl.flags, &nbuf));
+			update_tr_dst(dp, &nctrl);
 			set_ctrl(dp, &nctrl);
 		}
 	}
