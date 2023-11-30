@@ -19,6 +19,15 @@
 #undef __get_str
 #define __get_str(field) ((char *)__get_dynamic_array(field))
 
+#undef __get_str_strip_nl
+#define __get_str_strip_nl(field)					\
+	({								\
+		char *s = __get_str(field);				\
+		size_t len = strlen(s);					\
+		if (len && s[len-1] == '\n')				\
+			s[len-1] = '\0'; s;				\
+	})
+
 #undef __get_rel_dynamic_array
 #define __get_rel_dynamic_array(field)					\
 		((void *)__entry + 					\
