@@ -919,10 +919,10 @@ static void obj_to_location(unsigned long obj, struct zsdesc **zsdesc,
 	*obj_idx = (obj & OBJ_INDEX_MASK);
 }
 
-static void obj_to_page(unsigned long obj, struct page **page)
+static void obj_to_zsdesc(unsigned long obj, struct zsdesc **zsdesc)
 {
 	obj >>= OBJ_TAG_BITS;
-	*page = pfn_to_page(obj >> OBJ_INDEX_BITS);
+	*zsdesc = pfn_zsdesc(obj >> OBJ_INDEX_BITS);
 }
 
 /**
@@ -1597,7 +1597,7 @@ static void obj_free(int class_size, unsigned long obj)
 void zs_free(struct zs_pool *pool, unsigned long handle)
 {
 	struct zspage *zspage;
-	struct page *f_page;
+	struct zsdesc *f_zsdesc;
 	unsigned long obj;
 	struct size_class *class;
 	int fullness;
@@ -1611,8 +1611,8 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	 */
 	spin_lock(&pool->lock);
 	obj = handle_to_obj(handle);
-	obj_to_page(obj, &f_page);
-	zspage = get_zspage(f_page);
+	obj_to_zsdesc(obj, &f_zsdesc);
+	zspage = get_zspage(zsdesc_page(f_zsdesc));
 	class = zspage_class(pool, zspage);
 
 	class_stat_dec(class, ZS_OBJS_INUSE, 1);
