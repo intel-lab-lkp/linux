@@ -2741,6 +2741,7 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 {
 	struct inode * inode = file_inode(file);
 	struct task_struct *task;
+	const char *name = file->f_path.dentry->d_name.name;
 	void *page;
 	int rv;
 
@@ -2784,10 +2785,26 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 	if (rv < 0)
 		goto out_free;
 
-	rv = security_setprocattr(PROC_I(inode)->op.lsm,
-				  file->f_path.dentry->d_name.name, page,
-				  count);
+	rv = security_setprocattr(PROC_I(inode)->op.lsm, name, page, count);
 	mutex_unlock(&current->signal->cred_guard_mutex);
+
+	/*
+	 *  Update the inode security blob in advance if the task's security
+	 *  attribute was updated
+	 */
+	if (rv > 0 && !strcmp(name, "current")) {
+		struct pid *pid;
+		struct proc_inode *cur, *ei;
+
+		rcu_read_lock();
+		pid = get_task_pid(current, PIDTYPE_PID);
+		hlist_for_each_entry(cur, &pid->inodes, sibling_inodes)
+			ei = cur;
+		put_pid(pid);
+		pid_update_inode(current, &ei->vfs_inode);
+		rcu_read_unlock();
+	}
+
 out_free:
 	kfree(page);
 out:
