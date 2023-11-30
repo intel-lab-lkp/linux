@@ -263,16 +263,25 @@ repeat:
 	 */
 	zap_leader = 0;
 	leader = p->group_leader;
-	if (leader != p && thread_group_empty(leader)
-			&& leader->exit_state == EXIT_ZOMBIE) {
-		/*
-		 * If we were the last child thread and the leader has
-		 * exited already, and the leader's parent ignores SIGCHLD,
-		 * then we are the one who should release the leader.
-		 */
-		zap_leader = do_notify_parent(leader, leader->exit_signal);
-		if (zap_leader)
-			leader->exit_state = EXIT_DEAD;
+	if (leader != p) {
+		if (thread_group_empty(leader)
+				&& leader->exit_state == EXIT_ZOMBIE) {
+			/*
+			 * If we were the last child thread and the leader has
+			 * exited already, and the leader's parent ignores SIGCHLD,
+			 * then we are the one who should release the leader.
+			 */
+			zap_leader = do_notify_parent(leader,
+						      leader->exit_signal);
+			if (zap_leader)
+				leader->exit_state = EXIT_DEAD;
+		} else {
+			/*
+			 * wake up pidfd pollers anyway, they want to know this
+			 * thread is dying.
+			 */
+			wake_up_all(&thread_pid->wait_pidfd);
+		}
 	}
 
 	write_unlock_irq(&tasklist_lock);
