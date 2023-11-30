@@ -505,7 +505,7 @@ static void idpf_rx_post_buf_refill(struct idpf_sw_queue *refillq, u16 buf_id)
 
 	/* store the buffer ID and the SW maintained GEN bit to the refillq */
 	refillq->ring[nta] =
-		((buf_id << IDPF_RX_BI_BUFID_S) & IDPF_RX_BI_BUFID_M) |
+		FIELD_PREP(IDPF_RX_BI_BUFID_M, buf_id) |
 		(!!(test_bit(__IDPF_Q_GEN_CHK, refillq->flags)) <<
 		 IDPF_RX_BI_GEN_S);
 
@@ -1825,14 +1825,14 @@ static bool idpf_tx_clean_complq(struct idpf_queue *complq, int budget,
 		u16 gen;
 
 		/* if the descriptor isn't done, no work yet to do */
-		gen = (le16_to_cpu(tx_desc->qid_comptype_gen) &
-		      IDPF_TXD_COMPLQ_GEN_M) >> IDPF_TXD_COMPLQ_GEN_S;
+		gen = FIELD_GET(IDPF_TXD_COMPLQ_GEN_M,
+				le16_to_cpu(tx_desc->qid_comptype_gen));
 		if (test_bit(__IDPF_Q_GEN_CHK, complq->flags) != gen)
 			break;
 
 		/* Find necessary info of TX queue to clean buffers */
-		rel_tx_qid = (le16_to_cpu(tx_desc->qid_comptype_gen) &
-			 IDPF_TXD_COMPLQ_QID_M) >> IDPF_TXD_COMPLQ_QID_S;
+		rel_tx_qid = FIELD_GET(IDPF_TXD_COMPLQ_QID_M,
+				       le16_to_cpu(tx_desc->qid_comptype_gen));
 		if (rel_tx_qid >= complq->txq_grp->num_txq ||
 		    !complq->txq_grp->txqs[rel_tx_qid]) {
 			dev_err(&complq->vport->adapter->pdev->dev,
@@ -1842,9 +1842,8 @@ static bool idpf_tx_clean_complq(struct idpf_queue *complq, int budget,
 		tx_q = complq->txq_grp->txqs[rel_tx_qid];
 
 		/* Determine completion type */
-		ctype = (le16_to_cpu(tx_desc->qid_comptype_gen) &
-			IDPF_TXD_COMPLQ_COMPL_TYPE_M) >>
-			IDPF_TXD_COMPLQ_COMPL_TYPE_S;
+		ctype = FIELD_GET(IDPF_TXD_COMPLQ_COMPL_TYPE_M,
+				  le16_to_cpu(tx_desc->qid_comptype_gen));
 		switch (ctype) {
 		case IDPF_TXD_COMPLT_RE:
 			hw_head = le16_to_cpu(tx_desc->q_head_compl_tag.q_head);
@@ -1947,8 +1946,7 @@ void idpf_tx_splitq_build_ctb(union idpf_tx_flex_desc *desc,
 	desc->q.qw1.cmd_dtype =
 		cpu_to_le16(params->dtype & IDPF_FLEX_TXD_QW1_DTYPE_M);
 	desc->q.qw1.cmd_dtype |=
-		cpu_to_le16((td_cmd << IDPF_FLEX_TXD_QW1_CMD_S) &
-			    IDPF_FLEX_TXD_QW1_CMD_M);
+		cpu_to_le16(FIELD_PREP(IDPF_FLEX_TXD_QW1_CMD_M, td_cmd));
 	desc->q.qw1.buf_size = cpu_to_le16((u16)size);
 	desc->q.qw1.l2tags.l2tag1 = cpu_to_le16(params->td_tag);
 }
