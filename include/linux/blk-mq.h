@@ -503,7 +503,7 @@ struct blk_mq_tag_set {
 	unsigned int		cmd_size;
 	int			numa_node;
 	unsigned int		timeout;
-	unsigned int		flags;
+	unsigned long		flags;
 	void			*driver_data;
 
 	struct blk_mq_tags	**tags;
@@ -662,7 +662,8 @@ enum {
 	 * or shared hwqs instead of 'mq-deadline'.
 	 */
 	BLK_MQ_F_NO_SCHED_BY_DEFAULT	= 1 << 7,
-	BLK_MQ_F_ALLOC_POLICY_START_BIT = 8,
+	BLK_MQ_F_DISABLE_FAIR_TAG_SHARING = 1 << 8,
+	BLK_MQ_F_ALLOC_POLICY_START_BIT = 16,
 	BLK_MQ_F_ALLOC_POLICY_BITS = 1,
 
 	BLK_MQ_S_STOPPED	= 0,
@@ -705,6 +706,7 @@ int blk_mq_alloc_sq_tag_set(struct blk_mq_tag_set *set,
 		const struct blk_mq_ops *ops, unsigned int queue_depth,
 		unsigned int set_flags);
 void blk_mq_free_tag_set(struct blk_mq_tag_set *set);
+void blk_mq_update_fair_sharing(struct blk_mq_tag_set *set, bool enable);
 
 void blk_mq_free_request(struct request *rq);
 int blk_rq_poll(struct request *rq, struct io_comp_batch *iob,
