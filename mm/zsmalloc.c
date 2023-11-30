@@ -317,7 +317,7 @@ struct zspage {
 	};
 	unsigned int inuse;
 	unsigned int freeobj;
-	struct page *first_page;
+	struct zsdesc *first_zsdesc;
 	struct list_head list; /* fullness list */
 	struct zs_pool *pool;
 	rwlock_t lock;
@@ -516,7 +516,7 @@ static inline void mod_zspage_inuse(struct zspage *zspage, int val)
 
 static inline struct page *get_first_page(struct zspage *zspage)
 {
-	struct page *first_page = zspage->first_page;
+	struct page *first_page = zsdesc_page(zspage->first_zsdesc);
 
 	VM_BUG_ON_PAGE(!is_first_page(first_page), first_page);
 	return first_page;
@@ -1028,7 +1028,7 @@ static void create_page_chain(struct size_class *class, struct zspage *zspage,
 		set_page_private(page, (unsigned long)zspage);
 		page->index = 0;
 		if (i == 0) {
-			zspage->first_page = page;
+			zspage->first_zsdesc = page_zsdesc(page);
 			SetPagePrivate(page);
 			if (unlikely(class->objs_per_zspage == 1 &&
 					class->pages_per_zspage == 1))
@@ -1402,7 +1402,7 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 		link->handle = handle;
 	else
 		/* record handle to page->index */
-		zspage->first_page->index = handle;
+		zspage->first_zsdesc->handle = handle;
 
 	kunmap_atomic(vaddr);
 	mod_zspage_inuse(zspage, 1);
