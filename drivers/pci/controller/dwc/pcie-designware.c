@@ -1074,4 +1074,8 @@ void dw_pcie_setup(struct dw_pcie *pci)
 		break;
 	}
 	dw_pcie_writel_dbi(pci, PCIE_LINK_WIDTH_SPEED_CONTROL, val);
+
+	val = dwc_pcie_rasdes_debugfs_init(pci);
+	if (val)
+		dev_err(pci->dev, "Couldn't create debugfs files\n");
 }
