@@ -656,9 +656,8 @@ struct cfs_rq {
 	u64			throttled_clock_pelt_time;
 	u64			throttled_clock_self;
 	u64			throttled_clock_self_time;
-	int			throttled;
-	int			throttle_count;
 	int                     in_throttle_limbo;
+	int			throttle_count;
 	/* Temp storage for updating the counts during unthrottling */
 	unsigned int            unthrottled_h_nr_running;
 	unsigned int            unthrottled_idle_h_nr_running;
