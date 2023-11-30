@@ -139,6 +139,7 @@ extern void unregister_memory_block_under_nodes(struct memory_block *mem_blk);
 extern int register_memory_node_under_compute_node(unsigned int mem_nid,
 						   unsigned int cpu_nid,
 						   unsigned access);
+extern int get_node_adistance_offset(int nid);
 #else
 static inline void node_dev_init(void)
 {
@@ -165,6 +166,10 @@ static inline int unregister_cpu_under_node(unsigned int cpu, unsigned int nid)
 }
 static inline void unregister_memory_block_under_nodes(struct memory_block *mem_blk)
 {
+}
+static inline int get_node_adistance_offset(int nid)
+{
+	return 0;
 }
 #endif
 

@@ -23,6 +23,8 @@ struct memory_tier {
 	struct device dev;
 	/* All the nodes that are part of all the lower memory tiers. */
 	nodemask_t lower_tier_mask;
+	/* Nodes linked to this tier*/
+	nodemask_t nodes;
 };
 
 struct demotion_nodes {
@@ -120,13 +122,7 @@ static inline struct memory_tier *to_memory_tier(struct device *device)
 
 static __always_inline nodemask_t get_memtier_nodemask(struct memory_tier *memtier)
 {
-	nodemask_t nodes = NODE_MASK_NONE;
-	struct memory_dev_type *memtype;
-
-	list_for_each_entry(memtype, &memtier->memory_types, tier_sibling)
-		nodes_or(nodes, nodes, memtype->nodes);
-
-	return nodes;
+	return memtier->nodes;
 }
 
 static void memory_tier_device_release(struct device *dev)
@@ -181,33 +177,22 @@ int get_target_memtier_adistance(int node, int adistance_offset)
 	return node_adistance;
 }
 
-static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memtype)
+static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memtype,
+						   int tier_adistance)
 {
 	int ret;
 	bool found_slot = false;
 	struct memory_tier *memtier, *new_memtier;
-	int adistance = memtype->adistance;
+	int adistance;
 	unsigned int memtier_adistance_chunk_size = MEMTIER_CHUNK_SIZE;
 
 	lockdep_assert_held_once(&memory_tier_lock);
 
-	adistance = round_down(adistance, memtier_adistance_chunk_size);
-	/*
-	 * If the memtype is already part of a memory tier,
-	 * just return that.
-	 */
-	if (!list_empty(&memtype->tier_sibling)) {
-		list_for_each_entry(memtier, &memory_tiers, list) {
-			if (adistance == memtier->adistance_start)
-				return memtier;
-		}
-		WARN_ON(1);
-		return ERR_PTR(-EINVAL);
-	}
+	adistance = round_down(tier_adistance, memtier_adistance_chunk_size);
 
 	list_for_each_entry(memtier, &memory_tiers, list) {
 		if (adistance == memtier->adistance_start) {
-			goto link_memtype;
+			return memtier;
 		} else if (adistance < memtier->adistance_start) {
 			found_slot = true;
 			break;
@@ -238,9 +223,6 @@ static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memty
 		return ERR_PTR(ret);
 	}
 	memtier = new_memtier;
-
-link_memtype:
-	list_add(&memtype->tier_sibling, &memtier->memory_types);
 	return memtier;
 }
 
@@ -499,7 +481,7 @@ static struct memory_tier *set_node_memory_tier(int node)
 	struct memory_tier *memtier;
 	struct memory_dev_type *memtype;
 	pg_data_t *pgdat = NODE_DATA(node);
-
+	int tier_adistance;
 
 	lockdep_assert_held_once(&memory_tier_lock);
 
@@ -510,9 +492,13 @@ static struct memory_tier *set_node_memory_tier(int node)
 
 	memtype = node_memory_types[node].memtype;
 	node_set(node, memtype->nodes);
-	memtier = find_create_memory_tier(memtype);
+	tier_adistance = get_node_adistance_offset(node);
+	tier_adistance = memtype->adistance + tier_adistance;
+
+	memtier = find_create_memory_tier(memtype, tier_adistance);
 	if (!IS_ERR(memtier))
 		rcu_assign_pointer(pgdat->memtier, memtier);
+	node_set(node, memtier->nodes);
 	return memtier;
 }
 
@@ -548,11 +534,9 @@ static bool clear_node_memory_tier(int node)
 		synchronize_rcu();
 		memtype = node_memory_types[node].memtype;
 		node_clear(node, memtype->nodes);
-		if (nodes_empty(memtype->nodes)) {
-			list_del_init(&memtype->tier_sibling);
-			if (list_empty(&memtier->memory_types))
-				destroy_memory_tier(memtier);
-		}
+		node_clear(node, memtier->nodes);
+		if (nodes_empty(memtier->nodes))
+			destroy_memory_tier(memtier);
 		cleared = true;
 	}
 	return cleared;
@@ -575,7 +559,6 @@ struct memory_dev_type *alloc_memory_type(int adistance)
 		return ERR_PTR(-ENOMEM);
 
 	memtype->adistance = adistance;
-	INIT_LIST_HEAD(&memtype->tier_sibling);
 	memtype->nodes  = NODE_MASK_NONE;
 	kref_init(&memtype->kref);
 	return memtype;
@@ -614,6 +597,20 @@ void clear_node_memory_type(int node, struct memory_dev_type *memtype)
 	mutex_unlock(&memory_tier_lock);
 }
 EXPORT_SYMBOL_GPL(clear_node_memory_type);
+
+void node_memtier_change(int node)
+{
+	struct memory_tier *memtier;
+
+	mutex_lock(&memory_tier_lock);
+	if (clear_node_memory_tier(node))
+		establish_demotion_targets();
+	memtier = set_node_memory_tier(node);
+	if (!IS_ERR(memtier))
+		establish_demotion_targets();
+	mutex_unlock(&memory_tier_lock);
+}
+
 
 static void dump_hmem_attrs(struct node_hmem_attrs *attrs, const char *prefix)
 {

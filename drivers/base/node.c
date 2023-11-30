@@ -608,9 +608,15 @@ static ssize_t adistance_offset_store(struct device *dev,
 		return -EINVAL;
 
 	node_devices[nid]->adistance_offset = value;
+	node_memtier_change(nid);
 	return size;
 }
 static DEVICE_ATTR_RW(adistance_offset);
+
+int get_node_adistance_offset(int nid)
+{
+	return node_devices[nid]->adistance_offset;
+}
 
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
