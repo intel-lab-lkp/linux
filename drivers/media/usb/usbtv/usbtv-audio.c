@@ -172,6 +172,7 @@ static void usbtv_audio_urb_received(struct urb *urb)
 static int usbtv_audio_start(struct usbtv *chip)
 {
 	unsigned int pipe;
+	int err;
 	static const u16 setup[][2] = {
 		/* These seem to enable the device. */
 		{ USBTV_BASE + 0x0008, 0x0001 },
@@ -216,7 +217,15 @@ static int usbtv_audio_start(struct usbtv *chip)
 	usbtv_set_regs(chip, setup, ARRAY_SIZE(setup));
 
 	usb_clear_halt(chip->udev, pipe);
-	usb_submit_urb(chip->snd_bulk_urb, GFP_ATOMIC);
+	err = usb_submit_urb(chip->snd_bulk_urb, GFP_ATOMIC);
+	if (err) {
+		dev_err(&chip->udev->dev,
+			"usb_submit_urb failed: %d\n", err);
+		kfree(chip->snd_bulk_urb->transfer_buffer);
+		usb_free_urb(chip->snd_bulk_urb);
+		chip->snd_bulk_urb = NULL;
+		return err;
+	}
 
 	return 0;
 
