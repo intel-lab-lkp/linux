@@ -783,26 +783,6 @@ static int starfive_aes_cbc_decrypt(struct skcipher_request *req)
 	return starfive_aes_crypt(req, STARFIVE_AES_MODE_CBC);
 }
 
-static int starfive_aes_cfb_encrypt(struct skcipher_request *req)
-{
-	return starfive_aes_crypt(req, STARFIVE_AES_MODE_CFB | FLG_ENCRYPT);
-}
-
-static int starfive_aes_cfb_decrypt(struct skcipher_request *req)
-{
-	return starfive_aes_crypt(req, STARFIVE_AES_MODE_CFB);
-}
-
-static int starfive_aes_ofb_encrypt(struct skcipher_request *req)
-{
-	return starfive_aes_crypt(req, STARFIVE_AES_MODE_OFB | FLG_ENCRYPT);
-}
-
-static int starfive_aes_ofb_decrypt(struct skcipher_request *req)
-{
-	return starfive_aes_crypt(req, STARFIVE_AES_MODE_OFB);
-}
-
 static int starfive_aes_ctr_encrypt(struct skcipher_request *req)
 {
 	return starfive_aes_crypt(req, STARFIVE_AES_MODE_CTR | FLG_ENCRYPT);
@@ -898,48 +878,6 @@ static struct skcipher_engine_alg skcipher_algs[] = {
 	.base.base = {
 		.cra_name		= "ctr(aes)",
 		.cra_driver_name	= "starfive-ctr-aes",
-		.cra_priority		= 200,
-		.cra_flags		= CRYPTO_ALG_ASYNC,
-		.cra_blocksize		= 1,
-		.cra_ctxsize		= sizeof(struct starfive_cryp_ctx),
-		.cra_alignmask		= 0xf,
-		.cra_module		= THIS_MODULE,
-	},
-	.op = {
-		.do_one_request = starfive_aes_do_one_req,
-	},
-}, {
-	.base.init			= starfive_aes_init_tfm,
-	.base.setkey			= starfive_aes_setkey,
-	.base.encrypt			= starfive_aes_cfb_encrypt,
-	.base.decrypt			= starfive_aes_cfb_decrypt,
-	.base.min_keysize		= AES_MIN_KEY_SIZE,
-	.base.max_keysize		= AES_MAX_KEY_SIZE,
-	.base.ivsize			= AES_BLOCK_SIZE,
-	.base.base = {
-		.cra_name		= "cfb(aes)",
-		.cra_driver_name	= "starfive-cfb-aes",
-		.cra_priority		= 200,
-		.cra_flags		= CRYPTO_ALG_ASYNC,
-		.cra_blocksize		= 1,
-		.cra_ctxsize		= sizeof(struct starfive_cryp_ctx),
-		.cra_alignmask		= 0xf,
-		.cra_module		= THIS_MODULE,
-	},
-	.op = {
-		.do_one_request = starfive_aes_do_one_req,
-	},
-}, {
-	.base.init			= starfive_aes_init_tfm,
-	.base.setkey			= starfive_aes_setkey,
-	.base.encrypt			= starfive_aes_ofb_encrypt,
-	.base.decrypt			= starfive_aes_ofb_decrypt,
-	.base.min_keysize		= AES_MIN_KEY_SIZE,
-	.base.max_keysize		= AES_MAX_KEY_SIZE,
-	.base.ivsize			= AES_BLOCK_SIZE,
-	.base.base = {
-		.cra_name		= "ofb(aes)",
-		.cra_driver_name	= "starfive-ofb-aes",
 		.cra_priority		= 200,
 		.cra_flags		= CRYPTO_ALG_ASYNC,
 		.cra_blocksize		= 1,
