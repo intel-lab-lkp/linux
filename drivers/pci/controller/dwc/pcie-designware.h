@@ -222,6 +222,8 @@
 
 #define PCIE_RAS_DES_EVENT_COUNTER_DATA		0xc
 
+#define DW_PCIE_RAS_DES_CAP			0x2
+
 /*
  * The default address offset between dbi_base and atu_base. Root controller
  * drivers are not required to initialize atu_base if the offset matches this
@@ -406,6 +408,7 @@ struct dw_pcie {
 	struct reset_control_bulk_data	core_rsts[DW_PCIE_NUM_CORE_RSTS];
 	struct gpio_desc		*pe_rst;
 	bool			suspended;
+	void			*dump_info;
 };
 
 #define to_dw_pcie_from_pp(port) container_of((port), struct dw_pcie, pp)
@@ -643,4 +646,18 @@ dw_pcie_ep_get_func_from_ep(struct dw_pcie_ep *ep, u8 func_no)
 	return NULL;
 }
 #endif
+
+#ifdef CONFIG_PCIE_DW_DEBUGFS
+int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci);
+void dwc_pcie_rasdes_debugfs_deinit(struct dw_pcie *pci);
+#else
+static inline int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci)
+{
+	return 0;
+}
+static inline void dwc_pcie_rasdes_debugfs_deinit(struct dw_pcie *pci)
+{
+}
+#endif
+
 #endif /* _PCIE_DESIGNWARE_H */
