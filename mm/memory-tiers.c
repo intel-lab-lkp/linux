@@ -167,6 +167,20 @@ static const struct attribute_group *memtier_dev_groups[] = {
 	NULL
 };
 
+int get_target_memtier_adistance(int node, int adistance_offset)
+{
+	struct memory_dev_type *memtype;
+	int node_adistance;
+
+	memtype = node_memory_types[node].memtype;
+	/*
+	 * Calculate the targeted memtier abstract distance from
+	 * memtype adistance and node adistance offset.
+	 */
+	node_adistance = memtype->adistance + adistance_offset;
+	return node_adistance;
+}
+
 static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memtype)
 {
 	int ret;
