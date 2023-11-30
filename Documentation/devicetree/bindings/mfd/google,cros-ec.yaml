@@ -75,6 +75,9 @@ properties:
   interrupts:
     maxItems: 1
 
+  interrupts-extended:
+    maxItems: 1
+
   reset-gpios:
     maxItems: 1
 
@@ -199,9 +202,13 @@ allOf:
                 - google,cros-ec-rpmsg
                 - google,cros-ec-uart
     then:
+      oneOf:
+        - required:
+            - interrupts
+        - required:
+            - interrupts-extended
       required:
         - reg
-        - interrupts
 
   - if:
       properties:
