@@ -11,23 +11,6 @@
  * Released under the terms of GNU General Public License Version 2.0
  */
 
-/*
- * Following is how we use various fields and flags of underlying
- * struct page(s) to form a zspage.
- *
- * Usage of struct page fields:
- *	page->private: points to zspage
- *	page->index: links together all component pages of a zspage
- *		For the huge page, this is always 0, so we use this field
- *		to store handle.
- *	page->page_type: first object offset in a subpage of zspage
- *
- * Usage of struct page flags:
- *	PG_private: identifies the first component page
- *	PG_owner_priv_1: identifies the huge component page
- *
- */
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 /*
@@ -240,6 +223,56 @@ struct zs_pool {
 	spinlock_t lock;
 	atomic_t compaction_in_progress;
 };
+
+/*
+ * struct zsdesc - memory descriptor for zsmalloc memory
+ *
+ * This struct overlays struct page for now. Do not modify without a
+ * good understanding of the issues.
+ *
+ * Usage of struct page flags on zsdesc:
+ *	PG_private: identifies the first component zsdesc
+ */
+struct zsdesc {
+	unsigned long __page_flags;
+
+	/*
+	 * Although not used by zsmalloc, this field is used by
+	 * non-LRU movable page migration code. Leave it unused.
+	 */
+	struct list_head __page_lru;
+
+	/* Always points to zsmalloc_mops with PAGE_MAPPING_MOVABLE set */
+	struct movable_operations *mops;
+
+	union {
+		/* linked list of all zsdescs in a zspage */
+		struct zsdesc *next;
+		/* for huge zspages */
+		unsigned long handle;
+	};
+
+	struct zspage *zspage;
+	unsigned int first_obj_offset;
+	unsigned int __page_refcount;
+#ifdef CONFIG_MEMCG
+	unsigned long __page_memcg_data;
+#endif
+};
+
+#define ZSDESC_MATCH(pg, zs) \
+	static_assert(offsetof(struct page, pg) == offsetof(struct zsdesc, zs))
+
+ZSDESC_MATCH(flags, __page_flags);
+ZSDESC_MATCH(lru, __page_lru);
+ZSDESC_MATCH(mapping, mops);
+ZSDESC_MATCH(index, next);
+ZSDESC_MATCH(index, handle);
+ZSDESC_MATCH(private, zspage);
+ZSDESC_MATCH(page_type, first_obj_offset);
+ZSDESC_MATCH(_refcount, __page_refcount);
+#undef ZSDESC_MATCH
+static_assert(sizeof(struct zsdesc) <= sizeof(struct page));
 
 struct zspage {
 	struct {
