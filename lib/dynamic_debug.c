@@ -101,6 +101,9 @@ struct ddebug_trace {
 	struct ddebug_trace_inst inst[TRACE_DST_MAX-1];
 	DECLARE_BITMAP(bmap, TRACE_DST_MAX-1);
 	int bmap_size;
+#define DST_NOT_SET (-1)
+#define DST_NOT_SET_STR "not set"
+	int default_dst;
 };
 
 static DEFINE_MUTEX(ddebug_lock);
@@ -110,7 +113,8 @@ module_param(verbose, int, 0644);
 MODULE_PARM_DESC(verbose, " dynamic_debug/control processing "
 		 "( 0 = off (default), 1 = module add/rm, 2 = >control summary, 3 = parsing, 4 = per-site changes)");
 
-static struct ddebug_trace tr = { .bmap_size = TRACE_DST_MAX-1 };
+static struct ddebug_trace tr = { .bmap_size = TRACE_DST_MAX-1,
+				  .default_dst = DST_NOT_SET, };
 
 static inline struct dd_ctrl *get_ctrl(struct _ddebug *desc)
 {
@@ -132,6 +136,11 @@ static inline unsigned int get_trace_dst(const struct _ddebug *desc)
 	return desc->ctrl.trace_dst;
 }
 
+static inline bool has_tr_default_dst(void)
+{
+	return tr.default_dst != DST_NOT_SET;
+}
+
 static int find_tr_instance(const char *name)
 {
 	int idx;
@@ -146,11 +155,16 @@ static int find_tr_instance(const char *name)
 static const
 char *read_T_args(const char *str, struct flag_settings *modifiers)
 {
-	int len, idx = TRACE_DST_MAX;
-	char *end;
+	bool has_colon = *(str+1) == ':' ? true : false;
+	int len = 0, idx = TRACE_DST_MAX;
+	char *end = NULL;
 
-	if (*(str+1) != ':')
-		return str;
+	if (!has_colon) {
+		if (!has_tr_default_dst())
+			return NULL;
+		idx = tr.default_dst;
+		goto end;
+	}
 
 	str += 2;
 	end = strchr(str, ',');
@@ -168,8 +182,12 @@ char *read_T_args(const char *str, struct flag_settings *modifiers)
 		goto end;
 
 	idx = find_tr_instance(str);
-	if (idx < 0)
-		return NULL;
+	if (idx < 0) {
+		if (!has_tr_default_dst() ||
+		    has_colon)
+			return NULL;
+		idx = tr.default_dst;
+	}
 end:
 	modifiers->trace_dst = idx;
 	return end ? end : str + len;
@@ -387,6 +405,13 @@ static int handle_tr_close_cmd(const char *arg)
 		goto end;
 	}
 
+	/*
+	 * check if default trace instance is being closed,
+	 * if yes then clear default destination
+	 */
+	if (tr.default_dst == idx)
+		tr.default_dst = DST_NOT_SET;
+
 	trace_array_put(inst->arr);
 	/*
 	 * don't destroy trace instance but let user do it manually
@@ -425,6 +450,32 @@ void update_tr_dst(const struct _ddebug *desc, const struct dd_ctrl *nctrl)
 	if (nflags & _DPRINTK_FLAGS_TRACE &&
 	    ndst != TRACE_DST_MAX)
 		tr.inst[ndst].use_cnt++;
+}
+
+static const char *get_tr_default_dst_str(void)
+{
+	switch (tr.default_dst) {
+	case DST_NOT_SET:
+		return DST_NOT_SET_STR;
+	case TRACE_DST_MAX:
+		return DD_TR_EVENT;
+	default:
+		return tr.inst[tr.default_dst].name;
+	}
+}
+
+static void update_tr_default_dst(const struct flag_settings *modifiers)
+{
+	if (tr.default_dst == modifiers->trace_dst)
+		return;
+
+	if ((!modifiers->flags && (~modifiers->mask & _DPRINTK_FLAGS_TRACE)) ||
+	    (modifiers->flags & _DPRINTK_FLAGS_TRACE)) {
+
+		tr.default_dst = modifiers->trace_dst;
+		v3pr_info("set default trace dst to idx=%d, name=%s\n",
+			  tr.default_dst, get_tr_default_dst_str());
+	}
 }
 
 static int ddebug_parse_cmd(char *words[], int nwords)
@@ -565,6 +616,9 @@ static int ddebug_change(const struct ddebug_query *query,
 
 	if (!nfound && verbose)
 		pr_info("no matches for query\n");
+
+	if (nfound)
+		update_tr_default_dst(modifiers);
 
 	return nfound;
 }
@@ -1590,14 +1644,20 @@ static int ddebug_proc_show(struct seq_file *m, void *p)
 	}
 	seq_puts(m, "\n");
 
-	if (ddebug_iter_is_last(iter) &&
-	    !bitmap_empty(tr.bmap, tr.bmap_size)) {
-		int idx;
+	if (ddebug_iter_is_last(iter)) {
 
 		seq_puts(m, "\n");
-		seq_puts(m, "Opened trace instances:\n");
-		for_each_set_bit(idx, tr.bmap, tr.bmap_size)
-			seq_printf(m, "%s\n", tr.inst[idx].name);
+		seq_printf(m, "Default trace destination: %s\n",
+			   get_tr_default_dst_str());
+
+		if (!bitmap_empty(tr.bmap, tr.bmap_size)) {
+			int idx;
+
+			seq_puts(m, "\n");
+			seq_puts(m, "Opened trace instances:\n");
+			for_each_set_bit(idx, tr.bmap, tr.bmap_size)
+				seq_printf(m, "%s\n", tr.inst[idx].name);
+		}
 	}
 
 	return 0;
