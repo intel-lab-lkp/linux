@@ -1,0 +1,30 @@
+drm drm-fixes 2cc14f52aeb78ce3f29677c2de1f06c0e91471ab
+	Linux 6.7-rc3
+drm-misc drm-misc-fixes 64111a0e22a9d4e0de7a5d04e7d5c21d0af4b900
+	drm/panfrost: Fix incorrect updating of current device frequency
+drm-intel drm-intel-fixes d21a3962d3042e6f56ad324cf18bdd64a1e6ecfa
+	drm/i915: Call intel_pre_plane_updates() also for pipes getting enabled
+drm drm-next a13fee31f56449fc600d9e064c7b32302f92dcef
+	Merge v6.7-rc3 into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 55b0f4a7c37680428d640aeada96d62888366c56
+	drm/imagination: fix off by one in pvr_vm_mips_init() error handling
+drm-intel drm-intel-next 562f33836f519a235e5c5e71bcc723ab1faccd2f
+	drm/i915/dgfx: DGFX uses direct VBT pin mapping
+drm-intel drm-intel-gt-next 698e19da2914a0021a088b2b5d101d1854862315
+	drm/i915: Skip pxp init if gt is wedged
+drm-intel topic/core-for-CI ec86d2449703f826e8a4cc790fce3cb3b2179cd5
+	fixup! PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
