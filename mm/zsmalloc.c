@@ -369,6 +369,17 @@ static inline void free_zsdesc(struct zsdesc *zsdesc)
 	__free_page(page);
 }
 
+static void reset_zsdesc(struct zsdesc *zsdesc)
+{
+	struct page *page = zsdesc_page(zsdesc);
+
+	__ClearPageMovable(page);
+	ClearPagePrivate(page);
+	set_page_private(page, 0);
+	page_mapcount_reset(page);
+	page->index = 0;
+}
+
 struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
@@ -966,15 +977,6 @@ static inline bool obj_allocated(struct zsdesc *zsdesc, void *obj,
 	return true;
 }
 
-static void reset_page(struct page *page)
-{
-	__ClearPageMovable(page);
-	ClearPagePrivate(page);
-	set_page_private(page, 0);
-	page_mapcount_reset(page);
-	page->index = 0;
-}
-
 static int trylock_zspage(struct zspage *zspage)
 {
 	struct zsdesc *cursor, *fail;
@@ -1014,7 +1016,7 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 	do {
 		VM_BUG_ON_PAGE(!PageLocked(page), page);
 		next = get_next_page(page);
-		reset_page(page);
+		reset_zsdesc(page_zsdesc(page));
 		unlock_page(page);
 		dec_zone_page_state(page, NR_ZSPAGES);
 		put_page(page);
@@ -2022,7 +2024,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 		inc_zone_page_state(newpage, NR_ZSPAGES);
 	}
 
-	reset_page(page);
+	reset_zsdesc(page_zsdesc(page));
 	put_page(page);
 
 	return MIGRATEPAGE_SUCCESS;
