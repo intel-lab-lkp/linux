@@ -274,6 +274,39 @@ ZSDESC_MATCH(_refcount, __page_refcount);
 #undef ZSDESC_MATCH
 static_assert(sizeof(struct zsdesc) <= sizeof(struct page));
 
+#define zsdesc_page(zdesc) (_Generic((zdesc),				\
+		const struct zsdesc *:	(const struct page *)zdesc,	\
+		struct zsdesc *:	(struct page *)zdesc))
+
+static inline struct zsdesc *page_zsdesc(struct page *page)
+{
+	return (struct zsdesc *)page;
+}
+
+static inline unsigned long zsdesc_pfn(const struct zsdesc *zsdesc)
+{
+	return page_to_pfn(zsdesc_page(zsdesc));
+}
+
+static inline struct zsdesc *pfn_zsdesc(unsigned long pfn)
+{
+	return page_zsdesc(pfn_to_page(pfn));
+}
+
+static inline void zsdesc_get(struct zsdesc *zsdesc)
+{
+	struct folio *folio = (struct folio *)zsdesc;
+
+	folio_get(folio);
+}
+
+static inline void zsdesc_put(struct zsdesc *zsdesc)
+{
+	struct folio *folio = (struct folio *)zsdesc;
+
+	folio_put(folio);
+}
+
 struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
