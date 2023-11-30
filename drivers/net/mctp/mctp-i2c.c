@@ -442,14 +442,14 @@ static void mctp_i2c_unlock_reset(struct mctp_i2c_dev *midev)
 		i2c_unlock_bus(midev->adapter, I2C_LOCK_SEGMENT);
 }
 
-static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
+static int mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 {
 	struct net_device_stats *stats = &midev->ndev->stats;
 	enum mctp_i2c_flow_state fs;
 	struct mctp_i2c_hdr *hdr;
 	struct i2c_msg msg = {0};
 	u8 *pecp;
-	int rc;
+	int rc = 0;
 
 	fs = mctp_i2c_get_tx_flow_state(midev, skb);
 
@@ -461,17 +461,11 @@ static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 		dev_warn_ratelimited(&midev->adapter->dev,
 				     "Bad tx length %d vs skb %u\n",
 				     hdr->byte_count + 3, skb->len);
-		return;
+		return -EINVAL;
 	}
 
-	if (skb_tailroom(skb) >= 1) {
-		/* Linear case with space, we can just append the PEC */
-		skb_put(skb, 1);
-	} else {
-		/* Otherwise need to copy the buffer */
-		skb_copy_bits(skb, 0, midev->tx_scratch, skb->len);
-		hdr = (void *)midev->tx_scratch;
-	}
+	skb_copy_bits(skb, 0, midev->tx_scratch, skb->len);
+	hdr = (void *)midev->tx_scratch;
 
 	pecp = (void *)&hdr->source_slave + hdr->byte_count;
 	*pecp = i2c_smbus_pec(0, (u8 *)hdr, hdr->byte_count + 3);
@@ -503,17 +497,20 @@ static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 		break;
 
 	case MCTP_I2C_TX_FLOW_INVALID:
-		return;
+		return rc;
 	}
 
 	if (rc < 0) {
 		dev_warn_ratelimited(&midev->adapter->dev,
 				     "__i2c_transfer failed %d\n", rc);
 		stats->tx_errors++;
+		if (rc == -EAGAIN)
+			stats->collisions++;
 	} else {
 		stats->tx_bytes += skb->len;
 		stats->tx_packets++;
 	}
+	return rc;
 }
 
 static void mctp_i2c_flow_release(struct mctp_i2c_dev *midev)
@@ -568,6 +565,7 @@ static int mctp_i2c_tx_thread(void *data)
 	struct mctp_i2c_dev *midev = data;
 	struct sk_buff *skb;
 	unsigned long flags;
+	int rc;
 
 	for (;;) {
 		if (kthread_should_stop())
@@ -583,8 +581,17 @@ static int mctp_i2c_tx_thread(void *data)
 			mctp_i2c_flow_release(midev);
 
 		} else if (skb) {
-			mctp_i2c_xmit(midev, skb);
-			kfree_skb(skb);
+			rc = mctp_i2c_xmit(midev, skb);
+			if (rc == -EAGAIN) {
+				spin_lock_irqsave(&midev->tx_queue.lock, flags);
+				if (skb_queue_len(&midev->tx_queue) >= MCTP_I2C_TX_WORK_LEN)
+					kfree_skb(skb);
+				else
+					__skb_queue_head(&midev->tx_queue, skb);
+				spin_unlock_irqrestore(&midev->tx_queue.lock, flags);
+			} else {
+				kfree_skb(skb);
+			}
 
 		} else {
 			wait_event_idle(midev->tx_wq,
