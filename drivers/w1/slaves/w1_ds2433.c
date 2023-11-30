@@ -30,8 +30,6 @@
 #define W1_PAGE_BITS		5
 #define W1_PAGE_MASK		0x1F
 
-#define W1_F23_TIME		300
-
 #define W1_F23_READ_EEPROM	0xF0
 #define W1_F23_WRITE_SCRATCH	0x0F
 #define W1_F23_READ_SCRATCH	0xAA
