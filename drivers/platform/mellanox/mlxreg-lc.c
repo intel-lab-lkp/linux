@@ -824,9 +824,12 @@ static int mlxreg_lc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	mutex_init(&mlxreg_lc->lock);
-	/* Set event notification callback. */
-	data->notifier->user_handler = mlxreg_lc_event_handler;
-	data->notifier->handle = mlxreg_lc;
+
+	if (data->notifier) {
+		/* Set event notification callback. */
+		data->notifier->user_handler = mlxreg_lc_event_handler;
+		data->notifier->handle = mlxreg_lc;
+	}
 
 	data->hpdev.adapter = i2c_get_adapter(data->hpdev.nr);
 	if (!data->hpdev.adapter) {
