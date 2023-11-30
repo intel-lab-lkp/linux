@@ -1052,16 +1052,16 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 {
 	unsigned int freeobj = 1;
 	unsigned long off = 0;
-	struct page *page = get_first_page(zspage);
+	struct zsdesc *zsdesc = get_first_zsdesc(zspage);
 
-	while (page) {
-		struct page *next_page;
+	while (zsdesc) {
+		struct zsdesc *next_zsdesc;
 		struct link_free *link;
 		void *vaddr;
 
-		set_first_obj_offset(page, off);
+		set_first_obj_offset(zsdesc_page(zsdesc), off);
 
-		vaddr = kmap_atomic(page);
+		vaddr = zsdesc_kmap_atomic(zsdesc);
 		link = (struct link_free *)vaddr + off / sizeof(*link);
 
 		while ((off += class->size) < PAGE_SIZE) {
@@ -1074,8 +1074,8 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 		 * page, which must point to the first object on the next
 		 * page (if present)
 		 */
-		next_page = get_next_page(page);
-		if (next_page) {
+		next_zsdesc = get_next_zsdesc(zsdesc);
+		if (next_zsdesc) {
 			link->next = freeobj++ << OBJ_TAG_BITS;
 		} else {
 			/*
@@ -1085,7 +1085,7 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 			link->next = -1UL << OBJ_TAG_BITS;
 		}
 		kunmap_atomic(vaddr);
-		page = next_page;
+		zsdesc = next_zsdesc;
 		off %= PAGE_SIZE;
 	}
 
