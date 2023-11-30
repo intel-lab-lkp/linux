@@ -380,6 +380,16 @@ static void reset_zsdesc(struct zsdesc *zsdesc)
 	page->index = 0;
 }
 
+static inline bool zsdesc_is_isolated(struct zsdesc *zsdesc)
+{
+	return PageIsolated(zsdesc_page(zsdesc));
+}
+
+struct zone *zsdesc_zone(struct zsdesc *zsdesc)
+{
+	return page_zone(zsdesc_page(zsdesc));
+}
+
 struct zspage {
 	struct {
 		unsigned int huge:HUGE_BITS;
@@ -1933,14 +1943,15 @@ static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 {
 	struct zs_pool *pool;
 	struct zspage *zspage;
+	struct zsdesc *zsdesc = page_zsdesc(page);
 
 	/*
 	 * Page is locked so zspage couldn't be destroyed. For detail, look at
 	 * lock_zspage in free_zspage.
 	 */
-	VM_BUG_ON_PAGE(PageIsolated(page), page);
+	VM_BUG_ON_PAGE(zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
-	zspage = get_zspage(page);
+	zspage = get_zspage(zsdesc_page(zsdesc));
 	pool = zspage->pool;
 	spin_lock(&pool->lock);
 	inc_zspage_isolation(zspage);
@@ -1956,6 +1967,8 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	struct size_class *class;
 	struct zspage *zspage;
 	struct zsdesc *dummy;
+	struct zsdesc *new_zsdesc = page_zsdesc(newpage);
+	struct zsdesc *zsdesc = page_zsdesc(page);
 	void *s_addr, *d_addr, *addr;
 	unsigned int offset;
 	unsigned long handle;
@@ -1970,10 +1983,10 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	if (mode == MIGRATE_SYNC_NO_COPY)
 		return -EINVAL;
 
-	VM_BUG_ON_PAGE(!PageIsolated(page), page);
+	VM_BUG_ON_PAGE(!zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
 	/* The page is locked, so this pointer must remain valid */
-	zspage = get_zspage(page);
+	zspage = get_zspage(zsdesc_page(zsdesc));
 	pool = zspage->pool;
 
 	/*
@@ -1986,30 +1999,30 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	/* the migrate_write_lock protects zpage access via zs_map_object */
 	migrate_write_lock(zspage);
 
-	offset = get_first_obj_offset(page);
-	s_addr = kmap_atomic(page);
+	offset = get_first_obj_offset(zsdesc_page(zsdesc));
+	s_addr = zsdesc_kmap_atomic(zsdesc);
 
 	/*
 	 * Here, any user cannot access all objects in the zspage so let's move.
 	 */
-	d_addr = kmap_atomic(newpage);
+	d_addr = zsdesc_kmap_atomic(new_zsdesc);
 	copy_page(d_addr, s_addr);
 	kunmap_atomic(d_addr);
 
 	for (addr = s_addr + offset; addr < s_addr + PAGE_SIZE;
 					addr += class->size) {
-		if (obj_allocated(page_zsdesc(page), addr, &handle)) {
+		if (obj_allocated(zsdesc, addr, &handle)) {
 
 			old_obj = handle_to_obj(handle);
 			obj_to_location(old_obj, &dummy, &obj_idx);
-			new_obj = (unsigned long)location_to_obj(newpage,
+			new_obj = (unsigned long)location_to_obj(zsdesc_page(new_zsdesc),
 								obj_idx);
 			record_obj(handle, new_obj);
 		}
 	}
 	kunmap_atomic(s_addr);
 
-	replace_sub_page(class, zspage, page_zsdesc(newpage), page_zsdesc(page));
+	replace_sub_page(class, zspage, new_zsdesc, zsdesc);
 	dec_zspage_isolation(zspage);
 	/*
 	 * Since we complete the data copy and set up new zspage structure,
@@ -2018,14 +2031,14 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	spin_unlock(&pool->lock);
 	migrate_write_unlock(zspage);
 
-	get_page(newpage);
-	if (page_zone(newpage) != page_zone(page)) {
-		dec_zone_page_state(page, NR_ZSPAGES);
-		inc_zone_page_state(newpage, NR_ZSPAGES);
+	zsdesc_get(new_zsdesc);
+	if (zsdesc_zone(new_zsdesc) != zsdesc_zone(zsdesc)) {
+		zsdesc_dec_zone_page_state(zsdesc);
+		zsdesc_inc_zone_page_state(new_zsdesc);
 	}
 
-	reset_zsdesc(page_zsdesc(page));
-	put_page(page);
+	reset_zsdesc(zsdesc);
+	zsdesc_put(zsdesc);
 
 	return MIGRATEPAGE_SUCCESS;
 }
@@ -2034,10 +2047,11 @@ static void zs_page_putback(struct page *page)
 {
 	struct zs_pool *pool;
 	struct zspage *zspage;
+	struct zsdesc *zsdesc = page_zsdesc(page);
 
-	VM_BUG_ON_PAGE(!PageIsolated(page), page);
+	VM_BUG_ON_PAGE(!zsdesc_is_isolated(zsdesc), zsdesc_page(zsdesc));
 
-	zspage = get_zspage(page);
+	zspage = get_zspage(zsdesc_page(zsdesc));
 	pool = zspage->pool;
 	spin_lock(&pool->lock);
 	dec_zspage_isolation(zspage);
