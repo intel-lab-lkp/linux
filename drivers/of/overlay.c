@@ -1202,6 +1202,12 @@ int of_overlay_remove(int *ovcs_id)
 		goto out;
 	}
 
+	/*
+	 * Wait for any ongoing device link removals before removing some of
+	 * nodes
+	 */
+	device_link_wait_removal();
+
 	mutex_lock(&of_mutex);
 
 	ovcs = idr_find(&ovcs_idr, *ovcs_id);
