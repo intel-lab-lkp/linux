@@ -367,6 +367,8 @@ errors=%s		 Specify f2fs behavior on critical errors. This supports modes:
 			 pending node write	drop		keep		N/A
 			 pending meta write	keep		keep		N/A
 			 ====================== =============== =============== ========
+iversion		 Enable the feature of updating the inode I_version field.
+noiversion		 Disable the feature of updating the inode I_version field.
 ======================== ============================================================
 
 Debugfs Entries

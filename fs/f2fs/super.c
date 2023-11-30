@@ -180,6 +180,8 @@ enum {
 	Opt_memory_mode,
 	Opt_age_extent_cache,
 	Opt_errors,
+	Opt_iversion,
+	Opt_noiversion,
 	Opt_err,
 };
 
@@ -260,6 +262,8 @@ static match_table_t f2fs_tokens = {
 	{Opt_memory_mode, "memory=%s"},
 	{Opt_age_extent_cache, "age_extent_cache"},
 	{Opt_errors, "errors=%s"},
+	{Opt_iversion, "iversion"},
+	{Opt_noiversion, "noiversion"},
 	{Opt_err, NULL},
 };
 
@@ -1334,6 +1338,12 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			}
 			kfree(name);
 			break;
+		case Opt_iversion:
+			sb->s_flags |= SB_I_VERSION;
+			break;
+		case Opt_noiversion:
+			sb->s_flags &= ~SB_I_VERSION;
+			break;
 		default:
 			f2fs_err(sbi, "Unrecognized mount option \"%s\" or missing value",
 				 p);
@@ -2152,6 +2162,11 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else if (F2FS_OPTION(sbi).errors == MOUNT_ERRORS_PANIC)
 		seq_printf(seq, ",errors=%s", "panic");
 
+	if (sbi->sb->s_flags & SB_I_VERSION)
+		seq_puts(seq, ",iversion");
+	else
+		seq_puts(seq, ",noiversion");
+
 	return 0;
 }
 
@@ -2196,6 +2211,7 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 	F2FS_OPTION(sbi).errors = MOUNT_ERRORS_CONTINUE;
 
 	sbi->sb->s_flags &= ~SB_INLINECRYPT;
+	sbi->sb->s_flags &= ~SB_I_VERSION;
 
 	set_opt(sbi, INLINE_XATTR);
 	set_opt(sbi, INLINE_DATA);
@@ -2574,6 +2590,7 @@ skip:
 	limit_reserve_root(sbi);
 	adjust_unusable_cap_perc(sbi);
 	*flags = (*flags & ~SB_LAZYTIME) | (sb->s_flags & SB_LAZYTIME);
+	*flags = (*flags & ~SB_I_VERSION) | (sb->s_flags & SB_I_VERSION);
 	return 0;
 restore_checkpoint:
 	if (need_enable_checkpoint) {
