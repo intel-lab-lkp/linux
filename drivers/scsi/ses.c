@@ -35,6 +35,29 @@ struct ses_component {
 	u64 addr;
 };
 
+#define INIT_ALLOC_SIZE_DEF 4096
+#define INIT_ALLOC_SIZE_MIN 32
+#define INIT_ALLOC_SIZE_MAX 65535
+
+static uint init_alloc_size = INIT_ALLOC_SIZE_DEF;
+
+static int param_set_init_alloc_size(const char *val, const struct kernel_param *kp)
+{
+	uint size;
+	int ret = kstrtouint(val, 0, &size);
+
+	if (ret)
+		return ret;
+
+	init_alloc_size = clamp_t(uint, size, INIT_ALLOC_SIZE_MIN, INIT_ALLOC_SIZE_MAX);
+	return 0;
+}
+
+module_param_call(init_alloc_size, param_set_init_alloc_size, param_get_uint,
+		  &init_alloc_size, 0644);
+MODULE_PARM_DESC(init_alloc_size, "Buffer size for detecting diagnostic pages length. "
+		 "[Default=" __stringify(INIT_ALLOC_SIZE_DEF) "]");
+
 static bool ses_page2_supported(struct enclosure_device *edev)
 {
 	struct ses_device *ses_dev = edev->scratch;
@@ -525,8 +548,6 @@ static int ses_enclosure_find_by_addr(struct enclosure_device *edev,
 	return 0;
 }
 
-#define INIT_ALLOC_SIZE 32
-
 static void ses_enclosure_data_process(struct enclosure_device *edev,
 				       struct scsi_device *sdev,
 				       int create)
@@ -536,7 +557,8 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 	int i, j, page7_len, len, components;
 	struct ses_device *ses_dev = edev->scratch;
 	int types = ses_dev->page1_num_types;
-	unsigned char *hdr_buf = kzalloc(INIT_ALLOC_SIZE, GFP_KERNEL);
+	int hdr_buf_len = init_alloc_size;
+	unsigned char *hdr_buf = kzalloc(hdr_buf_len, GFP_KERNEL);
 
 	if (!hdr_buf)
 		goto simple_populate;
@@ -545,11 +567,14 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 	if (ses_dev->page10)
 		ses_recv_diag(sdev, 10, ses_dev->page10, ses_dev->page10_len);
 	/* Page 7 for the descriptors is optional */
-	result = ses_recv_diag(sdev, 7, hdr_buf, INIT_ALLOC_SIZE);
+	result = ses_recv_diag(sdev, 7, hdr_buf, hdr_buf_len);
 	if (result)
 		goto simple_populate;
 
 	page7_len = len = (hdr_buf[2] << 8) + hdr_buf[3] + 4;
+	if (page7_len == hdr_buf_len)
+		sdev_printk(KERN_WARNING, sdev,
+			    "Suspicious page7 len %d, try larger init_alloc_size\n", page7_len);
 	/* add 1 for trailing '\0' we'll use */
 	buf = kzalloc(len + 1, GFP_KERNEL);
 	if (!buf)
@@ -678,6 +703,7 @@ static int ses_intf_add(struct device *cdev)
 	int num_enclosures;
 	struct enclosure_device *edev;
 	struct ses_component *scomp = NULL;
+	int hdr_buf_len = init_alloc_size;
 
 	if (!scsi_device_enclosure(sdev)) {
 		/* not an enclosure, but might be in one */
@@ -695,16 +721,19 @@ static int ses_intf_add(struct device *cdev)
 		sdev_printk(KERN_NOTICE, sdev, "Embedded Enclosure Device\n");
 
 	ses_dev = kzalloc(sizeof(*ses_dev), GFP_KERNEL);
-	hdr_buf = kzalloc(INIT_ALLOC_SIZE, GFP_KERNEL);
+	hdr_buf = kzalloc(hdr_buf_len, GFP_KERNEL);
 	if (!hdr_buf || !ses_dev)
 		goto err_init_free;
 
 	page = 1;
-	result = ses_recv_diag(sdev, page, hdr_buf, INIT_ALLOC_SIZE);
+	result = ses_recv_diag(sdev, page, hdr_buf, hdr_buf_len);
 	if (result)
 		goto recv_failed;
 
 	len = (hdr_buf[2] << 8) + hdr_buf[3] + 4;
+	if (len == hdr_buf_len)
+		sdev_printk(KERN_WARNING, sdev,
+			    "Suspicious page1 len %d, try larger init_alloc_size\n", len);
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf)
 		goto err_free;
@@ -741,11 +770,14 @@ static int ses_intf_add(struct device *cdev)
 	buf = NULL;
 
 	page = 2;
-	result = ses_recv_diag(sdev, page, hdr_buf, INIT_ALLOC_SIZE);
+	result = ses_recv_diag(sdev, page, hdr_buf, hdr_buf_len);
 	if (result)
 		goto page2_not_supported;
 
 	len = (hdr_buf[2] << 8) + hdr_buf[3] + 4;
+	if (len == hdr_buf_len)
+		sdev_printk(KERN_WARNING, sdev,
+			    "Suspicious page2 len %d, try larger init_alloc_size\n", len);
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf)
 		goto err_free;
@@ -761,10 +793,13 @@ static int ses_intf_add(struct device *cdev)
 	/* The additional information page --- allows us
 	 * to match up the devices */
 	page = 10;
-	result = ses_recv_diag(sdev, page, hdr_buf, INIT_ALLOC_SIZE);
+	result = ses_recv_diag(sdev, page, hdr_buf, hdr_buf_len);
 	if (!result) {
 
 		len = (hdr_buf[2] << 8) + hdr_buf[3] + 4;
+		if (len == hdr_buf_len)
+			sdev_printk(KERN_WARNING, sdev,
+				    "Suspicious page10 len %d, try larger init_alloc_size\n", len);
 		buf = kzalloc(len, GFP_KERNEL);
 		if (!buf)
 			goto err_free;
