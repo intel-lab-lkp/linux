@@ -80,6 +80,9 @@ static bool match_endpoint(struct usb_endpoint_descriptor *epd,
 {
 	switch (usb_endpoint_type(epd)) {
 	case USB_ENDPOINT_XFER_BULK:
+		if (!usb_endpoint_maxp(epd))
+			return false;
+
 		if (usb_endpoint_dir_in(epd)) {
 			if (bulk_in && !*bulk_in) {
 				*bulk_in = epd;
