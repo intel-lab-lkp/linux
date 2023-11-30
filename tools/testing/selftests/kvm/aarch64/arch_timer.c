@@ -392,7 +392,7 @@ static struct kvm_vm *test_vm_create(void)
 
 	test_init_timer_irq(vm);
 	gic_fd = vgic_v3_setup(vm, nr_vcpus, 64, GICD_BASE_GPA, GICR_BASE_GPA);
-	__TEST_REQUIRE(gic_fd >= 0, "Failed to create vgic-v3");
+	__TEST_REQUIRE(gic_fd >= 0, "Failed to create vgic-v3\n");
 
 	/* Make all the test's cmdline args visible to the guest */
 	sync_global_to_guest(vm, test_args);
@@ -470,7 +470,7 @@ int main(int argc, char *argv[])
 		exit(KSFT_SKIP);
 
 	__TEST_REQUIRE(!test_args.migration_freq_ms || get_nprocs() >= 2,
-		       "At least two physical CPUs needed for vCPU migration");
+		       "At least two physical CPUs needed for vCPU migration\n");
 
 	vm = test_vm_create();
 	test_run(vm);

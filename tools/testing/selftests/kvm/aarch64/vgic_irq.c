@@ -766,7 +766,7 @@ static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
 
 	gic_fd = vgic_v3_setup(vm, 1, nr_irqs,
 			GICD_BASE_GPA, GICR_BASE_GPA);
-	__TEST_REQUIRE(gic_fd >= 0, "Failed to create vgic-v3, skipping");
+	__TEST_REQUIRE(gic_fd >= 0, "Failed to create vgic-v3, skipping\n");
 
 	vm_install_exception_handler(vm, VECTOR_IRQ_CURRENT,
 		guest_irq_handlers[args.eoi_split][args.level_sensitive]);

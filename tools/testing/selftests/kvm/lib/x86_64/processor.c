@@ -719,12 +719,12 @@ void __vm_xsave_require_permission(uint64_t xfeature, const char *name)
 	close(kvm_fd);
 
 	if (rc == -1 && (errno == ENXIO || errno == EINVAL))
-		__TEST_REQUIRE(0, "KVM_X86_XCOMP_GUEST_SUPP not supported");
+		__TEST_REQUIRE(0, "KVM_X86_XCOMP_GUEST_SUPP not supported\n");
 
 	TEST_ASSERT(rc == 0, "KVM_GET_DEVICE_ATTR(0, KVM_X86_XCOMP_GUEST_SUPP) error: %ld", rc);
 
 	__TEST_REQUIRE(bitmask & xfeature,
-		       "Required XSAVE feature '%s' not supported", name);
+		       "Required XSAVE feature '%s' not supported\n", name);
 
 	TEST_REQUIRE(!syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_GUEST_PERM, ilog2(xfeature)));
 

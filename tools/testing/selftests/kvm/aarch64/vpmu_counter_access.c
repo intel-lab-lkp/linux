@@ -458,7 +458,7 @@ static void create_vpmu_vm(void *guest_code)
 	vpmu_vm.gic_fd = vgic_v3_setup(vpmu_vm.vm, 1, 64,
 					GICD_BASE_GPA, GICR_BASE_GPA);
 	__TEST_REQUIRE(vpmu_vm.gic_fd >= 0,
-		       "Failed to create vgic-v3, skipping");
+		       "Failed to create vgic-v3, skipping\n");
 
 	/* Make sure that PMUv3 support is indicated in the ID register */
 	vcpu_get_reg(vpmu_vm.vcpu,

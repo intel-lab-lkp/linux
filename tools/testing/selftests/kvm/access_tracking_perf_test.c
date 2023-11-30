@@ -103,7 +103,7 @@ static uint64_t lookup_pfn(int pagemap_fd, struct kvm_vm *vm, uint64_t gva)
 		return 0;
 
 	pfn = entry & PAGEMAP_PFN_MASK;
-	__TEST_REQUIRE(pfn, "Looking up PFNs requires CAP_SYS_ADMIN");
+	__TEST_REQUIRE(pfn, "Looking up PFNs requires CAP_SYS_ADMIN\n");
 
 	return pfn;
 }
@@ -385,7 +385,7 @@ int main(int argc, char *argv[])
 
 	page_idle_fd = open("/sys/kernel/mm/page_idle/bitmap", O_RDWR);
 	__TEST_REQUIRE(page_idle_fd >= 0,
-		       "CONFIG_IDLE_PAGE_TRACKING is not enabled");
+		       "CONFIG_IDLE_PAGE_TRACKING is not enabled\n");
 	close(page_idle_fd);
 
 	for_each_guest_mode(run_test, &params);

@@ -183,7 +183,7 @@ static void calc_min_max_cpu(void)
 	}
 
 	__TEST_REQUIRE(cnt >= 2,
-		       "Only one usable CPU, task migration not possible");
+		       "Only one usable CPU, task migration not possible\n");
 }
 
 int main(int argc, char *argv[])

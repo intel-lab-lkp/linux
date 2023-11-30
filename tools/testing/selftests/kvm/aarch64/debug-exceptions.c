@@ -540,7 +540,7 @@ void test_guest_debug_exceptions_all(uint64_t aa64dfr0)
 
 	/* Number of breakpoints */
 	brp_num = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_BRPs), aa64dfr0) + 1;
-	__TEST_REQUIRE(brp_num >= 2, "At least two breakpoints are required");
+	__TEST_REQUIRE(brp_num >= 2, "At least two breakpoints are required\n");
 
 	/* Number of watchpoints */
 	wrp_num = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_WRPs), aa64dfr0) + 1;
@@ -585,7 +585,7 @@ int main(int argc, char *argv[])
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 	vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_ID_AA64DFR0_EL1), &aa64dfr0);
 	__TEST_REQUIRE(debug_version(aa64dfr0) >= 6,
-		       "Armv8 debug architecture not supported.");
+		       "Armv8 debug architecture not supported.\n");
 	kvm_vm_free(vm);
 
 	while ((opt = getopt(argc, argv, "i:")) != -1) {

@@ -27,7 +27,7 @@ int open_path_or_exit(const char *path, int flags)
 	int fd;
 
 	fd = open(path, flags);
-	__TEST_REQUIRE(fd >= 0, "%s not available (errno: %d)", path, errno);
+	__TEST_REQUIRE(fd >= 0, "%s not available (errno: %d)\n", path, errno);
 
 	return fd;
 }
