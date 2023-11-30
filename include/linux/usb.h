@@ -644,6 +644,7 @@ struct usb3_lpm_parameters {
  *	parent->hub_delay + wHubDelay + tTPTransmissionDelay (40ns)
  *	Will be used as wValue for SetIsochDelay requests.
  * @use_generic_driver: ask driver core to reprobe using the generic driver.
+ * @saved_configuration: The last value passed to usb_set_configuration().
  *
  * Notes:
  * Usbcore drivers should not set usbdev->state directly.  Instead use
@@ -729,6 +730,8 @@ struct usb_device {
 
 	u16 hub_delay;
 	unsigned use_generic_driver:1;
+
+	int saved_configuration;
 };
 
 #define to_usb_device(__dev)	container_of_const(__dev, struct usb_device, dev)

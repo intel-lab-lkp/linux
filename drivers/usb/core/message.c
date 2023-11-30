@@ -1998,6 +1998,8 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	struct usb_hcd *hcd = bus_to_hcd(dev->bus);
 	int n, nintf;
 
+	dev->saved_configuration = configuration;
+
 	if (dev->authorized == 0 || configuration == -1)
 		configuration = 0;
 	else {

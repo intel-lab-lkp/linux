@@ -2636,12 +2636,20 @@ fail:
  */
 int usb_deauthorize_device(struct usb_device *usb_dev)
 {
+	int old_configuration;
+
 	usb_lock_device(usb_dev);
 	if (usb_dev->authorized == 0)
 		goto out_unauthorized;
 
+	/*
+	 * Keep the `saved_configuration` in a local since
+	 * usb_set_configuration() will clobber it.
+	 */
+	old_configuration = usb_dev->saved_configuration;
 	usb_dev->authorized = 0;
 	usb_set_configuration(usb_dev, -1);
+	usb_dev->saved_configuration = old_configuration;
 
 out_unauthorized:
 	usb_unlock_device(usb_dev);
@@ -2668,7 +2676,10 @@ int usb_authorize_device(struct usb_device *usb_dev)
 	/* Choose and set the configuration.  This registers the interfaces
 	 * with the driver core and lets interface drivers bind to them.
 	 */
-	c = usb_choose_configuration(usb_dev);
+	if (usb_dev->saved_configuration != -1)
+		c = usb_dev->saved_configuration;
+	else
+		c = usb_choose_configuration(usb_dev);
 	if (c >= 0) {
 		result = usb_set_configuration(usb_dev, c);
 		if (result) {
@@ -5065,10 +5076,12 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 					retval);
 		goto fail;
 	}
-	if (initial)
+	if (initial) {
 		udev->descriptor = *descr;
-	else
+		udev->saved_configuration = -1;
+	} else {
 		*dev_descr = *descr;
+	}
 	kfree(descr);
 
 	/*
