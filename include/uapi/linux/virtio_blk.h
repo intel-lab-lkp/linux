@@ -317,6 +317,7 @@ struct virtio_scsi_inhdr {
 #define VIRTIO_BLK_S_OK		0
 #define VIRTIO_BLK_S_IOERR	1
 #define VIRTIO_BLK_S_UNSUPP	2
+#define VIRTIO_BLK_S_TIMEOUT	3
 
 /* Error codes that are specific to zoned block devices */
 #define VIRTIO_BLK_S_ZONE_INVALID_CMD     3

@@ -16,6 +16,7 @@
 #include <linux/blk-mq-virtio.h>
 #include <linux/numa.h>
 #include <linux/vmalloc.h>
+#include <linux/xarray.h>
 #include <uapi/linux/virtio_ring.h>
 
 #define PART_BITS 4
@@ -30,6 +31,15 @@
 #else
 #define VIRTIO_BLK_INLINE_SG_CNT	2
 #endif
+
+static unsigned int io_timeout = 20;
+module_param(io_timeout, uint, 0644);
+MODULE_PARM_DESC(io_timeout, "timeout in seconds for I/O requests. Default:20");
+
+static unsigned int timeout_teardown_limit = 2;
+module_param(timeout_teardown_limit, uint, 0644);
+MODULE_PARM_DESC(timeout_teardown_limit,
+		"request timeout teardown limit for stable dev. Default:2");
 
 static unsigned int num_request_queues;
 module_param(num_request_queues, uint, 0644);
@@ -84,6 +94,20 @@ struct virtio_blk {
 
 	/* For zoned device */
 	unsigned int zone_sectors;
+
+	/*
+	 * Block layer Request timeout teardown limit when device is in the
+	 * stable state, i.e. it has VIRTIO_CONFIG_S_DRIVER_OK value for its
+	 * config status. Once this limit is reached issue
+	 * virtblk_teardown_work to teardown the device in the block lyaer
+	 * request timeout callback.
+	 */
+	atomic_t rq_timeout_count;
+	/* avoid tear down race between remove and teardown work */
+	struct mutex teardown_mutex;
+	/* tear down work to be scheduled from block layer request handler */
+	struct work_struct teardown_work;
+
 };
 
 struct virtblk_req {
@@ -117,6 +141,8 @@ static inline blk_status_t virtblk_result(u8 status)
 	case VIRTIO_BLK_S_OK:
 		return BLK_STS_OK;
 	case VIRTIO_BLK_S_UNSUPP:
+	case VIRTIO_BLK_S_TIMEOUT:
+		return BLK_STS_TIMEOUT;
 		return BLK_STS_NOTSUPP;
 	case VIRTIO_BLK_S_ZONE_OPEN_RESOURCE:
 		return BLK_STS_ZONE_OPEN_RESOURCE;
@@ -926,6 +952,7 @@ static void virtblk_free_disk(struct gendisk *disk)
 	struct virtio_blk *vblk = disk->private_data;
 
 	ida_free(&vd_index_ida, vblk->index);
+	mutex_destroy(&vblk->teardown_mutex);
 	mutex_destroy(&vblk->vdev_mutex);
 	kfree(vblk);
 }
@@ -1287,6 +1314,86 @@ static int virtblk_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 	return found;
 }
 
+static bool virtblk_cancel_request(struct request *rq, void *data)
+{
+	struct virtblk_req *vbr = blk_mq_rq_to_pdu(rq);
+
+	vbr->in_hdr.status = VIRTIO_BLK_S_TIMEOUT;
+	if (blk_mq_request_started(rq) && !blk_mq_request_completed(rq))
+		blk_mq_complete_request(rq);
+
+	return true;
+}
+
+static void virtblk_teardown_work(struct work_struct *w)
+{
+	struct virtio_blk *vblk =
+		container_of(w, struct virtio_blk, teardown_work);
+	struct request_queue *q = vblk->disk->queue;
+	struct virtio_device *vdev = vblk->vdev;
+	struct blk_mq_hw_ctx *hctx;
+	unsigned long idx;
+
+	mutex_lock(&vblk->teardown_mutex);
+	if (!vblk->vdev)
+		goto unlock;
+
+	blk_mq_quiesce_queue(q);
+
+	/* Process any outstanding request from device. */
+	xa_for_each(&q->hctx_table, idx, hctx)
+		virtblk_poll(hctx, NULL);
+
+	blk_sync_queue(q);
+	blk_mq_tagset_busy_iter(&vblk->tag_set, virtblk_cancel_request, vblk);
+	blk_mq_tagset_wait_completed_request(&vblk->tag_set);
+
+	/*
+	 * Unblock any pending dispatch I/Os before we destroy device. From
+	 * del_gendisk() -> __blk_mark_disk_dead(disk) will set GD_DEAD flag,
+	 * that will make sure any new I/O from bio_queue_enter() to fail.
+	 */
+	blk_mq_unquiesce_queue(q);
+	del_gendisk(vblk->disk);
+	blk_mq_free_tag_set(&vblk->tag_set);
+
+	mutex_lock(&vblk->vdev_mutex);
+	flush_work(&vblk->config_work);
+
+	virtio_reset_device(vdev);
+
+	vblk->vdev = NULL;
+
+	vdev->config->del_vqs(vdev);
+	kfree(vblk->vqs);
+
+	mutex_unlock(&vblk->vdev_mutex);
+
+	put_disk(vblk->disk);
+
+unlock:
+	mutex_unlock(&vblk->teardown_mutex);
+}
+
+static enum blk_eh_timer_return virtblk_timeout(struct request *req)
+{
+	struct virtio_blk *vblk = req->mq_hctx->queue->queuedata;
+	struct virtio_device *vdev = vblk->vdev;
+	bool ok = vdev->config->get_status(vdev) & VIRTIO_CONFIG_S_DRIVER_OK;
+
+	if ((atomic_dec_return(&vblk->rq_timeout_count) != 0) && ok) {
+		virtblk_cancel_request(req, NULL);
+		return BLK_EH_DONE;
+	}
+
+	dev_err(&vdev->dev, "%s:%s initiating teardown\n", __func__,
+		vblk->disk->disk_name);
+
+	queue_work(virtblk_wq, &vblk->teardown_work);
+
+	return BLK_EH_RESET_TIMER;
+}
+
 static const struct blk_mq_ops virtio_mq_ops = {
 	.queue_rq	= virtio_queue_rq,
 	.queue_rqs	= virtio_queue_rqs,
@@ -1294,6 +1401,7 @@ static const struct blk_mq_ops virtio_mq_ops = {
 	.complete	= virtblk_request_done,
 	.map_queues	= virtblk_map_queues,
 	.poll		= virtblk_poll,
+	.timeout	= virtblk_timeout,
 };
 
 static unsigned int virtblk_queue_depth;
@@ -1366,6 +1474,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	memset(&vblk->tag_set, 0, sizeof(vblk->tag_set));
 	vblk->tag_set.ops = &virtio_mq_ops;
 	vblk->tag_set.queue_depth = queue_depth;
+	vblk->tag_set.timeout = io_timeout * HZ;
 	vblk->tag_set.numa_node = NUMA_NO_NODE;
 	vblk->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
 	vblk->tag_set.cmd_size =
@@ -1387,6 +1496,10 @@ static int virtblk_probe(struct virtio_device *vdev)
 		goto out_free_tags;
 	}
 	q = vblk->disk->queue;
+
+	mutex_init(&vblk->teardown_mutex);
+	INIT_WORK(&vblk->teardown_work, virtblk_teardown_work);
+	atomic_set(&vblk->rq_timeout_count, timeout_teardown_limit);
 
 	virtblk_name_format("vd", index, vblk->disk->disk_name, DISK_NAME_LEN);
 
@@ -1600,6 +1713,12 @@ static void virtblk_remove(struct virtio_device *vdev)
 {
 	struct virtio_blk *vblk = vdev->priv;
 
+	mutex_lock(&vblk->teardown_mutex);
+
+	/* we did the cleanup in the timeout handler */
+	if (!vblk->vdev)
+		goto unlock;
+
 	/* Make sure no work handler is accessing the device. */
 	flush_work(&vblk->config_work);
 
@@ -1620,6 +1739,9 @@ static void virtblk_remove(struct virtio_device *vdev)
 	mutex_unlock(&vblk->vdev_mutex);
 
 	put_disk(vblk->disk);
+
+unlock:
+	mutex_unlock(&vblk->teardown_mutex);
 }
 
 #ifdef CONFIG_PM_SLEEP
