@@ -528,7 +528,7 @@ pvr_device_addr_and_size_are_valid(u64 device_addr, u64 size)
 	       (device_addr + size <= PVR_PAGE_TABLE_ADDR_SPACE_SIZE);
 }
 
-void pvr_gpuvm_free(struct drm_gpuvm *gpuvm)
+static void pvr_gpuvm_free(struct drm_gpuvm *gpuvm)
 {
 
 }
