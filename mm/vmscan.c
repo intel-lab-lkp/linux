@@ -5912,13 +5912,13 @@ again:
 			set_bit(PGDAT_DIRTY, &pgdat->flags);
 
 		/*
-		 * If kswapd scans pages marked for immediate
+		 * If kswapd scans massive pages marked for immediate
 		 * reclaim and under writeback (nr_immediate), it
 		 * implies that pages are cycling through the LRU
 		 * faster than they are written so forcibly stall
 		 * until some pages complete writeback.
 		 */
-		if (sc->nr.immediate)
+		if (sc->nr.immediate && sc->nr.immediate == sc->nr.file_taken)
 			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
 	}
 
