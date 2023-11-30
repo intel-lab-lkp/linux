@@ -3191,7 +3191,7 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 			ret = -ENOMEM;
 			goto out;
 		}
-		for (int i = 0; i < inherit->num_qgroups; i++) {
+		for (i = 0; i < inherit->num_qgroups; i++) {
 			qlist_prealloc[i] = kzalloc(sizeof(struct btrfs_qgroup_list),
 						    GFP_NOFS);
 			if (!qlist_prealloc[i]) {
@@ -3318,7 +3318,7 @@ out:
 	if (need_rescan)
 		qgroup_mark_inconsistent(fs_info);
 	if (qlist_prealloc) {
-		for (int i = 0; i < inherit->num_qgroups; i++)
+		for (i = 0; i < inherit->num_qgroups; i++)
 			kfree(qlist_prealloc[i]);
 		kfree(qlist_prealloc);
 	}
