@@ -238,6 +238,9 @@ static void mips_cpu_register_ipi_domain(struct device_node *of_node)
 	struct cpu_ipi_domain_state *ipi_domain_state;
 
 	ipi_domain_state = kzalloc(sizeof(*ipi_domain_state), GFP_KERNEL);
+	if (!ipi_domain_state)
+		panic("Failed to allocate MIPS CPU IPI domain state");
+
 	ipi_domain = irq_domain_add_hierarchy(irq_domain,
 					      IRQ_DOMAIN_FLAG_IPI_SINGLE,
 					      2, of_node,
