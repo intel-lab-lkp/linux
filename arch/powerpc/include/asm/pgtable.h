@@ -233,6 +233,23 @@ static inline int pud_pfn(pud_t pud)
 }
 #endif
 
+#ifndef pmd_pte
+#define pmd_pte pmd_pte
+static inline pte_t pmd_pte(pmd_t pmd)
+{
+	WARN_ONCE(1, "pmd: platform does not use pmd entries directly");
+	return __pte(pmd_val(pmd));
+}
+#endif
+
+#ifndef pud_pte
+#define pud_pte pud_pte
+static inline pte_t pud_pte(pud_t pud)
+{
+	WARN_ONCE(1, "pud: platform does not use pud entries directly");
+	return __pte(pud_val(pud));
+}
+#endif
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_POWERPC_PGTABLE_H */

@@ -93,6 +93,7 @@ static inline void pmd_clear(pmd_t *pmdp)
 	*pmdp = __pmd(0);
 }
 
+#define pmd_pte pmd_pte
 static inline pte_t pmd_pte(pmd_t pmd)
 {
 	return __pte(pmd_val(pmd));
@@ -134,6 +135,7 @@ static inline pmd_t *pud_pgtable(pud_t pud)
 
 extern struct page *pud_page(pud_t pud);
 
+#define pud_pte pud_pte
 static inline pte_t pud_pte(pud_t pud)
 {
 	return __pte(pud_val(pud));
