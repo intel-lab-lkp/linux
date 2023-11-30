@@ -2163,7 +2163,7 @@ config RELOCATABLE
 
 config RANDOMIZE_BASE
 	bool "Randomize the address of the kernel image (KASLR)"
-	depends on RELOCATABLE
+	depends on RELOCATABLE && !DEBUG_KERNEL
 	default y
 	help
 	  In support of Kernel Address Space Layout Randomization (KASLR),
