@@ -5619,7 +5619,7 @@ static void __account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec)
 	if (likely(cfs_rq->runtime_remaining > 0))
 		return;
 
-	if (cfs_rq->throttled)
+	if (cfs_rq->throttled || cfs_rq->in_throttle_limbo)
 		return;
 	/*
 	 * if we're unable to extend our runtime we resched so that the active
@@ -5670,7 +5670,61 @@ static int tg_unthrottle_up(struct task_group *tg, void *data)
 {
 	struct rq *rq = data;
 	struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
+	struct sched_entity *se = tg->se[cpu_of(rq)];
+	struct cfs_rq *pcfs_rq = cfs_rq_of(se);
+	long task_delta = 0, idle_task_delta = 0;
+	struct task_struct *p, *tmp;
 
+	/*
+	 * Re-enqueue the tasks that have been throttled at this level.
+	 *
+	 * The task count is up-propagated via ->unthrottled_*h_nr_running,
+	 * as we can't purely rely on h_nr_running post-enqueue: the unthrottle
+	 * might happen when a cfs_rq still has some tasks enqueued, either still
+	 * making their way to userspace, or freshly migrated to it.
+	 */
+	list_for_each_entry_safe(p, tmp, &cfs_rq->throttled_limbo_list, throttle_node) {
+		struct sched_entity *pse = &p->se;
+
+		list_del_init(&p->throttle_node);
+		enqueue_entity(cfs_rq, pse, ENQUEUE_WAKEUP);
+		task_delta++;
+		idle_task_delta += task_has_idle_policy(p);
+	}
+
+	/*
+	 * Account tasks woken up in children; by this point all direct children
+	 * have been visited.
+	 */
+	task_delta += cfs_rq->unthrottled_h_nr_running;
+	idle_task_delta += cfs_rq->unthrottled_idle_h_nr_running;
+
+	/*
+	 * unthrottle_cfs_rq() needs a value to up-propagate above the
+	 * freshly unthrottled cfs_rq.
+	 */
+	cfs_rq->unthrottled_h_nr_running = task_delta;
+	cfs_rq->unthrottled_idle_h_nr_running = idle_task_delta;
+
+	cfs_rq->h_nr_running += task_delta;
+	cfs_rq->idle_h_nr_running += idle_task_delta;
+
+	/* Accumulate the delta in the parent's stash. Once all its children
+	 * (i.e. all of this cfs_rq's siblings) have been visited, this value
+	 * will be stable and used for its own count update.
+	 */
+	pcfs_rq->unthrottled_h_nr_running += task_delta;
+	pcfs_rq->unthrottled_idle_h_nr_running += idle_task_delta;
+
+	/*
+	 * If the cfs_rq became empty during throttling, then we dequeued
+	 * it. It needs to be put back in the hierarchy if it or any of
+	 * its children have now-unthrottled tasks.
+	 */
+	if (!se->on_rq && (task_delta || idle_task_delta))
+		enqueue_entity(pcfs_rq, se, ENQUEUE_WAKEUP);
+
+	cfs_rq->in_throttle_limbo = false;
 	cfs_rq->throttle_count--;
 	if (!cfs_rq->throttle_count) {
 		cfs_rq->throttled_clock_pelt_time += rq_clock_pelt(rq) -
@@ -5695,6 +5749,17 @@ static int tg_unthrottle_up(struct task_group *tg, void *data)
 	return 0;
 }
 
+static int tg_unthrottle_clear_up(struct task_group *tg, void *data)
+{
+	struct rq *rq = data;
+	struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
+
+	cfs_rq->unthrottled_h_nr_running = 0;
+	cfs_rq->unthrottled_idle_h_nr_running = 0;
+
+	return 0;
+}
+
 static int tg_throttle_down(struct task_group *tg, void *data)
 {
 	struct rq *rq = data;
@@ -5710,16 +5775,114 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 			cfs_rq->throttled_clock_self = rq_clock(rq);
 	}
 	cfs_rq->throttle_count++;
+	cfs_rq->in_throttle_limbo = true;
 
 	return 0;
+}
+
+static void throttle_cfs_rq_work(struct callback_head *work)
+{
+	struct task_struct *p = container_of(work, struct task_struct, sched_throttle_work);
+	struct sched_entity *se;
+	struct rq *rq;
+	struct cfs_rq *qcfs_rq, *top_cfs_rq;
+	long task_delta, idle_task_delta;
+
+	WARN_ON_ONCE(p != current);
+
+	/*
+	 * If task is exiting, then there won't be a return to userspace, so we
+	 * don't have to bother with any of this.
+	 */
+	if ((p->flags & PF_EXITING))
+		return;
+
+	CLASS(task_rq_lock, rq_guard)(p);
+	rq = rq_guard.rq;
+	se = &p->se;
+	qcfs_rq = cfs_rq_of(se);
+
+	/*
+	 * If not in limbo, then either replenish has happened or this task got
+	 * migrated out of the throttled cfs_rq, move along
+	 */
+	if (!qcfs_rq->in_throttle_limbo)
+		goto done;
+
+	update_rq_clock(rq);
+
+	list_add(&p->throttle_node, &qcfs_rq->throttled_limbo_list);
+	task_delta = 1;
+	idle_task_delta = cfs_rq_is_idle(qcfs_rq) ? 1 : 0;
+
+	for_each_sched_entity(se) {
+		qcfs_rq = cfs_rq_of(se);
+
+		if (!se->on_rq)
+			goto done;
+
+		dequeue_entity(qcfs_rq, se, DEQUEUE_SLEEP);
+		qcfs_rq->h_nr_running -= task_delta;
+		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+
+		if (qcfs_rq->in_throttle_limbo)
+			top_cfs_rq = qcfs_rq;
+
+		if (qcfs_rq->load.weight) {
+			/* Avoid re-evaluating load for this entity: */
+			se = parent_entity(se);
+			break;
+		}
+	}
+
+	for_each_sched_entity(se) {
+		qcfs_rq = cfs_rq_of(se);
+		/* throttled entity or throttle-on-deactivate */
+		if (!se->on_rq)
+			goto throttle_done;
+
+		update_load_avg(qcfs_rq, se, 0);
+		se_update_runnable(se);
+		qcfs_rq->h_nr_running -= task_delta;
+		qcfs_rq->h_nr_running -= idle_task_delta;
+	}
+
+throttle_done:
+	/* At this point se is NULL and we are at root level*/
+	sub_nr_running(rq, 1);
+done:
+	p->sched_throttle_work.next = &p->sched_throttle_work;
+	/*
+	 * XXX: this assumes the highest in_throttle_limbo cfs_rq in the
+	 * hierarchy is the one which got throttled, which might not always
+	 * be the case.
+	 */
+	if (top_cfs_rq && !top_cfs_rq->throttled_clock)
+		top_cfs_rq->throttled_clock = rq_clock(rq);
+
+	resched_curr(rq);
+}
+
+void init_cfs_throttle_work(struct task_struct *p)
+{
+	/* Protect against double add, see throttle_cfs_rq() and throttle_cfs_rq_work() */
+	p->sched_throttle_work.next = &p->sched_throttle_work;
+	init_task_work(&p->sched_throttle_work, throttle_cfs_rq_work);
+}
+
+static inline bool task_has_throttle_work(struct task_struct *p)
+{
+	return p->sched_throttle_work.next != &p->sched_throttle_work;
 }
 
 static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
-	struct sched_entity *se;
-	long task_delta, idle_task_delta, dequeue = 1;
+	long dequeue = 1;
+
+	if (cfs_rq->in_throttle_limbo)
+		return false;
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5737,70 +5900,20 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		list_add_tail_rcu(&cfs_rq->throttled_list,
 				  &cfs_b->throttled_cfs_rq);
 	}
+
 	raw_spin_unlock(&cfs_b->lock);
 
 	if (!dequeue)
 		return false;  /* Throttle no longer required. */
 
-	se = cfs_rq->tg->se[cpu_of(rq_of(cfs_rq))];
-
-	/* freeze hierarchy runnable averages while throttled */
 	rcu_read_lock();
 	walk_tg_tree_from(cfs_rq->tg, tg_throttle_down, tg_nop, (void *)rq);
 	rcu_read_unlock();
 
-	task_delta = cfs_rq->h_nr_running;
-	idle_task_delta = cfs_rq->idle_h_nr_running;
-	for_each_sched_entity(se) {
-		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
-		/* throttled entity or throttle-on-deactivate */
-		if (!se->on_rq)
-			goto done;
+	if (!task_has_throttle_work(current))
+		task_work_add(current, &current->sched_throttle_work, TWA_RESUME);
 
-		dequeue_entity(qcfs_rq, se, DEQUEUE_SLEEP);
-
-		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_running;
-
-		qcfs_rq->h_nr_running -= task_delta;
-		qcfs_rq->idle_h_nr_running -= idle_task_delta;
-
-		if (qcfs_rq->load.weight) {
-			/* Avoid re-evaluating load for this entity: */
-			se = parent_entity(se);
-			break;
-		}
-	}
-
-	for_each_sched_entity(se) {
-		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
-		/* throttled entity or throttle-on-deactivate */
-		if (!se->on_rq)
-			goto done;
-
-		update_load_avg(qcfs_rq, se, 0);
-		se_update_runnable(se);
-
-		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_running;
-
-		qcfs_rq->h_nr_running -= task_delta;
-		qcfs_rq->idle_h_nr_running -= idle_task_delta;
-	}
-
-	/* At this point se is NULL and we are at root level*/
-	sub_nr_running(rq, task_delta);
-
-done:
-	/*
-	 * Note: distribution will already see us throttled via the
-	 * throttled-list.  rq->lock protects completion.
-	 */
-	cfs_rq->throttled = 1;
-	SCHED_WARN_ON(cfs_rq->throttled_clock);
-	if (cfs_rq->nr_running)
-		cfs_rq->throttled_clock = rq_clock(rq);
-	return true;
+	return false;
 }
 
 void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
@@ -5811,8 +5924,6 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	long task_delta, idle_task_delta;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
-
-	cfs_rq->throttled = 0;
 
 	update_rq_clock(rq);
 
@@ -5841,17 +5952,21 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		goto unthrottle_throttle;
 	}
 
-	task_delta = cfs_rq->h_nr_running;
-	idle_task_delta = cfs_rq->idle_h_nr_running;
+	/*
+	 * cfs_rq's below us may not have been fully emptied out, so we can't rely
+	 * directly on ->h_nr_running. Use the stash instead.
+	 */
+	task_delta = cfs_rq->unthrottled_h_nr_running;
+	idle_task_delta = cfs_rq->unthrottled_idle_h_nr_running;
+
+	walk_tg_tree_from(cfs_rq->tg, tg_nop, tg_unthrottle_clear_up, (void *)rq);
+
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
 
 		if (se->on_rq)
 			break;
 		enqueue_entity(qcfs_rq, se, ENQUEUE_WAKEUP);
-
-		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_running;
 
 		qcfs_rq->h_nr_running += task_delta;
 		qcfs_rq->idle_h_nr_running += idle_task_delta;
@@ -5866,9 +5981,6 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		update_load_avg(qcfs_rq, se, UPDATE_TG);
 		se_update_runnable(se);
-
-		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_running;
 
 		qcfs_rq->h_nr_running += task_delta;
 		qcfs_rq->idle_h_nr_running += idle_task_delta;
@@ -5919,7 +6031,7 @@ static void __cfsb_csd_unthrottle(void *arg)
 				 throttled_csd_list) {
 		list_del_init(&cursor->throttled_csd_list);
 
-		if (cfs_rq_throttled(cursor))
+		if (cfs_rq_throttled(cursor) || cursor->in_throttle_limbo)
 			unthrottle_cfs_rq(cursor);
 	}
 
@@ -5959,7 +6071,7 @@ static void unthrottle_cfs_rq_async(struct cfs_rq *cfs_rq)
 {
 	lockdep_assert_rq_held(rq_of(cfs_rq));
 
-	if (SCHED_WARN_ON(!cfs_rq_throttled(cfs_rq) ||
+	if (SCHED_WARN_ON(!(cfs_rq_throttled(cfs_rq) || cfs_rq->in_throttle_limbo) ||
 	    cfs_rq->runtime_remaining <= 0))
 		return;
 
@@ -5987,7 +6099,12 @@ static bool distribute_cfs_runtime(struct cfs_bandwidth *cfs_b)
 		}
 
 		rq_lock_irqsave(rq, &rf);
-		if (!cfs_rq_throttled(cfs_rq))
+		/*
+		 * A cfs_rq can be in_throttle_limbo but not throttled if it is
+		 * waiting for tasks to exit the kernel. In this case we still
+		 * want to replenish.
+		 */
+		if (!cfs_rq_throttled(cfs_rq) && !cfs_rq->in_throttle_limbo)
 			goto next;
 
 		/* Already queued for async unthrottle */
@@ -6036,7 +6153,7 @@ next:
 
 		list_del_init(&cfs_rq->throttled_csd_list);
 
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_throttled(cfs_rq) || cfs_rq->in_throttle_limbo)
 			unthrottle_cfs_rq(cfs_rq);
 
 		rq_unlock_irqrestore(rq, &rf);
@@ -6374,6 +6491,7 @@ static void init_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 	cfs_rq->runtime_enabled = 0;
 	INIT_LIST_HEAD(&cfs_rq->throttled_list);
 	INIT_LIST_HEAD(&cfs_rq->throttled_csd_list);
+	INIT_LIST_HEAD(&cfs_rq->throttled_limbo_list);
 }
 
 void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
@@ -8412,6 +8530,8 @@ again:
 
 	p = task_of(se);
 
+	if (unlikely(cfs_rq_of(se)->in_throttle_limbo && !task_has_throttle_work(p)))
+		task_work_add(p, &p->sched_throttle_work, TWA_RESUME);
 	/*
 	 * Since we haven't yet done put_prev_entity and if the selected task
 	 * is a different task than we started out with, try and touch the
@@ -8451,6 +8571,9 @@ simple:
 	} while (cfs_rq);
 
 	p = task_of(se);
+
+	if (unlikely(cfs_rq_of(se)->in_throttle_limbo && !task_has_throttle_work(p)))
+		task_work_add(p, &p->sched_throttle_work, TWA_RESUME);
 
 done: __maybe_unused;
 #ifdef CONFIG_SMP

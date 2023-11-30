@@ -825,6 +825,8 @@ struct task_struct {
 
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
+	struct callback_head            sched_throttle_work;
+	struct list_head                throttle_node;
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK

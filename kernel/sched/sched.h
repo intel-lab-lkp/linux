@@ -658,8 +658,13 @@ struct cfs_rq {
 	u64			throttled_clock_self_time;
 	int			throttled;
 	int			throttle_count;
+	int                     in_throttle_limbo;
+	/* Temp storage for updating the counts during unthrottling */
+	unsigned int            unthrottled_h_nr_running;
+	unsigned int            unthrottled_idle_h_nr_running;
 	struct list_head	throttled_list;
 	struct list_head	throttled_csd_list;
+	struct list_head	throttled_limbo_list;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 };
@@ -2448,6 +2453,8 @@ extern void update_max_interval(void);
 extern void init_sched_dl_class(void);
 extern void init_sched_rt_class(void);
 extern void init_sched_fair_class(void);
+
+extern void init_cfs_throttle_work(struct task_struct *p);
 
 extern void reweight_task(struct task_struct *p, int prio);
 
