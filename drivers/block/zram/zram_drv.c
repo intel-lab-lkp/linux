@@ -514,7 +514,7 @@ static ssize_t backing_dev_store(struct device *dev,
 
 	nr_pages = i_size_read(inode) >> PAGE_SHIFT;
 	bitmap_sz = BITS_TO_LONGS(nr_pages) * sizeof(long);
-	bitmap = kvzalloc(bitmap_sz, GFP_KERNEL);
+	bitmap = kmalloc(bitmap_sz, GFP_ATOMIC);
 	if (!bitmap) {
 		err = -ENOMEM;
 		goto out;
