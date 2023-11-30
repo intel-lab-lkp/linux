@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
+#include <linux/memory-tiers.h>
 #include <linux/vmstat.h>
 #include <linux/notifier.h>
 #include <linux/node.h>
@@ -569,11 +570,54 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
+static ssize_t adistance_offset_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	int nid = dev->id;
+	int len = 0;
+
+	/*
+	 * buf is currently PAGE_SIZE in length and each node needs 4 chars
+	 * at the most (distance + space or newline).
+	 */
+	BUILD_BUG_ON(MAX_NUMNODES * 4 > PAGE_SIZE);
+
+	len += sysfs_emit(buf, "%d\n", node_devices[nid]->adistance_offset);
+	return len;
+}
+
+static ssize_t adistance_offset_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t size)
+{
+	int nid = dev->id;
+	int value, ret;
+
+	ret = kstrtoint(buf, 0, &value);
+
+	if (ret)
+		return ret;
+	if (node_devices[nid]->adistance_offset == value)
+		return size;
+	/*
+	 * Request from a node to migrate to a memtier with negative
+	 * adistance is not valid.
+	 */
+	ret = get_target_memtier_adistance(nid, value);
+	if (ret < 0)
+		return -EINVAL;
+
+	node_devices[nid]->adistance_offset = value;
+	return size;
+}
+static DEVICE_ATTR_RW(adistance_offset);
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_adistance_offset.attr,
 	NULL
 };
 
@@ -883,6 +927,7 @@ int __register_one_node(int nid)
 
 	INIT_LIST_HEAD(&node_devices[nid]->access_list);
 	node_init_caches(nid);
+	node_devices[nid]->adistance_offset = 0;
 
 	return error;
 }

@@ -48,6 +48,7 @@ int mt_calc_adistance(int node, int *adist);
 int mt_set_default_dram_perf(int nid, struct node_hmem_attrs *perf,
 			     const char *source);
 int mt_perf_to_adistance(struct node_hmem_attrs *perf, int *adist);
+int get_target_memtier_adistance(int node, int adistance_offset);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -135,6 +136,11 @@ static inline int mt_set_default_dram_perf(int nid, struct node_hmem_attrs *perf
 static inline int mt_perf_to_adistance(struct node_hmem_attrs *perf, int *adist)
 {
 	return -EIO;
+}
+
+static int get_target_memtier_adistance(int node, int adistance_offset)
+{
+	return 0;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */
