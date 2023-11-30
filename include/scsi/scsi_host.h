@@ -464,6 +464,9 @@ struct scsi_host_template {
 	/* The queuecommand callback may block. See also BLK_MQ_F_BLOCKING. */
 	unsigned queuecommand_may_block:1;
 
+	/* See also BLK_MQ_F_DISABLE_FAIR_TAG_SHARING. */
+	unsigned disable_fair_tag_sharing:1;
+
 	/*
 	 * Countdown for host blocking with no commands outstanding.
 	 */
@@ -661,6 +664,9 @@ struct Scsi_Host {
 
 	/* The queuecommand callback may block. See also BLK_MQ_F_BLOCKING. */
 	unsigned queuecommand_may_block:1;
+
+	/* See also BLK_MQ_F_DISABLE_FAIR_TAG_SHARING. */
+	unsigned disable_fair_tag_sharing:1;
 
 	/* Host responded with short (<36 bytes) INQUIRY result */
 	unsigned short_inquiry:1;
