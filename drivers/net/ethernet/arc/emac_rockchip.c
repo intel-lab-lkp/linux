@@ -134,6 +134,11 @@ static int emac_rockchip_probe(struct platform_device *pdev)
 	}
 
 	match = of_match_node(emac_rockchip_dt_ids, dev->of_node);
+	if (!match) {
+		dev_err(dev, "No matching device found\n");
+		return -ENODEV;
+	}
+
 	priv->soc_data = match->data;
 
 	priv->emac.clk = devm_clk_get(dev, "hclk");
