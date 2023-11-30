@@ -317,6 +317,11 @@ static inline void unlock_zsdesc(struct zsdesc *zsdesc)
 	unlock_page(zsdesc_page(zsdesc));
 }
 
+static inline bool zsdesc_is_locked(struct zsdesc *zsdesc)
+{
+	return PageLocked(zsdesc_page(zsdesc));
+}
+
 static inline void wait_on_zsdesc_locked(struct zsdesc *zsdesc)
 {
 	wait_on_page_locked(zsdesc_page(zsdesc));
@@ -1011,7 +1016,7 @@ unlock:
 static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 				struct zspage *zspage)
 {
-	struct page *page, *next;
+	struct zsdesc *zsdesc, *next;
 	int fg;
 	unsigned int class_idx;
 
@@ -1022,16 +1027,16 @@ static void __free_zspage(struct zs_pool *pool, struct size_class *class,
 	VM_BUG_ON(get_zspage_inuse(zspage));
 	VM_BUG_ON(fg != ZS_INUSE_RATIO_0);
 
-	next = page = get_first_page(zspage);
+	next = zsdesc = get_first_zsdesc(zspage);
 	do {
-		VM_BUG_ON_PAGE(!PageLocked(page), page);
-		next = get_next_page(page);
-		reset_zsdesc(page_zsdesc(page));
-		unlock_page(page);
-		dec_zone_page_state(page, NR_ZSPAGES);
-		put_page(page);
-		page = next;
-	} while (page != NULL);
+		VM_BUG_ON_PAGE(!zsdesc_is_locked(zsdesc), zsdesc_page(zsdesc));
+		next = get_next_zsdesc(zsdesc);
+		reset_zsdesc(zsdesc);
+		unlock_zsdesc(zsdesc);
+		zsdesc_dec_zone_page_state(zsdesc);
+		zsdesc_put(zsdesc);
+		zsdesc = next;
+	} while (zsdesc != NULL);
 
 	cache_free_zspage(pool, zspage);
 
