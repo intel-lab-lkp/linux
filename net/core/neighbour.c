@@ -256,6 +256,8 @@ static int neigh_forced_gc(struct neigh_table *tbl)
 	unsigned long tref = jiffies - 5 * HZ;
 	struct neighbour *n, *tmp;
 	int shrunk = 0;
+	bool finish = true;
+	unsigned long timeout = jiffies + msecs_to_jiffies(1);        /* timeout in 1ms */
 
 	NEIGH_CACHE_STAT_INC(tbl, forced_gc_runs);
 
@@ -278,10 +280,14 @@ static int neigh_forced_gc(struct neigh_table *tbl)
 				shrunk++;
 			if (shrunk >= max_clean)
 				break;
+			if (time_after(jiffies, timeout)) {
+				finish = false;
+				break;
+			}
 		}
 	}
-
-	WRITE_ONCE(tbl->last_flush, jiffies);
+	if (finish)
+		WRITE_ONCE(tbl->last_flush, jiffies);
 
 	write_unlock_bh(&tbl->lock);
 
