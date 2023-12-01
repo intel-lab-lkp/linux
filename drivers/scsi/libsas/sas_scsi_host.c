@@ -637,14 +637,23 @@ static void sas_eh_handle_sas_errors(struct Scsi_Host *shost, struct list_head *
 			       SAS_ADDR(task->dev->sas_addr),
 			       cmd->device->lun);
 
-			sas_eh_finish_cmd(cmd);
-			goto clear_q;
+			list_move_tail(&cmd->eh_entry, work_q);
+			goto free_q_task;
 		}
 	}
  out:
 	list_splice_tail(&done, work_q);
 	list_splice_tail_init(&ha->eh_ata_q, work_q);
 	return;
+
+free_q_task:
+	pr_debug("--- Exit %s -- free_q_task\n", __func__);
+	list_for_each_entry_safe(cmd, n, work_q, eh_entry) {
+		struct sas_task *task = TO_SAS_TASK(cmd);
+
+		sas_end_task(cmd, task);
+	}
+	goto out;
 
  clear_q:
 	pr_debug("--- Exit %s -- clear_q\n", __func__);
