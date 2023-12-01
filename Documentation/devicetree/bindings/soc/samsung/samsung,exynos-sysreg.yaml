@@ -24,6 +24,12 @@ properties:
           - const: syscon
       - items:
           - enum:
+              - google,gs101-apm-sysreg
+              - google,gs101-peric0-sysreg
+              - google,gs101-peric1-sysreg
+          - const: syscon
+      - items:
+          - enum:
               - samsung,exynos5433-cam0-sysreg
               - samsung,exynos5433-cam1-sysreg
               - samsung,exynos5433-disp-sysreg
