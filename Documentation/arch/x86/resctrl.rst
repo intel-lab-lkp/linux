@@ -417,6 +417,17 @@ When monitoring is enabled all MON groups will also contain:
 		# echo total=assign > /sys/fs/resctrl/monitor_state
 		# echo total=assign;local=assign > /sys/fs/resctrl/monitor_state
 
+	The user needs to unpin (or unassign) counter to release it.
+	Example::
+
+		# echo total=unassign > /sys/fs/resctrl/monitor_state
+		# cat /sys/fs/resctrl/monitor_state
+		total=unassign;local=assign
+
+		# echo total=unassign;local=unassign > /sys/fs/resctrl/monitor_state
+		# cat /sys/fs/resctrl/monitor_state
+		total=unassign;local=unassign
+
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
 	for the monitor group. On x86 this is the RMID.

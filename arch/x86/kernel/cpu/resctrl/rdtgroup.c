@@ -192,6 +192,11 @@ static int abmc_counters_alloc(void)
 	return counterid;
 }
 
+void abmc_counters_free(int counterid)
+{
+	abmc_free_map |= 1 << counterid;
+}
+
 /**
  * rdtgroup_mode_by_closid - Return mode of resource group with closid
  * @closid: closid if the resource group
@@ -1671,6 +1676,31 @@ static ssize_t rdtgroup_assign_abmc(struct rdtgroup *rdtgrp,
 	return 0;
 }
 
+static ssize_t rdtgroup_unassign_abmc(struct rdtgroup *rdtgrp,
+				      struct rdt_resource *r,
+				      u32 evtid, int mon_state)
+{
+	struct rdt_domain *d;
+	int index;
+
+	index = mon_event_config_index_get(evtid);
+	if (index == INVALID_CONFIG_INDEX) {
+		pr_warn_once("Invalid event id %d\n", evtid);
+		return -EINVAL;
+	}
+
+	if (rdtgrp->mon.monitor_state & mon_state) {
+		list_for_each_entry(d, &r->domains, list)
+			rdtgroup_abmc_domain(d, rdtgrp, evtid, index, 0);
+
+		abmc_counters_free(rdtgrp->mon.abmc_ctr_id[index]);
+	}
+
+	rdtgrp->mon.monitor_state &= ~mon_state;
+
+	return 0;
+}
+
 /**
  * rdtgroup_monitor_state_write - Modify the resource group's assign
  *
@@ -1714,6 +1744,12 @@ static ssize_t rdtgroup_monitor_state_write(struct kernfs_open_file *of,
 				ret = rdtgroup_assign_abmc(rdtgrp, r, evtid, mon_state);
 				if (ret) {
 					rdt_last_cmd_puts("ABMC assign failed\n");
+					break;
+				}
+			} else if (!strcmp(abmc_str, "unassign")) {
+				ret = rdtgroup_unassign_abmc(rdtgrp, r, evtid, mon_state);
+				if (ret) {
+					rdt_last_cmd_puts("ABMC unassign failed\n");
 					break;
 				}
 			} else {
