@@ -854,3 +854,14 @@ void __init intel_rdt_mbm_apply_quirk(void)
 	mbm_cf_rmidthreshold = mbm_cf_table[cf_index].rmidthreshold;
 	mbm_cf = mbm_cf_table[cf_index].cf;
 }
+
+void arch_domain_mbm_evt_config(struct rdt_hw_domain *hw_dom)
+{
+	if (mbm_total_event.configurable)
+		hw_dom->mbm_total_cfg = resctrl_max_evt_bitmask;
+
+	if (mbm_local_event.configurable)
+		hw_dom->mbm_local_cfg = READS_TO_LOCAL_MEM |
+					NON_TEMP_WRITE_TO_LOCAL_MEM |
+					READS_TO_LOCAL_S_MEM;
+}

@@ -556,6 +556,8 @@ static void domain_add_cpu(int cpu, struct rdt_resource *r)
 		return;
 	}
 
+	arch_domain_mbm_evt_config(hw_dom);
+
 	list_add_tail(&d->list, add_pos);
 
 	err = resctrl_online_domain(r, d);

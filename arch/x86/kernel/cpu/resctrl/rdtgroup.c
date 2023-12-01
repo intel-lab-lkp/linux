@@ -1667,6 +1667,7 @@ static void mon_event_config_write(void *info)
 static int mbm_config_write_domain(struct rdt_resource *r,
 				   struct rdt_domain *d, u32 evtid, u32 val)
 {
+	struct rdt_hw_domain *hw_dom = resctrl_to_arch_dom(d);
 	struct mon_config_info mon_info = {0};
 	int ret = 0;
 
@@ -1695,6 +1696,16 @@ static int mbm_config_write_domain(struct rdt_resource *r,
 	 */
 	smp_call_function_any(&d->cpu_mask, mon_event_config_write,
 			      &mon_info, 1);
+
+	/*
+	 * Update event config value in the domain when user changes it.
+	 */
+	if (evtid == QOS_L3_MBM_TOTAL_EVENT_ID)
+		hw_dom->mbm_total_cfg = val;
+	else if (evtid == QOS_L3_MBM_LOCAL_EVENT_ID)
+		hw_dom->mbm_local_cfg = val;
+	else
+		goto out;
 
 	/*
 	 * When an Event Configuration is changed, the bandwidth counters
