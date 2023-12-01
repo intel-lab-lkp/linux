@@ -96,6 +96,7 @@ struct ynl_policy_attr ethtool_header_policy[ETHTOOL_A_HEADER_MAX + 1] = {
 	[ETHTOOL_A_HEADER_DEV_INDEX] = { .name = "dev-index", .type = YNL_PT_U32, },
 	[ETHTOOL_A_HEADER_DEV_NAME] = { .name = "dev-name", .type = YNL_PT_NUL_STR, },
 	[ETHTOOL_A_HEADER_FLAGS] = { .name = "flags", .type = YNL_PT_U32, },
+	[ETHTOOL_A_HEADER_PHY_INDEX] = { .name = "phy-index", .type = YNL_PT_U32, },
 };
 
 struct ynl_policy_nest ethtool_header_nest = {
@@ -684,6 +685,8 @@ int ethtool_header_put(struct nlmsghdr *nlh, unsigned int attr_type,
 		mnl_attr_put_strz(nlh, ETHTOOL_A_HEADER_DEV_NAME, obj->dev_name);
 	if (obj->_present.flags)
 		mnl_attr_put_u32(nlh, ETHTOOL_A_HEADER_FLAGS, obj->flags);
+	if (obj->_present.phy_index)
+		mnl_attr_put_u32(nlh, ETHTOOL_A_HEADER_PHY_INDEX, obj->phy_index);
 	mnl_attr_nest_end(nlh, nest);
 
 	return 0;
@@ -719,6 +722,11 @@ int ethtool_header_parse(struct ynl_parse_arg *yarg,
 				return MNL_CB_ERROR;
 			dst->_present.flags = 1;
 			dst->flags = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_HEADER_PHY_INDEX) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.phy_index = 1;
+			dst->phy_index = mnl_attr_get_u32(attr);
 		}
 	}
 

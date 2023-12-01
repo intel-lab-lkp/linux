@@ -27,11 +27,13 @@ struct ethtool_header {
 		__u32 dev_index:1;
 		__u32 dev_name_len;
 		__u32 flags:1;
+		__u32 phy_index:1;
 	} _present;
 
 	__u32 dev_index;
 	char *dev_name;
 	__u32 flags;
+	__u32 phy_index;
 };
 
 struct ethtool_pause_stat {
@@ -253,6 +255,14 @@ ethtool_strset_get_req_set_header_flags(struct ethtool_strset_get_req *req,
 	req->header.flags = flags;
 }
 static inline void
+ethtool_strset_get_req_set_header_phy_index(struct ethtool_strset_get_req *req,
+					    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
+static inline void
 __ethtool_strset_get_req_set_stringsets_stringset(struct ethtool_strset_get_req *req,
 						  struct ethtool_stringset_ *stringset,
 						  unsigned int n_stringset)
@@ -331,6 +341,14 @@ ethtool_strset_get_req_dump_set_header_flags(struct ethtool_strset_get_req_dump 
 	req->header.flags = flags;
 }
 static inline void
+ethtool_strset_get_req_dump_set_header_phy_index(struct ethtool_strset_get_req_dump *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
+static inline void
 __ethtool_strset_get_req_dump_set_stringsets_stringset(struct ethtool_strset_get_req_dump *req,
 						       struct ethtool_stringset_ *stringset,
 						       unsigned int n_stringset)
@@ -398,6 +416,14 @@ ethtool_linkinfo_get_req_set_header_flags(struct ethtool_linkinfo_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_linkinfo_get_req_set_header_phy_index(struct ethtool_linkinfo_get_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_linkinfo_get_rsp {
@@ -468,6 +494,14 @@ ethtool_linkinfo_get_req_dump_set_header_flags(struct ethtool_linkinfo_get_req_d
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_linkinfo_get_req_dump_set_header_phy_index(struct ethtool_linkinfo_get_req_dump *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_linkinfo_get_list {
@@ -544,6 +578,14 @@ ethtool_linkinfo_set_req_set_header_flags(struct ethtool_linkinfo_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_linkinfo_set_req_set_header_phy_index(struct ethtool_linkinfo_set_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_linkinfo_set_req_set_port(struct ethtool_linkinfo_set_req *req,
@@ -630,6 +672,14 @@ ethtool_linkmodes_get_req_set_header_flags(struct ethtool_linkmodes_get_req *req
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_linkmodes_get_req_set_header_phy_index(struct ethtool_linkmodes_get_req *req,
+					       __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_linkmodes_get_rsp {
 	struct {
@@ -708,6 +758,14 @@ ethtool_linkmodes_get_req_dump_set_header_flags(struct ethtool_linkmodes_get_req
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_linkmodes_get_req_dump_set_header_phy_index(struct ethtool_linkmodes_get_req_dump *req,
+						    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_linkmodes_get_list {
@@ -792,6 +850,14 @@ ethtool_linkmodes_set_req_set_header_flags(struct ethtool_linkmodes_set_req *req
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_linkmodes_set_req_set_header_phy_index(struct ethtool_linkmodes_set_req *req,
+					       __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_linkmodes_set_req_set_autoneg(struct ethtool_linkmodes_set_req *req,
@@ -938,6 +1004,14 @@ ethtool_linkstate_get_req_set_header_flags(struct ethtool_linkstate_get_req *req
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_linkstate_get_req_set_header_phy_index(struct ethtool_linkstate_get_req *req,
+					       __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_linkstate_get_rsp {
 	struct {
@@ -1011,6 +1085,14 @@ ethtool_linkstate_get_req_dump_set_header_flags(struct ethtool_linkstate_get_req
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_linkstate_get_req_dump_set_header_phy_index(struct ethtool_linkstate_get_req_dump *req,
+						    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_linkstate_get_list {
 	struct ethtool_linkstate_get_list *next;
@@ -1064,6 +1146,14 @@ ethtool_debug_get_req_set_header_flags(struct ethtool_debug_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_debug_get_req_set_header_phy_index(struct ethtool_debug_get_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_debug_get_rsp {
@@ -1125,6 +1215,14 @@ ethtool_debug_get_req_dump_set_header_flags(struct ethtool_debug_get_req_dump *r
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_debug_get_req_dump_set_header_phy_index(struct ethtool_debug_get_req_dump *req,
+						__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_debug_get_list {
@@ -1192,6 +1290,14 @@ ethtool_debug_set_req_set_header_flags(struct ethtool_debug_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_debug_set_req_set_header_phy_index(struct ethtool_debug_set_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_debug_set_req_set_msgmask_nomask(struct ethtool_debug_set_req *req)
@@ -1264,6 +1370,14 @@ ethtool_wol_get_req_set_header_flags(struct ethtool_wol_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_wol_get_req_set_header_phy_index(struct ethtool_wol_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_wol_get_rsp {
 	struct {
@@ -1326,6 +1440,14 @@ ethtool_wol_get_req_dump_set_header_flags(struct ethtool_wol_get_req_dump *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_wol_get_req_dump_set_header_phy_index(struct ethtool_wol_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_wol_get_list {
@@ -1394,6 +1516,14 @@ ethtool_wol_set_req_set_header_flags(struct ethtool_wol_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_wol_set_req_set_header_phy_index(struct ethtool_wol_set_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_wol_set_req_set_modes_nomask(struct ethtool_wol_set_req *req)
@@ -1475,6 +1605,14 @@ ethtool_features_get_req_set_header_flags(struct ethtool_features_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_features_get_req_set_header_phy_index(struct ethtool_features_get_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_features_get_rsp {
 	struct {
@@ -1542,6 +1680,14 @@ ethtool_features_get_req_dump_set_header_flags(struct ethtool_features_get_req_d
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_features_get_req_dump_set_header_phy_index(struct ethtool_features_get_req_dump *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_features_get_list {
@@ -1616,6 +1762,14 @@ ethtool_features_set_req_set_header_flags(struct ethtool_features_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_features_set_req_set_header_phy_index(struct ethtool_features_set_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_features_set_req_set_hw_nomask(struct ethtool_features_set_req *req)
@@ -1777,6 +1931,14 @@ ethtool_privflags_get_req_set_header_flags(struct ethtool_privflags_get_req *req
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_privflags_get_req_set_header_phy_index(struct ethtool_privflags_get_req *req,
+					       __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_privflags_get_rsp {
 	struct {
@@ -1839,6 +2001,14 @@ ethtool_privflags_get_req_dump_set_header_flags(struct ethtool_privflags_get_req
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_privflags_get_req_dump_set_header_phy_index(struct ethtool_privflags_get_req_dump *req,
+						    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_privflags_get_list {
@@ -1907,6 +2077,14 @@ ethtool_privflags_set_req_set_header_flags(struct ethtool_privflags_set_req *req
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_privflags_set_req_set_header_phy_index(struct ethtool_privflags_set_req *req,
+					       __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_privflags_set_req_set_flags_nomask(struct ethtool_privflags_set_req *req)
@@ -1979,6 +2157,14 @@ ethtool_rings_get_req_set_header_flags(struct ethtool_rings_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_rings_get_req_set_header_phy_index(struct ethtool_rings_get_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_rings_get_rsp {
@@ -2068,6 +2254,14 @@ ethtool_rings_get_req_dump_set_header_flags(struct ethtool_rings_get_req_dump *r
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_rings_get_req_dump_set_header_phy_index(struct ethtool_rings_get_req_dump *req,
+						__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_rings_get_list {
@@ -2163,6 +2357,14 @@ ethtool_rings_set_req_set_header_flags(struct ethtool_rings_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_rings_set_req_set_header_phy_index(struct ethtool_rings_set_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_rings_set_req_set_rx_max(struct ethtool_rings_set_req *req,
@@ -2316,6 +2518,14 @@ ethtool_channels_get_req_set_header_flags(struct ethtool_channels_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_channels_get_req_set_header_phy_index(struct ethtool_channels_get_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_channels_get_rsp {
 	struct {
@@ -2391,6 +2601,14 @@ ethtool_channels_get_req_dump_set_header_flags(struct ethtool_channels_get_req_d
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_channels_get_req_dump_set_header_phy_index(struct ethtool_channels_get_req_dump *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_channels_get_list {
@@ -2473,6 +2691,14 @@ ethtool_channels_set_req_set_header_flags(struct ethtool_channels_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_channels_set_req_set_header_phy_index(struct ethtool_channels_set_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_channels_set_req_set_rx_max(struct ethtool_channels_set_req *req,
@@ -2579,6 +2805,14 @@ ethtool_coalesce_get_req_set_header_flags(struct ethtool_coalesce_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_coalesce_get_req_set_header_phy_index(struct ethtool_coalesce_get_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_coalesce_get_rsp {
@@ -2693,6 +2927,14 @@ ethtool_coalesce_get_req_dump_set_header_flags(struct ethtool_coalesce_get_req_d
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_coalesce_get_req_dump_set_header_phy_index(struct ethtool_coalesce_get_req_dump *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_coalesce_get_list {
@@ -2813,6 +3055,14 @@ ethtool_coalesce_set_req_set_header_flags(struct ethtool_coalesce_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_coalesce_set_req_set_header_phy_index(struct ethtool_coalesce_set_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_coalesce_set_req_set_rx_usecs(struct ethtool_coalesce_set_req *req,
@@ -3052,6 +3302,14 @@ ethtool_pause_get_req_set_header_flags(struct ethtool_pause_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_pause_get_req_set_header_phy_index(struct ethtool_pause_get_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_pause_get_rsp {
 	struct {
@@ -3120,6 +3378,14 @@ ethtool_pause_get_req_dump_set_header_flags(struct ethtool_pause_get_req_dump *r
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_pause_get_req_dump_set_header_phy_index(struct ethtool_pause_get_req_dump *req,
+						__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_pause_get_list {
@@ -3195,6 +3461,14 @@ ethtool_pause_set_req_set_header_flags(struct ethtool_pause_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_pause_set_req_set_header_phy_index(struct ethtool_pause_set_req *req,
+					   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_pause_set_req_set_autoneg(struct ethtool_pause_set_req *req,
@@ -3286,6 +3560,14 @@ ethtool_eee_get_req_set_header_flags(struct ethtool_eee_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_eee_get_req_set_header_phy_index(struct ethtool_eee_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_eee_get_rsp {
 	struct {
@@ -3356,6 +3638,14 @@ ethtool_eee_get_req_dump_set_header_flags(struct ethtool_eee_get_req_dump *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_eee_get_req_dump_set_header_phy_index(struct ethtool_eee_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_eee_get_list {
@@ -3432,6 +3722,14 @@ ethtool_eee_set_req_set_header_flags(struct ethtool_eee_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_eee_set_req_set_header_phy_index(struct ethtool_eee_set_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_eee_set_req_set_modes_ours_nomask(struct ethtool_eee_set_req *req)
@@ -3553,6 +3851,14 @@ ethtool_tsinfo_get_req_set_header_flags(struct ethtool_tsinfo_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_tsinfo_get_req_set_header_phy_index(struct ethtool_tsinfo_get_req *req,
+					    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_tsinfo_get_rsp {
 	struct {
@@ -3620,6 +3926,14 @@ ethtool_tsinfo_get_req_dump_set_header_flags(struct ethtool_tsinfo_get_req_dump 
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_tsinfo_get_req_dump_set_header_phy_index(struct ethtool_tsinfo_get_req_dump *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_tsinfo_get_list {
 	struct ethtool_tsinfo_get_list *next;
@@ -3675,6 +3989,14 @@ ethtool_cable_test_act_req_set_header_flags(struct ethtool_cable_test_act_req *r
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_cable_test_act_req_set_header_phy_index(struct ethtool_cable_test_act_req *req,
+						__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 /*
  * Cable test.
@@ -3726,6 +4048,14 @@ ethtool_cable_test_tdr_act_req_set_header_flags(struct ethtool_cable_test_tdr_ac
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_cable_test_tdr_act_req_set_header_phy_index(struct ethtool_cable_test_tdr_act_req *req,
+						    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 /*
  * Cable test TDR.
@@ -3775,6 +4105,14 @@ ethtool_tunnel_info_get_req_set_header_flags(struct ethtool_tunnel_info_get_req 
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_tunnel_info_get_req_set_header_phy_index(struct ethtool_tunnel_info_get_req *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_tunnel_info_get_rsp {
@@ -3839,6 +4177,14 @@ ethtool_tunnel_info_get_req_dump_set_header_flags(struct ethtool_tunnel_info_get
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_tunnel_info_get_req_dump_set_header_phy_index(struct ethtool_tunnel_info_get_req_dump *req,
+						      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_tunnel_info_get_list {
 	struct ethtool_tunnel_info_get_list *next;
@@ -3893,6 +4239,14 @@ ethtool_fec_get_req_set_header_flags(struct ethtool_fec_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_fec_get_req_set_header_phy_index(struct ethtool_fec_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_fec_get_rsp {
@@ -3960,6 +4314,14 @@ ethtool_fec_get_req_dump_set_header_flags(struct ethtool_fec_get_req_dump *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_fec_get_req_dump_set_header_phy_index(struct ethtool_fec_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_fec_get_list {
@@ -4032,6 +4394,14 @@ ethtool_fec_set_req_set_header_flags(struct ethtool_fec_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_fec_set_req_set_header_phy_index(struct ethtool_fec_set_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_fec_set_req_set_modes_nomask(struct ethtool_fec_set_req *req)
@@ -4144,6 +4514,14 @@ ethtool_module_eeprom_get_req_set_header_flags(struct ethtool_module_eeprom_get_
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_module_eeprom_get_req_set_header_phy_index(struct ethtool_module_eeprom_get_req *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_module_eeprom_get_rsp {
 	struct {
@@ -4218,6 +4596,14 @@ ethtool_module_eeprom_get_req_dump_set_header_flags(struct ethtool_module_eeprom
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_module_eeprom_get_req_dump_set_header_phy_index(struct ethtool_module_eeprom_get_req_dump *req,
+							__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_module_eeprom_get_list {
 	struct ethtool_module_eeprom_get_list *next;
@@ -4273,6 +4659,14 @@ ethtool_phc_vclocks_get_req_set_header_flags(struct ethtool_phc_vclocks_get_req 
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_phc_vclocks_get_req_set_header_phy_index(struct ethtool_phc_vclocks_get_req *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_phc_vclocks_get_rsp {
@@ -4337,6 +4731,14 @@ ethtool_phc_vclocks_get_req_dump_set_header_flags(struct ethtool_phc_vclocks_get
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_phc_vclocks_get_req_dump_set_header_phy_index(struct ethtool_phc_vclocks_get_req_dump *req,
+						      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_phc_vclocks_get_list {
 	struct ethtool_phc_vclocks_get_list *next;
@@ -4391,6 +4793,14 @@ ethtool_module_get_req_set_header_flags(struct ethtool_module_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_module_get_req_set_header_phy_index(struct ethtool_module_get_req *req,
+					    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_module_get_rsp {
@@ -4454,6 +4864,14 @@ ethtool_module_get_req_dump_set_header_flags(struct ethtool_module_get_req_dump 
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_module_get_req_dump_set_header_phy_index(struct ethtool_module_get_req_dump *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_module_get_list {
@@ -4525,6 +4943,14 @@ ethtool_module_set_req_set_header_flags(struct ethtool_module_set_req *req,
 	req->header.flags = flags;
 }
 static inline void
+ethtool_module_set_req_set_header_phy_index(struct ethtool_module_set_req *req,
+					    __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
+static inline void
 ethtool_module_set_req_set_power_mode_policy(struct ethtool_module_set_req *req,
 					     __u8 power_mode_policy)
 {
@@ -4585,6 +5011,14 @@ ethtool_pse_get_req_set_header_flags(struct ethtool_pse_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_pse_get_req_set_header_phy_index(struct ethtool_pse_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_pse_get_rsp {
@@ -4651,6 +5085,14 @@ ethtool_pse_get_req_dump_set_header_flags(struct ethtool_pse_get_req_dump *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_pse_get_req_dump_set_header_phy_index(struct ethtool_pse_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_pse_get_list {
 	struct ethtool_pse_get_list *next;
@@ -4709,6 +5151,14 @@ ethtool_pse_set_req_set_header_flags(struct ethtool_pse_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_pse_set_req_set_header_phy_index(struct ethtool_pse_set_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_pse_set_req_set_admin_state(struct ethtool_pse_set_req *req,
@@ -4779,6 +5229,14 @@ ethtool_rss_get_req_set_header_flags(struct ethtool_rss_get_req *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_rss_get_req_set_header_phy_index(struct ethtool_rss_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_rss_get_rsp {
 	struct {
@@ -4846,6 +5304,14 @@ ethtool_rss_get_req_dump_set_header_flags(struct ethtool_rss_get_req_dump *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_rss_get_req_dump_set_header_phy_index(struct ethtool_rss_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_rss_get_list {
 	struct ethtool_rss_get_list *next;
@@ -4899,6 +5365,14 @@ ethtool_plca_get_cfg_req_set_header_flags(struct ethtool_plca_get_cfg_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_plca_get_cfg_req_set_header_phy_index(struct ethtool_plca_get_cfg_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_plca_get_cfg_rsp {
@@ -4975,6 +5449,14 @@ ethtool_plca_get_cfg_req_dump_set_header_flags(struct ethtool_plca_get_cfg_req_d
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_plca_get_cfg_req_dump_set_header_phy_index(struct ethtool_plca_get_cfg_req_dump *req,
+						   __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_plca_get_cfg_list {
@@ -5057,6 +5539,14 @@ ethtool_plca_set_cfg_req_set_header_flags(struct ethtool_plca_set_cfg_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_plca_set_cfg_req_set_header_phy_index(struct ethtool_plca_set_cfg_req *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_plca_set_cfg_req_set_version(struct ethtool_plca_set_cfg_req *req,
@@ -5164,6 +5654,14 @@ ethtool_plca_get_status_req_set_header_flags(struct ethtool_plca_get_status_req 
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_plca_get_status_req_set_header_phy_index(struct ethtool_plca_get_status_req *req,
+						 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_plca_get_status_rsp {
 	struct {
@@ -5241,6 +5739,14 @@ ethtool_plca_get_status_req_dump_set_header_flags(struct ethtool_plca_get_status
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_plca_get_status_req_dump_set_header_phy_index(struct ethtool_plca_get_status_req_dump *req,
+						      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_plca_get_status_list {
 	struct ethtool_plca_get_status_list *next;
@@ -5295,6 +5801,14 @@ ethtool_mm_get_req_set_header_flags(struct ethtool_mm_get_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_mm_get_req_set_header_phy_index(struct ethtool_mm_get_req *req,
+					__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 
 struct ethtool_mm_get_rsp {
@@ -5373,6 +5887,14 @@ ethtool_mm_get_req_dump_set_header_flags(struct ethtool_mm_get_req_dump *req,
 	req->header._present.flags = 1;
 	req->header.flags = flags;
 }
+static inline void
+ethtool_mm_get_req_dump_set_header_phy_index(struct ethtool_mm_get_req_dump *req,
+					     __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
 
 struct ethtool_mm_get_list {
 	struct ethtool_mm_get_list *next;
@@ -5446,6 +5968,14 @@ ethtool_mm_set_req_set_header_flags(struct ethtool_mm_set_req *req,
 	req->_present.header = 1;
 	req->header._present.flags = 1;
 	req->header.flags = flags;
+}
+static inline void
+ethtool_mm_set_req_set_header_phy_index(struct ethtool_mm_set_req *req,
+					__u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
 }
 static inline void
 ethtool_mm_set_req_set_verify_enabled(struct ethtool_mm_set_req *req,
