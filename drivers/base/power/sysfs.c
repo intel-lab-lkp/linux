@@ -317,6 +317,76 @@ static ssize_t pm_qos_no_power_off_store(struct device *dev,
 
 static DEVICE_ATTR_RW(pm_qos_no_power_off);
 
+
+static ssize_t pm_qos_perf_limit_min_max_show(struct device *dev,
+					      struct device_attribute *attr,
+					      char *buf, bool max)
+{
+	s32 value = dev_pm_qos_read_value(dev, max ? DEV_PM_QOS_MAX_PERF :
+					  DEV_PM_QOS_MIN_PERF);
+
+	return sysfs_emit(buf, "%d\n", value);
+}
+
+static ssize_t pm_qos_perf_limit_min_max_store(struct device *dev,
+					       struct device_attribute *attr,
+					       const char *buf, size_t n, bool max)
+{
+	int ret;
+	s32 min_value = dev_pm_qos_read_value(dev, DEV_PM_QOS_MIN_PERF);
+	s32 max_value = dev_pm_qos_read_value(dev, DEV_PM_QOS_MAX_PERF);
+	s32 new_value;
+
+	if (kstrtoint(buf, 0, &new_value))
+		return -EINVAL;
+
+	if (new_value < PM_QOS_MIN_PERF_DEFAULT_VALUE ||
+	    new_value > PM_QOS_MAX_PERF_DEFAULT_VALUE)
+		return -EINVAL;
+
+	if (max && (new_value < min_value))
+		return -EINVAL;
+
+	if (!max && (new_value > max_value))
+		return -EINVAL;
+
+	ret = dev_pm_qos_update_request(max ? dev->power.qos->perf_max_req :
+					dev->power.qos->perf_min_req, new_value);
+
+	return ret < 0 ? ret : n;
+}
+
+static ssize_t pm_qos_perf_limit_min_show(struct device *dev,
+						 struct device_attribute *attr,
+						 char *buf)
+{
+	return pm_qos_perf_limit_min_max_show(dev, attr, buf, false);
+}
+
+static ssize_t pm_qos_perf_limit_min_store(struct device *dev,
+						  struct device_attribute *attr,
+						  const char *buf, size_t n)
+{
+	return pm_qos_perf_limit_min_max_store(dev, attr, buf, n, false);
+}
+
+static ssize_t pm_qos_perf_limit_max_show(struct device *dev,
+						 struct device_attribute *attr,
+						 char *buf)
+{
+	return pm_qos_perf_limit_min_max_show(dev, attr, buf, true);
+}
+
+static ssize_t pm_qos_perf_limit_max_store(struct device *dev,
+						  struct device_attribute *attr,
+						  const char *buf, size_t n)
+{
+	return pm_qos_perf_limit_min_max_store(dev, attr, buf, n, true);
+}
+
+static DEVICE_ATTR_RW(pm_qos_perf_limit_min);
+static DEVICE_ATTR_RW(pm_qos_perf_limit_max);
+
 #ifdef CONFIG_PM_SLEEP
 static const char _enabled[] = "enabled";
 static const char _disabled[] = "disabled";
@@ -686,6 +756,17 @@ static struct attribute *pm_qos_flags_attrs[] = {
 	&dev_attr_pm_qos_no_power_off.attr,
 	NULL,
 };
+
+static struct attribute *pm_qos_perf_limit_attrs[] = {
+	&dev_attr_pm_qos_perf_limit_min.attr,
+	&dev_attr_pm_qos_perf_limit_max.attr,
+	NULL,
+};
+static const struct attribute_group pm_qos_perf_limit_attr_group = {
+	.name	= power_group_name,
+	.attrs	= pm_qos_perf_limit_attrs,
+};
+
 static const struct attribute_group pm_qos_flags_attr_group = {
 	.name	= power_group_name,
 	.attrs	= pm_qos_flags_attrs,
@@ -819,6 +900,17 @@ int pm_qos_sysfs_add_latency_tolerance(struct device *dev)
 void pm_qos_sysfs_remove_latency_tolerance(struct device *dev)
 {
 	sysfs_unmerge_group(&dev->kobj, &pm_qos_latency_tolerance_attr_group);
+}
+
+int pm_qos_sysfs_add_perf_limit(struct device *dev)
+{
+	return sysfs_merge_group(&dev->kobj,
+				 &pm_qos_perf_limit_attr_group);
+}
+
+void pm_qos_sysfs_remove_perf_limit(struct device *dev)
+{
+	sysfs_unmerge_group(&dev->kobj, &pm_qos_perf_limit_attr_group);
 }
 
 void rpm_sysfs_remove(struct device *dev)

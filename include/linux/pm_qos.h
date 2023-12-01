@@ -34,6 +34,8 @@ enum pm_qos_flags_status {
 #define PM_QOS_LATENCY_TOLERANCE_DEFAULT_VALUE	0
 #define PM_QOS_MIN_FREQUENCY_DEFAULT_VALUE	0
 #define PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE	FREQ_QOS_MAX_DEFAULT_VALUE
+#define PM_QOS_MIN_PERF_DEFAULT_VALUE	0
+#define PM_QOS_MAX_PERF_DEFAULT_VALUE	1024
 #define PM_QOS_LATENCY_TOLERANCE_NO_CONSTRAINT	(-1)
 
 #define PM_QOS_FLAG_NO_POWER_OFF	(1 << 0)
@@ -102,6 +104,8 @@ enum dev_pm_qos_req_type {
 	DEV_PM_QOS_LATENCY_TOLERANCE,
 	DEV_PM_QOS_MIN_FREQUENCY,
 	DEV_PM_QOS_MAX_FREQUENCY,
+	DEV_PM_QOS_MIN_PERF,
+	DEV_PM_QOS_MAX_PERF,
 	DEV_PM_QOS_FLAGS,
 };
 
@@ -111,6 +115,7 @@ struct dev_pm_qos_request {
 		struct plist_node pnode;
 		struct pm_qos_flags_request flr;
 		struct interval_qos_request freq;
+		struct interval_qos_request perf;
 	} data;
 	struct device *dev;
 };
@@ -119,10 +124,13 @@ struct dev_pm_qos {
 	struct pm_qos_constraints resume_latency;
 	struct pm_qos_constraints latency_tolerance;
 	struct interval_constraints freq;
+	struct interval_constraints perf;
 	struct pm_qos_flags flags;
 	struct dev_pm_qos_request *resume_latency_req;
 	struct dev_pm_qos_request *latency_tolerance_req;
 	struct dev_pm_qos_request *flags_req;
+	struct dev_pm_qos_request *perf_min_req;
+	struct dev_pm_qos_request *perf_max_req;
 };
 
 /* Action requested to pm_qos_update_target */
@@ -192,6 +200,8 @@ s32 dev_pm_qos_get_user_latency_tolerance(struct device *dev);
 int dev_pm_qos_update_user_latency_tolerance(struct device *dev, s32 val);
 int dev_pm_qos_expose_latency_tolerance(struct device *dev);
 void dev_pm_qos_hide_latency_tolerance(struct device *dev);
+int dev_pm_qos_expose_perf_limit(struct device *dev);
+void dev_pm_qos_hide_perf_limit(struct device *dev);
 
 static inline s32 dev_pm_qos_requested_resume_latency(struct device *dev)
 {
@@ -228,6 +238,10 @@ static inline s32 dev_pm_qos_read_value(struct device *dev,
 		return PM_QOS_MIN_FREQUENCY_DEFAULT_VALUE;
 	case DEV_PM_QOS_MAX_FREQUENCY:
 		return PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE;
+	case DEV_PM_QOS_MIN_PERF:
+		return PM_QOS_MIN_PERF_DEFAULT_VALUE;
+	case DEV_PM_QOS_MAX_PERF:
+		return PM_QOS_MAX_PERF_DEFAULT_VALUE;
 	default:
 		WARN_ON(1);
 		return 0;
@@ -281,6 +295,10 @@ static inline int dev_pm_qos_expose_latency_tolerance(struct device *dev)
 			{ return 0; }
 static inline void dev_pm_qos_hide_latency_tolerance(struct device *dev) {}
 
+static inline int dev_pm_qos_expose_perf_limit(struct device *dev)
+			{ return 0; }
+void dev_pm_qos_hide_perf_limit(struct device *dev) {}
+
 static inline s32 dev_pm_qos_requested_resume_latency(struct device *dev)
 {
 	return PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
@@ -314,6 +332,30 @@ int freq_qos_add_notifier(struct interval_constraints *qos,
 			  enum interval_qos_req_type type,
 			  struct notifier_block *notifier);
 int freq_qos_remove_notifier(struct interval_constraints *qos,
+			     enum interval_qos_req_type type,
+			     struct notifier_block *notifier);
+
+static inline int perf_qos_request_active(struct interval_qos_request *req)
+{
+	return !IS_ERR_OR_NULL(req->qos);
+}
+
+s32 perf_qos_read_value(struct interval_constraints *qos,
+			enum interval_qos_req_type type);
+
+int perf_qos_apply(struct interval_qos_request *req,
+		   enum pm_qos_req_action action, s32 value);
+
+int perf_qos_add_request(struct interval_constraints *qos,
+			 struct interval_qos_request *req,
+			 enum interval_qos_req_type type, s32 value);
+int perf_qos_update_request(struct interval_qos_request *req, s32 new_value);
+int perf_qos_remove_request(struct interval_qos_request *req);
+
+int perf_qos_add_notifier(struct interval_constraints *qos,
+			  enum interval_qos_req_type type,
+			  struct notifier_block *notifier);
+int perf_qos_remove_notifier(struct interval_constraints *qos,
 			     enum interval_qos_req_type type,
 			     struct notifier_block *notifier);
 

@@ -680,3 +680,228 @@ int freq_qos_remove_notifier(struct interval_constraints *qos,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(freq_qos_remove_notifier);
+
+static inline bool perf_qos_value_invalid(s32 value)
+{
+	return value < 0 && value != PM_QOS_DEFAULT_VALUE;
+}
+
+/**
+ * perf_qos_apply - Add/modify/remove performance QoS request.
+ * @req: Constraint request to apply.
+ * @action: Action to perform (add/update/remove).
+ * @value: Value to assign to the QoS request.
+ *
+ * This is only meant to be called from inside pm_qos, not drivers.
+ */
+int perf_qos_apply(struct interval_qos_request *req,
+		   enum pm_qos_req_action action, s32 value)
+{
+	int ret;
+
+	switch(req->type) {
+	case INTERVAL_QOS_MIN:
+		ret = pm_qos_update_target(&req->qos->min, &req->pnode,
+					   action, value);
+		break;
+	case INTERVAL_QOS_MAX:
+		ret = pm_qos_update_target(&req->qos->max, &req->pnode,
+					   action, value);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+/**
+ * perf_qos_read_value - Get performance QoS constraint for a given list.
+ * @qos: Constraints to evaluate.
+ * @type: QoS request type.
+ */
+s32 perf_qos_read_value(struct interval_constraints *qos,
+			enum interval_qos_req_type type)
+{
+	s32 ret;
+
+	switch (type) {
+	case INTERVAL_QOS_MIN:
+		ret = IS_ERR_OR_NULL(qos) ?
+			PM_QOS_MIN_PERF_DEFAULT_VALUE :
+			pm_qos_read_value(&qos->min);
+		break;
+	case INTERVAL_QOS_MAX:
+		ret = IS_ERR_OR_NULL(qos) ?
+			PM_QOS_MAX_PERF_DEFAULT_VALUE :
+			pm_qos_read_value(&qos->max);
+		break;
+	default:
+		ret = 0;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_qos_read_value);
+
+/**
+ * perf_qos_add_request - Insert new performance QoS request into a given list.
+ * @qos: Constraints to update.
+ * @req: Preallocated request object.
+ * @type: Request type.
+ * @value: Request value.
+ *
+ * Insert a new entry into the @qos list of requests, recompute the effective
+ * QoS constraint value for that list and initialize the @req object.  The
+ * caller needs to save that object for later use in updates and removal.
+ *
+ * Return 1 if the effective constraint value has changed, 0 if the effective
+ * constraint value has not changed, or a negative error code on failures.
+ */
+int perf_qos_add_request(struct interval_constraints *qos,
+			 struct interval_qos_request *req,
+			 enum interval_qos_req_type type, s32 value)
+{
+	int ret;
+
+	if (IS_ERR_OR_NULL(qos) || !req || perf_qos_value_invalid(value))
+		return -EINVAL;
+
+	if (WARN(perf_qos_request_active(req),
+		 "%s() called for active request\n", __func__))
+		return -EINVAL;
+
+	req->qos = qos;
+	req->type = type;
+	ret = perf_qos_apply(req, PM_QOS_ADD_REQ, value);
+	if (ret < 0) {
+		req->qos = NULL;
+		req->type = 0;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_qos_add_request);
+
+/**
+ * perf_qos_update_request - Modify existing performance QoS request.
+ * @req: Request to modify.
+ * @new_value: New request value.
+ *
+ * Update an existing performance QoS request along with the effective
+ * constraint value for the list of requests it belongs to.
+ *
+ * Return 1 if the effective constraint value has changed, 0 if the effective
+ * constraint value has not changed, or a negative error code on failures.
+ */
+int perf_qos_update_request(struct interval_qos_request *req, s32 new_value)
+{
+	if (!req || perf_qos_value_invalid(new_value))
+		return -EINVAL;
+
+	if (WARN(!perf_qos_request_active(req),
+		 "%s() called for unknown object\n", __func__))
+		return -EINVAL;
+
+	if (req->pnode.prio == new_value)
+		return 0;
+
+	return perf_qos_apply(req, PM_QOS_UPDATE_REQ, new_value);
+}
+EXPORT_SYMBOL_GPL(perf_qos_update_request);
+
+/**
+ * perf_qos_remove_request - Remove performance QoS request from its list.
+ * @req: Request to remove.
+ *
+ * Remove the given performance QoS request from the list of
+ * constraints it belongs to and recompute the effective constraint
+ * value for that list.
+ *
+ * Return 1 if the effective constraint value has changed, 0 if the effective
+ * constraint value has not changed, or a negative error code on failures.
+ */
+int perf_qos_remove_request(struct interval_qos_request *req)
+{
+	int ret;
+
+	if (!req)
+		return -EINVAL;
+
+	if (WARN(!perf_qos_request_active(req),
+		 "%s() called for unknown object\n", __func__))
+		return -EINVAL;
+
+	ret = perf_qos_apply(req, PM_QOS_REMOVE_REQ, PM_QOS_DEFAULT_VALUE);
+	req->qos = NULL;
+	req->type = 0;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_qos_remove_request);
+
+/**
+ * perf_qos_add_notifier - Add performance QoS change notifier.
+ * @qos: List of requests to add the notifier to.
+ * @type: Request type.
+ * @notifier: Notifier block to add.
+ */
+int perf_qos_add_notifier(struct interval_constraints *qos,
+			  enum interval_qos_req_type type,
+			  struct notifier_block *notifier)
+{
+	int ret;
+
+	if (IS_ERR_OR_NULL(qos) || !notifier)
+		return -EINVAL;
+
+	switch (type) {
+	case INTERVAL_QOS_MIN:
+		ret = blocking_notifier_chain_register(qos->min.notifiers,
+						       notifier);
+		break;
+	case INTERVAL_QOS_MAX:
+		ret = blocking_notifier_chain_register(qos->max.notifiers,
+						       notifier);
+		break;
+	default:
+		WARN_ON(1);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_qos_add_notifier);
+
+/**
+ * perf_qos_remove_notifier - Remove performance QoS change notifier.
+ * @qos: List of requests to remove the notifier from.
+ * @type: Request type.
+ * @notifier: Notifier block to remove.
+ */
+int perf_qos_remove_notifier(struct interval_constraints *qos,
+			     enum interval_qos_req_type type,
+			     struct notifier_block *notifier)
+{
+	int ret;
+
+	if (IS_ERR_OR_NULL(qos) || !notifier)
+		return -EINVAL;
+
+	switch (type) {
+	case INTERVAL_QOS_MIN:
+		ret = blocking_notifier_chain_unregister(qos->min.notifiers,
+							 notifier);
+		break;
+	case INTERVAL_QOS_MAX:
+		ret = blocking_notifier_chain_unregister(qos->max.notifiers,
+							 notifier);
+		break;
+	default:
+		WARN_ON(1);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(perf_qos_remove_notifier);

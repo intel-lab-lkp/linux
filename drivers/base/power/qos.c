@@ -128,6 +128,14 @@ s32 dev_pm_qos_read_value(struct device *dev, enum dev_pm_qos_req_type type)
 		ret = IS_ERR_OR_NULL(qos) ? PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE
 			: freq_qos_read_value(&qos->freq, FREQ_QOS_MAX);
 		break;
+	case DEV_PM_QOS_MIN_PERF:
+		ret =  IS_ERR_OR_NULL(qos) ? PM_QOS_MIN_PERF_DEFAULT_VALUE
+			: perf_qos_read_value(&qos->perf, INTERVAL_QOS_MIN);
+		break;
+	case DEV_PM_QOS_MAX_PERF:
+		ret =  IS_ERR_OR_NULL(qos) ? PM_QOS_MAX_PERF_DEFAULT_VALUE
+			: perf_qos_read_value(&qos->perf, INTERVAL_QOS_MAX);
+		break;
 	default:
 		WARN_ON(1);
 		ret = 0;
@@ -177,6 +185,10 @@ static int apply_constraint(struct dev_pm_qos_request *req,
 		ret = pm_qos_update_flags(&qos->flags, &req->data.flr,
 					  action, value);
 		break;
+	case DEV_PM_QOS_MIN_PERF:
+	case DEV_PM_QOS_MAX_PERF:
+		ret = perf_qos_apply(&req->data.perf, action, value);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -221,6 +233,20 @@ static int dev_pm_qos_constraints_allocate(struct device *dev)
 	c->target_value = PM_QOS_LATENCY_TOLERANCE_DEFAULT_VALUE;
 	c->default_value = PM_QOS_LATENCY_TOLERANCE_DEFAULT_VALUE;
 	c->no_constraint_value = PM_QOS_LATENCY_TOLERANCE_NO_CONSTRAINT;
+	c->type = PM_QOS_MIN;
+
+	c = &qos->perf.min;
+	plist_head_init(&c->list);
+	c->target_value = PM_QOS_MIN_PERF_DEFAULT_VALUE;
+	c->default_value = PM_QOS_MIN_PERF_DEFAULT_VALUE;
+	c->no_constraint_value = PM_QOS_MIN_PERF_DEFAULT_VALUE;
+	c->type = PM_QOS_MAX;
+
+	c = &qos->perf.max;
+	plist_head_init(&c->list);
+	c->target_value = PM_QOS_MAX_PERF_DEFAULT_VALUE;
+	c->default_value = PM_QOS_MAX_PERF_DEFAULT_VALUE;
+	c->no_constraint_value = PM_QOS_MAX_PERF_DEFAULT_VALUE;
 	c->type = PM_QOS_MIN;
 
 	freq_constraints_init(&qos->freq);
@@ -299,6 +325,20 @@ void dev_pm_qos_constraints_destroy(struct device *dev)
 		memset(req, 0, sizeof(*req));
 	}
 
+	c = &qos->perf.min;
+	plist_for_each_entry_safe(req, tmp, &c->list, data.freq.pnode) {
+		apply_constraint(req, PM_QOS_REMOVE_REQ,
+				 PM_QOS_MIN_PERF_DEFAULT_VALUE);
+		memset(req, 0, sizeof(*req));
+	}
+
+	c = &qos->perf.max;
+	plist_for_each_entry_safe(req, tmp, &c->list, data.freq.pnode) {
+		apply_constraint(req, PM_QOS_REMOVE_REQ,
+				 PM_QOS_MAX_PERF_DEFAULT_VALUE);
+		memset(req, 0, sizeof(*req));
+	}
+	
 	f = &qos->flags;
 	list_for_each_entry_safe(req, tmp, &f->list, data.flr.node) {
 		apply_constraint(req, PM_QOS_REMOVE_REQ, PM_QOS_DEFAULT_VALUE);
@@ -349,17 +389,32 @@ static int __dev_pm_qos_add_request(struct device *dev,
 
 	req->dev = dev;
 	req->type = type;
-	if (req->type == DEV_PM_QOS_MIN_FREQUENCY)
+
+	switch (type) {
+	case DEV_PM_QOS_MIN_FREQUENCY:
 		ret = freq_qos_add_request(&dev->power.qos->freq,
 					   &req->data.freq,
 					   FREQ_QOS_MIN, value);
-	else if (req->type == DEV_PM_QOS_MAX_FREQUENCY)
+		break;
+	case DEV_PM_QOS_MAX_FREQUENCY:
 		ret = freq_qos_add_request(&dev->power.qos->freq,
 					   &req->data.freq,
 					   FREQ_QOS_MAX, value);
-	else
+		break;
+	case DEV_PM_QOS_MIN_PERF:
+		ret = perf_qos_add_request(&dev->power.qos->perf,
+					   &req->data.perf,
+					   INTERVAL_QOS_MIN, value);
+		break;
+	case DEV_PM_QOS_MAX_PERF:
+		ret = perf_qos_add_request(&dev->power.qos->perf,
+					   &req->data.perf,
+					   INTERVAL_QOS_MAX, value);
+		break;
+	default:
 		ret = apply_constraint(req, PM_QOS_ADD_REQ, value);
-
+		break;
+	}
 	return ret;
 }
 
@@ -426,6 +481,10 @@ static int __dev_pm_qos_update_request(struct dev_pm_qos_request *req,
 	case DEV_PM_QOS_MIN_FREQUENCY:
 	case DEV_PM_QOS_MAX_FREQUENCY:
 		curr_value = req->data.freq.pnode.prio;
+		break;
+	case DEV_PM_QOS_MIN_PERF:
+	case DEV_PM_QOS_MAX_PERF:
+		curr_value = req->data.perf.pnode.prio;
 		break;
 	case DEV_PM_QOS_FLAGS:
 		curr_value = req->data.flr.flags;
@@ -673,6 +732,14 @@ static void __dev_pm_qos_drop_user_request(struct device *dev,
 	case DEV_PM_QOS_FLAGS:
 		req = dev->power.qos->flags_req;
 		dev->power.qos->flags_req = NULL;
+		break;
+	case DEV_PM_QOS_MIN_PERF:
+		req = dev->power.qos->perf_min_req;
+		dev->power.qos->perf_min_req = NULL;
+		break;
+	case DEV_PM_QOS_MAX_PERF:
+		req = dev->power.qos->perf_max_req;
+		dev->power.qos->perf_max_req = NULL;
 		break;
 	default:
 		WARN_ON(1);
@@ -980,3 +1047,86 @@ void dev_pm_qos_hide_latency_tolerance(struct device *dev)
 	pm_runtime_put(dev);
 }
 EXPORT_SYMBOL_GPL(dev_pm_qos_hide_latency_tolerance);
+
+int dev_pm_qos_expose_perf_limit(struct device *dev)
+{
+	struct dev_pm_qos_request *req_min;
+	struct dev_pm_qos_request *req_max;
+	int ret;
+
+	if (!device_is_registered(dev))
+		return -EINVAL;
+
+	req_min = kzalloc(sizeof(*req_min), GFP_KERNEL);
+	if (!req_min)
+		return -ENOMEM;
+
+	req_max = kzalloc(sizeof(*req_max), GFP_KERNEL);
+	if (!req_max) {
+		kfree(req_min);
+		return -ENOMEM;
+	}
+	
+	ret = dev_pm_qos_add_request(dev, req_min, DEV_PM_QOS_MIN_PERF,
+				     PM_QOS_MIN_PERF_DEFAULT_VALUE);
+	if (ret < 0) {
+		kfree(req_min);
+		kfree(req_max);
+		return ret;
+	}
+
+	ret = dev_pm_qos_add_request(dev, req_max, DEV_PM_QOS_MAX_PERF,
+				     PM_QOS_MAX_PERF_DEFAULT_VALUE);
+	if (ret < 0) {
+		dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MIN_PERF);
+		return ret;
+	}
+
+	mutex_lock(&dev_pm_qos_sysfs_mtx);
+
+	mutex_lock(&dev_pm_qos_mtx);
+
+	if (IS_ERR_OR_NULL(dev->power.qos))
+		ret = -ENODEV;
+	else if (dev->power.qos->perf_min_req || dev->power.qos->perf_max_req)
+		ret = -EEXIST;
+
+	if (ret < 0) {
+		__dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MIN_PERF);
+		__dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MAX_PERF);
+		mutex_unlock(&dev_pm_qos_mtx);
+		goto out;
+	}
+
+	dev->power.qos->perf_min_req = req_min;
+	dev->power.qos->perf_max_req = req_max;
+
+	mutex_unlock(&dev_pm_qos_mtx);
+
+	ret = pm_qos_sysfs_add_perf_limit(dev);
+	if (ret) {
+		dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MIN_PERF);
+		dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MAX_PERF);
+	}
+out:
+	mutex_unlock(&dev_pm_qos_sysfs_mtx);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dev_pm_qos_expose_perf_limit);
+
+void dev_pm_qos_hide_perf_limit(struct device *dev)
+{
+	mutex_lock(&dev_pm_qos_sysfs_mtx);
+
+	pm_qos_sysfs_remove_perf_limit(dev);
+
+	mutex_lock(&dev_pm_qos_mtx);
+
+	__dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MIN_PERF);
+	__dev_pm_qos_drop_user_request(dev, DEV_PM_QOS_MAX_PERF);
+	
+	mutex_unlock(&dev_pm_qos_mtx);
+
+	mutex_unlock(&dev_pm_qos_sysfs_mtx);
+}
+EXPORT_SYMBOL_GPL(dev_pm_qos_hide_perf_limit);
