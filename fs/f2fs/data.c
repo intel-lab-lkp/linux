@@ -2309,7 +2309,8 @@ skip_reading_dnode:
 			break;
 
 		if (!f2fs_is_valid_blkaddr(sbi, blkaddr, DATA_GENERIC)) {
-			ret = -EFAULT;
+			ret = -EFSCORRUPTED;
+			f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
 			goto out_put_dnode;
 		}
 		cc->nr_cpages++;

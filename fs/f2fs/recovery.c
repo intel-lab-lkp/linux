@@ -374,7 +374,8 @@ static int sanity_check_node_chain(struct f2fs_sb_info *sbi, block_t blkaddr,
 	for (i = 0; i < 2; i++) {
 		if (!f2fs_is_valid_blkaddr(sbi, *blkaddr_fast, META_POR)) {
 			*is_detecting = false;
-			return 0;
+			f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
+			return -EFSCORRUPTED;
 		}
 
 		page = f2fs_get_tmp_page(sbi, *blkaddr_fast);
@@ -399,6 +400,7 @@ static int sanity_check_node_chain(struct f2fs_sb_info *sbi, block_t blkaddr,
 	if (*blkaddr_fast == blkaddr) {
 		f2fs_notice(sbi, "%s: Detect looped node chain on blkaddr:%u."
 				" Run fsck to fix it.", __func__, blkaddr);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
 		return -EINVAL;
 	}
 	return 0;
@@ -421,8 +423,10 @@ static int find_fsync_dnodes(struct f2fs_sb_info *sbi, struct list_head *head,
 	while (1) {
 		struct fsync_inode_entry *entry;
 
-		if (!f2fs_is_valid_blkaddr(sbi, blkaddr, META_POR))
-			return 0;
+		if (!f2fs_is_valid_blkaddr(sbi, blkaddr, META_POR)) {
+			f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
+			return -EFSCORRUPTED;
+		}
 
 		page = f2fs_get_tmp_page(sbi, blkaddr);
 		if (IS_ERR(page)) {
@@ -786,8 +790,11 @@ static int recover_data(struct f2fs_sb_info *sbi, struct list_head *inode_list,
 	while (1) {
 		struct fsync_inode_entry *entry;
 
-		if (!f2fs_is_valid_blkaddr(sbi, blkaddr, META_POR))
+		if (!f2fs_is_valid_blkaddr(sbi, blkaddr, META_POR)) {
+			err = -EFSCORRUPTED;
+			f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
 			break;
+		}
 
 		page = f2fs_get_tmp_page(sbi, blkaddr);
 		if (IS_ERR(page)) {

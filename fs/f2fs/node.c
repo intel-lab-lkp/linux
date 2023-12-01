@@ -611,8 +611,10 @@ retry:
 cache:
 	blkaddr = le32_to_cpu(ne.block_addr);
 	if (__is_valid_data_blkaddr(blkaddr) &&
-		!f2fs_is_valid_blkaddr(sbi, blkaddr, DATA_GENERIC_ENHANCE))
-		return -EFAULT;
+		!f2fs_is_valid_blkaddr(sbi, blkaddr, DATA_GENERIC_ENHANCE)) {
+		f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
+		return -EFSCORRUPTED;
+	}
 
 	/* cache nat entry */
 	cache_nat_entry(sbi, nid, &ne);
@@ -1652,6 +1654,7 @@ static int __write_node_page(struct page *page, bool atomic, bool *submitted,
 	if (__is_valid_data_blkaddr(ni.blk_addr) &&
 		!f2fs_is_valid_blkaddr(sbi, ni.blk_addr,
 					DATA_GENERIC_ENHANCE)) {
+		f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
 		f2fs_up_read(&sbi->node_write);
 		goto redirty_out;
 	}
