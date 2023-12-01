@@ -1791,6 +1791,13 @@ tcf_reoffload_del_notify(struct net *net, struct tc_action *action)
 	struct sk_buff *skb;
 	int ret;
 
+	if (!tc_should_notify(net, 0)) {
+		ret = tcf_idr_release_unsafe(action);
+		if (ret == ACT_P_DELETED)
+			module_put(ops->owner);
+		return ret;
+	}
+
 	skb = alloc_skb(attr_size <= NLMSG_GOODSIZE ? NLMSG_GOODSIZE : attr_size,
 			GFP_KERNEL);
 	if (!skb)
@@ -1877,6 +1884,13 @@ tcf_del_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 	int ret;
 	struct sk_buff *skb;
 
+	if (!tc_should_notify(net, n->nlmsg_flags)) {
+		ret = tcf_action_delete(net, actions);
+		if (ret < 0)
+			NL_SET_ERR_MSG(extack, "Failed to delete TC action");
+		return ret;
+	}
+
 	skb = alloc_skb(attr_size <= NLMSG_GOODSIZE ? NLMSG_GOODSIZE : attr_size,
 			GFP_KERNEL);
 	if (!skb)
@@ -1955,6 +1969,9 @@ tcf_add_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 	       u32 portid, size_t attr_size, struct netlink_ext_ack *extack)
 {
 	struct sk_buff *skb;
+
+	if (!tc_should_notify(net, n->nlmsg_flags))
+		return 0;
 
 	skb = alloc_skb(attr_size <= NLMSG_GOODSIZE ? NLMSG_GOODSIZE : attr_size,
 			GFP_KERNEL);
