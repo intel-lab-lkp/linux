@@ -4747,11 +4747,13 @@ EXPORT_SYMBOL(__page_frag_cache_drain);
 
 void *page_frag_alloc_align(struct page_frag_cache *nc,
 		      unsigned int fragsz, gfp_t gfp_mask,
-		      unsigned int align_mask)
+		      unsigned int align)
 {
 	unsigned int size = PAGE_SIZE;
 	struct page *page;
 	int offset;
+
+	WARN_ON_ONCE(!is_power_of_2(align));
 
 	if (unlikely(!nc->va)) {
 refill:
@@ -4811,7 +4813,7 @@ refill:
 	}
 
 	nc->pagecnt_bias--;
-	offset &= align_mask;
+	offset &= -align;
 	nc->offset = offset;
 
 	return nc->va + offset;
