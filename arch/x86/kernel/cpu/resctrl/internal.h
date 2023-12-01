@@ -59,6 +59,8 @@
 #define TOTAL_ASSIGN			BIT(0)
 #define LOCAL_ASSIGN			BIT(1)
 
+#define ABMC_MAX_PER_GROUP		2
+
 struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
 	bool				enable_cdpl2;
@@ -168,6 +170,7 @@ enum rdtgrp_mode {
  * @crdtgrp_list:		child rdtgroup node list
  * @rmid:			rmid for this rdtgroup
  * @monitor_state:		ABMC state of the group
+ * @abmc_ctr_id:		ABMC counterids assigned to this group
  */
 struct mongroup {
 	struct kernfs_node	*mon_data_kn;
@@ -175,6 +178,7 @@ struct mongroup {
 	struct list_head	crdtgrp_list;
 	u32			rmid;
 	u32			monitor_state;
+	u32			abmc_ctr_id[ABMC_MAX_PER_GROUP];
 };
 
 /**
@@ -525,6 +529,24 @@ union cpuid_0x10_x_edx {
 		unsigned int cos_max:16;
 	} split;
 	unsigned int full;
+};
+
+/*
+ * L3_QOS_ABMC_CFG MSR details. ABMC counters can be configured
+ * by writing to L3_QOS_ABMC_CFG.
+ */
+union l3_qos_abmc_cfg {
+	struct {
+		unsigned long  bw_type	:32,
+			       bw_src	:12,
+			       rsvrd1	: 3,
+			       is_cos	: 1,
+			       ctr_id	: 5,
+			       rsvrd	: 9,
+			       ctr_en	: 1,
+			       cfg_en	: 1;
+	} split;
+	unsigned long full;
 };
 
 void rdt_last_cmd_clear(void);
