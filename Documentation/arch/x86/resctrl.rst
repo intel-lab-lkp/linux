@@ -410,6 +410,13 @@ When monitoring is enabled all MON groups will also contain:
 		# cat /sys/fs/resctrl/monitor_state
 		total=assign;local=assign
 
+	The user needs to pin (or assign) RMID to read the MBM event in
+	ABMC mode. Each event can be assigned or unassigned separately.
+	Example::
+
+		# echo total=assign > /sys/fs/resctrl/monitor_state
+		# echo total=assign;local=assign > /sys/fs/resctrl/monitor_state
+
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
 	for the monitor group. On x86 this is the RMID.

@@ -180,6 +180,18 @@ static void abmc_counters_init(void)
 	abmc_free_map_len = hw_res->abmc_counters;
 }
 
+static int abmc_counters_alloc(void)
+{
+	u32 counterid = ffs(abmc_free_map);
+
+	if (counterid == 0)
+		return -ENOSPC;
+	counterid--;
+	abmc_free_map &= ~(1 << counterid);
+
+	return counterid;
+}
+
 /**
  * rdtgroup_mode_by_closid - Return mode of resource group with closid
  * @closid: closid if the resource group
@@ -1583,6 +1595,143 @@ static inline unsigned int mon_event_config_index_get(u32 evtid)
 	}
 }
 
+static void rdtgroup_abmc_msrwrite(void *info)
+{
+	u64 *msrval = info;
+
+	wrmsrl(MSR_IA32_L3_QOS_ABMC_CFG, *msrval);
+}
+
+static void rdtgroup_abmc_domain(struct rdt_domain *d,
+				 struct rdtgroup *rdtgrp,
+				 u32 evtid, int index, bool assign)
+{
+	struct rdt_hw_domain *hw_dom = resctrl_to_arch_dom(d);
+	union l3_qos_abmc_cfg abmc_cfg = { 0 };
+	struct arch_mbm_state *arch_mbm;
+
+	abmc_cfg.split.cfg_en = 1;
+	abmc_cfg.split.ctr_en = assign ? 1 : 0;
+	abmc_cfg.split.ctr_id = rdtgrp->mon.abmc_ctr_id[index];
+	abmc_cfg.split.bw_src = rdtgrp->mon.rmid;
+
+	/*
+	 * Read the event configuration from the domain and pass it as
+	 * bw_type.
+	 */
+	if (evtid == QOS_L3_MBM_TOTAL_EVENT_ID) {
+		abmc_cfg.split.bw_type = hw_dom->mbm_total_cfg;
+		arch_mbm = &hw_dom->arch_mbm_total[rdtgrp->mon.rmid];
+	} else {
+		abmc_cfg.split.bw_type = hw_dom->mbm_local_cfg;
+		arch_mbm = &hw_dom->arch_mbm_local[rdtgrp->mon.rmid];
+	}
+
+	smp_call_function_any(&d->cpu_mask, rdtgroup_abmc_msrwrite, &abmc_cfg, 1);
+
+	/* Reset the internal counters */
+	if (arch_mbm)
+		memset(arch_mbm, 0, sizeof(struct arch_mbm_state));
+}
+
+static ssize_t rdtgroup_assign_abmc(struct rdtgroup *rdtgrp,
+				    struct rdt_resource *r,
+				    u32 evtid, int mon_state)
+{
+	int counterid = 0, index;
+	struct rdt_domain *d;
+
+	if (rdtgrp->mon.monitor_state & mon_state) {
+		rdt_last_cmd_puts("ABMC counter is assigned already\n");
+		return 0;
+	}
+
+	index = mon_event_config_index_get(evtid);
+	if (index == INVALID_CONFIG_INDEX) {
+		pr_warn_once("Invalid event id %d\n", evtid);
+		return -EINVAL;
+	}
+
+	/*
+	 * Allocate a new counter and update domains
+	 */
+	counterid = abmc_counters_alloc();
+	if (counterid < 0) {
+		rdt_last_cmd_puts("Out of ABMC counters\n");
+		return -ENOSPC;
+	}
+
+	rdtgrp->mon.abmc_ctr_id[index] = counterid;
+
+	list_for_each_entry(d, &r->domains, list)
+		rdtgroup_abmc_domain(d, rdtgrp, evtid, index, 1);
+
+	rdtgrp->mon.monitor_state |= mon_state;
+
+	return 0;
+}
+
+/**
+ * rdtgroup_monitor_state_write - Modify the resource group's assign
+ *
+ */
+static ssize_t rdtgroup_monitor_state_write(struct kernfs_open_file *of,
+					    char *buf, size_t nbytes, loff_t off)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
+	char *abmc_str, *event_str;
+	struct rdtgroup *rdtgrp;
+	int ret = 0, mon_state;
+	u32 evtid;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+
+	rdt_last_cmd_clear();
+
+	while (buf && buf[0] != '\0') {
+		/* Start processing the strings for each domain */
+		abmc_str = strim(strsep(&buf, ";"));
+		event_str = strsep(&abmc_str, "=");
+
+		if (event_str && abmc_str) {
+			if (!strcmp(event_str, "total")) {
+				mon_state = TOTAL_ASSIGN;
+				evtid = QOS_L3_MBM_TOTAL_EVENT_ID;
+			} else if (!strcmp(event_str, "local")) {
+				mon_state = LOCAL_ASSIGN;
+				evtid = QOS_L3_MBM_LOCAL_EVENT_ID;
+			} else {
+				rdt_last_cmd_puts("Invalid ABMC event\n");
+				ret = -EINVAL;
+				break;
+			}
+
+			if (!strcmp(abmc_str, "assign")) {
+				ret = rdtgroup_assign_abmc(rdtgrp, r, evtid, mon_state);
+				if (ret) {
+					rdt_last_cmd_puts("ABMC assign failed\n");
+					break;
+				}
+			} else {
+				rdt_last_cmd_puts("Invalid ABMC event\n");
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			rdt_last_cmd_puts("Invalid ABMC input\n");
+			ret = -EINVAL;
+			break;
+		}
+	}
+
+	rdtgroup_kn_unlock(of->kn);
+	return ret ?: nbytes;
+}
+
 static void mon_event_config_read(void *info)
 {
 	struct mon_config_info *mon_info = info;
@@ -1944,9 +2093,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "monitor_state",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdtgroup_monitor_state_show,
+		.write		= rdtgroup_monitor_state_write,
 	},
 	{
 		.name		= "tasks",
