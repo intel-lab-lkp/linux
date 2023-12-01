@@ -127,6 +127,11 @@ static const struct mbm_correction_factor_table {
 static u32 mbm_cf_rmidthreshold __read_mostly = UINT_MAX;
 static u64 mbm_cf __read_mostly;
 
+/*
+ * Identifies the list of QoS Bandwidth Sources to track
+ */
+unsigned int resctrl_max_evt_bitmask;
+
 static inline u64 get_corrected_mbm_count(u32 rmid, unsigned long val)
 {
 	/* Correct MBM value. */
@@ -813,6 +818,12 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 		return ret;
 
 	if (rdt_cpu_has(X86_FEATURE_BMEC)) {
+		u32 eax, ebx, ecx, edx;
+
+		/* Detect list of bandwidth sources that can be tracked */
+		cpuid_count(0x80000020, 3, &eax, &ebx, &ecx, &edx);
+		resctrl_max_evt_bitmask = ecx;
+
 		if (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL)) {
 			mbm_total_event.configurable = true;
 			mbm_config_rftype_init("mbm_total_bytes_config");

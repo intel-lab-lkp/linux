@@ -1547,7 +1547,7 @@ static void mon_event_config_read(void *info)
 	rdmsrl(MSR_IA32_EVT_CFG_BASE + index, msrval);
 
 	/* Report only the valid event configuration bits */
-	mon_info->mon_config = msrval & MAX_EVT_CONFIG_BITS;
+	mon_info->mon_config = msrval & resctrl_max_evt_bitmask;
 }
 
 static void mondata_config_read(struct rdt_domain *d, struct mon_config_info *mon_info)
@@ -1621,7 +1621,7 @@ static int mbm_config_write_domain(struct rdt_resource *r,
 	int ret = 0;
 
 	/* mon_config cannot be more than the supported set of events */
-	if (val > MAX_EVT_CONFIG_BITS) {
+	if (val > resctrl_max_evt_bitmask) {
 		rdt_last_cmd_puts("Invalid event configuration\n");
 		return -EINVAL;
 	}
