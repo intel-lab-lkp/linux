@@ -127,7 +127,7 @@ void mce_setup(struct mce *m)
 	m->apicid = cpu_data(m->extcpu).topo.initial_apicid;
 	m->mcgcap = __rdmsr(MSR_IA32_MCG_CAP);
 	m->ppin = cpu_data(m->extcpu).ppin;
-	m->microcode = boot_cpu_data.microcode;
+	m->microcode = cpu_data(m->extcpu).microcode;
 }
 
 DEFINE_PER_CPU(struct mce, injectm);
