@@ -390,6 +390,26 @@ When monitoring is enabled all MON groups will also contain:
 	the sum for all tasks in the CTRL_MON group and all tasks in
 	MON groups. Please see example section for more details on usage.
 
+"monitor_state":
+	Available when ABMC feature is enabled. ABMC feature provides an
+	option to the user to pin (or assign) the RMID to hardware counter
+	and monitor the bandwidth for the longer duration. The RMID will
+	be active until user unpins (unassigns) it manually. Each group
+	will have two events that are assignable. By default, the events
+	are unassigned. Index 0 holds the monitor_state for MBM total bytes.
+	Index 1 holds the monitor_state for MBM local bytes.
+
+	Example::
+
+		# cat /sys/fs/resctrl/monitor_state
+		total=unassign;local=unassign
+
+	When the events are assigned, the output will look like below.
+	Example::
+
+		# cat /sys/fs/resctrl/monitor_state
+		total=assign;local=assign
+
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
 	for the monitor group. On x86 this is the RMID.

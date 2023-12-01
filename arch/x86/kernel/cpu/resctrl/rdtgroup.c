@@ -779,6 +779,26 @@ static int rdtgroup_tasks_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static int rdtgroup_monitor_state_show(struct kernfs_open_file *of,
+				       struct seq_file *s, void *v)
+{
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (rdtgrp)
+		seq_printf(s, "total=%s;local=%s\n",
+			   rdtgrp->mon.monitor_state & TOTAL_ASSIGN ?
+			   "assign" : "unassign",
+			   rdtgrp->mon.monitor_state & LOCAL_ASSIGN ?
+			   "assign" : "unassign");
+	else
+		ret = -ENOENT;
+	rdtgroup_kn_unlock(of->kn);
+
+	return ret;
+}
+
 static int rdtgroup_closid_show(struct kernfs_open_file *of,
 				struct seq_file *s, void *v)
 {
@@ -1896,6 +1916,12 @@ static struct rftype res_common_files[] = {
 		.fflags		= RFTYPE_BASE,
 	},
 	{
+		.name		= "monitor_state",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_monitor_state_show,
+	},
+	{
 		.name		= "tasks",
 		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2446,12 +2472,22 @@ int resctrl_arch_set_abmc_enabled(enum resctrl_res_level l, bool enable)
 		if (rft)
 			rft->fflags = RFTYPE_MON_INFO;
 
+		rft = rdtgroup_get_rftype_by_name("monitor_state");
+		if (rft)
+			rft->fflags = RFTYPE_MON_BASE;
+
+		rdtgroup_default.mon.monitor_state = 0;
+
 		return resctrl_abmc_enable(l);
 	}
 
 	rft = rdtgroup_get_rftype_by_name("abmc_counters");
 	if (rft)
 		rft->fflags &= ~RFTYPE_MON_INFO;
+
+	rft = rdtgroup_get_rftype_by_name("monitor_state");
+	if (rft)
+		rft->fflags &= ~RFTYPE_MON_BASE;
 
 	resctrl_abmc_disable(l);
 

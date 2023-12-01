@@ -53,6 +53,12 @@
 /* ABMC ENABLE */
 #define ABMC_ENABLE			BIT(0)
 
+/*
+ * monitor group's state when ABMC is enabled
+ */
+#define TOTAL_ASSIGN			BIT(0)
+#define LOCAL_ASSIGN			BIT(1)
+
 struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
 	bool				enable_cdpl2;
@@ -161,12 +167,14 @@ enum rdtgrp_mode {
  * @parent:			parent rdtgrp
  * @crdtgrp_list:		child rdtgroup node list
  * @rmid:			rmid for this rdtgroup
+ * @monitor_state:		ABMC state of the group
  */
 struct mongroup {
 	struct kernfs_node	*mon_data_kn;
 	struct rdtgroup		*parent;
 	struct list_head	crdtgrp_list;
 	u32			rmid;
+	u32			monitor_state;
 };
 
 /**
