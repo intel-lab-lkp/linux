@@ -811,6 +811,17 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static int rdtgroup_abmc_counters_show(struct kernfs_open_file *of,
+				       struct seq_file *s, void *v)
+{
+	struct rdt_resource *r = of->kn->parent->priv;
+	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
+
+	seq_printf(s, "%d\n", hw_res->abmc_counters);
+
+	return 0;
+}
+
 #ifdef CONFIG_PROC_CPU_RESCTRL
 
 /*
@@ -1862,6 +1873,12 @@ static struct rftype res_common_files[] = {
 		.write		= mbm_local_bytes_config_write,
 	},
 	{
+		.name		= "abmc_counters",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_abmc_counters_show,
+	},
+	{
 		.name		= "cpus",
 		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2419,12 +2436,22 @@ static void resctrl_abmc_disable(enum resctrl_res_level l)
 int resctrl_arch_set_abmc_enabled(enum resctrl_res_level l, bool enable)
 {
 	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+	struct rftype *rft;
 
 	if (!hw_res->r_resctrl.abmc_capable)
 		return -EINVAL;
 
-	if (enable)
+	if (enable) {
+		rft = rdtgroup_get_rftype_by_name("abmc_counters");
+		if (rft)
+			rft->fflags = RFTYPE_MON_INFO;
+
 		return resctrl_abmc_enable(l);
+	}
+
+	rft = rdtgroup_get_rftype_by_name("abmc_counters");
+	if (rft)
+		rft->fflags &= ~RFTYPE_MON_INFO;
 
 	resctrl_abmc_disable(l);
 
