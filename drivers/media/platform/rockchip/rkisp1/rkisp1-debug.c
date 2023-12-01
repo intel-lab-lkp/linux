@@ -25,6 +25,11 @@ struct rkisp1_debug_register {
 	const char * const name;
 };
 
+struct rkisp1_debug_counter {
+	const char * const name;
+	unsigned long *value;
+};
+
 #define RKISP1_DEBUG_REG(name)		{ RKISP1_CIF_##name, 0, #name }
 #define RKISP1_DEBUG_SHD_REG(name) { \
 	RKISP1_CIF_##name, RKISP1_CIF_##name##_SHD, #name \
@@ -191,6 +196,43 @@ static int rkisp1_debug_input_status_show(struct seq_file *m, void *p)
 }
 DEFINE_SHOW_ATTRIBUTE(rkisp1_debug_input_status);
 
+static int rkisp1_debug_counters_show(struct seq_file *m, void *p)
+{
+	struct rkisp1_device *rkisp1 = m->private;
+	struct rkisp1_debug *debug = &rkisp1->debug;
+
+	const struct rkisp1_debug_counter counters[] = {
+		{ "data_loss", &debug->data_loss },
+		{ "outform_size_err", &debug->outform_size_error },
+		{ "img_stabilization_size_error", &debug->img_stabilization_size_error },
+		{ "inform_size_error", &debug->inform_size_error },
+		{ "irq_delay", &debug->irq_delay },
+		{ "mipi_error", &debug->mipi_error },
+		{ "stats_error", &debug->stats_error },
+		{ "mp_stop_timeout", &debug->stop_timeout[RKISP1_MAINPATH] },
+		{ "sp_stop_timeout", &debug->stop_timeout[RKISP1_SELFPATH] },
+		{ "mp_frame_drop", &debug->frame_drop[RKISP1_MAINPATH] },
+		{ "sp_frame_drop", &debug->frame_drop[RKISP1_SELFPATH] },
+		{ "complete_frames", &debug->complete_frames },
+		{ /* Sentinel */ },
+	};
+
+	const struct rkisp1_debug_counter *counter = counters;
+
+	for (; counter->name; ++counter)
+		seq_printf(m, "%s: %lu\n", counter->name, *counter->value);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(rkisp1_debug_counters);
+
+void rkisp1_debug_reset_counters(struct rkisp1_device *rkisp1)
+{
+	struct dentry *debugfs_dir = rkisp1->debug.debugfs_dir;
+	memset(&rkisp1->debug, 0, sizeof(rkisp1->debug));
+	rkisp1->debug.debugfs_dir = debugfs_dir;
+}
+
 void rkisp1_debug_init(struct rkisp1_device *rkisp1)
 {
 	struct rkisp1_debug *debug = &rkisp1->debug;
@@ -198,31 +240,8 @@ void rkisp1_debug_init(struct rkisp1_device *rkisp1)
 
 	debug->debugfs_dir = debugfs_create_dir(dev_name(rkisp1->dev), NULL);
 
-	debugfs_create_ulong("data_loss", 0444, debug->debugfs_dir,
-			     &debug->data_loss);
-	debugfs_create_ulong("outform_size_err", 0444,  debug->debugfs_dir,
-			     &debug->outform_size_error);
-	debugfs_create_ulong("img_stabilization_size_error", 0444,
-			     debug->debugfs_dir,
-			     &debug->img_stabilization_size_error);
-	debugfs_create_ulong("inform_size_error", 0444,  debug->debugfs_dir,
-			     &debug->inform_size_error);
-	debugfs_create_ulong("irq_delay", 0444,  debug->debugfs_dir,
-			     &debug->irq_delay);
-	debugfs_create_ulong("mipi_error", 0444, debug->debugfs_dir,
-			     &debug->mipi_error);
-	debugfs_create_ulong("stats_error", 0444, debug->debugfs_dir,
-			     &debug->stats_error);
-	debugfs_create_ulong("mp_stop_timeout", 0444, debug->debugfs_dir,
-			     &debug->stop_timeout[RKISP1_MAINPATH]);
-	debugfs_create_ulong("sp_stop_timeout", 0444, debug->debugfs_dir,
-			     &debug->stop_timeout[RKISP1_SELFPATH]);
-	debugfs_create_ulong("mp_frame_drop", 0444, debug->debugfs_dir,
-			     &debug->frame_drop[RKISP1_MAINPATH]);
-	debugfs_create_ulong("sp_frame_drop", 0444, debug->debugfs_dir,
-			     &debug->frame_drop[RKISP1_SELFPATH]);
-	debugfs_create_ulong("complete_frames", 0444, debug->debugfs_dir,
-			     &debug->complete_frames);
+	debugfs_create_file("counters", 0444, debug->debugfs_dir, rkisp1,
+			    &rkisp1_debug_counters_fops);
 	debugfs_create_file("input_status", 0444, debug->debugfs_dir, rkisp1,
 			    &rkisp1_debug_input_status_fops);
 

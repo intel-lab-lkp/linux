@@ -599,9 +599,13 @@ int rkisp1_params_register(struct rkisp1_device *rkisp1);
 void rkisp1_params_unregister(struct rkisp1_device *rkisp1);
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
+void rkisp1_debug_reset_counters(struct rkisp1_device *rkisp1);
 void rkisp1_debug_init(struct rkisp1_device *rkisp1);
 void rkisp1_debug_cleanup(struct rkisp1_device *rkisp1);
 #else
+static inline void rkisp1_debug_reset_counters(struct rkisp1_device *rkisp1)
+{
+}
 static inline void rkisp1_debug_init(struct rkisp1_device *rkisp1)
 {
 }

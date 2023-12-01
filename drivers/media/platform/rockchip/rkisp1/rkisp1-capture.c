@@ -1030,6 +1030,8 @@ rkisp1_vb2_start_streaming(struct vb2_queue *queue, unsigned int count)
 	struct media_entity *entity = &cap->vnode.vdev.entity;
 	int ret;
 
+	rkisp1_debug_reset_counters(cap->rkisp1);
+
 	mutex_lock(&cap->rkisp1->stream_lock);
 
 	ret = video_device_pipeline_start(&cap->vnode.vdev, &cap->rkisp1->pipe);
