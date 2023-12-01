@@ -379,14 +379,19 @@ static int dpu_encoder_phys_vid_control_vblank_irq(
 	DRM_DEBUG_VBL("id:%u enable=%d/%d\n", DRMID(phys_enc->parent), enable,
 		      atomic_read(&phys_enc->vblank_refcount));
 
-	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1)
+	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1) {
 		ret = dpu_core_irq_register_callback(phys_enc->dpu_kms,
 				phys_enc->irq[INTR_IDX_VSYNC],
 				dpu_encoder_phys_vid_vblank_irq,
 				phys_enc);
-	else if (!enable && atomic_dec_return(&phys_enc->vblank_refcount) == 0)
+		if (ret)
+			atomic_dec(&phys_enc->vblank_refcount);
+	} else if (!enable && atomic_dec_return(&phys_enc->vblank_refcount) == 0) {
 		ret = dpu_core_irq_unregister_callback(phys_enc->dpu_kms,
 				phys_enc->irq[INTR_IDX_VSYNC]);
+		if (ret)
+			atomic_inc(&phys_enc->vblank_refcount);
+	}
 
 end:
 	if (ret) {
