@@ -59,6 +59,7 @@ static const char * const ethtool_op_strmap[] = {
 	[41] = "plca-ntf",
 	[ETHTOOL_MSG_MM_GET] = "mm-get",
 	[43] = "mm-ntf",
+	[ETHTOOL_MSG_PHY_GET] = "phy-get",
 };
 
 const char *ethtool_op_str(int op)
@@ -89,6 +90,18 @@ const char *ethtool_stringset_str(enum ethtool_stringset value)
 	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(ethtool_stringset_strmap))
 		return NULL;
 	return ethtool_stringset_strmap[value];
+}
+
+static const char * const ethtool_phy_upstream_type_strmap[] = {
+	[0] = "mac",
+	[1] = "phy",
+};
+
+const char *ethtool_phy_upstream_type_str(int value)
+{
+	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(ethtool_phy_upstream_type_strmap))
+		return NULL;
+	return ethtool_phy_upstream_type_strmap[value];
 }
 
 /* Policies */
@@ -152,6 +165,16 @@ struct ynl_policy_attr ethtool_mm_stat_policy[ETHTOOL_A_MM_STAT_MAX + 1] = {
 struct ynl_policy_nest ethtool_mm_stat_nest = {
 	.max_attr = ETHTOOL_A_MM_STAT_MAX,
 	.table = ethtool_mm_stat_policy,
+};
+
+struct ynl_policy_attr ethtool_phy_upstream_policy[ETHTOOL_A_PHY_UPSTREAM_MAX + 1] = {
+	[ETHTOOL_A_PHY_UPSTREAM_INDEX] = { .name = "index", .type = YNL_PT_U32, },
+	[ETHTOOL_A_PHY_UPSTREAM_SFP_NAME] = { .name = "sfp-name", .type = YNL_PT_NUL_STR, },
+};
+
+struct ynl_policy_nest ethtool_phy_upstream_nest = {
+	.max_attr = ETHTOOL_A_PHY_UPSTREAM_MAX,
+	.table = ethtool_phy_upstream_policy,
 };
 
 struct ynl_policy_attr ethtool_cable_result_policy[ETHTOOL_A_CABLE_RESULT_MAX + 1] = {
@@ -667,6 +690,22 @@ struct ynl_policy_nest ethtool_mm_nest = {
 	.table = ethtool_mm_policy,
 };
 
+struct ynl_policy_attr ethtool_phy_policy[ETHTOOL_A_PHY_MAX + 1] = {
+	[ETHTOOL_A_PHY_HEADER] = { .name = "header", .type = YNL_PT_NEST, .nest = &ethtool_header_nest, },
+	[ETHTOOL_A_PHY_INDEX] = { .name = "index", .type = YNL_PT_U32, },
+	[ETHTOOL_A_PHY_DRVNAME] = { .name = "drvname", .type = YNL_PT_NUL_STR, },
+	[ETHTOOL_A_PHY_NAME] = { .name = "name", .type = YNL_PT_NUL_STR, },
+	[ETHTOOL_A_PHY_UPSTREAM_TYPE] = { .name = "upstream-type", .type = YNL_PT_U8, },
+	[ETHTOOL_A_PHY_UPSTREAM] = { .name = "upstream", .type = YNL_PT_NEST, .nest = &ethtool_phy_upstream_nest, },
+	[ETHTOOL_A_PHY_DOWNSTREAM_SFP_NAME] = { .name = "downstream-sfp-name", .type = YNL_PT_NUL_STR, },
+	[ETHTOOL_A_PHY_ID] = { .name = "id", .type = YNL_PT_U32, },
+};
+
+struct ynl_policy_nest ethtool_phy_nest = {
+	.max_attr = ETHTOOL_A_PHY_MAX,
+	.table = ethtool_phy_policy,
+};
+
 /* Common nested types */
 void ethtool_header_free(struct ethtool_header *obj)
 {
@@ -893,6 +932,42 @@ int ethtool_mm_stat_parse(struct ynl_parse_arg *yarg,
 				return MNL_CB_ERROR;
 			dst->_present.hold_count = 1;
 			dst->hold_count = mnl_attr_get_u64(attr);
+		}
+	}
+
+	return 0;
+}
+
+void ethtool_phy_upstream_free(struct ethtool_phy_upstream *obj)
+{
+	free(obj->sfp_name);
+}
+
+int ethtool_phy_upstream_parse(struct ynl_parse_arg *yarg,
+			       const struct nlattr *nested)
+{
+	struct ethtool_phy_upstream *dst = yarg->data;
+	const struct nlattr *attr;
+
+	mnl_attr_for_each_nested(attr, nested) {
+		unsigned int type = mnl_attr_get_type(attr);
+
+		if (type == ETHTOOL_A_PHY_UPSTREAM_INDEX) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.index = 1;
+			dst->index = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_PHY_UPSTREAM_SFP_NAME) {
+			unsigned int len;
+
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+
+			len = strnlen(mnl_attr_get_str(attr), mnl_attr_get_payload_len(attr));
+			dst->_present.sfp_name_len = len;
+			dst->sfp_name = malloc(len + 1);
+			memcpy(dst->sfp_name, mnl_attr_get_str(attr), len);
+			dst->sfp_name[len] = 0;
 		}
 	}
 
@@ -6173,6 +6248,188 @@ int ethtool_mm_set(struct ynl_sock *ys, struct ethtool_mm_set_req *req)
 		return -1;
 
 	return 0;
+}
+
+/* ============== ETHTOOL_MSG_PHY_GET ============== */
+/* ETHTOOL_MSG_PHY_GET - do */
+void ethtool_phy_get_req_free(struct ethtool_phy_get_req *req)
+{
+	ethtool_header_free(&req->header);
+	free(req);
+}
+
+void ethtool_phy_get_rsp_free(struct ethtool_phy_get_rsp *rsp)
+{
+	ethtool_header_free(&rsp->header);
+	free(rsp->drvname);
+	free(rsp->name);
+	ethtool_phy_upstream_free(&rsp->upstream);
+	free(rsp->downstream_sfp_name);
+	free(rsp);
+}
+
+int ethtool_phy_get_rsp_parse(const struct nlmsghdr *nlh, void *data)
+{
+	struct ynl_parse_arg *yarg = data;
+	struct ethtool_phy_get_rsp *dst;
+	const struct nlattr *attr;
+	struct ynl_parse_arg parg;
+
+	dst = yarg->data;
+	parg.ys = yarg->ys;
+
+	mnl_attr_for_each(attr, nlh, sizeof(struct genlmsghdr)) {
+		unsigned int type = mnl_attr_get_type(attr);
+
+		if (type == ETHTOOL_A_PHY_HEADER) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.header = 1;
+
+			parg.rsp_policy = &ethtool_header_nest;
+			parg.data = &dst->header;
+			if (ethtool_header_parse(&parg, attr))
+				return MNL_CB_ERROR;
+		} else if (type == ETHTOOL_A_PHY_INDEX) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.index = 1;
+			dst->index = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_PHY_DRVNAME) {
+			unsigned int len;
+
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+
+			len = strnlen(mnl_attr_get_str(attr), mnl_attr_get_payload_len(attr));
+			dst->_present.drvname_len = len;
+			dst->drvname = malloc(len + 1);
+			memcpy(dst->drvname, mnl_attr_get_str(attr), len);
+			dst->drvname[len] = 0;
+		} else if (type == ETHTOOL_A_PHY_NAME) {
+			unsigned int len;
+
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+
+			len = strnlen(mnl_attr_get_str(attr), mnl_attr_get_payload_len(attr));
+			dst->_present.name_len = len;
+			dst->name = malloc(len + 1);
+			memcpy(dst->name, mnl_attr_get_str(attr), len);
+			dst->name[len] = 0;
+		} else if (type == ETHTOOL_A_PHY_UPSTREAM_TYPE) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.upstream_type = 1;
+			dst->upstream_type = mnl_attr_get_u8(attr);
+		} else if (type == ETHTOOL_A_PHY_UPSTREAM) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.upstream = 1;
+
+			parg.rsp_policy = &ethtool_phy_upstream_nest;
+			parg.data = &dst->upstream;
+			if (ethtool_phy_upstream_parse(&parg, attr))
+				return MNL_CB_ERROR;
+		} else if (type == ETHTOOL_A_PHY_DOWNSTREAM_SFP_NAME) {
+			unsigned int len;
+
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+
+			len = strnlen(mnl_attr_get_str(attr), mnl_attr_get_payload_len(attr));
+			dst->_present.downstream_sfp_name_len = len;
+			dst->downstream_sfp_name = malloc(len + 1);
+			memcpy(dst->downstream_sfp_name, mnl_attr_get_str(attr), len);
+			dst->downstream_sfp_name[len] = 0;
+		} else if (type == ETHTOOL_A_PHY_ID) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.id = 1;
+			dst->id = mnl_attr_get_u32(attr);
+		}
+	}
+
+	return MNL_CB_OK;
+}
+
+struct ethtool_phy_get_rsp *
+ethtool_phy_get(struct ynl_sock *ys, struct ethtool_phy_get_req *req)
+{
+	struct ynl_req_state yrs = { .yarg = { .ys = ys, }, };
+	struct ethtool_phy_get_rsp *rsp;
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, ETHTOOL_MSG_PHY_GET, 1);
+	ys->req_policy = &ethtool_phy_nest;
+	yrs.yarg.rsp_policy = &ethtool_phy_nest;
+
+	if (req->_present.header)
+		ethtool_header_put(nlh, ETHTOOL_A_PHY_HEADER, &req->header);
+
+	rsp = calloc(1, sizeof(*rsp));
+	yrs.yarg.data = rsp;
+	yrs.cb = ethtool_phy_get_rsp_parse;
+	yrs.rsp_cmd = ETHTOOL_MSG_PHY_GET;
+
+	err = ynl_exec(ys, nlh, &yrs);
+	if (err < 0)
+		goto err_free;
+
+	return rsp;
+
+err_free:
+	ethtool_phy_get_rsp_free(rsp);
+	return NULL;
+}
+
+/* ETHTOOL_MSG_PHY_GET - dump */
+void ethtool_phy_get_list_free(struct ethtool_phy_get_list *rsp)
+{
+	struct ethtool_phy_get_list *next = rsp;
+
+	while ((void *)next != YNL_LIST_END) {
+		rsp = next;
+		next = rsp->next;
+
+		ethtool_header_free(&rsp->obj.header);
+		free(rsp->obj.drvname);
+		free(rsp->obj.name);
+		ethtool_phy_upstream_free(&rsp->obj.upstream);
+		free(rsp->obj.downstream_sfp_name);
+		free(rsp);
+	}
+}
+
+struct ethtool_phy_get_list *
+ethtool_phy_get_dump(struct ynl_sock *ys, struct ethtool_phy_get_req_dump *req)
+{
+	struct ynl_dump_state yds = {};
+	struct nlmsghdr *nlh;
+	int err;
+
+	yds.ys = ys;
+	yds.alloc_sz = sizeof(struct ethtool_phy_get_list);
+	yds.cb = ethtool_phy_get_rsp_parse;
+	yds.rsp_cmd = ETHTOOL_MSG_PHY_GET;
+	yds.rsp_policy = &ethtool_phy_nest;
+
+	nlh = ynl_gemsg_start_dump(ys, ys->family_id, ETHTOOL_MSG_PHY_GET, 1);
+	ys->req_policy = &ethtool_phy_nest;
+
+	if (req->_present.header)
+		ethtool_header_put(nlh, ETHTOOL_A_PHY_HEADER, &req->header);
+
+	err = ynl_exec_dump(ys, nlh, &yds);
+	if (err < 0)
+		goto free_list;
+
+	return yds.first;
+
+free_list:
+	ethtool_phy_get_list_free(yds.first);
+	return NULL;
 }
 
 /* ETHTOOL_MSG_CABLE_TEST_NTF - event */

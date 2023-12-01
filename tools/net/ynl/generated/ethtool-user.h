@@ -20,6 +20,7 @@ extern const struct ynl_family ynl_ethtool_family;
 const char *ethtool_op_str(int op);
 const char *ethtool_udp_tunnel_type_str(int value);
 const char *ethtool_stringset_str(enum ethtool_stringset value);
+const char *ethtool_phy_upstream_type_str(int value);
 
 /* Common nested types */
 struct ethtool_header {
@@ -88,6 +89,16 @@ struct ethtool_mm_stat {
 	__u64 rx_frag_count;
 	__u64 tx_frag_count;
 	__u64 hold_count;
+};
+
+struct ethtool_phy_upstream {
+	struct {
+		__u32 index:1;
+		__u32 sfp_name_len;
+	} _present;
+
+	__u32 index;
+	char *sfp_name;
 };
 
 struct ethtool_cable_result {
@@ -6017,6 +6028,148 @@ ethtool_mm_set_req_set_tx_min_frag_size(struct ethtool_mm_set_req *req,
  * Set MAC Merge configuration
  */
 int ethtool_mm_set(struct ynl_sock *ys, struct ethtool_mm_set_req *req);
+
+/* ============== ETHTOOL_MSG_PHY_GET ============== */
+/* ETHTOOL_MSG_PHY_GET - do */
+struct ethtool_phy_get_req {
+	struct {
+		__u32 header:1;
+	} _present;
+
+	struct ethtool_header header;
+};
+
+static inline struct ethtool_phy_get_req *ethtool_phy_get_req_alloc(void)
+{
+	return calloc(1, sizeof(struct ethtool_phy_get_req));
+}
+void ethtool_phy_get_req_free(struct ethtool_phy_get_req *req);
+
+static inline void
+ethtool_phy_get_req_set_header_dev_index(struct ethtool_phy_get_req *req,
+					 __u32 dev_index)
+{
+	req->_present.header = 1;
+	req->header._present.dev_index = 1;
+	req->header.dev_index = dev_index;
+}
+static inline void
+ethtool_phy_get_req_set_header_dev_name(struct ethtool_phy_get_req *req,
+					const char *dev_name)
+{
+	free(req->header.dev_name);
+	req->header._present.dev_name_len = strlen(dev_name);
+	req->header.dev_name = malloc(req->header._present.dev_name_len + 1);
+	memcpy(req->header.dev_name, dev_name, req->header._present.dev_name_len);
+	req->header.dev_name[req->header._present.dev_name_len] = 0;
+}
+static inline void
+ethtool_phy_get_req_set_header_flags(struct ethtool_phy_get_req *req,
+				     __u32 flags)
+{
+	req->_present.header = 1;
+	req->header._present.flags = 1;
+	req->header.flags = flags;
+}
+static inline void
+ethtool_phy_get_req_set_header_phy_index(struct ethtool_phy_get_req *req,
+					 __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
+
+struct ethtool_phy_get_rsp {
+	struct {
+		__u32 header:1;
+		__u32 index:1;
+		__u32 drvname_len;
+		__u32 name_len;
+		__u32 upstream_type:1;
+		__u32 upstream:1;
+		__u32 downstream_sfp_name_len;
+		__u32 id:1;
+	} _present;
+
+	struct ethtool_header header;
+	__u32 index;
+	char *drvname;
+	char *name;
+	__u8 upstream_type;
+	struct ethtool_phy_upstream upstream;
+	char *downstream_sfp_name;
+	__u32 id;
+};
+
+void ethtool_phy_get_rsp_free(struct ethtool_phy_get_rsp *rsp);
+
+/*
+ * Get PHY devices attached to an interface
+ */
+struct ethtool_phy_get_rsp *
+ethtool_phy_get(struct ynl_sock *ys, struct ethtool_phy_get_req *req);
+
+/* ETHTOOL_MSG_PHY_GET - dump */
+struct ethtool_phy_get_req_dump {
+	struct {
+		__u32 header:1;
+	} _present;
+
+	struct ethtool_header header;
+};
+
+static inline struct ethtool_phy_get_req_dump *
+ethtool_phy_get_req_dump_alloc(void)
+{
+	return calloc(1, sizeof(struct ethtool_phy_get_req_dump));
+}
+void ethtool_phy_get_req_dump_free(struct ethtool_phy_get_req_dump *req);
+
+static inline void
+ethtool_phy_get_req_dump_set_header_dev_index(struct ethtool_phy_get_req_dump *req,
+					      __u32 dev_index)
+{
+	req->_present.header = 1;
+	req->header._present.dev_index = 1;
+	req->header.dev_index = dev_index;
+}
+static inline void
+ethtool_phy_get_req_dump_set_header_dev_name(struct ethtool_phy_get_req_dump *req,
+					     const char *dev_name)
+{
+	free(req->header.dev_name);
+	req->header._present.dev_name_len = strlen(dev_name);
+	req->header.dev_name = malloc(req->header._present.dev_name_len + 1);
+	memcpy(req->header.dev_name, dev_name, req->header._present.dev_name_len);
+	req->header.dev_name[req->header._present.dev_name_len] = 0;
+}
+static inline void
+ethtool_phy_get_req_dump_set_header_flags(struct ethtool_phy_get_req_dump *req,
+					  __u32 flags)
+{
+	req->_present.header = 1;
+	req->header._present.flags = 1;
+	req->header.flags = flags;
+}
+static inline void
+ethtool_phy_get_req_dump_set_header_phy_index(struct ethtool_phy_get_req_dump *req,
+					      __u32 phy_index)
+{
+	req->_present.header = 1;
+	req->header._present.phy_index = 1;
+	req->header.phy_index = phy_index;
+}
+
+struct ethtool_phy_get_list {
+	struct ethtool_phy_get_list *next;
+	struct ethtool_phy_get_rsp obj __attribute__((aligned(8)));
+};
+
+void ethtool_phy_get_list_free(struct ethtool_phy_get_list *rsp);
+
+struct ethtool_phy_get_list *
+ethtool_phy_get_dump(struct ynl_sock *ys, struct ethtool_phy_get_req_dump *req);
 
 /* ETHTOOL_MSG_CABLE_TEST_NTF - event */
 struct ethtool_cable_test_ntf_rsp {
