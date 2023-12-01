@@ -593,10 +593,10 @@ static int gen8_engine_reset_prepare(struct intel_engine_cs *engine)
 	ret = __intel_wait_for_register_fw(uncore, reg, mask, ack,
 					   700, 0, NULL);
 	if (ret)
-		gt_err(engine->gt,
-		       "%s reset request timed out: {request: %08x, RESET_CTL: %08x}\n",
-		       engine->name, request,
-		       intel_uncore_read_fw(uncore, reg));
+		GT_TRACE(engine->gt,
+			 "%s reset request timed out: {request: %08x, RESET_CTL: %08x}\n",
+			 engine->name, request,
+			 intel_uncore_read_fw(uncore, reg));
 
 	return ret;
 }
