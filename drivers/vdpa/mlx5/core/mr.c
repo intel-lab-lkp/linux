@@ -498,32 +498,32 @@ static void destroy_user_mr(struct mlx5_vdpa_dev *mvdev, struct mlx5_vdpa_mr *mr
 
 static void _mlx5_vdpa_destroy_mr(struct mlx5_vdpa_dev *mvdev, struct mlx5_vdpa_mr *mr)
 {
+	if (!mr)
+		return;
+
 	if (mr->user_mr)
 		destroy_user_mr(mvdev, mr);
 	else
 		destroy_dma_mr(mvdev, mr);
-
-	vhost_iotlb_free(mr->iotlb);
-}
-
-void mlx5_vdpa_destroy_mr(struct mlx5_vdpa_dev *mvdev,
-			  struct mlx5_vdpa_mr *mr)
-{
-	if (!mr)
-		return;
-
-	mutex_lock(&mvdev->mr_mtx);
-
-	_mlx5_vdpa_destroy_mr(mvdev, mr);
 
 	for (int i = 0; i < MLX5_VDPA_NUM_AS; i++) {
 		if (mvdev->mr[i] == mr)
 			mvdev->mr[i] = NULL;
 	}
 
-	mutex_unlock(&mvdev->mr_mtx);
+	vhost_iotlb_free(mr->iotlb);
 
 	kfree(mr);
+}
+
+void mlx5_vdpa_destroy_mr(struct mlx5_vdpa_dev *mvdev,
+			  struct mlx5_vdpa_mr *mr)
+{
+	mutex_lock(&mvdev->mr_mtx);
+
+	_mlx5_vdpa_destroy_mr(mvdev, mr);
+
+	mutex_unlock(&mvdev->mr_mtx);
 }
 
 void mlx5_vdpa_update_mr(struct mlx5_vdpa_dev *mvdev,
@@ -535,10 +535,7 @@ void mlx5_vdpa_update_mr(struct mlx5_vdpa_dev *mvdev,
 	mutex_lock(&mvdev->mr_mtx);
 
 	mvdev->mr[asid] = new_mr;
-	if (old_mr) {
-		_mlx5_vdpa_destroy_mr(mvdev, old_mr);
-		kfree(old_mr);
-	}
+	_mlx5_vdpa_destroy_mr(mvdev, old_mr);
 
 	mutex_unlock(&mvdev->mr_mtx);
 
@@ -546,8 +543,12 @@ void mlx5_vdpa_update_mr(struct mlx5_vdpa_dev *mvdev,
 
 void mlx5_vdpa_destroy_mr_resources(struct mlx5_vdpa_dev *mvdev)
 {
+	mutex_lock(&mvdev->mr_mtx);
+
 	for (int i = 0; i < MLX5_VDPA_NUM_AS; i++)
-		mlx5_vdpa_destroy_mr(mvdev, mvdev->mr[i]);
+		_mlx5_vdpa_destroy_mr(mvdev, mvdev->mr[i]);
+
+	mutex_unlock(&mvdev->mr_mtx);
 
 	prune_iotlb(mvdev->cvq.iotlb);
 }
