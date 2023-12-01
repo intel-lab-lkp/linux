@@ -610,6 +610,9 @@ struct ynl_policy_attr ethtool_pse_policy[ETHTOOL_A_PSE_MAX + 1] = {
 	[ETHTOOL_A_PODL_PSE_ADMIN_STATE] = { .name = "podl-pse-admin-state", .type = YNL_PT_U32, },
 	[ETHTOOL_A_PODL_PSE_ADMIN_CONTROL] = { .name = "podl-pse-admin-control", .type = YNL_PT_U32, },
 	[ETHTOOL_A_PODL_PSE_PW_D_STATUS] = { .name = "podl-pse-pw-d-status", .type = YNL_PT_U32, },
+	[ETHTOOL_A_C33_PSE_ADMIN_STATE] = { .name = "c33-pse-admin-state", .type = YNL_PT_U32, },
+	[ETHTOOL_A_C33_PSE_ADMIN_CONTROL] = { .name = "c33-pse-admin-control", .type = YNL_PT_U32, },
+	[ETHTOOL_A_C33_PSE_PW_D_STATUS] = { .name = "c33-pse-pw-d-status", .type = YNL_PT_U32, },
 };
 
 struct ynl_policy_nest ethtool_pse_nest = {
@@ -5320,6 +5323,21 @@ int ethtool_pse_get_rsp_parse(const struct nlmsghdr *nlh, void *data)
 				return MNL_CB_ERROR;
 			dst->_present.podl_pse_pw_d_status = 1;
 			dst->podl_pse_pw_d_status = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_C33_PSE_ADMIN_STATE) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.c33_pse_admin_state = 1;
+			dst->c33_pse_admin_state = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_C33_PSE_ADMIN_CONTROL) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.c33_pse_admin_control = 1;
+			dst->c33_pse_admin_control = mnl_attr_get_u32(attr);
+		} else if (type == ETHTOOL_A_C33_PSE_PW_D_STATUS) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.c33_pse_pw_d_status = 1;
+			dst->c33_pse_pw_d_status = mnl_attr_get_u32(attr);
 		}
 	}
 
@@ -5426,6 +5444,12 @@ int ethtool_pse_set(struct ynl_sock *ys, struct ethtool_pse_set_req *req)
 		mnl_attr_put_u32(nlh, ETHTOOL_A_PODL_PSE_ADMIN_CONTROL, req->podl_pse_admin_control);
 	if (req->_present.podl_pse_pw_d_status)
 		mnl_attr_put_u32(nlh, ETHTOOL_A_PODL_PSE_PW_D_STATUS, req->podl_pse_pw_d_status);
+	if (req->_present.c33_pse_admin_state)
+		mnl_attr_put_u32(nlh, ETHTOOL_A_C33_PSE_ADMIN_STATE, req->c33_pse_admin_state);
+	if (req->_present.c33_pse_admin_control)
+		mnl_attr_put_u32(nlh, ETHTOOL_A_C33_PSE_ADMIN_CONTROL, req->c33_pse_admin_control);
+	if (req->_present.c33_pse_pw_d_status)
+		mnl_attr_put_u32(nlh, ETHTOOL_A_C33_PSE_PW_D_STATUS, req->c33_pse_pw_d_status);
 
 	err = ynl_exec(ys, nlh, &yrs);
 	if (err < 0)
