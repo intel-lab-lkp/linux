@@ -288,8 +288,11 @@ struct amdgpu_vm {
 	/* Lock to protect vm_bo add/del/move on all lists of vm */
 	spinlock_t		status_lock;
 
-	/* BOs who needs a validation */
+	/* Per VM and PT BOs who needs a validation */
 	struct list_head	evicted;
+
+	/* BOs for user mode queues that need a validation */
+	struct list_head	evicted_user;
 
 	/* PT BOs which relocated and their parent need an update */
 	struct list_head	relocated;
