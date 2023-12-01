@@ -529,7 +529,7 @@ enum dmub_status dmub_srv_calc_mem_info(struct dmub_srv *dmub,
 		out->fb[i].cpu_addr = cpu_base + reg->base;
 		out->fb[i].gpu_addr = gpu_base + reg->base;
 
-		if (i == DMUB_WINDOW_4_MAILBOX && params->cpu_inbox_addr != 0) {
+		if (i == DMUB_WINDOW_4_MAILBOX && params->cpu_inbox_addr) {
 			out->fb[i].cpu_addr = (uint8_t *)params->cpu_inbox_addr + reg->base;
 			out->fb[i].gpu_addr = params->gpu_inbox_addr + reg->base;
 		}
