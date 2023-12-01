@@ -164,6 +164,22 @@ static bool closid_allocated(unsigned int closid)
 	return (closid_free_map & (1 << closid)) == 0;
 }
 
+static u64 abmc_free_map;
+static u32 abmc_free_map_len;
+
+static void abmc_counters_init(void)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_L3];
+
+	if (hw_res->abmc_counters > 64) {
+		hw_res->abmc_counters = 64;
+		WARN(1, "Cannot support more than 64 abmc counters\n");
+	}
+
+	abmc_free_map = BIT_MASK(hw_res->abmc_counters) - 1;
+	abmc_free_map_len = hw_res->abmc_counters;
+}
+
 /**
  * rdtgroup_mode_by_closid - Return mode of resource group with closid
  * @closid: closid if the resource group
@@ -2715,6 +2731,7 @@ static int rdt_get_tree(struct fs_context *fc)
 {
 	struct rdt_fs_context *ctx = rdt_fc2context(fc);
 	unsigned long flags = RFTYPE_CTRL_BASE;
+	struct rdt_hw_resource *hw_res;
 	struct rdt_domain *dom;
 	struct rdt_resource *r;
 	int ret;
@@ -2744,6 +2761,12 @@ static int rdt_get_tree(struct fs_context *fc)
 	}
 
 	closid_init();
+
+	r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
+	hw_res = resctrl_to_arch_res(r);
+
+	if (r->abmc_capable && hw_res->abmc_enabled)
+		abmc_counters_init();
 
 	if (rdt_mon_capable)
 		flags |= RFTYPE_MON;
@@ -2789,7 +2812,6 @@ static int rdt_get_tree(struct fs_context *fc)
 		static_branch_enable_cpuslocked(&rdt_enable_key);
 
 	if (is_mbm_enabled()) {
-		r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
 		list_for_each_entry(dom, &r->domains, list)
 			mbm_setup_overflow_handler(dom, MBM_OVERFLOW_INTERVAL);
 	}
