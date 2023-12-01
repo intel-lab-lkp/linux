@@ -74,6 +74,8 @@
 
 #include "access-helper.h"
 
+#define MAX(a, b) ((a) >= (b) ? (a) : (b))
+
 extern void check_wait(void);
 extern asmlinkage void rollback_handle_int(void);
 extern asmlinkage void handle_int(void);
