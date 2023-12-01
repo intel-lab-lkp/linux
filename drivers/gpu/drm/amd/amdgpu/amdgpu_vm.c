@@ -442,24 +442,31 @@ uint64_t amdgpu_vm_generation(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 }
 
 /**
- * amdgpu_vm_validate_pt_bos - validate the page table BOs
+ * amdgpu_vm_validate_evicted_bos - validate evicted BOs tracked in the VM
  *
  * @adev: amdgpu device pointer
  * @vm: vm providing the BOs
+ * @ticket: optional reservation ticket used to reserve the VM
  * @validate: callback to do the validation
  * @param: parameter for the validation callback
  *
- * Validate the page table BOs on command submission if neccessary.
+ * Validate the page table BOs and per-VM BOs on command submission if
+ * necessary. If a ticket is given, also try to validate evicted user queue
+ * BOs. They must already be reserved with the given ticket.
  *
  * Returns:
  * Validation result.
  */
-int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
-			      int (*validate)(void *p, struct amdgpu_bo *bo),
-			      void *param)
+int amdgpu_vm_validate_evicted_bos(struct amdgpu_device *adev,
+				   struct amdgpu_vm *vm,
+				   struct ww_acquire_ctx *ticket,
+				   int (*validate)(void *p,
+						   struct amdgpu_bo *bo),
+				   void *param)
 {
 	struct amdgpu_vm_bo_base *bo_base;
 	struct amdgpu_bo *shadow;
+	struct dma_resv *resv;
 	struct amdgpu_bo *bo;
 	int r;
 
@@ -497,6 +504,28 @@ int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 			vm->update_funcs->map_table(to_amdgpu_bo_vm(bo));
 			amdgpu_vm_bo_relocated(bo_base);
 		}
+		spin_lock(&vm->status_lock);
+	}
+	while (ticket && !list_empty(&vm->evicted_user)) {
+		bo_base = list_first_entry(&vm->evicted_user,
+					   struct amdgpu_vm_bo_base,
+					   vm_status);
+		spin_unlock(&vm->status_lock);
+
+		bo = bo_base->bo;
+		resv = bo->tbo.base.resv;
+
+		if (dma_resv_locking_ctx(resv) != ticket) {
+			pr_warn_ratelimited("Evicted user BO is not reserved in pid %d\n",
+					    vm->task_info.pid);
+			return -EINVAL;
+		}
+
+		r = validate(param, bo);
+		if (r)
+			return r;
+
+		amdgpu_vm_bo_invalidated(bo_base);
 		spin_lock(&vm->status_lock);
 	}
 	spin_unlock(&vm->status_lock);
@@ -1441,16 +1470,95 @@ int amdgpu_vm_handle_moved(struct amdgpu_device *adev,
 		}
 
 		r = amdgpu_vm_bo_update(adev, bo_va, clear);
-		if (r)
-			return r;
 
 		if (unlock)
 			dma_resv_unlock(resv);
+		if (r)
+			return r;
+
+		/* Remember evicted DMABuf imports in compute VMs for later
+		 * validation
+		 */
+		if (vm->is_compute_context && bo_va->base.bo &&
+		    bo_va->base.bo->tbo.base.import_attach &&
+		    (!bo_va->base.bo->tbo.resource ||
+		     bo_va->base.bo->tbo.resource->mem_type == TTM_PL_SYSTEM))
+			amdgpu_vm_bo_evicted_user(&bo_va->base);
+
 		spin_lock(&vm->status_lock);
 	}
 	spin_unlock(&vm->status_lock);
 
 	return 0;
+}
+
+/**
+ * amdgpu_vm_fence_imports - add fence to valid DMABuf imports
+ *
+ * @vm: requested vm
+ * @ticket: optional reservation ticket used to reserve the VM
+ * @fence: fence to add
+ *
+ * Add the specified fence to all dynamic DMABuf imports that are valid.
+ *
+ * Returns:
+ * 0 for success.
+ */
+int amdgpu_vm_fence_imports(struct amdgpu_vm *vm,
+			    struct ww_acquire_ctx *ticket,
+			    struct dma_fence *fence)
+{
+	struct amdgpu_bo_va *bo_va, *tmp;
+	struct dma_resv *resv;
+	LIST_HEAD(imports);
+	bool unlock;
+	int ret = 0;
+
+	if (!vm->is_compute_context)
+		return 0;
+
+	/* Move all the DMABuf imports to a private list so I can reserve
+	 * them while not holding te status_lock.
+	 */
+	spin_lock(&vm->status_lock);
+	list_for_each_entry_safe(bo_va, tmp, &vm->idle, base.vm_status) {
+		if (bo_va->base.bo && bo_va->base.bo->tbo.base.import_attach &&
+		    dma_buf_is_dynamic(bo_va->base.bo->tbo.base.import_attach->dmabuf))
+			list_move(&bo_va->base.vm_status, &imports);
+	}
+	spin_unlock(&vm->status_lock);
+
+	list_for_each_entry(bo_va, &imports, base.vm_status) {
+		resv = bo_va->base.bo->tbo.base.resv;
+
+		/* Try to reserve the BO */
+		if (dma_resv_trylock(resv)) {
+			unlock = true;
+		/* The caller is already holding the reservation lock */
+		} else if (ticket && dma_resv_locking_ctx(resv) == ticket) {
+			unlock = false;
+		} else {
+			WARN_ONCE(1, "Failed to reserve DMABuf import");
+			ret = -EBUSY;
+			break;
+		}
+
+		ret = dma_resv_reserve_fences(resv, 1);
+		if (!ret)
+			dma_resv_add_fence(resv, fence,
+					   DMA_RESV_USAGE_BOOKKEEP);
+
+		if (unlock)
+			dma_resv_unlock(resv);
+		if (ret)
+			break;
+	}
+
+	spin_lock(&vm->status_lock);
+	list_splice(&imports, &vm->idle);
+	spin_unlock(&vm->status_lock);
+
+	return ret;
 }
 
 /**
