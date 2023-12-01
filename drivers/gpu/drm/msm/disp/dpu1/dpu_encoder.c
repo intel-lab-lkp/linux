@@ -119,6 +119,8 @@ enum dpu_enc_rc_states {
  *	Virtual encoder defers as much as possible to the physical encoders.
  *	Virtual encoder registers itself with the DRM Framework as the encoder.
  * @base:		drm_encoder base class for registration with DRM
+ * @vblank_ctl_lock:	Vblank ctl mutex lock to protect physical encoder
+ * 						for IRQ purposes
  * @enc_spinlock:	Virtual-Encoder-Wide Spin Lock for IRQ purposes
  * @enabled:		True if the encoder is active, protected by enc_lock
  * @num_phys_encs:	Actual number of physical encoders contained.
@@ -166,6 +168,7 @@ enum dpu_enc_rc_states {
  */
 struct dpu_encoder_virt {
 	struct drm_encoder base;
+	struct mutex vblank_ctl_lock;
 	spinlock_t enc_spinlock;
 
 	bool enabled;
@@ -2255,6 +2258,7 @@ static int dpu_encoder_setup_display(struct dpu_encoder_virt *dpu_enc,
 	phys_params.dpu_kms = dpu_kms;
 	phys_params.parent = &dpu_enc->base;
 	phys_params.enc_spinlock = &dpu_enc->enc_spinlock;
+	phys_params.vblank_ctl_lock = &dpu_enc->vblank_ctl_lock;
 
 	WARN_ON(disp_info->num_of_h_tiles < 1);
 
@@ -2386,6 +2390,7 @@ struct drm_encoder *dpu_encoder_init(struct drm_device *dev,
 	dpu_enc->enabled = false;
 	mutex_init(&dpu_enc->enc_lock);
 	mutex_init(&dpu_enc->rc_lock);
+	mutex_init(&dpu_enc->vblank_ctl_lock);
 
 	ret = dpu_encoder_setup_display(dpu_enc, dpu_kms, disp_info);
 	if (ret)
@@ -2495,6 +2500,7 @@ void dpu_encoder_phys_init(struct dpu_encoder_phys *phys_enc,
 	phys_enc->dpu_kms = p->dpu_kms;
 	phys_enc->split_role = p->split_role;
 	phys_enc->enc_spinlock = p->enc_spinlock;
+	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
 	phys_enc->enable_state = DPU_ENC_DISABLED;
 
 	atomic_set(&phys_enc->vblank_refcount, 0);
