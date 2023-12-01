@@ -157,7 +157,6 @@ examples:
                     reg = <0>;
                     anx7625_in: endpoint {
                         remote-endpoint = <&mipi_dsi>;
-                        bus-type = <7>;
                         data-lanes = <0 1 2 3>;
                     };
                 };
