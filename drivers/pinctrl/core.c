@@ -1066,6 +1066,7 @@ static struct pinctrl *create_pinctrl(struct device *dev,
 	p->dev = dev;
 	INIT_LIST_HEAD(&p->states);
 	INIT_LIST_HEAD(&p->dt_maps);
+	spin_lock_init(&p->lock);
 
 	ret = pinctrl_dt_to_map(p, pctldev);
 	if (ret < 0) {
@@ -1262,9 +1263,12 @@ static void pinctrl_link_add(struct pinctrl_dev *pctldev,
 static int pinctrl_commit_state(struct pinctrl *p, struct pinctrl_state *state)
 {
 	struct pinctrl_setting *setting, *setting2;
-	struct pinctrl_state *old_state = READ_ONCE(p->state);
+	struct pinctrl_state *old_state;
 	int ret;
+	unsigned long flags;
 
+	spin_lock_irqsave(&p->lock, flags);
+	old_state = p->state;
 	if (old_state) {
 		/*
 		 * For each pinmux setting in the old state, forget SW's record
@@ -1329,11 +1333,11 @@ static int pinctrl_commit_state(struct pinctrl *p, struct pinctrl_state *state)
 	}
 
 	p->state = state;
+	spin_unlock_irqrestore(&p->lock, flags);
 
 	return 0;
 
 unapply_new_state:
-	dev_err(p->dev, "Error applying setting, reverse things back\n");
 
 	list_for_each_entry(setting2, &state->settings, node) {
 		if (&setting2->node == &setting->node)
@@ -1349,6 +1353,9 @@ unapply_new_state:
 			pinmux_disable_setting(setting2);
 	}
 
+	spin_unlock_irqrestore(&p->lock, flags);
+
+	dev_err(p->dev, "Error applying setting, reverse things back\n");
 	/* There's no infinite recursive loop here because p->state is NULL */
 	if (old_state)
 		pinctrl_select_state(p, old_state);
