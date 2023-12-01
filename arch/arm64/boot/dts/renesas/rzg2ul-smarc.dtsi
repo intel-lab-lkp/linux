@@ -23,6 +23,35 @@
 &i2c0 {
 	clock-frequency = <400000>;
 
+	da9062: pmic@58 {
+		compatible = "dlg,da9062";
+		reg = <0x58>;
+
+		da9062_rtc: rtc {
+			compatible = "dlg,da9062-rtc";
+		};
+
+		da9062_onkey: onkey {
+			compatible = "dlg,da9062-onkey";
+			status = "disabled";
+		};
+
+		watchdog {
+			compatible = "dlg,da9062-watchdog";
+			status = "disabled";
+		};
+
+		thermal {
+			compatible = "dlg,da9062-thermal";
+			status = "disabled";
+		};
+
+		gpio {
+			compatible = "dlg,da9062-gpio";
+			status = "disabled";
+		};
+	};
+
 	versa3: clock-generator@68 {
 		compatible = "renesas,5p35023";
 		reg = <0x68>;
