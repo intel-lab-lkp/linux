@@ -8,6 +8,7 @@
  * out of the OpenFirmware device tree and using it to populate an mii_bus.
  */
 
+#include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fwnode_mdio.h>
@@ -15,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/of.h>
+#include <linux/of_clk.h>
 #include <linux/of_irq.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
@@ -46,7 +48,37 @@ EXPORT_SYMBOL(of_mdiobus_phy_device_register);
 static int of_mdiobus_register_phy(struct mii_bus *mdio,
 				    struct device_node *child, u32 addr)
 {
-	return fwnode_mdiobus_register_phy(mdio, of_fwnode_handle(child), addr);
+	struct clk *clk = NULL;
+	int ret;
+
+	/* ethernet-phy binding specifies a maximum of 1 clock */
+	if (of_clk_get_parent_count(child) == 1) {
+		clk = of_clk_get(child, 0);
+		if (IS_ERR(clk)) {
+			if (PTR_ERR(clk) != -ENOENT)
+				return dev_err_probe(&mdio->dev, PTR_ERR(clk),
+						     "Could not get defined clock for MDIO device at address %u\n",
+						     addr);
+
+			clk = NULL;
+		}
+	}
+
+	ret = clk_prepare_enable(clk);
+	if (ret < 0) {
+		clk_put(clk);
+		dev_err(&mdio->dev,
+			"Could not enable clock for MDIO device at address %u: %d\n",
+			addr, ret);
+		return ret;
+	}
+
+	ret = fwnode_mdiobus_register_phy(mdio, of_fwnode_handle(child), addr);
+
+	clk_disable_unprepare(clk);
+	clk_put(clk);
+
+	return ret;
 }
 
 static int of_mdiobus_register_device(struct mii_bus *mdio,
