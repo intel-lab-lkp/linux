@@ -50,6 +50,9 @@
 /* Dirty Victims to All Types of Memory */
 #define DIRTY_VICTIMS_TO_ALL_MEM	BIT(6)
 
+/* ABMC ENABLE */
+#define ABMC_ENABLE			BIT(0)
+
 struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
 	bool				enable_cdpl2;
@@ -395,6 +398,7 @@ struct rdt_parse_data {
  * @mon_scale:		cqm counter * mon_scale = occupancy in bytes
  * @mbm_width:		Monitor width, to detect and correct for overflow.
  * @cdp_enabled:	CDP state of this resource
+ * @abmc_enabled:	ABMC feature is enabled
  *
  * Members of this structure are either private to the architecture
  * e.g. mbm_width, or accessed via helpers that provide abstraction. e.g.
@@ -410,6 +414,7 @@ struct rdt_hw_resource {
 	unsigned int		mon_scale;
 	unsigned int		mbm_width;
 	bool			cdp_enabled;
+	bool			abmc_enabled;
 };
 
 static inline struct rdt_hw_resource *resctrl_to_arch_res(struct rdt_resource *r)
@@ -454,6 +459,11 @@ static inline bool resctrl_arch_get_cdp_enabled(enum resctrl_res_level l)
 }
 
 int resctrl_arch_set_cdp_enabled(enum resctrl_res_level l, bool enable);
+
+static inline bool resctrl_arch_get_abmc_enabled(enum resctrl_res_level l)
+{
+	return rdt_resources_all[l].abmc_enabled;
+}
 
 /*
  * To return the common struct rdt_resource, which is contained in struct

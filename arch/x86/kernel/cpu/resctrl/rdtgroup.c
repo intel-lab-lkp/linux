@@ -2365,6 +2365,72 @@ int resctrl_arch_set_cdp_enabled(enum resctrl_res_level l, bool enable)
 	return 0;
 }
 
+static void resctrl_abmc_msrwrite(void *arg)
+{
+	bool *enable = arg;
+	u64 msrval;
+
+	rdmsrl(MSR_IA32_L3_QOS_EXT_CFG, msrval);
+
+	if (*enable)
+		msrval |= ABMC_ENABLE;
+	else
+		msrval &= ~ABMC_ENABLE;
+
+	wrmsrl(MSR_IA32_L3_QOS_EXT_CFG, msrval);
+}
+
+static int resctrl_abmc_setup(enum resctrl_res_level l, bool enable)
+{
+	struct rdt_resource *r = &rdt_resources_all[l].r_resctrl;
+	struct rdt_domain *d;
+
+	/* Update QOS_CFG MSR on all the CPUs in cpu_mask */
+	list_for_each_entry(d, &r->domains, list)
+		on_each_cpu_mask(&d->cpu_mask, resctrl_abmc_msrwrite, &enable, 1);
+
+	return 0;
+}
+
+static int resctrl_abmc_enable(enum resctrl_res_level l)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+	int ret = 0;
+
+	if (!hw_res->abmc_enabled) {
+		ret = resctrl_abmc_setup(l, true);
+		if (!ret)
+			hw_res->abmc_enabled = true;
+	}
+
+	return ret;
+}
+
+static void resctrl_abmc_disable(enum resctrl_res_level l)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+
+	if (hw_res->abmc_enabled) {
+		resctrl_abmc_setup(l, false);
+		hw_res->abmc_enabled = false;
+	}
+}
+
+int resctrl_arch_set_abmc_enabled(enum resctrl_res_level l, bool enable)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+
+	if (!hw_res->r_resctrl.abmc_capable)
+		return -EINVAL;
+
+	if (enable)
+		return resctrl_abmc_enable(l);
+
+	resctrl_abmc_disable(l);
+
+	return 0;
+}
+
 /*
  * We don't allow rdtgroup directories to be created anywhere
  * except the root directory. Thus when looking for the rdtgroup
@@ -2449,7 +2515,7 @@ static void rdt_disable_ctx(void)
 	resctrl_arch_set_cdp_enabled(RDT_RESOURCE_L3, false);
 	resctrl_arch_set_cdp_enabled(RDT_RESOURCE_L2, false);
 	set_mba_sc(false);
-
+	resctrl_arch_set_abmc_enabled(RDT_RESOURCE_L3, false);
 	resctrl_debug = false;
 }
 
@@ -2475,11 +2541,19 @@ static int rdt_enable_ctx(struct rdt_fs_context *ctx)
 			goto out_cdpl3;
 	}
 
+	if (ctx->enable_abmc) {
+		ret = resctrl_arch_set_abmc_enabled(RDT_RESOURCE_L3, true);
+		if (ret)
+			goto out_mba_mbps;
+	}
+
 	if (ctx->enable_debug)
 		resctrl_debug = true;
 
 	return 0;
 
+out_mba_mbps:
+	set_mba_sc(false);
 out_cdpl3:
 	resctrl_arch_set_cdp_enabled(RDT_RESOURCE_L3, false);
 out_cdpl2:
@@ -3801,6 +3875,9 @@ static int rdtgroup_show_options(struct seq_file *seq, struct kernfs_root *kf)
 
 	if (resctrl_debug)
 		seq_puts(seq, ",debug");
+
+	if (resctrl_arch_get_abmc_enabled(RDT_RESOURCE_L3))
+		seq_puts(seq, ",abmc");
 
 	return 0;
 }
