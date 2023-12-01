@@ -77,7 +77,7 @@ struct cpufreq_cooling_device {
 #ifndef CONFIG_SMP
 	struct time_in_idle *idle_time;
 #endif
-	struct freq_qos_request qos_req;
+	struct interval_qos_request qos_req;
 };
 
 #ifdef CONFIG_THERMAL_GOV_POWER_ALLOCATOR

@@ -27,7 +27,7 @@
 
 struct dtpm_cpu {
 	struct dtpm dtpm;
-	struct freq_qos_request qos_req;
+	struct interval_qos_request qos_req;
 	int cpu;
 };
 

@@ -285,14 +285,14 @@ void dev_pm_qos_constraints_destroy(struct device *dev)
 		memset(req, 0, sizeof(*req));
 	}
 
-	c = &qos->freq.min_freq;
+	c = &qos->freq.min;
 	plist_for_each_entry_safe(req, tmp, &c->list, data.freq.pnode) {
 		apply_constraint(req, PM_QOS_REMOVE_REQ,
 				 PM_QOS_MIN_FREQUENCY_DEFAULT_VALUE);
 		memset(req, 0, sizeof(*req));
 	}
 
-	c = &qos->freq.max_freq;
+	c = &qos->freq.max;
 	plist_for_each_entry_safe(req, tmp, &c->list, data.freq.pnode) {
 		apply_constraint(req, PM_QOS_REMOVE_REQ,
 				 PM_QOS_MAX_FREQUENCY_DEFAULT_VALUE);

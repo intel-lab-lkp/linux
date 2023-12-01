@@ -440,26 +440,26 @@ static inline bool freq_qos_value_invalid(s32 value)
  * freq_constraints_init - Initialize frequency QoS constraints.
  * @qos: Frequency QoS constraints to initialize.
  */
-void freq_constraints_init(struct freq_constraints *qos)
+void freq_constraints_init(struct interval_constraints *qos)
 {
 	struct pm_qos_constraints *c;
 
-	c = &qos->min_freq;
+	c = &qos->min;
 	plist_head_init(&c->list);
 	c->target_value = FREQ_QOS_MIN_DEFAULT_VALUE;
 	c->default_value = FREQ_QOS_MIN_DEFAULT_VALUE;
 	c->no_constraint_value = FREQ_QOS_MIN_DEFAULT_VALUE;
 	c->type = PM_QOS_MAX;
-	c->notifiers = &qos->min_freq_notifiers;
+	c->notifiers = &qos->min_notifiers;
 	BLOCKING_INIT_NOTIFIER_HEAD(c->notifiers);
 
-	c = &qos->max_freq;
+	c = &qos->max;
 	plist_head_init(&c->list);
 	c->target_value = FREQ_QOS_MAX_DEFAULT_VALUE;
 	c->default_value = FREQ_QOS_MAX_DEFAULT_VALUE;
 	c->no_constraint_value = FREQ_QOS_MAX_DEFAULT_VALUE;
 	c->type = PM_QOS_MIN;
-	c->notifiers = &qos->max_freq_notifiers;
+	c->notifiers = &qos->max_notifiers;
 	BLOCKING_INIT_NOTIFIER_HEAD(c->notifiers);
 }
 
@@ -468,8 +468,8 @@ void freq_constraints_init(struct freq_constraints *qos)
  * @qos: Constraints to evaluate.
  * @type: QoS request type.
  */
-s32 freq_qos_read_value(struct freq_constraints *qos,
-			enum freq_qos_req_type type)
+s32 freq_qos_read_value(struct interval_constraints *qos,
+			enum interval_qos_req_type type)
 {
 	s32 ret;
 
@@ -477,15 +477,14 @@ s32 freq_qos_read_value(struct freq_constraints *qos,
 	case FREQ_QOS_MIN:
 		ret = IS_ERR_OR_NULL(qos) ?
 			FREQ_QOS_MIN_DEFAULT_VALUE :
-			pm_qos_read_value(&qos->min_freq);
+			pm_qos_read_value(&qos->min);
 		break;
 	case FREQ_QOS_MAX:
 		ret = IS_ERR_OR_NULL(qos) ?
 			FREQ_QOS_MAX_DEFAULT_VALUE :
-			pm_qos_read_value(&qos->max_freq);
+			pm_qos_read_value(&qos->max);
 		break;
 	default:
-		WARN_ON(1);
 		ret = 0;
 	}
 
@@ -500,18 +499,18 @@ s32 freq_qos_read_value(struct freq_constraints *qos,
  *
  * This is only meant to be called from inside pm_qos, not drivers.
  */
-int freq_qos_apply(struct freq_qos_request *req,
-			  enum pm_qos_req_action action, s32 value)
+int freq_qos_apply(struct interval_qos_request *req,
+		   enum pm_qos_req_action action, s32 value)
 {
 	int ret;
 
 	switch(req->type) {
 	case FREQ_QOS_MIN:
-		ret = pm_qos_update_target(&req->qos->min_freq, &req->pnode,
+		ret = pm_qos_update_target(&req->qos->min, &req->pnode,
 					   action, value);
 		break;
 	case FREQ_QOS_MAX:
-		ret = pm_qos_update_target(&req->qos->max_freq, &req->pnode,
+		ret = pm_qos_update_target(&req->qos->max, &req->pnode,
 					   action, value);
 		break;
 	default:
@@ -535,9 +534,9 @@ int freq_qos_apply(struct freq_qos_request *req,
  * Return 1 if the effective constraint value has changed, 0 if the effective
  * constraint value has not changed, or a negative error code on failures.
  */
-int freq_qos_add_request(struct freq_constraints *qos,
-			 struct freq_qos_request *req,
-			 enum freq_qos_req_type type, s32 value)
+int freq_qos_add_request(struct interval_constraints *qos,
+			 struct interval_qos_request *req,
+			 enum interval_qos_req_type type, s32 value)
 {
 	int ret;
 
@@ -571,7 +570,7 @@ EXPORT_SYMBOL_GPL(freq_qos_add_request);
  * Return 1 if the effective constraint value has changed, 0 if the effective
  * constraint value has not changed, or a negative error code on failures.
  */
-int freq_qos_update_request(struct freq_qos_request *req, s32 new_value)
+int freq_qos_update_request(struct interval_qos_request *req, s32 new_value)
 {
 	if (!req || freq_qos_value_invalid(new_value))
 		return -EINVAL;
@@ -597,7 +596,7 @@ EXPORT_SYMBOL_GPL(freq_qos_update_request);
  * Return 1 if the effective constraint value has changed, 0 if the effective
  * constraint value has not changed, or a negative error code on failures.
  */
-int freq_qos_remove_request(struct freq_qos_request *req)
+int freq_qos_remove_request(struct interval_qos_request *req)
 {
 	int ret;
 
@@ -622,8 +621,8 @@ EXPORT_SYMBOL_GPL(freq_qos_remove_request);
  * @type: Request type.
  * @notifier: Notifier block to add.
  */
-int freq_qos_add_notifier(struct freq_constraints *qos,
-			  enum freq_qos_req_type type,
+int freq_qos_add_notifier(struct interval_constraints *qos,
+			  enum interval_qos_req_type type,
 			  struct notifier_block *notifier)
 {
 	int ret;
@@ -633,11 +632,11 @@ int freq_qos_add_notifier(struct freq_constraints *qos,
 
 	switch (type) {
 	case FREQ_QOS_MIN:
-		ret = blocking_notifier_chain_register(qos->min_freq.notifiers,
+		ret = blocking_notifier_chain_register(qos->min.notifiers,
 						       notifier);
 		break;
 	case FREQ_QOS_MAX:
-		ret = blocking_notifier_chain_register(qos->max_freq.notifiers,
+		ret = blocking_notifier_chain_register(qos->max.notifiers,
 						       notifier);
 		break;
 	default:
@@ -655,8 +654,8 @@ EXPORT_SYMBOL_GPL(freq_qos_add_notifier);
  * @type: Request type.
  * @notifier: Notifier block to remove.
  */
-int freq_qos_remove_notifier(struct freq_constraints *qos,
-			     enum freq_qos_req_type type,
+int freq_qos_remove_notifier(struct interval_constraints *qos,
+			     enum interval_qos_req_type type,
 			     struct notifier_block *notifier)
 {
 	int ret;
@@ -666,11 +665,11 @@ int freq_qos_remove_notifier(struct freq_constraints *qos,
 
 	switch (type) {
 	case FREQ_QOS_MIN:
-		ret = blocking_notifier_chain_unregister(qos->min_freq.notifiers,
+		ret = blocking_notifier_chain_unregister(qos->min.notifiers,
 							 notifier);
 		break;
 	case FREQ_QOS_MAX:
-		ret = blocking_notifier_chain_unregister(qos->max_freq.notifiers,
+		ret = blocking_notifier_chain_unregister(qos->max.notifiers,
 							 notifier);
 		break;
 	default:
