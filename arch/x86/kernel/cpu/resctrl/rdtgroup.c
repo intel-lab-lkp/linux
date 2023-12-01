@@ -1768,6 +1768,38 @@ static ssize_t rdtgroup_monitor_state_write(struct kernfs_open_file *of,
 	return ret ?: nbytes;
 }
 
+static void rdtgroup_update_abmc(struct rdt_resource *r,
+				 struct rdt_domain *d, u32 evtid)
+{
+	struct rdtgroup *prgrp, *crgrp;
+	int index, mon_state;
+
+	if (evtid == QOS_L3_MBM_TOTAL_EVENT_ID)
+		mon_state = TOTAL_ASSIGN;
+	else
+		mon_state = LOCAL_ASSIGN;
+
+	index = mon_event_config_index_get(evtid);
+	if (index == INVALID_CONFIG_INDEX) {
+		pr_warn_once("Invalid event id %d\n", evtid);
+		return;
+	}
+
+	/*
+	 * Update the assignment for all the monitor groups if the group
+	 * is configured with ABMC assignment.
+	 */
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		if (prgrp->mon.monitor_state & mon_state)
+			rdtgroup_abmc_domain(d, prgrp, evtid, index, 1);
+
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list) {
+			if (crgrp->mon.monitor_state & mon_state)
+				rdtgroup_abmc_domain(d, crgrp, evtid, index, 1);
+		}
+	}
+}
+
 static void mon_event_config_read(void *info)
 {
 	struct mon_config_info *mon_info = info;
@@ -1852,6 +1884,7 @@ static void mon_event_config_write(void *info)
 static int mbm_config_write_domain(struct rdt_resource *r,
 				   struct rdt_domain *d, u32 evtid, u32 val)
 {
+	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
 	struct rdt_hw_domain *hw_dom = resctrl_to_arch_dom(d);
 	struct mon_config_info mon_info = {0};
 	int ret = 0;
@@ -1891,6 +1924,13 @@ static int mbm_config_write_domain(struct rdt_resource *r,
 		hw_dom->mbm_local_cfg = val;
 	else
 		goto out;
+
+	/*
+	 * Event configuration changed for the domain, so Update
+	 * the ABMC assignment.
+	 */
+	if (hw_res->abmc_enabled)
+		rdtgroup_update_abmc(r, d, evtid);
 
 	/*
 	 * When an Event Configuration is changed, the bandwidth counters
