@@ -654,16 +654,34 @@ static u32 max310x_set_ref_clk(struct device *dev, struct max310x_port *s,
 
 static void max310x_batch_write(struct uart_port *port, u8 *txbuf, unsigned int len)
 {
-	struct max310x_one *one = to_max310x_port(port);
-
-	regmap_noinc_write(one->regmap, MAX310X_THR_REG, txbuf, len);
+	const u8 header = (port->iobase * 0x20 + MAX310X_THR_REG) | MAX310X_WRITE_BIT;
+	struct spi_transfer xfer[] = {
+		{
+			.tx_buf = &header,
+			.len = 1,
+		},
+		{
+			.tx_buf = txbuf,
+			.len = len,
+		},
+	};
+	spi_sync_transfer(to_spi_device(port->dev), xfer, ARRAY_SIZE(xfer));
 }
 
 static void max310x_batch_read(struct uart_port *port, u8 *rxbuf, unsigned int len)
 {
-	struct max310x_one *one = to_max310x_port(port);
-
-	regmap_noinc_read(one->regmap, MAX310X_RHR_REG, rxbuf, len);
+	const u8 header = port->iobase * 0x20 + MAX310X_RHR_REG;
+	struct spi_transfer xfer[] = {
+		{
+			.tx_buf = &header,
+			.len = 1,
+		},
+		{
+			.rx_buf = rxbuf,
+			.len = len,
+		},
+	};
+	spi_sync_transfer(to_spi_device(port->dev), xfer, ARRAY_SIZE(xfer));
 }
 
 static void max310x_handle_rx(struct uart_port *port, unsigned int rxlen)
