@@ -1332,6 +1332,57 @@ static void mv88e6xxx_get_ethtool_stats(struct dsa_switch *ds, int port,
 
 }
 
+static void mv88e6xxx_get_eth_mac_stats(struct dsa_switch *ds, int port,
+					struct ethtool_eth_mac_stats *mac_stats)
+{
+#define MV88E6XXX_ETH_MAC_STAT_MAPPING(_id, _member)			\
+	[MV88E6XXX_HW_STAT_ID_ ## _id] =				\
+		offsetof(struct ethtool_eth_mac_stats, stats._member)	\
+
+	static const size_t stat_map[MV88E6XXX_HW_STAT_ID_MAX] = {
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(out_unicast, FramesTransmittedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(single, SingleCollisionFrames),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(multiple, MultipleCollisionFrames),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(in_unicast, FramesReceivedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(in_fcs_error, FrameCheckSequenceErrors),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(out_octets, OctetsTransmittedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(deferred, FramesWithDeferredXmissions),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(late, LateCollisions),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(in_good_octets, OctetsReceivedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(out_multicasts, MulticastFramesXmittedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(out_broadcasts, BroadcastFramesXmittedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(excessive, FramesWithExcessiveDeferral),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(in_multicasts, MulticastFramesReceivedOK),
+		MV88E6XXX_ETH_MAC_STAT_MAPPING(in_broadcasts, BroadcastFramesReceivedOK),
+	};
+	struct mv88e6xxx_chip *chip = ds->priv;
+	const struct mv88e6xxx_hw_stat *stat;
+	enum mv88e6xxx_hw_stat_id id;
+	u64 *member;
+	int ret;
+
+	mv88e6xxx_reg_lock(chip);
+	ret = mv88e6xxx_stats_snapshot(chip, port);
+	mv88e6xxx_reg_unlock(chip);
+
+	if (ret < 0)
+		return;
+
+	stat = mv88e6xxx_hw_stats;
+	for (id = 0; id < MV88E6XXX_HW_STAT_ID_MAX; id++, stat++) {
+		if (!stat_map[id])
+			continue;
+
+		member = (u64 *)(((char *)mac_stats) + stat_map[id]);
+		mv88e6xxx_stats_get_stat(chip, port, stat, member);
+	}
+
+	mac_stats->stats.FramesTransmittedOK += mac_stats->stats.MulticastFramesXmittedOK;
+	mac_stats->stats.FramesTransmittedOK += mac_stats->stats.BroadcastFramesXmittedOK;
+	mac_stats->stats.FramesReceivedOK += mac_stats->stats.MulticastFramesReceivedOK;
+	mac_stats->stats.FramesReceivedOK += mac_stats->stats.BroadcastFramesReceivedOK;
+}
+
 static int mv88e6xxx_get_regs_len(struct dsa_switch *ds, int port)
 {
 	struct mv88e6xxx_chip *chip = ds->priv;
@@ -6853,6 +6904,7 @@ static const struct dsa_switch_ops mv88e6xxx_switch_ops = {
 	.phylink_mac_link_up	= mv88e6xxx_mac_link_up,
 	.get_strings		= mv88e6xxx_get_strings,
 	.get_ethtool_stats	= mv88e6xxx_get_ethtool_stats,
+	.get_eth_mac_stats	= mv88e6xxx_get_eth_mac_stats,
 	.get_sset_count		= mv88e6xxx_get_sset_count,
 	.port_max_mtu		= mv88e6xxx_get_max_mtu,
 	.port_change_mtu	= mv88e6xxx_change_mtu,
