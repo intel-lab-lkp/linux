@@ -312,3 +312,12 @@ int pse_ethtool_set_config(struct pse_control *psec,
 	return err;
 }
 EXPORT_SYMBOL_GPL(pse_ethtool_set_config);
+
+u32 pse_get_types(struct pse_control *psec)
+{
+	if (!psec->pcdev)
+		return PSE_UNKNOWN;
+	else
+		return psec->pcdev->types;
+}
+EXPORT_SYMBOL_GPL(pse_get_types);
