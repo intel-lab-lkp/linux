@@ -3299,7 +3299,7 @@ bool rpc_clnt_xprt_switch_has_addr(struct rpc_clnt *clnt,
 
 	rcu_read_lock();
 	xps = rcu_dereference(clnt->cl_xpi.xpi_xpswitch);
-	ret = rpc_xprt_switch_has_addr(xps, sap);
+	ret = __rpc_xprt_switch_has_addr(xps, sap);
 	rcu_read_unlock();
 	return ret;
 }
