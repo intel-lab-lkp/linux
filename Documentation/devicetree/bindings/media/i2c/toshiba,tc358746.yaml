@@ -129,6 +129,7 @@ additionalProperties: false
 examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/media/video-interfaces.h>
 
     i2c {
       #address-cells = <1>;
@@ -161,7 +162,7 @@ examples:
               remote-endpoint = <&sensor_out>;
               hsync-active = <0>;
               vsync-active = <0>;
-              bus-type = <5>;
+              bus-type = <MEDIA_BUS_TYPE_PARALLEL>;
             };
           };
 
