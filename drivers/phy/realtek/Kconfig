@@ -29,4 +29,12 @@ config PHY_RTK_RTD_USB3PHY
 	  DWC3 USB IP. This driver will do the PHY initialization
 	  of the parameters.
 
+config PHY_RTD_PCIE
+	tristate "Realtek RTD PCIe PHY driver"
+	depends on OF
+	select GENERIC_PHY
+	help
+	  Enable this to support the PCIe PHY on Realtek DHC (digital home center)
+	  RTD series SoCs.
+
 endif # ARCH_REALTEK || COMPILE_TEST
