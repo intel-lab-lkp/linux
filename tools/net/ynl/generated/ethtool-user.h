@@ -4590,15 +4590,15 @@ ethtool_pse_get_req_set_header_flags(struct ethtool_pse_get_req *req,
 struct ethtool_pse_get_rsp {
 	struct {
 		__u32 header:1;
-		__u32 admin_state:1;
-		__u32 admin_control:1;
-		__u32 pw_d_status:1;
+		__u32 podl_pse_admin_state:1;
+		__u32 podl_pse_admin_control:1;
+		__u32 podl_pse_pw_d_status:1;
 	} _present;
 
 	struct ethtool_header header;
-	__u32 admin_state;
-	__u32 admin_control;
-	__u32 pw_d_status;
+	__u32 podl_pse_admin_state;
+	__u32 podl_pse_admin_control;
+	__u32 podl_pse_pw_d_status;
 };
 
 void ethtool_pse_get_rsp_free(struct ethtool_pse_get_rsp *rsp);
@@ -4667,15 +4667,15 @@ ethtool_pse_get_dump(struct ynl_sock *ys, struct ethtool_pse_get_req_dump *req);
 struct ethtool_pse_set_req {
 	struct {
 		__u32 header:1;
-		__u32 admin_state:1;
-		__u32 admin_control:1;
-		__u32 pw_d_status:1;
+		__u32 podl_pse_admin_state:1;
+		__u32 podl_pse_admin_control:1;
+		__u32 podl_pse_pw_d_status:1;
 	} _present;
 
 	struct ethtool_header header;
-	__u32 admin_state;
-	__u32 admin_control;
-	__u32 pw_d_status;
+	__u32 podl_pse_admin_state;
+	__u32 podl_pse_admin_control;
+	__u32 podl_pse_pw_d_status;
 };
 
 static inline struct ethtool_pse_set_req *ethtool_pse_set_req_alloc(void)
@@ -4711,25 +4711,25 @@ ethtool_pse_set_req_set_header_flags(struct ethtool_pse_set_req *req,
 	req->header.flags = flags;
 }
 static inline void
-ethtool_pse_set_req_set_admin_state(struct ethtool_pse_set_req *req,
-				    __u32 admin_state)
+ethtool_pse_set_req_set_podl_pse_admin_state(struct ethtool_pse_set_req *req,
+					     __u32 podl_pse_admin_state)
 {
-	req->_present.admin_state = 1;
-	req->admin_state = admin_state;
+	req->_present.podl_pse_admin_state = 1;
+	req->podl_pse_admin_state = podl_pse_admin_state;
 }
 static inline void
-ethtool_pse_set_req_set_admin_control(struct ethtool_pse_set_req *req,
-				      __u32 admin_control)
+ethtool_pse_set_req_set_podl_pse_admin_control(struct ethtool_pse_set_req *req,
+					       __u32 podl_pse_admin_control)
 {
-	req->_present.admin_control = 1;
-	req->admin_control = admin_control;
+	req->_present.podl_pse_admin_control = 1;
+	req->podl_pse_admin_control = podl_pse_admin_control;
 }
 static inline void
-ethtool_pse_set_req_set_pw_d_status(struct ethtool_pse_set_req *req,
-				    __u32 pw_d_status)
+ethtool_pse_set_req_set_podl_pse_pw_d_status(struct ethtool_pse_set_req *req,
+					     __u32 podl_pse_pw_d_status)
 {
-	req->_present.pw_d_status = 1;
-	req->pw_d_status = pw_d_status;
+	req->_present.podl_pse_pw_d_status = 1;
+	req->podl_pse_pw_d_status = podl_pse_pw_d_status;
 }
 
 /*
