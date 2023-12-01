@@ -50,6 +50,8 @@ mount options are:
 "debug":
 	Make debug files accessible. Available debug files are annotated with
 	"Available only with debug option".
+"abmc":
+	Enable ABMC (Assignable Bandwidth Monitoring Counters) feature.
 
 L2 and L3 CDP are controlled separately.
 
