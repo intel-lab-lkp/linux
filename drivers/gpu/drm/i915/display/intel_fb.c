@@ -91,6 +91,8 @@ static const struct drm_format_info gen12_ccs_formats[] = {
 	{ .format = DRM_FORMAT_P016, .num_planes = 4,
 	  .char_per_block = { 2, 4, 1, 1 }, .block_w = { 1, 1, 2, 2 }, .block_h = { 1, 1, 1, 1 },
 	  .hsub = 2, .vsub = 2, .is_yuv = true },
+	{ .format = DRM_FORMAT_XRGB16161616F, .depth = 64, .num_planes = 2,
+	  .char_per_block = { 8, 1}, .block_w = { 1, 4}, .block_h = { 1, 2}, .hsub = 1, .vsub = 1 },
 };
 
 /*
@@ -394,6 +396,9 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 			       u8 plane_caps,
 			       const struct intel_modifier_desc *md)
 {
+	const struct drm_format_info *info =
+		lookup_format_info(md->formats, md->format_count, DRM_FORMAT_XRGB16161616F);
+
 	if (!IS_DISPLAY_VER(i915, md->display_ver.from, md->display_ver.until))
 		return false;
 
@@ -407,6 +412,11 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 	if (intel_fb_is_ccs_modifier(md->modifier) &&
 	    HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
 		return false;
+
+	/* Check if CSS modifier and FP16 format is supported on different platforms */
+	if (intel_fb_is_ccs_modifier(md->modifier) && info &&
+	    info->format == DRM_FORMAT_XRGB16161616F && DISPLAY_VER(i915) < 14)
+	       return false;
 
 	return true;
 }
