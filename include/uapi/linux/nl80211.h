@@ -2830,6 +2830,20 @@ enum nl80211_commands {
  * @NL80211_ATTR_MLO_LINK_DISABLED: Flag attribute indicating that the link is
  *	disabled.
  *
+ * @NL80211_ATTR_CARRIER_UP_COUNT: This u32 attribute is included in some
+ *	events that indicate a successful connection (notably association),
+ *	indicating the value of the netdev's carrier_up_count at the time
+ *	of sending this event. Userspace can use this to fix a race: when
+ *	the carrier is turned on, the actual handling thereof is done in
+ *	an asynchronous manner in the kernel. Thus, if userspace attempts
+ *	to send a frame immediately after receiving the event indicating
+ *	successful connection over nl80211, that may not go through if the
+ *	asynchronous processing in the kernel hasn't yet happened. To fix
+ *	it then userspace should be listening to rtnetlink events, and if
+ *	it didn't see the value of the carrier_up_count yet, it can wait
+ *	for a further rtnetlink event with a value equal to or bigger than
+ *	the value reported here, and only then transmit data.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3367,6 +3381,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_EMA_RNR_ELEMS,
 
 	NL80211_ATTR_MLO_LINK_DISABLED,
+
+	NL80211_ATTR_CARRIER_UP_COUNT,
 
 	/* add attributes here, update the policy in nl80211.c */
 

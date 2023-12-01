@@ -818,6 +818,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_HW_TIMESTAMP_ENABLED] = { .type = NLA_FLAG },
 	[NL80211_ATTR_EMA_RNR_ELEMS] = { .type = NLA_NESTED },
 	[NL80211_ATTR_MLO_LINK_DISABLED] = { .type = NLA_FLAG },
+	[NL80211_ATTR_CARRIER_UP_COUNT] = { .type = NLA_REJECT },
 };
 
 /* policy for the key attributes */
@@ -17738,11 +17739,13 @@ nla_put_failure:
 
 struct nl80211_mlme_event {
 	enum nl80211_commands cmd;
+	const u8 *mac_addr;
 	const u8 *buf;
 	size_t buf_len;
 	int uapsd_queues;
 	const u8 *req_ies;
 	size_t req_ies_len;
+	u32 carrier_up_count;
 	bool reconnect;
 };
 
@@ -17766,10 +17769,15 @@ static void nl80211_send_mlme_event(struct cfg80211_registered_device *rdev,
 
 	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
 	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex) ||
-	    nla_put(msg, NL80211_ATTR_FRAME, event->buf_len, event->buf) ||
+	    (event->buf &&
+	     nla_put(msg, NL80211_ATTR_FRAME, event->buf_len, event->buf)) ||
 	    (event->req_ies &&
 	     nla_put(msg, NL80211_ATTR_REQ_IE, event->req_ies_len,
 		     event->req_ies)))
+		goto nla_put_failure;
+
+	if (event->mac_addr &&
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, event->mac_addr))
 		goto nla_put_failure;
 
 	if (event->reconnect &&
@@ -17788,6 +17796,11 @@ static void nl80211_send_mlme_event(struct cfg80211_registered_device *rdev,
 
 		nla_nest_end(msg, nla_wmm);
 	}
+
+	if (event->carrier_up_count &&
+	    nla_put_u32(msg, NL80211_ATTR_CARRIER_UP_COUNT,
+			event->carrier_up_count))
+		goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
 
@@ -17824,6 +17837,7 @@ void nl80211_send_rx_assoc(struct cfg80211_registered_device *rdev,
 		.uapsd_queues = data->uapsd_queues,
 		.req_ies = data->req_ies,
 		.req_ies_len = data->req_ies_len,
+		.carrier_up_count = atomic_read(&netdev->carrier_up_count),
 	};
 
 	nl80211_send_mlme_event(rdev, netdev, &event, GFP_KERNEL);
@@ -18307,32 +18321,13 @@ void nl80211_send_ibss_bssid(struct cfg80211_registered_device *rdev,
 			     struct net_device *netdev, const u8 *bssid,
 			     gfp_t gfp)
 {
-	struct sk_buff *msg;
-	void *hdr;
+	struct nl80211_mlme_event event = {
+		.cmd = NL80211_CMD_JOIN_IBSS,
+		.mac_addr = bssid,
+		.carrier_up_count = atomic_read(&netdev->carrier_up_count),
+	};
 
-	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, gfp);
-	if (!msg)
-		return;
-
-	hdr = nl80211hdr_put(msg, 0, 0, 0, NL80211_CMD_JOIN_IBSS);
-	if (!hdr) {
-		nlmsg_free(msg);
-		return;
-	}
-
-	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
-	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex) ||
-	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, bssid))
-		goto nla_put_failure;
-
-	genlmsg_end(msg, hdr);
-
-	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
-				NL80211_MCGRP_MLME, gfp);
-	return;
-
- nla_put_failure:
-	nlmsg_free(msg);
+	nl80211_send_mlme_event(rdev, netdev, &event, gfp);
 }
 
 void cfg80211_notify_new_peer_candidate(struct net_device *dev, const u8 *addr,
