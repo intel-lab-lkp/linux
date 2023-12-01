@@ -179,7 +179,7 @@ EXPORT_SYMBOL(mmc_retune_release);
 int mmc_retune(struct mmc_host *host)
 {
 	bool return_to_hs400 = false;
-	int err;
+	int err = 0;
 
 	if (host->retune_now)
 		host->retune_now = 0;
@@ -194,6 +194,15 @@ int mmc_retune(struct mmc_host *host)
 	host->doing_retune = 1;
 
 	if (host->ios.timing == MMC_TIMING_MMC_HS400) {
+		if (host->ios.enhanced_strobe) {
+			if (host->ops->execute_hs400_tuning) {
+				mmc_retune_disable(host);
+				err = host->ops->execute_hs400_tuning(host, host->card);
+				mmc_retune_enable(host);
+			}
+			goto out;
+		}
+
 		err = mmc_hs400_to_hs200(host->card);
 		if (err)
 			goto out;
