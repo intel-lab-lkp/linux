@@ -388,6 +388,7 @@ struct rdt_parse_data {
  *			resctrl_arch_get_num_closid() to avoid confusion
  *			with struct resctrl_schema's property of the same name,
  *			which has been corrected for features like CDP.
+ * @abmc_countes:	Maximum number of ABMC counters supported
  * @msr_base:		Base MSR address for CBMs
  * @msr_update:		Function pointer to update QOS MSRs
  * @mon_scale:		cqm counter * mon_scale = occupancy in bytes
@@ -401,6 +402,7 @@ struct rdt_parse_data {
 struct rdt_hw_resource {
 	struct rdt_resource	r_resctrl;
 	u32			num_closid;
+	u32			abmc_counters;
 	unsigned int		msr_base;
 	void (*msr_update)	(struct rdt_domain *d, struct msr_param *m,
 				 struct rdt_resource *r);

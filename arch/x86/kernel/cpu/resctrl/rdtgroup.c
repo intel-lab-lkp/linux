@@ -1077,6 +1077,9 @@ static int rdt_mon_features_show(struct kernfs_open_file *of,
 			seq_printf(seq, "%s_config\n", mevt->name);
 	}
 
+	if (r->abmc_capable)
+		seq_printf(seq, "abmc_capable\n");
+
 	return 0;
 }
 

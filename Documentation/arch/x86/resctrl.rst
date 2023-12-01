@@ -197,6 +197,13 @@ with the following files:
 			mbm_local_bytes
 			mbm_local_bytes_config
 
+		If the system supports Assignable Bandwidth Monitoring
+		Counters (ABMC), the output will have additional text.
+		Example::
+
+			# cat /sys/fs/resctrl/info/L3_MON/mon_features
+			abmc_capable
+
 "mbm_total_bytes_config", "mbm_local_bytes_config":
 	Read/write files containing the configuration for the mbm_total_bytes
 	and mbm_local_bytes events, respectively, when the Bandwidth

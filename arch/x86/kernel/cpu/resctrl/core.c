@@ -303,6 +303,17 @@ static void rdt_get_cdp_l2_config(void)
 	rdt_get_cdp_config(RDT_RESOURCE_L2);
 }
 
+static void rdt_get_abmc_cfg(struct rdt_resource *r)
+{
+	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
+	u32 eax, ebx, ecx, edx;
+
+	r->abmc_capable = true;
+	/* Query CPUID_Fn80000020_EBX_x05 for number of ABMC counters */
+	cpuid_count(0x80000020, 5, &eax, &ebx, &ecx, &edx);
+	hw_res->abmc_counters = (ebx & 0xFFFF) + 1;
+}
+
 static void
 mba_wrmsr_amd(struct rdt_domain *d, struct msr_param *m, struct rdt_resource *r)
 {
@@ -814,6 +825,12 @@ static __init bool get_rdt_alloc_resources(void)
 
 	if (get_slow_mem_config())
 		ret = true;
+
+	if (rdt_cpu_has(X86_FEATURE_ABMC)) {
+		r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
+		rdt_get_abmc_cfg(r);
+		ret = true;
+	}
 
 	return ret;
 }
