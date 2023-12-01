@@ -470,8 +470,10 @@ static int cfs_rq_is_idle(struct cfs_rq *cfs_rq)
 
 static int se_is_idle(struct sched_entity *se)
 {
-	if (entity_is_task(se))
-		return task_has_idle_policy(task_of(se));
+	struct task_struct *p = task_of(se);
+
+	if (p)
+		return task_has_idle_policy(p);
 	return cfs_rq_is_idle(group_cfs_rq(se));
 }
 
@@ -1156,6 +1158,7 @@ s64 update_curr_common(struct rq *rq)
 static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
+	struct task_struct *p;
 	s64 delta_exec;
 
 	if (unlikely(!curr))
@@ -1169,8 +1172,9 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	update_deadline(cfs_rq, curr);
 	update_min_vruntime(cfs_rq);
 
-	if (entity_is_task(curr))
-		update_curr_task(task_of(curr), delta_exec);
+	p = task_of(curr);
+	if (p)
+		update_curr_task(p, delta_exec);
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
 }
@@ -1184,24 +1188,19 @@ static inline void
 update_stats_wait_start_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	struct sched_statistics *stats;
-	struct task_struct *p = NULL;
 
 	if (!schedstat_enabled())
 		return;
 
 	stats = __schedstats_from_se(se);
 
-	if (entity_is_task(se))
-		p = task_of(se);
-
-	__update_stats_wait_start(rq_of(cfs_rq), p, stats);
+	__update_stats_wait_start(rq_of(cfs_rq), task_of(se), stats);
 }
 
 static inline void
 update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	struct sched_statistics *stats;
-	struct task_struct *p = NULL;
 
 	if (!schedstat_enabled())
 		return;
@@ -1217,27 +1216,20 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	if (unlikely(!schedstat_val(stats->wait_start)))
 		return;
 
-	if (entity_is_task(se))
-		p = task_of(se);
-
-	__update_stats_wait_end(rq_of(cfs_rq), p, stats);
+	__update_stats_wait_end(rq_of(cfs_rq), task_of(se), stats);
 }
 
 static inline void
 update_stats_enqueue_sleeper_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	struct sched_statistics *stats;
-	struct task_struct *tsk = NULL;
 
 	if (!schedstat_enabled())
 		return;
 
 	stats = __schedstats_from_se(se);
 
-	if (entity_is_task(se))
-		tsk = task_of(se);
-
-	__update_stats_enqueue_sleeper(rq_of(cfs_rq), tsk, stats);
+	__update_stats_enqueue_sleeper(rq_of(cfs_rq), task_of(se), stats);
 }
 
 /*
@@ -1263,6 +1255,7 @@ update_stats_enqueue_fair(struct cfs_rq *cfs_rq, struct sched_entity *se, int fl
 static inline void
 update_stats_dequeue_fair(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
+	struct task_struct *tsk;
 
 	if (!schedstat_enabled())
 		return;
@@ -1274,8 +1267,8 @@ update_stats_dequeue_fair(struct cfs_rq *cfs_rq, struct sched_entity *se, int fl
 	if (se != cfs_rq->curr)
 		update_stats_wait_end_fair(cfs_rq, se);
 
-	if ((flags & DEQUEUE_SLEEP) && entity_is_task(se)) {
-		struct task_struct *tsk = task_of(se);
+	tsk = task_of(se);
+	if ((flags & DEQUEUE_SLEEP) && tsk) {
 		unsigned int state;
 
 		/* XXX racy against TTWU */
@@ -3569,12 +3562,14 @@ static inline void update_scan_period(struct task_struct *p, int new_cpu)
 static void
 account_entity_enqueue(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	struct task_struct *p = task_of(se);
+
 	update_load_add(&cfs_rq->load, se->load.weight);
 #ifdef CONFIG_SMP
-	if (entity_is_task(se)) {
+	if (p) {
 		struct rq *rq = rq_of(cfs_rq);
 
-		account_numa_enqueue(rq, task_of(se));
+		account_numa_enqueue(rq, p);
 		list_add(&se->group_node, &rq->cfs_tasks);
 	}
 #endif
@@ -3586,10 +3581,12 @@ account_entity_enqueue(struct cfs_rq *cfs_rq, struct sched_entity *se)
 static void
 account_entity_dequeue(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	struct task_struct *p = task_of(se);
+
 	update_load_sub(&cfs_rq->load, se->load.weight);
 #ifdef CONFIG_SMP
-	if (entity_is_task(se)) {
-		account_numa_dequeue(rq_of(cfs_rq), task_of(se));
+	if (p) {
+		account_numa_dequeue(rq_of(cfs_rq), p);
 		list_del_init(&se->group_node);
 	}
 #endif
@@ -5323,9 +5320,10 @@ static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
 static void
 dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
+	struct task_struct *p = task_of(se);
 	int action = UPDATE_TG;
 
-	if (entity_is_task(se) && task_on_rq_migrating(task_of(se)))
+	if (p && task_on_rq_migrating(p))
 		action |= DO_DETACH;
 
 	/*

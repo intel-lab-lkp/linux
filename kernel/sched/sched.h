@@ -1421,7 +1421,9 @@ static inline void update_idle_core(struct rq *rq) { }
 #ifdef CONFIG_FAIR_GROUP_SCHED
 static inline struct task_struct *task_of(struct sched_entity *se)
 {
-	SCHED_WARN_ON(!entity_is_task(se));
+	if (!entity_is_task(se))
+		return NULL;
+
 	return container_of(se, struct task_struct, se);
 }
 
