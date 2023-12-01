@@ -1129,11 +1129,42 @@ extern void ioport_unmap(void __iomem *p);
 #endif /* CONFIG_GENERIC_IOMAP */
 #endif /* CONFIG_HAS_IOPORT_MAP */
 
-#ifndef CONFIG_GENERIC_IOMAP
 #ifndef pci_iounmap
+#define pci_iounmap pci_iounmap
 #define ARCH_WANTS_GENERIC_PCI_IOUNMAP
-#endif
-#endif
+#endif /* pci_iounmap */
+
+
+/*
+ * This function is a helper only needed for the generic pci_iounmap().
+ * It's provided here if the architecture does not select GENERIC_IOMAP and does
+ * not provide its own version.
+ */
+#ifdef CONFIG_HAS_IOPORT
+#ifndef iomem_is_ioport /* i.e., if the architecture hasn't defined its own. */
+#define iomem_is_ioport iomem_is_ioport
+
+#ifndef CONFIG_GENERIC_IOMAP
+static inline bool iomem_is_ioport(void __iomem *addr)
+{
+	unsigned long port = (unsigned long __force)addr;
+
+	// TODO: do we have to take IO_SPACE_LIMIT and PCI_IOBASE into account
+	// similar as in ioport_map() ?
+
+	if (port > MMIO_UPPER_LIMIT)
+		return false;
+
+	return true;
+}
+#else /* CONFIG_GENERIC_IOMAP. Version from lib/iomap.c will be used. */
+bool iomem_is_ioport(void __iomem *addr);
+#define ARCH_WANTS_GENERIC_IOMEM_IS_IOPORT
+#endif /* CONFIG_GENERIC_IOMAP */
+
+#endif /* iomem_is_ioport */
+#endif /* CONFIG_HAS_IOPORT */
+
 
 #ifndef xlate_dev_mem_ptr
 #define xlate_dev_mem_ptr xlate_dev_mem_ptr
