@@ -1065,4 +1065,9 @@ static inline void tc_skb_ext_tc_disable(void) { }
 #define tc_skb_ext_tc_enabled() false
 #endif
 
+static inline bool tc_should_notify(const struct net *net, u16 nlflags)
+{
+	return (nlflags & NLM_F_ECHO) || rtnl_has_listeners(net, RTNLGRP_TC);
+}
+
 #endif
