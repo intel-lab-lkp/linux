@@ -2294,7 +2294,7 @@ static bool supports_mba_mbps(void)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_MBA].r_resctrl;
 
-	return (is_mbm_local_enabled() &&
+	return (is_mbm_enabled() &&
 		r->alloc_capable && is_mba_linear());
 }
 
@@ -2302,7 +2302,7 @@ static bool supports_mba_mbps(void)
  * Enable or disable the MBA software controller
  * which helps user specify bandwidth in MBps.
  */
-static int set_mba_sc(bool mba_sc)
+static int set_mba_sc(bool mba_sc, enum resctrl_event_id mba_mbps_event)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_MBA].r_resctrl;
 	u32 num_closid = resctrl_arch_get_num_closid(r);
@@ -2313,6 +2313,7 @@ static int set_mba_sc(bool mba_sc)
 		return -EINVAL;
 
 	r->membw.mba_sc = mba_sc;
+	r->membw.mba_mbps_event = mba_mbps_event;
 
 	list_for_each_entry(d, &r->domains, list) {
 		for (i = 0; i < num_closid; i++)
@@ -2445,13 +2446,14 @@ static void rdt_disable_ctx(void)
 {
 	resctrl_arch_set_cdp_enabled(RDT_RESOURCE_L3, false);
 	resctrl_arch_set_cdp_enabled(RDT_RESOURCE_L2, false);
-	set_mba_sc(false);
+	set_mba_sc(false, QOS_L3_MBM_LOCAL_EVENT_ID);
 
 	resctrl_debug = false;
 }
 
 static int rdt_enable_ctx(struct rdt_fs_context *ctx)
 {
+	enum resctrl_event_id mba_mbps_event;
 	int ret = 0;
 
 	if (ctx->enable_cdpl2) {
@@ -2466,8 +2468,12 @@ static int rdt_enable_ctx(struct rdt_fs_context *ctx)
 			goto out_cdpl2;
 	}
 
-	if (ctx->enable_mba_mbps) {
-		ret = set_mba_sc(true);
+	if (ctx->enable_mba_mbps_local || ctx->enable_mba_mbps_total) {
+		if (ctx->enable_mba_mbps_total)
+			mba_mbps_event = QOS_L3_MBM_TOTAL_EVENT_ID;
+		else
+			mba_mbps_event = QOS_L3_MBM_LOCAL_EVENT_ID;
+		ret = set_mba_sc(true, mba_mbps_event);
 		if (ret)
 			goto out_cdpl3;
 	}
@@ -2683,15 +2689,17 @@ enum rdt_param {
 	Opt_cdp,
 	Opt_cdpl2,
 	Opt_mba_mbps,
+	Opt_mba_mbps_event,
 	Opt_debug,
 	nr__rdt_params
 };
 
 static const struct fs_parameter_spec rdt_fs_parameters[] = {
-	fsparam_flag("cdp",		Opt_cdp),
-	fsparam_flag("cdpl2",		Opt_cdpl2),
-	fsparam_flag("mba_MBps",	Opt_mba_mbps),
-	fsparam_flag("debug",		Opt_debug),
+	fsparam_flag("cdp",			Opt_cdp),
+	fsparam_flag("cdpl2",			Opt_cdpl2),
+	fsparam_flag("mba_MBps",		Opt_mba_mbps),
+	fsparam_string("mba_MBps_event",	Opt_mba_mbps_event),
+	fsparam_flag("debug",			Opt_debug),
 	{}
 };
 
@@ -2715,7 +2723,27 @@ static int rdt_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_mba_mbps:
 		if (!supports_mba_mbps())
 			return -EINVAL;
-		ctx->enable_mba_mbps = true;
+		if (is_mbm_local_enabled())
+			ctx->enable_mba_mbps_local = true;
+		else if (is_mbm_total_enabled())
+			ctx->enable_mba_mbps_total = true;
+		else
+			return -EINVAL;
+		return 0;
+	case Opt_mba_mbps_event:
+		if (!supports_mba_mbps())
+			return -EINVAL;
+		if (!strcmp("local", param->string)) {
+			if (!is_mbm_local_enabled())
+				return -EINVAL;
+			ctx->enable_mba_mbps_local = true;
+		} else if (!strcmp("total", param->string)) {
+			if (!is_mbm_total_enabled())
+				return -EINVAL;
+			ctx->enable_mba_mbps_total = true;
+		} else {
+			return -EINVAL;
+		}
 		return 0;
 	case Opt_debug:
 		ctx->enable_debug = true;

@@ -129,6 +129,7 @@ enum membw_throttle_mode {
  * @throttle_mode:	Bandwidth throttling mode when threads request
  *			different memory bandwidths
  * @mba_sc:		True if MBA software controller(mba_sc) is enabled
+ * @mba_mbps_event:	Event (local or total) for mba_sc
  * @mb_map:		Mapping of memory B/W percentage to memory B/W delay
  */
 struct resctrl_membw {
@@ -138,6 +139,7 @@ struct resctrl_membw {
 	bool				arch_needs_linear;
 	enum membw_throttle_mode	throttle_mode;
 	bool				mba_sc;
+	enum resctrl_event_id		mba_mbps_event;
 	u32				*mb_map;
 };
 

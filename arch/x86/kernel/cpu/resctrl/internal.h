@@ -58,7 +58,8 @@ struct rdt_fs_context {
 	struct kernfs_fs_context	kfc;
 	bool				enable_cdpl2;
 	bool				enable_cdpl3;
-	bool				enable_mba_mbps;
+	bool				enable_mba_mbps_local;
+	bool				enable_mba_mbps_total;
 	bool				enable_debug;
 };
 
