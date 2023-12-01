@@ -1,0 +1,220 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/dlg,da9062.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Dialog DA9062 Power Management Integrated Circuit (PMIC)
+
+maintainers:
+  - Biju Das <biju.das.jz@bp.renesas.com>
+
+description: |
+  Product information for the DA9062 and DA9061 devices can be found here:
+  - https://www.dialog-semiconductor.com/products/da9062
+  - https://www.dialog-semiconductor.com/products/da9061
+
+  The DA9062 PMIC consists of:
+
+  Device                   Supply Names    Description
+  ------                   ------------    -----------
+  da9062-regulator        :               : LDOs & BUCKs
+  da9062-rtc              :               : Real-Time Clock
+  da9062-onkey            :               : On Key
+  da9062-watchdog         :               : Watchdog Timer
+  da9062-thermal          :               : Thermal
+  da9062-gpio             :               : GPIOs
+
+  The DA9061 PMIC consists of:
+
+  Device                   Supply Names    Description
+  ------                   ------------    -----------
+  da9062-regulator        :               : LDOs & BUCKs
+  da9062-onkey            :               : On Key
+  da9062-watchdog         :               : Watchdog Timer
+  da9062-thermal          :               : Thermal
+
+properties:
+  compatible:
+    enum:
+      - dlg,da9062
+      - dlg,da9061
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+
+  watchdog:
+    type: object
+    $ref: /schemas/watchdog/watchdog.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: dlg,da9062-watchdog
+
+      dlg,use-sw-pm:
+        type: boolean
+        description:
+          Disable the watchdog during suspend.
+          Only use this option if you can't use the watchdog automatic suspend
+          function during a suspend (see register CONTROL_B).
+
+  rtc:
+    type: object
+    $ref: /schemas/rtc/rtc.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: dlg,da9062-rtc
+
+  thermal:
+    type: object
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: dlg,da9062-thermal
+
+  gpio:
+    type: object
+    $ref: /schemas/gpio/gpio.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: dlg,da9062-gpio
+
+  onkey:
+    type: object
+    $ref: /schemas/input/input.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: dlg,da9062-onkey
+
+      dlg,disable-key-power:
+        type: boolean
+        description: |
+          Disable power-down using a long key-press.
+          If this entry does not exist then by default the key-press triggered
+          power down is enabled and the OnKey will support both KEY_POWER and
+          KEY_SLEEP.
+
+  regulators:
+    type: object
+    additionalProperties: false
+    patternProperties:
+      "^(ldo[1-9]|buck[1-4])$":
+        $ref: /schemas/regulator/regulator.yaml
+        unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/regulator/dlg,da9063-regulator.h>
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      pmic@58 {
+        compatible = "dlg,da9062";
+        reg = <0x58>;
+        #interrupt-cells = <2>;
+        interrupt-parent = <&gpio1>;
+        interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
+        interrupt-controller;
+
+        rtc {
+          compatible = "dlg,da9062-rtc";
+        };
+
+        onkey {
+          compatible = "dlg,da9062-onkey";
+        };
+
+        watchdog {
+          compatible = "dlg,da9062-watchdog";
+          dlg,use-sw-pm;
+        };
+
+        thermal {
+          compatible = "dlg,da9062-thermal";
+          status = "disabled";
+        };
+
+        gpio {
+          compatible = "dlg,da9062-gpio";
+          status = "disabled";
+        };
+
+        regulators {
+          buck1 {
+            regulator-name = "vdd_arm";
+            regulator-min-microvolt = <925000>;
+            regulator-max-microvolt = <1380000>;
+            regulator-initial-mode = <DA9063_BUCK_MODE_SYNC>;
+            regulator-always-on;
+          };
+          buck2 {
+            regulator-name = "vdd_soc";
+            regulator-min-microvolt = <1150000>;
+            regulator-max-microvolt = <1380000>;
+            regulator-initial-mode = <DA9063_BUCK_MODE_SYNC>;
+            regulator-always-on;
+          };
+          buck3 {
+            regulator-name = "vdd_ddr3";
+            regulator-min-microvolt = <1500000>;
+            regulator-max-microvolt = <1500000>;
+            regulator-initial-mode = <DA9063_BUCK_MODE_SYNC>;
+            regulator-always-on;
+          };
+          buck4 {
+            regulator-name = "vdd_eth";
+            regulator-min-microvolt = <1200000>;
+            regulator-max-microvolt = <1200000>;
+            regulator-initial-mode = <DA9063_BUCK_MODE_SYNC>;
+            regulator-always-on;
+          };
+          ldo1 {
+            regulator-name = "vdd_snvs";
+            regulator-min-microvolt = <3000000>;
+            regulator-max-microvolt = <3000000>;
+            regulator-always-on;
+          };
+          ldo2 {
+            regulator-name = "vdd_high";
+            regulator-min-microvolt = <3000000>;
+            regulator-max-microvolt = <3000000>;
+            regulator-always-on;
+          };
+          ldo3 {
+            regulator-name = "vdd_eth_io";
+            regulator-min-microvolt = <2500000>;
+            regulator-max-microvolt = <2500000>;
+          };
+          ldo4 {
+            regulator-name = "vdd_emmc";
+            regulator-min-microvolt = <1800000>;
+            regulator-max-microvolt = <1800000>;
+            regulator-always-on;
+          };
+        };
+      };
+    };
+...
