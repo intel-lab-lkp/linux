@@ -309,6 +309,34 @@ static int _kvm_setcsr(struct kvm_vcpu *vcpu, unsigned int id, u64 val)
 	return ret;
 }
 
+static int kvm_get_cpucfg_supported(int id, u64 *v)
+{
+	int ret = 0;
+
+	if (id < 0 && id >= KVM_MAX_CPUCFG_REGS)
+		return -EINVAL;
+
+	switch (id) {
+	/* Only CPUCFG2 checking are supported, we will add all CPUCFGs checking later. */
+	case 2:
+		/* return CPUCFG2 features which have been supported by KVM */
+		*v = CPUCFG2_FP     | CPUCFG2_FPSP  | CPUCFG2_FPDP     |
+		     CPUCFG2_FPVERS | CPUCFG2_LLFTP | CPUCFG2_LLFTPREV |
+		     CPUCFG2_LAM;
+		/*
+		 * if LSX is supported by CPU, it is also supported by KVM,
+		 * as we implement it.
+		 */
+		if (cpu_has_lsx)
+			*v |= CPUCFG2_LSX;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+
 static int kvm_get_one_reg(struct kvm_vcpu *vcpu,
 		const struct kvm_one_reg *reg, u64 *v)
 {
@@ -326,6 +354,10 @@ static int kvm_get_one_reg(struct kvm_vcpu *vcpu,
 			*v = vcpu->arch.cpucfg[id];
 		else
 			ret = -EINVAL;
+		break;
+	case KVM_REG_LOONGARCH_CPUCFG_SUPPORTED:
+		id = KVM_GET_IOC_CPUCFG_SUPPORTED_IDX(reg->id);
+		ret = kvm_get_cpucfg_supported(id, v);
 		break;
 	case KVM_REG_LOONGARCH_KVM:
 		switch (reg->id) {
@@ -365,6 +397,36 @@ static int kvm_get_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	return ret;
 }
 
+static int kvm_check_cpucfg(int id, u64 val)
+{
+	u64 mask;
+	int ret = 0;
+
+	if (id < 0 && id >= KVM_MAX_CPUCFG_REGS)
+		return -EINVAL;
+
+	switch (id) {
+	case 2:
+		ret = kvm_get_cpucfg_supported(id, &mask);
+		/*
+		 * CPUCFG2 features checking, if features are not supported, return false.
+		 * Features version checking, if feature enabled but without version bits
+		 * or feature disabled but along with version bits, return false.
+		 */
+		if (!ret) {
+			if ((val & ~mask) ||
+			    (!!(val & CPUCFG2_FP)    != !!(val & CPUCFG2_FPVERS)) ||
+			    (!!(val & CPUCFG2_LLFTP) != !!(val & CPUCFG2_LLFTPREV)))
+				ret = -EINVAL;
+		} else
+			ret = -EINVAL;
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
 static int kvm_set_one_reg(struct kvm_vcpu *vcpu,
 			const struct kvm_one_reg *reg, u64 v)
 {
@@ -378,10 +440,10 @@ static int kvm_set_one_reg(struct kvm_vcpu *vcpu,
 		break;
 	case KVM_REG_LOONGARCH_CPUCFG:
 		id = KVM_GET_IOC_CPUCFG_IDX(reg->id);
-		if (id >= 0 && id < KVM_MAX_CPUCFG_REGS)
-			vcpu->arch.cpucfg[id] = (u32)v;
-		else
-			ret = -EINVAL;
+		ret = kvm_check_cpucfg(id, v);
+		if (ret)
+			break;
+		vcpu->arch.cpucfg[id] = (u32)v;
 		break;
 	case KVM_REG_LOONGARCH_KVM:
 		switch (reg->id) {
@@ -561,12 +623,49 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 	preempt_enable();
 }
 
+#ifdef CONFIG_CPU_HAS_LSX
+/* Enable LSX for guest and restore context */
+void kvm_own_lsx(struct kvm_vcpu *vcpu)
+{
+	preempt_disable();
+
+	/* Enable LSX for guest */
+	set_csr_euen(CSR_EUEN_LSXEN | CSR_EUEN_FPEN);
+	switch (vcpu->arch.aux_inuse & KVM_LARCH_FPU) {
+	case KVM_LARCH_FPU:
+		/*
+		 * Guest FPU state already loaded,
+		 * only restore upper LSX state
+		 */
+		kvm_restore_lsx_upper(&vcpu->arch.fpu);
+		break;
+	default:
+		/* Neither FP or LSX already active,
+		 * restore full LSX state
+		 */
+		kvm_restore_lsx(&vcpu->arch.fpu);
+	break;
+	}
+
+	trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LSX);
+	vcpu->arch.aux_inuse |= KVM_LARCH_LSX | KVM_LARCH_FPU;
+	preempt_enable();
+}
+#endif
+
 /* Save context and disable FPU */
 void kvm_lose_fpu(struct kvm_vcpu *vcpu)
 {
 	preempt_disable();
 
-	if (vcpu->arch.aux_inuse & KVM_LARCH_FPU) {
+	if (vcpu->arch.aux_inuse & KVM_LARCH_LSX) {
+		kvm_save_lsx(&vcpu->arch.fpu);
+		vcpu->arch.aux_inuse &= ~(KVM_LARCH_LSX | KVM_LARCH_FPU);
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_SAVE, KVM_TRACE_AUX_LSX);
+
+		/* Disable LSX & FPU */
+		clear_csr_euen(CSR_EUEN_FPEN | CSR_EUEN_LSXEN);
+	} else if (vcpu->arch.aux_inuse & KVM_LARCH_FPU) {
 		kvm_save_fpu(&vcpu->arch.fpu);
 		vcpu->arch.aux_inuse &= ~KVM_LARCH_FPU;
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_SAVE, KVM_TRACE_AUX_FPU);

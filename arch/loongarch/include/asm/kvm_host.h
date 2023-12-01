@@ -21,8 +21,10 @@
 #include <asm/loongarch.h>
 
 /* Loongarch KVM register ids */
-#define KVM_GET_IOC_CSR_IDX(id)		((id & KVM_CSR_IDX_MASK) >> LOONGARCH_REG_SHIFT)
-#define KVM_GET_IOC_CPUCFG_IDX(id)	((id & KVM_CPUCFG_IDX_MASK) >> LOONGARCH_REG_SHIFT)
+#define KVM_GET_IOC_CSR_IDX(id)			((id & KVM_CSR_IDX_MASK) >> LOONGARCH_REG_SHIFT)
+#define KVM_GET_IOC_CPUCFG_IDX(id)		((id & KVM_CPUCFG_IDX_MASK) >> LOONGARCH_REG_SHIFT)
+#define KVM_GET_IOC_CPUCFG_SUPPORTED_IDX(id)	((id & KVM_CPUCFG_SUPPORTED_IDX_MASK) >> \
+						 LOONGARCH_REG_SHIFT)
 
 #define KVM_MAX_VCPUS			256
 #define KVM_MAX_CPUCFG_REGS		21
@@ -94,6 +96,7 @@ enum emulation_result {
 #define KVM_LARCH_FPU		(0x1 << 0)
 #define KVM_LARCH_SWCSR_LATEST	(0x1 << 1)
 #define KVM_LARCH_HWCSR_USABLE	(0x1 << 2)
+#define KVM_LARCH_LSX		(0x1 << 3)
 
 struct kvm_vcpu_arch {
 	/*
@@ -173,6 +176,11 @@ static inline unsigned long readl_sw_gcsr(struct loongarch_csrs *csr, int reg)
 static inline void writel_sw_gcsr(struct loongarch_csrs *csr, int reg, unsigned long val)
 {
 	csr->csrs[reg] = val;
+}
+
+static inline bool kvm_guest_has_lsx(struct kvm_vcpu_arch *arch)
+{
+	return arch->cpucfg[2] & CPUCFG2_LSX;
 }
 
 /* Debug: dump vcpu state */
