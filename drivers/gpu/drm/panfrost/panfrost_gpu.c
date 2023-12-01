@@ -452,6 +452,12 @@ void panfrost_gpu_power_off(struct panfrost_device *pfdev)
 		dev_err(pfdev->dev, "l2 power transition timeout");
 }
 
+void panfrost_gpu_suspend_irq(struct panfrost_device *pfdev)
+{
+	gpu_write(pfdev, GPU_INT_MASK, 0);
+	synchronize_irq(pfdev->gpu_irq);
+}
+
 int panfrost_gpu_init(struct panfrost_device *pfdev)
 {
 	int err;
