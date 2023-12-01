@@ -1383,6 +1383,60 @@ static void mv88e6xxx_get_eth_mac_stats(struct dsa_switch *ds, int port,
 	mac_stats->stats.FramesReceivedOK += mac_stats->stats.BroadcastFramesReceivedOK;
 }
 
+static void mv88e6xxx_get_rmon_stats(struct dsa_switch *ds, int port,
+				     struct ethtool_rmon_stats *rmon_stats,
+				     const struct ethtool_rmon_hist_range **ranges)
+{
+#define MV88E6XXX_RMON_STAT_MAPPING(_id, _member)			\
+	[MV88E6XXX_HW_STAT_ID_ ## _id] =				\
+		offsetof(struct ethtool_rmon_stats, stats._member)	\
+
+	static const size_t stat_map[MV88E6XXX_HW_STAT_ID_MAX] = {
+		MV88E6XXX_RMON_STAT_MAPPING(in_undersize, undersize_pkts),
+		MV88E6XXX_RMON_STAT_MAPPING(in_oversize, oversize_pkts),
+		MV88E6XXX_RMON_STAT_MAPPING(in_fragments, fragments),
+		MV88E6XXX_RMON_STAT_MAPPING(in_jabber, jabbers),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_64bytes, hist[0]),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_65_127bytes, hist[1]),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_128_255bytes, hist[2]),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_256_511bytes, hist[3]),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_512_1023bytes, hist[4]),
+		MV88E6XXX_RMON_STAT_MAPPING(hist_1024_max_bytes, hist[5]),
+	};
+	static const struct ethtool_rmon_hist_range rmon_ranges[] = {
+		{   64,    64 },
+		{   65,   127 },
+		{  128,   255 },
+		{  256,   511 },
+		{  512,  1023 },
+		{ 1024, 65535 },
+		{}
+	};
+	struct mv88e6xxx_chip *chip = ds->priv;
+	const struct mv88e6xxx_hw_stat *stat;
+	enum mv88e6xxx_hw_stat_id id;
+	u64 *member;
+	int ret;
+
+	mv88e6xxx_reg_lock(chip);
+	ret = mv88e6xxx_stats_snapshot(chip, port);
+	mv88e6xxx_reg_unlock(chip);
+
+	if (ret < 0)
+		return;
+
+	stat = mv88e6xxx_hw_stats;
+	for (id = 0; id < MV88E6XXX_HW_STAT_ID_MAX; id++, stat++) {
+		if (!stat_map[id])
+			continue;
+
+		member = (u64 *)(((char *)rmon_stats) + stat_map[id]);
+		mv88e6xxx_stats_get_stat(chip, port, stat, member);
+	}
+
+	*ranges = rmon_ranges;
+}
+
 static int mv88e6xxx_get_regs_len(struct dsa_switch *ds, int port)
 {
 	struct mv88e6xxx_chip *chip = ds->priv;
@@ -6905,6 +6959,7 @@ static const struct dsa_switch_ops mv88e6xxx_switch_ops = {
 	.get_strings		= mv88e6xxx_get_strings,
 	.get_ethtool_stats	= mv88e6xxx_get_ethtool_stats,
 	.get_eth_mac_stats	= mv88e6xxx_get_eth_mac_stats,
+	.get_rmon_stats		= mv88e6xxx_get_rmon_stats,
 	.get_sset_count		= mv88e6xxx_get_sset_count,
 	.port_max_mtu		= mv88e6xxx_get_max_mtu,
 	.port_change_mtu	= mv88e6xxx_change_mtu,
