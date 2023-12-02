@@ -733,7 +733,8 @@ int blk_trace_ioctl(struct block_device *bdev, unsigned cmd, char __user *arg)
 	int ret, start = 0;
 	char b[BDEVNAME_SIZE];
 
-	mutex_lock(&q->debugfs_mutex);
+	if (!mutex_trylock(&q->debugfs_mutex))
+		return -EBUSY;
 
 	switch (cmd) {
 	case BLKTRACESETUP:
