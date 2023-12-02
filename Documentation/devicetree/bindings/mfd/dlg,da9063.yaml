@@ -17,6 +17,9 @@ description: |
   moment where all voltage monitors are disabled. Next, as da9063 only supports
   UV *and* OV monitoring, both must be set to the same severity and value
   (0: disable, 1: enable).
+  Product information for the DA906{3L,3} devices can be found here:
+  - https://www.dialog-semiconductor.com/products/da9063l
+  - https://www.dialog-semiconductor.com/products/da9063
 
 properties:
   compatible:
@@ -34,21 +37,6 @@ properties:
 
   "#interrupt-cells":
     const: 2
-
-  dlg,use-sw-pm:
-    type: boolean
-    description:
-      Disable the watchdog during suspend.
-      Only use this option if you can't use the watchdog automatic suspend
-      function during a suspend (see register CONTROL_B).
-
-  watchdog:
-    type: object
-    $ref: /schemas/watchdog/watchdog.yaml#
-    unevaluatedProperties: false
-    properties:
-      compatible:
-        const: dlg,da9063-watchdog
 
   rtc:
     type: object
@@ -81,6 +69,9 @@ properties:
       "^(ldo([1-9]|1[01])|bcore([1-2]|s-merged)|b(pro|mem|io|peri)|bmem-bio-merged)$":
         $ref: /schemas/regulator/regulator.yaml
         unevaluatedProperties: false
+
+  watchdog:
+    $ref: /schemas/watchdog/dlg,da9062-watchdog.yaml
 
 required:
   - compatible
