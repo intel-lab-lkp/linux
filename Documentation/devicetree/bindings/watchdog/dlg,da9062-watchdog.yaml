@@ -18,6 +18,7 @@ properties:
       - items:
           - enum:
               - dlg,da9062-watchdog
+              - dlg,da9063-watchdog
       - items:
           - enum:
               - dlg,da9061-watchdog
