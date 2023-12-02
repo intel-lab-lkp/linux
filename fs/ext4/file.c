@@ -144,6 +144,9 @@ static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (iocb->ki_flags & IOCB_DIRECT)
 		return ext4_dio_read_iter(iocb, to);
 
+	/* wait for stale page cache to be invalidated */
+	inode_dio_wait(inode);
+
 	return generic_file_read_iter(iocb, to);
 }
 
