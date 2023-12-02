@@ -18,6 +18,7 @@
 #include <linux/nls.h>
 #include <linux/buffer_head.h>
 #include <linux/magic.h>
+#include <linux/bitops.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -500,11 +501,18 @@ static int exfat_read_boot_sector(struct super_block *sb)
 	sbi->used_clusters = EXFAT_CLUSTERS_UNTRACKED;
 
 	/* check consistencies */
-	if ((u64)sbi->num_FAT_sectors << p_boot->sect_size_bits <
+	u64 num_fat_sectors_u64 = (u64)sbi->num_FAT_sectors;
+	unsigned long num_bits = hweight_long(num_fat_sectors_u64);
+
+	if(num_bits>=p_boot->sect_size_bits){
+
+		if ((u64)sbi->num_FAT_sectors << p_boot->sect_size_bits <
 	    (u64)sbi->num_clusters * 4) {
 		exfat_err(sb, "bogus fat length");
 		return -EINVAL;
+		}
 	}
+	
 
 	if (sbi->data_start_sector <
 	    (u64)sbi->FAT1_start_sector +
