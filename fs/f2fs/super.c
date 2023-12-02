@@ -3364,6 +3364,15 @@ loff_t max_file_blocks(struct inode *inode)
 	leaf_count *= NIDS_PER_BLOCK;
 	result += leaf_count;
 
+	/* For compatibility with 4K crypto unit size, we must restrict
+	 * the max filesize to what can fit within U32_MAX 4K units.
+	 * Since the blocksize must currently be equal to the page size,
+	 * we can grab that from there. inode is NULL when setting up
+	 * the superblock.
+	 */
+
+	result = min(result, ((loff_t) U32_MAX * 4096) >> PAGE_SHIFT);
+
 	return result;
 }
 
