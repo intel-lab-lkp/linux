@@ -10,5 +10,8 @@
 #define RK3128_PD_VIDEO		2
 #define RK3128_PD_GPU		3
 #define RK3128_PD_MSCH		4
+#define RK3128_PD_PERI		5
+#define RK3128_PD_SYS		6
+#define RK3128_PD_CRYPTO	7
 
 #endif

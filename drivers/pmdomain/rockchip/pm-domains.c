@@ -998,11 +998,14 @@ static const struct rockchip_domain_info rk3066_pm_domains[] = {
 };
 
 static const struct rockchip_domain_info rk3128_pm_domains[] = {
-	[RK3128_PD_CORE]	= DOMAIN_RK3288("core",  BIT(0), BIT(0), BIT(4), false),
-	[RK3128_PD_MSCH]	= DOMAIN_RK3288("msch",  0,      0,      BIT(6), true),
-	[RK3128_PD_VIO]		= DOMAIN_RK3288("vio",   BIT(3), BIT(3), BIT(2), false),
-	[RK3128_PD_VIDEO]	= DOMAIN_RK3288("video", BIT(2), BIT(2), BIT(1), false),
-	[RK3128_PD_GPU]		= DOMAIN_RK3288("gpu",   BIT(1), BIT(1), BIT(3), false),
+	[RK3128_PD_CORE]	= DOMAIN_RK3288("core",   BIT(0), BIT(0), BIT(4), false),
+	[RK3128_PD_MSCH]	= DOMAIN_RK3288("msch",   0,      0,      BIT(6), true),
+	[RK3128_PD_VIO]		= DOMAIN_RK3288("vio",    BIT(3), BIT(3), BIT(2), false),
+	[RK3128_PD_VIDEO]	= DOMAIN_RK3288("video",  BIT(2), BIT(2), BIT(1), false),
+	[RK3128_PD_GPU]		= DOMAIN_RK3288("gpu",    BIT(1), BIT(1), BIT(3), false),
+	[RK3128_PD_PERI]	= DOMAIN_RK3288("peri",   0,      0,      BIT(0), false),
+	[RK3128_PD_SYS]		= DOMAIN_RK3288("sys",    0,      0,      BIT(5), true),
+	[RK3128_PD_CRYPTO]	= DOMAIN_RK3288("crypto", 0,      0,      BIT(7), false),
 };
 
 static const struct rockchip_domain_info rk3188_pm_domains[] = {
