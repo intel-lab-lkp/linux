@@ -185,7 +185,8 @@ TRACE_EVENT(9p_protocol_dump,
 		    __entry->clnt   =  clnt;
 		    __entry->type   =  pdu->id;
 		    __entry->tag    =  pdu->tag;
-		    memcpy(__entry->line, pdu->sdata, P9_PROTO_DUMP_SZ);
+		    memcpy(__entry->line, pdu->sdata,
+				min(pdu->capacity, P9_PROTO_DUMP_SZ));
 		    ),
 	    TP_printk("clnt %lu %s(tag = %d)\n%.3x: %16ph\n%.3x: %16ph\n",
 		      (unsigned long)__entry->clnt, show_9p_op(__entry->type),
