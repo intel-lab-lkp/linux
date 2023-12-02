@@ -23,6 +23,9 @@
 /* Perf's "BASE" is wildly misleading, this is a single-bit flag, not a base. */
 #define INTEL_RDPMC_FIXED	INTEL_PMC_FIXED_RDPMC_BASE
 
+#define INTEL_RDPMC_TYPE_MASK	GENMASK(31, 16)
+#define INTEL_RDPMC_INDEX_MASK	GENMASK(15, 0)
+
 #define MSR_PMC_FULL_WIDTH_BIT      (MSR_IA32_PMC0 - MSR_IA32_PERFCTR0)
 
 static void reprogram_fixed_counters(struct kvm_pmu *pmu, u64 data)
@@ -82,9 +85,13 @@ static struct kvm_pmc *intel_rdpmc_ecx_to_pmc(struct kvm_vcpu *vcpu,
 	/*
 	 * Fixed PMCs are supported on all architectural PMUs.  Note, KVM only
 	 * emulates fixed PMCs for PMU v2+, but the flag itself is still valid,
-	 * i.e. let RDPMC fail due to accessing a non-existent counter.
+	 * i.e. let RDPMC fail due to accessing a non-existent counter.  Reject
+	 * attempts to read all other types, which are unknown/unsupported.
 	 */
-	idx &= ~INTEL_RDPMC_FIXED;
+	if (idx & INTEL_RDPMC_TYPE_MASK & ~INTEL_RDPMC_FIXED)
+		return NULL;
+
+	idx &= INTEL_RDPMC_INDEX_MASK;
 	if (fixed) {
 		counters = pmu->fixed_counters;
 		num_counters = pmu->nr_arch_fixed_counters;
