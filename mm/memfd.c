@@ -35,7 +35,7 @@ static void memfd_tag_pins(struct xa_state *xas)
 	int latency = 0;
 	int cache_count;
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	xas_lock_irq(xas);
 	xas_for_each(xas, page, ULONG_MAX) {

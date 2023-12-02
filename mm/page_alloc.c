@@ -17,6 +17,7 @@
 
 #include <linux/stddef.h>
 #include <linux/mm.h>
+#include <linux/page-flags.h>
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
@@ -1078,7 +1079,7 @@ static __always_inline bool free_pages_prepare(struct page *page,
 {
 	int bad = 0;
 	bool skip_kasan_poison = should_skip_kasan_poison(page, fpi_flags);
-	bool init = want_init_on_free();
+	bool init = want_init_on_free() || PageOfinit(page);
 	bool compound = PageCompound(page);
 
 	VM_BUG_ON_PAGE(PageTail(page), page);

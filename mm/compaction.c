@@ -2503,7 +2503,7 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	trace_mm_compaction_begin(cc, start_pfn, end_pfn, sync);
 
 	/* lru_add_drain_all could be expensive with involving other CPUs */
-	lru_add_drain();
+	lru_add_drain(0);
 
 	while ((ret = compact_finished(cc)) == COMPACT_CONTINUE) {
 		int err;

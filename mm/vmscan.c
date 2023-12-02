@@ -1919,7 +1919,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 			return SWAP_CLUSTER_MAX;
 	}
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	spin_lock_irq(&lruvec->lru_lock);
 
@@ -2028,7 +2028,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	int file = is_file_lru(lru);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	spin_lock_irq(&lruvec->lru_lock);
 
@@ -4836,7 +4836,7 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 	VM_WARN_ON_ONCE(root_reclaim(sc));
 	VM_WARN_ON_ONCE(!sc->may_writepage || !sc->may_unmap);
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	blk_start_plug(&plug);
 
@@ -4904,7 +4904,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	if (!sc->may_writepage || !sc->may_unmap)
 		goto done;
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	blk_start_plug(&plug);
 

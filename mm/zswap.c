@@ -1146,7 +1146,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 
 	if (!PageLRU(page)) {
 		/* drain lru cache to help folio_rotate_reclaimable() */
-		lru_add_drain();
+		lru_add_drain(0);
 	}
 
 	/* start writeback */

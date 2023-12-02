@@ -266,7 +266,7 @@ static bool remove_migration_pte(struct folio *folio,
 			set_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte);
 		}
 		if (vma->vm_flags & VM_LOCKED)
-			mlock_drain_local();
+			mlock_drain_local(0);
 
 		trace_remove_migration_pte(pvmw.address, pte_val(pte),
 					   compound_order(new));
@@ -1299,7 +1299,7 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	 */
 	folio_add_lru(dst);
 	if (old_page_state & PAGE_WAS_MLOCKED)
-		lru_add_drain();
+		lru_add_drain(0);
 
 	if (old_page_state & PAGE_WAS_MAPPED)
 		remove_migration_ptes(src, dst, false);

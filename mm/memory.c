@@ -1769,7 +1769,7 @@ void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
 	struct mmu_notifier_range range;
 	struct mmu_gather tlb;
 
-	lru_add_drain();
+	lru_add_drain(0);
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
 				address, end);
 	hugetlb_zap_begin(vma, &range.start, &range.end);
@@ -3382,7 +3382,7 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 		 * We cannot easily detect+handle references from
 		 * remote LRU caches or references to LRU folios.
 		 */
-		lru_add_drain();
+		lru_add_drain(0);
 	if (folio_ref_count(folio) > 1 + folio_test_swapcache(folio))
 		return false;
 	if (!folio_trylock(folio))
@@ -3960,7 +3960,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		 */
 		if ((vmf->flags & FAULT_FLAG_WRITE) && folio == swapcache &&
 		    !folio_test_ksm(folio) && !folio_test_lru(folio))
-			lru_add_drain();
+			lru_add_drain(0);
 	}
 
 	folio_throttle_swaprate(folio, GFP_KERNEL);

@@ -1048,7 +1048,7 @@ static int __collapse_huge_page_swapin(struct mm_struct *mm,
 
 	/* Drain LRU cache to remove extra pin on the swapped in pages */
 	if (swapped_in)
-		lru_add_drain();
+		lru_add_drain(0);
 
 	result = SCAN_SUCCEED;
 out:
@@ -1863,7 +1863,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 					goto xa_unlocked;
 				}
 				/* drain lru cache to help isolate_lru_page() */
-				lru_add_drain();
+				lru_add_drain(0);
 				page = folio_file_page(folio, index);
 			} else if (trylock_page(page)) {
 				get_page(page);
@@ -1879,7 +1879,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 							  file, index,
 							  end - index);
 				/* drain lru cache to help isolate_lru_page() */
-				lru_add_drain();
+				lru_add_drain(0);
 				page = find_lock_page(mapping, index);
 				if (unlikely(page == NULL)) {
 					result = SCAN_FAIL;

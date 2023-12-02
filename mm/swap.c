@@ -746,12 +746,12 @@ void folio_mark_lazyfree(struct folio *folio)
 	}
 }
 
-void lru_add_drain(void)
+void lru_add_drain(int cofinit)
 {
 	local_lock(&cpu_fbatches.lock);
 	lru_add_drain_cpu(smp_processor_id());
 	local_unlock(&cpu_fbatches.lock);
-	mlock_drain_local();
+	mlock_drain_local(cofinit);
 }
 
 /*
@@ -766,7 +766,7 @@ static void lru_add_and_bh_lrus_drain(void)
 	lru_add_drain_cpu(smp_processor_id());
 	local_unlock(&cpu_fbatches.lock);
 	invalidate_bh_lrus_cpu();
-	mlock_drain_local();
+	mlock_drain_local(0);
 }
 
 void lru_add_drain_cpu_zone(struct zone *zone)
@@ -775,7 +775,7 @@ void lru_add_drain_cpu_zone(struct zone *zone)
 	lru_add_drain_cpu(smp_processor_id());
 	drain_local_pages(zone);
 	local_unlock(&cpu_fbatches.lock);
-	mlock_drain_local();
+	mlock_drain_local(0);
 }
 
 #ifdef CONFIG_SMP
@@ -907,7 +907,7 @@ void lru_add_drain_all(void)
 #else
 void lru_add_drain_all(void)
 {
-	lru_add_drain();
+	lru_add_drain(0);
 }
 #endif /* CONFIG_SMP */
 
@@ -1056,7 +1056,7 @@ EXPORT_SYMBOL(release_pages);
 void __folio_batch_release(struct folio_batch *fbatch)
 {
 	if (!fbatch->percpu_pvec_drained) {
-		lru_add_drain();
+		lru_add_drain(0);
 		fbatch->percpu_pvec_drained = true;
 	}
 	release_pages(fbatch->folios, folio_batch_count(fbatch));

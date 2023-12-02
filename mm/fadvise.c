@@ -153,7 +153,7 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 			 * second cache tree walk below by flushing
 			 * them out right away.
 			 */
-			lru_add_drain();
+			lru_add_drain(0);
 
 			mapping_try_invalidate(mapping, start_index, end_index,
 					&nr_failed);

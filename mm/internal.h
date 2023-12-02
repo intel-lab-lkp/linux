@@ -670,7 +670,7 @@ static inline void mlock_vma_folio(struct folio *folio,
 		mlock_folio(folio);
 }
 
-void munlock_folio(struct folio *folio);
+void munlock_folio(struct folio *folio, int cofinit);
 static inline void munlock_vma_folio(struct folio *folio,
 					struct vm_area_struct *vma)
 {
@@ -684,12 +684,12 @@ static inline void munlock_vma_folio(struct folio *folio,
 	 * if it's wrong.
 	 */
 	if (unlikely(vma->vm_flags & VM_LOCKED))
-		munlock_folio(folio);
+		munlock_folio(folio, 0);
 }
 
 void mlock_new_folio(struct folio *folio);
 bool need_mlock_drain(int cpu);
-void mlock_drain_local(void);
+void mlock_drain_local(int cofinit);
 void mlock_drain_remote(int cpu);
 
 extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
@@ -777,7 +777,7 @@ static inline struct file *maybe_unlock_mmap_for_io(struct vm_fault *vmf,
 static inline void unmap_mapping_folio(struct folio *folio) { }
 static inline void mlock_new_folio(struct folio *folio) { }
 static inline bool need_mlock_drain(int cpu) { return false; }
-static inline void mlock_drain_local(void) { }
+static inline void mlock_drain_local(int cofinit) { }
 static inline void mlock_drain_remote(int cpu) { }
 static inline void vunmap_range_noflush(unsigned long start, unsigned long end)
 {

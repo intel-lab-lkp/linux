@@ -119,7 +119,7 @@ out:
 	return lruvec;
 }
 
-static struct lruvec *__munlock_folio(struct folio *folio, struct lruvec *lruvec)
+static struct lruvec *__munlock_folio(struct folio *folio, struct lruvec *lruvec, int cofinit)
 {
 	int nr_pages = folio_nr_pages(folio);
 	bool isolated = false;
@@ -146,6 +146,9 @@ munlock:
 			__count_vm_events(UNEVICTABLE_PGMUNLOCKED, nr_pages);
 		else
 			__count_vm_events(UNEVICTABLE_PGSTRANDED, nr_pages);
+
+		if (cofinit)
+			folio_clear_ofinit(folio);
 	}
 
 	/* folio_evictable() has to be checked *after* clearing Mlocked */
@@ -183,7 +186,7 @@ static inline struct folio *mlock_new(struct folio *folio)
  * better (munlocking a full folio batch does not need to drain mlocking folio
  * batches first).
  */
-static void mlock_folio_batch(struct folio_batch *fbatch)
+static void mlock_folio_batch(struct folio_batch *fbatch, int cofinit)
 {
 	struct lruvec *lruvec = NULL;
 	unsigned long mlock;
@@ -201,7 +204,7 @@ static void mlock_folio_batch(struct folio_batch *fbatch)
 		else if (mlock & NEW_FOLIO)
 			lruvec = __mlock_new_folio(folio, lruvec);
 		else
-			lruvec = __munlock_folio(folio, lruvec);
+			lruvec = __munlock_folio(folio, lruvec, cofinit);
 	}
 
 	if (lruvec)
@@ -210,14 +213,14 @@ static void mlock_folio_batch(struct folio_batch *fbatch)
 	folio_batch_reinit(fbatch);
 }
 
-void mlock_drain_local(void)
+void mlock_drain_local(int cofinit)
 {
 	struct folio_batch *fbatch;
 
 	local_lock(&mlock_fbatch.lock);
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	if (folio_batch_count(fbatch))
-		mlock_folio_batch(fbatch);
+		mlock_folio_batch(fbatch, cofinit);
 	local_unlock(&mlock_fbatch.lock);
 }
 
@@ -228,7 +231,7 @@ void mlock_drain_remote(int cpu)
 	WARN_ON_ONCE(cpu_online(cpu));
 	fbatch = &per_cpu(mlock_fbatch.fbatch, cpu);
 	if (folio_batch_count(fbatch))
-		mlock_folio_batch(fbatch);
+		mlock_folio_batch(fbatch, 0);
 }
 
 bool need_mlock_drain(int cpu)
@@ -252,12 +255,15 @@ void mlock_folio(struct folio *folio)
 
 		zone_stat_mod_folio(folio, NR_MLOCK, nr_pages);
 		__count_vm_events(UNEVICTABLE_PGMLOCKED, nr_pages);
+
+		if (want_init_mlocked_on_free())
+			folio_set_ofinit(folio);
 	}
 
 	folio_get(folio);
 	if (!folio_batch_add(fbatch, mlock_lru(folio)) ||
 	    folio_test_large(folio) || lru_cache_disabled())
-		mlock_folio_batch(fbatch);
+		mlock_folio_batch(fbatch, 0);
 	local_unlock(&mlock_fbatch.lock);
 }
 
@@ -274,13 +280,16 @@ void mlock_new_folio(struct folio *folio)
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	folio_set_mlocked(folio);
 
+	if (want_init_mlocked_on_free())
+		folio_set_ofinit(folio);
+
 	zone_stat_mod_folio(folio, NR_MLOCK, nr_pages);
 	__count_vm_events(UNEVICTABLE_PGMLOCKED, nr_pages);
 
 	folio_get(folio);
 	if (!folio_batch_add(fbatch, mlock_new(folio)) ||
 	    folio_test_large(folio) || lru_cache_disabled())
-		mlock_folio_batch(fbatch);
+		mlock_folio_batch(fbatch, 0);
 	local_unlock(&mlock_fbatch.lock);
 }
 
@@ -288,7 +297,7 @@ void mlock_new_folio(struct folio *folio)
  * munlock_folio - munlock a folio
  * @folio: folio to be munlocked, either normal or a THP head.
  */
-void munlock_folio(struct folio *folio)
+void munlock_folio(struct folio *folio, int cofinit)
 {
 	struct folio_batch *fbatch;
 
@@ -301,7 +310,7 @@ void munlock_folio(struct folio *folio)
 	folio_get(folio);
 	if (!folio_batch_add(fbatch, folio) ||
 	    folio_test_large(folio) || lru_cache_disabled())
-		mlock_folio_batch(fbatch);
+		mlock_folio_batch(fbatch, cofinit);
 	local_unlock(&mlock_fbatch.lock);
 }
 
@@ -372,6 +381,8 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 	struct folio *folio;
 	unsigned int step = 1;
 	unsigned long start = addr;
+	int *cofinit_ptr = (int *)walk->private;
+	int cofinit = cofinit_ptr ? *cofinit_ptr : 0;
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
 	if (ptl) {
@@ -383,7 +394,7 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 		if (vma->vm_flags & VM_LOCKED)
 			mlock_folio(folio);
 		else
-			munlock_folio(folio);
+			munlock_folio(folio, cofinit);
 		goto out;
 	}
 
@@ -408,7 +419,7 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 		if (vma->vm_flags & VM_LOCKED)
 			mlock_folio(folio);
 		else
-			munlock_folio(folio);
+			munlock_folio(folio, cofinit);
 
 next_entry:
 		pte += step - 1;
@@ -433,7 +444,8 @@ out:
  * called for munlock() and munlockall(), to clear VM_LOCKED from @vma.
  */
 static void mlock_vma_pages_range(struct vm_area_struct *vma,
-	unsigned long start, unsigned long end, vm_flags_t newflags)
+	unsigned long start, unsigned long end, vm_flags_t newflags,
+	int cofinit)
 {
 	static const struct mm_walk_ops mlock_walk_ops = {
 		.pmd_entry = mlock_pte_range,
@@ -456,9 +468,9 @@ static void mlock_vma_pages_range(struct vm_area_struct *vma,
 	vma_start_write(vma);
 	vm_flags_reset_once(vma, newflags);
 
-	lru_add_drain();
-	walk_page_range(vma->vm_mm, start, end, &mlock_walk_ops, NULL);
-	lru_add_drain();
+	lru_add_drain(cofinit);
+	walk_page_range(vma->vm_mm, start, end, &mlock_walk_ops, &cofinit);
+	lru_add_drain(cofinit);
 
 	if (newflags & VM_IO) {
 		newflags &= ~VM_IO;
@@ -477,7 +489,7 @@ static void mlock_vma_pages_range(struct vm_area_struct *vma,
  */
 static int mlock_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	       struct vm_area_struct **prev, unsigned long start,
-	       unsigned long end, vm_flags_t newflags)
+	       unsigned long end, vm_flags_t newflags, int cofinit)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	int nr_pages;
@@ -516,7 +528,7 @@ static int mlock_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		vma_start_write(vma);
 		vm_flags_reset(vma, newflags);
 	} else {
-		mlock_vma_pages_range(vma, start, end, newflags);
+		mlock_vma_pages_range(vma, start, end, newflags, cofinit);
 	}
 out:
 	*prev = vma;
@@ -560,7 +572,7 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
-		error = mlock_fixup(&vmi, vma, &prev, nstart, tmp, newflags);
+		error = mlock_fixup(&vmi, vma, &prev, nstart, tmp, newflags, 1);
 		if (error)
 			return error;
 		tmp = vma_iter_end(&vmi);
@@ -744,7 +756,7 @@ static int apply_mlockall_flags(int flags)
 
 		/* Ignore errors */
 		mlock_fixup(&vmi, vma, &prev, vma->vm_start, vma->vm_end,
-			    newflags);
+			    newflags, 1);
 		cond_resched();
 	}
 out:

@@ -310,7 +310,7 @@ void free_page_and_swap_cache(struct page *page)
  */
 void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 {
-	lru_add_drain();
+	lru_add_drain(0);
 	for (int i = 0; i < nr; i++)
 		free_swap_cache(encoded_page_ptr(pages[i]));
 	release_pages(pages, nr);
@@ -668,7 +668,7 @@ struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	}
 	blk_finish_plug(&plug);
 	swap_read_unplug(splug);
-	lru_add_drain();	/* Push any new pages onto the LRU now */
+	lru_add_drain(0);	/* Push any new pages onto the LRU now */
 skip:
 	/* The page was likely read above, so no need for plugging here */
 	page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
@@ -843,7 +843,7 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 		pte_unmap(pte);
 	blk_finish_plug(&plug);
 	swap_read_unplug(splug);
-	lru_add_drain();
+	lru_add_drain(0);
 skip:
 	/* The page was likely read above, so no need for plugging here */
 	page = __read_swap_cache_async(targ_entry, gfp_mask, mpol, targ_ilx,

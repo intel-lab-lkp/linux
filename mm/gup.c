@@ -1676,7 +1676,7 @@ long populate_vma_page_range(struct vm_area_struct *vma,
 	 */
 	ret = __get_user_pages(mm, start, nr_pages, gup_flags,
 			       NULL, locked ? locked : &local_locked);
-	lru_add_drain();
+	lru_add_drain(0);
 	return ret;
 }
 
@@ -1734,7 +1734,7 @@ long faultin_vma_page_range(struct vm_area_struct *vma, unsigned long start,
 
 	ret = __get_user_pages(mm, start, nr_pages, gup_flags,
 			       NULL, locked);
-	lru_add_drain();
+	lru_add_drain(0);
 	return ret;
 }
 

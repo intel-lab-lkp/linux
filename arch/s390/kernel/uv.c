@@ -344,7 +344,7 @@ out:
 		 * on the local CPU so that hopefully the refcount will
 		 * reach the expected safe value.
 		 */
-		lru_add_drain();
+		lru_add_drain(0);
 		local_drain = true;
 		/* And now we try again immediately after draining */
 		goto again;

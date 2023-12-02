@@ -270,13 +270,13 @@ static long madvise_willneed(struct vm_area_struct *vma,
 #ifdef CONFIG_SWAP
 	if (!file) {
 		walk_page_range(vma->vm_mm, start, end, &swapin_walk_ops, vma);
-		lru_add_drain(); /* Push any new pages onto the LRU now */
+		lru_add_drain(0); /* Push any new pages onto the LRU now */
 		return 0;
 	}
 
 	if (shmem_mapping(file->f_mapping)) {
 		shmem_swapin_range(vma, start, end, file->f_mapping);
-		lru_add_drain(); /* Push any new pages onto the LRU now */
+		lru_add_drain(0); /* Push any new pages onto the LRU now */
 		return 0;
 	}
 #else
@@ -564,7 +564,7 @@ static long madvise_cold(struct vm_area_struct *vma,
 	if (!can_madv_lru_vma(vma))
 		return -EINVAL;
 
-	lru_add_drain();
+	lru_add_drain(0);
 	tlb_gather_mmu(&tlb, mm);
 	madvise_cold_page_range(&tlb, vma, start_addr, end_addr);
 	tlb_finish_mmu(&tlb);
@@ -607,7 +607,7 @@ static long madvise_pageout(struct vm_area_struct *vma,
 				(vma->vm_flags & VM_MAYSHARE)))
 		return 0;
 
-	lru_add_drain();
+	lru_add_drain(0);
 	tlb_gather_mmu(&tlb, mm);
 	madvise_pageout_page_range(&tlb, vma, start_addr, end_addr);
 	tlb_finish_mmu(&tlb);
@@ -775,7 +775,7 @@ static int madvise_free_single_vma(struct vm_area_struct *vma,
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
 				range.start, range.end);
 
-	lru_add_drain();
+	lru_add_drain(0);
 	tlb_gather_mmu(&tlb, mm);
 	update_hiwater_rss(mm);
 

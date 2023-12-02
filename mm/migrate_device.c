@@ -362,7 +362,7 @@ static unsigned long migrate_device_unmap(unsigned long *src_pfns,
 	bool allow_drain = true;
 	unsigned long unmapped = 0;
 
-	lru_add_drain();
+	lru_add_drain(0);
 
 	for (i = 0; i < npages; i++) {
 		struct page *page = migrate_pfn_to_page(src_pfns[i]);

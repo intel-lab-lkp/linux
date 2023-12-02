@@ -1836,7 +1836,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 discard:
 		page_remove_rmap(subpage, vma, folio_test_hugetlb(folio));
 		if (vma->vm_flags & VM_LOCKED)
-			mlock_drain_local();
+			mlock_drain_local(0);
 		folio_put(folio);
 	}
 
@@ -2189,7 +2189,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 
 		page_remove_rmap(subpage, vma, folio_test_hugetlb(folio));
 		if (vma->vm_flags & VM_LOCKED)
-			mlock_drain_local();
+			mlock_drain_local(0);
 		folio_put(folio);
 	}
 
