@@ -2587,7 +2587,8 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		if ((iocb->ki_flags & IOCB_WAITQ) && already_read)
 			iocb->ki_flags |= IOCB_NOWAIT;
 
-		if (unlikely(iocb->ki_pos >= i_size_read(inode)))
+		isize = i_size_read(inode);
+		if (unlikely(iocb->ki_pos >= isize))
 			break;
 
 		error = filemap_get_pages(iocb, iter->count, &fbatch, false);
@@ -2602,7 +2603,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		 * part of the page is not copied back to userspace (unless
 		 * another truncate extends the file - this is desired though).
 		 */
-		isize = i_size_read(inode);
+		isize = min_t(loff_t, isize, i_size_read(inode));
 		if (unlikely(iocb->ki_pos >= isize))
 			goto put_folios;
 		end_offset = min_t(loff_t, isize, iocb->ki_pos + iter->count);
