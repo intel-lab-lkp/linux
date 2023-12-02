@@ -267,7 +267,7 @@ void sort_r(void *base, size_t num, size_t size,
 			b = c;
 
 		/* Now backtrack from "b" to the correct location for "a" */
-		while (b != a && do_cmp(base + a, base + b, cmp_func, priv) >= 0)
+		while (b != a && do_cmp(base + a, base + b, cmp_func, priv) > 0)
 			b = parent(b, lsbit, size);
 		c = b;			/* Where "a" belongs */
 		while (b != a) {	/* Shift it into place */
