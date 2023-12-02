@@ -14,9 +14,14 @@ allOf:
 
 properties:
   compatible:
-    enum: 
-      - dlg,da9061-watchdog
-      - dlg,da9062-watchdog
+    oneOf:
+      - items:
+          - enum:
+              - dlg,da9062-watchdog
+      - items:
+          - enum:
+              - dlg,da9061-watchdog
+          - const: dlg,da9062-watchdog # da9062-watchdog fallback
 
   dlg,use-sw-pm:
     type: boolean
