@@ -39,24 +39,6 @@ struct rk_gmac_ops {
 	u32 regs[];
 };
 
-static const char * const rk_clocks[] = {
-	"aclk_mac", "pclk_mac", "mac_clk_tx", "clk_mac_speed",
-};
-
-static const char * const rk_rmii_clocks[] = {
-	"mac_clk_rx", "clk_mac_ref", "clk_mac_refout",
-};
-
-enum rk_clocks_index {
-	RK_ACLK_MAC = 0,
-	RK_PCLK_MAC,
-	RK_MAC_CLK_TX,
-	RK_CLK_MAC_SPEED,
-	RK_MAC_CLK_RX,
-	RK_CLK_MAC_REF,
-	RK_CLK_MAC_REFOUT,
-};
-
 struct rk_priv_data {
 	struct platform_device *pdev;
 	phy_interface_t phy_iface;
@@ -73,6 +55,7 @@ struct rk_priv_data {
 	int num_clks;
 	struct clk *clk_mac;
 	struct clk *clk_phy;
+	struct clk *clk_mac_speed;
 
 	struct reset_control *phy_reset;
 
@@ -116,12 +99,11 @@ static void px30_set_to_rmii(struct rk_priv_data *bsp_priv)
 
 static void px30_set_rmii_speed(struct rk_priv_data *bsp_priv, int speed)
 {
-	struct clk *clk_mac_speed = bsp_priv->clks[RK_CLK_MAC_SPEED].clk;
 	struct device *dev = &bsp_priv->pdev->dev;
 	int ret;
 
-	if (!clk_mac_speed) {
-		dev_err(dev, "%s: Missing clk_mac_speed clock\n", __func__);
+	if (!bsp_priv->clk_mac_speed) {
+		dev_err(dev, "Missing clk_mac_speed clock\n");
 		return;
 	}
 
@@ -129,7 +111,7 @@ static void px30_set_rmii_speed(struct rk_priv_data *bsp_priv, int speed)
 		regmap_write(bsp_priv->grf, PX30_GRF_GMAC_CON1,
 			     PX30_GMAC_SPEED_10M);
 
-		ret = clk_set_rate(clk_mac_speed, 2500000);
+		ret = clk_set_rate(bsp_priv->clk_mac_speed, 2500000);
 		if (ret)
 			dev_err(dev, "%s: set clk_mac_speed rate 2500000 failed: %d\n",
 				__func__, ret);
@@ -137,7 +119,7 @@ static void px30_set_rmii_speed(struct rk_priv_data *bsp_priv, int speed)
 		regmap_write(bsp_priv->grf, PX30_GRF_GMAC_CON1,
 			     PX30_GMAC_SPEED_100M);
 
-		ret = clk_set_rate(clk_mac_speed, 25000000);
+		ret = clk_set_rate(bsp_priv->clk_mac_speed, 25000000);
 		if (ret)
 			dev_err(dev, "%s: set clk_mac_speed rate 25000000 failed: %d\n",
 				__func__, ret);
@@ -1079,10 +1061,14 @@ static void rk3568_set_to_rmii(struct rk_priv_data *bsp_priv)
 
 static void rk3568_set_gmac_speed(struct rk_priv_data *bsp_priv, int speed)
 {
-	struct clk *clk_mac_speed = bsp_priv->clks[RK_CLK_MAC_SPEED].clk;
 	struct device *dev = &bsp_priv->pdev->dev;
 	unsigned long rate;
 	int ret;
+
+	if (!bsp_priv->clk_mac_speed) {
+		dev_err(dev, "Missing clk_mac_speed clock\n");
+		return;
+	}
 
 	switch (speed) {
 	case 10:
@@ -1099,7 +1085,7 @@ static void rk3568_set_gmac_speed(struct rk_priv_data *bsp_priv, int speed)
 		return;
 	}
 
-	ret = clk_set_rate(clk_mac_speed, rate);
+	ret = clk_set_rate(bsp_priv->clk_mac_speed, rate);
 	if (ret)
 		dev_err(dev, "%s: set clk_mac_speed rate %ld failed %d\n",
 			__func__, rate, ret);
@@ -1385,10 +1371,14 @@ static void rv1126_set_to_rmii(struct rk_priv_data *bsp_priv)
 
 static void rv1126_set_rgmii_speed(struct rk_priv_data *bsp_priv, int speed)
 {
-	struct clk *clk_mac_speed = bsp_priv->clks[RK_CLK_MAC_SPEED].clk;
 	struct device *dev = &bsp_priv->pdev->dev;
 	unsigned long rate;
 	int ret;
+
+	if (!bsp_priv->clk_mac_speed) {
+		dev_err(dev, "Missing clk_mac_speed clock\n");
+		return;
+	}
 
 	switch (speed) {
 	case 10:
@@ -1405,7 +1395,7 @@ static void rv1126_set_rgmii_speed(struct rk_priv_data *bsp_priv, int speed)
 		return;
 	}
 
-	ret = clk_set_rate(clk_mac_speed, rate);
+	ret = clk_set_rate(bsp_priv->clk_mac_speed, rate);
 	if (ret)
 		dev_err(dev, "%s: set clk_mac_speed rate %ld failed %d\n",
 			__func__, rate, ret);
@@ -1413,10 +1403,14 @@ static void rv1126_set_rgmii_speed(struct rk_priv_data *bsp_priv, int speed)
 
 static void rv1126_set_rmii_speed(struct rk_priv_data *bsp_priv, int speed)
 {
-	struct clk *clk_mac_speed = bsp_priv->clks[RK_CLK_MAC_SPEED].clk;
 	struct device *dev = &bsp_priv->pdev->dev;
 	unsigned long rate;
 	int ret;
+
+	if (!bsp_priv->clk_mac_speed) {
+		dev_err(dev, "Missing clk_mac_speed clock\n");
+		return;
+	}
 
 	switch (speed) {
 	case 10:
@@ -1430,7 +1424,7 @@ static void rv1126_set_rmii_speed(struct rk_priv_data *bsp_priv, int speed)
 		return;
 	}
 
-	ret = clk_set_rate(clk_mac_speed, rate);
+	ret = clk_set_rate(bsp_priv->clk_mac_speed, rate);
 	if (ret)
 		dev_err(dev, "%s: set clk_mac_speed rate %ld failed %d\n",
 			__func__, rate, ret);
@@ -1492,31 +1486,14 @@ static int rk_gmac_clk_init(struct plat_stmmacenet_data *plat)
 	struct rk_priv_data *bsp_priv = plat->bsp_priv;
 	struct device *dev = &bsp_priv->pdev->dev;
 	int phy_iface = bsp_priv->phy_iface;
-	int i, j, ret;
+	int ret;
 
 	bsp_priv->clk_enabled = false;
 
-	bsp_priv->num_clks = ARRAY_SIZE(rk_clocks);
-	if (phy_iface == PHY_INTERFACE_MODE_RMII)
-		bsp_priv->num_clks += ARRAY_SIZE(rk_rmii_clocks);
-
-	bsp_priv->clks = devm_kcalloc(dev, bsp_priv->num_clks,
-				      sizeof(*bsp_priv->clks), GFP_KERNEL);
-	if (!bsp_priv->clks)
-		return -ENOMEM;
-
-	for (i = 0; i < ARRAY_SIZE(rk_clocks); i++)
-		bsp_priv->clks[i].id = rk_clocks[i];
-
-	if (phy_iface == PHY_INTERFACE_MODE_RMII) {
-		for (j = 0; j < ARRAY_SIZE(rk_rmii_clocks); j++)
-			bsp_priv->clks[i++].id = rk_rmii_clocks[j];
-	}
-
-	ret = devm_clk_bulk_get_optional(dev, bsp_priv->num_clks,
-					 bsp_priv->clks);
-	if (ret)
+	ret = devm_clk_bulk_get_all(dev, &bsp_priv->clks);
+	if (ret <= 0)
 		return dev_err_probe(dev, ret, "Failed to get clocks\n");
+	bsp_priv->num_clks = ret;
 
 	/* "stmmaceth" will be enabled by the core */
 	bsp_priv->clk_mac = devm_clk_get(dev, "stmmaceth");
@@ -1537,6 +1514,12 @@ static int rk_gmac_clk_init(struct plat_stmmacenet_data *plat)
 			return dev_err_probe(dev, ret, "Cannot get PHY clock\n");
 		clk_set_rate(bsp_priv->clk_phy, 50000000);
 	}
+
+	/* get option clock */
+	bsp_priv->clk_mac_speed = devm_clk_get(dev, "clk_mac_speed");
+	ret = PTR_ERR_OR_ZERO(bsp_priv->clk_mac_speed);
+	if (ret)
+		bsp_priv->clk_mac_speed = NULL;
 
 	return 0;
 }
