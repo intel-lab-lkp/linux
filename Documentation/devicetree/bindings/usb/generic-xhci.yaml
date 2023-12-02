@@ -9,9 +9,6 @@ title: USB xHCI Controller
 maintainers:
   - Mathias Nyman <mathias.nyman@intel.com>
 
-allOf:
-  - $ref: usb-xhci.yaml#
-
 properties:
   compatible:
     oneOf:
@@ -28,6 +25,7 @@ properties:
       - description: Broadcom STB SoCs with xHCI
         enum:
           - brcm,xhci-brcm-v2
+          - brcm,bcm2711-xhci
           - brcm,bcm7445-xhci
       - description: Generic xHCI device
         const: xhci-platform
@@ -49,12 +47,29 @@ properties:
       - const: core
       - const: reg
 
+  power-domains:
+    maxItems: 1
+
 unevaluatedProperties: false
 
 required:
   - compatible
   - reg
   - interrupts
+
+allOf:
+  - $ref: usb-xhci.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: brcm,bcm2711-xhci
+    then:
+      required:
+        - power-domains
+    else:
+      properties:
+        power-domains: false
 
 examples:
   - |
