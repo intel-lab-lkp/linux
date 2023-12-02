@@ -2459,6 +2459,8 @@ extern int current_umask(void);
 
 extern void ihold(struct inode * inode);
 extern void iput(struct inode *);
+DEFINE_FREE(iput, struct inode *, if (_T) iput(_T))
+
 int inode_update_timestamps(struct inode *inode, int flags);
 int generic_update_time(struct inode *, int);
 
