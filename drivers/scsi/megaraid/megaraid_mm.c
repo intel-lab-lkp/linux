@@ -1001,12 +1001,10 @@ dma_pool_error:
 
 pthru_dma_pool_error:
 
-	for (i = 0; i < lld_adp->max_kioc; i++) {
+	while (--i >= 0) {
 		kioc = adapter->kioc_list + i;
-		if (kioc->pthru32) {
-			dma_pool_free(adapter->pthru_dma_pool, kioc->pthru32,
-				kioc->pthru32_h);
-		}
+		dma_pool_free(adapter->pthru_dma_pool, kioc->pthru32,
+			kioc->pthru32_h);
 	}
 
 memalloc_error:
