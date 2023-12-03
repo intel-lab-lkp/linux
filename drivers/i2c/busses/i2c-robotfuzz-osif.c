@@ -161,7 +161,12 @@ static int osif_probe(struct usb_interface *interface,
 		return ret;
 	}
 
-	i2c_add_adapter(&(priv->adapter));
+	ret = i2c_add_adapter(&(priv->adapter));
+	if (ret) {
+		dev_err(&interface->dev, "i2c_add_adapter failed: %d\n", ret);
+		usb_put_dev(priv->usb_dev);
+		return ret;
+	}
 
 	version = le16_to_cpu(priv->usb_dev->descriptor.bcdDevice);
 	dev_info(&interface->dev,
