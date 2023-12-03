@@ -349,16 +349,13 @@ static int multipath_run (struct mddev *mddev)
 	 * should be freed in multipath_free()]
 	 */
 
-	conf = kzalloc(sizeof(struct mpconf), GFP_KERNEL);
+	conf = kzalloc(struct_size(conf, multipaths, mddev->raid_disks),
+		       GFP_KERNEL);
 	mddev->private = conf;
 	if (!conf)
 		goto out;
 
-	conf->multipaths = kcalloc(mddev->raid_disks,
-				   sizeof(struct multipath_info),
-				   GFP_KERNEL);
-	if (!conf->multipaths)
-		goto out_free_conf;
+	conf->raid_disks = mddev->raid_disks;
 
 	working_disks = 0;
 	rdev_for_each(rdev, mddev) {
@@ -376,7 +373,6 @@ static int multipath_run (struct mddev *mddev)
 			working_disks++;
 	}
 
-	conf->raid_disks = mddev->raid_disks;
 	conf->mddev = mddev;
 	spin_lock_init(&conf->device_lock);
 	INIT_LIST_HEAD(&conf->retry_list);
@@ -413,7 +409,6 @@ static int multipath_run (struct mddev *mddev)
 
 out_free_conf:
 	mempool_exit(&conf->pool);
-	kfree(conf->multipaths);
 	kfree(conf);
 	mddev->private = NULL;
 out:
@@ -425,7 +420,6 @@ static void multipath_free(struct mddev *mddev, void *priv)
 	struct mpconf *conf = priv;
 
 	mempool_exit(&conf->pool);
-	kfree(conf->multipaths);
 	kfree(conf);
 }
 

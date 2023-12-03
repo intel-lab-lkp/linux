@@ -8,12 +8,13 @@ struct multipath_info {
 
 struct mpconf {
 	struct mddev			*mddev;
-	struct multipath_info	*multipaths;
 	int			raid_disks;
 	spinlock_t		device_lock;
 	struct list_head	retry_list;
 
 	mempool_t		pool;
+
+	struct multipath_info	multipaths[] __counted_by(raid_disks);
 };
 
 /*
