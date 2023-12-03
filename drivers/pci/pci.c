@@ -3023,6 +3023,9 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 		if (pci_bridge_d3_disable)
 			return false;
 
+		if (bridge->no_d3cold)
+			return false;
+
 		/*
 		 * Hotplug ports handled by firmware in System Management Mode
 		 * may not be put into D3 by the OS (Thunderbolt on non-Macs).
@@ -3098,7 +3101,11 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	bool d3cold_ok = true;
 
 	bridge = pci_upstream_bridge(dev);
-	if (!bridge || !pci_bridge_d3_possible(bridge))
+	if (!bridge) {
+		dev->bridge_d3 = pci_bridge_d3_possible(dev);
+		return;
+	}
+	if (!pci_bridge_d3_possible(bridge))
 		return;
 
 	/*
