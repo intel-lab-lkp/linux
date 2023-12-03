@@ -147,8 +147,12 @@ static ssize_t out0_enable_store(struct device *dev,
 		data->control |= PCF8591_CONTROL_AOEF;
 	else
 		data->control &= ~PCF8591_CONTROL_AOEF;
-	i2c_smbus_write_byte(client, data->control);
+	err = i2c_smbus_write_byte(client, data->control);
 	mutex_unlock(&data->update_lock);
+
+	if (err)
+		return err;
+
 	return count;
 }
 
