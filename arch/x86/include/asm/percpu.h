@@ -96,6 +96,15 @@
 
 #endif /* CONFIG_SMP */
 
+/*
+ * FIXME: Drop this hack once sparse learns how to ignore
+ * __seg_fs and __seg_gs named address space qualifiers.
+ */
+#ifdef __CHECKER__
+#undef __percpu_seg_override
+#define __percpu_seg_override
+#endif
+
 #define __my_cpu_type(var)	typeof(var) __percpu_seg_override
 #define __my_cpu_ptr(ptr)	(__my_cpu_type(*ptr) *)(uintptr_t)(ptr)
 #define __my_cpu_var(var)	(*__my_cpu_ptr(&var))
