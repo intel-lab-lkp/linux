@@ -22,6 +22,7 @@ static int da9052_spi_probe(struct spi_device *spi)
 	int ret;
 	const struct spi_device_id *id = spi_get_device_id(spi);
 	struct da9052 *da9052;
+	int ret;
 
 	da9052 = devm_kzalloc(&spi->dev, sizeof(struct da9052), GFP_KERNEL);
 	if (!da9052)
@@ -29,7 +30,11 @@ static int da9052_spi_probe(struct spi_device *spi)
 
 	spi->mode = SPI_MODE_0;
 	spi->bits_per_word = 8;
-	spi_setup(spi);
+	ret = spi_setup(spi);
+	if (ret) {
+		dev_err(&spi->dev, "spi_setup failed: %d\n", ret);
+		return ret;
+	}
 
 	da9052->dev = &spi->dev;
 	da9052->chip_irq = spi->irq;
