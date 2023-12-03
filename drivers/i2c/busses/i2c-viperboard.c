@@ -400,7 +400,11 @@ static int vprbrd_i2c_probe(struct platform_device *pdev)
 	vb_i2c->i2c.dev.parent = &pdev->dev;
 
 	/* attach to i2c layer */
-	i2c_add_adapter(&vb_i2c->i2c);
+	ret = i2c_add_adapter(&vb_i2c->i2c);
+	if (ret) {
+		dev_err(&pdev->dev, "i2c_add_adapter failed: %d\n", ret);
+		return ret;
+	}
 
 	platform_set_drvdata(pdev, vb_i2c);
 
