@@ -264,7 +264,12 @@ static int i2c_tiny_usb_probe(struct usb_interface *interface,
 	dev->adapter.dev.parent = &dev->interface->dev;
 
 	/* and finally attach to i2c layer */
-	i2c_add_adapter(&dev->adapter);
+	retval = i2c_add_adapter(&dev->adapter);
+	if (retval) {
+		dev_err(&interface->dev, "i2c_add_adapter failed: %d\n",
+			retval);
+		goto error;
+	}
 
 	/* inform user about successful attachment to i2c layer */
 	dev_info(&dev->adapter.dev, "connected i2c-tiny-usb device\n");
