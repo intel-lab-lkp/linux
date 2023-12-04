@@ -108,6 +108,12 @@ void crash_free_reserved_phys_range(unsigned long begin, unsigned long end);
 #endif /* CONFIG_PPC_RTAS */
 #endif /* CONFIG_CRASH_DUMP */
 
+#ifdef CONFIG_PPC64
+struct crash_mem;
+int update_cpus_node(void *fdt);
+int get_crash_memory_ranges(struct crash_mem **mem_ranges);
+#endif /* CONFIG_PPC64 */
+
 #ifdef CONFIG_KEXEC_FILE
 extern const struct kexec_file_ops kexec_elf64_ops;
 
