@@ -1942,8 +1942,9 @@ void intel_c10pll_dump_hw_state(struct drm_i915_private *i915,
 	unsigned int multiplier, tx_clk_div;
 
 	fracen = hw_state->pll[0] & C10_PLL0_FRACEN;
-	drm_dbg_kms(&i915->drm, "c10pll_hw_state: fracen: %s, ",
-		    str_yes_no(fracen));
+	drm_dbg_kms(&i915->drm, "c10pll_hw_state:\n");
+	drm_dbg_kms(&i915->drm, "clock: %d\n", hw_state->clock);
+	drm_dbg_kms(&i915->drm, "fracen: %s, ", str_yes_no(fracen));
 
 	if (fracen) {
 		frac_quot = hw_state->pll[12] << 8 | hw_state->pll[11];
@@ -2131,6 +2132,8 @@ void intel_c20pll_dump_hw_state(struct drm_i915_private *i915,
 	int i;
 
 	drm_dbg_kms(&i915->drm, "c20pll_hw_state:\n");
+	drm_dbg_kms(&i915->drm, "link bitrate: %d\n", hw_state->link_bit_rate);
+	drm_dbg_kms(&i915->drm, "clock: %d\n", hw_state->clock);
 	drm_dbg_kms(&i915->drm, "tx[0] = 0x%.4x, tx[1] = 0x%.4x, tx[2] = 0x%.4x\n",
 		    hw_state->tx[0], hw_state->tx[1], hw_state->tx[2]);
 	drm_dbg_kms(&i915->drm, "cmn[0] = 0x%.4x, cmn[1] = 0x%.4x, cmn[2] = 0x%.4x, cmn[3] = 0x%.4x\n",
