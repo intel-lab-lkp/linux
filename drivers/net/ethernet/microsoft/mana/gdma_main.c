@@ -1243,15 +1243,57 @@ void mana_gd_free_res_map(struct gdma_resource *r)
 	r->size = 0;
 }
 
+static int irq_setup(int *irqs, int nvec, int start_numa_node)
+{
+	int i = 0, cpu, err = 0;
+	const struct cpumask *node_cpumask;
+	unsigned int  next_node = start_numa_node;
+	cpumask_var_t visited_cpus, node_cpumask_temp;
+
+	if (!zalloc_cpumask_var(&visited_cpus, GFP_KERNEL)) {
+		err = ENOMEM;
+		return err;
+	}
+	if (!zalloc_cpumask_var(&node_cpumask_temp, GFP_KERNEL)) {
+		err = -ENOMEM;
+		return err;
+	}
+	rcu_read_lock();
+	for_each_numa_hop_mask(node_cpumask, next_node) {
+		cpumask_copy(node_cpumask_temp, node_cpumask);
+		for_each_cpu(cpu, node_cpumask_temp) {
+			cpumask_andnot(node_cpumask_temp, node_cpumask_temp,
+				       topology_sibling_cpumask(cpu));
+			irq_set_affinity_and_hint(irqs[i], cpumask_of(cpu));
+			if (++i == nvec)
+				goto free_mask;
+			cpumask_set_cpu(cpu, visited_cpus);
+			if (cpumask_empty(node_cpumask_temp)) {
+				cpumask_copy(node_cpumask_temp, node_cpumask);
+				cpumask_andnot(node_cpumask_temp, node_cpumask_temp,
+					       visited_cpus);
+				cpu = 0;
+			}
+		}
+	}
+free_mask:
+	rcu_read_unlock();
+	free_cpumask_var(visited_cpus);
+	free_cpumask_var(node_cpumask_temp);
+	return err;
+}
+
 static int mana_gd_setup_irqs(struct pci_dev *pdev)
 {
-	unsigned int max_queues_per_port = num_online_cpus();
 	struct gdma_context *gc = pci_get_drvdata(pdev);
+	unsigned int max_queues_per_port;
 	struct gdma_irq_context *gic;
 	unsigned int max_irqs, cpu;
-	int nvec, irq;
+	int nvec, *irqs, irq;
 	int err, i = 0, j;
 
+	cpus_read_lock();
+	max_queues_per_port = num_online_cpus();
 	if (max_queues_per_port > MANA_MAX_NUM_QUEUES)
 		max_queues_per_port = MANA_MAX_NUM_QUEUES;
 
@@ -1261,6 +1303,11 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 	nvec = pci_alloc_irq_vectors(pdev, 2, max_irqs, PCI_IRQ_MSIX);
 	if (nvec < 0)
 		return nvec;
+	irqs = kmalloc_array(max_queues_per_port, sizeof(int), GFP_KERNEL);
+	if (!irqs) {
+		err = -ENOMEM;
+		goto free_irq_vector;
+	}
 
 	gc->irq_contexts = kcalloc(nvec, sizeof(struct gdma_irq_context),
 				   GFP_KERNEL);
@@ -1287,21 +1334,28 @@ static int mana_gd_setup_irqs(struct pci_dev *pdev)
 			goto free_irq;
 		}
 
-		err = request_irq(irq, mana_gd_intr, 0, gic->name, gic);
+		if (!i) {
+			err = request_irq(irq, mana_gd_intr, 0, gic->name, gic);
+			cpu = cpumask_local_spread(i, gc->numa_node);
+			irq_set_affinity_and_hint(irq, cpumask_of(cpu));
+		} else {
+			irqs[i - 1] = irq;
+			err = request_irq(irqs[i - 1], mana_gd_intr, 0, gic->name, gic);
+		}
 		if (err)
 			goto free_irq;
-
-		cpu = cpumask_local_spread(i, gc->numa_node);
-		irq_set_affinity_and_hint(irq, cpumask_of(cpu));
 	}
 
+	err = irq_setup(irqs, max_queues_per_port, gc->numa_node);
+	if (err)
+		goto free_irq;
 	err = mana_gd_alloc_res_map(nvec, &gc->msix_resource);
 	if (err)
 		goto free_irq;
 
 	gc->max_num_msix = nvec;
 	gc->num_msix_usable = nvec;
-
+	cpus_read_unlock();
 	return 0;
 
 free_irq:
@@ -1314,8 +1368,10 @@ free_irq:
 	}
 
 	kfree(gc->irq_contexts);
+	kfree(irqs);
 	gc->irq_contexts = NULL;
 free_irq_vector:
+	cpus_read_unlock();
 	pci_free_irq_vectors(pdev);
 	return err;
 }
