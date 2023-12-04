@@ -1250,12 +1250,17 @@ static int pep_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	if (unlikely(1 << sk->sk_state & (TCPF_LISTEN | TCPF_CLOSE)))
 		return -ENOTCONN;
 
+	lock_sock(sk);
+
 	if ((flags & MSG_OOB) || sock_flag(sk, SOCK_URGINLINE)) {
 		/* Dequeue and acknowledge control request */
 		struct pep_sock *pn = pep_sk(sk);
 
-		if (flags & MSG_PEEK)
+		if (flags & MSG_PEEK) {
+			release_sock(sk);
 			return -EOPNOTSUPP;
+		}
+
 		skb = skb_dequeue(&pn->ctrlreq_queue);
 		if (skb) {
 			pep_ctrlreq_error(sk, skb, PN_PIPE_NO_ERROR,
@@ -1263,12 +1268,14 @@ static int pep_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 			msg->msg_flags |= MSG_OOB;
 			goto copy;
 		}
-		if (flags & MSG_OOB)
+
+		if (flags & MSG_OOB) {
+			release_sock(sk);
 			return -EINVAL;
+		}
 	}
 
 	skb = skb_recv_datagram(sk, flags, &err);
-	lock_sock(sk);
 	if (skb == NULL) {
 		if (err == -ENOTCONN && sk->sk_state == TCP_CLOSE_WAIT)
 			err = -ECONNRESET;
@@ -1278,7 +1285,7 @@ static int pep_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 
 	if (sk->sk_state == TCP_ESTABLISHED)
 		pipe_grant_credits(sk, GFP_KERNEL);
-	release_sock(sk);
+
 copy:
 	msg->msg_flags |= MSG_EOR;
 	if (skb->len > len)
@@ -1291,6 +1298,8 @@ copy:
 		err = (flags & MSG_TRUNC) ? skb->len : len;
 
 	skb_free_datagram(sk, skb);
+
+	release_sock(sk);
 	return err;
 }
 
