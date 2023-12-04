@@ -1537,8 +1537,10 @@ static int wave5_vpu_open_enc(struct file *filp)
 	int ret = 0;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
-	if (!inst)
+	if (!inst) {
+		kfree(inst);
 		return -ENOMEM;
+	}
 	v4l2_ctrl_hdl = &inst->v4l2_ctrl_hdl;
 
 	inst->dev = dev;

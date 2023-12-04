@@ -1792,8 +1792,10 @@ static int wave5_vpu_open_dec(struct file *filp)
 	int ret = 0;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
-	if (!inst)
+	if (!inst) {
+		kfree(inst);
 		return -ENOMEM;
+	}
 
 	inst->dev = dev;
 	inst->type = VPU_INST_TYPE_DEC;
