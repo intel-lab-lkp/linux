@@ -120,6 +120,24 @@ Contact: Daniel Vetter, respective driver maintainers
 
 Level: Advanced
 
+Rename drm_atomic_state
+-----------------------
+
+The KMS framework uses two slightly different definitions for the ``state``
+concept. For a given object (plane, CRTC, encoder, etc., so
+``drm_$OBJECT_state``), the state is the entire state of that object. However,
+at the device level, ``drm_atomic_state`` refers to a state update for a
+limited number of objects.
+
+The state isn't the entire device state anymore, but only the full state of
+some objects in that device. This is confusing to newcomers, and
+``drm_atomic_state`` should be renamed to something clearer like
+``drm_atomic_update``.
+
+Contact: Maxime Ripard <mripard@kernel.org>
+
+Level: Advanced
+
 Fallout from atomic KMS
 -----------------------
 
