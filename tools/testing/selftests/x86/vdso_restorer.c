@@ -57,6 +57,8 @@ int main()
 		return 0;
 	}
 
+	dlclose(vdso);
+
 	memset(&sa, 0, sizeof(sa));
 	sa.handler = handler_with_siginfo;
 	sa.flags = SA_SIGINFO;
