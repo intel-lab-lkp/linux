@@ -1615,6 +1615,11 @@ EXPORT_SYMBOL(down_write_trylock);
 
 /*
  * release a read lock
+ *
+ * The caller must ensure that the rw_semaphore stays alive until this function
+ * has returned - up_read() can NOT directly be used to release an object such
+ * that another concurrent task can free it.
+ * See Documentation/locking/locktypes.rst.
  */
 void up_read(struct rw_semaphore *sem)
 {
@@ -1625,6 +1630,11 @@ EXPORT_SYMBOL(up_read);
 
 /*
  * release a write lock
+ *
+ * The caller must ensure that the rw_semaphore stays alive until this function
+ * has returned - up_write() can NOT directly be used to release an object such
+ * that another concurrent task can free it.
+ * See Documentation/locking/locktypes.rst.
  */
 void up_write(struct rw_semaphore *sem)
 {

@@ -101,6 +101,8 @@ features that make lock debugging easier and faster:
     - Detects multi-task circular deadlocks and prints out all affected
       locks and tasks (and only those tasks).
 
+The mutex user must ensure that the mutex is not destroyed while a unlock
+operation is still in progress, see Documentation/locking/locktypes.rst.
 
 Interfaces
 ----------

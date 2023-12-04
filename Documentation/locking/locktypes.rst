@@ -95,6 +95,29 @@ rw_semaphores have a special interface which allows non-owner release for
 readers.
 
 
+Releasing and freeing
+=====================
+For some lock types, such as spinlocks, the lock release operation is designed
+to allow another concurrent task to free the lock as soon as the lock has been
+released - in other words, similarly to refcounts, the unlock operation will not
+access the lock object anymore after marking it as unlocked.
+
+This behavior is guaranteed for:
+
+ - spinlock_t (including in PREEMPT_RT kernels, where spinlock_t is
+   implemented as an rtmutex)
+
+There are other lock types where the lock release operation makes no such
+guarantee and the caller must ensure that the lock is not destroyed before the
+unlock operation has returned.
+Most sleeping locks are in this category.
+
+This is the case in particular for (not an exhaustive list):
+
+ - mutex
+ - rw_semaphore
+
+
 rtmutex
 =======
 
