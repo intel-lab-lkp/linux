@@ -1677,7 +1677,7 @@ static int ksz_check_device_id(struct ksz_device *dev)
 	dt_chip_data = of_device_get_match_data(dev->dev);
 
 	/* Check for Device Tree and Chip ID */
-	if (dt_chip_data->chip_id != dev->chip_id) {
+	if (dt_chip_data && dt_chip_data->chip_id != dev->chip_id) {
 		dev_err(dev->dev,
 			"Device tree specifies chip %s but found %s, please fix it!\n",
 			dt_chip_data->dev_name, dev->info->dev_name);
