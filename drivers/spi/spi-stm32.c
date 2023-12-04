@@ -948,10 +948,8 @@ end_irq:
 static irqreturn_t stm32fx_spi_irq_thread(int irq, void *dev_id)
 {
 	struct spi_controller *ctrl = dev_id;
-	struct stm32_spi *spi = spi_controller_get_devdata(ctrl);
 
 	spi_finalize_current_transfer(ctrl);
-	stm32fx_spi_disable(spi);
 
 	return IRQ_HANDLED;
 }
@@ -1135,7 +1133,6 @@ static void stm32fx_spi_dma_tx_cb(void *data)
 
 	if (spi->cur_comm == SPI_SIMPLEX_TX || spi->cur_comm == SPI_3WIRE_TX) {
 		spi_finalize_current_transfer(spi->ctrl);
-		stm32fx_spi_disable(spi);
 	}
 }
 
@@ -1150,7 +1147,6 @@ static void stm32_spi_dma_rx_cb(void *data)
 	struct stm32_spi *spi = data;
 
 	spi_finalize_current_transfer(spi->ctrl);
-	spi->cfg->disable(spi);
 }
 
 /**
@@ -1235,8 +1231,6 @@ static int stm32fx_spi_transfer_one_irq(struct stm32_spi *spi)
 
 	stm32_spi_set_bits(spi, STM32FX_SPI_CR2, cr2);
 
-	stm32_spi_enable(spi);
-
 	/* starting data transfer when buffer is loaded */
 	if (spi->tx_buf)
 		spi->cfg->write_tx(spi);
@@ -1273,8 +1267,6 @@ static int stm32h7_spi_transfer_one_irq(struct stm32_spi *spi)
 
 	spin_lock_irqsave(&spi->lock, flags);
 
-	stm32_spi_enable(spi);
-
 	/* Be sure to have data in fifo before starting data transfer */
 	if (spi->tx_buf)
 		stm32h7_spi_write_txfifo(spi);
@@ -1306,8 +1298,6 @@ static void stm32fx_spi_transfer_one_dma_start(struct stm32_spi *spi)
 		 */
 		stm32_spi_set_bits(spi, STM32FX_SPI_CR2, STM32FX_SPI_CR2_ERRIE);
 	}
-
-	stm32_spi_enable(spi);
 }
 
 /**
@@ -1340,8 +1330,6 @@ static void stm32h7_spi_transfer_one_dma_start(struct stm32_spi *spi)
 		ier |= STM32H7_SPI_IER_EOTIE | STM32H7_SPI_IER_TXTFIE;
 
 	stm32_spi_set_bits(spi, STM32H7_SPI_IER, ier);
-
-	stm32_spi_enable(spi);
 
 	if (STM32_SPI_MASTER_MODE(spi))
 		stm32_spi_set_bits(spi, STM32H7_SPI_CR1, STM32H7_SPI_CR1_CSTART);
@@ -1788,21 +1776,6 @@ static int stm32_spi_transfer_one(struct spi_controller *ctrl,
 }
 
 /**
- * stm32_spi_unprepare_msg - relax the hardware
- * @ctrl: controller interface
- * @msg: pointer to the spi message
- */
-static int stm32_spi_unprepare_msg(struct spi_controller *ctrl,
-				   struct spi_message *msg)
-{
-	struct stm32_spi *spi = spi_controller_get_devdata(ctrl);
-
-	spi->cfg->disable(spi);
-
-	return 0;
-}
-
-/**
  * stm32fx_spi_config - Configure SPI controller as SPI master
  * @spi: pointer to the spi controller data structure
  */
@@ -1827,6 +1800,8 @@ static int stm32fx_spi_config(struct stm32_spi *spi)
 						 STM32FX_SPI_CR1_BIDIOE |
 						 STM32FX_SPI_CR1_MSTR |
 						 STM32FX_SPI_CR1_SSM);
+
+	stm32_spi_enable(spi);
 
 	spin_unlock_irqrestore(&spi->lock, flags);
 
@@ -1870,6 +1845,8 @@ static int stm32h7_spi_config(struct stm32_spi *spi)
 
 	stm32_spi_set_bits(spi, STM32H7_SPI_CR1, cr1);
 	stm32_spi_set_bits(spi, STM32H7_SPI_CFG2, cfg2);
+
+	stm32_spi_enable(spi);
 
 	spin_unlock_irqrestore(&spi->lock, flags);
 
@@ -2067,7 +2044,6 @@ static int stm32_spi_probe(struct platform_device *pdev)
 	ctrl->use_gpio_descriptors = true;
 	ctrl->prepare_message = stm32_spi_prepare_msg;
 	ctrl->transfer_one = stm32_spi_transfer_one;
-	ctrl->unprepare_message = stm32_spi_unprepare_msg;
 	ctrl->flags = spi->cfg->flags;
 	if (STM32_SPI_DEVICE_MODE(spi))
 		ctrl->slave_abort = stm32h7_spi_device_abort;
@@ -2168,6 +2144,8 @@ static int __maybe_unused stm32_spi_runtime_suspend(struct device *dev)
 	struct spi_controller *ctrl = dev_get_drvdata(dev);
 	struct stm32_spi *spi = spi_controller_get_devdata(ctrl);
 
+	spi->cfg->disable(spi);
+
 	clk_disable_unprepare(spi->clk);
 
 	return pinctrl_pm_select_sleep_state(dev);
@@ -2183,7 +2161,11 @@ static int __maybe_unused stm32_spi_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	return clk_prepare_enable(spi->clk);
+	ret = clk_prepare_enable(spi->clk);
+	if (ret)
+		return ret;
+
+	return spi->cfg->config(spi);
 }
 
 static int __maybe_unused stm32_spi_suspend(struct device *dev)
@@ -2201,31 +2183,13 @@ static int __maybe_unused stm32_spi_suspend(struct device *dev)
 static int __maybe_unused stm32_spi_resume(struct device *dev)
 {
 	struct spi_controller *ctrl = dev_get_drvdata(dev);
-	struct stm32_spi *spi = spi_controller_get_devdata(ctrl);
 	int ret;
 
 	ret = pm_runtime_force_resume(dev);
 	if (ret)
 		return ret;
 
-	ret = spi_controller_resume(ctrl);
-	if (ret) {
-		clk_disable_unprepare(spi->clk);
-		return ret;
-	}
-
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret < 0) {
-		dev_err(dev, "Unable to power device:%d\n", ret);
-		return ret;
-	}
-
-	spi->cfg->config(spi);
-
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_put_autosuspend(dev);
-
-	return 0;
+	return spi_controller_resume(ctrl);
 }
 
 static const struct dev_pm_ops stm32_spi_pm_ops = {
