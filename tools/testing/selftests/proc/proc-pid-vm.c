@@ -205,7 +205,12 @@ static int make_exe(const uint8_t *payload, size_t len)
 	/* Avoid ETXTBSY on exec. */
 	snprintf(buf, sizeof(buf), "/proc/self/fd/%u", fd);
 	fd1 = open(buf, O_RDONLY|O_CLOEXEC);
+	if (fd == -1) {
+		exit(1);
+	}
+
 	close(fd);
+	close(fd1);
 
 	return fd1;
 }
