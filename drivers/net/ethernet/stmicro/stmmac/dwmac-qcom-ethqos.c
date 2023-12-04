@@ -109,6 +109,8 @@ struct qcom_ethqos {
 	unsigned int num_por;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+	int gvm_vlan_prio;
+	int gvm_queue;
 };
 
 static int rgmii_readl(struct qcom_ethqos *ethqos, unsigned int offset)
@@ -710,6 +712,214 @@ static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
 	netdev_dbg(priv->dev, "PTP rate %d\n", plat_dat->clk_ptp_rate);
 }
 
+static ssize_t gvm_vlan_routing_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *user_buf, size_t size)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
+	u32 prio;
+	s8 input = 0;
+
+	if (!netdev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	if (!priv) {
+		pr_err("priv is NULL\n");
+		return -EINVAL;
+	}
+
+	ethqos = priv->plat->bsp_priv;
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	if (kstrtos8(user_buf, 0, &input)) {
+		pr_err("Error in reading option from user\n");
+		return -EINVAL;
+	}
+
+	if (input < 1 || input > 7) {
+		pr_err("Invalid option set by user\n");
+		return -EINVAL;
+	}
+
+	if (input == ethqos->gvm_vlan_prio)
+		pr_err("No effect as duplicate input\n");
+
+	ethqos->gvm_vlan_prio = input;
+	prio  = 1 << input;
+
+	stmmac_rx_queue_prio(priv, priv->hw, prio, ethqos->gvm_queue);
+
+	return size;
+}
+
+static ssize_t gvm_queue_mapping_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *user_buf, size_t size)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
+	u32 prio;
+	s8 input = 0;
+
+	if (!netdev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	if (!priv) {
+		pr_err("priv is NULL\n");
+		return -EINVAL;
+	}
+
+	ethqos = priv->plat->bsp_priv;
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	if (kstrtos8(user_buf, 0, &input)) {
+		pr_err("Error in reading option from user\n");
+		return -EINVAL;
+	}
+
+	if (input == ethqos->gvm_queue)
+		pr_err("No effect as duplicate input\n");
+
+	ethqos->gvm_queue = input;
+	prio  = 1 << input;
+
+	return size;
+}
+
+static ssize_t gvm_queue_mapping_show(struct device *dev,
+				      struct device_attribute *attr, char *user_buf)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
+
+	if (!netdev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	if (!priv) {
+		pr_err("priv is NULL\n");
+		return -EINVAL;
+	}
+
+	ethqos = priv->plat->bsp_priv;
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	return scnprintf(user_buf, 256, "%d\n", ethqos->gvm_queue);
+}
+
+static ssize_t gvm_vlan_routing_show(struct device *dev,
+				     struct device_attribute *attr, char *user_buf)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
+
+	if (!netdev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	if (!priv) {
+		pr_err("priv is NULL\n");
+		return -EINVAL;
+	}
+
+	ethqos = priv->plat->bsp_priv;
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	return scnprintf(user_buf, 256, "%d\n", ethqos->gvm_vlan_prio);
+}
+
+static DEVICE_ATTR_RW(gvm_queue_mapping);
+
+static DEVICE_ATTR_RW(gvm_vlan_routing);
+
+static int ethqos_remove_sysfs(struct qcom_ethqos *ethqos)
+{
+	struct net_device *net_dev;
+
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	net_dev = platform_get_drvdata(ethqos->pdev);
+	if (!net_dev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	sysfs_remove_file(&net_dev->dev.kobj,
+			  &dev_attr_gvm_queue_mapping.attr);
+	sysfs_remove_file(&net_dev->dev.kobj,
+			  &dev_attr_gvm_vlan_routing.attr);
+
+	return 0;
+}
+
+static int ethqos_create_sysfs(struct qcom_ethqos *ethqos)
+{
+	int ret;
+	struct net_device *net_dev;
+
+	if (!ethqos) {
+		pr_err("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	net_dev = platform_get_drvdata(ethqos->pdev);
+	if (!net_dev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	ret = sysfs_create_file(&net_dev->dev.kobj,
+				&dev_attr_gvm_queue_mapping.attr);
+	if (ret) {
+		pr_err("unable to create passthrough_en sysfs node\n");
+		goto fail;
+	}
+
+	ret = sysfs_create_file(&net_dev->dev.kobj,
+				&dev_attr_gvm_vlan_routing.attr);
+	if (ret) {
+		pr_err("unable to create cv2x_priority sysfs node\n");
+		goto fail;
+	}
+
+	return ret;
+
+fail:
+	ethqos_remove_sysfs(ethqos);
+
+	return ret;
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -812,7 +1022,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->serdes_powerdown  = qcom_ethqos_serdes_powerdown;
 	}
 
-	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	ret = devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	if (ret)
+		return ret;
+
+	return ethqos_create_sysfs(ethqos);
 }
 
 static const struct of_device_id qcom_ethqos_match[] = {
