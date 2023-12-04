@@ -355,13 +355,15 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 	bootmem_init();
 	kasan_init();
-	unflatten_and_copy_device_tree();
 
 #ifdef CONFIG_SMP
 	smp_init_cpus();
 #endif
 
 	paging_init();
+
+	unflatten_and_copy_device_tree();
+
 	zones_init();
 
 #ifdef CONFIG_VT

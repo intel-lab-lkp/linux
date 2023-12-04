@@ -255,8 +255,6 @@ void calibrate_delay(void)
 
 void __init setup_arch(char **cmdline_p)
 {
-	unflatten_and_copy_device_tree();
-
 	setup_cpuinfo();
 
 #ifdef CONFIG_SMP
@@ -283,6 +281,8 @@ void __init setup_arch(char **cmdline_p)
 
 	/* paging_init() sets up the MMU and marks all pages as reserved */
 	paging_init();
+
+	unflatten_and_copy_device_tree();
 
 	*cmdline_p = boot_command_line;
 

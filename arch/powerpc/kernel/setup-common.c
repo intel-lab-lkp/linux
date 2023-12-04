@@ -986,6 +986,9 @@ void __init setup_arch(char **cmdline_p)
 
 	paging_init();
 
+	/* Unflatten the device-tree passed by prom_init or kexec */
+	unflatten_device_tree();
+
 	/* Initialize the MMU context management stuff. */
 	mmu_context_init();
 

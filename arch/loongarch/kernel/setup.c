@@ -366,7 +366,6 @@ void __init platform_init(void)
 	acpi_gbl_use_default_register_widths = false;
 	acpi_boot_table_init();
 #endif
-	unflatten_and_copy_device_tree();
 
 #ifdef CONFIG_NUMA
 	init_numa_memory();
@@ -626,6 +625,7 @@ void __init setup_arch(char **cmdline_p)
 
 	paging_init();
 
+	unflatten_and_copy_device_tree();
 #ifdef CONFIG_KASAN
 	kasan_init();
 #endif

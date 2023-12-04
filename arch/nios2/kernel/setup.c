@@ -169,8 +169,6 @@ void __init setup_arch(char **cmdline_p)
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();
 
-	unflatten_and_copy_device_tree();
-
 	setup_cpuinfo();
 
 	copy_exception_handler(cpuinfo.exception_addr);
@@ -189,4 +187,6 @@ void __init setup_arch(char **cmdline_p)
 	 * get kmalloc into gear
 	 */
 	paging_init();
+
+	unflatten_and_copy_device_tree();
 }

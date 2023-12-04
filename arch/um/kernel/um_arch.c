@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/mm.h>
+#include <linux/of_fdt.h>
 #include <linux/ctype.h>
 #include <linux/module.h>
 #include <linux/panic_notifier.h>
@@ -421,6 +422,7 @@ void __init setup_arch(char **cmdline_p)
 	read_initrd();
 
 	paging_init();
+	unflatten_device_tree();
 	strscpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
 	setup_hostinfo(host_info, sizeof host_info);
