@@ -1507,6 +1507,26 @@ r535_gsp_msg_run_cpu_sequencer(void *priv, u32 fn, void *repv, u32 repc)
 	return 0;
 }
 
+static int
+r535_gsp_msg_perf_bridgeless_info_update(void *priv, u32 fn, void *repv, u32 repc)
+{
+	return 0;
+}
+
+static int
+r535_gsp_msg_ucode_libos_print(void *priv, u32 fn, void *repv, u32 repc)
+{
+	/* work out what we should do here. */
+	return 0;
+}
+
+static int
+r535_gsp_msg_gsp_send_user_shared_data(void *priv, u32 fn, void *repv, u32 repc)
+{
+	/* this seems to send some sort of assert counts from gsp */
+	return 0;
+}
+
 static void
 nvkm_gsp_mem_dtor(struct nvkm_gsp *gsp, struct nvkm_gsp_mem *mem)
 {
@@ -2106,7 +2126,9 @@ r535_gsp_oneinit(struct nvkm_gsp *gsp)
 	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_MMU_FAULT_QUEUED,
 			      r535_gsp_msg_mmu_fault_queued, gsp);
 	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_OS_ERROR_LOG, r535_gsp_msg_os_error_log, gsp);
-
+	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_PERF_BRIDGELESS_INFO_UPDATE, r535_gsp_msg_perf_bridgeless_info_update, gsp);
+	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_UCODE_LIBOS_PRINT, r535_gsp_msg_ucode_libos_print, gsp);
+	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_GSP_SEND_USER_SHARED_DATA, r535_gsp_msg_gsp_send_user_shared_data, gsp);
 	ret = r535_gsp_rm_boot_ctor(gsp);
 	if (ret)
 		return ret;
