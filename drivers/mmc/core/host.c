@@ -119,13 +119,14 @@ void mmc_retune_enable(struct mmc_host *host)
 
 /*
  * Pause re-tuning for a small set of operations.  The pause begins after the
- * next command and after first doing re-tuning.
+ * next command and, if retune is set, after first doing re-tuning.
  */
-void mmc_retune_pause(struct mmc_host *host)
+void mmc_retune_pause(struct mmc_host *host, bool retune)
 {
 	if (!host->retune_paused) {
 		host->retune_paused = 1;
-		mmc_retune_needed(host);
+		if (retune)
+			mmc_retune_needed(host);
 		mmc_retune_hold(host);
 	}
 }
