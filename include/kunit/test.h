@@ -82,6 +82,9 @@ enum kunit_speed {
 /* Holds attributes for each test case and suite */
 struct kunit_attributes {
 	enum kunit_speed speed;
+
+	/* private: internal use only */
+	bool is_init;
 };
 
 /**
