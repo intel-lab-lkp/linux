@@ -26,22 +26,6 @@ static const unsigned char free_bit[] = {
 	0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0                /*240 ~ 254*/
 };
 
-static const unsigned char used_bit[] = {
-	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3,/*  0 ~  19*/
-	2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4,/* 20 ~  39*/
-	2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5,/* 40 ~  59*/
-	4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,/* 60 ~  79*/
-	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4,/* 80 ~  99*/
-	3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6,/*100 ~ 119*/
-	4, 5, 5, 6, 5, 6, 6, 7, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4,/*120 ~ 139*/
-	3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,/*140 ~ 159*/
-	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5,/*160 ~ 179*/
-	4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 2, 3, 3, 4, 3, 4, 4, 5,/*180 ~ 199*/
-	3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6,/*200 ~ 219*/
-	5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,/*220 ~ 239*/
-	4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8             /*240 ~ 255*/
-};
-
 /*
  *  Allocation Bitmap Management Functions
  */
@@ -252,7 +236,7 @@ int exfat_count_used_clusters(struct super_block *sb, unsigned int *ret_count)
 	total_clus &= ~last_mask;
 	for (i = 0; i < total_clus; i += BITS_PER_BYTE) {
 		clu_bits = *(sbi->vol_amap[map_i]->b_data + map_b);
-		count += used_bit[clu_bits];
+		count += hweight8(clu_bits);
 		if (++map_b >= (unsigned int)sb->s_blocksize) {
 			map_i++;
 			map_b = 0;
@@ -262,7 +246,7 @@ int exfat_count_used_clusters(struct super_block *sb, unsigned int *ret_count)
 	if (last_mask) {
 		clu_bits = *(sbi->vol_amap[map_i]->b_data + map_b);
 		clu_bits &= last_bit_mask[last_mask];
-		count += used_bit[clu_bits];
+		count += hweight8(clu_bits);
 	}
 
 	*ret_count = count;
