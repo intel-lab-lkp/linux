@@ -45,7 +45,7 @@ static void sas_add_parent_port(struct domain_device *dev, int phy_id)
 		BUG_ON(sas_port_add(ex->parent_port));
 		sas_port_mark_backlink(ex->parent_port);
 	}
-	sas_port_add_phy(ex->parent_port, ex_phy->phy);
+	sas_port_add_ex_phy(ex->parent_port, ex_phy);
 }
 
 /* ---------- SMP task management ---------- */
@@ -261,8 +261,7 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 	/* help some expanders that fail to zero sas_address in the 'no
 	 * device' case
 	 */
-	if (phy->attached_dev_type == SAS_PHY_UNUSED ||
-	    phy->linkrate < SAS_LINK_RATE_1_5_GBPS)
+	if (phy->attached_dev_type == SAS_PHY_UNUSED)
 		memset(phy->attached_sas_addr, 0, SAS_ADDR_SIZE);
 	else
 		memcpy(phy->attached_sas_addr, dr->attached_sas_addr, SAS_ADDR_SIZE);
@@ -1864,9 +1863,12 @@ static void sas_unregister_devs_sas_addr(struct domain_device *parent,
 	if (phy->port) {
 		sas_port_delete_phy(phy->port, phy->phy);
 		sas_device_set_phy(found, phy->port);
-		if (phy->port->num_phys == 0)
+		if (phy->port->num_phys == 0) {
 			list_add_tail(&phy->port->del_list,
 				&parent->port->sas_port_del_list);
+			if (ex_dev->parent_port == phy->port)
+				ex_dev->parent_port = NULL;
+		}
 		phy->port = NULL;
 	}
 }
