@@ -319,6 +319,7 @@ struct kimage {
 #ifdef CONFIG_CRASH_HOTPLUG
 	/* If set, allow changes to elfcorehdr of kexec_load'd image */
 	unsigned int update_elfcorehdr:1;
+	unsigned int update_fdt:1;
 #endif
 
 #ifdef ARCH_HAS_KIMAGE_ARCH
@@ -396,9 +397,10 @@ bool kexec_load_permitted(int kexec_image_type);
 
 /* List of defined/legal kexec flags */
 #ifndef CONFIG_KEXEC_JUMP
-#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_UPDATE_ELFCOREHDR)
+#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_UPDATE_ELFCOREHDR | KEXEC_UPDATE_FDT)
 #else
-#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_PRESERVE_CONTEXT | KEXEC_UPDATE_ELFCOREHDR)
+#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_PRESERVE_CONTEXT | KEXEC_UPDATE_ELFCOREHDR | \
+			KEXEC_UPDATE_FDT)
 #endif
 
 /* List of defined/legal kexec file flags */
