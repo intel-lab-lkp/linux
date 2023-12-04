@@ -419,6 +419,10 @@ struct file *cxl_get_fd(struct cxl_context *ctx, struct file_operations *fops,
 		fops = (struct file_operations *)&afu_fops;
 
 	name = kasprintf(GFP_KERNEL, "cxl:%d", ctx->pe);
+	if (!name) {
+		put_unused_fd(fdtmp);
+		return ERR_PTR(-ENOMEM);
+	}
 	file = cxl_getfile(name, fops, ctx, flags);
 	kfree(name);
 	if (IS_ERR(file))
