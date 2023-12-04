@@ -337,6 +337,9 @@ void __kunit_test_suites_exit(struct kunit_suite **suites, int num_suites);
 void kunit_exec_run_tests(struct kunit_suite_set *suite_set, bool builtin);
 void kunit_exec_list_tests(struct kunit_suite_set *suite_set, bool include_attr);
 
+struct kunit_suite_set kunit_merge_suite_sets(struct kunit_suite_set init_suite_set,
+		struct kunit_suite_set suite_set);
+
 #if IS_BUILTIN(CONFIG_KUNIT)
 int kunit_run_all_tests(void);
 #else
@@ -371,6 +374,11 @@ static inline int kunit_run_all_tests(void)
 
 #define kunit_test_suite(suite)	kunit_test_suites(&suite)
 
+#define __kunit_init_test_suites(unique_array, ...)			       \
+	static struct kunit_suite *unique_array[]			       \
+	__aligned(sizeof(struct kunit_suite *))				       \
+	__used __section(".kunit_init_test_suites") = { __VA_ARGS__ }
+
 /**
  * kunit_test_init_section_suites() - used to register one or more &struct
  *				      kunit_suite containing init functions or
@@ -392,7 +400,7 @@ static inline int kunit_run_all_tests(void)
  * this manner.
  */
 #define kunit_test_init_section_suites(__suites...)			\
-	__kunit_test_suites(CONCATENATE(__UNIQUE_ID(array), _probe),	\
+	__kunit_init_test_suites(__UNIQUE_ID(array),			\
 			    ##__suites)
 
 #define kunit_test_init_section_suite(suite)	\
