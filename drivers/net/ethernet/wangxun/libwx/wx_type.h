@@ -940,6 +940,7 @@ struct wx {
 	int speed;
 	int duplex;
 	struct phy_device *phydev;
+	struct phylink *phylink;
 
 	bool wol_hw_supported;
 	bool ncsi_enabled;

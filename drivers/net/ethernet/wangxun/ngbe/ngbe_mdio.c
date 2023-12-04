@@ -5,6 +5,7 @@
 #include <linux/iopoll.h>
 #include <linux/pci.h>
 #include <linux/phy.h>
+#include <linux/phylink.h>
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_hw.h"
@@ -56,66 +57,6 @@ static int ngbe_phy_write_reg_c22(struct mii_bus *bus, int phy_addr,
 	return ret;
 }
 
-static void ngbe_handle_link_change(struct net_device *dev)
-{
-	struct wx *wx = netdev_priv(dev);
-	struct phy_device *phydev;
-	u32 lan_speed, reg;
-
-	phydev = wx->phydev;
-	if (!(wx->link != phydev->link ||
-	      wx->speed != phydev->speed ||
-	      wx->duplex != phydev->duplex))
-		return;
-
-	wx->link = phydev->link;
-	wx->speed = phydev->speed;
-	wx->duplex = phydev->duplex;
-	switch (phydev->speed) {
-	case SPEED_10:
-		lan_speed = 0;
-		break;
-	case SPEED_100:
-		lan_speed = 1;
-		break;
-	case SPEED_1000:
-	default:
-		lan_speed = 2;
-		break;
-	}
-	wr32m(wx, NGBE_CFG_LAN_SPEED, 0x3, lan_speed);
-
-	if (phydev->link) {
-		reg = rd32(wx, WX_MAC_TX_CFG);
-		reg &= ~WX_MAC_TX_CFG_SPEED_MASK;
-		reg |= WX_MAC_TX_CFG_SPEED_1G | WX_MAC_TX_CFG_TE;
-		wr32(wx, WX_MAC_TX_CFG, reg);
-		/* Re configure MAC RX */
-		reg = rd32(wx, WX_MAC_RX_CFG);
-		wr32(wx, WX_MAC_RX_CFG, reg);
-		wr32(wx, WX_MAC_PKT_FLT, WX_MAC_PKT_FLT_PR);
-		reg = rd32(wx, WX_MAC_WDG_TIMEOUT);
-		wr32(wx, WX_MAC_WDG_TIMEOUT, reg);
-	}
-	phy_print_status(phydev);
-}
-
-int ngbe_phy_connect(struct wx *wx)
-{
-	int ret;
-
-	ret = phy_connect_direct(wx->netdev,
-				 wx->phydev,
-				 ngbe_handle_link_change,
-				 PHY_INTERFACE_MODE_RGMII_ID);
-	if (ret) {
-		wx_err(wx, "PHY connect failed.\n");
-		return ret;
-	}
-
-	return 0;
-}
-
 static void ngbe_phy_fixup(struct wx *wx)
 {
 	struct phy_device *phydev = wx->phydev;
@@ -131,6 +72,86 @@ static void ngbe_phy_fixup(struct wx *wx)
 	/* disable EEE, internal phy does not support eee */
 	memset(&eee, 0, sizeof(eee));
 	phy_ethtool_set_eee(phydev, &eee);
+}
+
+static void ngbe_mac_config(struct phylink_config *config, unsigned int mode,
+			    const struct phylink_link_state *state)
+{
+}
+
+static void ngbe_mac_link_down(struct phylink_config *config,
+			       unsigned int mode, phy_interface_t interface)
+{
+}
+
+static void ngbe_mac_link_up(struct phylink_config *config,
+			     struct phy_device *phy,
+			     unsigned int mode, phy_interface_t interface,
+			     int speed, int duplex,
+			     bool tx_pause, bool rx_pause)
+{
+	struct wx *wx = netdev_priv(to_net_dev(config->dev));
+	u32 lan_speed, reg;
+
+	switch (speed) {
+	case SPEED_10:
+		lan_speed = 0;
+		break;
+	case SPEED_100:
+		lan_speed = 1;
+		break;
+	case SPEED_1000:
+	default:
+		lan_speed = 2;
+		break;
+	}
+
+	wr32m(wx, NGBE_CFG_LAN_SPEED, 0x3, lan_speed);
+
+	reg = rd32(wx, WX_MAC_TX_CFG);
+	reg &= ~WX_MAC_TX_CFG_SPEED_MASK;
+	reg |= WX_MAC_TX_CFG_SPEED_1G | WX_MAC_TX_CFG_TE;
+	wr32(wx, WX_MAC_TX_CFG, reg);
+
+	/* Re configure MAC Rx */
+	reg = rd32(wx, WX_MAC_RX_CFG);
+	wr32(wx, WX_MAC_RX_CFG, reg);
+	wr32(wx, WX_MAC_PKT_FLT, WX_MAC_PKT_FLT_PR);
+	reg = rd32(wx, WX_MAC_WDG_TIMEOUT);
+	wr32(wx, WX_MAC_WDG_TIMEOUT, reg);
+}
+
+static const struct phylink_mac_ops ngbe_mac_ops = {
+	.mac_config = ngbe_mac_config,
+	.mac_link_down = ngbe_mac_link_down,
+	.mac_link_up = ngbe_mac_link_up,
+};
+
+static int ngbe_phylink_init(struct wx *wx)
+{
+	struct phylink_config *config;
+	phy_interface_t phy_mode;
+	struct phylink *phylink;
+
+	config = devm_kzalloc(&wx->pdev->dev, sizeof(*config), GFP_KERNEL);
+	if (!config)
+		return -ENOMEM;
+
+	config->dev = &wx->netdev->dev;
+	config->type = PHYLINK_NETDEV;
+	config->mac_capabilities = MAC_1000FD | MAC_100FD |
+				   MAC_SYM_PAUSE | MAC_ASYM_PAUSE;
+
+	phy_mode = PHY_INTERFACE_MODE_RGMII_ID;
+	__set_bit(PHY_INTERFACE_MODE_RGMII_ID, config->supported_interfaces);
+
+	phylink = phylink_create(config, NULL, phy_mode, &ngbe_mac_ops);
+	if (IS_ERR(phylink))
+		return PTR_ERR(phylink);
+
+	wx->phylink = phylink;
+
+	return 0;
 }
 
 int ngbe_mdio_init(struct wx *wx)
@@ -170,6 +191,12 @@ int ngbe_mdio_init(struct wx *wx)
 	wx->link = 0;
 	wx->speed = 0;
 	wx->duplex = 0;
+
+	ret = ngbe_phylink_init(wx);
+	if (ret) {
+		wx_err(wx, "failed to init phylink: %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
