@@ -437,7 +437,10 @@ static int __cont_access_flags_changed(pte_t *ptep, pte_t pte, int ncontig)
 	for (i = 0; i < ncontig; i++) {
 		pte_t orig_pte = ptep_get(ptep + i);
 
-		if (pte_dirty(pte) != pte_dirty(orig_pte))
+		if (pte_sw_dirty(pte) != pte_sw_dirty(orig_pte))
+			return 1;
+
+		if (pte_hw_dirty(pte) != pte_hw_dirty(orig_pte))
 			return 1;
 
 		if (pte_young(pte) != pte_young(orig_pte))
