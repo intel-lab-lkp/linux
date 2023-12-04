@@ -507,7 +507,6 @@ void mddev_resume(struct mddev *mddev)
 	percpu_ref_resurrect(&mddev->active_io);
 	wake_up(&mddev->sb_wait);
 
-	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	md_wakeup_thread(mddev->thread);
 	md_wakeup_thread(mddev->sync_thread); /* possibly kick off a reshape */
 
@@ -4139,6 +4138,7 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	md_new_event();
 	rv = len;
 out_unlock:
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	return rv;
 }
@@ -4645,6 +4645,8 @@ new_dev_store(struct mddev *mddev, const char *buf, size_t len)
  out:
 	if (err)
 		export_rdev(rdev, mddev);
+	else
+		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	if (!err)
 		md_new_event();
@@ -5527,6 +5529,7 @@ serialize_policy_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev_destroy_serial_pool(mddev, NULL);
 	mddev->serialize_policy = value;
 unlock:
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	return err ?: len;
 }
@@ -6598,6 +6601,7 @@ static void autorun_devices(int part)
 					export_rdev(rdev, mddev);
 			}
 			autorun_array(mddev);
+			set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 			mddev_unlock_and_resume(mddev);
 		}
 		/* on success, candidates will be empty, on error

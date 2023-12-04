@@ -2428,6 +2428,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 	}
 	rv = 0;
 out:
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	if (rv)
 		return rv;
@@ -2571,6 +2572,7 @@ backlog_store(struct mddev *mddev, const char *buf, size_t len)
 	if (old_mwb != backlog)
 		md_bitmap_update_sb(mddev->bitmap);
 
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	return len;
 }

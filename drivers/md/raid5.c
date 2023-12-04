@@ -7049,6 +7049,7 @@ raid5_store_stripe_size(struct mddev  *mddev, const char *page, size_t len)
 	mutex_unlock(&conf->cache_size_mutex);
 
 out_unlock:
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	return err ?: len;
 }
@@ -7150,6 +7151,7 @@ raid5_store_skip_copy(struct mddev *mddev, const char *page, size_t len)
 		else
 			blk_queue_flag_clear(QUEUE_FLAG_STABLE_WRITES, q);
 	}
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 	return err ?: len;
 }
@@ -7229,6 +7231,7 @@ raid5_store_group_thread_cnt(struct mddev *mddev, const char *page, size_t len)
 			kfree(old_groups);
 		}
 	}
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 
 	return err ?: len;
@@ -9003,6 +9006,7 @@ static int raid5_change_consistency_policy(struct mddev *mddev, const char *buf)
 	if (!err)
 		md_update_sb(mddev, 1);
 
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	mddev_unlock_and_resume(mddev);
 
 	return err;

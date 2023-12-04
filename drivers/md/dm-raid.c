@@ -4056,6 +4056,7 @@ static void raid_resume(struct dm_target *ti)
 		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 		mddev->ro = 0;
 		mddev->in_sync = 0;
+		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 		mddev_unlock_and_resume(mddev);
 	}
 }
