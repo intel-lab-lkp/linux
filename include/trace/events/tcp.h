@@ -113,6 +113,13 @@ DEFINE_EVENT(tcp_event_sk_skb, tcp_send_reset,
 	TP_ARGS(sk, skb)
 );
 
+DEFINE_EVENT(tcp_event_sk_skb, tcp_data_recv,
+
+	TP_PROTO(const struct sock *sk, const struct sk_buff *skb),
+
+	TP_ARGS(sk, skb)
+);
+
 /*
  * tcp event with arguments sk
  *
@@ -181,6 +188,20 @@ DEFINE_EVENT(tcp_event_sk, tcp_destroy_sock,
 );
 
 DEFINE_EVENT(tcp_event_sk, tcp_rcv_space_adjust,
+
+	TP_PROTO(struct sock *sk),
+
+	TP_ARGS(sk)
+);
+
+DEFINE_EVENT(tcp_event_sk, tcp_data_send,
+
+	TP_PROTO(struct sock *sk),
+
+	TP_ARGS(sk)
+);
+
+DEFINE_EVENT(tcp_event_sk, tcp_data_acked,
 
 	TP_PROTO(struct sock *sk),
 

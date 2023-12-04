@@ -817,6 +817,8 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 
 	now = tcp_jiffies32;
 
+	trace_tcp_data_recv(sk, skb);
+
 	if (!icsk->icsk_ack.ato) {
 		/* The _first_ data packet received, initialize
 		 * delayed ACK engine.
@@ -3479,6 +3481,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, const struct sk_buff *ack_skb,
 		}
 	}
 #endif
+
+	trace_tcp_data_acked(sk);
 	return flag;
 }
 
