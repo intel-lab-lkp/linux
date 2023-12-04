@@ -20,7 +20,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/tlv.h>
 
-#include "tas2562.h"
+#include <sound/tas2562.h>
 
 #define TAS2562_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE |\
 			 SNDRV_PCM_FORMAT_S32_LE)

@@ -11,6 +11,7 @@
 #define __TAS2562_H__
 
 #define TAS2562_PAGE_CTRL	0x00
+#define TAS2562_BOOK_CTRL	0x7f
 
 #define TAS2562_REG(page, reg)	((page * 128) + reg)
 
@@ -43,6 +44,8 @@
 #define TAS2562_DVC_CFG2	TAS2562_REG(2, 0x0d)
 #define TAS2562_DVC_CFG3	TAS2562_REG(2, 0x0e)
 #define TAS2562_DVC_CFG4	TAS2562_REG(2, 0x0f)
+
+#define TAS25XX_DSP_MODE	TAS2562_REG(1, 0x02)
 
 #define TAS2562_RESET	BIT(0)
 
