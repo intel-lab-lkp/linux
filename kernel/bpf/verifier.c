@@ -6816,10 +6816,9 @@ static int check_stack_access_within_bounds(
 			return -EACCES;
 		}
 		min_off = reg->smin_value + off;
+		max_off = reg->smax_value + off;
 		if (access_size > 0)
-			max_off = reg->smax_value + off + access_size - 1;
-		else
-			max_off = min_off;
+			max_off += access_size - 1;
 	}
 
 	err = check_stack_slot_within_bounds(min_off, state, type);
