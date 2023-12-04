@@ -161,6 +161,7 @@ Hardware Monitoring Kernel Drivers
    mp5023
    nct6683
    nct6775
+   nct736x
    nct7802
    nct7904
    npcm750-pwm-fan

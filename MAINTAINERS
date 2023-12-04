@@ -14903,6 +14903,8 @@ M:	Ban Feng <kcfeng0@nuvoton.com>
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/hwmon/nuvoton,nct736x.yaml
+F:	Documentation/hwmon/nct736x.rst
+F:	drivers/hwmon/nct736x.c
 
 NETDEVSIM
 M:	Jakub Kicinski <kuba@kernel.org>
