@@ -122,6 +122,14 @@ int arch_crash_hotplug_cpu_support(struct kimage *image);
 #define arch_crash_hotplug_cpu_support arch_crash_hotplug_cpu_support
 #endif
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+int arch_crash_hotplug_memory_support(struct kimage *image);
+#define arch_crash_hotplug_memory_support arch_crash_hotplug_memory_support
+#endif
+
+unsigned int arch_crash_get_elfcorehdr_size(void);
+#define crash_get_elfcorehdr_size arch_crash_get_elfcorehdr_size
+
 #endif /*CONFIG_CRASH_HOTPLUG */
 #endif /* CONFIG_PPC64 */
 
