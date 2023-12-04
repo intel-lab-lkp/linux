@@ -163,6 +163,7 @@ static struct dentry *nbd_dbg_dir;
 static unsigned int nbds_max = 16;
 static int max_part = 16;
 static int part_shift;
+static unsigned long max_connections = PAGE_SIZE / sizeof(struct nbd_sock *);
 
 static int nbd_dev_dbg_init(struct nbd_device *nbd);
 static void nbd_dev_dbg_close(struct nbd_device *nbd);
@@ -1139,6 +1140,13 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
 	/* Arg will be cast to int, check it to avoid overflow */
 	if (arg > INT_MAX)
 		return -EINVAL;
+
+	if (config->num_connections >= max_connections) {
+		dev_err(disk_to_dev(nbd->disk),
+			"Number of socket connections exceeded limit.\n");
+		return -ENOMEM;
+	}
+
 	sock = nbd_get_socket(nbd, arg, &err);
 	if (!sock)
 		return err;
