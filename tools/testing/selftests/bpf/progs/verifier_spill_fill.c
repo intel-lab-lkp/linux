@@ -492,6 +492,22 @@ char single_byte_buf[1] SEC(".data.single_byte_buf");
 SEC("raw_tp")
 __log_level(2)
 __success
+/* make sure fp-8 is all STACK_ZERO */
+__msg("2: (7a) *(u64 *)(r10 -8) = 0          ; R10=fp0 fp-8_w=00000000")
+/* but fp-16 is spilled IMPRECISE zero const reg */
+__msg("4: (7b) *(u64 *)(r10 -16) = r0        ; R0_w=0 R10=fp0 fp-16_w=0")
+/* and now check that precision propagation works even for such tricky case */
+__msg("10: (71) r2 = *(u8 *)(r10 -9)         ; R2_w=P0 R10=fp0 fp-16_w=0")
+__msg("11: (0f) r1 += r2")
+__msg("mark_precise: frame0: last_idx 11 first_idx 0 subseq_idx -1")
+__msg("mark_precise: frame0: regs=r2 stack= before 10: (71) r2 = *(u8 *)(r10 -9)")
+__msg("mark_precise: frame0: regs= stack=-16 before 9: (bf) r1 = r6")
+__msg("mark_precise: frame0: regs= stack=-16 before 8: (73) *(u8 *)(r1 +0) = r2")
+__msg("mark_precise: frame0: regs= stack=-16 before 7: (0f) r1 += r2")
+__msg("mark_precise: frame0: regs= stack=-16 before 6: (71) r2 = *(u8 *)(r10 -1)")
+__msg("mark_precise: frame0: regs= stack=-16 before 5: (bf) r1 = r6")
+__msg("mark_precise: frame0: regs= stack=-16 before 4: (7b) *(u64 *)(r10 -16) = r0")
+__msg("mark_precise: frame0: regs=r0 stack= before 3: (b7) r0 = 0")
 __naked void partial_stack_load_preserves_zeros(void)
 {
 	asm volatile (
@@ -505,42 +521,50 @@ __naked void partial_stack_load_preserves_zeros(void)
 		/* load single U8 from non-aligned STACK_ZERO slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u8 *)(r10 -1);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* load single U8 from non-aligned ZERO REG slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u8 *)(r10 -9);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* load single U16 from non-aligned STACK_ZERO slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u16 *)(r10 -2);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* load single U16 from non-aligned ZERO REG slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u16 *)(r10 -10);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* load single U32 from non-aligned STACK_ZERO slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u32 *)(r10 -4);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* load single U32 from non-aligned ZERO REG slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u32 *)(r10 -12);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* for completeness, load U64 from STACK_ZERO slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u64 *)(r10 -8);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		/* for completeness, load U64 from ZERO REG slot */
 		"r1 = %[single_byte_buf];"
 		"r2 = *(u64 *)(r10 -16);"
-		"r1 += r2;" /* this should be fine */
+		"r1 += r2;"
+		"*(u8 *)(r1 + 0) = r2;" /* this should be fine */
 
 		"r0 = 0;"
 		"exit;"
