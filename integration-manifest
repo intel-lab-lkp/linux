@@ -1,0 +1,30 @@
+drm drm-fixes 908f60642441cb4f9f0e1eb576e63b0011d318b9
+	Merge tag 'amd-drm-fixes-6.7-2023-11-30' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 64111a0e22a9d4e0de7a5d04e7d5c21d0af4b900
+	drm/panfrost: Fix incorrect updating of current device frequency
+drm-intel drm-intel-fixes 96d7e79401364c6e9a63af5f74f76792b03cb832
+	drm/i915: Check pipe active state in {planes,vrr}_{enabling,disabling}()
+drm drm-next a13fee31f56449fc600d9e064c7b32302f92dcef
+	Merge v6.7-rc3 into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next d0b3c318e04cc6c4e2a3c30ee0f6f619aa8d0db5
+	drm/bridge: migrate bridge_chains to per-encoder file
+drm-intel drm-intel-next 1116efbff3b106ec131e833f0e78f35c923d0104
+	drm/i915/display: Don't use "proxy" headers
+drm-intel drm-intel-gt-next 706785c19fe92186815bdb9ae0148c4ba7262669
+	drm/i915/guc: Add a selftest for FAST_REQUEST errors
+drm-intel topic/core-for-CI ec86d2449703f826e8a4cc790fce3cb3b2179cd5
+	fixup! PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
