@@ -50,7 +50,8 @@
  * the OS will do that anyway.  That sometimes is problematic, as it may cause
  * the system battery to drain too fast, for example, so it is better to adjust
  * it on CPU bring-up and if the initial EPB value for a given CPU is 0, the
- * kernel changes it to 6 ('normal').
+ * kernel changes it to 6 ('normal'). This however is overridable via
+ * intel_epb_keep_performance if required.
  */
 
 static DEFINE_PER_CPU(u8, saved_epb);
@@ -74,6 +75,8 @@ static u8 energ_perf_values[] = {
 	[EPB_INDEX_BALANCE_POWERSAVE] = ENERGY_PERF_BIAS_BALANCE_POWERSAVE,
 	[EPB_INDEX_POWERSAVE] = ENERGY_PERF_BIAS_POWERSAVE,
 };
+
+static bool intel_epb_keep_performance __read_mostly;
 
 static int intel_epb_save(void)
 {
@@ -107,8 +110,12 @@ static void intel_epb_restore(void)
 		 */
 		val = epb & EPB_MASK;
 		if (val == ENERGY_PERF_BIAS_PERFORMANCE) {
-			val = energ_perf_values[EPB_INDEX_NORMAL];
-			pr_warn_once("ENERGY_PERF_BIAS: Set to 'normal', was 'performance'\n");
+			if (!intel_epb_keep_performance) {
+				val = energ_perf_values[EPB_INDEX_NORMAL];
+				pr_warn_once("ENERGY_PERF_BIAS: Set to 'normal', was 'performance'\n");
+			} else {
+				pr_warn_once("ENERGY_PERF_BIAS: Kept at 'performance', no change\n");
+			}
 		}
 	}
 	wrmsrl(MSR_IA32_ENERGY_PERF_BIAS, (epb & ~EPB_MASK) | val);
@@ -212,6 +219,12 @@ static const struct x86_cpu_id intel_epb_normal[] = {
 				   ENERGY_PERF_BIAS_NORMAL_POWERSAVE),
 	{}
 };
+
+static __init int intel_epb_keep_performance_setup(char *str)
+{
+	return kstrtobool(str, &intel_epb_keep_performance);
+}
+early_param("intel_epb_keep_performance", intel_epb_keep_performance_setup);
 
 static __init int intel_epb_init(void)
 {
