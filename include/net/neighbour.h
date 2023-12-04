@@ -292,10 +292,6 @@ static inline bool neigh_key_eq128(const struct neighbour *n, const void *pkey)
 
 static inline struct neighbour *___neigh_lookup_noref(
 	struct neigh_table *tbl,
-	bool (*key_eq)(const struct neighbour *n, const void *pkey),
-	__u32 (*hash)(const void *pkey,
-		      const struct net_device *dev,
-		      __u32 *hash_rnd),
 	const void *pkey,
 	struct net_device *dev)
 {
@@ -303,11 +299,11 @@ static inline struct neighbour *___neigh_lookup_noref(
 	struct neighbour *n;
 	u32 hash_val;
 
-	hash_val = hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
+	hash_val = tbl->hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
 	for (n = rcu_dereference(nht->hash_buckets[hash_val]);
 	     n != NULL;
 	     n = rcu_dereference(n->next)) {
-		if (n->dev == dev && key_eq(n, pkey))
+		if (n->dev == dev && tbl->key_eq(n, pkey))
 			return n;
 	}
 
@@ -318,7 +314,7 @@ static inline struct neighbour *__neigh_lookup_noref(struct neigh_table *tbl,
 						     const void *pkey,
 						     struct net_device *dev)
 {
-	return ___neigh_lookup_noref(tbl, tbl->key_eq, tbl->hash, pkey, dev);
+	return ___neigh_lookup_noref(tbl, pkey, dev);
 }
 
 static inline void neigh_confirm(struct neighbour *n)
