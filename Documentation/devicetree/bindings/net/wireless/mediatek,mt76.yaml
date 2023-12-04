@@ -38,7 +38,11 @@ properties:
       MT7986 should contain 3 regions consys, dcm, and sku, in this order.
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
+    description:
+      MT7986 provides up to 4 interrupts including one primary interrupt and
+      three additional interrupts for ring 4, 5, and 19.
 
   power-domains:
     maxItems: 1
