@@ -36,7 +36,7 @@ int xfs_stats_format(struct xfsstats __percpu *stats, char *buf)
 		{ "dir",		xfsstats_offset(xs_trans_sync)	},
 		{ "trans",		xfsstats_offset(xs_ig_attempts)	},
 		{ "ig",			xfsstats_offset(xs_log_writes)	},
-		{ "log",		xfsstats_offset(xs_try_logspace)},
+		{ "log",		xfsstats_offset(xs_push_ail)},
 		{ "push_ail",		xfsstats_offset(xs_xstrat_quick)},
 		{ "xstrat",		xfsstats_offset(xs_write_calls)	},
 		{ "rw",			xfsstats_offset(xs_attr_get)	},
