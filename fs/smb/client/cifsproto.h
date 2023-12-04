@@ -397,8 +397,8 @@ extern int CIFSSMBSetFileDisposition(const unsigned int xid,
 				     bool delete_file, __u16 fid,
 				     __u32 pid_of_opener);
 extern int CIFSSMBSetEOF(const unsigned int xid, struct cifs_tcon *tcon,
-			 const char *file_name, __u64 size,
-			 struct cifs_sb_info *cifs_sb, bool set_allocation);
+			 const char *file_name, __u64 size, struct cifs_sb_info *cifs_sb,
+			 bool set_allocation, struct dentry *dentry);
 extern int CIFSSMBSetFileSize(const unsigned int xid, struct cifs_tcon *tcon,
 			      struct cifsFileInfo *cfile, __u64 size,
 			      bool set_allocation);
@@ -434,10 +434,10 @@ extern int CIFSPOSIXDelFile(const unsigned int xid, struct cifs_tcon *tcon,
 			const struct nls_table *nls_codepage,
 			int remap_special_chars);
 extern int CIFSSMBDelFile(const unsigned int xid, struct cifs_tcon *tcon,
-			  const char *name, struct cifs_sb_info *cifs_sb);
+			  const char *name, struct cifs_sb_info *cifs_sb, struct dentry *dentry);
 extern int CIFSSMBRename(const unsigned int xid, struct cifs_tcon *tcon,
 			 const char *from_name, const char *to_name,
-			 struct cifs_sb_info *cifs_sb);
+			 struct cifs_sb_info *cifs_sb, struct dentry *dentry);
 extern int CIFSSMBRenameOpenFile(const unsigned int xid, struct cifs_tcon *tcon,
 				 int netfid, const char *target_name,
 				 const struct nls_table *nls_codepage,
