@@ -245,6 +245,15 @@ config	IP_VS_MH
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
+config	IP_VS_MHS
+	tristate "stateless maglev hashing scheduling"
+	help
+	  The usual Maglev consistent hashing scheduling algorithm provides
+	  Google's Maglev hashing algorithm as an IPVS scheduler.
+	  This is a modified version of maglev consistent hashing scheduling algorithm.
+	  It simultaneously uses two hash tables instead of one.
+	  One of them is for old destinations, and the other is for new ones.
+
 config	IP_VS_SED
 	tristate "shortest expected delay scheduling"
 	help

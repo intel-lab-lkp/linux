@@ -38,7 +38,7 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 		  struct ip_vs_iphdr *iph)
 {
 	struct ip_vs_service *svc;
-	struct tcphdr _tcph, *th;
+	struct tcphdr _tcph, *th = NULL;
 	__be16 _ports[2], *ports = NULL;
 
 	/* In the event of icmp, we're only guaranteed to have the first 8
@@ -47,11 +47,8 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 	 */
 	if (likely(!ip_vs_iph_icmp(iph))) {
 		th = skb_header_pointer(skb, iph->len, sizeof(_tcph), &_tcph);
-		if (th) {
-			if (th->rst || !(sysctl_sloppy_tcp(ipvs) || th->syn))
-				return 1;
+		if (th)
 			ports = &th->source;
-		}
 	} else {
 		ports = skb_header_pointer(
 			skb, iph->len, sizeof(_ports), &_ports);
@@ -73,6 +70,17 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 
 	if (svc) {
 		int ignored;
+
+		if (th) {
+			/* If sloppy_tcp or IP_VS_SVC_F_STATELESS is true,
+			 * all SYN packets are scheduled except packets
+			 * with set RST flag.
+			 */
+			if (!sysctl_sloppy_tcp(ipvs) &&
+			    !(svc->flags & IP_VS_SVC_F_STATELESS) &&
+			    (!th->syn || th->rst))
+				return 1;
+		}
 
 		if (ip_vs_todrop(ipvs)) {
 			/*

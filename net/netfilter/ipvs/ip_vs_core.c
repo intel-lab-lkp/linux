@@ -449,6 +449,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	__be16 _ports[2], *pptr, cport, vport;
 	const void *caddr, *vaddr;
 	unsigned int flags;
+	bool need_state;
 
 	*ignored = 1;
 	/*
@@ -525,7 +526,11 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	if (sched) {
 		/* read svc->sched_data after svc->scheduler */
 		smp_rmb();
-		dest = sched->schedule(svc, skb, iph);
+		/* we use distinct handler for stateless service */
+		if (svc->flags & IP_VS_SVC_F_STATELESS)
+			dest = sched->schedule_sl(svc, skb, iph, &need_state);
+		else
+			dest = sched->schedule(svc, skb, iph);
 	} else {
 		dest = NULL;
 	}
@@ -534,9 +539,11 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 		return NULL;
 	}
 
-	flags = (svc->flags & IP_VS_SVC_F_ONEPACKET
-		 && iph->protocol == IPPROTO_UDP) ?
-		IP_VS_CONN_F_ONE_PACKET : 0;
+	/* We use IP_VS_SVC_F_ONEPACKET flag to create no state */
+	flags = ((svc->flags & IP_VS_SVC_F_ONEPACKET &&
+		  iph->protocol == IPPROTO_UDP) ||
+		 (svc->flags & IP_VS_SVC_F_STATELESS && !need_state))
+		? IP_VS_CONN_F_ONE_PACKET : 0;
 
 	/*
 	 *    Create a connection entry.
@@ -563,7 +570,10 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 		      IP_VS_DBG_ADDR(cp->daf, &cp->daddr), ntohs(cp->dport),
 		      cp->flags, refcount_read(&cp->refcnt));
 
-	ip_vs_conn_stats(cp, svc);
+	if (!(svc->flags & IP_VS_SVC_F_STATELESS) ||
+	    (svc->flags & IP_VS_SVC_F_STATELESS && need_state)) {
+		ip_vs_conn_stats(cp, svc);
+	}
 	return cp;
 }
 
@@ -1921,6 +1931,7 @@ ip_vs_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state
 	int ret, pkts;
 	struct sock *sk;
 	int af = state->pf;
+	struct ip_vs_service *svc;
 
 	/* Already marked as IPVS request or reply? */
 	if (skb->ipvs_property)
@@ -1995,6 +2006,19 @@ ip_vs_in_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state
 	 */
 	cp = INDIRECT_CALL_1(pp->conn_in_get, ip_vs_conn_in_get_proto,
 			     ipvs, af, skb, &iph);
+
+	/* Don't use expired connection in stateless service case;
+	 * otherwise reuse can maintain the number connection entries
+	 */
+	if (cp && cp->dest) {
+		svc = rcu_dereference(cp->dest->svc);
+
+		if ((svc->flags & IP_VS_SVC_F_STATELESS) &&
+		    !(timer_pending(&cp->timer) && time_after(cp->timer.expires, jiffies))) {
+			__ip_vs_conn_put(cp);
+			cp = NULL;
+		}
+	}
 
 	if (!iph.fragoffs && is_new_conn(skb, &iph) && cp) {
 		int conn_reuse_mode = sysctl_conn_reuse_mode(ipvs);

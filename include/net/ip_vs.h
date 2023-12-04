@@ -796,6 +796,12 @@ struct ip_vs_scheduler {
 	struct ip_vs_dest* (*schedule)(struct ip_vs_service *svc,
 				       const struct sk_buff *skb,
 				       struct ip_vs_iphdr *iph);
+
+	/* selecting 2 servers from the given service and choose one */
+	struct ip_vs_dest* (*schedule_sl)(struct ip_vs_service *svc,
+					  const struct sk_buff *skb,
+					  struct ip_vs_iphdr *iph,
+					  bool *need_state);
 };
 
 /* The persistence engine object */

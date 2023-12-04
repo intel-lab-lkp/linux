@@ -960,6 +960,43 @@ void ip_vs_stats_free(struct ip_vs_stats *stats)
 	}
 }
 
+static int __ip_vs_mh_compare_dests(struct list_head *a, struct list_head *b)
+{
+	struct ip_vs_dest *dest_a = list_entry(a, struct ip_vs_dest, n_list);
+	struct ip_vs_dest *dest_b = list_entry(b, struct ip_vs_dest, n_list);
+	unsigned int i = 0;
+	__be32 diff;
+
+	switch (dest_a->af) {
+	case AF_INET:
+		return (int)(dest_a->addr.ip - dest_b->addr.ip);
+
+	case AF_INET6:
+		for (; i < ARRAY_SIZE(dest_a->addr.ip6); i++) {
+			diff = dest_a->addr.ip6[i] - dest_b->addr.ip6[i];
+			if (diff)
+				return (int)diff;
+		}
+	}
+
+	return 0;
+}
+
+static struct list_head *
+__ip_vs_find_insertion_place(struct list_head *new, struct list_head *head)
+{
+	struct list_head *p = head;
+	int ret;
+
+	while ((p = p->next) != head) {
+		ret = __ip_vs_mh_compare_dests(new, p);
+		if (ret < 0)
+			break;
+	}
+
+	return p->prev;
+}
+
 /*
  *	Update a destination in the given service
  */
@@ -1038,7 +1075,10 @@ __ip_vs_update_dest(struct ip_vs_service *svc, struct ip_vs_dest *dest,
 	spin_unlock_bh(&dest->dst_lock);
 
 	if (add) {
-		list_add_rcu(&dest->n_list, &svc->destinations);
+		/* sorting of dests list */
+		list_add_rcu(&dest->n_list,
+			     __ip_vs_find_insertion_place(&dest->n_list,
+							  &svc->destinations));
 		svc->num_dests++;
 		sched = rcu_dereference_protected(svc->scheduler, 1);
 		if (sched && sched->add_dest)
@@ -1287,7 +1327,9 @@ static void __ip_vs_unlink_dest(struct ip_vs_service *svc,
 				struct ip_vs_dest *dest,
 				int svcupd)
 {
-	dest->flags &= ~IP_VS_DEST_F_AVAILABLE;
+	/* dest must be available from trash for stateless service */
+	if (!(svc->flags & IP_VS_SVC_F_STATELESS))
+		dest->flags &= ~IP_VS_DEST_F_AVAILABLE;
 
 	/*
 	 *  Remove it from the d-linked destination list.
@@ -1455,6 +1497,10 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 	svc->port = u->port;
 	svc->fwmark = u->fwmark;
 	svc->flags = u->flags & ~IP_VS_SVC_F_HASHED;
+	if (!strcmp(u->sched_name, "mhs")) {
+		svc->flags |= IP_VS_SVC_F_STATELESS;
+		svc->flags &= ~IP_VS_SVC_F_PERSISTENT;
+	}
 	svc->timeout = u->timeout * HZ;
 	svc->netmask = u->netmask;
 	svc->ipvs = ipvs;
@@ -1593,6 +1639,10 @@ ip_vs_edit_service(struct ip_vs_service *svc, struct ip_vs_service_user_kern *u)
 	 * Set the flags and timeout value
 	 */
 	svc->flags = u->flags | IP_VS_SVC_F_HASHED;
+	if (!strcmp(u->sched_name, "mhs")) {
+		svc->flags |= IP_VS_SVC_F_STATELESS;
+		svc->flags &= ~IP_VS_SVC_F_PERSISTENT;
+	}
 	svc->timeout = u->timeout * HZ;
 	svc->netmask = u->netmask;
 

@@ -24,6 +24,7 @@
 #define IP_VS_SVC_F_SCHED1	0x0008		/* scheduler flag 1 */
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
+#define IP_VS_SVC_F_STATELESS	0x0040		/* stateless scheduling */
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
