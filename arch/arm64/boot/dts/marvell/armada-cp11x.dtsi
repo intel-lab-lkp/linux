@@ -180,6 +180,8 @@
 			reg = <0x12a200 0x10>;
 			clocks = <&CP11X_LABEL(clk) 1 9>, <&CP11X_LABEL(clk) 1 5>,
 				 <&CP11X_LABEL(clk) 1 6>, <&CP11X_LABEL(clk) 1 18>;
+			clock-names = "gop_clk", "mg_clk",
+				      "mg_core_clk", "axi_clk";
 			status = "disabled";
 		};
 
@@ -190,6 +192,8 @@
 			reg = <0x12a600 0x10>;
 			clocks = <&CP11X_LABEL(clk) 1 5>,
 				 <&CP11X_LABEL(clk) 1 6>, <&CP11X_LABEL(clk) 1 18>;
+			clock-names = "mg_clk",
+				      "mg_core_clk", "axi_clk";
 			status = "disabled";
 		};
 
