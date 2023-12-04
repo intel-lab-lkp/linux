@@ -396,8 +396,8 @@ void close_id_del_oplock(struct ksmbd_file *fp)
 {
 	struct oplock_info *opinfo;
 
-	if (S_ISDIR(file_inode(fp->filp)->i_mode))
-		return;
+	if (fp->reserve_lease_break)
+		smb_lazy_parent_lease_break_close(fp);
 
 	opinfo = opinfo_get(fp);
 	if (!opinfo)
@@ -1106,6 +1106,29 @@ void smb_send_parent_lease_break_noti(struct ksmbd_file *fp,
 		    (!(lctx->flags & SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE) ||
 		     !compare_guid_key(opinfo, fp->conn->ClientGUID,
 				      lctx->parent_lease_key)))
+			oplock_break(opinfo, SMB2_OPLOCK_LEVEL_NONE);
+	}
+
+	ksmbd_inode_put(p_ci);
+}
+
+void smb_lazy_parent_lease_break_close(struct ksmbd_file *fp)
+{
+	struct oplock_info *opinfo;
+	struct ksmbd_inode *p_ci = NULL;
+
+	if (!fp->f_opinfo->is_lease || fp->f_opinfo->o_lease->version != 2)
+		return;
+
+	p_ci = ksmbd_inode_lookup_lock(fp->filp->f_path.dentry->d_parent);
+	if (!p_ci)
+		return;
+
+	list_for_each_entry(opinfo, &p_ci->m_op_list, op_entry) {
+		if (!opinfo->is_lease)
+			continue;
+
+		if (opinfo->o_lease->state != SMB2_OPLOCK_LEVEL_NONE)
 			oplock_break(opinfo, SMB2_OPLOCK_LEVEL_NONE);
 	}
 
