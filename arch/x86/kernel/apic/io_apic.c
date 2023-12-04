@@ -2381,14 +2381,14 @@ static int mp_irqdomain_create(int ioapic)
 static void ioapic_destroy_irqdomain(int idx)
 {
 	struct ioapic_domain_cfg *cfg = &ioapics[idx].irqdomain_cfg;
-	struct fwnode_handle *fn = ioapics[idx].irqdomain->fwnode;
 
-	if (ioapics[idx].irqdomain) {
-		irq_domain_remove(ioapics[idx].irqdomain);
-		if (!cfg->dev)
-			irq_domain_free_fwnode(fn);
-		ioapics[idx].irqdomain = NULL;
-	}
+	if (!ioapics[idx].irqdomain)
+		return;
+
+	irq_domain_remove(ioapics[idx].irqdomain);
+	if (!cfg->dev)
+		irq_domain_free_fwnode(ioapics[idx].irqdomain->fwnode);
+	ioapics[idx].irqdomain = NULL;
 }
 
 void __init setup_IO_APIC(void)
