@@ -94,6 +94,9 @@ static void init_vdso(void)
 	vdso_getcpu = (getcpu_t)dlsym(vdso, "__vdso_getcpu");
 	if (!vdso_getcpu)
 		printf("[WARN]\tfailed to find getcpu in vDSO\n");
+
+	dlclose(vdso);
+
 }
 
 static int init_vsys(void)
