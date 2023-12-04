@@ -32,6 +32,7 @@ intel_mtl_port_pll_type(struct intel_encoder *encoder,
 
 int intel_cx0pll_calc_state(struct intel_crtc_state *crtc_state, struct intel_encoder *encoder);
 void intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
+				   struct intel_crtc_state *crtc_state,
 				   struct intel_cx0pll_state *pll_state);
 int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
 				 const struct intel_cx0pll_state *pll_state);

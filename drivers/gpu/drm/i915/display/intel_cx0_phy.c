@@ -1871,6 +1871,7 @@ static int intel_c10pll_calc_state(struct intel_crtc_state *crtc_state,
 }
 
 static void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
+					  struct intel_crtc_state *crtc_state,
 					  struct intel_c10pll_state *pll_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
@@ -1894,6 +1895,7 @@ static void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
 
 	pll_state->cmn = intel_cx0_read(i915, encoder->port, lane, PHY_C10_VDR_CMN(0));
 	pll_state->tx = intel_cx0_read(i915, encoder->port, lane, PHY_C10_VDR_TX(0));
+	pll_state->clock = crtc_state->port_clock;
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
@@ -2445,12 +2447,33 @@ static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 		     XELPDP_SSC_ENABLE_PLLB, val);
 }
 
+static int intel_link_bitrate_to_clock(struct intel_encoder *encoder,
+				       struct intel_crtc_state *crtc_state,
+				       int link_bit_rate)
+{
+	const struct intel_c20pll_state * const *tables;
+	int i;
+
+	tables = intel_c20_pll_tables_get(crtc_state, encoder);
+	if (!tables)
+		return -EINVAL;
+
+	for (i = 0; tables[i]; i++) {
+		if (link_bit_rate == tables[i]->link_bit_rate)
+			return tables[i]->clock;
+	}
+
+	return -EINVAL;
+}
+
 static void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
+					  struct intel_crtc_state *crtc_state,
 					  struct intel_c20pll_state *pll_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	bool cntx;
 	intel_wakeref_t wakeref;
+	int clock;
 	int i;
 
 	wakeref = intel_cx0_phy_transaction_begin(encoder);
@@ -2499,6 +2522,13 @@ static void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
 									  PHY_C20_A_MPLLA_CNTX_CFG(i));
 		}
 	}
+
+	pll_state->link_bit_rate = intel_c20pll_calc_port_clock(encoder, pll_state);
+	clock = intel_link_bitrate_to_clock(encoder, crtc_state,
+					    pll_state->link_bit_rate);
+
+	if (clock >= 0)
+		pll_state->clock = clock;
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
@@ -3053,15 +3083,16 @@ static void intel_c10pll_state_verify(const struct intel_crtc_state *state,
 }
 
 void intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
+				   struct intel_crtc_state *crtc_state,
 				   struct intel_cx0pll_state *pll_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	enum phy phy = intel_port_to_phy(i915, encoder->port);
 
 	if (intel_is_c10phy(i915, phy))
-		intel_c10pll_readout_hw_state(encoder, &pll_state->c10);
+		intel_c10pll_readout_hw_state(encoder, crtc_state, &pll_state->c10);
 	else
-		intel_c20pll_readout_hw_state(encoder, &pll_state->c20);
+		intel_c20pll_readout_hw_state(encoder, crtc_state, &pll_state->c20);
 }
 
 int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
@@ -3145,7 +3176,8 @@ void intel_cx0pll_state_verify(struct intel_atomic_state *state,
 	if (intel_tc_port_in_tbt_alt_mode(enc_to_dig_port(encoder)))
 		return;
 
-	intel_cx0pll_readout_hw_state(encoder, &mpll_hw_state);
+	intel_cx0pll_readout_hw_state(encoder, (struct intel_crtc_state*)new_crtc_state,
+				      &mpll_hw_state);
 
 	if (intel_is_c10phy(i915, phy))
 		intel_c10pll_state_verify(new_crtc_state, crtc, encoder, &mpll_hw_state.c10);
