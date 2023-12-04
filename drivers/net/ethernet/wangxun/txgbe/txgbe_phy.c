@@ -189,6 +189,8 @@ static void txgbe_mac_link_up(struct phylink_config *config,
 	struct wx *wx = netdev_priv(to_net_dev(config->dev));
 	u32 txcfg, wdg;
 
+	wx_fc_enable(wx, tx_pause, rx_pause);
+
 	txcfg = rd32(wx, WX_MAC_TX_CFG);
 	txcfg &= ~WX_MAC_TX_CFG_SPEED_MASK;
 
