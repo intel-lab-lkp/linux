@@ -486,15 +486,16 @@ static inline void arch_kexec_pre_free_pages(void *vaddr, unsigned int pages) { 
 static inline void arch_crash_handle_hotplug_event(struct kimage *image, void *arg) { }
 #endif
 
-int crash_check_update_elfcorehdr(void);
-
-#ifndef crash_hotplug_cpu_support
-static inline int crash_hotplug_cpu_support(void) { return 0; }
+#ifndef arch_crash_hotplug_cpu_support
+static inline int arch_crash_hotplug_cpu_support(struct kimage *image) { return 0; }
 #endif
 
-#ifndef crash_hotplug_memory_support
-static inline int crash_hotplug_memory_support(void) { return 0; }
+#ifndef arch_crash_hotplug_memory_support
+static inline int arch_crash_hotplug_memory_support(struct kimage *image) { return 0; }
 #endif
+
+extern int crash_hotplug_cpu_support(void);
+extern int crash_hotplug_memory_support(void);
 
 #ifndef crash_get_elfcorehdr_size
 static inline unsigned int crash_get_elfcorehdr_size(void) { return 0; }
