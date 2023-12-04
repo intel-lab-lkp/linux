@@ -1044,7 +1044,8 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 		 */
 		if (xhci_handshake(&xhci->op_regs->status,
 			      STS_RESTORE, 0, 100 * 1000)) {
-			xhci_warn(xhci, "WARN: xHC restore state timeout\n");
+			xhci_err(xhci, "xHC restore state timeout, assume dead\n");
+			xhci->xhc_state |= XHCI_STATE_DYING;
 			spin_unlock_irq(&xhci->lock);
 			return -ETIMEDOUT;
 		}
