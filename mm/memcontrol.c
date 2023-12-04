@@ -25,6 +25,7 @@
  * Copyright (C) 2020 Alibaba, Inc, Alex Shi
  */
 
+#include <linux/cgroup-defs.h>
 #include <linux/page_counter.h>
 #include <linux/memcontrol.h>
 #include <linux/cgroup.h>
@@ -6668,6 +6669,16 @@ static u64 memory_peak_read(struct cgroup_subsys_state *css,
 	return (u64)memcg->memory.watermark * PAGE_SIZE;
 }
 
+static ssize_t memory_peak_write(struct kernfs_open_file *of,
+				 char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	page_counter_reset_watermark(&memcg->memory);
+
+	return nbytes;
+}
+
 static int memory_min_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
@@ -6984,6 +6995,7 @@ static struct cftype memory_files[] = {
 		.name = "peak",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = memory_peak_read,
+		.write = memory_peak_write,
 	},
 	{
 		.name = "min",
@@ -7962,6 +7974,16 @@ static u64 swap_peak_read(struct cgroup_subsys_state *css,
 	return (u64)memcg->swap.watermark * PAGE_SIZE;
 }
 
+static ssize_t swap_peak_write(struct kernfs_open_file *of,
+				 char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	page_counter_reset_watermark(&memcg->swap);
+
+	return nbytes;
+}
+
 static int swap_high_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
@@ -8044,6 +8066,7 @@ static struct cftype swap_files[] = {
 		.name = "swap.peak",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = swap_peak_read,
+		.write = swap_peak_write,
 	},
 	{
 		.name = "swap.events",
