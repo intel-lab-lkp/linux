@@ -38,6 +38,7 @@ int of_reserved_mem_device_init_by_name(struct device *dev,
 					struct device_node *np,
 					const char *name);
 void of_reserved_mem_device_release(struct device *dev);
+int __reserved_mem_alloc_size(unsigned long node, const char *uname);
 
 struct reserved_mem *of_reserved_mem_lookup(struct device_node *np);
 #else
@@ -59,6 +60,11 @@ static inline int of_reserved_mem_device_init_by_name(struct device *dev,
 }
 
 static inline void of_reserved_mem_device_release(struct device *pdev) { }
+
+static inline int __reserved_mem_alloc_size(unsigned long node, const char *uname)
+{
+	return -ENOSYS;
+}
 
 static inline struct reserved_mem *of_reserved_mem_lookup(struct device_node *np)
 {
