@@ -59,9 +59,9 @@ static void rxe_init_device_param(struct rxe_dev *rxe)
 	rxe->attr.max_res_rd_atom		= RXE_MAX_RES_RD_ATOM;
 	rxe->attr.max_qp_init_rd_atom		= RXE_MAX_QP_INIT_RD_ATOM;
 	rxe->attr.atomic_cap			= IB_ATOMIC_HCA;
-	rxe->attr.max_mcast_grp			= RXE_MAX_MCAST_GRP;
-	rxe->attr.max_mcast_qp_attach		= RXE_MAX_MCAST_QP_ATTACH;
-	rxe->attr.max_total_mcast_qp_attach	= RXE_MAX_TOT_MCAST_QP_ATTACH;
+	rxe->attr.max_mcast_grp			= rxe_max_mcast_grp;
+	rxe->attr.max_mcast_qp_attach		= rxe_max_mcast_qp_attach;
+	rxe->attr.max_total_mcast_qp_attach	= rxe_max_tot_mcast_qp_attach;
 	rxe->attr.max_ah			= RXE_MAX_AH;
 	rxe->attr.max_srq			= RXE_MAX_SRQ;
 	rxe->attr.max_srq_wr			= RXE_MAX_SRQ_WR;
