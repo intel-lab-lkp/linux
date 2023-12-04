@@ -2,7 +2,6 @@
 #
 # Makefile for the Renesas network device drivers
 #
-
 obj-$(CONFIG_SH_ETH) += sh_eth.o
 
 ravb-objs := ravb_main.o ravb_ptp.o
