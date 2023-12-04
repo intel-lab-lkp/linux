@@ -304,6 +304,11 @@ static int of_pci_prop_compatible(struct pci_dev *pdev,
 	compat_strs[PROP_COMPAT_PCICLASS_CCSS] =
 		kasprintf(GFP_KERNEL, "pciclass,%04x", pdev->class >> 8);
 
+	if (!compat_strs[PROP_COMPAT_PCI_VVVV_DDDD] ||
+	    !compat_strs[PROP_COMPAT_PCICLASS_CCSSPP] ||
+	    !compat_strs[PROP_COMPAT_PCICLASS_CCSS])
+		return -ENOMEM;
+
 	ret = of_changeset_add_prop_string_array(ocs, np, "compatible",
 						 compat_strs, PROP_COMPAT_NUM);
 	for (i = 0; i < PROP_COMPAT_NUM; i++)
