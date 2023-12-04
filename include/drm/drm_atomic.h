@@ -346,11 +346,19 @@ struct __drm_private_objs_state {
 };
 
 /**
- * struct drm_atomic_state - the global state object for atomic updates
+ * struct drm_atomic_state - Atomic Update structure
+ *
+ * This structure is the kernel counterpart of @drm_mode_atomic and contains
+ * all the objects affected by an atomic modeset update and their states.
  *
  * States are added to an atomic update by calling drm_atomic_get_crtc_state(),
  * drm_atomic_get_plane_state(), drm_atomic_get_connector_state(), or for
  * private state structures, drm_atomic_get_private_obj_state().
+ *
+ * NOTE: While this structure looks to be global and affecting the whole DRM
+ * device, it only contains the objects affected by the atomic commit.
+ * Unaffected objects will not be part of that update, unless they have been
+ * explicitly added by either the framework or the driver.
  */
 struct drm_atomic_state {
 	/**
