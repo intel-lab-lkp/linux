@@ -328,6 +328,18 @@ static void stm32_irq_handler(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
+static int stm32_irq_retrigger(struct irq_data *d)
+{
+	struct irq_chip_generic *gc = irq_data_get_irq_chip_data(d);
+	struct stm32_exti_chip_data *chip_data = gc->private;
+	const struct stm32_exti_bank *stm32_bank = chip_data->reg_bank;
+	u32 mask = BIT(d->hwirq % IRQS_PER_BANK);
+
+	irq_reg_writel(gc, mask, stm32_bank->swier_ofst);
+
+	return 0;
+}
+
 static int stm32_exti_set_type(struct irq_data *d,
 			       unsigned int type, u32 *rtsr, u32 *ftsr)
 {
@@ -856,6 +868,7 @@ static int __init stm32_exti_init(const struct stm32_exti_drv_data *drv_data,
 		gc->chip_types->chip.irq_ack = stm32_irq_ack;
 		gc->chip_types->chip.irq_mask = irq_gc_mask_clr_bit;
 		gc->chip_types->chip.irq_unmask = irq_gc_mask_set_bit;
+		gc->chip_types->chip.irq_retrigger = stm32_irq_retrigger;
 		gc->chip_types->chip.irq_set_type = stm32_irq_set_type;
 		gc->chip_types->chip.irq_set_wake = irq_gc_set_wake;
 		gc->suspend = stm32_irq_suspend;
