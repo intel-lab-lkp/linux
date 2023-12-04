@@ -10,6 +10,7 @@
 
 #include <asm/page.h>
 #include <linux/crc8.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
@@ -41,6 +42,7 @@ static const unsigned char sht3x_cmd_heater_off[]              = { 0x30, 0x66 };
 /* other commands */
 static const unsigned char sht3x_cmd_read_status_reg[]         = { 0xf3, 0x2d };
 static const unsigned char sht3x_cmd_clear_status_reg[]        = { 0x30, 0x41 };
+static const unsigned char sht3x_cmd_read_serial_number[]      = { 0x37, 0x80 };
 
 /* delays for single-shot mode i2c commands, both in us */
 #define SHT3X_SINGLE_WAIT_TIME_HPM  15000
@@ -163,12 +165,14 @@ struct sht3x_data {
 	enum sht3x_chips chip_id;
 	struct mutex i2c_lock; /* lock for sending i2c commands */
 	struct mutex data_lock; /* lock for updating driver data */
+	struct dentry *debugfs;
 
 	u8 mode;
 	const unsigned char *command;
 	u32 wait_time;			/* in us*/
 	unsigned long last_update;	/* last update in periodic mode*/
 	enum sht3x_repeatability repeatability;
+	u32 serial_number;
 
 	/*
 	 * cached values for temperature and humidity and limits
@@ -831,6 +835,50 @@ static int sht3x_write(struct device *dev, enum hwmon_sensor_types type,
 	}
 }
 
+#ifdef CONFIG_DEBUG_FS
+
+static void sht3x_debugfs_init(struct sht3x_data *data)
+{
+	char name[32];
+	struct dentry *sensor_dir;
+
+	data->debugfs = debugfs_lookup("sht3x", NULL);
+	if (IS_ERR_OR_NULL(data->debugfs))
+		data->debugfs = debugfs_create_dir("sht3x", NULL);
+
+	snprintf(name, sizeof(name), "i2c%u-%02x",
+		 data->client->adapter->nr, data->client->addr);
+	sensor_dir = debugfs_create_dir(name, data->debugfs);
+	debugfs_create_u32("serial_number", 0444,
+			   sensor_dir, &data->serial_number);
+}
+
+#else
+
+static void sht3x_debugfs_init(struct sht3x_data *data)
+{
+}
+
+#endif
+
+static int sht3x_serial_number_read(struct sht3x_data *data)
+{
+	int ret;
+	char buffer[SHT3X_RESPONSE_LENGTH];
+	struct i2c_client *client = data->client;
+
+	ret = sht3x_read_from_command(client, data,
+				      sht3x_cmd_read_serial_number,
+				      buffer,
+				      SHT3X_RESPONSE_LENGTH, 0);
+	if (ret)
+		return ret;
+
+	data->serial_number = (buffer[0] << 24) | (buffer[1] << 16) |
+			      (buffer[3] << 8) | buffer[4];
+	return ret;
+}
+
 static const struct hwmon_ops sht3x_ops = {
 	.is_visible = sht3x_is_visible,
 	.read = sht3x_read,
@@ -898,6 +946,13 @@ static int sht3x_probe(struct i2c_client *client)
 	ret = limits_update(data);
 	if (ret)
 		return ret;
+
+	ret = sht3x_serial_number_read(data);
+	if (ret) {
+		dev_dbg(dev, "unable to read serial number\n");
+		data->serial_number = 0;
+	}
+	sht3x_debugfs_init(data);
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev,
 							 client->name,
