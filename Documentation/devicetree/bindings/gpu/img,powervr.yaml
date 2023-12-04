@@ -11,11 +11,33 @@ maintainers:
   - Frank Binns <frank.binns@imgtec.com>
 
 properties:
+  $nodename:
+    pattern: '^gpu@[a-f0-9]+$'
+
   compatible:
-    items:
-      - enum:
-          - ti,am62-gpu
-      - const: img,img-axe # IMG AXE GPU model/revision is fully discoverable
+    oneOf:
+      - items:
+          - enum:
+              - ti,am62-gpu
+          - const: img,img-axe # IMG AXE GPU model/revision is fully discoverable
+      - items:
+          - enum:
+              - ti,omap3430-gpu # Rev 121
+              - ti,omap3630-gpu # Rev 125
+          - const: img,powervr-sgx530
+      - items:
+          - enum:
+              - ingenic,jz4780-gpu # Rev 130
+              - ti,omap4430-gpu # Rev 120
+          - const: img,powervr-sgx540
+      - items:
+          - enum:
+              - allwinner,sun6i-a31-gpu # MP2 Rev 115
+              - ti,omap4470-gpu # MP1 Rev 112
+              - ti,omap5432-gpu # MP2 Rev 105
+              - ti,am5728-gpu # MP2 Rev 116
+              - ti,am6548-gpu # MP1 Rev 117
+          - const: img,powervr-sgx544
 
   reg:
     maxItems: 1
@@ -40,8 +62,6 @@ properties:
 required:
   - compatible
   - reg
-  - clocks
-  - clock-names
   - interrupts
 
 additionalProperties: false
@@ -56,6 +76,43 @@ allOf:
       properties:
         clocks:
           maxItems: 1
+      required:
+        - clocks
+        - clock-names
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,am654-sgx544
+    then:
+      properties:
+        power-domains:
+          minItems: 1
+      required:
+        - power-domains
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: allwinner,sun6i-a31-gpu
+    then:
+      properties:
+        clocks:
+          minItems: 2
+        clock-names:
+          minItems: 2
+      required:
+        - clocks
+        - clock-names
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ingenic,jz4780-gpu
+    then:
+      required:
+        - clocks
+        - clock-names
 
 examples:
   - |
