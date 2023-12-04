@@ -981,7 +981,7 @@ static const struct hclge_dbg_item tm_pri_items[] = {
 
 static int hclge_dbg_dump_tm_pri(struct hclge_dev *hdev, char *buf, int len)
 {
-	char data_str[ARRAY_SIZE(tm_pri_items)][HCLGE_DBG_DATA_STR_LEN];
+	char *data_str;
 	struct hclge_tm_shaper_para c_shaper_para, p_shaper_para;
 	char *result[ARRAY_SIZE(tm_pri_items)], *sch_mode_str;
 	char content[HCLGE_DBG_TM_INFO_LEN];
@@ -991,9 +991,13 @@ static int hclge_dbg_dump_tm_pri(struct hclge_dev *hdev, char *buf, int len)
 	ret = hclge_tm_get_pri_num(hdev, &pri_num);
 	if (ret)
 		return ret;
+	data_str = kcalloc(ARRAY_SIZE(tm_pri_items), HCLGE_DBG_DATA_STR_LEN,
+			   GFP_KERNEL);
+	if (!data_str)
+		return -ENOMEM;
 
 	for (i = 0; i < ARRAY_SIZE(tm_pri_items); i++)
-		result[i] = &data_str[i][0];
+		result[i] = &data_str[i * HCLGE_DBG_DATA_STR_LEN];
 
 	hclge_dbg_fill_content(content, sizeof(content), tm_pri_items,
 			       NULL, ARRAY_SIZE(tm_pri_items));
@@ -1035,6 +1039,7 @@ static int hclge_dbg_dump_tm_pri(struct hclge_dev *hdev, char *buf, int len)
 		pos += scnprintf(buf + pos, len - pos, "%s", content);
 	}
 
+	kfree(data_str);
 	return 0;
 }
 
