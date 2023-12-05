@@ -1779,10 +1779,9 @@ static ssize_t btrfs_devinfo_scrub_speed_max_store(struct kobject *kobj,
 {
 	struct btrfs_device *device = container_of(kobj, struct btrfs_device,
 						   devid_kobj);
-	char *endptr;
 	unsigned long long limit;
 
-	limit = memparse(buf, &endptr);
+	limit = memparse(buf, NULL);
 	WRITE_ONCE(device->scrub_speed_max, limit);
 	return len;
 }
