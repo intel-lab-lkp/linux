@@ -3209,7 +3209,7 @@ sub process {
 				$tag_case = 0 if $tag eq "Fixes:";
 				$tag_space = 0 if ($line =~ /^fixes:? [0-9a-f]{5,} ($balanced_parens)/i);
 
-				$id_length = 0 if ($orig_commit =~ /^[0-9a-f]{12}$/i);
+				$id_length = 0 if ($orig_commit =~ /^[0-9a-f]{12,40}$/i);
 				$id_case = 0 if ($orig_commit !~ /[A-F]/);
 
 				# Always strip leading/trailing parens then double quotes if existing
@@ -3226,7 +3226,7 @@ sub process {
 			if ($ctitle ne $title || $tag_case || $tag_space ||
 			    $id_length || $id_case || !$title_has_quotes) {
 				if (WARN("BAD_FIXES_TAG",
-				     "Please use correct Fixes: style 'Fixes: <12 chars of sha1> (\"<title line>\")' - ie: 'Fixes: $cid (\"$ctitle\")'\n" . $herecurr) &&
+				     "Please use correct Fixes: style 'Fixes: <12+ chars of sha1> (\"<title line>\")' - ie: 'Fixes: $cid (\"$ctitle\")'\n" . $herecurr) &&
 				    $fix) {
 					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\")";
 				}
