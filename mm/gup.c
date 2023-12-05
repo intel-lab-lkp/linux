@@ -5,6 +5,7 @@
 #include <linux/spinlock.h>
 
 #include <linux/mm.h>
+#include <linux/memfd.h>
 #include <linux/memremap.h>
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
@@ -17,6 +18,7 @@
 #include <linux/hugetlb.h>
 #include <linux/migrate.h>
 #include <linux/mm_inline.h>
+#include <linux/pagevec.h>
 #include <linux/sched/mm.h>
 #include <linux/shmem_fs.h>
 
@@ -3412,3 +3414,103 @@ long pin_user_pages_unlocked(unsigned long start, unsigned long nr_pages,
 				     &locked, gup_flags);
 }
 EXPORT_SYMBOL(pin_user_pages_unlocked);
+
+/**
+ * memfd_pin_user_pages() - pin user pages associated with a memfd
+ * @memfd:      the memfd whose pages are to be pinned
+ * @start:      starting memfd offset
+ * @nr_pages:   number of pages from start to pin
+ * @pages:      array that receives pointers to the pages pinned.
+ *              Should be at-least nr_pages long.
+ *
+ * Attempt to pin pages associated with a memfd; given that a memfd is either
+ * backed by shmem or hugetlb, the pages can either be found in the page cache
+ * or need to be allocated if necessary. Once the pages are located, they are
+ * all pinned via FOLL_PIN. And, these pinned pages need to be released either
+ * using unpin_user_pages() or unpin_user_page().
+ *
+ * It must be noted that the pages may be pinned for an indefinite amount
+ * of time. And, in most cases, the duration of time they may stay pinned
+ * would be controlled by the userspace. This behavior is effectively the
+ * same as using FOLL_LONGTERM with other GUP APIs.
+ *
+ * Returns number of pages pinned. This would be equal to the number of
+ * pages requested. If no pages were pinned, it returns -errno.
+ */
+long memfd_pin_user_pages(struct file *memfd, pgoff_t start,
+			  unsigned long nr_pages, struct page **pages)
+{
+	pgoff_t start_idx, end_idx = start + nr_pages - 1;
+	unsigned int flags, nr_folios, i, j;
+	struct folio_batch fbatch;
+	struct page *page = NULL;
+	struct folio *folio;
+	long ret;
+
+	if (!nr_pages)
+		return -EINVAL;
+
+	if (!memfd)
+		return -EINVAL;
+
+	if (!shmem_file(memfd) && !is_file_hugepages(memfd))
+		return -EINVAL;
+
+	flags = memalloc_pin_save();
+	do {
+		folio_batch_init(&fbatch);
+		start_idx = start;
+		i = 0;
+
+		while (start_idx <= end_idx) {
+			/*
+			 * In most cases, we should be able to find the page
+			 * in the page cache. If we cannot find it for some
+			 * reason, we try to allocate one and add it to the
+			 * page cache.
+			 */
+			nr_folios = filemap_get_folios_contig(memfd->f_mapping,
+							      &start_idx,
+							      end_idx,
+							      &fbatch);
+			if (page) {
+				put_page(page);
+				page = NULL;
+			}
+			for (j = 0; j < nr_folios; j++) {
+				folio = fbatch.folios[j];
+				ret = try_grab_page(&folio->page, FOLL_PIN);
+				if (unlikely(ret)) {
+					folio_batch_release(&fbatch);
+					goto err;
+				}
+
+				pages[i++] = &folio->page;
+			}
+
+			folio_batch_release(&fbatch);
+			if (!nr_folios) {
+				page = memfd_alloc_page(memfd, start_idx);
+				if (IS_ERR(page)) {
+					ret = PTR_ERR(page);
+					if (ret != -EEXIST)
+						goto err;
+				}
+			}
+		}
+
+		ret = check_and_migrate_movable_pages(nr_pages, pages);
+	} while (ret == -EAGAIN);
+
+	memalloc_pin_restore(flags);
+	return ret ? ret : nr_pages;
+err:
+	memalloc_pin_restore(flags);
+	while (i-- > 0)
+		if (pages[i])
+			unpin_user_page(pages[i]);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(memfd_pin_user_pages);
+
