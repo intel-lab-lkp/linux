@@ -37,6 +37,9 @@
 
 #define DRVNAME			"brcmstb-dpfe"
 
+/* Generic constants */
+#define MHS_VERSION		0x04000000
+
 /* DCPU register offsets */
 #define REG_DCPU_RESET		0x0
 #define REG_TO_DCPU_MBOX	0x10
@@ -298,6 +301,28 @@ static const struct dpfe_api dpfe_api_v3 = {
 			[MSG_ARG_COUNT] = 0,
 		},
 		/* There's no GET_VENDOR command in API v3. */
+	},
+};
+
+/* API v4 firmware commands */
+static struct dpfe_api dpfe_api_v4 = {
+	.version = 4,
+	.fw_name = NULL, /* We expect the firmware to have been downloaded! */
+	.sysfs_attrs = dpfe_v3_groups, /* Same as v3 */
+	.command = {
+		[DPFE_CMD_GET_INFO] = {
+			[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
+			[MSG_COMMAND] = 0x0101,
+			[MSG_ARG_COUNT] = 2,
+			[MSG_ARG0] = MHS_VERSION,
+			[MSG_ARG0 + 1] = 1, /* Now the 2nd argument */
+		},
+		[DPFE_CMD_GET_REFRESH] = {
+			[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
+			[MSG_COMMAND] = 0x0202,
+			[MSG_ARG_COUNT] = 1,
+			[MSG_ARG0] = MHS_VERSION,
+		},
 	},
 };
 
@@ -929,8 +954,12 @@ static const struct of_device_id brcmstb_dpfe_of_match[] = {
 	{ .compatible = "brcm,dpfe-cpu-v1", .data = &dpfe_api_old_v2 },
 	{ .compatible = "brcm,dpfe-cpu-v2", .data = &dpfe_api_new_v2 },
 	{ .compatible = "brcm,dpfe-cpu-v3", .data = &dpfe_api_v3 },
+	{ .compatible = "brcm,dpfe-cpu-v4", .data = &dpfe_api_v4 },
 
-	/* API v3 is the default going forward */
+	/*
+	 * For historical reasons, API v3 is the default if nothing else is
+	 * specified.
+	 */
 	{ .compatible = "brcm,dpfe-cpu", .data = &dpfe_api_v3 },
 	{}
 };
