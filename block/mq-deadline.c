@@ -123,14 +123,16 @@ deadline_rb_root(struct dd_per_prio *per_prio, struct request *rq)
  * Returns the I/O priority class (IOPRIO_CLASS_*) that has been assigned to a
  * request.
  */
-static u8 dd_rq_ioclass(struct request *rq)
+static u8 dd_rq_ioclass(struct deadline_data *dd, struct request *rq)
 {
-	return IOPRIO_PRIO_CLASS(req_get_ioprio(rq));
+	return dd->prio_aging_expire ? IOPRIO_PRIO_CLASS(req_get_ioprio(rq)) :
+				       IOPRIO_CLASS_NONE;
 }
 
-static u8 dd_bio_ioclass(struct bio *bio)
+static u8 dd_bio_ioclass(struct deadline_data *dd, struct bio *bio)
 {
-	return IOPRIO_PRIO_CLASS(bio->bi_ioprio);
+	return dd->prio_aging_expire ? IOPRIO_PRIO_CLASS(bio->bi_ioprio) :
+				       IOPRIO_CLASS_NONE;
 }
 
 /*
@@ -233,7 +235,7 @@ static void dd_request_merged(struct request_queue *q, struct request *req,
 			      enum elv_merge type)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(req);
+	const u8 ioprio_class = dd_rq_ioclass(dd, req);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
@@ -253,7 +255,7 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 			       struct request *next)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(next);
+	const u8 ioprio_class = dd_rq_ioclass(dd, next);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 
 	lockdep_assert_held(&dd->lock);
@@ -550,7 +552,7 @@ dispatch_request:
 	dd->batching++;
 	deadline_move_request(dd, per_prio, rq);
 done:
-	ioprio_class = dd_rq_ioclass(rq);
+	ioprio_class = dd_rq_ioclass(dd, rq);
 	prio = ioprio_class_to_prio[ioprio_class];
 	dd->per_prio[prio].latest_pos[data_dir] = blk_rq_pos(rq);
 	dd->per_prio[prio].stats.dispatched++;
@@ -749,7 +751,7 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_bio_ioclass(bio);
+	const u8 ioprio_class = dd_bio_ioclass(dd, bio);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 	sector_t sector = bio_end_sector(bio);
@@ -814,7 +816,7 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	 */
 	blk_req_zone_write_unlock(rq);
 
-	prio = ioprio_class_to_prio[dd_rq_ioclass(rq)];
+	prio = ioprio_class_to_prio[dd_rq_ioclass(dd, rq)];
 	per_prio = &dd->per_prio[prio];
 	if (!rq->elv.priv[0]) {
 		per_prio->stats.inserted++;
@@ -923,7 +925,7 @@ static void dd_finish_request(struct request *rq)
 {
 	struct request_queue *q = rq->q;
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(rq);
+	const u8 ioprio_class = dd_rq_ioclass(dd, rq);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
