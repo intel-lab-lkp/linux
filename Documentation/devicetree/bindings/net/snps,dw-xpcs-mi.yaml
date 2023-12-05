@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/snps,dw-xpcs-mi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synopsys DesignWare Ethernet PCS Management Interface
+
+maintainers:
+  - Serge Semin <fancer.lancer@gmail.com>
+
+description:
+  Synopsys DesignWare Ethernet PCS provides an interface between MAC and PMA
+  through the Media Independent Interface. The PCS CSRs can be accessible over
+  the Ethernet MDIO bus or directly by means of the APB3/MCI interfaces. In the
+  later case the XPCS can be mapped right to the system IO memory space.
+
+allOf:
+  - $ref: mdio.yaml#
+
+properties:
+  compatible:
+    const: snps,dw-xpcs-mi
+
+  reg:
+    items:
+      - description:
+          DW XPCS CSRs space can be either 'directly' or 'indirectly'
+          accessible. In the former case all Clause 45 registers are
+          contiguously mapped within the address space MMD '[20:16]',
+          Reg '[15:0]'. In the later case the space is divided to the
+          multiple 256 register sets. There is a special viewport CSR
+          which is responsible for the set selection. The upper part of
+          the CSR address is supposed to be written in there thus the
+          corresponding subset would be mapped over the lowest 255 CSRs.
+
+  reg-names:
+    items:
+      - enum: [ direct, indirect ]
+
+  reg-io-width:
+    description:
+      The way the CSRs are mapped to the memory is platform depended. Since
+      each Clause 45 CSR is of 16-bits wide the access instructions must be
+      two bytes aligned at least.
+    default: 2
+    enum: [ 2, 4 ]
+
+  clocks:
+    items:
+      - description: Peripheral MCI/APB3 bus clock source
+
+  clock-names:
+    items:
+      - const: pclk
+
+patternProperties:
+  'ethernet-pcs@[0-9a-f]+$':
+    type: object
+
+    $ref: pcs/snps,dw-xpcs.yaml#
+
+required:
+  - compatible
+  - reg
+  - reg-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    mdio@1f05d000 {
+      compatible = "snps,dw-xpcs-mi";
+      reg = <0x1f05d000 0x1000>;
+      reg-names = "indirect";
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      clocks = <&ccu_pclk>;
+      clock-names = "pclk";
+
+      reg-io-width = <4>;
+
+      ethernet-pcs@0 {
+        compatible = "snps,dw-xpcs";
+        reg = <0>;
+      };
+    };
