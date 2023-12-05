@@ -965,7 +965,8 @@ static int watchdog_release(struct inode *inode, struct file *file)
 
 	/* If the watchdog was not stopped, send a keepalive ping */
 	if (err < 0) {
-		pr_crit("watchdog%d: watchdog did not stop!\n", wdd->id);
+		pr_crit("watchdog%d is still active. Stop by [%s:%d] failed.\n",
+			wdd->id, current->comm, current->pid);
 		watchdog_ping(wdd);
 	}
 
