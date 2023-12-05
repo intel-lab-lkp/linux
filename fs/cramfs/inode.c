@@ -183,9 +183,6 @@ static int next_buffer;
 static void *cramfs_blkdev_read(struct super_block *sb, unsigned int offset,
 				unsigned int len)
 {
-	struct address_space *mapping = sb->s_bdev->bd_inode->i_mapping;
-	struct file_ra_state ra = {};
-	struct page *pages[BLKS_PER_BUF];
 	unsigned i, blocknr, buffer;
 	unsigned long devsize;
 	char *data;
@@ -214,37 +211,29 @@ static void *cramfs_blkdev_read(struct super_block *sb, unsigned int offset,
 	devsize = bdev_nr_bytes(sb->s_bdev) >> PAGE_SHIFT;
 
 	/* Ok, read in BLKS_PER_BUF pages completely first. */
-	file_ra_state_init(&ra, mapping);
-	page_cache_sync_readahead(mapping, &ra, NULL, blocknr, BLKS_PER_BUF);
-
-	for (i = 0; i < BLKS_PER_BUF; i++) {
-		struct page *page = NULL;
-
-		if (blocknr + i < devsize) {
-			page = read_mapping_page(mapping, blocknr + i, NULL);
-			/* synchronous error? */
-			if (IS_ERR(page))
-				page = NULL;
-		}
-		pages[i] = page;
-	}
+	bdev_sync_readahead(sb->s_bdev, NULL, NULL, blocknr, BLKS_PER_BUF);
 
 	buffer = next_buffer;
 	next_buffer = NEXT_BUFFER(buffer);
 	buffer_blocknr[buffer] = blocknr;
 	buffer_dev[buffer] = sb;
-
 	data = read_buffers[buffer];
-	for (i = 0; i < BLKS_PER_BUF; i++) {
-		struct page *page = pages[i];
 
-		if (page) {
-			memcpy_from_page(data, page, 0, PAGE_SIZE);
-			put_page(page);
-		} else
+	for (i = 0; i < BLKS_PER_BUF; i++) {
+		struct folio *folio = NULL;
+
+		if (blocknr + i < devsize)
+			folio = bdev_read_folio(sb->s_bdev, blocknr + i);
+
+		if (IS_ERR_OR_NULL(folio)) {
 			memset(data, 0, PAGE_SIZE);
+		} else {
+			memcpy_from_folio(data, folio, 0, PAGE_SIZE);
+			folio_put(folio);
+		}
 		data += PAGE_SIZE;
 	}
+
 	return read_buffers[buffer] + offset;
 }
 
