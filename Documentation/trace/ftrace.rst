@@ -3731,3 +3731,5 @@ Currently, -mfentry is used by gcc 4.6.0 and above on x86 only.
 More
 ----
 More details can be found in the source code, in the `kernel/trace/*.c` files.
+Also you can see the trace source tree on browser `Git Link
+<https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/trace>`__.
