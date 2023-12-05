@@ -368,7 +368,7 @@ static bool valid_arg_len(struct linux_binprm *bprm, long len)
 static int bprm_mm_init(struct linux_binprm *bprm)
 {
 	int err;
-	struct mm_struct *mm = NULL;
+	struct mm_struct *mm;
 
 	bprm->mm = mm = mm_alloc();
 	err = -ENOMEM;
