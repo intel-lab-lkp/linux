@@ -397,9 +397,10 @@ static enum ixgbe_phy_type ixgbe_get_phy_type_from_id(u32 phy_id)
  **/
 s32 ixgbe_reset_phy_generic(struct ixgbe_hw *hw)
 {
-	u32 i;
-	u16 ctrl = 0;
 	s32 status = 0;
+	bool overtemp;
+	u16 ctrl = 0;
+	u32 i;
 
 	if (hw->phy.type == ixgbe_phy_unknown)
 		status = ixgbe_identify_phy_generic(hw);
@@ -407,9 +408,12 @@ s32 ixgbe_reset_phy_generic(struct ixgbe_hw *hw)
 	if (status != 0 || hw->phy.type == ixgbe_phy_none)
 		return status;
 
+	status = hw->phy.ops.check_overtemp(hw, &overtemp);
+	if (status)
+		return status;
+
 	/* Don't reset PHY if it's shut down due to overtemp. */
-	if (!hw->phy.reset_if_overtemp &&
-	    (IXGBE_ERR_OVERTEMP == hw->phy.ops.check_overtemp(hw)))
+	if (!hw->phy.reset_if_overtemp && overtemp)
 		return 0;
 
 	/* Blocked by MNG FW so bail */
@@ -2746,24 +2750,33 @@ static void ixgbe_i2c_bus_clear(struct ixgbe_hw *hw)
 /**
  *  ixgbe_tn_check_overtemp - Checks if an overtemp occurred.
  *  @hw: pointer to hardware structure
+ *  @is_overtemp: indicate whether an overtemp event encountered
  *
  *  Checks if the LASI temp alarm status was triggered due to overtemp
  **/
-s32 ixgbe_tn_check_overtemp(struct ixgbe_hw *hw)
+s32 ixgbe_tn_check_overtemp(struct ixgbe_hw *hw, bool *is_overtemp)
 {
 	u16 phy_data = 0;
+	u32 status;
+
+	if (!hw || !is_overtemp)
+		return -EINVAL;
+
+	*is_overtemp = false;
 
 	if (hw->device_id != IXGBE_DEV_ID_82599_T3_LOM)
 		return 0;
 
 	/* Check that the LASI temp alarm status was triggered */
-	hw->phy.ops.read_reg(hw, IXGBE_TN_LASI_STATUS_REG,
-			     MDIO_MMD_PMAPMD, &phy_data);
+	status = hw->phy.ops.read_reg(hw, IXGBE_TN_LASI_STATUS_REG,
+				      MDIO_MMD_PMAPMD, &phy_data);
+	if (status)
+		return status;
 
-	if (!(phy_data & IXGBE_TN_LASI_STATUS_TEMP_ALARM))
-		return 0;
+	if (phy_data & IXGBE_TN_LASI_STATUS_TEMP_ALARM)
+		*is_overtemp = true;
 
-	return IXGBE_ERR_OVERTEMP;
+	return 0;
 }
 
 /** ixgbe_set_copper_phy_power - Control power for copper phy
