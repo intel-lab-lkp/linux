@@ -49,6 +49,7 @@ Other guides to the community that are of interest to most developers are:
    :maxdepth: 1
 
    changes
+   tests
    stable-api-nonsense
    management-style
    stable-kernel-rules

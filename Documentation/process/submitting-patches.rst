@@ -233,27 +233,42 @@ Test your changes
 
 Test the patch to the best of your ability. Check the MAINTAINERS file for the
 subsystem(s) you are changing to see if there are any **V:** entries
-proposing particular test suite commands. E.g.::
+proposing particular test suites, either directly as commands, or via
+documentation references.
+
+Test suite references start with a ``*`` (similar to C pointer dereferencing),
+followed by the name of the test suite, which would be documented in the
+Documentation/process/tests.rst under the corresponding heading. E.g.::
+
+  V: *xfstests
+
+Anything not starting with a ``*`` is considered a command. E.g.::
 
   V: tools/testing/kunit/run_checks.py
 
 Supplying the ``--test`` option to ``scripts/get_maintainer.pl`` adds **V:**
 entries to its output.
 
-Execute the commands, if any, to test your changes.
+Execute the (referenced) test suites, if any, to test your changes.
 
 All commands must be executed from the root of the source tree. Each command
 outputs usage information, if an -h/--help option is specified.
 
 If a test suite you've executed completed successfully, add a ``Tested-with:
-<command>`` to the message of the commit you tested. E.g.::
+<command>`` or ``Tested-with: *<reference>`` to the message of the commit you
+tested. E.g.::
 
   Tested-with: tools/testing/kunit/run_checks.py
+
+or::
+
+  Tested-with: *xfstests
 
 Optionally, add a '#' character followed by a publicly-accessible URL
 containing the test results, if you make them available. E.g.::
 
   Tested-with: tools/testing/kunit/run_checks.py # https://kernelci.org/test/2239874
+  Tested-with: *xfstests # https://kernelci.org/test/2239324
 
 
 Select the recipients for your patch

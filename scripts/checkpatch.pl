@@ -66,6 +66,9 @@ my $codespellfile = "/usr/share/codespell/dictionary.txt";
 my $user_codespellfile = "";
 my $conststructsfile = "$D/const_structs.checkpatch";
 my $docsfile = "$D/../Documentation/dev-tools/checkpatch.rst";
+my $testsrelfile = "Documentation/process/tests.rst";
+my $testsfile = "$D/../$testsrelfile";
+my %tests = ();
 my $typedefsfile;
 my $color = "auto";
 my $allow_c99_comments = 1; # Can be overridden by --ignore C99_COMMENT_TOLERANCE
@@ -282,6 +285,39 @@ sub load_docs {
 	close($docs);
 }
 
+sub load_tests {
+	open(my $tests, '<', "$testsfile")
+	    or warn "$P: Can't read the tests file $testsfile $!\n";
+
+	my $name = undef;
+	my $prev_line = undef;
+	my $in_field_list = 0;
+
+	while (<$tests>) {
+		my $line = $_;
+		$line =~ s/\s+$//;
+
+		# If the previous line was a second-level header (test name)
+		if ($line =~ /^-+$/ &&
+		    defined($prev_line) &&
+		    length($line) == length($prev_line)) {
+			$name = $prev_line;
+			$tests{$name} = {};
+			$in_field_list = 1;
+		# Else, if we're parsing the test's header field list
+		} elsif ($in_field_list) {
+			if ($line =~ /^:([^:]+):\s+(.*)/) {
+				$tests{$name}{lc($1)} = $2;
+			} else {
+				$in_field_list = !$line;
+			}
+		}
+
+		$prev_line = $line;
+	}
+	close($tests);
+}
+
 # Perl's Getopt::Long allows options to take optional arguments after a space.
 # Prevent --color by itself from consuming other arguments
 foreach (@ARGV) {
@@ -372,6 +408,7 @@ if ($color =~ /^[01]$/) {
 
 load_docs() if ($verbose);
 list_types(0) if ($list_types);
+load_tests();
 
 $fix = 1 if ($fix_inplace);
 $check_orig = $check;
@@ -1160,10 +1197,22 @@ sub get_file_proposed_tests {
 		my $output = `$command 2>/dev/null`;
 		# But regenerate stderr on failure
 		die "Failed retrieving tests proposed for changes to \"$filename\":\n" . `$command 2>&1 >/dev/null` if ($?);
-		$files_proposed_tests{$filename} = [grep { !/@/ } split("\n", $output)]
+		$file_proposed_tests = [grep { !/@/ } split("\n", $output)];
+		# Validate and normalize all references
+		for my $index (0 .. scalar @$file_proposed_tests - 1) {
+			my $test = $file_proposed_tests->[$index];
+			if ($test =~ /^\*\s*(.*)$/) {
+				my $name = $1;
+				die "Test $name referenced in MAINTAINERS not found in $testsrelfile\n"
+					if (!exists $tests{$name});
+				$file_proposed_tests->[$index] = "*" . $name;
+			}
+		}
+		$files_proposed_tests{$filename} = $file_proposed_tests;
+	} else {
+		$file_proposed_tests = $files_proposed_tests{$filename};
 	}
 
-	$file_proposed_tests = $files_proposed_tests{$filename};
 	return @$file_proposed_tests;
 }
 
@@ -2936,11 +2985,33 @@ sub process {
 			# Check if tests are proposed for changes to the file
 			foreach my $test (get_file_proposed_tests($realfile)) {
 				next if exists $dont_propose_tests{$test};
-				CHK("TEST_PROPOSAL",
-				    "Running the following test suite is proposed for changes to $realfile:\n" .
-				    "$test\n" .
-				    "Add the following to the tested commit's message, IF IT PASSES:\n" .
-				    "Tested-with: $test\n");
+				my $name;
+				my $title;
+				my $command;
+				my $message;
+				# If this is a reference to a documented test suite
+				if ($test =~ /^\*\s*(.*)/) {
+					$name = $1;
+					$title = $tests{$name}{"summary"} // "$name test suite";
+					$command = $tests{$name}{"command"};
+				# Else it's a test command
+				} else {
+					$title = "test suite";
+					$command = $test;
+				}
+				if ($command) {
+					$message = "Execute the $title " .
+						"proposed for verifying changes to $realfile:\n" .
+						"$command\n";
+				} else {
+					$message = "The $title is proposed for verifying changes to $realfile\n";
+				}
+				if ($name) {
+					$message .= "See instructions under \"$name\" in $testsrelfile\n";
+				}
+				$message .= "Add the following to the tested commit's message, " .
+					"IF IT PASSES:\nTested-with: $test\n";
+				CHK("TEST_PROPOSAL", $message);
 				$dont_propose_tests{$test} = 1;
 			}
 
@@ -3272,8 +3343,28 @@ sub process {
 
 # Check and accumulate executed test suites (stripping URLs off the end)
 		if (!$in_commit_log && $line =~ /^\s*Tested-with:\s*(.*?)\s*#.*$/i) {
-			# Do not propose this certified-passing test suite
-			$dont_propose_tests{$1} = 1;
+			my $test = $1;
+			# If the test is a reference
+			if ($test =~ /^\*\s*(.*)$/) {
+				# Do not propose (normalized references to)
+				# the test and its subsets
+				local *dont_propose_test_name = sub {
+					my ($name) = @_;
+					$dont_propose_tests{"*" . $name} = 1;
+					foreach my $sub_name (keys %tests) {
+						my $sub_data = $tests{$sub_name};
+						my $superset = $sub_data->{"superset"};
+						if (defined($superset) and $superset eq $name) {
+							dont_propose_test($sub_name);
+						}
+					}
+				};
+				dont_propose_test_name($1);
+			# Else it's a command
+			} else {
+				# Do not propose the test
+				$dont_propose_tests{$test} = 1;
+			}
 		}
 
 # Check email subject for common tools that don't need to be mentioned
@@ -3728,8 +3819,17 @@ sub process {
 			}
 # check MAINTAINERS V: entries are valid
 			if ($rawline =~ /^\+V:\s*(.*)/) {
-				my $name = $1;
-				if ($name =~ /[@#]/) {
+				my $entry = $1;
+				# If this is a valid entry value
+				if ($entry =~ /^[^@#]*$/) {
+					# If the test in the entry is a reference
+					if ($entry =~ /^\*\s*(.*)$/) {
+						my $name = $1;
+						ERROR("TEST_PROPOSAL_INVALID",
+						      "Test $name referenced in MAINTAINERS not found in $testsrelfile\n" .
+						      $herecurr) if (!exists $tests{$name});
+					}
+				} else {
 					ERROR("TEST_PROPOSAL_INVALID",
 					      "Test proposal cannot contain '\@' or '#' characters\n" . $herecurr);
 				}
