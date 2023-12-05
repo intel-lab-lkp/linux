@@ -1529,7 +1529,8 @@ void phy_start(struct phy_device *phydev)
 		sfp_upstream_start(phydev->sfp_bus);
 
 	/* if phy was suspended, bring the physical link up again */
-	__phy_resume(phydev);
+	if (phydev->suspended)
+		__phy_resume(phydev);
 
 	phydev->state = PHY_UP;
 
