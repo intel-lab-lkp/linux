@@ -93,6 +93,11 @@ struct nbd_config {
 	unsigned long runtime_flags;
 	u64 dead_conn_timeout;
 
+	/*
+	 * Anyone who tries to get config->socks needs to be
+	 * protected by config_lock since it may be released
+	 * by krealloc in nbd_add_socket.
+	 */
 	struct nbd_sock **socks;
 	int num_connections;
 	atomic_t live_connections;
@@ -899,6 +904,10 @@ static void recv_work(struct work_struct *work)
 	nbd_mark_nsock_dead(nbd, nsock, 1);
 	mutex_unlock(&nsock->tx_lock);
 
+	/*
+	 * recv_work will not get config_lock here if recv_workq is flushed
+	 * in ioctl since nbd_open is holding config_refs.
+	 */
 	nbd_config_put(nbd);
 	atomic_dec(&config->recv_threads);
 	wake_up(&config->recv_wq);
@@ -1442,13 +1451,21 @@ static int nbd_start_device_ioctl(struct nbd_device *nbd)
 	mutex_unlock(&nbd->config_lock);
 	ret = wait_event_interruptible(config->recv_wq,
 					 atomic_read(&config->recv_threads) == 0);
+
+	/*
+	 * Get config_lock before sock_shutdown to prevent UAF since nbd_add_socket
+	 * may release config->socks concurrently.
+	 *
+	 * config_lock can be got before flush_workqueue since recv_work will not
+	 * get it in the current scenario.
+	 */
+	mutex_lock(&nbd->config_lock);
 	if (ret) {
 		sock_shutdown(nbd);
 		nbd_clear_que(nbd);
 	}
 
 	flush_workqueue(nbd->recv_workq);
-	mutex_lock(&nbd->config_lock);
 	nbd_bdev_reset(nbd);
 	/* user requested, ignore socket errors */
 	if (test_bit(NBD_RT_DISCONNECT_REQUESTED, &config->runtime_flags))
