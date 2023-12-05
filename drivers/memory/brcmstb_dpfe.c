@@ -924,6 +924,12 @@ static const struct of_device_id brcmstb_dpfe_of_match[] = {
 	{ .compatible = "brcm,bcm7271-dpfe-cpu", .data = &dpfe_api_old_v2 },
 	{ .compatible = "brcm,bcm7278-dpfe-cpu", .data = &dpfe_api_old_v2 },
 	{ .compatible = "brcm,bcm7211-dpfe-cpu", .data = &dpfe_api_new_v2 },
+
+	/* Match specific DCPU versions */
+	{ .compatible = "brcm,dpfe-cpu-v1", .data = &dpfe_api_old_v2 },
+	{ .compatible = "brcm,dpfe-cpu-v2", .data = &dpfe_api_new_v2 },
+	{ .compatible = "brcm,dpfe-cpu-v3", .data = &dpfe_api_v3 },
+
 	/* API v3 is the default going forward */
 	{ .compatible = "brcm,dpfe-cpu", .data = &dpfe_api_v3 },
 	{}
