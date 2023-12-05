@@ -53,16 +53,6 @@ enum cc_attr {
 	CC_ATTR_GUEST_MEM_ENCRYPT,
 
 	/**
-	 * @CC_ATTR_GUEST_STATE_ENCRYPT: Guest state encryption is active
-	 *
-	 * The platform/OS is running as a guest/virtual machine and actively
-	 * using memory encryption and register state encryption.
-	 *
-	 * Examples include SEV-ES.
-	 */
-	CC_ATTR_GUEST_STATE_ENCRYPT,
-
-	/**
 	 * @CC_ATTR_GUEST_UNROLL_STRING_IO: String I/O is implemented with
 	 *                                  IN/OUT instructions
 	 *
@@ -72,14 +62,6 @@ enum cc_attr {
 	 * Examples include TDX guest & SEV.
 	 */
 	CC_ATTR_GUEST_UNROLL_STRING_IO,
-
-	/**
-	 * @CC_ATTR_SEV_SNP: Guest SNP is active.
-	 *
-	 * The platform/OS is running as a guest/virtual machine and actively
-	 * using AMD SEV-SNP features.
-	 */
-	CC_ATTR_GUEST_SEV_SNP,
 
 	/**
 	 * @CC_ATTR_HOTPLUG_DISABLED: Hotplug is not supported or disabled.

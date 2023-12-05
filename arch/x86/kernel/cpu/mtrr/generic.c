@@ -453,7 +453,7 @@ void mtrr_overwrite_state(struct mtrr_var_range *var, unsigned int num_var,
 	 * - when running as SEV-SNP or TDX guest to avoid unnecessary
 	 *   VMM communication/Virtualization exceptions (#VC, #VE)
 	 */
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP) &&
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST) &&
 	    !hv_is_isolation_supported() &&
 	    !cpu_feature_enabled(X86_FEATURE_XENPV) &&
 	    !cpu_feature_enabled(X86_FEATURE_TDX_GUEST))

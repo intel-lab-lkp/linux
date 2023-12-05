@@ -126,7 +126,7 @@ static void __init __sme_early_enc_dec(resource_size_t paddr,
 		 * Use a temporary buffer, of cache-line multiple size, to
 		 * avoid data corruption as documented in the APM.
 		 */
-		if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP)) {
+		if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST)) {
 			snp_memcpy(sme_early_buffer, src, len, paddr, enc);
 			snp_memcpy(dst, sme_early_buffer, len, paddr, !enc);
 		} else {
@@ -288,7 +288,7 @@ static bool amd_enc_status_change_prepare(unsigned long vaddr, int npages, bool 
 	 * To maintain the security guarantees of SEV-SNP guests, make sure
 	 * to invalidate the memory before encryption attribute is cleared.
 	 */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP) && !enc)
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST) && !enc)
 		snp_set_memory_shared(vaddr, npages);
 
 	return true;
@@ -301,7 +301,7 @@ static bool amd_enc_status_change_finish(unsigned long vaddr, int npages, bool e
 	 * After memory is mapped encrypted in the page table, validate it
 	 * so that it is consistent with the page table updates.
 	 */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP) && enc)
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST) && enc)
 		snp_set_memory_private(vaddr, npages);
 
 	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
@@ -467,6 +467,13 @@ void __init sme_early_init(void)
 	x86_platform.guest.enc_tlb_flush_required    = amd_enc_tlb_flush_required;
 	x86_platform.guest.enc_cache_flush_required  = amd_enc_cache_flush_required;
 
+	if (sev_status & MSR_AMD64_SEV_ENABLED)
+		setup_force_cpu_cap(X86_FEATURE_SEV_GUEST);
+	if (sev_status & MSR_AMD64_SEV_ES_ENABLED)
+		setup_force_cpu_cap(X86_FEATURE_SEV_ES_GUEST);
+	if (sev_status & MSR_AMD64_SEV_SNP_ENABLED)
+		setup_force_cpu_cap(X86_FEATURE_SEV_SNP_GUEST);
+
 	/*
 	 * AMD-SEV-ES intercepts the RDMSR to read the X2APIC ID in the
 	 * parallel bringup low level code. That raises #VC which cannot be
@@ -479,7 +486,7 @@ void __init sme_early_init(void)
 	 * "initial" APIC ID to be the same as the real APIC ID.
 	 * Disable parallel bootup.
 	 */
-	if (sev_status & MSR_AMD64_SEV_ES_ENABLED)
+	if (cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		x86_cpuinit.parallel_bringup = false;
 }
 

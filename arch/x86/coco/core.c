@@ -11,6 +11,7 @@
 #include <linux/cc_platform.h>
 
 #include <asm/coco.h>
+#include <asm/cpufeature.h>
 #include <asm/processor.h>
 
 enum cc_vendor cc_vendor __ro_after_init = CC_VENDOR_NONE;
@@ -70,24 +71,18 @@ static bool noinstr amd_cc_platform_has(enum cc_attr attr)
 		return sme_me_mask;
 
 	case CC_ATTR_HOST_MEM_ENCRYPT:
-		return sme_me_mask && !(sev_status & MSR_AMD64_SEV_ENABLED);
+		return sme_me_mask && !cpu_feature_enabled(X86_FEATURE_SEV_GUEST);
 
 	case CC_ATTR_GUEST_MEM_ENCRYPT:
-		return sev_status & MSR_AMD64_SEV_ENABLED;
-
-	case CC_ATTR_GUEST_STATE_ENCRYPT:
-		return sev_status & MSR_AMD64_SEV_ES_ENABLED;
+		return cpu_feature_enabled(X86_FEATURE_SEV_GUEST);
 
 	/*
 	 * With SEV, the rep string I/O instructions need to be unrolled
 	 * but SEV-ES supports them through the #VC handler.
 	 */
 	case CC_ATTR_GUEST_UNROLL_STRING_IO:
-		return (sev_status & MSR_AMD64_SEV_ENABLED) &&
-			!(sev_status & MSR_AMD64_SEV_ES_ENABLED);
-
-	case CC_ATTR_GUEST_SEV_SNP:
-		return sev_status & MSR_AMD64_SEV_SNP_ENABLED;
+		return cpu_feature_enabled(X86_FEATURE_SEV_GUEST) &&
+			!cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST);
 
 	default:
 		return false;

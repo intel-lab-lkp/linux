@@ -145,22 +145,19 @@ extern void __sev_es_ist_enter(struct pt_regs *regs);
 extern void __sev_es_ist_exit(void);
 static __always_inline void sev_es_ist_enter(struct pt_regs *regs)
 {
-	if (cc_vendor == CC_VENDOR_AMD &&
-	    cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		__sev_es_ist_enter(regs);
 }
 static __always_inline void sev_es_ist_exit(void)
 {
-	if (cc_vendor == CC_VENDOR_AMD &&
-	    cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		__sev_es_ist_exit();
 }
 extern int sev_es_setup_ap_jump_table(struct real_mode_header *rmh);
 extern void __sev_es_nmi_complete(void);
 static __always_inline void sev_es_nmi_complete(void)
 {
-	if (cc_vendor == CC_VENDOR_AMD &&
-	    cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		__sev_es_nmi_complete();
 }
 extern int __init sev_es_efi_map_ghcbs(pgd_t *pgd);

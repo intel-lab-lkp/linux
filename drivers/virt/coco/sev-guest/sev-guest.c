@@ -905,7 +905,7 @@ static int __init sev_guest_probe(struct platform_device *pdev)
 	void __iomem *mapping;
 	int ret;
 
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return -ENODEV;
 
 	if (!dev->platform_data)

@@ -62,15 +62,15 @@ static void print_mem_encrypt_feature_info(void)
 	}
 
 	/* Secure Encrypted Virtualization */
-	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_GUEST))
 		pr_cont(" SEV");
 
 	/* Encrypted Register State */
-	if (cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		pr_cont(" SEV-ES");
 
 	/* Secure Nested Paging */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		pr_cont(" SEV-SNP");
 
 	pr_cont("\n");

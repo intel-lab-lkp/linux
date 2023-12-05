@@ -656,7 +656,7 @@ static u64 __init get_jump_table_addr(void)
 	struct ghcb *ghcb;
 	u64 ret = 0;
 
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return get_snp_jump_table_addr();
 
 	local_irq_save(flags);
@@ -879,7 +879,7 @@ static void set_pages_state(unsigned long vaddr, unsigned long npages, int op)
 
 void snp_set_memory_shared(unsigned long vaddr, unsigned long npages)
 {
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return;
 
 	set_pages_state(vaddr, npages, SNP_PAGE_STATE_SHARED);
@@ -887,7 +887,7 @@ void snp_set_memory_shared(unsigned long vaddr, unsigned long npages)
 
 void snp_set_memory_private(unsigned long vaddr, unsigned long npages)
 {
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return;
 
 	set_pages_state(vaddr, npages, SNP_PAGE_STATE_PRIVATE);
@@ -897,7 +897,7 @@ void snp_accept_memory(phys_addr_t start, phys_addr_t end)
 {
 	unsigned long vaddr, npages;
 
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return;
 
 	vaddr = (unsigned long)__va(start);
@@ -1117,7 +1117,7 @@ static int wakeup_cpu_via_vmgexit(u32 apic_id, unsigned long start_ip)
 
 void __init snp_set_wakeup_secondary_cpu(void)
 {
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return;
 
 	/*
@@ -1175,7 +1175,7 @@ int __init sev_es_efi_map_ghcbs(pgd_t *pgd)
 	int cpu;
 	u64 pfn;
 
-	if (!cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		return 0;
 
 	pflags = _PAGE_NX | _PAGE_RW;
@@ -1231,7 +1231,7 @@ static void snp_register_per_cpu_ghcb(void)
 
 void setup_ghcb(void)
 {
-	if (!cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		return;
 
 	/*
@@ -1242,7 +1242,7 @@ void setup_ghcb(void)
 	 * exception handler can use it.
 	 */
 	if (initial_vc_handler == (unsigned long)kernel_exc_vmm_communication) {
-		if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+		if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 			snp_register_per_cpu_ghcb();
 
 		sev_cfg.ghcbs_initialized = true;
@@ -1267,7 +1267,7 @@ void setup_ghcb(void)
 	boot_ghcb = &boot_ghcb_page;
 
 	/* SNP guest requires that GHCB GPA must be registered. */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		snp_register_ghcb_early(__pa(&boot_ghcb_page));
 }
 
@@ -1365,7 +1365,7 @@ void __init sev_es_init_vc_handling(void)
 
 	BUILD_BUG_ON(offsetof(struct sev_es_runtime_data, ghcb_page) % PAGE_SIZE);
 
-	if (!cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_ES_GUEST))
 		return;
 
 	if (!sev_es_check_cpu_features())
@@ -1375,7 +1375,7 @@ void __init sev_es_init_vc_handling(void)
 	 * SNP is supported in v2 of the GHCB spec which mandates support for HV
 	 * features.
 	 */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP)) {
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST)) {
 		sev_hv_features = get_hv_features();
 
 		if (!(sev_hv_features & GHCB_HV_FT_SNP))
@@ -2244,7 +2244,7 @@ static int __init snp_init_platform_device(void)
 	struct sev_guest_platform_data data;
 	u64 gpa;
 
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cpu_feature_enabled(X86_FEATURE_SEV_SNP_GUEST))
 		return -ENODEV;
 
 	gpa = get_secrets_page();
