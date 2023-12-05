@@ -18,6 +18,7 @@
 
 #include <asm/page.h>
 #include <asm/rtas.h>
+#include <asm/setup.h>
 #include <asm/fadump.h>
 #include <asm/fadump-internal.h>
 
@@ -79,6 +80,9 @@ static void __init rtas_fadump_get_config(struct fw_dump *fadump_conf,
 			hole_size += (base - last_end);
 			last_end = base + size;
 			fadump_conf->boot_mem_regs_cnt++;
+			break;
+		case RTAS_FADUMP_PARAM_AREA:
+			fadump_conf->param_area = be64_to_cpu(fdm->rgn[i].destination_address);
 			break;
 		default:
 			pr_warn("Section type %d unsupported on this kernel. Ignoring!\n", type);
@@ -153,7 +157,17 @@ static u64 rtas_fadump_init_mem_struct(struct fw_dump *fadump_conf)
 		sec_cnt++;
 	}
 
+	/* Parameters area */
+	if (fadump_conf->param_area) {
+		fdm.rgn[sec_cnt].request_flag = cpu_to_be32(RTAS_FADUMP_REQUEST_FLAG);
+		fdm.rgn[sec_cnt].source_data_type = cpu_to_be16(RTAS_FADUMP_PARAM_AREA);
+		fdm.rgn[sec_cnt].source_address = cpu_to_be64(fadump_conf->param_area);
+		fdm.rgn[sec_cnt].source_len = cpu_to_be64(COMMAND_LINE_SIZE);
+		fdm.rgn[sec_cnt].destination_address = cpu_to_be64(fadump_conf->param_area);
+		sec_cnt++;
+	}
 	fdm.header.dump_num_sections = cpu_to_be16(sec_cnt);
+
 	rtas_fadump_update_config(fadump_conf, &fdm);
 
 	return addr;
@@ -457,6 +471,13 @@ static int __init rtas_fadump_process(struct fw_dump *fadump_conf)
 				return rc;
 			}
 			break;
+		case RTAS_FADUMP_PARAM_AREA:
+			if (fdm_active->rgn[i].bytes_dumped != fdm_active->rgn[i].source_len ||
+			    fdm_active->rgn[i].error_flags != 0) {
+				pr_warn("Failed to process additional parameters! Proceeding anyway..\n");
+				fadump_conf->param_area = 0;
+			}
+			break;
 		default:
 			/*
 			 * If the first/crashed kernel added a new region type that the
@@ -532,6 +553,13 @@ static void rtas_fadump_region_show(struct fw_dump *fadump_conf,
 				   be64_to_cpu(fdm_ptr->rgn[i].source_len),
 				   be64_to_cpu(fdm_ptr->rgn[i].bytes_dumped));
 			break;
+		case RTAS_FADUMP_PARAM_AREA:
+			seq_printf(m, "\n[%#016llx-%#016llx]: cmdline append: '%s'\n",
+				   be64_to_cpu(fdm_ptr->rgn[i].destination_address),
+				   be64_to_cpu(fdm_ptr->rgn[i].destination_address) +
+				   be64_to_cpu(fdm_ptr->rgn[i].source_len) - 1,
+				   (char *)__va(be64_to_cpu(fdm_ptr->rgn[i].destination_address)));
+			break;
 		default:
 			seq_printf(m, "Unknown region type %d : Src: %#016llx, Dest: %#016llx, ",
 				   type, be64_to_cpu(fdm_ptr->rgn[i].source_address),
@@ -594,9 +622,10 @@ void __init rtas_fadump_dt_scan(struct fw_dump *fadump_conf, u64 node)
 	if (!token)
 		return;
 
-	fadump_conf->ibm_configure_kernel_dump = be32_to_cpu(*token);
-	fadump_conf->ops		= &rtas_fadump_ops;
-	fadump_conf->fadump_supported	= 1;
+	fadump_conf->ibm_configure_kernel_dump	= be32_to_cpu(*token);
+	fadump_conf->ops			= &rtas_fadump_ops;
+	fadump_conf->fadump_supported		= 1;
+	fadump_conf->param_area_supported	= 1;
 
 	/* Firmware supports 64-bit value for size, align it to pagesize. */
 	fadump_conf->max_copy_size = ALIGN_DOWN(U64_MAX, PAGE_SIZE);
