@@ -4,6 +4,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/pci.h>
+#include <linux/phy.h>
 #include <linux/dmi.h>
 #include "dwmac-intel.h"
 #include "dwmac4.h"
@@ -585,6 +586,28 @@ static int intel_mgbe_common_data(struct pci_dev *pdev,
 	/* Intel mgbe SGMII interface uses pcs-xcps */
 	if (plat->phy_interface == PHY_INTERFACE_MODE_SGMII ||
 	    plat->phy_interface == PHY_INTERFACE_MODE_1000BASEX) {
+		struct mdio_board_info *xpcs_info;
+
+		xpcs_info = devm_kzalloc(&pdev->dev,
+					 sizeof(*xpcs_info) + MII_BUS_ID_SIZE,
+					 GFP_KERNEL);
+		if (!xpcs_info) {
+			ret = -ENOMEM;
+			goto err_alloc_info;
+		}
+
+		xpcs_info->bus_id = (void *)xpcs_info + sizeof(*xpcs_info);
+		snprintf((char *)xpcs_info->bus_id, MII_BUS_ID_SIZE,
+			 "stmmac-%x", plat->bus_id);
+
+		snprintf(xpcs_info->modalias, MDIO_NAME_SIZE, "dwxpcs");
+
+		xpcs_info->mdio_addr = INTEL_MGBE_XPCS_ADDR;
+
+		ret = mdiobus_register_board_info(xpcs_info, 1);
+		if (ret)
+			goto err_alloc_info;
+
 		plat->mdio_bus_data->has_xpcs = true;
 		plat->mdio_bus_data->xpcs_an_inband = true;
 	}
@@ -600,7 +623,7 @@ static int intel_mgbe_common_data(struct pci_dev *pdev,
 		fwnode_handle_put(fixed_node);
 	}
 
-	/* Ensure mdio bus scan skips intel serdes and pcs-xpcs */
+	/* Ensure mdio bus PHY-scan skips intel serdes and pcs-xpcs */
 	plat->mdio_bus_data->phy_mask = 1 << INTEL_MGBE_ADHOC_ADDR;
 	plat->mdio_bus_data->phy_mask |= 1 << INTEL_MGBE_XPCS_ADDR;
 
@@ -618,6 +641,12 @@ static int intel_mgbe_common_data(struct pci_dev *pdev,
 	plat->msi_tx_base_vec = 1;
 
 	return 0;
+
+err_alloc_info:
+	clk_disable_unprepare(clk);
+	clk_unregister_fixed_rate(clk);
+
+	return ret;
 }
 
 static int ehl_common_data(struct pci_dev *pdev,
