@@ -53,6 +53,7 @@ my $output_section_maxlen = 50;
 my $scm = 0;
 my $tree = 1;
 my $web = 0;
+my $test = 0;
 my $subsystem = 0;
 my $status = 0;
 my $letters = "";
@@ -270,6 +271,7 @@ if (!GetOptions(
 		'scm!' => \$scm,
 		'tree!' => \$tree,
 		'web!' => \$web,
+		'test!' => \$test,
 		'letters=s' => \$letters,
 		'pattern-depth=i' => \$pattern_depth,
 		'k|keywords!' => \$keywords,
@@ -319,13 +321,14 @@ if ($sections || $letters ne "") {
     $status = 0;
     $subsystem = 0;
     $web = 0;
+    $test = 0;
     $keywords = 0;
     $keywords_in_file = 0;
     $interactive = 0;
 } else {
-    my $selections = $email + $scm + $status + $subsystem + $web;
+    my $selections = $email + $scm + $status + $subsystem + $web + $test;
     if ($selections == 0) {
-	die "$P:  Missing required option: email, scm, status, subsystem or web\n";
+	die "$P:  Missing required option: email, scm, status, subsystem, web or test\n";
     }
 }
 
@@ -634,6 +637,7 @@ my %hash_list_to;
 my @list_to = ();
 my @scm = ();
 my @web = ();
+my @test = ();
 my @subsystem = ();
 my @status = ();
 my %deduplicate_name_hash = ();
@@ -663,6 +667,11 @@ if ($subsystem) {
 if ($web) {
     @web = uniq(@web);
     output(@web);
+}
+
+if ($test) {
+    @test = uniq(@test);
+    output(@test);
 }
 
 exit($exit);
@@ -850,6 +859,7 @@ sub get_maintainers {
     @list_to = ();
     @scm = ();
     @web = ();
+    @test = ();
     @subsystem = ();
     @status = ();
     %deduplicate_name_hash = ();
@@ -1072,6 +1082,7 @@ MAINTAINER field selection options:
   --status => print status if any
   --subsystem => print subsystem name if any
   --web => print website(s) if any
+  --test => print test(s) if any
 
 Output type options:
   --separator [, ] => separator for multiple entries on 1 line
@@ -1382,6 +1393,8 @@ sub add_categories {
 		push(@scm, $pvalue . $suffix);
 	    } elsif ($ptype eq "W") {
 		push(@web, $pvalue . $suffix);
+	    } elsif ($ptype eq "V") {
+		push(@test, $pvalue . $suffix);
 	    } elsif ($ptype eq "S") {
 		push(@status, $pvalue . $suffix);
 	    }

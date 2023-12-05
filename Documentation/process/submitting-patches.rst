@@ -228,6 +228,24 @@ You should be able to justify all violations that remain in your
 patch.
 
 
+Test your changes
+-----------------
+
+Test the patch to the best of your ability. Check the MAINTAINERS file for the
+subsystem(s) you are changing to see if there are any **V:** entries
+proposing particular test suite commands. E.g.::
+
+  V: tools/testing/kunit/run_checks.py
+
+Supplying the ``--test`` option to ``scripts/get_maintainer.pl`` adds **V:**
+entries to its output.
+
+Execute the commands, if any, to test your changes.
+
+All commands must be executed from the root of the source tree. Each command
+outputs usage information, if an -h/--help option is specified.
+
+
 Select the recipients for your patch
 ------------------------------------
 

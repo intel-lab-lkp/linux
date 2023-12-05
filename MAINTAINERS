@@ -59,6 +59,13 @@ Descriptions of section entries and preferred order
 	      matches patches or files that contain one or more of the words
 	      printk, pr_info or pr_err
 	   One regex pattern per line.  Multiple K: lines acceptable.
+	V: *Test suite* proposed for execution. The command that could be
+	   executed to verify changes to the maintained subsystem.
+	   Must be executed from the root of the source tree.
+	   Must support the -h/--help option.
+	   Cannot contain '@' character.
+	   V: tools/testing/kunit/run_checks.py
+	   One test suite per line.
 
 Maintainers List
 ----------------

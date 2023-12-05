@@ -3657,7 +3657,7 @@ sub process {
 				}
 			}
 # check MAINTAINERS entries for the right ordering too
-			my $preferred_order = 'MRLSWQBCPTFXNK';
+			my $preferred_order = 'MRLSWQBCPVTFXNK';
 			if ($rawline =~ /^\+[A-Z]:/ &&
 			    $prevrawline =~ /^[\+ ][A-Z]:/) {
 				$rawline =~ /^\+([A-Z]):\s*(.*)/;
@@ -3681,6 +3681,14 @@ sub process {
 						WARN("MAINTAINERS_STYLE",
 						     "Misordered MAINTAINERS entry - list file patterns in alphabetic order\n" . $hereprev);
 					}
+				}
+			}
+# check MAINTAINERS V: entries are valid
+			if ($rawline =~ /^\+V:\s*(.*)/) {
+				my $name = $1;
+				if ($name =~ /@/) {
+					ERROR("TEST_PROPOSAL_INVALID",
+					      "Test proposal cannot contain '\@' character\n" . $herecurr);
 				}
 			}
 		}
