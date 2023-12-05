@@ -182,6 +182,7 @@ Hardware Monitoring Kernel Drivers
    pmbus
    powerz
    powr1220
+   pt516xx
    pxe1610
    pwm-fan
    q54sj108a2
