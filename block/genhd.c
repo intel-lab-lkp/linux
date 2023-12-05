@@ -118,7 +118,7 @@ static void part_stat_read_all(struct block_device *part,
 	}
 }
 
-static unsigned int part_in_flight(struct block_device *part)
+unsigned int part_in_flight(struct block_device *part)
 {
 	unsigned int inflight = 0;
 	int cpu;
@@ -962,7 +962,7 @@ ssize_t part_stat_show(struct device *dev,
 
 	if (inflight) {
 		part_stat_lock();
-		update_io_ticks(bdev, jiffies, true);
+		update_io_ticks(bdev, jiffies, true, true);
 		part_stat_unlock();
 	}
 	part_stat_read_all(bdev, &stat);
@@ -1255,7 +1255,7 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 
 		if (inflight) {
 			part_stat_lock();
-			update_io_ticks(hd, jiffies, true);
+			update_io_ticks(hd, jiffies, true, true);
 			part_stat_unlock();
 		}
 		part_stat_read_all(hd, &stat);
