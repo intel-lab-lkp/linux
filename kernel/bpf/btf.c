@@ -3696,6 +3696,7 @@ static int btf_parse_graph_root(const struct btf *btf,
 		if (offset % node_type_align)
 			return -EINVAL;
 
+		btf_get((struct btf *)btf);
 		field->graph_root.btf = (struct btf *)btf;
 		field->graph_root.value_btf_id = info->graph_root.value_btf_id;
 		field->graph_root.node_offset = offset;

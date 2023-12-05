@@ -521,8 +521,10 @@ void btf_record_free(struct btf_record *rec)
 			btf_put(rec->fields[i].kptr.btf);
 			break;
 		case BPF_LIST_HEAD:
-		case BPF_LIST_NODE:
 		case BPF_RB_ROOT:
+			btf_put(rec->fields[i].graph_root.btf);
+			break;
+		case BPF_LIST_NODE:
 		case BPF_RB_NODE:
 		case BPF_SPIN_LOCK:
 		case BPF_TIMER:
@@ -570,8 +572,10 @@ struct btf_record *btf_record_dup(const struct btf_record *rec)
 			}
 			break;
 		case BPF_LIST_HEAD:
-		case BPF_LIST_NODE:
 		case BPF_RB_ROOT:
+			btf_get(fields[i].graph_root.btf);
+			break;
+		case BPF_LIST_NODE:
 		case BPF_RB_NODE:
 		case BPF_SPIN_LOCK:
 		case BPF_TIMER:
