@@ -402,6 +402,16 @@ static void nested_ept_inject_page_fault(struct kvm_vcpu *vcpu,
 		 */
 		nested_ept_invalidate_addr(vcpu, vmcs12->ept_pointer,
 					   fault->address);
+
+		/*
+		 * vmx_get_exit_qual() returns the original exit qualification,
+		 * before it was overridden with exit qualification that
+		 * is about to be injected to the guest.
+		 */
+
+		trace_kvm_nested_page_fault(fault->address,
+				vmx_get_exit_qual(vcpu),
+				exit_qualification);
 	}
 
 	nested_vmx_vmexit(vcpu, vm_exit_reason, 0, exit_qualification);
@@ -4876,6 +4886,23 @@ void nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 						       vmcs12->vm_exit_intr_info,
 						       vmcs12->vm_exit_intr_error_code,
 						       KVM_ISA_VMX);
+
+		switch ((u16)vmcs12->vm_exit_reason) {
+		case EXIT_REASON_MSR_READ:
+		case EXIT_REASON_MSR_WRITE:
+			trace_kvm_nested_msr(vmcs12->vm_exit_reason == EXIT_REASON_MSR_WRITE,
+					     kvm_rcx_read(vcpu),
+					     (kvm_rax_read(vcpu) & 0xFFFFFFFFull) |
+					     (((u64)kvm_rdx_read(vcpu)) << 32));
+			break;
+		case EXIT_REASON_VMCALL:
+			trace_kvm_nested_hypercall(kvm_rax_read(vcpu),
+						   kvm_rbx_read(vcpu),
+						   kvm_rcx_read(vcpu),
+						   kvm_rdx_read(vcpu));
+			break;
+
+		}
 
 		load_vmcs12_host_state(vcpu, vmcs12);
 
