@@ -879,6 +879,50 @@ static int brcmstb_dpfe_resume(struct platform_device *pdev)
 	return brcmstb_dpfe_download_firmware(priv);
 }
 
+static int brcmstb_dpfe_probe_best_effort(struct platform_device *pdev)
+{
+	const char versioned_compat[] = "brcm,dpfe-cpu-v";
+	const char v1_str[] = "-v1";
+	const struct of_device_id *matches;
+	const struct dpfe_api *orig_dpfe_api;
+	struct device *dev = &pdev->dev;
+	struct brcmstb_dpfe_priv *priv;
+	int ret = -ENODEV;
+
+	priv = dev_get_drvdata(dev);
+	orig_dpfe_api = priv->dpfe_api;
+	matches = dev->driver->of_match_table;
+
+	/* Loop over all compatible strings */
+	for (; matches->compatible[0]; matches++) {
+		const char *compat = matches->compatible;
+		/* Find the ones that start with "brcm,dpfe-cpu-v" */
+		if (strstr(compat, versioned_compat) == compat) {
+			char *v1_ptr = strstr(compat, v1_str);
+			/*
+			 * We must skip v1, since we don't know the hardware
+			 * version and attempting a firmware download on v2 and
+			 * newer would crash the kernel due to a memory access
+			 * violation.
+			 * We make sure to match "-v1" at the end of the string
+			 * only.
+			 */
+			if (v1_ptr && v1_ptr[sizeof(v1_str)] == '\0')
+				continue;
+			priv->dpfe_api = matches->data;
+			/* Fingers crossed... */
+			ret = brcmstb_dpfe_download_firmware(priv);
+			if (!ret)
+				return 0;
+		}
+	}
+
+	/* It didn't work, so let's clean up. */
+	priv->dpfe_api = orig_dpfe_api;
+
+	return ret;
+}
+
 static int brcmstb_dpfe_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -923,8 +967,20 @@ static int brcmstb_dpfe_probe(struct platform_device *pdev)
 	}
 
 	ret = brcmstb_dpfe_download_firmware(priv);
+	if (ret && ret != -EPROBE_DEFER) {
+		/*
+		 * If the information provided by Device Tree didn't work, let's
+		 * try all known version. Maybe one will work.
+		 */
+		dev_warn(dev,
+			"DPFE v%d didn't work, reverting to best-effort\n",
+			priv->dpfe_api->version);
+		dev_warn(dev,
+			"Device Tree and / or the driver should be updated\n");
+		ret = brcmstb_dpfe_probe_best_effort(pdev);
+	}
 	if (ret)
-		return dev_err_probe(dev, ret, "Couldn't download firmware\n");
+		return dev_err_probe(dev, ret, "Unable to talk to DCPU\n");
 
 	ret = sysfs_create_groups(&pdev->dev.kobj, priv->dpfe_api->sysfs_attrs);
 	if (!ret)
