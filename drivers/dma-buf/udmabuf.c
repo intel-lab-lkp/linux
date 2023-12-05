@@ -156,7 +156,8 @@ static void release_udmabuf(struct dma_buf *buf)
 		put_sg_table(dev, ubuf->sg, DMA_BIDIRECTIONAL);
 
 	for (pg = 0; pg < ubuf->pagecount; pg++)
-		put_page(ubuf->pages[pg]);
+		unpin_user_page(ubuf->pages[pg]);
+
 	kfree(ubuf->subpgoff);
 	kfree(ubuf->pages);
 	kfree(ubuf);
@@ -217,15 +218,13 @@ static long udmabuf_create(struct miscdevice *device,
 {
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct file *memfd = NULL;
-	struct address_space *mapping = NULL;
 	struct udmabuf *ubuf;
 	struct dma_buf *buf;
-	pgoff_t pgoff, pgcnt, pgidx, pgbuf = 0, pglimit;
-	struct page *page, *hpage = NULL;
-	struct folio *folio;
+	pgoff_t pgcnt, pgbuf = 0, pglimit, nr_pages;
 	pgoff_t mapidx, chunkoff, maxchunks;
 	struct hstate *hpstate;
-	int seals, ret = -EINVAL;
+	long ret = -EINVAL;
+	int seals;
 	u32 i, flags;
 
 	ubuf = kzalloc(sizeof(*ubuf), GFP_KERNEL);
@@ -259,8 +258,7 @@ static long udmabuf_create(struct miscdevice *device,
 		memfd = fget(list[i].memfd);
 		if (!memfd)
 			goto err;
-		mapping = memfd->f_mapping;
-		if (!shmem_mapping(mapping) && !is_file_hugepages(memfd))
+		if (!shmem_file(memfd) && !is_file_hugepages(memfd))
 			goto err;
 		seals = memfd_fcntl(memfd, F_GET_SEALS, 0);
 		if (seals == -EINVAL)
@@ -269,7 +267,7 @@ static long udmabuf_create(struct miscdevice *device,
 		if ((seals & SEALS_WANTED) != SEALS_WANTED ||
 		    (seals & SEALS_DENIED) != 0)
 			goto err;
-		pgoff = list[i].offset >> PAGE_SHIFT;
+		mapidx = list[i].offset >> PAGE_SHIFT;
 		pgcnt = list[i].size   >> PAGE_SHIFT;
 		if (is_file_hugepages(memfd)) {
 			if (!ubuf->subpgoff) {
@@ -288,42 +286,27 @@ static long udmabuf_create(struct miscdevice *device,
 				    ~huge_page_mask(hpstate)) >> PAGE_SHIFT;
 			maxchunks = huge_page_size(hpstate) >> PAGE_SHIFT;
 		}
-		for (pgidx = 0; pgidx < pgcnt; pgidx++) {
+
+		do {
+			nr_pages = shmem_file(memfd) ? pgcnt : 1;
+			ret = memfd_pin_user_pages(memfd, mapidx, nr_pages,
+						   ubuf->pages + pgbuf);
+			if (ret < 0)
+				goto err;
+
 			if (is_file_hugepages(memfd)) {
-				if (!hpage) {
-					folio = __filemap_get_folio(mapping, mapidx,
-								    FGP_ACCESSED, 0);
-					hpage = IS_ERR(folio) ? NULL: &folio->page;
-					if (!hpage) {
-						ret = -EINVAL;
-						goto err;
-					}
-				}
-				get_page(hpage);
-				ubuf->pages[pgbuf] = hpage;
-				ubuf->subpgoff[pgbuf++] = chunkoff << PAGE_SHIFT;
+				ubuf->subpgoff[pgbuf] = chunkoff << PAGE_SHIFT;
 				if (++chunkoff == maxchunks) {
-					put_page(hpage);
-					hpage = NULL;
 					chunkoff = 0;
 					mapidx += pages_per_huge_page(hpstate);
 				}
-			} else {
-				mapidx = pgoff + pgidx;
-				page = shmem_read_mapping_page(mapping, mapidx);
-				if (IS_ERR(page)) {
-					ret = PTR_ERR(page);
-					goto err;
-				}
-				ubuf->pages[pgbuf++] = page;
 			}
-		}
+			pgbuf += nr_pages;
+			pgcnt -= nr_pages;
+		} while (pgcnt > 0);
+
 		fput(memfd);
 		memfd = NULL;
-		if (hpage) {
-			put_page(hpage);
-			hpage = NULL;
-		}
 	}
 
 	exp_info.ops  = &udmabuf_ops;
@@ -344,8 +327,9 @@ static long udmabuf_create(struct miscdevice *device,
 	return dma_buf_fd(buf, flags);
 
 err:
-	while (pgbuf > 0)
-		put_page(ubuf->pages[--pgbuf]);
+	while (pgbuf-- > 0)
+		if (ubuf->pages[pgbuf])
+			unpin_user_page(ubuf->pages[pgbuf]);
 	if (memfd)
 		fput(memfd);
 	kfree(ubuf->subpgoff);
