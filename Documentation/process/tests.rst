@@ -71,3 +71,26 @@ kvm-xfstests smoke
 
 The "kvm-xfstests smoke" is a minimal subset of xfstests for testing all major
 file systems, running under KVM.
+
+kunit
+-----
+
+:Summary: complete set of KUnit unit tests
+:Command: tools/testing/kunit/kunit.py run --alltests
+:Docs: https://docs.kernel.org/dev-tools/kunit/
+
+KUnit tests are part of the kernel, written in the C (programming) language,
+and test parts of the Kernel implementation (example: a C language function).
+Excluding build time, from invocation to completion, KUnit can run around 100
+tests in less than 10 seconds. KUnit can test any kernel component, for
+example: file system, system calls, memory management, device drivers and so
+on.
+
+KUnit follows the white-box testing approach. The test has access to internal
+system functionality. KUnit runs in kernel space and is not restricted to
+things exposed to user-space.
+
+In addition, KUnit has kunit_tool, a script (tools/testing/kunit/kunit.py)
+that configures the Linux kernel, runs KUnit tests under QEMU or UML (User
+Mode Linux), parses the test results and displays them in a user friendly
+manner.
