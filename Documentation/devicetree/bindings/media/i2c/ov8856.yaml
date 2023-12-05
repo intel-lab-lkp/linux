@@ -126,7 +126,7 @@ examples:
                 wcam_out: endpoint {
                     remote-endpoint = <&mipi_in_wcam>;
                     data-lanes = <1 2 3 4>;
-                    link-frequencies = /bits/ 64 <360000000>;
+                    link-frequencies = /bits/ 64 <360000000 180000000>;
                 };
             };
         };
