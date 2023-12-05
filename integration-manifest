@@ -1,0 +1,30 @@
+drm drm-fixes 33924328498e903bea74727353e5012d29653aff
+	Merge tag 'drm-intel-fixes-2023-12-01-1' of git://anongit.freedesktop.org/drm/drm-intel into drm-fixes
+drm-misc drm-misc-fixes 26513300978f7285c3e776c144f27ef71be61f57
+	drm/bridge: tc358768: select CONFIG_VIDEOMODE_HELPERS
+drm-intel drm-intel-fixes 9f269070abe9c45dc60abc84e29326f855317eac
+	drm/i915: correct the input parameter on _intel_dsb_commit()
+drm drm-next 5edfd7d94b0310b74136b666551f1d23711ed445
+	Merge tag 'amd-drm-next-6.8-2023-12-01' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 1319f2178bdf1898a76ea8c4f00d57b240bbc5fd
+	drm/panel-simple: add Evervision VGG644804 panel entry
+drm-intel drm-intel-next 4de77156a2acdec0014fa89fc1766a7410d726ff
+	drm/i915/dsi: Use devm_gpiod_get() for all GPIOs
+drm-intel drm-intel-gt-next 706785c19fe92186815bdb9ae0148c4ba7262669
+	drm/i915/guc: Add a selftest for FAST_REQUEST errors
+drm-intel topic/core-for-CI ec86d2449703f826e8a4cc790fce3cb3b2179cd5
+	fixup! PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
