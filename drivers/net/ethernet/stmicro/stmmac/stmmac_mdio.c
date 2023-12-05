@@ -522,6 +522,17 @@ int stmmac_xpcs_setup(struct net_device *ndev)
 	return 0;
 }
 
+void stmmac_xpcs_clean(struct net_device *ndev)
+{
+	struct stmmac_priv *priv = netdev_priv(ndev);
+
+	if (!priv->hw->xpcs)
+		return;
+
+	xpcs_destroy(priv->hw->xpcs);
+	priv->hw->xpcs = NULL;
+}
+
 /**
  * stmmac_mdio_register
  * @ndev: net device structure
@@ -673,9 +684,6 @@ int stmmac_mdio_unregister(struct net_device *ndev)
 
 	if (!priv->mii)
 		return 0;
-
-	if (priv->hw->xpcs)
-		xpcs_destroy(priv->hw->xpcs);
 
 	mdiobus_unregister(priv->mii);
 	priv->mii->priv = NULL;
