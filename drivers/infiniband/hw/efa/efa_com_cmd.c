@@ -270,6 +270,12 @@ int efa_com_register_mr(struct efa_com_dev *edev,
 
 	result->l_key = cmd_completion.l_key;
 	result->r_key = cmd_completion.r_key;
+	result->recv_pci_bus_id = EFA_GET(&cmd_completion.validity, EFA_ADMIN_REG_MR_RESP_RECV_PCI_BUS_ID) ?
+		cmd_completion.recv_pci_bus_id : EFA_INVALID_PCI_BUS_ID;
+	result->rdma_read_pci_bus_id = EFA_GET(&cmd_completion.validity, EFA_ADMIN_REG_MR_RESP_RDMA_READ_PCI_BUS_ID) ?
+		cmd_completion.rdma_read_pci_bus_id : EFA_INVALID_PCI_BUS_ID;
+	result->rdma_recv_pci_bus_id = EFA_GET(&cmd_completion.validity, EFA_ADMIN_REG_MR_RESP_RDMA_RECV_PCI_BUS_ID) ?
+		cmd_completion.rdma_recv_pci_bus_id : EFA_INVALID_PCI_BUS_ID;
 
 	return 0;
 }
