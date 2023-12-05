@@ -1144,6 +1144,29 @@ sub is_maintained_obsolete {
 	return $maintained_status{$filename} =~ /obsolete/i;
 }
 
+# Test suites proposed per changed file
+our %files_proposed_tests = ();
+
+# Return a list of test suites proposed for execution for a particular file
+sub get_file_proposed_tests {
+	my ($filename) = @_;
+	my $file_proposed_tests;
+
+	return () if (!$tree || !(-e "$root/scripts/get_maintainer.pl"));
+
+	if (!exists($files_proposed_tests{$filename})) {
+		my $command = "perl $root/scripts/get_maintainer.pl --test --multiline --nogit --nogit-fallback -f $filename";
+		# Ignore warnings on stderr
+		my $output = `$command 2>/dev/null`;
+		# But regenerate stderr on failure
+		die "Failed retrieving tests proposed for changes to \"$filename\":\n" . `$command 2>&1 >/dev/null` if ($?);
+		$files_proposed_tests{$filename} = [grep { !/@/ } split("\n", $output)]
+	}
+
+	$file_proposed_tests = $files_proposed_tests{$filename};
+	return @$file_proposed_tests;
+}
+
 sub is_SPDX_License_valid {
 	my ($license) = @_;
 
@@ -2689,6 +2712,9 @@ sub process {
 	my @setup_docs = ();
 	my $setup_docs = 0;
 
+	# Test suites which should not be proposed for execution
+	my %dont_propose_tests = ();
+
 	my $camelcase_file_seeded = 0;
 
 	my $checklicenseline = 1;
@@ -2905,6 +2931,17 @@ sub process {
 					WARN("DT_SPLIT_BINDING_PATCH",
 					     "DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst\n");
 				}
+			}
+
+			# Check if tests are proposed for changes to the file
+			foreach my $test (get_file_proposed_tests($realfile)) {
+				next if exists $dont_propose_tests{$test};
+				CHK("TEST_PROPOSAL",
+				    "Running the following test suite is proposed for changes to $realfile:\n" .
+				    "$test\n" .
+				    "Add the following to the tested commit's message, IF IT PASSES:\n" .
+				    "Tested-with: $test\n");
+				$dont_propose_tests{$test} = 1;
 			}
 
 			next;
@@ -3231,6 +3268,12 @@ sub process {
 					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\")";
 				}
 			}
+		}
+
+# Check and accumulate executed test suites (stripping URLs off the end)
+		if (!$in_commit_log && $line =~ /^\s*Tested-with:\s*(.*?)\s*#.*$/i) {
+			# Do not propose this certified-passing test suite
+			$dont_propose_tests{$1} = 1;
 		}
 
 # Check email subject for common tools that don't need to be mentioned
