@@ -185,6 +185,14 @@ config MDIO_IPQ8064
 	  This driver supports the MDIO interface found in the network
 	  interface units of the IPQ8064 SoC
 
+config MDIO_DW_XPCS
+	tristate "Synopsys DesignWare XPCS MI bus support"
+	depends on HAS_IOMEM
+	select MDIO_DEVRES
+	help
+	  This driver supports the MCI/APB3 Management Interface responsible
+	  for communicating with the Synopsys DesignWare XPCS devices.
+
 config MDIO_REGMAP
 	tristate
 	help
