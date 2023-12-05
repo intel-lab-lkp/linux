@@ -19,6 +19,9 @@ struct socket_cookie {
 	__u64 cookie_value;
 };
 
+bool is_cgroup1;
+int target_hid;
+
 static void test_tp_btf(int cgroup_fd)
 {
 	struct cgrp_ls_tp_btf *skel;
@@ -28,6 +31,9 @@ static void test_tp_btf(int cgroup_fd)
 	skel = cgrp_ls_tp_btf__open_and_load();
 	if (!ASSERT_OK_PTR(skel, "skel_open_and_load"))
 		return;
+
+	skel->bss->is_cgroup1 = is_cgroup1;
+	skel->bss->target_hid = target_hid;
 
 	/* populate a value in map_b */
 	err = bpf_map_update_elem(bpf_map__fd(skel->maps.map_b), &cgroup_fd, &val1, BPF_ANY);
@@ -130,6 +136,9 @@ static void test_recursion(int cgroup_fd)
 	if (!ASSERT_OK_PTR(skel, "skel_open_and_load"))
 		return;
 
+	skel->bss->target_hid = target_hid;
+	skel->bss->is_cgroup1 = is_cgroup1;
+
 	err = cgrp_ls_recursion__attach(skel);
 	if (!ASSERT_OK(err, "skel_attach"))
 		goto out;
@@ -164,6 +173,9 @@ static void test_cgroup_iter_sleepable(int cgroup_fd, __u64 cgroup_id)
 	skel = cgrp_ls_sleepable__open();
 	if (!ASSERT_OK_PTR(skel, "skel_open"))
 		return;
+
+	skel->bss->target_hid = target_hid;
+	skel->bss->is_cgroup1 = is_cgroup1;
 
 	bpf_program__set_autoload(skel->progs.cgroup_iter, true);
 	err = cgrp_ls_sleepable__load(skel);
@@ -202,6 +214,8 @@ static void test_yes_rcu_lock(__u64 cgroup_id)
 	if (!ASSERT_OK_PTR(skel, "skel_open"))
 		return;
 
+	skel->bss->target_hid = target_hid;
+	skel->bss->is_cgroup1 = is_cgroup1;
 	skel->bss->target_pid = syscall(SYS_gettid);
 
 	bpf_program__set_autoload(skel->progs.yes_rcu_lock, true);
@@ -229,6 +243,9 @@ static void test_no_rcu_lock(void)
 	if (!ASSERT_OK_PTR(skel, "skel_open"))
 		return;
 
+	skel->bss->target_hid = target_hid;
+	skel->bss->is_cgroup1 = is_cgroup1;
+
 	bpf_program__set_autoload(skel->progs.no_rcu_lock, true);
 	err = cgrp_ls_sleepable__load(skel);
 	ASSERT_ERR(err, "skel_load");
@@ -236,7 +253,26 @@ static void test_no_rcu_lock(void)
 	cgrp_ls_sleepable__destroy(skel);
 }
 
-void test_cgrp_local_storage(void)
+static void test_cgrp1_no_rcu_lock(void)
+{
+	struct cgrp_ls_sleepable *skel;
+	int err;
+
+	skel = cgrp_ls_sleepable__open();
+	if (!ASSERT_OK_PTR(skel, "skel_open"))
+		return;
+
+	skel->bss->target_hid = target_hid;
+	skel->bss->is_cgroup1 = is_cgroup1;
+
+	bpf_program__set_autoload(skel->progs.cgrp1_no_rcu_lock, true);
+	err = cgrp_ls_sleepable__load(skel);
+	ASSERT_OK(err, "skel_load");
+
+	cgrp_ls_sleepable__destroy(skel);
+}
+
+void cgrp2_local_storage(void)
 {
 	__u64 cgroup_id;
 	int cgroup_fd;
@@ -245,6 +281,8 @@ void test_cgrp_local_storage(void)
 	if (!ASSERT_GE(cgroup_fd, 0, "join_cgroup /cgrp_local_storage"))
 		return;
 
+	is_cgroup1 = 0;
+	target_hid = -1;
 	cgroup_id = get_cgroup_id("/cgrp_local_storage");
 	if (test__start_subtest("tp_btf"))
 		test_tp_btf(cgroup_fd);
@@ -262,4 +300,56 @@ void test_cgrp_local_storage(void)
 		test_no_rcu_lock();
 
 	close(cgroup_fd);
+}
+
+void cgrp1_local_storage(void)
+{
+	int cgrp1_fd, cgrp1_hid, cgrp1_id, err;
+
+	/* Setup cgroup1 hierarchy */
+	err = setup_classid_environment();
+	if (!ASSERT_OK(err, "setup_classid_environment"))
+		return;
+
+	err = join_classid();
+	if (!ASSERT_OK(err, "join_cgroup1"))
+		goto cleanup;
+
+	cgrp1_fd = open_classid();
+	if (!ASSERT_GE(cgrp1_fd, 0, "cgroup1 fd"))
+		goto cleanup;
+
+	cgrp1_id = get_classid_cgroup_id();
+	if (!ASSERT_GE(cgrp1_id, 0, "cgroup1 id"))
+		goto close_fd;
+
+	cgrp1_hid = get_cgroup1_hierarchy_id("net_cls");
+	if (!ASSERT_GE(cgrp1_hid, 0, "cgroup1 hid"))
+		goto close_fd;
+	target_hid = cgrp1_hid;
+	is_cgroup1 = 1;
+
+	if (test__start_subtest("cgrp1_tp_btf"))
+		test_tp_btf(cgrp1_fd);
+	if (test__start_subtest("cgrp1_recursion"))
+		test_recursion(cgrp1_fd);
+	if (test__start_subtest("cgrp1_negative"))
+		test_negative();
+	if (test__start_subtest("cgrp1_iter_sleepable"))
+		test_cgroup_iter_sleepable(cgrp1_fd, cgrp1_id);
+	if (test__start_subtest("cgrp1_yes_rcu_lock"))
+		test_yes_rcu_lock(cgrp1_id);
+	if (test__start_subtest("cgrp1_no_rcu_lock"))
+		test_cgrp1_no_rcu_lock();
+
+close_fd:
+	close(cgrp1_fd);
+cleanup:
+	cleanup_classid_environment();
+}
+
+void test_cgrp_local_storage(void)
+{
+	cgrp2_local_storage();
+	cgrp1_local_storage();
 }
