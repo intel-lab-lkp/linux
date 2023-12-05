@@ -1041,6 +1041,7 @@ err:
 	for (i = 0; i < type->num_boxes; i++)
 		kfree(pmus[i].boxes);
 	kfree(pmus);
+	type->pmus = NULL;
 
 	return -ENOMEM;
 }
