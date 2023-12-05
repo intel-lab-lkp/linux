@@ -207,6 +207,43 @@ void serial_base_port_device_remove(struct serial_port_device *port_dev)
 
 #ifdef CONFIG_SERIAL_CORE_CONSOLE
 
+#ifdef __sparc__
+
+/* Handle Sparc ttya and ttyb options as done in console_setup() */
+static int serial_base_add_sparc_console(struct uart_driver *drv,
+					 struct uart_port *port)
+{
+	const char *name = NULL;
+	int ret;
+
+	switch (port->line) {
+	case 0:
+		name = "ttya";
+		break;
+	case 1:
+		name = "ttyb";
+		break;
+	default:
+		return 0;
+	}
+
+	ret = add_preferred_console_match(name, drv->dev_name, port->line);
+	if (ret && ret != -ENOENT)
+		return ret;
+
+	return 0;
+}
+
+#else
+
+static inline int serial_base_add_sparc_console(struct uart_driver *drv,
+						struct uart_port *port)
+{
+	return 0;
+}
+
+#endif
+
 static int serial_base_add_one_prefcon(const char *match, const char *dev_name,
 				       int port_id)
 {
@@ -240,11 +277,41 @@ int serial_base_add_preferred_console(struct uart_driver *drv,
 				      struct uart_port *port)
 {
 	const char *port_match __free(kfree);
+	const char *char_match __free(kfree) = NULL;
+	const char *nmbr_match __free(kfree) = NULL;
+	int ret;
 
 	port_match = kasprintf(GFP_KERNEL, "%s:%i.%i", dev_name(port->dev),
 			       port->ctrl_id, port->port_id);
 	if (!port_match)
 		return -ENOMEM;
+
+	char_match = kasprintf(GFP_KERNEL, "%s%i", drv->dev_name, port->line);
+	if (!char_match)
+		return -ENOMEM;
+
+	/* Handle ttyS specific options */
+	if (!strncmp(drv->dev_name, "ttyS", 4)) {
+		/* No name, just a number */
+		nmbr_match = kasprintf(GFP_KERNEL, "%i", port->line);
+		if (!nmbr_match)
+			return -ENODEV;
+
+		ret = serial_base_add_one_prefcon(nmbr_match, drv->dev_name,
+						  port->line);
+		if (ret)
+			return ret;
+
+		/* Sparc ttya and ttyb */
+		ret = serial_base_add_sparc_console(drv, port);
+		if (ret)
+			return ret;
+	}
+
+	/* Handle the traditional character device name style console=ttyS0 */
+	ret = serial_base_add_one_prefcon(char_match, drv->dev_name, port->line);
+	if (ret)
+		return ret;
 
 	/* Translate a hardware addressing style console=DEVNAME:0.0 */
 	return serial_base_add_one_prefcon(port_match, drv->dev_name, port->line);
