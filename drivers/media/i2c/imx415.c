@@ -445,6 +445,38 @@ static const struct imx415_clk_params imx415_clk_params[] = {
 	},
 };
 
+/* all-pixel 2-lane 594 Mbps 10 Hz mode */
+static const struct cci_reg_sequence imx415_mode_2_594[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0CE4 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_2 },
+	{ IMX415_TCLKPOST, 0x0067 },
+	{ IMX415_TCLKPREPARE, 0x0027 },
+	{ IMX415_TCLKTRAIL, 0x0027 },
+	{ IMX415_TCLKZERO, 0x00B7 },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x004F },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x0047 },
+	{ IMX415_TLPX, 0x0027 },
+};
+
+/* all-pixel 2-lane 891 Mbps 15 Hz mode */
+static const struct cci_reg_sequence imx415_mode_2_891[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0898 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_2 },
+	{ IMX415_TCLKPOST, 0x007F },
+	{ IMX415_TCLKPREPARE, 0x0037 },
+	{ IMX415_TCLKTRAIL, 0x0037 },
+	{ IMX415_TCLKZERO, 0x00F7 },
+	{ IMX415_THSPREPARE, 0x003F },
+	{ IMX415_THSZERO, 0x006F },
+	{ IMX415_THSTRAIL, 0x003F },
+	{ IMX415_THSEXIT, 0x005F },
+	{ IMX415_TLPX, 0x002F },
+};
+
 /* all-pixel 2-lane 720 Mbps 15.74 Hz mode */
 static const struct cci_reg_sequence imx415_mode_2_720[] = {
 	{ IMX415_VMAX, 0x08CA },
@@ -459,6 +491,38 @@ static const struct cci_reg_sequence imx415_mode_2_720[] = {
 	{ IMX415_THSTRAIL, 0x002F },
 	{ IMX415_THSEXIT, 0x004F },
 	{ IMX415_TLPX, 0x0027 },
+};
+
+/* all-pixel 2-lane 1782 Mbps 30 Hz mode */
+static const struct cci_reg_sequence imx415_mode_2_1782[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x044C },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_2 },
+	{ IMX415_TCLKPOST, 0x00B7 },
+	{ IMX415_TCLKPREPARE, 0x0067 },
+	{ IMX415_TCLKTRAIL, 0x006F },
+	{ IMX415_TCLKZERO, 0x01DF },
+	{ IMX415_THSPREPARE, 0x006F },
+	{ IMX415_THSZERO, 0x00CF },
+	{ IMX415_THSTRAIL, 0x006F },
+	{ IMX415_THSEXIT, 0x00B7 },
+	{ IMX415_TLPX, 0x005F },
+};
+
+/* all-pixel 2-lane 2079 Mbps 30 Hz mode */
+static const struct cci_reg_sequence imx415_mode_2_2079[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x044C },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_2 },
+	{ IMX415_TCLKPOST, 0x00D7 },
+	{ IMX415_TCLKPREPARE, 0x007F },
+	{ IMX415_TCLKTRAIL, 0x007F },
+	{ IMX415_TCLKZERO, 0x0237 },
+	{ IMX415_THSPREPARE, 0x0087 },
+	{ IMX415_THSZERO, 0x00EF },
+	{ IMX415_THSTRAIL, 0x0087 },
+	{ IMX415_THSEXIT, 0x00DF },
+	{ IMX415_TLPX, 0x006F },
 };
 
 /* all-pixel 2-lane 1440 Mbps 30.01 Hz mode */
@@ -477,6 +541,70 @@ static const struct cci_reg_sequence imx415_mode_2_1440[] = {
 	{ IMX415_TLPX, 0x004F },
 };
 
+/* all-pixel 4-lane 594 Mbps 20 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_594_20fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0672 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x0067 },
+	{ IMX415_TCLKPREPARE, 0x0027 },
+	{ IMX415_TCLKTRAIL, 0x0027 },
+	{ IMX415_TCLKZERO, 0x00B7 },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x004F },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x0047 },
+	{ IMX415_TLPX, 0x0027 },
+};
+
+/* all-pixel 4-lane 594 Mbps 25 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_594_25fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0528 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x0067 },
+	{ IMX415_TCLKPREPARE, 0x0027 },
+	{ IMX415_TCLKTRAIL, 0x0027 },
+	{ IMX415_TCLKZERO, 0x00B7 },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x004F },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x0047 },
+	{ IMX415_TLPX, 0x0027 },
+};
+
+/* all-pixel 4-lane 720 Mbps 25 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_720_25fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0500 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x006F },
+	{ IMX415_TCLKPREPARE, 0x002F },
+	{ IMX415_TCLKTRAIL, 0x002F },
+	{ IMX415_TCLKZERO, 0x00BF },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x0057 },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x004F },
+	{ IMX415_TLPX, 0x0027 },
+};
+
+/* all-pixel 4-lane 720 Mbps 30.01 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_720_30fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x042A },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x006F },
+	{ IMX415_TCLKPREPARE, 0x002F },
+	{ IMX415_TCLKTRAIL, 0x002F },
+	{ IMX415_TCLKZERO, 0x00BF },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x0057 },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x004F },
+	{ IMX415_TLPX, 0x0027 },
+};
+
 /* all-pixel 4-lane 891 Mbps 30 Hz mode */
 static const struct cci_reg_sequence imx415_mode_4_891[] = {
 	{ IMX415_VMAX, 0x08CA },
@@ -491,6 +619,102 @@ static const struct cci_reg_sequence imx415_mode_4_891[] = {
 	{ IMX415_THSTRAIL, 0x003F },
 	{ IMX415_THSEXIT, 0x005F },
 	{ IMX415_TLPX, 0x002F },
+};
+
+/* all-pixel 4-lane 1440 Mbps 30.01 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_1440_30fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x042A },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x009F },
+	{ IMX415_TCLKPREPARE, 0x0057 },
+	{ IMX415_TCLKTRAIL, 0x0057 },
+	{ IMX415_TCLKZERO, 0x0187 },
+	{ IMX415_THSPREPARE, 0x005F },
+	{ IMX415_THSZERO, 0x00A7 },
+	{ IMX415_THSTRAIL, 0x005F },
+	{ IMX415_THSEXIT, 0x0097 },
+	{ IMX415_TLPX, 0x004F },
+};
+
+/* all-pixel 4-lane 1440 Mbps 60.03 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_1440_60fps[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0215 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x009F },
+	{ IMX415_TCLKPREPARE, 0x0057 },
+	{ IMX415_TCLKTRAIL, 0x0057 },
+	{ IMX415_TCLKZERO, 0x0187 },
+	{ IMX415_THSPREPARE, 0x005F },
+	{ IMX415_THSZERO, 0x00A7 },
+	{ IMX415_THSTRAIL, 0x005F },
+	{ IMX415_THSEXIT, 0x0097 },
+	{ IMX415_TLPX, 0x004F },
+};
+
+/* all-pixel 4-lane 1485 Mbps 60 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_1485[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0226 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x00A7 },
+	{ IMX415_TCLKPREPARE, 0x0057 },
+	{ IMX415_TCLKTRAIL, 0x005F },
+	{ IMX415_TCLKZERO, 0x0197 },
+	{ IMX415_THSPREPARE, 0x005F },
+	{ IMX415_THSZERO, 0x00AF },
+	{ IMX415_THSTRAIL, 0x005F },
+	{ IMX415_THSEXIT, 0x009F },
+	{ IMX415_TLPX, 0x004F },
+};
+
+/* all-pixel 4-lane 1782 Mbps 60 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_1782[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0226 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x00B7 },
+	{ IMX415_TCLKPREPARE, 0x0067 },
+	{ IMX415_TCLKTRAIL, 0x006F },
+	{ IMX415_TCLKZERO, 0x01DF },
+	{ IMX415_THSPREPARE, 0x006F },
+	{ IMX415_THSZERO, 0x00CF },
+	{ IMX415_THSTRAIL, 0x006F },
+	{ IMX415_THSEXIT, 0x00B7 },
+	{ IMX415_TLPX, 0x005F },
+};
+
+/* all-pixel 4-lane 2079 Mbps 60 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_2079[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x0226 },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x00D7 },
+	{ IMX415_TCLKPREPARE, 0x007F },
+	{ IMX415_TCLKTRAIL, 0x007F },
+	{ IMX415_TCLKZERO, 0x0237 },
+	{ IMX415_THSPREPARE, 0x0087 },
+	{ IMX415_THSZERO, 0x00EF },
+	{ IMX415_THSTRAIL, 0x0087 },
+	{ IMX415_THSEXIT, 0x00DF },
+	{ IMX415_TLPX, 0x006F },
+};
+
+/* all-pixel 4-lane 2376 Mbps 60 Hz mode */
+static const struct cci_reg_sequence imx415_mode_4_2376[] = {
+	{ IMX415_VMAX, 0x08CA },
+	{ IMX415_HMAX, 0x016E },
+	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+	{ IMX415_TCLKPOST, 0x00E7 },
+	{ IMX415_TCLKPREPARE, 0x008F },
+	{ IMX415_TCLKTRAIL, 0x008F },
+	{ IMX415_TCLKZERO, 0x027F },
+	{ IMX415_THSPREPARE, 0x0097 },
+	{ IMX415_THSZERO, 0x010F },
+	{ IMX415_THSTRAIL, 0x0097 },
+	{ IMX415_THSEXIT, 0x00F7 },
+	{ IMX415_TLPX, 0x007F },
 };
 
 struct imx415_mode_reg_list {
@@ -537,6 +761,26 @@ struct imx415_mode {
 /* mode configs */
 static const struct imx415_mode supported_modes[] = {
 	{
+		.lane_rate = 594000000,
+		.lanes = 2,
+		.hmax_pix = 4400,
+		.pixel_rate = 99000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_2_594),
+			.regs = imx415_mode_2_594,
+		},
+	},
+	{
+		.lane_rate = 891000000,
+		.lanes = 2,
+		.hmax_pix = 4400,
+		.pixel_rate = 148500000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_2_891),
+			.regs = imx415_mode_2_891,
+		},
+	},
+	{
 		.lane_rate = 720000000,
 		.lanes = 2,
 		.hmax_pix = 4064,
@@ -547,6 +791,24 @@ static const struct imx415_mode supported_modes[] = {
 		},
 	},
 	{
+		.lane_rate = 1782000000,
+		.lanes = 2,
+		.hmax_pix = 4400,
+		.pixel_rate = 297000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_2_1782),
+			.regs = imx415_mode_2_1782,
+		},
+	},	{
+		.lane_rate = 2079000000,
+		.lanes = 2,
+		.hmax_pix = 4400,
+		.pixel_rate = 304615385,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_2_2079),
+			.regs = imx415_mode_2_2079,
+		},
+	},	{
 		.lane_rate = 1440000000,
 		.lanes = 2,
 		.hmax_pix = 4510,
@@ -557,6 +819,46 @@ static const struct imx415_mode supported_modes[] = {
 		},
 	},
 	{
+		.lane_rate = 594000000,
+		.lanes = 4,
+		.hmax_pix = 5500,
+		.pixel_rate = 247500000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_594_20fps),
+			.regs = imx415_mode_4_594_20fps,
+		},
+	},
+	{
+		.lane_rate = 594000000,
+		.lanes = 4,
+		.hmax_pix = 4400,
+		.pixel_rate = 247500000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_594_25fps),
+			.regs = imx415_mode_4_594_25fps,
+		},
+	},
+	{
+		.lane_rate = 720000000,
+		.lanes = 4,
+		.hmax_pix = 4400,
+		.pixel_rate = 247500000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_720_25fps),
+			.regs = imx415_mode_4_720_25fps,
+		},
+	},
+	{
+		.lane_rate = 720000000,
+		.lanes = 4,
+		.hmax_pix = 4510,
+		.pixel_rate = 304615385,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_720_30fps),
+			.regs = imx415_mode_4_720_30fps,
+		},
+	},
+	{
 		.lane_rate = 891000000,
 		.lanes = 4,
 		.hmax_pix = 4400,
@@ -564,6 +866,66 @@ static const struct imx415_mode supported_modes[] = {
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(imx415_mode_4_891),
 			.regs = imx415_mode_4_891,
+		},
+	},
+	{
+		.lane_rate = 1440000000,
+		.lanes = 4,
+		.hmax_pix = 4510,
+		.pixel_rate = 304615385,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_1440_30fps),
+			.regs = imx415_mode_4_1440_30fps,
+		},
+	},
+	{
+		.lane_rate = 1440000000,
+		.lanes = 4,
+		.hmax_pix = 4510,
+		.pixel_rate = 609230769,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_1440_60fps),
+			.regs = imx415_mode_4_1440_60fps,
+		},
+	},
+	{
+		.lane_rate = 1485000000,
+		.lanes = 4,
+		.hmax_pix = 4400,
+		.pixel_rate = 594000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_1485),
+			.regs = imx415_mode_4_1485,
+		},
+	},
+	{
+		.lane_rate = 1782000000,
+		.lanes = 4,
+		.hmax_pix = 4400,
+		.pixel_rate = 594000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_1782),
+			.regs = imx415_mode_4_1782,
+		},
+	},
+	{
+		.lane_rate = 2079000000,
+		.lanes = 4,
+		.hmax_pix = 4400,
+		.pixel_rate = 594000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_2079),
+			.regs = imx415_mode_4_2079,
+		},
+	},
+	{
+		.lane_rate = 12376000000,
+		.lanes = 4,
+		.hmax_pix = 4392,
+		.pixel_rate = 891000000,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_mode_4_2376),
+			.regs = imx415_mode_4_2376,
 		},
 	},
 };
