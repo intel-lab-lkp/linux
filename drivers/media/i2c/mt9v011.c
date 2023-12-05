@@ -366,6 +366,9 @@ static int mt9v011_get_frame_interval(struct v4l2_subdev *sd,
 				      struct v4l2_subdev_state *sd_state,
 				      struct v4l2_subdev_frame_interval *ival)
 {
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	calc_fps(sd,
 		 &ival->interval.numerator,
 		 &ival->interval.denominator);
@@ -379,6 +382,9 @@ static int mt9v011_set_frame_interval(struct v4l2_subdev *sd,
 {
 	struct v4l2_fract *tpf = &ival->interval;
 	u16 speed;
+
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
 
 	speed = calc_speed(sd, tpf->numerator, tpf->denominator);
 

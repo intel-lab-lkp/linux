@@ -1051,6 +1051,9 @@ static int et8ek8_get_frame_interval(struct v4l2_subdev *subdev,
 {
 	struct et8ek8_sensor *sensor = to_et8ek8_sensor(subdev);
 
+	if (fi->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	memset(fi, 0, sizeof(*fi));
 	fi->interval = sensor->current_reglist->mode.timeperframe;
 
@@ -1063,6 +1066,9 @@ static int et8ek8_set_frame_interval(struct v4l2_subdev *subdev,
 {
 	struct et8ek8_sensor *sensor = to_et8ek8_sensor(subdev);
 	struct et8ek8_reglist *reglist;
+
+	if (fi->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
 
 	reglist = et8ek8_reglist_find_mode_ival(&meta_reglist,
 						sensor->current_reglist,

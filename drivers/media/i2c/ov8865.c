@@ -2846,6 +2846,9 @@ static int ov8865_get_frame_interval(struct v4l2_subdev *subdev,
 	unsigned int framesize;
 	unsigned int fps;
 
+	if (interval->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	mutex_lock(&sensor->mutex);
 
 	mode = sensor->state.mode;

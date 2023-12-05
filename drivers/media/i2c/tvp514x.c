@@ -746,6 +746,8 @@ tvp514x_get_frame_interval(struct v4l2_subdev *sd,
 	struct tvp514x_decoder *decoder = to_decoder(sd);
 	enum tvp514x_std current_std;
 
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
 
 	/* get the current standard */
 	current_std = decoder->current_std;
@@ -765,6 +767,8 @@ tvp514x_set_frame_interval(struct v4l2_subdev *sd,
 	struct v4l2_fract *timeperframe;
 	enum tvp514x_std current_std;
 
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
 
 	timeperframe = &ival->interval;
 

@@ -730,6 +730,9 @@ static int mt9v111_set_frame_interval(struct v4l2_subdev *sd,
 			   tpf->denominator;
 	unsigned int max_fps;
 
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	if (!tpf->numerator)
 		tpf->numerator = 1;
 
@@ -778,6 +781,9 @@ static int mt9v111_get_frame_interval(struct v4l2_subdev *sd,
 {
 	struct mt9v111_dev *mt9v111 = sd_to_mt9v111(sd);
 	struct v4l2_fract *tpf = &ival->interval;
+
+	if (ival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
 
 	mutex_lock(&mt9v111->stream_mutex);
 

@@ -851,6 +851,9 @@ static int ov2722_get_frame_interval(struct v4l2_subdev *sd,
 {
 	struct ov2722_device *dev = to_ov2722_sensor(sd);
 
+	if (interval->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	interval->interval.numerator = 1;
 	interval->interval.denominator = dev->res->fps;
 

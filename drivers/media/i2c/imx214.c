@@ -799,6 +799,9 @@ static int imx214_get_frame_interval(struct v4l2_subdev *subdev,
 				     struct v4l2_subdev_state *sd_state,
 				     struct v4l2_subdev_frame_interval *fival)
 {
+	if (fival->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	fival->interval.numerator = 1;
 	fival->interval.denominator = IMX214_FPS;
 

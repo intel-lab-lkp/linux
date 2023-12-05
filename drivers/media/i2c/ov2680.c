@@ -558,6 +558,9 @@ static int ov2680_get_frame_interval(struct v4l2_subdev *sd,
 {
 	struct ov2680_dev *sensor = to_ov2680_dev(sd);
 
+	if (fi->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	mutex_lock(&sensor->lock);
 	fi->interval = sensor->mode.frame_interval;
 	mutex_unlock(&sensor->lock);

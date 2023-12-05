@@ -2276,6 +2276,9 @@ static int ov5648_get_frame_interval(struct v4l2_subdev *subdev,
 	const struct ov5648_mode *mode;
 	int ret = 0;
 
+	if (interval->which != V4L2_SUBDEV_FORMAT_ACTIVE)
+		return -EINVAL;
+
 	mutex_lock(&sensor->mutex);
 
 	mode = sensor->state.mode;
