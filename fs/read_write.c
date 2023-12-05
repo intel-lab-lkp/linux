@@ -1554,6 +1554,8 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 		/* fallback to splice */
 		if (ret <= 0)
 			splice = true;
+	} else {
+		splice = true;
 	}
 
 	file_end_write(file_out);
