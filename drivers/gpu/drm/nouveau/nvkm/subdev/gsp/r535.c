@@ -640,7 +640,7 @@ r535_gsp_rpc_rm_ctrl_push(struct nvkm_gsp_object *object, void *argv, u32 repc)
 		return rpc;
 
 	if (rpc->status) {
-		nvkm_error(&gsp->subdev, "cli:0x%08x obj:0x%08x ctrl cmd:0x%08x failed: 0x%08x\n",
+		nvkm_debug(&gsp->subdev, "cli:0x%08x obj:0x%08x ctrl cmd:0x%08x failed: 0x%08x\n",
 			   object->client->object.handle, object->handle, rpc->cmd, rpc->status);
 		ret = ERR_PTR(-EINVAL);
 	} else {
