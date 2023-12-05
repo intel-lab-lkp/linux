@@ -1342,6 +1342,11 @@ static inline unsigned int block_size(struct block_device *bdev)
 	return 1 << bdev->bd_inode->i_blkbits;
 }
 
+static inline u8 block_bits(struct block_device *bdev)
+{
+	return bdev->bd_inode->i_blkbits;
+}
+
 int kblockd_schedule_work(struct work_struct *work);
 int kblockd_mod_delayed_work_on(int cpu, struct delayed_work *dwork, unsigned long delay);
 
@@ -1515,6 +1520,28 @@ struct block_device *blkdev_get_no_open(dev_t dev);
 void blkdev_put_no_open(struct block_device *bdev);
 
 struct block_device *I_BDEV(struct inode *inode);
+loff_t bdev_size(struct block_device *bdev);
+void invalidate_bdev_range(struct block_device *bdev, pgoff_t start,
+			   pgoff_t end);
+int truncate_bdev_range(struct block_device *bdev, blk_mode_t mode,
+		loff_t lstart, loff_t lend);
+struct folio *bdev_get_folio(struct block_device *bdev, pgoff_t index);
+struct folio *bdev_find_or_create_folio(struct block_device *bdev,
+					pgoff_t index, gfp_t gfp);
+struct folio *bdev_read_folio(struct block_device *bdev, pgoff_t index);
+struct folio *bdev_read_folio_gfp(struct block_device *bdev, pgoff_t index,
+				  gfp_t gfp);
+int bdev_wb_err_check(struct block_device *bdev, errseq_t since);
+int bdev_wb_err_check_and_advance(struct block_device *bdev, errseq_t *since);
+void bdev_balance_dirty_pages_ratelimited(struct block_device *bdev);
+void bdev_sync_readahead(struct block_device *bdev, struct file_ra_state *ra,
+			 struct file *file, pgoff_t index,
+			 unsigned long req_count);
+void bdev_attach_wb(struct block_device *bdev);
+void bdev_correlate_mapping(struct block_device *bdev,
+			    struct address_space *mapping);
+gfp_t bdev_gfp_constraint(struct block_device *bdev, gfp_t gfp);
+int bdev_ejected(struct block_device *bdev);
 
 #ifdef CONFIG_BLOCK
 void invalidate_bdev(struct block_device *bdev);

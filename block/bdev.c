@@ -92,6 +92,13 @@ void invalidate_bdev(struct block_device *bdev)
 }
 EXPORT_SYMBOL(invalidate_bdev);
 
+void invalidate_bdev_range(struct block_device *bdev, pgoff_t start,
+			   pgoff_t end)
+{
+	invalidate_mapping_pages(bdev->bd_inode->i_mapping, start, end);
+}
+EXPORT_SYMBOL_GPL(invalidate_bdev_range);
+
 /*
  * Drop all buffers & page cache for given bdev range. This function bails
  * with error if bdev has other exclusive owner (such as filesystem).
@@ -124,6 +131,7 @@ invalidate:
 					     lstart >> PAGE_SHIFT,
 					     lend >> PAGE_SHIFT);
 }
+EXPORT_SYMBOL_GPL(truncate_bdev_range);
 
 static void set_init_blocksize(struct block_device *bdev)
 {
@@ -137,6 +145,18 @@ static void set_init_blocksize(struct block_device *bdev)
 	}
 	bdev->bd_inode->i_blkbits = blksize_bits(bsize);
 }
+
+loff_t bdev_size(struct block_device *bdev)
+{
+	loff_t size;
+
+	spin_lock(&bdev->bd_size_lock);
+	size = i_size_read(bdev->bd_inode);
+	spin_unlock(&bdev->bd_size_lock);
+
+	return size;
+}
+EXPORT_SYMBOL_GPL(bdev_size);
 
 int set_blocksize(struct block_device *bdev, int size)
 {
@@ -1144,3 +1164,99 @@ static int __init setup_bdev_allow_write_mounted(char *str)
 	return 1;
 }
 __setup("bdev_allow_write_mounted=", setup_bdev_allow_write_mounted);
+
+struct folio *bdev_read_folio(struct block_device *bdev, pgoff_t index)
+{
+	return read_mapping_folio(bdev->bd_inode->i_mapping, index, NULL);
+}
+EXPORT_SYMBOL_GPL(bdev_read_folio);
+
+struct folio *bdev_read_folio_gfp(struct block_device *bdev, pgoff_t index,
+				  gfp_t gfp)
+{
+	return mapping_read_folio_gfp(bdev->bd_inode->i_mapping, index, gfp);
+}
+EXPORT_SYMBOL_GPL(bdev_read_folio_gfp);
+
+struct folio *bdev_get_folio(struct block_device *bdev, pgoff_t index)
+{
+	return filemap_get_folio(bdev->bd_inode->i_mapping, index);
+}
+EXPORT_SYMBOL_GPL(bdev_get_folio);
+
+struct folio *bdev_find_or_create_folio(struct block_device *bdev,
+					pgoff_t index, gfp_t gfp)
+{
+	return __filemap_get_folio(bdev->bd_inode->i_mapping, index,
+				   FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp);
+}
+EXPORT_SYMBOL_GPL(bdev_find_or_create_folio);
+
+int bdev_wb_err_check(struct block_device *bdev, errseq_t since)
+{
+	return errseq_check(&bdev->bd_inode->i_mapping->wb_err, since);
+}
+EXPORT_SYMBOL_GPL(bdev_wb_err_check);
+
+int bdev_wb_err_check_and_advance(struct block_device *bdev, errseq_t *since)
+{
+	return errseq_check_and_advance(&bdev->bd_inode->i_mapping->wb_err,
+					since);
+}
+EXPORT_SYMBOL_GPL(bdev_wb_err_check_and_advance);
+
+void bdev_balance_dirty_pages_ratelimited(struct block_device *bdev)
+{
+	return balance_dirty_pages_ratelimited(bdev->bd_inode->i_mapping);
+}
+EXPORT_SYMBOL_GPL(bdev_balance_dirty_pages_ratelimited);
+
+void bdev_sync_readahead(struct block_device *bdev, struct file_ra_state *ra,
+			 struct file *file, pgoff_t index,
+			 unsigned long req_count)
+{
+	struct file_ra_state tmp_ra = {};
+
+	if (!ra) {
+		ra = &tmp_ra;
+		file_ra_state_init(ra, bdev->bd_inode->i_mapping);
+	}
+	page_cache_sync_readahead(bdev->bd_inode->i_mapping, ra, file, index,
+				  req_count);
+}
+EXPORT_SYMBOL_GPL(bdev_sync_readahead);
+
+void bdev_attach_wb(struct block_device *bdev)
+{
+	inode_attach_wb(bdev->bd_inode, NULL);
+}
+EXPORT_SYMBOL_GPL(bdev_attach_wb);
+
+void bdev_correlate_mapping(struct block_device *bdev,
+			    struct address_space *mapping)
+{
+	mapping->host = bdev->bd_inode;
+}
+EXPORT_SYMBOL_GPL(bdev_correlate_mapping);
+
+gfp_t bdev_gfp_constraint(struct block_device *bdev, gfp_t gfp)
+{
+	return mapping_gfp_constraint(bdev->bd_inode->i_mapping, gfp);
+}
+EXPORT_SYMBOL_GPL(bdev_gfp_constraint);
+
+/*
+ * The del_gendisk() function uninitializes the disk-specific data
+ * structures, including the bdi structure, without telling anyone
+ * else.  Once this happens, any attempt to call mark_buffer_dirty()
+ * (for example, by ext4_commit_super), will cause a kernel OOPS.
+ * This is a kludge to prevent these oops until we can put in a proper
+ * hook in del_gendisk() to inform the VFS and file system layers.
+ */
+int bdev_ejected(struct block_device *bdev)
+{
+	struct backing_dev_info *bdi = inode_to_bdi(bdev->bd_inode);
+
+	return bdi->dev == NULL;
+}
+EXPORT_SYMBOL_GPL(bdev_ejected);
