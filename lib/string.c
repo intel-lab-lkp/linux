@@ -16,16 +16,16 @@
 
 #define __NO_FORTIFY
 #include <linux/types.h>
+#include <asm/bitsperlong.h>
+#include <asm/bug.h>
+#include <asm/errno.h>
+#include <asm/rwonce.h>
+#include <linux/linkage.h>
+#include <linux/stddef.h>
+#include <vdso/limits.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
-#include <linux/kernel.h>
-#include <linux/export.h>
-#include <linux/bug.h>
-#include <linux/errno.h>
-#include <linux/slab.h>
-
 #include <asm/unaligned.h>
-#include <asm/byteorder.h>
 #include <asm/word-at-a-time.h>
 #include <asm/page.h>
 
