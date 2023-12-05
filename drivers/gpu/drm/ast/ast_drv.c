@@ -35,6 +35,7 @@
 #include <drm/drm_fbdev_generic.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_module.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 
 #include "ast_drv.h"
@@ -47,6 +48,30 @@ module_param_named(modeset, ast_modeset, int, 0400);
 /*
  * DRM driver
  */
+
+static int ast_get_scanout_buffer(struct drm_device *dev,
+				  struct drm_scanout_buffer *sb)
+{
+	struct drm_plane *plane;
+	struct ast_plane *ast_plane;
+
+	drm_for_each_plane(plane, dev) {
+		if (!plane->state || !plane->state->visible || !plane->state->fb ||
+		    plane->type != DRM_PLANE_TYPE_PRIMARY)
+			continue;
+		ast_plane = to_ast_plane(plane);
+		if (!ast_plane->vaddr)
+			continue;
+
+		sb->format = plane->state->fb->format;
+		sb->width = plane->state->fb->width;
+		sb->height = plane->state->fb->height;
+		sb->pitch = plane->state->fb->pitches[0];
+		iosys_map_set_vaddr_iomem(&sb->map, ast_plane->vaddr);
+		return 0;
+	}
+	return -ENODEV;
+}
 
 DEFINE_DRM_GEM_FOPS(ast_fops);
 
@@ -62,8 +87,8 @@ static const struct drm_driver ast_driver = {
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,
 	.patchlevel = DRIVER_PATCHLEVEL,
-
-	DRM_GEM_SHMEM_DRIVER_OPS
+	.get_scanout_buffer = ast_get_scanout_buffer,
+	DRM_GEM_SHMEM_DRIVER_OPS,
 };
 
 /*
