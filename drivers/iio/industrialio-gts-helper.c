@@ -7,6 +7,7 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/export.h>
+#include <linux/math64.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
@@ -28,28 +29,32 @@
  *		scale is 64 100 000 000.
  * @scale:	Linearized scale to compute the gain for.
  *
- * Return:	(floored) gain corresponding to the scale. -EINVAL if scale
+ * Return:	(rounded) gain corresponding to the scale. -EINVAL if scale
  *		is invalid.
  */
 static int iio_gts_get_gain(const u64 max, const u64 scale)
 {
-	u64 full = max;
-	int tmp = 1;
+	u64 full = max, half_div;
+	int tmp = 0;
 
 	if (scale > full || !scale)
 		return -EINVAL;
 
-	if (U64_MAX - full < scale) {
-		/* Risk of overflow */
-		if (full - scale < scale)
+	half_div = scale >> 1;
+
+	if (U64_MAX - full < half_div) {
+		/*
+		 * Would overflow when adding half_div to full. Hence we need
+		 * to subtract scale from full if full is big enough.
+		 */
+		if (full - scale <= half_div)
 			return 1;
 
 		full -= scale;
 		tmp++;
 	}
 
-	while (full > scale * (u64)tmp)
-		tmp++;
+	tmp += div64_u64(full + half_div, scale);
 
 	return tmp;
 }
@@ -140,10 +145,18 @@ int iio_gts_total_gain_to_scale(struct iio_gts *gts, int total_gain,
 				int *scale_int, int *scale_nano)
 {
 	u64 tmp;
+	int rem;
 
 	tmp = gts->max_scale;
 
-	do_div(tmp, total_gain);
+	rem = do_div(tmp, total_gain);
+
+	/*
+	 * Round up if remainder is equal to or greater than the half of
+	 * the divider.
+	 */
+	if (total_gain > 1 && rem >= total_gain / 2)
+		tmp += 1ULL;
 
 	return iio_gts_delinearize(tmp, NANO, scale_int, scale_nano);
 }
