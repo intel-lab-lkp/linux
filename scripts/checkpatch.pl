@@ -3686,9 +3686,9 @@ sub process {
 # check MAINTAINERS V: entries are valid
 			if ($rawline =~ /^\+V:\s*(.*)/) {
 				my $name = $1;
-				if ($name =~ /@/) {
+				if ($name =~ /[@#]/) {
 					ERROR("TEST_PROPOSAL_INVALID",
-					      "Test proposal cannot contain '\@' character\n" . $herecurr);
+					      "Test proposal cannot contain '\@' or '#' characters\n" . $herecurr);
 				}
 			}
 		}

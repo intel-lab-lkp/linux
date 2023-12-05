@@ -63,7 +63,7 @@ Descriptions of section entries and preferred order
 	   executed to verify changes to the maintained subsystem.
 	   Must be executed from the root of the source tree.
 	   Must support the -h/--help option.
-	   Cannot contain '@' character.
+	   Cannot contain '@' or '#' characters.
 	   V: tools/testing/kunit/run_checks.py
 	   One test suite per line.
 

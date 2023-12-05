@@ -245,6 +245,16 @@ Execute the commands, if any, to test your changes.
 All commands must be executed from the root of the source tree. Each command
 outputs usage information, if an -h/--help option is specified.
 
+If a test suite you've executed completed successfully, add a ``Tested-with:
+<command>`` to the message of the commit you tested. E.g.::
+
+  Tested-with: tools/testing/kunit/run_checks.py
+
+Optionally, add a '#' character followed by a publicly-accessible URL
+containing the test results, if you make them available. E.g.::
+
+  Tested-with: tools/testing/kunit/run_checks.py # https://kernelci.org/test/2239874
+
 
 Select the recipients for your patch
 ------------------------------------
