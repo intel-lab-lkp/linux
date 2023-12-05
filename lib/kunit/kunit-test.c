@@ -8,6 +8,9 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 
+#include <linux/device.h>
+#include <kunit/device.h>
+
 #include "string-stream.h"
 #include "try-catch-impl.h"
 
@@ -687,6 +690,69 @@ static struct kunit_case kunit_current_test_cases[] = {
 	{}
 };
 
+static void test_dev_action(void *priv)
+{
+	*(void **)priv = (void *)1;
+}
+
+static void kunit_device_test(struct kunit *test)
+{
+	struct device *test_device;
+
+	test_device = kunit_device_register(test, "my_device");
+
+	KUNIT_ASSERT_NOT_NULL(test, test_device);
+
+	// Add an action to verify cleanup.
+	devm_add_action(test_device, test_dev_action, &test->priv);
+
+	KUNIT_EXPECT_PTR_EQ(test, test->priv, (void *)0);
+
+	kunit_device_unregister(test, test_device);
+
+	KUNIT_EXPECT_PTR_EQ(test, test->priv, (void *)1);
+}
+
+static void kunit_device_driver_test(struct kunit *test)
+{
+	struct device_driver *test_driver;
+	struct device *test_device;
+
+	test_driver = kunit_driver_create(test, "my_driver");
+
+	KUNIT_ASSERT_NOT_NULL(test, test_driver);
+
+	test_device = kunit_device_register_with_driver(test, "my_device", test_driver);
+
+	KUNIT_ASSERT_NOT_NULL(test, test_device);
+
+	// Add an action to verify cleanup.
+	devm_add_action(test_device, test_dev_action, &test->priv);
+
+	KUNIT_EXPECT_PTR_EQ(test, test->priv, (void *)0);
+
+	kunit_device_unregister(test, test_device);
+	test_device = NULL;
+
+	// The driver should not automatically be destroyed by
+	// kunit_device_unregister, so we can re-use it.
+	test_device = kunit_device_register_with_driver(test, "my_device", test_driver);
+	KUNIT_ASSERT_NOT_NULL(test, test_device);
+
+	// Everything is automatically freed here.
+}
+
+static struct kunit_case kunit_device_test_cases[] = {
+	KUNIT_CASE(kunit_device_test),
+	KUNIT_CASE(kunit_device_driver_test),
+	{}
+};
+
+static struct kunit_suite kunit_device_test_suite = {
+	.name = "kunit_device",
+	.test_cases = kunit_device_test_cases,
+};
+
 static struct kunit_suite kunit_current_test_suite = {
 	.name = "kunit_current",
 	.test_cases = kunit_current_test_cases,
@@ -694,6 +760,6 @@ static struct kunit_suite kunit_current_test_suite = {
 
 kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
 		  &kunit_log_test_suite, &kunit_status_test_suite,
-		  &kunit_current_test_suite);
+		  &kunit_current_test_suite, &kunit_device_test_suite);
 
 MODULE_LICENSE("GPL v2");

@@ -10,6 +10,7 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 #include <kunit/attributes.h>
+#include <kunit/device.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -840,6 +841,8 @@ static int __init kunit_init(void)
 	kunit_install_hooks();
 
 	kunit_debugfs_init();
+
+	kunit_bus_init();
 #ifdef CONFIG_MODULES
 	return register_module_notifier(&kunit_mod_nb);
 #else
