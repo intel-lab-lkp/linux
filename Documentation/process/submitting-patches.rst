@@ -233,18 +233,21 @@ Test your changes
 
 Test the patch to the best of your ability. Check the MAINTAINERS file for the
 subsystem(s) you are changing to see if there are any **V:** entries
-proposing particular test suites, either directly as commands, or via
-documentation references.
+proposing particular test suites.
+
+The **V:** entries start with a proposal strength keyword
+(SUGGESTED/RECOMMENDED/REQUIRED), followed either by a command, or a
+documentation reference.
 
 Test suite references start with a ``*`` (similar to C pointer dereferencing),
 followed by the name of the test suite, which would be documented in the
 Documentation/process/tests.rst under the corresponding heading. E.g.::
 
-  V: *xfstests
+  V: SUGGESTED *xfstests
 
 Anything not starting with a ``*`` is considered a command. E.g.::
 
-  V: tools/testing/kunit/run_checks.py
+  V: RECOMMENDED tools/testing/kunit/run_checks.py
 
 Supplying the ``--test`` option to ``scripts/get_maintainer.pl`` adds **V:**
 entries to its output.

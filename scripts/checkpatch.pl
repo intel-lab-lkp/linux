@@ -1181,39 +1181,57 @@ sub is_maintained_obsolete {
 	return $maintained_status{$filename} =~ /obsolete/i;
 }
 
-# Test suites proposed per changed file
+# A list of test proposal strength keywords, weakest to strongest
+our @test_proposal_strengths = qw(suggested recommended required);
+# A regular expression string matching test proposal strength keywords
+my $test_proposal_strengths_res = join('|', @test_proposal_strengths);
+# A regular expression matching valid values of MAINTAINERS V: entries
+# Puts proposal strength into $1 and the test into $2
+my $test_proposal_entry_re = qr/^\s*($test_proposal_strengths_res)\s+([^@#]+?)\s*$/i;
+
+# A hashmap of changed files and references to hashmaps of test suites and the
+# strength (0-2) of their proposal
 our %files_proposed_tests = ();
 
-# Return a list of test suites proposed for execution for a particular file
+# Return a reference to a hashmap of test suites proposed for execution for a
+# particular file, and their proposal strengths - 0, 1, or 2 for
+# SUGGESTED/RECOMMENDED/REQUIRED respectively.
 sub get_file_proposed_tests {
 	my ($filename) = @_;
-	my $file_proposed_tests;
 
-	return () if (!$tree || !(-e "$root/scripts/get_maintainer.pl"));
+	return {} if (!$tree || !(-e "$root/scripts/get_maintainer.pl"));
 
 	if (!exists($files_proposed_tests{$filename})) {
+		# Retrieve and parse the entries
+		my %file_proposed_tests = ();
 		my $command = "perl $root/scripts/get_maintainer.pl --test --multiline --nogit --nogit-fallback -f $filename";
 		# Ignore warnings on stderr
 		my $output = `$command 2>/dev/null`;
 		# But regenerate stderr on failure
 		die "Failed retrieving tests proposed for changes to \"$filename\":\n" . `$command 2>&1 >/dev/null` if ($?);
-		$file_proposed_tests = [grep { !/@/ } split("\n", $output)];
-		# Validate and normalize all references
-		for my $index (0 .. scalar @$file_proposed_tests - 1) {
-			my $test = $file_proposed_tests->[$index];
-			if ($test =~ /^\*\s*(.*)$/) {
-				my $name = $1;
-				die "Test $name referenced in MAINTAINERS not found in $testsrelfile\n"
-					if (!exists $tests{$name});
-				$file_proposed_tests->[$index] = "*" . $name;
+		# For each non-email line (a V: entry)
+		foreach my $entry (grep { !/@/ } split("\n", $output)) {
+			# Extract the strength and the test
+			if ($entry =~ $test_proposal_entry_re) {
+				my $strength = grep { $test_proposal_strengths[$_] eq lc($1) }
+						0..$#test_proposal_strengths;
+				my $test = $2;
+				# Validate and normalize references
+				if ($test =~ /^\*\s*(.*)$/) {
+					my $name = $1;
+					die "Test $name referenced in MAINTAINERS not found in $testsrelfile\n"
+						if (!exists $tests{$name});
+					$test = "*" . $name;
+				}
+				$file_proposed_tests{$test} = $strength;
+			} else {
+				die "Invalid MAINTAINERS V: entry: $entry\n";
 			}
 		}
-		$files_proposed_tests{$filename} = $file_proposed_tests;
-	} else {
-		$file_proposed_tests = $files_proposed_tests{$filename};
+		$files_proposed_tests{$filename} = \%file_proposed_tests;
 	}
 
-	return @$file_proposed_tests;
+	return $files_proposed_tests{$filename};
 }
 
 sub is_SPDX_License_valid {
@@ -2761,7 +2779,7 @@ sub process {
 	my @setup_docs = ();
 	my $setup_docs = 0;
 
-	# Test suites which should not be proposed for execution
+	# Maximum strength (0-2) of test proposals to be ignored
 	my %dont_propose_tests = ();
 
 	my $camelcase_file_seeded = 0;
@@ -2983,8 +3001,10 @@ sub process {
 			}
 
 			# Check if tests are proposed for changes to the file
-			foreach my $test (get_file_proposed_tests($realfile)) {
-				next if exists $dont_propose_tests{$test};
+			my $file_proposed_tests = get_file_proposed_tests($realfile);
+			foreach my $test (keys %$file_proposed_tests) {
+				my $strength = $file_proposed_tests->{$test};
+				next if $strength <= ($dont_propose_tests{$test} // -1);
 				my $name;
 				my $title;
 				my $command;
@@ -3000,19 +3020,19 @@ sub process {
 					$command = $test;
 				}
 				if ($command) {
-					$message = "Execute the $title " .
-						"proposed for verifying changes to $realfile:\n" .
-						"$command\n";
+					$message = "Execute the $title $test_proposal_strengths[$strength] " .
+						"for verifying changes to $realfile:\n$command\n";
 				} else {
-					$message = "The $title is proposed for verifying changes to $realfile\n";
+					$message = "The $title is $test_proposal_strengths[$strength] " .
+						"for verifying changes to $realfile\n";
 				}
 				if ($name) {
 					$message .= "See instructions under \"$name\" in $testsrelfile\n";
 				}
 				$message .= "Add the following to the tested commit's message, " .
 					"IF IT PASSES:\nTested-with: $test\n";
-				CHK("TEST_PROPOSAL", $message);
-				$dont_propose_tests{$test} = 1;
+				(\&CHK, \&WARN, \&ERROR)[$strength]("TEST_PROPOSAL", $message);
+				$dont_propose_tests{$test} = $strength;
 			}
 
 			next;
@@ -3350,7 +3370,7 @@ sub process {
 				# the test and its subsets
 				local *dont_propose_test_name = sub {
 					my ($name) = @_;
-					$dont_propose_tests{"*" . $name} = 1;
+					$dont_propose_tests{"*" . $name} = 2;
 					foreach my $sub_name (keys %tests) {
 						my $sub_data = $tests{$sub_name};
 						my $superset = $sub_data->{"superset"};
@@ -3363,7 +3383,7 @@ sub process {
 			# Else it's a command
 			} else {
 				# Do not propose the test
-				$dont_propose_tests{$test} = 1;
+				$dont_propose_tests{$test} = 2;
 			}
 		}
 
@@ -3821,9 +3841,10 @@ sub process {
 			if ($rawline =~ /^\+V:\s*(.*)/) {
 				my $entry = $1;
 				# If this is a valid entry value
-				if ($entry =~ /^[^@#]*$/) {
+				if ($entry =~ $test_proposal_entry_re) {
+					my $test = $2;
 					# If the test in the entry is a reference
-					if ($entry =~ /^\*\s*(.*)$/) {
+					if ($test =~ /^\*\s*(.*)$/) {
 						my $name = $1;
 						ERROR("TEST_PROPOSAL_INVALID",
 						      "Test $name referenced in MAINTAINERS not found in $testsrelfile\n" .
@@ -3831,7 +3852,7 @@ sub process {
 					}
 				} else {
 					ERROR("TEST_PROPOSAL_INVALID",
-					      "Test proposal cannot contain '\@' or '#' characters\n" . $herecurr);
+					      "Invalid test proposal entry: $entry\n" . $herecurr);
 				}
 			}
 		}
