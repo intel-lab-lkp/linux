@@ -795,8 +795,9 @@ err_rpm_put:
 	return ret;
 }
 
-static int imx214_g_frame_interval(struct v4l2_subdev *subdev,
-				   struct v4l2_subdev_frame_interval *fival)
+static int imx214_get_frame_interval(struct v4l2_subdev *subdev,
+				     struct v4l2_subdev_state *sd_state,
+				     struct v4l2_subdev_frame_interval *fival)
 {
 	fival->interval.numerator = 1;
 	fival->interval.denominator = IMX214_FPS;
@@ -828,8 +829,6 @@ static int imx214_enum_frame_interval(struct v4l2_subdev *subdev,
 
 static const struct v4l2_subdev_video_ops imx214_video_ops = {
 	.s_stream = imx214_s_stream,
-	.g_frame_interval = imx214_g_frame_interval,
-	.s_frame_interval = imx214_g_frame_interval,
 };
 
 static const struct v4l2_subdev_pad_ops imx214_subdev_pad_ops = {
@@ -839,6 +838,8 @@ static const struct v4l2_subdev_pad_ops imx214_subdev_pad_ops = {
 	.get_fmt = imx214_get_format,
 	.set_fmt = imx214_set_format,
 	.get_selection = imx214_get_selection,
+	.get_frame_interval = imx214_get_frame_interval,
+	.set_frame_interval = imx214_get_frame_interval,
 };
 
 static const struct v4l2_subdev_ops imx214_subdev_ops = {
