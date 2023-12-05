@@ -671,7 +671,6 @@ MODULE_DEVICE_TABLE(of, of_cr50_i2c_match);
 /**
  * tpm_cr50_i2c_probe() - Driver probe function.
  * @client:	I2C client information.
- * @id:		I2C device id.
  *
  * Return:
  * - 0:		Success.
