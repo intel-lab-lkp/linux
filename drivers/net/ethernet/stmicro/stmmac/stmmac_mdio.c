@@ -499,25 +499,33 @@ int stmmac_xpcs_setup(struct net_device *ndev)
 {
 	struct stmmac_priv *priv;
 	struct dw_xpcs *xpcs;
-	int mode, addr;
+	int ret, mode, addr;
 
 	priv = netdev_priv(ndev);
 	mode = priv->plat->phy_interface;
 
-	/* Try to probe the XPCS by scanning all addresses. */
-	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
-		xpcs = xpcs_create_byaddr(priv->mii, addr, mode);
-		if (IS_ERR(xpcs))
-			continue;
+	/* If PCS-node is specified use it to create the XPCS descriptor */
+	if (fwnode_property_present(priv->plat->port_node, "pcs-handle")) {
+		xpcs = xpcs_create_bynode(priv->plat->port_node, mode);
+		ret = PTR_ERR_OR_ZERO(xpcs);
+	} else if (priv->plat->mdio_bus_data && priv->plat->mdio_bus_data->has_xpcs) {
+		/* Try to probe the XPCS by scanning all addresses */
+		for (ret = -ENODEV, addr = 0; addr < PHY_MAX_ADDR; addr++) {
+			xpcs = xpcs_create_byaddr(priv->mii, addr, mode);
+			if (IS_ERR(xpcs))
+				continue;
 
-		priv->hw->xpcs = xpcs;
-		break;
+			ret = 0;
+			break;
+		}
+	} else {
+		return 0;
 	}
 
-	if (!priv->hw->xpcs) {
-		dev_warn(priv->device, "No xPCS found\n");
-		return -ENODEV;
-	}
+	if (ret)
+		return dev_err_probe(priv->device, ret, "No xPCS found\n");
+
+	priv->hw->xpcs = xpcs;
 
 	return 0;
 }

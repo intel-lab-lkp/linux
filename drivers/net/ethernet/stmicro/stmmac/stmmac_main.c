@@ -7684,11 +7684,9 @@ int stmmac_dvr_probe(struct device *device,
 	if (priv->plat->speed_mode_2500)
 		priv->plat->speed_mode_2500(ndev, priv->plat->bsp_priv);
 
-	if (priv->plat->mdio_bus_data && priv->plat->mdio_bus_data->has_xpcs) {
-		ret = stmmac_xpcs_setup(ndev);
-		if (ret)
-			goto error_xpcs_setup;
-	}
+	ret = stmmac_xpcs_setup(ndev);
+	if (ret)
+		goto error_xpcs_setup;
 
 	ret = stmmac_phy_setup(priv);
 	if (ret) {
