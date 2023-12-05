@@ -324,7 +324,7 @@ int ocxl_global_mmio_clear32(struct ocxl_afu *afu, size_t offset,
 int ocxl_global_mmio_clear64(struct ocxl_afu *afu, size_t offset,
 			     enum ocxl_endian endian, u64 mask);
 
-// Functions left here are for compatibility with the cxlflash driver
+// Functions left here are for compatibility with the ocxlflash driver
 
 /*
  * Read the configuration space of a function for the AFU specified by
