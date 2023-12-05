@@ -9,9 +9,11 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/fwnode.h>
 #include <linux/mdio.h>
 #include <linux/module.h>
 #include <linux/pcs/pcs-xpcs.h>
+#include <linux/phy.h>
 #include <linux/phylink.h>
 #include <linux/property.h>
 
@@ -1510,6 +1512,30 @@ out_free_data:
 
 	return ERR_PTR(ret);
 }
+
+struct dw_xpcs *xpcs_create_bynode(const struct fwnode_handle *fwnode,
+				   phy_interface_t interface)
+{
+	struct fwnode_handle *pcs_node;
+	struct mdio_device *mdiodev;
+	struct dw_xpcs *xpcs;
+
+	pcs_node = fwnode_find_reference(fwnode, "pcs-handle", 0);
+	if (IS_ERR(pcs_node))
+		return ERR_CAST(pcs_node);
+
+	mdiodev = fwnode_mdio_find_device(pcs_node);
+	fwnode_handle_put(pcs_node);
+	if (!mdiodev)
+		return ERR_PTR(-ENODEV);
+
+	xpcs = xpcs_create(mdiodev, interface);
+	if (IS_ERR(xpcs))
+		mdio_device_put(mdiodev);
+
+	return xpcs;
+}
+EXPORT_SYMBOL_GPL(xpcs_create_bynode);
 
 struct dw_xpcs *xpcs_create_byaddr(struct mii_bus *bus, int addr,
 				   phy_interface_t interface)

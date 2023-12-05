@@ -8,6 +8,7 @@
 #define __LINUX_PCS_XPCS_H
 
 #include <linux/clk.h>
+#include <linux/fwnode.h>
 #include <linux/mdio.h>
 #include <linux/phy.h>
 #include <linux/phylink.h>
@@ -73,6 +74,8 @@ int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 void xpcs_get_interfaces(struct dw_xpcs *xpcs, unsigned long *interfaces);
 int xpcs_config_eee(struct dw_xpcs *xpcs, int mult_fact_100ns,
 		    int enable);
+struct dw_xpcs *xpcs_create_bynode(const struct fwnode_handle *fwnode,
+				   phy_interface_t interface);
 struct dw_xpcs *xpcs_create_byaddr(struct mii_bus *bus, int addr,
 				   phy_interface_t interface);
 void xpcs_destroy(struct dw_xpcs *xpcs);
