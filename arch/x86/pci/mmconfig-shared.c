@@ -570,9 +570,13 @@ static void __init pci_mmcfg_reject_broken(int early)
 
 	list_for_each_entry(cfg, &pci_mmcfg_list, list) {
 		if (pci_mmcfg_check_reserved(NULL, cfg, early) == 0) {
-			pr_info(PREFIX "not using MMCONFIG\n");
-			free_all_mmcfg();
-			return;
+			if (dmi_get_bios_year() >= 2021) {
+				pr_info(PREFIX "MMCONFIG wasn't reserved by ACPI or EFI\n");
+			} else {
+				pr_info(PREFIX "not using MMCONFIG\n");
+				free_all_mmcfg();
+				return;
+			}
 		}
 	}
 }
