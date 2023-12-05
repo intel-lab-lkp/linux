@@ -253,7 +253,7 @@ static void flush_arg_page(struct linux_binprm *bprm, unsigned long pos,
 static int __bprm_mm_init(struct linux_binprm *bprm)
 {
 	int err;
-	struct vm_area_struct *vma = NULL;
+	struct vm_area_struct *vma;
 	struct mm_struct *mm = bprm->mm;
 
 	bprm->vma = vma = vm_area_alloc(mm);
