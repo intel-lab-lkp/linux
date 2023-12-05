@@ -2712,9 +2712,10 @@ static int ksz_connect_tag_protocol(struct dsa_switch *ds,
 				    enum dsa_tag_protocol proto)
 {
 	struct ksz_tagger_data *tagger_data;
-
-	tagger_data = ksz_tagger_data(ds);
-	tagger_data->xmit_work_fn = ksz_port_deferred_xmit;
+	if (ksz_tagger_data(ds)) {
+		tagger_data = ksz_tagger_data(ds);
+		tagger_data->xmit_work_fn = ksz_port_deferred_xmit;
+	}
 
 	return 0;
 }
