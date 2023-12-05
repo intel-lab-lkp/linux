@@ -9550,7 +9550,8 @@ static u8 mgmt_ltk_type(struct smp_ltk *ltk)
 	return MGMT_LTK_UNAUTHENTICATED;
 }
 
-void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
+void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent,
+		  u8 link_type)
 {
 	struct mgmt_ev_new_long_term_key ev;
 
@@ -9574,7 +9575,7 @@ void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, key->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(link_type, key->bdaddr_type);
 	ev.key.type = mgmt_ltk_type(key);
 	ev.key.enc_size = key->enc_size;
 	ev.key.ediv = key->ediv;
@@ -9593,7 +9594,8 @@ void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
 	mgmt_event(MGMT_EV_NEW_LONG_TERM_KEY, hdev, &ev, sizeof(ev), NULL);
 }
 
-void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent)
+void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent,
+		  u8 link_type)
 {
 	struct mgmt_ev_new_irk ev;
 
@@ -9603,14 +9605,14 @@ void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent)
 
 	bacpy(&ev.rpa, &irk->rpa);
 	bacpy(&ev.irk.addr.bdaddr, &irk->bdaddr);
-	ev.irk.addr.type = link_to_bdaddr(LE_LINK, irk->addr_type);
+	ev.irk.addr.type = link_to_bdaddr(link_type, irk->addr_type);
 	memcpy(ev.irk.val, irk->val, sizeof(irk->val));
 
 	mgmt_event(MGMT_EV_NEW_IRK, hdev, &ev, sizeof(ev), NULL);
 }
 
 void mgmt_new_csrk(struct hci_dev *hdev, struct smp_csrk *csrk,
-		   bool persistent)
+		   bool persistent, u8 link_type)
 {
 	struct mgmt_ev_new_csrk ev;
 
@@ -9632,7 +9634,7 @@ void mgmt_new_csrk(struct hci_dev *hdev, struct smp_csrk *csrk,
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &csrk->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, csrk->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(link_type, csrk->bdaddr_type);
 	ev.key.type = csrk->type;
 	memcpy(ev.key.val, csrk->val, sizeof(csrk->val));
 

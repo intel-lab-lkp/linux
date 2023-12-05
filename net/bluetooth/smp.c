@@ -1060,7 +1060,7 @@ static void smp_notify_keys(struct l2cap_conn *conn)
 	}
 
 	if (smp->remote_irk) {
-		mgmt_new_irk(hdev, smp->remote_irk, persistent);
+		mgmt_new_irk(hdev, smp->remote_irk, persistent, hcon->type);
 
 		/* Now that user space can be considered to know the
 		 * identity address track the connection based on it
@@ -1081,25 +1081,25 @@ static void smp_notify_keys(struct l2cap_conn *conn)
 	if (smp->csrk) {
 		smp->csrk->bdaddr_type = hcon->dst_type;
 		bacpy(&smp->csrk->bdaddr, &hcon->dst);
-		mgmt_new_csrk(hdev, smp->csrk, persistent);
+		mgmt_new_csrk(hdev, smp->csrk, persistent, hcon->type);
 	}
 
 	if (smp->responder_csrk) {
 		smp->responder_csrk->bdaddr_type = hcon->dst_type;
 		bacpy(&smp->responder_csrk->bdaddr, &hcon->dst);
-		mgmt_new_csrk(hdev, smp->responder_csrk, persistent);
+		mgmt_new_csrk(hdev, smp->responder_csrk, persistent, hcon->type);
 	}
 
 	if (smp->ltk) {
 		smp->ltk->bdaddr_type = hcon->dst_type;
 		bacpy(&smp->ltk->bdaddr, &hcon->dst);
-		mgmt_new_ltk(hdev, smp->ltk, persistent);
+		mgmt_new_ltk(hdev, smp->ltk, persistent, hcon->type);
 	}
 
 	if (smp->responder_ltk) {
 		smp->responder_ltk->bdaddr_type = hcon->dst_type;
 		bacpy(&smp->responder_ltk->bdaddr, &hcon->dst);
-		mgmt_new_ltk(hdev, smp->responder_ltk, persistent);
+		mgmt_new_ltk(hdev, smp->responder_ltk, persistent, hcon->type);
 	}
 
 	if (smp->link_key) {
