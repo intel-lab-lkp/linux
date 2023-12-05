@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# common clock support for SOPHGO SoC family.
+
+config CLK_SOPHGO_CV1800
+	tristate "Support for the Sophgo CV1800 series SoCs clock controller"
+	default y
+	depends on ARCH_SOPHGO || COMPILE_TEST
