@@ -1230,16 +1230,16 @@ int btrfs_open_devices(struct btrfs_fs_devices *fs_devices,
 
 void btrfs_release_disk_super(struct btrfs_super_block *super)
 {
-	struct page *page = virt_to_page(super);
+	struct folio *folio = virt_to_folio(super);
 
-	put_page(page);
+	folio_put(folio);
 }
 
 static struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
 						       u64 bytenr, u64 bytenr_orig)
 {
 	struct btrfs_super_block *disk_super;
-	struct page *page;
+	struct folio *folio;
 	void *p;
 	pgoff_t index;
 
@@ -1257,15 +1257,14 @@ static struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev
 		return ERR_PTR(-EINVAL);
 
 	/* pull in the page with our super */
-	page = read_cache_page_gfp(bdev->bd_inode->i_mapping, index, GFP_KERNEL);
+	folio = bdev_read_folio_gfp(bdev, index, GFP_KERNEL);
+	if (IS_ERR(folio))
+		return ERR_CAST(folio);
 
-	if (IS_ERR(page))
-		return ERR_CAST(page);
-
-	p = page_address(page);
+	p = folio_address(folio);
 
 	/* align our pointer to the offset of the super block */
-	disk_super = p + offset_in_page(bytenr);
+	disk_super = p + offset_in_folio(folio, bytenr);
 
 	if (btrfs_super_bytenr(disk_super) != bytenr_orig ||
 	    btrfs_super_magic(disk_super) != BTRFS_MAGIC) {
