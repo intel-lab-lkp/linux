@@ -15,6 +15,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/ioport.h>
@@ -517,6 +518,35 @@ static struct uart_8250_port *serial8250_setup_port(int index)
 	return up;
 }
 
+#ifdef CONFIG_SERIAL_8250_CONSOLE
+
+/*
+ * There is no struct device at this point, so let's not try to use
+ * serial_base_add_preferred_console().
+ */
+static void __init serial8250_isa_init_preferred_console(int idx)
+{
+	const char *name __free(kfree);
+	int ret;
+
+	name = kasprintf(GFP_KERNEL, "%s%i", serial8250_reg.dev_name, idx);
+	ret = add_preferred_console_match(name, serial8250_reg.dev_name, idx);
+	if (!ret || ret == -ENOENT)
+		return;
+
+	pr_err("Could not add preferred console for %s idx %i\n",
+	       serial8250_reg.dev_name, idx);
+}
+
+#else
+
+static inline void serial8250_isa_init_preferred_console(struct uart_port *port,
+							 int idx)
+{
+}
+
+#endif
+
 static void __init serial8250_isa_init_ports(void)
 {
 	struct uart_8250_port *up;
@@ -563,6 +593,8 @@ static void __init serial8250_isa_init_ports(void)
 		port->irqflags |= irqflag;
 		if (serial8250_isa_config != NULL)
 			serial8250_isa_config(i, &up->port, &up->capabilities);
+
+		serial8250_isa_init_preferred_console(i);
 	}
 }
 
