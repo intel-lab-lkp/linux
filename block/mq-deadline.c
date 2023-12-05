@@ -128,6 +128,11 @@ static u8 dd_rq_ioclass(struct request *rq)
 	return IOPRIO_PRIO_CLASS(req_get_ioprio(rq));
 }
 
+static u8 dd_bio_ioclass(struct bio *bio)
+{
+	return IOPRIO_PRIO_CLASS(bio->bi_ioprio);
+}
+
 /*
  * get the request before `rq' in sector-sorted order
  */
@@ -744,7 +749,7 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = IOPRIO_PRIO_CLASS(bio->bi_ioprio);
+	const u8 ioprio_class = dd_bio_ioclass(bio);
 	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 	sector_t sector = bio_end_sector(bio);
