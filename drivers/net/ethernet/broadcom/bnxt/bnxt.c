@@ -10753,7 +10753,7 @@ int bnxt_close_nic(struct bnxt *bp, bool irq_re_init, bool link_re_init)
 		rc = wait_event_interruptible_timeout(bp->sriov_cfg_wait,
 						      !bp->sriov_cfg,
 						      BNXT_SRIOV_CFG_WAIT_TMO);
-		if (rc)
+		if (!rc)
 			netdev_warn(bp->dev, "timeout waiting for SRIOV config operation to complete!\n");
 	}
 #endif
