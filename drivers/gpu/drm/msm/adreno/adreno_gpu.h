@@ -76,9 +76,6 @@ struct adreno_reglist {
 	u32 value;
 };
 
-extern const struct adreno_reglist a612_hwcg[], a615_hwcg[], a630_hwcg[], a640_hwcg[], a650_hwcg[];
-extern const struct adreno_reglist a660_hwcg[], a690_hwcg[], a730_hwcg[], a740_hwcg[];
-
 struct adreno_speedbin {
 	uint16_t fuse;
 	uint16_t speedbin;
