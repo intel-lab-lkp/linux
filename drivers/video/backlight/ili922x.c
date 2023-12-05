@@ -82,13 +82,12 @@
 #define START_RW_READ		1
 
 /**
- * START_BYTE(id, rs, rw)
- *
- * Set the start byte according to the required operation.
+ * START_BYTE() - Set the start byte according to the required operation.
  * The start byte is defined as:
  *   ----------------------------------
  *  | 0 | 1 | 1 | 1 | 0 | ID | RS | RW |
  *   ----------------------------------
+ *
  * @id: display's id as set by the manufacturer
  * @rs: operation type bit, one of:
  *	  - START_RS_INDEX	set the index register
@@ -101,14 +100,14 @@
 	(0x70 | (((id) & 0x01) << 2) | (((rs) & 0x01) << 1) | ((rw) & 0x01))
 
 /**
- * CHECK_FREQ_REG(spi_device s, spi_transfer x) - Check the frequency
+ * CHECK_FREQ_REG() - Check the frequency
  *	for the SPI transfer. According to the datasheet, the controller
  *	accept higher frequency for the GRAM transfer, but it requires
  *	lower frequency when the registers are read/written.
  *	The macro sets the frequency in the spi_transfer structure if
  *	the frequency exceeds the maximum value.
  * @s: pointer to an SPI device
- * @x: pointer to the read/write buffer pair
+ * @x: pointer to the &spi_transfer read/write buffer pair
  */
 #define CHECK_FREQ_REG(s, x)	\
 	do {			\
