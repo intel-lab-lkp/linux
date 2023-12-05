@@ -224,6 +224,7 @@ enum erofs_kmap_type {
 
 struct erofs_buf {
 	struct inode *inode;
+	struct block_device *bdev;
 	struct page *page;
 	void *base;
 	enum erofs_kmap_type kmap_type;
