@@ -334,7 +334,7 @@ void __init fdt_init_reserved_mem(void)
 		if (err == 0) {
 			err = __reserved_mem_init_node(rmem);
 			if (err != 0 && err != -ENOENT) {
-				pr_info("node %s compatible matching fail\n",
+				pr_err("node %s compatible matching fail\n",
 					rmem->name);
 				if (nomap)
 					memblock_clear_nomap(rmem->base, rmem->size);
