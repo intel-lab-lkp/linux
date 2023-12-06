@@ -277,6 +277,7 @@ static void *proc_key_users_start(struct seq_file *p, loff_t *_pos)
 	struct rb_node *_p;
 	loff_t pos = *_pos;
 
+	key_flush_gc();
 	spin_lock(&key_user_lock);
 
 	_p = key_user_first(seq_user_ns(p), &key_user_tree);

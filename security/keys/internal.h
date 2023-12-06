@@ -170,6 +170,7 @@ extern void keyring_restriction_gc(struct key *keyring,
 extern void key_schedule_gc(time64_t gc_at);
 extern void key_schedule_gc_links(void);
 extern void key_gc_keytype(struct key_type *ktype);
+extern void key_flush_gc(void);
 
 extern int key_task_permission(const key_ref_t key_ref,
 			       const struct cred *cred,

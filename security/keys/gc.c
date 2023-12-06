@@ -44,6 +44,12 @@ struct key_type key_type_dead = {
 	.name = ".dead",
 };
 
+void key_flush_gc(void)
+{
+	kenter("");
+	flush_work(&key_gc_work);
+}
+
 /*
  * Schedule a garbage collection run.
  * - time precision isn't particularly important
