@@ -1005,6 +1005,10 @@ static int wakeup_cpu_via_vmgexit(u32 apic_id, unsigned long start_ip)
 
 	cur_vmsa = per_cpu(sev_vmsa, cpu);
 
+	/* Re-onlining CPUs is currently unsupported */
+	if (cur_vmsa)
+		return -EOPNOTSUPP;
+
 	/*
 	 * A new VMSA is created each time because there is no guarantee that
 	 * the current VMSA is the kernels or that the vCPU is not running. If
