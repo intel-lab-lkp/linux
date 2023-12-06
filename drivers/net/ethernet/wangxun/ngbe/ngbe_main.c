@@ -335,7 +335,7 @@ static void ngbe_disable_device(struct wx *wx)
 	wx_update_stats(wx);
 }
 
-static void ngbe_down(struct wx *wx)
+void ngbe_down(struct wx *wx)
 {
 	phylink_stop(wx->phylink);
 	phylink_disconnect_phy(wx->phylink);
@@ -344,7 +344,7 @@ static void ngbe_down(struct wx *wx)
 	wx_clean_all_rx_rings(wx);
 }
 
-static void ngbe_up(struct wx *wx)
+void ngbe_up(struct wx *wx)
 {
 	wx_configure_vectors(wx);
 
