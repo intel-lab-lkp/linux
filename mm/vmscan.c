@@ -3297,7 +3297,7 @@ static unsigned long get_pmd_pfn(pmd_t pmd, struct vm_area_struct *vma, unsigned
 #endif
 
 static struct folio *get_pfn_folio(unsigned long pfn, struct mem_cgroup *memcg,
-				   struct pglist_data *pgdat, bool can_swap)
+				   struct pglist_data *pgdat, bool can_swap, bool clear_idle)
 {
 	struct folio *folio;
 
@@ -3306,6 +3306,10 @@ static struct folio *get_pfn_folio(unsigned long pfn, struct mem_cgroup *memcg,
 		return NULL;
 
 	folio = pfn_folio(pfn);
+
+	if (clear_idle && folio_test_idle(folio))
+		folio_clear_idle(folio);
+
 	if (folio_nid(folio) != pgdat->node_id)
 		return NULL;
 
@@ -3355,6 +3359,7 @@ restart:
 		unsigned long pfn;
 		struct folio *folio;
 		pte_t ptent = ptep_get(pte + i);
+		bool is_pte_young;
 
 		total++;
 		walk->mm_stats[MM_LEAF_TOTAL]++;
@@ -3363,16 +3368,20 @@ restart:
 		if (pfn == -1)
 			continue;
 
-		if (!pte_young(ptent)) {
+		is_pte_young = !!pte_young(ptent);
+		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap, is_pte_young);
+		if (!folio) {
+			if (!is_pte_young)
+				walk->mm_stats[MM_LEAF_OLD]++;
+			continue;
+		}
+
+		if (!folio_test_clear_young(folio) && !is_pte_young) {
 			walk->mm_stats[MM_LEAF_OLD]++;
 			continue;
 		}
 
-		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap);
-		if (!folio)
-			continue;
-
-		if (!ptep_test_and_clear_young(args->vma, addr, pte + i))
+		if (is_pte_young && !ptep_test_and_clear_young(args->vma, addr, pte + i))
 			VM_WARN_ON_ONCE(true);
 
 		young++;
@@ -3435,6 +3444,7 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 	do {
 		unsigned long pfn;
 		struct folio *folio;
+		bool is_pmd_young;
 
 		/* don't round down the first address */
 		addr = i ? (*first & PMD_MASK) + i * PMD_SIZE : *first;
@@ -3449,11 +3459,15 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 			goto next;
 		}
 
-		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap);
+		is_pmd_young = !!pmd_young(pmd[i]);
+		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap, is_pmd_young);
 		if (!folio)
 			goto next;
 
-		if (!pmdp_test_and_clear_young(vma, addr, pmd + i))
+		if (is_pmd_young && !pmdp_test_and_clear_young(vma, addr, pmd + i))
+			VM_WARN_ON_ONCE(true);
+
+		if (!folio_test_clear_young(folio) && !is_pmd_young)
 			goto next;
 
 		walk->mm_stats[MM_LEAF_YOUNG]++;
@@ -4025,19 +4039,21 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	for (i = 0, addr = start; addr != end; i++, addr += PAGE_SIZE) {
 		unsigned long pfn;
 		pte_t ptent = ptep_get(pte + i);
+		bool is_pte_young;
 
 		pfn = get_pte_pfn(ptent, pvmw->vma, addr);
 		if (pfn == -1)
 			continue;
 
-		if (!pte_young(ptent))
-			continue;
-
-		folio = get_pfn_folio(pfn, memcg, pgdat, can_swap);
+		is_pte_young = !!pte_young(ptent);
+		folio = get_pfn_folio(pfn, memcg, pgdat, can_swap, is_pte_young);
 		if (!folio)
 			continue;
 
-		if (!ptep_test_and_clear_young(pvmw->vma, addr, pte + i))
+		if (!folio_test_clear_young(folio) && !is_pte_young)
+			continue;
+
+		if (is_pte_young && !ptep_test_and_clear_young(pvmw->vma, addr, pte + i))
 			VM_WARN_ON_ONCE(true);
 
 		young++;
