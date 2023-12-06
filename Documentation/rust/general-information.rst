@@ -77,3 +77,13 @@ configuration:
 	#[cfg(CONFIG_X="y")]   // Enabled as a built-in (`y`)
 	#[cfg(CONFIG_X="m")]   // Enabled as a module   (`m`)
 	#[cfg(not(CONFIG_X))]  // Disabled
+
+Testing
+-------
+
+Running the Rust tests the Make target is::
+
+	make LLVM=1 rusttest
+
+This requires the kernel .config and downloads external repos.
+
