@@ -470,7 +470,6 @@ static int load_calibration_efi_1(struct tasdevice_priv *tas_priv)
 		dev_dbg(tas_priv->dev, "%4ld-%2d-%2d, %2d:%2d:%2d\n",
 			tm->tm_year, tm->tm_mon, tm->tm_mday,
 			tm->tm_hour, tm->tm_min, tm->tm_sec);
-		tas2781_apply_calib(tas_priv);
 	} else
 		tas_priv->cali_data.total_sz = 0;
 
@@ -548,6 +547,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	 * calibrated data inside algo.
 	 */
 	tasdevice_load_calibration(tas_priv);
+	tasdevice_apply_calibration(tas_priv);
 
 out:
 	if (tas_priv->fw_state == TASDEVICE_DSP_FW_FAIL) {
