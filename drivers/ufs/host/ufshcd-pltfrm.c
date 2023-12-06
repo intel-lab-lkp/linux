@@ -13,6 +13,7 @@
 #include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
+#include <linux/clk.h>
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"
@@ -213,6 +214,55 @@ static void ufshcd_init_lanes_per_dir(struct ufs_hba *hba)
 	}
 }
 
+/**
+ * ufshcd_config_min_max_clk_freq - update min and max freq
+ * @hba: per adapter instance
+ *
+ * This function store min and max freq for all the clocks.
+ *
+ * Returns 0 for success and non-zero for failure
+ */
+static int ufshcd_config_min_max_clk_freq(struct ufs_hba *hba)
+{
+	struct list_head *head = &hba->clk_list_head;
+	struct dev_pm_opp *opp;
+	struct ufs_clk_info *clki;
+	unsigned long freq;
+	u8 idx = 0;
+	int ret;
+
+	list_for_each_entry(clki, head, list) {
+		if (!clki->name)
+			continue;
+
+		clki->clk = devm_clk_get(hba->dev, clki->name);
+		if (!IS_ERR_OR_NULL(clki->clk)) {
+			/* Find Max Freq */
+			freq = ULONG_MAX;
+			opp = dev_pm_opp_find_freq_floor_indexed(hba->dev, &freq, idx);
+			if (IS_ERR(opp)) {
+				dev_err(hba->dev, "failed to find dev_pm_opp\n");
+				ret = PTR_ERR(opp);
+				return ret;
+			}
+			clki->max_freq = dev_pm_opp_get_freq_indexed(opp, idx);
+
+			/* Find Min Freq */
+			freq = 0;
+			opp = dev_pm_opp_find_freq_ceil_indexed(hba->dev, &freq, idx);
+			if (IS_ERR(opp)) {
+				dev_err(hba->dev, "failed to find dev_pm_opp\n");
+				ret = PTR_ERR(opp);
+				return ret;
+			}
+			clki->min_freq = dev_pm_opp_get_freq_indexed(opp, idx);
+			idx++;
+		}
+	}
+
+	return 0;
+}
+
 static int ufshcd_parse_operating_points(struct ufs_hba *hba)
 {
 	struct device *dev = hba->dev;
@@ -276,6 +326,12 @@ static int ufshcd_parse_operating_points(struct ufs_hba *hba)
 	ret = devm_pm_opp_of_add_table(dev);
 	if (ret) {
 		dev_err(dev, "Failed to add OPP table: %d\n", ret);
+		return ret;
+	}
+
+	ret = ufshcd_config_min_max_clk_freq(hba);
+	if (ret) {
+		dev_err(dev, "Failed to get min max freq: %d\n", ret);
 		return ret;
 	}
 
