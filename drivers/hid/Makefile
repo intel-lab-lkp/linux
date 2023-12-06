@@ -157,7 +157,7 @@ hid-uclogic-test-objs		:= hid-uclogic-rdesc.o \
 				   hid-uclogic-params.o \
 				   hid-uclogic-rdesc-test.o
 obj-$(CONFIG_HID_KUNIT_TEST)	+= hid-uclogic-test.o
-
+obj-$(CONFIG_HID_HIMAX)		+= hid-himax-83102j.o
 obj-$(CONFIG_USB_HID)		+= usbhid/
 obj-$(CONFIG_USB_MOUSE)		+= usbhid/
 obj-$(CONFIG_USB_KBD)		+= usbhid/
