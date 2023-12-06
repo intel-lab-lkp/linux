@@ -395,7 +395,7 @@ static const struct snd_kcontrol_new tas2781_dsp_conf_ctrl = {
 	.put = tasdevice_config_put,
 };
 
-static void tas2781_apply_calib(struct tasdevice_priv *tas_priv)
+static void tas2781_apply_calibration(struct tasdevice_priv *tas_priv)
 {
 	static const unsigned char page_array[CALIB_MAX] = {
 		0x17, 0x18, 0x18, 0x0d, 0x18
@@ -426,7 +426,7 @@ static void tas2781_apply_calib(struct tasdevice_priv *tas_priv)
  * by Algo for calcucating the speaker temperature, speaker membrane excursion
  * and f0 in real time during playback.
  */
-static int tas2781_save_calibration(struct tasdevice_priv *tas_priv)
+static int load_calibration_efi_1(struct tasdevice_priv *tas_priv)
 {
 	efi_guid_t efi_guid = EFI_GUID(0x02f9af02, 0x7734, 0x4233, 0xb4, 0x3d,
 		0x93, 0xfe, 0x5a, 0xa3, 0x5d, 0xb3);
@@ -547,7 +547,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	/* If calibrated data occurs error, dsp will still works with default
 	 * calibrated data inside algo.
 	 */
-	tas2781_save_calibration(tas_priv);
+	tasdevice_load_calibration(tas_priv);
 
 out:
 	if (tas_priv->fw_state == TASDEVICE_DSP_FW_FAIL) {
@@ -650,14 +650,16 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 	const char *device_name;
 	int ret;
 
-	if (strstr(dev_name(&clt->dev), "TIAS2781"))
-		device_name = "TIAS2781";
-	else
-		return -ENODEV;
-
 	tas_priv = tasdevice_kzalloc(clt);
 	if (!tas_priv)
 		return -ENOMEM;
+
+	if (strstr(dev_name(&clt->dev), "TIAS2781")) {
+		device_name = "TIAS2781";
+		tas_priv->load_calibration = load_calibration_efi_1;
+		tas_priv->apply_calibration = tas2781_apply_calibration;
+	} else
+		return -ENODEV;
 
 	tas_priv->irq_info.irq = clt->irq;
 	ret = tas2781_read_acpi(tas_priv, device_name);
@@ -726,8 +728,6 @@ static int tas2781_runtime_suspend(struct device *dev)
 static int tas2781_runtime_resume(struct device *dev)
 {
 	struct tasdevice_priv *tas_priv = dev_get_drvdata(dev);
-	unsigned long calib_data_sz =
-		tas_priv->ndev * TASDEVICE_SPEAKER_CALIBRATION_SIZE;
 
 	dev_dbg(tas_priv->dev, "Runtime Resume\n");
 
@@ -738,8 +738,7 @@ static int tas2781_runtime_resume(struct device *dev)
 	/* If calibrated data occurs error, dsp will still works with default
 	 * calibrated data inside algo.
 	 */
-	if (tas_priv->cali_data.total_sz > calib_data_sz)
-		tas2781_apply_calib(tas_priv);
+	tasdevice_apply_calibration(tas_priv);
 
 	mutex_unlock(&tas_priv->codec_lock);
 
@@ -770,8 +769,6 @@ static int tas2781_system_suspend(struct device *dev)
 static int tas2781_system_resume(struct device *dev)
 {
 	struct tasdevice_priv *tas_priv = dev_get_drvdata(dev);
-	unsigned long calib_data_sz =
-		tas_priv->ndev * TASDEVICE_SPEAKER_CALIBRATION_SIZE;
 	int i, ret;
 
 	dev_dbg(tas_priv->dev, "System Resume\n");
@@ -793,8 +790,7 @@ static int tas2781_system_resume(struct device *dev)
 	/* If calibrated data occurs error, dsp will still work with default
 	 * calibrated data inside algo.
 	 */
-	if (tas_priv->cali_data.total_sz > calib_data_sz)
-		tas2781_apply_calib(tas_priv);
+	tasdevice_apply_calibration(tas_priv);
 	mutex_unlock(&tas_priv->codec_lock);
 
 	return 0;
