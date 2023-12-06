@@ -72,7 +72,7 @@
  */
 #define MCACOD		  0xefff     /* MCA Error Code */
 
-/* Architecturally defined codes from SDM Vol. 3B Chapter 15 */
+/* Architecturally defined error codes from SDM: Machine-Check Architecture */
 #define MCACOD_SCRUB	0x00C0	/* 0xC0-0xCF Memory Scrubbing */
 #define MCACOD_SCRUBMSK	0xeff0	/* Skip bit 12 ('F' bit) */
 #define MCACOD_L3WB	0x017A	/* L3 Explicit Writeback */

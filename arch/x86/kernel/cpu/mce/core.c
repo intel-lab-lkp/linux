@@ -498,7 +498,8 @@ bool mce_is_memory_error(struct mce *m)
 	case X86_VENDOR_INTEL:
 	case X86_VENDOR_ZHAOXIN:
 		/*
-		 * Intel SDM Volume 3B - 15.9.2 Compound Error Codes
+		 * Intel SDM: Machine-Check Architecture -> "Compound Error
+		 * Codes"
 		 *
 		 * Bit 7 of the MCACOD field of IA32_MCi_STATUS is used for
 		 * indicating a memory error. Bit 8 is used for indicating a
@@ -714,7 +715,8 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 			goto log_it;
 
 		/*
-		 * Log UCNA (SDM: 15.6.3 "UCR Error Classification")
+		 * Log UCNA (Intel SDM: Machine-Check Architecture -> "UCR
+		 * Error Classification")
 		 * UC == 1 && PCC == 0 && S == 0
 		 */
 		if (!(m.status & MCI_STATUS_PCC) && !(m.status & MCI_STATUS_S))
