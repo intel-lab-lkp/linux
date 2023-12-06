@@ -36,14 +36,15 @@ enum {
 extern unsigned int perf_mem_events__loads_ldlat;
 extern struct perf_mem_event perf_mem_events[PERF_MEM_EVENTS__MAX];
 
-int perf_mem_events__parse(const char *str);
-int perf_mem_events__init(void);
+int perf_mem_events__parse(struct perf_pmu *pmu, const char *str);
+int perf_mem_events__init(struct perf_pmu *pmu);
 
 const char *perf_mem_events__name(int i, const char *pmu_name);
-struct perf_mem_event *perf_mem_events__ptr(int i);
+struct perf_mem_event *perf_mem_events__ptr(struct perf_pmu *pmu, int i);
+struct perf_pmu *perf_mem_events_find_pmu(void);
 bool is_mem_loads_aux_event(struct evsel *leader);
 
-void perf_mem_events__list(void);
+void perf_mem_events__list(struct perf_pmu *pmu);
 int perf_mem_events__record_args(const char **rec_argv, int *argv_nr,
 				 char **rec_tmp, int *tmp_nr);
 
