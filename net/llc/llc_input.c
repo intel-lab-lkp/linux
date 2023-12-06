@@ -141,7 +141,8 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
 			return 0;
 		if (unlikely(pskb_trim_rcsum(skb, data_size)))
 			return 0;
-	}
+	} else
+		return 0;
 	return 1;
 }
 
