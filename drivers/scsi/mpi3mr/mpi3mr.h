@@ -23,6 +23,7 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/aer.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -481,6 +482,7 @@ struct mpi3mr_throttle_group_info {
 
 /* HBA port flags */
 #define MPI3MR_HBA_PORT_FLAG_DIRTY	0x01
+#define MPI3MR_HBA_PORT_FLAG_NEW       0x02
 
 /* IOCTL data transfer sge*/
 #define MPI3MR_NUM_IOCTL_SGE		256
@@ -901,6 +903,29 @@ struct scmd_priv {
 };
 
 /**
+ * struct mpi3mr_pdevinfo - PCI device information
+ *
+ * @dev_id: PCI device ID of the adapter
+ * @dev_hw_rev: PCI revision of the adapter
+ * @subsys_dev_id: PCI subsystem device ID of the adapter
+ * @subsys_ven_id: PCI subsystem vendor ID of the adapter
+ * @dev: PCI device
+ * @func: PCI function
+ * @bus: PCI bus
+ * @seg_id: PCI segment ID
+ */
+struct mpi3mr_pdevinfo {
+	u16 id;
+	u16 ssid;
+	u16 ssvid;
+	u16 segment;
+	u8 dev:5;
+	u8 func:3;
+	u8 bus;
+	u8 revision;
+};
+
+/**
  * struct mpi3mr_ioc - Adapter anchor structure stored in shost
  * private data
  *
@@ -1056,6 +1081,9 @@ struct scmd_priv {
  * @ioctl_chain_sge: DMA buffer descriptor for IOCTL chain
  * @ioctl_resp_sge: DMA buffer descriptor for Mgmt cmd response
  * @ioctl_sges_allocated: Flag for IOCTL SGEs allocated or not
+ * @pcie_err_recovery: PCIe error recovery in progress
+ * @block_on_pcie_err: Block IO during PCI error recovery
+ * @pdevinfo: PCI device information
  */
 struct mpi3mr_ioc {
 	struct list_head list;
@@ -1247,6 +1275,9 @@ struct mpi3mr_ioc {
 	struct dma_memory_desc ioctl_chain_sge;
 	struct dma_memory_desc ioctl_resp_sge;
 	bool ioctl_sges_allocated;
+	bool pcie_err_recovery;
+	bool block_on_pcie_err;
+	struct mpi3mr_pdevinfo pdevinfo;
 };
 
 /**
