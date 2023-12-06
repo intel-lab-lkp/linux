@@ -76,6 +76,7 @@ properties:
     description: |
       Output connections from the TPDA to legacy CoreSight trace bus.
     $ref: /schemas/graph.yaml#/properties/ports
+    additionalProperties: false
 
     properties:
       port:
