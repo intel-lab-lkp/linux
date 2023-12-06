@@ -72,7 +72,7 @@ static int tas2781_get_i2c_res(struct acpi_resource *ares, void *data)
 
 	if (i2c_acpi_get_i2c_resource(ares, &sb)) {
 		if (tas_priv->ndev < TASDEVICE_MAX_CHANNELS &&
-			sb->slave_address != TAS2781_GLOBAL_ADDR) {
+			sb->slave_address != tas_priv->global_addr) {
 			tas_priv->tasdevice[tas_priv->ndev].dev_addr =
 				(unsigned int)sb->slave_address;
 			tas_priv->ndev++;
