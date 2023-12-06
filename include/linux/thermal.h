@@ -195,6 +195,9 @@ struct thermal_zone_device {
  *			thermal zone.
  * @throttle:	callback called for every trip point even if temperature is
  *		below the trip point temperature
+ * @instances_update:	callback called when thermal zone instances list
+ *	i		has changed (e.g. added new or removed), which
+ *			may help to offload work for governor like allocations
  * @governor_list:	node in thermal_governor_list (in thermal_core.c)
  */
 struct thermal_governor {
@@ -203,6 +206,7 @@ struct thermal_governor {
 	void (*unbind_from_tz)(struct thermal_zone_device *tz);
 	int (*throttle)(struct thermal_zone_device *tz,
 			const struct thermal_trip *trip);
+	void (*instances_update)(struct thermal_zone_device *tz);
 	struct list_head	governor_list;
 };
 
