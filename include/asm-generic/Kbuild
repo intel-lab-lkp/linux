@@ -26,6 +26,7 @@ mandatory-y += ftrace.h
 mandatory-y += futex.h
 mandatory-y += hardirq.h
 mandatory-y += hw_irq.h
+mandatory-y += ima-efi.h
 mandatory-y += io.h
 mandatory-y += irq.h
 mandatory-y += irq_regs.h

@@ -6,10 +6,7 @@
 #include <linux/module.h>
 #include <linux/ima.h>
 #include <asm/efi.h>
-
-#ifndef arch_ima_efi_boot_mode
-#define arch_ima_efi_boot_mode efi_secureboot_mode_unset
-#endif
+#include <asm/ima-efi.h>
 
 static enum efi_secureboot_mode get_sb_mode(void)
 {
