@@ -59,43 +59,57 @@ initial_plane_vma(struct drm_i915_private *i915,
 		return NULL;
 
 	base = round_down(plane_config->base, I915_GTT_MIN_ALIGNMENT);
-	if (IS_DGFX(i915)) {
+
+	if (GRAPHICS_VER(i915) < 8) {
+		/*
+		 * In gen7-, there is a 1:1 mapping
+		 * between GSM and physical address.
+		 */
+		phys_base = base;
+		mem = i915->mm.stolen_region;
+	} else {
+		/*
+		 * In gen8+, there is no 1:1 mapping between
+		 * GSM and physical address, so we need to
+		 * check GGTT to determine the physical address.
+		 */
 		gen8_pte_t __iomem *gte = to_gt(i915)->ggtt->gsm;
 		gen8_pte_t pte;
 
 		gte += base / I915_GTT_PAGE_SIZE;
-
 		pte = ioread64(gte);
-		if (!(pte & GEN12_GGTT_PTE_LM)) {
-			drm_err(&i915->drm,
-				"Initial plane programming missing PTE_LM bit\n");
-			return NULL;
+
+		if (IS_DGFX(i915)) {
+			if (!(pte & GEN12_GGTT_PTE_LM)) {
+				drm_err(&i915->drm,
+					"Initial plane programming missing PTE_LM bit\n");
+				return NULL;
+			}
+			mem = i915->mm.regions[INTEL_REGION_LMEM_0];
+		} else {
+			mem = i915->mm.stolen_region;
 		}
 
-		phys_base = pte & I915_GTT_PAGE_MASK;
-		mem = i915->mm.regions[INTEL_REGION_LMEM_0];
-
-		/*
-		 * We don't currently expect this to ever be placed in the
-		 * stolen portion.
-		 */
-		if (phys_base >= resource_size(&mem->region)) {
-			drm_err(&i915->drm,
-				"Initial plane programming using invalid range, phys_base=%pa\n",
-				&phys_base);
-			return NULL;
-		}
-
-		drm_dbg(&i915->drm,
-			"Using phys_base=%pa, based on initial plane programming\n",
-			&phys_base);
-	} else {
-		phys_base = base;
-		mem = i915->mm.stolen_region;
+		phys_base = (pte & I915_GTT_PAGE_MASK) - mem->region.start;
 	}
 
 	if (!mem)
 		return NULL;
+
+	/*
+	 * We don't currently expect this to ever be placed in the
+	 * stolen portion.
+	 */
+	if (phys_base >= resource_size(&mem->region)) {
+		drm_err(&i915->drm,
+			"Initial plane programming using invalid range, phys_base=%pa\n",
+			&phys_base);
+		return NULL;
+	}
+
+	drm_dbg(&i915->drm,
+		"Using phys_base=%pa, based on initial plane programming\n",
+		&phys_base);
 
 	size = round_up(plane_config->base + plane_config->size,
 			mem->min_page_size);
