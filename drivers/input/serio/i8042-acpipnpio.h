@@ -1692,6 +1692,9 @@ static int __init i8042_platform_init(void)
 		"");
 #endif
 
+	if (i8042_nokbd && i8042_noaux)
+		return -ENODEV;
+
 	retval = i8042_pnp_init();
 	if (retval)
 		return retval;
