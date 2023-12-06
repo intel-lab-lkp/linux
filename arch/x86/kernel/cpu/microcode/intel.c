@@ -266,6 +266,7 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 	struct microcode_intel *patch = NULL;
 	u32 cur_rev = uci->cpu_sig.rev;
 	unsigned int mc_size;
+	bool any_matches = false;
 
 	for (; size >= sizeof(struct microcode_header_intel); size -= mc_size, data += mc_size) {
 		mc_header = (struct microcode_header_intel *)data;
@@ -277,6 +278,7 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 
 		if (!intel_find_matching_signature(data, &uci->cpu_sig))
 			continue;
+		any_matches = true;
 
 		/*
 		 * For saving the early microcode, find the matching revision which
@@ -296,7 +298,21 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 		cur_rev = mc_header->rev;
 	}
 
-	return size ? NULL : patch;
+	if (size) {
+		pr_err("Unable to parse microcode blob!\n");
+		return NULL;
+	}
+
+	if (!save) {
+		if (patch)
+			pr_info("Found microcode update\n");
+		else if (any_matches)
+			pr_info("Found microcode update but it's not newer\n");
+		else
+			pr_info("Found no microcode update for this CPU\n");
+	}
+
+	return patch;
 }
 
 static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
@@ -373,8 +389,10 @@ static __init struct microcode_intel *get_microcode_blob(struct ucode_cpu_info *
 	if (!load_builtin_intel_microcode(&cp))
 		cp = find_microcode_in_initrd(ucode_path);
 
-	if (!(cp.data && cp.size))
+	if (!(cp.data && cp.size)) {
+		pr_info("Unable to find any microcode blob for early loading\n");
 		return NULL;
+	}
 
 	intel_collect_cpu_info(&uci->cpu_sig);
 
@@ -612,7 +630,7 @@ static enum ucode_state request_microcode_fw(int cpu, struct device *device)
 		c->x86, c->x86_model, c->x86_stepping);
 
 	if (request_firmware_direct(&firmware, name, device)) {
-		pr_debug("data file %s load failed\n", name);
+		pr_info("data file %s load failed\n", name);
 		return UCODE_NFOUND;
 	}
 

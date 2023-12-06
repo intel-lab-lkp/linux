@@ -136,13 +136,13 @@ static bool verify_container(const u8 *buf, size_t buf_size)
 	u32 cont_magic;
 
 	if (buf_size <= CONTAINER_HDR_SZ) {
-		pr_debug("Truncated microcode container header.\n");
+		pr_err("Truncated microcode container header.\n");
 		return false;
 	}
 
 	cont_magic = *(const u32 *)buf;
 	if (cont_magic != UCODE_MAGIC) {
-		pr_debug("Invalid magic value (0x%08x).\n", cont_magic);
+		pr_err("Invalid magic value (0x%08x).\n", cont_magic);
 		return false;
 	}
 
@@ -163,7 +163,7 @@ static bool verify_equivalence_table(const u8 *buf, size_t buf_size)
 
 	cont_type = hdr[1];
 	if (cont_type != UCODE_EQUIV_CPU_TABLE_TYPE) {
-		pr_debug("Wrong microcode container equivalence table type: %u.\n",
+		pr_err("Wrong microcode container equivalence table type: %u.\n",
 			 cont_type);
 		return false;
 	}
@@ -173,7 +173,7 @@ static bool verify_equivalence_table(const u8 *buf, size_t buf_size)
 	equiv_tbl_len = hdr[2];
 	if (equiv_tbl_len < sizeof(struct equiv_cpu_entry) ||
 	    buf_size < equiv_tbl_len) {
-		pr_debug("Truncated equivalence table.\n");
+		pr_err("Truncated equivalence table.\n");
 		return false;
 	}
 
@@ -194,7 +194,7 @@ __verify_patch_section(const u8 *buf, size_t buf_size, u32 *sh_psize)
 	const u32 *hdr;
 
 	if (buf_size < SECTION_HDR_SIZE) {
-		pr_debug("Truncated patch section.\n");
+		pr_err("Truncated patch section.\n");
 		return false;
 	}
 
@@ -203,13 +203,13 @@ __verify_patch_section(const u8 *buf, size_t buf_size, u32 *sh_psize)
 	p_size = hdr[1];
 
 	if (p_type != UCODE_UCODE_TYPE) {
-		pr_debug("Invalid type field (0x%x) in container file section header.\n",
+		pr_err("Invalid type field (0x%x) in container file section header.\n",
 			 p_type);
 		return false;
 	}
 
 	if (p_size < sizeof(struct microcode_header_amd)) {
-		pr_debug("Patch of size %u too short.\n", p_size);
+		pr_err("Patch of size %u too short.\n", p_size);
 		return false;
 	}
 
@@ -284,13 +284,13 @@ verify_patch(u8 family, const u8 *buf, size_t buf_size, u32 *patch_size)
 	 * size sh_psize, as the section claims.
 	 */
 	if (buf_size < sh_psize) {
-		pr_debug("Patch of size %u truncated.\n", sh_psize);
+		pr_err("Patch of size %u truncated.\n", sh_psize);
 		return -1;
 	}
 
 	ret = __verify_patch_size(family, sh_psize, buf_size);
 	if (!ret) {
-		pr_debug("Per-family patch size mismatch.\n");
+		pr_err("Per-family patch size mismatch.\n");
 		return -1;
 	}
 
@@ -423,8 +423,10 @@ static int __apply_microcode_amd(struct microcode_amd *mc)
 
 	/* verify patch application was successful */
 	native_rdmsr(MSR_AMD64_PATCH_LEVEL, rev, dummy);
-	if (rev != mc->hdr.patch_id)
+	if (rev != mc->hdr.patch_id) {
+		pr_err("CPU did not accept microcode update!\n");
 		return -1;
+	}
 
 	return 0;
 }
@@ -451,14 +453,18 @@ static bool early_apply_microcode(u32 cpuid_1_eax, u32 old_rev, void *ucode, siz
 	scan_containers(ucode, size, &desc);
 
 	mc = desc.mc;
-	if (!mc)
+	if (!mc) {
+		pr_info("Found no patches for this CPU model in the microcode file\n");
 		return ret;
+	}
 
 	/*
 	 * Allow application of the same revision to pick up SMT-specific
 	 * changes even if the revision of the other SMT thread is already
 	 * up-to-date.
 	 */
+	pr_info("CPU had microcode revision 0x%x, latest available patch is 0x%x\n",
+		old_rev, mc->hdr.patch_id);
 	if (old_rev > mc->hdr.patch_id)
 		return ret;
 
@@ -507,8 +513,10 @@ void __init load_ucode_amd_bsp(struct early_load_data *ed, unsigned int cpuid_1_
 	ucode_cpu_info[0].cpu_sig.sig = cpuid_1_eax;
 
 	find_blobs_in_containers(cpuid_1_eax, &cp);
-	if (!(cp.data && cp.size))
+	if (!(cp.data && cp.size)) {
+		pr_info("Unable to find any microcode blob for early loading\n");
 		return;
+	}
 
 	if (early_apply_microcode(cpuid_1_eax, ed->old_rev, cp.data, cp.size))
 		native_rdmsr(MSR_AMD64_PATCH_LEVEL, ed->new_rev, dummy);
@@ -883,7 +891,7 @@ static enum ucode_state request_microcode_amd(int cpu, struct device *device)
 		snprintf(fw_name, sizeof(fw_name), "amd-ucode/microcode_amd_fam%.2xh.bin", c->x86);
 
 	if (request_firmware_direct(&fw, (const char *)fw_name, device)) {
-		pr_debug("failed to load file %s\n", fw_name);
+		pr_err("failed to load file %s\n", fw_name);
 		goto out;
 	}
 
