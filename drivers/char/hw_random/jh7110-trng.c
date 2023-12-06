@@ -374,6 +374,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(starfive_trng_pm_ops, starfive_trng_suspend,
 
 static const struct of_device_id trng_dt_ids[] __maybe_unused = {
 	{ .compatible = "starfive,jh7110-trng" },
+	{ .compatible = "starfive,jh8100-trng" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, trng_dt_ids);
@@ -381,7 +382,7 @@ MODULE_DEVICE_TABLE(of, trng_dt_ids);
 static struct platform_driver starfive_trng_driver = {
 	.probe	= starfive_trng_probe,
 	.driver	= {
-		.name		= "jh7110-trng",
+		.name		= "starfive-trng",
 		.pm		= &starfive_trng_pm_ops,
 		.of_match_table	= of_match_ptr(trng_dt_ids),
 	},
