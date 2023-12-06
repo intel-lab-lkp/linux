@@ -42,7 +42,7 @@ static int befs_find_brun_dblindirect(struct super_block *sb,
  * @pos: start of data
  * @off: offset of data in buffer_head->b_data
  *
- * Returns pointer to buffer_head containing data starting with offset @off,
+ * Returns: pointer to buffer_head containing data starting with offset @off,
  * if you don't need to know offset just set @off = NULL.
  */
 struct buffer_head *
@@ -86,7 +86,7 @@ befs_read_datastream(struct super_block *sb, const befs_data_stream *ds,
  * Takes a file position and gives back a brun who's starting block
  * is block number fblock of the file.
  *
- * Returns BEFS_OK or BEFS_ERR.
+ * Returns: BEFS_OK or BEFS_ERR.
  *
  * Calls specialized functions for each of the three possible
  * datastream regions.
@@ -118,13 +118,13 @@ befs_fblock2brun(struct super_block *sb, const befs_data_stream *data,
 }
 
 /**
- * befs_read_lsmylink - read long symlink from datastream.
+ * befs_read_lsymlink - read long symlink from datastream.
  * @sb: Filesystem superblock
  * @ds: Datastream to read from
  * @buff: Buffer in which to place long symlink data
  * @len: Length of the long symlink in bytes
  *
- * Returns the number of bytes read
+ * Returns: the number of bytes read
  */
 size_t
 befs_read_lsymlink(struct super_block *sb, const befs_data_stream *ds,
@@ -166,6 +166,8 @@ befs_read_lsymlink(struct super_block *sb, const befs_data_stream *ds,
  * inode occupies on the filesystem, counting both regular file
  * data and filesystem metadata (and eventually attribute data
  * when we support attributes)
+ *
+ * Returns: count of blocks used by the file
 */
 
 befs_blocknr_t
@@ -229,8 +231,7 @@ befs_count_blocks(struct super_block *sb, const befs_data_stream *ds)
  * in the file represented by the datastream data, if that
  * blockno is in the direct region of the datastream.
  *
- * Return value is BEFS_OK if the blockrun is found, BEFS_ERR
- * otherwise.
+ * Returns: BEFS_OK if the blockrun is found, BEFS_ERR otherwise.
  *
  * Algorithm:
  * Linear search. Checks each element of array[] to see if it
@@ -290,8 +291,7 @@ befs_find_brun_direct(struct super_block *sb, const befs_data_stream *data,
  * in the file represented by the datastream data, if that
  * blockno is in the indirect region of the datastream.
  *
- * Return value is BEFS_OK if the blockrun is found, BEFS_ERR
- * otherwise.
+ * Returns: BEFS_OK if the blockrun is found, BEFS_ERR otherwise.
  *
  * Algorithm:
  * For each block in the indirect run of the datastream, read
@@ -381,8 +381,7 @@ befs_find_brun_indirect(struct super_block *sb,
  * in the file represented by the datastream data, if that
  * blockno is in the double-indirect region of the datastream.
  *
- * Return value is BEFS_OK if the blockrun is found, BEFS_ERR
- * otherwise.
+ * Returns: BEFS_OK if the blockrun is found, BEFS_ERR otherwise.
  *
  * Algorithm:
  * The block runs in the double-indirect region are different.
