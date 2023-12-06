@@ -1625,6 +1625,8 @@ static void f2fs_put_super(struct super_block *sb)
 	int err = 0;
 	bool done;
 
+	fscrypt_destroy_keyring(sb);
+
 	/* unregister procfs/sysfs entries in advance to avoid race case */
 	f2fs_unregister_sysfs(sbi);
 

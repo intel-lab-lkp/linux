@@ -47,6 +47,7 @@ static void ceph_put_super(struct super_block *s)
 	struct ceph_fs_client *fsc = ceph_sb_to_fs_client(s);
 
 	doutc(fsc->client, "begin\n");
+	fscrypt_destroy_keyring(s);
 	ceph_fscrypt_free_dummy_policy(fsc);
 	ceph_mdsc_close_sessions(fsc->mdsc);
 	doutc(fsc->client, "done\n");

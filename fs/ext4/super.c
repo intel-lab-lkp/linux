@@ -1295,6 +1295,8 @@ static void ext4_put_super(struct super_block *sb)
 	int aborted = 0;
 	int err;
 
+	fscrypt_destroy_keyring(sb);
+
 	/*
 	 * Unregister sysfs before destroying jbd2 journal.
 	 * Since we could still access attr_journal_task attribute via sysfs

@@ -219,13 +219,13 @@ static int allocate_filesystem_keyring(struct super_block *sb)
 
 /*
  * Release all encryption keys that have been added to the filesystem, along
- * with the keyring that contains them.
+ * with the keyring that contains them.  This is called at unmount time.
  *
- * This is called at unmount time, after all potentially-encrypted inodes have
- * been evicted.  The filesystem's underlying block device(s) are still
- * available at this time; this is important because after user file accesses
- * have been allowed, this function may need to evict keys from the keyslots of
- * an inline crypto engine, which requires the block device(s).
+ * Filesystems must call this from their ->put_super() method, after all
+ * potentially-encrypted inodes have been evicted but before the data structures
+ * needed for fscrypt_operations::get_devices() to work have been freed.  For
+ * block device based filesystems, the filesystem's block device(s) must still
+ * be available so that inline encryption keys can be evicted if necessary.
  */
 void fscrypt_destroy_keyring(struct super_block *sb)
 {
@@ -258,6 +258,7 @@ void fscrypt_destroy_keyring(struct super_block *sb)
 	kfree_sensitive(keyring);
 	sb->s_master_keys = NULL;
 }
+EXPORT_SYMBOL_GPL(fscrypt_destroy_keyring);
 
 static struct hlist_head *
 fscrypt_mk_hash_bucket(struct fscrypt_keyring *keyring,
