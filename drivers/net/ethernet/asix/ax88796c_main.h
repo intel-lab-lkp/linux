@@ -549,8 +549,10 @@ struct tx_eop_header {
 };
 
 struct tx_pkt_info {
-	struct tx_sop_header sop;
-	struct tx_segment_header seg;
+	struct_group(tx_overhead,
+		struct tx_sop_header sop;
+		struct tx_segment_header seg;
+	);
 	struct tx_eop_header eop;
 	u16 pkt_len;
 	u16 seq_num;
