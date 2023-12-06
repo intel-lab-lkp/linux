@@ -21,7 +21,7 @@
  */
 #define ICE_FLOW_PROF_FD(vsi, flow, tun_offs) \
 	((u64)(((((flow) + (tun_offs)) & ICE_FLOW_PROF_TYPE_M)) | \
-	      (((u64)(vsi) << ICE_FLOW_PROF_VSI_S) & ICE_FLOW_PROF_VSI_M)))
+	      FIELD_PREP(ICE_FLOW_PROF_VSI_M, vsi)))
 
 #define GTPU_TEID_OFFSET 4
 #define GTPU_EH_QFI_OFFSET 1
