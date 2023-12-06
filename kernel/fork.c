@@ -1719,7 +1719,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	/*
 	 * Are we cloning a kernel thread?
 	 *
-	 * We need to steal a active VM for that..
+	 * We need to steal an active VM for that..
 	 */
 	oldmm = current->mm;
 	if (!oldmm)
