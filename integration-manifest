@@ -1,0 +1,30 @@
+drm drm-fixes 33924328498e903bea74727353e5012d29653aff
+	Merge tag 'drm-intel-fixes-2023-12-01-1' of git://anongit.freedesktop.org/drm/drm-intel into drm-fixes
+drm-misc drm-misc-fixes e0f04e41e8eedd4e5a1275f2318df7e1841855f2
+	drm/atomic-helpers: Invoke end_fb_access while owning plane state
+drm-intel drm-intel-fixes 9f269070abe9c45dc60abc84e29326f855317eac
+	drm/i915: correct the input parameter on _intel_dsb_commit()
+drm drm-next 5edfd7d94b0310b74136b666551f1d23711ed445
+	Merge tag 'amd-drm-next-6.8-2023-12-01' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 28d3d0696688154cc04983f343011d07bf0508e4
+	drm/bridge: nxp-ptn3460: simplify some error checking
+drm-intel drm-intel-next 01a39f1c4f1220a4e6a25729fae87ff5794cbc52
+	drm/i915: Fix ADL+ tiled plane stride when the POT stride is smaller than the original
+drm-intel drm-intel-gt-next 706785c19fe92186815bdb9ae0148c4ba7262669
+	drm/i915/guc: Add a selftest for FAST_REQUEST errors
+drm-intel topic/core-for-CI 6e744c360e489e4f71e02829efaf3f71ad625c3e
+	ALSA: hda/hdmi: add connect-all quirk for ASUSTeK Z170 Pro
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
