@@ -25,9 +25,9 @@ s32 e1000e_get_bus_info_pcie(struct e1000_hw *hw)
 		pci_read_config_word(adapter->pdev,
 				     cap_offset + PCIE_LINK_STATUS,
 				     &pcie_link_status);
-		bus->width = (enum e1000_bus_width)((pcie_link_status &
-						     PCIE_LINK_WIDTH_MASK) >>
-						    PCIE_LINK_WIDTH_SHIFT);
+		bus->width =
+			(enum e1000_bus_width)FIELD_GET(PCIE_LINK_WIDTH_MASK,
+							pcie_link_status);
 	}
 
 	mac->ops.set_lan_id(hw);
@@ -52,7 +52,7 @@ void e1000_set_lan_id_multi_port_pcie(struct e1000_hw *hw)
 	 * for the device regardless of function swap state.
 	 */
 	reg = er32(STATUS);
-	bus->func = (reg & E1000_STATUS_FUNC_MASK) >> E1000_STATUS_FUNC_SHIFT;
+	bus->func = FIELD_GET(E1000_STATUS_FUNC_MASK, reg);
 }
 
 /**
