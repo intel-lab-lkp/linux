@@ -2035,7 +2035,7 @@ ice_add_rss_list(struct ice_hw *hw, u16 vsi_handle, struct ice_flow_prof *prof)
  */
 #define ICE_FLOW_GEN_PROFID(hash, hdr, segs_cnt) \
 	((u64)(((u64)(hash) & ICE_FLOW_PROF_HASH_M) | \
-	       (((u64)(hdr) << ICE_FLOW_PROF_HDR_S) & ICE_FLOW_PROF_HDR_M) | \
+	       FIELD_PREP(ICE_FLOW_PROF_HDR_M, hdr) | \
 	       ((u8)((segs_cnt) - 1) ? ICE_FLOW_PROF_ENCAP_M : 0)))
 
 /**
