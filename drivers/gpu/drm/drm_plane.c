@@ -401,6 +401,7 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	if (format_modifier_count && !plane->modifiers) {
 		DRM_DEBUG_KMS("out of memory when allocating plane\n");
 		kfree(plane->format_types);
+		plane->format_types = NULL;
 		drm_mode_object_unregister(dev, &plane->base);
 		return -ENOMEM;
 	}
@@ -414,6 +415,8 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	if (!plane->name) {
 		kfree(plane->format_types);
 		kfree(plane->modifiers);
+		plane->format_types = NULL;
+		plane->modifiers = NULL;
 		drm_mode_object_unregister(dev, &plane->base);
 		return -ENOMEM;
 	}
