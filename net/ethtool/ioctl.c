@@ -2765,26 +2765,18 @@ static int ethtool_set_fecparam(struct net_device *dev, void __user *useraddr)
 /* The main entry point in this file.  Called from net/core/dev_ioctl.c */
 
 static int
-__dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
-	      u32 ethcmd, struct ethtool_devlink_compat *devlink_state)
+__dev_ethtool_check(struct net_device *dev, void __user *useraddr,
+		    u32 ethcmd, u32 *sub_cmd)
 {
-	struct net_device *dev;
-	u32 sub_cmd;
-	int rc;
-	netdev_features_t old_features;
-
-	dev = __dev_get_by_name(net, ifr->ifr_name);
-	if (!dev)
-		return -ENODEV;
-
 	if (ethcmd == ETHTOOL_PERQUEUE) {
-		if (copy_from_user(&sub_cmd, useraddr + sizeof(ethcmd), sizeof(sub_cmd)))
+		if (copy_from_user(sub_cmd, useraddr + sizeof(ethcmd), sizeof(*sub_cmd)))
 			return -EFAULT;
 	} else {
-		sub_cmd = ethcmd;
+		*sub_cmd = ethcmd;
 	}
+
 	/* Allow some commands to be done by anyone */
-	switch (sub_cmd) {
+	switch (*sub_cmd) {
 	case ETHTOOL_GSET:
 	case ETHTOOL_GDRVINFO:
 	case ETHTOOL_GMSGLVL:
@@ -2823,22 +2815,28 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 	case ETHTOOL_GFECPARAM:
 		break;
 	default:
-		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		if (!ns_capable(dev_net(dev)->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 	}
 
-	if (dev->dev.parent)
-		pm_runtime_get_sync(dev->dev.parent);
+	return 0;
+}
 
-	if (!netif_device_present(dev)) {
-		rc = -ENODEV;
-		goto out;
-	}
+static int
+__dev_ethtool_do(struct net_device *dev, struct ifreq *ifr,
+		 void __user *useraddr, u32 ethcmd, u32 sub_cmd,
+		 struct ethtool_devlink_compat *devlink_state)
+{
+	netdev_features_t old_features;
+	int rc;
+
+	if (!netif_device_present(dev))
+		return -ENODEV;
 
 	if (dev->ethtool_ops->begin) {
 		rc = dev->ethtool_ops->begin(dev);
 		if (rc < 0)
-			goto out;
+			return rc;
 	}
 	old_features = dev->features;
 
@@ -3049,7 +3047,7 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 		rc = ethtool_set_fecparam(dev, useraddr);
 		break;
 	default:
-		rc = -EOPNOTSUPP;
+		return -EOPNOTSUPP;
 	}
 
 	if (dev->ethtool_ops->complete)
@@ -3057,9 +3055,6 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 
 	if (old_features != dev->features)
 		netdev_features_change(dev);
-out:
-	if (dev->dev.parent)
-		pm_runtime_put(dev->dev.parent);
 
 	return rc;
 }
@@ -3067,7 +3062,9 @@ out:
 int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 {
 	struct ethtool_devlink_compat *state;
-	u32 ethcmd;
+	struct net_device *dev = NULL;
+	netdevice_tracker dev_tracker;
+	u32 ethcmd, subcmd;
 	int rc;
 
 	if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd)))
@@ -3087,9 +3084,26 @@ int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 		break;
 	}
 
+	dev = netdev_get_by_name(net, ifr->ifr_name, &dev_tracker, GFP_KERNEL);
+	if (!dev) {
+		rc = -ENODEV;
+		goto exit_free;
+	}
+
+	rc = __dev_ethtool_check(dev, useraddr, ethcmd, &subcmd);
+	if (rc)
+		goto exit_free;
+
+	if (dev->dev.parent)
+		pm_runtime_get_sync(dev->dev.parent);
+
 	rtnl_lock();
-	rc = __dev_ethtool(net, ifr, useraddr, ethcmd, state);
+	rc = __dev_ethtool_do(dev, ifr, useraddr, ethcmd, subcmd, state);
 	rtnl_unlock();
+
+	if (dev->dev.parent)
+		pm_runtime_put(dev->dev.parent);
+
 	if (rc)
 		goto exit_free;
 
@@ -3112,6 +3126,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 	}
 
 exit_free:
+	netdev_put(dev, &dev_tracker);
 	if (state->devlink)
 		devlink_put(state->devlink);
 	kfree(state);
