@@ -651,7 +651,7 @@ DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 	cond_local_irq_enable(regs);
 
 	if (static_cpu_has(X86_FEATURE_UMIP)) {
-		if (user_mode(regs) && fixup_umip_exception(regs))
+		if (user_mode(regs) && !error_code && fixup_umip_exception(regs))
 			goto exit;
 	}
 
