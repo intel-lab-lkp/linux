@@ -33,6 +33,7 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 
+#include "../../pci.h"
 #include "pcie-designware.h"
 
 #define IMX8MQ_GPR_PCIE_REF_USE_PAD		BIT(9)
@@ -1332,6 +1333,11 @@ static int imx6_pcie_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, PTR_ERR(imx6_pcie->pciephy_reset),
 					     "Failed to get PCIEPHY reset control\n");
 	}
+
+	/* Using linux,pci-domain as PCI slot id */
+	imx6_pcie->controller_id = of_get_pci_domain_nr(node);
+	if (imx6_pcie->controller_id)
+		imx6_pcie->controller_id = 0;
 
 	switch (imx6_pcie->drvdata->variant) {
 	case IMX7D:
