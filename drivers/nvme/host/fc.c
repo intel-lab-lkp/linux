@@ -2799,7 +2799,7 @@ static blk_status_t
 nvme_fc_queue_rq(struct blk_mq_hw_ctx *hctx,
 			const struct blk_mq_queue_data *bd)
 {
-	struct nvme_ns *ns = hctx->queue->queuedata;
+	struct nvme_ns_head *head = hctx->queue->queuedata;
 	struct nvme_fc_queue *queue = hctx->driver_data;
 	struct nvme_fc_ctrl *ctrl = queue->ctrl;
 	struct request *rq = bd->rq;
@@ -2813,7 +2813,7 @@ nvme_fc_queue_rq(struct blk_mq_hw_ctx *hctx,
 	    !nvme_check_ready(&queue->ctrl->ctrl, rq, queue_ready))
 		return nvme_fail_nonready_command(&queue->ctrl->ctrl, rq);
 
-	ret = nvme_setup_cmd(ns, rq);
+	ret = nvme_setup_cmd(head, rq);
 	if (ret)
 		return ret;
 

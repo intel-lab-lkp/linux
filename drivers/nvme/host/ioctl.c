@@ -61,7 +61,7 @@ static bool nvme_cmd_allowed(struct nvme_ns *ns, struct nvme_command *c,
 	 * and marks this command as supported.  If not reject unprivileged
 	 * passthrough.
 	 */
-	effects = nvme_command_effects(ns->ctrl, ns, c->common.opcode);
+	effects = nvme_command_effects(ns->ctrl, ns->head, c->common.opcode);
 	if (!(effects & NVME_CMD_EFFECTS_CSUPP))
 		return false;
 
@@ -168,8 +168,8 @@ static int nvme_map_user_request(struct request *req, u64 ubuffer,
 		unsigned int flags)
 {
 	struct request_queue *q = req->q;
-	struct nvme_ns *ns = q->queuedata;
-	struct block_device *bdev = ns ? ns->disk->part0 : NULL;
+	struct nvme_ns_head *head = q->queuedata;
+	struct block_device *bdev = head ? head->disk->part0 : NULL;
 	struct bio *bio = NULL;
 	void *meta = NULL;
 	int ret;
@@ -222,7 +222,7 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 		void __user *meta_buffer, unsigned meta_len, u32 meta_seed,
 		u64 *result, unsigned timeout, unsigned int flags)
 {
-	struct nvme_ns *ns = q->queuedata;
+	struct nvme_ns_head *head = q->queuedata;
 	struct nvme_ctrl *ctrl;
 	struct request *req;
 	void *meta = NULL;
@@ -245,7 +245,7 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	bio = req->bio;
 	ctrl = nvme_req(req)->ctrl;
 
-	effects = nvme_passthru_start(ctrl, ns, cmd->common.opcode);
+	effects = nvme_passthru_start(ctrl, head, cmd->common.opcode);
 	ret = nvme_execute_rq(req, false);
 	if (result)
 		*result = le64_to_cpu(nvme_req(req)->result.u64);
@@ -257,7 +257,7 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	blk_mq_free_request(req);
 
 	if (effects)
-		nvme_passthru_end(ctrl, ns, effects, cmd, ret);
+		nvme_passthru_end(ctrl, head, effects, cmd, ret);
 
 	return ret;
 }
@@ -283,10 +283,10 @@ static int nvme_submit_io(struct nvme_ns *ns, struct nvme_user_io __user *uio)
 		return -EINVAL;
 	}
 
-	length = (io.nblocks + 1) << ns->lba_shift;
+	length = (io.nblocks + 1) << ns->head->lba_shift;
 
 	if ((io.control & NVME_RW_PRINFO_PRACT) &&
-	    ns->ms == sizeof(struct t10_pi_tuple)) {
+	    ns->head->ms == sizeof(struct t10_pi_tuple)) {
 		/*
 		 * Protection information is stripped/inserted by the
 		 * controller.
@@ -296,11 +296,11 @@ static int nvme_submit_io(struct nvme_ns *ns, struct nvme_user_io __user *uio)
 		meta_len = 0;
 		metadata = NULL;
 	} else {
-		meta_len = (io.nblocks + 1) * ns->ms;
+		meta_len = (io.nblocks + 1) * ns->head->ms;
 		metadata = nvme_to_user_ptr(io.metadata);
 	}
 
-	if (ns->features & NVME_NS_EXT_LBAS) {
+	if (ns->head->features & NVME_NS_EXT_LBAS) {
 		length += meta_len;
 		meta_len = 0;
 	} else if (meta_len) {

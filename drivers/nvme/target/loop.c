@@ -131,7 +131,7 @@ static void nvme_loop_execute_work(struct work_struct *work)
 static blk_status_t nvme_loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		const struct blk_mq_queue_data *bd)
 {
-	struct nvme_ns *ns = hctx->queue->queuedata;
+	struct nvme_ns_head *head = hctx->queue->queuedata;
 	struct nvme_loop_queue *queue = hctx->driver_data;
 	struct request *req = bd->rq;
 	struct nvme_loop_iod *iod = blk_mq_rq_to_pdu(req);
@@ -141,7 +141,7 @@ static blk_status_t nvme_loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (!nvme_check_ready(&queue->ctrl->ctrl, req, queue_ready))
 		return nvme_fail_nonready_command(&queue->ctrl->ctrl, req);
 
-	ret = nvme_setup_cmd(ns, req);
+	ret = nvme_setup_cmd(head, req);
 	if (ret)
 		return ret;
 

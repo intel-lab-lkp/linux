@@ -2476,7 +2476,7 @@ static blk_status_t nvme_tcp_map_data(struct nvme_tcp_queue *queue,
 	return 0;
 }
 
-static blk_status_t nvme_tcp_setup_cmd_pdu(struct nvme_ns *ns,
+static blk_status_t nvme_tcp_setup_cmd_pdu(struct nvme_ns_head *head,
 		struct request *rq)
 {
 	struct nvme_tcp_request *req = blk_mq_rq_to_pdu(rq);
@@ -2485,7 +2485,7 @@ static blk_status_t nvme_tcp_setup_cmd_pdu(struct nvme_ns *ns,
 	u8 hdgst = nvme_tcp_hdgst_len(queue), ddgst = 0;
 	blk_status_t ret;
 
-	ret = nvme_setup_cmd(ns, rq);
+	ret = nvme_setup_cmd(head, rq);
 	if (ret)
 		return ret;
 
@@ -2541,7 +2541,7 @@ static void nvme_tcp_commit_rqs(struct blk_mq_hw_ctx *hctx)
 static blk_status_t nvme_tcp_queue_rq(struct blk_mq_hw_ctx *hctx,
 		const struct blk_mq_queue_data *bd)
 {
-	struct nvme_ns *ns = hctx->queue->queuedata;
+	struct nvme_ns_head *head = hctx->queue->queuedata;
 	struct nvme_tcp_queue *queue = hctx->driver_data;
 	struct request *rq = bd->rq;
 	struct nvme_tcp_request *req = blk_mq_rq_to_pdu(rq);
@@ -2551,7 +2551,7 @@ static blk_status_t nvme_tcp_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (!nvme_check_ready(&queue->ctrl->ctrl, rq, queue_ready))
 		return nvme_fail_nonready_command(&queue->ctrl->ctrl, rq);
 
-	ret = nvme_tcp_setup_cmd_pdu(ns, rq);
+	ret = nvme_tcp_setup_cmd_pdu(head, rq);
 	if (unlikely(ret))
 		return ret;
 

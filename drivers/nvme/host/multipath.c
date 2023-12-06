@@ -82,11 +82,14 @@ void nvme_mpath_start_freeze(struct nvme_subsystem *subsys)
 
 void nvme_failover_req(struct request *req)
 {
-	struct nvme_ns *ns = req->q->queuedata;
+	struct nvme_ns_head *head = req->q->queuedata;
+	struct nvme_ctrl *ctrl = nvme_req(req)->ctrl;
+	struct nvme_ns *ns;
 	u16 status = nvme_req(req)->status & 0x7ff;
 	unsigned long flags;
 	struct bio *bio;
 
+	ns = nvme_find_get_ns(ctrl, head->ns_id);
 	nvme_mpath_clear_current_path(ns);
 
 	/*
@@ -94,14 +97,14 @@ void nvme_failover_req(struct request *req)
 	 * ready to serve this namespace.  Kick of a re-read of the ANA
 	 * information page, and just try any other available path for now.
 	 */
-	if (nvme_is_ana_error(status) && ns->ctrl->ana_log_buf) {
+	if (nvme_is_ana_error(status) && ctrl->ana_log_buf) {
 		set_bit(NVME_NS_ANA_PENDING, &ns->flags);
-		queue_work(nvme_wq, &ns->ctrl->ana_work);
+		queue_work(nvme_wq, &ctrl->ana_work);
 	}
 
-	spin_lock_irqsave(&ns->head->requeue_lock, flags);
+	spin_lock_irqsave(&head->requeue_lock, flags);
 	for (bio = req->bio; bio; bio = bio->bi_next) {
-		bio_set_dev(bio, ns->head->disk->part0);
+		bio_set_dev(bio, head->disk->part0);
 		if (bio->bi_opf & REQ_POLLED) {
 			bio->bi_opf &= ~REQ_POLLED;
 			bio->bi_cookie = BLK_QC_T_NONE;
@@ -115,17 +118,17 @@ void nvme_failover_req(struct request *req)
 		 */
 		bio->bi_opf &= ~REQ_NOWAIT;
 	}
-	blk_steal_bios(&ns->head->requeue_list, req);
-	spin_unlock_irqrestore(&ns->head->requeue_lock, flags);
+	blk_steal_bios(&head->requeue_list, req);
+	spin_unlock_irqrestore(&head->requeue_lock, flags);
 
 	blk_mq_end_request(req, 0);
-	kblockd_schedule_work(&ns->head->requeue_work);
+	kblockd_schedule_work(&head->requeue_work);
 }
 
 void nvme_mpath_start_request(struct request *rq)
 {
-	struct nvme_ns *ns = rq->q->queuedata;
-	struct gendisk *disk = ns->head->disk;
+	struct nvme_ns_head *head = rq->q->queuedata;
+	struct gendisk *disk = head->disk;
 
 	if (!blk_queue_io_stat(disk->queue) || blk_rq_is_passthrough(rq))
 		return;
@@ -138,11 +141,11 @@ EXPORT_SYMBOL_GPL(nvme_mpath_start_request);
 
 void nvme_mpath_end_request(struct request *rq)
 {
-	struct nvme_ns *ns = rq->q->queuedata;
+	struct nvme_ns_head *head = rq->q->queuedata;
 
 	if (!(nvme_req(rq)->flags & NVME_MPATH_IO_STATS))
 		return;
-	bdev_end_io_acct(ns->head->disk->part0, req_op(rq),
+	bdev_end_io_acct(head->disk->part0, req_op(rq),
 			 blk_rq_bytes(rq) >> SECTOR_SHIFT,
 			 nvme_req(rq)->start_time);
 }
@@ -202,10 +205,10 @@ void nvme_mpath_clear_ctrl_paths(struct nvme_ctrl *ctrl)
 	up_read(&ctrl->namespaces_rwsem);
 }
 
-void nvme_mpath_revalidate_paths(struct nvme_ns *ns)
+void nvme_mpath_revalidate_paths(struct nvme_ns_head *head)
 {
-	struct nvme_ns_head *head = ns->head;
 	sector_t capacity = get_capacity(head->disk);
+	struct nvme_ns *ns;
 	int node;
 	int srcu_idx;
 

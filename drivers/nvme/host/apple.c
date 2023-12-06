@@ -732,7 +732,7 @@ static int apple_nvme_remove_sq(struct apple_nvme *anv)
 static blk_status_t apple_nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 					const struct blk_mq_queue_data *bd)
 {
-	struct nvme_ns *ns = hctx->queue->queuedata;
+	struct nvme_ns_head *head = hctx->queue->queuedata;
 	struct apple_nvme_queue *q = hctx->driver_data;
 	struct apple_nvme *anv = queue_to_apple_nvme(q);
 	struct request *req = bd->rq;
@@ -753,7 +753,7 @@ static blk_status_t apple_nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (!nvme_check_ready(&anv->ctrl, req, true))
 		return nvme_fail_nonready_command(&anv->ctrl, req);
 
-	ret = nvme_setup_cmd(ns, req);
+	ret = nvme_setup_cmd(head, req);
 	if (ret)
 		return ret;
 

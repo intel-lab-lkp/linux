@@ -1402,7 +1402,7 @@ static int nvme_rdma_map_sg_pi(struct nvme_rdma_queue *queue,
 	struct nvme_rdma_sgl *sgl = &req->data_sgl;
 	struct ib_reg_wr *wr = &req->reg_wr;
 	struct request *rq = blk_mq_rq_from_pdu(req);
-	struct nvme_ns *ns = rq->q->queuedata;
+	struct nvme_ns_head *head = rq->q->queuedata;
 	struct bio *bio = rq->bio;
 	struct nvme_keyed_sgl_desc *sg = &c->common.dptr.ksgl;
 	int nr;
@@ -1418,7 +1418,7 @@ static int nvme_rdma_map_sg_pi(struct nvme_rdma_queue *queue,
 		goto mr_put;
 
 	nvme_rdma_set_sig_attrs(blk_get_integrity(bio->bi_bdev->bd_disk), c,
-				req->mr->sig_attrs, ns->pi_type);
+				req->mr->sig_attrs, head->pi_type);
 	nvme_rdma_set_prot_checks(c, &req->mr->sig_attrs->check_mask);
 
 	ib_update_fast_reg_key(req->mr, ib_inc_rkey(req->mr->rkey));
@@ -1974,7 +1974,7 @@ static enum blk_eh_timer_return nvme_rdma_timeout(struct request *rq)
 static blk_status_t nvme_rdma_queue_rq(struct blk_mq_hw_ctx *hctx,
 		const struct blk_mq_queue_data *bd)
 {
-	struct nvme_ns *ns = hctx->queue->queuedata;
+	struct nvme_ns_head *head = hctx->queue->queuedata;
 	struct nvme_rdma_queue *queue = hctx->driver_data;
 	struct request *rq = bd->rq;
 	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
@@ -2002,7 +2002,7 @@ static blk_status_t nvme_rdma_queue_rq(struct blk_mq_hw_ctx *hctx,
 	ib_dma_sync_single_for_cpu(dev, sqe->dma,
 			sizeof(struct nvme_command), DMA_TO_DEVICE);
 
-	ret = nvme_setup_cmd(ns, rq);
+	ret = nvme_setup_cmd(head, rq);
 	if (ret)
 		goto unmap_qe;
 
@@ -2012,7 +2012,7 @@ static blk_status_t nvme_rdma_queue_rq(struct blk_mq_hw_ctx *hctx,
 	    queue->pi_support &&
 	    (c->common.opcode == nvme_cmd_write ||
 	     c->common.opcode == nvme_cmd_read) &&
-	    nvme_ns_has_pi(ns))
+	    nvme_ns_has_pi(head))
 		req->use_sig_mr = true;
 	else
 		req->use_sig_mr = false;

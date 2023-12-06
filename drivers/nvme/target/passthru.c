@@ -216,11 +216,11 @@ static void nvmet_passthru_execute_cmd_work(struct work_struct *w)
 	struct nvmet_req *req = container_of(w, struct nvmet_req, p.work);
 	struct request *rq = req->p.rq;
 	struct nvme_ctrl *ctrl = nvme_req(rq)->ctrl;
-	struct nvme_ns *ns = rq->q->queuedata;
+	struct nvme_ns_head *head = rq->q->queuedata;
 	u32 effects;
 	int status;
 
-	effects = nvme_passthru_start(ctrl, ns, req->cmd->common.opcode);
+	effects = nvme_passthru_start(ctrl, head, req->cmd->common.opcode);
 	status = nvme_execute_rq(rq, false);
 	if (status == NVME_SC_SUCCESS &&
 	    req->cmd->common.opcode == nvme_admin_identify) {
@@ -243,7 +243,7 @@ static void nvmet_passthru_execute_cmd_work(struct work_struct *w)
 	blk_mq_free_request(rq);
 
 	if (effects)
-		nvme_passthru_end(ctrl, ns, effects, req->cmd, status);
+		nvme_passthru_end(ctrl, head, effects, req->cmd, status);
 }
 
 static enum rq_end_io_ret nvmet_passthru_req_done(struct request *rq,
@@ -339,7 +339,7 @@ static void nvmet_passthru_execute_cmd(struct nvmet_req *req)
 	 * non-trivial effects, make sure to execute the command synchronously
 	 * in a workqueue so that nvme_passthru_end gets called.
 	 */
-	effects = nvme_command_effects(ctrl, ns, req->cmd->common.opcode);
+	effects = nvme_command_effects(ctrl, ns->head, req->cmd->common.opcode);
 	if (req->p.use_workqueue ||
 	    (effects & ~(NVME_CMD_EFFECTS_CSUPP | NVME_CMD_EFFECTS_LBCC))) {
 		INIT_WORK(&req->p.work, nvmet_passthru_execute_cmd_work);
