@@ -34,39 +34,23 @@ int ethnl_ops_begin(struct net_device *dev)
 {
 	int ret;
 
-	if (!dev)
-		return -ENODEV;
-
-	if (dev->dev.parent)
-		pm_runtime_get_sync(dev->dev.parent);
-
 	if (!netif_device_present(dev) ||
-	    dev->reg_state == NETREG_UNREGISTERING) {
-		ret = -ENODEV;
-		goto err;
-	}
+	    dev->reg_state == NETREG_UNREGISTERING)
+		return -ENODEV;
 
 	if (dev->ethtool_ops->begin) {
 		ret = dev->ethtool_ops->begin(dev);
 		if (ret)
-			goto err;
+			return ret;
 	}
 
 	return 0;
-err:
-	if (dev->dev.parent)
-		pm_runtime_put(dev->dev.parent);
-
-	return ret;
 }
 
 void ethnl_ops_complete(struct net_device *dev)
 {
 	if (dev->ethtool_ops->complete)
 		dev->ethtool_ops->complete(dev);
-
-	if (dev->dev.parent)
-		pm_runtime_put(dev->dev.parent);
 }
 
 /**
@@ -602,6 +586,14 @@ static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 			goto out_dev;
 	}
 
+	if (!req_info.dev) {
+		ret = -ENODEV;
+		goto out_dev;
+	}
+
+	if (req_info.dev->dev.parent)
+		pm_runtime_get_sync(req_info.dev->dev.parent);
+
 	rtnl_lock();
 	ret = ethnl_ops_begin(req_info.dev);
 	if (ret < 0)
@@ -617,6 +609,8 @@ out_ops:
 	ethnl_ops_complete(req_info.dev);
 out_rtnl:
 	rtnl_unlock();
+	if (req_info.dev->dev.parent)
+		pm_runtime_put(req_info.dev->dev.parent);
 out_dev:
 	ethnl_parse_header_dev_put(&req_info);
 	return ret;
