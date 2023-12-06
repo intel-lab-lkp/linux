@@ -767,6 +767,7 @@ static blk_status_t nvme_setup_discard(struct nvme_ns *ns, struct request *req,
 		struct nvme_command *cmnd)
 {
 	unsigned short segments = blk_rq_nr_discard_segments(req), n = 0;
+	struct nvme_ctrl *ctrl = nvme_req(req)->ctrl;
 	struct nvme_dsm_range *range;
 	struct bio *bio;
 
@@ -784,10 +785,10 @@ static blk_status_t nvme_setup_discard(struct nvme_ns *ns, struct request *req,
 		 * discard page. If that's also busy, it's safe to return
 		 * busy, as we know we can make progress once that's freed.
 		 */
-		if (test_and_set_bit_lock(0, &ns->ctrl->discard_page_busy))
+		if (test_and_set_bit_lock(0, &ctrl->discard_page_busy))
 			return BLK_STS_RESOURCE;
 
-		range = page_address(ns->ctrl->discard_page);
+		range = page_address(ctrl->discard_page);
 	}
 
 	if (queue_max_discard_segments(req->q) == 1) {
@@ -813,8 +814,8 @@ static blk_status_t nvme_setup_discard(struct nvme_ns *ns, struct request *req,
 	}
 
 	if (WARN_ON_ONCE(n != segments)) {
-		if (virt_to_page(range) == ns->ctrl->discard_page)
-			clear_bit_unlock(0, &ns->ctrl->discard_page_busy);
+		if (virt_to_page(range) == ctrl->discard_page)
+			clear_bit_unlock(0, &ctrl->discard_page_busy);
 		else
 			kfree(range);
 		return BLK_STS_IOERR;
@@ -859,9 +860,11 @@ static void nvme_set_ref_tag(struct nvme_ns *ns, struct nvme_command *cmnd,
 static inline blk_status_t nvme_setup_write_zeroes(struct nvme_ns *ns,
 		struct request *req, struct nvme_command *cmnd)
 {
+	struct nvme_ctrl *ctrl = nvme_req(req)->ctrl;
+
 	memset(cmnd, 0, sizeof(*cmnd));
 
-	if (ns->ctrl->quirks & NVME_QUIRK_DEALLOCATE_ZEROES)
+	if (ctrl->quirks & NVME_QUIRK_DEALLOCATE_ZEROES)
 		return nvme_setup_discard(ns, req, cmnd);
 
 	cmnd->write_zeroes.opcode = nvme_cmd_write_zeroes;
