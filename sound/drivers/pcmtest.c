@@ -396,8 +396,6 @@ static int snd_pcmtst_pcm_close(struct snd_pcm_substream *substream)
 {
 	struct pcmtst_buf_iter *v_iter = substream->runtime->private_data;
 
-	timer_shutdown_sync(&v_iter->timer_instance);
-	v_iter->substream = NULL;
 	playback_capture_test = !v_iter->is_buf_corrupted;
 	kfree(v_iter);
 	return 0;
@@ -499,6 +497,11 @@ static int snd_pcmtst_pcm_hw_params(struct snd_pcm_substream *substream,
 
 static int snd_pcmtst_pcm_hw_free(struct snd_pcm_substream *substream)
 {
+	struct pcmtst_buf_iter *v_iter = substream->runtime->private_data;
+
+	timer_shutdown_sync(&v_iter->timer_instance);
+	v_iter->substream = NULL;
+
 	return 0;
 }
 
