@@ -418,12 +418,6 @@ static int record_root_in_trans(struct btrfs_trans_handle *trans,
 		 * is only one writer in this function
 		 */
 		set_bit(BTRFS_ROOT_IN_TRANS_SETUP, &root->state);
-
-		/* make sure readers find IN_TRANS_SETUP before
-		 * they find our root->last_trans update
-		 */
-		smp_wmb();
-
 		spin_lock(&fs_info->fs_roots_radix_lock);
 		if (root->last_trans == trans->transid && !force) {
 			spin_unlock(&fs_info->fs_roots_radix_lock);
@@ -433,7 +427,11 @@ static int record_root_in_trans(struct btrfs_trans_handle *trans,
 				   (unsigned long)root->root_key.objectid,
 				   BTRFS_ROOT_TRANS_TAG);
 		spin_unlock(&fs_info->fs_roots_radix_lock);
-		root->last_trans = trans->transid;
+
+		/* make sure readers find IN_TRANS_SETUP before
+		 * they find our root->last_trans update
+		 */
+		smp_store_release(&root->last_trans, trans->transid); /* ^^^ */
 
 		/* this is pretty tricky.  We don't want to
 		 * take the relocation lock in btrfs_record_root_in_trans
@@ -492,11 +490,11 @@ int btrfs_record_root_in_trans(struct btrfs_trans_handle *trans,
 
 	/*
 	 * see record_root_in_trans for comments about IN_TRANS_SETUP usage
-	 * and barriers
+	 * and barriers.  The smp_load_acquire() pairs with the smp_wmb()
+	 * and the test_bit_acquire pairs with the smp_mb__before_atomic().
 	 */
-	smp_rmb();
-	if (root->last_trans == trans->transid &&
-	    !test_bit(BTRFS_ROOT_IN_TRANS_SETUP, &root->state))
+	if (smp_load_acquire(&root->last_trans) == trans->transid && /* ^^^ */
+	    !test_bit_acquire(BTRFS_ROOT_IN_TRANS_SETUP, &root->state)) /* ^^^ */
 		return 0;
 
 	mutex_lock(&fs_info->reloc_mutex);
