@@ -17,6 +17,7 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 #include <asm/smp.h>
+#include <asm/pci_setup.h>
 #include <asm/pci_x86.h>
 #include <asm/setup.h>
 #include <asm/irqdomain.h>

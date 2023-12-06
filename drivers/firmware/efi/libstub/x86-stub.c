@@ -17,6 +17,7 @@
 #include <asm/boot.h>
 #include <asm/kaslr.h>
 #include <asm/sev.h>
+#include <asm/pci_setup.h>
 
 #include "efistub.h"
 #include "x86-stub.h"
