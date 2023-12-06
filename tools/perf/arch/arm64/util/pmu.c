@@ -8,6 +8,12 @@
 #include <api/fs/fs.h>
 #include <math.h>
 
+void perf_pmu__arch_init(struct perf_pmu *pmu)
+{
+	if (strcmp(pmu->name, "arm_spe_0"))
+		pmu->mem_events = perf_mem_events_arm;
+}
+
 const struct pmu_metrics_table *pmu_metrics_table__find(void)
 {
 	struct perf_pmu *pmu;
