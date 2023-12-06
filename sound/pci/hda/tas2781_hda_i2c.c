@@ -613,8 +613,11 @@ static void tas2781_hda_unbind(struct device *dev,
 	struct tasdevice_priv *tas_priv = dev_get_drvdata(dev);
 	struct hda_component *comps = master_data;
 
-	if (comps[tas_priv->index].dev == dev)
-		memset(&comps[tas_priv->index], 0, sizeof(*comps));
+	if (comps[tas_priv->index].dev == dev) {
+		comps[tas_priv->index].dev = NULL;
+		strscpy(comps->name, "", sizeof(comps->name));
+		comps[tas_priv->index].playback_hook = NULL;
+	}
 
 	tasdevice_config_info_remove(tas_priv);
 	tasdevice_dsp_remove(tas_priv);
