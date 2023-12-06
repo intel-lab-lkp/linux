@@ -9,6 +9,7 @@
 #include <linux/etherdevice.h>
 #include <net/ip.h>
 #include <linux/phy.h>
+#include <linux/phylink.h>
 #include <linux/if_vlan.h>
 
 #include "../libwx/wx_type.h"
@@ -336,7 +337,8 @@ static void ngbe_disable_device(struct wx *wx)
 
 static void ngbe_down(struct wx *wx)
 {
-	phy_stop(wx->phydev);
+	phylink_stop(wx->phylink);
+	phylink_disconnect_phy(wx->phylink);
 	ngbe_disable_device(wx);
 	wx_clean_all_tx_rings(wx);
 	wx_clean_all_rx_rings(wx);
@@ -359,7 +361,7 @@ static void ngbe_up(struct wx *wx)
 	if (wx->gpio_ctrl)
 		ngbe_sfp_modules_txrx_powerctl(wx, true);
 
-	phy_start(wx->phydev);
+	ngbe_phylink_start(wx);
 }
 
 /**
@@ -388,23 +390,18 @@ static int ngbe_open(struct net_device *netdev)
 	if (err)
 		goto err_free_resources;
 
-	err = ngbe_phy_connect(wx);
+	err = netif_set_real_num_tx_queues(netdev, wx->num_tx_queues);
 	if (err)
 		goto err_free_irq;
 
-	err = netif_set_real_num_tx_queues(netdev, wx->num_tx_queues);
-	if (err)
-		goto err_dis_phy;
-
 	err = netif_set_real_num_rx_queues(netdev, wx->num_rx_queues);
 	if (err)
-		goto err_dis_phy;
+		goto err_free_irq;
 
 	ngbe_up(wx);
 
 	return 0;
-err_dis_phy:
-	phy_disconnect(wx->phydev);
+
 err_free_irq:
 	wx_free_irq(wx);
 err_free_resources:
@@ -430,7 +427,6 @@ static int ngbe_close(struct net_device *netdev)
 	ngbe_down(wx);
 	wx_free_irq(wx);
 	wx_free_resources(wx);
-	phy_disconnect(wx->phydev);
 	wx_control_hw(wx, false);
 
 	return 0;
@@ -680,6 +676,7 @@ static int ngbe_probe(struct pci_dev *pdev,
 	return 0;
 
 err_register:
+	phylink_destroy(wx->phylink);
 	wx_control_hw(wx, false);
 err_clear_interrupt_scheme:
 	wx_clear_interrupt_scheme(wx);
@@ -709,6 +706,7 @@ static void ngbe_remove(struct pci_dev *pdev)
 
 	netdev = wx->netdev;
 	unregister_netdev(netdev);
+	phylink_destroy(wx->phylink);
 	pci_release_selected_regions(pdev,
 				     pci_select_bars(pdev, IORESOURCE_MEM));
 

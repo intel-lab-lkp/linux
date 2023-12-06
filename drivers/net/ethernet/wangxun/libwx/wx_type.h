@@ -8,6 +8,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
 #include <net/ip.h>
+#include <linux/phylink.h>
 
 #define WX_NCSI_SUP                             0x8000
 #define WX_NCSI_MASK                            0x8000
@@ -940,6 +941,8 @@ struct wx {
 	int speed;
 	int duplex;
 	struct phy_device *phydev;
+	struct phylink *phylink;
+	struct phylink_config phylink_config;
 
 	bool wol_hw_supported;
 	bool ncsi_enabled;
@@ -1044,5 +1047,10 @@ rd64(struct wx *wx, u32 reg)
 
 #define wx_dbg(wx, fmt, arg...) \
 	dev_dbg(&(wx)->pdev->dev, fmt, ##arg)
+
+static inline struct wx *phylink_to_wx(struct phylink_config *config)
+{
+	return container_of(config, struct wx, phylink_config);
+}
 
 #endif /* _WX_TYPE_H_ */
