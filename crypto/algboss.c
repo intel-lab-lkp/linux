@@ -131,8 +131,12 @@ static int cryptomgr_schedule_probe(struct crypto_larval *larval)
 		if (i >= CRYPTO_MAX_ATTRS)
 			goto err_free_param;
 
-		if (*p == ')')
+		if (*p == ')') {
+			if (*++p)
+				goto err_free_param;
+
 			break;
+		}
 
 		if (*p != ',')
 			goto err_free_param;
