@@ -1008,8 +1008,8 @@ static int i8042_controller_init(void)
 			udelay(50);
 
 		if (i8042_command(&ctr[n++ % 2], I8042_CMD_CTL_RCTR)) {
-			pr_err("Can't read CTR while initializing i8042\n");
-			return i8042_probe_defer ? -EPROBE_DEFER : -EIO;
+			pr_debug("Can't read CTR while initializing\n");
+			return i8042_probe_defer ? -EPROBE_DEFER : -ENXIO;
 		}
 
 	} while (n < 2 || ctr[0] != ctr[1]);
