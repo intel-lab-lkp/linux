@@ -60,6 +60,21 @@ static inline struct netlink_sock *nlk_sk(struct sock *sk)
 
 #define nlk_test_bit(nr, sk) test_bit(NETLINK_F_##nr, &nlk_sk(sk)->flags)
 
+struct genl_sock {
+	struct netlink_sock nlk_sk;
+	struct xarray *family_privs;
+};
+
+static inline struct genl_sock *genl_sk(struct sock *sk)
+{
+	return container_of(nlk_sk(sk), struct genl_sock, nlk_sk);
+}
+
+/* Size of netlink sock is size of the biggest user with priv,
+ * which is currently just Generic Netlink.
+ */
+#define NETLINK_SOCK_SIZE sizeof(struct genl_sock)
+
 struct netlink_table {
 	struct rhashtable	hash;
 	struct hlist_head	mc_list;

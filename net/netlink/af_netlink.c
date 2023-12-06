@@ -632,7 +632,7 @@ static void netlink_remove(struct sock *sk)
 static struct proto netlink_proto = {
 	.name	  = "NETLINK",
 	.owner	  = THIS_MODULE,
-	.obj_size = sizeof(struct netlink_sock),
+	.obj_size = NETLINK_SOCK_SIZE,
 };
 
 static int __netlink_create(struct net *net, struct socket *sock,

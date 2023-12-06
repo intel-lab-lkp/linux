@@ -22,6 +22,8 @@
 #include <net/sock.h>
 #include <net/genetlink.h>
 
+#include "af_netlink.h"
+
 static DEFINE_MUTEX(genl_mutex); /* serialization of message processing */
 static DECLARE_RWSEM(cb_lock);
 
@@ -1699,12 +1701,156 @@ static int genl_bind(struct net *net, int group)
 	return ret;
 }
 
+struct genl_sk_priv {
+	void (*destructor)(void *priv);
+	long priv[];
+};
+
+static struct genl_sk_priv *genl_sk_priv_alloc(struct genl_family *family)
+{
+	struct genl_sk_priv *priv;
+
+	priv = kzalloc(size_add(sizeof(*priv), family->sock_priv_size),
+		       GFP_KERNEL);
+	if (!priv)
+		return ERR_PTR(-ENOMEM);
+	priv->destructor = family->sock_priv_destroy;
+	if (family->sock_priv_init)
+		family->sock_priv_init(priv->priv);
+	return priv;
+}
+
+static void genl_sk_priv_free(struct genl_sk_priv *priv)
+{
+	if (priv->destructor)
+		priv->destructor(priv->priv);
+	kfree(priv);
+}
+
+static void genl_release(struct sock *sk, unsigned long *groups)
+{
+	struct genl_sock *gsk = genl_sk(sk);
+	struct genl_sk_priv *priv;
+	unsigned long family_id;
+
+	if (!gsk->family_privs)
+		return;
+	xa_for_each(gsk->family_privs, family_id, priv) {
+		xa_erase(gsk->family_privs, family_id);
+		genl_sk_priv_free(priv);
+	}
+	xa_destroy(gsk->family_privs);
+	kfree(gsk->family_privs);
+}
+
+static struct xarray *genl_family_privs_get(struct genl_sock *gsk)
+{
+	struct xarray *family_privs;
+
+again:
+	family_privs = READ_ONCE(gsk->family_privs);
+	if (family_privs)
+		return family_privs;
+
+	family_privs = kzalloc(sizeof(*family_privs), GFP_KERNEL);
+	if (!family_privs)
+		return ERR_PTR(-ENOMEM);
+	xa_init_flags(family_privs, XA_FLAGS_ALLOC);
+
+	/* Use genl lock to protect family_privs to be
+	 * initialized in parallel by different CPU.
+	 */
+	genl_lock();
+	if (unlikely(gsk->family_privs)) {
+		xa_destroy(family_privs);
+		kfree(family_privs);
+		genl_unlock();
+		goto again;
+	}
+	WRITE_ONCE(gsk->family_privs, family_privs);
+	genl_unlock();
+	return family_privs;
+}
+
+/**
+ * __genl_sk_priv_get - Get per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ *
+ * Lookup a private pointer stored per-socket by a specified
+ * Generic netlink family.
+ *
+ * Caller should make sure this is called in RCU read locked section.
+ *
+ * Return: valid pointer on success, otherwise NULL.
+ */
+void *__genl_sk_priv_get(struct sock *sk, struct genl_family *family)
+{
+	struct genl_sock *gsk = genl_sk(sk);
+	struct genl_sk_priv *priv;
+	struct xarray *family_privs;
+
+	family_privs = READ_ONCE(gsk->family_privs);
+	if (!family_privs)
+		return NULL;
+	priv = xa_load(family_privs, family->id);
+	return priv ? priv->priv : NULL;
+}
+
+/**
+ * genl_sk_priv_get - Get per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ *
+ * Store a private pointer per-socket for a specified
+ * Generic netlink family.
+ *
+ * Caller has to make sure this is not called in parallel multiple times
+ * for the same sock and also in parallel to genl_release() for the same sock.
+ *
+ * Return: previously stored private pointer for the family (could be NULL)
+ * on success, otherwise negative error value encoded by ERR_PTR().
+ */
+void *genl_sk_priv_get(struct sock *sk, struct genl_family *family)
+{
+	struct genl_sk_priv *priv, *old_priv;
+	struct genl_sock *gsk = genl_sk(sk);
+	struct xarray *family_privs;
+
+	family_privs = genl_family_privs_get(gsk);
+	if (IS_ERR(family_privs))
+		return ERR_CAST(family_privs);
+
+	priv = xa_load(family_privs, family->id);
+	if (priv)
+		return priv->priv;
+
+	/* priv for the family does not exist so far, create it. */
+
+	priv = genl_sk_priv_alloc(family);
+	if (IS_ERR(priv))
+		return ERR_CAST(priv);
+
+	old_priv = xa_cmpxchg(family_privs, family->id, NULL, priv, GFP_KERNEL);
+	if (xa_is_err(old_priv))
+		return ERR_PTR(xa_err(old_priv));
+	else if (!old_priv)
+		return priv->priv;
+
+	/* Race happened, priv was already inserted. */
+	genl_sk_priv_free(priv);
+	return old_priv->priv;
+}
+
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
+		.release	= genl_release,
 	};
 
 	/* we'll bump the group number right afterwards */
