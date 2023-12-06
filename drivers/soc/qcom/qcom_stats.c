@@ -221,7 +221,8 @@ static int qcom_ddr_stats_show(struct seq_file *s, void *unused)
 
 	for (i = 0; i < ddr.entry_count; i++) {
 		/* Convert the period to ms */
-		entry[i].dur = mult_frac(MSEC_PER_SEC, entry[i].dur, ARCH_TIMER_FREQ);
+		entry[i].dur *= MSEC_PER_SEC;
+		entry[i].dur = div_u64(entry[i].dur, ARCH_TIMER_FREQ);
 	}
 
 	for (i = 0; i < ddr.entry_count; i++)
