@@ -3472,10 +3472,11 @@ static int nvme_global_check_duplicate_ids(struct nvme_subsystem *this,
 	return ret;
 }
 
-static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
+static int nvme_init_ns_head(struct nvme_ctrl *ctrl,
+			     struct nvme_ns_info *info,
+			     struct nvme_ns_head **head)
 {
-	struct nvme_ctrl *ctrl = ns->ctrl;
-	struct nvme_ns_head *head = NULL;
+	struct nvme_ns_head *h = NULL;
 	int ret;
 
 	ret = nvme_global_check_duplicate_ids(ctrl->subsys, &info->ids);
@@ -3497,8 +3498,8 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 		 * up at any time.
 		 */
 		nvme_print_device_info(ctrl);
-		if ((ns->ctrl->ops->flags & NVME_F_FABRICS) || /* !PCIe */
-		    ((ns->ctrl->subsys->cmic & NVME_CTRL_CMIC_MULTI_CTRL) &&
+		if ((ctrl->ops->flags & NVME_F_FABRICS) || /* !PCIe */
+		    ((ctrl->subsys->cmic & NVME_CTRL_CMIC_MULTI_CTRL) &&
 		     info->is_shared)) {
 			dev_err(ctrl->device,
 				"ignoring nsid %d because of duplicate IDs\n",
@@ -3517,8 +3518,8 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 	}
 
 	mutex_lock(&ctrl->subsys->lock);
-	head = nvme_find_ns_head(ctrl, info->nsid);
-	if (!head) {
+	h = nvme_find_ns_head(ctrl, info->nsid);
+	if (!h) {
 		ret = nvme_subsys_check_duplicate_ids(ctrl->subsys, &info->ids);
 		if (ret) {
 			dev_err(ctrl->device,
@@ -3526,20 +3527,20 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 				info->nsid);
 			goto out_unlock;
 		}
-		head = nvme_alloc_ns_head(ctrl, info);
-		if (IS_ERR(head)) {
-			ret = PTR_ERR(head);
+		h = nvme_alloc_ns_head(ctrl, info);
+		if (IS_ERR(h)) {
+			ret = PTR_ERR(h);
 			goto out_unlock;
 		}
 	} else {
 		ret = -EINVAL;
-		if (!info->is_shared || !head->shared) {
+		if (!info->is_shared || !h->shared) {
 			dev_err(ctrl->device,
 				"Duplicate unshared namespace %d\n",
 				info->nsid);
 			goto out_put_ns_head;
 		}
-		if (!nvme_ns_ids_equal(&head->ids, &info->ids)) {
+		if (!nvme_ns_ids_equal(&h->ids, &info->ids)) {
 			dev_err(ctrl->device,
 				"IDs don't match for shared namespace %d\n",
 					info->nsid);
@@ -3555,13 +3556,12 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 		}
 	}
 
-	list_add_tail_rcu(&ns->siblings, &head->list);
-	ns->head = head;
+	*head = h;
 	mutex_unlock(&ctrl->subsys->lock);
 	return 0;
 
 out_put_ns_head:
-	nvme_put_ns_head(head);
+	nvme_put_ns_head(h);
 out_unlock:
 	mutex_unlock(&ctrl->subsys->lock);
 	return ret;
@@ -3613,14 +3613,21 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	if (!ns)
 		return;
 
+	if (nvme_init_ns_head(ctrl, info, &ns->head))
+		goto out_free_ns;
+
 	disk = blk_mq_alloc_disk(ctrl->tagset, ns);
 	if (IS_ERR(disk))
-		goto out_free_ns;
+		goto out_free_head;
 	disk->fops = &nvme_bdev_ops;
 	disk->private_data = ns;
 
 	ns->disk = disk;
 	ns->queue = disk->queue;
+
+	mutex_lock(&ctrl->subsys->lock);
+	list_add_tail_rcu(&ns->siblings, &ns->head->list);
+	mutex_unlock(&ctrl->subsys->lock);
 
 	if (ctrl->opts && ctrl->opts->data_digest)
 		blk_queue_flag_set(QUEUE_FLAG_STABLE_WRITES, ns->queue);
@@ -3632,9 +3639,6 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 
 	ns->ctrl = ctrl;
 	kref_init(&ns->kref);
-
-	if (nvme_init_ns_head(ns, info))
-		goto out_cleanup_disk;
 
 	/*
 	 * If multipathing is enabled, the device name for all disks and not
@@ -3689,9 +3693,9 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	if (list_empty(&ns->head->list))
 		list_del_init(&ns->head->entry);
 	mutex_unlock(&ctrl->subsys->lock);
-	nvme_put_ns_head(ns->head);
- out_cleanup_disk:
 	put_disk(disk);
+ out_free_head:
+	nvme_put_ns_head(ns->head);
  out_free_ns:
 	kfree(ns);
 }
