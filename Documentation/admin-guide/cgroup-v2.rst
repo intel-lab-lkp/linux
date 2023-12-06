@@ -1282,8 +1282,8 @@ PAGE_SIZE multiple when read back.
 	This is a simple interface to trigger memory reclaim in the
 	target cgroup.
 
-	This file accepts a single key, the number of bytes to reclaim.
-	No nested keys are currently supported.
+	This file accepts a string which containers thhe number of bytes
+	to reclaim.
 
 	Example::
 
@@ -1303,6 +1303,17 @@ PAGE_SIZE multiple when read back.
 	the memory reclaim normally is not exercised in this case.
 	This means that the networking layer will not adapt based on
 	reclaim induced by memory.reclaim.
+
+	This file also allows the user to specify the swappiness value
+	to be used for the reclaim. For example:
+
+	  echo "1G swappiness=60" > memory.reclaim
+
+	The above instructs the kernel to perform the reclaim with
+	a swappiness value of 60. Note that this has the same semantics
+	as the vm.swappiness sysctl - it sets the relative IO cost of
+	reclaiming anon vs file memory but does not allow for reclaiming
+	specific amounts of anon or file memory.
 
   memory.peak
 	A read-only single value file which exists on non-root
