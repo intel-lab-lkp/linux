@@ -1295,6 +1295,14 @@ static const struct dmi_system_id i8042_dmi_quirk_table[] __initconst = {
 		.driver_data = (void *)(SERIO_QUIRK_NOMUX | SERIO_QUIRK_RESET_ALWAYS |
 					SERIO_QUIRK_NOLOOP | SERIO_QUIRK_NOPNP)
 	},
+	/* Framework 16" laptop uses an internal USB keyboard */
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Framework"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Laptop 16"),
+		},
+		.driver_data = (void *)(SERIO_QUIRK_NOKBD | SERIO_QUIRK_NOAUX)
+	},
 	{ }
 };
 
