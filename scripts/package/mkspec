@@ -24,6 +24,7 @@ fi
 cat<<EOF
 %define ARCH ${ARCH}
 %define KERNELRELEASE ${KERNELRELEASE}
+%define KERNEL_MODULE_DIRECTORY ${KERNEL_MODULE_DIRECTORY}
 %define pkg_release $("${srctree}/init/build-version")
 EOF
 
