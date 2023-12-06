@@ -1775,15 +1775,16 @@ static int atalk_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	case TIOCINQ: {
+		long amount = 0;
 		/*
 		 * These two are safe on a single CPU system as only
 		 * user tasks fiddle here
 		 */
+		spin_lock_irq(&sk->sk_receive_queue.lock);
 		struct sk_buff *skb = skb_peek(&sk->sk_receive_queue);
-		long amount = 0;
-
 		if (skb)
 			amount = skb->len - sizeof(struct ddpehdr);
+		spin_unlock_irq(&sk->sk_receive_queue.lock);
 		rc = put_user(amount, (int __user *)argp);
 		break;
 	}
