@@ -28,19 +28,16 @@
  * Locking status:
  *   @folio is locked and will be unlocked.
  */
-static int vxfs_immed_read_folio(struct file *fp, struct folio *folio)
+static int vxfs_immed_read_folio(struct file *file, struct folio *folio)
 {
 	struct vxfs_inode_info *vip = VXFS_INO(folio->mapping->host);
-	void *src = vip->vii_immed.vi_immed + folio_pos(folio);
-	unsigned long i;
+	size_t len = VXFS_NIMMED;
 
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		memcpy_to_page(folio_page(folio, i), 0, src, PAGE_SIZE);
-		src += PAGE_SIZE;
-	}
+	if (folio->index > 0)
+		len = 0;
 
-	folio_mark_uptodate(folio);
-	folio_unlock(folio);
+	folio_fill_tail(folio, 0, vip->vii_immed.vi_immed, len);
+	folio_end_read(folio, true);
 
 	return 0;
 }
