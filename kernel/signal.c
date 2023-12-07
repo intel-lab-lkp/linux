@@ -2028,7 +2028,7 @@ ret:
 	return ret;
 }
 
-static void do_notify_pidfd(struct task_struct *task)
+void do_notify_pidfd(struct task_struct *task)
 {
 	struct pid *pid;
 
@@ -2059,9 +2059,6 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 
 	WARN_ON_ONCE(!tsk->ptrace &&
 	       (tsk->group_leader != tsk || !thread_group_empty(tsk)));
-
-	/* Wake up all pidfd waiters */
-	do_notify_pidfd(tsk);
 
 	if (sig != SIGCHLD) {
 		/*

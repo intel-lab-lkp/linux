@@ -149,6 +149,9 @@ static void __exit_signal(struct task_struct *tsk)
 	struct tty_struct *tty;
 	u64 utime, stime;
 
+	/* Wake up all pidfd waiters */
+	do_notify_pidfd(tsk);
+
 	sighand = rcu_dereference_check(tsk->sighand,
 					lockdep_tasklist_lock_is_held());
 	spin_lock(&sighand->siglock);
