@@ -375,7 +375,7 @@ static ssize_t active_store(struct device *dev, struct device_attribute *attr,
 
 		/* Make sure that the partner exits the mode before disabling */
 		if (altmode->partner && !enter && altmode->partner->adev.active)
-			typec_altmode_exit(&altmode->partner->adev);
+			typec_altmode_exit(&altmode->partner->adev, TYPEC_ALTMODE_SOP);
 	} else if (altmode->partner) {
 		if (enter && !altmode->partner->adev.active) {
 			dev_warn(dev, "port has the mode disabled\n");

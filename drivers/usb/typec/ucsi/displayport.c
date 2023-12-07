@@ -45,7 +45,8 @@ struct ucsi_dp {
  * -EOPNOTSUPP.
  */
 
-static int ucsi_displayport_enter(struct typec_altmode *alt, u32 *vdo)
+static int ucsi_displayport_enter(struct typec_altmode *alt, u32 *vdo,
+				  enum typec_altmode_transmit_type sop_type)
 {
 	struct ucsi_dp *dp = typec_altmode_get_drvdata(alt);
 	struct ucsi *ucsi = dp->con->ucsi;
@@ -53,6 +54,9 @@ static int ucsi_displayport_enter(struct typec_altmode *alt, u32 *vdo)
 	u64 command;
 	u8 cur = 0;
 	int ret;
+
+	if (sop_type != TYPEC_ALTMODE_SOP)
+		return 0;
 
 	mutex_lock(&dp->con->lock);
 
@@ -105,12 +109,16 @@ err_unlock:
 	return ret;
 }
 
-static int ucsi_displayport_exit(struct typec_altmode *alt)
+static int ucsi_displayport_exit(struct typec_altmode *alt,
+				 enum typec_altmode_transmit_type sop_type)
 {
 	struct ucsi_dp *dp = typec_altmode_get_drvdata(alt);
 	int svdm_version;
 	u64 command;
 	int ret = 0;
+
+	if (sop_type != TYPEC_ALTMODE_SOP)
+		return 0;
 
 	mutex_lock(&dp->con->lock);
 
@@ -195,12 +203,16 @@ static int ucsi_displayport_configure(struct ucsi_dp *dp)
 }
 
 static int ucsi_displayport_vdm(struct typec_altmode *alt,
-				u32 header, const u32 *data, int count)
+				u32 header, const u32 *data, int count,
+				enum typec_altmode_transmit_type sop_type)
 {
 	struct ucsi_dp *dp = typec_altmode_get_drvdata(alt);
 	int cmd_type = PD_VDO_CMDT(header);
 	int cmd = PD_VDO_CMD(header);
 	int svdm_version;
+
+	if (sop_type != TYPEC_ALTMODE_SOP)
+		return 0;
 
 	mutex_lock(&dp->con->lock);
 

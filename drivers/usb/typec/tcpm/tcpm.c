@@ -1862,13 +1862,13 @@ static void tcpm_handle_vdm_request(struct tcpm_port *port,
 			break;
 		case ADEV_NOTIFY_USB_AND_QUEUE_VDM:
 			WARN_ON(typec_altmode_notify(adev, TYPEC_STATE_USB, NULL));
-			typec_altmode_vdm(adev, p[0], &p[1], cnt);
+			typec_altmode_vdm(adev, p[0], &p[1], cnt, TYPEC_ALTMODE_SOP);
 			break;
 		case ADEV_QUEUE_VDM:
-			typec_altmode_vdm(adev, p[0], &p[1], cnt);
+			typec_altmode_vdm(adev, p[0], &p[1], cnt, TYPEC_ALTMODE_SOP);
 			break;
 		case ADEV_QUEUE_VDM_SEND_EXIT_MODE_ON_FAIL:
-			if (typec_altmode_vdm(adev, p[0], &p[1], cnt)) {
+			if (typec_altmode_vdm(adev, p[0], &p[1], cnt, TYPEC_ALTMODE_SOP)) {
 				int svdm_version = typec_get_negotiated_svdm_version(
 									port->typec_port);
 				if (svdm_version < 0)
@@ -2219,7 +2219,8 @@ static int tcpm_validate_caps(struct tcpm_port *port, const u32 *pdo,
 	return 0;
 }
 
-static int tcpm_altmode_enter(struct typec_altmode *altmode, u32 *vdo)
+static int tcpm_altmode_enter(struct typec_altmode *altmode, u32 *vdo,
+			      enum typec_altmode_transmit_type tx_sop_type)
 {
 	struct tcpm_port *port = typec_altmode_get_drvdata(altmode);
 	int svdm_version;
@@ -2236,7 +2237,8 @@ static int tcpm_altmode_enter(struct typec_altmode *altmode, u32 *vdo)
 	return 0;
 }
 
-static int tcpm_altmode_exit(struct typec_altmode *altmode)
+static int tcpm_altmode_exit(struct typec_altmode *altmode,
+			     enum typec_altmode_transmit_type tx_sop_type)
 {
 	struct tcpm_port *port = typec_altmode_get_drvdata(altmode);
 	int svdm_version;
@@ -2254,7 +2256,8 @@ static int tcpm_altmode_exit(struct typec_altmode *altmode)
 }
 
 static int tcpm_altmode_vdm(struct typec_altmode *altmode,
-			    u32 header, const u32 *data, int count)
+			    u32 header, const u32 *data, int count,
+			    enum typec_altmode_transmit_type tx_sop_type)
 {
 	struct tcpm_port *port = typec_altmode_get_drvdata(altmode);
 

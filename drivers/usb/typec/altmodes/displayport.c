@@ -202,7 +202,7 @@ static int dp_altmode_configure_vdm(struct dp_altmode *dp, u32 conf)
 		return ret;
 	}
 
-	ret = typec_altmode_vdm(dp->alt, header, &conf, 2);
+	ret = typec_altmode_vdm(dp->alt, header, &conf, 2, TYPEC_ALTMODE_SOP);
 	if (ret)
 		dp_altmode_notify(dp);
 
@@ -221,7 +221,7 @@ static void dp_altmode_work(struct work_struct *work)
 
 	switch (dp->state) {
 	case DP_STATE_ENTER:
-		ret = typec_altmode_enter(dp->alt, NULL);
+		ret = typec_altmode_enter(dp->alt, NULL, TYPEC_ALTMODE_SOP);
 		if (ret && ret != -EBUSY)
 			dev_err(&dp->alt->dev, "failed to enter mode\n");
 		break;
@@ -231,7 +231,7 @@ static void dp_altmode_work(struct work_struct *work)
 			break;
 		header = DP_HEADER(dp, svdm_version, DP_CMD_STATUS_UPDATE);
 		vdo = 1;
-		ret = typec_altmode_vdm(dp->alt, header, &vdo, 2);
+		ret = typec_altmode_vdm(dp->alt, header, &vdo, 2, TYPEC_ALTMODE_SOP);
 		if (ret)
 			dev_err(&dp->alt->dev,
 				"unable to send Status Update command (%d)\n",
@@ -244,7 +244,7 @@ static void dp_altmode_work(struct work_struct *work)
 				"unable to send Configure command (%d)\n", ret);
 		break;
 	case DP_STATE_EXIT:
-		if (typec_altmode_exit(dp->alt))
+		if (typec_altmode_exit(dp->alt, TYPEC_ALTMODE_SOP))
 			dev_err(&dp->alt->dev, "Exit Mode Failed!\n");
 		break;
 	default:
@@ -283,7 +283,8 @@ static void dp_altmode_attention(struct typec_altmode *alt, const u32 vdo)
 }
 
 static int dp_altmode_vdm(struct typec_altmode *alt,
-			  const u32 hdr, const u32 *vdo, int count)
+			  const u32 hdr, const u32 *vdo, int count,
+			  enum typec_altmode_transmit_type sop_type)
 {
 	struct dp_altmode *dp = typec_altmode_get_drvdata(alt);
 	int cmd_type = PD_VDO_CMDT(hdr);
@@ -350,8 +351,8 @@ err_unlock:
 
 static int dp_altmode_activate(struct typec_altmode *alt, int activate)
 {
-	return activate ? typec_altmode_enter(alt, NULL) :
-			  typec_altmode_exit(alt);
+	return activate ? typec_altmode_enter(alt, NULL, TYPEC_ALTMODE_SOP) :
+			  typec_altmode_exit(alt, TYPEC_ALTMODE_SOP);
 }
 
 static const struct typec_altmode_ops dp_altmode_ops = {

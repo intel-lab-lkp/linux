@@ -117,13 +117,15 @@ EXPORT_SYMBOL_GPL(typec_altmode_notify);
  * typec_altmode_enter - Enter Mode
  * @adev: The alternate mode
  * @vdo: VDO for the Enter Mode command
+ * @sop_type: SOP* target for the Enter Mode command
  *
  * The alternate mode drivers use this function to enter mode. The port drivers
  * use this to inform the alternate mode drivers that the partner has initiated
  * Enter Mode command. If the alternate mode does not require VDO, @vdo must be
  * NULL.
  */
-int typec_altmode_enter(struct typec_altmode *adev, u32 *vdo)
+int typec_altmode_enter(struct typec_altmode *adev, u32 *vdo,
+			enum typec_altmode_transmit_type sop_type)
 {
 	struct altmode *partner = to_altmode(adev)->partner;
 	struct typec_altmode *pdev = &partner->adev;
@@ -144,17 +146,18 @@ int typec_altmode_enter(struct typec_altmode *adev, u32 *vdo)
 		return ret;
 
 	/* Enter Mode */
-	return pdev->ops->enter(pdev, vdo);
+	return pdev->ops->enter(pdev, vdo, sop_type);
 }
 EXPORT_SYMBOL_GPL(typec_altmode_enter);
 
 /**
  * typec_altmode_exit - Exit Mode
  * @adev: The alternate mode
+ * @sop_type: SOP* target for the Exit Mode command
  *
  * The partner of @adev has initiated Exit Mode command.
  */
-int typec_altmode_exit(struct typec_altmode *adev)
+int typec_altmode_exit(struct typec_altmode *adev, enum typec_altmode_transmit_type sop_type)
 {
 	struct altmode *partner = to_altmode(adev)->partner;
 	struct typec_altmode *pdev = &partner->adev;
@@ -172,7 +175,7 @@ int typec_altmode_exit(struct typec_altmode *adev)
 		return ret;
 
 	/* Exit Mode command */
-	return pdev->ops->exit(pdev);
+	return pdev->ops->exit(pdev, sop_type);
 }
 EXPORT_SYMBOL_GPL(typec_altmode_exit);
 
@@ -206,13 +209,15 @@ EXPORT_SYMBOL_GPL(typec_altmode_attention);
  * @header: VDM Header
  * @vdo: Array of Vendor Defined Data Objects
  * @count: Number of Data Objects
+ * @sop_type: SOP* target for the VDM
  *
  * The alternate mode drivers use this function for SVID specific communication
  * with the partner. The port drivers use it to deliver the Structured VDMs
  * received from the partners to the alternate mode drivers.
  */
 int typec_altmode_vdm(struct typec_altmode *adev,
-		      const u32 header, const u32 *vdo, int count)
+		      const u32 header, const u32 *vdo, int count,
+		      enum typec_altmode_transmit_type sop_type)
 {
 	struct typec_altmode *pdev;
 	struct altmode *altmode;
@@ -230,7 +235,7 @@ int typec_altmode_vdm(struct typec_altmode *adev,
 	if (!pdev->ops || !pdev->ops->vdm)
 		return -EOPNOTSUPP;
 
-	return pdev->ops->vdm(pdev, header, vdo, count);
+	return pdev->ops->vdm(pdev, header, vdo, count, sop_type);
 }
 EXPORT_SYMBOL_GPL(typec_altmode_vdm);
 

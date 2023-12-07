@@ -92,7 +92,8 @@ void cros_typec_handle_vdm_response(struct cros_typec_data *typec, int port_num)
 			svid, port_num);
 }
 
-static int cros_typec_port_amode_enter(struct typec_altmode *amode, u32 *vdo)
+static int cros_typec_port_amode_enter(struct typec_altmode *amode, u32 *vdo,
+				       enum typec_altmode_transmit_type sop_type)
 {
 	struct cros_typec_port *port = typec_altmode_get_drvdata(amode);
 	struct ec_params_typec_control req = {
@@ -101,6 +102,9 @@ static int cros_typec_port_amode_enter(struct typec_altmode *amode, u32 *vdo)
 	};
 	struct typec_vdm_req vdm_req = {};
 	u32 hdr;
+
+	if (sop_type != TYPEC_ALTMODE_SOP)
+		return 0;
 
 	hdr = VDO(amode->svid, 1, SVDM_VER_2_0, CMD_ENTER_MODE);
 	hdr |= VDO_OPOS(amode->mode);
@@ -118,7 +122,8 @@ static int cros_typec_port_amode_enter(struct typec_altmode *amode, u32 *vdo)
 }
 
 static int cros_typec_port_amode_vdm(struct typec_altmode *amode, const u32 hdr,
-				     const u32 *vdo, int cnt)
+				     const u32 *vdo, int cnt,
+				     enum typec_altmode_transmit_type sop_type)
 {
 	struct cros_typec_port *port = typec_altmode_get_drvdata(amode);
 	struct ec_params_typec_control req = {
@@ -127,6 +132,9 @@ static int cros_typec_port_amode_vdm(struct typec_altmode *amode, const u32 hdr,
 	};
 	struct typec_vdm_req vdm_req = {};
 	int i;
+
+	if (sop_type != TYPEC_ALTMODE_SOP)
+		return 0;
 
 	vdm_req.vdm_data[0] = hdr;
 	vdm_req.vdm_data_objects = cnt;
