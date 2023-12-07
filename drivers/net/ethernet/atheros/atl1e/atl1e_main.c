@@ -866,6 +866,7 @@ static int atl1e_setup_ring_resources(struct atl1e_adapter *adapter)
 		netdev_err(adapter->netdev, "offset(%d) > ring size(%d) !!\n",
 			   offset, adapter->ring_size);
 		err = -1;
+		kfree(tx_ring->tx_buffer);
 		goto failed;
 	}
 
