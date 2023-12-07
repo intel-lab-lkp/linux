@@ -1082,6 +1082,11 @@ static int its_wait_for_range_completion(struct its_node *its,
 		s64 delta;
 
 		rd_idx = readl_relaxed(its->base + GITS_CREADR);
+		/*
+		 * Check for stall bit as there is no point in waiting
+		 * for 1s if the stall bit is already set.
+		 */
+		BUG_ON(rd_idx & 1);
 
 		/*
 		 * Compute the read pointer progress, taking the
