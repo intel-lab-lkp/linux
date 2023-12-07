@@ -490,7 +490,7 @@ int mddev_suspend(struct mddev *mddev, bool interruptible)
 }
 EXPORT_SYMBOL_GPL(mddev_suspend);
 
-void mddev_resume(struct mddev *mddev)
+static void __mddev_resume(struct mddev *mddev, bool recovery_needed)
 {
 	lockdep_assert_not_held(&mddev->reconfig_mutex);
 
@@ -507,11 +507,17 @@ void mddev_resume(struct mddev *mddev)
 	percpu_ref_resurrect(&mddev->active_io);
 	wake_up(&mddev->sb_wait);
 
-	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
+	if (recovery_needed)
+		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	md_wakeup_thread(mddev->thread);
 	md_wakeup_thread(mddev->sync_thread); /* possibly kick off a reshape */
 
 	mutex_unlock(&mddev->suspend_mutex);
+}
+
+void mddev_resume(struct mddev *mddev)
+{
+	return __mddev_resume(mddev, true);
 }
 EXPORT_SYMBOL_GPL(mddev_resume);
 
@@ -9389,7 +9395,9 @@ static void md_start_sync(struct work_struct *ws)
 		goto not_running;
 	}
 
-	suspend ? mddev_unlock_and_resume(mddev) : mddev_unlock(mddev);
+	mddev_unlock(mddev);
+	if (suspend)
+		__mddev_resume(mddev, false);
 	md_wakeup_thread(mddev->sync_thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
 	md_new_event();
@@ -9401,7 +9409,9 @@ not_running:
 	clear_bit(MD_RECOVERY_REQUESTED, &mddev->recovery);
 	clear_bit(MD_RECOVERY_CHECK, &mddev->recovery);
 	clear_bit(MD_RECOVERY_RUNNING, &mddev->recovery);
-	suspend ? mddev_unlock_and_resume(mddev) : mddev_unlock(mddev);
+	mddev_unlock(mddev);
+	if (suspend)
+		__mddev_resume(mddev, false);
 
 	wake_up(&resync_wait);
 	if (test_and_clear_bit(MD_RECOVERY_RECOVER, &mddev->recovery) &&
