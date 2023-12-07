@@ -1,0 +1,33 @@
+What:		/sys/kernel/mm/mempolicy/
+Date:		December 2023
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Interface for Mempolicy
+
+What:		/sys/kernel/mm/mempolicy/cpu_nodes
+Date:		December 2023
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	The numa nodes from which accesses can be generated
+
+		A cpu numa node is one which has at least 1 CPU. These nodes
+		are capable of generating accesses to memory numa nodes, and
+		will have an interleave weight table.
+
+		Example output:
+
+		=====         =================================================
+		"0,1"         nodes 0 and 1 have CPUs which may generate access
+		=====         =================================================
+
+What:		/sys/kernel/mm/mempolicy/possible_nodes
+Date:		December 2023
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	The numa nodes which are possible to come online
+
+		A possible numa node is one which has been reserved by the
+		system at boot, but may or may not be online at runtime.
+
+		Example output:
+
+		=========     ========================================
+		"0,1,2,3"     nodes 0-3 are possibly online or offline
+		=========     ========================================
