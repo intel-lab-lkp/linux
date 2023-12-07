@@ -239,7 +239,6 @@ static void __init alloc_node_data(int nid)
  */
 int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
 {
-	const u64 low = 0;
 	const u64 high = PFN_PHYS(max_pfn);
 	int i, j, k;
 
@@ -253,9 +252,6 @@ int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
 			numa_move_tail_memblk(&numa_reserved_meminfo, i--, mi);
 			continue;
 		}
-
-		/* make sure all non-reserved blocks are inside the limits */
-		bi->start = max(bi->start, low);
 
 		/* preserve info for non-RAM areas above 'max_pfn': */
 		if (bi->end > high) {
