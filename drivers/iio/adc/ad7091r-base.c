@@ -6,6 +6,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/bitfield.h>
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/interrupt.h>
@@ -187,6 +188,12 @@ int ad7091r_probe(struct device *dev, const char *name,
 
 	iio_dev->info = &ad7091r_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
+
+	if (init_info->ad7091r_setup) {
+		ret = init_info->ad7091r_setup(st);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (irq) {
 		st->chip_info = &init_info->irq_info;

@@ -45,6 +45,8 @@
 	.scan_type.realbits = bits,					\
 }
 
+#include <linux/gpio/consumer.h>
+
 struct device;
 
 enum ad7091r_mode {
@@ -56,13 +58,18 @@ enum ad7091r_mode {
 struct ad7091r_state {
 	struct device *dev;
 	struct regmap *map;
+	struct gpio_desc *convst_gpio;
+	struct gpio_desc *reset_gpio;
 	struct regulator *vref;
 	const struct ad7091r_chip_info *chip_info;
 	enum ad7091r_mode mode;
 	struct mutex lock; /*lock to prevent concurent reads */
+	__be16 tx_buf __aligned(IIO_DMA_MINALIGN);
+	__be16 rx_buf;
 };
 
 struct ad7091r_chip_info {
+	const char *name;
 	unsigned int num_channels;
 	const struct iio_chan_spec *channels;
 	unsigned int vref_mV;
@@ -74,6 +81,7 @@ struct ad7091r_init_info {
 	struct ad7091r_chip_info irq_info;
 	struct ad7091r_chip_info info_no_irq;
 	const struct regmap_config *regmap_config;
+	int (*ad7091r_setup)(struct ad7091r_state *st);
 	void (*ad7091r_regmap_init)(struct ad7091r_state *st,
 				    const struct regmap_config *regmap_conf);
 };
