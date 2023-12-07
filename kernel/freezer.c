@@ -108,6 +108,7 @@ static void fake_signal_wake_up(struct task_struct *p)
 static int __set_task_frozen(struct task_struct *p, void *arg)
 {
 	unsigned int state = READ_ONCE(p->__state);
+	struct task_freeze_check *p_check = arg;
 
 	if (p->on_rq)
 		return 0;
@@ -118,30 +119,37 @@ static int __set_task_frozen(struct task_struct *p, void *arg)
 	if (!(state & (TASK_FREEZABLE | __TASK_STOPPED | __TASK_TRACED)))
 		return 0;
 
-	/*
-	 * Only TASK_NORMAL can be augmented with TASK_FREEZABLE, since they
-	 * can suffer spurious wakeups.
-	 */
-	if (state & TASK_FREEZABLE)
-		WARN_ON_ONCE(!(state & TASK_NORMAL));
-
-#ifdef CONFIG_LOCKDEP
-	/*
-	 * It's dangerous to freeze with locks held; there be dragons there.
-	 */
-	if (!(state & __TASK_FREEZABLE_UNSAFE))
-		WARN_ON_ONCE(debug_locks && p->lockdep_depth);
-#endif
-
 	p->saved_state = p->__state;
 	WRITE_ONCE(p->__state, TASK_FROZEN);
+	p_check->state = p->__state;
+	p_check->lockdep_depth = p->lockdep_depth;
 	return TASK_FROZEN;
 }
 
 static bool __freeze_task(struct task_struct *p)
 {
+	struct task_freeze_check p_check;
+	unsigned int ret;
 	/* TASK_FREEZABLE|TASK_STOPPED|TASK_TRACED -> TASK_FROZEN */
-	return task_call_func(p, __set_task_frozen, NULL);
+	ret = task_call_func(p, __set_task_frozen, &p_check);
+	if (ret) {
+		/*
+		 * Only TASK_NORMAL can be augmented with TASK_FREEZABLE, since they
+		 * can suffer spurious wakeups.
+		 */
+		if (p_check.state & TASK_FREEZABLE)
+			WARN_ON_ONCE(!(p_check.state & TASK_NORMAL));
+
+#ifdef CONFIG_LOCKDEP
+		/*
+		 * It's dangerous to freeze with locks held; there be dragons there.
+		 */
+		if (!(p_check.state & __TASK_FREEZABLE_UNSAFE))
+			WARN_ON_ONCE(debug_locks && p_check.lockdep_depth);
+#endif
+	}
+	return ret;
+
 }
 
 /**

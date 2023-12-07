@@ -17,6 +17,15 @@ extern bool pm_freezing;		/* PM freezing in effect */
 extern bool pm_nosig_freezing;		/* PM nosig freezing in effect */
 
 /*
+ * Check whether the status and locks are normal
+ * when the task is frozen
+ */
+struct task_freeze_check {
+	unsigned int state;
+	int lockdep_depth;
+};
+
+/*
  * Timeout for stopping processes
  */
 extern unsigned int freeze_timeout_msecs;
