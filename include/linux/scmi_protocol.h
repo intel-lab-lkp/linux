@@ -47,6 +47,9 @@ struct scmi_clock_info {
 	bool rate_discrete;
 	bool rate_changed_notifications;
 	bool rate_change_requested_notifications;
+	bool state_ctrl_forbidden;
+	bool rate_ctrl_forbidden;
+	bool parent_ctrl_forbidden;
 	union {
 		struct {
 			int num_rates;
@@ -60,6 +63,7 @@ struct scmi_clock_info {
 	};
 	int num_parents;
 	u32 *parents;
+	u32 attributes;
 };
 
 enum scmi_power_scale {
