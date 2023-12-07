@@ -544,8 +544,10 @@ static int btt_freelist_init(struct arena_info *arena)
 
 	for (i = 0; i < arena->nfree; i++) {
 		new = btt_log_read(arena, i, &log_new, LOG_NEW_ENT);
-		if (new < 0)
-			return new;
+		if (new < 0) {
+			ret = new;
+			goto out_free;
+		}
 
 		/* old and new map entries with any flags stripped out */
 		log_oldmap = ent_lba(le32_to_cpu(log_new.old_map));
@@ -577,7 +579,7 @@ static int btt_freelist_init(struct arena_info *arena)
 		ret = btt_map_read(arena, le32_to_cpu(log_new.lba), &map_entry,
 				NULL, NULL, 0);
 		if (ret)
-			return ret;
+			goto out_free;
 
 		/*
 		 * The map_entry from btt_read_map is stripped of any flag bits,
@@ -594,11 +596,16 @@ static int btt_freelist_init(struct arena_info *arena)
 			ret = btt_map_write(arena, le32_to_cpu(log_new.lba),
 					le32_to_cpu(log_new.new_map), 0, 0, 0);
 			if (ret)
-				return ret;
+				goto out_free;
 		}
 	}
 
 	return 0;
+
+out_free:
+	kfree(arena->freelist);
+	arena->freelist = NULL;
+	return ret;
 }
 
 static bool ent_is_padding(struct log_entry *ent)
