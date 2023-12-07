@@ -734,6 +734,8 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 	if (!tas_priv)
 		return -ENOMEM;
 
+	dev_set_drvdata(&clt->dev, tas_priv);
+
 	if (strstr(dev_name(&clt->dev), "TIAS2781")) {
 		device_name = "TIAS2781";
 		tas_priv->load_calibration = load_calibration_efi_1;
