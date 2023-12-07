@@ -3762,17 +3762,10 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 	if (cfg->fc_flags & RTF_ADDRCONF)
 		rt->dst_nocount = true;
 
-	if (cfg->fc_flags & RTF_EXPIRES)
-		fib6_set_expires_locked(rt, jiffies +
-					clock_t_to_jiffies(cfg->fc_expires));
-	else
-		fib6_clean_expires_locked(rt);
-
 	if (cfg->fc_protocol == RTPROT_UNSPEC)
 		cfg->fc_protocol = RTPROT_BOOT;
 	rt->fib6_protocol = cfg->fc_protocol;
 
-	rt->fib6_table = table;
 	rt->fib6_metric = cfg->fc_metric;
 	rt->fib6_type = cfg->fc_type ? : RTN_UNICAST;
 	rt->fib6_flags = cfg->fc_flags & ~RTF_GATEWAY;
@@ -3823,6 +3816,15 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 		rt->fib6_prefsrc.plen = 128;
 	} else
 		rt->fib6_prefsrc.plen = 0;
+
+	if (cfg->fc_flags & RTF_EXPIRES)
+		fib6_set_expires_locked(rt, jiffies +
+					clock_t_to_jiffies(cfg->fc_expires));
+	/* Set fib6_table after fib6_set_expires_locked() to ensure the
+	 * gc_link is not inserted until fib6_add() is called to insert the
+	 * fib6_info to the fib.
+	 */
+	rt->fib6_table = table;
 
 	return rt;
 out:
