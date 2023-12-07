@@ -415,6 +415,32 @@ struct efa_admin_reg_mr_resp {
 	 * memory region
 	 */
 	u32 r_key;
+
+	/*
+	 * Mask indicating which fields have valid values
+	 * 0 : recv_pci_bus_id
+	 * 1 : rdma_read_pci_bus_id
+	 * 2 : rdma_recv_pci_bus_id
+	 */
+	u8 validity;
+
+	/*
+	 * Physical PCIe bus used by the device to reach the MR for receive
+	 * operation
+	 */
+	u8 recv_pci_bus_id;
+
+	/*
+	 * Physical PCIe bus used by the device to reach the MR for RDMA read
+	 * operation
+	 */
+	u8 rdma_read_pci_bus_id;
+
+	/*
+	 * Physical PCIe bus used by the device to reach the MR for RDMA write
+	 * receive
+	 */
+	u8 rdma_recv_pci_bus_id;
 };
 
 struct efa_admin_dereg_mr_cmd {
@@ -998,6 +1024,11 @@ struct efa_admin_host_info {
 #define EFA_ADMIN_REG_MR_CMD_LOCAL_WRITE_ENABLE_MASK        BIT(0)
 #define EFA_ADMIN_REG_MR_CMD_REMOTE_WRITE_ENABLE_MASK       BIT(1)
 #define EFA_ADMIN_REG_MR_CMD_REMOTE_READ_ENABLE_MASK        BIT(2)
+
+/* reg_mr_resp */
+#define EFA_ADMIN_REG_MR_RESP_RECV_PCI_BUS_ID_MASK          BIT(0)
+#define EFA_ADMIN_REG_MR_RESP_RDMA_READ_PCI_BUS_ID_MASK     BIT(1)
+#define EFA_ADMIN_REG_MR_RESP_RDMA_RECV_PCI_BUS_ID_MASK     BIT(2)
 
 /* create_cq_cmd */
 #define EFA_ADMIN_CREATE_CQ_CMD_INTERRUPT_MODE_ENABLED_MASK BIT(5)

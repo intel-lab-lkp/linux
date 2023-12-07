@@ -9,6 +9,7 @@
 #include "efa_com.h"
 
 #define EFA_GID_SIZE 16
+#define EFA_INVALID_PCI_BUS_ID 0xffff
 
 struct efa_com_create_qp_params {
 	u64 rq_base_addr;
@@ -210,6 +211,9 @@ struct efa_com_reg_mr_result {
 	 * accessed memory region
 	 */
 	u32 r_key;
+	u16 recv_pci_bus_id;
+	u16 rdma_read_pci_bus_id;
+	u16 rdma_recv_pci_bus_id;
 };
 
 struct efa_com_dereg_mr_params {

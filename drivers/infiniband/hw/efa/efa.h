@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2018-2021 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #ifndef _EFA_H_
@@ -83,6 +83,9 @@ struct efa_pd {
 struct efa_mr {
 	struct ib_mr ibmr;
 	struct ib_umem *umem;
+	u16 recv_pci_bus_id;
+	u16 rdma_read_pci_bus_id;
+	u16 rdma_recv_pci_bus_id;
 };
 
 struct efa_cq {
