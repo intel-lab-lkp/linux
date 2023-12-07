@@ -800,14 +800,14 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 
 	pm_runtime_put_autosuspend(tas_hda->dev);
 
+	tas2781_reset(tas_hda->priv);
+
 	ret = component_add(tas_hda->dev, &tas2781_hda_comp_ops);
 	if (ret) {
 		dev_err(tas_hda->dev, "Register component failed: %d\n", ret);
 		pm_runtime_disable(tas_hda->dev);
 		goto err;
 	}
-
-	tas2781_reset(tas_hda->priv);
 err:
 	if (ret)
 		tas2781_hda_remove(&clt->dev);
