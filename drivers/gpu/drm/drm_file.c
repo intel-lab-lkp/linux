@@ -913,7 +913,7 @@ void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
 					DRM_GEM_OBJECT_PURGEABLE;
 		}
 
-		if (obj->handle_count > 1) {
+		if ((obj->handle_count > 1) || obj->dma_buf) {
 			status.shared += obj->size;
 		} else {
 			status.private += obj->size;
