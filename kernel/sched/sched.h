@@ -956,7 +956,6 @@ struct uclamp_rq {
 DECLARE_STATIC_KEY_FALSE(sched_uclamp_used);
 #endif /* CONFIG_UCLAMP_TASK */
 
-struct rq;
 struct balance_callback {
 	struct balance_callback *next;
 	void (*func)(struct rq *rq);
