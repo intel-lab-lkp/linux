@@ -155,6 +155,10 @@ int amdgpu_ttm_copy_mem_to_mem(struct amdgpu_device *adev,
 			       uint64_t size, bool tmz,
 			       struct dma_resv *resv,
 			       struct dma_fence **f);
+int amdgpu_clear_buffer(struct amdgpu_bo *bo,
+			struct dma_resv *resv,
+			struct dma_fence **fence,
+			bool delayed);
 int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 			uint32_t src_data,
 			struct dma_resv *resv,
