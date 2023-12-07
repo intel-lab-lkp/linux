@@ -95,34 +95,6 @@ config DRM_PANEL_LVDS
 	  handling of power supplies or control signals. It implements automatic
 	  backlight handling if the panel is attached to a backlight controller.
 
-config DRM_PANEL_SIMPLE
-	tristate "support for simple panels (other than eDP ones)"
-	depends on OF
-	depends on BACKLIGHT_CLASS_DEVICE
-	depends on PM
-	select VIDEOMODE_HELPERS
-	help
-	  DRM panel driver for dumb non-eDP panels that need at most a regulator
-	  and a GPIO to be powered up. Optionally a backlight can be attached so
-	  that it can be automatically turned off when the panel goes into a
-	  low power state.
-
-config DRM_PANEL_EDP
-	tristate "support for simple Embedded DisplayPort panels"
-	depends on OF
-	depends on BACKLIGHT_CLASS_DEVICE
-	depends on PM
-	select VIDEOMODE_HELPERS
-	select DRM_DISPLAY_DP_HELPER
-	select DRM_DISPLAY_HELPER
-	select DRM_DP_AUX_BUS
-	select DRM_KMS_HELPER
-	help
-	  DRM panel driver for dumb eDP panels that need at most a regulator and
-	  a GPIO to be powered up. Optionally a backlight can be attached so
-	  that it can be automatically turned off when the panel goes into a
-	  low power state.
-
 config DRM_PANEL_EBBG_FT8719
 	tristate "EBBG FT8719 panel driver"
 	depends on OF
@@ -317,12 +289,6 @@ config DRM_PANEL_LEADTEK_LTK500HD1829
 	  24 bit RGB per pixel. It provides a MIPI DSI interface to
 	  the host and has a built-in LED backlight.
 
-config DRM_PANEL_SAMSUNG_LD9040
-	tristate "Samsung LD9040 RGB/SPI panel"
-	depends on OF && SPI
-	depends on BACKLIGHT_CLASS_DEVICE
-	select VIDEOMODE_HELPERS
-
 config DRM_PANEL_LG_LB035Q02
 	tristate "LG LB035Q024573 RGB panel"
 	depends on GPIOLIB && OF && SPI
@@ -349,6 +315,17 @@ config DRM_PANEL_MAGNACHIP_D53E6EA8966
 	  DRM panel driver for the Samsung AMS495QA01 panel controlled
 	  with the Magnachip D53E6EA8966 panel IC. This panel receives
 	  video data via DSI but commands via 9-bit SPI using DBI.
+
+config DRM_PANEL_MANTIX_MLAF057WE51
+	tristate "Mantix MLAF057WE51-X MIPI-DSI LCD panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for the Mantix
+	  MLAF057WE51-X MIPI DSI panel as e.g. used in the Librem 5. It
+	  has a resolution of 720x1440 pixels, a built in backlight and touch
+	  controller.
 
 config DRM_PANEL_NEC_NL8048HL11
 	tristate "NEC NL8048HL11 RGB panel"
@@ -437,17 +414,6 @@ config DRM_PANEL_NOVATEK_NT39016
 	help
 	  Say Y here if you want to enable support for the panels built
 	  around the Novatek NT39016 display controller.
-
-config DRM_PANEL_MANTIX_MLAF057WE51
-	tristate "Mantix MLAF057WE51-X MIPI-DSI LCD panel"
-	depends on OF
-	depends on DRM_MIPI_DSI
-	depends on BACKLIGHT_CLASS_DEVICE
-	help
-	  Say Y here if you want to enable support for the Mantix
-	  MLAF057WE51-X MIPI DSI panel as e.g. used in the Librem 5. It
-	  has a resolution of 720x1440 pixels, a built in backlight and touch
-	  controller.
 
 config DRM_PANEL_OLIMEX_LCD_OLINUXINO
 	tristate "Olimex LCD-OLinuXino panel"
@@ -565,6 +531,12 @@ config DRM_PANEL_SAMSUNG_DB7430
 	  Say Y here if you want to enable support for the Samsung
 	  DB7430 DPI display controller used in such devices as the
 	  LMS397KF04 480x800 DPI panel.
+
+config DRM_PANEL_SAMSUNG_LD9040
+	tristate "Samsung LD9040 RGB/SPI panel"
+	depends on OF && SPI
+	depends on BACKLIGHT_CLASS_DEVICE
+	select VIDEOMODE_HELPERS
 
 config DRM_PANEL_SAMSUNG_S6D16D0
 	tristate "Samsung S6D16D0 DSI video mode panel"
@@ -773,6 +745,34 @@ config DRM_PANEL_STARTEK_KD070FHFID015
 	  based on RENESAS-R69429 controller. The pannel is a 7-inch TFT LCD display
 	  with a resolution of 1024 x 600 pixels. It provides a MIPI DSI interface to
 	  the host, a built-in LED backlight and touch controller.
+
+config DRM_PANEL_EDP
+	tristate "support for simple Embedded DisplayPort panels"
+	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
+	depends on PM
+	select VIDEOMODE_HELPERS
+	select DRM_DISPLAY_DP_HELPER
+	select DRM_DISPLAY_HELPER
+	select DRM_DP_AUX_BUS
+	select DRM_KMS_HELPER
+	help
+	  DRM panel driver for dumb eDP panels that need at most a regulator and
+	  a GPIO to be powered up. Optionally a backlight can be attached so
+	  that it can be automatically turned off when the panel goes into a
+	  low power state.
+
+config DRM_PANEL_SIMPLE
+	tristate "support for simple panels (other than eDP ones)"
+	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
+	depends on PM
+	select VIDEOMODE_HELPERS
+	help
+	  DRM panel driver for dumb non-eDP panels that need at most a regulator
+	  and a GPIO to be powered up. Optionally a backlight can be attached so
+	  that it can be automatically turned off when the panel goes into a
+	  low power state.
 
 config DRM_PANEL_TDO_TL070WSH30
 	tristate "TDO TL070WSH30 DSI panel"
