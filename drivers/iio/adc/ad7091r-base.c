@@ -215,10 +215,13 @@ int ad7091r_probe(struct device *dev, const char *name,
 	iio_dev->channels = st->chip_info->channels;
 
 	st->vref = devm_regulator_get_optional(dev, "vref");
-	if (IS_ERR(st->vref)) {
-		if (PTR_ERR(st->vref) == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
+	if (IS_ERR_OR_NULL(st->vref)) {
+		/* Enable internal vref */
 		st->vref = NULL;
+		ret = regmap_update_bits(st->map, AD7091R_REG_CONF,
+					 AD7091R_REG_CONF_INT_VREF, BIT(0));
+		if (ret)
+			return ret;
 	} else {
 		ret = regulator_enable(st->vref);
 		if (ret)
