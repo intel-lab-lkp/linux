@@ -19,4 +19,7 @@ void perf_pmu__arch_init(struct perf_pmu *pmu)
 	    !strcmp(pmu->name, S390_PMUPAI_EXT) ||
 	    !strcmp(pmu->name, S390_PMUCPUM_CF))
 		pmu->selectable = true;
+
+	if (pmu->is_core)
+		pmu->mem_events = perf_mem_events;
 }
