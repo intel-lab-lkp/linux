@@ -254,7 +254,8 @@ MPOL_WEIGHTED_INTERLEAVE
 	This mode operates the same as MPOL_INTERLEAVE, except that
 	interleaving behavior is executed based on weights set in
 	/sys/kernel/mm/mempolicy/weighted_interleave/
-	rather than simple round-robin interleave (which is the default).
+	when configured to utilize global weights, or based on task-local
+	weights configured with set_mempolicy2(2) or mbind2(2).
 
 	When utilizing global weights from the sysfs interface,
 	weights are applied in a src-node relative manner.  For example
@@ -266,6 +267,13 @@ MPOL_WEIGHTED_INTERLEAVE
 	This allows for tasks migrated between nodes (for example
 	cgroup initiated migrations) to re-weight for the optimal
 	distribution of bandwidth.
+
+	When utilizing task-local weights, weights are not rebalanced
+	in the event of a task migration.  If a weight has not been
+	explicitly set for a node set in the new nodemask, the
+	value of that weight defaults to "1".  For this reason, if
+	migrations are expected or possible, users should consider
+	utilizing global interleave weights.
 
 NUMA memory policy supports the following optional mode flags:
 
@@ -533,6 +541,9 @@ Extended Mempolicy Arguments::
 		/* mbind2: address ranges to apply the policy */
 		struct iovec *vec;
 		size_t vlen;
+
+		/* weighted interleave settings */
+		unsigned char *il_weights;  /* of size pol_maxnodes */
 	};
 
 The extended mempolicy argument structure is defined to allow the mempolicy

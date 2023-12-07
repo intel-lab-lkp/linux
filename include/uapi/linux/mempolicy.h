@@ -43,6 +43,8 @@ struct mpol_args {
 	/* mbind2: address ranges to apply the policy */
 	struct iovec *vec;
 	size_t vlen;
+	/* weighted interleave settings */
+	unsigned char *il_weights;	/* of size pol_maxnodes */
 };
 
 /* Flags for set_mempolicy */
@@ -83,6 +85,7 @@ struct mpol_args {
 #define MPOL_F_SHARED  (1 << 0)	/* identify shared policies */
 #define MPOL_F_MOF	(1 << 3) /* this policy wants migrate on fault */
 #define MPOL_F_MORON	(1 << 4) /* Migrate On protnone Reference On Node */
+#define MPOL_F_GWEIGHT	(1 << 5) /* Utilize global weights */
 
 /*
  * These bit locations are exposed in the vm.zone_reclaim_mode sysctl

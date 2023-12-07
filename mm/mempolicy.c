@@ -274,6 +274,7 @@ static struct mempolicy *mpol_new(struct mempolicy_args *args)
 	unsigned short mode = args->mode;
 	unsigned short flags = args->mode_flags;
 	nodemask_t *nodes = args->policy_nodes;
+	int node;
 
 	if (mode == MPOL_DEFAULT) {
 		if (nodes && !nodes_empty(*nodes))
@@ -300,6 +301,19 @@ static struct mempolicy *mpol_new(struct mempolicy_args *args)
 		    (flags & MPOL_F_STATIC_NODES) ||
 		    (flags & MPOL_F_RELATIVE_NODES))
 			return ERR_PTR(-EINVAL);
+	} else if (mode == MPOL_WEIGHTED_INTERLEAVE) {
+		/* weighted interleave requires a nodemask and weights > 0 */
+		if (nodes_empty(*nodes))
+			return ERR_PTR(-EINVAL);
+		if (args->il_weights) {
+			node = first_node(*nodes);
+			while (node != MAX_NUMNODES) {
+				if (!args->il_weights[node])
+					return ERR_PTR(-EINVAL);
+				node = next_node(node, *nodes);
+			}
+		} else if (!(args->mode_flags & MPOL_F_GWEIGHT))
+			return ERR_PTR(-EINVAL);
 	} else if (nodes_empty(*nodes))
 		return ERR_PTR(-EINVAL);
 
@@ -312,6 +326,16 @@ static struct mempolicy *mpol_new(struct mempolicy_args *args)
 	policy->home_node = NUMA_NO_NODE;
 	policy->wil.cur_weight = 0;
 	policy->home_node = args->home_node;
+	if (policy->mode == MPOL_WEIGHTED_INTERLEAVE && args->il_weights) {
+		policy->wil.cur_weight = 0;
+		/* Minimum weight value is always 1 */
+		memset(policy->wil.weights, 1, MAX_NUMNODES);
+		node = first_node(*nodes);
+		while (node != MAX_NUMNODES) {
+			policy->wil.weights[node] = args->il_weights[node];
+			node = next_node(node, *nodes);
+		}
+	}
 
 	return policy;
 }
@@ -1612,6 +1636,7 @@ SYSCALL_DEFINE3(mbind2, struct mpol_args __user *, uargs, size_t, usize,
 	struct iovec iovstack[UIO_FASTIOV];
 	struct iovec *iov = iovstack;
 	struct iov_iter iter;
+	unsigned char weights[MAX_NUMNODES];
 	int err;
 
 	err = copy_struct_from_user(&kargs, sizeof(kargs), uargs, usize);
@@ -1647,6 +1672,19 @@ SYSCALL_DEFINE3(mbind2, struct mpol_args __user *, uargs, size_t, usize,
 		margs.policy_nodes = &policy_nodes;
 	} else
 		margs.policy_nodes = NULL;
+
+	if (kargs.mode == MPOL_WEIGHTED_INTERLEAVE) {
+		err = copy_struct_from_user(&weights,
+					    sizeof(weights),
+					    &kargs.il_weights,
+					    kargs.pol_maxnodes);
+		if (err)
+			return err;
+		margs.il_weights = weights;
+	} else {
+		margs.il_weights = NULL;
+		flags |= MPOL_F_GWEIGHT;
+	}
 
 	/* For each address range in vector, do_mbind */
 	err = import_iovec(ITER_DEST, kargs.vec, kargs.vlen,
@@ -1686,6 +1724,9 @@ static long kernel_set_mempolicy(int mode, const unsigned long __user *nmask,
 	if (err)
 		return err;
 
+	if (mode & MPOL_WEIGHTED_INTERLEAVE)
+		mode_flags |= MPOL_F_GWEIGHT;
+
 	memset(&args, 0, sizeof(args));
 	args.mode = lmode;
 	args.mode_flags = mode_flags;
@@ -1708,6 +1749,7 @@ SYSCALL_DEFINE3(set_mempolicy2, struct mpol_args __user *, uargs, size_t, usize,
 	struct mempolicy_args margs;
 	int err;
 	nodemask_t policy_nodemask;
+	unsigned char weights[MAX_NUMNODES];
 
 	if (flags)
 		return -EINVAL;
@@ -1731,6 +1773,19 @@ SYSCALL_DEFINE3(set_mempolicy2, struct mpol_args __user *, uargs, size_t, usize,
 		margs.policy_nodes = &policy_nodemask;
 	} else
 		margs.policy_nodes = NULL;
+
+	if (kargs.mode == MPOL_WEIGHTED_INTERLEAVE && kargs.il_weights) {
+		err = copy_struct_from_user(weights,
+					    sizeof(weights),
+					    kargs.il_weights,
+					    kargs.pol_maxnodes);
+		if (err)
+			return err;
+		margs.il_weights = weights;
+	} else {
+		margs.il_weights = NULL;
+		flags |= MPOL_F_GWEIGHT;
+	}
 
 	return do_set_mempolicy(&margs);
 }
@@ -2081,16 +2136,22 @@ static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
 {
 	unsigned int next;
 	struct task_struct *me = current;
+	unsigned char *weights;
 
 	if (policy->wil.cur_weight > 0) {
 		policy->wil.cur_weight--;
 		return me->il_prev;
 	}
 
+	if (policy->flags & MPOL_F_GWEIGHT)
+		weights = iw_table[numa_node_id()].weights;
+	else
+		weights = policy->wil.weights;
+
 	next = next_node_in(me->il_prev, policy->nodes);
 	if (next < MAX_NUMNODES) {
 		me->il_prev = next;
-		policy->wil.cur_weight = iw_table[numa_node_id()].weights[next];
+		policy->wil.cur_weight = weights[next];
 	}
 	return next;
 }
@@ -2160,15 +2221,21 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	nodemask_t nodemask = pol->nodes;
 	unsigned int target, weight_total = 0;
-	int nid, local_node = numa_node_id();
+	int nid;
+	unsigned char *pol_weights;
 	unsigned char weights[MAX_NUMNODES];
 	unsigned char weight;
 
 	barrier();
 
+	if (pol->flags & MPOL_F_GWEIGHT)
+		pol_weights = iw_table[numa_node_id()].weights;
+	else
+		pol_weights = pol->wil.weights;
+
 	/* Collect weights and save them on stack so they don't change */
 	for_each_node_mask(nid, nodemask) {
-		weight = iw_table[local_node].weights[nid];
+		weight = pol_weights[nid];
 		weight_total += weight;
 		weights[nid] = weight;
 	}
@@ -2564,6 +2631,7 @@ static unsigned long alloc_pages_bulk_array_weighted_interleave(gfp_t gfp,
 	unsigned long nr_allocated;
 	unsigned long rounds;
 	unsigned long node_pages, delta;
+	unsigned char *pol_weights;
 	unsigned char weight;
 	unsigned char weights[MAX_NUMNODES];
 	unsigned int weight_total;
@@ -2576,9 +2644,14 @@ static unsigned long alloc_pages_bulk_array_weighted_interleave(gfp_t gfp,
 
 	nnodes = nodes_weight(nodes);
 
+	if (pol->flags & MPOL_F_GWEIGHT)
+		pol_weights = iw_table[numa_node_id()].weights;
+	else
+		pol_weights = pol->wil.weights;
+
 	/* Collect weights and save them on stack so they don't change */
 	for_each_node_mask(node, nodes) {
-		weight = iw_table[numa_node_id()].weights[node];
+		weight = pol_weights[node];
 		weight_total += weight;
 		weights[node] = weight;
 	}
@@ -3095,6 +3168,7 @@ void mpol_shared_policy_init(struct shared_policy *sp, struct mempolicy *mpol)
 {
 	int ret;
 	struct mempolicy_args margs;
+	unsigned char weights[MAX_NUMNODES];
 
 	sp->root = RB_ROOT;		/* empty tree == default mempolicy */
 	rwlock_init(&sp->lock);
@@ -3112,6 +3186,11 @@ void mpol_shared_policy_init(struct shared_policy *sp, struct mempolicy *mpol)
 		margs.mode_flags = mpol->flags;
 		margs.policy_nodes = &mpol->w.user_nodemask;
 		margs.home_node = NUMA_NO_NODE;
+		if (margs.mode == MPOL_WEIGHTED_INTERLEAVE &&
+		    !(margs.mode_flags & MPOL_F_GWEIGHT)) {
+			memcpy(weights, mpol->wil.weights, sizeof(weights));
+			margs.il_weights = weights;
+		}
 
 		/* contextualize the tmpfs mount point mempolicy to this file */
 		npol = mpol_new(&margs);
