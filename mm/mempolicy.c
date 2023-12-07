@@ -1860,6 +1860,49 @@ SYSCALL_DEFINE5(get_mempolicy, int __user *, policy,
 	return kernel_get_mempolicy(policy, nmask, maxnode, addr, flags);
 }
 
+SYSCALL_DEFINE3(get_mempolicy2, struct mpol_args __user *, uargs, size_t, usize,
+		unsigned long, flags)
+{
+	struct mpol_args kargs;
+	struct mempolicy_args margs;
+	int err;
+	nodemask_t policy_nodemask;
+
+	err = copy_struct_from_user(&kargs, sizeof(kargs), uargs, usize);
+	if (err)
+		return -EINVAL;
+
+	if (flags & MPOL_F_MEMS_ALLOWED) {
+		if (!margs.policy_nodes)
+			return -EINVAL;
+		err = do_get_mems_allowed(&policy_nodemask);
+		if (err)
+			return err;
+		return copy_nodes_to_user(kargs.pol_nodes, kargs.pol_maxnodes,
+					  &policy_nodemask);
+	}
+
+	margs.policy_nodes = kargs.pol_nodes ? &policy_nodemask : NULL;
+	if (flags & MPOL_F_ADDR) {
+		margs.addr = kargs.addr;
+		err = do_get_vma_mempolicy(&margs);
+	} else
+		err = do_get_task_mempolicy(&margs);
+
+	if (err)
+		return err;
+
+	kargs.mode = margs.mode;
+	kargs.mode_flags = margs.mode_flags;
+	kargs.policy_node = margs.policy_node;
+	kargs.addr_node = (flags & MPOL_F_ADDR) ? margs.addr_node : -1;
+	if (kargs.pol_nodes)
+		err = copy_nodes_to_user(kargs.pol_nodes, kargs.pol_maxnodes,
+					 margs.policy_nodes);
+
+	return copy_to_user(uargs, &kargs, usize) ? -EFAULT : 0;
+}
+
 bool vma_migratable(struct vm_area_struct *vma)
 {
 	if (vma->vm_flags & (VM_IO | VM_PFNMAP))
