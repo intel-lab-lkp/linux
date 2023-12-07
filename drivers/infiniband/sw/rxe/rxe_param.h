@@ -125,6 +125,10 @@ enum rxe_device_param {
 	RXE_VENDOR_ID			= 0XFFFFFF,
 };
 
+extern int rxe_max_mcast_grp;
+extern int rxe_max_mcast_qp_attach;
+extern int rxe_max_tot_mcast_qp_attach;
+
 /* default/initial rxe port parameters */
 enum rxe_port_param {
 	RXE_PORT_GID_TBL_LEN		= 1024,
