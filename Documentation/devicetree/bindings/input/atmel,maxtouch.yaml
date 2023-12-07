@@ -87,6 +87,12 @@ properties:
       - 2 # ATMEL_MXT_WAKEUP_GPIO
     default: 0
 
+  atmel,poweroff-in-suspend:
+    description: |
+      When this property is set, all supplies are turned off when the system is
+      going to suspend.
+    type: boolean
+
   wakeup-source:
     type: boolean
 
