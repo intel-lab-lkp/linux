@@ -238,7 +238,8 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 		kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 }
 
-static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos)
+static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos,
+		rwf_t rw_flags)
 {
 	struct iov_iter i;
 	ssize_t bw;
@@ -246,7 +247,7 @@ static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos)
 	iov_iter_bvec(&i, ITER_SOURCE, bvec, 1, bvec->bv_len);
 
 	file_start_write(file);
-	bw = vfs_iter_write(file, &i, ppos, 0);
+	bw = vfs_iter_write(file, &i, ppos, rw_flags);
 	file_end_write(file);
 
 	if (likely(bw ==  bvec->bv_len))
@@ -261,14 +262,14 @@ static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos)
 }
 
 static int lo_write_simple(struct loop_device *lo, struct request *rq,
-		loff_t pos)
+		loff_t pos, rwf_t rw_flags)
 {
 	struct bio_vec bvec;
 	struct req_iterator iter;
 	int ret = 0;
 
 	rq_for_each_segment(bvec, rq, iter) {
-		ret = lo_write_bvec(lo->lo_backing_file, &bvec, &pos);
+		ret = lo_write_bvec(lo->lo_backing_file, &bvec, &pos, rw_flags);
 		if (ret < 0)
 			break;
 		cond_resched();
@@ -392,7 +393,7 @@ static void lo_rw_aio_complete(struct kiocb *iocb, long ret)
 }
 
 static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
-		     loff_t pos, int rw)
+		     loff_t pos, int rw, rwf_t rw_flags)
 {
 	struct iov_iter iter;
 	struct req_iterator rq_iter;
@@ -446,6 +447,7 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	cmd->iocb.ki_filp = file;
 	cmd->iocb.ki_complete = lo_rw_aio_complete;
 	cmd->iocb.ki_flags = IOCB_DIRECT;
+	kiocb_set_rw_flags(&cmd->iocb, rw_flags);
 	cmd->iocb.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
 
 	if (rw == ITER_SOURCE)
@@ -464,6 +466,15 @@ static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 {
 	struct loop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	loff_t pos = ((loff_t) blk_rq_pos(rq) << 9) + lo->lo_offset;
+	rwf_t rw_flags = 0;
+
+	/*
+	 * If we are being asked to do a REQ_FUA write, then we convert that to
+	 * a datasync write so that the contents of the write are on stable
+	 * storage before the write completes.
+	 */
+	if (rq->cmd_flags & REQ_FUA)
+		rw_flags = RWF_DSYNC;
 
 	/*
 	 * lo_write_simple and lo_read_simple should have been covered
@@ -490,12 +501,12 @@ static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 		return lo_fallocate(lo, rq, pos, FALLOC_FL_PUNCH_HOLE);
 	case REQ_OP_WRITE:
 		if (cmd->use_aio)
-			return lo_rw_aio(lo, cmd, pos, ITER_SOURCE);
+			return lo_rw_aio(lo, cmd, pos, ITER_SOURCE, rw_flags);
 		else
-			return lo_write_simple(lo, rq, pos);
+			return lo_write_simple(lo, rq, pos, rw_flags);
 	case REQ_OP_READ:
 		if (cmd->use_aio)
-			return lo_rw_aio(lo, cmd, pos, ITER_DEST);
+			return lo_rw_aio(lo, cmd, pos, ITER_DEST, 0);
 		else
 			return lo_read_simple(lo, rq, pos);
 	default:
@@ -1077,7 +1088,7 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	mapping_set_gfp_mask(mapping, lo->old_gfp_mask & ~(__GFP_IO|__GFP_FS));
 
 	if (!(lo->lo_flags & LO_FLAGS_READ_ONLY) && file->f_op->fsync)
-		blk_queue_write_cache(lo->lo_queue, true, false);
+		blk_queue_write_cache(lo->lo_queue, true, true);
 
 	if (config->block_size)
 		bsize = config->block_size;
