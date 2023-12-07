@@ -339,7 +339,7 @@ static void __init numa_nodemask_from_meminfo(nodemask_t *nodemask,
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mi->blk); i++)
+	for (i = 0; i < mi->nr_blks; i++)
 		if (mi->blk[i].start != mi->blk[i].end &&
 		    mi->blk[i].nid != NUMA_NO_NODE)
 			node_set(mi->blk[i].nid, *nodemask);
