@@ -921,9 +921,12 @@ static void qed_ilt_shadow_free(struct qed_hwfn *p_hwfn)
 	struct qed_cxt_mngr *p_mngr = p_hwfn->p_cxt_mngr;
 	u32 ilt_size, i;
 
+	if (!p_mngr->ilt_shadow)
+		return;
+
 	ilt_size = qed_cxt_ilt_shadow_size(p_cli);
 
-	for (i = 0; p_mngr->ilt_shadow && i < ilt_size; i++) {
+	for (i = 0; i < ilt_size; i++) {
 		struct phys_mem_desc *p_dma = &p_mngr->ilt_shadow[i];
 
 		if (p_dma->virt_addr)
@@ -933,6 +936,7 @@ static void qed_ilt_shadow_free(struct qed_hwfn *p_hwfn)
 		p_dma->virt_addr = NULL;
 	}
 	kfree(p_mngr->ilt_shadow);
+	p_hwfn->p_cxt_mngr->ilt_shadow = NULL;
 }
 
 static int qed_ilt_blk_alloc(struct qed_hwfn *p_hwfn,
@@ -995,10 +999,8 @@ static int qed_ilt_shadow_alloc(struct qed_hwfn *p_hwfn)
 	size = qed_cxt_ilt_shadow_size(clients);
 	p_mngr->ilt_shadow = kcalloc(size, sizeof(struct phys_mem_desc),
 				     GFP_KERNEL);
-	if (!p_mngr->ilt_shadow) {
-		rc = -ENOMEM;
-		goto ilt_shadow_fail;
-	}
+	if (!p_mngr->ilt_shadow)
+		return -ENOMEM;
 
 	DP_VERBOSE(p_hwfn, QED_MSG_ILT,
 		   "Allocated 0x%x bytes for ilt shadow\n",
