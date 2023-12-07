@@ -307,8 +307,8 @@ int tasdevice_init(struct tasdevice_priv *tas_priv)
 		goto out;
 	}
 
-	tas_priv->cur_prog = -1;
-	tas_priv->cur_conf = -1;
+	tas_priv->cur_prog = 0;
+	tas_priv->cur_conf = 0;
 
 	for (i = 0; i < tas_priv->ndev; i++) {
 		tas_priv->tasdevice[i].cur_book = -1;
