@@ -488,6 +488,37 @@ closest to which page allocation will come from. Specifying the home node overri
 the default allocation policy to allocate memory close to the local node for an
 executing CPU.
 
+Extended Mempolicy Arguments::
+
+	struct mpol_args {
+		/* Basic mempolicy settings */
+		unsigned short mode;
+		unsigned short mode_flags;
+		unsigned long *pol_nodes;
+		unsigned long pol_maxnodes;
+
+		/* get_mempolicy2: policy node information */
+		int policy_node;
+
+		/* get_mempolicy2: memory range policy */
+		unsigned long addr;
+		int addr_node;
+
+		/* mbind2: policy home node */
+		unsigned long home_node;
+
+		/* mbind2: address ranges to apply the policy */
+		struct iovec *vec;
+		size_t vlen;
+	};
+
+The extended mempolicy argument structure is defined to allow the mempolicy
+interfaces future extensibility without the need for additional system calls.
+
+The core arguments (mode, mode_flags, pol_nodes, and pol_maxnodes) apply to
+all interfaces relative to their non-extended counterparts. Each additional
+field may only apply to specific extended interfaces.  See the respective
+extended interface man page for more details.
 
 Memory Policy Command Line Interface
 ====================================
