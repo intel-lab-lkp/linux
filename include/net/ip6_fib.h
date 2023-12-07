@@ -513,7 +513,10 @@ static inline void fib6_set_expires_locked(struct fib6_info *f6i,
 
 	tb6 = f6i->fib6_table;
 	f6i->expires = expires;
-	if (tb6 && !fib6_has_expires(f6i))
+	if (tb6 &&
+	    rcu_dereference_protected(f6i->fib6_node,
+				      lockdep_is_held(&tb6->tb6_lock)) &&
+	    !fib6_has_expires(f6i))
 		hlist_add_head(&f6i->gc_link, &tb6->tb6_gc_hlist);
 	f6i->fib6_flags |= RTF_EXPIRES;
 }
