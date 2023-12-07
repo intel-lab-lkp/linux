@@ -683,9 +683,7 @@ static inline bool vma_start_read(struct vm_area_struct *vma)
 
 static inline void vma_end_read(struct vm_area_struct *vma)
 {
-	rcu_read_lock(); /* keeps vma alive till the end of up_read */
 	up_read(&vma->vm_lock->lock);
-	rcu_read_unlock();
 }
 
 /* WARNING! Can only be used if mmap_lock is expected to be write-locked */
