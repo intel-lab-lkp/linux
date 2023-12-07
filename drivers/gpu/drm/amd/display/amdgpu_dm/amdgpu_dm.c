@@ -8148,9 +8148,15 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		/* Cursor plane is handled after stream updates */
 		if (plane->type == DRM_PLANE_TYPE_CURSOR) {
 			if ((fb && crtc == pcrtc) ||
-			    (old_plane_state->fb && old_plane_state->crtc == pcrtc))
+			    (old_plane_state->fb && old_plane_state->crtc == pcrtc)) {
 				cursor_update = true;
-
+				/*
+				 * With atomic modesetting, cursor changes must
+				 * also trigger a new refresh period with vrr
+				 */
+				if (!state->legacy_cursor_update)
+					pflip_present = true;
+			}
 			continue;
 		}
 
