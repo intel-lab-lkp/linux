@@ -99,8 +99,10 @@ static int realview_soc_probe(struct platform_device *pdev)
 
 	ret = of_property_read_string(np, "compatible",
 				      &soc_dev_attr->soc_id);
-	if (ret)
+	if (ret) {
+		kfree(soc_dev_attr);
 		return -EINVAL;
+	}
 
 	soc_dev_attr->machine = "RealView";
 	soc_dev_attr->family = "Versatile";
@@ -112,9 +114,11 @@ static int realview_soc_probe(struct platform_device *pdev)
 	}
 	ret = regmap_read(syscon_regmap, REALVIEW_SYS_ID_OFFSET,
 			  &realview_coreid);
-	if (ret)
+	if (ret) {
+		soc_device_unregister(soc_dev);
+		kfree(soc_dev_attr);
 		return -ENODEV;
-
+	}
 	dev_info(&pdev->dev, "RealView Syscon Core ID: 0x%08x, HBI-%03x\n",
 		 realview_coreid,
 		 ((realview_coreid >> 16) & 0xfff));
