@@ -2168,21 +2168,21 @@ int tasdevice_select_tuningprm_cfg(void *context, int prm_no,
 		goto out;
 	}
 
-	if (cfg_no >= tas_fmw->nr_configurations) {
+	if (cfg_no < 0 || cfg_no >= tas_fmw->nr_configurations) {
 		dev_err(tas_priv->dev,
 			"%s: cfg(%d) is not in range of conf %u\n",
 			__func__, cfg_no, tas_fmw->nr_configurations);
 		goto out;
 	}
 
-	if (prm_no >= tas_fmw->nr_programs) {
+	if (prm_no < 0 || prm_no >= tas_fmw->nr_programs) {
 		dev_err(tas_priv->dev,
 			"%s: prm(%d) is not in range of Programs %u\n",
 			__func__, prm_no, tas_fmw->nr_programs);
 		goto out;
 	}
 
-	if (rca_conf_no >= rca->ncfgs || rca_conf_no < 0 ||
+	if (rca_conf_no < 0 || rca_conf_no >= rca->ncfgs ||
 		!cfg_info) {
 		dev_err(tas_priv->dev,
 			"conf_no:%d should be in range from 0 to %u\n",
@@ -2274,7 +2274,7 @@ int tasdevice_prmg_load(void *context, int prm_no)
 		goto out;
 	}
 
-	if (prm_no >= tas_fmw->nr_programs) {
+	if (prm_no < 0 || prm_no >= tas_fmw->nr_programs) {
 		dev_err(tas_priv->dev,
 			"%s: prm(%d) is not in range of Programs %u\n",
 			__func__, prm_no, tas_fmw->nr_programs);
@@ -2319,7 +2319,7 @@ int tasdevice_prmg_calibdata_load(void *context, int prm_no)
 		goto out;
 	}
 
-	if (prm_no >= tas_fmw->nr_programs) {
+	if (prm_no < 0 || prm_no >= tas_fmw->nr_programs) {
 		dev_err(tas_priv->dev,
 			"%s: prm(%d) is not in range of Programs %u\n",
 			__func__, prm_no, tas_fmw->nr_programs);
