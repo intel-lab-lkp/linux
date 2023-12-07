@@ -410,7 +410,7 @@ static dma_cookie_t pd_tx_submit(struct dma_async_tx_descriptor *txd)
 	struct pch_dma_desc *desc = to_pd_desc(txd);
 	struct pch_dma_chan *pd_chan = to_pd_chan(txd->chan);
 
-	spin_lock(&pd_chan->lock);
+	spin_lock_bh(&pd_chan->lock);
 
 	if (list_empty(&pd_chan->active_list)) {
 		list_add_tail(&desc->desc_node, &pd_chan->active_list);
@@ -419,7 +419,7 @@ static dma_cookie_t pd_tx_submit(struct dma_async_tx_descriptor *txd)
 		list_add_tail(&desc->desc_node, &pd_chan->queue);
 	}
 
-	spin_unlock(&pd_chan->lock);
+	spin_unlock_bh(&pd_chan->lock);
 	return 0;
 }
 
@@ -447,7 +447,7 @@ static struct pch_dma_desc *pdc_desc_get(struct pch_dma_chan *pd_chan)
 	struct pch_dma_desc *ret = NULL;
 	int i = 0;
 
-	spin_lock(&pd_chan->lock);
+	spin_lock_bh(&pd_chan->lock);
 	list_for_each_entry_safe(desc, _d, &pd_chan->free_list, desc_node) {
 		i++;
 		if (async_tx_test_ack(&desc->txd)) {
@@ -457,15 +457,15 @@ static struct pch_dma_desc *pdc_desc_get(struct pch_dma_chan *pd_chan)
 		}
 		dev_dbg(chan2dev(&pd_chan->chan), "desc %p not ACKed\n", desc);
 	}
-	spin_unlock(&pd_chan->lock);
+	spin_unlock_bh(&pd_chan->lock);
 	dev_dbg(chan2dev(&pd_chan->chan), "scanned %d descriptors\n", i);
 
 	if (!ret) {
 		ret = pdc_alloc_desc(&pd_chan->chan, GFP_ATOMIC);
 		if (ret) {
-			spin_lock(&pd_chan->lock);
+			spin_lock_bh(&pd_chan->lock);
 			pd_chan->descs_allocated++;
-			spin_unlock(&pd_chan->lock);
+			spin_unlock_bh(&pd_chan->lock);
 		} else {
 			dev_err(chan2dev(&pd_chan->chan),
 				"failed to alloc desc\n");
@@ -478,11 +478,12 @@ static struct pch_dma_desc *pdc_desc_get(struct pch_dma_chan *pd_chan)
 static void pdc_desc_put(struct pch_dma_chan *pd_chan,
 			 struct pch_dma_desc *desc)
 {
+
 	if (desc) {
-		spin_lock(&pd_chan->lock);
+		spin_lock_bh(&pd_chan->lock);
 		list_splice_init(&desc->tx_list, &pd_chan->free_list);
 		list_add(&desc->desc_node, &pd_chan->free_list);
-		spin_unlock(&pd_chan->lock);
+		spin_unlock_bh(&pd_chan->lock);
 	}
 }
 
@@ -557,9 +558,9 @@ static void pd_issue_pending(struct dma_chan *chan)
 	struct pch_dma_chan *pd_chan = to_pd_chan(chan);
 
 	if (pdc_is_idle(pd_chan)) {
-		spin_lock(&pd_chan->lock);
+		spin_lock_bh(&pd_chan->lock);
 		pdc_advance_work(pd_chan);
-		spin_unlock(&pd_chan->lock);
+		spin_unlock_bh(&pd_chan->lock);
 	}
 }
 
