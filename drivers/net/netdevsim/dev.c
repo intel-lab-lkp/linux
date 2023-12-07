@@ -25,6 +25,7 @@
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/rtnetlink.h>
+#include <linux/string.h>
 #include <linux/workqueue.h>
 #include <net/devlink.h>
 #include <net/ip.h>
@@ -388,6 +389,99 @@ static const struct file_operations nsim_dev_rate_parent_fops = {
 	.owner = THIS_MODULE,
 };
 
+static ssize_t nsim_dev_link_read(struct file *file, char __user *data,
+				  size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port;
+	struct netdevsim *peer;
+	unsigned int id, port;
+	char buf[11];
+	ssize_t len;
+
+	nsim_dev_port = file->private_data;
+	peer = nsim_dev_port->ns->peer;
+	if (!peer) {
+		len = scnprintf(buf, sizeof(buf), "\n");
+		goto out;
+	}
+
+	id = peer->nsim_bus_dev->dev.id;
+	port = peer->nsim_dev_port->port_index;
+	len = scnprintf(buf, sizeof(buf), "%u %u\n", id, port);
+
+out:
+	return simple_read_from_buffer(data, count, ppos, buf, len);
+}
+
+static ssize_t nsim_dev_link_write(struct file *file,
+					  const char __user *data,
+					  size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port, *peer_dev_port;
+	struct nsim_bus_dev *peer_bus_dev;
+	struct nsim_dev *peer_dev;
+	unsigned int id, port;
+	char *token, *cur;
+	char buf[10];
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -ENOSPC;
+
+	ret = copy_from_user(buf, data, count);
+	if (ret)
+		return -EFAULT;
+	buf[count] = '\0';
+
+	cur = buf;
+	token = strsep(&cur, " ");
+	if (!token)
+		return -EINVAL;
+	ret = kstrtouint(token, 10, &id);
+	if (ret)
+		return ret;
+
+	token = strsep(&cur, " ");
+	if (!token)
+		return -EINVAL;
+	ret = kstrtouint(token, 10, &port);
+	if (ret)
+		return ret;
+
+	/* too many args */
+	if (strsep(&cur, " "))
+		return -E2BIG;
+
+	/* cannot link to self */
+	nsim_dev_port = file->private_data;
+	if (nsim_dev_port->ns->nsim_bus_dev->dev.id == id)
+		return -EINVAL;
+
+	/* invalid netdevsim id */
+	peer_bus_dev = nsim_bus_dev_get(id);
+	if (!peer_bus_dev)
+		return -EINVAL;
+
+	peer_dev = dev_get_drvdata(&peer_bus_dev->dev);
+	list_for_each_entry(peer_dev_port, &peer_dev->port_list, list) {
+		if (peer_dev_port->port_index == port) {
+			nsim_dev_port->ns->peer = peer_dev_port->ns;
+			peer_dev_port->ns->peer = nsim_dev_port->ns;
+			return count;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static const struct file_operations nsim_dev_link_fops = {
+	.open = simple_open,
+	.read = nsim_dev_link_read,
+	.write = nsim_dev_link_write,
+	.llseek = generic_file_llseek,
+	.owner = THIS_MODULE,
+};
+
 static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 				      struct nsim_dev_port *nsim_dev_port)
 {
@@ -417,6 +511,9 @@ static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 								 &nsim_dev_rate_parent_fops);
 	}
 	debugfs_create_symlink("dev", nsim_dev_port->ddir, dev_link_name);
+
+	debugfs_create_file("link", 0600, nsim_dev_port->ddir,
+			    nsim_dev_port, &nsim_dev_link_fops);
 
 	return 0;
 }
