@@ -525,7 +525,7 @@ struct ATTR_LIST_ENTRY {
 	__le16 id;		// 0x18: struct ATTRIB ID.
 	__le16 name[];		// 0x1A: To get real name use name_off.
 
-}; // sizeof(0x20)
+} __aligned((8)); // sizeof(0x20)
 
 static_assert(sizeof(struct ATTR_LIST_ENTRY) == 0x20);
 
