@@ -87,6 +87,60 @@ static u32 dpu_hw_util_log_mask = DPU_DBG_MASK_NONE;
 #define QOS_QOS_CTRL_VBLANK_EN            BIT(16)
 #define QOS_QOS_CTRL_CREQ_VBLANK_MASK     GENMASK(21, 20)
 
+static const struct dpu_csc_cfg dpu_csc_YUV2RGB_601L = {
+	{
+		/* S15.16 format */
+		0x00012A00, 0x00000000, 0x00019880,
+		0x00012A00, 0xFFFF9B80, 0xFFFF3000,
+		0x00012A00, 0x00020480, 0x00000000,
+	},
+	/* signed bias */
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	/* unsigned clamp */
+	{ 0x10, 0xeb, 0x10, 0xf0, 0x10, 0xf0,},
+	{ 0x00, 0xff, 0x00, 0xff, 0x00, 0xff,},
+};
+
+static const struct dpu_csc_cfg dpu_csc10_YUV2RGB_601L = {
+	{
+		/* S15.16 format */
+		0x00012A00, 0x00000000, 0x00019880,
+		0x00012A00, 0xFFFF9B80, 0xFFFF3000,
+		0x00012A00, 0x00020480, 0x00000000,
+	},
+	/* signed bias */
+	{ 0xffc0, 0xfe00, 0xfe00,},
+	{ 0x0, 0x0, 0x0,},
+	/* unsigned clamp */
+	{ 0x40, 0x3ac, 0x40, 0x3c0, 0x40, 0x3c0,},
+	{ 0x00, 0x3ff, 0x00, 0x3ff, 0x00, 0x3ff,},
+};
+
+/**
+ * dpu_hw_get_csc_cfg - get the CSC matrix based on the request type
+ * @type:		type of the requested CSC matrix from caller
+ * Return: CSC matrix corresponding to the request type in DPU format
+ */
+const struct dpu_csc_cfg *dpu_hw_get_csc_cfg(enum dpu_hw_csc_cfg_type type)
+{
+	const struct dpu_csc_cfg *csc_cfg = NULL;
+
+	switch (type) {
+	case DPU_HW_YUV2RGB_601L:
+		csc_cfg = &dpu_csc_YUV2RGB_601L;
+		break;
+	case DPU_HW_YUV2RGB_601L_10BIT:
+		csc_cfg = &dpu_csc10_YUV2RGB_601L;
+		break;
+	default:
+		DPU_ERROR("unknown csc_cfg type\n");
+		break;
+	}
+
+	return csc_cfg;
+}
+
 void dpu_reg_write(struct dpu_hw_blk_reg_map *c,
 		u32 reg_off,
 		u32 val,

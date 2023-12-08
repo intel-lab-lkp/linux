@@ -19,6 +19,11 @@
 #define MISR_CTRL_STATUS_CLEAR          BIT(10)
 #define MISR_CTRL_FREE_RUN_MASK         BIT(31)
 
+enum dpu_hw_csc_cfg_type {
+	DPU_HW_YUV2RGB_601L,
+	DPU_HW_YUV2RGB_601L_10BIT,
+};
+
 /*
  * This is the common struct maintained by each sub block
  * for mapping the register offsets in this block to the
@@ -367,5 +372,7 @@ int dpu_hw_collect_misr(struct dpu_hw_blk_reg_map *c,
 bool dpu_hw_clk_force_ctrl(struct dpu_hw_blk_reg_map *c,
 			   const struct dpu_clk_ctrl_reg *clk_ctrl_reg,
 			   bool enable);
+
+const struct dpu_csc_cfg *dpu_hw_get_csc_cfg(enum dpu_hw_csc_cfg_type type);
 
 #endif /* _DPU_HW_UTIL_H */
