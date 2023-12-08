@@ -71,7 +71,7 @@ enum ipi_msg_type {
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
 	IPI_CPU_STOP,
-	IPI_CPU_CRASH_STOP,
+	IPI_CPU_STOP_NMI,
 	IPI_TIMER,
 	IPI_IRQ_WORK,
 	NR_IPI,
@@ -87,6 +87,9 @@ enum ipi_msg_type {
 static int ipi_irq_base __ro_after_init;
 static int nr_ipi __ro_after_init = NR_IPI;
 static struct irq_desc *ipi_desc[MAX_IPI] __ro_after_init;
+
+static DECLARE_BITMAP(stop_mask, NR_CPUS) __read_mostly;
+static bool crash_stop;
 
 static void ipi_setup(int cpu);
 
@@ -770,7 +773,7 @@ static const char *ipi_types[NR_IPI] __tracepoint_string = {
 	[IPI_RESCHEDULE]	= "Rescheduling interrupts",
 	[IPI_CALL_FUNC]		= "Function call interrupts",
 	[IPI_CPU_STOP]		= "CPU stop interrupts",
-	[IPI_CPU_CRASH_STOP]	= "CPU stop (for crash dump) interrupts",
+	[IPI_CPU_STOP_NMI]	= "CPU stop NMIs",
 	[IPI_TIMER]		= "Timer broadcast interrupts",
 	[IPI_IRQ_WORK]		= "IRQ work interrupts",
 };
@@ -831,16 +834,10 @@ void __noreturn panic_smp_self_stop(void)
 	local_cpu_stop();
 }
 
-#ifdef CONFIG_KEXEC_CORE
-static atomic_t waiting_for_crash_ipi = ATOMIC_INIT(0);
-#endif
-
 static void __noreturn ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs)
 {
 #ifdef CONFIG_KEXEC_CORE
 	crash_save_cpu(regs, cpu);
-
-	atomic_dec(&waiting_for_crash_ipi);
 
 	local_irq_disable();
 	sdei_mask_local_cpu();
@@ -907,14 +904,13 @@ static void do_handle_IPI(int ipinr)
 		break;
 
 	case IPI_CPU_STOP:
-		local_cpu_stop();
-		break;
-
-	case IPI_CPU_CRASH_STOP:
-		if (IS_ENABLED(CONFIG_KEXEC_CORE)) {
+	case IPI_CPU_STOP_NMI:
+		cpumask_clear_cpu(cpu, to_cpumask(stop_mask));
+		if (IS_ENABLED(CONFIG_KEXEC_CORE) && crash_stop) {
 			ipi_cpu_crash_stop(cpu, get_irq_regs());
-
 			unreachable();
+		} else {
+			local_cpu_stop();
 		}
 		break;
 
@@ -969,8 +965,7 @@ static bool ipi_should_be_nmi(enum ipi_msg_type ipi)
 		return false;
 
 	switch (ipi) {
-	case IPI_CPU_STOP:
-	case IPI_CPU_CRASH_STOP:
+	case IPI_CPU_STOP_NMI:
 	case IPI_CPU_BACKTRACE:
 	case IPI_KGDB_ROUNDUP:
 		return true;
@@ -1085,45 +1080,6 @@ void smp_send_stop(void)
 {
 	unsigned long timeout;
 
-	if (num_other_online_cpus()) {
-		cpumask_t mask;
-
-		cpumask_copy(&mask, cpu_online_mask);
-		cpumask_clear_cpu(smp_processor_id(), &mask);
-
-		if (system_state <= SYSTEM_RUNNING)
-			pr_crit("SMP: stopping secondary CPUs\n");
-		smp_cross_call(&mask, IPI_CPU_STOP);
-	}
-
-	/* Wait up to one second for other CPUs to stop */
-	timeout = USEC_PER_SEC;
-	while (num_other_online_cpus() && timeout--)
-		udelay(1);
-
-	if (num_other_online_cpus())
-		pr_warn("SMP: failed to stop secondary CPUs %*pbl\n",
-			cpumask_pr_args(cpu_online_mask));
-
-	sdei_mask_local_cpu();
-}
-
-#ifdef CONFIG_KEXEC_CORE
-void crash_smp_send_stop(void)
-{
-	static int cpus_stopped;
-	cpumask_t mask;
-	unsigned long timeout;
-
-	/*
-	 * This function can be called twice in panic path, but obviously
-	 * we execute this only once.
-	 */
-	if (cpus_stopped)
-		return;
-
-	cpus_stopped = 1;
-
 	/*
 	 * If this cpu is the only one alive at this point in time, online or
 	 * not, there are no stop messages to be sent around, so just back out.
@@ -1131,31 +1087,68 @@ void crash_smp_send_stop(void)
 	if (num_other_online_cpus() == 0)
 		goto skip_ipi;
 
-	cpumask_copy(&mask, cpu_online_mask);
-	cpumask_clear_cpu(smp_processor_id(), &mask);
+	cpumask_copy(to_cpumask(stop_mask), cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), to_cpumask(stop_mask));
 
-	atomic_set(&waiting_for_crash_ipi, num_other_online_cpus());
+	if (system_state <= SYSTEM_RUNNING)
+		pr_crit("SMP: stopping secondary CPUs\n");
 
-	pr_crit("SMP: stopping secondary CPUs\n");
-	smp_cross_call(&mask, IPI_CPU_CRASH_STOP);
-
-	/* Wait up to one second for other CPUs to stop */
+	/*
+	 * Start with a normal IPI and wait up to one second for other CPUs to
+	 * stop. We do this first because it gives other processors a chance
+	 * to exit critical sections / drop locks and makes the rest of the
+	 * stop process (especially console flush) more robust.
+	 */
+	smp_cross_call(to_cpumask(stop_mask), IPI_CPU_STOP);
 	timeout = USEC_PER_SEC;
-	while ((atomic_read(&waiting_for_crash_ipi) > 0) && timeout--)
+	while (!cpumask_empty(to_cpumask(stop_mask)) && timeout--)
 		udelay(1);
 
-	if (atomic_read(&waiting_for_crash_ipi) > 0)
+	/*
+	 * If CPUs are still online, try an NMI. There's no excuse for this to
+	 * be slow, so we only give them an extra 10 ms to respond.
+	 */
+	if (!cpumask_empty(to_cpumask(stop_mask)) &&
+	    ipi_should_be_nmi(IPI_CPU_STOP_NMI)) {
+		pr_info("SMP: retry stop with NMI for CPUs %*pbl\n",
+			cpumask_pr_args(to_cpumask(stop_mask)));
+
+		smp_cross_call(to_cpumask(stop_mask), IPI_CPU_STOP_NMI);
+		timeout = USEC_PER_MSEC * 10;
+		while (!cpumask_empty(to_cpumask(stop_mask)) && timeout--)
+			udelay(1);
+	}
+
+	if (!cpumask_empty(to_cpumask(stop_mask)))
 		pr_warn("SMP: failed to stop secondary CPUs %*pbl\n",
-			cpumask_pr_args(&mask));
+			cpumask_pr_args(to_cpumask(stop_mask)));
 
 skip_ipi:
 	sdei_mask_local_cpu();
+}
+
+#ifdef CONFIG_KEXEC_CORE
+void crash_smp_send_stop(void)
+{
+	/*
+	 * This function can be called twice in panic path, but obviously
+	 * we execute this only once.
+	 *
+	 * We use this same boolean to tell whether the IPI we send was a
+	 * stop or a "crash stop".
+	 */
+	if (crash_stop)
+		return;
+	crash_stop = 1;
+
+	smp_send_stop();
+
 	sdei_handler_abort();
 }
 
 bool smp_crash_stop_failed(void)
 {
-	return (atomic_read(&waiting_for_crash_ipi) > 0);
+	return !cpumask_empty(to_cpumask(stop_mask));
 }
 #endif
 
