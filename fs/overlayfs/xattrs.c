@@ -65,6 +65,9 @@ static int ovl_xattr_set(struct dentry *dentry, struct inode *inode, const char 
 		goto out;
 
 	old_cred = ovl_override_creds(dentry->d_sb);
+	if (!strcmp(name, XATTR_NAME_EVM))
+		name = XATTR_NAME_EVM_OVERLAYFS;
+
 	if (value) {
 		err = ovl_do_setxattr(ofs, realdentry, name, value, size,
 				      flags);
@@ -88,6 +91,9 @@ static int ovl_xattr_get(struct dentry *dentry, struct inode *inode, const char 
 	const struct cred *old_cred;
 	struct path realpath;
 
+	if (!strcmp(name, XATTR_NAME_EVM))
+		name = XATTR_NAME_EVM_OVERLAYFS;
+
 	ovl_i_path_real(inode, &realpath);
 	old_cred = ovl_override_creds(dentry->d_sb);
 	res = vfs_getxattr(mnt_idmap(realpath.mnt), realpath.dentry, name, value, size);
@@ -99,6 +105,9 @@ static bool ovl_can_list(struct super_block *sb, const char *s)
 {
 	/* Never list private (.overlay) */
 	if (ovl_is_private_xattr(sb, s))
+		return false;
+
+	if (!strcmp(s, XATTR_NAME_EVM_OVERLAYFS))
 		return false;
 
 	/* List all non-trusted xattrs */
