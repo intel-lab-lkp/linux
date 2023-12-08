@@ -2264,11 +2264,9 @@ struct dc_state *dc_copy_state(struct dc_state *src_ctx)
 
 #ifdef CONFIG_DRM_AMD_DC_FP
 	if (new_ctx->bw_ctx.dml2) {
-		dml2 = kzalloc(sizeof(struct dml2_context), GFP_KERNEL);
+		dml2 = kmemdup(src_ctx->bw_ctx.dml2, sizeof(struct dml2_context), GFP_KERNEL);
 		if (!dml2)
 			return NULL;
-
-		memcpy(dml2, src_ctx->bw_ctx.dml2, sizeof(struct dml2_context));
 		new_ctx->bw_ctx.dml2 = dml2;
 	}
 #endif
