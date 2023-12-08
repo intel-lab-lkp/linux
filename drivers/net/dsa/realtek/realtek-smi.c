@@ -389,15 +389,15 @@ static int realtek_smi_setup_mdio(struct dsa_switch *ds)
 	priv->user_mii_bus->write = realtek_smi_mdio_write;
 	snprintf(priv->user_mii_bus->id, MII_BUS_ID_SIZE, "SMI-%d",
 		 ds->index);
-	priv->user_mii_bus->dev.of_node = mdio_np;
 	priv->user_mii_bus->parent = priv->dev;
 	ds->user_mii_bus = priv->user_mii_bus;
 
 	ret = devm_of_mdiobus_register(priv->dev, priv->user_mii_bus, mdio_np);
+	of_node_put(mdio_np);
 	if (ret) {
 		dev_err(priv->dev, "unable to register MDIO bus %s\n",
 			priv->user_mii_bus->id);
-		goto err_put_node;
+		return ret;
 	}
 
 	return 0;
@@ -514,8 +514,6 @@ static void realtek_smi_remove(struct platform_device *pdev)
 		return;
 
 	dsa_unregister_switch(priv->ds);
-	if (priv->user_mii_bus)
-		of_node_put(priv->user_mii_bus->dev.of_node);
 
 	/* leave the device reset asserted */
 	if (priv->reset)
