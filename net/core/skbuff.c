@@ -896,19 +896,23 @@ bool napi_pp_put_page(struct page *page, bool napi_safe)
 	bool allow_direct = false;
 	struct page_pool *pp;
 
-	page = compound_head(page);
+	if (!page_is_page_pool_iov(page)) {
+		page = compound_head(page);
 
-	/* page->pp_magic is OR'ed with PP_SIGNATURE after the allocation
-	 * in order to preserve any existing bits, such as bit 0 for the
-	 * head page of compound page and bit 1 for pfmemalloc page, so
-	 * mask those bits for freeing side when doing below checking,
-	 * and page_is_pfmemalloc() is checked in __page_pool_put_page()
-	 * to avoid recycling the pfmemalloc page.
-	 */
-	if (unlikely((page->pp_magic & ~0x3UL) != PP_SIGNATURE))
-		return false;
+		/* page->pp_magic is OR'ed with PP_SIGNATURE after the allocation
+		 * in order to preserve any existing bits, such as bit 0 for the
+		 * head page of compound page and bit 1 for pfmemalloc page, so
+		 * mask those bits for freeing side when doing below checking,
+		 * and page_is_pfmemalloc() is checked in __page_pool_put_page()
+		 * to avoid recycling the pfmemalloc page.
+		 */
+		if (unlikely((page->pp_magic & ~0x3UL) != PP_SIGNATURE))
+			return false;
 
-	pp = page->pp;
+		pp = page->pp;
+	} else {
+		pp = page_to_page_pool_iov(page)->pp;
+	}
 
 	/* Allow direct recycle if we have reasons to believe that we are
 	 * in the same context as the consumer would run, so there's
