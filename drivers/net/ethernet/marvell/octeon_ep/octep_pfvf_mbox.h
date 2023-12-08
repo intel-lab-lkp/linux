@@ -13,10 +13,14 @@
 #define OCTEON_SDP_16K_HW_FRS  16380UL
 #define OCTEON_SDP_64K_HW_FRS  65531UL
 
+/* When a new command is implemented,PF Mbox version should be bumped.
+ */
 enum octep_pfvf_mbox_version {
 	OCTEP_PFVF_MBOX_VERSION_V0,
 	OCTEP_PFVF_MBOX_VERSION_V1,
 };
+
+#define OCTEP_PFVF_MBOX_VERSION_CURRENT	OCTEP_PFVF_MBOX_VERSION_V1
 
 enum octep_pfvf_mbox_opcode {
 	OCTEP_PFVF_MBOX_CMD_VERSION,
@@ -30,7 +34,7 @@ enum octep_pfvf_mbox_opcode {
 	OCTEP_PFVF_MBOX_CMD_GET_LINK_STATUS,
 	OCTEP_PFVF_MBOX_CMD_GET_MTU,
 	OCTEP_PFVF_MBOX_CMD_DEV_REMOVE,
-	OCTEP_PFVF_MBOX_CMD_LAST,
+	OCTEP_PFVF_MBOX_CMD_MAX,
 };
 
 enum octep_pfvf_mbox_word_type {
@@ -79,7 +83,6 @@ enum octep_pfvf_link_autoneg {
 
 #define OCTEP_PFVF_MBOX_TIMEOUT_MS     500
 #define OCTEP_PFVF_MBOX_MAX_RETRIES    2
-#define OCTEP_PFVF_MBOX_VERSION        0
 #define OCTEP_PFVF_MBOX_MAX_DATA_SIZE  6
 #define OCTEP_PFVF_MBOX_MORE_FRAG_FLAG 1
 #define OCTEP_PFVF_MBOX_WRITE_WAIT_TIME msecs_to_jiffies(1)
