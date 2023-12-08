@@ -1199,24 +1199,21 @@ static void nf_tables_table_disable(struct net *net, struct nft_table *table)
 static int nf_tables_updtable(struct nft_ctx *ctx)
 {
 	struct nft_trans *trans;
-	u32 flags;
+	u32 flags = 0;
 	int ret;
 
-	if (!ctx->nla[NFTA_TABLE_FLAGS])
-		return 0;
+	if (ctx->nla[NFTA_TABLE_FLAGS])
+		flags = ntohl(nla_get_be32(ctx->nla[NFTA_TABLE_FLAGS]));
 
-	flags = ntohl(nla_get_be32(ctx->nla[NFTA_TABLE_FLAGS]));
 	if (flags & ~NFT_TABLE_F_MASK)
 		return -EOPNOTSUPP;
 
 	if (flags == ctx->table->flags)
 		return 0;
 
-	if ((nft_table_has_owner(ctx->table) &&
-	     !(flags & NFT_TABLE_F_OWNER)) ||
-	    (!nft_table_has_owner(ctx->table) &&
-	     flags & NFT_TABLE_F_OWNER))
-		return -EOPNOTSUPP;
+	if (nft_table_has_owner(ctx->table) &&
+	    ctx->table->nlpid != ctx->portid)
+		return -EPERM;
 
 	/* No dormant off/on/off/on games in single transaction */
 	if (ctx->table->flags & __NFT_TABLE_F_UPDATE)
@@ -1226,6 +1223,14 @@ static int nf_tables_updtable(struct nft_ctx *ctx)
 				sizeof(struct nft_trans_table));
 	if (trans == NULL)
 		return -ENOMEM;
+
+	if (flags & NFT_TABLE_F_OWNER) {
+		ctx->table->flags |= NFT_TABLE_F_OWNER;
+		ctx->table->nlpid = ctx->portid;
+	} else if (nft_table_has_owner(ctx->table)) {
+		ctx->table->flags &= ~NFT_TABLE_F_OWNER;
+		ctx->table->nlpid = 0;
+	}
 
 	if ((flags & NFT_TABLE_F_DORMANT) &&
 	    !(ctx->table->flags & NFT_TABLE_F_DORMANT)) {
