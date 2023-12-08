@@ -19,7 +19,6 @@
  * @fwrt_ptr: pointer to the buffer coming from fwrt
  * @trans_ptr: pointer to struct %iwl_trans_dump_data which contains the
  *	transport's data.
- * @trans_len: length of the valid data in trans_ptr
  * @fwrt_len: length of the valid data in fwrt_ptr
  */
 struct iwl_fw_dump_ptrs {
@@ -1726,12 +1725,13 @@ iwl_dump_ini_mem_fill_header(struct iwl_fw_runtime *fwrt,
 }
 
 /**
- * mask_apply_and_normalize - applies mask on val and normalize the result
+ * mask_apply_and_normalize - applies mask on val and normalizes the result
+ * @val: value
+ * @mask: mask to apply and to normalize with
  *
  * The normalization is based on the first set bit in the mask
  *
- * @val: value
- * @mask: mask to apply and to normalize with
+ * Returns: the masked, normalized value
  */
 static u32 mask_apply_and_normalize(u32 val, u32 mask)
 {
@@ -2200,15 +2200,15 @@ struct iwl_dump_ini_mem_ops {
 };
 
 /**
- * iwl_dump_ini_mem
- *
- * Creates a dump tlv and copy a memory region into it.
- * Returns the size of the current dump tlv or 0 if failed
- *
+ * iwl_dump_ini_mem - copy ini memory region to a dump tlv
  * @fwrt: fw runtime struct
  * @list: list to add the dump tlv to
  * @reg_data: memory region
  * @ops: memory dump operations
+ *
+ * Creates a dump tlv and copies a memory region into it.
+ *
+ * Returns: the size of the current dump tlv or %0 if failed
  */
 static u32 iwl_dump_ini_mem(struct iwl_fw_runtime *fwrt, struct list_head *list,
 			    struct iwl_dump_ini_region_data *reg_data,
