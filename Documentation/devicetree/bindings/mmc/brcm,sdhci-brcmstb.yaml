@@ -15,6 +15,11 @@ properties:
     oneOf:
       - items:
           - enum:
+              - brcm,bcm74165b0-sdhci
+          - const: brcm,bcm74165-sdhci
+          - const: brcm,sdhci-brcmstb
+      - items:
+          - enum:
               - brcm,bcm7216-sdhci
           - const: brcm,bcm7445-sdhci
           - const: brcm,sdhci-brcmstb
