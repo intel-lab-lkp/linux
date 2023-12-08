@@ -731,6 +731,29 @@ __page_pool_put_page(struct page_pool *pool, struct page *page,
 		/* Page found as candidate for recycling */
 		return page;
 	}
+
+	if (page_is_page_pool_iov(page)) {
+		/* With devmem TCP and ppiovs, we can't release pages if the
+		 * refcount is > 1. This is because the net stack holds
+		 * 2 references:
+		 *	- 1 for the skb, and
+		 *	- 1 for the user until they call SO_DEVMEM_DONTNEED.
+		 * Releasing pages for elevated refcounts completely disables
+		 * page_pool recycling. Instead, simply don't release pages and
+		 * the next call to napi_pp_put_page() via SO_DEVMEM_DONTNEED
+		 * will consider the page again for recycling. As a result,
+		 * devmem TCP incompatible with drivers doing refcnt based
+		 * recycling unless those drivers:
+		 *
+		 * - don't mark skb_mark_for_recycle()
+		 * - are sure to release the last reference with
+		 *   page_pool_put_full_page() to consider the page for
+		 *   page_pool recycling.
+		 */
+		page_pool_page_put_many(page, 1);
+		return NULL;
+	}
+
 	/* Fallback/non-XDP mode: API user have elevated refcnt.
 	 *
 	 * Many drivers split up the page into fragments, and some
