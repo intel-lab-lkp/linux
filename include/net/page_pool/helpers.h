@@ -53,6 +53,8 @@
 #define _NET_PAGE_POOL_HELPERS_H
 
 #include <net/page_pool/types.h>
+#include <net/net_debug.h>
+#include <net/devmem.h>
 
 #ifdef CONFIG_PAGE_POOL_STATS
 /* Deprecated driver-facing API, use netlink instead */
@@ -92,6 +94,11 @@ static inline unsigned int page_pool_iov_idx(const struct page_pool_iov *ppiov)
 	return ppiov - page_pool_iov_owner(ppiov)->ppiovs;
 }
 
+static inline u32 page_pool_iov_binding_id(const struct page_pool_iov *ppiov)
+{
+	return page_pool_iov_owner(ppiov)->binding->id;
+}
+
 static inline dma_addr_t
 page_pool_iov_dma_addr(const struct page_pool_iov *ppiov)
 {
@@ -105,6 +112,46 @@ static inline struct netdev_dmabuf_binding *
 page_pool_iov_binding(const struct page_pool_iov *ppiov)
 {
 	return page_pool_iov_owner(ppiov)->binding;
+}
+
+static inline int page_pool_iov_refcount(const struct page_pool_iov *ppiov)
+{
+	return refcount_read(&ppiov->refcount);
+}
+
+static inline void page_pool_iov_get_many(struct page_pool_iov *ppiov,
+					  unsigned int count)
+{
+	refcount_add(count, &ppiov->refcount);
+}
+
+void __page_pool_iov_free(struct page_pool_iov *ppiov);
+
+static inline void page_pool_iov_put_many(struct page_pool_iov *ppiov,
+					  unsigned int count)
+{
+	if (!refcount_sub_and_test(count, &ppiov->refcount))
+		return;
+
+	__page_pool_iov_free(ppiov);
+}
+
+/* page pool mm helpers */
+
+DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
+static inline bool page_is_page_pool_iov(const struct page *page)
+{
+	return static_branch_unlikely(&page_pool_mem_providers) &&
+	       (unsigned long)page & PP_IOV;
+}
+
+static inline struct page_pool_iov *page_to_page_pool_iov(struct page *page)
+{
+	if (page_is_page_pool_iov(page))
+		return (struct page_pool_iov *)((unsigned long)page & ~PP_IOV);
+
+	DEBUG_NET_WARN_ON_ONCE(true);
+	return NULL;
 }
 
 /**
