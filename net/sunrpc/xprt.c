@@ -653,8 +653,13 @@ static unsigned long xprt_abs_ktime_to_jiffies(ktime_t abstime)
 
 static unsigned long xprt_calc_majortimeo(struct rpc_rqst *req)
 {
-	const struct rpc_timeout *to = req->rq_task->tk_client->cl_timeout;
+	const struct rpc_timeout *to;
 	unsigned long majortimeo = req->rq_timeout;
+
+	if (req->rq_task->tk_client)
+		to = req->rq_task->tk_client->cl_timeout;
+	else
+		to = &req->rq_xprt->bc_timeout;
 
 	if (to->to_exponential)
 		majortimeo <<= to->to_retries;
@@ -684,7 +689,11 @@ static void xprt_init_majortimeo(struct rpc_task *task, struct rpc_rqst *req)
 		time_init = jiffies;
 	else
 		time_init = xprt_abs_ktime_to_jiffies(task->tk_start);
-	req->rq_timeout = task->tk_client->cl_timeout->to_initval;
+
+	if (task->tk_client)
+		req->rq_timeout = task->tk_client->cl_timeout->to_initval;
+	else
+		req->rq_timeout = req->rq_xprt->bc_timeout.to_initval;
 	req->rq_majortimeo = time_init + xprt_calc_majortimeo(req);
 	req->rq_minortimeo = time_init + req->rq_timeout;
 }
@@ -1996,6 +2005,8 @@ xprt_init_bc_request(struct rpc_rqst *req, struct rpc_task *task)
 	 */
 	xbufp->len = xbufp->head[0].iov_len + xbufp->page_len +
 		xbufp->tail[0].iov_len;
+
+	xprt_init_majortimeo(task, req);
 }
 #endif
 

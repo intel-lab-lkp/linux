@@ -279,6 +279,9 @@ static struct rpc_xprt *rpc_clnt_set_transport(struct rpc_clnt *clnt,
 		clnt->cl_autobind = 1;
 
 	clnt->cl_timeout = timeout;
+#if defined(CONFIG_SUNRPC_BACKCHANNEL)
+	memcpy(&xprt->bc_timeout, timeout, sizeof(struct rpc_timeout));
+#endif
 	rcu_assign_pointer(clnt->cl_xprt, xprt);
 	spin_unlock(&clnt->cl_lock);
 

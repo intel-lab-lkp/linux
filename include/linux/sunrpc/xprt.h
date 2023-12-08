@@ -285,6 +285,7 @@ struct rpc_xprt {
 						 * items */
 	struct list_head	bc_pa_list;	/* List of preallocated
 						 * backchannel rpc_rqst's */
+	struct rpc_timeout	bc_timeout;	/* backchannel timeout params */
 #endif /* CONFIG_SUNRPC_BACKCHANNEL */
 
 	struct rb_root		recv_queue;	/* Receive queue */
