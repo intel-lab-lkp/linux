@@ -1252,7 +1252,7 @@ static bool pci_ea_fixed_busnrs(struct pci_dev *dev, u8 *sec, u8 *sub)
  */
 static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 				  int max, unsigned int available_buses,
-				  int pass)
+				  unsigned int pass)
 {
 	struct pci_bus *child;
 	int is_cardbus = (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS);
@@ -1284,7 +1284,7 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 	}
 
 	/* Check if setup is sensible at all */
-	if (!pass &&
+	if (pass == 0 &&
 	    (primary != bus->number || secondary <= bus->number ||
 	     secondary > subordinate)) {
 		pci_info(dev, "bridge configuration invalid ([bus %02x-%02x]), reconfiguring\n",
@@ -1310,7 +1310,7 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 		 * Bus already configured by firmware, process it in the
 		 * first pass and just note the configuration.
 		 */
-		if (pass)
+		if (pass > 0)
 			goto out;
 
 		/*
@@ -1344,7 +1344,7 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 		 * We need to assign a number to this bus which we always
 		 * do in the second pass.
 		 */
-		if (!pass) {
+		if (pass == 0) {
 			if (pcibios_assign_all_busses() || broken || is_cardbus)
 
 				/*
@@ -1496,7 +1496,8 @@ out:
  *
  * Return: New subordinate number covering all buses behind this bridge.
  */
-int pci_scan_bridge(struct pci_bus *bus, struct pci_dev *dev, int max, int pass)
+int pci_scan_bridge(struct pci_bus *bus, struct pci_dev *dev, int max,
+		    unsigned int pass)
 {
 	return pci_scan_bridge_extend(bus, dev, max, 0, pass);
 }
