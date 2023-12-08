@@ -25,6 +25,10 @@ properties:
     description: Set if the controller has broken port disable mechanism
     type: boolean
 
+  disable-usb3:
+    description: Ignore (don't initialize, don't use) USB3 ports
+    type: boolean
+
   imod-interval-ns:
     description: Interrupt moderation interval
     default: 5000

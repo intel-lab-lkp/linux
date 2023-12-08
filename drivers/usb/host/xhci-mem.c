@@ -1982,6 +1982,10 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 	minor_revision = XHCI_EXT_PORT_MINOR(temp);
 
 	if (major_revision == 0x03) {
+		/* Ignore USB3 ports entirely if USB3 support is disabled. */
+		if (xhci->quirks & XHCI_DISABLE_USB3)
+			return;
+
 		rhub = &xhci->usb3_rhub;
 		/*
 		 * Some hosts incorrectly use sub-minor version for minor
