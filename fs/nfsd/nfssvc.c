@@ -956,6 +956,8 @@ nfsd(void *vrqstp)
 
 		svc_recv(rqstp);
 		validate_process_creds();
+
+		nfsd_file_net_dispose(nn);
 	}
 
 	atomic_dec(&nfsdstats.th_cnt);
