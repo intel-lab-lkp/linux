@@ -311,6 +311,7 @@ static int sprd_efuse_read(void *context, u32 offset, void *val, size_t bytes)
 	ret = sprd_efuse_raw_read(efuse, index, &data, blk_double);
 	if (!ret) {
 		data >>= blk_offset;
+		bytes = bytes > sizeof(data) ? sizeof(data) : bytes;
 		memcpy(val, &data, bytes);
 	}
 
