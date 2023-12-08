@@ -1200,14 +1200,180 @@ methods must be implemented:
 - ``port_hsr_leave``: function invoked when a given switch port leaves a
   DANP/DANH and returns to normal operation as a standalone port.
 
-TODO
-====
+History and development directions
+==================================
 
-Making SWITCHDEV and DSA converge towards an unified codebase
--------------------------------------------------------------
+This section gives some background context to the developers who are eager to
+make changes to the DSA core (``net/dsa/`` excepting ``tag_*.c`` files).
 
-SWITCHDEV properly takes care of abstracting the networking stack with offload
-capable hardware, but does not enforce a strict switch device driver model. On
-the other DSA enforces a fairly strict device driver model, and deals with most
-of the switch specific. At some point we should envision a merger between these
-two subsystems and get the best of both worlds.
+Initially (2008), the DSA core was a platform driver for a platform device
+representing the switch tree. Support for hardware switch chips lived in
+separate modules, which were required to call the ``register_switch_driver()``
+method. The tree platform device was instantiated through ``platform_data``.
+
+Later (2013), the DSA core gained support for OF bindings. The initial bindings
+(now no longer supported) expected a compatible string of "marvell,dsa" or
+"brcm,bcm7445-switch-v4.0" for the tree, and, like the implementation of the
+DSA core, also expected that all switches in the tree are MDIO devices on an
+``mii_bus``. The initial bindings and core driver implementation first assumed
+that all switches in the tree are connected to the same MDIO bus, then in 2015,
+they were augmented such that each switch may be on its own MDIO bus.
+
+The early DSA core was more concerned with using switches as port multiplexers
+and with managing auxiliary functionality like temperature sensors
+(``CONFIG_NET_DSA_HWMON``) rather than with production-ready features.
+Bridging and bonding were handled in software. Support for hardware-accelerated
+bridging, by means of integrating with the ``switchdev`` framework, was added
+in 2015.
+
+In mid 2016, the second (and current) device tree binding for DSA was
+introduced. Here, individual switches are represented as devices in the Linux
+device model sense, on arbitrary buses, not just MDIO. The limitation of being
+able to describe a single CPU port was lifted (the driver support for multiple
+CPU ports came much later, in 2022). During this time, DSA stopped playing the
+role of a device model for switches, and ``register_switch_driver()`` was
+replaced with ``dsa_register_switch()``, the modern mechanism through which
+arbitrary devices may use DSA as a framework exclusively for integrating
+Ethernet switch IP blocks with the network stack.
+
+With the conversion to the second device tree binding, DSA's support for
+``platform_data`` (used in non-OF scenarios) was also changed to align. With
+the DSA tree no longer being a platform device, the ``platform_data`` structure
+moved to individual switch devices.
+
+Support for the initial device tree binding was subsequently removed in 2019.
+
+Probing through ``platform_data`` remains limited in functionality. The
+``ds->dev->of_node`` and ``dp->dn`` pointers are NULL, and the OF API calls
+made by drivers for discovering more complex setups fall back to the implicit
+handling. There is no way to describe multi-chip trees, or switches with
+multiple CPU ports. It is always assumed that shared ports are configured by
+the driver to the maximum supported link speed (they do not use phylink).
+User ports cannot connect to arbitrary PHYs, but are limited to
+``ds->user_mii_bus``.
+
+Many switch drivers introduced since after DSA's second OF binding were not
+designed to support probing through ``platform_data``. Most notably,
+``device_get_match_data()`` and ``of_device_get_match_data()`` return NULL with
+``platform_data``, so generally, drivers which do not have alternative
+mechanisms for this do not support ``platform_data``.
+
+Extending the ``platform_data`` support implies adding more separate code.
+An alternative worth exploring is growing DSA towards the ``fwnode`` API.
+However, not the entire OF binding should be generalized to ``fwnode``.
+The current bindings must be examined with a critical eye, and the properties
+which are no longer considered good practice (like ``label``, because ``udev``
+offers this functionality) should first be deprecated in OF, and not migrated
+to ``fwnode``.
+
+With ``fwnode`` support in the DSA framework, the ``fwnode_create_software_node()``
+API could be used as an alternative to ``platform_data``, to allow describing
+and probing switches on non-OF.
+
+DSA is used to control very complex switching chips. Some devices have a
+microprocessor, and in some cases, this microprocessor can run a variant of the
+Linux kernel. Sometimes, the switch packet I/O procedure of the internal
+microprocessor is different from the packet I/O procedure for an external host.
+The internal processor may have access to switch queues, while the external
+processor may require DSA tags. Other times, the microprocessor may also be
+connected to the switch in a DSA fashion (using an internal MAC to MAC
+connection).
+
+Since DSA is only concerned with switches where the packet I/O is handled
+by an intermediate conduit driver, this leads to the situation where it is
+recommended to have two drivers for the same switch hardware. When the queues
+are accessed directly, a separate non-DSA driver should be used, with its own
+skeleton which is integrated with ``switchdev`` on its own.
+
+In 2019, a DSA driver was added for the ``ocelot`` switch, which is a thin
+front-end over a hardware library that is also common with a ``switchdev``
+driver. While this design is encouraged for other similar cases, code
+duplication among multiple front-ends is a concern, so it may be desirable to
+extract some of DSA's core functionality into a reusable library for Ethernet
+switches. This could offer a driver-facing API similar to ``dsa_switch_ops``,
+but the aspects relating to cross-chip management, to DSA tags and to the
+conduit interface would remain DSA-specific.
+
+Traditionally, DSA switch drivers for discrete chips own the entire
+``spi_device``, ``i2c_client``, ``mdio_device`` etc. When the chip is complex
+and has multiple embedded peripherals (IRQ controller, GPIO controller, MDIO
+controller, LED controller, sensors), the handling of these peripherals is
+currently monolithic within the same device driver that also calls
+``dsa_register_switch()``.
+
+But an internal microprocessor may have a very different view of the switch
+address space, and may have discrete Linux drivers for each peripheral.
+In 2023, the ``ocelot_ext`` driver was added, which deviated from the
+traditional DSA driver architecture. Rather than probing on the entire
+``spi_device``, it created a multi-function device (MFD) top-level driver for
+it (associated with the SoC at large), and the switching IP is only one of the
+children of the MFD (it is a platform device with regmaps provided by its
+parent). The drivers for each peripheral in this switch SoC are the same when
+controlled over SPI and when controlled by the internal processor.
+
+Authors of new switch drivers that use DSA are encouraged to have a wider view
+of the peripherals on the chip that they are controlling, and to use the MFD
+model to separate the components whenever possible. The general direction for
+the DSA core is to shrink in size and to focus only on the Ethernet switching
+IP and its ports. ``CONFIG_NET_DSA_HWMON`` was removed in 2017. Adding new
+methods to ``struct dsa_switch_ops`` which are outside of DSA's core focus on
+Ethernet is strongly discouraged.
+
+DSA's support for multi-chip trees also has limitations. After converting from
+the first to the second OF binding, the switch tree stopped being a platform
+device, and its probing became implicit, and distributed among its constituent
+switch devices. There is currently a synchronization point in
+``dsa_tree_setup_routing_table()``, through which the tree setup is performed
+only once, when there is more than one switch in the tree. The first N-1
+switches will end their probing early, and the last switch will configure the
+entire tree, and thus all the other switches, in its ``dsa_register_switch()``
+calling context.
+
+Furthermore, the synchronization point works because each switch is able to
+determine, in a distributed manner, that the routing table is not complete, aka
+that there is at least one switch which has not probed. This is only possible
+because the ``link`` properties in the device tree describe the connections to
+all other cascade ports in the tree, not just to the directly connected cascade
+port. If only the latter were described, it could happen that a switch waits
+for its direct neighbors to probe before setting up the tree, but not
+necessarily for all switches in the tree (therefore, it sets up the tree too
+early).
+
+With more than 3 switches in a tree, it becomes a difficult task to write
+correct device trees which are not missing any link to the other cascade ports
+in the tree. The routing table, based on which ``dsa_routing_port()`` works, is
+directly taken from the device tree, although it could be computed through BFS
+instead. This means that the device tree writer needs to specify more than just
+the hardware description (represented by the direct cascade port connections).
+
+Simplifying the device tree bindings to require a single ``link`` phandle
+cannot be done without rethinking the distributed probing scheme. One idea is
+to reinstate the switch tree as a platform device, but this time created
+dynamically by ``dsa_register_switch()`` if the switch's tree ID is not already
+present in the system. The switch tree driver walks the device tree hop by hop,
+following the ``link`` references, to discover all the other switches, and to
+construct the full routing table. It then uses the component API to register
+itself as an aggregate driver, with each of the discovered switches as a
+component. When ``dsa_register_switch()`` completes for all component switches,
+the tree probing continues and calls ``dsa_tree_setup()``.
+
+The cross-chip management layer (``net/dsa/switch.c``) can also be improved.
+Currently ``struct dsa_switch_tree`` holds a list of ports rather than a list
+of switches, and thus, calling one function for each switch in a tree is hard.
+DSA currently uses one notifier chain per tree as a workaround for that, with
+each switch registered as a listener (``dsa_switch_event()``).
+
+It is considered bad practice to use notifiers when the emitter and the
+listener are known to each other, instead of a plain function call. Also, error
+handling with notifiers is not robust. When one switch fails mid-operation,
+there is no rollback to the previous state for switches which already completed
+the operation successfully.
+
+To untangle this situation and improve the reliability of the cross-chip
+management layer, it is necessary to split the DSA operations into ones which
+can fail, and ones which cannot fail. For example, ``port_fdb_add()`` can fail,
+whereas ``port_fdb_del()`` cannot. Then, cross-chip operations can take a
+fallible function to make forward progress, and an infallible function for
+rollback. However, it is unclear what to do in the case of ``change_mtu()``.
+It is hard to classify this operation as either fallible or infallible. It is
+also unclear how to deal with I/O access errors on the switch's management bus.
