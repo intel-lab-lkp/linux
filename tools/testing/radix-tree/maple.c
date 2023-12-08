@@ -34132,7 +34132,7 @@ STORE, 140501948112896, 140501948116991,
 	mt_init_flags(mt, MT_FLAGS_ALLOC_RANGE);
 	check_erase2_testset(mt, set27, ARRAY_SIZE(set27));
 	rcu_barrier();
-	MT_BUG_ON(mt, 0 != mtree_load(mt, 140415537422336));
+	MT_BUG_ON(mt, NULL != mtree_load(mt, 140415537422336));
 	mt_set_non_kernel(0);
 	mt_validate(mt);
 	mtree_destroy(mt);
@@ -34256,7 +34256,7 @@ STORE, 140501948112896, 140501948116991,
 	mt_init_flags(mt, MT_FLAGS_ALLOC_RANGE);
 	check_erase2_testset(mt, set37, ARRAY_SIZE(set37));
 	rcu_barrier();
-	MT_BUG_ON(mt, 0 != mtree_load(mt, 94637033459712));
+	MT_BUG_ON(mt, NULL != mtree_load(mt, 94637033459712));
 	mt_validate(mt);
 	mtree_destroy(mt);
 
@@ -34264,7 +34264,7 @@ STORE, 140501948112896, 140501948116991,
 	mt_init_flags(mt, MT_FLAGS_ALLOC_RANGE);
 	check_erase2_testset(mt, set38, ARRAY_SIZE(set38));
 	rcu_barrier();
-	MT_BUG_ON(mt, 0 != mtree_load(mt, 94637033459712));
+	MT_BUG_ON(mt, NULL != mtree_load(mt, 94637033459712));
 	mt_validate(mt);
 	mtree_destroy(mt);
 
