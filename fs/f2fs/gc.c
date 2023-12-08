@@ -368,6 +368,14 @@ static inline unsigned int get_gc_cost(struct f2fs_sb_info *sbi,
 	if (p->alloc_mode == SSR)
 		return get_seg_entry(sbi, segno)->ckpt_valid_blocks;
 
+	/*
+	 * If we don't need to clean dirty nodes,
+	 * we just skip node victims.
+	 */
+	if (IS_NODESEG(get_seg_entry(sbi, segno)->type) &&
+		!sbi->need_node_clean)
+		return get_max_cost(sbi, p);
+
 	/* alloc_mode == LFS */
 	if (p->gc_mode == GC_GREEDY)
 		return get_valid_blocks(sbi, segno, true);
@@ -555,6 +563,14 @@ next:
 		return;
 
 	if (ve->mtime >= max_mtime || ve->mtime < min_mtime)
+		goto skip;
+
+	/*
+	 * If we don't need to clean dirty nodes,
+	 * we just skip node victims.
+	 */
+	if (IS_NODESEG(get_seg_entry(sbi, ve->segno)->type) &&
+	    !sbi->need_node_clean)
 		goto skip;
 
 	/* age = 10000 * x% * 60 */
@@ -913,7 +929,21 @@ next:
 		goto retry;
 	}
 
+
 	if (p.min_segno != NULL_SEGNO) {
+		if (sbi->need_node_clean &&
+		    IS_DATASEG(get_seg_entry(sbi, p.min_segno)->type)) {
+			 /*
+			  * we need to clean node sections.
+			  * but, data victim cost is the lowest.
+			  * if free sections are enough, stop cleaning node victim.
+			  * if not, it goes on by GCing data victims.
+			  */
+			if (has_enough_free_secs(sbi, prefree_segments(sbi), 0)) {
+				p.min_segno = NULL_SEGNO;
+				goto out;
+			}
+		}
 got_it:
 		*result = (p.min_segno / p.ofs_unit) * p.ofs_unit;
 got_result:
@@ -1830,8 +1860,27 @@ gc_more:
 		goto stop;
 	}
 
+	__get_secs_required(sbi, NULL, &upper_secs, NULL);
+
+	/*
+	 * Write checkpoint to reclaim prefree segments.
+	 * We need more three extra sections for writer's data/node/dentry.
+	 */
+	if (free_sections(sbi) <= upper_secs + NR_GC_CHECKPOINT_SECS) {
+		sbi->need_node_clean = true;
+
+		if (prefree_segments(sbi)) {
+			stat_inc_cp_call_count(sbi, TOTAL_CALL);
+			ret = f2fs_write_checkpoint(sbi, &cpc);
+			if (ret)
+				goto stop;
+			/* Reset due to checkpoint */
+			sec_freed = 0;
+		}
+	}
+
 	/* Let's run FG_GC, if we don't have enough space. */
-	if (has_not_enough_free_secs(sbi, 0, 0)) {
+	if (gc_type == BG_GC && has_not_enough_free_secs(sbi, 0, 0)) {
 		gc_type = FG_GC;
 
 		/*
@@ -1858,10 +1907,22 @@ retry:
 	ret = __get_victim(sbi, &segno, gc_type);
 	if (ret) {
 		/* allow to search victim from sections has pinned data */
-		if (ret == -ENODATA && gc_type == FG_GC &&
-				f2fs_pinned_section_exists(DIRTY_I(sbi))) {
-			f2fs_unpin_all_sections(sbi, false);
-			goto retry;
+		if (ret == -ENODATA && gc_type == FG_GC) {
+			if (f2fs_pinned_section_exists(DIRTY_I(sbi))) {
+				f2fs_unpin_all_sections(sbi, false);
+				goto retry;
+			}
+			/*
+			 * If we have no more data victims, let's start to
+			 * clean dirty nodes.
+			 */
+			if (!sbi->need_node_clean) {
+				sbi->need_node_clean = true;
+				goto retry;
+			}
+			/* node cleaning is over */
+			else if (sbi->need_node_clean)
+				goto stop;
 		}
 		goto stop;
 	}
@@ -1882,7 +1943,13 @@ retry:
 			if (!gc_control->no_bg_gc &&
 			    total_sec_freed < gc_control->nr_free_secs)
 				goto go_gc_more;
-			goto stop;
+			/*
+			 * If the need_node_clean flag is set
+			 * even though there are enough free
+			 * sections, node cleaning will continue.
+			 */
+			if (!sbi->need_node_clean)
+				goto stop;
 		}
 		if (sbi->skipped_gc_rwsem)
 			skipped_round++;
@@ -1897,21 +1964,6 @@ retry:
 		goto stop;
 	}
 
-	__get_secs_required(sbi, NULL, &upper_secs, NULL);
-
-	/*
-	 * Write checkpoint to reclaim prefree segments.
-	 * We need more three extra sections for writer's data/node/dentry.
-	 */
-	if (free_sections(sbi) <= upper_secs + NR_GC_CHECKPOINT_SECS &&
-				prefree_segments(sbi)) {
-		stat_inc_cp_call_count(sbi, TOTAL_CALL);
-		ret = f2fs_write_checkpoint(sbi, &cpc);
-		if (ret)
-			goto stop;
-		/* Reset due to checkpoint */
-		sec_freed = 0;
-	}
 go_gc_more:
 	segno = NULL_SEGNO;
 	goto gc_more;
@@ -1920,8 +1972,10 @@ stop:
 	SIT_I(sbi)->last_victim[ALLOC_NEXT] = 0;
 	SIT_I(sbi)->last_victim[FLUSH_DEVICE] = gc_control->victim_segno;
 
-	if (gc_type == FG_GC)
+	if (gc_type == FG_GC) {
 		f2fs_unpin_all_sections(sbi, true);
+		sbi->need_node_clean = false;
+	}
 
 	trace_f2fs_gc_end(sbi->sb, ret, total_freed, total_sec_freed,
 				get_pages(sbi, F2FS_DIRTY_NODES),
