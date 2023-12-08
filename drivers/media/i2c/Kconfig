@@ -1511,6 +1511,19 @@ config VIDEO_MAX96714
 	  Device driver for the Maxim MAX96714
 	  GMSL2 Deserializer.
 
+config VIDEO_MAX96717
+	tristate "Maxim MAX96717 GMSL2 Serializer support"
+	depends on OF && I2C && VIDEO_DEV && COMMON_CLK
+	select I2C_MUX
+	select MEDIA_CONTROLLER
+	select GPIOLIB
+	select REGMAP_I2C
+	select V4L2_FWNODE
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  Device driver for the Maxim MAX96717
+	  GMSL2 Serializer.
+
 endmenu
 
 endif # VIDEO_DEV
