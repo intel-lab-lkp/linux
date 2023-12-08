@@ -622,7 +622,7 @@ console_initcall(kgdboc_earlycon_late_init);
 
 #endif /* IS_BUILTIN(CONFIG_KGDB_SERIAL_CONSOLE) */
 
-module_init(init_kgdboc);
+late_initcall_sync(init_kgdboc);
 module_exit(exit_kgdboc);
 module_param_call(kgdboc, param_set_kgdboc_var, param_get_string, &kps, 0644);
 MODULE_PARM_DESC(kgdboc, "<serial_device>[,baud]");
