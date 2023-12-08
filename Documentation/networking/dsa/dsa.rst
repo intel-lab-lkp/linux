@@ -221,6 +221,44 @@ receive all frames regardless of the value of the MAC DA. This can be done by
 setting the ``promisc_on_conduit`` property of the ``struct dsa_device_ops``.
 Note that this assumes a DSA-unaware conduit driver, which is the norm.
 
+Separation between tagging protocol and switch drivers
+------------------------------------------------------
+
+Sometimes it is desirable to test the behavior of a given conduit interface
+with a given switch protocol, to see how it responds to checksum offloading,
+padding with tail tags, increased MTU, how the hardware parser sees DSA-tagged
+frames, etc.
+
+To achieve that, any tagging protocol driver may be used with ``dsa_loop``
+(this requires modifying the ``dsa_loop_get_protocol()`` function
+implementation). Therefore, tagging protocol drivers must not assume that they
+are used only in conjunction with a particular switch driver. Concretely, the
+tagging protocol driver should make no assumptions about the type of
+``ds->priv``, and its core functionality should only rely on the data
+structures offered by the DSA core for all switches (``struct dsa_switch``,
+``struct dsa_port`` etc).
+
+Additionally, tagging protocol drivers must not depend on symbols exported by
+any particular switch control path driver. Doing so would create a circular
+dependency, because DSA, on behalf of the switch driver, already requests the
+appropriate tagging protocol driver module to be loaded.
+
+Nonetheless, there are exceptional situations when switch-specific processing
+is required in a tagging protocol driver. In some cases the tagger needs a
+place to hold state; in other cases, the packet transmission procedure may
+involve accessing switch registers. The tagger may also be processing packets
+which are not destined for the network stack but for the switch driver's
+management logic, and thus, the switch driver should have a handler for these
+management frames.
+
+A mechanism, called tagger-owned storage (in reference to ``ds->tagger_data``),
+exists, which permits tagging protocol drivers to allocate memory for each
+switch that they connect to. Each tagging protocol driver may define its own
+contract with switch drivers as to what this data structure contains.
+Through the ``struct dsa_device_ops`` methods ``connect()`` and ``disconnect()``,
+tagging protocol drivers are given the possibility to manage the
+``ds->tagger_data`` pointer of any switch that they connect to.
+
 Conduit network devices
 -----------------------
 
@@ -623,6 +661,27 @@ Switch configuration
   at runtime, either through a device tree property or through sysfs. In that
   case, further calls to ``get_tag_protocol`` should report the protocol in
   current use.
+
+- ``connect_tag_protocol``: optional method to notify the switch driver that a
+  tagging protocol driver has connected to this switch. Depending on the
+  contract established by the protocol given in the ``proto`` argument, the
+  tagger-owned storage (``ds->tagger_data``) may be expected to contain a
+  pointer to a data structure specific to the tagging protocol. This data
+  structure may contain function pointers to packet handlers that the switch
+  driver registers with the tagging protocol. If interested in these packets,
+  the switch driver must cast the ``ds->tagger_data`` pointer to the data type
+  established by the tagging protocol, and assign the packet handler function
+  pointers to methods that it owns. Since the memory pointed to by
+  ``ds->tagger_data`` is owned by the tagging protocol, the switch driver must
+  assume by convention that it has been allocated, and this method is only
+  provided for making initial adjustments to the contents of ``ds->tagger_data``.
+  It is also the reason why no ``disconnect_tag_protocol()`` counterpart is
+  provided. Additionally, a tagging protocol driver which makes use of
+  tagger-owned storage must not assume that the connected switch has
+  implemented the ``connect_tag_protocol()`` method (it may connect to a
+  ``dsa_loop`` switch, which does not). Therefore, a tagging protocol may
+  always rely on ``ds->tagger_data``, but it must treat the packet handlers
+  provided by the switch in this method as optional.
 
 - ``setup``: setup function for the switch, this function is responsible for setting
   up the ``dsa_switch_ops`` private structure with all it needs: register maps,
