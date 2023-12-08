@@ -1,0 +1,30 @@
+drm drm-fixes b7b5a56acec819bb8dcd03c687e97a091b29d28f
+	Merge tag 'exynos-drm-next-for-v6.7-rc5' of git://git.kernel.org/pub/scm/linux/kernel/git/daeinki/drm-exynos into drm-fixes
+drm-misc drm-misc-fixes 3823119b9c2b5f9e9b760336f75bc989b805cde6
+	drm/crtc: Fix uninit-value bug in drm_mode_setcrtc
+drm-intel drm-intel-fixes 9f269070abe9c45dc60abc84e29326f855317eac
+	drm/i915: correct the input parameter on _intel_dsb_commit()
+drm drm-next a60501d7c2d3e70b3545b9b96576628e369d8e85
+	Merge tag 'drm-misc-next-2023-12-07' of git://anongit.freedesktop.org/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next fca9448ae2f5ddebd841c727ee86136e1b5cbd86
+	drm/imagination: Move dereference after NULL check in pvr_mmu_backing_page_init()
+drm-intel drm-intel-next 10690b8a49bceafb1badf0ad91842a359e796d8b
+	drm/i915/display: Add intel_fb_bo_framebuffer_fini
+drm-intel drm-intel-gt-next be5bcc4be9d9d3ae294072441a66fe39b74e5bba
+	drm/i915/guc: Create the guc_to_i915() wrapper
+drm-intel topic/core-for-CI 1b41fe116e165c113744d56d71ceeee122d740c5
+	Revert "debugfs: annotate debugfs handlers vs. removal with lockdep"
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
