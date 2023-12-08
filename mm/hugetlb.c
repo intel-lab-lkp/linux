@@ -4497,6 +4497,7 @@ static inline void hugetlb_sysctl_init(void) { }
 static int __init hugetlb_init(void)
 {
 	int i;
+	unsigned long start;
 
 	BUILD_BUG_ON(sizeof_field(struct page, private) * BITS_PER_BYTE <
 			__NR_HPAGEFLAGS);
@@ -4543,8 +4544,11 @@ static int __init hugetlb_init(void)
 	}
 
 	hugetlb_cma_check();
+	start = jiffies;
 	hugetlb_init_hstates();
 	gather_bootmem_prealloc();
+	pr_info("HugeTLB: 2M alloc, init and 1G init takes %u ms\n",
+		jiffies_to_msecs(jiffies - start));
 	report_hugepages();
 
 	hugetlb_sysfs_init();
@@ -4689,6 +4693,7 @@ static int __init hugepages_setup(char *s)
 		}
 	}
 
+	unsigned long start = jiffies;
 	/*
 	 * Global state is always initialized later in hugetlb_init.
 	 * But we need to allocate gigantic hstates here early to still
@@ -4699,6 +4704,7 @@ static int __init hugepages_setup(char *s)
 
 	last_mhp = mhp;
 
+	pr_info("HugeTLB: 1G alloc takes %u ms\n", jiffies_to_msecs(jiffies - start));
 	return 1;
 
 invalid:
