@@ -313,6 +313,7 @@ struct pci_sriov {
 	u16		subsystem_device; /* VF subsystem device */
 	resource_size_t	barsz[PCI_SRIOV_NUM_BARS];	/* VF BAR size */
 	bool		drivers_autoprobe; /* Auto probing of VFs by driver */
+	struct mutex	lock; /* for synchronizing num_VFs sysfs accesses */
 };
 
 #ifdef CONFIG_PCI_DOE

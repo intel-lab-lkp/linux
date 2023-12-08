@@ -398,9 +398,9 @@ static ssize_t sriov_numvfs_show(struct device *dev,
 	u16 num_vfs;
 
 	/* Serialize vs sriov_numvfs_store() so readers see valid num_VFs */
-	device_lock(&pdev->dev);
+	mutex_lock(&pdev->sriov->lock);
 	num_vfs = pdev->sriov->num_VFs;
-	device_unlock(&pdev->dev);
+	mutex_unlock(&pdev->sriov->lock);
 
 	return sysfs_emit(buf, "%u\n", num_vfs);
 }
@@ -427,6 +427,7 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 		return -ERANGE;
 
 	device_lock(&pdev->dev);
+	mutex_lock(&pdev->sriov->lock);
 
 	if (num_vfs == pdev->sriov->num_VFs)
 		goto exit;
@@ -468,6 +469,7 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 			 num_vfs, ret);
 
 exit:
+	mutex_unlock(&pdev->sriov->lock);
 	device_unlock(&pdev->dev);
 
 	if (ret < 0)
@@ -808,6 +810,7 @@ found:
 		nres++;
 	}
 
+	mutex_init(&iov->lock);
 	iov->pos = pos;
 	iov->nres = nres;
 	iov->ctrl = ctrl;
