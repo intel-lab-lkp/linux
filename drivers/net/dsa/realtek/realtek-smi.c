@@ -358,7 +358,6 @@ int realtek_smi_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->mdio);
 
 	priv->write_reg_noack = realtek_smi_write_reg_noack;
-	priv->ds_ops = priv->variant->ds_ops_custom_user_mdio;
 
 	return realtek_common_probe_post(priv);
 }

@@ -42,7 +42,7 @@ int realtek_common_setup_user_mdio(struct dsa_switch *ds)
 {
 	struct realtek_priv *priv =  ds->priv;
 	struct device_node *mdio_np;
-	const char compatible = "realtek,smi-mdio";
+	const char *compatible = "realtek,smi-mdio";
 	int ret;
 
 	mdio_np = of_get_child_by_name(priv->dev->of_node, "mdio");
@@ -172,7 +172,7 @@ int realtek_common_probe_post(struct realtek_priv *priv)
 
 	priv->ds->priv = priv;
 	priv->ds->dev = priv->dev;
-	priv->ds->ops = priv->ds_ops;
+	priv->ds->ops = priv->variant->ds_ops;
 	priv->ds->num_ports = priv->num_ports;
 
 	ret = dsa_register_switch(priv->ds);
