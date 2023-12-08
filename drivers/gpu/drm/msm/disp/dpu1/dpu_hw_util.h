@@ -22,6 +22,7 @@
 enum dpu_hw_csc_cfg_type {
 	DPU_HW_YUV2RGB_601L,
 	DPU_HW_YUV2RGB_601L_10BIT,
+	DPU_HW_RGB2YUV_601L_10BIT,
 };
 
 /*

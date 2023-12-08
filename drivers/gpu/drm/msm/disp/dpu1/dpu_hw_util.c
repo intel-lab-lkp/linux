@@ -87,6 +87,8 @@ static u32 dpu_hw_util_log_mask = DPU_DBG_MASK_NONE;
 #define QOS_QOS_CTRL_VBLANK_EN            BIT(16)
 #define QOS_QOS_CTRL_CREQ_VBLANK_MASK     GENMASK(21, 20)
 
+#define TO_S15D16(_x_)((_x_) << 7)
+
 static const struct dpu_csc_cfg dpu_csc_YUV2RGB_601L = {
 	{
 		/* S15.16 format */
@@ -117,6 +119,18 @@ static const struct dpu_csc_cfg dpu_csc10_YUV2RGB_601L = {
 	{ 0x00, 0x3ff, 0x00, 0x3ff, 0x00, 0x3ff,},
 };
 
+static const struct dpu_csc_cfg dpu_csc10_rgb2yuv_601l = {
+	{
+		TO_S15D16(0x0083), TO_S15D16(0x0102), TO_S15D16(0x0032),
+		TO_S15D16(0x1fb5), TO_S15D16(0x1f6c), TO_S15D16(0x00e1),
+		TO_S15D16(0x00e1), TO_S15D16(0x1f45), TO_S15D16(0x1fdc)
+	},
+	{ 0x00, 0x00, 0x00 },
+	{ 0x0040, 0x0200, 0x0200 },
+	{ 0x000, 0x3ff, 0x000, 0x3ff, 0x000, 0x3ff },
+	{ 0x040, 0x3ac, 0x040, 0x3c0, 0x040, 0x3c0 },
+};
+
 /**
  * dpu_hw_get_csc_cfg - get the CSC matrix based on the request type
  * @type:		type of the requested CSC matrix from caller
@@ -132,6 +146,9 @@ const struct dpu_csc_cfg *dpu_hw_get_csc_cfg(enum dpu_hw_csc_cfg_type type)
 		break;
 	case DPU_HW_YUV2RGB_601L_10BIT:
 		csc_cfg = &dpu_csc10_YUV2RGB_601L;
+		break;
+	case DPU_HW_RGB2YUV_601L_10BIT:
+		csc_cfg = &dpu_csc10_rgb2yuv_601l;
 		break;
 	default:
 		DPU_ERROR("unknown csc_cfg type\n");
