@@ -141,7 +141,7 @@ int realtek_mdio_probe(struct mdio_device *mdiodev)
 	priv->bus = mdiodev->bus;
 	priv->mdio_addr = mdiodev->addr;
 	priv->write_reg_noack = realtek_mdio_write;
-	priv->ds_ops = priv->variant->ds_ops_mdio;
+	priv->ds_ops = priv->variant->ds_ops_default_user_mdio;
 
 	return realtek_common_probe_post(priv);
 

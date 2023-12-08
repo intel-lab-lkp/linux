@@ -1027,8 +1027,8 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 	if (ret)
 		dev_info(priv->dev, "no interrupt support\n");
 
-	if (priv->setup_interface) {
-		ret = priv->setup_interface(ds);
+	if (!priv->ds_ops->phy_read) {
+		ret = realtek_common_setup_user_mdio(ds);
 		if (ret) {
 			dev_err(priv->dev, "could not set up MDIO bus\n");
 			return -ENODEV;
@@ -1848,7 +1848,7 @@ static int rtl8366rb_detect(struct realtek_priv *priv)
 	return 0;
 }
 
-static const struct dsa_switch_ops rtl8366rb_switch_ops_smi = {
+static const struct dsa_switch_ops rtl8366rb_switch_ops_custom_user_mdio = {
 	.get_tag_protocol = rtl8366_get_tag_protocol,
 	.setup = rtl8366rb_setup,
 	.phylink_get_caps = rtl8366rb_phylink_get_caps,
@@ -1872,7 +1872,7 @@ static const struct dsa_switch_ops rtl8366rb_switch_ops_smi = {
 	.port_max_mtu = rtl8366rb_max_mtu,
 };
 
-static const struct dsa_switch_ops rtl8366rb_switch_ops_mdio = {
+static const struct dsa_switch_ops rtl8366rb_switch_ops_default_user_mdio = {
 	.get_tag_protocol = rtl8366_get_tag_protocol,
 	.setup = rtl8366rb_setup,
 	.phy_read = rtl8366rb_dsa_phy_read,
@@ -1915,8 +1915,8 @@ static const struct realtek_ops rtl8366rb_ops = {
 };
 
 const struct realtek_variant rtl8366rb_variant = {
-	.ds_ops_smi = &rtl8366rb_switch_ops_smi,
-	.ds_ops_mdio = &rtl8366rb_switch_ops_mdio,
+	.ds_ops_default_user_mdio = &rtl8366rb_switch_ops_default_user_mdio,
+	.ds_ops_custom_user_mdio = &rtl8366rb_switch_ops_custom_user_mdio,
 	.ops = &rtl8366rb_ops,
 	.clk_delay = 10,
 	.cmd_read = 0xa9,
