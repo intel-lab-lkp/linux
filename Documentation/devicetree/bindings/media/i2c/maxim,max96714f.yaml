@@ -95,69 +95,69 @@ examples:
     #include <dt-bindings/media/video-interfaces.h>
 
     main_i2c2 {
-            #address-cells = <1>;
-            #size-cells = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
 
-            gmsl-deserializer@28 {
-                    compatible = "maxim,max96714f";
-                    reg = <0x28>;
-                    enable-gpios = <&main_gpio0 37 GPIO_ACTIVE_HIGH>;
+        gmsl-deserializer@28 {
+            compatible = "maxim,max96714f";
+            reg = <0x28>;
+            enable-gpios = <&main_gpio0 37 GPIO_ACTIVE_HIGH>;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+                port@0 {
+                    reg = <0>;
+                    max96714_gmsl_in: endpoint {
+                        remote-endpoint = <&max96917f_gmsl_out>;
+                    };
+                };
+
+                port@1 {
+                    reg = <1>;
+                    max96714_csi_out: endpoint {
+                        bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+                        clock-lanes = <0>;
+                        data-lanes = <1 2 3 4>;
+                        link-frequencies = /bits/ 64 <400000000>;
+                        remote-endpoint = <&csi_in>;
+                    };
+                };
+            };
+
+            i2c-gate {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                gmsl-serializer@40 {
+                    compatible = "maxim,max96717f";
+                    reg = <0x40>;
+                    gpio-controller;
+                    #gpio-cells = <2>;
+                    #clock-cells = <0>;
 
                     ports {
-                            #address-cells = <1>;
-                            #size-cells = <0>;
-                            port@0 {
-                                    reg = <0>;
-                                    max96714_gmsl_in: endpoint {
-                                            remote-endpoint = <&max96917f_gmsl_out>;
-                                    };
-                           };
+                        #address-cells = <1>;
+                        #size-cells = <0>;
 
-                            port@1 {
-                                    reg = <1>;
-                                    max96714_csi_out: endpoint {
-                                            bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
-                                            clock-lanes = <0>;
-                                            data-lanes = <1 2 3 4>;
-                                            link-frequencies = /bits/ 64 <400000000>;
-                                            remote-endpoint = <&csi_in>;
-                                    };
+                        port@0 {
+                            reg = <0>;
+                            max96717f_csi_in: endpoint {
+                                data-lanes = <1 2>;
+                                lane-polarities = <1 0 1>;
+                                remote-endpoint = <&vd5661_csi>;
                             };
-                    };
+                        };
 
-                    i2c-gate {
-                            #address-cells = <1>;
-                            #size-cells = <0>;
-
-                            gmsl-serializer@40 {
-                                   compatible = "maxim,max96717f";
-                                   reg = <0x40>;
-                                   gpio-controller;
-                                   #gpio-cells = <2>;
-                                   #clock-cells = <0>;
-
-                                   ports {
-                                            #address-cells = <1>;
-                                            #size-cells = <0>;
-
-                                            port@0 {
-                                                    reg = <0>;
-                                                    max96717f_csi_in: endpoint {
-                                                            data-lanes = <1 2>;
-                                                            lane-polarities = <1 0 1>;
-                                                            remote-endpoint = <&vd5661_csi>;
-                                                    };
-                                            };
-
-                                            port@1 {
-                                                    reg = <1>;
-                                                    max96917f_gmsl_out: endpoint {
-                                                            remote-endpoint = <&max96714_gmsl_in>;
-                                                    };
-                                            };
-                                   };
+                        port@1 {
+                            reg = <1>;
+                            max96917f_gmsl_out: endpoint {
+                                remote-endpoint = <&max96714_gmsl_in>;
                             };
+                        };
                     };
+                };
             };
+        };
     };
 ...
