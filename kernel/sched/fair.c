@@ -878,7 +878,7 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 {
 	struct rb_node *node = cfs_rq->tasks_timeline.rb_root.rb_node;
-	struct sched_entity *se = __pick_first_entity(cfs_rq);
+	struct sched_entity *first = __pick_first_entity(cfs_rq);
 	struct sched_entity *curr = cfs_rq->curr;
 	struct sched_entity *best = NULL;
 
@@ -887,7 +887,7 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	 * in this cfs_rq, saving some cycles.
 	 */
 	if (cfs_rq->nr_running == 1)
-		return curr && curr->on_rq ? curr : se;
+		return curr && curr->on_rq ? curr : first;
 
 	if (curr && (!curr->on_rq || !entity_eligible(cfs_rq, curr)))
 		curr = NULL;
@@ -900,14 +900,15 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 		return curr;
 
 	/* Pick the leftmost entity if it's eligible */
-	if (se && entity_eligible(cfs_rq, se)) {
-		best = se;
+	if (first && entity_eligible(cfs_rq, first)) {
+		best = first;
 		goto found;
 	}
 
 	/* Heap search for the EEVD entity */
 	while (node) {
 		struct rb_node *left = node->rb_left;
+		struct sched_entity *se;
 
 		/*
 		 * Eligible entities in left subtree are always better
@@ -936,6 +937,9 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 found:
 	if (!best || (curr && entity_before(curr, best)))
 		best = curr;
+
+	if (WARN_ONCE(!best, "EEVDF scheduling failed, picking leftmost\n"))
+		best = first;
 
 	return best;
 }
