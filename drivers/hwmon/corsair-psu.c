@@ -899,7 +899,20 @@ static struct hid_driver corsairpsu_driver = {
 	.reset_resume	= corsairpsu_resume,
 #endif
 };
-module_hid_driver(corsairpsu_driver);
+
+static int __init corsairpsu_hid_init(void)
+{
+	return hid_register_driver(&corsairpsu_driver);
+}
+
+static void __exit corsairpsu_hid_exit(void)
+{
+	hid_unregister_driver(&corsairpsu_driver);
+}
+
+/* When compiled into the kernel, initialize after the hid bus */
+late_initcall(corsairpsu_hid_init);
+module_exit(corsairpsu_hid_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Wilken Gottwalt <wilken.gottwalt@posteo.net>");
