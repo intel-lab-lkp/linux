@@ -1296,6 +1296,15 @@ static bool btmtksdio_sdio_inband_wakeup(struct hci_dev *hdev)
 	return device_may_wakeup(bdev->dev);
 }
 
+static void btmtksdio_disable_bt_wakeup(struct hci_dev *hdev)
+{
+	struct btmtksdio_dev *bdev = hci_get_drvdata(hdev);
+
+	if (!bdev)
+		return;
+	clear_bit(BTMTKSDIO_BT_WAKE_ENABLED, &bdev->tx_state);
+}
+
 static bool btmtksdio_sdio_wakeup(struct hci_dev *hdev)
 {
 	struct btmtksdio_dev *bdev = hci_get_drvdata(hdev);
@@ -1363,6 +1372,7 @@ static int btmtksdio_probe(struct sdio_func *func,
 	hdev->shutdown = btmtksdio_shutdown;
 	hdev->send     = btmtksdio_send_frame;
 	hdev->wakeup   = btmtksdio_sdio_wakeup;
+	hdev->clear_wakeup = btmtksdio_disable_bt_wakeup;
 	/*
 	 * If SDIO controller supports wake on Bluetooth, sending a wakeon
 	 * command is not necessary.
