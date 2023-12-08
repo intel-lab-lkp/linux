@@ -45,6 +45,7 @@ static bool etm_perf_up;
 struct etm_ctxt {
 	struct perf_output_handle handle;
 	struct etm_event_data *event_data;
+	int pr_allowed;
 };
 
 static DEFINE_PER_CPU(struct etm_ctxt, etm_ctxt);
@@ -452,6 +453,13 @@ static void etm_event_start(struct perf_event *event, int flags)
 	struct list_head *path;
 	u64 hw_id;
 
+	if (mode & PERF_EF_RESUME) {
+		if (!READ_ONCE(ctxt->pr_allowed))
+			return;
+	} else if (READ_ONCE(event->aux_paused)) {
+		goto out_pr_allowed;
+	}
+
 	if (!csdev)
 		goto fail;
 
@@ -514,6 +522,8 @@ out:
 	event->hw.state = 0;
 	/* Save the event_data for this ETM */
 	ctxt->event_data = event_data;
+out_pr_allowed:
+	WRITE_ONCE(ctxt->pr_allowed, 1);
 	return;
 
 fail_disable_path:
@@ -530,6 +540,7 @@ fail_end_stop:
 	}
 fail:
 	event->hw.state = PERF_HES_STOPPED;
+	WRITE_ONCE(ctxt->pr_allowed, 0);
 	return;
 }
 
@@ -542,6 +553,11 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	struct perf_output_handle *handle = &ctxt->handle;
 	struct etm_event_data *event_data;
 	struct list_head *path;
+
+	if (mode & PERF_EF_PAUSE && !READ_ONCE(ctxt->pr_allowed))
+		return;
+
+	WRITE_ONCE(ctxt->pr_allowed, 0);
 
 	/*
 	 * If we still have access to the event_data via handle,
@@ -556,7 +572,7 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	ctxt->event_data = NULL;
 
 	if (event->hw.state == PERF_HES_STOPPED)
-		return;
+		goto out_pr_allowed;
 
 	/* We must have a valid event_data for a running event */
 	if (WARN_ON(!event_data))
@@ -627,6 +643,10 @@ static void etm_event_stop(struct perf_event *event, int mode)
 
 	/* Disabling the path make its elements available to other sessions */
 	coresight_disable_path(path);
+
+out_pr_allowed:
+	if (mode & PERF_EF_PAUSE)
+		WRITE_ONCE(ctxt->pr_allowed, 1);
 }
 
 static int etm_event_add(struct perf_event *event, int mode)
@@ -634,7 +654,7 @@ static int etm_event_add(struct perf_event *event, int mode)
 	int ret = 0;
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (mode & PERF_EF_START) {
+	if (mode & PERF_EF_START && !READ_ONCE(event->aux_paused)) {
 		etm_event_start(event, 0);
 		if (hwc->state & PERF_HES_STOPPED)
 			ret = -EINVAL;
@@ -886,8 +906,9 @@ int __init etm_perf_init(void)
 {
 	int ret;
 
-	etm_pmu.capabilities		= (PERF_PMU_CAP_EXCLUSIVE |
-					   PERF_PMU_CAP_ITRACE);
+	etm_pmu.capabilities		= PERF_PMU_CAP_EXCLUSIVE |
+					  PERF_PMU_CAP_ITRACE |
+					  PERF_PMU_CAP_AUX_PAUSE;
 
 	etm_pmu.attr_groups		= etm_pmu_attr_groups;
 	etm_pmu.task_ctx_nr		= perf_sw_context;
