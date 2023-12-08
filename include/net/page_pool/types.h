@@ -134,6 +134,33 @@ struct memory_provider_ops {
 	bool (*release_page)(struct page_pool *pool, struct page *page);
 };
 
+/* page_pool_iov support */
+
+/* Owner of the dma-buf chunks inserted into the gen pool. Each scatterlist
+ * entry from the dmabuf is inserted into the genpool as a chunk, and needs
+ * this owner struct to keep track of some metadata necessary to create
+ * allocations from this chunk.
+ */
+struct dmabuf_genpool_chunk_owner {
+	/* Offset into the dma-buf where this chunk starts.  */
+	unsigned long base_virtual;
+
+	/* dma_addr of the start of the chunk.  */
+	dma_addr_t base_dma_addr;
+
+	/* Array of page_pool_iovs for this chunk. */
+	struct page_pool_iov *ppiovs;
+	size_t num_ppiovs;
+
+	struct netdev_dmabuf_binding *binding;
+};
+
+struct page_pool_iov {
+	struct dmabuf_genpool_chunk_owner *owner;
+
+	refcount_t refcount;
+};
+
 struct page_pool {
 	struct page_pool_params_fast p;
 
