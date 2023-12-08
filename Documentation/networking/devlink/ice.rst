@@ -11,6 +11,7 @@ Parameters
 ==========
 
 .. list-table:: Generic parameters implemented
+   :widths: 5 5 90
 
    * - Name
      - Mode
@@ -21,6 +22,20 @@ Parameters
    * - ``enable_iwarp``
      - runtime
      - mutually exclusive with ``enable_roce``
+
+.. list-table:: Driver specific parameters implemented
+   :widths: 5 5 90
+
+   * - Name
+     - Mode
+     - Description
+   * - ``loopback``
+     - runtime
+     - Controls loopback behavior by tuning scheduler bandwidth.
+       Supported values are ``enabled``, ``disabled``, ``prioritized``.
+       The latter allows for bandwidth higher than external port speed
+       when looping back traffic between VFs. Works with 8x10G and 4x25G
+       cards.
 
 Info versions
 =============
