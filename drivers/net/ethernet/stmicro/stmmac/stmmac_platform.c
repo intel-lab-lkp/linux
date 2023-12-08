@@ -324,6 +324,7 @@ static int stmmac_dt_phy(struct plat_stmmacenet_data *plat,
 			 struct device_node *np, struct device *dev)
 {
 	bool mdio = !of_phy_is_fixed_link(np);
+	bool has_xpcs = false;
 	static const struct of_device_id need_mdio_ids[] = {
 		{ .compatible = "snps,dwc-qos-ethernet-4.10" },
 		{},
@@ -345,6 +346,7 @@ static int stmmac_dt_phy(struct plat_stmmacenet_data *plat,
 
 	if (plat->mdio_node) {
 		dev_dbg(dev, "Found MDIO subnode\n");
+		has_xpcs = of_property_read_bool(plat->mdio_node, "snps,xpcs");
 		mdio = true;
 	}
 
@@ -356,6 +358,9 @@ static int stmmac_dt_phy(struct plat_stmmacenet_data *plat,
 			return -ENOMEM;
 
 		plat->mdio_bus_data->needs_reset = true;
+		plat->mdio_bus_data->has_xpcs = has_xpcs;
+		if (plat->mdio_bus_data->has_xpcs)
+			plat->mdio_bus_data->xpcs_an_inband = true;
 	}
 
 	return 0;
