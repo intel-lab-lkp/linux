@@ -2205,6 +2205,23 @@ err_remove_group:
 	return ret;
 }
 
+static void reset_queues_for_apid(struct ap_matrix_mdev *matrix_mdev,
+				  unsigned long apid)
+{
+	DECLARE_BITMAP(apm_reset, AP_DEVICES);
+
+	/*
+	 * If the adapter is not in the host's AP configuration, then resetting
+	 * any queue for that adapter will fail with response code 01, (APQN not
+	 * valid).
+	 */
+	if (test_bit_inv(apid, (unsigned long *)matrix_dev->info.apm)) {
+		bitmap_clear(apm_reset, 0, AP_DEVICES);
+		set_bit_inv(apid, apm_reset);
+		reset_queues_for_apids(matrix_mdev, apm_reset);
+	}
+}
+
 void vfio_ap_mdev_remove_queue(struct ap_device *apdev)
 {
 	unsigned long apid, apqi;
@@ -2217,24 +2234,28 @@ void vfio_ap_mdev_remove_queue(struct ap_device *apdev)
 	matrix_mdev = q->matrix_mdev;
 
 	if (matrix_mdev) {
-		vfio_ap_unlink_queue_fr_mdev(q);
-
-		apid = AP_QID_CARD(q->apqn);
-		apqi = AP_QID_QUEUE(q->apqn);
-
-		/*
-		 * If the queue is assigned to the guest's APCB, then remove
-		 * the adapter's APID from the APCB and hot it into the guest.
-		 */
+		/* If the queue is assigned to the guest's AP configuration */
 		if (test_bit_inv(apid, matrix_mdev->shadow_apcb.apm) &&
 		    test_bit_inv(apqi, matrix_mdev->shadow_apcb.aqm)) {
+			/*
+			 * Since the queues are defined via a matrix of adapters
+			 * and domains, it is not possible to hot unplug a
+			 * single queue; so, let's unplug the adapter.
+			 */
 			clear_bit_inv(apid, matrix_mdev->shadow_apcb.apm);
 			vfio_ap_mdev_update_guest_apcb(matrix_mdev);
+			reset_queues_for_apid(matrix_mdev, apid);
+			goto done;
 		}
 	}
 
 	vfio_ap_mdev_reset_queue(q);
 	flush_work(&q->reset_work);
+
+done:
+	if (matrix_mdev)
+		vfio_ap_unlink_queue_fr_mdev(q);
+
 	dev_set_drvdata(&apdev->device, NULL);
 	kfree(q);
 	release_update_locks_for_mdev(matrix_mdev);
