@@ -77,3 +77,17 @@ configuration:
 	#[cfg(CONFIG_X="y")]   // Enabled as a built-in (`y`)
 	#[cfg(CONFIG_X="m")]   // Enabled as a module   (`m`)
 	#[cfg(not(CONFIG_X))]  // Disabled
+
+Testing
+-------
+
+To run the Rust tests, you can use the following make target::
+
+	make LLVM=1 rusttest
+
+This requires the kernel .config and downloads external repos.
+
+The tests can be run via kunit, too::
+
+	./tools/testing/kunit/kunit.py run --make_options LLVM=1 --arch x86_64 --kconfig_add CONFIG_RUST=y
+
