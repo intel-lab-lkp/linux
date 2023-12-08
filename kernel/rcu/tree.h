@@ -24,11 +24,7 @@
 /* Communicate arguments to a workqueue handler. */
 struct rcu_exp_work {
 	unsigned long rew_s;
-#ifdef CONFIG_RCU_EXP_KTHREAD
 	struct kthread_work rew_work;
-#else
-	struct work_struct rew_work;
-#endif /* CONFIG_RCU_EXP_KTHREAD */
 };
 
 /* RCU's kthread states for tracing. */
