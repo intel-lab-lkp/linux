@@ -561,7 +561,7 @@ nfsd4_shutdown_recdir(struct net *net)
 
 	if (!nn->rec_file)
 		return;
-	fput(nn->rec_file);
+	__fput_sync(nn->rec_file);
 	nn->rec_file = NULL;
 }
 

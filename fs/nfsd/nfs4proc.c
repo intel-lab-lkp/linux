@@ -629,7 +629,7 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		nn->somebody_reclaimed = true;
 out:
 	if (open->op_filp) {
-		fput(open->op_filp);
+		__fput_sync(open->op_filp);
 		open->op_filp = NULL;
 	}
 	if (resfh && resfh != &cstate->current_fh) {
@@ -1546,7 +1546,7 @@ nfsd4_cleanup_inter_ssc(struct nfsd4_ssc_umount_item *nsui, struct file *filp,
 	long timeout = msecs_to_jiffies(nfsd4_ssc_umount_timeout);
 
 	nfs42_ssc_close(filp);
-	fput(filp);
+	__fput_sync(filp);
 
 	spin_lock(&nn->nfsd_ssc_lock);
 	list_del(&nsui->nsui_list);

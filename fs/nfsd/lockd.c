@@ -60,7 +60,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp,
 static void
 nlm_fclose(struct file *filp)
 {
-	fput(filp);
+	__fput_sync(filp);
 }
 
 static const struct nlmsvc_binding nfsd_nlm_ops = {
