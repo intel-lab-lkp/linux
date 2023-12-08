@@ -397,18 +397,40 @@ perspective::
 User MDIO bus
 -------------
 
-In order to be able to read to/from a switch PHY built into it, DSA creates an
-user MDIO bus which allows a specific switch driver to divert and intercept
-MDIO reads/writes towards specific PHY addresses. In most MDIO-connected
-switches, these functions would utilize direct or indirect PHY addressing mode
-to return standard MII registers from the switch builtin PHYs, allowing the PHY
-library and/or to return link status, link partner pages, auto-negotiation
-results, etc.
+The framework creates an MDIO bus for user ports (``ds->user_mii_bus``) when
+both methods ``ds->ops->phy_read()`` and ``ds->ops->phy_write()`` are present.
+However, this pointer may also be populated by the switch driver during the
+``ds->ops->setup()`` method, with an MDIO bus managed by the driver.
+
+Its role is to permit user ports to connect to a PHY (usually internal) when
+the more general ``phy-handle`` property is unavailable (either because the
+MDIO bus is missing from the OF description, or because probing uses
+``platform_data``).
+
+In most MDIO-connected switches, these functions would utilize direct or
+indirect PHY addressing mode to return standard MII registers from the switch
+builtin PHYs, allowing the PHY library and/or to return link status, link
+partner pages, auto-negotiation results, etc.
 
 For Ethernet switches which have both external and internal MDIO buses, the
 user MII bus can be utilized to mux/demux MDIO reads and writes towards either
 internal or external MDIO devices this switch might be connected to: internal
 PHYs, external PHYs, or even external switches.
+
+When using OF, the ``ds->user_mii_bus`` can be seen as a legacy feature, rather
+than core functionality. Since 2014, the DSA OF bindings support the
+``phy-handle`` property, which is a universal mechanism to reference a PHY,
+be it internal or external.
+
+New switch drivers are encouraged to require the more universal ``phy-handle``
+property even for user ports with internal PHYs. This allows device trees to
+interoperate with simpler variants of the drivers such as those from U-Boot,
+which do not have the (redundant) fallback logic for ``ds->user_mii_bus``.
+
+The only use case for ``ds->user_mii_bus`` in new drivers would be for probing
+on non-OF through ``platform_data``. In the distant future where this will be
+possible through software nodes, there will be no need for ``ds->user_mii_bus``
+in new drivers at all.
 
 Data structures
 ---------------
