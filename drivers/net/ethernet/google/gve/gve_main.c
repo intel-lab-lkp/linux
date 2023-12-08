@@ -22,6 +22,7 @@
 #include "gve_dqo.h"
 #include "gve_adminq.h"
 #include "gve_register.h"
+#include "gve_utils.h"
 
 #define GVE_DEFAULT_RX_COPYBREAK	(256)
 
@@ -1702,6 +1703,287 @@ static int gve_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 	}
 }
 
+struct gve_per_rx_queue_mem_dqo {
+	struct gve_rx_buf_state_dqo *buf_states;
+	u32 num_buf_states;
+
+	struct gve_rx_compl_desc_dqo *complq_desc_ring;
+	dma_addr_t complq_bus;
+
+	struct gve_rx_desc_dqo *bufq_desc_ring;
+	dma_addr_t bufq_bus;
+
+	struct gve_queue_resources *q_resources;
+	dma_addr_t q_resources_bus;
+
+	size_t completion_queue_slots;
+	size_t buffer_queue_slots;
+};
+
+static int gve_rx_queue_stop(struct net_device *dev, int idx,
+			     void **out_per_q_mem)
+{
+	struct gve_per_rx_queue_mem_dqo *per_q_mem;
+	struct gve_priv *priv = netdev_priv(dev);
+	struct gve_notify_block *block;
+	struct gve_rx_ring *rx;
+	int ntfy_idx;
+	int err;
+
+	rx = &priv->rx[idx];
+	ntfy_idx = gve_rx_idx_to_ntfy(priv, idx);
+	block = &priv->ntfy_blocks[ntfy_idx];
+
+	if (priv->queue_format != GVE_DQO_RDA_FORMAT)
+		return -EOPNOTSUPP;
+
+	if (!out_per_q_mem)
+		return -EINVAL;
+
+	/* Stopping queue 0 while other queues are running is unfortunately
+	 * fails silently for GVE at the moment. Disable the queue-api for
+	 * queue 0 until this is resolved.
+	 */
+	if (idx == 0)
+		return -ERANGE;
+
+	per_q_mem = kvcalloc(1, sizeof(*per_q_mem), GFP_KERNEL);
+	if (!per_q_mem)
+		return -ENOMEM;
+
+	napi_disable(&block->napi);
+	err = gve_adminq_destroy_rx_queue(priv, idx);
+	if (err)
+		goto err_napi_enable;
+
+	err = gve_adminq_kick_and_wait(priv);
+	if (err)
+		goto err_create_rx_queue;
+
+	gve_remove_napi(priv, ntfy_idx);
+
+	per_q_mem->buf_states = rx->dqo.buf_states;
+	per_q_mem->num_buf_states = rx->dqo.num_buf_states;
+
+	per_q_mem->complq_desc_ring = rx->dqo.complq.desc_ring;
+	per_q_mem->complq_bus = rx->dqo.complq.bus;
+
+	per_q_mem->bufq_desc_ring = rx->dqo.bufq.desc_ring;
+	per_q_mem->bufq_bus = rx->dqo.bufq.bus;
+
+	per_q_mem->q_resources = rx->q_resources;
+	per_q_mem->q_resources_bus = rx->q_resources_bus;
+
+	per_q_mem->buffer_queue_slots = rx->dqo.bufq.mask + 1;
+	per_q_mem->completion_queue_slots = rx->dqo.complq.mask + 1;
+
+	*out_per_q_mem = per_q_mem;
+
+	return 0;
+
+err_create_rx_queue:
+	/* There is nothing we can do here if these fail. */
+	gve_adminq_create_rx_queue(priv, idx);
+	gve_adminq_kick_and_wait(priv);
+
+err_napi_enable:
+	napi_enable(&block->napi);
+	kvfree(per_q_mem);
+
+	return err;
+}
+
+static void gve_rx_queue_mem_free(struct net_device *dev, void *per_q_mem)
+{
+	struct gve_per_rx_queue_mem_dqo *gve_q_mem;
+	struct gve_priv *priv = netdev_priv(dev);
+	struct gve_rx_buf_state_dqo *bs;
+	struct device *hdev;
+	size_t size;
+	int i;
+
+	priv = netdev_priv(dev);
+	gve_q_mem = (struct gve_per_rx_queue_mem_dqo *)per_q_mem;
+	hdev = &priv->pdev->dev;
+
+	if (!gve_q_mem)
+		return;
+
+	if (priv->queue_format != GVE_DQO_RDA_FORMAT)
+		return;
+
+	for (i = 0; i < gve_q_mem->num_buf_states; i++) {
+		bs = &gve_q_mem->buf_states[i];
+		if (bs->page_info.page)
+			gve_free_page_dqo(priv, bs, true);
+	}
+
+	if (gve_q_mem->q_resources)
+		dma_free_coherent(hdev, sizeof(*gve_q_mem->q_resources),
+				  gve_q_mem->q_resources,
+				  gve_q_mem->q_resources_bus);
+
+	if (gve_q_mem->bufq_desc_ring) {
+		size = sizeof(gve_q_mem->bufq_desc_ring[0]) *
+		       gve_q_mem->buffer_queue_slots;
+		dma_free_coherent(hdev, size, gve_q_mem->bufq_desc_ring,
+				  gve_q_mem->bufq_bus);
+	}
+
+	if (gve_q_mem->complq_desc_ring) {
+		size = sizeof(gve_q_mem->complq_desc_ring[0]) *
+		       gve_q_mem->completion_queue_slots;
+		dma_free_coherent(hdev, size, gve_q_mem->complq_desc_ring,
+				  gve_q_mem->complq_bus);
+	}
+
+	kvfree(gve_q_mem->buf_states);
+
+	kvfree(per_q_mem);
+}
+
+static void *gve_rx_queue_mem_alloc(struct net_device *dev, int idx)
+{
+	struct gve_per_rx_queue_mem_dqo *gve_q_mem;
+	struct gve_priv *priv = netdev_priv(dev);
+	struct device *hdev = &priv->pdev->dev;
+	size_t size;
+
+	if (priv->queue_format != GVE_DQO_RDA_FORMAT)
+		return NULL;
+
+	/* See comment in gve_rx_queue_stop() */
+	if (idx == 0)
+		return NULL;
+
+	gve_q_mem = kvcalloc(1, sizeof(*gve_q_mem), GFP_KERNEL);
+	if (!gve_q_mem)
+		goto err;
+
+	gve_q_mem->buffer_queue_slots =
+		priv->options_dqo_rda.rx_buff_ring_entries;
+	gve_q_mem->completion_queue_slots = priv->rx_desc_cnt;
+
+	gve_q_mem->num_buf_states =
+		min_t(s16, S16_MAX, gve_q_mem->buffer_queue_slots * 4);
+
+	gve_q_mem->buf_states = kvcalloc(gve_q_mem->num_buf_states,
+					 sizeof(gve_q_mem->buf_states[0]),
+					 GFP_KERNEL);
+	if (!gve_q_mem->buf_states)
+		goto err;
+
+	size = sizeof(struct gve_rx_compl_desc_dqo) *
+		gve_q_mem->completion_queue_slots;
+	gve_q_mem->complq_desc_ring = dma_alloc_coherent(hdev, size,
+							 &gve_q_mem->complq_bus,
+							 GFP_KERNEL);
+	if (!gve_q_mem->complq_desc_ring)
+		goto err;
+
+	size = sizeof(struct gve_rx_desc_dqo) * gve_q_mem->buffer_queue_slots;
+	gve_q_mem->bufq_desc_ring = dma_alloc_coherent(hdev, size,
+						       &gve_q_mem->bufq_bus,
+						       GFP_KERNEL);
+	if (!gve_q_mem->bufq_desc_ring)
+		goto err;
+
+	gve_q_mem->q_resources = dma_alloc_coherent(hdev,
+						    sizeof(*gve_q_mem->q_resources),
+						    &gve_q_mem->q_resources_bus,
+						    GFP_KERNEL);
+	if (!gve_q_mem->q_resources)
+		goto err;
+
+	return gve_q_mem;
+
+err:
+	gve_rx_queue_mem_free(dev, gve_q_mem);
+	return NULL;
+}
+
+static int gve_rx_queue_start(struct net_device *dev, int idx, void *per_q_mem)
+{
+	struct gve_per_rx_queue_mem_dqo *gve_q_mem;
+	struct gve_priv *priv = netdev_priv(dev);
+	struct gve_rx_ring *rx = &priv->rx[idx];
+	struct gve_notify_block *block;
+	int ntfy_idx;
+	int err;
+	int i;
+
+	if (priv->queue_format != GVE_DQO_RDA_FORMAT)
+		return -EOPNOTSUPP;
+
+	/* See comment in gve_rx_queue_stop() */
+	if (idx == 0)
+		return -ERANGE;
+
+	gve_q_mem = (struct gve_per_rx_queue_mem_dqo *)per_q_mem;
+	ntfy_idx = gve_rx_idx_to_ntfy(priv, idx);
+	block = &priv->ntfy_blocks[ntfy_idx];
+
+	netif_dbg(priv, drv, priv->dev, "starting rx ring DQO\n");
+
+	memset(rx, 0, sizeof(*rx));
+	rx->gve = priv;
+	rx->q_num = idx;
+	rx->dqo.bufq.mask = gve_q_mem->buffer_queue_slots - 1;
+	rx->dqo.complq.num_free_slots = gve_q_mem->completion_queue_slots;
+	rx->dqo.complq.mask = gve_q_mem->completion_queue_slots - 1;
+	rx->ctx.skb_head = NULL;
+	rx->ctx.skb_tail = NULL;
+
+	rx->dqo.num_buf_states = gve_q_mem->num_buf_states;
+
+	rx->dqo.buf_states = gve_q_mem->buf_states;
+
+	/* Set up linked list of buffer IDs */
+	for (i = 0; i < rx->dqo.num_buf_states - 1; i++)
+		rx->dqo.buf_states[i].next = i + 1;
+
+	rx->dqo.buf_states[rx->dqo.num_buf_states - 1].next = -1;
+	rx->dqo.recycled_buf_states.head = -1;
+	rx->dqo.recycled_buf_states.tail = -1;
+	rx->dqo.used_buf_states.head = -1;
+	rx->dqo.used_buf_states.tail = -1;
+
+	rx->dqo.complq.desc_ring = gve_q_mem->complq_desc_ring;
+	rx->dqo.complq.bus = gve_q_mem->complq_bus;
+
+	rx->dqo.bufq.desc_ring = gve_q_mem->bufq_desc_ring;
+	rx->dqo.bufq.bus = gve_q_mem->bufq_bus;
+
+	rx->q_resources = gve_q_mem->q_resources;
+	rx->q_resources_bus = gve_q_mem->q_resources_bus;
+
+	gve_rx_add_to_block(priv, idx);
+
+	err = gve_adminq_create_rx_queue(priv, idx);
+	if (err)
+		return err;
+
+	err = gve_adminq_kick_and_wait(priv);
+	if (err)
+		goto err_destroy_rx_queue;
+
+	/* TODO, pull the memory allocations in this to gve_rx_queue_mem_alloc()
+	 */
+	gve_rx_post_buffers_dqo(&priv->rx[idx]);
+
+	napi_enable(&block->napi);
+	gve_set_itr_coalesce_usecs_dqo(priv, block, priv->rx_coalesce_usecs);
+
+	return 0;
+
+err_destroy_rx_queue:
+	/* There is nothing we can do if these fail. */
+	gve_adminq_destroy_rx_queue(priv, idx);
+	gve_adminq_kick_and_wait(priv);
+
+	return err;
+}
+
 int gve_adjust_queues(struct gve_priv *priv,
 		      struct gve_queue_config new_rx_config,
 		      struct gve_queue_config new_tx_config)
@@ -1900,6 +2182,10 @@ static const struct net_device_ops gve_netdev_ops = {
 	.ndo_bpf		=	gve_xdp,
 	.ndo_xdp_xmit		=	gve_xdp_xmit,
 	.ndo_xsk_wakeup		=	gve_xsk_wakeup,
+	.ndo_queue_mem_alloc	=	gve_rx_queue_mem_alloc,
+	.ndo_queue_mem_free	=	gve_rx_queue_mem_free,
+	.ndo_queue_start	=	gve_rx_queue_start,
+	.ndo_queue_stop		=	gve_rx_queue_stop,
 };
 
 static void gve_handle_status(struct gve_priv *priv, u32 status)
