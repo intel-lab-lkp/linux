@@ -155,8 +155,8 @@
 #include <net/netdev_rx_queue.h>
 #include <linux/genalloc.h>
 #include <linux/dma-buf.h>
-#include <net/page_pool/types.h>
 #include <net/devmem.h>
+#include <net/page_pool/helpers.h>
 
 #include "dev.h"
 #include "net-sysfs.h"
@@ -2118,6 +2118,41 @@ err_free_new_mem:
 	dev->netdev_ops->ndo_queue_mem_free(dev, new_mem);
 
 	return err;
+}
+
+struct page_pool_iov *netdev_alloc_dmabuf(struct netdev_dmabuf_binding *binding)
+{
+	struct dmabuf_genpool_chunk_owner *owner;
+	struct page_pool_iov *ppiov;
+	unsigned long dma_addr;
+	ssize_t offset;
+	ssize_t index;
+
+	dma_addr = gen_pool_alloc_owner(binding->chunk_pool, PAGE_SIZE,
+					(void **)&owner);
+	if (!dma_addr)
+		return NULL;
+
+	offset = dma_addr - owner->base_dma_addr;
+	index = offset / PAGE_SIZE;
+	ppiov = &owner->ppiovs[index];
+
+	netdev_dmabuf_binding_get(binding);
+
+	return ppiov;
+}
+
+void netdev_free_dmabuf(struct page_pool_iov *ppiov)
+{
+	struct netdev_dmabuf_binding *binding = page_pool_iov_binding(ppiov);
+	unsigned long dma_addr = page_pool_iov_dma_addr(ppiov);
+
+	refcount_set(&ppiov->refcount, 1);
+
+	if (gen_pool_has_addr(binding->chunk_pool, dma_addr, PAGE_SIZE))
+		gen_pool_free(binding->chunk_pool, dma_addr, PAGE_SIZE);
+
+	netdev_dmabuf_binding_put(binding);
 }
 
 /* Protected by rtnl_lock() */
