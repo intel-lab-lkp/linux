@@ -319,6 +319,7 @@ static void qcom_create_subsystem_stat_files(struct dentry *root,
 static int qcom_create_ddr_stats_files(struct device *dev,
 				       struct dentry *root,
 				       void __iomem *reg,
+				       resource_size_t reg_size,
 				       const struct stats_config *config)
 {
 	struct ddr_stats_data *ddrd;
@@ -337,6 +338,8 @@ static int qcom_create_ddr_stats_files(struct device *dev,
 
 	/* Get the offset of DDR stats */
 	stats_offset = readl(reg + DDR_DYNAMIC_OFFSET) & DDR_OFFSET_MASK;
+	if (stats_offset >= reg_size || stats_offset % 4)
+		return -EINVAL;
 	ddrd->base = reg + stats_offset;
 
 	/* Check if DDR stats are present */
@@ -364,6 +367,7 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	void __iomem *reg;
 	struct dentry *root;
 	const struct stats_config *config;
+	struct resource *res;
 	struct stats_data *d;
 	int i, ret;
 
@@ -371,7 +375,7 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	if (!config)
 		return -ENODEV;
 
-	reg = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
+	reg = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(reg))
 		return -ENOMEM;
 
@@ -387,7 +391,9 @@ static int qcom_stats_probe(struct platform_device *pdev)
 
 	qcom_create_subsystem_stat_files(root, config);
 	qcom_create_soc_sleep_stat_files(root, reg, d, config);
-	ret = qcom_create_ddr_stats_files(&pdev->dev, root, reg, config);
+	ret = qcom_create_ddr_stats_files(&pdev->dev, root, reg,
+					  resource_size(res),
+					  config);
 	if (ret) {
 		debugfs_remove_recursive(root);
 		return ret;
