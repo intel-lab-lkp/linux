@@ -581,6 +581,7 @@ static const struct dev_pm_ops starfive_wdt_pm_ops = {
 static const struct of_device_id starfive_wdt_match[] = {
 	{ .compatible = "starfive,jh7100-wdt", .data = &starfive_wdt_jh7100_variant },
 	{ .compatible = "starfive,jh7110-wdt", .data = &starfive_wdt_jh7110_variant },
+	{ .compatible = "starfive,jh8100-wdt", .data = &starfive_wdt_jh7110_variant },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, starfive_wdt_match);
