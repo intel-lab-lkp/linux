@@ -5,9 +5,9 @@
 // Copyright (C) 2022 - 2023 Texas Instruments Incorporated
 // https://www.ti.com
 //
-// The TAS2781 driver implements a flexible and configurable
+// The TAS2781/TAS2563 driver implements a flexible and configurable
 // algo coefficient setting for one, two, or even multiple
-// TAS2781 chips.
+// TAS2781/TAS2563 chips.
 //
 // Author: Shenghao Ding <shenghao-ding@ti.com>
 // Author: Kevin Lu <kevin-lu@ti.com>
@@ -33,6 +33,7 @@
 
 static const struct i2c_device_id tasdevice_id[] = {
 	{ "tas2781", TAS2781 },
+	{ "tas2563", TAS2563 },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, tasdevice_id);
@@ -40,6 +41,7 @@ MODULE_DEVICE_TABLE(i2c, tasdevice_id);
 #ifdef CONFIG_OF
 static const struct of_device_id tasdevice_of_match[] = {
 	{ .compatible = "ti,tas2781" },
+	{ .compatible = "ti,tas2563" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, tasdevice_of_match);
