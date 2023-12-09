@@ -74,6 +74,9 @@ const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX + 1] = {
 };
 
 struct security_hook_heads security_hook_heads __ro_after_init;
+static DEFINE_STATIC_KEY_FALSE_RO(mod_security_enabled);
+struct security_hook_heads mod_security_hook_heads;
+EXPORT_SYMBOL_GPL(mod_security_hook_heads);
 static BLOCKING_NOTIFIER_HEAD(blocking_lsm_notifier_chain);
 
 static struct kmem_cache *lsm_file_cache;
@@ -408,6 +411,10 @@ int __init early_security_init(void)
 	INIT_HLIST_HEAD(&security_hook_heads.NAME);
 #include "linux/lsm_hook_defs.h"
 #undef LSM_HOOK
+#define LSM_HOOK(RET, DEFAULT, NAME, ...) \
+	INIT_HLIST_HEAD(&mod_security_hook_heads.NAME);
+#include "linux/lsm_hook_defs.h"
+#undef LSM_HOOK
 
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (!lsm->enabled)
@@ -464,6 +471,13 @@ static int __init choose_lsm_order(char *str)
 	return 1;
 }
 __setup("lsm=", choose_lsm_order);
+
+static int __init enable_mod_security(char *str)
+{
+	static_branch_enable(&mod_security_enabled);
+	return 1;
+}
+__setup("lsm.modular", enable_mod_security);
 
 /* Enable LSM order debugging. */
 static int __init enable_debug(char *str)
@@ -536,6 +550,23 @@ void __init security_add_hooks(struct security_hook_list *hooks, int count,
 			panic("%s - Cannot get early memory.\n", __func__);
 	}
 }
+
+int mod_security_add_hooks(struct security_hook_list *hooks, int count, const char *lsm)
+{
+	int i;
+
+	if (!static_branch_unlikely(&mod_security_enabled)) {
+		pr_info("Modular LSM support is not enabled.\n");
+		return -EINVAL;
+	}
+	pr_info("Registering modular LSM: %s\n", lsm);
+	for (i = 0; i < count; i++) {
+		hooks[i].lsm = lsm;
+		hlist_add_tail_rcu(&hooks[i].list, hooks[i].head);
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mod_security_add_hooks);
 
 int call_blocking_lsm_notifier(enum lsm_event event, void *data)
 {
@@ -769,6 +800,10 @@ static int lsm_superblock_alloc(struct super_block *sb)
 								\
 		hlist_for_each_entry(P, &security_hook_heads.FUNC, list) \
 			P->hook.FUNC(__VA_ARGS__);		\
+		if (static_branch_unlikely(&mod_security_enabled)) {			\
+			hlist_for_each_entry(P, &mod_security_hook_heads.FUNC, list) \
+				P->hook.FUNC(__VA_ARGS__);	\
+		}						\
 	} while (0)
 
 #define call_int_hook(FUNC, IRC, ...) ({			\
@@ -780,6 +815,13 @@ static int lsm_superblock_alloc(struct super_block *sb)
 			RC = P->hook.FUNC(__VA_ARGS__);		\
 			if (RC != 0)				\
 				break;				\
+		}						\
+		if (static_branch_unlikely(&mod_security_enabled)) {			\
+			hlist_for_each_entry(P, &mod_security_hook_heads.FUNC, list) { \
+				RC = P->hook.FUNC(__VA_ARGS__);	\
+				if (RC != 0)			\
+					break;			\
+			}					\
 		}						\
 	} while (0);						\
 	RC;							\
@@ -1038,6 +1080,15 @@ int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
 			break;
 		}
 	}
+	if (static_branch_unlikely(&mod_security_enabled) && cap_sys_admin) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.vm_enough_memory, list) {
+			rc = hp->hook.vm_enough_memory(mm, pages);
+			if (rc <= 0) {
+				cap_sys_admin = 0;
+				break;
+			}
+		}
+	}
 	return __vm_enough_memory(mm, pages, cap_sys_admin);
 }
 
@@ -1195,6 +1246,15 @@ int security_fs_context_parse_param(struct fs_context *fc,
 			rc = 0;
 		else if (trc != -ENOPARAM)
 			return trc;
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.fs_context_parse_param, list) {
+			trc = hp->hook.fs_context_parse_param(fc, param);
+			if (trc == 0)
+				rc = 0;
+			else if (trc != -ENOPARAM)
+				return trc;
+		}
 	}
 	return rc;
 }
@@ -1566,6 +1626,14 @@ int security_dentry_init_security(struct dentry *dentry, int mode,
 		if (rc != LSM_RET_DEFAULT(dentry_init_security))
 			return rc;
 	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.dentry_init_security, list) {
+			rc = hp->hook.dentry_init_security(dentry, mode, name,
+							   xattr_name, ctx, ctxlen);
+			if (rc != LSM_RET_DEFAULT(dentry_init_security))
+				return rc;
+		}
+	}
 	return LSM_RET_DEFAULT(dentry_init_security);
 }
 EXPORT_SYMBOL(security_dentry_init_security);
@@ -1655,6 +1723,14 @@ int security_inode_init_security(struct inode *inode, struct inode *dir,
 		 * that it wants to signal an error. Thus, continue to invoke
 		 * the remaining LSMs.
 		 */
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.inode_init_security, list) {
+			ret = hp->hook.inode_init_security(inode, dir, qstr, new_xattrs,
+							   &xattr_count);
+			if (ret && ret != -EOPNOTSUPP)
+				goto out;
+		}
 	}
 
 	/* If initxattrs() is NULL, xattr_count is zero, skip the call. */
@@ -2419,6 +2495,13 @@ int security_inode_getsecurity(struct mnt_idmap *idmap,
 		if (rc != LSM_RET_DEFAULT(inode_getsecurity))
 			return rc;
 	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.inode_getsecurity, list) {
+			rc = hp->hook.inode_getsecurity(idmap, inode, name, buffer, alloc);
+			if (rc != LSM_RET_DEFAULT(inode_getsecurity))
+				return rc;
+		}
+	}
 	return LSM_RET_DEFAULT(inode_getsecurity);
 }
 
@@ -2453,6 +2536,13 @@ int security_inode_setsecurity(struct inode *inode, const char *name,
 						flags);
 		if (rc != LSM_RET_DEFAULT(inode_setsecurity))
 			return rc;
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.inode_setsecurity, list) {
+			rc = hp->hook.inode_setsecurity(inode, name, value, size, flags);
+			if (rc != LSM_RET_DEFAULT(inode_setsecurity))
+				return rc;
+		}
 	}
 	return LSM_RET_DEFAULT(inode_setsecurity);
 }
@@ -2537,6 +2627,13 @@ int security_inode_copy_up_xattr(const char *name)
 		rc = hp->hook.inode_copy_up_xattr(name);
 		if (rc != LSM_RET_DEFAULT(inode_copy_up_xattr))
 			return rc;
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.inode_copy_up_xattr, list) {
+			rc = hp->hook.inode_copy_up_xattr(name);
+			if (rc != LSM_RET_DEFAULT(inode_copy_up_xattr))
+				return rc;
+		}
 	}
 
 	return LSM_RET_DEFAULT(inode_copy_up_xattr);
@@ -3424,6 +3521,16 @@ int security_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 				break;
 		}
 	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.task_prctl, list) {
+			thisrc = hp->hook.task_prctl(option, arg2, arg3, arg4, arg5);
+			if (thisrc != LSM_RET_DEFAULT(task_prctl)) {
+				rc = thisrc;
+				if (thisrc != 0)
+					break;
+			}
+		}
+	}
 	return rc;
 }
 
@@ -3821,6 +3928,13 @@ int security_getprocattr(struct task_struct *p, const char *lsm,
 			continue;
 		return hp->hook.getprocattr(p, name, value);
 	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.getprocattr, list) {
+			if (lsm != NULL && strcmp(lsm, hp->lsm))
+				continue;
+			return hp->hook.getprocattr(p, name, value);
+		}
+	}
 	return LSM_RET_DEFAULT(getprocattr);
 }
 
@@ -3845,6 +3959,13 @@ int security_setprocattr(const char *lsm, const char *name, void *value,
 		if (lsm != NULL && strcmp(lsm, hp->lsm))
 			continue;
 		return hp->hook.setprocattr(name, value, size);
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.setprocattr, list) {
+			if (lsm != NULL && strcmp(lsm, hp->lsm))
+				continue;
+			return hp->hook.setprocattr(name, value, size);
+		}
 	}
 	return LSM_RET_DEFAULT(setprocattr);
 }
@@ -3907,6 +4028,13 @@ int security_secid_to_secctx(u32 secid, char **secdata, u32 *seclen)
 		rc = hp->hook.secid_to_secctx(secid, secdata, seclen);
 		if (rc != LSM_RET_DEFAULT(secid_to_secctx))
 			return rc;
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.secid_to_secctx, list) {
+			rc = hp->hook.secid_to_secctx(secid, secdata, seclen);
+			if (rc != LSM_RET_DEFAULT(secid_to_secctx))
+				return rc;
+		}
 	}
 
 	return LSM_RET_DEFAULT(secid_to_secctx);
@@ -4963,6 +5091,12 @@ int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
 			     list) {
 		rc = hp->hook.xfrm_state_pol_flow_match(x, xp, flic);
 		break;
+	}
+	if (static_branch_unlikely(&mod_security_enabled)) {
+		hlist_for_each_entry(hp, &mod_security_hook_heads.xfrm_state_pol_flow_match, list) {
+			rc = hp->hook.xfrm_state_pol_flow_match(x, xp, flic);
+			break;
+		}
 	}
 	return rc;
 }

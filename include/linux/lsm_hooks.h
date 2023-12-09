@@ -97,6 +97,7 @@ static inline struct xattr *lsm_get_xattr_slot(struct xattr *xattrs,
  * care of the common case and reduces the amount of
  * text involved.
  */
+#ifndef MODULE
 #define LSM_HOOK_INIT(HEAD, HOOK) \
 	{ .head = &security_hook_heads.HEAD, .hook = { .HEAD = HOOK } }
 
@@ -105,6 +106,14 @@ extern char *lsm_names;
 
 extern void security_add_hooks(struct security_hook_list *hooks, int count,
 				const char *lsm);
+#else
+#define LSM_HOOK_INIT(HEAD, HOOK) \
+	{ .head = &mod_security_hook_heads.HEAD, .hook = { .HEAD = HOOK } }
+
+extern struct security_hook_heads mod_security_hook_heads;
+extern int mod_security_add_hooks(struct security_hook_list *hooks, int count, const char *lsm);
+#endif
+
 
 #define LSM_FLAG_LEGACY_MAJOR	BIT(0)
 #define LSM_FLAG_EXCLUSIVE	BIT(1)
