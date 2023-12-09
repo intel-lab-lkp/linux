@@ -136,6 +136,8 @@ __XFS_AG_OPSTATE(agfl_needs_reset, AGFL_NEEDS_RESET)
 int xfs_initialize_perag(struct xfs_mount *mp, xfs_agnumber_t agcount,
 			xfs_rfsblock_t dcount, xfs_agnumber_t *maxagi);
 int xfs_initialize_perag_data(struct xfs_mount *mp, xfs_agnumber_t agno);
+void xfs_free_perag_range(xfs_mount_t *mp, xfs_agnumber_t agstart,
+			xfs_agnumber_t agend);
 void xfs_free_perag(struct xfs_mount *mp);
 
 /* Passive AG references */

@@ -245,16 +245,20 @@ __xfs_free_perag(
 }
 
 /*
- * Free up the per-ag resources associated with the mount structure.
+ * Free per-ag within the specified range, if agno is not found in the
+ * radix tree, then it means that agno and subsequent AGs have not been
+ * initialized.
  */
 void
-xfs_free_perag(
-	struct xfs_mount	*mp)
+xfs_free_perag_range(
+		xfs_mount_t		*mp,
+		xfs_agnumber_t		agstart,
+		xfs_agnumber_t		agend)
 {
-	struct xfs_perag	*pag;
 	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
 
-	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+	for (agno = agstart; agno < agend; agno++) {
 		spin_lock(&mp->m_perag_lock);
 		pag = radix_tree_delete(&mp->m_perag_tree, agno);
 		spin_unlock(&mp->m_perag_lock);
@@ -272,6 +276,16 @@ xfs_free_perag(
 				atomic_read(&pag->pag_active_ref) != 0);
 		call_rcu(&pag->rcu_head, __xfs_free_perag);
 	}
+}
+
+/*
+ * Free up the per-ag resources associated with the mount structure.
+ */
+void
+xfs_free_perag(
+	struct xfs_mount	*mp)
+{
+	xfs_free_perag_range(mp, 0,  mp->m_sb.sb_agcount);
 }
 
 /* Find the size of the AG, in blocks. */
@@ -432,16 +446,7 @@ out_free_pag:
 	kmem_free(pag);
 out_unwind_new_pags:
 	/* unwind any prior newly initialized pags */
-	for (index = first_initialised; index < agcount; index++) {
-		spin_lock(&mp->m_perag_lock);
-		pag = radix_tree_delete(&mp->m_perag_tree, index);
-		spin_unlock(&mp->m_perag_lock);
-		if (!pag)
-			break;
-		xfs_buf_hash_destroy(pag);
-		xfs_defer_drain_free(&pag->pag_intents_drain);
-		kmem_free(pag);
-	}
+	xfs_free_perag_range(mp, first_initialised, agcount);
 	return error;
 }
 
