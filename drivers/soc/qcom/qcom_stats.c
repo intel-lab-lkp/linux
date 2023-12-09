@@ -438,6 +438,14 @@ static const struct stats_config rpmh_data_sdm845 = {
 	.subsystem_stats_in_smem = true,
 };
 
+static const struct stats_config rpmh_data_sm8150 = {
+	.stats_offset = 0x48,
+	.num_records = 3,
+	.appended_stats_avail = false,
+	.dynamic_offset = false,
+	.subsystem_stats_in_smem = true,
+};
+
 static const struct stats_config rpmh_data = {
 	.stats_offset = 0x48,
 	.num_records = 3,
@@ -455,6 +463,7 @@ static const struct of_device_id qcom_stats_table[] = {
 	{ .compatible = "qcom,rpm-stats", .data = &rpm_data },
 	{ .compatible = "qcom,rpmh-stats", .data = &rpmh_data },
 	{ .compatible = "qcom,sdm845-rpmh-stats", .data = &rpmh_data_sdm845 },
+	{ .compatible = "qcom,sm8150-rpmh-stats", .data = &rpmh_data_sm8150 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_stats_table);
