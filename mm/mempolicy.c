@@ -131,6 +131,8 @@ static struct mempolicy default_policy = {
 
 static struct mempolicy preferred_node_policy[MAX_NUMNODES];
 
+static char iw_table[MAX_NUMNODES];
+
 /**
  * numa_nearest_node - Find nearest node by state
  * @node: Node id to start the search
@@ -3067,3 +3069,170 @@ void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 		p += scnprintf(p, buffer + maxlen - p, ":%*pbl",
 			       nodemask_pr_args(&nodes));
 }
+
+struct iw_node_info {
+	struct kobject kobj;
+	int nid;
+};
+
+static ssize_t node_weight_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	struct iw_node_info *node_info = container_of(kobj, struct iw_node_info,
+						      kobj);
+	return sysfs_emit(buf, "%d\n", iw_table[node_info->nid]);
+}
+
+static ssize_t node_weight_store(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 const char *buf, size_t count)
+{
+	unsigned char weight = 0;
+	struct iw_node_info *node_info = NULL;
+
+	node_info = container_of(kobj, struct iw_node_info, kobj);
+
+	if (kstrtou8(buf, 0, &weight) || !weight)
+		return -EINVAL;
+
+	iw_table[node_info->nid] = weight;
+
+	return count;
+}
+
+static struct kobj_attribute node_weight =
+	__ATTR(weight, 0664, node_weight_show, node_weight_store);
+
+static struct attribute *dst_node_attrs[] = {
+	&node_weight.attr,
+	NULL,
+};
+
+static struct attribute_group dst_node_attr_group = {
+	.attrs = dst_node_attrs,
+};
+
+static const struct attribute_group *dst_node_attr_groups[] = {
+	&dst_node_attr_group,
+	NULL,
+};
+
+static const struct kobj_type dst_node_kobj_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.default_groups = dst_node_attr_groups,
+};
+
+static int add_weight_node(int nid, struct kobject *src_kobj)
+{
+	struct iw_node_info *node_info = NULL;
+	int ret;
+
+	node_info = kzalloc(sizeof(struct iw_node_info), GFP_KERNEL);
+	if (!node_info)
+		return -ENOMEM;
+	node_info->nid = nid;
+
+	kobject_init(&node_info->kobj, &dst_node_kobj_ktype);
+	ret = kobject_add(&node_info->kobj, src_kobj, "node%d", nid);
+	if (ret) {
+		pr_err("kobject_add error [node%d]: %d", nid, ret);
+		kobject_put(&node_info->kobj);
+	}
+	return ret;
+}
+
+static int add_weighted_interleave_group(struct kobject *root_kobj)
+{
+	struct kobject *wi_kobj;
+	int nid, err;
+
+	wi_kobj = kobject_create_and_add("weighted_interleave", root_kobj);
+	if (!wi_kobj) {
+		pr_err("failed to create node kobject\n");
+		return -ENOMEM;
+	}
+
+	for_each_node_state(nid, N_POSSIBLE) {
+		err = add_weight_node(nid, wi_kobj);
+		if (err) {
+			pr_err("failed to add sysfs [node%d]\n", nid);
+			break;
+		}
+	}
+	if (err)
+		kobject_put(wi_kobj);
+	return 0;
+
+}
+
+static ssize_t possible_nodes_show(struct kobject *kobj,
+				   struct kobj_attribute *attr, char *buf)
+{
+	int nid, next_nid;
+	int len = 0;
+
+	for_each_node_state(nid, N_POSSIBLE) {
+		len += sysfs_emit_at(buf, len, "%d", nid);
+		next_nid = next_node(nid, node_states[N_POSSIBLE]);
+		if (next_nid < MAX_NUMNODES)
+			len += sysfs_emit_at(buf, len, ",");
+	}
+	len += sysfs_emit_at(buf, len, "\n");
+
+	return len;
+}
+
+static struct kobj_attribute possible_nodes_attr = __ATTR_RO(possible_nodes);
+
+static struct attribute *mempolicy_attrs[] = {
+	&possible_nodes_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group mempolicy_attr_group = {
+	.attrs = mempolicy_attrs,
+	NULL,
+};
+
+static void mempolicy_kobj_release(struct kobject *kobj)
+{
+	kfree(kobj);
+}
+
+static const struct kobj_type mempolicy_kobj_ktype = {
+	.release = mempolicy_kobj_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+};
+
+static int __init mempolicy_sysfs_init(void)
+{
+	int err;
+	struct kobject *root_kobj;
+
+	memset(&iw_table, 1, sizeof(iw_table));
+
+	root_kobj = kzalloc(sizeof(struct kobject), GFP_KERNEL);
+	if (!root_kobj)
+		return -ENOMEM;
+
+	kobject_init(root_kobj, &mempolicy_kobj_ktype);
+	err = kobject_add(root_kobj, mm_kobj, "mempolicy");
+	if (err) {
+		pr_err("failed to add kobject to the system\n");
+		goto fail_obj;
+	}
+
+	err = sysfs_create_group(root_kobj, &mempolicy_attr_group);
+	if (err) {
+		pr_err("failed to register mempolicy group\n");
+		goto fail_obj;
+	}
+
+	err = add_weighted_interleave_group(root_kobj);
+fail_obj:
+	if (err)
+		kobject_put(root_kobj);
+	return err;
+
+}
+late_initcall(mempolicy_sysfs_init);
