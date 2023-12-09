@@ -528,6 +528,7 @@ extern void pm_print_active_wakeup_sources(void);
 
 extern unsigned int lock_system_sleep(void);
 extern void unlock_system_sleep(unsigned int);
+extern void clear_abort_suspend_list(void);
 
 #else /* !CONFIG_PM_SLEEP */
 
@@ -556,6 +557,7 @@ static inline void pm_system_irq_wakeup(unsigned int irq_number) {}
 
 static inline unsigned int lock_system_sleep(void) { return 0; }
 static inline void unlock_system_sleep(unsigned int flags) {}
+static inline void clear_abort_suspend_list(void) {}
 
 #endif /* !CONFIG_PM_SLEEP */
 

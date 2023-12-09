@@ -73,6 +73,13 @@ static struct wakeup_source deleted_ws = {
 
 static DEFINE_IDA(wakeup_ida);
 
+struct pm_abort_suspend_source {
+	struct list_head list;     //linux kernel list implementation
+	char *source_triggering_abort_suspend;
+};
+
+LIST_HEAD(pm_abort_suspend_list);
+
 /**
  * wakeup_source_create - Create a struct wakeup_source object.
  * @name: Name of the new wakeup source.
@@ -576,6 +583,53 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 }
 
 /**
+ * clear_abort_suspend_list: To clear the list containing sources which
+ * aborted suspend transitions.
+ * Functionality: The list will be cleared every time system PM exits as we
+ * can find sources which aborted suspend in the current suspend transisions.
+ */
+void clear_abort_suspend_list(void)
+{
+	struct pm_abort_suspend_source *info, *tmp;
+
+	if (!list_empty(&pm_abort_suspend_list))
+		list_for_each_entry_safe(info, tmp, &pm_abort_suspend_list, list) {
+			list_del(&info->list);
+			kfree(info);
+		}
+}
+EXPORT_SYMBOL_GPL(clear_abort_suspend_list);
+
+/**
+ * pm_add_abort_suspend_source: add sources who aborted system suspend transitions.
+ * @func_name: Name of the WS or subsystem which needs to added in the list
+ */
+void pm_add_abort_suspend_source(const char *source_name)
+{
+	struct pm_abort_suspend_source *info = NULL;
+
+	info = kmalloc(sizeof(struct pm_abort_suspend_source), GFP_KERNEL);
+	if (unlikely(!info)) {
+		pr_err("Failed to alloc memory for pm_abort_suspend_source info\n");
+		return;
+	}
+
+	/* Initialize the list within the struct if it's not already initialized */
+	if (list_empty(&info->list))
+		INIT_LIST_HEAD(&info->list);
+
+	info->source_triggering_abort_suspend = kstrdup(source_name, GFP_KERNEL);
+	if (unlikely(!info->source_triggering_abort_suspend)) {
+		pr_err("Failed to get abort_suspend source_name\n");
+		kfree(info);
+		return;
+	}
+
+	list_add_tail(&info->list, &pm_abort_suspend_list);
+}
+EXPORT_SYMBOL_GPL(pm_add_abort_suspend_source);
+
+/**
  * wakeup_source_report_event - Report wakeup event using the given source.
  * @ws: Wakeup source to report the event for.
  * @hard: If set, abort suspends in progress and wake up from suspend-to-idle.
@@ -590,8 +644,11 @@ static void wakeup_source_report_event(struct wakeup_source *ws, bool hard)
 	if (!ws->active)
 		wakeup_source_activate(ws);
 
-	if (hard)
+	if (hard) {
+		if (pm_suspend_target_state != PM_SUSPEND_ON)
+			pm_add_abort_suspend_source(ws->name);
 		pm_system_wakeup();
+	}
 }
 
 /**
@@ -893,12 +950,28 @@ bool pm_wakeup_pending(void)
 		pm_print_active_wakeup_sources();
 	}
 
+	if (atomic_read(&pm_abort_suspend) > 0) {
+		if (!list_empty(&pm_abort_suspend_list))
+			list_for_each_entry(info, &pm_abort_suspend_list, list) {
+				log_suspend_abort_reason("ws or subsystem %s aborted suspend\n",
+						info->source_triggering_abort_suspend);
+			}
+	}
+
 	return ret || atomic_read(&pm_abort_suspend) > 0;
 }
 EXPORT_SYMBOL_GPL(pm_wakeup_pending);
 
 void pm_system_wakeup(void)
 {
+	char buf[MAX_SUSPEND_ABORT_LEN];
+
+	if (pm_suspend_target_state != PM_SUSPEND_ON) {
+		sprintf(buf, "%ps", __builtin_return_address(0));
+		if (strcmp(buf, "pm_wakeup_ws_event"))
+			pm_add_abort_suspend_source(buf);
+	}
+
 	atomic_inc(&pm_abort_suspend);
 	s2idle_wake();
 }

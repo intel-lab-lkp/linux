@@ -623,6 +623,7 @@ int pm_suspend(suspend_state_t state)
 	} else {
 		suspend_stats.success++;
 	}
+	clear_abort_suspend_list();
 	pr_info("suspend exit\n");
 	return error;
 }
