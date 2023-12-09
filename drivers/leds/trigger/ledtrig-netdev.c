@@ -61,6 +61,8 @@ struct led_netdev_data {
 	bool hw_control;
 };
 
+static int add_link_speed_attr(struct led_netdev_data *trigger_data);
+
 static void set_baseline_state(struct led_netdev_data *trigger_data)
 {
 	int current_brightness;
@@ -262,8 +264,10 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 	trigger_data->carrier_link_up = false;
 	trigger_data->link_speed = SPEED_UNKNOWN;
 	trigger_data->duplex = DUPLEX_UNKNOWN;
-	if (trigger_data->net_dev)
+	if (trigger_data->net_dev) {
 		get_device_state(trigger_data);
+		add_link_speed_attr(trigger_data);
+	}
 
 	trigger_data->last_activity = 0;
 
@@ -396,6 +400,50 @@ DEFINE_NETDEV_TRIGGER(full_duplex, TRIGGER_NETDEV_FULL_DUPLEX);
 DEFINE_NETDEV_TRIGGER(tx, TRIGGER_NETDEV_TX);
 DEFINE_NETDEV_TRIGGER(rx, TRIGGER_NETDEV_RX);
 
+static int add_link_speed_attr(struct led_netdev_data *trigger_data)
+{
+	struct led_classdev *led_cdev = trigger_data->led_cdev;
+	struct device *dev = led_cdev->dev;
+	struct ethtool_link_ksettings cmd;
+	int ret;
+
+	/* First remove any entry previously added */
+	device_remove_file(dev, &dev_attr_link_10);
+	device_remove_file(dev, &dev_attr_link_100);
+	device_remove_file(dev, &dev_attr_link_1000);
+	device_remove_file(dev, &dev_attr_link_2500);
+	device_remove_file(dev, &dev_attr_link_5000);
+	device_remove_file(dev, &dev_attr_link_10000);
+
+	ret = __ethtool_get_link_ksettings(trigger_data->net_dev, &cmd);
+	if (ret)
+		return ret;
+
+	/* Add only supported entry */
+	if (test_bit(ETHTOOL_LINK_MODE_10baseT_Half_BIT, cmd.link_modes.supported) ||
+	    test_bit(ETHTOOL_LINK_MODE_10baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_10);
+
+	if (test_bit(ETHTOOL_LINK_MODE_100baseT_Half_BIT, cmd.link_modes.supported) ||
+	    test_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_100);
+
+	if (test_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT, cmd.link_modes.supported) ||
+	    test_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_1000);
+
+	if (test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_2500);
+
+	if (test_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_5000);
+
+	if (test_bit(ETHTOOL_LINK_MODE_10000baseT_Full_BIT, cmd.link_modes.supported))
+		device_create_file(dev, &dev_attr_link_10000);
+
+	return 0;
+}
+
 static ssize_t interval_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
@@ -446,12 +494,6 @@ static DEVICE_ATTR_RO(offloaded);
 static struct attribute *netdev_trig_attrs[] = {
 	&dev_attr_device_name.attr,
 	&dev_attr_link.attr,
-	&dev_attr_link_10.attr,
-	&dev_attr_link_100.attr,
-	&dev_attr_link_1000.attr,
-	&dev_attr_link_2500.attr,
-	&dev_attr_link_5000.attr,
-	&dev_attr_link_10000.attr,
 	&dev_attr_full_duplex.attr,
 	&dev_attr_half_duplex.attr,
 	&dev_attr_rx.attr,
