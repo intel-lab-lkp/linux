@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <linux/if_vlan.h>
 #include "netlink.h"
 #include "common.h"
 #include "bitset.h"
@@ -278,8 +279,24 @@ int ethnl_set_features(struct sk_buff *skb, struct genl_info *info)
 					  wanted_diff_mask, new_active,
 					  active_diff_mask, compact);
 	}
-	if (mod)
+	if (mod) {
+		bitmap_xor(active_diff_mask, old_active, new_active,
+			   NETDEV_FEATURE_COUNT);
+		if (test_bit(NETIF_F_HW_VLAN_CTAG_FILTER_BIT, active_diff_mask)) {
+			if (test_bit(NETIF_F_HW_VLAN_CTAG_FILTER_BIT, new_active))
+				vlan_get_rx_ctag_filter_info(dev);
+			else
+				vlan_drop_rx_ctag_filter_info(dev);
+		}
+		if (test_bit(NETIF_F_HW_VLAN_STAG_FILTER_BIT, active_diff_mask)) {
+			if (test_bit(NETIF_F_HW_VLAN_STAG_FILTER_BIT, new_active))
+				vlan_get_rx_stag_filter_info(dev);
+			else
+				vlan_drop_rx_stag_filter_info(dev);
+		}
+
 		netdev_features_change(dev);
+	}
 
 out_rtnl:
 	rtnl_unlock();

@@ -3058,8 +3058,24 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 	if (dev->ethtool_ops->complete)
 		dev->ethtool_ops->complete(dev);
 
-	if (old_features != dev->features)
+	if (old_features != dev->features) {
+		netdev_features_t diff = old_features ^ dev->features;
+
+		if (diff & NETIF_F_HW_VLAN_CTAG_FILTER) {
+			if (dev->features & NETIF_F_HW_VLAN_CTAG_FILTER)
+				vlan_get_rx_ctag_filter_info(dev);
+			else
+				vlan_drop_rx_ctag_filter_info(dev);
+		}
+		if (diff & NETIF_F_HW_VLAN_STAG_FILTER) {
+			if (dev->features & NETIF_F_HW_VLAN_STAG_FILTER)
+				vlan_get_rx_stag_filter_info(dev);
+			else
+				vlan_drop_rx_stag_filter_info(dev);
+		}
+
 		netdev_features_change(dev);
+	}
 out:
 	if (dev->dev.parent)
 		pm_runtime_put(dev->dev.parent);
