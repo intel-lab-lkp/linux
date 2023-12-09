@@ -145,6 +145,13 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 
 static struct nfc_llcp_local *nfc_llcp_local_get(struct nfc_llcp_local *local)
 {
+	/* Since using nfc_llcp_local may result in usage of nfc_dev, whenever
+	 * we hold a reference to local, we also need to hold a reference to
+	 * the device to avoid UAF.
+	 */
+	if (!nfc_get_device(local->dev->idx))
+		return NULL;
+
 	kref_get(&local->ref);
 
 	return local;
@@ -177,10 +184,18 @@ static void local_release(struct kref *ref)
 
 int nfc_llcp_local_put(struct nfc_llcp_local *local)
 {
+	struct nfc_dev *dev;
+	int ret;
+
 	if (local == NULL)
 		return 0;
 
-	return kref_put(&local->ref, local_release);
+	dev = local->dev;
+
+	ret = kref_put(&local->ref, local_release);
+	nfc_put_device(dev);
+
+	return ret;
 }
 
 static struct nfc_llcp_sock *nfc_llcp_sock_get(struct nfc_llcp_local *local,
@@ -930,9 +945,7 @@ static void nfc_llcp_recv_connect(struct nfc_llcp_local *local,
 
 	if (sk_acceptq_is_full(parent)) {
 		reason = LLCP_DM_REJ;
-		release_sock(&sock->sk);
-		sock_put(&sock->sk);
-		goto fail;
+		goto fail_put_sock;
 	}
 
 	if (sock->ssap == LLCP_SDP_UNBOUND) {
@@ -942,9 +955,7 @@ static void nfc_llcp_recv_connect(struct nfc_llcp_local *local,
 
 		if (ssap == LLCP_SAP_MAX) {
 			reason = LLCP_DM_REJ;
-			release_sock(&sock->sk);
-			sock_put(&sock->sk);
-			goto fail;
+			goto fail_put_sock;
 		}
 
 		sock->ssap = ssap;
@@ -953,14 +964,18 @@ static void nfc_llcp_recv_connect(struct nfc_llcp_local *local,
 	new_sk = nfc_llcp_sock_alloc(NULL, parent->sk_type, GFP_ATOMIC, 0);
 	if (new_sk == NULL) {
 		reason = LLCP_DM_REJ;
-		release_sock(&sock->sk);
-		sock_put(&sock->sk);
-		goto fail;
+		goto fail_put_sock;
 	}
 
 	new_sock = nfc_llcp_sock(new_sk);
-	new_sock->dev = local->dev;
+
 	new_sock->local = nfc_llcp_local_get(local);
+	if (!new_sock->local) {
+		reason = LLCP_DM_REJ;
+		goto fail_free_new_sock;
+	}
+
+	new_sock->dev = local->dev;
 	new_sock->rw = sock->rw;
 	new_sock->miux = sock->miux;
 	new_sock->nfc_protocol = sock->nfc_protocol;
@@ -1004,8 +1019,13 @@ static void nfc_llcp_recv_connect(struct nfc_llcp_local *local,
 
 	return;
 
+fail_free_new_sock:
+	sock_put(&new_sock->sk);
+	nfc_llcp_sock_free(new_sock);
+fail_put_sock:
+	release_sock(&sock->sk);
+	sock_put(&sock->sk);
 fail:
-	/* Send DM */
 	nfc_llcp_send_dm(local, dsap, ssap, reason);
 }
 
@@ -1597,7 +1617,16 @@ int nfc_llcp_register_device(struct nfc_dev *ndev)
 	if (local == NULL)
 		return -ENOMEM;
 
-	local->dev = ndev;
+	/* As we are going to initialize local's refcount, we need to get the
+	 * nfc_dev to avoid UAF, otherwise there is no point in continuing.
+	 * See nfc_llcp_local_get().
+	 */
+	local->dev = nfc_get_device(ndev->idx);
+	if (!local->dev) {
+		kfree(local);
+		return -ENODEV;
+	}
+
 	INIT_LIST_HEAD(&local->list);
 	kref_init(&local->ref);
 	mutex_init(&local->sdp_lock);
