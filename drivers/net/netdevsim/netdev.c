@@ -29,19 +29,33 @@
 static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netdevsim *ns = netdev_priv(dev);
+	struct netdevsim *peer_ns;
+	int ret = NETDEV_TX_OK;
 
+	rcu_read_lock();
 	if (!nsim_ipsec_tx(ns, skb))
-		goto out;
+		goto err;
 
 	u64_stats_update_begin(&ns->syncp);
 	ns->tx_packets++;
 	ns->tx_bytes += skb->len;
 	u64_stats_update_end(&ns->syncp);
 
-out:
-	dev_kfree_skb(skb);
+	peer_ns = rcu_dereference(ns->peer);
+	if (!peer_ns)
+		goto err;
 
-	return NETDEV_TX_OK;
+	skb_tx_timestamp(skb);
+	if (unlikely(dev_forward_skb(peer_ns->netdev, skb) == NET_RX_DROP))
+		ret = NET_XMIT_DROP;
+
+	rcu_read_unlock();
+	return ret;
+
+err:
+	rcu_read_unlock();
+	dev_kfree_skb(skb);
+	return ret;
 }
 
 static void nsim_set_rx_mode(struct net_device *dev)
@@ -302,7 +316,6 @@ static void nsim_setup(struct net_device *dev)
 	eth_hw_addr_random(dev);
 
 	dev->tx_queue_len = 0;
-	dev->flags |= IFF_NOARP;
 	dev->flags &= ~IFF_MULTICAST;
 	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE |
 			   IFF_NO_QUEUE;
