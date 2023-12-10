@@ -16,6 +16,7 @@
 #include <linux/fs.h>
 #include <linux/nd.h>
 #include <linux/backing-dev.h>
+#include <linux/cleanup.h>
 #include "btt.h"
 #include "nd.h"
 
@@ -847,7 +848,7 @@ static int discover_arenas(struct btt *btt)
 {
 	int ret = 0;
 	struct arena_info *arena;
-	struct btt_sb *super;
+	struct btt_sb *super __free(kfree) = NULL;
 	size_t remaining = btt->rawsize;
 	u64 cur_nlba = 0;
 	size_t cur_off = 0;
@@ -860,10 +861,8 @@ static int discover_arenas(struct btt *btt)
 	while (remaining) {
 		/* Alloc memory for arena */
 		arena = alloc_arena(btt, 0, 0, 0);
-		if (!arena) {
-			ret = -ENOMEM;
-			goto out_super;
-		}
+		if (!arena)
+			return -ENOMEM;
 
 		arena->infooff = cur_off;
 		ret = btt_info_read(arena, super);
@@ -919,14 +918,11 @@ static int discover_arenas(struct btt *btt)
 	btt->nlba = cur_nlba;
 	btt->init_state = INIT_READY;
 
-	kfree(super);
 	return ret;
 
  out:
 	kfree(arena);
 	free_arenas(btt);
- out_super:
-	kfree(super);
 	return ret;
 }
 
