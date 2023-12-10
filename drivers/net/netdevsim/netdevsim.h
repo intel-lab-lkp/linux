@@ -125,6 +125,7 @@ struct netdevsim {
 	} udp_ports;
 
 	struct nsim_ethtool ethtool;
+	struct netdevsim __rcu *peer;
 };
 
 struct netdevsim *
@@ -417,3 +418,5 @@ struct nsim_bus_dev {
 
 int nsim_bus_init(void);
 void nsim_bus_exit(void);
+
+struct nsim_bus_dev *nsim_bus_dev_get(unsigned int id);

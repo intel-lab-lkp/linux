@@ -364,3 +364,13 @@ void nsim_bus_exit(void)
 	driver_unregister(&nsim_driver);
 	bus_unregister(&nsim_bus);
 }
+
+struct nsim_bus_dev *nsim_bus_dev_get(unsigned int id)
+{
+	struct nsim_bus_dev *nsim_bus_dev;
+	list_for_each_entry(nsim_bus_dev, &nsim_bus_dev_list, list) {
+		if (nsim_bus_dev->dev.id == id)
+			return nsim_bus_dev;
+	}
+	return NULL;
+}
