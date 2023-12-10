@@ -256,6 +256,14 @@ struct physdev_pci_device_add {
  */
 #define PHYSDEVOP_prepare_msix          30
 #define PHYSDEVOP_release_msix          31
+/*
+ * On PVH dom0, when device is reset, the vpci on Xen side
+ * won't get notification, so that the cached state in vpci is
+ * all out of date with the real device state. Use this to reset
+ * the vpci state of device.
+ */
+#define PHYSDEVOP_pci_device_state_reset     32
+
 struct physdev_pci_device {
     /* IN */
     uint16_t seg;
