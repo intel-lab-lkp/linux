@@ -531,13 +531,13 @@ static int arena_clear_freelist_error(struct arena_info *arena, u32 lane)
 	return ret;
 }
 
-static int btt_freelist_init(struct arena_info *arena)
+static int btt_freelist_init(struct device *dev, struct arena_info *arena)
 {
 	int new, ret;
 	struct log_entry log_new;
 	u32 i, map_entry, log_oldmap, log_newmap;
 
-	arena->freelist = kcalloc(arena->nfree, sizeof(struct free_entry),
+	arena->freelist = devm_kcalloc(dev, arena->nfree, sizeof(struct free_entry),
 					GFP_KERNEL);
 	if (!arena->freelist)
 		return -ENOMEM;
@@ -718,20 +718,20 @@ static int log_set_indices(struct arena_info *arena)
 	return 0;
 }
 
-static int btt_rtt_init(struct arena_info *arena)
+static int btt_rtt_init(struct device *dev, struct arena_info *arena)
 {
-	arena->rtt = kcalloc(arena->nfree, sizeof(u32), GFP_KERNEL);
+	arena->rtt = devm_kcalloc(dev, arena->nfree, sizeof(u32), GFP_KERNEL);
 	if (arena->rtt == NULL)
 		return -ENOMEM;
 
 	return 0;
 }
 
-static int btt_maplocks_init(struct arena_info *arena)
+static int btt_maplocks_init(struct device *dev, struct arena_info *arena)
 {
 	u32 i;
 
-	arena->map_locks = kcalloc(arena->nfree, sizeof(struct aligned_lock),
+	arena->map_locks = devm_kcalloc(dev, arena->nfree, sizeof(struct aligned_lock),
 				GFP_KERNEL);
 	if (!arena->map_locks)
 		return -ENOMEM;
@@ -805,9 +805,6 @@ static void free_arenas(struct btt *btt)
 
 	list_for_each_entry_safe(arena, next, &btt->arena_list, list) {
 		list_del(&arena->list);
-		kfree(arena->rtt);
-		kfree(arena->map_locks);
-		kfree(arena->freelist);
 		debugfs_remove_recursive(arena->debugfs_dir);
 		kfree(arena);
 	}
@@ -843,7 +840,7 @@ static void parse_arena_meta(struct arena_info *arena, struct btt_sb *super,
 	arena->flags = le32_to_cpu(super->flags);
 }
 
-static int discover_arenas(struct btt *btt)
+static int discover_arenas(struct device *dev, struct btt *btt)
 {
 	int ret = 0;
 	struct arena_info *arena;
@@ -893,15 +890,15 @@ static int discover_arenas(struct btt *btt)
 			goto out;
 		}
 
-		ret = btt_freelist_init(arena);
+		ret = btt_freelist_init(dev, arena);
 		if (ret)
 			goto out;
 
-		ret = btt_rtt_init(arena);
+		ret = btt_rtt_init(dev, arena);
 		if (ret)
 			goto out;
 
-		ret = btt_maplocks_init(arena);
+		ret = btt_maplocks_init(dev, arena);
 		if (ret)
 			goto out;
 
@@ -1022,7 +1019,7 @@ static int btt_arena_write_layout(struct arena_info *arena)
  * This function completes the initialization for the BTT namespace
  * such that it is ready to accept IOs
  */
-static int btt_meta_init(struct btt *btt)
+static int btt_meta_init(struct device *dev, struct btt *btt)
 {
 	int ret = 0;
 	struct arena_info *arena;
@@ -1033,15 +1030,15 @@ static int btt_meta_init(struct btt *btt)
 		if (ret)
 			goto unlock;
 
-		ret = btt_freelist_init(arena);
+		ret = btt_freelist_init(dev, arena);
 		if (ret)
 			goto unlock;
 
-		ret = btt_rtt_init(arena);
+		ret = btt_rtt_init(dev, arena);
 		if (ret)
 			goto unlock;
 
-		ret = btt_maplocks_init(arena);
+		ret = btt_maplocks_init(dev, arena);
 		if (ret)
 			goto unlock;
 	}
@@ -1584,7 +1581,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 	nsio = to_nd_namespace_io(&nd_btt->ndns->dev);
 	btt->phys_bb = &nsio->bb;
 
-	ret = discover_arenas(btt);
+	ret = discover_arenas(dev, btt);
 	if (ret) {
 		dev_err(dev, "init: error in arena_discover: %d\n", ret);
 		return NULL;
@@ -1606,7 +1603,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 			return NULL;
 		}
 
-		ret = btt_meta_init(btt);
+		ret = btt_meta_init(dev, btt);
 		if (ret) {
 			dev_err(dev, "init: error in meta_init: %d\n", ret);
 			return NULL;
