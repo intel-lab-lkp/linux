@@ -266,6 +266,7 @@ static int __init
 acpi_parse_lapic(union acpi_subtable_headers * header, const unsigned long end)
 {
 	struct acpi_madt_local_apic *processor = NULL;
+	int cpu;
 
 	processor = (struct acpi_madt_local_apic *)header;
 
@@ -289,9 +290,13 @@ acpi_parse_lapic(union acpi_subtable_headers * header, const unsigned long end)
 	 * to not preallocating memory for all NR_CPUS
 	 * when we use CPU hotplug.
 	 */
-	acpi_register_lapic(processor->id,	/* APIC ID */
-			    processor->processor_id, /* ACPI ID */
-			    processor->lapic_flags & ACPI_MADT_ENABLED);
+	cpu = acpi_register_lapic(processor->id,	/* APIC ID */
+				  processor->processor_id, /* ACPI ID */
+				  processor->lapic_flags & ACPI_MADT_ENABLED);
+
+	/* Do strict X2APIC ID check only when LAPIC contains enabled CPUs */
+	if (cpu >= 0)
+		has_lapic_cpus = true;
 
 	return 0;
 }
@@ -1134,7 +1139,6 @@ static int __init acpi_parse_madt_lapic_entries(void)
 	if (!count) {
 		count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC,
 					acpi_parse_lapic, MAX_LOCAL_APIC);
-		has_lapic_cpus = count > 0;
 		x2count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC,
 					acpi_parse_x2apic, MAX_LOCAL_APIC);
 	}
