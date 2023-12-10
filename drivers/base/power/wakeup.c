@@ -73,6 +73,15 @@ static struct wakeup_source deleted_ws = {
 
 static DEFINE_IDA(wakeup_ida);
 
+#define MAX_SUSPEND_ABORT_LEN 256
+static DEFINE_RAW_SPINLOCK(abort_suspend_lock);
+
+struct pm_abort_suspend_source {
+	struct list_head list;
+	char *source_triggering_abort_suspend;
+};
+static LIST_HEAD(pm_abort_suspend_list);
+
 /**
  * wakeup_source_create - Create a struct wakeup_source object.
  * @name: Name of the new wakeup source.
@@ -576,6 +585,56 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 }
 
 /**
+ * abort_suspend_list_clear - Clear pm_abort_suspend_list.
+ *
+ * The pm_abort_suspend_list will be cleared when system PM exits.
+ */
+void abort_suspend_list_clear(void)
+{
+	struct pm_abort_suspend_source *info, *tmp;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&abort_suspend_lock, flags);
+	list_for_each_entry_safe(info, tmp, &pm_abort_suspend_list, list) {
+		list_del(&info->list);
+		kfree(info);
+	}
+	raw_spin_unlock_irqrestore(&abort_suspend_lock, flags);
+}
+EXPORT_SYMBOL_GPL(abort_suspend_list_clear);
+
+/**
+ * pm_abort_suspend_source_add - Update pm_abort_suspend_list
+ * @source_name: Wakeup_source or function aborting suspend transitions.
+ *
+ * Add the source name responsible for updating the abort_suspend flag in the
+ * pm_abort_suspend_list.
+ */
+static void pm_abort_suspend_source_add(const char *source_name)
+{
+	struct pm_abort_suspend_source *info;
+	unsigned long flags;
+
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return;
+
+	/* Initialize the list within the struct if it's not already initialized */
+	if (list_empty(&info->list))
+		INIT_LIST_HEAD(&info->list);
+
+	info->source_triggering_abort_suspend = kstrdup(source_name, GFP_KERNEL);
+	if (!info->source_triggering_abort_suspend) {
+		kfree(info);
+		return;
+	}
+
+	raw_spin_lock_irqsave(&abort_suspend_lock, flags);
+	list_add_tail(&info->list, &pm_abort_suspend_list);
+	raw_spin_unlock_irqrestore(&abort_suspend_lock, flags);
+}
+
+/**
  * wakeup_source_report_event - Report wakeup event using the given source.
  * @ws: Wakeup source to report the event for.
  * @hard: If set, abort suspends in progress and wake up from suspend-to-idle.
@@ -590,8 +649,11 @@ static void wakeup_source_report_event(struct wakeup_source *ws, bool hard)
 	if (!ws->active)
 		wakeup_source_activate(ws);
 
-	if (hard)
+	if (hard) {
+		if (pm_suspend_target_state != PM_SUSPEND_ON)
+			pm_abort_suspend_source_add(ws->name);
 		pm_system_wakeup();
+	}
 }
 
 /**
@@ -877,6 +939,7 @@ bool pm_wakeup_pending(void)
 {
 	unsigned long flags;
 	bool ret = false;
+	struct pm_abort_suspend_source *info;
 
 	raw_spin_lock_irqsave(&events_lock, flags);
 	if (events_check_enabled) {
@@ -893,12 +956,29 @@ bool pm_wakeup_pending(void)
 		pm_print_active_wakeup_sources();
 	}
 
+	if (atomic_read(&pm_abort_suspend) > 0) {
+		raw_spin_lock_irqsave(&abort_suspend_lock, flags);
+		list_for_each_entry(info, &pm_abort_suspend_list, list) {
+			pm_pr_dbg("wakeup source or subsystem %s aborted suspend\n",
+					info->source_triggering_abort_suspend);
+		}
+		raw_spin_unlock_irqrestore(&abort_suspend_lock, flags);
+	}
+
 	return ret || atomic_read(&pm_abort_suspend) > 0;
 }
 EXPORT_SYMBOL_GPL(pm_wakeup_pending);
 
 void pm_system_wakeup(void)
 {
+	char buf[MAX_SUSPEND_ABORT_LEN];
+
+	if (pm_suspend_target_state != PM_SUSPEND_ON) {
+		sprintf(buf, "%ps", __builtin_return_address(0));
+		if (strcmp(buf, "pm_wakeup_ws_event"))
+			pm_abort_suspend_source_add(buf);
+	}
+
 	atomic_inc(&pm_abort_suspend);
 	s2idle_wake();
 }
