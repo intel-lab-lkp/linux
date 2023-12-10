@@ -71,6 +71,16 @@ static ssize_t irq_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(irq);
 
+static ssize_t gsi_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	return sysfs_emit(buf, "%u\n", pdev->gsi);
+}
+static DEVICE_ATTR_RO(gsi);
+
 static ssize_t broken_parity_status_show(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -596,6 +606,7 @@ static struct attribute *pci_dev_attrs[] = {
 	&dev_attr_revision.attr,
 	&dev_attr_class.attr,
 	&dev_attr_irq.attr,
+	&dev_attr_gsi.attr,
 	&dev_attr_local_cpus.attr,
 	&dev_attr_local_cpulist.attr,
 	&dev_attr_modalias.attr,
