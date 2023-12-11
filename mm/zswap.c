@@ -1986,7 +1986,8 @@ static int zswap_setup(void)
 		zswap_enabled = false;
 	}
 
-	shrink_wq = create_workqueue("zswap-shrink");
+	shrink_wq = alloc_workqueue("zswap-shrink",
+			WQ_UNBOUND|WQ_MEM_RECLAIM, 0);
 	if (!shrink_wq)
 		goto fallback_fail;
 
