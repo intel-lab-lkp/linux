@@ -199,6 +199,15 @@ struct efa_com_reg_mr_params {
 	u8 indirect;
 };
 
+struct efa_com_mr_pci_info {
+	u16 recv_pci_bus_id;
+	u16 rdma_read_pci_bus_id;
+	u16 rdma_recv_pci_bus_id;
+	u8 recv_pci_bus_id_valid : 1;
+	u8 rdma_read_pci_bus_id_valid : 1;
+	u8 rdma_recv_pci_bus_id_valid : 1;
+};
+
 struct efa_com_reg_mr_result {
 	/*
 	 * To be used in conjunction with local buffers references in SQ and
@@ -210,6 +219,7 @@ struct efa_com_reg_mr_result {
 	 * accessed memory region
 	 */
 	u32 r_key;
+	struct efa_com_mr_pci_info pci_info;
 };
 
 struct efa_com_dereg_mr_params {
