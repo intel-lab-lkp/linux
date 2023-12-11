@@ -10,6 +10,10 @@
 
 #ifndef EFX_DEBUGFS_H
 #define EFX_DEBUGFS_H
+#include <linux/module.h>
+#include <linux/debugfs.h>
+#include <linux/dcache.h>
+#include <linux/seq_file.h>
 #include "net_driver.h"
 
 #ifdef CONFIG_DEBUG_FS
@@ -63,6 +67,45 @@ void efx_fini_debugfs_nic(struct efx_nic *efx);
 int efx_init_debugfs(void);
 void efx_fini_debugfs(void);
 
+void efx_debugfs_print_filter(char *s, size_t l, struct efx_filter_spec *spec);
+
+/* Generate operations for a debugfs node with a custom reader function.
+ * The reader should have signature int (*)(struct seq_file *s, void *data)
+ * where data is the pointer passed to EFX_DEBUGFS_CREATE_RAW.
+ */
+#define EFX_DEBUGFS_RAW_PARAMETER(_reader)				       \
+									       \
+static int efx_debugfs_##_reader##_read(struct seq_file *s, void *d)	       \
+{									       \
+	return _reader(s, s->private);					       \
+}									       \
+									       \
+static int efx_debugfs_##_reader##_open(struct inode *inode, struct file *f)   \
+{									       \
+	return single_open(f, efx_debugfs_##_reader##_read, inode->i_private); \
+}									       \
+									       \
+static const struct file_operations efx_debugfs_##_reader##_ops = {	       \
+	.owner = THIS_MODULE,						       \
+	.open = efx_debugfs_##_reader##_open,				       \
+	.release = single_release,					       \
+	.read = seq_read,						       \
+	.llseek = seq_lseek,						       \
+};									       \
+									       \
+static void efx_debugfs_create_##_reader(const char *name, umode_t mode,       \
+					 struct dentry *parent, void *data)    \
+{									       \
+	debugfs_create_file(name, mode, parent, data,			       \
+			    &efx_debugfs_##_reader##_ops);		       \
+}
+
+/* Instantiate a debugfs node with a custom reader function.  The operations
+ * must have been generated with EFX_DEBUGFS_RAW_PARAMETER(_reader).
+ */
+#define EFX_DEBUGFS_CREATE_RAW(_name, _mode, _parent, _data, _reader)	       \
+		efx_debugfs_create_##_reader(_name, _mode, _parent, _data)
+
 #else /* CONFIG_DEBUG_FS */
 
 static inline void efx_fini_debugfs_netdev(struct net_device *net_dev) {}
@@ -98,6 +141,8 @@ static inline int efx_init_debugfs(void)
 	return 0;
 }
 static inline void efx_fini_debugfs(void) {}
+
+void efx_debugfs_print_filter(char *s, size_t l, struct efx_filter_spec *spec) {}
 
 #endif /* CONFIG_DEBUG_FS */
 

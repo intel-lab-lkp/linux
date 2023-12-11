@@ -9,10 +9,6 @@
  */
 
 #include "debugfs.h"
-#include <linux/module.h>
-#include <linux/debugfs.h>
-#include <linux/dcache.h>
-#include <linux/seq_file.h>
 
 /* Maximum length for a name component or symlink target */
 #define EFX_DEBUGFS_NAME_LEN 32
@@ -427,4 +423,117 @@ void efx_fini_debugfs(void)
 	debugfs_remove_recursive(efx_debug_root);
 	efx_debug_cards = NULL;
 	efx_debug_root = NULL;
+}
+
+/**
+ * efx_debugfs_print_filter - format a filter spec for display
+ * @s: buffer to write result into
+ * @l: length of buffer @s
+ * @spec: filter specification
+ */
+void efx_debugfs_print_filter(char *s, size_t l, struct efx_filter_spec *spec)
+{
+	u32 ip[4];
+	int p = snprintf(s, l, "match=%#x,pri=%d,flags=%#x,q=%d",
+			 spec->match_flags, spec->priority, spec->flags,
+			 spec->dmaq_id);
+
+	if (spec->vport_id)
+		p += snprintf(s + p, l - p, ",vport=%#x", spec->vport_id);
+
+	if (spec->flags & EFX_FILTER_FLAG_RX_RSS)
+		p += snprintf(s + p, l - p, ",rss=%#x", spec->rss_context);
+
+	if (spec->match_flags & EFX_FILTER_MATCH_OUTER_VID)
+		p += snprintf(s + p, l - p,
+			      ",ovid=%d", ntohs(spec->outer_vid));
+	if (spec->match_flags & EFX_FILTER_MATCH_INNER_VID)
+		p += snprintf(s + p, l - p,
+			      ",ivid=%d", ntohs(spec->inner_vid));
+	if (spec->match_flags & EFX_FILTER_MATCH_ENCAP_TYPE)
+		p += snprintf(s + p, l - p,
+			      ",encap=%d", spec->encap_type);
+	if (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC)
+		p += snprintf(s + p, l - p,
+			      ",lmac=%02x:%02x:%02x:%02x:%02x:%02x",
+			      spec->loc_mac[0], spec->loc_mac[1],
+			      spec->loc_mac[2], spec->loc_mac[3],
+			      spec->loc_mac[4], spec->loc_mac[5]);
+	if (spec->match_flags & EFX_FILTER_MATCH_REM_MAC)
+		p += snprintf(s + p, l - p,
+			      ",rmac=%02x:%02x:%02x:%02x:%02x:%02x",
+			      spec->rem_mac[0], spec->rem_mac[1],
+			      spec->rem_mac[2], spec->rem_mac[3],
+			      spec->rem_mac[4], spec->rem_mac[5]);
+	if (spec->match_flags & EFX_FILTER_MATCH_ETHER_TYPE)
+		p += snprintf(s + p, l - p,
+			      ",ether=%#x", ntohs(spec->ether_type));
+	if (spec->match_flags & EFX_FILTER_MATCH_IP_PROTO)
+		p += snprintf(s + p, l - p,
+			      ",ippr=%#x", spec->ip_proto);
+	if (spec->match_flags & EFX_FILTER_MATCH_LOC_HOST) {
+		if (ntohs(spec->ether_type) == ETH_P_IP) {
+			ip[0] = (__force u32) spec->loc_host[0];
+			p += snprintf(s + p, l - p,
+				      ",lip=%d.%d.%d.%d",
+				      ip[0] & 0xff,
+				      (ip[0] >> 8) & 0xff,
+				      (ip[0] >> 16) & 0xff,
+				      (ip[0] >> 24) & 0xff);
+		} else if (ntohs(spec->ether_type) == ETH_P_IPV6) {
+			ip[0] = (__force u32) spec->loc_host[0];
+			ip[1] = (__force u32) spec->loc_host[1];
+			ip[2] = (__force u32) spec->loc_host[2];
+			ip[3] = (__force u32) spec->loc_host[3];
+			p += snprintf(s + p, l - p,
+				      ",lip=%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
+				      ip[0] & 0xffff,
+				      (ip[0] >> 16) & 0xffff,
+				      ip[1] & 0xffff,
+				      (ip[1] >> 16) & 0xffff,
+				      ip[2] & 0xffff,
+				      (ip[2] >> 16) & 0xffff,
+				      ip[3] & 0xffff,
+				      (ip[3] >> 16) & 0xffff);
+		} else {
+			p += snprintf(s + p, l - p, ",lip=?");
+		}
+	}
+	if (spec->match_flags & EFX_FILTER_MATCH_REM_HOST) {
+		if (ntohs(spec->ether_type) == ETH_P_IP) {
+			ip[0] = (__force u32) spec->rem_host[0];
+			p += snprintf(s + p, l - p,
+				      ",rip=%d.%d.%d.%d",
+				      ip[0] & 0xff,
+				      (ip[0] >> 8) & 0xff,
+				      (ip[0] >> 16) & 0xff,
+				      (ip[0] >> 24) & 0xff);
+		} else if (ntohs(spec->ether_type) == ETH_P_IPV6) {
+			ip[0] = (__force u32) spec->rem_host[0];
+			ip[1] = (__force u32) spec->rem_host[1];
+			ip[2] = (__force u32) spec->rem_host[2];
+			ip[3] = (__force u32) spec->rem_host[3];
+			p += snprintf(s + p, l - p,
+				      ",rip=%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
+				      ip[0] & 0xffff,
+				      (ip[0] >> 16) & 0xffff,
+				      ip[1] & 0xffff,
+				      (ip[1] >> 16) & 0xffff,
+				      ip[2] & 0xffff,
+				      (ip[2] >> 16) & 0xffff,
+				      ip[3] & 0xffff,
+				      (ip[3] >> 16) & 0xffff);
+		} else {
+			p += snprintf(s + p, l - p, ",rip=?");
+		}
+	}
+	if (spec->match_flags & EFX_FILTER_MATCH_LOC_PORT)
+		p += snprintf(s + p, l - p,
+			      ",lport=%d", ntohs(spec->loc_port));
+	if (spec->match_flags & EFX_FILTER_MATCH_REM_PORT)
+		p += snprintf(s + p, l - p,
+			      ",rport=%d", ntohs(spec->rem_port));
+	if (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC_IG)
+		p += snprintf(s + p, l - p, ",%s",
+			      spec->loc_mac[0] ? "mc" : "uc");
 }

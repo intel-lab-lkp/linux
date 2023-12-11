@@ -13,6 +13,7 @@
 #include "mcdi.h"
 #include "nic.h"
 #include "rx_common.h"
+#include "debugfs.h"
 
 /* The maximum size of a shared RSS context */
 /* TODO: this should really be from the mcdi protocol export */
@@ -1173,6 +1174,42 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 	return count;
 }
 
+static int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
+{
+	struct efx_mcdi_filter_table *table;
+	struct efx_nic *efx = data;
+	int i;
+
+	down_read(&efx->filter_sem);
+	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
+
+	/* deliberately don't lock the table->lock, so that we can
+	 * still dump the table even if we hang mid-operation.
+	 */
+	for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; ++i) {
+		struct efx_filter_spec *spec =
+			efx_mcdi_filter_entry_spec(table, i);
+		char filter[256];
+
+		if (spec) {
+			efx_debugfs_print_filter(filter, sizeof(filter), spec);
+
+			seq_printf(file, "%d[%#04llx],%#x = %s\n",
+				   i, table->entry[i].handle & 0xffff,
+				   efx_mcdi_filter_entry_flags(table, i),
+				   filter);
+		}
+	}
+
+	up_read(&efx->filter_sem);
+	return 0;
+}
+EFX_DEBUGFS_RAW_PARAMETER(efx_debugfs_read_filter_list);
+
 static int efx_mcdi_filter_match_flags_from_mcdi(bool encap, u32 mcdi_flags)
 {
 	int match_flags = 0;
@@ -1360,6 +1397,8 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool multicast_chaining)
 			    &table->mc_overflow);
 	debugfs_create_bool("mc_chaining", 0444, table->debug_dir,
 			    &table->mc_chaining);
+	EFX_DEBUGFS_CREATE_RAW("entries", 0444, table->debug_dir, efx,
+			       efx_debugfs_read_filter_list);
 #endif
 
 	efx->filter_state = table;
