@@ -887,7 +887,7 @@ struct buffer_head *ext4_bread(handle_t *handle, struct inode *inode,
 	bh = ext4_getblk(handle, inode, block, map_flags);
 	if (IS_ERR(bh))
 		return bh;
-	if (!bh || ext4_buffer_uptodate(bh))
+	if (!bh || buffer_uptodate_or_error(bh))
 		return bh;
 
 	ret = ext4_read_bh_lock(bh, REQ_META | REQ_PRIO, true);
@@ -915,7 +915,7 @@ int ext4_bread_batch(struct inode *inode, ext4_lblk_t block, int bh_count,
 
 	for (i = 0; i < bh_count; i++)
 		/* Note that NULL bhs[i] is valid because of holes. */
-		if (bhs[i] && !ext4_buffer_uptodate(bhs[i]))
+		if (bhs[i] && !buffer_uptodate_or_error(bhs[i]))
 			ext4_read_bh_lock(bhs[i], REQ_META | REQ_PRIO, false);
 
 	if (!wait)
@@ -4392,11 +4392,11 @@ static int __ext4_get_inode_loc(struct super_block *sb, unsigned long ino,
 	bh = sb_getblk(sb, block);
 	if (unlikely(!bh))
 		return -ENOMEM;
-	if (ext4_buffer_uptodate(bh))
+	if (buffer_uptodate_or_error(bh))
 		goto has_buffer;
 
 	lock_buffer(bh);
-	if (ext4_buffer_uptodate(bh)) {
+	if (buffer_uptodate_or_error(bh)) {
 		/* Someone brought it uptodate while we waited */
 		unlock_buffer(bh);
 		goto has_buffer;

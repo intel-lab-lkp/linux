@@ -94,7 +94,7 @@ static const char *ext4_get_link(struct dentry *dentry, struct inode *inode,
 		bh = ext4_getblk(NULL, inode, 0, EXT4_GET_BLOCKS_CACHED_NOWAIT);
 		if (IS_ERR(bh))
 			return ERR_CAST(bh);
-		if (!bh || !ext4_buffer_uptodate(bh))
+		if (!bh || !buffer_uptodate_or_error(bh))
 			return ERR_PTR(-ECHILD);
 	} else {
 		bh = ext4_bread(NULL, inode, 0, 0);
