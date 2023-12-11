@@ -273,9 +273,23 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	const char *name = NULL;
 
 	if (file) {
-		struct inode *inode = file_inode(vma->vm_file);
-		dev = inode->i_sb->s_dev;
-		ino = inode->i_ino;
+		const struct path *path;
+		struct kstat stat;
+
+		path = file_user_path(file);
+		/*
+		 * A file system can manipulate inode numbers within the
+		 * getattr callback (e.g. ovl_getattr).
+		 */
+		if (!vfs_getattr_nosec(path, &stat, STATX_INO, AT_STATX_DONT_SYNC)) {
+			dev = stat.dev;
+			ino = stat.ino;
+		} else {
+			struct inode *inode = d_backing_inode(path->dentry);
+
+			dev = inode->i_sb->s_dev;
+			ino = inode->i_ino;
+		}
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 	}
 
