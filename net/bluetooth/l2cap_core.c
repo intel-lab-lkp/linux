@@ -1669,7 +1669,13 @@ static void l2cap_conn_start(struct l2cap_conn *conn)
 			rsp.dcid = cpu_to_le16(chan->scid);
 
 			if (l2cap_chan_check_security(chan, false)) {
-				if (test_bit(FLAG_DEFER_SETUP, &chan->flags)) {
+				if (!l2cap_check_enc_key_size(conn->hcon)) {
+					l2cap_state_change(chan, BT_DISCONN);
+					__set_chan_timer(chan,
+							 L2CAP_DISC_TIMEOUT);
+					rsp.result = cpu_to_le16(L2CAP_CR_SEC_BLOCK);
+					rsp.status = cpu_to_le16(L2CAP_CS_NO_INFO);
+				} else if (test_bit(FLAG_DEFER_SETUP, &chan->flags)) {
 					rsp.result = cpu_to_le16(L2CAP_CR_PEND);
 					rsp.status = cpu_to_le16(L2CAP_CS_AUTHOR_PEND);
 					chan->ops->defer(chan);
@@ -4202,7 +4208,15 @@ static struct l2cap_chan *l2cap_connect(struct l2cap_conn *conn,
 
 	if (conn->info_state & L2CAP_INFO_FEAT_MASK_REQ_DONE) {
 		if (l2cap_chan_check_security(chan, false)) {
-			if (test_bit(FLAG_DEFER_SETUP, &chan->flags)) {
+			/* As slave role, we should check the enc key size when
+			 * l2cap conn req is received.
+			 */
+			if (!l2cap_check_enc_key_size(conn->hcon)) {
+				l2cap_state_change(chan, BT_DISCONN);
+				__set_chan_timer(chan, L2CAP_DISC_TIMEOUT);
+				result = L2CAP_CR_SEC_BLOCK;
+				status = L2CAP_CS_NO_INFO;
+			} else if (test_bit(FLAG_DEFER_SETUP, &chan->flags)) {
 				l2cap_state_change(chan, BT_CONNECT2);
 				result = L2CAP_CR_PEND;
 				status = L2CAP_CS_AUTHOR_PEND;
