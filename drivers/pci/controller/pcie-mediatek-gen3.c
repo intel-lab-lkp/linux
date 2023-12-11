@@ -116,7 +116,6 @@ struct mtk_msi_set {
  * struct mtk_gen3_pcie - PCIe port information
  * @dev: pointer to PCIe device
  * @base: IO mapped register base
- * @reg_base: physical register base
  * @mac_reset: MAC reset control
  * @phy_reset: PHY reset control
  * @phy: PHY controller block
@@ -135,7 +134,6 @@ struct mtk_msi_set {
 struct mtk_gen3_pcie {
 	struct device *dev;
 	void __iomem *base;
-	phys_addr_t reg_base;
 	struct reset_control *mac_reset;
 	struct reset_control *phy_reset;
 	struct phy *phy;
@@ -280,23 +278,7 @@ static int mtk_pcie_set_trans_table(struct mtk_gen3_pcie *pcie,
 
 static void mtk_pcie_enable_msi(struct mtk_gen3_pcie *pcie)
 {
-	int i;
 	u32 val;
-
-	for (i = 0; i < PCIE_MSI_SET_NUM; i++) {
-		struct mtk_msi_set *msi_set = &pcie->msi_sets[i];
-
-		msi_set->base = pcie->base + PCIE_MSI_SET_BASE_REG +
-				i * PCIE_MSI_SET_OFFSET;
-		msi_set->msg_addr = pcie->reg_base + PCIE_MSI_SET_BASE_REG +
-				    i * PCIE_MSI_SET_OFFSET;
-
-		/* Configure the MSI capture address */
-		writel_relaxed(lower_32_bits(msi_set->msg_addr), msi_set->base);
-		writel_relaxed(upper_32_bits(msi_set->msg_addr),
-			       pcie->base + PCIE_MSI_SET_ADDR_HI_BASE +
-			       i * PCIE_MSI_SET_ADDR_HI_OFFSET);
-	}
 
 	val = readl_relaxed(pcie->base + PCIE_MSI_SET_ENABLE_REG);
 	val |= PCIE_MSI_SET_ENABLE;
@@ -624,6 +606,29 @@ static int mtk_pcie_init_msi(struct mtk_gen3_pcie *pcie)
 {
 	struct device *dev = pcie->dev;
 	struct device_node *node = dev->of_node;
+	struct mtk_msi_set *msi_set;
+	void *msg_vaddr[PCIE_MSI_SET_NUM];
+	int i, j, ret = -ENODEV;
+
+	for (i = 0; i < PCIE_MSI_SET_NUM; i++) {
+		msi_set = &pcie->msi_sets[i];
+
+		msi_set->base = pcie->base + PCIE_MSI_SET_BASE_REG +
+				i * PCIE_MSI_SET_OFFSET;
+
+		msg_vaddr[i] = dmam_alloc_coherent(dev, sizeof(dma_addr_t),
+							 &msi_set->msg_addr, GFP_KERNEL);
+		if (!msg_vaddr[i]) {
+			dev_err(dev, "failed to alloc and map MSI address for set %d\n", i);
+			ret = -ENOMEM;
+			goto err_alloc_addr;
+		}
+
+		/* Configure the MSI capture address */
+		writel_relaxed(lower_32_bits(msi_set->msg_addr), msi_set->base);
+		writel_relaxed(upper_32_bits(msi_set->msg_addr), pcie->base +
+			       PCIE_MSI_SET_ADDR_HI_BASE + i * PCIE_MSI_SET_ADDR_HI_OFFSET);
+	}
 
 	mutex_init(&pcie->lock);
 
@@ -631,18 +636,24 @@ static int mtk_pcie_init_msi(struct mtk_gen3_pcie *pcie)
 				  &mtk_msi_bottom_domain_ops, pcie);
 	if (!pcie->msi_bottom_domain) {
 		dev_err(dev, "failed to create MSI bottom domain\n");
-		return -ENODEV;
+		goto err_alloc_addr;
 	}
 
 	pcie->msi_domain = pci_msi_create_irq_domain(dev->fwnode, &mtk_msi_domain_info,
 						     pcie->msi_bottom_domain);
-	if (!pcie->msi_domain) {
-		dev_err(dev, "failed to create MSI domain\n");
-		irq_domain_remove(pcie->msi_bottom_domain);
-		return -ENODEV;
+	if (pcie->msi_domain)
+		return 0;
+
+	dev_err(dev, "failed to create MSI domain\n");
+	irq_domain_remove(pcie->msi_bottom_domain);
+
+err_alloc_addr:
+	for (j = 0; j < i; j++) {
+		msi_set = &pcie->msi_sets[j];
+		dmam_free_coherent(dev, sizeof(dma_addr_t), msg_vaddr[j], msi_set->msg_addr);
 	}
 
-	return 0;
+	return ret;
 }
 
 static int mtk_pcie_init_intx(struct mtk_gen3_pcie *pcie)
@@ -760,19 +771,13 @@ static int mtk_pcie_parse_port(struct mtk_gen3_pcie *pcie)
 {
 	struct device *dev = pcie->dev;
 	struct platform_device *pdev = to_platform_device(dev);
-	struct resource *regs;
 	int ret;
 
-	regs = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pcie-mac");
-	if (!regs)
-		return -EINVAL;
-	pcie->base = devm_ioremap_resource(dev, regs);
+	pcie->base = devm_platform_ioremap_resource_byname(pdev, "pcie-mac");
 	if (IS_ERR(pcie->base)) {
 		dev_err(dev, "failed to map register base\n");
 		return PTR_ERR(pcie->base);
 	}
-
-	pcie->reg_base = regs->start;
 
 	pcie->phy_reset = devm_reset_control_get_optional_exclusive(dev, "phy");
 	if (IS_ERR(pcie->phy_reset)) {
@@ -983,6 +988,11 @@ static void mtk_pcie_irq_restore(struct mtk_gen3_pcie *pcie)
 
 	for (i = 0; i < PCIE_MSI_SET_NUM; i++) {
 		struct mtk_msi_set *msi_set = &pcie->msi_sets[i];
+
+		/* Configure the MSI capture address */
+		writel_relaxed(lower_32_bits(msi_set->msg_addr), msi_set->base);
+		writel_relaxed(upper_32_bits(msi_set->msg_addr), pcie->base +
+			       PCIE_MSI_SET_ADDR_HI_BASE + i * PCIE_MSI_SET_ADDR_HI_OFFSET);
 
 		writel_relaxed(msi_set->saved_irq_state,
 			       msi_set->base + PCIE_MSI_SET_ENABLE_OFFSET);
