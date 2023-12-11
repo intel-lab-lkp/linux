@@ -553,6 +553,18 @@ struct vb2_buf_ops {
  *		VIDIOC_REQBUFS will ensure at least @min_queued_buffers + 1
  *		buffers will be allocated. Note that VIDIOC_CREATE_BUFS will not
  *		modify the requested buffer count.
+ * @min_reqbufs_allocation: the minimum number of buffers to be allocated when
+ *		calling VIDIOC_REQBUFS. Drivers can set this if there has to
+ *		be a certain number of buffers available for the hardware to
+ *		work effectively. If set, then @min_reqbufs_allocation must be
+ *		larger than @min_queued_buffers + 1.
+ *		This field is only used by VIDIOC_REQBUFS. This allows calling
+ *		that ioctl with a buffer count of 1 and it will be automatically
+ *		adjusted to a workable buffer count. VIDIOC_CREATE_BUFS will not
+ *		modify the requested buffer count.
+ *		If this field is > 3, then it is highly recommended that the
+ *		driver implements the V4L2_CID_MIN_BUFFERS_FOR_CAPTURE/OUTPUT
+ *		control.
  */
 /*
  * Private elements (won't appear at the uAPI book):
@@ -618,6 +630,7 @@ struct vb2_queue {
 	u32				timestamp_flags;
 	gfp_t				gfp_flags;
 	u32				min_queued_buffers;
+	u32				min_reqbufs_allocation;
 
 	struct device			*alloc_devs[VB2_MAX_PLANES];
 
