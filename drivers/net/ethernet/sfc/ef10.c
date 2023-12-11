@@ -19,6 +19,7 @@
 #include "workarounds.h"
 #include "selftest.h"
 #include "ef10_sriov.h"
+#include "debugfs.h"
 #include <linux/in.h>
 #include <linux/jhash.h>
 #include <linux/wait.h>
@@ -580,6 +581,13 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	if (rc)
 		goto fail3;
 
+	/* Populate debugfs */
+#ifdef CONFIG_DEBUG_FS
+	rc = efx_init_debugfs_nic(efx);
+	if (rc)
+		pci_err(efx->pci_dev, "failed to init device debugfs\n");
+#endif
+
 	rc = device_create_file(&efx->pci_dev->dev,
 				&dev_attr_link_control_flag);
 	if (rc)
@@ -693,6 +701,7 @@ fail5:
 fail4:
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
 fail3:
+	efx_fini_debugfs_nic(efx);
 	efx_mcdi_detach(efx);
 
 	mutex_lock(&nic_data->udp_tunnels_lock);
@@ -962,6 +971,7 @@ static void efx_ef10_remove(struct efx_nic *efx)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
 
 	efx_mcdi_detach(efx);
+	efx_fini_debugfs_nic(efx);
 
 	memset(nic_data->udp_tunnels, 0, sizeof(nic_data->udp_tunnels));
 	mutex_lock(&nic_data->udp_tunnels_lock);

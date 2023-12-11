@@ -1022,6 +1022,9 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
 
+#ifdef CONFIG_DEBUG_FS
+	mutex_init(&efx->debugfs_symlink_mutex);
+#endif
 	efx->tx_queues_per_channel = 1;
 	efx->rxq_entries = EFX_DEFAULT_DMAQ_SIZE;
 	efx->txq_entries = EFX_DEFAULT_DMAQ_SIZE;
@@ -1055,6 +1058,10 @@ void efx_fini_struct(struct efx_nic *efx)
 #endif
 
 	efx_fini_channels(efx);
+
+#ifdef CONFIG_DEBUG_FS
+	mutex_destroy(&efx->debugfs_symlink_mutex);
+#endif
 
 	kfree(efx->vpd_sn);
 

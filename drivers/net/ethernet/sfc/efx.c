@@ -33,6 +33,7 @@
 #include "selftest.h"
 #include "sriov.h"
 #include "efx_devlink.h"
+#include "debugfs.h"
 
 #include "mcdi_port_common.h"
 #include "mcdi_pcol.h"
@@ -401,6 +402,11 @@ static void efx_remove_all(struct efx_nic *efx)
 #endif
 	efx_remove_port(efx);
 	efx_remove_nic(efx);
+#ifdef CONFIG_DEBUG_FS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	efx_fini_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+#endif
 }
 
 /**************************************************************************
@@ -681,6 +687,7 @@ static void efx_update_name(struct efx_nic *efx)
 	strcpy(efx->name, efx->net_dev->name);
 	efx_mtd_rename(efx);
 	efx_set_channel_names(efx);
+	efx_update_debugfs_netdev(efx);
 }
 
 static int efx_netdev_event(struct notifier_block *this,
@@ -1333,6 +1340,10 @@ static int __init efx_init_module(void)
 
 	printk(KERN_INFO "Solarflare NET driver\n");
 
+	rc = efx_init_debugfs();
+	if (rc)
+		goto err_debugfs;
+
 	rc = register_netdevice_notifier(&efx_netdev_notifier);
 	if (rc)
 		goto err_notifier;
@@ -1358,6 +1369,8 @@ static int __init efx_init_module(void)
  err_reset:
 	unregister_netdevice_notifier(&efx_netdev_notifier);
  err_notifier:
+	efx_fini_debugfs();
+ err_debugfs:
 	return rc;
 }
 
@@ -1369,7 +1382,7 @@ static void __exit efx_exit_module(void)
 	pci_unregister_driver(&efx_pci_driver);
 	efx_destroy_reset_workqueue();
 	unregister_netdevice_notifier(&efx_netdev_notifier);
-
+	efx_fini_debugfs();
 }
 
 module_init(efx_init_module);

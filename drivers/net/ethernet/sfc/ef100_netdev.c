@@ -26,10 +26,12 @@
 #include "tc_bindings.h"
 #include "tc_encap_actions.h"
 #include "efx_devlink.h"
+#include "debugfs.h"
 
 static void ef100_update_name(struct efx_nic *efx)
 {
 	strcpy(efx->name, efx->net_dev->name);
+	efx_update_debugfs_netdev(efx);
 }
 
 static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
@@ -404,6 +406,11 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 #ifdef CONFIG_SFC_SRIOV
 	ef100_pf_unset_devlink_port(efx);
 	efx_fini_tc(efx);
+#endif
+#ifdef CONFIG_DEBUG_FS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	efx_fini_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
 #endif
 
 	down_write(&efx->filter_sem);

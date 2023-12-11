@@ -27,6 +27,7 @@
 #include "tc.h"
 #include "mae.h"
 #include "rx_common.h"
+#include "debugfs.h"
 
 #define EF100_MAX_VIS 4096
 #define EF100_NUM_MCDI_BUFFERS	1
@@ -1077,6 +1078,12 @@ static int ef100_probe_main(struct efx_nic *efx)
 
 	/* Post-IO section. */
 
+	/* Populate debugfs */
+#ifdef CONFIG_DEBUG_FS
+	rc = efx_init_debugfs_nic(efx);
+	if (rc)
+		pci_err(efx->pci_dev, "failed to init device debugfs\n");
+#endif
 	rc = efx_mcdi_init(efx);
 	if (rc)
 		goto fail;
@@ -1213,6 +1220,7 @@ void ef100_remove(struct efx_nic *efx)
 
 	efx_mcdi_detach(efx);
 	efx_mcdi_fini(efx);
+	efx_fini_debugfs_nic(efx);
 	if (nic_data)
 		efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
 	kfree(nic_data);

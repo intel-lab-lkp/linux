@@ -108,6 +108,24 @@ struct hwtstamp_config;
 struct efx_self_tests;
 
 /**
+ * struct efx_debugfs_enum_data - information for pretty-printing enums
+ * @value: pointer to the actual enum
+ * @vlen: sizeof the enum
+ * @names: array of names of enumerated values.  May contain some %NULL entries.
+ * @max: number of entries in @names, typically from ARRAY_SIZE()
+ *
+ * Where a driver struct contains an enum member which we wish to expose in
+ * debugfs, we also embed an instance of this struct, which
+ * efx_debugfs_enum_read() uses to pretty-print the value.
+ */
+struct efx_debugfs_enum_data {
+	void *value;
+	size_t vlen;
+	const char *const *names;
+	unsigned int max;
+};
+
+/**
  * struct efx_buffer - A general-purpose DMA buffer
  * @addr: host base address of the buffer
  * @dma_addr: DMA base address of the buffer
@@ -1121,6 +1139,17 @@ struct efx_nic {
 	spinlock_t rps_hash_lock;
 	struct hlist_head *rps_hash_table;
 	u32 rps_next_id;
+#endif
+
+#ifdef CONFIG_DEBUG_FS
+	/** @debug_dir: NIC debugfs directory */
+	struct dentry *debug_dir;
+	/** @debug_symlink: NIC debugfs symlink (``nic_eth%d``) */
+	struct dentry *debug_symlink;
+	/** @debug_interrupt_mode: debugfs details for printing @interrupt_mode */
+	struct efx_debugfs_enum_data debug_interrupt_mode;
+	/** @debugfs_symlink_mutex: protects debugfs @debug_symlink */
+	struct mutex debugfs_symlink_mutex;
 #endif
 
 	atomic_t active_queues;
