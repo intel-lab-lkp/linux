@@ -5234,6 +5234,9 @@ intel_dp_update_dfp(struct intel_dp *intel_dp,
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	struct intel_connector *connector = intel_dp->attached_connector;
 
+	if (!drm_dp_is_branch(intel_dp->dpcd))
+		return;
+
 	intel_dp->dfp.max_bpc =
 		drm_dp_downstream_max_bpc(intel_dp->dpcd,
 					  intel_dp->downstream_ports, drm_edid);
