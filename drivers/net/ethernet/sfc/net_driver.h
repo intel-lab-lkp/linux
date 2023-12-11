@@ -273,6 +273,10 @@ struct efx_tx_queue {
 	bool initialised;
 	bool timestamping;
 	bool xdp_tx;
+#ifdef CONFIG_DEBUG_FS
+	/** @debug_dir: Queue debugfs directory (under @efx->debug_queues_dir) */
+	struct dentry *debug_dir;
+#endif
 
 	/* Members used mainly on the completion path */
 	unsigned int read_count ____cacheline_aligned_in_smp;

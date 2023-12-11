@@ -78,6 +78,77 @@ void efx_update_debugfs_netdev(struct efx_nic *efx)
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 }
 
+#define EFX_DEBUGFS_TXQ(_type, _name)	\
+	debugfs_create_##_type(#_name, 0444, tx_queue->debug_dir, &tx_queue->_name)
+
+/* Create basic debugfs parameter files for an Efx TXQ */
+static void efx_init_debugfs_tx_queue_files(struct efx_tx_queue *tx_queue)
+{
+	EFX_DEBUGFS_TXQ(u32, label);
+	EFX_DEBUGFS_TXQ(bool, xdp_tx);
+	/* offload features */
+	EFX_DEBUGFS_TXQ(u32, type);
+	EFX_DEBUGFS_TXQ(u32, tso_version);
+	EFX_DEBUGFS_TXQ(bool, tso_encap);
+	EFX_DEBUGFS_TXQ(bool, timestamping);
+	/* descriptor ring indices */
+	EFX_DEBUGFS_TXQ(u32, read_count);
+	EFX_DEBUGFS_TXQ(u32, insert_count);
+	EFX_DEBUGFS_TXQ(u32, write_count);
+	EFX_DEBUGFS_TXQ(u32, notify_count);
+}
+
+/**
+ * efx_init_debugfs_tx_queue - create debugfs directory for TX queue
+ * @tx_queue:		Efx TX queue
+ *
+ * Create a debugfs directory containing parameter-files for @tx_queue.
+ * The directory must be cleaned up using efx_fini_debugfs_tx_queue(),
+ * even if this function returns an error.
+ *
+ * Return: a negative error code or 0 on success.
+ */
+int efx_init_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
+{
+	char target[EFX_DEBUGFS_NAME_LEN];
+	char name[EFX_DEBUGFS_NAME_LEN];
+
+	if (!tx_queue->efx->debug_queues_dir)
+		return -ENODEV;
+	/* Create directory */
+	if (snprintf(name, sizeof(name), "tx-%d", tx_queue->queue)
+	    >= sizeof(name))
+		return -ENAMETOOLONG;
+	tx_queue->debug_dir = debugfs_create_dir(name,
+						 tx_queue->efx->debug_queues_dir);
+	if (!tx_queue->debug_dir)
+		return -ENOMEM;
+
+	/* Create files */
+	efx_init_debugfs_tx_queue_files(tx_queue);
+
+	/* Create symlink to channel */
+	if (snprintf(target, sizeof(target), "../../channels/%d",
+		     tx_queue->channel->channel) >= sizeof(target))
+		return -ENAMETOOLONG;
+	if (!debugfs_create_symlink("channel", tx_queue->debug_dir, target))
+		return -ENOMEM;
+
+	return 0;
+}
+
+/**
+ * efx_fini_debugfs_tx_queue - remove debugfs directory for TX queue
+ * @tx_queue:		Efx TX queue
+ *
+ * Remove directory created for @tx_queue by efx_init_debugfs_tx_queue().
+ */
+void efx_fini_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
+{
+	debugfs_remove_recursive(tx_queue->debug_dir);
+	tx_queue->debug_dir = NULL;
+}
+
 #define EFX_DEBUGFS_RXQ(_type, _name)	\
 	debugfs_create_##_type(#_name, 0444, rx_queue->debug_dir, &rx_queue->_name)
 

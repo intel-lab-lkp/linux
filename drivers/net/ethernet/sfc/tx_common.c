@@ -12,6 +12,7 @@
 #include "efx.h"
 #include "nic_common.h"
 #include "tx_common.h"
+#include "debugfs.h"
 #include <net/gso.h>
 
 static unsigned int efx_tx_cb_page_count(struct efx_tx_queue *tx_queue)
@@ -47,6 +48,11 @@ int efx_probe_tx_queue(struct efx_tx_queue *tx_queue)
 		rc = -ENOMEM;
 		goto fail1;
 	}
+	rc = efx_init_debugfs_tx_queue(tx_queue);
+	if (rc) /* not fatal */
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to create debugfs for TXQ %d, rc=%d\n",
+			  tx_queue->queue, rc);
 
 	/* Allocate hardware ring, determine TXQ type */
 	rc = efx_nic_probe_tx(tx_queue);
@@ -132,6 +138,8 @@ void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
 	netif_dbg(tx_queue->efx, drv, tx_queue->efx->net_dev,
 		  "destroying TX queue %d\n", tx_queue->queue);
 	efx_nic_remove_tx(tx_queue);
+
+	efx_fini_debugfs_tx_queue(tx_queue);
 
 	if (tx_queue->cb_page) {
 		for (i = 0; i < efx_tx_cb_page_count(tx_queue); i++)
