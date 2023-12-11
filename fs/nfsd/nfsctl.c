@@ -61,6 +61,30 @@ enum {
 	NFSD_MaxReserved
 };
 
+/**
+ * nfsd_put - put the reference to the nfsd_serv for given net
+ * @net: the net namespace for the serv
+ * @err: current error for the op
+ *
+ * When putting a reference to the nfsd_serv from a control operation
+ * we must first call nfsd_last_thread if all of these are true:
+ *
+ * - the configuration operation is going fail
+ * - there are no running threads
+ * - there are no successfully configured ports
+ *
+ * Otherwise, just put the serv reference.
+ */
+static inline void nfsd_put(struct net *net, int err)
+{
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct svc_serv *serv = nn->nfsd_serv;
+
+	if (err < 0 && !nn->nfsd_serv->sv_nrthreads && !nn->keep_active)
+		nfsd_last_thread(net);
+	svc_put(serv);
+}
+
 /*
  * write() for these nodes.
  */
@@ -709,7 +733,7 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
 	    !nn->nfsd_serv->sv_nrthreads && !xchg(&nn->keep_active, 1))
 		svc_get(nn->nfsd_serv);
 
-	nfsd_put(net);
+	nfsd_put(net, err);
 	return err;
 }
 
@@ -748,7 +772,7 @@ static ssize_t __write_ports_addxprt(char *buf, struct net *net, const struct cr
 	if (!nn->nfsd_serv->sv_nrthreads && !xchg(&nn->keep_active, 1))
 		svc_get(nn->nfsd_serv);
 
-	nfsd_put(net);
+	nfsd_put(net, 0);
 	return 0;
 out_close:
 	xprt = svc_find_xprt(nn->nfsd_serv, transport, net, PF_INET, port);
@@ -757,7 +781,7 @@ out_close:
 		svc_xprt_put(xprt);
 	}
 out_err:
-	nfsd_put(net);
+	nfsd_put(net, err);
 	return err;
 }
 
@@ -1687,7 +1711,7 @@ out:
 int nfsd_nl_rpc_status_get_done(struct netlink_callback *cb)
 {
 	mutex_lock(&nfsd_mutex);
-	nfsd_put(sock_net(cb->skb->sk));
+	nfsd_put(sock_net(cb->skb->sk), 0);
 	mutex_unlock(&nfsd_mutex);
 
 	return 0;
