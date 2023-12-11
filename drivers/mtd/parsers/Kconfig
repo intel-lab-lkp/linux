@@ -118,6 +118,16 @@ config MTD_AFS_PARTS
 	  for your particular device. It won't happen automatically. The
 	  'physmap' map driver (CONFIG_MTD_PHYSMAP) does this, for example.
 
+config MTD_GPT_PARTS
+	tristate "GPT partition table parsing"
+	select GENERIC_LIB_GPT
+	help
+	  This allow specifying MTD partitions on a NOR Flash device using
+	  a fixed-location GPT partition table. No wear-leveling is done by
+	  this parser, and it cannot recover from bad blocks in critical GPT
+	  metadata locations. For these reasons, NAND Flash devices cannot
+	  make use of this partition parser.
+
 config MTD_PARSER_TPLINK_SAFELOADER
 	tristate "TP-Link Safeloader partitions parser"
 	depends on MTD && (ARCH_BCM_5301X || ATH79 || SOC_MT7620 || SOC_MT7621 || COMPILE_TEST)
