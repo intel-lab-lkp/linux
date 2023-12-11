@@ -104,8 +104,7 @@ static void xen_update_blkif_status(struct xen_blkif *blkif)
 		xenbus_dev_error(blkif->be->dev, err, "block flush");
 		return;
 	}
-	invalidate_inode_pages2(
-			blkif->vbd.bdev_handle->bdev->bd_inode->i_mapping);
+	invalidate_bdev(blkif->vbd.bdev_handle->bdev);
 
 	for (i = 0; i < blkif->nr_rings; i++) {
 		ring = &blkif->rings[i];
