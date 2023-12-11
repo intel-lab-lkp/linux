@@ -602,9 +602,10 @@ static int __radix_tree_create(struct radix_tree_root *root,
 	struct radix_tree_node *node = NULL, *child;
 	void __rcu **slot = (void __rcu **)&root->xa_head;
 	unsigned long maxindex;
-	unsigned int shift, offset = 0;
+	unsigned int shift, offset = 0, mmshift = 0;
 	unsigned long max = index;
 	gfp_t gfp = root_gfp_mask(root);
+	int ret;
 
 	shift = radix_tree_load_root(root, &child, &maxindex);
 
@@ -614,6 +615,7 @@ static int __radix_tree_create(struct radix_tree_root *root,
 		if (error < 0)
 			return error;
 		shift = error;
+		mmshift = error;
 		child = rcu_dereference_raw(root->xa_head);
 	}
 
@@ -623,8 +625,10 @@ static int __radix_tree_create(struct radix_tree_root *root,
 			/* Have to add a child node.  */
 			child = radix_tree_node_alloc(gfp, node, root, shift,
 							offset, 0, 0);
-			if (!child)
-				return -ENOMEM;
+			if (!child) {
+				 ret = -ENOMEM;
+				 goto freec;
+			}
 			rcu_assign_pointer(*slot, node_to_entry(child));
 			if (node)
 				node->count++;
@@ -642,6 +646,17 @@ static int __radix_tree_create(struct radix_tree_root *root,
 	if (slotp)
 		*slotp = slot;
 	return 0;
+freec:
+	if (mmshift > 0) {
+		struct radix_tree_node *pn;
+		while (shift < mmshift && node) {
+			pn = node->parent;
+			radix_tree_node_rcu_free(&node->rcu_head);
+			shift += RADIX_TREE_MAP_SHIFT;
+			node = pn;
+		}
+	}
+	return ret;
 }
 
 /*
