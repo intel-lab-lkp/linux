@@ -110,6 +110,17 @@ config TYPEC_WUSB3801
 	  If you choose to build this driver as a dynamically linked module, the
 	  module will be called wusb3801.ko.
 
+config TYPEC_SPRD_PMIC
+	tristate "SPRD Serials PMICs Typec Controller"
+	help
+	  Say Y or M here if your system has a SPRD PMIC Type-C port controller.
+
+	  If you choose to build this driver as a dynamically linked module, the
+	  module will be called sprd_pmic_typec.ko.
+	  SPRD_PMIC_TYPEC notify usb, phy, charger, and analog audio to proceed
+	  with work
+
+
 source "drivers/usb/typec/mux/Kconfig"
 
 source "drivers/usb/typec/altmodes/Kconfig"
