@@ -73,7 +73,8 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 	 */
 	if (pc & HARDIRQ_MASK)
 		irqtime_account_delta(irqtime, delta, CPUTIME_IRQ);
-	else if ((pc & SOFTIRQ_OFFSET) && curr != this_cpu_ksoftirqd())
+	else if ((pc & SOFTIRQ_OFFSET) &&
+		 (IS_ENABLED(CONFIG_PREEMPT_RT) || curr != this_cpu_ksoftirqd()))
 		irqtime_account_delta(irqtime, delta, CPUTIME_SOFTIRQ);
 }
 
@@ -391,7 +392,7 @@ static void irqtime_account_process_tick(struct task_struct *p, int user_tick,
 
 	cputime -= other;
 
-	if (this_cpu_ksoftirqd() == p) {
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && this_cpu_ksoftirqd() == p) {
 		/*
 		 * ksoftirqd time do not get accounted in cpu_softirq_time.
 		 * So, we have to handle it separately here.
