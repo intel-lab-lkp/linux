@@ -1444,6 +1444,8 @@ print_link_msg:
 		speed = kasprintf(GFP_KERNEL, "%d Mbps", link_speed_mbps);
 	}
 
+	if (!speed)
+		return;
 	netdev_info(netdev, "NIC Link is Up Speed is %s Full Duplex\n", speed);
 	kfree(speed);
 }
