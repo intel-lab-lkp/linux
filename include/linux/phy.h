@@ -1145,6 +1145,21 @@ struct phy_driver {
 	int (*led_hw_control_get)(struct phy_device *dev, u8 index,
 				  unsigned long *rules);
 
+	/**
+	 * @led_polarity_set: Set the LED polarity if active low
+	 * @dev: PHY device which has the LED
+	 * @index: Which LED of the PHY device or -1
+	 * @active_low: LED needs to be set low to turn on
+	 *
+	 * Set the PHY to require the LED low to turn on.
+	 * index can be the LED of the PHY device or -1 whether the
+	 * LED polatiry is global and applied to every LED or polarity
+	 * is set per LED.
+	 *
+	 * Returns 0, or an error code.
+	 */
+	int (*led_polarity_set)(struct phy_device *dev, int index,
+				bool active_low);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)

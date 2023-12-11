@@ -3093,6 +3093,7 @@ static int of_phy_led(struct phy_device *phydev,
 	struct led_init_data init_data = {};
 	struct led_classdev *cdev;
 	struct phy_led *phyled;
+	bool active_low;
 	u32 index;
 	int err;
 
@@ -3108,6 +3109,13 @@ static int of_phy_led(struct phy_device *phydev,
 		return err;
 	if (index > U8_MAX)
 		return -EINVAL;
+
+	active_low = of_property_read_bool(led, "active-low");
+	if (phydev->drv->led_polarity_set) {
+		err = phydev->drv->led_polarity_set(phydev, index, active_low);
+		if (err)
+			return err;
+	}
 
 	phyled->index = index;
 	if (phydev->drv->led_brightness_set)
@@ -3145,6 +3153,7 @@ static int of_phy_leds(struct phy_device *phydev)
 {
 	struct device_node *node = phydev->mdio.dev.of_node;
 	struct device_node *leds, *led;
+	bool active_low;
 	int err;
 
 	if (!IS_ENABLED(CONFIG_OF_MDIO))
@@ -3156,6 +3165,15 @@ static int of_phy_leds(struct phy_device *phydev)
 	leds = of_get_child_by_name(node, "leds");
 	if (!leds)
 		return 0;
+
+	active_low = of_property_read_bool(leds, "active-low");
+	if (phydev->drv->led_polarity_set) {
+		err = phydev->drv->led_polarity_set(phydev, -1, active_low);
+		if (err) {
+			of_node_put(leds);
+			return err;
+		}
+	}
 
 	for_each_available_child_of_node(leds, led) {
 		err = of_phy_led(phydev, led);
