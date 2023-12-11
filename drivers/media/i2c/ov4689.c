@@ -32,11 +32,7 @@
 #define OV4689_EXPOSURE_STEP		1
 #define OV4689_VTS_MAX			0x7fff
 
-#define OV4689_REG_GAIN_H		CCI_REG8(0x3508)
-#define OV4689_REG_GAIN_L		CCI_REG8(0x3509)
-#define OV4689_GAIN_H_MASK		0x07
-#define OV4689_GAIN_H_SHIFT		8
-#define OV4689_GAIN_L_MASK		0xff
+#define OV4689_REG_GAIN			CCI_REG16(0x3508)
 #define OV4689_GAIN_STEP		1
 #define OV4689_GAIN_DEFAULT		0x80
 
@@ -613,14 +609,7 @@ static int ov4689_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_ANALOGUE_GAIN:
 		ret = ov4689_map_gain(ov4689, val, &sensor_gain);
-
-		cci_write(regmap, OV4689_REG_GAIN_H,
-			  (sensor_gain >> OV4689_GAIN_H_SHIFT) &
-			  OV4689_GAIN_H_MASK, &ret);
-
-		cci_write(regmap, OV4689_REG_GAIN_L,
-			  sensor_gain & OV4689_GAIN_L_MASK,
-			  &ret);
+		cci_write(regmap, OV4689_REG_GAIN, sensor_gain, &ret);
 		break;
 	case V4L2_CID_VBLANK:
 		cci_write(regmap, OV4689_REG_VTS,
