@@ -1348,6 +1348,20 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool multicast_chaining)
 	INIT_LIST_HEAD(&table->vlan_list);
 	init_rwsem(&table->lock);
 
+#ifdef CONFIG_DEBUG_FS
+	table->debug_dir = debugfs_create_dir("filters", efx->debug_dir);
+	debugfs_create_bool("uc_promisc", 0444, table->debug_dir,
+			    &table->uc_promisc);
+	debugfs_create_bool("mc_promisc", 0444, table->debug_dir,
+			    &table->mc_promisc);
+	debugfs_create_bool("mc_promisc_last", 0444, table->debug_dir,
+			    &table->mc_promisc_last);
+	debugfs_create_bool("mc_overflow", 0444, table->debug_dir,
+			    &table->mc_overflow);
+	debugfs_create_bool("mc_chaining", 0444, table->debug_dir,
+			    &table->mc_chaining);
+#endif
+
 	efx->filter_state = table;
 
 	return 0;
@@ -1518,6 +1532,10 @@ void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 		return;
 
 	vfree(table->entry);
+#ifdef CONFIG_DEBUG_FS
+	/* Remove debugfs entries pointing into @table */
+	debugfs_remove_recursive(table->debug_dir);
+#endif
 	kfree(table);
 }
 

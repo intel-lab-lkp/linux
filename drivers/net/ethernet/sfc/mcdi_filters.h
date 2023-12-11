@@ -91,6 +91,10 @@ struct efx_mcdi_filter_table {
 	bool vlan_filter;
 	/* Entries on the vlan_list are added/removed under filter_sem */
 	struct list_head vlan_list;
+#ifdef CONFIG_DEBUG_FS
+	/* filter table debugfs directory */
+	struct dentry *debug_dir;
+#endif
 };
 
 int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool multicast_chaining);

@@ -39,6 +39,10 @@
  *     index.  (This may differ from both the kernel core TX queue index and
  *     the hardware queue label of the TXQ.)
  *     The directory will contain a symlink to the owning channel.
+ *
+ * * "filters/" (&efx_mcdi_filter_table.debug_dir).
+ *   This contains parameter files for the NIC receive filter table
+ *   (@efx->filter_state).
  */
 
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
