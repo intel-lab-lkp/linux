@@ -424,6 +424,10 @@ struct efx_rx_queue {
 	struct work_struct grant_work;
 	/* Statistics to supplement MAC stats */
 	unsigned long rx_packets;
+#ifdef CONFIG_DEBUG_FS
+	/** @debug_dir: Queue debugfs directory (under @efx->debug_queues_dir) */
+	struct dentry *debug_dir;
+#endif
 	struct xdp_rxq_info xdp_rxq_info;
 	bool xdp_rxq_info_valid;
 };
@@ -1150,6 +1154,8 @@ struct efx_nic {
 	struct dentry *debug_dir;
 	/** @debug_channels_dir: contains channel debugfs dirs.  Under @debug_dir */
 	struct dentry *debug_channels_dir;
+	/** @debug_queues_dir: contains RX/TX queue debugfs dirs.  Under @debug_dir */
+	struct dentry *debug_queues_dir;
 	/** @debug_symlink: NIC debugfs symlink (``nic_eth%d``) */
 	struct dentry *debug_symlink;
 	/** @debug_interrupt_mode: debugfs details for printing @interrupt_mode */

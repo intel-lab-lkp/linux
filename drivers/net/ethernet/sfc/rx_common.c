@@ -14,6 +14,7 @@
 #include "efx.h"
 #include "nic.h"
 #include "rx_common.h"
+#include "debugfs.h"
 
 /* This is the percentage fill level below which new RX descriptors
  * will be added to the RX descriptor ring.
@@ -208,6 +209,12 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 	if (!rx_queue->buffer)
 		return -ENOMEM;
 
+	rc = efx_init_debugfs_rx_queue(rx_queue);
+	if (rc) /* not fatal */
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to create debugfs for RXQ %d, rc=%d\n",
+			  efx_rx_queue_index(rx_queue), rc);
+
 	rc = efx_nic_probe_rx(rx_queue);
 	if (rc) {
 		kfree(rx_queue->buffer);
@@ -310,6 +317,8 @@ void efx_remove_rx_queue(struct efx_rx_queue *rx_queue)
 		  "destroying RX queue %d\n", efx_rx_queue_index(rx_queue));
 
 	efx_nic_remove_rx(rx_queue);
+
+	efx_fini_debugfs_rx_queue(rx_queue);
 
 	kfree(rx_queue->buffer);
 	rx_queue->buffer = NULL;

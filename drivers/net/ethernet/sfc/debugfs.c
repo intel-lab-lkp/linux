@@ -78,6 +78,72 @@ void efx_update_debugfs_netdev(struct efx_nic *efx)
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 }
 
+#define EFX_DEBUGFS_RXQ(_type, _name)	\
+	debugfs_create_##_type(#_name, 0444, rx_queue->debug_dir, &rx_queue->_name)
+
+/* Create basic debugfs parameter files for an Efx RXQ */
+static void efx_init_debugfs_rx_queue_files(struct efx_rx_queue *rx_queue)
+{
+	EFX_DEBUGFS_RXQ(u32, core_index); /* actually an int */
+	/* descriptor ring indices */
+	EFX_DEBUGFS_RXQ(u32, added_count);
+	EFX_DEBUGFS_RXQ(u32, notified_count);
+	EFX_DEBUGFS_RXQ(u32, granted_count);
+	EFX_DEBUGFS_RXQ(u32, removed_count);
+}
+
+/**
+ * efx_init_debugfs_rx_queue - create debugfs directory for RX queue
+ * @rx_queue:		Efx RX queue
+ *
+ * Create a debugfs directory containing parameter-files for @rx_queue.
+ * The directory must be cleaned up using efx_fini_debugfs_rx_queue(),
+ * even if this function returns an error.
+ *
+ * Return: a negative error code or 0 on success.
+ */
+int efx_init_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
+{
+	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
+	char target[EFX_DEBUGFS_NAME_LEN];
+	char name[EFX_DEBUGFS_NAME_LEN];
+
+	if (!rx_queue->efx->debug_queues_dir)
+		return -ENODEV;
+	/* Create directory */
+	if (snprintf(name, sizeof(name), "rx-%d", efx_rx_queue_index(rx_queue))
+	    >= sizeof(name))
+		return -ENAMETOOLONG;
+	rx_queue->debug_dir = debugfs_create_dir(name,
+						 rx_queue->efx->debug_queues_dir);
+	if (!rx_queue->debug_dir)
+		return -ENOMEM;
+
+	/* Create files */
+	efx_init_debugfs_rx_queue_files(rx_queue);
+
+	/* Create symlink to channel */
+	if (snprintf(target, sizeof(target), "../../channels/%d",
+		     channel->channel) >= sizeof(target))
+		return -ENAMETOOLONG;
+	if (!debugfs_create_symlink("channel", rx_queue->debug_dir, target))
+		return -ENOMEM;
+
+	return 0;
+}
+
+/**
+ * efx_fini_debugfs_rx_queue - remove debugfs directory for RX queue
+ * @rx_queue:		Efx RX queue
+ *
+ * Remove directory created for @rx_queue by efx_init_debugfs_rx_queue().
+ */
+void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
+{
+	debugfs_remove_recursive(rx_queue->debug_dir);
+	rx_queue->debug_dir = NULL;
+}
+
 #define EFX_DEBUGFS_CHANNEL(_type, _name)	\
 	debugfs_create_##_type(#_name, 0444, channel->debug_dir, &channel->_name)
 
@@ -208,9 +274,10 @@ int efx_init_debugfs_nic(struct efx_nic *efx)
 	if (!efx->debug_dir)
 		return -ENOMEM;
 	efx_init_debugfs_nic_files(efx);
-	/* Create channels subdirectory */
+	/* Create subdirectories */
 	efx->debug_channels_dir = debugfs_create_dir("channels",
 						     efx->debug_dir);
+	efx->debug_queues_dir = debugfs_create_dir("queues", efx->debug_dir);
 	return 0;
 }
 

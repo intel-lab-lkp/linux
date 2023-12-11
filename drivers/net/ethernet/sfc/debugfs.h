@@ -28,10 +28,19 @@
  * * "channels/" (&efx_nic.debug_channels_dir).  For each channel, this will
  *   contain a directory (&efx_channel.debug_dir), whose name is the channel
  *   index (in decimal).
+ * * "queues/" (&efx_nic.debug_queues_dir).
+ *
+ *   * For each NIC RX queue, this will contain a directory
+ *     (&efx_rx_queue.debug_dir), whose name is "rx-N" where N is the RX queue
+ *     index.  (This may not be the same as the kernel core RX queue index.)
+ *     The directory will contain a symlink to the owning channel.
  */
 
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
 void efx_update_debugfs_netdev(struct efx_nic *efx);
+
+int efx_init_debugfs_rx_queue(struct efx_rx_queue *rx_queue);
+void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue);
 
 int efx_init_debugfs_channel(struct efx_channel *channel);
 void efx_fini_debugfs_channel(struct efx_channel *channel);
@@ -47,6 +56,12 @@ void efx_fini_debugfs(void);
 static inline void efx_fini_debugfs_netdev(struct net_device *net_dev) {}
 
 static inline void efx_update_debugfs_netdev(struct efx_nic *efx) {}
+
+int efx_init_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
+{
+	return 0;
+}
+void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue) {}
 
 int efx_init_debugfs_channel(struct efx_channel *channel)
 {
