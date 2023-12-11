@@ -326,6 +326,13 @@ static void efx_init_debugfs_nic_files(struct efx_nic *efx)
 	efx->debug_interrupt_mode.value = &efx->interrupt_mode;
 	efx_debugfs_create_enum("interrupt_mode", 0444, efx->debug_dir,
 				&efx->debug_interrupt_mode);
+	EFX_DEBUGFS_EFX(x64, loopback_modes);
+	efx->debug_loopback_mode.max = efx_loopback_mode_max;
+	efx->debug_loopback_mode.names = efx_loopback_mode_names;
+	efx->debug_loopback_mode.vlen = sizeof(efx->loopback_mode);
+	efx->debug_loopback_mode.value = &efx->loopback_mode;
+	efx_debugfs_create_enum("loopback_mode", 0444, efx->debug_dir,
+				&efx->debug_loopback_mode);
 }
 
 /**

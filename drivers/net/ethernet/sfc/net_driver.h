@@ -1164,6 +1164,8 @@ struct efx_nic {
 	struct dentry *debug_symlink;
 	/** @debug_interrupt_mode: debugfs details for printing @interrupt_mode */
 	struct efx_debugfs_enum_data debug_interrupt_mode;
+	/** @debug_loopback_mode: debugfs details for printing @loopback_mode */
+	struct efx_debugfs_enum_data debug_loopback_mode;
 	/** @debugfs_symlink_mutex: protects debugfs @debug_symlink */
 	struct mutex debugfs_symlink_mutex;
 #endif
