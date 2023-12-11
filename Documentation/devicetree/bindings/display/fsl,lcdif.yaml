@@ -20,6 +20,7 @@ properties:
           - fsl,imx23-lcdif
           - fsl,imx28-lcdif
           - fsl,imx6sx-lcdif
+          - fsl,imx8mq-lcdif
           - fsl,imx8mp-lcdif
           - fsl,imx93-lcdif
       - items:
@@ -74,7 +75,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: fsl,imx6sx-lcdif
+            enum:
+              - fsl,imx6sx-lcdif
+              - fsl,imx8mq-lcdif
     then:
       properties:
         clocks:
@@ -110,6 +113,7 @@ allOf:
               enum:
                 - fsl,imx6sx-lcdif
                 - fsl,imx8mp-lcdif
+                - fsl,imx8mq-lcdif
                 - fsl,imx93-lcdif
     then:
       properties:
