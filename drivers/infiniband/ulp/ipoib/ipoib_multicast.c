@@ -573,13 +573,9 @@ void ipoib_mcast_join_task(struct work_struct *work)
 		return;
 	}
 	priv->local_lid = port_attr.lid;
-	netif_addr_lock_bh(dev);
 
-	if (!test_bit(IPOIB_FLAG_DEV_ADDR_SET, &priv->flags)) {
-		netif_addr_unlock_bh(dev);
+	if (!test_bit(IPOIB_FLAG_DEV_ADDR_SET, &priv->flags))
 		return;
-	}
-	netif_addr_unlock_bh(dev);
 
 	mutex_lock(&priv->mcast_mutex);
 	spin_lock_irq(&priv->lock);
