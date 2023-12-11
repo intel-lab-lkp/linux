@@ -2438,6 +2438,10 @@ config CC_HAS_RETURN_THUNK
 config CC_HAS_ENTRY_PADDING
 	def_bool $(cc-option,-fpatchable-function-entry=16,16)
 
+config RUSTC_HAS_ENTRY_PADDING
+	depends RUST
+	def_bool $(rs-option,-Zpatchable-function-entry=16,16)
+
 config FUNCTION_PADDING_CFI
 	int
 	default 59 if FUNCTION_ALIGNMENT_64B
@@ -2455,7 +2459,7 @@ config FUNCTION_PADDING_BYTES
 
 config CALL_PADDING
 	def_bool n
-	depends on CC_HAS_ENTRY_PADDING && OBJTOOL
+	depends on CC_HAS_ENTRY_PADDING && (!RUST || RUST_HAS_ENTRY_PADDING) && OBJTOOL
 	select FUNCTION_ALIGNMENT_16B
 
 config FINEIBT
