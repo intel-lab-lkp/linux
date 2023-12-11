@@ -245,7 +245,7 @@ def parse_attr_sets(entries: List[Dict[str, Any]]) -> str:
                 # Add the attribute type in the same line
                 attr_line += f" ({inline(type_)})"
 
-            lines.append(rst_subsubsection(attr_line))
+            lines.append(rst_bullet(attr_line))
 
             for k in attr.keys():
                 if k in preprocessed + ignored:
