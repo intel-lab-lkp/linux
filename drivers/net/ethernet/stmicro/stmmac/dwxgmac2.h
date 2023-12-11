@@ -194,6 +194,12 @@
 #define XGMAC_MDIO_DATA			0x00000204
 #define XGMAC_MDIO_C22P			0x00000220
 #define XGMAC_FPE_CTRL_STS		0x00000280
+#define XGMAC_TRSP			BIT(19)
+#define XGMAC_TVER			BIT(18)
+#define XGMAC_RRSP			BIT(17)
+#define XGMAC_RVER			BIT(16)
+#define XGMAC_SRSP			BIT(2)
+#define XGMAC_SVER			BIT(1)
 #define XGMAC_EFPE			BIT(0)
 #define XGMAC_ADDRx_HIGH(x)		(0x00000300 + (x) * 0x8)
 #define XGMAC_ADDR_MAX			32

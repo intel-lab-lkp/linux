@@ -1439,22 +1439,63 @@ static void dwxgmac3_fpe_configure(void __iomem *ioaddr, struct stmmac_fpe_cfg *
 {
 	u32 value;
 
-	if (!enable) {
-		value = readl(ioaddr + XGMAC_FPE_CTRL_STS);
+	if (enable) {
+		cfg->fpe_csr = XGMAC_EFPE;
+		value = readl(ioaddr + XGMAC_RXQ_CTRL1);
+		value &= ~XGMAC_RQ;
+		value |= (num_rxq - 1) << XGMAC_RQ_SHIFT;
+		writel(value, ioaddr + XGMAC_RXQ_CTRL1);
+	} else {
+		cfg->fpe_csr = 0;
+	}
+	writel(cfg->fpe_csr, ioaddr + XGMAC_FPE_CTRL_STS);
+}
 
-		value &= ~XGMAC_EFPE;
+static int dwxgmac3_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
+{
+	u32 value;
+	int status;
 
-		writel(value, ioaddr + XGMAC_FPE_CTRL_STS);
-		return;
+	status = FPE_EVENT_UNKNOWN;
+
+	/* Reads from the XGMAC_FPE_CTRL_STS register should only be performed
+	 * here, since the status flags of MAC_FPE_CTRL_STS are "clear on read"
+	 */
+	value = readl(ioaddr + XGMAC_FPE_CTRL_STS);
+
+	if (value & XGMAC_TRSP) {
+		status |= FPE_EVENT_TRSP;
+		netdev_info(dev, "FPE: Respond mPacket is transmitted\n");
 	}
 
-	value = readl(ioaddr + XGMAC_RXQ_CTRL1);
-	value &= ~XGMAC_RQ;
-	value |= (num_rxq - 1) << XGMAC_RQ_SHIFT;
-	writel(value, ioaddr + XGMAC_RXQ_CTRL1);
+	if (value & XGMAC_TVER) {
+		status |= FPE_EVENT_TVER;
+		netdev_info(dev, "FPE: Verify mPacket is transmitted\n");
+	}
 
-	value = readl(ioaddr + XGMAC_FPE_CTRL_STS);
-	value |= XGMAC_EFPE;
+	if (value & XGMAC_RRSP) {
+		status |= FPE_EVENT_RRSP;
+		netdev_info(dev, "FPE: Respond mPacket is received\n");
+	}
+
+	if (value & XGMAC_RVER) {
+		status |= FPE_EVENT_RVER;
+		netdev_info(dev, "FPE: Verify mPacket is received\n");
+	}
+
+	return status;
+}
+
+static void dwxgmac3_fpe_send_mpacket(void __iomem *ioaddr, struct stmmac_fpe_cfg *cfg,
+				      enum stmmac_mpacket_type type)
+{
+	u32 value = cfg->fpe_csr;
+
+	if (type == MPACKET_VERIFY)
+		value |= XGMAC_SVER;
+	else if (type == MPACKET_RESPONSE)
+		value |= XGMAC_SRSP;
+
 	writel(value, ioaddr + XGMAC_FPE_CTRL_STS);
 }
 
@@ -1503,6 +1544,8 @@ const struct stmmac_ops dwxgmac210_ops = {
 	.config_l4_filter = dwxgmac2_config_l4_filter,
 	.set_arp_offload = dwxgmac2_set_arp_offload,
 	.fpe_configure = dwxgmac3_fpe_configure,
+	.fpe_send_mpacket = dwxgmac3_fpe_send_mpacket,
+	.fpe_irq_status = dwxgmac3_fpe_irq_status,
 };
 
 static void dwxlgmac2_rx_queue_enable(struct mac_device_info *hw, u8 mode,
