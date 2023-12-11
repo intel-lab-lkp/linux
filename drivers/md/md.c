@@ -6238,7 +6238,6 @@ static void md_clean(struct mddev *mddev)
 	mddev->persistent = 0;
 	mddev->level = LEVEL_NONE;
 	mddev->clevel[0] = 0;
-	mddev->flags = 0;
 	mddev->sb_flags = 0;
 	mddev->ro = MD_RDWR;
 	mddev->metadata_type[0] = 0;
@@ -7614,7 +7613,6 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	int err = 0;
 	void __user *argp = (void __user *)arg;
 	struct mddev *mddev = NULL;
-	bool did_set_md_closing = false;
 
 	if (!md_ioctl_valid(cmd))
 		return -ENOTTY;
@@ -7698,7 +7696,6 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 			err = -EBUSY;
 			goto out;
 		}
-		did_set_md_closing = true;
 		mutex_unlock(&mddev->open_mutex);
 		sync_blockdev(bdev);
 	}
@@ -7742,10 +7739,13 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 
 	case STOP_ARRAY:
 		err = do_md_stop(mddev, 0, bdev);
+		if (err)
+			clear_bit(MD_CLOSING, &mddev->flags);
 		goto unlock;
 
 	case STOP_ARRAY_RO:
 		err = md_set_readonly(mddev, bdev);
+		clear_bit(MD_CLOSING, &mddev->flags);
 		goto unlock;
 
 	case HOT_REMOVE_DISK:
@@ -7840,8 +7840,6 @@ unlock:
 				     mddev_unlock(mddev);
 
 out:
-	if(did_set_md_closing)
-		clear_bit(MD_CLOSING, &mddev->flags);
 	return err;
 }
 #ifdef CONFIG_COMPAT
