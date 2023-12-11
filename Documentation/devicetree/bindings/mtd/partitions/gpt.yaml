@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mtd/partitions/gpt.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GUID Partition Table (GPT)
+
+description: The GPT format is commonly used on block devices to describe a
+partitioning scheme. It mainly consists of a Legacy or Protective MBR for
+backwards compatibility, a primary GPT header with an array of Partition Table
+Entries, and a backup header with a backup array of PTEs. This partition table
+format can be used on MTD devices, specifically NOR flash devices, since NAND
+flashes are susceptible to bad blocks which could easily corrupt the GPT layout.
+Logical Block Addresses (LBAs) are defined to target 512-byte blocks.
+
+maintainers:
+  - Romain Gantois <romain.gantois@bootlin.com>
+
+select: false
+
+properties:
+  compatible:
+    const: gpt
+
+  '#address-cells': false
+
+  '#size-cells': false
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    flash@0 {
+      partitions {
+        compatible = "gpt";
+      };
+    };
