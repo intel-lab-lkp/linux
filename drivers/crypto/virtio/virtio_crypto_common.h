@@ -134,10 +134,9 @@ virtcrypto_clear_request(struct virtio_crypto_request *vc_req);
 
 static inline int virtio_crypto_get_current_node(void)
 {
-	int cpu, node;
+	int node;
 
-	cpu = get_cpu();
-	node = topology_physical_package_id(cpu);
+	node = topology_physical_package_id(get_cpu());
 	put_cpu();
 
 	return node;
