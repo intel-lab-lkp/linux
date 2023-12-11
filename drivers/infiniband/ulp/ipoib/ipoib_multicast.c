@@ -581,6 +581,7 @@ void ipoib_mcast_join_task(struct work_struct *work)
 	}
 	netif_addr_unlock_bh(dev);
 
+	mutex_lock(&priv->mcast_mutex);
 	spin_lock_irq(&priv->lock);
 	if (!test_bit(IPOIB_FLAG_OPER_UP, &priv->flags))
 		goto out;
@@ -635,6 +636,7 @@ void ipoib_mcast_join_task(struct work_struct *work)
 				/* Found the next unjoined group */
 				if (ipoib_mcast_join(dev, mcast)) {
 					spin_unlock_irq(&priv->lock);
+					mutex_unlock(&priv->mcast_mutex);
 					return;
 				}
 			} else if (!delay_until ||
@@ -656,6 +658,7 @@ out:
 		ipoib_mcast_join(dev, mcast);
 
 	spin_unlock_irq(&priv->lock);
+	mutex_unlock(&priv->mcast_mutex);
 }
 
 void ipoib_mcast_start_thread(struct net_device *dev)
