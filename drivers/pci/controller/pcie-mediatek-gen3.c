@@ -620,15 +620,36 @@ static const struct irq_domain_ops intx_domain_ops = {
 	.map = mtk_pcie_intx_map,
 };
 
-static int mtk_pcie_init_irq_domains(struct mtk_gen3_pcie *pcie)
+static int mtk_pcie_init_msi(struct mtk_gen3_pcie *pcie)
+{
+	struct device *dev = pcie->dev;
+	struct device_node *node = dev->of_node;
+
+	mutex_init(&pcie->lock);
+
+	pcie->msi_bottom_domain = irq_domain_add_linear(node, PCIE_MSI_IRQS_NUM,
+				  &mtk_msi_bottom_domain_ops, pcie);
+	if (!pcie->msi_bottom_domain) {
+		dev_err(dev, "failed to create MSI bottom domain\n");
+		return -ENODEV;
+	}
+
+	pcie->msi_domain = pci_msi_create_irq_domain(dev->fwnode, &mtk_msi_domain_info,
+						     pcie->msi_bottom_domain);
+	if (!pcie->msi_domain) {
+		dev_err(dev, "failed to create MSI domain\n");
+		irq_domain_remove(pcie->msi_bottom_domain);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int mtk_pcie_init_intx(struct mtk_gen3_pcie *pcie)
 {
 	struct device *dev = pcie->dev;
 	struct device_node *intc_node, *node = dev->of_node;
-	int ret;
 
-	raw_spin_lock_init(&pcie->irq_lock);
-
-	/* Setup INTx */
 	intc_node = of_get_child_by_name(node, "interrupt-controller");
 	if (!intc_node) {
 		dev_err(dev, "missing interrupt-controller node\n");
@@ -637,42 +658,13 @@ static int mtk_pcie_init_irq_domains(struct mtk_gen3_pcie *pcie)
 
 	pcie->intx_domain = irq_domain_add_linear(intc_node, PCI_NUM_INTX,
 						  &intx_domain_ops, pcie);
+	of_node_put(intc_node);
 	if (!pcie->intx_domain) {
 		dev_err(dev, "failed to create INTx IRQ domain\n");
-		ret = -ENODEV;
-		goto out_put_node;
+		return -ENODEV;
 	}
 
-	/* Setup MSI */
-	mutex_init(&pcie->lock);
-
-	pcie->msi_bottom_domain = irq_domain_add_linear(node, PCIE_MSI_IRQS_NUM,
-				  &mtk_msi_bottom_domain_ops, pcie);
-	if (!pcie->msi_bottom_domain) {
-		dev_err(dev, "failed to create MSI bottom domain\n");
-		ret = -ENODEV;
-		goto err_msi_bottom_domain;
-	}
-
-	pcie->msi_domain = pci_msi_create_irq_domain(dev->fwnode,
-						     &mtk_msi_domain_info,
-						     pcie->msi_bottom_domain);
-	if (!pcie->msi_domain) {
-		dev_err(dev, "failed to create MSI domain\n");
-		ret = -ENODEV;
-		goto err_msi_domain;
-	}
-
-	of_node_put(intc_node);
 	return 0;
-
-err_msi_domain:
-	irq_domain_remove(pcie->msi_bottom_domain);
-err_msi_bottom_domain:
-	irq_domain_remove(pcie->intx_domain);
-out_put_node:
-	of_node_put(intc_node);
-	return ret;
 }
 
 static void mtk_pcie_irq_teardown(struct mtk_gen3_pcie *pcie)
@@ -745,9 +737,15 @@ static int mtk_pcie_setup_irq(struct mtk_gen3_pcie *pcie)
 	struct platform_device *pdev = to_platform_device(dev);
 	int err;
 
-	err = mtk_pcie_init_irq_domains(pcie);
+	raw_spin_lock_init(&pcie->irq_lock);
+
+	err = mtk_pcie_init_intx(pcie);
 	if (err)
 		return err;
+
+	err = mtk_pcie_init_msi(pcie);
+	if (err)
+		dev_warn(dev, "no MSI supported, only INTx available\n");
 
 	pcie->irq = platform_get_irq(pdev, 0);
 	if (pcie->irq < 0)
