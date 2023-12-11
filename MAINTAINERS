@@ -9192,7 +9192,8 @@ GUID PARTITION TABLE (GPT)
 M:	Davidlohr Bueso <dave@stgolabs.net>
 L:	linux-efi@vger.kernel.org
 S:	Maintained
-F:	block/partitions/efi.*
+F:	block/partitions/efi.c
+F:	include/linux/gpt.h
 
 HABANALABS PCI DRIVER
 M:	Oded Gabbay <ogabbay@kernel.org>

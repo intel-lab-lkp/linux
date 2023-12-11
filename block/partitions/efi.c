@@ -87,8 +87,8 @@
 #include <linux/ctype.h>
 #include <linux/math64.h>
 #include <linux/slab.h>
+#include <linux/gpt.h>
 #include "check.h"
-#include "efi.h"
 
 /* This allows a kernel command line option 'gpt' to override
  * the test for invalid PMBR.  Not __initdata because reloading

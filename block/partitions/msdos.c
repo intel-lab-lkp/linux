@@ -27,9 +27,9 @@
  */
 #include <linux/msdos_fs.h>
 #include <linux/msdos_partition.h>
+#include <linux/gpt.h>
 
 #include "check.h"
-#include "efi.h"
 
 /*
  * Many architectures don't like unaligned accesses, while
