@@ -3102,6 +3102,8 @@ void igb_set_fw_version(struct igb_adapter *adapter)
 		break;
 	}
 
+	if (!lbuf)
+		return;
 	/* the truncate happens here if it doesn't fit */
 	strscpy(adapter->fw_version, lbuf, sizeof(adapter->fw_version));
 	kfree(lbuf);
