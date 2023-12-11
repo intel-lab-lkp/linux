@@ -28,6 +28,7 @@ MODULE_ALIAS("devname:fuse");
 /* Ordinary requests have even IDs, while interrupts IDs are odd */
 #define FUSE_INT_REQ_BIT (1ULL << 0)
 #define FUSE_REQ_ID_STEP (1ULL << 1)
+#define FUSE_REQ_ID_MASK (~(FUSE_INT_REQ_BIT | FUSE_UNIQUE_RESEND))
 
 static struct kmem_cache *fuse_req_cachep;
 
@@ -194,7 +195,7 @@ EXPORT_SYMBOL_GPL(fuse_len_args);
 
 u64 fuse_get_unique(struct fuse_iqueue *fiq)
 {
-	fiq->reqctr += FUSE_REQ_ID_STEP;
+	fiq->reqctr = (fiq->reqctr + FUSE_REQ_ID_STEP) & FUSE_REQ_ID_MASK;
 	return fiq->reqctr;
 }
 EXPORT_SYMBOL_GPL(fuse_get_unique);
@@ -1822,6 +1823,8 @@ static void fuse_resend(struct fuse_conn *fc)
 
 	list_for_each_entry_safe(req, next, &to_queue, list) {
 		__set_bit(FR_PENDING, &req->flags);
+		/* mark the request as resend request */
+		req->in.h.unique |= FUSE_UNIQUE_RESEND;
 	}
 
 	spin_lock(&fiq->lock);
