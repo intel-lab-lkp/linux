@@ -419,6 +419,7 @@ static int hash_accept_parent_nokey(void *private, struct sock *sk)
 	if (!ctx)
 		return -ENOMEM;
 
+	ctx->sgl.sgt.sgl = NULL;
 	ctx->result = NULL;
 	ctx->len = len;
 	ctx->more = false;
