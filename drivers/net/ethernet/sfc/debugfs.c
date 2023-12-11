@@ -78,6 +78,54 @@ void efx_update_debugfs_netdev(struct efx_nic *efx)
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 }
 
+#define EFX_DEBUGFS_CHANNEL(_type, _name)	\
+	debugfs_create_##_type(#_name, 0444, channel->debug_dir, &channel->_name)
+
+/* Create basic debugfs parameter files for an Efx channel */
+static void efx_init_debugfs_channel_files(struct efx_channel *channel)
+{
+	EFX_DEBUGFS_CHANNEL(bool, enabled);
+	EFX_DEBUGFS_CHANNEL(u32, irq); /* actually an int */
+	EFX_DEBUGFS_CHANNEL(u32, eventq_read_ptr);
+}
+
+/**
+ * efx_init_debugfs_channel - create debugfs directory for channel
+ * @channel:		Efx channel
+ *
+ * Create a debugfs directory containing parameter-files for @channel.
+ * The directory must be cleaned up using efx_fini_debugfs_channel().
+ *
+ * Return: a negative error code or 0 on success.
+ */
+int efx_init_debugfs_channel(struct efx_channel *channel)
+{
+	char name[EFX_DEBUGFS_NAME_LEN];
+
+	if (!channel->efx->debug_channels_dir)
+		return -ENODEV;
+	if (snprintf(name, sizeof(name), "%d", channel->channel)
+	    >= sizeof(name))
+		return -ENAMETOOLONG;
+	channel->debug_dir = debugfs_create_dir(name, channel->efx->debug_channels_dir);
+	if (!channel->debug_dir)
+		return -ENOMEM;
+	efx_init_debugfs_channel_files(channel);
+	return 0;
+}
+
+/**
+ * efx_fini_debugfs_channel - remove debugfs directory for channel
+ * @channel:		Efx channel
+ *
+ * Remove directory created for @channel by efx_init_debugfs_channel().
+ */
+void efx_fini_debugfs_channel(struct efx_channel *channel)
+{
+	debugfs_remove_recursive(channel->debug_dir);
+	channel->debug_dir = NULL;
+}
+
 static int efx_debugfs_enum_read(struct seq_file *s, void *d)
 {
 	struct efx_debugfs_enum_data *data = s->private;
@@ -160,6 +208,9 @@ int efx_init_debugfs_nic(struct efx_nic *efx)
 	if (!efx->debug_dir)
 		return -ENOMEM;
 	efx_init_debugfs_nic_files(efx);
+	/* Create channels subdirectory */
+	efx->debug_channels_dir = debugfs_create_dir("channels",
+						     efx->debug_dir);
 	return 0;
 }
 

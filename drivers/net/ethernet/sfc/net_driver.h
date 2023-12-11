@@ -528,6 +528,10 @@ struct efx_channel {
 #define RPS_FLOW_ID_INVALID 0xFFFFFFFF
 	u32 *rps_flow_id;
 #endif
+#ifdef CONFIG_DEBUG_FS
+	/** @debug_dir: Channel debugfs directory (under @efx->debug_channels_dir) */
+	struct dentry *debug_dir;
+#endif
 
 	unsigned int n_rx_tobe_disc;
 	unsigned int n_rx_ip_hdr_chksum_err;
@@ -1144,6 +1148,8 @@ struct efx_nic {
 #ifdef CONFIG_DEBUG_FS
 	/** @debug_dir: NIC debugfs directory */
 	struct dentry *debug_dir;
+	/** @debug_channels_dir: contains channel debugfs dirs.  Under @debug_dir */
+	struct dentry *debug_channels_dir;
 	/** @debug_symlink: NIC debugfs symlink (``nic_eth%d``) */
 	struct dentry *debug_symlink;
 	/** @debug_interrupt_mode: debugfs details for printing @interrupt_mode */

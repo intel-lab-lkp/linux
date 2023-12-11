@@ -22,10 +22,19 @@
  * bound and created a &struct efx_nic, there is a directory &efx_nic.debug_dir
  * in "cards" whose name is the PCI address of the device; it is to this
  * directory that the netdev symlink points.
+ *
+ * Under this directory, besides top-level parameter files, are:
+ *
+ * * "channels/" (&efx_nic.debug_channels_dir).  For each channel, this will
+ *   contain a directory (&efx_channel.debug_dir), whose name is the channel
+ *   index (in decimal).
  */
 
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
 void efx_update_debugfs_netdev(struct efx_nic *efx);
+
+int efx_init_debugfs_channel(struct efx_channel *channel);
+void efx_fini_debugfs_channel(struct efx_channel *channel);
 
 int efx_init_debugfs_nic(struct efx_nic *efx);
 void efx_fini_debugfs_nic(struct efx_nic *efx);
@@ -38,6 +47,12 @@ void efx_fini_debugfs(void);
 static inline void efx_fini_debugfs_netdev(struct net_device *net_dev) {}
 
 static inline void efx_update_debugfs_netdev(struct efx_nic *efx) {}
+
+int efx_init_debugfs_channel(struct efx_channel *channel)
+{
+	return 0;
+}
+void efx_fini_debugfs_channel(struct efx_channel *channel) {}
 
 static inline int efx_init_debugfs_nic(struct efx_nic *efx)
 {

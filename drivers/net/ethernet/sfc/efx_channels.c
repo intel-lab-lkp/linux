@@ -19,6 +19,7 @@
 #include "nic.h"
 #include "sriov.h"
 #include "workarounds.h"
+#include "debugfs.h"
 
 /* This is the first interrupt mode to try out of:
  * 0 => MSI-X
@@ -667,6 +668,12 @@ static int efx_probe_channel(struct efx_channel *channel)
 
 	channel->rx_list = NULL;
 
+	rc = efx_init_debugfs_channel(channel);
+	if (rc) /* not fatal */
+		netif_err(channel->efx, drv, channel->efx->net_dev,
+			  "Failed to create debugfs for channel %d, rc=%d\n",
+			  channel->channel, rc);
+
 	return 0;
 
 fail:
@@ -743,6 +750,7 @@ void efx_remove_channel(struct efx_channel *channel)
 
 	netif_dbg(channel->efx, drv, channel->efx->net_dev,
 		  "destroy chan %d\n", channel->channel);
+	efx_fini_debugfs_channel(channel);
 
 	efx_for_each_channel_rx_queue(rx_queue, channel)
 		efx_remove_rx_queue(rx_queue);
