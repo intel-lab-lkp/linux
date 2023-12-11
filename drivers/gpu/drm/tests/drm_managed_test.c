@@ -48,6 +48,34 @@ static void drm_test_managed_run_action(struct kunit *test)
 	KUNIT_EXPECT_GT_MSG(test, ret, 0, "Release action was not called");
 }
 
+/*
+ * The test verifies that the release action is called immediately when
+ * drmm_release_action is called and that it is not called for a second time
+ * when the device is released.
+ */
+static void drm_test_managed_release_action(struct kunit *test)
+{
+	struct managed_test_priv *priv = test->priv;
+	int ret;
+
+	ret = drmm_add_action_or_reset(priv->drm, drm_action, priv);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+
+	ret = drm_dev_register(priv->drm, 0);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	drmm_release_action(priv->drm, drm_action, priv);
+	KUNIT_EXPECT_TRUE_MSG(test, priv->action_done, "Release action was not called");
+	priv->action_done = false;
+
+	drm_dev_unregister(priv->drm);
+	drm_kunit_helper_free_device(test, priv->drm->dev);
+
+	ret = wait_event_interruptible_timeout(priv->action_wq, priv->action_done,
+					       msecs_to_jiffies(TEST_TIMEOUT_MS));
+	KUNIT_EXPECT_EQ_MSG(test, ret, 0, "Unexpected release action call during cleanup");
+}
+
 static int drm_managed_test_init(struct kunit *test)
 {
 	struct managed_test_priv *priv;
@@ -76,6 +104,7 @@ static int drm_managed_test_init(struct kunit *test)
 }
 
 static struct kunit_case drm_managed_tests[] = {
+	KUNIT_CASE(drm_test_managed_release_action),
 	KUNIT_CASE(drm_test_managed_run_action),
 	{}
 };
