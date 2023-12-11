@@ -250,7 +250,7 @@ config KARMA_PARTITION
 config EFI_PARTITION
 	bool "EFI GUID Partition support" if PARTITION_ADVANCED
 	default y
-	select CRC32
+	select GENERIC_LIB_GPT
 	help
 	  Say Y here if you would like to use hard disks under Linux which
 	  were partitioned using EFI GPT.

@@ -9194,6 +9194,7 @@ L:	linux-efi@vger.kernel.org
 S:	Maintained
 F:	block/partitions/efi.c
 F:	include/linux/gpt.h
+F:	lib/gpt.c
 
 HABANALABS PCI DRIVER
 M:	Oded Gabbay <ogabbay@kernel.org>

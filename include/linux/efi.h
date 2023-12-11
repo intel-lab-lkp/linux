@@ -24,6 +24,7 @@
 #include <linux/range.h>
 #include <linux/reboot.h>
 #include <linux/uuid.h>
+#include <linux/crc32.h>
 
 #include <asm/page.h>
 
@@ -1347,5 +1348,22 @@ bool efi_config_table_is_usable(const efi_guid_t *guid, unsigned long table)
 }
 
 umode_t efi_attr_is_visible(struct kobject *kobj, struct attribute *attr, int n);
+
+/**
+ * efi_crc32() - EFI version of crc32 function
+ * @buf: buffer to calculate crc32 of
+ * @len: length of buf
+ *
+ * Description: Returns EFI-style CRC32 value for @buf
+ *
+ * This function uses the little endian Ethernet polynomial
+ * but seeds the function with ~0, and xor's with ~0 at the end.
+ * Note, the EFI Specification, v1.02, has a reference to
+ * Dr. Dobbs Journal, May 1994 (actually it's in May 1992).
+ */
+static inline u32 efi_crc32(const void *buf, unsigned long len)
+{
+	return (crc32(~0L, buf, len) ^ ~0L);
+}
 
 #endif /* _LINUX_EFI_H */

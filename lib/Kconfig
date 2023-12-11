@@ -748,6 +748,9 @@ config GENERIC_LIB_ASHLDI3
 config GENERIC_LIB_ASHRDI3
 	bool
 
+config GENERIC_LIB_GPT
+	bool
+
 config GENERIC_LIB_LSHRDI3
 	bool
 
