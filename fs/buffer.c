@@ -1255,16 +1255,19 @@ void __bforget(struct buffer_head *bh)
 }
 EXPORT_SYMBOL(__bforget);
 
-static struct buffer_head *__bread_slow(struct buffer_head *bh)
+static struct buffer_head *__bread_slow(struct buffer_head *bh,
+					blk_opf_t op_flags,
+					bool check_write_error)
 {
 	lock_buffer(bh);
-	if (buffer_uptodate(bh)) {
+	if (buffer_uptodate(bh) ||
+	    (check_write_error && buffer_uptodate_or_error(bh))) {
 		unlock_buffer(bh);
 		return bh;
 	} else {
 		get_bh(bh);
 		bh->b_end_io = end_buffer_read_sync;
-		submit_bh(REQ_OP_READ, bh);
+		submit_bh(REQ_OP_READ | op_flags, bh);
 		wait_on_buffer(bh);
 		if (buffer_uptodate(bh))
 			return bh;
@@ -1445,6 +1448,31 @@ void __breadahead(struct block_device *bdev, sector_t block, unsigned size)
 }
 EXPORT_SYMBOL(__breadahead);
 
+static struct buffer_head *
+bread_gfp(struct block_device *bdev, sector_t block, unsigned int size,
+	  blk_opf_t op_flags, gfp_t gfp, bool check_write_error)
+{
+	struct buffer_head *bh;
+
+	gfp |= mapping_gfp_constraint(bdev->bd_inode->i_mapping, ~__GFP_FS);
+
+	/*
+	 * Prefer looping in the allocator rather than here, at least that
+	 * code knows what it's doing.
+	 */
+	gfp |= __GFP_NOFAIL;
+
+	bh = bdev_getblk(bdev, block, size, gfp);
+	if (unlikely(!bh))
+		return NULL;
+
+	if (buffer_uptodate(bh) ||
+	    (check_write_error && buffer_uptodate_or_error(bh)))
+		return bh;
+
+	return __bread_slow(bh, op_flags, check_write_error);
+}
+
 /**
  *  __bread_gfp() - reads a specified block and returns the bh
  *  @bdev: the block_device to read from
@@ -1458,26 +1486,26 @@ EXPORT_SYMBOL(__breadahead);
  *  It returns NULL if the block was unreadable.
  */
 struct buffer_head *
-__bread_gfp(struct block_device *bdev, sector_t block,
-		   unsigned size, gfp_t gfp)
+__bread_gfp(struct block_device *bdev, sector_t block, unsigned int size,
+	    gfp_t gfp)
 {
-	struct buffer_head *bh;
-
-	gfp |= mapping_gfp_constraint(bdev->bd_inode->i_mapping, ~__GFP_FS);
-
-	/*
-	 * Prefer looping in the allocator rather than here, at least that
-	 * code knows what it's doing.
-	 */
-	gfp |= __GFP_NOFAIL;
-
-	bh = bdev_getblk(bdev, block, size, gfp);
-
-	if (likely(bh) && !buffer_uptodate(bh))
-		bh = __bread_slow(bh);
-	return bh;
+	return bread_gfp(bdev, block, size, 0, gfp, false);
 }
 EXPORT_SYMBOL(__bread_gfp);
+
+/*
+ * This works like __bread_gfp() except:
+ * 1) If buffer write failed before, set buffer uptodate and don't read
+ * block from disk;
+ * 2) Caller can pass in additional op_flags like REQ_META;
+ */
+struct buffer_head *
+__bread_gfp2(struct block_device *bdev, sector_t block, unsigned int size,
+	     blk_opf_t op_flags, gfp_t gfp)
+{
+	return bread_gfp(bdev, block, size, op_flags, gfp, true);
+}
+EXPORT_SYMBOL(__bread_gfp2);
 
 static void __invalidate_bh_lrus(struct bh_lru *b)
 {
