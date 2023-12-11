@@ -742,6 +742,8 @@ static int tx2_uncore_pmu_register(
 
 	tx2_pmu->pmu.name = devm_kasprintf(dev, GFP_KERNEL,
 			"%s", name);
+	if (!tx2_pmu->pmu.name)
+		return -ENOMEM;
 
 	return perf_pmu_register(&tx2_pmu->pmu, tx2_pmu->pmu.name, -1);
 }
@@ -881,6 +883,11 @@ static struct tx2_uncore_pmu *tx2_uncore_pmu_init_dev(struct device *dev,
 		return NULL;
 	}
 
+	if (!tx2_pmu->name) {
+		dev_err(dev, "PMU type %d: Fail to allocate memory\n", type);
+		devm_kfree(dev, tx2_pmu);
+		return NULL;
+	}
 	return tx2_pmu;
 }
 
