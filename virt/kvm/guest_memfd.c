@@ -259,6 +259,7 @@ void kvm_gmem_init(struct module *module)
 	kvm_gmem_fops.owner = module;
 }
 
+#ifdef CONFIG_MIGRATION
 static int kvm_gmem_migrate_folio(struct address_space *mapping,
 				  struct folio *dst, struct folio *src,
 				  enum migrate_mode mode)
@@ -266,6 +267,7 @@ static int kvm_gmem_migrate_folio(struct address_space *mapping,
 	WARN_ON_ONCE(1);
 	return -EINVAL;
 }
+#endif
 
 static int kvm_gmem_error_folio(struct address_space *mapping,
 		struct folio *folio)
