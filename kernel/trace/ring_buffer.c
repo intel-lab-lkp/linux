@@ -576,34 +576,50 @@ struct ring_buffer_iter {
 #ifdef RB_TIME_32
 
 /*
- * On 32 bit machines, local64_t is very expensive. As the ring
- * buffer doesn't need all the features of a true 64 bit atomic,
- * on 32 bit, it uses these functions (64 still uses local64_t).
+ * On 32-bit machines, local64_t is very expensive. As the ring
+ * buffer doesn't need all the features of a true 64-bit atomic,
+ * on 32-bit, it uses these functions (64-bit still uses local64_t).
  *
- * For the ring buffer, 64 bit required operations for the time is
- * the following:
+ * For the ring buffer, the operations required to manipulate 64-bit
+ * time stamps are the following:
  *
- *  - Reads may fail if it interrupted a modification of the time stamp.
+ *  - Read may fail if it interrupted a modification of the time stamp.
  *      It will succeed if it did not interrupt another write even if
  *      the read itself is interrupted by a write.
+ *      A read will fail if it follows a cmpxchg which failed between
+ *      updates to its top and msb bits, until a write is performed.
+ *      (note: this limitation may be unexpected in parts of the
+ *      ring buffer algorithm)
  *      It returns whether it was successful or not.
  *
- *  - Writes always succeed and will overwrite other writes and writes
+ *  - Write always succeeds and will overwrite other writes and writes
  *      that were done by events interrupting the current write.
  *
  *  - A write followed by a read of the same time stamp will always succeed,
  *      but may not contain the same value.
  *
  *  - A cmpxchg will fail if it interrupted another write or cmpxchg.
+ *      A cmpxchg will fail if it follows a cmpxchg which failed between
+ *      updates to its top and msb bits, until a write is performed.
+ *      (note: this limitation may be unexpected in parts of the
+ *      ring buffer algorithm)
  *      Other than that, it acts like a normal cmpxchg.
  *
- * The 60 bit time stamp is broken up by 30 bits in a top and bottom half
- *  (bottom being the least significant 30 bits of the 60 bit time stamp).
+ * The 64-bit time stamp is broken up, from most to least significant,
+ * in: msb, top and bottom fields, of respectively 4, 30, and 30 bits.
  *
- * The two most significant bits of each half holds a 2 bit counter (0-3).
+ * The two most significant bits of each field hold a 2-bit counter (0-3).
  * Each update will increment this counter by one.
- * When reading the top and bottom, if the two counter bits match then the
- *  top and bottom together make a valid 60 bit number.
+ * When reading the top, bottom, and msb fields, if the two counter bits
+ *   match, then the combined values make a valid 64-bit number.
+ *
+ * Counter limits. The following situations can generate overflows that
+ * produce corrupted time stamps:
+ *
+ * - A read or a write interrupted by 2^32 writes or cmpxchg.
+ *
+ * - A cmpxchg interrupted by 4 writes or cmpxchg.
+ *   (note: this is not sufficient and should be fixed)
  */
 #define RB_TIME_SHIFT	30
 #define RB_TIME_VAL_MASK ((1 << RB_TIME_SHIFT) - 1)
@@ -632,7 +648,7 @@ static inline bool __rb_time_read(rb_time_t *t, u64 *ret, unsigned long *cnt)
 
 	/*
 	 * If the read is interrupted by a write, then the cnt will
-	 * be different. Loop until both top and bottom have been read
+	 * be different. Loop until top, bottom and msb have been read
 	 * without interruption.
 	 */
 	do {
@@ -644,7 +660,12 @@ static inline bool __rb_time_read(rb_time_t *t, u64 *ret, unsigned long *cnt)
 
 	*cnt = rb_time_cnt(top);
 
-	/* If top and msb counts don't match, this interrupted a write */
+	/*
+	 * If top and msb counts don't match, this either interrupted a
+	 * write or follows a failed cmpxchg.
+	 * This requires the update to bottom to be enclosed between
+	 * updates to top and msb.
+	 */
 	if (*cnt != rb_time_cnt(msb))
 		return false;
 
@@ -685,9 +706,10 @@ static void rb_time_set(rb_time_t *t, u64 val)
 
 	rb_time_split(val, &top, &bottom, &msb);
 
-	/* Writes always succeed with a valid number even if it gets interrupted. */
+	/* Write always succeeds with a valid number even if it gets interrupted. */
 	do {
 		cnt = local_inc_return(&t->cnt);
+		/* The top and msb updates surround bottom update. */
 		rb_time_val_set(&t->top, top, cnt);
 		rb_time_val_set(&t->bottom, bottom, cnt);
 		rb_time_val_set(&t->msb, val >> RB_TIME_MSB_SHIFT, cnt);
@@ -706,7 +728,12 @@ static bool rb_time_cmpxchg(rb_time_t *t, u64 expect, u64 set)
 	unsigned long cnt2, top2, bottom2, msb2;
 	u64 val;
 
-	/* The cmpxchg always fails if it interrupted an update */
+	/*
+	 * The cmpxchg always fails if it interrupted an update or if it
+	 * follows a cmpxchg that fails between updates to top and msb.
+	 * A rb_time_set() is needed after a failed cmpxchg to reset to
+	 * a state where cmpxchg can succeed again.
+	 */
 	 if (!__rb_time_read(t, &val, &cnt2))
 		 return false;
 
@@ -729,11 +756,12 @@ static bool rb_time_cmpxchg(rb_time_t *t, u64 expect, u64 set)
 
 	if (!rb_time_read_cmpxchg(&t->cnt, cnt, cnt2))
 		return false;
-	if (!rb_time_read_cmpxchg(&t->msb, msb, msb2))
-		return false;
+	/* The top and msb updates surround bottom update. */
 	if (!rb_time_read_cmpxchg(&t->top, top, top2))
 		return false;
 	if (!rb_time_read_cmpxchg(&t->bottom, bottom, bottom2))
+		return false;
+	if (!rb_time_read_cmpxchg(&t->msb, msb, msb2))
 		return false;
 	return true;
 }
