@@ -192,6 +192,17 @@ void blkcg_set_ioprio(struct bio *bio)
 	if (!blkcg || blkcg->prio_policy == POLICY_NO_CHANGE)
 		return;
 
+	/*
+	 * If REQ_OP_WRITE or REQ_OP_WRITE_ZEROES operations for the same zone
+	 * originate from different cgroups that could result in different
+	 * priorities being assigned to these operations. Do not modify the I/O
+	 * priority of these write operations to prevent that these would be
+	 * executed in the wrong order when using the mq-deadline I/O
+	 * scheduler.
+	 */
+	if (bdev_op_is_zoned_write(bio->bi_bdev, bio_op(bio)))
+		return;
+
 	if (blkcg->prio_policy == POLICY_PROMOTE_TO_RT ||
 	    blkcg->prio_policy == POLICY_NONE_TO_RT) {
 		/*
