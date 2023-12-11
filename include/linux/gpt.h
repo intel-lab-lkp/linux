@@ -8,8 +8,8 @@
  *   Copyright 2000,2001 Dell Inc.
  ************************************************************/
 
-#ifndef FS_PART_EFI_H_INCLUDED
-#define FS_PART_EFI_H_INCLUDED
+#ifndef _GPT_H
+#define _GPT_H
 
 #include <linux/types.h>
 #include <linux/fs.h>
@@ -110,5 +110,38 @@ typedef struct _legacy_mbr {
 	gpt_mbr_record partition_record[4];
 	__le16 signature;
 } __packed legacy_mbr;
+
+// Helpers for validating GPT metadata
+int gpt_is_pmbr_valid(legacy_mbr *mbr, sector_t total_sectors);
+int gpt_validate_header(gpt_header *gpt, u64 lba, unsigned int lba_size,
+			u64 lastlba);
+int gpt_check_pte_array_crc(gpt_header *gpt, gpt_entry *ptes);
+int gpt_compare_alt(gpt_header *pgpt, gpt_header *agpt, u64 lastlba);
+
+/**
+ * is_pte_valid() - tests one PTE for validity
+ * @pte:pte to check
+ * @lastlba: last lba of the disk
+ *
+ * returns 1 if valid,  0 on error.
+ */
+	static inline bool
+gpt_is_pte_valid(const gpt_entry *pte, const u64 lastlba)
+{
+	if ((!efi_guidcmp(pte->partition_type_guid, NULL_GUID)) ||
+	    le64_to_cpu(pte->starting_lba) > lastlba         ||
+	    le64_to_cpu(pte->ending_lba)   > lastlba)
+		return 0;
+	return 1;
+}
+
+// Returns size in bytes of PTE array
+static inline int get_pt_size(gpt_header *gpt)
+{
+	return le32_to_cpu(gpt->num_partition_entries)
+		* le32_to_cpu(gpt->sizeof_partition_entry);
+}
+
+void utf16_le_to_7bit(const __le16 *in, unsigned int size, u8 *out);
 
 #endif
