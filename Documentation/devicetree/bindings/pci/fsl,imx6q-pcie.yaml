@@ -29,6 +29,7 @@ properties:
       - fsl,imx8mq-pcie
       - fsl,imx8mm-pcie
       - fsl,imx8mp-pcie
+      - fsl,imx95-pcie
 
   reg:
     items:
@@ -94,6 +95,22 @@ allOf:
       properties:
         compatible:
           enum:
+            - fsl,imx95-pcie
+    then:
+      properties:
+        reg:
+          minItems: 4
+        reg-names:
+          items:
+            - const: dbi
+            - const: serdes
+            - const: atu
+            - const: config
+
+  - if:
+      properties:
+        compatible:
+          enum:
             - fsl,imx6sx-pcie
     then:
       properties:
@@ -111,6 +128,7 @@ allOf:
         compatible:
           enum:
             - fsl,imx8mq-pcie
+            - fsl,imx95-pcie
     then:
       properties:
         clocks:
