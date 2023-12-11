@@ -239,18 +239,16 @@ static void cptvf_lf_shutdown(struct otx2_cptlfs_info *lfs)
 {
 	atomic_set(&lfs->state, OTX2_CPTLF_IN_RESET);
 
-	/* Remove interrupts affinity */
-	otx2_cptlf_free_irqs_affinity(lfs);
-	/* Disable instruction queue */
-	otx2_cptlf_disable_iqueues(lfs);
 	/* Unregister crypto algorithms */
 	otx2_cpt_crypto_exit(lfs->pdev, THIS_MODULE);
+	/* Remove interrupts affinity */
+	otx2_cptlf_free_irqs_affinity(lfs);
 	/* Unregister LFs interrupts */
 	otx2_cptlf_unregister_interrupts(lfs);
 	/* Cleanup LFs software side */
 	lf_sw_cleanup(lfs);
-	/* Send request to detach LFs */
-	otx2_cpt_detach_rsrcs_msg(lfs);
+	/* CPT LFs cleanup */
+	otx2_cptlf_shutdown(lfs);
 }
 
 static int cptvf_lf_init(struct otx2_cptvf_dev *cptvf)
