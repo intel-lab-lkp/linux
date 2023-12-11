@@ -1053,6 +1053,12 @@ int bch_cached_dev_run(struct cached_dev *dc)
 		NULL,
 	};
 
+	if (!env[1] || !env[2]) {
+		pr_err("Couldn't create bcache dev <-> fail to allocate memory\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	if (dc->io_disable) {
 		pr_err("I/O disabled on cached dev %pg\n", dc->bdev);
 		ret = -EIO;
