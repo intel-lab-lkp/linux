@@ -151,24 +151,6 @@ tb_attach_bandwidth_group(struct tb_cm *tcm, struct tb_port *in,
 	return group;
 }
 
-static void tb_discover_bandwidth_group(struct tb_cm *tcm, struct tb_port *in,
-					struct tb_port *out)
-{
-	if (usb4_dp_port_bandwidth_mode_enabled(in)) {
-		int index, i;
-
-		index = usb4_dp_port_group_id(in);
-		for (i = 0; i < ARRAY_SIZE(tcm->groups); i++) {
-			if (tcm->groups[i].index == index) {
-				tb_bandwidth_group_attach_port(&tcm->groups[i], in);
-				return;
-			}
-		}
-	}
-
-	tb_attach_bandwidth_group(tcm, in, out);
-}
-
 static void tb_detach_bandwidth_group(struct tb_port *in)
 {
 	struct tb_bandwidth_group *group = in->group;
@@ -234,32 +216,6 @@ static void tb_remove_dp_resources(struct tb_switch *sw)
 			tb_port_dbg(port, "DP OUT resource unavailable\n");
 			list_del_init(&port->list);
 		}
-	}
-}
-
-static void tb_discover_dp_resource(struct tb *tb, struct tb_port *port)
-{
-	struct tb_cm *tcm = tb_priv(tb);
-	struct tb_port *p;
-
-	list_for_each_entry(p, &tcm->dp_resources, list) {
-		if (p == port)
-			return;
-	}
-
-	tb_port_dbg(port, "DP %s resource available discovered\n",
-		    tb_port_is_dpin(port) ? "IN" : "OUT");
-	list_add_tail(&port->list, &tcm->dp_resources);
-}
-
-static void tb_discover_dp_resources(struct tb *tb)
-{
-	struct tb_cm *tcm = tb_priv(tb);
-	struct tb_tunnel *tunnel;
-
-	list_for_each_entry(tunnel, &tcm->tunnel_list, list) {
-		if (tb_tunnel_is_dp(tunnel))
-			tb_discover_dp_resource(tb, tunnel->dst_port);
 	}
 }
 
@@ -458,34 +414,6 @@ static void tb_switch_discover_tunnels(struct tb_switch *sw,
 		if (tb_port_has_remote(port)) {
 			tb_switch_discover_tunnels(port->remote->sw, list,
 						   alloc_hopids);
-		}
-	}
-}
-
-static void tb_discover_tunnels(struct tb *tb)
-{
-	struct tb_cm *tcm = tb_priv(tb);
-	struct tb_tunnel *tunnel;
-
-	tb_switch_discover_tunnels(tb->root_switch, &tcm->tunnel_list, true);
-
-	list_for_each_entry(tunnel, &tcm->tunnel_list, list) {
-		if (tb_tunnel_is_pci(tunnel)) {
-			struct tb_switch *parent = tunnel->dst_port->sw;
-
-			while (parent != tunnel->src_port->sw) {
-				parent->boot = true;
-				parent = tb_switch_parent(parent);
-			}
-		} else if (tb_tunnel_is_dp(tunnel)) {
-			struct tb_port *in = tunnel->src_port;
-			struct tb_port *out = tunnel->dst_port;
-
-			/* Keep the domain from powering down */
-			pm_runtime_get_sync(&in->sw->dev);
-			pm_runtime_get_sync(&out->sw->dev);
-
-			tb_discover_bandwidth_group(tcm, in, out);
 		}
 	}
 }
@@ -1031,31 +959,6 @@ err_reclaim:
 		tb_reclaim_usb3_bandwidth(tb, down, up);
 
 	return ret;
-}
-
-static int tb_create_usb3_tunnels(struct tb_switch *sw)
-{
-	struct tb_port *port;
-	int ret;
-
-	if (!tb_acpi_may_tunnel_usb3())
-		return 0;
-
-	if (tb_route(sw)) {
-		ret = tb_tunnel_usb3(sw->tb, sw);
-		if (ret)
-			return ret;
-	}
-
-	tb_switch_for_each_port(sw, port) {
-		if (!tb_port_has_remote(port))
-			continue;
-		ret = tb_create_usb3_tunnels(port->remote->sw);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
 }
 
 /**
@@ -2524,27 +2427,6 @@ static void tb_stop(struct tb *tb)
 	tcm->hotplug_active = false; /* signal tb_handle_hotplug to quit */
 }
 
-static int tb_scan_finalize_switch(struct device *dev, void *data)
-{
-	if (tb_is_switch(dev)) {
-		struct tb_switch *sw = tb_to_switch(dev);
-
-		/*
-		 * If we found that the switch was already setup by the
-		 * boot firmware, mark it as authorized now before we
-		 * send uevent to userspace.
-		 */
-		if (sw->boot)
-			sw->authorized = 1;
-
-		dev_set_uevent_suppress(dev, false);
-		kobject_uevent(&dev->kobj, KOBJ_ADD);
-		device_for_each_child(dev, NULL, tb_scan_finalize_switch);
-	}
-
-	return 0;
-}
-
 static int tb_start(struct tb *tb)
 {
 	struct tb_cm *tcm = tb_priv(tb);
@@ -2588,20 +2470,15 @@ static int tb_start(struct tb *tb)
 	tb_switch_tmu_enable(tb->root_switch);
 	/* Full scan to discover devices added before the driver was loaded. */
 	tb_scan_switch(tb->root_switch);
-	/* Find out tunnels created by the boot firmware */
-	tb_discover_tunnels(tb);
-	/* Add DP resources from the DP tunnels created by the boot firmware */
-	tb_discover_dp_resources(tb);
 	/*
-	 * If the boot firmware did not create USB 3.x tunnels create them
-	 * now for the whole topology.
+	 * Boot firmware might have created tunnels of its own. Since we cannot
+	 * be sure they are usable for us, Tear them down and reset the ports
+	 * to handle it as new hotplug.
 	 */
-	tb_create_usb3_tunnels(tb->root_switch);
-	/* Add DP IN resources for the root switch */
-	tb_add_dp_resources(tb->root_switch);
-	/* Make the discovered switches available to the userspace */
-	device_for_each_child(&tb->root_switch->dev, NULL,
-			      tb_scan_finalize_switch);
+	tb_switch_discover_tunnels(tb->root_switch, &tcm->tunnel_list, false);
+	ret = tb_switch_reset_ports(tb->root_switch);
+	if (ret)
+		return ret;
 
 	/* Allow tb_handle_hotplug to progress events */
 	tcm->hotplug_active = true;
