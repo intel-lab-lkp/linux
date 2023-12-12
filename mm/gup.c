@@ -5,6 +5,7 @@
 #include <linux/spinlock.h>
 
 #include <linux/mm.h>
+#include <linux/memfd.h>
 #include <linux/memremap.h>
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
@@ -17,6 +18,7 @@
 #include <linux/hugetlb.h>
 #include <linux/migrate.h>
 #include <linux/mm_inline.h>
+#include <linux/pagevec.h>
 #include <linux/sched/mm.h>
 #include <linux/shmem_fs.h>
 
@@ -3412,3 +3414,156 @@ long pin_user_pages_unlocked(unsigned long start, unsigned long nr_pages,
 				     &locked, gup_flags);
 }
 EXPORT_SYMBOL(pin_user_pages_unlocked);
+
+/**
+ * memfd_pin_folios() - pin folios associated with a memfd
+ * @memfd:      the memfd whose folios are to be pinned
+ * @start:      starting memfd offset
+ * @nr_pages:   number of pages from start to pin
+ * @folios:     array that receives pointers to the folios pinned.
+ *              Should be at-least nr_pages long.
+ * @offsets:    array that receives offsets of pages in their folios.
+ *              Should be at-least nr_pages long.
+ *
+ * Attempt to pin folios associated with a memfd; given that a memfd is
+ * either backed by shmem or hugetlb, the folios can either be found in
+ * the page cache or need to be allocated if necessary. Once the folios
+ * are located, they are all pinned via FOLL_PIN and the @offsets array
+ * is populated with offsets of the pages in their respective folios.
+ * Therefore, for each page the caller requested, there will be a
+ * corresponding entry in both @folios and @offsets. And, eventually,
+ * these pinned folios need to be released either using unpin_user_pages()
+ * or unpin_user_page().
+ *
+ * It must be noted that the folios may be pinned for an indefinite amount
+ * of time. And, in most cases, the duration of time they may stay pinned
+ * would be controlled by the userspace. This behavior is effectively the
+ * same as using FOLL_LONGTERM with other GUP APIs.
+ *
+ * Returns number of folios pinned. This would be equal to the number of
+ * pages requested. If no folios were pinned, it returns -errno.
+ */
+long memfd_pin_folios(struct file *memfd, unsigned long start,
+		      unsigned long nr_pages, struct folio **folios,
+		      pgoff_t *offsets)
+{
+	unsigned long end = start + (nr_pages << PAGE_SHIFT) - 1;
+	unsigned int max_pgs, pgoff, pgshift = PAGE_SHIFT;
+	pgoff_t start_idx, end_idx, next_idx;
+	unsigned int flags, nr_folios, i, j;
+	struct folio *folio = NULL;
+	struct folio_batch fbatch;
+	struct page **pages;
+	struct hstate *h;
+	long ret;
+
+	if (!nr_pages)
+		return -EINVAL;
+
+	if (!memfd)
+		return -EINVAL;
+
+	if (!shmem_file(memfd) && !is_file_hugepages(memfd))
+		return -EINVAL;
+
+	pages = kmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	if (is_file_hugepages(memfd)) {
+		h = hstate_file(memfd);
+		pgshift = huge_page_shift(h);
+	}
+
+	flags = memalloc_pin_save();
+	do {
+		i = 0;
+		start_idx = start >> pgshift;
+		end_idx = end >> pgshift;
+		if (is_file_hugepages(memfd)) {
+			start_idx <<= huge_page_order(h);
+			end_idx <<= huge_page_order(h);
+		}
+
+		folio_batch_init(&fbatch);
+		while (start_idx <= end_idx) {
+			/*
+			 * In most cases, we should be able to find the folios
+			 * in the page cache. If we cannot find them for some
+			 * reason, we try to allocate them and add them to the
+			 * page cache.
+			 */
+			nr_folios = filemap_get_folios_contig(memfd->f_mapping,
+							      &start_idx,
+							      end_idx,
+							      &fbatch);
+			if (folio) {
+				folio_put(folio);
+				folio = NULL;
+			}
+
+			next_idx = 0;
+			for (j = 0; j < nr_folios; j++) {
+				if (next_idx &&
+				    next_idx != folio_index(fbatch.folios[j]))
+					continue;
+
+				folio = try_grab_folio(&fbatch.folios[j]->page,
+						       1, FOLL_PIN);
+				if (!folio) {
+					folio_batch_release(&fbatch);
+					kfree(pages);
+					goto err;
+				}
+
+				max_pgs = folio_nr_pages(folio);
+				if (i == 0) {
+					pgoff = offset_in_folio(folio, start);
+					pgoff >>= PAGE_SHIFT;
+				}
+
+				do {
+					folios[i] = folio;
+					offsets[i] = pgoff << PAGE_SHIFT;
+					pages[i] = folio_page(folio, 0);
+					folio_add_pin(folio);
+
+					pgoff++;
+					i++;
+				} while (pgoff < max_pgs && i < nr_pages);
+
+				pgoff = 0;
+				next_idx = folio_next_index(folio);
+				gup_put_folio(folio, 1, FOLL_PIN);
+			}
+
+			folio = NULL;
+			folio_batch_release(&fbatch);
+			if (!nr_folios) {
+				folio = memfd_alloc_folio(memfd, start_idx);
+				if (IS_ERR(folio)) {
+					ret = PTR_ERR(folio);
+					if (ret != -EEXIST) {
+						kfree(pages);
+						goto err;
+					}
+				}
+			}
+		}
+
+		ret = check_and_migrate_movable_pages(nr_pages, pages);
+	} while (ret == -EAGAIN);
+
+	kfree(pages);
+	memalloc_pin_restore(flags);
+	return ret ? ret : nr_pages;
+err:
+	memalloc_pin_restore(flags);
+	while (i-- > 0)
+		if (folios[i])
+			gup_put_folio(folios[i], 1, FOLL_PIN);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(memfd_pin_folios);
+
