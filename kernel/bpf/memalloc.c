@@ -483,11 +483,15 @@ static void init_refill_work(struct bpf_mem_cache *c)
 
 static void prefill_mem_cache(struct bpf_mem_cache *c, int cpu)
 {
+	int cnt = 1;
+
 	/* To avoid consuming memory assume that 1st run of bpf
 	 * prog won't be doing more than 4 map_update_elem from
 	 * irq disabled region
 	 */
-	alloc_bulk(c, c->unit_size <= 256 ? 4 : 1, cpu_to_node(cpu), false);
+	if (!c->percpu_size && c->unit_size <= 256)
+		cnt = 4;
+	alloc_bulk(c, cnt, cpu_to_node(cpu), false);
 }
 
 static int check_obj_size(struct bpf_mem_cache *c, unsigned int idx)
