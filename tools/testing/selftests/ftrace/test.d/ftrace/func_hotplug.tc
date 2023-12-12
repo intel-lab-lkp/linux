@@ -1,0 +1,30 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: ftrace - function trace across cpu hotplug
+# requires: function:tracer
+
+if ! which nproc ; then
+  nproc() {
+    ls -d /sys/devices/system/cpu/cpu[0-9]* | wc -l
+  }
+fi
+
+NP=`nproc`
+
+if [ $NP -eq 1 ] ;then
+  echo "We can not test cpu hotplug in UP environment"
+  exit_unresolved
+fi
+
+echo 0 > tracing_on
+echo > trace
+: "Set CPU1 offline/online with function tracer enabled"
+echo function > current_tracer
+echo 1 > tracing_on
+(echo 0 > /sys/devices/system/cpu/cpu1/online)
+(echo "forked"; sleep 1)
+(echo 1 > /sys/devices/system/cpu/cpu1/online)
+echo 0 > tracing_on
+
+: "Check CPU1 events are recorded"
+grep -q -e "\[001\]" trace
