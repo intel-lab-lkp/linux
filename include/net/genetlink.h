@@ -20,6 +20,11 @@ struct genl_multicast_group {
 	u8			cap_sys_admin:1;
 };
 
+struct genl_sk_priv_list {
+	struct list_head list;
+	spinlock_t lock; /* protects list */
+};
+
 struct genl_split_ops;
 struct genl_info;
 
@@ -51,6 +56,9 @@ struct genl_info;
  * @split_ops: the split do/dump form of operation definition
  * @n_split_ops: number of entries in @split_ops, not that with split do/dump
  *	ops the number of entries is not the same as number of commands
+ * @sock_priv_size: the size of per-socket private memory
+ * @sock_priv_init: the per-socket private memory initializer
+ * @sock_priv_destroy: the per-socket private memory destructor
  *
  * Attribute policies (the combination of @policy and @maxattr fields)
  * can be attached at the family level or at the operation level.
@@ -84,11 +92,17 @@ struct genl_family {
 	const struct genl_multicast_group *mcgrps;
 	struct module		*module;
 
+	size_t			sock_priv_size;
+	void			(*sock_priv_init)(void *priv);
+	void			(*sock_priv_destroy)(void *priv);
+
 /* private: internal use only */
 	/* protocol family identifier */
 	int			id;
 	/* starting number of multicast group IDs in this family */
 	unsigned int		mcgrp_offset;
+	/* list of per-socket privs */
+	struct genl_sk_priv_list *sock_priv_list;
 };
 
 /**
@@ -298,6 +312,8 @@ static inline bool genl_info_is_ntf(const struct genl_info *info)
 	return !info->nlhdr;
 }
 
+void *__genl_sk_priv_get(struct sock *sk, struct genl_family *family);
+void *genl_sk_priv_get(struct sock *sk, struct genl_family *family);
 int genl_register_family(struct genl_family *family);
 int genl_unregister_family(const struct genl_family *family);
 void genl_notify(const struct genl_family *family, struct sk_buff *skb,

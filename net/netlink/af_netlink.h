@@ -53,6 +53,13 @@ struct netlink_sock {
 	struct work_struct	work;
 };
 
+/* Size of netlink sock is size of the biggest user with priv,
+ * which is currently just Generic Netlink.
+ */
+#define NETLINK_SOCK_PROTO_SIZE 8
+#define NETLINK_SOCK_SIZE	\
+	(sizeof(struct netlink_sock) + NETLINK_SOCK_PROTO_SIZE)
+
 static inline struct netlink_sock *nlk_sk(struct sock *sk)
 {
 	return container_of(sk, struct netlink_sock, sk);

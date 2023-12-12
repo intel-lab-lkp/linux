@@ -22,6 +22,8 @@
 #include <net/sock.h>
 #include <net/genetlink.h>
 
+#include "af_netlink.h"
+
 static DEFINE_MUTEX(genl_mutex); /* serialization of message processing */
 static DECLARE_RWSEM(cb_lock);
 
@@ -631,6 +633,199 @@ static int genl_validate_ops(const struct genl_family *family)
 	return 0;
 }
 
+struct genl_sock {
+	struct netlink_sock nlk_sk;
+	struct xarray *family_privs;
+};
+
+static inline struct genl_sock *genl_sk(struct sock *sk)
+{
+	BUILD_BUG_ON(sizeof(struct genl_sock) > NETLINK_SOCK_SIZE);
+	return container_of(nlk_sk(sk), struct genl_sock, nlk_sk);
+}
+
+struct genl_sk_priv {
+	struct list_head list;
+	struct genl_family *family;
+	void (*destructor)(void *priv);
+	long priv[];
+};
+
+static struct genl_sk_priv *genl_sk_priv_alloc(struct genl_family *family)
+{
+	struct genl_sk_priv *priv;
+
+	if (WARN_ON_ONCE(!family->sock_priv_size))
+		return ERR_PTR(-EINVAL);
+
+	priv = kzalloc(size_add(sizeof(*priv), family->sock_priv_size),
+		       GFP_KERNEL);
+	if (!priv)
+		return ERR_PTR(-ENOMEM);
+	priv->family = family;
+	priv->destructor = family->sock_priv_destroy;
+	if (family->sock_priv_init)
+		family->sock_priv_init(priv->priv);
+	spin_lock(&family->sock_priv_list->lock);
+	list_add(&priv->list, &family->sock_priv_list->list);
+	spin_unlock(&family->sock_priv_list->lock);
+	return priv;
+}
+
+static void genl_sk_priv_free(struct genl_sk_priv *priv)
+{
+	spin_lock(&priv->family->sock_priv_list->lock);
+	list_del(&priv->list);
+	spin_unlock(&priv->family->sock_priv_list->lock);
+	if (priv->destructor)
+		priv->destructor(priv->priv);
+	kfree(priv);
+}
+
+static int genl_sk_priv_list_alloc(struct genl_family *family)
+{
+	if (!family->sock_priv_size)
+		return 0;
+
+	family->sock_priv_list = kzalloc(sizeof(*family->sock_priv_list),
+					 GFP_KERNEL);
+	if (!family->sock_priv_list)
+		return -ENOMEM;
+	INIT_LIST_HEAD(&family->sock_priv_list->list);
+	spin_lock_init(&family->sock_priv_list->lock);
+	return 0;
+}
+
+static void genl_sk_priv_list_free(const struct genl_family *family)
+{
+	struct genl_sk_priv *priv, *tmp;
+
+	if (!family->sock_priv_size)
+		return;
+
+	list_for_each_entry_safe(priv, tmp, &family->sock_priv_list->list, list)
+		genl_sk_priv_free(priv);
+	kfree(family->sock_priv_list);
+}
+
+static void genl_release(struct sock *sk, unsigned long *groups)
+{
+	struct genl_sock *gsk = genl_sk(sk);
+	struct genl_sk_priv *priv;
+	unsigned long family_id;
+
+	if (!gsk->family_privs)
+		return;
+	xa_for_each(gsk->family_privs, family_id, priv) {
+		xa_erase(gsk->family_privs, family_id);
+		genl_sk_priv_free(priv);
+	}
+	xa_destroy(gsk->family_privs);
+	kfree(gsk->family_privs);
+}
+
+static struct xarray *genl_family_privs_get(struct genl_sock *gsk)
+{
+	struct xarray *family_privs;
+
+	family_privs = READ_ONCE(gsk->family_privs);
+	if (family_privs)
+		return family_privs;
+
+	family_privs = kzalloc(sizeof(*family_privs), GFP_KERNEL);
+	if (!family_privs)
+		return ERR_PTR(-ENOMEM);
+	xa_init_flags(family_privs, XA_FLAGS_ALLOC);
+
+	/* Use genl lock to protect family_privs to be
+	 * initialized in parallel by different CPU.
+	 */
+	genl_lock();
+	if (unlikely(gsk->family_privs)) {
+		genl_unlock();
+		xa_destroy(family_privs);
+		kfree(family_privs);
+		return READ_ONCE(gsk->family_privs);
+	}
+	WRITE_ONCE(gsk->family_privs, family_privs);
+	genl_unlock();
+	return family_privs;
+}
+
+/**
+ * __genl_sk_priv_get - Get per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ *
+ * Lookup a private pointer stored per-socket by a specified
+ * Generic netlink family.
+ *
+ * Caller should make sure this is called in RCU read locked section.
+ *
+ * Return: valid pointer on success, otherwise NULL.
+ */
+void *__genl_sk_priv_get(struct sock *sk, struct genl_family *family)
+{
+	struct genl_sock *gsk = genl_sk(sk);
+	struct genl_sk_priv *priv;
+	struct xarray *family_privs;
+
+	family_privs = READ_ONCE(gsk->family_privs);
+	if (!family_privs)
+		return NULL;
+	priv = xa_load(family_privs, family->id);
+	return priv ? priv->priv : NULL;
+}
+
+/**
+ * genl_sk_priv_get - Get per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ *
+ * Store a private pointer per-socket for a specified
+ * Generic netlink family.
+ *
+ * Caller has to make sure this is not called in parallel multiple times
+ * for the same sock and also in parallel to genl_release() for the same sock.
+ *
+ * Return: previously stored private pointer for the family (could be NULL)
+ * on success, otherwise negative error value encoded by ERR_PTR().
+ */
+void *genl_sk_priv_get(struct sock *sk, struct genl_family *family)
+{
+	struct genl_sk_priv *priv, *old_priv;
+	struct genl_sock *gsk = genl_sk(sk);
+	struct xarray *family_privs;
+
+	family_privs = genl_family_privs_get(gsk);
+	if (IS_ERR(family_privs))
+		return ERR_CAST(family_privs);
+
+	priv = xa_load(family_privs, family->id);
+	if (priv)
+		return priv->priv;
+
+	/* priv for the family does not exist so far, create it. */
+
+	priv = genl_sk_priv_alloc(family);
+	if (IS_ERR(priv))
+		return ERR_CAST(priv);
+
+	old_priv = xa_cmpxchg(family_privs, family->id, NULL, priv, GFP_KERNEL);
+	if (xa_is_err(old_priv)) {
+		genl_sk_priv_free(priv);
+		return ERR_PTR(xa_err(old_priv));
+	} else if (!old_priv) {
+		return priv->priv;
+	}
+
+	/* Race happened, priv was already inserted. */
+	genl_sk_priv_free(priv);
+	return old_priv->priv;
+}
+
 /**
  * genl_register_family - register a generic netlink family
  * @family: generic netlink family
@@ -659,6 +854,10 @@ int genl_register_family(struct genl_family *family)
 		goto errout_locked;
 	}
 
+	err = genl_sk_priv_list_alloc(family);
+	if (err)
+		goto errout_locked;
+
 	/*
 	 * Sadly, a few cases need to be special-cased
 	 * due to them having previously abused the API
@@ -679,7 +878,7 @@ int genl_register_family(struct genl_family *family)
 				      start, end + 1, GFP_KERNEL);
 	if (family->id < 0) {
 		err = family->id;
-		goto errout_locked;
+		goto errout_priv_list_free;
 	}
 
 	err = genl_validate_assign_mc_groups(family);
@@ -698,6 +897,8 @@ int genl_register_family(struct genl_family *family)
 
 errout_remove:
 	idr_remove(&genl_fam_idr, family->id);
+errout_priv_list_free:
+	genl_sk_priv_list_free(family);
 errout_locked:
 	genl_unlock_all();
 	return err;
@@ -728,6 +929,9 @@ int genl_unregister_family(const struct genl_family *family)
 	up_write(&cb_lock);
 	wait_event(genl_sk_destructing_waitq,
 		   atomic_read(&genl_sk_destructing_cnt) == 0);
+
+	genl_sk_priv_list_free(family);
+
 	genl_unlock();
 
 	genl_ctrl_event(CTRL_CMD_DELFAMILY, family, NULL, 0);
@@ -1708,6 +1912,7 @@ static int __net_init genl_pernet_init(struct net *net)
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
+		.release	= genl_release,
 	};
 
 	/* we'll bump the group number right afterwards */
