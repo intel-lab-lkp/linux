@@ -43,6 +43,8 @@ static const struct bpf_verifier_ops * const bpf_verifier_ops[] = {
 };
 
 struct bpf_mem_alloc bpf_global_percpu_ma;
+#define LLIST_NODE_SZ sizeof(struct llist_node)
+#define BPF_GLOBAL_PERCPU_MA_MAX_SIZE  (512 - LLIST_NODE_SZ)
 
 /* bpf_check() is a static code analyzer that walks eBPF program
  * instruction by instruction and updates register/stack state.
@@ -12076,6 +12078,11 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 				}
 
 				if (meta.func_id == special_kfunc_list[KF_bpf_percpu_obj_new_impl]) {
+					if (ret_t->size > BPF_GLOBAL_PERCPU_MA_MAX_SIZE) {
+						verbose(env, "bpf_percpu_obj_new type size (%d) is greater than %lu\n",
+							ret_t->size, BPF_GLOBAL_PERCPU_MA_MAX_SIZE);
+						return -EINVAL;
+					}
 					mutex_lock(&bpf_percpu_ma_lock);
 					err = bpf_mem_alloc_percpu_unit_init(&bpf_global_percpu_ma, ret_t->size);
 					mutex_unlock(&bpf_percpu_ma_lock);
