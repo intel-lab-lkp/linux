@@ -88,15 +88,9 @@ static int dw_mipi_dsi_phy_init(void *priv_data)
 	}
 
 	/* Make sure the rate of the bit clock is not modified by someone else */
-	ret = clk_rate_exclusive_get(mipi_dsi->bit_clk);
-	if (ret) {
-		dev_err(mipi_dsi->dev,
-			"Failed to set the exclusivity on the bit clock rate (ret %d)\n", ret);
-		return ret;
-	}
+	clk_rate_exclusive_get(mipi_dsi->bit_clk);
 
 	ret = clk_set_rate(mipi_dsi->px_clk, mipi_dsi->mode->clock * 1000);
-
 	if (ret) {
 		dev_err(mipi_dsi->dev, "Failed to set DSI Pixel clock rate %u (%d)\n",
 			mipi_dsi->mode->clock * 1000, ret);
