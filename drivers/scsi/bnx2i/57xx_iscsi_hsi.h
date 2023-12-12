@@ -938,12 +938,17 @@ struct bnx2i_login_response {
 	u16 reserved3;
 #endif
 	u32 stat_sn;
-	u32 isid_lo;
 #if defined(__BIG_ENDIAN)
-	u16 isid_hi;
+	struct_group_attr(isid, __packed,
+		u32 isid_lo;
+		u16 isid_hi;
+	);
 	u16 tsih;
 #elif defined(__LITTLE_ENDIAN)
-	u16 tsih;
+	struct_group_attr(isid, __packed,
+		u32 isid_lo;
+		u16 tsih;
+	);
 	u16 isid_hi;
 #endif
 #if defined(__BIG_ENDIAN)
