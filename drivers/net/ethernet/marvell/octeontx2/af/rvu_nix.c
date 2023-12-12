@@ -6142,14 +6142,12 @@ static struct nix_mcast_grp_elem *rvu_nix_mcast_find_grp_elem(struct nix_mcast_g
 	struct nix_mcast_grp_elem *iter;
 	bool is_found = false;
 
-	mutex_lock(&mcast_grp->mcast_grp_lock);
 	list_for_each_entry(iter, &mcast_grp->mcast_grp_head, list) {
 		if (iter->mcast_grp_idx == mcast_grp_idx) {
 			is_found = true;
 			break;
 		}
 	}
-	mutex_unlock(&mcast_grp->mcast_grp_lock);
 
 	if (is_found)
 		return iter;
@@ -6162,7 +6160,7 @@ int rvu_nix_mcast_get_mce_index(struct rvu *rvu, u16 pcifunc, u32 mcast_grp_idx)
 	struct nix_mcast_grp_elem *elem;
 	struct nix_mcast_grp *mcast_grp;
 	struct nix_hw *nix_hw;
-	int blkaddr;
+	int blkaddr, ret;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, pcifunc);
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
@@ -6170,11 +6168,15 @@ int rvu_nix_mcast_get_mce_index(struct rvu *rvu, u16 pcifunc, u32 mcast_grp_idx)
 		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	mcast_grp = &nix_hw->mcast_grp;
+	mutex_lock(&mcast_grp->mcast_grp_lock);
 	elem = rvu_nix_mcast_find_grp_elem(mcast_grp, mcast_grp_idx);
 	if (!elem)
-		return NIX_AF_ERR_INVALID_MCAST_GRP;
+		ret = NIX_AF_ERR_INVALID_MCAST_GRP;
+	else
+		ret = elem->mce_start_index;
 
-	return elem->mce_start_index;
+	mutex_unlock(&mcast_grp->mcast_grp_lock);
+	return ret;
 }
 
 void rvu_nix_mcast_flr_free_entries(struct rvu *rvu, u16 pcifunc)
@@ -6238,7 +6240,7 @@ int rvu_nix_mcast_update_mcam_entry(struct rvu *rvu, u16 pcifunc,
 	struct nix_mcast_grp_elem *elem;
 	struct nix_mcast_grp *mcast_grp;
 	struct nix_hw *nix_hw;
-	int blkaddr;
+	int blkaddr, ret = 0;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, pcifunc);
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
@@ -6246,13 +6248,15 @@ int rvu_nix_mcast_update_mcam_entry(struct rvu *rvu, u16 pcifunc,
 		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	mcast_grp = &nix_hw->mcast_grp;
+	mutex_lock(&mcast_grp->mcast_grp_lock);
 	elem = rvu_nix_mcast_find_grp_elem(mcast_grp, mcast_grp_idx);
 	if (!elem)
-		return NIX_AF_ERR_INVALID_MCAST_GRP;
+		ret = NIX_AF_ERR_INVALID_MCAST_GRP;
+	else
+		elem->mcam_index = mcam_index;
 
-	elem->mcam_index = mcam_index;
-
-	return 0;
+	mutex_unlock(&mcast_grp->mcast_grp_lock);
+	return ret;
 }
 
 int rvu_mbox_handler_nix_mcast_grp_create(struct rvu *rvu,
@@ -6306,6 +6310,13 @@ int rvu_mbox_handler_nix_mcast_grp_destroy(struct rvu *rvu,
 		return err;
 
 	mcast_grp = &nix_hw->mcast_grp;
+
+	/* If AF is requesting for the deletion,
+	 * then AF is already taking the lock
+	 */
+	if (!req->is_af)
+		mutex_lock(&mcast_grp->mcast_grp_lock);
+
 	elem = rvu_nix_mcast_find_grp_elem(mcast_grp, req->mcast_grp_idx);
 	if (!elem)
 		return NIX_AF_ERR_INVALID_MCAST_GRP;
@@ -6333,12 +6344,6 @@ int rvu_mbox_handler_nix_mcast_grp_destroy(struct rvu *rvu,
 	mutex_unlock(&mcast->mce_lock);
 
 delete_grp:
-	/* If AF is requesting for the deletion,
-	 * then AF is already taking the lock
-	 */
-	if (!req->is_af)
-		mutex_lock(&mcast_grp->mcast_grp_lock);
-
 	list_del(&elem->list);
 	kfree(elem);
 	mcast_grp->count--;
@@ -6370,9 +6375,20 @@ int rvu_mbox_handler_nix_mcast_grp_update(struct rvu *rvu,
 		return err;
 
 	mcast_grp = &nix_hw->mcast_grp;
+
+	/* If AF is requesting for the updation,
+	 * then AF is already taking the lock
+	 */
+	if (!req->is_af)
+		mutex_lock(&mcast_grp->mcast_grp_lock);
+
 	elem = rvu_nix_mcast_find_grp_elem(mcast_grp, req->mcast_grp_idx);
-	if (!elem)
+	if (!elem) {
+		if (!req->is_af)
+			mutex_unlock(&mcast_grp->mcast_grp_lock);
+
 		return NIX_AF_ERR_INVALID_MCAST_GRP;
+	}
 
 	/* If any pcifunc matches the group's pcifunc, then we can
 	 * delete the entire group.
@@ -6383,8 +6399,11 @@ int rvu_mbox_handler_nix_mcast_grp_update(struct rvu *rvu,
 				/* Delete group */
 				dreq.hdr.pcifunc = elem->pcifunc;
 				dreq.mcast_grp_idx = elem->mcast_grp_idx;
-				dreq.is_af = req->is_af;
+				dreq.is_af = 1;
 				rvu_mbox_handler_nix_mcast_grp_destroy(rvu, &dreq, NULL);
+				if (!req->is_af)
+					mutex_unlock(&mcast_grp->mcast_grp_lock);
+
 				return 0;
 			}
 		}
@@ -6467,5 +6486,8 @@ int rvu_mbox_handler_nix_mcast_grp_update(struct rvu *rvu,
 
 done:
 	mutex_unlock(&mcast->mce_lock);
+	if (!req->is_af)
+		mutex_unlock(&mcast_grp->mcast_grp_lock);
+
 	return ret;
 }
