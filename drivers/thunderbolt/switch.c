@@ -626,6 +626,19 @@ int tb_port_unlock(struct tb_port *port)
 	return 0;
 }
 
+/**
+ * tb_port_reset() - Reset downstream port
+ * @port: Port to reset
+ *
+ * Helps to reconfigure the USB4 link by resetting the downstream port.
+ *
+ * Return: Returns 0 on success or an error code on failure.
+ */
+static int tb_port_reset(struct tb_port *port)
+{
+	return usb4_port_reset(port);
+}
+
 static int __tb_port_enable(struct tb_port *port, bool enable)
 {
 	int ret;
@@ -1545,6 +1558,24 @@ static void tb_dump_switch(const struct tb *tb, const struct tb_switch *sw)
 	       regs->enabled, regs->plug_events_delay);
 	tb_dbg(tb, "   unknown1: %#x unknown4: %#x\n",
 	       regs->__unknown1, regs->__unknown4);
+}
+
+/**
+ * tb_switch_reset_ports() - Reset downstream ports of switch.
+ * @sw: Switch whose ports need to be reset.
+ *
+ * Return: Returns 0 on success or an error code on failure.
+ */
+int tb_switch_reset_ports(struct tb_switch *sw)
+{
+	struct tb_port *port;
+	int ret = -EINVAL;
+
+	tb_switch_for_each_port(sw, port) {
+		if (tb_port_is_null(port) && port->cap_usb4)
+			ret = tb_port_reset(port);
+	}
+	return ret;
 }
 
 /**
