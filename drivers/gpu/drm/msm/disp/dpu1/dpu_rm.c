@@ -461,29 +461,177 @@ static int _dpu_rm_reserve_ctls(
 	return 0;
 }
 
+static int _dpu_rm_pingpong_next_index(int start,
+				 uint32_t enc_id,
+				 uint32_t *pp_to_enc_id,
+				 int pp_max)
+{
+	int pp_ndx;
+
+	for (pp_ndx = start; pp_ndx < pp_max; pp_ndx++) {
+		if (pp_to_enc_id[pp_ndx] == enc_id)
+			return pp_ndx;
+	}
+
+	return -ENAVAIL;
+}
+
+static int _dpu_rm_pingpong_dsc_check(int dsc_ndx, int pp_ndx)
+{
+
+	/*
+	 * dsc even index must be mapped to pingpong even index
+	 * dsc odd index must be mapped to pingpong odd index
+	 */
+	if ((dsc_ndx & 0x01) != (pp_ndx & 0x01))
+		return -ENAVAIL;
+
+	return 0;
+}
+
+static int _dpu_rm_reserve_dsc_single(struct dpu_rm *rm,
+			       struct dpu_global_state *global_state,
+			       uint32_t enc_id,
+			       int *dsc_id,
+			       const struct msm_display_topology *top)
+{
+	int num_dsc = 0;
+	uint32_t *pp_to_enc_id = global_state->pingpong_to_enc_id;
+	uint32_t *dsc_enc_id = global_state->dsc_to_enc_id;
+	int pp_max = PINGPONG_MAX - PINGPONG_0;
+	int pp_ndx;
+	int dsc_ndx;
+	int ret;
+
+	for (dsc_ndx = 0; dsc_ndx < ARRAY_SIZE(rm->dsc_blks); dsc_ndx++) {
+		if (!rm->dsc_blks[dsc_ndx])
+			continue;
+
+		if (reserved_by_other(dsc_enc_id, dsc_ndx, enc_id))
+			continue;
+
+		pp_ndx = _dpu_rm_pingpong_next_index(0, enc_id, pp_to_enc_id, pp_max);
+		if (pp_ndx < 0)
+			return -ENAVAIL;
+
+		ret = _dpu_rm_pingpong_dsc_check(dsc_ndx, pp_ndx);
+		if (ret)
+			return -ENAVAIL;
+
+		dsc_id[num_dsc++] = DSC_0 + dsc_ndx;	/* found */
+
+		if (num_dsc >= top->num_dsc)
+			break;
+	}
+
+	if (num_dsc < top->num_dsc) {
+		DPU_ERROR("DSC allocation failed num_dsc=%d required=%d\n",
+						num_dsc, top->num_dsc);
+		return -ENAVAIL;
+	}
+
+	return 0;
+}
+
+static int _dpu_rm_reserve_dsc_pair(struct dpu_rm *rm,
+			       struct dpu_global_state *global_state,
+			       uint32_t enc_id,
+			       int *dsc_id,
+			       const struct msm_display_topology *top)
+{
+	int num_dsc = 0;
+	uint32_t *pp_to_enc_id = global_state->pingpong_to_enc_id;
+	uint32_t *dsc_enc_id = global_state->dsc_to_enc_id;
+	int pp_max = PINGPONG_MAX - PINGPONG_0;
+	int start_pp_ndx = 0;
+	int dsc_ndx, pp_ndx;
+	int ret;
+
+	/* only start from even dsc index */
+	for (dsc_ndx = 0; dsc_ndx < ARRAY_SIZE(rm->dsc_blks); dsc_ndx += 2) {
+		if (!rm->dsc_blks[dsc_ndx] || !rm->dsc_blks[dsc_ndx + 1])
+			continue;
+
+		/* consective dsc index to be paired */
+		if (reserved_by_other(dsc_enc_id, dsc_ndx, enc_id) ||
+				reserved_by_other(dsc_enc_id, dsc_ndx + 1, enc_id))
+			continue;
+
+		pp_ndx = _dpu_rm_pingpong_next_index(start_pp_ndx, enc_id, pp_to_enc_id, pp_max);
+		if (pp_ndx < 0)
+			return -ENAVAIL;
+
+		ret = _dpu_rm_pingpong_dsc_check(dsc_ndx, pp_ndx);
+		if (ret) {
+			pp_ndx = 0;
+			continue;
+		}
+
+		pp_ndx = _dpu_rm_pingpong_next_index(pp_ndx + 1, enc_id, pp_to_enc_id, pp_max);
+		if (pp_ndx < 0)
+			return -ENAVAIL;
+
+		/* pair found */
+		dsc_id[num_dsc++] = DSC_0 + dsc_ndx;
+		dsc_id[num_dsc++] = DSC_0 + dsc_ndx + 1;
+
+		start_pp_ndx = pp_ndx + 1;	/* start for next pair */
+
+		if (num_dsc >= top->num_dsc)
+			break;
+	}
+
+	if (num_dsc < top->num_dsc) {
+		DPU_ERROR("DSC allocation failed num_dsc=%d required=%d\n",
+						num_dsc, top->num_dsc);
+		return -ENAVAIL;
+	}
+
+	return 0;
+}
+
 static int _dpu_rm_reserve_dsc(struct dpu_rm *rm,
 			       struct dpu_global_state *global_state,
 			       struct drm_encoder *enc,
 			       const struct msm_display_topology *top)
 {
-	int num_dsc = top->num_dsc;
-	int i;
+	uint32_t enc_id = enc->base.id;
+	int dsc_id[DSC_MAX - DSC_0];
+	int i, ret;
 
-	/* check if DSC required are allocated or not */
-	for (i = 0; i < num_dsc; i++) {
-		if (!rm->dsc_blks[i]) {
-			DPU_ERROR("DSC %d does not exist\n", i);
-			return -EIO;
-		}
+	if (!top->num_dsc || !top->num_intf)
+		return 0;
 
-		if (global_state->dsc_to_enc_id[i]) {
-			DPU_ERROR("DSC %d is already allocated\n", i);
-			return -EIO;
-		}
+	memset(dsc_id, 0, sizeof(dsc_id));
+
+	/*
+	 * Truth:
+	 * 1) every layer mixer only connects to one interface
+	 * 2) no pingpong split -- which is two layer mixers shared one pingpong
+	 * 3) DSC pair start from even index, such as index(0,1), index (2,3), etc
+	 * 4) odd pingpong connect to odd dsc
+	 * 5) even pingpong connect to even dsc
+	 * 6) pair: encoder +--> pp_idx_0 --> dsc_idx_0
+			    +--> pp_idx_1 --> dsc_idx_1
+	 */
+
+	/* num_dsc should be either 1, 2 or 4 */
+	if (top->num_dsc > top->num_intf)	/* merge mode */
+		ret =  _dpu_rm_reserve_dsc_pair(rm, global_state, enc_id, dsc_id, top);
+	else
+		ret =  _dpu_rm_reserve_dsc_single(rm, global_state, enc_id, dsc_id, top);
+
+	if (ret)
+		return ret;
+
+	/* everything is good proceed to allocate dsc */
+	for (i = 0; i < top->num_dsc; i++) {
+		int id;
+
+		id = dsc_id[i];
+		if (id >= DSC_0)
+			global_state->dsc_to_enc_id[id - DSC_0] = enc_id;
 	}
-
-	for (i = 0; i < num_dsc; i++)
-		global_state->dsc_to_enc_id[i] = enc->base.id;
 
 	return 0;
 }
