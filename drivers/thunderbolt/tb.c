@@ -2588,6 +2588,17 @@ static int tb_start(struct tb *tb)
 	tb_switch_tmu_enable(tb->root_switch);
 	/* Full scan to discover devices added before the driver was loaded. */
 	tb_scan_switch(tb->root_switch);
+	/*
+	 * Boot firmware might have created tunnels of its own. Since we cannot
+	 * be sure they are usable for us, Tear them down and reset the ports
+	 * to handle it as new hotplug for USB4 routers.
+	 */
+	if (tb_switch_is_usb4(tb->root_switch)) {
+		tb_switch_discover_tunnels(tb->root_switch,
+					   &tcm->tunnel_list, false);
+		tcm->hotplug_active = true;
+		return tb_switch_reset_ports(tb->root_switch);
+	}
 	/* Find out tunnels created by the boot firmware */
 	tb_discover_tunnels(tb);
 	/* Add DP resources from the DP tunnels created by the boot firmware */
