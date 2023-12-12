@@ -1030,6 +1030,9 @@ static bool xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool enabl
 
 	__xelpdp_tc_phy_enable_tcss_power(tc, enable);
 
+	if (!enable)
+		return false;
+
 	if ((!tc_phy_wait_for_ready(tc) ||
 	     !xelpdp_tc_phy_wait_for_tcss_power(tc, enable)) &&
 	    !drm_WARN_ON(&i915->drm, tc->mode == TC_PORT_LEGACY)) {
