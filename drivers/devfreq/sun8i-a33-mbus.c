@@ -381,18 +381,10 @@ static int sun8i_a33_mbus_probe(struct platform_device *pdev)
 				     "failed to enable bus clock\n");
 
 	/* Lock the DRAM clock rate to keep priv->nominal_bw in sync. */
-	ret = clk_rate_exclusive_get(priv->clk_dram);
-	if (ret) {
-		err = "failed to lock dram clock rate\n";
-		goto err_disable_bus;
-	}
+	clk_rate_exclusive_get(priv->clk_dram);
 
 	/* Lock the MBUS clock rate to keep MBUS_TMR_PERIOD in sync. */
-	ret = clk_rate_exclusive_get(priv->clk_mbus);
-	if (ret) {
-		err = "failed to lock mbus clock rate\n";
-		goto err_unlock_dram;
-	}
+	clk_rate_exclusive_get(priv->clk_mbus);
 
 	priv->gov_data.upthreshold	= 10;
 	priv->gov_data.downdifferential	=  5;
@@ -450,9 +442,7 @@ err_remove_opps:
 	dev_pm_opp_remove_all_dynamic(dev);
 err_unlock_mbus:
 	clk_rate_exclusive_put(priv->clk_mbus);
-err_unlock_dram:
 	clk_rate_exclusive_put(priv->clk_dram);
-err_disable_bus:
 	clk_disable_unprepare(priv->clk_bus);
 
 	return dev_err_probe(dev, ret, err);
