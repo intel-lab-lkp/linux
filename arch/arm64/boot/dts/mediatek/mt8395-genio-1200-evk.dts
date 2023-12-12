@@ -238,8 +238,6 @@
 	mt6360: pmic@34 {
 		compatible = "mediatek,mt6360";
 		reg = <0x34>;
-		interrupts = <128 IRQ_TYPE_EDGE_FALLING>;
-		interrupt-names = "IRQB";
 		interrupt-controller;
 		#interrupt-cells = <1>;
 		pinctrl-0 = <&mt6360_pins>;
