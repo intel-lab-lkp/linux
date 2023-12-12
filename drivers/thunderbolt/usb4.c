@@ -1074,6 +1074,45 @@ void usb4_switch_remove_ports(struct tb_switch *sw)
 }
 
 /**
+ * usb4_port_reset() - Reset USB4 downsteam port
+ * @port: USB4 port to reset.
+ *
+ * Helps to reconfigure USB4 link by resetting downstream port.
+ *
+ * Return: Returns 0 on success or an error code on failure.
+ */
+int usb4_port_reset(struct tb_port *port)
+{
+	u32 val = 0;
+	int ret;
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			port->cap_usb4 + PORT_CS_19, 1);
+	if (ret)
+		return ret;
+
+	val = val | PORT_CS_19_DPR;
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			port->cap_usb4 + PORT_CS_19, 1);
+	if (ret)
+		return ret;
+
+	/* Wait for 10ms after requesting downstream port reset */
+	usleep_range(10000, 15000);
+
+	ret = tb_port_read(port, &val, TB_CFG_PORT,
+			port->cap_usb4 + PORT_CS_19, 1);
+	if (ret)
+		return ret;
+
+	val &= ~PORT_CS_19_DPR;
+	ret = tb_port_write(port, &val, TB_CFG_PORT,
+			port->cap_usb4 + PORT_CS_19, 1);
+
+	return ret;
+}
+
+/**
  * usb4_port_unlock() - Unlock USB4 downstream port
  * @port: USB4 port to unlock
  *
