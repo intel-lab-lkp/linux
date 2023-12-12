@@ -21,6 +21,8 @@
  *  Copyright (C) 2016 Mellanox Technologies
  */
 
+#include "av_permissions.h"
+#include "linux/vduse.h"
 #include <linux/init.h>
 #include <linux/kd.h>
 #include <linux/kernel.h>
@@ -92,6 +94,7 @@
 #include <linux/fsnotify.h>
 #include <linux/fanotify.h>
 #include <linux/io_uring.h>
+#include <uapi/linux/virtio_ids.h>
 
 #include "avc.h"
 #include "objsec.h"
@@ -6977,6 +6980,34 @@ static int selinux_uring_cmd(struct io_uring_cmd *ioucmd)
 }
 #endif /* CONFIG_IO_URING */
 
+static int selinux_vduse_perm_check(enum vduse_op_perm op_perm, u32 device_id)
+{
+	u32 requested_op, requested_type, sid = current_sid();
+	int ret;
+
+	if (op_perm == VDUSE_PERM_CREATE)
+		requested_op = VDUSE__CREATE;
+	else if (op_perm == VDUSE__DESTROY)
+		requested_op = VDUSE__DESTROY;
+	else if (op_perm == VDUSE_PERM_OPEN)
+		requested_op = VDUSE__OPEN;
+	else
+		return -EINVAL;
+
+	ret = avc_has_perm(sid, sid, SECCLASS_VDUSE, requested_op, NULL);
+	if (ret)
+		return ret;
+
+	if (device_id == VIRTIO_ID_NET)
+		requested_type = VDUSE__NET;
+	else if (device_id == VIRTIO_ID_BLOCK)
+		requested_type = VDUSE__BLOCK;
+	else
+		return -EINVAL;
+
+	return avc_has_perm(sid, sid, SECCLASS_VDUSE, requested_type, NULL);
+}
+
 /*
  * IMPORTANT NOTE: When adding new hooks, please be careful to keep this order:
  * 1. any hooks that don't belong to (2.) or (3.) below,
@@ -7270,6 +7301,7 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 #ifdef CONFIG_PERF_EVENTS
 	LSM_HOOK_INIT(perf_event_alloc, selinux_perf_event_alloc),
 #endif
+	LSM_HOOK_INIT(vduse_perm_check, selinux_vduse_perm_check),
 };
 
 static __init int selinux_init(void)

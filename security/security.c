@@ -5337,3 +5337,18 @@ int security_uring_cmd(struct io_uring_cmd *ioucmd)
 	return call_int_hook(uring_cmd, 0, ioucmd);
 }
 #endif /* CONFIG_IO_URING */
+
+/**
+ * security_vduse_perm_check() - Check if a VDUSE device type operation is allowed
+ * @op_perm: the operation type
+ * @device_id: the Virtio device ID
+ *
+ * Check whether the Virtio device creation is allowed
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_vduse_perm_check(enum vduse_op_perm op_perm, u32 device_id)
+{
+	return call_int_hook(vduse_perm_check, 0, op_perm, device_id);
+}
+EXPORT_SYMBOL(security_vduse_perm_check);
