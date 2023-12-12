@@ -190,16 +190,14 @@ bool clk_is_match(const struct clk *p, const struct clk *q);
  *
  * This function allows drivers to get exclusive control over the rate of a
  * provider. It prevents any other consumer to execute, even indirectly,
- * opereation which could alter the rate of the provider or cause glitches
+ * operation which could alter the rate of the provider or cause glitches
  *
- * If exlusivity is claimed more than once on clock, even by the same driver,
+ * If exclusivity is claimed more than once on clock, even by the same driver,
  * the rate effectively gets locked as exclusivity can't be preempted.
  *
  * Must not be called from within atomic context.
- *
- * Returns success (0) or negative errno.
  */
-int clk_rate_exclusive_get(struct clk *clk);
+void clk_rate_exclusive_get(struct clk *clk);
 
 /**
  * clk_rate_exclusive_put - release exclusivity over the rate control of a

@@ -925,17 +925,15 @@ static void clk_core_rate_restore_protect(struct clk_core *core, int count)
  * clk_rate_exclusive_put(). Calls to this function may sleep.
  * Returns 0 on success, -EERROR otherwise
  */
-int clk_rate_exclusive_get(struct clk *clk)
+void clk_rate_exclusive_get(struct clk *clk)
 {
 	if (!clk)
-		return 0;
+		return;
 
 	clk_prepare_lock();
 	clk_core_rate_protect(clk->core);
 	clk->exclusive_count++;
 	clk_prepare_unlock();
-
-	return 0;
 }
 EXPORT_SYMBOL_GPL(clk_rate_exclusive_get);
 
