@@ -27,6 +27,7 @@ properties:
     enum:
       - starfive,jh7100-wdt
       - starfive,jh7110-wdt
+      - starfive,jh8100-wdt
 
   reg:
     maxItems: 1
@@ -45,6 +46,7 @@ properties:
       - const: core
 
   resets:
+    minItems: 1
     items:
       - description: APB reset
       - description: Core reset
