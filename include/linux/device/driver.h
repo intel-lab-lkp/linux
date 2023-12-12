@@ -288,4 +288,18 @@ static int __init __driver##_init(void) \
 } \
 device_initcall(__driver##_init);
 
+/**
+ * module_exit_stub() - Helper macro for drivers that have init but don't
+ * do anything in exit. This eliminates some boilerplate.
+ * Each module may only use this macro one, and calling it replaces
+ * module_exit().
+ *
+ * @__driver: driver name
+ */
+#define module_exit_stub(__driver) \
+static void __exit __driver##_exit(void) \
+{ \
+} \
+module_exit(__driver##_exit)
+
 #endif	/* _DEVICE_DRIVER_H_ */
