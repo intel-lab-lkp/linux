@@ -542,7 +542,7 @@ static irqreturn_t mhuv2_sender_interrupt(int irq, void *data)
 	struct mhuv2_mbox_chan_priv *priv;
 	struct mbox_chan *chan;
 	unsigned long flags;
-	int i, found = 0;
+	int i, j, found = 0;
 	u32 stat;
 
 	chan = get_irq_chan_comb(mhu, mhu->send->chcomb_int_st);
@@ -553,7 +553,8 @@ static irqreturn_t mhuv2_sender_interrupt(int irq, void *data)
 	priv = chan->con_priv;
 
 	if (!IS_PROTOCOL_DOORBELL(priv)) {
-		writel_relaxed(1, &mhu->send->ch_wn[priv->ch_wn_idx + priv->windows - 1].int_clr);
+		for (j = 0; j < priv->windows; j++)
+			writel_relaxed(1, &mhu->send->ch_wn[priv->ch_wn_idx + j].int_clr);
 
 		if (chan->cl) {
 			mbox_chan_txdone(chan, 0);
