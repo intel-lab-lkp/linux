@@ -307,7 +307,7 @@ void show_dialogue(void)
 	wattroff(w, A_BOLD);
 	/* print legend at the bottom line */
 	mvwprintw(w, rows - 2, 1,
-		"Legend: A=Active, P=Passive, C=Critical");
+		"Legend: A=Active, P=Passive, C=Critical, N=Cold, Z=Critical Cold");
 
 	wrefresh(dialogue_window);
 }
@@ -535,6 +535,8 @@ static char trip_type_to_char(int type)
 	switch (type) {
 	case THERMAL_TRIP_CRITICAL: return 'C';
 	case THERMAL_TRIP_HOT: return 'H';
+	case THERMAL_TRIP_COLD: return 'N';
+	case THERMAL_TRIP_CRITICAL_COLD: return 'Z';
 	case THERMAL_TRIP_PASSIVE: return 'P';
 	case THERMAL_TRIP_ACTIVE: return 'A';
 	default:
