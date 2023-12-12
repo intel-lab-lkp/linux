@@ -153,6 +153,8 @@
 #include <linux/prandom.h>
 #include <linux/once_lite.h>
 #include <net/netdev_rx_queue.h>
+#include <net/page_pool/types.h>
+#include <net/page_pool/helpers.h>
 
 #include "dev.h"
 #include "net-sysfs.h"
@@ -11670,12 +11672,14 @@ static void __init net_dev_struct_check(void)
  *
  */
 
+#define SD_PAGE_POOL_RING_SIZE	256
 /*
  *       This is called single threaded during boot, so no need
  *       to take the rtnl semaphore.
  */
 static int __init net_dev_init(void)
 {
+	struct softnet_data *sd;
 	int i, rc = -ENOMEM;
 
 	BUG_ON(!dev_boot_phase);
@@ -11701,10 +11705,14 @@ static int __init net_dev_init(void)
 
 	for_each_possible_cpu(i) {
 		struct work_struct *flush = per_cpu_ptr(&flush_works, i);
-		struct softnet_data *sd = &per_cpu(softnet_data, i);
+		struct page_pool_params page_pool_params = {
+			.pool_size = SD_PAGE_POOL_RING_SIZE,
+			.nid = NUMA_NO_NODE,
+		};
 
 		INIT_WORK(flush, flush_backlog);
 
+		sd = &per_cpu(softnet_data, i);
 		skb_queue_head_init(&sd->input_pkt_queue);
 		skb_queue_head_init(&sd->process_queue);
 #ifdef CONFIG_XFRM_OFFLOAD
@@ -11722,6 +11730,13 @@ static int __init net_dev_init(void)
 		init_gro_hash(&sd->backlog);
 		sd->backlog.poll = process_backlog;
 		sd->backlog.weight = weight_p;
+
+		sd->page_pool = page_pool_create(&page_pool_params);
+		if (IS_ERR(sd->page_pool)) {
+			sd->page_pool = NULL;
+			goto out;
+		}
+		page_pool_set_cpuid(sd->page_pool, i);
 	}
 
 	dev_boot_phase = 0;
@@ -11749,6 +11764,17 @@ static int __init net_dev_init(void)
 	WARN_ON(rc < 0);
 	rc = 0;
 out:
+	if (rc < 0) {
+		for_each_possible_cpu(i) {
+			sd = &per_cpu(softnet_data, i);
+			if (!sd->page_pool)
+				continue;
+
+			page_pool_destroy(sd->page_pool);
+			sd->page_pool = NULL;
+		}
+	}
+
 	return rc;
 }
 

@@ -3319,6 +3319,7 @@ struct softnet_data {
 	int			defer_count;
 	int			defer_ipi_scheduled;
 	struct sk_buff		*defer_list;
+	struct page_pool	*page_pool;
 	call_single_data_t	defer_csd;
 };
 

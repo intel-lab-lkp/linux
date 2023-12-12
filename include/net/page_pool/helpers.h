@@ -393,4 +393,9 @@ static inline void page_pool_nid_changed(struct page_pool *pool, int new_nid)
 		page_pool_update_nid(pool, new_nid);
 }
 
+static inline void page_pool_set_cpuid(struct page_pool *pool, int cpuid)
+{
+	pool->cpuid = cpuid;
+}
+
 #endif /* _NET_PAGE_POOL_HELPERS_H */
