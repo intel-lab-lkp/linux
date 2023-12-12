@@ -632,7 +632,7 @@ static int hdac_hda_dev_probe(struct hdac_device *hdev)
 	snd_hdac_ext_bus_link_get(hdev->bus, hlink);
 
 	/* ASoC specific initialization */
-	if (hda_pvt->need_display_power)
+	if (hda_pvt && hda_pvt->need_display_power)
 		ret = devm_snd_soc_register_component(&hdev->dev,
 						&hdac_hda_hdmi_codec, hdac_hda_hdmi_dais,
 						ARRAY_SIZE(hdac_hda_hdmi_dais));
