@@ -7,6 +7,11 @@
 #include "mac.h"
 #include "mcu.h"
 
+static bool mt7925_powersave;
+module_param_named(power_save, mt7925_powersave, bool, 0444);
+MODULE_PARM_DESC(power_save,
+		 "enable WiFi power management (default: disable)");
+
 static void
 mt7925_regd_notifier(struct wiphy *wiphy,
 		     struct regulatory_request *req)
@@ -184,11 +189,13 @@ int mt7925_register_device(struct mt792x_dev *dev)
 	dev->pm.idle_timeout = MT792x_PM_TIMEOUT;
 	dev->pm.stats.last_wake_event = jiffies;
 	dev->pm.stats.last_doze_event = jiffies;
-	if (!mt76_is_usb(&dev->mt76)) {
+	if (mt7925_powersave && !mt76_is_usb(&dev->mt76)) {
 		dev->pm.enable_user = true;
 		dev->pm.enable = true;
 		dev->pm.ds_enable_user = true;
 		dev->pm.ds_enable = true;
+	} else {
+		hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
 	}
 
 	if (!mt76_is_mmio(&dev->mt76))
