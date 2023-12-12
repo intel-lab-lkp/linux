@@ -302,7 +302,7 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 
 		fallthrough;
 	case SWAUX_STATUS_ACKM:
-		len = data & SWAUX_M_MASK;
+		len = min(len, (unsigned int)(data & SWAUX_M_MASK));
 		break;
 	case SWAUX_STATUS_DEFER:
 	case SWAUX_STATUS_I2C_DEFER:
@@ -310,7 +310,7 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 			msg->reply |= DP_AUX_NATIVE_REPLY_DEFER;
 		else
 			msg->reply |= DP_AUX_I2C_REPLY_DEFER;
-		len = data & SWAUX_M_MASK;
+		len = min(len, (unsigned int)(data & SWAUX_M_MASK));
 		break;
 	case SWAUX_STATUS_INVALID:
 		return -EOPNOTSUPP;
