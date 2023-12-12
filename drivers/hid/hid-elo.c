@@ -33,7 +33,7 @@ struct elo_priv {
 
 static struct workqueue_struct *wq;
 static bool use_fw_quirk = true;
-module_param(use_fw_quirk, bool, S_IRUGO);
+module_param(use_fw_quirk, bool, 0444);
 MODULE_PARM_DESC(use_fw_quirk, "Do periodic pokes for broken M firmwares (default = true)");
 
 static int elo_input_configured(struct hid_device *hdev,
@@ -193,7 +193,7 @@ static bool elo_broken_firmware(struct usb_device *dev)
 	u16 fw_lvl = le16_to_cpu(dev->descriptor.bcdDevice);
 	u16 child_vid, child_pid;
 	int i;
-    
+
 	if (!use_fw_quirk)
 		return false;
 	if (fw_lvl != 0x10d)
@@ -205,13 +205,13 @@ static bool elo_broken_firmware(struct usb_device *dev)
 		child_pid = le16_to_cpu(child->descriptor.idProduct);
 
 		/*
-		 * If one of the devices below is present attached as a sibling of 
-		 * the touch controller then  this is a newer IBM 4820 monitor that 
+		 * If one of the devices below is present attached as a sibling of
+		 * the touch controller then  this is a newer IBM 4820 monitor that
 		 * does not need the IBM-requested workaround if fw level is
 		 * 0x010d - aka 'M'.
 		 * No other HW can have this combination.
 		 */
-		if (child_vid==0x04b3) {
+		if (child_vid == 0x04b3) {
 			switch (child_pid) {
 			case 0x4676: /* 4820 21x Video */
 			case 0x4677: /* 4820 51x Video */
