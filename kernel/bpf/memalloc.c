@@ -526,6 +526,9 @@ int bpf_mem_alloc_init(struct bpf_mem_alloc *ma, int size, bool percpu)
 	struct bpf_mem_cache *c, __percpu *pc;
 	struct obj_cgroup *objcg = NULL;
 
+	if (percpu && size == 0)
+		return -EINVAL;
+
 	/* room for llist_node and per-cpu pointer */
 	if (percpu)
 		percpu_size = LLIST_NODE_SZ + sizeof(void *);
@@ -623,6 +626,65 @@ static void bpf_mem_alloc_destroy_cache(struct bpf_mem_cache *c)
 	WRITE_ONCE(c->draining, true);
 	irq_work_sync(&c->refill_work);
 	drain_mem_cache(c);
+}
+
+int bpf_mem_alloc_percpu_unit_init(struct bpf_mem_alloc *ma, int size)
+{
+	static u16 sizes[NUM_CACHES] = {96, 192, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+	int cpu, i, err, unit_size, percpu_size = 0;
+	struct bpf_mem_caches *cc, __percpu *pcc;
+	struct obj_cgroup *objcg = NULL;
+	struct bpf_mem_cache *c;
+
+	/* room for llist_node and per-cpu pointer */
+	percpu_size = LLIST_NODE_SZ + sizeof(void *);
+
+	if (ma->caches) {
+		pcc = ma->caches;
+	} else {
+		ma->percpu = true;
+		pcc = __alloc_percpu_gfp(sizeof(*cc), 8, GFP_KERNEL | __GFP_ZERO);
+		if (!pcc)
+			return -ENOMEM;
+		ma->caches = pcc;
+	}
+
+	err = 0;
+	i = bpf_mem_cache_idx(size + LLIST_NODE_SZ);
+	if (i < 0) {
+		err = -EINVAL;
+		goto out;
+	}
+	unit_size = sizes[i];
+
+#ifdef CONFIG_MEMCG_KMEM
+	objcg = get_obj_cgroup_from_current();
+#endif
+	for_each_possible_cpu(cpu) {
+		cc = per_cpu_ptr(pcc, cpu);
+		c = &cc->cache[i];
+		if (cpu == 0 && c->unit_size)
+			goto out;
+
+		c->unit_size = unit_size;
+		c->objcg = objcg;
+		c->percpu_size = percpu_size;
+		c->tgt = c;
+
+		init_refill_work(c);
+		prefill_mem_cache(c, cpu);
+
+		if (cpu == 0) {
+			err = check_obj_size(c, i);
+			if (err) {
+				bpf_mem_alloc_destroy_cache(c);
+				goto out;
+			}
+		}
+	}
+
+out:
+	return err;
 }
 
 static void check_mem_cache(struct bpf_mem_cache *c)
