@@ -5501,6 +5501,12 @@ int mas_preallocate(struct ma_state *mas, void *entry, gfp_t gfp)
 
 	mas_wr_end_piv(&wr_mas);
 	node_size = mas_wr_new_end(&wr_mas);
+
+	/* Slot store, does not require additional nodes */
+	if ((node_size == mas->end) && ((!mt_in_rcu(mas->tree))
+		|| (wr_mas.offset_end - mas->offset == 1)))
+		return 0;
+
 	if (node_size >= mt_slots[wr_mas.type]) {
 		/* Split, worst case for now. */
 		request = 1 + mas_mt_height(mas) * 2;
