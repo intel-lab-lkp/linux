@@ -1020,11 +1020,13 @@ long keyctl_chown_key(key_serial_t id, uid_t user, gid_t group)
 
 			newowner->qnkeys++;
 			newowner->qnbytes += key->quotalen;
+			trace_key_quota(newowner, +1, key->quotalen);
 			spin_unlock_irqrestore(&newowner->lock, flags);
 
 			spin_lock_irqsave(&key->user->lock, flags);
 			key->user->qnkeys--;
 			key->user->qnbytes -= key->quotalen;
+			trace_key_quota(newowner, -1, -key->quotalen);
 			spin_unlock_irqrestore(&key->user->lock, flags);
 		}
 

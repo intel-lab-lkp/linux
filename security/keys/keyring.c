@@ -1368,6 +1368,7 @@ void __key_link(struct key *keyring, struct key *key,
 		struct assoc_array_edit **_edit)
 {
 	key_get(key);
+	trace_key_link(keyring, key);
 	assoc_array_insert_set_object(*_edit, keyring_key_to_ptr(key));
 	assoc_array_apply_edit(*_edit);
 	*_edit = NULL;
@@ -1506,6 +1507,7 @@ static int __key_unlink_begin(struct key *keyring, struct key *key,
 static void __key_unlink(struct key *keyring, struct key *key,
 			 struct assoc_array_edit **_edit)
 {
+	trace_key_unlink(keyring, key);
 	assoc_array_apply_edit(*_edit);
 	notify_key(keyring, NOTIFY_KEY_UNLINKED, key_serial(key));
 	*_edit = NULL;
@@ -1625,6 +1627,7 @@ int key_move(struct key *key,
 	if (ret < 0)
 		goto error;
 
+	trace_key_move(from_keyring, to_keyring, key);
 	__key_unlink(from_keyring, key, &from_edit);
 	__key_link(to_keyring, key, &to_edit);
 error:
@@ -1654,6 +1657,7 @@ int keyring_clear(struct key *keyring)
 
 	down_write(&keyring->sem);
 
+	trace_key_clear(keyring);
 	edit = assoc_array_clear(&keyring->keys, &keyring_assoc_array_ops);
 	if (IS_ERR(edit)) {
 		ret = PTR_ERR(edit);
@@ -1697,14 +1701,27 @@ static bool key_is_dead(const struct key *key, time64_t limit)
 	if (expiry != TIME64_MAX) {
 		if (!(key->type->flags & KEY_TYPE_INSTANT_REAP))
 			expiry += key_gc_delay;
-		if (expiry <= limit)
+		if (expiry <= limit) {
+			trace_key_dead(key, key_trace_dead_expired);
 			return true;
+		}
 	}
 
-	return
-		key->flags & ((1 << KEY_FLAG_DEAD) |
-			      (1 << KEY_FLAG_INVALIDATED)) ||
-		key->domain_tag->removed;
+	if (test_bit(KEY_FLAG_DEAD, &key->flags)) {
+		trace_key_dead(key, key_trace_dead_type_removed);
+		return true;
+	}
+
+	if (test_bit(KEY_FLAG_INVALIDATED, &key->flags)) {
+		trace_key_dead(key, key_trace_dead_invalidated);
+		return true;
+	}
+
+	if (key->domain_tag->removed) {
+		trace_key_dead(key, key_trace_dead_domain_removed);
+		return true;
+	}
+	return false;
 }
 
 static bool keyring_gc_select_iterator(void *object, void *iterator_data)

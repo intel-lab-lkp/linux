@@ -14,6 +14,7 @@
 #include <linux/workqueue.h>
 #include <linux/random.h>
 #include <linux/err.h>
+#define CREATE_TRACE_POINTS
 #include "internal.h"
 
 struct kmem_cache *key_jar;
@@ -264,12 +265,15 @@ struct key *key_alloc(struct key_type *type, const char *desc,
 		if (!(flags & KEY_ALLOC_QUOTA_OVERRUN)) {
 			if (user->qnkeys + 1 > maxkeys ||
 			    user->qnbytes + quotalen > maxbytes ||
-			    user->qnbytes + quotalen < user->qnbytes)
+			    user->qnbytes + quotalen < user->qnbytes) {
+				trace_key_edquot(user, maxkeys, maxbytes, quotalen);
 				goto no_quota;
+			}
 		}
 
 		user->qnkeys++;
 		user->qnbytes += quotalen;
+		trace_key_quota(user, +1, quotalen);
 		spin_unlock_irqrestore(&user->lock, irqflags);
 	}
 
@@ -319,7 +323,10 @@ struct key *key_alloc(struct key_type *type, const char *desc,
 	/* publish the key by giving it a serial number */
 	refcount_inc(&key->domain_tag->usage);
 	atomic_inc(&user->nkeys);
+	trace_key_quota(user, 0, 0);
 	key_alloc_serial(key);
+	trace_key_alloc(key);
+	trace_key_ref(key->serial, 1, key_trace_ref_alloc, __builtin_return_address(0));
 
 error:
 	return key;
@@ -331,6 +338,7 @@ security_error:
 		spin_lock_irqsave(&user->lock, irqflags);
 		user->qnkeys--;
 		user->qnbytes -= quotalen;
+		trace_key_quota(user, -1, -quotalen);
 		spin_unlock_irqrestore(&user->lock, irqflags);
 	}
 	key_user_put(user);
@@ -344,6 +352,7 @@ no_memory_2:
 		spin_lock_irqsave(&user->lock, irqflags);
 		user->qnkeys--;
 		user->qnbytes -= quotalen;
+		trace_key_quota(user, -1, quotalen);
 		spin_unlock_irqrestore(&user->lock, irqflags);
 	}
 	key_user_put(user);
@@ -388,11 +397,13 @@ int key_payload_reserve(struct key *key, size_t datalen)
 		if (delta > 0 &&
 		    (key->user->qnbytes + delta > maxbytes ||
 		     key->user->qnbytes + delta < key->user->qnbytes)) {
+			trace_key_edquot(key->user, 0, maxbytes, datalen);
 			ret = -EDQUOT;
 		}
 		else {
 			key->user->qnbytes += delta;
 			key->quotalen += delta;
+			trace_key_quota(key->user, 0, delta);
 		}
 		spin_unlock_irqrestore(&key->user->lock, flags);
 	}
@@ -447,6 +458,7 @@ static int __key_instantiate_and_link(struct key *key,
 		if (ret == 0) {
 			/* mark the key as being instantiated */
 			atomic_inc(&key->user->nikeys);
+			trace_key_instantiate(key, prep);
 			mark_key_instantiated(key, 0);
 			notify_key(key, NOTIFY_KEY_INSTANTIATED, 0);
 
@@ -604,6 +616,7 @@ int key_reject_and_link(struct key *key,
 	if (key->state == KEY_IS_UNINSTANTIATED) {
 		/* mark the key as being negatively instantiated */
 		atomic_inc(&key->user->nikeys);
+		trace_key_reject(key, -error);
 		mark_key_instantiated(key, -error);
 		notify_key(key, NOTIFY_KEY_INSTANTIATED, -error);
 		key_set_expiry(key, ktime_get_real_seconds() + timeout);
@@ -641,10 +654,15 @@ EXPORT_SYMBOL(key_reject_and_link);
  *
  * Get a reference on a key, if not NULL, and return the parameter.
  */
-struct key *key_get(struct key *key)
+noinline struct key *key_get(struct key *key)
 {
-	if (key)
-		refcount_inc(&key->usage);
+	if (key) {
+		int r;
+
+		__refcount_inc(&key->usage, &r);
+		trace_key_ref(key->serial, r + 1, key_trace_ref_get,
+			      __builtin_return_address(0));
+	}
 	return key;
 }
 EXPORT_SYMBOL(key_get);
@@ -656,10 +674,14 @@ EXPORT_SYMBOL(key_get);
  * Get a reference on a key unless it has no references and return true if
  * successful.  @key must not be NULL.
  */
-struct key *key_try_get(struct key *key)
+noinline struct key *key_try_get(struct key *key)
 {
-	if (!refcount_inc_not_zero(&key->usage))
+	int r;
+
+	if (!__refcount_inc_not_zero(&key->usage, &r))
 		return NULL;
+	trace_key_ref(key->serial, r + 1, key_trace_ref_try_get,
+		      __builtin_return_address(0));
 	return key;
 }
 
@@ -671,12 +693,19 @@ struct key *key_try_get(struct key *key)
  * schedule the cleanup task to come and pull it out of the tree in process
  * context at some later time.
  */
-void key_put(struct key *key)
+noinline void key_put(struct key *key)
 {
 	if (key) {
+		key_serial_t serial = key->serial;
+		bool zero;
+		int r;
+
 		key_check(key);
 
-		if (refcount_dec_and_test(&key->usage)) {
+		zero = __refcount_dec_and_test(&key->usage, &r);
+		trace_key_ref(serial, r - 1, key_trace_ref_put,
+			      __builtin_return_address(0));
+		if (zero) {
 			unsigned long flags;
 
 			/* deal with the user's key tracking and quota */
@@ -684,6 +713,7 @@ void key_put(struct key *key)
 				spin_lock_irqsave(&key->user->lock, flags);
 				key->user->qnkeys--;
 				key->user->qnbytes -= key->quotalen;
+				trace_key_quota(key->user, -1, -key->quotalen);
 				spin_unlock_irqrestore(&key->user->lock, flags);
 			}
 			schedule_work(&key_gc_work);
@@ -807,6 +837,7 @@ static inline key_ref_t __key_update(key_ref_t key_ref,
 	ret = key->type->update(key, prep);
 	if (ret == 0) {
 		/* Updating a negative key positively instantiates it */
+		trace_key_update(key, prep);
 		mark_key_instantiated(key, 0);
 		notify_key(key, NOTIFY_KEY_UPDATED, 0);
 	}
@@ -1131,6 +1162,7 @@ int key_update(key_ref_t key_ref, const void *payload, size_t plen)
 	ret = key->type->update(key, &prep);
 	if (ret == 0) {
 		/* Updating a negative key positively instantiates it */
+		trace_key_update(key, &prep);
 		mark_key_instantiated(key, 0);
 		notify_key(key, NOTIFY_KEY_UPDATED, 0);
 	}
@@ -1166,6 +1198,7 @@ void key_revoke(struct key *key)
 	 */
 	down_write_nested(&key->sem, 1);
 	if (!test_and_set_bit(KEY_FLAG_REVOKED, &key->flags)) {
+		trace_key_revoke(key);
 		notify_key(key, NOTIFY_KEY_REVOKED, 0);
 		if (key->type->revoke)
 			key->type->revoke(key);
@@ -1198,6 +1231,7 @@ void key_invalidate(struct key *key)
 	if (!test_bit(KEY_FLAG_INVALIDATED, &key->flags)) {
 		down_write_nested(&key->sem, 1);
 		if (!test_and_set_bit(KEY_FLAG_INVALIDATED, &key->flags)) {
+			trace_key_invalidate(key);
 			notify_key(key, NOTIFY_KEY_INVALIDATED, 0);
 			key_schedule_gc_links();
 		}

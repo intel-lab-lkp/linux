@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <keys/key_user.h>
+#include <trace/events/key.h>
 
 struct iovec;
 

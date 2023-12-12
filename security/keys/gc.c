@@ -141,6 +141,7 @@ static noinline void key_gc_unused_keys(struct list_head *keys)
 
 		list_del(&key->graveyard_link);
 
+		trace_key_gc(key);
 		kdebug("- %u", key->serial);
 		key_check(key);
 
@@ -163,6 +164,8 @@ static noinline void key_gc_unused_keys(struct list_head *keys)
 		key_put_tag(key->domain_tag);
 		kfree(key->description);
 
+		trace_key_ref(key->serial, refcount_read(&key->usage),
+			      key_trace_ref_free, 0);
 		memzero_explicit(key, sizeof(*key));
 		kmem_cache_free(key_jar, key);
 	}
@@ -331,6 +334,7 @@ maybe_resched:
 	 */
 found_unreferenced_key:
 	kdebug("unrefd key %d", key->serial);
+	trace_key_ref(key->serial, refcount_read(&key->usage), key_trace_ref_gc, 0);
 	rb_erase(&key->serial_node, &key_serial_tree);
 	spin_unlock(&key_serial_lock);
 
