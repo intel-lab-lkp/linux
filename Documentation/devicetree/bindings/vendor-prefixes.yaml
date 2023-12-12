@@ -1438,6 +1438,8 @@ patternProperties:
     description: Traverse Technologies Australia Pty Ltd
   "^tronfy,.*":
     description: Tronfy
+  "^transpeed,.*":
+    description: Transpeed
   "^tronsmart,.*":
     description: Tronsmart
   "^truly,.*":
