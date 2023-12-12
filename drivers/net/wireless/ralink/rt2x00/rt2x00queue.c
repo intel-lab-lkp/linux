@@ -389,7 +389,6 @@ static void rt2x00queue_create_tx_descriptor(struct rt2x00_dev *rt2x00dev,
 	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct ieee80211_tx_rate *txrate = &tx_info->control.rates[0];
-	struct ieee80211_rate *rate;
 	const struct rt2x00_rate *hwrate = NULL;
 
 	memset(txdesc, 0, sizeof(*txdesc));
@@ -416,9 +415,6 @@ static void rt2x00queue_create_tx_descriptor(struct rt2x00_dev *rt2x00dev,
 			__set_bit(ENTRY_TXD_RTS_FRAME, &txdesc->flags);
 		else
 			__set_bit(ENTRY_TXD_CTS_FRAME, &txdesc->flags);
-		if (tx_info->control.rts_cts_rate_idx >= 0)
-			rate =
-			    ieee80211_get_rts_cts_rate(rt2x00dev->hw, tx_info);
 	}
 
 	/*
@@ -463,7 +459,8 @@ static void rt2x00queue_create_tx_descriptor(struct rt2x00_dev *rt2x00dev,
 	else if (txrate->flags & IEEE80211_TX_RC_MCS)
 		txdesc->rate_mode = RATE_MODE_HT_MIX;
 	else {
-		rate = ieee80211_get_tx_rate(rt2x00dev->hw, tx_info);
+		struct ieee80211_rate *rate =
+			ieee80211_get_tx_rate(rt2x00dev->hw, tx_info);
 		hwrate = rt2x00_get_rate(rate->hw_value);
 		if (hwrate->flags & DEV_RATE_OFDM)
 			txdesc->rate_mode = RATE_MODE_OFDM;
