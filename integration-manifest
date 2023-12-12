@@ -1,0 +1,30 @@
+drm drm-fixes a39b6ac3781d46ba18193c9dbb2110f31e9bffe9
+	Linux 6.7-rc5
+drm-misc drm-misc-fixes 759f14e20891de72e676d9d738eb2c573aa15f52
+	drm/edid: also call add modes in EDID connector update fallback
+drm-intel drm-intel-fixes e6861d8264cd43c5eb20196e53df36fd71ec5698
+	drm/i915/edp: don't write to DP_LINK_BW_SET when using rate select
+drm drm-next c1ee197d64f49c9e2a6c8e6a168083c411c1362c
+	Backmerge tag 'v6.7-rc5' into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next eb3f7cbee2942b2c98c1af1652199c46d507153e
+	drm/bridge: ti-sn65dsi86: Associate PWM device to auxiliary device
+drm-intel drm-intel-next 15d03119ed215177c52fb5c9edbe184b78263b65
+	drm/i915/display: do not use cursor size reduction on MTL
+drm-intel drm-intel-gt-next 5169477081a1ed08924949e4893732de92ad7d25
+	drm/i915/selftests: Fix spelling mistake "initialiased" -> "initialised"
+drm-intel topic/core-for-CI 6b2bcf964cad023bd9695a5cd842390578a7d1c9
+	ALSA: hda/hdmi: add force-connect quirk for ASUSTeK Z170M Pro
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
