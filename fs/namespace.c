@@ -4950,7 +4950,8 @@ static inline bool retry_statmount(const long ret, size_t *seq_size)
 	return true;
 }
 
-static int prepare_kstatmount(struct kstatmount *ks, struct mnt_id_req *kreq,
+static int noinline_for_stack
+prepare_kstatmount(struct kstatmount *ks, struct mnt_id_req *kreq,
 			      struct statmount __user *buf, size_t bufsize,
 			      size_t seq_size)
 {
