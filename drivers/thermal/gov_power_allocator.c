@@ -61,6 +61,7 @@ static inline s64 div_frac(s64 x, s64 y)
  *			@trip_switch_on should be NULL.
  * @trip_max:		last passive trip point of the thermal zone. The
  *			temperature we are controlling for.
+ * @total_weight:	Sum of all thermal instances weights
  * @num_actors:		number of cooling devices supporting IPA callbacks
  * @buffer_size:	IPA internal buffer size
  * @req_power:		IPA buffer for requested power
@@ -76,6 +77,7 @@ struct power_allocator_params {
 	u32 sustainable_power;
 	const struct thermal_trip *trip_switch_on;
 	const struct thermal_trip *trip_max;
+	int total_weight;
 	int num_actors;
 	int buffer_size;
 	u32 *req_power;
@@ -403,15 +405,10 @@ static int allocate_power(struct thermal_zone_device *tz, int control_temp)
 	u32 total_req_power = 0;
 	u32 *weighted_req_power;
 	u32 power_range, weight;
-	int total_weight = 0;
 	int i = 0;
 
 	if (!params->num_actors)
 		return -ENODEV;
-
-	list_for_each_entry(instance, &tz->thermal_instances, tz_node)
-		if (power_actor_is_valid(params, instance))
-			total_weight += instance->weight;
 
 	/* Clean all buffers for new power estimations */
 	memset(params->req_power, 0, params->buffer_size);
@@ -430,7 +427,7 @@ static int allocate_power(struct thermal_zone_device *tz, int control_temp)
 		if (cdev->ops->get_requested_power(cdev, &req_power[i]))
 			continue;
 
-		if (!total_weight)
+		if (!params->total_weight)
 			weight = 1 << FRAC_BITS;
 		else
 			weight = instance->weight;
@@ -665,6 +662,12 @@ static void power_allocator_update_tz(struct thermal_zone_device *tz,
 			return;
 
 		allocate_actors_buffer(params, num_actors);
+		break;
+	case THERMAL_INSTANCE_WEIGHT_UPDATE:
+		params->total_weight = 0;
+		list_for_each_entry(instance, &tz->thermal_instances, tz_node)
+			if (power_actor_is_valid(params, instance))
+				params->total_weight += instance->weight;
 		break;
 	default:
 		break;
