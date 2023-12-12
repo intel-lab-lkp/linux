@@ -1696,11 +1696,7 @@ static int tegra_emc_suspend(struct device *dev)
 	int err;
 
 	/* take exclusive control over the clock's rate */
-	err = clk_rate_exclusive_get(emc->clk);
-	if (err) {
-		dev_err(emc->dev, "failed to acquire clk: %d\n", err);
-		return err;
-	}
+	clk_rate_exclusive_get(emc->clk);
 
 	/* suspending in a bad state will hang machine */
 	if (WARN(emc->bad_state, "hardware in a bad state\n"))
