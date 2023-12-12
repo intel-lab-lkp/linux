@@ -52,6 +52,7 @@ enum thermal_notify_event {
 	THERMAL_TABLE_CHANGED, /* Thermal table(s) changed */
 	THERMAL_EVENT_KEEP_ALIVE, /* Request for user space handler to respond */
 	THERMAL_INSTANCE_LIST_UPDATE, /* List of thermal instances changed */
+	THERMAL_INSTANCE_WEIGHT_UPDATE, /* Thermal instance weight changed */
 };
 
 /**

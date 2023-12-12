@@ -975,6 +975,14 @@ weight_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return sprintf(buf, "%d\n", instance->weight);
 }
 
+static void handle_weight_update(struct thermal_zone_device *tz)
+{
+	if (!tz->governor || !tz->governor->update_tz)
+		return;
+
+	tz->governor->update_tz(tz, THERMAL_INSTANCE_WEIGHT_UPDATE);
+}
+
 ssize_t weight_store(struct device *dev, struct device_attribute *attr,
 		     const char *buf, size_t count)
 {
@@ -992,6 +1000,7 @@ ssize_t weight_store(struct device *dev, struct device_attribute *attr,
 	/* Don't race with governors using the 'weight' value */
 	mutex_lock(&tz->lock);
 	instance->weight = weight;
+	handle_weight_update(tz);
 	mutex_unlock(&tz->lock);
 
 	return count;
