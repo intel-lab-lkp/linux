@@ -14,6 +14,8 @@ enum thermal_trip_type {
 	THERMAL_TRIP_PASSIVE,
 	THERMAL_TRIP_HOT,
 	THERMAL_TRIP_CRITICAL,
+	THERMAL_TRIP_COLD,
+	THERMAL_TRIP_CRITICAL_COLD,
 };
 
 /* Adding event notification support elements */

@@ -84,6 +84,8 @@ struct thermal_zone_device_ops {
 			  const struct thermal_trip *, enum thermal_trend *);
 	void (*hot)(struct thermal_zone_device *);
 	void (*critical)(struct thermal_zone_device *);
+	void (*cold)(struct thermal_zone_device *);
+	void (*critical_cold)(struct thermal_zone_device *);
 };
 
 struct thermal_cooling_device_ops {

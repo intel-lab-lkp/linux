@@ -344,6 +344,17 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 		tz->ops->hot(tz);
 }
 
+static void handle_critical_cold_trips(struct thermal_zone_device *tz,
+				       const struct thermal_trip *trip)
+{
+	trace_thermal_zone_trip(tz, thermal_zone_trip_id(tz, trip), trip->type);
+
+	if (trip->type == THERMAL_TRIP_CRITICAL_COLD && tz->ops->critical_cold)
+		tz->ops->critical_cold(tz);
+	else if (trip->type == THERMAL_TRIP_COLD && tz->ops->cold)
+		tz->ops->cold(tz);
+}
+
 static void handle_thermal_trip(struct thermal_zone_device *tz,
 				const struct thermal_trip *trip)
 {
@@ -365,6 +376,8 @@ static void handle_thermal_trip(struct thermal_zone_device *tz,
 
 	if (trip->type == THERMAL_TRIP_CRITICAL || trip->type == THERMAL_TRIP_HOT)
 		handle_critical_trips(tz, trip);
+	else if (trip->type == THERMAL_TRIP_CRITICAL_COLD || trip->type == THERMAL_TRIP_COLD)
+		handle_critical_cold_trips(tz, trip);
 	else
 		handle_non_critical_trips(tz, trip);
 }
