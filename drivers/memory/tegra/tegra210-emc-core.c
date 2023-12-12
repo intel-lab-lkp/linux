@@ -2001,11 +2001,7 @@ static int __maybe_unused tegra210_emc_suspend(struct device *dev)
 	struct tegra210_emc *emc = dev_get_drvdata(dev);
 	int err;
 
-	err = clk_rate_exclusive_get(emc->clk);
-	if (err < 0) {
-		dev_err(emc->dev, "failed to acquire clock: %d\n", err);
-		return err;
-	}
+	clk_rate_exclusive_get(emc->clk);
 
 	emc->resume_rate = clk_get_rate(emc->clk);
 
