@@ -18,14 +18,8 @@ static void grp_spread_init_one(struct cpumask *irqmsk, struct cpumask *nmsk,
 	int cpu, sibl;
 
 	for_each_cpu(cpu, nmsk) {
-		__cpumask_clear_cpu(cpu, nmsk);
-		__cpumask_set_cpu(cpu, irqmsk);
-		if (cpus_per_grp-- == 0)
-			return;
-
-		/* If the cpu has siblings, use them first */
 		siblmsk = topology_sibling_cpumask(cpu);
-		sibl = cpu + 1;
+		sibl = cpu;
 
 		for_each_cpu_and_from(sibl, siblmsk, nmsk) {
 			__cpumask_clear_cpu(sibl, nmsk);
