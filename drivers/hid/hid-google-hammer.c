@@ -324,7 +324,7 @@ static int hammer_kbd_brightness_set_blocking(struct led_classdev *cdev,
 	}
 
 	ret = hid_hw_output_report(led->hdev, led->buf, sizeof(led->buf));
-	if (ret == -ENOSYS)
+	if (ret == -EINVAL)
 		ret = hid_hw_raw_request(led->hdev, 0, led->buf,
 					 sizeof(led->buf),
 					 HID_OUTPUT_REPORT,
@@ -420,7 +420,7 @@ static int hammer_event(struct hid_device *hid, struct hid_field *field,
 }
 
 static bool hammer_has_usage(struct hid_device *hdev, unsigned int report_type,
-			unsigned application, unsigned usage)
+			unsigned int application, unsigned int usage)
 {
 	struct hid_report_enum *re = &hdev->report_enum[report_type];
 	struct hid_report *report;
