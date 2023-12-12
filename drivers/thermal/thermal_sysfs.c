@@ -979,6 +979,7 @@ ssize_t weight_store(struct device *dev, struct device_attribute *attr,
 		     const char *buf, size_t count)
 {
 	struct thermal_instance *instance;
+	struct thermal_zone_device *tz;
 	int ret, weight;
 
 	ret = kstrtoint(buf, 0, &weight);
@@ -986,7 +987,12 @@ ssize_t weight_store(struct device *dev, struct device_attribute *attr,
 		return ret;
 
 	instance = container_of(attr, struct thermal_instance, weight_attr);
+	tz = instance->tz;
+
+	/* Don't race with governors using the 'weight' value */
+	mutex_lock(&tz->lock);
 	instance->weight = weight;
+	mutex_unlock(&tz->lock);
 
 	return count;
 }
