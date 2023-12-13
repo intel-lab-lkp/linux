@@ -106,6 +106,13 @@ unsigned long min_low_pfn;
 unsigned long max_pfn;
 unsigned long long max_possible_pfn;
 
+#ifdef CONFIG_MEMBLOCK_SCRATCH
+/* When set to true, only allocate from MEMBLOCK_SCRATCH ranges */
+static bool scratch_only;
+#else
+#define scratch_only false
+#endif
+
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_MEMORY_REGIONS] __initdata_memblock;
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_RESERVED_REGIONS] __initdata_memblock;
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
@@ -168,6 +175,10 @@ bool __init_memblock memblock_has_mirror(void)
 
 static enum memblock_flags __init_memblock choose_memblock_flags(void)
 {
+	/* skip non-scratch memory for kho early boot allocations */
+	if (scratch_only)
+		return MEMBLOCK_SCRATCH;
+
 	return system_has_some_mirror ? MEMBLOCK_MIRROR : MEMBLOCK_NONE;
 }
 
@@ -643,7 +654,7 @@ repeat:
 #ifdef CONFIG_NUMA
 			WARN_ON(nid != memblock_get_region_node(rgn));
 #endif
-			WARN_ON(flags != rgn->flags);
+			WARN_ON(flags != (rgn->flags & ~MEMBLOCK_SCRATCH));
 			nr_new++;
 			if (insert) {
 				if (start_rgn == -1)
@@ -890,6 +901,18 @@ int __init_memblock memblock_physmem_add(phys_addr_t base, phys_addr_t size)
 }
 #endif
 
+#ifdef CONFIG_MEMBLOCK_SCRATCH
+__init_memblock void memblock_set_scratch_only(void)
+{
+	scratch_only = true;
+}
+
+__init_memblock void memblock_clear_scratch_only(void)
+{
+	scratch_only = false;
+}
+#endif
+
 /**
  * memblock_setclr_flag - set or clear flag for a memory region
  * @type: memblock type to set/clear flag for
@@ -1015,6 +1038,33 @@ int __init_memblock memblock_reserved_mark_noinit(phys_addr_t base, phys_addr_t 
 				    MEMBLOCK_RSRV_NOINIT);
 }
 
+/**
+ * memblock_mark_scratch - Mark a memory region with flag MEMBLOCK_SCRATCH.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Only memory regions marked with %MEMBLOCK_SCRATCH will be considered for
+ * allocations during early boot with kexec handover.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_mark_scratch(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.memory, base, size, 1, MEMBLOCK_SCRATCH);
+}
+
+/**
+ * memblock_clear_scratch - Clear flag MEMBLOCK_SCRATCH for a specified region.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_clear_scratch(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.memory, base, size, 0, MEMBLOCK_SCRATCH);
+}
+
 static bool should_skip_region(struct memblock_type *type,
 			       struct memblock_region *m,
 			       int nid, int flags)
@@ -1044,6 +1094,14 @@ static bool should_skip_region(struct memblock_type *type,
 
 	/* skip driver-managed memory unless we were asked for it explicitly */
 	if (!(flags & MEMBLOCK_DRIVER_MANAGED) && memblock_is_driver_managed(m))
+		return true;
+
+	/* In early alloc during kho, we can only consider scratch allocations */
+	if ((flags & MEMBLOCK_SCRATCH) && !memblock_is_scratch(m))
+		return true;
+
+	/* Leave scratch memory alone after scratch-only phase */
+	if (!(flags & MEMBLOCK_SCRATCH) && memblock_is_scratch(m))
 		return true;
 
 	return false;
@@ -2211,6 +2269,7 @@ static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_MIRROR)] = "MIRROR",
 	[ilog2(MEMBLOCK_NOMAP)] = "NOMAP",
 	[ilog2(MEMBLOCK_DRIVER_MANAGED)] = "DRV_MNG",
+	[ilog2(MEMBLOCK_SCRATCH)] = "SCRATCH",
 };
 
 static int memblock_debug_show(struct seq_file *m, void *private)

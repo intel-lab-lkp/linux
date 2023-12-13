@@ -513,6 +513,10 @@ config ARCH_WANT_OPTIMIZE_HUGETLB_VMEMMAP
 config HAVE_MEMBLOCK_PHYS_MAP
 	bool
 
+# Enable memblock support for scratch memory which is needed for KHO
+config MEMBLOCK_SCRATCH
+	bool
+
 config HAVE_FAST_GUP
 	depends on MMU
 	bool
