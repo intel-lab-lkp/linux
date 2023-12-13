@@ -3,6 +3,9 @@
 # Makefile for the Altera device drivers.
 #
 
+ccflags-y += -DDEFAULT_SYMBOL_NAMESPACE=NET_ALTERA
+
 obj-$(CONFIG_ALTERA_TSE) += altera_tse.o
 altera_tse-objs := altera_tse_main.o altera_tse_ethtool.o \
-altera_msgdma.o altera_sgdma.o altera_utils.o
+		   altera_msgdma.o altera_sgdma.o altera_utils.o \
+		   altera_eth_dma.o
