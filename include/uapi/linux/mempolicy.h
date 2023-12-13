@@ -27,6 +27,16 @@ enum {
 	MPOL_MAX,	/* always last member of enum */
 };
 
+struct mpol_args {
+	/* Basic mempolicy settings */
+	__u16 mode;
+	__u16 mode_flags;
+	__s32 home_node;	/* mbind2: policy home node */
+	__aligned_u64 pol_nodes;
+	__u64 pol_maxnodes;
+	__s32 policy_node;	/* get_mempolicy: policy node info */
+};
+
 /* Flags for set_mempolicy */
 #define MPOL_F_STATIC_NODES	(1 << 15)
 #define MPOL_F_RELATIVE_NODES	(1 << 14)
