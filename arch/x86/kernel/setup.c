@@ -382,6 +382,29 @@ int __init ima_get_kexec_buffer(void **addr, size_t *size)
 }
 #endif
 
+static void __init add_kho(u64 phys_addr, u32 data_len)
+{
+#ifdef CONFIG_KEXEC_KHO
+	struct kho_data *kho;
+	u64 addr = phys_addr + sizeof(struct setup_data);
+	u64 size = data_len - sizeof(struct setup_data);
+
+	kho = early_memremap(addr, size);
+	if (!kho) {
+		pr_warn("setup: failed to memremap kho data (0x%llx, 0x%llx)\n",
+			 addr, size);
+		return;
+	}
+
+	kho_populate(kho->dt_addr, kho->scratch_addr, kho->scratch_size,
+		     kho->mem_cache_addr, kho->mem_cache_size);
+
+	early_memunmap(kho, size);
+#else
+	pr_warn("Passed KHO data, but CONFIG_KEXEC_KHO not set. Ignoring.\n");
+#endif
+}
+
 static void __init parse_setup_data(void)
 {
 	struct setup_data *data;
@@ -409,6 +432,9 @@ static void __init parse_setup_data(void)
 			break;
 		case SETUP_IMA:
 			add_early_ima_buffer(pa_data);
+			break;
+		case SETUP_KEXEC_KHO:
+			add_kho(pa_data, data_len);
 			break;
 		case SETUP_RNG_SEED:
 			data = early_memremap(pa_data, data_len);
@@ -989,7 +1015,25 @@ void __init setup_arch(char **cmdline_p)
 	cleanup_highmap();
 
 	memblock_set_current_limit(ISA_END_ADDRESS);
+
 	e820__memblock_setup();
+
+	/*
+	 * We can resize memblocks at this point, let's dump all KHO
+	 * reservations in and switch from scratch-only to normal allocations
+	 */
+	kho_reserve_mem();
+
+	/* Allocations now skip scratch mem, return low 1M to the pool */
+	if (is_kho_boot()) {
+		u64 i;
+		phys_addr_t base, end;
+
+		__for_each_mem_range(i, &memblock.memory, NULL, NUMA_NO_NODE,
+				     MEMBLOCK_SCRATCH, &base, &end, NULL)
+			if (end <= ISA_END_ADDRESS)
+				memblock_clear_scratch(base, end - base);
+	}
 
 	/*
 	 * Needs to run after memblock setup because it needs the physical
@@ -1105,6 +1149,8 @@ void __init setup_arch(char **cmdline_p)
 	 * won't consume hotpluggable memory.
 	 */
 	arch_reserve_crashkernel();
+
+	kho_reserve();
 
 	memblock_find_dma_reserve();
 

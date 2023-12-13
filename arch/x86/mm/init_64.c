@@ -20,6 +20,7 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/initrd.h>
+#include <linux/kexec.h>
 #include <linux/pagemap.h>
 #include <linux/memblock.h>
 #include <linux/proc_fs.h>
@@ -1338,6 +1339,12 @@ void __init mem_init(void)
 	memblock_free_all();
 	after_bootmem = 1;
 	x86_init.hyper.init_after_bootmem();
+
+	/*
+	 * Now that all KHO pages are marked as reserved, let's flip them back
+	 * to normal pages with accurate refcount.
+	 */
+	kho_populate_refcount();
 
 	/*
 	 * Must be done after boot memory is put on freelist, because here we

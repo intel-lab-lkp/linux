@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/kexec.h>
 #include <linux/kernel.h>
+#include <linux/libfdt.h>
 #include <linux/mm.h>
 #include <linux/efi.h>
 #include <linux/random.h>
@@ -233,6 +234,33 @@ setup_ima_state(const struct kimage *image, struct boot_params *params,
 #endif /* CONFIG_IMA_KEXEC */
 }
 
+static void setup_kho(const struct kimage *image, struct boot_params *params,
+		       unsigned long params_load_addr,
+		       unsigned int setup_data_offset)
+{
+#ifdef CONFIG_KEXEC_KHO
+	struct setup_data *sd = (void *)params + setup_data_offset;
+	struct kho_data *kho = (void *)sd + sizeof(*sd);
+
+	sd->type = SETUP_KEXEC_KHO;
+	sd->len = sizeof(struct kho_data);
+
+	/* Only add if we have all KHO images in place */
+	if (!image->kho.dt.buffer || !image->kho.mem_cache.buffer)
+		return;
+
+	/* Add setup data */
+	kho->dt_addr = image->kho.dt.mem;
+	kho->dt_size = image->kho.dt.bufsz;
+	kho->scratch_addr = kho_scratch_phys;
+	kho->scratch_size = kho_scratch_len;
+	kho->mem_cache_addr = image->kho.mem_cache.mem;
+	kho->mem_cache_size = image->kho.mem_cache.bufsz;
+	sd->next = params->hdr.setup_data;
+	params->hdr.setup_data = params_load_addr + setup_data_offset;
+#endif /* CONFIG_KEXEC_KHO */
+}
+
 static int
 setup_boot_parameters(struct kimage *image, struct boot_params *params,
 		      unsigned long params_load_addr,
@@ -303,6 +331,13 @@ setup_boot_parameters(struct kimage *image, struct boot_params *params,
 				setup_data_offset);
 		setup_data_offset += sizeof(struct setup_data) +
 				     sizeof(struct ima_setup_data);
+	}
+
+	if (IS_ENABLED(CONFIG_KEXEC_KHO)) {
+		/* Setup space to store preservation metadata */
+		setup_kho(image, params, params_load_addr, setup_data_offset);
+		setup_data_offset += sizeof(struct setup_data) +
+				     sizeof(struct kho_data);
 	}
 
 	/* Setup RNG seed */
@@ -469,6 +504,10 @@ static void *bzImage64_load(struct kimage *image, char *kernel,
 	if (IS_ENABLED(CONFIG_IMA_KEXEC))
 		kbuf.bufsz += sizeof(struct setup_data) +
 			      sizeof(struct ima_setup_data);
+
+	if (IS_ENABLED(CONFIG_KEXEC_KHO))
+		kbuf.bufsz += sizeof(struct setup_data) +
+			      sizeof(struct kho_data);
 
 	params = kzalloc(kbuf.bufsz, GFP_KERNEL);
 	if (!params)
