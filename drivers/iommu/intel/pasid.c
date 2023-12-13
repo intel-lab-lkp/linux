@@ -476,6 +476,23 @@ devtlb_invalidation_with_pasid(struct intel_iommu *iommu,
 {
 	struct device_domain_info *info;
 	u16 sid, qdep, pfsid;
+	struct pci_dev *pdev;
+
+	pdev = to_pci_dev(dev);
+	if (!pdev)
+		return;
+
+	/*
+	 * If endpoint device's link was brough down by user's pci configuration
+	 * access to it's hotplug capable slot's link control register, as sequence
+	 * response for DLLSC pciehp_ist() will set the device error_state to
+	 * pci_channel_io_perm_failure. Checking device's state here to avoid
+	 * issuing meaningless devTLB flush request to it, that might cause lockup
+	 * warning or deadlock because too long time waiting in interrupt context.
+	 */
+
+	if (pci_dev_is_disconnected(pdev))
+		return;
 
 	info = dev_iommu_priv_get(dev);
 	if (!info || !info->ats_enabled)
@@ -495,6 +512,8 @@ devtlb_invalidation_with_pasid(struct intel_iommu *iommu,
 		qi_flush_dev_iotlb(iommu, sid, pfsid, qdep, 0, 64 - VTD_PAGE_SHIFT);
 	else
 		qi_flush_dev_iotlb_pasid(iommu, sid, pfsid, pasid, qdep, 0, 64 - VTD_PAGE_SHIFT);
+
+	return;
 }
 
 void intel_pasid_tear_down_entry(struct intel_iommu *iommu, struct device *dev,
