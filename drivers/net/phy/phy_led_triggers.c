@@ -84,7 +84,7 @@ static void phy_led_trigger_unregister(struct phy_led_trigger *plt)
 int phy_led_triggers_register(struct phy_device *phy)
 {
 	int i, err;
-	unsigned int speeds[50];
+	unsigned int speeds[__LINK_SPEEDS_NUM];
 
 	phy->phy_num_led_triggers = phy_supported_speeds(phy, speeds,
 							 ARRAY_SIZE(speeds));
