@@ -313,6 +313,8 @@ static int ufs_qcom_init_lane_clks(struct ufs_qcom_host *host)
 
 		err = ufs_qcom_host_clk_get(dev, "tx_lane1_sync_clk",
 			&host->tx_l1_sync_clk, true);
+		if (err)
+			return err;
 	}
 
 	return 0;
@@ -404,9 +406,11 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 	usleep_range(200, 210);
 
 	ret = reset_control_deassert(host->core_reset);
-	if (ret)
+	if (ret) {
 		dev_err(hba->dev, "%s: core_reset deassert failed, err = %d\n",
 				 __func__, ret);
+		return ret;
+	}
 
 	usleep_range(1000, 1100);
 
@@ -415,7 +419,7 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 		hba->is_irq_enabled = true;
 	}
 
-	return 0;
+	return ret;
 }
 
 static u32 ufs_qcom_get_hs_gear(struct ufs_hba *hba)
@@ -1535,7 +1539,7 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 		ufshcd_uic_hibern8_exit(hba);
 	}
 
-	return 0;
+	return err;
 }
 
 static void ufs_qcom_enable_test_bus(struct ufs_qcom_host *host)
