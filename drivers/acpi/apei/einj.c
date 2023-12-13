@@ -615,6 +615,8 @@ static int available_error_type_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(available_error_type);
 
+static bool einj_initialized;
+
 static int error_type_get(void *data, u64 *val)
 {
 	*val = error_type;
@@ -684,7 +686,7 @@ static int einj_check_table(struct acpi_table_einj *einj_tab)
 	return 0;
 }
 
-static int __init einj_init(void)
+static int __init __einj_init(void)
 {
 	int rc;
 	acpi_status status;
@@ -782,9 +784,30 @@ err_put_table:
 	return rc;
 }
 
+static int __init einj_init(void)
+{
+	int rc = __einj_init();
+
+	einj_initialized = (rc == 0);
+
+	/*
+	 * CXL needs to be able to link and call its EINJ helpers
+	 * regardless of whether the EINJ table is present and initialized
+	 * correctly. CXL helpers check @einj_initialized before
+	 * doing any work.
+	 */
+	if (IS_ENABLED(CONFIG_CXL_EINJ))
+		return 0;
+
+	return rc;
+}
+
 static void __exit einj_exit(void)
 {
 	struct apei_exec_context ctx;
+
+	if (!einj_initialized)
+		return;
 
 	if (einj_param) {
 		acpi_size size = (acpi5) ?
