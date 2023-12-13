@@ -11,6 +11,7 @@
 #include <linux/idr.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
+#include <einj.h>
 #include <cxl.h>
 #include "core.h"
 
@@ -783,6 +784,32 @@ static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
 	return rc;
 }
 
+DEFINE_SHOW_ATTRIBUTE(cxl_einj_available_error_type);
+
+static int cxl_einj_inject(void *data, u64 type)
+{
+	struct cxl_dport *dport = data;
+
+	if (dport->rch)
+		return cxl_einj_inject_rch_error(dport->rcrb.base, type);
+
+	if (!dev_is_pci(dport->dport_dev))
+		return -EINVAL;
+
+	return cxl_einj_inject_error(to_pci_dev(dport->dport_dev), type);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(cxl_einj_inject_fops, NULL, cxl_einj_inject, "%llx\n");
+
+static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
+{
+	struct dentry *dir;
+
+	dir = cxl_debugfs_create_dir(dev_name(dport->dport_dev));
+
+	debugfs_create_file("einj_inject", 0200, dir, dport,
+			    &cxl_einj_inject_fops);
+}
+
 static struct cxl_port *__devm_cxl_add_port(struct device *host,
 					    struct device *uport_dev,
 					    resource_size_t component_reg_phys,
@@ -1136,6 +1163,8 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 	} else {
 		dev_dbg(dport_dev, "dport added to %s\n",
 			dev_name(&port->dev));
+
+		cxl_debugfs_create_dport_dir(dport);
 	}
 
 	return dport;
@@ -1170,6 +1199,8 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 	} else {
 		dev_dbg(dport_dev, "RCH dport added to %s\n",
 			dev_name(&port->dev));
+
+		cxl_debugfs_create_dport_dir(dport);
 	}
 
 	return dport;
@@ -2109,6 +2140,8 @@ static __init int cxl_core_init(void)
 	int rc;
 
 	cxl_debugfs = debugfs_create_dir("cxl", NULL);
+	debugfs_create_file("einj_types", 0400, cxl_debugfs, NULL,
+			    &cxl_einj_available_error_type_fops);
 
 	cxl_mbox_init();
 
