@@ -264,6 +264,37 @@ static inline int setup_ima_buffer(const struct kimage *image, void *fdt,
 }
 #endif /* CONFIG_IMA_KEXEC */
 
+static int kho_add_chosen(const struct kimage *image, void *fdt, int chosen_node)
+{
+	int ret = 0;
+
+#ifdef CONFIG_KEXEC_KHO
+	if (!image->kho.dt.buffer || !image->kho.mem_cache.buffer)
+		goto out;
+
+	pr_debug("Adding kho metadata to DT");
+
+	ret = fdt_appendprop_addrrange(fdt, 0, chosen_node, "linux,kho-dt",
+				       image->kho.dt.mem, image->kho.dt.memsz);
+	if (ret)
+		goto out;
+
+	ret = fdt_appendprop_addrrange(fdt, 0, chosen_node, "linux,kho-scratch",
+				       kho_scratch_phys, kho_scratch_len);
+	if (ret)
+		goto out;
+
+	ret = fdt_appendprop_addrrange(fdt, 0, chosen_node, "linux,kho-mem",
+				       image->kho.mem_cache.mem,
+				       image->kho.mem_cache.bufsz);
+	if (ret)
+		goto out;
+
+out:
+#endif
+	return ret;
+}
+
 /*
  * of_kexec_alloc_and_setup_fdt - Alloc and setup a new Flattened Device Tree
  *
@@ -411,6 +442,11 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 				goto out;
 		}
 	}
+
+	/* Add kho metadata if this is a KHO image */
+	ret = kho_add_chosen(image, fdt, chosen_node);
+	if (ret)
+		goto out;
 
 	/* add bootargs */
 	if (cmdline) {
