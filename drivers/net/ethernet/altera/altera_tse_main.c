@@ -258,14 +258,12 @@ static int alloc_init_skbufs(struct altera_tse_private *priv)
 	int i;
 
 	/* Create Rx ring buffer */
-	priv->rx_ring = kcalloc(rx_descs, sizeof(struct tse_buffer),
-				GFP_KERNEL);
+	priv->rx_ring = kcalloc(rx_descs, sizeof(struct tse_buffer), GFP_KERNEL);
 	if (!priv->rx_ring)
 		goto err_rx_ring;
 
 	/* Create Tx ring buffer */
-	priv->tx_ring = kcalloc(tx_descs, sizeof(struct tse_buffer),
-				GFP_KERNEL);
+	priv->tx_ring = kcalloc(tx_descs, sizeof(struct tse_buffer), GFP_KERNEL);
 	if (!priv->tx_ring)
 		goto err_tx_ring;
 
@@ -319,8 +317,7 @@ static inline void tse_rx_refill(struct altera_tse_private *priv)
 	unsigned int entry;
 	int ret;
 
-	for (; priv->rx_cons - priv->rx_prod > 0;
-			priv->rx_prod++) {
+	for (; priv->rx_cons - priv->rx_prod > 0; priv->rx_prod++) {
 		entry = priv->rx_prod % rxsize;
 		if (likely(priv->rx_ring[entry].skb == NULL)) {
 			ret = tse_init_rx_buffer(priv, &priv->rx_ring[entry],

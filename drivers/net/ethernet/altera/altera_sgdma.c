@@ -20,7 +20,7 @@ static void sgdma_setup_descrip(struct sgdma_descrip __iomem *desc,
 				int wfixed);
 
 static int sgdma_async_write(struct altera_tse_private *priv,
-			      struct sgdma_descrip __iomem *desc);
+			     struct sgdma_descrip __iomem *desc);
 
 static int sgdma_async_read(struct altera_tse_private *priv);
 
@@ -62,7 +62,6 @@ int sgdma_initialize(struct altera_tse_private *priv)
 
 	INIT_LIST_HEAD(&priv->txlisthd);
 	INIT_LIST_HEAD(&priv->rxlisthd);
-
 
 	priv->rxdescphys = dma_map_single(priv->device,
 					  (void __force *)priv->rx_dma_desc,
@@ -192,9 +191,7 @@ int sgdma_tx_buffer(struct altera_tse_private *priv, struct tse_buffer *buffer)
 	return 1;
 }
 
-
-/* tx_lock held to protect access to queued tx list
- */
+/* tx_lock held to protect access to queued tx list */
 u32 sgdma_tx_completions(struct altera_tse_private *priv)
 {
 	u32 ready = 0;
@@ -237,10 +234,9 @@ u32 sgdma_rx_status(struct altera_tse_private *priv)
 	if (sts & SGDMA_STSREG_EOP) {
 		unsigned int pktlength;
 		unsigned int pktstatus;
-		dma_sync_single_for_cpu(priv->device,
-					priv->rxdescphys,
-					SGDMA_DESC_LEN,
-					DMA_FROM_DEVICE);
+
+		dma_sync_single_for_cpu(priv->device, priv->rxdescphys,
+					SGDMA_DESC_LEN,	DMA_FROM_DEVICE);
 
 		pktlength = csrrd16(desc, sgdma_descroffs(bytes_xferred));
 		pktstatus = csrrd8(desc, sgdma_descroffs(status));
@@ -286,7 +282,6 @@ u32 sgdma_rx_status(struct altera_tse_private *priv)
 	return rxstatus;
 }
 
-
 /* Private functions */
 static void sgdma_setup_descrip(struct sgdma_descrip __iomem *desc,
 				struct sgdma_descrip __iomem *ndesc,
@@ -301,6 +296,7 @@ static void sgdma_setup_descrip(struct sgdma_descrip __iomem *desc,
 	/* Clear the next descriptor as not owned by hardware */
 
 	u32 ctrl = csrrd8(ndesc, sgdma_descroffs(control));
+
 	ctrl &= ~SGDMA_CONTROL_HW_OWNED;
 	csrwr8(ctrl, ndesc, sgdma_descroffs(control));
 
@@ -406,6 +402,7 @@ sgdma_txphysaddr(struct altera_tse_private *priv,
 {
 	dma_addr_t paddr = priv->txdescmem_busaddr;
 	uintptr_t offs = (uintptr_t)desc - (uintptr_t)priv->tx_dma_desc;
+
 	return (dma_addr_t)((uintptr_t)paddr + offs);
 }
 
@@ -415,6 +412,7 @@ sgdma_rxphysaddr(struct altera_tse_private *priv,
 {
 	dma_addr_t paddr = priv->rxdescmem_busaddr;
 	uintptr_t offs = (uintptr_t)desc - (uintptr_t)priv->rx_dma_desc;
+
 	return (dma_addr_t)((uintptr_t)paddr + offs);
 }
 
@@ -445,7 +443,6 @@ queue_tx(struct altera_tse_private *priv, struct tse_buffer *buffer)
 	list_add_tail(&buffer->lh, &priv->txlisthd);
 }
 
-
 /* adds a tse_buffer to the tail of a rx buffer list
  * assumes the caller is managing and holding a mutual exclusion
  * primitive to avoid simultaneous pushes/pops to the list.
@@ -465,6 +462,7 @@ static struct tse_buffer *
 dequeue_tx(struct altera_tse_private *priv)
 {
 	struct tse_buffer *buffer = NULL;
+
 	list_remove_head(&priv->txlisthd, buffer, struct tse_buffer, lh);
 	return buffer;
 }
@@ -478,6 +476,7 @@ static struct tse_buffer *
 dequeue_rx(struct altera_tse_private *priv)
 {
 	struct tse_buffer *buffer = NULL;
+
 	list_remove_head(&priv->rxlisthd, buffer, struct tse_buffer, lh);
 	return buffer;
 }
@@ -492,6 +491,7 @@ static struct tse_buffer *
 queue_rx_peekhead(struct altera_tse_private *priv)
 {
 	struct tse_buffer *buffer = NULL;
+
 	list_peek_head(&priv->rxlisthd, buffer, struct tse_buffer, lh);
 	return buffer;
 }
