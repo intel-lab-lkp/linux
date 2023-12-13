@@ -7,11 +7,54 @@
 #define __ALTERA_UTILS_H__
 
 #include <linux/compiler.h>
+#include <linux/io.h>
 #include <linux/types.h>
 
 void tse_set_bit(void __iomem *ioaddr, size_t offs, u32 bit_mask);
 void tse_clear_bit(void __iomem *ioaddr, size_t offs, u32 bit_mask);
 int tse_bit_is_set(void __iomem *ioaddr, size_t offs, u32 bit_mask);
 int tse_bit_is_clear(void __iomem *ioaddr, size_t offs, u32 bit_mask);
+
+static inline u32 csrrd32(void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	return readl(paddr);
+}
+
+static inline u16 csrrd16(void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	return readw(paddr);
+}
+
+static inline u8 csrrd8(void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	return readb(paddr);
+}
+
+static inline void csrwr32(u32 val, void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	writel(val, paddr);
+}
+
+static inline void csrwr16(u16 val, void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	writew(val, paddr);
+}
+
+static inline void csrwr8(u8 val, void __iomem *mac, size_t offs)
+{
+	void __iomem *paddr = mac + offs;
+
+	writeb(val, paddr);
+}
 
 #endif /* __ALTERA_UTILS_H__*/
