@@ -213,6 +213,11 @@ properties:
       '#size-cells':
         const: 0
 
+      'active-low':
+        type: boolean
+        description:
+          This define whether all LEDs needs to be low to be turned on.
+
     patternProperties:
       '^led@[a-f0-9]+$':
         $ref: /schemas/leds/common.yaml#
@@ -225,10 +230,25 @@ properties:
               driver dependent and required for ports that define multiple
               LED for the same port.
 
+          'active-low':
+            type: boolean
+            description:
+              This define whether the LED needs to be low to be turned on.
+
         required:
           - reg
 
         unevaluatedProperties: false
+
+    allOf:
+      - if:
+          required:
+            - active-low
+        then:
+          patternProperties:
+            '^led@[a-f0-9]+$':
+              properties:
+                'active-low': false
 
     additionalProperties: false
 
