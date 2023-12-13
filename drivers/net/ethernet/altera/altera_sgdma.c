@@ -4,10 +4,11 @@
  */
 
 #include <linux/list.h>
-#include "altera_utils.h"
-#include "altera_tse.h"
-#include "altera_sgdmahw.h"
+
 #include "altera_sgdma.h"
+#include "altera_sgdmahw.h"
+#include "altera_tse.h"
+#include "altera_utils.h"
 
 static void sgdma_setup_descrip(struct sgdma_descrip __iomem *desc,
 				struct sgdma_descrip __iomem *ndesc,

@@ -38,12 +38,13 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/skbuff.h>
+
 #include <asm/cacheflush.h>
 
-#include "altera_utils.h"
-#include "altera_tse.h"
-#include "altera_sgdma.h"
 #include "altera_msgdma.h"
+#include "altera_sgdma.h"
+#include "altera_tse.h"
+#include "altera_utils.h"
 
 static atomic_t instance_count = ATOMIC_INIT(~0);
 /* Module parameters */
