@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
+#include <linux/memory-tiers.h>
 #include <linux/vmstat.h>
 #include <linux/notifier.h>
 #include <linux/node.h>
@@ -569,11 +570,49 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
+static ssize_t memtier_override_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	int nid = dev->id;
+	int len = 0;
+
+	len += sysfs_emit(buf, "memory_tier%d\n", node_devices[nid]->memtier);
+	return len;
+}
+
+static ssize_t memtier_override_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t size)
+{
+	int nid = dev->id;
+	int ret, memtier;
+
+	ret = kstrtoint(buf, 0, &memtier);
+
+	if (ret)
+		return ret;
+	if (memtier < 0 || memtier > MAX_MEMTIERID)
+		return -EINVAL;
+	if (node_devices[nid]->memtier == memtier)
+		return size;
+	ret = get_memtier_adistance_offset(nid, memtier);
+	node_devices[nid]->adistance_offset = ret;
+
+	return size;
+}
+static DEVICE_ATTR_RW(memtier_override);
+
+void set_node_memtierid(int node, int memtierid)
+{
+	node_devices[node]->memtier = memtierid;
+}
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_memtier_override.attr,
 	NULL
 };
 
@@ -883,6 +922,8 @@ int __register_one_node(int nid)
 
 	INIT_LIST_HEAD(&node_devices[nid]->access_list);
 	node_init_caches(nid);
+	node_devices[nid]->memtier = 0;
+	node_devices[nid]->adistance_offset = 0;
 
 	return error;
 }

@@ -167,6 +167,21 @@ static const struct attribute_group *memtier_dev_groups[] = {
 	NULL
 };
 
+int get_memtier_adistance_offset(int node, int memtier)
+{
+	struct memory_dev_type *memtype;
+	int adistance_offset;
+
+	memtype = node_memory_types[node].memtype;
+	/*
+	 * Calculate the adistance offset required from memtype
+	 * to move node to target memory tier.
+	 */
+	adistance_offset = (memtier << MEMTIER_CHUNK_BITS) -
+			   memtype->adistance;
+	return adistance_offset;
+}
+
 static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memtype)
 {
 	int ret;
@@ -497,8 +512,10 @@ static struct memory_tier *set_node_memory_tier(int node)
 	memtype = node_memory_types[node].memtype;
 	node_set(node, memtype->nodes);
 	memtier = find_create_memory_tier(memtype);
-	if (!IS_ERR(memtier))
+	if (!IS_ERR(memtier)) {
 		rcu_assign_pointer(pgdat->memtier, memtier);
+		set_node_memtierid(node, memtier->dev.id);
+	}
 	return memtier;
 }
 

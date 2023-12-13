@@ -70,6 +70,13 @@ Description:
 		Distance between the node and all the other nodes
 		in the system.
 
+What:		/sys/devices/system/node/nodeX/memtier_overwrite
+Date:		December 2023
+Contact:	Srinivasulu Thanneeru <sthanneeru.opensrc@micron.com>
+Description:
+		The current memory tier of the node.
+		To migrate, replace it with the id of the desired memory tier.
+
 What:		/sys/devices/system/node/nodeX/vmstat
 Date:		October 2002
 Contact:	Linux Memory Management list <linux-mm@kvack.org>

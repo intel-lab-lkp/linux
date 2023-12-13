@@ -83,6 +83,8 @@ static inline void node_set_perf_attrs(unsigned int nid,
 struct node {
 	struct device	dev;
 	struct list_head access_list;
+	int memtier;
+	int adistance_offset;
 #ifdef CONFIG_HMEM_REPORTING
 	struct list_head cache_attrs;
 	struct device *cache_dev;
@@ -138,6 +140,7 @@ extern void unregister_memory_block_under_nodes(struct memory_block *mem_blk);
 extern int register_memory_node_under_compute_node(unsigned int mem_nid,
 						   unsigned int cpu_nid,
 						   unsigned access);
+extern void set_node_memtierid(int node, int memtierid);
 #else
 static inline void node_dev_init(void)
 {
@@ -163,6 +166,9 @@ static inline int unregister_cpu_under_node(unsigned int cpu, unsigned int nid)
 	return 0;
 }
 static inline void unregister_memory_block_under_nodes(struct memory_block *mem_blk)
+{
+}
+static inline void set_node_memtierid(int node, int memtierid)
 {
 }
 #endif
