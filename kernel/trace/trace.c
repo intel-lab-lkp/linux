@@ -9384,7 +9384,8 @@ allocate_trace_buffer(struct trace_array *tr, struct array_buffer *buf, int size
 
 	buf->tr = tr;
 
-	buf->buffer = ring_buffer_alloc(size, rb_flags);
+	buf->buffer = ring_buffer_alloc(tr->name ? tr->name : "global_trace",
+					size, rb_flags);
 	if (!buf->buffer)
 		return -ENOMEM;
 
@@ -9421,7 +9422,7 @@ static int allocate_trace_buffers(struct trace_array *tr, int size)
 		return ret;
 
 #ifdef CONFIG_TRACER_MAX_TRACE
-	ret = allocate_trace_buffer(tr, &tr->max_buffer,
+	ret = allocate_trace_buffer(NULL, &tr->max_buffer,
 				    allocate_snapshot ? size : 1);
 	if (MEM_FAIL(ret, "Failed to allocate trace buffer\n")) {
 		free_trace_buffer(&tr->array_buffer);
@@ -10473,7 +10474,7 @@ __init static int tracer_alloc_buffers(void)
 		goto out_free_cpumask;
 	/* Used for event triggers */
 	ret = -ENOMEM;
-	temp_buffer = ring_buffer_alloc(PAGE_SIZE, RB_FL_OVERWRITE);
+	temp_buffer = ring_buffer_alloc("temp_buffer", PAGE_SIZE, RB_FL_OVERWRITE);
 	if (!temp_buffer)
 		goto out_rm_hp_state;
 
