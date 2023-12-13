@@ -72,6 +72,12 @@ properties:
       L=operation state) (optional required).
     type: boolean
 
+  wake-gpios:
+    description: If present this property specifies WAKE# sideband signaling
+      to implement wakeup functionality. This is an input GPIO pin for the Root
+      Port mode here. Host drivers will wakeup the host using the IRQ
+      corresponding to the passed GPIO.
+
 required:
   - compatible
   - reg
