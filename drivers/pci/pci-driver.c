@@ -507,7 +507,9 @@ static void pci_device_shutdown(struct device *dev)
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	struct pci_driver *drv = pci_dev->driver;
 
-	pm_runtime_resume(dev);
+	/* If system will go to S5, don't wake up PCI devices for shutdown */
+	if (system_state != SYSTEM_POWER_OFF)
+		pm_runtime_resume(dev);
 
 	if (drv && drv->shutdown)
 		drv->shutdown(pci_dev);
