@@ -1835,6 +1835,9 @@ int trace_probe_register_event_call(struct trace_probe *tp)
 				  trace_probe_name(tp)))
 		return -EEXIST;
 
+	if (!call->event.name)
+		call->event.name = call->name;
+
 	ret = register_trace_event(&call->event);
 	if (!ret)
 		return -ENODEV;

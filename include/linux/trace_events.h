@@ -149,6 +149,7 @@ struct trace_event {
 	struct hlist_node		node;
 	int				type;
 	struct trace_event_functions	*funcs;
+	const char			*name;
 };
 
 extern int register_trace_event(struct trace_event *event);

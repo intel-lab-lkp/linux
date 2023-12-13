@@ -1342,11 +1342,13 @@ static struct trace_event_functions graph_functions = {
 static struct trace_event graph_trace_entry_event = {
 	.type		= TRACE_GRAPH_ENT,
 	.funcs		= &graph_functions,
+	.name		= "graph_ent",
 };
 
 static struct trace_event graph_trace_ret_event = {
 	.type		= TRACE_GRAPH_RET,
-	.funcs		= &graph_functions
+	.funcs		= &graph_functions,
+	.name		= "graph_ret",
 };
 
 static struct tracer graph_trace __tracer_data = {

@@ -1584,6 +1584,7 @@ static struct trace_event_functions trace_blk_event_funcs = {
 static struct trace_event trace_blk_event = {
 	.type		= TRACE_BLK,
 	.funcs		= &trace_blk_event_funcs,
+	.name		= "blk",
 };
 
 static int __init init_blk_tracer(void)

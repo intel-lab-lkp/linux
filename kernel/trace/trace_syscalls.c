@@ -441,8 +441,29 @@ static void unreg_event_syscall_exit(struct trace_event_file *file,
 	mutex_unlock(&syscall_trace_lock);
 }
 
+/**
+ * trace_csum - a simple checksum generator
+ *
+ * This returns a checksum for data that should not generate
+ * a lot of collisions, but is trivial to read.
+ */
+static u32 __init trace_csum(void *data, u32 len)
+{
+	u32 r = 0, i;
+	char *p = data;
+
+	if (!data)
+		return 0;
+
+	for (i = 0; i < len; i++)
+		r = (r >> 31) + (r << 1) + p[i];
+
+	return (r << 4) + len;
+}
+
 static int __init init_syscall_trace(struct trace_event_call *call)
 {
+	u32 csum;
 	int id;
 	int num;
 
@@ -456,9 +477,17 @@ static int __init init_syscall_trace(struct trace_event_call *call)
 	if (set_syscall_print_fmt(call) < 0)
 		return -ENOMEM;
 
+	csum = (trace_csum(call->print_fmt, strlen(call->print_fmt)) << 4) + num;
+	call->event.name = kasprintf(GFP_KERNEL, "sc-%x", csum);
+	if (!call->event.name) {
+		free_syscall_print_fmt(call);
+		return -ENOMEM;
+	}
+
 	id = trace_event_raw_init(call);
 
 	if (id < 0) {
+		kfree(call->event.name);
 		free_syscall_print_fmt(call);
 		return id;
 	}

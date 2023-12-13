@@ -1067,6 +1067,7 @@ static struct trace_event_functions trace_fn_funcs = {
 static struct trace_event trace_fn_event = {
 	.type		= TRACE_FN,
 	.funcs		= &trace_fn_funcs,
+	.name		= "fn",
 };
 
 /* TRACE_CTX an TRACE_WAKE */
@@ -1207,6 +1208,7 @@ static struct trace_event_functions trace_ctx_funcs = {
 static struct trace_event trace_ctx_event = {
 	.type		= TRACE_CTX,
 	.funcs		= &trace_ctx_funcs,
+	.name		= "ctx",
 };
 
 static struct trace_event_functions trace_wake_funcs = {
@@ -1219,6 +1221,7 @@ static struct trace_event_functions trace_wake_funcs = {
 static struct trace_event trace_wake_event = {
 	.type		= TRACE_WAKE,
 	.funcs		= &trace_wake_funcs,
+	.name		= "wake",
 };
 
 /* TRACE_STACK */
@@ -1256,6 +1259,7 @@ static struct trace_event_functions trace_stack_funcs = {
 static struct trace_event trace_stack_event = {
 	.type		= TRACE_STACK,
 	.funcs		= &trace_stack_funcs,
+	.name		= "stack",
 };
 
 /* TRACE_USER_STACK */
@@ -1309,6 +1313,7 @@ static struct trace_event_functions trace_user_stack_funcs = {
 static struct trace_event trace_user_stack_event = {
 	.type		= TRACE_USER_STACK,
 	.funcs		= &trace_user_stack_funcs,
+	.name		= "user_stack",
 };
 
 /* TRACE_HWLAT */
@@ -1373,6 +1378,7 @@ static struct trace_event_functions trace_hwlat_funcs = {
 static struct trace_event trace_hwlat_event = {
 	.type		= TRACE_HWLAT,
 	.funcs		= &trace_hwlat_funcs,
+	.name		= "hwlat",
 };
 
 /* TRACE_OSNOISE */
@@ -1443,6 +1449,7 @@ static struct trace_event_functions trace_osnoise_funcs = {
 static struct trace_event trace_osnoise_event = {
 	.type		= TRACE_OSNOISE,
 	.funcs		= &trace_osnoise_funcs,
+	.name		= "osnoise",
 };
 
 /* TRACE_TIMERLAT */
@@ -1491,6 +1498,7 @@ static struct trace_event_functions trace_timerlat_funcs = {
 static struct trace_event trace_timerlat_event = {
 	.type		= TRACE_TIMERLAT,
 	.funcs		= &trace_timerlat_funcs,
+	.name		= "timerlat",
 };
 
 /* TRACE_BPUTS */
@@ -1535,6 +1543,7 @@ static struct trace_event_functions trace_bputs_funcs = {
 static struct trace_event trace_bputs_event = {
 	.type		= TRACE_BPUTS,
 	.funcs		= &trace_bputs_funcs,
+	.name		= "bputs",
 };
 
 /* TRACE_BPRINT */
@@ -1579,6 +1588,7 @@ static struct trace_event_functions trace_bprint_funcs = {
 static struct trace_event trace_bprint_event = {
 	.type		= TRACE_BPRINT,
 	.funcs		= &trace_bprint_funcs,
+	.name		= "bprint",
 };
 
 /* TRACE_PRINT */
@@ -1616,6 +1626,7 @@ static struct trace_event_functions trace_print_funcs = {
 static struct trace_event trace_print_event = {
 	.type	 	= TRACE_PRINT,
 	.funcs		= &trace_print_funcs,
+	.name		= "print",
 };
 
 static enum print_line_t trace_raw_data(struct trace_iterator *iter, int flags,
@@ -1645,6 +1656,7 @@ static struct trace_event_functions trace_raw_data_funcs = {
 static struct trace_event trace_raw_data_event = {
 	.type	 	= TRACE_RAW_DATA,
 	.funcs		= &trace_raw_data_funcs,
+	.name		= "raw_data",
 };
 
 static enum print_line_t
@@ -1691,6 +1703,7 @@ static struct trace_event_functions trace_func_repeats_funcs = {
 static struct trace_event trace_func_repeats_event = {
 	.type	 	= TRACE_FUNC_REPEATS,
 	.funcs		= &trace_func_repeats_funcs,
+	.name		= "func_repeats",
 };
 
 static struct trace_event *events[] __initdata = {

@@ -2658,6 +2658,9 @@ static int event_init(struct trace_event_call *call)
 	if (WARN_ON(!name))
 		return -EINVAL;
 
+	if (!call->event.name)
+		call->event.name = name;
+
 	if (call->class->raw_init) {
 		ret = call->class->raw_init(call);
 		if (ret < 0 && ret != -ENOSYS)

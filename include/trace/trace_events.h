@@ -443,6 +443,7 @@ static struct trace_event_call __used event_##call = {			\
 		.tp			= &__tracepoint_##call,		\
 	},								\
 	.event.funcs		= &trace_event_type_funcs_##template,	\
+	.event.name		= __stringify(call),			\
 	.print_fmt		= print_fmt_##template,			\
 	.flags			= TRACE_EVENT_FL_TRACEPOINT,		\
 };									\
@@ -460,6 +461,7 @@ static struct trace_event_call __used event_##call = {			\
 		.tp			= &__tracepoint_##call,		\
 	},								\
 	.event.funcs		= &trace_event_type_funcs_##call,	\
+	.event.name		= __stringify(template),		\
 	.print_fmt		= print_fmt_##call,			\
 	.flags			= TRACE_EVENT_FL_TRACEPOINT,		\
 };									\
