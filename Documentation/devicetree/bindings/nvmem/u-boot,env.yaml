@@ -44,6 +44,15 @@ properties:
   reg:
     maxItems: 1
 
+  data-size:
+    description:
+      U-Boot environment data size is set and hardcoded during compilation using
+      CONFIG_ENV_SIZE. Knowing it is critical for CRC32 checksum calculation.
+
+      This property allows specifying it in case it differs from NVMEM device
+      size. It may happen if device partitioning was designed with different
+      concepts in mind (like block alignment or future-proof size).
+
   bootcmd:
     type: object
     description: Command to use for automatic booting
@@ -76,6 +85,7 @@ examples:
         env: partition@40000 {
             compatible = "u-boot,env";
             reg = <0x40000 0x10000>;
+            data-size = <0x4000>;
 
             mac: ethaddr {
                 #nvmem-cell-cells = <1>;
