@@ -595,6 +595,9 @@ static int enter_state(suspend_state_t state)
  Finish:
 	events_check_enabled = false;
 	pm_pr_dbg("Finishing wakeup.\n");
+	/* Record last succeeded resume time before thawing processes. */
+	if (!error)
+		ktime_get_ts64(&suspend_stats.last_success_resume_time);
 	suspend_finish();
  Unlock:
 	mutex_unlock(&system_transition_mutex);
