@@ -166,6 +166,7 @@ struct xhci_hcd_mtk {
 	unsigned int has_ippc:1;
 	unsigned int lpm_support:1;
 	unsigned int u2_lpm_disable:1;
+	unsigned int rxfifo_depth_quirk:1;
 	/* usb remote wakeup */
 	unsigned int uwk_en:1;
 	struct regmap *uwk;
