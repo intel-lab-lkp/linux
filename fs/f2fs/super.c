@@ -4666,6 +4666,9 @@ try_onemore:
 		goto free_node_inode;
 	}
 
+	if (sb->s_encoding)
+		sb->s_d_op = &generic_ci_dentry_ops;
+
 	sb->s_root = d_make_root(root); /* allocate root dentry */
 	if (!sb->s_root) {
 		err = -ENOMEM;
