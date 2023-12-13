@@ -761,7 +761,15 @@ int ip_options_rcv_srr(struct sk_buff *skb, struct net_device *dev);
  *	Functions provided by ip_sockglue.c
  */
 
-void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb);
+void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *iskb,
+			struct sk_buff *oskb);
+
+
+static inline void ipv4_pktinfo_input_prepare(const struct sock *sk, struct sk_buff *skb)
+{
+	ipv4_pktinfo_prepare(sk, skb, NULL);
+}
+
 void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 			 struct sk_buff *skb, int tlen, int offset);
 int ip_cmsg_send(struct sock *sk, struct msghdr *msg,

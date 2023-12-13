@@ -1365,19 +1365,26 @@ e_inval:
 /**
  * ipv4_pktinfo_prepare - transfer some info from rtable to skb
  * @sk: socket
- * @skb: buffer
+ * @iskb: input buffer
+ * @oskb: out buffer
  *
  * To support IP_CMSG_PKTINFO option, we store rt_iif and specific
  * destination in skb->cb[] before dst drop.
  * This way, receiver doesn't make cache line misses to read rtable.
  */
-void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb)
+void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *iskb,
+			  struct sk_buff *oskb)
 {
-	struct in_pktinfo *pktinfo = PKTINFO_SKB_CB(skb);
+	struct in_pktinfo *pktinfo = PKTINFO_SKB_CB(iskb);
 	bool prepare = inet_test_bit(PKTINFO, sk) ||
 		       ipv6_sk_rxinfo(sk);
 
-	if (prepare && skb_rtable(skb)) {
+	if (oskb) {
+		memcpy(oskb->cb, iskb->cb, sizeof(iskb->cb));
+		pktinfo = PKTINFO_SKB_CB(oskb);
+	}
+
+	if (prepare && skb_rtable(iskb)) {
 		/* skb->cb is overloaded: prior to this point it is IP{6}CB
 		 * which has interface index (iif) as the first member of the
 		 * underlying inet{6}_skb_parm struct. This code then overlays
@@ -1387,20 +1394,20 @@ void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb)
 		 * (e.g., process binds socket to eth0 for Tx which is
 		 * redirected to loopback in the rtable/dst).
 		 */
-		struct rtable *rt = skb_rtable(skb);
-		bool l3slave = ipv4_l3mdev_skb(IPCB(skb)->flags);
+		struct rtable *rt = skb_rtable(iskb);
+		bool l3slave = ipv4_l3mdev_skb(IPCB(iskb)->flags);
 
 		if (pktinfo->ipi_ifindex == LOOPBACK_IFINDEX)
-			pktinfo->ipi_ifindex = inet_iif(skb);
+			pktinfo->ipi_ifindex = inet_iif(iskb);
 		else if (l3slave && rt && rt->rt_iif)
 			pktinfo->ipi_ifindex = rt->rt_iif;
 
-		pktinfo->ipi_spec_dst.s_addr = fib_compute_spec_dst(skb);
+		pktinfo->ipi_spec_dst.s_addr = fib_compute_spec_dst(iskb);
 	} else {
 		pktinfo->ipi_ifindex = 0;
 		pktinfo->ipi_spec_dst.s_addr = 0;
 	}
-	skb_dst_drop(skb);
+	skb_dst_drop(iskb);
 }
 
 int ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
