@@ -1850,7 +1850,7 @@ static inline int memcg_kmem_charge_page(struct page *page, gfp_t gfp,
 
 static inline void memcg_kmem_uncharge_page(struct page *page, int order)
 {
-	if (memcg_kmem_online())
+	if (memcg_kmem_online() && PageMemcgKmem(page))
 		__memcg_kmem_uncharge_page(page, order);
 }
 

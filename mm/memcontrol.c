@@ -3320,9 +3320,6 @@ void __memcg_kmem_uncharge_page(struct page *page, int order)
 	struct obj_cgroup *objcg;
 	unsigned int nr_pages = 1 << order;
 
-	if (!folio_memcg_kmem(folio))
-		return;
-
 	objcg = __folio_objcg(folio);
 	obj_cgroup_uncharge_pages(objcg, nr_pages);
 	folio->memcg_data = 0;
