@@ -1884,6 +1884,28 @@ enum ethtool_link_mode_bit_indices {
  * Update drivers/net/phy/phy.c:phy_speed_to_str() and
  * drivers/net/bonding/bond_3ad.c:__get_link_speed() when adding new values.
  */
+enum ethtool_link_speeds {
+	SPEED_10 = 0,
+	SPEED_100,
+	SPEED_1000,
+	SPEED_2500,
+	SPEED_5000,
+	SPEED_10000,
+	SPEED_14000,
+	SPEED_20000,
+	SPEED_25000,
+	SPEED_40000,
+	SPEED_50000,
+	SPEED_56000,
+	SPEED_100000,
+	SPEED_200000,
+	SPEED_400000,
+	SPEED_800000,
+
+	/* must be last entry */
+	__LINK_SPEEDS_NUM,
+};
+
 #define SPEED_10		10
 #define SPEED_100		100
 #define SPEED_1000		1000
