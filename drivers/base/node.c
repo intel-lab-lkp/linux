@@ -597,6 +597,7 @@ static ssize_t memtier_override_store(struct device *dev,
 		return size;
 	ret = get_memtier_adistance_offset(nid, memtier);
 	node_devices[nid]->adistance_offset = ret;
+	node_memtier_change(nid);
 
 	return size;
 }
@@ -605,6 +606,11 @@ static DEVICE_ATTR_RW(memtier_override);
 void set_node_memtierid(int node, int memtierid)
 {
 	node_devices[node]->memtier = memtierid;
+}
+
+int get_node_adistance_offset(int node)
+{
+	return node_devices[node]->adistance_offset;
 }
 
 static struct attribute *node_dev_attrs[] = {

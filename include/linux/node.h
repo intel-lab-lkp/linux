@@ -141,6 +141,7 @@ extern int register_memory_node_under_compute_node(unsigned int mem_nid,
 						   unsigned int cpu_nid,
 						   unsigned access);
 extern void set_node_memtierid(int node, int memtierid);
+extern int get_node_adistance_offset(int nid);
 #else
 static inline void node_dev_init(void)
 {
@@ -170,6 +171,10 @@ static inline void unregister_memory_block_under_nodes(struct memory_block *mem_
 }
 static inline void set_node_memtierid(int node, int memtierid)
 {
+}
+static inline int get_node_adistance_offset(int nid)
+{
+	return 0;
 }
 #endif
 
