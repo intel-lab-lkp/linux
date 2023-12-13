@@ -22,6 +22,7 @@
 #include "intel_frontbuffer.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
+#include "intel_vblank.h"
 #include "skl_watermark.h"
 
 #include "gem/i915_gem_object.h"
@@ -647,12 +648,14 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 {
 	struct intel_plane *plane = to_intel_plane(_plane);
 	struct intel_crtc *crtc = to_intel_crtc(_crtc);
+	struct drm_i915_private *i915 = to_i915(plane->base.dev);
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(plane->base.state);
 	struct intel_plane_state *new_plane_state;
 	struct intel_crtc_state *crtc_state =
 		to_intel_crtc_state(crtc->base.state);
 	struct intel_crtc_state *new_crtc_state;
+	struct intel_vblank_evade_ctx evade;
 	int ret;
 
 	/*
@@ -745,13 +748,14 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 */
 	crtc_state->active_planes = new_crtc_state->active_planes;
 
-	/*
-	 * Technically we should do a vblank evasion here to make
-	 * sure all the cursor registers update on the same frame.
-	 * For now just make sure the register writes happen as
-	 * quickly as possible to minimize the race window.
-	 */
+	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
+
 	local_irq_disable();
+
+	if (!drm_WARN_ON(&i915->drm, drm_crtc_vblank_get(&crtc->base))) {
+		intel_vblank_evade(&evade);
+		drm_crtc_vblank_put(&crtc->base);
+	}
 
 	if (new_plane_state->uapi.visible) {
 		intel_plane_update_noarm(plane, crtc_state, new_plane_state);
