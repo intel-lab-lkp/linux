@@ -362,6 +362,13 @@ struct kimage {
 	size_t ima_buffer_size;
 #endif
 
+#ifdef CONFIG_KEXEC_KHO
+	struct {
+		struct kexec_buf dt;
+		struct kexec_buf mem_cache;
+	} kho;
+#endif
+
 	/* Core ELF header buffer */
 	void *elf_headers;
 	unsigned long elf_headers_sz;
@@ -543,6 +550,7 @@ static inline bool is_kho_boot(void)
 
 /* egest handover metadata */
 void kho_reserve(void);
+int kho_fill_kimage(struct kimage *image);
 int register_kho_notifier(struct notifier_block *nb);
 int unregister_kho_notifier(struct notifier_block *nb);
 bool kho_is_active(void);
@@ -558,6 +566,7 @@ static inline void *kho_get_fdt(void) { return NULL; }
 
 /* egest handover metadata */
 static inline void kho_reserve(void) { }
+static inline int kho_fill_kimage(struct kimage *image) { return 0; }
 static inline int register_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
 static inline int unregister_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
 static inline bool kho_is_active(void) { return false; }
