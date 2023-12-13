@@ -83,6 +83,8 @@ struct cpufreq_policy {
 	struct range_constraints	constraints;
 	struct range_qos_request	*min_freq_req;
 	struct range_qos_request	*max_freq_req;
+	struct range_qos_request	*min_perf_req;
+	struct range_qos_request	*max_perf_req;
 
 	struct cpufreq_frequency_table	*freq_table;
 	enum cpufreq_table_sorting freq_table_sorted;
