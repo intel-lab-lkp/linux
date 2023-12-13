@@ -20,6 +20,7 @@
 #include <linux/percpu.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+#include <linux/kexec.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/hash.h>
@@ -5920,6 +5921,94 @@ int trace_rb_cpu_prepare(unsigned int cpu, struct hlist_node *node)
 	cpumask_set_cpu(cpu, buffer->cpumask);
 	return 0;
 }
+
+#ifdef CONFIG_FTRACE_KHO
+static int trace_kho_write_cpu(void *fdt, struct trace_buffer *buffer, int cpu)
+{
+	int i = 0;
+	int err = 0;
+	struct list_head *tmp;
+	const char compatible[] = "ftrace,cpu-v1";
+	char name[] = "cpuffffffff";
+	int nr_pages;
+	struct ring_buffer_per_cpu *cpu_buffer;
+	bool first_loop = true;
+	struct kho_mem *mem;
+	uint64_t mem_len;
+
+	if (!cpumask_test_cpu(cpu, buffer->cpumask))
+		return 0;
+
+	cpu_buffer = buffer->buffers[cpu];
+
+	nr_pages = cpu_buffer->nr_pages;
+	mem_len = sizeof(*mem) * nr_pages * 2;
+	mem = vmalloc(mem_len);
+
+	snprintf(name, sizeof(name), "cpu%x", cpu);
+
+	err |= fdt_begin_node(fdt, name);
+	err |= fdt_property(fdt, "compatible", compatible, sizeof(compatible));
+	err |= fdt_property(fdt, "cpu", &cpu, sizeof(cpu));
+
+	for (tmp = rb_list_head(cpu_buffer->pages);
+	     tmp != rb_list_head(cpu_buffer->pages) || first_loop;
+	     tmp = rb_list_head(tmp->next), first_loop = false) {
+		struct buffer_page *bpage = (struct buffer_page *)tmp;
+
+		/* Ring is larger than it should be? */
+		if (i >= (nr_pages * 2)) {
+			pr_err("ftrace ring has more pages than nr_pages (%d / %d)", i, nr_pages);
+			err = -EINVAL;
+			break;
+		}
+
+		/* First describe the bpage */
+		mem[i++] = (struct kho_mem) {
+			.addr = __pa(bpage),
+			.len = sizeof(*bpage)
+		};
+
+		/* Then the data page */
+		mem[i++] = (struct kho_mem) {
+			.addr = __pa(bpage->page),
+			.len = PAGE_SIZE
+		};
+	}
+
+	err |= fdt_property(fdt, "mem", mem, mem_len);
+	err |= fdt_end_node(fdt);
+
+	vfree(mem);
+	return err;
+}
+
+int trace_kho_write_trace_buffer(void *fdt, struct trace_buffer *buffer)
+{
+	const char compatible[] = "ftrace,buffer-v1";
+	char name[] = "buffer";
+	int err;
+	int i;
+
+	err = fdt_begin_node(fdt, name);
+	if (err)
+		return err;
+
+	fdt_property(fdt, "compatible", compatible, sizeof(compatible));
+
+	for (i = 0; i < buffer->cpus; i++) {
+		err = trace_kho_write_cpu(fdt, buffer, i);
+		if (err)
+			return err;
+	}
+
+	err =  fdt_end_node(fdt);
+	if (err)
+		return err;
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_RING_BUFFER_STARTUP_TEST
 /*
