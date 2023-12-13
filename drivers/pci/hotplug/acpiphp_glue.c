@@ -722,7 +722,9 @@ static void acpiphp_check_bridge(struct acpiphp_bridge *bridge)
 					trim_stale_devices(dev);
 
 			/* configure all functions */
-			enable_slot(slot, true);
+			if (slot->flags != SLOT_ENABLED) {
+				enable_slot(slot, true);
+			}
 		} else {
 			disable_slot(slot);
 		}
