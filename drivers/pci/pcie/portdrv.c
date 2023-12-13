@@ -734,9 +734,14 @@ static void pcie_portdrv_remove(struct pci_dev *dev)
 static void pcie_portdrv_shutdown(struct pci_dev *dev)
 {
 	if (pci_bridge_d3_possible(dev)) {
-		pm_runtime_forbid(&dev->dev);
-		pm_runtime_get_noresume(&dev->dev);
-		pm_runtime_dont_use_autosuspend(&dev->dev);
+		/* whole hierarchy goes into a low power state for S5 */
+		if (system_state == SYSTEM_POWER_OFF) {
+			pci_set_power_state(dev, PCI_D3cold);
+		} else {
+			pm_runtime_forbid(&dev->dev);
+			pm_runtime_get_noresume(&dev->dev);
+			pm_runtime_dont_use_autosuspend(&dev->dev);
+		}
 	}
 
 	pcie_port_device_remove(dev);
