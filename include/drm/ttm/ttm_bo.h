@@ -397,7 +397,8 @@ vm_fault_t ttm_bo_vm_dummy_page(struct vm_fault *vmf, pgprot_t prot);
 int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 		     struct ttm_placement *placement,
 		     struct ttm_resource **mem,
-		     struct ttm_operation_ctx *ctx);
+		     struct ttm_operation_ctx *ctx,
+		     bool force_space);
 
 void ttm_bo_unmap_virtual(struct ttm_buffer_object *bo);
 /*
