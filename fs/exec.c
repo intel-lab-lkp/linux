@@ -1086,7 +1086,7 @@ static int de_thread(struct task_struct *tsk)
 
 		for (;;) {
 			cgroup_threadgroup_change_begin(tsk);
-			write_lock_irq(&tasklist_lock);
+			write_lock_tasklist_lock();
 			/*
 			 * Do this under tasklist_lock to ensure that
 			 * exit_notify() can't miss ->group_exec_task
@@ -1095,7 +1095,7 @@ static int de_thread(struct task_struct *tsk)
 			if (likely(leader->exit_state))
 				break;
 			__set_current_state(TASK_KILLABLE);
-			write_unlock_irq(&tasklist_lock);
+			write_unlock_tasklist_lock();
 			cgroup_threadgroup_change_end(tsk);
 			schedule();
 			if (__fatal_signal_pending(tsk))
@@ -1150,7 +1150,7 @@ static int de_thread(struct task_struct *tsk)
 		 */
 		if (unlikely(leader->ptrace))
 			__wake_up_parent(leader, leader->parent);
-		write_unlock_irq(&tasklist_lock);
+		write_unlock_tasklist_lock();
 		cgroup_threadgroup_change_end(tsk);
 
 		release_task(leader);
@@ -1198,13 +1198,13 @@ static int unshare_sighand(struct task_struct *me)
 
 		refcount_set(&newsighand->count, 1);
 
-		write_lock_irq(&tasklist_lock);
+		write_lock_tasklist_lock();
 		spin_lock(&oldsighand->siglock);
 		memcpy(newsighand->action, oldsighand->action,
 		       sizeof(newsighand->action));
 		rcu_assign_pointer(me->sighand, newsighand);
 		spin_unlock(&oldsighand->siglock);
-		write_unlock_irq(&tasklist_lock);
+		write_unlock_tasklist_lock();
 
 		__cleanup_sighand(oldsighand);
 	}

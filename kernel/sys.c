@@ -1088,7 +1088,7 @@ SYSCALL_DEFINE2(setpgid, pid_t, pid, pid_t, pgid)
 	/* From this point forward we keep holding onto the tasklist lock
 	 * so that our parent does not change from under us. -DaveM
 	 */
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 
 	err = -ESRCH;
 	p = find_task_by_vpid(pid);
@@ -1136,7 +1136,7 @@ SYSCALL_DEFINE2(setpgid, pid_t, pid, pid_t, pgid)
 	err = 0;
 out:
 	/* All paths lead to here, thus we are safe. -DaveM */
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 	rcu_read_unlock();
 	return err;
 }
@@ -1229,7 +1229,7 @@ int ksys_setsid(void)
 	pid_t session = pid_vnr(sid);
 	int err = -EPERM;
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	/* Fail if I am already a session leader */
 	if (group_leader->signal->leader)
 		goto out;
@@ -1247,7 +1247,7 @@ int ksys_setsid(void)
 
 	err = session;
 out:
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 	if (err > 0) {
 		proc_sid_connector(group_leader);
 		sched_autogroup_create_attach(group_leader);
