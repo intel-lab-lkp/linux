@@ -95,6 +95,7 @@ enum emulation_result {
 #define KVM_LARCH_SWCSR_LATEST	(0x1 << 1)
 #define KVM_LARCH_HWCSR_USABLE	(0x1 << 2)
 #define KVM_LARCH_LSX		(0x1 << 3)
+#define KVM_LARCH_LASX		(0x1 << 4)
 
 struct kvm_vcpu_arch {
 	/*
@@ -184,6 +185,11 @@ static inline bool kvm_guest_has_lsx(struct kvm_vcpu_arch *arch)
 static inline bool kvm_guest_has_fpu(struct kvm_vcpu_arch *arch)
 {
 	return arch->cpucfg[2] & CPUCFG2_FP;
+}
+
+static inline bool kvm_guest_has_lasx(struct kvm_vcpu_arch *arch)
+{
+	return arch->cpucfg[2] & CPUCFG2_LASX;
 }
 
 /* Debug: dump vcpu state */
