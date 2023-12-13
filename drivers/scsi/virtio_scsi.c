@@ -594,7 +594,8 @@ static int virtscsi_queuecommand(struct Scsi_Host *shost,
 		req_size = sizeof(cmd->req.cmd);
 	}
 
-	kick = (sc->flags & SCMD_LAST) != 0;
+	kick = (sc->flags & SCMD_LAST) != 0 ||
+		sc->submitter == SUBMITTED_BY_SCSI_ERROR_HANDLER;
 	ret = virtscsi_add_cmd(req_vq, cmd, req_size, sizeof(cmd->resp.cmd), kick);
 	if (ret == -EIO) {
 		cmd->resp.cmd.response = VIRTIO_SCSI_S_BAD_TARGET;
