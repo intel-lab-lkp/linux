@@ -26,6 +26,13 @@ properties:
   "#size-cells":
     const: 1
 
+  data-size:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      NVMEM device actual data (content) size. It may be need to be specified
+      if it differs by design from the total NVMEM device size and it's
+      impossible to determine it on runtime.
+
   read-only:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
