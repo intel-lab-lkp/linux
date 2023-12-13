@@ -33,6 +33,7 @@ struct mpol_args {
 	__u16 mode_flags;
 	__s32 home_node;	/* mbind2: policy home node */
 	__aligned_u64 pol_nodes;
+	__aligned_u64 il_weights; /* size: pol_maxnodes * sizeof(char) */
 	__u64 pol_maxnodes;
 	__s32 policy_node;	/* get_mempolicy: policy node info */
 };
@@ -75,6 +76,7 @@ struct mpol_args {
 #define MPOL_F_SHARED  (1 << 0)	/* identify shared policies */
 #define MPOL_F_MOF	(1 << 3) /* this policy wants migrate on fault */
 #define MPOL_F_MORON	(1 << 4) /* Migrate On protnone Reference On Node */
+#define MPOL_F_GWEIGHT	(1 << 5) /* Utilize global weights */
 
 /*
  * These bit locations are exposed in the vm.zone_reclaim_mode sysctl
