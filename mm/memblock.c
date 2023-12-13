@@ -16,6 +16,7 @@
 #include <linux/kmemleak.h>
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
+#include <linux/page-isolation.h>
 
 #include <asm/sections.h>
 #include <linux/io.h>
@@ -1100,10 +1101,6 @@ static bool should_skip_region(struct memblock_type *type,
 	if ((flags & MEMBLOCK_SCRATCH) && !memblock_is_scratch(m))
 		return true;
 
-	/* Leave scratch memory alone after scratch-only phase */
-	if (!(flags & MEMBLOCK_SCRATCH) && memblock_is_scratch(m))
-		return true;
-
 	return false;
 }
 
@@ -2153,6 +2150,20 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 	}
 }
 
+static void reserve_scratch_mem(phys_addr_t start, phys_addr_t end)
+{
+#ifdef CONFIG_MEMBLOCK_SCRATCH
+	ulong start_pfn = pageblock_start_pfn(PFN_DOWN(start));
+	ulong end_pfn = pageblock_align(PFN_UP(end));
+	ulong pfn;
+
+	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
+		/* Mark as CMA to prevent kernel allocations in it */
+		set_pageblock_migratetype(pfn_to_page(pfn), MIGRATE_CMA);
+	}
+#endif
+}
+
 static unsigned long __init __free_memory_core(phys_addr_t start,
 				 phys_addr_t end)
 {
@@ -2213,6 +2224,17 @@ static unsigned long __init free_low_memory_core_early(void)
 	memblock_clear_hotplug(0, -1);
 
 	memmap_init_reserved_pages();
+
+#ifdef CONFIG_MEMBLOCK_SCRATCH
+	/*
+	 * Mark scratch mem as CMA before we return it. That way we ensure that
+	 * no kernel allocations happen on it. That means we can reuse it as
+	 * scratch memory again later.
+	 */
+	__for_each_mem_range(i, &memblock.memory, NULL, NUMA_NO_NODE,
+			     MEMBLOCK_SCRATCH, &start, &end, NULL)
+		reserve_scratch_mem(start, end);
+#endif
 
 	/*
 	 * We need to use NUMA_NO_NODE instead of NODE_DATA(0)->node_id
