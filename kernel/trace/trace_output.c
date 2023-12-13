@@ -750,6 +750,67 @@ void trace_event_read_unlock(void)
 }
 
 /**
+ * trace_kho_fill_event_type - restore event type info from KHO
+ * @event: the event type to enumerate
+ *
+ * Event types are semi-dynamically generated. To ensure that
+ * their identifiers match before and after kexec with KHO,
+ * let's match up unique name identifiers and fill in the
+ * respective ID information if we booted with KHO.
+ */
+static bool trace_kho_fill_event_type(struct trace_event *event)
+{
+#ifdef CONFIG_FTRACE_KHO
+	const char *path = "/ftrace/events";
+	void *fdt = kho_get_fdt();
+	int err, len, off, id;
+	const void *p;
+
+	if (!fdt)
+		return false;
+
+	if (WARN_ON(!event->name))
+		return false;
+
+	pr_debug("Trying to revive event '%s'", event->name);
+
+	off = fdt_path_offset(fdt, path);
+	if (off < 0) {
+		pr_debug("Could not find '%s' in DT", path);
+		return false;
+	}
+
+	err = fdt_node_check_compatible(fdt, off, "ftrace,events-v1");
+	if (err) {
+		pr_warn("Node '%s' has invalid compatible", path);
+		return false;
+	}
+
+	p = fdt_getprop(fdt, off, event->name, &len);
+	if (!p) {
+		pr_warn("Event '%s' not found", event->name);
+		return false;
+	}
+
+	if (len != sizeof(event->type)) {
+		pr_warn("Event '%s' has invalid length", event->name);
+		return false;
+	}
+
+	id = *(const u32 *)p;
+
+	/* Mark ID as in use */
+	if (ida_alloc_range(&trace_event_ida, id, id, GFP_KERNEL) != id)
+		return false;
+
+	event->type = id;
+	return true;
+#endif
+
+	return false;
+}
+
+/**
  * register_trace_event - register output for an event type
  * @event: the event type to register
  *
@@ -777,7 +838,9 @@ int register_trace_event(struct trace_event *event)
 	if (WARN_ON(!event->funcs))
 		goto out;
 
-	if (!event->type) {
+	if (trace_kho_fill_event_type(event)) {
+		pr_debug("Recovered '%s' as id=%d", event->name, event->type);
+	} else if (!event->type) {
 		event->type = alloc_trace_event_type();
 		if (!event->type)
 			goto out;
