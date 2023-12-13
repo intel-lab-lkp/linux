@@ -21,6 +21,8 @@
 
 #include <uapi/linux/kexec.h>
 #include <linux/verification.h>
+#include <linux/libfdt.h>
+#include <linux/notifier.h>
 
 extern note_buf_t __percpu *crash_notes;
 
@@ -514,6 +516,28 @@ static inline int kexec_crash_loaded(void) { return 0; }
 void set_kexec_sig_enforced(void);
 #else
 static inline void set_kexec_sig_enforced(void) {}
+#endif
+
+#ifdef CONFIG_KEXEC_KHO
+/* Notifier index */
+enum kho_event {
+	KEXEC_KHO_DUMP = 0,
+	KEXEC_KHO_ABORT = 1,
+};
+
+extern phys_addr_t kho_scratch_phys;
+extern phys_addr_t kho_scratch_len;
+
+/* egest handover metadata */
+void kho_reserve(void);
+int register_kho_notifier(struct notifier_block *nb);
+int unregister_kho_notifier(struct notifier_block *nb);
+bool kho_is_active(void);
+#else
+static inline void kho_reserve(void) { }
+static inline int register_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
+static inline int unregister_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
+static inline bool kho_is_active(void) { return false; }
 #endif
 
 #endif /* !defined(__ASSEBMLY__) */

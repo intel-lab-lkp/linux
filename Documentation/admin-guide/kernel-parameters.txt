@@ -2504,6 +2504,16 @@
 	kgdbwait	[KGDB] Stop kernel execution and enter the
 			kernel debugger at the earliest opportunity.
 
+	kho_scratch=n[KMG]	[KEXEC] Sets the size of the KHO scratch
+			region. The KHO scratch region is a physically
+			memory range that can only be used for non-kernel
+			allocations. That way, even when memory is heavily
+			fragmented with handed over memory, kexec will always
+			be able to find contiguous memory to place the next
+			kernel for kexec into.
+
+			The default is 0.
+
 	kmac=		[MIPS] Korina ethernet MAC address.
 			Configure the RouterBoard 532 series on-chip
 			Ethernet adapter MAC address.
