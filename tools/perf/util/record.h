@@ -8,6 +8,7 @@
 #include <linux/stddef.h>
 #include <linux/perf_event.h>
 #include "util/target.h"
+#include "util/evlist.h"
 
 struct option;
 
@@ -85,6 +86,7 @@ extern const char * const *record_usage;
 extern struct option *record_options;
 
 int record__parse_freq(const struct option *opt, const char *str, int unset);
+void record__uniquify_name(struct evlist *evlist);
 
 static inline bool record_opts__no_switch_events(const struct record_opts *opts)
 {

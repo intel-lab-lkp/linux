@@ -1298,6 +1298,7 @@ static int __cmd_top(struct perf_top *top)
 		}
 	}
 
+	record__uniquify_name(top->evlist);
 	ret = perf_top__start_counters(top);
 	if (ret)
 		return ret;
