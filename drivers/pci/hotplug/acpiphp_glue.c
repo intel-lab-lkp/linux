@@ -37,6 +37,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/delay.h>
 
 #include "../pci.h"
 #include "acpiphp.h"
@@ -700,6 +701,7 @@ static void trim_stale_devices(struct pci_dev *dev)
 static void acpiphp_check_bridge(struct acpiphp_bridge *bridge)
 {
 	struct acpiphp_slot *slot;
+        int nr_hp_slots = 0;
 
 	/* Bail out if the bridge is going away. */
 	if (bridge->is_going_away)
@@ -723,6 +725,10 @@ static void acpiphp_check_bridge(struct acpiphp_bridge *bridge)
 
 			/* configure all functions */
 			if (slot->flags != SLOT_ENABLED) {
+				if (nr_hp_slots)
+					msleep(1000);
+
+                                ++nr_hp_slots;
 				enable_slot(slot, true);
 			}
 		} else {
