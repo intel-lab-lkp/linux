@@ -4957,15 +4957,12 @@ static int prepare_kstatmount(struct kstatmount *ks, struct mnt_id_req *kreq,
 	if (!access_ok(buf, bufsize))
 		return -EFAULT;
 
-	*ks = (struct kstatmount){
-		.mask		= kreq->param,
-		.buf		= buf,
-		.bufsize	= bufsize,
-		.seq = {
-			.size	= seq_size,
-			.buf	= kvmalloc(seq_size, GFP_KERNEL_ACCOUNT),
-		},
-	};
+	memset(ks, 0, sizeof(*ks));
+	ks->mask = kreq->param;
+	ks->buf = buf;
+	ks->bufsize = bufsize;
+	ks->seq.size = seq_size;
+	ks->seq.buf = kvmalloc(seq_size, GFP_KERNEL_ACCOUNT);
 	if (!ks->seq.buf)
 		return -ENOMEM;
 	return 0;
