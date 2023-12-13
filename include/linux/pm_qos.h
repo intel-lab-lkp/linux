@@ -77,24 +77,25 @@ struct pm_qos_flags {
 #define FREQ_QOS_MIN_DEFAULT_VALUE	0
 #define FREQ_QOS_MAX_DEFAULT_VALUE	S32_MAX
 
-enum freq_qos_req_type {
-	FREQ_QOS_MIN = 1,
+enum range_qos_req_type {
+	RANGE_QOS_MIN = 1,
+	RANGE_QOS_MAX,
+	FREQ_QOS_MIN,
 	FREQ_QOS_MAX,
 };
 
-struct freq_constraints {
-	struct pm_qos_constraints min_freq;
-	struct blocking_notifier_head min_freq_notifiers;
-	struct pm_qos_constraints max_freq;
-	struct blocking_notifier_head max_freq_notifiers;
+struct range_constraints {
+	struct pm_qos_constraints lower_bound;
+	struct blocking_notifier_head lower_bound_notifiers;
+	struct pm_qos_constraints upper_bound;
+	struct blocking_notifier_head upper_bound_notifiers;
 };
 
-struct freq_qos_request {
-	enum freq_qos_req_type type;
+struct range_qos_request {
+	enum range_qos_req_type type;
 	struct plist_node pnode;
-	struct freq_constraints *qos;
+	struct range_constraints *qos;
 };
-
 
 enum dev_pm_qos_req_type {
 	DEV_PM_QOS_RESUME_LATENCY = 1,
@@ -109,7 +110,7 @@ struct dev_pm_qos_request {
 	union {
 		struct plist_node pnode;
 		struct pm_qos_flags_request flr;
-		struct freq_qos_request freq;
+		struct range_qos_request freq;
 	} data;
 	struct device *dev;
 };
@@ -117,7 +118,7 @@ struct dev_pm_qos_request {
 struct dev_pm_qos {
 	struct pm_qos_constraints resume_latency;
 	struct pm_qos_constraints latency_tolerance;
-	struct freq_constraints freq;
+	struct range_constraints freq;
 	struct pm_qos_flags flags;
 	struct dev_pm_qos_request *resume_latency_req;
 	struct dev_pm_qos_request *latency_tolerance_req;
@@ -291,29 +292,29 @@ static inline s32 dev_pm_qos_raw_resume_latency(struct device *dev)
 }
 #endif
 
-static inline int freq_qos_request_active(struct freq_qos_request *req)
+static inline int freq_qos_request_active(struct range_qos_request *req)
 {
 	return !IS_ERR_OR_NULL(req->qos);
 }
 
-void freq_constraints_init(struct freq_constraints *qos);
+void freq_constraints_init(struct range_constraints *qos);
 
-s32 freq_qos_read_value(struct freq_constraints *qos,
-			enum freq_qos_req_type type);
+s32 freq_qos_read_value(struct range_constraints *qos,
+			enum range_qos_req_type type);
 
-int freq_qos_add_request(struct freq_constraints *qos,
-			 struct freq_qos_request *req,
-			 enum freq_qos_req_type type, s32 value);
-int freq_qos_update_request(struct freq_qos_request *req, s32 new_value);
-int freq_qos_remove_request(struct freq_qos_request *req);
-int freq_qos_apply(struct freq_qos_request *req,
+int freq_qos_add_request(struct range_constraints *qos,
+			 struct range_qos_request *req,
+			 enum range_qos_req_type type, s32 value);
+int freq_qos_update_request(struct range_qos_request *req, s32 new_value);
+int freq_qos_remove_request(struct range_qos_request *req);
+int freq_qos_apply(struct range_qos_request *req,
 		   enum pm_qos_req_action action, s32 value);
 
-int freq_qos_add_notifier(struct freq_constraints *qos,
-			  enum freq_qos_req_type type,
+int freq_qos_add_notifier(struct range_constraints *qos,
+			  enum range_qos_req_type type,
 			  struct notifier_block *notifier);
-int freq_qos_remove_notifier(struct freq_constraints *qos,
-			     enum freq_qos_req_type type,
+int freq_qos_remove_notifier(struct range_constraints *qos,
+			     enum range_qos_req_type type,
 			     struct notifier_block *notifier);
 
 #endif

@@ -63,7 +63,7 @@ struct amd_aperf_mperf {
 struct amd_cpudata {
 	int	cpu;
 
-	struct	freq_qos_request req[2];
+	struct	range_qos_request req[2];
 	u64	cppc_req_cached;
 
 	u32	highest_perf;

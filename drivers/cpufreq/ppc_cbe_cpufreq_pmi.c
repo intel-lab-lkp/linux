@@ -64,7 +64,7 @@ EXPORT_SYMBOL_GPL(cbe_cpufreq_set_pmode_pmi);
 static void cbe_cpufreq_handle_pmi(pmi_message_t pmi_msg)
 {
 	struct cpufreq_policy *policy;
-	struct freq_qos_request *req;
+	struct range_qos_request *req;
 	u8 node, slow_mode;
 	int cpu, ret;
 
@@ -102,7 +102,7 @@ static struct pmi_handler cbe_pmi_handler = {
 
 void cbe_cpufreq_pmi_policy_init(struct cpufreq_policy *policy)
 {
-	struct freq_qos_request *req;
+	struct range_qos_request *req;
 	int ret;
 
 	if (!cbe_cpufreq_has_pmi)
@@ -126,7 +126,7 @@ EXPORT_SYMBOL_GPL(cbe_cpufreq_pmi_policy_init);
 
 void cbe_cpufreq_pmi_policy_exit(struct cpufreq_policy *policy)
 {
-	struct freq_qos_request *req = policy->driver_data;
+	struct range_qos_request *req = policy->driver_data;
 
 	if (cbe_cpufreq_has_pmi) {
 		freq_qos_remove_request(req);

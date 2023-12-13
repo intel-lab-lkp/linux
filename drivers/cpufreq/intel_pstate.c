@@ -1320,9 +1320,9 @@ static ssize_t store_no_turbo(struct kobject *a, struct kobj_attribute *b,
 	return count;
 }
 
-static void update_qos_request(enum freq_qos_req_type type)
+static void update_qos_request(enum range_qos_req_type type)
 {
-	struct freq_qos_request *req;
+	struct range_qos_request *req;
 	struct cpufreq_policy *policy;
 	int i;
 
@@ -2984,7 +2984,7 @@ static void intel_cpufreq_adjust_perf(unsigned int cpunum,
 
 static int intel_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
-	struct freq_qos_request *req;
+	struct range_qos_request *req;
 	struct cpudata *cpu;
 	struct device *dev;
 	int ret, freq;
@@ -3058,7 +3058,7 @@ pstate_exit:
 
 static int intel_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 {
-	struct freq_qos_request *req;
+	struct range_qos_request *req;
 
 	req = policy->driver_data;
 

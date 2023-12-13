@@ -237,8 +237,8 @@ struct acpi_processor {
 	struct acpi_processor_limit limit;
 	struct thermal_cooling_device *cdev;
 	struct device *dev; /* Processor device. */
-	struct freq_qos_request perflib_req;
-	struct freq_qos_request thermal_req;
+	struct range_qos_request perflib_req;
+	struct range_qos_request thermal_req;
 };
 
 struct acpi_processor_errata {

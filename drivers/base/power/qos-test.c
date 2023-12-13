@@ -8,8 +8,8 @@
 /* Basic test for aggregating two "min" requests */
 static void freq_qos_test_min(struct kunit *test)
 {
-	struct freq_constraints	qos;
-	struct freq_qos_request	req1, req2;
+	struct range_constraints	qos;
+	struct range_qos_request	req1, req2;
 	int ret;
 
 	freq_constraints_init(&qos);
@@ -36,8 +36,8 @@ static void freq_qos_test_min(struct kunit *test)
 /* Test that requests for MAX_DEFAULT_VALUE have no effect */
 static void freq_qos_test_maxdef(struct kunit *test)
 {
-	struct freq_constraints	qos;
-	struct freq_qos_request	req1, req2;
+	struct range_constraints	qos;
+	struct range_qos_request	req1, req2;
 	int ret;
 
 	freq_constraints_init(&qos);
@@ -70,15 +70,15 @@ static void freq_qos_test_maxdef(struct kunit *test)
 }
 
 /*
- * Test that a freq_qos_request can be added again after removal
+ * Test that a range_qos_request can be added again after removal
  *
  * This issue was solved by commit 05ff1ba412fd ("PM: QoS: Invalidate frequency
  * QoS requests after removal")
  */
 static void freq_qos_test_readd(struct kunit *test)
 {
-	struct freq_constraints	qos;
-	struct freq_qos_request	req;
+	struct range_constraints	qos;
+	struct range_qos_request	req;
 	int ret;
 
 	freq_constraints_init(&qos);

@@ -16,7 +16,7 @@
 
 static int clamped;
 static struct wf_control *clamp_control;
-static struct freq_qos_request qos_req;
+static struct range_qos_request qos_req;
 static unsigned int min_freq, max_freq;
 
 static int clamp_set(struct wf_control *ct, s32 value)
