@@ -5,6 +5,7 @@
 #include <dt-bindings/sound/qcom,q6afe.h>
 #include <linux/module.h>
 #include <sound/soc.h>
+#include "common.h"
 #include "sdw.h"
 
 /**
@@ -109,7 +110,7 @@ int qcom_snd_sdw_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai;
 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
 	struct sdw_stream_runtime *sruntime;
-	int i;
+	int ret, i;
 
 	switch (cpu_dai->id) {
 	case WSA_CODEC_DMA_RX_0:
@@ -123,6 +124,14 @@ int qcom_snd_sdw_hw_params(struct snd_pcm_substream *substream,
 			sruntime = snd_soc_dai_get_stream(codec_dai, substream->stream);
 			if (sruntime != ERR_PTR(-ENOTSUPP))
 				*psruntime = sruntime;
+		}
+		break;
+	case PRIMARY_TDM_RX_0...QUINARY_TDM_TX_7:
+		ret = qcom_snd_tdm_hw_params(substream, params);
+		if (ret < 0) {
+			dev_err(rtd->dev, "%s: failed to setup TDM err:%d\n",
+				__func__, ret);
+			return ret;
 		}
 		break;
 	}
