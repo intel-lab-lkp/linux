@@ -1006,10 +1006,6 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 	    time_before(jiffies, xhci->usb3_rhub.bus_state.next_statechange))
 		msleep(100);
 
-	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
-	if (xhci->shared_hcd)
-		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
-
 	spin_lock_irq(&xhci->lock);
 
 	if (hibernated || xhci->quirks & XHCI_RESET_ON_RESUME || xhci->broken_suspend)
@@ -1133,9 +1129,13 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 
 	spin_unlock_irq(&xhci->lock);
 
+ done:
+	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+	if (xhci->shared_hcd)
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
+
 	xhci_dbc_resume(xhci);
 
- done:
 	if (retval == 0) {
 		/*
 		 * Resume roothubs only if there are pending events.
