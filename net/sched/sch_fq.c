@@ -159,7 +159,7 @@ struct fq_sched_data {
 /* return the i-th 2-bit value ("crumb") */
 static u8 fq_prio2band(const u8 *prio2band, unsigned int prio)
 {
-	return (prio2band[prio / 4] >> (2 * (prio & 0x3))) & 0x3;
+	return (prio2band[prio / 4] >> (2 * (prio & 0x3))) % 0x3;
 }
 
 /*
