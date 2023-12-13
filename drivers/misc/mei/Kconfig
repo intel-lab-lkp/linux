@@ -64,6 +64,7 @@ config INTEL_MEI_VSC_HW
 	tristate "Intel visual sensing controller device transport driver"
 	depends on ACPI && SPI
 	depends on GPIOLIB || COMPILE_TEST
+	depends on INTEL_MEI_VSC
 	help
 	  Intel SPI transport driver between host and Intel visual sensing
 	  controller (IVSC) device.
@@ -73,7 +74,6 @@ config INTEL_MEI_VSC_HW
 
 config INTEL_MEI_VSC
 	tristate "Intel visual sensing controller device with ME interface"
-	depends on INTEL_MEI_VSC_HW
 	depends on INTEL_MEI
 	help
 	  Intel MEI over SPI driver for Intel visual sensing controller
