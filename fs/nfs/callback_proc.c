@@ -504,6 +504,9 @@ __be32 nfs4_callback_sequence(void *argp, void *resp,
 	if (!(clp->cl_session->flags & SESSION4_BACK_CHAN))
 		goto out;
 
+	/* release in svc_process_bc */
+	refcount_inc(&clp->cl_rpcclient->cl_count);
+
 	tbl = &clp->cl_session->bc_slot_table;
 
 	/* Set up res before grabbing the spinlock */

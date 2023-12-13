@@ -1302,9 +1302,12 @@ static void call_bc_encode(struct rpc_task *task);
  * rpc_run_bc_task - Allocate a new RPC task for backchannel use, then run
  * rpc_execute against it
  * @req: RPC request
+ * @clnt: RPC client from request's cl_rpcclient
  */
-struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req)
+struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req,
+		struct rpc_clnt *clnt)
 {
+	const struct rpc_timeout *timeout;
 	struct rpc_task *task;
 	struct rpc_task_setup task_setup_data = {
 		.callback_ops = &rpc_default_ops,
@@ -1322,7 +1325,8 @@ struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req)
 		return task;
 	}
 
-	xprt_init_bc_request(req, task);
+	timeout = clnt ? clnt->cl_timeout : req->rq_xprt->timeout;
+	xprt_init_bc_request(req, task, timeout);
 
 	task->tk_action = call_bc_encode;
 	atomic_inc(&task->tk_count);

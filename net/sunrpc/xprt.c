@@ -1986,7 +1986,8 @@ void xprt_release(struct rpc_task *task)
 
 #ifdef CONFIG_SUNRPC_BACKCHANNEL
 void
-xprt_init_bc_request(struct rpc_rqst *req, struct rpc_task *task)
+xprt_init_bc_request(struct rpc_rqst *req, struct rpc_task *task,
+		const struct rpc_timeout *to)
 {
 	struct xdr_buf *xbufp = &req->rq_snd_buf;
 
@@ -2000,7 +2001,7 @@ xprt_init_bc_request(struct rpc_rqst *req, struct rpc_task *task)
 	xbufp->len = xbufp->head[0].iov_len + xbufp->page_len +
 		xbufp->tail[0].iov_len;
 
-	xprt_init_majortimeo(task, req, req->rq_xprt->timeout);
+	xprt_init_majortimeo(task, req, to);
 }
 #endif
 

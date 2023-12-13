@@ -1603,7 +1603,11 @@ void svc_process_bc(struct rpc_rqst *req, struct svc_rqst *rqstp)
 	}
 	/* Finally, send the reply synchronously */
 	memcpy(&req->rq_snd_buf, &rqstp->rq_res, sizeof(req->rq_snd_buf));
-	task = rpc_run_bc_task(req);
+	task = rpc_run_bc_task(req, rqstp->bc_rpc_clnt);
+
+	if (rqstp->bc_rpc_clnt)
+		rpc_release_client(rqstp->bc_rpc_clnt);
+
 	if (IS_ERR(task))
 		return;
 

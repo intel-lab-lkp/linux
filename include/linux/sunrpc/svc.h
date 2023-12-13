@@ -250,6 +250,7 @@ struct svc_rqst {
 	struct net		*rq_bc_net;	/* pointer to backchannel's
 						 * net namespace
 						 */
+	struct rpc_clnt		*bc_rpc_clnt;	/* v4.1 backchannel RPC client */
 	void **			rq_lease_breaker; /* The v4 client breaking a lease */
 	unsigned int		rq_status_counter; /* RPC processing counter */
 };
