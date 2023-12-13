@@ -34,7 +34,7 @@
  * the same driver for allocation, read and write operations.
  *
  * Open-coding access to :c:type:`struct iosys_map <iosys_map>` is considered
- * bad style. Rather then accessing its fields directly, use one of the provided
+ * bad style. Rather than accessing its fields directly, use one of the provided
  * helper functions, or implement your own. For example, instances of
  * :c:type:`struct iosys_map <iosys_map>` can be initialized statically with
  * IOSYS_MAP_INIT_VADDR(), or at runtime with iosys_map_set_vaddr(). These
@@ -85,7 +85,7 @@
  *	if (iosys_map_is_equal(&sys_map, &io_map))
  *		// always false
  *
- * A set up instance of struct iosys_map can be used to access or manipulate the
+ * A setup instance of struct iosys_map can be used to access or manipulate the
  * buffer memory. Depending on the location of the memory, the provided helpers
  * will pick the correct operations. Data can be copied into the memory with
  * iosys_map_memcpy_to(). The address can be manipulated with iosys_map_incr().
