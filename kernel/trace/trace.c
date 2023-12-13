@@ -10639,6 +10639,7 @@ static int trace_kho_notifier(struct notifier_block *self,
 	err |= fdt_begin_node(fdt, "ftrace");
 	err |= fdt_property(fdt, "compatible", compatible, sizeof(compatible));
 	err |= trace_kho_write_trace_array(fdt, &global_trace);
+	err |= trace_kho_write_events(fdt);
 	err |= fdt_end_node(fdt);
 
 	if (!err) {

@@ -12,6 +12,7 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/mm.h>
 #include <linux/idr.h>
+#include <linux/kexec.h>
 
 #include "trace_output.h"
 
@@ -668,6 +669,33 @@ int trace_print_lat_context(struct trace_iterator *iter)
 
 	return !trace_seq_has_overflowed(s);
 }
+
+int trace_kho_write_events(void *fdt)
+{
+#ifdef CONFIG_FTRACE_KHO
+	const char compatible[] = "ftrace,events-v1";
+	const char *name = "events";
+	struct trace_event *event;
+	unsigned key;
+	int err = 0;
+
+	err |= fdt_begin_node(fdt, name);
+	err |= fdt_property(fdt, "compatible", compatible, sizeof(compatible));
+
+	for (key = 0; key < EVENT_HASHSIZE; key++) {
+		hlist_for_each_entry(event, &event_hash[key], node)
+			err |= fdt_property(fdt, event->name, &event->type,
+					    sizeof(event->type));
+	}
+
+	err |= fdt_end_node(fdt);
+
+	return err;
+#else
+	return 0;
+#endif
+}
+
 
 /**
  * ftrace_find_event - find a registered event
