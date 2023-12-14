@@ -617,3 +617,41 @@ void qce_get_version(struct qce_device *qce, u32 *major, u32 *minor, u32 *step)
 	*minor = (val & CORE_MINOR_REV_MASK) >> CORE_MINOR_REV_SHIFT;
 	*step = (val & CORE_STEP_REV_MASK) >> CORE_STEP_REV_SHIFT;
 }
+
+int qce_bam_acquire_lock(struct qce_device *qce)
+{
+	u32 val = 0;
+	int ret;
+
+	qce_clear_bam_transaction(qce);
+
+	/* This is just a dummy read to acquire lock bam pipe */
+	qce_read_reg_dma(qce, REG_STATUS2, &val, 1);
+
+	ret = qce_submit_cmd_desc(qce, QCE_DMA_DESC_FLAG_LOCK);
+	if (ret) {
+		dev_err(qce->dev, "Error in LOCK cmd descriptor\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+int qce_bam_release_lock(struct qce_device *qce)
+{
+	u32 val = 0;
+	int ret;
+
+	qce_clear_bam_transaction(qce);
+
+	/* This just dummy read to release lock on bam pipe*/
+	qce_read_reg_dma(qce, REG_STATUS2, &val, 1);
+
+	ret = qce_submit_cmd_desc(qce, QCE_DMA_DESC_FLAG_UNLOCK);
+	if (ret) {
+		dev_err(qce->dev, "Error in LOCK cmd descriptor\n");
+		return ret;
+	}
+
+	return 0;
+}
