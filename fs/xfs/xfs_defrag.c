@@ -502,6 +502,57 @@ out:
 	return error;
 }
 
+static int xfs_do_copy_extent_sync(struct xfs_mount *mp, xfs_fsblock_t src_blk,
+				   xfs_fsblock_t tgt_blk, xfs_filblks_t count)
+{
+	struct xfs_buf  *bp = NULL;
+	xfs_daddr_t	src_daddr, tgt_daddr;
+	size_t		nblocks;
+	int		error;
+
+	src_daddr = XFS_FSB_TO_DADDR(mp, src_blk);
+	tgt_daddr = XFS_FSB_TO_DADDR(mp, tgt_blk);
+	nblocks = XFS_FSB_TO_BB(mp, count);
+
+	error = xfs_buf_read_uncached(mp->m_ddev_targp, src_daddr, nblocks, 0, &bp, NULL);
+	if (error)
+		goto rel_bp;
+
+	/* write to new blocks */
+	bp->b_maps[0].bm_bn = tgt_daddr;
+	error = xfs_bwrite(bp);
+rel_bp:
+	if (bp)
+		xfs_buf_relse(bp);
+	return error;
+}
+
+/* Physically copy data from old extents to new extents synchronously
+ * Note: @new extent is expected either exact same as piece size or it's bigger
+ * than that.
+ */
+static int xfs_defrag_copy_piece_sync(struct xfs_defrag_info *di,
+				      struct xfs_bmbt_irec *new)
+{
+	struct xfs_defrag_piece	*dp = &di->di_dp;
+	xfs_fsblock_t		new_strt_blk;
+	int			error = 0;
+	int			i;
+
+	new_strt_blk = new->br_startblock + dp->dp_start_off - new->br_startoff;
+	for (i = 0; i < dp->dp_nr_ext; i++) {
+		struct xfs_bmbt_irec *irec = &dp->dp_extents[i];
+
+		error = xfs_do_copy_extent_sync(di->di_ip->i_mount,
+			irec->br_startblock, new_strt_blk,
+			irec->br_blockcount);
+		if (error)
+			break;
+		new_strt_blk += irec->br_blockcount;
+	}
+	return error;
+}
+
 /* defrag on the given piece
  * XFS_ILOCK_EXCL is held by caller
  */
@@ -523,6 +574,11 @@ static int xfs_defrag_file_piece(struct xfs_defrag_info *di)
 		goto out;
 
 	ASSERT(imap.br_blockcount >= di->di_dp.dp_len);
+
+	/* copy data to new blocks */
+	error = xfs_defrag_copy_piece_sync(di, &imap);
+	if (error)
+		goto out;
 out:
 	return error;
 }
