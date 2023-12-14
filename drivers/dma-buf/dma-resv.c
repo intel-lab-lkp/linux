@@ -192,7 +192,10 @@ int dma_resv_reserve_fences(struct dma_resv *obj, unsigned int num_fences)
 			return 0;
 		max = max(old->num_fences + num_fences, old->max_fences * 2);
 	} else {
-		max = max(4ul, roundup_pow_of_two(num_fences));
+		if (num_fences)
+			max = max(4ul, roundup_pow_of_two(num_fences));
+		else
+			max = 4ul;
 	}
 
 	new = dma_resv_list_alloc(max);
