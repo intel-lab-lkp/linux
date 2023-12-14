@@ -7284,11 +7284,18 @@ static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpu
 /*
  * Scan the local SMT mask for idle CPUs.
  */
-static int select_idle_smt(struct task_struct *p, int target)
+static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int target)
 {
 	int cpu;
+	struct cpumask *cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 
-	for_each_cpu_and(cpu, cpu_smt_mask(target), p->cpus_ptr) {
+	/*
+	 * Check if a candidate cpu is in the LLC scheduling domain where target exists.
+	 * Due to isolcpus and cpusets, there is no guarantee that it holds.
+	 */
+	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
+
+	for_each_cpu_and(cpu, cpu_smt_mask(target), cpus) {
 		if (cpu == target)
 			continue;
 		if (available_idle_cpu(cpu) || sched_idle_cpu(cpu))
@@ -7314,7 +7321,7 @@ static inline int select_idle_core(struct task_struct *p, int core, struct cpuma
 	return __select_idle_cpu(core, p);
 }
 
-static inline int select_idle_smt(struct task_struct *p, int target)
+static inline int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int target)
 {
 	return -1;
 }
@@ -7564,7 +7571,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		has_idle_core = test_idle_cores(target);
 
 		if (!has_idle_core && cpus_share_cache(prev, target)) {
-			i = select_idle_smt(p, prev);
+			i = select_idle_smt(p, sd, prev);
 			if ((unsigned int)i < nr_cpumask_bits)
 				return i;
 		}
