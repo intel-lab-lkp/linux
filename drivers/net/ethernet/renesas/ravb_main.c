@@ -2828,6 +2828,10 @@ static int ravb_probe(struct platform_device *pdev)
 
 		/* Request GTI loading */
 		ravb_modify(ndev, GCCR, GCCR_LTI, GCCR_LTI);
+		/* Check completion status. */
+		error = ravb_wait(ndev, GCCR, GCCR_LTI, 0);
+		if (error)
+			goto out_disable_refclk;
 	}
 
 	if (info->internal_delay) {
@@ -3050,6 +3054,10 @@ static int __maybe_unused ravb_resume(struct device *dev)
 
 		/* Request GTI loading */
 		ravb_modify(ndev, GCCR, GCCR_LTI, GCCR_LTI);
+		/* Check completion status. */
+		ret = ravb_wait(ndev, GCCR, GCCR_LTI, 0);
+		if (ret)
+			return ret;
 	}
 
 	if (info->internal_delay)
