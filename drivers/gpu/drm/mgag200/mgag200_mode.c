@@ -65,9 +65,9 @@ static void mgag200_crtc_set_gamma_linear(struct mga_device *mdev,
 	}
 }
 
-static void mgag200_crtc_set_gamma(struct mga_device *mdev,
-				   const struct drm_format_info *format,
-				   struct drm_color_lut *lut)
+static void mgag200_crtc_set_gamma_table(struct mga_device *mdev,
+					 const struct drm_format_info *format,
+					 struct drm_color_lut *lut)
 {
 	int i;
 
@@ -101,6 +101,16 @@ static void mgag200_crtc_set_gamma(struct mga_device *mdev,
 			      &format->format);
 		break;
 	}
+}
+
+void mgag200_crtc_set_gamma(struct mga_device *mdev,
+			    const struct drm_format_info *format,
+			    struct drm_property_blob *gamma_lut)
+{
+	if (gamma_lut)
+		mgag200_crtc_set_gamma_table(mdev, format, gamma_lut->data);
+	else
+		mgag200_crtc_set_gamma_linear(mdev, format);
 }
 
 static inline void mga_wait_vsync(struct mga_device *mdev)
@@ -616,10 +626,7 @@ void mgag200_crtc_helper_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_s
 	if (crtc_state->enable && crtc_state->color_mgmt_changed) {
 		const struct drm_format_info *format = mgag200_crtc_state->format;
 
-		if (crtc_state->gamma_lut)
-			mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut->data);
-		else
-			mgag200_crtc_set_gamma_linear(mdev, format);
+		mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut);
 	}
 }
 
@@ -642,10 +649,7 @@ void mgag200_crtc_helper_atomic_enable(struct drm_crtc *crtc, struct drm_atomic_
 	if (funcs->pixpllc_atomic_update)
 		funcs->pixpllc_atomic_update(crtc, old_state);
 
-	if (crtc_state->gamma_lut)
-		mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut->data);
-	else
-		mgag200_crtc_set_gamma_linear(mdev, format);
+	mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut);
 
 	mgag200_enable_display(mdev);
 
