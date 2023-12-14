@@ -62,12 +62,10 @@ static void net_ctl_set_ownership(struct ctl_table_header *head,
 	kgid_t ns_root_gid;
 
 	ns_root_uid = make_kuid(net->user_ns, 0);
-	if (uid_valid(ns_root_uid))
-		*uid = ns_root_uid;
+	*uid = uid_valid(ns_root_uid) ? ns_root_uid : net->user_ns->owner;
 
 	ns_root_gid = make_kgid(net->user_ns, 0);
-	if (gid_valid(ns_root_gid))
-		*gid = ns_root_gid;
+	*gid = gid_valid(ns_root_gid) ? ns_root_gid : net->user_ns->group;
 }
 
 static struct ctl_table_root net_sysctl_root = {
