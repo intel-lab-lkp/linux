@@ -1147,6 +1147,7 @@ static enum scsi_disposition scsi_send_eh_cmnd(struct scsi_cmnd *scmd,
 	const unsigned long stall_for = msecs_to_jiffies(100);
 	int rtn;
 
+	scmd->flags |= SCMD_LAST;
 retry:
 	scsi_eh_prep_cmnd(scmd, &ses, cmnd, cmnd_size, sense_bytes);
 	shost->eh_action = &done;
