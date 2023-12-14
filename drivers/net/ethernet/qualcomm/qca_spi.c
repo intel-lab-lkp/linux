@@ -679,25 +679,17 @@ qcaspi_netdev_open(struct net_device *dev)
 	qca->sync = QCASPI_SYNC_UNKNOWN;
 	qcafrm_fsm_init_spi(&qca->frm_handle);
 
-	qca->spi_thread = kthread_run((void *)qcaspi_spi_thread,
-				      qca, "%s", dev->name);
-
-	if (IS_ERR(qca->spi_thread)) {
-		netdev_err(dev, "%s: unable to start kernel thread.\n",
-			   QCASPI_DRV_NAME);
-		return PTR_ERR(qca->spi_thread);
-	}
-
 	ret = request_irq(qca->spi_dev->irq, qcaspi_intr_handler, 0,
 			  dev->name, qca);
 	if (ret) {
 		netdev_err(dev, "%s: unable to get IRQ %d (irqval=%d).\n",
 			   QCASPI_DRV_NAME, qca->spi_dev->irq, ret);
-		kthread_stop(qca->spi_thread);
 		return ret;
 	}
 
 	/* SPI thread takes care of TX queue */
+	kthread_unpark(qca->spi_thread);
+	wake_up_process(qca->spi_thread);
 
 	return 0;
 }
@@ -707,14 +699,10 @@ qcaspi_netdev_close(struct net_device *dev)
 {
 	struct qcaspi *qca = netdev_priv(dev);
 
-	netif_stop_queue(dev);
+	kthread_park(qca->spi_thread);
 
 	qcaspi_write_register(qca, SPI_REG_INTR_ENABLE, 0, wr_verify);
 	free_irq(qca->spi_dev->irq, qca);
-
-	kthread_stop(qca->spi_thread);
-	qca->spi_thread = NULL;
-	qcaspi_flush_tx_ring(qca);
 
 	return 0;
 }
@@ -807,6 +795,7 @@ static int
 qcaspi_netdev_init(struct net_device *dev)
 {
 	struct qcaspi *qca = netdev_priv(dev);
+	struct task_struct *thread;
 
 	dev->mtu = QCAFRM_MAX_MTU;
 	dev->type = ARPHRD_ETHER;
@@ -830,6 +819,15 @@ qcaspi_netdev_init(struct net_device *dev)
 		return -ENOBUFS;
 	}
 
+	thread = kthread_create(qcaspi_spi_thread, qca, "%s", dev->name);
+	if (IS_ERR(thread)) {
+		netdev_err(dev, "%s: unable to start kernel thread.\n",
+			   QCASPI_DRV_NAME);
+		return PTR_ERR(thread);
+	}
+
+	qca->spi_thread = thread;
+
 	return 0;
 }
 
@@ -837,6 +835,11 @@ static void
 qcaspi_netdev_uninit(struct net_device *dev)
 {
 	struct qcaspi *qca = netdev_priv(dev);
+
+	if (qca->spi_thread) {
+		kthread_stop(qca->spi_thread);
+		qca->spi_thread = NULL;
+	}
 
 	kfree(qca->rx_buffer);
 	qca->buffer_size = 0;
