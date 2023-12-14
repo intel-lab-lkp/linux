@@ -4137,9 +4137,9 @@ static bool pte_range_none(pte_t *pte, int nr_pages)
 	return true;
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 {
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	struct vm_area_struct *vma = vmf->vma;
 	unsigned long orders;
 	struct folio *folio;
@@ -4199,12 +4199,9 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	}
 
 fallback:
-	return vma_alloc_zeroed_movable_folio(vma, vmf->address);
-}
-#else
-#define alloc_anon_folio(vmf) \
-		vma_alloc_zeroed_movable_folio((vmf)->vma, (vmf)->address)
 #endif
+	return vma_alloc_zeroed_movable_folio(vmf->vma, vmf->address);
+}
 
 /*
  * We enter with non-exclusive mmap_lock (to exclude vma changes,
@@ -4260,6 +4257,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	/* Allocate our own private page. */
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
+	/* Returns NULL on OOM or ERR_PTR(-EAGAIN) if we must retry the fault */
 	folio = alloc_anon_folio(vmf);
 	if (IS_ERR(folio))
 		return 0;
