@@ -96,43 +96,57 @@
 	.endm
 
 	.macro sc_save_fcc base, tmp0, tmp1
-	movcf2gr	\tmp0, $fcc0
-	move		\tmp1, \tmp0
-	movcf2gr	\tmp0, $fcc1
-	bstrins.d	\tmp1, \tmp0, 15, 8
-	movcf2gr	\tmp0, $fcc2
-	bstrins.d	\tmp1, \tmp0, 23, 16
-	movcf2gr	\tmp0, $fcc3
-	bstrins.d	\tmp1, \tmp0, 31, 24
-	movcf2gr	\tmp0, $fcc4
-	bstrins.d	\tmp1, \tmp0, 39, 32
-	movcf2gr	\tmp0, $fcc5
-	bstrins.d	\tmp1, \tmp0, 47, 40
-	movcf2gr	\tmp0, $fcc6
-	bstrins.d	\tmp1, \tmp0, 55, 48
-	movcf2gr	\tmp0, $fcc7
-	bstrins.d	\tmp1, \tmp0, 63, 56
-	EX	st.d	\tmp1, \base, 0
+	movcf2fr	ft0, $fcc0
+	movcf2fr	ft1, $fcc1
+	movfr2gr.s	\tmp0, ft0
+	movfr2gr.s	\tmp1, ft1
+	EX  st.b	\tmp0, \base, 0
+	EX  st.b	\tmp0, \base, 8
+	movcf2fr	ft0, $fcc2
+	movcf2fr	ft1, $fcc3
+	movfr2gr.s	\tmp0, ft0
+	movfr2gr.s	\tmp1, ft1
+	EX  st.b	\tmp0, \base, 16
+	EX  st.b	\tmp0, \base, 24
+	movcf2fr	ft0, $fcc3
+	movcf2fr	ft1, $fcc4
+	movfr2gr.s	\tmp0, ft0
+	movfr2gr.s	\tmp1, ft1
+	EX  st.b	\tmp0, \base, 32
+	EX  st.b	\tmp0, \base, 40
+	movcf2fr	ft0, $fcc5
+	movcf2fr	ft1, $fcc6
+	movfr2gr.s	\tmp0, ft0
+	movfr2gr.s	\tmp1, ft1
+	EX  st.b	\tmp0, \base, 48
+	EX  st.b	\tmp0, \base, 56
 	.endm
 
 	.macro sc_restore_fcc base, tmp0, tmp1
-	EX	ld.d	\tmp0, \base, 0
-	bstrpick.d	\tmp1, \tmp0, 7, 0
-	movgr2cf	$fcc0, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 15, 8
-	movgr2cf	$fcc1, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 23, 16
-	movgr2cf	$fcc2, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 31, 24
-	movgr2cf	$fcc3, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 39, 32
-	movgr2cf	$fcc4, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 47, 40
-	movgr2cf	$fcc5, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 55, 48
-	movgr2cf	$fcc6, \tmp1
-	bstrpick.d	\tmp1, \tmp0, 63, 56
-	movgr2cf	$fcc7, \tmp1
+	EX	ld.b	\tmp0, \base, 0
+	EX	ld.b	\tmp1, \base, 8
+	movgr2fr.w	ft0, \tmp0
+	movgr2fr.w	ft1, \tmp1
+	movfr2cf	$fcc0, ft0
+	movfr2cf	$fcc1, ft1
+	EX	ld.b	\tmp0, \base, 16
+	EX	ld.b	\tmp1, \base, 24
+	movgr2fr.w	ft0, \tmp0
+	movgr2fr.w	ft1, \tmp1
+	movfr2cf	$fcc2, ft0
+	movfr2cf	$fcc3, ft1
+	EX	ld.b	\tmp0, \base, 32
+	EX	ld.b	\tmp1, \base, 40
+	movgr2fr.w	ft0, \tmp0
+	movgr2fr.w	ft1, \tmp1
+	movfr2cf	$fcc4, ft0
+	movfr2cf	$fcc5, ft1
+	EX	ld.b	\tmp0, \base, 48
+	EX	ld.b	\tmp1, \base, 56
+	movgr2fr.w	ft0, \tmp0
+	movgr2fr.w	ft1, \tmp1
+	movfr2cf	$fcc6, ft0
+	movfr2cf	$fcc7, ft1
 	.endm
 
 	.macro sc_save_fcsr base, tmp0
@@ -449,9 +463,9 @@ SYM_FUNC_END(_init_fpu)
  * a2: fcsr
  */
 SYM_FUNC_START(_save_fp_context)
-	sc_save_fcc	a1 t1 t2
 	sc_save_fcsr	a2 t1
 	sc_save_fp	a0
+	sc_save_fcc	a1 t1 t2
 	li.w		a0, 0				# success
 	jr		ra
 SYM_FUNC_END(_save_fp_context)
@@ -462,8 +476,8 @@ SYM_FUNC_END(_save_fp_context)
  * a2: fcsr
  */
 SYM_FUNC_START(_restore_fp_context)
-	sc_restore_fp	a0
 	sc_restore_fcc	a1 t1 t2
+	sc_restore_fp	a0
 	sc_restore_fcsr	a2 t1
 	li.w		a0, 0				# success
 	jr		ra
@@ -475,9 +489,9 @@ SYM_FUNC_END(_restore_fp_context)
  * a2: fcsr
  */
 SYM_FUNC_START(_save_lsx_context)
-	sc_save_fcc a1, t0, t1
 	sc_save_fcsr a2, t0
 	sc_save_lsx a0
+	sc_save_fcc a1, t0, t1
 	li.w	a0, 0					# success
 	jr	ra
 SYM_FUNC_END(_save_lsx_context)
@@ -488,8 +502,8 @@ SYM_FUNC_END(_save_lsx_context)
  * a2: fcsr
  */
 SYM_FUNC_START(_restore_lsx_context)
-	sc_restore_lsx a0
 	sc_restore_fcc a1, t1, t2
+	sc_restore_lsx a0
 	sc_restore_fcsr a2, t1
 	li.w	a0, 0					# success
 	jr	ra
@@ -501,9 +515,9 @@ SYM_FUNC_END(_restore_lsx_context)
  * a2: fcsr
  */
 SYM_FUNC_START(_save_lasx_context)
-	sc_save_fcc a1, t0, t1
 	sc_save_fcsr a2, t0
 	sc_save_lasx a0
+	sc_save_fcc a1, t0, t1
 	li.w	a0, 0					# success
 	jr	ra
 SYM_FUNC_END(_save_lasx_context)
@@ -514,8 +528,8 @@ SYM_FUNC_END(_save_lasx_context)
  * a2: fcsr
  */
 SYM_FUNC_START(_restore_lasx_context)
-	sc_restore_lasx a0
 	sc_restore_fcc a1, t1, t2
+	sc_restore_lasx a0
 	sc_restore_fcsr a2, t1
 	li.w	a0, 0					# success
 	jr	ra
