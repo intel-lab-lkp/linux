@@ -24,6 +24,9 @@
 #include "xfs_pnfs.h"
 #include "xfs_iomap.h"
 #include "xfs_reflink.h"
+#include "xfs_quota.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 
 #include <linux/dax.h>
 #include <linux/falloc.h>
@@ -803,8 +806,18 @@ write_retry:
 		goto write_retry;
 	} else if (ret == -ENOSPC && !cleared_space) {
 		struct xfs_icwalk	icw = {0};
+		struct xfs_dquot	*pdqp = ip->i_pdquot;
 
 		cleared_space = true;
+		if (XFS_IS_PQUOTA_ENFORCED(ip->i_mount) &&
+			pdqp && xfs_dquot_lowsp(pdqp)) {
+			xfs_iunlock(ip, iolock);
+			icw.icw_prid = pdqp->q_id;
+			icw.icw_flags |= XFS_ICWALK_FLAG_PRID;
+			xfs_blockgc_free_space(ip->i_mount, &icw);
+			goto write_retry;
+		}
+
 		xfs_flush_inodes(ip->i_mount);
 
 		xfs_iunlock(ip, iolock);
