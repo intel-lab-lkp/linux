@@ -83,13 +83,20 @@ static void phy_led_trigger_unregister(struct phy_led_trigger *plt)
 
 int phy_led_triggers_register(struct phy_device *phy)
 {
+	unsigned int *speeds;
 	int i, err;
-	unsigned int speeds[50];
 
-	phy->phy_num_led_triggers = phy_supported_speeds(phy, speeds,
-							 ARRAY_SIZE(speeds));
+	phy->phy_num_led_triggers = phy_supported_speeds_num(phy);
 	if (!phy->phy_num_led_triggers)
 		return 0;
+
+	speeds = kmalloc_array(phy->phy_num_led_triggers, sizeof(*speeds),
+			       GFP_KERNEL);
+	if (!speeds)
+		return -ENOMEM;
+
+	/* Presence of speed modes already checked up */
+	phy_supported_speeds(phy, speeds, phy->phy_num_led_triggers);
 
 	phy->led_link_trigger = devm_kzalloc(&phy->mdio.dev,
 					     sizeof(*phy->led_link_trigger),
@@ -123,6 +130,8 @@ int phy_led_triggers_register(struct phy_device *phy)
 	phy->last_triggered = NULL;
 	phy_led_trigger_change_speed(phy);
 
+	free(speeds);
+
 	return 0;
 out_unreg:
 	while (i--)
@@ -134,6 +143,7 @@ out_free_link:
 	devm_kfree(&phy->mdio.dev, phy->led_link_trigger);
 	phy->led_link_trigger = NULL;
 out_clear:
+	free(speeds);
 	phy->phy_num_led_triggers = 0;
 	return err;
 }
