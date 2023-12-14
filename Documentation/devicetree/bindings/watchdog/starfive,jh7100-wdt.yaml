@@ -19,14 +19,17 @@ description:
   isn't cleared, the watchdog will reset the system unless the watchdog
   reset is disabled.
 
-allOf:
-  - $ref: watchdog.yaml#
-
 properties:
   compatible:
-    enum:
-      - starfive,jh7100-wdt
-      - starfive,jh7110-wdt
+    oneOf:
+      - items:
+          - enum:
+              - starfive,jh7100-wdt
+              - starfive,jh7110-wdt
+      - items:
+          - enum:
+              - starfive,jh8100-wdt
+          - const: starfive,jh7110-wdt
 
   reg:
     maxItems: 1
@@ -45,9 +48,32 @@ properties:
       - const: core
 
   resets:
+    minItems: 1
     items:
       - description: APB reset
       - description: Core reset
+
+allOf:
+  - $ref: watchdog.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - starfive,jh8100-wdt
+    then:
+      properties:
+        resets:
+          description: |
+            Must contain Core reset entry.
+          maxItems: 1
+    else:
+      properties:
+        resets:
+          description: |
+            Must contain APB reset and Core reset entry.
+          minItems: 2
 
 required:
   - compatible
@@ -68,4 +94,14 @@ examples:
         clock-names = "apb", "core";
         resets = <&rst 99>,
                  <&rst 100>;
+    };
+
+  - |
+    watchdog@12270000 {
+        compatible = "starfive,jh8100-wdt", "starfive,jh7110-wdt";
+        reg = <0x12270000 0x10000>;
+        clocks = <&clk 78>,
+                 <&clk 79>;
+        clock-names = "apb", "core";
+        resets = <&rst 15>;
     };
