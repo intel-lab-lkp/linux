@@ -317,17 +317,57 @@ phy_lookup_setting(int speed, int duplex, const unsigned long *mask, bool exact)
 }
 EXPORT_SYMBOL_GPL(phy_lookup_setting);
 
+/**
+ * phy_speeds - return all speeds in mask
+ * @speeds: pointer to array where to put the speed modes
+ * @size: size of array where to put the speed modes
+ * @mask: mask of speed modes to compare with
+ *
+ * Take mask, test bit in mask with the settings table and compose the
+ * speeds array based on that as many as size permits.
+ *
+ * With speeds NULL, only the number of detected modes is returned and
+ * no array is composed. (size value is ignored)
+ *
+ * Return the number of detected modes in mask.
+ */
 size_t phy_speeds(unsigned int *speeds, size_t size,
 		  unsigned long *mask)
 {
+	unsigned int curr_speed;
 	size_t count;
 	int i;
 
-	for (i = 0, count = 0; i < ARRAY_SIZE(settings) && count < size; i++)
-		if (settings[i].bit < __ETHTOOL_LINK_MODE_MASK_NBITS &&
-		    test_bit(settings[i].bit, mask) &&
-		    (count == 0 || speeds[count - 1] != settings[i].speed))
-			speeds[count++] = settings[i].speed;
+	for (i = 0, count = 0; i < ARRAY_SIZE(settings); i++) {
+		/* Inconsistent mapping with ethtool modes? */
+		if (unlikely(settings[i].bit >= __ETHTOOL_LINK_MODE_MASK_NBITS))
+			return count;
+
+		/* Skip. Speed not in provided mask */
+		if (!test_bit(settings[i].bit, mask))
+			continue;
+
+		/* settings struct is set in descending order with
+		 * ordered speed modes. Detect a new speed mode by
+		 * checking if it's different than the current one.
+		 */
+		if (count == 0 || curr_speed != settings[i].speed) {
+			curr_speed = settings[i].speed;
+
+			/* With speeds not declared, we return only
+			 * the number of detected speed mode in the mask.
+			 */
+			if (speeds) {
+				/* No more space to put new modes */
+				if (count > size)
+					return count;
+
+				speeds[count] = curr_speed;
+			}
+
+			count++;
+		}
+	}
 
 	return count;
 }
