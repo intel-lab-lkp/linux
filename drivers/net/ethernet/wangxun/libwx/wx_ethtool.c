@@ -383,10 +383,6 @@ void wx_get_channels(struct net_device *dev,
 
 	/* record RSS queues */
 	ch->combined_count = wx->ring_feature[RING_F_RSS].indices;
-
-	/* nothing else to report if RSS is disabled */
-	if (ch->combined_count == 1)
-		return;
 }
 EXPORT_SYMBOL(wx_get_channels);
 
@@ -395,10 +391,6 @@ int wx_set_channels(struct net_device *dev,
 {
 	unsigned int count = ch->combined_count;
 	struct wx *wx = netdev_priv(dev);
-
-	/* verify they are not requesting separate vectors */
-	if (!count || ch->rx_count || ch->tx_count)
-		return -EOPNOTSUPP;
 
 	/* verify other_count has not changed */
 	if (ch->other_count != 1)
@@ -413,3 +405,19 @@ int wx_set_channels(struct net_device *dev,
 	return 0;
 }
 EXPORT_SYMBOL(wx_set_channels);
+
+u32 wx_get_msglevel(struct net_device *netdev)
+{
+	struct wx *wx = netdev_priv(netdev);
+
+	return wx->msg_enable;
+}
+EXPORT_SYMBOL(wx_get_msglevel);
+
+void wx_set_msglevel(struct net_device *netdev, u32 data)
+{
+	struct wx *wx = netdev_priv(netdev);
+
+	wx->msg_enable = data;
+}
+EXPORT_SYMBOL(wx_set_msglevel);
