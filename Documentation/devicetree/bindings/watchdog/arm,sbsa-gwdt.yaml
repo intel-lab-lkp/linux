@@ -20,12 +20,17 @@ allOf:
 
 properties:
   compatible:
-    const: arm,sbsa-gwdt
+    enum:
+      - arm,sbsa-gwdt
+      - marvell,ac5-wd
 
   reg:
     items:
       - description: Watchdog control frame
       - description: Refresh frame
+      - description: Marvell CPU control frame
+      - description: Marvell Management frame
+      - description: Marvell reset control unit frame
 
   interrupts:
     description: The Watchdog Signal 0 (WS0) SPI (Shared Peripheral Interrupt)
@@ -39,12 +44,55 @@ required:
 unevaluatedProperties: false
 
 examples:
+  # First example is for generic ARM one
+  # Next examples are for Marvell.
+  # They are organized as three sets:
+  # first set is for global watchdog, then CPU core #0 private watchdog,
+  # and finally CPU core #1 private watchdog
+  # Examples are given for AC5 or Ironman. For AC5X SOC, the last
+  # reg item's low address (0x840F8000) should be replaced with 0x944F8000
   - |
     watchdog@2a440000 {
         compatible = "arm,sbsa-gwdt";
         reg = <0x2a440000 0x1000>,
-              <0x2a450000 0x1000>;
+              <0x2a450000 0x1000>,
+              <0x0 0x0>,
+              <0x0 0x0>,
+              <0x0 0x0>;
         interrupts = <0 27 4>;
+        timeout-sec = <30>;
+    };
+  - |
+    watchdog@80216000 {
+        compatible = "marvell,ac5-wd";
+        reg = <0x80216000 0x1000>,
+              <0x80215000 0x1000>,
+              <0x80210000 0x1000>,
+              <0x7f900000 0x1000>,
+              <0x840F8000 0x1000>;
+        interrupts = <0 124 4>;
+        timeout-sec = <30>;
+    };
+  - |
+    watchdog@80212000 {
+        compatible = "marvell,ac5-wd";
+        reg = <0x80212000 0x1000>,
+              <0x80211000 0x1000>,
+              <0x80210000 0x1000>,
+              <0x7f900000 0x1000>,
+              <0x840F8000 0x1000>;
+        interrupts = <0 122 4>;
+        timeout-sec = <30>;
+    };
+  - |
+    watchdog@80214000 {
+        compatible = "marvell,ac5-wd";
+        reg = <0x80214000 0x1000>,
+              <0x80213000 0x1000>,
+              <0x80210000 0x1000>,
+              <0x7f900000 0x1000>,
+              <0x840F8000 0x1000>;
+        interrupts = <0 122 4>;
         timeout-sec = <30>;
     };
 ...
