@@ -178,6 +178,11 @@ static int page_pool_init(struct page_pool *pool,
 	memcpy(&pool->p, &params->fast, sizeof(pool->p));
 	memcpy(&pool->slow, &params->slow, sizeof(pool->slow));
 
+	/* It is up to the consumer to set cpuid if we are using percpu
+	 * page_pool so initialize it to an invalid value.
+	 */
+	pool->cpuid = -1;
+
 	/* Validate only known flags were used */
 	if (pool->p.flags & ~(PP_FLAG_ALL))
 		return -EINVAL;
