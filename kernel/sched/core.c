@@ -7850,8 +7850,8 @@ unlock:
 	return retval;
 }
 
-static int _sched_setscheduler(struct task_struct *p, int policy,
-			       const struct sched_param *param, bool check)
+static int _sched_setscheduler_pi(struct task_struct *p, int policy,
+			       const struct sched_param *param, bool check, bool pi)
 {
 	struct sched_attr attr = {
 		.sched_policy   = policy,
@@ -7866,8 +7866,15 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 		attr.sched_policy = policy;
 	}
 
-	return __sched_setscheduler(p, &attr, check, true);
+	return __sched_setscheduler(p, &attr, check, pi);
 }
+
+static inline int _sched_setscheduler(struct task_struct *p, int policy,
+			       const struct sched_param *param, bool check)
+{
+	return _sched_setscheduler_pi(p, policy, param, check, true);
+}
+
 /**
  * sched_setscheduler - change the scheduling policy and/or RT priority of a thread.
  * @p: the task in question.
@@ -7915,6 +7922,27 @@ int sched_setscheduler_nocheck(struct task_struct *p, int policy,
 {
 	return _sched_setscheduler(p, policy, param, false);
 }
+
+/**
+ * sched_setscheduler_pi_nocheck - change the scheduling policy and/or RT priority of a thread from kernelspace.
+ * @p: the task in question.
+ * @policy: new policy.
+ * @param: structure containing the new RT priority.
+ * @pi: boolean flag stating if pi validation needs to be performed.
+ *
+ * A flexible version of sched_setcheduler_nocheck which allows for specifying
+ * whether PI context validation needs to be done or not. set_scheduler_nocheck
+ * is not allowed in interrupt context as it assumes that PI is used.
+ * This function allows interrupt context call by specifying pi = false.
+ *
+ * Return: 0 on success. An error code otherwise.
+ */
+int sched_setscheduler_pi_nocheck(struct task_struct *p, int policy,
+			       const struct sched_param *param, bool pi)
+{
+	return _sched_setscheduler_pi(p, policy, param, false, pi);
+}
+EXPORT_SYMBOL_GPL(sched_setscheduler_pi_nocheck);
 
 /*
  * SCHED_FIFO is a broken scheduler model; that is, it is fundamentally
