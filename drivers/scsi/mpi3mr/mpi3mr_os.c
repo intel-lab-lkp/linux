@@ -5231,6 +5231,35 @@ shost_failed:
 }
 
 /**
+ * mpi3mr_get_shost_and_mrioc - get shost and ioc reference if
+ *                     they are valid
+ * @pdev: PCI device struct
+ * @shost: address to store scsi host reference
+ * @mrioc: address store HBA adapter reference
+ *
+ * Return: 0 if *shost and *ioc are not NULL otherwise -1.
+ */
+
+static int
+mpi3mr_get_shost_and_mrioc(struct pci_dev *pdev,
+	struct Scsi_Host **shost, struct mpi3mr_ioc **mrioc)
+{
+	*shost = pci_get_drvdata(pdev);
+	if (*shost == NULL) {
+		dev_err(&pdev->dev, "pdev's driver data is null\n");
+		return -ENXIO;
+	}
+
+	*mrioc = shost_priv(*shost);
+	if (*mrioc == NULL) {
+		dev_err(&pdev->dev, "shost's private data is null\n");
+		*shost = NULL;
+		return -ENXIO;
+		}
+	return 0;
+}
+
+/**
  * mpi3mr_remove - PCI remove callback
  * @pdev: PCI device instance
  *
@@ -5242,7 +5271,7 @@ shost_failed:
  */
 static void mpi3mr_remove(struct pci_dev *pdev)
 {
-	struct Scsi_Host *shost = pci_get_drvdata(pdev);
+	struct Scsi_Host *shost;
 	struct mpi3mr_ioc *mrioc;
 	struct workqueue_struct	*wq;
 	unsigned long flags;
@@ -5250,7 +5279,7 @@ static void mpi3mr_remove(struct pci_dev *pdev)
 	struct mpi3mr_hba_port *port, *hba_port_next;
 	struct mpi3mr_sas_node *sas_expander, *sas_expander_next;
 
-	if (!shost)
+	if (mpi3mr_get_shost_and_mrioc(pdev, &shost, &mrioc))
 		return;
 
 	mrioc = shost_priv(shost);
@@ -5328,12 +5357,12 @@ static void mpi3mr_remove(struct pci_dev *pdev)
  */
 static void mpi3mr_shutdown(struct pci_dev *pdev)
 {
-	struct Scsi_Host *shost = pci_get_drvdata(pdev);
+	struct Scsi_Host *shost;
 	struct mpi3mr_ioc *mrioc;
 	struct workqueue_struct	*wq;
 	unsigned long flags;
 
-	if (!shost)
+	if (mpi3mr_get_shost_and_mrioc(pdev, &shost, &mrioc))
 		return;
 
 	mrioc = shost_priv(shost);
@@ -5361,17 +5390,19 @@ static void mpi3mr_shutdown(struct pci_dev *pdev)
  * Change the power state to the given value and cleanup the IOC
  * by issuing MUR and shutdown notification
  *
- * Return: 0 always.
+ * Return: 0 on success, non-zero on failure
  */
 static int __maybe_unused
 mpi3mr_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct Scsi_Host *shost = pci_get_drvdata(pdev);
+	struct Scsi_Host *shost;
 	struct mpi3mr_ioc *mrioc;
+	int rc;
 
-	if (!shost)
-		return 0;
+	rc = mpi3mr_get_shost_and_mrioc(pdev, &shost, &mrioc);
+	if (rc)
+		return rc;
 
 	mrioc = shost_priv(shost);
 	while (mrioc->reset_in_progress || mrioc->is_driver_loading)
@@ -5402,13 +5433,14 @@ static int __maybe_unused
 mpi3mr_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct Scsi_Host *shost = pci_get_drvdata(pdev);
+	struct Scsi_Host *shost;
 	struct mpi3mr_ioc *mrioc;
 	pci_power_t device_state = pdev->current_state;
 	int r;
 
-	if (!shost)
-		return 0;
+	r = mpi3mr_get_shost_and_mrioc(pdev, &shost, &mrioc);
+	if (r)
+		return r;
 
 	mrioc = shost_priv(shost);
 
