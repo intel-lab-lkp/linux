@@ -590,12 +590,7 @@ static void range_cond(enum num_t t, struct range x, struct range y,
 		*newy = range(t, max_t(t, x.a, y.a), min_t(t, x.b, y.b));
 		break;
 	case OP_NE:
-		/* generic case, can't derive more information */
-		*newx = range(t, x.a, x.b);
-		*newy = range(t, y.a, y.b);
-		break;
-
-		/* below extended logic is not supported by verifier just yet */
+		/* below logic is supported by the verifier now */
 		if (x.a == x.b && x.a == y.a) {
 			/* X is a constant matching left side of Y */
 			*newx = range(t, x.a, x.b);
@@ -2101,6 +2096,24 @@ static struct subtest_case crafted_cases[] = {
 	{S32, S64, {(u32)(s32)S32_MIN, (u32)(s32)-255}, {(u32)(s32)-2, 0}},
 	{S32, S64, {0, 1}, {(u32)(s32)S32_MIN, (u32)(s32)S32_MIN}},
 	{S32, U32, {(u32)(s32)S32_MIN, (u32)(s32)S32_MIN}, {(u32)(s32)S32_MIN, (u32)(s32)S32_MIN}},
+
+	/* edge overlap testings for BPF_NE */
+	{U64, U64, {1, 1}, {1, 0x80000000}},
+	{U64, S64, {1, 1}, {1, 0x80000000}},
+	{U64, U32, {1, 1}, {1, 0x80000000}},
+	{U64, S32, {1, 1}, {1, 0x80000000}},
+	{U64, U64, {0x80000000, 0x80000000}, {1, 0x80000000}},
+	{U64, S64, {0x80000000, 0x80000000}, {1, 0x80000000}},
+	{U64, U32, {0x80000000, 0x80000000}, {1, 0x80000000}},
+	{U64, S32, {0x80000000, 0x80000000}, {1, 0x80000000}},
+	{U64, U64, {1, 0x80000000}, {1, 1}},
+	{U64, S64, {1, 0x80000000}, {1, 1}},
+	{U64, U32, {1, 0x80000000}, {1, 1}},
+	{U64, S32, {1, 0x80000000}, {1, 1}},
+	{U64, U64, {1, 0x80000000}, {0x80000000, 0x80000000}},
+	{U64, S64, {1, 0x80000000}, {0x80000000, 0x80000000}},
+	{U64, U32, {1, 0x80000000}, {0x80000000, 0x80000000}},
+	{U64, S32, {1, 0x80000000}, {0x80000000, 0x80000000}},
 };
 
 /* Go over crafted hard-coded cases. This is fast, so we do it as part of
