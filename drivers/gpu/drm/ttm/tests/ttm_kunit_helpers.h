@@ -31,6 +31,7 @@ struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 					    size_t size);
 struct ttm_place *ttm_place_kunit_init(struct kunit *test,
 				       uint32_t mem_type, uint32_t flags);
+void dummy_ttm_bo_destroy(struct ttm_buffer_object *bo);
 
 struct ttm_test_devices *ttm_test_devices_basic(struct kunit *test);
 struct ttm_test_devices *ttm_test_devices_all(struct kunit *test);
