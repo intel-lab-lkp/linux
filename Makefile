@@ -276,7 +276,8 @@ no-dot-config-targets := $(clean-targets) \
 			 cscope gtags TAGS tags help% %docs check% coccicheck \
 			 $(version_h) headers headers_% archheaders archscripts \
 			 %asm-generic kernelversion %src-pkg dt_binding_check \
-			 outputmakefile rustavailable rustfmt rustfmtcheck
+			 outputmakefile rustavailable rustfmt rustfmtcheck \
+			 rustupoverride
 no-sync-config-targets := $(no-dot-config-targets) %install modules_sign kernelrelease \
 			  image_name
 single-targets := %.a %.i %.ko %.lds %.ll %.lst %.mod %.o %.rsi %.s %.symtypes %/
@@ -1611,6 +1612,7 @@ help:
 	@echo  '                    (requires kernel .config; downloads external repos)'
 	@echo  '  rust-analyzer	  - Generate rust-project.json rust-analyzer support file'
 	@echo  '		    (requires kernel .config)'
+	@echo  '  rustupoverride  - Set up a rustup override for the build directory'
 	@echo  '  dir/file.[os]   - Build specified target only'
 	@echo  '  dir/file.rsi    - Build macro expanded source, similar to C preprocessing.'
 	@echo  '                    Run with RUSTFMT=n to skip reformatting if needed.'
@@ -1734,6 +1736,11 @@ rustfmt:
 
 rustfmtcheck: rustfmt_flags = --check
 rustfmtcheck: rustfmt
+
+# `rustup override` setup target
+PHONY += rustupoverride
+rustupoverride:
+	$(Q)rustup override set $(shell $(srctree)/scripts/min-tool-version.sh rustc)
 
 # Misc
 # ---------------------------------------------------------------------------
