@@ -4601,9 +4601,9 @@ static void hci_mode_change_evt(struct hci_dev *hdev, void *data,
 		if (!test_and_clear_bit(HCI_CONN_MODE_CHANGE_PEND,
 					&conn->flags)) {
 			if (conn->mode == HCI_CM_ACTIVE)
-				set_bit(HCI_CONN_POWER_SAVE, &conn->flags);
-			else
 				clear_bit(HCI_CONN_POWER_SAVE, &conn->flags);
+			else
+				set_bit(HCI_CONN_POWER_SAVE, &conn->flags);
 		}
 
 		if (test_and_clear_bit(HCI_CONN_SCO_SETUP_PEND, &conn->flags))
