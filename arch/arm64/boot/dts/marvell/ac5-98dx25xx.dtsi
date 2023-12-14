@@ -307,6 +307,20 @@
 			status = "disabled";
 		};
 
+/*
+ * Global Watchdog:
+ */
+		watchdog: watchdog@80216000 {
+			compatible = "marvell,ac5-wd";
+			reg = <0x0 0x80216000 0 0x1000>,
+			      <0x0 0x80215000 0 0x1000>,
+			      <0x0 0x80210000 0 0x1000>,
+			      <0x0 0x7f900000 0 0x1000>,
+			      <0x0 0x840F8000 0 0x1000>;
+			interrupts = <GIC_SPI 124 IRQ_TYPE_LEVEL_HIGH>;
+			timeout-sec = <30>;
+		};
+
 		gic: interrupt-controller@80600000 {
 			compatible = "arm,gic-v3";
 			#interrupt-cells = <3>;
