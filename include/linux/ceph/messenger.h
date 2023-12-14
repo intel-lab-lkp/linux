@@ -231,6 +231,7 @@ struct ceph_msg_data {
 
 struct ceph_msg_data_cursor {
 	size_t			total_resid;	/* across all data items */
+	size_t			sr_total_resid;	/* across all data items for sparse-read */
 
 	struct ceph_msg_data	*data;		/* current data item */
 	size_t			resid;		/* bytes not yet consumed */
