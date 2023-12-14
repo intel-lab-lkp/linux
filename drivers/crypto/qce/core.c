@@ -192,6 +192,7 @@ static int qce_crypto_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct qce_device *qce;
+	struct resource *res;
 	int ret;
 
 	qce = devm_kzalloc(dev, sizeof(*qce), GFP_KERNEL);
@@ -204,6 +205,14 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	qce->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(qce->base))
 		return PTR_ERR(qce->base);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		return -ENOMEM;
+	qce->base_dma = dma_map_resource(dev, res->start, resource_size(res),
+					 DMA_BIDIRECTIONAL, 0);
+	if (dma_mapping_error(dev, qce->base_dma))
+		return -ENXIO;
 
 	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
 	if (ret < 0)
