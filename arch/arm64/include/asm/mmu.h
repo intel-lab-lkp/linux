@@ -76,5 +76,25 @@ extern bool kaslr_requires_kpti(void);
 #define INIT_MM_CONTEXT(name)	\
 	.pgd = init_pg_dir,
 
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+void vmemmap_update_pmd(unsigned long start, pmd_t *pmd, pte_t *pgtable);
+#define vmemmap_update_pmd vmemmap_update_pmd
+void vmemmap_update_pte(unsigned long addr, pte_t *pte, pte_t entry);
+#define vmemmap_update_pte vmemmap_update_pte
+
+static inline void flush_tlb_vmemmap_all(void)
+{
+	/* do nothing, already flushed tlb in every single BBM */
+}
+#define flush_tlb_vmemmap_all flush_tlb_vmemmap_all
+
+static inline void flush_tlb_vmemmap_range(unsigned long start,
+					   unsigned long end)
+{
+	/* do nothing, already flushed tlb in every single BBM */
+}
+#define flush_tlb_vmemmap_range flush_tlb_vmemmap_range
+#endif
+
 #endif	/* !__ASSEMBLY__ */
 #endif
