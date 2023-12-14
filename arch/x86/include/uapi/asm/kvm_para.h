@@ -168,10 +168,29 @@ enum kvm_vcpu_boost_state {
 };
 
 /*
+ * Boost Request from guest to host for lazy boosting.
+ */
+enum kvm_vcpu_boost_request {
+	VCPU_REQ_NONE = 0,
+	VCPU_REQ_UNBOOST,
+	VCPU_REQ_BOOST,
+};
+
+
+union guest_schedinfo {
+	struct {
+		__u8 boost_req;
+		__u8 preempt_disabled;
+	};
+	__u64 pad;
+};
+
+/*
  * Structure passed in via MSR_KVM_PV_SCHED
  */
 struct pv_sched_data {
 	__u64 boost_status;
+	union guest_schedinfo schedinfo;
 };
 
 #endif /* _UAPI_ASM_X86_KVM_PARA_H */

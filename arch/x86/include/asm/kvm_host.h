@@ -994,6 +994,8 @@ struct kvm_vcpu_arch {
 	 */
 	struct {
 		enum kvm_vcpu_boost_state boost_status;
+		int boost_policy;
+		int boost_prio;
 		u64 msr_val;
 		struct gfn_to_hva_cache data;
 	} pv_sched;
@@ -2230,6 +2232,13 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
 #define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
 
 #ifdef CONFIG_PARAVIRT_SCHED_KVM
+/*
+ * Default policy and priority used for boosting
+ * VCPU threads.
+ */
+#define VCPU_BOOST_DEFAULT_PRIO	8
+#define VCPU_BOOST_DEFAULT_POLICY	SCHED_RR
+
 static inline bool kvm_arch_vcpu_pv_sched_enabled(struct kvm_vcpu_arch *arch)
 {
 	return arch->pv_sched.msr_val;
@@ -2239,6 +2248,39 @@ static inline void kvm_arch_vcpu_set_boost_status(struct kvm_vcpu_arch *arch,
 		enum kvm_vcpu_boost_state boost_status)
 {
 	arch->pv_sched.boost_status = boost_status;
+}
+
+static inline bool kvm_arch_vcpu_boosted(struct kvm_vcpu_arch *arch)
+{
+	return arch->pv_sched.boost_status == VCPU_BOOST_BOOSTED;
+}
+
+static inline int kvm_arch_vcpu_boost_policy(struct kvm_vcpu_arch *arch)
+{
+	return arch->pv_sched.boost_policy;
+}
+
+static inline int kvm_arch_vcpu_boost_prio(struct kvm_vcpu_arch *arch)
+{
+	return arch->pv_sched.boost_prio;
+}
+
+static inline int kvm_arch_vcpu_set_boost_prio(struct kvm_vcpu_arch *arch, u64 prio)
+{
+	if (prio >= MAX_RT_PRIO)
+		return -EINVAL;
+
+	arch->pv_sched.boost_prio = prio;
+	return 0;
+}
+
+static inline int kvm_arch_vcpu_set_boost_policy(struct kvm_vcpu_arch *arch, u64 policy)
+{
+	if (policy != SCHED_FIFO && policy != SCHED_RR)
+		return -EINVAL;
+
+	arch->pv_sched.boost_policy = policy;
+	return 0;
 }
 #endif
 

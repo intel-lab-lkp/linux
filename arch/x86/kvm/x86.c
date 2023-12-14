@@ -2136,6 +2136,37 @@ static inline bool kvm_vcpu_exit_request(struct kvm_vcpu *vcpu)
 		xfer_to_guest_mode_work_pending();
 }
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+static inline bool __vcpu_needs_boost(struct kvm_vcpu *vcpu, union guest_schedinfo schedinfo)
+{
+	bool pending_event = kvm_cpu_has_pending_timer(vcpu) || kvm_cpu_has_interrupt(vcpu);
+
+	/*
+	 * vcpu needs a boost if
+	 * - A lazy boost request active, or
+	 * - Pending latency sensitive event, or
+	 * - Preemption disabled in this vcpu.
+	 */
+	return (schedinfo.boost_req == VCPU_REQ_BOOST || pending_event || schedinfo.preempt_disabled);
+}
+
+static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu)
+{
+	union guest_schedinfo schedinfo;
+
+	if (!kvm_vcpu_sched_enabled(vcpu))
+		return;
+
+	if (kvm_read_guest_offset_cached(vcpu->kvm, &vcpu->arch.pv_sched.data,
+		&schedinfo, offsetof(struct pv_sched_data, schedinfo), sizeof(schedinfo)))
+		return;
+
+	kvm_vcpu_set_sched(vcpu, __vcpu_needs_boost(vcpu, schedinfo));
+}
+#else
+static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu) { }
+#endif
+
 /*
  * The fast path for frequent and performance sensitive wrmsr emulation,
  * i.e. the sending of IPI, sending IPI early in the VM-Exit flow reduces
@@ -2187,6 +2218,15 @@ fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu)
 			ret = EXIT_FASTPATH_REENTER_GUEST;
 		}
 		break;
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case MSR_KVM_PV_SCHED:
+		data = kvm_read_edx_eax(vcpu);
+		if (data == ULLONG_MAX) {
+			kvm_skip_emulated_instruction(vcpu);
+			ret = EXIT_FASTPATH_EXIT_HANDLED;
+		}
+		break;
+#endif
 	default:
 		break;
 	}
@@ -10888,6 +10928,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	guest_timing_exit_irqoff();
 
 	local_irq_enable();
+
+	kvm_vcpu_do_pv_sched(vcpu);
+
 	preempt_enable();
 
 	kvm_vcpu_srcu_read_lock(vcpu);
@@ -11957,6 +12000,11 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	r = static_call(kvm_x86_vcpu_create)(vcpu);
 	if (r)
 		goto free_guest_fpu;
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	kvm_arch_vcpu_set_boost_prio(&vcpu->arch, VCPU_BOOST_DEFAULT_PRIO);
+	kvm_arch_vcpu_set_boost_policy(&vcpu->arch, VCPU_BOOST_DEFAULT_POLICY);
+#endif
 
 	vcpu->arch.arch_capabilities = kvm_get_arch_capabilities();
 	vcpu->arch.msr_platform_info = MSR_PLATFORM_INFO_CPUID_FAULT;

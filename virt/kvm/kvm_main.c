@@ -57,6 +57,9 @@
 #include <asm/ioctl.h>
 #include <linux/uaccess.h>
 
+#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
+
 #include "coalesced_mmio.h"
 #include "async_pf.h"
 #include "kvm_mm.h"
@@ -3601,6 +3604,77 @@ bool kvm_vcpu_wake_up(struct kvm_vcpu *vcpu)
 	return false;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_wake_up);
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+/*
+ * Check if we need to act on the boost/unboost request.
+ * Returns true if:
+ *  - caller is requesting boost and vcpu is boosted, or
+ *  - caller is requesting unboost and vcpu is not boosted.
+ */
+static inline bool __can_ignore_set_sched(struct kvm_vcpu *vcpu, bool boost)
+{
+	return ((boost && kvm_arch_vcpu_boosted(&vcpu->arch)) ||
+		(!boost && !kvm_arch_vcpu_boosted(&vcpu->arch)));
+}
+
+int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, bool boost)
+{
+	int policy;
+	int ret = 0;
+	struct pid *pid;
+	struct sched_param param = { 0 };
+	struct task_struct *vcpu_task = NULL;
+
+	/*
+	 * We can ignore the request if a boost request comes
+	 * when we are already boosted or an unboost request
+	 * when we are already unboosted.
+	 */
+	if (__can_ignore_set_sched(vcpu, boost))
+		goto set_boost_status;
+
+	if (boost) {
+		policy = kvm_arch_vcpu_boost_policy(&vcpu->arch);
+		param.sched_priority = kvm_arch_vcpu_boost_prio(&vcpu->arch);
+	} else {
+		/*
+		 * TODO: here we just unboost to SCHED_NORMAL. Ideally we
+		 * should either
+		 * - revert to the initial priority before boost, or
+		 * - introduce tunables for unboost priority.
+		 */
+		policy = SCHED_NORMAL;
+		param.sched_priority = 0;
+	}
+
+	rcu_read_lock();
+	pid = rcu_dereference(vcpu->pid);
+	if (pid)
+		vcpu_task = get_pid_task(pid, PIDTYPE_PID);
+	rcu_read_unlock();
+	if (vcpu_task == NULL)
+		return -KVM_EINVAL;
+
+	/*
+	 * This might be called from interrupt context.
+	 * Since we do not use rt-mutexes, we can safely call
+	 * sched_setscheduler_pi_nocheck with pi = false.
+	 * NOTE: If in future, we use rt-mutexes, this should
+	 * be modified to use a tasklet to do boost/unboost.
+	 */
+	WARN_ON_ONCE(vcpu_task->pi_top_task);
+	ret = sched_setscheduler_pi_nocheck(vcpu_task, policy,
+			&param, false);
+	put_task_struct(vcpu_task);
+set_boost_status:
+	if (!ret)
+		kvm_set_vcpu_boosted(vcpu, boost);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(kvm_vcpu_set_sched);
+#endif
 
 #ifndef CONFIG_S390
 /*

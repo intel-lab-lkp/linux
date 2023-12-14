@@ -2290,6 +2290,17 @@ static inline void kvm_account_pgtable_pages(void *virt, int nr)
 
 #ifdef CONFIG_PARAVIRT_SCHED_KVM
 void kvm_set_vcpu_boosted(struct kvm_vcpu *vcpu, bool boosted);
+int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, bool boost);
+
+static inline bool kvm_vcpu_sched_enabled(struct kvm_vcpu *vcpu)
+{
+	return kvm_arch_vcpu_pv_sched_enabled(&vcpu->arch);
+}
+#else
+static inline int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, bool boost)
+{
+	return 0;
+}
 #endif
 
 #endif
