@@ -41,6 +41,7 @@ static void qce_ahash_done(void *data)
 	struct qce_sha_reqctx *rctx = ahash_request_ctx_dma(req);
 	struct qce_alg_template *tmpl = to_ahash_tmpl(async_req->tfm);
 	struct qce_device *qce = tmpl->qce;
+	struct qce_bam_transaction *qce_bam_txn = qce->dma.qce_bam_txn;
 	struct qce_result_dump *result = qce->dma.result_buf;
 	unsigned int digestsize = crypto_ahash_digestsize(ahash);
 	int error;
@@ -59,6 +60,17 @@ static void qce_ahash_done(void *data)
 
 	rctx->byte_count[0] = cpu_to_be32(result->auth_byte_count[0]);
 	rctx->byte_count[1] = cpu_to_be32(result->auth_byte_count[1]);
+
+	if (qce_bam_txn->qce_read_sgl_cnt)
+		dma_unmap_sg(qce->dev,
+			     qce_bam_txn->qce_reg_read_sgl,
+			qce_bam_txn->qce_read_sgl_cnt,
+			DMA_DEV_TO_MEM);
+	if (qce_bam_txn->qce_write_sgl_cnt)
+		dma_unmap_sg(qce->dev,
+			     qce_bam_txn->qce_reg_write_sgl,
+			qce_bam_txn->qce_write_sgl_cnt,
+			DMA_MEM_TO_DEV);
 
 	error = qce_check_status(qce, &status);
 	if (error < 0)
