@@ -39,6 +39,7 @@
 #include "xfs_ioctl.h"
 #include "xfs_xattr.h"
 #include "xfs_rtbitmap.h"
+#include "xfs_defrag.h"
 
 #include <linux/mount.h>
 #include <linux/namei.h>
@@ -2158,6 +2159,22 @@ xfs_file_ioctl(
 		error = xfs_blockgc_free_space(mp, &icw);
 		sb_end_write(mp->m_super);
 		return error;
+	}
+
+	case XFS_IOC_DEFRAG: {
+		struct xfs_defrag	defrag;
+		int			ret;
+
+		if (xfs_is_readonly(mp))
+			return -EROFS;
+
+		if (copy_from_user(&defrag, arg, sizeof(defrag)))
+			return -EFAULT;
+
+		ret =  xfs_file_defrag(filp, &defrag);
+		if (ret == 0)
+			ret = copy_to_user(arg, &defrag, sizeof(defrag));
+		return ret;
 	}
 
 	default:

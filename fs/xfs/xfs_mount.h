@@ -71,6 +71,34 @@ struct xfs_inodegc {
 	unsigned int		cpu;
 };
 
+/* Online Defrag */
+enum xfs_defrag_cmd {
+	XFS_DEFRAG_CMD_START	= 1,	/* start defrag, or change configuration */
+	XFS_DEFRAG_CMD_STOP,		/* stop defrag */
+	XFS_DEFRAG_CMD_SUSPEND,		/* suspend on going defrag */
+	XFS_DEFRAG_CMD_RESUME,		/* resume suspended defrag */
+	XFS_DEFRAG_CMD_STATUS,		/* get status */
+};
+
+struct xfs_defrag {
+	/* [IN] XFS_DEFRAG_CMD_* */
+	enum xfs_defrag_cmd	df_cmd;
+	/* [IN] the size of piece in blocks */
+	unsigned int		df_piece_size;
+	/* [IN] the target extent size */
+	unsigned int		df_tgt_extsize;
+	/* [IN] idle time in ms between adjacent pieces */
+	unsigned int		df_idle_time;
+	/* [OUT] current running status */
+	int			df_status;
+	/* [OUT] the number of the processed blocks */
+	unsigned long long	df_blocks_done;
+	/* [OUT] inode number of the file under defragmentation */
+	unsigned long		df_ino;
+	/* [OUT] defragmenting on this file is suspended */
+	bool			df_suspended;
+};
+
 /*
  * The struct xfsmount layout is optimised to separate read-mostly variables
  * from variables that are frequently modified. We put the read-mostly variables
@@ -252,6 +280,15 @@ typedef struct xfs_mount {
 
 	/* cpus that have inodes queued for inactivation */
 	struct cpumask		m_inodegc_cpumask;
+
+	/* lock to serialize the access of defrags fields */
+	struct semaphore	m_defrag_lock;
+	/* number of pending defragmentation in this FS */
+	unsigned int		m_nr_defrag;
+	/* list that links up all pending defragmentation */
+	struct list_head	m_defrag_list;
+	/* the task which does defragmentation job */
+	struct task_struct	*m_defrag_task;
 } xfs_mount_t;
 
 #define M_IGEO(mp)		(&(mp)->m_ino_geo)
