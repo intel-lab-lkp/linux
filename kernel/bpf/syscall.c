@@ -35,6 +35,7 @@
 #include <linux/rcupdate_trace.h>
 #include <linux/memcontrol.h>
 #include <linux/trace_events.h>
+#include <linux/uidgid.h>
 
 #include <net/netfilter/nf_bpf_link.h>
 #include <net/netkit.h>
@@ -2110,6 +2111,8 @@ static void bpf_audit_prog(const struct bpf_prog *prog, unsigned int op)
 {
 	struct audit_context *ctx = NULL;
 	struct audit_buffer *ab;
+	const struct cred *cred;
+	char comm[sizeof(current->comm)];
 
 	if (WARN_ON_ONCE(op >= BPF_AUDIT_MAX))
 		return;
@@ -2120,7 +2123,14 @@ static void bpf_audit_prog(const struct bpf_prog *prog, unsigned int op)
 	ab = audit_log_start(ctx, GFP_ATOMIC, AUDIT_BPF);
 	if (unlikely(!ab))
 		return;
-	audit_log_format(ab, "prog-id=%u op=%s",
+	cred = current_cred();
+
+	audit_log_format(ab, "pid=%u uid=%u",
+			 task_pid_nr(current),
+			 from_kuid(&init_user_ns, cred->uid));
+	audit_log_format(ab, " comm=");
+	audit_log_untrustedstring(ab, get_task_comm(comm, current));
+	audit_log_format(ab, " prog-id=%u op=%s",
 			 prog->aux->id, bpf_audit_str[op]);
 	audit_log_end(ab);
 }
