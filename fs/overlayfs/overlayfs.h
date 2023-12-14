@@ -416,6 +416,24 @@ static inline int ovl_do_getattr(const struct path *path, struct kstat *stat,
 	return vfs_getattr(path, stat, request_mask, flags);
 }
 
+struct ovl_cred {
+	const struct cred *cred;
+};
+
+static inline struct ovl_cred ovl_creator_cred(struct super_block *sb)
+{
+	struct ovl_fs *ofs = OVL_FS(sb);
+
+	return (struct ovl_cred) { .cred = ofs->creator_cred };
+}
+
+void ovl_override_creds_new(struct ovl_cred *creator_cred);
+void ovl_revert_creds_new(struct ovl_cred *creator_cred);
+
+DEFINE_GUARD(ovl_creds, struct ovl_cred *,
+	     ovl_override_creds_new(_T),
+	     ovl_revert_creds_new(_T));
+
 /* util.c */
 int ovl_get_write_access(struct dentry *dentry);
 void ovl_put_write_access(struct dentry *dentry);

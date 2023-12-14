@@ -1304,6 +1304,13 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (!cred)
 		goto out_err;
 
+	/* Never override disk quota limits or use reserved space */
+	cap_lower(cred->cap_effective, CAP_SYS_RESOURCE);
+	/* The cred that is going to be associated with the super
+	 * block will not change.
+	 */
+	cred_set_immutable(cred, true);
+
 	err = ovl_fs_params_verify(ctx, &ofs->config);
 	if (err)
 		goto out_err;
@@ -1437,9 +1444,6 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 		sb->s_export_op = &ovl_export_operations;
 	else if (!ofs->nofh)
 		sb->s_export_op = &ovl_export_fid_operations;
-
-	/* Never override disk quota limits or use reserved space */
-	cap_lower(cred->cap_effective, CAP_SYS_RESOURCE);
 
 	sb->s_magic = OVERLAYFS_SUPER_MAGIC;
 	sb->s_xattr = ovl_xattr_handlers(ofs);

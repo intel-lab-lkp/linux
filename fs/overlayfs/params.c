@@ -770,8 +770,10 @@ void ovl_free_fs(struct ovl_fs *ofs)
 	kfree(ofs->config.lowerdirs);
 	kfree(ofs->config.upperdir);
 	kfree(ofs->config.workdir);
-	if (ofs->creator_cred)
+	if (ofs->creator_cred) {
+		cred_set_immutable(ofs->creator_cred, false);
 		put_cred(ofs->creator_cred);
+	}
 	kfree(ofs);
 }
 

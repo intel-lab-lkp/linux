@@ -151,6 +151,7 @@ struct cred {
 		int non_rcu;			/* Can we skip RCU deletion? */
 		struct rcu_head	rcu;		/* RCU deletion hook */
 	};
+	bool	immutable;
 } __randomize_layout;
 
 extern void __put_cred(struct cred *);
@@ -229,7 +230,8 @@ static inline bool cap_ambient_invariant_ok(const struct cred *cred)
  */
 static inline struct cred *get_new_cred_many(struct cred *cred, int nr)
 {
-	atomic_add(nr, &cred->usage);
+	if (!cred->immutable)
+		atomic_add(nr, &cred->usage);
 	return cred;
 }
 
@@ -243,6 +245,12 @@ static inline struct cred *get_new_cred_many(struct cred *cred, int nr)
 static inline struct cred *get_new_cred(struct cred *cred)
 {
 	return get_new_cred_many(cred, 1);
+}
+
+static inline void cred_set_immutable(const struct cred *cred, bool imm)
+{
+	struct cred *nonconst_cred = (struct cred *) cred;
+	nonconst_cred->immutable = imm;
 }
 
 /**
@@ -313,7 +321,7 @@ static inline void put_cred_many(const struct cred *_cred, int nr)
 
 	if (cred) {
 		validate_creds(cred);
-		if (atomic_sub_and_test(nr, &cred->usage))
+		if (!cred->immutable && atomic_sub_and_test(nr, &cred->usage))
 			__put_cred(cred);
 	}
 }
