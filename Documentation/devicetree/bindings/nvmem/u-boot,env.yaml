@@ -58,6 +58,34 @@ properties:
         description: The first argument is a MAC address offset.
         const: 1
 
+patternProperties:
+  ".*":
+    allOf:
+      - if:
+          type: object
+        then:
+          properties:
+            compatible:
+              enum:
+                - mac
+      - if:
+          properties:
+            compatible:
+              contains:
+                const: mac
+        then:
+          description:
+            Ethernet interfaces base MAC address.
+
+          properties:
+            compatible: true
+
+            "#nvmem-cell-cells":
+              description: The first argument is a MAC address offset.
+              const: 1
+
+          additionalProperties: false
+
 additionalProperties: false
 
 examples:
@@ -78,6 +106,11 @@ examples:
             reg = <0x40000 0x10000>;
 
             mac: ethaddr {
+                #nvmem-cell-cells = <1>;
+            };
+
+            wanaddr {
+                compatible = "mac";
                 #nvmem-cell-cells = <1>;
             };
         };
