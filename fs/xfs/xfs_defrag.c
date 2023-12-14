@@ -154,9 +154,74 @@ struct xfs_defrag_info *__xfs_find_defrag(unsigned long ino,
 	return NULL;
 }
 
+static void xfs_change_defrag_param(struct xfs_defrag *to, struct xfs_defrag *from)
+{
+	to->df_piece_size = from->df_piece_size;
+	to->df_tgt_extsize = from->df_tgt_extsize;
+	to->df_idle_time = from->df_idle_time;
+	to->df_ino = from->df_ino;
+}
+
+/* caller holds m_defrag_lock */
+static struct xfs_defrag_info *__alloc_new_defrag_info(struct xfs_mount *mp)
+{
+	struct xfs_defrag_info *di;
+
+	di = kmem_alloc(sizeof(struct xfs_defrag_info), KM_ZERO);
+	mp->m_nr_defrag++;
+	return di;
+}
+
+/* sleep some jiffies */
+static inline void xfs_defrag_idle(unsigned int idle_jiffies)
+{
+	if (idle_jiffies > 0) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(idle_jiffies);
+	}
+}
+
+/* caller holds mp->m_defrag_lock */
+static void __xfs_drop_defrag(struct xfs_defrag_info *di, struct xfs_mount *mp)
+{
+	list_del(&di->di_list);
+	mp->m_nr_defrag--;
+	iput(VFS_I(di->di_ip));
+	kfree(di);
+}
+
+/* clean up all defragmentation jobs in this XFS */
+void clean_up_defrags(struct xfs_mount *mp)
+{
+	struct xfs_defrag_info *di, *tmp;
+
+	down(&mp->m_defrag_lock);
+	list_for_each_entry_safe(di, tmp, &mp->m_defrag_list, di_list) {
+		__xfs_drop_defrag(di, mp);
+	}
+	ASSERT(mp->m_nr_defrag == 0);
+	up(&mp->m_defrag_lock);
+}
+
+/* run as a separated process.
+ * defragment files in mp->m_defrag_list
+ */
+int xfs_defrag_process(void *data)
+{
+	struct xfs_mount	*mp = data;
+
+	while (!kthread_should_stop())
+		xfs_defrag_idle(1000);
+
+	clean_up_defrags(mp);
+	return 0;
+}
+
 /* start a new defragmetation or change the parameters on the existing one */
 static int xfs_file_defrag_start(struct inode *inode, struct xfs_defrag *defrag)
 {
+	struct xfs_mount	*mp = XFS_I(inode)->i_mount;
+	struct xfs_defrag_info	*di = NULL;
 	int			ret = 0;
 
 	if ((inode->i_mode & S_IFMT) != S_IFREG) {
@@ -174,9 +239,63 @@ static int xfs_file_defrag_start(struct inode *inode, struct xfs_defrag *defrag)
 		goto out;
 	}
 
+	/* racing with unmount and freeze */
+	if (down_read_trylock(&inode->i_sb->s_umount) == 0) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	down(&mp->m_defrag_lock);
+	if (!__xfs_new_defrag_allowed(mp)) {
+		ret = -EAGAIN;
+		goto up_return;
+	}
+
+	di = __xfs_find_defrag(inode->i_ino, mp);
+	if (di) {
+		/*
+		 * the file is already under defragmentation,
+		 * a subsequential "start" is used to adjust parameters
+		 * on the existing defragmentation
+		 */
+		xfs_change_defrag_param(&di->di_defrag, defrag);
+		ret = 0;
+		goto up_return;
+	}
+
+	inode = igrab(inode);
+	if (!inode) {
+		ret = -EAGAIN;
+		goto up_return;
+	}
+
+	/* a new defragmentation */
+	di = __alloc_new_defrag_info(mp);
+	xfs_change_defrag_param(&di->di_defrag, defrag);
+	di->di_ip = XFS_I(inode);
+	list_add_tail(&di->di_list, &mp->m_defrag_list);
+
+	/*
+	 * defrag process per FS is creatd on demand and keep alive until
+	 * FS is unmounted.
+	 */
+	if (mp->m_defrag_task == NULL) {
+		mp->m_defrag_task = kthread_run(xfs_defrag_process, mp,
+					"xdf_%s", mp->m_super->s_id);
+		if (IS_ERR(mp->m_defrag_task)) {
+			ret = PTR_ERR(mp->m_defrag_task);
+			mp->m_defrag_task = NULL;
+		}
+	} else {
+		wake_up_process(mp->m_defrag_task);
+	}
+
+up_return:
+	up(&mp->m_defrag_lock);
+	up_read(&inode->i_sb->s_umount);
 out:
-	return -EOPNOTSUPP;
- }
+	return ret;
+}
 
 static void xfs_file_defrag_status(struct inode *inode, struct xfs_defrag *defrag)
 {
