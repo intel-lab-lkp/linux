@@ -18,10 +18,12 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/leds.h>
+#include <linux/linkmode.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/mutex.h>
+#include <linux/phy.h>
 #include <linux/rtnetlink.h>
 #include <linux/timer.h>
 #include "../leds.h"
@@ -55,11 +57,15 @@ struct led_netdev_data {
 
 	unsigned long mode;
 	int link_speed;
+	unsigned int supported_link_speeds[20];
+	int supported_link_speeds_num;
 	u8 duplex;
 
 	bool carrier_link_up;
 	bool hw_control;
 };
+
+static const struct attribute_group netdev_trig_link_speed_attrs_group;
 
 static void set_baseline_state(struct led_netdev_data *trigger_data)
 {
@@ -206,15 +212,25 @@ static bool can_hw_control(struct led_netdev_data *trigger_data)
 static void get_device_state(struct led_netdev_data *trigger_data)
 {
 	struct ethtool_link_ksettings cmd;
+	int speeds_num;
 
 	trigger_data->carrier_link_up = netif_carrier_ok(trigger_data->net_dev);
-	if (!trigger_data->carrier_link_up)
+
+	if (__ethtool_get_link_ksettings(trigger_data->net_dev, &cmd))
 		return;
 
-	if (!__ethtool_get_link_ksettings(trigger_data->net_dev, &cmd)) {
+	if (trigger_data->carrier_link_up) {
 		trigger_data->link_speed = cmd.base.speed;
 		trigger_data->duplex = cmd.base.duplex;
 	}
+
+	/* Have a local copy of the link speed supported to not rtnl lock every time
+	 * Modes are refreshed on any change event to handle mode changes
+	 */
+	speeds_num = phy_speeds(trigger_data->supported_link_speeds,
+				ARRAY_SIZE(trigger_data->supported_link_speeds),
+				cmd.link_modes.supported);
+	trigger_data->supported_link_speeds_num = speeds_num;
 }
 
 static ssize_t device_name_show(struct device *dev,
@@ -257,6 +273,7 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 	trigger_data->carrier_link_up = false;
 	trigger_data->link_speed = SPEED_UNKNOWN;
 	trigger_data->duplex = DUPLEX_UNKNOWN;
+	trigger_data->supported_link_speeds_num = 0;
 	if (trigger_data->net_dev != NULL) {
 		rtnl_lock();
 		get_device_state(trigger_data);
@@ -282,6 +299,10 @@ static ssize_t device_name_store(struct device *dev,
 
 	if (ret < 0)
 		return ret;
+
+	/* Refresh link_speed visibility */
+	sysfs_update_group(&dev->kobj, &netdev_trig_link_speed_attrs_group);
+
 	return size;
 }
 
@@ -440,15 +461,72 @@ static ssize_t offloaded_show(struct device *dev,
 
 static DEVICE_ATTR_RO(offloaded);
 
-static struct attribute *netdev_trig_attrs[] = {
-	&dev_attr_device_name.attr,
-	&dev_attr_link.attr,
+static umode_t netdev_trig_link_speed_visible(struct kobject *kobj,
+					      struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct led_netdev_data *trigger_data;
+	unsigned int *supported_link_speeds;
+	int speeds_num, i;
+
+	trigger_data = led_trigger_get_drvdata(dev);
+	supported_link_speeds = trigger_data->supported_link_speeds;
+	speeds_num = trigger_data->supported_link_speeds_num;
+
+	for (i = 0; i < speeds_num; i++) {
+		int speed = supported_link_speeds[i];
+
+		switch (speed) {
+		case SPEED_10:
+			if (attr == &dev_attr_link_10.attr)
+				return attr->mode;
+			break;
+		case SPEED_100:
+			if (attr == &dev_attr_link_100.attr)
+				return attr->mode;
+			break;
+		case SPEED_1000:
+			if (attr == &dev_attr_link_1000.attr)
+				return attr->mode;
+			break;
+		case SPEED_2500:
+			if (attr == &dev_attr_link_2500.attr)
+				return attr->mode;
+			break;
+		case SPEED_5000:
+			if (attr == &dev_attr_link_5000.attr)
+				return attr->mode;
+			break;
+		case SPEED_10000:
+			if (attr == &dev_attr_link_10000.attr)
+				return attr->mode;
+			break;
+		default:
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+static struct attribute *netdev_trig_link_speed_attrs[] = {
 	&dev_attr_link_10.attr,
 	&dev_attr_link_100.attr,
 	&dev_attr_link_1000.attr,
 	&dev_attr_link_2500.attr,
 	&dev_attr_link_5000.attr,
 	&dev_attr_link_10000.attr,
+	NULL
+};
+
+static const struct attribute_group netdev_trig_link_speed_attrs_group = {
+	.attrs = netdev_trig_link_speed_attrs,
+	.is_visible = netdev_trig_link_speed_visible,
+};
+
+static struct attribute *netdev_trig_attrs[] = {
+	&dev_attr_device_name.attr,
+	&dev_attr_link.attr,
 	&dev_attr_full_duplex.attr,
 	&dev_attr_half_duplex.attr,
 	&dev_attr_rx.attr,
@@ -457,7 +535,16 @@ static struct attribute *netdev_trig_attrs[] = {
 	&dev_attr_offloaded.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(netdev_trig);
+
+static const struct attribute_group netdev_trig_attrs_group = {
+	.attrs = netdev_trig_attrs,
+};
+
+static const struct attribute_group *netdev_trig_groups[] = {
+	&netdev_trig_attrs_group,
+	&netdev_trig_link_speed_attrs_group,
+	NULL,
+};
 
 static int netdev_trig_notify(struct notifier_block *nb,
 			      unsigned long evt, void *dv)
@@ -466,6 +553,7 @@ static int netdev_trig_notify(struct notifier_block *nb,
 		netdev_notifier_info_to_dev((struct netdev_notifier_info *)dv);
 	struct led_netdev_data *trigger_data =
 		container_of(nb, struct led_netdev_data, notifier);
+	struct led_classdev *led_cdev = trigger_data->led_cdev;
 
 	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
 	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
@@ -500,6 +588,10 @@ static int netdev_trig_notify(struct notifier_block *nb,
 	case NETDEV_UP:
 	case NETDEV_CHANGE:
 		get_device_state(trigger_data);
+		/* Refresh link_speed visibility */
+		if (evt == NETDEV_CHANGE)
+			sysfs_update_group(&led_cdev->dev->kobj,
+					   &netdev_trig_link_speed_attrs_group);
 		break;
 	}
 
