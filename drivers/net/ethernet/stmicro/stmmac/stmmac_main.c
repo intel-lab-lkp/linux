@@ -1455,25 +1455,29 @@ static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
 		gfp |= GFP_DMA32;
 
 	if (!buf->page) {
-		buf->page = page_pool_alloc_pages(rx_q->page_pool, gfp);
+		buf->page = netmem_to_page(page_pool_alloc_pages(rx_q->page_pool,
+								 gfp));
 		if (!buf->page)
 			return -ENOMEM;
 		buf->page_offset = stmmac_rx_offset(priv);
 	}
 
 	if (priv->sph && !buf->sec_page) {
-		buf->sec_page = page_pool_alloc_pages(rx_q->page_pool, gfp);
+		buf->sec_page = netmem_to_page(page_pool_alloc_pages(rx_q->page_pool,
+								     gfp));
 		if (!buf->sec_page)
 			return -ENOMEM;
 
-		buf->sec_addr = page_pool_get_dma_addr(buf->sec_page);
+		buf->sec_addr =
+			page_pool_get_dma_addr(page_to_netmem(buf->sec_page));
 		stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, true);
 	} else {
 		buf->sec_page = NULL;
 		stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, false);
 	}
 
-	buf->addr = page_pool_get_dma_addr(buf->page) + buf->page_offset;
+	buf->addr = page_pool_get_dma_addr(page_to_netmem(buf->page)) +
+		    buf->page_offset;
 
 	stmmac_set_desc_addr(priv, p, buf->addr);
 	if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
@@ -1495,11 +1499,13 @@ static void stmmac_free_rx_buffer(struct stmmac_priv *priv,
 	struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
 
 	if (buf->page)
-		page_pool_put_full_page(rx_q->page_pool, buf->page, false);
+		page_pool_put_full_page(rx_q->page_pool,
+					page_to_netmem(buf->page), false);
 	buf->page = NULL;
 
 	if (buf->sec_page)
-		page_pool_put_full_page(rx_q->page_pool, buf->sec_page, false);
+		page_pool_put_full_page(rx_q->page_pool,
+					page_to_netmem(buf->sec_page), false);
 	buf->sec_page = NULL;
 }
 
@@ -4739,20 +4745,23 @@ static inline void stmmac_rx_refill(struct stmmac_priv *priv, u32 queue)
 			p = rx_q->dma_rx + entry;
 
 		if (!buf->page) {
-			buf->page = page_pool_alloc_pages(rx_q->page_pool, gfp);
+			buf->page = netmem_to_page(page_pool_alloc_pages(rx_q->page_pool,
+									 gfp));
 			if (!buf->page)
 				break;
 		}
 
 		if (priv->sph && !buf->sec_page) {
-			buf->sec_page = page_pool_alloc_pages(rx_q->page_pool, gfp);
+			buf->sec_page = netmem_to_page(page_pool_alloc_pages(rx_q->page_pool,
+									     gfp));
 			if (!buf->sec_page)
 				break;
 
-			buf->sec_addr = page_pool_get_dma_addr(buf->sec_page);
+			buf->sec_addr = page_pool_get_dma_addr(page_to_netmem(buf->sec_page));
 		}
 
-		buf->addr = page_pool_get_dma_addr(buf->page) + buf->page_offset;
+		buf->addr = page_pool_get_dma_addr(page_to_netmem(buf->page)) +
+			    buf->page_offset;
 
 		stmmac_set_desc_addr(priv, p, buf->addr);
 		if (priv->sph)
@@ -4861,8 +4870,8 @@ static int stmmac_xdp_xmit_xdpf(struct stmmac_priv *priv, int queue,
 	} else {
 		struct page *page = virt_to_page(xdpf->data);
 
-		dma_addr = page_pool_get_dma_addr(page) + sizeof(*xdpf) +
-			   xdpf->headroom;
+		dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
+			   sizeof(*xdpf) + xdpf->headroom;
 		dma_sync_single_for_device(priv->device, dma_addr,
 					   xdpf->len, DMA_BIDIRECTIONAL);
 
@@ -5432,7 +5441,8 @@ read_again:
 		if (priv->extend_desc)
 			stmmac_rx_extended_status(priv, &priv->xstats, rx_q->dma_erx + entry);
 		if (unlikely(status == discard_frame)) {
-			page_pool_recycle_direct(rx_q->page_pool, buf->page);
+			page_pool_recycle_direct(rx_q->page_pool,
+						 page_to_netmem(buf->page));
 			buf->page = NULL;
 			error = 1;
 			if (!priv->hwts_rx_en)
@@ -5500,9 +5510,12 @@ read_again:
 				unsigned int xdp_res = -PTR_ERR(skb);
 
 				if (xdp_res & STMMAC_XDP_CONSUMED) {
-					page_pool_put_page(rx_q->page_pool,
-							   virt_to_head_page(ctx.xdp.data),
-							   sync_len, true);
+					page_pool_put_page(
+						rx_q->page_pool,
+						page_to_netmem(
+							virt_to_head_page(
+								ctx.xdp.data)),
+						sync_len, true);
 					buf->page = NULL;
 					rx_dropped++;
 
@@ -5543,7 +5556,8 @@ read_again:
 			skb_put(skb, buf1_len);
 
 			/* Data payload copied into SKB, page ready for recycle */
-			page_pool_recycle_direct(rx_q->page_pool, buf->page);
+			page_pool_recycle_direct(rx_q->page_pool,
+						 page_to_netmem(buf->page));
 			buf->page = NULL;
 		} else if (buf1_len) {
 			dma_sync_single_for_cpu(priv->device, buf->addr,

@@ -616,7 +616,9 @@ static u32 mt7915_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 		if (!buf)
 			goto unmap;
 
-		addr = page_pool_get_dma_addr(virt_to_head_page(buf)) + offset;
+		addr = page_pool_get_dma_addr(
+			       page_to_netmem(virt_to_head_page(buf))) +
+		       offset;
 		dir = page_pool_get_dma_dir(q->page_pool);
 		dma_sync_single_for_device(dev->mt76.dma_dev, addr, len, dir);
 

@@ -336,7 +336,7 @@ static void idpf_rx_page_rel(struct idpf_queue *rxq, struct idpf_rx_buf *rx_buf)
 	if (unlikely(!rx_buf->page))
 		return;
 
-	page_pool_put_full_page(rxq->pp, rx_buf->page, false);
+	page_pool_put_full_page(rxq->pp, page_to_netmem(rx_buf->page), false);
 
 	rx_buf->page = NULL;
 	rx_buf->page_offset = 0;

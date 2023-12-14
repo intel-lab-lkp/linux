@@ -380,11 +380,11 @@ static void cpsw_rx_handler(void *token, int len, int status)
 		}
 
 		/* the interface is going down, pages are purged */
-		page_pool_recycle_direct(pool, page);
+		page_pool_recycle_direct(pool, page_to_netmem(page));
 		return;
 	}
 
-	new_page = page_pool_dev_alloc_pages(pool);
+	new_page = netmem_to_page(page_pool_dev_alloc_pages(pool));
 	if (unlikely(!new_page)) {
 		new_page = page;
 		ndev->stats.rx_dropped++;
@@ -417,7 +417,7 @@ static void cpsw_rx_handler(void *token, int len, int status)
 	skb = build_skb(pa, cpsw_rxbuf_total_len(pkt_size));
 	if (!skb) {
 		ndev->stats.rx_dropped++;
-		page_pool_recycle_direct(pool, page);
+		page_pool_recycle_direct(pool, page_to_netmem(page));
 		goto requeue;
 	}
 
@@ -442,12 +442,13 @@ requeue:
 	xmeta->ndev = ndev;
 	xmeta->ch = ch;
 
-	dma = page_pool_get_dma_addr(new_page) + CPSW_HEADROOM_NA;
+	dma = page_pool_get_dma_addr(page_to_netmem(new_page)) +
+	      CPSW_HEADROOM_NA;
 	ret = cpdma_chan_submit_mapped(cpsw->rxv[ch].ch, new_page, dma,
 				       pkt_size, 0);
 	if (ret < 0) {
 		WARN_ON(ret == -ENOMEM);
-		page_pool_recycle_direct(pool, new_page);
+		page_pool_recycle_direct(pool, page_to_netmem(new_page));
 	}
 }
 

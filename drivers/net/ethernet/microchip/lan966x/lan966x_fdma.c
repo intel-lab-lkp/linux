@@ -16,11 +16,12 @@ static struct page *lan966x_fdma_rx_alloc_page(struct lan966x_rx *rx,
 {
 	struct page *page;
 
-	page = page_pool_dev_alloc_pages(rx->page_pool);
+	page = netmem_to_page(page_pool_dev_alloc_pages(rx->page_pool));
 	if (unlikely(!page))
 		return NULL;
 
-	db->dataptr = page_pool_get_dma_addr(page) + XDP_PACKET_HEADROOM;
+	db->dataptr = page_pool_get_dma_addr(page_to_netmem(page)) +
+		      XDP_PACKET_HEADROOM;
 
 	return page;
 }
@@ -32,7 +33,8 @@ static void lan966x_fdma_rx_free_pages(struct lan966x_rx *rx)
 	for (i = 0; i < FDMA_DCB_MAX; ++i) {
 		for (j = 0; j < FDMA_RX_DCB_MAX_DBS; ++j)
 			page_pool_put_full_page(rx->page_pool,
-						rx->page[i][j], false);
+						page_to_netmem(rx->page[i][j]),
+						false);
 	}
 }
 
@@ -44,7 +46,7 @@ static void lan966x_fdma_rx_free_page(struct lan966x_rx *rx)
 	if (unlikely(!page))
 		return;
 
-	page_pool_recycle_direct(rx->page_pool, page);
+	page_pool_recycle_direct(rx->page_pool, page_to_netmem(page));
 }
 
 static void lan966x_fdma_rx_add_dcb(struct lan966x_rx *rx,
@@ -435,7 +437,7 @@ static void lan966x_fdma_tx_clear_buf(struct lan966x *lan966x, int weight)
 				xdp_return_frame_bulk(dcb_buf->data.xdpf, &bq);
 			else
 				page_pool_recycle_direct(rx->page_pool,
-							 dcb_buf->data.page);
+							 page_to_netmem(dcb_buf->data.page));
 		}
 
 		clear = true;
@@ -537,7 +539,7 @@ static struct sk_buff *lan966x_fdma_rx_get_frame(struct lan966x_rx *rx,
 	return skb;
 
 free_page:
-	page_pool_recycle_direct(rx->page_pool, page);
+	page_pool_recycle_direct(rx->page_pool, page_to_netmem(page));
 
 	return NULL;
 }
@@ -765,7 +767,7 @@ int lan966x_fdma_xmit_xdpf(struct lan966x_port *port, void *ptr, u32 len)
 		lan966x_ifh_set_bypass(ifh, 1);
 		lan966x_ifh_set_port(ifh, BIT_ULL(port->chip_port));
 
-		dma_addr = page_pool_get_dma_addr(page);
+		dma_addr = page_pool_get_dma_addr(page_to_netmem(page));
 		dma_sync_single_for_device(lan966x->dev,
 					   dma_addr + XDP_PACKET_HEADROOM,
 					   len + IFH_LEN_BYTES,

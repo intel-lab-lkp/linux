@@ -781,8 +781,9 @@ static int veth_convert_skb_to_xdp_buff(struct veth_rq *rq,
 			size = min_t(u32, len, PAGE_SIZE);
 			truesize = size;
 
-			page = page_pool_dev_alloc(rq->page_pool, &page_offset,
-						   &truesize);
+			page = netmem_to_page(page_pool_dev_alloc(rq->page_pool,
+								  &page_offset,
+								  &truesize));
 			if (!page) {
 				consume_skb(nskb);
 				goto drop;

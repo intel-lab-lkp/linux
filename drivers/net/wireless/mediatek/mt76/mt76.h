@@ -1565,7 +1565,7 @@ static inline void mt76_put_page_pool_buf(void *buf, bool allow_direct)
 {
 	struct page *page = virt_to_head_page(buf);
 
-	page_pool_put_full_page(page->pp, page, allow_direct);
+	page_pool_put_full_page(page->pp, page_to_netmem(page), allow_direct);
 }
 
 static inline void *
@@ -1573,7 +1573,8 @@ mt76_get_page_pool_buf(struct mt76_queue *q, u32 *offset, u32 size)
 {
 	struct page *page;
 
-	page = page_pool_dev_alloc_frag(q->page_pool, offset, size);
+	page = netmem_to_page(
+		page_pool_dev_alloc_frag(q->page_pool, offset, size));
 	if (!page)
 		return NULL;
 

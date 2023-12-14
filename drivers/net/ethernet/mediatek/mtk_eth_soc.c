@@ -1735,11 +1735,13 @@ static void *mtk_page_pool_get_buff(struct page_pool *pp, dma_addr_t *dma_addr,
 {
 	struct page *page;
 
-	page = page_pool_alloc_pages(pp, gfp_mask | __GFP_NOWARN);
+	page = netmem_to_page(page_pool_alloc_pages(pp,
+						    gfp_mask | __GFP_NOWARN));
 	if (!page)
 		return NULL;
 
-	*dma_addr = page_pool_get_dma_addr(page) + MTK_PP_HEADROOM;
+	*dma_addr =
+		page_pool_get_dma_addr(page_to_netmem(page)) + MTK_PP_HEADROOM;
 	return page_address(page);
 }
 
@@ -1747,7 +1749,8 @@ static void mtk_rx_put_buff(struct mtk_rx_ring *ring, void *data, bool napi)
 {
 	if (ring->page_pool)
 		page_pool_put_full_page(ring->page_pool,
-					virt_to_head_page(data), napi);
+					page_to_netmem(virt_to_head_page(data)),
+					napi);
 	else
 		skb_free_frag(data);
 }
@@ -1771,7 +1774,7 @@ static int mtk_xdp_frame_map(struct mtk_eth *eth, struct net_device *dev,
 	} else {
 		struct page *page = virt_to_head_page(data);
 
-		txd_info->addr = page_pool_get_dma_addr(page) +
+		txd_info->addr = page_pool_get_dma_addr(page_to_netmem(page)) +
 				 sizeof(struct xdp_frame) + headroom;
 		dma_sync_single_for_device(eth->dma_dev, txd_info->addr,
 					   txd_info->size, DMA_BIDIRECTIONAL);
@@ -1985,7 +1988,8 @@ static u32 mtk_xdp_run(struct mtk_eth *eth, struct mtk_rx_ring *ring,
 	}
 
 	page_pool_put_full_page(ring->page_pool,
-				virt_to_head_page(xdp->data), true);
+				page_to_netmem(virt_to_head_page(xdp->data)),
+				true);
 
 update_stats:
 	u64_stats_update_begin(&hw_stats->syncp);
@@ -2074,8 +2078,9 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 			}
 
 			dma_sync_single_for_cpu(eth->dma_dev,
-				page_pool_get_dma_addr(page) + MTK_PP_HEADROOM,
-				pktlen, page_pool_get_dma_dir(ring->page_pool));
+						page_pool_get_dma_addr(page_to_netmem(page)) +
+						MTK_PP_HEADROOM,
+						pktlen, page_pool_get_dma_dir(ring->page_pool));
 
 			xdp_init_buff(&xdp, PAGE_SIZE, &ring->xdp_q);
 			xdp_prepare_buff(&xdp, data, MTK_PP_HEADROOM, pktlen,
@@ -2092,7 +2097,8 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 			skb = build_skb(data, PAGE_SIZE);
 			if (unlikely(!skb)) {
 				page_pool_put_full_page(ring->page_pool,
-							page, true);
+							page_to_netmem(page),
+							true);
 				netdev->stats.rx_dropped++;
 				goto skip_rx;
 			}

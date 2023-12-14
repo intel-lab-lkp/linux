@@ -161,7 +161,8 @@ void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 			for (j = 0; j < frags; j++) {
 				tx_cons = NEXT_TX(tx_cons);
 				tx_buf = &txr->tx_buf_ring[RING_TX(bp, tx_cons)];
-				page_pool_recycle_direct(rxr->page_pool, tx_buf->page);
+				page_pool_recycle_direct(rxr->page_pool,
+							 page_to_netmem(tx_buf->page));
 			}
 		} else {
 			bnxt_sched_reset_txr(bp, txr, tx_cons);
@@ -219,7 +220,7 @@ void bnxt_xdp_buff_frags_free(struct bnxt_rx_ring_info *rxr,
 	for (i = 0; i < shinfo->nr_frags; i++) {
 		struct page *page = skb_frag_page(&shinfo->frags[i]);
 
-		page_pool_recycle_direct(rxr->page_pool, page);
+		page_pool_recycle_direct(rxr->page_pool, page_to_netmem(page));
 	}
 	shinfo->nr_frags = 0;
 }
@@ -320,7 +321,8 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 
 		if (xdp_do_redirect(bp->dev, &xdp, xdp_prog)) {
 			trace_xdp_exception(bp->dev, xdp_prog, act);
-			page_pool_recycle_direct(rxr->page_pool, page);
+			page_pool_recycle_direct(rxr->page_pool,
+						 page_to_netmem(page));
 			return true;
 		}
 

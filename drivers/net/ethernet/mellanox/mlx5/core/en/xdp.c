@@ -122,7 +122,8 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 	 * mode.
 	 */
 
-	dma_addr = page_pool_get_dma_addr(page) + (xdpf->data - (void *)xdpf);
+	dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
+		   (xdpf->data - (void *)xdpf);
 	dma_sync_single_for_device(sq->pdev, dma_addr, xdptxd->len, DMA_BIDIRECTIONAL);
 
 	if (xdptxd->has_frags) {
@@ -134,8 +135,8 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 			dma_addr_t addr;
 			u32 len;
 
-			addr = page_pool_get_dma_addr(skb_frag_page(frag)) +
-				skb_frag_off(frag);
+			addr = page_pool_get_dma_addr(page_to_netmem(skb_frag_page(frag))) +
+			       skb_frag_off(frag);
 			len = skb_frag_size(frag);
 			dma_sync_single_for_device(sq->pdev, addr, len,
 						   DMA_BIDIRECTIONAL);
@@ -458,9 +459,12 @@ mlx5e_xmit_xdp_frame_mpwqe(struct mlx5e_xdpsq *sq, struct mlx5e_xmit_data *xdptx
 
 			tmp.data = skb_frag_address(frag);
 			tmp.len = skb_frag_size(frag);
-			tmp.dma_addr = xdptxdf->dma_arr ? xdptxdf->dma_arr[0] :
-				page_pool_get_dma_addr(skb_frag_page(frag)) +
-				skb_frag_off(frag);
+			tmp.dma_addr =
+				xdptxdf->dma_arr ?
+					xdptxdf->dma_arr[0] :
+					page_pool_get_dma_addr(page_to_netmem(
+						skb_frag_page(frag))) +
+						skb_frag_off(frag);
 			p = &tmp;
 		}
 	}
@@ -607,9 +611,11 @@ mlx5e_xmit_xdp_frame(struct mlx5e_xdpsq *sq, struct mlx5e_xmit_data *xdptxd,
 			skb_frag_t *frag = &xdptxdf->sinfo->frags[i];
 			dma_addr_t addr;
 
-			addr = xdptxdf->dma_arr ? xdptxdf->dma_arr[i] :
-				page_pool_get_dma_addr(skb_frag_page(frag)) +
-				skb_frag_off(frag);
+			addr = xdptxdf->dma_arr ?
+				       xdptxdf->dma_arr[i] :
+				       page_pool_get_dma_addr(page_to_netmem(
+					       skb_frag_page(frag))) +
+					       skb_frag_off(frag);
 
 			dseg->addr = cpu_to_be64(addr);
 			dseg->byte_count = cpu_to_be32(skb_frag_size(frag));
@@ -699,7 +705,8 @@ static void mlx5e_free_xdpsq_desc(struct mlx5e_xdpsq *sq,
 				/* No need to check ((page->pp_magic & ~0x3UL) == PP_SIGNATURE)
 				 * as we know this is a page_pool page.
 				 */
-				page_pool_recycle_direct(page->pp, page);
+				page_pool_recycle_direct(page->pp,
+							 page_to_netmem(page));
 			} while (++n < num);
 
 			break;

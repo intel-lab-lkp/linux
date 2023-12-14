@@ -296,7 +296,7 @@ static int xdp_test_run_batch(struct xdp_test_data *xdp, struct bpf_prog *prog,
 	xdp_set_return_frame_no_direct();
 
 	for (i = 0; i < batch_sz; i++) {
-		page = page_pool_dev_alloc_pages(xdp->pp);
+		page = netmem_to_page(page_pool_dev_alloc_pages(xdp->pp));
 		if (!page) {
 			err = -ENOMEM;
 			goto out;

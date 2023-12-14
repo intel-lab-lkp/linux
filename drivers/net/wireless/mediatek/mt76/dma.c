@@ -616,7 +616,9 @@ mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q,
 		if (!buf)
 			break;
 
-		addr = page_pool_get_dma_addr(virt_to_head_page(buf)) + offset;
+		addr = page_pool_get_dma_addr(
+			       page_to_netmem(virt_to_head_page(buf))) +
+		       offset;
 		dir = page_pool_get_dma_dir(q->page_pool);
 		dma_sync_single_for_device(dev->dma_dev, addr, len, dir);
 

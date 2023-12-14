@@ -928,7 +928,7 @@ bool napi_pp_put_page(struct page *page, bool napi_safe)
 	 * The page will be returned to the pool here regardless of the
 	 * 'flipped' fragment being in use or not.
 	 */
-	page_pool_put_full_page(pp, page, allow_direct);
+	page_pool_put_full_page(pp, page_to_netmem(page), allow_direct);
 
 	return true;
 }

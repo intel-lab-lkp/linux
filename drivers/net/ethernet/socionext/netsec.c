@@ -739,7 +739,7 @@ static void *netsec_alloc_rx_data(struct netsec_priv *priv,
 	struct netsec_desc_ring *dring = &priv->desc_ring[NETSEC_RING_RX];
 	struct page *page;
 
-	page = page_pool_dev_alloc_pages(dring->page_pool);
+	page = netmem_to_page(page_pool_dev_alloc_pages(dring->page_pool));
 	if (!page)
 		return NULL;
 
@@ -747,7 +747,8 @@ static void *netsec_alloc_rx_data(struct netsec_priv *priv,
 	 * page_pool API will map the whole page, skip what's needed for
 	 * network payloads and/or XDP
 	 */
-	*dma_handle = page_pool_get_dma_addr(page) + NETSEC_RXBUF_HEADROOM;
+	*dma_handle = page_pool_get_dma_addr(page_to_netmem(page)) +
+		      NETSEC_RXBUF_HEADROOM;
 	/* Make sure the incoming payload fits in the page for XDP and non-XDP
 	 * cases and reserve enough space for headroom + skb_shared_info
 	 */
@@ -862,8 +863,8 @@ static u32 netsec_xdp_queue_one(struct netsec_priv *priv,
 		enum dma_data_direction dma_dir =
 			page_pool_get_dma_dir(rx_ring->page_pool);
 
-		dma_handle = page_pool_get_dma_addr(page) + xdpf->headroom +
-			sizeof(*xdpf);
+		dma_handle = page_pool_get_dma_addr(page_to_netmem(page)) +
+			     xdpf->headroom + sizeof(*xdpf);
 		dma_sync_single_for_device(priv->dev, dma_handle, xdpf->len,
 					   dma_dir);
 		tx_desc.buf_type = TYPE_NETSEC_XDP_TX;
@@ -919,7 +920,8 @@ static u32 netsec_run_xdp(struct netsec_priv *priv, struct bpf_prog *prog,
 		ret = netsec_xdp_xmit_back(priv, xdp);
 		if (ret != NETSEC_XDP_TX) {
 			page = virt_to_head_page(xdp->data);
-			page_pool_put_page(dring->page_pool, page, sync, true);
+			page_pool_put_page(dring->page_pool,
+					   page_to_netmem(page), sync, true);
 		}
 		break;
 	case XDP_REDIRECT:
@@ -929,7 +931,8 @@ static u32 netsec_run_xdp(struct netsec_priv *priv, struct bpf_prog *prog,
 		} else {
 			ret = NETSEC_XDP_CONSUMED;
 			page = virt_to_head_page(xdp->data);
-			page_pool_put_page(dring->page_pool, page, sync, true);
+			page_pool_put_page(dring->page_pool,
+					   page_to_netmem(page), sync, true);
 		}
 		break;
 	default:
@@ -941,7 +944,8 @@ static u32 netsec_run_xdp(struct netsec_priv *priv, struct bpf_prog *prog,
 	case XDP_DROP:
 		ret = NETSEC_XDP_CONSUMED;
 		page = virt_to_head_page(xdp->data);
-		page_pool_put_page(dring->page_pool, page, sync, true);
+		page_pool_put_page(dring->page_pool, page_to_netmem(page), sync,
+				   true);
 		break;
 	}
 
@@ -1038,8 +1042,8 @@ static int netsec_process_rx(struct netsec_priv *priv, int budget)
 			 * cache state. Since we paid the allocation cost if
 			 * building an skb fails try to put the page into cache
 			 */
-			page_pool_put_page(dring->page_pool, page, pkt_len,
-					   true);
+			page_pool_put_page(dring->page_pool,
+					   page_to_netmem(page), pkt_len, true);
 			netif_err(priv, drv, priv->ndev,
 				  "rx failed to build skb\n");
 			break;
@@ -1212,7 +1216,8 @@ static void netsec_uninit_pkt_dring(struct netsec_priv *priv, int id)
 		if (id == NETSEC_RING_RX) {
 			struct page *page = virt_to_page(desc->addr);
 
-			page_pool_put_full_page(dring->page_pool, page, false);
+			page_pool_put_full_page(dring->page_pool,
+						page_to_netmem(page), false);
 		} else if (id == NETSEC_RING_TX) {
 			dma_unmap_single(priv->dev, desc->dma_addr, desc->len,
 					 DMA_TO_DEVICE);

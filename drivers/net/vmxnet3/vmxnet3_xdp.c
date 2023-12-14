@@ -147,7 +147,7 @@ vmxnet3_xdp_xmit_frame(struct vmxnet3_adapter *adapter,
 		tbi->map_type |= VMXNET3_MAP_SINGLE;
 	} else { /* XDP buffer from page pool */
 		page = virt_to_page(xdpf->data);
-		tbi->dma_addr = page_pool_get_dma_addr(page) +
+		tbi->dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
 				VMXNET3_XDP_HEADROOM;
 		dma_sync_single_for_device(&adapter->pdev->dev,
 					   tbi->dma_addr, buf_size,
@@ -269,7 +269,8 @@ vmxnet3_run_xdp(struct vmxnet3_rx_queue *rq, struct xdp_buff *xdp,
 			rq->stats.xdp_redirects++;
 		} else {
 			rq->stats.xdp_drops++;
-			page_pool_recycle_direct(rq->page_pool, page);
+			page_pool_recycle_direct(rq->page_pool,
+						 page_to_netmem(page));
 		}
 		return act;
 	case XDP_TX:
@@ -277,7 +278,8 @@ vmxnet3_run_xdp(struct vmxnet3_rx_queue *rq, struct xdp_buff *xdp,
 		if (unlikely(!xdpf ||
 			     vmxnet3_xdp_xmit_back(rq->adapter, xdpf))) {
 			rq->stats.xdp_drops++;
-			page_pool_recycle_direct(rq->page_pool, page);
+			page_pool_recycle_direct(rq->page_pool,
+						 page_to_netmem(page));
 		} else {
 			rq->stats.xdp_tx++;
 		}
@@ -294,7 +296,7 @@ vmxnet3_run_xdp(struct vmxnet3_rx_queue *rq, struct xdp_buff *xdp,
 		break;
 	}
 
-	page_pool_recycle_direct(rq->page_pool, page);
+	page_pool_recycle_direct(rq->page_pool, page_to_netmem(page));
 
 	return act;
 }
@@ -307,7 +309,7 @@ vmxnet3_build_skb(struct vmxnet3_rx_queue *rq, struct page *page,
 
 	skb = build_skb(page_address(page), PAGE_SIZE);
 	if (unlikely(!skb)) {
-		page_pool_recycle_direct(rq->page_pool, page);
+		page_pool_recycle_direct(rq->page_pool, page_to_netmem(page));
 		rq->stats.rx_buf_alloc_failure++;
 		return NULL;
 	}
@@ -332,7 +334,7 @@ vmxnet3_process_xdp_small(struct vmxnet3_adapter *adapter,
 	struct page *page;
 	int act;
 
-	page = page_pool_alloc_pages(rq->page_pool, GFP_ATOMIC);
+	page = netmem_to_page(page_pool_alloc_pages(rq->page_pool, GFP_ATOMIC));
 	if (unlikely(!page)) {
 		rq->stats.rx_buf_alloc_failure++;
 		return XDP_DROP;
@@ -381,9 +383,9 @@ vmxnet3_process_xdp(struct vmxnet3_adapter *adapter,
 
 	page = rbi->page;
 	dma_sync_single_for_cpu(&adapter->pdev->dev,
-				page_pool_get_dma_addr(page) +
-				rq->page_pool->p.offset, rcd->len,
-				page_pool_get_dma_dir(rq->page_pool));
+				page_pool_get_dma_addr(page_to_netmem(page)) +
+					rq->page_pool->p.offset,
+				rcd->len, page_pool_get_dma_dir(rq->page_pool));
 
 	xdp_init_buff(&xdp, rbi->len, &rq->xdp_rxq);
 	xdp_prepare_buff(&xdp, page_address(page), rq->page_pool->p.offset,

@@ -361,7 +361,7 @@ static void *mvpp2_frag_alloc(const struct mvpp2_bm_pool *pool,
 			      struct page_pool *page_pool)
 {
 	if (page_pool)
-		return page_pool_dev_alloc_pages(page_pool);
+		return netmem_to_page(page_pool_dev_alloc_pages(page_pool));
 
 	if (likely(pool->frag_size <= PAGE_SIZE))
 		return netdev_alloc_frag(pool->frag_size);
@@ -373,7 +373,9 @@ static void mvpp2_frag_free(const struct mvpp2_bm_pool *pool,
 			    struct page_pool *page_pool, void *data)
 {
 	if (page_pool)
-		page_pool_put_full_page(page_pool, virt_to_head_page(data), false);
+		page_pool_put_full_page(page_pool,
+					page_to_netmem(virt_to_head_page(data)),
+					false);
 	else if (likely(pool->frag_size <= PAGE_SIZE))
 		skb_free_frag(data);
 	else
@@ -750,7 +752,7 @@ static void *mvpp2_buf_alloc(struct mvpp2_port *port,
 
 	if (page_pool) {
 		page = (struct page *)data;
-		dma_addr = page_pool_get_dma_addr(page);
+		dma_addr = page_pool_get_dma_addr(page_to_netmem(page));
 		data = page_to_virt(page);
 	} else {
 		dma_addr = dma_map_single(port->dev->dev.parent, data,
@@ -3687,7 +3689,7 @@ mvpp2_xdp_submit_frame(struct mvpp2_port *port, u16 txq_id,
 		/* XDP_TX */
 		struct page *page = virt_to_page(xdpf->data);
 
-		dma_addr = page_pool_get_dma_addr(page) +
+		dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
 			   sizeof(*xdpf) + xdpf->headroom;
 		dma_sync_single_for_device(port->dev->dev.parent, dma_addr,
 					   xdpf->len, DMA_BIDIRECTIONAL);
@@ -3809,7 +3811,8 @@ mvpp2_run_xdp(struct mvpp2_port *port, struct bpf_prog *prog,
 		if (unlikely(err)) {
 			ret = MVPP2_XDP_DROPPED;
 			page = virt_to_head_page(xdp->data);
-			page_pool_put_page(pp, page, sync, true);
+			page_pool_put_page(pp, page_to_netmem(page), sync,
+					   true);
 		} else {
 			ret = MVPP2_XDP_REDIR;
 			stats->xdp_redirect++;
@@ -3819,7 +3822,8 @@ mvpp2_run_xdp(struct mvpp2_port *port, struct bpf_prog *prog,
 		ret = mvpp2_xdp_xmit_back(port, xdp);
 		if (ret != MVPP2_XDP_TX) {
 			page = virt_to_head_page(xdp->data);
-			page_pool_put_page(pp, page, sync, true);
+			page_pool_put_page(pp, page_to_netmem(page), sync,
+					   true);
 		}
 		break;
 	default:
@@ -3830,7 +3834,7 @@ mvpp2_run_xdp(struct mvpp2_port *port, struct bpf_prog *prog,
 		fallthrough;
 	case XDP_DROP:
 		page = virt_to_head_page(xdp->data);
-		page_pool_put_page(pp, page, sync, true);
+		page_pool_put_page(pp, page_to_netmem(page), sync, true);
 		ret = MVPP2_XDP_DROPPED;
 		stats->xdp_drop++;
 		break;

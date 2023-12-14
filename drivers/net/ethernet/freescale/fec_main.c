@@ -996,7 +996,9 @@ static void fec_enet_bd_init(struct net_device *dev)
 				struct page *page = txq->tx_buf[i].buf_p;
 
 				if (page)
-					page_pool_put_page(page->pp, page, 0, false);
+					page_pool_put_page(page->pp,
+							   page_to_netmem(page),
+							   0, false);
 			}
 
 			txq->tx_buf[i].buf_p = NULL;
@@ -1520,7 +1522,8 @@ fec_enet_tx_queue(struct net_device *ndev, u16 queue_id, int budget)
 			xdp_return_frame_rx_napi(xdpf);
 		} else { /* recycle pages of XDP_TX frames */
 			/* The dma_sync_size = 0 as XDP_TX has already synced DMA for_device */
-			page_pool_put_page(page->pp, page, 0, true);
+			page_pool_put_page(page->pp, page_to_netmem(page), 0,
+					   true);
 		}
 
 		txq->tx_buf[index].buf_p = NULL;
@@ -1568,12 +1571,13 @@ static void fec_enet_update_cbd(struct fec_enet_priv_rx_q *rxq,
 	struct page *new_page;
 	dma_addr_t phys_addr;
 
-	new_page = page_pool_dev_alloc_pages(rxq->page_pool);
+	new_page = netmem_to_page(page_pool_dev_alloc_pages(rxq->page_pool));
 	WARN_ON(!new_page);
 	rxq->rx_skb_info[index].page = new_page;
 
 	rxq->rx_skb_info[index].offset = FEC_ENET_XDP_HEADROOM;
-	phys_addr = page_pool_get_dma_addr(new_page) + FEC_ENET_XDP_HEADROOM;
+	phys_addr = page_pool_get_dma_addr(page_to_netmem(new_page)) +
+		    FEC_ENET_XDP_HEADROOM;
 	bdp->cbd_bufaddr = cpu_to_fec32(phys_addr);
 }
 
@@ -1633,7 +1637,8 @@ fec_enet_run_xdp(struct fec_enet_private *fep, struct bpf_prog *prog,
 xdp_err:
 		ret = FEC_ENET_XDP_CONSUMED;
 		page = virt_to_head_page(xdp->data);
-		page_pool_put_page(rxq->page_pool, page, sync, true);
+		page_pool_put_page(rxq->page_pool, page_to_netmem(page), sync,
+				   true);
 		if (act != XDP_DROP)
 			trace_xdp_exception(fep->netdev, prog, act);
 		break;
@@ -1761,7 +1766,8 @@ fec_enet_rx_queue(struct net_device *ndev, int budget, u16 queue_id)
 		 */
 		skb = build_skb(page_address(page), PAGE_SIZE);
 		if (unlikely(!skb)) {
-			page_pool_recycle_direct(rxq->page_pool, page);
+			page_pool_recycle_direct(rxq->page_pool,
+						 page_to_netmem(page));
 			ndev->stats.rx_dropped++;
 
 			netdev_err_once(ndev, "build_skb failed!\n");
@@ -3264,7 +3270,9 @@ static void fec_enet_free_buffers(struct net_device *ndev)
 	for (q = 0; q < fep->num_rx_queues; q++) {
 		rxq = fep->rx_queue[q];
 		for (i = 0; i < rxq->bd.ring_size; i++)
-			page_pool_put_full_page(rxq->page_pool, rxq->rx_skb_info[i].page, false);
+			page_pool_put_full_page(rxq->page_pool,
+						page_to_netmem(rxq->rx_skb_info[i].page),
+						false);
 
 		for (i = 0; i < XDP_STATS_TOTAL; i++)
 			rxq->stats[i] = 0;
@@ -3293,7 +3301,9 @@ static void fec_enet_free_buffers(struct net_device *ndev)
 			} else {
 				struct page *page = txq->tx_buf[i].buf_p;
 
-				page_pool_put_page(page->pp, page, 0, false);
+				page_pool_put_page(page->pp,
+						   page_to_netmem(page), 0,
+						   false);
 			}
 
 			txq->tx_buf[i].buf_p = NULL;
@@ -3390,11 +3400,12 @@ fec_enet_alloc_rxq_buffers(struct net_device *ndev, unsigned int queue)
 	}
 
 	for (i = 0; i < rxq->bd.ring_size; i++) {
-		page = page_pool_dev_alloc_pages(rxq->page_pool);
+		page = netmem_to_page(page_pool_dev_alloc_pages(rxq->page_pool));
 		if (!page)
 			goto err_alloc;
 
-		phys_addr = page_pool_get_dma_addr(page) + FEC_ENET_XDP_HEADROOM;
+		phys_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
+			    FEC_ENET_XDP_HEADROOM;
 		bdp->cbd_bufaddr = cpu_to_fec32(phys_addr);
 
 		rxq->rx_skb_info[i].page = page;
@@ -3856,7 +3867,7 @@ static int fec_enet_txq_xmit_frame(struct fec_enet_private *fep,
 		struct page *page;
 
 		page = virt_to_page(xdpb->data);
-		dma_addr = page_pool_get_dma_addr(page) +
+		dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
 			   (xdpb->data - xdpb->data_hard_start);
 		dma_sync_single_for_device(&fep->pdev->dev, dma_addr,
 					   dma_sync_len, DMA_BIDIRECTIONAL);

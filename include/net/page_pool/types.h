@@ -6,6 +6,7 @@
 #include <linux/dma-direction.h>
 #include <linux/ptr_ring.h>
 #include <linux/types.h>
+#include <net/netmem.h>
 
 #define PP_FLAG_DMA_MAP		BIT(0) /* Should page_pool do the DMA
 					* map/unmap
@@ -199,9 +200,9 @@ struct page_pool {
 	} user;
 };
 
-struct page *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp);
-struct page *page_pool_alloc_frag(struct page_pool *pool, unsigned int *offset,
-				  unsigned int size, gfp_t gfp);
+struct netmem *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp);
+struct netmem *page_pool_alloc_frag(struct page_pool *pool, unsigned int *offset,
+			       unsigned int size, gfp_t gfp);
 struct page_pool *page_pool_create(const struct page_pool_params *params);
 
 struct xdp_mem_info;
@@ -234,7 +235,7 @@ static inline void page_pool_put_page_bulk(struct page_pool *pool, void **data,
 }
 #endif
 
-void page_pool_put_defragged_page(struct page_pool *pool, struct page *page,
+void page_pool_put_defragged_page(struct page_pool *pool, struct netmem *netmem,
 				  unsigned int dma_sync_size,
 				  bool allow_direct);
 

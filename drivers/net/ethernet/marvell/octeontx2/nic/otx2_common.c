@@ -530,11 +530,12 @@ static int otx2_alloc_pool_buf(struct otx2_nic *pfvf, struct otx2_pool *pool,
 	sz = SKB_DATA_ALIGN(pool->rbsize);
 	sz = ALIGN(sz, OTX2_ALIGN);
 
-	page = page_pool_alloc_frag(pool->page_pool, &offset, sz, GFP_ATOMIC);
+	page = netmem_to_page(page_pool_alloc_frag(pool->page_pool,
+						   &offset, sz, GFP_ATOMIC));
 	if (unlikely(!page))
 		return -ENOMEM;
 
-	*dma = page_pool_get_dma_addr(page) + offset;
+	*dma = page_pool_get_dma_addr(page_to_netmem(page)) + offset;
 	return 0;
 }
 
@@ -1208,7 +1209,8 @@ void otx2_free_bufs(struct otx2_nic *pfvf, struct otx2_pool *pool,
 	page = virt_to_head_page(phys_to_virt(pa));
 
 	if (pool->page_pool) {
-		page_pool_put_full_page(pool->page_pool, page, true);
+		page_pool_put_full_page(pool->page_pool, page_to_netmem(page),
+					true);
 	} else {
 		dma_unmap_page_attrs(pfvf->dev, iova, size,
 				     DMA_FROM_DEVICE,

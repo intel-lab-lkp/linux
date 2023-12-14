@@ -1940,12 +1940,13 @@ static int mvneta_rx_refill(struct mvneta_port *pp,
 	dma_addr_t phys_addr;
 	struct page *page;
 
-	page = page_pool_alloc_pages(rxq->page_pool,
-				     gfp_mask | __GFP_NOWARN);
+	page = netmem_to_page(page_pool_alloc_pages(rxq->page_pool,
+						    gfp_mask | __GFP_NOWARN));
 	if (!page)
 		return -ENOMEM;
 
-	phys_addr = page_pool_get_dma_addr(page) + pp->rx_offset_correction;
+	phys_addr = page_pool_get_dma_addr(page_to_netmem(page)) +
+		    pp->rx_offset_correction;
 	mvneta_rx_desc_fill(rx_desc, phys_addr, page, rxq);
 
 	return 0;
@@ -2013,7 +2014,8 @@ static void mvneta_rxq_drop_pkts(struct mvneta_port *pp,
 		if (!data || !(rx_desc->buf_phys_addr))
 			continue;
 
-		page_pool_put_full_page(rxq->page_pool, data, false);
+		page_pool_put_full_page(rxq->page_pool, page_to_netmem(data),
+					false);
 	}
 	if (xdp_rxq_info_is_reg(&rxq->xdp_rxq))
 		xdp_rxq_info_unreg(&rxq->xdp_rxq);
@@ -2080,10 +2082,12 @@ mvneta_xdp_put_buff(struct mvneta_port *pp, struct mvneta_rx_queue *rxq,
 
 	for (i = 0; i < sinfo->nr_frags; i++)
 		page_pool_put_full_page(rxq->page_pool,
-					skb_frag_page(&sinfo->frags[i]), true);
+					page_to_netmem(skb_frag_page(&sinfo->frags[i])),
+					true);
 
 out:
-	page_pool_put_page(rxq->page_pool, virt_to_head_page(xdp->data),
+	page_pool_put_page(rxq->page_pool,
+			   page_to_netmem(virt_to_head_page(xdp->data)),
 			   sync_len, true);
 }
 
@@ -2132,7 +2136,7 @@ mvneta_xdp_submit_frame(struct mvneta_port *pp, struct mvneta_tx_queue *txq,
 		} else {
 			page = unlikely(frag) ? skb_frag_page(frag)
 					      : virt_to_page(xdpf->data);
-			dma_addr = page_pool_get_dma_addr(page);
+			dma_addr = page_pool_get_dma_addr(page_to_netmem(page));
 			if (unlikely(frag))
 				dma_addr += skb_frag_off(frag);
 			else
@@ -2386,7 +2390,8 @@ mvneta_swbm_add_rx_fragment(struct mvneta_port *pp,
 		if (page_is_pfmemalloc(page))
 			xdp_buff_set_frag_pfmemalloc(xdp);
 	} else {
-		page_pool_put_full_page(rxq->page_pool, page, true);
+		page_pool_put_full_page(rxq->page_pool, page_to_netmem(page),
+					true);
 	}
 	*size -= len;
 }
@@ -2471,7 +2476,8 @@ static int mvneta_rx_swbm(struct napi_struct *napi,
 		} else {
 			if (unlikely(!xdp_buf.data_hard_start)) {
 				rx_desc->buf_phys_addr = 0;
-				page_pool_put_full_page(rxq->page_pool, page,
+				page_pool_put_full_page(rxq->page_pool,
+							page_to_netmem(page),
 							true);
 				goto next;
 			}

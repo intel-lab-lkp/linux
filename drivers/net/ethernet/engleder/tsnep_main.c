@@ -641,7 +641,7 @@ static int tsnep_xdp_tx_map(struct xdp_frame *xdpf, struct tsnep_tx *tx,
 		} else {
 			page = unlikely(frag) ? skb_frag_page(frag) :
 						virt_to_page(xdpf->data);
-			dma = page_pool_get_dma_addr(page);
+			dma = page_pool_get_dma_addr(page_to_netmem(page));
 			if (unlikely(frag))
 				dma += skb_frag_off(frag);
 			else
@@ -940,7 +940,8 @@ static void tsnep_rx_ring_cleanup(struct tsnep_rx *rx)
 	for (i = 0; i < TSNEP_RING_SIZE; i++) {
 		entry = &rx->entry[i];
 		if (!rx->xsk_pool && entry->page)
-			page_pool_put_full_page(rx->page_pool, entry->page,
+			page_pool_put_full_page(rx->page_pool,
+						page_to_netmem(entry->page),
 						false);
 		if (rx->xsk_pool && entry->xdp)
 			xsk_buff_free(entry->xdp);
@@ -1066,7 +1067,8 @@ static void tsnep_rx_free_page_buffer(struct tsnep_rx *rx)
 	 */
 	page = rx->page_buffer;
 	while (*page) {
-		page_pool_put_full_page(rx->page_pool, *page, false);
+		page_pool_put_full_page(rx->page_pool, page_to_netmem(*page),
+					false);
 		*page = NULL;
 		page++;
 	}
@@ -1080,7 +1082,8 @@ static int tsnep_rx_alloc_page_buffer(struct tsnep_rx *rx)
 	 * be filled completely
 	 */
 	for (i = 0; i < TSNEP_RING_SIZE - 1; i++) {
-		rx->page_buffer[i] = page_pool_dev_alloc_pages(rx->page_pool);
+		rx->page_buffer[i] =
+			netmem_to_page(page_pool_dev_alloc_pages(rx->page_pool));
 		if (!rx->page_buffer[i]) {
 			tsnep_rx_free_page_buffer(rx);
 
@@ -1096,7 +1099,7 @@ static void tsnep_rx_set_page(struct tsnep_rx *rx, struct tsnep_rx_entry *entry,
 {
 	entry->page = page;
 	entry->len = TSNEP_MAX_RX_BUF_SIZE;
-	entry->dma = page_pool_get_dma_addr(entry->page);
+	entry->dma = page_pool_get_dma_addr(page_to_netmem(entry->page));
 	entry->desc->rx = __cpu_to_le64(entry->dma + TSNEP_RX_OFFSET);
 }
 
@@ -1105,7 +1108,7 @@ static int tsnep_rx_alloc_buffer(struct tsnep_rx *rx, int index)
 	struct tsnep_rx_entry *entry = &rx->entry[index];
 	struct page *page;
 
-	page = page_pool_dev_alloc_pages(rx->page_pool);
+	page = netmem_to_page(page_pool_dev_alloc_pages(rx->page_pool));
 	if (unlikely(!page))
 		return -ENOMEM;
 	tsnep_rx_set_page(rx, entry, page);
@@ -1296,7 +1299,8 @@ out_failure:
 		sync = xdp->data_end - xdp->data_hard_start -
 		       XDP_PACKET_HEADROOM;
 		sync = max(sync, length);
-		page_pool_put_page(rx->page_pool, virt_to_head_page(xdp->data),
+		page_pool_put_page(rx->page_pool,
+				   page_to_netmem(virt_to_head_page(xdp->data)),
 				   sync, true);
 		return true;
 	}
@@ -1400,7 +1404,7 @@ static void tsnep_rx_page(struct tsnep_rx *rx, struct napi_struct *napi,
 
 		napi_gro_receive(napi, skb);
 	} else {
-		page_pool_recycle_direct(rx->page_pool, page);
+		page_pool_recycle_direct(rx->page_pool, page_to_netmem(page));
 
 		rx->dropped++;
 	}
@@ -1599,7 +1603,7 @@ static int tsnep_rx_poll_zc(struct tsnep_rx *rx, struct napi_struct *napi,
 			}
 		}
 
-		page = page_pool_dev_alloc_pages(rx->page_pool);
+		page = netmem_to_page(page_pool_dev_alloc_pages(rx->page_pool));
 		if (page) {
 			memcpy(page_address(page) + TSNEP_RX_OFFSET,
 			       entry->xdp->data - TSNEP_RX_INLINE_METADATA_SIZE,

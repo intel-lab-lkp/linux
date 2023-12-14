@@ -1349,11 +1349,12 @@ vmxnet3_pp_get_buff(struct page_pool *pp, dma_addr_t *dma_addr,
 {
 	struct page *page;
 
-	page = page_pool_alloc_pages(pp, gfp_mask | __GFP_NOWARN);
+	page = netmem_to_page(page_pool_alloc_pages(pp,
+						    gfp_mask | __GFP_NOWARN));
 	if (unlikely(!page))
 		return NULL;
 
-	*dma_addr = page_pool_get_dma_addr(page) + pp->p.offset;
+	*dma_addr = page_pool_get_dma_addr(page_to_netmem(page)) + pp->p.offset;
 
 	return page_address(page);
 }
@@ -1931,7 +1932,7 @@ vmxnet3_rq_cleanup(struct vmxnet3_rx_queue *rq,
 			if (rxd->btype == VMXNET3_RXD_BTYPE_HEAD &&
 			    rbi->page && rbi->buf_type == VMXNET3_RX_BUF_XDP) {
 				page_pool_recycle_direct(rq->page_pool,
-							 rbi->page);
+							 page_to_netmem(rbi->page));
 				rbi->page = NULL;
 			} else if (rxd->btype == VMXNET3_RXD_BTYPE_HEAD &&
 				   rbi->skb) {

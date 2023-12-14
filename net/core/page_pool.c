@@ -360,7 +360,7 @@ static void page_pool_dma_sync_for_device(struct page_pool *pool,
 					  struct page *page,
 					  unsigned int dma_sync_size)
 {
-	dma_addr_t dma_addr = page_pool_get_dma_addr(page);
+	dma_addr_t dma_addr = page_pool_get_dma_addr(page_to_netmem(page));
 
 	dma_sync_size = min(dma_sync_size, pool->p.max_len);
 	dma_sync_single_range_for_device(pool->p.dev, dma_addr,
@@ -384,7 +384,7 @@ static bool page_pool_dma_map(struct page_pool *pool, struct page *page)
 	if (dma_mapping_error(pool->p.dev, dma))
 		return false;
 
-	if (page_pool_set_dma_addr(page, dma))
+	if (page_pool_set_dma_addr(page_to_netmem(page), dma))
 		goto unmap_failed;
 
 	if (pool->p.flags & PP_FLAG_DMA_SYNC_DEV)
@@ -412,7 +412,7 @@ static void page_pool_set_pp_info(struct page_pool *pool,
 	 * is dirtying the same cache line as the page->pp_magic above, so
 	 * the overhead is negligible.
 	 */
-	page_pool_fragment_page(page, 1);
+	page_pool_fragment_page(page_to_netmem(page), 1);
 	if (pool->has_init_callback)
 		pool->slow.init_callback(page, pool->slow.init_arg);
 }
@@ -509,18 +509,18 @@ static struct page *__page_pool_alloc_pages_slow(struct page_pool *pool,
 /* For using page_pool replace: alloc_pages() API calls, but provide
  * synchronization guarantee for allocation side.
  */
-struct page *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp)
+struct netmem *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp)
 {
 	struct page *page;
 
 	/* Fast-path: Get a page from cache */
 	page = __page_pool_get_cached(pool);
 	if (page)
-		return page;
+		return page_to_netmem(page);
 
 	/* Slow-path: cache empty, do real allocation */
 	page = __page_pool_alloc_pages_slow(pool, gfp);
-	return page;
+	return page_to_netmem(page);
 }
 EXPORT_SYMBOL(page_pool_alloc_pages);
 
@@ -564,13 +564,13 @@ static void page_pool_return_page(struct page_pool *pool, struct page *page)
 		 */
 		goto skip_dma_unmap;
 
-	dma = page_pool_get_dma_addr(page);
+	dma = page_pool_get_dma_addr(page_to_netmem(page));
 
 	/* When page is unmapped, it cannot be returned to our pool */
 	dma_unmap_page_attrs(pool->p.dev, dma,
 			     PAGE_SIZE << pool->p.order, pool->p.dma_dir,
 			     DMA_ATTR_SKIP_CPU_SYNC | DMA_ATTR_WEAK_ORDERING);
-	page_pool_set_dma_addr(page, 0);
+	page_pool_set_dma_addr(page_to_netmem(page), 0);
 skip_dma_unmap:
 	page_pool_clear_pp_info(page);
 
@@ -677,9 +677,11 @@ __page_pool_put_page(struct page_pool *pool, struct page *page,
 	return NULL;
 }
 
-void page_pool_put_defragged_page(struct page_pool *pool, struct page *page,
+void page_pool_put_defragged_page(struct page_pool *pool, struct netmem *netmem,
 				  unsigned int dma_sync_size, bool allow_direct)
 {
+	struct page *page = netmem_to_page(netmem);
+
 	page = __page_pool_put_page(pool, page, dma_sync_size, allow_direct);
 	if (page && !page_pool_recycle_in_ring(pool, page)) {
 		/* Cache full, fallback to free pages */
@@ -714,7 +716,7 @@ void page_pool_put_page_bulk(struct page_pool *pool, void **data,
 		struct page *page = virt_to_head_page(data[i]);
 
 		/* It is not the last user for the page frag case */
-		if (!page_pool_is_last_frag(page))
+		if (!page_pool_is_last_frag(page_to_netmem(page)))
 			continue;
 
 		page = __page_pool_put_page(pool, page, -1, false);
@@ -756,7 +758,7 @@ static struct page *page_pool_drain_frag(struct page_pool *pool,
 	long drain_count = BIAS_MAX - pool->frag_users;
 
 	/* Some user is still using the page frag */
-	if (likely(page_pool_defrag_page(page, drain_count)))
+	if (likely(page_pool_defrag_page(page_to_netmem(page), drain_count)))
 		return NULL;
 
 	if (page_ref_count(page) == 1 && !page_is_pfmemalloc(page)) {
@@ -777,15 +779,14 @@ static void page_pool_free_frag(struct page_pool *pool)
 
 	pool->frag_page = NULL;
 
-	if (!page || page_pool_defrag_page(page, drain_count))
+	if (!page || page_pool_defrag_page(page_to_netmem(page), drain_count))
 		return;
 
 	page_pool_return_page(pool, page);
 }
 
-struct page *page_pool_alloc_frag(struct page_pool *pool,
-				  unsigned int *offset,
-				  unsigned int size, gfp_t gfp)
+struct netmem *page_pool_alloc_frag(struct page_pool *pool, unsigned int *offset,
+			       unsigned int size, gfp_t gfp)
 {
 	unsigned int max_size = PAGE_SIZE << pool->p.order;
 	struct page *page = pool->frag_page;
@@ -805,7 +806,7 @@ struct page *page_pool_alloc_frag(struct page_pool *pool,
 	}
 
 	if (!page) {
-		page = page_pool_alloc_pages(pool, gfp);
+		page = netmem_to_page(page_pool_alloc_pages(pool, gfp));
 		if (unlikely(!page)) {
 			pool->frag_page = NULL;
 			return NULL;
@@ -817,14 +818,14 @@ frag_reset:
 		pool->frag_users = 1;
 		*offset = 0;
 		pool->frag_offset = size;
-		page_pool_fragment_page(page, BIAS_MAX);
-		return page;
+		page_pool_fragment_page(page_to_netmem(page), BIAS_MAX);
+		return page_to_netmem(page);
 	}
 
 	pool->frag_users++;
 	pool->frag_offset = *offset + size;
 	alloc_stat_inc(pool, fast);
-	return page;
+	return page_to_netmem(page);
 }
 EXPORT_SYMBOL(page_pool_alloc_frag);
 

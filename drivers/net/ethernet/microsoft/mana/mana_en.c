@@ -1587,7 +1587,7 @@ drop_xdp:
 drop:
 	if (from_pool) {
 		page_pool_recycle_direct(rxq->page_pool,
-					 virt_to_head_page(buf_va));
+					 page_to_netmem(virt_to_head_page(buf_va)));
 	} else {
 		WARN_ON_ONCE(rxq->xdp_save_va);
 		/* Save for reuse */
@@ -1627,7 +1627,7 @@ static void *mana_get_rxfrag(struct mana_rxq *rxq, struct device *dev,
 			return NULL;
 		}
 	} else {
-		page = page_pool_dev_alloc_pages(rxq->page_pool);
+		page = netmem_to_page(page_pool_dev_alloc_pages(rxq->page_pool));
 		if (!page)
 			return NULL;
 
@@ -1639,7 +1639,8 @@ static void *mana_get_rxfrag(struct mana_rxq *rxq, struct device *dev,
 			     DMA_FROM_DEVICE);
 	if (dma_mapping_error(dev, *da)) {
 		if (*from_pool)
-			page_pool_put_full_page(rxq->page_pool, page, false);
+			page_pool_put_full_page(rxq->page_pool,
+						page_to_netmem(page), false);
 		else
 			put_page(virt_to_head_page(va));
 
@@ -2027,7 +2028,8 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 		page = virt_to_head_page(rx_oob->buf_va);
 
 		if (rx_oob->from_pool)
-			page_pool_put_full_page(rxq->page_pool, page, false);
+			page_pool_put_full_page(rxq->page_pool,
+						page_to_netmem(page), false);
 		else
 			put_page(page);
 

@@ -3371,15 +3371,15 @@ static int hns3_alloc_buffer(struct hns3_enet_ring *ring,
 	struct page *p;
 
 	if (ring->page_pool) {
-		p = page_pool_dev_alloc_frag(ring->page_pool,
-					     &cb->page_offset,
-					     hns3_buf_size(ring));
+		p = netmem_to_page(page_pool_dev_alloc_frag(ring->page_pool,
+							    &cb->page_offset,
+							    hns3_buf_size(ring)));
 		if (unlikely(!p))
 			return -ENOMEM;
 
 		cb->priv = p;
 		cb->buf = page_address(p);
-		cb->dma = page_pool_get_dma_addr(p);
+		cb->dma = page_pool_get_dma_addr(page_to_netmem(p));
 		cb->type = DESC_TYPE_PP_FRAG;
 		cb->reuse_flag = 0;
 		return 0;
@@ -3411,7 +3411,8 @@ static void hns3_free_buffer(struct hns3_enet_ring *ring,
 		if (cb->type & DESC_TYPE_PAGE && cb->pagecnt_bias)
 			__page_frag_cache_drain(cb->priv, cb->pagecnt_bias);
 		else if (cb->type & DESC_TYPE_PP_FRAG)
-			page_pool_put_full_page(ring->page_pool, cb->priv,
+			page_pool_put_full_page(ring->page_pool,
+						page_to_netmem(cb->priv),
 						false);
 	}
 	memset(cb, 0, sizeof(*cb));
@@ -4058,7 +4059,8 @@ static int hns3_alloc_skb(struct hns3_enet_ring *ring, unsigned int length,
 		if (dev_page_is_reusable(desc_cb->priv))
 			desc_cb->reuse_flag = 1;
 		else if (desc_cb->type & DESC_TYPE_PP_FRAG)
-			page_pool_put_full_page(ring->page_pool, desc_cb->priv,
+			page_pool_put_full_page(ring->page_pool,
+						page_to_netmem(desc_cb->priv),
 						false);
 		else /* This page cannot be reused so discard it */
 			__page_frag_cache_drain(desc_cb->priv,

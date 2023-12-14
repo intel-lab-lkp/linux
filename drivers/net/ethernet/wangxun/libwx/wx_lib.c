@@ -228,7 +228,8 @@ static void wx_dma_sync_frag(struct wx_ring *rx_ring,
 
 	/* If the page was released, just unmap it. */
 	if (unlikely(WX_CB(skb)->page_released))
-		page_pool_put_full_page(rx_ring->page_pool, rx_buffer->page, false);
+		page_pool_put_full_page(rx_ring->page_pool,
+					page_to_netmem(rx_buffer->page), false);
 }
 
 static struct wx_rx_buffer *wx_get_rx_buffer(struct wx_ring *rx_ring,
@@ -288,7 +289,9 @@ static void wx_put_rx_buffer(struct wx_ring *rx_ring,
 			/* the page has been released from the ring */
 			WX_CB(skb)->page_released = true;
 		else
-			page_pool_put_full_page(rx_ring->page_pool, rx_buffer->page, false);
+			page_pool_put_full_page(rx_ring->page_pool,
+						page_to_netmem(rx_buffer->page),
+						false);
 
 		__page_frag_cache_drain(rx_buffer->page,
 					rx_buffer->pagecnt_bias);
@@ -375,9 +378,9 @@ static bool wx_alloc_mapped_page(struct wx_ring *rx_ring,
 	if (likely(page))
 		return true;
 
-	page = page_pool_dev_alloc_pages(rx_ring->page_pool);
+	page = netmem_to_page(page_pool_dev_alloc_pages(rx_ring->page_pool));
 	WARN_ON(!page);
-	dma = page_pool_get_dma_addr(page);
+	dma = page_pool_get_dma_addr(page_to_netmem(page));
 
 	bi->page_dma = dma;
 	bi->page = page;
@@ -2232,7 +2235,9 @@ static void wx_clean_rx_ring(struct wx_ring *rx_ring)
 			struct sk_buff *skb = rx_buffer->skb;
 
 			if (WX_CB(skb)->page_released)
-				page_pool_put_full_page(rx_ring->page_pool, rx_buffer->page, false);
+				page_pool_put_full_page(rx_ring->page_pool,
+							page_to_netmem(rx_buffer->page),
+							false);
 
 			dev_kfree_skb(skb);
 		}
@@ -2247,7 +2252,8 @@ static void wx_clean_rx_ring(struct wx_ring *rx_ring)
 					      DMA_FROM_DEVICE);
 
 		/* free resources associated with mapping */
-		page_pool_put_full_page(rx_ring->page_pool, rx_buffer->page, false);
+		page_pool_put_full_page(rx_ring->page_pool,
+					page_to_netmem(rx_buffer->page), false);
 		__page_frag_cache_drain(rx_buffer->page,
 					rx_buffer->pagecnt_bias);
 

@@ -807,16 +807,17 @@ static struct page *__bnxt_alloc_rx_page(struct bnxt *bp, dma_addr_t *mapping,
 	struct page *page;
 
 	if (PAGE_SIZE > BNXT_RX_PAGE_SIZE) {
-		page = page_pool_dev_alloc_frag(rxr->page_pool, offset,
-						BNXT_RX_PAGE_SIZE);
+		page = netmem_to_page(page_pool_dev_alloc_frag(rxr->page_pool,
+							       offset,
+							       BNXT_RX_PAGE_SIZE));
 	} else {
-		page = page_pool_dev_alloc_pages(rxr->page_pool);
+		page = netmem_to_page(page_pool_dev_alloc_pages(rxr->page_pool));
 		*offset = 0;
 	}
 	if (!page)
 		return NULL;
 
-	*mapping = page_pool_get_dma_addr(page) + *offset;
+	*mapping = page_pool_get_dma_addr(page_to_netmem(page)) + *offset;
 	return page;
 }
 
@@ -1040,7 +1041,7 @@ static struct sk_buff *bnxt_rx_multi_page_skb(struct bnxt *bp,
 				bp->rx_dir);
 	skb = napi_build_skb(data_ptr - bp->rx_offset, BNXT_RX_PAGE_SIZE);
 	if (!skb) {
-		page_pool_recycle_direct(rxr->page_pool, page);
+		page_pool_recycle_direct(rxr->page_pool, page_to_netmem(page));
 		return NULL;
 	}
 	skb_mark_for_recycle(skb);
@@ -1078,7 +1079,7 @@ static struct sk_buff *bnxt_rx_page_skb(struct bnxt *bp,
 
 	skb = napi_alloc_skb(&rxr->bnapi->napi, payload);
 	if (!skb) {
-		page_pool_recycle_direct(rxr->page_pool, page);
+		page_pool_recycle_direct(rxr->page_pool, page_to_netmem(page));
 		return NULL;
 	}
 
@@ -3283,7 +3284,7 @@ skip_rx_buf_free:
 		rx_agg_buf->page = NULL;
 		__clear_bit(i, rxr->rx_agg_bmap);
 
-		page_pool_recycle_direct(rxr->page_pool, page);
+		page_pool_recycle_direct(rxr->page_pool, page_to_netmem(page));
 	}
 
 skip_rx_agg_free:

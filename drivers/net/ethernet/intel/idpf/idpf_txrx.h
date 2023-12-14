@@ -932,18 +932,19 @@ static inline dma_addr_t idpf_alloc_page(struct page_pool *pool,
 					 unsigned int buf_size)
 {
 	if (buf_size == IDPF_RX_BUF_2048)
-		buf->page = page_pool_dev_alloc_frag(pool, &buf->page_offset,
-						     buf_size);
+		buf->page = netmem_to_page(page_pool_dev_alloc_frag(pool,
+								    &buf->page_offset,
+								    buf_size));
 	else
-		buf->page = page_pool_dev_alloc_pages(pool);
+		buf->page = netmem_to_page(page_pool_dev_alloc_pages(pool));
 
 	if (!buf->page)
 		return DMA_MAPPING_ERROR;
 
 	buf->truesize = buf_size;
 
-	return page_pool_get_dma_addr(buf->page) + buf->page_offset +
-	       pool->p.offset;
+	return page_pool_get_dma_addr(page_to_netmem(buf->page)) +
+	       buf->page_offset + pool->p.offset;
 }
 
 /**
@@ -952,7 +953,7 @@ static inline dma_addr_t idpf_alloc_page(struct page_pool *pool,
  */
 static inline void idpf_rx_put_page(struct idpf_rx_buf *rx_buf)
 {
-	page_pool_put_page(rx_buf->page->pp, rx_buf->page,
+	page_pool_put_page(rx_buf->page->pp, page_to_netmem(rx_buf->page),
 			   rx_buf->truesize, true);
 	rx_buf->page = NULL;
 }
@@ -968,7 +969,7 @@ static inline void idpf_rx_sync_for_cpu(struct idpf_rx_buf *rx_buf, u32 len)
 	struct page_pool *pp = page->pp;
 
 	dma_sync_single_range_for_cpu(pp->p.dev,
-				      page_pool_get_dma_addr(page),
+				      page_pool_get_dma_addr(page_to_netmem(page)),
 				      rx_buf->page_offset + pp->p.offset, len,
 				      page_pool_get_dma_dir(pp));
 }

@@ -1113,7 +1113,7 @@ int cpsw_fill_rx_channels(struct cpsw_priv *priv)
 		pool = cpsw->page_pool[ch];
 		ch_buf_num = cpdma_chan_get_rx_buf_num(cpsw->rxv[ch].ch);
 		for (i = 0; i < ch_buf_num; i++) {
-			page = page_pool_dev_alloc_pages(pool);
+			page = netmem_to_page(page_pool_dev_alloc_pages(pool));
 			if (!page) {
 				cpsw_err(priv, ifup, "allocate rx page err\n");
 				return -ENOMEM;
@@ -1123,7 +1123,8 @@ int cpsw_fill_rx_channels(struct cpsw_priv *priv)
 			xmeta->ndev = priv->ndev;
 			xmeta->ch = ch;
 
-			dma = page_pool_get_dma_addr(page) + CPSW_HEADROOM_NA;
+			dma = page_pool_get_dma_addr(page_to_netmem(page)) +
+			      CPSW_HEADROOM_NA;
 			ret = cpdma_chan_idle_submit_mapped(cpsw->rxv[ch].ch,
 							    page, dma,
 							    cpsw->rx_packet_max,
@@ -1132,7 +1133,8 @@ int cpsw_fill_rx_channels(struct cpsw_priv *priv)
 				cpsw_err(priv, ifup,
 					 "cannot submit page to channel %d rx, error %d\n",
 					 ch, ret);
-				page_pool_recycle_direct(pool, page);
+				page_pool_recycle_direct(pool,
+							 page_to_netmem(page));
 				return ret;
 			}
 		}
@@ -1303,7 +1305,7 @@ int cpsw_xdp_tx_frame(struct cpsw_priv *priv, struct xdp_frame *xdpf,
 	txch = cpsw->txv[0].ch;
 
 	if (page) {
-		dma = page_pool_get_dma_addr(page);
+		dma = page_pool_get_dma_addr(page_to_netmem(page));
 		dma += xdpf->headroom + sizeof(struct xdp_frame);
 		ret = cpdma_chan_submit_mapped(txch, cpsw_xdpf_to_handle(xdpf),
 					       dma, xdpf->len, port);
@@ -1379,7 +1381,7 @@ int cpsw_run_xdp(struct cpsw_priv *priv, int ch, struct xdp_buff *xdp,
 out:
 	return ret;
 drop:
-	page_pool_recycle_direct(cpsw->page_pool[ch], page);
+	page_pool_recycle_direct(cpsw->page_pool[ch], page_to_netmem(page));
 	return ret;
 }
 
