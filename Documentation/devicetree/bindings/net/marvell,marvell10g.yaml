@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/marvell,marvell10g.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Marvell Alaska X 10G Ethernet PHY
+
+maintainers:
+  - Tobias Waldekranz <tobias@waldekranz.com>
+
+description: |
+  Bindings for Marvell Alaska X 10G Ethernet PHYs
+
+allOf:
+  - $ref: ethernet-phy.yaml#
+
+properties:
+  leds:
+    type: object
+
+    properties:
+      '#address-cells':
+        const: 1
+
+      '#size-cells':
+        const: 0
+
+    patternProperties:
+      '^led@[a-f0-9]+$':
+        $ref: /schemas/leds/common.yaml#
+
+        properties:
+          marvell,polarity:
+            description: |
+              Electrical polarity and drive type for this LED. In the
+              active state, hardware may drive the pin either low or
+              high. In the inactive state, the pin can either be
+              driven to the opposite logic level, or be tristated.
+            $ref: /schemas/types.yaml#/definitions/string
+            enum:
+              - active-low
+              - active-high
+              - active-low-tristate
+              - active-high-tristate
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-phy@0 {
+            reg = <0>;
+
+            marvell,polarity = "active-low-tristate";
+        };
+    };
