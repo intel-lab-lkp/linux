@@ -323,6 +323,23 @@ static struct device_driver nsim_driver = {
 	.owner		= THIS_MODULE,
 };
 
+struct nsim_bus_dev *nsim_bus_dev_get(unsigned int id)
+{
+	struct nsim_bus_dev *nsim_bus_dev;
+
+	mutex_lock(&nsim_bus_dev_list_lock);
+	list_for_each_entry(nsim_bus_dev, &nsim_bus_dev_list, list) {
+		if (nsim_bus_dev->dev.id == id) {
+			get_device(&nsim_bus_dev->dev);
+			mutex_unlock(&nsim_bus_dev_list_lock);
+			return nsim_bus_dev;
+		}
+	}
+	mutex_unlock(&nsim_bus_dev_list_lock);
+
+	return NULL;
+}
+
 int nsim_bus_init(void)
 {
 	int err;

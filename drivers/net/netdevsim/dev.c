@@ -388,6 +388,91 @@ static const struct file_operations nsim_dev_rate_parent_fops = {
 	.owner = THIS_MODULE,
 };
 
+static ssize_t nsim_dev_peer_read(struct file *file, char __user *data,
+				  size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port;
+	struct netdevsim *peer;
+	unsigned int id, port;
+	char buf[23];
+	ssize_t len;
+
+	nsim_dev_port = file->private_data;
+	rcu_read_lock();
+	peer = rcu_dereference(nsim_dev_port->ns->peer);
+	if (!peer) {
+		rcu_read_unlock();
+		return 0;
+	}
+
+	id = peer->nsim_bus_dev->dev.id;
+	port = peer->nsim_dev_port->port_index;
+	len = scnprintf(buf, sizeof(buf), "%u %u\n", id, port);
+
+	rcu_read_unlock();
+	return simple_read_from_buffer(data, count, ppos, buf, len);
+}
+
+static ssize_t nsim_dev_peer_write(struct file *file,
+				   const char __user *data,
+				   size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port, *peer_dev_port;
+	struct nsim_bus_dev *peer_bus_dev;
+	struct nsim_dev *peer_dev;
+	unsigned int id, port;
+	char buf[22];
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -ENOSPC;
+
+	ret = copy_from_user(buf, data, count);
+	if (ret)
+		return -EFAULT;
+	buf[count] = '\0';
+
+	ret = sscanf(buf, "%u %u", &id, &port);
+	if (ret != 2) {
+		pr_err("Format for adding a peer is \"id port\" (uint uint)");
+		return -EINVAL;
+	}
+
+	/* invalid netdevsim id */
+	peer_bus_dev = nsim_bus_dev_get(id);
+	if (!peer_bus_dev)
+		return -EINVAL;
+
+	ret = -EINVAL;
+	/* cannot link to self */
+	nsim_dev_port = file->private_data;
+	if (nsim_dev_port->ns->nsim_bus_dev == peer_bus_dev &&
+	    nsim_dev_port->port_index == port)
+		goto out;
+
+	peer_dev = dev_get_drvdata(&peer_bus_dev->dev);
+	list_for_each_entry(peer_dev_port, &peer_dev->port_list, list) {
+		if (peer_dev_port->port_index != port)
+			continue;
+		rcu_assign_pointer(nsim_dev_port->ns->peer, peer_dev_port->ns);
+		rcu_assign_pointer(peer_dev_port->ns->peer, nsim_dev_port->ns);
+		ret = count;
+		goto out;
+	}
+
+out:
+	put_device(&peer_bus_dev->dev);
+	return ret;
+}
+
+static const struct file_operations nsim_dev_peer_fops = {
+	.open = simple_open,
+	.read = nsim_dev_peer_read,
+	.write = nsim_dev_peer_write,
+	.llseek = generic_file_llseek,
+	.owner = THIS_MODULE,
+};
+
 static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 				      struct nsim_dev_port *nsim_dev_port)
 {
@@ -417,6 +502,9 @@ static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 								 &nsim_dev_rate_parent_fops);
 	}
 	debugfs_create_symlink("dev", nsim_dev_port->ddir, dev_link_name);
+
+	debugfs_create_file("peer", 0600, nsim_dev_port->ddir,
+			    nsim_dev_port, &nsim_dev_peer_fops);
 
 	return 0;
 }
