@@ -344,11 +344,22 @@ static int mv3310_power_down(struct phy_device *phydev)
 
 static int mv3310_power_up(struct phy_device *phydev)
 {
+	static const u16 resets[][2] = {
+		{ MDIO_MMD_PCS,    MV_PCS_BASE_R    + MDIO_CTRL1 },
+		{ MDIO_MMD_PCS,    MV_PCS_1000BASEX + MDIO_CTRL1 },
+		{ MDIO_MMD_PCS,    MV_PCS_BASE_T    + MDIO_CTRL1 },
+		{ MDIO_MMD_PMAPMD, MDIO_CTRL1 },
+		{ MDIO_MMD_VEND2,  MV_V2_PORT_CTRL },
+	};
 	struct mv3310_priv *priv = dev_get_drvdata(&phydev->mdio.dev);
-	int ret;
+	int i, ret;
 
-	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2, MV_V2_PORT_CTRL,
-				 MV_V2_PORT_CTRL_PWRDOWN);
+	for (i = 0; i < ARRAY_SIZE(resets); i++) {
+		ret = phy_clear_bits_mmd(phydev, resets[i][0], resets[i][1],
+					 MV_V2_PORT_CTRL_PWRDOWN);
+		if (ret)
+			break;
+	}
 
 	/* Sometimes, the power down bit doesn't clear immediately, and
 	 * a read of this register causes the bit not to clear. Delay
