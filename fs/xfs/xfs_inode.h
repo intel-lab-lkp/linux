@@ -346,6 +346,7 @@ static inline bool xfs_inode_has_large_extent_counts(struct xfs_inode *ip)
 
 /* Quotacheck is running but inode has not been added to quota counts. */
 #define XFS_IQUOTAUNCHECKED	(1 << 14)
+#define XFS_IDEFRAG             (1 << 15) /* defrag in progress */
 
 /*
  * Remap in progress. Callers that wish to update file data while

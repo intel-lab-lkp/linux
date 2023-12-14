@@ -252,10 +252,191 @@ static inline bool xfs_defrag_failed(struct xfs_defrag_info *di)
 	return di->di_defrag.df_status != 0;
 }
 
-/* so far do nothing */
+static inline void xfs_set_defrag_error(struct xfs_defrag *df, int error)
+{
+	if (df->df_status == 0)
+		df->df_status = error;
+}
+
+static void xfs_piece_reset(struct xfs_defrag_piece *dp)
+{
+	dp->dp_start_off = 0;
+	dp->dp_len = 0;
+	dp->dp_nr_ext = 0;
+}
+
+/*
+ * check if the given extent should be skipped from defragmenting
+ * The following extents are skipped
+ *	1. non "real"
+ *	2. unwritten
+ *	3. size bigger than target
+ * returns:
+ * true		-- skip this extent
+ * false	-- don't skip
+ */
+static bool xfs_extent_skip_defrag(struct xfs_bmbt_irec *check,
+			    struct xfs_defrag *defrag)
+{
+	if (!xfs_bmap_is_real_extent(check))
+		return true;
+	if (check->br_state == XFS_EXT_UNWRITTEN)
+		return true;
+	if (check->br_blockcount > defrag->df_tgt_extsize)
+		return true;
+	return false;
+}
+
+/*
+ * add extent to piece
+ * the extent is expected to be behind all the existing extents.
+ * returns:
+ *	true	-- the piece is full with extents
+ *	false	-- not full yet
+ */
+static bool xfs_add_extent_to_piece(struct xfs_defrag_piece *dp,
+			     struct xfs_bmbt_irec *add,
+			     struct xfs_defrag *defrag,
+			     int pos_in_piece)
+{
+	ASSERT(dp->dp_nr_ext < XFS_DEFRAG_PIECE_MAX_EXT);
+	ASSERT(pos_in_piece < XFS_DEFRAG_PIECE_MAX_EXT);
+	dp->dp_extents[pos_in_piece] = *add;
+	dp->dp_len += add->br_blockcount;
+
+	/* set up starting file offset */
+	if (dp->dp_nr_ext == 0)
+		dp->dp_start_off = add->br_startoff;
+	dp->dp_nr_ext++;
+	if (dp->dp_nr_ext == XFS_DEFRAG_PIECE_MAX_EXT)
+		return true;
+	if (dp->dp_len >= defrag->df_piece_size)
+		return true;
+	return false;
+}
+
+/*
+ * check if the given extent is contiguous, by file block number,  with the
+ * previous one in the piece
+ */
+static bool xfs_is_contig_ext(struct xfs_bmbt_irec *check,
+			      struct xfs_defrag_piece *dp)
+{
+	/* it's contig if the piece is empty */
+	if (dp->dp_len == 0)
+		return true;
+	return dp->dp_start_off + dp->dp_len == check->br_startoff;
+}
+
+/*
+ * pick next piece to defragment starting from the @di->di_next_blk
+ * takes and drops XFS_ILOCK_SHARED lock
+ * returns:
+ *	true:	piece is selected.
+ *	false:	no more pieces in this file.
+ */
+static bool xfs_pick_next_piece(struct xfs_defrag_info *di)
+{
+	struct xfs_defrag	*defrag = &di->di_defrag;
+	int			pos_in_piece = 0;
+	struct xfs_defrag_piece	*dp = &di->di_dp;
+	struct xfs_inode	*ip = di->di_ip;
+	bool			found;
+	struct xfs_iext_cursor	icur;
+	struct xfs_bmbt_irec	got;
+
+	xfs_piece_reset(dp);
+	xfs_ilock(ip, XFS_ILOCK_SHARED);
+	found = xfs_iext_lookup_extent(ip, &ip->i_df, di->di_next_blk, &icur, &got);
+
+	/* fill the piece until it get full or the it reaches block limit */
+	while (found) {
+		if (xfs_extent_skip_defrag(&got, defrag)) {
+			if (dp->dp_len) {
+				/* this piece already has some extents, return */
+				break;
+			}
+			goto next_ext;
+		}
+
+		if (!xfs_is_contig_ext(&got, dp)) {
+			/* this extent is not contigurous with previous one, finish this piece */
+			break;
+		}
+
+		if (xfs_add_extent_to_piece(dp, &got, defrag, pos_in_piece++)) {
+			/* this piece is full */
+			break;
+		}
+
+next_ext:
+		found = xfs_iext_next_extent(&ip->i_df, &icur, &got);
+	}
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
+
+	/* set the starting file block for next piece */
+	di->di_next_blk = dp->dp_start_off + dp->dp_len;
+	return !!dp->dp_len;
+}
+
+/*
+ * defrag a piece of a file
+ * error code is stored in di->di_defrag.df_status.
+ * returns:
+ *	true	-- whole file defrag done successfully.
+ *	false	-- not all done or error happened.
+ */
+
 static bool xfs_defrag_file(struct xfs_defrag_info *di)
 {
-	return true;
+	struct xfs_defrag	*df = &(di->di_defrag);
+	struct xfs_inode	*ip = di->di_ip;
+	bool			ret = false;
+	int			error;
+
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	error = xfs_iread_extents(NULL, ip, XFS_DATA_FORK);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	if (error) {
+		xfs_set_defrag_error(df, error);
+		goto out;
+	}
+
+	/* prevent further read/write/map/unmap/reflink/GC requests to this file */
+	if (!xfs_ilock_nowait(ip, XFS_IOLOCK_EXCL))
+		goto out;
+
+	if (!filemap_invalidate_trylock(VFS_I(ip)->i_mapping)) {
+		xfs_iunlock(ip, XFS_IOLOCK_EXCL);
+		goto out;
+	}
+
+	inode_dio_wait(VFS_I(ip));
+	/*
+	 * flush the whole file to get stable data/cow extents
+	 */
+	error = filemap_write_and_wait(VFS_I(ip)->i_mapping);
+	if (error) {
+		xfs_set_defrag_error(df, error);
+		goto unlock_out;
+	}
+
+	xfs_iflags_set(ip, XFS_IDEFRAG); //set after dirty pages get flushed
+	/* pick up next piece */
+	if (!xfs_pick_next_piece(di)) {
+		/* no more pieces to defrag, we are done */
+		ret = true;
+		goto clear_out;
+	}
+	df->df_blocks_done = di->di_next_blk;
+clear_out:
+	xfs_iflags_clear(ip, XFS_IDEFRAG);
+unlock_out:
+	filemap_invalidate_unlock(VFS_I(ip)->i_mapping);
+	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
+out:
+	di->di_last_process = jiffies;
+	return ret;
 }
 
 static inline bool xfs_defrag_suspended(struct xfs_defrag_info *di)
@@ -266,7 +447,7 @@ static inline bool xfs_defrag_suspended(struct xfs_defrag_info *di)
 /* run as a separated process.
  * defragment files in mp->m_defrag_list
  */
-int xfs_defrag_process(void *data)
+static int xfs_defrag_process(void *data)
 {
 	unsigned long		smallest_wait = ULONG_MAX;
 	struct xfs_mount	*mp = data;
