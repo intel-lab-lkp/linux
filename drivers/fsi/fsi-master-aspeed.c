@@ -87,7 +87,7 @@ static const u32 fsi_base = 0xa0000000;
 #define FSI_LINK_ENABLE_SETUP_TIME	10	/* in mS */
 
 /* Run the bus at maximum speed by default */
-#define FSI_DIVISOR_DEFAULT            1
+#define FSI_DIVISOR_DEFAULT            2
 #define FSI_DIVISOR_CABLED             2
 static u16 aspeed_fsi_divisor = FSI_DIVISOR_DEFAULT;
 module_param_named(bus_div,aspeed_fsi_divisor, ushort, 0);
