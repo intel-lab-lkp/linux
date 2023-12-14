@@ -2330,7 +2330,10 @@ static void unmap_region(struct mm_struct *mm, struct ma_state *mas,
 	struct mmu_gather tlb;
 	unsigned long mt_start = mas->index;
 
+	/* Defer lru_add_drain() to tlb_finish_mmu() for the ifndef case. */
+#ifdef CONFIG_MMU_GATHER_NO_GATHER
 	lru_add_drain();
+#endif
 	tlb_gather_mmu(&tlb, mm);
 	update_hiwater_rss(mm);
 	unmap_vmas(&tlb, mas, vma, start, end, tree_end, mm_wr_locked);
@@ -3300,7 +3303,10 @@ void exit_mmap(struct mm_struct *mm)
 		return;
 	}
 
+	/* Defer lru_add_drain() to tlb_finish_mmu() for the ifndef case. */
+#ifdef CONFIG_MMU_GATHER_NO_GATHER
 	lru_add_drain();
+#endif
 	flush_cache_mm(mm);
 	tlb_gather_mmu_fullmm(&tlb, mm);
 	/* update_hiwater_rss(mm) here? but nobody should be looking */
