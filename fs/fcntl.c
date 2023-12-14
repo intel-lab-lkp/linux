@@ -306,6 +306,7 @@ static long fcntl_get_rw_hint(struct file *file, unsigned int cmd,
 static long fcntl_set_rw_hint(struct file *file, unsigned int cmd,
 			      unsigned long arg)
 {
+	void (*apply_whint)(struct file *, enum rw_hint);
 	struct inode *inode = file_inode(file);
 	u64 __user *argp = (u64 __user *)arg;
 	u64 hint;
@@ -317,6 +318,9 @@ static long fcntl_set_rw_hint(struct file *file, unsigned int cmd,
 
 	inode_lock(inode);
 	inode->i_write_hint = hint;
+	apply_whint = inode->i_fop->apply_whint;
+	if (apply_whint)
+		apply_whint(file, hint);
 	inode_unlock(inode);
 
 	return 0;

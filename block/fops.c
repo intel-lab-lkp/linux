@@ -620,6 +620,16 @@ static int blkdev_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static void blkdev_apply_whint(struct file *file, enum rw_hint hint)
+{
+	struct bdev_handle *handle = file->private_data;
+	struct inode *bd_inode = handle->bdev->bd_inode;
+
+	inode_lock(bd_inode);
+	bd_inode->i_write_hint = hint;
+	inode_unlock(bd_inode);
+}
+
 static ssize_t
 blkdev_direct_write(struct kiocb *iocb, struct iov_iter *from)
 {
@@ -854,6 +864,7 @@ const struct file_operations def_blk_fops = {
 	.splice_read	= filemap_splice_read,
 	.splice_write	= iter_file_splice_write,
 	.fallocate	= blkdev_fallocate,
+	.apply_whint	= blkdev_apply_whint,
 };
 
 static __init int blkdev_init(void)
