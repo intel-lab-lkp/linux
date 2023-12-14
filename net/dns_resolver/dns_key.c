@@ -104,7 +104,7 @@ dns_resolver_preparse(struct key_preparsed_payload *prep)
 
 	if (data[0] == 0) {
 		/* It may be a server list. */
-		if (datalen <= sizeof(*bin))
+		if (datalen <= sizeof(*v1))
 			return -EINVAL;
 
 		bin = (const struct dns_payload_header *)data;
