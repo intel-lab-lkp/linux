@@ -190,6 +190,14 @@ static void __xfs_drop_defrag(struct xfs_defrag_info *di, struct xfs_mount *mp)
 	kfree(di);
 }
 
+/* cleanup when a defragmentation is done, failed, or cancelled. */
+static void xfs_drop_defrag(struct xfs_defrag_info *di, struct xfs_mount *mp)
+{
+	down(&mp->m_defrag_lock);
+	__xfs_drop_defrag(di, mp);
+	up(&mp->m_defrag_lock);
+}
+
 /* clean up all defragmentation jobs in this XFS */
 void clean_up_defrags(struct xfs_mount *mp)
 {
@@ -203,15 +211,149 @@ void clean_up_defrags(struct xfs_mount *mp)
 	up(&mp->m_defrag_lock);
 }
 
+/*
+ * if mp->m_defrag_list is not empty, return the first one in the list.
+ * returns NULL otherwise.
+ */
+static struct xfs_defrag_info *get_first_defrag(struct xfs_mount *mp)
+{
+	struct xfs_defrag_info *first;
+
+	down(&mp->m_defrag_lock);
+	if (list_empty(&mp->m_defrag_list))
+		first = NULL;
+	else
+		first = container_of(mp->m_defrag_list.next,
+				struct xfs_defrag_info, di_list);
+	up(&mp->m_defrag_lock);
+	return first;
+}
+
+/*
+ * if mp->m_defrag_list is not empty, return the last one in the list.
+ * returns NULL otherwise.
+ */
+static struct xfs_defrag_info *get_last_defrag(struct xfs_mount *mp)
+{
+	struct xfs_defrag_info *last;
+
+	down(&mp->m_defrag_lock);
+	if (list_empty(&mp->m_defrag_list))
+		last = NULL;
+	else
+		last = container_of(mp->m_defrag_list.prev,
+				struct xfs_defrag_info, di_list);
+	up(&mp->m_defrag_lock);
+	return last;
+}
+
+static inline bool xfs_defrag_failed(struct xfs_defrag_info *di)
+{
+	return di->di_defrag.df_status != 0;
+}
+
+/* so far do nothing */
+static bool xfs_defrag_file(struct xfs_defrag_info *di)
+{
+	return true;
+}
+
+static inline bool xfs_defrag_suspended(struct xfs_defrag_info *di)
+{
+	return di->di_defrag.df_suspended;
+}
+
 /* run as a separated process.
  * defragment files in mp->m_defrag_list
  */
 int xfs_defrag_process(void *data)
 {
+	unsigned long		smallest_wait = ULONG_MAX;
 	struct xfs_mount	*mp = data;
+	struct xfs_defrag_info	*di, *last;
 
-	while (!kthread_should_stop())
-		xfs_defrag_idle(1000);
+	while (!kthread_should_stop()) {
+		bool	defrag_any = false;
+
+		if (smallest_wait != ULONG_MAX) {
+			smallest_wait = max_t(unsigned long, smallest_wait, 10);
+			xfs_defrag_idle(smallest_wait);
+			smallest_wait = ULONG_MAX;
+		}
+
+		last = get_last_defrag(mp);
+		if (!last) {
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			continue; /* while loop */
+		}
+
+		do {
+			unsigned long	next_defrag_time;
+			unsigned long	save_jiffies;
+
+			if (kthread_should_stop())
+				break; /* do */
+
+			di = get_first_defrag(mp);
+			/* done this round */
+			if (!di)
+				break; /* do */
+
+			/* stopped by user, clean up right now */
+			if (di->di_user_stopped) {
+				xfs_drop_defrag(di, mp);
+				continue; /* do */
+			}
+
+			/*
+			 * Defrag failed on this file, give some grace time, say 30s
+			 * for user space to capture the error
+			 */
+			if (xfs_defrag_failed(di)) {
+				unsigned long drop_time = di->di_last_process
+					+ msecs_to_jiffies(XFS_DERFAG_GRACE_PERIOD);
+				save_jiffies = jiffies;
+				/* not the time to drop this failed file yet */
+				if (time_before(save_jiffies, drop_time)) {
+					/* wait a while before dropping this file */
+					if (smallest_wait > drop_time - save_jiffies)
+						smallest_wait = drop_time - save_jiffies;
+				} else {
+					xfs_drop_defrag(di, mp);
+				}
+				continue; /* do */
+			}
+
+			if (xfs_defrag_suspended(di))
+				continue; /* do */
+
+			next_defrag_time = di->di_last_process
+					+ msecs_to_jiffies(di->di_defrag.df_idle_time);
+
+			save_jiffies = jiffies;
+			if (time_before(save_jiffies, next_defrag_time)) {
+				if (smallest_wait > next_defrag_time - save_jiffies)
+					smallest_wait = next_defrag_time - save_jiffies;
+				continue; /* do */
+			}
+
+			defrag_any = true;
+			/* whole file defrag done successfully */
+			if (xfs_defrag_file(di))
+				xfs_drop_defrag(di, mp);
+
+			/* avoid tight CPU usage */
+			xfs_defrag_idle(2);
+		} while (di != last);
+
+		/* all the left defragmentations are suspended */
+		if (defrag_any == false && smallest_wait == ULONG_MAX) {
+			set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+		}
+
+	}
 
 	clean_up_defrags(mp);
 	return 0;
