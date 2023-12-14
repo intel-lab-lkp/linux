@@ -231,10 +231,12 @@ struct ceph_msg_data {
 
 struct ceph_msg_data_cursor {
 	size_t			total_resid;	/* across all data items */
+	size_t			sr_total_resid;	/* across all data items for sparse-read */
 
 	struct ceph_msg_data	*data;		/* current data item */
 	size_t			resid;		/* bytes not yet consumed */
 	int			sr_resid;	/* residual sparse_read len */
+	int			sr_resid_elen;	/* total sparse_read elen */
 	bool			need_crc;	/* crc update needed */
 	union {
 #ifdef CONFIG_BLOCK

@@ -5946,6 +5946,7 @@ next_op:
 
 		/* send back the new length and nullify the ptr */
 		cursor->sr_resid = elen;
+		cursor->sr_resid_elen = elen;
 		ret = elen;
 		*pbuf = NULL;
 

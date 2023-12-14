@@ -160,7 +160,9 @@ static size_t sizeof_footer(struct ceph_connection *con)
 static void prepare_message_data(struct ceph_msg *msg, u32 data_len)
 {
 	/* Initialize data cursor if it's not a sparse read */
-	if (!msg->sparse_read)
+	if (msg->sparse_read)
+		msg->cursor.sr_total_resid = data_len;
+	else
 		ceph_msg_data_cursor_init(&msg->cursor, msg, data_len);
 }
 
@@ -1032,18 +1034,25 @@ static int read_partial_sparse_msg_data(struct ceph_connection *con)
 	bool do_datacrc = !ceph_test_opt(from_msgr(con->msgr), NOCRC);
 	u32 crc = 0;
 	int ret = 1;
+	int len;
 
 	if (do_datacrc)
 		crc = con->in_data_crc;
 
-	do {
-		if (con->v1.in_sr_kvec.iov_base)
+	while (cursor->sr_total_resid && ret > 0) {
+		len = 0;
+		if (con->v1.in_sr_kvec.iov_base) {
 			ret = read_partial_message_chunk(con,
 							 &con->v1.in_sr_kvec,
 							 con->v1.in_sr_len,
 							 &crc);
-		else if (cursor->sr_resid > 0)
+			if (ret == 1)
+				len = con->v1.in_sr_len;
+		} else if (cursor->sr_resid > 0) {
 			ret = read_partial_sparse_msg_extent(con, &crc);
+			if (ret == 1)
+				len = cursor->sr_resid_elen;
+		}
 
 		if (ret <= 0) {
 			if (do_datacrc)
@@ -1051,11 +1060,13 @@ static int read_partial_sparse_msg_data(struct ceph_connection *con)
 			return ret;
 		}
 
+		cursor->sr_total_resid -= len;
+
 		memset(&con->v1.in_sr_kvec, 0, sizeof(con->v1.in_sr_kvec));
 		ret = con->ops->sparse_read(con, cursor,
 				(char **)&con->v1.in_sr_kvec.iov_base);
 		con->v1.in_sr_len = ret;
-	} while (ret > 0);
+	}
 
 	if (do_datacrc)
 		con->in_data_crc = crc;

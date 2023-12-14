@@ -1073,6 +1073,7 @@ void ceph_msg_data_cursor_init(struct ceph_msg_data_cursor *cursor,
 	cursor->total_resid = length;
 	cursor->data = msg->data;
 	cursor->sr_resid = 0;
+	cursor->sr_resid_elen = 0;
 
 	__ceph_msg_data_cursor_init(cursor);
 }
