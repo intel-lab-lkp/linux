@@ -160,12 +160,12 @@ static const struct gnss_operations sirf_gnss_ops = {
 	.write_raw	= sirf_write_raw,
 };
 
-static ssize_t sirf_receive_buf(struct serdev_device *serdev,
-				const u8 *buf, size_t count)
+static size_t sirf_receive_buf(struct serdev_device *serdev,
+			       const u8 *buf, size_t count)
 {
 	struct sirf_data *data = serdev_device_get_drvdata(serdev);
 	struct gnss_device *gdev = data->gdev;
-	int ret = 0;
+	size_t ret = 0;
 
 	if (!data->wakeup && !data->active) {
 		data->active = true;

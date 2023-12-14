@@ -60,8 +60,8 @@ void gnss_put_device(struct gnss_device *gdev);
 int gnss_register_device(struct gnss_device *gdev);
 void gnss_deregister_device(struct gnss_device *gdev);
 
-int gnss_insert_raw(struct gnss_device *gdev, const unsigned char *buf,
-			size_t count);
+size_t gnss_insert_raw(struct gnss_device *gdev, const unsigned char *buf,
+		       size_t count);
 
 static inline void gnss_set_drvdata(struct gnss_device *gdev, void *data)
 {

@@ -317,10 +317,10 @@ EXPORT_SYMBOL_GPL(gnss_deregister_device);
  *
  * Must not be called for a closed device.
  */
-int gnss_insert_raw(struct gnss_device *gdev, const unsigned char *buf,
-				size_t count)
+size_t gnss_insert_raw(struct gnss_device *gdev, const unsigned char *buf,
+		       size_t count)
 {
-	int ret;
+	size_t ret;
 
 	ret = kfifo_in(&gdev->read_fifo, buf, count);
 
