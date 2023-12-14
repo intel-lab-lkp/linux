@@ -25,6 +25,7 @@
 #include <linux/bitfield.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/firmware.h>
 #include <linux/hwmon.h>
 #include <linux/marvell_phy.h>
 #include <linux/phy.h>
@@ -50,6 +51,13 @@ enum {
 	MV_PMA_21X0_PORT_CTRL_MACTYPE_10GBASER_RATE_MATCH	= 0x6,
 	MV_PMA_BOOT		= 0xc050,
 	MV_PMA_BOOT_FATAL	= BIT(0),
+	MV_PMA_BOOT_PRGS_MASK	= 0x0006,
+	MV_PMA_BOOT_PRGS_INIT	= 0x0000,
+	MV_PMA_BOOT_PRGS_WAIT	= 0x0002,
+	MV_PMA_BOOT_PRGS_CSUM	= 0x0004,
+	MV_PMA_BOOT_PRGS_JRAM	= 0x0006,
+	MV_PMA_BOOT_APP_STARTED	= BIT(4),
+	MV_PMA_BOOT_APP_LOADED	= BIT(6),
 
 	MV_PCS_BASE_T		= 0x0000,
 	MV_PCS_BASE_R		= 0x1000,
@@ -95,6 +103,12 @@ enum {
 	MV_PCS_PORT_INFO	= 0xd00d,
 	MV_PCS_PORT_INFO_NPORTS_MASK	= 0x0380,
 	MV_PCS_PORT_INFO_NPORTS_SHIFT	= 7,
+
+	/* Firmware downloading */
+	MV_PCS_FW_ADDR_LOW	= 0xd0f0,
+	MV_PCS_FW_ADDR_HIGH	= 0xd0f1,
+	MV_PCS_FW_DATA		= 0xd0f2,
+	MV_PCS_FW_CSUM		= 0xd0f3,
 
 	/* SerDes reinitialization 88E21X0 */
 	MV_AN_21X0_SERDES_CTRL2	= 0x800f,
@@ -156,6 +170,7 @@ struct mv3310_chip {
 
 	const struct mv3310_mactype *mactypes;
 	size_t n_mactypes;
+	const char *firmware_path;
 
 #ifdef CONFIG_HWMON
 	int (*hwmon_read_temp_reg)(struct phy_device *phydev);
@@ -506,6 +521,132 @@ static const struct sfp_upstream_ops mv3310_sfp_ops = {
 	.module_insert = mv3310_sfp_insert,
 };
 
+struct mv3310_fw_hdr {
+	struct {
+		u32 size;
+		u32 addr;
+		u16 csum;
+	} __packed data;
+
+	u8 flags;
+#define MV3310_FW_HDR_DATA_ONLY BIT(6)
+
+	u8 port_skip;
+	u32 next_hdr;
+	u16 csum;
+
+	u8 pad[14];
+} __packed;
+
+static int mv3310_load_fw_sect(struct phy_device *phydev,
+			       const struct mv3310_fw_hdr *hdr, const u8 *data)
+{
+	int err = 0;
+	size_t i;
+	u16 csum;
+
+	dev_dbg(&phydev->mdio.dev, "Loading %u byte %s section at 0x%08x\n",
+		hdr->data.size,
+		(hdr->flags & MV3310_FW_HDR_DATA_ONLY) ? "data" : "executable",
+		hdr->data.addr);
+
+	for (i = 0, csum = 0; i < hdr->data.size; i++)
+		csum += data[i];
+
+	if ((u16)~csum != hdr->data.csum) {
+		dev_err(&phydev->mdio.dev, "Corrupt section data\n");
+		return -EINVAL;
+	}
+
+	phy_lock_mdio_bus(phydev);
+
+	/* Any existing checksum is cleared by a read */
+	__phy_read_mmd(phydev, MDIO_MMD_PCS, MV_PCS_FW_CSUM);
+
+	__phy_write_mmd(phydev, MDIO_MMD_PCS, MV_PCS_FW_ADDR_LOW,  hdr->data.addr & 0xffff);
+	__phy_write_mmd(phydev, MDIO_MMD_PCS, MV_PCS_FW_ADDR_HIGH, hdr->data.addr >> 16);
+
+	for (i = 0; i < hdr->data.size; i += 2) {
+		__phy_write_mmd(phydev, MDIO_MMD_PCS, MV_PCS_FW_DATA,
+				(data[i + 1] << 8) | data[i]);
+	}
+
+	csum = __phy_read_mmd(phydev, MDIO_MMD_PCS, MV_PCS_FW_CSUM);
+	if ((u16)~csum != hdr->data.csum) {
+		dev_err(&phydev->mdio.dev, "Download failed\n");
+		err = -EIO;
+		goto unlock;
+	}
+
+	if (hdr->flags & MV3310_FW_HDR_DATA_ONLY)
+		goto unlock;
+
+	__phy_modify_mmd(phydev, MDIO_MMD_PMAPMD, MV_PMA_BOOT, 0, MV_PMA_BOOT_APP_LOADED);
+	mdelay(200);
+	if (!(__phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MV_PMA_BOOT) & MV_PMA_BOOT_APP_STARTED)) {
+		dev_err(&phydev->mdio.dev, "Application did not startup\n");
+		err = -ENODEV;
+	}
+
+unlock:
+	phy_unlock_mdio_bus(phydev);
+	return err;
+}
+
+static int mv3310_load_fw(struct phy_device *phydev)
+{
+	const struct mv3310_chip *chip = to_mv3310_chip(phydev);
+	const struct firmware *fw;
+	struct mv3310_fw_hdr hdr;
+	const u8 *sect;
+	size_t i;
+	u16 csum;
+	int err;
+
+	if (!chip->firmware_path)
+		return -EOPNOTSUPP;
+
+	err = request_firmware(&fw, chip->firmware_path, &phydev->mdio.dev);
+	if (err)
+		return err;
+
+	if (fw->size & 1) {
+		err = -EINVAL;
+		goto release;
+	}
+
+	for (sect = fw->data; (sect + sizeof(hdr)) < (fw->data + fw->size);) {
+		memcpy(&hdr, sect, sizeof(hdr));
+		hdr.data.size = cpu_to_le32(hdr.data.size);
+		hdr.data.addr = cpu_to_le32(hdr.data.addr);
+		hdr.data.csum = cpu_to_le16(hdr.data.csum);
+		hdr.next_hdr = cpu_to_le32(hdr.next_hdr);
+		hdr.csum = cpu_to_le16(hdr.csum);
+
+		for (i = 0, csum = 0; i < offsetof(struct mv3310_fw_hdr, csum); i++)
+			csum += sect[i];
+
+		if ((u16)~csum != hdr.csum) {
+			dev_err(&phydev->mdio.dev, "Corrupt section header\n");
+			err = -EINVAL;
+			break;
+		}
+
+		err = mv3310_load_fw_sect(phydev, &hdr, sect + sizeof(hdr));
+		if (err)
+			break;
+
+		if (!hdr.next_hdr)
+			break;
+
+		sect = fw->data + hdr.next_hdr;
+	}
+
+release:
+	release_firmware(fw);
+	return err;
+}
+
 static int mv3310_probe(struct phy_device *phydev)
 {
 	const struct mv3310_chip *chip = to_mv3310_chip(phydev);
@@ -525,6 +666,12 @@ static int mv3310_probe(struct phy_device *phydev)
 		dev_warn(&phydev->mdio.dev,
 			 "PHY failed to boot firmware, status=%04x\n", ret);
 		return -ENODEV;
+	}
+
+	if ((ret & MV_PMA_BOOT_PRGS_MASK) == MV_PMA_BOOT_PRGS_WAIT) {
+		ret = mv3310_load_fw(phydev);
+		if (ret)
+			return ret;
 	}
 
 	priv = devm_kzalloc(&phydev->mdio.dev, sizeof(*priv), GFP_KERNEL);
@@ -1219,6 +1366,7 @@ static const struct mv3310_chip mv3310_type = {
 
 	.mactypes = mv3310_mactypes,
 	.n_mactypes = ARRAY_SIZE(mv3310_mactypes),
+	.firmware_path = "mrvl/x3310fw.hdr",
 
 #ifdef CONFIG_HWMON
 	.hwmon_read_temp_reg = mv3310_hwmon_read_temp_reg,
@@ -1489,4 +1637,5 @@ static struct mdio_device_id __maybe_unused mv3310_tbl[] = {
 };
 MODULE_DEVICE_TABLE(mdio, mv3310_tbl);
 MODULE_DESCRIPTION("Marvell Alaska X/M multi-gigabit Ethernet PHY driver");
+MODULE_FIRMWARE("mrvl/x3310fw.hdr");
 MODULE_LICENSE("GPL");
