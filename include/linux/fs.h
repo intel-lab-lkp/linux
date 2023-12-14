@@ -989,6 +989,7 @@ struct file {
 	 * Must not be taken from IRQ context.
 	 */
 	spinlock_t		f_lock;
+	enum rw_hint		f_write_hint;
 	fmode_t			f_mode;
 	atomic_long_t		f_count;
 	struct mutex		f_pos_lock;
@@ -2160,6 +2161,14 @@ static inline bool HAS_UNMAPPED_ID(struct mnt_idmap *idmap,
 {
 	return !vfsuid_valid(i_uid_into_vfsuid(idmap, inode)) ||
 	       !vfsgid_valid(i_gid_into_vfsgid(idmap, inode));
+}
+
+static inline enum rw_hint file_write_hint(struct file *file)
+{
+	if (file->f_write_hint != WRITE_LIFE_NOT_SET)
+		return file->f_write_hint;
+
+	return file_inode(file)->i_write_hint;
 }
 
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
