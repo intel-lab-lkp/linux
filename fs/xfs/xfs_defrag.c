@@ -380,6 +380,154 @@ next_ext:
 }
 
 /*
+ * check if the extent _imap_ covers the range specified by 'off_start'
+ * and 'length'.
+ * returns the following codes
+ */
+#define XFS_DEFRAG_IMAP_NOOVERLAP		0	/* no overlap */
+#define	XFS_DEFRAG_IMAP_COVER			1	/* fully cover */
+#define XFS_DEFRAG_IMAP_PARTIAL_COVER		2	/* partially cover */
+static int xfs_extent_cover_range(struct xfs_bmbt_irec *imap,
+			   xfs_fileoff_t off_start,
+			   xfs_fileoff_t length)
+{
+	if (off_start >= imap->br_startoff + imap->br_blockcount)
+		return XFS_DEFRAG_IMAP_NOOVERLAP;
+
+	if (off_start + length <= imap->br_startoff)
+		return XFS_DEFRAG_IMAP_NOOVERLAP;
+
+	if (imap->br_startoff <= off_start &&
+		imap->br_blockcount + imap->br_startoff - off_start >= length)
+		return XFS_DEFRAG_IMAP_COVER;
+
+	return XFS_DEFRAG_IMAP_PARTIAL_COVER;
+}
+
+/*
+ * make sure there is contiguous blocks to cover the given piece in cowfp.
+ * if there is already such an extent covering the piece, we are done.
+ * otherwise, we reclaim the non-contigurous blocks if there are, and allocate
+ * new contigurous blocks.
+ * parameters:
+ * dp	--> [input] the piece
+ * icur	--> [output] cow tree context
+ * imap	--> [outout] the extent that covers the piece.
+ */
+static int xfs_guarantee_cow_extent(struct xfs_defrag_info *di,
+			      struct xfs_iext_cursor *icur,
+			      struct xfs_bmbt_irec *imap)
+{
+#define XFS_DEFRAG_NO_ALLOC		0 /* Cow extent covers, no alloc */
+#define XFS_DEFRAG_ALLOC_NO_CANCEL	1 /* No Cow extents to cancel, alloc */
+#define XFS_DEFRAG_ALLOC_CANCEL		2 /* Cow extents to cancel, alloc */
+	struct xfs_inode	*ip = di->di_ip;
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_defrag_piece *dp = &di->di_dp;
+	int			need_alloc;
+	int			nmap = 1;
+	unsigned int		resblks;
+	int			error;
+	struct xfs_trans	*tp;
+
+	xfs_ifork_init_cow(ip);
+	if (!xfs_inode_has_cow_data(ip)) {
+		need_alloc = XFS_DEFRAG_ALLOC_NO_CANCEL;
+	} else if (!xfs_iext_lookup_extent(ip, ip->i_cowfp, dp->dp_start_off,
+					icur, imap)) {
+		need_alloc = XFS_DEFRAG_ALLOC_NO_CANCEL;
+	} else {
+		int ret = xfs_extent_cover_range(imap, dp->dp_start_off, dp->dp_len);
+
+		if (ret == XFS_DEFRAG_IMAP_COVER)
+			need_alloc = XFS_DEFRAG_NO_ALLOC;
+		else if (ret == XFS_DEFRAG_IMAP_PARTIAL_COVER)
+			need_alloc = XFS_DEFRAG_ALLOC_CANCEL;
+		else // XFS_DEFRAG_IMAP_NOOVERLAP
+			need_alloc = XFS_DEFRAG_ALLOC_NO_CANCEL;
+	}
+
+	/* this piece is fully covered by exsting Cow extent, we are done */
+	if (need_alloc == XFS_DEFRAG_NO_ALLOC)
+		goto out;
+
+	/*
+	 * this piece is partially covered by existing Cow extent, reclaim the
+	 * overlapping blocks
+	 */
+	if (need_alloc == XFS_DEFRAG_ALLOC_CANCEL) {
+		/*
+		 * reclaim overlap (but not covers) extents in a separated
+		 * transaction
+		 */
+		error = xfs_reflink_cancel_cow_range(ip,
+				XFS_FSB_TO_B(mp, dp->dp_start_off),
+				XFS_FSB_TO_B(mp, dp->dp_len), true);
+		if (error)
+			return error;
+	}
+
+	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK) + dp->dp_len;
+	error = xfs_trans_alloc_inode(ip, &M_RES(mp)->tr_write,
+					resblks, 0, false, &tp);
+	if (error)
+		goto out;
+
+	/* now we have ILOCK_EXCL locked */
+	error = xfs_bmapi_write(tp, ip, dp->dp_start_off, dp->dp_len,
+			XFS_BMAPI_COWFORK | XFS_BMAPI_CONTIG, 0, imap, &nmap);
+	if (error)
+		goto cancel_out;
+
+	if (nmap == 0) {
+		error = -ENOSPC;
+		goto cancel_out;
+	}
+
+	error = xfs_trans_commit(tp);
+	if (error)
+		goto unlock_out;
+
+	xfs_iext_lookup_extent(ip, ip->i_cowfp, dp->dp_start_off, icur, imap);
+
+	/* new extent can be merged into existing extent(s) though it's rare */
+	ASSERT(imap->br_blockcount >= dp->dp_len);
+	goto unlock_out;
+
+cancel_out:
+	xfs_trans_cancel(tp);
+unlock_out:
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+out:
+	return error;
+}
+
+/* defrag on the given piece
+ * XFS_ILOCK_EXCL is held by caller
+ */
+static int xfs_defrag_file_piece(struct xfs_defrag_info *di)
+{
+	struct xfs_inode	*ip = di->di_ip;
+	struct xfs_bmbt_irec	imap;
+	int			error;
+	struct xfs_iext_cursor	icur;
+
+	if (xfs_is_shutdown(ip->i_mount)) {
+		error = -EIO;
+		goto out;
+	}
+
+	/* allocate contig new blocks to Cow fork */
+	error = xfs_guarantee_cow_extent(di, &icur, &imap);
+	if (error)
+		goto out;
+
+	ASSERT(imap.br_blockcount >= di->di_dp.dp_len);
+out:
+	return error;
+}
+
+/*
  * defrag a piece of a file
  * error code is stored in di->di_defrag.df_status.
  * returns:
@@ -428,6 +576,14 @@ static bool xfs_defrag_file(struct xfs_defrag_info *di)
 		ret = true;
 		goto clear_out;
 	}
+
+	if (di->di_dp.dp_nr_ext > 1) {
+		/* defrag the piece */
+		error = xfs_defrag_file_piece(di);
+		if (error)
+			xfs_set_defrag_error(df, error);
+	}
+
 	df->df_blocks_done = di->di_next_blk;
 clear_out:
 	xfs_iflags_clear(ip, XFS_IDEFRAG);
@@ -536,6 +692,7 @@ static int xfs_defrag_process(void *data)
 
 	}
 
+	/* unmount in progress, clean up the defrags */
 	clean_up_defrags(mp);
 	return 0;
 }

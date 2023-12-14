@@ -82,6 +82,10 @@ xfs_get_cowextsz_hint(
 {
 	xfs_extlen_t		a, b;
 
+	/* defrag need exact required size and skip the hint */
+	if (xfs_iflags_test(ip, XFS_IDEFRAG))
+		return 0;
+
 	a = 0;
 	if (ip->i_diflags2 & XFS_DIFLAG2_COWEXTSIZE)
 		a = ip->i_cowextsize;
