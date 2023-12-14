@@ -994,6 +994,8 @@ struct kvm_vcpu_arch {
 	 */
 	struct {
 		enum kvm_vcpu_boost_state boost_status;
+		bool preempt_disabled;
+		ktime_t preempt_disabled_ts;
 		int boost_policy;
 		int boost_prio;
 		u64 msr_val;

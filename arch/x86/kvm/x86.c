@@ -199,6 +199,15 @@ module_param(eager_page_split, bool, 0644);
 static bool __read_mostly mitigate_smt_rsb;
 module_param(mitigate_smt_rsb, bool, 0444);
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+/*
+ * Maximum time in micro seconds a guest vcpu can stay boosted due
+ * to preemption disabled.
+ */
+unsigned int pvsched_max_preempt_disabled_us = 3000;
+module_param(pvsched_max_preempt_disabled_us, uint, 0644);
+#endif
+
 /*
  * Restoring the host value for MSRs that are only consumed when running in
  * usermode, e.g. SYSCALL MSRs and TSC_AUX, can be deferred until the CPU
@@ -2137,17 +2146,47 @@ static inline bool kvm_vcpu_exit_request(struct kvm_vcpu *vcpu)
 }
 
 #ifdef CONFIG_PARAVIRT_SCHED_KVM
+static inline void kvm_vcpu_update_preempt_disabled(struct kvm_vcpu_arch *arch,
+		bool preempt_disabled)
+{
+	if (arch->pv_sched.preempt_disabled != preempt_disabled) {
+		arch->pv_sched.preempt_disabled = preempt_disabled;
+		if (preempt_disabled)
+			arch->pv_sched.preempt_disabled_ts = ktime_get();
+		else
+			arch->pv_sched.preempt_disabled_ts = 0;
+	}
+}
+
+static inline bool kvm_vcpu_exceeds_preempt_disabled_duration(struct kvm_vcpu_arch *arch)
+{
+	s64 max_delta = pvsched_max_preempt_disabled_us * NSEC_PER_USEC;
+
+	if (max_delta && arch->pv_sched.preempt_disabled) {
+		s64 delta;
+
+		WARN_ON_ONCE(arch->pv_sched.preempt_disabled_ts == 0);
+		delta = ktime_to_ns(ktime_sub(ktime_get(),
+					arch->pv_sched.preempt_disabled_ts));
+
+		if (delta >= max_delta)
+			return true;
+	}
+
+	return false;
+}
+
 static inline bool __vcpu_needs_boost(struct kvm_vcpu *vcpu, union guest_schedinfo schedinfo)
 {
 	bool pending_event = kvm_cpu_has_pending_timer(vcpu) || kvm_cpu_has_interrupt(vcpu);
 
 	/*
 	 * vcpu needs a boost if
-	 * - A lazy boost request active, or
-	 * - Pending latency sensitive event, or
-	 * - Preemption disabled in this vcpu.
+	 * - A lazy boost request active or a pending latency sensitive event, and
+	 * - Preemption disabled duration on this vcpu has not crossed the threshold.
 	 */
-	return (schedinfo.boost_req == VCPU_REQ_BOOST || pending_event || schedinfo.preempt_disabled);
+	return ((schedinfo.boost_req == VCPU_REQ_BOOST || pending_event) &&
+			!kvm_vcpu_exceeds_preempt_disabled_duration(&vcpu->arch));
 }
 
 static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu)
@@ -2160,6 +2199,8 @@ static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu)
 	if (kvm_read_guest_offset_cached(vcpu->kvm, &vcpu->arch.pv_sched.data,
 		&schedinfo, offsetof(struct pv_sched_data, schedinfo), sizeof(schedinfo)))
 		return;
+
+	kvm_vcpu_update_preempt_disabled(&vcpu->arch, schedinfo.preempt_disabled);
 
 	kvm_vcpu_set_sched(vcpu, __vcpu_needs_boost(vcpu, schedinfo));
 }
