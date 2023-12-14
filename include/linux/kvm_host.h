@@ -807,6 +807,9 @@ struct kvm {
 	struct notifier_block pm_notifier;
 #endif
 	char stats_id[KVM_STATS_NAME_SIZE];
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	bool pv_sched_enabled;
+#endif
 };
 
 #define kvm_err(fmt, ...) \
@@ -2292,9 +2295,38 @@ static inline void kvm_account_pgtable_pages(void *virt, int nr)
 void kvm_set_vcpu_boosted(struct kvm_vcpu *vcpu, bool boosted);
 int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, bool boost);
 
+DECLARE_STATIC_KEY_FALSE(kvm_pv_sched);
+
+static inline bool kvm_pv_sched_enabled(struct kvm *kvm)
+{
+	if (static_branch_unlikely(&kvm_pv_sched))
+		return kvm->pv_sched_enabled;
+
+	return false;
+}
+
+static inline void kvm_set_pv_sched_enabled(struct kvm *kvm, bool enabled)
+{
+	unsigned long i;
+	struct kvm_vcpu *vcpu;
+
+	kvm->pv_sched_enabled = enabled;
+	/*
+	 * After setting vcpu_sched_enabled, we need to update each vcpu's
+	 * state(VCPU_BOOST_{DISABLED,NORMAL}) so that guest knows about the
+	 * update.
+	 * When disabling, we would also need to unboost vcpu threads
+	 * if already boosted.
+	 * XXX: this can race, needs locking!
+	 */
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		kvm_vcpu_set_sched(vcpu, false);
+}
+
 static inline bool kvm_vcpu_sched_enabled(struct kvm_vcpu *vcpu)
 {
-	return kvm_arch_vcpu_pv_sched_enabled(&vcpu->arch);
+	return kvm_pv_sched_enabled(vcpu->kvm) &&
+		kvm_arch_vcpu_pv_sched_enabled(&vcpu->arch);
 }
 
 static inline void kvm_vcpu_kick_boost(struct kvm_vcpu *vcpu)

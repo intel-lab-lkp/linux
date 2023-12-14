@@ -9922,8 +9922,12 @@ static void record_vcpu_boost_status(struct kvm_vcpu *vcpu)
 
 void kvm_set_vcpu_boosted(struct kvm_vcpu *vcpu, bool boosted)
 {
-	kvm_arch_vcpu_set_boost_status(&vcpu->arch,
-			boosted ? VCPU_BOOST_BOOSTED : VCPU_BOOST_NORMAL);
+	enum kvm_vcpu_boost_state boost_status = VCPU_BOOST_DISABLED;
+
+	if (kvm_pv_sched_enabled(vcpu->kvm))
+		boost_status = boosted ? VCPU_BOOST_BOOSTED : VCPU_BOOST_NORMAL;
+
+	kvm_arch_vcpu_set_boost_status(&vcpu->arch, boost_status);
 
 	kvm_make_request(KVM_REQ_VCPU_BOOST_UPDATE, vcpu);
 }
