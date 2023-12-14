@@ -1072,7 +1072,11 @@ static void dsa_user_get_strings(struct net_device *dev,
 			ds->ops->get_strings(ds, dp->index, stringset,
 					     data + 4 * len);
 	} else if (stringset ==  ETH_SS_TEST) {
-		net_selftest_get_strings(data);
+		if (ds->ops->self_test && ds->ops->get_strings)
+			ds->ops->get_strings(ds, dp->index, stringset,
+					     data);
+		else
+			net_selftest_get_strings(data);
 	}
 
 }
@@ -1123,7 +1127,10 @@ static int dsa_user_get_sset_count(struct net_device *dev, int sset)
 
 		return count + 4;
 	} else if (sset ==  ETH_SS_TEST) {
-		return net_selftest_get_count();
+		if (ds->ops->self_test && ds->ops->get_sset_count)
+			return ds->ops->get_sset_count(ds, dp->index, sset);
+		else
+			return net_selftest_get_count();
 	}
 
 	return -EOPNOTSUPP;
