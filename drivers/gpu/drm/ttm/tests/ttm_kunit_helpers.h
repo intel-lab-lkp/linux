@@ -14,8 +14,11 @@
 #include <kunit/test.h>
 
 #define TTM_PL_MULTIHOP (TTM_PL_PRIV + 1)
+#define TTM_PL_MOCK1 (TTM_PL_PRIV + 2)
+#define TTM_PL_MOCK2 (TTM_PL_PRIV + 3)
 
 extern struct ttm_device_funcs ttm_dev_funcs;
+extern struct ttm_device_funcs ttm_dev_funcs_bad_evict;
 
 struct ttm_test_devices {
 	struct drm_device *drm;
@@ -28,6 +31,10 @@ int ttm_device_kunit_init(struct ttm_test_devices *priv,
 			  struct ttm_device *ttm,
 			  bool use_dma_alloc,
 			  bool use_dma32);
+int ttm_device_kunit_init_bad_evict(struct ttm_test_devices *priv,
+				    struct ttm_device *ttm,
+				    bool use_dma_alloc,
+				    bool use_dma32);
 struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 					    struct ttm_test_devices *devs,
 					    size_t size);
