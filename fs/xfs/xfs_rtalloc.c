@@ -257,13 +257,9 @@ xfs_rtallocate_extent_block(
 			/*
 			 * i for maxlen is all free, allocate and return that.
 			 */
-			error = xfs_rtallocate_range(args, i, maxlen);
-			if (error)
-				return error;
-
-			*len = maxlen;
-			*rtx = i;
-			return 0;
+			bestlen = maxlen;
+			besti = i;
+			break;
 		}
 		/*
 		 * In the case where we have a variable-sized allocation
@@ -283,43 +279,44 @@ xfs_rtallocate_extent_block(
 		/*
 		 * If not done yet, find the start of the next free space.
 		 */
-		if (next < end) {
-			error = xfs_rtfind_forw(args, next, end, &i);
-			if (error)
-				return error;
-		} else
+		if (next >= end)
 			break;
+		error = xfs_rtfind_forw(args, next, end, &i);
+		if (error)
+			return error;
 	}
+
 	/*
 	 * Searched the whole thing & didn't find a maxlen free extent.
 	 */
-	if (minlen <= maxlen && besti != -1) {
+	if (maxlen < minlen || besti == -1) {
+		/*
+		 * Allocation failed.  Set *nextp to the next block to try.
+		 */
+		*nextp = next;
+		return -ENOSPC;
+	}
+
+	/*
+	 * If size should be a multiple of prod, make that so.
+	 */
+	if (prod > 1) {
 		xfs_rtxlen_t	p;	/* amount to trim length by */
 
-		/*
-		 * If size should be a multiple of prod, make that so.
-		 */
-		if (prod > 1) {
-			div_u64_rem(bestlen, prod, &p);
-			if (p)
-				bestlen -= p;
-		}
-
-		/*
-		 * Allocate besti for bestlen & return that.
-		 */
-		error = xfs_rtallocate_range(args, besti, bestlen);
-		if (error)
-			return error;
-		*len = bestlen;
-		*rtx = besti;
-		return 0;
+		div_u64_rem(bestlen, prod, &p);
+		if (p)
+			bestlen -= p;
 	}
+
 	/*
-	 * Allocation failed.  Set *nextp to the next block to try.
+	 * Allocate besti for bestlen & return that.
 	 */
-	*nextp = next;
-	return -ENOSPC;
+	error = xfs_rtallocate_range(args, besti, bestlen);
+	if (error)
+		return error;
+	*len = bestlen;
+	*rtx = besti;
+	return 0;
 }
 
 /*
