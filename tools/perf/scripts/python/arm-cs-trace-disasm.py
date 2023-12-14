@@ -108,6 +108,8 @@ def print_disam(dso_fname, dso_start, start_addr, stop_addr):
 			m = disasm_re.search(line)
 			if m is None:
 				continue
+		else:
+			line += " (base address is 0x%016x)" % dso_start
 		print("\t" + line)
 
 def print_sample(sample):
