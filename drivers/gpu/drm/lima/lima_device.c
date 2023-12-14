@@ -368,7 +368,7 @@ int lima_device_init(struct lima_device *ldev)
 	if (err)
 		goto err_out0;
 
-	ldev->empty_vm = lima_vm_create(ldev);
+	ldev->empty_vm = lima_vm_create(ldev, false);
 	if (!ldev->empty_vm) {
 		err = -ENOMEM;
 		goto err_out1;

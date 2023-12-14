@@ -197,7 +197,7 @@ u32 lima_vm_get_va(struct lima_vm *vm, struct lima_bo *bo)
 	return ret;
 }
 
-struct lima_vm *lima_vm_create(struct lima_device *dev)
+struct lima_vm *lima_vm_create(struct lima_device *dev, bool has_drm_mm)
 {
 	struct lima_vm *vm;
 
@@ -221,7 +221,10 @@ struct lima_vm *lima_vm_create(struct lima_device *dev)
 			goto err_out1;
 	}
 
-	drm_mm_init(&vm->mm, dev->va_start, dev->va_end - dev->va_start);
+	if (has_drm_mm) {
+		vm->has_drm_mm = true;
+		drm_mm_init(&vm->mm, dev->va_start, dev->va_end - dev->va_start);
+	}
 
 	return vm;
 
@@ -237,7 +240,8 @@ void lima_vm_release(struct kref *kref)
 	struct lima_vm *vm = container_of(kref, struct lima_vm, refcount);
 	int i;
 
-	drm_mm_takedown(&vm->mm);
+	if (vm->has_drm_mm)
+		drm_mm_takedown(&vm->mm);
 
 	for (i = 0; i < LIMA_VM_NUM_BT; i++) {
 		if (vm->bts[i].cpu)

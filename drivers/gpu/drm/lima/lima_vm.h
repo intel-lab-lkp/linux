@@ -30,6 +30,7 @@ struct lima_vm {
 	struct mutex lock;
 	struct kref refcount;
 
+	bool has_drm_mm;
 	struct drm_mm mm;
 
 	struct lima_device *dev;
@@ -43,7 +44,7 @@ void lima_vm_bo_del(struct lima_vm *vm, struct lima_bo *bo);
 
 u32 lima_vm_get_va(struct lima_vm *vm, struct lima_bo *bo);
 
-struct lima_vm *lima_vm_create(struct lima_device *dev);
+struct lima_vm *lima_vm_create(struct lima_device *dev, bool has_drm_mm);
 void lima_vm_release(struct kref *kref);
 
 static inline struct lima_vm *lima_vm_get(struct lima_vm *vm)

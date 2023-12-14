@@ -219,7 +219,7 @@ static int lima_drm_driver_open(struct drm_device *dev, struct drm_file *file)
 	if (!priv)
 		return -ENOMEM;
 
-	priv->vm = lima_vm_create(ldev);
+	priv->vm = lima_vm_create(ldev, true);
 	if (!priv->vm) {
 		err = -ENOMEM;
 		goto err_out0;
