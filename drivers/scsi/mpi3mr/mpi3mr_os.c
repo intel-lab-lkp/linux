@@ -919,7 +919,7 @@ static int mpi3mr_report_tgtdev_to_host(struct mpi3mr_ioc *mrioc,
 	int retval = 0;
 	struct mpi3mr_tgt_dev *tgtdev;
 
-	if (mrioc->reset_in_progress)
+	if (mrioc->reset_in_progress || mrioc->pcie_err_recovery)
 		return -1;
 
 	tgtdev = mpi3mr_get_tgtdev_by_perst_id(mrioc, perst_id);
@@ -2000,8 +2000,13 @@ static void mpi3mr_fwevt_bh(struct mpi3mr_ioc *mrioc,
 	}
 	case MPI3_EVENT_WAIT_FOR_DEVICES_TO_REFRESH:
 	{
-		while (mrioc->device_refresh_on)
+		while ((mrioc->device_refresh_on || mrioc->block_on_pcie_err) &&
+		    !mrioc->unrecoverable && !mrioc->pcie_err_recovery) {
 			msleep(500);
+		}
+
+		if (mrioc->unrecoverable || mrioc->pcie_err_recovery)
+			break;
 
 		dprint_event_bh(mrioc,
 		    "scan for non responding and newly added devices after soft reset started\n");
@@ -3680,6 +3685,13 @@ int mpi3mr_issue_tm(struct mpi3mr_ioc *mrioc, u8 tm_type,
 		mutex_unlock(&drv_cmd->mutex);
 		goto out;
 	}
+	if (mrioc->block_on_pcie_err) {
+		retval = -1;
+		dprint_tm(mrioc, "sending task management failed due to\n"
+				"pcie error recovery in progress\n");
+		mutex_unlock(&drv_cmd->mutex);
+		goto out;
+	}
 
 	drv_cmd->state = MPI3MR_CMD_PENDING;
 	drv_cmd->is_waiting = 1;
@@ -4073,12 +4085,19 @@ static int mpi3mr_eh_bus_reset(struct scsi_cmnd *scmd)
 	if (dev_type == MPI3_DEVICE_DEVFORM_VD) {
 		mpi3mr_wait_for_host_io(mrioc,
 			MPI3MR_RAID_ERRREC_RESET_TIMEOUT);
-		if (!mpi3mr_get_fw_pending_ios(mrioc))
+		if (!mpi3mr_get_fw_pending_ios(mrioc)) {
+			while (mrioc->reset_in_progress ||
+			       mrioc->prepare_for_reset ||
+			       mrioc->block_on_pcie_err)
+				ssleep(1);
 			retval = SUCCESS;
+			goto out;
+		}
 	}
 	if (retval == FAILED)
 		mpi3mr_print_pending_host_io(mrioc);
 
+out:
 	sdev_printk(KERN_INFO, scmd->device,
 		"Bus reset is %s for scmd(%p)\n",
 		((retval == SUCCESS) ? "SUCCESS" : "FAILED"), scmd);
@@ -4779,7 +4798,8 @@ static int mpi3mr_qcmd(struct Scsi_Host *shost,
 		goto out;
 	}
 
-	if (mrioc->reset_in_progress) {
+	if (mrioc->reset_in_progress || mrioc->prepare_for_reset
+	    || mrioc->block_on_pcie_err) {
 		retval = SCSI_MLQUEUE_HOST_BUSY;
 		goto out;
 	}
@@ -5123,6 +5143,14 @@ mpi3mr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	mrioc->logging_level = logging_level;
 	mrioc->shost = shost;
 	mrioc->pdev = pdev;
+	mrioc->pdevinfo.id = pdev->device;
+	mrioc->pdevinfo.revision = pdev->revision;
+	mrioc->pdevinfo.ssid = pdev->subsystem_device;
+	mrioc->pdevinfo.ssvid = pdev->subsystem_vendor;
+	mrioc->pdevinfo.bus = pdev->bus->number;
+	mrioc->pdevinfo.dev = PCI_SLOT(pdev->devfn);
+	mrioc->pdevinfo.func = PCI_FUNC(pdev->devfn);
+	mrioc->pdevinfo.segment = pci_domain_nr(pdev->bus);
 	mrioc->stop_bsgs = 1;
 
 	mrioc->max_sgl_entries = max_sgl_entries;
@@ -5276,17 +5304,21 @@ static void mpi3mr_remove(struct pci_dev *pdev)
 	struct workqueue_struct	*wq;
 	unsigned long flags;
 	struct mpi3mr_tgt_dev *tgtdev, *tgtdev_next;
-	struct mpi3mr_hba_port *port, *hba_port_next;
-	struct mpi3mr_sas_node *sas_expander, *sas_expander_next;
 
 	if (mpi3mr_get_shost_and_mrioc(pdev, &shost, &mrioc))
 		return;
 
-	mrioc = shost_priv(shost);
 	while (mrioc->reset_in_progress || mrioc->is_driver_loading)
 		ssleep(1);
 
-	if (!pci_device_is_present(mrioc->pdev)) {
+	if (mrioc->block_on_pcie_err) {
+		mrioc->block_on_pcie_err = false;
+		scsi_unblock_requests(shost);
+		mrioc->unrecoverable = 1;
+	}
+
+	if (!pci_device_is_present(mrioc->pdev) ||
+	    mrioc->pcie_err_recovery) {
 		mrioc->unrecoverable = 1;
 		mpi3mr_flush_cmds_for_unrecovered_controller(mrioc);
 	}
@@ -5316,29 +5348,6 @@ static void mpi3mr_remove(struct pci_dev *pdev)
 	mpi3mr_cleanup_ioc(mrioc);
 	mpi3mr_free_mem(mrioc);
 	mpi3mr_cleanup_resources(mrioc);
-
-	spin_lock_irqsave(&mrioc->sas_node_lock, flags);
-	list_for_each_entry_safe_reverse(sas_expander, sas_expander_next,
-	    &mrioc->sas_expander_list, list) {
-		spin_unlock_irqrestore(&mrioc->sas_node_lock, flags);
-		mpi3mr_expander_node_remove(mrioc, sas_expander);
-		spin_lock_irqsave(&mrioc->sas_node_lock, flags);
-	}
-	list_for_each_entry_safe(port, hba_port_next, &mrioc->hba_port_table_list, list) {
-		ioc_info(mrioc,
-		    "removing hba_port entry: %p port: %d from hba_port list\n",
-		    port, port->port_id);
-		list_del(&port->list);
-		kfree(port);
-	}
-	spin_unlock_irqrestore(&mrioc->sas_node_lock, flags);
-
-	if (mrioc->sas_hba.num_phys) {
-		kfree(mrioc->sas_hba.phy);
-		mrioc->sas_hba.phy = NULL;
-		mrioc->sas_hba.num_phys = 0;
-	}
-
 	spin_lock(&mrioc_list_lock);
 	list_del(&mrioc->list);
 	spin_unlock(&mrioc_list_lock);

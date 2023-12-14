@@ -31,7 +31,7 @@ static int mpi3mr_bsg_pel_abort(struct mpi3mr_ioc *mrioc)
 		dprint_bsg_err(mrioc, "%s: reset in progress\n", __func__);
 		return -1;
 	}
-	if (mrioc->stop_bsgs) {
+	if (mrioc->stop_bsgs || mrioc->block_on_pcie_err) {
 		dprint_bsg_err(mrioc, "%s: bsgs are blocked\n", __func__);
 		return -1;
 	}
@@ -424,6 +424,9 @@ static long mpi3mr_bsg_adp_reset(struct mpi3mr_ioc *mrioc,
 		goto out;
 	}
 
+	if (mrioc->unrecoverable || mrioc->block_on_pcie_err)
+		return -EINVAL;
+
 	sg_copy_to_buffer(job->request_payload.sg_list,
 			  job->request_payload.sg_cnt,
 			  &adpreset, sizeof(adpreset));
@@ -470,25 +473,29 @@ static long mpi3mr_bsg_populate_adpinfo(struct mpi3mr_ioc *mrioc,
 
 	memset(&adpinfo, 0, sizeof(adpinfo));
 	adpinfo.adp_type = MPI3MR_BSG_ADPTYPE_AVGFAMILY;
-	adpinfo.pci_dev_id = mrioc->pdev->device;
-	adpinfo.pci_dev_hw_rev = mrioc->pdev->revision;
-	adpinfo.pci_subsys_dev_id = mrioc->pdev->subsystem_device;
-	adpinfo.pci_subsys_ven_id = mrioc->pdev->subsystem_vendor;
-	adpinfo.pci_bus = mrioc->pdev->bus->number;
-	adpinfo.pci_dev = PCI_SLOT(mrioc->pdev->devfn);
-	adpinfo.pci_func = PCI_FUNC(mrioc->pdev->devfn);
-	adpinfo.pci_seg_id = pci_domain_nr(mrioc->pdev->bus);
 	adpinfo.app_intfc_ver = MPI3MR_IOCTL_VERSION;
 
-	ioc_state = mpi3mr_get_iocstate(mrioc);
-	if (ioc_state == MRIOC_STATE_UNRECOVERABLE)
-		adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_UNRECOVERABLE;
-	else if ((mrioc->reset_in_progress) || (mrioc->stop_bsgs))
+	if (mrioc->reset_in_progress || mrioc->stop_bsgs ||
+	    mrioc->block_on_pcie_err)
 		adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_IN_RESET;
-	else if (ioc_state == MRIOC_STATE_FAULT)
-		adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_FAULT;
-	else
-		adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_OPERATIONAL;
+	else {
+		ioc_state = mpi3mr_get_iocstate(mrioc);
+		if (ioc_state == MRIOC_STATE_UNRECOVERABLE)
+			adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_UNRECOVERABLE;
+		else if (ioc_state == MRIOC_STATE_FAULT)
+			adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_FAULT;
+		else
+			adpinfo.adp_state = MPI3MR_BSG_ADPSTATE_OPERATIONAL;
+	}
+
+	adpinfo.pci_dev_id = mrioc->pdevinfo.id;
+	adpinfo.pci_dev_hw_rev = mrioc->pdevinfo.revision;
+	adpinfo.pci_subsys_dev_id = mrioc->pdevinfo.ssid;
+	adpinfo.pci_subsys_ven_id = mrioc->pdevinfo.ssvid;
+	adpinfo.pci_bus = mrioc->pdevinfo.bus;
+	adpinfo.pci_dev = mrioc->pdevinfo.dev;
+	adpinfo.pci_func = mrioc->pdevinfo.func;
+	adpinfo.pci_seg_id = mrioc->pdevinfo.segment;
 
 	memcpy((u8 *)&adpinfo.driver_info, (u8 *)&mrioc->driver_info,
 	    sizeof(adpinfo.driver_info));
@@ -1495,7 +1502,7 @@ static long mpi3mr_bsg_process_mpt_cmds(struct bsg_job *job)
 		mutex_unlock(&mrioc->bsg_cmds.mutex);
 		goto out;
 	}
-	if (mrioc->stop_bsgs) {
+	if (mrioc->stop_bsgs || mrioc->block_on_pcie_err) {
 		dprint_bsg_err(mrioc, "%s: bsgs are blocked\n", __func__);
 		rval = -EAGAIN;
 		mutex_unlock(&mrioc->bsg_cmds.mutex);
@@ -2020,17 +2027,20 @@ adp_state_show(struct device *dev, struct device_attribute *attr,
 	enum mpi3mr_iocstate ioc_state;
 	uint8_t adp_state;
 
-	ioc_state = mpi3mr_get_iocstate(mrioc);
-	if (ioc_state == MRIOC_STATE_UNRECOVERABLE)
-		adp_state = MPI3MR_BSG_ADPSTATE_UNRECOVERABLE;
-	else if ((mrioc->reset_in_progress) || (mrioc->stop_bsgs))
+	if (mrioc->reset_in_progress || mrioc->stop_bsgs ||
+		 mrioc->block_on_pcie_err)
 		adp_state = MPI3MR_BSG_ADPSTATE_IN_RESET;
-	else if (ioc_state == MRIOC_STATE_FAULT)
-		adp_state = MPI3MR_BSG_ADPSTATE_FAULT;
-	else
-		adp_state = MPI3MR_BSG_ADPSTATE_OPERATIONAL;
+	else {
+		ioc_state = mpi3mr_get_iocstate(mrioc);
+		if (ioc_state == MRIOC_STATE_UNRECOVERABLE)
+			adp_state = MPI3MR_BSG_ADPSTATE_UNRECOVERABLE;
+		else if (ioc_state == MRIOC_STATE_FAULT)
+			adp_state = MPI3MR_BSG_ADPSTATE_FAULT;
+		else
+			adp_state = MPI3MR_BSG_ADPSTATE_OPERATIONAL;
+	}
 
-	return sysfs_emit(buf, "%u\n", adp_state);
+	return snprintf(buf, PAGE_SIZE, "%u\n", adp_state);
 }
 
 static DEVICE_ATTR_RO(adp_state);
