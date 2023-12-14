@@ -35,6 +35,7 @@
 #include "xfs_trace.h"
 #include "xfs_ag.h"
 #include "scrub/stats.h"
+#include "xfs_defrag.h"
 
 static DEFINE_MUTEX(xfs_uuid_table_mutex);
 static int xfs_uuid_table_size;
@@ -1055,6 +1056,8 @@ xfs_unmountfs(
 {
 	uint64_t		resblks;
 	int			error;
+
+	xfs_stop_wait_defrags(mp);
 
 	/*
 	 * Perform all on-disk metadata updates required to inactivate inodes

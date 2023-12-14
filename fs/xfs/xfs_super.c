@@ -44,6 +44,7 @@
 #include "xfs_dahash_test.h"
 #include "xfs_rtbitmap.h"
 #include "scrub/stats.h"
+#include "xfs_defrag.h"
 
 #include <linux/magic.h>
 #include <linux/fs_context.h>
@@ -2022,6 +2023,8 @@ static int xfs_init_fs_context(
 
 	fc->s_fs_info = mp;
 	fc->ops = &xfs_context_ops;
+
+	xfs_initialize_defrag(mp);
 
 	return 0;
 }

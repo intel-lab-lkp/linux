@@ -54,6 +54,29 @@
  */
 #define XFS_DEFRAG_MAX_PIECE_BLOCKS	4096U
 
+/* initialization called for new mount */
+void xfs_initialize_defrag(struct xfs_mount *mp)
+{
+	sema_init(&mp->m_defrag_lock, 1);
+	mp->m_nr_defrag = 0;
+	mp->m_defrag_task = NULL;
+	INIT_LIST_HEAD(&mp->m_defrag_list);
+}
+
+/* stop all the defragmentations on this mount and wait until they really stopped */
+void xfs_stop_wait_defrags(struct xfs_mount *mp)
+{
+	down(&mp->m_defrag_lock);
+	if (list_empty(&mp->m_defrag_list)) {
+		up(&mp->m_defrag_lock);
+		return;
+	}
+	ASSERT(mp->m_defrag_task);
+	up(&mp->m_defrag_lock);
+	kthread_stop(mp->m_defrag_task);
+	mp->m_defrag_task = NULL;
+}
+
 int xfs_file_defrag(struct file *filp, struct xfs_defrag *defrag)
 {
 	return -EOPNOTSUPP;
