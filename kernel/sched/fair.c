@@ -11252,7 +11252,6 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 		.dst_rq		= this_rq,
 		.dst_grpmask    = group_balance_mask(sd->groups),
 		.idle		= idle,
-		.loop_break	= SCHED_NR_MIGRATE_BREAK,
 		.cpus		= cpus,
 		.fbq_type	= all,
 		.tasks		= LIST_HEAD_INIT(env.tasks),
@@ -11298,6 +11297,12 @@ redo:
 		 * correctly treated as an imbalance.
 		 */
 		env.loop_max  = min(sysctl_sched_nr_migrate, busiest->nr_running);
+		/*
+		 * If busiest rq is small, nr_running < SCHED_NR_MIGRATE_BREAK
+		 * and all tasks are not movable, detach_tasks() should not
+		 * iterate more than tasks available in rq.
+		 */
+		env.loop_break = min(SCHED_NR_MIGRATE_BREAK, busiest->nr_running);
 
 more_balance:
 		rq_lock_irqsave(busiest, &rf);
