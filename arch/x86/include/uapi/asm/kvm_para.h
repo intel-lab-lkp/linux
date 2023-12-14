@@ -36,6 +36,7 @@
 #define KVM_FEATURE_MSI_EXT_DEST_ID	15
 #define KVM_FEATURE_HC_MAP_GPA_RANGE	16
 #define KVM_FEATURE_MIGRATION_CONTROL	17
+#define KVM_FEATURE_PV_SCHED		18
 
 #define KVM_HINTS_REALTIME      0
 
@@ -58,6 +59,7 @@
 #define MSR_KVM_ASYNC_PF_INT	0x4b564d06
 #define MSR_KVM_ASYNC_PF_ACK	0x4b564d07
 #define MSR_KVM_MIGRATION_CONTROL	0x4b564d08
+#define MSR_KVM_PV_SCHED	0x4b564da0
 
 struct kvm_steal_time {
 	__u64 steal;
@@ -149,5 +151,27 @@ struct kvm_vcpu_pv_apf_data {
 #define KVM_PV_EOI_MASK (0x1 << KVM_PV_EOI_BIT)
 #define KVM_PV_EOI_ENABLED KVM_PV_EOI_MASK
 #define KVM_PV_EOI_DISABLED 0x0
+
+/*
+ * VCPU boost state shared between the host and guest.
+ */
+enum kvm_vcpu_boost_state {
+	/* Priority boosting feature disabled in host */
+	VCPU_BOOST_DISABLED = 0,
+	/*
+	 * vcpu is not explicitly boosted by the host.
+	 * (Default priority when the guest started)
+	 */
+	VCPU_BOOST_NORMAL,
+	/* vcpu is boosted by the host */
+	VCPU_BOOST_BOOSTED
+};
+
+/*
+ * Structure passed in via MSR_KVM_PV_SCHED
+ */
+struct pv_sched_data {
+	__u64 boost_status;
+};
 
 #endif /* _UAPI_ASM_X86_KVM_PARA_H */

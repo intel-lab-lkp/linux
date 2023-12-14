@@ -167,6 +167,7 @@ static inline bool is_error_page(struct page *page)
 #define KVM_REQ_VM_DEAD			(1 | KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
 #define KVM_REQ_UNBLOCK			2
 #define KVM_REQ_DIRTY_RING_SOFT_FULL	3
+#define KVM_REQ_VCPU_BOOST_UPDATE	6
 #define KVM_REQUEST_ARCH_BASE		8
 
 /*
@@ -2286,5 +2287,9 @@ static inline void kvm_account_pgtable_pages(void *virt, int nr)
 
 /* Max number of entries allowed for each kvm dirty ring */
 #define  KVM_DIRTY_RING_MAX_ENTRIES  65536
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+void kvm_set_vcpu_boosted(struct kvm_vcpu *vcpu, bool boosted);
+#endif
 
 #endif

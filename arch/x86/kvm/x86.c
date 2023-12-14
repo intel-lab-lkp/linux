@@ -3863,6 +3863,33 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		break;
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case MSR_KVM_PV_SCHED:
+		if (!guest_pv_has(vcpu, KVM_FEATURE_PV_SCHED))
+			return 1;
+
+		if (!(data & KVM_MSR_ENABLED))
+			break;
+
+		if (!(data & ~KVM_MSR_ENABLED)) {
+			/*
+			 * Disable the feature
+			 */
+			vcpu->arch.pv_sched.msr_val = 0;
+			kvm_set_vcpu_boosted(vcpu, false);
+		} if (!kvm_gfn_to_hva_cache_init(vcpu->kvm,
+				&vcpu->arch.pv_sched.data, data & ~KVM_MSR_ENABLED,
+				sizeof(struct pv_sched_data))) {
+			vcpu->arch.pv_sched.msr_val = data;
+			kvm_set_vcpu_boosted(vcpu, false);
+		} else {
+			pr_warn("MSR_KVM_PV_SCHED: kvm:%p, vcpu:%p, "
+				"msr value: %llx, kvm_gfn_to_hva_cache_init failed!\n",
+				vcpu->kvm, vcpu, data & ~KVM_MSR_ENABLED);
+		}
+		break;
+#endif
+
 	case MSR_KVM_POLL_CONTROL:
 		if (!guest_pv_has(vcpu, KVM_FEATURE_POLL_CONTROL))
 			return 1;
@@ -4223,6 +4250,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 		msr_info->data = vcpu->arch.pv_eoi.msr_val;
 		break;
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case MSR_KVM_PV_SCHED:
+		msr_info->data = vcpu->arch.pv_sched.msr_val;
+		break;
+#endif
 	case MSR_KVM_POLL_CONTROL:
 		if (!guest_pv_has(vcpu, KVM_FEATURE_POLL_CONTROL))
 			return 1;
@@ -9793,6 +9825,29 @@ static int complete_hypercall_exit(struct kvm_vcpu *vcpu)
 	return kvm_skip_emulated_instruction(vcpu);
 }
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+static void record_vcpu_boost_status(struct kvm_vcpu *vcpu)
+{
+	u64 val = vcpu->arch.pv_sched.boost_status;
+
+	if (!kvm_arch_vcpu_pv_sched_enabled(&vcpu->arch))
+		return;
+
+	pagefault_disable();
+	kvm_write_guest_offset_cached(vcpu->kvm, &vcpu->arch.pv_sched.data,
+		&val, offsetof(struct pv_sched_data, boost_status), sizeof(u64));
+	pagefault_enable();
+}
+
+void kvm_set_vcpu_boosted(struct kvm_vcpu *vcpu, bool boosted)
+{
+	kvm_arch_vcpu_set_boost_status(&vcpu->arch,
+			boosted ? VCPU_BOOST_BOOSTED : VCPU_BOOST_NORMAL);
+
+	kvm_make_request(KVM_REQ_VCPU_BOOST_UPDATE, vcpu);
+}
+#endif
+
 int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 {
 	unsigned long nr, a0, a1, a2, a3, ret;
@@ -10562,6 +10617,12 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		}
 		if (kvm_check_request(KVM_REQ_STEAL_UPDATE, vcpu))
 			record_steal_time(vcpu);
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+		if (kvm_check_request(KVM_REQ_VCPU_BOOST_UPDATE, vcpu))
+			record_vcpu_boost_status(vcpu);
+#endif
+
 #ifdef CONFIG_KVM_SMM
 		if (kvm_check_request(KVM_REQ_SMI, vcpu))
 			process_smi(vcpu);

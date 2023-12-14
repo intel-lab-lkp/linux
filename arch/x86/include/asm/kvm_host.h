@@ -987,6 +987,18 @@ struct kvm_vcpu_arch {
 	/* Protected Guests */
 	bool guest_state_protected;
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	/*
+	 * MSR to setup a shared memory for scheduling
+	 * information sharing between host and guest.
+	 */
+	struct {
+		enum kvm_vcpu_boost_state boost_status;
+		u64 msr_val;
+		struct gfn_to_hva_cache data;
+	} pv_sched;
+#endif
+
 	/*
 	 * Set when PDPTS were loaded directly by the userspace without
 	 * reading the guest memory
@@ -2216,5 +2228,18 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
  * remaining 31 lower bits must be 0 to preserve ABI.
  */
 #define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+static inline bool kvm_arch_vcpu_pv_sched_enabled(struct kvm_vcpu_arch *arch)
+{
+	return arch->pv_sched.msr_val;
+}
+
+static inline void kvm_arch_vcpu_set_boost_status(struct kvm_vcpu_arch *arch,
+		enum kvm_vcpu_boost_state boost_status)
+{
+	arch->pv_sched.boost_status = boost_status;
+}
+#endif
 
 #endif /* _ASM_X86_KVM_HOST_H */
