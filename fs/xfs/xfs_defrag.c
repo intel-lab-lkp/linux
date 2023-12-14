@@ -553,13 +553,102 @@ static int xfs_defrag_copy_piece_sync(struct xfs_defrag_info *di,
 	return error;
 }
 
+/* caller makes sure both irec1 and irec2 are real ones. */
+static int compare_bmbt_by_fsb(const void *a, const void *b)
+{
+	const struct xfs_bmbt_irec *irec1 = a, *irec2 = b;
+
+	return irec1->br_startblock > irec2->br_startblock ? 1 : -1;
+}
+
+/* sort the extents in dp_extents to be in fsb order, low to high */
+static void xfs_sort_piece_exts_by_fsb(struct xfs_defrag_piece *dp)
+{
+	sort(dp->dp_extents, dp->dp_nr_ext, sizeof(struct xfs_bmbt_irec),
+	     compare_bmbt_by_fsb, NULL);
+}
+
+/*
+ * unmap the given extent from inode
+ * free non-shared blocks and decrease shared counter for shared ones.
+ */
+static int xfs_defrag_unmap_ext(struct xfs_inode *ip,
+				struct xfs_bmbt_irec *irec,
+				struct xfs_trans *tp)
+{
+	struct xfs_bmbt_irec unmap = *irec; /* don't update original extent */
+	xfs_fsblock_t irec_end = irec->br_startblock + irec->br_blockcount;
+	int error = 0;
+
+	while (unmap.br_startblock < irec_end) {
+		bool shared;
+
+		error = xfs_reflink_trim_around_shared(ip, &unmap, &shared, tp);
+		if (error)
+			goto out;
+
+		/* unmap blocks from data fork */
+		xfs_bmap_unmap_extent(tp, ip, &unmap);
+		/*
+		 * decrease refcount counter for shared blocks, or free the
+		 * non-shared blocks
+		 */
+		if (shared) {
+			xfs_refcount_decrease_extent(tp, &unmap);
+		} else {
+			ASSERT(unmap.br_state != XFS_EXT_UNWRITTEN);
+			__xfs_free_extent_later(tp, unmap.br_startblock,
+					unmap.br_blockcount, NULL, 0, false);
+		}
+		xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_BCOUNT,
+			-unmap.br_blockcount);
+
+		/* for next */
+		unmap.br_startoff += unmap.br_blockcount;
+		unmap.br_startblock += unmap.br_blockcount;
+		unmap.br_blockcount = irec_end - unmap.br_startblock;
+	}
+out:
+	return error;
+}
+
+/*
+ * unmap original extents in this piece
+ * for those non-shared ones, also free them; for shared, decrease refcount
+ * counter.
+ * XFS_ILOCK_EXCL is locked by caller.
+ */
+static int xfs_defrag_unmap_piece(struct xfs_defrag_info *di, struct xfs_trans *tp)
+{
+	struct xfs_defrag_piece	*dp = &di->di_dp;
+	xfs_fsblock_t		last_fsb = 0;
+	int			i, error;
+
+	for (i = 0; i < dp->dp_nr_ext; i++) {
+		struct xfs_bmbt_irec *irec = &dp->dp_extents[i];
+
+		/* debug only, remove the following two lines for production use */
+		ASSERT(last_fsb == 0 || irec->br_startblock > last_fsb);
+		last_fsb = irec->br_startblock;
+
+		error = xfs_defrag_unmap_ext(di->di_ip, irec, tp);
+		if (error)
+			break;
+	}
+	return error;
+}
+
 /* defrag on the given piece
  * XFS_ILOCK_EXCL is held by caller
  */
 static int xfs_defrag_file_piece(struct xfs_defrag_info *di)
 {
 	struct xfs_inode	*ip = di->di_ip;
-	struct xfs_bmbt_irec	imap;
+	struct xfs_mount	*mp = ip->i_mount;
+	struct	xfs_trans	*tp = NULL;
+	struct xfs_bmbt_irec	imap, del;
+	unsigned int		resblks;
+
 	int			error;
 	struct xfs_iext_cursor	icur;
 
@@ -579,6 +668,55 @@ static int xfs_defrag_file_piece(struct xfs_defrag_info *di)
 	error = xfs_defrag_copy_piece_sync(di, &imap);
 	if (error)
 		goto out;
+
+	/* sort the extents by FSB, low -> high, for later unmapping*/
+	xfs_sort_piece_exts_by_fsb(&di->di_dp);
+
+	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
+			XFS_TRANS_RESERVE, &tp);
+	if (error)
+		goto out;
+
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	xfs_trans_ijoin(tp, ip, 0);
+
+	/* unmap original extents in data fork */
+	error = xfs_defrag_unmap_piece(di, tp);
+	if (error) {
+		xfs_trans_cancel(tp);
+		goto out;
+	}
+
+	/* adjust new blocks to proper range */
+	del = imap;
+	if (del.br_blockcount > di->di_dp.dp_len) {
+		xfs_filblks_t	diff = di->di_dp.dp_start_off - del.br_startoff;
+
+		del.br_startoff += diff;
+		del.br_startblock += diff;
+		del.br_blockcount = di->di_dp.dp_len;
+	}
+
+	/* Free the CoW orphan record. */
+	xfs_refcount_free_cow_extent(tp, del.br_startblock, del.br_blockcount);
+
+	/* map the adjusted new blocks to data fork */
+	xfs_bmap_map_extent(tp, ip, &del);
+
+	/* Charge this new data fork mapping to the on-disk quota. */
+	xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_DELBCOUNT,
+			(long)del.br_blockcount);
+
+	/* remove the extent from Cow fork */
+	xfs_bmap_del_extent_cow(ip, &icur, &imap, &del);
+
+	/* modify inode change time */
+	xfs_trans_ichgtime(tp, ip, XFS_ICHGTIME_CHG);
+
+	error = xfs_trans_commit(tp);
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
 out:
 	return error;
 }

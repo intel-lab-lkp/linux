@@ -17,7 +17,8 @@ static inline bool xfs_is_cow_inode(struct xfs_inode *ip)
 }
 
 extern int xfs_reflink_trim_around_shared(struct xfs_inode *ip,
-		struct xfs_bmbt_irec *irec, bool *shared);
+		struct xfs_bmbt_irec *irec, bool *shared,
+		struct xfs_trans *tp);
 int xfs_bmap_trim_cow(struct xfs_inode *ip, struct xfs_bmbt_irec *imap,
 		bool *shared);
 

@@ -168,7 +168,8 @@ int
 xfs_reflink_trim_around_shared(
 	struct xfs_inode	*ip,
 	struct xfs_bmbt_irec	*irec,
-	bool			*shared)
+	bool			*shared,
+	struct xfs_trans	*tp)
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_perag	*pag;
@@ -190,7 +191,7 @@ xfs_reflink_trim_around_shared(
 	agbno = XFS_FSB_TO_AGBNO(mp, irec->br_startblock);
 	aglen = irec->br_blockcount;
 
-	error = xfs_reflink_find_shared(pag, NULL, agbno, aglen, &fbno, &flen,
+	error = xfs_reflink_find_shared(pag, tp, agbno, aglen, &fbno, &flen,
 			true);
 	xfs_perag_put(pag);
 	if (error)
@@ -238,7 +239,7 @@ xfs_bmap_trim_cow(
 	}
 
 	/* Trim the mapping to the nearest shared extent boundary. */
-	return xfs_reflink_trim_around_shared(ip, imap, shared);
+	return xfs_reflink_trim_around_shared(ip, imap, shared, NULL);
 }
 
 static int

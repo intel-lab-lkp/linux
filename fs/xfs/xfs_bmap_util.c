@@ -301,7 +301,7 @@ xfs_getbmap_report_one(
 	bool			shared = false;
 	int			error;
 
-	error = xfs_reflink_trim_around_shared(ip, got, &shared);
+	error = xfs_reflink_trim_around_shared(ip, got, &shared, NULL);
 	if (error)
 		return error;
 
