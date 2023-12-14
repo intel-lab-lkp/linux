@@ -2296,11 +2296,19 @@ static inline bool kvm_vcpu_sched_enabled(struct kvm_vcpu *vcpu)
 {
 	return kvm_arch_vcpu_pv_sched_enabled(&vcpu->arch);
 }
+
+static inline void kvm_vcpu_kick_boost(struct kvm_vcpu *vcpu)
+{
+	kvm_vcpu_set_sched(vcpu, true);
+	kvm_vcpu_kick(vcpu);
+}
 #else
 static inline int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, bool boost)
 {
 	return 0;
 }
+
+#define kvm_vcpu_kick_boost kvm_vcpu_kick
 #endif
 
 #endif
