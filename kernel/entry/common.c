@@ -209,6 +209,15 @@ static void exit_to_user_mode_prepare(struct pt_regs *regs)
 	kmap_assert_nomap();
 	lockdep_assert_irqs_disabled();
 	lockdep_sys_exit();
+#ifdef CONFIG_PARAVIRT_SCHED
+	/*
+	 * Guest requests a boost when preemption is disabled but does not request
+	 * an immediate unboost when preemption is enabled back. There is a chance
+	 * that we are boosted here. Unboost if needed.
+	 */
+	if (pv_sched_enabled() && !task_is_realtime(current))
+		pv_sched_unboost_vcpu();
+#endif
 }
 
 /*

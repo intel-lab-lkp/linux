@@ -151,6 +151,71 @@ const_debug unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
 
 __read_mostly int scheduler_running;
 
+#ifdef CONFIG_PARAVIRT_SCHED
+#include <linux/kvm_para.h>
+
+DEFINE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+DEFINE_PER_CPU_DECRYPTED(struct pv_sched_data, pv_sched) __aligned(64);
+
+unsigned long pv_sched_pa(void)
+{
+	return slow_virt_to_phys(this_cpu_ptr(&pv_sched));
+}
+
+bool pv_sched_vcpu_boosted(void)
+{
+	return (this_cpu_read(pv_sched.boost_status) == VCPU_BOOST_BOOSTED);
+}
+
+void pv_sched_boost_vcpu_lazy(void)
+{
+	this_cpu_write(pv_sched.schedinfo.boost_req, VCPU_REQ_BOOST);
+}
+
+void pv_sched_unboost_vcpu_lazy(void)
+{
+	this_cpu_write(pv_sched.schedinfo.boost_req, VCPU_REQ_UNBOOST);
+}
+
+void pv_sched_boost_vcpu(void)
+{
+	pv_sched_boost_vcpu_lazy();
+	/*
+	 * XXX: there could be a race between the boost_status check
+	 *      and hypercall.
+	 */
+	if (this_cpu_read(pv_sched.boost_status) == VCPU_BOOST_NORMAL)
+		kvm_pv_sched_notify_host();
+}
+
+void pv_sched_unboost_vcpu(void)
+{
+	pv_sched_unboost_vcpu_lazy();
+	/*
+	 * XXX: there could be a race between the boost_status check
+	 *      and hypercall.
+	 */
+	if (this_cpu_read(pv_sched.boost_status) == VCPU_BOOST_BOOSTED &&
+			!preempt_count())
+		kvm_pv_sched_notify_host();
+}
+
+/*
+ * Share the preemption enabled/disabled status with host. This will not incur a
+ * VMEXIT and acts as a lazy boost/unboost mechanism - host will check this on
+ * the next VMEXIT for boost/unboost decisions.
+ * XXX: Lazy unboosting may allow cfs tasks to run on RT vcpu till next VMEXIT.
+ */
+static inline void pv_sched_update_preempt_status(bool preempt_disabled)
+{
+	if (pv_sched_enabled())
+		this_cpu_write(pv_sched.schedinfo.preempt_disabled, preempt_disabled);
+}
+#else
+static inline void pv_sched_update_preempt_status(bool preempt_disabled) {}
+#endif
+
 #ifdef CONFIG_SCHED_CORE
 
 DEFINE_STATIC_KEY_FALSE(__sched_core_enabled);
@@ -2070,6 +2135,19 @@ unsigned long get_wchan(struct task_struct *p)
 
 static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
+#ifdef CONFIG_PARAVIRT_SCHED
+	/*
+	 * TODO: currently request for boosting remote vcpus is not implemented. So
+	 * we boost only if this enqueue happens for this cpu.
+	 * This is not a big problem though, target cpu gets an IPI and then gets
+	 * boosted by the host. Posted interrupts is an exception where target vcpu
+	 * will not get boosted immediately, but on the next schedule().
+	 */
+	if (pv_sched_enabled() && this_rq() == rq &&
+			sched_class_above(p->sched_class, &fair_sched_class))
+		pv_sched_boost_vcpu_lazy();
+#endif
+
 	if (!(flags & ENQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
@@ -5835,6 +5913,8 @@ static inline void preempt_latency_start(int val)
 #ifdef CONFIG_DEBUG_PREEMPT
 		current->preempt_disable_ip = ip;
 #endif
+		pv_sched_update_preempt_status(true);
+
 		trace_preempt_off(CALLER_ADDR0, ip);
 	}
 }
@@ -5867,8 +5947,10 @@ NOKPROBE_SYMBOL(preempt_count_add);
  */
 static inline void preempt_latency_stop(int val)
 {
-	if (preempt_count() == val)
+	if (preempt_count() == val) {
+		pv_sched_update_preempt_status(false);
 		trace_preempt_on(CALLER_ADDR0, get_lock_parent_ip());
+	}
 }
 
 void preempt_count_sub(int val)
@@ -6676,6 +6758,15 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	clear_preempt_need_resched();
 #ifdef CONFIG_SCHED_DEBUG
 	rq->last_seen_need_resched_ns = 0;
+#endif
+
+#ifdef CONFIG_PARAVIRT_SCHED
+	if (pv_sched_enabled()) {
+		if (sched_class_above(next->sched_class, &fair_sched_class))
+			pv_sched_boost_vcpu_lazy();
+		else if (next->sched_class == &fair_sched_class)
+			pv_sched_unboost_vcpu();
+	}
 #endif
 
 	if (likely(prev != next)) {

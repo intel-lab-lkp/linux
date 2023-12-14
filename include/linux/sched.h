@@ -2442,4 +2442,25 @@ static inline void sched_core_fork(struct task_struct *p) { }
 
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
+#ifdef CONFIG_PARAVIRT_SCHED
+DECLARE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+extern unsigned long pv_sched_pa(void);
+
+static inline bool pv_sched_enabled(void)
+{
+	return static_branch_unlikely(&__pv_sched_enabled);
+}
+
+static inline void pv_sched_enable(void)
+{
+	static_branch_enable(&__pv_sched_enabled);
+}
+
+extern bool pv_sched_vcpu_boosted(void);
+extern void pv_sched_boost_vcpu(void);
+extern void pv_sched_unboost_vcpu(void);
+extern void pv_sched_boost_vcpu_lazy(void);
+extern void pv_sched_unboost_vcpu_lazy(void);
+#endif
 #endif
