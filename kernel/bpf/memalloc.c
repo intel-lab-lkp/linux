@@ -618,6 +618,13 @@ static void drain_mem_cache(struct bpf_mem_cache *c)
 	free_all(llist_del_all(&c->waiting_for_gp), percpu);
 }
 
+static void bpf_mem_alloc_destroy_cache(struct bpf_mem_cache *c)
+{
+	WRITE_ONCE(c->draining, true);
+	irq_work_sync(&c->refill_work);
+	drain_mem_cache(c);
+}
+
 static void check_mem_cache(struct bpf_mem_cache *c)
 {
 	WARN_ON_ONCE(!llist_empty(&c->free_by_rcu_ttrace));
@@ -723,9 +730,7 @@ void bpf_mem_alloc_destroy(struct bpf_mem_alloc *ma)
 		rcu_in_progress = 0;
 		for_each_possible_cpu(cpu) {
 			c = per_cpu_ptr(ma->cache, cpu);
-			WRITE_ONCE(c->draining, true);
-			irq_work_sync(&c->refill_work);
-			drain_mem_cache(c);
+			bpf_mem_alloc_destroy_cache(c);
 			rcu_in_progress += atomic_read(&c->call_rcu_ttrace_in_progress);
 			rcu_in_progress += atomic_read(&c->call_rcu_in_progress);
 		}
@@ -740,9 +745,7 @@ void bpf_mem_alloc_destroy(struct bpf_mem_alloc *ma)
 			cc = per_cpu_ptr(ma->caches, cpu);
 			for (i = 0; i < NUM_CACHES; i++) {
 				c = &cc->cache[i];
-				WRITE_ONCE(c->draining, true);
-				irq_work_sync(&c->refill_work);
-				drain_mem_cache(c);
+				bpf_mem_alloc_destroy_cache(c);
 				rcu_in_progress += atomic_read(&c->call_rcu_ttrace_in_progress);
 				rcu_in_progress += atomic_read(&c->call_rcu_in_progress);
 			}
