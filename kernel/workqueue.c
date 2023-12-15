@@ -107,8 +107,6 @@ enum {
 	 */
 	RESCUER_NICE_LEVEL	= MIN_NICE,
 	HIGHPRI_NICE_LEVEL	= MIN_NICE,
-
-	WQ_NAME_LEN		= 24,
 };
 
 /*
@@ -311,7 +309,7 @@ struct workqueue_struct {
 	struct lock_class_key	key;
 	struct lockdep_map	lockdep_map;
 #endif
-	char			name[WQ_NAME_LEN]; /* I: workqueue name */
+	char			*name; /* I: workqueue name */
 
 	/*
 	 * Destruction of workqueue_struct is RCU protected to allow walking
@@ -3929,6 +3927,7 @@ static void rcu_free_wq(struct rcu_head *rcu)
 	wq_free_lockdep(wq);
 	free_percpu(wq->cpu_pwq);
 	free_workqueue_attrs(wq->unbound_attrs);
+	kfree(wq->name);
 	kfree(wq);
 }
 
@@ -4670,9 +4669,10 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 					 unsigned int flags,
 					 int max_active, ...)
 {
-	va_list args;
+	va_list args, args_copy;
 	struct workqueue_struct *wq;
 	struct pool_workqueue *pwq;
+	size_t namelen;
 
 	/*
 	 * Unbound && max_active == 1 used to imply ordered, which is no longer
@@ -4699,8 +4699,16 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	}
 
 	va_start(args, max_active);
-	vsnprintf(wq->name, sizeof(wq->name), fmt, args);
+	va_copy(args_copy, args);
+	namelen = vsnprintf(NULL, 0, fmt, args) + 1;
+	namelen = (namelen < PAGE_SIZE) ? namelen : PAGE_SIZE;
 	va_end(args);
+	wq->name = kzalloc(namelen, GFP_KERNEL);
+	if (!wq->name)
+		goto err_free_wq;
+
+	vsnprintf(wq->name, namelen, fmt, args_copy);
+	va_end(args_copy);
 
 	max_active = max_active ?: WQ_DFL_ACTIVE;
 	max_active = wq_clamp_max_active(max_active, flags, wq->name);
@@ -4746,6 +4754,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	return wq;
 
 err_unreg_lockdep:
+	kfree(wq->name);
 	wq_unregister_lockdep(wq);
 	wq_free_lockdep(wq);
 err_free_wq:
@@ -5038,7 +5047,7 @@ EXPORT_SYMBOL_GPL(set_worker_desc);
 void print_worker_info(const char *log_lvl, struct task_struct *task)
 {
 	work_func_t *fn = NULL;
-	char name[WQ_NAME_LEN] = { };
+	char *name;
 	char desc[WORKER_DESC_LEN] = { };
 	struct pool_workqueue *pwq = NULL;
 	struct workqueue_struct *wq = NULL;
@@ -5060,7 +5069,7 @@ void print_worker_info(const char *log_lvl, struct task_struct *task)
 	copy_from_kernel_nofault(&fn, &worker->current_func, sizeof(fn));
 	copy_from_kernel_nofault(&pwq, &worker->current_pwq, sizeof(pwq));
 	copy_from_kernel_nofault(&wq, &pwq->wq, sizeof(wq));
-	copy_from_kernel_nofault(name, wq->name, sizeof(name) - 1);
+	copy_from_kernel_nofault(&name, &wq->name, sizeof(wq->name));
 	copy_from_kernel_nofault(desc, worker->desc, sizeof(desc) - 1);
 
 	if (fn || name[0] || desc[0]) {
