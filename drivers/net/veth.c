@@ -624,7 +624,18 @@ static struct xdp_frame *veth_xdp_rcv_one(struct veth_rq *rq,
 		xdp->rxq = &rq->xdp_rxq;
 		vxbuf.skb = NULL;
 
-		act = bpf_prog_run_xdp(xdp_prog, xdp);
+		scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+			act = bpf_prog_run_xdp(xdp_prog, xdp);
+			if (act == XDP_REDIRECT) {
+				orig_frame = *frame;
+				xdp->rxq->mem = frame->mem;
+				if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
+					frame = &orig_frame;
+					stats->xdp_drops++;
+					goto err_xdp;
+				}
+			}
+		}
 
 		switch (act) {
 		case XDP_PASS:
@@ -644,13 +655,6 @@ static struct xdp_frame *veth_xdp_rcv_one(struct veth_rq *rq,
 			rcu_read_unlock();
 			goto xdp_xmit;
 		case XDP_REDIRECT:
-			orig_frame = *frame;
-			xdp->rxq->mem = frame->mem;
-			if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
-				frame = &orig_frame;
-				stats->rx_drops++;
-				goto err_xdp;
-			}
 			stats->xdp_redirect++;
 			rcu_read_unlock();
 			goto xdp_xmit;
@@ -857,7 +861,18 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 	orig_data = xdp->data;
 	orig_data_end = xdp->data_end;
 
-	act = bpf_prog_run_xdp(xdp_prog, xdp);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+		act = bpf_prog_run_xdp(xdp_prog, xdp);
+		if (act == XDP_REDIRECT) {
+			veth_xdp_get(xdp);
+			consume_skb(skb);
+			xdp->rxq->mem = rq->xdp_mem;
+			if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
+				stats->rx_drops++;
+				goto err_xdp;
+			}
+		}
+	}
 
 	switch (act) {
 	case XDP_PASS:
@@ -875,13 +890,6 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		rcu_read_unlock();
 		goto xdp_xmit;
 	case XDP_REDIRECT:
-		veth_xdp_get(xdp);
-		consume_skb(skb);
-		xdp->rxq->mem = rq->xdp_mem;
-		if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
-			stats->rx_drops++;
-			goto err_xdp;
-		}
 		stats->xdp_redirect++;
 		rcu_read_unlock();
 		goto xdp_xmit;

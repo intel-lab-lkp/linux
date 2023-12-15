@@ -1708,16 +1708,18 @@ static struct sk_buff *tun_build_skb(struct tun_struct *tun,
 		xdp_init_buff(&xdp, buflen, &tfile->xdp_rxq);
 		xdp_prepare_buff(&xdp, buf, pad, len, false);
 
-		act = bpf_prog_run_xdp(xdp_prog, &xdp);
-		if (act == XDP_REDIRECT || act == XDP_TX) {
-			get_page(alloc_frag->page);
-			alloc_frag->offset += buflen;
-		}
-		err = tun_xdp_act(tun, xdp_prog, &xdp, act);
-		if (err < 0) {
-			if (act == XDP_REDIRECT || act == XDP_TX)
-				put_page(alloc_frag->page);
-			goto out;
+		scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+			act = bpf_prog_run_xdp(xdp_prog, &xdp);
+			if (act == XDP_REDIRECT || act == XDP_TX) {
+				get_page(alloc_frag->page);
+				alloc_frag->offset += buflen;
+			}
+			err = tun_xdp_act(tun, xdp_prog, &xdp, act);
+			if (err < 0) {
+				if (act == XDP_REDIRECT || act == XDP_TX)
+					put_page(alloc_frag->page);
+				goto out;
+			}
 		}
 
 		if (err == XDP_REDIRECT)
@@ -2460,8 +2462,10 @@ static int tun_xdp_one(struct tun_struct *tun,
 		xdp_init_buff(xdp, buflen, &tfile->xdp_rxq);
 		xdp_set_data_meta_invalid(xdp);
 
-		act = bpf_prog_run_xdp(xdp_prog, xdp);
-		ret = tun_xdp_act(tun, xdp_prog, xdp, act);
+		scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+			act = bpf_prog_run_xdp(xdp_prog, xdp);
+			ret = tun_xdp_act(tun, xdp_prog, xdp, act);
+		}
 		if (ret < 0) {
 			put_page(virt_to_head_page(xdp->data));
 			return ret;

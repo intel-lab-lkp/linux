@@ -80,8 +80,15 @@ static netdev_tx_t netkit_xmit(struct sk_buff *skb, struct net_device *dev)
 	netkit_prep_forward(skb, !net_eq(dev_net(dev), dev_net(peer)));
 	skb->dev = peer;
 	entry = rcu_dereference(nk->active);
-	if (entry)
-		ret = netkit_run(entry, skb, ret);
+	if (entry) {
+		scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+			ret = netkit_run(entry, skb, ret);
+			if (ret == NETKIT_REDIRECT) {
+				dev_sw_netstats_tx_add(dev, 1, len);
+				skb_do_redirect(skb);
+			}
+		}
+	}
 	switch (ret) {
 	case NETKIT_NEXT:
 	case NETKIT_PASS:
@@ -95,8 +102,6 @@ static netdev_tx_t netkit_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		break;
 	case NETKIT_REDIRECT:
-		dev_sw_netstats_tx_add(dev, 1, len);
-		skb_do_redirect(skb);
 		break;
 	case NETKIT_DROP:
 	default:

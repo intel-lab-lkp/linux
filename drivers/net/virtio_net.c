@@ -1029,6 +1029,7 @@ static int virtnet_xdp_handler(struct bpf_prog *xdp_prog, struct xdp_buff *xdp,
 	int err;
 	u32 act;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(xdp_prog, xdp);
 	u64_stats_inc(&stats->xdp_packets);
 
