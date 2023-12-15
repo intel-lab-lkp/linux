@@ -73,8 +73,9 @@ patternProperties:
         description: >
           Minimum and maximum values produced by the axis.
           For an ABS_X axis this will be the left-most and right-most
-          inclination of the joystick. If min > max, it is left to userspace to
-          treat the axis as inverted.
+          inclination of the joystick. The axis must always be expressed as
+          min < max, if the axis is inverted it is left to userspace to handle
+          the inversion.
           This property is interpreted as two signed 32 bit values.
 
       abs-fuzz:
