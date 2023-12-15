@@ -16,6 +16,16 @@ elif type c++filt >/dev/null 2>&1 ; then
 	cppfilt_opts=-i
 fi
 
+if [[ "${LLVM}" == "1" ]] ; then
+	addr2line="llvm-addr2line"
+elif [[ "${LLVM}" == */ ]] ; then
+	addr2line="${LLVM}llvm-addr2line"
+elif [[ "${LLVM}" == -* ]] ; then
+	addr2line="llvm-addr2line${LLVM}"
+else
+	addr2line="${CROSS_COMPILE}addr2line"
+fi
+
 if [[ $1 == "-r" ]] ; then
 	vmlinux=""
 	basepath="auto"
@@ -169,7 +179,7 @@ parse_symbol() {
 	if [[ $aarray_support == true && "${cache[$module,$address]+isset}" == "isset" ]]; then
 		local code=${cache[$module,$address]}
 	else
-		local code=$(${CROSS_COMPILE}addr2line -i -e "$objfile" "$address" 2>/dev/null)
+		local code=$(${addr2line} -i -e "$objfile" "$address" 2>/dev/null)
 		if [[ $aarray_support == true ]]; then
 			cache[$module,$address]=$code
 		fi
