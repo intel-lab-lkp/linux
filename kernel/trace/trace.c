@@ -5388,6 +5388,8 @@ int trace_keep_overwrite(struct tracer *tracer, u32 mask, int set)
 	return 0;
 }
 
+static int __tracing_set_filter_buffering(struct trace_array *tr, bool set);
+
 int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 {
 	int *map;
@@ -5440,6 +5442,9 @@ int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 
 	if (mask == TRACE_ITER_FUNC_FORK)
 		ftrace_pid_follow_fork(tr, enabled);
+
+	if (mask == TRACE_ITER_DISABLE_FILTER_BUF)
+		__tracing_set_filter_buffering(tr, enabled);
 
 	if (mask == TRACE_ITER_OVERWRITE) {
 		ring_buffer_change_overwrite(tr->array_buffer.buffer, enabled);
@@ -6454,7 +6459,7 @@ static void tracing_set_nop(struct trace_array *tr)
 {
 	if (tr->current_trace == &nop_trace)
 		return;
-	
+
 	tr->current_trace->enabled--;
 
 	if (tr->current_trace->reset)
@@ -7524,27 +7529,29 @@ u64 tracing_event_time_stamp(struct trace_buffer *buffer, struct ring_buffer_eve
 	return ring_buffer_event_time_stamp(buffer, rbe);
 }
 
+static int __tracing_set_filter_buffering(struct trace_array *tr, bool set)
+{
+	if (set && tr->no_filter_buffering_ref++)
+		return 0;
+
+	if (!set) {
+		if (WARN_ON_ONCE(!tr->no_filter_buffering_ref))
+			return -EINVAL;
+
+		--tr->no_filter_buffering_ref;
+	}
+	return 0;
+}
+
 /*
  * Set or disable using the per CPU trace_buffer_event when possible.
  */
 int tracing_set_filter_buffering(struct trace_array *tr, bool set)
 {
-	int ret = 0;
+	int ret;
 
 	mutex_lock(&trace_types_lock);
-
-	if (set && tr->no_filter_buffering_ref++)
-		goto out;
-
-	if (!set) {
-		if (WARN_ON_ONCE(!tr->no_filter_buffering_ref)) {
-			ret = -EINVAL;
-			goto out;
-		}
-
-		--tr->no_filter_buffering_ref;
-	}
- out:
+	ret = __tracing_set_filter_buffering(tr, set);
 	mutex_unlock(&trace_types_lock);
 
 	return ret;

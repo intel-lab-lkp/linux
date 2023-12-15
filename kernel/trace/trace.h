@@ -1249,6 +1249,7 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 		C(EVENT_FORK,		"event-fork"),		\
 		C(PAUSE_ON_TRACE,	"pause-on-trace"),	\
 		C(HASH_PTR,		"hash-ptr"),	/* Print hashed pointer */ \
+		C(DISABLE_FILTER_BUF,	"disable-filter-buffer"),\
 		FUNCTION_FLAGS					\
 		FGRAPH_FLAGS					\
 		STACK_FLAGS					\

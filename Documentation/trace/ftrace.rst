@@ -1239,6 +1239,29 @@ Here are the available options:
 	When the free_buffer is closed, tracing will
 	stop (tracing_on set to 0).
 
+  disable-filter-buf
+	Normally, when the filter is enabled, a temporary buffer is
+	created to copy the event data into it to perform the
+	filtering logic. If the filter passes and the event should
+	be recorded, then the event is copied from the temporary
+	buffer into the ring buffer. If the event is to be discarded
+	then it is simply dropped. If another event comes in via
+	an interrupt, it will not use the temporary buffer as it is
+	busy and will write directly into the ring buffer.
+
+	This option will disable the temporary buffer and always
+	write into the ring buffer. This will avoid the copy when
+	the event is to be recorded, but also adds a bit more
+	overhead on the discard, and if another event were to interrupt
+	the event that is to be discarded, then the event will not
+	be removed from the ring buffer but instead converted to
+	padding that will not be read by the reader. Padding will
+	still take up space on the ring buffer.
+
+	This option can be beneficial if most events are recorded and
+	not discarded, or simply for debugging the discard functionality
+	of the ring buffer.
+
   irq-info
 	Shows the interrupt, preempt count, need resched data.
 	When disabled, the trace looks like::
