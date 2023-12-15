@@ -2491,7 +2491,10 @@ static int __igc_xdp_run_prog(struct igc_adapter *adapter,
 			      struct bpf_prog *prog,
 			      struct xdp_buff *xdp)
 {
-	u32 act = bpf_prog_run_xdp(prog, xdp);
+	u32 act;
+
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
+	act = bpf_prog_run_xdp(prog, xdp);
 
 	switch (act) {
 	case XDP_PASS:

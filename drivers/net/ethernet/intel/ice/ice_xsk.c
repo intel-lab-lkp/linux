@@ -762,17 +762,18 @@ ice_run_xdp_zc(struct ice_rx_ring *rx_ring, struct xdp_buff *xdp,
 	int err, result = ICE_XDP_PASS;
 	u32 act;
 
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
 	act = bpf_prog_run_xdp(xdp_prog, xdp);
-
-	if (likely(act == XDP_REDIRECT)) {
-		err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
-		if (!err)
-			return ICE_XDP_REDIR;
-		if (xsk_uses_need_wakeup(rx_ring->xsk_pool) && err == -ENOBUFS)
-			result = ICE_XDP_EXIT;
-		else
-			result = ICE_XDP_CONSUMED;
-		goto out_failure;
+		if (likely(act == XDP_REDIRECT)) {
+			err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
+			if (!err)
+				return ICE_XDP_REDIR;
+			if (xsk_uses_need_wakeup(rx_ring->xsk_pool) && err == -ENOBUFS)
+				result = ICE_XDP_EXIT;
+			else
+				result = ICE_XDP_CONSUMED;
+			goto out_failure;
+		}
 	}
 
 	switch (act) {

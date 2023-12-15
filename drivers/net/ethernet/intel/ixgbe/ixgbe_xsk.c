@@ -104,18 +104,20 @@ static int ixgbe_run_xdp_zc(struct ixgbe_adapter *adapter,
 	struct xdp_frame *xdpf;
 	u32 act;
 
-	xdp_prog = READ_ONCE(rx_ring->xdp_prog);
-	act = bpf_prog_run_xdp(xdp_prog, xdp);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+		xdp_prog = READ_ONCE(rx_ring->xdp_prog);
+		act = bpf_prog_run_xdp(xdp_prog, xdp);
 
-	if (likely(act == XDP_REDIRECT)) {
-		err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
-		if (!err)
-			return IXGBE_XDP_REDIR;
-		if (xsk_uses_need_wakeup(rx_ring->xsk_pool) && err == -ENOBUFS)
-			result = IXGBE_XDP_EXIT;
-		else
-			result = IXGBE_XDP_CONSUMED;
-		goto out_failure;
+		if (likely(act == XDP_REDIRECT)) {
+			err = xdp_do_redirect(rx_ring->netdev, xdp, xdp_prog);
+			if (!err)
+				return IXGBE_XDP_REDIR;
+			if (xsk_uses_need_wakeup(rx_ring->xsk_pool) && err == -ENOBUFS)
+				result = IXGBE_XDP_EXIT;
+			else
+				result = IXGBE_XDP_CONSUMED;
+			goto out_failure;
+		}
 	}
 
 	switch (act) {

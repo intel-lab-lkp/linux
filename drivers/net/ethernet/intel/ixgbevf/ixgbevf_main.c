@@ -1059,7 +1059,8 @@ static struct sk_buff *ixgbevf_run_xdp(struct ixgbevf_adapter *adapter,
 	if (!xdp_prog)
 		goto xdp_out;
 
-	act = bpf_prog_run_xdp(xdp_prog, xdp);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock)
+		act = bpf_prog_run_xdp(xdp_prog, xdp);
 	switch (act) {
 	case XDP_PASS:
 		break;
