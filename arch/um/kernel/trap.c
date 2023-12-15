@@ -214,11 +214,15 @@ unsigned long segv(struct faultinfo fi, unsigned long ip, int is_user,
 	int err;
 	int is_write = FAULT_WRITE(fi);
 	unsigned long address = FAULT_ADDRESS(fi);
+	pte_t *pte;
 
 	if (!is_user && regs)
 		current->thread.segv_regs = container_of(regs, struct pt_regs, regs);
 
 	if (!is_user && (address >= start_vm) && (address < end_vm)) {
+		pte = virt_to_pte(&init_mm, address);
+		if (!pte_present(*pte))
+			page_fault_oops(regs, address, ip);
 		flush_tlb_kernel_vm();
 		goto out;
 	}
