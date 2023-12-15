@@ -93,7 +93,8 @@ unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long
 	return _parse_integer_limit(s, base, p, INT_MAX);
 }
 
-static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)
+static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res,
+		      char **retptr)
 {
 	unsigned long long _res;
 	unsigned int rv;
@@ -105,11 +106,19 @@ static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)
 	if (rv == 0)
 		return -EINVAL;
 	s += rv;
-	if (*s == '\n')
+
+	/*
+	 * If @retptr is provided, caller is responsible to detect
+	 * the extra chars, otherwise we can skip one newline.
+	 */
+	if (!retptr && *s == '\n')
 		s++;
-	if (*s)
+	if (!retptr && *s)
 		return -EINVAL;
+
 	*res = _res;
+	if (retptr)
+		*retptr = (char *)s;
 	return 0;
 }
 
@@ -133,9 +142,103 @@ int kstrtoull(const char *s, unsigned int base, unsigned long long *res)
 {
 	if (s[0] == '+')
 		s++;
-	return _kstrtoull(s, base, res);
+	return _kstrtoull(s, base, res, NULL);
 }
 EXPORT_SYMBOL(kstrtoull);
+
+/**
+ * kstrtoull_suffix - convert a string to ull with suffixes support
+ * @s: The start of the string. The string must be null-terminated, and may also
+ *  include a single newline before its terminating null.
+ * @base: The number base to use. The maximum supported base is 16. If base is
+ *  given as 0, then the base of the string is automatically detected with the
+ *  conventional semantics - If it begins with 0x the number will be parsed as a
+ *  hexadecimal (case insensitive), if it otherwise begins with 0, it will be
+ *  parsed as an octal number. Otherwise it will be parsed as a decimal.
+ * @res: Where to write the result of the conversion on success.
+ * @suffixes: A string of acceptable suffixes, must be provided. Or caller
+ *  should use kstrtoull() directly.
+ *
+ *
+ * Return 0 on success.
+ *
+ * Return -ERANGE on overflow or -EINVAL if invalid chars found.
+ * Return value must be checked.
+ */
+int kstrtoull_suffix(const char *s, unsigned int base, unsigned long long *res,
+		     const char *suffixes)
+{
+	unsigned long long init_value;
+	unsigned long long final_value;
+	char *endptr;
+	int ret;
+
+	ret = _kstrtoull(s, base, &init_value, &endptr);
+	/* Either already overflow or no number string at all. */
+	if (ret < 0)
+		return ret;
+	final_value = init_value;
+	/* No suffixes. */
+	if (!*endptr)
+		goto done;
+
+	switch (*endptr) {
+	case 'K':
+	case 'k':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 10;
+		endptr++;
+		break;
+	case 'M':
+	case 'm':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 20;
+		endptr++;
+		break;
+	case 'G':
+	case 'g':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 30;
+		endptr++;
+		break;
+	case 'T':
+	case 't':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 40;
+		endptr++;
+		break;
+	case 'P':
+	case 'p':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 50;
+		endptr++;
+		break;
+	case 'E':
+	case 'e':
+		if (!strchr(suffixes, *endptr))
+			return -EINVAL;
+		final_value <<= 60;
+		endptr++;
+		break;
+	}
+	if (*endptr == '\n')
+		endptr++;
+	if (*endptr)
+		return -EINVAL;
+
+	/* Overflow check. */
+	if (final_value < init_value)
+		return -EOVERFLOW;
+done:
+	*res = final_value;
+	return 0;
+}
+EXPORT_SYMBOL(kstrtoull_suffix);
 
 /**
  * kstrtoll - convert a string to a long long
@@ -159,7 +262,7 @@ int kstrtoll(const char *s, unsigned int base, long long *res)
 	int rv;
 
 	if (s[0] == '-') {
-		rv = _kstrtoull(s + 1, base, &tmp);
+		rv = _kstrtoull(s + 1, base, &tmp, NULL);
 		if (rv < 0)
 			return rv;
 		if ((long long)-tmp > 0)
