@@ -338,7 +338,7 @@ static bool armv8pmu_event_want_user_access(struct perf_event *event)
 	return ATTR_CFG_GET_FLD(&event->attr, rdpmc);
 }
 
-static u8 armv8pmu_event_threshold_control(struct perf_event_attr *attr)
+static __maybe_unused u8 armv8pmu_event_threshold_control(struct perf_event_attr *attr)
 {
 	u8 th_compare = ATTR_CFG_GET_FLD(attr, threshold_compare);
 	u8 th_count = ATTR_CFG_GET_FLD(attr, threshold_count);
@@ -1040,11 +1040,13 @@ static int armv8pmu_set_event_filter(struct hw_perf_event *event,
 		return -EINVAL;
 	}
 
-	if (IS_ENABLED(CONFIG_ARM64) && th) {
+#if IS_ENABLED(CONFIG_ARM64)
+	if (th) {
 		config_base |= FIELD_PREP(ARMV8_PMU_EVTYPE_TH, th);
 		config_base |= FIELD_PREP(ARMV8_PMU_EVTYPE_TC,
 					  armv8pmu_event_threshold_control(attr));
 	}
+#endif
 
 	/*
 	 * Install the filter into config_base as this is used to
