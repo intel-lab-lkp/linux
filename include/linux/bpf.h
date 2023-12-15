@@ -291,6 +291,12 @@ struct bpf_map {
 	s64 __percpu *elem_count;
 };
 
+struct bpf_run_lock {
+	local_lock_t redirect_lock;
+};
+
+DECLARE_PER_CPU(struct bpf_run_lock, bpf_run_lock);
+
 static inline const char *btf_field_type_name(enum btf_field_type type)
 {
 	switch (type) {

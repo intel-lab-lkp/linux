@@ -89,6 +89,11 @@
 static const struct bpf_func_proto *
 bpf_sk_base_func_proto(enum bpf_func_id func_id);
 
+DEFINE_PER_CPU(struct bpf_run_lock, bpf_run_lock) = {
+	.redirect_lock = INIT_LOCAL_LOCK(redirect_lock),
+};
+EXPORT_PER_CPU_SYMBOL_GPL(bpf_run_lock);
+
 int copy_bpf_fprog_from_user(struct sock_fprog *dst, sockptr_t src, int len)
 {
 	if (in_compat_syscall()) {
