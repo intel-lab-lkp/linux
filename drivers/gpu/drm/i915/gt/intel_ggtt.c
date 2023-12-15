@@ -1167,7 +1167,7 @@ static int ggtt_probe_common(struct i915_ggtt *ggtt, u64 size)
 	 * should have relaxed the access permissions sufficiently.
 	 */
 	if (IS_METEORLAKE(i915))
-		phys_addr = intel_uncore_read64(uncore, GEN12_GSMBASE) & GEN12_BDSM_MASK;
+		phys_addr = intel_uncore_read64(uncore, GEN6_GSMBASE) & GEN11_BDSM_MASK;
 	else
 		phys_addr = pci_resource_start(pdev, GEN4_GTTMMADR_BAR) + gen6_gttadr_offset(i915);
 
