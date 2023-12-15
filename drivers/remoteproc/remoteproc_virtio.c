@@ -465,8 +465,12 @@ out:
 static int rproc_remove_virtio_dev(struct device *dev, void *data)
 {
 	struct virtio_device *vdev = dev_to_virtio(dev);
+	struct rproc_vdev *rvdev = vdev_to_rvdev(vdev);
 
 	unregister_virtio_device(vdev);
+	of_reserved_mem_device_release(&rvdev->pdev->dev);
+	dma_release_coherent_memory(&rvdev->pdev->dev);
+
 	return 0;
 }
 
@@ -583,9 +587,6 @@ static void rproc_virtio_remove(struct platform_device *pdev)
 
 	rproc_remove_subdev(rproc, &rvdev->subdev);
 	rproc_remove_rvdev(rvdev);
-
-	of_reserved_mem_device_release(&pdev->dev);
-	dma_release_coherent_memory(&pdev->dev);
 
 	put_device(&rproc->dev);
 }
