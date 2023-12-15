@@ -85,9 +85,16 @@ class Type(SpecAttr):
         delattr(self, "enum_name")
 
     def get_limit(self, limit, default=None):
+        defines = []
+        for const in self.family['definitions']:
+            if const['type'] == 'const':
+                defines.append(const['name'])
+
         value = self.checks.get(limit, default)
         if value is None:
             return value
+        elif value in defines:
+            return c_upper(f"{self.family['name']}-{value}")
         if not isinstance(value, int):
             value = limit_to_number(value)
         return value
