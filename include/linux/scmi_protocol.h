@@ -839,6 +839,7 @@ struct scmi_device {
 	u32 id;
 	u8 protocol_id;
 	const char *name;
+	const char *compatible; /* Optional */
 	struct device dev;
 	struct scmi_handle *handle;
 };
@@ -848,6 +849,7 @@ struct scmi_device {
 struct scmi_device_id {
 	u8 protocol_id;
 	const char *name;
+	const char *compatible; /* Optional */
 };
 
 struct scmi_driver {

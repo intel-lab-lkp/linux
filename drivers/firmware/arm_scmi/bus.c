@@ -194,13 +194,21 @@ scmi_dev_match_id(struct scmi_device *scmi_dev, struct scmi_driver *scmi_drv)
 	if (!id)
 		return NULL;
 
-	for (; id->protocol_id; id++)
-		if (id->protocol_id == scmi_dev->protocol_id) {
-			if (!id->name)
+	for (; id->protocol_id; id++) {
+		if (id->protocol_id != scmi_dev->protocol_id)
+			continue;
+		if (!id->name)
+			return id;
+
+		if (!strcmp(id->name, scmi_dev->name)) {
+			if (!id->compatible &&
+			    device_property_read_string(&scmi_dev->dev, "compatible", NULL))
 				return id;
-			else if (!strcmp(id->name, scmi_dev->name))
+
+			if (id->compatible && device_is_compatible(&scmi_dev->dev, id->compatible))
 				return id;
 		}
+	}
 
 	return NULL;
 }
@@ -325,10 +333,13 @@ static void __scmi_device_destroy(struct scmi_device *scmi_dev)
 
 static struct scmi_device *
 __scmi_device_create(struct device_node *np, struct device *parent,
-		     int protocol, const char *name)
+		     int protocol, const char *name, const char *compatible)
 {
 	int id, retval;
 	struct scmi_device *scmi_dev;
+
+	if (compatible && !of_device_is_compatible(np, compatible))
+		return NULL;
 
 	/*
 	 * If the same protocol/name device already exist under the same parent
@@ -405,6 +416,7 @@ put_dev:
  * @name: The requested-name of the device to be created; this is optional
  *	  and if no @name is provided, all the devices currently known to
  *	  be requested on the SCMI bus for @protocol will be created.
+ * @compatible: The compatible string
  *
  * This method can be invoked to create a single well-defined device (like
  * a transport device or a device requested by an SCMI driver loaded after
@@ -421,14 +433,14 @@ put_dev:
  */
 struct scmi_device *scmi_device_create(struct device_node *np,
 				       struct device *parent, int protocol,
-				       const char *name)
+				       const char *name, const char *compatible)
 {
 	struct list_head *phead;
 	struct scmi_requested_dev *rdev;
 	struct scmi_device *scmi_dev = NULL;
 
 	if (name)
-		return __scmi_device_create(np, parent, protocol, name);
+		return __scmi_device_create(np, parent, protocol, name, compatible);
 
 	mutex_lock(&scmi_requested_devices_mtx);
 	phead = idr_find(&scmi_requested_devices, protocol);
@@ -442,9 +454,20 @@ struct scmi_device *scmi_device_create(struct device_node *np,
 	list_for_each_entry(rdev, phead, node) {
 		struct scmi_device *sdev;
 
+		if (compatible) {
+			if (!rdev->id_table->compatible)
+				continue;
+			if (strcmp(compatible, rdev->id_table->compatible))
+				continue;
+		} else {
+			if (rdev->id_table->compatible)
+				continue;
+		}
+
 		sdev = __scmi_device_create(np, parent,
 					    rdev->id_table->protocol_id,
-					    rdev->id_table->name);
+					    rdev->id_table->name,
+					    rdev->id_table->compatible);
 		/* Report errors and carry on... */
 		if (sdev)
 			scmi_dev = sdev;

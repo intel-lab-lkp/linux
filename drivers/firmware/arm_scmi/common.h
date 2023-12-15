@@ -149,7 +149,7 @@ extern struct blocking_notifier_head scmi_requested_devices_nh;
 
 struct scmi_device *scmi_device_create(struct device_node *np,
 				       struct device *parent, int protocol,
-				       const char *name);
+				       const char *name, const char *compatible);
 void scmi_device_destroy(struct device *parent, int protocol, const char *name);
 
 int scmi_protocol_acquire(const struct scmi_handle *handle, u8 protocol_id);

@@ -261,15 +261,17 @@ EXPORT_SYMBOL_GPL(scmi_protocol_unregister);
  * @name: The optional name of the device to be created: if not provided this
  *	  call will lead to the creation of all the devices currently requested
  *	  for the specified protocol.
+ * @compatible: optional, the compatible string
  */
 static void scmi_create_protocol_devices(struct device_node *np,
 					 struct scmi_info *info,
-					 int prot_id, const char *name)
+					 int prot_id, const char *name,
+					 const char *compatible)
 {
 	struct scmi_device *sdev;
 
 	mutex_lock(&info->devreq_mtx);
-	sdev = scmi_device_create(np, info->dev, prot_id, name);
+	sdev = scmi_device_create(np, info->dev, prot_id, name, compatible);
 	if (name && !sdev)
 		dev_err(info->dev,
 			"failed to create device for protocol 0x%X (%s)\n",
@@ -2354,7 +2356,7 @@ static int scmi_chan_setup(struct scmi_info *info, struct device_node *of_node,
 	snprintf(name, 32, "__scmi_transport_device_%s_%02X",
 		 idx ? "rx" : "tx", prot_id);
 	/* Create a uniquely named, dedicated transport device for this chan */
-	tdev = scmi_device_create(of_node, info->dev, prot_id, name);
+	tdev = scmi_device_create(of_node, info->dev, prot_id, name, NULL);
 	if (!tdev) {
 		dev_err(info->dev,
 			"failed to create transport device (%s)\n", name);
@@ -2550,7 +2552,7 @@ static int scmi_device_request_notifier(struct notifier_block *nb,
 	switch (action) {
 	case SCMI_BUS_NOTIFY_DEVICE_REQUEST:
 		scmi_create_protocol_devices(np, info, id_table->protocol_id,
-					     id_table->name);
+					     id_table->name, id_table->compatible);
 		break;
 	case SCMI_BUS_NOTIFY_DEVICE_UNREQUEST:
 		scmi_destroy_protocol_devices(info, id_table->protocol_id,
@@ -2802,9 +2804,12 @@ static int scmi_probe(struct platform_device *pdev)
 
 	for_each_available_child_of_node(np, child) {
 		u32 prot_id;
+		const char *s = NULL;
 
 		if (of_property_read_u32(child, "reg", &prot_id))
 			continue;
+
+		of_property_read_string(child, "compatible", &s);
 
 		if (!FIELD_FIT(MSG_PROTOCOL_ID_MASK, prot_id))
 			dev_err(dev, "Out of range protocol %d\n", prot_id);
@@ -2828,7 +2833,7 @@ static int scmi_probe(struct platform_device *pdev)
 		}
 
 		of_node_get(child);
-		scmi_create_protocol_devices(child, info, prot_id, NULL);
+		scmi_create_protocol_devices(child, info, prot_id, NULL, s);
 	}
 
 	return 0;
