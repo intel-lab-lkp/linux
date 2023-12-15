@@ -957,9 +957,6 @@ struct task_struct {
 #ifdef CONFIG_IOMMU_SVA
 	unsigned			pasid_activated:1;
 #endif
-#ifdef	CONFIG_CPU_SUP_INTEL
-	unsigned			reported_split_lock:1;
-#endif
 #ifdef CONFIG_TASK_DELAY_ACCT
 	/* delay due to memory thrashing */
 	unsigned                        in_thrashing:1;
@@ -1027,6 +1024,9 @@ struct task_struct {
 	u64				stimescaled;
 #endif
 	u64				gtime;
+#ifdef	CONFIG_CPU_SUP_INTEL
+	u64				detected_split_locks;
+#endif
 	struct prev_cputime		prev_cputime;
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
 	struct vtime			vtime;

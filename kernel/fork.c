@@ -1188,7 +1188,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #endif
 
 #ifdef CONFIG_CPU_SUP_INTEL
-	tsk->reported_split_lock = 0;
+	tsk->detected_split_locks = 0;
 #endif
 
 #ifdef CONFIG_SCHED_MM_CID

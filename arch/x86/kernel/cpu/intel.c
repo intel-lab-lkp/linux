@@ -1160,10 +1160,10 @@ static void split_lock_warn(unsigned long ip)
 	struct delayed_work *work;
 	int cpu;
 
-	if (!current->reported_split_lock)
+	if (!current->detected_split_locks)
 		pr_warn_ratelimited("#AC: %s/%d took a split_lock trap at address: 0x%lx\n",
 				    current->comm, current->pid, ip);
-	current->reported_split_lock = 1;
+	current->detected_split_locks++;
 
 	if (sysctl_sld_mitigate) {
 		/*
@@ -1189,6 +1189,37 @@ static void split_lock_warn(unsigned long ip)
 	/* Disable split lock detection on this CPU to make progress */
 	sld_update_msr(false);
 	put_cpu();
+}
+
+static int split_locks_show(struct seq_file *s, struct task_struct *tsk,
+			    int whole)
+{
+	u64 detected_split_locks = tsk->detected_split_locks;
+
+	if (whole) {
+		struct task_struct *t = tsk;
+
+		while_each_thread(tsk, t) {
+			detected_split_locks += t->detected_split_locks;
+		}
+	}
+
+	seq_put_decimal_ull(s, "", detected_split_locks);
+	seq_putc(s, '\n');
+
+	return 0;
+}
+
+int proc_pid_split_locks_show(struct seq_file *s, struct pid_namespace *ns,
+			      struct pid *pid, struct task_struct *tsk)
+{
+	return split_locks_show(s, tsk, 0);
+}
+
+int proc_tgid_split_locks_show(struct seq_file *s, struct pid_namespace *ns,
+			       struct pid *pid, struct task_struct *tsk)
+{
+	return split_locks_show(s, tsk, 1);
 }
 
 bool handle_guest_split_lock(unsigned long ip)

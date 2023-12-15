@@ -44,6 +44,12 @@ extern bool handle_user_split_lock(struct pt_regs *regs, long error_code);
 extern bool handle_guest_split_lock(unsigned long ip);
 extern void handle_bus_lock(struct pt_regs *regs);
 u8 get_this_hybrid_cpu_type(void);
+extern int proc_pid_split_locks_show(struct seq_file *s,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *tsk);
+extern int proc_tgid_split_locks_show(struct seq_file *s,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *tsk);
 #else
 static inline void __init sld_setup(struct cpuinfo_x86 *c) {}
 static inline bool handle_user_split_lock(struct pt_regs *regs, long error_code)
@@ -59,6 +65,18 @@ static inline bool handle_guest_split_lock(unsigned long ip)
 static inline void handle_bus_lock(struct pt_regs *regs) {}
 
 static inline u8 get_this_hybrid_cpu_type(void)
+{
+	return 0;
+}
+static inline int proc_pid_split_locks_show(struct seq_file *s,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *tsk)
+{
+	return 0;
+}
+static inline int proc_tgid_split_locks_show(struct seq_file *s,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *tsk)
 {
 	return 0;
 }
