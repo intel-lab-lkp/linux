@@ -2947,8 +2947,14 @@ void nfs4_cb_getattr(struct nfs4_cb_fattr *ncf)
 
 	if (test_and_set_bit(CB_GETATTR_BUSY, &ncf->ncf_cb_flags))
 		return;
+
 	refcount_inc(&dp->dl_stid.sc_count);
-	nfsd4_run_cb(&ncf->ncf_getattr);
+	if (!nfsd4_run_cb(&ncf->ncf_getattr)) {
+		refcount_dec(&dp->dl_stid.sc_count);
+		clear_bit(CB_GETATTR_BUSY, &ncf->ncf_cb_flags);
+		wake_up_bit(&ncf->ncf_cb_flags, CB_GETATTR_BUSY);
+		WARN_ON_ONCE(1);
+	}
 }
 
 static struct nfs4_client *create_client(struct xdr_netobj name,
@@ -4967,7 +4973,10 @@ static void nfsd_break_one_deleg(struct nfs4_delegation *dp)
 	 * we know it's safe to take a reference.
 	 */
 	refcount_inc(&dp->dl_stid.sc_count);
-	WARN_ON_ONCE(!nfsd4_run_cb(&dp->dl_recall));
+	if (!nfsd4_run_cb(&dp->dl_recall)) {
+		refcount_dec(&dp->dl_stid.sc_count);
+		WARN_ON_ONCE(1);
+	}
 }
 
 /* Called from break_lease() with flc_lock held. */
@@ -8543,12 +8552,12 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct inode *inode,
 				return 0;
 			}
 break_lease:
-			spin_unlock(&ctx->flc_lock);
 			nfsd_stats_wdeleg_getattr_inc();
-
 			dp = fl->fl_owner;
 			ncf = &dp->dl_cb_fattr;
 			nfs4_cb_getattr(&dp->dl_cb_fattr);
+			spin_unlock(&ctx->flc_lock);
+
 			wait_on_bit(&ncf->ncf_cb_flags, CB_GETATTR_BUSY, TASK_INTERRUPTIBLE);
 			if (ncf->ncf_cb_status) {
 				status = nfserrno(nfsd_open_break_lease(inode, NFSD_MAY_READ));
