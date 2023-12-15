@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/seq_file.h>
 #include <linux/scmi_protocol.h>
 #include <linux/slab.h>
@@ -18,6 +19,7 @@
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
 
+#include "pinctrl-scmi.h"
 #include "pinctrl-utils.h"
 #include "core.h"
 #include "pinconf.h"
@@ -82,6 +84,16 @@ static const struct pinctrl_ops pinctrl_scmi_pinctrl_ops = {
 	.get_group_pins = pinctrl_scmi_get_group_pins,
 #ifdef CONFIG_OF
 	.dt_node_to_map = pinconf_generic_dt_node_to_map_all,
+	.dt_free_map = pinconf_generic_dt_free_map,
+#endif
+};
+
+static const struct pinctrl_ops pinctrl_scmi_imx_pinctrl_ops = {
+	.get_groups_count = pinctrl_scmi_get_groups_count,
+	.get_group_name = pinctrl_scmi_get_group_name,
+	.get_group_pins = pinctrl_scmi_get_group_pins,
+#ifdef CONFIG_OF
+	.dt_node_to_map = pinctrl_scmi_imx_dt_node_to_map,
 	.dt_free_map = pinconf_generic_dt_free_map,
 #endif
 };
@@ -327,6 +339,7 @@ static int pinctrl_scmi_get_pins(struct scmi_pinctrl *pmx,
 
 static const struct scmi_device_id scmi_id_table[] = {
 	{ SCMI_PROTOCOL_PINCTRL, "pinctrl" },
+	{ SCMI_PROTOCOL_PINCTRL, "pinctrl-scmi-imx", "fsl,imx95-scmi-pinctrl" },
 	{ }
 };
 MODULE_DEVICE_TABLE(scmi, scmi_id_table);
@@ -360,6 +373,9 @@ static int scmi_pinctrl_probe(struct scmi_device *sdev)
 	pmx->pctl_desc.pctlops = &pinctrl_scmi_pinctrl_ops;
 	pmx->pctl_desc.pmxops = &pinctrl_scmi_pinmux_ops;
 	pmx->pctl_desc.confops = &pinctrl_scmi_pinconf_ops;
+
+	if (device_is_compatible(dev, "fsl,imx95-scmi-pinctrl"))
+		pmx->pctl_desc.pctlops = &pinctrl_scmi_imx_pinctrl_ops;
 
 	ret = pinctrl_scmi_get_pins(pmx, &pmx->pctl_desc.npins,
 				    &pmx->pctl_desc.pins);
