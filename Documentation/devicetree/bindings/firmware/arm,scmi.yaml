@@ -247,6 +247,85 @@ properties:
       reg:
         const: 0x18
 
+  protocol@19:
+    type: object
+    allOf:
+      - $ref: '#/$defs/protocol-node'
+      - $ref: /schemas/pinctrl/pinctrl.yaml
+      - if:
+          properties:
+            compatible:
+              const: fsl,imx95-scmi-pinctrl
+        then:
+          patternProperties:
+            "grp$": false
+            "-pins$": true
+        else:
+          patternProperties:
+            "grp$": false
+            "-pins$": true
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        const: 0x19
+
+      '#pinctrl-cells':
+        const: 0
+
+      compatible:
+        const: fsl,imx95-scmi-pinctrl
+
+    patternProperties:
+      '-pins$':
+        type: object
+        allOf:
+          - $ref: /schemas/pinctrl/pincfg-node.yaml#
+          - $ref: /schemas/pinctrl/pinmux-node.yaml#
+        unevaluatedProperties: false
+
+        description:
+          A pin multiplexing sub-node describe how to configure a
+          set of pins is some desired function.
+          A single sub-node may define several pin configurations.
+          This sub-node is using default pinctrl bindings to configure
+          pin multiplexing and using SCMI protocol to apply specified
+          configuration using SCMI protocol.
+
+      'grp$':
+        type: object
+        description:
+          Pinctrl node's client devices use subnodes for desired pin configuration.
+          Client device subnodes use below standard properties.
+
+        properties:
+          fsl,pins:
+            description:
+              each entry consists of 6 integers and represents the mux and config
+              setting for one pin. The first 5 integers <mux_reg conf_reg input_reg
+              mux_val input_val> are specified using a PIN_FUNC_ID macro, which can
+              be found in <arch/arm64/boot/dts/freescale/imx95-pinfunc.h>. The last
+              integer CONFIG is the pad setting value like pull-up on this pin. Please
+              refer to i.MX95 Plus Reference Manual for detailed CONFIG settings.
+            $ref: /schemas/types.yaml#/definitions/uint32-matrix
+            items:
+              items:
+                - description: |
+                    "mux_reg" indicates the offset of mux register.
+                - description: |
+                    "conf_reg" indicates the offset of pad configuration register.
+                - description: |
+                    "input_reg" indicates the offset of select input register.
+                - description: |
+                    "mux_val" indicates the mux value to be applied.
+                - description: |
+                    "input_val" indicates the select input value to be applied.
+                - description: |
+                    "pad_setting" indicates the pad configuration value to be applied.
+
+    required:
+      - reg
+
 additionalProperties: false
 
 $defs:
@@ -400,6 +479,26 @@ examples:
 
             scmi_powercap: protocol@18 {
                 reg = <0x18>;
+            };
+
+            scmi_pinctrl: protocol@19 {
+                reg = <0x19>;
+                #pinctrl-cells = <0>;
+
+                i2c2-pins {
+                    groups = "i2c2_a", "i2c2_b";
+                    function = "i2c2";
+                };
+
+                mdio-pins {
+                    groups = "avb_mdio";
+                    drive-strength = <24>;
+                };
+
+                keys_pins: keys-pins {
+                    pins = "GP_5_17", "GP_5_20", "GP_5_22", "GP_2_1";
+                    bias-pull-up;
+                };
             };
         };
     };
