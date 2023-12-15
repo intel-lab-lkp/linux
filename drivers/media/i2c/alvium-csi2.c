@@ -1643,25 +1643,6 @@ static int alvium_hw_init(struct alvium_dev *alvium)
 }
 
 /* --------------- Subdev Operations --------------- */
-
-static int alvium_g_frame_interval(struct v4l2_subdev *sd,
-				   struct v4l2_subdev_state *sd_state,
-				   struct v4l2_subdev_frame_interval *fi)
-{
-	struct alvium_dev *alvium = sd_to_alvium(sd);
-
-	/*
-	 * FIXME: Implement support for V4L2_SUBDEV_FORMAT_TRY, using the V4L2
-	 * subdev active state API.
-	 */
-	if (fi->which != V4L2_SUBDEV_FORMAT_ACTIVE)
-		return -EINVAL;
-
-	fi->interval = alvium->frame_interval;
-
-	return 0;
-}
-
 static int alvium_s_frame_interval(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *sd_state,
 				   struct v4l2_subdev_frame_interval *fi)
@@ -1669,6 +1650,7 @@ static int alvium_s_frame_interval(struct v4l2_subdev *sd,
 	struct alvium_dev *alvium = sd_to_alvium(sd);
 	struct device *dev = &alvium->i2c_client->dev;
 	u64 req_fr, dft_fr, min_fr, max_fr;
+	struct v4l2_fract *interval;
 	int ret;
 
 	/*
@@ -1701,9 +1683,10 @@ static int alvium_s_frame_interval(struct v4l2_subdev *sd,
 	if (req_fr >= max_fr && req_fr <= min_fr)
 		req_fr = dft_fr;
 
-	alvium->fr = req_fr;
-	alvium->frame_interval.numerator = fi->interval.numerator;
-	alvium->frame_interval.denominator = fi->interval.denominator;
+	interval = v4l2_subdev_state_get_interval(sd_state, 0);
+
+	interval->numerator = fi->interval.numerator;
+	interval->denominator = fi->interval.denominator;
 
 	return alvium_set_frame_rate(alvium, req_fr);
 }
@@ -1853,6 +1836,7 @@ static int alvium_init_state(struct v4l2_subdev *sd,
 {
 	struct alvium_dev *alvium = sd_to_alvium(sd);
 	struct alvium_mode *mode = &alvium->mode;
+	struct v4l2_fract *interval;
 	struct v4l2_subdev_format sd_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
 		.format = alvium_csi2_default_fmt,
@@ -1869,6 +1853,11 @@ static int alvium_init_state(struct v4l2_subdev *sd,
 
 	*v4l2_subdev_state_get_crop(state, 0) = sd_crop.rect;
 	*v4l2_subdev_state_get_format(state, 0) = sd_fmt.format;
+
+	/* Setup initial frame interval*/
+	interval = v4l2_subdev_state_get_interval(state, 0);
+	interval->numerator = 1;
+	interval->denominator = ALVIUM_DEFAULT_FR_HZ;
 
 	return 0;
 }
@@ -2239,7 +2228,7 @@ static const struct v4l2_subdev_pad_ops alvium_pad_ops = {
 	.set_fmt = alvium_set_fmt,
 	.get_selection = alvium_get_selection,
 	.set_selection = alvium_set_selection,
-	.get_frame_interval = alvium_g_frame_interval,
+	.get_frame_interval = v4l2_subdev_get_frame_interval,
 	.set_frame_interval = alvium_s_frame_interval,
 };
 
@@ -2259,11 +2248,6 @@ static int alvium_subdev_init(struct alvium_dev *alvium)
 	struct device *dev = &alvium->i2c_client->dev;
 	struct v4l2_subdev *sd = &alvium->sd;
 	int ret;
-
-	/* Setup initial frame interval*/
-	alvium->frame_interval.numerator = 1;
-	alvium->frame_interval.denominator = ALVIUM_DEFAULT_FR_HZ;
-	alvium->fr = ALVIUM_DEFAULT_FR_HZ;
 
 	/* Setup the initial mode */
 	alvium->mode.fmt = alvium_csi2_default_fmt;
