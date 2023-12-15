@@ -280,7 +280,9 @@ nfsd_file_free(struct nfsd_file *nf)
 		nfsd_file_mark_put(nf->nf_mark);
 	if (nf->nf_file) {
 		nfsd_file_check_write_error(nf);
+		get_file(nf->nf_file);
 		filp_close(nf->nf_file, NULL);
+		__fput_sync(nf->nf_file);
 	}
 
 	/*
@@ -658,7 +660,6 @@ nfsd_file_close_inode_sync(struct inode *inode)
 		list_del_init(&nf->nf_lru);
 		nfsd_file_free(nf);
 	}
-	flush_delayed_fput();
 }
 
 static int
