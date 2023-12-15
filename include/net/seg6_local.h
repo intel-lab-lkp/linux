@@ -20,6 +20,7 @@ extern bool seg6_bpf_has_valid_srh(struct sk_buff *skb);
 
 struct seg6_bpf_srh_state {
 	struct ipv6_sr_hdr *srh;
+	local_lock_t bh_lock;
 	u16 hdrlen;
 	bool valid;
 };
