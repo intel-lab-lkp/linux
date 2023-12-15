@@ -2497,6 +2497,7 @@ int skb_do_redirect(struct sk_buff *skb)
 	struct net_device *dev;
 	u32 flags = ri->flags;
 
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
 	dev = dev_get_by_index_rcu(net, ri->tgt_index);
 	ri->tgt_index = 0;
 	ri->flags = 0;
@@ -2527,6 +2528,8 @@ BPF_CALL_2(bpf_redirect, u32, ifindex, u64, flags)
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
+
 	if (unlikely(flags & (~(BPF_F_INGRESS) | BPF_F_REDIRECT_INTERNAL)))
 		return TC_ACT_SHOT;
 
@@ -2547,6 +2550,8 @@ static const struct bpf_func_proto bpf_redirect_proto = {
 BPF_CALL_2(bpf_redirect_peer, u32, ifindex, u64, flags)
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
+
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
 
 	if (unlikely(flags))
 		return TC_ACT_SHOT;
@@ -2569,6 +2574,8 @@ BPF_CALL_4(bpf_redirect_neigh, u32, ifindex, struct bpf_redir_neigh *, params,
 	   int, plen, u64, flags)
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
+
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
 
 	if (unlikely((plen && plen < sizeof(*params)) || flags))
 		return TC_ACT_SHOT;
@@ -4289,6 +4296,8 @@ u32 xdp_master_redirect(struct xdp_buff *xdp)
 	struct net_device *master, *slave;
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
+
 	master = netdev_master_upper_dev_get_rcu(xdp->rxq->dev);
 	slave = master->netdev_ops->ndo_xdp_get_xmit_slave(master, xdp);
 	if (slave && slave != xdp->rxq->dev) {
@@ -4396,6 +4405,7 @@ int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	enum bpf_map_type map_type = ri->map_type;
 
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
 	if (map_type == BPF_MAP_TYPE_XSKMAP)
 		return __xdp_do_redirect_xsk(ri, dev, xdp, xdp_prog);
 
@@ -4410,6 +4420,7 @@ int xdp_do_redirect_frame(struct net_device *dev, struct xdp_buff *xdp,
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	enum bpf_map_type map_type = ri->map_type;
 
+	lockdep_assert_held(this_cpu_ptr(&bpf_run_lock.redirect_lock));
 	if (map_type == BPF_MAP_TYPE_XSKMAP)
 		return __xdp_do_redirect_xsk(ri, dev, xdp, xdp_prog);
 
