@@ -485,11 +485,13 @@ static bool popcount_eq(__uint128_t a, __uint128_t b)
 
 static __uint128_t rotate(int size, __uint128_t val, int amount)
 {
-	unsigned int bits = size * 8;
+	unsigned int left, right, bits = size * 8;
 
-	amount = (amount + bits) % bits;
+	right = (amount + bits) % bits;
+	/* % 128 prevents left shift UB if size == 16 && right == 0 */
+	left = (bits - right) % 128;
 	val = cut_to_size(size, val);
-	return (val << (bits - amount)) | (val >> amount);
+	return (val << left) | (val >> right);
 }
 
 const unsigned int max_block = 16;
