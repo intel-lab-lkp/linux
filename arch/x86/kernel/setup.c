@@ -37,7 +37,6 @@
 #include <asm/bugs.h>
 #include <asm/cacheinfo.h>
 #include <asm/cpu.h>
-#include <asm/efi.h>
 #include <asm/gart.h>
 #include <asm/hypervisor.h>
 #include <asm/io_apic.h>
