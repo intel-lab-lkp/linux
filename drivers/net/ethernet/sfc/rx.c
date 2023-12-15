@@ -291,6 +291,7 @@ static bool efx_do_xdp(struct efx_nic *efx, struct efx_channel *channel,
 	xdp_prepare_buff(&xdp, *ehp - EFX_XDP_HEADROOM, EFX_XDP_HEADROOM,
 			 rx_buf->len, false);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
 	offset = (u8 *)xdp.data - *ehp;

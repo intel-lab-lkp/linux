@@ -1014,7 +1014,8 @@ static int nfp_nfd3_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 					 pkt_off - NFP_NET_RX_BUF_HEADROOM,
 					 pkt_len, true);
 
-			act = bpf_prog_run_xdp(xdp_prog, &xdp);
+			scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock)
+				act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
 			pkt_len = xdp.data_end - xdp.data;
 			pkt_off += xdp.data - orig_data;

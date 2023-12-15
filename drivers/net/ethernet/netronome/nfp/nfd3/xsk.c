@@ -216,6 +216,7 @@ nfp_nfd3_xsk_rx(struct nfp_net_rx_ring *rx_ring, int budget,
 			}
 		}
 
+		guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 		act = bpf_prog_run_xdp(xdp_prog, xrxbuf->xdp);
 
 		pkt_len = xrxbuf->xdp->data_end - xrxbuf->xdp->data;

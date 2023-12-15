@@ -833,6 +833,7 @@ int mlx4_en_process_rx_cq(struct net_device *dev, struct mlx4_en_cq *cq, int bud
 			mxbuf.ring = ring;
 			mxbuf.dev = dev;
 
+			guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 			act = bpf_prog_run_xdp(xdp_prog, &mxbuf.xdp);
 
 			length = mxbuf.xdp.data_end - mxbuf.xdp.data;

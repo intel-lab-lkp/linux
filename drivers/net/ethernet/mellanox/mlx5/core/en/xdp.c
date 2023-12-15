@@ -300,6 +300,7 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq,
 	u32 act;
 	int err;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:
