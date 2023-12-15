@@ -303,10 +303,13 @@ static int als_parse_report(struct platform_device *pdev,
 				struct hid_sensor_hub_device *hsdev,
 				struct iio_chan_spec *channels,
 				unsigned usage_id,
-				struct als_state *st)
+				struct als_state *st,
+				int *max_channels)
 {
 	int ret;
 	int i;
+
+	*max_channels = CHANNEL_SCAN_INDEX_MAX;
 
 	for (i = 0; i <= CHANNEL_SCAN_INDEX_ILLUM; ++i) {
 		ret = sensor_hub_input_get_attribute_info(hsdev,
@@ -326,8 +329,12 @@ static int als_parse_report(struct platform_device *pdev,
 				usage_id,
 				HID_USAGE_SENSOR_LIGHT_COLOR_TEMPERATURE,
 				&st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP]);
-	if (ret < 0)
-		return ret;
+	if (ret < 0) {
+		*max_channels = CHANNEL_SCAN_INDEX_ILLUM;
+		ret = 0;
+		goto skip_color_chromaticity;
+	}
+
 	als_adjust_channel_bit_mask(channels, CHANNEL_SCAN_INDEX_COLOR_TEMP,
 				st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].size);
 
@@ -354,6 +361,7 @@ static int als_parse_report(struct platform_device *pdev,
 			st->als[next_scan_index].report_id);
 	}
 
+skip_color_chromaticity:
 	st->scale_precision = hid_sensor_format_scale(usage_id,
 				&st->als[CHANNEL_SCAN_INDEX_INTENSITY],
 				&st->scale_pre_decml, &st->scale_post_decml);
@@ -364,7 +372,7 @@ static int als_parse_report(struct platform_device *pdev,
 /* Function to initialize the processing for usage id */
 static int hid_als_probe(struct platform_device *pdev)
 {
-	int ret = 0;
+	int ret = 0, max_channels;
 	static const char *name = "als";
 	struct iio_dev *indio_dev;
 	struct als_state *als_state;
@@ -398,15 +406,15 @@ static int hid_als_probe(struct platform_device *pdev)
 
 	ret = als_parse_report(pdev, hsdev,
 			       (struct iio_chan_spec *)indio_dev->channels,
-			       hsdev->usage,
-			       als_state);
+			       hsdev->usage, als_state, &max_channels);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to setup attributes\n");
 		return ret;
 	}
 
-	indio_dev->num_channels =
-				ARRAY_SIZE(als_channels);
+	/* +1 to include time stamp */
+	indio_dev->num_channels = max_channels + 1;
+
 	indio_dev->info = &als_info;
 	indio_dev->name = name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
