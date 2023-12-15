@@ -22423,6 +22423,12 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tiwai/sound.git
 F:	sound/usb/midi.*
 
+USB MOTOROLA SOLUTIONS SECURITY ACCESSORIES DRIVER
+M:	Yinghua Yang <Yinghua.Yang@motorolasolutions.com>
+L:	linux-usb@vger.kernel.org
+S:	Maintained
+F:	drivers/usb/misc/motsolsa.c
+
 USB NETWORKING DRIVERS
 L:	linux-usb@vger.kernel.org
 S:	Odd Fixes
