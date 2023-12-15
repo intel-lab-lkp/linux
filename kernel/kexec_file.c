@@ -435,13 +435,12 @@ static int locate_mem_hole_top_down(unsigned long start, unsigned long end,
 		if (temp_start < start || temp_start < kbuf->buf_min)
 			return 0;
 
-		temp_end = temp_start + kbuf->memsz - 1;
-
 		/*
 		 * Make sure this does not conflict with any of existing
 		 * segments
 		 */
-		if (kimage_is_destination_range(image, temp_start, temp_end)) {
+		if (kimage_is_destination_range(image, temp_start,
+						temp_start + kbuf->memsz)) {
 			temp_start = temp_start - PAGE_SIZE;
 			continue;
 		}
@@ -475,7 +474,7 @@ static int locate_mem_hole_bottom_up(unsigned long start, unsigned long end,
 		 * Make sure this does not conflict with any of existing
 		 * segments
 		 */
-		if (kimage_is_destination_range(image, temp_start, temp_end)) {
+		if (kimage_is_destination_range(image, temp_start, temp_end + 1)) {
 			temp_start = temp_start + PAGE_SIZE;
 			continue;
 		}
