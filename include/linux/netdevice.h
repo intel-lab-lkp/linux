@@ -5103,7 +5103,7 @@ void netif_inherit_tso_max(struct net_device *to,
 
 static inline bool netif_is_macsec(const struct net_device *dev)
 {
-	return dev->priv_flags & IFF_MACSEC;
+	return netif_is_macsec(dev);
 }
 
 static inline bool netif_is_macvlan(const struct net_device *dev)
