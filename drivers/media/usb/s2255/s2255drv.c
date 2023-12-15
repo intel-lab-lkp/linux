@@ -60,6 +60,7 @@
 #define S2255_MIN_BUFS          2
 #define S2255_SETMODE_TIMEOUT   500
 #define S2255_VIDSTATUS_TIMEOUT 350
+#define S2255_MARKER_FIRMWARE	cpu_to_le32(0xDDCCBBAAL)
 #define S2255_MARKER_FRAME	cpu_to_le32(0x2255DA4AL)
 #define S2255_MARKER_RESPONSE	cpu_to_le32(0x2255ACACL)
 #define S2255_RESPONSE_SETMODE  cpu_to_le32(0x01)
@@ -323,6 +324,7 @@ struct s2255_buffer {
 #define S2255_V4L2_YC_ON  1
 #define S2255_V4L2_YC_OFF 0
 #define V4L2_CID_S2255_COLORFILTER (V4L2_CID_USER_S2255_BASE + 0)
+#define V4L2_CID_S2255_SERIALNUM (V4L2_CID_USER_S2255_BASE + 1)
 
 /* frame prefix size (sent once every frame) */
 #define PREFIX_SIZE		512
@@ -1232,6 +1234,36 @@ static int s2255_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+/*
+ * serial number is not used in usb device descriptors.
+ * returns serial number from device, 0 if none found.
+ */
+
+static int s2255_g_serialnum(struct s2255_dev *dev)
+{
+#define S2255_SERIALNUM_NONE 0
+#define S2255_I2C_SIZE     16
+#define S2255_I2C_SERIALNUM 0xa2
+#define S2255_I2C_SERIALNUM_OFFSET 0x1ff0
+#define S2255_VENDOR_READREG 0x22
+
+	u8 *buf;
+	int serialnum = S2255_SERIALNUM_NONE;
+
+	buf = kzalloc(S2255_I2C_SIZE, GFP_KERNEL);
+	if (!buf)
+		return serialnum;
+
+	s2255_vendor_req(dev, S2255_VENDOR_READREG, S2255_I2C_SERIALNUM_OFFSET,
+			 S2255_I2C_SERIALNUM >> 1, buf, S2255_I2C_SIZE, 0);
+
+	/* verify marker code */
+	if (*(__le32 *)buf == S2255_MARKER_FIRMWARE)
+		serialnum = (buf[12] << 24) + (buf[13] << 16) + (buf[14] << 8) + buf[15];
+	kfree(buf);
+	return serialnum;
+}
+
 static int vidioc_g_jpegcomp(struct file *file, void *priv,
 			 struct v4l2_jpegcompression *jc)
 {
@@ -1581,6 +1613,17 @@ static const struct v4l2_ctrl_config color_filter_ctrl = {
 	.def = 1,
 };
 
+static const struct v4l2_ctrl_config v4l2_ctrl_serialnum = {
+	.ops = &s2255_ctrl_ops,
+	.name = "Serial Number",
+	.id = V4L2_CID_S2255_SERIALNUM,
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.max = 0x7fffffff,
+	.min = 0,
+	.step = 1,
+	.flags = V4L2_CTRL_FLAG_READ_ONLY,
+};
+
 static int s2255_probe_v4l(struct s2255_dev *dev)
 {
 	int ret;
@@ -1588,6 +1631,7 @@ static int s2255_probe_v4l(struct s2255_dev *dev)
 	int cur_nr = video_nr;
 	struct s2255_vc *vc;
 	struct vb2_queue *q;
+	struct v4l2_ctrl_config tmp = v4l2_ctrl_serialnum;
 
 	ret = v4l2_device_register(&dev->interface->dev, &dev->v4l2_dev);
 	if (ret)
@@ -1598,7 +1642,7 @@ static int s2255_probe_v4l(struct s2255_dev *dev)
 		vc = &dev->vc[i];
 		INIT_LIST_HEAD(&vc->buf_list);
 
-		v4l2_ctrl_handler_init(&vc->hdl, 6);
+		v4l2_ctrl_handler_init(&vc->hdl, 7);
 		v4l2_ctrl_new_std(&vc->hdl, &s2255_ctrl_ops,
 				V4L2_CID_BRIGHTNESS, -127, 127, 1, DEF_BRIGHT);
 		v4l2_ctrl_new_std(&vc->hdl, &s2255_ctrl_ops,
@@ -1615,6 +1659,8 @@ static int s2255_probe_v4l(struct s2255_dev *dev)
 		    (dev->pid != 0x2257 || vc->idx <= 1))
 			v4l2_ctrl_new_custom(&vc->hdl, &color_filter_ctrl,
 					     NULL);
+		tmp.def = s2255_g_serialnum(dev);
+		v4l2_ctrl_new_custom(&vc->hdl, &tmp, NULL);
 		if (vc->hdl.error) {
 			ret = vc->hdl.error;
 			v4l2_ctrl_handler_free(&vc->hdl);
@@ -2306,6 +2352,10 @@ static int s2255_probe(struct usb_interface *interface,
 	retval = s2255_board_init(dev);
 	if (retval)
 		goto errorBOARDINIT;
+	/*
+	 * v4l2_ctrl_handler_setup is not required.
+	 * V4L2 controls initialized when firmware is loaded.
+	 */
 	s2255_fwload_start(dev);
 	/* loads v4l specific */
 	retval = s2255_probe_v4l(dev);
