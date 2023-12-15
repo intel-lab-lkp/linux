@@ -1145,7 +1145,6 @@ static int gmac_map_tx_bufs(struct net_device *netdev, struct sk_buff *skb,
 	dma_addr_t mapping;
 	unsigned short mtu;
 	void *buffer;
-	int ret;
 
 	mtu  = ETH_HLEN;
 	mtu += netdev->mtu;
@@ -1166,14 +1165,7 @@ static int gmac_map_tx_bufs(struct net_device *netdev, struct sk_buff *skb,
 		 * checksum buffer is only 1518 bytes, so when the frames get
 		 * bigger they get truncated, or the last few bytes get
 		 * overwritten by the FCS.
-		 *
-		 * Just use software checksumming and bypass on bigger frames.
 		 */
-		if (skb->ip_summed == CHECKSUM_PARTIAL) {
-			ret = skb_checksum_help(skb);
-			if (ret)
-				return ret;
-		}
 		word1 |= TSS_BYPASS_BIT;
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		int tcp = 0;
