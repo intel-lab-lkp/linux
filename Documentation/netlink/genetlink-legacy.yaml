@@ -242,14 +242,17 @@ properties:
                   max:
                     description: Max value for an integer attribute.
                     $ref: '#/$defs/len-or-limit'
+                  len:
+                    description: Max length for a string or a binary attribute.
+                    $ref: '#/$defs/len-or-define'
                   min-len:
                     description: Min length for a binary attribute.
                     $ref: '#/$defs/len-or-define'
                   max-len:
-                    description: Max length for a string or a binary attribute.
+                    description: Max length for a binary attribute.
                     $ref: '#/$defs/len-or-define'
                   exact-len:
-                    description: Exact length for a string or a binary attribute.
+                    description: Exact length for a binary attribute.
                     $ref: '#/$defs/len-or-define'
               sub-type: *attr-type
               display-hint: *display-hint

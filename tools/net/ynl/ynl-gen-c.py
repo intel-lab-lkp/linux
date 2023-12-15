@@ -427,13 +427,10 @@ class TypeString(Type):
         return f'.type = YNL_PT_NUL_STR, '
 
     def _attr_policy(self, policy):
-        if 'exact-len' in self.checks:
-            mem = 'NLA_POLICY_EXACT_LEN(' + str(self.checks['exact-len']) + ')'
-        else:
-            mem = '{ .type = ' + policy
-            if 'max-len' in self.checks:
-                mem += ', .len = ' + str(self.get_limit('max-len'))
-            mem += ', }'
+        mem = '{ .type = ' + policy
+        if 'len' in self.checks:
+            mem += ', .len = ' + str(self.get_limit('len'))
+        mem += ', }'
         return mem
 
     def attr_policy(self, cw):
@@ -481,13 +478,15 @@ class TypeBinary(Type):
     def _attr_policy(self, policy):
         if 'exact-len' in self.checks:
             mem = 'NLA_POLICY_EXACT_LEN(' + str(self.checks['exact-len']) + ')'
+        elif 'max-len' in self.checks:
+            mem = 'NLA_POLICY_MAX_LEN(' + str(self.checks['max-len']) + ')'
+        elif 'min-len' in self.checks:
+            mem = 'NLA_POLICY_MIN_LEN(' + str(self.checks['min-len']) + ')'
         else:
-            mem = '{ '
-            if len(self.checks) == 1 and 'min-len' in self.checks:
-                mem += '.len = ' + str(self.get_limit('min-len'))
-            elif len(self.checks) == 0:
-                mem += '.type = NLA_BINARY'
-            else:
+            mem = '{ .type = ' + policy
+            if len(self.checks) == 1 and 'len' in self.checks:
+                mem += '.len = ' + str(self.get_limit('len'))
+            elif len(self.checks) > 1:
                 raise Exception('One or more of binary type checks not implemented, yet')
             mem += ', }'
         return mem
