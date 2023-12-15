@@ -391,7 +391,7 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	if (ret) {
 		debugfs_remove_recursive(root);
 		return ret;
-	};
+	}
 
 	platform_set_drvdata(pdev, root);
 
