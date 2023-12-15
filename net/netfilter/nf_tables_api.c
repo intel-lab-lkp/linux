@@ -1199,24 +1199,29 @@ static void nf_tables_table_disable(struct net *net, struct nft_table *table)
 static int nf_tables_updtable(struct nft_ctx *ctx)
 {
 	struct nft_trans *trans;
-	u32 flags;
+	u32 flags = 0;
 	int ret;
 
-	if (!ctx->nla[NFTA_TABLE_FLAGS])
-		return 0;
+	if (ctx->nla[NFTA_TABLE_FLAGS])
+		flags = ntohl(nla_get_be32(ctx->nla[NFTA_TABLE_FLAGS]));
 
-	flags = ntohl(nla_get_be32(ctx->nla[NFTA_TABLE_FLAGS]));
 	if (flags & ~NFT_TABLE_F_MASK)
 		return -EOPNOTSUPP;
 
 	if (flags == ctx->table->flags)
 		return 0;
 
-	if ((nft_table_has_owner(ctx->table) &&
-	     !(flags & NFT_TABLE_F_OWNER)) ||
-	    (!nft_table_has_owner(ctx->table) &&
-	     flags & NFT_TABLE_F_OWNER))
-		return -EOPNOTSUPP;
+	if (nft_table_has_owner(ctx->table)) {
+		if (ctx->table->nlpid != ctx->portid)
+			return -EPERM;
+		if (!(flags & NFT_TABLE_F_OWNER))
+			return -EOPNOTSUPP;
+	}
+
+	if (flags & NFT_TABLE_F_OWNER &&
+	    !nft_table_has_owner(ctx->table) &&
+	    !(ctx->table->flags & NFT_TABLE_F_PERSIST))
+		return -EPERM;
 
 	/* No dormant off/on/off/on games in single transaction */
 	if (ctx->table->flags & __NFT_TABLE_F_UPDATE)
@@ -1226,6 +1231,16 @@ static int nf_tables_updtable(struct nft_ctx *ctx)
 				sizeof(struct nft_trans_table));
 	if (trans == NULL)
 		return -ENOMEM;
+
+	if (flags & NFT_TABLE_F_OWNER) {
+		ctx->table->flags &= ~NFT_TABLE_F_PERSIST;
+		ctx->table->flags |= flags & NFT_TABLE_F_PERSIST;
+		ctx->table->flags |= NFT_TABLE_F_OWNER;
+		ctx->table->nlpid = ctx->portid;
+	} else if (nft_table_has_owner(ctx->table)) {
+		ctx->table->flags &= ~NFT_TABLE_F_OWNER;
+		ctx->table->nlpid = 0;
+	}
 
 	if ((flags & NFT_TABLE_F_DORMANT) &&
 	    !(ctx->table->flags & NFT_TABLE_F_DORMANT)) {
@@ -11236,6 +11251,10 @@ again:
 	list_for_each_entry(table, &nft_net->tables, list) {
 		if (nft_table_has_owner(table) &&
 		    n->portid == table->nlpid) {
+			if (table->flags & NFT_TABLE_F_PERSIST) {
+				table->flags &= ~NFT_TABLE_F_OWNER;
+				continue;
+			}
 			__nft_release_hook(net, table);
 			list_del_rcu(&table->list);
 			to_delete[deleted++] = table;
