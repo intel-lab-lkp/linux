@@ -165,8 +165,6 @@ static void cpuidle_idle_call(void)
 	 */
 
 	if (cpuidle_not_available(drv, dev)) {
-		tick_nohz_idle_stop_tick();
-
 		default_idle_call();
 		goto exit_idle;
 	}
