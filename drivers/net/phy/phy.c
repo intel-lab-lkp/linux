@@ -230,6 +230,18 @@ phy_find_valid(int speed, int duplex, unsigned long *supported)
 }
 
 /**
+ * phy_supported_speeds_num - return the number of all speeds currently
+ *			      supported by a phy device
+ * @phy: The phy device to return supported speeds of.
+ *
+ * Description: Returns the number of supported speeds.
+ */
+unsigned int phy_supported_speeds_num(struct phy_device *phy)
+{
+	return phy_speeds(NULL, 0, phy->supported);
+}
+
+/**
  * phy_supported_speeds - return all speeds currently supported by a phy device
  * @phy: The phy device to return supported speeds of.
  * @speeds: buffer to store supported speeds in.
