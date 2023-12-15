@@ -357,9 +357,34 @@ Pages
 Folios
 ======
 
-.. admonition:: Stub
+A folio is a physically, virtually and logically contiguous set of bytes.
+It is a power-of-two in size, and it is aligned to that same power-of-two.
+It is at least as large as %PAGE_SIZE. If it is in the page cache, it is
+at a file offset which is a multiple of that power-of-two. It may be
+mapped into userspace at an address which is at an arbitrary page offset,
+but its kernel virtual address is aligned to its size.
 
-   This section is incomplete. Please list and describe the appropriate fields.
+As Matthew Wilcox explains in his introduction to folios, the need for
+`struct folio` arises mostly to address issues with the use of compound
+pages. It is often unclear whether a function operates on an individual
+page, or an entire compound page.
+
+"A function which has a `struct page` pointer argument might be
+expecting a head or base page and will BUG if given a tail page. It might
+work with any kind of page and operate on %PAGE_SIZE bytes. It might work
+with any kind of page and operate on page_size() bytes if given a head
+page but %PAGE_SIZE bytes if given a base or tail page. It might operate
+on page_size() bytes if passed a head or tail page. We have examples of
+all of these today.".
+
+A pointer to folio points to a page that is never a tail page. It
+represents an entire compound page. Therefore, there is no need to call
+compound_head() to get a pointer to the head. Folios has eliminted the
+need to unnecessary calls and has avoided bugs related to the misuse of
+pages passed to functions. Furthermore, the inline compound_head() makes
+the kernel bigger and slows things down.
+
+The folio APIs are described in the "Memory Management APIs" document.
 
 .. _initialization:
 
