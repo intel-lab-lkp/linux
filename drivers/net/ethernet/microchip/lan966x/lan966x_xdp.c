@@ -84,6 +84,7 @@ int lan966x_xdp_run(struct lan966x_port *port, struct page *page, u32 data_len)
 	xdp_prepare_buff(&xdp, page_address(page),
 			 IFH_LEN_BYTES + XDP_PACKET_HEADROOM,
 			 data_len - IFH_LEN_BYTES, false);
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(xdp_prog, &xdp);
 	switch (act) {
 	case XDP_PASS:

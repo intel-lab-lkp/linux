@@ -1949,6 +1949,7 @@ static u32 mtk_xdp_run(struct mtk_eth *eth, struct mtk_rx_ring *ring,
 	if (!prog)
 		goto out;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:

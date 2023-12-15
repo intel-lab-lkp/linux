@@ -93,6 +93,7 @@ u32 mana_run_xdp(struct net_device *ndev, struct mana_rxq *rxq,
 	xdp_init_buff(xdp, PAGE_SIZE, &rxq->xdp_rxq);
 	xdp_prepare_buff(xdp, buf_va, XDP_PACKET_HEADROOM, pkt_len, false);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 
 	rx_stats = &rxq->stats;

@@ -152,6 +152,7 @@ static void *fun_run_xdp(struct funeth_rxq *q, skb_frag_t *frags, void *buf_va,
 	xdp_prepare_buff(&xdp, buf_va, FUN_XDP_HEADROOM, skb_frag_size(frags) -
 			 (FUN_RX_TAILROOM + FUN_XDP_HEADROOM), false);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	xdp_prog = READ_ONCE(q->xdp_prog);
 	act = bpf_prog_run_xdp(xdp_prog, &xdp);
 

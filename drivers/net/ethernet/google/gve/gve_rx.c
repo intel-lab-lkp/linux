@@ -772,11 +772,13 @@ static void gve_rx(struct gve_rx_ring *rx, netdev_features_t feat,
 				 page_info->page_offset, GVE_RX_PAD,
 				 len, false);
 		old_data = xdp.data;
-		xdp_act = bpf_prog_run_xdp(xprog, &xdp);
-		if (xdp_act != XDP_PASS) {
-			gve_xdp_done(priv, rx, &xdp, xprog, xdp_act);
-			ctx->total_size += frag_size;
-			goto finish_ok_pkt;
+		scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+			xdp_act = bpf_prog_run_xdp(xprog, &xdp);
+			if (xdp_act != XDP_PASS) {
+				gve_xdp_done(priv, rx, &xdp, xprog, xdp_act);
+				ctx->total_size += frag_size;
+				goto finish_ok_pkt;
+			}
 		}
 
 		page_info->pad += xdp.data - old_data;
