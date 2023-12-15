@@ -223,7 +223,7 @@ attribute-sets:
         name: saddr6
         type: binary
         checks:
-          min-len: 16
+          exact-len: 16
       -
         name: daddr4
         type: u32
@@ -232,7 +232,7 @@ attribute-sets:
         name: daddr6
         type: binary
         checks:
-          min-len: 16
+          exact-len: 16
       -
         name: sport
         type: u16
