@@ -166,7 +166,9 @@ static int mv88q2xxx_get_features(struct phy_device *phydev)
 	 * sequence provided by Marvell. Disable it for now until a proper
 	 * workaround is found or a new PHY revision is released.
 	 */
-	linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->supported);
+	if (phydev->drv->phy_id == MARVELL_PHY_ID_88Q2110)
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
+				   phydev->supported);
 
 	return 0;
 }
@@ -191,6 +193,9 @@ static int mv88q2xxx_config_init(struct phy_device *phydev)
 	 * work according to specification. Therefore, we force it here.
 	 */
 	phydev->pma_extable = MDIO_PMA_EXTABLE_BT1;
+
+	if (phydev->drv->phy_id == MARVELL_PHY_ID_88Q2220)
+		return 0;
 
 	/* Read the current PHY configuration */
 	ret = genphy_c45_read_pma(phydev);
@@ -235,6 +240,242 @@ static int mv88q2xxxx_get_sqi_max(struct phy_device *phydev)
 	return 15;
 }
 
+static int mv88q222x_soft_reset(struct phy_device *phydev)
+{
+	int ret;
+
+	/* Enable RESET of DCL */
+	if (phydev->autoneg == AUTONEG_ENABLE || phydev->speed == SPEED_1000) {
+		ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe1b, 0x48);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Soft reset */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, MDIO_PCS_1000BT1_CTRL,
+			    MDIO_PCS_1000BT1_CTRL_RESET);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xffe4, 0xc);
+	if (ret < 0)
+		return ret;
+
+	/* Disable RESET of DCL */
+	if (phydev->autoneg == AUTONEG_ENABLE || phydev->speed == SPEED_1000)
+		return phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe1b, 0x58);
+	else
+		return ret;
+}
+
+static int mv88q222x_config_aneg_gbit(struct phy_device *phydev)
+{
+	int ret;
+
+	/* send_s detection threshold, slave and master */
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, 0x8032, 0x2020);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, 0x8031, 0xa28);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, 0x8031, 0xc28);
+	if (ret < 0)
+		return ret;
+
+	/* Disable DCL calibratin during tear down */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xffdb, 0xfc10);
+	if (ret < 0)
+		return ret;
+
+	/* Disable RESET of DCL*/
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe1b, 0x58);
+	if (ret < 0)
+		return ret;
+
+	/* Turn CM Clamp ON */
+	return phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe79, 0x4);
+}
+
+static int mv88q222x_config_aneg_100m(struct phy_device *phydev)
+{
+	int ret;
+
+	/* Update Initial FFE Coefficients */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfbba, 0xcb2);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfbbb, 0xc4a);
+	if (ret < 0)
+		return ret;
+
+	/* Turn CM Clamp ON */
+	return phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe79, 0x4);
+}
+
+static int mv88q222x_config_aneg_preinit(struct phy_device *phydev)
+{
+	int ret, val, i;
+
+	/* Enable txdac */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0x8033, 0x6801);
+	if (ret < 0)
+		return ret;
+
+	/* Disable ANEG */
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, MDIO_AN_T1_CTRL, 0x0);
+	if (ret < 0)
+		return ret;
+
+	/* Set IEEE power down */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_CTRL1, 0x840);
+	if (ret < 0)
+		return ret;
+
+	/* Exit standby state(internal state) */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe1b, 0x48);
+	if (ret < 0)
+		return ret;
+
+	/* Set power management state breakpoint (internal state) */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xffe4, 0x6b6);
+	if (ret < 0)
+		return ret;
+
+	/* Exit IEEE power down */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_CTRL1, 0x0);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, MDIO_CTRL1, 0x0);
+	if (ret < 0)
+		return ret;
+
+	/* Wait up to 5ms to enter to power management state, if we do not meet
+	 * the target value, it is still ok to proceed
+	 */
+	for (i = 0; i < 5; i++) {
+		val = phy_read_mmd(phydev, MDIO_MMD_PCS, 0xffe4);
+		if (val == 0x6ba)
+			break;
+
+		usleep_range(1000, 2000);
+	}
+
+	/* Turn CM Clamp OFF */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe79, 0x0);
+	if (ret < 0)
+		return ret;
+
+	/* mdi vcm */
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe07, 0x125a);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe09, 0x1288);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe08, 0x2588);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe11, 0x1105);
+	if (ret < 0)
+		return ret;
+
+	/* aux_boost */
+	return phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe72, 0x042c);
+}
+
+static int mv88q222x_config_aneg_init_b0(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = mv88q222x_config_aneg_preinit(phydev);
+	if (ret < 0)
+		return ret;
+
+	if (phydev->autoneg == AUTONEG_DISABLE) {
+		if (phydev->speed == SPEED_100)
+			return mv88q222x_config_aneg_100m(phydev);
+		else
+			return mv88q222x_config_aneg_gbit(phydev);
+	}
+
+	ret = mv88q222x_config_aneg_100m(phydev);
+	if (ret)
+		return ret;
+
+	ret = mv88q222x_config_aneg_gbit(phydev);
+	if (ret)
+		return ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe5f, 0xe8);
+	if (ret)
+		return ret;
+
+	return phy_write_mmd(phydev, MDIO_MMD_PCS, 0xfe05, 0x755c);
+}
+
+static int mv88q222x_config_aneg(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = mv88q222x_config_aneg_init_b0(phydev);
+	if (ret < 0)
+		return ret;
+
+	ret = genphy_c45_config_aneg(phydev);
+	if (ret)
+		return ret;
+
+	return mv88q222x_soft_reset(phydev);
+}
+
+static int mv88q222x_set_loopback(struct phy_device *phydev, bool enable)
+{
+	return phy_modify_mmd(phydev,
+			      MDIO_MMD_PCS,
+			      MDIO_PCS_1000BT1_CTRL,
+			      MDIO_PCS_CTRL1_LOOPBACK,
+			      enable ? MDIO_PCS_CTRL1_LOOPBACK : 0);
+}
+
+static int mv88q222x_get_sqi(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->speed == SPEED_100) {
+		/* Read the SQI from the vendor specific receiver status
+		 * register
+		 */
+		ret = phy_read_mmd(phydev, MDIO_MMD_PCS, 0x8230);
+		if (ret < 0)
+			return ret;
+
+		ret = (ret & 0xe0000) >> 13;
+	} else {
+		/* Read the SQI from the vendor specific signal quality index
+		 * register
+		 */
+
+		ret = phy_read_mmd(phydev, MDIO_MMD_PCS, 0xfcd8);
+		if (ret < 0)
+			return ret;
+	}
+
+	return ret & 0x0F;
+}
+
+static int mv88q222x_get_sqi_max(struct phy_device *phydev)
+{
+	return 7;
+}
+
 static struct phy_driver mv88q2xxx_driver[] = {
 	{
 		.phy_id			= MARVELL_PHY_ID_88Q2110,
@@ -249,12 +490,27 @@ static struct phy_driver mv88q2xxx_driver[] = {
 		.get_sqi		= mv88q2xxxx_get_sqi,
 		.get_sqi_max		= mv88q2xxxx_get_sqi_max,
 	},
+	{
+		.phy_id			= MARVELL_PHY_ID_88Q2220,
+		.phy_id_mask		= MARVELL_PHY_ID_MASK,
+		.name			= "mv88q2220",
+		.get_features		= mv88q2xxx_get_features,
+		.config_aneg		= mv88q222x_config_aneg,
+		.aneg_done		= genphy_c45_aneg_done,
+		.config_init		= mv88q2xxx_config_init,
+		.read_status		= mv88q2xxx_read_status,
+		.soft_reset		= mv88q222x_soft_reset,
+		.set_loopback		= mv88q222x_set_loopback,
+		.get_sqi		= mv88q222x_get_sqi,
+		.get_sqi_max		= mv88q222x_get_sqi_max,
+	},
 };
 
 module_phy_driver(mv88q2xxx_driver);
 
 static struct mdio_device_id __maybe_unused mv88q2xxx_tbl[] = {
 	{ MARVELL_PHY_ID_88Q2110, MARVELL_PHY_ID_MASK },
+	{ MARVELL_PHY_ID_88Q2220, MARVELL_PHY_ID_MASK },
 	{ /*sentinel*/ }
 };
 MODULE_DEVICE_TABLE(mdio, mv88q2xxx_tbl);
