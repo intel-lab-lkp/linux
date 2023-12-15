@@ -631,8 +631,9 @@ static void armv8pmu_write_evtype(int idx, unsigned long val)
 			     ARMV8_PMU_EXCLUDE_EL0 |
 			     ARMV8_PMU_EXCLUDE_EL1;
 
-	if (IS_ENABLED(CONFIG_ARM64))
-		mask |= ARMV8_PMU_EVTYPE_TC | ARMV8_PMU_EVTYPE_TH;
+#if IS_ENABLED(CONFIG_ARM64)
+	mask |= ARMV8_PMU_EVTYPE_TC | ARMV8_PMU_EVTYPE_TH;
+#endif
 
 	val &= mask;
 	write_pmevtypern(counter, val);
