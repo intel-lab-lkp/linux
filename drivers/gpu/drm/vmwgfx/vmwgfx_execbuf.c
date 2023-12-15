@@ -127,7 +127,7 @@ struct vmw_ctx_validation_info {
  * @func: Call-back to handle the command.
  * @user_allow: Whether allowed from the execbuf ioctl.
  * @gb_disable: Whether disabled if guest-backed objects are available.
- * @gb_enable: Whether enabled iff guest-backed objects are available.
+ * @gb_enable: Whether enabled if guest-backed objects are available.
  * @cmd_name: Name of the command.
  */
 struct vmw_cmd_entry {
@@ -621,10 +621,10 @@ static int vmw_resources_reserve(struct vmw_sw_context *sw_context)
  * @sw_context: Pointer to the software context.
  * @res_type: Resource type.
  * @dirty: Whether to change dirty status.
- * @converter: User-space visisble type specific information.
+ * @converter: User-space visible type specific information.
  * @id_loc: Pointer to the location in the command buffer currently being parsed
  * from where the user-space resource id handle is located.
- * @p_res: Pointer to pointer to resource validalidation node. Populated on
+ * @p_res: Pointer to pointer to resource validation node. Populated on
  * exit.
  */
 static int
@@ -1069,7 +1069,7 @@ static int vmw_query_bo_switch_prepare(struct vmw_private *dev_priv,
  * object following that query wait has signaled, we are sure that all preceding
  * queries have finished, and the old query buffer can be unpinned. However,
  * since both the new query buffer and the old one are fenced with that fence,
- * we can do an asynchronus unpin now, and be sure that the old query buffer
+ * we can do an asynchronous unpin now, and be sure that the old query buffer
  * won't be moved until the fence has signaled.
  *
  * As mentioned above, both the new - and old query buffers need to be fenced
