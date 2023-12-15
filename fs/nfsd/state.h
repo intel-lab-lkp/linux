@@ -135,6 +135,8 @@ struct nfs4_cb_fattr {
 /* bits for ncf_cb_flags */
 #define	CB_GETATTR_BUSY		0
 
+#define	NFSD_CB_GETATTR_TIMEOUT	msecs_to_jiffies(20000) /* 20 secs */
+
 /*
  * Represents a delegation stateid. The nfs4_client holds references to these
  * and they are put when it is being destroyed or when the delegation is
