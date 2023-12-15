@@ -1265,6 +1265,18 @@ sub dump_struct($$) {
 		$declaration .= "\t" . $clause . "\n";
 		$level++ if ($clause =~ m/(\{)/ && !($clause =~m/\}/));
 	}
+
+	my %_members;
+	$_members{$_}++ for (@parameterlist);
+
+	while (my ($k, $v) = each %parameterdescs) {
+	    if (!exists($_members{$k})) {
+	        if (show_warnings("struct", $declaration_name)) {
+		     emit_warning("${file}:$.", "Excess struct member '$k' description in '$declaration_name'\n");
+		}
+	    }
+	}
+
 	output_declaration($declaration_name,
 			   'struct',
 			   {'struct' => $declaration_name,
