@@ -51,4 +51,15 @@
 #define local_unlock_irqrestore(lock, flags)			\
 	__local_unlock_irqrestore(lock, flags)
 
+DEFINE_LOCK_GUARD_1(local_lock, local_lock_t,
+		    local_lock(_T->lock),
+		    local_unlock(_T->lock))
+DEFINE_LOCK_GUARD_1(local_lock_irq, local_lock_t,
+		    local_lock_irq(_T->lock),
+		    local_unlock_irq(_T->lock))
+DEFINE_LOCK_GUARD_1(local_lock_irqsave, local_lock_t,
+		    local_lock_irqsave(_T->lock, _T->flags),
+		    local_unlock_irqrestore(_T->lock, _T->flags),
+		    unsigned long flags)
+
 #endif
