@@ -90,6 +90,7 @@
 #define VCNL4040_PS_CONF1_PS_SHUTDOWN	BIT(0)
 #define VCNL4040_PS_CONF2_PS_IT	GENMASK(3, 1) /* Proximity integration time */
 #define VCNL4040_CONF1_PS_PERS	GENMASK(5, 4) /* Proximity interrupt persistence setting */
+#define VCNL4040_PS_CONF2_PS_HD		BIT(11)	/* Proximity high definition */
 #define VCNL4040_PS_CONF2_PS_INT	GENMASK(9, 8) /* Proximity interrupt mode */
 #define VCNL4040_PS_CONF3_MPS		GENMASK(6, 5) /* Proximity multi pulse number */
 #define VCNL4040_PS_MS_LED_I		GENMASK(10, 8) /* Proximity current */
@@ -168,6 +169,11 @@ static const int vcnl4040_ps_calibbias_ua[][2] = {
 	{0, 160000},
 	{0, 180000},
 	{0, 200000},
+};
+
+static const int vcnl4040_ps_resolutions[2] = {
+	12,
+	16
 };
 
 static const int vcnl4040_als_persistence[] = {1, 2, 4, 8};
@@ -880,6 +886,54 @@ out_unlock:
 	return ret;
 }
 
+static ssize_t vcnl4040_read_ps_resolution(struct vcnl4000_data *data, int *val, int *val2)
+{
+	int ret;
+
+	ret = i2c_smbus_read_word_data(data->client, VCNL4200_PS_CONF1);
+	if (ret < 0)
+		return ret;
+
+	ret = FIELD_GET(VCNL4040_PS_CONF2_PS_HD, ret);
+	if (ret >= ARRAY_SIZE(vcnl4040_ps_resolutions))
+		return -EINVAL;
+
+	*val = vcnl4040_ps_resolutions[ret];
+	*val2 = 0;
+
+	return ret;
+}
+
+static ssize_t vcnl4040_write_ps_resolution(struct vcnl4000_data *data, int val)
+{
+	unsigned int i;
+	int ret;
+	u16 regval;
+
+	for (i = 0; i < ARRAY_SIZE(vcnl4040_ps_resolutions); i++) {
+		if (val == vcnl4040_ps_resolutions[i])
+			break;
+	}
+
+	if (i >= ARRAY_SIZE(vcnl4040_ps_resolutions))
+		return -EINVAL;
+
+	mutex_lock(&data->vcnl4000_lock);
+
+	ret = i2c_smbus_read_word_data(data->client, VCNL4200_PS_CONF1);
+	if (ret < 0)
+		goto out_unlock;
+
+	regval = (ret & ~VCNL4040_PS_CONF2_PS_HD);
+	regval |= FIELD_PREP(VCNL4040_PS_CONF2_PS_HD, i);
+	ret = i2c_smbus_write_word_data(data->client, VCNL4200_PS_CONF1,
+					regval);
+
+out_unlock:
+	mutex_unlock(&data->vcnl4000_lock);
+	return ret;
+}
+
 static int vcnl4000_read_raw(struct iio_dev *indio_dev,
 				struct iio_chan_spec const *chan,
 				int *val, int *val2, long mask)
@@ -950,6 +1004,16 @@ static int vcnl4000_read_raw(struct iio_dev *indio_dev,
 		default:
 			return -EINVAL;
 		}
+	case IIO_CHAN_INFO_RESOLUTION:
+		switch (chan->type) {
+		case IIO_PROXIMITY:
+			ret = vcnl4040_read_ps_resolution(data, val, val2);
+			if (ret < 0)
+				return ret;
+			return IIO_VAL_INT;
+		default:
+			return -EINVAL;
+		}
 	default:
 		return -EINVAL;
 	}
@@ -984,6 +1048,13 @@ static int vcnl4040_write_raw(struct iio_dev *indio_dev,
 		switch (chan->type) {
 		case IIO_PROXIMITY:
 			return vcnl4040_write_ps_calibbias(data, val2);
+		default:
+			return -EINVAL;
+		}
+	case IIO_CHAN_INFO_RESOLUTION:
+		switch (chan->type) {
+		case IIO_PROXIMITY:
+			return vcnl4040_write_ps_resolution(data, val);
 		default:
 			return -EINVAL;
 		}
@@ -1031,6 +1102,16 @@ static int vcnl4040_read_avail(struct iio_dev *indio_dev,
 			*vals = (int *)vcnl4040_ps_calibbias_ua;
 			*length = 2 * ARRAY_SIZE(vcnl4040_ps_calibbias_ua);
 			*type = IIO_VAL_INT_PLUS_MICRO;
+			return IIO_AVAIL_LIST;
+		default:
+			return -EINVAL;
+		}
+	case IIO_CHAN_INFO_RESOLUTION:
+		switch (chan->type) {
+		case IIO_PROXIMITY:
+			*vals = (int *)vcnl4040_ps_resolutions;
+			*length = ARRAY_SIZE(vcnl4040_ps_resolutions);
+			*type = IIO_VAL_INT;
 			return IIO_AVAIL_LIST;
 		default:
 			return -EINVAL;
@@ -1808,10 +1889,12 @@ static const struct iio_chan_spec vcnl4040_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 			BIT(IIO_CHAN_INFO_INT_TIME) |
 			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) |
-			BIT(IIO_CHAN_INFO_CALIBBIAS),
+			BIT(IIO_CHAN_INFO_CALIBBIAS) |
+			BIT(IIO_CHAN_INFO_RESOLUTION),
 		.info_mask_separate_available = BIT(IIO_CHAN_INFO_INT_TIME) |
 			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO) |
-			BIT(IIO_CHAN_INFO_CALIBBIAS),
+			BIT(IIO_CHAN_INFO_CALIBBIAS) |
+			BIT(IIO_CHAN_INFO_RESOLUTION),
 		.ext_info = vcnl4000_ext_info,
 		.event_spec = vcnl4040_event_spec,
 		.num_event_specs = ARRAY_SIZE(vcnl4040_event_spec),
