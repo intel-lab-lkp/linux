@@ -57,8 +57,13 @@
 /* DMA Related Registers */
 #define SPI_DMA_ADDR_BASE		(0x1000)
 #define SPI_DMA_GLOBAL_WR_ENGINE_EN	(SPI_DMA_ADDR_BASE + 0x0C)
+#define SPI_DMA_WR_DOORBELL_REG		(SPI_DMA_ADDR_BASE + 0x10)
 #define SPI_DMA_GLOBAL_RD_ENGINE_EN	(SPI_DMA_ADDR_BASE + 0x2C)
 #define SPI_DMA_RD_DOORBELL_REG		(SPI_DMA_ADDR_BASE + 0x30)
+#define SPI_DMA_INTR_WR_STS		(SPI_DMA_ADDR_BASE + 0x4C)
+#define SPI_DMA_WR_INT_MASK		(SPI_DMA_ADDR_BASE + 0x54)
+#define SPI_DMA_INTR_WR_CLR		(SPI_DMA_ADDR_BASE + 0x58)
+#define SPI_DMA_ERR_WR_STS		(SPI_DMA_ADDR_BASE + 0x5C)
 #define SPI_DMA_INTR_IMWR_WDONE_LOW	(SPI_DMA_ADDR_BASE + 0x60)
 #define SPI_DMA_INTR_IMWR_WDONE_HIGH	(SPI_DMA_ADDR_BASE + 0x64)
 #define SPI_DMA_INTR_IMWR_WABORT_LOW	(SPI_DMA_ADDR_BASE + 0x68)
@@ -74,7 +79,9 @@
 #define SPI_DMA_INTR_IMWR_RABORT_HIGH	(SPI_DMA_ADDR_BASE + 0xD8)
 #define SPI_DMA_INTR_RD_IMWR_DATA	(SPI_DMA_ADDR_BASE + 0xDC)
 
+#define SPI_DMA_CH0_WR_BASE		(SPI_DMA_ADDR_BASE + 0x200)
 #define SPI_DMA_CH0_RD_BASE		(SPI_DMA_ADDR_BASE + 0x300)
+#define SPI_DMA_CH1_WR_BASE		(SPI_DMA_ADDR_BASE + 0x400)
 #define SPI_DMA_CH1_RD_BASE		(SPI_DMA_ADDR_BASE + 0x500)
 
 #define SPI_DMA_CH_CTL1_OFFSET		(0x00)
@@ -126,7 +133,9 @@
 struct pci1xxxx_spi_internal {
 	u8 hw_inst;
 	bool spi_xfer_in_progress;
+	void *rx_buf;
 	bool dma_aborted_rd;
+	bool dma_aborted_wr;
 	int irq;
 	struct completion spi_xfer_done;
 	struct spi_controller *spi_host;
@@ -333,6 +342,26 @@ static void pci1xxxx_spi_setup_dma_read(struct pci1xxxx_spi_internal *p,
 	       base + SPI_DMA_CH_DAR_HI_OFFSET);
 }
 
+static void pci1xxxx_spi_setup_dma_write(struct pci1xxxx_spi_internal *p,
+					 dma_addr_t dma_addr, u32 len)
+{
+	void *base;
+
+	if (!p->hw_inst)
+		base = p->parent->dma_offset_bar + SPI_DMA_CH0_WR_BASE;
+	else
+		base = p->parent->dma_offset_bar + SPI_DMA_CH1_WR_BASE;
+
+	writel(DMA_INTR_EN, base + SPI_DMA_CH_CTL1_OFFSET);
+	writel(len, base + SPI_DMA_CH_XFER_LEN_OFFSET);
+	writel(lower_32_bits(dma_addr), base + SPI_DMA_CH_DAR_LO_OFFSET);
+	writel(upper_32_bits(dma_addr), base + SPI_DMA_CH_DAR_HI_OFFSET);
+	writel(lower_32_bits(SPI_PERI_ADDR_BASE + SPI_MST_RSP_BUF_OFFSET(p->hw_inst)),
+	       base + SPI_DMA_CH_SAR_LO_OFFSET);
+	writel(upper_32_bits(SPI_PERI_ADDR_BASE + SPI_MST_RSP_BUF_OFFSET(p->hw_inst)),
+	       base + SPI_DMA_CH_SAR_HI_OFFSET);
+}
+
 static void pci1xxxx_spi_setup(struct pci1xxxx_spi *par, u8 hw_inst, u32 mode,
 			       u8 clkdiv, u32 len)
 {
@@ -427,9 +456,9 @@ static int pci1xxxx_spi_transfer_with_dma(struct spi_controller *spi_ctlr,
 	struct pci1xxxx_spi_internal *p = spi_controller_get_devdata(spi_ctlr);
 	struct pci1xxxx_spi *par = p->parent;
 	struct device *dev = &par->dev->dev;
+	dma_addr_t rx_dma_addr = 0;
 	dma_addr_t tx_dma_addr = 0;
 	u64 bytes_transfered = 0;
-	u64 bytes_recvd = 0;
 	int loop_count;
 	int ret = 0;
 	u32 regval;
@@ -439,6 +468,7 @@ static int pci1xxxx_spi_transfer_with_dma(struct spi_controller *spi_ctlr,
 	u32 i;
 
 	p->spi_xfer_in_progress = true;
+	p->rx_buf = xfer->rx_buf;
 	clkdiv = pci1xxxx_get_clock_div(xfer->speed_hz);
 	rx_buf = xfer->rx_buf;
 	regval = readl(par->reg_base + SPI_MST_EVENT_REG_OFFSET(p->hw_inst));
@@ -456,6 +486,15 @@ static int pci1xxxx_spi_transfer_with_dma(struct spi_controller *spi_ctlr,
 		goto error;
 	}
 
+	if (xfer->rx_buf) {
+		rx_dma_addr = dma_map_single(dev, (void *)xfer->rx_buf, xfer->len, DMA_FROM_DEVICE);
+		if (dma_mapping_error(NULL, rx_dma_addr)) {
+			rx_dma_addr = 0;
+			ret = -ENOMEM;
+			goto error;
+		}
+	}
+
 	loop_count = DIV_ROUND_UP(xfer->len, SPI_MAX_DATA_LEN);
 	len = SPI_MAX_DATA_LEN;
 	pci1xxxx_spi_setup(par, p->hw_inst, spi->mode, clkdiv, len);
@@ -466,6 +505,8 @@ static int pci1xxxx_spi_transfer_with_dma(struct spi_controller *spi_ctlr,
 		}
 
 		pci1xxxx_spi_setup_dma_read(p, (tx_dma_addr + bytes_transfered), len);
+		if (rx_dma_addr)
+			pci1xxxx_spi_setup_dma_write(p, (rx_dma_addr + bytes_transfered), len);
 
 		writel(p->hw_inst, par->dma_offset_bar + SPI_DMA_RD_DOORBELL_REG);
 
@@ -495,14 +536,31 @@ static int pci1xxxx_spi_transfer_with_dma(struct spi_controller *spi_ctlr,
 				p->dma_aborted_rd = false;
 				ret = -ECANCELED;
 			}
+			if (p->dma_aborted_wr) {
+				writel(SPI_DMA_ENGINE_DIS,
+				       par->dma_offset_bar + SPI_DMA_GLOBAL_WR_ENGINE_EN);
+
+				/*
+				 * DMA ENGINE reset takes time if any TLP
+				 * completeion in progress, should wait
+				 * till DMA Engine reset is completed.
+				 */
+				ret = readl_poll_timeout(par->dma_offset_bar +
+							 SPI_DMA_GLOBAL_WR_ENGINE_EN, regval,
+							 (regval == 0x0), 0, USEC_PER_MSEC);
+				if (ret) {
+					ret = -ECANCELED;
+					goto error;
+				}
+
+				writel(SPI_DMA_ENGINE_EN,
+				       par->dma_offset_bar + SPI_DMA_GLOBAL_WR_ENGINE_EN);
+				p->dma_aborted_wr = false;
+				ret = -ECANCELED;
+			}
 			goto error;
 		}
 		bytes_transfered += len;
-		if (rx_buf) {
-			memcpy_fromio(&rx_buf[bytes_recvd], par->reg_base +
-				      SPI_MST_RSP_BUF_OFFSET(p->hw_inst), len);
-			bytes_recvd += len;
-		}
 		ret = 0;
 	}
 
@@ -510,6 +568,8 @@ error:
 	p->spi_xfer_in_progress = false;
 	if (tx_dma_addr)
 		dma_unmap_single(dev, tx_dma_addr, xfer->len, DMA_TO_DEVICE);
+	if (rx_dma_addr)
+		dma_unmap_single(dev, rx_dma_addr, xfer->len, DMA_FROM_DEVICE);
 
 	return ret;
 }
@@ -525,7 +585,11 @@ static irqreturn_t pci1xxxx_spi_isr(int irq, void *dev)
 	regval = readl(p->parent->reg_base + SPI_MST_EVENT_REG_OFFSET(p->hw_inst));
 	if (regval & SPI_INTR) {
 		/* Clear xfer_done */
-		complete(&p->spi_xfer_done);
+		if (p->parent->can_dma && p->rx_buf)
+			writel(p->hw_inst, p->parent->dma_offset_bar +
+			       SPI_DMA_WR_DOORBELL_REG);
+		else
+			complete(&p->parent->spi_int[p->hw_inst]->spi_xfer_done);
 		spi_int_fired = IRQ_HANDLED;
 	}
 
@@ -549,6 +613,21 @@ static irqreturn_t pci1xxxx_spi_isr(int irq, void *dev)
 		spi_int_fired = IRQ_HANDLED;
 	}
 	writel(regval, p->parent->dma_offset_bar + SPI_DMA_INTR_RD_CLR);
+
+	/* Clear the DMA WR INT */
+	regval = readl(p->parent->dma_offset_bar + SPI_DMA_INTR_WR_STS);
+	if (regval & SPI_DMA_DONE_INT_MASK) {
+		if (regval & SPI_DMA_CH0_DONE_INT)
+			complete(&p->parent->spi_int[SPI0]->spi_xfer_done);
+		if (regval & SPI_DMA_CH1_DONE_INT)
+			complete(&p->parent->spi_int[SPI1]->spi_xfer_done);
+		spi_int_fired = IRQ_HANDLED;
+	}
+	if (regval & SPI_DMA_ABORT_INT_MASK) {
+		p->dma_aborted_wr = true;
+		spi_int_fired = IRQ_HANDLED;
+	}
+	writel(regval, p->parent->dma_offset_bar + SPI_DMA_INTR_WR_CLR);
 	spin_unlock_irqrestore(&p->parent->dma_reg_lock, flags);
 
 	return spi_int_fired;
