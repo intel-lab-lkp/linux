@@ -852,6 +852,16 @@ struct phy_plca_status {
 	bool pst;
 };
 
+enum phy_led_polarity_modes {
+	PHY_LED_POLARITY_ACTIVE_LOW,
+	PHY_LED_POLARITY_ACTIVE_HIGH,
+	PHY_LED_POLARITY_ACTIVE_LOW_TRISTATED,
+	PHY_LED_POLARITY_ACTIVE_HIGH_TRISTATED,
+
+	/* PHY driver apply a default value */
+	PHY_LED_POLARITY_DEFAULT,
+};
+
 /**
  * struct phy_led: An LED driven by the PHY
  *
@@ -1145,6 +1155,21 @@ struct phy_driver {
 	int (*led_hw_control_get)(struct phy_device *dev, u8 index,
 				  unsigned long *rules);
 
+	/**
+	 * @led_polarity_set: Set the LED polarity mode
+	 * @dev: PHY device which has the LED
+	 * @index: Which LED of the PHY device
+	 * @polarity_mode: LED polarity mode from enum
+	 *
+	 * Set PHY to requested LED polarity mode.
+	 *
+	 * If polarity mode PHY_LED_POLARITY_DEFAULT is passed,
+	 * PHY driver should apply a default LED polarity mode.
+	 *
+	 * Returns 0, or an error code.
+	 */
+	int (*led_polarity_set)(struct phy_device *dev, int index,
+				enum phy_led_polarity_modes polarity_mode);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)

@@ -43,6 +43,13 @@ MODULE_DESCRIPTION("PHY library");
 MODULE_AUTHOR("Andy Fleming");
 MODULE_LICENSE("GPL");
 
+static const char * const phy_led_polarity_mode_strings[] = {
+	[PHY_LED_POLARITY_ACTIVE_LOW] = "active-low",
+	[PHY_LED_POLARITY_ACTIVE_HIGH] = "active-high",
+	[PHY_LED_POLARITY_ACTIVE_LOW_TRISTATED] = "active-low-tristated",
+	[PHY_LED_POLARITY_ACTIVE_HIGH_TRISTATED] = "active-low-tristated",
+};
+
 __ETHTOOL_DECLARE_LINK_MODE_MASK(phy_basic_features) __ro_after_init;
 EXPORT_SYMBOL_GPL(phy_basic_features);
 
@@ -3086,6 +3093,40 @@ static void phy_leds_unregister(struct phy_device *phydev)
 	}
 }
 
+static int of_phy_set_led_polarity(struct phy_device *phydev,
+				   struct device_node *led, u32 index)
+{
+	const char *polarity_str;
+	int i, err;
+
+	err = of_property_read_string(led, "polarity", &polarity_str);
+	if (err) {
+		if (err != -EINVAL)
+			return err;
+
+		/* Nothing to do, polarity setting not supported */
+		if (!phydev->drv->led_polarity_set)
+			return 0;
+
+		/* Apply default polarity if supported */
+		return phydev->drv->led_polarity_set(phydev, index,
+						     PHY_LED_POLARITY_DEFAULT);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(phy_led_polarity_mode_strings); i++)
+		if (!strcmp(phy_led_polarity_mode_strings[i], polarity_str)) {
+			if (!phydev->drv->led_polarity_set) {
+				phydev_warn(phydev, "Ignoring LED polarity in DT. Setting polarity not supported\n");
+				return 0;
+			}
+
+			return phydev->drv->led_polarity_set(phydev, index, i);
+		}
+
+	/* Unknown polarity mode declared */
+	return -EINVAL;
+}
+
 static int of_phy_led(struct phy_device *phydev,
 		      struct device_node *led)
 {
@@ -3108,6 +3149,10 @@ static int of_phy_led(struct phy_device *phydev,
 		return err;
 	if (index > U8_MAX)
 		return -EINVAL;
+
+	err = of_phy_set_led_polarity(phydev, led, index);
+	if (err)
+		return err;
 
 	phyled->index = index;
 	if (phydev->drv->led_brightness_set)
