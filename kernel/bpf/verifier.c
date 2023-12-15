@@ -1781,6 +1781,7 @@ static void __mark_reg_const_zero(struct bpf_reg_state *reg)
 {
 	__mark_reg_known(reg, 0);
 	reg->type = SCALAR_VALUE;
+	reg->precise = false; /* all scalars are assumed imprecise initially */
 }
 
 static void mark_reg_known_zero(struct bpf_verifier_env *env,
@@ -4706,21 +4707,10 @@ static void mark_reg_stack_read(struct bpf_verifier_env *env,
 		zeros++;
 	}
 	if (zeros == max_off - min_off) {
-		/* any access_size read into register is zero extended,
-		 * so the whole register == const_zero
+		/* Any access_size read into register is zero extended,
+		 * so the whole register == const_zero.
 		 */
 		__mark_reg_const_zero(&state->regs[dst_regno]);
-		/* backtracking doesn't support STACK_ZERO yet,
-		 * so mark it precise here, so that later
-		 * backtracking can stop here.
-		 * Backtracking may not need this if this register
-		 * doesn't participate in pointer adjustment.
-		 * Forward propagation of precise flag is not
-		 * necessary either. This mark is only to stop
-		 * backtracking. Any register that contributed
-		 * to const 0 was marked precise before spill.
-		 */
-		state->regs[dst_regno].precise = true;
 	} else {
 		/* have read misc data from the stack */
 		mark_reg_unknown(env, state->regs, dst_regno);
