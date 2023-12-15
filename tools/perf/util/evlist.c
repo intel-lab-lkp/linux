@@ -2521,8 +2521,8 @@ void evlist__warn_user_requested_cpus(struct evlist *evlist, const char *cpu_lis
 
 void evlist__uniquify_name(struct evlist *evlist)
 {
+	char *new_name, *old_name, *modifier, *tmp;
 	struct evsel *pos;
-	char *new_name;
 	int ret;
 
 	if (perf_pmus__num_core_pmus() == 1)
@@ -2535,8 +2535,13 @@ void evlist__uniquify_name(struct evlist *evlist)
 		if (strchr(pos->name, '/'))
 			continue;
 
-		ret = asprintf(&new_name, "%s/%s/",
-			       pos->pmu_name, pos->name);
+		/* The event modifiers must be appended after "/" */
+		old_name = strtok_r(pos->name, ":", &tmp);
+		if (!old_name)
+			continue;
+		modifier = strtok_r(NULL, ":", &tmp);
+		ret = asprintf(&new_name, "%s/%s/%s",
+			       pos->pmu_name, old_name, !modifier ? "" : modifier);
 		if (ret) {
 			free(pos->name);
 			pos->name = new_name;
