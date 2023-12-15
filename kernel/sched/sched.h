@@ -395,6 +395,7 @@ struct task_group {
 	 */
 	atomic_long_t		load_avg ____cacheline_aligned;
 #endif
+	atomic_long_t           cfs_nr_running ____cacheline_aligned;
 #endif
 
 #ifdef CONFIG_RT_GROUP_SCHED

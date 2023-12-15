@@ -3576,6 +3576,7 @@ account_entity_enqueue(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 		account_numa_enqueue(rq, task_of(se));
 		list_add(&se->group_node, &rq->cfs_tasks);
+		atomic_long_inc(&task_group(task_of(se))->cfs_nr_running);
 	}
 #endif
 	cfs_rq->nr_running++;
@@ -3591,6 +3592,7 @@ account_entity_dequeue(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	if (entity_is_task(se)) {
 		account_numa_dequeue(rq_of(cfs_rq), task_of(se));
 		list_del_init(&se->group_node);
+		atomic_long_dec(&task_group(task_of(se))->cfs_nr_running);
 	}
 #endif
 	cfs_rq->nr_running--;
@@ -4107,6 +4109,20 @@ static inline void update_tg_load_avg(struct cfs_rq *cfs_rq)
 	now = sched_clock_cpu(cpu_of(rq_of(cfs_rq)));
 	if (now - cfs_rq->last_update_tg_load_avg < NSEC_PER_MSEC)
 		return;
+
+	/*
+	 * If number of running tasks for a task_group is 0, pull back its
+	 * load_avg to 0 as well.
+	 * This avoids the situation where a freshly forked task in a cgroup,
+	 * with some residual load_avg but with no running tasks, gets less
+	 * CPU time because of pre-existing load_avg of task_group.
+	 */
+	if (!atomic_long_read(&cfs_rq->tg->cfs_nr_running)
+	    && atomic_long_read(&cfs_rq->tg->load_avg)) {
+		atomic_long_set(&cfs_rq->tg->load_avg, 0);
+		cfs_rq->last_update_tg_load_avg = now;
+		return;
+	}
 
 	delta = cfs_rq->avg.load_avg - cfs_rq->tg_load_avg_contrib;
 	if (abs(delta) > cfs_rq->tg_load_avg_contrib / 64) {
@@ -12841,6 +12857,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 		goto err;
 
 	tg->shares = NICE_0_LOAD;
+	atomic_long_set(&tg->cfs_nr_running, 0);
 
 	init_cfs_bandwidth(tg_cfs_bandwidth(tg), tg_cfs_bandwidth(parent));
 
