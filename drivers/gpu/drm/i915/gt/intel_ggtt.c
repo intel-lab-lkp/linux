@@ -618,7 +618,7 @@ static int init_ggtt(struct i915_ggtt *ggtt)
 						    ggtt->error_capture.size, 0,
 						    ggtt->error_capture.color,
 						    0, ggtt->mappable_end,
-						    DRM_MM_INSERT_LOW);
+						    DRM_MM_INSERT_HIGH);
 	}
 	if (drm_mm_node_allocated(&ggtt->error_capture)) {
 		u64 start = ggtt->error_capture.start;
