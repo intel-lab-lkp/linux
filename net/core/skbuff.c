@@ -265,6 +265,7 @@ static void *page_frag_alloc_1k(struct page_frag_1k *nc, gfp_t gfp_mask)
 #endif
 
 struct napi_alloc_cache {
+	local_lock_t bh_lock;
 	struct page_frag_cache page;
 	struct page_frag_1k page_small;
 	unsigned int skb_count;
@@ -272,7 +273,9 @@ struct napi_alloc_cache {
 };
 
 static DEFINE_PER_CPU(struct page_frag_cache, netdev_alloc_cache);
-static DEFINE_PER_CPU(struct napi_alloc_cache, napi_alloc_cache);
+static DEFINE_PER_CPU(struct napi_alloc_cache, napi_alloc_cache) = {
+	.bh_lock = INIT_LOCAL_LOCK(bh_lock),
+};
 
 /* Double check that napi_get_frags() allocates skbs with
  * skb->head being backed by slab, not a page fragment.
@@ -296,6 +299,7 @@ void *__napi_alloc_frag_align(unsigned int fragsz, unsigned int align_mask)
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
 
 	fragsz = SKB_DATA_ALIGN(fragsz);
+	guard(local_lock_nested_bh)(&napi_alloc_cache.bh_lock);
 
 	return page_frag_alloc_align(&nc->page, fragsz, GFP_ATOMIC, align_mask);
 }
@@ -324,6 +328,7 @@ static struct sk_buff *napi_skb_cache_get(void)
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
 	struct sk_buff *skb;
 
+	guard(local_lock_nested_bh)(&napi_alloc_cache.bh_lock);
 	if (unlikely(!nc->skb_count)) {
 		nc->skb_count = kmem_cache_alloc_bulk(skbuff_cache,
 						      GFP_ATOMIC,
@@ -726,9 +731,11 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 		pfmemalloc = nc->pfmemalloc;
 	} else {
 		local_bh_disable();
-		nc = this_cpu_ptr(&napi_alloc_cache.page);
-		data = page_frag_alloc(nc, len, gfp_mask);
-		pfmemalloc = nc->pfmemalloc;
+		scoped_guard(local_lock_nested_bh, &napi_alloc_cache.bh_lock) {
+			nc = this_cpu_ptr(&napi_alloc_cache.page);
+			data = page_frag_alloc(nc, len, gfp_mask);
+			pfmemalloc = nc->pfmemalloc;
+		}
 		local_bh_enable();
 	}
 
@@ -793,31 +800,32 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 		goto skb_success;
 	}
 
-	nc = this_cpu_ptr(&napi_alloc_cache);
-
 	if (sk_memalloc_socks())
 		gfp_mask |= __GFP_MEMALLOC;
 
-	if (NAPI_HAS_SMALL_PAGE_FRAG && len <= SKB_WITH_OVERHEAD(1024)) {
-		/* we are artificially inflating the allocation size, but
-		 * that is not as bad as it may look like, as:
-		 * - 'len' less than GRO_MAX_HEAD makes little sense
-		 * - On most systems, larger 'len' values lead to fragment
-		 *   size above 512 bytes
-		 * - kmalloc would use the kmalloc-1k slab for such values
-		 * - Builds with smaller GRO_MAX_HEAD will very likely do
-		 *   little networking, as that implies no WiFi and no
-		 *   tunnels support, and 32 bits arches.
-		 */
-		len = SZ_1K;
+	scoped_guard(local_lock_nested_bh, &napi_alloc_cache.bh_lock) {
+		nc = this_cpu_ptr(&napi_alloc_cache);
+		if (NAPI_HAS_SMALL_PAGE_FRAG && len <= SKB_WITH_OVERHEAD(1024)) {
+			/* we are artificially inflating the allocation size, but
+			 * that is not as bad as it may look like, as:
+			 * - 'len' less than GRO_MAX_HEAD makes little sense
+			 * - On most systems, larger 'len' values lead to fragment
+			 *   size above 512 bytes
+			 * - kmalloc would use the kmalloc-1k slab for such values
+			 * - Builds with smaller GRO_MAX_HEAD will very likely do
+			 *   little networking, as that implies no WiFi and no
+			 *   tunnels support, and 32 bits arches.
+			 */
+			len = SZ_1K;
 
-		data = page_frag_alloc_1k(&nc->page_small, gfp_mask);
-		pfmemalloc = NAPI_SMALL_PAGE_PFMEMALLOC(nc->page_small);
-	} else {
-		len = SKB_HEAD_ALIGN(len);
+			data = page_frag_alloc_1k(&nc->page_small, gfp_mask);
+			pfmemalloc = NAPI_SMALL_PAGE_PFMEMALLOC(nc->page_small);
+		} else {
+			len = SKB_HEAD_ALIGN(len);
 
-		data = page_frag_alloc(&nc->page, len, gfp_mask);
-		pfmemalloc = nc->page.pfmemalloc;
+			data = page_frag_alloc(&nc->page, len, gfp_mask);
+			pfmemalloc = nc->page.pfmemalloc;
+		}
 	}
 
 	if (unlikely(!data))
@@ -1306,6 +1314,7 @@ static void napi_skb_cache_put(struct sk_buff *skb)
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
 	u32 i;
 
+	guard(local_lock_nested_bh)(&napi_alloc_cache.bh_lock);
 	kasan_poison_object_data(skbuff_cache, skb);
 	nc->skb_cache[nc->skb_count++] = skb;
 
