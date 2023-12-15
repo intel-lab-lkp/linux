@@ -11,6 +11,7 @@
 #include <linux/ktime.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
+#include <net/xdp_sock.h>
 
 #define INCVALUE_MASK		0x7fffffff
 #define ISGN			0x80000000
@@ -555,8 +556,15 @@ static void igc_ptp_clear_tx_tstamp(struct igc_adapter *adapter)
 	for (i = 0; i < IGC_MAX_TX_TSTAMP_REGS; i++) {
 		struct igc_tx_timestamp_request *tstamp = &adapter->tx_tstamp[i];
 
-		dev_kfree_skb_any(tstamp->skb);
-		tstamp->skb = NULL;
+		if (tstamp->skb) {
+			dev_kfree_skb_any(tstamp->skb);
+			tstamp->skb = NULL;
+		} else if (tstamp->xsk_pending_ts) {
+			*tstamp->xsk_pending_ts = false;
+			tstamp->xsk_pending_ts = NULL;
+			igc_xsk_wakeup(adapter->netdev, tstamp->xsk_queue_index,
+				       0);
+		}
 	}
 
 	spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
@@ -657,8 +665,15 @@ static int igc_ptp_set_timestamp_mode(struct igc_adapter *adapter,
 static void igc_ptp_tx_timeout(struct igc_adapter *adapter,
 			       struct igc_tx_timestamp_request *tstamp)
 {
-	dev_kfree_skb_any(tstamp->skb);
-	tstamp->skb = NULL;
+	if (tstamp->skb) {
+		dev_kfree_skb_any(tstamp->skb);
+		tstamp->skb = NULL;
+	} else if (tstamp->xsk_pending_ts) {
+		*tstamp->xsk_pending_ts = false;
+		tstamp->xsk_pending_ts = NULL;
+		igc_xsk_wakeup(adapter->netdev, tstamp->xsk_queue_index, 0);
+	}
+
 	adapter->tx_hwtstamp_timeouts++;
 
 	netdev_warn(adapter->netdev, "Tx timestamp timeout\n");
@@ -677,7 +692,7 @@ void igc_ptp_tx_hang(struct igc_adapter *adapter)
 	for (i = 0; i < IGC_MAX_TX_TSTAMP_REGS; i++) {
 		tstamp = &adapter->tx_tstamp[i];
 
-		if (!tstamp->skb)
+		if (!tstamp->skb && !tstamp->xsk_pending_ts)
 			continue;
 
 		if (time_is_after_jiffies(tstamp->start + IGC_PTP_TX_TIMEOUT))
@@ -705,7 +720,7 @@ static void igc_ptp_tx_reg_to_stamp(struct igc_adapter *adapter,
 	int adjust = 0;
 
 	skb = tstamp->skb;
-	if (!skb)
+	if (!skb && !tstamp->xsk_pending_ts)
 		return;
 
 	if (igc_ptp_systim_to_hwtstamp(adapter, &shhwtstamps, regval))
@@ -729,10 +744,19 @@ static void igc_ptp_tx_reg_to_stamp(struct igc_adapter *adapter,
 	shhwtstamps.hwtstamp =
 		ktime_add_ns(shhwtstamps.hwtstamp, adjust);
 
-	tstamp->skb = NULL;
+	if (skb) {
+		tstamp->skb = NULL;
+		skb_tstamp_tx(skb, &shhwtstamps);
+		dev_kfree_skb_any(skb);
+	} else {
+		xsk_tx_metadata_complete(&tstamp->xsk_meta,
+					 &igc_xsk_tx_metadata_ops,
+					 &shhwtstamps.hwtstamp);
 
-	skb_tstamp_tx(skb, &shhwtstamps);
-	dev_kfree_skb_any(skb);
+		*tstamp->xsk_pending_ts = false;
+		tstamp->xsk_pending_ts = NULL;
+		igc_xsk_wakeup(adapter->netdev, tstamp->xsk_queue_index, 0);
+	}
 }
 
 /**

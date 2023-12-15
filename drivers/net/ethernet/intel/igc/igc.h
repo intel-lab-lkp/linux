@@ -79,6 +79,9 @@ struct igc_tx_timestamp_request {
 	u32 regl;              /* which TXSTMPL_{X} register should be used */
 	u32 regh;              /* which TXSTMPH_{X} register should be used */
 	u32 flags;             /* flags that should be added to the tx_buffer */
+	u8 xsk_queue_index;    /* Tx queue which requesting timestamp */
+	bool *xsk_pending_ts;  /* ref to tx ring for waiting timestamp event */
+	struct xsk_tx_metadata_compl xsk_meta;	/* ref to xsk Tx metadata */
 };
 
 struct igc_inline_rx_tstamps {
@@ -319,6 +322,9 @@ void igc_disable_tx_ring(struct igc_ring *ring);
 void igc_enable_tx_ring(struct igc_ring *ring);
 int igc_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags);
 
+/* AF_XDP TX metadata operations */
+extern const struct xsk_tx_metadata_ops igc_xsk_tx_metadata_ops;
+
 /* igc_dump declarations */
 void igc_rings_dump(struct igc_adapter *adapter);
 void igc_regs_dump(struct igc_adapter *adapter);
@@ -528,6 +534,7 @@ struct igc_tx_buffer {
 	DEFINE_DMA_UNMAP_ADDR(dma);
 	DEFINE_DMA_UNMAP_LEN(len);
 	u32 tx_flags;
+	bool xsk_pending_ts;
 };
 
 struct igc_rx_buffer {
@@ -551,6 +558,14 @@ struct igc_xdp_buff {
 	struct xdp_buff xdp;
 	union igc_adv_rx_desc *rx_desc;
 	struct igc_inline_rx_tstamps *rx_ts; /* data indication bit IGC_RXDADV_STAT_TSIP */
+};
+
+struct igc_metadata_request {
+	struct xsk_tx_metadata *meta;
+	struct igc_adapter *adapter;
+	struct igc_ring *tx_ring;
+	bool *xsk_pending_ts;
+	u32 *cmd_type;
 };
 
 struct igc_q_vector {
