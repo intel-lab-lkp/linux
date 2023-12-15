@@ -4,6 +4,7 @@
 */
 
 #include <linux/clocksource.h>
+#include <linux/clocksource_ids.h>
 #include <linux/kvm_para.h>
 #include <asm/pvclock.h>
 #include <asm/msr.h>
@@ -160,6 +161,7 @@ struct clocksource kvm_clock = {
 	.rating	= 400,
 	.mask	= CLOCKSOURCE_MASK(64),
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
+	.id     = CSID_X86_KVM_CLK,
 	.enable	= kvm_cs_enable,
 };
 EXPORT_SYMBOL_GPL(kvm_clock);
