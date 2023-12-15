@@ -23,6 +23,7 @@
 #include <linux/jhash.h>
 #include <linux/rculist.h>
 #include <linux/rhashtable.h>
+#include <linux/bpf.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/netlink.h>
@@ -3929,6 +3930,7 @@ struct sk_buff *tcf_qevent_handle(struct tcf_qevent *qe, struct Qdisc *sch, stru
 
 	fl = rcu_dereference_bh(qe->filter_chain);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	switch (tcf_classify(skb, NULL, fl, &cl_res, false)) {
 	case TC_ACT_SHOT:
 		qdisc_qstats_drop(sch);

@@ -144,6 +144,7 @@ static void cpu_map_bpf_prog_run_skb(struct bpf_cpu_map_entry *rcpu,
 	int err;
 
 	list_for_each_entry_safe(skb, tmp, listp, list) {
+		guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 		act = bpf_prog_run_generic_xdp(skb, &xdp, rcpu->prog);
 		switch (act) {
 		case XDP_PASS:
@@ -182,6 +183,7 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 	struct xdp_buff xdp;
 	int i, nframes = 0;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	xdp_set_return_frame_no_direct();
 	xdp.rxq = &rxq;
 

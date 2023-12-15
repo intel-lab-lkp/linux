@@ -4243,6 +4243,7 @@ static const struct bpf_func_proto bpf_xdp_adjust_meta_proto = {
  */
 void xdp_do_flush(void)
 {
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	__dev_flush();
 	__cpu_map_flush();
 	__xsk_map_flush();

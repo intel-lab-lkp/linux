@@ -3992,6 +3992,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		*pt_prev = NULL;
 	}
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	qdisc_skb_cb(skb)->pkt_len = skb->len;
 	tcx_set_ingress(skb, true);
 
@@ -4044,6 +4045,7 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 	if (!entry)
 		return skb;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	/* qdisc_skb_cb(skb)->pkt_len & tcx_set_ingress() was
 	 * already set by the caller.
 	 */
@@ -5007,6 +5009,7 @@ int do_xdp_generic(struct bpf_prog *xdp_prog, struct sk_buff *skb)
 		u32 act;
 		int err;
 
+		guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 		act = netif_receive_generic_xdp(skb, &xdp, xdp_prog);
 		if (act != XDP_PASS) {
 			switch (act) {

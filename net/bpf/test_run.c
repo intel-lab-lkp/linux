@@ -293,6 +293,7 @@ static int xdp_test_run_batch(struct xdp_test_data *xdp, struct bpf_prog *prog,
 	batch_sz = min_t(u32, repeat, xdp->batch_size);
 
 	local_bh_disable();
+	local_lock_nested_bh(&bpf_run_lock.redirect_lock);
 	xdp_set_return_frame_no_direct();
 
 	for (i = 0; i < batch_sz; i++) {
@@ -348,6 +349,9 @@ static int xdp_test_run_batch(struct xdp_test_data *xdp, struct bpf_prog *prog,
 	}
 
 out:
+	xdp_clear_return_frame_no_direct();
+	local_unlock_nested_bh(&bpf_run_lock.redirect_lock);
+
 	if (redirect)
 		xdp_do_flush();
 	if (nframes) {
@@ -356,7 +360,6 @@ out:
 			err = ret;
 	}
 
-	xdp_clear_return_frame_no_direct();
 	local_bh_enable();
 	return err;
 }
@@ -417,10 +420,12 @@ static int bpf_test_run(struct bpf_prog *prog, void *ctx, u32 repeat,
 	do {
 		run_ctx.prog_item = &item;
 		local_bh_disable();
-		if (xdp)
+		if (xdp) {
+			guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 			*retval = bpf_prog_run_xdp(prog, ctx);
-		else
+		} else {
 			*retval = bpf_prog_run(prog, ctx);
+		}
 		local_bh_enable();
 	} while (bpf_test_timer_continue(&t, 1, repeat, &ret, time));
 	bpf_reset_run_ctx(old_ctx);

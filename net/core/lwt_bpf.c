@@ -44,6 +44,7 @@ static int run_lwt_bpf(struct sk_buff *skb, struct bpf_lwt_prog *lwt,
 	 * BPF prog and skb_do_redirect().
 	 */
 	local_bh_disable();
+	local_lock_nested_bh(&bpf_run_lock.redirect_lock);
 	bpf_compute_data_pointers(skb);
 	ret = bpf_prog_run_save_cb(lwt->prog, skb);
 
@@ -76,6 +77,7 @@ static int run_lwt_bpf(struct sk_buff *skb, struct bpf_lwt_prog *lwt,
 		break;
 	}
 
+	local_unlock_nested_bh(&bpf_run_lock.redirect_lock);
 	local_bh_enable();
 
 	return ret;

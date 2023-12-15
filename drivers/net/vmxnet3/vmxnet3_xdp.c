@@ -257,6 +257,7 @@ vmxnet3_run_xdp(struct vmxnet3_rx_queue *rq, struct xdp_buff *xdp,
 	u32 act;
 
 	rq->stats.xdp_packets++;
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 	page = virt_to_page(xdp->data_hard_start);
 
