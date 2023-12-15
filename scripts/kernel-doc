@@ -450,7 +450,7 @@ sub print_lineno {
 sub emit_warning {
     my $location = shift;
     my $msg = shift;
-    print STDERR "$location: warning: $msg";
+    print STDERR "$0: $location: warning: $msg";
     ++$warnings;
 }
 ##
@@ -1280,7 +1280,7 @@ sub dump_struct($$) {
 			   });
     }
     else {
-	print STDERR "${file}:$.: error: Cannot parse struct or union!\n";
+	print STDERR "$0: ${file}:$.: error: Cannot parse struct or union!\n";
 	++$errors;
     }
 }
@@ -1386,7 +1386,7 @@ sub dump_enum($$) {
 			    'purpose' => $declaration_purpose
 			   });
     } else {
-	print STDERR "${file}:$.: error: Cannot parse enum!\n";
+	print STDERR "$0: ${file}:$.: error: Cannot parse enum!\n";
 	++$errors;
     }
 }
@@ -1457,7 +1457,7 @@ sub dump_typedef($$) {
 			   });
     }
     else {
-	print STDERR "${file}:$.: error: Cannot parse typedef!\n";
+	print STDERR "$0: ${file}:$.: error: Cannot parse typedef!\n";
 	++$errors;
     }
 }
@@ -1981,7 +1981,7 @@ sub process_export_file($) {
     my $file = map_filename($orig_file);
 
     if (!open(IN,"<$file")) {
-	print STDERR "Error: Cannot open file $file\n";
+	print STDERR "$0: Error: Cannot open file $file\n";
 	++$errors;
 	return;
     }
@@ -2090,7 +2090,7 @@ sub process_name($$) {
 	}
 
 	if ($verbose) {
-	    print STDERR "${file}:$.: info: Scanning doc for $decl_type $identifier\n";
+	    print STDERR "$0: ${file}:$.: info: Scanning doc for $decl_type $identifier\n";
 	}
     } else {
 	emit_warning("${file}:$.", "Cannot understand $_ on line $. - I thought it was a doc line\n");
@@ -2308,7 +2308,7 @@ sub process_file($) {
     $file = map_filename($orig_file);
 
     if (!open(IN_FILE,"<$file")) {
-	print STDERR "Error: Cannot open file $file\n";
+	print STDERR "$0: Error: Cannot open file $file\n";
 	++$errors;
 	return;
     }
@@ -2398,14 +2398,14 @@ foreach (@ARGV) {
     process_file($_);
 }
 if ($verbose && $errors) {
-  print STDERR "$errors errors\n";
+  print STDERR "$0: $errors errors\n";
 }
 if ($verbose && $warnings) {
-  print STDERR "$warnings warnings\n";
+  print STDERR "$0: $warnings warnings\n";
 }
 
 if ($Werror && $warnings) {
-    print STDERR "$warnings warnings as Errors\n";
+    print STDERR "$0: $warnings warnings as Errors\n";
     exit($warnings);
 } else {
     exit($output_mode eq "none" ? 0 : $errors)
