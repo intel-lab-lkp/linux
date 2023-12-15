@@ -1587,6 +1587,7 @@ fec_enet_run_xdp(struct fec_enet_private *fep, struct bpf_prog *prog,
 	int err;
 	u32 act;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 
 	/* Due xdp_adjust_tail and xdp_adjust_head: DMA sync for_device cover

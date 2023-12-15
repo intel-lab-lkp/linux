@@ -2597,6 +2597,7 @@ static u32 dpaa_run_xdp(struct dpaa_priv *priv, struct qm_fd *fd, void *vaddr,
 	}
 #endif
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
 	/* Update the length and the offset of the FD */

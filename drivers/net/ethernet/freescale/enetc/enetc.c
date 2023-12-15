@@ -1578,6 +1578,7 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 			rx_byte_cnt += VLAN_HLEN;
 		rx_byte_cnt += xdp_get_buff_len(&xdp_buff);
 
+		guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 		xdp_act = bpf_prog_run_xdp(prog, &xdp_buff);
 
 		switch (xdp_act) {

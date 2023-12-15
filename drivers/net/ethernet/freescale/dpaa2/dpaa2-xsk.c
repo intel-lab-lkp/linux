@@ -56,23 +56,25 @@ static u32 dpaa2_xsk_run_xdp(struct dpaa2_eth_priv *priv,
 	xdp_buff->rxq = &ch->xdp_rxq;
 
 	xsk_buff_dma_sync_for_cpu(xdp_buff, ch->xsk_pool);
-	xdp_act = bpf_prog_run_xdp(xdp_prog, xdp_buff);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+		xdp_act = bpf_prog_run_xdp(xdp_prog, xdp_buff);
 
-	/* xdp.data pointer may have changed */
-	dpaa2_fd_set_offset(fd, xdp_buff->data - vaddr);
-	dpaa2_fd_set_len(fd, xdp_buff->data_end - xdp_buff->data);
+		/* xdp.data pointer may have changed */
+		dpaa2_fd_set_offset(fd, xdp_buff->data - vaddr);
+		dpaa2_fd_set_len(fd, xdp_buff->data_end - xdp_buff->data);
 
-	if (likely(xdp_act == XDP_REDIRECT)) {
-		err = xdp_do_redirect(priv->net_dev, xdp_buff, xdp_prog);
-		if (unlikely(err)) {
-			ch->stats.xdp_drop++;
-			dpaa2_eth_recycle_buf(priv, ch, addr);
-		} else {
-			ch->buf_count--;
-			ch->stats.xdp_redirect++;
+		if (likely(xdp_act == XDP_REDIRECT)) {
+			err = xdp_do_redirect(priv->net_dev, xdp_buff, xdp_prog);
+			if (unlikely(err)) {
+				ch->stats.xdp_drop++;
+				dpaa2_eth_recycle_buf(priv, ch, addr);
+			} else {
+				ch->buf_count--;
+				ch->stats.xdp_redirect++;
+			}
+
+			goto xdp_redir;
 		}
-
-		goto xdp_redir;
 	}
 
 	switch (xdp_act) {
