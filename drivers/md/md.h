@@ -584,7 +584,8 @@ static inline void md_sync_acct(struct block_device *bdev, unsigned long nr_sect
 
 static inline void md_sync_acct_bio(struct bio *bio, unsigned long nr_sectors)
 {
-	md_sync_acct(bio->bi_bdev, nr_sectors);
+	if (blk_queue_io_stat(bio->bi_bdev->bd_disk->queue))
+		md_sync_acct(bio->bi_bdev, nr_sectors);
 }
 
 struct md_personality
