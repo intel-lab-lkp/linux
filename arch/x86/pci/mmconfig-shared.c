@@ -34,6 +34,15 @@ static DEFINE_MUTEX(pci_mmcfg_lock);
 
 LIST_HEAD(pci_mmcfg_list);
 
+static bool enforce_ecam_resv __read_mostly;
+static int __init parse_ecam_options(char *str)
+{
+	enforce_ecam_resv = true;
+
+	return 1;
+}
+__setup("enforce_ecam_resv", parse_ecam_options);
+
 static void __init pci_mmconfig_remove(struct pci_mmcfg_region *cfg)
 {
 	if (cfg->res.parent)
@@ -569,10 +578,12 @@ static void __init pci_mmcfg_reject_broken(int early)
 
 	list_for_each_entry(cfg, &pci_mmcfg_list, list) {
 		if (!pci_mmcfg_reserved(NULL, cfg, early)) {
-			pr_info("not using ECAM (%pR not reserved)\n",
-				&cfg->res);
-			free_all_mmcfg();
-			return;
+			pr_info("ECAM %pR not reserved, %s\n", &cfg->res,
+				enforce_ecam_resv ? "ignoring" : "using anyway");
+			if (enforce_ecam_resv) {
+				free_all_mmcfg();
+				return;
+			}
 		}
 	}
 }

@@ -1473,6 +1473,12 @@
 			(in particular on some ATI chipsets).
 			The kernel tries to set a reasonable default.
 
+	enforce_ecam_resv [X86]
+			Enforce requiring an ECAM reservation specified in
+			BIOS for PCI devices.
+			This parameter is only valid if CONFIG_PCI_MMCONFIG
+			is enabled.
+
 	enforcing=	[SELINUX] Set initial enforcing status.
 			Format: {"0" | "1"}
 			See security/selinux/Kconfig help text.
