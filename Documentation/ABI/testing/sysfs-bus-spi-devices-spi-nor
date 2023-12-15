@@ -25,6 +25,9 @@ KernelVersion:	5.14
 Contact:	linux-mtd@lists.infradead.org
 Description:	(RO) Part name of the SPI NOR flash.
 
+		The attribute is not present if the jedec_id founded in
+		ID table but flash name didn't include in it.
+
 
 What:		/sys/bus/spi/devices/.../spi-nor/sfdp
 Date:		April 2021
