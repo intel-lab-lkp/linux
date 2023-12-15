@@ -17,6 +17,14 @@
 #include <os.h>
 #include <skas.h>
 
+static void page_fault_oops(struct uml_pt_regs *regs, unsigned long address,
+			    unsigned long ip)
+{
+	pr_alert("Kernel mode fault at addr 0x%lx, ip 0x%lx\n", address, ip);
+	show_regs(container_of(regs, struct pt_regs, regs));
+	make_task_dead(SIGKILL);
+}
+
 /*
  * Note this is constrained to return 0, -EFAULT, -EACCES, -ENOMEM by
  * segv().
@@ -249,11 +257,8 @@ unsigned long segv(struct faultinfo fi, unsigned long ip, int is_user,
 	else if (!is_user && arch_fixup(ip, regs))
 		goto out;
 
-	if (!is_user) {
-		show_regs(container_of(regs, struct pt_regs, regs));
-		panic("Kernel mode fault at addr 0x%lx, ip 0x%lx",
-		      address, ip);
-	}
+	if (!is_user)
+		page_fault_oops(regs, address, ip);
 
 	show_segv_info(regs);
 
