@@ -591,8 +591,15 @@ int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags)
 	 * reverting to no-key names without evicting the directory's inode
 	 * -- which implies eviction of the dentries in the directory.
 	 */
-	if (!(dentry->d_flags & DCACHE_NOKEY_NAME))
+	if (!(dentry->d_flags & DCACHE_NOKEY_NAME)) {
+		/*
+		 * If fscrypt is the only feature requiring
+		 * revalidation for this dentry, we can just disable it.
+		 */
+		if (dentry->d_op->d_revalidate == &fscrypt_d_revalidate)
+			d_set_always_valid(dentry);
 		return 1;
+	}
 
 	/*
 	 * No-key name; valid if the directory's key is still unavailable.
