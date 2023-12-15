@@ -4956,6 +4956,7 @@ static int __stmmac_xdp_run_prog(struct stmmac_priv *priv,
 	u32 act;
 	int res;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:

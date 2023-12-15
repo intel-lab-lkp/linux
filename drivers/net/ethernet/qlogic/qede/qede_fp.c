@@ -1091,6 +1091,7 @@ static bool qede_rx_xdp(struct qede_dev *edev,
 	xdp_prepare_buff(&xdp, page_address(bd->data), *data_offset,
 			 *len, false);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, &xdp);
 
 	/* Recalculate, as XDP might have changed the headers */

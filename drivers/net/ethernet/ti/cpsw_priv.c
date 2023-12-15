@@ -1335,9 +1335,15 @@ int cpsw_run_xdp(struct cpsw_priv *priv, int ch, struct xdp_buff *xdp,
 	if (!prog)
 		return CPSW_XDP_PASS;
 
-	act = bpf_prog_run_xdp(prog, xdp);
-	/* XDP prog might have changed packet data and boundaries */
-	*len = xdp->data_end - xdp->data;
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+		act = bpf_prog_run_xdp(prog, xdp);
+		/* XDP prog might have changed packet data and boundaries */
+		*len = xdp->data_end - xdp->data;
+		if (act == XDP_REDIRECT) {
+			if (xdp_do_redirect(ndev, xdp, prog))
+				goto drop;
+		}
+	}
 
 	switch (act) {
 	case XDP_PASS:
@@ -1352,9 +1358,6 @@ int cpsw_run_xdp(struct cpsw_priv *priv, int ch, struct xdp_buff *xdp,
 			xdp_return_frame_rx_napi(xdpf);
 		break;
 	case XDP_REDIRECT:
-		if (xdp_do_redirect(ndev, xdp, prog))
-			goto drop;
-
 		/*  Have to flush here, per packet, instead of doing it in bulk
 		 *  at the end of the napi handler. The RX devices on this
 		 *  particular hardware is sharing a common queue, so the
