@@ -1268,6 +1268,7 @@ static bool tsnep_xdp_run_prog(struct tsnep_rx *rx, struct bpf_prog *prog,
 
 	length = xdp->data_end - xdp->data_hard_start - XDP_PACKET_HEADROOM;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:
@@ -1309,14 +1310,16 @@ static bool tsnep_xdp_run_prog_zc(struct tsnep_rx *rx, struct bpf_prog *prog,
 {
 	u32 act;
 
-	act = bpf_prog_run_xdp(prog, xdp);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock) {
+		act = bpf_prog_run_xdp(prog, xdp);
 
-	/* XDP_REDIRECT is the main action for zero-copy */
-	if (likely(act == XDP_REDIRECT)) {
-		if (xdp_do_redirect(rx->adapter->netdev, xdp, prog) < 0)
-			goto out_failure;
-		*status |= TSNEP_XDP_REDIRECT;
-		return true;
+		/* XDP_REDIRECT is the main action for zero-copy */
+		if (likely(act == XDP_REDIRECT)) {
+			if (xdp_do_redirect(rx->adapter->netdev, xdp, prog) < 0)
+				goto out_failure;
+			*status |= TSNEP_XDP_REDIRECT;
+			return true;
+		}
 	}
 
 	switch (act) {

@@ -387,6 +387,7 @@ static int ena_xdp_execute(struct ena_ring *rx_ring, struct xdp_buff *xdp)
 	if (!xdp_prog)
 		goto out;
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	verdict = bpf_prog_run_xdp(xdp_prog, xdp);
 
 	switch (verdict) {

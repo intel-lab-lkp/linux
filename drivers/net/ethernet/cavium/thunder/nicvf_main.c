@@ -554,7 +554,8 @@ static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 	xdp_prepare_buff(&xdp, hard_start, data - hard_start, len, false);
 	orig_data = xdp.data;
 
-	action = bpf_prog_run_xdp(prog, &xdp);
+	scoped_guard(local_lock_nested_bh, &bpf_run_lock.redirect_lock)
+		action = bpf_prog_run_xdp(prog, &xdp);
 
 	len = xdp.data_end - xdp.data;
 	/* Check if XDP program has changed headers */

@@ -429,7 +429,24 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 	if (xdp_buff_has_frags(xdp) && !prog->aux->xdp_has_frags)
 		goto out_aborted;
 
+	local_lock_nested_bh(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
+	if (act == XDP_REDIRECT) {
+		if (xdp_do_redirect(aq_nic->ndev, xdp, prog) < 0) {
+			local_unlock_nested_bh(&bpf_run_lock.redirect_lock);
+			goto out_aborted;
+		}
+		local_unlock_nested_bh(&bpf_run_lock.redirect_lock);
+
+		xdp_do_flush();
+		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
+		++rx_ring->stats.rx.xdp_redirect;
+		u64_stats_update_end(&rx_ring->stats.rx.syncp);
+		aq_get_rxpages_xdp(buff, xdp);
+	} else {
+		local_unlock_nested_bh(&bpf_run_lock.redirect_lock);
+	}
+
 	switch (act) {
 	case XDP_PASS:
 		skb = aq_xdp_build_skb(xdp, aq_nic->ndev, buff);
@@ -449,15 +466,6 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 			goto out_aborted;
 		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
 		++rx_ring->stats.rx.xdp_tx;
-		u64_stats_update_end(&rx_ring->stats.rx.syncp);
-		aq_get_rxpages_xdp(buff, xdp);
-		break;
-	case XDP_REDIRECT:
-		if (xdp_do_redirect(aq_nic->ndev, xdp, prog) < 0)
-			goto out_aborted;
-		xdp_do_flush();
-		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
-		++rx_ring->stats.rx.xdp_redirect;
 		u64_stats_update_end(&rx_ring->stats.rx.syncp);
 		aq_get_rxpages_xdp(buff, xdp);
 		break;
