@@ -282,14 +282,18 @@ EXPORT_SYMBOL_GPL(scmi_bus_type);
 int scmi_driver_register(struct scmi_driver *driver, struct module *owner,
 			 const char *mod_name)
 {
+	const struct scmi_device_id *id_table = driver->id_table;
 	int retval;
 
 	if (!driver->probe)
 		return -EINVAL;
 
-	retval = scmi_protocol_device_request(driver->id_table);
-	if (retval)
-		return retval;
+	while (id_table->name) {
+		retval = scmi_protocol_device_request(id_table);
+		if (retval)
+			return retval;
+		id_table++;
+	}
 
 	driver->driver.bus = &scmi_bus_type;
 	driver->driver.name = driver->name;
