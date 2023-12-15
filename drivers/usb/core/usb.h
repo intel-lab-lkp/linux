@@ -176,11 +176,12 @@ static inline int is_root_hub(struct usb_device *udev)
 }
 
 /* Do the same for device drivers and interface drivers. */
-
+extern int usb_probe_device(struct device *dev);
 static inline int is_usb_device_driver(struct device_driver *drv)
 {
-	return container_of(drv, struct usbdrv_wrap, driver)->
-			for_devices;
+	if (drv->probe == usb_probe_device)
+		return 1;
+	return 0;
 }
 
 /* for labeling diagnostics */
