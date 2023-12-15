@@ -72,6 +72,60 @@ atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 
 static bool hw_memory_failure __read_mostly = false;
 
+#define SPLIT_THP_MAX_RETRY_CNT		10
+#define SPLIT_THP_INIT_DELAYED_MS	1
+
+static bool split_thp_pending;
+
+struct split_thp_req {
+	struct delayed_work work;
+	struct page *thp;
+	int retries;
+};
+
+static void split_thp_work_fn(struct work_struct *work)
+{
+	struct split_thp_req *req = container_of(work, typeof(*req), work.work);
+	int ret;
+
+	/* Split the thp. */
+	get_page(req->thp);
+	lock_page(req->thp);
+	ret = split_huge_page(req->thp);
+	unlock_page(req->thp);
+	put_page(req->thp);
+
+	/* Retry with an exponential backoff. */
+	if (ret && ++req->retries < SPLIT_THP_MAX_RETRY_CNT) {
+		schedule_delayed_work(to_delayed_work(work),
+				      msecs_to_jiffies(SPLIT_THP_INIT_DELAYED_MS << req->retries));
+		return;
+	}
+
+	pr_err("%#lx: split unsplit thp %ssuccessfully.\n", page_to_pfn(req->thp), ret ? "un" : "");
+	kfree(req);
+	split_thp_pending = false;
+}
+
+static bool split_thp_delayed(struct page *thp)
+{
+	struct split_thp_req *req;
+
+	if (split_thp_pending)
+		return false;
+
+	req = kmalloc(sizeof(*req), GFP_ATOMIC);
+	if (!req)
+		return false;
+
+	req->thp = thp;
+	req->retries = 0;
+	INIT_DELAYED_WORK(&req->work, split_thp_work_fn);
+	split_thp_pending = true;
+	schedule_delayed_work(&req->work, msecs_to_jiffies(SPLIT_THP_INIT_DELAYED_MS));
+	return true;
+}
+
 static DEFINE_MUTEX(mf_mutex);
 
 void num_poisoned_pages_inc(unsigned long pfn)
@@ -2273,8 +2327,23 @@ try_again:
 		 * page is a valid handlable page.
 		 */
 		SetPageHasHWPoisoned(hpage);
-		if (try_to_split_thp_page(p) < 0) {
-			res = action_result(pfn, MF_MSG_UNSPLIT_THP, MF_IGNORED);
+		res = try_to_split_thp_page(p);
+		if (res < 0) {
+			/*
+			 * Re-attempting try_to_split_thp_page() here could consistently
+			 * yield -EAGAIN, as the threads of the process may increment the
+			 * reference count of the huge page before the process exits
+			 * memory_failure() and terminates.
+			 *
+			 * Employ the kernel worker to re-split the huge page. By the time
+			 * this worker initiates the re-splitting process, the affected
+			 * process has already been terminated, preventing its threads from
+			 * incrementing the reference count.
+			 */
+			if (res == -EAGAIN && split_thp_delayed(p))
+				res = action_result(pfn, MF_MSG_UNSPLIT_THP, MF_DELAYED);
+			else
+				res = action_result(pfn, MF_MSG_UNSPLIT_THP, MF_IGNORED);
 			goto unlock_mutex;
 		}
 		VM_BUG_ON_PAGE(!page_count(p), p);
