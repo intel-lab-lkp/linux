@@ -81,13 +81,9 @@ struct mutex {
 #define __DEBUG_MUTEX_INITIALIZER(lockname)				\
 	, .magic = &lockname
 
-extern void mutex_destroy(struct mutex *lock);
-
 #else
 
 # define __DEBUG_MUTEX_INITIALIZER(lockname)
-
-static inline void mutex_destroy(struct mutex *lock) {}
 
 #endif
 
@@ -153,8 +149,6 @@ extern void __mutex_rt_init(struct mutex *lock, const char *name,
 			    struct lock_class_key *key);
 extern int mutex_trylock(struct mutex *lock);
 
-static inline void mutex_destroy(struct mutex *lock) { }
-
 #define mutex_is_locked(l)	rt_mutex_base_is_locked(&(l)->rtmutex)
 
 #define __mutex_init(mutex, name, key)			\
@@ -170,6 +164,28 @@ do {							\
 	__mutex_init((mutex), #mutex, &__key);		\
 } while (0)
 #endif /* CONFIG_PREEMPT_RT */
+
+struct device;
+
+/*
+ * devm_mutex_init() registers a function that calls mutex_destroy()
+ * when the ressource is released.
+ *
+ * When mutex_destroy() is a not, there is no need to register that
+ * function.
+ */
+#ifdef CONFIG_DEBUG_MUTEXES
+void mutex_destroy(struct mutex *lock);
+int devm_mutex_init(struct device *dev, struct mutex *lock);
+#else
+static inline void mutex_destroy(struct mutex *lock) {}
+
+static inline int devm_mutex_init(struct device *dev, struct mutex *lock)
+{
+	mutex_init(lock);
+	return 0;
+}
+#endif
 
 /*
  * See kernel/locking/mutex.c for detailed documentation of these APIs.
