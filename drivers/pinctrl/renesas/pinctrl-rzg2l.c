@@ -482,7 +482,7 @@ static int rzg2l_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 			goto remove_group;
 
 		idx++;
-	};
+	}
 
 	dev_dbg(pctrl->dev, "Parsed %pOF with %d pins\n", np, num_pinmux);
 	ret = 0;
