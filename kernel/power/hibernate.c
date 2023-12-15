@@ -671,7 +671,7 @@ static void power_down(void)
 		if (error == -EAGAIN || error == -EBUSY) {
 			swsusp_unmark();
 			events_check_enabled = false;
-			pr_info("Wakeup event detected during hiberantion, rolling back.\n");
+			pr_info("Wakeup event detected during hibernation, rolling back.\n");
 			return;
 		}
 		fallthrough;
