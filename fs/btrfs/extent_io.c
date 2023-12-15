@@ -3733,6 +3733,7 @@ again:
 	spin_unlock(&fs_info->buffer_lock);
 	radix_tree_preload_end();
 	if (ret == -EEXIST) {
+		ret = 0;
 		existing_eb = find_extent_buffer(fs_info, start);
 		if (existing_eb)
 			goto out;
