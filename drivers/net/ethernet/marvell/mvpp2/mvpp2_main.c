@@ -3805,6 +3805,7 @@ mvpp2_run_xdp(struct mvpp2_port *port, struct bpf_prog *prog,
 	u32 ret, act;
 
 	len = xdp->data_end - xdp->data_hard_start - MVPP2_SKB_HEADROOM;
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 
 	/* Due xdp_adjust_tail: DMA sync for_device cover max len CPU touch */

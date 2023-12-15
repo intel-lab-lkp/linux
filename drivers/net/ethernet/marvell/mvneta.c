@@ -2263,6 +2263,8 @@ mvneta_run_xdp(struct mvneta_port *pp, struct mvneta_rx_queue *rxq,
 
 	len = xdp->data_end - xdp->data_hard_start - pp->rx_offset_correction;
 	data_len = xdp->data_end - xdp->data;
+
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, xdp);
 
 	/* Due xdp_adjust_tail: DMA sync for_device cover max len CPU touch */

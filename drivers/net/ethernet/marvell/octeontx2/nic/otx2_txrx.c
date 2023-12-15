@@ -1422,6 +1422,7 @@ static bool otx2_xdp_rcv_pkt_handler(struct otx2_nic *pfvf,
 	xdp_prepare_buff(&xdp, hard_start, data - hard_start,
 			 cqe->sg.seg_size, false);
 
+	guard(local_lock_nested_bh)(&bpf_run_lock.redirect_lock);
 	act = bpf_prog_run_xdp(prog, &xdp);
 
 	switch (act) {
