@@ -150,6 +150,10 @@ static struct tty_ldisc *tty_ldisc_get(struct tty_struct *tty, int disc)
 	 */
 	ldops = get_ldops(disc);
 	if (IS_ERR(ldops)) {
+		/*
+		 * Always request tty-ldisc module regardless of user's
+		 * CAP_SYS_MODULE if autoload is enabled.
+		 */
 		if (!capable(CAP_SYS_MODULE) && !tty_ldisc_autoload)
 			return ERR_PTR(-EPERM);
 		request_module("tty-ldisc-%d", disc);
