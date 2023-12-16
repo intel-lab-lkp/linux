@@ -225,10 +225,17 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 	ret = starfive_sm3_register_algs();
 	if (ret)
 		goto err_algs_sm3;
+
+	ret = starfive_sm4_register_algs();
+	if (ret)
+		goto err_algs_sm4;
 #endif
+
 	return 0;
 
 #ifdef CONFIG_CRYPTO_DEV_JH8100
+err_algs_sm4:
+	starfive_sm3_unregister_algs();
 err_algs_sm3:
 	starfive_rsa_unregister_algs();
 #endif
@@ -269,6 +276,7 @@ static void starfive_cryp_remove(struct platform_device *pdev)
 	tasklet_kill(&cryp->hash_done);
 #ifdef CONFIG_CRYPTO_DEV_JH8100
 	starfive_sm3_unregister_algs();
+	starfive_sm4_unregister_algs();
 	tasklet_kill(&cryp->sm3_done);
 #endif
 	crypto_engine_stop(cryp->engine);
