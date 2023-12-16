@@ -61,8 +61,7 @@ EXPORT_SYMBOL_GPL(lock_system_sleep);
 void unlock_system_sleep(unsigned int flags)
 {
 	/*
-	 * Don't use freezer_count() because we don't want the call to
-	 * try_to_freeze() here.
+	 * Don't call try_to_freeze() here.
 	 *
 	 * Reason:
 	 * Fundamentally, we just don't need it, because freezing condition
