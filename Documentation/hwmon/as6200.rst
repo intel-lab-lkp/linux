@@ -1,0 +1,50 @@
+Kernel driver as6200
+====================
+
+Supported chips:
+
+  * AMS OSRAM AS6200
+
+    Prefix: 'as6200'
+
+    Addresses scanned: none
+
+    Datasheet: https://ams.com/documents/20143/36005/AS6200_DS000449_4-00.pdf
+
+Author:
+
+	Abdel Alkuor <alkuor@gmail.com>
+
+Description
+-----------
+The AS6200 IC is a temperature sensor with a range between -40°C and 125°C.
+It supports ultra-low power consumption (low operation and quiescent current)
+which makes it ideally suited for mobile/battery powered applications.
+Additionally the AS6200 temperature sensor system also features an alert
+functionality, which triggers an interrupt to protect devices from excessive
+temperatures.
+
+The sensor has an accuracy of ±0.4°C between 0°C and 60°C and has an accuracy
+of 1.0°C from -40°C to +125°C, with Resolution of 0.0625°C. The sensor
+supports conversion rate of 0.25, 1, 4, 8 Hz, and consecutive fault counts of
+1, 2, 4, 6 samples which triggers/clears an alert when high/low temperature
+is detected respectively. Two alert modes are supported, interrupt mode and
+comparator mode.
+
+Configuration Notes
+-------------------
+By default as6200 driver reads the temperature continuously at 8Hz.
+Consecutive faults is set to 6 samples with true polarity which an
+alert is set when the current temperaute goes above high temperature
+theshold and is cleared when it falls below the low temperature threshold.
+Alert is configured in comparator mode.
+
+Interrupt is supported for the alert where user space is notified
+when alert is set/cleared.
+
+sysfs-Interface
+---------------
+temp#_input		 temperature input (read-only)
+temp#_alert              alert flag (read-only)
+temp#_max		 temperature maximum setpoint (read/write)
+temp#_max_hyst		 hysteresis for temperature maximum (read/write)
