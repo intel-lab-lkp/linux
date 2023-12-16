@@ -106,6 +106,26 @@ static irqreturn_t starfive_cryp_irq(int irq, void *priv)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+static irqreturn_t starfive_cryp_irq1(int irq, void *priv)
+{
+	u32 status;
+	u32 mask;
+	struct starfive_cryp_dev *cryp = (struct starfive_cryp_dev *)priv;
+
+	mask = readl(cryp->base + STARFIVE_SM_IE_MASK_OFFSET);
+	status = readl(cryp->base + STARFIVE_SM_IE_FLAG_OFFSET);
+
+	if (status & STARFIVE_SM_IE_FLAG_SM3_DONE) {
+		mask |= STARFIVE_SM_IE_MASK_SM3_DONE;
+		writel(mask, cryp->base + STARFIVE_SM_IE_MASK_OFFSET);
+		tasklet_schedule(&cryp->sm3_done);
+	}
+
+	return IRQ_HANDLED;
+}
+#endif
+
 static int starfive_cryp_probe(struct platform_device *pdev)
 {
 	struct starfive_cryp_dev *cryp;
@@ -156,6 +176,16 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, ret,
 				     "Failed to register interrupt handler\n");
 
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+	tasklet_init(&cryp->sm3_done, starfive_sm3_done_task, (unsigned long)cryp);
+
+	irq = platform_get_irq(pdev, 1);
+	if (irq < 0)
+		return irq;
+
+	ret = devm_request_irq(&pdev->dev, irq, starfive_cryp_irq1, 0,
+			       pdev->name, (void *)cryp);
+#endif
 	clk_prepare_enable(cryp->hclk);
 	clk_prepare_enable(cryp->ahb);
 	reset_control_deassert(cryp->rst);
@@ -191,8 +221,17 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_algs_rsa;
 
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+	ret = starfive_sm3_register_algs();
+	if (ret)
+		goto err_algs_sm3;
+#endif
 	return 0;
 
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+err_algs_sm3:
+	starfive_rsa_unregister_algs();
+#endif
 err_algs_rsa:
 	starfive_hash_unregister_algs();
 err_algs_hash:
@@ -213,7 +252,9 @@ err_dma_init:
 	reset_control_assert(cryp->rst);
 
 	tasklet_kill(&cryp->hash_done);
-
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+	tasklet_kill(&cryp->sm3_done);
+#endif
 	return ret;
 }
 
@@ -226,7 +267,10 @@ static void starfive_cryp_remove(struct platform_device *pdev)
 	starfive_rsa_unregister_algs();
 
 	tasklet_kill(&cryp->hash_done);
-
+#ifdef CONFIG_CRYPTO_DEV_JH8100
+	starfive_sm3_unregister_algs();
+	tasklet_kill(&cryp->sm3_done);
+#endif
 	crypto_engine_stop(cryp->engine);
 	crypto_engine_exit(cryp->engine);
 

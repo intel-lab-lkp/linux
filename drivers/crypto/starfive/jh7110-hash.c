@@ -511,12 +511,6 @@ static int starfive_sha512_init_tfm(struct crypto_ahash *hash)
 				      STARFIVE_HASH_SHA512, 0);
 }
 
-static int starfive_sm3_init_tfm(struct crypto_ahash *hash)
-{
-	return starfive_hash_init_tfm(hash, "sm3-generic",
-				      STARFIVE_HASH_SM3, 0);
-}
-
 static int starfive_hmac_sha224_init_tfm(struct crypto_ahash *hash)
 {
 	return starfive_hash_init_tfm(hash, "hmac(sha224-generic)",
@@ -541,11 +535,19 @@ static int starfive_hmac_sha512_init_tfm(struct crypto_ahash *hash)
 				      STARFIVE_HASH_SHA512, 1);
 }
 
+#ifndef CONFIG_CRYPTO_DEV_JH8100
+static int starfive_sm3_init_tfm(struct crypto_ahash *hash)
+{
+	return starfive_hash_init_tfm(hash, "sm3-generic",
+				      STARFIVE_HASH_SM3, 0);
+}
+
 static int starfive_hmac_sm3_init_tfm(struct crypto_ahash *hash)
 {
 	return starfive_hash_init_tfm(hash, "hmac(sm3-generic)",
 				      STARFIVE_HASH_SM3, 1);
 }
+#endif
 
 static struct ahash_engine_alg algs_sha2_sm3[] = {
 {
@@ -776,7 +778,10 @@ static struct ahash_engine_alg algs_sha2_sm3[] = {
 	.op = {
 		.do_one_request = starfive_hash_one_request,
 	},
-}, {
+},
+
+#ifndef CONFIG_CRYPTO_DEV_JH8100
+{
 	.base.init     = starfive_hash_init,
 	.base.update   = starfive_hash_update,
 	.base.final    = starfive_hash_final,
@@ -834,6 +839,7 @@ static struct ahash_engine_alg algs_sha2_sm3[] = {
 		.do_one_request = starfive_hash_one_request,
 	},
 },
+#endif
 };
 
 int starfive_hash_register_algs(void)
