@@ -314,8 +314,11 @@ static int als_parse_report(struct platform_device *pdev,
 						usage_id,
 						HID_USAGE_SENSOR_LIGHT_ILLUM,
 						&st->als[i]);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(&pdev->dev,
+				"Failed to setup Illuminance attribute\n");
 			return ret;
+		}
 		als_adjust_channel_bit_mask(channels, i, st->als[i].size);
 
 		dev_dbg(&pdev->dev, "als %x:%x\n", st->als[i].index,
@@ -326,14 +329,16 @@ static int als_parse_report(struct platform_device *pdev,
 				usage_id,
 				HID_USAGE_SENSOR_LIGHT_COLOR_TEMPERATURE,
 				&st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP]);
-	if (ret < 0)
-		return ret;
-	als_adjust_channel_bit_mask(channels, CHANNEL_SCAN_INDEX_COLOR_TEMP,
-				st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].size);
+	if (!ret) {
+		dev_info(&pdev->dev, "Color temperature is supported\n");
+		als_adjust_channel_bit_mask(channels,
+			CHANNEL_SCAN_INDEX_COLOR_TEMP,
+			st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].size);
 
-	dev_dbg(&pdev->dev, "als %x:%x\n",
-		st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].index,
-		st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].report_id);
+		dev_dbg(&pdev->dev, "als %x:%x\n",
+			st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].index,
+			st->als[CHANNEL_SCAN_INDEX_COLOR_TEMP].report_id);
+	}
 
 	for (i = 0; i < 2; i++) {
 		int next_scan_index = CHANNEL_SCAN_INDEX_CHROMATICITY_X + i;
@@ -342,23 +347,25 @@ static int als_parse_report(struct platform_device *pdev,
 				HID_INPUT_REPORT, usage_id,
 				HID_USAGE_SENSOR_LIGHT_CHROMATICITY_X + i,
 				&st->als[next_scan_index]);
-		if (ret < 0)
-			return ret;
-
-		als_adjust_channel_bit_mask(channels,
+		if (!ret) {
+			dev_info(&pdev->dev,
+				 "Light chromaticity %c is supported\n",
+				 i ? 'Y' : 'X');
+			als_adjust_channel_bit_mask(channels,
 					CHANNEL_SCAN_INDEX_CHROMATICITY_X + i,
 					st->als[next_scan_index].size);
 
-		dev_dbg(&pdev->dev, "als %x:%x\n",
-			st->als[next_scan_index].index,
-			st->als[next_scan_index].report_id);
+			dev_dbg(&pdev->dev, "als %x:%x\n",
+				st->als[next_scan_index].index,
+				st->als[next_scan_index].report_id);
+		}
 	}
 
 	st->scale_precision = hid_sensor_format_scale(usage_id,
 				&st->als[CHANNEL_SCAN_INDEX_INTENSITY],
 				&st->scale_pre_decml, &st->scale_post_decml);
 
-	return ret;
+	return 0;
 }
 
 /* Function to initialize the processing for usage id */
