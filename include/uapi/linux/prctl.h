@@ -293,6 +293,15 @@ struct prctl_mm_map {
 
 #define PR_GET_AUXV			0x41555856
 
+/*
+ * This is experimental and placed out of order to keep surrounding context
+ * the same in the presence of new prctls. Thus the patch should just apply.
+ */
+#define PR_PREFERRED_NID		101
+# define PR_PREFERRED_NID_GET		0
+# define PR_PREFERRED_NID_SET		1
+# define PR_PREFERRED_NID_CMD_MAX	2
+
 #define PR_SET_MEMORY_MERGE		67
 #define PR_GET_MEMORY_MERGE		68
 
