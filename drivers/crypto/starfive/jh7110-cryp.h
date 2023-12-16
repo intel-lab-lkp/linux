@@ -190,6 +190,7 @@ struct starfive_cryp_dev {
 	struct crypto_engine			*engine;
 	struct tasklet_struct			aes_done;
 	struct tasklet_struct			hash_done;
+	struct completion			dma_done;
 	size_t					assoclen;
 	size_t					total_in;
 	size_t					total_out;
