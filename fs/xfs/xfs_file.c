@@ -24,6 +24,9 @@
 #include "xfs_pnfs.h"
 #include "xfs_iomap.h"
 #include "xfs_reflink.h"
+#include "xfs_quota.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 
 #include <linux/dax.h>
 #include <linux/falloc.h>
@@ -761,6 +764,20 @@ out:
 	return ret;
 }
 
+static inline bool want_blockgc_free_quota(struct xfs_inode *ip, int ret)
+{
+	if (ret == -EDQUOT)
+		return true;
+	if (ret != -ENOSPC)
+		return false;
+
+	if (XFS_IS_PQUOTA_ENFORCED(ip->i_mount) &&
+	    ip->i_pdquot && xfs_dquot_lowsp(ip->i_pdquot))
+		return true;
+
+	return false;
+}
+
 STATIC ssize_t
 xfs_file_buffered_write(
 	struct kiocb		*iocb,
@@ -796,7 +813,7 @@ write_retry:
 	 * running at the same time.  Use a synchronous scan to increase the
 	 * effectiveness of the scan.
 	 */
-	if (ret == -EDQUOT && !cleared_space) {
+	if (want_blockgc_free_quota(ip, ret) && !cleared_space) {
 		xfs_iunlock(ip, iolock);
 		xfs_blockgc_free_quota(ip, XFS_ICWALK_FLAG_SYNC);
 		cleared_space = true;
