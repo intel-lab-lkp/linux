@@ -202,6 +202,8 @@ static inline void phy_interface_set_rgmii(unsigned long *intf)
 	__set_bit(PHY_INTERFACE_MODE_RGMII_TXID, intf);
 }
 
+unsigned int phy_supported_speeds_num(struct phy_device *phy);
+
 /*
  * phy_supported_speeds - return all speeds currently supported by a PHY device
  */
