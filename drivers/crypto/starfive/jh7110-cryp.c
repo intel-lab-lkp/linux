@@ -97,12 +97,6 @@ static irqreturn_t starfive_cryp_irq(int irq, void *priv)
 
 	mask = readl(cryp->base + STARFIVE_IE_MASK_OFFSET);
 	status = readl(cryp->base + STARFIVE_IE_FLAG_OFFSET);
-	if (status & STARFIVE_IE_FLAG_AES_DONE) {
-		mask |= STARFIVE_IE_MASK_AES_DONE;
-		writel(mask, cryp->base + STARFIVE_IE_MASK_OFFSET);
-		tasklet_schedule(&cryp->aes_done);
-	}
-
 	if (status & STARFIVE_IE_FLAG_HASH_DONE) {
 		mask |= STARFIVE_IE_MASK_HASH_DONE;
 		writel(mask, cryp->base + STARFIVE_IE_MASK_OFFSET);
@@ -131,7 +125,6 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(cryp->base),
 				     "Error remapping memory for platform device\n");
 
-	tasklet_init(&cryp->aes_done, starfive_aes_done_task, (unsigned long)cryp);
 	tasklet_init(&cryp->hash_done, starfive_hash_done_task, (unsigned long)cryp);
 
 	cryp->phys_base = res->start;
@@ -219,7 +212,6 @@ err_dma_init:
 	clk_disable_unprepare(cryp->ahb);
 	reset_control_assert(cryp->rst);
 
-	tasklet_kill(&cryp->aes_done);
 	tasklet_kill(&cryp->hash_done);
 
 	return ret;
@@ -233,7 +225,6 @@ static void starfive_cryp_remove(struct platform_device *pdev)
 	starfive_hash_unregister_algs();
 	starfive_rsa_unregister_algs();
 
-	tasklet_kill(&cryp->aes_done);
 	tasklet_kill(&cryp->hash_done);
 
 	crypto_engine_stop(cryp->engine);
