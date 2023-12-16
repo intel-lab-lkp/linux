@@ -121,6 +121,8 @@ struct bpf_mem_caches {
 	struct bpf_mem_cache cache[NUM_CACHES];
 };
 
+static const u16 sizes[NUM_CACHES] = {96, 192, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+
 static struct llist_node notrace *__llist_del_first(struct llist_head *head)
 {
 	struct llist_node *entry, *next;
@@ -520,11 +522,13 @@ static int check_obj_size(struct bpf_mem_cache *c, unsigned int idx)
  */
 int bpf_mem_alloc_init(struct bpf_mem_alloc *ma, int size, bool percpu)
 {
-	static u16 sizes[NUM_CACHES] = {96, 192, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
 	int cpu, i, err, unit_size, percpu_size = 0;
 	struct bpf_mem_caches *cc, __percpu *pcc;
 	struct bpf_mem_cache *c, __percpu *pc;
 	struct obj_cgroup *objcg = NULL;
+
+	if (percpu && size == 0)
+		return -EINVAL;
 
 	/* room for llist_node and per-cpu pointer */
 	if (percpu)
@@ -616,6 +620,67 @@ static void drain_mem_cache(struct bpf_mem_cache *c)
 	free_all(__llist_del_all(&c->free_by_rcu), percpu);
 	free_all(__llist_del_all(&c->free_llist_extra_rcu), percpu);
 	free_all(llist_del_all(&c->waiting_for_gp), percpu);
+}
+
+__init int bpf_mem_alloc_percpu_init(struct bpf_mem_alloc *ma)
+{
+	struct bpf_mem_caches __percpu *pcc;
+
+	pcc = __alloc_percpu_gfp(sizeof(struct bpf_mem_caches), 8, GFP_KERNEL);
+	if (!pcc)
+		return -ENOMEM;
+
+	ma->caches = pcc;
+	ma->percpu = true;
+	return 0;
+}
+
+int bpf_mem_alloc_percpu_unit_init(struct bpf_mem_alloc *ma, int size)
+{
+	int cpu, i, err = 0, unit_size, percpu_size;
+	struct bpf_mem_caches *cc, __percpu *pcc;
+	struct obj_cgroup *objcg;
+	struct bpf_mem_cache *c;
+
+	i = bpf_mem_cache_idx(size);
+	if (i < 0)
+		return -EINVAL;
+
+	/* room for llist_node and per-cpu pointer */
+	percpu_size = LLIST_NODE_SZ + sizeof(void *);
+
+	pcc = ma->caches;
+	unit_size = sizes[i];
+
+#ifdef CONFIG_MEMCG_KMEM
+	objcg = get_obj_cgroup_from_current();
+#endif
+	for_each_possible_cpu(cpu) {
+		cc = per_cpu_ptr(pcc, cpu);
+		c = &cc->cache[i];
+		if (cpu == 0 && c->unit_size)
+			goto out;
+
+		c->unit_size = unit_size;
+		c->objcg = objcg;
+		c->percpu_size = percpu_size;
+		c->tgt = c;
+
+		init_refill_work(c);
+		prefill_mem_cache(c, cpu);
+
+		if (cpu == 0) {
+			err = check_obj_size(c, i);
+			if (err) {
+				drain_mem_cache(c);
+				memset(c, 0, sizeof(*c));
+				goto out;
+			}
+		}
+	}
+
+out:
+	return err;
 }
 
 static void check_mem_cache(struct bpf_mem_cache *c)
