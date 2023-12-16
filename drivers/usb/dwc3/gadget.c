@@ -3049,8 +3049,11 @@ static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned int mA)
 	if (dwc->usb2_phy)
 		return usb_phy_set_power(dwc->usb2_phy, mA);
 
-	if (!dwc->usb_psy)
-		return -EOPNOTSUPP;
+	if (!dwc->usb_psy) {
+		dwc3_populate_usb_psy(dwc);
+		if (!dwc->usb_psy)
+			return -EOPNOTSUPP;
+	}
 
 	val.intval = 1000 * mA;
 	ret = power_supply_set_property(dwc->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
