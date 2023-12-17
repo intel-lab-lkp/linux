@@ -125,7 +125,7 @@
 #include	<asm/tlbflush.h>
 #include	<asm/page.h>
 
-#include <trace/events/kmem.h>
+#include	<trace/events/kmem.h>
 
 #include	"internal.h"
 
