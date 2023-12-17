@@ -731,10 +731,14 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 		.rdev = c->stat.rdev,
 		.link = c->link
 	};
+	err = -EIO;
+	/* workdir and destdir could be the same when copying up to indexdir */
+	if (lock_rename(c->workdir, c->destdir) != NULL)
+		goto unlock;
 
 	err = ovl_prep_cu_creds(c->dentry, &cc);
 	if (err)
-		return err;
+		goto unlock;
 
 	ovl_start_write(c->dentry);
 	inode_lock(wdir);
@@ -743,8 +747,9 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	ovl_end_write(c->dentry);
 	ovl_revert_cu_creds(&cc);
 
+	err = PTR_ERR(temp);
 	if (IS_ERR(temp))
-		return PTR_ERR(temp);
+		goto unlock;
 
 	/*
 	 * Copy up data first and then xattrs. Writing data after
@@ -760,10 +765,9 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	 * If temp was moved, abort without the cleanup.
 	 */
 	ovl_start_write(c->dentry);
-	if (lock_rename(c->workdir, c->destdir) != NULL ||
-	    temp->d_parent != c->workdir) {
+	if (temp->d_parent != c->workdir) {
 		err = -EIO;
-		goto unlock;
+		goto unlockcd;
 	} else if (err) {
 		goto cleanup;
 	}
@@ -801,16 +805,18 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	ovl_inode_update(inode, temp);
 	if (S_ISDIR(inode->i_mode))
 		ovl_set_flag(OVL_WHITEOUTS, inode);
+
+unlockcd:
+	ovl_end_write(c->dentry);
 unlock:
 	unlock_rename(c->workdir, c->destdir);
-	ovl_end_write(c->dentry);
 
 	return err;
 
 cleanup:
 	ovl_cleanup(ofs, wdir, temp);
 	dput(temp);
-	goto unlock;
+	goto unlockcd;
 }
 
 /* Copyup using O_TMPFILE which does not require cross dir locking */
