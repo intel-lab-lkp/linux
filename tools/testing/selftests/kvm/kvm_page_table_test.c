@@ -24,8 +24,8 @@
 
 #define TEST_MEM_SLOT_INDEX             1
 
-/* Default size(1GB) of the memory for testing */
-#define DEFAULT_TEST_MEM_SIZE		(1 << 30)
+/* Default size(128MB) of the memory for testing */
+#define DEFAULT_TEST_MEM_SIZE          (1 << 27)
 
 /* Default guest test virtual memory offset */
 #define DEFAULT_GUEST_TEST_MEM		0xc0000000
