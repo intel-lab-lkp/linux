@@ -1394,6 +1394,9 @@ static int nbd_start_device(struct nbd_device *nbd)
 	}
 	set_bit(NBD_RT_HAS_PID_FILE, &config->runtime_flags);
 
+	if (num_connections == 1 && !nbd->tag_set.timeout)
+		nbd->tag_set.timeout = HZ * 1024;
+
 	nbd_dev_dbg_init(nbd);
 	for (i = 0; i < num_connections; i++) {
 		struct recv_thread_args *args;
