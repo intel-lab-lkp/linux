@@ -15,21 +15,26 @@ maintainers:
 
 properties:
   volid:
-    $ref: "/schemas/types.yaml#/definitions/uint32"
+    $ref: /schemas/types.yaml#/definitions/uint32
     description:
       Match UBI volume ID
 
   volname:
-    $ref: "/schemas/types.yaml#/definitions/string"
+    $ref: /schemas/types.yaml#/definitions/string
     description:
       Match UBI volume ID
 
+  nvmem-layout:
+    $ref: /schemas/nvmem/layouts/nvmem-layout.yaml#
+    description:
+      This container may reference an NVMEM layout parser.
+
 anyOf:
   - required:
-    - volid
+      - volid
 
   - required:
-    - volname
+      - volname
 
 # This is a generic file other binding inherit from and extend
 additionalProperties: true
