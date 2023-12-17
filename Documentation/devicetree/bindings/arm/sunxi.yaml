@@ -136,6 +136,11 @@ properties:
           - const: sinovoip,bpi-m3
           - const: allwinner,sun8i-a83t
 
+      - description: BananaPi M4 Berry
+        items:
+          - const: sinovoip,bananapi-m4-berry
+          - const: allwinner,sun50i-h618
+
       - description: BananaPi M64
         items:
           - const: sinovoip,bananapi-m64
