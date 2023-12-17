@@ -1075,4 +1075,31 @@ l0_%=:	r0 = 0;						\
 	: __clobber_all);
 }
 
+SEC("tc")
+__description("bounds check with JMP_NE for reg edge")
+__success __retval(0)
+__naked void reg_not_equal(void)
+{
+	asm volatile ("					\
+	r6 = r1;					\
+	r1 = 0;						\
+	*(u64*)(r10 - 8) = r1;				\
+	call %[bpf_get_prandom_u32];			\
+	r4 = r0;					\
+	r4 &= 7;					\
+	if r4 == 0 goto l0_%=;				\
+	r1 = r6;					\
+	r2 = 0;						\
+	r3 = r10;					\
+	r3 += -8;					\
+	r5 = 0;						\
+	call %[bpf_skb_store_bytes];			\
+l0_%=:	r0 = 0;						\
+	exit;						\
+"	:
+	: __imm(bpf_get_prandom_u32),
+	  __imm(bpf_skb_store_bytes)
+	: __clobber_all);
+}
+
 char _license[] SEC("license") = "GPL";
