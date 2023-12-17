@@ -315,17 +315,25 @@ static ssize_t show_text_leaf(struct device *dev,
 {
 	struct config_rom_attribute *attr =
 		container_of(dattr, struct config_rom_attribute, attr);
-	const u32 *dir;
+	const u32 *directories[] = {NULL, NULL};
 	size_t bufsize;
 	char dummy_buf[2];
-	int ret;
+	int i, ret;
 
 	down_read(&fw_device_rwsem);
 
-	if (is_fw_unit(dev))
-		dir = fw_unit(dev)->directory;
-	else
-		dir = fw_device(dev)->config_rom + ROOT_DIR_OFFSET;
+	if (is_fw_unit(dev)) {
+		directories[0] = fw_unit(dev)->directory;
+	} else {
+		const u32 *root_directory = fw_device(dev)->config_rom + ROOT_DIR_OFFSET;
+
+		directories[0] = root_directory;
+
+		// Legacy layout of configuration ROM described in Annex 1 of 'Configuration ROM
+		// for AV/C Devices 1.0 (December 12, 2000, 1394 Trading Association, TA Document
+		// 1999027)'.
+		directories[1] = search_directory(root_directory, CSR_VENDOR);
+	}
 
 	if (buf) {
 		bufsize = PAGE_SIZE - 1;
@@ -334,7 +342,8 @@ static ssize_t show_text_leaf(struct device *dev,
 		bufsize = 1;
 	}
 
-	ret = fw_csr_string(dir, attr->key, buf, bufsize);
+	for (i = 0; i < ARRAY_SIZE(directories) && directories[i]; ++i)
+		ret = fw_csr_string(directories[i], attr->key, buf, bufsize);
 
 	if (ret >= 0) {
 		/* Strip trailing whitespace and add newline. */
