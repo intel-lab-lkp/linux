@@ -388,7 +388,7 @@ static int __init callthunks_debugfs_init(void)
 	dir = debugfs_create_dir("callthunks", NULL);
 	for_each_possible_cpu(cpu) {
 		void *arg = (void *)cpu;
-		char name [10];
+		char name[14];
 
 		sprintf(name, "cpu%lu", cpu);
 		debugfs_create_file(name, 0644, dir, arg, &dfs_ops);
