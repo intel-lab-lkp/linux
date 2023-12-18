@@ -6,7 +6,7 @@
 config NET_VENDOR_BROADCOM
 	bool "Broadcom devices"
 	default y
-	depends on (SSB_POSSIBLE && HAS_DMA) || PCI || BCM63XX || \
+	depends on (HAS_IOMEM && HAS_DMA) || PCI || BCM63XX || \
 		   SIBYTE_SB1xxx_SOC
 	help
 	  If you have a network (Ethernet) chipset belonging to this class,
@@ -21,7 +21,7 @@ if NET_VENDOR_BROADCOM
 
 config B44
 	tristate "Broadcom 440x/47xx ethernet support"
-	depends on SSB_POSSIBLE && HAS_DMA
+	depends on HAS_IOMEM && HAS_DMA
 	select SSB
 	select MII
 	select PHYLIB

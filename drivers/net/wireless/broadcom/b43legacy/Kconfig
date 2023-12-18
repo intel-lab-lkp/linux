@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config B43LEGACY
 	tristate "Broadcom 43xx-legacy wireless support (mac80211 stack)"
-	depends on SSB_POSSIBLE && MAC80211 && HAS_DMA
+	depends on HAS_IOMEM && HAS_DMA && MAC80211
 	select SSB
 	select FW_LOADER
 	help

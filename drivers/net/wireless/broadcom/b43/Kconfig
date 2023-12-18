@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config B43
 	tristate "Broadcom 43xx wireless support (mac80211 stack)"
-	depends on (BCMA_POSSIBLE || SSB_POSSIBLE) && MAC80211 && HAS_DMA
+	depends on HAS_IOMEM && HAS_DMA && MAC80211
 	select BCMA if B43_BCMA
 	select SSB if B43_SSB
 	select FW_LOADER
@@ -42,18 +42,15 @@ choice
 
 config B43_BUSES_BCMA_AND_SSB
 	bool "BCMA and SSB"
-	depends on BCMA_POSSIBLE && SSB_POSSIBLE
 	select B43_BCMA
 	select B43_SSB
 
 config B43_BUSES_BCMA
 	bool "BCMA only"
-	depends on BCMA_POSSIBLE
 	select B43_BCMA
 
 config B43_BUSES_SSB
 	bool "SSB only"
-	depends on SSB_POSSIBLE
 	select B43_SSB
 
 endchoice

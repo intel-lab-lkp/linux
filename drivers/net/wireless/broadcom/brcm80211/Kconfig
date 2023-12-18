@@ -4,8 +4,7 @@ config BRCMUTIL
 
 config BRCMSMAC
 	tristate "Broadcom IEEE802.11n PCIe SoftMAC WLAN driver"
-	depends on MAC80211
-	depends on BCMA_POSSIBLE
+	depends on HAS_IOMEM && HAS_DMA && MAC80211
 	select BCMA
 	select BRCMUTIL
 	select FW_LOADER
