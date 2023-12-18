@@ -845,6 +845,9 @@ mb_update_avg_fragment_size(struct super_block *sb, struct ext4_group_info *grp)
 	if (!test_opt2(sb, MB_OPTIMIZE_SCAN) || grp->bb_free == 0)
 		return;
 
+	if (unlikely(grp->bb_fragments == 0))
+		return;
+
 	new_order = mb_avg_fragment_size_order(sb,
 					grp->bb_free / grp->bb_fragments);
 	if (new_order == grp->bb_avg_fragment_size_order)
