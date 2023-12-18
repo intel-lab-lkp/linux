@@ -19,6 +19,7 @@
 #include <asm/time.h>
 #include <asm/tm.h>
 #include <asm/unistd.h>
+#include <asm/entry-common.h>
 
 #if defined(CONFIG_PPC_ADV_DEBUG_REGS) && defined(CONFIG_PPC32)
 unsigned long global_dbcr0[NR_CPUS];
@@ -244,6 +245,8 @@ again:
 
 	/* Restore user access locks last */
 	kuap_user_restore(regs);
+
+	arch_exit_to_user_mode_prepare(regs, ti_flags);
 
 	return ret;
 }
