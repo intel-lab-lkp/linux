@@ -1,0 +1,30 @@
+drm drm-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm-misc drm-misc-fixes aca58eac52b88138ab98c814afb389a381725cd7
+	drm/bridge: ti-sn65dsi86: Never store more than msg->size bytes in AUX xfer
+drm-intel drm-intel-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm drm-next a0a28956b46ec7f16ce5d762ac5a124bb532da0d
+	Merge tag 'amd-drm-next-6.8-2023-12-08' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 8a53e29fe05c56f643eaab285f224c09b9c3dd4c
+	drm/imagination: Fix error path in pvr_vm_create_context
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 0547692ac14650d0574e065094891bed31e37007
+	drm/panel-edp: Add several generic edp panels
+drm-intel drm-intel-next 716c3cf21784479a1934b670ec67f320cbb5d308
+	drm/i915/display: Remove dead code around intel_atomic_helper->free_list
+drm-intel drm-intel-gt-next 31accc37eaee98a90b25809ed58c6ee4956ab642
+	drm/i915: Use kmap_local_page() in gem/i915_gem_execbuffer.c
+drm-intel topic/core-for-CI d77abe80efb959aa038165a87df4327c90a26447
+	HAX net/phy: Suppress WARN from phy_error
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
