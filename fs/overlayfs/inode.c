@@ -751,7 +751,11 @@ static int ovl_security_fileattr(const struct path *realpath, struct fileattr *f
 	else
 		cmd = fa->fsx_valid ? FS_IOC_FSGETXATTR : FS_IOC_GETFLAGS;
 
+#ifdef CONFIG_COMPAT
+	err = security_file_ioctl_compat(file, cmd, 0);
+# else
 	err = security_file_ioctl(file, cmd, 0);
+#endif
 	fput(file);
 
 	return err;
