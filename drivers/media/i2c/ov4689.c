@@ -555,35 +555,26 @@ static int ov4689_s_stream(struct v4l2_subdev *sd, int on)
 					  ov4689_common_regs,
 					  ARRAY_SIZE(ov4689_common_regs),
 					  NULL);
-		if (ret) {
-			pm_runtime_put_sync(dev);
-			goto unlock_and_return;
-		}
+		if (ret)
+			goto cleanup_pm;
 
 		ret = ov4689_setup_timings(ov4689, sd_state);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
+		if (ret)
+			goto cleanup_pm;
 
 		ret = ov4689_setup_blc_anchors(ov4689, sd_state);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
+		if (ret)
+			goto cleanup_pm;
 
 		ret = __v4l2_ctrl_handler_setup(&ov4689->ctrl_handler);
-		if (ret) {
-			pm_runtime_put_sync(dev);
-			goto unlock_and_return;
-		}
+		if (ret)
+			goto cleanup_pm;
 
 		ret = cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
 				OV4689_MODE_STREAMING, NULL);
-		if (ret) {
+cleanup_pm:
+		if (ret)
 			pm_runtime_put_sync(dev);
-			goto unlock_and_return;
-		}
 	} else {
 		cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
 			  OV4689_MODE_SW_STANDBY, NULL);
