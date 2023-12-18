@@ -33,10 +33,9 @@ A particular version of the Rust compiler is required. Newer versions may or
 may not work because, for the moment, the kernel depends on some unstable
 Rust features.
 
-If ``rustup`` is being used, enter the checked out source code directory
-and run::
+If ``rustup`` is being used, run the following Make target::
 
-	rustup override set $(scripts/min-tool-version.sh rustc)
+	make LLVM=1 rustupoverride
 
 This will configure your working directory to use the correct version of
 ``rustc`` without affecting your default toolchain. If you are not using
