@@ -56,6 +56,7 @@
 #define VIRTIO_NET_F_MQ	22	/* Device supports Receive Flow
 					 * Steering */
 #define VIRTIO_NET_F_CTRL_MAC_ADDR 23	/* Set MAC address */
+#define VIRTIO_NET_F_TX_TSTAMP	  49	/* Device sends TAI transmit time */
 #define VIRTIO_NET_F_RX_TSTAMP	  50	/* Device sends TAI receive time */
 #define VIRTIO_NET_F_TX_HASH	  51	/* Driver sends hash report */
 #define VIRTIO_NET_F_VQ_NOTF_COAL 52	/* Device supports virtqueue notification coalescing */
