@@ -23,7 +23,9 @@ allOf:
 
 properties:
   compatible:
-    const: allwinner,sun50i-h6-operating-points
+    enum:
+      - allwinner,sun50i-h6-operating-points
+      - allwinner,sun20i-d1-operating-points
 
   nvmem-cells:
     description: |
