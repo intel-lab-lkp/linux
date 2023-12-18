@@ -51,6 +51,7 @@
 #include <linux/syscalls.h>
 #include <linux/of.h>
 #include <linux/rcupdate.h>
+#include <linux/delay.h>
 
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
@@ -1166,10 +1167,21 @@ static ssize_t write_sysrq_trigger(struct file *file, const char __user *buf,
 		if (get_user(c, buf + i))
 			return -EFAULT;
 
-		if (c == '_')
+		switch (c) {
+
+		case '_':
 			bulk = true;
-		else
+			break;
+
+		case ',':
+			msleep(1000);
+			break;
+
+		default:
 			__handle_sysrq(c, false);
+			break;
+
+		}
 
 		if (!bulk)
 			break;

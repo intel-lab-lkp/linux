@@ -161,6 +161,8 @@ Command	    Function
             will be printed to your console. (``0``, for example would make
             it so that only emergency messages like PANICs or OOPSes would
             make it to your console.)
+
+``,``	    Wait for one second (only for use with /proc/sysrq-trigger batch)
 =========== ===================================================================
 
 Okay, so what can I use them for?
