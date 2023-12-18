@@ -7,6 +7,11 @@ config MQ_IOSCHED_DEADLINE
 	help
 	  MQ version of the deadline IO scheduler.
 
+config MQ_IOSCHED_DEADLINE_TEST
+	tristate "MQ deadline unit tests" if !KUNIT_ALL_TESTS
+	depends on MQ_IOSCHED_DEADLINE && KUNIT
+	default KUNIT_ALL_TESTS
+
 config MQ_IOSCHED_KYBER
 	tristate "Kyber I/O scheduler"
 	default y

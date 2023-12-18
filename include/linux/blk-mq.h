@@ -1149,6 +1149,18 @@ static inline unsigned int blk_rq_zone_no(struct request *rq)
 	return disk_zone_no(rq->q->disk, blk_rq_pos(rq));
 }
 
+/**
+ * blk_bio_is_seq_zoned_write() - Check if @bio requires write serialization.
+ * @bio: Bio to examine.
+ *
+ * Note: REQ_OP_ZONE_APPEND bios do not require serialization.
+ */
+static inline bool blk_bio_is_seq_zoned_write(struct bio *bio)
+{
+	return disk_zone_is_seq(bio->bi_bdev->bd_disk, bio->bi_iter.bi_sector) &&
+		op_needs_zoned_write_locking(bio_op(bio));
+}
+
 static inline unsigned int blk_rq_zone_is_seq(struct request *rq)
 {
 	return disk_zone_is_seq(rq->q->disk, blk_rq_pos(rq));
@@ -1196,6 +1208,11 @@ static inline bool blk_req_can_dispatch_to_zone(struct request *rq)
 	return !blk_req_zone_is_write_locked(rq);
 }
 #else /* CONFIG_BLK_DEV_ZONED */
+static inline bool blk_bio_is_seq_zoned_write(struct bio *bio)
+{
+	return false;
+}
+
 static inline bool blk_rq_is_seq_zoned_write(struct request *rq)
 {
 	return false;

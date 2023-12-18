@@ -46,6 +46,8 @@ enum dd_data_dir {
 enum { DD_DIR_COUNT = 2 };
 
 enum dd_prio {
+	DD_INVALID_PRIO	= -1,
+	DD_PRIO_MIN	= 0,
 	DD_RT_PRIO	= 0,
 	DD_BE_PRIO	= 1,
 	DD_IDLE_PRIO	= 2,
@@ -111,6 +113,12 @@ static const enum dd_prio ioprio_class_to_prio[] = {
 	[IOPRIO_CLASS_RT]	= DD_RT_PRIO,
 	[IOPRIO_CLASS_BE]	= DD_BE_PRIO,
 	[IOPRIO_CLASS_IDLE]	= DD_IDLE_PRIO,
+};
+
+static const u8 prio_to_ioprio_class[] = {
+	[DD_RT_PRIO]	= IOPRIO_CLASS_RT,
+	[DD_BE_PRIO]	= IOPRIO_CLASS_BE,
+	[DD_IDLE_PRIO]	= IOPRIO_CLASS_IDLE,
 };
 
 static inline struct rb_root *
@@ -195,17 +203,66 @@ static inline struct request *deadline_from_pos(struct dd_per_prio *per_prio,
 }
 
 /*
+ * If any sequential write requests are pending for the zone containing @pos,
+ * return the I/O priority for these write requests.
+ */
+static enum dd_prio dd_zone_prio(struct deadline_data *dd,
+				 struct block_device *bdev, sector_t pos)
+{
+#ifdef CONFIG_BLK_DEV_ZONED
+	struct gendisk *disk = bdev->bd_disk;
+	const unsigned int zno = disk_zone_no(disk, pos);
+	enum dd_prio prio;
+
+	pos -= bdev_offset_from_zone_start(bdev, pos);
+	for (prio = DD_PRIO_MIN; prio <= DD_PRIO_MAX; prio++) {
+		struct dd_per_prio *per_prio = &dd->per_prio[prio];
+		struct request *rq;
+
+		rq = deadline_first_rq_past_pos(per_prio, DD_WRITE, pos);
+		while (rq && blk_rq_zone_no(rq) == zno) {
+			struct rb_node *node;
+
+			if (blk_rq_is_seq_zoned_write(rq))
+				return prio;
+			node = rb_next(&rq->rb_node);
+			if (!node)
+				break;
+			rq = rb_entry_rq(node);
+		}
+	}
+#endif
+	return DD_INVALID_PRIO;
+}
+
+/*
  * Returns the I/O priority class (IOPRIO_CLASS_*) that has been assigned to a
  * request.
  */
-static enum dd_prio dd_rq_ioprio(struct request *rq)
+static enum dd_prio dd_rq_ioprio(struct deadline_data *dd, struct request *rq)
 {
-	return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(req_get_ioprio(rq))];
+	enum dd_prio prio;
+
+	if (!blk_rq_is_seq_zoned_write(rq) || !rq->bio)
+		return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(
+			req_get_ioprio(rq))];
+	prio = dd_zone_prio(dd, rq->q->disk->part0, blk_rq_pos(rq));
+	if (prio == DD_INVALID_PRIO)
+		return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(
+			req_get_ioprio(rq))];
+	return prio;
 }
 
-static enum dd_prio dd_bio_ioprio(struct bio *bio)
+static enum dd_prio dd_bio_ioprio(struct deadline_data *dd, struct bio *bio)
 {
-	return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(bio->bi_ioprio)];
+	enum dd_prio prio;
+
+	if (!blk_bio_is_seq_zoned_write(bio))
+		return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(bio->bi_ioprio)];
+	prio = dd_zone_prio(dd, bio->bi_bdev, bio->bi_iter.bi_sector);
+	if (prio == DD_INVALID_PRIO)
+		return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(bio->bi_ioprio)];
+	return prio;
 }
 
 static void
@@ -246,7 +303,7 @@ static void dd_request_merged(struct request_queue *q, struct request *req,
 			      enum elv_merge type)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const enum dd_prio prio = dd_rq_ioprio(req);
+	const enum dd_prio prio = dd_rq_ioprio(dd, req);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 	/*
@@ -265,7 +322,7 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 			       struct request *next)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const enum dd_prio prio = dd_rq_ioprio(next);
+	const enum dd_prio prio = dd_rq_ioprio(dd, next);
 
 	lockdep_assert_held(&dd->lock);
 
@@ -560,7 +617,7 @@ dispatch_request:
 	dd->batching++;
 	deadline_move_request(dd, per_prio, rq);
 done:
-	prio = dd_rq_ioprio(rq);
+	prio = dd_rq_ioprio(dd, rq);
 	dd->per_prio[prio].latest_pos[data_dir] = blk_rq_pos(rq);
 	dd->per_prio[prio].stats.dispatched++;
 	/*
@@ -758,7 +815,7 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const enum dd_prio prio = dd_bio_ioprio(bio);
+	const enum dd_prio prio = dd_bio_ioprio(dd, bio);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 	sector_t sector = bio_end_sector(bio);
 	struct request *__rq;
@@ -822,7 +879,7 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	 */
 	blk_req_zone_write_unlock(rq);
 
-	prio = dd_rq_ioprio(rq);
+	prio = dd_rq_ioprio(dd, rq);
 	per_prio = &dd->per_prio[prio];
 	if (!rq->elv.priv[0]) {
 		per_prio->stats.inserted++;
@@ -931,7 +988,7 @@ static void dd_finish_request(struct request *rq)
 {
 	struct request_queue *q = rq->q;
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const enum dd_prio prio = dd_rq_ioprio(rq);
+	const enum dd_prio prio = dd_rq_ioprio(dd, rq);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 	/*
@@ -1281,6 +1338,10 @@ static struct elevator_type mq_deadline = {
 	.elevator_owner = THIS_MODULE,
 };
 MODULE_ALIAS("mq-deadline-iosched");
+
+#ifdef CONFIG_MQ_IOSCHED_DEADLINE_TEST
+#include "mq-deadline_test.c"
+#endif
 
 static int __init deadline_init(void)
 {
