@@ -20762,6 +20762,13 @@ F:	Documentation/devicetree/bindings/phy/starfive,jh7110-usb-phy.yaml
 F:	drivers/phy/starfive/phy-jh7110-pcie.c
 F:	drivers/phy/starfive/phy-jh7110-usb.c
 
+STARFIVE MEU DRIVER
+M:	Joshua Yeong <joshua.yeong@starfivetech.com>
+M:	Sia Jee Heng <jeeheng.sia@starfivetech.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/mailbox/starfive-meu.yaml
+F:	drivers/mailbox/starfive-meu.c
+
 STATIC BRANCH/CALL
 M:	Peter Zijlstra <peterz@infradead.org>
 M:	Josh Poimboeuf <jpoimboe@kernel.org>
