@@ -190,6 +190,11 @@ static enum dd_prio dd_rq_ioprio(struct request *rq)
 	return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(req_get_ioprio(rq))];
 }
 
+static enum dd_prio dd_bio_ioprio(struct bio *bio)
+{
+	return ioprio_class_to_prio[IOPRIO_PRIO_CLASS(bio->bi_ioprio)];
+}
+
 static void
 deadline_add_rq_rb(struct dd_per_prio *per_prio, struct request *rq)
 {
@@ -740,8 +745,7 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = IOPRIO_PRIO_CLASS(bio->bi_ioprio);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	const enum dd_prio prio = dd_bio_ioprio(bio);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 	sector_t sector = bio_end_sector(bio);
 	struct request *__rq;
