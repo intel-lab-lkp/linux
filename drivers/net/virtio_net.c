@@ -274,6 +274,12 @@ struct virtnet_info {
 	/* Driver will pass tx path info to the device */
 	bool has_tx_hash;
 
+	/* Device can pass CLOCK_TAI receive time to the driver */
+	bool has_rx_tstamp;
+
+	/* Device will pass rx timestamp. Requires has_rx_tstamp */
+	bool enable_rx_tstamp;
+
 	/* Has control virtqueue */
 	bool has_cvq;
 
@@ -382,6 +388,13 @@ static inline struct virtio_net_common_hdr *
 skb_vnet_common_hdr(struct sk_buff *skb)
 {
 	return (struct virtio_net_common_hdr *)skb->cb;
+}
+
+static inline struct virtio_net_hdr_hash_ts *skb_vnet_hdr_ht(struct sk_buff *skb)
+{
+	BUILD_BUG_ON(sizeof(struct virtio_net_hdr_hash_ts) > sizeof(skb->cb));
+
+	return (void *)skb->cb;
 }
 
 /*
@@ -1755,6 +1768,19 @@ static void virtio_skb_set_hash(const struct virtio_net_hdr_v1_hash *hdr_hash,
 	skb_set_hash(skb, __le32_to_cpu(hdr_hash->hash_value), rss_hash_type);
 }
 
+static inline void virtnet_record_rx_tstamp(const struct virtnet_info *vi,
+					    struct sk_buff *skb)
+{
+	const struct virtio_net_hdr_hash_ts *h = skb_vnet_hdr_ht(skb);
+
+	if (h->hash.hdr.flags & VIRTIO_NET_HDR_F_TSTAMP &&
+	    vi->enable_rx_tstamp) {
+		u64 ts = le64_to_cpu(h->tstamp);
+
+		skb_hwtstamps(skb)->hwtstamp = ns_to_ktime(ts);
+	}
+}
+
 static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 			void *buf, unsigned int len, void **ctx,
 			unsigned int *xdp_xmit,
@@ -1797,6 +1823,7 @@ static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 		goto frame_err;
 	}
 
+	virtnet_record_rx_tstamp(vi, skb);
 	skb_record_rx_queue(skb, vq2rxq(rq->vq));
 	skb->protocol = eth_type_trans(skb, dev);
 	pr_debug("Receiving skb proto 0x%04x len %i type %i\n",
@@ -3512,6 +3539,28 @@ static int virtnet_get_per_queue_coalesce(struct net_device *dev,
 	return 0;
 }
 
+static int virtnet_get_ts_info(struct net_device *dev,
+			       struct ethtool_ts_info *info)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+
+	/* setup default software timestamp */
+	ethtool_op_get_ts_info(dev, info);
+
+	/* return rx capabilities (which may differ from current enable) */
+	if (vi->has_rx_tstamp) {
+		info->so_timestamping |= SOF_TIMESTAMPING_RX_HARDWARE |
+					 SOF_TIMESTAMPING_RAW_HARDWARE;
+		info->rx_filters = HWTSTAMP_FILTER_ALL;
+	} else {
+		info->rx_filters = HWTSTAMP_FILTER_NONE;
+	}
+
+	info->tx_types = HWTSTAMP_TX_OFF;
+
+	return 0;
+}
+
 static void virtnet_init_settings(struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
@@ -3637,7 +3686,7 @@ static const struct ethtool_ops virtnet_ethtool_ops = {
 	.get_ethtool_stats = virtnet_get_ethtool_stats,
 	.set_channels = virtnet_set_channels,
 	.get_channels = virtnet_get_channels,
-	.get_ts_info = ethtool_op_get_ts_info,
+	.get_ts_info = virtnet_get_ts_info,
 	.get_link_ksettings = virtnet_get_link_ksettings,
 	.set_link_ksettings = virtnet_set_link_ksettings,
 	.set_coalesce = virtnet_set_coalesce,
@@ -3926,6 +3975,60 @@ static void virtnet_tx_timeout(struct net_device *dev, unsigned int txqueue)
 		   jiffies_to_usecs(jiffies - READ_ONCE(txq->trans_start)));
 }
 
+static int virtnet_ioctl_set_hwtstamp(struct net_device *dev, struct ifreq *ifr)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+	struct hwtstamp_config tsconf;
+
+	if (copy_from_user(&tsconf, ifr->ifr_data, sizeof(tsconf)))
+		return -EFAULT;
+	if (tsconf.flags)
+		return -EINVAL;
+	if (tsconf.tx_type != HWTSTAMP_TX_OFF)
+		return -ERANGE;
+	if (tsconf.rx_filter != HWTSTAMP_FILTER_NONE &&
+	    tsconf.rx_filter != HWTSTAMP_FILTER_ALL)
+		tsconf.rx_filter = HWTSTAMP_FILTER_ALL;
+
+	if (!vi->has_rx_tstamp)
+		tsconf.rx_filter = HWTSTAMP_FILTER_NONE;
+	else
+		vi->enable_rx_tstamp = tsconf.rx_filter == HWTSTAMP_FILTER_ALL;
+
+	if (copy_to_user(ifr->ifr_data, &tsconf, sizeof(tsconf)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int virtnet_ioctl_get_hwtstamp(struct net_device *dev, struct ifreq *ifr)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+	struct hwtstamp_config tsconf;
+
+	tsconf.flags = 0;
+	tsconf.rx_filter = vi->enable_rx_tstamp ? HWTSTAMP_FILTER_ALL :
+						  HWTSTAMP_FILTER_NONE;
+	tsconf.tx_type = HWTSTAMP_TX_OFF;
+
+	if (copy_to_user(ifr->ifr_data, &tsconf, sizeof(tsconf)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int virtnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+{
+	switch (cmd) {
+	case SIOCSHWTSTAMP:
+		return virtnet_ioctl_set_hwtstamp(dev, ifr);
+
+	case SIOCGHWTSTAMP:
+		return virtnet_ioctl_get_hwtstamp(dev, ifr);
+	}
+	return -EOPNOTSUPP;
+}
+
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
@@ -3942,6 +4045,7 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_get_phys_port_name	= virtnet_get_phys_port_name,
 	.ndo_set_features	= virtnet_set_features,
 	.ndo_tx_timeout		= virtnet_tx_timeout,
+	.ndo_eth_ioctl		= virtnet_ioctl,
 };
 
 static void virtnet_config_changed_work(struct work_struct *work)
@@ -4530,6 +4634,11 @@ static int virtnet_probe(struct virtio_device *vdev)
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash);
 	}
 
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_RX_TSTAMP)) {
+		vi->has_rx_tstamp = true;
+		vi->hdr_len = sizeof(struct virtio_net_hdr_hash_ts);
+	}
+
 	if (virtio_has_feature(vdev, VIRTIO_F_ANY_LAYOUT) ||
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		vi->any_header_sg = true;
@@ -4773,7 +4882,7 @@ static struct virtio_device_id id_table[] = {
 	VIRTIO_NET_F_RSS, VIRTIO_NET_F_HASH_REPORT, VIRTIO_NET_F_NOTF_COAL, \
 	VIRTIO_NET_F_VQ_NOTF_COAL, \
 	VIRTIO_NET_F_GUEST_HDRLEN, \
-	VIRTIO_NET_F_TX_HASH
+	VIRTIO_NET_F_TX_HASH, VIRTIO_NET_F_RX_TSTAMP
 
 static unsigned int features[] = {
 	VIRTNET_FEATURES,
