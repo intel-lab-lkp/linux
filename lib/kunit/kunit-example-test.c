@@ -168,6 +168,8 @@ static int subtract_one(int i)
 	return i - 1;
 }
 
+static int (* const add_one_fn_ptr)(int i) = add_one;
+
 /*
  * This test shows the use of static stubs.
  */
@@ -184,6 +186,30 @@ static void example_static_stub_test(struct kunit *test)
 
 	/* Return add_one() to normal. */
 	kunit_deactivate_static_stub(test, add_one);
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+}
+
+/*
+ * This test shows the use of static stubs when the function being
+ * replaced is provided as a pointer-to-function instead of the
+ * actual function. This is useful for providing access to static
+ * functions in a module by exporting a pointer to that function
+ * instead of having to change the static function to a non-static
+ * exported function.
+ */
+static void example_static_stub_using_fn_ptr_test(struct kunit *test)
+{
+	/* By default, function is not stubbed. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+
+	/* Replace add_one() with subtract_one(). */
+	kunit_activate_static_stub(test, add_one_fn_ptr, subtract_one);
+
+	/* add_one() is now replaced. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 0);
+
+	/* Return add_one() to normal. */
+	kunit_deactivate_static_stub(test, add_one_fn_ptr);
 	KUNIT_EXPECT_EQ(test, add_one(1), 2);
 }
 
@@ -245,6 +271,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_mark_skipped_test),
 	KUNIT_CASE(example_all_expect_macros_test),
 	KUNIT_CASE(example_static_stub_test),
+	KUNIT_CASE(example_static_stub_using_fn_ptr_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
 	{}
