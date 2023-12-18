@@ -81,6 +81,11 @@ static const struct intel_mmio_range dg2_lncf_steering_table[] = {
 	{},
 };
 
+static const struct intel_mmio_range dg2_dss_steering_table[] = {
+	{ 0x00E400, 0x00E7FF },
+	{},
+};
+
 /*
  * We have several types of MCR registers on PVC where steering to (0,0)
  * will always provide us with a non-terminated value.  We'll stick them
@@ -190,6 +195,7 @@ void intel_gt_mcr_init(struct intel_gt *gt)
 	} else if (IS_DG2(i915)) {
 		gt->steering_table[MSLICE] = xehpsdv_mslice_steering_table;
 		gt->steering_table[LNCF] = dg2_lncf_steering_table;
+		gt->steering_table[DSS] = dg2_dss_steering_table;
 		/*
 		 * No need to hook up the GAM table since it has a dedicated
 		 * steering control register on DG2 and can use implicit
@@ -672,6 +678,27 @@ void intel_gt_mcr_get_nonterminated_steering(struct intel_gt *gt,
 
 	*group = gt->default_steering.groupid;
 	*instance = gt->default_steering.instanceid;
+}
+
+/*
+ * intel_gt_is_mcr_reg - check whether it is a mcr register or not
+ * @gt: GT structure
+ * @reg: the register to check
+ *
+ * Returns true if @reg belong to a register range of any steering type,
+ * otherwise, return false.
+ */
+bool intel_gt_is_mcr_reg(struct intel_gt *gt, i915_reg_t reg)
+{
+	int type;
+	i915_mcr_reg_t mcr_reg = {.reg = reg.reg};
+
+	for (type = 0; type < NUM_STEERING_TYPES; type++) {
+		if (reg_needs_read_steering(gt, mcr_reg, type)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
