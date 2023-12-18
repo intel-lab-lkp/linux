@@ -5775,6 +5775,13 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	vcpu->arch.exit_qualification = exit_qualification;
 
 	/*
+	 * Emulate the instruction when accessing a GPA which is set any bits
+	 * beyond guest-physical bits that EPT can translate.
+	 */
+	if (unlikely(gpa & rsvd_bits(kvm_mmu_tdp_maxphyaddr(), 63)))
+		return kvm_emulate_instruction(vcpu, 0);
+
+	/*
 	 * Check that the GPA doesn't exceed physical memory limits, as that is
 	 * a guest page fault.  We have to emulate the instruction here, because
 	 * if the illegal address is that of a paging structure, then
