@@ -27,6 +27,19 @@ static unsigned long ccu_nm_calc_rate(unsigned long parent,
 	return rate;
 }
 
+static bool ccu_nm_is_valid_rate(struct ccu_common *common, unsigned long n, unsigned long m)
+{
+	struct ccu_nm *nm = container_of(common, struct ccu_nm, common);
+
+	if (nm->max_nm_ratio && (n > nm->max_nm_ratio * m))
+		return false;
+
+	if (nm->min_nm_ratio && (n < nm->min_nm_ratio * m))
+		return false;
+
+	return true;
+}
+
 static unsigned long ccu_nm_find_best(struct ccu_common *common, unsigned long parent,
 				      unsigned long rate, struct _ccu_nm *nm)
 {
@@ -36,8 +49,12 @@ static unsigned long ccu_nm_find_best(struct ccu_common *common, unsigned long p
 
 	for (_n = nm->min_n; _n <= nm->max_n; _n++) {
 		for (_m = nm->min_m; _m <= nm->max_m; _m++) {
-			unsigned long tmp_rate = ccu_nm_calc_rate(parent,
-								  _n, _m);
+			unsigned long tmp_rate;
+
+			if (!ccu_nm_is_valid_rate(common, _n, _m))
+				continue;
+
+			tmp_rate = ccu_nm_calc_rate(parent, _n, _m);
 
 			if (ccu_is_better_rate(common, rate, tmp_rate, best_rate)) {
 				best_rate = tmp_rate;

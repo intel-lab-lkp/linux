@@ -31,6 +31,8 @@ struct ccu_nm {
 	unsigned int		fixed_post_div;
 	unsigned int		min_rate;
 	unsigned int		max_rate;
+	unsigned long		min_nm_ratio; /* minimum value for m/n */
+	unsigned long		max_nm_ratio; /* maximum value for m/n */
 
 	struct ccu_common	common;
 };
@@ -108,7 +110,8 @@ struct ccu_nm {
 		},							\
 	}
 
-#define SUNXI_CCU_NM_WITH_FRAC_GATE_LOCK_MIN_MAX_FEAT(_struct, _name,	\
+#define SUNXI_CCU_NM_WITH_FRAC_GATE_LOCK_MIN_MAX_FEAT_NM_RATIO(		\
+						 _struct, _name,	\
 						 _parent, _reg,		\
 						 _min_rate, _max_rate,	\
 						 _nshift, _nwidth,	\
@@ -117,7 +120,9 @@ struct ccu_nm {
 						 _frac_rate_0,		\
 						 _frac_rate_1,		\
 						 _gate, _lock, _flags,	\
-						 _features)		\
+						 _features,		\
+						 _min_nm_ratio,		\
+						 _max_nm_ratio)		\
 	struct ccu_nm _struct = {					\
 		.enable		= _gate,				\
 		.lock		= _lock,				\
@@ -128,6 +133,8 @@ struct ccu_nm {
 						  _frac_rate_1),	\
 		.min_rate	= _min_rate,				\
 		.max_rate	= _max_rate,				\
+		.min_nm_ratio	= _min_nm_ratio,			\
+		.max_nm_ratio	= _max_nm_ratio,			\
 		.common		= {					\
 			.reg		= _reg,				\
 			.features	= _features,			\
@@ -137,6 +144,29 @@ struct ccu_nm {
 						      _flags),		\
 		},							\
 	}
+
+#define SUNXI_CCU_NM_WITH_FRAC_GATE_LOCK_MIN_MAX_FEAT(_struct, _name,	\
+						 _parent, _reg,		\
+						 _min_rate, _max_rate,	\
+						 _nshift, _nwidth,	\
+						 _mshift, _mwidth,	\
+						 _frac_en, _frac_sel,	\
+						 _frac_rate_0,		\
+						 _frac_rate_1,		\
+						 _gate, _lock, _flags,	\
+						 _features)		\
+	SUNXI_CCU_NM_WITH_FRAC_GATE_LOCK_MIN_MAX_FEAT_NM_RATIO(		\
+						_struct, _name,		\
+						_parent, _reg,		\
+						_min_rate, _max_rate,	\
+						_nshift, _nwidth,	\
+						_mshift, _mwidth,	\
+						_frac_en, _frac_sel,	\
+						_frac_rate_0,		\
+						_frac_rate_1,		\
+						_gate, _lock, _flags,	\
+						_features,		\
+						0, 0)
 
 #define SUNXI_CCU_NM_WITH_FRAC_GATE_LOCK_MIN_MAX(_struct, _name,	\
 						 _parent, _reg,		\
