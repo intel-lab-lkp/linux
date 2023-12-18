@@ -1008,9 +1008,7 @@ ahd_intr(struct ahd_softc *ahd)
 	 * Handle statuses that may invalidate our cached
 	 * copy of INTSTAT separately.
 	 */
-	if (intstat == 0xFF && (ahd->features & AHD_REMOVABLE) != 0) {
-		/* Hot eject.  Do nothing */
-	} else if (intstat & HWERRINT) {
+	if (intstat & HWERRINT) {
 		ahd_handle_hwerrint(ahd);
 	} else if ((intstat & (PCIINT|SPLTINT)) != 0) {
 		ahd->bus_intr(ahd);
