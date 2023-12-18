@@ -57,6 +57,7 @@ properties:
           - enum:
               - fsl,imx8mm-usb
               - fsl,imx8mn-usb
+              - fsl,imx93-usb
           - const: fsl,imx7d-usb
           - const: fsl,imx27-usb
       - items:
@@ -411,6 +412,17 @@ allOf:
         external-vbus-divider: false
         samsung,picophy-pre-emp-curr-control: false
         samsung,picophy-dc-vol-level-adjust: false
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx93-usb
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: usb_ctrl_root_clk
+            - const: usb_wakeup_clk
 
 unevaluatedProperties: false
 
