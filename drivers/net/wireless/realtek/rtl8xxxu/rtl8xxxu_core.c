@@ -7190,7 +7190,9 @@ static void rtl8xxxu_watchdog_callback(struct work_struct *work)
 	struct rtl8xxxu_priv *priv;
 
 	priv = container_of(work, struct rtl8xxxu_priv, ra_watchdog.work);
-	vif = priv->vif;
+	vif = priv->vifs[0];
+	if (vif && vif->type != NL80211_IFTYPE_STATION)
+		vif = priv->vifs[1];
 
 	if (vif && vif->type == NL80211_IFTYPE_STATION) {
 		int signal;
