@@ -986,8 +986,8 @@ nvmet_fc_hostport_free(struct kref *ref)
 	spin_unlock_irqrestore(&tgtport->lock, flags);
 	if (tgtport->ops->host_release && hostport->invalid)
 		tgtport->ops->host_release(hostport->hosthandle);
-	kfree(hostport);
 	nvmet_fc_tgtport_put(tgtport);
+	kfree(hostport);
 }
 
 static void
