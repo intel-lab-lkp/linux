@@ -581,7 +581,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		}
 
 lock:
-		spin_lock(&x->lock);
+		spin_lock_bh(&x->lock);
 
 		if (unlikely(x->km.state != XFRM_STATE_VALID)) {
 			if (x->km.state == XFRM_STATE_ACQ)
@@ -607,7 +607,7 @@ lock:
 			goto drop_unlock;
 		}
 
-		spin_unlock(&x->lock);
+		spin_unlock_bh(&x->lock);
 
 		if (xfrm_tunnel_check(skb, x, family)) {
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINSTATEMODEERROR);
