@@ -35,6 +35,7 @@
 #include <linux/of_irq.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
+#include <linux/dma-map-ops.h>
 #include <asm/io.h>
 #include <asm/paca.h>
 #include <asm/processor.h>
@@ -975,6 +976,7 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	kvm_cma_reserve();
 	gigantic_hugetlb_cma_reserve();
+	dma_contiguous_reserve(0);
 
 	early_memtest(min_low_pfn << PAGE_SHIFT, max_low_pfn << PAGE_SHIFT);
 
