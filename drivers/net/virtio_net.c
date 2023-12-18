@@ -286,6 +286,9 @@ struct virtnet_info {
 	/* Device will pass tx timestamp. Requires has_tx_tstamp */
 	bool enable_tx_tstamp;
 
+	/* Driver will pass CLOCK_TAI delivery time to the device */
+	bool has_tx_time;
+
 	/* Has control virtqueue */
 	bool has_cvq;
 
@@ -2371,6 +2374,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	}
 	if (vi->enable_tx_tstamp && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
 		ht->hash.hdr.flags |= VIRTIO_NET_HDR_F_TSTAMP;
+	if (vi->has_tx_time && skb->tstamp)
+		ht->tstamp = cpu_to_le64(skb->tstamp);
 
 	sg_init_table(sq->sg, skb_shinfo(skb)->nr_frags + (can_push ? 1 : 2));
 	if (can_push) {
@@ -4698,6 +4703,11 @@ static int virtnet_probe(struct virtio_device *vdev)
 		vi->hdr_len = sizeof(struct virtio_net_hdr_hash_ts);
 	}
 
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_TX_TIME)) {
+		vi->has_tx_time = true;
+		vi->hdr_len = sizeof(struct virtio_net_hdr_hash_ts);
+	}
+
 	if (virtio_has_feature(vdev, VIRTIO_F_ANY_LAYOUT) ||
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		vi->any_header_sg = true;
@@ -4941,7 +4951,8 @@ static struct virtio_device_id id_table[] = {
 	VIRTIO_NET_F_RSS, VIRTIO_NET_F_HASH_REPORT, VIRTIO_NET_F_NOTF_COAL, \
 	VIRTIO_NET_F_VQ_NOTF_COAL, \
 	VIRTIO_NET_F_GUEST_HDRLEN, \
-	VIRTIO_NET_F_TX_HASH, VIRTIO_NET_F_RX_TSTAMP, VIRTIO_NET_F_TX_TSTAMP
+	VIRTIO_NET_F_TX_HASH, VIRTIO_NET_F_RX_TSTAMP, VIRTIO_NET_F_TX_TSTAMP, \
+	VIRTIO_NET_F_TX_TIME
 
 static unsigned int features[] = {
 	VIRTNET_FEATURES,
