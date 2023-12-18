@@ -627,7 +627,7 @@ int crash_exclude_mem_range(struct crash_mem *mem,
 		return 0;
 
 	/* Split happened */
-	if (i == mem->max_nr_ranges - 1)
+	if (mem->nr_ranges >= mem->max_nr_ranges)
 		return -ENOMEM;
 
 	/* Location where new range should go */
