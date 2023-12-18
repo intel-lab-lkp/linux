@@ -6786,12 +6786,10 @@ static inline void sched_submit_work(struct task_struct *tsk)
 
 static void sched_update_worker(struct task_struct *tsk)
 {
-	if (tsk->flags & (PF_WQ_WORKER | PF_IO_WORKER)) {
-		if (tsk->flags & PF_WQ_WORKER)
-			wq_worker_running(tsk);
-		else
-			io_wq_worker_running(tsk);
-	}
+	if (tsk->flags & PF_WQ_WORKER)
+		wq_worker_running(tsk);
+	else if (tsk->flags  & PF_IO_WORKER)
+		io_wq_worker_running(tsk);
 }
 
 static __always_inline void __schedule_loop(unsigned int sched_mode)
