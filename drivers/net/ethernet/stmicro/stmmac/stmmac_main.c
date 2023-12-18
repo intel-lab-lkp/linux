@@ -42,6 +42,7 @@
 #include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
+#include <net/dsa.h>
 #include "stmmac_ptp.h"
 #include "stmmac.h"
 #include "stmmac_xdp.h"
@@ -993,8 +994,11 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			       int speed, int duplex,
 			       bool tx_pause, bool rx_pause)
 {
-	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+	struct net_device *ndev = to_net_dev(config->dev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
+	unsigned int tx_queue_cnt;
 	u32 old_ctrl, ctrl;
+	int queue;
 
 	if ((priv->plat->flags & STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP) &&
 	    priv->plat->serdes_powerup)
@@ -1102,6 +1106,16 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
 		stmmac_hwtstamp_correct_latency(priv, priv);
+
+	/* DSA tags break COEs on some cores. Disable TX checksum
+	 * offloading on those cores if the netdevice is a DSA conduit.
+	 */
+	if (priv->dma_cap.dsa_breaks_tx_coe && netdev_uses_dsa(ndev)) {
+		tx_queue_cnt = priv->plat->tx_queues_to_use;
+		for (queue = 0; queue < tx_queue_cnt; queue++)
+			priv->plat->tx_queues_cfg[queue].coe_unsupported = true;
+	}
+
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {

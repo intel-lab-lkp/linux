@@ -405,6 +405,7 @@ struct dma_features {
 	unsigned int rx_coe_type1;
 	unsigned int rx_coe_type2;
 	unsigned int rxfifo_over_2048;
+	unsigned int dsa_breaks_tx_coe;
 	/* TX and RX number of channels */
 	unsigned int number_rx_channel;
 	unsigned int number_tx_channel;
