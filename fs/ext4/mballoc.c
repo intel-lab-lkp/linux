@@ -6757,6 +6757,9 @@ __releases(ext4_group_lock_ptr(sb, e4b->bd_group))
 	bool set_trimmed = false;
 	void *bitmap;
 
+	if (unlikely(EXT4_MB_GRP_BBITMAP_CORRUPT(e4b->bd_info)))
+		return 0;
+
 	bitmap = e4b->bd_bitmap;
 	if (start == 0 && max >= ext4_last_grp_cluster(sb, e4b->bd_group))
 		set_trimmed = true;
