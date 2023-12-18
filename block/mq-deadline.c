@@ -148,6 +148,28 @@ deadline_latter_request(struct request *rq)
 }
 
 /*
+ * Return the first request with the given priority, data direction and for
+ * which blk_rq_pos() >= @pos.
+ */
+static struct request *deadline_first_rq_past_pos(struct dd_per_prio *per_prio,
+					enum dd_data_dir data_dir, sector_t pos)
+{
+	struct rb_node *node = per_prio->sort_list[data_dir].rb_node;
+	struct request *rq, *res = NULL;
+
+	while (node) {
+		rq = rb_entry_rq(node);
+		if (blk_rq_pos(rq) >= pos) {
+			res = rq;
+			node = node->rb_left;
+		} else {
+			node = node->rb_right;
+		}
+	}
+	return res;
+}
+
+/*
  * Return the first request for which blk_rq_pos() >= @pos. For zoned devices,
  * return the first request after the start of the zone containing @pos.
  */
@@ -155,7 +177,7 @@ static inline struct request *deadline_from_pos(struct dd_per_prio *per_prio,
 				enum dd_data_dir data_dir, sector_t pos)
 {
 	struct rb_node *node = per_prio->sort_list[data_dir].rb_node;
-	struct request *rq, *res = NULL;
+	struct request *rq;
 
 	if (!node)
 		return NULL;
@@ -169,16 +191,7 @@ static inline struct request *deadline_from_pos(struct dd_per_prio *per_prio,
 	if (blk_rq_is_seq_zoned_write(rq))
 		pos = round_down(pos, rq->q->limits.chunk_sectors);
 
-	while (node) {
-		rq = rb_entry_rq(node);
-		if (blk_rq_pos(rq) >= pos) {
-			res = rq;
-			node = node->rb_left;
-		} else {
-			node = node->rb_right;
-		}
-	}
-	return res;
+	return deadline_first_rq_past_pos(per_prio, data_dir, pos);
 }
 
 /*
