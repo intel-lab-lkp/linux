@@ -62,6 +62,18 @@ struct mempolicy {
 };
 
 /*
+ * Describes settings of a mempolicy during set/get syscalls and
+ * kernel internal calls to do_set_mempolicy()
+ */
+struct mempolicy_args {
+	unsigned short mode;		/* policy mode */
+	unsigned short mode_flags;	/* policy mode flags */
+	int home_node;			/* mbind: use MPOL_MF_HOME_NODE */
+	nodemask_t *policy_nodes;	/* get/set/mbind */
+	int policy_node;		/* get: policy node information */
+};
+
+/*
  * Support for managing mempolicy data objects (clone, copy, destroy)
  * The default fast path of a NULL MPOL_DEFAULT policy is always inlined.
  */
