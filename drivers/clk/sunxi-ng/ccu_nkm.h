@@ -16,6 +16,12 @@
  * struct ccu_nkm - Definition of an N-K-M clock
  *
  * Clocks based on the formula parent * N * K / M
+ *
+ * @max_mn_ratio:	Maximum value for M / N.
+ * @parent_wo_nk:	The minimum rate the parent must provide after applying the divisor,
+ *			but without applying the multipliers, i.e. the contstraint
+ *			   (parent rate)/M >= parent_wo_nk
+ *			must be fulfilled.
  */
 struct ccu_nkm {
 	u32			enable;
@@ -27,6 +33,8 @@ struct ccu_nkm {
 	struct ccu_mux_internal	mux;
 
 	unsigned int		fixed_post_div;
+	unsigned long		max_mn_ratio;
+	unsigned long           parent_wo_nk;
 
 	struct ccu_common	common;
 };
