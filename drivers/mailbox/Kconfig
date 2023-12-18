@@ -295,4 +295,15 @@ config QCOM_IPCC
 	  acts as an interrupt controller for receiving interrupts from clients.
 	  Say Y here if you want to build this driver.
 
+config STARFIVE_MEU_MBOX
+	tristate "Starfive MEU Mailbox"
+	depends on OF
+	depends on SOC_STARFIVE || COMPILE_TEST
+	help
+	  Say Y here if you want to build the Starfive MEU mailbox controller
+	  driver.
+
+	  The StarFive mailbox controller has 2 channels. Each channel has a
+	  pair of Tx/Rx link and each link has 31 slots/doorbells.
+
 endif
