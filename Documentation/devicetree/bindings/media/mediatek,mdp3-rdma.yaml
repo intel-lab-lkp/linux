@@ -40,10 +40,7 @@ properties:
 
   mediatek,gce-events:
     description:
-      The event id which is mapping to the specific hardware event signal
-      to gce. The event id is defined in the gce header
-      include/dt-bindings/gce/<chip>-gce.h of each chips.
-    $ref: /schemas/types.yaml#/definitions/uint32-array
+      Reference to Documentation/devicetree/bindings/mailbox/mediatek,gce-mailbox.yaml.
 
   power-domains:
     maxItems: 1
