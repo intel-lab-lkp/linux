@@ -498,6 +498,7 @@ struct rtl8xxxu_txdesc40 {
 #define DESC_RATE_ID_SHIFT		16
 #define DESC_RATE_ID_MASK		0xf
 #define TXDESC_NAVUSEHDR		BIT(20)
+#define TXDESC_EN_DESC_ID		BIT(21)
 #define TXDESC_SEC_RC4			0x00400000
 #define TXDESC_SEC_AES			0x00c00000
 #define TXDESC_PKT_OFFSET_SHIFT		26
@@ -1774,6 +1775,7 @@ struct rtl8xxxu_cfo_tracking {
 #define RTL8XXXU_HW_LED_CONTROL	2
 #define RTL8XXXU_MAX_MAC_ID_NUM	128
 #define RTL8XXXU_BC_MC_MACID	0
+#define RTL8XXXU_MAX_SEC_CAM_NUM	16
 
 struct rtl8xxxu_priv {
 	struct ieee80211_hw *hw;
@@ -1907,6 +1909,7 @@ struct rtl8xxxu_priv {
 	char led_name[32];
 	struct led_classdev led_cdev;
 	DECLARE_BITMAP(mac_id_map, RTL8XXXU_MAX_MAC_ID_NUM);
+	DECLARE_BITMAP(cam_map, RTL8XXXU_MAX_SEC_CAM_NUM);
 };
 
 struct rtl8xxxu_sta_info {
@@ -1918,6 +1921,7 @@ struct rtl8xxxu_sta_info {
 
 struct rtl8xxxu_vif {
 	int port_num;
+	u8 hw_key_idx;
 };
 
 struct rtl8xxxu_rx_urb {
