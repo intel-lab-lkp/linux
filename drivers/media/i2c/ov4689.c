@@ -114,7 +114,7 @@
  * Minimum working vertical blanking value. Found experimentally at
  * minimum HTS values.
  */
-#define OV4689_VBLANK_MIN		31
+#define OV4689_VBLANK_MIN		35
 
 static const char *const ov4689_supply_names[] = {
 	"avdd", /* Analog power */
@@ -256,6 +256,18 @@ static const struct cci_reg_sequence ov4689_common_regs[] = {
 	{CCI_REG8(0x5503), 0x0f}, /* OTP_DPC_END_L otp_end_address[7:0] = 0x0f */
 };
 
+static const struct cci_reg_sequence ov4689_2x2_binning_regs[] = {
+	{CCI_REG8(0x3632), 0x05}, /* ADC */
+	{CCI_REG8(0x376b), 0x40}, /* Sensor control */
+	{CCI_REG8(0x3814), 0x03}, /* H_INC_ODD */
+	{CCI_REG8(0x3821), 0x07}, /* TIMING_FORMAT_2 hor_binning = 1*/
+	{CCI_REG8(0x382a), 0x03}, /* V_INC_ODD */
+	{CCI_REG8(0x3830), 0x08}, /* BLC_NUM_OPTION blc_use_num_2 = 1 */
+	{CCI_REG8(0x3836), 0x02}, /* TIMING_REG_36 r_zline_use_num_2 = 1 */
+	{CCI_REG8(0x4001), 0x50}, /* BLC DEBUG MODE */
+	{CCI_REG8(0x4502), 0x44}, /* ADC synch control*/
+};
+
 static const u64 link_freq_menu_items[] = { 504000000 };
 
 static const char *const ov4689_test_pattern_menu[] = {
@@ -305,18 +317,96 @@ static const struct ov4689_gain_range ov4689_gain_ranges[] = {
 	},
 };
 
+/*
+ * For now, only 2x2 binning implemented in this driver.
+ */
+static int ov4689_best_binning(struct ov4689 *ov4689,
+			       const struct v4l2_mbus_framefmt *format,
+			       const struct v4l2_rect *crop,
+			       unsigned int *binning)
+{
+	const struct v4l2_area candidates[] = {
+		{ crop->width, crop->height },
+		{ crop->width / 2, crop->height / 2 },
+	};
+
+	const struct v4l2_area *best;
+	int index;
+
+	best = v4l2_find_nearest_size(candidates, ARRAY_SIZE(candidates), width,
+				      height, format->width, format->height);
+	if (!best) {
+		dev_err(ov4689->dev,
+			"failed to find best binning for requested mode\n");
+		return -EINVAL;
+	}
+
+	index = best - candidates;
+	*binning = index + 1;
+
+	dev_dbg(ov4689->dev,
+		"best_binning: crop=%dx%d format=%dx%d binning=%d\n",
+		crop->width, crop->height, format->width, format->height,
+		*binning);
+
+	return 0;
+}
+
+/*
+ * Minimum working HTS value for given output width (found
+ * experimentally).
+ */
+static unsigned int ov4689_hts_min(unsigned int width)
+{
+	return max_t(unsigned int, 3156, 224 + width * 19 / 16);
+}
+
+static void ov4689_update_ctrl_ranges(struct ov4689 *ov4689, unsigned int width,
+				      unsigned int height)
+{
+	struct v4l2_ctrl *exposure = ov4689->exposure;
+	struct v4l2_ctrl *vblank = ov4689->vblank;
+	struct v4l2_ctrl *hblank = ov4689->hblank;
+	s64 def_val, min_val, max_val;
+
+	min_val = ov4689_hts_min(width) - width;
+	max_val = OV4689_HTS_MAX - width;
+	def_val = clamp_t(s64, hblank->default_value, min_val, max_val);
+	__v4l2_ctrl_modify_range(hblank, min_val, max_val, hblank->step,
+				 def_val);
+
+	min_val = OV4689_VBLANK_MIN;
+	max_val = OV4689_HTS_MAX - width;
+	def_val = clamp_t(s64, vblank->default_value, min_val, max_val);
+	__v4l2_ctrl_modify_range(vblank, min_val, max_val, vblank->step,
+				 def_val);
+
+	min_val = exposure->minimum;
+	max_val = height + vblank->val - 4;
+	def_val = clamp_t(s64, exposure->default_value, min_val, max_val);
+	__v4l2_ctrl_modify_range(exposure, min_val, max_val, exposure->step,
+				 def_val);
+}
+
 static int ov4689_set_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *fmt)
 {
+	struct ov4689 *ov4689 = to_ov4689(sd);
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *crop;
+	unsigned int binning;
+	int ret;
 
 	crop = v4l2_subdev_state_get_crop(sd_state, fmt->pad);
 	format = v4l2_subdev_state_get_format(sd_state, fmt->pad);
 
-	format->width = crop->width;
-	format->height = crop->height;
+	ret = ov4689_best_binning(ov4689, &fmt->format, crop, &binning);
+	if (ret)
+		return ret;
+
+	format->width = crop->width / binning;
+	format->height = crop->height / binning;
 
 	format->code = MEDIA_BUS_FMT_SBGGR10_1X10;
 	format->field = V4L2_FIELD_NONE;
@@ -326,6 +416,9 @@ static int ov4689_set_fmt(struct v4l2_subdev *sd,
 	format->xfer_func = V4L2_XFER_FUNC_NONE;
 
 	fmt->format = *format;
+
+	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE)
+		ov4689_update_ctrl_ranges(ov4689, format->width, format->height);
 
 	return 0;
 }
@@ -346,8 +439,9 @@ static int ov4689_enum_frame_sizes(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_frame_size_enum *fse)
 {
 	const struct v4l2_rect *crop;
+	int binning;
 
-	if (fse->index >= 1)
+	if (fse->index >= 2)
 		return -EINVAL;
 
 	if (fse->code != MEDIA_BUS_FMT_SBGGR10_1X10)
@@ -355,10 +449,11 @@ static int ov4689_enum_frame_sizes(struct v4l2_subdev *sd,
 
 	crop = v4l2_subdev_state_get_crop(sd_state, 0);
 
-	fse->min_width = crop->width;
-	fse->max_width = crop->width;
-	fse->max_height = crop->height;
-	fse->min_height = crop->height;
+	binning = fse->index + 1;
+	fse->min_width = crop->width / binning;
+	fse->max_width = crop->width / binning;
+	fse->max_height = crop->height / binning;
+	fse->min_height = crop->height / binning;
 
 	return 0;
 }
@@ -398,42 +493,6 @@ static int ov4689_get_selection(struct v4l2_subdev *sd,
 	return -EINVAL;
 }
 
-/*
- * Minimum working HTS value for given output width (found
- * experimentally).
- */
-static unsigned int ov4689_hts_min(unsigned int width)
-{
-	return max_t(unsigned int, 3156, 224 + width * 19 / 16);
-}
-
-static void ov4689_update_ctrl_ranges(struct ov4689 *ov4689,
-				      struct v4l2_rect *crop)
-{
-	struct v4l2_ctrl *exposure = ov4689->exposure;
-	struct v4l2_ctrl *vblank = ov4689->vblank;
-	struct v4l2_ctrl *hblank = ov4689->hblank;
-	s64 def_val, min_val, max_val;
-
-	min_val = ov4689_hts_min(crop->width) - crop->width;
-	max_val = OV4689_HTS_MAX - crop->width;
-	def_val = clamp_t(s64, hblank->default_value, min_val, max_val);
-	__v4l2_ctrl_modify_range(hblank, min_val, max_val, hblank->step,
-				 def_val);
-
-	min_val = OV4689_VBLANK_MIN;
-	max_val = OV4689_HTS_MAX - crop->width;
-	def_val = clamp_t(s64, vblank->default_value, min_val, max_val);
-	__v4l2_ctrl_modify_range(vblank, min_val, max_val, vblank->step,
-				 def_val);
-
-	min_val = exposure->minimum;
-	max_val = crop->height + vblank->val - 4;
-	def_val = clamp_t(s64, exposure->default_value, min_val, max_val);
-	__v4l2_ctrl_modify_range(exposure, min_val, max_val, exposure->step,
-				 def_val);
-}
-
 static int ov4689_set_selection(struct v4l2_subdev *sd,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_selection *sel)
@@ -470,7 +529,8 @@ static int ov4689_set_selection(struct v4l2_subdev *sd,
 		format->height = rect.height;
 
 		if (sel->which == V4L2_SUBDEV_FORMAT_ACTIVE)
-			ov4689_update_ctrl_ranges(ov4689, &rect);
+			ov4689_update_ctrl_ranges(ov4689, rect.width,
+						  rect.height);
 	}
 
 	*crop = rect;
@@ -485,21 +545,27 @@ static int ov4689_setup_timings(struct ov4689 *ov4689,
 	const struct v4l2_mbus_framefmt *format;
 	struct regmap *rm = ov4689->regmap;
 	const struct v4l2_rect *crop;
+	const int v_offset = 2;
+	unsigned int binning;
 	int ret = 0;
 
 	format = v4l2_subdev_state_get_format(state, 0);
 	crop = v4l2_subdev_state_get_crop(state, 0);
 
+	ret = ov4689_best_binning(ov4689, format, crop, &binning);
+	if (ret)
+		return ret;
+
 	cci_write(rm, OV4689_REG_H_CROP_START, crop->left, &ret);
-	cci_write(rm, OV4689_REG_V_CROP_START, crop->top, &ret);
-	cci_write(rm, OV4689_REG_H_CROP_END, crop->left + crop->width + 1, &ret);
-	cci_write(rm, OV4689_REG_V_CROP_END, crop->top + crop->height + 1, &ret);
+	cci_write(rm, OV4689_REG_V_CROP_START, crop->top - v_offset, &ret);
+	cci_write(rm, OV4689_REG_H_CROP_END, crop->left + crop->width + 3, &ret);
+	cci_write(rm, OV4689_REG_V_CROP_END, crop->top + crop->height + 7, &ret);
 
 	cci_write(rm, OV4689_REG_H_OUTPUT_SIZE, format->width, &ret);
 	cci_write(rm, OV4689_REG_V_OUTPUT_SIZE, format->height, &ret);
 
 	cci_write(rm, OV4689_REG_H_WIN_OFF, 0, &ret);
-	cci_write(rm, OV4689_REG_V_WIN_OFF, 0, &ret);
+	cci_write(rm, OV4689_REG_V_WIN_OFF, v_offset, &ret);
 
 	/*
 	 * Maximum working value of vfifo_read_start for given output
@@ -507,6 +573,10 @@ static int ov4689_setup_timings(struct ov4689 *ov4689,
 	 */
 	cci_write(rm, OV4689_REG_VFIFO_CTRL_01, format->width / 16 - 1, &ret);
 
+	if (binning == 2)
+		cci_multi_reg_write(ov4689->regmap, ov4689_2x2_binning_regs,
+				    ARRAY_SIZE(ov4689_2x2_binning_regs),
+				    &ret);
 	return ret;
 }
 
@@ -519,20 +589,20 @@ static int ov4689_setup_blc_anchors(struct ov4689 *ov4689,
 				    struct v4l2_subdev_state *state)
 {
 	unsigned int width_def = OV4689_H_OUTPUT_SIZE_DEFAULT;
+	const struct v4l2_mbus_framefmt *format;
 	struct regmap *rm = ov4689->regmap;
-	const struct v4l2_rect *crop;
 	int ret = 0;
 
-	crop = v4l2_subdev_state_get_crop(state, 0);
+	format = v4l2_subdev_state_get_format(state, 0);
 
 	cci_write(rm, OV4689_REG_ANCHOR_LEFT_START,
-		  OV4689_ANCHOR_LEFT_START_DEF * crop->width / width_def, &ret);
+		  OV4689_ANCHOR_LEFT_START_DEF * format->width / width_def, &ret);
 	cci_write(rm, OV4689_REG_ANCHOR_LEFT_END,
-		  OV4689_ANCHOR_LEFT_END_DEF * crop->width / width_def, &ret);
+		  OV4689_ANCHOR_LEFT_END_DEF * format->width / width_def, &ret);
 	cci_write(rm, OV4689_REG_ANCHOR_RIGHT_START,
-		  OV4689_ANCHOR_RIGHT_START_DEF * crop->width / width_def, &ret);
+		  OV4689_ANCHOR_RIGHT_START_DEF * format->width / width_def, &ret);
 	cci_write(rm, OV4689_REG_ANCHOR_RIGHT_END,
-		  OV4689_ANCHOR_RIGHT_END_DEF * crop->width / width_def, &ret);
+		  OV4689_ANCHOR_RIGHT_END_DEF * format->width / width_def, &ret);
 
 	return ret;
 }
@@ -734,19 +804,19 @@ static int ov4689_set_ctrl(struct v4l2_ctrl *ctrl)
 	struct regmap *regmap = ov4689->regmap;
 	struct v4l2_subdev_state *sd_state;
 	struct device *dev = ov4689->dev;
-	struct v4l2_rect *crop;
+	struct v4l2_mbus_framefmt *fmt;
 	s64 max_expo, def_expo;
 	int sensor_gain;
 	int ret;
 
 	sd_state = v4l2_subdev_get_locked_active_state(&ov4689->subdev);
-	crop = v4l2_subdev_state_get_crop(sd_state, 0);
+	fmt = v4l2_subdev_state_get_format(sd_state, 0);
 
 	/* Propagate change of current control to all related controls */
 	switch (ctrl->id) {
 	case V4L2_CID_VBLANK:
 		/* Update max exposure while meeting expected vblanking */
-		max_expo = crop->height + ctrl->val - 4;
+		max_expo = fmt->height + ctrl->val - 4;
 		def_expo = clamp_t(s64, ov4689->exposure->default_value,
 				   ov4689->exposure->minimum, max_expo);
 
@@ -770,16 +840,14 @@ static int ov4689_set_ctrl(struct v4l2_ctrl *ctrl)
 		cci_write(regmap, OV4689_REG_GAIN, sensor_gain, &ret);
 		break;
 	case V4L2_CID_VBLANK:
-		cci_write(regmap, OV4689_REG_VTS,
-			  ctrl->val + crop->height, &ret);
+		cci_write(regmap, OV4689_REG_VTS, ctrl->val + fmt->height, &ret);
 		break;
 	case V4L2_CID_TEST_PATTERN:
 		ret = ov4689_enable_test_pattern(ov4689, ctrl->val);
 		break;
 	case V4L2_CID_HBLANK:
 		cci_write(regmap, OV4689_REG_HTS,
-			  (ctrl->val + crop->width) /
-			  OV4689_HTS_DIVIDER, &ret);
+			  (ctrl->val + fmt->width) / OV4689_HTS_DIVIDER, &ret);
 		break;
 	case V4L2_CID_VFLIP:
 		cci_update_bits(regmap, OV4689_REG_TIMING_FORMAT1,
