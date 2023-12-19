@@ -840,14 +840,20 @@ static void cnic_free_context(struct cnic_dev *dev)
 static void __cnic_free_uio_rings(struct cnic_uio_dev *udev)
 {
 	if (udev->l2_buf) {
-		dma_free_coherent(&udev->pdev->dev, udev->l2_buf_size,
-				  udev->l2_buf, udev->l2_buf_map);
+		if (udev->l2_buf_map)
+			dma_unmap_single(&udev->pdev->dev, udev->l2_buf_map,
+					 udev->l2_buf_size, DMA_BIDIRECTIONAL);
+		free_pages((unsigned long)udev->l2_buf,
+			   get_order(udev->l2_buf_size));
 		udev->l2_buf = NULL;
 	}
 
 	if (udev->l2_ring) {
-		dma_free_coherent(&udev->pdev->dev, udev->l2_ring_size,
-				  udev->l2_ring, udev->l2_ring_map);
+		if (udev->l2_ring_map)
+			dma_unmap_single(&udev->pdev->dev, udev->l2_ring_map,
+					 udev->l2_ring_size, DMA_BIDIRECTIONAL);
+		free_pages((unsigned long)udev->l2_ring,
+			   get_order(udev->l2_ring_size));
 		udev->l2_ring = NULL;
 	}
 
@@ -1026,16 +1032,36 @@ static int __cnic_alloc_uio_rings(struct cnic_uio_dev *udev, int pages)
 		return 0;
 
 	udev->l2_ring_size = pages * CNIC_PAGE_SIZE;
-	udev->l2_ring = dma_alloc_coherent(&udev->pdev->dev, udev->l2_ring_size,
-					   &udev->l2_ring_map, GFP_KERNEL);
+	udev->l2_ring = (void *)__get_free_pages(GFP_KERNEL | __GFP_COMP |
+						 __GFP_ZERO,
+						 get_order(udev->l2_ring_size));
 	if (!udev->l2_ring)
 		return -ENOMEM;
 
+	udev->l2_ring_map = dma_map_single(&udev->pdev->dev, udev->l2_ring,
+					   udev->l2_ring_size,
+					   DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&udev->pdev->dev, udev->l2_ring_map))) {
+		pr_err("unable to map L2 ring memory %d\n", udev->l2_ring_size);
+		__cnic_free_uio_rings(udev);
+		return -ENOMEM;
+	}
+
 	udev->l2_buf_size = (cp->l2_rx_ring_size + 1) * cp->l2_single_buf_size;
 	udev->l2_buf_size = CNIC_PAGE_ALIGN(udev->l2_buf_size);
-	udev->l2_buf = dma_alloc_coherent(&udev->pdev->dev, udev->l2_buf_size,
-					  &udev->l2_buf_map, GFP_KERNEL);
+	udev->l2_buf = (void *)__get_free_pages(GFP_KERNEL | __GFP_COMP |
+						__GFP_ZERO,
+						get_order(udev->l2_buf_size));
 	if (!udev->l2_buf) {
+		__cnic_free_uio_rings(udev);
+		return -ENOMEM;
+	}
+
+	udev->l2_buf_map = dma_map_single(&udev->pdev->dev, udev->l2_buf,
+					  udev->l2_buf_size,
+					  DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&udev->pdev->dev, udev->l2_buf_map))) {
+		pr_err("unable to map L2 buf memory %d\n", udev->l2_buf_size);
 		__cnic_free_uio_rings(udev);
 		return -ENOMEM;
 	}
