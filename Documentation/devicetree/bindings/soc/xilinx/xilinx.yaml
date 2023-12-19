@@ -118,6 +118,7 @@ properties:
 
       - description: Xilinx Kria SOMs
         items:
+          - const: xlnx,zynqmp-sm-k26-rev2
           - const: xlnx,zynqmp-sm-k26-rev1
           - const: xlnx,zynqmp-sm-k26-revB
           - const: xlnx,zynqmp-sm-k26-revA
@@ -126,6 +127,7 @@ properties:
 
       - description: Xilinx Kria SOMs (starter)
         items:
+          - const: xlnx,zynqmp-smk-k26-rev2
           - const: xlnx,zynqmp-smk-k26-rev1
           - const: xlnx,zynqmp-smk-k26-revB
           - const: xlnx,zynqmp-smk-k26-revA
