@@ -427,36 +427,21 @@ setcc_trap_handler:
 	jmp	%l2		! advance over trap instruction
 	rett	%l2 + 0x4	! like this...
 
-sun4m_nmi_error:
+nmi_error:
 	/* NMI async memory error handling. */
-	sethi	%hi(0x80000000), %l4
-	sethi	%hi(sun4m_irq_global), %o5
-	ld	[%o5 + %lo(sun4m_irq_global)], %l5
-	st	%l4, [%l5 + 0x0c]	! sun4m_irq_global->mask_set=0x80000000
-	WRITE_PAUSE
-	ld	[%l5 + 0x00], %g0	! sun4m_irq_global->pending
-	WRITE_PAUSE
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-	call	sun4m_nmi
-	 nop
-	st	%l4, [%l5 + 0x08]	! sun4m_irq_global->mask_clear=0x80000000
-	WRITE_PAUSE
-	ld	[%l5 + 0x00], %g0	! sun4m_irq_global->pending
-	WRITE_PAUSE
-	RESTORE_ALL
-
 #ifndef CONFIG_SMP
 	.align	4
 	.globl	linux_trap_ipi15_leon
 linux_trap_ipi15_leon:
 	SAVE_ALL
-
-	ba      sun4m_nmi_error
+	or	%l0, PSR_PIL, %l4
+	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
+	wr	%l4, PSR_ET, %psr
+	WRITE_PAUSE
+	call	leon_nmi
 	 nop
+	RESTORE_ALL
 #endif /* CONFIG_SMP */
 
 	.align	4
