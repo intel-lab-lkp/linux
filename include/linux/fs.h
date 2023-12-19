@@ -1944,6 +1944,7 @@ struct file_operations {
 	int (*uring_cmd)(struct io_uring_cmd *ioucmd, unsigned int issue_flags);
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
+	void (*apply_whint)(struct file *, enum rw_hint hint);
 } __randomize_layout;
 
 /* Wrap a directory iterator that needs exclusive inode access */
