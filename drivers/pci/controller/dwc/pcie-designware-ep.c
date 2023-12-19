@@ -174,7 +174,7 @@ static int dw_pcie_ep_inbound_atu(struct dw_pcie_ep *ep, u8 func_no, int type,
 	u32 free_win;
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 
-	if (!ep->bar_to_atu[bar])
+	if (ep->bar_to_atu[bar] < 0)
 		free_win = find_first_zero_bit(ep->ib_window_map, pci->num_ib_windows);
 	else
 		free_win = ep->bar_to_atu[bar];
@@ -228,14 +228,17 @@ static void dw_pcie_ep_clear_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 	enum pci_barno bar = epf_bar->barno;
-	u32 atu_index = ep->bar_to_atu[bar];
+	s8 atu_index = ep->bar_to_atu[bar];
+
+	if (atu_index < 0)
+		return;
 
 	__dw_pcie_ep_reset_bar(pci, func_no, bar, epf_bar->flags);
 
 	dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, atu_index);
 	clear_bit(atu_index, ep->ib_window_map);
 	ep->epf_bar[bar] = NULL;
-	ep->bar_to_atu[bar] = 0;
+	ep->bar_to_atu[bar] = -1;
 }
 
 static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
@@ -766,6 +769,8 @@ int dw_pcie_ep_init(struct dw_pcie_ep *ep)
 	if (!addr)
 		return -ENOMEM;
 	ep->outbound_addr = addr;
+
+	memset(ep->bar_to_atu, -1, sizeof(ep->bar_to_atu));
 
 	epc = devm_pci_epc_create(dev, &epc_ops);
 	if (IS_ERR(epc)) {
