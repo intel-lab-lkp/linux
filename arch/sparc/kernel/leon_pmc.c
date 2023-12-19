@@ -79,15 +79,13 @@ static void pmc_leon_idle(void)
 /* Install LEON Power Down function */
 static int __init leon_pmc_install(void)
 {
-	if (sparc_cpu_model == sparc_leon) {
-		/* Assign power management IDLE handler */
-		if (pmc_leon_need_fixup())
-			sparc_idle = pmc_leon_idle_fixup;
-		else
-			sparc_idle = pmc_leon_idle;
+	/* Assign power management IDLE handler */
+	if (pmc_leon_need_fixup())
+		sparc_idle = pmc_leon_idle_fixup;
+	else
+		sparc_idle = pmc_leon_idle;
 
-		printk(KERN_INFO "leon: power management initialized\n");
-	}
+	printk(KERN_INFO "leon: power management initialized\n");
 
 	return 0;
 }

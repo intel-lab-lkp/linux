@@ -124,7 +124,6 @@ static inline void srmmu_flush_whole_tlb(void)
 			     "i" (ASI_M_FLUSH_PROBE) : "memory");
 
 }
-
 #endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_PGTSRMMU_H) */

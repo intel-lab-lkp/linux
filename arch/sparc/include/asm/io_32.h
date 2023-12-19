@@ -138,11 +138,11 @@ void pci_iounmap(struct pci_dev *dev, void __iomem *);
 
 static inline int sbus_can_dma_64bit(void)
 {
-	return 0; /* actually, sparc_cpu_model==sun4d */
+	return 0;
 }
 static inline int sbus_can_burst64(void)
 {
-	return 0; /* actually, sparc_cpu_model==sun4d */
+	return 0;
 }
 struct device;
 void sbus_set_sbus64(struct device *, int);
