@@ -459,7 +459,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 {
 	struct kobj_uevent_env *env;
 	const char *action_string = kobject_actions[action];
-	const char *devpath = NULL;
+	const char *devpath;
 	const char *subsystem;
 	struct kobject *top_kobj;
 	struct kset *kset;
