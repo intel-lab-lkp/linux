@@ -6684,7 +6684,6 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 				delayacct_blkio_start();
 			}
 		}
-		switch_count = &prev->nvcsw;
 	}
 
 	next = pick_next_task(rq, prev, &rf);
