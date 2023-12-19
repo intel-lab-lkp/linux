@@ -1854,17 +1854,9 @@ bool intel_phy_is_combo(struct drm_i915_private *dev_priv, enum phy phy)
 		return false;
 }
 
-bool intel_phy_is_tc(struct drm_i915_private *dev_priv, enum phy phy)
+static bool intel_phy_is_legacy_tc(struct drm_i915_private *dev_priv, enum phy phy)
 {
-	/*
-	 * DG2's "TC1", although TC-capable output, doesn't share the same flow
-	 * as other platforms on the display engine side and rather rely on the
-	 * SNPS PHY, that is programmed separately
-	 */
-	if (IS_DG2(dev_priv))
-		return false;
-
-	if (DISPLAY_VER(dev_priv) >= 13)
+	if (DISPLAY_VER(dev_priv) == 13)
 		return phy >= PHY_F && phy <= PHY_I;
 	else if (IS_TIGERLAKE(dev_priv))
 		return phy >= PHY_D && phy <= PHY_I;
@@ -1872,6 +1864,23 @@ bool intel_phy_is_tc(struct drm_i915_private *dev_priv, enum phy phy)
 		return phy >= PHY_C && phy <= PHY_F;
 
 	return false;
+}
+
+static bool intel_phy_is_vbt_tc(struct drm_i915_private *dev_priv, enum phy phy)
+{
+	const struct intel_bios_encoder_data *data =
+		intel_bios_encoder_phy_data_lookup(dev_priv, phy);
+
+	return intel_bios_encoder_supports_typec_usb(data) &&
+	       intel_bios_encoder_supports_tbt(data);
+}
+
+bool intel_phy_is_tc(struct drm_i915_private *dev_priv, enum phy phy)
+{
+	if (!HAS_LEGACY_TC(dev_priv))
+		return intel_phy_is_vbt_tc(dev_priv, phy);
+	else
+		return intel_phy_is_legacy_tc(dev_priv, phy);
 }
 
 bool intel_phy_is_snps(struct drm_i915_private *dev_priv, enum phy phy)

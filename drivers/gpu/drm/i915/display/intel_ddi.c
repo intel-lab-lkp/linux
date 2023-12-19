@@ -5100,7 +5100,7 @@ void intel_ddi_init(struct drm_i915_private *dev_priv,
 	}
 
 	if (intel_phy_is_tc(dev_priv, phy)) {
-		bool is_legacy =
+		bool is_legacy = HAS_LEGACY_TC(dev_priv) &&
 			!intel_bios_encoder_supports_typec_usb(devdata) &&
 			!intel_bios_encoder_supports_tbt(devdata);
 
