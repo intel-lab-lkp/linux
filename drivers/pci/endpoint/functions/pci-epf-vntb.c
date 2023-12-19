@@ -550,6 +550,14 @@ static int epf_ntb_db_bar_init(struct epf_ntb *ntb)
 
 	barno = ntb->epf_ntb_bar[BAR_DB];
 
+	if (epc_features->bar_fixed_size[barno]) {
+		if (size > epc_features->bar_fixed_size[barno]) {
+			dev_err(dev, "Fixed BAR%d is too small for doorbell\n", barno);
+			return -EINVAL;
+		}
+		size = epc_features->bar_fixed_size[barno];
+	}
+
 	mw_addr = pci_epf_alloc_space(ntb->epf, size, barno, align, 0);
 	if (!mw_addr) {
 		dev_err(dev, "Failed to allocate OB address\n");
