@@ -18,7 +18,6 @@
 
 #include <asm/io.h>
 #include <asm/io-unit.h>
-#include <asm/mxcc.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/dma.h>

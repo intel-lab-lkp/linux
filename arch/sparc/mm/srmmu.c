@@ -40,13 +40,7 @@
 #include <asm/io.h>
 
 /* Now the cpu specific definitions. */
-#include <asm/turbosparc.h>
-#include <asm/tsunami.h>
-#include <asm/viking.h>
-#include <asm/swift.h>
 #include <asm/leon.h>
-#include <asm/mxcc.h>
-#include <asm/ross.h>
 
 #include "mm_32.h"
 
@@ -65,12 +59,6 @@ EXPORT_SYMBOL(sparc32_cachetlb_ops);
 
 #ifdef CONFIG_SMP
 const struct sparc32_cachetlb_ops *local_ops;
-
-#define FLUSH_BEGIN(mm)
-#define FLUSH_END
-#else
-#define FLUSH_BEGIN(mm) if ((mm)->context != NO_CONTEXT) {
-#define FLUSH_END	}
 #endif
 
 int flush_page_for_dma_global = 1;
@@ -80,10 +68,7 @@ char *srmmu_name;
 ctxd_t *srmmu_ctx_table_phys;
 static ctxd_t *srmmu_context_table;
 
-int viking_mxcc_present;
 static DEFINE_SPINLOCK(srmmu_context_spinlock);
-
-static int is_hypersparc;
 
 static int srmmu_cache_pagetables;
 
@@ -110,25 +95,6 @@ static inline void srmmu_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
 
 	pte = __pte((SRMMU_ET_PTD | (__nocache_pa(pgdp) >> 4)));
 	set_pte((pte_t *)ctxp, pte);
-}
-
-/*
- * Locations of MSI Registers.
- */
-#define MSI_MBUS_ARBEN	0xe0001008	/* MBus Arbiter Enable register */
-
-/*
- * Useful bits in the MSI Registers.
- */
-#define MSI_ASYNC_MODE  0x80000000	/* Operate the MSI asynchronously */
-
-static void msi_set_sync(void)
-{
-	__asm__ __volatile__ ("lda [%0] %1, %%g3\n\t"
-			      "andn %%g3, %2, %%g3\n\t"
-			      "sta %%g3, [%0] %1\n\t" : :
-			      "r" (MSI_MBUS_ARBEN),
-			      "i" (ASI_M_CTL), "r" (MSI_ASYNC_MODE) : "g3");
 }
 
 void pmd_set(pmd_t *pmdp, pte_t *ptep)
@@ -478,11 +444,7 @@ void switch_mm(struct mm_struct *old_mm, struct mm_struct *mm,
 		srmmu_ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
 	}
 
-	if (sparc_cpu_model == sparc_leon)
-		leon_switch_mm();
-
-	if (is_hypersparc)
-		hyper_flush_whole_icache();
+	leon_switch_mm();
 
 	srmmu_set_context(mm->context);
 }
@@ -556,110 +518,6 @@ void srmmu_unmapiorange(unsigned long virt_addr, unsigned int len)
 	}
 	flush_tlb_all();
 }
-
-/* tsunami.S */
-extern void tsunami_flush_cache_all(void);
-extern void tsunami_flush_cache_mm(struct mm_struct *mm);
-extern void tsunami_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
-extern void tsunami_flush_page_to_ram(unsigned long page);
-extern void tsunami_flush_page_for_dma(unsigned long page);
-extern void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
-extern void tsunami_flush_tlb_all(void);
-extern void tsunami_flush_tlb_mm(struct mm_struct *mm);
-extern void tsunami_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
-extern void tsunami_setup_blockops(void);
-
-/* swift.S */
-extern void swift_flush_cache_all(void);
-extern void swift_flush_cache_mm(struct mm_struct *mm);
-extern void swift_flush_cache_range(struct vm_area_struct *vma,
-				    unsigned long start, unsigned long end);
-extern void swift_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
-extern void swift_flush_page_to_ram(unsigned long page);
-extern void swift_flush_page_for_dma(unsigned long page);
-extern void swift_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
-extern void swift_flush_tlb_all(void);
-extern void swift_flush_tlb_mm(struct mm_struct *mm);
-extern void swift_flush_tlb_range(struct vm_area_struct *vma,
-				  unsigned long start, unsigned long end);
-extern void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
-
-#if 0  /* P3: deadwood to debug precise flushes on Swift. */
-void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	int cctx, ctx1;
-
-	page &= PAGE_MASK;
-	if ((ctx1 = vma->vm_mm->context) != -1) {
-		cctx = srmmu_get_context();
-/* Is context # ever different from current context? P3 */
-		if (cctx != ctx1) {
-			printk("flush ctx %02x curr %02x\n", ctx1, cctx);
-			srmmu_set_context(ctx1);
-			swift_flush_page(page);
-			__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-					"r" (page), "i" (ASI_M_FLUSH_PROBE));
-			srmmu_set_context(cctx);
-		} else {
-			 /* Rm. prot. bits from virt. c. */
-			/* swift_flush_cache_all(); */
-			/* swift_flush_cache_page(vma, page); */
-			swift_flush_page(page);
-
-			__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-				"r" (page), "i" (ASI_M_FLUSH_PROBE));
-			/* same as above: srmmu_flush_tlb_page() */
-		}
-	}
-}
-#endif
-
-/*
- * The following are all MBUS based SRMMU modules, and therefore could
- * be found in a multiprocessor configuration.  On the whole, these
- * chips seems to be much more touchy about DVMA and page tables
- * with respect to cache coherency.
- */
-
-/* viking.S */
-extern void viking_flush_cache_all(void);
-extern void viking_flush_cache_mm(struct mm_struct *mm);
-extern void viking_flush_cache_range(struct vm_area_struct *vma, unsigned long start,
-				     unsigned long end);
-extern void viking_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
-extern void viking_flush_page_to_ram(unsigned long page);
-extern void viking_flush_page_for_dma(unsigned long page);
-extern void viking_flush_sig_insns(struct mm_struct *mm, unsigned long addr);
-extern void viking_flush_page(unsigned long page);
-extern void viking_mxcc_flush_page(unsigned long page);
-extern void viking_flush_tlb_all(void);
-extern void viking_flush_tlb_mm(struct mm_struct *mm);
-extern void viking_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
-				   unsigned long end);
-extern void viking_flush_tlb_page(struct vm_area_struct *vma,
-				  unsigned long page);
-extern void sun4dsmp_flush_tlb_all(void);
-extern void sun4dsmp_flush_tlb_mm(struct mm_struct *mm);
-extern void sun4dsmp_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
-				   unsigned long end);
-extern void sun4dsmp_flush_tlb_page(struct vm_area_struct *vma,
-				  unsigned long page);
-
-/* hypersparc.S */
-extern void hypersparc_flush_cache_all(void);
-extern void hypersparc_flush_cache_mm(struct mm_struct *mm);
-extern void hypersparc_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void hypersparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
-extern void hypersparc_flush_page_to_ram(unsigned long page);
-extern void hypersparc_flush_page_for_dma(unsigned long page);
-extern void hypersparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
-extern void hypersparc_flush_tlb_all(void);
-extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
-extern void hypersparc_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
-extern void hypersparc_setup_blockops(void);
 
 /*
  * NOTE: All of this startup code assumes the low 16mb (approx.) of
@@ -747,18 +605,7 @@ static void __init srmmu_allocate_ptable_skeleton(unsigned long start,
 /* These flush types are not available on all chips... */
 static inline unsigned long srmmu_probe(unsigned long vaddr)
 {
-	unsigned long retval;
-
-	if (sparc_cpu_model != sparc_leon) {
-
-		vaddr &= PAGE_MASK;
-		__asm__ __volatile__("lda [%1] %2, %0\n\t" :
-				     "=r" (retval) :
-				     "r" (vaddr | 0x400), "i" (ASI_M_FLUSH_PROBE));
-	} else {
-		retval = leon_swprobe(vaddr, NULL);
-	}
-	return retval;
+	return leon_swprobe(vaddr, NULL);
 }
 
 /*
@@ -904,20 +751,16 @@ void __init srmmu_paging_init(void)
 	init_mm.context = (unsigned long) NO_CONTEXT;
 	sparc_iomap.start = SUN4M_IOBASE_VADDR;	/* 16MB of IOSPACE on all sun4m's. */
 
-	if (sparc_cpu_model == sun4d)
-		num_contexts = 65536; /* We know it is Viking */
-	else {
-		/* Find the number of contexts on the srmmu. */
-		cpunode = prom_getchild(prom_root_node);
-		num_contexts = 0;
-		while (cpunode != 0) {
-			prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
-			if (!strcmp(node_str, "cpu")) {
-				num_contexts = prom_getintdefault(cpunode, "mmu-nctx", 0x8);
-				break;
-			}
-			cpunode = prom_getsibling(cpunode);
+	/* Find the number of contexts on the srmmu. */
+	cpunode = prom_getchild(prom_root_node);
+	num_contexts = 0;
+	while (cpunode != 0) {
+		prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
+		if (!strcmp(node_str, "cpu")) {
+			num_contexts = prom_getintdefault(cpunode, "mmu-nctx", 0x8);
+			break;
 		}
+		cpunode = prom_getsibling(cpunode);
 	}
 
 	if (!num_contexts) {
@@ -1012,577 +855,6 @@ void destroy_context(struct mm_struct *mm)
 		spin_unlock_irqrestore(&srmmu_context_spinlock, flags);
 		mm->context = NO_CONTEXT;
 	}
-}
-
-/* Init various srmmu chip types. */
-static void __init srmmu_is_bad(void)
-{
-	prom_printf("Could not determine SRMMU chip type.\n");
-	prom_halt();
-}
-
-static void __init init_vac_layout(void)
-{
-	phandle nd;
-	int cache_lines;
-	char node_str[128];
-#ifdef CONFIG_SMP
-	int cpu = 0;
-	unsigned long max_size = 0;
-	unsigned long min_line_size = 0x10000000;
-#endif
-
-	nd = prom_getchild(prom_root_node);
-	while ((nd = prom_getsibling(nd)) != 0) {
-		prom_getstring(nd, "device_type", node_str, sizeof(node_str));
-		if (!strcmp(node_str, "cpu")) {
-			vac_line_size = prom_getint(nd, "cache-line-size");
-			if (vac_line_size == -1) {
-				prom_printf("can't determine cache-line-size, halting.\n");
-				prom_halt();
-			}
-			cache_lines = prom_getint(nd, "cache-nlines");
-			if (cache_lines == -1) {
-				prom_printf("can't determine cache-nlines, halting.\n");
-				prom_halt();
-			}
-
-			vac_cache_size = cache_lines * vac_line_size;
-#ifdef CONFIG_SMP
-			if (vac_cache_size > max_size)
-				max_size = vac_cache_size;
-			if (vac_line_size < min_line_size)
-				min_line_size = vac_line_size;
-			//FIXME: cpus not contiguous!!
-			cpu++;
-			if (cpu >= nr_cpu_ids || !cpu_online(cpu))
-				break;
-#else
-			break;
-#endif
-		}
-	}
-	if (nd == 0) {
-		prom_printf("No CPU nodes found, halting.\n");
-		prom_halt();
-	}
-#ifdef CONFIG_SMP
-	vac_cache_size = max_size;
-	vac_line_size = min_line_size;
-#endif
-	printk("SRMMU: Using VAC size of %d bytes, line size %d bytes.\n",
-	       (int)vac_cache_size, (int)vac_line_size);
-}
-
-static void poke_hypersparc(void)
-{
-	volatile unsigned long clear;
-	unsigned long mreg = srmmu_get_mmureg();
-
-	hyper_flush_unconditional_combined();
-
-	mreg &= ~(HYPERSPARC_CWENABLE);
-	mreg |= (HYPERSPARC_CENABLE | HYPERSPARC_WBENABLE);
-	mreg |= (HYPERSPARC_CMODE);
-
-	srmmu_set_mmureg(mreg);
-
-#if 0 /* XXX I think this is bad news... -DaveM */
-	hyper_clear_all_tags();
-#endif
-
-	put_ross_icr(HYPERSPARC_ICCR_FTD | HYPERSPARC_ICCR_ICE);
-	hyper_flush_whole_icache();
-	clear = srmmu_get_faddr();
-	clear = srmmu_get_fstatus();
-}
-
-static const struct sparc32_cachetlb_ops hypersparc_ops = {
-	.cache_all	= hypersparc_flush_cache_all,
-	.cache_mm	= hypersparc_flush_cache_mm,
-	.cache_page	= hypersparc_flush_cache_page,
-	.cache_range	= hypersparc_flush_cache_range,
-	.tlb_all	= hypersparc_flush_tlb_all,
-	.tlb_mm		= hypersparc_flush_tlb_mm,
-	.tlb_page	= hypersparc_flush_tlb_page,
-	.tlb_range	= hypersparc_flush_tlb_range,
-	.page_to_ram	= hypersparc_flush_page_to_ram,
-	.sig_insns	= hypersparc_flush_sig_insns,
-	.page_for_dma	= hypersparc_flush_page_for_dma,
-};
-
-static void __init init_hypersparc(void)
-{
-	srmmu_name = "ROSS HyperSparc";
-
-	init_vac_layout();
-
-	is_hypersparc = 1;
-	sparc32_cachetlb_ops = &hypersparc_ops;
-
-	poke_srmmu = poke_hypersparc;
-
-	hypersparc_setup_blockops();
-}
-
-static void poke_swift(void)
-{
-	unsigned long mreg;
-
-	/* Clear any crap from the cache or else... */
-	swift_flush_cache_all();
-
-	/* Enable I & D caches */
-	mreg = srmmu_get_mmureg();
-	mreg |= (SWIFT_IE | SWIFT_DE);
-	/*
-	 * The Swift branch folding logic is completely broken.  At
-	 * trap time, if things are just right, if can mistakenly
-	 * think that a trap is coming from kernel mode when in fact
-	 * it is coming from user mode (it mis-executes the branch in
-	 * the trap code).  So you see things like crashme completely
-	 * hosing your machine which is completely unacceptable.  Turn
-	 * this shit off... nice job Fujitsu.
-	 */
-	mreg &= ~(SWIFT_BF);
-	srmmu_set_mmureg(mreg);
-}
-
-static const struct sparc32_cachetlb_ops swift_ops = {
-	.cache_all	= swift_flush_cache_all,
-	.cache_mm	= swift_flush_cache_mm,
-	.cache_page	= swift_flush_cache_page,
-	.cache_range	= swift_flush_cache_range,
-	.tlb_all	= swift_flush_tlb_all,
-	.tlb_mm		= swift_flush_tlb_mm,
-	.tlb_page	= swift_flush_tlb_page,
-	.tlb_range	= swift_flush_tlb_range,
-	.page_to_ram	= swift_flush_page_to_ram,
-	.sig_insns	= swift_flush_sig_insns,
-	.page_for_dma	= swift_flush_page_for_dma,
-};
-
-#define SWIFT_MASKID_ADDR  0x10003018
-static void __init init_swift(void)
-{
-	unsigned long swift_rev;
-
-	__asm__ __volatile__("lda [%1] %2, %0\n\t"
-			     "srl %0, 0x18, %0\n\t" :
-			     "=r" (swift_rev) :
-			     "r" (SWIFT_MASKID_ADDR), "i" (ASI_M_BYPASS));
-	srmmu_name = "Fujitsu Swift";
-
-	sparc32_cachetlb_ops = &swift_ops;
-	flush_page_for_dma_global = 0;
-
-	/*
-	 * Are you now convinced that the Swift is one of the
-	 * biggest VLSI abortions of all time?  Bravo Fujitsu!
-	 * Fujitsu, the !#?!%$'d up processor people.  I bet if
-	 * you examined the microcode of the Swift you'd find
-	 * XXX's all over the place.
-	 */
-	poke_srmmu = poke_swift;
-}
-
-static void turbosparc_flush_cache_all(void)
-{
-	flush_user_windows();
-	turbosparc_idflash_clear();
-}
-
-static void turbosparc_flush_cache_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	flush_user_windows();
-	turbosparc_idflash_clear();
-	FLUSH_END
-}
-
-static void turbosparc_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	flush_user_windows();
-	turbosparc_idflash_clear();
-	FLUSH_END
-}
-
-static void turbosparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	flush_user_windows();
-	if (vma->vm_flags & VM_EXEC)
-		turbosparc_flush_icache();
-	turbosparc_flush_dcache();
-	FLUSH_END
-}
-
-/* TurboSparc is copy-back, if we turn it on, but this does not work. */
-static void turbosparc_flush_page_to_ram(unsigned long page)
-{
-#ifdef TURBOSPARC_WRITEBACK
-	volatile unsigned long clear;
-
-	if (srmmu_probe(page))
-		turbosparc_flush_page_cache(page);
-	clear = srmmu_get_fstatus();
-#endif
-}
-
-static void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
-{
-}
-
-static void turbosparc_flush_page_for_dma(unsigned long page)
-{
-	turbosparc_flush_dcache();
-}
-
-static void turbosparc_flush_tlb_all(void)
-{
-	srmmu_flush_whole_tlb();
-}
-
-static void turbosparc_flush_tlb_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	srmmu_flush_whole_tlb();
-	FLUSH_END
-}
-
-static void turbosparc_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	srmmu_flush_whole_tlb();
-	FLUSH_END
-}
-
-static void turbosparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	srmmu_flush_whole_tlb();
-	FLUSH_END
-}
-
-
-static void poke_turbosparc(void)
-{
-	unsigned long mreg = srmmu_get_mmureg();
-	unsigned long ccreg;
-
-	/* Clear any crap from the cache or else... */
-	turbosparc_flush_cache_all();
-	/* Temporarily disable I & D caches */
-	mreg &= ~(TURBOSPARC_ICENABLE | TURBOSPARC_DCENABLE);
-	mreg &= ~(TURBOSPARC_PCENABLE);		/* Don't check parity */
-	srmmu_set_mmureg(mreg);
-
-	ccreg = turbosparc_get_ccreg();
-
-#ifdef TURBOSPARC_WRITEBACK
-	ccreg |= (TURBOSPARC_SNENABLE);		/* Do DVMA snooping in Dcache */
-	ccreg &= ~(TURBOSPARC_uS2 | TURBOSPARC_WTENABLE);
-			/* Write-back D-cache, emulate VLSI
-			 * abortion number three, not number one */
-#else
-	/* For now let's play safe, optimize later */
-	ccreg |= (TURBOSPARC_SNENABLE | TURBOSPARC_WTENABLE);
-			/* Do DVMA snooping in Dcache, Write-thru D-cache */
-	ccreg &= ~(TURBOSPARC_uS2);
-			/* Emulate VLSI abortion number three, not number one */
-#endif
-
-	switch (ccreg & 7) {
-	case 0: /* No SE cache */
-	case 7: /* Test mode */
-		break;
-	default:
-		ccreg |= (TURBOSPARC_SCENABLE);
-	}
-	turbosparc_set_ccreg(ccreg);
-
-	mreg |= (TURBOSPARC_ICENABLE | TURBOSPARC_DCENABLE); /* I & D caches on */
-	mreg |= (TURBOSPARC_ICSNOOP);		/* Icache snooping on */
-	srmmu_set_mmureg(mreg);
-}
-
-static const struct sparc32_cachetlb_ops turbosparc_ops = {
-	.cache_all	= turbosparc_flush_cache_all,
-	.cache_mm	= turbosparc_flush_cache_mm,
-	.cache_page	= turbosparc_flush_cache_page,
-	.cache_range	= turbosparc_flush_cache_range,
-	.tlb_all	= turbosparc_flush_tlb_all,
-	.tlb_mm		= turbosparc_flush_tlb_mm,
-	.tlb_page	= turbosparc_flush_tlb_page,
-	.tlb_range	= turbosparc_flush_tlb_range,
-	.page_to_ram	= turbosparc_flush_page_to_ram,
-	.sig_insns	= turbosparc_flush_sig_insns,
-	.page_for_dma	= turbosparc_flush_page_for_dma,
-};
-
-static void __init init_turbosparc(void)
-{
-	srmmu_name = "Fujitsu TurboSparc";
-	sparc32_cachetlb_ops = &turbosparc_ops;
-	poke_srmmu = poke_turbosparc;
-}
-
-static void poke_tsunami(void)
-{
-	unsigned long mreg = srmmu_get_mmureg();
-
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-	mreg &= ~TSUNAMI_ITD;
-	mreg |= (TSUNAMI_IENAB | TSUNAMI_DENAB);
-	srmmu_set_mmureg(mreg);
-}
-
-static const struct sparc32_cachetlb_ops tsunami_ops = {
-	.cache_all	= tsunami_flush_cache_all,
-	.cache_mm	= tsunami_flush_cache_mm,
-	.cache_page	= tsunami_flush_cache_page,
-	.cache_range	= tsunami_flush_cache_range,
-	.tlb_all	= tsunami_flush_tlb_all,
-	.tlb_mm		= tsunami_flush_tlb_mm,
-	.tlb_page	= tsunami_flush_tlb_page,
-	.tlb_range	= tsunami_flush_tlb_range,
-	.page_to_ram	= tsunami_flush_page_to_ram,
-	.sig_insns	= tsunami_flush_sig_insns,
-	.page_for_dma	= tsunami_flush_page_for_dma,
-};
-
-static void __init init_tsunami(void)
-{
-	/*
-	 * Tsunami's pretty sane, Sun and TI actually got it
-	 * somewhat right this time.  Fujitsu should have
-	 * taken some lessons from them.
-	 */
-
-	srmmu_name = "TI Tsunami";
-	sparc32_cachetlb_ops = &tsunami_ops;
-	poke_srmmu = poke_tsunami;
-
-	tsunami_setup_blockops();
-}
-
-static void poke_viking(void)
-{
-	unsigned long mreg = srmmu_get_mmureg();
-	static int smp_catch;
-
-	if (viking_mxcc_present) {
-		unsigned long mxcc_control = mxcc_get_creg();
-
-		mxcc_control |= (MXCC_CTL_ECE | MXCC_CTL_PRE | MXCC_CTL_MCE);
-		mxcc_control &= ~(MXCC_CTL_RRC);
-		mxcc_set_creg(mxcc_control);
-
-		/*
-		 * We don't need memory parity checks.
-		 * XXX This is a mess, have to dig out later. ecd.
-		viking_mxcc_turn_off_parity(&mreg, &mxcc_control);
-		 */
-
-		/* We do cache ptables on MXCC. */
-		mreg |= VIKING_TCENABLE;
-	} else {
-		unsigned long bpreg;
-
-		mreg &= ~(VIKING_TCENABLE);
-		if (smp_catch++) {
-			/* Must disable mixed-cmd mode here for other cpu's. */
-			bpreg = viking_get_bpreg();
-			bpreg &= ~(VIKING_ACTION_MIX);
-			viking_set_bpreg(bpreg);
-
-			/* Just in case PROM does something funny. */
-			msi_set_sync();
-		}
-	}
-
-	mreg |= VIKING_SPENABLE;
-	mreg |= (VIKING_ICENABLE | VIKING_DCENABLE);
-	mreg |= VIKING_SBENABLE;
-	mreg &= ~(VIKING_ACENABLE);
-	srmmu_set_mmureg(mreg);
-}
-
-static struct sparc32_cachetlb_ops viking_ops __ro_after_init = {
-	.cache_all	= viking_flush_cache_all,
-	.cache_mm	= viking_flush_cache_mm,
-	.cache_page	= viking_flush_cache_page,
-	.cache_range	= viking_flush_cache_range,
-	.tlb_all	= viking_flush_tlb_all,
-	.tlb_mm		= viking_flush_tlb_mm,
-	.tlb_page	= viking_flush_tlb_page,
-	.tlb_range	= viking_flush_tlb_range,
-	.page_to_ram	= viking_flush_page_to_ram,
-	.sig_insns	= viking_flush_sig_insns,
-	.page_for_dma	= viking_flush_page_for_dma,
-};
-
-#ifdef CONFIG_SMP
-/* On sun4d the cpu broadcasts local TLB flushes, so we can just
- * perform the local TLB flush and all the other cpus will see it.
- * But, unfortunately, there is a bug in the sun4d XBUS backplane
- * that requires that we add some synchronization to these flushes.
- *
- * The bug is that the fifo which keeps track of all the pending TLB
- * broadcasts in the system is an entry or two too small, so if we
- * have too many going at once we'll overflow that fifo and lose a TLB
- * flush resulting in corruption.
- *
- * Our workaround is to take a global spinlock around the TLB flushes,
- * which guarentees we won't ever have too many pending.  It's a big
- * hammer, but a semaphore like system to make sure we only have N TLB
- * flushes going at once will require SMP locking anyways so there's
- * no real value in trying any harder than this.
- */
-static struct sparc32_cachetlb_ops viking_sun4d_smp_ops __ro_after_init = {
-	.cache_all	= viking_flush_cache_all,
-	.cache_mm	= viking_flush_cache_mm,
-	.cache_page	= viking_flush_cache_page,
-	.cache_range	= viking_flush_cache_range,
-	.tlb_all	= sun4dsmp_flush_tlb_all,
-	.tlb_mm		= sun4dsmp_flush_tlb_mm,
-	.tlb_page	= sun4dsmp_flush_tlb_page,
-	.tlb_range	= sun4dsmp_flush_tlb_range,
-	.page_to_ram	= viking_flush_page_to_ram,
-	.sig_insns	= viking_flush_sig_insns,
-	.page_for_dma	= viking_flush_page_for_dma,
-};
-#endif
-
-static void __init init_viking(void)
-{
-	unsigned long mreg = srmmu_get_mmureg();
-
-	/* Ahhh, the viking.  SRMMU VLSI abortion number two... */
-	if (mreg & VIKING_MMODE) {
-		srmmu_name = "TI Viking";
-		viking_mxcc_present = 0;
-		msi_set_sync();
-
-		/*
-		 * We need this to make sure old viking takes no hits
-		 * on it's cache for dma snoops to workaround the
-		 * "load from non-cacheable memory" interrupt bug.
-		 * This is only necessary because of the new way in
-		 * which we use the IOMMU.
-		 */
-		viking_ops.page_for_dma = viking_flush_page;
-#ifdef CONFIG_SMP
-		viking_sun4d_smp_ops.page_for_dma = viking_flush_page;
-#endif
-		flush_page_for_dma_global = 0;
-	} else {
-		srmmu_name = "TI Viking/MXCC";
-		viking_mxcc_present = 1;
-		srmmu_cache_pagetables = 1;
-	}
-
-	sparc32_cachetlb_ops = (const struct sparc32_cachetlb_ops *)
-		&viking_ops;
-#ifdef CONFIG_SMP
-	if (sparc_cpu_model == sun4d)
-		sparc32_cachetlb_ops = (const struct sparc32_cachetlb_ops *)
-			&viking_sun4d_smp_ops;
-#endif
-
-	poke_srmmu = poke_viking;
-}
-
-/* Probe for the srmmu chip version. */
-static void __init get_srmmu_type(void)
-{
-	unsigned long mreg, psr;
-	unsigned long mod_typ, mod_rev, psr_typ, psr_vers;
-
-	mreg = srmmu_get_mmureg(); psr = get_psr();
-	mod_typ = (mreg & 0xf0000000) >> 28;
-	mod_rev = (mreg & 0x0f000000) >> 24;
-	psr_typ = (psr >> 28) & 0xf;
-	psr_vers = (psr >> 24) & 0xf;
-
-	/* First, check for sparc-leon. */
-	if (sparc_cpu_model == sparc_leon) {
-		init_leon();
-		return;
-	}
-
-	/* Second, check for HyperSparc or Cypress. */
-	if (mod_typ == 1) {
-		switch (mod_rev) {
-		case 7:
-			/* UP or MP Hypersparc */
-			init_hypersparc();
-			break;
-		case 0:
-		case 2:
-		case 10:
-		case 11:
-		case 12:
-		case 13:
-		case 14:
-		case 15:
-		default:
-			prom_printf("Sparc-Linux Cypress support does not longer exit.\n");
-			prom_halt();
-			break;
-		}
-		return;
-	}
-
-	/* Now Fujitsu TurboSparc. It might happen that it is
-	 * in Swift emulation mode, so we will check later...
-	 */
-	if (psr_typ == 0 && psr_vers == 5) {
-		init_turbosparc();
-		return;
-	}
-
-	/* Next check for Fujitsu Swift. */
-	if (psr_typ == 0 && psr_vers == 4) {
-		phandle cpunode;
-		char node_str[128];
-
-		/* Look if it is not a TurboSparc emulating Swift... */
-		cpunode = prom_getchild(prom_root_node);
-		while ((cpunode = prom_getsibling(cpunode)) != 0) {
-			prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
-			if (!strcmp(node_str, "cpu")) {
-				if (!prom_getintdefault(cpunode, "psr-implementation", 1) &&
-				    prom_getintdefault(cpunode, "psr-version", 1) == 5) {
-					init_turbosparc();
-					return;
-				}
-				break;
-			}
-		}
-
-		init_swift();
-		return;
-	}
-
-	/* Now the Viking family of srmmu. */
-	if (psr_typ == 4 &&
-	   ((psr_vers == 0) ||
-	    ((psr_vers == 1) && (mod_typ == 0) && (mod_rev == 0)))) {
-		init_viking();
-		return;
-	}
-
-	/* Finally the Tsunami. */
-	if (psr_typ == 4 && psr_vers == 1 && (mod_typ || mod_rev)) {
-		init_tsunami();
-		return;
-	}
-
-	/* Oh well */
-	srmmu_is_bad();
 }
 
 #ifdef CONFIG_SMP
@@ -1734,34 +1006,20 @@ static struct sparc32_cachetlb_ops smp_cachetlb_ops __ro_after_init = {
 };
 #endif
 
-/* Load up routines and constants for sun4m and sun4d mmu */
+/* Load up routines and constants for mmu */
 void __init load_mmu(void)
 {
 	/* Functions */
-	get_srmmu_type();
+	init_leon();
 
 #ifdef CONFIG_SMP
 	/* El switcheroo... */
 	local_ops = sparc32_cachetlb_ops;
 
-	if (sparc_cpu_model == sun4d || sparc_cpu_model == sparc_leon) {
-		smp_cachetlb_ops.tlb_all = local_ops->tlb_all;
-		smp_cachetlb_ops.tlb_mm = local_ops->tlb_mm;
-		smp_cachetlb_ops.tlb_range = local_ops->tlb_range;
-		smp_cachetlb_ops.tlb_page = local_ops->tlb_page;
-	}
-
-	if (poke_srmmu == poke_viking) {
-		/* Avoid unnecessary cross calls. */
-		smp_cachetlb_ops.cache_all = local_ops->cache_all;
-		smp_cachetlb_ops.cache_mm = local_ops->cache_mm;
-		smp_cachetlb_ops.cache_range = local_ops->cache_range;
-		smp_cachetlb_ops.cache_page = local_ops->cache_page;
-
-		smp_cachetlb_ops.page_to_ram = local_ops->page_to_ram;
-		smp_cachetlb_ops.sig_insns = local_ops->sig_insns;
-		smp_cachetlb_ops.page_for_dma = local_ops->page_for_dma;
-	}
+	smp_cachetlb_ops.tlb_all = local_ops->tlb_all;
+	smp_cachetlb_ops.tlb_mm = local_ops->tlb_mm;
+	smp_cachetlb_ops.tlb_range = local_ops->tlb_range;
+	smp_cachetlb_ops.tlb_page = local_ops->tlb_page;
 
 	/* It really is const after this point. */
 	sparc32_cachetlb_ops = (const struct sparc32_cachetlb_ops *)

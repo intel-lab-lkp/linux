@@ -10,7 +10,6 @@ obj-y                   += fault_$(BITS).o
 obj-y                   += init_$(BITS).o
 obj-$(CONFIG_SPARC32)   += srmmu.o iommu.o io-unit.o
 obj-$(CONFIG_SPARC32)   += srmmu_access.o
-obj-$(CONFIG_SPARC32)   += hypersparc.o viking.o tsunami.o swift.o
 obj-$(CONFIG_SPARC32)   += leon_mm.o
 
 # Only used by sparc64
