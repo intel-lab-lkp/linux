@@ -195,7 +195,7 @@ hrtimer_check_target(struct hrtimer *timer, struct hrtimer_clock_base *new_base)
 {
 	ktime_t expires;
 
-	expires = ktime_sub(hrtimer_get_expires(timer), new_base->offset);
+	expires = ktime_sub_safe(hrtimer_get_expires(timer), new_base->offset);
 	return expires < new_base->cpu_base->expires_next;
 }
 
@@ -341,6 +341,22 @@ ktime_t ktime_add_safe(const ktime_t lhs, const ktime_t rhs)
 }
 
 EXPORT_SYMBOL_GPL(ktime_add_safe);
+
+/*
+ * Sub two ktime values and do a safety check for overflow:
+ */
+ktime_t ktime_sub_safe(const ktime_t lhs, const ktime_t rhs)
+{
+	ktime_t res = ktime_sub_unsafe(lhs, rhs);
+
+	if (lhs > 0 && rhs < 0 && res < 0)
+		res = ktime_set(KTIME_SEC_MAX, 0);
+	else if (lhs < 0 && rhs > 0 && res > 0)
+		res = ktime_set(-KTIME_SEC_MAX, 0);
+
+	return res;
+}
+EXPORT_SYMBOL_GPL(ktime_sub_safe);
 
 #ifdef CONFIG_DEBUG_OBJECTS_TIMERS
 
@@ -523,7 +539,7 @@ static ktime_t __hrtimer_next_event_base(struct hrtimer_cpu_base *cpu_base,
 
 			timer = container_of(next, struct hrtimer, node);
 		}
-		expires = ktime_sub(hrtimer_get_expires(timer), base->offset);
+		expires = ktime_sub_safe(hrtimer_get_expires(timer), base->offset);
 		if (expires < expires_next) {
 			expires_next = expires;
 
@@ -811,7 +827,7 @@ static void hrtimer_reprogram(struct hrtimer *timer, bool reprogram)
 {
 	struct hrtimer_cpu_base *cpu_base = this_cpu_ptr(&hrtimer_bases);
 	struct hrtimer_clock_base *base = timer->base;
-	ktime_t expires = ktime_sub(hrtimer_get_expires(timer), base->offset);
+	ktime_t expires = ktime_sub_safe(hrtimer_get_expires(timer), base->offset);
 
 	WARN_ON_ONCE(hrtimer_get_expires_tv64(timer) < 0);
 
