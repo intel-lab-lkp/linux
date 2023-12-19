@@ -1368,12 +1368,16 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 unregister:
 	device_del(&tz->device);
 release_device:
+	/* Free tz->tzp before tz goes away. */
+	kfree(tz->tzp);
 	put_device(&tz->device);
 	tz = NULL;
 remove_id:
 	ida_free(&thermal_tz_ida, id);
 free_tzp:
-	kfree(tz->tzp);
+	/* If we arrived here before device_register() was called. */
+	if (tz)
+		kfree(tz->tzp);
 free_tz:
 	kfree(tz);
 	return ERR_PTR(result);
