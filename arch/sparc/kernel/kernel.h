@@ -138,10 +138,6 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn);
 /* windows.c */
 void try_to_clear_window_buffer(struct pt_regs *regs, int who);
 
-/* pcic.c */
-extern void __iomem *pcic_regs;
-void pcic_nmi(unsigned int pend, struct pt_regs *regs);
-
 /* time_32.c */
 void __init time_init(void);
 
