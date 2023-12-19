@@ -21,14 +21,6 @@ config OBP_FLASH
 	  The OpenBoot PROM on Ultra systems is flashable. If you want to be
 	  able to upgrade the OBP firmware, say Y here.
 
-config TADPOLE_TS102_UCTRL
-	tristate "Tadpole TS102 Microcontroller support"
-	help
-	  Say Y here to directly support the TS102 Microcontroller interface
-	  on the Tadpole Sparcbook 3.  This device handles power-management
-	  events, and can also notice the attachment/detachment of external
-	  monitors and mice.
-
 config BBC_I2C
 	tristate "UltraSPARC-III bootbus i2c controller driver"
 	depends on PCI && SPARC64
