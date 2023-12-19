@@ -196,5 +196,9 @@ struct vhost_vdpa_iova_range {
  * and is in state DRIVER_OK.
  */
 #define VHOST_BACKEND_F_CHANGEABLE_VQ_ADDR_IN_SUSPEND  0x9
+/* Device supports changing virtqueue state when device is suspended
+ * and is in state DRIVER_OK.
+ */
+#define VHOST_BACKEND_F_CHANGEABLE_VQ_STATE_IN_SUSPEND  0x10
 
 #endif
