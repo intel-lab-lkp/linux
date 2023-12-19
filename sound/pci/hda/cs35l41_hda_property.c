@@ -6,6 +6,7 @@
 //
 // Author: Stefan Binding <sbinding@opensource.cirrus.com>
 
+#include <linux/acpi.h>
 #include <linux/gpio/consumer.h>
 #include <linux/string.h>
 #include "cs35l41_hda_property.h"
@@ -81,6 +82,42 @@ static int hp_vision_acpi_fix(struct cs35l41_hda *cs35l41, struct device *physde
 	return 0;
 }
 
+/*
+ * HP 2-channel I2C configuration with internal boost (4.1A inductor current) with no _DSD,
+ * reset GPIO can still be extracted from ACPI by index. Covers HP configurations 251, 252,
+ * 253, 254, 351, 352 and 353 in the proprietary driver (csaudioext).
+ */
+static int hp_i2c_2ch_vbst_ipk41(struct cs35l41_hda *cs35l41, struct device *physdev, int id,
+			      const char *hid)
+{
+	// In case a valid _DSD exists, use that instead of the override. This stops applying
+	// the override in case HP ever fixes their firmware.
+	if (device_property_count_u32(physdev, "cirrus,dev-index") > 0)
+		return -ENOENT;
+
+	struct cs35l41_hw_cfg *hw_cfg = &cs35l41->hw_cfg;
+
+	cs35l41->index = id == 0x40 ? 0 : 1;
+	cs35l41->channel_index = 0;
+	// Get reset GPIO (shared for both instances) from ACPI GpioIo at index 0.
+	cs35l41->reset_gpio = gpiod_get_index(physdev, NULL, 0, GPIOD_OUT_HIGH);
+	// Speaker ID GPIO is ACPI GpioIo index 1.
+	cs35l41->speaker_id = cs35l41_get_speaker_id(physdev, 0, 0, 1);
+
+	hw_cfg->spk_pos = cs35l41->index ? 1 : 0; // left:right
+	hw_cfg->gpio1.func = CS35L41_NOT_USED;
+	hw_cfg->gpio1.valid = true;
+	hw_cfg->gpio2.func = CS35L41_INTERRUPT;
+	hw_cfg->gpio2.valid = true;
+	hw_cfg->bst_type = CS35L41_INT_BOOST;
+	hw_cfg->bst_ind = 1000;
+	hw_cfg->bst_ipk = 4100;
+	hw_cfg->bst_cap = 10; // Exact value unknown, maps into correct range
+	hw_cfg->valid = true;
+
+	return 0;
+}
+
 struct cs35l41_prop_model {
 	const char *hid;
 	const char *ssid;
@@ -92,6 +129,28 @@ static const struct cs35l41_prop_model cs35l41_prop_model_table[] = {
 	{ "CLSA0100", NULL, lenovo_legion_no_acpi },
 	{ "CLSA0101", NULL, lenovo_legion_no_acpi },
 	{ "CSC3551", "103C89C6", hp_vision_acpi_fix },
+	{ "CSC3551", "103C8A28", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A29", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A2A", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A2B", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A2C", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A2D", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A2E", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A30", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8A31", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BB3", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BB4", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BDF", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE0", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE1", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE2", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE9", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BDD", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BDE", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE3", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE5", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8BE6", hp_i2c_2ch_vbst_ipk41 },
+	{ "CSC3551", "103C8B3A", hp_i2c_2ch_vbst_ipk41 },
 	{}
 };
 
