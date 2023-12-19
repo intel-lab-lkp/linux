@@ -22,6 +22,53 @@
 #define GPIOCHIP_NAME	"gpiochip"
 
 /**
+ * struct gpio_desc - Opaque descriptor for a GPIO
+ *
+ * @gdev:		Pointer to the parent GPIO device
+ * @flags:		Binary descriptor flags
+ * @label:		Name of the consumer
+ * @name:		Line name
+ * @hog:		Pointer to the device node that hogs this line (if any)
+ *
+ * These are obtained using gpiod_get() and are preferable to the old
+ * integer-based handles.
+ *
+ * Contrary to integers, a pointer to a &struct gpio_desc is guaranteed to be
+ * valid until the GPIO is released.
+ */
+struct gpio_desc {
+	struct gpio_device	*gdev;
+	unsigned long		flags;
+/* flag symbols are bit numbers */
+#define FLAG_REQUESTED	0
+#define FLAG_IS_OUT	1
+#define FLAG_EXPORT	2	/* protected by sysfs_lock */
+#define FLAG_SYSFS	3	/* exported via /sys/class/gpio/control */
+#define FLAG_ACTIVE_LOW	6	/* value has active low */
+#define FLAG_OPEN_DRAIN	7	/* Gpio is open drain type */
+#define FLAG_OPEN_SOURCE 8	/* Gpio is open source type */
+#define FLAG_USED_AS_IRQ 9	/* GPIO is connected to an IRQ */
+#define FLAG_IRQ_IS_ENABLED 10	/* GPIO is connected to an enabled IRQ */
+#define FLAG_IS_HOGGED	11	/* GPIO is hogged */
+#define FLAG_TRANSITORY 12	/* GPIO may lose value in sleep or reset */
+#define FLAG_PULL_UP    13	/* GPIO has pull up enabled */
+#define FLAG_PULL_DOWN  14	/* GPIO has pull down enabled */
+#define FLAG_BIAS_DISABLE    15	/* GPIO has pull disabled */
+#define FLAG_EDGE_RISING     16	/* GPIO CDEV detects rising edge events */
+#define FLAG_EDGE_FALLING    17	/* GPIO CDEV detects falling edge events */
+#define FLAG_EVENT_CLOCK_REALTIME	18 /* GPIO CDEV reports REALTIME timestamps in events */
+#define FLAG_EVENT_CLOCK_HTE		19 /* GPIO CDEV reports hardware timestamps in events */
+
+	/* Connection label */
+	const char		*label;
+	/* Name of the GPIO */
+	const char		*name;
+#ifdef CONFIG_OF_DYNAMIC
+	struct device_node	*hog;
+#endif
+};
+
+/**
  * struct gpio_device - internal state container for GPIO devices
  * @dev: the GPIO device struct
  * @chrdev: character device for the GPIO device
@@ -31,7 +78,6 @@
  * @owner: helps prevent removal of modules exporting active GPIOs
  * @chip: pointer to the corresponding gpiochip, holding static
  * data for this device
- * @descs: array of ngpio descriptors.
  * @ngpio: the number of GPIO lines on this GPIO device, equal to the size
  * of the @descs array.
  * @base: GPIO base in the DEPRECATED global Linux GPIO numberspace, assigned
@@ -48,6 +94,7 @@
  *       user-space operations when the device gets unregistered during
  *       a hot-unplug event
  * @pin_ranges: range of pins served by the GPIO driver
+ * @descs: array of ngpio descriptors.
  *
  * This state container holds most of the runtime variable data
  * for a GPIO device and can hold references and live on after the
@@ -61,7 +108,6 @@ struct gpio_device {
 	struct device		*mockdev;
 	struct module		*owner;
 	struct gpio_chip	*chip;
-	struct gpio_desc	*descs;
 	int			base;
 	u16			ngpio;
 	const char		*label;
@@ -80,6 +126,7 @@ struct gpio_device {
 	 */
 	struct list_head pin_ranges;
 #endif
+	struct gpio_desc	descs[] __counted_by(ngpio);
 };
 
 static inline struct gpio_device *to_gpio_device(struct device *dev)
@@ -140,53 +187,6 @@ extern struct list_head gpio_devices;
 extern struct mutex gpio_devices_lock;
 
 void gpiod_line_state_notify(struct gpio_desc *desc, unsigned long action);
-
-/**
- * struct gpio_desc - Opaque descriptor for a GPIO
- *
- * @gdev:		Pointer to the parent GPIO device
- * @flags:		Binary descriptor flags
- * @label:		Name of the consumer
- * @name:		Line name
- * @hog:		Pointer to the device node that hogs this line (if any)
- *
- * These are obtained using gpiod_get() and are preferable to the old
- * integer-based handles.
- *
- * Contrary to integers, a pointer to a &struct gpio_desc is guaranteed to be
- * valid until the GPIO is released.
- */
-struct gpio_desc {
-	struct gpio_device	*gdev;
-	unsigned long		flags;
-/* flag symbols are bit numbers */
-#define FLAG_REQUESTED	0
-#define FLAG_IS_OUT	1
-#define FLAG_EXPORT	2	/* protected by sysfs_lock */
-#define FLAG_SYSFS	3	/* exported via /sys/class/gpio/control */
-#define FLAG_ACTIVE_LOW	6	/* value has active low */
-#define FLAG_OPEN_DRAIN	7	/* Gpio is open drain type */
-#define FLAG_OPEN_SOURCE 8	/* Gpio is open source type */
-#define FLAG_USED_AS_IRQ 9	/* GPIO is connected to an IRQ */
-#define FLAG_IRQ_IS_ENABLED 10	/* GPIO is connected to an enabled IRQ */
-#define FLAG_IS_HOGGED	11	/* GPIO is hogged */
-#define FLAG_TRANSITORY 12	/* GPIO may lose value in sleep or reset */
-#define FLAG_PULL_UP    13	/* GPIO has pull up enabled */
-#define FLAG_PULL_DOWN  14	/* GPIO has pull down enabled */
-#define FLAG_BIAS_DISABLE    15	/* GPIO has pull disabled */
-#define FLAG_EDGE_RISING     16	/* GPIO CDEV detects rising edge events */
-#define FLAG_EDGE_FALLING    17	/* GPIO CDEV detects falling edge events */
-#define FLAG_EVENT_CLOCK_REALTIME	18 /* GPIO CDEV reports REALTIME timestamps in events */
-#define FLAG_EVENT_CLOCK_HTE		19 /* GPIO CDEV reports hardware timestamps in events */
-
-	/* Connection label */
-	const char		*label;
-	/* Name of the GPIO */
-	const char		*name;
-#ifdef CONFIG_OF_DYNAMIC
-	struct device_node	*hog;
-#endif
-};
 
 #define gpiod_not_found(desc)		(IS_ERR(desc) && PTR_ERR(desc) == -ENOENT)
 

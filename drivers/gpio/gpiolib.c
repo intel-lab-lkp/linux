@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -669,7 +670,6 @@ static void gpiodev_release(struct device *dev)
 
 	ida_free(&gpio_ida, gdev->id);
 	kfree_const(gdev->label);
-	kfree(gdev->descs);
 	kfree(gdev);
 }
 
@@ -831,7 +831,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	 * First: allocate and populate the internal stat container, and
 	 * set up the struct device.
 	 */
-	gdev = kzalloc(sizeof(*gdev), GFP_KERNEL);
+	gdev = kzalloc(struct_size(gdev, descs, gc->ngpio), GFP_KERNEL);
 	if (!gdev)
 		return -ENOMEM;
 	gdev->dev.bus = &gpio_bus_type;
@@ -873,16 +873,10 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	if (ret)
 		goto err_free_dev_name;
 
-	gdev->descs = kcalloc(gc->ngpio, sizeof(*gdev->descs), GFP_KERNEL);
-	if (!gdev->descs) {
-		ret = -ENOMEM;
-		goto err_free_dev_name;
-	}
-
 	gdev->label = kstrdup_const(gc->label ?: "unknown", GFP_KERNEL);
 	if (!gdev->label) {
 		ret = -ENOMEM;
-		goto err_free_descs;
+		goto err_free_dev_name;
 	}
 
 	gdev->ngpio = gc->ngpio;
@@ -1021,8 +1015,6 @@ err_remove_from_list:
 		list_del(&gdev->list);
 err_free_label:
 	kfree_const(gdev->label);
-err_free_descs:
-	kfree(gdev->descs);
 err_free_dev_name:
 	kfree(dev_name(&gdev->dev));
 err_free_ida:
