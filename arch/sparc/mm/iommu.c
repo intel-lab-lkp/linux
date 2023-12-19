@@ -19,7 +19,6 @@
 
 #include <asm/io.h>
 #include <asm/mxcc.h>
-#include <asm/mbus.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/bitext.h>
@@ -117,13 +116,7 @@ static void __init sbus_iommu_init(struct platform_device *op)
 		prom_halt();
 	}
 	bit_map_init(&iommu->usemap, bitmap, IOMMU_NPTES);
-	/* To be coherent on HyperSparc, the page color of DVMA
-	 * and physical addresses must match.
-	 */
-	if (srmmu_modtype == HyperSparc)
-		iommu->usemap.num_colors = vac_cache_size >> PAGE_SHIFT;
-	else
-		iommu->usemap.num_colors = 1;
+	iommu->usemap.num_colors = 1;
 
 	printk(KERN_INFO "IOMMU: impl %d vers %d table 0x%p[%d B] map [%d b]\n",
 	       impl, vers, iommu->page_table,
@@ -445,11 +438,6 @@ static const struct dma_map_ops sbus_iommu_dma_pflush_ops = {
 
 void __init ld_mmu_iommu(void)
 {
-	if (viking_mxcc_present || srmmu_modtype == HyperSparc) {
-		dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
-		ioperm_noc = IOPTE_CACHE | IOPTE_WRITE | IOPTE_VALID;
-	} else {
-		dvma_prot = __pgprot(SRMMU_ET_PTE | SRMMU_PRIV);
-		ioperm_noc = IOPTE_WRITE | IOPTE_VALID;
-	}
+	dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
+	ioperm_noc = IOPTE_CACHE | IOPTE_WRITE | IOPTE_VALID;
 }

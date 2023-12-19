@@ -34,7 +34,6 @@
 #include <asm/cache.h>
 #include <asm/traps.h>
 #include <asm/oplib.h>
-#include <asm/mbus.h>
 #include <asm/page.h>
 #include <asm/asi.h>
 #include <asm/smp.h>
@@ -51,8 +50,6 @@
 
 #include "mm_32.h"
 
-enum mbus_module srmmu_modtype;
-static unsigned int hwbug_bitmask;
 int vac_cache_size;
 EXPORT_SYMBOL(vac_cache_size);
 int vac_line_size;
@@ -1117,7 +1114,6 @@ static const struct sparc32_cachetlb_ops hypersparc_ops = {
 static void __init init_hypersparc(void)
 {
 	srmmu_name = "ROSS HyperSparc";
-	srmmu_modtype = HyperSparc;
 
 	init_vac_layout();
 
@@ -1176,45 +1172,6 @@ static void __init init_swift(void)
 			     "=r" (swift_rev) :
 			     "r" (SWIFT_MASKID_ADDR), "i" (ASI_M_BYPASS));
 	srmmu_name = "Fujitsu Swift";
-	switch (swift_rev) {
-	case 0x11:
-	case 0x20:
-	case 0x23:
-	case 0x30:
-		srmmu_modtype = Swift_lots_o_bugs;
-		hwbug_bitmask |= (HWBUG_KERN_ACCBROKEN | HWBUG_KERN_CBITBROKEN);
-		/*
-		 * Gee george, I wonder why Sun is so hush hush about
-		 * this hardware bug... really braindamage stuff going
-		 * on here.  However I think we can find a way to avoid
-		 * all of the workaround overhead under Linux.  Basically,
-		 * any page fault can cause kernel pages to become user
-		 * accessible (the mmu gets confused and clears some of
-		 * the ACC bits in kernel ptes).  Aha, sounds pretty
-		 * horrible eh?  But wait, after extensive testing it appears
-		 * that if you use pgd_t level large kernel pte's (like the
-		 * 4MB pages on the Pentium) the bug does not get tripped
-		 * at all.  This avoids almost all of the major overhead.
-		 * Welcome to a world where your vendor tells you to,
-		 * "apply this kernel patch" instead of "sorry for the
-		 * broken hardware, send it back and we'll give you
-		 * properly functioning parts"
-		 */
-		break;
-	case 0x25:
-	case 0x31:
-		srmmu_modtype = Swift_bad_c;
-		hwbug_bitmask |= HWBUG_KERN_CBITBROKEN;
-		/*
-		 * You see Sun allude to this hardware bug but never
-		 * admit things directly, they'll say things like,
-		 * "the Swift chip cache problems" or similar.
-		 */
-		break;
-	default:
-		srmmu_modtype = Swift_ok;
-		break;
-	}
 
 	sparc32_cachetlb_ops = &swift_ops;
 	flush_page_for_dma_global = 0;
@@ -1367,7 +1324,6 @@ static const struct sparc32_cachetlb_ops turbosparc_ops = {
 static void __init init_turbosparc(void)
 {
 	srmmu_name = "Fujitsu TurboSparc";
-	srmmu_modtype = TurboSparc;
 	sparc32_cachetlb_ops = &turbosparc_ops;
 	poke_srmmu = poke_turbosparc;
 }
@@ -1406,7 +1362,6 @@ static void __init init_tsunami(void)
 	 */
 
 	srmmu_name = "TI Tsunami";
-	srmmu_modtype = Tsunami;
 	sparc32_cachetlb_ops = &tsunami_ops;
 	poke_srmmu = poke_tsunami;
 
@@ -1545,9 +1500,6 @@ static void __init get_srmmu_type(void)
 {
 	unsigned long mreg, psr;
 	unsigned long mod_typ, mod_rev, psr_typ, psr_vers;
-
-	srmmu_modtype = SRMMU_INVAL_MOD;
-	hwbug_bitmask = 0;
 
 	mreg = srmmu_get_mmureg(); psr = get_psr();
 	mod_typ = (mreg & 0xf0000000) >> 28;

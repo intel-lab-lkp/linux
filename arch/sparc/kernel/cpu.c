@@ -19,7 +19,6 @@
 #include <asm/page.h>
 #include <asm/head.h>
 #include <asm/psr.h>
-#include <asm/mbus.h>
 #include <asm/cpudata.h>
 
 #include "kernel.h"

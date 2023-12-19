@@ -41,7 +41,6 @@
 #include <asm/page.h>
 #include <asm/traps.h>
 #include <asm/vaddrs.h>
-#include <asm/mbus.h>
 #include <asm/idprom.h>
 #include <asm/cpudata.h>
 #include <asm/setup.h>
