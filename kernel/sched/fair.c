@@ -6669,9 +6669,8 @@ static int sched_idle_cpu(int cpu)
 #endif
 
 /*
- * The enqueue_task method is called before nr_running is
- * increased. Here we update the fair scheduling stats and
- * then put the task into the rbtree:
+ * The enqueue_task method is called to update the fair scheduling stats 
+ * and put the task into the rbtree, and increase nr_running. 
  */
 static void
 enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
