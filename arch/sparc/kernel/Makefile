@@ -83,7 +83,7 @@ obj-$(CONFIG_SMP)         += trampoline_$(BITS).o smp_$(BITS).o
 obj-$(CONFIG_SPARC32_SMP) += sun4m_smp.o sun4d_smp.o leon_smp.o
 obj-$(CONFIG_SPARC64_SMP) += hvtramp.o
 
-obj-y                     += auxio_$(BITS).o
+obj-$(CONFIG_SPARC64)     += auxio_64.o
 
 obj-y                     += termios.o
 

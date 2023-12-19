@@ -27,7 +27,6 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 
-#include <asm/auxio.h>
 #include <asm/oplib.h>
 #include <linux/uaccess.h>
 #include <asm/page.h>
@@ -49,8 +48,6 @@ void (*sparc_idle)(void);
 
 /* 
  * Power-off handler instantiation for pm.h compliance
- * This is done via auxio, but could be used as a fallback
- * handler when auxio is not present-- unused for now...
  */
 void (*pm_power_off)(void) = machine_power_off;
 EXPORT_SYMBOL(pm_power_off);
@@ -103,13 +100,6 @@ void machine_restart(char * cmd)
 
 void machine_power_off(void)
 {
-	if (auxio_power_register &&
-	    (!of_node_is_type(of_console_device, "serial") || scons_pwroff)) {
-		u8 power_register = sbus_readb(auxio_power_register);
-		power_register |= AUXIO_POWER_OFF;
-		sbus_writeb(power_register, auxio_power_register);
-	}
-
 	machine_halt();
 }
 
