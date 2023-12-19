@@ -19,29 +19,14 @@ allOf:
 properties:
   compatible:
     enum:
-      - ti,am642-icssg-prueth  # for AM64x SoC family
-      - ti,am654-icssg-prueth  # for AM65x SoC family
+      - ti,am642-icssg-prueth      # for AM64x SoC family
+      - ti,am654-icssg-prueth      # for AM65x SoC family, SR2.x
+      - ti,am654-icssg-prueth-sr1  # for AM65x SoC family, SR1.0
 
   sram:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
       phandle to MSMC SRAM node
-
-  dmas:
-    maxItems: 10
-
-  dma-names:
-    items:
-      - const: tx0-0
-      - const: tx0-1
-      - const: tx0-2
-      - const: tx0-3
-      - const: tx1-0
-      - const: tx1-1
-      - const: tx1-2
-      - const: tx1-3
-      - const: rx0
-      - const: rx1
 
   ti,mii-g-rt:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -121,6 +106,47 @@ properties:
           - port@0
       - required:
           - port@1
+
+if:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - ti,am654-icssg-prueth-sr1
+then:
+  properties:
+    dmas:
+      maxItems: 12
+    dma-names:
+      items:
+        - const: tx0-0
+        - const: tx0-1
+        - const: tx0-2
+        - const: tx0-3
+        - const: tx1-0
+        - const: tx1-1
+        - const: tx1-2
+        - const: tx1-3
+        - const: rx0
+        - const: rx1
+        - const: rxmgm0
+        - const: rxmgm1
+else:
+  properties:
+    dmas:
+      maxItems: 10
+    dma-names:
+      items:
+        - const: tx0-0
+        - const: tx0-1
+        - const: tx0-2
+        - const: tx0-3
+        - const: tx1-0
+        - const: tx1-1
+        - const: tx1-2
+        - const: tx1-3
+        - const: rx0
+        - const: rx1
 
 required:
   - compatible
