@@ -2539,6 +2539,10 @@ int security_inode_copy_up_xattr(const char *name)
 			return rc;
 	}
 
+	rc = evm_inode_copy_up_xattr(name);
+	if (rc != LSM_RET_DEFAULT(inode_copy_up_xattr))
+		return rc;
+
 	return LSM_RET_DEFAULT(inode_copy_up_xattr);
 }
 EXPORT_SYMBOL(security_inode_copy_up_xattr);
