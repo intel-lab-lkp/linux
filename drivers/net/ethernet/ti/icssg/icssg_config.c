@@ -18,8 +18,10 @@
  */
 
 /* IPG is in core_clk cycles */
-#define MII_RT_TX_IPG_100M	0x17
-#define MII_RT_TX_IPG_1G	0xb
+#define MII_RT_TX_IPG_100M_SR1	0x166
+#define MII_RT_TX_IPG_1G_SR1	0x1a
+#define MII_RT_TX_IPG_100M_SR2	0x17
+#define MII_RT_TX_IPG_1G_SR2	0xb
 
 #define	ICSSG_QUEUES_MAX		64
 #define	ICSSG_QUEUE_OFFSET		0xd00
@@ -205,20 +207,76 @@ void icssg_config_ipg(struct prueth_emac *emac)
 
 	switch (emac->speed) {
 	case SPEED_1000:
-		icssg_mii_update_ipg(prueth->mii_rt, slice, MII_RT_TX_IPG_1G);
+		icssg_mii_update_ipg(prueth->mii_rt, slice,
+				     prueth->pdata.is_sr1 ?
+				     MII_RT_TX_IPG_1G_SR1 : MII_RT_TX_IPG_1G_SR2);
 		break;
 	case SPEED_100:
-		icssg_mii_update_ipg(prueth->mii_rt, slice, MII_RT_TX_IPG_100M);
+		icssg_mii_update_ipg(prueth->mii_rt, slice,
+				     prueth->pdata.is_sr1 ?
+				     MII_RT_TX_IPG_100M_SR1 : MII_RT_TX_IPG_100M_SR2);
 		break;
 	case SPEED_10:
-		/* IPG for 10M is same as 100M */
-		icssg_mii_update_ipg(prueth->mii_rt, slice, MII_RT_TX_IPG_100M);
+		/* Firmware hardcodes IPG for SR1. SR2 same as 100M */
+		if (!prueth->pdata.is_sr1)
+			icssg_mii_update_ipg(prueth->mii_rt, slice,
+					     MII_RT_TX_IPG_100M_SR2);
 		break;
 	default:
 		/* Other links speeds not supported */
 		netdev_err(emac->ndev, "Unsupported link speed\n");
 		return;
 	}
+}
+
+/* SR1: Set buffer sizes for the pools. There are 8 internal queues
+ * implemented in firmware, but only 4 tx channels/threads in the Egress
+ * direction to firmware. Need a high priority queue for management
+ * messages since they shouldn't be blocked even during high traffic
+ * situation. So use Q0-Q2 as data queues and Q3 as management queue
+ * in the max case. However for ease of configuration, use the max
+ * data queue + 1 for management message if we are not using max
+ * case.
+ *
+ * Allocate 4 MTU buffers per data queue.  Firmware requires
+ * pool sizes to be set for internal queues. Set the upper 5 queue
+ * pool size to min size of 128 bytes since there are only 3 tx
+ * data channels and management queue requires only minimum buffer.
+ * i.e lower queues are used by driver and highest priority queue
+ * from that is used for management message.
+ */
+
+static int emac_egress_buf_pool_size[] = {
+	PRUETH_EMAC_BUF_POOL_SIZE_SR1, PRUETH_EMAC_BUF_POOL_SIZE_SR1,
+	PRUETH_EMAC_BUF_POOL_SIZE_SR1, PRUETH_EMAC_BUF_POOL_MIN_SIZE_SR1,
+	PRUETH_EMAC_BUF_POOL_MIN_SIZE_SR1, PRUETH_EMAC_BUF_POOL_MIN_SIZE_SR1,
+	PRUETH_EMAC_BUF_POOL_MIN_SIZE_SR1, PRUETH_EMAC_BUF_POOL_MIN_SIZE_SR1};
+
+void icssg_config_sr1(struct prueth *prueth, struct prueth_emac *emac,
+		      int slice)
+{
+	struct icssg_config_sr1 *config;
+	void __iomem *va;
+	int i, index;
+
+	va = prueth->shram.va + slice * ICSSG_CONFIG_OFFSET_SLICE1;
+	config = &prueth->config[slice];
+	memset(config, 0, sizeof(*config));
+	config->addr_lo = cpu_to_le32(lower_32_bits(prueth->msmcram.pa));
+	config->addr_hi = cpu_to_le32(upper_32_bits(prueth->msmcram.pa));
+	config->num_tx_threads = 0;
+	config->rx_flow_id = emac->rx_flow_id_base; /* flow id for host port */
+	config->rx_mgr_flow_id = emac->rx_mgm_flow_id_base; /* for mgm ch */
+	config->rand_seed = get_random_u32();
+
+	for (i = PRUETH_EMAC_BUF_POOL_START_SR1; i < PRUETH_NUM_BUF_POOLS_SR1; i++) {
+		index =  i - PRUETH_EMAC_BUF_POOL_START_SR1;
+		config->tx_buf_sz[i] = cpu_to_le32(emac_egress_buf_pool_size[index]);
+	}
+
+	memcpy_toio(va, &prueth->config[slice], sizeof(prueth->config[slice]));
+
+	emac->speed = SPEED_1000;
 }
 
 static void emac_r30_cmd_init(struct prueth_emac *emac)
@@ -331,6 +389,11 @@ int icssg_config(struct prueth *prueth, struct prueth_emac *emac, int slice)
 	struct icssg_flow_cfg __iomem *flow_cfg;
 	int ret;
 
+	if (prueth->pdata.is_sr1) {
+		icssg_config_sr1(prueth, emac, slice);
+		return 0;
+	}
+
 	icssg_init_emac_mode(prueth);
 
 	memset_io(config, 0, TAS_GATE_MASK_LIST0);
@@ -435,18 +498,31 @@ int emac_set_port_state(struct prueth_emac *emac,
 
 void icssg_config_half_duplex(struct prueth_emac *emac)
 {
+	struct icssg_config_sr1 *config;
+	void __iomem *va;
+	int slice;
 	u32 val;
 
 	if (!emac->half_duplex)
 		return;
 
 	val = get_random_u32();
-	writel(val, emac->dram.va + HD_RAND_SEED_OFFSET);
+	if (emac->is_sr1) {
+		slice = prueth_emac_slice(emac);
+		va = emac->prueth->shram.va + slice * ICSSG_CONFIG_OFFSET_SLICE1;
+		config = (struct icssg_config_sr1 *)va;
+		writel(val, &config->rand_seed);
+	} else {
+		writel(val, emac->dram.va + HD_RAND_SEED_OFFSET);
+	}
 }
 
 void icssg_config_set_speed(struct prueth_emac *emac)
 {
 	u8 fw_speed;
+
+	if (emac->is_sr1)
+		return;
 
 	switch (emac->speed) {
 	case SPEED_1000:
