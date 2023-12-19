@@ -1681,6 +1681,9 @@ struct intel_pps {
 struct alpm_parameters {
 	u8 io_wake_lines;
 	u8 fast_wake_lines;
+
+	/* LNL and beyond */
+	u8 check_entry_lines;
 };
 
 struct intel_psr {
