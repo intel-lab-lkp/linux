@@ -255,19 +255,16 @@ srmmu_fwin_stackchk:
 	mov	AC_M_SFSR, %l4
 	cmp	%l5, %sp
 	bleu	fwin_user_stack_is_bolixed
-LEON_PI( lda	[%l4] ASI_LEON_MMUREGS, %g0)	! clear fault status
-SUN_PI_( lda	[%l4] ASI_M_MMUREGS, %g0)	! clear fault status
+	 lda	[%l4] ASI_LEON_MMUREGS, %g0	! clear fault status
 
 	/* The technique is, turn off faults on this processor,
 	 * just let the load rip, then check the sfsr to see if
 	 * a fault did occur.  Then we turn on fault traps again
 	 * and branch conditionally based upon what happened.
 	 */
-LEON_PI(lda	[%g0] ASI_LEON_MMUREGS, %l5)	! read mmu-ctrl reg
-SUN_PI_(lda	[%g0] ASI_M_MMUREGS, %l5)	! read mmu-ctrl reg
+	lda	[%g0] ASI_LEON_MMUREGS, %l5	! read mmu-ctrl reg
 	or	%l5, 0x2, %l5			! turn on no-fault bit
-LEON_PI(sta	%l5, [%g0] ASI_LEON_MMUREGS)	! store it
-SUN_PI_(sta	%l5, [%g0] ASI_M_MMUREGS)	! store it
+	sta	%l5, [%g0] ASI_LEON_MMUREGS	! store it
 
 	/* Cross fingers and go for it. */
 	LOAD_WINDOW(sp)
@@ -279,19 +276,15 @@ SUN_PI_(sta	%l5, [%g0] ASI_M_MMUREGS)	! store it
 
 	/* LOCATION: Window 'T' */
 
-LEON_PI(lda	[%g0] ASI_LEON_MMUREGS, %twin_tmp1)	! load mmu-ctrl again
-SUN_PI_(lda	[%g0] ASI_M_MMUREGS, %twin_tmp1)	! load mmu-ctrl again
+	lda	[%g0] ASI_LEON_MMUREGS, %twin_tmp1	! load mmu-ctrl again
 	andn	%twin_tmp1, 0x2, %twin_tmp1		! clear no-fault bit
-LEON_PI(sta	%twin_tmp1, [%g0] ASI_LEON_MMUREGS)	! store it
-SUN_PI_(sta	%twin_tmp1, [%g0] ASI_M_MMUREGS)	! store it
+	sta	%twin_tmp1, [%g0] ASI_LEON_MMUREGS	! store it
 
 	mov	AC_M_SFAR, %twin_tmp2
-LEON_PI(lda	[%twin_tmp2] ASI_LEON_MMUREGS, %g0)	! read fault address
-SUN_PI_(lda	[%twin_tmp2] ASI_M_MMUREGS, %g0)	! read fault address
+	lda	[%twin_tmp2] ASI_LEON_MMUREGS, %g0	! read fault address
 
 	mov	AC_M_SFSR, %twin_tmp2
-LEON_PI(lda	[%twin_tmp2] ASI_LEON_MMUREGS, %twin_tmp2) ! read fault status
-SUN_PI_(lda	[%twin_tmp2] ASI_M_MMUREGS, %twin_tmp2)	   ! read fault status
+	lda	[%twin_tmp2] ASI_LEON_MMUREGS, %twin_tmp2 ! read fault status
 	andcc	%twin_tmp2, 0x2, %g0			   ! did fault occur?
 
 	bne	1f					   ! yep, cleanup

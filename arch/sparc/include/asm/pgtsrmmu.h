@@ -107,23 +107,24 @@ extern void *srmmu_nocache_pool;
 #define __nocache_va(PADDR) (__va((unsigned long)PADDR) - (unsigned long)srmmu_nocache_pool + SRMMU_NOCACHE_VADDR)
 #define __nocache_fix(VADDR) ((__typeof__(VADDR))__va(__nocache_pa(VADDR)))
 
-/* Accessing the MMU control register. */
-unsigned int srmmu_get_mmureg(void);
-void srmmu_set_mmureg(unsigned long regval);
-void srmmu_set_ctable_ptr(unsigned long paddr);
-void srmmu_set_context(int context);
-int srmmu_get_context(void);
-unsigned int srmmu_get_fstatus(void);
-unsigned int srmmu_get_faddr(void);
-
-/* This is guaranteed on all SRMMU's. */
-static inline void srmmu_flush_whole_tlb(void)
+static inline void srmmu_set_ctable_ptr(unsigned long paddr)
 {
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
-			     "r" (0x400),        /* Flush entire TLB!! */
-			     "i" (ASI_M_FLUSH_PROBE) : "memory");
-
+	paddr = ((paddr >> 4) & SRMMU_CTX_PMASK);
+	asm volatile("sta %0, [%1] %2\n\t" : : "r" (paddr), "r" (SRMMU_CTXTBL_PTR), "i" (ASI_LEON_MMUREGS) : "memory");
 }
+
+static inline void srmmu_set_context(int context)
+{
+	asm volatile("sta %0, [%1] %2\n\t" : : "r" (context), "r" (SRMMU_CTX_REG), "i" (ASI_LEON_MMUREGS) : "memory");
+}
+
+static inline int srmmu_get_context(void)
+{
+	register int retval;
+	asm volatile("lda [%1] %2, %0\n\t" : "=r" (retval) : "r" (SRMMU_CTX_REG), "i" (ASI_LEON_MMUREGS));
+	return retval;
+}
+
 #endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_PGTSRMMU_H) */

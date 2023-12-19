@@ -178,39 +178,6 @@ extern int root_mountflags;
 
 char reboot_command[COMMAND_LINE_SIZE];
 
-struct cpuid_patch_entry {
-	unsigned int	addr;
-	unsigned int	sun4d[3];
-	unsigned int	leon[3];
-};
-extern struct cpuid_patch_entry __cpuid_patch, __cpuid_patch_end;
-
-static void __init per_cpu_patch(void)
-{
-	struct cpuid_patch_entry *p;
-
-	p = &__cpuid_patch;
-	while (p < &__cpuid_patch_end) {
-		unsigned long addr = p->addr;
-		unsigned int *insns;
-
-		insns = &p->leon[0];
-		*(unsigned int *) (addr + 0) = insns[0];
-		flushi(addr + 0);
-		*(unsigned int *) (addr + 4) = insns[1];
-		flushi(addr + 4);
-		*(unsigned int *) (addr + 8) = insns[2];
-		flushi(addr + 8);
-
-		p++;
-	}
-}
-
-static __init void leon_patch(void)
-{
-	/* Default instruction is leon - no patching */
-}
-
 struct tt_entry *sparc_ttable;
 
 /* Called from head_32.S - before we have setup anything
@@ -219,7 +186,6 @@ struct tt_entry *sparc_ttable;
 void __init sparc32_start_kernel(struct linux_romvec *rp)
 {
 	prom_init(rp);
-	leon_patch();
 	start_kernel();
 }
 
@@ -270,9 +236,6 @@ void __init setup_arch(char **cmdline_p)
 		printk("Booted under KADB. Syncing trap table.\n");
 		(*(linux_dbvec->teach_debugger))();
 	}
-
-	/* Run-time patch instructions to match the cpu model */
-	per_cpu_patch();
 
 	paging_init();
 

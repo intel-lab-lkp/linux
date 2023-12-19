@@ -108,18 +108,11 @@
 661:	rd	%tbr, %idreg;				\
 	srl	%idreg, 10, %idreg;			\
 	and	%idreg, 0xc, %idreg;			\
-	.section	.cpuid_patch, "ax";		\
-	/* Instruction location. */			\
-	.word		661b;				\
-	/* SUN4D implementation. */			\
-	lda	 [%g0] ASI_M_VIKING_TMP1, %idreg;	\
-	sll	 %idreg, 2, %idreg;			\
-	nop;						\
-	/* LEON implementation. */			\
+							\
 	rd 	%asr17, %idreg;				\
 	srl	%idreg, 0x1c, %idreg;			\
 	sll	%idreg, 0x02, %idreg;			\
-	.previous;					\
+							\
 	sethi    %hi(current_set), %dest_reg; 		\
 	or       %dest_reg, %lo(current_set), %dest_reg;\
 	ld       [%idreg + %dest_reg], %dest_reg;
