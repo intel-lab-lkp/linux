@@ -90,8 +90,6 @@ nvkm_fan_update(struct nvkm_fan *fan, bool immediate, int target)
 
 		if (duty > target)
 			delay = slow_down_period;
-		else if (duty == target)
-			delay = min(bump_period, slow_down_period) ;
 		else
 			delay = bump_period;
 
