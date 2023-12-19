@@ -1058,8 +1058,8 @@ static void emac_adjust_link(struct net_device *ndev)
 static int emac_napi_rx_poll(struct napi_struct *napi_rx, int budget)
 {
 	struct prueth_emac *emac = prueth_napi_to_emac(napi_rx);
-	int rx_flow = PRUETH_RX_FLOW_DATA;
-	int flow = PRUETH_MAX_RX_FLOWS;
+	int rx_flow = PRUETH_RX_FLOW_DATA_SR2;
+	int flow = PRUETH_MAX_RX_FLOWS_SR2;
 	int num_rx = 0;
 	int cur_budget;
 	int ret;
@@ -1345,7 +1345,7 @@ static int emac_ndo_open(struct net_device *ndev)
 		return ret;
 	}
 
-	max_rx_flows = PRUETH_MAX_RX_FLOWS;
+	max_rx_flows = PRUETH_MAX_RX_FLOWS_SR2;
 	ret = prueth_init_rx_chns(emac, &emac->rx_chns, "rx",
 				  max_rx_flows, PRUETH_MAX_RX_DESC);
 	if (ret) {
@@ -1358,7 +1358,7 @@ static int emac_ndo_open(struct net_device *ndev)
 		goto cleanup_rx;
 
 	/* we use only the highest priority flow for now i.e. @irq[3] */
-	rx_flow = PRUETH_RX_FLOW_DATA;
+	rx_flow = PRUETH_RX_FLOW_DATA_SR2;
 	ret = request_irq(emac->rx_chns.irq[rx_flow], prueth_rx_irq,
 			  IRQF_TRIGGER_HIGH, dev_name(dev), emac);
 	if (ret) {
@@ -1447,7 +1447,7 @@ static int emac_ndo_stop(struct net_device *ndev)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
 	struct prueth *prueth = emac->prueth;
-	int rx_flow = PRUETH_RX_FLOW_DATA;
+	int rx_flow = PRUETH_RX_FLOW_DATA_SR2;
 	int max_rx_flows;
 	int ret, i;
 
@@ -1477,7 +1477,7 @@ static int emac_ndo_stop(struct net_device *ndev)
 	for (i = 0; i < emac->tx_ch_num; i++)
 		napi_disable(&emac->tx_chns[i].napi_tx);
 
-	max_rx_flows = PRUETH_MAX_RX_FLOWS;
+	max_rx_flows = PRUETH_MAX_RX_FLOWS_SR2;
 	k3_udma_glue_tdown_rx_chn(emac->rx_chns.rx_chn, true);
 
 	prueth_reset_rx_chan(&emac->rx_chns, max_rx_flows, true);
@@ -2074,7 +2074,7 @@ static int prueth_probe(struct platform_device *pdev)
 		goto put_mem;
 	}
 
-	msmc_ram_size = MSMC_RAM_SIZE;
+	msmc_ram_size = MSMC_RAM_SIZE_SR2;
 
 	/* NOTE: FW bug needs buffer base to be 64KB aligned */
 	prueth->msmcram.va =
@@ -2264,7 +2264,7 @@ static void prueth_remove(struct platform_device *pdev)
 
 	gen_pool_free(prueth->sram_pool,
 		      (unsigned long)prueth->msmcram.va,
-		      MSMC_RAM_SIZE);
+		      MSMC_RAM_SIZE_SR2);
 
 	pruss_release_mem_region(prueth->pruss, &prueth->shram);
 
