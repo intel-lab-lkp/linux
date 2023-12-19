@@ -1084,7 +1084,7 @@ static int smt_set_para(struct s_smc *smc, struct smt_para *pa, int index,
 	int		path ;
 	int		port ;
 	SK_LOC_DECL(u_char,byte_val) ;
-	SK_LOC_DECL(u_short,word_val) ;
+	SK_LOC_DECL(u_short, word_val) = 0 ;
 	SK_LOC_DECL(u_long,long_val) ;
 
 	mac = index - INDEX_MAC ;
