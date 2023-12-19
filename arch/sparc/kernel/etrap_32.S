@@ -30,18 +30,6 @@
 	.text
 	.align 4
 
-	/* SEVEN WINDOW PATCH INSTRUCTIONS */
-	.globl	tsetup_7win_patch1, tsetup_7win_patch2
-	.globl	tsetup_7win_patch3, tsetup_7win_patch4
-	.globl	tsetup_7win_patch5, tsetup_7win_patch6
-tsetup_7win_patch1:	sll	%t_wim, 0x6, %t_wim
-tsetup_7win_patch2:	and	%g2, 0x7f, %g2
-tsetup_7win_patch3:	and	%g2, 0x7f, %g2
-tsetup_7win_patch4:	and	%g1, 0x7f, %g1
-tsetup_7win_patch5:	sll	%t_wim, 0x6, %t_wim
-tsetup_7win_patch6:	and	%g2, 0x7f, %g2
-	/* END OF PATCH INSTRUCTIONS */
-
 	/* At trap time, interrupts and all generic traps do the
 	 * following:
 	 *
@@ -72,9 +60,7 @@ tsetup_7win_patch6:	and	%g2, 0x7f, %g2
 	 * trap pc and npc, and %l3 contains the trap time %wim.
 	 */
 
-	.globl	trap_setup, tsetup_patch1, tsetup_patch2
-	.globl	tsetup_patch3, tsetup_patch4
-	.globl	tsetup_patch5, tsetup_patch6
+	.globl	trap_setup
 trap_setup:
 	/* Calculate mask of trap window.  See if from user
 	 * or kernel and branch conditionally.
@@ -109,11 +95,10 @@ trap_setup_kernel_spill:
 	 * %wim and go.
 	 */
 	 srl	%t_wim, 0x1, %g2	! begin computation of new %wim
-tsetup_patch1:
-	sll	%t_wim, 0x7, %t_wim	! patched on 7 window Sparcs
+
+	sll	%t_wim, 0x7, %t_wim
 	or	%t_wim, %g2, %g2
-tsetup_patch2:
-	and	%g2, 0xff, %g2		! patched on 7 window Sparcs
+	and	%g2, 0xff, %g2
 
 	save	%g0, %g0, %g0
 
@@ -185,8 +170,7 @@ trap_setup_from_user:
 	 sub	%g2, 0x1, %g2
 1:
 	andn	%g2, %t_twinmask, %g2
-tsetup_patch3:
-	and	%g2, 0xff, %g2			! patched on 7win Sparcs
+	and	%g2, 0xff, %g2
 	st	%g2, [%curptr + TI_UWINMASK]	! store new umask
 
 	jmpl	%t_retpc + 0x8, %g0		! return to caller
@@ -199,14 +183,11 @@ trap_setup_user_spill:
 	 * is in %g1 upon entry to here.
 	 */
 
-tsetup_patch4:
-	and	%g1, 0xff, %g1		! patched on 7win Sparcs, mask
+	and	%g1, 0xff, %g1
 	srl	%t_wim, 0x1, %g2	! compute new %wim
-tsetup_patch5:
-	sll	%t_wim, 0x7, %t_wim	! patched on 7win Sparcs
+	sll	%t_wim, 0x7, %t_wim
 	or	%t_wim, %g2, %g2	! %g2 is new %wim
-tsetup_patch6:
-	and	%g2, 0xff, %g2		! patched on 7win Sparcs
+	and	%g2, 0xff, %g2
 	andn	%g1, %g2, %g1		! clear this bit in %g1
 	st	%g1, [%curptr + TI_UWINMASK]
 

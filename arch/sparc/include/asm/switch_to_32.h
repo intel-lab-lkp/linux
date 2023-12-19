@@ -37,7 +37,6 @@ extern struct thread_info *current_set[NR_CPUS];
 
 #define prepare_arch_switch(next) do { \
 	__asm__ __volatile__( \
-	".globl\tflush_patch_switch\nflush_patch_switch:\n\t" \
 	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t" \
 	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t" \
 	"save %sp, -0x40, %sp\n\t" \

@@ -68,27 +68,17 @@
 	 *           are done and return from trap if successful
 	 */
 
-	/* BEGINNING OF PATCH INSTRUCTIONS */
-
-	/* On 7-window Sparc the boot code patches fnwin_patch1
-	 * with the following instruction.
-	 */
-	.globl	fnwin_patch1_7win, fnwin_patch2_7win
-fnwin_patch1_7win:	srl	%t_wim, 6, %twin_tmp2
-fnwin_patch2_7win:	and	%twin_tmp1, 0x7f, %twin_tmp1
-	/* END OF PATCH INSTRUCTIONS */
-
-	.globl	fill_window_entry, fnwin_patch1, fnwin_patch2
+	.globl	fill_window_entry
 fill_window_entry:
 	/* LOCATION: Window 'T' */
 
 	/* Compute what the new %wim is going to be if we retrieve
 	 * the proper window off of the stack.
 	 */
-		sll	%t_wim, 1, %twin_tmp1
-fnwin_patch1:	srl	%t_wim, 7, %twin_tmp2
-		or	%twin_tmp1, %twin_tmp2, %twin_tmp1
-fnwin_patch2:	and	%twin_tmp1, 0xff, %twin_tmp1
+	sll	%t_wim, 1, %twin_tmp1
+	srl	%t_wim, 7, %twin_tmp2
+	or	%twin_tmp1, %twin_tmp2, %twin_tmp1
+	and	%twin_tmp1, 0xff, %twin_tmp1
 
 	wr	%twin_tmp1, 0x0, %wim	/* Make window 'I' invalid */
 
