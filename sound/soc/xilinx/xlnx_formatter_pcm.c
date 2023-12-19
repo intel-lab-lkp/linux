@@ -451,12 +451,48 @@ xlnx_formatter_pcm_pointer(struct snd_soc_component *component,
 	return bytes_to_frames(runtime, pos);
 }
 
+static u32 xlnx_formatter_get_iec958_ch_status(u32 sample_rate)
+{
+	u32 tmp = 0;
+
+	switch (sample_rate) {
+	case 32000:
+		tmp = IEC958_AES3_CON_FS_32000;
+		break;
+	case 44100:
+		tmp = IEC958_AES3_CON_FS_44100;
+		break;
+	case 48000:
+		tmp = IEC958_AES3_CON_FS_48000;
+		break;
+	case 88200:
+		tmp = IEC958_AES3_CON_FS_88200;
+		break;
+	case 96000:
+		tmp = IEC958_AES3_CON_FS_96000;
+		break;
+	case 176400:
+		tmp = IEC958_AES3_CON_FS_176400;
+		break;
+	case 192000:
+		tmp = IEC958_AES3_CON_FS_192000;
+		break;
+	case 768000:
+		tmp = IEC958_AES3_CON_FS_768000;
+		break;
+	default:
+		tmp = IEC958_AES3_CON_FS_NOTID;
+	}
+		return tmp;
+}
+
 static int xlnx_formatter_pcm_hw_params(struct snd_soc_component *component,
 					struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params)
 {
+	void __iomem *reg;
 	u32 low, high, active_ch, val, bytes_per_ch, bits_per_sample;
-	u32 aes_reg1_val, aes_reg2_val;
+	u32 aes_reg1_val, aes_reg2_val, sample_rate, ch_sts;
 	u64 size;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct xlnx_pcm_stream_param *stream_data = runtime->private_data;
@@ -533,6 +569,42 @@ static int xlnx_formatter_pcm_hw_params(struct snd_soc_component *component,
 	bytes_per_ch = DIV_ROUND_UP(params_period_bytes(params), active_ch);
 	writel(bytes_per_ch, stream_data->mmio + XLNX_BYTES_PER_CH);
 
+	if ((strstr(adata->nodes[XLNX_PLAYBACK]->name, "hdmi")) ||
+	    (strstr(adata->nodes[XLNX_PLAYBACK]->name, "dp"))) {
+		sample_rate = params_rate(params);
+		dev_info(component->dev, "%s: sample_rate=%d\n", __func__, sample_rate);
+
+		/* As per IEC 60958 standards, whenever transmitting a valid audio
+		 * stream, HDMI/DP Sources shall always include valid and correct
+		 * information in Channel Status bits 24 through 27. For L-PCM audio,
+		 * these bits shall indicate the audio sample frequency. For
+		 * compressed audio formats, these bits shall indicate the IEC 60958
+		 * frame-rate.
+		 *
+		 * Channel Status Bit Number     Sample Frequency or Frame Rate
+		 *   24    25     26    27
+		 *   -----------------------     ------------------------------
+		 *    1     1      0     0                    32 kHz
+		 *    0     0      0     0                    44.1 kHz
+		 *    0     0      0     1                    88.2 kHz
+		 *    0     0      1     1                    176.4 kHz
+		 *    0     1      0     0                    48 kHz
+		 *    0     1      0     1                    96 kHz
+		 *    0     1      1     1                    192 kHz
+		 *    1     0      0     1                    768 kHz
+		 */
+
+		ch_sts = xlnx_formatter_get_iec958_ch_status(sample_rate);
+		dev_info(component->dev, "%s: iec60958 channel status bits 24 to 27 value for sample rate %dHz = 0x%08x\n",
+			 __func__, sample_rate, ch_sts);
+		ch_sts <<= 24;
+		reg = adata->mmio + XLNX_MM2S_OFFSET + XLNX_AUD_CH_STS_START;
+		aes_reg1_val = ioread32(reg);
+		aes_reg1_val |= ch_sts;
+		dev_info(component->dev, "%s: MM2S: AES Encode channel status register value 0x%08x\n",
+			 __func__, aes_reg1_val);
+		iowrite32(aes_reg1_val, reg);
+	}
 	return 0;
 }
 
