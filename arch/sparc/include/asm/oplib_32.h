@@ -163,17 +163,6 @@ int prom_setprop(phandle node, const char *prop_name, char *prop_value,
 
 phandle prom_inst2pkg(int);
 
-/* Dorking with Bus ranges... */
-
-/* Apply promlib probes OBIO ranges to registers. */
-void prom_apply_obio_ranges(struct linux_prom_registers *obioregs, int nregs);
-
-/* Apply ranges of any prom node (and optionally parent node as well) to registers. */
-void prom_apply_generic_ranges(phandle node, phandle parent,
-			       struct linux_prom_registers *sbusregs, int nregs);
-
-void prom_ranges_init(void);
-
 /* CPU probing helpers.  */
 int cpu_find_by_instance(int instance, phandle *prom_node, int *mid);
 int cpu_find_by_mid(int mid, phandle *prom_node);
