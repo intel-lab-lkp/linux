@@ -195,7 +195,7 @@ config GENERIC_CALIBRATE_DELAY
 
 config ARCH_MAY_HAVE_PC_FDC
 	bool
-	default y
+	default y if SPARC64
 
 config EMULATED_CMPXCHG
 	bool
