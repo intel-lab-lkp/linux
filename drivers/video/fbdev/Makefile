@@ -51,7 +51,6 @@ obj-$(CONFIG_FB_CG6)              += cg6.o
 obj-$(CONFIG_FB_CG3)              += cg3.o
 obj-$(CONFIG_FB_BW2)              += bw2.o
 obj-$(CONFIG_FB_CG14)             += cg14.o
-obj-$(CONFIG_FB_P9100)            += p9100.o
 obj-$(CONFIG_FB_TCX)              += tcx.o
 obj-$(CONFIG_FB_LEO)              += leo.o
 obj-$(CONFIG_FB_ACORN)            += acornfb.o

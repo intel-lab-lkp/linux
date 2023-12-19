@@ -576,14 +576,6 @@ config FB_CG14
 	  This is the frame buffer device driver for the CGfourteen frame
 	  buffer on Desktop SPARCsystems with the SX graphics option.
 
-config FB_P9100
-	bool "P9100 (Sparcbook 3 only) support"
-	depends on FB_SBUS
-	select FB_SBUS_HELPERS
-	help
-	  This is the frame buffer device driver for the P9100 card
-	  supported on Sparcbook 3 machines.
-
 config FB_LEO
 	bool "Leo (ZX) support"
 	depends on FB_SBUS
