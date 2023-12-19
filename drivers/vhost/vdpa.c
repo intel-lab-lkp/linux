@@ -641,6 +641,9 @@ static bool vhost_vdpa_vq_config_allowed(struct vhost_vdpa *v, unsigned int cmd)
 	case VHOST_SET_VRING_ADDR:
 		feature = VHOST_BACKEND_F_CHANGEABLE_VQ_ADDR_IN_SUSPEND;
 		break;
+	case VHOST_SET_VRING_BASE:
+		feature = VHOST_BACKEND_F_CHANGEABLE_VQ_STATE_IN_SUSPEND;
+		break;
 	default:
 		return false;
 	}
@@ -737,6 +740,9 @@ static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 		break;
 
 	case VHOST_SET_VRING_BASE:
+		if (!vhost_vdpa_vq_config_allowed(v, cmd))
+			return -EOPNOTSUPP;
+
 		if (vhost_has_feature(vq, VIRTIO_F_RING_PACKED)) {
 			vq_state.packed.last_avail_idx = vq->last_avail_idx & 0x7fff;
 			vq_state.packed.last_avail_counter = !!(vq->last_avail_idx & 0x8000);
