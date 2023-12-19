@@ -518,7 +518,7 @@ config FB_GBE_MEM
 
 config FB_SBUS
 	bool "SBUS and UPA framebuffers"
-	depends on (FB = y) && SPARC
+	depends on (FB = y) && SBUS
 	help
 	  Say Y if you want support for SBUS or UPA based frame buffer device.
 

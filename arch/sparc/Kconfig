@@ -392,11 +392,11 @@ endmenu
 menu "Bus options (PCI etc.)"
 config SBUS
 	bool
-	default y
+	default y if SPARC64
 
 config SBUSCHAR
 	bool
-	default y
+	default y if SPARC64
 
 config SUN_LDOMS
 	bool "Sun Logical Domains support"
