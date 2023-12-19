@@ -141,6 +141,9 @@ static int emac_set_channels(struct net_device *ndev,
 		return -EBUSY;
 
 	emac->tx_ch_num = ch->tx_count;
+	/* highest channel number for management messaging on SR1 */
+	if (emac->is_sr1)
+		emac->tx_ch_num++;
 
 	return 0;
 }
@@ -151,9 +154,12 @@ static void emac_get_channels(struct net_device *ndev,
 	struct prueth_emac *emac = netdev_priv(ndev);
 
 	ch->max_rx = 1;
-	ch->max_tx = PRUETH_MAX_TX_QUEUES;
+	/* SR1 use high priority channel for management messages */
+	ch->max_tx = emac->is_sr1 ? PRUETH_MAX_TX_QUEUES - 1 :
+				    PRUETH_MAX_TX_QUEUES;
 	ch->rx_count = 1;
-	ch->tx_count = emac->tx_ch_num;
+	ch->tx_count = emac->is_sr1 ? emac->tx_ch_num - 1 :
+				      emac->tx_ch_num;
 }
 
 static const struct ethtool_rmon_hist_range emac_rmon_ranges[] = {
