@@ -174,32 +174,6 @@ maybe_smp4m_msg_check_resched:
 maybe_smp4m_msg_out:
 	RESTORE_ALL
 
-	.align	4
-	.globl	linux_trap_ipi15_sun4m
-linux_trap_ipi15_sun4m:
-	SAVE_ALL
-	sethi	%hi(0x80000000), %o2
-	GET_PROCESSOR4M_ID(o0)
-	sethi	%hi(sun4m_irq_percpu), %l5
-	or	%l5, %lo(sun4m_irq_percpu), %o5
-	sll	%o0, 2, %o0
-	ld	[%o5 + %o0], %o5
-	ld	[%o5 + 0x00], %o3	! sun4m_irq_percpu[cpu]->pending
-	andcc	%o3, %o2, %g0
-	be	sun4m_nmi_error		! Must be an NMI async memory error
-	 st	%o2, [%o5 + 0x04]	! sun4m_irq_percpu[cpu]->clear=0x80000000
-	WRITE_PAUSE
-	ld	[%o5 + 0x00], %g0	! sun4m_irq_percpu[cpu]->pending
-	WRITE_PAUSE
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-	call	smp4m_cross_call_irq
-	 nop
-	b	ret_trap_lockless_ipi
-	 clr	%l6
 
 	.globl	smp4d_ticker
 	/* SMP per-cpu ticker interrupts are handled specially. */
@@ -219,44 +193,6 @@ smp4d_ticker:
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 	RESTORE_ALL
-
-	.align	4
-	.globl	linux_trap_ipi15_sun4d
-linux_trap_ipi15_sun4d:
-	SAVE_ALL
-	sethi	%hi(CC_BASE), %o4
-	sethi	%hi(MXCC_ERR_ME|MXCC_ERR_PEW|MXCC_ERR_ASE|MXCC_ERR_PEE), %o2
-	or	%o4, (CC_EREG - CC_BASE), %o0
-	ldda	[%o0] ASI_M_MXCC, %o0
-	andcc	%o0, %o2, %g0
-	bne	1f
-	 sethi	%hi(BB_STAT2), %o2
-	lduba	[%o2] ASI_M_CTL, %o2
-	andcc	%o2, BB_STAT2_MASK, %g0
-	bne	2f
-	 or	%o4, (CC_ICLR - CC_BASE), %o0
-	sethi	%hi(1 << 15), %o1
-	stha	%o1, [%o0] ASI_M_MXCC	/* Clear PIL 15 in MXCC's ICLR */
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-	call	smp4d_cross_call_irq
-	 nop
-	b	ret_trap_lockless_ipi
-	 clr	%l6
-
-1:	/* MXCC error */
-2:	/* BB error */
-	/* Disable PIL 15 */
-	set	CC_IMSK, %l4
-	lduha	[%l4] ASI_M_MXCC, %l5
-	sethi	%hi(1 << 15), %l7
-	or	%l5, %l7, %l5
-	stha	%l5, [%l4] ASI_M_MXCC
-	/* FIXME */
-1:	b,a	1b
 
 	.globl	smpleon_ipi
 	.extern leon_ipi_interrupt
@@ -618,11 +554,11 @@ sun4m_nmi_error:
 
 #ifndef CONFIG_SMP
 	.align	4
-	.globl	linux_trap_ipi15_sun4m
-linux_trap_ipi15_sun4m:
+	.globl	linux_trap_ipi15_leon
+linux_trap_ipi15_leon:
 	SAVE_ALL
 
-	ba	sun4m_nmi_error
+	ba      sun4m_nmi_error
 	 nop
 #endif /* CONFIG_SMP */
 

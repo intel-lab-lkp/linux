@@ -134,10 +134,6 @@ void leonsmp_ipi_interrupt(void);
 void leon_cross_call_irq(void);
 
 /* head_32.S */
-extern unsigned int t_nmi[];
-extern unsigned int linux_trap_ipi15_sun4d[];
-extern unsigned int linux_trap_ipi15_sun4m[];
-
 extern struct tt_entry trapbase;
 extern struct tt_entry trapbase_cpu1;
 extern struct tt_entry trapbase_cpu2;

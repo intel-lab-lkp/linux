@@ -463,8 +463,5 @@ static const struct sparc32_ipi_ops leon_ipi_ops = {
 
 void __init leon_init_smp(void)
 {
-	/* Patch ipi15 trap table */
-	t_nmi[1] = t_nmi[1] + (linux_trap_ipi15_leon - linux_trap_ipi15_sun4m);
-
 	sparc32_ipi_ops = &leon_ipi_ops;
 }
