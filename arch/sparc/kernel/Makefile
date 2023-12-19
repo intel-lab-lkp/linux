@@ -84,7 +84,6 @@ obj-$(CONFIG_SPARC32_SMP) += sun4m_smp.o sun4d_smp.o leon_smp.o
 obj-$(CONFIG_SPARC64_SMP) += hvtramp.o
 
 obj-y                     += auxio_$(BITS).o
-obj-$(CONFIG_SUN_PM)      += apc.o pmc.o
 
 obj-y                     += termios.o
 

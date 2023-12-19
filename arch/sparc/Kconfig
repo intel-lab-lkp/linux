@@ -324,13 +324,6 @@ config CMDLINE
 
 	  NOTE: This option WILL override the PROM bootargs setting!
 
-config SUN_PM
-	bool
-	default y if SPARC32
-	help
-	  Enable power management and CPU standby features on supported
-	  SPARC platforms.
-
 config SERIAL_CONSOLE
 	bool
 	depends on SPARC32
