@@ -3648,6 +3648,19 @@ intel_bios_encoder_port_data_lookup(struct drm_i915_private *i915, enum port por
 	return NULL;
 }
 
+const struct intel_bios_encoder_data *
+intel_bios_encoder_phy_data_lookup(struct drm_i915_private *i915, enum phy phy)
+{
+	struct intel_bios_encoder_data *devdata;
+
+	list_for_each_entry(devdata, &i915->display.vbt.display_devices, node) {
+		if (intel_port_to_phy(i915, intel_bios_encoder_port(devdata)) == phy)
+			return devdata;
+	}
+
+	return NULL;
+}
+
 void intel_bios_for_each_encoder(struct drm_i915_private *i915,
 				 void (*func)(struct drm_i915_private *i915,
 					      const struct intel_bios_encoder_data *devdata))
