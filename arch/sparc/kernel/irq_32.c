@@ -24,9 +24,6 @@
 #include "kernel.h"
 #include "irq.h"
 
-/* platform specific irq setup */
-struct sparc_config sparc_config;
-
 unsigned long arch_local_irq_save(void)
 {
 	unsigned long retval;
