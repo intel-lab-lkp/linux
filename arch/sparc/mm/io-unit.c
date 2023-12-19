@@ -86,8 +86,6 @@ static int __init iounit_init(void)
 		of_propagate_archdata(op);
 	}
 
-	sun4d_init_sbi_irq();
-
 	return 0;
 }
 

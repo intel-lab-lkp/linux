@@ -65,7 +65,6 @@ void sun4d_cpu_pre_starting(void *arg)
 
 void sun4d_cpu_pre_online(void *arg)
 {
-	unsigned long flags;
 	int cpuid;
 
 	cpuid = hard_smp_processor_id();
@@ -103,9 +102,7 @@ void sun4d_cpu_pre_online(void *arg)
 	while (!cpumask_test_cpu(cpuid, &smp_commenced_mask))
 		barrier();
 
-	spin_lock_irqsave(&sun4d_imsk_lock, flags);
 	cc_set_imsk(cc_get_imsk() & ~0x4000); /* Allow PIL 14 as well */
-	spin_unlock_irqrestore(&sun4d_imsk_lock, flags);
 }
 
 /*
@@ -177,7 +174,6 @@ void __init smp4d_smp_done(void)
 
 	/* Ok, they are spinning and ready to go. */
 	smp_processors_ready = 1;
-	sun4d_distribute_irqs();
 }
 
 /* Memory structure giving interrupt handler information about IPI generated */

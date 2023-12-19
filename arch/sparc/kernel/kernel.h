@@ -93,7 +93,6 @@ extern spinlock_t irq_action_lock;
 void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs);
 
 /* sun4m_irq.c */
-void sun4m_init_IRQ(void);
 void sun4m_unmask_profile_irq(void);
 void sun4m_clear_profile_irq(int cpu);
 
@@ -105,18 +104,6 @@ int smp4m_boot_one_cpu(int i, struct task_struct *idle);
 void __init smp4m_smp_done(void);
 void smp4m_cross_call_irq(void);
 void smp4m_percpu_timer_interrupt(struct pt_regs *regs);
-
-/* sun4d_irq.c */
-extern spinlock_t sun4d_imsk_lock;
-
-void sun4d_init_IRQ(void);
-int sun4d_request_irq(unsigned int irq,
-                      irq_handler_t handler,
-                      unsigned long irqflags,
-                      const char *devname, void *dev_id);
-int show_sun4d_interrupts(struct seq_file *, void *);
-void sun4d_distribute_irqs(void);
-void sun4d_free_irq(unsigned int irq, void *dev_id);
 
 /* sun4d_smp.c */
 void sun4d_cpu_pre_starting(void *arg);
