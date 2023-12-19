@@ -1023,10 +1023,7 @@ void __init load_mmu(void)
 	/* It really is const after this point. */
 	sparc32_cachetlb_ops = (const struct sparc32_cachetlb_ops *)
 		&smp_cachetlb_ops;
-#endif
 
-	ld_mmu_iommu();
-#ifdef CONFIG_SMP
 	leon_init_smp();
 #endif
 }
