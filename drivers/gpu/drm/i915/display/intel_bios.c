@@ -3636,7 +3636,7 @@ bool intel_bios_encoder_hpd_invert(const struct intel_bios_encoder_data *devdata
 }
 
 const struct intel_bios_encoder_data *
-intel_bios_encoder_data_lookup(struct drm_i915_private *i915, enum port port)
+intel_bios_encoder_port_data_lookup(struct drm_i915_private *i915, enum port port)
 {
 	struct intel_bios_encoder_data *devdata;
 

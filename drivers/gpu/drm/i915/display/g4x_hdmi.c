@@ -697,7 +697,7 @@ void g4x_hdmi_init(struct drm_i915_private *dev_priv,
 	if (!assert_hdmi_port_valid(dev_priv, port))
 		return;
 
-	devdata = intel_bios_encoder_data_lookup(dev_priv, port);
+	devdata = intel_bios_encoder_port_data_lookup(dev_priv, port);
 
 	/* FIXME bail? */
 	if (!devdata)

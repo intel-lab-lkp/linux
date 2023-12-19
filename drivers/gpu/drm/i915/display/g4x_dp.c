@@ -1298,7 +1298,7 @@ bool g4x_dp_init(struct drm_i915_private *dev_priv,
 	if (!assert_port_valid(dev_priv, port))
 		return false;
 
-	devdata = intel_bios_encoder_data_lookup(dev_priv, port);
+	devdata = intel_bios_encoder_port_data_lookup(dev_priv, port);
 
 	/* FIXME bail? */
 	if (!devdata)

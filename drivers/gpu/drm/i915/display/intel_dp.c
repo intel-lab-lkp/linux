@@ -6148,7 +6148,7 @@ static bool _intel_dp_is_port_edp(struct drm_i915_private *dev_priv,
 bool intel_dp_is_port_edp(struct drm_i915_private *i915, enum port port)
 {
 	const struct intel_bios_encoder_data *devdata =
-		intel_bios_encoder_data_lookup(i915, port);
+		intel_bios_encoder_port_data_lookup(i915, port);
 
 	return _intel_dp_is_port_edp(i915, devdata, port);
 }
