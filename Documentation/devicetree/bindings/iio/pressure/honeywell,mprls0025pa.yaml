@@ -53,19 +53,37 @@ properties:
   honeywell,pmin-pascal:
     description:
       Minimum pressure value the sensor can measure in pascal.
+      To be specified only if honeywell,pressure-triplet is set to "NA".
 
   honeywell,pmax-pascal:
     description:
       Maximum pressure value the sensor can measure in pascal.
+      To be specified only if honeywell,pressure-triplet is set to "NA".
 
   honeywell,transfer-function:
     description: |
-      Transfer function which defines the range of valid values delivered by the
-      sensor.
+      Transfer function which defines the range of valid values delivered by
+      the sensor.
       1 - A, 10% to 90% of 2^24 (1677722 .. 15099494)
       2 - B, 2.5% to 22.5% of 2^24 (419430 .. 3774874)
       3 - C, 20% to 80% of 2^24 (3355443 .. 13421773)
+    enum: [1, 2, 3]
     $ref: /schemas/types.yaml#/definitions/uint32
+
+  honeywell,pressure-triplet:
+    description: |
+      Case-sensitive five character string that defines pressure range, unit
+      and type as part of the device nomenclature. In the unlikely case of a
+      custom chip, set to "NA" and provide pmin-pascal and pmax-pascal.
+    enum: [0001BA, 01.6BA, 02.5BA, 0060MG, 0100MG, 0160MG, 0250MG, 0400MG,
+           0600MG, 0001BG, 01.6BG, 02.5BG, 0100KA, 0160KA, 0250KA, 0006KG,
+           0010KG, 0016KG, 0025KG, 0040KG, 0060KG, 0100KG, 0160KG, 0250KG,
+           0015PA, 0025PA, 0030PA, 0001PG, 0005PG, 0015PG, 0030PG, 0300YG,
+           NA]
+    $ref: /schemas/types.yaml#/definitions/string
+
+  spi-max-frequency:
+    maximum: 800000
 
   vdd-supply:
     description: provide VDD power to the sensor.
@@ -73,12 +91,20 @@ properties:
 required:
   - compatible
   - reg
-  - honeywell,pmin-pascal
-  - honeywell,pmax-pascal
+  - honeywell,pressure-triplet
   - honeywell,transfer-function
-  - vdd-supply
 
 additionalProperties: false
+
+dependentSchemas:
+  honeywell,pmin-pascal:
+    properties:
+      honeywell,pressure-triplet:
+        const: NA
+  honeywell,pmax-pascal:
+    properties:
+      honeywell,pressure-triplet:
+        const: NA
 
 examples:
   - |
@@ -93,10 +119,28 @@ examples:
             reg = <0x18>;
             reset-gpios = <&gpio3 19 GPIO_ACTIVE_HIGH>;
             interrupt-parent = <&gpio3>;
-            interrupts = <21 IRQ_TYPE_EDGE_FALLING>;
-            honeywell,pmin-pascal = <0>;
-            honeywell,pmax-pascal = <172369>;
+            interrupts = <21 IRQ_TYPE_EDGE_RISING>;
+
+            honeywell,pressure-triplet = "0025PA";
             honeywell,transfer-function = <1>;
             vdd-supply = <&vcc_3v3>;
         };
     };
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        pressure@0 {
+            compatible = "honeywell,mprls0025pa";
+            reg = <0>;
+            spi-max-frequency = <800000>;
+            reset-gpios = <&gpio1 28 GPIO_ACTIVE_HIGH>;
+            interrupt-parent = <&gpio0>;
+            interrupts = <30 IRQ_TYPE_EDGE_RISING>;
+
+            honeywell,pressure-triplet = "0015PA";
+            honeywell,transfer-function = <1>;
+        };
+    };
+...
