@@ -529,7 +529,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	devpath = kobject_get_path(kobj, GFP_KERNEL);
 	if (!devpath) {
 		retval = -ENOENT;
-		goto exit;
+		goto free_env;
 	}
 
 	/* default keys */
@@ -623,6 +623,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 
 exit:
 	kfree(devpath);
+free_env:
 	kfree(env);
 	return retval;
 }
