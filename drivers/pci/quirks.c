@@ -3874,6 +3874,116 @@ DECLARE_PCI_FIXUP_SUSPEND_LATE(PCI_VENDOR_ID_INTEL,
 #endif
 
 /*
+ * On most ThinkPad Carbon 7/8s, JHL6540 Thunderbolt 3 bridges are set
+ * incorrectly as DEVICE_REMOVABLE despite being built into the device.
+ * This is the side effect of a unique hardware configuration.
+ *
+ * Normally, Thunderbolt functionality is integrated to the SoC and
+ * its root ports.
+ *
+ *                          Most devices:
+ *                    root port --> USB-C port
+ *
+ * But X1 Carbon Gen 7/8 uses Whiskey Lake and Comet Lake SoC, which
+ * don't come with Thunderbolt functionality. Therefore, a discrete
+ * Thunderbolt Host PCI controller was added between the root port and
+ * the USB-C port.
+ *
+ *                        Thinkpad Carbon 7/8s
+ *                 (w/ Whiskey Lake and Comet Lake SoC):
+ *                root port -->  JHL6540   --> USB-C port
+ *
+ * Because the root port is labeled by FW as "ExternalFacingPort", as
+ * required by the DMAR ACPI spec, the JHL6540 chip is inaccurately
+ * labeled as DEVICE_REMOVABLE by the kernel pci driver.
+ * Therefore, the built-in USB-C ports do not enumerate when policies
+ * forbidding external pci devices are enforced.
+ *
+ * This fix relabels the pci components in the built-in JHL6540 chip as
+ * DEVICE_FIXED, ensuring that the built-in USB-C ports always enumerate
+ * properly as intended.
+ *
+ * This fix also labels the external facing components of the JHL6540 as
+ * external_facing, so that the pci attach policy works as intended.
+ *
+ * The ASCII diagram below describes the pci layout of the JHL6540 chip.
+ *
+ *                         Root Port
+ *                 [8086:02b4] or [8086:9db4]
+ *                             |
+ *                        JHL6540 Chip
+ *     __________________________________________________
+ *    |                      Bridge                      |
+ *    |        PCI ID ->  [8086:15d3]                    |
+ *    |         DEVFN ->      (00)                       |
+ *    |       _________________|__________________       |
+ *    |      |           |            |           |      |
+ *    |    Bridge     Bridge        Bridge      Bridge   |
+ *    | [8086:15d3] [8086:15d3]  [8086:15d3] [8086:15d3] |
+ *    |    (00)        (08)         (10)        (20)     |
+ *    |      |           |            |           |      |
+ *    |     NHI          |     USB Controller     |      |
+ *    | [8086:15d2]      |       [8086:15d4]      |      |
+ *    |    (00)          |          (00)          |      |
+ *    |      |___________|            |___________|      |
+ *    |____________|________________________|____________|
+ *                 |                        |
+ *             USB-C Port               USB-C Port
+ *
+ *
+ * Based on what a JHL6549 pci component's pci id, subsystem device id
+ * and devfn are, we can infer if it is fixed and if it faces a usb port;
+ * which would mean it is external facing.
+ * This quirk uses these values to identify the pci components and set the
+ * properties accordingly.
+ */
+static void carbon_X1_fixup_relabel_alpine_ridge(struct pci_dev *dev)
+{
+	if (!dmi_match(DMI_PRODUCT_FAMILY, "ThinkPad X1 Carbon 7th") &&
+	    !dmi_match(DMI_PRODUCT_FAMILY, "ThinkPad X1 Carbon Gen 8"))
+		return;
+
+	/* Is this JHL6540 PCI component embedded in a Lenovo device? */
+	if (dev->subsystem_vendor != 0x17aa)
+		return;
+
+	/* Is this JHL6540 PCI component embedded in an X1 Carbon Gen 7/8? */
+	if (dev->subsystem_device != 0x22be && // Gen 8
+	    dev->subsystem_device != 0x2292) { // Gen 7
+		return;
+	}
+
+	dev_set_removable(&dev->dev, DEVICE_FIXED);
+
+	/* Not all 0x15d3 components are external facing */
+	if (dev->device == 0x15d3 &&
+	    dev->devfn != 0x08 &&
+	    dev->devfn != 0x20) {
+		return;
+	}
+
+	dev->external_facing = true;
+}
+
+/*
+ * We also need to relabel the root port as a consequence of changing
+ * the JHL6540's PCIE hierarchy.
+ */
+static void carbon_X1_fixup_rootport_not_removable(struct pci_dev *dev)
+{
+	if (!dmi_match(DMI_PRODUCT_FAMILY, "ThinkPad X1 Carbon 7th") &&
+	    !dmi_match(DMI_PRODUCT_FAMILY, "ThinkPad X1 Carbon Gen 8"))
+		return;
+
+	dev->external_facing = false;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x15d3, carbon_X1_fixup_relabel_alpine_ridge);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x15d2, carbon_X1_fixup_relabel_alpine_ridge);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x15d4, carbon_X1_fixup_relabel_alpine_ridge);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x02b4, carbon_X1_fixup_rootport_not_removable);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x9db4, carbon_X1_fixup_rootport_not_removable);
+
+/*
  * Following are device-specific reset methods which can be used to
  * reset a single function if other methods (e.g. FLR, PM D0->D3) are
  * not available.
