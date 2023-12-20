@@ -546,8 +546,8 @@ static int mmd_phy_indirect(struct mii_bus *bus, int phy_addr, int devad,
 			       devad | MII_MMD_CTRL_NOINCR);
 }
 
-static int mmd_phy_read_indirect(struct mii_bus *bus, int phy_addr, int devad,
-				 u32 regnum)
+int __mmd_phy_read_indirect(struct mii_bus *bus, int phy_addr, int devad,
+			    u32 regnum)
 {
 	int ret;
 
@@ -558,9 +558,10 @@ static int mmd_phy_read_indirect(struct mii_bus *bus, int phy_addr, int devad,
 	/* Read the content of the MMD's selected register */
 	return __mdiobus_read(bus, phy_addr, MII_MMD_DATA);
 }
+EXPORT_SYMBOL(__mmd_phy_read_indirect);
 
-static int mmd_phy_write_indirect(struct mii_bus *bus, int phy_addr, int devad,
-				  u32 regnum, u16 val)
+int __mmd_phy_write_indirect(struct mii_bus *bus, int phy_addr, int devad,
+			     u32 regnum, u16 val)
 {
 	int ret;
 
@@ -571,6 +572,7 @@ static int mmd_phy_write_indirect(struct mii_bus *bus, int phy_addr, int devad,
 	/* Write the data into MMD's selected register */
 	return __mdiobus_write(bus, phy_addr, MII_MMD_DATA, val);
 }
+EXPORT_SYMBOL(__mmd_phy_write_indirect);
 
 static int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
 			int devad, u32 regnum)
@@ -578,7 +580,7 @@ static int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
 	if (is_c45)
 		return __mdiobus_c45_read(bus, phy_addr, devad, regnum);
 
-	return mmd_phy_read_indirect(bus, phy_addr, devad, regnum);
+	return __mmd_phy_read_indirect(bus, phy_addr, devad, regnum);
 }
 
 static int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
@@ -587,7 +589,7 @@ static int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
 	if (is_c45)
 		return __mdiobus_c45_write(bus, phy_addr, devad, regnum, val);
 
-	return mmd_phy_write_indirect(bus, phy_addr, devad, regnum, val);
+	return __mmd_phy_write_indirect(bus, phy_addr, devad, regnum, val);
 }
 
 /**

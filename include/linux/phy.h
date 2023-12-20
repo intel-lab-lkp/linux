@@ -1359,6 +1359,16 @@ int phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum);
 })
 
 /*
+ * __mmd_phy_read_indirect, __mmd_phy_write_indirect - Convenience functions for
+ * indirectly accessing MMD registers via clause 22 registers 13 and 14. Can be
+ * used in phy_driver's .read_mmd and .write_mmd methods.
+ */
+int __mmd_phy_read_indirect(struct mii_bus *bus, int phy_addr, int devad,
+			    u32 regnum);
+int __mmd_phy_write_indirect(struct mii_bus *bus, int phy_addr, int devad,
+			     u32 regnum, u16 val);
+
+/*
  * __phy_read_mmd - Convenience function for reading a register
  * from an MMD on a given PHY.
  */
