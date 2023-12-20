@@ -24,6 +24,7 @@
 
 struct aead_request;
 struct rtattr;
+static const struct crypto_type crypto_skcipher_type;
 
 struct skcipher_instance {
 	void (*free)(struct skcipher_instance *inst);

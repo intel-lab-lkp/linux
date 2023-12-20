@@ -44,7 +44,6 @@ struct skcipher_walk_buffer {
 	u8 buffer[];
 };
 
-static const struct crypto_type crypto_skcipher_type;
 
 static int skcipher_walk_next(struct skcipher_walk *walk);
 
