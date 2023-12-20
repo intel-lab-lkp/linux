@@ -96,7 +96,7 @@ l0_%=:	exit;						\
  */
 SEC("tracepoint")
 __description("helper access to map: empty range")
-__failure __msg("R2 invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R2=0. Attempting to dereference *map_value R1: off=0 value_size=48")
 __naked void access_to_map_empty_range(void)
 {
 	asm volatile ("					\
@@ -123,7 +123,7 @@ l0_%=:	exit;						\
  */
 SEC("tracepoint")
 __description("helper access to map: possibly-empty range")
-__failure __msg("R2 invalid zero-sized read")
+__failure __msg("invalid possibly zero-size read. Size comes from R2=[0,4]. Attempting to dereference *map_value R1: off=0 value_size=48")
 __naked void access_to_map_possibly_empty_range(void)
 {
 	asm volatile ("                                         \
@@ -258,7 +258,7 @@ l0_%=:	exit;						\
 
 SEC("tracepoint")
 __description("helper access to adjusted map (via const imm): empty range")
-__failure __msg("R2 invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R2=0. Attempting to dereference *map_value R1: off=4 value_size=48")
 __naked void via_const_imm_empty_range(void)
 {
 	asm volatile ("					\
@@ -423,7 +423,7 @@ l0_%=:	exit;						\
 
 SEC("tracepoint")
 __description("helper access to adjusted map (via const reg): empty range")
-__failure __msg("R2 invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R2=0. Attempting to dereference *map_value R1: off=0 value_size=48")
 __naked void via_const_reg_empty_range(void)
 {
 	asm volatile ("					\
@@ -593,7 +593,7 @@ l0_%=:	exit;						\
 
 SEC("tracepoint")
 __description("helper access to adjusted map (via variable): empty range")
-__failure __msg("R2 invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R2=0. Attempting to dereference *map_value R1: off=[0,4] value_size=48")
 __naked void map_via_variable_empty_range(void)
 {
 	asm volatile ("					\

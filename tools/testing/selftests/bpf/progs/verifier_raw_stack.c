@@ -64,7 +64,7 @@ __naked void load_bytes_negative_len_2(void)
 
 SEC("tc")
 __description("raw_stack: skb_load_bytes, zero len")
-__failure __msg("R4 invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R4=0. Attempting to dereference *fp R3: off=-8 max_size=N/A")
 __naked void skb_load_bytes_zero_len(void)
 {
 	asm volatile ("					\
@@ -333,7 +333,7 @@ __naked void load_bytes_invalid_access_5(void)
 
 SEC("tc")
 __description("raw_stack: skb_load_bytes, invalid access 6")
-__failure __msg("invalid zero-sized read")
+__failure __msg("invalid zero-size read. Size comes from R4=0. Attempting to dereference *fp R3: off=-512 max_size=N/A")
 __naked void load_bytes_invalid_access_6(void)
 {
 	asm volatile ("					\

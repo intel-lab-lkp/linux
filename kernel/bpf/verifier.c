@@ -7239,6 +7239,67 @@ static int check_helper_mem_access(struct bpf_verifier_env *env, int regno,
 	}
 }
 
+/* Helper function for logging an error about an invalid attempt to perform a
+ * (possibly) zero-sized memory access. The pointer being dereferenced is in
+ * register @ptr_regno, and the size of the access is in register @size_regno.
+ * The size register is assumed to either be a constant zero or have a zero lower
+ * bound.
+ *
+ * Logs a message like:
+ * invalid zero-size read. Size comes from R2=0. Attempting to dereference *map_value R1: off=[0,4] value_size=48
+ */
+static void log_zero_size_access_err(struct bpf_verifier_env *env,
+			      int ptr_regno,
+			      int size_regno)
+{
+	struct bpf_reg_state *ptr_reg = &cur_regs(env)[ptr_regno];
+	struct bpf_reg_state *size_reg = &cur_regs(env)[size_regno];
+	const bool size_is_const = tnum_is_const(size_reg->var_off);
+	const char *ptr_type_str = reg_type_str(env, ptr_reg->type);
+	/* allocate a few buffers to be used as parts of the error message */
+	char size_range_buf[32] = {0}, max_size_buf[32] = {0}, off_buf[64] = {0};
+	s64 min_off, max_off;
+
+	if (!size_is_const) {
+		snprintf(size_range_buf, sizeof(size_range_buf),
+			"[0,%lld]", size_reg->umax_value);
+	}
+
+	if (tnum_is_const(ptr_reg->var_off)) {
+		min_off = (s64)ptr_reg->var_off.value + ptr_reg->off;
+		snprintf(off_buf, sizeof(off_buf), "%lld", min_off);
+	} else {
+		min_off = ptr_reg->smin_value + ptr_reg->off;
+		max_off = ptr_reg->smax_value + ptr_reg->off;
+		snprintf(off_buf, sizeof(off_buf), "[%lld,%lld]", min_off, max_off);
+	}
+
+	/* attempt to figure out info about the maximum offset that could be allowed */
+	switch (ptr_reg->type) {
+	case PTR_TO_MAP_KEY:
+		snprintf(max_size_buf, sizeof(max_size_buf), "key_size=%d", ptr_reg->map_ptr->key_size);
+		break;
+	case PTR_TO_MAP_VALUE:
+		snprintf(max_size_buf, sizeof(max_size_buf), "value_size=%d", ptr_reg->map_ptr->value_size);
+		break;
+	case PTR_TO_PACKET:
+	case PTR_TO_PACKET_META:
+		snprintf(max_size_buf, sizeof(max_size_buf), "packet_size=%d", ptr_reg->range);
+		break;
+	case PTR_TO_MEM:
+		snprintf(max_size_buf, sizeof(max_size_buf), "mem_size=%d", ptr_reg->mem_size);
+	default:
+		snprintf(max_size_buf, sizeof(max_size_buf), "max_size=N/A");
+	}
+
+	verbose(env, "invalid %szero-size read. Size comes from R%d=%s. "
+		"Attempting to dereference *%s R%d: off=%s %s\n",
+		size_is_const ? "" : "possibly ",
+		size_regno, size_is_const ? "0" : size_range_buf,
+		ptr_type_str, ptr_regno, off_buf, max_size_buf);
+}
+
+
 /* verify arguments to helpers or kfuncs consisting of a pointer and an access
  * size.
  *
@@ -7281,7 +7342,7 @@ static int check_mem_size_reg(struct bpf_verifier_env *env,
 	}
 
 	if (reg->umin_value == 0 && !zero_size_allowed) {
-		verbose(env, "R%d invalid zero-sized read\n", regno);
+		log_zero_size_access_err(env, regno-1, regno);
 		return -EACCES;
 	}
 
