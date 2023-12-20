@@ -585,84 +585,63 @@ static int rtlgen_read_status(struct phy_device *phydev)
 	return rtlgen_get_speed(phydev);
 }
 
-static int rtlgen_read_mmd(struct phy_device *phydev, int devnum, u16 regnum)
+static int rtlgen_read_mmd(struct phy_device *phydev, int dev, u16 reg)
 {
-	int ret;
+	struct mii_bus *bus = phydev->mdio.bus;
+	int addr = phydev->mdio.addr;
+	int page, ret;
 
-	if (devnum == MDIO_MMD_PCS && regnum == MDIO_PCS_EEE_ABLE) {
-		rtl821x_write_page(phydev, 0xa5c);
-		ret = __phy_read(phydev, 0x12);
-		rtl821x_write_page(phydev, 0);
-	} else if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_ADV) {
-		rtl821x_write_page(phydev, 0xa5d);
-		ret = __phy_read(phydev, 0x10);
-		rtl821x_write_page(phydev, 0);
-	} else if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_LPABLE) {
-		rtl821x_write_page(phydev, 0xa5d);
-		ret = __phy_read(phydev, 0x11);
-		rtl821x_write_page(phydev, 0);
-	} else {
-		ret = -EOPNOTSUPP;
-	}
+	/* use c45 access if MDIO bus supports them */
+	if (bus->read_c45)
+		return __mdiobus_c45_read(bus, addr, dev, reg);
 
-	return ret;
+	/* use c22 indirect access for MMD != 31 */
+	if (dev != MDIO_MMD_VEND2)
+		return __mmd_phy_read_indirect(bus, addr, dev, reg);
+
+	/* MDIO_MMD_VEND2 registers need to be accessed in a different way */
+	page = reg >> 4;
+	reg = 0x10 | ((reg & 0xf) >> 1);
+
+	ret = rtl821x_write_page(phydev, page);
+	if (ret < 0)
+		return ret;
+
+	ret = __phy_read(phydev, reg);
+	if (ret < 0)
+		return ret;
+
+	return rtl821x_write_page(phydev, 0) ?: ret;
 }
 
-static int rtlgen_write_mmd(struct phy_device *phydev, int devnum, u16 regnum,
+static int rtlgen_write_mmd(struct phy_device *phydev, int dev, u16 reg,
 			    u16 val)
 {
-	int ret;
+	struct mii_bus *bus = phydev->mdio.bus;
+	int addr = phydev->mdio.addr;
+	int page, ret;
 
-	if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_ADV) {
-		rtl821x_write_page(phydev, 0xa5d);
-		ret = __phy_write(phydev, 0x10, val);
-		rtl821x_write_page(phydev, 0);
-	} else {
-		ret = -EOPNOTSUPP;
-	}
+	/* use c45 access if MDIO bus supports them */
+	if (bus->write_c45)
+		return __mdiobus_c45_write(bus, addr, dev, reg, val);
 
-	return ret;
-}
+	/* use c22 indirect access for MMD != 31 */
+	if (dev != MDIO_MMD_VEND2)
+		return __mmd_phy_write_indirect(bus, addr, dev, reg, val);
 
-static int rtl822x_read_mmd(struct phy_device *phydev, int devnum, u16 regnum)
-{
-	int ret = rtlgen_read_mmd(phydev, devnum, regnum);
+	/* MDIO_MMD_VEND2 registers need to be accessed in a different way */
+	page = reg >> 4;
+	reg = 0x10 | ((reg & 0xf) >> 1);
 
-	if (ret != -EOPNOTSUPP)
+	ret = rtl821x_write_page(phydev, page);
+	if (ret < 0)
 		return ret;
 
-	if (devnum == MDIO_MMD_PCS && regnum == MDIO_PCS_EEE_ABLE2) {
-		rtl821x_write_page(phydev, 0xa6e);
-		ret = __phy_read(phydev, 0x16);
-		rtl821x_write_page(phydev, 0);
-	} else if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_ADV2) {
-		rtl821x_write_page(phydev, 0xa6d);
-		ret = __phy_read(phydev, 0x12);
-		rtl821x_write_page(phydev, 0);
-	} else if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_LPABLE2) {
-		rtl821x_write_page(phydev, 0xa6d);
-		ret = __phy_read(phydev, 0x10);
-		rtl821x_write_page(phydev, 0);
-	}
-
-	return ret;
-}
-
-static int rtl822x_write_mmd(struct phy_device *phydev, int devnum, u16 regnum,
-			     u16 val)
-{
-	int ret = rtlgen_write_mmd(phydev, devnum, regnum, val);
-
-	if (ret != -EOPNOTSUPP)
+	ret = __phy_write(phydev, reg, val);
+	if (ret < 0)
 		return ret;
 
-	if (devnum == MDIO_MMD_AN && regnum == MDIO_AN_EEE_ADV2) {
-		rtl821x_write_page(phydev, 0xa6d);
-		ret = __phy_write(phydev, 0x12, val);
-		rtl821x_write_page(phydev, 0);
-	}
-
-	return ret;
+	return rtl821x_write_page(phydev, 0) ?: ret;
 }
 
 static int rtl822x_get_features(struct phy_device *phydev)
@@ -993,8 +972,8 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= rtlgen_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
-		.read_mmd	= rtl822x_read_mmd,
-		.write_mmd	= rtl822x_write_mmd,
+		.read_mmd	= rtlgen_read_mmd,
+		.write_mmd	= rtlgen_write_mmd,
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc840),
 		.name		= "RTL8226B_RTL8221B 2.5Gbps PHY",
@@ -1005,8 +984,8 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= rtlgen_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
-		.read_mmd	= rtl822x_read_mmd,
-		.write_mmd	= rtl822x_write_mmd,
+		.read_mmd	= rtlgen_read_mmd,
+		.write_mmd	= rtlgen_write_mmd,
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc838),
 		.name           = "RTL8226-CG 2.5Gbps PHY",
