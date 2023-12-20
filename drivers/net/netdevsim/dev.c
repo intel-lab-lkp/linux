@@ -35,6 +35,9 @@
 
 #include "netdevsim.h"
 
+static LIST_HEAD(nsim_dev_list);
+static DEFINE_MUTEX(nsim_dev_list_lock);
+
 static unsigned int
 nsim_dev_port_index(enum nsim_dev_port_type type, unsigned int port_index)
 {
@@ -1531,6 +1534,7 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 				 nsim_bus_dev->initial_net, &nsim_bus_dev->dev);
 	if (!devlink)
 		return -ENOMEM;
+	mutex_lock(&nsim_dev_list_lock);
 	devl_lock(devlink);
 	nsim_dev = devlink_priv(devlink);
 	nsim_dev->nsim_bus_dev = nsim_bus_dev;
@@ -1544,6 +1548,7 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 	spin_lock_init(&nsim_dev->fa_cookie_lock);
 
 	dev_set_drvdata(&nsim_bus_dev->dev, nsim_dev);
+	list_add(&nsim_dev->list, &nsim_dev_list);
 
 	nsim_dev->vfconfigs = kcalloc(nsim_bus_dev->max_vfs,
 				      sizeof(struct nsim_vf_config),
@@ -1607,6 +1612,7 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 
 	nsim_dev->esw_mode = DEVLINK_ESWITCH_MODE_LEGACY;
 	devl_unlock(devlink);
+	mutex_unlock(&nsim_dev_list_lock);
 	return 0;
 
 err_hwstats_exit:
@@ -1668,8 +1674,18 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 {
 	struct nsim_dev *nsim_dev = dev_get_drvdata(&nsim_bus_dev->dev);
 	struct devlink *devlink = priv_to_devlink(nsim_dev);
+	struct nsim_dev *pos, *tmp;
 
+	mutex_lock(&nsim_dev_list_lock);
 	devl_lock(devlink);
+
+	list_for_each_entry_safe(pos, tmp, &nsim_dev_list, list) {
+		if (pos == nsim_dev) {
+			list_del(&nsim_dev->list);
+			break;
+		}
+	}
+
 	nsim_dev_reload_destroy(nsim_dev);
 
 	nsim_bpf_dev_exit(nsim_dev);
@@ -1681,6 +1697,7 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 	kfree(nsim_dev->vfconfigs);
 	kfree(nsim_dev->fa_cookie);
 	devl_unlock(devlink);
+	mutex_unlock(&nsim_dev_list_lock);
 	devlink_free(devlink);
 	dev_set_drvdata(&nsim_bus_dev->dev, NULL);
 }
