@@ -9,6 +9,26 @@
 int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
 int __must_check _kstrtol(const char *s, unsigned int base, long *res);
 
+/*
+ * The default suffix list would not include "E" since it's too easy to overflow
+ * and not much real world usage.
+ */
+enum unit_suffix {
+	SUFFIX_K = (1 << 0),
+	SUFFIX_M = (1 << 1),
+	SUFFIX_G = (1 << 2),
+	SUFFIX_T = (1 << 3),
+	SUFFIX_P = (1 << 4),
+	SUFFIX_E = (1 << 5),
+};
+
+/*
+ * The default suffix list would not include "E" since it's too easy to overflow
+ * and not much real world usage.
+ */
+#define KSTRTOULL_SUFFIX_DEFAULT (SUFFIX_K | SUFFIX_M | SUFFIX_G | SUFFIX_T | SUFFIX_P)
+int kstrtoull_suffix(const char *s, unsigned int base, unsigned long long *res,
+		     enum unit_suffix suffixes);
 int __must_check kstrtoull(const char *s, unsigned int base, unsigned long long *res);
 int __must_check kstrtoll(const char *s, unsigned int base, long long *res);
 
