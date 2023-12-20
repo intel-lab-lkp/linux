@@ -247,6 +247,15 @@ enum adv7511_input_sync_pulse {
 	ADV7511_INPUT_SYNC_PULSE_NONE = 3,
 };
 
+enum adv7511_ddc_status {
+	ADV7511_DDC_STATUS_IN_RESET = 0,
+	ADV7511_DDC_STATUS_READING_EDID = 1,
+	ADV7511_DDC_STATUS_WAIT_HDCP = 2,
+	ADV7511_DDC_STATUS_INIT_HDCP = 3,
+	ADV7511_DDC_STATUS_HDCP_ENABLED = 4,
+	ADV7511_DDC_STATUS_INIT_HDCP_REPEATER = 5,
+};
+
 /**
  * enum adv7511_sync_polarity - Polarity for the input sync signals
  * @ADV7511_SYNC_POLARITY_PASSTHROUGH:  Sync polarity matches that of

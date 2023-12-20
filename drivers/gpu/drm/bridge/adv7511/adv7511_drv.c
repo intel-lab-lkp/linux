@@ -533,6 +533,48 @@ static int adv7511_wait_for_edid(struct adv7511 *adv7511, int timeout)
 	return adv7511->edid_read ? 0 : -EIO;
 }
 
+static int adv7511_wait_for_hdcp(struct adv7511 *adv7511)
+{
+	struct device *dev = &adv7511->i2c_edid->dev;
+	unsigned int status = 0;
+	const int interval = 25;
+	int timeout = 100;
+	int ret = -EINVAL;
+
+	for (; timeout > 0; timeout -= interval) {
+		ret = regmap_read(adv7511->regmap, ADV7511_REG_DDC_STATUS,
+				  &status);
+		if (ret < 0)
+			return ret;
+
+		status &= 0x0F;
+
+		switch (status) {
+		case ADV7511_DDC_STATUS_IN_RESET:
+		case ADV7511_DDC_STATUS_READING_EDID:
+		case ADV7511_DDC_STATUS_HDCP_ENABLED:
+			return 0;
+		case ADV7511_DDC_STATUS_WAIT_HDCP:
+		case ADV7511_DDC_STATUS_INIT_HDCP:
+		case ADV7511_DDC_STATUS_INIT_HDCP_REPEATER:
+			dev_dbg(dev, "DDC status 0x%x\n", status);
+			break;
+		default:
+			dev_err(dev, "Unknown status 0x%x\n", status);
+			return -EIO;
+		}
+
+		msleep(interval);
+	}
+
+	if (status) {
+		dev_warn(dev, "Stuck in HDCP state 0x%x\n", status);
+		ret = -EAGAIN;
+	}
+
+	return ret;
+}
+
 static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 				  size_t len)
 {
@@ -547,21 +589,20 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 		return -EINVAL;
 
 	if (adv7511->current_edid_segment != edid_segment) {
-		unsigned int status;
-
-		ret = regmap_read(adv7511->regmap, ADV7511_REG_DDC_STATUS,
-				  &status);
+		/*
+		 * EDID and HDCP shares memory so make sure HDCP is done before
+		 * reading EDID.
+		 */
+		ret = adv7511_wait_for_hdcp(adv7511);
 		if (ret < 0)
 			return ret;
 
-		if (status != 2) {
-			adv7511->edid_read = false;
-			regmap_write(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
-				     edid_segment);
-			ret = adv7511_wait_for_edid(adv7511, 200);
-			if (ret < 0)
-				return ret;
-		}
+		adv7511->edid_read = false;
+		regmap_write(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
+			     edid_segment);
+		ret = adv7511_wait_for_edid(adv7511, 200);
+		if (ret < 0)
+			return ret;
 
 		/* Break this apart, hopefully more I2C controllers will
 		 * support 64 byte transfers than 256 byte transfers
