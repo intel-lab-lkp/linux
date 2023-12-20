@@ -651,6 +651,18 @@ static int rtl822x_probe(struct phy_device *phydev)
 	return 0;
 }
 
+static int rtl822x_resume(struct phy_device *phydev)
+{
+	int ret = genphy_c45_pma_resume(phydev);
+
+	if (ret < 0)
+		return ret;
+
+	msleep(20);
+
+	return 0;
+}
+
 static int rtl822x_config_aneg(struct phy_device *phydev)
 {
 	bool changed = false;
@@ -949,8 +961,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg	= rtl822x_config_aneg,
 		.read_status	= rtl822x_read_status,
-		.suspend	= genphy_suspend,
-		.resume		= rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
@@ -961,8 +973,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg	= rtl822x_config_aneg,
 		.read_status	= rtl822x_read_status,
-		.suspend	= genphy_suspend,
-		.resume		= rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
@@ -973,8 +985,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
-		.suspend        = genphy_suspend,
-		.resume         = rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
@@ -985,8 +997,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
-		.suspend        = genphy_suspend,
-		.resume         = rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
@@ -997,8 +1009,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
-		.suspend        = genphy_suspend,
-		.resume         = rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
@@ -1009,8 +1021,8 @@ static struct phy_driver realtek_drvs[] = {
 		.probe		= rtl822x_probe,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
-		.suspend        = genphy_suspend,
-		.resume         = rtlgen_resume,
+		.suspend	= genphy_c45_pma_suspend,
+		.resume		= rtl822x_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
