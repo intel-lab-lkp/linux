@@ -760,7 +760,7 @@ static ssize_t btrfs_chunk_size_store(struct kobject *kobj,
 {
 	struct btrfs_space_info *space_info = to_space_info(kobj);
 	struct btrfs_fs_info *fs_info = to_fs_info(get_btrfs_kobj(kobj));
-	char *retptr;
+	int ret;
 	u64 val;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -776,11 +776,9 @@ static ssize_t btrfs_chunk_size_store(struct kobject *kobj,
 	if (space_info->flags & BTRFS_BLOCK_GROUP_SYSTEM)
 		return -EPERM;
 
-	val = memparse(buf, &retptr);
-	/* There could be trailing '\n', also catch any typos after the value */
-	retptr = skip_spaces(retptr);
-	if (*retptr != 0 || val == 0)
-		return -EINVAL;
+	ret = kstrtoull_suffix(buf, 0, &val, KSTRTOULL_SUFFIX_DEFAULT);
+	if (ret < 0)
+		return ret;
 
 	val = min(val, BTRFS_MAX_DATA_CHUNK_SIZE);
 
@@ -1779,14 +1777,12 @@ static ssize_t btrfs_devinfo_scrub_speed_max_store(struct kobject *kobj,
 {
 	struct btrfs_device *device = container_of(kobj, struct btrfs_device,
 						   devid_kobj);
-	char *endptr;
 	unsigned long long limit;
+	int ret;
 
-	limit = memparse(buf, &endptr);
-	/* There could be trailing '\n', also catch any typos after the value. */
-	endptr = skip_spaces(endptr);
-	if (*endptr != 0)
-		return -EINVAL;
+	ret = kstrtoull_suffix(buf, 0, &limit, KSTRTOULL_SUFFIX_DEFAULT);
+	if (ret < 0)
+		return ret;
 	WRITE_ONCE(device->scrub_speed_max, limit);
 	return len;
 }
