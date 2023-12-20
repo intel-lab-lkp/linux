@@ -3225,6 +3225,11 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	folio = filemap_get_folio(mapping, index);
 	if (likely(!IS_ERR(folio))) {
 		/*
+		 * try to promote inactive folio here when it is accessed
+		 * as minor fault
+		 */
+		folio_mark_accessed(folio);
+		/*
 		 * We found the page, so try async readahead before waiting for
 		 * the lock.
 		 */
