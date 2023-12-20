@@ -2952,12 +2952,11 @@ static u32 intel_spi_read(struct intel_uncore *uncore, u32 offset)
 	return intel_uncore_read(uncore, PRIMARY_SPI_TRIGGER);
 }
 
-static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
+static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915, u16 *vbt_size)
 {
 	u32 count, data, found, store = 0;
 	u32 static_region, oprom_offset;
 	u32 oprom_size = 0x200000;
-	u16 vbt_size;
 	u32 *vbt;
 
 	static_region = intel_uncore_read(&i915->uncore, SPI_STATIC_REGIONS);
@@ -2979,18 +2978,18 @@ static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
 		goto err_not_found;
 
 	/* Get VBT size and allocate space for the VBT */
-	vbt_size = intel_spi_read(&i915->uncore,
+	*vbt_size = intel_spi_read(&i915->uncore,
 				  found + offsetof(struct vbt_header, vbt_size));
-	vbt_size &= 0xffff;
+	*vbt_size &= 0xffff;
 
-	vbt = kzalloc(round_up(vbt_size, 4), GFP_KERNEL);
+	vbt = kzalloc(round_up(*vbt_size, 4), GFP_KERNEL);
 	if (!vbt)
 		goto err_not_found;
 
-	for (count = 0; count < vbt_size; count += 4)
+	for (count = 0; count < *vbt_size; count += 4)
 		*(vbt + store++) = intel_spi_read(&i915->uncore, found + count);
 
-	if (!intel_bios_is_valid_vbt(vbt, vbt_size))
+	if (!intel_bios_is_valid_vbt(vbt, *vbt_size))
 		goto err_free_vbt;
 
 	drm_dbg_kms(&i915->drm, "Found valid VBT in SPI flash\n");
@@ -2999,16 +2998,16 @@ static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
 
 err_free_vbt:
 	kfree(vbt);
+	*vbt_size = 0;
 err_not_found:
 	return NULL;
 }
 
-static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
+static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915, u16 *vbt_size)
 {
 	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
 	void __iomem *p = NULL, *oprom;
 	struct vbt_header *vbt;
-	u16 vbt_size;
 	size_t i, size;
 
 	oprom = pci_map_rom(pdev, &size);
@@ -3033,21 +3032,21 @@ static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
 		goto err_unmap_oprom;
 	}
 
-	vbt_size = ioread16(p + offsetof(struct vbt_header, vbt_size));
-	if (vbt_size > size) {
+	*vbt_size = ioread16(p + offsetof(struct vbt_header, vbt_size));
+	if (*vbt_size > size) {
 		drm_dbg(&i915->drm,
-			"VBT incomplete (vbt_size overflows)\n");
+			"VBT incomplete (*vbt_size overflows)\n");
 		goto err_unmap_oprom;
 	}
 
 	/* The rest will be validated by intel_bios_is_valid_vbt() */
-	vbt = kmalloc(vbt_size, GFP_KERNEL);
+	vbt = kmalloc(*vbt_size, GFP_KERNEL);
 	if (!vbt)
 		goto err_unmap_oprom;
 
-	memcpy_fromio(vbt, p, vbt_size);
+	memcpy_fromio(vbt, p, *vbt_size);
 
-	if (!intel_bios_is_valid_vbt(vbt, vbt_size))
+	if (!intel_bios_is_valid_vbt(vbt, *vbt_size))
 		goto err_free_vbt;
 
 	pci_unmap_rom(pdev, oprom);
@@ -3058,6 +3057,7 @@ static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
 
 err_free_vbt:
 	kfree(vbt);
+	*vbt_size = 0;
 err_unmap_oprom:
 	pci_unmap_rom(pdev, oprom);
 
@@ -3074,8 +3074,10 @@ err_unmap_oprom:
  */
 void intel_bios_init(struct drm_i915_private *i915)
 {
+	struct intel_opregion *opregion = &i915->display.opregion;
 	const struct vbt_header *vbt = i915->display.opregion.vbt;
 	struct vbt_header *oprom_vbt = NULL;
+	u16 vbt_size;
 	const struct bdb_header *bdb;
 
 	INIT_LIST_HEAD(&i915->display.vbt.display_devices);
@@ -3094,13 +3096,15 @@ void intel_bios_init(struct drm_i915_private *i915)
 	 * PCI mapping
 	 */
 	if (!vbt && IS_DGFX(i915)) {
-		oprom_vbt = spi_oprom_get_vbt(i915);
-		vbt = oprom_vbt;
+		oprom_vbt = spi_oprom_get_vbt(i915, &vbt_size);
+		opregion->vbt = vbt = oprom_vbt;
+		opregion->vbt_size = (u32)vbt_size;
 	}
 
 	if (!vbt) {
-		oprom_vbt = oprom_get_vbt(i915);
-		vbt = oprom_vbt;
+		oprom_vbt = oprom_get_vbt(i915, &vbt_size);
+		opregion->vbt = vbt = oprom_vbt;
+		opregion->vbt_size = (u32)vbt_size;
 	}
 
 	if (!vbt)
@@ -3133,8 +3137,6 @@ out:
 	/* Further processing on pre-parsed or generated child device data */
 	parse_sdvo_device_mapping(i915);
 	parse_ddi_ports(i915);
-
-	kfree(oprom_vbt);
 }
 
 static void intel_bios_init_panel(struct drm_i915_private *i915,

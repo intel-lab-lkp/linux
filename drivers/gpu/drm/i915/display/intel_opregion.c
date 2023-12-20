@@ -1244,8 +1244,13 @@ void intel_opregion_cleanup(struct drm_i915_private *i915)
 {
 	struct intel_opregion *opregion = &i915->display.opregion;
 
-	if (!opregion->header)
+	if (!opregion->header) {
+		if (opregion->vbt) {
+			kfree(opregion->vbt);
+			opregion->vbt_size = 0;
+		}
 		return;
+	}
 
 	/* just clear all opregion memory pointers now */
 	memunmap(opregion->header);
