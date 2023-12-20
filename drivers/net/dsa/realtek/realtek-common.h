@@ -7,6 +7,7 @@
 
 void realtek_common_lock(void *ctx);
 void realtek_common_unlock(void *ctx);
+int realtek_common_setup_user_mdio(struct dsa_switch *ds);
 struct realtek_priv *
 realtek_common_probe(struct device *dev, struct regmap_config rc,
 		     struct regmap_config rc_nolock);

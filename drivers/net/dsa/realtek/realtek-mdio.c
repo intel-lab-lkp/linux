@@ -142,7 +142,6 @@ int realtek_mdio_probe(struct mdio_device *mdiodev)
 	priv->bus = mdiodev->bus;
 	priv->mdio_addr = mdiodev->addr;
 	priv->write_reg_noack = realtek_mdio_write;
-	priv->ds_ops = priv->variant->ds_ops_mdio;
 
 	ret = realtek_common_register_switch(priv);
 	if (ret)
@@ -155,11 +154,6 @@ EXPORT_SYMBOL_GPL(realtek_mdio_probe);
 void realtek_mdio_remove(struct mdio_device *mdiodev)
 {
 	struct realtek_priv *priv = dev_get_drvdata(&mdiodev->dev);
-
-	if (!priv)
-		return;
-
-	dsa_unregister_switch(priv->ds);
 
 	realtek_common_remove(priv);
 }
