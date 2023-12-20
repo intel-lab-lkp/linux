@@ -58,11 +58,9 @@ struct realtek_priv {
 	struct mii_bus		*bus;
 	int			mdio_addr;
 
-	unsigned int		clk_delay;
-	u8			cmd_read;
-	u8			cmd_write;
 	spinlock_t		lock; /* Locks around command writes */
 	struct dsa_switch	*ds;
+	const struct dsa_switch_ops *ds_ops;
 	struct irq_domain	*irqdomain;
 	bool			leds_disabled;
 
@@ -78,6 +76,8 @@ struct realtek_priv {
 
 	int			vlan_enabled;
 	int			vlan4k_enabled;
+
+	const struct realtek_variant *variant;
 
 	char			buf[4096];
 	void			*chip_data; /* Per-chip extra variant data */
