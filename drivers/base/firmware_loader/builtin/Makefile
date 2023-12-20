@@ -20,7 +20,7 @@ filechk_fwbin = \
 	echo "    .section .rodata"				;\
 	echo "    .p2align 4"					;\
 	echo "_fw_$(FWSTR)_bin:"				;\
-	echo "    .incbin \"$(fwdir)/$(FWNAME)\""		;\
+	echo "    .incbin \"$(obj)/$(FWNAME)\""		;\
 	echo "_fw_end:"						;\
 	echo "    .section .rodata.str,\"aMS\",$(PROGBITS),1"	;\
 	echo "    .p2align $(ASM_ALIGN)"			;\
@@ -36,7 +36,15 @@ $(obj)/%.gen.S: FORCE
 	$(call filechk,fwbin)
 
 # The .o files depend on the binaries directly; the .S files don't.
-$(addprefix $(obj)/, $(firmware)): $(obj)/%.gen.o: $(fwdir)/%
+$(addprefix $(obj)/, $(firmware)): $(obj)/%.gen.o: $(obj)/%
 
-targets := $(patsubst $(obj)/%,%, \
-                                $(shell find $(obj) -name \*.gen.S 2>/dev/null))
+$(obj)/% : $(fwdir)/% FORCE
+	$(call if_changed,copy)
+
+$(obj)/% : $(fwdir)/%.xz FORCE
+	$(call if_changed,xzdec)
+
+$(obj)/% : $(fwdir)/%.zst FORCE
+	$(call if_changed,zstddec)
+
+targets := $(patsubst %.gen.o, %.gen.S, $(firmware)) $(CONFIG_EXTRA_FIRMWARE)

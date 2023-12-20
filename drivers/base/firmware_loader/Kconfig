@@ -76,7 +76,10 @@ config EXTRA_FIRMWARE
 	  image since it combines both GPL and non-GPL work. You should
 	  consult a lawyer of your own before distributing such an image.
 
-	  NOTE: Compressed files are not supported in EXTRA_FIRMWARE.
+	  NOTE: Compressed files are supported by EXTRA_FIRMWARE. The build
+	  system will look for uncompressed files first then fall back to
+	  searching for compressed files in a similar way to
+	  CONFIG_FW_LOADER_COMPRESS.
 
 config EXTRA_FIRMWARE_DIR
 	string "Firmware blobs root directory"
