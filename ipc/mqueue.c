@@ -118,9 +118,9 @@ struct posix_msg_tree_node {
  * Solution: use _release and _acquire barriers.
  *
  * 3) There is intentionally no barrier when setting current->state
- *    to TASK_INTERRUPTIBLE: spin_unlock(&info->lock) provides the
+ *    to TASK_INTERRUPTIBLE: mutex_unlock(&info->lock) provides the
  *    release memory barrier, and the wakeup is triggered when holding
- *    info->lock, i.e. spin_lock(&info->lock) provided a pairing
+ *    info->lock, i.e. mutex_lock(&info->lock) provided a pairing
  *    acquire memory barrier.
  */
 
@@ -132,7 +132,7 @@ struct ext_wait_queue {		/* queue of sleeping tasks */
 };
 
 struct mqueue_inode_info {
-	spinlock_t lock;
+	struct mutex lock;
 	struct inode vfs_inode;
 	wait_queue_head_t wait_q;
 
@@ -312,7 +312,7 @@ static struct inode *mqueue_get_inode(struct super_block *sb,
 		inode->i_size = FILENT_SIZE;
 		/* mqueue specific info */
 		info = MQUEUE_I(inode);
-		spin_lock_init(&info->lock);
+		mutex_init(&info->lock);
 		init_waitqueue_head(&info->wait_q);
 		INIT_LIST_HEAD(&info->e_wait_q[0].list);
 		INIT_LIST_HEAD(&info->e_wait_q[1].list);
@@ -523,11 +523,11 @@ static void mqueue_evict_inode(struct inode *inode)
 
 	ipc_ns = get_ns_from_inode(inode);
 	info = MQUEUE_I(inode);
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 	while ((msg = msg_get(info)) != NULL)
 		list_add_tail(&msg->m_list, &tmp_msg);
 	kfree(info->node_cache);
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 
 	list_for_each_entry_safe(msg, nmsg, &tmp_msg, m_list) {
 		list_del(&msg->m_list);
@@ -640,7 +640,7 @@ static ssize_t mqueue_read_file(struct file *filp, char __user *u_data,
 	char buffer[FILENT_SIZE];
 	ssize_t ret;
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 	snprintf(buffer, sizeof(buffer),
 			"QSIZE:%-10lu NOTIFY:%-5d SIGNO:%-5d NOTIFY_PID:%-6d\n",
 			info->qsize,
@@ -649,7 +649,7 @@ static ssize_t mqueue_read_file(struct file *filp, char __user *u_data,
 			 info->notify.sigev_notify == SIGEV_SIGNAL) ?
 				info->notify.sigev_signo : 0,
 			pid_vnr(info->notify_owner));
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 	buffer[sizeof(buffer)-1] = '\0';
 
 	ret = simple_read_from_buffer(u_data, count, off, buffer,
@@ -665,11 +665,11 @@ static int mqueue_flush_file(struct file *filp, fl_owner_t id)
 {
 	struct mqueue_inode_info *info = MQUEUE_I(file_inode(filp));
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 	if (task_tgid(current) == info->notify_owner)
 		remove_notification(info);
 
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 	return 0;
 }
 
@@ -680,13 +680,13 @@ static __poll_t mqueue_poll_file(struct file *filp, struct poll_table_struct *po
 
 	poll_wait(filp, &info->wait_q, poll_tab);
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 	if (info->attr.mq_curmsgs)
 		retval = EPOLLIN | EPOLLRDNORM;
 
 	if (info->attr.mq_curmsgs < info->attr.mq_maxmsg)
 		retval |= EPOLLOUT | EPOLLWRNORM;
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 
 	return retval;
 }
@@ -724,7 +724,7 @@ static int wq_sleep(struct mqueue_inode_info *info, int sr,
 		/* memory barrier not required, we hold info->lock */
 		__set_current_state(TASK_INTERRUPTIBLE);
 
-		spin_unlock(&info->lock);
+		mutex_unlock(&info->lock);
 		time = schedule_hrtimeout_range_clock(timeout, 0,
 			HRTIMER_MODE_ABS, CLOCK_REALTIME);
 
@@ -734,7 +734,7 @@ static int wq_sleep(struct mqueue_inode_info *info, int sr,
 			retval = 0;
 			goto out;
 		}
-		spin_lock(&info->lock);
+		mutex_lock(&info->lock);
 
 		/* we hold info->lock, so no memory barrier required */
 		if (READ_ONCE(ewp->state) == STATE_READY) {
@@ -752,7 +752,7 @@ static int wq_sleep(struct mqueue_inode_info *info, int sr,
 	}
 	list_del(&ewp->list);
 out_unlock:
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 out:
 	return retval;
 }
@@ -1125,7 +1125,7 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 	if (!info->node_cache)
 		new_leaf = kmalloc(sizeof(*new_leaf), GFP_KERNEL);
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 
 	if (!info->node_cache && new_leaf) {
 		/* Save our speculative allocation into the cache */
@@ -1166,7 +1166,7 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 		simple_inode_init_ts(inode);
 	}
 out_unlock:
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 	wake_up_q(&wake_q);
 out_free:
 	if (ret)
@@ -1230,7 +1230,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 	if (!info->node_cache)
 		new_leaf = kmalloc(sizeof(*new_leaf), GFP_KERNEL);
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 
 	if (!info->node_cache && new_leaf) {
 		/* Save our speculative allocation into the cache */
@@ -1242,7 +1242,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 
 	if (info->attr.mq_curmsgs == 0) {
 		if (f.file->f_flags & O_NONBLOCK) {
-			spin_unlock(&info->lock);
+			mutex_unlock(&info->lock);
 			ret = -EAGAIN;
 		} else {
 			wait.task = current;
@@ -1261,7 +1261,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 
 		/* There is now free space in queue. */
 		pipelined_receive(&wake_q, info);
-		spin_unlock(&info->lock);
+		mutex_unlock(&info->lock);
 		wake_up_q(&wake_q);
 		ret = 0;
 	}
@@ -1391,7 +1391,7 @@ retry:
 	info = MQUEUE_I(inode);
 
 	ret = 0;
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 	if (notification == NULL) {
 		if (info->notify_owner == task_tgid(current)) {
 			remove_notification(info);
@@ -1424,7 +1424,7 @@ retry:
 		info->notify_user_ns = get_user_ns(current_user_ns());
 		inode_set_atime_to_ts(inode, inode_set_ctime_current(inode));
 	}
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 out_fput:
 	fdput(f);
 out:
@@ -1470,7 +1470,7 @@ static int do_mq_getsetattr(int mqdes, struct mq_attr *new, struct mq_attr *old)
 	inode = file_inode(f.file);
 	info = MQUEUE_I(inode);
 
-	spin_lock(&info->lock);
+	mutex_lock(&info->lock);
 
 	if (old) {
 		*old = info->attr;
@@ -1488,7 +1488,7 @@ static int do_mq_getsetattr(int mqdes, struct mq_attr *new, struct mq_attr *old)
 		inode_set_atime_to_ts(inode, inode_set_ctime_current(inode));
 	}
 
-	spin_unlock(&info->lock);
+	mutex_unlock(&info->lock);
 	fdput(f);
 	return 0;
 }
