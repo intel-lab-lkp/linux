@@ -554,8 +554,10 @@ static ssize_t nilfs_cpfile_do_get_ssinfo(struct inode *cpfile, __u64 *cnop,
 /**
  * nilfs_cpfile_get_cpinfo -
  * @cpfile:
- * @cno:
- * @ci:
+ * @cnop:
+ * @mode:
+ * @buf:
+ * @cisz:
  * @nci:
  */
 
