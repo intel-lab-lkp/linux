@@ -7250,6 +7250,7 @@ static int check_mem_size_reg(struct bpf_verifier_env *env,
 			      bool zero_size_allowed,
 			      struct bpf_call_arg_meta *meta)
 {
+	const bool size_is_const = tnum_is_const(reg->var_off);
 	int err;
 
 	/* This is used to refine r0 return value bounds for helpers
@@ -7265,7 +7266,7 @@ static int check_mem_size_reg(struct bpf_verifier_env *env,
 	/* The register is SCALAR_VALUE; the access check
 	 * happens using its boundaries.
 	 */
-	if (!tnum_is_const(reg->var_off))
+	if (!size_is_const)
 		/* For unprivileged variable accesses, disable raw
 		 * mode so that the program is required to
 		 * initialize all the memory that the helper could
@@ -7279,12 +7280,9 @@ static int check_mem_size_reg(struct bpf_verifier_env *env,
 		return -EACCES;
 	}
 
-	if (reg->umin_value == 0) {
-		err = check_helper_mem_access(env, regno - 1, 0,
-					      zero_size_allowed,
-					      meta);
-		if (err)
-			return err;
+	if (reg->umin_value == 0 && !zero_size_allowed) {
+		verbose(env, "R%d invalid zero-sized read\n", regno);
+		return -EACCES;
 	}
 
 	if (reg->umax_value >= BPF_MAX_VAR_SIZ) {
@@ -7292,9 +7290,21 @@ static int check_mem_size_reg(struct bpf_verifier_env *env,
 			regno);
 		return -EACCES;
 	}
+	/* If !zero_size_allowed, we already checked that umin_value > 0, so
+	 * umax_value should also be > 0.
+	 */
+	if (reg->umax_value == 0 && !zero_size_allowed) {
+		verbose(env, "verifier bug: !zero_size_allowed should have been handled already\n");
+		return -EFAULT;
+	}
 	err = check_helper_mem_access(env, regno - 1,
-				      reg->umax_value,
-				      zero_size_allowed, meta);
+				reg->umax_value,
+				/* zero_size_allowed: we asserted above that umax_value is not
+				 * zero if !zero_size_allowed, so we don't need any further
+				 * checks.
+				 */
+				true,
+				meta);
 	if (!err)
 		err = mark_chain_precision(env, regno);
 	return err;
