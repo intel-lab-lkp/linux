@@ -882,6 +882,8 @@ static int acpi_power_meter_add(struct acpi_device *device)
 	strcpy(acpi_device_name(device), ACPI_POWER_METER_DEVICE_NAME);
 	strcpy(acpi_device_class(device), ACPI_POWER_METER_CLASS);
 	device->driver_data = resource;
+	if (dmi_match(DMI_SYS_VENDOR, "Dell Inc."))
+		request_module("ipmi_si");
 
 	res = read_capabilities(resource);
 	if (res)
