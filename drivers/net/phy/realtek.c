@@ -55,6 +55,7 @@
 #define RTL8201F_IER				0x13
 
 #define RTL8221_GBCR				0xa412
+#define RTL8221_GANLPAR				0xa414
 
 #define RTL8366RB_POWER_SAVE			0x15
 #define RTL8366RB_POWER_SAVE_ON			BIT(12)
@@ -678,30 +679,17 @@ static int rtl822x_config_aneg(struct phy_device *phydev)
 
 static int rtl822x_read_status(struct phy_device *phydev)
 {
-	int ret;
+	int val;
 
 	if (phydev->autoneg == AUTONEG_ENABLE) {
-		int lpadv = phy_read_paged(phydev, 0xa5d, 0x13);
+		val = phy_read_mmd(phydev, MDIO_MMD_VEND2, RTL8221_GANLPAR);
+		if (val < 0)
+			return val;
 
-		if (lpadv < 0)
-			return lpadv;
-
-		linkmode_mod_bit(ETHTOOL_LINK_MODE_10000baseT_Full_BIT,
-				 phydev->lp_advertising,
-				 lpadv & MDIO_AN_10GBT_STAT_LP10G);
-		linkmode_mod_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
-				 phydev->lp_advertising,
-				 lpadv & MDIO_AN_10GBT_STAT_LP5G);
-		linkmode_mod_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
-				 phydev->lp_advertising,
-				 lpadv & MDIO_AN_10GBT_STAT_LP2_5G);
+		mii_stat1000_mod_linkmode_lpa_t(phydev->lp_advertising, val);
 	}
 
-	ret = genphy_read_status(phydev);
-	if (ret < 0)
-		return ret;
-
-	return rtlgen_get_speed(phydev);
+	return genphy_c45_read_status(phydev);
 }
 
 static bool rtlgen_supports_2_5gbps(struct phy_device *phydev)
