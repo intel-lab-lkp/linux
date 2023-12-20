@@ -677,8 +677,8 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	if (rc)
 		goto err_pcibios;
 
-	kobject_uevent(&dev->dev.kobj, KOBJ_CHANGE);
 	iov->num_VFs = nr_virtfn;
+	kobject_uevent(&dev->dev.kobj, KOBJ_CHANGE);
 
 	return 0;
 
