@@ -3249,7 +3249,7 @@ qla2x00_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		ql_log_pci(ql_log_fatal, pdev, 0x0031,
 		    "Failed to allocate memory for adapter, aborting.\n");
 
-		goto probe_hw_failed;
+		goto mem_alloc_failed;
 	}
 
 	req->max_q_depth = MAX_Q_DEPTH;
@@ -3660,6 +3660,8 @@ probe_failed:
 
 probe_hw_failed:
 	qla2x00_mem_free(ha);
+
+mem_alloc_failed:
 	qla2x00_free_req_que(ha, req);
 	qla2x00_free_rsp_que(ha, rsp);
 	qla2x00_clear_drv_active(ha);
