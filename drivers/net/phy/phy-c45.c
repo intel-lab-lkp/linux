@@ -831,6 +831,39 @@ static int genphy_c45_read_eee_cap1(struct phy_device *phydev)
 }
 
 /**
+ * genphy_c45_read_eee_cap2 - read supported EEE link modes from register 3.21
+ * @phydev: target phy_device struct
+ */
+static int genphy_c45_read_eee_cap2(struct phy_device *phydev)
+{
+	int val;
+
+	/* IEEE 802.3-2018 45.2.3.11 EEE control and capability 2
+	 * (Register 3.21)
+	 */
+	val = phy_read_mmd(phydev, MDIO_MMD_PCS, MDIO_PCS_EEE_ABLE2);
+	if (val < 0)
+		return val;
+
+	/* The 802.3 2018 standard says the top 6 bits are reserved and should
+	 * read as 0.
+	 * If MDIO_PCS_EEE_ABLE2 is 0xffff assume EEE is not supported.
+	 */
+	if (val == 0xffff)
+		return 0;
+
+	mii_eee_cap2_mod_linkmode_t(phydev->supported_eee, val);
+
+	/* Some buggy devices may indicate EEE link modes in MDIO_PCS_EEE_ABLE2
+	 * which they don't support as indicated by BMSR, ESTATUS etc.
+	 */
+	linkmode_and(phydev->supported_eee, phydev->supported_eee,
+		     phydev->supported);
+
+	return 0;
+}
+
+/**
  * genphy_c45_read_eee_abilities - read supported EEE link modes
  * @phydev: target phy_device struct
  */
@@ -838,12 +871,20 @@ int genphy_c45_read_eee_abilities(struct phy_device *phydev)
 {
 	int val;
 
-	/* There is not indicator whether optional register
-	 * "EEE control and capability 1" (3.20) is supported. Read it only
-	 * on devices with appropriate linkmodes.
+	/* There is not indicator whether optional registers
+	 * "EEE control and capability 1" (3.20) and
+	 * "EEE control and capability 2" (3.22) are supported. Read them only
+	 * on devices with appropriate
+	 * linkmodes.
 	 */
 	if (linkmode_intersects(phydev->supported, PHY_EEE_CAP1_FEATURES)) {
 		val = genphy_c45_read_eee_cap1(phydev);
+		if (val)
+			return val;
+	}
+
+	if (linkmode_intersects(phydev->supported, PHY_EEE_CAP2_FEATURES)) {
+		val = genphy_c45_read_eee_cap2(phydev);
 		if (val)
 			return val;
 	}
