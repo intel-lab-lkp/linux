@@ -133,5 +133,6 @@ void realtek_common_remove(struct realtek_priv *priv)
 EXPORT_SYMBOL(realtek_common_remove);
 
 MODULE_AUTHOR("Luiz Angelo Daros de Luca <luizluca@gmail.com>");
+MODULE_AUTHOR("Linus Walleij <linus.walleij@linaro.org>");
 MODULE_DESCRIPTION("Realtek DSA switches common module");
 MODULE_LICENSE("GPL");
