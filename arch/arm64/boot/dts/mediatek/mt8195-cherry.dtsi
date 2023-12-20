@@ -1185,6 +1185,7 @@
 
 	vusb33-supply = <&mt6359_vusb_ldo_reg>;
 	vbus-supply = <&usb_vbus>;
+	rx-fifo-depth = <3>;
 };
 
 &xhci1 {
@@ -1192,6 +1193,7 @@
 
 	vusb33-supply = <&mt6359_vusb_ldo_reg>;
 	vbus-supply = <&usb_vbus>;
+	rx-fifo-depth = <3>;
 };
 
 &xhci2 {
