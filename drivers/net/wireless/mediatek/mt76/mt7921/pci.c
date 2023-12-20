@@ -409,7 +409,9 @@ static int mt7921_pci_suspend(struct device *device)
 	if (err < 0)
 		goto restore_suspend;
 
+	mt792x_mutex_acquire(dev);
 	err = mt76_connac_mcu_set_hif_suspend(mdev, true);
+	mt792x_mutex_release(dev);
 	if (err)
 		goto restore_suspend;
 
