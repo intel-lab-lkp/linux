@@ -391,6 +391,117 @@ static const struct file_operations nsim_dev_rate_parent_fops = {
 	.owner = THIS_MODULE,
 };
 
+static struct nsim_dev *nsim_dev_find_by_id(unsigned int id)
+{
+	struct nsim_dev *dev;
+
+	list_for_each_entry(dev, &nsim_dev_list, list)
+		if (dev->nsim_bus_dev->dev.id == id)
+			return dev;
+
+	return NULL;
+}
+
+static struct nsim_dev_port *
+__nsim_dev_port_lookup(struct nsim_dev *nsim_dev, enum nsim_dev_port_type type,
+		       unsigned int port_index)
+{
+	struct nsim_dev_port *nsim_dev_port;
+
+	port_index = nsim_dev_port_index(type, port_index);
+	list_for_each_entry(nsim_dev_port, &nsim_dev->port_list, list)
+		if (nsim_dev_port->port_index == port_index)
+			return nsim_dev_port;
+	return NULL;
+}
+
+static ssize_t nsim_dev_peer_read(struct file *file, char __user *data,
+				  size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port;
+	struct netdevsim *peer;
+	unsigned int id, port;
+	char buf[23];
+	ssize_t ret;
+
+	mutex_lock(&nsim_dev_list_lock);
+	rtnl_lock();
+	nsim_dev_port = file->private_data;
+	peer = rtnl_dereference(nsim_dev_port->ns->peer);
+	if (!peer)
+		goto out;
+
+	id = peer->nsim_bus_dev->dev.id;
+	port = peer->nsim_dev_port->port_index;
+	ret = scnprintf(buf, sizeof(buf), "%u %u\n", id, port);
+	ret = simple_read_from_buffer(data, count, ppos, buf, ret);
+
+out:
+	rtnl_unlock();
+	mutex_unlock(&nsim_dev_list_lock);
+
+	return ret;
+}
+
+static ssize_t nsim_dev_peer_write(struct file *file,
+				   const char __user *data,
+				   size_t count, loff_t *ppos)
+{
+	struct nsim_dev_port *nsim_dev_port, *peer_dev_port;
+	struct nsim_dev *peer_dev;
+	unsigned int id, port;
+	char buf[22];
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -ENOSPC;
+
+	ret = copy_from_user(buf, data, count);
+	if (ret)
+		return -EFAULT;
+	buf[count] = '\0';
+
+	ret = sscanf(buf, "%u %u", &id, &port);
+	if (ret != 2) {
+		pr_err("Format for adding a peer is \"id port\" (uint uint)");
+		return -EINVAL;
+	}
+
+	ret = -EINVAL;
+	mutex_lock(&nsim_dev_list_lock);
+	rtnl_lock();
+	peer_dev = nsim_dev_find_by_id(id);
+	if (!peer_dev)
+		goto out;
+
+	peer_dev_port = __nsim_dev_port_lookup(peer_dev, NSIM_DEV_PORT_TYPE_PF,
+					       port);
+	if (!peer_dev_port)
+		goto out;
+
+	nsim_dev_port = file->private_data;
+	if (nsim_dev_port == peer_dev_port)
+		goto out;
+
+	rcu_assign_pointer(nsim_dev_port->ns->peer, peer_dev_port->ns);
+	rcu_assign_pointer(peer_dev_port->ns->peer, nsim_dev_port->ns);
+	ret = count;
+
+out:
+	rtnl_unlock();
+	mutex_unlock(&nsim_dev_list_lock);
+
+	return ret;
+}
+
+static const struct file_operations nsim_dev_peer_fops = {
+	.open = simple_open,
+	.read = nsim_dev_peer_read,
+	.write = nsim_dev_peer_write,
+	.llseek = generic_file_llseek,
+	.owner = THIS_MODULE,
+};
+
 static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 				      struct nsim_dev_port *nsim_dev_port)
 {
@@ -420,6 +531,9 @@ static int nsim_dev_port_debugfs_init(struct nsim_dev *nsim_dev,
 								 &nsim_dev_rate_parent_fops);
 	}
 	debugfs_create_symlink("dev", nsim_dev_port->ddir, dev_link_name);
+
+	debugfs_create_file("peer", 0600, nsim_dev_port->ddir,
+			    nsim_dev_port, &nsim_dev_peer_fops);
 
 	return 0;
 }
@@ -1700,19 +1814,6 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 	mutex_unlock(&nsim_dev_list_lock);
 	devlink_free(devlink);
 	dev_set_drvdata(&nsim_bus_dev->dev, NULL);
-}
-
-static struct nsim_dev_port *
-__nsim_dev_port_lookup(struct nsim_dev *nsim_dev, enum nsim_dev_port_type type,
-		       unsigned int port_index)
-{
-	struct nsim_dev_port *nsim_dev_port;
-
-	port_index = nsim_dev_port_index(type, port_index);
-	list_for_each_entry(nsim_dev_port, &nsim_dev->port_list, list)
-		if (nsim_dev_port->port_index == port_index)
-			return nsim_dev_port;
-	return NULL;
 }
 
 int nsim_drv_port_add(struct nsim_bus_dev *nsim_bus_dev, enum nsim_dev_port_type type,
