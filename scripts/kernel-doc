@@ -1657,6 +1657,7 @@ sub check_sections($$$$$) {
 			}
 			elsif (($decl_type eq "struct") or
 		       	       ($decl_type eq "union")) {
+                next if (index("@_", "__counted_by") != -1);
 				emit_warning("${file}:$.",
 					"Excess $decl_type member " .
 					"'$sects[$sx]' " .
