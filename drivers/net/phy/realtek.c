@@ -699,11 +699,7 @@ static int rtl822x_read_status(struct phy_device *phydev)
 
 static bool rtlgen_supports_2_5gbps(struct phy_device *phydev)
 {
-	int val;
-
-	phy_write(phydev, RTL821x_PAGE_SELECT, 0xa61);
-	val = phy_read(phydev, 0x13);
-	phy_write(phydev, RTL821x_PAGE_SELECT, 0);
+	int val = rtlgen_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_SPEED);
 
 	return val >= 0 && val & MDIO_PMA_SPEED_2_5G;
 }
