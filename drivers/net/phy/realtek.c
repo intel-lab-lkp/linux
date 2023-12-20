@@ -54,6 +54,8 @@
 						 RTL8201F_ISR_LINK)
 #define RTL8201F_IER				0x13
 
+#define RTL8221_GBCR				0xa412
+
 #define RTL8366RB_POWER_SAVE			0x15
 #define RTL8366RB_POWER_SAVE_ON			BIT(12)
 
@@ -650,23 +652,28 @@ static int rtl822x_probe(struct phy_device *phydev)
 
 static int rtl822x_config_aneg(struct phy_device *phydev)
 {
-	int ret = 0;
+	bool changed = false;
+	u16 val;
+	int ret;
 
-	if (phydev->autoneg == AUTONEG_ENABLE) {
-		u16 adv2500 = 0;
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		return genphy_c45_pma_setup_forced(phydev);
 
-		if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
-				      phydev->advertising))
-			adv2500 = MDIO_AN_10GBT_CTRL_ADV2_5G;
+	ret = genphy_c45_an_config_aneg(phydev);
+	if (ret < 0)
+		return ret;
+	if (ret > 0)
+		changed = true;
 
-		ret = phy_modify_paged_changed(phydev, 0xa5d, 0x12,
-					       MDIO_AN_10GBT_CTRL_ADV2_5G,
-					       adv2500);
-		if (ret < 0)
-			return ret;
-	}
+	val = linkmode_adv_to_mii_ctrl1000_t(phydev->advertising);
+	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_VEND2, RTL8221_GBCR,
+				     ADVERTISE_1000FULL, val);
+	if (ret < 0)
+		return ret;
+	if (ret > 0)
+		changed = true;
 
-	return __genphy_config_aneg(phydev, ret);
+	return genphy_c45_check_and_restart_aneg(phydev, changed);
 }
 
 static int rtl822x_read_status(struct phy_device *phydev)
