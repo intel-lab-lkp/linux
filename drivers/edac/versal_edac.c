@@ -42,8 +42,10 @@
 
 #define ECCW0_FLIP_CTRL				0x109C
 #define ECCW0_FLIP0_OFFSET			0x10A0
+#define ECCW0_FLIP1_OFFSET			0x10A4
 #define ECCW1_FLIP_CTRL				0x10AC
 #define ECCW1_FLIP0_OFFSET			0x10B0
+#define ECCW1_FLIP1_OFFSET			0x10B4
 #define ECCR0_CERR_STAT_OFFSET			0x10BC
 #define ECCR0_CE_ADDR_LO_OFFSET			0x10C0
 #define ECCR0_CE_ADDR_HI_OFFSET			0x10C4
@@ -734,24 +736,24 @@ static void poison_setup(struct edac_priv *priv)
 	writel(regval, priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC15_OFFSET);
 }
 
-static ssize_t xddr_inject_data_poison_store(struct mem_ctl_info *mci,
-					     const char __user *data)
+static int xddr_inject_data_ce_store(struct mem_ctl_info *mci, int ce_bitpos)
 {
 	struct edac_priv *priv = mci->pvt_info;
 
 	writel(0, priv->ddrmc_baseaddr + ECCW0_FLIP0_OFFSET);
 	writel(0, priv->ddrmc_baseaddr + ECCW1_FLIP0_OFFSET);
 
-	if (strncmp(data, "CE", 2) == 0) {
-		writel(ECC_CEPOISON_MASK, priv->ddrmc_baseaddr +
+	if (ce_bitpos < 31) {
+		writel(BIT(ce_bitpos), priv->ddrmc_baseaddr +
 		       ECCW0_FLIP0_OFFSET);
-		writel(ECC_CEPOISON_MASK, priv->ddrmc_baseaddr +
+		writel(BIT(ce_bitpos), priv->ddrmc_baseaddr +
 		       ECCW1_FLIP0_OFFSET);
 	} else {
-		writel(ECC_UEPOISON_MASK, priv->ddrmc_baseaddr +
-		       ECCW0_FLIP0_OFFSET);
-		writel(ECC_UEPOISON_MASK, priv->ddrmc_baseaddr +
-		       ECCW1_FLIP0_OFFSET);
+		ce_bitpos = ce_bitpos - 31;
+		writel(BIT(ce_bitpos), priv->ddrmc_baseaddr +
+		       ECCW0_FLIP1_OFFSET);
+		writel(BIT(ce_bitpos), priv->ddrmc_baseaddr +
+		       ECCW1_FLIP1_OFFSET);
 	}
 
 	/* Lock the PCSR registers */
@@ -760,12 +762,14 @@ static ssize_t xddr_inject_data_poison_store(struct mem_ctl_info *mci,
 	return 0;
 }
 
-static ssize_t inject_data_poison_store(struct file *file, const char __user *data,
-					size_t count, loff_t *ppos)
+static ssize_t inject_data_ce_store(struct file *file, const char __user *data,
+				    size_t count, loff_t *ppos)
 {
 	struct device *dev = file->private_data;
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct edac_priv *priv = mci->pvt_info;
+	u8 ce_bitpos;
+	int ret;
 
 	/* Unlock the PCSR registers */
 	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
@@ -776,14 +780,98 @@ static ssize_t inject_data_poison_store(struct file *file, const char __user *da
 	/* Lock the PCSR registers */
 	writel(1, priv->ddrmc_noc_baseaddr + XDDR_PCSR_OFFSET);
 
-	xddr_inject_data_poison_store(mci, data);
+	ret = kstrtou8_from_user(data, count, 0, &ce_bitpos);
+	if (ret)
+		return ret;
+	ret = xddr_inject_data_ce_store(mci, ce_bitpos);
 
 	return count;
 }
 
-static const struct file_operations xddr_inject_enable_fops = {
+static void xddr_inject_data_ue_store(struct mem_ctl_info *mci, u32 val0, u32 val1)
+{
+	struct edac_priv *priv = mci->pvt_info;
+
+	writel(val0, priv->ddrmc_baseaddr + ECCW0_FLIP0_OFFSET);
+	writel(val0, priv->ddrmc_baseaddr + ECCW0_FLIP1_OFFSET);
+	writel(val1, priv->ddrmc_baseaddr + ECCW1_FLIP1_OFFSET);
+	writel(val1, priv->ddrmc_baseaddr + ECCW1_FLIP1_OFFSET);
+}
+
+static ssize_t inject_data_ue_store(struct file *file, const char __user *data,
+				    size_t count, loff_t *ppos)
+{
+	struct device *dev = file->private_data;
+	struct mem_ctl_info *mci = to_mci(dev);
+	struct edac_priv *priv = mci->pvt_info;
+	u8 pos0, pos1, len;
+	u32 val0 = 0;
+	u32 val1 = 0;
+	u8 ue0, ue1;
+	char buf[6];
+	int ret;
+
+	len = min_t(size_t, count, sizeof(buf));
+	if (copy_from_user(buf, data, len))
+		return -EFAULT;
+
+	for (pos0 = 0; buf[pos0] != ' ' && pos0 <= len; pos0++)
+		;
+
+	if (pos0 > len)
+		return -EINVAL;
+
+	ret = kstrtou8_from_user(data, pos0, 0, &ue0);
+	if (ret)
+		return ret;
+
+	for (pos1 = pos0 + 1; buf[pos1] != '\n' && pos1 <= len; pos1++)
+		;
+
+	if (pos1 > count)
+		return -EINVAL;
+
+	ret = kstrtou8_from_user(&data[pos0 + 1], pos1 - pos0 - 1, 0,
+				 &ue1);
+	if (ret)
+		return ret;
+
+	if (ue0 < 31) {
+		val0 = BIT(ue0);
+	} else {
+		ue0 = ue0 - 31;
+		val1 = BIT(ue0);
+	}
+	if (ue1 < 31) {
+		val0 |= BIT(ue1);
+	} else {
+		ue1 = ue1 - 31;
+		val1 |= BIT(ue1);
+	}
+
+	/* Unlock the PCSR registers */
+	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
+	writel(PCSR_UNLOCK_VAL, priv->ddrmc_noc_baseaddr + XDDR_PCSR_OFFSET);
+
+	poison_setup(priv);
+
+	/* Lock the PCSR registers */
+	writel(1, priv->ddrmc_noc_baseaddr + XDDR_PCSR_OFFSET);
+
+	xddr_inject_data_ue_store(mci, val0, val1);
+
+	return count;
+}
+
+static const struct file_operations xddr_inject_ue_fops = {
 	.open = simple_open,
-	.write = inject_data_poison_store,
+	.write = inject_data_ue_store,
+	.llseek = generic_file_llseek,
+};
+
+static const struct file_operations xddr_inject_ce_fops = {
+	.open = simple_open,
+	.write = inject_data_ce_store,
 	.llseek = generic_file_llseek,
 };
 
@@ -795,8 +883,10 @@ static void create_debugfs_attributes(struct mem_ctl_info *mci)
 	if (!priv->debugfs)
 		return;
 
-	edac_debugfs_create_file("inject_error", 0200, priv->debugfs,
-				 &mci->dev, &xddr_inject_enable_fops);
+	edac_debugfs_create_file("inject_ce", 0200, priv->debugfs,
+				 &mci->dev, &xddr_inject_ce_fops);
+	edac_debugfs_create_file("inject_ue", 0200, priv->debugfs,
+				 &mci->dev, &xddr_inject_ue_fops);
 	debugfs_create_x64("address", 0600, priv->debugfs,
 			   &priv->err_inject_addr);
 	mci->debugfs = priv->debugfs;
