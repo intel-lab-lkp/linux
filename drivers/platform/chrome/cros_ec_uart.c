@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/serdev.h>
 #include <linux/slab.h>
 #include <uapi/linux/sched/types.h>
@@ -70,6 +71,7 @@ struct response_info {
  * @baudrate:		UART baudrate of attached EC device.
  * @flowcontrol:	UART flowcontrol of attached device.
  * @irq:		Linux IRQ number of associated serial device.
+ * @irq_wake:		Whether or not irq assertion should wake the system.
  * @response:		Response info passing between cros_ec_uart_pkt_xfer()
  *			and cros_ec_uart_rx_bytes()
  */
@@ -78,6 +80,7 @@ struct cros_ec_uart {
 	u32 baudrate;
 	u8 flowcontrol;
 	u32 irq;
+	bool irq_wake;
 	struct response_info response;
 };
 
@@ -225,8 +228,10 @@ static int cros_ec_uart_resource(struct acpi_resource *ares, void *data)
 static int cros_ec_uart_acpi_probe(struct cros_ec_uart *ec_uart)
 {
 	int ret;
+	struct resource irqres;
 	LIST_HEAD(resources);
-	struct acpi_device *adev = ACPI_COMPANION(&ec_uart->serdev->dev);
+	struct device *dev = &ec_uart->serdev->dev;
+	struct acpi_device *adev = ACPI_COMPANION(dev);
 
 	ret = acpi_dev_get_resources(adev, &resources, cros_ec_uart_resource, ec_uart);
 	if (ret < 0)
@@ -235,12 +240,13 @@ static int cros_ec_uart_acpi_probe(struct cros_ec_uart *ec_uart)
 	acpi_dev_free_resource_list(&resources);
 
 	/* Retrieve GpioInt and translate it to Linux IRQ number */
-	ret = acpi_dev_gpio_irq_get(adev, 0);
+	ret = acpi_dev_get_gpio_irq_resource(adev, NULL, 0, &irqres);
 	if (ret < 0)
 		return ret;
 
-	ec_uart->irq = ret;
-	dev_dbg(&ec_uart->serdev->dev, "IRQ number %d\n", ec_uart->irq);
+	ec_uart->irq = irqres.start;
+	ec_uart->irq_wake = irqres.flags & IORESOURCE_IRQ_WAKECAPABLE;
+	dev_dbg(dev, "IRQ: %i, wake_capable: %i\n", ec_uart->irq, ec_uart->irq_wake);
 
 	return 0;
 }
@@ -302,13 +308,31 @@ static int cros_ec_uart_probe(struct serdev_device *serdev)
 
 	serdev_device_set_client_ops(serdev, &cros_ec_uart_client_ops);
 
-	return cros_ec_register(ec_dev);
+	/* Register a new cros_ec device */
+	ret = cros_ec_register(ec_dev);
+	if (ret) {
+		dev_err(dev, "Couldn't register ec_dev (%d)\n", ret);
+		return ret;
+	}
+
+	if (ec_uart->irq_wake) {
+		ret = device_init_wakeup(dev, true);
+		if (ret) {
+			dev_err_probe(dev, ret, "Failed to init device for wakeup");
+			return ret;
+		}
+		ret = dev_pm_set_wake_irq(dev, ec_uart->irq);
+	}
+	return ret;
 }
 
 static void cros_ec_uart_remove(struct serdev_device *serdev)
 {
 	struct cros_ec_device *ec_dev = serdev_device_get_drvdata(serdev);
+	struct device *dev = ec_dev->dev;
 
+	dev_pm_clear_wake_irq(dev);
+	device_init_wakeup(dev, false);
 	cros_ec_unregister(ec_dev);
 };
 

@@ -7,9 +7,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <uapi/linux/sched/types.h>
@@ -70,6 +72,7 @@
  * @end_of_msg_delay: used to set the delay_usecs on the spi_transfer that
  *      is sent when we want to turn off CS at the end of a transaction.
  * @high_pri_worker: Used to schedule high priority work.
+ * @irq_wake: Whether or not irq assertion should wake the system.
  */
 struct cros_ec_spi {
 	struct spi_device *spi;
@@ -77,6 +80,7 @@ struct cros_ec_spi {
 	unsigned int start_of_msg_delay;
 	unsigned int end_of_msg_delay;
 	struct kthread_worker *high_pri_worker;
+	bool irq_wake;
 };
 
 typedef int (*cros_ec_xfer_fn_t) (struct cros_ec_device *ec_dev,
@@ -689,11 +693,15 @@ static int cros_ec_cmd_xfer_spi(struct cros_ec_device *ec_dev,
 	return cros_ec_xfer_high_pri(ec_dev, ec_msg, do_cros_ec_cmd_xfer_spi);
 }
 
-static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi, struct device *dev)
+static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi, struct spi_device *spi)
 {
-	struct device_node *np = dev->of_node;
+	struct cros_ec_device *ec_dev = spi_get_drvdata(spi);
+	struct device_node *np = spi->dev.of_node;
 	u32 val;
 	int ret;
+
+	if (!np)
+		return;
 
 	ret = of_property_read_u32(np, "google,cros-ec-spi-pre-delay", &val);
 	if (!ret)
@@ -702,6 +710,11 @@ static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi, struct device *dev)
 	ret = of_property_read_u32(np, "google,cros-ec-spi-msg-delay", &val);
 	if (!ret)
 		ec_spi->end_of_msg_delay = val;
+
+	if (ec_dev->irq > 0 && of_property_read_bool(np, "wakeup-source")) {
+		ec_spi->irq_wake = true;
+		dev_dbg(&spi->dev, "IRQ: %i, wake_capable: %i\n", ec_dev->irq, ec_spi->irq_wake);
+	}
 }
 
 static void cros_ec_spi_high_pri_release(void *worker)
@@ -753,9 +766,6 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 	if (!ec_dev)
 		return -ENOMEM;
 
-	/* Check for any DT properties */
-	cros_ec_spi_dt_probe(ec_spi, dev);
-
 	spi_set_drvdata(spi, ec_dev);
 	ec_dev->dev = dev;
 	ec_dev->priv = ec_spi;
@@ -768,6 +778,9 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 			   sizeof(struct ec_response_get_protocol_info);
 	ec_dev->dout_size = sizeof(struct ec_host_request);
 
+	/* Check for any DT properties */
+	cros_ec_spi_dt_probe(ec_spi, spi);
+
 	ec_spi->last_transfer_ns = ktime_get_ns();
 
 	err = cros_ec_spi_devm_high_pri_alloc(dev, ec_spi);
@@ -776,19 +789,31 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 
 	err = cros_ec_register(ec_dev);
 	if (err) {
-		dev_err(dev, "cannot register EC\n");
+		dev_err_probe(dev, err, "cannot register EC\n");
 		return err;
 	}
 
-	device_init_wakeup(&spi->dev, true);
+	if (ec_spi->irq_wake) {
+		err = device_init_wakeup(dev, true);
+		if (err) {
+			dev_err_probe(dev, err, "Failed to init device for wakeup\n");
+			return err;
+		}
+		err = dev_pm_set_wake_irq(dev, ec_dev->irq);
+		if (err)
+			dev_err_probe(dev, err, "Failed to set irq(%d) for wake\n", ec_dev->irq);
+	}
 
-	return 0;
+	return err;
 }
 
 static void cros_ec_spi_remove(struct spi_device *spi)
 {
 	struct cros_ec_device *ec_dev = spi_get_drvdata(spi);
+	struct device *dev = ec_dev->dev;
 
+	dev_pm_clear_wake_irq(dev);
+	device_init_wakeup(dev, false);
 	cros_ec_unregister(ec_dev);
 }
 

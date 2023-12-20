@@ -21,6 +21,7 @@
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/printk.h>
 #include <linux/reboot.h>
 #include <linux/suspend.h>
@@ -47,6 +48,28 @@ struct lpc_driver_ops {
 };
 
 static struct lpc_driver_ops cros_ec_lpc_ops = { };
+
+static const struct dmi_system_id untrusted_fw_irq_wake_capable[] = {
+	{
+		.ident = "Brya",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brya")
+		}
+	},
+	{
+		.ident = "Brask",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brask")
+		}
+	},
+	{ }
+}
+MODULE_DEVICE_TABLE(dmi, untrusted_fw_irq_wake_capable);
+
+static bool cros_ec_should_force_irq_wake_capable(void)
+{
+	return dmi_first_match(untrusted_fw_irq_wake_capable) != NULL;
+}
 
 /*
  * A generic instance of the read function of struct lpc_driver_ops, used for
@@ -350,9 +373,11 @@ static void cros_ec_lpc_acpi_notify(acpi_handle device, u32 value, void *data)
 static int cros_ec_lpc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	bool irq_wake = false;
 	struct acpi_device *adev;
 	acpi_status status;
 	struct cros_ec_device *ec_dev;
+	struct resource irqres;
 	u8 buf[2] = {};
 	int irq, ret;
 
@@ -428,18 +453,34 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 	 * Some boards do not have an IRQ allotted for cros_ec_lpc,
 	 * which makes ENXIO an expected (and safe) scenario.
 	 */
-	irq = platform_get_irq_optional(pdev, 0);
-	if (irq > 0)
+	irq = platform_get_irq_resource_optional(pdev, 0, &irqres);
+	if (irq > 0) {
 		ec_dev->irq = irq;
-	else if (irq != -ENXIO) {
+		if (cros_ec_should_force_irq_wake_capable())
+			irq_wake = true;
+		else
+			irq_wake = irqres.flags & IORESOURCE_IRQ_WAKECAPABLE;
+		dev_dbg(dev, "IRQ: %i, wake_capable: %i\n", irq, irq_wake);
+	} else if (irq != -ENXIO) {
 		dev_err(dev, "couldn't retrieve IRQ number (%d)\n", irq);
 		return irq;
 	}
 
 	ret = cros_ec_register(ec_dev);
 	if (ret) {
-		dev_err(dev, "couldn't register ec_dev (%d)\n", ret);
+		dev_err_probe(dev, ret, "couldn't register ec_dev (%d)\n", ret);
 		return ret;
+	}
+
+	if (irq_wake) {
+		ret = device_init_wakeup(dev, true);
+		if (ret) {
+			dev_err_probe(dev, ret, "Failed to init device for wakeup");
+			return ret;
+		}
+		ret = dev_pm_set_wake_irq(dev, irq);
+		if (ret)
+			return ret;
 	}
 
 	/*
@@ -463,6 +504,7 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 static void cros_ec_lpc_remove(struct platform_device *pdev)
 {
 	struct cros_ec_device *ec_dev = platform_get_drvdata(pdev);
+	struct device *dev = ec_dev->dev;
 	struct acpi_device *adev;
 
 	adev = ACPI_COMPANION(&pdev->dev);
@@ -470,6 +512,8 @@ static void cros_ec_lpc_remove(struct platform_device *pdev)
 		acpi_remove_notify_handler(adev->handle, ACPI_ALL_NOTIFY,
 					   cros_ec_lpc_acpi_notify);
 
+	dev_pm_clear_wake_irq(dev);
+	device_init_wakeup(dev, false);
 	cros_ec_unregister(ec_dev);
 }
 

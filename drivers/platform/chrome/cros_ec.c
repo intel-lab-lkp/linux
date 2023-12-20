@@ -353,12 +353,6 @@ EXPORT_SYMBOL(cros_ec_suspend_prepare);
 
 static void cros_ec_disable_irq(struct cros_ec_device *ec_dev)
 {
-	struct device *dev = ec_dev->dev;
-	if (device_may_wakeup(dev))
-		ec_dev->wake_enabled = !enable_irq_wake(ec_dev->irq);
-	else
-		ec_dev->wake_enabled = false;
-
 	disable_irq(ec_dev->irq);
 	ec_dev->suspended = true;
 }
@@ -439,9 +433,6 @@ static void cros_ec_enable_irq(struct cros_ec_device *ec_dev)
 {
 	ec_dev->suspended = false;
 	enable_irq(ec_dev->irq);
-
-	if (ec_dev->wake_enabled)
-		disable_irq_wake(ec_dev->irq);
 
 	/*
 	 * Let the mfd devices know about events that occur during
