@@ -963,8 +963,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status	= rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page	= rtl821x_read_page,
-		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
@@ -975,8 +973,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status	= rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page	= rtl821x_read_page,
-		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
@@ -987,8 +983,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status    = rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page      = rtl821x_read_page,
-		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
@@ -999,8 +993,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status    = rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page      = rtl821x_read_page,
-		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
@@ -1011,8 +1003,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status    = rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page      = rtl821x_read_page,
-		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
@@ -1023,8 +1013,6 @@ static struct phy_driver realtek_drvs[] = {
 		.read_status    = rtl822x_read_status,
 		.suspend	= genphy_c45_pma_suspend,
 		.resume		= rtl822x_resume,
-		.read_page      = rtl821x_read_page,
-		.write_page     = rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
 	}, {
