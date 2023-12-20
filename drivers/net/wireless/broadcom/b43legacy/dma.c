@@ -174,8 +174,8 @@ static struct b43legacy_dmaring *priority_to_txring(
 {
 	struct b43legacy_dmaring *ring;
 
-/*FIXME: For now we always run on TX-ring-1 */
-return dev->dma.tx_ring1;
+	/*FIXME: For now we always run on TX-ring-1 */
+	return dev->dma.tx_ring1;
 
 	/* 0 = highest priority */
 	switch (queue_priority) {
