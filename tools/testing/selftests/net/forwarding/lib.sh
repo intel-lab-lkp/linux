@@ -31,6 +31,7 @@ REQUIRE_MTOOLS=${REQUIRE_MTOOLS:=no}
 STABLE_MAC_ADDRS=${STABLE_MAC_ADDRS:=no}
 TCPDUMP_EXTRA_FLAGS=${TCPDUMP_EXTRA_FLAGS:=}
 TROUTE6=${TROUTE6:=traceroute6}
+VETH_OPTS=${VETH_OPTS:=}
 
 relative_path="${BASH_SOURCE%/*}"
 if [[ "$relative_path" == "${BASH_SOURCE}" ]]; then
@@ -244,7 +245,7 @@ create_netif_veth()
 
 		ip link show dev ${NETIFS[p$i]} &> /dev/null
 		if [[ $? -ne 0 ]]; then
-			ip link add ${NETIFS[p$i]} type veth \
+			ip link add ${NETIFS[p$i]} ${VETH_OPTS} type veth \
 				peer name ${NETIFS[p$j]}
 			if [[ $? -ne 0 ]]; then
 				echo "Failed to create netif"
