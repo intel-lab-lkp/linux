@@ -98,7 +98,7 @@ static DEFINE_MUTEX(gpio_lookup_lock);
 static LIST_HEAD(gpio_lookup_list);
 
 LIST_HEAD(gpio_devices);
-DEFINE_MUTEX(gpio_devices_lock);
+DECLARE_RWSEM(gpio_devices_sem);
 
 static DEFINE_MUTEX(gpio_machine_hogs_mutex);
 static LIST_HEAD(gpio_machine_hogs);
@@ -131,7 +131,7 @@ struct gpio_desc *gpio_to_desc(unsigned gpio)
 {
 	struct gpio_device *gdev;
 
-	scoped_guard(mutex, &gpio_devices_lock) {
+	scoped_guard(rwsem_read, &gpio_devices_sem) {
 		list_for_each_entry(gdev, &gpio_devices, list) {
 			if (gdev->base <= gpio &&
 			    gdev->base + gdev->ngpio > gpio)
@@ -415,7 +415,7 @@ static struct gpio_desc *gpio_name_to_desc(const char * const name)
 	if (!name)
 		return NULL;
 
-	guard(mutex)(&gpio_devices_lock);
+	guard(rwsem_read)(&gpio_devices_sem);
 
 	list_for_each_entry(gdev, &gpio_devices, list) {
 		struct gpio_desc *desc;
@@ -664,7 +664,7 @@ static void gpiodev_release(struct device *dev)
 {
 	struct gpio_device *gdev = to_gpio_device(dev);
 
-	scoped_guard(mutex, &gpio_devices_lock)
+	scoped_guard(rwsem_write, &gpio_devices_sem)
 		list_del(&gdev->list);
 
 	ida_free(&gpio_ida, gdev->id);
@@ -887,7 +887,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 
 	gdev->ngpio = gc->ngpio;
 
-	scoped_guard(mutex, &gpio_devices_lock) {
+	scoped_guard(rwsem_write, &gpio_devices_sem) {
 		/*
 		 * TODO: this allocates a Linux GPIO number base in the global
 		 * GPIO numberspace for this chip. In the long run we want to
@@ -1017,7 +1017,7 @@ err_free_gpiochip_mask:
 		goto err_print_message;
 	}
 err_remove_from_list:
-	scoped_guard(mutex, &gpio_devices_lock)
+	scoped_guard(rwsem_write, &gpio_devices_sem)
 		list_del(&gdev->list);
 err_free_label:
 	kfree_const(gdev->label);
@@ -1127,7 +1127,7 @@ struct gpio_device *gpio_device_find(void *data,
 	 */
 	might_sleep();
 
-	guard(mutex)(&gpio_devices_lock);
+	guard(rwsem_read)(&gpio_devices_sem);
 
 	list_for_each_entry(gdev, &gpio_devices, list) {
 		if (gdev->chip && match(gdev->chip, data))
@@ -4745,7 +4745,7 @@ static void *gpiolib_seq_start(struct seq_file *s, loff_t *pos)
 
 	s->private = "";
 
-	guard(mutex)(&gpio_devices_lock);
+	guard(rwsem_read)(&gpio_devices_sem);
 
 	list_for_each_entry(gdev, &gpio_devices, list) {
 		if (index-- == 0)
@@ -4760,7 +4760,7 @@ static void *gpiolib_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	struct gpio_device *gdev = v;
 	void *ret = NULL;
 
-	scoped_guard(mutex, &gpio_devices_lock) {
+	scoped_guard(rwsem_read, &gpio_devices_sem) {
 		if (list_is_last(&gdev->list, &gpio_devices))
 			ret = NULL;
 		else
