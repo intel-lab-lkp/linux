@@ -487,7 +487,8 @@ static inline bool op_is_write(blk_opf_t op)
  */
 static inline bool op_is_flush(blk_opf_t op)
 {
-	return op & (REQ_FUA | REQ_PREFLUSH);
+	return op & (REQ_FUA | REQ_PREFLUSH) ||
+		(op & REQ_OP_MASK) == REQ_OP_FLUSH;
 }
 
 /*
