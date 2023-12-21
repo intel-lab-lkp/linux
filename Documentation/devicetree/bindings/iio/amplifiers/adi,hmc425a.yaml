@@ -21,6 +21,8 @@ description: |
   HMC540S 1 dB LSB Silicon MMIC 4-Bit Digital Positive Control Attenuator, 0.1 - 8 GHz
     https://www.analog.com/media/en/technical-documentation/data-sheets/hmc540s.pdf
 
+  LTC6373 is a 3-Bit precision instrumentation amplifier with fully differential outputs
+    https://www.analog.com/media/en/technical-documentation/data-sheets/ltc6373.pdf
 
 properties:
   compatible:
@@ -28,6 +30,7 @@ properties:
       - adi,adrf5740
       - adi,hmc425a
       - adi,hmc540s
+      - adi,ltc6373
 
   vcc-supply: true
 
@@ -37,6 +40,19 @@ properties:
       connected to the control pins V1-V6.
     minItems: 6
     maxItems: 6
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: adi,ltc6373
+
+    then:
+      properties:
+        ctrl-gpios:
+          minItems: 3
+          maxItems: 3
 
 required:
   - compatible
