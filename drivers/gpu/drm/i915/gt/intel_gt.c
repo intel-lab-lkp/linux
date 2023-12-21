@@ -17,6 +17,7 @@
 #include "intel_engine_regs.h"
 #include "intel_ggtt_gmch.h"
 #include "intel_gt.h"
+#include "intel_gt_ccs_mode.h"
 #include "intel_gt_buffer_pool.h"
 #include "intel_gt_clock_utils.h"
 #include "intel_gt_debugfs.h"
@@ -47,6 +48,7 @@ void intel_gt_common_init_early(struct intel_gt *gt)
 	init_llist_head(&gt->watchdog.list);
 	INIT_WORK(&gt->watchdog.work, intel_gt_watchdog_work);
 
+	intel_gt_init_ccs_mode(gt);
 	intel_gt_init_buffer_pool(gt);
 	intel_gt_init_reset(gt);
 	intel_gt_init_requests(gt);
@@ -194,6 +196,9 @@ int intel_gt_init_hw(struct intel_gt *gt)
 	intel_gt_verify_workarounds(gt, "init");
 
 	intel_gt_init_swizzling(gt);
+
+	/* Configure CCS mode */
+	intel_gt_apply_ccs_mode(gt);
 
 	/*
 	 * At least 830 can leave some of the unused rings
@@ -849,6 +854,7 @@ void intel_gt_driver_late_release_all(struct drm_i915_private *i915)
 
 	for_each_gt(gt, i915, id) {
 		intel_uc_driver_late_release(&gt->uc);
+		intel_gt_fini_ccs_mode(gt);
 		intel_gt_fini_requests(gt);
 		intel_gt_fini_reset(gt);
 		intel_gt_fini_timelines(gt);
