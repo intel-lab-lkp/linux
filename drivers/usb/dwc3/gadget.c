@@ -4451,6 +4451,7 @@ static irqreturn_t dwc3_thread_interrupt(int irq, void *_evt)
 static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 {
 	struct dwc3 *dwc = evt->dwc;
+	int ret = IRQ_WAKE_THREAD;
 	u32 amount;
 	u32 count;
 
@@ -4480,6 +4481,12 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	if (!count)
 		return IRQ_NONE;
 
+	if (count > evt->length) {
+		dev_err(dwc->dev, "GEVTCOUNT corrupt\n");
+		ret = IRQ_NONE;
+		goto done;
+	}
+
 	evt->count = count;
 	evt->flags |= DWC3_EVENT_PENDING;
 
@@ -4493,9 +4500,10 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	if (amount < count)
 		memcpy(evt->cache, evt->buf, count - amount);
 
+done:
 	dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), count);
 
-	return IRQ_WAKE_THREAD;
+	return ret;
 }
 
 static irqreturn_t dwc3_interrupt(int irq, void *_evt)
