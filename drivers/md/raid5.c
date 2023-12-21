@@ -7390,11 +7390,12 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 				       struct shrink_control *sc)
 {
 	struct r5conf *conf = shrink->private_data;
-
-	if (conf->max_nr_stripes < conf->min_nr_stripes)
+	int max_stripes = conf->max_nr_stripes;
+	int min_stripes = conf->min_nr_stripes;
+	if (max_stripes < min_stripes)
 		/* unlikely, but not impossible */
 		return 0;
-	return conf->max_nr_stripes - conf->min_nr_stripes;
+	return max_stripes - min_stripes;
 }
 
 static struct r5conf *setup_conf(struct mddev *mddev)
