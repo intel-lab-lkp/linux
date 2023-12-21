@@ -63,8 +63,6 @@ int sgdma_initialize(struct altera_tse_private *priv)
 	INIT_LIST_HEAD(&priv->txlisthd);
 	INIT_LIST_HEAD(&priv->rxlisthd);
 
-	priv->rxdescphys = (dma_addr_t) 0;
-	priv->txdescphys = (dma_addr_t) 0;
 
 	priv->rxdescphys = dma_map_single(priv->device,
 					  (void __force *)priv->rx_dma_desc,
@@ -237,8 +235,8 @@ u32 sgdma_rx_status(struct altera_tse_private *priv)
 
 	desc = &base[0];
 	if (sts & SGDMA_STSREG_EOP) {
-		unsigned int pktlength = 0;
-		unsigned int pktstatus = 0;
+		unsigned int pktlength;
+		unsigned int pktstatus;
 		dma_sync_single_for_cpu(priv->device,
 					priv->rxdescphys,
 					SGDMA_DESC_LEN,
