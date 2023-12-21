@@ -772,7 +772,7 @@ w6692_irq(int intno, void *dev_id)
 	spin_lock(&card->lock);
 	ista = ReadW6692(card, W_ISTA);
 	if ((ista | card->imask) == card->imask) {
-		/* possible a shared  IRQ reqest */
+		/* possible a shared  IRQ request */
 		spin_unlock(&card->lock);
 		return IRQ_NONE;
 	}
