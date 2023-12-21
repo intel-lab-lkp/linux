@@ -98,7 +98,8 @@ static u64 suspend_start;
 /*
  * Interval: 0.5sec.
  */
-#define WATCHDOG_INTERVAL (HZ >> 1)
+#define WATCHDOG_INTERVAL_SHIFT	1
+#define WATCHDOG_INTERVAL	(HZ >> WATCHDOG_INTERVAL_SHIFT)
 
 /*
  * Threshold: 0.0312s, when doubled: 0.0625s.
@@ -121,7 +122,8 @@ static u64 suspend_start;
 #define MAX_SKEW_USEC	(125 * WATCHDOG_INTERVAL / HZ)
 #endif
 
-#define WATCHDOG_MAX_SKEW (MAX_SKEW_USEC * NSEC_PER_USEC)
+#define WATCHDOG_MAX_SKEW	(MAX_SKEW_USEC * NSEC_PER_USEC)
+#define WATCHDOG_MIN_MARGIN	(2 * WATCHDOG_MAX_SKEW)
 
 #ifdef CONFIG_CLOCKSOURCE_WATCHDOG
 static void clocksource_watchdog_work(struct work_struct *work);
@@ -395,16 +397,47 @@ static inline void clocksource_reset_watchdog(void)
 		cs->flags &= ~CLOCK_SOURCE_WATCHDOG;
 }
 
+/* Scaled margin calculation */
+#define MARGIN_SCALE		24
+/* Bits needed for multiplication with WATCHDOG_MIN_MARGIN */
+#define MARGIN_MIN_BITS		(const_ilog2(WATCHDOG_MIN_MARGIN) + 1)
+/* 1UL << 30 approximates NSEC_PER_SEC */
+#define MARGIN_SHIFT		(30 - WATCHDOG_INTERVAL_SHIFT - MARGIN_SCALE)
+/* The result needs to fit into 32 bits */
+#define MARGIN_MAX_INTERVAL	(1ULL << (32 + MARGIN_SCALE - MARGIN_MIN_BITS \
+					  + MARGIN_SHIFT))
+
+/*
+ * Calculate the minimal uncertainty margin scaled by
+ * the length of the watchdog interval that elapsed since
+ * cs_last and wd_last. Since the watchdog is executed
+ * in softirq context the expiration of the timer can get
+ * severely delayed on account of a ksoftirqd thread not
+ * getting to run in a timely manner.
+ * Left-shifting is utilized to approximate the division by
+ * WATCHDOG_INTERVAL * NSEC_PER_SEC / HZ
+ */
+static u32 clocksource_calc_margin(int64_t interval)
+{
+	u64 tmp;
+
+	if (interval < 0)
+		return 0;
+	tmp = interval < MARGIN_MAX_INTERVAL ? interval : MARGIN_MAX_INTERVAL;
+	tmp >>= MARGIN_SHIFT;
+	tmp *= WATCHDOG_MIN_MARGIN;
+	return tmp >> MARGIN_SCALE;
+}
 
 static void clocksource_watchdog(struct timer_list *unused)
 {
 	u64 csnow, wdnow, cslast, wdlast, delta;
+	u32 scaled_cs_margin, scaled_wd_margin, md;
 	int next_cpu, reset_pending;
 	int64_t wd_nsec, cs_nsec;
 	struct clocksource *cs;
 	enum wd_read_status read_ret;
 	unsigned long extra_wait = 0;
-	u32 md;
 
 	spin_lock(&watchdog_lock);
 	if (!watchdog_running)
@@ -470,8 +503,19 @@ static void clocksource_watchdog(struct timer_list *unused)
 		if (atomic_read(&watchdog_reset_pending))
 			continue;
 
+		/*
+		 * Skip the check if CONFIG_CLOCKSOURCE_VALIDATE_LAST_CYCLE
+		 * detected the MSB of the mask in the delta or delta == mask.
+		 */
+		if (!wd_nsec || !cs_nsec)
+			continue;
+
 		/* Check the deviation from the watchdog clocksource. */
-		md = cs->uncertainty_margin + watchdog->uncertainty_margin;
+		scaled_cs_margin = clocksource_calc_margin(cs_nsec);
+		scaled_wd_margin = clocksource_calc_margin(wd_nsec);
+		md = max(cs->uncertainty_margin, scaled_cs_margin);
+		md += max(watchdog->uncertainty_margin, scaled_wd_margin);
+
 		if (abs(cs_nsec - wd_nsec) > md) {
 			s64 cs_wd_msec;
 			s64 wd_msec;
@@ -487,6 +531,8 @@ static void clocksource_watchdog(struct timer_list *unused)
 			wd_msec = div_s64_rem(wd_nsec, 1000 * 1000, &wd_rem);
 			pr_warn("                      Clocksource '%s' skewed %lld ns (%lld ms) over watchdog '%s' interval of %lld ns (%lld ms)\n",
 				cs->name, cs_nsec - wd_nsec, cs_wd_msec, watchdog->name, wd_nsec, wd_msec);
+			pr_warn("                      Max deviation: %u scaled_cs_margin: %u scaled_wd_margin: %u\n",
+				md, scaled_cs_margin, scaled_wd_margin);
 			if (curr_clocksource == cs)
 				pr_warn("                      '%s' is current clocksource.\n", cs->name);
 			else if (curr_clocksource)
@@ -1138,12 +1184,12 @@ void __clocksource_update_freq_scale(struct clocksource *cs, u32 scale, u32 freq
 	 */
 	if (scale && freq && !cs->uncertainty_margin) {
 		cs->uncertainty_margin = NSEC_PER_SEC / (scale * freq);
-		if (cs->uncertainty_margin < 2 * WATCHDOG_MAX_SKEW)
-			cs->uncertainty_margin = 2 * WATCHDOG_MAX_SKEW;
+		if (cs->uncertainty_margin < WATCHDOG_MIN_MARGIN)
+			cs->uncertainty_margin = WATCHDOG_MIN_MARGIN;
 	} else if (!cs->uncertainty_margin) {
 		cs->uncertainty_margin = WATCHDOG_THRESHOLD;
 	}
-	WARN_ON_ONCE(cs->uncertainty_margin < 2 * WATCHDOG_MAX_SKEW);
+	WARN_ON_ONCE(cs->uncertainty_margin < WATCHDOG_MIN_MARGIN);
 
 	/*
 	 * Ensure clocksources that have large 'mult' values don't overflow
