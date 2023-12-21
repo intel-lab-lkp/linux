@@ -830,7 +830,8 @@ void blk_mq_end_request_batch(struct io_comp_batch *ib);
  */
 static inline bool blk_mq_need_time_stamp(struct request *rq)
 {
-	return (rq->rq_flags & (RQF_IO_STAT | RQF_STATS | RQF_USE_SCHED));
+	return (rq->rq_flags & (RQF_IO_STAT | RQF_STATS | RQF_USE_SCHED) &&
+		!blk_rq_is_passthrough(rq));
 }
 
 static inline bool blk_mq_is_reserved_rq(struct request *rq)
