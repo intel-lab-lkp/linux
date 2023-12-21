@@ -515,6 +515,20 @@ void mddev_resume(struct mddev *mddev)
 }
 EXPORT_SYMBOL_GPL(mddev_resume);
 
+static void md_link_disk_holder(struct mddev *mddev)
+{
+	struct md_rdev *rdev;
+
+	rcu_read_lock();
+	rdev_for_each_rcu(rdev, mddev) {
+		if (test_bit(SymlinkCreated, &rdev->flags))
+			continue;
+		if (!bd_link_disk_holder(rdev->bdev, mddev->gendisk))
+			set_bit(SymlinkCreated, &rdev->flags);
+	}
+	rcu_read_unlock();
+}
+
 /*
  * Generic flush handling for md
  */
@@ -896,6 +910,11 @@ void mddev_unlock(struct mddev *mddev)
 
 	list_for_each_entry_safe(rdev, tmp, &delete, same_set) {
 		list_del_init(&rdev->same_set);
+		if (test_bit(SymlinkCreated, &rdev->flags)) {
+			bd_unlink_disk_holder(rdev->bdev, rdev->mddev->gendisk);
+			clear_bit(SymlinkCreated, &rdev->flags);
+		}
+		rdev->mddev = NULL;
 		kobject_del(&rdev->kobj);
 		export_rdev(rdev, mddev);
 	}
@@ -2538,8 +2557,6 @@ static int bind_rdev_to_array(struct md_rdev *rdev, struct mddev *mddev)
 		sysfs_get_dirent_safe(rdev->kobj.sd, "bad_blocks");
 
 	list_add_rcu(&rdev->same_set, &mddev->disks);
-	if (!bd_link_disk_holder(rdev->bdev, mddev->gendisk))
-		set_bit(SymlinkCreated, &rdev->flags);
 
 	/* May as well allow recovery to be retried once */
 	mddev->recovery_disabled++;
@@ -2574,14 +2591,9 @@ static void md_kick_rdev_from_array(struct md_rdev *rdev)
 {
 	struct mddev *mddev = rdev->mddev;
 
-	if (test_bit(SymlinkCreated, &rdev->flags)) {
-		bd_unlink_disk_holder(rdev->bdev, rdev->mddev->gendisk);
-		clear_bit(SymlinkCreated, &rdev->flags);
-	}
 	list_del_rcu(&rdev->same_set);
 	pr_debug("md: unbind<%pg>\n", rdev->bdev);
 	mddev_destroy_serial_pool(rdev->mddev, rdev);
-	rdev->mddev = NULL;
 	sysfs_remove_link(&rdev->kobj, "block");
 	sysfs_put(rdev->sysfs_state);
 	sysfs_put(rdev->sysfs_unack_badblocks);
@@ -4670,8 +4682,10 @@ new_dev_store(struct mddev *mddev, const char *buf, size_t len)
 	if (err)
 		export_rdev(rdev, mddev);
 	mddev_unlock_and_resume(mddev);
-	if (!err)
+	if (!err) {
+		md_link_disk_holder(mddev);
 		md_new_event();
+	}
 	return err ? err : len;
 }
 
@@ -6623,6 +6637,7 @@ static void autorun_devices(int part)
 			}
 			autorun_array(mddev);
 			mddev_unlock_and_resume(mddev);
+			md_link_disk_holder(mddev);
 		}
 		/* on success, candidates will be empty, on error
 		 * it won't...
@@ -7849,8 +7864,12 @@ unlock:
 	    err != -EINVAL)
 		mddev->hold_active = 0;
 
-	md_ioctl_need_suspend(cmd) ? mddev_unlock_and_resume(mddev) :
-				     mddev_unlock(mddev);
+	if (md_ioctl_need_suspend(cmd)) {
+		mddev_unlock_and_resume(mddev);
+		md_link_disk_holder(mddev);
+	} else {
+		mddev_unlock(mddev);
+	}
 
 out:
 	if(did_set_md_closing)
