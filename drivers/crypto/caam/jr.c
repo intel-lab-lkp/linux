@@ -189,6 +189,10 @@ static void caam_jr_remove(struct platform_device *pdev)
 	jrdev = &pdev->dev;
 	jrpriv = dev_get_drvdata(jrdev);
 
+	/* Disabling interrupts is ensure that the device removal operation
+	 * is not interrupted by interrupts.
+	 */
+	devm_free_irq(jrdev, jrpriv->irq, jrdev);
 	if (jrpriv->hwrng)
 		caam_rng_exit(jrdev->parent);
 
