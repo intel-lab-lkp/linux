@@ -180,7 +180,7 @@ void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
 {
 	BUG_ON(!buffer_locked(bh));
 
-	if (ext4_buffer_uptodate(bh)) {
+	if (buffer_uptodate_or_error(bh)) {
 		unlock_buffer(bh);
 		return;
 	}
@@ -191,7 +191,7 @@ int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags, bh_end_io_t *end_io
 {
 	BUG_ON(!buffer_locked(bh));
 
-	if (ext4_buffer_uptodate(bh)) {
+	if (buffer_uptodate_or_error(bh)) {
 		unlock_buffer(bh);
 		return 0;
 	}
@@ -214,49 +214,24 @@ int ext4_read_bh_lock(struct buffer_head *bh, blk_opf_t op_flags, bool wait)
 	return ext4_read_bh(bh, op_flags, NULL);
 }
 
-/*
- * This works like __bread_gfp() except it uses ERR_PTR for error
- * returns.  Currently with sb_bread it's impossible to distinguish
- * between ENOMEM and EIO situations (since both result in a NULL
- * return.
- */
-static struct buffer_head *__ext4_sb_bread_gfp(struct super_block *sb,
-					       sector_t block,
-					       blk_opf_t op_flags, gfp_t gfp)
-{
-	struct buffer_head *bh;
-	int ret;
-
-	bh = sb_getblk_gfp(sb, block, gfp);
-	if (bh == NULL)
-		return ERR_PTR(-ENOMEM);
-	if (ext4_buffer_uptodate(bh))
-		return bh;
-
-	ret = ext4_read_bh_lock(bh, REQ_META | op_flags, true);
-	if (ret) {
-		put_bh(bh);
-		return ERR_PTR(ret);
-	}
-	return bh;
-}
-
 struct buffer_head *ext4_sb_bread(struct super_block *sb, sector_t block,
 				   blk_opf_t op_flags)
 {
-	gfp_t gfp = mapping_gfp_constraint(sb->s_bdev->bd_inode->i_mapping,
-			~__GFP_FS) | __GFP_MOVABLE;
+	struct buffer_head *bh = __bread_gfp2(sb->s_bdev, block,
+					      sb->s_blocksize,
+					      REQ_META | op_flags,
+					      __GFP_MOVABLE);
 
-	return __ext4_sb_bread_gfp(sb, block, op_flags, gfp);
+	return bh ? bh : ERR_PTR(-EIO);
 }
 
 struct buffer_head *ext4_sb_bread_unmovable(struct super_block *sb,
 					    sector_t block)
 {
-	gfp_t gfp = mapping_gfp_constraint(sb->s_bdev->bd_inode->i_mapping,
-			~__GFP_FS);
+	struct buffer_head *bh = __bread_gfp2(sb->s_bdev, block,
+					      sb->s_blocksize, REQ_META, 0);
 
-	return __ext4_sb_bread_gfp(sb, block, 0, gfp);
+	return bh ? bh : ERR_PTR(-EIO);
 }
 
 void ext4_sb_breadahead_unmovable(struct super_block *sb, sector_t block)
