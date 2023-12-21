@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/linkage.h>
-#include <asm/page.h>
+#include <asm/vdso/page.h>
 
 	__PAGE_ALIGNED_DATA
 

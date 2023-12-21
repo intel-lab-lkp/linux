@@ -4,7 +4,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <asm/page.h>
+#include <asm/vdso/page.h>
 #include <asm/vdso/timebase.h>
 #include <asm/barrier.h>
 #include <asm/unistd.h>

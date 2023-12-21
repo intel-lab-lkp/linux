@@ -4,7 +4,7 @@
  * library
  */
 #include <asm/vdso.h>
-#include <asm/page.h>
+#include <asm/vdso/page.h>
 #include <asm-generic/vmlinux.lds.h>
 
 #ifdef __LITTLE_ENDIAN__

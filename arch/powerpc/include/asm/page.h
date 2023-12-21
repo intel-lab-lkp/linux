@@ -14,15 +14,7 @@
 #include <asm/types.h>
 #endif
 #include <asm/asm-const.h>
-
-/*
- * On regular PPC32 page size is 4K (but we support 4K/16K/64K/256K pages
- * on PPC44x and 4K/16K on 8xx). For PPC64 we support either 4K or 64K software
- * page size. When using 64K pages however, whether we are really supporting
- * 64K pages in HW or not is irrelevant to those definitions.
- */
-#define PAGE_SHIFT		CONFIG_PPC_PAGE_SHIFT
-#define PAGE_SIZE		(ASM_CONST(1) << PAGE_SHIFT)
+#include <asm/vdso/page.h>
 
 #ifndef __ASSEMBLY__
 #ifndef CONFIG_HUGETLB_PAGE
