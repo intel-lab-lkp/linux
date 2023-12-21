@@ -22,3 +22,21 @@ config SND_SOC_JH7110_TDM
 	select SND_SOC_GENERIC_DMAENGINE_PCM
 	help
 	  Say Y or M if you want to add support for StarFive TDM driver.
+
+config SND_SOC_JH8100_CADENCE_I2S
+        tristate "Cadence I2S Controller Device Driver for StarFive JH8100 SoC"
+	depends on HAVE_CLK && SND_SOC_STARFIVE
+        select SND_SOC_GENERIC_DMAENGINE_PCM
+        help
+         Say Y or M if you want to add support for I2S driver for the
+         StarFive JH8100 Cadence Multi-Channel I2S Controller device.
+
+
+config SND_SOC_JH8100_CADENCE_I2S_PCM
+        bool "PCM PIO extension for CDNS I2S driver on the StarFive JH8100 SoC"
+        depends on SND_SOC_JH8100_CADENCE_I2S
+        help
+         Say Y or N if you want to add a custom ALSA extension that registers
+         a PCM and uses PIO to transfer data.
+         This functionality is specially suited for I2S devices that don't have
+         DMA support.
