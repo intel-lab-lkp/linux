@@ -186,9 +186,9 @@ isochron_do()
 	local vid=$1; shift
 	local priority=$1; shift
 	local dst_ip=$1; shift
+	local sender_extra_args="$1"; shift
+	local receiver_extra_args="$1"; shift
 	local isochron_dat=$1; shift
-	local extra_args=""
-	local receiver_extra_args=""
 	local vrf="$(master_name_get ${sender_if_name})"
 	local use_l2="true"
 
@@ -205,19 +205,19 @@ isochron_do()
 	fi
 
 	if [ -z "${receiver_uds}" ]; then
-		extra_args="${extra_args} --omit-remote-sync"
+		sender_extra_args="${sender_extra_args} --omit-remote-sync"
 	fi
 
 	if ! [ -z "${shift_time}" ]; then
-		extra_args="${extra_args} --shift-time=${shift_time}"
+		sender_extra_args="${sender_extra_args} --shift-time=${shift_time}"
 	fi
 
 	if [ "${use_l2}" = "true" ]; then
-		extra_args="${extra_args} --l2 --etype=0xdead ${vid}"
-		receiver_extra_args="--l2 --etype=0xdead"
+		sender_extra_args="${sender_extra_args} --l2 --etype=0xdead ${vid}"
+		receiver_extra_args="${receiver_extra_args} --l2 --etype=0xdead"
 	else
-		extra_args="${extra_args} --l4 --ip-destination=${dst_ip}"
-		receiver_extra_args="--l4"
+		sender_extra_args="${sender_extra_args} --l4 --ip-destination=${dst_ip}"
+		receiver_extra_args="${receiver_extra_args} --l4"
 	fi
 
 	cpufreq_max ${ISOCHRON_CPU}
@@ -232,7 +232,6 @@ isochron_do()
 		--cycle-time ${cycle_time} \
 		--num-frames ${num_pkts} \
 		--frame-size 64 \
-		--txtime \
 		--utc-tai-offset ${UTC_TAI_OFFSET} \
 		--cpu-mask $((1 << ${ISOCHRON_CPU})) \
 		--sched-fifo \
@@ -240,8 +239,8 @@ isochron_do()
 		--client 127.0.0.1 \
 		--sync-threshold 5000 \
 		--output-file ${isochron_dat} \
-		${extra_args} \
-		--quiet
+		--quiet \
+		${sender_extra_args}
 
 	isochron_recv_stop 5000
 

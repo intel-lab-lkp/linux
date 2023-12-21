@@ -270,6 +270,7 @@ run_test()
 		"${STREAM_VID}" \
 		"${STREAM_PRIO}" \
 		"" \
+		"--txtime" "" \
 		"${isochron_dat}"
 
 	# Count all received packets by looking at the non-zero RX timestamps
