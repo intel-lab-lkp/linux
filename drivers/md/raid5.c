@@ -6070,7 +6070,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	enum stripe_result res;
 	int s, stripe_cnt;
 
-	if (unlikely(bi->bi_opf & REQ_PREFLUSH)) {
+	if (unlikely(op_is_flush(bi->bi_opf))) {
 		int ret = log_handle_flush_request(conf, bi);
 
 		if (ret == 0)

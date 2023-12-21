@@ -592,7 +592,7 @@ static bool raid0_make_request(struct mddev *mddev, struct bio *bio)
 	unsigned chunk_sects;
 	unsigned sectors;
 
-	if (unlikely(bio->bi_opf & REQ_PREFLUSH)
+	if (unlikely(op_is_flush(bio->bi_opf))
 	    && md_flush_request(mddev, bio))
 		return true;
 
