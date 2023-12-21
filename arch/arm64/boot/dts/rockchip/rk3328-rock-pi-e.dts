@@ -148,7 +148,7 @@
 	assigned-clocks = <&cru SCLK_MAC2IO>, <&cru SCLK_MAC2IO_EXT>;
 	assigned-clock-parents = <&gmac_clkin>, <&gmac_clkin>;
 	clock_in_out = "input";
-	phy-handle = <&rtl8211e>;
+	phy-handle = <&rtl8211f>;
 	phy-mode = "rgmii";
 	phy-supply = <&vcc_io>;
 	pinctrl-names = "default";
@@ -156,8 +156,8 @@
 	snps,aal;
 	snps,rxpbl = <0x4>;
 	snps,txpbl = <0x4>;
-	tx_delay = <0x26>;
-	rx_delay = <0x11>;
+	tx_delay = <0x1a>;
+	rx_delay = <0x14>;
 	status = "okay";
 
 	mdio {
@@ -165,15 +165,17 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		rtl8211e: ethernet-phy@1 {
+		rtl8211f: ethernet-phy@1 {
+			compatible = "ethernet-phy-id001c.c916", "ethernet-phy-ieee802.3-c22";
 			reg = <1>;
 			pinctrl-0 = <&eth_phy_int_pin>, <&eth_phy_reset_pin>;
 			pinctrl-names = "default";
 			interrupt-parent = <&gpio1>;
 			interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
-			reset-assert-us = <10000>;
-			reset-deassert-us = <50000>;
+			reset-assert-us = <20000>;
+			reset-deassert-us = <100000>;
 			reset-gpios = <&gpio1 RK_PC2 GPIO_ACTIVE_LOW>;
+			max-speed = <1000>;
 		};
 	};
 };
