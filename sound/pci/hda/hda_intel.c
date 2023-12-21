@@ -2144,9 +2144,6 @@ static int azx_probe(struct pci_dev *pci,
 			 * codecs can be on the same link.
 			 */
 			if (HDA_CONTROLLER_IN_GPU(pci)) {
-				dev_err_probe(card->dev, err,
-					     "HSW/BDW HD-audio HDMI/DP requires binding with gfx driver\n");
-
 				goto out_free;
 			} else {
 				/* don't bother any longer */
@@ -2242,6 +2239,8 @@ static const struct snd_pci_quirk power_save_denylist[] = {
 	SND_PCI_QUIRK(0x17aa, 0x36a7, "Lenovo C50 All in one", 0),
 	/* https://bugs.launchpad.net/bugs/1821663 */
 	SND_PCI_QUIRK(0x1631, 0xe017, "Packard Bell NEC IMEDIA 5204", 0),
+	/* KONTRON SinglePC may cause a stall at runtime resume */
+	SND_PCI_QUIRK(0x1734, 0x1232, "KONTRON SinglePC", 0),
 	{}
 };
 #endif /* CONFIG_PM */
