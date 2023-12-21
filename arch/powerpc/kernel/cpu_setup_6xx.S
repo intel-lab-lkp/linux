@@ -81,6 +81,20 @@ _GLOBAL(__setup_cpu_745x)
 	bl	setup_745x_specifics
 	mtlr	r5
 	blr
+_GLOBAL(__setup_cpu_g2)
+	mflr	r5
+BEGIN_MMU_FTR_SECTION
+	li	r10,0
+	mtspr	SPRN_SPRG_603_LRU,r10		/* init SW LRU tracking */
+END_MMU_FTR_SECTION_IFSET(MMU_FTR_NEED_DTLB_SW_LRU)
+
+BEGIN_FTR_SECTION
+	bl	__init_fpu_registers
+END_FTR_SECTION_IFCLR(CPU_FTR_FPU_UNAVAILABLE)
+	bl	setup_common_caches
+	bl	setup_g2_hid2
+	mtlr	r5
+	blr
 
 /* Enable caches for 603's, 604, 750 & 7400 */
 SYM_FUNC_START_LOCAL(setup_common_caches)
@@ -114,6 +128,16 @@ SYM_FUNC_START_LOCAL(setup_604_hid0)
 	isync
 	blr
 SYM_FUNC_END(setup_604_hid0)
+
+/* Enable high BATs for G2 (G2_LE, e300cX) */
+SYM_FUNC_START_LOCAL(setup_g2_hid2)
+	mfspr	r11,SPRN_HID2_G2
+	oris	r11,r11,HID2_HBE_G2@h
+	mtspr	SPRN_HID2_G2,r11
+	sync
+	isync
+	blr
+SYM_FUNC_END(setup_g2_hid2)
 
 /* 7400 <= rev 2.7 and 7410 rev = 1.0 suffer from some
  * erratas we work around here.
@@ -495,4 +519,3 @@ _GLOBAL(__restore_cpu_setup)
 	mtcr	r7
 	blr
 _ASM_NOKPROBE_SYMBOL(__restore_cpu_setup)
-
