@@ -207,6 +207,9 @@ enum flag_bits {
 				 * check if there is collision between raid1
 				 * serial bios.
 				 */
+	SymlinkCreated,		/* This device has created the symlink
+				 * with gendisk.
+				 */
 };
 
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,

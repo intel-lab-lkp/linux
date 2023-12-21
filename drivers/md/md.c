@@ -2538,7 +2538,8 @@ static int bind_rdev_to_array(struct md_rdev *rdev, struct mddev *mddev)
 		sysfs_get_dirent_safe(rdev->kobj.sd, "bad_blocks");
 
 	list_add_rcu(&rdev->same_set, &mddev->disks);
-	bd_link_disk_holder(rdev->bdev, mddev->gendisk);
+	if (!bd_link_disk_holder(rdev->bdev, mddev->gendisk))
+		set_bit(SymlinkCreated, &rdev->flags);
 
 	/* May as well allow recovery to be retried once */
 	mddev->recovery_disabled++;
@@ -2573,7 +2574,10 @@ static void md_kick_rdev_from_array(struct md_rdev *rdev)
 {
 	struct mddev *mddev = rdev->mddev;
 
-	bd_unlink_disk_holder(rdev->bdev, rdev->mddev->gendisk);
+	if (test_bit(SymlinkCreated, &rdev->flags)) {
+		bd_unlink_disk_holder(rdev->bdev, rdev->mddev->gendisk);
+		clear_bit(SymlinkCreated, &rdev->flags);
+	}
 	list_del_rcu(&rdev->same_set);
 	pr_debug("md: unbind<%pg>\n", rdev->bdev);
 	mddev_destroy_serial_pool(rdev->mddev, rdev);
