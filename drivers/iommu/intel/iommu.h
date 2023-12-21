@@ -615,6 +615,9 @@ struct dmar_domain {
 		struct {
 			/* virtual address */
 			struct dma_pte	*pgd;
+
+			/* Synchronizes pgd map/unmap operations */
+			rwlock_t	pgd_lock;
 			/* max guest address width */
 			int		gaw;
 			/*

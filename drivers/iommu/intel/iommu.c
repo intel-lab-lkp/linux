@@ -938,11 +938,13 @@ static void dma_pte_free_pagetable(struct dmar_domain *domain,
 				   unsigned long last_pfn,
 				   int retain_level)
 {
+	read_lock(&domain->pgd_lock);
 	dma_pte_clear_range(domain, start_pfn, last_pfn);
 
 	/* We don't need lock here; nobody else touches the iova range */
 	dma_pte_free_level(domain, agaw_to_level(domain->agaw), retain_level,
 			   domain->pgd, 0, start_pfn, last_pfn);
+	read_unlock(&domain->pgd_lock);
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == DOMAIN_MAX_PFN(domain->gaw)) {
@@ -1035,9 +1037,11 @@ static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
 	    WARN_ON(start_pfn > last_pfn))
 		return;
 
+	read_lock(&domain->pgd_lock);
 	/* we don't need lock here; nobody else touches the iova range */
 	dma_pte_clear_level(domain, agaw_to_level(domain->agaw),
 			    domain->pgd, 0, start_pfn, last_pfn, freelist);
+	read_unlock(&domain->pgd_lock);
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == DOMAIN_MAX_PFN(domain->gaw)) {
@@ -2034,6 +2038,7 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 
 	pteval = ((phys_addr_t)phys_pfn << VTD_PAGE_SHIFT) | attr;
 
+	read_lock(&domain->pgd_lock);
 	while (nr_pages > 0) {
 		uint64_t tmp;
 
@@ -2043,8 +2048,10 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 
 			pte = pfn_to_dma_pte(domain, iov_pfn, &largepage_lvl,
 					     gfp);
-			if (!pte)
+			if (!pte) {
+				read_unlock(&domain->pgd_lock);
 				return -ENOMEM;
+			}
 			first_pte = pte;
 
 			lvl_pages = lvl_to_nr_pages(largepage_lvl);
@@ -2104,6 +2111,7 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 			pte = NULL;
 		}
 	}
+	read_unlock(&domain->pgd_lock);
 
 	return 0;
 }
@@ -3825,6 +3833,7 @@ static int md_domain_init(struct dmar_domain *domain, int guest_width)
 	domain->pgd = alloc_pgtable_page(domain->nid, GFP_ATOMIC);
 	if (!domain->pgd)
 		return -ENOMEM;
+	rwlock_init(&domain->pgd_lock);
 	domain_flush_cache(domain, domain->pgd, PAGE_SIZE);
 	return 0;
 }
@@ -4056,11 +4065,15 @@ static size_t intel_iommu_unmap(struct iommu_domain *domain,
 	unsigned long start_pfn, last_pfn;
 	int level = 0;
 
+	read_lock(&dmar_domain->pgd_lock);
 	/* Cope with horrid API which requires us to unmap more than the
 	   size argument if it happens to be a large-page mapping. */
 	if (unlikely(!pfn_to_dma_pte(dmar_domain, iova >> VTD_PAGE_SHIFT,
-				     &level, GFP_ATOMIC)))
+				     &level, GFP_ATOMIC))) {
+		read_unlock(&dmar_domain->pgd_lock);
 		return 0;
+	}
+	read_unlock(&dmar_domain->pgd_lock);
 
 	if (size < VTD_PAGE_SIZE << level_to_offset_bits(level))
 		size = VTD_PAGE_SIZE << level_to_offset_bits(level);
@@ -4124,8 +4137,10 @@ static phys_addr_t intel_iommu_iova_to_phys(struct iommu_domain *domain,
 	int level = 0;
 	u64 phys = 0;
 
+	read_lock(&dmar_domain->pgd_lock);
 	pte = pfn_to_dma_pte(dmar_domain, iova >> VTD_PAGE_SHIFT, &level,
 			     GFP_ATOMIC);
+	read_unlock(&dmar_domain->pgd_lock);
 	if (pte && dma_pte_present(pte))
 		phys = dma_pte_addr(pte) +
 			(iova & (BIT_MASK(level_to_offset_bits(level) +
@@ -4726,8 +4741,10 @@ static int intel_iommu_read_and_clear_dirty(struct iommu_domain *domain,
 		struct dma_pte *pte;
 		int lvl = 0;
 
+		read_lock(&dmar_domain->pgd_lock);
 		pte = pfn_to_dma_pte(dmar_domain, iova >> VTD_PAGE_SHIFT, &lvl,
 				     GFP_ATOMIC);
+		read_unlock(&dmar_domain->pgd_lock);
 		pgsize = level_size(lvl) << VTD_PAGE_SHIFT;
 		if (!pte || !dma_pte_present(pte)) {
 			iova += pgsize;
