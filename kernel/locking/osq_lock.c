@@ -87,12 +87,29 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 	return next;
 }
 
+#ifndef vcpu_is_preempted
+#define prev_vcpu_is_preempted(n, p, c)	false
+#else
+static inline bool prev_vcpu_is_preempted(struct optimistic_spin_node *node,
+					  struct optimistic_spin_node **pprev,
+					  int *ppvcpu)
+{
+	struct optimistic_spin_node *prev = READ_ONCE(node->prev);
+
+	if (prev != *pprev) {
+		*pprev = prev;
+		*ppvcpu = node_cpu(prev);
+	}
+	return vcpu_is_preempted(*ppvcpu);
+}
+#endif
+
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
 	struct optimistic_spin_node *prev, *next;
 	int curr = encode_cpu(smp_processor_id());
-	int old;
+	int old, pvcpu;
 
 	node->locked = 0;
 	node->next = NULL;
@@ -110,6 +127,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 
 	prev = decode_cpu(old);
 	node->prev = prev;
+	pvcpu = node_cpu(prev);
 
 	/*
 	 * osq_lock()			unqueue
@@ -141,7 +159,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * polling, be careful.
 	 */
 	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
-				  vcpu_is_preempted(node_cpu(node->prev))))
+				  prev_vcpu_is_preempted(node, &prev, &pvcpu)))
 		return true;
 
 	/* unqueue */
