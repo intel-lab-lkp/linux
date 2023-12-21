@@ -986,7 +986,7 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 				struct dma_pte *pte, unsigned long pfn,
 				unsigned long start_pfn, unsigned long last_pfn,
-				struct list_head *freelist)
+				struct list_head *freelist, int *freed_level)
 {
 	struct dma_pte *first_pte = NULL, *last_pte = NULL;
 
@@ -1012,11 +1012,48 @@ static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 				first_pte = pte;
 			last_pte = pte;
 		} else if (level > 1) {
+			struct dma_pte *npte = phys_to_virt(dma_pte_addr(pte));
+			struct page *npage = virt_to_page(npte);
+
 			/* Recurse down into a level that isn't *entirely* obsolete */
-			dma_pte_clear_level(domain, level - 1,
-					    phys_to_virt(dma_pte_addr(pte)),
+			dma_pte_clear_level(domain, level - 1, npte,
 					    level_pfn, start_pfn, last_pfn,
-					    freelist);
+					    freelist, freed_level);
+
+			/*
+			 * Free next level page table if it became empty.
+			 *
+			 * We only holding the reader lock, and it is possible
+			 * that other threads are accessing page table as
+			 * readers as well. We can only free page table that
+			 * is outside of the request IOVA space only if
+			 * we grab the writer lock. Since we need to drop reader
+			 * lock, we are incrementing the refcount in the npage
+			 * so it (and the current page table) does not
+			 * dissappear due to concurrent unmapping threads.
+			 *
+			 * Store the size maximum size of the freed page table
+			 * into freed_level, so the size of the IOTLB flush
+			 * can be determined.
+			 */
+			if (freed_level && page_count(npage) == 1) {
+				page_ref_inc(npage);
+				read_unlock(&domain->pgd_lock);
+				write_lock(&domain->pgd_lock);
+				if (page_count(npage) == 2) {
+					dma_clear_pte(pte);
+
+					if (!first_pte)
+						first_pte = pte;
+
+					last_pte = pte;
+					list_add_tail(&npage->lru, freelist);
+					*freed_level = level;
+				}
+				write_unlock(&domain->pgd_lock);
+				read_lock(&domain->pgd_lock);
+				page_ref_dec(npage);
+			}
 		}
 next:
 		pfn = level_pfn + level_size(level);
@@ -1031,7 +1068,8 @@ next:
    the page tables, and may have cached the intermediate levels. The
    pages can only be freed after the IOTLB flush has been done. */
 static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
-			 unsigned long last_pfn, struct list_head *freelist)
+			 unsigned long last_pfn, struct list_head *freelist,
+			 int *level)
 {
 	if (WARN_ON(!domain_pfn_supported(domain, last_pfn)) ||
 	    WARN_ON(start_pfn > last_pfn))
@@ -1040,7 +1078,8 @@ static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
 	read_lock(&domain->pgd_lock);
 	/* we don't need lock here; nobody else touches the iova range */
 	dma_pte_clear_level(domain, agaw_to_level(domain->agaw),
-			    domain->pgd, 0, start_pfn, last_pfn, freelist);
+			    domain->pgd, 0, start_pfn, last_pfn, freelist,
+			    level);
 	read_unlock(&domain->pgd_lock);
 
 	/* free pgd */
@@ -1380,11 +1419,11 @@ static void domain_flush_pasid_iotlb(struct intel_iommu *iommu,
 
 static void iommu_flush_iotlb_psi(struct intel_iommu *iommu,
 				  struct dmar_domain *domain,
-				  unsigned long pfn, unsigned int pages,
+				  unsigned long pfn, unsigned long pages,
 				  int ih, int map)
 {
-	unsigned int aligned_pages = __roundup_pow_of_two(pages);
-	unsigned int mask = ilog2(aligned_pages);
+	unsigned long aligned_pages = __roundup_pow_of_two(pages);
+	unsigned long mask = ilog2(aligned_pages);
 	uint64_t addr = (uint64_t)pfn << VTD_PAGE_SHIFT;
 	u16 did = domain_id_iommu(domain, iommu);
 
@@ -1727,7 +1766,8 @@ static void domain_exit(struct dmar_domain *domain)
 	if (domain->pgd) {
 		LIST_HEAD(freelist);
 
-		domain_unmap(domain, 0, DOMAIN_MAX_PFN(domain->gaw), &freelist);
+		domain_unmap(domain, 0, DOMAIN_MAX_PFN(domain->gaw), &freelist,
+			     NULL);
 		put_pages_list(&freelist);
 	}
 
@@ -3391,7 +3431,8 @@ static int intel_iommu_memory_notifier(struct notifier_block *nb,
 			struct intel_iommu *iommu;
 			LIST_HEAD(freelist);
 
-			domain_unmap(si_domain, start_vpfn, last_vpfn, &freelist);
+			domain_unmap(si_domain, start_vpfn, last_vpfn,
+				     &freelist, NULL);
 
 			rcu_read_lock();
 			for_each_active_iommu(iommu, drhd)
@@ -4062,6 +4103,7 @@ static size_t intel_iommu_unmap(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *gather)
 {
 	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
+	bool queued = iommu_iotlb_gather_queued(gather);
 	unsigned long start_pfn, last_pfn;
 	int level = 0;
 
@@ -4081,7 +4123,16 @@ static size_t intel_iommu_unmap(struct iommu_domain *domain,
 	start_pfn = iova >> VTD_PAGE_SHIFT;
 	last_pfn = (iova + size - 1) >> VTD_PAGE_SHIFT;
 
-	domain_unmap(dmar_domain, start_pfn, last_pfn, &gather->freelist);
+	/*
+	 * pass level only if !queued, which means we will do iotlb
+	 * flush callback before freeing pages from freelist.
+	 *
+	 * When level is passed domain_unamp will attempt to add empty
+	 * page tables to freelist, and pass the level number of the highest
+	 * page table that was added to the freelist.
+	 */
+	domain_unmap(dmar_domain, start_pfn, last_pfn, &gather->freelist,
+		     queued ? NULL : &level);
 
 	if (dmar_domain->max_addr == iova + size)
 		dmar_domain->max_addr = iova;
@@ -4090,8 +4141,21 @@ static size_t intel_iommu_unmap(struct iommu_domain *domain,
 	 * We do not use page-selective IOTLB invalidation in flush queue,
 	 * so there is no need to track page and sync iotlb.
 	 */
-	if (!iommu_iotlb_gather_queued(gather))
-		iommu_iotlb_gather_add_page(domain, gather, iova, size);
+	if (!queued) {
+		size_t sz = size;
+
+		/*
+		 * Increase iova and sz for flushing if level was returned,
+		 * as it means we also are freeing some page tables.
+		 */
+		if (level) {
+			unsigned long pgsize = level_size(level) << VTD_PAGE_SHIFT;
+
+			iova = ALIGN_DOWN(iova, pgsize);
+			sz = ALIGN(size, pgsize);
+		}
+		iommu_iotlb_gather_add_page(domain, gather, iova, sz);
+	}
 
 	return size;
 }
