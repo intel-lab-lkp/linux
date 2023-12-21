@@ -651,6 +651,16 @@ static struct line *supinfo_find(struct gpio_desc *desc)
 	return NULL;
 }
 
+static unsigned int line_get_debounce_period(struct line *line)
+{
+	return READ_ONCE(line->debounce_period_us);
+}
+
+static inline bool line_has_supinfo(struct line *line)
+{
+	return line_get_debounce_period(line);
+}
+
 static void supinfo_to_lineinfo(struct gpio_desc *desc,
 				struct gpio_v2_line_info *info)
 {
@@ -665,13 +675,8 @@ static void supinfo_to_lineinfo(struct gpio_desc *desc,
 
 	attr = &info->attrs[info->num_attrs];
 	attr->id = GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
-	attr->debounce_period_us = READ_ONCE(line->debounce_period_us);
+	attr->debounce_period_us = line_get_debounce_period(line);
 	info->num_attrs++;
-}
-
-static inline bool line_has_supinfo(struct line *line)
-{
-	return READ_ONCE(line->debounce_period_us);
 }
 
 /*
@@ -846,7 +851,7 @@ static enum hte_return process_hw_ts(struct hte_ts_data *ts, void *p)
 		line->total_discard_seq++;
 		line->last_seqno = ts->seq;
 		mod_delayed_work(system_wq, &line->work,
-		  usecs_to_jiffies(READ_ONCE(line->debounce_period_us)));
+				 usecs_to_jiffies(line_get_debounce_period(line)));
 	} else {
 		if (unlikely(ts->seq < line->line_seqno))
 			return HTE_CB_HANDLED;
@@ -987,7 +992,7 @@ static irqreturn_t debounce_irq_handler(int irq, void *p)
 	struct line *line = p;
 
 	mod_delayed_work(system_wq, &line->work,
-		usecs_to_jiffies(READ_ONCE(line->debounce_period_us)));
+			 usecs_to_jiffies(line_get_debounce_period(line)));
 
 	return IRQ_HANDLED;
 }
@@ -1215,7 +1220,7 @@ static int edge_detector_update(struct line *line,
 			gpio_v2_line_config_debounce_period(lc, line_idx);
 
 	if ((active_edflags == edflags) &&
-	    (READ_ONCE(line->debounce_period_us) == debounce_period_us))
+	    (line_get_debounce_period(line) == debounce_period_us))
 		return 0;
 
 	/* sw debounced and still will be...*/
