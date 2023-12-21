@@ -473,8 +473,19 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
 					struct kvm_guest_debug *dbg)
 {
-	/* TODO; To be implemented later. */
-	return -EINVAL;
+	if (dbg->control & KVM_GUESTDBG_ENABLE) {
+		if (vcpu->guest_debug != dbg->control) {
+			vcpu->guest_debug = dbg->control;
+			csr_clear(CSR_HEDELEG, BIT(EXC_BREAKPOINT));
+		}
+	} else {
+		if (vcpu->guest_debug != 0) {
+			vcpu->guest_debug = 0;
+			csr_set(CSR_HEDELEG, BIT(EXC_BREAKPOINT));
+		}
+	}
+
+	return 0;
 }
 
 static void kvm_riscv_vcpu_setup_config(struct kvm_vcpu *vcpu)
