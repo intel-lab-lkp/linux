@@ -1429,6 +1429,55 @@ static int sdhci_pci_gli_resume(struct sdhci_pci_chip *chip)
 	return sdhci_pci_resume_host(chip);
 }
 
+#ifdef CONFIG_PCIEAER
+static void mask_replay_timer_timeout(struct pci_dev *pdev)
+{
+	struct pci_dev *parent = pci_upstream_bridge(pdev);
+	u32 val;
+
+	if (!parent || !parent->aer_cap)
+		return;
+
+	pci_read_config_dword(parent, parent->aer_cap + PCI_ERR_COR_MASK, &val);
+	val |= PCI_ERR_COR_REP_TIMER;
+	pci_write_config_dword(parent, parent->aer_cap + PCI_ERR_COR_MASK, val);
+}
+
+static void unmask_replay_timer_timeout(struct pci_dev *pdev)
+{
+	struct pci_dev *parent = pci_upstream_bridge(pdev);
+	u32 val;
+
+	if (!parent || !parent->aer_cap)
+		return;
+
+	pci_read_config_dword(pdev, parent->aer_cap + PCI_ERR_COR_MASK, &val);
+	val &= ~PCI_ERR_COR_REP_TIMER;
+	pci_write_config_dword(pdev, parent->aer_cap + PCI_ERR_COR_MASK, val);
+}
+#else
+static inline void mask_replay_timer_timeout(struct pci_dev *pdev) { }
+static inline void unmask_replay_timer_timeout(struct pci_dev *pdev) {  }
+#endif
+
+static int sdhci_pci_gl975x_suspend(struct sdhci_pci_chip *chip)
+{
+	mask_replay_timer_timeout(chip->pdev);
+
+	return sdhci_pci_suspend_host(chip);
+}
+
+static int sdhci_pci_gl975x_resume(struct sdhci_pci_chip *chip)
+{
+	int ret;
+
+	ret = sdhci_pci_gli_resume(chip);
+
+	unmask_replay_timer_timeout(chip->pdev);
+
+	return ret;
+}
+
 static int gl9763e_resume(struct sdhci_pci_chip *chip)
 {
 	struct sdhci_pci_slot *slot = chip->slots[0];
@@ -1547,7 +1596,8 @@ const struct sdhci_pci_fixes sdhci_gl9755 = {
 	.probe_slot	= gli_probe_slot_gl9755,
 	.ops            = &sdhci_gl9755_ops,
 #ifdef CONFIG_PM_SLEEP
-	.resume         = sdhci_pci_gli_resume,
+	.suspend	= sdhci_pci_gl975x_suspend,
+	.resume         = sdhci_pci_gl975x_resume,
 #endif
 };
 
@@ -1570,7 +1620,8 @@ const struct sdhci_pci_fixes sdhci_gl9750 = {
 	.probe_slot	= gli_probe_slot_gl9750,
 	.ops            = &sdhci_gl9750_ops,
 #ifdef CONFIG_PM_SLEEP
-	.resume         = sdhci_pci_gli_resume,
+	.suspend	= sdhci_pci_gl975x_suspend,
+	.resume         = sdhci_pci_gl975x_resume,
 #endif
 };
 
