@@ -468,4 +468,7 @@ void brcmf_set_mpc(struct brcmf_if *ndev, int mpc);
 void brcmf_abort_scanning(struct brcmf_cfg80211_info *cfg);
 void brcmf_cfg80211_free_netdev(struct net_device *ndev);
 
+int brcmf_set_sae_password(struct brcmf_if *ifp, const u8 *pwd_data,
+			   u16 pwd_len);
+
 #endif /* BRCMFMAC_CFG80211_H */

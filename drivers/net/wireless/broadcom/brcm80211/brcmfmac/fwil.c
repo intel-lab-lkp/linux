@@ -142,6 +142,7 @@ brcmf_fil_cmd_data_set(struct brcmf_if *ifp, u32 cmd, void *data, u32 len)
 
 	return err;
 }
+BRCMF_EXPORT_SYMBOL_GPL(brcmf_fil_cmd_data_set);
 
 s32
 brcmf_fil_cmd_data_get(struct brcmf_if *ifp, u32 cmd, void *data, u32 len)

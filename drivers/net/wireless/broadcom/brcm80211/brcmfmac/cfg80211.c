@@ -32,6 +32,7 @@
 #include "vendor.h"
 #include "bus.h"
 #include "common.h"
+#include "fwvid.h"
 
 #define BRCMF_SCAN_IE_LEN_MAX		2048
 
@@ -1693,6 +1694,12 @@ static int brcmf_set_pmk(struct brcmf_if *ifp, const u8 *pmk_data, u16 pmk_len)
 	struct brcmf_wsec_pmk_le pmk;
 	int err;
 
+	if (pmk_len > sizeof(pmk.key)) {
+		bphy_err(drvr, "key must be less than %zu bytes\n",
+			 sizeof(pmk.key));
+		return -EINVAL;
+	}
+
 	memset(&pmk, 0, sizeof(pmk));
 
 	/* pass pmk directly */
@@ -1710,7 +1717,7 @@ static int brcmf_set_pmk(struct brcmf_if *ifp, const u8 *pmk_data, u16 pmk_len)
 	return err;
 }
 
-static int brcmf_set_sae_password(struct brcmf_if *ifp, const u8 *pwd_data,
+int brcmf_set_sae_password(struct brcmf_if *ifp, const u8 *pwd_data,
 				  u16 pwd_len)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
@@ -1734,6 +1741,7 @@ static int brcmf_set_sae_password(struct brcmf_if *ifp, const u8 *pwd_data,
 
 	return err;
 }
+BRCMF_EXPORT_SYMBOL_GPL(brcmf_set_sae_password);
 
 static void brcmf_link_down(struct brcmf_cfg80211_vif *vif, u16 reason,
 			    bool locally_generated)
@@ -2503,8 +2511,7 @@ brcmf_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 			bphy_err(drvr, "failed to clean up user-space RSNE\n");
 			goto done;
 		}
-		err = brcmf_set_sae_password(ifp, sme->crypto.sae_pwd,
-					     sme->crypto.sae_pwd_len);
+		err = brcmf_fwvid_set_sae_password(ifp, &sme->crypto);
 		if (!err && sme->crypto.psk)
 			err = brcmf_set_pmk(ifp, sme->crypto.psk,
 					    BRCMF_WSEC_MAX_PSK_LEN);
