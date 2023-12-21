@@ -34,12 +34,8 @@ void module_enable_x(const struct module *mod)
 
 void module_enable_ro(const struct module *mod, bool after_init)
 {
-	if (!IS_ENABLED(CONFIG_STRICT_MODULE_RWX))
+	if (!IS_ENABLED(CONFIG_STRICT_MODULE_RWX) || !rodata_enabled)
 		return;
-#ifdef CONFIG_STRICT_MODULE_RWX
-	if (!rodata_enabled)
-		return;
-#endif
 
 	module_set_memory(mod, MOD_TEXT, set_memory_ro);
 	module_set_memory(mod, MOD_INIT_TEXT, set_memory_ro);
