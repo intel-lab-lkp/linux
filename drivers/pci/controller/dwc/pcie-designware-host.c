@@ -377,10 +377,17 @@ static int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 	 * Note until there is a better alternative found the reservation is
 	 * done by allocating from the artificially limited DMA-coherent
 	 * memory.
+	 *
+	 * Set the coherent DMA mask to 32 bits only if the DMA32 zone is
+	 * supported. Otherwise, leave the mask as is.
+	 * This ensures that the dmam_alloc_coherent is successful in
+	 * allocating the memory.
 	 */
+#ifdef CONFIG_ZONE_DMA32
 	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 	if (ret)
 		dev_warn(dev, "Failed to set DMA mask to 32-bit. Devices with only 32-bit MSI support may not work properly\n");
+#endif
 
 	msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
 					GFP_KERNEL);
