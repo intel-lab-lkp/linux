@@ -933,7 +933,7 @@ static bool rbd_image_format_valid(u32 image_format)
 
 static bool rbd_dev_ondisk_valid(struct rbd_image_header_ondisk *ondisk)
 {
-	size_t size;
+	size_t size, result;
 	u32 snap_count;
 
 	/* The header has to start with the magic rbd header text */
@@ -956,7 +956,7 @@ static bool rbd_dev_ondisk_valid(struct rbd_image_header_ondisk *ondisk)
 	 */
 	snap_count = le32_to_cpu(ondisk->snap_count);
 	size = SIZE_MAX - sizeof (struct ceph_snap_context);
-	if (snap_count > size / sizeof (__le64))
+	if (check_sub_overflow(size / sizeof(__le64), snap_count, &result))
 		return false;
 
 	/*
@@ -6090,8 +6090,8 @@ static int rbd_dev_v2_snap_context(struct rbd_device *rbd_dev,
 	 * make sure the computed size of the snapshot context we
 	 * allocate is representable in a size_t.
 	 */
-	if (snap_count > (SIZE_MAX - sizeof (struct ceph_snap_context))
-				 / sizeof (u64)) {
+	if (check_sub_overflow((SIZE_MAX - sizeof(struct ceph_snap_context))
+			       / sizeof(u64), snap_count, &size)) {
 		ret = -EINVAL;
 		goto out;
 	}
