@@ -799,11 +799,6 @@ struct dma_pte {
 	u64 val;
 };
 
-static inline void dma_clear_pte(struct dma_pte *pte)
-{
-	pte->val = 0;
-}
-
 static inline u64 dma_pte_addr(struct dma_pte *pte)
 {
 #ifdef CONFIG_64BIT
@@ -815,9 +810,43 @@ static inline u64 dma_pte_addr(struct dma_pte *pte)
 #endif
 }
 
+#define DMA_PTEVAL_PRESENT(pteval) (((pteval) & 3) != 0)
 static inline bool dma_pte_present(struct dma_pte *pte)
 {
-	return (pte->val & 3) != 0;
+	return DMA_PTEVAL_PRESENT(pte->val);
+}
+
+static inline void dma_clear_pte(struct dma_pte *pte)
+{
+	u64 old_pteval;
+
+	old_pteval = xchg(&pte->val, 0ULL);
+	if (DMA_PTEVAL_PRESENT(old_pteval)) {
+		struct page *pg = virt_to_page(pte);
+		int rc = page_ref_dec_return(pg);
+
+		WARN_ON_ONCE(rc > 512 || rc < 1);
+	} else {
+		/* Ensure that we cleared a valid entry from the page table */
+		WARN_ON(1);
+	}
+}
+
+static inline u64 dma_set_pte(struct dma_pte *pte, u64 pteval)
+{
+	u64 old_pteval;
+
+	/* Ensure we about to set a valid entry to the page table */
+	WARN_ON(!DMA_PTEVAL_PRESENT(pteval));
+	old_pteval = cmpxchg64(&pte->val, 0ULL, pteval);
+	if (old_pteval == 0) {
+		struct page *pg = virt_to_page(pte);
+		int rc = page_ref_inc_return(pg);
+
+		WARN_ON_ONCE(rc > 513 || rc < 2);
+	}
+
+	return old_pteval;
 }
 
 static inline bool dma_sl_pte_test_and_clear_dirty(struct dma_pte *pte,

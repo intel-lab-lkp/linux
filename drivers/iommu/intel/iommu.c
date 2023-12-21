@@ -805,7 +805,7 @@ static struct dma_pte *pfn_to_dma_pte(struct dmar_domain *domain,
 			if (domain->use_first_level)
 				pteval |= DMA_FL_PTE_XD | DMA_FL_PTE_US | DMA_FL_PTE_ACCESS;
 
-			if (cmpxchg64(&pte->val, 0ULL, pteval))
+			if (dma_set_pte(pte, pteval))
 				/* Someone else set it while we were thinking; use theirs. */
 				free_pgtable_page(tmp_page);
 			else
@@ -877,7 +877,8 @@ static void dma_pte_clear_range(struct dmar_domain *domain,
 			continue;
 		}
 		do {
-			dma_clear_pte(pte);
+			if (dma_pte_present(pte))
+				dma_clear_pte(pte);
 			start_pfn += lvl_to_nr_pages(large_page);
 			pte++;
 		} while (start_pfn <= last_pfn && !first_pte_in_page(pte));
@@ -918,7 +919,8 @@ static void dma_pte_free_level(struct dmar_domain *domain, int level,
 		 */
 		if (level < retain_level && !(start_pfn > level_pfn ||
 		      last_pfn < level_pfn + level_size(level) - 1)) {
-			dma_clear_pte(pte);
+			if (dma_pte_present(pte))
+				dma_clear_pte(pte);
 			domain_flush_cache(domain, pte, sizeof(*pte));
 			free_pgtable_page(level_pte);
 		}
@@ -949,12 +951,13 @@ static void dma_pte_free_pagetable(struct dmar_domain *domain,
 	}
 }
 
-/* When a page at a given level is being unlinked from its parent, we don't
-   need to *modify* it at all. All we need to do is make a list of all the
-   pages which can be freed just as soon as we've flushed the IOTLB and we
-   know the hardware page-walk will no longer touch them.
-   The 'pte' argument is the *parent* PTE, pointing to the page that is to
-   be freed. */
+/*
+ * A given page at a given level is being unlinked from its parent.
+ * We need to make a list of all the pages which can be freed just as soon as
+ * we've flushed the IOTLB and we know the hardware page-walk will no longer
+ * touch them. The 'pte' argument is the *parent* PTE, pointing to the page
+ * that is to be freed.
+ */
 static void dma_pte_list_pagetables(struct dmar_domain *domain,
 				    int level, struct dma_pte *pte,
 				    struct list_head *freelist)
@@ -962,17 +965,20 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 	struct page *pg;
 
 	pg = pfn_to_page(dma_pte_addr(pte) >> PAGE_SHIFT);
-	list_add_tail(&pg->lru, freelist);
-
-	if (level == 1)
-		return;
-
 	pte = page_address(pg);
+
 	do {
-		if (dma_pte_present(pte) && !dma_pte_superpage(pte))
-			dma_pte_list_pagetables(domain, level - 1, pte, freelist);
+		if (dma_pte_present(pte)) {
+			if (level > 1 && !dma_pte_superpage(pte)) {
+				dma_pte_list_pagetables(domain, level - 1, pte,
+							freelist);
+			}
+			dma_clear_pte(pte);
+		}
 		pte++;
 	} while (!first_pte_in_page(pte));
+
+	list_add_tail(&pg->lru, freelist);
 }
 
 static void dma_pte_clear_level(struct dmar_domain *domain, int level,
@@ -2061,7 +2067,7 @@ __domain_mapping(struct dmar_domain *domain, unsigned long iov_pfn,
 		/* We don't need lock here, nobody else
 		 * touches the iova range
 		 */
-		tmp = cmpxchg64_local(&pte->val, 0ULL, pteval);
+		tmp = dma_set_pte(pte, pteval);
 		if (tmp) {
 			static int dumps = 5;
 			pr_crit("ERROR: DMA PTE for vPFN 0x%lx already set (to %llx not %llx)\n",
