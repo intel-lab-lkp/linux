@@ -20,7 +20,6 @@
 #ifdef CONFIG_32BIT
 
 #define TASK_SIZE	0x80000000UL
-#define TASK_SIZE_MIN	TASK_SIZE
 #define STACK_TOP_MAX	TASK_SIZE
 
 #define TASK_IS_32BIT_ADDR 1
@@ -33,7 +32,6 @@
 #define TASK_SIZE64     (0x1UL << ((cpu_vabits > VA_BITS) ? VA_BITS : cpu_vabits))
 
 #define TASK_SIZE	(test_thread_flag(TIF_32BIT_ADDR) ? TASK_SIZE32 : TASK_SIZE64)
-#define TASK_SIZE_MIN	TASK_SIZE32
 #define STACK_TOP_MAX	TASK_SIZE64
 
 #define TASK_SIZE_OF(tsk)						\
