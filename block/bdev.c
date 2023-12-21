@@ -89,6 +89,25 @@ void invalidate_bdev(struct block_device *bdev)
 }
 EXPORT_SYMBOL(invalidate_bdev);
 
+/**
+ * invalidate_bdev_pages - Invalidate clean unused buffers and pagecache.
+ * @bdev: the block device which holds the cache to invalidate
+ * @start: the offset 'from' which to invalidate
+ * @end: the offset 'to' which to invalidate (inclusive)
+ *
+ * This function removes pages that are clean, unmapped and unlocked,
+ * as well as shadow entries. It will not block on IO activity.
+ *
+ * If you want to remove all the pages of one block device, regardless of
+ * their use and writeback state, use truncate_bdev_range().
+ */
+void invalidate_bdev_range(struct block_device *bdev, pgoff_t start,
+			   pgoff_t end)
+{
+	invalidate_mapping_pages(bdev->bd_inode->i_mapping, start, end);
+}
+EXPORT_SYMBOL_GPL(invalidate_bdev_range);
+
 /*
  * Drop all buffers & page cache for given bdev range. This function bails
  * with error if bdev has other exclusive owner (such as filesystem).
@@ -121,6 +140,7 @@ invalidate:
 					     lstart >> PAGE_SHIFT,
 					     lend >> PAGE_SHIFT);
 }
+EXPORT_SYMBOL_GPL(truncate_bdev_range);
 
 static void set_init_blocksize(struct block_device *bdev)
 {
@@ -1102,3 +1122,131 @@ void bdev_statx_dioalign(struct inode *inode, struct kstat *stat)
 
 	blkdev_put_no_open(bdev);
 }
+
+/**
+ * bdev_read_folio - Read into block device page cache.
+ * @bdev: the block device which holds the cache to read.
+ * @pos: the offset that allocated folio will contain.
+ *
+ * Read one page into the block device page cache. If it succeeds, the folio
+ * returned will contain @pos;
+ *
+ * Return: Uptodate folio on success, ERR_PTR() on failure.
+ */
+struct folio *bdev_read_folio(struct block_device *bdev, loff_t pos)
+{
+	return mapping_read_folio_gfp(bdev->bd_inode->i_mapping,
+				      pos >> PAGE_SHIFT, GFP_KERNEL);
+}
+EXPORT_SYMBOL_GPL(bdev_read_folio);
+
+/**
+ * bdev_get_folio - Find and get a reference to a folio.
+ * @bdev: the block device which holds the address_space to search.
+ * @pos: the offset the returned folio will contain.
+ * @fgp_flags: %FGP flags modify how the folio is returned.
+ * @gfp: Memory allocation flags to use if %FGP_CREAT is specified.
+ *
+ * Looks up the page cache entry at @bdev->bd_inode->i_mapping from @pos. If
+ * this function returns a folio, it is returned with an increased refcount.
+ *
+ * Return: The found folio or an ERR_PTR() otherwise.
+ */
+struct folio *bdev_get_folio(struct block_device *bdev, loff_t pos,
+			     fgf_t fgp_flags, gfp_t gfp)
+{
+	return __filemap_get_folio(bdev->bd_inode->i_mapping, pos >> PAGE_SHIFT,
+				   fgp_flags, gfp);
+}
+EXPORT_SYMBOL_GPL(bdev_get_folio);
+
+/**
+ * bdev_wb_err_check - Has block device writeback error occurred?
+ * @bdev: the block device to check.
+ * @since: Previously-sampled @bdev->bd_inode->i_mapping->wb_err.
+ *
+ * Grab @bdev->bd_inode->i_mapping->wb_err, and see if it has changed @since
+ * the given value was sampled.
+ *
+ * Return: The latest error or 0 if it hasn't changed.
+ */
+int bdev_wb_err_check(struct block_device *bdev, errseq_t since)
+{
+	return errseq_check(&bdev->bd_inode->i_mapping->wb_err, since);
+}
+EXPORT_SYMBOL_GPL(bdev_wb_err_check);
+
+/**
+ * bdev_wb_err_check_and_advance() - Check block device writeback error and
+ * advance to current value.
+ * @bdev: the block device to check;
+ * @since: Pointer to previously-sampled @bdev->bd_inode->i_mapping->wb_err to
+ * check against and advance.
+ *
+ * Grab @bdev->bd_inode->i_mapping->wb_err, and see whether it matches the
+ * value that @since points to. If it does, then just return 0; If it doesn't,
+ * then the value has changed. Set the "seen" flag, and try to swap it into
+ * place as the new eseq value. Then, set that value as the new @since value,
+ * and return whatever the error portion is set to.
+ *
+ * Return: Negative errno if one has been stored, or 0 if no new error has
+ * occurred.
+ */
+int bdev_wb_err_check_and_advance(struct block_device *bdev, errseq_t *since)
+{
+	return errseq_check_and_advance(&bdev->bd_inode->i_mapping->wb_err,
+					since);
+}
+EXPORT_SYMBOL_GPL(bdev_wb_err_check_and_advance);
+
+/**
+ * bdev_balance_dirty_pages_ratelimited - balance dirty memory state.
+ * @bdev: the block device which was dirtied.
+ *
+ * Check the system's dirty state and will initiate writeback if needed.
+ */
+void bdev_balance_dirty_pages_ratelimited(struct block_device *bdev)
+{
+	return balance_dirty_pages_ratelimited(bdev->bd_inode->i_mapping);
+}
+EXPORT_SYMBOL_GPL(bdev_balance_dirty_pages_ratelimited);
+
+/**
+ * bdev_async_readahead - readahead for marked block device pages
+ * @bdev: the block device to read.
+ * @ra: file_ra_state which holds the readahead state.
+ * @file: Used by the filesystem for authentication.
+ * @index: Index of first page to be read.
+ * @req_count: Total number of pages being read by the caller.
+ *
+ * Read multiple pages into the block device page cache. The readahead logic may
+ * decide to piggyback more pages onto the read request if access patterns
+ * suggest it will improve performance.
+ */
+void bdev_sync_readahead(struct block_device *bdev, struct file_ra_state *ra,
+			 struct file *file, pgoff_t index,
+			 unsigned long req_count)
+{
+	struct file_ra_state tmp_ra = {};
+
+	if (!ra) {
+		ra = &tmp_ra;
+		file_ra_state_init(ra, bdev->bd_inode->i_mapping);
+	}
+	page_cache_sync_readahead(bdev->bd_inode->i_mapping, ra, file, index,
+				  req_count);
+}
+EXPORT_SYMBOL_GPL(bdev_sync_readahead);
+
+/**
+ * bdev_attach_wb - associate an block device with its wb
+ * @bdev: block device of interest
+ *
+ * If @bdev->bd_inode doesn't have its wb, associate it with the wb matching the
+ * %current.
+ */
+void bdev_attach_wb(struct block_device *bdev)
+{
+	inode_attach_wb(bdev->bd_inode, NULL);
+}
+EXPORT_SYMBOL_GPL(bdev_attach_wb);
