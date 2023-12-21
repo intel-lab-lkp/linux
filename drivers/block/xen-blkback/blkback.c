@@ -563,20 +563,18 @@ int xen_blkif_schedule(void *arg)
 
 	set_freezable();
 	while (!kthread_should_stop()) {
-		if (try_to_freeze())
-			continue;
 		if (unlikely(vbd->size != vbd_sz(vbd)))
 			xen_vbd_resize(blkif);
 
 		timeout = msecs_to_jiffies(LRU_INTERVAL);
 
-		timeout = wait_event_interruptible_timeout(
+		timeout = wait_event_freezable_timeout(
 			ring->wq,
 			ring->waiting_reqs || kthread_should_stop(),
 			timeout);
 		if (timeout == 0)
 			goto purge_gnt_list;
-		timeout = wait_event_interruptible_timeout(
+		timeout = wait_event_freezable_timeout(
 			ring->pending_free_wq,
 			!list_empty(&ring->pending_free) ||
 			kthread_should_stop(),
@@ -593,8 +591,8 @@ int xen_blkif_schedule(void *arg)
 		if (ret > 0)
 			ring->waiting_reqs = 1;
 		if (ret == -EACCES)
-			wait_event_interruptible(ring->shutdown_wq,
-						 kthread_should_stop());
+			wait_event_freezable(ring->shutdown_wq,
+					     kthread_should_stop());
 
 		if (do_eoi && !ring->waiting_reqs) {
 			xen_irq_lateeoi(ring->irq, eoi_flags);
