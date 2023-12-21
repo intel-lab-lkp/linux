@@ -168,6 +168,8 @@
 };
 
 &gpucc {
+	/delete-property/ power-domains;
+
 	status = "disabled";
 };
 
