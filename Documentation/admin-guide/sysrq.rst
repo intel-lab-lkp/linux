@@ -161,6 +161,8 @@ Command	    Function
             will be printed to your console. (``0``, for example would make
             it so that only emergency messages like PANICs or OOPSes would
             make it to your console.)
+
+``D``	    Dump the kernel ring buffer
 =========== ===================================================================
 
 Okay, so what can I use them for?
