@@ -204,6 +204,12 @@ isochron_do()
 		vid="--vid=${vid}"
 	fi
 
+	if [ -z "${sender_uds}" ]; then
+		sender_extra_args="${sender_extra_args} --omit-sync"
+	else
+		sender_extra_args="${sender_extra_args} --unix-domain-socket ${sender_uds}"
+	fi
+
 	if [ -z "${receiver_uds}" ]; then
 		sender_extra_args="${sender_extra_args} --omit-remote-sync"
 	fi
@@ -226,7 +232,6 @@ isochron_do()
 
 	isochron send \
 		--interface ${sender_if_name} \
-		--unix-domain-socket ${sender_uds} \
 		--priority ${priority} \
 		--base-time ${base_time} \
 		--cycle-time ${cycle_time} \
