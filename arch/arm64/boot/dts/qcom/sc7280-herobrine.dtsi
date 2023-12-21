@@ -19,6 +19,7 @@
 
 #include "sc7280-qcard.dtsi"
 #include "sc7280-chrome-common.dtsi"
+#include "sc7280-firmware-tfa.dtsi"
 
 / {
 	chosen {
