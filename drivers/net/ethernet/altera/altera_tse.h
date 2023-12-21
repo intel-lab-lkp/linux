@@ -368,29 +368,6 @@ struct tse_buffer {
 
 struct altera_tse_private;
 
-#define ALTERA_DTYPE_SGDMA 1
-#define ALTERA_DTYPE_MSGDMA 2
-
-/* standard DMA interface for SGDMA and MSGDMA */
-struct altera_dmaops {
-	int altera_dtype;
-	int dmamask;
-	void (*reset_dma)(struct altera_tse_private *);
-	void (*enable_txirq)(struct altera_tse_private *);
-	void (*enable_rxirq)(struct altera_tse_private *);
-	void (*disable_txirq)(struct altera_tse_private *);
-	void (*disable_rxirq)(struct altera_tse_private *);
-	void (*clear_txirq)(struct altera_tse_private *);
-	void (*clear_rxirq)(struct altera_tse_private *);
-	int (*tx_buffer)(struct altera_tse_private *, struct tse_buffer *);
-	u32 (*tx_completions)(struct altera_tse_private *);
-	void (*add_rx_desc)(struct altera_tse_private *, struct tse_buffer *);
-	u32 (*get_rx_status)(struct altera_tse_private *);
-	int (*init_dma)(struct altera_tse_private *);
-	void (*uninit_dma)(struct altera_tse_private *);
-	void (*start_rxdma)(struct altera_tse_private *);
-};
-
 /* This structure is private to each device.
  */
 struct altera_tse_private {
@@ -400,6 +377,9 @@ struct altera_tse_private {
 
 	/* MAC address space */
 	struct altera_tse_mac __iomem *mac_dev;
+
+	/* Shared DMA structure */
+	struct altera_dma_private dma_priv;
 
 	/* TSE Revision */
 	u32	revision;
