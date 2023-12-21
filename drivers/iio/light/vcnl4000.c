@@ -90,6 +90,7 @@
 #define VCNL4040_PS_CONF1_PS_SHUTDOWN	BIT(0)
 #define VCNL4040_PS_CONF2_PS_IT	GENMASK(3, 1) /* Proximity integration time */
 #define VCNL4040_CONF1_PS_PERS	GENMASK(5, 4) /* Proximity interrupt persistence setting */
+#define VCNL4040_PS_CONF2_PS_HD		BIT(11)	/* Proximity high definition */
 #define VCNL4040_PS_CONF2_PS_INT	GENMASK(9, 8) /* Proximity interrupt mode */
 #define VCNL4040_PS_CONF3_MPS		GENMASK(6, 5) /* Proximity multi pulse number */
 #define VCNL4040_PS_MS_LED_I		GENMASK(10, 8) /* Proximity current */
@@ -345,6 +346,7 @@ static int vcnl4200_set_power_state(struct vcnl4000_data *data, bool on)
 static int vcnl4200_init(struct vcnl4000_data *data)
 {
 	int ret, id;
+	u16 regval;
 
 	ret = i2c_smbus_read_word_data(data->client, VCNL4200_DEV_ID);
 	if (ret < 0)
@@ -388,6 +390,17 @@ static int vcnl4200_init(struct vcnl4000_data *data)
 	data->al_scale = data->chip_spec->ulux_step;
 	mutex_init(&data->vcnl4200_al.lock);
 	mutex_init(&data->vcnl4200_ps.lock);
+
+	/* Use 16 bits proximity sensor readings */
+	ret = i2c_smbus_read_word_data(data->client, VCNL4200_PS_CONF1);
+	if (ret >= 0) {
+		regval = (ret | VCNL4040_PS_CONF2_PS_HD);
+		ret = i2c_smbus_write_word_data(data->client, VCNL4200_PS_CONF1,
+						regval);
+	}
+
+	if (ret < 0)
+		dev_info(&data->client->dev, "Default to 12 bits sensor data");
 
 	ret = data->chip_spec->set_power_state(data, true);
 	if (ret < 0)
