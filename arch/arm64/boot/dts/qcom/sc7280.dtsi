@@ -383,7 +383,7 @@
 			};
 		};
 
-		idle-states {
+		idle_states: idle-states {
 			entry-method = "psci";
 
 			LITTLE_CPU_SLEEP_0: cpu-sleep-0-0 {
@@ -427,7 +427,7 @@
 			};
 		};
 
-		domain-idle-states {
+		domain_idle_states: domain-idle-states {
 			CLUSTER_SLEEP_0: cluster-sleep-0 {
 				compatible = "domain-idle-state";
 				idle-state-name = "cluster-power-down";
