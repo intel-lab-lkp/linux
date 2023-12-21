@@ -266,6 +266,26 @@
 	status = "okay";
 };
 
+&i2c12 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&qup1_i2c4_state>;
+
+	status = "okay";
+
+	vdd_gfx: regulator@39 {
+		compatible = "maxim,max20411";
+		reg = <0x39>;
+
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <968750>;
+
+		enable-gpios = <&pmm8540a_gpios 2 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&max20411_en>;
+	};
+};
+
 &mdss0 {
 	status = "okay";
 };
@@ -473,6 +493,10 @@
 	vdda-phy-supply = <&vreg_l11a>;
 	vdda-pll-supply = <&vreg_l3a>;
 
+	status = "okay";
+};
+
+&qup1 {
 	status = "okay";
 };
 
@@ -727,5 +751,21 @@
 			drive-strength = <2>;
 			bias-pull-up;
 		};
+	};
+
+	qup1_i2c4_state: qup1-i2c4-state {
+		pins = "gpio0", "gpio1";
+		function = "qup12";
+
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+};
+
+&pmm8540a_gpios {
+	max20411_en: max20411-en-state {
+		pins = "gpio2";
+		function = "normal";
+		output-enable;
 	};
 };
