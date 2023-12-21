@@ -1302,3 +1302,66 @@ void virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
 
 	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
 }
+
+static void virtio_gpu_cmd_get_resource_layout_cb(struct virtio_gpu_device *vgdev,
+						  struct virtio_gpu_vbuffer *vbuf)
+{
+	struct virtio_gpu_resp_resource_layout *resp =
+		(struct virtio_gpu_resp_resource_layout *)vbuf->resp_buf;
+	struct virtio_gpu_query_info *bo_info = vbuf->resp_cb_data;
+	int i;
+
+	vbuf->resp_cb_data = NULL;
+
+	if (resp->hdr.type != VIRTIO_GPU_RESP_OK_RESOURCE_LAYOUT) {
+		atomic_set(&bo_info->is_valid, 0);
+		goto out;
+	}
+
+	bo_info->modifier = le64_to_cpu(resp->modifier);
+	bo_info->num_planes = le32_to_cpu(resp->num_planes);
+	for (i = 0; i < bo_info->num_planes; i++) {
+		bo_info->planes[i].stride = le32_to_cpu(resp->planes[i].stride);
+		bo_info->planes[i].offset = le32_to_cpu(resp->planes[i].offset);
+	}
+	smp_wmb();
+	atomic_set(&bo_info->is_valid, 1);
+
+out:
+	wake_up_all(&vgdev->resp_wq);
+}
+
+int virtio_gpu_cmd_get_resource_layout(struct virtio_gpu_device *vgdev,
+				       struct virtio_gpu_query_info *bo_info,
+				       uint32_t width,
+				       uint32_t height,
+				       uint32_t format,
+				       uint32_t bind,
+				       uint32_t hw_res_handle)
+{
+	struct virtio_gpu_resource_query_layout *cmd_p;
+	struct virtio_gpu_vbuffer *vbuf;
+	void *resp_buf;
+
+	resp_buf = kzalloc(sizeof(struct virtio_gpu_resp_resource_layout),
+			   GFP_KERNEL);
+	if (!resp_buf)
+		return -ENOMEM;
+
+	cmd_p = virtio_gpu_alloc_cmd_resp
+		(vgdev, &virtio_gpu_cmd_get_resource_layout_cb, &vbuf,
+		 sizeof(*cmd_p), sizeof(struct virtio_gpu_resp_resource_layout),
+		 resp_buf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->hdr.type = cpu_to_le32(VIRTIO_GPU_CMD_RESOURCE_QUERY_LAYOUT);
+	cmd_p->resource_id = cpu_to_le32(hw_res_handle);
+	cmd_p->width = cpu_to_le32(width);
+	cmd_p->height = cpu_to_le32(height);
+	cmd_p->format = cpu_to_le32(format);
+	cmd_p->bind = cpu_to_le32(bind);
+	vbuf->resp_cb_data = bo_info;
+
+	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}

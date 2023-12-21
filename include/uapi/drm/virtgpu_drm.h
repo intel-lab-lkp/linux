@@ -48,6 +48,7 @@ extern "C" {
 #define DRM_VIRTGPU_GET_CAPS  0x09
 #define DRM_VIRTGPU_RESOURCE_CREATE_BLOB 0x0a
 #define DRM_VIRTGPU_CONTEXT_INIT 0x0b
+#define DRM_VIRTGPU_RESOURCE_QUERY_LAYOUT 0x0c
 
 #define VIRTGPU_EXECBUF_FENCE_FD_IN	0x01
 #define VIRTGPU_EXECBUF_FENCE_FD_OUT	0x02
@@ -97,6 +98,7 @@ struct drm_virtgpu_execbuffer {
 #define VIRTGPU_PARAM_CROSS_DEVICE 5 /* Cross virtio-device resource sharing  */
 #define VIRTGPU_PARAM_CONTEXT_INIT 6 /* DRM_VIRTGPU_CONTEXT_INIT */
 #define VIRTGPU_PARAM_SUPPORTED_CAPSET_IDs 7 /* Bitmask of supported capability set ids */
+#define VIRTGPU_PARAM_RESOURCE_QUERY_LAYOUT 8 /* DRM_VIRTGPU_RESOURCE_QUERY_LAYOUT (also needs cap) */
 
 struct drm_virtgpu_getparam {
 	__u64 param;
@@ -211,6 +213,21 @@ struct drm_virtgpu_context_init {
 	__u64 ctx_set_params;
 };
 
+#define VIRTIO_GPU_MAX_RESOURCE_PLANES 4
+struct drm_virtgpu_resource_query_layout {
+	__u32 handle;
+	__u32 width;
+	__u32 height;
+	__u32 format;
+	__u32 bind;
+	__u32 num_planes;
+	__u64 modifier;
+	struct {
+		__u64 offset;
+		__u32 stride;
+	} planes[VIRTIO_GPU_MAX_RESOURCE_PLANES];
+};
+
 /*
  * Event code that's given when VIRTGPU_CONTEXT_PARAM_POLL_RINGS_MASK is in
  * effect.  The event size is sizeof(drm_event), since there is no additional
@@ -260,6 +277,10 @@ struct drm_virtgpu_context_init {
 #define DRM_IOCTL_VIRTGPU_CONTEXT_INIT					\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_CONTEXT_INIT,		\
 		struct drm_virtgpu_context_init)
+
+#define DRM_IOCTL_VIRTGPU_RESOURCE_QUERY_LAYOUT				\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_QUERY_LAYOUT,	\
+		struct drm_virtgpu_resource_query_layout)
 
 #if defined(__cplusplus)
 }

@@ -214,6 +214,16 @@ struct virtio_gpu_drv_cap_cache {
 	atomic_t is_valid;
 };
 
+struct virtio_gpu_query_info {
+	uint32_t num_planes;
+	uint64_t modifier;
+	struct {
+		uint64_t offset;
+		uint32_t stride;
+	} planes[VIRTIO_GPU_MAX_RESOURCE_PLANES];
+	atomic_t is_valid;
+};
+
 struct virtio_gpu_device {
 	struct drm_device *ddev;
 
@@ -246,6 +256,7 @@ struct virtio_gpu_device {
 	bool has_resource_blob;
 	bool has_host_visible;
 	bool has_context_init;
+	bool has_resource_query_layout;
 	struct virtio_shm_region host_visible_region;
 	struct drm_mm host_visible_mm;
 
@@ -277,7 +288,7 @@ struct virtio_gpu_fpriv {
 };
 
 /* virtgpu_ioctl.c */
-#define DRM_VIRTIO_NUM_IOCTLS 12
+#define DRM_VIRTIO_NUM_IOCTLS 13
 extern struct drm_ioctl_desc virtio_gpu_ioctls[DRM_VIRTIO_NUM_IOCTLS];
 void virtio_gpu_create_context(struct drm_device *dev, struct drm_file *file);
 
@@ -419,6 +430,15 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
 				struct drm_framebuffer *fb,
 				uint32_t width, uint32_t height,
 				uint32_t x, uint32_t y);
+
+int
+virtio_gpu_cmd_get_resource_layout(struct virtio_gpu_device *vgdev,
+				   struct virtio_gpu_query_info *bo_info,
+				   uint32_t width,
+				   uint32_t height,
+				   uint32_t format,
+				   uint32_t bind,
+				   uint32_t hw_res_handle);
 
 /* virtgpu_display.c */
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev);

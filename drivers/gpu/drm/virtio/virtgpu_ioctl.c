@@ -107,6 +107,9 @@ static int virtio_gpu_getparam_ioctl(struct drm_device *dev, void *data,
 	case VIRTGPU_PARAM_SUPPORTED_CAPSET_IDs:
 		value = vgdev->capset_id_mask;
 		break;
+	case VIRTGPU_PARAM_RESOURCE_QUERY_LAYOUT:
+		value = vgdev->has_resource_query_layout ? 1 : 0;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -668,6 +671,65 @@ out_unlock:
 	return ret;
 }
 
+static int virtio_gpu_resource_query_layout_ioctl(struct drm_device *dev,
+						  void *data,
+						  struct drm_file *file)
+{
+	struct drm_virtgpu_resource_query_layout *args = data;
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct drm_gem_object *obj = NULL;
+	struct virtio_gpu_object *bo = NULL;
+	struct virtio_gpu_query_info bo_info = {0};
+	int ret = 0;
+	int i;
+
+	if (!vgdev->has_resource_query_layout) {
+		DRM_ERROR("failing: no RQL on host\n");
+		return -EINVAL;
+	}
+
+	if (args->handle > 0) {
+		obj = drm_gem_object_lookup(file, args->handle);
+		if (obj == NULL) {
+			DRM_ERROR("invalid handle 0x%x\n", args->handle);
+			return -ENOENT;
+		}
+		bo = gem_to_virtio_gpu_obj(obj);
+	}
+
+	ret = virtio_gpu_cmd_get_resource_layout(vgdev, &bo_info, args->width,
+						 args->height, args->format,
+						 args->bind, bo ? bo->hw_res_handle : 0);
+	if (ret)
+		goto out;
+
+	ret = wait_event_timeout(vgdev->resp_wq,
+				 atomic_read(&bo_info.is_valid),
+				 5 * HZ);
+	if (!ret)
+		goto out;
+
+valid:
+	smp_rmb();
+	WARN_ON(atomic_read(&bo_info.is_valid));
+	args->num_planes = bo_info.num_planes;
+	args->modifier = bo_info.modifier;
+	for (i = 0; i < args->num_planes; i++) {
+		args->planes[i].offset = bo_info.planes[i].offset;
+		args->planes[i].stride = bo_info.planes[i].stride;
+	}
+	for (; i < VIRTIO_GPU_MAX_RESOURCE_PLANES; i++) {
+		args->planes[i].offset = 0;
+		args->planes[i].stride = 0;
+	}
+	ret = 0;
+
+out:
+	if (obj)
+		drm_gem_object_put(obj);
+	return ret;
+}
+
 struct drm_ioctl_desc virtio_gpu_ioctls[DRM_VIRTIO_NUM_IOCTLS] = {
 	DRM_IOCTL_DEF_DRV(VIRTGPU_MAP, virtio_gpu_map_ioctl,
 			  DRM_RENDER_ALLOW),
@@ -706,5 +768,9 @@ struct drm_ioctl_desc virtio_gpu_ioctls[DRM_VIRTIO_NUM_IOCTLS] = {
 			  DRM_RENDER_ALLOW),
 
 	DRM_IOCTL_DEF_DRV(VIRTGPU_CONTEXT_INIT, virtio_gpu_context_init_ioctl,
+			  DRM_RENDER_ALLOW),
+
+	DRM_IOCTL_DEF_DRV(VIRTGPU_RESOURCE_QUERY_LAYOUT,
+			  virtio_gpu_resource_query_layout_ioctl,
 			  DRM_RENDER_ALLOW),
 };
