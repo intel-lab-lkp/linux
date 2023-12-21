@@ -84,7 +84,8 @@ static int bond_option_ad_user_port_key_set(struct bonding *bond,
 					    const struct bond_opt_value *newval);
 static int bond_option_missed_max_set(struct bonding *bond,
 				      const struct bond_opt_value *newval);
-
+static int bond_option_lacp_extended_mux_set(struct bonding *bond,
+					     const struct bond_opt_value *newval);
 
 static const struct bond_opt_value bond_mode_tbl[] = {
 	{ "balance-rr",    BOND_MODE_ROUNDROBIN,   BOND_VALFLAG_DEFAULT},
@@ -230,6 +231,12 @@ static const struct bond_opt_value bond_missed_max_tbl[] = {
 	{ "maxval",	255,	BOND_VALFLAG_MAX},
 	{ "default",	2,	BOND_VALFLAG_DEFAULT},
 	{ NULL,		-1,	0},
+};
+
+static const struct bond_opt_value bond_lacp_extended_mux_tbl[] = {
+	{ "off", 0,  BOND_VALFLAG_DEFAULT},
+	{ "on",  1,  0},
+	{ NULL,  -1, 0},
 };
 
 static const struct bond_option bond_opts[BOND_OPT_LAST] = {
@@ -496,6 +503,14 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.desc = "Delay between each peer notification on failover event, in milliseconds",
 		.values = bond_peer_notif_delay_tbl,
 		.set = bond_option_peer_notif_delay_set
+	},
+	[BOND_OPT_LACP_EXTENDED_MUX] = {
+		.id = BOND_OPT_LACP_EXTENDED_MUX,
+		.name = "lacp_extended_mux",
+		.desc = "Opt into using extended MUX for LACP states",
+		.unsuppmodes = BOND_MODE_ALL_EX(BIT(BOND_MODE_8023AD)),
+		.values = bond_lacp_extended_mux_tbl,
+		.set = bond_option_lacp_extended_mux_set,
 	}
 };
 
@@ -1690,5 +1705,14 @@ static int bond_option_ad_user_port_key_set(struct bonding *bond,
 		   newval->value);
 
 	bond->params.ad_user_port_key = newval->value;
+	return 0;
+}
+
+static int bond_option_lacp_extended_mux_set(struct bonding *bond,
+					     const struct bond_opt_value *newval)
+{
+	netdev_info(bond->dev, "Setting lacp_extended_mux to %s (%llu)\n",
+		    newval->string, newval->value);
+	bond->params.lacp_extended_mux = newval->value;
 	return 0;
 }

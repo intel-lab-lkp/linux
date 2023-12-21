@@ -2119,7 +2119,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 		 * will activate the slaves in the selected
 		 * aggregator
 		 */
-		bond_set_slave_inactive_flags(new_slave, BOND_SLAVE_NOTIFY_NOW);
+		bond_set_slave_txrx_disabled_flags(new_slave, BOND_SLAVE_NOTIFY_NOW);
 		/* if this is the first slave */
 		if (!prev_slave) {
 			SLAVE_AD_INFO(new_slave)->id = 1;
@@ -2381,7 +2381,10 @@ static int __bond_release_one(struct net_device *bond_dev,
 		return -EINVAL;
 	}
 
-	bond_set_slave_inactive_flags(slave, BOND_SLAVE_NOTIFY_NOW);
+	if (BOND_MODE(bond) == BOND_MODE_8023AD)
+		bond_set_slave_txrx_disabled_flags(slave, BOND_SLAVE_NOTIFY_NOW);
+	else
+		bond_set_slave_inactive_flags(slave, BOND_SLAVE_NOTIFY_NOW);
 
 	bond_sysfs_slave_del(slave);
 
@@ -2763,10 +2766,13 @@ static void bond_miimon_commit(struct bonding *bond)
 			bond_set_slave_link_state(slave, BOND_LINK_DOWN,
 						  BOND_SLAVE_NOTIFY_NOW);
 
-			if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP ||
-			    BOND_MODE(bond) == BOND_MODE_8023AD)
+			if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP)
 				bond_set_slave_inactive_flags(slave,
 							      BOND_SLAVE_NOTIFY_NOW);
+
+			if (BOND_MODE(bond) == BOND_MODE_8023AD)
+				bond_set_slave_txrx_disabled_flags(slave,
+								   BOND_SLAVE_NOTIFY_NOW);
 
 			slave_info(bond->dev, slave->dev, "link status definitely down, disabling slave\n");
 
@@ -4276,8 +4282,12 @@ static int bond_open(struct net_device *bond_dev)
 		bond_for_each_slave(bond, slave, iter) {
 			if (bond_uses_primary(bond) &&
 			    slave != rcu_access_pointer(bond->curr_active_slave)) {
-				bond_set_slave_inactive_flags(slave,
-							      BOND_SLAVE_NOTIFY_NOW);
+				if (BOND_MODE(bond) == BOND_MODE_8023AD)
+					bond_set_slave_txrx_disabled_flags(slave,
+									   BOND_SLAVE_NOTIFY_NOW);
+				else
+					bond_set_slave_inactive_flags(slave,
+								      BOND_SLAVE_NOTIFY_NOW);
 			} else if (BOND_MODE(bond) != BOND_MODE_8023AD) {
 				bond_set_slave_active_flags(slave,
 							    BOND_SLAVE_NOTIFY_NOW);
