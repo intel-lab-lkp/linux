@@ -5,6 +5,8 @@
 REQUIRE_ISOCHRON=${REQUIRE_ISOCHRON:=yes}
 REQUIRE_LINUXPTP=${REQUIRE_LINUXPTP:=yes}
 
+NSEC_PER_SEC=1000000000
+
 # Tunables
 UTC_TAI_OFFSET=37
 ISOCHRON_CPU=1
@@ -18,6 +20,7 @@ fi
 if [[ "$REQUIRE_LINUXPTP" = "yes" ]]; then
 	require_command phc2sys
 	require_command ptp4l
+	require_command phc_ctl
 fi
 
 phc2sys_start()
@@ -250,4 +253,43 @@ isochron_do()
 	isochron_recv_stop 5000
 
 	cpufreq_restore ${ISOCHRON_CPU}
+}
+
+# Convert a time specifier from 1.23456789 format to nanoseconds
+time_to_ns()
+{
+	local time="$1"
+	local sec=${time%%.*}
+	local nsec=${time##*.}
+
+	echo $((sec * NSEC_PER_SEC + 10#$nsec))
+}
+
+ns_to_time()
+{
+	local nsec="$1"
+	local sec=$((nsec / NSEC_PER_SEC))
+
+	nsec=$((nsec - (sec * NSEC_PER_SEC)))
+
+	printf "%d.%09lld" $sec $nsec
+}
+
+clock_gettime()
+{
+	local clkid=$1; shift
+	local time=$(phc_ctl $clkid get | awk '/clock time is/ { print $5 }')
+
+	echo $(time_to_ns $time)
+}
+
+# Round up value to next multiple, leaving a specified margin
+round_up_with_margin()
+{
+	local val=$1; shift
+	local multiple=$1; shift
+	local margin=$1; shift
+
+	val=$((val + margin))
+	echo $((((val + margin - 1) / margin) * margin))
 }

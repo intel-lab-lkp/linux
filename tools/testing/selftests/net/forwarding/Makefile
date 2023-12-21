@@ -96,6 +96,7 @@ TEST_PROGS = bridge_fdb_learning_limit.sh \
 	tc_mpls_l2vpn.sh \
 	tc_police.sh \
 	tc_shblocks.sh \
+	tc_taprio.sh \
 	tc_tunnel_key.sh \
 	tc_vlan_modify.sh \
 	vxlan_asymmetric_ipv6.sh \
