@@ -71,6 +71,10 @@
 #define MAX_PAYLOAD (IP_MAXPACKET - sizeof(struct tcphdr) - sizeof(struct ipv6hdr))
 #define NUM_LARGE_PKT (MAX_PAYLOAD / MSS)
 #define MAX_HDR_LEN (ETH_HLEN + sizeof(struct ipv6hdr) + sizeof(struct tcphdr))
+#define MIN_EXTHDR_SIZE 8   /* minimum size of IPv6 extension header */
+
+#define ipv6_optlen(p)  (((p)->hdrlen+1) << 3) /* calculate IPv6 extension header len */
+
 
 static const char *addr6_src = "fdaa::2";
 static const char *addr6_dst = "fdaa::1";
@@ -104,7 +108,7 @@ static void setup_sock_filter(int fd)
 	const int dport_off = tcp_offset + offsetof(struct tcphdr, dest);
 	const int ethproto_off = offsetof(struct ethhdr, h_proto);
 	int optlen = 0;
-	int ipproto_off;
+	int ipproto_off, opt_ipproto_off;
 	int next_off;
 
 	if (proto == PF_INET)
@@ -116,14 +120,27 @@ static void setup_sock_filter(int fd)
 	if (strcmp(testname, "ip") == 0) {
 		if (proto == PF_INET)
 			optlen = sizeof(struct ip_timestamp);
-		else
-			optlen = sizeof(struct ip6_frag);
+		else {
+			// same size for HBH and Fragment extension header types
+			optlen = MIN_EXTHDR_SIZE;
+			opt_ipproto_off = ETH_HLEN + sizeof(struct ipv6hdr) +
+				offsetof(struct ip6_ext, ip6e_nxt);
+		}
 	}
 
+	/*
+	 * this filter validates the following:
+	 *	- packet is IPv4/IPv6 according to the running test.
+	 *	- packet is TCP. Also handles the case of one extension header and then TCP.
+	 *	- checks the packet tcp dport equals to DPORT.
+	 *     (also handles the case of one extension header and then TCP.)
+	 */
 	struct sock_filter filter[] = {
 			BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, ethproto_off),
-			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ntohs(ethhdr_proto), 0, 7),
+			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, ntohs(ethhdr_proto), 0, 9),
 			BPF_STMT(BPF_LD  + BPF_B   + BPF_ABS, ipproto_off),
+			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, IPPROTO_TCP, 2, 0),
+			BPF_STMT(BPF_LD  + BPF_B   + BPF_ABS, opt_ipproto_off),
 			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, IPPROTO_TCP, 0, 5),
 			BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, dport_off),
 			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, DPORT, 2, 0),
@@ -576,6 +593,39 @@ static void add_ipv4_ts_option(void *buf, void *optpkt)
 	iph->check = checksum_fold(iph, sizeof(struct iphdr) + optlen, 0);
 }
 
+static void add_ipv6_exthdr(void *buf, void *optpkt, __u8 exthdr_type)
+{
+	struct ipv6_opt_hdr *hbh_hdr = (struct ipv6_opt_hdr *)(optpkt + tcp_offset);
+	struct ipv6hdr *iph = (struct ipv6hdr *)(optpkt + ETH_HLEN);
+	int opt_len;
+
+	hbh_hdr->hdrlen = 0;
+	hbh_hdr->nexthdr = IPPROTO_TCP;
+	opt_len = ipv6_optlen(hbh_hdr);
+
+	memcpy(optpkt, buf, tcp_offset);
+	memcpy(optpkt + tcp_offset + MIN_EXTHDR_SIZE, buf + tcp_offset,
+		sizeof(struct tcphdr) + PAYLOAD_LEN);
+
+	iph->nexthdr = exthdr_type;
+	iph->payload_len = htons(ntohs(iph->payload_len) + MIN_EXTHDR_SIZE);
+}
+
+/* Send IPv6 packet with extension header */
+static void send_ipv6_exthdr(int fd, struct sockaddr_ll *daddr)
+{
+	static char buf[MAX_HDR_LEN + PAYLOAD_LEN];
+	static char exthdr_pck[sizeof(buf) + MIN_EXTHDR_SIZE];
+
+	create_packet(buf, 0, 0, PAYLOAD_LEN, 0);
+	add_ipv6_exthdr(buf, exthdr_pck, IPPROTO_HOPOPTS);
+	write_packet(fd, exthdr_pck, total_hdr_len + PAYLOAD_LEN + MIN_EXTHDR_SIZE, daddr);
+
+	create_packet(buf, PAYLOAD_LEN * 1, 0, PAYLOAD_LEN, 0);
+	add_ipv6_exthdr(buf, exthdr_pck, IPPROTO_HOPOPTS);
+	write_packet(fd, exthdr_pck, total_hdr_len + PAYLOAD_LEN + MIN_EXTHDR_SIZE, daddr);
+}
+
 /* IPv4 options shouldn't coalesce */
 static void send_ip_options(int fd, struct sockaddr_ll *daddr)
 {
@@ -697,7 +747,7 @@ static void send_fragment6(int fd, struct sockaddr_ll *daddr)
 		create_packet(buf, PAYLOAD_LEN * i, 0, PAYLOAD_LEN, 0);
 		write_packet(fd, buf, bufpkt_len, daddr);
 	}
-
+	sleep(1);
 	create_packet(buf, PAYLOAD_LEN * 2, 0, PAYLOAD_LEN, 0);
 	memset(extpkt, 0, extpkt_len);
 
@@ -760,6 +810,7 @@ static void check_recv_pkts(int fd, int *correct_payload,
 	vlog("}, Total %d packets\nReceived {", correct_num_pkts);
 
 	while (1) {
+		ip_ext_len = 0;
 		pkt_size = recv(fd, buffer, IP_MAXPACKET + ETH_HLEN + 1, 0);
 		if (pkt_size < 0)
 			error(1, errno, "could not receive");
@@ -767,7 +818,7 @@ static void check_recv_pkts(int fd, int *correct_payload,
 		if (iph->version == 4)
 			ip_ext_len = (iph->ihl - 5) * 4;
 		else if (ip6h->version == 6 && ip6h->nexthdr != IPPROTO_TCP)
-			ip_ext_len = sizeof(struct ip6_frag);
+			ip_ext_len = MIN_EXTHDR_SIZE;
 
 		tcph = (struct tcphdr *)(buffer + tcp_offset + ip_ext_len);
 
@@ -880,7 +931,14 @@ static void gro_sender(void)
 			sleep(1);
 			write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
 		} else if (proto == PF_INET6) {
+			sleep(1);
 			send_fragment6(txfd, &daddr);
+			sleep(1);
+			write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
+
+			sleep(1);
+			send_ipv6_exthdr(txfd, &daddr);
+			sleep(1);
 			write_packet(txfd, fin_pkt, total_hdr_len, &daddr);
 		}
 	} else if (strcmp(testname, "large") == 0) {
@@ -997,7 +1055,13 @@ static void gro_receiver(void)
 			 */
 			printf("fragmented ip6 doesn't coalesce: ");
 			correct_payload[0] = PAYLOAD_LEN * 2;
-			check_recv_pkts(rxfd, correct_payload, 2);
+			correct_payload[1] = PAYLOAD_LEN;
+			correct_payload[2] = PAYLOAD_LEN;
+			check_recv_pkts(rxfd, correct_payload, 3);
+
+			correct_payload[0] = PAYLOAD_LEN * 2;
+			printf("ipv6 with extension header DOES coalesce: ");
+			check_recv_pkts(rxfd, correct_payload, 1);
 		}
 	} else if (strcmp(testname, "large") == 0) {
 		int offset = proto == PF_INET ? 20 : 0;
