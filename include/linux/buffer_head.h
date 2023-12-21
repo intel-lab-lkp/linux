@@ -171,6 +171,18 @@ static __always_inline int buffer_uptodate(const struct buffer_head *bh)
 	return test_bit_acquire(BH_Uptodate, &bh->b_state);
 }
 
+static __always_inline int buffer_uptodate_or_error(struct buffer_head *bh)
+{
+	/*
+	 * If the buffer has the write error flag, data was failed to write
+	 * out in the block. In this case, set buffer uptodate to prevent
+	 * reading old data.
+	 */
+	if (buffer_write_io_error(bh))
+		set_buffer_uptodate(bh);
+	return buffer_uptodate(bh);
+}
+
 static inline unsigned long bh_offset(const struct buffer_head *bh)
 {
 	return (unsigned long)(bh)->b_data & (page_size(bh->b_page) - 1);
@@ -231,7 +243,11 @@ void __brelse(struct buffer_head *);
 void __bforget(struct buffer_head *);
 void __breadahead(struct block_device *, sector_t block, unsigned int size);
 struct buffer_head *__bread_gfp(struct block_device *,
-				sector_t block, unsigned size, gfp_t gfp);
+				sector_t block, unsigned int size, gfp_t gfp);
+struct buffer_head *__bread_gfp2(struct block_device *bdev, sector_t block,
+				 unsigned int size, blk_opf_t op_flags,
+				 gfp_t gfp);
+
 struct buffer_head *alloc_buffer_head(gfp_t gfp_flags);
 void free_buffer_head(struct buffer_head * bh);
 void unlock_buffer(struct buffer_head *bh);
