@@ -2,7 +2,7 @@
 %YAML 1.2
 ---
 
-$id: http://devicetree.org/schemas/display/msm/gpu.yaml#
+$id: http://devicetree.org/schemas/display/msm/qcom,adreno.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: Adreno or Snapdragon GPUs
