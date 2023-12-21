@@ -7,6 +7,7 @@
 
 #include "intel_gt.h"
 #include "intel_gt_ccs_mode.h"
+#include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 #include "intel_gt_types.h"
 
@@ -78,4 +79,71 @@ void intel_gt_init_ccs_mode(struct intel_gt *gt)
 void intel_gt_fini_ccs_mode(struct intel_gt *gt)
 {
 	mutex_destroy(&gt->ccs.mutex);
+}
+
+static ssize_t
+ccs_mode_show(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
+{
+	struct intel_gt *gt = container_of(kobj, struct intel_gt, sysfs_gt);
+
+	return sysfs_emit(buff, "%u\n", gt->ccs.mode);
+}
+
+static ssize_t
+ccs_mode_store(struct kobject *kobj, struct kobj_attribute *attr,
+	       const char *buff, size_t count)
+{
+	struct intel_gt *gt = container_of(kobj, struct intel_gt, sysfs_gt);
+	int num_slices = hweight32(CCS_MASK(gt));
+	int err;
+	u32 val;
+
+	err = kstrtou32(buff, 0, &val);
+	if (err)
+		return err;
+
+	if ((!val) || (val > num_slices) || (val % num_slices))
+		return -EINVAL;
+
+	mutex_lock(&gt->ccs.mutex);
+
+	if (val == gt->ccs.mode)
+		goto out;
+
+	gt->ccs.mode = val;
+	intel_gt_apply_ccs_mode(gt);
+
+out:
+	mutex_unlock(&gt->ccs.mutex);
+
+	return count;
+}
+
+static ssize_t
+num_slices_show(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
+{
+	struct intel_gt *gt = container_of(kobj, struct intel_gt, sysfs_gt);
+	u32 num_slices;
+
+	num_slices = hweight32(CCS_MASK(gt));
+
+	return sysfs_emit(buff, "%u\n", num_slices);
+}
+
+static struct kobj_attribute ccs_mode = __ATTR_RW(ccs_mode);
+static struct kobj_attribute num_slices = __ATTR_RO(num_slices);
+
+static const struct attribute * const ccs_mode_attrs[] = {
+	&ccs_mode.attr,
+	&num_slices.attr,
+	NULL
+};
+
+void intel_gt_sysfs_ccs_mode(struct intel_gt *gt)
+{
+	int ret;
+
+	ret = sysfs_create_files(&gt->sysfs_gt, ccs_mode_attrs);
+	if (ret)
+		gt_warn(gt, "Failed to create ccs mode sysfs files");
 }
