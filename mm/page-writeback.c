@@ -2442,8 +2442,10 @@ retry:
 		filemap_get_folios_tag(mapping, &wbc->index, wbc_end(wbc),
 				wbc_to_tag(wbc), &wbc->fbatch);
 		folio = folio_batch_next(&wbc->fbatch);
-		if (!folio)
+		if (!folio) {
+			writeback_finish(mapping, wbc, 0);
 			return NULL;
+		}
 	}
 
 	folio_lock(folio);
@@ -2469,6 +2471,46 @@ static struct folio *writeback_iter_init(struct address_space *mapping,
 
 	wbc->err = 0;
 	folio_batch_init(&wbc->fbatch);
+	return writeback_get_folio(mapping, wbc);
+}
+
+static struct folio *writeback_iter_next(struct address_space *mapping,
+		struct writeback_control *wbc, struct folio *folio, int error)
+{
+	unsigned long nr = folio_nr_pages(folio);
+
+	wbc->nr_to_write -= nr;
+
+	/*
+	 * Handle the legacy AOP_WRITEPAGE_ACTIVATE magic return value.
+	 * Eventually all instances should just unlock the folio themselves and
+	 * return 0;
+	 */
+	if (error == AOP_WRITEPAGE_ACTIVATE) {
+		folio_unlock(folio);
+		error = 0;
+	}
+
+	if (error && !wbc->err)
+		wbc->err = error;
+
+	/*
+	 * For integrity sync  we have to keep going until we have written all
+	 * the folios we tagged for writeback prior to entering the writeback
+	 * loop, even if we run past wbc->nr_to_write or encounter errors.
+	 * This is because the file system may still have state to clear for
+	 * each folio.   We'll eventually return the first error encountered.
+	 *
+	 * For background writeback just push done_index past this folio so that
+	 * we can just restart where we left off and media errors won't choke
+	 * writeout for the entire file.
+	 */
+	if (wbc->sync_mode == WB_SYNC_NONE &&
+	    (wbc->err || wbc->nr_to_write <= 0)) {
+		writeback_finish(mapping, wbc, folio->index + nr);
+		return NULL;
+	}
+
 	return writeback_get_folio(mapping, wbc);
 }
 
@@ -2512,47 +2554,10 @@ int write_cache_pages(struct address_space *mapping,
 
 	for (folio = writeback_iter_init(mapping, wbc);
 	     folio;
-	     folio = writeback_get_folio(mapping, wbc)) {
-		unsigned long nr;
-
+	     folio = writeback_iter_next(mapping, wbc, folio, error))
 		error = writepage(folio, wbc, data);
-		nr = folio_nr_pages(folio);
-		wbc->nr_to_write -= nr;
 
-		/*
-		 * Handle the legacy AOP_WRITEPAGE_ACTIVATE magic return value.
-		 * Eventually all instances should just unlock the folio
-		 * themselves and return 0;
-		 */
-		if (error == AOP_WRITEPAGE_ACTIVATE) {
-			folio_unlock(folio);
-			error = 0;
-		}
-
-		if (error && !wbc->err)
-			wbc->err = error;
-
-		/*
-		 * For integrity sync  we have to keep going until we have
-		 * written all the folios we tagged for writeback prior to
-		 * entering this loop, even if we run past wbc->nr_to_write or
-		 * encounter errors.  This is because the file system may still
-		 * have state to clear for each folio.   We'll eventually return
-		 * the first error encountered.
-		 *
-		 * For background writeback just push done_index past this folio
-		 * so that we can just restart where we left off and media
-		 * errors won't choke writeout for the entire file.
-		 */
-		if (wbc->sync_mode == WB_SYNC_NONE &&
-		    (wbc->err || wbc->nr_to_write <= 0)) {
-			writeback_finish(mapping, wbc, folio->index + nr);
-			return error;
-		}
-	}
-
-	writeback_finish(mapping, wbc, 0);
-	return 0;
+	return wbc->err;
 }
 EXPORT_SYMBOL(write_cache_pages);
 
