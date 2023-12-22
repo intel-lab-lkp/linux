@@ -2446,6 +2446,22 @@ static struct folio *writeback_get_folio(struct address_space *mapping,
 	return folio;
 }
 
+static struct folio *writeback_iter_init(struct address_space *mapping,
+		struct writeback_control *wbc)
+{
+	if (wbc->range_cyclic)
+		wbc->index = mapping->writeback_index; /* prev offset */
+	else
+		wbc->index = wbc->range_start >> PAGE_SHIFT;
+
+	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
+		tag_pages_for_writeback(mapping, wbc->index, wbc_end(wbc));
+
+	wbc->err = 0;
+	folio_batch_init(&wbc->fbatch);
+	return writeback_get_folio(mapping, wbc);
+}
+
 /**
  * write_cache_pages - walk the list of dirty pages of the given address space and write all of them.
  * @mapping: address space structure to write
@@ -2481,28 +2497,13 @@ int write_cache_pages(struct address_space *mapping,
 		      struct writeback_control *wbc, writepage_t writepage,
 		      void *data)
 {
+	struct folio *folio;
 	int error;
-	pgoff_t end;		/* Inclusive */
 
-	if (wbc->range_cyclic) {
-		wbc->index = mapping->writeback_index; /* prev offset */
-		end = -1;
-	} else {
-		wbc->index = wbc->range_start >> PAGE_SHIFT;
-		end = wbc->range_end >> PAGE_SHIFT;
-	}
-	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
-		tag_pages_for_writeback(mapping, wbc->index, end);
-
-	folio_batch_init(&wbc->fbatch);
-	wbc->err = 0;
-
-	for (;;) {
-		struct folio *folio = writeback_get_folio(mapping, wbc);
+	for (folio = writeback_iter_init(mapping, wbc);
+	     folio;
+	     folio = writeback_get_folio(mapping, wbc)) {
 		unsigned long nr;
-
-		if (!folio)
-			break;
 
 		folio_lock(folio);
 		if (!folio_prepare_writeback(mapping, wbc, folio)) {
