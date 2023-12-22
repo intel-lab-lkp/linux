@@ -42,8 +42,10 @@ static bool	swap_slot_cache_initialized;
 static DEFINE_MUTEX(swap_slots_cache_mutex);
 /* Serialize swap slots cache enable/disable operations */
 static DEFINE_MUTEX(swap_slots_cache_enable_mutex);
+static struct workqueue_struct *swap_free_queue;
 
 static void __drain_swap_slots_cache(unsigned int type);
+static void swapcache_async_free_entries(struct work_struct *data);
 
 #define use_swap_slot_cache (swap_slot_cache_active && swap_slot_cache_enabled)
 #define SLOTS_CACHE 0x1
@@ -149,6 +151,7 @@ static int alloc_swap_slot_cache(unsigned int cpu)
 		spin_lock_init(&cache->free_lock);
 		cache->lock_initialized = true;
 	}
+	INIT_WORK(&cache->async_free, swapcache_async_free_entries);
 	cache->nr = 0;
 	cache->cur = 0;
 	cache->n_ret = 0;
@@ -269,6 +272,20 @@ static int refill_swap_slots_cache(struct swap_slots_cache *cache)
 	return cache->nr;
 }
 
+static void swapcache_async_free_entries(struct work_struct *data)
+{
+	struct swap_slots_cache *cache;
+
+	cache = container_of(data, struct swap_slots_cache, async_free);
+	spin_lock_irq(&cache->free_lock);
+	/* Swap slots cache may be deactivated before acquiring lock */
+	if (cache->slots_ret) {
+		swapcache_free_entries(cache->slots_ret, cache->n_ret);
+		cache->n_ret = 0;
+	}
+	spin_unlock_irq(&cache->free_lock);
+}
+
 void free_swap_slot(swp_entry_t entry)
 {
 	struct swap_slots_cache *cache;
@@ -282,17 +299,14 @@ void free_swap_slot(swp_entry_t entry)
 			goto direct_free;
 		}
 		if (cache->n_ret >= SWAP_SLOTS_CACHE_SIZE) {
-			/*
-			 * Return slots to global pool.
-			 * The current swap_map value is SWAP_HAS_CACHE.
-			 * Set it to 0 to indicate it is available for
-			 * allocation in global pool
-			 */
-			swapcache_free_entries(cache->slots_ret, cache->n_ret);
-			cache->n_ret = 0;
+			spin_unlock_irq(&cache->free_lock);
+			queue_work(swap_free_queue, &cache->async_free);
+			goto direct_free;
 		}
 		cache->slots_ret[cache->n_ret++] = entry;
 		spin_unlock_irq(&cache->free_lock);
+		if (cache->n_ret >= SWAP_SLOTS_CACHE_SIZE)
+			queue_work(swap_free_queue, &cache->async_free);
 	} else {
 direct_free:
 		swapcache_free_entries(&entry, 1);
@@ -348,3 +362,10 @@ out:
 	}
 	return entry;
 }
+
+static int __init async_queue_init(void)
+{
+	swap_free_queue = create_workqueue("async swap cache");
+	return 0;
+}
+subsys_initcall(async_queue_init);
