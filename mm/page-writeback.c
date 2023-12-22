@@ -2474,43 +2474,39 @@ continue_unlock:
 			error = writepage(folio, wbc, data);
 			nr = folio_nr_pages(folio);
 			wbc->nr_to_write -= nr;
-			if (unlikely(error)) {
-				/*
-				 * Handle errors according to the type of
-				 * writeback. There's no need to continue for
-				 * background writeback. Just push done_index
-				 * past this page so media errors won't choke
-				 * writeout for the entire file. For integrity
-				 * writeback, we must process the entire dirty
-				 * set regardless of errors because the fs may
-				 * still have state to clear for each page. In
-				 * that case we continue processing and return
-				 * the first error.
-				 */
-				if (error == AOP_WRITEPAGE_ACTIVATE) {
-					folio_unlock(folio);
-					error = 0;
-				} else if (wbc->sync_mode != WB_SYNC_ALL) {
-					ret = error;
+
+			/*
+			 * Handle the legacy AOP_WRITEPAGE_ACTIVATE magic return
+			 * value.  Eventually all instances should just unlock
+			 * the folio themselves and return 0;
+			 */
+			if (error == AOP_WRITEPAGE_ACTIVATE) {
+				folio_unlock(folio);
+				error = 0;
+			}
+
+			/*
+			 * For integrity sync  we have to keep going until we
+			 * have written all the folios we tagged for writeback
+			 * prior to entering this loop, even if we run past
+			 * wbc->nr_to_write or encounter errors.  This is
+			 * because the file system may still have state to clear
+			 * for each folio.   We'll eventually return the first
+			 * error encountered.
+			 *
+			 * For background writeback just push done_index past
+			 * this folio so that we can just restart where we left
+			 * off and media errors won't choke writeout for the
+			 * entire file.
+			 */
+			if (error && !ret)
+				ret = error;
+			if (wbc->sync_mode == WB_SYNC_NONE) {
+				if (ret || wbc->nr_to_write <= 0) {
 					done_index = folio->index + nr;
 					done = 1;
 					break;
 				}
-				if (!ret)
-					ret = error;
-			}
-
-			/*
-			 * We stop writing back only if we are not doing
-			 * integrity sync. In case of integrity sync we have to
-			 * keep going until we have written all the pages
-			 * we tagged for writeback prior to entering this loop.
-			 */
-			done_index = folio->index + nr;
-			if (wbc->nr_to_write <= 0 &&
-			    wbc->sync_mode == WB_SYNC_NONE) {
-				done = 1;
-				break;
 			}
 		}
 		folio_batch_release(&fbatch);
