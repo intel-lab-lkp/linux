@@ -32,7 +32,7 @@ struct max77620_therm_info {
 
 /**
  * max77620_thermal_read_temp: Read PMIC die temperatue.
- * @data:	Device specific data.
+ * @tz:		pointer to &thermal_zone_device
  * @temp:	Temperature in millidegrees Celsius
  *
  * The actual temperature of PMIC die is not available from PMIC.
@@ -41,7 +41,7 @@ struct max77620_therm_info {
  * If threshold has not been crossed then assume die temperature as 100degC
  * else 120degC or 140deG based on the PMIC die temp threshold status.
  *
- * Return 0 on success otherwise error number to show reason of failure.
+ * Return: %0 on success otherwise error number to show reason of failure.
  */
 
 static int max77620_thermal_read_temp(struct thermal_zone_device *tz, int *temp)
