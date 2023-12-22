@@ -1228,6 +1228,7 @@ r535_gsp_acpi_dod(acpi_handle handle, DOD_METHOD_DATA *dod)
 	}
 
 	dod->status = 0;
+	kfree(output.pointer);
 }
 #endif
 
