@@ -2,6 +2,8 @@
 #ifndef __LINUX_OSQ_LOCK_H
 #define __LINUX_OSQ_LOCK_H
 
+#include <linux/cache.h>
+
 /*
  * An MCS like lock especially tailored for optimistic spinning for sleeping
  * lock implementations (mutex, rwsem, etc).
@@ -9,7 +11,13 @@
 struct optimistic_spin_node {
 	struct optimistic_spin_node *next, *prev;
 	int locked; /* 1 if lock acquired */
-	int cpu; /* encoded CPU # + 1 value */
+
+	CACHELINE_PADDING(_pad1_);
+	/*
+	 * Stores an encoded CPU # + 1 value.
+	 * Only read by other cpus, so split into different cache lines.
+	 */
+	int cpu;
 };
 
 struct optimistic_spin_queue {
