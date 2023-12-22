@@ -3290,6 +3290,7 @@ static int virtnet_set_channels(struct net_device *dev,
 	return err;
 }
 
+/* qid == -1: for rx/tx queue total field */
 static void virtnet_get_stats_string(struct virtnet_info *vi, int type, int qid, u8 **data)
 {
 	struct virtnet_stats_map *m;
@@ -3312,14 +3313,23 @@ static void virtnet_get_stats_string(struct virtnet_info *vi, int type, int qid,
 			else
 				tp = "_hw";
 
-			if (type == VIRTNET_STATS_Q_TYPE_RX)
-				ethtool_sprintf(&p, "rx_queue%s_%u_%s", tp, qid, m->desc[j].desc);
+			if (type == VIRTNET_STATS_Q_TYPE_RX) {
+				if (qid < 0)
+					ethtool_sprintf(&p, "rx%s_%s", tp, m->desc[j].desc);
+				else
+					ethtool_sprintf(&p, "rx_queue%s_%u_%s", tp, qid,
+							m->desc[j].desc);
 
-			else if (type == VIRTNET_STATS_Q_TYPE_TX)
-				ethtool_sprintf(&p, "tx_queue%s_%u_%s", tp, qid, m->desc[j].desc);
+			} else if (type == VIRTNET_STATS_Q_TYPE_TX) {
+				if (qid < 0)
+					ethtool_sprintf(&p, "tx%s_%s", tp, m->desc[j].desc);
+				else
+					ethtool_sprintf(&p, "tx_queue%s_%u_%s", tp, qid,
+							m->desc[j].desc);
 
-			else if (type == VIRTNET_STATS_Q_TYPE_CQ)
+			} else if (type == VIRTNET_STATS_Q_TYPE_CQ) {
 				ethtool_sprintf(&p, "cq%s_%s", tp, m->desc[j].desc);
+			}
 		}
 	}
 
@@ -3376,6 +3386,38 @@ static void virtnet_stats_ctx_init(struct virtnet_info *vi,
 	}
 }
 
+static void stats_sum_queue(u64 *sum, u32 num, u64 *q_value, u32 q_num)
+{
+	u32 step = num;
+	int i, j;
+	u64 *p;
+
+	for (i = 0; i < num; ++i) {
+		p = sum + i;
+		*p = 0;
+
+		for (j = 0; j < q_num; ++j)
+			*p += *(q_value + i + j * step);
+	}
+}
+
+static void virtnet_fill_total_fields(struct virtnet_info *vi,
+				      struct virtnet_stats_ctx *ctx)
+{
+	u64 *data, *first_rx_q, *first_tx_q;
+
+	first_rx_q = ctx->data + ctx->num_rx + ctx->num_tx + ctx->num_cq;
+	first_tx_q = first_rx_q + vi->curr_queue_pairs * ctx->num_rx;
+
+	data = ctx->data;
+
+	stats_sum_queue(data, ctx->num_rx, first_rx_q, vi->curr_queue_pairs);
+
+	data = ctx->data + ctx->num_rx;
+
+	stats_sum_queue(data, ctx->num_tx, first_tx_q, vi->curr_queue_pairs);
+}
+
 static void virtnet_fill_stats(struct virtnet_info *vi, u32 qid,
 			       struct virtnet_stats_ctx *ctx,
 			       const u8 *base, bool from_driver, u8 type)
@@ -3387,14 +3429,17 @@ static void virtnet_fill_stats(struct virtnet_info *vi, u32 qid,
 	u64 offset;
 	int i, j;
 
+	/* skip the total fields of pairs */
+	offset = ctx->num_rx + ctx->num_tx;
+
 	if (qid == vi->max_queue_pairs * 2) {
-		offset = 0;
 		queue_type = VIRTNET_STATS_Q_TYPE_CQ;
 	} else if (qid % 2) {
-		offset = ctx->num_cq + ctx->num_rx * vi->curr_queue_pairs + ctx->num_tx * (qid / 2);
+		offset += ctx->num_cq + ctx->num_rx * vi->curr_queue_pairs +
+			ctx->num_tx * (qid / 2);
 		queue_type = VIRTNET_STATS_Q_TYPE_TX;
 	} else {
-		offset = ctx->num_cq + ctx->num_rx * (qid / 2);
+		offset += ctx->num_cq + ctx->num_rx * (qid / 2);
 		queue_type = VIRTNET_STATS_Q_TYPE_RX;
 	}
 
@@ -3513,6 +3558,9 @@ static void virtnet_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 
 	switch (stringset) {
 	case ETH_SS_STATS:
+		virtnet_get_stats_string(vi, VIRTNET_STATS_Q_TYPE_RX, -1, &p);
+		virtnet_get_stats_string(vi, VIRTNET_STATS_Q_TYPE_TX, -1, &p);
+
 		virtnet_get_stats_string(vi, VIRTNET_STATS_Q_TYPE_CQ, 0, &p);
 
 		for (i = 0; i < vi->curr_queue_pairs; ++i)
@@ -3554,7 +3602,7 @@ static int virtnet_get_sset_count(struct net_device *dev, int sset)
 
 		pair_count = ctx.num_rx + ctx.num_tx;
 
-		return ctx.num_cq + vi->curr_queue_pairs * pair_count;
+		return pair_count + ctx.num_cq + vi->curr_queue_pairs * pair_count;
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -3587,6 +3635,8 @@ static void virtnet_get_ethtool_stats(struct net_device *dev,
 			virtnet_fill_stats(vi, i * 2 + 1, &ctx, stats_base, true, 0);
 		} while (u64_stats_fetch_retry(&sq->stats.syncp, start));
 	}
+
+	virtnet_fill_total_fields(vi, &ctx);
 }
 
 static void virtnet_get_channels(struct net_device *dev,
