@@ -4904,7 +4904,16 @@ void nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 
 static void nested_vmx_triple_fault(struct kvm_vcpu *vcpu)
 {
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
 	kvm_clear_request(KVM_REQ_TRIPLE_FAULT, vcpu);
+
+	/* In case of a triple fault, cancel the nested reentry. This may occur
+	 * when the RSM instruction fails while attempting to restore the state
+	 * from SMRAM.
+	 */
+	vmx->nested.nested_run_pending = 0;
+
 	nested_vmx_vmexit(vcpu, EXIT_REASON_TRIPLE_FAULT, 0, 0);
 }
 
