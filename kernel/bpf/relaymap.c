@@ -117,7 +117,37 @@ static void *relay_map_lookup_elem(struct bpf_map *map, void *key)
 static long relay_map_update_elem(struct bpf_map *map, void *key, void *value,
 				   u64 flags)
 {
-	return -EOPNOTSUPP;
+	struct bpf_relay_map *rmap;
+	struct dentry *parent;
+	int err;
+
+	if (unlikely(flags))
+		return -EINVAL;
+
+	if (unlikely(key))
+		return -EINVAL;
+
+	rmap = container_of(map, struct bpf_relay_map, map);
+
+	/* The directory already exists */
+	if (rmap->relay_chan->has_base_filename)
+		return -EEXIST;
+
+	/* Setup relay files. Note that the directory name passed as value should
+	 * not be longer than map->value_size, including the '\0' at the end.
+	 */
+	((char *)value)[map->value_size - 1] = '\0';
+	parent = debugfs_create_dir(value, NULL);
+	if (IS_ERR_OR_NULL(parent))
+		return PTR_ERR(parent);
+
+	err = relay_late_setup_files(rmap->relay_chan, map->name, parent);
+	if (err) {
+		debugfs_remove_recursive(parent);
+		return err;
+	}
+
+	return 0;
 }
 
 static long relay_map_delete_elem(struct bpf_map *map, void *key)
