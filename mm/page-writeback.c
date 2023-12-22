@@ -2360,6 +2360,29 @@ void tag_pages_for_writeback(struct address_space *mapping,
 }
 EXPORT_SYMBOL(tag_pages_for_writeback);
 
+static void writeback_finish(struct address_space *mapping,
+		struct writeback_control *wbc, pgoff_t done_index)
+{
+	folio_batch_release(&wbc->fbatch);
+
+	/*
+	 * For range cyclic writeback we need to remember where we stopped so
+	 * that we can continue there next time we are called.  If  we hit the
+	 * last page and there is more work to be done, wrap back to the start
+	 * of the file.
+	 *
+	 * For non-cyclic writeback we always start looking up at the beginning
+	 * of the file if we are called again, which can only happen due to
+	 * -ENOMEM from the file system.
+	 */
+	if (wbc->range_cyclic) {
+		if (wbc->err || wbc->nr_to_write <= 0)
+			mapping->writeback_index = done_index;
+		else
+			mapping->writeback_index = 0;
+	}
+}
+
 /**
  * write_cache_pages - walk the list of dirty pages of the given address space and write all of them.
  * @mapping: address space structure to write
@@ -2395,17 +2418,12 @@ int write_cache_pages(struct address_space *mapping,
 		      struct writeback_control *wbc, writepage_t writepage,
 		      void *data)
 {
-	int ret = 0;
-	int done = 0;
 	int error;
-	struct folio_batch fbatch;
 	int nr_folios;
 	pgoff_t index;
 	pgoff_t end;		/* Inclusive */
-	pgoff_t done_index;
 	xa_mark_t tag;
 
-	folio_batch_init(&fbatch);
 	if (wbc->range_cyclic) {
 		index = mapping->writeback_index; /* prev offset */
 		end = -1;
@@ -2419,21 +2437,22 @@ int write_cache_pages(struct address_space *mapping,
 	} else {
 		tag = PAGECACHE_TAG_DIRTY;
 	}
-	done_index = index;
-	while (!done && (index <= end)) {
+
+	folio_batch_init(&wbc->fbatch);
+	wbc->err = 0;
+
+	while (index <= end) {
 		int i;
 
 		nr_folios = filemap_get_folios_tag(mapping, &index, end,
-				tag, &fbatch);
+				tag, &wbc->fbatch);
 
 		if (nr_folios == 0)
 			break;
 
 		for (i = 0; i < nr_folios; i++) {
-			struct folio *folio = fbatch.folios[i];
+			struct folio *folio = wbc->fbatch.folios[i];
 			unsigned long nr;
-
-			done_index = folio->index;
 
 			folio_lock(folio);
 
@@ -2481,6 +2500,9 @@ continue_unlock:
 				folio_unlock(folio);
 				error = 0;
 			}
+		
+			if (error && !wbc->err)
+				wbc->err = error;
 
 			/*
 			 * For integrity sync  we have to keep going until we
@@ -2496,38 +2518,19 @@ continue_unlock:
 			 * off and media errors won't choke writeout for the
 			 * entire file.
 			 */
-			if (error && !ret)
-				ret = error;
-			if (wbc->sync_mode == WB_SYNC_NONE) {
-				if (ret || wbc->nr_to_write <= 0) {
-					done_index = folio->index + nr;
-					done = 1;
-					break;
-				}
+			if (wbc->sync_mode == WB_SYNC_NONE &&
+			    (wbc->err || wbc->nr_to_write <= 0)) {
+				writeback_finish(mapping, wbc,
+						folio->index + nr);
+				return error;
 			}
 		}
-		folio_batch_release(&fbatch);
+		folio_batch_release(&wbc->fbatch);
 		cond_resched();
 	}
 
-	/*
-	 * For range cyclic writeback we need to remember where we stopped so
-	 * that we can continue there next time we are called.  If  we hit the
-	 * last page and there is more work to be done, wrap back to the start
-	 * of the file.
-	 *
-	 * For non-cyclic writeback we always start looking up at the beginning
-	 * of the file if we are called again, which can only happen due to
-	 * -ENOMEM from the file system.
-	 */
-	if (wbc->range_cyclic) {
-		if (done)
-			mapping->writeback_index = done_index;
-		else
-			mapping->writeback_index = 0;
-	}
-
-	return ret;
+	writeback_finish(mapping, wbc, 0);
+	return 0;
 }
 EXPORT_SYMBOL(write_cache_pages);
 
