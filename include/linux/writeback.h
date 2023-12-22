@@ -81,6 +81,7 @@ struct writeback_control {
 
 	/* internal fields used by the ->writepages implementation: */
 	struct folio_batch fbatch;
+	pgoff_t index;
 	int err;
 
 #ifdef CONFIG_CGROUP_WRITEBACK
