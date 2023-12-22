@@ -217,11 +217,13 @@ DEFINE_SHOW_ATTRIBUTE(remote_oob);
 static int conn_info_min_age_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
-
-	if (val == 0 || val > hdev->conn_info_max_age)
-		return -EINVAL;
-
+	
 	hci_dev_lock(hdev);
+	if (val == 0 || val > hdev->conn_info_max_age) {
+		hci_dev_unlock(hdev);
+		return -EINVAL;
+	}
+
 	hdev->conn_info_min_age = val;
 	hci_dev_unlock(hdev);
 
@@ -245,11 +247,13 @@ DEFINE_DEBUGFS_ATTRIBUTE(conn_info_min_age_fops, conn_info_min_age_get,
 static int conn_info_max_age_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
-
-	if (val == 0 || val < hdev->conn_info_min_age)
-		return -EINVAL;
-
+	
 	hci_dev_lock(hdev);
+	if (val == 0 || val < hdev->conn_info_min_age) {
+		hci_dev_unlock(hdev);
+		return -EINVAL;
+	}
+
 	hdev->conn_info_max_age = val;
 	hci_dev_unlock(hdev);
 
