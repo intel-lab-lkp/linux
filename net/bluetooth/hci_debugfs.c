@@ -849,11 +849,13 @@ DEFINE_SHOW_ATTRIBUTE(long_term_keys);
 static int conn_min_interval_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
-
-	if (val < 0x0006 || val > 0x0c80 || val > hdev->le_conn_max_interval)
-		return -EINVAL;
-
+	
 	hci_dev_lock(hdev);
+	if (val < 0x0006 || val > 0x0c80 || val > hdev->le_conn_max_interval) {
+		hci_dev_unlock(hdev);	
+		return -EINVAL;
+	}
+
 	hdev->le_conn_min_interval = val;
 	hci_dev_unlock(hdev);
 
@@ -877,11 +879,13 @@ DEFINE_DEBUGFS_ATTRIBUTE(conn_min_interval_fops, conn_min_interval_get,
 static int conn_max_interval_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
-
-	if (val < 0x0006 || val > 0x0c80 || val < hdev->le_conn_min_interval)
-		return -EINVAL;
-
+	
 	hci_dev_lock(hdev);
+	if (val < 0x0006 || val > 0x0c80 || val < hdev->le_conn_min_interval) {
+		hci_dev_unlock(hdev);
+		return -EINVAL;
+	}
+
 	hdev->le_conn_max_interval = val;
 	hci_dev_unlock(hdev);
 
@@ -989,11 +993,13 @@ DEFINE_DEBUGFS_ATTRIBUTE(adv_channel_map_fops, adv_channel_map_get,
 static int adv_min_interval_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
-
-	if (val < 0x0020 || val > 0x4000 || val > hdev->le_adv_max_interval)
-		return -EINVAL;
-
+	
 	hci_dev_lock(hdev);
+	if (val < 0x0020 || val > 0x4000 || val > hdev->le_adv_max_interval) {
+		hci_dev_unlock(hdev);	
+		return -EINVAL;
+	}
+
 	hdev->le_adv_min_interval = val;
 	hci_dev_unlock(hdev);
 
@@ -1018,10 +1024,12 @@ static int adv_max_interval_set(void *data, u64 val)
 {
 	struct hci_dev *hdev = data;
 
-	if (val < 0x0020 || val > 0x4000 || val < hdev->le_adv_min_interval)
-		return -EINVAL;
-
 	hci_dev_lock(hdev);
+	if (val < 0x0020 || val > 0x4000 || val < hdev->le_adv_min_interval) {
+		hci_dev_unlock(hdev);
+		return -EINVAL;
+	}
+
 	hdev->le_adv_max_interval = val;
 	hci_dev_unlock(hdev);
 
