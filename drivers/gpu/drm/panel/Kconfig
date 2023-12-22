@@ -835,6 +835,15 @@ config DRM_PANEL_TRULY_NT35597_WQXGA
 	  Say Y here if you want to enable support for Truly NT35597 WQXGA Dual DSI
 	  Video Mode panel
 
+config DRM_PANEL_TRULY_NT36672E
+	tristate "Truly NT36672E"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	help
+	  Say Y here if you want to enable support for Truly NT36672E DSI Video Mode
+	  LCD panel module. The panel has a resolution of 1080x2408 and uses 24 bit
+	  RGB per pixel.
+
 config DRM_PANEL_VISIONOX_RM69299
 	tristate "Visionox RM69299"
 	depends on OF
