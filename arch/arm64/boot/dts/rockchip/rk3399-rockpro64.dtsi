@@ -193,7 +193,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc5v0_host_en>;
 		regulator-name = "vcc5v0_host";
-		regulator-always-on;
 		vin-supply = <&vcc5v0_usb>;
 	};
 
@@ -204,7 +203,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc5v0_typec_en>;
 		regulator-name = "vcc5v0_typec";
-		regulator-always-on;
 		vin-supply = <&vcc5v0_usb>;
 	};
 
@@ -860,6 +858,7 @@
 	status = "okay";
 
 	u2phy0_otg: otg-port {
+		phy-supply = <&vcc5v0_typec>;
 		status = "okay";
 	};
 
