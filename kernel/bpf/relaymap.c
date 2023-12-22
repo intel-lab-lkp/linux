@@ -173,6 +173,32 @@ static u64 relay_map_mem_usage(const struct bpf_map *map)
 	return usage;
 }
 
+BPF_CALL_4(bpf_relay_output, struct bpf_map *, map, void *, data, u64, size,
+	   u64, flags)
+{
+	struct bpf_relay_map *rmap;
+
+	/* not support any flag now */
+	if (unlikely(flags))
+		return -EINVAL;
+
+	rmap = container_of(map, struct bpf_relay_map, map);
+	if (!rmap->relay_chan->has_base_filename)
+		return -ENOENT;
+
+	relay_write(rmap->relay_chan, data, size);
+	return 0;
+}
+
+const struct bpf_func_proto bpf_relay_output_proto = {
+	.func		= bpf_relay_output,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_CONST_MAP_PTR,
+	.arg2_type	= ARG_PTR_TO_MEM | MEM_RDONLY,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
+	.arg4_type	= ARG_ANYTHING,
+};
+
 BTF_ID_LIST_SINGLE(relay_map_btf_ids, struct, bpf_relay_map)
 const struct bpf_map_ops relay_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,

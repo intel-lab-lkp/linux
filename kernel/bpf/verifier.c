@@ -8800,6 +8800,10 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
 		if (func_id != BPF_FUNC_user_ringbuf_drain)
 			goto error;
 		break;
+	case BPF_MAP_TYPE_RELAY:
+		if (func_id != BPF_FUNC_relay_output)
+			goto error;
+		break;
 	case BPF_MAP_TYPE_STACK_TRACE:
 		if (func_id != BPF_FUNC_get_stackid)
 			goto error;
@@ -8930,6 +8934,10 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
 		break;
 	case BPF_FUNC_user_ringbuf_drain:
 		if (map->map_type != BPF_MAP_TYPE_USER_RINGBUF)
+			goto error;
+		break;
+	case BPF_FUNC_relay_output:
+		if (map->map_type != BPF_MAP_TYPE_RELAY)
 			goto error;
 		break;
 	case BPF_FUNC_get_stackid:

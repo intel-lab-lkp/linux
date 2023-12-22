@@ -1720,6 +1720,10 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_ringbuf_discard_proto;
 	case BPF_FUNC_ringbuf_query:
 		return &bpf_ringbuf_query_proto;
+#ifdef CONFIG_RELAY
+	case BPF_FUNC_relay_output:
+		return &bpf_relay_output_proto;
+#endif
 	case BPF_FUNC_strncmp:
 		return &bpf_strncmp_proto;
 	case BPF_FUNC_strtol:

@@ -5686,6 +5686,15 @@ union bpf_attr {
  *		0 on success.
  *
  *		**-ENOENT** if the bpf_local_storage cannot be found.
+ *
+ * long bpf_relay_output(void *map, void *data, u64 size, u64 flags)
+ * 	Description
+ * 		Copy *size* bytes from *data* into *map* of type BPF_MAP_TYPE_RELAY.
+ * 		Currently, the *flags* must be 0.
+ * 	Return
+ * 		0 on success.
+ *
+ *		**-ENOENT** if the relay base_file in debugfs cannot be found.
  */
 #define ___BPF_FUNC_MAPPER(FN, ctx...)			\
 	FN(unspec, 0, ##ctx)				\
@@ -5900,6 +5909,7 @@ union bpf_attr {
 	FN(user_ringbuf_drain, 209, ##ctx)		\
 	FN(cgrp_storage_get, 210, ##ctx)		\
 	FN(cgrp_storage_delete, 211, ##ctx)		\
+	FN(relay_output, 212, ##ctx)		\
 	/* */
 
 /* backwards-compatibility macros for users of __BPF_FUNC_MAPPER that don't
