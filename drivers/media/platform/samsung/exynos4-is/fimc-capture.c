@@ -1546,6 +1546,7 @@ static int fimc_subdev_set_fmt(struct v4l2_subdev *sd,
 	fimc_alpha_ctrl_update(ctx);
 
 	fimc_capture_mark_jpeg_xfer(ctx, ffmt->color);
+	mutex_lock(&fimc->lock);
 	if (fmt->pad == FIMC_SD_PAD_SOURCE) {
 		ff = &ctx->d_frame;
 		/* Sink pads crop rectangle size */
@@ -1555,7 +1556,6 @@ static int fimc_subdev_set_fmt(struct v4l2_subdev *sd,
 		ff = &ctx->s_frame;
 	}
 
-	mutex_lock(&fimc->lock);
 	set_frame_bounds(ff, mf->width, mf->height);
 
 	if (fmt->pad == FIMC_SD_PAD_SINK_FIFO)
