@@ -78,7 +78,7 @@ static void *map_paste_region(struct pnv_vas_window *txwin)
 	name = kasprintf(GFP_KERNEL, "window-v%d-w%d", txwin->vinst->vas_id,
 				txwin->vas_win.winid);
 	if (!name)
-		goto free_name;
+		return ERR_PTR(-ENOMEM);
 
 	txwin->paste_addr_name = name;
 	vas_win_paste_addr(txwin, &start, &len);
