@@ -545,7 +545,7 @@ static struct pnv_vas_window *vas_window_alloc(struct vas_instance *vinst)
 
 	window = kzalloc(sizeof(*window), GFP_KERNEL);
 	if (!window)
-		goto out_free;
+		goto release_window_id;
 
 	window->vinst = vinst;
 	window->vas_win.winid = winid;
@@ -559,6 +559,7 @@ static struct pnv_vas_window *vas_window_alloc(struct vas_instance *vinst)
 
 out_free:
 	kfree(window);
+release_window_id:
 	vas_release_window_id(&vinst->ida, winid);
 	return ERR_PTR(-ENOMEM);
 }
