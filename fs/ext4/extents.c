@@ -4073,9 +4073,10 @@ again:
 	} else if (in_range(map->m_lblk, es.es_lblk, es.es_len)) {
 		/*
 		 * Straddle the beginning of the queried range, it's no
-		 * longer a hole, adjust the length to the delayed extent's
-		 * after map->m_lblk.
+		 * longer a hole, mark it is a delalloc and adjust the
+		 * length to the delayed extent's after map->m_lblk.
 		 */
+		map->m_flags |= EXT4_MAP_DELAYED;
 		len = es.es_lblk + es.es_len - map->m_lblk;
 		goto out;
 	} else {
