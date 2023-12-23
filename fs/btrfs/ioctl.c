@@ -1175,8 +1175,12 @@ static noinline int btrfs_ioctl_resize(struct file *file,
 			mod = 1;
 			sizestr++;
 		}
-		new_size = memparse(sizestr, &retptr);
-		if (*retptr != '\0' || new_size == 0) {
+
+		ret = memparse_safe(sizestr, MEMPARSE_SUFFIXES_DEFAULT,
+				    &new_size, &retptr);
+		if (ret < 0)
+			goto out_finish;
+		if (*retptr != '\0') {
 			ret = -EINVAL;
 			goto out_finish;
 		}

@@ -400,6 +400,14 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ctx->thread_pool_size = result.uint_32;
 		break;
 	case Opt_max_inline:
+		int ret;
+
+		ret = memparse_safe(param->string, MEMPARSE_SUFFIXES_DEFAULT,
+				    &ctx->max_inline, NULL);
+		if (ret < 0) {
+			btrfs_err(NULL, "invalid string \"%s\"", param->string);
+			return ret;
+		}
 		ctx->max_inline = memparse(param->string, NULL);
 		break;
 	case Opt_acl:
