@@ -188,6 +188,7 @@ COND_SYSCALL(process_mrelease);
 COND_SYSCALL(remap_file_pages);
 COND_SYSCALL(mbind);
 COND_SYSCALL(get_mempolicy);
+COND_SYSCALL(get_mempolicy2);
 COND_SYSCALL(set_mempolicy);
 COND_SYSCALL(set_mempolicy2);
 COND_SYSCALL(migrate_pages);
