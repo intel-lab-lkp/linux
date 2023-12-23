@@ -114,6 +114,102 @@ static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)
 }
 
 /**
+ * memparse_safe - convert a string to an unsigned long long, safer version of
+ * memparse()
+ *
+ * @s:		The start of the string. Must be null-terminated.
+ *		The base would be determined automatically, if it starts with
+ *		"0x" the base would be 16, if it starts with "0" the base
+ *		would be 8, otherwise the base would be 10.
+ *		After a valid number string, there can be at most one
+ *		case-insensive suffix character, specified by the @suffixes
+ *		parameter.
+ *
+ * @suffixes:	The suffixes which should be parsed. Use logical ORed
+ *		memparse_suffix enum to indicate the supported suffixes.
+ *		The suffixes are case-insensive, all 2 ^ 10 based.
+ *		Supported ones are "KMGPTE".
+ *		NOTE: If one suffix out of the supported one is hit, it would
+ *		end the parse normally, with @retptr pointed to the unsupported
+ *		suffix.
+ *
+ * @res:	Where to write the result.
+ *
+ * @retptr:	(output) Optional pointer to the next char after parse completes.
+ *
+ * Return 0 if any valid numberic string can be parsed, and @retptr updated.
+ * Return -INVALID if no valid number string can be found.
+ * Return -ERANGE if the number overflows.
+ * For minus return values, @retptr would not be updated.
+ */
+noinline int memparse_safe(const char *s, enum memparse_suffix suffixes,
+			   unsigned long long *res, char **retptr)
+{
+	unsigned long long value;
+	unsigned int rv;
+	int shift = 0;
+	int base = 0;
+
+	s = _parse_integer_fixup_radix(s, &base);
+	rv = _parse_integer(s, base, &value);
+	if (rv & KSTRTOX_OVERFLOW)
+		return -ERANGE;
+	if (rv == 0)
+		return -EINVAL;
+
+	s += rv;
+	switch (*s) {
+	case 'K':
+	case 'k':
+		if (!(suffixes & MEMPARSE_SUFFIX_K))
+			break;
+		shift = 10;
+		break;
+	case 'M':
+	case 'm':
+		if (!(suffixes & MEMPARSE_SUFFIX_M))
+			break;
+		shift = 20;
+		break;
+	case 'G':
+	case 'g':
+		if (!(suffixes & MEMPARSE_SUFFIX_G))
+			break;
+		shift = 30;
+		break;
+	case 'T':
+	case 't':
+		if (!(suffixes & MEMPARSE_SUFFIX_T))
+			break;
+		shift = 40;
+		break;
+	case 'P':
+	case 'p':
+		if (!(suffixes & MEMPARSE_SUFFIX_P))
+			break;
+		shift = 50;
+		break;
+	case 'E':
+	case 'e':
+		if (!(suffixes & MEMPARSE_SUFFIX_E))
+			break;
+		shift = 60;
+		break;
+	}
+	if (shift) {
+		s++;
+		if (value >> (64 - shift))
+			return -ERANGE;
+		value <<= shift;
+	}
+	*res = value;
+	if (retptr)
+		*retptr = (char *)s;
+	return 0;
+}
+EXPORT_SYMBOL(memparse_safe);
+
+/**
  * kstrtoull - convert a string to an unsigned long long
  * @s: The start of the string. The string must be null-terminated, and may also
  *  include a single newline before its terminating null. The first character
