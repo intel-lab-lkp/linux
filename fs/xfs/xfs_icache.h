@@ -57,11 +57,10 @@ long xfs_reclaim_inodes_nr(struct xfs_mount *mp, unsigned long nr_to_scan);
 
 void xfs_inode_mark_reclaimable(struct xfs_inode *ip);
 
-int xfs_blockgc_free_dquots(struct xfs_mount *mp, struct xfs_dquot *udqp,
-		struct xfs_dquot *gdqp, struct xfs_dquot *pdqp,
-		unsigned int iwalk_flags);
-int xfs_blockgc_free_quota(struct xfs_inode *ip, unsigned int iwalk_flags);
 int xfs_blockgc_free_space(struct xfs_mount *mp, struct xfs_icwalk *icm);
+void xfs_blockgc_nospace_flush(struct xfs_mount *mp, struct xfs_dquot *udqp,
+			struct xfs_dquot *gdqp, struct xfs_dquot *pdqp,
+			unsigned int iwalk_flags, int what);
 int xfs_blockgc_flush_all(struct xfs_mount *mp);
 
 void xfs_inode_set_eofblocks_tag(struct xfs_inode *ip);

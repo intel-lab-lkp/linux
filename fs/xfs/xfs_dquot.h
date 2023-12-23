@@ -183,6 +183,19 @@ xfs_dquot_is_enforced(
 	return false;
 }
 
+static inline bool
+xfs_dquot_is_enospc(
+	struct xfs_dquot	*dqp)
+{
+	if (!dqp)
+		return false;
+	if (!xfs_dquot_is_enforced(dqp))
+		return false;
+	if (dqp->q_blk.hardlimit - dqp->q_blk.reserved > 0)
+		return false;
+	return true;
+}
+
 /*
  * Check whether a dquot is under low free space conditions. We assume the quota
  * is enabled and enforced.

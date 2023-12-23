@@ -25,6 +25,8 @@
 #include "xfs_bit.h"
 #include "xfs_alloc.h"
 #include "xfs_quota.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 #include "xfs_reflink.h"
 #include "xfs_iomap.h"
 #include "xfs_ag.h"
