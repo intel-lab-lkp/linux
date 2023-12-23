@@ -1259,6 +1259,8 @@ struct usb_driver {
  *	device.  If it is, probe returns zero and uses dev_set_drvdata()
  *	to associate driver-specific data with the device.  If unwilling
  *	to manage the device, return a negative errno value.
+ * @choose_configuration: Called from usb_choose_configuration, allows the
+ *	driver to override the default configuration.
  * @disconnect: Called when the device is no longer accessible, usually
  *	because it has been (or is being) disconnected or the driver's
  *	module is being unloaded.
@@ -1283,6 +1285,7 @@ struct usb_device_driver {
 
 	bool (*match) (struct usb_device *udev);
 	int (*probe) (struct usb_device *udev);
+	int (*choose_configuration) (struct usb_device *udev);
 	void (*disconnect) (struct usb_device *udev);
 
 	int (*suspend) (struct usb_device *udev, pm_message_t message);
