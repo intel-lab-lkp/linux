@@ -257,12 +257,19 @@ static int get_port_device_capability(struct pci_dev *dev)
 	}
 
 	/*
+	 * _OSC AER Control is required by the OS & requires OS to control AER,
+	 * but _OSC DPC Control isn't required by the OS to control DPC; however
+	 * it does require the OS to control DPC. _OSC DPC Control also requres
+	 * _OSC EDR Control (Error Disconnect Recovery) (PCI Firmware - DPC ECN rev3.2)
+	 * PCI_Express_Base 6.1, 6.2.11 Determination of DPC Control recommends
+	 * platform fw or OS always link control of DPC to AER.
+	 *
 	 * With dpc-native, allow Linux to use DPC even if it doesn't have
 	 * permission to use AER.
 	 */
 	if (pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DPC) &&
-	    pci_aer_available() &&
-	    (pcie_ports_dpc_native || (services & PCIE_PORT_SERVICE_AER)))
+	    pci_aer_available() && (pcie_ports_dpc_native ||
+	    (dev->aer_cap && host->native_aer)))
 		services |= PCIE_PORT_SERVICE_DPC;
 
 	if (pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM ||
