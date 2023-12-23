@@ -190,7 +190,6 @@ static int __init pt_pmu_hw_init(void)
 	struct attribute **attrs;
 	size_t size;
 	u64 reg;
-	int ret;
 	long i;
 
 	rdmsrl(MSR_PLATFORM_INFO, reg);
@@ -242,11 +241,10 @@ static int __init pt_pmu_hw_init(void)
 			    &pt_pmu.caps[CPUID_EDX + i*PT_CPUID_REGS_NUM]);
 	}
 
-	ret = -ENOMEM;
 	size = sizeof(struct attribute *) * (ARRAY_SIZE(pt_caps)+1);
 	attrs = kzalloc(size, GFP_KERNEL);
 	if (!attrs)
-		goto fail;
+		return -ENOMEM;
 
 	size = sizeof(struct dev_ext_attribute) * (ARRAY_SIZE(pt_caps)+1);
 	de_attrs = kzalloc(size, GFP_KERNEL);
@@ -273,8 +271,7 @@ static int __init pt_pmu_hw_init(void)
 
 fail:
 	kfree(attrs);
-
-	return ret;
+	return -ENOMEM;
 }
 
 #define RTIT_CTL_CYC_PSB (RTIT_CTL_CYCLEACC	| \
