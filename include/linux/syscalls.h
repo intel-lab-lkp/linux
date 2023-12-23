@@ -74,6 +74,7 @@ struct landlock_ruleset_attr;
 enum landlock_rule_type;
 struct cachestat_range;
 struct cachestat;
+struct mpol_args;
 
 #include <linux/types.h>
 #include <linux/aio_abi.h>
