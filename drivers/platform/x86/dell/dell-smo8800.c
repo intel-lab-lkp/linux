@@ -10,6 +10,7 @@
  */
 
 #define DRIVER_NAME "smo8800"
+#define LIS3_WHO_AM_I 0x0f
 
 #include <linux/device/bus.h>
 #include <linux/dmi.h>
@@ -23,6 +24,10 @@
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
+
+static bool use_misc_lis3lv02d;
+module_param(use_misc_lis3lv02d, bool, 0444);
+MODULE_PARM_DESC(use_misc_lis3lv02d, "Use /dev/freefall chardev + evdev joystick emulation instead of iio accel driver");
 
 struct smo8800_device {
 	u32 irq;                     /* acpi device irq */
@@ -142,6 +147,65 @@ static int smo8800_find_i801(struct device *dev, void *data)
 }
 
 /*
+ * Set label to let iio-sensor-proxy know these freefall sensors are located in
+ * the laptop base (not the display) and are not intended for screen rotation.
+ */
+static const struct property_entry smo8800_accel_props[] = {
+	PROPERTY_ENTRY_STRING("label", "accel-base"),
+	{}
+};
+
+const struct software_node smo8800_accel_node = {
+	.properties = smo8800_accel_props,
+};
+
+static int smo8800_detect_accel(struct smo8800_device *smo8800,
+				struct i2c_adapter *adap, u8 addr,
+				struct i2c_board_info *info)
+{
+	union i2c_smbus_data smbus_data;
+	const char *type;
+	int err;
+
+	err = i2c_smbus_xfer(adap, addr, 0, I2C_SMBUS_READ, LIS3_WHO_AM_I,
+			     I2C_SMBUS_BYTE_DATA, &smbus_data);
+	if (err < 0) {
+		dev_warn(smo8800->dev, "Failed to read who-am-i register: %d\n", err);
+		return err;
+	}
+
+	/*
+	 * These who-am-i register mappings to model strings have been
+	 * taken from the old /dev/freefall chardev and joystick driver:
+	 * drivers/misc/lis3lv02d/lis3lv02d.c
+	 */
+	switch (smbus_data.byte) {
+	case 0x32:
+		type = "lis331dlh";
+		break;
+	case 0x33:
+		type = "lis2de12"; /* LIS3DC / HP3DC in drivers/misc/lis3lv02d/lis3lv02d.c */
+		break;
+	case 0x3a:
+		type = "lis3lv02dl_accel";
+		break;
+	case 0x3b:
+		type = "lis302dl";
+		break;
+	default:
+		dev_warn(smo8800->dev, "Unknown who-am-i register value 0x%02x\n",
+			 smbus_data.byte);
+		return -ENODEV;
+	}
+
+	strscpy(info->type, type, I2C_NAME_SIZE);
+	info->addr = addr;
+	info->irq = smo8800->irq;
+	info->swnode = &smo8800_accel_node;
+	return 0;
+}
+
+/*
  * Accelerometer's I2C address is not specified in DMI nor ACPI,
  * so it is needed to define mapping table based on DMI product names.
  */
@@ -174,7 +238,7 @@ static void smo8800_instantiate_i2c_client(struct smo8800_device *smo8800)
 	struct i2c_adapter *adap = NULL;
 	const char *dmi_product_name;
 	u8 addr = 0;
-	int i;
+	int i, err;
 
 	bus_for_each_dev(&i2c_bus_type, NULL, &adap, smo8800_find_i801);
 	if (!adap)
@@ -195,9 +259,19 @@ static void smo8800_instantiate_i2c_client(struct smo8800_device *smo8800)
 		goto put_adapter;
 	}
 
-	info.addr = addr;
-	info.irq = smo8800->irq;
-	strscpy(info.type, "lis3lv02d", I2C_NAME_SIZE);
+	/* Always detect the accel-type, this also checks the accel is actually there */
+	err = smo8800_detect_accel(smo8800, adap, addr, &info);
+	if (err)
+		goto put_adapter;
+
+	/*
+	 * If requested override detected type with "lis3lv02d" i2c_client_id,
+	 * for the old drivers/misc/lis3lv02d/lis3lv02d.c driver.
+	 */
+	if (use_misc_lis3lv02d) {
+		strscpy(info.type, "lis3lv02d", I2C_NAME_SIZE);
+		info.swnode = NULL;
+	}
 
 	smo8800->i2c_dev = i2c_new_client_device(adap, &info);
 	if (IS_ERR(smo8800->i2c_dev)) {
