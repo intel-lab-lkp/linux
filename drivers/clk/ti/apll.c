@@ -177,17 +177,22 @@ cleanup:
 
 static void __init of_dra7_apll_setup(struct device_node *node)
 {
-	struct dpll_data *ad = NULL;
-	struct clk_hw_omap *clk_hw = NULL;
-	struct clk_init_data *init = NULL;
-	const char **parent_names = NULL;
+	struct dpll_data *ad;
+	struct clk_hw_omap *clk_hw;
+	struct clk_init_data *init = kzalloc(sizeof(*init), GFP_KERNEL);
+	const char **parent_names;
 	int ret;
 
-	ad = kzalloc(sizeof(*ad), GFP_KERNEL);
+	if (!init)
+		return;
+
 	clk_hw = kzalloc(sizeof(*clk_hw), GFP_KERNEL);
-	init = kzalloc(sizeof(*init), GFP_KERNEL);
-	if (!ad || !clk_hw || !init)
-		goto cleanup;
+	if (!clk_hw)
+		goto free_init;
+
+	ad = kzalloc(sizeof(*ad), GFP_KERNEL);
+	if (!ad)
+		goto free_clk_hw;
 
 	clk_hw->dpll_data = ad;
 	clk_hw->hw.init = init;
@@ -198,12 +203,12 @@ static void __init of_dra7_apll_setup(struct device_node *node)
 	init->num_parents = of_clk_get_parent_count(node);
 	if (init->num_parents < 1) {
 		pr_err("dra7 apll %pOFn must have parent(s)\n", node);
-		goto cleanup;
+		goto free_ad;
 	}
 
 	parent_names = kcalloc(init->num_parents, sizeof(char *), GFP_KERNEL);
 	if (!parent_names)
-		goto cleanup;
+		goto free_ad;
 
 	of_clk_parent_fill(node, parent_names, init->num_parents);
 
@@ -223,8 +228,11 @@ static void __init of_dra7_apll_setup(struct device_node *node)
 
 cleanup:
 	kfree(parent_names);
+free_ad:
 	kfree(ad);
+free_clk_hw:
 	kfree(clk_hw);
+free_init:
 	kfree(init);
 }
 CLK_OF_DECLARE(dra7_apll_clock, "ti,dra7-apll-clock", of_dra7_apll_setup);
