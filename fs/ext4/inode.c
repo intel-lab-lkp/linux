@@ -4944,8 +4944,12 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		inode->i_fop = &ext4_file_operations;
 		ext4_set_aops(inode);
 	} else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ext4_dir_inode_operations;
-		inode->i_fop = &ext4_dir_operations;
+		if (ino == EXT4_BOOT_LOADER_INO)
+			make_bad_inode(inode);
+		else {
+			inode->i_op = &ext4_dir_inode_operations;
+			inode->i_fop = &ext4_dir_operations;
+		}
 	} else if (S_ISLNK(inode->i_mode)) {
 		/* VFS does not allow setting these so must be corruption */
 		if (IS_APPEND(inode) || IS_IMMUTABLE(inode)) {
