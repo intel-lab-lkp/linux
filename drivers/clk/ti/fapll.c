@@ -546,11 +546,11 @@ static void __init ti_fapll_setup(struct device_node *node)
 				   MAX_FAPLL_OUTPUTS + 1,
 				   GFP_KERNEL);
 	if (!fd->outputs.clks)
-		goto free;
+		goto free_fd;
 
 	init = kzalloc(sizeof(*init), GFP_KERNEL);
 	if (!init)
-		goto free;
+		goto free_clks;
 
 	init->ops = &ti_fapll_ops;
 	name = ti_dt_clk_name(node);
@@ -559,7 +559,7 @@ static void __init ti_fapll_setup(struct device_node *node)
 	init->num_parents = of_clk_get_parent_count(node);
 	if (init->num_parents != 2) {
 		pr_err("%pOFn must have two parents\n", node);
-		goto free;
+		goto free_init;
 	}
 
 	of_clk_parent_fill(node, parent_name, 2);
@@ -568,19 +568,19 @@ static void __init ti_fapll_setup(struct device_node *node)
 	fd->clk_ref = of_clk_get(node, 0);
 	if (IS_ERR(fd->clk_ref)) {
 		pr_err("%pOFn could not get clk_ref\n", node);
-		goto free;
+		goto free_init;
 	}
 
 	fd->clk_bypass = of_clk_get(node, 1);
 	if (IS_ERR(fd->clk_bypass)) {
 		pr_err("%pOFn could not get clk_bypass\n", node);
-		goto free;
+		goto put_clk_ref;
 	}
 
 	fd->base = of_iomap(node, 0);
 	if (!fd->base) {
 		pr_err("%pOFn could not get IO base\n", node);
-		goto free;
+		goto put_clk_bypass;
 	}
 
 	if (fapll_is_ddr_pll(fd->base))
@@ -653,14 +653,16 @@ static void __init ti_fapll_setup(struct device_node *node)
 
 unmap:
 	iounmap(fd->base);
-free:
-	if (fd->clk_bypass)
-		clk_put(fd->clk_bypass);
-	if (fd->clk_ref)
-		clk_put(fd->clk_ref);
-	kfree(fd->outputs.clks);
-	kfree(fd);
+put_clk_bypass:
+	clk_put(fd->clk_bypass);
+put_clk_ref:
+	clk_put(fd->clk_ref);
+free_init:
 	kfree(init);
+free_clks:
+	kfree(fd->outputs.clks);
+free_fd:
+	kfree(fd);
 }
 
 CLK_OF_DECLARE(ti_fapll_clock, "ti,dm816-fapll-clock", ti_fapll_setup);
