@@ -182,7 +182,7 @@ static void of_mux_clk_setup(struct device_node *node)
 	}
 	parent_names = kzalloc((sizeof(char *) * num_parents), GFP_KERNEL);
 	if (!parent_names)
-		goto cleanup;
+		return;
 
 	of_clk_parent_fill(node, parent_names, num_parents);
 
