@@ -291,7 +291,7 @@ _ti_clkctrl_clk_register(struct omap_clkctrl_provider *provider,
 	struct clk_init_data init = { NULL };
 	struct clk *clk;
 	struct omap_clkctrl_clk *clkctrl_clk;
-	int ret = 0;
+	int ret;
 
 	init.name = clkctrl_get_clock_name(node, clkctrl_name, offset, bit,
 					   ti_clk_get_features()->flags &
