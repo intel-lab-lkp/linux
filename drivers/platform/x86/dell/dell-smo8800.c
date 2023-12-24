@@ -10,6 +10,7 @@
 
 #define DRIVER_NAME "smo8800"
 
+#include <linux/dmi.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -107,6 +108,9 @@ static int smo8800_probe(struct platform_device *device)
 {
 	int err;
 	struct smo8800_device *smo8800;
+
+	if (!dmi_match(DMI_SYS_VENDOR, "Dell Inc."))
+		return false;
 
 	smo8800 = devm_kzalloc(&device->dev, sizeof(*smo8800), GFP_KERNEL);
 	if (!smo8800) {
