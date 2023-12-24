@@ -375,11 +375,8 @@ static int mpr_probe(struct i2c_client *client)
 				"honeywell,transfer-function %d invalid\n",
 								data->function);
 	} else {
-		/* when loaded as i2c device we need to use default values */
-		dev_notice(dev, "firmware node not found; using defaults\n");
-		data->pmin = 0;
-		data->pmax = 172369; /* 25 psi */
-		data->function = MPR_FUNCTION_A;
+		return dev_err_probe(dev, -EINVAL,
+				  "driver needs to be initialized in the dt\n");
 	}
 
 	data->outmin = mpr_func_spec[data->function].output_min;
