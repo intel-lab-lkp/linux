@@ -338,21 +338,25 @@ static const struct clk_hw_omap_ops omap2_apll_hwops = {
 
 static void __init of_omap2_apll_setup(struct device_node *node)
 {
-	struct dpll_data *ad = NULL;
-	struct clk_hw_omap *clk_hw = NULL;
-	struct clk_init_data *init = NULL;
+	struct dpll_data *ad;
+	struct clk_hw_omap *clk_hw;
+	struct clk_init_data *init = kzalloc(sizeof(*init), GFP_KERNEL);
 	const char *name;
 	struct clk *clk;
 	const char *parent_name;
 	u32 val;
 	int ret;
 
-	ad = kzalloc(sizeof(*ad), GFP_KERNEL);
-	clk_hw = kzalloc(sizeof(*clk_hw), GFP_KERNEL);
-	init = kzalloc(sizeof(*init), GFP_KERNEL);
+	if (!init)
+		return;
 
-	if (!ad || !clk_hw || !init)
-		goto cleanup;
+	clk_hw = kzalloc(sizeof(*clk_hw), GFP_KERNEL);
+	if (!clk_hw)
+		goto free_init;
+
+	ad = kzalloc(sizeof(*ad), GFP_KERNEL);
+	if (!ad)
+		goto free_clk_hw;
 
 	clk_hw->dpll_data = ad;
 	clk_hw->hw.init = init;
@@ -403,12 +407,13 @@ static void __init of_omap2_apll_setup(struct device_node *node)
 	clk = of_ti_clk_register_omap_hw(node, &clk_hw->hw, name);
 	if (!IS_ERR(clk)) {
 		of_clk_add_provider(node, of_clk_src_simple_get, clk);
-		kfree(init);
-		return;
+		goto free_init;
 	}
 cleanup:
 	kfree(ad);
+free_clk_hw:
 	kfree(clk_hw);
+free_init:
 	kfree(init);
 }
 CLK_OF_DECLARE(omap2_apll_clock, "ti,omap2-apll-clock",
