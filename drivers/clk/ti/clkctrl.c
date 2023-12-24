@@ -590,10 +590,9 @@ static void __init _ti_omap4_clkctrl_setup(struct device_node *node)
 	if (clkctrl_name) {
 		provider->clkdm_name = kasprintf(GFP_KERNEL,
 						 "%s_clkdm", clkctrl_name);
-		if (!provider->clkdm_name) {
-			kfree(provider);
-			return;
-		}
+		if (!provider->clkdm_name)
+			goto free_provider;
+
 		goto clkdm_found;
 	}
 
@@ -603,10 +602,8 @@ static void __init _ti_omap4_clkctrl_setup(struct device_node *node)
 	 */
 	if (legacy_naming) {
 		provider->clkdm_name = kasprintf(GFP_KERNEL, "%pOFnxxx", node->parent);
-		if (!provider->clkdm_name) {
-			kfree(provider);
-			return;
-		}
+		if (!provider->clkdm_name)
+			goto free_provider;
 
 		/*
 		 * Create default clkdm name, replace _cm from end of parent
@@ -615,10 +612,8 @@ static void __init _ti_omap4_clkctrl_setup(struct device_node *node)
 		provider->clkdm_name[strlen(provider->clkdm_name) - 2] = 0;
 	} else {
 		provider->clkdm_name = kasprintf(GFP_KERNEL, "%pOFn", node);
-		if (!provider->clkdm_name) {
-			kfree(provider);
-			return;
-		}
+		if (!provider->clkdm_name)
+			goto free_provider;
 
 		/*
 		 * Create default clkdm name, replace _clkctrl from end of
@@ -708,6 +703,10 @@ clkdm_found:
 
 	kfree(clkctrl_name);
 
+	return;
+
+free_provider:
+	kfree(provider);
 	return;
 
 cleanup:
