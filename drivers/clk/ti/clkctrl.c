@@ -681,11 +681,11 @@ clkdm_found:
 						   reg_data->offset, 0,
 						   legacy_naming);
 		if (!init.name)
-			goto cleanup;
+			goto free_clkctrl_name;
 
 		clkctrl_clk = kzalloc(sizeof(*clkctrl_clk), GFP_KERNEL);
 		if (!clkctrl_clk)
-			goto cleanup;
+			goto free_init_name;
 
 		init.ops = &omap4_clkctrl_clk_ops;
 		hw->hw.init = &init;
@@ -711,10 +711,12 @@ clkdm_found:
 	return;
 
 cleanup:
-	kfree(hw);
-	kfree(init.name);
-	kfree(clkctrl_name);
 	kfree(clkctrl_clk);
+free_init_name:
+	kfree(init.name);
+free_clkctrl_name:
+	kfree(clkctrl_name);
+	kfree(hw);
 }
 CLK_OF_DECLARE(ti_omap4_clkctrl_clock, "ti,clkctrl",
 	       _ti_omap4_clkctrl_setup);
