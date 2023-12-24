@@ -163,16 +163,15 @@ static void __init omap_clk_register_apll(void *user,
 	clk = of_ti_clk_register_omap_hw(node, &clk_hw->hw, name);
 	if (!IS_ERR(clk)) {
 		of_clk_add_provider(node, of_clk_src_simple_get, clk);
-		kfree(init->parent_names);
-		kfree(init);
-		return;
+		goto free_names;
 	}
 
 cleanup:
 	kfree(clk_hw->dpll_data);
+	kfree(clk_hw);
+free_names:
 	kfree(init->parent_names);
 	kfree(init);
-	kfree(clk_hw);
 }
 
 static void __init of_dra7_apll_setup(struct device_node *node)
