@@ -1714,7 +1714,7 @@ static void __init stm32f4_rcc_init(struct device_node *np)
 	clks = kmalloc_array(data->gates_num + stm32fx_end_primary_clk,
 			sizeof(*clks), GFP_KERNEL);
 	if (!clks)
-		goto fail;
+		goto unmap_io;
 
 	stm32f4_gate_map = data->gates_map;
 
@@ -1897,6 +1897,7 @@ static void __init stm32f4_rcc_init(struct device_node *np)
 	return;
 fail:
 	kfree(clks);
+unmap_io:
 	iounmap(base);
 }
 CLK_OF_DECLARE_DRIVER(stm32f42xx_rcc, "st,stm32f42xx-rcc", stm32f4_rcc_init);
