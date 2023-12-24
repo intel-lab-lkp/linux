@@ -504,7 +504,7 @@ static struct clk * __init ti_fapll_synth_setup(struct fapll_data *fd,
 
 	synth = kzalloc(sizeof(*synth), GFP_KERNEL);
 	if (!synth)
-		goto free;
+		goto free_init;
 
 	synth->fd = fd;
 	synth->index = index;
@@ -524,6 +524,7 @@ static struct clk * __init ti_fapll_synth_setup(struct fapll_data *fd,
 
 free:
 	kfree(synth);
+free_init:
 	kfree(init);
 
 	return clk;
