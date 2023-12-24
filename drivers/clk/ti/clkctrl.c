@@ -296,11 +296,13 @@ _ti_clkctrl_clk_register(struct omap_clkctrl_provider *provider,
 	init.name = clkctrl_get_clock_name(node, clkctrl_name, offset, bit,
 					   ti_clk_get_features()->flags &
 					   TI_CLK_CLKCTRL_COMPAT);
+	if (!init.name)
+		return -ENOMEM;
 
 	clkctrl_clk = kzalloc(sizeof(*clkctrl_clk), GFP_KERNEL);
-	if (!init.name || !clkctrl_clk) {
+	if (!clkctrl_clk) {
 		ret = -ENOMEM;
-		goto cleanup;
+		goto free_init_name;
 	}
 
 	clk_hw->init = &init;
@@ -324,8 +326,9 @@ _ti_clkctrl_clk_register(struct omap_clkctrl_provider *provider,
 	return 0;
 
 cleanup:
-	kfree(init.name);
 	kfree(clkctrl_clk);
+free_init_name;
+	kfree(init.name);
 	return ret;
 }
 
