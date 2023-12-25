@@ -30,7 +30,7 @@ struct loongson_system_configuration {
 	int boot_cpu_id;
 	int cores_per_node;
 	int cores_per_package;
-	unsigned long cores_io_master;
+	unsigned long cores_io_master[4];
 	unsigned long suspend_addr;
 	const char *cpuname;
 };
@@ -42,7 +42,7 @@ extern struct loongson_system_configuration loongson_sysconf;
 
 static inline bool io_master(int cpu)
 {
-	return test_bit(cpu, &loongson_sysconf.cores_io_master);
+	return test_bit(cpu, loongson_sysconf.cores_io_master);
 }
 
 #endif /* _ASM_BOOTINFO_H */
