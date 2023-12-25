@@ -4263,7 +4263,7 @@ static bool instance_has_memory(struct amd64_pvt *pvt)
 
 static int probe_one_instance(unsigned int nid)
 {
-	struct pci_dev *F3 = node_to_amd_nb(nid)->misc;
+	struct pci_dev *F3;
 	struct amd64_pvt *pvt;
 	struct ecc_settings *s;
 	int ret;
@@ -4281,6 +4281,7 @@ static int probe_one_instance(unsigned int nid)
 	}
 
 	pvt->mc_node_id	= nid;
+	F3 = node_to_amd_nb(nid)->misc;
 	pvt->F3 = F3;
 
 	ret = per_family_init(pvt);
