@@ -4406,10 +4406,7 @@ static int __init amd64_edac_init(void)
 	if (owner && strncmp(owner, EDAC_MOD_STR, sizeof(EDAC_MOD_STR)))
 		return -EBUSY;
 
-	if (!x86_match_cpu(amd64_cpuids))
-		return -ENODEV;
-
-	if (!amd_nb_num())
+	if (!x86_match_cpu(amd64_cpuids) || !amd_nb_num())
 		return -ENODEV;
 
 	opstate_init();
