@@ -2366,7 +2366,7 @@ int do_sock_getsockopt(struct socket *sock, bool compat, int level,
 	} else if (unlikely(!ops->getsockopt)) {
 		err = -EOPNOTSUPP;
 	} else {
-		if (WARN_ONCE(optval.is_kernel || optlen.is_kernel,
+		if (WARN_ONCE(sockptr_is_kernel(optval) || sockptr_is_kernel(optlen),
 			      "Invalid argument type"))
 			return -EOPNOTSUPP;
 

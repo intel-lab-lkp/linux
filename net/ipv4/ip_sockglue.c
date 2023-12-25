@@ -1646,7 +1646,7 @@ int do_ip_getsockopt(struct sock *sk, int level, int optname,
 		if (sk->sk_type != SOCK_STREAM)
 			return -ENOPROTOOPT;
 
-		if (optval.is_kernel) {
+		if (sockptr_is_kernel(optval)) {
 			msg.msg_control_is_user = false;
 			msg.msg_control = optval.kernel;
 		} else {
