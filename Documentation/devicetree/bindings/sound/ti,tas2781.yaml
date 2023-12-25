@@ -5,36 +5,72 @@
 $id: http://devicetree.org/schemas/sound/ti,tas2781.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Texas Instruments TAS2781 SmartAMP
+title: Texas Instruments TAS2781/TAS2563 SmartAMP
 
 maintainers:
   - Shenghao Ding <shenghao-ding@ti.com>
 
 description:
-  The TAS2781 is a mono, digital input Class-D audio amplifier
-  optimized for efficiently driving high peak power into small
-  loudspeakers. An integrated on-chip DSP supports Texas Instruments
-  Smart Amp speaker protection algorithm. The integrated speaker
-  voltage and current sense provides for real time
+  The TAS2781/TAS2563 is a mono, digital input Class-D audio
+  amplifier optimized for efficiently driving high peak power into
+  small loudspeakers. An integrated on-chip DSP supports Texas
+  Instruments Smart Amp speaker protection algorithm. The
+  integrated speaker voltage and current sense provides for real time
   monitoring of loudspeaker behavior.
 
 allOf:
   - $ref: dai-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,tas2781
+    then:
+      properties:
+        reg:
+          description:
+            I2C address, in multiple AMP case, all the i2c address
+            aggregate as one Audio Device to support multiple audio slots.
+          maxItems: 8
+          minItems: 1
+          items:
+            minimum: 0x38
+            maximum: 0x3f
+    else:
+      properties:
+        reg:
+          description:
+            I2C address, in multiple AMP case, all the i2c address
+            aggregate as one Audio Device to support multiple audio slots.
+          maxItems: 4
+          minItems: 1
+          items:
+            minimum: 0x4c
+            maximum: 0x4f
 
 properties:
   compatible:
+    description: |
+      ti,tas2781: 24-V Class-D Amplifier with Real Time Integrated Speaker
+      Protection and Audio Processing, 16/20/24/32bit stereo I2S or
+      multichannel TDM.
+
+      ti,tas2563: 6.1-W Boosted Class-D Audio Amplifier With Integrated
+      DSP and IV Sense, 16/20/24/32bit stereo I2S or multichannel TDM.
     enum:
       - ti,tas2781
+      - ti,tas2563
+      # Tas781 driver can support both tas2563 and tas2781, because the
+      # hardware part in the driver code, such as register setting and DSP
+      # firmware, all these are stored in the binary firmware. What drivder
+      # dooes is to parse the firmware and download it to the tas2781 or
+      # tas2563, then control tas2781 or tas2563 to power on/off or switch
+      # different dsp params. So, tas2781 driver can be resued as tas2563
+      # driver. Only attention will be paid to downloading corresponding
+      # firmware.
 
-  reg:
-    description:
-      I2C address, in multiple tas2781s case, all the i2c address
-      aggregate as one Audio Device to support multiple audio slots.
-    maxItems: 8
-    minItems: 1
-    items:
-      minimum: 0x38
-      maximum: 0x3f
+  reg: true
 
   reset-gpios:
     maxItems: 1
