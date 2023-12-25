@@ -93,7 +93,7 @@ int bpf_check_uarg_tail_zero(bpfptr_t uaddr,
 	if (actual_size <= expected_size)
 		return 0;
 
-	if (uaddr.is_kernel)
+	if (bpfptr_is_kernel(uaddr))
 		res = memchr_inv(uaddr.kernel + expected_size, 0,
 				 actual_size - expected_size) == NULL;
 	else
@@ -1509,8 +1509,8 @@ err_put:
 
 static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 {
-	bpfptr_t ukey = make_bpfptr(attr->key, uattr.is_kernel);
-	bpfptr_t uvalue = make_bpfptr(attr->value, uattr.is_kernel);
+	bpfptr_t ukey = make_bpfptr(attr->key, bpfptr_is_kernel(uattr));
+	bpfptr_t uvalue = make_bpfptr(attr->value, bpfptr_is_kernel(uattr));
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
 	void *key, *value;
@@ -1567,7 +1567,7 @@ err_put:
 
 static int map_delete_elem(union bpf_attr *attr, bpfptr_t uattr)
 {
-	bpfptr_t ukey = make_bpfptr(attr->key, uattr.is_kernel);
+	bpfptr_t ukey = make_bpfptr(attr->key, bpfptr_is_kernel(uattr));
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
 	struct fd f;
@@ -2707,12 +2707,12 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 
 	err = -EFAULT;
 	if (copy_from_bpfptr(prog->insns,
-			     make_bpfptr(attr->insns, uattr.is_kernel),
+			     make_bpfptr(attr->insns, bpfptr_is_kernel(uattr)),
 			     bpf_prog_insn_size(prog)) != 0)
 		goto free_prog_sec;
 	/* copy eBPF program license from user space */
 	if (strncpy_from_bpfptr(license,
-				make_bpfptr(attr->license, uattr.is_kernel),
+				make_bpfptr(attr->license, bpfptr_is_kernel(uattr)),
 				sizeof(license) - 1) < 0)
 		goto free_prog_sec;
 	license[sizeof(license) - 1] = 0;

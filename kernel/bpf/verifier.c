@@ -15603,7 +15603,7 @@ static int check_btf_func_early(struct bpf_verifier_env *env,
 	prog = env->prog;
 	btf = prog->aux->btf;
 
-	urecord = make_bpfptr(attr->func_info, uattr.is_kernel);
+	urecord = make_bpfptr(attr->func_info, bpfptr_is_kernel(uattr));
 	min_size = min_t(u32, krec_size, urec_size);
 
 	krecord = kvcalloc(nfuncs, krec_size, GFP_KERNEL | __GFP_NOWARN);
@@ -15703,7 +15703,7 @@ static int check_btf_func(struct bpf_verifier_env *env,
 	prog = env->prog;
 	btf = prog->aux->btf;
 
-	urecord = make_bpfptr(attr->func_info, uattr.is_kernel);
+	urecord = make_bpfptr(attr->func_info, bpfptr_is_kernel(uattr));
 
 	krecord = prog->aux->func_info;
 	info_aux = kcalloc(nfuncs, sizeof(*info_aux), GFP_KERNEL | __GFP_NOWARN);
@@ -15801,7 +15801,7 @@ static int check_btf_line(struct bpf_verifier_env *env,
 
 	s = 0;
 	sub = env->subprog_info;
-	ulinfo = make_bpfptr(attr->line_info, uattr.is_kernel);
+	ulinfo = make_bpfptr(attr->line_info, bpfptr_is_kernel(uattr));
 	expected_size = sizeof(struct bpf_line_info);
 	ncopy = min_t(u32, expected_size, rec_size);
 	for (i = 0; i < nr_linfo; i++) {
@@ -15919,7 +15919,7 @@ static int check_core_relo(struct bpf_verifier_env *env,
 	    rec_size % sizeof(u32))
 		return -EINVAL;
 
-	u_core_relo = make_bpfptr(attr->core_relos, uattr.is_kernel);
+	u_core_relo = make_bpfptr(attr->core_relos, bpfptr_is_kernel(uattr));
 	expected_size = sizeof(struct bpf_core_relo);
 	ncopy = min_t(u32, expected_size, rec_size);
 
@@ -20593,7 +20593,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 		env->insn_aux_data[i].orig_idx = i;
 	env->prog = *prog;
 	env->ops = bpf_verifier_ops[env->prog->type];
-	env->fd_array = make_bpfptr(attr->fd_array, uattr.is_kernel);
+	env->fd_array = make_bpfptr(attr->fd_array, bpfptr_is_kernel(uattr));
 	is_priv = bpf_capable();
 
 	bpf_get_btf_vmlinux();

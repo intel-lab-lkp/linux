@@ -520,7 +520,7 @@ int bpf_iter_link_attach(const union bpf_attr *attr, bpfptr_t uattr,
 
 	memset(&linfo, 0, sizeof(union bpf_iter_link_info));
 
-	ulinfo = make_bpfptr(attr->link_create.iter_info, uattr.is_kernel);
+	ulinfo = make_bpfptr(attr->link_create.iter_info, bpfptr_is_kernel(uattr));
 	linfo_len = attr->link_create.iter_info_len;
 	if (bpfptr_is_null(ulinfo) ^ !linfo_len)
 		return -EINVAL;

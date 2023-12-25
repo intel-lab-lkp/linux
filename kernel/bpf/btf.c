@@ -5480,7 +5480,7 @@ static int finalize_log(struct bpf_verifier_log *log, bpfptr_t uattr, u32 uattr_
 
 static struct btf *btf_parse(const union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 {
-	bpfptr_t btf_data = make_bpfptr(attr->btf, uattr.is_kernel);
+	bpfptr_t btf_data = make_bpfptr(attr->btf, bpfptr_is_kernel(uattr));
 	char __user *log_ubuf = u64_to_user_ptr(attr->btf_log_buf);
 	struct btf_struct_metas *struct_meta_tab;
 	struct btf_verifier_env *env = NULL;
