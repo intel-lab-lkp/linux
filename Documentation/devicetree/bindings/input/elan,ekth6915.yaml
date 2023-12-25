@@ -20,6 +20,7 @@ properties:
   compatible:
     items:
       - const: elan,ekth6915
+      - const: ilitek,ili2901
 
   reg:
     const: 0x10
