@@ -37,9 +37,12 @@
 
 #define IPQ_PHY_SET_DELAY_US	100000
 
+/* Maximum SOC PCS(uniphy) number on IPQ platform */
+#define ETH_LDO_RDY_CNT				3
+
 struct ipq4019_mdio_data {
-	void __iomem	*membase;
-	void __iomem *eth_ldo_rdy;
+	void __iomem *membase;
+	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
 	struct clk *mdio_clk;
 };
 
@@ -206,18 +209,7 @@ static int ipq4019_mdio_write_c22(struct mii_bus *bus, int mii_id, int regnum,
 static int ipq_mdio_reset(struct mii_bus *bus)
 {
 	struct ipq4019_mdio_data *priv = bus->priv;
-	u32 val;
 	int ret;
-
-	/* To indicate CMN_PLL that ethernet_ldo has been ready if platform resource 1
-	 * is specified in the device tree.
-	 */
-	if (priv->eth_ldo_rdy) {
-		val = readl(priv->eth_ldo_rdy);
-		val |= BIT(0);
-		writel(val, priv->eth_ldo_rdy);
-		fsleep(IPQ_PHY_SET_DELAY_US);
-	}
 
 	/* Configure MDIO clock source frequency if clock is specified in the device tree */
 	ret = clk_set_rate(priv->mdio_clk, IPQ_MDIO_CLK_RATE);
@@ -236,7 +228,7 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 	struct ipq4019_mdio_data *priv;
 	struct mii_bus *bus;
 	struct resource *res;
-	int ret;
+	int ret, index;
 
 	bus = devm_mdiobus_alloc_size(&pdev->dev, sizeof(*priv));
 	if (!bus)
@@ -252,11 +244,32 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->mdio_clk))
 		return PTR_ERR(priv->mdio_clk);
 
-	/* The platform resource is provided on the chipset IPQ5018 */
-	/* This resource is optional */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res)
-		priv->eth_ldo_rdy = devm_ioremap_resource(&pdev->dev, res);
+	/* These platform resources are provided on the chipset IPQ5018 or
+	 * IPQ5332.
+	 */
+	/* This resource are optional */
+	for (index = 0; index < ETH_LDO_RDY_CNT; index++) {
+		res = platform_get_resource(pdev, IORESOURCE_MEM, index + 1);
+		if (res) {
+			priv->eth_ldo_rdy[index] = devm_ioremap(&pdev->dev,
+								res->start,
+								resource_size(res));
+
+			/* The ethernet LDO enable is necessary to reset PHY
+			 * by GPIO, some PHY(such as qca8084) GPIO reset uses
+			 * the MDIO level reset, so this function should be
+			 * called before the MDIO bus register.
+			 */
+			if (priv->eth_ldo_rdy[index]) {
+				u32 val;
+
+				val = readl(priv->eth_ldo_rdy[index]);
+				val |= BIT(0);
+				writel(val, priv->eth_ldo_rdy[index]);
+				fsleep(IPQ_PHY_SET_DELAY_US);
+			}
+		}
+	}
 
 	bus->name = "ipq4019_mdio";
 	bus->read = ipq4019_mdio_read_c22;
