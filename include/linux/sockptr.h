@@ -12,21 +12,18 @@
 #include <linux/uaccess.h>
 
 typedef struct {
-	union {
-		void		*kernel;
-		void __user	*user;
-	};
-	bool		is_kernel : 1;
+	void		*kernel;
+	void __user	*user;
 } sockptr_t;
 
 static inline bool sockptr_is_kernel(sockptr_t sockptr)
 {
-	return sockptr.is_kernel;
+	return !!sockptr.kernel;
 }
 
 static inline sockptr_t KERNEL_SOCKPTR(void *p)
 {
-	return (sockptr_t) { .kernel = p, .is_kernel = true };
+	return (sockptr_t) { .kernel = p };
 }
 
 static inline sockptr_t USER_SOCKPTR(void __user *p)
@@ -36,9 +33,7 @@ static inline sockptr_t USER_SOCKPTR(void __user *p)
 
 static inline bool sockptr_is_null(sockptr_t sockptr)
 {
-	if (sockptr_is_kernel(sockptr))
-		return !sockptr.kernel;
-	return !sockptr.user;
+	return !sockptr.user && !sockptr.kernel;
 }
 
 static inline int copy_from_sockptr_offset(void *dst, sockptr_t src,
