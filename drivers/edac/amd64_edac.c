@@ -4268,13 +4268,13 @@ static int probe_one_instance(unsigned int nid)
 	struct ecc_settings *s;
 	int ret;
 
-	s = kzalloc(sizeof(struct ecc_settings), GFP_KERNEL);
+	s = kzalloc(sizeof(*s), GFP_KERNEL);
 	if (!s)
 		return -ENOMEM;
 
 	ecc_stngs[nid] = s;
 
-	pvt = kzalloc(sizeof(struct amd64_pvt), GFP_KERNEL);
+	pvt = kzalloc(sizeof(*pvt), GFP_KERNEL);
 	if (!pvt) {
 		ret = -ENOMEM;
 		goto err_settings;
