@@ -4414,14 +4414,15 @@ static int __init amd64_edac_init(void)
 
 	opstate_init();
 
-	err = -ENOMEM;
 	ecc_stngs = kcalloc(amd_nb_num(), sizeof(ecc_stngs[0]), GFP_KERNEL);
 	if (!ecc_stngs)
-		goto err_free;
+		return -ENOMEM;
 
 	msrs = msrs_alloc();
-	if (!msrs)
+	if (!msrs) {
+		err = -ENOMEM;
 		goto err_free;
+	}
 
 	for (i = 0; i < amd_nb_num(); i++) {
 		err = probe_one_instance(i);
