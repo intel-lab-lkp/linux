@@ -2623,7 +2623,7 @@ __latent_entropy struct task_struct *copy_process(
 	 * Make it visible to the rest of the system, but dont wake it up yet.
 	 * Need tasklist lock for parent etc handling!
 	 */
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 
 	/* CLONE_PARENT re-uses the old parent */
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD)) {
@@ -2714,7 +2714,7 @@ __latent_entropy struct task_struct *copy_process(
 	hlist_del_init(&delayed.node);
 	spin_unlock(&current->sighand->siglock);
 	syscall_tracepoint_update(p);
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 
 	if (pidfile)
 		fd_install(pidfd, pidfile);
@@ -2735,7 +2735,7 @@ __latent_entropy struct task_struct *copy_process(
 bad_fork_cancel_cgroup:
 	sched_core_free(p);
 	spin_unlock(&current->sighand->siglock);
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 	cgroup_cancel_fork(p, args);
 bad_fork_put_pidfd:
 	if (clone_flags & CLONE_PIDFD) {

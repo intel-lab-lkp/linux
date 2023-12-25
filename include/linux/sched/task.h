@@ -50,6 +50,35 @@ struct kernel_clone_args {
  * a separate lock).
  */
 extern rwlock_t tasklist_lock;
+
+/*
+ * Tasklist_lock is a special lock, it takes a good amount of time of
+ * taskslist_lock readers to finish, and the pure write_irq_lock api
+ * will do local_irq_disable at the very first, and put the current cpu
+ * waiting for the lock while is non-responsive for interrupts.
+ *
+ * The current taskslist_lock writers all have write_lock_irq to hold
+ * tasklist_lock, and write_unlock_irq to release tasklist_lock, that
+ * means the writers are not suitable or workable to wait on
+ * tasklist_lock in irq disabled scenarios. So the write lock/unlock
+ * wrapper here only follow the current design of directly use
+ * local_irq_disable and local_irq_enable.
+ */
+static inline void write_lock_tasklist_lock(void)
+{
+	while (1) {
+		local_irq_disable();
+		if (write_trylock(&tasklist_lock))
+			break;
+		local_irq_enable();
+		cpu_relax();
+	}
+}
+static inline void write_unlock_tasklist_lock(void)
+{
+	write_unlock_irq(&tasklist_lock);
+}
+
 extern spinlock_t mmlist_lock;
 
 extern union thread_union init_thread_union;

@@ -435,7 +435,7 @@ static int ptrace_attach(struct task_struct *task, long request,
 	if (retval)
 		goto unlock_creds;
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	retval = -EPERM;
 	if (unlikely(task->exit_state))
 		goto unlock_tasklist;
@@ -479,7 +479,7 @@ static int ptrace_attach(struct task_struct *task, long request,
 
 	retval = 0;
 unlock_tasklist:
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 unlock_creds:
 	mutex_unlock(&task->signal->cred_guard_mutex);
 out:
@@ -508,7 +508,7 @@ static int ptrace_traceme(void)
 {
 	int ret = -EPERM;
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	/* Are we already being traced? */
 	if (!current->ptrace) {
 		ret = security_ptrace_traceme(current->parent);
@@ -522,7 +522,7 @@ static int ptrace_traceme(void)
 			ptrace_link(current, current->real_parent);
 		}
 	}
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 
 	return ret;
 }
@@ -588,7 +588,7 @@ static int ptrace_detach(struct task_struct *child, unsigned int data)
 	/* Architecture-specific hardware disable .. */
 	ptrace_disable(child);
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	/*
 	 * We rely on ptrace_freeze_traced(). It can't be killed and
 	 * untraced by another thread, it can't be a zombie.
@@ -600,7 +600,7 @@ static int ptrace_detach(struct task_struct *child, unsigned int data)
 	 */
 	child->exit_code = data;
 	__ptrace_detach(current, child);
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 
 	proc_ptrace_connector(child, PTRACE_DETACH);
 

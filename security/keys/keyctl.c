@@ -1652,7 +1652,7 @@ long keyctl_session_to_parent(void)
 
 	me = current;
 	rcu_read_lock();
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 
 	ret = -EPERM;
 	oldwork = NULL;
@@ -1702,7 +1702,7 @@ long keyctl_session_to_parent(void)
 	if (!ret)
 		newwork = NULL;
 unlock:
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 	rcu_read_unlock();
 	if (oldwork)
 		put_cred(container_of(oldwork, struct cred, rcu));

@@ -251,7 +251,7 @@ repeat:
 
 	cgroup_release(p);
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	ptrace_release_task(p);
 	thread_pid = get_pid(p->thread_pid);
 	__exit_signal(p);
@@ -275,7 +275,7 @@ repeat:
 			leader->exit_state = EXIT_DEAD;
 	}
 
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 	seccomp_filter_release(p);
 	proc_flush_pid(thread_pid);
 	put_pid(thread_pid);
@@ -598,7 +598,7 @@ static struct task_struct *find_child_reaper(struct task_struct *father,
 		return reaper;
 	}
 
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 
 	list_for_each_entry_safe(p, n, dead, ptrace_entry) {
 		list_del_init(&p->ptrace_entry);
@@ -606,7 +606,7 @@ static struct task_struct *find_child_reaper(struct task_struct *father,
 	}
 
 	zap_pid_ns_processes(pid_ns);
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 
 	return father;
 }
@@ -730,7 +730,7 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 	struct task_struct *p, *n;
 	LIST_HEAD(dead);
 
-	write_lock_irq(&tasklist_lock);
+	write_lock_tasklist_lock();
 	forget_original_parent(tsk, &dead);
 
 	if (group_dead)
@@ -758,7 +758,7 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 	/* mt-exec, de_thread() is waiting for group leader */
 	if (unlikely(tsk->signal->notify_count < 0))
 		wake_up_process(tsk->signal->group_exec_task);
-	write_unlock_irq(&tasklist_lock);
+	write_unlock_tasklist_lock();
 
 	list_for_each_entry_safe(p, n, &dead, ptrace_entry) {
 		list_del_init(&p->ptrace_entry);
@@ -1172,7 +1172,7 @@ static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
 	wo->wo_stat = status;
 
 	if (state == EXIT_TRACE) {
-		write_lock_irq(&tasklist_lock);
+		write_lock_tasklist_lock();
 		/* We dropped tasklist, ptracer could die and untrace */
 		ptrace_unlink(p);
 
@@ -1181,7 +1181,7 @@ static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
 		if (do_notify_parent(p, p->exit_signal))
 			state = EXIT_DEAD;
 		p->exit_state = state;
-		write_unlock_irq(&tasklist_lock);
+		write_unlock_tasklist_lock();
 	}
 	if (state == EXIT_DEAD)
 		release_task(p);
