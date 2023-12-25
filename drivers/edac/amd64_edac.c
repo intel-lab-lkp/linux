@@ -4264,7 +4264,7 @@ static bool instance_has_memory(struct amd64_pvt *pvt)
 static int probe_one_instance(unsigned int nid)
 {
 	struct pci_dev *F3 = node_to_amd_nb(nid)->misc;
-	struct amd64_pvt *pvt = NULL;
+	struct amd64_pvt *pvt;
 	struct ecc_settings *s;
 	int ret;
 
