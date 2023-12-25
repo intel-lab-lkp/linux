@@ -4396,7 +4396,7 @@ MODULE_DEVICE_TABLE(x86cpu, amd64_cpuids);
 static int __init amd64_edac_init(void)
 {
 	const char *owner;
-	int err = -ENODEV;
+	int err;
 	int i;
 
 	if (ghes_get_devices())
