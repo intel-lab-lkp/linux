@@ -18,8 +18,10 @@ properties:
 
       - items:
           - enum:
+              - qcom,ipq5332-mdio
               - qcom,ipq6018-mdio
               - qcom,ipq8074-mdio
+              - qcom,ipq9574-mdio
           - const: qcom,ipq4019-mdio
 
   "#address-cells":
@@ -30,19 +32,76 @@ properties:
 
   reg:
     minItems: 1
-    maxItems: 2
-    description:
-      the first Address and length of the register set for the MDIO controller.
-      the second Address and length of the register for ethernet LDO, this second
-      address range is only required by the platform IPQ50xx.
+    maxItems: 5
+    description: |
+      The first address and length of the register set for the MDIO controller,
+      the optional second address and length of the register is for CMN block,
+      the optional third, fourth and fifth address and length of the register
+      for Ethernet LDO, the optional Ethernet LDO address range is required by
+      the platform IPQ50xx/IPQ5332.
+
+  reg-names:
+    minItems: 1
+    items:
+      - const: mdio
+      - const: cmn_blk
+      - const: eth_ldo1
+      - const: eth_ldo2
+      - const: eth_ldo3
 
   clocks:
+    minItems: 1
     items:
       - description: MDIO clock source frequency fixed to 100MHZ
+      - description: UNIPHY0 AHB clock source frequency fixed to 100MHZ
+      - description: UNIPHY1 AHB clock source frequency fixed to 100MHZ
+      - description: UNIPHY0 SYS clock source frequency fixed to 24MHZ
+      - description: UNIPHY1 SYS clock source frequency fixed to 24MHZ
 
   clock-names:
+    minItems: 1
     items:
       - const: gcc_mdio_ahb_clk
+      - const: uniphy0_ahb
+      - const: uniphy1_ahb
+      - const: uniphy0_sys
+      - const: uniphy1_sys
+
+  qcom,cmn-ref-clock-frequency:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 25000000
+      - 31250000
+      - 40000000
+      - 48000000
+      - 50000000
+      - 96000000
+    default: 48000000
+    description: |
+      The reference clock source of CMN PLL block is selectable, the
+      reference clock source can be from wifi module or the external
+      xtal, the reference clock frequency 48MHZ can be from internal
+      wifi or the external xtal, if absent, the internal 48MHZ is used,
+      if the 48MHZ is specified, which means the external 48Mhz is used.
+
+  clock-frequency:
+    enum:
+      - 390625
+      - 781250
+      - 1562500
+      - 3125000
+      - 6250000
+      - 12500000
+    default: 390625
+    description: |
+      The MDIO bus clock that must be output by the MDIO bus hardware,
+      only the listed frequencies above can be supported, other frequency
+      will cause malfunction. If absent, the default hardware value 0xff
+      is used, which means the default MDIO clock frequency 390625HZ, The
+      MDIO clock frequency is MDIO_SYS_CLK/(MDIO_CLK_DIV + 1), the SoC
+      MDIO_SYS_CLK is fixed to 100MHZ, the MDIO_CLK_DIV is from MDIO control
+      register, there is higher clock frequency requirement on the normal
+      working case where the MDIO slave devices support high clock frequency.
 
 required:
   - compatible
@@ -59,8 +118,10 @@ allOf:
           contains:
             enum:
               - qcom,ipq5018-mdio
+              - qcom,ipq5332-mdio
               - qcom,ipq6018-mdio
               - qcom,ipq8074-mdio
+              - qcom,ipq9574-mdio
     then:
       required:
         - clocks
@@ -69,6 +130,20 @@ allOf:
       properties:
         clocks: false
         clock-names: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,ipq5332-mdio
+    then:
+      properties:
+        clocks:
+          minItems: 5
+          maxItems: 5
+        reg-names:
+          minItems: 4
 
 unevaluatedProperties: false
 
@@ -97,6 +172,62 @@ examples:
       };
 
       ethphy4: ethernet-phy@4 {
+        reg = <4>;
+      };
+    };
+
+  - |
+    #include <dt-bindings/clock/qcom,ipq5332-gcc.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    mdio@90000 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      compatible = "qcom,ipq5332-mdio",
+                   "qcom,ipq4019-mdio";
+
+      reg = <0x90000 0x64>,
+            <0x9b000 0x800>,
+            <0x7a00610 0x4>,
+            <0x7a10610 0x4>;
+
+      reg-names = "mdio",
+                  "cmn_blk",
+                  "eth_ldo1",
+                  "eth_ldo2";
+
+      clocks = <&gcc GCC_MDIO_AHB_CLK>,
+               <&gcc GCC_UNIPHY0_AHB_CLK>,
+               <&gcc GCC_UNIPHY1_AHB_CLK>,
+               <&gcc GCC_UNIPHY0_SYS_CLK>,
+               <&gcc GCC_UNIPHY1_SYS_CLK>;
+
+      clock-names = "gcc_mdio_ahb_clk",
+                    "uniphy0_ahb",
+                    "uniphy1_ahb",
+                    "uniphy0_sys",
+                    "uniphy1_sys";
+
+      clock-frequency = <6250000>;
+      reset-gpios = <&tlmm 51 GPIO_ACTIVE_LOW>;
+
+      qca8kphy0: ethernet-phy@1 {
+        compatible = "ethernet-phy-id004d.d180";
+        reg = <1>;
+      };
+
+      qca8kphy1: ethernet-phy@2 {
+        compatible = "ethernet-phy-id004d.d180";
+        reg = <2>;
+      };
+
+      qca8kphy2: ethernet-phy@3 {
+        compatible = "ethernet-phy-id004d.d180";
+        reg = <3>;
+      };
+
+      qca8kphy3: ethernet-phy@4 {
+        compatible = "ethernet-phy-id004d.d180";
         reg = <4>;
       };
     };
