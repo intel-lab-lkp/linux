@@ -333,7 +333,7 @@ static struct timb_dma_desc *td_alloc_init_desc(struct timb_dma_chan *td_chan)
 
 	td_desc->desc_list = kzalloc(td_desc->desc_list_len, GFP_KERNEL);
 	if (!td_desc->desc_list)
-		goto err;
+		goto free_td_desc;
 
 	dma_async_tx_descriptor_init(&td_desc->txd, chan);
 	td_desc->txd.tx_submit = td_tx_submit;
@@ -351,6 +351,7 @@ static struct timb_dma_desc *td_alloc_init_desc(struct timb_dma_chan *td_chan)
 	return td_desc;
 err:
 	kfree(td_desc->desc_list);
+free_td_desc:
 	kfree(td_desc);
 	return NULL;
 
