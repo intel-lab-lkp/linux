@@ -10,17 +10,17 @@ typedef sockptr_t bpfptr_t;
 
 static inline bool bpfptr_is_kernel(bpfptr_t bpfptr)
 {
-	return bpfptr.is_kernel;
+	return sockptr_is_kernel(bpfptr);
 }
 
 static inline bpfptr_t KERNEL_BPFPTR(void *p)
 {
-	return (bpfptr_t) { .kernel = p, .is_kernel = true };
+	return KERNEL_SOCKPTR(p);
 }
 
 static inline bpfptr_t USER_BPFPTR(void __user *p)
 {
-	return (bpfptr_t) { .user = p };
+	return USER_SOCKPTR(p);
 }
 
 static inline bpfptr_t make_bpfptr(u64 addr, bool is_kernel)
@@ -33,9 +33,7 @@ static inline bpfptr_t make_bpfptr(u64 addr, bool is_kernel)
 
 static inline bool bpfptr_is_null(bpfptr_t bpfptr)
 {
-	if (bpfptr_is_kernel(bpfptr))
-		return !bpfptr.kernel;
-	return !bpfptr.user;
+	return sockptr_is_null(bpfptr);
 }
 
 static inline void bpfptr_add(bpfptr_t *bpfptr, size_t val)
