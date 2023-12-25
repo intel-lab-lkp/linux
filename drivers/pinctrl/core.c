@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) "pinctrl core: " fmt
 
 #include <linux/array_size.h>
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -1066,6 +1067,7 @@ static struct pinctrl *create_pinctrl(struct device *dev,
 	p->dev = dev;
 	INIT_LIST_HEAD(&p->states);
 	INIT_LIST_HEAD(&p->dt_maps);
+	spin_lock_init(&p->lock);
 
 	ret = pinctrl_dt_to_map(p, pctldev);
 	if (ret < 0) {
@@ -1262,93 +1264,95 @@ static void pinctrl_link_add(struct pinctrl_dev *pctldev,
 static int pinctrl_commit_state(struct pinctrl *p, struct pinctrl_state *state)
 {
 	struct pinctrl_setting *setting, *setting2;
-	struct pinctrl_state *old_state = READ_ONCE(p->state);
+	struct pinctrl_state *old_state;
 	int ret;
 
-	if (old_state) {
-		/*
-		 * For each pinmux setting in the old state, forget SW's record
-		 * of mux owner for that pingroup. Any pingroups which are
-		 * still owned by the new state will be re-acquired by the call
-		 * to pinmux_enable_setting() in the loop below.
-		 */
-		list_for_each_entry(setting, &old_state->settings, node) {
-			if (setting->type != PIN_MAP_TYPE_MUX_GROUP)
-				continue;
-			pinmux_disable_setting(setting);
-		}
-	}
-
-	p->state = NULL;
-
-	/* Apply all the settings for the new state - pinmux first */
-	list_for_each_entry(setting, &state->settings, node) {
-		switch (setting->type) {
-		case PIN_MAP_TYPE_MUX_GROUP:
-			ret = pinmux_enable_setting(setting);
-			break;
-		case PIN_MAP_TYPE_CONFIGS_PIN:
-		case PIN_MAP_TYPE_CONFIGS_GROUP:
-			ret = 0;
-			break;
-		default:
-			ret = -EINVAL;
-			break;
+	scoped_guard(spinlock_irqsave, &p->lock) {
+		old_state = p->state;
+		if (old_state) {
+			/*
+			 * For each pinmux setting in the old state, forget SW's record
+			 * of mux owner for that pingroup. Any pingroups which are
+			 * still owned by the new state will be re-acquired by the call
+			 * to pinmux_enable_setting() in the loop below.
+			 */
+			list_for_each_entry(setting, &old_state->settings, node) {
+				if (setting->type != PIN_MAP_TYPE_MUX_GROUP)
+					continue;
+				pinmux_disable_setting(setting);
+			}
 		}
 
-		if (ret < 0)
-			goto unapply_new_state;
+		p->state = NULL;
 
-		/* Do not link hogs (circular dependency) */
-		if (p != setting->pctldev->p)
-			pinctrl_link_add(setting->pctldev, p->dev);
-	}
+		/* Apply all the settings for the new state - pinmux first */
+		list_for_each_entry(setting, &state->settings, node) {
+			switch (setting->type) {
+			case PIN_MAP_TYPE_MUX_GROUP:
+				ret = pinmux_enable_setting(setting);
+				break;
+			case PIN_MAP_TYPE_CONFIGS_PIN:
+			case PIN_MAP_TYPE_CONFIGS_GROUP:
+				ret = 0;
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
 
-	/* Apply all the settings for the new state - pinconf after */
-	list_for_each_entry(setting, &state->settings, node) {
-		switch (setting->type) {
-		case PIN_MAP_TYPE_MUX_GROUP:
-			ret = 0;
-			break;
-		case PIN_MAP_TYPE_CONFIGS_PIN:
-		case PIN_MAP_TYPE_CONFIGS_GROUP:
-			ret = pinconf_apply_setting(setting);
-			break;
-		default:
-			ret = -EINVAL;
-			break;
+			if (ret < 0)
+				goto unapply_new_state;
+
+			/* Do not link hogs (circular dependency) */
+			if (p != setting->pctldev->p)
+				pinctrl_link_add(setting->pctldev, p->dev);
 		}
 
-		if (ret < 0) {
-			goto unapply_new_state;
+		/* Apply all the settings for the new state - pinconf after */
+		list_for_each_entry(setting, &state->settings, node) {
+			switch (setting->type) {
+			case PIN_MAP_TYPE_MUX_GROUP:
+				ret = 0;
+				break;
+			case PIN_MAP_TYPE_CONFIGS_PIN:
+			case PIN_MAP_TYPE_CONFIGS_GROUP:
+				ret = pinconf_apply_setting(setting);
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
+
+			if (ret < 0)
+				goto unapply_new_state;
+
+			/* Do not link hogs (circular dependency) */
+			if (p != setting->pctldev->p)
+				pinctrl_link_add(setting->pctldev, p->dev);
 		}
 
-		/* Do not link hogs (circular dependency) */
-		if (p != setting->pctldev->p)
-			pinctrl_link_add(setting->pctldev, p->dev);
-	}
+		p->state = state;
 
-	p->state = state;
-
-	return 0;
+		return 0;
 
 unapply_new_state:
-	dev_err(p->dev, "Error applying setting, reverse things back\n");
 
-	list_for_each_entry(setting2, &state->settings, node) {
-		if (&setting2->node == &setting->node)
-			break;
-		/*
-		 * All we can do here is pinmux_disable_setting.
-		 * That means that some pins are muxed differently now
-		 * than they were before applying the setting (We can't
-		 * "unmux a pin"!), but it's not a big deal since the pins
-		 * are free to be muxed by another apply_setting.
-		 */
-		if (setting2->type == PIN_MAP_TYPE_MUX_GROUP)
-			pinmux_disable_setting(setting2);
+		list_for_each_entry(setting2, &state->settings, node) {
+			if (&setting2->node == &setting->node)
+				break;
+			/*
+			 * All we can do here is pinmux_disable_setting.
+			 * That means that some pins are muxed differently now
+			 * than they were before applying the setting (We can't
+			 * "unmux a pin"!), but it's not a big deal since the pins
+			 * are free to be muxed by another apply_setting.
+			 */
+			if (setting2->type == PIN_MAP_TYPE_MUX_GROUP)
+				pinmux_disable_setting(setting2);
+		}
 	}
 
+	dev_err(p->dev, "Error applying setting, reverse things back\n");
 	/* There's no infinite recursive loop here because p->state is NULL */
 	if (old_state)
 		pinctrl_select_state(p, old_state);
