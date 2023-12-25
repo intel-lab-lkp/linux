@@ -5835,6 +5835,7 @@ _base_release_memory_pools(struct MPT3SAS_ADAPTER *ioc)
 		}
 		dma_pool_destroy(ioc->reply_post_free_array_dma_pool);
 		kfree(ioc->reply_post);
+		ioc->reply_post = NULL;
 	}
 
 	if (ioc->pcie_sgl_dma_pool) {
@@ -5845,6 +5846,7 @@ _base_release_memory_pools(struct MPT3SAS_ADAPTER *ioc)
 			ioc->pcie_sg_lookup[i].pcie_sgl = NULL;
 		}
 		dma_pool_destroy(ioc->pcie_sgl_dma_pool);
+		ioc->pcie_sgl_dma_pool = NULL;
 	}
 	kfree(ioc->pcie_sg_lookup);
 	ioc->pcie_sg_lookup = NULL;
@@ -5855,6 +5857,7 @@ _base_release_memory_pools(struct MPT3SAS_ADAPTER *ioc)
 				     ioc->config_page));
 		dma_free_coherent(&ioc->pdev->dev, ioc->config_page_sz,
 		    ioc->config_page, ioc->config_page_dma);
+		ioc->config_page = NULL;
 	}
 
 	kfree(ioc->hpr_lookup);
