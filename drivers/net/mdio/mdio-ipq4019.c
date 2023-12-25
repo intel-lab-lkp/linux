@@ -29,6 +29,9 @@
 /* 0 = Clause 22, 1 = Clause 45 */
 #define MDIO_MODE_C45				BIT(8)
 
+/* MDC frequency is SYS_CLK/(MDIO_CLK_DIV + 1), SYS_CLK is 100MHz */
+#define MDIO_CLK_DIV_MASK			GENMASK(7, 0)
+
 #define IPQ4019_MDIO_TIMEOUT	10000
 #define IPQ4019_MDIO_SLEEP		10
 
@@ -69,6 +72,7 @@ struct ipq4019_mdio_data {
 	void __iomem *cmn_membase;
 	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
 	struct clk *clk[MDIO_CLK_CNT];
+	int clk_div;
 };
 
 static const char *const mdio_clk_name[] = {
@@ -102,6 +106,7 @@ static int ipq4019_mdio_read_c45(struct mii_bus *bus, int mii_id, int mmd,
 	data = readl(priv->membase + MDIO_MODE_REG);
 
 	data |= MDIO_MODE_C45;
+	data |= FIELD_PREP(MDIO_CLK_DIV_MASK, priv->clk_div);
 
 	writel(data, priv->membase + MDIO_MODE_REG);
 
@@ -143,6 +148,7 @@ static int ipq4019_mdio_read_c22(struct mii_bus *bus, int mii_id, int regnum)
 	data = readl(priv->membase + MDIO_MODE_REG);
 
 	data &= ~MDIO_MODE_C45;
+	data |= FIELD_PREP(MDIO_CLK_DIV_MASK, priv->clk_div);
 
 	writel(data, priv->membase + MDIO_MODE_REG);
 
@@ -175,6 +181,7 @@ static int ipq4019_mdio_write_c45(struct mii_bus *bus, int mii_id, int mmd,
 	data = readl(priv->membase + MDIO_MODE_REG);
 
 	data |= MDIO_MODE_C45;
+	data |= FIELD_PREP(MDIO_CLK_DIV_MASK, priv->clk_div);
 
 	writel(data, priv->membase + MDIO_MODE_REG);
 
@@ -218,6 +225,7 @@ static int ipq4019_mdio_write_c22(struct mii_bus *bus, int mii_id, int regnum,
 	data = readl(priv->membase + MDIO_MODE_REG);
 
 	data &= ~MDIO_MODE_C45;
+	data |= FIELD_PREP(MDIO_CLK_DIV_MASK, priv->clk_div);
 
 	writel(data, priv->membase + MDIO_MODE_REG);
 
@@ -389,6 +397,39 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	return ret;
 }
 
+static int ipq_mdio_clk_set(struct platform_device *pdev, int *clk_div)
+{
+	int freq;
+
+	/* Keep the MDIO clock divider as the hardware default value 0xff if
+	 * the MDIO property "clock-frequency" is not specified.
+	 */
+	if (of_property_read_u32(pdev->dev.of_node, "clock-frequency", &freq)) {
+		*clk_div = 0xff;
+		return 0;
+	}
+
+	/* MDC frequency is SYS_CLK/(MDIO_CLK_DIV + 1), SYS_CLK is fixed
+	 * to 100MHz, the MDIO_CLK_DIV can be only configured the valid
+	 * values, other values cause malfunction.
+	 */
+	switch (freq) {
+	case 390625:
+	case 781250:
+	case 1562500:
+	case 3125000:
+	case 6250000:
+	case 12500000:
+		*clk_div = DIV_ROUND_UP(IPQ_MDIO_CLK_RATE, freq) - 1;
+		break;
+	default:
+		dev_err(&pdev->dev, "Invalid clock frequency %dHZ\n", freq);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int ipq4019_mdio_probe(struct platform_device *pdev)
 {
 	struct ipq4019_mdio_data *priv;
@@ -450,6 +491,10 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 		if (IS_ERR(priv->clk[index]))
 			return PTR_ERR(priv->clk[index]);
 	}
+
+	ret = ipq_mdio_clk_set(pdev, &priv->clk_div);
+	if (ret)
+		return ret;
 
 	bus->name = "ipq4019_mdio";
 	bus->read = ipq4019_mdio_read_c22;
