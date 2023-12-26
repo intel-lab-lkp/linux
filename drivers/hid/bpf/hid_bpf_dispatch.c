@@ -118,17 +118,17 @@ u8 *call_hid_bpf_rdesc_fixup(struct hid_device *hdev, u8 *rdesc, unsigned int *s
 
 	ctx_kern.data = kzalloc(ctx_kern.ctx.allocated_size, GFP_KERNEL);
 	if (!ctx_kern.data)
-		goto ignore_bpf;
+		goto dup_mem;
 
 	memcpy(ctx_kern.data, rdesc, min_t(unsigned int, *size, HID_MAX_DESCRIPTOR_SIZE));
 
 	ret = hid_bpf_prog_run(hdev, HID_BPF_PROG_TYPE_RDESC_FIXUP, &ctx_kern);
 	if (ret < 0)
-		goto ignore_bpf;
+		goto free_data;
 
 	if (ret) {
 		if (ret > ctx_kern.ctx.allocated_size)
-			goto ignore_bpf;
+			goto free_data;
 
 		*size = ret;
 	}
@@ -137,8 +137,9 @@ u8 *call_hid_bpf_rdesc_fixup(struct hid_device *hdev, u8 *rdesc, unsigned int *s
 
 	return rdesc;
 
- ignore_bpf:
+free_data:
 	kfree(ctx_kern.data);
+dup_mem:
 	return kmemdup(rdesc, *size, GFP_KERNEL);
 }
 EXPORT_SYMBOL_GPL(call_hid_bpf_rdesc_fixup);
