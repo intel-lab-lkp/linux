@@ -595,6 +595,15 @@ static int enter_state(suspend_state_t state)
  Finish:
 	events_check_enabled = false;
 	pm_pr_dbg("Finishing wakeup.\n");
+
+	/*
+	 * Record last succeeded resume timestamp just before thawing processes.
+	 * This is for helping users to measure user-space resume performance
+	 * for improving their programs or finding regressions.
+	 */
+	if (!error)
+		ktime_get_ts64(&suspend_stats.last_success_resume_time);
+
 	suspend_finish();
  Unlock:
 	mutex_unlock(&system_transition_mutex);
