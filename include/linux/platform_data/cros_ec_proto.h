@@ -100,6 +100,7 @@ struct cros_ec_command {
  * @proto_version: The protocol version used for this device.
  * @priv: Private data.
  * @irq: Interrupt to use.
+ * @irq_wake: Whether or not irq assertion should wake the system.
  * @id: Device id.
  * @din: Input buffer (for data from EC). This buffer will always be
  *       dword-aligned and include enough space for up to 7 word-alignment
@@ -115,7 +116,6 @@ struct cros_ec_command {
  *        performance advantage to using dword.
  * @din_size: Size of din buffer to allocate (zero to use static din).
  * @dout_size: Size of dout buffer to allocate (zero to use static dout).
- * @wake_enabled: True if this device can wake the system from sleep.
  * @suspended: True if this device had been suspended.
  * @cmd_xfer: Send command to EC and get response.
  *            Returns the number of bytes received if the communication
@@ -169,11 +169,11 @@ struct cros_ec_device {
 	u16 proto_version;
 	void *priv;
 	int irq;
+	bool irq_wake;
 	u8 *din;
 	u8 *dout;
 	int din_size;
 	int dout_size;
-	bool wake_enabled;
 	bool suspended;
 	int (*cmd_xfer)(struct cros_ec_device *ec,
 			struct cros_ec_command *msg);

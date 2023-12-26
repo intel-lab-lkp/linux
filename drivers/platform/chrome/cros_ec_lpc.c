@@ -48,6 +48,27 @@ struct lpc_driver_ops {
 
 static struct lpc_driver_ops cros_ec_lpc_ops = { };
 
+static const struct dmi_system_id untrusted_fw_irq_wake_capable[] = {
+	{
+		.ident = "Brya",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brya"),
+		},
+	},
+	{
+		.ident = "Brask",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brask"),
+		},
+	},
+	{ }
+};
+
+static bool should_force_irq_wake_capable(void)
+{
+	return dmi_first_match(untrusted_fw_irq_wake_capable);
+}
+
 /*
  * A generic instance of the read function of struct lpc_driver_ops, used for
  * the LPC EC.
@@ -353,6 +374,7 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 	struct acpi_device *adev;
 	acpi_status status;
 	struct cros_ec_device *ec_dev;
+	struct resource irqres;
 	u8 buf[2] = {};
 	int irq, ret;
 
@@ -428,10 +450,14 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 	 * Some boards do not have an IRQ allotted for cros_ec_lpc,
 	 * which makes ENXIO an expected (and safe) scenario.
 	 */
-	irq = platform_get_irq_optional(pdev, 0);
-	if (irq > 0)
+	irq = platform_get_irq_resource_optional(pdev, 0, &irqres);
+	if (irq > 0) {
 		ec_dev->irq = irq;
-	else if (irq != -ENXIO) {
+		if (should_force_irq_wake_capable())
+			ec_dev->irq_wake = true;
+		else
+			ec_dev->irq_wake = irqres.flags & IORESOURCE_IRQ_WAKECAPABLE;
+	} else if (irq != -ENXIO) {
 		dev_err(dev, "couldn't retrieve IRQ number (%d)\n", irq);
 		return irq;
 	}

@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
 
@@ -168,6 +169,35 @@ static int cros_ec_ready_event(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static int enable_irq_for_wake(struct cros_ec_device *ec_dev)
+{
+	struct device *dev = ec_dev->dev;
+	int ret = device_init_wakeup(dev, true);
+
+	if (ret) {
+		dev_err(dev, "Failed to enable device for wakeup");
+		return ret;
+	}
+	ret = dev_pm_set_wake_irq(dev, ec_dev->irq);
+	if (ret)
+		device_init_wakeup(dev, false);
+
+	return ret;
+}
+
+static int disable_irq_for_wake(struct cros_ec_device *ec_dev)
+{
+	int ret;
+	struct device *dev = ec_dev->dev;
+
+	dev_pm_clear_wake_irq(dev);
+	ret = device_init_wakeup(dev, false);
+	if (ret)
+		dev_err(dev, "Failed to disable device for wakeup");
+
+	return ret;
+}
+
 /**
  * cros_ec_register() - Register a new ChromeOS EC, using the provided info.
  * @ec_dev: Device to register.
@@ -220,6 +250,13 @@ int cros_ec_register(struct cros_ec_device *ec_dev)
 			dev_err(dev, "Failed to request IRQ %d: %d\n",
 				ec_dev->irq, err);
 			goto exit;
+		}
+		dev_dbg(dev, "IRQ: %i, wake_capable: %s\n", ec_dev->irq,
+			str_yes_no(ec_dev->irq_wake));
+		if (ec_dev->irq_wake) {
+			err = enable_irq_for_wake(ec_dev);
+			if (err)
+				goto exit;
 		}
 	}
 
@@ -313,6 +350,8 @@ EXPORT_SYMBOL(cros_ec_register);
  */
 void cros_ec_unregister(struct cros_ec_device *ec_dev)
 {
+	if (ec_dev->irq_wake)
+		disable_irq_for_wake(ec_dev);
 	platform_device_unregister(ec_dev->pd);
 	platform_device_unregister(ec_dev->ec);
 	mutex_destroy(&ec_dev->lock);
@@ -353,12 +392,6 @@ EXPORT_SYMBOL(cros_ec_suspend_prepare);
 
 static void cros_ec_disable_irq(struct cros_ec_device *ec_dev)
 {
-	struct device *dev = ec_dev->dev;
-	if (device_may_wakeup(dev))
-		ec_dev->wake_enabled = !enable_irq_wake(ec_dev->irq);
-	else
-		ec_dev->wake_enabled = false;
-
 	disable_irq(ec_dev->irq);
 	ec_dev->suspended = true;
 }
@@ -439,9 +472,6 @@ static void cros_ec_enable_irq(struct cros_ec_device *ec_dev)
 {
 	ec_dev->suspended = false;
 	enable_irq(ec_dev->irq);
-
-	if (ec_dev->wake_enabled)
-		disable_irq_wake(ec_dev->irq);
 
 	/*
 	 * Let the mfd devices know about events that occur during
