@@ -892,14 +892,22 @@ struct nft_offload_ctx;
  *	struct nft_expr_ops - nf_tables expression operations
  *
  *	@eval: Expression evaluation function
+ *	@clone: Expression clone function
  *	@size: full expression size, including private data size
  *	@init: initialization function
  *	@activate: activate expression in the next generation
  *	@deactivate: deactivate expression in next generation
  *	@destroy: destruction function, called after synchronize_rcu
+ *	@destroy_clone: destruction clone function
  *	@dump: function to dump parameters
- *	@type: expression type
  *	@validate: validate expression, called during loop detection
+ *	@reduce: reduce expression
+ *	@gc: garbage collection expression
+ *	@offload: hardware offload expression
+ *	@offload_action: function to report true/false to allocate one slot or not in the flow
+ *			 offload array
+ *	@offload_stats: function to synchronize hardware stats via updating the counter expression
+ *	@type: expression type
  *	@data: extra data to attach to this expression operation
  */
 struct nft_expr_ops {
