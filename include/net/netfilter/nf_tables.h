@@ -1301,11 +1301,13 @@ struct nft_object_hash_key {
  *	struct nft_object - nf_tables stateful object
  *
  *	@list: table stateful object list node
- *	@key:  keys that identify this object
  *	@rhlhead: nft_objname_ht node
+ *	@key: keys that identify this object
  *	@genmask: generation mask
  *	@use: number of references to this stateful object
  *	@handle: unique object handle
+ *	@udlen: length of user data
+ *	@udata: user data
  *	@ops: object operations
  *	@data: object data, layout depends on type
  */
