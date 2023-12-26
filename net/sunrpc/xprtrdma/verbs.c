@@ -55,9 +55,6 @@
 #include <linux/sunrpc/svc_rdma.h>
 #include <linux/log2.h>
 
-#include <asm-generic/barrier.h>
-#include <asm/bitops.h>
-
 #include <rdma/ib_cm.h>
 
 #include "xprt_rdma.h"
