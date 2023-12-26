@@ -701,6 +701,7 @@ extern const struct nft_set_ext_type nft_set_ext_types[];
  *
  *	@len: length of extension area
  *	@offset: offsets of individual extension types
+ *	@ext_len: length of the expected extension(used to sanity check)
  */
 struct nft_set_ext_tmpl {
 	u16	len;
