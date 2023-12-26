@@ -205,6 +205,7 @@ static inline void nft_data_copy(u32 *dst, const struct nft_data *src,
  *	@nla: netlink attributes
  *	@portid: netlink portID of the original message
  *	@seq: netlink sequence number
+ *	@flags: modifiers to new request
  *	@family: protocol family
  *	@level: depth of the chains
  *	@report: notify via unicast netlink message
