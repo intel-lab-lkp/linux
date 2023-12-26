@@ -229,6 +229,9 @@ static int rfcomm_check_security(struct rfcomm_dlc *d)
 		break;
 	}
 
+	if (!conn)
+		return 0;
+
 	return hci_conn_security(conn->hcon, d->sec_level, auth_type,
 				 d->out);
 }
