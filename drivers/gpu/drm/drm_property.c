@@ -116,7 +116,7 @@ struct drm_property *drm_property_create(struct drm_device *dev,
 		property->values = kcalloc(num_values, sizeof(uint64_t),
 					   GFP_KERNEL);
 		if (!property->values)
-			goto fail;
+			goto free_property;
 	}
 
 	ret = drm_mode_object_add(dev, &property->base, DRM_MODE_OBJECT_PROPERTY);
@@ -134,6 +134,7 @@ struct drm_property *drm_property_create(struct drm_device *dev,
 	return property;
 fail:
 	kfree(property->values);
+free_property:
 	kfree(property);
 	return NULL;
 }
