@@ -336,7 +336,7 @@ static int create_gpadl_header(enum hv_gpadl_type type, void *kbuffer,
 			  sizeof(struct gpa_range) + pfncount * sizeof(u64);
 		msgheader =  kzalloc(msgsize, GFP_KERNEL);
 		if (!msgheader)
-			goto nomem;
+			goto free_body;
 
 		INIT_LIST_HEAD(&msgheader->submsglist);
 		msgheader->msgsize = msgsize;
@@ -417,7 +417,7 @@ static int create_gpadl_header(enum hv_gpadl_type type, void *kbuffer,
 			  sizeof(struct gpa_range) + pagecount * sizeof(u64);
 		msgheader = kzalloc(msgsize, GFP_KERNEL);
 		if (msgheader == NULL)
-			goto nomem;
+			goto free_body;
 
 		INIT_LIST_HEAD(&msgheader->submsglist);
 		msgheader->msgsize = msgsize;
@@ -439,6 +439,7 @@ static int create_gpadl_header(enum hv_gpadl_type type, void *kbuffer,
 	return 0;
 nomem:
 	kfree(msgheader);
+free_body:
 	kfree(msgbody);
 	return -ENOMEM;
 }
