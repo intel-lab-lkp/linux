@@ -1475,6 +1475,7 @@ static int ksz9031_get_features(struct phy_device *phydev)
 
 static int ksz9031_read_status(struct phy_device *phydev)
 {
+	u8 timeout = 10;
 	int err;
 	int regval;
 
@@ -1492,6 +1493,22 @@ static int ksz9031_read_status(struct phy_device *phydev)
 		if (phydev->drv->config_intr && phy_interrupt_is_valid(phydev))
 			phydev->drv->config_intr(phydev);
 		return genphy_config_aneg(phydev);
+	}
+
+	/* KSZ9031's autonegotiation takes normally 4-5 seconds to complete.
+	 * Occasionally it fails to complete autonegotiation. The workaround is
+	 * to restart it.
+	 */
+        if (phydev->autoneg == AUTONEG_ENABLE) {
+		while (timeout) {
+			if (phy_aneg_done(phydev))
+				break;
+			mdelay(1000);
+			timeout--;
+		};
+
+		if (timeout == 0)
+			phy_restart_aneg(phydev);
 	}
 
 	return 0;
