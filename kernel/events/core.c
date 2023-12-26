@@ -1924,6 +1924,10 @@ static void perf_event__id_header_size(struct perf_event *event)
 	event->id_header_size = size;
 }
 
+#define read_for_each_sibling_event(sibling, event)		\
+	if ((event)->group_leader == (event))			\
+		list_for_each_entry((sibling), &(event)->sibling_list, sibling_list)
+
 /*
  * Check that adding an event to the group does not result in anybody
  * overflowing the 64k event limit imposed by the output buffer.
@@ -1957,7 +1961,7 @@ static bool perf_event_validate_size(struct perf_event *event)
 	if (event == group_leader)
 		return true;
 
-	for_each_sibling_event(sibling, group_leader) {
+	read_for_each_sibling_event(sibling, group_leader) {
 		if (__perf_event_read_size(sibling->attr.read_format,
 					   group_leader->nr_siblings + 1) > 16*1024)
 			return false;
