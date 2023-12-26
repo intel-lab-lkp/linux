@@ -977,7 +977,7 @@ static int nexio_init(struct usbtouch_usb *usbtouch)
 
 	buf = kmalloc(NEXIO_BUFSIZE, GFP_NOIO);
 	if (!buf)
-		goto out_buf;
+		return ret;
 
 	/* two empty reads */
 	for (i = 0; i < 2; i++) {
