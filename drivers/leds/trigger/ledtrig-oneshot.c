@@ -134,7 +134,7 @@ static void pattern_init(struct led_classdev *led_cdev)
 
 	pattern = led_get_default_pattern(led_cdev, &size);
 	if (!pattern)
-		goto out_default;
+		goto out_settings;
 
 	if (size != 2) {
 		dev_warn(led_cdev->dev,
@@ -151,6 +151,7 @@ static void pattern_init(struct led_classdev *led_cdev)
 
 out_default:
 	kfree(pattern);
+out_settings:
 	led_cdev->blink_delay_on = DEFAULT_DELAY;
 	led_cdev->blink_delay_off = DEFAULT_DELAY;
 }
