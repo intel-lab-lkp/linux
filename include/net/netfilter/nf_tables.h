@@ -424,9 +424,13 @@ struct nft_set_ext;
  *	@remove: remove element from set
  *	@walk: iterate over all set elements
  *	@get: get set elements
+ *	@commit: commit set elements
+ *	@abort: abort set elements
  *	@privsize: function to return size of set private data
+ *	@estimate: estimate the required memory size and the lookup complexity class
  *	@init: initialize private data of new set instance
  *	@destroy: destroy private data of set instance
+ *	@gc_init: initialize garbage collection
  *	@elemsize: element private size
  *
  *	Operations lookup, update and delete have simpler interfaces, are faster
