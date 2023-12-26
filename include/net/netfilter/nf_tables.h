@@ -1373,6 +1373,7 @@ struct nft_object_type {
  *	@destroy: release existing stateful object
  *	@dump: netlink dump stateful object
  *	@update: update stateful object
+ *	@type: pointer to object type
  */
 struct nft_object_ops {
 	void				(*eval)(struct nft_object *obj,
