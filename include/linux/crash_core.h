@@ -89,16 +89,6 @@ void final_note(Elf_Word *buf);
 
 #ifdef CONFIG_ARCH_HAS_GENERIC_CRASHKERNEL_RESERVATION
 #ifndef DEFAULT_CRASH_KERNEL_LOW_SIZE
-#define DEFAULT_CRASH_KERNEL_LOW_SIZE  (128UL << 20)
-#endif
-#endif
-
-int __init parse_crashkernel(char *cmdline, unsigned long long system_ram,
-		unsigned long long *crash_size, unsigned long long *crash_base,
-		unsigned long long *low_size, bool *high);
-
-#ifdef CONFIG_ARCH_HAS_GENERIC_CRASHKERNEL_RESERVATION
-#ifndef DEFAULT_CRASH_KERNEL_LOW_SIZE
 #define DEFAULT_CRASH_KERNEL_LOW_SIZE	(128UL << 20)
 #endif
 #ifndef CRASH_ALIGN
@@ -110,6 +100,10 @@ int __init parse_crashkernel(char *cmdline, unsigned long long system_ram,
 #ifndef CRASH_ADDR_HIGH_MAX
 #define CRASH_ADDR_HIGH_MAX		memblock_end_of_DRAM()
 #endif
+
+int __init parse_crashkernel(char *cmdline, unsigned long long system_ram,
+		unsigned long long *crash_size, unsigned long long *crash_base,
+		unsigned long long *low_size, bool *high);
 
 void __init reserve_crashkernel_generic(char *cmdline,
 		unsigned long long crash_size,
