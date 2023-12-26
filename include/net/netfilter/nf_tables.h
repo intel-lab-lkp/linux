@@ -1409,9 +1409,8 @@ void nft_unregister_obj(struct nft_object_type *obj_type);
  *	@genmask: generation mask
  *	@use: number of references to this flow table
  * 	@handle: unique object handle
- *	@dev_name: array of device names
+ *	@hook_list: hook list for hooks per net_device in flowtables
  *	@data: rhashtable and garbage collector
- * 	@ops: array of hooks
  */
 struct nft_flowtable {
 	struct list_head		list;
