@@ -783,7 +783,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 	int shader_end_ip = 0;
 	uint32_t last_thread_switch_ip = -3;
 	uint32_t ip;
-	struct vc4_validated_shader_info *validated_shader = NULL;
+	struct vc4_validated_shader_info *validated_shader;
 	struct vc4_shader_validation_state validation_state;
 
 	if (WARN_ON_ONCE(vc4->is_vc5))
@@ -799,14 +799,14 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 		kcalloc(BITS_TO_LONGS(validation_state.max_ip),
 			sizeof(unsigned long), GFP_KERNEL);
 	if (!validation_state.branch_targets)
-		goto fail;
+		return NULL;
 
 	validated_shader = kcalloc(1, sizeof(*validated_shader), GFP_KERNEL);
 	if (!validated_shader)
-		goto fail;
+		goto free_targets;
 
 	if (!vc4_validate_branches(&validation_state))
-		goto fail;
+		goto free_shader;
 
 	for (ip = 0; ip < validation_state.max_ip; ip++) {
 		uint64_t inst = validation_state.shader[ip];
@@ -815,7 +815,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 		validation_state.ip = ip;
 
 		if (!vc4_handle_branch_target(&validation_state))
-			goto fail;
+			goto free_offsets;
 
 		if (ip == last_thread_switch_ip + 3) {
 			/* Reset r0-r3 live clamp data */
@@ -842,12 +842,12 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 			if (!check_instruction_writes(validated_shader,
 						      &validation_state)) {
 				DRM_DEBUG("Bad write at ip %d\n", ip);
-				goto fail;
+				goto free_offsets;
 			}
 
 			if (!check_instruction_reads(validated_shader,
 						     &validation_state))
-				goto fail;
+				goto free_offsets;
 
 			if (sig == QPU_SIG_PROG_END) {
 				found_shader_end = true;
@@ -861,7 +861,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 				if (ip < last_thread_switch_ip + 3) {
 					DRM_DEBUG("Thread switch too soon after "
 						  "last switch at ip %d\n", ip);
-					goto fail;
+					goto free_offsets;
 				}
 				last_thread_switch_ip = ip;
 			}
@@ -872,26 +872,26 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 			if (!check_instruction_writes(validated_shader,
 						      &validation_state)) {
 				DRM_DEBUG("Bad LOAD_IMM write at ip %d\n", ip);
-				goto fail;
+				goto free_offsets;
 			}
 			break;
 
 		case QPU_SIG_BRANCH:
 			if (!check_branch(inst, validated_shader,
 					  &validation_state, ip))
-				goto fail;
+				goto free_offsets;
 
 			if (ip < last_thread_switch_ip + 3) {
 				DRM_DEBUG("Branch in thread switch at ip %d",
 					  ip);
-				goto fail;
+				goto free_offsets;
 			}
 
 			break;
 		default:
 			DRM_DEBUG("Unsupported QPU signal %d at "
 				  "instruction %d\n", sig, ip);
-			goto fail;
+			goto free_offsets;
 		}
 
 		/* There are two delay slots after program end is signaled
@@ -905,7 +905,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 		DRM_DEBUG("shader failed to terminate before "
 			  "shader BO end at %zd\n",
 			  shader_obj->base.size);
-		goto fail;
+		goto free_offsets;
 	}
 
 	/* Might corrupt other thread */
@@ -913,7 +913,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 	    validation_state.all_registers_used) {
 		DRM_DEBUG("Shader uses threading, but uses the upper "
 			  "half of the registers, too\n");
-		goto fail;
+		goto free_offsets;
 	}
 
 	/* If we did a backwards branch and we haven't emitted a uniforms
@@ -927,7 +927,7 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 	 */
 	if (validation_state.needs_uniform_address_for_loop) {
 		if (!require_uniform_address_uniform(validated_shader))
-			goto fail;
+			goto free_offsets;
 		validated_shader->uniforms_size += 4;
 	}
 
@@ -943,12 +943,12 @@ vc4_validate_shader(struct drm_gem_dma_object *shader_obj)
 
 	return validated_shader;
 
-fail:
+free_offsets:
+	kfree(validated_shader->uniform_addr_offsets);
+	kfree(validated_shader->texture_samples);
+free_shader:
+	kfree(validated_shader);
+free_targets:
 	kfree(validation_state.branch_targets);
-	if (validated_shader) {
-		kfree(validated_shader->uniform_addr_offsets);
-		kfree(validated_shader->texture_samples);
-		kfree(validated_shader);
-	}
 	return NULL;
 }
