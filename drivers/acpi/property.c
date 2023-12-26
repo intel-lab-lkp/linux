@@ -1627,17 +1627,16 @@ static int acpi_fwnode_graph_parse_endpoint(const struct fwnode_handle *fwnode,
 	return 0;
 }
 
-static int acpi_fwnode_irq_get(const struct fwnode_handle *fwnode,
-			       unsigned int index)
+static int acpi_fwnode_irq_get_resource(const struct fwnode_handle *fwnode, unsigned int index,
+					struct resource *r)
 {
-	struct resource res;
 	int ret;
 
-	ret = acpi_irq_get(ACPI_HANDLE_FWNODE(fwnode), index, &res);
+	ret = acpi_irq_get(ACPI_HANDLE_FWNODE(fwnode), index, r);
 	if (ret)
 		return ret;
 
-	return res.start;
+	return r->start;
 }
 
 #define DECLARE_ACPI_FWNODE_OPS(ops) \
@@ -1664,7 +1663,7 @@ static int acpi_fwnode_irq_get(const struct fwnode_handle *fwnode,
 			acpi_graph_get_remote_endpoint,			\
 		.graph_get_port_parent = acpi_fwnode_get_parent,	\
 		.graph_parse_endpoint = acpi_fwnode_graph_parse_endpoint, \
-		.irq_get = acpi_fwnode_irq_get,				\
+		.irq_get_resource = acpi_fwnode_irq_get_resource,	\
 	};								\
 	EXPORT_SYMBOL_GPL(ops)
 
