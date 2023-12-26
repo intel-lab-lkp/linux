@@ -2038,8 +2038,6 @@ static int loop_add(int i)
 	}
 	lo->lo_queue = lo->lo_disk->queue;
 
-	blk_queue_max_hw_sectors(lo->lo_queue, BLK_DEF_MAX_SECTORS);
-
 	/*
 	 * By default, we do buffer IO, so it doesn't make sense to enable
 	 * merge because the I/O submitted to backing file is handled page by
