@@ -97,7 +97,7 @@ struct drm_property *drm_property_create(struct drm_device *dev,
 					 u32 flags, const char *name,
 					 int num_values)
 {
-	struct drm_property *property = NULL;
+	struct drm_property *property;
 	int ret;
 
 	if (WARN_ON(!drm_property_flags_valid(flags)))
