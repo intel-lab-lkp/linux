@@ -49,7 +49,7 @@ int input_mt_init_slots(struct input_dev *dev, unsigned int num_slots,
 
 	mt = kzalloc(struct_size(mt, slots, num_slots), GFP_KERNEL);
 	if (!mt)
-		goto err_mem;
+		return -ENOMEM;
 
 	mt->num_slots = num_slots;
 	mt->flags = flags;
