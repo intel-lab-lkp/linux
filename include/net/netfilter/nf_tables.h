@@ -327,10 +327,10 @@ struct nft_set_iter {
  *	@dtype: data type
  *	@dlen: data length
  *	@objtype: object type
- *	@flags: flags
  *	@size: number of set elements
  *	@policy: set policy
  *	@gc_int: garbage collector interval
+ *	@timeout: element timeout
  *	@field_len: length of each field in concatenation, bytes
  *	@field_count: number of concatenated fields in element
  *	@expr: set must support for expressions
