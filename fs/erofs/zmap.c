@@ -574,7 +574,8 @@ static int z_erofs_fill_inode_lazy(struct inode *inode)
 {
 	struct erofs_inode *const vi = EROFS_I(inode);
 	struct super_block *const sb = inode->i_sb;
-	int err, headnr;
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
+	int err, nr;
 	erofs_off_t pos;
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 	void *kaddr;
@@ -618,12 +619,12 @@ static int z_erofs_fill_inode_lazy(struct inode *inode)
 	vi->z_algorithmtype[0] = h->h_algorithmtype & 15;
 	vi->z_algorithmtype[1] = h->h_algorithmtype >> 4;
 
-	headnr = 0;
-	if (vi->z_algorithmtype[0] >= Z_EROFS_COMPRESSION_MAX ||
-	    vi->z_algorithmtype[++headnr] >= Z_EROFS_COMPRESSION_MAX) {
-		erofs_err(sb, "unknown HEAD%u format %u for nid %llu, please upgrade kernel",
-			  headnr + 1, vi->z_algorithmtype[headnr], vi->nid);
-		err = -EOPNOTSUPP;
+	nr = 0;
+	if (!(sbi->available_compr_algs & (1 << vi->z_algorithmtype[0])) ||
+	    !(sbi->available_compr_algs & (1 << vi->z_algorithmtype[++nr]))) {
+		erofs_err(sb, "inconsistent HEAD%u algorithm format %u for nid %llu",
+			  nr + 1, vi->z_algorithmtype[nr], vi->nid);
+		err = -EFSCORRUPTED;
 		goto out_put_metabuf;
 	}
 
