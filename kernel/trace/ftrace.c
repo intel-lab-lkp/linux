@@ -2555,28 +2555,33 @@ unsigned long ftrace_find_rec_direct(unsigned long ip)
 	return entry->direct;
 }
 
+static struct ftrace_hash *ftrace_expand_direct(int inc_count)
+{
+	struct ftrace_hash *new_hash, *free_hash;
+	int size = ftrace_hash_empty(direct_functions) ? 0 :
+		direct_functions->count + inc_count;
+
+	if (!ftrace_hash_empty(direct_functions) &&
+	    size <= 2 * (1 << direct_functions->size_bits))
+		return NULL;
+
+	if (size < 32)
+		size = 32;
+
+	new_hash = dup_hash(direct_functions, size);
+	if (!new_hash)
+		return ERR_PTR(-ENOMEM);
+
+	free_hash = direct_functions;
+	direct_functions = new_hash;
+
+	return free_hash;
+}
+
 static struct ftrace_func_entry*
-ftrace_add_rec_direct(unsigned long ip, unsigned long addr,
-		      struct ftrace_hash **free_hash)
+ftrace_add_rec_direct(unsigned long ip, unsigned long addr)
 {
 	struct ftrace_func_entry *entry;
-
-	if (ftrace_hash_empty(direct_functions) ||
-	    direct_functions->count > 2 * (1 << direct_functions->size_bits)) {
-		struct ftrace_hash *new_hash;
-		int size = ftrace_hash_empty(direct_functions) ? 0 :
-			direct_functions->count + 1;
-
-		if (size < 32)
-			size = 32;
-
-		new_hash = dup_hash(direct_functions, size);
-		if (!new_hash)
-			return NULL;
-
-		*free_hash = direct_functions;
-		direct_functions = new_hash;
-	}
 
 	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry)
@@ -5436,11 +5441,19 @@ int register_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
 		}
 	}
 
+	/* ... and prepare the insertion */
+	free_hash = ftrace_expand_direct(hash->count);
+	if (IS_ERR(free_hash)) {
+		err = PTR_ERR(free_hash);
+		free_hash = NULL;
+		goto out_unlock;
+	}
+
 	/* ... and insert them to direct_functions hash. */
 	err = -ENOMEM;
 	for (i = 0; i < size; i++) {
 		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
-			new = ftrace_add_rec_direct(entry->ip, addr, &free_hash);
+			new = ftrace_add_rec_direct(entry->ip, addr);
 			if (!new)
 				goto out_remove;
 			entry->direct = addr;
