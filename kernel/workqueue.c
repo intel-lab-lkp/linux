@@ -298,7 +298,7 @@ struct workqueue_struct {
 	struct worker		*rescuer;	/* MD: rescue worker */
 
 	int			nr_drainers;	/* WQ: drain in progress */
-	int			saved_max_active; /* WQ: saved max_active */
+	int			max_active;	/* WQ: percpu or total max_active */
 	int			min_active;	/* WQ: pwq min_active */
 
 	struct workqueue_attrs	*unbound_attrs;	/* PW: only for unbound wqs */
@@ -3376,7 +3376,7 @@ static bool start_flush_work(struct work_struct *work, struct wq_barrier *barr,
 	 * forward progress.
 	 */
 	if (!from_cancel &&
-	    (pwq->wq->saved_max_active == 1 || pwq->wq->rescuer)) {
+	    (pwq->wq->max_active == 1 || pwq->wq->rescuer)) {
 		lock_map_acquire(&pwq->wq->lockdep_map);
 		lock_map_release(&pwq->wq->lockdep_map);
 	}
@@ -4159,17 +4159,17 @@ static int pwq_calculate_max_active(struct pool_workqueue *pwq)
 		return 0;
 
 	if (!(pwq->wq->flags & WQ_UNBOUND))
-		return pwq->wq->saved_max_active;
+		return pwq->wq->max_active;
 
 	pwq_nr_online_cpus = cpumask_weight_and(pwq->pool->attrs->__pod_cpumask, cpu_online_mask);
-	max_active = DIV_ROUND_UP(pwq->wq->saved_max_active * pwq_nr_online_cpus, num_online_cpus());
+	max_active = DIV_ROUND_UP(pwq->wq->max_active * pwq_nr_online_cpus, num_online_cpus());
 
 	/*
 	 * To guarantee forward progress regardless of online CPU distribution,
 	 * the concurrency limit on every pwq is guaranteed to be equal to or
 	 * greater than wq->min_active.
 	 */
-	return clamp(max_active, pwq->wq->min_active, pwq->wq->saved_max_active);
+	return clamp(max_active, pwq->wq->min_active, pwq->wq->max_active);
 }
 
 /**
@@ -4177,7 +4177,7 @@ static int pwq_calculate_max_active(struct pool_workqueue *pwq)
  * @pwq: target pool_workqueue
  *
  * If @pwq isn't freezing, set @pwq->max_active to the associated
- * workqueue's saved_max_active and activate inactive work items
+ * workqueue's max_active and activate inactive work items
  * accordingly.  If @pwq is freezing, clear @pwq->max_active to zero.
  */
 static void pwq_adjust_max_active(struct pool_workqueue *pwq)
@@ -4186,7 +4186,7 @@ static void pwq_adjust_max_active(struct pool_workqueue *pwq)
 	int max_active = pwq_calculate_max_active(pwq);
 	unsigned long flags;
 
-	/* for @wq->saved_max_active */
+	/* for @wq->max_active */
 	lockdep_assert_held(&wq->mutex);
 
 	/* fast exit if unchanged */
@@ -4761,7 +4761,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 
 	/* init wq */
 	wq->flags = flags;
-	wq->saved_max_active = max_active;
+	wq->max_active = max_active;
 	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
 	mutex_init(&wq->mutex);
 	atomic_set(&wq->nr_pwqs_to_flush, 0);
@@ -4935,7 +4935,7 @@ void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 	mutex_lock(&wq->mutex);
 
 	wq->flags &= ~__WQ_ORDERED;
-	wq->saved_max_active = max_active;
+	wq->max_active = max_active;
 	wq->min_active = min(wq->min_active, max_active);
 
 	for_each_pwq(pwq, wq)
@@ -5990,7 +5990,7 @@ static ssize_t max_active_show(struct device *dev,
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", wq->saved_max_active);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", wq->max_active);
 }
 
 static ssize_t max_active_store(struct device *dev,
