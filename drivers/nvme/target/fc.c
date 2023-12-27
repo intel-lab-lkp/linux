@@ -552,7 +552,7 @@ nvmet_fc_alloc_ls_iodlist(struct nvmet_fc_tgtport *tgtport)
 				       sizeof(union nvmefc_ls_responses),
 				       GFP_KERNEL);
 		if (!iod->rqstbuf)
-			goto out_fail;
+			goto out_delete_entry;
 
 		iod->rspbuf = (union nvmefc_ls_responses *)&iod->rqstbuf[1];
 
@@ -567,6 +567,7 @@ nvmet_fc_alloc_ls_iodlist(struct nvmet_fc_tgtport *tgtport)
 
 out_fail:
 	kfree(iod->rqstbuf);
+out_delete_entry:
 	list_del(&iod->ls_rcv_list);
 	for (iod--, i--; i >= 0; iod--, i--) {
 		fc_dma_unmap_single(tgtport->dev, iod->rspdma,
