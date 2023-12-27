@@ -30,11 +30,13 @@
 #include <linux/kernel.h>
 #include <linux/math.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
 #include <linux/percpu-defs.h>
 #include <linux/printk.h>
 #include <linux/processor.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/suspend.h>
 #include <linux/string.h>
 #include <linux/topology.h>
 #include <linux/workqueue.h>
@@ -569,10 +571,61 @@ static __init int hfi_parse_features(void)
 	return 0;
 }
 
+static void hfi_do_pm_enable(void *info)
+{
+	struct hfi_instance *hfi_instance = info;
+
+	hfi_set_hw_table(hfi_instance);
+	hfi_enable();
+}
+
+static void hfi_do_pm_disable(void *info)
+{
+	hfi_disable();
+}
+
+static int hfi_pm_notify(struct notifier_block *nb,
+			 unsigned long mode, void *unused)
+{
+	struct hfi_cpu_info *info = &per_cpu(hfi_cpu_info, 0);
+	struct hfi_instance *hfi_instance = info->hfi_instance;
+
+	/* HFI may not be in use. */
+	if (!hfi_instance)
+		return 0;
+
+	/*
+	 * Only handle the HFI instance of the package of the boot CPU. The
+	 * instances of other packages are handled in the CPU hotplug callbacks.
+	 */
+	switch (mode) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+	case PM_RESTORE_PREPARE:
+		return smp_call_function_single(0, hfi_do_pm_disable,
+						NULL, true);
+
+	case PM_POST_RESTORE:
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return smp_call_function_single(0, hfi_do_pm_enable,
+						hfi_instance, true);
+	default:
+		return -EINVAL;
+	}
+}
+
+static struct notifier_block hfi_pm_nb = {
+	.notifier_call = hfi_pm_notify,
+};
+
 void __init intel_hfi_init(void)
 {
 	struct hfi_instance *hfi_instance;
 	int i, j;
+
+	if (register_pm_notifier(&hfi_pm_nb))
+		return;
 
 	if (hfi_parse_features())
 		return;
