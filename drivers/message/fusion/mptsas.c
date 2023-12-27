@@ -4169,14 +4169,13 @@ static struct mptsas_phyinfo *
 mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 	u8 channel, u8 id)
 {
-	struct mptsas_phyinfo *phy_info = NULL;
+	struct mptsas_phyinfo *phy_info;
 	struct mptsas_portinfo *port_info;
 	RaidPhysDiskPage1_t *phys_disk;
 	int num_paths;
 	u64 sas_address = 0;
 	int i;
 
-	phy_info = NULL;
 	if (!ioc->raid_data.pIocPg3)
 		return NULL;
 	/* dual port support */
@@ -4190,6 +4189,7 @@ mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 		goto lock_mutex;
 
 	mpt_raid_phys_disk_pg1(ioc, phys_disk_num, phys_disk);
+	phy_info = NULL;
 	for (i = 0; i < num_paths; i++) {
 		if ((phys_disk->Path[i].Flags & 1) != 0)
 			/* entry no longer valid */
