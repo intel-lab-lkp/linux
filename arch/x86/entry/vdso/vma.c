@@ -4,27 +4,32 @@
  *
  * This contains most of the x86 vDSO kernel-side code.
  */
-#include <linux/mm.h>
+#include <linux/bug.h>
+#include <linux/build_bug.h>
+#include <linux/compiler.h>
+#include <linux/elf.h>
+#include <linux/errno.h>
 #include <linux/err.h>
+#include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/mm.h>
+#include <linux/mm_types.h>
+#include <linux/mmap_lock.h>
+#include <linux/ptrace.h>
+#include <linux/random.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
-#include <linux/slab.h>
-#include <linux/init.h>
-#include <linux/random.h>
-#include <linux/elf.h>
-#include <linux/cpu.h>
-#include <linux/ptrace.h>
+#include <linux/stddef.h>
+#include <linux/thread_info.h>
 #include <linux/time_namespace.h>
+#include <linux/types.h>
 
 #include <asm/pvclock.h>
 #include <asm/vgtod.h>
-#include <asm/proto.h>
 #include <asm/vdso.h>
 #include <asm/vvar.h>
-#include <asm/tlb.h>
 #include <asm/page.h>
-#include <asm/desc.h>
-#include <asm/cpufeature.h>
+#include <asm/mmu.h>
 #include <clocksource/hyperv_timer.h>
 
 #undef _ASM_X86_VVAR_H
@@ -57,7 +62,6 @@ int __init init_vdso_image(const struct vdso_image *image)
 }
 
 static const struct vm_special_mapping vvar_mapping;
-struct linux_binprm;
 
 static vm_fault_t vdso_fault(const struct vm_special_mapping *sm,
 		      struct vm_area_struct *vma, struct vm_fault *vmf)
