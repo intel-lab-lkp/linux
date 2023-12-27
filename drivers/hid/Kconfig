@@ -1335,6 +1335,14 @@ config HID_KUNIT_TEST
 
 	  If in doubt, say "N".
 
+config HID_HIMAX_HX83102J
+	tristate "Himax hx83102j touchpanel CHIPSET"
+	depends on HID
+	help
+	  Say Y here if you have a Himax CHIPSET touchscreen.
+	  HIMAX controllers are multi touch controllers which can
+	  report 10 touches at a time.
+	  If unsure, say N.
 endmenu
 
 source "drivers/hid/bpf/Kconfig"

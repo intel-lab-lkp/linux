@@ -9452,6 +9452,7 @@ M:	Allen Lin <allencl_lin@hotmail.com>
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/input/himax,hx83102j.yaml
+F:	drivers/hid/hid-himax-83102j.*
 
 HIMAX HX83112B TOUCHSCREEN SUPPORT
 M:	Job Noorman <job@noorman.info>
