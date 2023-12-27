@@ -3155,6 +3155,7 @@ static int qedf_alloc_global_queues(struct qedf_ctx *qedf)
 
 mem_alloc_failure:
 	qedf_free_global_queues(qedf);
+	kfree(qedf->global_queues);
 	return status;
 }
 
