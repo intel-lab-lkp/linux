@@ -440,7 +440,7 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 	if (!cma || !cma->count || !cma->bitmap)
 		goto out;
 
-	pr_debug("%s(cma %p, name: %s, count %lu, align %d)\n", __func__,
+	pr_debug("%s(cma 0x%px, name: %s, count %lu, align %d)\n", __func__,
 		(void *)cma, cma->name, count, align);
 
 	if (!count)
@@ -487,7 +487,7 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 		if (ret != -EBUSY)
 			break;
 
-		pr_debug("%s(): memory range at pfn 0x%lx %p is busy, retrying\n",
+		pr_debug("%s(): memory range at pfn 0x%lx 0x%px is busy, retrying\n",
 			 __func__, pfn, pfn_to_page(pfn));
 
 		trace_cma_alloc_busy_retry(cma->name, pfn, pfn_to_page(pfn),
@@ -514,7 +514,7 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 		cma_debug_show_areas(cma);
 	}
 
-	pr_debug("%s(): returned %p\n", __func__, page);
+	pr_debug("%s(): returned 0x%px\n", __func__, page);
 out:
 	if (page) {
 		count_vm_event(CMA_ALLOC_SUCCESS);
@@ -539,7 +539,7 @@ bool cma_pages_valid(struct cma *cma, const struct page *pages,
 	pfn = page_to_pfn(pages);
 
 	if (pfn < cma->base_pfn || pfn >= cma->base_pfn + cma->count) {
-		pr_debug("%s(page %p, count %lu)\n", __func__,
+		pr_debug("%s(page 0x%px, count %lu)\n", __func__,
 						(void *)pages, count);
 		return false;
 	}
@@ -565,7 +565,7 @@ bool cma_release(struct cma *cma, const struct page *pages,
 	if (!cma_pages_valid(cma, pages, count))
 		return false;
 
-	pr_debug("%s(page %p, count %lu)\n", __func__, (void *)pages, count);
+	pr_debug("%s(page 0x%px, count %lu)\n", __func__, (void *)pages, count);
 
 	pfn = page_to_pfn(pages);
 
