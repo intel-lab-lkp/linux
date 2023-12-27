@@ -1637,10 +1637,8 @@ static int qedi_alloc_global_queues(struct qedi_ctx *qedi)
 	/* Make sure we allocated the PBL that will contain the physical
 	 * addresses of our queues
 	 */
-	if (!qedi->p_cpuq) {
-		status = -EINVAL;
-		goto mem_alloc_failure;
-	}
+	if (!qedi->p_cpuq)
+		return -EINVAL;
 
 	qedi->global_queues = kzalloc((sizeof(struct global_queue *) *
 				       qedi->num_queues), GFP_KERNEL);
@@ -1751,6 +1749,7 @@ static int qedi_alloc_global_queues(struct qedi_ctx *qedi)
 
 mem_alloc_failure:
 	qedi_free_global_queues(qedi);
+	kfree(qedi->global_queues);
 	return status;
 }
 
