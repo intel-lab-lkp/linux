@@ -240,6 +240,7 @@ struct qcom_pcie {
 	struct phy *phy;
 	struct gpio_desc *reset;
 	struct icc_path *icc_mem;
+	u32 last_bw;
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
 	bool suspended;
@@ -1387,6 +1388,8 @@ static int qcom_pcie_icc_init(struct qcom_pcie *pcie)
 		return ret;
 	}
 
+	pcie->last_bw = QCOM_PCIE_LINK_SPEED_TO_BW(1);
+
 	return 0;
 }
 
@@ -1415,6 +1418,8 @@ static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
 		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
 			ret);
 	}
+
+	pcie->last_bw = width * QCOM_PCIE_LINK_SPEED_TO_BW(speed);
 }
 
 static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
@@ -1577,6 +1582,8 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 		dev_err(dev, "Failed to set interconnect bandwidth: %d\n", ret);
 		return ret;
 	}
+
+	pcie->last_bw = kBps_to_icc(1);
 
 	/*
 	 * Turn OFF the resources only for controllers without active PCIe
