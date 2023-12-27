@@ -1347,6 +1347,7 @@ int qi_submit_sync(struct intel_iommu *iommu, struct qi_desc *desc,
 		   unsigned int count, unsigned long options)
 {
 	struct q_inval *qi = iommu->qi;
+	struct pci_dev *pdev = NULL;
 	s64 devtlb_start_ktime = 0;
 	s64 iotlb_start_ktime = 0;
 	s64 iec_start_ktime = 0;
@@ -1359,6 +1360,9 @@ int qi_submit_sync(struct intel_iommu *iommu, struct qi_desc *desc,
 
 	if (!qi)
 		return 0;
+
+	if (iommu->flush_target_dev && dev_is_pci(iommu->flush_target_dev))
+		pdev = to_pci_dev(iommu->flush_target_dev);
 
 	type = desc->qw0 & GENMASK_ULL(3, 0);
 
@@ -1423,6 +1427,14 @@ restart:
 	writel(qi->free_head << shift, iommu->reg + DMAR_IQT_REG);
 
 	while (qi->desc_status[wait_index] != QI_DONE) {
+		/*
+		 * if the device-TLB invalidation target device is gone, don't
+		 * wait anymore, it might take up to 1min+50%, causes system
+		 * hang. (see Implementation Note in PCIe spec r6.1 sec 10.3.1)
+		 */
+		if ((type == QI_DIOTLB_TYPE || type == QI_DEIOTLB_TYPE) && pdev)
+			if (!pci_device_is_present(pdev))
+				break;
 		/*
 		 * We will leave the interrupts disabled, to prevent interrupt
 		 * context to queue another cmd while a cmd is already submitted
