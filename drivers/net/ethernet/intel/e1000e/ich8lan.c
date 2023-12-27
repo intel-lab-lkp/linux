@@ -1145,18 +1145,21 @@ s32 e1000_enable_ulp_lpt_lp(struct e1000_hw *hw, bool to_sx)
 	ret_val = hw->phy.ops.acquire(hw);
 	if (ret_val)
 		goto out;
+	/* Forcing SMBUS on MTL and above is not required */
+	if (hw->mac.type < e1000_pch_mtp) {
+		/* Force SMBus mode in PHY */
+		ret_val = e1000_read_phy_reg_hv_locked(hw, CV_SMB_CTRL,
+						       &phy_reg);
+		if (ret_val)
+			goto release;
+		phy_reg |= CV_SMB_CTRL_FORCE_SMBUS;
+		e1000_write_phy_reg_hv_locked(hw, CV_SMB_CTRL, phy_reg);
 
-	/* Force SMBus mode in PHY */
-	ret_val = e1000_read_phy_reg_hv_locked(hw, CV_SMB_CTRL, &phy_reg);
-	if (ret_val)
-		goto release;
-	phy_reg |= CV_SMB_CTRL_FORCE_SMBUS;
-	e1000_write_phy_reg_hv_locked(hw, CV_SMB_CTRL, phy_reg);
-
-	/* Force SMBus mode in MAC */
-	mac_reg = er32(CTRL_EXT);
-	mac_reg |= E1000_CTRL_EXT_FORCE_SMBUS;
-	ew32(CTRL_EXT, mac_reg);
+		/* Force SMBus mode in MAC */
+		mac_reg = er32(CTRL_EXT);
+		mac_reg |= E1000_CTRL_EXT_FORCE_SMBUS;
+		ew32(CTRL_EXT, mac_reg);
+	}
 
 	/* Si workaround for ULP entry flow on i127/rev6 h/w.  Enable
 	 * LPLU and disable Gig speed when entering ULP
