@@ -4,7 +4,7 @@
 #include <linux/linkage.h>
 #include <linux/sys.h>
 #include <linux/cache.h>
-#include <linux/syscalls.h>
+#include <linux/ptrace.h>
 #include <asm/syscall.h>
 
 #ifdef CONFIG_IA32_EMULATION
@@ -16,6 +16,7 @@
 #define __SYSCALL(nr, sym) extern long __ia32_##sym(const struct pt_regs *);
 
 #include <asm/syscalls_32.h>
+
 #undef __SYSCALL
 
 #define __SYSCALL(nr, sym) __ia32_##sym,
