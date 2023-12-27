@@ -34,6 +34,9 @@ properties:
           - const: marvell,armada-3700-sdhci
           - const: marvell,sdhci-xenon
 
+      - items:
+          - const: marvell,ac5-sdhci
+          - const: marvell,armada-ap806-sdhci
   reg:
     minItems: 1
     maxItems: 2
