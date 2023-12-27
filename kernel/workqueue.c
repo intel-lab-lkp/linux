@@ -4137,6 +4137,25 @@ static void pwq_release_workfn(struct kthread_work *work)
 }
 
 /**
+ * pwq_calculate_max_active - Determine max_active to use
+ * @pwq: pool_workqueue of interest
+ *
+ * Determine the max_active @pwq should use.
+ */
+static int pwq_calculate_max_active(struct pool_workqueue *pwq)
+{
+	/*
+	 * During [un]freezing, the caller is responsible for ensuring
+	 * that pwq_adjust_max_active() is called at least once after
+	 * @workqueue_freezing is updated and visible.
+	 */
+	if ((pwq->wq->flags & WQ_FREEZABLE) && workqueue_freezing)
+		return 0;
+
+	return pwq->wq->saved_max_active;
+}
+
+/**
  * pwq_adjust_max_active - update a pwq's max_active to the current setting
  * @pwq: target pool_workqueue
  *
@@ -4147,35 +4166,26 @@ static void pwq_release_workfn(struct kthread_work *work)
 static void pwq_adjust_max_active(struct pool_workqueue *pwq)
 {
 	struct workqueue_struct *wq = pwq->wq;
-	bool freezable = wq->flags & WQ_FREEZABLE;
+	int max_active = pwq_calculate_max_active(pwq);
 	unsigned long flags;
 
 	/* for @wq->saved_max_active */
 	lockdep_assert_held(&wq->mutex);
 
-	/* fast exit for non-freezable wqs */
-	if (!freezable && pwq->max_active == wq->saved_max_active)
+	/* fast exit if unchanged */
+	if (pwq->max_active == max_active)
 		return;
 
 	/* this function can be called during early boot w/ irq disabled */
 	raw_spin_lock_irqsave(&pwq->pool->lock, flags);
 
-	/*
-	 * During [un]freezing, the caller is responsible for ensuring that
-	 * this function is called at least once after @workqueue_freezing
-	 * is updated and visible.
-	 */
-	if (!freezable || !workqueue_freezing) {
-		pwq->max_active = wq->saved_max_active;
+	pwq->max_active = max_active;
 
-		while (!list_empty(&pwq->inactive_works) &&
-		       pwq->nr_active < pwq->max_active)
-			pwq_activate_first_inactive(pwq);
+	while (!list_empty(&pwq->inactive_works) &&
+	       pwq->nr_active < pwq->max_active)
+		pwq_activate_first_inactive(pwq);
 
-		kick_pool(pwq->pool);
-	} else {
-		pwq->max_active = 0;
-	}
+	kick_pool(pwq->pool);
 
 	raw_spin_unlock_irqrestore(&pwq->pool->lock, flags);
 }
