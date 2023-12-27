@@ -371,9 +371,15 @@ static int __init early_init_dt_scan_cpus(unsigned long node,
 	DBG("boot cpu: logical %d physical %d\n", found,
 	    be32_to_cpu(intserv[found_thread]));
 	boot_cpuid = found;
+	/* This forces all threads in a core to be onlined */
+	set_nr_cpu_ids(ALIGN(nr_cpu_ids, nthreads));
+	/* Core 0 is always onlined and assure enough room for boot core */
+	if (nthreads -1 < boot_cpuid && nr_cpu_ids < 2 * nthreads)
+		set_nr_cpu_ids(2 * nthreads);
 
 	if (IS_ENABLED(CONFIG_PPC64))
 		boot_cpu_hwid = be32_to_cpu(intserv[found_thread]);
+	threads_in_core = nthreads;
 
 	/*
 	 * PAPR defines "logical" PVR values for cpus that

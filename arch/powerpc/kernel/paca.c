@@ -242,9 +242,12 @@ static int __initdata paca_struct_size;
 
 void __init allocate_paca_ptrs(void)
 {
-	paca_last_cpu_num = nr_cpu_ids;
+	unsigned int cnt;
 
-	paca_ptrs_size = sizeof(struct paca_struct *) * paca_last_cpu_num;
+	/* paca_ptrs should be big enough to hold boot cpu */
+	cnt = max((unsigned int)ALIGN(boot_cpuid + 1, threads_in_core), nr_cpu_ids);
+	paca_last_cpu_num = cnt;
+	paca_ptrs_size = sizeof(struct paca_struct *) * cnt;
 	paca_ptrs = memblock_alloc_raw(paca_ptrs_size, SMP_CACHE_BYTES);
 	if (!paca_ptrs)
 		panic("Failed to allocate %d bytes for paca pointers\n",

@@ -85,6 +85,7 @@ EXPORT_SYMBOL(machine_id);
 
 int boot_cpuid = -1;
 EXPORT_SYMBOL_GPL(boot_cpuid);
+int __initdata threads_in_core = 1;
 
 #ifdef CONFIG_PPC64
 int boot_cpu_hwid = -1;
@@ -432,8 +433,9 @@ u32 *cpu_to_phys_id = NULL;
 void __init smp_setup_cpu_maps(void)
 {
 	struct device_node *dn;
-	int cpu = 0;
+	int cpu_onlined = 0, cpu = 0;
 	int nthreads = 1;
+	bool bootcpu_covered = false;
 
 	DBG("smp_setup_cpu_maps()\n");
 
@@ -468,7 +470,19 @@ void __init smp_setup_cpu_maps(void)
 
 		nthreads = len / sizeof(int);
 
-		for (j = 0; j < nthreads && cpu < nr_cpu_ids; j++) {
+		if (!bootcpu_covered) {
+			if (cpu == ALIGN_DOWN(boot_cpuid, nthreads)) {
+				bootcpu_covered = true;
+				goto scan;
+
+			/* Reserve the last online slot for boot core */
+			} else if (cpu >= nr_cpu_ids - nthreads && !bootcpu_covered) {
+				cpu += nthreads;
+				continue;
+			}
+		}
+scan:
+		for (j = 0; j < nthreads && cpu_onlined < nr_cpu_ids; j++) {
 			bool avail;
 
 			DBG("    thread %d -> cpu %d (hard id %d)\n",
@@ -483,9 +497,10 @@ void __init smp_setup_cpu_maps(void)
 			set_cpu_possible(cpu, true);
 			cpu_to_phys_id[cpu] = be32_to_cpu(intserv[j]);
 			cpu++;
+			cpu_onlined++;
 		}
 
-		if (cpu >= nr_cpu_ids) {
+		if (cpu_onlined >= nr_cpu_ids) {
 			of_node_put(dn);
 			break;
 		}
@@ -531,7 +546,8 @@ void __init smp_setup_cpu_maps(void)
 			printk(KERN_INFO "Partition configured for %d cpus.\n",
 			       maxcpus);
 
-		for (cpu = 0; cpu < maxcpus; cpu++)
+		/* Bits below #cpu have been set */
+		for (; cpu < maxcpus; cpu++)
 			set_cpu_possible(cpu, true);
 	out:
 		of_node_put(dn);
