@@ -58,6 +58,8 @@ struct viai2c {
 	u16			tcr;
 	int			irq;
 	u16			cmd_status;
+	ktime_t			ti;
+	ktime_t			to;
 };
 
 int viai2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num);
