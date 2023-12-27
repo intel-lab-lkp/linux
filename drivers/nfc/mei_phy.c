@@ -157,8 +157,8 @@ static int mei_nfc_connect(struct nfc_mei_phy *phy)
 
 	reply = kzalloc(connect_resp_length, GFP_KERNEL);
 	if (!reply) {
-		kfree(cmd);
-		return -ENOMEM;
+		r = -ENOMEM;
+		goto free_cmd;
 	}
 
 	connect_resp = (struct mei_nfc_connect_resp *)reply->data;
@@ -197,6 +197,7 @@ static int mei_nfc_connect(struct nfc_mei_phy *phy)
 
 err:
 	kfree(reply);
+free_cmd:
 	kfree(cmd);
 
 	return r;
