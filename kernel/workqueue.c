@@ -5590,10 +5590,15 @@ int workqueue_online_cpu(unsigned int cpu)
 		mutex_unlock(&wq_pool_attach_mutex);
 	}
 
-	/* update pod affinity of unbound workqueues */
+	/*
+	 * Update pod affinity of unbound workqueues, and update max_active
+	 * for PWQs of all pods due to CPU online distribution changed.
+	 */
 	list_for_each_entry(wq, &workqueues, list) {
-		if (wq->unbound_attrs)
+		if (wq->unbound_attrs) {
 			wq_update_pod(wq, cpu, true);
+			wq_adjust_pwqs_max_active(wq);
+		}
 	}
 
 	mutex_unlock(&wq_pool_mutex);
@@ -5610,11 +5615,16 @@ int workqueue_offline_cpu(unsigned int cpu)
 
 	unbind_workers(cpu);
 
-	/* update pod affinity of unbound workqueues */
+	/*
+	 * Update pod affinity of unbound workqueues, and update max_active
+	 * for PWQs of all pods due to CPU online distribution changed.
+	 */
 	mutex_lock(&wq_pool_mutex);
 	list_for_each_entry(wq, &workqueues, list) {
-		if (wq->unbound_attrs)
+		if (wq->unbound_attrs) {
 			wq_update_pod(wq, cpu, false);
+			wq_adjust_pwqs_max_active(wq);
+		}
 	}
 	mutex_unlock(&wq_pool_mutex);
 
