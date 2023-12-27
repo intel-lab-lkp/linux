@@ -772,7 +772,7 @@ w6692_irq(int intno, void *dev_id)
 	spin_lock(&card->lock);
 	ista = ReadW6692(card, W_ISTA);
 	if ((ista | card->imask) == card->imask) {
-		/* possible a shared  IRQ reqest */
+		/* possible a shared  IRQ request */
 		spin_unlock(&card->lock);
 		return IRQ_NONE;
 	}
@@ -857,7 +857,7 @@ static void initW6692(struct w6692_hw *card)
 	/* enable peripheral */
 	if (card->subtype == W6692_USR) {
 		/* seems that USR implemented some power control features
-		 * Pin 79 is connected to the oscilator circuit so we
+		 * Pin 79 is connected to the oscillator circuit so we
 		 * have to handle it here
 		 */
 		card->pctl = 0x80;
