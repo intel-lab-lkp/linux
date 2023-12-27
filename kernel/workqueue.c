@@ -4190,6 +4190,16 @@ static void pwq_adjust_max_active(struct pool_workqueue *pwq)
 	raw_spin_unlock_irqrestore(&pwq->pool->lock, flags);
 }
 
+static void wq_adjust_pwqs_max_active(struct workqueue_struct *wq)
+{
+	struct pool_workqueue *pwq;
+
+	mutex_lock(&wq->mutex);
+	for_each_pwq(pwq, wq)
+		pwq_adjust_max_active(pwq);
+	mutex_unlock(&wq->mutex);
+}
+
 /* initialize newly allocated @pwq which is associated with @wq and @pool */
 static void init_pwq(struct pool_workqueue *pwq, struct workqueue_struct *wq,
 		     struct worker_pool *pool)
@@ -4700,7 +4710,6 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 {
 	va_list args;
 	struct workqueue_struct *wq;
-	struct pool_workqueue *pwq;
 
 	/*
 	 * Unbound && max_active == 1 used to imply ordered, which is no longer
@@ -4761,14 +4770,8 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	 * list.
 	 */
 	mutex_lock(&wq_pool_mutex);
-
-	mutex_lock(&wq->mutex);
-	for_each_pwq(pwq, wq)
-		pwq_adjust_max_active(pwq);
-	mutex_unlock(&wq->mutex);
-
+	wq_adjust_pwqs_max_active(wq);
 	list_add_tail_rcu(&wq->list, &workqueues);
-
 	mutex_unlock(&wq_pool_mutex);
 
 	return wq;
@@ -5698,19 +5701,14 @@ EXPORT_SYMBOL_GPL(work_on_cpu_safe_key);
 void freeze_workqueues_begin(void)
 {
 	struct workqueue_struct *wq;
-	struct pool_workqueue *pwq;
 
 	mutex_lock(&wq_pool_mutex);
 
 	WARN_ON_ONCE(workqueue_freezing);
 	workqueue_freezing = true;
 
-	list_for_each_entry(wq, &workqueues, list) {
-		mutex_lock(&wq->mutex);
-		for_each_pwq(pwq, wq)
-			pwq_adjust_max_active(pwq);
-		mutex_unlock(&wq->mutex);
-	}
+	list_for_each_entry(wq, &workqueues, list)
+		wq_adjust_pwqs_max_active(wq);
 
 	mutex_unlock(&wq_pool_mutex);
 }
@@ -5773,7 +5771,6 @@ out_unlock:
 void thaw_workqueues(void)
 {
 	struct workqueue_struct *wq;
-	struct pool_workqueue *pwq;
 
 	mutex_lock(&wq_pool_mutex);
 
@@ -5783,12 +5780,8 @@ void thaw_workqueues(void)
 	workqueue_freezing = false;
 
 	/* restore max_active and repopulate worklist */
-	list_for_each_entry(wq, &workqueues, list) {
-		mutex_lock(&wq->mutex);
-		for_each_pwq(pwq, wq)
-			pwq_adjust_max_active(pwq);
-		mutex_unlock(&wq->mutex);
-	}
+	list_for_each_entry(wq, &workqueues, list)
+		wq_adjust_pwqs_max_active(wq);
 
 out_unlock:
 	mutex_unlock(&wq_pool_mutex);
