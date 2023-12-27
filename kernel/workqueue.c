@@ -4270,7 +4270,7 @@ static void wq_calc_pod_cpumask(struct workqueue_attrs *attrs, int cpu,
 	if (cpu_going_down >= 0)
 		cpumask_clear_cpu(cpu_going_down, attrs->__pod_cpumask);
 
-	if (cpumask_empty(attrs->__pod_cpumask)) {
+	if (attrs->ordered || cpumask_empty(attrs->__pod_cpumask)) {
 		cpumask_copy(attrs->__pod_cpumask, attrs->cpumask);
 		return;
 	}
@@ -4360,15 +4360,15 @@ apply_wqattrs_prepare(struct workqueue_struct *wq,
 		goto out_free;
 
 	for_each_possible_cpu(cpu) {
-		if (new_attrs->ordered) {
+		wq_calc_pod_cpumask(new_attrs, cpu, -1);
+		if (cpumask_equal(new_attrs->cpumask, new_attrs->__pod_cpumask)) {
 			ctx->dfl_pwq->refcnt++;
 			ctx->pwq_tbl[cpu] = ctx->dfl_pwq;
-		} else {
-			wq_calc_pod_cpumask(new_attrs, cpu, -1);
-			ctx->pwq_tbl[cpu] = alloc_unbound_pwq(wq, new_attrs);
-			if (!ctx->pwq_tbl[cpu])
-				goto out_free;
+			continue;
 		}
+		ctx->pwq_tbl[cpu] = alloc_unbound_pwq(wq, new_attrs);
+		if (!ctx->pwq_tbl[cpu])
+			goto out_free;
 	}
 
 	/* save the user configured attrs and sanitize it. */
@@ -4530,6 +4530,8 @@ static void wq_update_pod(struct workqueue_struct *wq, int cpu,
 					lockdep_is_held(&wq_pool_mutex));
 	if (wqattrs_equal(target_attrs, pwq->pool->attrs))
 		return;
+	if (cpumask_equal(target_attrs->cpumask, target_attrs->__pod_cpumask))
+		goto use_dfl_pwq;
 
 	/* create a new pwq */
 	pwq = alloc_unbound_pwq(wq, target_attrs);
