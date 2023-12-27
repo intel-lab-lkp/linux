@@ -655,6 +655,7 @@ bool acpi_device_override_status(struct acpi_device *adev, unsigned long long *s
 bool acpi_quirk_skip_acpi_ac_and_battery(void);
 int acpi_install_cmos_rtc_space_handler(acpi_handle handle);
 void acpi_remove_cmos_rtc_space_handler(acpi_handle handle);
+void wait_for_acpi_ipmi(void);
 #else
 static inline bool acpi_device_override_status(struct acpi_device *adev,
 					       unsigned long long *status)
@@ -670,6 +671,9 @@ static inline int acpi_install_cmos_rtc_space_handler(acpi_handle handle)
 	return 1;
 }
 static inline void acpi_remove_cmos_rtc_space_handler(acpi_handle handle)
+{
+}
+static inline void wait_for_acpi_ipmi(void)
 {
 }
 #endif
