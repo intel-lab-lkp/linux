@@ -4360,15 +4360,29 @@ apply_wqattrs_prepare(struct workqueue_struct *wq,
 		goto out_free;
 
 	for_each_possible_cpu(cpu) {
+		struct pool_workqueue *pwq;
+		int tcpu;
+
+		if (ctx->pwq_tbl[cpu])
+			continue;
 		wq_calc_pod_cpumask(new_attrs, cpu, -1);
 		if (cpumask_equal(new_attrs->cpumask, new_attrs->__pod_cpumask)) {
 			ctx->dfl_pwq->refcnt++;
 			ctx->pwq_tbl[cpu] = ctx->dfl_pwq;
 			continue;
 		}
-		ctx->pwq_tbl[cpu] = alloc_unbound_pwq(wq, new_attrs);
-		if (!ctx->pwq_tbl[cpu])
+		pwq = alloc_unbound_pwq(wq, new_attrs);
+		if (!pwq)
 			goto out_free;
+		/*
+		 * Reinitialize pwq->refcnt and prepare the new pwd for
+		 * all the CPU of the pod.
+		 */
+		pwq->refcnt = 0;
+		for_each_cpu(tcpu, new_attrs->__pod_cpumask) {
+			pwq->refcnt++;
+			ctx->pwq_tbl[tcpu] = pwq;
+		}
 	}
 
 	/* save the user configured attrs and sanitize it. */
@@ -4483,14 +4497,12 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
 /**
  * wq_update_pod - update pod affinity of a wq for CPU hot[un]plug
  * @wq: the target workqueue
- * @cpu: the CPU to update pool association for
- * @hotplug_cpu: the CPU coming up or going down
+ * @cpu: the CPU coming up or going down
  * @online: whether @cpu is coming up or going down
  *
  * This function is to be called from %CPU_DOWN_PREPARE, %CPU_ONLINE and
  * %CPU_DOWN_FAILED.  @cpu is being hot[un]plugged, update pod affinity of
  * @wq accordingly.
- *
  *
  * If pod affinity can't be adjusted due to memory allocation failure, it falls
  * back to @wq->dfl_pwq which may not be optimal but is always correct.
@@ -4502,11 +4514,11 @@ int apply_workqueue_attrs(struct workqueue_struct *wq,
  * CPU_DOWN. If a workqueue user wants strict affinity, it's the user's
  * responsibility to flush the work item from CPU_DOWN_PREPARE.
  */
-static void wq_update_pod(struct workqueue_struct *wq, int cpu,
-			  int hotplug_cpu, bool online)
+static void wq_update_pod(struct workqueue_struct *wq, int cpu, bool online)
 {
-	int off_cpu = online ? -1 : hotplug_cpu;
-	struct pool_workqueue *old_pwq = NULL, *pwq;
+	int off_cpu = online ? -1 : cpu;
+	int tcpu;
+	struct pool_workqueue *pwq;
 	struct workqueue_attrs *target_attrs;
 
 	lockdep_assert_held(&wq_pool_mutex);
@@ -4541,20 +4553,24 @@ static void wq_update_pod(struct workqueue_struct *wq, int cpu,
 		goto use_dfl_pwq;
 	}
 
-	/* Install the new pwq. */
+	/* Install the new pwq for all the cpus of the pod */
 	mutex_lock(&wq->mutex);
-	old_pwq = install_unbound_pwq(wq, cpu, pwq);
-	goto out_unlock;
+	/* reinitialize pwq->refcnt before installing */
+	pwq->refcnt = 0;
+	for_each_cpu(tcpu, target_attrs->__pod_cpumask)
+		pwq->refcnt++;
+	for_each_cpu(tcpu, target_attrs->__pod_cpumask)
+		put_pwq_unlocked(install_unbound_pwq(wq, tcpu, pwq));
+	mutex_unlock(&wq->mutex);
+	return;
 
 use_dfl_pwq:
 	mutex_lock(&wq->mutex);
 	raw_spin_lock_irq(&wq->dfl_pwq->pool->lock);
 	get_pwq(wq->dfl_pwq);
 	raw_spin_unlock_irq(&wq->dfl_pwq->pool->lock);
-	old_pwq = install_unbound_pwq(wq, cpu, wq->dfl_pwq);
-out_unlock:
+	put_pwq_unlocked(install_unbound_pwq(wq, cpu, wq->dfl_pwq));
 	mutex_unlock(&wq->mutex);
-	put_pwq_unlocked(old_pwq);
 }
 
 static int alloc_and_link_pwqs(struct workqueue_struct *wq)
@@ -5563,15 +5579,8 @@ int workqueue_online_cpu(unsigned int cpu)
 
 	/* update pod affinity of unbound workqueues */
 	list_for_each_entry(wq, &workqueues, list) {
-		struct workqueue_attrs *attrs = wq->unbound_attrs;
-
-		if (attrs) {
-			const struct wq_pod_type *pt = wqattrs_pod_type(attrs);
-			int tcpu;
-
-			for_each_cpu(tcpu, pt->pod_cpus[pt->cpu_pod[cpu]])
-				wq_update_pod(wq, tcpu, cpu, true);
-		}
+		if (wq->unbound_attrs)
+			wq_update_pod(wq, cpu, true);
 	}
 
 	mutex_unlock(&wq_pool_mutex);
@@ -5591,15 +5600,8 @@ int workqueue_offline_cpu(unsigned int cpu)
 	/* update pod affinity of unbound workqueues */
 	mutex_lock(&wq_pool_mutex);
 	list_for_each_entry(wq, &workqueues, list) {
-		struct workqueue_attrs *attrs = wq->unbound_attrs;
-
-		if (attrs) {
-			const struct wq_pod_type *pt = wqattrs_pod_type(attrs);
-			int tcpu;
-
-			for_each_cpu(tcpu, pt->pod_cpus[pt->cpu_pod[cpu]])
-				wq_update_pod(wq, tcpu, cpu, false);
-		}
+		if (wq->unbound_attrs)
+			wq_update_pod(wq, cpu, false);
 	}
 	mutex_unlock(&wq_pool_mutex);
 
@@ -5891,9 +5893,8 @@ static int wq_affn_dfl_set(const char *val, const struct kernel_param *kp)
 	wq_affn_dfl = affn;
 
 	list_for_each_entry(wq, &workqueues, list) {
-		for_each_online_cpu(cpu) {
-			wq_update_pod(wq, cpu, cpu, true);
-		}
+		for_each_online_cpu(cpu)
+			wq_update_pod(wq, cpu, true);
 	}
 
 	mutex_unlock(&wq_pool_mutex);
@@ -6803,9 +6804,8 @@ void __init workqueue_init_topology(void)
 	 * combinations to apply per-pod sharing.
 	 */
 	list_for_each_entry(wq, &workqueues, list) {
-		for_each_online_cpu(cpu) {
-			wq_update_pod(wq, cpu, cpu, true);
-		}
+		for_each_online_cpu(cpu)
+			wq_update_pod(wq, cpu, true);
 	}
 
 	mutex_unlock(&wq_pool_mutex);
