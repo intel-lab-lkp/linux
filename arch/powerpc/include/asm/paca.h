@@ -299,5 +299,7 @@ static inline void free_unused_pacas(void) { }
 
 #endif /* CONFIG_PPC64 */
 
+extern int paca_last_cpu_num;
+
 #endif /* __KERNEL__ */
 #endif /* _ASM_POWERPC_PACA_H */

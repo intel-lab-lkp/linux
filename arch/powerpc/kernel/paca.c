@@ -236,15 +236,15 @@ void setup_paca(struct paca_struct *new_paca)
 
 }
 
-static int __initdata paca_nr_cpu_ids;
+int __initdata paca_last_cpu_num;
 static int __initdata paca_ptrs_size;
 static int __initdata paca_struct_size;
 
 void __init allocate_paca_ptrs(void)
 {
-	paca_nr_cpu_ids = nr_cpu_ids;
+	paca_last_cpu_num = nr_cpu_ids;
 
-	paca_ptrs_size = sizeof(struct paca_struct *) * nr_cpu_ids;
+	paca_ptrs_size = sizeof(struct paca_struct *) * paca_last_cpu_num;
 	paca_ptrs = memblock_alloc_raw(paca_ptrs_size, SMP_CACHE_BYTES);
 	if (!paca_ptrs)
 		panic("Failed to allocate %d bytes for paca pointers\n",
@@ -258,7 +258,7 @@ void __init allocate_paca(int cpu)
 	u64 limit;
 	struct paca_struct *paca;
 
-	BUG_ON(cpu >= paca_nr_cpu_ids);
+	BUG_ON(cpu >= paca_last_cpu_num);
 
 #ifdef CONFIG_PPC_BOOK3S_64
 	/*
