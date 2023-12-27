@@ -4874,21 +4874,20 @@ static int snd_hdsp_hwdep_ioctl(struct snd_hwdep *hw, struct file *file, unsigne
 
 		if (copy_from_user(hdsp->fw_uploaded, firmware_data,
 				   HDSP_FIRMWARE_SIZE)) {
-			vfree(hdsp->fw_uploaded);
-			hdsp->fw_uploaded = NULL;
-			return -EFAULT;
+			err = -EFAULT;
+			goto free_fw_uploaded;
 		}
 
 		hdsp->state |= HDSP_FirmwareCached;
 
 		err = snd_hdsp_load_firmware_from_cache(hdsp);
 		if (err < 0)
-			return err;
+			goto free_fw_uploaded;
 
 		if (!(hdsp->state & HDSP_InitializationComplete)) {
 			err = snd_hdsp_enable_io(hdsp);
 			if (err < 0)
-				return err;
+				goto free_fw_uploaded;
 
 			snd_hdsp_initialize_channels(hdsp);
 			snd_hdsp_initialize_midi_flush(hdsp);
@@ -4897,7 +4896,7 @@ static int snd_hdsp_hwdep_ioctl(struct snd_hwdep *hw, struct file *file, unsigne
 			if (err < 0) {
 				dev_err(hdsp->card->dev,
 					"error creating alsa devices\n");
-				return err;
+				goto free_fw_uploaded;
 			}
 		}
 		break;
@@ -4912,6 +4911,11 @@ static int snd_hdsp_hwdep_ioctl(struct snd_hwdep *hw, struct file *file, unsigne
 		return -EINVAL;
 	}
 	return 0;
+
+free_fw_uploaded:
+	vfree(hdsp->fw_uploaded);
+	hdsp->fw_uploaded = NULL;
+	return err;
 }
 
 static const struct snd_pcm_ops snd_hdsp_playback_ops = {
