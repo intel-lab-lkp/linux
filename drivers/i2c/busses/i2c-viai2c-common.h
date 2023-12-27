@@ -49,6 +49,10 @@
 #define VIAI2C_REG_TR		0x0C
 #define VIAI2C_REG_MCR		0x0E
 
+enum {
+	VIAI2C_PLAT_WMT = 1,
+};
+
 struct viai2c {
 	struct i2c_adapter	adapter;
 	struct completion	complete;
@@ -60,9 +64,10 @@ struct viai2c {
 	u16			cmd_status;
 	ktime_t			ti;
 	ktime_t			to;
+	u8			platform;
 };
 
 int viai2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num);
-int viai2c_init(struct platform_device *pdev, struct viai2c **pi2c);
+int viai2c_init(struct platform_device *pdev, struct viai2c **pi2c, int plat);
 
 #endif
