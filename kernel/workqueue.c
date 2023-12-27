@@ -298,7 +298,8 @@ struct workqueue_struct {
 	struct worker		*rescuer;	/* MD: rescue worker */
 
 	int			nr_drainers;	/* WQ: drain in progress */
-	int			saved_max_active; /* WQ: saved pwq max_active */
+	int			saved_max_active; /* WQ: saved max_active */
+	int			min_active;	/* WQ: pwq min_active */
 
 	struct workqueue_attrs	*unbound_attrs;	/* PW: only for unbound wqs */
 	struct pool_workqueue	*dfl_pwq;	/* PW: only for unbound wqs */
@@ -4140,10 +4141,15 @@ static void pwq_release_workfn(struct kthread_work *work)
  * pwq_calculate_max_active - Determine max_active to use
  * @pwq: pool_workqueue of interest
  *
- * Determine the max_active @pwq should use.
+ * Determine the max_active @pwq should use based on the proportion of
+ * online CPUs in the @pwq to the total system's online CPU count if
+ * @pwq->wq is unbound.
  */
 static int pwq_calculate_max_active(struct pool_workqueue *pwq)
 {
+	int pwq_nr_online_cpus;
+	int max_active;
+
 	/*
 	 * During [un]freezing, the caller is responsible for ensuring
 	 * that pwq_adjust_max_active() is called at least once after
@@ -4152,7 +4158,18 @@ static int pwq_calculate_max_active(struct pool_workqueue *pwq)
 	if ((pwq->wq->flags & WQ_FREEZABLE) && workqueue_freezing)
 		return 0;
 
-	return pwq->wq->saved_max_active;
+	if (!(pwq->wq->flags & WQ_UNBOUND))
+		return pwq->wq->saved_max_active;
+
+	pwq_nr_online_cpus = cpumask_weight_and(pwq->pool->attrs->__pod_cpumask, cpu_online_mask);
+	max_active = DIV_ROUND_UP(pwq->wq->saved_max_active * pwq_nr_online_cpus, num_online_cpus());
+
+	/*
+	 * To guarantee forward progress regardless of online CPU distribution,
+	 * the concurrency limit on every pwq is guaranteed to be equal to or
+	 * greater than wq->min_active.
+	 */
+	return clamp(max_active, pwq->wq->min_active, pwq->wq->saved_max_active);
 }
 
 /**
@@ -4745,6 +4762,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	/* init wq */
 	wq->flags = flags;
 	wq->saved_max_active = max_active;
+	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
 	mutex_init(&wq->mutex);
 	atomic_set(&wq->nr_pwqs_to_flush, 0);
 	INIT_LIST_HEAD(&wq->pwqs);
@@ -4898,7 +4916,8 @@ EXPORT_SYMBOL_GPL(destroy_workqueue);
  * @wq: target workqueue
  * @max_active: new max_active value.
  *
- * Set max_active of @wq to @max_active.
+ * Set max_active of @wq to @max_active. See the alloc_workqueue() function
+ * comment.
  *
  * CONTEXT:
  * Don't call from IRQ context.
@@ -4917,6 +4936,7 @@ void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 
 	wq->flags &= ~__WQ_ORDERED;
 	wq->saved_max_active = max_active;
+	wq->min_active = min(wq->min_active, max_active);
 
 	for_each_pwq(pwq, wq)
 		pwq_adjust_max_active(pwq);
