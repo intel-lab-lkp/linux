@@ -1341,8 +1341,7 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 				   const char *stem_name,
 				   int index, struct of_phandle_args *out_args)
 {
-	char *cells_name, *map_name = NULL, *mask_name = NULL;
-	char *pass_name = NULL;
+	char *cells_name, *map_name, *mask_name, *pass_name;
 	struct device_node *cur, *new = NULL;
 	const __be32 *map, *mask, *pass;
 	static const __be32 dummy_mask[] = { [0 ... MAX_PHANDLE_ARGS] = ~0 };
@@ -1362,26 +1361,26 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 	ret = -ENOMEM;
 	map_name = kasprintf(GFP_KERNEL, "%s-map", stem_name);
 	if (!map_name)
-		goto free;
+		goto free_cells_name;
 
 	mask_name = kasprintf(GFP_KERNEL, "%s-map-mask", stem_name);
 	if (!mask_name)
-		goto free;
+		goto free_map_name;
 
 	pass_name = kasprintf(GFP_KERNEL, "%s-map-pass-thru", stem_name);
 	if (!pass_name)
-		goto free;
+		goto free_mask_name;
 
 	ret = __of_parse_phandle_with_args(np, list_name, cells_name, -1, index,
 					   out_args);
 	if (ret)
-		goto free;
+		goto free_pass_name;
 
 	/* Get the #<list>-cells property */
 	cur = out_args->np;
 	ret = of_property_read_u32(cur, cells_name, &list_size);
 	if (ret < 0)
-		goto put;
+		goto put_cur_node;
 
 	/* Precalculate the match array - this simplifies match loop */
 	for (i = 0; i < list_size; i++)
@@ -1393,7 +1392,7 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 		map = of_get_property(cur, map_name, &map_len);
 		if (!map) {
 			ret = 0;
-			goto free;
+			goto free_pass_name;
 		}
 		map_len /= sizeof(u32);
 
@@ -1416,27 +1415,28 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 
 			/* Check if not found */
 			if (!new)
-				goto put;
+				goto put_cur_node;
 
 			if (!of_device_is_available(new))
 				match = 0;
 
 			ret = of_property_read_u32(new, cells_name, &new_size);
 			if (ret)
-				goto put;
+				goto put_new_node;
 
 			/* Check for malformed properties */
 			if (WARN_ON(new_size > MAX_PHANDLE_ARGS))
-				goto put;
+				goto put_new_node;
+
 			if (map_len < new_size)
-				goto put;
+				goto put_new_node;
 
 			/* Move forward by new node's #<list>-cells amount */
 			map += new_size;
 			map_len -= new_size;
 		}
 		if (!match)
-			goto put;
+			goto put_new_node;
 
 		/* Get the <list>-map-pass-thru property (optional) */
 		pass = of_get_property(cur, pass_name, NULL);
@@ -1465,15 +1465,18 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 		of_node_put(cur);
 		cur = new;
 	}
-put:
-	of_node_put(cur);
+put_new_node:
 	of_node_put(new);
-free:
-	kfree(mask_name);
-	kfree(map_name);
-	kfree(cells_name);
+put_cur_node:
+	of_node_put(cur);
+free_pass_name:
 	kfree(pass_name);
-
+free_mask_name:
+	kfree(mask_name);
+free_map_name:
+	kfree(map_name);
+free_cells_name:
+	kfree(cells_name);
 	return ret;
 }
 EXPORT_SYMBOL(of_parse_phandle_with_args_map);
