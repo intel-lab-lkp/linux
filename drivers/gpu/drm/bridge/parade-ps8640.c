@@ -107,6 +107,7 @@ struct ps8640 {
 	struct device_link *link;
 	bool pre_enabled;
 	bool need_post_hpd_delay;
+	struct completion suspend_completion;
 };
 
 static const struct regmap_config ps8640_regmap_config[] = {
@@ -417,6 +418,8 @@ static int __maybe_unused ps8640_suspend(struct device *dev)
 	if (ret < 0)
 		dev_err(dev, "cannot disable regulators %d\n", ret);
 
+	complete_all(&ps_bridge->suspend_completion);
+
 	return ret;
 }
 
@@ -465,11 +468,37 @@ static void ps8640_atomic_post_disable(struct drm_bridge *bridge,
 				       struct drm_bridge_state *old_bridge_state)
 {
 	struct ps8640 *ps_bridge = bridge_to_ps8640(bridge);
+	struct device *dev = &ps_bridge->page[PAGE0_DP_CNTL]->dev;
 
 	ps_bridge->pre_enabled = false;
 
 	ps8640_bridge_vdo_control(ps_bridge, DISABLE);
-	pm_runtime_put_sync_suspend(&ps_bridge->page[PAGE0_DP_CNTL]->dev);
+
+	/*
+	 * The ps8640 bridge seems to expect everything to be power cycled at
+	 * the disable process, but sometimes ps8640_aux_transfer() holds the
+	 * runtime PM reference and prevents the bridge from suspend.
+	 * Instead of force powering off the bridge and taking the risk of
+	 * breaking the AUX communication, disable the autosuspend and wait for
+	 * ps8640_suspend() being called here, and re-enable the autosuspend
+	 * afterwards.  With this approach, the bridge should be suspended after
+	 * the current ps8640_aux_transfer() completes.
+	 */
+	reinit_completion(&ps_bridge->suspend_completion);
+	pm_runtime_dont_use_autosuspend(dev);
+	pm_runtime_put_sync_suspend(dev);
+
+	/*
+	 * Mostly the suspend completes under 10 ms, but sometimes it could
+	 * take 708 ms to complete.  Set the timeout to 2000 ms here to be
+	 * extra safe.
+	 */
+	if (!wait_for_completion_timeout(&ps_bridge->suspend_completion,
+					 msecs_to_jiffies(2000))) {
+		dev_warn(dev, "Failed to wait for the suspend completion\n");
+	}
+
+	pm_runtime_use_autosuspend(dev);
 }
 
 static int ps8640_bridge_attach(struct drm_bridge *bridge,
@@ -692,6 +721,8 @@ static int ps8640_probe(struct i2c_client *client)
 	ret = devm_add_action_or_reset(dev, ps8640_runtime_disable, dev);
 	if (ret)
 		return ret;
+
+	init_completion(&ps_bridge->suspend_completion);
 
 	ret = devm_of_dp_aux_populate_bus(&ps_bridge->aux, ps8640_bridge_link_panel);
 
