@@ -536,8 +536,7 @@ nvmet_fc_alloc_ls_iodlist(struct nvmet_fc_tgtport *tgtport)
 	struct nvmet_fc_ls_iod *iod;
 	int i;
 
-	iod = kcalloc(NVMET_LS_CTX_COUNT, sizeof(struct nvmet_fc_ls_iod),
-			GFP_KERNEL);
+	iod = kcalloc(NVMET_LS_CTX_COUNT, sizeof(*iod), GFP_KERNEL);
 	if (!iod)
 		return -ENOMEM;
 
