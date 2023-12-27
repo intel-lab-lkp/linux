@@ -4171,7 +4171,7 @@ mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 {
 	struct mptsas_phyinfo *phy_info = NULL;
 	struct mptsas_portinfo *port_info;
-	RaidPhysDiskPage1_t *phys_disk = NULL;
+	RaidPhysDiskPage1_t *phys_disk;
 	int num_paths;
 	u64 sas_address = 0;
 	int i;
@@ -4182,11 +4182,13 @@ mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 	/* dual port support */
 	num_paths = mpt_raid_phys_disk_get_num_paths(ioc, phys_disk_num);
 	if (!num_paths)
-		goto out;
+		goto lock_mutex;
+
 	phys_disk = kzalloc(offsetof(RaidPhysDiskPage1_t, Path) +
 	   (num_paths * sizeof(RAID_PHYS_DISK1_PATH)), GFP_KERNEL);
 	if (!phys_disk)
-		goto out;
+		goto lock_mutex;
+
 	mpt_raid_phys_disk_pg1(ioc, phys_disk_num, phys_disk);
 	for (i = 0; i < num_paths; i++) {
 		if ((phys_disk->Path[i].Flags & 1) != 0)
@@ -4211,6 +4213,7 @@ mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 	 * Extra code to handle RAID0 case, where the sas_address is not updated
 	 * in phys_disk_page_1 when hotswapped
 	 */
+lock_mutex:
 	mutex_lock(&ioc->sas_topology_mutex);
 	list_for_each_entry(port_info, &ioc->sas_topology, list) {
 		for (i = 0; i < port_info->num_phys && !phy_info; i++) {
