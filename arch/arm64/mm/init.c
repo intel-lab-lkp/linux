@@ -115,20 +115,21 @@ static void __init arch_reserve_crashkernel(void)
 
 /*
  * Return the maximum physical address for a zone accessible by the given bits
- * limit. If DRAM starts above 32-bit, expand the zone to the maximum
- * available memory, otherwise cap it at 32-bit.
+ * limit. If DRAM starts above 32-bit, expand the zone to the available memory
+ * start limited by the zone bits mask, otherwise cap it at 32-bit.
  */
 static phys_addr_t __init max_zone_phys(unsigned int zone_bits)
 {
 	phys_addr_t zone_mask = DMA_BIT_MASK(zone_bits);
 	phys_addr_t phys_start = memblock_start_of_DRAM();
+	phys_addr_t phys_end = memblock_end_of_DRAM();
 
 	if (phys_start > U32_MAX)
-		zone_mask = PHYS_ADDR_MAX;
+		zone_mask = phys_start | zone_mask;
 	else if (phys_start > zone_mask)
 		zone_mask = U32_MAX;
 
-	return min(zone_mask, memblock_end_of_DRAM() - 1) + 1;
+	return min(zone_mask, phys_end - 1) + 1;
 }
 
 static void __init zone_sizes_init(void)
@@ -140,7 +141,16 @@ static void __init zone_sizes_init(void)
 
 #ifdef CONFIG_ZONE_DMA
 	acpi_zone_dma_bits = fls64(acpi_iort_dma_get_max_cpu_address());
-	dt_zone_dma_bits = fls64(of_dma_get_max_cpu_address(NULL));
+	/*
+	 * When calculating the dma zone bits from the device tree, subtract
+	 * the DRAM start address, in case it does not start from address
+	 * zero. This way. we pass only the zone size related bits to
+	 * max_zone_phys(), which will add them to the base of the DRAM.
+	 * This prevents miscalculations on arm64 SOCs which combines
+	 * DDR starting above 4GB with memory controllers limited to
+	 * 32-bits or less:
+	 */
+	dt_zone_dma_bits = fls64(of_dma_get_max_cpu_address(NULL) - memblock_start_of_DRAM());
 	zone_dma_bits = min3(32U, dt_zone_dma_bits, acpi_zone_dma_bits);
 	arm64_dma_phys_limit = max_zone_phys(zone_dma_bits);
 	max_zone_pfns[ZONE_DMA] = PFN_DOWN(arm64_dma_phys_limit);
