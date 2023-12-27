@@ -208,10 +208,9 @@ static int mei_nfc_send(struct nfc_mei_phy *phy, const u8 *buf, size_t length)
 	u8 *mei_buf;
 	int err;
 
-	err = -ENOMEM;
 	mei_buf = kzalloc(length + MEI_NFC_HEADER_SIZE, GFP_KERNEL);
 	if (!mei_buf)
-		goto out;
+		return -ENOMEM;
 
 	hdr = (struct mei_nfc_hdr *)mei_buf;
 	hdr->cmd = MEI_NFC_CMD_HCI_SEND;
