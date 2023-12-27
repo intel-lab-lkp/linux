@@ -602,6 +602,7 @@
 			clocks = <&cru PCLK_GPIO0_PMU>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 0 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -615,6 +616,7 @@
 			clocks = <&cru PCLK_GPIO1>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 32 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -628,6 +630,7 @@
 			clocks = <&cru PCLK_GPIO2>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 64 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -641,6 +644,7 @@
 			clocks = <&cru PCLK_GPIO3>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 96 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
