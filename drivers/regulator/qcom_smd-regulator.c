@@ -11,11 +11,10 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/soc/qcom/smd-rpm.h>
 
+struct qcom_smd_rpm *smd_vreg_rpm;
+
 struct qcom_rpm_reg {
 	struct device *dev;
-
-	struct qcom_smd_rpm *rpm;
-
 	u32 type;
 	u32 id;
 
@@ -70,7 +69,7 @@ static int rpm_reg_write_active(struct qcom_rpm_reg *vreg)
 	if (!reqlen)
 		return 0;
 
-	ret = qcom_rpm_smd_write(vreg->rpm, QCOM_SMD_RPM_ACTIVE_STATE,
+	ret = qcom_rpm_smd_write(smd_vreg_rpm, QCOM_SMD_RPM_ACTIVE_STATE,
 				 vreg->type, vreg->id,
 				 req, sizeof(req[0]) * reqlen);
 	if (!ret) {
@@ -1391,7 +1390,7 @@ MODULE_DEVICE_TABLE(of, rpm_of_match);
  * Return: 0 on success, errno on failure
  */
 static int rpm_regulator_init_vreg(struct qcom_rpm_reg *vreg, struct device *dev,
-				   struct device_node *node, struct qcom_smd_rpm *rpm,
+				   struct device_node *node,
 				   const struct rpm_regulator_data *pmic_rpm_data)
 {
 	struct regulator_config config = {};
@@ -1409,7 +1408,6 @@ static int rpm_regulator_init_vreg(struct qcom_rpm_reg *vreg, struct device *dev
 	}
 
 	vreg->dev	= dev;
-	vreg->rpm	= rpm;
 	vreg->type	= rpm_data->type;
 	vreg->id	= rpm_data->id;
 
@@ -1440,11 +1438,10 @@ static int rpm_reg_probe(struct platform_device *pdev)
 	const struct rpm_regulator_data *vreg_data;
 	struct device_node *node;
 	struct qcom_rpm_reg *vreg;
-	struct qcom_smd_rpm *rpm;
 	int ret;
 
-	rpm = dev_get_drvdata(pdev->dev.parent);
-	if (!rpm) {
+	smd_vreg_rpm = dev_get_drvdata(pdev->dev.parent);
+	if (!smd_vreg_rpm) {
 		dev_err(&pdev->dev, "Unable to retrieve handle to rpm\n");
 		return -ENODEV;
 	}
@@ -1460,8 +1457,7 @@ static int rpm_reg_probe(struct platform_device *pdev)
 			return -ENOMEM;
 		}
 
-		ret = rpm_regulator_init_vreg(vreg, dev, node, rpm, vreg_data);
-
+		ret = rpm_regulator_init_vreg(vreg, dev, node, vreg_data);
 		if (ret < 0) {
 			of_node_put(node);
 			return ret;
