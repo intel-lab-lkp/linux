@@ -51,6 +51,7 @@
 
 enum {
 	VIAI2C_PLAT_WMT = 1,
+	VIAI2C_PLAT_ZHAOXIN
 };
 
 struct viai2c {
@@ -65,8 +66,13 @@ struct viai2c {
 	ktime_t			ti;
 	ktime_t			to;
 	u8			platform;
+	u8			hrv;
+	u16			tr;
+	u16			mcr;
 };
 
+int viai2c_wait_status(struct viai2c *i2c);
+int viai2c_wait_bus_ready(struct viai2c *i2c);
 int viai2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num);
 int viai2c_init(struct platform_device *pdev, struct viai2c **pi2c, int plat);
 

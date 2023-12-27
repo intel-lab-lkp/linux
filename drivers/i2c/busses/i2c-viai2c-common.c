@@ -5,7 +5,7 @@
 #define VIAI2C_TIMEOUT			(msecs_to_jiffies(1000))
 #define VIAI2C_STRETCHING_TIMEOUT	200
 
-static int viai2c_wait_bus_ready(struct viai2c *i2c)
+int viai2c_wait_bus_ready(struct viai2c *i2c)
 {
 	unsigned long timeout;
 	void __iomem *base = i2c->base;
@@ -23,7 +23,7 @@ static int viai2c_wait_bus_ready(struct viai2c *i2c)
 	return 0;
 }
 
-static int viai2c_wait_status(struct viai2c *i2c)
+int viai2c_wait_status(struct viai2c *i2c)
 {
 	int ret = 0;
 	unsigned long time_left;
@@ -71,6 +71,9 @@ static irqreturn_t viai2c_isr(int irq, void *data)
 
 	/* save the status and write-clear it */
 	i2c->cmd_status = readw(i2c->base + VIAI2C_REG_ISR);
+	if (!i2c->cmd_status)
+		return IRQ_NONE;
+
 	writew(i2c->cmd_status, i2c->base + VIAI2C_REG_ISR);
 
 	complete(&i2c->complete);
@@ -139,6 +142,8 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 		if (xfer_len == pmsg->len) {
 			if (i2c->platform == VIAI2C_PLAT_WMT && !last)
 				writew(VIAI2C_CR_ENABLE, base + VIAI2C_REG_CR);
+			else if (i2c->platform == VIAI2C_PLAT_ZHAOXIN && last)
+				writeb(VIAI2C_CR_TX_END, base + VIAI2C_REG_CR);
 		} else {
 			writew(pmsg->buf[xfer_len] & 0xFF,
 					base + VIAI2C_REG_CDR);
@@ -150,7 +155,7 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 	return 0;
 }
 
-static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg)
+static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg, bool first)
 {
 	u16 val, tcr_val = i2c->tcr;
 	int ret;
@@ -175,7 +180,8 @@ static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg)
 
 	writew(tcr_val, base + VIAI2C_REG_TCR);
 
-	if (i2c->platform == VIAI2C_PLAT_WMT && (pmsg->flags & I2C_M_NOSTART)) {
+	if ((i2c->platform == VIAI2C_PLAT_WMT && (pmsg->flags & I2C_M_NOSTART))
+           || (i2c->platform == VIAI2C_PLAT_ZHAOXIN && !first)) {
 		val = readw(base + VIAI2C_REG_CR);
 		val |= VIAI2C_CR_CPU_RDY;
 		writew(val, base + VIAI2C_REG_CR);
@@ -218,7 +224,7 @@ int viai2c_xfer(struct i2c_adapter *adap,
 		}
 
 		if (pmsg->flags & I2C_M_RD)
-			ret = viai2c_read(i2c, pmsg);
+			ret = viai2c_read(i2c, pmsg, i == 0);
 		else
 			ret = viai2c_write(i2c, pmsg, (i + 1) == num);
 	}
@@ -246,6 +252,11 @@ int viai2c_init(struct platform_device *pdev, struct viai2c **pi2c, int plat)
 		i2c->irq = irq_of_parse_and_map(np, 0);
 		if (!i2c->irq)
 			return -EINVAL;
+	} else if (plat == VIAI2C_PLAT_ZHAOXIN) {
+		irq_flags = IRQF_SHARED;
+		i2c->irq = platform_get_irq(pdev, 0);
+		if (i2c->irq < 0)
+			return i2c->irq;
 	} else
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				"wrong platform type\n");
