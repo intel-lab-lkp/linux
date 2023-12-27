@@ -286,16 +286,6 @@ void __init allocate_paca(int cpu)
 
 void __init free_unused_pacas(void)
 {
-	int new_ptrs_size;
-
-	new_ptrs_size = sizeof(struct paca_struct *) * nr_cpu_ids;
-	if (new_ptrs_size < paca_ptrs_size)
-		memblock_phys_free(__pa(paca_ptrs) + new_ptrs_size,
-				   paca_ptrs_size - new_ptrs_size);
-
-	paca_nr_cpu_ids = nr_cpu_ids;
-	paca_ptrs_size = new_ptrs_size;
-
 #ifdef CONFIG_PPC_64S_HASH_MMU
 	if (early_radix_enabled()) {
 		/* Ugly fixup, see new_slb_shadow() */
@@ -304,9 +294,6 @@ void __init free_unused_pacas(void)
 		paca_ptrs[boot_cpuid]->slb_shadow_ptr = NULL;
 	}
 #endif
-
-	printk(KERN_DEBUG "Allocated %u bytes for %u pacas\n",
-			paca_ptrs_size + paca_struct_size, nr_cpu_ids);
 }
 
 #ifdef CONFIG_PPC_64S_HASH_MMU
