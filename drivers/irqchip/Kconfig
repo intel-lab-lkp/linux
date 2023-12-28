@@ -252,6 +252,16 @@ config REALTEK_RTD1325_INTC
 
 	  If unsure, say N.
 
+config REALTEK_RTD1619B_INTC
+	tristate "Realtek RTD1619B interrupt controller"
+	select REALTEK_DHC_INTC
+	help
+	  Enable support for the Realtek RTD1619B SoC Interrupt Controller.
+	  Each Realtek DHC SoC has two sets of interrupt controllers, each
+	  capable of handling up to 32 interrupts.
+
+	  If unsure, say N.
+
 config RENESAS_INTC_IRQPIN
 	bool "Renesas INTC External IRQ Pin Support" if COMPILE_TEST
 	select IRQ_DOMAIN
