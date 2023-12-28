@@ -22,6 +22,9 @@
 #define MT7921_DLSTATUS 0x7c053c10
 #define BT_DL_STATE BIT(1)
 
+#define MT7925_SLPPROT 0x18011100
+#define SLPPROT_BYPASS BIT(1)
+
 #define MTK_COREDUMP_SIZE		(1024 * 1000)
 #define MTK_COREDUMP_END		"coredump end"
 #define MTK_COREDUMP_END_LEN		(sizeof(MTK_COREDUMP_END))

@@ -3118,9 +3118,13 @@ static int btusb_mtk_setup(struct hci_dev *hdev)
 	case 0x7668:
 		fwname = FIRMWARE_MT7668;
 		break;
+	case 0x7925:
+		btusb_mtk_uhw_reg_read(data, MT7925_SLPPROT, &val);
+		val |= SLPPROT_BYPASS;
+		btusb_mtk_uhw_reg_write(data, MT7925_SLPPROT, val);
+		fallthrough;
 	case 0x7922:
 	case 0x7961:
-	case 0x7925:
 		if (dev_id == 0x7925)
 			snprintf(fw_bin_name, sizeof(fw_bin_name),
 				 "mediatek/mt%04x/BT_RAM_CODE_MT%04x_1_%x_hdr.bin",
