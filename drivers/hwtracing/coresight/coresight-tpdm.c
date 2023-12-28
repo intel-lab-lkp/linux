@@ -201,9 +201,13 @@ static int tpdm_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->base = base;
 
 	/* Set up coresight component description */
-	desc.name = coresight_alloc_device_name(&tpdm_devs, dev);
-	if (!desc.name)
-		return -ENOMEM;
+	desc.name = coresight_get_device_name(dev);
+	if (!desc.name) {
+		desc.name = coresight_alloc_device_name(&tpdm_devs, dev);
+		if (!desc.name)
+			return -ENOMEM;
+	}
+
 	desc.type = CORESIGHT_DEV_TYPE_SOURCE;
 	desc.subtype.source_subtype = CORESIGHT_DEV_SUBTYPE_SOURCE_OTHERS;
 	desc.ops = &tpdm_cs_ops;

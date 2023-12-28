@@ -902,14 +902,18 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	/* default to powered - could change on PM notifications */
 	drvdata->config.hw_powered = true;
 
-	/* set up device name - will depend if cpu bound or otherwise */
-	if (drvdata->ctidev.cpu >= 0)
-		cti_desc.name = devm_kasprintf(dev, GFP_KERNEL, "cti_cpu%d",
-					       drvdata->ctidev.cpu);
-	else
-		cti_desc.name = coresight_alloc_device_name(&cti_sys_devs, dev);
-	if (!cti_desc.name)
-		return -ENOMEM;
+	cti_desc.name = coresight_get_device_name(dev);
+	if (!cti_desc.name) {
+		/* set up device name - will depend if cpu bound or otherwise */
+		if (drvdata->ctidev.cpu >= 0)
+			cti_desc.name = devm_kasprintf(dev, GFP_KERNEL, "cti_cpu%d",
+						       drvdata->ctidev.cpu);
+		else {
+			cti_desc.name = coresight_alloc_device_name(&cti_sys_devs, dev);
+			if (!cti_desc.name)
+				return -ENOMEM;
+		}
+	}
 
 	/* setup CPU power management handling for CPU bound CTI devices. */
 	ret = cti_pm_setup(drvdata);

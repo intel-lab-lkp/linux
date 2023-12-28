@@ -76,10 +76,12 @@ static int dummy_probe(struct platform_device *pdev)
 	struct coresight_desc desc = { 0 };
 
 	if (of_device_is_compatible(node, "arm,coresight-dummy-source")) {
-
-		desc.name = coresight_alloc_device_name(&source_devs, dev);
-		if (!desc.name)
-			return -ENOMEM;
+		desc.name = coresight_get_device_name(dev);
+		if (!desc.name) {
+			desc.name = coresight_alloc_device_name(&source_devs, dev);
+			if (!desc.name)
+				return -ENOMEM;
+		}
 
 		desc.type = CORESIGHT_DEV_TYPE_SOURCE;
 		desc.subtype.source_subtype =
