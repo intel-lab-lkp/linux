@@ -121,6 +121,7 @@ int sched_set_itmt_support(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(sched_set_itmt_support);
 
 /**
  * sched_clear_itmt_support() - Revoke platform's support of ITMT
@@ -180,3 +181,4 @@ void sched_set_itmt_core_prio(int prio, int cpu)
 {
 	per_cpu(sched_core_priority, cpu) = prio;
 }
+EXPORT_SYMBOL_GPL(sched_set_itmt_core_prio);
