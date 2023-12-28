@@ -4866,26 +4866,34 @@ action_show(struct mddev *mddev, char *page)
 	return sprintf(page, "%s\n", type);
 }
 
-/**
- * stop_sync_thread() - wait for sync_thread to stop if it's running.
- * @mddev:	the array.
- * @locked:	if set, reconfig_mutex will still be held after this function
- *		return; if not set, reconfig_mutex will be released after this
- *		function return.
- * @check_seq:	if set, only wait for curent running sync_thread to stop, noted
- *		that new sync_thread can still start.
- */
-static void stop_sync_thread(struct mddev *mddev, bool locked, bool check_seq)
+static bool sync_thread_stopped(struct mddev *mddev, int *sync_seq)
 {
-	int sync_seq;
+	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
+		return true;
 
-	if (check_seq)
-		sync_seq = atomic_read(&mddev->sync_seq);
+	if (sync_seq && *sync_seq != atomic_read(&mddev->sync_seq))
+		return true;
 
+	return false;
+}
+
+/**
+ * prepare_to_stop_sync_thread() - prepare to stop sync_thread if it's running.
+ * @mddev:	the array.
+ * @unlock:	whether or not caller want to release reconfig_mutex if
+ *		sync_thread is not running.
+ *
+ * Return true if sync_thread is running, release reconfig_mutex and do
+ * preparatory work to stop sync_thread, caller should wait for
+ * sync_thread_stopped() to return true. Return false if sync_thread is not
+ * running, reconfig_mutex will be released if @unlock is set.
+ */
+static bool prepare_to_stop_sync_thread(struct mddev *mddev, bool unlock)
+{
 	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
-		if (!locked)
+		if (unlock)
 			mddev_unlock(mddev);
-		return;
+		return false;
 	}
 
 	mddev_unlock(mddev);
@@ -4899,53 +4907,67 @@ static void stop_sync_thread(struct mddev *mddev, bool locked, bool check_seq)
 	if (work_pending(&mddev->sync_work))
 		flush_work(&mddev->sync_work);
 
-	wait_event(resync_wait,
-		   !test_bit(MD_RECOVERY_RUNNING, &mddev->recovery) ||
-		   (check_seq && sync_seq != atomic_read(&mddev->sync_seq)));
-
-	if (locked)
-		mddev_lock_nointr(mddev);
+	return true;
 }
 
-static void idle_sync_thread(struct mddev *mddev)
+static int idle_sync_thread(struct mddev *mddev)
 {
-	mutex_lock(&mddev->sync_mutex);
+	int sync_seq = atomic_read(&mddev->sync_seq);
+	int err = mutex_lock_interruptible(&mddev->sync_mutex);
+
+	if (err)
+		return err;
 	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 
-	if (mddev_lock(mddev)) {
+	err = mddev_lock(mddev);
+	if (err) {
 		mutex_unlock(&mddev->sync_mutex);
-		return;
+		return err;
 	}
 
-	stop_sync_thread(mddev, false, true);
+	if (prepare_to_stop_sync_thread(mddev, true))
+		err = wait_event_interruptible(resync_wait,
+			   sync_thread_stopped(mddev, &sync_seq));
+
 	mutex_unlock(&mddev->sync_mutex);
+
+	return err;
 }
 
-static void frozen_sync_thread(struct mddev *mddev)
+static int frozen_sync_thread(struct mddev *mddev)
 {
-	mutex_lock(&mddev->sync_mutex);
+	int err = mutex_lock_interruptible(&mddev->sync_mutex);
+
+	if (err)
+		return err;
 	set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 
-	if (mddev_lock(mddev)) {
+	err = mddev_lock(mddev);
+	if (err) {
 		mutex_unlock(&mddev->sync_mutex);
-		return;
+		return err;
 	}
 
-	stop_sync_thread(mddev, false, false);
+	if (prepare_to_stop_sync_thread(mddev, true))
+		err = wait_event_interruptible(resync_wait,
+			   sync_thread_stopped(mddev, NULL));
 	mutex_unlock(&mddev->sync_mutex);
+
+	return err;
 }
 
 static ssize_t
 action_store(struct mddev *mddev, const char *page, size_t len)
 {
+	int err = 0;
+
 	if (!mddev->pers || !mddev->pers->sync_request)
 		return -EINVAL;
 
-
 	if (cmd_match(page, "idle"))
-		idle_sync_thread(mddev);
+		err = idle_sync_thread(mddev);
 	else if (cmd_match(page, "frozen"))
-		frozen_sync_thread(mddev);
+		err = frozen_sync_thread(mddev);
 	else if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
 		return -EBUSY;
 	else if (cmd_match(page, "resync"))
@@ -4954,7 +4976,6 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 		set_bit(MD_RECOVERY_RECOVER, &mddev->recovery);
 	} else if (cmd_match(page, "reshape")) {
-		int err;
 		if (mddev->pers->start_reshape == NULL)
 			return -EINVAL;
 		err = mddev_lock(mddev);
@@ -5000,7 +5021,7 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	md_wakeup_thread(mddev->thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
-	return len;
+	return err ? err : len;
 }
 
 static struct md_sysfs_entry md_scan_mode =
@@ -6300,7 +6321,11 @@ static void md_clean(struct mddev *mddev)
 
 static void __md_stop_writes(struct mddev *mddev)
 {
-	stop_sync_thread(mddev, true, false);
+	if (prepare_to_stop_sync_thread(mddev, false)) {
+		wait_event(resync_wait, sync_thread_stopped(mddev, NULL));
+		mddev_lock_nointr(mddev);
+	}
+
 	del_timer_sync(&mddev->safemode_timer);
 
 	if (mddev->pers && mddev->pers->quiesce) {
@@ -6389,7 +6414,8 @@ static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
 		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	}
 
-	stop_sync_thread(mddev, false, false);
+	if (prepare_to_stop_sync_thread(mddev, true))
+		wait_event(resync_wait, sync_thread_stopped(mddev, NULL));
 	wait_event(mddev->sb_wait,
 		   !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags));
 	mddev_lock_nointr(mddev);
@@ -6441,7 +6467,10 @@ static int do_md_stop(struct mddev *mddev, int mode,
 		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	}
 
-	stop_sync_thread(mddev, true, false);
+	if (prepare_to_stop_sync_thread(mddev, false)) {
+		wait_event(resync_wait, sync_thread_stopped(mddev, NULL));
+		mddev_lock_nointr(mddev);
+	}
 
 	mutex_lock(&mddev->open_mutex);
 	if ((mddev->pers && atomic_read(&mddev->openers) > !!bdev) ||
