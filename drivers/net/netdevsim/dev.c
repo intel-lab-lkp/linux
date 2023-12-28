@@ -35,6 +35,9 @@
 
 #include "netdevsim.h"
 
+static LIST_HEAD(nsim_dev_list);
+static DEFINE_MUTEX(nsim_dev_list_lock);
+
 static unsigned int
 nsim_dev_port_index(enum nsim_dev_port_type type, unsigned int port_index)
 {
@@ -1607,6 +1610,11 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 
 	nsim_dev->esw_mode = DEVLINK_ESWITCH_MODE_LEGACY;
 	devl_unlock(devlink);
+
+	mutex_lock(&nsim_dev_list_lock);
+	list_add(&nsim_dev->list, &nsim_dev_list);
+	mutex_unlock(&nsim_dev_list_lock);
+
 	return 0;
 
 err_hwstats_exit:
@@ -1668,8 +1676,19 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 {
 	struct nsim_dev *nsim_dev = dev_get_drvdata(&nsim_bus_dev->dev);
 	struct devlink *devlink = priv_to_devlink(nsim_dev);
+	struct nsim_dev *pos, *tmp;
+
+	mutex_lock(&nsim_dev_list_lock);
+	list_for_each_entry_safe(pos, tmp, &nsim_dev_list, list) {
+		if (pos == nsim_dev) {
+			list_del(&nsim_dev->list);
+			break;
+		}
+	}
+	mutex_unlock(&nsim_dev_list_lock);
 
 	devl_lock(devlink);
+
 	nsim_dev_reload_destroy(nsim_dev);
 
 	nsim_bpf_dev_exit(nsim_dev);

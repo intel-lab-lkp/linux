@@ -277,6 +277,7 @@ struct nsim_vf_config {
 
 struct nsim_dev {
 	struct nsim_bus_dev *nsim_bus_dev;
+	struct list_head list;
 	struct nsim_fib_data *fib_data;
 	struct nsim_trap_data *trap_data;
 	struct dentry *ddir;
