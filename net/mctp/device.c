@@ -400,8 +400,8 @@ static int mctp_set_link_af(struct net_device *dev, const struct nlattr *attr,
 	struct mctp_dev *mdev;
 	int rc;
 
-	rc = nla_parse_nested(tb, IFLA_MCTP_MAX, attr, ifla_af_mctp_policy,
-			      NULL);
+	rc = nla_parse_nested_deprecated(tb, IFLA_MCTP_MAX, attr, ifla_af_mctp_policy,
+					 NULL);
 	if (rc)
 		return rc;
 
