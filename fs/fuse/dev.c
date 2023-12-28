@@ -1468,29 +1468,30 @@ static int fuse_notify_inval_entry(struct fuse_conn *fc, unsigned int size,
 				   struct fuse_copy_state *cs)
 {
 	struct fuse_notify_inval_entry_out outarg;
-	int err = -ENOMEM;
+	int err;
 	char *buf;
 	struct qstr name;
 
 	buf = kzalloc(FUSE_NAME_MAX + 1, GFP_KERNEL);
-	if (!buf)
-		goto err;
+	if (!buf) {
+		err = -ENOMEM;
+		goto finish_copy;
+	}
 
-	err = -EINVAL;
 	if (size < sizeof(outarg))
-		goto err;
+		goto e_inval;
 
 	err = fuse_copy_one(cs, &outarg, sizeof(outarg));
 	if (err)
 		goto err;
 
-	err = -ENAMETOOLONG;
-	if (outarg.namelen > FUSE_NAME_MAX)
+	if (outarg.namelen > FUSE_NAME_MAX) {
+		err = -ENAMETOOLONG;
 		goto err;
+	}
 
-	err = -EINVAL;
 	if (size != sizeof(outarg) + outarg.namelen + 1)
-		goto err;
+		goto e_inval;
 
 	name.name = buf;
 	name.len = outarg.namelen;
@@ -1506,8 +1507,11 @@ static int fuse_notify_inval_entry(struct fuse_conn *fc, unsigned int size,
 	kfree(buf);
 	return err;
 
+e_inval:
+	err = -EINVAL;
 err:
 	kfree(buf);
+finish_copy:
 	fuse_copy_finish(cs);
 	return err;
 }
@@ -1516,29 +1520,30 @@ static int fuse_notify_delete(struct fuse_conn *fc, unsigned int size,
 			      struct fuse_copy_state *cs)
 {
 	struct fuse_notify_delete_out outarg;
-	int err = -ENOMEM;
+	int err;
 	char *buf;
 	struct qstr name;
 
 	buf = kzalloc(FUSE_NAME_MAX + 1, GFP_KERNEL);
-	if (!buf)
-		goto err;
+	if (!buf) {
+		err = -ENOMEM;
+		goto finish_copy;
+	}
 
-	err = -EINVAL;
 	if (size < sizeof(outarg))
-		goto err;
+		goto e_inval;
 
 	err = fuse_copy_one(cs, &outarg, sizeof(outarg));
 	if (err)
 		goto err;
 
-	err = -ENAMETOOLONG;
-	if (outarg.namelen > FUSE_NAME_MAX)
+	if (outarg.namelen > FUSE_NAME_MAX) {
+		err = -ENAMETOOLONG;
 		goto err;
+	}
 
-	err = -EINVAL;
 	if (size != sizeof(outarg) + outarg.namelen + 1)
-		goto err;
+		goto e_inval;
 
 	name.name = buf;
 	name.len = outarg.namelen;
@@ -1554,8 +1559,11 @@ static int fuse_notify_delete(struct fuse_conn *fc, unsigned int size,
 	kfree(buf);
 	return err;
 
+e_inval:
+	err = -EINVAL;
 err:
 	kfree(buf);
+finish_copy:
 	fuse_copy_finish(cs);
 	return err;
 }
