@@ -193,8 +193,7 @@ static int cros_ec_cmd_xfer_i2c(struct cros_ec_device *ec_dev,
 	int i;
 	int len;
 	int packet_len;
-	u8 *out_buf = NULL;
-	u8 *in_buf = NULL;
+	u8 *in_buf, *out_buf;
 	u8 sum;
 	struct i2c_msg i2c_msg[2];
 
@@ -210,7 +209,8 @@ static int cros_ec_cmd_xfer_i2c(struct cros_ec_device *ec_dev,
 	packet_len = msg->insize + 3;
 	in_buf = kzalloc(packet_len, GFP_KERNEL);
 	if (!in_buf)
-		goto done;
+		goto check_command;
+
 	i2c_msg[1].len = packet_len;
 	i2c_msg[1].buf = (char *)in_buf;
 
@@ -221,7 +221,8 @@ static int cros_ec_cmd_xfer_i2c(struct cros_ec_device *ec_dev,
 	packet_len = msg->outsize + 4;
 	out_buf = kzalloc(packet_len, GFP_KERNEL);
 	if (!out_buf)
-		goto done;
+		goto free_in_buf;
+
 	i2c_msg[0].len = packet_len;
 	i2c_msg[0].buf = (char *)out_buf;
 
@@ -278,8 +279,10 @@ static int cros_ec_cmd_xfer_i2c(struct cros_ec_device *ec_dev,
 
 	ret = len;
 done:
-	kfree(in_buf);
 	kfree(out_buf);
+free_in_buf:
+	kfree(in_buf);
+check_command:
 	if (msg->command == EC_CMD_REBOOT_EC)
 		msleep(EC_REBOOT_DELAY_MS);
 
