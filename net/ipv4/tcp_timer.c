@@ -542,7 +542,7 @@ void tcp_retransmit_timer(struct sock *sk)
 		struct inet_sock *inet = inet_sk(sk);
 		u32 rtx_delta;
 
-		rtx_delta = tcp_time_stamp_ts(tp) - (tp->retrans_stamp ?: 
+		rtx_delta = tcp_time_stamp_ts(tp) - (tp->retrans_stamp ? :
 				tcp_skb_timestamp_ts(tp->tcp_usec_ts, skb));
 		if (tp->tcp_usec_ts)
 			rtx_delta /= USEC_PER_MSEC;
