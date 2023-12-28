@@ -20778,7 +20778,6 @@ lpfc_sli_read_link_ste(struct lpfc_hba *phba)
 
 out:
 	kfree(rgn23_data);
-	return;
 }
 
 /**
