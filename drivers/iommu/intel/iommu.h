@@ -728,6 +728,8 @@ struct intel_iommu {
 	void *perf_statistic;
 
 	struct iommu_pmu *pmu;
+
+	struct device *flush_target_dev; /* the target device TLB to be invalidated. */
 };
 
 /* PCI domain-device relationship */
