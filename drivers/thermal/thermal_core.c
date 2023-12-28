@@ -167,6 +167,7 @@ int thermal_register_governor(struct thermal_governor *governor)
 
 	return err;
 }
+EXPORT_SYMBOL_GPL(thermal_register_governor);
 
 void thermal_unregister_governor(struct thermal_governor *governor)
 {
@@ -193,6 +194,7 @@ void thermal_unregister_governor(struct thermal_governor *governor)
 exit:
 	mutex_unlock(&thermal_governor_lock);
 }
+EXPORT_SYMBOL_GPL(thermal_unregister_governor);
 
 int thermal_zone_device_set_policy(struct thermal_zone_device *tz,
 				   char *policy)
