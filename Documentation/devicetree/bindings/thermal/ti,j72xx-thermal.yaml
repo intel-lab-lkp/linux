@@ -24,9 +24,13 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - ti,j721e-vtm
-      - ti,j7200-vtm
+    anyOf:
+      - items:
+          - enum:
+              - ti,j721e-vtm
+              - ti,j7200-vtm
+              - ti,j721s2-vtm
+      - maxItems: 2
 
   reg:
     items:
@@ -72,7 +76,7 @@ examples:
   - |
     #include <dt-bindings/soc/ti,sci_pm_domain.h>
     wkup_vtm0: thermal-sensor@42040000 {
-        compatible = "ti,j721e-vtm";
+        compatible = "ti,j721e-vtm", "ti,j7200-vtm";
         reg = <0x42040000 0x350>,
               <0x42050000 0x350>,
               <0x43000300 0x10>;
