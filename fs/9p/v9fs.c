@@ -392,15 +392,18 @@ struct p9_fid *v9fs_session_init(struct v9fs_session_info *v9ses,
 		  const char *dev_name, char *data)
 {
 	struct p9_fid *fid;
-	int rc = -ENOMEM;
+	int rc;
 
 	v9ses->uname = kstrdup(V9FS_DEFUSER, GFP_KERNEL);
 	if (!v9ses->uname)
-		goto err_names;
+		return ERR_PTR(-ENOMEM);
 
 	v9ses->aname = kstrdup(V9FS_DEFANAME, GFP_KERNEL);
-	if (!v9ses->aname)
-		goto err_names;
+	if (!v9ses->aname) {
+		rc = -ENOMEM;
+		goto free_uname;
+	}
+
 	init_rwsem(&v9ses->rename_sem);
 
 	v9ses->uid = INVALID_UID;
@@ -489,8 +492,9 @@ err_clnt:
 #endif
 	p9_client_destroy(v9ses->clnt);
 err_names:
-	kfree(v9ses->uname);
 	kfree(v9ses->aname);
+free_uname:
+	kfree(v9ses->uname);
 	return ERR_PTR(rc);
 }
 
