@@ -1556,6 +1556,8 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 	for (i = 0; i < phba->sli4_hba.nvmet_xri_cnt; i++) {
 		ctx_buf = kzalloc(sizeof(*ctx_buf), GFP_KERNEL);
 		if (!ctx_buf) {
+			kfree(phba->sli4_hba.nvmet_ctx_info);
+			phba->sli4_hba.nvmet_ctx_info = NULL;
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 					"6404 Ran out of memory for NVMET\n");
 			return -ENOMEM;
@@ -1565,6 +1567,8 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 					   GFP_KERNEL);
 		if (!ctx_buf->context) {
 			kfree(ctx_buf);
+			kfree(phba->sli4_hba.nvmet_ctx_info);
+			phba->sli4_hba.nvmet_ctx_info = NULL;
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 					"6405 Ran out of NVMET "
 					"context memory\n");
@@ -1577,6 +1581,8 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 		if (!ctx_buf->iocbq) {
 			kfree(ctx_buf->context);
 			kfree(ctx_buf);
+			kfree(phba->sli4_hba.nvmet_ctx_info);
+			phba->sli4_hba.nvmet_ctx_info = NULL;
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 					"6406 Ran out of NVMET iocb/WQEs\n");
 			return -ENOMEM;
@@ -1596,6 +1602,8 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 			lpfc_sli_release_iocbq(phba, ctx_buf->iocbq);
 			kfree(ctx_buf->context);
 			kfree(ctx_buf);
+			kfree(phba->sli4_hba.nvmet_ctx_info);
+			phba->sli4_hba.nvmet_ctx_info = NULL;
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 					"6407 Ran out of NVMET XRIs\n");
 			return -ENOMEM;
