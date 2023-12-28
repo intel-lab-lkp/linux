@@ -400,6 +400,7 @@ struct fuse_writepage_args {
 	struct fuse_writepage_args *next;
 	struct inode *inode;
 	struct fuse_sync_bucket *bucket;
+	bool has_temporary_page;
 };
 
 static struct fuse_writepage_args *fuse_find_writeback(struct fuse_inode *fi,
@@ -1662,8 +1663,10 @@ static void fuse_writepage_free(struct fuse_writepage_args *wpa)
 	if (wpa->bucket)
 		fuse_sync_bucket_dec(wpa->bucket);
 
-	for (i = 0; i < ap->num_pages; i++)
-		__free_page(ap->pages[i]);
+	if (wpa->has_temporary_page) {
+		for (i = 0; i < ap->num_pages; i++)
+			__free_page(ap->pages[i]);
+	}
 
 	if (wpa->ia.ff)
 		fuse_file_put(wpa->ia.ff, false, false);
@@ -1683,10 +1686,14 @@ static void fuse_writepage_finish(struct fuse_mount *fm,
 
 	for (i = 0; i < ap->num_pages; i++) {
 		dec_wb_stat(&bdi->wb, WB_WRITEBACK);
-		dec_node_page_state(ap->pages[i], NR_WRITEBACK_TEMP);
+		if (wpa->has_temporary_page)
+			dec_node_page_state(ap->pages[i], NR_WRITEBACK_TEMP);
+		else
+			end_page_writeback(ap->pages[i]);
 		wb_writeout_inc(&bdi->wb);
 	}
-	wake_up(&fi->page_waitq);
+	if (wpa->has_temporary_page)
+		wake_up(&fi->page_waitq);
 }
 
 /* Called under fi->lock, may release and reacquire it */
@@ -1825,6 +1832,9 @@ static void fuse_writepage_end(struct fuse_mount *fm, struct fuse_args *args,
 	if (!fc->writeback_cache)
 		fuse_invalidate_attr_mask(inode, FUSE_STATX_MODIFY);
 	spin_lock(&fi->lock);
+	if (!wpa->has_temporary_page)
+		goto skip;
+
 	rb_erase(&wpa->writepages_entry, &fi->writepages);
 	while (wpa->next) {
 		struct fuse_mount *fm = get_fuse_mount(inode);
@@ -1861,6 +1871,7 @@ static void fuse_writepage_end(struct fuse_mount *fm, struct fuse_args *args,
 		 */
 		fuse_send_writepage(fm, next, inarg->offset + inarg->size);
 	}
+skip:
 	fi->writectr--;
 	fuse_writepage_finish(fm, wpa);
 	spin_unlock(&fi->lock);
@@ -1954,8 +1965,9 @@ static int fuse_writepage_locked(struct page *page)
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_writepage_args *wpa;
 	struct fuse_args_pages *ap;
-	struct page *tmp_page;
+	struct page *tmp_page = NULL;
 	int error = -ENOMEM;
+	int needs_temporary_page = !fc->no_temporary_page;
 
 	set_page_writeback(page);
 
@@ -1964,9 +1976,11 @@ static int fuse_writepage_locked(struct page *page)
 		goto err;
 	ap = &wpa->ia.ap;
 
-	tmp_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
-	if (!tmp_page)
-		goto err_free;
+	if (needs_temporary_page) {
+		tmp_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
+		if (!tmp_page)
+			goto err_free;
+	}
 
 	error = -EIO;
 	wpa->ia.ff = fuse_write_file_get(fi);
@@ -1976,19 +1990,24 @@ static int fuse_writepage_locked(struct page *page)
 	fuse_writepage_add_to_bucket(fc, wpa);
 	fuse_write_args_fill(&wpa->ia, wpa->ia.ff, page_offset(page), 0);
 
-	copy_highpage(tmp_page, page);
+	if (needs_temporary_page) {
+		copy_highpage(tmp_page, page);
+		ap->pages[0] = tmp_page;
+		inc_node_page_state(tmp_page, NR_WRITEBACK_TEMP);
+	} else {
+		ap->pages[0] = page;
+	}
 	wpa->ia.write.in.write_flags |= FUSE_WRITE_CACHE;
 	wpa->next = NULL;
 	ap->args.in_pages = true;
 	ap->num_pages = 1;
-	ap->pages[0] = tmp_page;
 	ap->descs[0].offset = 0;
 	ap->descs[0].length = PAGE_SIZE;
 	ap->args.end = fuse_writepage_end;
 	wpa->inode = inode;
+	wpa->has_temporary_page = needs_temporary_page;
 
 	inc_wb_stat(&inode_to_bdi(inode)->wb, WB_WRITEBACK);
-	inc_node_page_state(tmp_page, NR_WRITEBACK_TEMP);
 
 	spin_lock(&fi->lock);
 	tree_insert(&fi->writepages, wpa);
@@ -1996,12 +2015,14 @@ static int fuse_writepage_locked(struct page *page)
 	fuse_flush_writepages(inode);
 	spin_unlock(&fi->lock);
 
-	end_page_writeback(page);
+	if (needs_temporary_page)
+		end_page_writeback(page);
 
 	return 0;
 
 err_nofile:
-	__free_page(tmp_page);
+	if (needs_temporary_page)
+		__free_page(tmp_page);
 err_free:
 	kfree(wpa);
 err:
@@ -2015,7 +2036,7 @@ static int fuse_writepage(struct page *page, struct writeback_control *wbc)
 	struct fuse_conn *fc = get_fuse_conn(page->mapping->host);
 	int err;
 
-	if (fuse_page_is_writeback(page->mapping->host, page->index)) {
+	if ((!fc->no_temporary_page) && fuse_page_is_writeback(page->mapping->host, page->index)) {
 		/*
 		 * ->writepages() should be called for sync() and friends.  We
 		 * should only get here on direct reclaim and then we are
@@ -2086,8 +2107,11 @@ static void fuse_writepages_send(struct fuse_fill_wb_data *data)
 	fuse_flush_writepages(inode);
 	spin_unlock(&fi->lock);
 
-	for (i = 0; i < num_pages; i++)
-		end_page_writeback(data->orig_pages[i]);
+
+	if (wpa->has_temporary_page) {
+		for (i = 0; i < num_pages; i++)
+			end_page_writeback(data->orig_pages[i]);
+	}
 }
 
 /*
@@ -2158,7 +2182,8 @@ static bool fuse_writepage_need_send(struct fuse_conn *fc, struct page *page,
 	 * the pages are faulted with get_user_pages(), and then after the read
 	 * completed.
 	 */
-	if (fuse_page_is_writeback(data->inode, page->index))
+	if (data->wpa->has_temporary_page &&
+	    fuse_page_is_writeback(data->inode, page->index))
 		return true;
 
 	/* Reached max pages */
@@ -2189,8 +2214,9 @@ static int fuse_writepages_fill(struct folio *folio,
 	struct inode *inode = data->inode;
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
-	struct page *tmp_page;
+	struct page *tmp_page = NULL;
 	int err;
+	int needs_temporary_page = !fc->no_temporary_page;
 
 	if (!data->ff) {
 		err = -EIO;
@@ -2204,10 +2230,12 @@ static int fuse_writepages_fill(struct folio *folio,
 		data->wpa = NULL;
 	}
 
-	err = -ENOMEM;
-	tmp_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
-	if (!tmp_page)
-		goto out_unlock;
+	if (needs_temporary_page) {
+		err = -ENOMEM;
+		tmp_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
+		if (!tmp_page)
+			goto out_unlock;
+	}
 
 	/*
 	 * The page must not be redirtied until the writeout is completed
@@ -2225,7 +2253,7 @@ static int fuse_writepages_fill(struct folio *folio,
 	if (data->wpa == NULL) {
 		err = -ENOMEM;
 		wpa = fuse_writepage_args_alloc();
-		if (!wpa) {
+		if (!wpa && tmp_page) {
 			__free_page(tmp_page);
 			goto out_unlock;
 		}
@@ -2244,14 +2272,20 @@ static int fuse_writepages_fill(struct folio *folio,
 	}
 	folio_start_writeback(folio);
 
-	copy_highpage(tmp_page, &folio->page);
-	ap->pages[ap->num_pages] = tmp_page;
+	if (needs_temporary_page) {
+		copy_highpage(tmp_page, &folio->page);
+		ap->pages[ap->num_pages] = tmp_page;
+		data->orig_pages[ap->num_pages] = &folio->page;
+		inc_node_page_state(tmp_page, NR_WRITEBACK_TEMP);
+	} else {
+		ap->pages[ap->num_pages] = &folio->page;
+		data->orig_pages[ap->num_pages] = &folio->page;
+	}
 	ap->descs[ap->num_pages].offset = 0;
 	ap->descs[ap->num_pages].length = PAGE_SIZE;
-	data->orig_pages[ap->num_pages] = &folio->page;
+	wpa->has_temporary_page = needs_temporary_page;
 
 	inc_wb_stat(&inode_to_bdi(inode)->wb, WB_WRITEBACK);
-	inc_node_page_state(tmp_page, NR_WRITEBACK_TEMP);
 
 	err = 0;
 	if (data->wpa) {
@@ -2262,10 +2296,16 @@ static int fuse_writepages_fill(struct folio *folio,
 		spin_lock(&fi->lock);
 		ap->num_pages++;
 		spin_unlock(&fi->lock);
-	} else if (fuse_writepage_add(wpa, &folio->page)) {
-		data->wpa = wpa;
+	} else if (needs_temporary_page) {
+		if (fuse_writepage_add(wpa, &folio->page))
+			data->wpa = wpa;
+		else
+			folio_end_writeback(folio);
 	} else {
-		folio_end_writeback(folio);
+		spin_lock(&fi->lock);
+		data->wpa = wpa;
+		ap->num_pages++;
+		spin_unlock(&fi->lock);
 	}
 out_unlock:
 	folio_unlock(folio);
@@ -2438,6 +2478,9 @@ static vm_fault_t fuse_page_mkwrite(struct vm_fault *vmf)
 {
 	struct page *page = vmf->page;
 	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct folio *folio = page_folio(vmf->page);
+	int has_temporary_page = !fc->no_temporary_page;
 
 	file_update_time(vmf->vma->vm_file);
 	lock_page(page);
@@ -2446,7 +2489,11 @@ static vm_fault_t fuse_page_mkwrite(struct vm_fault *vmf)
 		return VM_FAULT_NOPAGE;
 	}
 
-	fuse_wait_on_page_writeback(inode, page->index);
+	if (has_temporary_page)
+		fuse_wait_on_page_writeback(inode, page->index);
+	else
+		folio_wait_stable(folio);
+
 	return VM_FAULT_LOCKED;
 }
 

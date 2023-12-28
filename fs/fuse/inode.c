@@ -1243,8 +1243,11 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 			}
 			if (flags & FUSE_ASYNC_DIO)
 				fc->async_dio = 1;
-			if (flags & FUSE_WRITEBACK_CACHE)
+			if (flags & FUSE_WRITEBACK_CACHE) {
 				fc->writeback_cache = 1;
+				if (fc->virtio_fs_ch)
+					fc->no_temporary_page = 1;
+			}
 			if (flags & FUSE_PARALLEL_DIROPS)
 				fc->parallel_dirops = 1;
 			if (flags & FUSE_HANDLE_KILLPRIV)

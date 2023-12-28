@@ -661,8 +661,14 @@ struct fuse_conn {
 	/** Filesystem supports NFS exporting.  Only set in INIT */
 	unsigned export_support:1;
 
+	/** Indicate fuse req is passed on virtio_fs channel **/
+	unsigned virtio_fs_ch:1;
+
 	/** write-back cache policy (default is write-through) */
 	unsigned writeback_cache:1;
+
+	/** Indicate whether write-back cache policy should use temporary pages **/
+	unsigned no_temporary_page:1;
 
 	/** allow parallel lookups and readdir (default is serialized) */
 	unsigned parallel_dirops:1;

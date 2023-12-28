@@ -1346,6 +1346,7 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 
 	/* Previous unmount will stop all queues. Start these again */
 	virtio_fs_start_all_queues(fs);
+	fc->virtio_fs_ch = 1;
 	fuse_send_init(fm);
 	mutex_unlock(&virtio_fs_mutex);
 	return 0;
