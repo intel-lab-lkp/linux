@@ -20694,7 +20694,7 @@ out:
 void
 lpfc_sli_read_link_ste(struct lpfc_hba *phba)
 {
-	uint8_t *rgn23_data = NULL;
+	uint8_t *rgn23_data;
 	uint32_t if_type, data_size, sub_tlv_len, tlv_offset;
 	uint32_t offset = 0;
 
