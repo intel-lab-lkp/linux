@@ -487,6 +487,8 @@ static void build_conf(struct menu *menu)
 						  menu_is_empty(menu) ? "----" : "--->");
 				item_set_tag('m');
 				item_set_data(menu);
+				if (!visible)
+					item_set_hidden(TRUE);
 				if (single_menu_mode && menu->data)
 					goto conf_childs;
 				return;
@@ -496,6 +498,8 @@ static void build_conf(struct menu *menu)
 					item_make("   %*c*** %s ***", indent + 1, ' ', prompt);
 					item_set_tag(':');
 					item_set_data(menu);
+					if (!visible)
+						item_set_hidden(TRUE);
 				}
 				break;
 			default:
@@ -504,6 +508,8 @@ static void build_conf(struct menu *menu)
 					item_make("---%*c%s", indent + 1, ' ', prompt);
 					item_set_tag(':');
 					item_set_data(menu);
+					if (!visible)
+						item_set_hidden(TRUE);
 				}
 			}
 		} else
@@ -539,10 +545,14 @@ static void build_conf(struct menu *menu)
 			}
 			item_set_tag('t');
 			item_set_data(menu);
+			if (!visible)
+				item_set_hidden(TRUE);
 		} else {
 			item_make("   ");
 			item_set_tag(def_menu ? 't' : ':');
 			item_set_data(menu);
+			if (!visible)
+				item_set_hidden(TRUE);
 		}
 
 		item_add_str("%*c%s", indent + 1, ' ', menu_get_prompt(menu));
@@ -563,6 +573,8 @@ static void build_conf(struct menu *menu)
 			item_make("---%*c%s", indent + 1, ' ', menu_get_prompt(menu));
 			item_set_tag(':');
 			item_set_data(menu);
+			if (!visible)
+				item_set_hidden(TRUE);
 			goto conf_childs;
 		}
 		child_count++;
@@ -580,6 +592,8 @@ static void build_conf(struct menu *menu)
 					item_make("-%c-", val == no ? ' ' : '*');
 				item_set_tag('t');
 				item_set_data(menu);
+				if (!visible)
+					item_set_hidden(TRUE);
 				break;
 			case S_TRISTATE:
 				switch (val) {
@@ -596,6 +610,8 @@ static void build_conf(struct menu *menu)
 					item_make("-%c-", ch);
 				item_set_tag('t');
 				item_set_data(menu);
+				if (!visible)
+					item_set_hidden(TRUE);
 				break;
 			default:
 				tmp = 2 + strlen(sym_get_string_value(sym)); /* () = 2 */
@@ -608,6 +624,8 @@ static void build_conf(struct menu *menu)
 					     "" : " (NEW)");
 				item_set_tag('s');
 				item_set_data(menu);
+				if (!visible)
+					item_set_hidden(TRUE);
 				goto conf_childs;
 			}
 		}

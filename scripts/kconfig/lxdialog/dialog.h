@@ -128,6 +128,7 @@ void item_add_str(const char *fmt, ...);
 void item_set_tag(char tag);
 void item_set_data(void *p);
 void item_set_selected(int val);
+void item_set_hidden(int val);
 int item_activate_selected(void);
 void *item_data(void);
 char item_tag(void);
@@ -139,6 +140,7 @@ struct dialog_item {
 	char tag;
 	void *data;	/* pointer to menu item - used by menubox+checklist */
 	int selected;	/* Set to 1 by dialog_*() function if selected. */
+	int hidden;	/* Set to 1 if hidden. */
 };
 
 /* list of lialog_items */
@@ -157,6 +159,7 @@ int item_n(void);
 const char *item_str(void);
 int item_is_selected(void);
 int item_is_tag(char tag);
+int item_is_hidden(void);
 #define item_foreach() \
 	for (item_cur = item_head ? item_head: item_cur; \
 	     item_cur && (item_cur != &item_nil); item_cur = item_cur->next)

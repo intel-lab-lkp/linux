@@ -635,6 +635,11 @@ void item_set_selected(int val)
 	item_cur->node.selected = val;
 }
 
+void item_set_hidden(int val)
+{
+	item_cur->node.hidden = val;
+}
+
 int item_activate_selected(void)
 {
 	item_foreach()
@@ -697,4 +702,9 @@ int item_is_selected(void)
 int item_is_tag(char tag)
 {
 	return (item_cur->node.tag == tag);
+}
+
+int item_is_hidden(void)
+{
+	return (item_cur->node.hidden != 0);
 }

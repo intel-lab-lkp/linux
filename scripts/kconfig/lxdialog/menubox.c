@@ -51,9 +51,9 @@ static int menu_width, item_x;
  * Print menu item
  */
 static void do_print_item(WINDOW * win, const char *item, int line_y,
-			  int selected, int hotkey)
+			  int selected, int hotkey, int hidden)
 {
-	int j;
+	int j, attrs;
 	char *menu_item = malloc(menu_width + 1);
 
 	strncpy(menu_item, item, menu_width - item_x);
@@ -64,7 +64,10 @@ static void do_print_item(WINDOW * win, const char *item, int line_y,
 	wattrset(win, dlg.menubox.atr);
 	wmove(win, line_y, 0);
 	wclrtoeol(win);
-	wattrset(win, selected ? dlg.item_selected.atr : dlg.item.atr);
+	attrs = selected ? dlg.item_selected.atr : dlg.item.atr;
+	if (hidden)
+		attrs |= A_DIM;
+	wattrset(win, attrs);
 	mvwaddstr(win, line_y, item_x, menu_item);
 	if (hotkey) {
 		wattrset(win, selected ? dlg.tag_key_selected.atr
@@ -81,7 +84,7 @@ static void do_print_item(WINDOW * win, const char *item, int line_y,
 #define print_item(index, choice, selected)				\
 do {									\
 	item_set(index);						\
-	do_print_item(menu, item_str(), choice, selected, !item_is_tag(':')); \
+	do_print_item(menu, item_str(), choice, selected, !item_is_tag(':'), item_is_hidden()); \
 } while (0)
 
 /*
