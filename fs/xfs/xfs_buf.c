@@ -2075,6 +2075,8 @@ xfs_buf_delwri_cancel(
 		xfs_buf_lock(bp);
 		bp->b_flags &= ~_XBF_DELWRI_Q;
 		xfs_buf_list_del(bp);
+		if (bp->b_log_item)
+			xfs_buf_item_relse(bp);
 		xfs_buf_relse(bp);
 	}
 }

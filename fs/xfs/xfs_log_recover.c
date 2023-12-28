@@ -2964,7 +2964,6 @@ xlog_do_recovery_pass(
 	char			*offset;
 	char			*hbp, *dbp;
 	int			error = 0, h_size, h_len;
-	int			error2 = 0;
 	int			bblks, split_bblks;
 	int			hblks, split_hblks, wrapped_hblks;
 	int			i;
@@ -3203,15 +3202,20 @@ xlog_do_recovery_pass(
  bread_err1:
 	kmem_free(hbp);
 
-	/*
-	 * Submit buffers that have been added from the last record processed,
-	 * regardless of error status.
-	 */
-	if (!list_empty(&buffer_list))
-		error2 = xfs_buf_delwri_submit(&buffer_list);
-
 	if (error && first_bad)
 		*first_bad = rhead_blk;
+
+	/*
+	 * If there are no error, submit buffers that have been added from the
+	 * last record processed, othrewise cancel the write list, to ensure
+	 * submit buffers on LSN boundaries.
+	 */
+	if (!list_empty(&buffer_list)) {
+		if (error)
+			xfs_buf_delwri_cancel(&buffer_list);
+		else
+			error = xfs_buf_delwri_submit(&buffer_list);
+	}
 
 	/*
 	 * Transactions are freed at commit time but transactions without commit
@@ -3226,7 +3230,7 @@ xlog_do_recovery_pass(
 			xlog_recover_free_trans(trans);
 	}
 
-	return error ? error : error2;
+	return error;
 }
 
 /*
