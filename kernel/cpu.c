@@ -1738,7 +1738,7 @@ out:
 
 static int cpu_up(unsigned int cpu, enum cpuhp_state target)
 {
-	int err = 0;
+	int err;
 
 	if (!cpu_possible(cpu)) {
 		pr_err("can't online cpu %d because it is not configured as may-hotadd at boot time\n",
