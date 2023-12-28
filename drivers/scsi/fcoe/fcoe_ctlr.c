@@ -163,14 +163,14 @@ static int fcoe_sysfs_fcf_add(struct fcoe_fcf *new)
 	struct fcoe_ctlr *fip = new->fip;
 	struct fcoe_ctlr_device *ctlr_dev;
 	struct fcoe_fcf_device *temp, *fcf_dev;
-	int rc = -ENOMEM;
+	int rc;
 
 	LIBFCOE_FIP_DBG(fip, "New FCF fab %16.16llx mac %pM\n",
 			new->fabric_name, new->fcf_mac);
 
 	temp = kzalloc(sizeof(*temp), GFP_KERNEL);
 	if (!temp)
-		goto out;
+		return -ENOMEM;
 
 	temp->fabric_name = new->fabric_name;
 	temp->switch_name = new->switch_name;
