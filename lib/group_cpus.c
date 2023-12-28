@@ -76,6 +76,8 @@ static void free_node_to_cpumask(cpumask_var_t *masks)
 	kfree(masks);
 }
 
+DEFINE_FREE(free_node_to_cpumask, cpumask_var_t *, if (_T) free_node_to_cpumask(_T));
+
 static void build_node_to_cpumask(cpumask_var_t *masks)
 {
 	int cpu;
@@ -345,25 +347,15 @@ static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
  */
 struct cpumask *group_cpus_evenly(unsigned int numgrps)
 {
-	unsigned int curgrp = 0, nr_present = 0, nr_others = 0;
-	cpumask_var_t *node_to_cpumask;
-	cpumask_var_t nmsk, npresmsk;
-	int ret = -ENOMEM;
-	struct cpumask *masks = NULL;
+	cpumask_var_t *node_to_cpumask __free(free_node_to_cpumask) = alloc_node_to_cpumask();
+	struct cpumask *masks __free(kfree) = kcalloc(numgrps, sizeof(*masks), GFP_KERNEL);
+	cpumask_var_t npresmsk __free(free_cpumask_var);
+	cpumask_var_t nmsk __free(free_cpumask_var);
+	unsigned int curgrp, nr_present, nr_others;
 
-	if (!alloc_cpumask_var(&nmsk, GFP_KERNEL))
+	if (!masks || !node_to_cpumask || !alloc_cpumask_var(&nmsk, GFP_KERNEL)
+			|| !alloc_cpumask_var(&npresmsk, GFP_KERNEL))
 		return NULL;
-
-	if (!alloc_cpumask_var(&npresmsk, GFP_KERNEL))
-		goto fail_nmsk;
-
-	node_to_cpumask = alloc_node_to_cpumask();
-	if (!node_to_cpumask)
-		goto fail_npresmsk;
-
-	masks = kcalloc(numgrps, sizeof(*masks), GFP_KERNEL);
-	if (!masks)
-		goto fail_node_to_cpumask;
 
 	build_node_to_cpumask(node_to_cpumask);
 
@@ -382,11 +374,15 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	cpumask_copy(npresmsk, data_race(cpu_present_mask));
 
 	/* grouping present CPUs first */
-	ret = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask,
-				  npresmsk, nmsk, masks);
-	if (ret < 0)
-		goto fail_build_affinity;
-	nr_present = ret;
+	nr_present = __group_cpus_evenly(0, numgrps, node_to_cpumask, npresmsk, nmsk, masks);
+	if (nr_present < 0)
+		return NULL;
+
+	/* If npresmsk is empty */
+	if (!cpumask_andnot(npresmsk, cpu_possible_mask, npresmsk))
+		return_ptr(masks);
+
+	curgrp = nr_present < numgrps ? nr_present : 0;
 
 	/*
 	 * Allocate non present CPUs starting from the next group to be
@@ -394,38 +390,13 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	 * group space, assign the non present CPUs to the already
 	 * allocated out groups.
 	 */
-	if (nr_present >= numgrps)
-		curgrp = 0;
-	else
-		curgrp = nr_present;
-
-	if (cpumask_andnot(npresmsk, cpu_possible_mask, npresmsk))
-		/* If npresmsk is not empty */
-		ret = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask,
-					  npresmsk, nmsk, masks);
-	else
-		ret = 0;
-
-	if (ret >= 0)
-		nr_others = ret;
-
- fail_build_affinity:
-	if (ret >= 0)
-		WARN_ON(nr_present + nr_others < numgrps);
-
- fail_node_to_cpumask:
-	free_node_to_cpumask(node_to_cpumask);
-
- fail_npresmsk:
-	free_cpumask_var(npresmsk);
-
- fail_nmsk:
-	free_cpumask_var(nmsk);
-	if (ret < 0) {
-		kfree(masks);
+	nr_others = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask,
+					npresmsk, nmsk, masks);
+	if (nr_others < 0)
 		return NULL;
-	}
-	return masks;
+
+	WARN_ON(nr_present + nr_others < numgrps);
+	return_ptr(masks);
 }
 #else /* CONFIG_SMP */
 struct cpumask *group_cpus_evenly(unsigned int numgrps)
