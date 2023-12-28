@@ -244,7 +244,8 @@ int ipcget(struct ipc_namespace *ns, struct ipc_ids *ids,
 void free_ipcs(struct ipc_namespace *ns, struct ipc_ids *ids,
 		void (*free)(struct ipc_namespace *, struct kern_ipc_perm *));
 
-static inline int sem_check_semmni(struct ipc_namespace *ns) {
+static inline int sem_check_semmni(struct ipc_namespace *ns)
+{
 	/*
 	 * Check semmni range [0, ipc_mni]
 	 * semmni is the last element of sem_ctls[4] array
