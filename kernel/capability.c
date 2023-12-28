@@ -140,7 +140,7 @@ static inline int cap_get_target_pid(pid_t pid, kernel_cap_t *pEp,
  */
 SYSCALL_DEFINE2(capget, cap_user_header_t, header, cap_user_data_t, dataptr)
 {
-	int ret = 0;
+	int ret;
 	pid_t pid;
 	unsigned tocopy;
 	kernel_cap_t pE, pI, pP;
