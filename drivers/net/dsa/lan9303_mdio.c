@@ -162,7 +162,7 @@ static const struct of_device_id lan9303_mdio_of_match[] = {
 MODULE_DEVICE_TABLE(of, lan9303_mdio_of_match);
 
 static struct mdio_driver lan9303_mdio_driver = {
-	.mdiodrv.driver = {
+	.driver = {
 		.name = "LAN9303_MDIO",
 		.of_match_table = lan9303_mdio_of_match,
 	},

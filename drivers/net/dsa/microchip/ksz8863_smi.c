@@ -213,7 +213,7 @@ static struct mdio_driver ksz8863_driver = {
 	.probe	= ksz8863_smi_probe,
 	.remove	= ksz8863_smi_remove,
 	.shutdown = ksz8863_smi_shutdown,
-	.mdiodrv.driver = {
+	.driver = {
 		.name	= "ksz8863-switch",
 		.of_match_table = ksz8863_dt_ids,
 	},

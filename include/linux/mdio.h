@@ -50,22 +50,11 @@ static inline struct mdio_device *to_mdio_device(const struct device *dev)
 	return container_of(dev, struct mdio_device, dev);
 }
 
-/* struct mdio_driver_common: Common to all MDIO drivers */
-struct mdio_driver_common {
-	struct device_driver driver;
-	int flags;
-};
 #define MDIO_DEVICE_FLAG_PHY		1
-
-static inline struct mdio_driver_common *
-to_mdio_common_driver(const struct device_driver *driver)
-{
-	return container_of(driver, struct mdio_driver_common, driver);
-}
 
 /* struct mdio_driver: Generic MDIO driver */
 struct mdio_driver {
-	struct mdio_driver_common mdiodrv;
+	struct device_driver driver;
 
 	/*
 	 * Called during discovery.  Used to set
@@ -83,8 +72,7 @@ struct mdio_driver {
 static inline struct mdio_driver *
 to_mdio_driver(const struct device_driver *driver)
 {
-	return container_of(to_mdio_common_driver(driver), struct mdio_driver,
-			    mdiodrv);
+	return container_of(driver, struct mdio_driver, driver);
 }
 
 /* device driver data */

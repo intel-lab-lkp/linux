@@ -375,7 +375,7 @@ static void dsa_loop_drv_shutdown(struct mdio_device *mdiodev)
 }
 
 static struct mdio_driver dsa_loop_drv = {
-	.mdiodrv.driver	= {
+	.driver	= {
 		.name	= "dsa-loop",
 	},
 	.probe	= dsa_loop_drv_probe,

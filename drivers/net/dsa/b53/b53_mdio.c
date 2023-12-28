@@ -392,7 +392,7 @@ static struct mdio_driver b53_mdio_driver = {
 	.probe	= b53_mdio_probe,
 	.remove	= b53_mdio_remove,
 	.shutdown = b53_mdio_shutdown,
-	.mdiodrv.driver = {
+	.driver = {
 		.name = "bcm53xx",
 		.of_match_table = b53_of_match,
 	},

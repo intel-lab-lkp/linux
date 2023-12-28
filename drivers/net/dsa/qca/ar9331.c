@@ -1122,7 +1122,7 @@ static struct mdio_driver ar9331_sw_mdio_driver = {
 	.probe = ar9331_sw_probe,
 	.remove = ar9331_sw_remove,
 	.shutdown = ar9331_sw_shutdown,
-	.mdiodrv.driver = {
+	.driver = {
 		.name = AR9331_SW_NAME,
 		.of_match_table = ar9331_sw_of_match,
 	},

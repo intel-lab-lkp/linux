@@ -164,7 +164,7 @@ static const struct of_device_id __maybe_unused xrs700x_mdio_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, xrs700x_mdio_dt_ids);
 
 static struct mdio_driver xrs700x_mdio_driver = {
-	.mdiodrv.driver = {
+	.driver = {
 		.name	= "xrs700x-mdio",
 		.of_match_table = of_match_ptr(xrs700x_mdio_dt_ids),
 	},

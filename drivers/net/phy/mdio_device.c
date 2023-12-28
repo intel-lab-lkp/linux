@@ -40,7 +40,7 @@ int mdio_device_bus_match(struct device *dev, struct device_driver *drv)
 	struct mdio_device *mdiodev = to_mdio_device(dev);
 	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
 
-	if (mdiodrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY)
+	if (is_phy_driver(&mdiodrv->driver))
 		return 0;
 
 	return strcmp(mdiodev->modalias, drv->name) == 0;
@@ -203,20 +203,19 @@ static void mdio_shutdown(struct device *dev)
  */
 int mdio_driver_register(struct mdio_driver *drv)
 {
-	struct mdio_driver_common *mdiodrv = &drv->mdiodrv;
 	int retval;
 
-	pr_debug("%s: %s\n", __func__, mdiodrv->driver.name);
+	pr_debug("%s: %s\n", __func__, drv->driver.name);
 
-	mdiodrv->driver.bus = &mdio_bus_type;
-	mdiodrv->driver.probe = mdio_probe;
-	mdiodrv->driver.remove = mdio_remove;
-	mdiodrv->driver.shutdown = mdio_shutdown;
+	drv->driver.bus = &mdio_bus_type;
+	drv->driver.probe = mdio_probe;
+	drv->driver.remove = mdio_remove;
+	drv->driver.shutdown = mdio_shutdown;
 
-	retval = driver_register(&mdiodrv->driver);
+	retval = driver_register(&drv->driver);
 	if (retval) {
 		pr_err("%s: Error %d in registering driver\n",
-		       mdiodrv->driver.name, retval);
+		       drv->driver.name, retval);
 
 		return retval;
 	}
@@ -227,8 +226,6 @@ EXPORT_SYMBOL(mdio_driver_register);
 
 void mdio_driver_unregister(struct mdio_driver *drv)
 {
-	struct mdio_driver_common *mdiodrv = &drv->mdiodrv;
-
-	driver_unregister(&mdiodrv->driver);
+	driver_unregister(&drv->driver);
 }
 EXPORT_SYMBOL(mdio_driver_unregister);

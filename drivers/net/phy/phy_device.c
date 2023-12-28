@@ -529,7 +529,7 @@ static int phy_bus_match(struct device *dev, struct device_driver *drv)
 	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
 	int i;
 
-	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
+	if (!(is_phy_driver(&phydrv->driver)))
 		return 0;
 
 	if (phydrv->match_phy_device)
@@ -1456,9 +1456,9 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 */
 	if (!d->driver) {
 		if (phydev->is_c45)
-			d->driver = &genphy_c45_driver.mdiodrv.driver;
+			d->driver = &genphy_c45_driver.driver;
 		else
-			d->driver = &genphy_driver.mdiodrv.driver;
+			d->driver = &genphy_driver.driver;
 
 		using_genphy = true;
 	}
@@ -1638,14 +1638,14 @@ static bool phy_driver_is_genphy_kind(struct phy_device *phydev,
 bool phy_driver_is_genphy(struct phy_device *phydev)
 {
 	return phy_driver_is_genphy_kind(phydev,
-					 &genphy_driver.mdiodrv.driver);
+					 &genphy_driver.driver);
 }
 EXPORT_SYMBOL_GPL(phy_driver_is_genphy);
 
 bool phy_driver_is_genphy_10g(struct phy_device *phydev)
 {
 	return phy_driver_is_genphy_kind(phydev,
-					 &genphy_c45_driver.mdiodrv.driver);
+					 &genphy_c45_driver.driver);
 }
 EXPORT_SYMBOL_GPL(phy_driver_is_genphy_10g);
 
@@ -3410,6 +3410,12 @@ static int phy_remove(struct device *dev)
 	return 0;
 }
 
+bool is_phy_driver(struct device_driver *driver)
+{
+	return driver->probe == phy_probe;
+}
+EXPORT_SYMBOL_GPL(is_phy_driver);
+
 /**
  * phy_driver_register - register a phy_driver with the PHY layer
  * @new_driver: new phy_driver to register
@@ -3433,20 +3439,19 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 	 * is backed by a struct phy_device. If such a case happens, we will
 	 * make out-of-bounds accesses and lockup in phydev->lock.
 	 */
-	if (WARN(new_driver->mdiodrv.driver.of_match_table,
+	if (WARN(new_driver->driver.of_match_table,
 		 "%s: driver must not provide a DT match table\n",
 		 new_driver->name))
 		return -EINVAL;
 
-	new_driver->mdiodrv.flags |= MDIO_DEVICE_IS_PHY;
-	new_driver->mdiodrv.driver.name = new_driver->name;
-	new_driver->mdiodrv.driver.bus = &mdio_bus_type;
-	new_driver->mdiodrv.driver.probe = phy_probe;
-	new_driver->mdiodrv.driver.remove = phy_remove;
-	new_driver->mdiodrv.driver.owner = owner;
-	new_driver->mdiodrv.driver.probe_type = PROBE_FORCE_SYNCHRONOUS;
+	new_driver->driver.name = new_driver->name;
+	new_driver->driver.bus = &mdio_bus_type;
+	new_driver->driver.probe = phy_probe;
+	new_driver->driver.remove = phy_remove;
+	new_driver->driver.owner = owner;
+	new_driver->driver.probe_type = PROBE_FORCE_SYNCHRONOUS;
 
-	retval = driver_register(&new_driver->mdiodrv.driver);
+	retval = driver_register(&new_driver->driver);
 	if (retval) {
 		pr_err("%s: Error %d in registering driver\n",
 		       new_driver->name, retval);
@@ -3479,7 +3484,7 @@ EXPORT_SYMBOL(phy_drivers_register);
 
 void phy_driver_unregister(struct phy_driver *drv)
 {
-	driver_unregister(&drv->mdiodrv.driver);
+	driver_unregister(&drv->driver);
 }
 EXPORT_SYMBOL(phy_driver_unregister);
 

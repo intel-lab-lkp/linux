@@ -1342,7 +1342,7 @@ static int mdio_bus_match(struct device *dev, struct device_driver *drv)
 	struct mdio_device *mdio = to_mdio_device(dev);
 
 	/* Both the driver and device must type-match */
-	if (!(mdiodrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY) !=
+	if (!(is_phy_driver(&mdiodrv->driver)) !=
 	    !(mdio->flags & MDIO_DEVICE_FLAG_PHY))
 		return 0;
 

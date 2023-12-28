@@ -229,11 +229,9 @@ static int bcm_ns_usb3_mdio_probe(struct mdio_device *mdiodev)
 }
 
 static struct mdio_driver bcm_ns_usb3_mdio_driver = {
-	.mdiodrv = {
-		.driver = {
-			.name = "bcm_ns_mdio_usb3",
-			.of_match_table = bcm_ns_usb3_id_table,
-		},
+	.driver = {
+		.name = "bcm_ns_mdio_usb3",
+		.of_match_table = bcm_ns_usb3_id_table,
 	},
 	.probe = bcm_ns_usb3_mdio_probe,
 };

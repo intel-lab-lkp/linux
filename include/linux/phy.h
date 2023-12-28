@@ -87,7 +87,6 @@ extern const int phy_10gbit_features_array[1];
 #define PHY_RST_AFTER_CLK_EN	0x00000002
 #define PHY_POLL_CABLE_TEST	0x00000004
 #define PHY_ALWAYS_CALL_SUSPEND	0x00000008
-#define MDIO_DEVICE_IS_PHY	0x80000000
 
 /**
  * enum phy_interface_t - Interface Mode definitions
@@ -873,7 +872,7 @@ struct phy_led {
 /**
  * struct phy_driver - Driver structure for a particular PHY type
  *
- * @mdiodrv: Data common to all MDIO devices
+ * @driver: The driver-model core driver structure.
  * @phy_id: The result of reading the UID registers of this PHY
  *   type, and ANDing them with the phy_id_mask.  This driver
  *   only works for PHYs with IDs which match this field
@@ -894,7 +893,7 @@ struct phy_led {
  * though it is not currently supported in the driver).
  */
 struct phy_driver {
-	struct mdio_driver_common mdiodrv;
+	struct device_driver driver;
 	u32 phy_id;
 	char *name;
 	u32 phy_id_mask;
@@ -1147,8 +1146,7 @@ struct phy_driver {
 				  unsigned long *rules);
 
 };
-#define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
-				      struct phy_driver, mdiodrv)
+#define to_phy_driver(d) container_of(d, struct phy_driver, driver)
 
 #define PHY_ANY_ID "MATCH ANY PHY"
 #define PHY_ANY_UID 0xffffffff
@@ -2148,5 +2146,6 @@ module_exit(phy_module_exit)
 
 bool phy_driver_is_genphy(struct phy_device *phydev);
 bool phy_driver_is_genphy_10g(struct phy_device *phydev);
+bool is_phy_driver(struct device_driver *driver);
 
 #endif /* __PHY_H */

@@ -73,11 +73,9 @@ static const struct of_device_id ns2_pci_phy_of_match[] = {
 MODULE_DEVICE_TABLE(of, ns2_pci_phy_of_match);
 
 static struct mdio_driver ns2_pci_phy_driver = {
-	.mdiodrv = {
-		.driver = {
-			.name = "phy-bcm-ns2-pci",
-			.of_match_table = ns2_pci_phy_of_match,
-		},
+	.driver = {
+		.name = "phy-bcm-ns2-pci",
+		.of_match_table = ns2_pci_phy_of_match,
 	},
 	.probe = ns2_pci_phy_probe,
 };
