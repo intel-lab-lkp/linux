@@ -27,7 +27,7 @@ static LIST_HEAD(eeh_phb_pe);
  * eeh_set_pe_aux_size - Set PE auxiliary data size
  * @size: PE auxiliary data size
  *
- * Set PE auxiliary data size
+ * Set PE auxiliary data size.
  */
 void eeh_set_pe_aux_size(int size)
 {
