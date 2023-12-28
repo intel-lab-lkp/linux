@@ -459,10 +459,6 @@ lpfc_rcv_plogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	ndlp->nlp_nvme_info &= ~NLP_NVME_NSLER;
 	ndlp->nlp_flag &= ~NLP_FIRSTBURST;
 
-	login_mbox = NULL;
-	link_mbox = NULL;
-	save_iocb = NULL;
-
 	/* Check for Nport to NPort pt2pt protocol */
 	if ((vport->fc_flag & FC_PT2PT) &&
 	    !(vport->fc_flag & FC_PT2PT_PLOGI)) {
@@ -509,7 +505,7 @@ lpfc_rcv_plogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 			link_mbox = mempool_alloc(phba->mbox_mem_pool,
 						  GFP_KERNEL);
 			if (!link_mbox)
-				goto out;
+				goto reject_response;
 			lpfc_config_link(phba, link_mbox);
 			link_mbox->mbox_cmpl = lpfc_sli_def_mbox_cmpl;
 			link_mbox->vport = vport;
@@ -522,7 +518,7 @@ lpfc_rcv_plogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 			rc = lpfc_sli_issue_mbox(phba, link_mbox, MBX_NOWAIT);
 			if (rc == MBX_NOT_FINISHED) {
 				mempool_free(link_mbox, phba->mbox_mem_pool);
-				goto out;
+				goto reject_response;
 			}
 		}
 
@@ -540,11 +536,11 @@ lpfc_rcv_plogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 
 	login_mbox = mempool_alloc(phba->mbox_mem_pool, GFP_KERNEL);
 	if (!login_mbox)
-		goto out;
+		goto reject_response;
 
 	save_iocb = kzalloc(sizeof(*save_iocb), GFP_KERNEL);
 	if (!save_iocb)
-		goto out;
+		goto free_mempool;
 
 	/* Save info from cmd IOCB to be used in rsp after all mbox completes */
 	memcpy((uint8_t *)save_iocb, (uint8_t *)cmdiocb,
@@ -657,9 +653,9 @@ lpfc_rcv_plogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	return 1;
 out:
 	kfree(save_iocb);
-	if (login_mbox)
-		mempool_free(login_mbox, phba->mbox_mem_pool);
-
+free_mempool:
+	mempool_free(login_mbox, phba->mbox_mem_pool);
+reject_response:
 	stat.un.b.lsRjtRsnCode = LSRJT_UNABLE_TPC;
 	stat.un.b.lsRjtRsnCodeExp = LSEXP_OUT_OF_RESOURCE;
 	lpfc_els_rsp_reject(vport, stat.un.lsRjtError, cmdiocb, ndlp, NULL);
