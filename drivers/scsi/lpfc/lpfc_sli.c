@@ -20701,7 +20701,7 @@ lpfc_sli_read_link_ste(struct lpfc_hba *phba)
 	/* Get adapter Region 23 data */
 	rgn23_data = kzalloc(DMP_RGN23_SIZE, GFP_KERNEL);
 	if (!rgn23_data)
-		goto out;
+		return;
 
 	if (phba->sli_rev < LPFC_SLI_REV4)
 		data_size = lpfc_sli_get_config_region23(phba, rgn23_data);
