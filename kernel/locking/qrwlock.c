@@ -61,9 +61,10 @@ EXPORT_SYMBOL(queued_read_lock_slowpath);
 
 /**
  * queued_write_lock_slowpath - acquire write lock of a queued rwlock
- * @lock : Pointer to queued rwlock structure
+ * @lock: Pointer to queued rwlock structure
+ * @irq: True if we can enable interrupts while spinning
  */
-void __lockfunc queued_write_lock_slowpath(struct qrwlock *lock)
+void __lockfunc queued_write_lock_slowpath(struct qrwlock *lock, bool irq)
 {
 	int cnts;
 
@@ -82,7 +83,11 @@ void __lockfunc queued_write_lock_slowpath(struct qrwlock *lock)
 
 	/* When no more readers or writers, set the locked flag */
 	do {
+		if (irq)
+			local_irq_enable();
 		cnts = atomic_cond_read_relaxed(&lock->cnts, VAL == _QW_WAITING);
+		if (irq)
+			local_irq_disable();
 	} while (!atomic_try_cmpxchg_acquire(&lock->cnts, &cnts, _QW_LOCKED));
 unlock:
 	arch_spin_unlock(&lock->wait_lock);

@@ -211,6 +211,13 @@ void do_raw_write_lock(rwlock_t *lock)
 	debug_write_lock_after(lock);
 }
 
+void do_raw_write_lock_irq(rwlock_t *lock)
+{
+	debug_write_lock_before(lock);
+	arch_write_lock_irq(&lock->raw_lock);
+	debug_write_lock_after(lock);
+}
+
 int do_raw_write_trylock(rwlock_t *lock)
 {
 	int ret = arch_write_trylock(&lock->raw_lock);

@@ -33,8 +33,8 @@
 /*
  * External function declarations
  */
-extern void queued_read_lock_slowpath(struct qrwlock *lock);
-extern void queued_write_lock_slowpath(struct qrwlock *lock);
+void queued_read_lock_slowpath(struct qrwlock *lock);
+void queued_write_lock_slowpath(struct qrwlock *lock, bool irq);
 
 /**
  * queued_read_trylock - try to acquire read lock of a queued rwlock
@@ -98,7 +98,21 @@ static inline void queued_write_lock(struct qrwlock *lock)
 	if (likely(atomic_try_cmpxchg_acquire(&lock->cnts, &cnts, _QW_LOCKED)))
 		return;
 
-	queued_write_lock_slowpath(lock);
+	queued_write_lock_slowpath(lock, false);
+}
+
+/**
+ * queued_write_lock_irq - acquire write lock of a queued rwlock
+ * @lock : Pointer to queued rwlock structure
+ */
+static inline void queued_write_lock_irq(struct qrwlock *lock)
+{
+	int cnts = 0;
+	/* Optimize for the unfair lock case where the fair flag is 0. */
+	if (likely(atomic_try_cmpxchg_acquire(&lock->cnts, &cnts, _QW_LOCKED)))
+		return;
+
+	queued_write_lock_slowpath(lock, true);
 }
 
 /**
@@ -138,6 +152,7 @@ static inline int queued_rwlock_is_contended(struct qrwlock *lock)
  */
 #define arch_read_lock(l)		queued_read_lock(l)
 #define arch_write_lock(l)		queued_write_lock(l)
+#define arch_write_lock_irq(l)		queued_write_lock_irq(l)
 #define arch_read_trylock(l)		queued_read_trylock(l)
 #define arch_write_trylock(l)		queued_write_trylock(l)
 #define arch_read_unlock(l)		queued_read_unlock(l)
