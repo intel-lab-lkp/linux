@@ -1060,7 +1060,7 @@ struct mpi3mr_ioc {
 	struct list_head list;
 	struct pci_dev *pdev;
 	struct Scsi_Host *shost;
-	u8 id;
+	int id;
 	int cpu_count;
 	bool enable_segqueue;
 	u32 irqpoll_sleep;
