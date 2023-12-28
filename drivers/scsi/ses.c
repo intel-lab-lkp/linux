@@ -528,7 +528,7 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 				       int create)
 {
 	u32 result;
-	unsigned char *buf = NULL, *type_ptr, *desc_ptr, *addl_desc_ptr = NULL;
+	unsigned char *buf, *type_ptr, *desc_ptr, *addl_desc_ptr = NULL;
 	int i, j, page7_len, len, components;
 	struct ses_device *ses_dev = edev->scratch;
 	int types = ses_dev->page1_num_types;
@@ -552,8 +552,8 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 		goto simple_populate;
 	result = ses_recv_diag(sdev, 7, buf, len);
 	if (result) {
- simple_populate:
 		kfree(buf);
+simple_populate:
 		buf = NULL;
 		desc_ptr = NULL;
 		len = 0;
