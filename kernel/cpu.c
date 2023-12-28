@@ -1006,7 +1006,7 @@ static int cpuhp_up_callbacks(unsigned int cpu, struct cpuhp_cpu_state *st,
 			      enum cpuhp_state target)
 {
 	enum cpuhp_state prev_state = st->state;
-	int ret = 0;
+	int ret;
 
 	ret = cpuhp_invoke_callback_range(true, cpu, st, target);
 	if (ret) {
@@ -1417,7 +1417,7 @@ static int cpuhp_down_callbacks(unsigned int cpu, struct cpuhp_cpu_state *st,
 				enum cpuhp_state target)
 {
 	enum cpuhp_state prev_state = st->state;
-	int ret = 0;
+	int ret;
 
 	ret = cpuhp_invoke_callback_range(false, cpu, st, target);
 	if (ret) {
@@ -2509,7 +2509,7 @@ int __cpuhp_setup_state_cpuslocked(enum cpuhp_state state,
 				   int (*teardown)(unsigned int cpu),
 				   bool multi_instance)
 {
-	int cpu, ret = 0;
+	int cpu, ret;
 	bool dynstate;
 
 	lockdep_assert_cpus_held();
