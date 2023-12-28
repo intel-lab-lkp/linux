@@ -253,13 +253,17 @@ static void alloc_nodes_groups(unsigned int numgrps,
 static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 			       cpumask_var_t *node_to_cpumask,
 			       const struct cpumask *cpu_mask,
-			       struct cpumask *nmsk, struct cpumask *masks)
+			       struct cpumask *masks)
 {
 	unsigned int i, n, nodes, cpus_per_grp, extra_grps, done = 0;
 	unsigned int last_grp = numgrps;
 	unsigned int curgrp = startgrp;
 	nodemask_t nodemsk = NODE_MASK_NONE;
 	struct node_groups *node_groups;
+	cpumask_var_t nmsk __free(free_cpumask_var);
+
+	if (!alloc_cpumask_var(&nmsk, GFP_KERNEL))
+		return -ENOMEM;
 
 	nodes = get_nodes_in_cpumask(node_to_cpumask, cpu_mask, &nodemsk);
 
@@ -350,11 +354,9 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	cpumask_var_t *node_to_cpumask __free(free_node_to_cpumask) = alloc_node_to_cpumask();
 	struct cpumask *masks __free(kfree) = kcalloc(numgrps, sizeof(*masks), GFP_KERNEL);
 	cpumask_var_t npresmsk __free(free_cpumask_var);
-	cpumask_var_t nmsk __free(free_cpumask_var);
 	unsigned int curgrp, nr_present, nr_others;
 
-	if (!masks || !node_to_cpumask || !alloc_cpumask_var(&nmsk, GFP_KERNEL)
-			|| !alloc_cpumask_var(&npresmsk, GFP_KERNEL))
+	if (!masks || !node_to_cpumask || !alloc_cpumask_var(&npresmsk, GFP_KERNEL))
 		return NULL;
 
 	build_node_to_cpumask(node_to_cpumask);
@@ -374,7 +376,7 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	cpumask_copy(npresmsk, data_race(cpu_present_mask));
 
 	/* grouping present CPUs first */
-	nr_present = __group_cpus_evenly(0, numgrps, node_to_cpumask, npresmsk, nmsk, masks);
+	nr_present = __group_cpus_evenly(0, numgrps, node_to_cpumask, npresmsk, masks);
 	if (nr_present < 0)
 		return NULL;
 
@@ -390,8 +392,7 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	 * group space, assign the non present CPUs to the already
 	 * allocated out groups.
 	 */
-	nr_others = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask,
-					npresmsk, nmsk, masks);
+	nr_others = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask, npresmsk, masks);
 	if (nr_others < 0)
 		return NULL;
 
