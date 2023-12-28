@@ -4695,6 +4695,10 @@ static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, in
 				return -EINVAL;
 			addr4 = (struct sockaddr_in *)address;
 			if (family_sa == AF_UNSPEC) {
+				if (sock->sk->__sk_common.skc_family ==
+					    AF_INET6 &&
+				    addrlen < SIN6_LEN_RFC2133)
+					return -EINVAL;
 				/* see __inet_bind(), we only want to allow
 				 * AF_UNSPEC if the address is INADDR_ANY
 				 */
