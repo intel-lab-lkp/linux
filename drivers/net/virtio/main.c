@@ -3962,6 +3962,14 @@ void virtnet_rq_free_unused_bufs(struct virtqueue *vq)
 	rq = &vi->rq[i];
 
 	while ((buf = virtqueue_detach_unused_buf(vq)) != NULL) {
+		if (rq->xsk.pool) {
+			struct xdp_buff *xdp;
+
+			xdp = (struct xdp_buff *)buf;
+			xsk_buff_free(xdp);
+			continue;
+		}
+
 		if (virtqueue_get_dma_premapped(rq->vq))
 			virtnet_rq_unmap(rq, buf, 0);
 
