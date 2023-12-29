@@ -705,8 +705,8 @@ static struct nullb_device *null_alloc_dev(void)
 	dev->init_hctx_fault_config.attr = null_init_hctx_attr;
 #endif
 
-	INIT_RADIX_TREE(&dev->data, GFP_ATOMIC);
-	INIT_RADIX_TREE(&dev->cache, GFP_ATOMIC);
+	xa_init(&dev->data);
+	xa_init(&dev->cache);
 	if (badblocks_init(&dev->badblocks, 0)) {
 		kfree(dev);
 		return NULL;
@@ -899,18 +899,18 @@ static void null_free_sector(struct nullb *nullb, sector_t sector,
 	unsigned int sector_bit;
 	u64 idx;
 	struct nullb_page *t_page, *ret;
-	struct radix_tree_root *root;
+	struct xarray *xa;
 
-	root = is_cache ? &nullb->dev->cache : &nullb->dev->data;
+	xa = is_cache ? &nullb->dev->cache : &nullb->dev->data;
 	idx = sector >> PAGE_SECTORS_SHIFT;
 	sector_bit = (sector & SECTOR_MASK);
 
-	t_page = radix_tree_lookup(root, idx);
+	t_page = xa_load(xa, idx);
 	if (t_page) {
 		__clear_bit(sector_bit, t_page->bitmap);
 
 		if (null_page_empty(t_page)) {
-			ret = radix_tree_delete_item(root, idx, t_page);
+			ret = xa_erase(xa, idx);
 			WARN_ON(ret != t_page);
 			null_free_page(ret);
 			if (is_cache)
@@ -919,16 +919,18 @@ static void null_free_sector(struct nullb *nullb, sector_t sector,
 	}
 }
 
-static struct nullb_page *null_radix_tree_insert(struct nullb *nullb, u64 idx,
+static struct nullb_page *null_xarray_insert(struct nullb *nullb, u64 idx,
 	struct nullb_page *t_page, bool is_cache)
 {
-	struct radix_tree_root *root;
+	struct xarray *xa;
+	void *ret;
 
-	root = is_cache ? &nullb->dev->cache : &nullb->dev->data;
+	xa = is_cache ? &nullb->dev->cache : &nullb->dev->data;
 
-	if (radix_tree_insert(root, idx, t_page)) {
+	ret = xa_store(xa, idx, t_page, GFP_ATOMIC);
+	if (xa_is_err(ret)) {
 		null_free_page(t_page);
-		t_page = radix_tree_lookup(root, idx);
+		t_page = xa_load(xa, idx);
 		WARN_ON(!t_page || t_page->page->index != idx);
 	} else if (is_cache)
 		nullb->dev->curr_cache += PAGE_SIZE;
@@ -938,28 +940,16 @@ static struct nullb_page *null_radix_tree_insert(struct nullb *nullb, u64 idx,
 
 static void null_free_device_storage(struct nullb_device *dev, bool is_cache)
 {
-	unsigned long pos = 0;
-	int nr_pages;
-	struct nullb_page *ret, *t_pages[FREE_BATCH];
-	struct radix_tree_root *root;
+	unsigned long idx;
+	struct nullb_page *t_page, *ret;
+	struct xarray *xa;
 
-	root = is_cache ? &dev->cache : &dev->data;
-
-	do {
-		int i;
-
-		nr_pages = radix_tree_gang_lookup(root,
-				(void **)t_pages, pos, FREE_BATCH);
-
-		for (i = 0; i < nr_pages; i++) {
-			pos = t_pages[i]->page->index;
-			ret = radix_tree_delete_item(root, pos, t_pages[i]);
-			WARN_ON(ret != t_pages[i]);
-			null_free_page(ret);
-		}
-
-		pos++;
-	} while (nr_pages == FREE_BATCH);
+	xa = is_cache ? &dev->cache : &dev->data;
+	xa_for_each(xa, idx, t_page) {
+		ret = xa_erase(xa, idx);
+		WARN_ON(ret != t_page);
+		null_free_page(t_page);
+	}
 
 	if (is_cache)
 		dev->curr_cache = 0;
@@ -971,13 +961,13 @@ static struct nullb_page *__null_lookup_page(struct nullb *nullb,
 	unsigned int sector_bit;
 	u64 idx;
 	struct nullb_page *t_page;
-	struct radix_tree_root *root;
+	struct xarray *xa;
 
 	idx = sector >> PAGE_SECTORS_SHIFT;
 	sector_bit = (sector & SECTOR_MASK);
 
-	root = is_cache ? &nullb->dev->cache : &nullb->dev->data;
-	t_page = radix_tree_lookup(root, idx);
+	xa = is_cache ? &nullb->dev->cache : &nullb->dev->data;
+	t_page = xa_load(xa, idx);
 	WARN_ON(t_page && t_page->page->index != idx);
 
 	if (t_page && (for_write || test_bit(sector_bit, t_page->bitmap)))
@@ -1005,6 +995,7 @@ static struct nullb_page *null_insert_page(struct nullb *nullb,
 {
 	u64 idx;
 	struct nullb_page *t_page;
+	struct xarray *xa;
 
 	t_page = null_lookup_page(nullb, sector, true, ignore_cache);
 	if (t_page)
@@ -1016,14 +1007,14 @@ static struct nullb_page *null_insert_page(struct nullb *nullb,
 	if (!t_page)
 		goto out_lock;
 
-	if (radix_tree_preload(GFP_NOIO))
+	xa = ignore_cache ? &nullb->dev->data : &nullb->dev->cache;
+	idx = sector >> PAGE_SECTORS_SHIFT;
+	if (xa_is_err(xa_store(xa, idx, NULL, GFP_NOIO)))
 		goto out_freepage;
 
 	spin_lock_irq(&nullb->lock);
-	idx = sector >> PAGE_SECTORS_SHIFT;
 	t_page->page->index = idx;
-	t_page = null_radix_tree_insert(nullb, idx, t_page, !ignore_cache);
-	radix_tree_preload_end();
+	t_page = null_xarray_insert(nullb, idx, t_page, !ignore_cache);
 
 	return t_page;
 out_freepage:
@@ -1049,8 +1040,8 @@ static int null_flush_cache_page(struct nullb *nullb, struct nullb_page *c_page)
 	if (test_bit(NULLB_PAGE_FREE, c_page->bitmap)) {
 		null_free_page(c_page);
 		if (t_page && null_page_empty(t_page)) {
-			ret = radix_tree_delete_item(&nullb->dev->data,
-				idx, t_page);
+			ret = xa_erase(&nullb->dev->data, idx);
+			WARN_ON(ret != t_page);
 			null_free_page(t_page);
 		}
 		return 0;
@@ -1075,7 +1066,7 @@ static int null_flush_cache_page(struct nullb *nullb, struct nullb_page *c_page)
 	kunmap_local(dst);
 	kunmap_local(src);
 
-	ret = radix_tree_delete_item(&nullb->dev->cache, idx, c_page);
+	ret = xa_erase(&nullb->dev->cache, idx);
 	null_free_page(ret);
 	nullb->dev->curr_cache -= PAGE_SIZE;
 
@@ -1093,8 +1084,8 @@ again:
 	     nullb->dev->curr_cache + n || nullb->dev->curr_cache == 0)
 		return 0;
 
-	nr_pages = radix_tree_gang_lookup(&nullb->dev->cache,
-			(void **)c_pages, nullb->cache_flush_pos, FREE_BATCH);
+	nr_pages = xa_extract(&nullb->dev->cache, (void **)c_pages,
+			nullb->cache_flush_pos, ULONG_MAX, FREE_BATCH, XA_PRESENT);
 	/*
 	 * nullb_flush_cache_page could unlock before using the c_pages. To
 	 * avoid race, we don't allow page free
@@ -1235,7 +1226,7 @@ static int null_handle_flush(struct nullb *nullb)
 			break;
 	}
 
-	WARN_ON(!radix_tree_empty(&nullb->dev->cache));
+	WARN_ON(!xa_empty(&nullb->dev->cache));
 	spin_unlock_irq(&nullb->lock);
 	return err;
 }

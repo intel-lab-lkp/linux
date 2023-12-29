@@ -14,6 +14,7 @@
 #include <linux/fault-inject.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/xarray.h>
 
 struct nullb_cmd {
 	union {
@@ -75,8 +76,8 @@ struct nullb_device {
 	struct fault_config requeue_config;
 	struct fault_config init_hctx_fault_config;
 #endif
-	struct radix_tree_root data; /* data stored in the disk */
-	struct radix_tree_root cache; /* disk cache data */
+	struct xarray data; /* data stored in the disk */
+	struct xarray cache; /* disk cache data */
 	unsigned long flags; /* device flags */
 	unsigned int curr_cache;
 	struct badblocks badblocks;
