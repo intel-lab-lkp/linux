@@ -1483,7 +1483,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 						     ctx->max_hpages,
 						     ctx->min_hpages);
 		if (!sbinfo->spool)
-			goto out_free;
+			goto free_sbinfo;
 	}
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_blocksize = huge_page_size(ctx->hstate);
@@ -1499,10 +1499,12 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_stack_depth = FILESYSTEM_MAX_STACK_DEPTH;
 	sb->s_root = d_make_root(hugetlbfs_get_root(sb, ctx));
 	if (!sb->s_root)
-		goto out_free;
+		goto free_spool;
 	return 0;
-out_free:
+
+free_spool:
 	kfree(sbinfo->spool);
+free_sbinfo:
 	kfree(sbinfo);
 	return -ENOMEM;
 }
