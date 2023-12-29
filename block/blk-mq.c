@@ -4410,10 +4410,11 @@ static int blk_mq_realloc_tag_set_tags(struct blk_mq_tag_set *set,
 	if (!new_tags)
 		return -ENOMEM;
 
-	if (set->tags)
+	if (set->tags) {
 		memcpy(new_tags, set->tags, set->nr_hw_queues *
 		       sizeof(*set->tags));
-	kfree(set->tags);
+		kfree(set->tags);
+	}
 	set->tags = new_tags;
 
 	for (i = set->nr_hw_queues; i < new_nr_hw_queues; i++) {
