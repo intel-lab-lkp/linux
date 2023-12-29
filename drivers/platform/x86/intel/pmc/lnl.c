@@ -500,7 +500,7 @@ const struct pmc_reg_map lnl_socm_reg_map = {
  * Set power state of select devices that do not have drivers to D3
  * so that they do not block Package C entry.
  */
-void lnl_d3_fixup(void)
+static void lnl_d3_fixup(void)
 {
 	pmc_core_set_device_d3(LNL_IPU_PCI_DEV);
 	pmc_core_set_device_d3(LNL_NPU_PCI_DEV);
