@@ -33,6 +33,8 @@ properties:
       performance domains.
     const: 1
 
+  big-cpus-supply: true
+
 required:
   - compatible
   - reg
