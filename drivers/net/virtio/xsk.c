@@ -377,6 +377,16 @@ bool virtnet_xsk_xmit(struct virtnet_sq *sq, struct xsk_buff_pool *pool,
 	if (!virtnet_is_xdp_raw_buffer_queue(vi, sq - vi->sq))
 		virtnet_check_sq_full_and_disable(vi, vi->dev, sq);
 
+	if (packets) {
+		struct netdev_queue *txq;
+		struct virtnet_info *vi;
+
+		vi = sq->vq->vdev->priv;
+
+		txq = netdev_get_tx_queue(vi->dev, sq - vi->sq);
+		txq_trans_cond_update(txq);
+	}
+
 	u64_stats_update_begin(&sq->stats.syncp);
 	u64_stats_add(&sq->stats.packets, packets);
 	u64_stats_add(&sq->stats.bytes,   bytes);
