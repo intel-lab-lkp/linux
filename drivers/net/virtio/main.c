@@ -149,7 +149,8 @@ struct virtio_net_common_hdr {
 	};
 };
 
-static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf);
+static void virtnet_rq_free_unused_bufs(struct virtqueue *vq);
+static void virtnet_sq_free_unused_bufs(struct virtqueue *vq);
 
 static bool is_xdp_frame(void *ptr)
 {
@@ -580,20 +581,6 @@ static void virtnet_rq_set_premapped(struct virtnet_info *vi)
 
 		vi->rq[i].do_dma = true;
 	}
-}
-
-static void virtnet_rq_unmap_free_buf(struct virtqueue *vq, void *buf)
-{
-	struct virtnet_info *vi = vq->vdev->priv;
-	struct virtnet_rq *rq;
-	int i = vq2rxq(vq);
-
-	rq = &vi->rq[i];
-
-	if (rq->do_dma)
-		virtnet_rq_unmap(rq, buf, 0);
-
-	virtnet_rq_free_buf(vi, rq, buf);
 }
 
 static void free_old_xmit(struct virtnet_sq *sq, bool in_napi)
@@ -2210,7 +2197,7 @@ static int virtnet_rx_resize(struct virtnet_info *vi,
 	if (running)
 		napi_disable(&rq->napi);
 
-	err = virtqueue_resize(rq->vq, ring_num, virtnet_rq_unmap_free_buf);
+	err = virtqueue_resize(rq->vq, ring_num, virtnet_rq_free_unused_bufs);
 	if (err)
 		netdev_err(vi->dev, "resize rx fail: rx queue index: %d err: %d\n", qindex, err);
 
@@ -2249,7 +2236,7 @@ static int virtnet_tx_resize(struct virtnet_info *vi,
 
 	__netif_tx_unlock_bh(txq);
 
-	err = virtqueue_resize(sq->vq, ring_num, virtnet_sq_free_unused_buf);
+	err = virtqueue_resize(sq->vq, ring_num, virtnet_sq_free_unused_bufs);
 	if (err)
 		netdev_err(vi->dev, "resize tx fail: tx queue index: %d err: %d\n", qindex, err);
 
@@ -3841,31 +3828,48 @@ static void free_receive_page_frags(struct virtnet_info *vi)
 		}
 }
 
-static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf)
+static void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
 {
-	if (!is_xdp_frame(buf))
-		dev_kfree_skb(buf);
-	else
-		xdp_return_frame(ptr_to_xdp(buf));
+	void *buf;
+
+	while ((buf = virtqueue_detach_unused_buf(vq)) != NULL) {
+		if (!is_xdp_frame(buf))
+			dev_kfree_skb(buf);
+		else
+			xdp_return_frame(ptr_to_xdp(buf));
+	}
+}
+
+static void virtnet_rq_free_unused_bufs(struct virtqueue *vq)
+{
+	struct virtnet_info *vi = vq->vdev->priv;
+	struct virtnet_rq *rq;
+	int i = vq2rxq(vq);
+	void *buf;
+
+	rq = &vi->rq[i];
+
+	while ((buf = virtqueue_detach_unused_buf(vq)) != NULL) {
+		if (rq->do_dma)
+			virtnet_rq_unmap(rq, buf, 0);
+
+		virtnet_rq_free_buf(vi, rq, buf);
+	}
 }
 
 static void free_unused_bufs(struct virtnet_info *vi)
 {
-	void *buf;
 	int i;
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		struct virtqueue *vq = vi->sq[i].vq;
-		while ((buf = virtqueue_detach_unused_buf(vq)) != NULL)
-			virtnet_sq_free_unused_buf(vq, buf);
+		virtnet_sq_free_unused_bufs(vq);
 		cond_resched();
 	}
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		struct virtqueue *vq = vi->rq[i].vq;
-
-		while ((buf = virtqueue_detach_unused_buf(vq)) != NULL)
-			virtnet_rq_unmap_free_buf(vq, buf);
+		virtnet_rq_free_unused_bufs(vq);
 		cond_resched();
 	}
 }
