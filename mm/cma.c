@@ -37,7 +37,7 @@
 #include "cma.h"
 
 struct cma cma_areas[MAX_CMA_AREAS];
-unsigned cma_area_count;
+unsigned int cma_area_count;
 static DEFINE_MUTEX(cma_mutex);
 
 phys_addr_t cma_get_base(const struct cma *cma)
