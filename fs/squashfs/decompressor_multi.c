@@ -62,12 +62,12 @@ static void *squashfs_decompressor_create(struct squashfs_sb_info *msblk,
 				void *comp_opts)
 {
 	struct squashfs_stream *stream;
-	struct decomp_stream *decomp_strm = NULL;
-	int err = -ENOMEM;
+	struct decomp_stream *decomp_strm;
+	int err;
 
 	stream = kzalloc(sizeof(*stream), GFP_KERNEL);
 	if (!stream)
-		goto out;
+		return ERR_PTR(-ENOMEM);
 
 	stream->comp_opts = comp_opts;
 	mutex_init(&stream->mutex);
@@ -81,8 +81,10 @@ static void *squashfs_decompressor_create(struct squashfs_sb_info *msblk,
 	 * file system works.
 	 */
 	decomp_strm = kmalloc(sizeof(*decomp_strm), GFP_KERNEL);
-	if (!decomp_strm)
-		goto out;
+	if (!decomp_strm) {
+		err = -ENOMEM;
+		goto free_stream;
+	}
 
 	decomp_strm->stream = msblk->decompressor->init(msblk,
 						stream->comp_opts);
@@ -97,6 +99,7 @@ static void *squashfs_decompressor_create(struct squashfs_sb_info *msblk,
 
 out:
 	kfree(decomp_strm);
+free_stream:
 	kfree(stream);
 	return ERR_PTR(err);
 }
