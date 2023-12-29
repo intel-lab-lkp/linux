@@ -195,4 +195,7 @@ struct virtnet_info {
 	/* failover when STANDBY feature enabled */
 	struct failover *failover;
 };
+
+void virtnet_rx_pause(struct virtnet_info *vi, struct virtnet_rq *rq);
+void virtnet_rx_resume(struct virtnet_info *vi, struct virtnet_rq *rq);
 #endif
