@@ -73,9 +73,13 @@ bool virtnet_xsk_xmit(struct virtnet_sq *sq, struct xsk_buff_pool *pool,
 {
 	struct virtnet_info *vi = sq->vq->vdev->priv;
 	u64 bytes = 0, packets = 0, kicks = 0;
+	u64 xsknum = 0;
 	int sent;
 
-	virtnet_free_old_xmit(sq, true, &bytes, &packets);
+	/* Avoid to wakeup napi meanless, so call __virtnet_free_old_xmit. */
+	__virtnet_free_old_xmit(sq, true, &bytes, &packets, &xsknum);
+	if (xsknum)
+		xsk_tx_completed(sq->xsk.pool, xsknum);
 
 	sent = virtnet_xsk_xmit_batch(sq, pool, budget, &kicks);
 
@@ -95,6 +99,16 @@ bool virtnet_xsk_xmit(struct virtnet_sq *sq, struct xsk_buff_pool *pool,
 	return sent == budget;
 }
 
+static void xsk_wakeup(struct virtnet_sq *sq)
+{
+	if (napi_if_scheduled_mark_missed(&sq->napi))
+		return;
+
+	local_bh_disable();
+	virtnet_vq_napi_schedule(&sq->napi, sq->vq);
+	local_bh_enable();
+}
+
 int virtnet_xsk_wakeup(struct net_device *dev, u32 qid, u32 flag)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
@@ -108,14 +122,19 @@ int virtnet_xsk_wakeup(struct net_device *dev, u32 qid, u32 flag)
 
 	sq = &vi->sq[qid];
 
-	if (napi_if_scheduled_mark_missed(&sq->napi))
-		return 0;
-
-	local_bh_disable();
-	virtnet_vq_napi_schedule(&sq->napi, sq->vq);
-	local_bh_enable();
-
+	xsk_wakeup(sq);
 	return 0;
+}
+
+void virtnet_xsk_completed(struct virtnet_sq *sq, int num)
+{
+	xsk_tx_completed(sq->xsk.pool, num);
+
+	/* If this is called by rx poll, start_xmit and xdp xmit we should
+	 * wakeup the tx napi to consume the xsk tx queue, because the tx
+	 * interrupt may not be triggered.
+	 */
+	xsk_wakeup(sq);
 }
 
 static int virtnet_rq_bind_xsk_pool(struct virtnet_info *vi, struct virtnet_rq *rq,

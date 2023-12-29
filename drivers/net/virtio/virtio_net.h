@@ -214,6 +214,11 @@ struct virtnet_info {
 	struct failover *failover;
 };
 
+static inline bool virtnet_is_skb_ptr(void *ptr)
+{
+	return !((unsigned long)ptr & (VIRTIO_XDP_FLAG | VIRTIO_XSK_FLAG));
+}
+
 static inline bool virtnet_is_xdp_frame(void *ptr)
 {
 	return (unsigned long)ptr & VIRTIO_XDP_FLAG;
@@ -223,6 +228,9 @@ static inline struct xdp_frame *virtnet_ptr_to_xdp(void *ptr)
 {
 	return (struct xdp_frame *)((unsigned long)ptr & ~VIRTIO_XDP_FLAG);
 }
+
+static inline u32 virtnet_ptr_to_xsk(void *ptr);
+void virtnet_xsk_completed(struct virtnet_sq *sq, int num);
 
 static inline void virtnet_sq_unmap_buf(struct virtnet_sq *sq, struct virtio_dma_head *dma)
 {
@@ -239,8 +247,8 @@ static inline void virtnet_sq_unmap_buf(struct virtnet_sq *sq, struct virtio_dma
 	dma->next = 0;
 }
 
-static inline void virtnet_free_old_xmit(struct virtnet_sq *sq, bool in_napi,
-					 u64 *bytes, u64 *packets)
+static inline void __virtnet_free_old_xmit(struct virtnet_sq *sq, bool in_napi,
+					   u64 *bytes, u64 *packets, u64 *xsk)
 {
 	struct virtio_dma_head *dma;
 	unsigned int len;
@@ -257,21 +265,35 @@ static inline void virtnet_free_old_xmit(struct virtnet_sq *sq, bool in_napi,
 	while ((ptr = virtqueue_get_buf_ctx_dma(sq->vq, &len, dma, NULL)) != NULL) {
 		virtnet_sq_unmap_buf(sq, dma);
 
-		if (!virtnet_is_xdp_frame(ptr)) {
+		if (virtnet_is_skb_ptr(ptr)) {
 			struct sk_buff *skb = ptr;
 
 			pr_debug("Sent skb %p\n", skb);
 
 			*bytes += skb->len;
 			napi_consume_skb(skb, in_napi);
-		} else {
+		} else if (virtnet_is_xdp_frame(ptr)) {
 			struct xdp_frame *frame = virtnet_ptr_to_xdp(ptr);
 
 			*bytes += xdp_get_frame_len(frame);
 			xdp_return_frame(frame);
+		} else {
+			*bytes += virtnet_ptr_to_xsk(ptr);
+			(*xsk)++;
 		}
 		(*packets)++;
 	}
+}
+
+static inline void virtnet_free_old_xmit(struct virtnet_sq *sq, bool in_napi,
+					 u64 *bytes, u64 *packets)
+{
+	u64 xsknum = 0;
+
+	__virtnet_free_old_xmit(sq, in_napi, bytes, packets, &xsknum);
+
+	if (xsknum)
+		virtnet_xsk_completed(sq, xsknum);
 }
 
 static inline bool virtnet_is_xdp_raw_buffer_queue(struct virtnet_info *vi, int q)
