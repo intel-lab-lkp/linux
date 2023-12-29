@@ -116,12 +116,13 @@ The following order of properties in device nodes is preferred:
 
 1. "compatible"
 2. "reg"
-3. "ranges"
-4. Standard/common properties (defined by common bindings, e.g. without
+3. "reg-names"
+4. "ranges"
+5. Standard/common properties (defined by common bindings, e.g. without
    vendor-prefixes)
-5. Vendor-specific properties
-6. "status" (if applicable)
-7. Child nodes, where each node is preceded with a blank line
+6. Vendor-specific properties
+7. "status" (if applicable)
+8. Child nodes, where each node is preceded with a blank line
 
 The "status" property is by default "okay", thus it can be omitted.
 
