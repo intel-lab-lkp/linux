@@ -1166,6 +1166,8 @@ static int esdhc_executing_tuning(struct sdhci_host *host, u32 opcode)
 	min = ESDHC_TUNE_CTRL_MIN;
 	max = ESDHC_TUNE_CTRL_MIN;
 	target_win_length = 0;
+	target_min = 0;
+	target_max = 0;
 	while (max < ESDHC_TUNE_CTRL_MAX) {
 		/* find the mininum delay first which can pass tuning */
 		while (min < ESDHC_TUNE_CTRL_MAX) {
