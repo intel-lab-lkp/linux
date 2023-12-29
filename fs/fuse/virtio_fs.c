@@ -1415,10 +1415,10 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 {
 	struct virtio_fs *fs;
 	struct super_block *sb;
-	struct fuse_conn *fc = NULL;
+	struct fuse_conn *fc;
 	struct fuse_mount *fm;
 	unsigned int virtqueue_size;
-	int err = -EIO;
+	int err;
 
 	/* This gets a reference on virtio_fs object. This ptr gets installed
 	 * in fc->iq->priv. Once fuse_conn is going away, it calls ->put()
@@ -1431,13 +1431,15 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 	}
 
 	virtqueue_size = virtqueue_get_vring_size(fs->vqs[VQ_REQUEST].vq);
-	if (WARN_ON(virtqueue_size <= FUSE_HEADER_OVERHEAD))
-		goto out_err;
+	if (WARN_ON(virtqueue_size <= FUSE_HEADER_OVERHEAD)) {
+		err = -EIO;
+		goto lock_mutex;
+	}
 
 	err = -ENOMEM;
 	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
 	if (!fc)
-		goto out_err;
+		goto lock_mutex;
 
 	fm = kzalloc(sizeof(*fm), GFP_KERNEL);
 	if (!fm)
@@ -1476,6 +1478,7 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 
 out_err:
 	kfree(fc);
+lock_mutex:
 	mutex_lock(&virtio_fs_mutex);
 	virtio_fs_put(fs);
 	mutex_unlock(&virtio_fs_mutex);
