@@ -1461,6 +1461,7 @@
 			clocks = <&cru PCLK_GPIO0>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 0 24>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1474,6 +1475,7 @@
 			clocks = <&cru PCLK_GPIO1>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 32 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1487,6 +1489,7 @@
 			clocks = <&cru PCLK_GPIO2>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 64 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1500,6 +1503,7 @@
 			clocks = <&cru PCLK_GPIO3>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 96 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1513,6 +1517,7 @@
 			clocks = <&cru PCLK_GPIO4>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 128 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1526,6 +1531,7 @@
 			clocks = <&cru PCLK_GPIO5>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 160 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1539,6 +1545,7 @@
 			clocks = <&cru PCLK_GPIO6>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 192 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1552,6 +1559,7 @@
 			clocks = <&cru PCLK_GPIO7>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 224 32>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
@@ -1565,6 +1573,7 @@
 			clocks = <&cru PCLK_GPIO8>;
 
 			gpio-controller;
+			gpio-ranges = <&pinctrl 0 256 16>;
 			#gpio-cells = <2>;
 
 			interrupt-controller;
