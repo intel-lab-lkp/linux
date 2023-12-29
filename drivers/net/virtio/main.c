@@ -167,13 +167,39 @@ static struct xdp_frame *ptr_to_xdp(void *ptr)
 	return (struct xdp_frame *)((unsigned long)ptr & ~VIRTIO_XDP_FLAG);
 }
 
+static void virtnet_sq_unmap_buf(struct virtnet_sq *sq, struct virtio_dma_head *dma)
+{
+	int i;
+
+	if (!dma)
+		return;
+
+	for (i = 0; i < dma->next; ++i)
+		virtqueue_dma_unmap_single_attrs(sq->vq,
+						 dma->items[i].addr,
+						 dma->items[i].length,
+						 DMA_TO_DEVICE, 0);
+	dma->next = 0;
+}
+
 static void __free_old_xmit(struct virtnet_sq *sq, bool in_napi,
 			    u64 *bytes, u64 *packets)
 {
+	struct virtio_dma_head *dma;
 	unsigned int len;
 	void *ptr;
 
-	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
+	if (virtqueue_get_dma_premapped(sq->vq)) {
+		dma = &sq->dma.head;
+		dma->num = ARRAY_SIZE(sq->dma.items);
+		dma->next = 0;
+	} else {
+		dma = NULL;
+	}
+
+	while ((ptr = virtqueue_get_buf_ctx_dma(sq->vq, &len, dma, NULL)) != NULL) {
+		virtnet_sq_unmap_buf(sq, dma);
+
 		if (!is_xdp_frame(ptr)) {
 			struct sk_buff *skb = ptr;
 
@@ -567,16 +593,70 @@ static void *virtnet_rq_alloc(struct virtnet_rq *rq, u32 size, gfp_t gfp)
 	return buf;
 }
 
-static void virtnet_rq_set_premapped(struct virtnet_info *vi)
+static void virtnet_set_premapped(struct virtnet_info *vi)
 {
 	int i;
 
-	/* disable for big mode */
-	if (!vi->mergeable_rx_bufs && vi->big_packets)
-		return;
+	for (i = 0; i < vi->max_queue_pairs; i++) {
+		virtqueue_set_dma_premapped(vi->sq[i].vq);
 
-	for (i = 0; i < vi->max_queue_pairs; i++)
-		virtqueue_set_dma_premapped(vi->rq[i].vq);
+		/* TODO for big mode */
+		if (vi->mergeable_rx_bufs || !vi->big_packets)
+			virtqueue_set_dma_premapped(vi->rq[i].vq);
+	}
+}
+
+static void virtnet_sq_unmap_sg(struct virtnet_sq *sq, u32 num)
+{
+	struct scatterlist *sg;
+	u32 i;
+
+	for (i = 0; i < num; ++i) {
+		sg = &sq->sg[i];
+
+		virtqueue_dma_unmap_single_attrs(sq->vq,
+						 sg->dma_address,
+						 sg->length,
+						 DMA_TO_DEVICE, 0);
+	}
+}
+
+static int virtnet_sq_map_sg(struct virtnet_sq *sq, u32 num)
+{
+	struct scatterlist *sg;
+	u32 i;
+
+	for (i = 0; i < num; ++i) {
+		sg = &sq->sg[i];
+		sg->dma_address = virtqueue_dma_map_single_attrs(sq->vq, sg_virt(sg),
+								 sg->length,
+								 DMA_TO_DEVICE, 0);
+		if (virtqueue_dma_mapping_error(sq->vq, sg->dma_address))
+			goto err;
+	}
+
+	return 0;
+
+err:
+	virtnet_sq_unmap_sg(sq, i);
+	return -ENOMEM;
+}
+
+static int virtnet_add_outbuf(struct virtnet_sq *sq, u32 num, void *data)
+{
+	int ret;
+
+	if (virtqueue_get_dma_premapped(sq->vq)) {
+		ret = virtnet_sq_map_sg(sq, num);
+		if (ret)
+			return -ENOMEM;
+	}
+
+	ret = virtqueue_add_outbuf(sq->vq, sq->sg, num, data, GFP_ATOMIC);
+	if (ret && virtqueue_get_dma_premapped(sq->vq))
+		virtnet_sq_unmap_sg(sq, num);
+
+	return ret;
 }
 
 static void free_old_xmit(struct virtnet_sq *sq, bool in_napi)
@@ -682,8 +762,7 @@ static int __virtnet_xdp_xmit_one(struct virtnet_info *vi,
 			    skb_frag_size(frag), skb_frag_off(frag));
 	}
 
-	err = virtqueue_add_outbuf(sq->vq, sq->sg, nr_frags + 1,
-				   xdp_to_ptr(xdpf), GFP_ATOMIC);
+	err = virtnet_add_outbuf(sq, nr_frags + 1, xdp_to_ptr(xdpf));
 	if (unlikely(err))
 		return -ENOSPC; /* Caller handle free/refcnt */
 
@@ -2122,7 +2201,7 @@ static int xmit_skb(struct virtnet_sq *sq, struct sk_buff *skb)
 			return num_sg;
 		num_sg++;
 	}
-	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
+	return virtnet_add_outbuf(sq, num_sg, skb);
 }
 
 static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -3826,9 +3905,25 @@ static void free_receive_page_frags(struct virtnet_info *vi)
 
 static void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
 {
+	struct virtnet_info *vi = vq->vdev->priv;
+	struct virtio_dma_head *dma;
+	struct virtnet_sq *sq;
+	int i = vq2txq(vq);
 	void *buf;
 
-	while ((buf = virtqueue_detach_unused_buf(vq)) != NULL) {
+	sq = &vi->sq[i];
+
+	if (virtqueue_get_dma_premapped(sq->vq)) {
+		dma = &sq->dma.head;
+		dma->num = ARRAY_SIZE(sq->dma.items);
+		dma->next = 0;
+	} else {
+		dma = NULL;
+	}
+
+	while ((buf = virtqueue_detach_unused_buf_dma(vq, dma)) != NULL) {
+		virtnet_sq_unmap_buf(sq, dma);
+
 		if (!is_xdp_frame(buf))
 			dev_kfree_skb(buf);
 		else
@@ -4040,7 +4135,7 @@ static int init_vqs(struct virtnet_info *vi)
 	if (ret)
 		goto err_free;
 
-	virtnet_rq_set_premapped(vi);
+	virtnet_set_premapped(vi);
 
 	cpus_read_lock();
 	virtnet_set_affinity(vi);

@@ -48,13 +48,21 @@ struct virtnet_rq_dma {
 	u16 need_sync;
 };
 
+struct virtnet_sq_dma {
+	struct virtio_dma_head head;
+	struct virtio_dma_item items[MAX_SKB_FRAGS + 2];
+};
+
 /* Internal representation of a send virtqueue */
 struct virtnet_sq {
 	/* Virtqueue associated with this virtnet_sq */
 	struct virtqueue *vq;
 
 	/* TX: fragments + linear part + virtio header */
-	struct scatterlist sg[MAX_SKB_FRAGS + 2];
+	union {
+		struct scatterlist sg[MAX_SKB_FRAGS + 2];
+		struct virtnet_sq_dma dma;
+	};
 
 	/* Name of the send queue: output.$index */
 	char name[16];
