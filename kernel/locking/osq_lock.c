@@ -51,7 +51,7 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 	      struct optimistic_spin_node *prev)
 {
 	struct optimistic_spin_node *next = NULL;
-	int curr = encode_cpu(smp_processor_id());
+	int curr = node->cpu;
 	int old;
 
 	/*
@@ -98,12 +98,10 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
 	struct optimistic_spin_node *prev, *next;
-	int curr = encode_cpu(smp_processor_id());
 	int old;
 
-	node->locked = 0;
-	node->next = NULL;
-	node->cpu = curr;
+	if (unlikely(node->cpu == OSQ_UNLOCKED_VAL))
+		node->cpu = encode_cpu(smp_processor_id());
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -111,12 +109,13 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the node fields we just initialised) semantics when updating
 	 * the lock tail.
 	 */
-	old = atomic_xchg(&lock->tail, curr);
+	old = atomic_xchg(&lock->tail, node->cpu);
 	if (old == OSQ_UNLOCKED_VAL)
 		return true;
 
 	prev = decode_cpu(old);
 	node->prev = prev;
+	node->locked = 0;
 
 	/*
 	 * osq_lock()			unqueue
@@ -214,7 +213,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 void osq_unlock(struct optimistic_spin_queue *lock)
 {
 	struct optimistic_spin_node *node, *next;
-	int curr = encode_cpu(smp_processor_id());
+	int curr = raw_cpu_read(osq_node.cpu);
 
 	/*
 	 * Fast path for the uncontended case.
