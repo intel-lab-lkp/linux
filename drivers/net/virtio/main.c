@@ -8,7 +8,6 @@
 #include <linux/etherdevice.h>
 #include <linux/module.h>
 #include <linux/virtio.h>
-#include <linux/virtio_net.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
 #include <linux/scatterlist.h>
@@ -23,6 +22,7 @@
 #include <net/netdev_rx_queue.h>
 
 #include "virtio_net.h"
+#include "xsk.h"
 
 static int napi_weight = NAPI_POLL_WEIGHT;
 module_param(napi_weight, int, 0444);
@@ -148,9 +148,6 @@ struct virtio_net_common_hdr {
 		struct virtio_net_hdr_v1_hash hash_v1_hdr;
 	};
 };
-
-static void virtnet_rq_free_unused_bufs(struct virtqueue *vq);
-static void virtnet_sq_free_unused_bufs(struct virtqueue *vq);
 
 static bool is_xdp_frame(void *ptr)
 {
@@ -3756,6 +3753,8 @@ static int virtnet_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
 		return virtnet_xdp_set(dev, xdp->prog, xdp->extack);
+	case XDP_SETUP_XSK_POOL:
+		return virtnet_xsk_pool_setup(dev, xdp);
 	default:
 		return -EINVAL;
 	}
@@ -3939,7 +3938,7 @@ static void free_receive_page_frags(struct virtnet_info *vi)
 		}
 }
 
-static void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
+void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
 {
 	struct virtnet_info *vi = vq->vdev->priv;
 	struct virtio_dma_head *dma;
@@ -3967,7 +3966,7 @@ static void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
 	}
 }
 
-static void virtnet_rq_free_unused_bufs(struct virtqueue *vq)
+void virtnet_rq_free_unused_bufs(struct virtqueue *vq)
 {
 	struct virtnet_info *vi = vq->vdev->priv;
 	struct virtnet_rq *rq;
