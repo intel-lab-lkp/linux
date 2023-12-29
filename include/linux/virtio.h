@@ -75,6 +75,22 @@ void *virtqueue_get_buf(struct virtqueue *vq, unsigned int *len);
 void *virtqueue_get_buf_ctx(struct virtqueue *vq, unsigned int *len,
 			    void **ctx);
 
+struct virtio_dma_item {
+	dma_addr_t addr;
+	unsigned int length;
+};
+
+struct virtio_dma_head {
+	/* total num of items. */
+	u16 num;
+	/* point to the next item to store dma info. */
+	u16 next;
+	struct virtio_dma_item items[];
+};
+
+void *virtqueue_get_buf_ctx_dma(struct virtqueue *_vq, unsigned int *len,
+				struct virtio_dma_head *dma, void **ctx);
+
 void virtqueue_disable_cb(struct virtqueue *vq);
 
 bool virtqueue_enable_cb(struct virtqueue *vq);
