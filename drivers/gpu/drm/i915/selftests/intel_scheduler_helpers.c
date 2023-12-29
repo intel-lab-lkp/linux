@@ -65,7 +65,7 @@ int intel_selftest_modify_policy(struct intel_engine_cs *engine,
 	if (!intel_engine_uses_guc(engine))
 		return 0;
 
-	err = intel_guc_global_policies_update(&engine->gt->uc.guc);
+	err = intel_guc_global_policies_update(gt_to_guc(engine->gt));
 	if (err)
 		intel_selftest_restore_policy(engine, saved);
 
@@ -84,7 +84,7 @@ int intel_selftest_restore_policy(struct intel_engine_cs *engine,
 	if (!intel_engine_uses_guc(engine))
 		return 0;
 
-	return intel_guc_global_policies_update(&engine->gt->uc.guc);
+	return intel_guc_global_policies_update(gt_to_guc(engine->gt));
 }
 
 int intel_selftest_wait_for_rq(struct i915_request *rq)

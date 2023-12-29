@@ -43,7 +43,7 @@ static int notify_guc(struct drm_i915_private *i915)
 
 	for_each_gt(gt, i915, i) {
 		if (intel_uc_uses_guc_submission(&gt->uc))
-			ret = intel_guc_global_policies_update(&gt->uc.guc);
+			ret = intel_guc_global_policies_update(gt_to_guc(gt));
 	}
 
 	return ret;
