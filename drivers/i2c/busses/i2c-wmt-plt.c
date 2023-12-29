@@ -22,13 +22,15 @@
 #define WMTI2C_MCR_APB_96M		7
 #define WMTI2C_MCR_APB_166M		12
 
+#define wmt_i2c				viai2c
+
 static u32 wmt_i2c_func(struct i2c_adapter *adap)
 {
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_NOSTART;
 }
 
 static const struct i2c_algorithm wmt_i2c_algo = {
-	.master_xfer	= wmt_i2c_xfer,
+	.master_xfer	= viai2c_xfer,
 	.functionality	= wmt_i2c_func,
 };
 
@@ -50,18 +52,18 @@ static int wmt_i2c_reset_hardware(struct wmt_i2c *i2c)
 		return err;
 	}
 
-	writew(0, base + WMTI2C_REG_CR);
-	writew(WMTI2C_MCR_APB_166M, base + WMTI2C_REG_MCR);
-	writew(WMTI2C_ISR_WRITE_ALL, base + WMTI2C_REG_ISR);
-	writew(WMTI2C_IMR_ENABLE_ALL, base + WMTI2C_REG_IMR);
-	writew(WMTI2C_CR_ENABLE, base + WMTI2C_REG_CR);
-	readw(base + WMTI2C_REG_CSR);		/* read clear */
-	writew(WMTI2C_ISR_WRITE_ALL, base + WMTI2C_REG_ISR);
+	writew(0, base + VIAI2C_REG_CR);
+	writew(WMTI2C_MCR_APB_166M, base + VIAI2C_REG_MCR);
+	writew(VIAI2C_ISR_MASK_ALL, base + VIAI2C_REG_ISR);
+	writew(VIAI2C_IMR_ENABLE_ALL, base + VIAI2C_REG_IMR);
+	writew(VIAI2C_CR_ENABLE, base + VIAI2C_REG_CR);
+	readw(base + VIAI2C_REG_CSR);		/* read clear */
+	writew(VIAI2C_ISR_MASK_ALL, base + VIAI2C_REG_ISR);
 
-	if (i2c->tcr == WMTI2C_TCR_FAST_MODE)
-		writew(WMTI2C_SCL_TIMEOUT(128) | WMTI2C_TR_HS, base + WMTI2C_REG_TR);
+	if (i2c->tcr == VIAI2C_TCR_FAST)
+		writew(WMTI2C_SCL_TIMEOUT(128) | WMTI2C_TR_HS, base + VIAI2C_REG_TR);
 	else
-		writew(WMTI2C_SCL_TIMEOUT(128) | WMTI2C_TR_STD, base + WMTI2C_REG_TR);
+		writew(WMTI2C_SCL_TIMEOUT(128) | WMTI2C_TR_STD, base + VIAI2C_REG_TR);
 
 	return 0;
 }
@@ -74,7 +76,7 @@ static int wmt_i2c_probe(struct platform_device *pdev)
 	int err;
 	u32 clk_rate;
 
-	err = wmt_i2c_init(pdev, &i2c);
+	err = viai2c_init(pdev, &i2c);
 	if (err)
 		return err;
 
@@ -86,7 +88,7 @@ static int wmt_i2c_probe(struct platform_device *pdev)
 
 	err = of_property_read_u32(np, "clock-frequency", &clk_rate);
 	if (!err && (clk_rate == I2C_MAX_FAST_MODE_FREQ))
-		i2c->tcr = WMTI2C_TCR_FAST_MODE;
+		i2c->tcr = VIAI2C_TCR_FAST;
 
 	adap = &i2c->adapter;
 	i2c_set_adapdata(adap, i2c);
@@ -110,7 +112,7 @@ static void wmt_i2c_remove(struct platform_device *pdev)
 	struct wmt_i2c *i2c = platform_get_drvdata(pdev);
 
 	/* Disable interrupts, clock and delete adapter */
-	writew(0, i2c->base + WMTI2C_REG_IMR);
+	writew(0, i2c->base + VIAI2C_REG_IMR);
 	clk_disable_unprepare(i2c->clk);
 	i2c_del_adapter(&i2c->adapter);
 }
