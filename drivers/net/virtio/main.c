@@ -3897,10 +3897,12 @@ void virtnet_sq_free_unused_bufs(struct virtqueue *vq)
 	while ((buf = virtqueue_detach_unused_buf_dma(vq, dma)) != NULL) {
 		virtnet_sq_unmap_buf(sq, dma);
 
-		if (!virtnet_is_xdp_frame(buf))
+		if (virtnet_is_skb_ptr(buf))
 			dev_kfree_skb(buf);
-		else
+		else if (virtnet_is_xdp_frame(buf))
 			xdp_return_frame(virtnet_ptr_to_xdp(buf));
+		else
+			xsk_tx_completed(sq->xsk.pool, 1);
 	}
 }
 
