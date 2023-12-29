@@ -104,9 +104,6 @@ struct virtnet_rq {
 
 	/* Record the last dma info to free after new pages is allocated. */
 	struct virtnet_rq_dma *last_dma;
-
-	/* Do dma by self */
-	bool do_dma;
 };
 
 struct virtnet_info {

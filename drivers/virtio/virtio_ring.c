@@ -2906,6 +2906,28 @@ int virtqueue_set_dma_premapped(struct virtqueue *_vq)
 EXPORT_SYMBOL_GPL(virtqueue_set_dma_premapped);
 
 /**
+ * virtqueue_get_dma_premapped - get the vring premapped mode
+ * @_vq: the struct virtqueue we're talking about.
+ *
+ * Get the premapped mode of the vq.
+ *
+ * Returns bool for the vq premapped mode.
+ */
+bool virtqueue_get_dma_premapped(struct virtqueue *_vq)
+{
+	struct vring_virtqueue *vq = to_vvq(_vq);
+	bool premapped;
+
+	START_USE(vq);
+	premapped = vq->premapped;
+	END_USE(vq);
+
+	return premapped;
+
+}
+EXPORT_SYMBOL_GPL(virtqueue_get_dma_premapped);
+
+/**
  * virtqueue_reset - detach and recycle all unused buffers
  * @_vq: the struct virtqueue we're talking about.
  * @recycle: callback to recycle unused buffers
