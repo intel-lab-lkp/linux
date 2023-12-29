@@ -2,7 +2,8 @@
 #include <linux/of_irq.h>
 #include "i2c-viai2c-common.h"
 
-#define VIAI2C_TIMEOUT		(msecs_to_jiffies(1000))
+#define VIAI2C_TIMEOUT			(msecs_to_jiffies(1000))
+#define VIAI2C_STRETCHING_TIMEOUT	200
 
 static int viai2c_wait_bus_ready(struct viai2c *i2c)
 {
@@ -25,12 +26,35 @@ static int viai2c_wait_bus_ready(struct viai2c *i2c)
 static int viai2c_wait_status(struct viai2c *i2c)
 {
 	int ret = 0;
-	unsigned long wait_result;
+	unsigned long time_left;
+	unsigned long delta_ms;
 
-	wait_result = wait_for_completion_timeout(&i2c->complete,
-						msecs_to_jiffies(500));
-	if (!wait_result)
-		return -ETIMEDOUT;
+	time_left = wait_for_completion_timeout(&i2c->complete,
+						VIAI2C_TIMEOUT);
+	if (!time_left) {
+		dev_err(i2c->dev, "bus transfer timeout\n");
+		return -EIO;
+	}
+
+	/*
+	 * During each byte access, the host performs clock stretching.
+	 * In this case, the thread may be interrupted by preemption,
+	 * resulting in a long stretching time.
+	 * However, some touchpad can only tolerate host clock stretching
+	 * of no more than 200 ms. We reduce the impact of this through
+	 * a retransmission mechanism.
+	 */
+	local_irq_disable();
+	i2c->to = ktime_get();
+	delta_ms = ktime_to_ms(ktime_sub(i2c->to, i2c->ti));
+	if (delta_ms > VIAI2C_STRETCHING_TIMEOUT) {
+		local_irq_enable();
+		dev_warn(i2c->dev, "thread blocked more than %ldms\n",
+				delta_ms);
+		return -EAGAIN;
+	}
+	i2c->ti = i2c->to;
+	local_irq_enable();
 
 	if (i2c->cmd_status & VIAI2C_ISR_NACK_ADDR)
 		ret = -EIO;
@@ -184,6 +208,7 @@ int viai2c_xfer(struct i2c_adapter *adap,
 	int ret = 0;
 	struct viai2c *i2c = i2c_get_adapdata(adap);
 
+	i2c->to = i2c->ti = ktime_get();
 	for (i = 0; ret >= 0 && i < num; i++) {
 		pmsg = &msgs[i];
 		if (!(pmsg->flags & I2C_M_NOSTART)) {
