@@ -61,8 +61,7 @@ properties:
     minItems: 1
     maxItems: 8
 
-  iommu-map:
-    maxItems: 2
+  iommu-map: true
 
   # Common definitions for clocks, clock-names and reset.
   # Platform constraints are described later.
