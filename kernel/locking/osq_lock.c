@@ -13,7 +13,7 @@
  */
 
 struct optimistic_spin_node {
-	struct optimistic_spin_node *next, *prev;
+	struct optimistic_spin_node *self, *next, *prev;
 	int locked; /* 1 if lock acquired */
 	int cpu; /* encoded CPU # + 1 value */
 };
@@ -93,12 +93,16 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
+	struct optimistic_spin_node *node = raw_cpu_read(osq_node.self);
 	struct optimistic_spin_node *prev, *next;
 	int old;
 
-	if (unlikely(node->cpu == OSQ_UNLOCKED_VAL))
-		node->cpu = encode_cpu(smp_processor_id());
+	if (unlikely(!node)) {
+		int cpu = encode_cpu(smp_processor_id());
+		node = decode_cpu(cpu);
+		node->self = node;
+		node->cpu = cpu;
+	}
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -222,7 +226,7 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	/*
 	 * Second most likely case.
 	 */
-	node = this_cpu_ptr(&osq_node);
+	node = raw_cpu_read(osq_node.self);
 	next = xchg(&node->next, NULL);
 	if (next) {
 		WRITE_ONCE(next->locked, 1);
