@@ -14,8 +14,9 @@
 
 struct optimistic_spin_node {
 	struct optimistic_spin_node *self, *next, *prev;
-	int locked; /* 1 if lock acquired */
-	int cpu; /* encoded CPU # + 1 value */
+	int locked;    /* 1 if lock acquired */
+	int cpu;       /* encoded CPU # + 1 value */
+	int prev_cpu;  /* actual CPU # for vpcu_is_preempted() */
 };
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
@@ -27,11 +28,6 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
 static inline int encode_cpu(int cpu_nr)
 {
 	return cpu_nr + 1;
-}
-
-static inline int node_cpu(struct optimistic_spin_node *node)
-{
-	return node->cpu - 1;
 }
 
 static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
@@ -114,6 +110,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	if (old == OSQ_UNLOCKED_VAL)
 		return true;
 
+	node->prev_cpu = old - 1;
 	prev = decode_cpu(old);
 	node->prev = prev;
 	node->locked = 0;
@@ -148,7 +145,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * polling, be careful.
 	 */
 	if (smp_cond_load_relaxed(&node->locked, VAL || need_resched() ||
-				  vcpu_is_preempted(node_cpu(node->prev))))
+				  vcpu_is_preempted(node->prev_cpu)))
 		return true;
 
 	/* unqueue */
@@ -205,6 +202,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * it will wait in Step-A.
 	 */
 
+	WRITE_ONCE(next->prev_cpu, prev->cpu - 1);
 	WRITE_ONCE(next->prev, prev);
 	WRITE_ONCE(prev->next, next);
 
