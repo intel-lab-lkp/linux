@@ -9,6 +9,7 @@
 #include <net/xdp_sock_drv.h>
 
 #define VIRTIO_XDP_FLAG	BIT(0)
+#define VIRTIO_XSK_FLAG	BIT(1)
 
 /* RX packet size EWMA. The average packet size is used to determine the packet
  * buffer size when refilling RX rings. As the entire RX ring may be refilled
@@ -289,4 +290,7 @@ void virtnet_tx_pause(struct virtnet_info *vi, struct virtnet_sq *sq);
 void virtnet_tx_resume(struct virtnet_info *vi, struct virtnet_sq *sq);
 void virtnet_sq_free_unused_bufs(struct virtqueue *vq);
 void virtnet_rq_free_unused_bufs(struct virtqueue *vq);
+void virtnet_check_sq_full_and_disable(struct virtnet_info *vi,
+				       struct net_device *dev,
+				       struct virtnet_sq *sq);
 #endif
