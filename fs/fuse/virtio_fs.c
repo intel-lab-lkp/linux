@@ -1435,11 +1435,11 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 		goto out_err;
 
 	err = -ENOMEM;
-	fc = kzalloc(sizeof(struct fuse_conn), GFP_KERNEL);
+	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
 	if (!fc)
 		goto out_err;
 
-	fm = kzalloc(sizeof(struct fuse_mount), GFP_KERNEL);
+	fm = kzalloc(sizeof(*fm), GFP_KERNEL);
 	if (!fm)
 		goto out_err;
 
@@ -1495,7 +1495,7 @@ static int virtio_fs_init_fs_context(struct fs_context *fsc)
 	if (fsc->purpose == FS_CONTEXT_FOR_SUBMOUNT)
 		return fuse_init_fs_context_submount(fsc);
 
-	ctx = kzalloc(sizeof(struct fuse_fs_context), GFP_KERNEL);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 	fsc->fs_private = ctx;
