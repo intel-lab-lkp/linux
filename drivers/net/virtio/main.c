@@ -797,10 +797,10 @@ static void put_xdp_frags(struct xdp_buff *xdp)
 	}
 }
 
-static int virtnet_xdp_handler(struct bpf_prog *xdp_prog, struct xdp_buff *xdp,
-			       struct net_device *dev,
-			       unsigned int *xdp_xmit,
-			       struct virtnet_rq_stats *stats)
+int virtnet_xdp_handler(struct bpf_prog *xdp_prog, struct xdp_buff *xdp,
+			struct net_device *dev,
+			unsigned int *xdp_xmit,
+			struct virtnet_rq_stats *stats)
 {
 	struct xdp_frame *xdpf;
 	int err;
@@ -1892,23 +1892,37 @@ static int virtnet_receive(struct virtnet_rq *rq, int budget,
 {
 	struct virtnet_info *vi = rq->vq->vdev->priv;
 	struct virtnet_rq_stats stats = {};
+	void *buf, *ctx, *pctx = NULL;
 	unsigned int len;
 	int packets = 0;
-	void *buf;
 	int i;
 
-	if (!vi->big_packets || vi->mergeable_rx_bufs) {
-		void *ctx;
+	if (rq->xsk.pool) {
+		struct sk_buff *skb;
 
-		while (packets < budget &&
-		       (buf = virtnet_rq_get_buf(rq, &len, &ctx))) {
-			receive_buf(vi, rq, buf, len, ctx, xdp_xmit, &stats);
+		while (packets < budget) {
+			buf = virtqueue_get_buf(rq->vq, &len);
+			if (!buf)
+				break;
+
+			skb = virtnet_receive_xsk_buf(vi, rq, buf, len, xdp_xmit, &stats);
+			if (skb)
+				virtnet_receive_done(vi, rq, skb);
+
 			packets++;
 		}
 	} else {
-		while (packets < budget &&
-		       (buf = virtnet_rq_get_buf(rq, &len, NULL)) != NULL) {
-			receive_buf(vi, rq, buf, len, NULL, xdp_xmit, &stats);
+		if (!vi->big_packets || vi->mergeable_rx_bufs)
+			pctx = &ctx;
+		else
+			ctx = NULL;
+
+		while (packets < budget) {
+			buf = virtnet_rq_get_buf(rq, &len, &ctx);
+			if (!buf)
+				break;
+
+			receive_buf(vi, rq, buf, len, ctx, xdp_xmit, &stats);
 			packets++;
 		}
 	}

@@ -326,4 +326,12 @@ void virtnet_rq_free_unused_bufs(struct virtqueue *vq);
 void virtnet_check_sq_full_and_disable(struct virtnet_info *vi,
 				       struct net_device *dev,
 				       struct virtnet_sq *sq);
+struct sk_buff *virtnet_skb_append_frag(struct sk_buff *head_skb,
+					struct sk_buff *curr_skb,
+					struct page *page, void *buf,
+					int len, int truesize);
+int virtnet_xdp_handler(struct bpf_prog *xdp_prog, struct xdp_buff *xdp,
+			struct net_device *dev,
+			unsigned int *xdp_xmit,
+			struct virtnet_rq_stats *stats);
 #endif
