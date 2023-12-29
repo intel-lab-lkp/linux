@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Novatek NT35510 panel driver
+ * Copyright (C) 2023 Dario Binacchi <dario.binacchi@amarulasolutions.com>
+ * Add support to Frida FRD400B25025-A-CTK panel.
+ * Based on code by MCD Application Team (C) 2020 STMicroelectronics
  * Copyright (C) 2020 Linus Walleij <linus.walleij@linaro.org>
  * Based on code by Robert Teather (C) 2012 Samsung
  *
@@ -162,6 +165,49 @@ static const struct panel_init_cmd hydis_hva40wv1_init_cmds[] = {
 	_INIT_DELAY_CMD(0x78),
 	_INIT_DCS_CMD(0x29),
 	_INIT_DELAY_CMD(0x0A),
+	{},
+};
+
+static const struct panel_init_cmd frida_frd400b25025_init_cmds[] = {
+	_INIT_DCS_CMD(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01),
+	_INIT_DCS_CMD(0xB0, 0x03, 0x03, 0x03),
+	_INIT_DCS_CMD(0xB6, 0x46, 0x46, 0x46),
+	_INIT_DCS_CMD(0xB1, 0x03, 0x03, 0x03),
+	_INIT_DCS_CMD(0xB7, 0x36, 0x36, 0x36),
+	_INIT_DCS_CMD(0xB2, 0x00, 0x00, 0x02),
+	_INIT_DCS_CMD(0xB8, 0x26, 0x26, 0x26),
+	_INIT_DCS_CMD(0xBF, 0x01),
+	_INIT_DCS_CMD(0xB3, 0x09, 0x09, 0x09),
+	_INIT_DCS_CMD(0xB9, 0x36, 0x36, 0x36),
+	_INIT_DCS_CMD(0xB5, 0x08, 0x08, 0x08),
+	_INIT_DCS_CMD(0xBA, 0x26, 0x26, 0x26),
+	_INIT_DCS_CMD(0xBC, 0x00, 0x80, 0x00),
+	_INIT_DCS_CMD(0xBD, 0x00, 0x80, 0x00),
+	_INIT_DCS_CMD(0xBE, 0x00, 0x50),
+	_INIT_DCS_CMD(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00),
+	_INIT_DCS_CMD(0xB1, 0xFC, 0x00),
+	_INIT_DCS_CMD(0xB6, 0x03),
+	_INIT_DCS_CMD(0xB5, 0x50),
+	_INIT_DCS_CMD(0xB7, 0x00, 0x00),
+	_INIT_DCS_CMD(0xB8, 0x01, 0x02, 0x02, 0x02),
+	_INIT_DCS_CMD(0xBC, 0x00, 0x00, 0x00),
+	_INIT_DCS_CMD(0xCC, 0x03, 0x00, 0x00),
+	_INIT_DCS_CMD(0xBA, 0x01),
+	_INIT_DCS_CMD(0x35, 0x00),
+	_INIT_DCS_CMD(0x3A, 0x77),
+	_INIT_DELAY_CMD(0xC8),
+	_INIT_DCS_CMD(0x36, 0x00),
+	_INIT_DCS_CMD(0x2A, 0x00, 0x00, 0x01, 0xDF),
+	_INIT_DCS_CMD(0x2B, 0x00, 0x00, 0x03, 0x1F),
+	_INIT_DCS_CMD(0x11),
+	_INIT_DELAY_CMD(0x78),
+	_INIT_DCS_CMD(0x3A, 0x77),
+	_INIT_DCS_CMD(0x51, 0x7F, 0x00),
+	_INIT_DCS_CMD(0x53, 0x2C),
+	_INIT_DCS_CMD(0x55, 0x02),
+	_INIT_DCS_CMD(0x5E, 0xFF),
+	_INIT_DCS_CMD(0x29),
+	_INIT_DCS_CMD(0x2C),
 	{},
 };
 
@@ -606,7 +652,36 @@ static const struct nt35510_config nt35510_hydis_hva40wv1 = {
 	.init_cmds = hydis_hva40wv1_init_cmds,
 };
 
+/*
+ * The Frida FRD400B25025-A-CTK panel
+ */
+static const struct nt35510_config nt35510_frida_frd400b25025 = {
+	.width_mm = 52,
+	.height_mm = 86,
+	.mode = {
+		.clock = 23000,
+		.hdisplay = 480,
+		.hsync_start = 480 + 34, /* HFP = 34 */
+		.hsync_end = 480 + 34 + 2, /* HSync = 2 */
+		.htotal = 480 + 34 + 2 + 34, /* HBP = 34 */
+		.vdisplay = 800,
+		.vsync_start = 800 + 15, /* VFP = 15 */
+		.vsync_end = 800 + 15 + 12, /* VSync = 12 */
+		.vtotal = 800 + 15 + 12 + 15, /* VBP = 15 */
+		.flags = 0,
+	},
+	.lanes = 2,
+	.format = MIPI_DSI_FMT_RGB888,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+			MIPI_DSI_MODE_LPM,
+	.init_cmds = frida_frd400b25025_init_cmds,
+};
+
 static const struct of_device_id nt35510_of_match[] = {
+	{
+		.compatible = "frida,frd400b25025",
+		.data = &nt35510_frida_frd400b25025,
+	},
 	{
 		.compatible = "hydis,hva40wv1",
 		.data = &nt35510_hydis_hva40wv1,
