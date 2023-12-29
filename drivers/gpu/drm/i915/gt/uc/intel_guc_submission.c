@@ -3513,7 +3513,7 @@ static inline void sub_context_inflight_prio(struct intel_context *ce,
 
 static inline void update_context_prio(struct intel_context *ce)
 {
-	struct intel_guc *guc = &ce->engine->gt->uc.guc;
+	struct intel_guc *guc = ce_to_guc(ce);
 	int i;
 
 	BUILD_BUG_ON(GUC_CLIENT_PRIORITY_KMD_HIGH != 0);
