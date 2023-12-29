@@ -579,6 +579,7 @@ bool cma_release(struct cma *cma, const struct page *pages,
 }
 
 int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)
+
 {
 	int i;
 
