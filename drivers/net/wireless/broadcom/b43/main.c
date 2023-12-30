@@ -3603,7 +3603,10 @@ static void b43_tx_work(struct work_struct *work)
 				err = b43_dma_tx(dev, skb);
 			if (err == -ENOSPC) {
 				wl->tx_queue_stopped[queue_num] = true;
-				ieee80211_stop_queue(wl->hw, queue_num);
+				if (dev->qos_enabled)
+					ieee80211_stop_queue(wl->hw, queue_num);
+				else
+					ieee80211_stop_queue(wl->hw, 0);
 				skb_queue_head(&wl->tx_queue[queue_num], skb);
 				break;
 			}
@@ -3636,11 +3639,12 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 	B43_WARN_ON(skb_shinfo(skb)->nr_frags);
 
 	skb_queue_tail(&wl->tx_queue[skb->queue_mapping], skb);
-	if (!wl->tx_queue_stopped[skb->queue_mapping]) {
+	if (!wl->tx_queue_stopped[skb->queue_mapping])
 		ieee80211_queue_work(wl->hw, &wl->tx_work);
-	} else {
+	else if (wl->current_dev->qos_enabled)
 		ieee80211_stop_queue(wl->hw, skb->queue_mapping);
-	}
+	else
+		ieee80211_stop_queue(wl->hw, 0);
 }
 
 static void b43_qos_params_upload(struct b43_wldev *dev,
