@@ -2713,7 +2713,7 @@ static int b43_upload_microcode(struct b43_wldev *dev)
 			dev->hwcrypto_enabled = false;
 		}
 		/* adding QoS support should use an offline discovery mechanism */
-		WARN(fwcapa & B43_FWCAPA_QOS, "QoS in OpenFW not supported\n");
+		WARN(!(fwcapa & B43_FWCAPA_QOS), "QoS in OpenFW not supported\n");
 	} else {
 		b43info(dev->wl, "Loading firmware version %u.%u "
 			"(20%.2i-%.2i-%.2i %.2i:%.2i:%.2i)\n",
