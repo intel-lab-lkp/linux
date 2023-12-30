@@ -1047,14 +1047,13 @@ settimeout_out:
 
 static inline int ib_nl_is_good_resolve_resp(const struct nlmsghdr *nlh)
 {
-	struct nlattr *tb[LS_NLA_TYPE_MAX];
 	int ret;
 
 	if (nlh->nlmsg_flags & RDMA_NL_LS_F_ERR)
 		return 0;
 
-	ret = nla_parse_deprecated(tb, LS_NLA_TYPE_MAX - 1, nlmsg_data(nlh),
-				   nlmsg_len(nlh), ib_nl_policy, NULL);
+	ret = nla_validate_deprecated(nlmsg_data(nlh), nlmsg_len(nlh),
+				      LS_NLA_TYPE_MAX - 1, ib_nl_policy, NULL);
 	if (ret)
 		return 0;
 
