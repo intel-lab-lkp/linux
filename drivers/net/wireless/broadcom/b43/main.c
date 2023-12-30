@@ -359,6 +359,22 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
+static const u16 b43_no_qos_chip_ids[] = {
+	BCMA_CHIP_ID_BCM4331,
+	0,
+};
+
+static bool b43_qos_not_supported(struct b43_wldev *dev)
+{
+	int idx;
+
+	for (idx = 0; b43_no_qos_chip_ids[idx]; idx++)
+		if (dev->dev->chip_id == b43_no_qos_chip_ids[idx])
+			return true;
+
+	return false;
+}
+
 static void b43_wireless_core_exit(struct b43_wldev *dev);
 static int b43_wireless_core_init(struct b43_wldev *dev);
 static struct b43_wldev * b43_wireless_core_stop(struct b43_wldev *dev);
@@ -2587,7 +2603,7 @@ static void b43_request_firmware(struct work_struct *work)
 
 start_ieee80211:
 	wl->hw->queues = B43_QOS_QUEUE_NUM;
-	if (!modparam_qos || dev->fw.opensource)
+	if (!modparam_qos || dev->fw.opensource || b43_qos_not_supported(wl->current_dev))
 		wl->hw->queues = 1;
 
 	err = ieee80211_register_hw(wl->hw);
