@@ -17,6 +17,7 @@
 #include <linux/firmware/imx/svc/rm.h>
 
 #if IS_ENABLED(CONFIG_IMX_SCU)
+extern int scu_suspend;
 int imx_scu_enable_general_irq_channel(struct device *dev);
 int imx_scu_irq_register_notifier(struct notifier_block *nb);
 int imx_scu_irq_unregister_notifier(struct notifier_block *nb);

@@ -342,9 +342,29 @@ static int imx_scu_probe(struct platform_device *pdev)
 	return devm_of_platform_populate(dev);
 }
 
+
+
 static const struct of_device_id imx_scu_match[] = {
 	{ .compatible = "fsl,imx-scu", },
 	{ /* Sentinel */ }
+};
+static int __maybe_unused imx_scu_suspend_noirq(struct device *dev)
+{
+	scu_suspend = true;
+
+	return 0;
+}
+
+static int __maybe_unused imx_scu_resume_noirq(struct device *dev)
+{
+	scu_suspend = false;
+
+	return 0;
+};
+
+static const struct dev_pm_ops imx_scu_pm_ops = {
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(imx_scu_suspend_noirq,
+				      imx_scu_resume_noirq)
 };
 
 static struct platform_driver imx_scu_driver = {
