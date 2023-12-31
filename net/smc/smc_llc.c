@@ -1163,23 +1163,21 @@ static void smc_llc_cli_add_link_invite(struct smc_link *link,
 					struct smc_llc_qentry *qentry)
 {
 	struct smc_link_group *lgr = smc_get_lgr(link);
-	struct smc_init_info *ini = NULL;
+	struct smc_init_info *ini;
 
 	if (lgr->smc_version == SMC_V2) {
 		smc_llc_send_request_add_link(link);
-		goto out;
+		goto free_qentry;
 	}
 
 	if (lgr->type == SMC_LGR_SYMMETRIC ||
-	    lgr->type == SMC_LGR_ASYMMETRIC_PEER)
-		goto out;
-
-	if (lgr->type == SMC_LGR_SINGLE && lgr->max_links <= 1)
-		goto out;
+	    lgr->type == SMC_LGR_ASYMMETRIC_PEER ||
+	    lgr->type == SMC_LGR_SINGLE && lgr->max_links <= 1)
+		goto free_qentry;
 
 	ini = kzalloc(sizeof(*ini), GFP_KERNEL);
 	if (!ini)
-		goto out;
+		goto free_qentry;
 
 	ini->vlan_id = lgr->vlan_id;
 	smc_pnet_find_alt_roce(lgr, ini, link->smcibdev);
@@ -1190,6 +1188,7 @@ static void smc_llc_cli_add_link_invite(struct smc_link *link,
 			      ini->ib_gid, NULL, SMC_LLC_REQ);
 out:
 	kfree(ini);
+free_qentry:
 	kfree(qentry);
 }
 
