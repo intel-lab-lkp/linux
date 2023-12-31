@@ -29,11 +29,9 @@ static inline int encode_cpu(int cpu_nr)
 	return cpu_nr + 1;
 }
 
-static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
+static inline struct optimistic_spin_node *decode_cpu(unsigned int encoded_cpu_val)
 {
-	int cpu_nr = encoded_cpu_val - 1;
-
-	return per_cpu_ptr(&osq_node, cpu_nr);
+	return per_cpu_ptr(&osq_node, encoded_cpu_val - 1);
 }
 
 /*
