@@ -2021,7 +2021,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	struct sock *sk;
 	struct netlink_sock *nlk;
 	struct listeners *listeners;
-	struct mutex *cb_mutex = cfg ? cfg->cb_mutex : NULL;
+	struct mutex *cb_mutex; /* Serialize data processing with callbacks */
 	unsigned int groups;
 
 	BUG_ON(!nl_table);
@@ -2032,6 +2032,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (sock_create_lite(PF_NETLINK, SOCK_DGRAM, unit, &sock))
 		return NULL;
 
+	cb_mutex = (cfg ? cfg->cb_mutex : NULL);
 	if (__netlink_create(net, sock, cb_mutex, unit, 1) < 0)
 		goto out_sock_release_nosk;
 
