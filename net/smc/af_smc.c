@@ -1180,7 +1180,7 @@ void smc_fill_gid_list(struct smc_link_group *lgr,
 
 	alt_ini = kzalloc(sizeof(*alt_ini), GFP_KERNEL);
 	if (!alt_ini)
-		goto out;
+		return;
 
 	alt_ini->vlan_id = lgr->vlan_id;
 	alt_ini->check_smcrv2 = true;
