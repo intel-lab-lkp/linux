@@ -566,7 +566,6 @@ static struct gcov_node *new_node(struct gcov_node *parent,
 
 err_nomem:
 	kfree(node);
-	pr_warn("out of memory\n");
 	return NULL;
 }
 
