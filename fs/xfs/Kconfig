@@ -165,6 +165,37 @@ config XFS_ONLINE_SCRUB_STATS
 
 	  If unsure, say N.
 
+choice
+	prompt "XFS hook implementation"
+	depends on XFS_FS && XFS_LIVE_HOOKS && XFS_ONLINE_SCRUB
+	default XFS_LIVE_HOOKS_BLOCKING if HAVE_ARCH_JUMP_LABEL
+	default XFS_LIVE_HOOKS_SRCU if !HAVE_ARCH_JUMP_LABEL
+	help
+	  Pick one
+
+config XFS_LIVE_HOOKS_SRCU
+	bool "SRCU notifier chains"
+	help
+	  Use SRCU notifier chains for filesystem hooks.  These have very low
+	  overhead for event initiators (the main filesystem) and higher
+	  overhead for chain modifiers (scrub waits for RCU grace).  This is
+	  the best option when jump labels are not supported or there are many
+	  CPUs in the system.
+
+	  This may cause problems with CPU hotplug invoking reclaim invoking
+	  XFS.
+
+config XFS_LIVE_HOOKS_BLOCKING
+	bool "Blocking notifier chains"
+	help
+	  Use blocking notifier chains for filesystem hooks.  These have medium
+	  overhead for event initiators (the main fs) and chain modifiers
+	  (scrub) due to their use of rwsems.  This is the best option when
+	  jump labels can be used to eliminate overhead for the filesystem when
+	  scrub is not running.
+
+endchoice
+
 config XFS_ONLINE_REPAIR
 	bool "XFS online metadata repair support"
 	default n
