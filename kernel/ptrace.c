@@ -1033,7 +1033,7 @@ int ptrace_request(struct task_struct *child, long request,
 {
 	bool seized = child->ptrace & PT_SEIZED;
 	int ret = -EIO;
-	kernel_siginfo_t siginfo, *si;
+	kernel_siginfo_t siginfo, *si, *psiginfo;
 	void __user *datavp = (void __user *) data;
 	unsigned long __user *datalp = datavp;
 	unsigned long flags;
@@ -1061,9 +1061,13 @@ int ptrace_request(struct task_struct *child, long request,
 		break;
 
 	case PTRACE_GETSIGINFO:
-		ret = ptrace_getsiginfo(child, &siginfo);
+		psiginfo = kvmalloc(sizeof(kernel_siginfo_t), GFP_KERNEL);
+		if (!psiginfo)
+			break;
+		ret = ptrace_getsiginfo(child, psiginfo);
 		if (!ret)
-			ret = copy_siginfo_to_user(datavp, &siginfo);
+			ret = copy_siginfo_to_user(datavp, psiginfo);
+		kvfree(psiginfo);
 		break;
 
 	case PTRACE_SETSIGINFO:
