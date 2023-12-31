@@ -2693,7 +2693,7 @@ static void cfg80211_parse_ml_sta_data(struct wiphy *wiphy,
 
 	new_ie = kmalloc(IEEE80211_MAX_DATA_LEN, gfp);
 	if (!new_ie)
-		goto out;
+		goto free_mle;
 
 	for (i = 0; i < ARRAY_SIZE(mle->sta_prof) && mle->sta_prof[i]; i++) {
 		const struct ieee80211_neighbor_ap_info *ap_info;
@@ -2812,8 +2812,8 @@ static void cfg80211_parse_ml_sta_data(struct wiphy *wiphy,
 		cfg80211_put_bss(wiphy, bss);
 	}
 
-out:
 	kfree(new_ie);
+free_mle:
 	kfree(mle);
 }
 
