@@ -638,6 +638,10 @@ static int reiserfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	if (retval)
 		return retval;
 
+#ifdef DISPLACE_NEW_PACKING_LOCALITIES
+	REISERFS_I(dir)->new_packing_locality = 0;
+#endif
+
 	if (!(inode = new_inode(dir->i_sb))) {
 		return -ENOMEM;
 	}
