@@ -490,7 +490,8 @@ static void add_links(struct gcov_node *node, struct dentry *parent)
 				gcov_info_filename(get_node_info(node)),
 				&gcov_link[i]);
 		if (!target)
-			goto out_err;
+			goto remove_links;
+
 		basename = kbasename(target);
 		if (basename == target)
 			goto out_err;
@@ -502,6 +503,7 @@ static void add_links(struct gcov_node *node, struct dentry *parent)
 	return;
 out_err:
 	kfree(target);
+remove_links:
 	while (i-- > 0)
 		debugfs_remove(node->links[i]);
 	kfree(node->links);
