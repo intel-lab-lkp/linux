@@ -13,9 +13,8 @@
  */
 
 struct optimistic_spin_node {
-	struct optimistic_spin_node *next, *prev;
+	struct optimistic_spin_node *next;
 	int locked;    /* 1 if lock acquired */
-	int cpu;       /* encoded CPU # + 1 value */
 	int prev_cpu;  /* encoded CPU # + 1 value */
 };
 
@@ -91,10 +90,9 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
 	struct optimistic_spin_node *prev, *next;
 	int curr = encode_cpu(smp_processor_id());
-	int old;
+	int prev_cpu;
 
 	node->next = NULL;
-	node->cpu = curr;
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -102,13 +100,12 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the node fields we just initialised) semantics when updating
 	 * the lock tail.
 	 */
-	old = atomic_xchg(&lock->tail, curr);
-	if (old == OSQ_UNLOCKED_VAL)
+	prev_cpu = atomic_xchg(&lock->tail, curr);
+	if (prev_cpu == OSQ_UNLOCKED_VAL)
 		return true;
 
-	node->prev_cpu = old;
-	prev = decode_cpu(old);
-	node->prev = prev;
+	node->prev_cpu = prev_cpu;
+	prev = decode_cpu(prev_cpu);
 	node->locked = 0;
 
 	/*
@@ -174,9 +171,16 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 
 		/*
 		 * Or we race against a concurrent unqueue()'s step-B, in which
-		 * case its step-C will write us a new @node->prev pointer.
+		 * case its step-C will write us a new @node->prev_cpu value.
 		 */
-		prev = READ_ONCE(node->prev);
+		{
+			int new_prev_cpu = READ_ONCE(node->prev_cpu);
+
+			if (new_prev_cpu == prev_cpu)
+				continue;
+			prev_cpu = new_prev_cpu;
+			prev = decode_cpu(prev_cpu);
+		}
 	}
 
 	/*
@@ -186,7 +190,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * back to @prev.
 	 */
 
-	next = osq_wait_next(lock, node, prev->cpu);
+	next = osq_wait_next(lock, node, prev_cpu);
 	if (!next)
 		return false;
 
@@ -198,8 +202,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * it will wait in Step-A.
 	 */
 
-	WRITE_ONCE(next->prev_cpu, prev->cpu);
-	WRITE_ONCE(next->prev, prev);
+	WRITE_ONCE(next->prev_cpu, prev_cpu);
 	WRITE_ONCE(prev->next, next);
 
 	return false;
