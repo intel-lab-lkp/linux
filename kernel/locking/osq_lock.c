@@ -87,12 +87,17 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 
 bool osq_lock(struct optimistic_spin_queue *lock)
 {
-	struct optimistic_spin_node *node = this_cpu_ptr(&osq_node);
-	struct optimistic_spin_node *prev, *next;
+	struct optimistic_spin_node *node, *prev, *next;
 	int curr = encode_cpu(smp_processor_id());
 	int prev_cpu;
 
-	node->next = NULL;
+	/*
+	 * node->next should be NULL on entry.
+	 * Check just in case there is a race somewhere.
+	 * Note that this is probably an unnecessary cache miss in the fast path.
+	 */
+	if (WARN_ON_ONCE(raw_cpu_read(osq_node.next) != NULL))
+		raw_cpu_write(osq_node.next, NULL);
 
 	/*
 	 * We need both ACQUIRE (pairs with corresponding RELEASE in
@@ -104,8 +109,9 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	if (prev_cpu == OSQ_UNLOCKED_VAL)
 		return true;
 
-	node->prev_cpu = prev_cpu;
+	node = this_cpu_ptr(&osq_node);
 	prev = decode_cpu(prev_cpu);
+	node->prev_cpu = prev_cpu;
 	node->locked = 0;
 
 	/*
