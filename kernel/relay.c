@@ -161,14 +161,15 @@ static struct rchan_buf *relay_create_buf(struct rchan *chan)
 
 	buf->start = relay_alloc_buf(buf, &chan->alloc_size);
 	if (!buf->start)
-		goto free_buf;
+		goto free_padding;
 
 	buf->chan = chan;
 	kref_get(&buf->chan->kref);
 	return buf;
 
-free_buf:
+free_padding:
 	kfree(buf->padding);
+free_buf:
 	kfree(buf);
 	return NULL;
 }
