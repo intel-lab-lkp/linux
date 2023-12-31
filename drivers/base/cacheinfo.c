@@ -845,7 +845,7 @@ static int cpu_cache_sysfs_init(unsigned int cpu)
 	if (per_cpu_cacheinfo(cpu) == NULL)
 		return -ENOENT;
 
-	per_cpu_cache_dev(cpu) = cpu_device_create(dev, NULL, NULL, "cache");
+	per_cpu_cache_dev(cpu) = cpu_device_create(dev, NULL, NULL, NULL, "cache");
 	if (IS_ERR(per_cpu_cache_dev(cpu)))
 		return PTR_ERR(per_cpu_cache_dev(cpu));
 
@@ -882,7 +882,9 @@ static int cache_add_dev(unsigned int cpu)
 		if (this_leaf->type == CACHE_TYPE_NOCACHE)
 			break;
 		cache_groups = cache_get_attribute_groups(this_leaf);
-		ci_dev = cpu_device_create(parent, this_leaf, cache_groups,
+		ci_dev = cpu_device_create(parent, this_leaf,
+					   NULL,
+					   cache_groups,
 					   "index%1u", i);
 		if (IS_ERR(ci_dev)) {
 			rc = PTR_ERR(ci_dev);

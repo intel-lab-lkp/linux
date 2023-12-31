@@ -16,6 +16,7 @@
 #include <linux/percpu.h>
 #include <linux/acpi.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/cpufeature.h>
 #include <linux/tick.h>
 #include <linux/pm_qos.h>
@@ -28,7 +29,11 @@ static DEFINE_PER_CPU(struct device *, cpu_sys_devices);
 
 static int cpu_subsys_match(struct device *dev, struct device_driver *drv)
 {
-	/* ACPI style match is the only one that may succeed. */
+	/* Attempt an OF style match first */
+	if (of_driver_match_device(dev, drv))
+		return 1;
+
+	/* Then try ACPI style match */
 	if (acpi_driver_match_device(dev, drv))
 		return 1;
 
@@ -428,12 +433,14 @@ EXPORT_SYMBOL_GPL(get_cpu_device);
 
 static void device_create_release(struct device *dev)
 {
+	of_node_put(dev->of_node);
 	kfree(dev);
 }
 
-__printf(4, 0)
+__printf(5, 0)
 static struct device *
 __cpu_device_create(struct device *parent, void *drvdata,
+		    struct device_node *np,
 		    const struct attribute_group **groups,
 		    const char *fmt, va_list args)
 {
@@ -447,6 +454,7 @@ __cpu_device_create(struct device *parent, void *drvdata,
 	device_initialize(dev);
 	dev->parent = parent;
 	dev->groups = groups;
+	dev->of_node = of_node_get(np);
 	dev->release = device_create_release;
 	device_set_pm_not_required(dev);
 	dev_set_drvdata(dev, drvdata);
@@ -467,6 +475,7 @@ error:
 }
 
 struct device *cpu_device_create(struct device *parent, void *drvdata,
+				 struct device_node *np,
 				 const struct attribute_group **groups,
 				 const char *fmt, ...)
 {
@@ -474,7 +483,7 @@ struct device *cpu_device_create(struct device *parent, void *drvdata,
 	struct device *dev;
 
 	va_start(vargs, fmt);
-	dev = __cpu_device_create(parent, drvdata, groups, fmt, vargs);
+	dev = __cpu_device_create(parent, drvdata, np, groups, fmt, vargs);
 	va_end(vargs);
 	return dev;
 }

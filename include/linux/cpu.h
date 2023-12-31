@@ -76,8 +76,9 @@ extern ssize_t cpu_show_spec_rstack_overflow(struct device *dev,
 extern ssize_t cpu_show_gds(struct device *dev,
 			    struct device_attribute *attr, char *buf);
 
-extern __printf(4, 5)
+extern __printf(5, 6)
 struct device *cpu_device_create(struct device *parent, void *drvdata,
+				 struct device_node *np,
 				 const struct attribute_group **groups,
 				 const char *fmt, ...);
 extern bool arch_cpu_is_hotpluggable(int cpu);
