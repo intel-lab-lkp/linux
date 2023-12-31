@@ -38,6 +38,7 @@ extern unsigned int coherency_max_size;
  * @attributes: bitfield representing various cache attributes
  * @fw_token: Unique value used to determine if different cacheinfo
  *	structures represent a single hardware cache instance.
+ * @of_node: Corresponding DT node
  * @disable_sysfs: indicates whether this node is visible to the user via
  *	sysfs or not
  * @priv: pointer to any private data structure specific to particular
@@ -67,6 +68,7 @@ struct cacheinfo {
 	(CACHE_READ_ALLOCATE | CACHE_WRITE_ALLOCATE)
 #define CACHE_ID		BIT(4)
 	void *fw_token;
+	struct device_node *of_node;
 	bool disable_sysfs;
 	void *priv;
 };

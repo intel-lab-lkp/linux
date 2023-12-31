@@ -230,6 +230,7 @@ static int cache_setup_of_node(unsigned int cpu)
 		}
 		cache_of_set_props(this_leaf, np);
 		this_leaf->fw_token = np;
+		this_leaf->of_node = of_node_get(np);
 		index++;
 	}
 
@@ -457,10 +458,19 @@ static void cache_shared_cpu_map_remove(unsigned int cpu)
 
 static void free_cache_attributes(unsigned int cpu)
 {
+	struct cacheinfo *this_leaf;
+	unsigned int index;
+
 	if (!per_cpu_cacheinfo(cpu))
 		return;
 
 	cache_shared_cpu_map_remove(cpu);
+
+	for (index = 0; index < cache_leaves(cpu); index++) {
+		this_leaf = per_cpu_cacheinfo_idx(cpu, index);
+		of_node_put(this_leaf->of_node);
+		this_leaf->of_node = NULL;
+	}
 }
 
 int __weak early_cache_level(unsigned int cpu)
@@ -883,7 +893,7 @@ static int cache_add_dev(unsigned int cpu)
 			break;
 		cache_groups = cache_get_attribute_groups(this_leaf);
 		ci_dev = cpu_device_create(parent, this_leaf,
-					   NULL,
+					   this_leaf->of_node,
 					   cache_groups,
 					   "index%1u", i);
 		if (IS_ERR(ci_dev)) {
