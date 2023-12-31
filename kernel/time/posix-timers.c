@@ -31,6 +31,8 @@
 #include <linux/compat.h>
 #include <linux/nospec.h>
 #include <linux/time_namespace.h>
+#include <linux/multi_clock.h>
+#include <linux/slab.h>
 
 #include "timekeeping.h"
 #include "posix-timers.h"
@@ -1425,6 +1427,63 @@ SYSCALL_DEFINE4(clock_nanosleep_time32, clockid_t, which_clock, int, flags,
 }
 
 #endif
+
+SYSCALL_DEFINE1(multi_clock_gettime, struct __ptp_multi_clock_get __user *, ptp_multi_clk_get)
+{
+	const struct k_clock *kc;
+	struct timespec64 *kernel_tp;
+	struct timespec64 *kernel_tp_base;
+	unsigned int n_clocks; /* Desired number of clocks. */
+	unsigned int n_samples; /* Desired number of measurements per clock. */
+	unsigned int i, j;
+	clockid_t clkid_arr[MULTI_PTP_MAX_CLOCKS]; /* list of clock IDs */
+	int error = 0;
+
+	if (copy_from_user(&n_clocks, &ptp_multi_clk_get->n_clocks, sizeof(n_clocks)))
+		return -EFAULT;
+	if (copy_from_user(&n_samples, &ptp_multi_clk_get->n_samples, sizeof(n_samples)))
+		return -EFAULT;
+	if (n_samples > MULTI_PTP_MAX_SAMPLES)
+		return -EINVAL;
+	if (n_clocks > MULTI_PTP_MAX_CLOCKS)
+		return -EINVAL;
+	if (copy_from_user(clkid_arr, &ptp_multi_clk_get->clkid_arr,
+			   sizeof(clockid_t) * n_clocks))
+		return -EFAULT;
+
+	kernel_tp_base = kmalloc_array(n_clocks * n_samples,
+				       sizeof(struct timespec64), GFP_KERNEL);
+	if (!kernel_tp_base)
+		return -ENOMEM;
+
+	kernel_tp = kernel_tp_base;
+	for (j = 0; j < n_samples; j++) {
+		for (i = 0; i < n_clocks; i++) {
+			kc = clockid_to_kclock(clkid_arr[i]);
+			if (!kc) {
+				error = -EINVAL;
+				goto out;
+			}
+			error = kc->clock_get_timespec(clkid_arr[i], kernel_tp++);
+			if (error)
+				goto out;
+		}
+	}
+
+	kernel_tp = kernel_tp_base;
+	for (j = 0; j < n_samples; j++) {
+		for (i = 0; i < n_clocks; i++) {
+			if (put_timespec64(kernel_tp++, (struct __kernel_timespec __user *)
+					&ptp_multi_clk_get->ts[j][i])) {
+				error = -EFAULT;
+				goto out;
+			}
+		}
+	}
+out:
+	kfree(kernel_tp_base);
+	return error;
+}
 
 static const struct k_clock clock_realtime = {
 	.clock_getres		= posix_get_hrtimer_res,
