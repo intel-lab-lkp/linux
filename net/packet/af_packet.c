@@ -1712,14 +1712,14 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 
 	err = -EALREADY;
 	if (po->fanout)
-		goto out;
+		goto unlock_mutex;
 
 	if (type == PACKET_FANOUT_ROLLOVER ||
 	    (type_flags & PACKET_FANOUT_FLAG_ROLLOVER)) {
 		err = -ENOMEM;
 		rollover = kzalloc(sizeof(*rollover), GFP_KERNEL);
 		if (!rollover)
-			goto out;
+			goto unlock_mutex;
 		atomic_long_set(&rollover->num, 0);
 		atomic_long_set(&rollover->num_huge, 0);
 		atomic_long_set(&rollover->num_failed, 0);
@@ -1812,6 +1812,7 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 
 out:
 	kfree(rollover);
+unlock_mutex:
 	mutex_unlock(&fanout_mutex);
 	return err;
 }
