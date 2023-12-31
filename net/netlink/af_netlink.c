@@ -2044,7 +2044,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	listeners = kzalloc(sizeof(*listeners) + NLGRPSZ(groups), GFP_KERNEL);
 	if (!listeners)
-		goto out_sock_release;
+		goto out_netlink_release_sock;
 
 	sk->sk_data_ready = netlink_data_ready;
 	if (cfg && cfg->input)
@@ -2078,6 +2078,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 out_sock_release:
 	kfree(listeners);
+out_netlink_release_sock:
 	netlink_kernel_release(sk);
 	return NULL;
 
