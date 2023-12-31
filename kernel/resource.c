@@ -1905,8 +1905,8 @@ get_free_mem_region(struct device *dev, struct resource *base,
  * devm_request_free_mem_region - find free region for device private memory
  *
  * @dev: device struct to bind the resource to
- * @size: size in bytes of the device memory to add
  * @base: resource tree to look in
+ * @size: size in bytes of the device memory to add
  *
  * This function tries to find an empty range of physical address big enough to
  * contain the new resource, so that it can later be hotplugged as ZONE_DEVICE
