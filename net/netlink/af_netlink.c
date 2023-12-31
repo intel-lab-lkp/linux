@@ -2035,8 +2035,6 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (__netlink_create(net, sock, cb_mutex, unit, 1) < 0)
 		goto out_sock_release_nosk;
 
-	sk = sock->sk;
-
 	if (!cfg || cfg->groups < 32)
 		groups = 32;
 	else
@@ -2046,6 +2044,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (!listeners)
 		goto out_netlink_release_sock;
 
+	sk = sock->sk;
 	sk->sk_data_ready = netlink_data_ready;
 	if (cfg && cfg->input)
 		nlk_sk(sk)->netlink_rcv = cfg->input;
