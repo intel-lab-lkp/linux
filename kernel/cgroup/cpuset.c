@@ -973,10 +973,9 @@ static int generate_sched_domains(cpumask_var_t **domains,
 
 	/* Special case for the 99% of systems with one, full, sched domain */
 	if (root_load_balance && !top_cpuset.nr_subparts) {
-		ndoms = 1;
 		doms = alloc_sched_domains(ndoms);
 		if (!doms)
-			goto done;
+			goto set_ndoms;
 
 		dattr = kmalloc(sizeof(struct sched_domain_attr), GFP_KERNEL);
 		if (dattr) {
@@ -986,12 +985,12 @@ static int generate_sched_domains(cpumask_var_t **domains,
 		cpumask_and(doms[0], top_cpuset.effective_cpus,
 			    housekeeping_cpumask(HK_TYPE_DOMAIN));
 
-		goto done;
+		goto set_ndoms;
 	}
 
 	csa = kmalloc_array(nr_cpusets(), sizeof(cp), GFP_KERNEL);
 	if (!csa)
-		goto done;
+		goto set_ndoms;
 	csn = 0;
 
 	rcu_read_lock();
@@ -1123,6 +1122,7 @@ done:
 	 * See comments in partition_sched_domains().
 	 */
 	if (doms == NULL)
+set_ndoms:
 		ndoms = 1;
 
 	*domains    = doms;
