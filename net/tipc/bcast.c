@@ -688,13 +688,15 @@ int tipc_nl_bc_link_set(struct net *net, struct nlattr *attrs[])
 
 int tipc_bcast_init(struct net *net)
 {
-	struct tipc_net *tn = tipc_net(net);
-	struct tipc_bc_base *bb = NULL;
-	struct tipc_link *l = NULL;
+	struct tipc_net *tn;
+	struct tipc_bc_base *bb;
+	struct tipc_link *l;
 
 	bb = kzalloc(sizeof(*bb), GFP_KERNEL);
 	if (!bb)
-		goto enomem;
+		return -ENOMEM;
+
+	tn = tipc_net(net);
 	tn->bcbase = bb;
 	spin_lock_init(&tipc_net(net)->bclock);
 
@@ -715,7 +717,6 @@ int tipc_bcast_init(struct net *net)
 	return 0;
 enomem:
 	kfree(bb);
-	kfree(l);
 	return -ENOMEM;
 }
 
