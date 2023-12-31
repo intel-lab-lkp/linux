@@ -1123,7 +1123,7 @@ void dcn35_calc_blocks_to_ungate(struct dc *dc, struct dc_state *context,
 		update_state->pg_res_update[PG_HPO] = true;
 
 }
-/**
+/*
 	 * power down sequence
 	 * ONO Region 3, DCPG 25: hpo - SKIPPED
 	 * ONO Region 4, DCPG 0: dchubp0, dpp0
@@ -1175,7 +1175,7 @@ void dcn35_hw_block_power_down(struct dc *dc,
 	//domain22, 23, 25 currently always on.
 
 }
-/**
+/*
 	 * power up sequence
 	 * ONO Region 0, DCPG 22: dccg dio dcio - SKIPPED
 	 * ONO Region 2, DCPG 24: mpc opp optc dwb
