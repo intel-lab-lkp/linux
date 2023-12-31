@@ -2020,7 +2020,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	struct socket *sock;
 	struct sock *sk;
 	struct netlink_sock *nlk;
-	struct listeners *listeners = NULL;
+	struct listeners *listeners;
 	struct mutex *cb_mutex = cfg ? cfg->cb_mutex : NULL;
 	unsigned int groups;
 
