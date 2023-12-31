@@ -942,7 +942,7 @@ u32 krb5_etm_checksum(struct crypto_sync_skcipher *cipher,
 	/* For RPCSEC, the "initial cipher state" is always all zeroes. */
 	iv = kzalloc(ivsize, GFP_KERNEL);
 	if (!iv)
-		goto out_free_mem;
+		goto out_free_checksum;
 
 	req = ahash_request_alloc(tfm, GFP_KERNEL);
 	if (!req)
@@ -972,6 +972,7 @@ out_free_ahash:
 	ahash_request_free(req);
 out_free_mem:
 	kfree(iv);
+out_free_checksum:
 	kfree_sensitive(checksumdata);
 	return err ? GSS_S_FAILURE : GSS_S_COMPLETE;
 }
