@@ -97,7 +97,6 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	int curr = encode_cpu(smp_processor_id());
 	int old;
 
-	node->locked = 0;
 	node->next = NULL;
 	node->cpu = curr;
 
@@ -111,6 +110,7 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	if (old == OSQ_UNLOCKED_VAL)
 		return true;
 
+	node->locked = 0;
 	prev = decode_cpu(old);
 	node->prev = prev;
 
