@@ -1746,8 +1746,8 @@ static void ena_del_napi_in_range(struct ena_adapter *adapter,
 	for (i = first_index; i < first_index + count; i++) {
 		netif_napi_del(&adapter->ena_napi[i].napi);
 
-		WARN_ON(!ENA_IS_XDP_INDEX(adapter, i) &&
-			adapter->ena_napi[i].xdp_ring);
+		WARN_ON(ENA_IS_XDP_INDEX(adapter, i) &&
+			adapter->ena_napi[i].rx_ring);
 	}
 }
 
@@ -1764,10 +1764,8 @@ static void ena_init_napi_in_range(struct ena_adapter *adapter,
 
 		if (!ENA_IS_XDP_INDEX(adapter, i)) {
 			napi->rx_ring = &adapter->rx_ring[i];
-			napi->tx_ring = &adapter->tx_ring[i];
-		} else {
-			napi->xdp_ring = &adapter->tx_ring[i];
-		}
+
+		napi->tx_ring = &adapter->tx_ring[i];
 		napi->qid = i;
 	}
 }
