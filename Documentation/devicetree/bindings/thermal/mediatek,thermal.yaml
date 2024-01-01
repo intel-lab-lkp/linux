@@ -15,9 +15,6 @@ description:
   controls a mux in the apmixedsys register space via AHB bus accesses, so a
   phandle to the APMIXEDSYS is also needed.
 
-allOf:
-  - $ref: thermal-sensor.yaml#
-
 properties:
   compatible:
     enum:
@@ -38,14 +35,18 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 2
     items:
       - description: Main clock needed for register access
       - description: The AUXADC clock
+      - description: AUXADC 32k clock
 
   clock-names:
+    minItems: 2
     items:
       - const: therm
       - const: auxadc
+      - const: adc_32k
 
   mediatek,auxadc:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -75,6 +76,23 @@ required:
   - clock-names
   - mediatek,auxadc
   - mediatek,apmixedsys
+
+allOf:
+  - $ref: thermal-sensor.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt7981-thermal
+              - mediatek,mt7986-thermal
+    then:
+      properties:
+        clocks:
+          minItems: 3
+
+        clock-names:
+          minItems: 3
 
 unevaluatedProperties: false
 
