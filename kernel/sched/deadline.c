@@ -1658,10 +1658,16 @@ update_stats_dequeue_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se,
 			int flags)
 {
 	struct task_struct *p = dl_task_of(dl_se);
+	struct rq *rq = rq_of_dl_rq(dl_rq);
 
 	if (!schedstat_enabled())
 		return;
-
+	/*
+	 * Mark the end of the wait period
+	 * if dequeueing a waiting task.
+	 */
+	if (p && (p != rq->curr))
+		 update_stats_wait_end_dl(dl_rq, dl_se);
 	if ((flags & DEQUEUE_SLEEP)) {
 		unsigned int state;
 
