@@ -365,6 +365,7 @@ struct ethtool_eeprom {
  * @tx_lpi_timer: Time in microseconds the interface delays prior to asserting
  *	its tx lpi (after reaching 'idle' state). Effective only when eee
  *	was negotiated and tx_lpi_enabled was set.
+ * @is_member_of_keee: struct is member of a struct ethtool_keee
  * @reserved: Reserved for future use; see the note on reserved space.
  */
 struct ethtool_eee {
@@ -376,7 +377,8 @@ struct ethtool_eee {
 	__u32	eee_enabled;
 	__u32	tx_lpi_enabled;
 	__u32	tx_lpi_timer;
-	__u32	reserved[2];
+	__u8    is_member_of_keee;
+	__u8	reserved[7];
 };
 
 /**

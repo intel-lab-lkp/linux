@@ -163,6 +163,24 @@ static inline u32 ethtool_rxfh_indir_default(u32 index, u32 n_rx_rings)
 #define __ETHTOOL_DECLARE_LINK_MODE_MASK(name)		\
 	DECLARE_BITMAP(name, __ETHTOOL_LINK_MODE_MASK_NBITS)
 
+struct ethtool_keee {
+	struct ethtool_eee eee;
+	struct {
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(lp_advertising);
+	} link_modes;
+	bool use_link_modes;
+};
+
+static inline struct ethtool_keee *ethtool_eee2keee(struct ethtool_eee *eee)
+{
+	if (!eee->is_member_of_keee)
+		return NULL;
+
+	return container_of(eee, struct ethtool_keee, eee);
+}
+
 /* drivers must ignore base.cmd and base.link_mode_masks_nwords
  * fields, but they are allowed to overwrite them (will be ignored).
  */
