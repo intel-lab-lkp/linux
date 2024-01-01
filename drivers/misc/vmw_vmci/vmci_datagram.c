@@ -216,6 +216,7 @@ static int dg_dispatch_as_host(u32 context_id, struct vmci_datagram *dg)
 		if (dst_entry->run_delayed ||
 		    dg->src.context == VMCI_HOST_CONTEXT_ID) {
 			struct delayed_datagram_info *dg_info;
+			size_t payload_size = dg_size - VMCI_DG_HEADERSIZE;
 
 			if (atomic_add_return(1, &delayed_dg_host_queue_size)
 			    == VMCI_MAX_DELAYED_DG_HOST_QUEUE_SIZE) {
@@ -234,7 +235,8 @@ static int dg_dispatch_as_host(u32 context_id, struct vmci_datagram *dg)
 
 			dg_info->in_dg_host_queue = true;
 			dg_info->entry = dst_entry;
-			memcpy(&dg_info->msg, dg, dg_size);
+			memcpy(&dg_info->msg, dg, VMCI_DG_HEADERSIZE);
+			memcpy(&dg_info->msg_payload, dg + 1, payload_size);
 
 			INIT_WORK(&dg_info->work, dg_delayed_dispatch);
 			schedule_work(&dg_info->work);
