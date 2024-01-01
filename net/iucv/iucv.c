@@ -555,13 +555,16 @@ static int iucv_enable(void)
 	if (cpumask_empty(&iucv_buffer_cpumask))
 		/* No cpu could declare an iucv buffer. */
 		goto out;
+
+	rc = 0;
+unlock:
 	cpus_read_unlock();
-	return 0;
+	return rc;
+
 out:
 	kfree(iucv_path_table);
 	iucv_path_table = NULL;
-	cpus_read_unlock();
-	return rc;
+	goto unlock;
 }
 
 /*
