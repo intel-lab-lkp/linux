@@ -543,13 +543,14 @@ static int iucv_enable(void)
 	int cpu, rc;
 
 	cpus_read_lock();
-	rc = -ENOMEM;
 	alloc_size = iucv_max_pathid * sizeof(struct iucv_path);
 	iucv_path_table = kzalloc(alloc_size, GFP_KERNEL);
-	if (!iucv_path_table)
-		goto out;
+	if (!iucv_path_table) {
+		rc = -ENOMEM;
+		goto unlock;
+	}
+
 	/* Declare per cpu buffers. */
-	rc = -EIO;
 	for_each_online_cpu(cpu)
 		smp_call_function_single(cpu, iucv_declare_cpu, NULL, 1);
 	if (cpumask_empty(&iucv_buffer_cpumask))
@@ -564,6 +565,7 @@ unlock:
 out:
 	kfree(iucv_path_table);
 	iucv_path_table = NULL;
+	rc = -EIO;
 	goto unlock;
 }
 
