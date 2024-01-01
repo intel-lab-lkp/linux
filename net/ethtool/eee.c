@@ -13,7 +13,7 @@ struct eee_req_info {
 
 struct eee_reply_data {
 	struct ethnl_reply_data		base;
-	struct ethtool_eee		eee;
+	struct ethtool_keee		keee;
 };
 
 #define EEE_REPDATA(__reply_base) \
@@ -30,14 +30,17 @@ static int eee_prepare_data(const struct ethnl_req_info *req_base,
 {
 	struct eee_reply_data *data = EEE_REPDATA(reply_base);
 	struct net_device *dev = reply_base->dev;
+	struct ethtool_keee *keee = &data->keee;
+	struct ethtool_eee *eee = &keee->eee;
 	int ret;
 
+	eee->is_member_of_keee = 1;
 	if (!dev->ethtool_ops->get_eee)
 		return -EOPNOTSUPP;
 	ret = ethnl_ops_begin(dev);
 	if (ret < 0)
 		return ret;
-	ret = dev->ethtool_ops->get_eee(dev, &data->eee);
+	ret = dev->ethtool_ops->get_eee(dev, eee);
 	ethnl_ops_complete(dev);
 
 	return ret;
@@ -48,7 +51,8 @@ static int eee_reply_size(const struct ethnl_req_info *req_base,
 {
 	bool compact = req_base->flags & ETHTOOL_FLAG_COMPACT_BITSETS;
 	const struct eee_reply_data *data = EEE_REPDATA(reply_base);
-	const struct ethtool_eee *eee = &data->eee;
+	const struct ethtool_keee *keee = &data->keee;
+	const struct ethtool_eee *eee = &keee->eee;
 	int len = 0;
 	int ret;
 
@@ -84,7 +88,8 @@ static int eee_fill_reply(struct sk_buff *skb,
 {
 	bool compact = req_base->flags & ETHTOOL_FLAG_COMPACT_BITSETS;
 	const struct eee_reply_data *data = EEE_REPDATA(reply_base);
-	const struct ethtool_eee *eee = &data->eee;
+	const struct ethtool_keee *keee = &data->keee;
+	const struct ethtool_eee *eee = &keee->eee;
 	int ret;
 
 	ret = ethnl_put_bitset32(skb, ETHTOOL_A_EEE_MODES_OURS,
@@ -132,28 +137,30 @@ ethnl_set_eee(struct ethnl_req_info *req_info, struct genl_info *info)
 {
 	struct net_device *dev = req_info->dev;
 	struct nlattr **tb = info->attrs;
-	struct ethtool_eee eee = {};
+	struct ethtool_keee keee = {};
+	struct ethtool_eee *eee = &keee.eee;
 	bool mod = false;
 	int ret;
 
-	ret = dev->ethtool_ops->get_eee(dev, &eee);
+	eee->is_member_of_keee = 1;
+	ret = dev->ethtool_ops->get_eee(dev, eee);
 	if (ret < 0)
 		return ret;
 
-	ret = ethnl_update_bitset32(&eee.advertised, EEE_MODES_COUNT,
+	ret = ethnl_update_bitset32(&eee->advertised, EEE_MODES_COUNT,
 				    tb[ETHTOOL_A_EEE_MODES_OURS],
 				    link_mode_names, info->extack, &mod);
 	if (ret < 0)
 		return ret;
-	ethnl_update_bool32(&eee.eee_enabled, tb[ETHTOOL_A_EEE_ENABLED], &mod);
-	ethnl_update_bool32(&eee.tx_lpi_enabled,
+	ethnl_update_bool32(&eee->eee_enabled, tb[ETHTOOL_A_EEE_ENABLED], &mod);
+	ethnl_update_bool32(&eee->tx_lpi_enabled,
 			    tb[ETHTOOL_A_EEE_TX_LPI_ENABLED], &mod);
-	ethnl_update_u32(&eee.tx_lpi_timer, tb[ETHTOOL_A_EEE_TX_LPI_TIMER],
+	ethnl_update_u32(&eee->tx_lpi_timer, tb[ETHTOOL_A_EEE_TX_LPI_TIMER],
 			 &mod);
 	if (!mod)
 		return 0;
 
-	ret = dev->ethtool_ops->set_eee(dev, &eee);
+	ret = dev->ethtool_ops->set_eee(dev, eee);
 	return ret < 0 ? ret : 1;
 }
 
