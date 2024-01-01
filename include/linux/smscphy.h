@@ -2,6 +2,8 @@
 #ifndef __LINUX_SMSCPHY_H__
 #define __LINUX_SMSCPHY_H__
 
+#define SMSC_OUI 0x01f0
+
 #define MII_LAN83C185_ISF 29 /* Interrupt Source Flags */
 #define MII_LAN83C185_IM  30 /* Interrupt Mask */
 #define MII_LAN83C185_CTRL_STATUS 17 /* Mode/Status Register */

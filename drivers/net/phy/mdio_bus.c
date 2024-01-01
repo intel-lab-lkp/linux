@@ -31,6 +31,7 @@
 #include <linux/reset.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/smscphy.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
@@ -632,7 +633,7 @@ static bool mdiobus_prevent_c45_scan(struct mii_bus *bus)
 			continue;
 		oui = phydev->phy_id >> 10;
 
-		if (oui == MICREL_OUI)
+		if (oui == MICREL_OUI || oui == SMSC_OUI)
 			return true;
 	}
 	return false;
