@@ -2342,13 +2342,14 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 
 	if (status) {
 		if (conn && conn->state == BT_CONNECT) {
-			/* If the request failed with "Command Disallowed", the
+			/* If the request failed with a certain status, the
 			 * card is either using all its available "slots" for
 			 * attempting new connections, or it's currently
 			 * doing an HCI Inquiry. In these cases we'll try to
 			 * do the "Create Connection" request again later.
 			 */
-			if (status == HCI_ERROR_COMMAND_DISALLOWED) {
+			if (status == HCI_ERROR_COMMAND_DISALLOWED ||
+			    status == HCI_ERROR_HARDWARE_FAILURE) {
 				conn->state = BT_CONNECT2;
 
 				if (!hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECT) &&
@@ -3269,7 +3270,26 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 
 done:
 	if (status) {
-		hci_conn_failed(conn, status);
+		if (status == HCI_ERROR_REJ_LIMITED_RESOURCES) {
+			conn->state = BT_CONNECT2;
+
+			if (!hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECT) &&
+			    !test_bit(HCI_INQUIRY, &hdev->flags)) {
+				bt_dev_err(hdev,
+					   "\"Connect Complete\" event with error "
+					   "(0x%2.2x) indicating to try again, but "
+					   "there's no concurrent \"Create "
+					   "Connection\" nor an ongoing inquiry",
+					   status);
+
+				hci_conn_failed(conn, status);
+			}
+
+			hci_dev_unlock(hdev);
+			return;
+		} else {
+			hci_conn_failed(conn, status);
+		}
 	} else if (ev->link_type == SCO_LINK) {
 		switch (conn->setting & SCO_AIRMODE_MASK) {
 		case SCO_AIRMODE_CVSD:
