@@ -5184,6 +5184,11 @@ static int bpf_object_populate_internal_map(struct bpf_object *obj, struct bpf_m
 
 static void bpf_map_destroy(struct bpf_map *map);
 
+static bool map_is_created(const struct bpf_map *map)
+{
+	return map->obj->loaded || map->reused;
+}
+
 static int bpf_object_create_map(struct bpf_object *obj, struct bpf_map *map, bool is_inner)
 {
 	LIBBPF_OPTS(bpf_map_create_opts, create_attr);
@@ -5215,7 +5220,7 @@ static int bpf_object_create_map(struct bpf_object *obj, struct bpf_map *map, bo
 					map->name, err);
 				return err;
 			}
-			map->inner_map_fd = bpf_map__fd(map->inner_map);
+			map->inner_map_fd = map->inner_map->fd;
 		}
 		if (map->inner_map_fd >= 0)
 			create_attr.inner_map_fd = map->inner_map_fd;
@@ -5298,7 +5303,7 @@ static int init_map_in_map_slots(struct bpf_object *obj, struct bpf_map *map)
 			continue;
 
 		targ_map = map->init_slots[i];
-		fd = bpf_map__fd(targ_map);
+		fd = targ_map->fd;
 
 		if (obj->gen_loader) {
 			bpf_gen__populate_outer_map(obj->gen_loader,
@@ -7112,7 +7117,7 @@ retry_load:
 				if (map->libbpf_type != LIBBPF_MAP_RODATA)
 					continue;
 
-				if (bpf_prog_bind_map(ret, bpf_map__fd(map), NULL)) {
+				if (bpf_prog_bind_map(ret, map->fd, NULL)) {
 					cp = libbpf_strerror_r(errno, errmsg, sizeof(errmsg));
 					pr_warn("prog '%s': failed to bind map '%s': %s\n",
 						prog->name, map->real_name, cp);
@@ -9575,7 +9580,11 @@ int libbpf_attach_type_by_name(const char *name,
 
 int bpf_map__fd(const struct bpf_map *map)
 {
-	return map ? map->fd : libbpf_err(-EINVAL);
+	if (!map)
+		return libbpf_err(-EINVAL);
+	if (!map_is_created(map))
+		return -1;
+	return map->fd;
 }
 
 static bool map_uses_real_name(const struct bpf_map *map)
@@ -9611,7 +9620,7 @@ enum bpf_map_type bpf_map__type(const struct bpf_map *map)
 
 int bpf_map__set_type(struct bpf_map *map, enum bpf_map_type type)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->def.type = type;
 	return 0;
@@ -9624,7 +9633,7 @@ __u32 bpf_map__map_flags(const struct bpf_map *map)
 
 int bpf_map__set_map_flags(struct bpf_map *map, __u32 flags)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->def.map_flags = flags;
 	return 0;
@@ -9637,7 +9646,7 @@ __u64 bpf_map__map_extra(const struct bpf_map *map)
 
 int bpf_map__set_map_extra(struct bpf_map *map, __u64 map_extra)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->map_extra = map_extra;
 	return 0;
@@ -9650,7 +9659,7 @@ __u32 bpf_map__numa_node(const struct bpf_map *map)
 
 int bpf_map__set_numa_node(struct bpf_map *map, __u32 numa_node)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->numa_node = numa_node;
 	return 0;
@@ -9663,7 +9672,7 @@ __u32 bpf_map__key_size(const struct bpf_map *map)
 
 int bpf_map__set_key_size(struct bpf_map *map, __u32 size)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->def.key_size = size;
 	return 0;
@@ -9747,7 +9756,7 @@ static int map_btf_datasec_resize(struct bpf_map *map, __u32 size)
 
 int bpf_map__set_value_size(struct bpf_map *map, __u32 size)
 {
-	if (map->fd >= 0)
+	if (map->obj->loaded || map->reused)
 		return libbpf_err(-EBUSY);
 
 	if (map->mmaped) {
@@ -9788,8 +9797,11 @@ __u32 bpf_map__btf_value_type_id(const struct bpf_map *map)
 int bpf_map__set_initial_value(struct bpf_map *map,
 			       const void *data, size_t size)
 {
+	if (map->obj->loaded || map->reused)
+		return libbpf_err(-EBUSY);
+
 	if (!map->mmaped || map->libbpf_type == LIBBPF_MAP_KCONFIG ||
-	    size != map->def.value_size || map->fd >= 0)
+	    size != map->def.value_size)
 		return libbpf_err(-EINVAL);
 
 	memcpy(map->mmaped, data, size);
@@ -9816,7 +9828,7 @@ __u32 bpf_map__ifindex(const struct bpf_map *map)
 
 int bpf_map__set_ifindex(struct bpf_map *map, __u32 ifindex)
 {
-	if (map->fd >= 0)
+	if (map_is_created(map))
 		return libbpf_err(-EBUSY);
 	map->map_ifindex = ifindex;
 	return 0;
@@ -9921,7 +9933,7 @@ bpf_object__find_map_fd_by_name(const struct bpf_object *obj, const char *name)
 static int validate_map_op(const struct bpf_map *map, size_t key_sz,
 			   size_t value_sz, bool check_value_sz)
 {
-	if (map->fd <= 0)
+	if (!map_is_created(map)) /* map is not yet created */
 		return -ENOENT;
 
 	if (map->def.key_size != key_sz) {
@@ -12374,7 +12386,7 @@ int bpf_link__update_map(struct bpf_link *link, const struct bpf_map *map)
 	__u32 zero = 0;
 	int err;
 
-	if (!bpf_map_is_struct_ops(map) || map->fd < 0)
+	if (!bpf_map_is_struct_ops(map) || !map_is_created(map))
 		return -EINVAL;
 
 	st_ops_link = container_of(link, struct bpf_link_struct_ops, link);
@@ -13276,7 +13288,7 @@ int bpf_object__load_skeleton(struct bpf_object_skeleton *s)
 	for (i = 0; i < s->map_cnt; i++) {
 		struct bpf_map *map = *s->maps[i].map;
 		size_t mmap_sz = bpf_map_mmap_sz(map->def.value_size, map->def.max_entries);
-		int prot, map_fd = bpf_map__fd(map);
+		int prot, map_fd = map->fd;
 		void **mmaped = s->maps[i].mmaped;
 
 		if (!mmaped)
