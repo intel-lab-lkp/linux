@@ -2342,8 +2342,28 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 
 	if (status) {
 		if (conn && conn->state == BT_CONNECT) {
+			/* If the request failed with "Command Disallowed", the
+			 * card is either using all its available "slots" for
+			 * attempting new connections, or it's currently
+			 * doing an HCI Inquiry. In these cases we'll try to
+			 * do the "Create Connection" request again later.
+			 */
 			if (status == HCI_ERROR_COMMAND_DISALLOWED) {
 				conn->state = BT_CONNECT2;
+
+				if (!hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECT) &&
+				    !test_bit(HCI_INQUIRY, &hdev->flags)) {
+					bt_dev_err(hdev,
+						   "\"Create Connection\" returned error "
+						   "(0x%2.2x) indicating to try again, but "
+						   "there's no concurrent \"Create "
+						   "Connection\" nor an ongoing inquiry",
+						   status);
+
+					conn->state = BT_CLOSED;
+					hci_connect_cfm(conn, status);
+					hci_conn_del(conn);
+				}
 			} else {
 				conn->state = BT_CLOSED;
 				hci_connect_cfm(conn, status);
