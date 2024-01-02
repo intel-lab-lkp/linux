@@ -128,6 +128,7 @@ if ($#ARGV == -1) {
 
 my $kernelversion;
 my ($sphinx_major, $sphinx_minor, $sphinx_patch);
+my ($arch, $arch_is_x86, $arch_x86_64);
 
 my $dohighlight = "";
 
@@ -437,6 +438,31 @@ sub get_kernel_version() {
 	$version = $ENV{'KERNELVERSION'};
     }
     return $version;
+}
+
+# get the environment ARCH and x86 flavor
+sub get_arch() {
+
+	my $uname = `uname -m`;
+	chomp($uname);
+	$uname =~ s/i.86/i386/;
+	if ($uname eq "x86") {
+		$uname = "x86_64";
+	}
+
+	# allow ENV ARCH to override uname -m
+	if (defined($ENV{'ARCH'})) {
+		$arch = $ENV{'ARCH'};
+		if ($arch eq "i386" || $arch eq "x86_64") {
+			# use that
+		} else {
+			$arch = $uname;
+		}
+	} else {
+		$arch = $uname;
+	}
+	$arch_is_x86 = ($arch eq "i386") || ($arch eq "x86_64");
+	$arch_x86_64 = $arch eq "x86_64";
 }
 
 #
@@ -1862,6 +1888,62 @@ sub tracepoint_munge($) {
 	}
 }
 
+# idtentry_munge() is only for x86 and can be different for i386 vs. x86_64.
+sub idtentry_munge($) {
+	my $file = shift;
+	my $idtentryname = "";
+	my $idtentryargs = "void";
+	$prototype =~ s/^\s+|\s+$//g;   # remove both leading and trailing whitespace
+
+	if ($prototype =~ m/DEFINE_IDTENTRY\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_ERRORCODE\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs, unsigned long error_code";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_RAW\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_RAW_ERRORCODE\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs, unsigned long error_code";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_IRQ\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs, u32 vector";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_SYSVEC\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_SYSVEC_SIMPLE\((.*?)\)/) {
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_IST\((.*?)\)/) { # same as _RAW
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_NOIST\((.*?)\)/) { # same as _RAW
+		$idtentryname = "noist_" . $1;
+		$idtentryargs = "struct pt_regs *regs";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_DF\((.*?)\)/) { # same as _RAW_ERRORCODE
+		$idtentryname = $1;
+		$idtentryargs = $arch_x86_64 ? "struct pt_regs *regs, unsigned long error_code"
+			: "struct pt_regs *regs, unsigned long error_code, unsigned long address";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_VC_KERNEL\((.*?)\)/) { # same as _RAW_ERRORCODE
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs, unsigned long error_code";
+	} elsif ($prototype =~ m/DEFINE_IDTENTRY_VC_USER\((.*?)\)/) { # same as _RAW_ERRORCODE
+		$idtentryname = $1;
+		$idtentryargs = "struct pt_regs *regs, unsigned long error_code";
+	}
+
+	$idtentryname =~ s/^\s+//; #strip leading whitespace
+	if ($idtentryname eq "") {
+		emit_warning("${file}:$.", "Unrecognized IDTENTRY macro: \n".
+			     "$prototype\n");
+	} else {
+		$prototype = "void $idtentryname($idtentryargs)";
+		$identifier = "$idtentryname";
+	}
+}
+
 sub syscall_munge() {
 	my $void = 0;
 
@@ -1925,6 +2007,9 @@ sub process_proto_function($$) {
 	    $prototype =~ /DEFINE_SINGLE_EVENT/)
 	{
 		tracepoint_munge($file);
+	}
+	if ($arch_is_x86 && $prototype =~ /DEFINE_IDTENTRY/) {
+		idtentry_munge($file);
 	}
 	dump_function($prototype, $file);
 	reset_state();
@@ -2367,6 +2452,8 @@ if ($output_mode eq "rst") {
 }
 
 $kernelversion = get_kernel_version();
+
+get_arch();
 
 # generate a sequence of code that will splice in highlighting information
 # using the s// operator.
