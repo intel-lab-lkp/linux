@@ -2043,13 +2043,19 @@ device_reset:
 	return hl_device_reset(hdev, flags | HL_DRV_RESET_HARD);
 }
 
-static void hl_notifier_event_send(struct hl_notifier_event *notifier_event, u64 event_mask)
+static void hl_notifier_event_send(struct hl_device *hdev,
+			struct hl_notifier_event *notifier_event, u64 event_mask)
 {
+	u64 n;
+
 	mutex_lock(&notifier_event->lock);
 	notifier_event->events_mask |= event_mask;
 
-	if (notifier_event->eventfd)
-		eventfd_signal(notifier_event->eventfd, 1);
+	if (notifier_event->eventfd) {
+		n = eventfd_signal(notifier_event->eventfd, 1);
+		if (n != 1)
+			dev_err(hdev->dev, "eventfd signal failed, incremented by %llu\n", n);
+	}
 
 	mutex_unlock(&notifier_event->lock);
 }
@@ -2073,7 +2079,7 @@ void hl_notifier_event_send_all(struct hl_device *hdev, u64 event_mask)
 	mutex_lock(&hdev->fpriv_list_lock);
 
 	list_for_each_entry(hpriv, &hdev->fpriv_list, dev_node)
-		hl_notifier_event_send(&hpriv->notifier_event, event_mask);
+		hl_notifier_event_send(hdev, &hpriv->notifier_event, event_mask);
 
 	mutex_unlock(&hdev->fpriv_list_lock);
 }
