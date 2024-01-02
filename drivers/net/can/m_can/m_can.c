@@ -2029,7 +2029,7 @@ struct m_can_classdev *m_can_class_allocate_dev(struct device *dev,
 	tx_fifo_size = mram_config_vals[7];
 
 	/* allocate the m_can device */
-	net_dev = alloc_candev(sizeof_priv, tx_fifo_size);
+	net_dev = alloc_candev_with_dev(sizeof_priv, tx_fifo_size, dev);
 	if (!net_dev) {
 		dev_err(dev, "Failed to allocate CAN device");
 		goto out;

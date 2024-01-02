@@ -247,12 +247,14 @@ void can_setup(struct net_device *dev)
 
 /* Allocate and setup space for the CAN network device */
 struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
-				    unsigned int txqs, unsigned int rxqs)
+					unsigned int txqs, unsigned int rxqs,
+					struct device *candev)
 {
 	struct can_ml_priv *can_ml;
 	struct net_device *dev;
 	struct can_priv *priv;
-	int size;
+	int size, aliasid;
+	char devname[6] = "can%d";
 
 	/* We put the driver's priv, the CAN mid layer priv and the
 	 * echo skb into the netdevice's priv. The memory layout for
@@ -273,7 +275,14 @@ struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
 		size = ALIGN(size, sizeof(struct sk_buff *)) +
 			echo_skb_max * sizeof(struct sk_buff *);
 
-	dev = alloc_netdev_mqs(size, "can%d", NET_NAME_UNKNOWN, can_setup,
+	if (candev) {
+		aliasid = of_alias_get_id(candev->of_node, "can");
+		if (aliasid >= 0)
+			snprintf(devname, sizeof(devname), "%s%d", "can", aliasid);
+	}
+	dev_dbg(candev, "Name of CAN assigned is : %s\n", devname);
+
+	dev = alloc_netdev_mqs(size, devname, NET_NAME_UNKNOWN, can_setup,
 			       txqs, rxqs);
 	if (!dev)
 		return NULL;
