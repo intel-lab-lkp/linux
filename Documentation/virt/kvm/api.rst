@@ -370,6 +370,8 @@ Errors:
 
   =======    ==============================================================
   EINTR      an unmasked signal is pending
+  EAGAIN     the vcpu is an application processor (AP) and had not received
+             an INIT signal [x86]
   ENOEXEC    the vcpu hasn't been initialized or the guest tried to execute
              instructions from device memory (arm64)
   ENOSYS     data abort outside memslots with no syndrome info and
