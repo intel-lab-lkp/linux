@@ -1315,12 +1315,6 @@ static int enable_device_and_get(struct ib_device *device)
 	down_write(&devices_rwsem);
 	xa_set_mark(&devices, device->index, DEVICE_REGISTERED);
 
-	/*
-	 * By using downgrade_write() we ensure that no other thread can clear
-	 * DEVICE_REGISTERED while we are completing the client setup.
-	 */
-	downgrade_write(&devices_rwsem);
-
 	if (device->ops.enable_driver) {
 		ret = device->ops.enable_driver(device);
 		if (ret)
@@ -1337,7 +1331,7 @@ static int enable_device_and_get(struct ib_device *device)
 	if (!ret)
 		ret = add_compat_devs(device);
 out:
-	up_read(&devices_rwsem);
+	up_write(&devices_rwsem);
 	return ret;
 }
 
