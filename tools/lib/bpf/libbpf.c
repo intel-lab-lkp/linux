@@ -3122,7 +3122,7 @@ static int bpf_object_load_vmlinux_btf(struct bpf_object *obj, bool force)
 	return 0;
 }
 
-static int bpf_object_sanitize_and_load_btf(struct bpf_object *obj)
+static int bpf_object_load_btf(struct bpf_object *obj)
 {
 	struct btf *kern_btf = obj->btf;
 	bool btf_mandatory, sanitize;
@@ -8068,10 +8068,10 @@ static int bpf_object_load(struct bpf_object *obj, int extra_log_level, const ch
 	err = bpf_object_probe_loading(obj);
 	err = err ? : bpf_object_load_vmlinux_btf(obj, false);
 	err = err ? : bpf_object_resolve_externs(obj, obj->kconfig);
-	err = err ? : bpf_object_sanitize_and_load_btf(obj);
 	err = err ? : bpf_object_sanitize_maps(obj);
 	err = err ? : bpf_object_init_kern_struct_ops_maps(obj);
 	err = err ? : bpf_object_relocate(obj, obj->btf_custom_path ? : target_btf_path);
+	err = err ? : bpf_object_load_btf(obj);
 	err = err ? : bpf_object_create_maps(obj);
 	err = err ? : bpf_object_load_progs(obj, extra_log_level);
 	err = err ? : bpf_object_init_prog_arrays(obj);
