@@ -881,7 +881,7 @@ struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
 	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
 				vma, vmf->address, false);
 	if (folio) {
-		if (mem_cgroup_swapin_charge_folio(folio, vma->vm_mm,
+		if (mem_cgroup_swapin_charge_folio(folio, NULL,
 						   GFP_KERNEL, entry)) {
 			folio_put(folio);
 			return NULL;
