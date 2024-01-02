@@ -1117,7 +1117,8 @@ void __ref kmemleak_free_part(const void *ptr, size_t size)
 {
 	pr_debug("%s(0x%px)\n", __func__, ptr);
 
-	if (kmemleak_enabled && ptr && !IS_ERR(ptr))
+	if (kmemleak_enabled && kmemleak_late_initialized && ptr &&
+		!IS_ERR(ptr))
 		delete_object_part((unsigned long)ptr, size, false);
 }
 EXPORT_SYMBOL_GPL(kmemleak_free_part);
@@ -1135,7 +1136,8 @@ void __ref kmemleak_free_percpu(const void __percpu *ptr)
 
 	pr_debug("%s(0x%px)\n", __func__, ptr);
 
-	if (kmemleak_free_enabled && ptr && !IS_ERR(ptr))
+	if (kmemleak_free_enabled && kmemleak_late_initialized && ptr &&
+		!IS_ERR(ptr))
 		for_each_possible_cpu(cpu)
 			delete_object_full((unsigned long)per_cpu_ptr(ptr,
 								      cpu));
@@ -1189,7 +1191,8 @@ void __ref kmemleak_not_leak(const void *ptr)
 {
 	pr_debug("%s(0x%px)\n", __func__, ptr);
 
-	if (kmemleak_enabled && ptr && !IS_ERR(ptr))
+	if (kmemleak_enabled && kmamleak_late_initialized && ptr &&
+		!IS_ERR(ptr))
 		make_gray_object((unsigned long)ptr);
 }
 EXPORT_SYMBOL(kmemleak_not_leak);
@@ -1207,7 +1210,8 @@ void __ref kmemleak_ignore(const void *ptr)
 {
 	pr_debug("%s(0x%px)\n", __func__, ptr);
 
-	if (kmemleak_enabled && ptr && !IS_ERR(ptr))
+	if (kmemleak_enabled && kmamleak_late_initialized && ptr &&
+		!IS_ERR(ptr))
 		make_black_object((unsigned long)ptr, false);
 }
 EXPORT_SYMBOL(kmemleak_ignore);
