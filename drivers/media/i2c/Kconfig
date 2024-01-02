@@ -673,6 +673,7 @@ menu "Camera ISPs"
 
 config VIDEO_THP7312
 	tristate "THine THP7312 support"
+	depends on FW_LOADER || FW_LOADER=n
 	depends on I2C
 	select MEDIA_CONTROLLER
 	select V4L2_CCI_I2C
