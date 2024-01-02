@@ -106,6 +106,7 @@ stages:
   - rockchip
   - virtio-gpu
   - lint
+  - software-driver
 
 # YAML anchors for rule conditions
 # --------------------------------
