@@ -166,6 +166,7 @@ static void cxt_init_gpio_led(struct hda_codec *codec)
 
 static int cx_auto_init(struct hda_codec *codec)
 {
+	unsigned int mic_persent;
 	struct conexant_spec *spec = codec->spec;
 	snd_hda_gen_init(codec);
 	if (!spec->dynamic_eapd)
@@ -173,6 +174,22 @@ static int cx_auto_init(struct hda_codec *codec)
 
 	cxt_init_gpio_led(codec);
 	snd_hda_apply_fixup(codec, HDA_FIXUP_ACT_INIT);
+
+	switch (codec->core.vendor_id) {
+	case 0x14f11f86:
+	case 0x14f11f87:
+		/* fix some headset type recognize fail issue, such as EDIFIER headset */
+		snd_hda_codec_write(codec, 0x1c, 0, 0x320, 0x010);
+		snd_hda_codec_write(codec, 0x1c, 0, 0x3b0, 0xe10);
+		snd_hda_codec_write(codec, 0x1c, 0, 0x4f0, 0x0eb);
+		/* fix reboot headset type recognize fail issue */
+		mic_persent = snd_hda_codec_read(codec, 0x19, 0, 0xf09, 0x0);
+		if (mic_persent&0x80000000)
+			snd_hda_codec_write(codec, 0x19, 0, 0x707, 0x24);
+		else
+			snd_hda_codec_write(codec, 0x19, 0, 0x707, 0x20);
+		break;
+	}
 
 	return 0;
 }
@@ -192,6 +209,58 @@ static void cx_auto_free(struct hda_codec *codec)
 	snd_hda_gen_free(codec);
 }
 
+static int headset_present_flag;
+static void cx_jack_unsol_event(struct hda_codec *codec, unsigned int res)
+{
+	unsigned int val, phone_present, mic_persent, phone_tag, mic_tag;
+	unsigned int count = 0;
+
+	switch (codec->core.vendor_id) {
+	case 0x14f11f86:
+	case 0x14f11f87:
+		/* check hp&mic tag to process headset pulgin&plugout */
+		phone_tag = snd_hda_codec_read(codec, 0x16, 0, 0xf08, 0x0);
+		mic_tag = snd_hda_codec_read(codec, 0x19, 0, 0xf08, 0x0);
+		if ((phone_tag&(res>>26)) || (mic_tag&(res>>26))) {
+			phone_present = snd_hda_codec_read(codec, 0x16, 0, 0xf09, 0x0);
+			if (!(phone_present&0x80000000)) {/* headphone plugout */
+				headset_present_flag = 0;
+				snd_hda_codec_write(codec, 0x19, 0, 0x707, 0x20);
+				break;
+			}
+			if (headset_present_flag == 0) {
+				headset_present_flag = 1;
+			} else if (headset_present_flag == 1) {
+				mic_persent = snd_hda_codec_read(codec, 0x19, 0, 0xf09, 0x0);
+				/* headset is present */
+				if ((phone_present&0x80000000) && (mic_persent&0x80000000)) {
+					/* wait headset detect done */
+					do {
+						msleep(20);
+						val = snd_hda_codec_read(codec, 0x1c,
+									0, 0xca0, 0x0);
+						count += 1;
+					} while ((count > 3) || (val&0x080));
+					val = snd_hda_codec_read(codec, 0x1c, 0, 0xcb0, 0x0);
+					if (val&0x800) {
+						codec_dbg(codec, "headset plugin, type is CTIA\n");
+						snd_hda_codec_write(codec, 0x19, 0, 0x707, 0x24);
+					} else if (val&0x400) {
+						codec_dbg(codec, "headset plugin, type is OMTP\n");
+						snd_hda_codec_write(codec, 0x19, 0, 0x707, 0x24);
+					} else {
+						codec_dbg(codec, "headphone plugin\n");
+					}
+					headset_present_flag = 2;
+				}
+			}
+		}
+		break;
+	}
+
+	snd_hda_jack_unsol_event(codec, res);
+}
+
 #ifdef CONFIG_PM
 static int cx_auto_suspend(struct hda_codec *codec)
 {
@@ -205,7 +274,7 @@ static const struct hda_codec_ops cx_auto_patch_ops = {
 	.build_pcms = snd_hda_gen_build_pcms,
 	.init = cx_auto_init,
 	.free = cx_auto_free,
-	.unsol_event = snd_hda_jack_unsol_event,
+	.unsol_event = cx_jack_unsol_event,
 #ifdef CONFIG_PM
 	.suspend = cx_auto_suspend,
 	.check_power_status = snd_hda_gen_check_power_status,
@@ -1042,6 +1111,7 @@ static int patch_conexant_auto(struct hda_codec *codec)
 	codec->spec = spec;
 	codec->patch_ops = cx_auto_patch_ops;
 
+	headset_present_flag = 0;
 	cx_auto_parse_eapd(codec);
 	spec->gen.own_eapd_ctl = 1;
 
