@@ -54,10 +54,8 @@ struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_flags,
 		bool skip_if_exists);
 struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 		struct mempolicy *mpol, pgoff_t ilx);
-struct page *swapin_readahead(swp_entry_t entry, gfp_t flag,
-			      struct vm_fault *vmf);
-struct folio *swapin_direct(swp_entry_t entry, gfp_t flag,
-			    struct vm_fault *vmf);
+struct folio *swapin_entry(swp_entry_t entry, gfp_t flag,
+			    struct vm_fault *vmf, bool *swapcached);
 
 static inline unsigned int folio_swap_flags(struct folio *folio)
 {
@@ -88,14 +86,8 @@ static inline struct folio *swap_cluster_readahead(swp_entry_t entry,
 	return NULL;
 }
 
-struct folio *swapin_direct(swp_entry_t entry, gfp_t flag,
-			struct vm_fault *vmf)
-{
-	return NULL;
-}
-
-static inline struct page *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
-			struct vm_fault *vmf)
+static inline struct folio *swapin_entry(swp_entry_t swp, gfp_t gfp_mask,
+			struct vm_fault *vmf, bool *swapcached)
 {
 	return NULL;
 }

@@ -3801,6 +3801,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	rmap_t rmap_flags = RMAP_NONE;
 	bool exclusive = false;
 	swp_entry_t entry;
+	bool swapcached;
 	pte_t pte;
 	vm_fault_t ret = 0;
 
@@ -3864,21 +3865,13 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	swapcache = folio;
 
 	if (!folio) {
-		if (data_race(si->flags & SWP_SYNCHRONOUS_IO) &&
-		    __swap_count(entry) == 1) {
-			/* skip swapcache and readahead */
-			folio = swapin_direct(entry, GFP_HIGHUSER_MOVABLE, vmf);
-			if (folio)
-				page = &folio->page;
+		folio = swapin_entry(entry, GFP_HIGHUSER_MOVABLE,
+				     vmf, &swapcached);
+		if (folio) {
+			page = folio_file_page(folio, swp_offset(entry));
+			if (swapcached)
+				swapcache = folio;
 		} else {
-			page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-						vmf);
-			if (page)
-				folio = page_folio(page);
-			swapcache = folio;
-		}
-
-		if (!folio) {
 			/*
 			 * Back out if somebody else faulted in this pte
 			 * while we released the pte lock.
