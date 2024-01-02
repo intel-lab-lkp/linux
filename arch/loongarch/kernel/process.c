@@ -91,6 +91,7 @@ void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long sp)
 	clear_used_math();
 	regs->csr_era = pc;
 	regs->regs[3] = sp;
+	current->thread.fpu.fcsr = boot_cpu_data.fpu_csr0;
 }
 
 void flush_thread(void)
