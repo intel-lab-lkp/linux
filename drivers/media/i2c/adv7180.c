@@ -334,8 +334,9 @@ static u32 adv7180_status_to_v4l2(u8 status1)
 static int __adv7180_status(struct adv7180_state *state, u32 *status,
 			    v4l2_std_id *std)
 {
-	int status1 = adv7180_read(state, ADV7180_REG_STATUS1);
+	int status1;
 
+	status1 = adv7180_read(state, ADV7180_REG_STATUS1);
 	if (status1 < 0)
 		return status1;
 
@@ -355,7 +356,9 @@ static inline struct adv7180_state *to_state(struct v4l2_subdev *sd)
 static int adv7180_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 {
 	struct adv7180_state *state = to_state(sd);
-	int err = mutex_lock_interruptible(&state->mutex);
+	int err;
+
+	err = mutex_lock_interruptible(&state->mutex);
 	if (err)
 		return err;
 
@@ -387,8 +390,9 @@ static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 			     u32 output, u32 config)
 {
 	struct adv7180_state *state = to_state(sd);
-	int ret = mutex_lock_interruptible(&state->mutex);
+	int ret;
 
+	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
 
@@ -398,7 +402,6 @@ static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 	}
 
 	ret = state->chip_info->select_input(state, input);
-
 	if (ret == 0)
 		state->input = input;
 out:
@@ -409,7 +412,9 @@ out:
 static int adv7180_g_input_status(struct v4l2_subdev *sd, u32 *status)
 {
 	struct adv7180_state *state = to_state(sd);
-	int ret = mutex_lock_interruptible(&state->mutex);
+	int ret;
+
+	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
 
@@ -435,8 +440,9 @@ static int adv7180_program_std(struct adv7180_state *state)
 static int adv7180_s_std(struct v4l2_subdev *sd, v4l2_std_id std)
 {
 	struct adv7180_state *state = to_state(sd);
-	int ret = mutex_lock_interruptible(&state->mutex);
+	int ret;
 
+	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
 
@@ -465,8 +471,9 @@ static int adv7180_g_std(struct v4l2_subdev *sd, v4l2_std_id *norm)
 static int adv7180_g_frame_interval(struct v4l2_subdev *sd,
 				    struct v4l2_subdev_frame_interval *fi)
 {
-	struct adv7180_state *state = to_state(sd);
+	struct adv7180_state *state;
 
+	state = to_state(sd);
 	if (state->curr_norm & V4L2_STD_525_60) {
 		fi->interval.numerator = 1001;
 		fi->interval.denominator = 30000;
@@ -827,8 +834,9 @@ static int adv7180_get_mbus_config(struct v4l2_subdev *sd,
 				   unsigned int pad,
 				   struct v4l2_mbus_config *cfg)
 {
-	struct adv7180_state *state = to_state(sd);
+	struct adv7180_state *state;
 
+	state = to_state(sd);
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		cfg->type = V4L2_MBUS_CSI2_DPHY;
 		cfg->bus.mipi_csi2.num_data_lanes = 1;
@@ -856,8 +864,9 @@ static int adv7180_get_skip_frames(struct v4l2_subdev *sd, u32 *frames)
 
 static int adv7180_g_pixelaspect(struct v4l2_subdev *sd, struct v4l2_fract *aspect)
 {
-	struct adv7180_state *state = to_state(sd);
+	struct adv7180_state *state;
 
+	state = to_state(sd);
 	if (state->curr_norm & V4L2_STD_525_60) {
 		aspect->numerator = 11;
 		aspect->denominator = 10;
