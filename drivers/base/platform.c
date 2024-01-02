@@ -151,50 +151,45 @@ EXPORT_SYMBOL_GPL(devm_platform_ioremap_resource_byname);
 #endif /* CONFIG_HAS_IOMEM */
 
 /**
- * platform_get_irq_optional - get an optional IRQ for a device
+ * platform_get_irq_resource_optional - get an optional IRQ for a device and
+ *					populate the resource struct
  * @dev: platform device
  * @num: IRQ number index
+ * @r: pointer to resource to populate with IRQ information.
  *
  * Gets an IRQ for a platform device. Device drivers should check the return
- * value for errors so as to not pass a negative integer value to the
- * request_irq() APIs. This is the same as platform_get_irq(), except that it
- * does not print an error message if an IRQ can not be obtained.
+ * value for errors. If no error is returned, the IRQ can be found in r->start.
  *
  * For example::
  *
- *		int irq = platform_get_irq_optional(pdev, 0);
- *		if (irq < 0)
- *			return irq;
+ *		int res = platform_get_irq_resource_optional(pdev, 0, &res);
+ *		if (!res)
+ *			return res.start;
  *
- * Return: non-zero IRQ number on success, negative error number on failure.
+ * Return: 0 on success, negative error number on failure.
  */
-int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
+int platform_get_irq_resource_optional(struct platform_device *dev,
+				       unsigned int num, struct resource *r)
 {
 	int ret;
+
+	if (!r)
+		return -EINVAL;
+
 #ifdef CONFIG_SPARC
 	/* sparc does not have irqs represented as IORESOURCE_IRQ resources */
 	if (!dev || num >= dev->archdata.num_irqs)
 		goto out_not_found;
-	ret = dev->archdata.irqs[num];
+	*r = DEFINE_RES_IRQ(dev->archdata.irqs[num]);
+	ret = 0;
 	goto out;
 #else
 	struct fwnode_handle *fwnode = dev_fwnode(&dev->dev);
-	struct resource *r;
 
-	if (is_of_node(fwnode)) {
-		ret = of_irq_get(to_of_node(fwnode), num);
-		if (ret > 0 || ret == -EPROBE_DEFER)
-			goto out;
-	}
-
-	r = platform_get_resource(dev, IORESOURCE_IRQ, num);
-	if (is_acpi_device_node(fwnode)) {
-		if (r && r->flags & IORESOURCE_DISABLED) {
-			ret = acpi_irq_get(ACPI_HANDLE_FWNODE(fwnode), num, r);
-			if (ret)
-				goto out;
-		}
-	}
+	ret = fwnode_irq_get_resource(fwnode, num, r);
+	ret = ret < 0 ? ret : 0;
+	if (!ret || ret == -EPROBE_DEFER)
+		goto out;
 
 	/*
 	 * The resources may pass trigger flags to the irqs that need
@@ -202,7 +197,9 @@ int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
 	 * IORESOURCE_BITS correspond 1-to-1 to the IRQF_TRIGGER*
 	 * settings.
 	 */
-	if (r && r->flags & IORESOURCE_BITS) {
+	struct resource *platform_res = platform_get_resource(dev, IORESOURCE_IRQ, num);
+
+	if (platform_res && platform_res->flags & IORESOURCE_BITS) {
 		struct irq_data *irqd;
 
 		irqd = irq_get_irq_data(r->start);
@@ -211,8 +208,9 @@ int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
 		irqd_set_trigger_type(irqd, r->flags & IORESOURCE_BITS);
 	}
 
-	if (r) {
-		ret = r->start;
+	if (platform_res) {
+		*r = *platform_res;
+		ret = 0;
 		goto out;
 	}
 
@@ -224,9 +222,9 @@ int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
 	 * allows a common code path across either kind of resource.
 	 */
 	if (num == 0 && is_acpi_device_node(fwnode)) {
-		ret = acpi_dev_gpio_irq_get(to_acpi_device_node(fwnode), num);
+		ret = acpi_dev_get_gpio_irq_resource(to_acpi_device_node(fwnode), NULL, num, r);
 		/* Our callers expect -ENXIO for missing IRQs. */
-		if (ret >= 0 || ret == -EPROBE_DEFER)
+		if (!ret || ret == -EPROBE_DEFER)
 			goto out;
 	}
 
@@ -234,11 +232,11 @@ int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
 out_not_found:
 	ret = -ENXIO;
 out:
-	if (WARN(!ret, "0 is an invalid IRQ number\n"))
+	if (WARN(!ret && !r->start, "0 is an invalid IRQ number\n"))
 		return -EINVAL;
 	return ret;
 }
-EXPORT_SYMBOL_GPL(platform_get_irq_optional);
+EXPORT_SYMBOL_GPL(platform_get_irq_resource_optional);
 
 /**
  * platform_get_irq - get an IRQ for a device
@@ -269,6 +267,34 @@ int platform_get_irq(struct platform_device *dev, unsigned int num)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(platform_get_irq);
+
+/**
+ * platform_get_irq_optional - get an optional IRQ for a device
+ * @dev: platform device
+ * @num: IRQ number index
+ *
+ * Gets an IRQ for a platform device. Device drivers should check the return
+ * value for errors so as to not pass a negative integer value to the
+ * request_irq() APIs. This is the same as platform_get_irq(), except that it
+ * does not print an error message if an IRQ can not be obtained.
+ *
+ * For example::
+ *
+ *		int irq = platform_get_irq_optional(pdev, 0);
+ *		if (irq < 0)
+ *			return irq;
+ *
+ * Return: non-zero IRQ number on success, negative error number on failure.
+ */
+int platform_get_irq_optional(struct platform_device *dev, unsigned int num)
+{
+	int ret;
+	struct resource r = {};
+
+	ret = platform_get_irq_resource_optional(dev, num, &r);
+	return ret ?: r.start;
+}
+EXPORT_SYMBOL_GPL(platform_get_irq_optional);
 
 /**
  * platform_irq_count - Count the number of IRQs a platform device uses
