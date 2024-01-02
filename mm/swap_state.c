@@ -335,12 +335,18 @@ static inline bool swap_use_vma_readahead(void)
  * Caller must lock the swap device or hold a reference to keep it valid.
  */
 struct folio *swap_cache_get_folio(swp_entry_t entry,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct vm_area_struct *vma, unsigned long addr, void **shadowp)
 {
 	struct folio *folio;
 
-	folio = filemap_get_folio(swap_address_space(entry), swp_offset(entry));
-	if (!IS_ERR(folio)) {
+	folio = filemap_get_entry(swap_address_space(entry), swp_offset(entry));
+	if (xa_is_value(folio)) {
+		if (shadowp)
+			*shadowp = folio;
+		return NULL;
+	}
+
+	if (folio) {
 		bool vma_ra = swap_use_vma_readahead();
 		bool readahead;
 
@@ -370,8 +376,6 @@ struct folio *swap_cache_get_folio(swp_entry_t entry,
 			if (!vma || !vma_ra)
 				atomic_inc(&swapin_readahead_hits);
 		}
-	} else {
-		folio = NULL;
 	}
 
 	return folio;
@@ -876,11 +880,10 @@ skip:
  * in.
  */
 static struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
-				  struct vm_fault *vmf)
+				  struct vm_fault *vmf, void *shadow)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio;
-	void *shadow = NULL;
 
 	/* skip swapcache */
 	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
@@ -897,7 +900,6 @@ static struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
 
 		mem_cgroup_swapin_uncharge_swap(entry);
 
-		shadow = get_shadow_from_swap_cache(entry);
 		if (shadow)
 			workingset_refault(folio, shadow);
 
@@ -931,17 +933,18 @@ struct folio *swapin_entry(swp_entry_t entry, gfp_t gfp_mask,
 {
 	enum swap_cache_result cache_result;
 	struct mempolicy *mpol;
+	void *shadow = NULL;
 	struct folio *folio;
 	pgoff_t ilx;
 
-	folio = swap_cache_get_folio(entry, vmf->vma, vmf->address);
+	folio = swap_cache_get_folio(entry, vmf->vma, vmf->address, &shadow);
 	if (folio) {
 		cache_result = SWAP_CACHE_HIT;
 		goto done;
 	}
 
 	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
-		folio = swapin_direct(entry, gfp_mask, vmf);
+		folio = swapin_direct(entry, gfp_mask, vmf, shadow);
 		cache_result = SWAP_CACHE_BYPASS;
 	} else {
 		mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
@@ -952,7 +955,6 @@ struct folio *swapin_entry(swp_entry_t entry, gfp_t gfp_mask,
 		mpol_cond_put(mpol);
 		cache_result = SWAP_CACHE_MISS;
 	}
-
 done:
 	if (result)
 		*result = cache_result;
