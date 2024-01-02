@@ -142,6 +142,10 @@ struct user_event_mm;
 #define is_special_task_state(state)				\
 	((state) & (__TASK_STOPPED | __TASK_TRACED | TASK_PARKED | TASK_DEAD))
 
+/* blocked task is UNINTERRUPTIBLE but not NOLOAD */
+#define is_blocked_task_state(state)				\
+	((state) & TASK_UNINTERRUPTIBLE && (!((state) & TASK_NOLOAD)))
+
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 # define debug_normal_state_change(state_value)				\
 	do {								\
