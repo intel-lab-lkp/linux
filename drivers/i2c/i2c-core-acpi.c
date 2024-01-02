@@ -137,11 +137,6 @@ static const struct acpi_device_id i2c_acpi_ignored_device_ids[] = {
 	{}
 };
 
-struct i2c_acpi_irq_context {
-	int irq;
-	bool wake_capable;
-};
-
 static int i2c_acpi_do_lookup(struct acpi_device *adev,
 			      struct i2c_acpi_lookup *lookup)
 {
@@ -175,64 +170,54 @@ static int i2c_acpi_do_lookup(struct acpi_device *adev,
 
 static int i2c_acpi_add_irq_resource(struct acpi_resource *ares, void *data)
 {
-	struct i2c_acpi_irq_context *irq_ctx = data;
-	struct resource r;
+	struct resource *r = data;
 
-	if (irq_ctx->irq > 0)
+	if (r->flags)
 		return 1;
 
-	if (!acpi_dev_resource_interrupt(ares, 0, &r))
+	if (!acpi_dev_resource_interrupt(ares, 0, r))
 		return 1;
 
-	irq_ctx->irq = i2c_dev_irq_from_resources(&r, 1);
-	irq_ctx->wake_capable = r.flags & IORESOURCE_IRQ_WAKECAPABLE;
+	i2c_dev_irq_from_resources(r, 1);
 
 	return 1; /* No need to add resource to the list */
 }
 
 /**
- * i2c_acpi_get_irq - get device IRQ number from ACPI
+ * i2c_acpi_get_irq - get device IRQ number from ACPI and populate resource
  * @client: Pointer to the I2C client device
- * @wake_capable: Set to true if the IRQ is wake capable
+ * @r: resource with populated IRQ information
  *
  * Find the IRQ number used by a specific client device.
  *
  * Return: The IRQ number or an error code.
  */
-int i2c_acpi_get_irq(struct i2c_client *client, bool *wake_capable)
+int i2c_acpi_get_irq(struct i2c_client *client, struct resource *r)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&client->dev);
 	struct list_head resource_list;
-	struct resource irqres;
-	struct i2c_acpi_irq_context irq_ctx = {
-		.irq = -ENOENT,
-	};
 	int ret;
+
+	if (!r)
+		return -EINVAL;
 
 	INIT_LIST_HEAD(&resource_list);
 
 	ret = acpi_dev_get_resources(adev, &resource_list,
-				     i2c_acpi_add_irq_resource, &irq_ctx);
+				     i2c_acpi_add_irq_resource, r);
 	if (ret < 0)
 		return ret;
 
 	acpi_dev_free_resource_list(&resource_list);
 
-	if (irq_ctx.irq == -ENOENT) {
-		ret = acpi_dev_get_gpio_irq_resource(adev, NULL, 0, &irqres);
-		if (ret)
-			return ret;
-		irq_ctx.irq = irqres.start;
-		irq_ctx.wake_capable = irqres.flags & IORESOURCE_IRQ_WAKECAPABLE;
-	}
+	if (r->flags)
+		return r->start;
 
-	if (irq_ctx.irq < 0)
-		return irq_ctx.irq;
+	ret = acpi_dev_get_gpio_irq_resource(adev, NULL, 0, r);
+	if (ret)
+		return ret;
 
-	if (wake_capable)
-		*wake_capable = irq_ctx.wake_capable;
-
-	return irq_ctx.irq;
+	return r->start;
 }
 
 static int i2c_acpi_get_info(struct acpi_device *adev,
