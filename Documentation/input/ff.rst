@@ -85,6 +85,7 @@ following bits:
 - FF_FRICTION	can simulate friction
 - FF_DAMPER	can simulate damper effects
 - FF_RUMBLE	rumble effects
+- FF_PRESTORED  pre-stored effects
 - FF_INERTIA    can simulate inertia
 - FF_GAIN	gain is adjustable
 - FF_AUTOCENTER	autocenter is adjustable
