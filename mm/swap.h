@@ -56,6 +56,8 @@ struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 		struct mempolicy *mpol, pgoff_t ilx);
 struct page *swapin_readahead(swp_entry_t entry, gfp_t flag,
 			      struct vm_fault *vmf);
+struct folio *swapin_direct(swp_entry_t entry, gfp_t flag,
+			    struct vm_fault *vmf);
 
 static inline unsigned int folio_swap_flags(struct folio *folio)
 {
@@ -82,6 +84,12 @@ static inline void show_swap_cache_info(void)
 
 static inline struct folio *swap_cluster_readahead(swp_entry_t entry,
 			gfp_t gfp_mask, struct mempolicy *mpol, pgoff_t ilx)
+{
+	return NULL;
+}
+
+struct folio *swapin_direct(swp_entry_t entry, gfp_t flag,
+			struct vm_fault *vmf)
 {
 	return NULL;
 }

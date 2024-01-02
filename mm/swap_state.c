@@ -862,6 +862,53 @@ skip:
 }
 
 /**
+ * swapin_direct - swap in folios skipping swap cache and readahead
+ * @entry: swap entry of this memory
+ * @gfp_mask: memory allocation flags
+ * @vmf: fault information
+ *
+ * Returns the struct folio for entry and addr after the swap entry is read
+ * in.
+ */
+struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
+			    struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct folio *folio;
+	void *shadow = NULL;
+
+	/* skip swapcache */
+	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
+				vma, vmf->address, false);
+	if (folio) {
+		__folio_set_locked(folio);
+		__folio_set_swapbacked(folio);
+
+		if (mem_cgroup_swapin_charge_folio(folio,
+					vma->vm_mm, GFP_KERNEL,
+					entry)) {
+			folio_unlock(folio);
+			folio_put(folio);
+			return NULL;
+		}
+		mem_cgroup_swapin_uncharge_swap(entry);
+
+		shadow = get_shadow_from_swap_cache(entry);
+		if (shadow)
+			workingset_refault(folio, shadow);
+
+		folio_add_lru(folio);
+
+		/* To provide entry to swap_read_folio() */
+		folio->swap = entry;
+		swap_read_folio(folio, true, NULL);
+		folio->private = NULL;
+	}
+
+	return folio;
+}
+
+/**
  * swapin_readahead - swap in pages in hope we need them soon
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
