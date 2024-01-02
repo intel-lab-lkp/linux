@@ -197,6 +197,10 @@ static int hfs_ext_read_extent(struct inode *inode, u16 block)
 	    block < HFS_I(inode)->cached_start + HFS_I(inode)->cached_blocks)
 		return 0;
 
+	if (HFS_I(inode)->flags & HFS_FLG_EXT_DIRTY && 
+	    HFS_I(inode)->flags & HFS_FLG_EXT_NEW) 
+		return -ENOENT;
+
 	res = hfs_find_init(HFS_SB(inode->i_sb)->ext_tree, &fd);
 	if (!res) {
 		res = __hfs_ext_cache_extent(&fd, inode, block);
