@@ -56,7 +56,7 @@
 #define AM65_CPSW_MAX_PORTS	8
 
 #define AM65_CPSW_MIN_PACKET_SIZE	VLAN_ETH_ZLEN
-#define AM65_CPSW_MAX_PACKET_SIZE	(VLAN_ETH_FRAME_LEN + ETH_FCS_LEN)
+#define AM65_CPSW_MAX_PACKET_SIZE	2024
 
 #define AM65_CPSW_REG_CTL		0x004
 #define AM65_CPSW_REG_STAT_PORT_EN	0x014
@@ -2246,8 +2246,7 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 	eth_hw_addr_set(port->ndev, port->slave.mac_addr);
 
 	port->ndev->min_mtu = AM65_CPSW_MIN_PACKET_SIZE;
-	port->ndev->max_mtu = common->rx_packet_max -
-			      (VLAN_ETH_HLEN + ETH_FCS_LEN);
+	port->ndev->max_mtu = common->max_mtu;
 	port->ndev->hw_features = NETIF_F_SG |
 				  NETIF_F_RXCSUM |
 				  NETIF_F_HW_CSUM |
@@ -2975,8 +2974,19 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 	if (common->port_num < 1 || common->port_num > AM65_CPSW_MAX_PORTS)
 		return -ENOENT;
 
+	common->max_mtu = VLAN_ETH_DATA_LEN;
+	of_property_read_u32(dev->of_node, "max-frame-size", &common->max_mtu);
+
+	common->rx_packet_max = common->max_mtu + VLAN_ETH_HLEN + ETH_FCS_LEN;
+	if (common->rx_packet_max > AM65_CPSW_MAX_PACKET_SIZE) {
+		common->rx_packet_max = AM65_CPSW_MAX_PACKET_SIZE;
+		common->max_mtu = AM65_CPSW_MAX_PACKET_SIZE -
+				  (VLAN_ETH_HLEN + ETH_FCS_LEN);
+	}
+
+	dev_info(common->dev, "Max RX packet size set to %d\n", common->rx_packet_max);
+
 	common->rx_flow_id_base = -1;
-	common->rx_packet_max = AM65_CPSW_MAX_PACKET_SIZE;
 	init_completion(&common->tdown_complete);
 	common->tx_ch_num = AM65_CPSW_DEFAULT_TX_CHNS;
 	common->pf_p0_rx_ptype_rrobin = false;
