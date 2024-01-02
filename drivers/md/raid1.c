@@ -596,6 +596,9 @@ static sector_t align_to_barrier_unit_end(sector_t start_sector,
  *
  * The rdev for the device selected will have nr_pending incremented.
  */
+#define MAX_RR_DISKS 3
+#define RR_16K_IN_SECS 0x20
+#define RR_128K_IN_SECS 0x100
 static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sectors)
 {
 	const sector_t this_sector = r1_bio->sector;
@@ -608,7 +611,9 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 	unsigned int min_pending;
 	struct md_rdev *rdev;
 	int choose_first;
-	int choose_next_idle;
+	int avail_disk[MAX_RR_DISKS * 2];
+	int avail_disks, choose_first_disk, any_pending, best_index;
+	bool sequential;
 
 	/*
 	 * Check if we can balance. We can balance on the whole
@@ -624,7 +629,10 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 	min_pending = UINT_MAX;
 	best_good_sectors = 0;
 	has_nonrot_disk = 0;
-	choose_next_idle = 0;
+	avail_disks = 0;
+	any_pending = 0;
+	choose_first_disk = -1;
+	sequential = false;
 	clear_bit(R1BIO_FailFast, &r1_bio->state);
 
 	if ((conf->mddev->recovery_cp < this_sector + sectors) ||
@@ -664,6 +672,7 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 					best_good_sectors = sectors;
 				best_dist_disk = disk;
 				best_pending_disk = disk;
+				avail_disk[avail_disks++] = disk;
 			}
 			continue;
 		}
@@ -692,8 +701,16 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 					best_good_sectors = good_sectors;
 					best_disk = disk;
 				}
-				if (choose_first)
-					break;
+				if (choose_first) {
+					/* As we need to loop through all disks and in some cases
+					 * we know we want to use the first, set it so that
+					 * best_disk doesn't get updated in subsequent loop
+					 * iterations.
+					 */
+					if (choose_first_disk == -1)
+						choose_first_disk = best_disk;
+					continue;
+				}
 			}
 			continue;
 		} else {
@@ -709,44 +726,30 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 		nonrot = bdev_nonrot(rdev->bdev);
 		has_nonrot_disk |= nonrot;
 		pending = atomic_read(&rdev->nr_pending);
+		any_pending |= pending;
+		avail_disk[avail_disks++] = disk;
 		dist = abs(this_sector - conf->mirrors[disk].head_position);
 		if (choose_first) {
 			best_disk = disk;
-			break;
+			if (choose_first_disk == -1)
+				choose_first_disk = best_disk;
+			continue;
 		}
-		/* Don't change to another disk for sequential reads */
+		/* For sequential reads, we round robin available disks assuming
+		 * all other conditions are met to make this viable. See below for
+		 * more info.
+		 */
 		if (conf->mirrors[disk].next_seq_sect == this_sector
 		    || dist == 0) {
-			int opt_iosize = bdev_io_opt(rdev->bdev) >> 9;
-			struct raid1_info *mirror = &conf->mirrors[disk];
 
+			sequential = true;
+			best_index = avail_disks - 1;
 			best_disk = disk;
-			/*
-			 * If buffered sequential IO size exceeds optimal
-			 * iosize, check if there is idle disk. If yes, choose
-			 * the idle disk. read_balance could already choose an
-			 * idle disk before noticing it's a sequential IO in
-			 * this disk. This doesn't matter because this disk
-			 * will idle, next time it will be utilized after the
-			 * first disk has IO size exceeds optimal iosize. In
-			 * this way, iosize of the first disk will be optimal
-			 * iosize at least. iosize of the second disk might be
-			 * small, but not a big deal since when the second disk
-			 * starts IO, the first disk is likely still busy.
-			 */
-			if (nonrot && opt_iosize > 0 &&
-			    mirror->seq_start != MaxSector &&
-			    mirror->next_seq_sect > opt_iosize &&
-			    mirror->next_seq_sect - opt_iosize >=
-			    mirror->seq_start) {
-				choose_next_idle = 1;
-				continue;
-			}
-			break;
-		}
 
-		if (choose_next_idle)
+			if (choose_first_disk == -1)
+				choose_first_disk = best_disk;
 			continue;
+		}
 
 		if (min_pending > pending) {
 			min_pending = pending;
@@ -763,7 +766,7 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 	 * If all disks are rotational, choose the closest disk. If any disk is
 	 * non-rotational, choose the disk with less pending request even the
 	 * disk is rotational, which might/might not be optimal for raids with
-	 * mixed ratation/non-rotational disks depending on workload.
+	 * mixed rotation/non-rotational disks depending on workload.
 	 */
 	if (best_disk == -1) {
 		if (has_nonrot_disk || min_pending == 0)
@@ -772,8 +775,44 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 			best_disk = best_dist_disk;
 	}
 
+	if (choose_first_disk >= 0)
+		best_disk = choose_first_disk;
+
 	if (best_disk >= 0) {
-		rdev = conf->mirrors[best_disk].rdev;
+		if (avail_disks > 1) {
+
+			/* Only set Failfast if we have at least 2 available disks. */
+			set_bit(R1BIO_FailFast, &r1_bio->state);
+
+			/* There are many reasons why round robin might not be the best
+			 * choice...
+			 */
+			if (has_nonrot_disk && !choose_first && avail_disks <= MAX_RR_DISKS
+				&& sectors > RR_16K_IN_SECS && sequential == true) {
+
+				conf->mirrors->read_thresh += sectors;
+				conf->mirrors->rr_index = best_index;
+				/* Only switch over after a certain transfer threshold per
+				 * disk, based on empirical data for non rotational media.
+				 */
+				if (conf->mirrors->read_thresh >= RR_128K_IN_SECS) {
+					conf->mirrors->read_thresh = 0;
+
+					if (any_pending > 1) {
+						/* We store the index into the mirrors array that
+						 * represents the N available disks and round robin
+						 * that index into the array to get the next disk
+						 * number to use.
+						 */
+						best_index = (best_index + 1) % avail_disks;
+						conf->mirrors->rr_index = best_index;
+						best_disk = avail_disk[best_index];
+					}
+				}
+			}
+		}
+
+		rdev = rcu_dereference(conf->mirrors[best_disk].rdev);
 		if (!rdev)
 			goto retry;
 		atomic_inc(&rdev->nr_pending);

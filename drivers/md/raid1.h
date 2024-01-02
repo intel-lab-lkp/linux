@@ -42,6 +42,12 @@ struct raid1_info {
 	struct md_rdev	*rdev;
 	sector_t	head_position;
 
+	/* The round robin trasnfer (sectors) threshold before we move to the next
+	 * disk, and the mirrors[] index of the last used disk for round robin.
+	 */
+	int read_thresh;
+	int rr_index;
+
 	/* When choose the best device for a read (read_balance())
 	 * we try to keep sequential reads one the same device
 	 */
