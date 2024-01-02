@@ -543,6 +543,23 @@ done:
 	return err;
 }
 
+static int set_powered_off_sync(struct hci_dev *hdev, void *data)
+{
+	return hci_set_powered_sync(hdev, false);
+}
+
+static void set_powered_off_sync_complete(struct hci_dev *hdev, void *data, int err)
+{
+	if (err)
+		bt_dev_err(hdev, "Powering HCI device off before rfkilling failed (%d)", err);
+}
+
+static int hci_dev_do_poweroff(struct hci_dev *hdev)
+{
+	return hci_cmd_sync_queue(hdev, set_powered_off_sync,
+				  NULL, set_powered_off_sync_complete);
+}
+
 int hci_dev_do_close(struct hci_dev *hdev)
 {
 	int err;
@@ -943,17 +960,27 @@ int hci_get_dev_info(void __user *arg)
 static int hci_rfkill_set_block(void *data, bool blocked)
 {
 	struct hci_dev *hdev = data;
+	int err;
 
 	BT_DBG("%p name %s blocked %d", hdev, hdev->name, blocked);
 
 	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
 		return -EBUSY;
 
+	if (blocked == hci_dev_test_flag(hdev, HCI_RFKILLED))
+		return 0;
+
 	if (blocked) {
-		hci_dev_set_flag(hdev, HCI_RFKILLED);
 		if (!hci_dev_test_flag(hdev, HCI_SETUP) &&
-		    !hci_dev_test_flag(hdev, HCI_CONFIG))
-			hci_dev_do_close(hdev);
+		    !hci_dev_test_flag(hdev, HCI_CONFIG)) {
+			err = hci_dev_do_poweroff(hdev);
+			if (err) {
+				bt_dev_err(hdev, "Powering off device before rfkilling failed (%d)",
+					   err);
+			}
+		}
+
+		hci_dev_set_flag(hdev, HCI_RFKILLED);
 	} else {
 		hci_dev_clear_flag(hdev, HCI_RFKILLED);
 	}
