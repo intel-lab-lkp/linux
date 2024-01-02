@@ -1047,6 +1047,29 @@ void __iomem *fwnode_iomap(struct fwnode_handle *fwnode, int index)
 EXPORT_SYMBOL(fwnode_iomap);
 
 /**
+ * fwnode_irq_get_resource - Get IRQ directly from a fwnode and populate
+ *			     the resource struct
+ * @fwnode:	Pointer to the firmware node
+ * @index:	Zero-based index of the IRQ
+ * @r:		Pointer to resource to populate with IRQ information.
+ *
+ * Return: Linux IRQ number on success. Negative errno on failure.
+ */
+int fwnode_irq_get_resource(const struct fwnode_handle *fwnode, unsigned int index,
+			    struct resource *r)
+{
+	int ret;
+
+	ret = fwnode_call_int_op(fwnode, irq_get_resource, index, r);
+	/* We treat mapping errors as invalid case */
+	if (ret == 0)
+		return -EINVAL;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fwnode_irq_get_resource);
+
+/**
  * fwnode_irq_get - Get IRQ directly from a fwnode
  * @fwnode:	Pointer to the firmware node
  * @index:	Zero-based index of the IRQ
@@ -1055,14 +1078,9 @@ EXPORT_SYMBOL(fwnode_iomap);
  */
 int fwnode_irq_get(const struct fwnode_handle *fwnode, unsigned int index)
 {
-	int ret;
+	struct resource r = {};
 
-	ret = fwnode_call_int_op(fwnode, irq_get, index);
-	/* We treat mapping errors as invalid case */
-	if (ret == 0)
-		return -EINVAL;
-
-	return ret;
+	return fwnode_irq_get_resource(fwnode, index, &r);
 }
 EXPORT_SYMBOL(fwnode_irq_get);
 

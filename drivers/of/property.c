@@ -1425,10 +1425,10 @@ static void __iomem *of_fwnode_iomap(struct fwnode_handle *fwnode, int index)
 #endif
 }
 
-static int of_fwnode_irq_get(const struct fwnode_handle *fwnode,
-			     unsigned int index)
+static int of_fwnode_irq_get_resource(const struct fwnode_handle *fwnode,
+				      unsigned int index, struct resource *r)
 {
-	return of_irq_get(to_of_node(fwnode), index);
+	return of_irq_to_resource(to_of_node(fwnode), index, r);
 }
 
 static int of_fwnode_add_links(struct fwnode_handle *fwnode)
@@ -1469,7 +1469,7 @@ const struct fwnode_operations of_fwnode_ops = {
 	.graph_get_port_parent = of_fwnode_graph_get_port_parent,
 	.graph_parse_endpoint = of_fwnode_graph_parse_endpoint,
 	.iomap = of_fwnode_iomap,
-	.irq_get = of_fwnode_irq_get,
+	.irq_get_resource = of_fwnode_irq_get_resource,
 	.add_links = of_fwnode_add_links,
 };
 EXPORT_SYMBOL_GPL(of_fwnode_ops);

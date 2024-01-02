@@ -9,12 +9,13 @@
 #ifndef _LINUX_FWNODE_H_
 #define _LINUX_FWNODE_H_
 
-#include <linux/types.h>
-#include <linux/list.h>
 #include <linux/bits.h>
 #include <linux/err.h>
+#include <linux/list.h>
+#include <linux/types.h>
 
 struct fwnode_operations;
+struct resource;
 struct device;
 
 /*
@@ -164,7 +165,8 @@ struct fwnode_operations {
 	int (*graph_parse_endpoint)(const struct fwnode_handle *fwnode,
 				    struct fwnode_endpoint *endpoint);
 	void __iomem *(*iomap)(struct fwnode_handle *fwnode, int index);
-	int (*irq_get)(const struct fwnode_handle *fwnode, unsigned int index);
+	int (*irq_get_resource)(const struct fwnode_handle *fwnode,
+				unsigned int index, struct resource *r);
 	int (*add_links)(struct fwnode_handle *fwnode);
 };
 
