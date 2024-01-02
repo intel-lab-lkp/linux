@@ -132,6 +132,8 @@ struct am65_cpsw_common {
 	u32			tx_ch_rate_msk;
 	u32			rx_flow_id_base;
 
+	int			rx_packet_max;
+
 	struct am65_cpsw_tx_chn	tx_chns[AM65_CPSW_MAX_TX_QUEUES];
 	struct completion	tdown_complete;
 	atomic_t		tdown_cnt;

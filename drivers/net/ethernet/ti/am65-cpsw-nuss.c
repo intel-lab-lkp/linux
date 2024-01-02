@@ -151,9 +151,11 @@ static void am65_cpsw_port_set_sl_mac(struct am65_cpsw_port *slave,
 
 static void am65_cpsw_sl_ctl_reset(struct am65_cpsw_port *port)
 {
+	struct am65_cpsw_common *common = port->common;
+
 	cpsw_sl_reset(port->slave.mac_sl, 100);
 	/* Max length register has to be restored after MAC SL reset */
-	writel(AM65_CPSW_MAX_PACKET_SIZE,
+	writel(common->rx_packet_max,
 	       port->port_base + AM65_CPSW_PORT_REG_RX_MAXLEN);
 }
 
@@ -455,7 +457,7 @@ static int am65_cpsw_nuss_common_open(struct am65_cpsw_common *common)
 	       AM65_CPSW_CTL_VLAN_AWARE | AM65_CPSW_CTL_P0_RX_PAD,
 	       common->cpsw_base + AM65_CPSW_REG_CTL);
 	/* Max length register */
-	writel(AM65_CPSW_MAX_PACKET_SIZE,
+	writel(common->rx_packet_max,
 	       host_p->port_base + AM65_CPSW_PORT_REG_RX_MAXLEN);
 	/* set base flow_id */
 	writel(common->rx_flow_id_base,
@@ -507,7 +509,7 @@ static int am65_cpsw_nuss_common_open(struct am65_cpsw_common *common)
 
 	for (i = 0; i < common->rx_chns.descs_num; i++) {
 		skb = __netdev_alloc_skb_ip_align(NULL,
-						  AM65_CPSW_MAX_PACKET_SIZE,
+						  common->rx_packet_max,
 						  GFP_KERNEL);
 		if (!skb) {
 			ret = -ENOMEM;
@@ -851,7 +853,7 @@ static int am65_cpsw_nuss_rx_packets(struct am65_cpsw_common *common,
 
 	k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 
-	new_skb = netdev_alloc_skb_ip_align(ndev, AM65_CPSW_MAX_PACKET_SIZE);
+	new_skb = netdev_alloc_skb_ip_align(ndev, common->rx_packet_max);
 	if (new_skb) {
 		ndev_priv = netdev_priv(ndev);
 		am65_cpsw_nuss_set_offload_fwd_mark(skb, ndev_priv->offload_fwd_mark);
@@ -2244,7 +2246,7 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 	eth_hw_addr_set(port->ndev, port->slave.mac_addr);
 
 	port->ndev->min_mtu = AM65_CPSW_MIN_PACKET_SIZE;
-	port->ndev->max_mtu = AM65_CPSW_MAX_PACKET_SIZE -
+	port->ndev->max_mtu = common->rx_packet_max -
 			      (VLAN_ETH_HLEN + ETH_FCS_LEN);
 	port->ndev->hw_features = NETIF_F_SG |
 				  NETIF_F_RXCSUM |
@@ -2974,6 +2976,7 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 		return -ENOENT;
 
 	common->rx_flow_id_base = -1;
+	common->rx_packet_max = AM65_CPSW_MAX_PACKET_SIZE;
 	init_completion(&common->tdown_complete);
 	common->tx_ch_num = AM65_CPSW_DEFAULT_TX_CHNS;
 	common->pf_p0_rx_ptype_rrobin = false;
