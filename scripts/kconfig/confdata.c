@@ -195,6 +195,52 @@ static void conf_message(const char *fmt, ...)
 	va_end(ap);
 }
 
+static void conf_warn_unmet_rev_dep(struct symbol *sym)
+{
+	struct gstr gs = str_new();
+	char value = 'n';
+
+	switch (sym->curr.tri) {
+	case no:
+		value = 'n';
+		break;
+	case mod:
+		sym_calc_value(modules_sym);
+		value = (modules_sym->curr.tri == no) ? 'n' : 'm';
+		break;
+	case yes:
+		value = 'y';
+	}
+
+	str_printf(&gs,
+		"'%s' set to %c for it is selected\n",
+		sym->name, value);
+	expr_gstr_print_revdep(sym->rev_dep.expr, &gs, yes,
+				" Selected by [y]:\n");
+	expr_gstr_print_revdep(sym->rev_dep.expr, &gs, mod,
+				" Selected by [m]:\n");
+
+	conf_warning("%s", str_get(&gs));
+	str_free(&gs);
+}
+
+static void conf_warn_dep_error(struct symbol *sym)
+{
+	struct gstr gs = str_new();
+
+	str_printf(&gs,
+		"'%s' set to n for it unmet direct dependencies\n",
+		sym->name);
+
+	str_printf(&gs,
+		" Depends on [%c]: ",
+		sym->dir_dep.tri == mod ? 'm' : 'n');
+	expr_gstr_print(sym->dir_dep.expr, &gs);
+
+	conf_warning("%s\n", str_get(&gs));
+	str_free(&gs);
+}
+
 const char *conf_get_configname(void)
 {
 	char *name = getenv("KCONFIG_CONFIG");
@@ -568,6 +614,36 @@ int conf_read(const char *name)
 			continue;
 		conf_unsaved++;
 		/* maybe print value in verbose mode... */
+		if (getenv("KCONFIG_WARN_CHANGED_INPUT") && (sym->prop)) {
+			conf_filename = sym->prop->file->name;
+			conf_lineno = sym->prop->menu->lineno;
+
+			switch (sym->type) {
+			case S_BOOLEAN:
+			case S_TRISTATE:
+				if (sym->def[S_DEF_USER].tri != sym_get_tristate_value(sym)) {
+					if (sym->dir_dep.tri < sym->def[S_DEF_USER].tri)
+						conf_warn_dep_error(sym);
+					else if (sym->rev_dep.tri > sym->def[S_DEF_USER].tri)
+						conf_warn_unmet_rev_dep(sym);
+					else
+						conf_warning("'%s' set to %s due to option constraints\n",
+							sym->name, sym_get_string_value(sym));
+				}
+				break;
+			case S_INT:
+			case S_HEX:
+			case S_STRING:
+				if (sym->dir_dep.tri == no && sym_has_value(sym))
+					conf_warn_dep_error(sym);
+				else
+					conf_warning("'%s' set to %s due to option constraints\n",
+							sym->name, sym_get_string_value(sym));
+				break;
+			default:
+				break;
+			}
+		}
 	}
 
 	for_all_symbols(i, sym) {
