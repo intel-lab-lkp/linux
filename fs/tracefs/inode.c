@@ -219,10 +219,13 @@ resume:
 
 		change_gid(dentry, gid);
 
-		/* If this is the events directory, update that too */
-		ti = get_tracefs(dentry->d_inode);
-		if (ti && (ti->flags & TRACEFS_EVENT_INODE))
-			eventfs_update_gid(dentry, gid);
+		/* Note, getdents() can add a cursor dentry with no inode */
+		if (dentry->d_inode) {
+			/* If this is the events directory, update that too */
+			ti = get_tracefs(dentry->d_inode);
+			if (ti && (ti->flags & TRACEFS_EVENT_INODE))
+				eventfs_update_gid(dentry, gid);
+		}
 
 		if (!list_empty(&dentry->d_subdirs)) {
 			spin_unlock(&this_parent->d_lock);
