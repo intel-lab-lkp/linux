@@ -429,16 +429,26 @@ struct ff_rumble_effect {
 };
 
 /**
+ * struct ff_prestored_effect - defines parameters of a pre-stored force-feedback effect
+ * @index: index of effect
+ * @bank: memory bank of effect
+ */
+struct ff_prestored_effect {
+	__u16 index;
+	__u16 bank;
+};
+
+/**
  * struct ff_effect - defines force feedback effect
  * @type: type of the effect (FF_CONSTANT, FF_PERIODIC, FF_RAMP, FF_SPRING,
- *	FF_FRICTION, FF_DAMPER, FF_RUMBLE, FF_INERTIA, or FF_CUSTOM)
+ *	FF_FRICTION, FF_DAMPER, FF_RUMBLE, FF_INERTIA, FF_PRESTORED, or FF_CUSTOM)
  * @id: an unique id assigned to an effect
  * @direction: direction of the effect
  * @trigger: trigger conditions (struct ff_trigger)
  * @replay: scheduling of the effect (struct ff_replay)
  * @u: effect-specific structure (one of ff_constant_effect, ff_ramp_effect,
- *	ff_periodic_effect, ff_condition_effect, ff_rumble_effect) further
- *	defining effect parameters
+ *	ff_periodic_effect, ff_condition_effect, ff_rumble_effect, ff_prestored_effect)
+ *	further defining effect parameters
  *
  * This structure is sent through ioctl from the application to the driver.
  * To create a new effect application should set its @id to -1; the kernel
@@ -464,6 +474,7 @@ struct ff_effect {
 		struct ff_periodic_effect periodic;
 		struct ff_condition_effect condition[2]; /* One for each axis */
 		struct ff_rumble_effect rumble;
+		struct ff_prestored_effect prestored;
 	} u;
 };
 
@@ -479,20 +490,21 @@ struct ff_effect {
 #define FF_DAMPER	0x55
 #define FF_INERTIA	0x56
 #define FF_RAMP		0x57
+#define FF_PRESTORED	0x58
 
 #define FF_EFFECT_MIN	FF_RUMBLE
-#define FF_EFFECT_MAX	FF_RAMP
+#define FF_EFFECT_MAX	FF_PRESTORED
 
 /*
  * Force feedback periodic effect types
  */
 
-#define FF_SQUARE	0x58
-#define FF_TRIANGLE	0x59
-#define FF_SINE		0x5a
-#define FF_SAW_UP	0x5b
-#define FF_SAW_DOWN	0x5c
-#define FF_CUSTOM	0x5d
+#define FF_SQUARE	0x59
+#define FF_TRIANGLE	0x5a
+#define FF_SINE		0x5b
+#define FF_SAW_UP	0x5c
+#define FF_SAW_DOWN	0x5d
+#define FF_CUSTOM	0x5e
 
 #define FF_WAVEFORM_MIN	FF_SQUARE
 #define FF_WAVEFORM_MAX	FF_CUSTOM
