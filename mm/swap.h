@@ -4,6 +4,22 @@
 
 struct mempolicy;
 
+/*
+ * Caller of swapin_entry may need to know the cache lookup result:
+ *
+ * SWAP_CACHE_HIT: cache hit, cached folio is retured.
+ * SWAP_CACHE_MISS: cache miss, folio is allocated, read from swap device
+ *                  and adde to swap cache, but still may return a cached
+ *                  folio if raced (check __read_swap_cache_async).
+ * SWAP_CACHE_BYPASS: cache miss, folio is new allocated and read
+ *                    from swap device bypassing the cache.
+ */
+enum swap_cache_result {
+	SWAP_CACHE_HIT,
+	SWAP_CACHE_MISS,
+	SWAP_CACHE_BYPASS,
+};
+
 #ifdef CONFIG_SWAP
 #include <linux/blk_types.h> /* for bio_end_io_t */
 
@@ -55,7 +71,7 @@ struct folio *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_flags,
 struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 		struct mempolicy *mpol, pgoff_t ilx);
 struct folio *swapin_entry(swp_entry_t entry, gfp_t flag,
-			    struct vm_fault *vmf, bool *swapcached);
+			    struct vm_fault *vmf, enum swap_cache_result *result);
 
 static inline unsigned int folio_swap_flags(struct folio *folio)
 {
@@ -87,7 +103,7 @@ static inline struct folio *swap_cluster_readahead(swp_entry_t entry,
 }
 
 static inline struct folio *swapin_entry(swp_entry_t swp, gfp_t gfp_mask,
-			struct vm_fault *vmf, bool *swapcached)
+			struct vm_fault *vmf, enum swap_cache_result *result)
 {
 	return NULL;
 }

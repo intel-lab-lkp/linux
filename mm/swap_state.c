@@ -917,8 +917,7 @@ static struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
  * @vmf: fault information
- * @swapcached: pointer to a bool used as indicator if the
- *              page is swapped in through swapcache.
+ * @result: a return value to indicate swap cache usage.
  *
  * Returns the struct page for entry and addr, after queueing swapin.
  *
@@ -928,16 +927,22 @@ static struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
  * or skip the readahead (ie, ramdisk based swap device).
  */
 struct folio *swapin_entry(swp_entry_t entry, gfp_t gfp_mask,
-			   struct vm_fault *vmf, bool *swapcached)
+			   struct vm_fault *vmf, enum swap_cache_result *result)
 {
+	enum swap_cache_result cache_result;
 	struct mempolicy *mpol;
 	struct folio *folio;
 	pgoff_t ilx;
-	bool cached;
+
+	folio = swap_cache_get_folio(entry, vmf->vma, vmf->address);
+	if (folio) {
+		cache_result = SWAP_CACHE_HIT;
+		goto done;
+	}
 
 	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
 		folio = swapin_direct(entry, gfp_mask, vmf);
-		cached = false;
+		cache_result = SWAP_CACHE_BYPASS;
 	} else {
 		mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 		if (swap_use_vma_readahead())
@@ -945,11 +950,12 @@ struct folio *swapin_entry(swp_entry_t entry, gfp_t gfp_mask,
 		else
 			folio = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
 		mpol_cond_put(mpol);
-		cached = true;
+		cache_result = SWAP_CACHE_MISS;
 	}
 
-	if (swapcached)
-		*swapcached = cached;
+done:
+	if (result)
+		*result = cache_result;
 
 	return folio;
 }
