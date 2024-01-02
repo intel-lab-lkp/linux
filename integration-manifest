@@ -1,0 +1,30 @@
+drm drm-fixes d4b6e7f582e29acac17bcaf7f7771138d72f89d2
+	Merge tag 'drm-intel-fixes-2023-12-21' of git://anongit.freedesktop.org/drm/drm-intel into drm-fixes
+drm-misc drm-misc-fixes 11f9eb899ecc8c02b769cf8d2532ba12786a7af7
+	drm/mgag200: Fix gamma lut not initialized for G200ER, G200EV, G200SE
+drm-intel drm-intel-fixes ee11d2d37f5c05bd7bf5ccc820a58f48423d032b
+	drm/i915/perf: Update handling of MMIO triggered reports
+drm drm-next 92242716ee92d2aa3c38c736b53d8910d443566d
+	Merge tag 'drm-habanalabs-next-2023-12-19' of https://git.kernel.org/pub/scm/linux/kernel/git/ogabbay/linux into drm-next
+drm-misc drm-misc-next-fixes eee706839333ec0643f1b4898a37588025bf4cb5
+	drm/imagination: pvr_device.h: fix all kernel-doc warnings
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 0c75d52190b8bfa22cdb66e07148aea599c4535d
+	drm/debugfs: drop unneeded DEBUG_FS guard
+drm-intel drm-intel-next e7b2d82d420a389da078be315b80cc5bc18ee734
+	drm/i915/bios: remove some unused leftover declarations
+drm-intel drm-intel-gt-next 835e4d9bb3a13879031942ca6692d5a82ec00158
+	drm/i915/guc: Change wa and EU_PERF_CNTL registers to MCR type
+drm-intel topic/core-for-CI d77abe80efb959aa038165a87df4327c90a26447
+	HAX net/phy: Suppress WARN from phy_error
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
