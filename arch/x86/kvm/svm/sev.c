@@ -59,10 +59,14 @@ module_param_named(sev_es, sev_es_enabled, bool, 0444);
 /* enable/disable SEV-ES DebugSwap support */
 static bool sev_es_debug_swap_enabled = true;
 module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
+
+/* When true, at least one type of SEV guest is enabled to run */
+static bool sev_guests_enabled;
 #else
 #define sev_enabled false
 #define sev_es_enabled false
 #define sev_es_debug_swap_enabled false
+#define sev_guests_enabled false
 #endif /* CONFIG_KVM_AMD_SEV */
 
 static u8 sev_enc_bit;
@@ -1854,7 +1858,7 @@ int sev_mem_enc_ioctl(struct kvm *kvm, void __user *argp)
 	struct kvm_sev_cmd sev_cmd;
 	int r;
 
-	if (!sev_enabled)
+	if (!sev_guests_enabled)
 		return -ENOTTY;
 
 	if (!argp)
@@ -2172,8 +2176,10 @@ void sev_vm_destroy(struct kvm *kvm)
 
 void __init sev_set_cpu_caps(void)
 {
-	if (!sev_enabled)
+	if (!sev_guests_enabled) {
 		kvm_cpu_cap_clear(X86_FEATURE_SEV);
+		return;
+	}
 	if (!sev_es_enabled)
 		kvm_cpu_cap_clear(X86_FEATURE_SEV_ES);
 }
@@ -2229,9 +2235,11 @@ void __init sev_hardware_setup(void)
 		goto out;
 	}
 
-	sev_asid_count = max_sev_asid - min_sev_asid + 1;
-	WARN_ON_ONCE(misc_cg_set_capacity(MISC_CG_RES_SEV, sev_asid_count));
-	sev_supported = true;
+	if (min_sev_asid <= max_sev_asid) {
+		sev_asid_count = max_sev_asid - min_sev_asid + 1;
+		WARN_ON_ONCE(misc_cg_set_capacity(MISC_CG_RES_SEV, sev_asid_count));
+		sev_supported = true;
+	}
 
 	/* SEV-ES support requested? */
 	if (!sev_es_enabled)
@@ -2262,7 +2270,8 @@ out:
 	if (boot_cpu_has(X86_FEATURE_SEV))
 		pr_info("SEV %s (ASIDs %u - %u)\n",
 			sev_supported ? "enabled" : "disabled",
-			min_sev_asid, max_sev_asid);
+			sev_supported ? min_sev_asid : 0,
+			sev_supported ? max_sev_asid : 0);
 	if (boot_cpu_has(X86_FEATURE_SEV_ES))
 		pr_info("SEV-ES %s (ASIDs %u - %u)\n",
 			sev_es_supported ? "enabled" : "disabled",
@@ -2270,6 +2279,7 @@ out:
 
 	sev_enabled = sev_supported;
 	sev_es_enabled = sev_es_supported;
+	sev_guests_enabled = sev_enabled || sev_es_enabled;
 	if (!sev_es_enabled || !cpu_feature_enabled(X86_FEATURE_DEBUG_SWAP) ||
 	    !cpu_feature_enabled(X86_FEATURE_NO_NESTED_DATA_BP))
 		sev_es_debug_swap_enabled = false;
@@ -2278,7 +2288,7 @@ out:
 
 void sev_hardware_unsetup(void)
 {
-	if (!sev_enabled)
+	if (!sev_guests_enabled)
 		return;
 
 	/* No need to take sev_bitmap_lock, all VMs have been destroyed. */
@@ -2293,7 +2303,7 @@ void sev_hardware_unsetup(void)
 
 int sev_cpu_init(struct svm_cpu_data *sd)
 {
-	if (!sev_enabled)
+	if (!sev_guests_enabled)
 		return 0;
 
 	sd->sev_vmcbs = kcalloc(nr_asids, sizeof(void *), GFP_KERNEL);
