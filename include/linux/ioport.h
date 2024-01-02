@@ -163,28 +163,38 @@ enum {
 		.desc = IORES_DESC_NONE,				\
 	}
 
+#define DEFINE_RES_IO_NAMED_FLAGS(_start, _size, _name, _flags)		\
+	DEFINE_RES_NAMED((_start), (_size), (_name), (_flags) | IORESOURCE_IO)
 #define DEFINE_RES_IO_NAMED(_start, _size, _name)			\
-	DEFINE_RES_NAMED((_start), (_size), (_name), IORESOURCE_IO)
+	DEFINE_RES_IO_NAMED_FLAGS((_start), (_size), (_name), 0)
 #define DEFINE_RES_IO(_start, _size)					\
 	DEFINE_RES_IO_NAMED((_start), (_size), NULL)
 
+#define DEFINE_RES_MEM_NAMED_FLAGS(_start, _size, _name, _flags)	\
+	DEFINE_RES_NAMED((_start), (_size), (_name), (_flags) | IORESOURCE_MEM)
 #define DEFINE_RES_MEM_NAMED(_start, _size, _name)			\
-	DEFINE_RES_NAMED((_start), (_size), (_name), IORESOURCE_MEM)
+	DEFINE_RES_MEM_NAMED_FLAGS((_start), (_size), (_name), 0)
 #define DEFINE_RES_MEM(_start, _size)					\
 	DEFINE_RES_MEM_NAMED((_start), (_size), NULL)
 
+#define DEFINE_RES_REG_NAMED_FLAGS(_start, _size, _name, _flags)	\
+	DEFINE_RES_NAMED((_start), (_size), (_name), (_flags) | IORESOURCE_REG)
 #define DEFINE_RES_REG_NAMED(_start, _size, _name)			\
-	DEFINE_RES_NAMED((_start), (_size), (_name), IORESOURCE_REG)
+	DEFINE_RES_REG_NAMED_FLAGS((_start), (_size), (_name), 0)
 #define DEFINE_RES_REG(_start, _size)					\
 	DEFINE_RES_REG_NAMED((_start), (_size), NULL)
 
+#define DEFINE_RES_IRQ_NAMED_FLAGS(_irq, _name, _flags)			\
+	DEFINE_RES_NAMED((_irq), 1, (_name), (_flags) | IORESOURCE_IRQ)
 #define DEFINE_RES_IRQ_NAMED(_irq, _name)				\
-	DEFINE_RES_NAMED((_irq), 1, (_name), IORESOURCE_IRQ)
+	DEFINE_RES_IRQ_NAMED_FLAGS((_irq), (_name), 0)
 #define DEFINE_RES_IRQ(_irq)						\
 	DEFINE_RES_IRQ_NAMED((_irq), NULL)
 
+#define DEFINE_RES_DMA_NAMED_FLAGS(_dma, _name, _flags)			\
+	DEFINE_RES_NAMED((_dma), 1, (_name), (_flags) | IORESOURCE_DMA)
 #define DEFINE_RES_DMA_NAMED(_dma, _name)				\
-	DEFINE_RES_NAMED((_dma), 1, (_name), IORESOURCE_DMA)
+	DEFINE_RES_DMA_NAMED_FLAGS((_dma), (_name), 0)
 #define DEFINE_RES_DMA(_dma)						\
 	DEFINE_RES_DMA_NAMED((_dma), NULL)
 
