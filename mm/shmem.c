@@ -1564,20 +1564,6 @@ static inline struct mempolicy *shmem_get_sbmpol(struct shmem_sb_info *sbinfo)
 static struct mempolicy *shmem_get_pgoff_policy(struct shmem_inode_info *info,
 			pgoff_t index, unsigned int order, pgoff_t *ilx);
 
-static struct folio *shmem_swapin_cluster(swp_entry_t swap, gfp_t gfp,
-			struct shmem_inode_info *info, pgoff_t index)
-{
-	struct mempolicy *mpol;
-	pgoff_t ilx;
-	struct folio *folio;
-
-	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
-	folio = swap_cluster_readahead(swap, gfp, mpol, ilx);
-	mpol_cond_put(mpol);
-
-	return folio;
-}
-
 /*
  * Make sure huge_gfp is always more limited than limit_gfp.
  * Some of the flags set permissions, while others set limitations.
@@ -1851,9 +1837,12 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	enum swap_cache_result cache_result;
 	struct swap_info_struct *si;
 	struct folio *folio = NULL;
+	struct mempolicy *mpol;
 	swp_entry_t swap;
+	pgoff_t ilx;
 	int error;
 
 	VM_BUG_ON(!*foliop || !xa_is_value(*foliop));
@@ -1871,36 +1860,40 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 			return -EINVAL;
 	}
 
-	/* Look it up and read it in.. */
-	folio = swap_cache_get_folio(swap, NULL, 0, NULL);
+	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
+	folio = swapin_entry_mpol(swap, gfp, mpol, ilx, &cache_result);
+	mpol_cond_put(mpol);
+
 	if (!folio) {
-		/* Or update major stats only when swapin succeeds?? */
+		error = -ENOMEM;
+		goto failed;
+	}
+	if (cache_result != SWAP_CACHE_HIT) {
 		if (fault_type) {
 			*fault_type |= VM_FAULT_MAJOR;
 			count_vm_event(PGMAJFAULT);
 			count_memcg_event_mm(fault_mm, PGMAJFAULT);
 		}
-		/* Here we actually start the io */
-		folio = shmem_swapin_cluster(swap, gfp, info, index);
-		if (!folio) {
-			error = -ENOMEM;
-			goto failed;
-		}
 	}
 
 	/* We have to do this with folio locked to prevent races */
 	folio_lock(folio);
-	if (!folio_test_swapcache(folio) ||
-	    folio->swap.val != swap.val ||
-	    !shmem_confirm_swap(mapping, index, swap)) {
+	if (cache_result != SWAP_CACHE_BYPASS) {
+		/* With cache bypass, folio is new allocated, sync, and not in cache */
+		if (!folio_test_swapcache(folio) || folio->swap.val != swap.val) {
+			error = -EEXIST;
+			goto unlock;
+		}
+		if (!folio_test_uptodate(folio)) {
+			error = -EIO;
+			goto failed;
+		}
+		folio_wait_writeback(folio);
+	}
+	if (!shmem_confirm_swap(mapping, index, swap)) {
 		error = -EEXIST;
 		goto unlock;
 	}
-	if (!folio_test_uptodate(folio)) {
-		error = -EIO;
-		goto failed;
-	}
-	folio_wait_writeback(folio);
 
 	/*
 	 * Some architectures may have to restore extra metadata to the
@@ -1908,12 +1901,19 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	 */
 	arch_swap_restore(swap, folio);
 
-	if (shmem_should_replace_folio(folio, gfp)) {
+	/* With cache bypass, folio is new allocated and always respect gfp flags */
+	if (cache_result != SWAP_CACHE_BYPASS && shmem_should_replace_folio(folio, gfp)) {
 		error = shmem_replace_folio(&folio, gfp, info, index);
 		if (error)
 			goto failed;
 	}
 
+	/*
+	 * The expected value checking below should be enough to ensure
+	 * only one up-to-date swapin success. swap_free() is called after
+	 * this, so the entry can't be reused. As long as the mapping still
+	 * has the old entry value, it's never swapped in or modified.
+	 */
 	error = shmem_add_to_page_cache(folio, mapping, index,
 					swp_to_radix_entry(swap), gfp);
 	if (error)
@@ -1924,7 +1924,8 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (sgp == SGP_WRITE)
 		folio_mark_accessed(folio);
 
-	delete_from_swap_cache(folio);
+	if (cache_result != SWAP_CACHE_BYPASS)
+		delete_from_swap_cache(folio);
 	folio_mark_dirty(folio);
 	swap_free(swap);
 	put_swap_device(si);

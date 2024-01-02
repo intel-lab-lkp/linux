@@ -318,7 +318,14 @@ void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 
 static inline bool swap_use_no_readahead(struct swap_info_struct *si, swp_entry_t entry)
 {
-	return data_race(si->flags & SWP_SYNCHRONOUS_IO) && __swap_count(entry) == 1;
+	int count;
+
+	if (!data_race(si->flags & SWP_SYNCHRONOUS_IO))
+		return false;
+
+	count = __swap_count(entry);
+
+	return (count == 1 || count == SWAP_MAP_SHMEM);
 }
 
 static inline bool swap_use_vma_readahead(void)
@@ -334,7 +341,7 @@ static inline bool swap_use_vma_readahead(void)
  *
  * Caller must lock the swap device or hold a reference to keep it valid.
  */
-struct folio *swap_cache_get_folio(swp_entry_t entry,
+static struct folio *swap_cache_get_folio(swp_entry_t entry,
 		struct vm_area_struct *vma, unsigned long addr, void **shadowp)
 {
 	struct folio *folio;
