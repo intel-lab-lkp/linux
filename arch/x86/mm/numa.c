@@ -974,9 +974,9 @@ static struct numa_memblk *numa_memblk_list[NR_NODE_MEMBLKS] __initdata;
  * @start: address to begin fill
  * @end: address to end fill
  *
- * Find and extend numa_meminfo memblks to cover the @start-@end
+ * Find and extend numa_meminfo memblks to cover the [start, end)
  * physical address range, such that the first memblk includes
- * @start, the last memblk includes @end, and any gaps in between
+ * @start, the last memblk excludes @end, and any gaps in between
  * are filled.
  *
  * RETURNS:
@@ -1003,7 +1003,7 @@ int __init numa_fill_memblks(u64 start, u64 end)
 	for (int i = 0; i < mi->nr_blks; i++) {
 		struct numa_memblk *bi = &mi->blk[i];
 
-		if (start < bi->end && end >= bi->start) {
+		if (start < bi->end && end > bi->start) {
 			blk[count] = &mi->blk[i];
 			count++;
 		}
