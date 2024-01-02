@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <asm/prom.h>
 #include <asm/xive.h>
+#include <asm/smp.h>
 
 #include "vas.h"
 
