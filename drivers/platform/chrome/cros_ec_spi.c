@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
@@ -70,6 +71,7 @@
  * @end_of_msg_delay: used to set the delay_usecs on the spi_transfer that
  *      is sent when we want to turn off CS at the end of a transaction.
  * @high_pri_worker: Used to schedule high priority work.
+ * @irq_wake: Whether or not irq assertion should wake the system.
  */
 struct cros_ec_spi {
 	struct spi_device *spi;
@@ -77,6 +79,7 @@ struct cros_ec_spi {
 	unsigned int start_of_msg_delay;
 	unsigned int end_of_msg_delay;
 	struct kthread_worker *high_pri_worker;
+	bool irq_wake;
 };
 
 typedef int (*cros_ec_xfer_fn_t) (struct cros_ec_device *ec_dev,
@@ -689,9 +692,10 @@ static int cros_ec_cmd_xfer_spi(struct cros_ec_device *ec_dev,
 	return cros_ec_xfer_high_pri(ec_dev, ec_msg, do_cros_ec_cmd_xfer_spi);
 }
 
-static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi, struct device *dev)
+static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi)
 {
-	struct device_node *np = dev->of_node;
+	struct spi_device *spi = ec_spi->spi;
+	struct device_node *np = spi->dev.of_node;
 	u32 val;
 	int ret;
 
@@ -702,6 +706,8 @@ static void cros_ec_spi_dt_probe(struct cros_ec_spi *ec_spi, struct device *dev)
 	ret = of_property_read_u32(np, "google,cros-ec-spi-msg-delay", &val);
 	if (!ret)
 		ec_spi->end_of_msg_delay = val;
+
+	ec_spi->irq_wake = spi->irq > 0 && of_property_present(np, "wakeup-source");
 }
 
 static void cros_ec_spi_high_pri_release(void *worker)
@@ -754,12 +760,13 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	/* Check for any DT properties */
-	cros_ec_spi_dt_probe(ec_spi, dev);
+	cros_ec_spi_dt_probe(ec_spi);
 
 	spi_set_drvdata(spi, ec_dev);
 	ec_dev->dev = dev;
 	ec_dev->priv = ec_spi;
 	ec_dev->irq = spi->irq;
+	ec_dev->irq_wake = ec_spi->irq_wake;
 	ec_dev->cmd_xfer = cros_ec_cmd_xfer_spi;
 	ec_dev->pkt_xfer = cros_ec_pkt_xfer_spi;
 	ec_dev->phys_name = dev_name(&ec_spi->spi->dev);
@@ -779,8 +786,6 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 		dev_err(dev, "cannot register EC\n");
 		return err;
 	}
-
-	device_init_wakeup(&spi->dev, true);
 
 	return 0;
 }
