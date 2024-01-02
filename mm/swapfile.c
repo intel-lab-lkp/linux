@@ -1840,17 +1840,12 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 	do {
 		struct folio *folio;
 		unsigned long offset;
+		struct mempolicy *mpol;
 		unsigned char swp_count;
 		swp_entry_t entry;
+		pgoff_t ilx;
 		int ret;
 		pte_t ptent;
-
-		struct vm_fault vmf = {
-			.vma = vma,
-			.address = addr,
-			.real_address = addr,
-			.pmd = pmd,
-		};
 
 		if (!pte++) {
 			pte = pte_offset_map(pmd, addr);
@@ -1871,8 +1866,10 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 		pte_unmap(pte);
 		pte = NULL;
 
-		folio = swapin_entry(entry, GFP_HIGHUSER_MOVABLE,
-				     &vmf, NULL);
+		mpol = get_vma_policy(vma, addr, 0, &ilx);
+		folio = swapin_entry_mpol(entry, GFP_HIGHUSER_MOVABLE,
+					  mpol, ilx, NULL);
+		mpol_cond_put(mpol);
 		if (!folio) {
 			/*
 			 * The entry could have been freed, and will not

@@ -880,14 +880,13 @@ skip:
  * in.
  */
 static struct folio *swapin_direct(swp_entry_t entry, gfp_t gfp_mask,
-				  struct vm_fault *vmf, void *shadow)
+				   struct mempolicy *mpol, pgoff_t ilx,
+				   void *shadow)
 {
-	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio;
 
-	/* skip swapcache */
-	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
-				vma, vmf->address, false);
+	folio = (struct folio *)alloc_pages_mpol(gfp_mask, 0,
+			mpol, ilx, numa_node_id());
 	if (folio) {
 		if (mem_cgroup_swapin_charge_folio(folio, NULL,
 						   GFP_KERNEL, entry)) {
@@ -943,19 +942,44 @@ struct folio *swapin_entry(swp_entry_t entry, gfp_t gfp_mask,
 		goto done;
 	}
 
+	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
-		folio = swapin_direct(entry, gfp_mask, vmf, shadow);
+		folio = swapin_direct(entry, gfp_mask, mpol, ilx, shadow);
 		cache_result = SWAP_CACHE_BYPASS;
 	} else {
-		mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 		if (swap_use_vma_readahead())
 			folio = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
 		else
 			folio = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
-		mpol_cond_put(mpol);
 		cache_result = SWAP_CACHE_MISS;
 	}
+	mpol_cond_put(mpol);
 done:
+	if (result)
+		*result = cache_result;
+
+	return folio;
+}
+
+struct folio *swapin_entry_mpol(swp_entry_t entry, gfp_t gfp_mask,
+				struct mempolicy *mpol, pgoff_t ilx,
+				enum swap_cache_result *result)
+{
+	enum swap_cache_result cache_result;
+	void *shadow = NULL;
+	struct folio *folio;
+
+	folio = swap_cache_get_folio(entry, NULL, 0, &shadow);
+	if (folio) {
+		cache_result = SWAP_CACHE_HIT;
+	} else if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
+		folio = swapin_direct(entry, gfp_mask, mpol, ilx, shadow);
+		cache_result = SWAP_CACHE_BYPASS;
+	} else {
+		folio = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+		cache_result = SWAP_CACHE_MISS;
+	}
+
 	if (result)
 		*result = cache_result;
 
