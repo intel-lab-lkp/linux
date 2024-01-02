@@ -15,6 +15,7 @@
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
 #include "intel_frontbuffer.h"
+#include "intel_plane_caps.h"
 #include "intel_plane_initial.h"
 
 static bool
@@ -288,4 +289,26 @@ void intel_crtc_initial_plane_config(struct intel_crtc *crtc)
 	intel_find_initial_plane_obj(crtc, &plane_config);
 
 	plane_config_fini(&plane_config);
+}
+
+u8 skl_get_plane_caps(struct drm_i915_private *i915,
+		      enum pipe pipe, enum plane_id plane_id)
+{
+	u8 caps = INTEL_PLANE_CAP_TILING_X;
+
+	if (DISPLAY_VER(i915) < 13 || IS_ALDERLAKE_P(i915))
+		caps |= INTEL_PLANE_CAP_TILING_Y;
+	if (DISPLAY_VER(i915) < 12)
+		caps |= INTEL_PLANE_CAP_TILING_Yf;
+	if (HAS_4TILE(i915))
+		caps |= INTEL_PLANE_CAP_TILING_4;
+
+	if (HAS_FLAT_CCS(i915)) {
+		caps |= INTEL_PLANE_CAP_CCS_RC | INTEL_PLANE_CAP_CCS_RC_CC;
+
+		if (plane_id < PLANE_SPRITE4)
+			caps |= INTEL_PLANE_CAP_CCS_MC;
+	}
+
+	return caps;
 }
