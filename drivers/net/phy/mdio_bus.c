@@ -621,19 +621,27 @@ static int mdiobus_scan_bus_c45(struct mii_bus *bus)
  */
 static bool mdiobus_prevent_c45_scan(struct mii_bus *bus)
 {
-	int i;
+	const struct {
+		u32 phy_id;
+		u32 phy_id_mask;
+	} id_list[] = {
+		{ MICREL_OUI << 10, GENMASK(31, 10) },
+	};
+	int i, j;
 
 	for (i = 0; i < PHY_MAX_ADDR; i++) {
 		struct phy_device *phydev;
-		u32 oui;
 
 		phydev = mdiobus_get_phy(bus, i);
 		if (!phydev)
 			continue;
-		oui = phydev->phy_id >> 10;
 
-		if (oui == MICREL_OUI)
-			return true;
+		for (j = 0; j < ARRAY_SIZE(id_list); j++) {
+			u32 mask = id_list[j].phy_id_mask;
+
+			if ((phydev->phy_id & mask) == (id_list[j].phy_id & mask))
+				return true;
+		}
 	}
 	return false;
 }
