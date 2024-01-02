@@ -762,6 +762,7 @@ static ssize_t btrfs_chunk_size_store(struct kobject *kobj,
 	struct btrfs_fs_info *fs_info = to_fs_info(get_btrfs_kobj(kobj));
 	char *retptr;
 	u64 val;
+	int ret;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -776,7 +777,10 @@ static ssize_t btrfs_chunk_size_store(struct kobject *kobj,
 	if (space_info->flags & BTRFS_BLOCK_GROUP_SYSTEM)
 		return -EPERM;
 
-	val = memparse(buf, &retptr);
+	ret = memparse_safe(buf, MEMPARSE_SUFFIXES_DEFAULT, &val, &retptr);
+	if (ret < 0)
+		return ret;
+
 	/* There could be trailing '\n', also catch any typos after the value */
 	retptr = skip_spaces(retptr);
 	if (*retptr != 0 || val == 0)
@@ -1779,10 +1783,14 @@ static ssize_t btrfs_devinfo_scrub_speed_max_store(struct kobject *kobj,
 {
 	struct btrfs_device *device = container_of(kobj, struct btrfs_device,
 						   devid_kobj);
-	char *endptr;
 	unsigned long long limit;
+	char *endptr;
+	int ret;
 
-	limit = memparse(buf, &endptr);
+	ret = memparse_safe(buf, MEMPARSE_SUFFIXES_DEFAULT, &limit, &endptr);
+	if (ret < 0)
+		return ret;
+
 	/* There could be trailing '\n', also catch any typos after the value. */
 	endptr = skip_spaces(endptr);
 	if (*endptr != 0)

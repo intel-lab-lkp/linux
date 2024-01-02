@@ -263,6 +263,8 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct btrfs_fs_context *ctx = fc->fs_private;
 	struct fs_parse_result result;
+	/* Only for memparse_safe() caller. */
+	int ret;
 	int opt;
 
 	opt = fs_parse(fc, btrfs_fs_parameters, param, &result);
@@ -400,7 +402,12 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ctx->thread_pool_size = result.uint_32;
 		break;
 	case Opt_max_inline:
-		ctx->max_inline = memparse(param->string, NULL);
+		ret = memparse_safe(param->string, MEMPARSE_SUFFIXES_DEFAULT,
+				    &ctx->max_inline, NULL);
+		if (ret < 0) {
+			btrfs_err(NULL, "invalid string \"%s\"", param->string);
+			return ret;
+		}
 		break;
 	case Opt_acl:
 		if (result.negated) {
