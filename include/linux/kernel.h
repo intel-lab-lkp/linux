@@ -201,7 +201,13 @@ void do_exit(long error_code) __noreturn;
 
 extern int get_option(char **str, int *pint);
 extern char *get_options(const char *str, int nints, int *ints);
-extern unsigned long long memparse(const char *ptr, char **retptr);
+
+/*
+ * DEPRECATED, lack of any kind of error handling.
+ *
+ * Use memparse_safe() from lib/kstrtox.c instead.
+ */
+extern __deprecated unsigned long long memparse(const char *ptr, char **retptr);
 extern bool parse_option_str(const char *str, const char *option);
 extern char *next_arg(char *args, char **param, char **val);
 

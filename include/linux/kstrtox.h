@@ -9,6 +9,21 @@
 int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
 int __must_check _kstrtol(const char *s, unsigned int base, long *res);
 
+enum memparse_suffix {
+	MEMPARSE_SUFFIX_K = 1 << 0,
+	MEMPARSE_SUFFIX_M = 1 << 1,
+	MEMPARSE_SUFFIX_G = 1 << 2,
+	MEMPARSE_SUFFIX_T = 1 << 3,
+	MEMPARSE_SUFFIX_P = 1 << 4,
+	MEMPARSE_SUFFIX_E = 1 << 5,
+};
+
+#define MEMPARSE_SUFFIXES_DEFAULT (MEMPARSE_SUFFIX_K | MEMPARSE_SUFFIX_M |\
+				   MEMPARSE_SUFFIX_G | MEMPARSE_SUFFIX_T |\
+				   MEMPARSE_SUFFIX_P)
+
+int __must_check memparse_safe(const char *s, enum memparse_suffix suffixes,
+			       unsigned long long *res, char **retptr);
 int __must_check kstrtoull(const char *s, unsigned int base, unsigned long long *res);
 int __must_check kstrtoll(const char *s, unsigned int base, long long *res);
 
