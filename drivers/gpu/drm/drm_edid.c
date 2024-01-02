@@ -43,6 +43,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_eld.h>
 #include <drm/drm_encoder.h>
+#include <drm/drm_modes.h>
 #include <drm/drm_print.h>
 
 #include "drm_crtc_internal.h"
@@ -6988,28 +6989,6 @@ int drm_add_modes_noedid(struct drm_connector *connector,
 	return num_modes;
 }
 EXPORT_SYMBOL(drm_add_modes_noedid);
-
-/**
- * drm_set_preferred_mode - Sets the preferred mode of a connector
- * @connector: connector whose mode list should be processed
- * @hpref: horizontal resolution of preferred mode
- * @vpref: vertical resolution of preferred mode
- *
- * Marks a mode as preferred if it matches the resolution specified by @hpref
- * and @vpref.
- */
-void drm_set_preferred_mode(struct drm_connector *connector,
-			   int hpref, int vpref)
-{
-	struct drm_display_mode *mode;
-
-	list_for_each_entry(mode, &connector->probed_modes, head) {
-		if (mode->hdisplay == hpref &&
-		    mode->vdisplay == vpref)
-			mode->type |= DRM_MODE_TYPE_PREFERRED;
-	}
-}
-EXPORT_SYMBOL(drm_set_preferred_mode);
 
 static bool is_hdmi2_sink(const struct drm_connector *connector)
 {
