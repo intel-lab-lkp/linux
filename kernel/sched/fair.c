@@ -563,6 +563,11 @@ static inline s64 entity_key(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	return (s64)(se->vruntime - cfs_rq->min_vruntime);
 }
 
+static inline bool entity_deadline_is_valid(struct sched_entity *se)
+{
+	return (s64)(se->vruntime - se->deadline) < 0;
+}
+
 #define __node_2_se(node) \
 	rb_entry((node), struct sched_entity, run_node)
 
@@ -977,7 +982,7 @@ static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
  */
 static void update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	if ((s64)(se->vruntime - se->deadline) < 0)
+	if (entity_deadline_is_valid(se))
 		return;
 
 	/*
