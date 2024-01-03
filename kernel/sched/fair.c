@@ -755,21 +755,16 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
 	struct sched_entity *curr = cfs_rq->curr;
 
-	u64 vruntime = cfs_rq->min_vruntime;
+	u64 vruntime = U64_MAX;
 
-	if (curr) {
-		if (curr->on_rq)
-			vruntime = curr->vruntime;
-		else
-			curr = NULL;
-	}
+	if (curr && curr->on_rq)
+		vruntime = curr->vruntime;
+	if (se)
+		vruntime = min_vruntime(vruntime, se->vruntime);
 
-	if (se) {
-		if (!curr)
-			vruntime = se->vruntime;
-		else
-			vruntime = min_vruntime(vruntime, se->vruntime);
-	}
+	/* no need to update if vruntime is unchanged */
+	if (vruntime == U64_MAX)
+		return;
 
 	/* ensure we never gain time by being placed backwards. */
 	u64_u32_store(cfs_rq->min_vruntime,
