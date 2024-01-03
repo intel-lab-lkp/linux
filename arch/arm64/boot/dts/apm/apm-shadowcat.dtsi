@@ -123,7 +123,7 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 		interrupt-controller;
-		interrupts = <1 9 0xf04>;	/* GIC Maintenence IRQ */
+		interrupts = <1 9 0xf04>;	/* GIC Maintenance IRQ */
 		ranges = <0 0 0 0x79000000 0x0 0x800000>; /* MSI Range */
 		reg = <0x0 0x78090000 0x0 0x10000>,	/* GIC Dist */
 		      <0x0 0x780a0000 0x0 0x20000>,	/* GIC CPU */

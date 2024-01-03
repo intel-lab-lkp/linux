@@ -1415,7 +1415,7 @@
 	status = "disabled";
 };
 
-/* TODO: role swich using ID pin */
+/* TODO: role switch using ID pin */
 &usb0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usb0>, <&pinctrl_usb0_id>;

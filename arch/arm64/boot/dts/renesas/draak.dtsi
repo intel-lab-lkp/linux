@@ -226,7 +226,7 @@
 	/*
 	 * X11 is connected to VI4_FIELD/SCIF_CLK/AUDIO_CLKB,
 	 * and R-Car Sound uses AUDIO_CLKB.
-	 * Note is that schematic indicates VI4_FIELD conection only
+	 * Note is that schematic indicates VI4_FIELD connection only
 	 * not AUDIO_CLKB at SoC page.
 	 * And this VI4_FIELD/SCIF_CLK/AUDIO_CLKB is connected to SW60.
 	 * SW60 should be 1-2.

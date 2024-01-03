@@ -109,7 +109,7 @@
 		      <0x0 0x78020000 0x0 0x1000>,	/* GIC CPU */
 		      <0x0 0x78040000 0x0 0x2000>,	/* GIC VCPU Control */
 		      <0x0 0x78060000 0x0 0x2000>;	/* GIC VCPU */
-		interrupts = <1 9 0xf04>;	/* GIC Maintenence IRQ */
+		interrupts = <1 9 0xf04>;	/* GIC Maintenance IRQ */
 	};
 
 	timer {

@@ -305,7 +305,7 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 
 			/*
-			 * The driver *really* doesn't want this regualtor to exist,
+			 * The driver *really* doesn't want this regulator to exist,
 			 * saying that it could not get the current voltage (-ENOTRECOVERABLE)
 			 * even though it surely is used on these devices (as a voltage
 			 * source for camera autofocus)
