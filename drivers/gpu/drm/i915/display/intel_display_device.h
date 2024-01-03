@@ -45,7 +45,12 @@ struct drm_printer;
 #define HAS_DP_MST(i915)		(DISPLAY_INFO(i915)->has_dp_mst)
 #define HAS_DP20(i915)			(IS_DG2(i915) || DISPLAY_VER(i915) >= 14)
 #define HAS_DPT(i915)			(DISPLAY_VER(i915) >= 13)
+#ifdef I915
 #define HAS_DSB(i915)			(DISPLAY_INFO(i915)->has_dsb)
+#else
+/* TODO: DSB is broken in Xe KMD, so disabling it until fixed */
+#define HAS_DSB(i915)			(false)
+#endif
 #define HAS_DSC(__i915)			(DISPLAY_RUNTIME_INFO(__i915)->has_dsc)
 #define HAS_FBC(i915)			(DISPLAY_RUNTIME_INFO(i915)->fbc_mask != 0)
 #define HAS_FPGA_DBG_UNCLAIMED(i915)	(DISPLAY_INFO(i915)->has_fpga_dbg)
