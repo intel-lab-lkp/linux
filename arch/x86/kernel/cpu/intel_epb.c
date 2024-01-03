@@ -50,7 +50,8 @@
  * the OS will do that anyway.  That sometimes is problematic, as it may cause
  * the system battery to drain too fast, for example, so it is better to adjust
  * it on CPU bring-up and if the initial EPB value for a given CPU is 0, the
- * kernel changes it to 6 ('normal').
+ * kernel changes it to 6 ('normal'). However, if it is desirable to retain the
+ * original initial EPB value, intel_epb=preserve can be set to enforce it.
  */
 
 static DEFINE_PER_CPU(u8, saved_epb);
@@ -74,6 +75,8 @@ static u8 energ_perf_values[] = {
 	[EPB_INDEX_BALANCE_POWERSAVE] = ENERGY_PERF_BIAS_BALANCE_POWERSAVE,
 	[EPB_INDEX_POWERSAVE] = ENERGY_PERF_BIAS_POWERSAVE,
 };
+
+static bool intel_epb_no_override __read_mostly;
 
 static int intel_epb_save(void)
 {
@@ -106,7 +109,7 @@ static void intel_epb_restore(void)
 		 * ('normal').
 		 */
 		val = epb & EPB_MASK;
-		if (val == ENERGY_PERF_BIAS_PERFORMANCE) {
+		if (!intel_epb_no_override && val == ENERGY_PERF_BIAS_PERFORMANCE) {
 			val = energ_perf_values[EPB_INDEX_NORMAL];
 			pr_warn_once("ENERGY_PERF_BIAS: Set to 'normal', was 'performance'\n");
 		}
@@ -212,6 +215,20 @@ static const struct x86_cpu_id intel_epb_normal[] = {
 				   ENERGY_PERF_BIAS_NORMAL_POWERSAVE),
 	{}
 };
+
+static __init int parse_intel_epb(char *str)
+{
+	if (!str)
+		return 0;
+
+	/* "intel_epb=preserve" prevents PERFORMANCE->NORMAL on restore. */
+	if (!strcmp(str, "preserve"))
+		intel_epb_no_override = true;
+
+	return 0;
+}
+
+early_param("intel_epb", parse_intel_epb);
 
 static __init int intel_epb_init(void)
 {
