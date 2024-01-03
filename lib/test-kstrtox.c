@@ -268,6 +268,247 @@ static void __init test_kstrtoll_ok(void)
 	TEST_OK(kstrtoll, long long, "%lld", test_ll_ok);
 }
 
+/*
+ * The special pattern to make sure the result is not modified for error cases.
+ */
+#define ULL_PATTERN		(0xefefefef7a7a7a7aULL)
+#define POINTER_PATTERN		((void *)(uintptr_t)(ULL_PATTERN & UINTPTR_MAX))
+
+/* Want to include "E" suffix for full coverage. */
+#define MEMPARSE_TEST_SUFFIX	(MEMPARSE_SUFFIX_K | MEMPARSE_SUFFIX_M |\
+				 MEMPARSE_SUFFIX_G | MEMPARSE_SUFFIX_T |\
+				 MEMPARSE_SUFFIX_P | MEMPARSE_SUFFIX_E)
+
+static void __init test_memparse_safe_fail(void)
+{
+	struct memparse_test_fail {
+		const char *str;
+		/* Expected error number, either -EINVAL or -ERANGE. */
+		unsigned int expected_ret;
+	};
+	static const struct memparse_test_fail tests[] __initconst = {
+		/* No valid string can be found at all. */
+		{"", -EINVAL},
+		{"\n", -EINVAL},
+		{"\n0", -EINVAL},
+		{"+", -EINVAL},
+		{"-", -EINVAL},
+
+		/* Only hex prefix, but no valid string. */
+		{"0x", -EINVAL},
+		{"0X", -EINVAL},
+
+		/* Only hex prefix, with suffix but still no valid string. */
+		{"0xK", -EINVAL},
+		{"0xM", -EINVAL},
+		{"0xG", -EINVAL},
+
+		/* Only hex prefix, with invalid chars. */
+		{"0xH", -EINVAL},
+		{"0xy", -EINVAL},
+
+		/*
+		 * No support for any leading "+-" chars, even followed by a valid
+		 * number.
+		 */
+		{"-0", -EINVAL},
+		{"+0", -EINVAL},
+		{"-1", -EINVAL},
+		{"+1", -EINVAL},
+
+		/* Stray suffix would also be rejected. */
+		{"K", -EINVAL},
+		{"P", -EINVAL},
+
+		/* Overflow in the string itself*/
+		{"18446744073709551616", -ERANGE},
+		{"02000000000000000000000", -ERANGE},
+		{"0x10000000000000000", -ERANGE},
+
+		/*
+		 * Good string but would overflow with suffix.
+		 *
+		 * Note, for "E" suffix, one should not use with hex, or "0x1E"
+		 * would be treated as 0x1e (30 in decimal), not 0x1 and "E" suffix.
+		 * Another reason "E" suffix is cursed.
+		 */
+		{"16E", -ERANGE},
+		{"020E", -ERANGE},
+		{"16384P", -ERANGE},
+		{"040000P", -ERANGE},
+		{"16777216T", -ERANGE},
+		{"0100000000T", -ERANGE},
+		{"17179869184G", -ERANGE},
+		{"0200000000000G", -ERANGE},
+		{"17592186044416M", -ERANGE},
+		{"0400000000000000M", -ERANGE},
+		{"18014398509481984K", -ERANGE},
+		{"01000000000000000000K", -ERANGE},
+	};
+	unsigned int i;
+
+	for_each_test(i, tests) {
+		const struct memparse_test_fail *t = &tests[i];
+		unsigned long long tmp = ULL_PATTERN;
+		char *retptr = POINTER_PATTERN;
+		int ret;
+
+		ret = memparse_safe(t->str, MEMPARSE_TEST_SUFFIX, &tmp, &retptr);
+		if (ret != t->expected_ret) {
+			WARN(1, "str '%s', expected ret %d got %d\n", t->str,
+			     t->expected_ret, ret);
+			continue;
+		}
+		if (tmp != ULL_PATTERN)
+			WARN(1, "str '%s' failed as expected, but result got modified",
+			     t->str);
+		if (retptr != POINTER_PATTERN)
+			WARN(1, "str '%s' failed as expected, but pointer got modified",
+			     t->str);
+	}
+}
+
+static void __init test_memparse_safe_ok(void)
+{
+	struct memparse_test_ok {
+		const char *str;
+		unsigned long long expected_value;
+		/* How many bytes the @retptr pointer should be moved forward. */
+		unsigned int retptr_off;
+
+		/* If 0, falls back to MEMPARSE_TEST_SUFFIX. */
+		enum memparse_suffix suffixes;
+	};
+	static DEFINE_TEST_OK(struct memparse_test_ok, tests) = {
+		/*
+		 * The same pattern of kstrtoull, just with extra @retptr
+		 * verification.
+		 */
+		{"0",			0ULL,			1},
+		{"1",			1ULL,			1},
+		{"127",			127ULL,			3},
+		{"128",			128ULL,			3},
+		{"129",			129ULL,			3},
+		{"255",			255ULL,			3},
+		{"256",			256ULL,			3},
+		{"257",			257ULL,			3},
+		{"32767",		32767ULL,		5},
+		{"32768",		32768ULL,		5},
+		{"32769",		32769ULL,		5},
+		{"65535",		65535ULL,		5},
+		{"65536",		65536ULL,		5},
+		{"65537",		65537ULL,		5},
+		{"2147483647",		2147483647ULL,		10},
+		{"2147483648",		2147483648ULL,		10},
+		{"2147483649",		2147483649ULL,		10},
+		{"4294967295",		4294967295ULL,		10},
+		{"4294967296",		4294967296ULL,		10},
+		{"4294967297",		4294967297ULL,		10},
+		{"9223372036854775807",	9223372036854775807ULL,	19},
+		{"9223372036854775808",	9223372036854775808ULL,	19},
+		{"9223372036854775809",	9223372036854775809ULL,	19},
+		{"18446744073709551614", 18446744073709551614ULL, 20},
+		{"18446744073709551615", 18446744073709551615ULL, 20},
+
+		{"00",				00ULL,		2},
+		{"01",				01ULL,		2},
+		{"0177",			0177ULL,	4},
+		{"0200",			0200ULL,	4},
+		{"0201",			0201ULL,	4},
+		{"0377",			0377ULL,	4},
+		{"0400",			0400ULL,	4},
+		{"0401",			0401ULL,	4},
+		{"077777",			077777ULL,	6},
+		{"0100000",			0100000ULL,	7},
+		{"0100001",			0100001ULL,	7},
+		{"0177777",			0177777ULL,	7},
+		{"0200000",			0200000ULL,	7},
+		{"0200001",			0200001ULL,	7},
+		{"017777777777",		017777777777ULL,	12},
+		{"020000000000",		020000000000ULL,	12},
+		{"020000000001",		020000000001ULL,	12},
+		{"037777777777",		037777777777ULL,	12},
+		{"040000000000",		040000000000ULL,	12},
+		{"040000000001",		040000000001ULL,	12},
+		{"0777777777777777777777",	0777777777777777777777ULL, 22},
+		{"01000000000000000000000",	01000000000000000000000ULL, 23},
+		{"01000000000000000000001",	01000000000000000000001ULL, 23},
+		{"01777777777777777777776",	01777777777777777777776ULL, 23},
+		{"01777777777777777777777",	01777777777777777777777ULL, 23},
+
+		{"0x0",			0x0ULL,			3},
+		{"0x1",			0x1ULL,			3},
+		{"0x7f",		0x7fULL,		4},
+		{"0x80",		0x80ULL,		4},
+		{"0x81",		0x81ULL,		4},
+		{"0xff",		0xffULL,		4},
+		{"0x100",		0x100ULL,		5},
+		{"0x101",		0x101ULL,		5},
+		{"0x7fff",		0x7fffULL,		6},
+		{"0x8000",		0x8000ULL,		6},
+		{"0x8001",		0x8001ULL,		6},
+		{"0xffff",		0xffffULL,		6},
+		{"0x10000",		0x10000ULL,		7},
+		{"0x10001",		0x10001ULL,		7},
+		{"0x7fffffff",		0x7fffffffULL,		10},
+		{"0x80000000",		0x80000000ULL,		10},
+		{"0x80000001",		0x80000001ULL,		10},
+		{"0xffffffff",		0xffffffffULL,		10},
+		{"0x100000000",		0x100000000ULL,		11},
+		{"0x100000001",		0x100000001ULL,		11},
+		{"0x7fffffffffffffff",	0x7fffffffffffffffULL,	18},
+		{"0x8000000000000000",	0x8000000000000000ULL,	18},
+		{"0x8000000000000001",	0x8000000000000001ULL,	18},
+		{"0xfffffffffffffffe",	0xfffffffffffffffeULL,	18},
+		{"0xffffffffffffffff",	0xffffffffffffffffULL,	18},
+
+		/* Now with extra non-suffix chars to test @retptr update. */
+		{"1q84",		1,			1},
+		{"02o45",		2,			2},
+		{"0xffvii",		0xff,			4},
+
+		/*
+		 * Valid suffix then tailing chars, to test the @retptr
+		 * behavior.
+		 */
+		{"68k ",		69632,			3},
+		{"8MS",			8388608,		2},
+		{"0xaeGis",		0x2b80000000,		5},
+		{"0xaTx",		0xa0000000000,		4},
+		{"3E8",			0x3000000000000000,	2},
+
+		/* Valid suffixes but not enabled. */
+		{"68k ",	68,	2, MEMPARSE_SUFFIX_M},
+		{"8MS",		8,	1, MEMPARSE_SUFFIX_K},
+		{"0xaeGis",	0xae,	4, MEMPARSE_SUFFIX_K},
+		{"0xaTx",	0xa,	3, MEMPARSE_SUFFIX_K},
+		{"3E8",		3,	1, MEMPARSE_SUFFIX_K},
+	};
+	unsigned int i;
+
+	for_each_test(i, tests) {
+		const struct memparse_test_ok *t = &tests[i];
+		unsigned long long tmp;
+		char *retptr;
+		int ret;
+		enum memparse_suffix suffixes = MEMPARSE_TEST_SUFFIX;
+
+		if (t->suffixes)
+			suffixes = t->suffixes;
+
+		ret = memparse_safe(t->str, suffixes, &tmp, &retptr);
+		if (ret != 0) {
+			WARN(1, "str '%s', expected ret 0 got %d\n", t->str, ret);
+			continue;
+		}
+		if (tmp != t->expected_value)
+			WARN(1, "str '%s' incorrect result, expected %llu got %llu",
+			     t->str, t->expected_value, tmp);
+		if (retptr != t->str + t->retptr_off)
+			WARN(1, "str '%s' incorrect endptr, expected %u got %zu",
+			     t->str, t->retptr_off, retptr - t->str);
+	}
+}
 static void __init test_kstrtoll_fail(void)
 {
 	static DEFINE_TEST_FAIL(test_ll_fail) = {
@@ -709,6 +950,9 @@ static int __init test_kstrtox_init(void)
 	test_kstrtoull_fail();
 	test_kstrtoll_ok();
 	test_kstrtoll_fail();
+
+	test_memparse_safe_ok();
+	test_memparse_safe_fail();
 
 	test_kstrtou64_ok();
 	test_kstrtou64_fail();
