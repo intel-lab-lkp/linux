@@ -9,7 +9,7 @@
  * vineetg: Nov 2009 (Everything needed for TIF_RESTORE_SIGMASK)
  *  -do_signal() supports TIF_RESTORE_SIGMASK
  *  -do_signal() no loner needs oldset, required by OLD sys_sigsuspend
- *  -sys_rt_sigsuspend() now comes from generic code, so discard arch implemen
+ *  -sys_rt_sigsuspend() now comes from generic code, so discard arch implement
  *  -sys_sigsuspend() no longer needs to fudge ptregs, hence that arg removed
  *  -sys_sigsuspend() no longer loops for do_signal(), sets TIF_xxx and leaves
  *   the job to do_signal()
