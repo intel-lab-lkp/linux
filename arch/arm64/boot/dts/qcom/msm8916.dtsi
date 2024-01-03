@@ -666,12 +666,12 @@
 
 				/*
 				 * Not described input ports:
-				 * 0 - connected to Resource and Power Manger CPU ETM
+				 * 0 - connected to Resource and Power Manager CPU ETM
 				 * 1 - not-connected
 				 * 2 - connected to Modem CPU ETM
 				 * 3 - not-connected
 				 * 5 - not-connected
-				 * 6 - connected trought funnel to Wireless CPU ETM
+				 * 6 - connected through funnel to Wireless CPU ETM
 				 * 7 - connected to STM component
 				 */
 

@@ -857,7 +857,7 @@
 	status = "okay";
 
 	/*
-	 * This device is shipped with HS400 capabable eMMCs
+	 * This device is shipped with HS400 capable eMMCs
 	 * However various brands have been used in various product batches,
 	 * including a Samsung eMMC (BGND3R) which features a quirk with HS400.
 	 * Set the speed to HS200 as a safety measure.

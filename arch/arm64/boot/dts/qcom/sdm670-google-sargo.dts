@@ -168,7 +168,7 @@
 	 * Supply map from xiaomi-lavender specifies this as the supply for
 	 * ldob1, ldob9, ldob10, ldoa2, and ldoa3, while downstream specifies
 	 * this as a power domain. Set this as a fixed regulator with the same
-	 * voltage as lavender until display is needed to avoid unneccessarily
+	 * voltage as lavender until display is needed to avoid unnecessarily
 	 * using a deprecated binding (regulator-fixed-domain).
 	 */
 	vreg_s2b_1p05: vreg-s2b-regulator {

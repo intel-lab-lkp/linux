@@ -16,7 +16,7 @@
 	 * PWM backlight circuit on this PinePhone revision was changed since
 	 * 1.0, and the lowest PWM duty cycle that doesn't lead to backlight
 	 * being off is around 20%. Duty cycle for the lowest brightness level
-	 * also varries quite a bit between individual boards, so the lowest
+	 * also varies quite a bit between individual boards, so the lowest
 	 * value here was chosen as a safe default.
 	 */
 	brightness-levels = <

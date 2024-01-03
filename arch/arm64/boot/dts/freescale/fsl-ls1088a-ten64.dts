@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Device Tree file for Travese Ten64 (LS1088) board
+ * Device Tree file for Traverse Ten64 (LS1088) board
  * Based on fsl-ls1088a-rdb.dts
  * Copyright 2017-2020 NXP
  * Copyright 2019-2021 Traverse Technologies
