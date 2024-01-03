@@ -14074,6 +14074,7 @@ static void bnxt_cfg_ntp_filters(struct bnxt *bp)
 			if (test_bit(BNXT_FLTR_VALID, &fltr->base.state)) {
 				if (fltr->base.flags & BNXT_ACT_NO_AGING)
 					continue;
+#if IS_ENABLED(CONFIG_RFS_ACCEL)
 				if (rps_may_expire_flow(bp->dev, fltr->base.rxq,
 							fltr->flow_id,
 							fltr->base.sw_id)) {
@@ -14081,6 +14082,7 @@ static void bnxt_cfg_ntp_filters(struct bnxt *bp)
 									 fltr);
 					del = true;
 				}
+#endif
 			} else {
 				rc = bnxt_hwrm_cfa_ntuple_filter_alloc(bp,
 								       fltr);
