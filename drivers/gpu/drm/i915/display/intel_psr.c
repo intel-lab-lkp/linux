@@ -3310,11 +3310,8 @@ void intel_psr_connector_debugfs_add(struct intel_connector *connector)
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	struct dentry *root = connector->base.debugfs_entry;
 
-	if (connector->base.connector_type != DRM_MODE_CONNECTOR_eDP) {
-		if (!(HAS_DP20(i915) &&
-		      connector->base.connector_type == DRM_MODE_CONNECTOR_DisplayPort))
-			return;
-	}
+	if (connector->base.connector_type != DRM_MODE_CONNECTOR_eDP)
+		return;
 
 	debugfs_create_file("i915_psr_sink_status", 0444, root,
 			    connector, &i915_psr_sink_status_fops);
