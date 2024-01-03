@@ -549,18 +549,46 @@ static int zynqmp_get_parent_list(struct device_node *np, u32 clk_id,
 	u32 total_parents = clock[clk_id].num_parents;
 	struct clock_topology *clk_nodes;
 	struct clock_parent *parents;
+	struct clk *clk_parent;
+	char *clk_name;
 
 	clk_nodes = clock[clk_id].node;
 	parents = clock[clk_id].parent;
 
 	for (i = 0; i < total_parents; i++) {
 		if (!parents[i].flag) {
+			ret = of_property_match_string(np, "clock-names",
+						       parents[i].name);
+			if (ret >= 0) {
+				clk_parent = of_clk_get(np, ret);
+				if (clk_parent) {
+					clk_name = __clk_get_name(clk_parent);
+					if (clk_name)
+						strcpy(parents[i].name, clk_name);
+					else
+						return 1;
+				} else {
+					return 1;
+				}
+			}
 			parent_list[i] = parents[i].name;
 		} else if (parents[i].flag == PARENT_CLK_EXTERNAL) {
 			ret = of_property_match_string(np, "clock-names",
 						       parents[i].name);
-			if (ret < 0)
+			if (ret < 0) {
 				strcpy(parents[i].name, "dummy_name");
+			} else {
+				clk_parent = of_clk_get(np, ret);
+				if (clk_parent) {
+					clk_name = __clk_get_name(clk_parent);
+					if (clk_name)
+						strcpy(parents[i].name, clk_name);
+					else
+						return 1;
+				} else {
+					return 1;
+				}
+			}
 			parent_list[i] = parents[i].name;
 		} else {
 			strcat(parents[i].name,
