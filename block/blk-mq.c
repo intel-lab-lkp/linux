@@ -360,8 +360,11 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 
 	if (data->flags & BLK_MQ_REQ_PM)
 		data->rq_flags |= RQF_PM;
-	if (blk_queue_io_stat(q))
+	if (blk_queue_io_stat(q)) {
 		data->rq_flags |= RQF_IO_STAT;
+		if (blk_queue_precise_io_stat(q))
+			data->rq_flags |= RQF_PRECISE_IO_STAT;
+	}
 	rq->rq_flags = data->rq_flags;
 
 	if (data->rq_flags & RQF_SCHED_TAGS) {
@@ -999,6 +1002,9 @@ static inline void blk_account_io_done(struct request *req, u64 now)
 		update_io_ticks(req->part, jiffies, true);
 		part_stat_inc(req->part, ios[sgrp]);
 		part_stat_add(req->part, nsecs[sgrp], now - req->start_time_ns);
+		if (req->rq_flags & RQF_PRECISE_IO_STAT)
+			part_stat_local_dec(req->part,
+					in_flight[op_is_write(req_op(req))]);
 		part_stat_unlock();
 	}
 }
@@ -1006,7 +1012,6 @@ static inline void blk_account_io_done(struct request *req, u64 now)
 static inline void blk_account_io_start(struct request *req)
 {
 	trace_block_io_start(req);
-
 	if (blk_do_io_stat(req)) {
 		/*
 		 * All non-passthrough requests are created from a bio with one
@@ -1021,6 +1026,9 @@ static inline void blk_account_io_start(struct request *req)
 
 		part_stat_lock();
 		update_io_ticks(req->part, jiffies, false);
+		if (req->rq_flags & RQF_PRECISE_IO_STAT)
+			part_stat_local_inc(req->part,
+					in_flight[op_is_write(req_op(req))]);
 		part_stat_unlock();
 	}
 }
