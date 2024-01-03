@@ -925,23 +925,10 @@ static int _set_opp_voltage(struct device *dev, struct regulator *reg,
 	return ret;
 }
 
-static int
-_opp_config_clk_single(struct device *dev, struct opp_table *opp_table,
-		       struct dev_pm_opp *opp, void *data, bool scaling_down)
+static int _opp_clk_set_rate(struct device *dev, struct opp_table *opp_table,
+			     unsigned long freq)
 {
-	unsigned long *target = data;
-	unsigned long freq;
 	int ret;
-
-	/* One of target and opp must be available */
-	if (target) {
-		freq = *target;
-	} else if (opp) {
-		freq = opp->rates[0];
-	} else {
-		WARN_ON(1);
-		return -EINVAL;
-	}
 
 	ret = clk_set_rate(opp_table->clk, freq);
 	if (ret) {
@@ -954,12 +941,19 @@ _opp_config_clk_single(struct device *dev, struct opp_table *opp_table,
 	return ret;
 }
 
+static int
+_opp_config_clk_single(struct device *dev, struct opp_table *opp_table,
+		       struct dev_pm_opp *opp, bool scaling_down)
+{
+	return _opp_clk_set_rate(dev, opp_table, opp->rates[0]);
+}
+
 /*
  * Simple implementation for configuring multiple clocks. Configure clocks in
  * the order in which they are present in the array while scaling up.
  */
 int dev_pm_opp_config_clks_simple(struct device *dev,
-		struct opp_table *opp_table, struct dev_pm_opp *opp, void *data,
+		struct opp_table *opp_table, struct dev_pm_opp *opp,
 		bool scaling_down)
 {
 	int ret, i;
@@ -1209,7 +1203,7 @@ out:
 }
 
 static int _set_opp(struct device *dev, struct opp_table *opp_table,
-		    struct dev_pm_opp *opp, void *clk_data, bool forced)
+		    struct dev_pm_opp *opp, bool forced)
 {
 	struct dev_pm_opp *old_opp;
 	int scaling_down, ret;
@@ -1269,7 +1263,7 @@ static int _set_opp(struct device *dev, struct opp_table *opp_table,
 	}
 
 	if (opp_table->config_clks) {
-		ret = opp_table->config_clks(dev, opp_table, opp, clk_data, scaling_down);
+		ret = opp_table->config_clks(dev, opp_table, opp, scaling_down);
 		if (ret)
 			return ret;
 	}
@@ -1348,8 +1342,7 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 		 * equivalent to a clk_set_rate()
 		 */
 		if (!_get_opp_count(opp_table)) {
-			ret = opp_table->config_clks(dev, opp_table, NULL,
-						     &target_freq, false);
+			ret = _opp_clk_set_rate(dev, opp_table, target_freq);
 			goto put_opp_table;
 		}
 
@@ -1381,7 +1374,7 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 		forced = opp_table->rate_clk_single != target_freq;
 	}
 
-	ret = _set_opp(dev, opp_table, opp, &target_freq, forced);
+	ret = _set_opp(dev, opp_table, opp, forced);
 
 	if (target_freq)
 		dev_pm_opp_put(opp);
@@ -1413,7 +1406,7 @@ int dev_pm_opp_set_opp(struct device *dev, struct dev_pm_opp *opp)
 		return PTR_ERR(opp_table);
 	}
 
-	ret = _set_opp(dev, opp_table, opp, NULL, false);
+	ret = _set_opp(dev, opp_table, opp, false);
 	dev_pm_opp_put_opp_table(opp_table);
 
 	return ret;
