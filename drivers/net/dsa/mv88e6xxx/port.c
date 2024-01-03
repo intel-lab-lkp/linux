@@ -1539,6 +1539,39 @@ int mv88e6351_port_set_ether_type(struct mv88e6xxx_chip *chip, int port,
 	return mv88e6xxx_port_write(chip, port, MV88E6XXX_PORT_ETH_TYPE, etype);
 }
 
+/* Offset 0x16: LED Control Register */
+
+int mv88e6393x_port_led_write(struct mv88e6xxx_chip *chip, int port,
+			      unsigned int pointer, u16 data)
+{
+	u16 cmd = BIT(15) | ((pointer & 0x7) << 12) | (data & 0x7ff);
+	int err;
+
+	err = mv88e6xxx_port_write(chip, port, MV88E6393X_PORT_LED_CONTROL, cmd);
+	if (err)
+		return err;
+
+	return mv88e6xxx_port_wait_bit(chip, port, MV88E6393X_PORT_LED_CONTROL, 15, 0);
+}
+
+int mv88e6393x_port_led_read(struct mv88e6xxx_chip *chip, int port,
+			     unsigned int pointer, u16 *data)
+{
+	u16 cmd = (pointer & 0x7) << 12;
+	int err;
+
+	err = mv88e6xxx_port_write(chip, port, MV88E6393X_PORT_LED_CONTROL, cmd);
+	if (err)
+		return err;
+
+	err = mv88e6xxx_port_read(chip, port, MV88E6393X_PORT_LED_CONTROL, &cmd);
+	if (err)
+		return err;
+
+	*data = cmd & 0x7ff;
+	return 0;
+}
+
 /* Offset 0x18: Port IEEE Priority Remapping Registers [0-3]
  * Offset 0x19: Port IEEE Priority Remapping Registers [4-7]
  */

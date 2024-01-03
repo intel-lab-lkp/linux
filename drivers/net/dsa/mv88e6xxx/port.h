@@ -294,6 +294,9 @@
 /* Offset 0x13: OutFiltered Counter */
 #define MV88E6XXX_PORT_OUT_FILTERED	0x13
 
+/* Offset 0x16: LED Control Register */
+#define MV88E6393X_PORT_LED_CONTROL	0x16
+
 /* Offset 0x18: IEEE Priority Mapping Table */
 #define MV88E6390_PORT_IEEE_PRIO_MAP_TABLE			0x18
 #define MV88E6390_PORT_IEEE_PRIO_MAP_TABLE_UPDATE		0x8000
@@ -410,6 +413,10 @@ int mv88e6393x_port_set_policy(struct mv88e6xxx_chip *chip, int port,
 			       enum mv88e6xxx_policy_action action);
 int mv88e6351_port_set_ether_type(struct mv88e6xxx_chip *chip, int port,
 				  u16 etype);
+int mv88e6393x_port_led_write(struct mv88e6xxx_chip *chip, int port,
+			      unsigned int pointer, u16 data);
+int mv88e6393x_port_led_read(struct mv88e6xxx_chip *chip, int port,
+			     unsigned int pointer, u16 *data);
 int mv88e6393x_set_egress_port(struct mv88e6xxx_chip *chip,
 			       enum mv88e6xxx_egress_direction direction,
 			       int port);
