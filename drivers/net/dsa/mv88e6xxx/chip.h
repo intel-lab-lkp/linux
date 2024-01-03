@@ -206,6 +206,7 @@ struct mv88e6xxx_gpio_ops;
 struct mv88e6xxx_avb_ops;
 struct mv88e6xxx_ptp_ops;
 struct mv88e6xxx_pcs_ops;
+struct mv88e6xxx_led_ops;
 
 struct mv88e6xxx_irq {
 	u16 masked;
@@ -652,6 +653,9 @@ struct mv88e6xxx_ops {
 
 	/* Precision Time Protocol operations */
 	const struct mv88e6xxx_ptp_ops *ptp_ops;
+
+	/* LED operations */
+	const struct mv88e6xxx_led_ops *led_ops;
 
 	/* Phylink */
 	void (*phylink_get_caps)(struct mv88e6xxx_chip *chip, int port,

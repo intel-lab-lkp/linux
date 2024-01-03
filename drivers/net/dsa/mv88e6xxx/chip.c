@@ -37,6 +37,7 @@
 #include "global1.h"
 #include "global2.h"
 #include "hwtstamp.h"
+#include "leds.h"
 #include "phy.h"
 #include "port.h"
 #include "ptp.h"
@@ -4005,6 +4006,10 @@ static int mv88e6xxx_port_setup(struct dsa_switch *ds, int port)
 {
 	struct mv88e6xxx_chip *chip = ds->priv;
 	int err;
+
+	err = mv88e6xxx_port_setup_leds(ds, port);
+	if (err)
+		return err;
 
 	if (chip->info->ops->pcs_ops &&
 	    chip->info->ops->pcs_ops->pcs_init) {
