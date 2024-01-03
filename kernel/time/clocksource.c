@@ -98,7 +98,9 @@ static u64 suspend_start;
 /*
  * Interval: 0.5sec.
  */
-#define WATCHDOG_INTERVAL (HZ >> 1)
+#define WATCHDOG_INTERVAL	(HZ >> 1)
+#define WATCHDOG_INTR_MAX_NS	((WATCHDOG_INTERVAL + (WATCHDOG_INTERVAL >> 1))\
+				 * NSEC_PER_SEC / HZ)
 
 /*
  * Threshold: 0.0312s, when doubled: 0.0625s.
@@ -134,6 +136,7 @@ static DECLARE_WORK(watchdog_work, clocksource_watchdog_work);
 static DEFINE_SPINLOCK(watchdog_lock);
 static int watchdog_running;
 static atomic_t watchdog_reset_pending;
+static int64_t watchdog_max_intr;
 
 static inline void clocksource_watchdog_lock(unsigned long *flags)
 {
@@ -400,7 +403,7 @@ static void clocksource_watchdog(struct timer_list *unused)
 {
 	u64 csnow, wdnow, cslast, wdlast, delta;
 	int next_cpu, reset_pending;
-	int64_t wd_nsec, cs_nsec;
+	int64_t wd_nsec, cs_nsec, interval;
 	struct clocksource *cs;
 	enum wd_read_status read_ret;
 	unsigned long extra_wait = 0;
@@ -469,6 +472,27 @@ static void clocksource_watchdog(struct timer_list *unused)
 
 		if (atomic_read(&watchdog_reset_pending))
 			continue;
+
+		/*
+		 * The processing of timer softirqs can get delayed (usually
+		 * on account of ksoftirqd not getting to run in a timely
+		 * manner), which causes the watchdog interval to stretch.
+		 * Some clocksources, e.g. acpi_pm, cannot tolerate
+		 * watchdog intervals longer than a few seconds.
+		 * Skew detection may fail for longer watchdog intervals
+		 * on account of fixed margins being used.
+		 */
+		interval = max(cs_nsec, wd_nsec);
+		if (unlikely(interval > WATCHDOG_INTR_MAX_NS)) {
+			if (system_state > SYSTEM_SCHEDULING &&
+			    interval > 2 * watchdog_max_intr) {
+				watchdog_max_intr = interval;
+				pr_warn("Skipping watchdog check: cs_nsec: %lld wd_nsec: %lld\n",
+					cs_nsec, wd_nsec);
+			}
+			watchdog_timer.expires = jiffies;
+			continue;
+		}
 
 		/* Check the deviation from the watchdog clocksource. */
 		md = cs->uncertainty_margin + watchdog->uncertainty_margin;
