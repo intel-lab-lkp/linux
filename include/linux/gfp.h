@@ -316,6 +316,8 @@ extern void *page_frag_alloc_align(struct page_frag_cache *nc,
 				   unsigned int fragsz, gfp_t gfp_mask,
 				   unsigned int align);
 
+void page_frag_cache_drain(struct page_frag_cache *nc);
+
 static inline void *page_frag_alloc(struct page_frag_cache *nc,
 			     unsigned int fragsz, gfp_t gfp_mask)
 {
