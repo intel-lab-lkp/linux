@@ -236,6 +236,9 @@ static int kvm_emu_cpucfg(struct kvm_vcpu *vcpu, larch_inst inst)
 	case CPUCFG_KVM_SIG:
 		vcpu->arch.gprs[rd] = *(unsigned int *)KVM_SIGNATURE;
 		break;
+	case CPUCFG_KVM_FEATURE:
+		vcpu->arch.gprs[rd] = KVM_FEATURE_PV_IPI;
+		break;
 	default:
 		vcpu->arch.gprs[rd] = 0;
 		break;
@@ -673,12 +676,71 @@ static int kvm_handle_fpu_disabled(struct kvm_vcpu *vcpu)
 	return RESUME_GUEST;
 }
 
+static int kvm_pv_send_ipi(struct kvm_vcpu *vcpu, int sgi)
+{
+	int ret = 0;
+	u64 ipi_bitmap;
+	unsigned int min, cpu;
+	struct kvm_vcpu *dest;
+
+	ipi_bitmap = vcpu->arch.gprs[LOONGARCH_GPR_A1];
+	min = vcpu->arch.gprs[LOONGARCH_GPR_A2];
+
+	if (ipi_bitmap) {
+		cpu = find_first_bit((void *)&ipi_bitmap, BITS_PER_LONG);
+		while (cpu < BITS_PER_LONG) {
+			if ((cpu + min) < KVM_MAX_VCPUS) {
+				dest = kvm_get_vcpu_by_id(vcpu->kvm, cpu + min);
+				kvm_queue_irq(dest, sgi);
+				kvm_vcpu_kick(dest);
+			}
+			cpu = find_next_bit((void *)&ipi_bitmap, BITS_PER_LONG, cpu + 1);
+		}
+	}
+
+	return ret;
+}
+
+/*
+ * hypcall emulation always return to guest, Caller should check retval.
+ */
+static void kvm_handle_pv_hcall(struct kvm_vcpu *vcpu)
+{
+	unsigned long func = vcpu->arch.gprs[LOONGARCH_GPR_A0];
+	long ret;
+
+	switch (func) {
+	case KVM_HC_FUNC_IPI:
+		kvm_pv_send_ipi(vcpu, INT_SWI0);
+		ret = KVM_HC_STATUS_SUCCESS;
+		break;
+	default:
+		ret = KVM_HC_INVALID_CODE;
+		break;
+	};
+
+	vcpu->arch.gprs[LOONGARCH_GPR_A0] = ret;
+}
+
 static int kvm_handle_hypcall(struct kvm_vcpu *vcpu)
 {
+	larch_inst inst;
+	unsigned int code;
+
+	inst.word = vcpu->arch.badi;
+	code = inst.reg0i15_format.immediate;
 	update_pc(&vcpu->arch);
 
-	/* Treat it as noop intruction, only set return value */
-	vcpu->arch.gprs[LOONGARCH_GPR_A0] = KVM_HC_INVALID_CODE;
+	switch (code) {
+	case KVM_HC_SERVICE:
+		kvm_handle_pv_hcall(vcpu);
+		break;
+	default:
+		/* Treat it as noop intruction, only set return value */
+		vcpu->arch.gprs[LOONGARCH_GPR_A0] = KVM_HC_INVALID_CODE;
+		break;
+	}
+
 	return RESUME_GUEST;
 }
 
