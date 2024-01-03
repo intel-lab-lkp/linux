@@ -10115,15 +10115,13 @@ static unsigned int task_running_on_cpu(int cpu, struct task_struct *p)
 
 /**
  * idle_cpu_without - would a given CPU be idle without p ?
- * @cpu: the processor on which idleness is tested.
+ * @rq: the rq on which idleness is tested.
  * @p: task which should be ignored.
  *
  * Return: 1 if the CPU would be idle. 0 otherwise.
  */
-static int idle_cpu_without(int cpu, struct task_struct *p)
+static int idle_cpu_without(struct rq *rq, struct task_struct *p)
 {
-	struct rq *rq = cpu_rq(cpu);
-
 	if (rq->curr != rq->idle && rq->curr != p)
 		return 0;
 
@@ -10177,7 +10175,7 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 		/*
 		 * No need to call idle_cpu_without() if nr_running is not 0
 		 */
-		if (!nr_running && idle_cpu_without(i, p))
+		if (!nr_running && idle_cpu_without(rq, p))
 			sgs->idle_cpus++;
 
 		/* Check if task fits in the CPU */
