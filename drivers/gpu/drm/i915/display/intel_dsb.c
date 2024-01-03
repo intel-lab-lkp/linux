@@ -321,6 +321,7 @@ void intel_dsb_finish(struct intel_dsb *dsb)
 	intel_dsb_buffer_flush_map(&dsb->dsb_buf);
 }
 
+#ifdef I915
 static int intel_dsb_dewake_scanline(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
@@ -339,6 +340,7 @@ static int intel_dsb_dewake_scanline(const struct intel_crtc_state *crtc_state)
 
 	return max(0, vblank_start - intel_usecs_to_scanlines(adjusted_mode, latency));
 }
+#endif
 
 static void _intel_dsb_commit(struct intel_dsb *dsb, u32 ctrl,
 			      int dewake_scanline)
@@ -444,6 +446,8 @@ void intel_dsb_wait(struct intel_dsb *dsb)
 struct intel_dsb *intel_dsb_prepare(const struct intel_crtc_state *crtc_state,
 				    unsigned int max_cmds)
 {
+	/* TODO: DSB is broken in Xe KMD, so disabling it until fixed */
+#ifdef I915
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	intel_wakeref_t wakeref;
@@ -484,6 +488,7 @@ out:
 		      "[CRTC:%d:%s] DSB %d queue setup failed, will fallback to MMIO for display HW programming\n",
 		      crtc->base.base.id, crtc->base.name, DSB1);
 
+#endif
 	return NULL;
 }
 
