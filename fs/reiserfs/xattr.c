@@ -618,6 +618,9 @@ int reiserfs_xattr_set(struct inode *inode, const char *name,
 	int error, error2;
 	size_t jbegin_count = reiserfs_xattr_nblocks(inode, buffer_size);
 
+	if (!reiserfs_xattrs_initialized(inode->i_sb))
+		return -EOPNOTSUPP;
+
 	/* Check before we start a transaction and then do nothing. */
 	if (!d_really_is_positive(REISERFS_SB(inode->i_sb)->priv_root))
 		return -EOPNOTSUPP;
