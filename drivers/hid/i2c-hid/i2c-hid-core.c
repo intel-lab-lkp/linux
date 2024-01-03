@@ -955,9 +955,6 @@ static int i2c_hid_core_suspend(struct i2c_hid *ihid, bool force_poweroff)
 	if (ret < 0)
 		return ret;
 
-	/* Save some power */
-	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
-
 	disable_irq(client->irq);
 
 	if (force_poweroff || !device_may_wakeup(&client->dev))
