@@ -1107,6 +1107,7 @@ static int cnic_init_uio(struct cnic_dev *dev)
 						     TX_MAX_TSS_RINGS + 1);
 		uinfo->mem[1].addr = (unsigned long) cp->status_blk.gen &
 					CNIC_PAGE_MASK;
+		uinfo->mem[1].dma_addr = cp->status_blk_map;
 		if (cp->ethdev->drv_state & CNIC_DRV_STATE_USING_MSIX)
 			uinfo->mem[1].size = BNX2_SBLK_MSIX_ALIGN_SIZE * 9;
 		else
@@ -1116,22 +1117,25 @@ static int cnic_init_uio(struct cnic_dev *dev)
 	} else if (test_bit(CNIC_F_BNX2X_CLASS, &dev->flags)) {
 		uinfo->mem[0].size = pci_resource_len(dev->pcidev, 0);
 
-		uinfo->mem[1].addr = (unsigned long) cp->bnx2x_def_status_blk &
+		uinfo->mem[1].addr = (phys_addr_t)cp->bnx2x_def_status_blk &
 			CNIC_PAGE_MASK;
+		uinfo->mem[1].dma_addr = cp->status_blk_map;
 		uinfo->mem[1].size = sizeof(*cp->bnx2x_def_status_blk);
 
 		uinfo->name = "bnx2x_cnic";
 	}
 
-	uinfo->mem[1].memtype = UIO_MEM_LOGICAL;
+	uinfo->mem[1].memtype = UIO_MEM_DMA_COHERENT;
 
-	uinfo->mem[2].addr = (unsigned long) udev->l2_ring;
+	uinfo->mem[2].addr = (phys_addr_t)udev->l2_ring;
+	uinfo->mem[2].dma_addr = udev->l2_ring_map;
 	uinfo->mem[2].size = udev->l2_ring_size;
-	uinfo->mem[2].memtype = UIO_MEM_LOGICAL;
+	uinfo->mem[2].memtype = UIO_MEM_DMA_COHERENT;
 
-	uinfo->mem[3].addr = (unsigned long) udev->l2_buf;
+	uinfo->mem[3].addr = (phys_addr_t)udev->l2_buf;
+	uinfo->mem[3].dma_addr = udev->l2_buf_map;
 	uinfo->mem[3].size = udev->l2_buf_size;
-	uinfo->mem[3].memtype = UIO_MEM_LOGICAL;
+	uinfo->mem[3].memtype = UIO_MEM_DMA_COHERENT;
 
 	uinfo->version = CNIC_MODULE_VERSION;
 	uinfo->irq = UIO_IRQ_CUSTOM;
@@ -1313,6 +1317,7 @@ static int cnic_alloc_bnx2x_resc(struct cnic_dev *dev)
 		return 0;
 
 	cp->bnx2x_def_status_blk = cp->ethdev->irq_arr[1].status_blk;
+	cp->status_blk_map = cp->ethdev->irq_arr[1].status_blk_map;
 
 	cp->l2_rx_ring_size = 15;
 
@@ -5323,6 +5328,7 @@ static int cnic_start_hw(struct cnic_dev *dev)
 	pci_dev_get(dev->pcidev);
 	cp->func = PCI_FUNC(dev->pcidev->devfn);
 	cp->status_blk.gen = ethdev->irq_arr[0].status_blk;
+	cp->status_blk_map = ethdev->irq_arr[0].status_blk_map;
 	cp->status_blk_num = ethdev->irq_arr[0].status_blk_num;
 
 	err = cp->alloc_resc(dev);
