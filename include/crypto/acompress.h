@@ -205,6 +205,15 @@ struct acomp_req *acomp_request_alloc(struct crypto_acomp *tfm);
 void acomp_request_free(struct acomp_req *req);
 
 /**
+ * acomp_is_async() -- check if an acomp is asynchronous(can sleep)
+ *
+ * @tfm:	ACOMPRESS tfm handle allocated with crypto_alloc_acomp()
+ *
+ * Return:	true if the acomp is asynchronous, otherwise, false
+ */
+bool acomp_is_async(struct crypto_acomp *tfm);
+
+/**
  * acomp_request_set_callback() -- Sets an asynchronous callback
  *
  * Callback will be called when an asynchronous operation on a given
