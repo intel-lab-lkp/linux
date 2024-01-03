@@ -1090,11 +1090,11 @@ static int bch2_dev_in_fs(struct bch_sb_handle *fs,
 		prt_newline(&buf);
 
 		prt_printf(&buf, "%pg ", fs->bdev);
-		bch2_prt_datetime(&buf, le64_to_cpu(fs->sb->write_time));;
+		bch2_prt_datetime(&buf, le64_to_cpu(fs->sb->write_time));
 		prt_newline(&buf);
 
 		prt_printf(&buf, "%pg ", sb->bdev);
-		bch2_prt_datetime(&buf, le64_to_cpu(sb->sb->write_time));;
+		bch2_prt_datetime(&buf, le64_to_cpu(sb->sb->write_time));
 		prt_newline(&buf);
 
 		prt_printf(&buf, "Not using older sb");
