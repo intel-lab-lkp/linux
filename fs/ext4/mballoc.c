@@ -5473,7 +5473,7 @@ out_dbg:
  *
  * FIXME!! Make sure it is valid at all the call sites
  */
-void ext4_discard_preallocations(struct inode *inode, unsigned int needed)
+void ext4_discard_preallocations(struct inode *inode)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct super_block *sb = inode->i_sb;
@@ -5495,15 +5495,12 @@ void ext4_discard_preallocations(struct inode *inode, unsigned int needed)
 	mb_debug(sb, "discard preallocation for inode %lu\n",
 		 inode->i_ino);
 	trace_ext4_discard_preallocations(inode,
-			atomic_read(&ei->i_prealloc_active), needed);
-
-	if (needed == 0)
-		needed = UINT_MAX;
+			atomic_read(&ei->i_prealloc_active), 0);
 
 repeat:
 	/* first, collect all pa's in the inode */
 	write_lock(&ei->i_prealloc_lock);
-	for (iter = rb_first(&ei->i_prealloc_node); iter && needed;
+	for (iter = rb_first(&ei->i_prealloc_node); iter;
 	     iter = rb_next(iter)) {
 		pa = rb_entry(iter, struct ext4_prealloc_space,
 			      pa_node.inode_node);
@@ -5527,7 +5524,6 @@ repeat:
 			spin_unlock(&pa->pa_lock);
 			rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
 			list_add(&pa->u.pa_tmp_list, &list);
-			needed--;
 			continue;
 		}
 
