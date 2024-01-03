@@ -1452,6 +1452,12 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 	/* Tell FUSE to split requests that exceed the virtqueue's size */
 	fc->max_pages_limit = min_t(unsigned int, fc->max_pages_limit,
 				    virtqueue_size - FUSE_HEADER_OVERHEAD);
+	/* copy_args_to_argbuf() uses kmalloc-ed memory as bounce buffer
+	 * for fuse args, so limit the total size of these args to prevent
+	 * the warning in __alloc_pages() and decrease the demand for large
+	 * contiguous pages.
+	 */
+	fc->max_nopage_rw = min(fc->max_nopage_rw, 256U << 10);
 
 	fsc->s_fs_info = fm;
 	sb = sget_fc(fsc, virtio_fs_test_super, set_anon_super_fc);

@@ -594,6 +594,9 @@ struct fuse_conn {
 	/** Constrain ->max_pages to this value during feature negotiation */
 	unsigned int max_pages_limit;
 
+	/** Maximum read/write size when there is no page in request */
+	unsigned int max_nopage_rw;
+
 	/** Input queue */
 	struct fuse_iqueue iq;
 

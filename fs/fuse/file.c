@@ -1422,6 +1422,16 @@ static int fuse_get_user_pages(struct fuse_args_pages *ap, struct iov_iter *ii,
 	return ret < 0 ? ret : 0;
 }
 
+static size_t fuse_max_dio_rw_size(const struct fuse_conn *fc,
+				   const struct iov_iter *iter, int write)
+{
+	unsigned int nmax = write ? fc->max_write : fc->max_read;
+
+	if (iov_iter_is_kvec(iter))
+		nmax = min(nmax, fc->max_nopage_rw);
+	return nmax;
+}
+
 ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 		       loff_t *ppos, int flags)
 {
@@ -1432,7 +1442,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 	struct inode *inode = mapping->host;
 	struct fuse_file *ff = file->private_data;
 	struct fuse_conn *fc = ff->fm->fc;
-	size_t nmax = write ? fc->max_write : fc->max_read;
+	size_t nmax = fuse_max_dio_rw_size(fc, iter, write);
 	loff_t pos = *ppos;
 	size_t count = iov_iter_count(iter);
 	pgoff_t idx_from = pos >> PAGE_SHIFT;
