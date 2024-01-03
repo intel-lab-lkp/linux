@@ -1362,11 +1362,12 @@ update_stats_dequeue_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se,
 		unsigned int state;
 
 		state = READ_ONCE(p->__state);
-		if (state & TASK_INTERRUPTIBLE)
+		/* idle state still accounts into sleep */
+		if (state & TASK_INTERRUPTIBLE || is_idle_state(state))
 			__schedstat_set(p->stats.sleep_start,
 					rq_clock(rq_of_rt_rq(rt_rq)));
 
-		if (state & TASK_UNINTERRUPTIBLE)
+		if (is_blocked_state(state))
 			__schedstat_set(p->stats.block_start,
 					rq_clock(rq_of_rt_rq(rt_rq)));
 	}

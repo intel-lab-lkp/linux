@@ -1666,11 +1666,12 @@ update_stats_dequeue_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se,
 		unsigned int state;
 
 		state = READ_ONCE(p->__state);
-		if (state & TASK_INTERRUPTIBLE)
+		/* idle state still accounts into sleep */
+		if (state & TASK_INTERRUPTIBLE || is_idle_state(state))
 			__schedstat_set(p->stats.sleep_start,
 					rq_clock(rq_of_dl_rq(dl_rq)));
 
-		if (state & TASK_UNINTERRUPTIBLE)
+		if (is_blocked_state(state))
 			__schedstat_set(p->stats.block_start,
 					rq_clock(rq_of_dl_rq(dl_rq)));
 	}
