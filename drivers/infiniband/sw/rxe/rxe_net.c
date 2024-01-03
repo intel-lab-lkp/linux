@@ -524,6 +524,7 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 {
 	int err;
 	struct rxe_dev *rxe = NULL;
+	struct rxe_port *port;
 
 	rxe = ib_alloc_device(rxe_dev, ib_dev);
 	if (!rxe)
@@ -535,6 +536,11 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 	if (err) {
 		ib_dealloc_device(&rxe->ib_dev);
 		return err;
+	}
+
+	if (netif_running(ndev) && netif_carrier_ok(ndev)) {
+		port = &rxe->port;
+		port->attr.state = IB_PORT_ACTIVE;
 	}
 
 	return 0;
