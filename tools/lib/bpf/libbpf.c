@@ -9830,6 +9830,29 @@ void *bpf_map__initial_value(struct bpf_map *map, size_t *psize)
 	return map->mmaped;
 }
 
+size_t bpf_map__mmap_size(const struct bpf_map *map)
+{
+	long page_sz = sysconf(_SC_PAGE_SIZE);
+	size_t map_sz;
+
+	map_sz = (size_t)roundup(bpf_map__value_size(map), 8) *
+		bpf_map__max_entries(map);
+	map_sz = roundup(map_sz, page_sz);
+	return map_sz;
+}
+
+void *bpf_map__mmap(const struct bpf_map *map)
+{
+	return mmap(NULL, bpf_map__mmap_size(map),
+		    PROT_READ | PROT_WRITE, MAP_SHARED,
+		    bpf_map__fd(map), 0);
+}
+
+int bpf_map__munmap(const struct bpf_map *map, void *addr)
+{
+	return munmap(addr, bpf_map__mmap_size(map));
+}
+
 bool bpf_map__is_internal(const struct bpf_map *map)
 {
 	return map->libbpf_type != LIBBPF_MAP_UNSPEC;
