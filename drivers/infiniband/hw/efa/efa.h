@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2018-2021 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #ifndef _EFA_H_
@@ -57,6 +57,7 @@ struct efa_dev {
 	u64 db_bar_addr;
 	u64 db_bar_len;
 
+	unsigned int num_irq_vectors;
 	int admin_msix_vector_idx;
 	struct efa_irq admin_irq;
 
