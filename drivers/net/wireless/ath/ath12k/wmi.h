@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef ATH12K_WMI_H
@@ -4795,6 +4795,11 @@ struct wmi_rfkill_state_change_event {
 	__le32 gpio_pin_num;
 	__le32 int_type;
 	__le32 radio_state;
+} __packed;
+
+struct wmi_twt_enable_event {
+	__le32 pdev_id;
+	__le32 status;
 } __packed;
 
 void ath12k_wmi_init_qcn9274(struct ath12k_base *ab,
