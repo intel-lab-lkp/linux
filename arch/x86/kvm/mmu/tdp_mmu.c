@@ -325,6 +325,7 @@ static void handle_removed_pt(struct kvm *kvm, tdp_ptep_t pt, bool shared)
 	int i;
 
 	trace_kvm_mmu_prepare_zap_page(sp);
+	++kvm->stat.mmu_shadow_zapped;
 
 	tdp_mmu_unlink_sp(kvm, sp, shared);
 
