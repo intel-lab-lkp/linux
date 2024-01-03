@@ -1542,8 +1542,8 @@ static int			sched_domains_numa_levels;
 static int			sched_domains_curr_level;
 
 int				sched_max_numa_distance;
-static int			*sched_domains_numa_distance;
-static struct cpumask		***sched_domains_numa_masks;
+static int			__rcu *sched_domains_numa_distance;
+static struct cpumask		** __rcu *sched_domains_numa_masks;
 #endif
 
 /*
