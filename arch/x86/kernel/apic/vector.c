@@ -738,7 +738,7 @@ int __init arch_probe_nr_irqs(void)
 void lapic_assign_legacy_vector(unsigned int irq, bool replace)
 {
 	/*
-	 * Use assign system here so it wont get accounted as allocated
+	 * Use assign system here so it won't get accounted as allocated
 	 * and moveable in the cpu hotplug check and it prevents managed
 	 * irq reservation from touching it.
 	 */
