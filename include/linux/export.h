@@ -15,13 +15,9 @@
  */
 
 #ifdef CONFIG_64BIT
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 8				ASM_NL	\
-	.quad sym
+#define __EXPORT_SYMBOL_PTR	.quad
 #else
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 4				ASM_NL	\
-	.long sym
+#define __EXPORT_SYMBOL_PTR	.long
 #endif
 
 #define ___EXPORT_SYMBOL(sym, license, ns)		\
@@ -29,7 +25,7 @@
 	__export_symbol_##sym:			ASM_NL	\
 		.asciz license			ASM_NL	\
 		.asciz ns			ASM_NL	\
-		__EXPORT_SYMBOL_REF(sym)	ASM_NL	\
+		__EXPORT_SYMBOL_PTR sym		ASM_NL	\
 	.previous
 
 #if defined(__DISABLE_EXPORTS)
