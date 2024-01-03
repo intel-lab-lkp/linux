@@ -258,7 +258,7 @@ init_io7_irqs(struct io7 *io7,
 	 * They really should be sent to the local CPU to avoid having to
 	 * traverse the mesh, but if it's not an SMP kernel, they have to
 	 * go to the boot CPU. Send them all to the boot CPU for now,
-	 * as each secondary starts, it can redirect it's local device 
+	 * as each secondary starts, it can redirect its local device
 	 * interrupts.
 	 */
 	printk("  Interrupts reported to CPU at PE %u\n", boot_cpuid);

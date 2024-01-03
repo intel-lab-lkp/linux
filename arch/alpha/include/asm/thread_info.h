@@ -20,7 +20,7 @@ struct thread_info {
 	unsigned int		ieee_state;	/* see fpu.h */
 
 	unsigned		cpu;		/* current CPU */
-	int			preempt_count; /* 0 => preemptable, <0 => BUG */
+	int			preempt_count; /* 0 => preemptible, <0 => BUG */
 	unsigned int		status;		/* thread-synchronous flags */
 
 	int bpt_nsaved;

@@ -32,7 +32,7 @@ struct el_subpacket_handler {
 #define SUBPACKET_HANDLER_INIT(c, h) {NULL, (c), (h)}
 
 /*
- * Manipulate a field from a register given it's name. defines
+ * Manipulate a field from a register given its name. defines
  * for the LSB (__S - shift count) and bitmask (__M) are required
  *
  * EXTRACT(u, f) - extracts the field and places it at bit position 0

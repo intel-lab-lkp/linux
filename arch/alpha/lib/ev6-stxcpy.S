@@ -129,7 +129,7 @@ __stxcpy:
 	ldq_u	t1, 0(a1)		# L : load first src word
 	and	a0, 7, t0		# E : take care not to load a word ...
 	addq	a1, 8, a1		# E :
-	beq	t0, stxcpy_aligned	# U : ... if we wont need it (stall)
+	beq	t0, stxcpy_aligned	# U : ... if we won't need it (stall)
 
 	ldq_u	t0, 0(a0)	# L :
 	br	stxcpy_aligned	# L0 : Latency=3

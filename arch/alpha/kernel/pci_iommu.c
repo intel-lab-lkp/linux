@@ -476,7 +476,7 @@ static void alpha_pci_free_coherent(struct device *dev, size_t size,
 	-1  : Not leader, physically adjacent to previous.
 	-2  : Not leader, virtually adjacent to previous.
    Write dma_length of each leader with the combined lengths of
-   the mergable followers.  */
+   the mergeable followers.  */
 
 #define SG_ENT_VIRT_ADDRESS(SG) (sg_virt((SG)))
 #define SG_ENT_PHYS_ADDRESS(SG) __pa(SG_ENT_VIRT_ADDRESS(SG))
@@ -495,7 +495,7 @@ sg_classify(struct device *dev, struct scatterlist *sg, struct scatterlist *end,
 	leader_length = leader->length;
 	next_paddr = SG_ENT_PHYS_ADDRESS(leader) + leader_length;
 
-	/* we will not marge sg without device. */
+	/* we will not merge sg without device. */
 	max_seg_size = dev ? dma_get_max_seg_size(dev) : 0;
 	for (++sg; sg < end; ++sg) {
 		unsigned long addr, len;

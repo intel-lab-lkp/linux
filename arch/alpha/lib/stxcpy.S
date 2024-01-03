@@ -109,7 +109,7 @@ __stxcpy:
 	ldq_u	t1, 0(a1)	# e0    : load first src word
 	and	a0, 7, t0	# .. e1 : take care not to load a word ...
 	addq	a1, 8, a1		# e0    :
-	beq	t0, stxcpy_aligned	# .. e1 : ... if we wont need it
+	beq	t0, stxcpy_aligned	# .. e1 : ... if we won't need it
 	ldq_u	t0, 0(a0)	# e0    :
 	br	stxcpy_aligned	# .. e1 :
 

@@ -179,7 +179,7 @@ miata_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
         };
 	const long min_idsel = 3, max_idsel = 20, irqs_per_slot = 5;
 	
-	/* the USB function of the 82c693 has it's interrupt connected to 
+	/* the USB function of the 82c693 has its interrupt connected to
            the 2nd 8259 controller. So we have to check for it first. */
 
 	if((slot == 7) && (PCI_FUNC(dev->devfn) == 3)) {

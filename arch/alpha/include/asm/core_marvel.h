@@ -279,7 +279,7 @@ union IO7_IID {
 #define IO7_DAC_OFFSET		(1UL << 49)
 
 /*
- * This is needed to satisify the IO() macro used in initializing the machvec
+ * This is needed to satisfy the IO() macro used in initializing the machvec
  */
 #define MARVEL_IACK_SC 							\
         ((unsigned long)						\

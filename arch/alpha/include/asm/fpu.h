@@ -73,7 +73,7 @@ static inline unsigned long
 swcr_update_status(unsigned long swcr, unsigned long fpcr)
 {
 	/* EV6 implements most of the bits in hardware.  Collect
-	   the acrued exception bits from the real fpcr.  */
+	   the accrued exception bits from the real fpcr.  */
 	if (implver() == IMPLVER_EV6) {
 		swcr &= ~IEEE_STATUS_MASK;
 		swcr |= (fpcr >> 35) & IEEE_STATUS_MASK;

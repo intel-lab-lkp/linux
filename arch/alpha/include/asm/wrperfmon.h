@@ -59,7 +59,7 @@
 
 
 /*
- * The Alpha Architecure Handbook, vers. 4 (1998) appears to have a misprint
+ * The Alpha Architecture Handbook, vers. 4 (1998) appears to have a misprint
  *  in Table E-23 regarding the bits that set the event PCTR 1 counts.
  *  Hopefully what we have here is correct.
  */

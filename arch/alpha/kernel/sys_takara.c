@@ -93,7 +93,7 @@ takara_device_interrupt(unsigned long vector)
 	if (intstatus) {
 		/*
 		 * This is a PCI interrupt. Check each bit and
-		 * despatch an interrupt if it's set.
+		 * dispatch an interrupt if it's set.
 		 */
 
 		if (intstatus & 8) handle_irq(16+3);

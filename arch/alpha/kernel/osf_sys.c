@@ -826,7 +826,7 @@ SYSCALL_DEFINE5(osf_setsysinfo, unsigned long, op, void __user *, buffer,
 
 		/* 
 		 * Alpha Architecture Handbook 4.7.7.3:
-		 * To be fully IEEE compiant, we must track the current IEEE
+		 * To be fully IEEE compliant, we must track the current IEEE
 		 * exception state in software, because spurious bits can be
 		 * set in the trap shadow of a software-complete insn.
 		 */
