@@ -660,7 +660,7 @@ static void noinstr el0_inv(struct pt_regs *regs, unsigned long esr)
 
 static void noinstr el0_dbg(struct pt_regs *regs, unsigned long esr)
 {
-	/* Only watchpoints write FAR_EL1, otherwise its UNKNOWN */
+	/* Only watchpoints write FAR_EL1, otherwise it's UNKNOWN */
 	unsigned long far = read_sysreg(far_el1);
 
 	enter_from_user_mode(regs);

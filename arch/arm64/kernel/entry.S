@@ -547,7 +547,7 @@ SYM_CODE_START_LOCAL(__bad_stack)
 	mrs	x0, tpidrro_el0
 
 	/*
-	 * Store the original GPRs to the new stack. The orginal SP (minus
+	 * Store the original GPRs to the new stack. The original SP (minus
 	 * PT_REGS_SIZE) was stashed in tpidr_el0 by kernel_ventry.
 	 */
 	sub	sp, sp, #PT_REGS_SIZE
