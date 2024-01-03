@@ -521,6 +521,7 @@ static int ice_setup_rx_ctx(struct ice_rx_ring *ring)
 
 static void ice_xsk_pool_fill_cb(struct ice_rx_ring *ring)
 {
+#ifdef CONFIG_XDP_SOCKETS
 	void *ctx_ptr = &ring->pkt_ctx;
 	struct xsk_cb_desc desc = {};
 
@@ -530,6 +531,7 @@ static void ice_xsk_pool_fill_cb(struct ice_rx_ring *ring)
 		   sizeof(struct xdp_buff);
 	desc.bytes = sizeof(ctx_ptr);
 	xsk_pool_fill_cb(ring->xsk_pool, &desc);
+#endif
 }
 
 /**
