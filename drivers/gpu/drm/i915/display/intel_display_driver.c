@@ -45,6 +45,7 @@
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
 #include "intel_hti.h"
+#include "intel_modeset_lock.h"
 #include "intel_modeset_setup.h"
 #include "intel_opregion.h"
 #include "intel_overlay.h"
@@ -276,6 +277,71 @@ cleanup_bios:
 	return ret;
 }
 
+static void set_display_access(struct drm_i915_private *i915,
+			       bool any_task_allowed,
+			       struct task_struct *allowed_task)
+{
+	struct drm_modeset_acquire_ctx ctx;
+	int err;
+
+	intel_modeset_lock_ctx_retry(&ctx, NULL, 0, err) {
+		err = drm_modeset_lock_all_ctx(&i915->drm, &ctx);
+		if (err)
+			continue;
+
+		i915->display.access.any_task_allowed = any_task_allowed;
+		i915->display.access.allowed_task = allowed_task;
+	}
+
+	drm_WARN_ON(&i915->drm, err);
+}
+
+void intel_display_driver_enable_user_access(struct drm_i915_private *i915)
+{
+	set_display_access(i915, true, NULL);
+}
+
+void intel_display_driver_disable_user_access(struct drm_i915_private *i915)
+{
+	set_display_access(i915, false, current);
+}
+
+void intel_display_driver_suspend_access(struct drm_i915_private *i915)
+{
+	set_display_access(i915, false, NULL);
+}
+
+void intel_display_driver_resume_access(struct drm_i915_private *i915)
+{
+	set_display_access(i915, false, current);
+}
+
+bool intel_display_driver_check_access(struct drm_i915_private *i915)
+{
+	char comm[TASK_COMM_LEN];
+	char current_task[TASK_COMM_LEN + 16];
+	char allowed_task[TASK_COMM_LEN + 16] = "none";
+
+	if (i915->display.access.any_task_allowed ||
+	    i915->display.access.allowed_task == current)
+		return true;
+
+	snprintf(current_task, sizeof(current_task), "%s[%d]",
+		 get_task_comm(comm, current),
+		 task_pid_vnr(current));
+
+	if (i915->display.access.allowed_task)
+		snprintf(allowed_task, sizeof(allowed_task), "%s[%d]",
+			 get_task_comm(comm, i915->display.access.allowed_task),
+			 task_pid_vnr(i915->display.access.allowed_task));
+
+	drm_dbg_kms(&i915->drm,
+		    "Reject display access from task %s (allowed to %s)\n",
+		    current_task, allowed_task);
+
+	return false;
+}
+
 /* part #2: call after irq install, but before gem init */
 int intel_display_driver_probe_nogem(struct drm_i915_private *i915)
 {
@@ -325,6 +391,8 @@ int intel_display_driver_probe_nogem(struct drm_i915_private *i915)
 	/* Just disable it once at startup */
 	intel_vga_disable(i915);
 	intel_setup_outputs(i915);
+
+	intel_display_driver_disable_user_access(i915);
 
 	drm_modeset_lock_all(dev);
 	intel_modeset_setup_hw_state(i915, dev->mode_config.acquire_ctx);
@@ -393,6 +461,8 @@ void intel_display_driver_register(struct drm_i915_private *i915)
 
 	intel_audio_init(i915);
 
+	intel_display_driver_enable_user_access(i915);
+
 	intel_display_debugfs_register(i915);
 
 	/*
@@ -439,6 +509,8 @@ void intel_display_driver_remove_noirq(struct drm_i915_private *i915)
 {
 	if (!HAS_DISPLAY(i915))
 		return;
+
+	intel_display_driver_suspend_access(i915);
 
 	/*
 	 * Due to the hpd irq storm handling the hotplug work can re-arm the
@@ -492,6 +564,8 @@ void intel_display_driver_unregister(struct drm_i915_private *i915)
 	 * the hotplug events.
 	 */
 	drm_kms_helper_poll_fini(&i915->drm);
+
+	intel_display_driver_disable_user_access(i915);
 
 	intel_audio_deinit(i915);
 
