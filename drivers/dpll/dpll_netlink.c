@@ -328,6 +328,8 @@ dpll_msg_add_pin_parents(struct sk_buff *msg, struct dpll_pin *pin,
 		void *parent_priv;
 
 		ppin = ref->pin;
+		if (!xa_get_mark(&dpll_pin_xa, ppin->id, DPLL_REGISTERED))
+			continue;
 		parent_priv = dpll_pin_on_dpll_priv(dpll_ref->dpll, ppin);
 		ret = ops->state_on_pin_get(pin,
 					    dpll_pin_on_pin_priv(ppin, pin),
