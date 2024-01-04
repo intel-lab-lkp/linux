@@ -429,6 +429,7 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 	       const struct dpll_pin_properties *prop)
 {
 	struct dpll_pin *pin;
+	size_t freq_size;
 	int ret;
 
 	pin = kzalloc(sizeof(*pin), GFP_KERNEL);
@@ -440,9 +441,22 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 	if (WARN_ON(prop->type < DPLL_PIN_TYPE_MUX ||
 		    prop->type > DPLL_PIN_TYPE_MAX)) {
 		ret = -EINVAL;
-		goto err;
+		goto pin_free;
 	}
-	pin->prop = prop;
+	memcpy(&pin->prop, prop, sizeof(pin->prop));
+	if (prop->freq_supported && prop->freq_supported_num) {
+		freq_size = prop->freq_supported_num *
+			    sizeof(*pin->prop.freq_supported);
+		pin->prop.freq_supported = kmemdup(prop->freq_supported,
+						   freq_size, GFP_KERNEL);
+		if (!pin->prop.freq_supported) {
+			ret = -ENOMEM;
+			goto pin_free;
+		}
+	}
+	pin->prop.board_label = kstrdup(prop->board_label, GFP_KERNEL);
+	pin->prop.panel_label = kstrdup(prop->panel_label, GFP_KERNEL);
+	pin->prop.package_label = kstrdup(prop->package_label, GFP_KERNEL);
 	refcount_set(&pin->refcount, 1);
 	xa_init_flags(&pin->dpll_refs, XA_FLAGS_ALLOC);
 	xa_init_flags(&pin->parent_refs, XA_FLAGS_ALLOC);
@@ -451,8 +465,13 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 		goto err;
 	return pin;
 err:
+	kfree(pin->prop.package_label);
+	kfree(pin->prop.panel_label);
+	kfree(pin->prop.board_label);
+	kfree(pin->prop.freq_supported);
 	xa_destroy(&pin->dpll_refs);
 	xa_destroy(&pin->parent_refs);
+pin_free:
 	kfree(pin);
 	return ERR_PTR(ret);
 }
@@ -512,6 +531,10 @@ void dpll_pin_put(struct dpll_pin *pin)
 		xa_destroy(&pin->dpll_refs);
 		xa_destroy(&pin->parent_refs);
 		xa_erase(&dpll_pin_xa, pin->id);
+		kfree(pin->prop.board_label);
+		kfree(pin->prop.panel_label);
+		kfree(pin->prop.package_label);
+		kfree(pin->prop.freq_supported);
 		kfree(pin);
 	}
 	mutex_unlock(&dpll_lock);
@@ -634,7 +657,7 @@ int dpll_pin_on_pin_register(struct dpll_pin *parent, struct dpll_pin *pin,
 	unsigned long i, stop;
 	int ret;
 
-	if (WARN_ON(parent->prop->type != DPLL_PIN_TYPE_MUX))
+	if (WARN_ON(parent->prop.type != DPLL_PIN_TYPE_MUX))
 		return -EINVAL;
 
 	if (WARN_ON(!ops) ||
