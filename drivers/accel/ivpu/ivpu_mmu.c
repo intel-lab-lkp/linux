@@ -898,13 +898,13 @@ void ivpu_mmu_irq_evtq_handler(struct ivpu_device *vdev)
 	while ((event = ivpu_mmu_get_event(vdev)) != NULL) {
 		ivpu_mmu_dump_event(vdev, event);
 		if (++event_count > IVPU_MMU_MAX_EVENT_COUNT) {
-			ivpu_pm_schedule_recovery(vdev);
+			ivpu_pm_trigger_recovery(vdev, "MMU event limit");
 			return;
 		}
 
 		ssid = FIELD_GET(IVPU_MMU_EVT_SSID_MASK, event[0]);
 		if (ssid == IVPU_GLOBAL_CONTEXT_MMU_SSID) {
-			ivpu_pm_schedule_recovery(vdev);
+			ivpu_pm_trigger_recovery(vdev, "MMU event");
 			return;
 		}
 
