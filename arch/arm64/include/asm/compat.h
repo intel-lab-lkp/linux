@@ -100,6 +100,11 @@ long compat_arm_syscall(struct pt_regs *regs, int scno);
 
 #else /* !CONFIG_COMPAT */
 
+static inline int is_compat_task(void)
+{
+	return 0;
+}
+
 static inline int is_compat_thread(struct thread_info *thread)
 {
 	return 0;
