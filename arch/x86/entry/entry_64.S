@@ -224,7 +224,7 @@ SYM_FUNC_END(__switch_to_asm)
 .pushsection .text, "ax"
 SYM_CODE_START(ret_from_fork_asm)
 	/*
-	 * This is the start of the kernel stack; even through there's a
+	 * This is the start of the kernel stack; even though there's a
 	 * register set at the top, the regset isn't necessarily coherent
 	 * (consider kthreads) and one cannot unwind further.
 	 *
