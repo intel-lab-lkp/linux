@@ -158,11 +158,13 @@ static int cxl_cdat_endpoint_process(struct cxl_port *port,
 	return cdat_table_parse_output(rc);
 }
 
+DEFINE_FREE(put_root_port, struct cxl_port *, put_cxl_root(_T))
+
 static int cxl_port_perf_data_calculate(struct cxl_port *port,
 					struct xarray *dsmas_xa)
 {
 	struct access_coordinate c;
-	struct cxl_port *root_port __free(put_device) = NULL;
+	struct cxl_port *root_port __free(put_root_port) = NULL;
 	struct cxl_root *cxl_root;
 	struct dsmas_entry *dent;
 	int valid_entries = 0;
@@ -352,7 +354,7 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 {
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
-	struct cxl_port *root_port __free(put_device) = NULL;
+	struct cxl_port *root_port __free(put_root_port) = NULL;
 	LIST_HEAD(__discard);
 	struct list_head *discard __free(dpa_perf) = &__discard;
 	int rc;

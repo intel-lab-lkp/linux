@@ -71,7 +71,7 @@ struct cxl_nvdimm_bridge *cxl_find_nvdimm_bridge(struct cxl_memdev *cxlmd)
 		return NULL;
 
 	dev = device_find_child(&port->dev, NULL, match_nvdimm_bridge);
-	put_device(&port->dev);
+	put_cxl_root(port);
 
 	if (!dev)
 		return NULL;

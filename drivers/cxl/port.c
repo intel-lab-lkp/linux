@@ -137,7 +137,7 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 * assemble regions from committed decoders
 	 */
 	device_for_each_child(&port->dev, root, discover_region);
-	put_device(&root->dev);
+	put_cxl_root(root);
 
 	return 0;
 }
