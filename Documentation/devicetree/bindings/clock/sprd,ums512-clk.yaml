@@ -30,24 +30,37 @@ properties:
       - sprd,ums512-mm-clk
       - sprd,ums512-mm-gate-clk
       - sprd,ums512-apapb-gate
+      - sprd,ums9620-pmu-gate
+      - sprd,ums9620-g1-pll
+      - sprd,ums9620-g5l-pll
+      - sprd,ums9620-g5r-pll
+      - sprd,ums9620-g8-pll
+      - sprd,ums9620-g9-pll
+      - sprd,ums9620-g10-pll
+      - sprd,ums9620-apapb-gate
+      - sprd,ums9620-ap-clk
+      - sprd,ums9620-apahb-gate
+      - sprd,ums9620-aon-gate
+      - sprd,ums9620-aonapb-clk
+      - sprd,ums9620-topdvfs-clk
+      - sprd,ums9620-ipaapb-gate
+      - sprd,ums9620-ipa-clk
+      - sprd,ums9620-ipaglb-gate
+      - sprd,ums9620-ipadispc-gate
+      - sprd,ums9620-pcieapb-gate
+      - sprd,ums9620-pcie-clk
+      - sprd,ums9620-mm-gate
+      - sprd,ums9620-mm-clk
+      - sprd,ums9620-dpu-vsp-gate
+      - sprd,ums9620-dpu-vsp-clk
 
   "#clock-cells":
     const: 1
 
   clocks:
-    minItems: 1
-    maxItems: 4
     description: |
       The input parent clock(s) phandle for the clock, only list
       fixed clocks which are declared in devicetree.
-
-  clock-names:
-    minItems: 1
-    items:
-      - const: ext-26m
-      - const: ext-32k
-      - const: ext-4m
-      - const: rco-100m
 
   reg:
     maxItems: 1
@@ -57,7 +70,43 @@ required:
   - '#clock-cells'
   - reg
 
-additionalProperties: false
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            pattern: "^sprd,ums512-.*"
+
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 4
+
+        clock-names:
+          minItems: 1
+          items:
+            - const: ext-26m
+            - const: ext-32k
+            - const: ext-4m
+            - const: rco-100m
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            pattern: "^sprd,ums9620-.*"
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 6
+
+        clock-names:
+          minItems: 1
+          maxItems: 6
+
+unevaluatedProperties: false
 
 examples:
   - |
@@ -66,6 +115,14 @@ examples:
       reg = <0x20200000 0x1000>;
       clocks = <&ext_26m>;
       clock-names = "ext-26m";
+      #clock-cells = <1>;
+    };
+
+    aonapb_gate: clock-controller@0 {
+      compatible = "sprd,ums9620-aon-gate";
+      reg = <0x0 0x3000>;
+      clocks = <&ext_26m>, <&ext_32k>, <&rco_60m>;
+      clock-names = "ext-26m", "ext-32k", "rco-60m";
       #clock-cells = <1>;
     };
 ...
