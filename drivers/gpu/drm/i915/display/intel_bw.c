@@ -213,6 +213,7 @@ static int icl_get_qgv_points(struct drm_i915_private *dev_priv,
 			      bool is_y_tile)
 {
 	const struct dram_info *dram_info = &dev_priv->dram_info;
+	u32 val = 0x00, val2 = 0;
 	int i, ret;
 
 	qi->num_points = dram_info->num_qgv_points;
@@ -311,6 +312,11 @@ static int icl_get_qgv_points(struct drm_i915_private *dev_priv,
 				    "PSF GV %d: CLK=%d \n",
 				    i, qi->psf_points[i].clk);
 	}
+
+	/* clear the QGV points mask set by the GOP driver while booting */
+	ret = snb_pcode_read(&dev_priv->uncore, ICL_PCODE_SAGV_DE_MEM_SS_CONFIG, &val, &val2);
+	if (ret)
+		return ret;
 
 	return 0;
 }
