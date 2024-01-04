@@ -176,6 +176,9 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 	}
 
 	root_port = find_cxl_root(port);
+	if (!root_port)
+		return -ENODEV;
+
 	cxl_root = to_cxl_root(root_port);
 	if (!cxl_root->ops || !cxl_root->ops->qos_class)
 		return -EOPNOTSUPP;
