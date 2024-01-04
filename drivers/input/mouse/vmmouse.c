@@ -63,6 +63,8 @@
 #define VMMOUSE_VENDOR "VMware"
 #define VMMOUSE_NAME   "VMMouse"
 
+#define VMMOUSE_PHYS_NAME_POSTFIX_STR "/input1"
+
 /**
  * struct vmmouse_data - private data structure for the vmmouse driver
  *
@@ -72,7 +74,8 @@
  */
 struct vmmouse_data {
 	struct input_dev *abs_dev;
-	char phys[32];
+	char phys[sizeof_field(struct serio, phys) +
+		  strlen(VMMOUSE_PHYS_NAME_POSTFIX_STR)];
 	char dev_name[128];
 };
 
@@ -452,7 +455,8 @@ int vmmouse_init(struct psmouse *psmouse)
 	psmouse->private = priv;
 
 	/* Set up and register absolute device */
-	snprintf(priv->phys, sizeof(priv->phys), "%s/input1",
+	snprintf(priv->phys, sizeof(priv->phys),
+		 "%s" VMMOUSE_PHYS_NAME_POSTFIX_STR,
 		 psmouse->ps2dev.serio->phys);
 
 	/* Mimic name setup for relative device in psmouse-base.c */
