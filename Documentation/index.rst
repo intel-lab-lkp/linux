@@ -28,30 +28,14 @@ community and getting your work upstream.
    maintainer/index
    All development-process docs <process/index>
 
-
-Internal API manuals
-====================
-
-Manuals for use by developers working to interface with the rest of the
-kernel.
-
-.. toctree::
-   :maxdepth: 1
-
-   core-api/index
-   driver-api/index
-   subsystem-apis
-   Locking in the kernel <locking/index>
-
-Development tools and processes
+Development tools and resources
 ===============================
 
-Various other manuals with useful information for all kernel developers.
+Various tools and manuals with useful information for all kernel developers.
 
 .. toctree::
    :maxdepth: 1
 
-   process/license-rules
    doc-guide/index
    dev-tools/index
    dev-tools/testing-overview
@@ -80,6 +64,20 @@ developers seeking information on the kernel's user-space APIs.
 
 See also: the `Linux man pages <https://www.kernel.org/doc/man-pages/>`_,
 which are kept separately from the kernel's own documentation.
+
+Internal API manuals
+====================
+
+Manuals for use by developers working to interface with the rest of the
+kernel.
+
+.. toctree::
+   :maxdepth: 1
+
+   core-api/index
+   driver-api/index
+   subsystem-apis
+   Locking in the kernel <locking/index>
 
 Firmware-related documentation
 ==============================
