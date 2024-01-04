@@ -17,6 +17,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_dma.h>
+#include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_managed.h>
@@ -172,6 +173,7 @@ static const struct drm_driver imx_drm_driver = {
 	.major			= 1,
 	.minor			= 0,
 	.patchlevel		= 0,
+	.get_scanout_buffer	= drm_panic_gem_get_scanout_buffer,
 };
 
 static int compare_of(struct device *dev, void *data)
