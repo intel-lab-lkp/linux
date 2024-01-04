@@ -275,6 +275,15 @@
 #define HALO_MPU_VIO_ERR_SRC_MASK           0x00007fff
 #define HALO_MPU_VIO_ERR_SRC_SHIFT                   0
 
+/*
+ * Write Sequencer
+ */
+#define WSEQ_OP_FULL_WORDS	3
+#define WSEQ_OP_X16_WORDS	2
+#define WSEQ_OP_END_WORDS	1
+#define WSEQ_OP_UNLOCK_WORDS	1
+#define WSEQ_END_OF_SCRIPT	0xFFFFFF
+
 struct cs_dsp_ops {
 	bool (*validate_version)(struct cs_dsp *dsp, unsigned int version);
 	unsigned int (*parse_sizes)(struct cs_dsp *dsp,
@@ -2233,6 +2242,111 @@ static int cs_dsp_create_name(struct cs_dsp *dsp)
 	return 0;
 }
 
+struct cs_dsp_wseq_op {
+	struct list_head list;
+	u32 words[3];
+	u32 address;
+	u32 data;
+	u16 offset;
+	u8 operation;
+};
+
+static int cs_dsp_populate_wseq(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq)
+{
+	struct cs_dsp_wseq_op *op = NULL;
+	struct cs_dsp_chunk ch;
+	int i, num_words, ret;
+	u32 *words;
+
+	if (wseq->size <= 0 || !wseq->reg)
+		return -EINVAL;
+
+	words = kcalloc(wseq->size, sizeof(u32), GFP_KERNEL);
+	if (!words)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&wseq->ops);
+
+	ret = regmap_raw_read(dsp->regmap, wseq->reg, words,
+			      wseq->size * sizeof(u32));
+	if (ret)
+		goto err_free;
+
+	ch = cs_dsp_chunk(words, wseq->size * sizeof(u32));
+
+	for (i = 0; i < wseq->size; i += num_words) {
+		op = devm_kzalloc(dsp->dev, sizeof(*op), GFP_KERNEL);
+		if (!op) {
+			ret = -ENOMEM;
+			goto err_free;
+		}
+
+		op->offset = ch.bytes;
+		op->operation = cs_dsp_chunk_read(&ch, 8);
+
+		switch (op->operation) {
+		case CS_DSP_WSEQ_END:
+			num_words = WSEQ_OP_END_WORDS;
+			break;
+		case CS_DSP_WSEQ_UNLOCK:
+			num_words = WSEQ_OP_UNLOCK_WORDS;
+			op->address = 0;
+			op->data = cs_dsp_chunk_read(&ch, 16);
+			break;
+		case CS_DSP_WSEQ_ADDR8:
+		case CS_DSP_WSEQ_H16:
+		case CS_DSP_WSEQ_L16:
+			num_words = WSEQ_OP_X16_WORDS;
+			op->address = cs_dsp_chunk_read(&ch, 24);
+			op->data = cs_dsp_chunk_read(&ch, 16);
+			break;
+		case CS_DSP_WSEQ_FULL:
+			num_words = WSEQ_OP_FULL_WORDS;
+			op->address = cs_dsp_chunk_read(&ch, 32);
+			op->data = cs_dsp_chunk_read(&ch, 32);
+			break;
+		default:
+			ret = -EINVAL;
+			cs_dsp_err(dsp, "Unsupported op: %u\n", op->operation);
+			goto err_free;
+		}
+
+		list_add(&op->list, &wseq->ops);
+
+		if (op->operation == CS_DSP_WSEQ_END)
+			break;
+	}
+
+	if (op && op->operation != CS_DSP_WSEQ_END)
+		ret = -ENOENT;
+err_free:
+	kfree(words);
+
+	return ret;
+}
+
+/**
+ * cs_dsp_wseq_init() - Initialize write sequences contained within the loaded DSP firmware
+ * @dsp: pointer to DSP structure
+ * @wseqs: list of write sequences to initialize
+ * @num_wseqs: number of write sequences to initialize
+ *
+ * Return: Zero for success, a negative number on error.
+ */
+int cs_dsp_wseq_init(struct cs_dsp *dsp, struct cs_dsp_wseq *wseqs, unsigned int num_wseqs)
+{
+	int i, ret;
+
+	for (i = 0; i < num_wseqs; i++) {
+		ret = cs_dsp_populate_wseq(dsp, &wseqs[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cs_dsp_wseq_init);
+
 static int cs_dsp_common_init(struct cs_dsp *dsp)
 {
 	int ret;
@@ -3338,6 +3452,153 @@ int cs_dsp_chunk_read(struct cs_dsp_chunk *ch, int nbits)
 	return result;
 }
 EXPORT_SYMBOL_NS_GPL(cs_dsp_chunk_read, FW_CS_DSP);
+
+static struct cs_dsp_wseq_op *cs_dsp_wseq_find_op(u8 op_code, u32 addr,
+						  struct list_head *wseq_ops)
+{
+	struct cs_dsp_wseq_op *op;
+
+	list_for_each_entry(op, wseq_ops, list) {
+		if (op->operation == op_code && op->address == addr)
+			return op;
+	}
+
+	return NULL;
+}
+
+/**
+ * cs_dsp_wseq_write() - Add or update an entry in a write sequence
+ * @dsp: Pointer to a DSP structure
+ * @wseq: Write sequence to write to
+ * @addr: Address of the register to be written to
+ * @data: Data to be written
+ * @update: If true, searches for the first entry in the Write Sequencer with
+ * the same address and op_code, and replaces it. If false, creates a new entry
+ * at the tail.
+ * @op_code: The type of operation of the new entry
+ *
+ * This function formats register address and value pairs into the format
+ * required for write sequence entries, and either updates or adds the
+ * new entry into the write sequence.
+ *
+ * Return: Zero for success, a negative number on error.
+ */
+int cs_dsp_wseq_write(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq,
+		      u32 addr, u32 data, bool update, u8 op_code)
+{
+	struct cs_dsp_wseq_op *op_end, *op_new;
+	struct cs_dsp_chunk ch;
+	u32 wseq_bytes;
+	int new_op_size, ret;
+
+	if (update) {
+		op_new = cs_dsp_wseq_find_op(op_code, addr, &wseq->ops);
+		if (!op_new)
+			return -EINVAL;
+	} else {
+		op_new = devm_kzalloc(dsp->dev, sizeof(*op_new), GFP_KERNEL);
+		if (!op_new)
+			return -ENOMEM;
+
+		op_new->operation = op_code;
+		op_new->address = addr;
+	}
+
+	op_new->data = data;
+
+	ch = cs_dsp_chunk((void *) op_new->words,
+			  WSEQ_OP_FULL_WORDS * sizeof(u32));
+	cs_dsp_chunk_write(&ch, 8, op_new->operation);
+	switch (op_code) {
+	case CS_DSP_WSEQ_FULL:
+		cs_dsp_chunk_write(&ch, 32, op_new->address);
+		cs_dsp_chunk_write(&ch, 32, op_new->data);
+		break;
+	case CS_DSP_WSEQ_L16:
+	case CS_DSP_WSEQ_H16:
+		cs_dsp_chunk_write(&ch, 24, op_new->address);
+		cs_dsp_chunk_write(&ch, 16, op_new->data);
+		break;
+	default:
+		ret = -EINVAL;
+		goto op_new_free;
+	}
+
+	new_op_size = cs_dsp_chunk_bytes(&ch);
+
+	op_end = cs_dsp_wseq_find_op(CS_DSP_WSEQ_END, 0, &wseq->ops);
+	if (!op_end) {
+		cs_dsp_err(dsp, "Missing write sequencer list terminator\n");
+		ret = -EINVAL;
+		goto op_new_free;
+	}
+
+	wseq_bytes = wseq->size * sizeof(u32);
+
+	if (wseq_bytes - op_end->offset < new_op_size) {
+		cs_dsp_err(dsp, "Not enough memory in Write Sequencer for entry\n");
+		ret = -ENOMEM;
+		goto op_new_free;
+	}
+
+	if (!update) {
+		op_new->offset = op_end->offset;
+		op_end->offset += new_op_size;
+	}
+
+	ret = regmap_raw_write(dsp->regmap, wseq->reg + op_new->offset,
+			       op_new->words, new_op_size);
+	if (ret)
+		goto op_new_free;
+
+	if (!update) {
+		ret = regmap_write(dsp->regmap, wseq->reg + op_end->offset,
+				   WSEQ_END_OF_SCRIPT);
+		if (ret)
+			goto op_new_free;
+
+		list_add(&op_new->list, &wseq->ops);
+	}
+
+	return 0;
+
+op_new_free:
+	devm_kfree(dsp->dev, op_new);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cs_dsp_wseq_write);
+
+/**
+ * cs_dsp_wseq_multi_write() - Add or update multiple entries in the write sequence
+ * @dsp: Pointer to a DSP structure
+ * @wseq: Write sequence to write to
+ * @reg_seq: List of address-data pairs
+ * @num_regs: Number of address-data pairs
+ * @update: If true, searches for the first entry in the write sequence with the same
+ * address and op code, and replaces it. If false, creates a new entry at the tail.
+ * @op_code: The types of operations of the new entries
+ *
+ * This function calls cs_dsp_wseq_write() for multiple address-data pairs.
+ *
+ * Return: Zero for success, a negative number on error.
+ */
+int cs_dsp_wseq_multi_write(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq,
+			    const struct reg_sequence *reg_seq,
+			    int num_regs, bool update, u8 op_code)
+{
+	int ret, i;
+
+	for (i = 0; i < num_regs; i++) {
+		ret = cs_dsp_wseq_write(dsp, wseq, reg_seq[i].reg,
+					reg_seq[i].def, update, op_code);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cs_dsp_wseq_multi_write);
 
 MODULE_DESCRIPTION("Cirrus Logic DSP Support");
 MODULE_AUTHOR("Simon Trimmer <simont@opensource.cirrus.com>");
