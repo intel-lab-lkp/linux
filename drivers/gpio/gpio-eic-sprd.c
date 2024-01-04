@@ -52,10 +52,10 @@
 #define SPRD_EIC_SYNC_DATA		0x1c
 
 /*
- * The digital-chip EIC controller can support maximum 3 banks, and each bank
+ * The digital-chip EIC controller can support maximum 8 banks, and each bank
  * contains 8 EICs.
  */
-#define SPRD_EIC_MAX_BANK		3
+#define SPRD_EIC_MAX_BANK		8
 #define SPRD_EIC_PER_BANK_NR		8
 #define SPRD_EIC_DATA_MASK		GENMASK(7, 0)
 #define SPRD_EIC_BIT(x)			((x) & (SPRD_EIC_PER_BANK_NR - 1))
@@ -627,9 +627,9 @@ static int sprd_eic_probe(struct platform_device *pdev)
 
 	for (i = 0; i < SPRD_EIC_MAX_BANK; i++) {
 		/*
-		 * We can have maximum 3 banks EICs, and each EIC has
+		 * We can have maximum 8 banks EICs, and each EIC has
 		 * its own base address. But some platform maybe only
-		 * have one bank EIC, thus base[1] and base[2] can be
+		 * have one bank EIC, thus base[1] to base[7] can be
 		 * optional.
 		 */
 		res = platform_get_resource(pdev, IORESOURCE_MEM, i);
