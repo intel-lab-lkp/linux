@@ -34,7 +34,7 @@
 static int iio_gts_get_gain(const u64 max, const u64 scale)
 {
 	u64 full = max;
-	int tmp = 1;
+	int tmp = 0;
 
 	if (scale > full || !scale)
 		return -EINVAL;
@@ -48,8 +48,7 @@ static int iio_gts_get_gain(const u64 max, const u64 scale)
 		tmp++;
 	}
 
-	while (full > scale * (u64)tmp)
-		tmp++;
+	tmp += div64_u64(full, scale);
 
 	return tmp;
 }
