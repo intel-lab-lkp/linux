@@ -1684,6 +1684,8 @@ static vm_fault_t dax_fault_iter(struct vm_fault *vmf,
 	if (dax_fault_is_synchronous(iter, vmf->vma))
 		return dax_fault_synchronous_pfnp(pfnp, pfn);
 
+	trace_dax_insert_entry(iter->inode, vmf, *entry);
+
 	/* insert PMD pfn */
 	if (pmd)
 		return vmf_insert_pfn_pmd(vmf, pfn, write);

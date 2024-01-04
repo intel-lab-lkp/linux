@@ -62,15 +62,14 @@ DEFINE_PMD_FAULT_EVENT(dax_pmd_fault_done);
 
 DECLARE_EVENT_CLASS(dax_pmd_load_hole_class,
 	TP_PROTO(struct inode *inode, struct vm_fault *vmf,
-		struct page *zero_page,
-		void *radix_entry),
-	TP_ARGS(inode, vmf, zero_page, radix_entry),
+		struct page *zero_page, void *xa_entry),
+	TP_ARGS(inode, vmf, zero_page, xa_entry),
 	TP_STRUCT__entry(
 		__field(unsigned long, ino)
 		__field(unsigned long, vm_flags)
 		__field(unsigned long, address)
 		__field(struct page *, zero_page)
-		__field(void *, radix_entry)
+		__field(void *, xa_entry)
 		__field(dev_t, dev)
 	),
 	TP_fast_assign(
@@ -79,40 +78,40 @@ DECLARE_EVENT_CLASS(dax_pmd_load_hole_class,
 		__entry->vm_flags = vmf->vma->vm_flags;
 		__entry->address = vmf->address;
 		__entry->zero_page = zero_page;
-		__entry->radix_entry = radix_entry;
+		__entry->xa_entry = xa_entry;
 	),
 	TP_printk("dev %d:%d ino %#lx %s address %#lx zero_page %p "
-			"radix_entry %#lx",
+			"xa_entry %#lx",
 		MAJOR(__entry->dev),
 		MINOR(__entry->dev),
 		__entry->ino,
 		__entry->vm_flags & VM_SHARED ? "shared" : "private",
 		__entry->address,
 		__entry->zero_page,
-		(unsigned long)__entry->radix_entry
+		(unsigned long)__entry->xa_entry
 	)
 )
 
 #define DEFINE_PMD_LOAD_HOLE_EVENT(name) \
 DEFINE_EVENT(dax_pmd_load_hole_class, name, \
 	TP_PROTO(struct inode *inode, struct vm_fault *vmf, \
-		struct page *zero_page, void *radix_entry), \
-	TP_ARGS(inode, vmf, zero_page, radix_entry))
+		struct page *zero_page, void *xa_entry), \
+	TP_ARGS(inode, vmf, zero_page, xa_entry))
 
 DEFINE_PMD_LOAD_HOLE_EVENT(dax_pmd_load_hole);
 DEFINE_PMD_LOAD_HOLE_EVENT(dax_pmd_load_hole_fallback);
 
 DECLARE_EVENT_CLASS(dax_pmd_insert_mapping_class,
 	TP_PROTO(struct inode *inode, struct vm_fault *vmf,
-		long length, pfn_t pfn, void *radix_entry),
-	TP_ARGS(inode, vmf, length, pfn, radix_entry),
+		long length, pfn_t pfn, void *xa_entry),
+	TP_ARGS(inode, vmf, length, pfn, xa_entry),
 	TP_STRUCT__entry(
 		__field(unsigned long, ino)
 		__field(unsigned long, vm_flags)
 		__field(unsigned long, address)
 		__field(long, length)
 		__field(u64, pfn_val)
-		__field(void *, radix_entry)
+		__field(void *, xa_entry)
 		__field(dev_t, dev)
 		__field(int, write)
 	),
@@ -124,10 +123,10 @@ DECLARE_EVENT_CLASS(dax_pmd_insert_mapping_class,
 		__entry->write = vmf->flags & FAULT_FLAG_WRITE;
 		__entry->length = length;
 		__entry->pfn_val = pfn.val;
-		__entry->radix_entry = radix_entry;
+		__entry->xa_entry = xa_entry;
 	),
 	TP_printk("dev %d:%d ino %#lx %s %s address %#lx length %#lx "
-			"pfn %#llx %s radix_entry %#lx",
+			"pfn %#llx %s xa_entry %#lx",
 		MAJOR(__entry->dev),
 		MINOR(__entry->dev),
 		__entry->ino,
@@ -138,15 +137,15 @@ DECLARE_EVENT_CLASS(dax_pmd_insert_mapping_class,
 		__entry->pfn_val & ~PFN_FLAGS_MASK,
 		__print_flags_u64(__entry->pfn_val & PFN_FLAGS_MASK, "|",
 			PFN_FLAGS_TRACE),
-		(unsigned long)__entry->radix_entry
+		(unsigned long)__entry->xa_entry
 	)
 )
 
 #define DEFINE_PMD_INSERT_MAPPING_EVENT(name) \
 DEFINE_EVENT(dax_pmd_insert_mapping_class, name, \
 	TP_PROTO(struct inode *inode, struct vm_fault *vmf, \
-		long length, pfn_t pfn, void *radix_entry), \
-	TP_ARGS(inode, vmf, length, pfn, radix_entry))
+		long length, pfn_t pfn, void *xa_entry), \
+	TP_ARGS(inode, vmf, length, pfn, xa_entry))
 
 DEFINE_PMD_INSERT_MAPPING_EVENT(dax_pmd_insert_mapping);
 
@@ -194,14 +193,14 @@ DEFINE_PTE_FAULT_EVENT(dax_load_hole);
 DEFINE_PTE_FAULT_EVENT(dax_insert_pfn_mkwrite_no_entry);
 DEFINE_PTE_FAULT_EVENT(dax_insert_pfn_mkwrite);
 
-TRACE_EVENT(dax_insert_mapping,
-	TP_PROTO(struct inode *inode, struct vm_fault *vmf, void *radix_entry),
-	TP_ARGS(inode, vmf, radix_entry),
+TRACE_EVENT(dax_insert_entry,
+	TP_PROTO(struct inode *inode, struct vm_fault *vmf, void *xa_entry),
+	TP_ARGS(inode, vmf, xa_entry),
 	TP_STRUCT__entry(
 		__field(unsigned long, ino)
 		__field(unsigned long, vm_flags)
 		__field(unsigned long, address)
-		__field(void *, radix_entry)
+		__field(void *, xa_entry)
 		__field(dev_t, dev)
 		__field(int, write)
 	),
@@ -211,16 +210,16 @@ TRACE_EVENT(dax_insert_mapping,
 		__entry->vm_flags = vmf->vma->vm_flags;
 		__entry->address = vmf->address;
 		__entry->write = vmf->flags & FAULT_FLAG_WRITE;
-		__entry->radix_entry = radix_entry;
+		__entry->xa_entry = xa_entry;
 	),
-	TP_printk("dev %d:%d ino %#lx %s %s address %#lx radix_entry %#lx",
+	TP_printk("dev %d:%d ino %#lx %s %s address %#lx xa_entry %#lx",
 		MAJOR(__entry->dev),
 		MINOR(__entry->dev),
 		__entry->ino,
 		__entry->vm_flags & VM_SHARED ? "shared" : "private",
 		__entry->write ? "write" : "read",
 		__entry->address,
-		(unsigned long)__entry->radix_entry
+		(unsigned long)__entry->xa_entry
 	)
 )
 
