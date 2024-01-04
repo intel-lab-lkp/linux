@@ -162,7 +162,6 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 					struct xarray *dsmas_xa)
 {
 	struct access_coordinate c;
-	struct cxl_port *root_port;
 	struct cxl_root *cxl_root;
 	struct dsmas_entry *dent;
 	int valid_entries = 0;
@@ -175,7 +174,8 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 		return rc;
 	}
 
-	root_port = find_cxl_root(port);
+	struct cxl_port *root_port __free(put_device) = find_cxl_root(port);
+
 	if (!root_port)
 		return -ENODEV;
 
