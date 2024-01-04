@@ -10,10 +10,28 @@ maintainers:
   - Miquel Raynal <miquel.raynal@bootlin.com>
   - Richard Weinberger <richard@nod.at>
 
-properties:
-  $nodename:
-    pattern: "^(flash|.*sram|nand)(@.*)?$"
+select:
+  if:
+    properties:
+      $nodename:
+        pattern: "^.*sram(@.*)?$"
+  then:
+    properties:
+      compatible:
+        enum:
+          - arm,vexpress-psram
+          - cypress,cy7c1019dv33-10zsxi
+          - microchip,48l640
+          - mtd-ram
+  else:
+    properties:
+      $nodename:
+        pattern: "^(flash|nand)(@.*)?$"
 
+  required:
+    - $nodename
+
+properties:
   label:
     description:
       User-defined MTD device name. Can be used to assign user friendly
