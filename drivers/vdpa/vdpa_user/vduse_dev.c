@@ -28,6 +28,7 @@
 #include <uapi/linux/virtio_config.h>
 #include <uapi/linux/virtio_ids.h>
 #include <uapi/linux/virtio_blk.h>
+#include <uapi/linux/virtio_ring.h>
 #include <linux/mod_devicetable.h>
 
 #include "iova_domain.h"
@@ -45,6 +46,15 @@
 #define VDUSE_MSG_DEFAULT_TIMEOUT 30
 
 #define IRQ_UNBOUND -1
+
+#define VDUSE_NET_INVALID_FEATURES_MASK         \
+	(BIT_ULL(VIRTIO_NET_F_CTRL_VQ) |        \
+	 BIT_ULL(VIRTIO_NET_F_CTRL_RX)   |      \
+	 BIT_ULL(VIRTIO_NET_F_CTRL_VLAN) |      \
+	 BIT_ULL(VIRTIO_NET_F_GUEST_ANNOUNCE) | \
+	 BIT_ULL(VIRTIO_NET_F_MQ) |             \
+	 BIT_ULL(VIRTIO_NET_F_CTRL_MAC_ADDR) |  \
+	 BIT_ULL(VIRTIO_NET_F_RSS))
 
 struct vduse_virtqueue {
 	u16 index;
@@ -1679,6 +1689,9 @@ static bool features_is_valid(struct vduse_dev_config *config)
 	/* Now we only support read-only configuration space */
 	if ((config->device_id == VIRTIO_ID_BLOCK) &&
 			(config->features & (1ULL << VIRTIO_BLK_F_CONFIG_WCE)))
+		return false;
+	else if ((config->device_id == VIRTIO_ID_NET) &&
+			(config->features & VDUSE_NET_INVALID_FEATURES_MASK))
 		return false;
 
 	return true;
