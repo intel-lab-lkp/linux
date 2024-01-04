@@ -2056,11 +2056,9 @@ int m_can_class_register(struct m_can_classdev *cdev)
 {
 	int ret;
 
-	if (cdev->pm_clock_support) {
-		ret = m_can_clk_start(cdev);
-		if (ret)
-			return ret;
-	}
+	ret = m_can_clk_start(cdev);
+	if (ret)
+		return ret;
 
 	if (cdev->is_peripheral) {
 		ret = can_rx_offload_add_manual(cdev->net, &cdev->offload,
