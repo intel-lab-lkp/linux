@@ -295,10 +295,11 @@ out:
 	return rc;
 }
 
-static int cxl_acpi_qos_class(struct cxl_port *root_port,
+static int cxl_acpi_qos_class(struct cxl_root *cxl_root,
 			      struct access_coordinate *coord, int entries,
 			      int *qos_class)
 {
+	struct cxl_port *root_port = &cxl_root->port;
 	acpi_handle handle;
 	struct device *dev;
 
