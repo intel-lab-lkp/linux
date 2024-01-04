@@ -8,13 +8,11 @@
  */
 
 #include <linux/init.h>
-#include <linux/smp.h>
-#include <linux/kernel.h>
-#include <linux/mm_types.h>
-#include <linux/elf.h>
+#include <linux/kstrtox.h>
+#include <linux/printk.h>
+#include <linux/stddef.h>
 
-#include <asm/processor.h>
-#include <asm/vdso.h>
+#include <asm/cache.h>
 
 #ifdef CONFIG_COMPAT_VDSO
 #define VDSO_DEFAULT	0
