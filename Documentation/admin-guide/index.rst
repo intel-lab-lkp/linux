@@ -48,15 +48,6 @@ problems and bugs in particular.
    pstore-blk
 
 This is the beginning of a section with information of interest to
-application developers.  Documents covering various aspects of the kernel
-ABI will be found here.
-
-.. toctree::
-   :maxdepth: 1
-
-   sysfs-rules
-
-This is the beginning of a section with information of interest to
 application developers and system integrators doing analysis of the
 Linux kernel for safety critical applications. Documents supporting
 analysis of kernel interactions with applications, and key kernel

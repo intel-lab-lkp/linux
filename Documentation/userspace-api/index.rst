@@ -9,8 +9,16 @@ While much of the kernel's user-space API is documented elsewhere
 also be found in the kernel tree itself.  This manual is intended to be the
 place where this information is gathered.
 
+General documentation:
+
 .. toctree::
-   :caption: Table of contents
+   :maxdepth: 1
+
+   sysfs-rules
+
+Subsystem-specific documentation:
+
+.. toctree::
    :maxdepth: 2
 
    no_new_privs

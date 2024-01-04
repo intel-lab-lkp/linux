@@ -214,7 +214,7 @@ static void mem_toupper(char *f, size_t len)
 
 /*
  * Check for "NAME_PATH" environment variable to override fs location (for
- * testing). This matches the recommendation in Documentation/admin-guide/sysfs-rules.rst
+ * testing). This matches the recommendation in Documentation/userspace-api/sysfs-rules.rst
  * for SYSFS_PATH.
  */
 static bool fs__env_override(struct fs *fs)
