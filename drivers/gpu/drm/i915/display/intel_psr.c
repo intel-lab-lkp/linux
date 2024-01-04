@@ -2924,8 +2924,11 @@ void intel_psr_short_pulse(struct intel_dp *intel_dp)
 	/* clear status register */
 	drm_dp_dpcd_writeb(&intel_dp->aux, DP_PSR_ERROR_STATUS, error_status);
 
-	psr_alpm_check(intel_dp);
-	psr_capability_changed_check(intel_dp);
+	if (intel_dp_is_edp(intel_dp))
+		psr_alpm_check(intel_dp);
+
+	if (!psr->panel_replay_enabled)
+		psr_capability_changed_check(intel_dp);
 
 exit:
 	mutex_unlock(&psr->lock);
