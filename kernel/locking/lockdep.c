@@ -3855,8 +3855,11 @@ static int validate_chain(struct task_struct *curr,
 		 */
 		int ret = check_deadlock(curr, hlock);
 
-		if (!ret)
+		if (!ret) {
+			graph_unlock();
 			return 0;
+		}
+
 		/*
 		 * Add dependency only if this lock is not the head
 		 * of the chain, and if the new lock introduces no more
@@ -3865,9 +3868,9 @@ static int validate_chain(struct task_struct *curr,
 		 * serializes nesting locks), see the comments for
 		 * check_deadlock().
 		 */
-		if (!chain_head && ret != 2) {
-			if (!check_prevs_add(curr, hlock))
-				return 0;
+		if (!chain_head && ret != 2 && !check_prevs_add(curr, hlock)) {
+			graph_unlock();
+			return 0;
 		}
 
 		graph_unlock();
