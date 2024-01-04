@@ -949,6 +949,19 @@ dpll_pin_parent_pin_set(struct dpll_pin *pin, struct nlattr *parent_nest,
 	return 0;
 }
 
+static bool dpll_pin_parents_registered(struct dpll_pin *pin)
+{
+	struct dpll_pin_ref *par_ref;
+	struct dpll_pin *p;
+	unsigned long i, j;
+
+	xa_for_each(&pin->parent_refs, i, par_ref)
+		xa_for_each_marked(&dpll_pin_xa, j, p, DPLL_REGISTERED)
+			if (par_ref->pin == p)
+				return true;
+	return false;
+}
+
 static int
 dpll_pin_set_from_nlattr(struct dpll_pin *pin, struct genl_info *info)
 {
@@ -1153,6 +1166,9 @@ int dpll_nl_pin_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 
 	xa_for_each_marked_start(&dpll_pin_xa, i, pin, DPLL_REGISTERED,
 				 ctx->idx) {
+		if (!xa_empty(&pin->parent_refs) &&
+		    !dpll_pin_parents_registered(pin))
+			continue;
 		hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
 				  cb->nlh->nlmsg_seq,
 				  &dpll_nl_family, NLM_F_MULTI,
@@ -1178,6 +1194,10 @@ int dpll_nl_pin_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 int dpll_nl_pin_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct dpll_pin *pin = info->user_ptr[0];
+
+	if (!xa_empty(&pin->parent_refs) &&
+	    !dpll_pin_parents_registered(pin))
+		return -ENODEV;
 
 	return dpll_pin_set_from_nlattr(pin, info);
 }
