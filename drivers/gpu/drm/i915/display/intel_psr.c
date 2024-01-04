@@ -214,6 +214,11 @@ static bool psr2_global_enabled(struct intel_dp *intel_dp)
 	}
 }
 
+static bool panel_replay_global_enabled(struct intel_dp *intel_dp)
+{
+	return !(intel_dp->psr.debug & I915_PSR_DEBUG_PANEL_REPLAY_DISABLE);
+}
+
 static u32 psr_irq_psr_error_bit_get(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
@@ -1366,7 +1371,7 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	}
 
 	if (CAN_PANEL_REPLAY(intel_dp))
-		crtc_state->has_panel_replay = true;
+		crtc_state->has_panel_replay = panel_replay_global_enabled(intel_dp);
 	else
 		crtc_state->has_psr = _psr_compute_config(intel_dp, crtc_state);
 
@@ -2779,6 +2784,9 @@ void intel_psr_init(struct intel_dp *intel_dp)
 		intel_dp->psr.source_panel_replay_support = true;
 	else
 		intel_dp->psr.source_support = true;
+
+	/* Disable panel replay for now */
+	intel_dp->psr.debug |= I915_PSR_DEBUG_PANEL_REPLAY_DISABLE;
 
 	/* Set link_standby x link_off defaults */
 	if (DISPLAY_VER(dev_priv) < 12)
