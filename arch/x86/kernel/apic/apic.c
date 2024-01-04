@@ -2157,7 +2157,7 @@ out:
 	trace_spurious_apic_exit(vector);
 }
 
-/**
+/*
  * spurious_interrupt - Catch all for interrupts raised on unused vectors
  * @regs:	Pointer to pt_regs on stack
  * @vector:	The vector number
