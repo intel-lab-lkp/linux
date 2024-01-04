@@ -23,6 +23,8 @@ MODULE_LICENSE("GPL");
 #define IPMI_TIMEOUT			(5000)
 #define ACPI_IPMI_MAX_MSG_LENGTH	64
 
+static struct completion smi_selected;
+
 struct acpi_ipmi_device {
 	/* the device list attached to driver_data.ipmi_devices */
 	struct list_head head;
@@ -463,8 +465,10 @@ static void ipmi_register_bmc(int iface, struct device *dev)
 		if (temp->handle == handle)
 			goto err_lock;
 	}
-	if (!driver_data.selected_smi)
+	if (!driver_data.selected_smi) {
 		driver_data.selected_smi = ipmi_device;
+		complete(&smi_selected);
+	}
 	list_add_tail(&ipmi_device->head, &driver_data.ipmi_devices);
 	mutex_unlock(&driver_data.ipmi_lock);
 
@@ -578,10 +582,21 @@ out_msg:
 	return status;
 }
 
+int acpi_wait_for_acpi_ipmi(void)
+{
+	long ret;
+
+	ret = wait_for_completion_interruptible_timeout(&smi_selected, 2 * HZ);
+
+	return ret > 0 ? 0 : -ETIMEDOUT;
+}
+EXPORT_SYMBOL_GPL(acpi_wait_for_acpi_ipmi);
+
 static int __init acpi_ipmi_init(void)
 {
 	int result;
 	acpi_status status;
+	init_completion(&smi_selected);
 
 	if (acpi_disabled)
 		return 0;
