@@ -146,8 +146,9 @@ static void usage(char *progname)
 		" -T val     set the ptp clock time to 'val' seconds\n"
 		" -x val     get an extended ptp clock time with the desired number of samples (up to %d)\n"
 		" -X         get a ptp clock cross timestamp\n"
+		" -y val     sandwich timebase to use {real|mono|raw}\n"
 		" -z         test combinations of rising/falling external time stamp flags\n",
-		progname, PTP_MAX_SAMPLES);
+		progname, PTP_MAX_SAMPLES, PTP_MAX_SAMPLES);
 }
 
 int main(int argc, char *argv[])
@@ -163,6 +164,7 @@ int main(int argc, char *argv[])
 	struct ptp_sys_offset *sysoff;
 	struct ptp_sys_offset_extended *soe;
 	struct ptp_sys_offset_precise *xts;
+	struct ptp_sys_offset_any *ats;
 
 	char *progname;
 	unsigned int i;
@@ -183,6 +185,8 @@ int main(int argc, char *argv[])
 	int pct_offset = 0;
 	int getextended = 0;
 	int getcross = 0;
+	int get_ext_any = 0;
+	clockid_t ext_any_clkid = -1;
 	int n_samples = 0;
 	int pin_index = -1, pin_func;
 	int pps = -1;
@@ -198,7 +202,7 @@ int main(int argc, char *argv[])
 
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:f:F:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
+	while (EOF != (c = getopt(argc, argv, "cd:e:f:F:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xy:z"))) {
 		switch (c) {
 		case 'c':
 			capabilities = 1;
@@ -278,6 +282,20 @@ int main(int argc, char *argv[])
 		case 'X':
 			getcross = 1;
 			break;
+		case 'y':
+			if (!strcasecmp(optarg, "real"))
+				ext_any_clkid = CLOCK_REALTIME;
+			else if (!strcasecmp(optarg, "mono"))
+				ext_any_clkid = CLOCK_MONOTONIC;
+			else if (!strcasecmp(optarg, "raw"))
+				ext_any_clkid = CLOCK_MONOTONIC_RAW;
+			else {
+				fprintf(stderr,
+					"type needs to be one of real,mono,raw only; was given %s\n",
+					optarg);
+				return -1;
+			}
+			break;
 		case 'z':
 			flagtest = 1;
 			break;
@@ -289,6 +307,18 @@ int main(int argc, char *argv[])
 			usage(progname);
 			return -1;
 		}
+	}
+
+	/* For ptp_sys_offset_any both options 'x', 'y' must be given */
+	if (ext_any_clkid > -1) {
+		if (getextended == 0) {
+			fprintf(stderr,
+				"For extended-any TS both options -x, and -y are required.\n");
+			usage(progname);
+			return -1;
+		}
+		get_ext_any = getextended;
+		getextended = 0;
 	}
 
 	fd = open(device, O_RDWR);
@@ -621,6 +651,68 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (get_ext_any) {
+		ats = calloc(1, sizeof(*ats));
+		if (!ats) {
+			perror("calloc");
+			return -1;
+		}
+
+		ats->n_samples = get_ext_any;
+		ats->clockid = ext_any_clkid;
+
+		if (ioctl(fd, PTP_SYS_OFFSET_ANY, ats)) {
+			perror("PTP_SYS_OFFSET_ANY");
+		} else {
+			printf("extended-any timestamp request returned %d samples\n",
+			       get_ext_any);
+
+			for (i = 0; i < get_ext_any; i++) {
+				switch (ext_any_clkid) {
+				case CLOCK_REALTIME:
+					printf("sample #%2d: system time before: %lld.%09u\n",
+					       i, ats->ts[i][0].sec,
+					       ats->ts[i][0].nsec);
+					break;
+				case CLOCK_MONOTONIC:
+					printf("sample #%2d: monotonic time before: %lld.%09u\n",
+					       i, ats->ts[i][0].sec,
+					       ats->ts[i][0].nsec);
+					break;
+				case CLOCK_MONOTONIC_RAW:
+					printf("sample #%2d: raw-monotonic time before: %lld.%09u\n",
+					       i, ats->ts[i][0].sec,
+					       ats->ts[i][0].nsec);
+					break;
+				default:
+					break;
+				}
+				printf("            phc time: %lld.%09u\n",
+				       ats->ts[i][1].sec, ats->ts[i][1].nsec);
+				switch (ext_any_clkid) {
+				case CLOCK_REALTIME:
+					printf("            system time after: %lld.%09u\n",
+					       ats->ts[i][2].sec,
+					       ats->ts[i][2].nsec);
+					break;
+				case CLOCK_MONOTONIC:
+					printf("            monotonic time after: %lld.%09u\n",
+					       ats->ts[i][2].sec,
+					       ats->ts[i][2].nsec);
+					break;
+				case CLOCK_MONOTONIC_RAW:
+					printf("            raw-monotonic time after: %lld.%09u\n",
+					       ats->ts[i][2].sec,
+					       ats->ts[i][2].nsec);
+					break;
+				default:
+					break;
+				}
+			}
+		}
+
+		free(ats);
+	}
 	close(fd);
 	return 0;
 }
