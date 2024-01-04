@@ -303,7 +303,6 @@ static int spmi_controller_probe(struct platform_device *pdev)
 
 	spin_lock_init(&spmi_controller->lock);
 
-	ctrl->nr = spmi_controller->channel;
 	ctrl->dev.parent = pdev->dev.parent;
 	ctrl->dev.of_node = of_node_get(pdev->dev.of_node);
 
@@ -326,7 +325,8 @@ err_put_controller:
 
 static void spmi_del_controller(struct platform_device *pdev)
 {
-	struct spmi_controller *ctrl = platform_get_drvdata(pdev);
+	struct spmi_controller_dev *spmi_controller = platform_get_drvdata(pdev);
+	struct spmi_controller *ctrl = spmi_controller->controller;
 
 	spmi_controller_remove(ctrl);
 	spmi_controller_put(ctrl);
