@@ -491,7 +491,7 @@ static void gre_fb_xmit(struct sk_buff *skb, struct net_device *dev,
 	key = &tun_info->key;
 	tunnel_hlen = gre_calc_hlen(key->tun_flags);
 
-	if (skb_cow_head(skb, dev->needed_headroom))
+	if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom)))
 		goto err_free_skb;
 
 	/* Push Tunnel header. */
@@ -541,7 +541,7 @@ static void erspan_fb_xmit(struct sk_buff *skb, struct net_device *dev)
 	version = md->version;
 	tunnel_hlen = 8 + erspan_hdr_len(version);
 
-	if (skb_cow_head(skb, dev->needed_headroom))
+	if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom)))
 		goto err_free_skb;
 
 	if (gre_handle_offloads(skb, false))
@@ -653,7 +653,7 @@ static netdev_tx_t ipgre_xmit(struct sk_buff *skb,
 		    skb_checksum_start(skb) < skb->data)
 			goto free_skb;
 	} else {
-		if (skb_cow_head(skb, dev->needed_headroom))
+		if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom)))
 			goto free_skb;
 
 		tnl_params = &tunnel->parms.iph;
@@ -689,7 +689,7 @@ static netdev_tx_t erspan_xmit(struct sk_buff *skb,
 	if (gre_handle_offloads(skb, false))
 		goto free_skb;
 
-	if (skb_cow_head(skb, dev->needed_headroom))
+	if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom)))
 		goto free_skb;
 
 	if (skb->len > dev->mtu + dev->hard_header_len) {
@@ -742,7 +742,7 @@ static netdev_tx_t gre_tap_xmit(struct sk_buff *skb,
 	if (gre_handle_offloads(skb, !!(tunnel->parms.o_flags & TUNNEL_CSUM)))
 		goto free_skb;
 
-	if (skb_cow_head(skb, dev->needed_headroom))
+	if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom)))
 		goto free_skb;
 
 	__gre_xmit(skb, dev, &tunnel->parms.iph, htons(ETH_P_TEB));
@@ -768,7 +768,7 @@ static void ipgre_link_update(struct net_device *dev, bool set_mtu)
 	if (dev->header_ops)
 		dev->hard_header_len += len;
 	else
-		dev->needed_headroom += len;
+		WRITE_ONCE(dev->needed_headroom, dev->needed_headroom + len);
 
 	if (set_mtu)
 		dev->mtu = max_t(int, dev->mtu - len, 68);

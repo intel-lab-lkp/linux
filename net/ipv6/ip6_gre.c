@@ -782,7 +782,7 @@ static netdev_tx_t __gre6_xmit(struct sk_buff *skb,
 			(TUNNEL_CSUM | TUNNEL_KEY | TUNNEL_SEQ);
 		tun_hlen = gre_calc_hlen(flags);
 
-		if (skb_cow_head(skb, dev->needed_headroom ?: tun_hlen + tunnel->encap_hlen))
+		if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom) ?: tun_hlen + tunnel->encap_hlen))
 			return -ENOMEM;
 
 		gre_build_header(skb, tun_hlen,
@@ -792,7 +792,7 @@ static netdev_tx_t __gre6_xmit(struct sk_buff *skb,
 						      : 0);
 
 	} else {
-		if (skb_cow_head(skb, dev->needed_headroom ?: tunnel->hlen))
+		if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom) ?: tunnel->hlen))
 			return -ENOMEM;
 
 		flags = tunnel->parms.o_flags;
@@ -976,7 +976,7 @@ static netdev_tx_t ip6erspan_tunnel_xmit(struct sk_buff *skb,
 			truncate = true;
 	}
 
-	if (skb_cow_head(skb, dev->needed_headroom ?: t->hlen))
+	if (skb_cow_head(skb, READ_ONCE(dev->needed_headroom) ?: t->hlen))
 		goto tx_err;
 
 	t->parms.o_flags &= ~TUNNEL_KEY;
@@ -1153,7 +1153,7 @@ static void ip6gre_tnl_link_config_route(struct ip6_tnl *t, int set_mtu,
 			if (t->dev->header_ops)
 				dev->hard_header_len = dst_len;
 			else
-				dev->needed_headroom = dst_len;
+				WRITE_ONCE(dev->needed_headroom, dst_len);
 
 			if (set_mtu) {
 				int mtu = rt->dst.dev->mtu - t_hlen;
@@ -1184,7 +1184,7 @@ static int ip6gre_calc_hlen(struct ip6_tnl *tunnel)
 	if (tunnel->dev->header_ops)
 		tunnel->dev->hard_header_len = LL_MAX_HEADER + t_hlen;
 	else
-		tunnel->dev->needed_headroom = LL_MAX_HEADER + t_hlen;
+		WRITE_ONCE(tunnel->dev->needed_headroom, LL_MAX_HEADER + t_hlen);
 
 	return t_hlen;
 }
@@ -1864,7 +1864,7 @@ static int ip6erspan_calc_hlen(struct ip6_tnl *tunnel)
 		       erspan_hdr_len(tunnel->parms.erspan_ver);
 
 	t_hlen = tunnel->hlen + sizeof(struct ipv6hdr);
-	tunnel->dev->needed_headroom = LL_MAX_HEADER + t_hlen;
+	WRITE_ONCE(tunnel->dev->needed_headroom, LL_MAX_HEADER + t_hlen);
 	return t_hlen;
 }
 
