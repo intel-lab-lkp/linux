@@ -107,12 +107,22 @@ s32 igc_phy_has_link(struct igc_hw *hw, u32 iterations,
  */
 void igc_power_up_phy_copper(struct igc_hw *hw)
 {
-	u16 mii_reg = 0;
+	struct igc_phy_info *phy = &hw->phy;
+	u32 phpm, manc;
 
-	/* The PHY will retain its settings across a power down/up cycle */
-	hw->phy.ops.read_reg(hw, PHY_CONTROL, &mii_reg);
-	mii_reg &= ~MII_CR_POWER_DOWN;
-	hw->phy.ops.write_reg(hw, PHY_CONTROL, mii_reg);
+	if (phy->ops.acquire(hw))
+		return;
+
+	manc = rd32(IGC_MANC);
+	manc &= ~IGC_MANC_BLK_PHY_RST_ON_IDE;
+	wr32(IGC_MANC, manc);
+
+	phpm = rd32(IGC_I225_PHPM);
+	phpm &= ~IGC_GO_LINK_DISCONNECT;
+	wr32(IGC_I225_PHPM, phpm);
+	usleep_range(100, 200);
+
+	hw->phy.ops.release(hw);
 }
 
 /**
@@ -124,17 +134,21 @@ void igc_power_up_phy_copper(struct igc_hw *hw)
  */
 void igc_power_down_phy_copper(struct igc_hw *hw)
 {
-	u16 mii_reg = 0;
+	struct igc_phy_info *phy = &hw->phy;
+	u32 phpm, manc;
 
-	/* The PHY will retain its settings across a power down/up cycle */
-	hw->phy.ops.read_reg(hw, PHY_CONTROL, &mii_reg);
-	mii_reg |= MII_CR_POWER_DOWN;
-
-	/* Temporary workaround - should be removed when PHY will implement
-	 * IEEE registers as properly
-	 */
-	/* hw->phy.ops.write_reg(hw, PHY_CONTROL, mii_reg);*/
+	if (phy->ops.acquire(hw))
+		return;
+	/* Set "Go Link Disconnect" bit in the PHPM register to turn off the PHY */
+	phpm = rd32(IGC_I225_PHPM);
+	phpm |= IGC_GO_LINK_DISCONNECT;
+	wr32(IGC_I225_PHPM, phpm);
 	usleep_range(1000, 2000);
+
+	manc = rd32(IGC_MANC);
+	wr32(IGC_MANC, manc | IGC_MANC_BLK_PHY_RST_ON_IDE);
+
+	phy->ops.release(hw);
 }
 
 /**

@@ -684,4 +684,7 @@
 #define IGC_LTRMAXV_LSNP_REQ		0x00008000 /* LTR Snoop Requirement */
 #define IGC_LTRMAXV_SCALE_SHIFT		10
 
+/* PHY Power management register */
+#define IGC_GO_LINK_DISCONNECT		0x0020	   /* Go Link Disconnect */
+
 #endif /* _IGC_DEFINES_H_ */
