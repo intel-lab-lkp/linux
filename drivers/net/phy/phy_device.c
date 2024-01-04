@@ -3152,6 +3152,7 @@ static int of_phy_led(struct phy_device *phydev,
 	struct device *dev = &phydev->mdio.dev;
 	struct led_init_data init_data = {};
 	struct led_classdev *cdev;
+	unsigned long modes = 0;
 	struct phy_led *phyled;
 	u32 index;
 	int err;
@@ -3168,6 +3169,17 @@ static int of_phy_led(struct phy_device *phydev,
 		return err;
 	if (index > U8_MAX)
 		return -EINVAL;
+
+	if (phydev->drv->led_polarity_set) {
+		if (of_property_read_bool(led, "active-low"))
+			set_bit(PHY_LED_ACTIVE_LOW, &modes);
+		if (of_property_read_bool(led, "inactive-high-impedance"))
+			set_bit(PHY_LED_INACTIVE_HIGH_IMPEDANCE, &modes);
+
+		err = phydev->drv->led_polarity_set(phydev, index, modes);
+		if (err)
+			return err;
+	}
 
 	phyled->index = index;
 	if (phydev->drv->led_brightness_set)
