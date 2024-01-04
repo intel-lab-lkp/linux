@@ -949,6 +949,21 @@ static inline struct drm_plane *drm_plane_find(struct drm_device *dev,
 		for_each_if (plane->type == DRM_PLANE_TYPE_OVERLAY)
 
 /**
+ * drm_for_each_primary_visible_plane - iterate over all primary visible planes
+ * @plane: the loop cursor
+ * @dev: the DRM device
+ *
+ * Iterate over all primary, visible plane, with a framebuffer.
+ * This is useful for drm_panic, to find the current scanout buffer.
+ */
+#define drm_for_each_primary_visible_plane(plane, dev) \
+	list_for_each_entry((plane), &(dev)->mode_config.plane_list, head) \
+		for_each_if((plane)->type == DRM_PLANE_TYPE_PRIMARY && \
+			    (plane)->state && \
+			    (plane)->state->fb && \
+			    (plane)->state->visible)
+
+/**
  * drm_for_each_plane - iterate over all planes
  * @plane: the loop cursor
  * @dev: the DRM device
