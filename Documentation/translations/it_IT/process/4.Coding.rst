@@ -365,8 +365,8 @@ informazione.
 Qualsiasi codice che aggiunge una nuova interfaccia in spazio utente - inclusi
 nuovi file in sysfs o /proc - dovrebbe includere la documentazione di tale
 interfaccia così da permette agli sviluppatori dello spazio utente di sapere
-con cosa stanno lavorando.  Consultate: Documentation/ABI/README per avere una
-descrizione di come questi documenti devono essere impostati e quali
+con cosa stanno lavorando.  Consultate: Documentation/ABI/README.rst per avere
+una descrizione di come questi documenti devono essere impostati e quali
 informazioni devono essere fornite.
 
 Il file :ref:`Documentation/translations/it_IT/admin-guide/kernel-parameters.rst <kernelparameters>`

@@ -347,8 +347,8 @@ information.
 Any code which adds a new user-space interface - including new sysfs or
 /proc files - should include documentation of that interface which enables
 user-space developers to know what they are working with.  See
-Documentation/ABI/README for a description of how this documentation should
-be formatted and what information needs to be provided.
+Documentation/ABI/README.rst for a description of how this documentation
+should be formatted and what information needs to be provided.
 
 The file :ref:`Documentation/admin-guide/kernel-parameters.rst
 <kernelparameters>` describes all of the kernel's boot-time parameters.

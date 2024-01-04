@@ -418,5 +418,5 @@ Documentation
 The sysfs directory structure and the attributes in each directory define an
 ABI between the kernel and user space. As for any ABI, it is important that
 this ABI is stable and properly documented. All new sysfs attributes must be
-documented in Documentation/ABI. See also Documentation/ABI/README for more
-information.
+documented in Documentation/ABI. See also Documentation/ABI/README.rst for
+more information.

@@ -86,7 +86,7 @@ Linux カーネルパッチ投稿者向けチェックリスト
     利用して必ずその説明を記述してください。
 
 18: 新しいuserspaceインタフェースを作成した場合には、Documentation/ABI/ に
-    Documentation/ABI/README を参考にして必ずドキュメントを追加してください。
+    Documentation/ABI/README.rst を参考にして必ずドキュメントを追加してください。
 
 19: 少なくともslabアロケーションとpageアロケーションに失敗した場合の
     挙動について、fault-injectionを利用して確認してください。

@@ -370,4 +370,4 @@ void driver_remove_file(struct device_driver *, const struct driver_attribute *)
 
 sysfs 目录结构以及其中包含的属性定义了一个内核与用户空间之间的 ABI。
 对于任何 ABI，其自身的稳定和适当的文档是非常重要的。所有新的 sysfs
-属性必须在 Documentation/ABI 中有文档。详见 Documentation/ABI/README。
+属性必须在 Documentation/ABI 中有文档。详见 Documentation/ABI/README.rst。

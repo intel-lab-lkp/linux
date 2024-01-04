@@ -94,7 +94,7 @@ sottomissione delle patch, in particolare
 18) Tutti i nuovi parametri dei moduli sono documentati con ``MODULE_PARM_DESC()``.
 
 19) Tutte le nuove interfacce verso lo spazio utente sono documentate in
-    ``Documentation/ABI/``.  Leggete ``Documentation/ABI/README`` per maggiori
+    ``Documentation/ABI/``.  Leggete ``Documentation/ABI/README.rst`` per maggiori
     informazioni.  Le patch che modificano le interfacce utente dovrebbero
     essere inviate in copia anche a linux-api@vger.kernel.org.
 

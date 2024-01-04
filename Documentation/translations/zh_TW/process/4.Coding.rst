@@ -247,7 +247,7 @@ scripts/coccinelle目錄下已經打包了相當多的內核“語義補丁”�
 
 任何添加新用戶空間接口的代碼——包括新的sysfs或/proc文件——都應該包含該接口
 的文檔，該文檔使用戶空間開發人員能夠知道他們在使用什麼。請參閱
-Documentation/ABI/README，瞭解如何此文檔格式以及需要提供哪些信息。
+Documentation/ABI/README.rst，瞭解如何此文檔格式以及需要提供哪些信息。
 
 文檔 :ref:`Documentation/admin-guide/kernel-parameters.rst <kernelparameters>`
 描述了內核的所有引導時間參數。任何添加新參數的補丁都應該向該文檔添加適當的

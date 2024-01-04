@@ -85,7 +85,7 @@ and elsewhere regarding submitting Linux kernel patches.
 17) All new module parameters are documented with ``MODULE_PARM_DESC()``
 
 18) All new userspace interfaces are documented in ``Documentation/ABI/``.
-    See ``Documentation/ABI/README`` for more information.
+    See ``Documentation/ABI/README.rst`` for more information.
     Patches that change userspace interfaces should be CCed to
     linux-api@vger.kernel.org.
 
