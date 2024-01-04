@@ -42,6 +42,14 @@ Subsystem-specific documentation:
    isapnp
    dcdbas
 
+Kernel ABIs: These documents describe the the ABI between the Linux
+kernel and userspace, and the relative stability of these interfaces.
+
+.. toctree::
+   :maxdepth: 2
+
+   abi
+
 .. only::  subproject and html
 
    Indices
