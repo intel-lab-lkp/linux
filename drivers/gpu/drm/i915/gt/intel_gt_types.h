@@ -208,6 +208,25 @@ struct intel_gt {
 	enum intel_submission_method submission_method;
 
 	/*
+	 * Track fixed mapping between CCS engines and compute slices.
+	 *
+	 * In order to w/a HW that has the inability to dynamically load
+	 * balance between CCS engines and EU in the compute slices, we have to
+	 * reconfigure a static mapping on the fly. We track the current CCS
+	 * configuration (set by thr user through a sysfs interface) and compare
+	 * it against the current CCS_MODE (which maps CCS engines to compute
+	 * slices). If there is only a single engine selected, we can map it to
+	 * all available compute slices for maximal single task performance
+	 * (fast/narrow). If there are more then one engine selected, we have to
+	 * reduce the number of slices allocated to each engine (wide/slow),
+	 * fairly distributing the EU between the equivalent engines.
+	 */
+	struct {
+		struct mutex mutex;
+		u32 mode;
+	} ccs;
+
+	/*
 	 * Default address space (either GGTT or ppGTT depending on arch).
 	 *
 	 * Reserved for exclusive use by the kernel.
