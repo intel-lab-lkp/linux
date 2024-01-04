@@ -10111,10 +10111,13 @@ static int __init rtl8152_driver_init(void)
 {
 	int ret;
 
-	ret = usb_register_device_driver(&rtl8152_cfgselector_driver, THIS_MODULE);
+	ret = usb_register(&rtl8152_driver);
 	if (ret)
 		return ret;
-	return usb_register(&rtl8152_driver);
+
+	ret = usb_register_device_driver(&rtl8152_cfgselector_driver, THIS_MODULE);
+	return ret;
+
 }
 
 static void __exit rtl8152_driver_exit(void)
