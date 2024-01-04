@@ -64,6 +64,10 @@ static int xfs_icwalk_ag(struct xfs_perag *pag,
 					 XFS_ICWALK_FLAG_RECLAIM_SICK | \
 					 XFS_ICWALK_FLAG_UNION)
 
+static int xfs_blockgc_free_dquots(struct xfs_mount *mp,
+		struct xfs_dquot *udqp, struct xfs_dquot *gdqp,
+		struct xfs_dquot *pdqp, unsigned int iwalk_flags);
+
 /*
  * Allocate and initialise an xfs_inode.
  */
@@ -1478,6 +1482,38 @@ xfs_blockgc_free_space(
 }
 
 /*
+ * If we hit a space limit, try to free up some lingering preallocated
+ * space before returning an error. In the case of ENOSPC, first try to
+ * write back all dirty inodes to free up some of the excess reserved
+ * metadata space. This reduces the chances that the eofblocks scan
+ * waits on dirty mappings. Since xfs_flush_inodes() is serialized, this
+ * also behaves as a filter to prevent too many eofblocks scans from
+ * running at the same time.  Use a synchronous scan to increase the
+ * effectiveness of the scan.
+ */
+void
+xfs_blockgc_nospace_flush(
+	struct xfs_mount	*mp,
+	struct xfs_dquot	*udqp,
+	struct xfs_dquot	*gdqp,
+	struct xfs_dquot	*pdqp,
+	unsigned int		iwalk_flags,
+	int			what)
+{
+	ASSERT(what == -EDQUOT || what == -ENOSPC);
+
+	if (what == -EDQUOT) {
+		xfs_blockgc_free_dquots(mp, udqp, gdqp, pdqp, iwalk_flags);
+	} else if (what == -ENOSPC) {
+		struct xfs_icwalk	icw = {0};
+
+		xfs_flush_inodes(mp);
+		icw.icw_flags = iwalk_flags;
+		xfs_blockgc_free_space(mp, &icw);
+	}
+}
+
+/*
  * Reclaim all the free space that we can by scheduling the background blockgc
  * and inodegc workers immediately and waiting for them all to clear.
  */
@@ -1515,7 +1551,7 @@ xfs_blockgc_flush_all(
  * (XFS_ICWALK_FLAG_SYNC), the caller also must not hold any inode's IOLOCK or
  * MMAPLOCK.
  */
-int
+static int
 xfs_blockgc_free_dquots(
 	struct xfs_mount	*mp,
 	struct xfs_dquot	*udqp,
@@ -1557,18 +1593,6 @@ xfs_blockgc_free_dquots(
 		return 0;
 
 	return xfs_blockgc_free_space(mp, &icw);
-}
-
-/* Run cow/eofblocks scans on the quotas attached to the inode. */
-int
-xfs_blockgc_free_quota(
-	struct xfs_inode	*ip,
-	unsigned int		iwalk_flags)
-{
-	return xfs_blockgc_free_dquots(ip->i_mount,
-			xfs_inode_dquot(ip, XFS_DQTYPE_USER),
-			xfs_inode_dquot(ip, XFS_DQTYPE_GROUP),
-			xfs_inode_dquot(ip, XFS_DQTYPE_PROJ), iwalk_flags);
 }
 
 /* XFS Inode Cache Walking Code */

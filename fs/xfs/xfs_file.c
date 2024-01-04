@@ -24,6 +24,9 @@
 #include "xfs_pnfs.h"
 #include "xfs_iomap.h"
 #include "xfs_reflink.h"
+#include "xfs_quota.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 
 #include <linux/dax.h>
 #include <linux/falloc.h>
@@ -785,32 +788,18 @@ write_retry:
 	trace_xfs_file_buffered_write(iocb, from);
 	ret = iomap_file_buffered_write(iocb, from,
 			&xfs_buffered_write_iomap_ops);
-
-	/*
-	 * If we hit a space limit, try to free up some lingering preallocated
-	 * space before returning an error. In the case of ENOSPC, first try to
-	 * write back all dirty inodes to free up some of the excess reserved
-	 * metadata space. This reduces the chances that the eofblocks scan
-	 * waits on dirty mappings. Since xfs_flush_inodes() is serialized, this
-	 * also behaves as a filter to prevent too many eofblocks scans from
-	 * running at the same time.  Use a synchronous scan to increase the
-	 * effectiveness of the scan.
-	 */
-	if (ret == -EDQUOT && !cleared_space) {
-		xfs_iunlock(ip, iolock);
-		xfs_blockgc_free_quota(ip, XFS_ICWALK_FLAG_SYNC);
-		cleared_space = true;
-		goto write_retry;
-	} else if (ret == -ENOSPC && !cleared_space) {
-		struct xfs_icwalk	icw = {0};
-
-		cleared_space = true;
-		xfs_flush_inodes(ip->i_mount);
-
-		xfs_iunlock(ip, iolock);
-		icw.icw_flags = XFS_ICWALK_FLAG_SYNC;
-		xfs_blockgc_free_space(ip->i_mount, &icw);
-		goto write_retry;
+	if (ret == -EDQUOT || ret == -ENOSPC) {
+		if (!cleared_space) {
+			xfs_iunlock(ip, iolock);
+			xfs_blockgc_nospace_flush(ip->i_mount, ip->i_udquot,
+						ip->i_gdquot, ip->i_pdquot,
+						XFS_ICWALK_FLAG_SYNC, ret);
+			cleared_space = true;
+			goto write_retry;
+		}
+		if (ret == -EDQUOT && xfs_dquot_hardlimit_exceeded(
+				ip->i_pdquot))
+			ret = -ENOSPC;
 	}
 
 out:

@@ -183,6 +183,22 @@ xfs_dquot_is_enforced(
 	return false;
 }
 
+static inline bool
+xfs_dquot_hardlimit_exceeded(
+	struct xfs_dquot	*dqp)
+{
+	int64_t freesp;
+
+	if (!dqp)
+		return false;
+	if (!xfs_dquot_is_enforced(dqp))
+		return false;
+	xfs_dqlock(dqp);
+	freesp = dqp->q_blk.hardlimit - dqp->q_blk.reserved;
+	xfs_dqunlock(dqp);
+	return freesp < 0;
+}
+
 /*
  * Check whether a dquot is under low free space conditions. We assume the quota
  * is enabled and enforced.
@@ -191,11 +207,11 @@ static inline bool xfs_dquot_lowsp(struct xfs_dquot *dqp)
 {
 	int64_t freesp;
 
+	xfs_dqlock(dqp);
 	freesp = dqp->q_blk.hardlimit - dqp->q_blk.reserved;
-	if (freesp < dqp->q_low_space[XFS_QLOWSP_1_PCNT])
-		return true;
+	xfs_dqunlock(dqp);
 
-	return false;
+	return freesp < dqp->q_low_space[XFS_QLOWSP_1_PCNT];
 }
 
 void xfs_dquot_to_disk(struct xfs_disk_dquot *ddqp, struct xfs_dquot *dqp);

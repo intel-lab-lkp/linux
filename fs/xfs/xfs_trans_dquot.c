@@ -700,8 +700,6 @@ xfs_trans_dqresv(
 
 error_return:
 	xfs_dqunlock(dqp);
-	if (xfs_dquot_type(dqp) == XFS_DQTYPE_PROJ)
-		return -ENOSPC;
 	return -EDQUOT;
 error_corrupt:
 	xfs_dqunlock(dqp);
@@ -717,7 +715,6 @@ error_corrupt:
  * approach.
  *
  * flags = XFS_QMOPT_FORCE_RES evades limit enforcement. Used by chown.
- *	   XFS_QMOPT_ENOSPC returns ENOSPC not EDQUOT.  Used by pquota.
  *	   XFS_TRANS_DQ_RES_BLKS reserves regular disk blocks
  *	   XFS_TRANS_DQ_RES_RTBLKS reserves realtime disk blocks
  * dquots are unlocked on return, if they were not locked by caller.

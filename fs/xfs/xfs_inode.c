@@ -27,6 +27,8 @@
 #include "xfs_errortag.h"
 #include "xfs_error.h"
 #include "xfs_quota.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 #include "xfs_filestream.h"
 #include "xfs_trace.h"
 #include "xfs_icache.h"
@@ -1006,12 +1008,6 @@ xfs_create(
 	 */
 	error = xfs_trans_alloc_icreate(mp, tres, udqp, gdqp, pdqp, resblks,
 			&tp);
-	if (error == -ENOSPC) {
-		/* flush outstanding delalloc blocks and retry */
-		xfs_flush_inodes(mp);
-		error = xfs_trans_alloc_icreate(mp, tres, udqp, gdqp, pdqp,
-				resblks, &tp);
-	}
 	if (error)
 		goto out_release_dquots;
 
@@ -2944,13 +2940,20 @@ retry:
 	if (spaceres != 0) {
 		error = xfs_trans_reserve_quota_nblks(tp, target_dp, spaceres,
 				0, false);
-		if (error == -EDQUOT || error == -ENOSPC) {
+		if (error == -EDQUOT) {
 			if (!retried) {
 				xfs_trans_cancel(tp);
-				xfs_blockgc_free_quota(target_dp, 0);
+				xfs_blockgc_nospace_flush(target_dp->i_mount,
+							target_dp->i_udquot,
+							target_dp->i_gdquot,
+							target_dp->i_pdquot,
+							0, error);
 				retried = true;
 				goto retry;
 			}
+
+			if (xfs_dquot_hardlimit_exceeded(target_dp->i_pdquot))
+				error = -ENOSPC;
 
 			nospace_error = error;
 			spaceres = 0;

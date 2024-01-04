@@ -1217,15 +1217,22 @@ retry:
 	}
 
 	error = xfs_trans_reserve_quota_nblks(tp, ip, dblocks, rblocks, force);
-	if ((error == -EDQUOT || error == -ENOSPC) && !retried) {
+	if (error == -EDQUOT && !retried) {
 		xfs_trans_cancel(tp);
 		xfs_iunlock(ip, XFS_ILOCK_EXCL);
-		xfs_blockgc_free_quota(ip, 0);
+		xfs_blockgc_nospace_flush(ip->i_mount, ip->i_udquot,
+					ip->i_gdquot, ip->i_pdquot,
+					0, error);
 		retried = true;
 		goto retry;
 	}
-	if (error)
+	if (error) {
+		if (error == -EDQUOT && xfs_dquot_hardlimit_exceeded(
+				ip->i_pdquot))
+			error = -ENOSPC;
+
 		goto out_cancel;
+	}
 
 	*tpp = tp;
 	return 0;
@@ -1322,13 +1329,16 @@ retry:
 		return error;
 
 	error = xfs_trans_reserve_quota_icreate(tp, udqp, gdqp, pdqp, dblocks);
-	if ((error == -EDQUOT || error == -ENOSPC) && !retried) {
+	if (error == -EDQUOT && !retried) {
 		xfs_trans_cancel(tp);
-		xfs_blockgc_free_dquots(mp, udqp, gdqp, pdqp, 0);
+		xfs_blockgc_nospace_flush(mp, udqp, gdqp, pdqp, 0, error);
 		retried = true;
 		goto retry;
 	}
 	if (error) {
+		if (error == -EDQUOT && xfs_dquot_hardlimit_exceeded(pdqp))
+			error = -ENOSPC;
+
 		xfs_trans_cancel(tp);
 		return error;
 	}
@@ -1402,14 +1412,20 @@ retry:
 		error = xfs_trans_reserve_quota_bydquots(tp, mp, udqp, gdqp,
 				pdqp, ip->i_nblocks + ip->i_delayed_blks,
 				1, qflags);
-		if ((error == -EDQUOT || error == -ENOSPC) && !retried) {
+		if (error == -EDQUOT && !retried) {
 			xfs_trans_cancel(tp);
-			xfs_blockgc_free_dquots(mp, udqp, gdqp, pdqp, 0);
+			xfs_blockgc_nospace_flush(mp, udqp, gdqp, pdqp, 0,
+						error);
 			retried = true;
 			goto retry;
 		}
-		if (error)
+		if (error) {
+			if (error == -EDQUOT && xfs_dquot_hardlimit_exceeded(
+					pdqp))
+				error = -ENOSPC;
+
 			goto out_cancel;
+		}
 	}
 
 	*tpp = tp;
@@ -1481,13 +1497,18 @@ retry:
 		goto done;
 
 	error = xfs_trans_reserve_quota_nblks(tp, dp, resblks, 0, false);
-	if (error == -EDQUOT || error == -ENOSPC) {
+	if (error == -EDQUOT) {
 		if (!retried) {
 			xfs_trans_cancel(tp);
-			xfs_blockgc_free_quota(dp, 0);
+			xfs_blockgc_nospace_flush(dp->i_mount, ip->i_udquot,
+						ip->i_gdquot, ip->i_pdquot,
+						0, error);
 			retried = true;
 			goto retry;
 		}
+
+		if (xfs_dquot_hardlimit_exceeded(dp->i_pdquot))
+			error = -ENOSPC;
 
 		*nospace_error = error;
 		resblks = 0;
