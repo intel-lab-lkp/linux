@@ -15,6 +15,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_plane.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
@@ -148,3 +149,57 @@ void drm_fb_dma_sync_non_coherent(struct drm_device *drm,
 	}
 }
 EXPORT_SYMBOL_GPL(drm_fb_dma_sync_non_coherent);
+
+#if defined(CONFIG_DRM_PANIC)
+/**
+ * @dev: DRM device
+ * @drm_scanout_buffer: scanout buffer for the panic handler
+ * Returns: 0 or negative error code
+ *
+ * Generic get_scanout_buffer() implementation, for drivers that uses the
+ * drm_fb_dma_helper.
+ */
+int drm_panic_gem_get_scanout_buffer(struct drm_device *dev,
+				     struct drm_scanout_buffer *sb)
+{
+	struct drm_plane *plane;
+	struct drm_gem_dma_object *dma_obj;
+	struct drm_framebuffer *fb;
+
+	drm_for_each_primary_visible_plane(plane, dev) {
+		fb = plane->state->fb;
+		/* Only support linear modifier */
+		if (fb->modifier != DRM_FORMAT_MOD_LINEAR)
+			continue;
+
+		/* Check if color format is supported */
+		if (!drm_panic_is_format_supported(fb->format->format))
+			continue;
+
+		dma_obj = drm_fb_dma_get_gem_obj(fb, 0);
+
+		/* Buffer should be accessible from the CPU */
+		if (dma_obj->base.import_attach)
+			continue;
+
+		/* Buffer should be already mapped to CPU */
+		if (!dma_obj->vaddr)
+			continue;
+
+		iosys_map_set_vaddr(&sb->map, dma_obj->vaddr);
+		sb->format = fb->format;
+		sb->height = fb->height;
+		sb->width = fb->width;
+		sb->pitch = fb->pitches[0];
+		return 0;
+	}
+	return -ENODEV;
+}
+#else
+int drm_panic_gem_get_scanout_buffer(struct drm_device *dev,
+				     struct drm_scanout_buffer *sb)
+{
+	return 0;
+}
+#endif
+EXPORT_SYMBOL(drm_panic_gem_get_scanout_buffer);
