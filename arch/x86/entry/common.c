@@ -188,7 +188,7 @@ static __always_inline bool int80_is_external(void)
 	return apic_read(APIC_ISR + offs) & bit;
 }
 
-/**
+/*
  * int80_emulation - 32-bit legacy syscall entry
  *
  * This entry point can be used by 32-bit and 64-bit programs to perform
