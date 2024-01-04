@@ -102,6 +102,17 @@ struct ptp_system_timestamp {
  *               reading the lowest bits of the PHC timestamp and the second
  *               reading immediately follows that.
  *
+ * @gettimex64any: Reads the current time from the hardware clock and
+ *                 optionally also any of the MONO, MONO_RAW, or SYS clock
+ *                 parameter ts: Holds the PHC timestamp.
+ *                 parameter sts: If not NULL, it holds a pair of
+ *                 timestamps from the clock of choice. The first reading
+ *                 is made right before reading the lowest bits of the
+ *                 PHC timestamp and the second reading immediately
+ *                 follows that.
+ *                 parameter clkid: any one of the supported clockids
+ *                 (CLOCK_REALTIME, CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW)
+ *
  * @getcrosststamp:  Reads the current time from the hardware clock and
  *                   system clock simultaneously.
  *                   parameter cts: Contains timestamp (device,system) pair,
@@ -180,6 +191,10 @@ struct ptp_clock_info {
 	int (*gettime64)(struct ptp_clock_info *ptp, struct timespec64 *ts);
 	int (*gettimex64)(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			  struct ptp_system_timestamp *sts);
+	int (*gettimex64any)(struct ptp_clock_info *ptp,
+			     struct timespec64 *ts,
+			     struct ptp_system_timestamp *sts,
+			     clockid_t clockid);
 	int (*getcrosststamp)(struct ptp_clock_info *ptp,
 			      struct system_device_crosststamp *cts);
 	int (*settime64)(struct ptp_clock_info *p, const struct timespec64 *ts);
@@ -452,16 +467,47 @@ static inline ktime_t ptp_convert_timestamp(const ktime_t *hwtstamp,
 
 #endif
 
+static inline void ptp_read_any_ts64(struct timespec64 *ts,
+				     clockid_t clkid)
+{
+	switch (clkid) {
+	case CLOCK_REALTIME:
+		ktime_get_real_ts64(ts);
+		break;
+	case CLOCK_MONOTONIC:
+		ktime_get_ts64(ts);
+		break;
+	case CLOCK_MONOTONIC_RAW:
+		ktime_get_raw_ts64(ts);
+		break;
+	default:
+		break;
+	}
+}
+
 static inline void ptp_read_system_prets(struct ptp_system_timestamp *sts)
 {
 	if (sts)
-		ktime_get_real_ts64(&sts->pre_ts);
+		ptp_read_any_ts64(&sts->pre_ts, CLOCK_REALTIME);
 }
 
 static inline void ptp_read_system_postts(struct ptp_system_timestamp *sts)
 {
 	if (sts)
-		ktime_get_real_ts64(&sts->post_ts);
+		ptp_read_any_ts64(&sts->pre_ts, CLOCK_REALTIME);
 }
 
+static inline void ptp_read_any_prets(struct ptp_system_timestamp *sts,
+				      clockid_t clkid)
+{
+	if (sts)
+		ptp_read_any_ts64(&sts->pre_ts, clkid);
+}
+
+static inline void ptp_read_any_postts(struct ptp_system_timestamp *sts,
+				       clockid_t clkid)
+{
+	if (sts)
+		ptp_read_any_ts64(&sts->post_ts, clkid);
+}
 #endif
