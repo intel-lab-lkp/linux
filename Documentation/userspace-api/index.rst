@@ -19,7 +19,7 @@ General documentation:
 Subsystem-specific documentation:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    no_new_privs
    seccomp_filter
