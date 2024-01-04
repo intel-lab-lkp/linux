@@ -20,7 +20,8 @@ This driver used to be named ibm-acpi until kernel 2.6.21 and release
 0.13-20070314.  It used to be in the drivers/acpi tree, but it was
 moved to the drivers/misc tree and renamed to thinkpad-acpi for kernel
 2.6.22, and release 0.14.  It was moved to drivers/platform/x86 for
-kernel 2.6.29 and release 0.22.
+kernel 2.6.29 and release 0.22. It was moved to drivers/platform/x86/lenovo
+for kernel 6.8.
 
 The driver is named "thinkpad-acpi".  In some places, like module
 names and log messages, "thinkpad_acpi" is used because of userspace
