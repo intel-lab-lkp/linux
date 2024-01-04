@@ -173,7 +173,8 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 		return rc;
 	}
 
-	struct cxl_root *cxl_root __free(put_device) = find_cxl_root(port);
+	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
+
 	if (!cxl_root)
 		return -ENODEV;
 
@@ -354,7 +355,7 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 	struct cxl_port *root_port;
 	int rc;
 
-	struct cxl_root *cxl_root __free(put_device) =
+	struct cxl_root *cxl_root __free(put_cxl_root) =
 		find_cxl_root(cxlmd->endpoint);
 
 	if (!cxl_root)
