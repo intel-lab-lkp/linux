@@ -349,6 +349,19 @@ void drm_panic_unregister(struct drm_device *dev)
 EXPORT_SYMBOL(drm_panic_unregister);
 
 /**
+ * drm_panic_is_format_supported()
+ * @format: a fourcc color code
+ * Returns: true if supported, false otherwise.
+ *
+ * Check if drm_panic will be able to use this color format.
+ */
+bool drm_panic_is_format_supported(u32 format)
+{
+	return drm_fb_convert_from_xrgb8888(0xffffff, format) != 0;
+}
+EXPORT_SYMBOL(drm_panic_is_format_supported);
+
+/**
  * drm_panic_init() - Initialize drm-panic subsystem
  *
  * register the panic notifier

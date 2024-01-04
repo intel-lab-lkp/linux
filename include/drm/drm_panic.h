@@ -84,6 +84,8 @@ void drm_panic_exit(void);
 void drm_panic_register(struct drm_device *dev);
 void drm_panic_unregister(struct drm_device *dev);
 
+bool drm_panic_is_format_supported(u32 format);
+
 #else
 
 static inline void drm_panic_init(void) {}
@@ -91,6 +93,8 @@ static inline void drm_panic_exit(void) {}
 
 static inline void drm_panic_register(struct drm_device *dev) {}
 static inline void drm_panic_unregister(struct drm_device *dev) {}
+
+bool drm_panic_is_format_supported(u32 format) {return false; }
 
 #endif
 
