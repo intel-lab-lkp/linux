@@ -389,12 +389,18 @@ void ivpu_ipc_irq_handler(struct ivpu_device *vdev, bool *wake_thread)
 	unsigned long flags;
 	bool dispatched;
 	u32 vpu_addr;
+	int msg_count = 0;
 
 	/*
 	 * Driver needs to purge all messages from IPC FIFO to clear IPC interrupt.
 	 * Without purge IPC FIFO to 0 next IPC interrupts won't be generated.
 	 */
 	while (ivpu_hw_reg_ipc_rx_count_get(vdev)) {
+		if (++msg_count > IPC_MAX_RX_MSG) {
+			ivpu_pm_schedule_recovery(vdev);
+			return;
+		}
+
 		vpu_addr = ivpu_hw_reg_ipc_rx_addr_get(vdev);
 		if (vpu_addr == REG_IO_ERROR) {
 			ivpu_err_ratelimited(vdev, "Failed to read IPC rx addr register\n");
