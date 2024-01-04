@@ -2148,6 +2148,15 @@
 			0	disables intel_idle and fall back on acpi_idle.
 			1 to 9	specify maximum depth of C-state.
 
+	intel_epb=	[X86]
+			auto (default)
+			  Work around buggy BIOSes to avoid excess power usage
+			  by forcing the performance bias to "normal" at boot-time.
+			preserve
+			  Do not override the existing performance bias setting.
+			  Useful if a previous kernel or bootloader's setting is
+			  more desirable than "normal".
+
 	intel_pstate=	[X86]
 			disable
 			  Do not enable intel_pstate as the default
