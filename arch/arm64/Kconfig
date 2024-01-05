@@ -434,6 +434,22 @@ config AMPERE_ERRATUM_AC03_CPU_38
 
 	  If unsure, say Y.
 
+config AMPERE_ERRATUM_AC03_CPU_36
+	bool "AmpereOne: AC03_CPU_36: CPU takes invalid asynchronous exception while changing exception controls"
+	default y
+	help
+	  This option adds an alternative code sequence to work around Ampere
+	  erratum AC03_CPU_36 on AmpereOne parts.
+
+	  The affected designs can take an invalid exception to an incorrect
+	  exception level if an asynchronous exception arrives while software
+	  is changing the EL2 exception controls (i.e. HCR_EL2, SCTLR_EL2).
+
+	  The workaround forces KVM to mask all asynchronous exception sources
+	  when switching to the guest MMU context for TLB invalidations.
+
+	  If unsure, say Y.
+
 config ARM64_WORKAROUND_CLEAN_CACHE
 	bool
 

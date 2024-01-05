@@ -728,6 +728,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_AMPERE1),
 	},
 #endif
+#ifdef CONFIG_AMPERE_ERRATUM_AC03_CPU_36
+	{
+		.desc = "AmpereOne erratum AC03_CPU_36",
+		.capability = ARM64_WORKAROUND_AMPERE_AC03_CPU_36,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_AMPERE1),
+	},
+#endif
 	{
 	}
 };

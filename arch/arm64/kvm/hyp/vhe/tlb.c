@@ -17,13 +17,29 @@ struct tlb_inv_context {
 	u64			sctlr;
 };
 
+#define __tlb_daif_save(flags)						\
+({									\
+	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_36))	\
+		flags = local_daif_save();				\
+	else								\
+		local_irq_save(flags);					\
+})
+
+#define __tlb_daif_restore(flags)					\
+({									\
+	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_36))	\
+		local_daif_restore(flags);				\
+	else								\
+		local_irq_restore(flags);				\
+})
+
 static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
 				  struct tlb_inv_context *cxt)
 {
 	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
 	u64 val;
 
-	local_irq_save(cxt->flags);
+	__tlb_daif_save(cxt->flags);
 
 	if (vcpu && mmu != vcpu->arch.hw_mmu)
 		cxt->mmu = vcpu->arch.hw_mmu;
@@ -86,7 +102,7 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 		write_sysreg_el1(cxt->sctlr, SYS_SCTLR);
 	}
 
-	local_irq_restore(cxt->flags);
+	__tlb_daif_restore(cxt->flags);
 }
 
 void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
