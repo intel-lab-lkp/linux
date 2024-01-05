@@ -1415,11 +1415,11 @@ struct fuse_dev *fuse_dev_alloc(void)
 	struct fuse_dev *fud;
 	struct list_head *pq;
 
-	fud = kzalloc(sizeof(struct fuse_dev), GFP_KERNEL);
+	fud = kzalloc(sizeof(struct fuse_dev), GFP_KERNEL_ACCOUNT);
 	if (!fud)
 		return NULL;
 
-	pq = kcalloc(FUSE_PQ_HASH_SIZE, sizeof(struct list_head), GFP_KERNEL);
+	pq = kcalloc(FUSE_PQ_HASH_SIZE, sizeof(struct list_head), GFP_KERNEL_ACCOUNT);
 	if (!pq) {
 		kfree(fud);
 		return NULL;
