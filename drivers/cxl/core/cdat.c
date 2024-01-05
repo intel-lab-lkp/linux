@@ -162,7 +162,6 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 					struct xarray *dsmas_xa)
 {
 	struct access_coordinate c;
-	struct cxl_port *root_port;
 	struct cxl_root *cxl_root;
 	struct dsmas_entry *dent;
 	int valid_entries = 0;
@@ -175,8 +174,7 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 		return rc;
 	}
 
-	root_port = find_cxl_root(port);
-	cxl_root = to_cxl_root(root_port);
+	cxl_root = find_cxl_root(port);
 	if (!cxl_root->ops || !cxl_root->ops->qos_class)
 		return -EOPNOTSUPP;
 
@@ -193,7 +191,8 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 						    dent->coord.write_bandwidth);
 
 		dent->entries = 1;
-		rc = cxl_root->ops->qos_class(root_port, &dent->coord, 1, &qos_class);
+		rc = cxl_root->ops->qos_class(&cxl_root->port, &dent->coord, 1,
+					      &qos_class);
 		if (rc != 1)
 			continue;
 
@@ -351,13 +350,16 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	LIST_HEAD(__discard);
 	struct list_head *discard __free(dpa_perf) = &__discard;
+	struct cxl_port *root_port;
 	int rc;
 
-	struct cxl_port *root_port __free(put_cxl_root) =
+	struct cxl_root *cxl_root __free(put_cxl_root) =
 		find_cxl_root(cxlmd->endpoint);
 
-	if (!root_port)
+	if (!cxl_root)
 		return -ENODEV;
+
+	root_port = &cxl_root->port;
 
 	/* Check that the QTG IDs are all sane between end device and root decoders */
 	cxl_qos_match(root_port, &mds->ram_perf_list, discard);
