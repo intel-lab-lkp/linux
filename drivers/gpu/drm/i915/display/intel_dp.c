@@ -4038,8 +4038,13 @@ intel_dp_configure_mst(struct intel_dp *intel_dp)
 	if (!intel_dp_mst_source_support(intel_dp))
 		return;
 
-	intel_dp->is_mst = sink_can_mst &&
-		i915->display.params.enable_dp_mst;
+	/*
+	 * Even if dpcd reg MSTM_CAP is 0, if the sink supports UHBR rates then
+	 * DP2.1 can be enabled with underlying protocol using MST for MTP
+	 */
+	intel_dp->is_mst = (sink_can_mst ||
+			    drm_dp_is_uhbr_rate(intel_dp_max_common_rate(intel_dp)))
+			    && i915->display.params.enable_dp_mst;
 
 	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr,
 					intel_dp->is_mst);
