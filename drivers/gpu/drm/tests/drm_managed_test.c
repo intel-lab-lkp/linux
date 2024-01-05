@@ -19,6 +19,10 @@ static void drm_action(struct drm_device *drm, void *ptr)
 	priv->action_done = true;
 }
 
+/*
+ * The test verifies that the release action is called automatically when the
+ * device is released.
+ */
 static void drm_test_managed_run_action(struct kunit *test)
 {
 	struct managed_test_priv *priv;
@@ -32,6 +36,11 @@ static void drm_test_managed_run_action(struct kunit *test)
 	dev = drm_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
 
+	/*
+	 * DRM device can't be embedded in priv, since priv->action_done needs
+	 * to remain allocated beyond both parent device and drm_device
+	 * lifetime.
+	 */
 	drm = __drm_kunit_helper_alloc_drm_device(test, dev, sizeof(*drm), 0, DRIVER_MODESET);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, drm);
 
@@ -44,7 +53,7 @@ static void drm_test_managed_run_action(struct kunit *test)
 	drm_dev_unregister(drm);
 	drm_kunit_helper_free_device(test, dev);
 
-	KUNIT_EXPECT_TRUE(test, priv->action_done);
+	KUNIT_EXPECT_TRUE_MSG(test, priv->action_done, "Release action was not called");
 }
 
 static struct kunit_case drm_managed_tests[] = {
