@@ -162,6 +162,9 @@ struct dsa_switch_tree {
 
 	/* Track the largest switch index within a tree */
 	unsigned int last_switch;
+
+	/* List of port mirror routes */
+	struct list_head mirrors;
 };
 
 /* LAG IDs are one-based, the dst->lags array is zero-based */
@@ -366,6 +369,21 @@ struct dsa_vlan {
 	u16 vid;
 	refcount_t refcount;
 	struct list_head list;
+};
+
+struct dsa_mirror {
+	struct list_head list;
+	const struct dsa_port *from_dp;
+	const struct dsa_port *to_dp;
+	bool ingress;
+	struct list_head route;
+};
+
+struct dsa_route {
+	struct list_head list;
+	int sw_index;
+	int from_local_p;
+	int to_local_p;
 };
 
 struct dsa_switch {

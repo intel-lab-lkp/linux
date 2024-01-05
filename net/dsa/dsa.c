@@ -228,6 +228,8 @@ static struct dsa_switch_tree *dsa_tree_alloc(int index)
 
 	kref_init(&dst->refcount);
 
+	INIT_LIST_HEAD(&dst->mirrors);
+
 	return dst;
 }
 
@@ -923,6 +925,8 @@ teardown_cpu_ports:
 static void dsa_tree_teardown(struct dsa_switch_tree *dst)
 {
 	struct dsa_link *dl, *next;
+	struct dsa_mirror *dm, *m;
+	struct dsa_route *dr, *r;
 
 	if (!dst->setup)
 		return;
@@ -940,6 +944,16 @@ static void dsa_tree_teardown(struct dsa_switch_tree *dst)
 	list_for_each_entry_safe(dl, next, &dst->rtable, list) {
 		list_del(&dl->list);
 		kfree(dl);
+	}
+
+	list_for_each_entry_safe(dm, m, &dst->mirrors, list) {
+		list_for_each_entry_safe(dr, r, &dm->route, list) {
+			list_del(&dr->list);
+			kfree(dr);
+		}
+
+		list_del(&dm->list);
+		kfree(dm);
 	}
 
 	pr_info("DSA: tree %d torn down\n", dst->index);
