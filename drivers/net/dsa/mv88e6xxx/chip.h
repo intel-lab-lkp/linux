@@ -284,8 +284,6 @@ struct mv88e6xxx_port {
 	u64 vtu_miss_violation;
 	phy_interface_t interface;
 	u8 cmode;
-	bool mirror_ingress;
-	bool mirror_egress;
 	struct devlink_region *region;
 	void *pcs_private;
 

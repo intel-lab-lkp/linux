@@ -3568,6 +3568,28 @@ static int mv88e6xxx_stats_setup(struct mv88e6xxx_chip *chip)
 	return mv88e6xxx_g1_stats_clear(chip);
 }
 
+static int mv88e6xxx_mirror_setup(struct mv88e6xxx_chip *chip)
+{
+	int err, port, i;
+	const enum mv88e6xxx_egress_direction direction[] = {
+		MV88E6XXX_EGRESS_DIR_INGRESS, MV88E6XXX_EGRESS_DIR_EGRESS};
+
+	for (i = 0; i < ARRAY_SIZE(direction); i++) {
+		err = mv88e6xxx_set_egress_port(chip, i,
+						MV88E6XXX_EGRESS_DEST_DISABLE);
+		if (err)
+			return err;
+
+		for (port = 0; port < mv88e6xxx_num_ports(chip); port++) {
+			err = mv88e6xxx_port_set_mirror(chip, port, i, false);
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
 /* Check if the errata has already been applied. */
 static bool mv88e6390_setup_errata_applied(struct mv88e6xxx_chip *chip)
 {
@@ -3963,6 +3985,10 @@ static int mv88e6xxx_setup(struct dsa_switch *ds)
 	}
 
 	err = mv88e6xxx_stats_setup(chip);
+	if (err)
+		goto unlock;
+
+	err = mv88e6xxx_mirror_setup(chip);
 	if (err)
 		goto unlock;
 
@@ -6488,31 +6514,26 @@ static int mv88e6xxx_port_mirror_add(struct dsa_switch *ds, int from_port,
 						MV88E6XXX_EGRESS_DIR_INGRESS :
 						MV88E6XXX_EGRESS_DIR_EGRESS;
 	struct mv88e6xxx_chip *chip = ds->priv;
-	bool other_mirrors = false;
-	int i;
+	int *dest_port;
 	int err;
 
 	mutex_lock(&chip->reg_lock);
-	if ((ingress ? chip->ingress_dest_port : chip->egress_dest_port) !=
-	    to_port) {
-		for (i = 0; i < mv88e6xxx_num_ports(chip); i++)
-			other_mirrors |= ingress ?
-					 chip->ports[i].mirror_ingress :
-					 chip->ports[i].mirror_egress;
+	dest_port = ingress ? &chip->ingress_dest_port : &chip->egress_dest_port;
 
-		/* Can't change egress port when other mirror is active */
-		if (other_mirrors) {
-			err = -EBUSY;
-			goto out;
-		}
-
-		err = mv88e6xxx_set_egress_port(chip, direction,
-						to_port);
-		if (err)
-			goto out;
+	/* Can't change egress port when mirroring is active */
+	if (*dest_port != MV88E6XXX_EGRESS_DEST_DISABLE &&
+	    *dest_port != to_port) {
+		err = -EBUSY;
+		goto out;
 	}
 
-	err = mv88e6xxx_port_set_mirror(chip, from_port, direction, true);
+	err = mv88e6xxx_set_egress_port(chip, direction, to_port);
+	if (err)
+		goto out;
+
+	if (dsa_port_is_user(dsa_to_port(ds, from_port)))
+		err = mv88e6xxx_port_set_mirror(chip, from_port, direction, true);
+
 out:
 	mutex_unlock(&chip->reg_lock);
 
@@ -6527,20 +6548,18 @@ static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int from_port,
 						MV88E6XXX_EGRESS_DIR_INGRESS :
 						MV88E6XXX_EGRESS_DIR_EGRESS;
 	struct mv88e6xxx_chip *chip = ds->priv;
-	bool other_mirrors = false;
-	int i;
+	int *dest_port;
 
 	mutex_lock(&chip->reg_lock);
-	if (mv88e6xxx_port_set_mirror(chip, from_port, direction, false))
-		dev_err(ds->dev, "p%d: failed to disable mirroring\n", from_port);
+	dest_port = ingress ? &chip->ingress_dest_port : &chip->egress_dest_port;
 
-	for (i = 0; i < mv88e6xxx_num_ports(chip); i++)
-		other_mirrors |= ingress ?
-				 chip->ports[i].mirror_ingress :
-				 chip->ports[i].mirror_egress;
+	if (!(route_status & DSA_ROUTE_SRC_PORT_BUSY)) {
+		if (mv88e6xxx_port_set_mirror(chip, from_port, direction, false))
+			dev_err(ds->dev, "p%d: failed to disable mirroring\n", from_port);
+	}
 
-	/* Reset egress port when no other mirror is active */
-	if (!other_mirrors) {
+	if (!(route_status & DSA_ROUTE_DEST_PORT_BUSY) &&
+	    *dest_port == to_port) {
 		if (mv88e6xxx_set_egress_port(chip, direction,
 					      MV88E6XXX_EGRESS_DEST_DISABLE))
 			dev_err(ds->dev, "failed to set egress port\n");
