@@ -8283,6 +8283,12 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	update_curr(cfs_rq);
 
 	/*
+	 * We can come here with TIF_NEED_RESCHED already set from update_curr,
+	 * check to save one call to pick_eevdf if it's set.
+	 */
+	if (test_tsk_need_resched(curr))
+		return;
+	/*
 	 * XXX pick_eevdf(cfs_rq) != se ?
 	 */
 	if (pick_eevdf(cfs_rq) == pse)
