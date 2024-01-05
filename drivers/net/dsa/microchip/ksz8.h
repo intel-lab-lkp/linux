@@ -43,11 +43,11 @@ int ksz8_port_vlan_add(struct ksz_device *dev, int port,
 		       struct netlink_ext_ack *extack);
 int ksz8_port_vlan_del(struct ksz_device *dev, int port,
 		       const struct switchdev_obj_port_vlan *vlan);
-int ksz8_port_mirror_add(struct ksz_device *dev, int port,
-			 struct dsa_mall_mirror_tc_entry *mirror,
-			 bool ingress, struct netlink_ext_ack *extack);
-void ksz8_port_mirror_del(struct ksz_device *dev, int port,
-			  struct dsa_mall_mirror_tc_entry *mirror);
+int ksz8_port_mirror_add(struct ksz_device *dev, int from_port,
+			 int to_port, bool ingress,
+			 struct netlink_ext_ack *extack);
+void ksz8_port_mirror_del(struct ksz_device *dev, int from_port,
+			  int to_port, bool ingress);
 void ksz8_get_caps(struct ksz_device *dev, int port,
 		   struct phylink_config *config);
 void ksz8_config_cpu_port(struct dsa_switch *ds);

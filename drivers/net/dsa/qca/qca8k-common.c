@@ -884,16 +884,16 @@ int qca8k_port_mdb_del(struct dsa_switch *ds, int port,
 	return qca8k_fdb_search_and_del(priv, BIT(port), addr, vid);
 }
 
-int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
-			  struct dsa_mall_mirror_tc_entry *mirror,
-			  bool ingress, struct netlink_ext_ack *extack)
+int qca8k_port_mirror_add(struct dsa_switch *ds, int from_port,
+			  int to_port, bool ingress,
+			  struct netlink_ext_ack *extack)
 {
 	struct qca8k_priv *priv = ds->priv;
 	int monitor_port, ret;
 	u32 reg, val;
 
 	/* Check for existent entry */
-	if ((ingress ? priv->mirror_rx : priv->mirror_tx) & BIT(port))
+	if ((ingress ? priv->mirror_rx : priv->mirror_tx) & BIT(from_port))
 		return -EEXIST;
 
 	ret = regmap_read(priv->regmap, QCA8K_REG_GLOBAL_FW_CTRL0, &val);
@@ -905,22 +905,22 @@ int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
 	 * When no mirror port is set, the values is set to 0xF
 	 */
 	monitor_port = FIELD_GET(QCA8K_GLOBAL_FW_CTRL0_MIRROR_PORT_NUM, val);
-	if (monitor_port != 0xF && monitor_port != mirror->to_local_port)
+	if (monitor_port != 0xF && monitor_port != to_port)
 		return -EEXIST;
 
 	/* Set the monitor port */
 	val = FIELD_PREP(QCA8K_GLOBAL_FW_CTRL0_MIRROR_PORT_NUM,
-			 mirror->to_local_port);
+			 to_port);
 	ret = regmap_update_bits(priv->regmap, QCA8K_REG_GLOBAL_FW_CTRL0,
 				 QCA8K_GLOBAL_FW_CTRL0_MIRROR_PORT_NUM, val);
 	if (ret)
 		return ret;
 
 	if (ingress) {
-		reg = QCA8K_PORT_LOOKUP_CTRL(port);
+		reg = QCA8K_PORT_LOOKUP_CTRL(from_port);
 		val = QCA8K_PORT_LOOKUP_ING_MIRROR_EN;
 	} else {
-		reg = QCA8K_REG_PORT_HOL_CTRL1(port);
+		reg = QCA8K_REG_PORT_HOL_CTRL1(from_port);
 		val = QCA8K_PORT_HOL_CTRL1_EG_MIRROR_EN;
 	}
 
@@ -932,25 +932,25 @@ int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
 	 * mirror port has to be disabled.
 	 */
 	if (ingress)
-		priv->mirror_rx |= BIT(port);
+		priv->mirror_rx |= BIT(from_port);
 	else
-		priv->mirror_tx |= BIT(port);
+		priv->mirror_tx |= BIT(from_port);
 
 	return 0;
 }
 
-void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
-			   struct dsa_mall_mirror_tc_entry *mirror)
+void qca8k_port_mirror_del(struct dsa_switch *ds, int from_port,
+			   int to_port, bool ingress)
 {
 	struct qca8k_priv *priv = ds->priv;
 	u32 reg, val;
 	int ret;
 
-	if (mirror->ingress) {
-		reg = QCA8K_PORT_LOOKUP_CTRL(port);
+	if (ingress) {
+		reg = QCA8K_PORT_LOOKUP_CTRL(from_port);
 		val = QCA8K_PORT_LOOKUP_ING_MIRROR_EN;
 	} else {
-		reg = QCA8K_REG_PORT_HOL_CTRL1(port);
+		reg = QCA8K_REG_PORT_HOL_CTRL1(from_port);
 		val = QCA8K_PORT_HOL_CTRL1_EG_MIRROR_EN;
 	}
 
@@ -958,10 +958,10 @@ void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 	if (ret)
 		goto err;
 
-	if (mirror->ingress)
-		priv->mirror_rx &= ~BIT(port);
+	if (ingress)
+		priv->mirror_rx &= ~BIT(from_port);
 	else
-		priv->mirror_tx &= ~BIT(port);
+		priv->mirror_tx &= ~BIT(from_port);
 
 	/* No port set to send packet to mirror port. Disable mirror port */
 	if (!priv->mirror_rx && !priv->mirror_tx) {
@@ -972,7 +972,7 @@ void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 			goto err;
 	}
 err:
-	dev_err(priv->dev, "Failed to del mirror port from %d", port);
+	dev_err(priv->dev, "Failed to del mirror port from %d", from_port);
 }
 
 int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port,

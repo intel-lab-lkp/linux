@@ -325,11 +325,10 @@ struct ksz_dev_ops {
 			 struct netlink_ext_ack *extack);
 	int  (*vlan_del)(struct ksz_device *dev, int port,
 			 const struct switchdev_obj_port_vlan *vlan);
-	int (*mirror_add)(struct ksz_device *dev, int port,
-			  struct dsa_mall_mirror_tc_entry *mirror,
+	int (*mirror_add)(struct ksz_device *dev, int from_port, int to_port,
 			  bool ingress, struct netlink_ext_ack *extack);
-	void (*mirror_del)(struct ksz_device *dev, int port,
-			   struct dsa_mall_mirror_tc_entry *mirror);
+	void (*mirror_del)(struct ksz_device *dev, int from_port,
+			   int to_port, bool ingress);
 	int (*fdb_add)(struct ksz_device *dev, int port,
 		       const unsigned char *addr, u16 vid, struct dsa_db db);
 	int (*fdb_del)(struct ksz_device *dev, int port,

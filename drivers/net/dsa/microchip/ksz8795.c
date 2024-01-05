@@ -1312,45 +1312,45 @@ int ksz8_port_vlan_del(struct ksz_device *dev, int port,
 	return 0;
 }
 
-int ksz8_port_mirror_add(struct ksz_device *dev, int port,
-			 struct dsa_mall_mirror_tc_entry *mirror,
-			 bool ingress, struct netlink_ext_ack *extack)
+int ksz8_port_mirror_add(struct ksz_device *dev, int from_port,
+			 int to_port, bool ingress,
+			 struct netlink_ext_ack *extack)
 {
 	if (ingress) {
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
-		dev->mirror_rx |= BIT(port);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
+		dev->mirror_rx |= BIT(from_port);
 	} else {
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, true);
-		dev->mirror_tx |= BIT(port);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_TX, true);
+		dev->mirror_tx |= BIT(from_port);
 	}
 
-	ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_SNIFFER, false);
+	ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_SNIFFER, false);
 
 	/* configure mirror port */
 	if (dev->mirror_rx || dev->mirror_tx)
-		ksz_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
+		ksz_port_cfg(dev, to_port, P_MIRROR_CTRL,
 			     PORT_MIRROR_SNIFFER, true);
 
 	return 0;
 }
 
-void ksz8_port_mirror_del(struct ksz_device *dev, int port,
-			  struct dsa_mall_mirror_tc_entry *mirror)
+void ksz8_port_mirror_del(struct ksz_device *dev, int from_port,
+			  int to_port, bool ingress)
 {
 	u8 data;
 
-	if (mirror->ingress) {
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
-		dev->mirror_rx &= ~BIT(port);
+	if (ingress) {
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
+		dev->mirror_rx &= ~BIT(from_port);
 	} else {
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, false);
-		dev->mirror_tx &= ~BIT(port);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_TX, false);
+		dev->mirror_tx &= ~BIT(from_port);
 	}
 
-	ksz_pread8(dev, port, P_MIRROR_CTRL, &data);
+	ksz_pread8(dev, from_port, P_MIRROR_CTRL, &data);
 
 	if (!dev->mirror_rx && !dev->mirror_tx)
-		ksz_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
+		ksz_port_cfg(dev, to_port, P_MIRROR_CTRL,
 			     PORT_MIRROR_SNIFFER, false);
 }
 

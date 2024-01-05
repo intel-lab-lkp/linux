@@ -569,11 +569,11 @@ int qca8k_port_mdb_del(struct dsa_switch *ds, int port,
 		       struct dsa_db db);
 
 /* Common port mirror function */
-int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
-			  struct dsa_mall_mirror_tc_entry *mirror,
-			  bool ingress, struct netlink_ext_ack *extack);
-void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
-			   struct dsa_mall_mirror_tc_entry *mirror);
+int qca8k_port_mirror_add(struct dsa_switch *ds, int from_port,
+			  int to_port, bool ingress,
+			  struct netlink_ext_ack *extack);
+void qca8k_port_mirror_del(struct dsa_switch *ds, int from_port,
+			   int to_port, bool ingress);
 
 /* Common port VLAN function */
 int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,

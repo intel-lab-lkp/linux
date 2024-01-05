@@ -385,13 +385,13 @@ int b53_mdb_add(struct dsa_switch *ds, int port,
 int b53_mdb_del(struct dsa_switch *ds, int port,
 		const struct switchdev_obj_port_mdb *mdb,
 		struct dsa_db db);
-int b53_mirror_add(struct dsa_switch *ds, int port,
-		   struct dsa_mall_mirror_tc_entry *mirror, bool ingress,
+int b53_mirror_add(struct dsa_switch *ds, int from_port,
+		   int to_port, bool ingress,
 		   struct netlink_ext_ack *extack);
 enum dsa_tag_protocol b53_get_tag_protocol(struct dsa_switch *ds, int port,
 					   enum dsa_tag_protocol mprot);
-void b53_mirror_del(struct dsa_switch *ds, int port,
-		    struct dsa_mall_mirror_tc_entry *mirror);
+void b53_mirror_del(struct dsa_switch *ds, int from_port, int to_port,
+		    bool ingress);
 int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy);
 void b53_disable_port(struct dsa_switch *ds, int port);
 void b53_brcm_hdr_setup(struct dsa_switch *ds, int port);

@@ -1003,9 +1003,9 @@ exit:
 	return ret;
 }
 
-int ksz9477_port_mirror_add(struct ksz_device *dev, int port,
-			    struct dsa_mall_mirror_tc_entry *mirror,
-			    bool ingress, struct netlink_ext_ack *extack)
+int ksz9477_port_mirror_add(struct ksz_device *dev, int from_port,
+			    int to_port, bool ingress,
+			    struct netlink_ext_ack *extack)
 {
 	u8 data;
 	int p;
@@ -1016,7 +1016,7 @@ int ksz9477_port_mirror_add(struct ksz_device *dev, int port,
 	 */
 	for (p = 0; p < dev->info->port_cnt; p++) {
 		/* Skip the current sniffing port */
-		if (p == mirror->to_local_port)
+		if (p == to_port)
 			continue;
 
 		ksz_pread8(dev, p, P_MIRROR_CTRL, &data);
@@ -1029,12 +1029,12 @@ int ksz9477_port_mirror_add(struct ksz_device *dev, int port,
 	}
 
 	if (ingress)
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
 	else
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, true);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_TX, true);
 
 	/* configure mirror port */
-	ksz_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
+	ksz_port_cfg(dev, to_port, P_MIRROR_CTRL,
 		     PORT_MIRROR_SNIFFER, true);
 
 	ksz_cfg(dev, S_MIRROR_CTRL, SW_MIRROR_RX_TX, false);
@@ -1042,17 +1042,17 @@ int ksz9477_port_mirror_add(struct ksz_device *dev, int port,
 	return 0;
 }
 
-void ksz9477_port_mirror_del(struct ksz_device *dev, int port,
-			     struct dsa_mall_mirror_tc_entry *mirror)
+void ksz9477_port_mirror_del(struct ksz_device *dev, int from_port,
+			     int to_port, bool ingress)
 {
 	bool in_use = false;
 	u8 data;
 	int p;
 
-	if (mirror->ingress)
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
+	if (ingress)
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
 	else
-		ksz_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, false);
+		ksz_port_cfg(dev, from_port, P_MIRROR_CTRL, PORT_MIRROR_TX, false);
 
 
 	/* Check if any of the port is still referring to sniffer port */
@@ -1067,7 +1067,7 @@ void ksz9477_port_mirror_del(struct ksz_device *dev, int port,
 
 	/* delete sniffing if there are no other mirroring rules */
 	if (!in_use)
-		ksz_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
+		ksz_port_cfg(dev, to_port, P_MIRROR_CTRL,
 			     PORT_MIRROR_SNIFFER, false);
 }
 

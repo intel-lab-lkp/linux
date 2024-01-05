@@ -6480,9 +6480,8 @@ static int mv88e6xxx_port_mdb_del(struct dsa_switch *ds, int port,
 	return err;
 }
 
-static int mv88e6xxx_port_mirror_add(struct dsa_switch *ds, int port,
-				     struct dsa_mall_mirror_tc_entry *mirror,
-				     bool ingress,
+static int mv88e6xxx_port_mirror_add(struct dsa_switch *ds, int from_port,
+				     int to_port, bool ingress,
 				     struct netlink_ext_ack *extack)
 {
 	enum mv88e6xxx_egress_direction direction = ingress ?
@@ -6495,7 +6494,7 @@ static int mv88e6xxx_port_mirror_add(struct dsa_switch *ds, int port,
 
 	mutex_lock(&chip->reg_lock);
 	if ((ingress ? chip->ingress_dest_port : chip->egress_dest_port) !=
-	    mirror->to_local_port) {
+	    to_port) {
 		for (i = 0; i < mv88e6xxx_num_ports(chip); i++)
 			other_mirrors |= ingress ?
 					 chip->ports[i].mirror_ingress :
@@ -6508,22 +6507,22 @@ static int mv88e6xxx_port_mirror_add(struct dsa_switch *ds, int port,
 		}
 
 		err = mv88e6xxx_set_egress_port(chip, direction,
-						mirror->to_local_port);
+						to_port);
 		if (err)
 			goto out;
 	}
 
-	err = mv88e6xxx_port_set_mirror(chip, port, direction, true);
+	err = mv88e6xxx_port_set_mirror(chip, from_port, direction, true);
 out:
 	mutex_unlock(&chip->reg_lock);
 
 	return err;
 }
 
-static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int port,
-				      struct dsa_mall_mirror_tc_entry *mirror)
+static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int from_port,
+				      int to_port, bool ingress)
 {
-	enum mv88e6xxx_egress_direction direction = mirror->ingress ?
+	enum mv88e6xxx_egress_direction direction = ingress ?
 						MV88E6XXX_EGRESS_DIR_INGRESS :
 						MV88E6XXX_EGRESS_DIR_EGRESS;
 	struct mv88e6xxx_chip *chip = ds->priv;
@@ -6531,18 +6530,18 @@ static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int port,
 	int i;
 
 	mutex_lock(&chip->reg_lock);
-	if (mv88e6xxx_port_set_mirror(chip, port, direction, false))
-		dev_err(ds->dev, "p%d: failed to disable mirroring\n", port);
+	if (mv88e6xxx_port_set_mirror(chip, from_port, direction, false))
+		dev_err(ds->dev, "p%d: failed to disable mirroring\n", from_port);
 
 	for (i = 0; i < mv88e6xxx_num_ports(chip); i++)
-		other_mirrors |= mirror->ingress ?
+		other_mirrors |= ingress ?
 				 chip->ports[i].mirror_ingress :
 				 chip->ports[i].mirror_egress;
 
 	/* Reset egress port when no other mirror is active */
 	if (!other_mirrors) {
 		if (mv88e6xxx_set_egress_port(chip, direction,
-					      dsa_upstream_port(ds, port)))
+					      dsa_upstream_port(ds, from_port)))
 			dev_err(ds->dev, "failed to set egress port\n");
 	}
 

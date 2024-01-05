@@ -1399,10 +1399,10 @@ dsa_user_add_cls_matchall_mirred(struct net_device *dev,
 
 	to_dp = dsa_user_to_port(act->dev);
 
-	mirror->to_local_port = to_dp->index;
+	mirror->to_port = to_dp;
 	mirror->ingress = ingress;
 
-	err = ds->ops->port_mirror_add(ds, dp->index, mirror, ingress, extack);
+	err = ds->ops->port_mirror_add(ds, dp->index, to_dp->index, ingress, extack);
 	if (err) {
 		kfree(mall_tc_entry);
 		return err;
@@ -1506,9 +1506,14 @@ static void dsa_user_del_cls_matchall(struct net_device *dev,
 
 	switch (mall_tc_entry->type) {
 	case DSA_PORT_MALL_MIRROR:
-		if (ds->ops->port_mirror_del)
+		if (ds->ops->port_mirror_del) {
+			struct dsa_mall_mirror_tc_entry *mirror;
+
+			mirror = &mall_tc_entry->mirror;
 			ds->ops->port_mirror_del(ds, dp->index,
-						 &mall_tc_entry->mirror);
+						 mirror->to_port->index,
+						 mirror->ingress);
+		}
 		break;
 	case DSA_PORT_MALL_POLICER:
 		if (ds->ops->port_policer_del)

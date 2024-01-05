@@ -1760,16 +1760,16 @@ static int mt753x_mirror_port_set(unsigned int id, u32 val)
 				   MIRROR_PORT(val);
 }
 
-static int mt753x_port_mirror_add(struct dsa_switch *ds, int port,
-				  struct dsa_mall_mirror_tc_entry *mirror,
-				  bool ingress, struct netlink_ext_ack *extack)
+static int mt753x_port_mirror_add(struct dsa_switch *ds, int from_port,
+				  int to_port, bool ingress,
+				  struct netlink_ext_ack *extack)
 {
 	struct mt7530_priv *priv = ds->priv;
 	int monitor_port;
 	u32 val;
 
 	/* Check for existent entry */
-	if ((ingress ? priv->mirror_rx : priv->mirror_tx) & BIT(port))
+	if ((ingress ? priv->mirror_rx : priv->mirror_tx) & BIT(from_port))
 		return -EEXIST;
 
 	val = mt7530_read(priv, MT753X_MIRROR_REG(priv->id));
@@ -1777,42 +1777,42 @@ static int mt753x_port_mirror_add(struct dsa_switch *ds, int port,
 	/* MT7530 only supports one monitor port */
 	monitor_port = mt753x_mirror_port_get(priv->id, val);
 	if (val & MT753X_MIRROR_EN(priv->id) &&
-	    monitor_port != mirror->to_local_port)
+	    monitor_port != to_port)
 		return -EEXIST;
 
 	val |= MT753X_MIRROR_EN(priv->id);
 	val &= ~MT753X_MIRROR_MASK(priv->id);
-	val |= mt753x_mirror_port_set(priv->id, mirror->to_local_port);
+	val |= mt753x_mirror_port_set(priv->id, to_port);
 	mt7530_write(priv, MT753X_MIRROR_REG(priv->id), val);
 
-	val = mt7530_read(priv, MT7530_PCR_P(port));
+	val = mt7530_read(priv, MT7530_PCR_P(from_port));
 	if (ingress) {
 		val |= PORT_RX_MIR;
-		priv->mirror_rx |= BIT(port);
+		priv->mirror_rx |= BIT(from_port);
 	} else {
 		val |= PORT_TX_MIR;
-		priv->mirror_tx |= BIT(port);
+		priv->mirror_tx |= BIT(from_port);
 	}
-	mt7530_write(priv, MT7530_PCR_P(port), val);
+	mt7530_write(priv, MT7530_PCR_P(from_port), val);
 
 	return 0;
 }
 
-static void mt753x_port_mirror_del(struct dsa_switch *ds, int port,
-				   struct dsa_mall_mirror_tc_entry *mirror)
+static void mt753x_port_mirror_del(struct dsa_switch *ds, int from_port,
+				   int to_port, bool ingress)
 {
 	struct mt7530_priv *priv = ds->priv;
 	u32 val;
 
-	val = mt7530_read(priv, MT7530_PCR_P(port));
-	if (mirror->ingress) {
+	val = mt7530_read(priv, MT7530_PCR_P(from_port));
+	if (ingress) {
 		val &= ~PORT_RX_MIR;
-		priv->mirror_rx &= ~BIT(port);
+		priv->mirror_rx &= ~BIT(from_port);
 	} else {
 		val &= ~PORT_TX_MIR;
-		priv->mirror_tx &= ~BIT(port);
+		priv->mirror_tx &= ~BIT(from_port);
 	}
-	mt7530_write(priv, MT7530_PCR_P(port), val);
+	mt7530_write(priv, MT7530_PCR_P(from_port), val);
 
 	if (!priv->mirror_rx && !priv->mirror_tx) {
 		val = mt7530_read(priv, MT753X_MIRROR_REG(priv->id));

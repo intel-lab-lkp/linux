@@ -1853,22 +1853,22 @@ static void felix_port_policer_del(struct dsa_switch *ds, int port)
 	ocelot_port_policer_del(ocelot, port);
 }
 
-static int felix_port_mirror_add(struct dsa_switch *ds, int port,
-				 struct dsa_mall_mirror_tc_entry *mirror,
-				 bool ingress, struct netlink_ext_ack *extack)
+static int felix_port_mirror_add(struct dsa_switch *ds, int from_port,
+				 int to_port, bool ingress,
+				 struct netlink_ext_ack *extack)
 {
 	struct ocelot *ocelot = ds->priv;
 
-	return ocelot_port_mirror_add(ocelot, port, mirror->to_local_port,
+	return ocelot_port_mirror_add(ocelot, from_port, to_port,
 				      ingress, extack);
 }
 
-static void felix_port_mirror_del(struct dsa_switch *ds, int port,
-				  struct dsa_mall_mirror_tc_entry *mirror)
+static void felix_port_mirror_del(struct dsa_switch *ds, int from_port,
+				  int to_port, bool ingress)
 {
 	struct ocelot *ocelot = ds->priv;
 
-	ocelot_port_mirror_del(ocelot, port, mirror->ingress);
+	ocelot_port_mirror_del(ocelot, from_port, ingress);
 }
 
 static int felix_port_setup_tc(struct dsa_switch *ds, int port,

@@ -2895,19 +2895,18 @@ static int sja1105_mirror_apply(struct sja1105_private *priv, int from, int to,
 					    &mac[from], true);
 }
 
-static int sja1105_mirror_add(struct dsa_switch *ds, int port,
-			      struct dsa_mall_mirror_tc_entry *mirror,
+static int sja1105_mirror_add(struct dsa_switch *ds, int from_port, int to_port,
 			      bool ingress, struct netlink_ext_ack *extack)
 {
-	return sja1105_mirror_apply(ds->priv, port, mirror->to_local_port,
+	return sja1105_mirror_apply(ds->priv, from_port, to_port,
 				    ingress, true);
 }
 
-static void sja1105_mirror_del(struct dsa_switch *ds, int port,
-			       struct dsa_mall_mirror_tc_entry *mirror)
+static void sja1105_mirror_del(struct dsa_switch *ds, int from_port,
+			       int to_port, bool ingress)
 {
-	sja1105_mirror_apply(ds->priv, port, mirror->to_local_port,
-			     mirror->ingress, false);
+	sja1105_mirror_apply(ds->priv, from_port, to_port,
+			     ingress, false);
 }
 
 static int sja1105_port_policer_add(struct dsa_switch *ds, int port,

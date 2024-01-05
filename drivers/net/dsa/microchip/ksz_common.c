@@ -2770,25 +2770,25 @@ static int ksz_port_vlan_del(struct dsa_switch *ds, int port,
 	return dev->dev_ops->vlan_del(dev, port, vlan);
 }
 
-static int ksz_port_mirror_add(struct dsa_switch *ds, int port,
-			       struct dsa_mall_mirror_tc_entry *mirror,
-			       bool ingress, struct netlink_ext_ack *extack)
+static int ksz_port_mirror_add(struct dsa_switch *ds, int from_port,
+			       int to_port, bool ingress,
+			       struct netlink_ext_ack *extack)
 {
 	struct ksz_device *dev = ds->priv;
 
 	if (!dev->dev_ops->mirror_add)
 		return -EOPNOTSUPP;
 
-	return dev->dev_ops->mirror_add(dev, port, mirror, ingress, extack);
+	return dev->dev_ops->mirror_add(dev, from_port, to_port, ingress, extack);
 }
 
-static void ksz_port_mirror_del(struct dsa_switch *ds, int port,
-				struct dsa_mall_mirror_tc_entry *mirror)
+static void ksz_port_mirror_del(struct dsa_switch *ds, int from_port,
+				int to_port, bool ingress)
 {
 	struct ksz_device *dev = ds->priv;
 
 	if (dev->dev_ops->mirror_del)
-		dev->dev_ops->mirror_del(dev, port, mirror);
+		dev->dev_ops->mirror_del(dev, from_port, to_port, ingress);
 }
 
 static int ksz_change_mtu(struct dsa_switch *ds, int port, int mtu)

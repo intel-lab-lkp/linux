@@ -31,11 +31,11 @@ int ksz9477_port_vlan_add(struct ksz_device *dev, int port,
 			  struct netlink_ext_ack *extack);
 int ksz9477_port_vlan_del(struct ksz_device *dev, int port,
 			  const struct switchdev_obj_port_vlan *vlan);
-int ksz9477_port_mirror_add(struct ksz_device *dev, int port,
-			    struct dsa_mall_mirror_tc_entry *mirror,
-			    bool ingress, struct netlink_ext_ack *extack);
-void ksz9477_port_mirror_del(struct ksz_device *dev, int port,
-			     struct dsa_mall_mirror_tc_entry *mirror);
+int ksz9477_port_mirror_add(struct ksz_device *dev, int from_port,
+			    int to_port, bool ingress,
+			    struct netlink_ext_ack *extack);
+void ksz9477_port_mirror_del(struct ksz_device *dev, int from_port,
+			     int to_port, bool ingress);
 void ksz9477_get_caps(struct ksz_device *dev, int port,
 		      struct phylink_config *config);
 int ksz9477_fdb_dump(struct ksz_device *dev, int port,

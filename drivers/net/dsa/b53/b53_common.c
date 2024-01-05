@@ -2128,8 +2128,8 @@ out:
 }
 EXPORT_SYMBOL(b53_get_tag_protocol);
 
-int b53_mirror_add(struct dsa_switch *ds, int port,
-		   struct dsa_mall_mirror_tc_entry *mirror, bool ingress,
+int b53_mirror_add(struct dsa_switch *ds, int from_port,
+		   int to_port, bool ingress,
 		   struct netlink_ext_ack *extack)
 {
 	struct b53_device *dev = ds->priv;
@@ -2141,12 +2141,12 @@ int b53_mirror_add(struct dsa_switch *ds, int port,
 		loc = B53_EG_MIR_CTL;
 
 	b53_read16(dev, B53_MGMT_PAGE, loc, &reg);
-	reg |= BIT(port);
+	reg |= BIT(from_port);
 	b53_write16(dev, B53_MGMT_PAGE, loc, reg);
 
 	b53_read16(dev, B53_MGMT_PAGE, B53_MIR_CAP_CTL, &reg);
 	reg &= ~CAP_PORT_MASK;
-	reg |= mirror->to_local_port;
+	reg |= to_port;
 	reg |= MIRROR_EN;
 	b53_write16(dev, B53_MGMT_PAGE, B53_MIR_CAP_CTL, reg);
 
@@ -2154,21 +2154,21 @@ int b53_mirror_add(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL(b53_mirror_add);
 
-void b53_mirror_del(struct dsa_switch *ds, int port,
-		    struct dsa_mall_mirror_tc_entry *mirror)
+void b53_mirror_del(struct dsa_switch *ds, int from_port,
+		    int to_port, bool ingress)
 {
 	struct b53_device *dev = ds->priv;
 	bool loc_disable = false, other_loc_disable = false;
 	u16 reg, loc;
 
-	if (mirror->ingress)
+	if (ingress)
 		loc = B53_IG_MIR_CTL;
 	else
 		loc = B53_EG_MIR_CTL;
 
 	/* Update the desired ingress/egress register */
 	b53_read16(dev, B53_MGMT_PAGE, loc, &reg);
-	reg &= ~BIT(port);
+	reg &= ~BIT(from_port);
 	if (!(reg & MIRROR_MASK))
 		loc_disable = true;
 	b53_write16(dev, B53_MGMT_PAGE, loc, reg);
@@ -2176,7 +2176,7 @@ void b53_mirror_del(struct dsa_switch *ds, int port,
 	/* Now look at the other one to know if we can disable mirroring
 	 * entirely
 	 */
-	if (mirror->ingress)
+	if (ingress)
 		b53_read16(dev, B53_MGMT_PAGE, B53_EG_MIR_CTL, &reg);
 	else
 		b53_read16(dev, B53_MGMT_PAGE, B53_IG_MIR_CTL, &reg);
@@ -2187,7 +2187,7 @@ void b53_mirror_del(struct dsa_switch *ds, int port,
 	/* Both no longer have ports, let's disable mirroring */
 	if (loc_disable && other_loc_disable) {
 		reg &= ~MIRROR_EN;
-		reg &= ~mirror->to_local_port;
+		reg &= ~to_port;
 	}
 	b53_write16(dev, B53_MGMT_PAGE, B53_MIR_CAP_CTL, reg);
 }
