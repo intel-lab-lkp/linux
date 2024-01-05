@@ -82,6 +82,43 @@ struct resource *platform_get_mem_or_io(struct platform_device *dev,
 }
 EXPORT_SYMBOL_GPL(platform_get_mem_or_io);
 
+/**
+ * devm_platform_get_and_resource - get and request a resource
+ *
+ * @pdev: the platform device to get the resource from
+ * @type: resource type (either IORESOURCE_MEM or IORESOURCE_IO)
+ * @num: resource index
+ * @name: name to be associated with the request
+ *
+ * Return: a pointer to the resource on success, an ERR_PTR on failure.
+ *
+ * Gets a resource and requests it. Use this instead of
+ * devm_platform_ioremap_resource() only if you have to create several single
+ * mappings with devm_ioremap().
+ */
+struct resource *devm_platform_get_resource(struct platform_device *pdev,
+		unsigned int type, unsigned int num, const char *name)
+{
+	struct resource *res;
+
+	res = platform_get_resource(pdev, type, num);
+	if (!res)
+		return ERR_PTR(-EINVAL);
+
+	if (type & IORESOURCE_MEM)
+		res = devm_request_mem_region(&pdev->dev, res->start, res->end, name);
+	else if (type & IORESOURCE_IO)
+		res = devm_request_region(&pdev->dev, res->start, res->end, name);
+	else
+		return ERR_PTR(-EINVAL);
+
+	if (!res)
+		return ERR_PTR(-EBUSY);
+
+	return res;
+}
+EXPORT_SYMBOL_GPL(devm_platform_get_resource);
+
 #ifdef CONFIG_HAS_IOMEM
 /**
  * devm_platform_get_and_ioremap_resource - call devm_ioremap_resource() for a
