@@ -201,6 +201,8 @@ struct fpga_manager_ops {
  * @state: state of fpga manager
  * @compat_id: FPGA manager id for compatibility check.
  * @mops: pointer to struct of fpga manager ops
+ * @mops_mutex: protects mops from low-level module removal
+ * @mops_owner: module containing the mops
  * @priv: low level driver private date
  */
 struct fpga_manager {
@@ -210,6 +212,8 @@ struct fpga_manager {
 	enum fpga_mgr_states state;
 	struct fpga_compat_id *compat_id;
 	const struct fpga_manager_ops *mops;
+	struct mutex mops_mutex;
+	struct module *mops_owner;
 	void *priv;
 };
 
@@ -222,6 +226,7 @@ void fpga_image_info_free(struct fpga_image_info *info);
 int fpga_mgr_load(struct fpga_manager *mgr, struct fpga_image_info *info);
 
 int fpga_mgr_lock(struct fpga_manager *mgr);
+
 void fpga_mgr_unlock(struct fpga_manager *mgr);
 
 struct fpga_manager *of_fpga_mgr_get(struct device_node *node);
@@ -230,18 +235,81 @@ struct fpga_manager *fpga_mgr_get(struct device *dev);
 
 void fpga_mgr_put(struct fpga_manager *mgr);
 
-struct fpga_manager *
-fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info);
+/**
+ * fpga_mgr_register_full - create and register an FPGA Manager device
+ * @parent:	fpga manager device from pdev
+ * @info:	parameters for fpga manager
+ *
+ * The caller of this function is responsible for calling fpga_mgr_unregister().
+ * Using devm_fpga_mgr_register_full() instead is recommended.
+ *
+ * Return: pointer to struct fpga_manager pointer or ERR_PTR()
+ */
+#define fpga_mgr_register_full(parent, info) \
+	__fpga_mgr_register_full(parent, info, THIS_MODULE)
 
 struct fpga_manager *
-fpga_mgr_register(struct device *parent, const char *name,
-		  const struct fpga_manager_ops *mops, void *priv);
+__fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
+			 struct module *owner);
+/**
+ * fpga_mgr_register - create and register an FPGA Manager device
+ * @parent:	fpga manager device from pdev
+ * @name:	fpga manager name
+ * @mops:	pointer to structure of fpga manager ops
+ * @priv:	fpga manager private data
+ *
+ * The caller of this function is responsible for calling fpga_mgr_unregister().
+ * Using devm_fpga_mgr_register() instead is recommended. This simple
+ * version of the register function should be sufficient for most users. The
+ * fpga_mgr_register_full() function is available for users that need to pass
+ * additional, optional parameters.
+ *
+ * Return: pointer to struct fpga_manager pointer or ERR_PTR()
+ */
+#define fpga_mgr_register(parent, name, mops, priv) \
+	__fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
+
+struct fpga_manager *
+__fpga_mgr_register(struct device *parent, const char *name,
+		    const struct fpga_manager_ops *mops, void *priv, struct module *owner);
+
 void fpga_mgr_unregister(struct fpga_manager *mgr);
 
+/**
+ * devm_fpga_mgr_register_full - resource managed variant of fpga_mgr_register()
+ * @parent:	fpga manager device from pdev
+ * @info:	parameters for fpga manager
+ *
+ * Return:  fpga manager pointer on success, negative error code otherwise.
+ *
+ * This is the devres variant of fpga_mgr_register_full() for which the unregister
+ * function will be called automatically when the managing device is detached.
+ */
+#define devm_fpga_mgr_register_full(parent, info) \
+	__devm_fpga_mgr_register_full(parent, info, THIS_MODULE)
+
 struct fpga_manager *
-devm_fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info);
+__devm_fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
+			      struct module *owner);
+/**
+ * devm_fpga_mgr_register - resource managed variant of fpga_mgr_register()
+ * @parent:	fpga manager device from pdev
+ * @name:	fpga manager name
+ * @mops:	pointer to structure of fpga manager ops
+ * @priv:	fpga manager private data
+ *
+ * Return:  fpga manager pointer on success, negative error code otherwise.
+ *
+ * This is the devres variant of fpga_mgr_register() for which the
+ * unregister function will be called automatically when the managing
+ * device is detached.
+ */
+#define devm_fpga_mgr_register(parent, name, mops, priv) \
+	__devm_fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
+
 struct fpga_manager *
-devm_fpga_mgr_register(struct device *parent, const char *name,
-		       const struct fpga_manager_ops *mops, void *priv);
+__devm_fpga_mgr_register(struct device *parent, const char *name,
+			 const struct fpga_manager_ops *mops, void *priv,
+			 struct module *owner);
 
 #endif /*_LINUX_FPGA_MGR_H */
