@@ -95,7 +95,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_hdm *cxlhdm;
-	struct cxl_port *root;
+	struct cxl_root *cxl_root;
+	struct cxl_port *root_port;
 	int rc;
 
 	rc = cxl_dvsec_rr_decode(cxlds->dev, cxlds->cxl_dvsec, &info);
@@ -130,14 +131,15 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 * This can't fail in practice as CXL root exit unregisters all
 	 * descendant ports and that in turn synchronizes with cxl_port_probe()
 	 */
-	root = find_cxl_root(port);
+	cxl_root = find_cxl_root(port);
+	root_port = &cxl_root->port;
 
 	/*
 	 * Now that all endpoint decoders are successfully enumerated, try to
 	 * assemble regions from committed decoders
 	 */
-	device_for_each_child(&port->dev, root, discover_region);
-	put_device(&root->dev);
+	device_for_each_child(&root_port->dev, root_port, discover_region);
+	put_cxl_root(cxl_root);
 
 	return 0;
 }
