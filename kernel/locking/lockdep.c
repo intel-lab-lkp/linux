@@ -3178,6 +3178,7 @@ check_prev_add(struct task_struct *curr, struct held_lock *prev,
 			}
 
 			/* <prev> is not found in <next>::locks_before */
+			graph_unlock();
 			return 0;
 		}
 	}
