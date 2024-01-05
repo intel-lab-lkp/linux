@@ -6542,7 +6542,7 @@ static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int from_port,
 	/* Reset egress port when no other mirror is active */
 	if (!other_mirrors) {
 		if (mv88e6xxx_set_egress_port(chip, direction,
-					      dsa_upstream_port(ds, from_port)))
+					      MV88E6XXX_EGRESS_DEST_DISABLE))
 			dev_err(ds->dev, "failed to set egress port\n");
 	}
 

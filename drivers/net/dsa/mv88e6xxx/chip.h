@@ -589,6 +589,9 @@ struct mv88e6xxx_ops {
 				 const struct mv88e6xxx_hw_stat *stat,
 				 uint64_t *data);
 	int (*set_cpu_port)(struct mv88e6xxx_chip *chip, int port);
+
+#define MV88E6XXX_EGRESS_DEST_DISABLE           0x1f
+
 	int (*set_egress_port)(struct mv88e6xxx_chip *chip,
 			       enum mv88e6xxx_egress_direction direction,
 			       int port);
