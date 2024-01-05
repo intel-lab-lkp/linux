@@ -2117,6 +2117,9 @@ static struct net_device_stats *ravb_get_stats(struct net_device *ndev)
 	const struct ravb_hw_info *info = priv->info;
 	struct net_device_stats *nstats, *stats0, *stats1;
 
+	if (!(ndev->flags & IFF_UP))
+		return &ndev->stats;
+
 	nstats = &ndev->stats;
 	stats0 = &priv->stats[RAVB_BE];
 
@@ -2225,6 +2228,9 @@ static int ravb_close(struct net_device *ndev)
 	ravb_ring_free(ndev, RAVB_BE);
 	if (info->nc_queues)
 		ravb_ring_free(ndev, RAVB_NC);
+
+	/* Update statistics. */
+	ravb_get_stats(ndev);
 
 	/* Set reset mode. */
 	return ravb_set_opmode(ndev, CCC_OPC_RESET);
