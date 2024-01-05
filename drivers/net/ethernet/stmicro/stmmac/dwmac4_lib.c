@@ -201,15 +201,19 @@ int dwmac4_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
 	}
 	/* TX/RX NORMAL interrupts */
 	if (likely(intr_status & DMA_CHAN_STATUS_RI)) {
+		spin_lock(&rxq_stats->lock);
 		u64_stats_update_begin(&rxq_stats->syncp);
 		rxq_stats->rx_normal_irq_n++;
 		u64_stats_update_end(&rxq_stats->syncp);
+		spin_unlock(&rxq_stats->lock);
 		ret |= handle_rx;
 	}
 	if (likely(intr_status & DMA_CHAN_STATUS_TI)) {
+		spin_lock(&txq_stats->lock);
 		u64_stats_update_begin(&txq_stats->syncp);
 		txq_stats->tx_normal_irq_n++;
 		u64_stats_update_end(&txq_stats->syncp);
+		spin_unlock(&txq_stats->lock);
 		ret |= handle_tx;
 	}
 

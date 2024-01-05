@@ -70,6 +70,7 @@ struct stmmac_txq_stats {
 	u64 tx_tso_frames;
 	u64 tx_tso_nfrags;
 	struct u64_stats_sync syncp;
+	spinlock_t lock;	/* mutual writer exclusion */
 } ____cacheline_aligned_in_smp;
 
 struct stmmac_rxq_stats {
@@ -79,6 +80,7 @@ struct stmmac_rxq_stats {
 	u64 rx_normal_irq_n;
 	u64 napi_poll;
 	struct u64_stats_sync syncp;
+	spinlock_t lock;	/* mutual writer exclusion */
 } ____cacheline_aligned_in_smp;
 
 /* Extra statistic and debug information exposed by ethtool */

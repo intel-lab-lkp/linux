@@ -455,9 +455,11 @@ static int sun8i_dwmac_dma_interrupt(struct stmmac_priv *priv,
 
 	if (v & EMAC_TX_INT) {
 		ret |= handle_tx;
+		spin_lock(&txq_stats->lock);
 		u64_stats_update_begin(&txq_stats->syncp);
 		txq_stats->tx_normal_irq_n++;
 		u64_stats_update_end(&txq_stats->syncp);
+		spin_unlock(&txq_stats->lock);
 	}
 
 	if (v & EMAC_TX_DMA_STOP_INT)
@@ -479,9 +481,11 @@ static int sun8i_dwmac_dma_interrupt(struct stmmac_priv *priv,
 
 	if (v & EMAC_RX_INT) {
 		ret |= handle_rx;
+		spin_lock(&rxq_stats->lock);
 		u64_stats_update_begin(&rxq_stats->syncp);
 		rxq_stats->rx_normal_irq_n++;
 		u64_stats_update_end(&rxq_stats->syncp);
+		spin_unlock(&rxq_stats->lock);
 	}
 
 	if (v & EMAC_RX_BUF_UA_INT)
