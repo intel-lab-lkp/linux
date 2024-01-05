@@ -1,2 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-*.gen.S
+*
+!.gitignore
+!Makefile
+!main.c
