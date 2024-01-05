@@ -2903,7 +2903,8 @@ static int sja1105_mirror_add(struct dsa_switch *ds, int from_port, int to_port,
 }
 
 static void sja1105_mirror_del(struct dsa_switch *ds, int from_port,
-			       int to_port, bool ingress)
+			       int to_port, bool ingress,
+			       enum dsa_route_status route_status)
 {
 	sja1105_mirror_apply(ds->priv, from_port, to_port,
 			     ingress, false);

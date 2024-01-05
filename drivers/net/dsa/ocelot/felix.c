@@ -1864,7 +1864,8 @@ static int felix_port_mirror_add(struct dsa_switch *ds, int from_port,
 }
 
 static void felix_port_mirror_del(struct dsa_switch *ds, int from_port,
-				  int to_port, bool ingress)
+				  int to_port, bool ingress,
+				  enum dsa_route_status route_status)
 {
 	struct ocelot *ocelot = ds->priv;
 

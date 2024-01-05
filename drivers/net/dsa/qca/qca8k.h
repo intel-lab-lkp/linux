@@ -573,7 +573,8 @@ int qca8k_port_mirror_add(struct dsa_switch *ds, int from_port,
 			  int to_port, bool ingress,
 			  struct netlink_ext_ack *extack);
 void qca8k_port_mirror_del(struct dsa_switch *ds, int from_port,
-			   int to_port, bool ingress);
+			   int to_port, bool ingress,
+			   enum dsa_route_status route_status);
 
 /* Common port VLAN function */
 int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,

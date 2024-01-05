@@ -391,7 +391,7 @@ int b53_mirror_add(struct dsa_switch *ds, int from_port,
 enum dsa_tag_protocol b53_get_tag_protocol(struct dsa_switch *ds, int port,
 					   enum dsa_tag_protocol mprot);
 void b53_mirror_del(struct dsa_switch *ds, int from_port, int to_port,
-		    bool ingress);
+		    bool ingress, enum dsa_route_status route_status);
 int b53_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy);
 void b53_disable_port(struct dsa_switch *ds, int port);
 void b53_brcm_hdr_setup(struct dsa_switch *ds, int port);

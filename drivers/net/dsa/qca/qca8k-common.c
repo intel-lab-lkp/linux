@@ -940,7 +940,8 @@ int qca8k_port_mirror_add(struct dsa_switch *ds, int from_port,
 }
 
 void qca8k_port_mirror_del(struct dsa_switch *ds, int from_port,
-			   int to_port, bool ingress)
+			   int to_port, bool ingress,
+			   enum dsa_route_status route_status)
 {
 	struct qca8k_priv *priv = ds->priv;
 	u32 reg, val;

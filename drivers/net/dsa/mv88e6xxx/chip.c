@@ -6520,7 +6520,8 @@ out:
 }
 
 static void mv88e6xxx_port_mirror_del(struct dsa_switch *ds, int from_port,
-				      int to_port, bool ingress)
+				      int to_port, bool ingress,
+				      enum dsa_route_status route_status)
 {
 	enum mv88e6xxx_egress_direction direction = ingress ?
 						MV88E6XXX_EGRESS_DIR_INGRESS :

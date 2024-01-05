@@ -148,9 +148,38 @@ static int dsa_switch_mirror_add(struct dsa_switch *ds,
 	return 0;
 }
 
+static enum dsa_route_status dsa_route_get_status(struct dsa_switch *ds,
+						  const struct dsa_mirror *dm,
+						  int from_port, int to_port)
+{
+	enum dsa_route_status ret;
+	struct dsa_mirror *m;
+	struct dsa_route *r;
+
+	ret = DSA_ROUTE_UNUSED;
+	list_for_each_entry(m, &ds->dst->mirrors, list) {
+		if (m == dm)
+			continue;
+		if (m->ingress != dm->ingress)
+			continue;
+
+		list_for_each_entry(r, &m->route, list) {
+			if (r->sw_index == ds->index) {
+				if (r->from_local_p == from_port)
+					ret |= DSA_ROUTE_SRC_PORT_BUSY;
+				if (r->to_local_p == to_port)
+					ret |= DSA_ROUTE_DEST_PORT_BUSY;
+			}
+		}
+	}
+
+	return ret;
+}
+
 static int dsa_switch_mirror_del(struct dsa_switch *ds,
 				 struct dsa_notifier_mirror_info *info)
 {
+	enum dsa_route_status status;
 	struct dsa_route *dr;
 	struct dsa_port *dp;
 	bool ingress;
@@ -162,9 +191,12 @@ static int dsa_switch_mirror_del(struct dsa_switch *ds,
 			ingress = info->mirror->ingress;
 			dp = dsa_to_port(ds, dr->to_local_p);
 			to_port = dp->index;
+			status = dsa_route_get_status(ds, info->mirror,
+						      dr->from_local_p,
+						      dr->to_local_p);
 
 			ds->ops->port_mirror_del(ds, dr->from_local_p,
-						 to_port, ingress);
+						 to_port, ingress, status);
 		}
 	}
 

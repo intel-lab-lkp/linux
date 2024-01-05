@@ -2155,7 +2155,8 @@ int b53_mirror_add(struct dsa_switch *ds, int from_port,
 EXPORT_SYMBOL(b53_mirror_add);
 
 void b53_mirror_del(struct dsa_switch *ds, int from_port,
-		    int to_port, bool ingress)
+		    int to_port, bool ingress,
+		    enum dsa_route_status route_status)
 {
 	struct b53_device *dev = ds->priv;
 	bool loc_disable = false, other_loc_disable = false;

@@ -88,6 +88,13 @@ enum dsa_tag_protocol {
 	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
 };
 
+enum dsa_route_status {
+	DSA_ROUTE_UNUSED = 0,
+	DSA_ROUTE_SRC_PORT_BUSY = BIT(0),
+	DSA_ROUTE_DEST_PORT_BUSY = BIT(1),
+	DSA_ROUTE_BUSY = (BIT(0) | BIT(1))
+};
+
 struct dsa_switch;
 
 struct dsa_device_ops {
@@ -1120,7 +1127,8 @@ struct dsa_switch_ops {
 				   int to_port, bool ingress,
 				   struct netlink_ext_ack *extack);
 	void	(*port_mirror_del)(struct dsa_switch *ds, int from_port,
-				   int to_port, bool ingress);
+				   int to_port, bool ingress,
+				   enum dsa_route_status route_status);
 	int	(*port_policer_add)(struct dsa_switch *ds, int port,
 				    struct dsa_mall_policer_tc_entry *policer);
 	void	(*port_policer_del)(struct dsa_switch *ds, int port);

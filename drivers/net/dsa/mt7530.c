@@ -1799,7 +1799,8 @@ static int mt753x_port_mirror_add(struct dsa_switch *ds, int from_port,
 }
 
 static void mt753x_port_mirror_del(struct dsa_switch *ds, int from_port,
-				   int to_port, bool ingress)
+			   int to_port, bool ingress,
+			   enum dsa_route_status route_status)
 {
 	struct mt7530_priv *priv = ds->priv;
 	u32 val;
