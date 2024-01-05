@@ -1677,6 +1677,11 @@ struct intel_pps {
 	struct edp_power_seq bios_pps_delays;
 };
 
+struct alpm_parameters {
+	u8 io_wake_lines;
+	u8 fast_wake_lines;
+};
+
 struct intel_psr {
 	/* Mutex for PSR state of the transcoder */
 	struct mutex lock;
@@ -1706,8 +1711,6 @@ struct intel_psr {
 	bool psr2_sel_fetch_cff_enabled;
 	bool req_psr2_sdp_prior_scanline;
 	u8 sink_sync_latency;
-	u8 io_wake_lines;
-	u8 fast_wake_lines;
 	ktime_t last_entry_attempt;
 	ktime_t last_exit;
 	bool sink_not_reliable;
@@ -1721,6 +1724,7 @@ struct intel_psr {
 	u32 dc3co_exit_delay;
 	struct delayed_work dc3co_work;
 	u8 entry_setup_frames;
+	struct alpm_parameters alpm_params;
 };
 
 struct intel_dp {
