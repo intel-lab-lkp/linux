@@ -8,12 +8,8 @@
 
 #include <linux/device.h>
 
-/* Ought to be enough for anybody */
-#define TEST_TIMEOUT_MS	100
-
 struct managed_test_priv {
 	bool action_done;
-	wait_queue_head_t action_wq;
 };
 
 static void drm_action(struct drm_device *drm, void *ptr)
@@ -21,7 +17,6 @@ static void drm_action(struct drm_device *drm, void *ptr)
 	struct managed_test_priv *priv = ptr;
 
 	priv->action_done = true;
-	wake_up_interruptible(&priv->action_wq);
 }
 
 static void drm_test_managed_run_action(struct kunit *test)
@@ -33,7 +28,6 @@ static void drm_test_managed_run_action(struct kunit *test)
 
 	priv = kunit_kzalloc(test, sizeof(*priv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
-	init_waitqueue_head(&priv->action_wq);
 
 	dev = drm_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
@@ -50,9 +44,7 @@ static void drm_test_managed_run_action(struct kunit *test)
 	drm_dev_unregister(drm);
 	drm_kunit_helper_free_device(test, dev);
 
-	ret = wait_event_interruptible_timeout(priv->action_wq, priv->action_done,
-					       msecs_to_jiffies(TEST_TIMEOUT_MS));
-	KUNIT_EXPECT_GT(test, ret, 0);
+	KUNIT_EXPECT_TRUE(test, priv->action_done);
 }
 
 static struct kunit_case drm_managed_tests[] = {
