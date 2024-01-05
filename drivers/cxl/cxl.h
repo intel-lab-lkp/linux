@@ -617,12 +617,6 @@ struct cxl_port {
 	long pci_latency;
 };
 
-struct cxl_root_ops {
-	int (*qos_class)(struct cxl_port *root_port,
-			 struct access_coordinate *coord, int entries,
-			 int *qos_class);
-};
-
 /**
  * struct cxl_root - logical collection of root cxl_port items
  *
@@ -639,6 +633,12 @@ to_cxl_root(const struct cxl_port *port)
 {
 	return container_of(port, struct cxl_root, port);
 }
+
+struct cxl_root_ops {
+	int (*qos_class)(struct cxl_root *cxl_root,
+			 struct access_coordinate *coord, int entries,
+			 int *qos_class);
+};
 
 static inline struct cxl_dport *
 cxl_find_dport_by_dev(struct cxl_port *port, const struct device *dport_dev)
