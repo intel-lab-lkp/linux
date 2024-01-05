@@ -349,12 +349,13 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 {
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
-	struct cxl_port *root_port __free(put_device) = NULL;
 	LIST_HEAD(__discard);
 	struct list_head *discard __free(dpa_perf) = &__discard;
 	int rc;
 
-	root_port = find_cxl_root(cxlmd->endpoint);
+	struct cxl_port *root_port __free(put_cxl_root) =
+		find_cxl_root(cxlmd->endpoint);
+
 	if (!root_port)
 		return -ENODEV;
 
