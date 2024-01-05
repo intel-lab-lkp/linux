@@ -35,6 +35,8 @@ enum {
 	DSA_NOTIFIER_TAG_8021Q_VLAN_ADD,
 	DSA_NOTIFIER_TAG_8021Q_VLAN_DEL,
 	DSA_NOTIFIER_CONDUIT_STATE_CHANGE,
+	DSA_NOTIFIER_MIRROR_ADD,
+	DSA_NOTIFIER_MIRROR_DEL,
 };
 
 /* DSA_NOTIFIER_AGEING_TIME */
@@ -109,6 +111,12 @@ struct dsa_notifier_tag_8021q_vlan_info {
 struct dsa_notifier_conduit_state_info {
 	const struct net_device *conduit;
 	bool operational;
+};
+
+/* DSA_NOTIFIER_MIRROR_ADD */
+struct dsa_notifier_mirror_info {
+	const struct dsa_mirror *mirror;
+	struct netlink_ext_ack *extack;
 };
 
 struct dsa_vlan *dsa_vlan_find(struct list_head *vlan_list,

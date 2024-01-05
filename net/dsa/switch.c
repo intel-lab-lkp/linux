@@ -125,6 +125,52 @@ static int dsa_switch_bridge_leave(struct dsa_switch *ds,
 	return 0;
 }
 
+static int dsa_switch_mirror_add(struct dsa_switch *ds,
+				 struct dsa_notifier_mirror_info *info)
+{
+	struct dsa_route *dr;
+	struct dsa_port *dp;
+	bool ingress;
+	int to_port;
+
+	list_for_each_entry(dr, &info->mirror->route, list) {
+		if (ds->index == dr->sw_index) {
+			ingress = info->mirror->ingress;
+			dp = dsa_to_port(ds, dr->to_local_p);
+			to_port = dp->index;
+
+			return ds->ops->port_mirror_add(ds, dr->from_local_p,
+							to_port, ingress,
+							info->extack);
+		}
+	}
+
+	return 0;
+}
+
+static int dsa_switch_mirror_del(struct dsa_switch *ds,
+				 struct dsa_notifier_mirror_info *info)
+{
+	struct dsa_route *dr;
+	struct dsa_port *dp;
+	bool ingress;
+	int to_port;
+
+	/* check if switch is a part of the route we are trying to delete */
+	list_for_each_entry(dr, &info->mirror->route, list) {
+		if (ds->index == dr->sw_index) {
+			ingress = info->mirror->ingress;
+			dp = dsa_to_port(ds, dr->to_local_p);
+			to_port = dp->index;
+
+			ds->ops->port_mirror_del(ds, dr->from_local_p,
+						 to_port, ingress);
+		}
+	}
+
+	return 0;
+}
+
 /* Matches for all upstream-facing ports (the CPU port and all upstream-facing
  * DSA links) that sit between the targeted port on which the notifier was
  * emitted and its dedicated CPU port.
@@ -1058,6 +1104,12 @@ static int dsa_switch_event(struct notifier_block *nb,
 		break;
 	case DSA_NOTIFIER_CONDUIT_STATE_CHANGE:
 		err = dsa_switch_conduit_state_change(ds, info);
+		break;
+	case DSA_NOTIFIER_MIRROR_ADD:
+		err = dsa_switch_mirror_add(ds, info);
+		break;
+	case DSA_NOTIFIER_MIRROR_DEL:
+		err = dsa_switch_mirror_del(ds, info);
 		break;
 	default:
 		err = -EOPNOTSUPP;

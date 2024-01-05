@@ -1359,6 +1359,89 @@ dsa_user_mall_tc_entry_find(struct net_device *dev, unsigned long cookie)
 	return NULL;
 }
 
+static int dsa_route_add_segment(int sw_index, int from_port,
+				 int to_port, struct list_head *route)
+{
+	struct dsa_route *nr;
+
+	nr = kzalloc(sizeof(*nr), GFP_KERNEL);
+	if (!nr)
+		return -ENOMEM;
+
+	nr->sw_index = sw_index;
+	nr->from_local_p = from_port;
+	nr->to_local_p = to_port;
+	list_add(&nr->list, route);
+	return 0;
+}
+
+static int dsa_route_create(struct dsa_port *from_dp, struct dsa_port *to_dp,
+			    struct dsa_port *iter, struct list_head *route)
+{
+	struct dsa_switch_tree *dst = from_dp->ds->dst;
+	struct dsa_route *dr;
+	struct dsa_link *dl;
+	int err;
+
+	if (from_dp->ds == to_dp->ds)
+		return dsa_route_add_segment(from_dp->ds->index, from_dp->index,
+					     to_dp->index, route);
+
+	/* Assign iter to final "to port" on first entry */
+	if (!iter)
+		iter = to_dp;
+
+	list_for_each_entry(dl, &dst->rtable, list) {
+		if (dl->dp->ds != iter->ds)
+			continue;
+
+		dr = list_first_entry_or_null(route, struct dsa_route, list);
+
+		if (!dr || dr->sw_index != dl->link_dp->ds->index) {
+			err = dsa_route_add_segment(dl->dp->ds->index, dl->dp->index,
+						    dr ? iter->index : to_dp->index,
+						    route);
+			if (err)
+				return err;
+
+			/* have we reached the final "from" device */
+			if (dl->link_dp->ds == from_dp->ds)
+				return dsa_route_add_segment(dl->link_dp->ds->index,
+							     from_dp->index,
+							     dl->link_dp->index, route);
+
+			err = dsa_route_create(from_dp, to_dp, dl->link_dp, route);
+			if (err <= 0)
+				return err;
+		}
+	}
+
+	dr = list_first_entry_or_null(route, struct dsa_route, list);
+	if (dr) {
+		list_del(&dr->list);
+		kfree(dr);
+	}
+
+	return 1;
+}
+
+static struct dsa_mirror *dsa_tree_find_mirror(struct dsa_switch_tree *dst,
+					       struct dsa_port *from_dp,
+					       struct dsa_mall_mirror_tc_entry *mirror)
+{
+	struct dsa_mirror *dm;
+
+	list_for_each_entry(dm, &dst->mirrors, list) {
+		if (dm->ingress != mirror->ingress)
+			continue;
+
+		if (dm->from_dp == from_dp && dm->to_dp == mirror->to_port)
+			return dm;
+	}
+
+	return NULL;
+}
+
 static int
 dsa_user_add_cls_matchall_mirred(struct net_device *dev,
 				 struct tc_cls_matchall_offload *cls,
@@ -1369,9 +1452,12 @@ dsa_user_add_cls_matchall_mirred(struct net_device *dev,
 	struct dsa_user_priv *p = netdev_priv(dev);
 	struct dsa_mall_mirror_tc_entry *mirror;
 	struct dsa_mall_tc_entry *mall_tc_entry;
+	struct dsa_notifier_mirror_info info;
 	struct dsa_switch *ds = dp->ds;
 	struct flow_action_entry *act;
+	struct dsa_route *dr, *n;
 	struct dsa_port *to_dp;
+	struct dsa_mirror *dm;
 	int err;
 
 	if (!ds->ops->port_mirror_add)
@@ -1389,6 +1475,10 @@ dsa_user_add_cls_matchall_mirred(struct net_device *dev,
 	if (!dsa_user_dev_check(act->dev))
 		return -EOPNOTSUPP;
 
+	to_dp = dsa_user_to_port(act->dev);
+	if (ds->dst != to_dp->ds->dst)
+		return -EINVAL;
+
 	mall_tc_entry = kzalloc(sizeof(*mall_tc_entry), GFP_KERNEL);
 	if (!mall_tc_entry)
 		return -ENOMEM;
@@ -1396,19 +1486,52 @@ dsa_user_add_cls_matchall_mirred(struct net_device *dev,
 	mall_tc_entry->cookie = cls->cookie;
 	mall_tc_entry->type = DSA_PORT_MALL_MIRROR;
 	mirror = &mall_tc_entry->mirror;
-
-	to_dp = dsa_user_to_port(act->dev);
-
 	mirror->to_port = to_dp;
 	mirror->ingress = ingress;
 
-	err = ds->ops->port_mirror_add(ds, dp->index, to_dp->index, ingress, extack);
-	if (err) {
-		kfree(mall_tc_entry);
-		return err;
+	if (dsa_tree_find_mirror(ds->dst, dp, mirror)) {
+		err = -EINVAL;
+		goto err_mirror;
 	}
 
+	dm = kzalloc(sizeof(*dm), GFP_KERNEL);
+	if (!dm) {
+		err = -ENOMEM;
+		goto err_mirror;
+	}
+
+	INIT_LIST_HEAD(&dm->route);
+	dm->from_dp = dp;
+	dm->to_dp = to_dp;
+	dm->ingress = ingress;
+
+	if (dsa_route_create(dp, to_dp, NULL, &dm->route)) {
+		err = -EINVAL;
+		goto err_route;
+	}
+
+	info.mirror = dm;
+	info.extack = extack;
+
+	err = dsa_tree_notify(ds->dst, DSA_NOTIFIER_MIRROR_ADD, &info);
+	if (err)
+		goto err_route;
+
+	list_add(&dm->list, &ds->dst->mirrors);
 	list_add_tail(&mall_tc_entry->list, &p->mall_tc_list);
+
+	return 0;
+
+err_route:
+	dsa_tree_notify(ds->dst, DSA_NOTIFIER_MIRROR_DEL, &info);
+
+	list_for_each_entry_safe(dr, n, &dm->route, list) {
+		list_del(&dr->list);
+		kfree(dr);
+	}
+	kfree(dm);
+err_mirror:
+	kfree(mall_tc_entry);
 
 	return err;
 }
@@ -1491,6 +1614,33 @@ static int dsa_user_add_cls_matchall(struct net_device *dev,
 	return err;
 }
 
+static void dsa_user_mirror_del(struct dsa_switch *ds, struct dsa_port *dp,
+				struct dsa_mall_mirror_tc_entry *mirror)
+{
+	struct dsa_notifier_mirror_info info;
+	struct dsa_route *dr, *n;
+	struct dsa_mirror *dm;
+
+	dm = dsa_tree_find_mirror(ds->dst, dp, mirror);
+
+	if (!dm) {
+		netdev_err(dp->user, "failed to delete mirror\n");
+		return;
+	}
+
+	info.mirror = dm;
+
+	dsa_tree_notify(ds->dst, DSA_NOTIFIER_MIRROR_DEL, &info);
+
+	list_for_each_entry_safe(dr, n, &dm->route, list) {
+		list_del(&dr->list);
+		kfree(dr);
+	}
+
+	list_del(&dm->list);
+	kfree(dm);
+}
+
 static void dsa_user_del_cls_matchall(struct net_device *dev,
 				      struct tc_cls_matchall_offload *cls)
 {
@@ -1506,14 +1656,8 @@ static void dsa_user_del_cls_matchall(struct net_device *dev,
 
 	switch (mall_tc_entry->type) {
 	case DSA_PORT_MALL_MIRROR:
-		if (ds->ops->port_mirror_del) {
-			struct dsa_mall_mirror_tc_entry *mirror;
-
-			mirror = &mall_tc_entry->mirror;
-			ds->ops->port_mirror_del(ds, dp->index,
-						 mirror->to_port->index,
-						 mirror->ingress);
-		}
+		if (ds->ops->port_mirror_del)
+			dsa_user_mirror_del(ds, dp, &mall_tc_entry->mirror);
 		break;
 	case DSA_PORT_MALL_POLICER:
 		if (ds->ops->port_policer_del)
