@@ -177,10 +177,10 @@ struct dcss_dev *dcss_dev_create(struct device *dev, bool hdmi_output)
 		return ERR_PTR(-ENODEV);
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(dev, "cannot get memory resource\n");
-		return ERR_PTR(-EINVAL);
+	res = devm_platform_get_resource(pdev, IORESOURCE_MEM, 0, "dcss");
+	if (IS_ERR(res)) {
+		dev_err(dev, "cannot get / request memory resource\n");
+		return res;
 	}
 
 	dcss = kzalloc(sizeof(*dcss), GFP_KERNEL);
