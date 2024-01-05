@@ -61,9 +61,15 @@ static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
 	 * has an ISB in order to deal with this.
 	 */
 	__load_stage2(mmu, mmu->arch);
-	val = read_sysreg(hcr_el2);
-	val &= ~HCR_TGE;
-	write_sysreg(val, hcr_el2);
+
+	/*
+	 * With {E2H,TGE} == {1,0}, IMO == 1 is required so that IRQs are not
+	 * all masked. This also works around AmpereOne erratum AC03_CPU_36
+	 * which can incorrectly route an IRQ to EL1 when HCR_EL2.{E2H,TGE} is
+	 * written from {1,1} to {1,0} with interrupts unmasked.
+	 */
+	sysreg_clear_set(hcr_el2, HCR_TGE, HCR_AMO | HCR_IMO | HCR_FMO);
+
 	isb();
 }
 
