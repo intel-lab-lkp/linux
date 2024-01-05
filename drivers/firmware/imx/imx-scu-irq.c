@@ -20,6 +20,7 @@
 #define IMX_SC_IRQ_NUM_GROUP	9
 
 static u32 mu_resource_id;
+int scu_suspend;
 
 struct imx_sc_msg_irq_get_status {
 	struct imx_sc_rpc_msg hdr;
@@ -109,7 +110,8 @@ static void imx_scu_irq_work_handler(struct work_struct *work)
 			scu_irq_wakeup[i].wakeup_src = irq_status;
 		}
 
-		pm_system_wakeup();
+		if (scu_suspend)
+			pm_system_wakeup();
 		imx_scu_irq_notifier_call_chain(irq_status, &i);
 	}
 }
