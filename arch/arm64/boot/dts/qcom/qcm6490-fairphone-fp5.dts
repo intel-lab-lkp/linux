@@ -446,6 +446,10 @@
 	};
 };
 
+&CLUSTER_SLEEP_0 {
+	arm,psci-suspend-param = <0x4100b344>;
+};
+
 &dispcc {
 	/* Disable for now so simple-framebuffer continues working */
 	status = "disabled";

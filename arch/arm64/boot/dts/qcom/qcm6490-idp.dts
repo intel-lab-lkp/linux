@@ -415,6 +415,10 @@
 	};
 };
 
+&CLUSTER_SLEEP_0 {
+	arm,psci-suspend-param = <0x4100b344>;
+};
+
 &qupv3_id_0 {
 	status = "okay";
 };
