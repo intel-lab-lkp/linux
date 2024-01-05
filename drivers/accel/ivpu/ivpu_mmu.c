@@ -236,6 +236,8 @@
 #define IVPU_MMU_CERROR_ABT          0x2
 #define IVPU_MMU_CERROR_ATC_INV_SYNC 0x3
 
+#define IVPU_MMU_MAX_EVENT_COUNT     100
+
 static const char *ivpu_mmu_event_to_str(u32 cmd)
 {
 	switch (cmd) {
@@ -887,7 +889,7 @@ static u32 *ivpu_mmu_get_event(struct ivpu_device *vdev)
 
 void ivpu_mmu_irq_evtq_handler(struct ivpu_device *vdev)
 {
-	bool schedule_recovery = false;
+	int event_count = 0;
 	u32 *event;
 	u32 ssid;
 
@@ -895,16 +897,19 @@ void ivpu_mmu_irq_evtq_handler(struct ivpu_device *vdev)
 
 	while ((event = ivpu_mmu_get_event(vdev)) != NULL) {
 		ivpu_mmu_dump_event(vdev, event);
+		if (++event_count > IVPU_MMU_MAX_EVENT_COUNT) {
+			ivpu_pm_schedule_recovery(vdev);
+			return;
+		}
 
 		ssid = FIELD_GET(IVPU_MMU_EVT_SSID_MASK, event[0]);
-		if (ssid == IVPU_GLOBAL_CONTEXT_MMU_SSID)
-			schedule_recovery = true;
-		else
-			ivpu_mmu_user_context_mark_invalid(vdev, ssid);
-	}
+		if (ssid == IVPU_GLOBAL_CONTEXT_MMU_SSID) {
+			ivpu_pm_schedule_recovery(vdev);
+			return;
+		}
 
-	if (schedule_recovery)
-		ivpu_pm_schedule_recovery(vdev);
+		ivpu_mmu_user_context_mark_invalid(vdev, ssid);
+	}
 }
 
 void ivpu_mmu_evtq_dump(struct ivpu_device *vdev)
