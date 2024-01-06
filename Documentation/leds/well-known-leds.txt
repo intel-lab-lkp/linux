@@ -70,3 +70,11 @@ Good: "platform:*:charging" (allwinner sun50i)
 * Screen
 
 Good: ":backlight" (Motorola Droid 4)
+
+* Indicators
+
+Good: ":indicator" (Blinkm)
+
+* RGB
+
+Good: ":rgb" (Blinkm)
