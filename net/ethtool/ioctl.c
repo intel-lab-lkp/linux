@@ -1479,6 +1479,13 @@ static void eee_to_keee(struct ethtool_keee *keee,
 	keee->eee_enabled = eee->eee_enabled;
 	keee->tx_lpi_enabled = eee->tx_lpi_enabled;
 	keee->tx_lpi_timer = eee->tx_lpi_timer;
+
+	ethtool_convert_legacy_u32_to_link_mode(keee->link_modes.supported,
+						eee->supported);
+	ethtool_convert_legacy_u32_to_link_mode(keee->link_modes.advertising,
+						eee->advertised);
+	ethtool_convert_legacy_u32_to_link_mode(keee->link_modes.lp_advertising,
+						eee->lp_advertised);
 }
 
 static void keee_to_eee(struct ethtool_eee *eee,
@@ -1486,13 +1493,28 @@ static void keee_to_eee(struct ethtool_eee *eee,
 {
 	memset(eee, 0, sizeof(*eee));
 
-	eee->supported = keee->supported;
-	eee->advertised = keee->advertised;
-	eee->lp_advertised = keee->lp_advertised;
 	eee->eee_active = keee->eee_active;
 	eee->eee_enabled = keee->eee_enabled;
 	eee->tx_lpi_enabled = keee->tx_lpi_enabled;
 	eee->tx_lpi_timer = keee->tx_lpi_timer;
+
+	if (ethtool_eee_use_linkmodes(keee)) {
+		bool overflow;
+
+		overflow = !ethtool_convert_link_mode_to_legacy_u32(
+				&eee->supported,
+				keee->link_modes.supported);
+		ethtool_convert_link_mode_to_legacy_u32(&eee->advertised,
+				keee->link_modes.advertising);
+		ethtool_convert_link_mode_to_legacy_u32(&eee->lp_advertised,
+				keee->link_modes.lp_advertising);
+		if (overflow)
+			pr_warn("Ethtool ioctl interface doesn't support passing EEE linkmodes beyond bit 32\n");
+	} else {
+		eee->supported = keee->supported;
+		eee->advertised = keee->advertised;
+		eee->lp_advertised = keee->lp_advertised;
+	}
 }
 
 static int ethtool_get_eee(struct net_device *dev, char __user *useraddr)

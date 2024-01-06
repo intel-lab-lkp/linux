@@ -30,6 +30,7 @@ static int eee_prepare_data(const struct ethnl_req_info *req_base,
 {
 	struct eee_reply_data *data = EEE_REPDATA(reply_base);
 	struct net_device *dev = reply_base->dev;
+	struct ethtool_keee *eee = &data->eee;
 	int ret;
 
 	if (!dev->ethtool_ops->get_eee)
@@ -37,8 +38,17 @@ static int eee_prepare_data(const struct ethnl_req_info *req_base,
 	ret = ethnl_ops_begin(dev);
 	if (ret < 0)
 		return ret;
-	ret = dev->ethtool_ops->get_eee(dev, &data->eee);
+	ret = dev->ethtool_ops->get_eee(dev, eee);
 	ethnl_ops_complete(dev);
+
+	if (!ret && !ethtool_eee_use_linkmodes(eee)) {
+		ethtool_convert_legacy_u32_to_link_mode(eee->link_modes.supported,
+							eee->supported);
+		ethtool_convert_legacy_u32_to_link_mode(eee->link_modes.advertising,
+							eee->advertised);
+		ethtool_convert_legacy_u32_to_link_mode(eee->link_modes.lp_advertising,
+							eee->lp_advertised);
+	}
 
 	return ret;
 }
@@ -58,14 +68,17 @@ static int eee_reply_size(const struct ethnl_req_info *req_base,
 		     EEE_MODES_COUNT);
 
 	/* MODES_OURS */
-	ret = ethnl_bitset32_size(&eee->advertised, &eee->supported,
-				  EEE_MODES_COUNT, link_mode_names, compact);
+	ret = ethnl_bitset_size(eee->link_modes.advertising,
+				eee->link_modes.supported,
+				__ETHTOOL_LINK_MODE_MASK_NBITS,
+				link_mode_names, compact);
 	if (ret < 0)
 		return ret;
 	len += ret;
 	/* MODES_PEERS */
-	ret = ethnl_bitset32_size(&eee->lp_advertised, NULL,
-				  EEE_MODES_COUNT, link_mode_names, compact);
+	ret = ethnl_bitset_size(eee->link_modes.lp_advertising, NULL,
+				__ETHTOOL_LINK_MODE_MASK_NBITS,
+				link_mode_names, compact);
 	if (ret < 0)
 		return ret;
 	len += ret;
@@ -87,14 +100,17 @@ static int eee_fill_reply(struct sk_buff *skb,
 	const struct ethtool_keee *eee = &data->eee;
 	int ret;
 
-	ret = ethnl_put_bitset32(skb, ETHTOOL_A_EEE_MODES_OURS,
-				 &eee->advertised, &eee->supported,
-				 EEE_MODES_COUNT, link_mode_names, compact);
+	ret = ethnl_put_bitset(skb, ETHTOOL_A_EEE_MODES_OURS,
+			       eee->link_modes.advertising,
+			       eee->link_modes.supported,
+			       __ETHTOOL_LINK_MODE_MASK_NBITS,
+			       link_mode_names, compact);
 	if (ret < 0)
 		return ret;
-	ret = ethnl_put_bitset32(skb, ETHTOOL_A_EEE_MODES_PEER,
-				 &eee->lp_advertised, NULL, EEE_MODES_COUNT,
-				 link_mode_names, compact);
+	ret = ethnl_put_bitset(skb, ETHTOOL_A_EEE_MODES_PEER,
+			       eee->link_modes.lp_advertising, NULL,
+			       __ETHTOOL_LINK_MODE_MASK_NBITS,
+			       link_mode_names, compact);
 	if (ret < 0)
 		return ret;
 
@@ -140,9 +156,16 @@ ethnl_set_eee(struct ethnl_req_info *req_info, struct genl_info *info)
 	if (ret < 0)
 		return ret;
 
-	ret = ethnl_update_bitset32(&eee.advertised, EEE_MODES_COUNT,
-				    tb[ETHTOOL_A_EEE_MODES_OURS],
-				    link_mode_names, info->extack, &mod);
+	if (ethtool_eee_use_linkmodes(&eee)) {
+		ret = ethnl_update_bitset(eee.link_modes.advertising,
+					  __ETHTOOL_LINK_MODE_MASK_NBITS,
+					  tb[ETHTOOL_A_EEE_MODES_OURS],
+					  link_mode_names, info->extack, &mod);
+	} else {
+		ret = ethnl_update_bitset32(&eee.advertised, EEE_MODES_COUNT,
+					    tb[ETHTOOL_A_EEE_MODES_OURS],
+					    link_mode_names, info->extack, &mod);
+	}
 	if (ret < 0)
 		return ret;
 	ethnl_update_bool(&eee.eee_enabled, tb[ETHTOOL_A_EEE_ENABLED], &mod);
