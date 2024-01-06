@@ -576,7 +576,7 @@ static const struct drm_driver kms_driver = {
 	.ioctls = radeon_ioctls_kms,
 	.num_ioctls = ARRAY_SIZE(radeon_ioctls_kms),
 	.dumb_create = radeon_mode_dumb_create,
-	.dumb_map_offset = radeon_mode_dumb_mmap,
+	.dumb_map_offset = drm_gem_dumb_map_offset,
 	.fops = &radeon_driver_kms_fops,
 
 	.gem_prime_import_sg_table = radeon_gem_prime_import_sg_table,

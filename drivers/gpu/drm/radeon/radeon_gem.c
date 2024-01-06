@@ -31,6 +31,7 @@
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
+#include <drm/dem_gem.h>
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/radeon_drm.h>
 
@@ -464,33 +465,12 @@ int radeon_gem_set_domain_ioctl(struct drm_device *dev, void *data,
 	return r;
 }
 
-int radeon_mode_dumb_mmap(struct drm_file *filp,
-			  struct drm_device *dev,
-			  uint32_t handle, uint64_t *offset_p)
-{
-	struct drm_gem_object *gobj;
-	struct radeon_bo *robj;
-
-	gobj = drm_gem_object_lookup(filp, handle);
-	if (gobj == NULL) {
-		return -ENOENT;
-	}
-	robj = gem_to_radeon_bo(gobj);
-	if (radeon_ttm_tt_has_userptr(robj->rdev, robj->tbo.ttm)) {
-		drm_gem_object_put(gobj);
-		return -EPERM;
-	}
-	*offset_p = radeon_bo_mmap_offset(robj);
-	drm_gem_object_put(gobj);
-	return 0;
-}
-
 int radeon_gem_mmap_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *filp)
 {
 	struct drm_radeon_gem_mmap *args = data;
 
-	return radeon_mode_dumb_mmap(filp, dev, args->handle, &args->addr_ptr);
+	return drm_gem_dumb_map_offset(filp, dev, args->handle, &args->addr_ptr);
 }
 
 int radeon_gem_busy_ioctl(struct drm_device *dev, void *data,
