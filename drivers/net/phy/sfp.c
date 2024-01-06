@@ -340,6 +340,12 @@ static const struct of_device_id sfp_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, sfp_of_match);
 
+static void sfp_fixup_2500baset(struct sfp *sfp)
+{
+	sfp->id.base.connector = SFF8024_CONNECTOR_RJ45;
+	sfp->id.base.extended_cc = SFF8024_ECC_2_5GBASE_T;
+}
+
 static void sfp_fixup_long_startup(struct sfp *sfp)
 {
 	sfp->module_t_start_up = T_START_UP_BAD_GPON;
@@ -503,6 +509,10 @@ static const struct sfp_quirk sfp_quirks[] = {
 	SFP_QUIRK_F("OEM", "RTSFP-10G", sfp_fixup_rollball_cc),
 	SFP_QUIRK_F("Turris", "RTSFP-10", sfp_fixup_rollball),
 	SFP_QUIRK_F("Turris", "RTSFP-10G", sfp_fixup_rollball),
+
+	// tp-link 2.5Gbase-T modules wrongly report 25Gbps fiber connector
+	// in their EEPROM
+	SFP_QUIRK_F("TP-LINK", "TL-SM410U", sfp_fixup_2500baset),
 };
 
 static size_t sfp_strlen(const char *str, size_t maxlen)
