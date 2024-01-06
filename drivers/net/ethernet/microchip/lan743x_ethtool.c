@@ -1053,7 +1053,7 @@ static int lan743x_ethtool_get_ts_info(struct net_device *netdev,
 }
 
 static int lan743x_ethtool_get_eee(struct net_device *netdev,
-				   struct ethtool_eee *eee)
+				   struct ethtool_keee *eee)
 {
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
 	struct phy_device *phydev = netdev->phydev;
@@ -1091,7 +1091,7 @@ static int lan743x_ethtool_get_eee(struct net_device *netdev,
 }
 
 static int lan743x_ethtool_set_eee(struct net_device *netdev,
-				   struct ethtool_eee *eee)
+				   struct ethtool_keee *eee)
 {
 	struct lan743x_adapter *adapter;
 	struct phy_device *phydev;

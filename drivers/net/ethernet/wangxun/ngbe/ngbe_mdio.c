@@ -119,7 +119,7 @@ int ngbe_phy_connect(struct wx *wx)
 static void ngbe_phy_fixup(struct wx *wx)
 {
 	struct phy_device *phydev = wx->phydev;
-	struct ethtool_eee eee;
+	struct ethtool_keee eee;
 
 	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_10baseT_Half_BIT);
 	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_100baseT_Half_BIT);
