@@ -45,6 +45,9 @@ properties:
   clock-names:
     maxItems: 2
 
+  interrupts:
+    maxItems: 1
+
   "#pwm-cells":
     enum: [2, 3]
     description:
