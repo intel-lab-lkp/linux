@@ -341,6 +341,27 @@ Typedefs with function prototypes can also be documented::
    */
    typedef void (*type_name)(struct v4l2_ctrl *arg1, void *arg2);
 
+Object-like macro documentation
+-------------------------------
+
+Object-like macros are distinct from function-like macros. They are
+differentiated by whether the macro name is immediately followed by a
+left parenthesis ('(') for function-like macros or not followed by one
+for object-like macros.
+
+Function-like macros are handled like functions by ``scripts/kernel-doc``.
+They may have a parameter list. Object-like macros have do not have a
+parameter list.
+
+The general format of an object-like macro kernel-doc comment is::
+
+  /**
+   * define object_name - Brief description.
+   *
+   * Description of the object.
+   */
+
+
 Highlights and cross-references
 -------------------------------
 
