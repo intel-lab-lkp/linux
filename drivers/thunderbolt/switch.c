@@ -676,6 +676,13 @@ int tb_port_disable(struct tb_port *port)
 	return __tb_port_enable(port, false);
 }
 
+static int tb_port_reset(struct tb_port *port)
+{
+	if (tb_switch_is_usb4(port->sw))
+		return usb4_port_reset(port);
+	return tb_lc_reset_port(port);
+}
+
 /*
  * tb_init_port() - initialize a port
  *
@@ -1534,18 +1541,66 @@ static void tb_dump_switch(const struct tb *tb, const struct tb_switch *sw)
 /**
  * tb_switch_reset() - reconfigure route, enable and send TB_CFG_PKG_RESET
  * @sw: Switch to reset
+ * tb_switch_reset() - Perform reset to the router
+ * @sw: Router to reset
  *
  * Return: Returns 0 on success or an error code on failure.
+ * Issues reset to the router. Can be used for any router. Returns %0
+ * on success or an error code on failure.
  */
 int tb_switch_reset(struct tb_switch *sw)
 {
 	struct tb_cfg_result res;
 
-	if (sw->generation > 1)
+	tb_sw_dbg(sw, "resetting router\n");
+
+	if (sw->generation > 1) {
+		struct tb_port *port;
+
+		tb_sw_dbg(sw, "resetting switch\n");
+		tb_switch_for_each_port(sw, port) {
+			int i, ret;
+
+			/*
+			 * For lane adapters we issue downstream port
+			 * reset and clear up path config spaces.
+			 *
+			 * For protocol adapters we disable the path and
+			 * clear path config space one by one (from 8 to
+			 * Max Input HopID of the adapter).
+			 */
+			if (tb_port_is_null(port) && !tb_is_upstream_port(port)) {
+				if (!port->cap_usb4)
+					continue;
+				ret = tb_port_reset(port);
+				if (ret)
+					return ret;
+			} else if (tb_port_is_usb3_down(port) ||
+				   tb_port_is_usb3_up(port)) {
+				tb_usb3_port_enable(port, false);
+			} else if (tb_port_is_dpin(port) ||
+				   tb_port_is_dpout(port)) {
+				tb_dp_port_enable(port, false);
+			} else if (tb_port_is_pcie_down(port) ||
+				   tb_port_is_pcie_up(port)) {
+				tb_pci_port_enable(port, false);
+			} else {
+				continue;
+			}
+
+			/* Cleanup path config space of protocol adapter */
+			for (i = TB_PATH_MIN_HOPID;
+			     i <= port->config.max_in_hop_id; i++) {
+				ret = tb_path_deactivate_hop(port, i);
+				if (ret)
+					return ret;
+			}
+		}
+
 		return 0;
+	}
 
-	tb_sw_dbg(sw, "resetting switch\n");
-
+	/* Thunderbolt 1 uses the "reset" config space packet */
 	res.err = tb_sw_write(sw, ((u32 *) &sw->config) + 2,
 			      TB_CFG_SWITCH, 2, 2);
 	if (res.err)
