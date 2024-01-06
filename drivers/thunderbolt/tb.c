@@ -2571,7 +2571,7 @@ static int tb_scan_finalize_switch(struct device *dev, void *data)
 	return 0;
 }
 
-static int tb_start(struct tb *tb)
+static int tb_start(struct tb *tb, bool reset)
 {
 	struct tb_cm *tcm = tb_priv(tb);
 	int ret;
