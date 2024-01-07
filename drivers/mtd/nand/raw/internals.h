@@ -18,6 +18,7 @@
  */
 #define NAND_MFR_AMD		0x01
 #define NAND_MFR_ATO		0x9b
+#define NAND_MFR_DOSILICON	0xf8
 #define NAND_MFR_EON		0x92
 #define NAND_MFR_ESMT		0xc8
 #define NAND_MFR_FUJITSU	0x04

@@ -181,6 +181,7 @@ struct nand_flash_dev nand_flash_ids[] = {
 static const struct nand_manufacturer_desc nand_manufacturer_descs[] = {
 	{NAND_MFR_AMD, "AMD/Spansion", &amd_nand_manuf_ops},
 	{NAND_MFR_ATO, "ATO"},
+	{NAND_MFR_DOSILICON, "Dosilicon"},
 	{NAND_MFR_EON, "Eon"},
 	{NAND_MFR_ESMT, "ESMT", &esmt_nand_manuf_ops},
 	{NAND_MFR_FUJITSU, "Fujitsu"},
