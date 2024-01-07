@@ -37,7 +37,7 @@
 
 #define __types_ok(x, y) 					\
 	(__is_signed(x) == __is_signed(y) ||			\
-		__is_signed((x) + 0) == __is_signed((y) + 0) ||	\
+		__is_signed((x) + 0ll) == __is_signed((y) + 0ll) ||	\
 		__is_noneg_int(x) || __is_noneg_int(y))
 
 #define __cmp_op_min <
