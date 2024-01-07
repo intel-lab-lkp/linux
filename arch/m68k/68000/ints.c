@@ -63,13 +63,13 @@ asmlinkage void trap46(void);
 asmlinkage void trap47(void);
 asmlinkage irqreturn_t bad_interrupt(int, void *);
 asmlinkage irqreturn_t inthandler(void);
-asmlinkage irqreturn_t inthandler1(void);
-asmlinkage irqreturn_t inthandler2(void);
-asmlinkage irqreturn_t inthandler3(void);
-asmlinkage irqreturn_t inthandler4(void);
-asmlinkage irqreturn_t inthandler5(void);
-asmlinkage irqreturn_t inthandler6(void);
-asmlinkage irqreturn_t inthandler7(void);
+asmlinkage irqreturn_t inthandler65(void);
+asmlinkage irqreturn_t inthandler66(void);
+asmlinkage irqreturn_t inthandler67(void);
+asmlinkage irqreturn_t inthandler68(void);
+asmlinkage irqreturn_t inthandler69(void);
+asmlinkage irqreturn_t inthandler70(void);
+asmlinkage irqreturn_t inthandler71(void);
 
 /* The 68k family did not have a good way to determine the source
  * of interrupts until later in the family.  The EC000 core does
