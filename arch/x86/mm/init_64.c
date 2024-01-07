@@ -150,7 +150,7 @@ static void sync_global_pgds_l5(unsigned long start, unsigned long end)
 			pgd_t *pgd;
 			spinlock_t *pgt_lock;
 
-			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
+			pgd = page_address(page) + pgd_index(addr);
 			/* the pgt_lock only for Xen */
 			pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
 			spin_lock(pgt_lock);
@@ -192,7 +192,7 @@ static void sync_global_pgds_l4(unsigned long start, unsigned long end)
 			p4d_t *p4d;
 			spinlock_t *pgt_lock;
 
-			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
+			pgd = page_address(page) + pgd_index(addr);
 			p4d = p4d_offset(pgd, addr);
 			/* the pgt_lock only for Xen */
 			pgt_lock = &pgd_page_get_mm(page)->page_table_lock;
@@ -249,7 +249,7 @@ static __ref void *spp_getpage(void)
 static p4d_t *fill_p4d(pgd_t *pgd, unsigned long vaddr)
 {
 	if (pgd_none(*pgd)) {
-		p4d_t *p4d = (p4d_t *)spp_getpage();
+		p4d_t *p4d = spp_getpage();
 		pgd_populate(&init_mm, pgd, p4d);
 		if (p4d != p4d_offset(pgd, 0))
 			printk(KERN_ERR "PAGETABLE BUG #00! %p <-> %p\n",
@@ -261,7 +261,7 @@ static p4d_t *fill_p4d(pgd_t *pgd, unsigned long vaddr)
 static pud_t *fill_pud(p4d_t *p4d, unsigned long vaddr)
 {
 	if (p4d_none(*p4d)) {
-		pud_t *pud = (pud_t *)spp_getpage();
+		pud_t *pud = spp_getpage();
 		p4d_populate(&init_mm, p4d, pud);
 		if (pud != pud_offset(p4d, 0))
 			printk(KERN_ERR "PAGETABLE BUG #01! %p <-> %p\n",
@@ -273,7 +273,7 @@ static pud_t *fill_pud(p4d_t *p4d, unsigned long vaddr)
 static pmd_t *fill_pmd(pud_t *pud, unsigned long vaddr)
 {
 	if (pud_none(*pud)) {
-		pmd_t *pmd = (pmd_t *) spp_getpage();
+		pmd_t *pmd = spp_getpage();
 		pud_populate(&init_mm, pud, pmd);
 		if (pmd != pmd_offset(pud, 0))
 			printk(KERN_ERR "PAGETABLE BUG #02! %p <-> %p\n",
@@ -285,7 +285,7 @@ static pmd_t *fill_pmd(pud_t *pud, unsigned long vaddr)
 static pte_t *fill_pte(pmd_t *pmd, unsigned long vaddr)
 {
 	if (pmd_none(*pmd)) {
-		pte_t *pte = (pte_t *) spp_getpage();
+		pte_t *pte = spp_getpage();
 		pmd_populate_kernel(&init_mm, pmd, pte);
 		if (pte != pte_offset_kernel(pmd, 0))
 			printk(KERN_ERR "PAGETABLE BUG #03!\n");
@@ -378,19 +378,19 @@ static void __init __init_extra_mapping(unsigned long phys, unsigned long size,
 	for (; size; phys += PMD_SIZE, size -= PMD_SIZE) {
 		pgd = pgd_offset_k((unsigned long)__va(phys));
 		if (pgd_none(*pgd)) {
-			p4d = (p4d_t *) spp_getpage();
+			p4d = spp_getpage();
 			set_pgd(pgd, __pgd(__pa(p4d) | _KERNPG_TABLE |
 						_PAGE_USER));
 		}
 		p4d = p4d_offset(pgd, (unsigned long)__va(phys));
 		if (p4d_none(*p4d)) {
-			pud = (pud_t *) spp_getpage();
+			pud = spp_getpage();
 			set_p4d(p4d, __p4d(__pa(pud) | _KERNPG_TABLE |
 						_PAGE_USER));
 		}
 		pud = pud_offset(p4d, (unsigned long)__va(phys));
 		if (pud_none(*pud)) {
-			pmd = (pmd_t *) spp_getpage();
+			pmd = spp_getpage();
 			set_pud(pud, __pud(__pa(pmd) | _KERNPG_TABLE |
 						_PAGE_USER));
 		}
