@@ -74,7 +74,7 @@ static void fscache_free_cookie(struct fscache_cookie *cookie)
 	if (cookie->aux_len > sizeof(cookie->inline_aux))
 		kfree(cookie->aux);
 	if (cookie->key_len > sizeof(cookie->inline_key))
-		kfree(cookie->key);
+		kfree_sensitive(cookie->key);
 	fscache_stat_d(&fscache_n_cookies);
 	kmem_cache_free(fscache_cookie_jar, cookie);
 }
