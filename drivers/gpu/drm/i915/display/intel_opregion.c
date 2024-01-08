@@ -903,6 +903,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 		return -ENOTSUPP;
 	}
 
+	opregion->asls = asls;
 	INIT_WORK(&opregion->asle_work, asle_work);
 
 	base = memremap(asls, OPREGION_SIZE, MEMREMAP_WB);
@@ -987,7 +988,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 		    opregion->header->over.minor >= 1) {
 			drm_WARN_ON(&dev_priv->drm, rvda < OPREGION_SIZE);
 
-			rvda += asls;
+			rvda += opregion->asls;
 		}
 
 		opregion->rvda = memremap(rvda, opregion->asle->rvds,
@@ -1262,6 +1263,7 @@ void intel_opregion_cleanup(struct drm_i915_private *i915)
 	opregion->swsci = NULL;
 	opregion->asle = NULL;
 	opregion->asle_ext = NULL;
+	opregion->asls = 0;
 	vbt->vbt = NULL;
 	opregion->lid_state = NULL;
 }

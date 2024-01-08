@@ -48,6 +48,7 @@ struct intel_opregion {
 	struct opregion_asle_ext *asle_ext;
 	void *rvda;
 	u32 *lid_state;
+	u32 asls;
 	struct work_struct asle_work;
 	struct notifier_block acpi_notifier;
 };
