@@ -129,6 +129,8 @@
 };
 
 &qspi { /* MIO 0-5 - U143 */
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	spi_flash: flash@0 { /* MT25QU512A */
 		compatible = "jedec,spi-nor"; /* 64MB */
@@ -240,6 +242,8 @@
 };
 
 &spi1 { /* MIO6, 9-11 */
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	label = "TPM";
 	num-cs = <1>;
@@ -251,6 +255,8 @@
 };
 
 &i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	bootph-all;
 	clock-frequency = <400000>;

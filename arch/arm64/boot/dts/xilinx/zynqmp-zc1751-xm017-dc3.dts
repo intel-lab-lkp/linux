@@ -103,6 +103,8 @@
 
 /* just eeprom here */
 &i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <400000>;
 

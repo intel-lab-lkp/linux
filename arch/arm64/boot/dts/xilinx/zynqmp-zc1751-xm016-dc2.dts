@@ -109,6 +109,8 @@
 };
 
 &i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <400000>;
 	pinctrl-names = "default", "gpio";
@@ -132,6 +134,8 @@
 };
 
 &nand0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_nand0_default>;
@@ -444,6 +448,8 @@
 };
 
 &spi0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	num-cs = <1>;
 	pinctrl-names = "default";
@@ -464,6 +470,8 @@
 };
 
 &spi1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	num-cs = <1>;
 	pinctrl-names = "default";

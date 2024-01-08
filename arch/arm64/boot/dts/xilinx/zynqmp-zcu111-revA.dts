@@ -200,6 +200,8 @@
 };
 
 &i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <400000>;
 	pinctrl-names = "default", "gpio";
@@ -380,6 +382,8 @@
 };
 
 &i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <400000>;
 	pinctrl-names = "default", "gpio";
@@ -788,6 +792,8 @@
 };
 
 &qspi {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	status = "okay";
 	flash@0 {
 		compatible = "m25p80", "jedec,spi-nor"; /* 16MB + 16MB */
