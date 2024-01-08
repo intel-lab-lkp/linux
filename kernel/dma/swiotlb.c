@@ -1126,6 +1126,9 @@ static int swiotlb_find_slots(struct device *dev, phys_addr_t orig_addr,
 	u64 phys_limit;
 	int index;
 
+	if (alloc_size > IO_TLB_SEGSIZE * IO_TLB_SIZE)
+		return -1;
+
 	rcu_read_lock();
 	list_for_each_entry_rcu(pool, &mem->pools, node) {
 		index = swiotlb_pool_find_slots(dev, pool, orig_addr,
