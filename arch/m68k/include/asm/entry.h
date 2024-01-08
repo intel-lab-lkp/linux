@@ -184,6 +184,7 @@
  * that the stack frame is NOT for syscall
  */
 .macro SAVE_ALL_INT
+					/* entry.S should populate the vector */
 	clrl	%sp@-			/* stk_adj */
 	pea	-1:w			/* orig d0 */
 	movel	%d0,%sp@-		/* d0 */
@@ -191,6 +192,7 @@
 .endm
 
 .macro SAVE_ALL_SYS
+					/* entry.S should populate the vector */
 	clrl	%sp@-			/* stk_adj */
 	movel	%d0,%sp@-		/* orig d0 */
 	movel	%d0,%sp@-		/* d0 */
@@ -202,6 +204,7 @@
 	movel	%sp@+,%d0
 	addql	#4,%sp			/* orig d0 */
 	addl	%sp@+,%sp		/* stk adj */
+	addql	#2,%sp			/* entry.S populated vector */
 	rte
 .endm
 

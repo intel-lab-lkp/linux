@@ -54,6 +54,7 @@ do_trace:
 	jra	ret_from_exception
 
 ENTRY(system_call)
+	movew	#32,%sp@-
 	SAVE_ALL_SYS
 
 	/* save top of frame*/
@@ -116,17 +117,15 @@ Lsignal_return:
  .macro inthandler num func
 	.globl inthandler\num
 	inthandler\num:
+	movew	#\num,%sp@-
 	SAVE_ALL_INT
-	movew	%sp@(PT_OFF_FORMATVEC), %d0
-	and	#0x3ff, %d0
 
+	/* Push frame address onto stack */
 	movel	%sp,%sp@-
-	/* put vector # on stack*/
-	movel	#\num,%sp@-
 	/* process the IRQ*/
 	jbsr	\func
 	/* pop parameters off stack*/
-	addql	#8,%sp
+	addql	#4,%sp
 	bra	ret_from_exception
  .endm
 
