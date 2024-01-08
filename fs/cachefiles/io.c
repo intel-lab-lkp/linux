@@ -521,8 +521,9 @@ int __cachefiles_prepare_write(struct cachefiles_object *object,
 			       bool no_space_allocated_yet)
 {
 	struct cachefiles_cache *cache = object->volume->cache;
-	unsigned long long start = *_start, pos;
+	unsigned long long start = *_start;
 	size_t len = *_len;
+	loff_t pos;
 	int ret;
 
 	/* Round to DIO size */
