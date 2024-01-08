@@ -1070,6 +1070,28 @@ Similarly, if you need to calculate the size of some structure member, use
 There are also ``min()`` and ``max()`` macros in ``include/linux/minmax.h``
 that do strict type checking if you need them.
 
+Using existing macros provided by the shared headers also prevents naming
+collisions. For example, if one developer define in ``foo.h``
+
+.. code-block:: c
+
+	#define __stringify(x) __stringify_1(x)
+	#define __stringify_1(x) #x
+
+and another define in ``bar.h``
+
+.. code-block:: c
+
+	#define stringify(x) __stringify(x)
+	#define __stringify(x) #x
+
+When both headers are ``#include``-d into the same file, the facilities provided
+by ``foo.h`` might be broken by ``bar.h``.
+
+If both ``foo.h`` and ``bar.h``  use the macro ``__stringify()`` provided by
+``include/linux/stringify.h``, they wouldn't have stepped onto each other's
+toes.
+
 Feel free to search across and peruse the header files to see what else is
 already defined that you shouldn't reproduce in your code.
 
