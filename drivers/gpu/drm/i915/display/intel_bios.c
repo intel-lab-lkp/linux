@@ -2968,11 +2968,10 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv,
 	}
 
 	if (intel_bios_is_valid_vbt(fw->data, fw->size)) {
-		vbt->vbt_firmware = kmemdup(fw->data, fw->size, GFP_KERNEL);
-		if (vbt->vbt_firmware) {
+		vbt->vbt = kmemdup(fw->data, fw->size, GFP_KERNEL);
+		if (vbt->vbt) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Found valid VBT firmware \"%s\"\n", name);
-			vbt->vbt = vbt->vbt_firmware;
 			vbt->vbt_size = fw->size;
 			vbt->type = I915_VBT_FIRMWARE;
 			ret = 0;
@@ -3273,12 +3272,10 @@ void intel_bios_driver_remove(struct drm_i915_private *i915)
 	switch (vbt->type) {
 	case I915_VBT_SPI:
 	case I915_VBT_OPROM:
+	case I915_VBT_FIRMWARE:
 		kfree(vbt->vbt);
 		vbt->type = I915_VBT_NONE;
 		break;
-	case I915_VBT_FIRMWARE:
-		kfree(vbt->vbt_firmware);
-		fallthrough;
 	case I915_VBT_OPREGION:
 		vbt->vbt = NULL;
 		vbt->type = I915_VBT_NONE;

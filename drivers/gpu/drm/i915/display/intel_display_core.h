@@ -238,7 +238,6 @@ struct intel_vbt_data {
 };
 
 struct intel_vbt {
-	void *vbt_firmware;
 	const void *vbt;
 	u32 vbt_size;
 	enum {
