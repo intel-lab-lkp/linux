@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/nuvoton/nuvoton,npcm-clk-rst.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Clock and reset registers block in Nuvoton SoCs
+
+maintainers:
+  - Tomer Maimon <tmaimon77@gmail.com>
+
+description:
+  The clock and reset registers are a registers block in Nuvoton SoCs that 
+  handle both reset and clock functionality.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - nuvoton,npcm750-clk-rst
+          - nuvoton,npcm845-clk-rst
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties:
+  type: object
+
+examples:
+  - |
+    clk_rst: syscon@801000 {
+      compatible = "nuvoton,npcm750-clk-rst", "syscon", "simple-mfd";
+      reg = <0x801000 0x6C>;
+    };
