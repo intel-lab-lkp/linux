@@ -112,7 +112,7 @@ int con_is_bound(const struct consw *csw);
 int do_unregister_con_driver(const struct consw *csw);
 int do_take_over_console(const struct consw *sw, int first, int last, int deflt);
 void give_up_console(const struct consw *sw);
-#ifdef CONFIG_HW_CONSOLE
+#ifdef CONFIG_VT
 int con_debug_enter(struct vc_data *vc);
 int con_debug_leave(void);
 #else
