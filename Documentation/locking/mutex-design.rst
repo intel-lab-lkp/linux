@@ -101,12 +101,21 @@ features that make lock debugging easier and faster:
     - Detects multi-task circular deadlocks and prints out all affected
       locks and tasks (and only those tasks).
 
-Releasing a mutex is not an atomic operation: Once a mutex release operation
-has begun, another context may be able to acquire the mutex before the release
-operation has fully completed. The mutex user must ensure that the mutex is not
-destroyed while a release operation is still in progress - in other words,
-callers of mutex_unlock() must ensure that the mutex stays alive until
-mutex_unlock() has returned.
+A mutex - and most other sleeping locks like rwsems - do not provide an
+implicit refcount for the memory they occupy, which could then be released
+with mutex_unlock().
+
+[ This is in contrast with spin_unlock() [or completion_done()], which APIs can
+  be used to guarantee that the memory is not touched by the lock implementation
+  after spin_unlock() releases the lock. ]
+
+Once a mutex release operation has begun within mutex_unlock(), another context
+may be able to acquire the mutex before the release operation has fully completed,
+and it's not safe to free the object then.
+
+The mutex user must ensure that the mutex is not destroyed while a release operation
+is still in progress - in other words, callers of mutex_unlock() must ensure that
+the mutex stays alive until mutex_unlock() has returned.
 
 Interfaces
 ----------
