@@ -146,6 +146,7 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 
 static const struct of_device_id starfive_dwmac_match[] = {
 	{ .compatible = "starfive,jh7110-dwmac"	},
+	{ .compatible = "starfive,jh8100-dwmac"	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, starfive_dwmac_match);
