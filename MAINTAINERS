@@ -14632,6 +14632,13 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/msi-laptop.c
 
+MSI PSU HARDWARE MONITOR DRIVER
+M:	Jack Doan <me@jackdoan.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	Documentation/hwmon/msi-psu.rst
+F:	drivers/hwmon/msi-psu.c
+
 MSI WMI SUPPORT
 L:	platform-driver-x86@vger.kernel.org
 S:	Orphan

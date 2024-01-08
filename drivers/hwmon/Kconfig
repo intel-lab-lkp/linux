@@ -1248,6 +1248,18 @@ config SENSORS_MLXREG_FAN
 	  driver as a module, choose 'M' here: the module will be called
 	  mlxreg-fan.
 
+config SENSORS_MSI_PSU
+	tristate "MSI PSU HID controller"
+	depends on HID
+	help
+	  If you say yes here you get support for MSI power supplies with an
+	  HID monitoring interface.
+
+	  Currently this driver supports the MEG Ai1300P and MEG Ai1000P PSUs.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called msi-psu.
+
 config SENSORS_TC654
 	tristate "Microchip TC654/TC655 and compatibles"
 	depends on I2C
