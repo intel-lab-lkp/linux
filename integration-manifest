@@ -1,0 +1,30 @@
+drm drm-fixes eb284f4b37817d2038fdfe1a9d51769730ab7b5f
+	drm/nouveau/dp: Honor GSP link training retry timeouts
+drm-misc drm-misc-fixes 11f9eb899ecc8c02b769cf8d2532ba12786a7af7
+	drm/mgag200: Fix gamma lut not initialized for G200ER, G200EV, G200SE
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm drm-next 3c064aea46d071ccf95a142be5532768a7fa6f02
+	Merge tag 'drm-misc-next-fixes-2024-01-04' of git://anongit.freedesktop.org/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 196da3f3f76a46905f7daab29c56974f1aba9a7a
+	drm/rockchip: vop2: Drop unused if_dclk_rate variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next babebd1dc1279027206583a9921e05657f97da87
+	drm/probe-helper: remove unused drm_connector_helper_get_modes_from_ddc()
+drm-intel drm-intel-next 0fa647659c492c0a4342f7da70f5f946a40df250
+	drm/i915/display: Use helper to select C20 MPLLA/B
+drm-intel drm-intel-gt-next a797099562267ebb281acd59750f1a8dbba36eef
+	drm/i915/huc: Allow for very slow HuC loading
+drm-intel topic/core-for-CI 4ed7492a358d8405f0fff43b17db7f2e33295110
+	HAX net/phy: Suppress WARN from phy_error
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
