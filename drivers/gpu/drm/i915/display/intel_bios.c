@@ -2994,6 +2994,8 @@ static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
 	if (!intel_bios_is_valid_vbt(vbt, vbt_size))
 		goto err_free_vbt;
 
+	i915->display.vbt.vbt = vbt;
+	i915->display.vbt.vbt_size = vbt_size;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in SPI flash\n");
 
 	return (struct vbt_header *)vbt;
@@ -3053,6 +3055,8 @@ static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
 
 	pci_unmap_rom(pdev, oprom);
 
+	i915->display.vbt.vbt = vbt;
+	i915->display.vbt.vbt_size = vbt_size;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in PCI ROM\n");
 
 	return vbt;
@@ -3134,8 +3138,6 @@ out:
 	/* Further processing on pre-parsed or generated child device data */
 	parse_sdvo_device_mapping(i915);
 	parse_ddi_ports(i915);
-
-	kfree(oprom_vbt);
 }
 
 static void intel_bios_init_panel(struct drm_i915_private *i915,
@@ -3207,6 +3209,9 @@ void intel_bios_driver_remove(struct drm_i915_private *i915)
 		list_del(&entry->node);
 		kfree(entry);
 	}
+
+	/* FIXME: Handle vbt free in opregion case. */
+	kfree(vbt->vbt);
 }
 
 void intel_bios_fini_panel(struct intel_panel *panel)
