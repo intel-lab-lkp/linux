@@ -2997,13 +2997,14 @@ static u32 intel_spi_read(struct intel_uncore *uncore, u32 offset)
 	return intel_uncore_read(uncore, PRIMARY_SPI_TRIGGER);
 }
 
-static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
+static void spi_oprom_get_vbt(struct drm_i915_private *i915,
+			      struct intel_vbt *vbt)
 {
 	u32 count, data, found, store = 0;
 	u32 static_region, oprom_offset;
 	u32 oprom_size = 0x200000;
 	u16 vbt_size;
-	u32 *vbt;
+	u32 *header;
 
 	static_region = intel_uncore_read(&i915->uncore, SPI_STATIC_REGIONS);
 	static_region &= OPTIONROM_SPI_REGIONID_MASK;
@@ -3028,27 +3029,29 @@ static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
 				  found + offsetof(struct vbt_header, vbt_size));
 	vbt_size &= 0xffff;
 
-	vbt = kzalloc(round_up(vbt_size, 4), GFP_KERNEL);
-	if (!vbt)
+	header = kzalloc(round_up(vbt_size, 4), GFP_KERNEL);
+	if (!header)
 		goto err_not_found;
 
 	for (count = 0; count < vbt_size; count += 4)
-		*(vbt + store++) = intel_spi_read(&i915->uncore, found + count);
+		*(header + store++) = intel_spi_read(&i915->uncore, found + count);
 
-	if (!intel_bios_is_valid_vbt(vbt, vbt_size))
+	if (!intel_bios_is_valid_vbt(header, vbt_size))
 		goto err_free_vbt;
 
-	i915->display.vbt.vbt = vbt;
-	i915->display.vbt.vbt_size = vbt_size;
-	i915->display.vbt.type = I915_VBT_SPI;
+	vbt->vbt = header;
+	vbt->vbt_size = vbt_size;
+	vbt->type = I915_VBT_SPI;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in SPI flash\n");
 
-	return (struct vbt_header *)vbt;
+	return;
 
 err_free_vbt:
 	kfree(vbt);
 err_not_found:
-	return NULL;
+	vbt->vbt = NULL;
+
+	return;
 }
 
 static void oprom_get_vbt(struct drm_i915_private *i915,
@@ -3129,7 +3132,6 @@ void intel_bios_init(struct drm_i915_private *i915)
 {
 	struct intel_vbt *vbt = &i915->display.vbt;
 	struct intel_opregion *opregion = &i915->display.opregion;
-	struct vbt_header *oprom_vbt = NULL;
 	struct vbt_header *header = NULL;
 	const struct bdb_header *bdb;
 	const char * const vbt_type[] = {
@@ -3159,10 +3161,8 @@ void intel_bios_init(struct drm_i915_private *i915)
 	 * If the OpRegion does not have VBT, look in SPI flash through MMIO or
 	 * PCI mapping
 	 */
-	if (!vbt->vbt && IS_DGFX(i915)) {
-		oprom_vbt = spi_oprom_get_vbt(i915);
-		vbt->vbt = oprom_vbt;
-	}
+	if (!vbt->vbt && IS_DGFX(i915))
+		spi_oprom_get_vbt(i915, vbt);
 
 	if (!vbt->vbt)
 		oprom_get_vbt(i915, vbt);
