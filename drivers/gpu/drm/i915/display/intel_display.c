@@ -3525,7 +3525,6 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	u8 panel_transcoder_mask = hsw_panel_transcoders(dev_priv);
 	enum transcoder cpu_transcoder;
-	u8 master_pipes, slave_pipes;
 	u8 enabled_transcoders = 0;
 
 	/*
@@ -3576,15 +3575,6 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 	if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
 		enabled_transcoders |= BIT(cpu_transcoder);
 
-	/* bigjoiner slave -> consider the master pipe's transcoder as well */
-	enabled_bigjoiner_pipes(dev_priv, &master_pipes, &slave_pipes);
-	if (slave_pipes & BIT(crtc->pipe)) {
-		cpu_transcoder = (enum transcoder)
-			get_bigjoiner_master_pipe(crtc->pipe, master_pipes, slave_pipes);
-		if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
-			enabled_transcoders |= BIT(cpu_transcoder);
-	}
-
 	return enabled_transcoders;
 }
 
@@ -3631,6 +3621,15 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 	u32 tmp;
 
 	enabled_transcoders = hsw_enabled_transcoders(crtc);
+
+	/* bigjoiner slave -> consider the master pipe's transcoder as well */
+	if (intel_crtc_is_bigjoiner_slave(pipe_config)) {
+		unsigned long cpu_transcoder = (enum transcoder)
+			bigjoiner_master_pipe(pipe_config);
+		if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
+			enabled_transcoders |= BIT(cpu_transcoder);
+	}
+
 	if (!enabled_transcoders)
 		return false;
 
@@ -3735,6 +3734,8 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 
 	pipe_config->shared_dpll = NULL;
 
+	intel_bigjoiner_get_config(pipe_config);
+
 	active = hsw_get_transcoder_state(crtc, pipe_config, &crtc->hw_readout_power_domains);
 
 	if ((IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) &&
@@ -3746,7 +3747,6 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 	if (!active)
 		goto out;
 
-	intel_bigjoiner_get_config(pipe_config);
 	intel_dsc_get_config(pipe_config);
 
 	if (!transcoder_is_dsi(pipe_config->cpu_transcoder) ||
