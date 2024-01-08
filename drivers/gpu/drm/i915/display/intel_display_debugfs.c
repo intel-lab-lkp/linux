@@ -100,10 +100,10 @@ static int i915_opregion(struct seq_file *m, void *unused)
 static int i915_vbt(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *i915 = node_to_i915(m->private);
-	struct intel_opregion *opregion = &i915->display.opregion;
+	struct intel_vbt *vbt = &i915->display.vbt;
 
-	if (opregion->vbt)
-		seq_write(m, opregion->vbt, opregion->vbt_size);
+	if (vbt->vbt)
+		seq_write(m, vbt->vbt, vbt->vbt_size);
 
 	return 0;
 }

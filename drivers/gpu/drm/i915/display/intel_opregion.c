@@ -839,7 +839,7 @@ static const struct dmi_system_id intel_no_opregion_vbt[] = {
 
 static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 {
-	struct intel_opregion *opregion = &dev_priv->display.opregion;
+	struct intel_vbt *vbt = &dev_priv->display.vbt;
 	const struct firmware *fw = NULL;
 	const char *name = dev_priv->display.params.vbt_firmware;
 	int ret;
@@ -856,12 +856,12 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 	}
 
 	if (intel_bios_is_valid_vbt(fw->data, fw->size)) {
-		opregion->vbt_firmware = kmemdup(fw->data, fw->size, GFP_KERNEL);
-		if (opregion->vbt_firmware) {
+		vbt->vbt_firmware = kmemdup(fw->data, fw->size, GFP_KERNEL);
+		if (vbt->vbt_firmware) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Found valid VBT firmware \"%s\"\n", name);
-			opregion->vbt = opregion->vbt_firmware;
-			opregion->vbt_size = fw->size;
+			vbt->vbt = vbt->vbt_firmware;
+			vbt->vbt_size = fw->size;
 			ret = 0;
 		} else {
 			ret = -ENOMEM;
@@ -880,12 +880,13 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 int intel_opregion_setup(struct drm_i915_private *dev_priv)
 {
 	struct intel_opregion *opregion = &dev_priv->display.opregion;
+	struct intel_vbt *vbt = &dev_priv->display.vbt;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	u32 asls, mboxes;
 	char buf[sizeof(OPREGION_SIGNATURE)];
 	int err = 0;
 	void *base;
-	const void *vbt;
+	const void *vbt_data;
 	u32 vbt_size;
 
 	BUILD_BUG_ON(sizeof(struct opregion_header) != 0x100);
@@ -992,13 +993,13 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 		opregion->rvda = memremap(rvda, opregion->asle->rvds,
 					  MEMREMAP_WB);
 
-		vbt = opregion->rvda;
+		vbt_data = opregion->rvda;
 		vbt_size = opregion->asle->rvds;
-		if (intel_bios_is_valid_vbt(vbt, vbt_size)) {
+		if (intel_bios_is_valid_vbt(vbt_data, vbt_size)) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Found valid VBT in ACPI OpRegion (RVDA)\n");
-			opregion->vbt = vbt;
-			opregion->vbt_size = vbt_size;
+			vbt->vbt = vbt_data;
+			vbt->vbt_size = vbt_size;
 			goto out;
 		} else {
 			drm_dbg_kms(&dev_priv->drm,
@@ -1008,7 +1009,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 		}
 	}
 
-	vbt = base + OPREGION_VBT_OFFSET;
+	vbt_data = base + OPREGION_VBT_OFFSET;
 	/*
 	 * The VBT specification says that if the ASLE ext mailbox is not used
 	 * its area is reserved, but on some CHT boards the VBT extends into the
@@ -1019,11 +1020,11 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 	vbt_size = (mboxes & MBOX_ASLE_EXT) ?
 		OPREGION_ASLE_EXT_OFFSET : OPREGION_SIZE;
 	vbt_size -= OPREGION_VBT_OFFSET;
-	if (intel_bios_is_valid_vbt(vbt, vbt_size)) {
+	if (intel_bios_is_valid_vbt(vbt_data, vbt_size)) {
 		drm_dbg_kms(&dev_priv->drm,
 			    "Found valid VBT in ACPI OpRegion (Mailbox #4)\n");
-		opregion->vbt = vbt;
-		opregion->vbt_size = vbt_size;
+		vbt->vbt = vbt_data;
+		vbt->vbt_size = vbt_size;
 	} else {
 		drm_dbg_kms(&dev_priv->drm,
 			    "Invalid VBT in ACPI OpRegion (Mailbox #4)\n");
@@ -1243,6 +1244,7 @@ void intel_opregion_unregister(struct drm_i915_private *i915)
 void intel_opregion_cleanup(struct drm_i915_private *i915)
 {
 	struct intel_opregion *opregion = &i915->display.opregion;
+	struct intel_vbt *vbt = &i915->display.vbt;
 
 	if (!opregion->header)
 		return;
@@ -1253,15 +1255,13 @@ void intel_opregion_cleanup(struct drm_i915_private *i915)
 		memunmap(opregion->rvda);
 		opregion->rvda = NULL;
 	}
-	if (opregion->vbt_firmware) {
-		kfree(opregion->vbt_firmware);
-		opregion->vbt_firmware = NULL;
-	}
+	kfree(vbt->vbt_firmware);
+	vbt->vbt_firmware = NULL;
 	opregion->header = NULL;
 	opregion->acpi = NULL;
 	opregion->swsci = NULL;
 	opregion->asle = NULL;
 	opregion->asle_ext = NULL;
-	opregion->vbt = NULL;
+	vbt->vbt = NULL;
 	opregion->lid_state = NULL;
 }
