@@ -685,6 +685,10 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 		       struct nlattr **tb, struct fib_rule *rule)
 {
 	struct fib_rule *r;
+	size_t off_len;
+
+	off_len = offsetof(struct fib_rule, uid_range) -
+		  offsetof(struct fib_rule, pref);
 
 	list_for_each_entry(r, &ops->rules_list, list) {
 		if (r->action != rule->action)
@@ -693,22 +697,10 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 		if (r->table != rule->table)
 			continue;
 
-		if (r->pref != rule->pref)
-			continue;
-
-		if (memcmp(r->iifname, rule->iifname, IFNAMSIZ))
-			continue;
-
-		if (memcmp(r->oifname, rule->oifname, IFNAMSIZ))
+		if (memcmp(&r->pref, &rule->pref, off_len))
 			continue;
 
 		if (r->mark != rule->mark)
-			continue;
-
-		if (r->suppress_ifgroup != rule->suppress_ifgroup)
-			continue;
-
-		if (r->suppress_prefixlen != rule->suppress_prefixlen)
 			continue;
 
 		if (r->mark_mask != rule->mark_mask)
