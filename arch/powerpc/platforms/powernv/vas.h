@@ -12,6 +12,7 @@
 #include <linux/dcache.h>
 #include <linux/mutex.h>
 #include <linux/stringify.h>
+#include <linux/interrupt.h>
 
 /*
  * Overview of Virtual Accelerator Switchboard (VAS).

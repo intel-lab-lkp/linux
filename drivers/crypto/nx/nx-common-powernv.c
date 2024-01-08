@@ -17,6 +17,7 @@
 #include <asm/reg.h>
 #include <asm/opal-api.h>
 #include <asm/opal.h>
+#include <asm/smp.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Dan Streetman <ddstreet@ieee.org>");
