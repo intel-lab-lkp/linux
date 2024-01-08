@@ -2949,9 +2949,9 @@ bool intel_bios_is_valid_vbt(const void *buf, size_t size)
 	return vbt;
 }
 
-static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
+static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv,
+				   struct intel_vbt *vbt)
 {
-	struct intel_vbt *vbt = &dev_priv->display.vbt;
 	const struct firmware *fw = NULL;
 	const char *name = dev_priv->display.params.vbt_firmware;
 	int ret;
@@ -3153,7 +3153,7 @@ void intel_bios_init(struct drm_i915_private *i915)
 
 	init_vbt_defaults(i915);
 
-	intel_load_vbt_firmware(i915);
+	intel_load_vbt_firmware(i915, vbt);
 
 	if (!vbt->vbt && opregion->asls)
 		intel_load_opregion_vbt(i915, opregion, vbt);
