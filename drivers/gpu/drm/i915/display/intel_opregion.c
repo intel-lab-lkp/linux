@@ -862,6 +862,7 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 				    "Found valid VBT firmware \"%s\"\n", name);
 			vbt->vbt = vbt->vbt_firmware;
 			vbt->vbt_size = fw->size;
+			vbt->type = I915_VBT_FIRMWARE;
 			ret = 0;
 		} else {
 			ret = -ENOMEM;
@@ -918,6 +919,7 @@ static int intel_load_opregion_vbt(struct drm_i915_private *i915,
 				    "Found valid VBT in ACPI OpRegion (RVDA)\n");
 			vbt->vbt = vbt_data;
 			vbt->vbt_size = vbt_size;
+			vbt->type = I915_VBT_OPREGION;
 			goto out;
 		} else {
 			drm_dbg_kms(&i915->drm,
@@ -943,6 +945,7 @@ static int intel_load_opregion_vbt(struct drm_i915_private *i915,
 			    "Found valid VBT in ACPI OpRegion (Mailbox #4)\n");
 		vbt->vbt = vbt_data;
 		vbt->vbt_size = vbt_size;
+		vbt->type = I915_VBT_OPREGION;
 	} else {
 		drm_dbg_kms(&i915->drm,
 			    "Invalid VBT in ACPI OpRegion (Mailbox #4)\n");

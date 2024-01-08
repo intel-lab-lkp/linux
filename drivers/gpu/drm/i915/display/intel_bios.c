@@ -2996,6 +2996,7 @@ static struct vbt_header *spi_oprom_get_vbt(struct drm_i915_private *i915)
 
 	i915->display.vbt.vbt = vbt;
 	i915->display.vbt.vbt_size = vbt_size;
+	i915->display.vbt.type = I915_VBT_SPI;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in SPI flash\n");
 
 	return (struct vbt_header *)vbt;
@@ -3057,6 +3058,7 @@ static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
 
 	i915->display.vbt.vbt = vbt;
 	i915->display.vbt.vbt_size = vbt_size;
+	i915->display.vbt.type = I915_VBT_OPROM;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in PCI ROM\n");
 
 	return vbt;
@@ -3082,6 +3084,13 @@ void intel_bios_init(struct drm_i915_private *i915)
 	const struct vbt_header *vbt = i915->display.vbt.vbt;
 	struct vbt_header *oprom_vbt = NULL;
 	const struct bdb_header *bdb;
+	const char * const vbt_type[] = {
+		[I915_VBT_NONE] = "None",
+		[I915_VBT_FIRMWARE] = "Firmware",
+		[I915_VBT_OPREGION] = "Opregion",
+		[I915_VBT_OPROM] = "Oprom",
+		[I915_VBT_SPI] = "SPI",
+	};
 
 	INIT_LIST_HEAD(&i915->display.vbt.data.display_devices);
 	INIT_LIST_HEAD(&i915->display.vbt.data.bdb_blocks);
@@ -3114,9 +3123,9 @@ void intel_bios_init(struct drm_i915_private *i915)
 	bdb = get_bdb_header(vbt);
 	i915->display.vbt.data.version = bdb->version;
 
-	drm_dbg_kms(&i915->drm,
-		    "VBT signature \"%.*s\", BDB version %d\n",
-		    (int)sizeof(vbt->signature), vbt->signature, i915->display.vbt.data.version);
+	drm_dbg_kms(&i915->drm, "%s VBT signature \"%.*s\", BDB version %d\n",
+		    vbt_type[i915->display.vbt.type], (int)sizeof(vbt->signature),
+		    vbt->signature, i915->display.vbt.data.version);
 
 	init_bdb_blocks(i915, bdb);
 

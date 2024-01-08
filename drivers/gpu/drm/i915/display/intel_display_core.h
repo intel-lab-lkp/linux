@@ -241,6 +241,14 @@ struct intel_vbt {
 	void *vbt_firmware;
 	const void *vbt;
 	u32 vbt_size;
+	enum {
+		I915_VBT_NONE = 0,
+		I915_VBT_FIRMWARE,
+		I915_VBT_OPREGION,
+		I915_VBT_OPROM,
+		I915_VBT_SPI
+	} type;
+
 	struct intel_vbt_data data;
 };
 
