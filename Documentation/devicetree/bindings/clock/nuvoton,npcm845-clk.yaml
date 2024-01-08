@@ -18,8 +18,9 @@ properties:
     enum:
       - nuvoton,npcm845-clk
 
-  reg:
-    maxItems: 1
+  nuvoton,sysclk:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: phandle to access clock registers.
 
   clocks:
     items:
@@ -37,7 +38,7 @@ properties:
 
 required:
   - compatible
-  - reg
+  - nuvoton,sysclk
   - clocks
   - clock-names
   - '#clock-cells'
@@ -52,14 +53,11 @@ examples:
         clock-frequency = <25000000>;
     }; 
   
-    ahb {
-        #address-cells = <2>;
-        #size-cells = <2>;
-
-        clock-controller@f0801000 {
-            compatible = "nuvoton,npcm845-clk";
-            reg = <0x0 0xf0801000 0x0 0x1000>;
-            #clock-cells = <1>;
-        };
+    clk: clock-controller {
+        compatible = "nuvoton,npcm845-clk";
+        nuvoton,sysclk = <&clk_rst>;
+        #clock-cells = <1>;
+        clocks = <&refclk>;
+        clock-names = "refclk";
     };
 ...
