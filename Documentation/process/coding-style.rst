@@ -1048,27 +1048,29 @@ readable alternative if the call-sites have naked true/false constants.
 Otherwise limited use of bool in structures and arguments can improve
 readability.
 
+
 18) Don't re-invent the kernel macros
 -------------------------------------
 
-The header file include/linux/kernel.h contains a number of macros that
-you should use, rather than explicitly coding some variant of them yourself.
+The header files in the ``include/linux`` directory provide a number of macros
+that you should use, rather than explicitly coding some variant of them
+yourself.
+
 For example, if you need to calculate the length of an array, take advantage
-of the macro
+of the macro ``ARRAY_SIZE()`` from ``include/linux/array_size.h`` by
 
 .. code-block:: c
 
-	#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+	#include <linux/array_size.h>
+	ARRAY_SIZE(x) // The size of array x
 
 Similarly, if you need to calculate the size of some structure member, use
+``sizeof_field()`` from ``include/linux/stddef.h``.
 
-.. code-block:: c
-
-	#define sizeof_field(t, f) (sizeof(((t*)0)->f))
-
-There are also min() and max() macros that do strict type checking if you
-need them.  Feel free to peruse that header file to see what else is already
-defined that you shouldn't reproduce in your code.
+There are also ``min()`` and ``max()`` macros in ``include/linux/minmax.h``
+that do strict type checking if you need them. Feel free to search across and
+peruse the header files to see what else is already defined that you shouldn't
+reproduce in your code.
 
 
 19) Editor modelines and other cruft
