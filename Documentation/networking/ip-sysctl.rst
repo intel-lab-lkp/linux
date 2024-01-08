@@ -2502,18 +2502,17 @@ use_tempaddr - INTEGER
 		* -1 (for point-to-point devices and loopback devices)
 
 temp_valid_lft - INTEGER
-	valid lifetime (in seconds) for temporary addresses. If less than the
-	minimum required lifetime (typically 5 seconds), temporary addresses
-	will not be created.
+	valid lifetime (in seconds) for temporary addresses. If temp_valid_lft
+	is less than or equal to regen_advance, temporary addresses will not be
+	created.
 
 	Default: 172800 (2 days)
 
 temp_prefered_lft - INTEGER
 	Preferred lifetime (in seconds) for temporary addresses. If
-	temp_prefered_lft is less than the minimum required lifetime (typically
-	5 seconds), temporary addresses will not be created. If
-	temp_prefered_lft is greater than temp_valid_lft, the preferred lifetime
-	is temp_valid_lft.
+	temp_prefered_lft is less than or equal to regen_advance, temporary
+	addresses will not be created. If temp_prefered_lft is greater than
+	temp_valid_lft, the preferred lifetime is temp_valid_lft.
 
 	Default: 86400 (1 day)
 
@@ -2534,6 +2533,13 @@ max_desync_factor - INTEGER
 	value is in seconds.
 
 	Default: 600
+
+regen_advance - INTEGER
+
+	How far in advance (in seconds) to create a new temporary address before
+	the current one is deprecated.
+
+	Default: 5
 
 regen_max_retry - INTEGER
 	Number of attempts before give up attempting to generate
