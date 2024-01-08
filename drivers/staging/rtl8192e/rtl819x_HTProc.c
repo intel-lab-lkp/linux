@@ -241,9 +241,9 @@ void ht_construct_capability_element(struct rtllib_device *ieee, u8 *pos_ht_cap,
 	memset(pos_ht_cap, 0, *len);
 
 	if ((assoc) && (ht->peer_ht_spec_ver == HT_SPEC_VER_EWC)) {
-		static const u8	EWC11NHTCap[] = { 0x00, 0x90, 0x4c, 0x33 };
+		static const u8	ewc_11n_ht_cap[] = { 0x00, 0x90, 0x4c, 0x33 };
 
-		memcpy(pos_ht_cap, EWC11NHTCap, sizeof(EWC11NHTCap));
+		memcpy(pos_ht_cap, ewc_11n_ht_cap, sizeof(ewc_11n_ht_cap));
 		cap_ele = (struct ht_capab_ele *)&pos_ht_cap[4];
 		*len = 30 + 2;
 	} else {
