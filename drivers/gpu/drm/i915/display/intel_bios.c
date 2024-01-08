@@ -3051,17 +3051,18 @@ err_not_found:
 	return NULL;
 }
 
-static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
+static void oprom_get_vbt(struct drm_i915_private *i915,
+			  struct intel_vbt *vbt)
 {
 	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
 	void __iomem *p = NULL, *oprom;
-	struct vbt_header *vbt;
+	struct vbt_header *header;
 	u16 vbt_size;
 	size_t i, size;
 
 	oprom = pci_map_rom(pdev, &size);
 	if (!oprom)
-		return NULL;
+		return;
 
 	/* Scour memory looking for the VBT signature. */
 	for (i = 0; i + 4 < size; i += 4) {
@@ -3089,30 +3090,31 @@ static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
 	}
 
 	/* The rest will be validated by intel_bios_is_valid_vbt() */
-	vbt = kmalloc(vbt_size, GFP_KERNEL);
-	if (!vbt)
+	header = kmalloc(vbt_size, GFP_KERNEL);
+	if (!header)
 		goto err_unmap_oprom;
 
-	memcpy_fromio(vbt, p, vbt_size);
+	memcpy_fromio(header, p, vbt_size);
 
-	if (!intel_bios_is_valid_vbt(vbt, vbt_size))
+	if (!intel_bios_is_valid_vbt(header, vbt_size))
 		goto err_free_vbt;
 
 	pci_unmap_rom(pdev, oprom);
 
-	i915->display.vbt.vbt = vbt;
-	i915->display.vbt.vbt_size = vbt_size;
-	i915->display.vbt.type = I915_VBT_OPROM;
+	vbt->vbt = header;
+	vbt->vbt_size = vbt_size;
+	vbt->type = I915_VBT_OPROM;
 	drm_dbg_kms(&i915->drm, "Found valid VBT in PCI ROM\n");
 
-	return vbt;
+	return;
 
 err_free_vbt:
 	kfree(vbt);
 err_unmap_oprom:
 	pci_unmap_rom(pdev, oprom);
+	vbt->vbt = NULL;
 
-	return NULL;
+	return;
 }
 
 /**
@@ -3162,10 +3164,8 @@ void intel_bios_init(struct drm_i915_private *i915)
 		vbt->vbt = oprom_vbt;
 	}
 
-	if (!vbt->vbt) {
-		oprom_vbt = oprom_get_vbt(i915);
-		vbt->vbt = oprom_vbt;
-	}
+	if (!vbt->vbt)
+		oprom_get_vbt(i915, vbt);
 
 	if (!vbt->vbt)
 		goto out;
