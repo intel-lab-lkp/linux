@@ -363,7 +363,7 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 {
 	unsigned int chan_index;
 	size_t iface_weight = 0, iface_min_speed = 0;
-	struct cifs_server_iface *iface = NULL;
+	struct cifs_server_iface *iface;
 	struct cifs_server_iface *old_iface = NULL;
 	struct cifs_server_iface *last_iface = NULL;
 	struct sockaddr_storage ss;
@@ -432,11 +432,6 @@ cifs_chan_update_iface(struct cifs_ses *ses, struct TCP_Server_Info *server)
 	}
 
 	if (list_entry_is_head(iface, &ses->iface_list, iface_head)) {
-		iface = NULL;
-		cifs_dbg(FYI, "unable to find a suitable iface\n");
-	}
-
-	if (!iface) {
 		if (!chan_index)
 			cifs_dbg(FYI, "unable to get the interface matching: %pIS\n",
 				 &ss);
