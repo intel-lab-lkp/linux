@@ -1037,7 +1037,7 @@ void intel_crt_init(struct drm_i915_private *dev_priv)
 		return;
 	}
 
-	ddc_pin = dev_priv->display.vbt.crt_ddc_pin;
+	ddc_pin = dev_priv->display.vbt.data.crt_ddc_pin;
 
 	connector = &intel_connector->base;
 	crt->connector = intel_connector;

@@ -2078,7 +2078,7 @@ intel_sdvo_get_analog_edid(struct drm_connector *connector)
 	struct drm_i915_private *i915 = to_i915(connector->dev);
 	struct i2c_adapter *ddc;
 
-	ddc = intel_gmbus_get_adapter(i915, i915->display.vbt.crt_ddc_pin);
+	ddc = intel_gmbus_get_adapter(i915, i915->display.vbt.data.crt_ddc_pin);
 	if (!ddc)
 		return NULL;
 
@@ -2604,9 +2604,9 @@ intel_sdvo_select_ddc_bus(struct intel_sdvo *sdvo,
 	int ddc_bus;
 
 	if (sdvo->base.port == PORT_B)
-		mapping = &dev_priv->display.vbt.sdvo_mappings[0];
+		mapping = &dev_priv->display.vbt.data.sdvo_mappings[0];
 	else
-		mapping = &dev_priv->display.vbt.sdvo_mappings[1];
+		mapping = &dev_priv->display.vbt.data.sdvo_mappings[1];
 
 	if (mapping->initialized)
 		ddc_bus = (mapping->ddc_pin & 0xf0) >> 4;
@@ -2627,9 +2627,9 @@ intel_sdvo_select_i2c_bus(struct intel_sdvo *sdvo)
 	u8 pin;
 
 	if (sdvo->base.port == PORT_B)
-		mapping = &dev_priv->display.vbt.sdvo_mappings[0];
+		mapping = &dev_priv->display.vbt.data.sdvo_mappings[0];
 	else
-		mapping = &dev_priv->display.vbt.sdvo_mappings[1];
+		mapping = &dev_priv->display.vbt.data.sdvo_mappings[1];
 
 	if (mapping->initialized &&
 	    intel_gmbus_is_valid_pin(dev_priv, mapping->i2c_pin))
@@ -2671,11 +2671,11 @@ intel_sdvo_get_slave_addr(struct intel_sdvo *sdvo)
 	const struct sdvo_device_mapping *my_mapping, *other_mapping;
 
 	if (sdvo->base.port == PORT_B) {
-		my_mapping = &dev_priv->display.vbt.sdvo_mappings[0];
-		other_mapping = &dev_priv->display.vbt.sdvo_mappings[1];
+		my_mapping = &dev_priv->display.vbt.data.sdvo_mappings[0];
+		other_mapping = &dev_priv->display.vbt.data.sdvo_mappings[1];
 	} else {
-		my_mapping = &dev_priv->display.vbt.sdvo_mappings[1];
-		other_mapping = &dev_priv->display.vbt.sdvo_mappings[0];
+		my_mapping = &dev_priv->display.vbt.data.sdvo_mappings[1];
+		other_mapping = &dev_priv->display.vbt.data.sdvo_mappings[0];
 	}
 
 	/* If the BIOS described our SDVO device, take advantage of it. */

@@ -237,6 +237,10 @@ struct intel_vbt_data {
 	} sdvo_mappings[2];
 };
 
+struct intel_vbt {
+	struct intel_vbt_data data;
+};
+
 struct intel_wm {
 	/*
 	 * Raw watermark latency values:
@@ -526,7 +530,7 @@ struct intel_display {
 	struct intel_opregion opregion;
 	struct intel_overlay *overlay;
 	struct intel_display_params params;
-	struct intel_vbt_data vbt;
+	struct intel_vbt vbt;
 	struct intel_wm wm;
 };
 

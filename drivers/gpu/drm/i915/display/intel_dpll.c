@@ -376,7 +376,7 @@ static int i9xx_pll_refclk(struct drm_device *dev,
 	u32 dpll = pipe_config->dpll_hw_state.dpll;
 
 	if ((dpll & PLL_REF_INPUT_MASK) == PLLB_REF_INPUT_SPREADSPECTRUMIN)
-		return dev_priv->display.vbt.lvds_ssc_freq;
+		return dev_priv->display.vbt.data.lvds_ssc_freq;
 	else if (HAS_PCH_SPLIT(dev_priv))
 		return 120000;
 	else if (DISPLAY_VER(dev_priv) != 2)
@@ -1210,7 +1210,7 @@ static void ilk_update_pll_dividers(struct intel_crtc_state *crtc_state,
 	factor = 21;
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_LVDS)) {
 		if ((intel_panel_use_ssc(dev_priv) &&
-		     dev_priv->display.vbt.lvds_ssc_freq == 100000) ||
+		     dev_priv->display.vbt.data.lvds_ssc_freq == 100000) ||
 		    (HAS_PCH_IBX(dev_priv) &&
 		     intel_is_dual_link_lvds(dev_priv)))
 			factor = 25;
@@ -1325,8 +1325,8 @@ static int ilk_crtc_compute_clock(struct intel_atomic_state *state,
 		if (intel_panel_use_ssc(dev_priv)) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "using SSC reference clock of %d kHz\n",
-				    dev_priv->display.vbt.lvds_ssc_freq);
-			refclk = dev_priv->display.vbt.lvds_ssc_freq;
+				    dev_priv->display.vbt.data.lvds_ssc_freq);
+			refclk = dev_priv->display.vbt.data.lvds_ssc_freq;
 		}
 
 		if (intel_is_dual_link_lvds(dev_priv)) {
@@ -1477,7 +1477,7 @@ static int g4x_crtc_compute_clock(struct intel_atomic_state *state,
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_LVDS)) {
 		if (intel_panel_use_ssc(dev_priv)) {
-			refclk = dev_priv->display.vbt.lvds_ssc_freq;
+			refclk = dev_priv->display.vbt.data.lvds_ssc_freq;
 			drm_dbg_kms(&dev_priv->drm,
 				    "using SSC reference clock of %d kHz\n",
 				    refclk);
@@ -1526,7 +1526,7 @@ static int pnv_crtc_compute_clock(struct intel_atomic_state *state,
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_LVDS)) {
 		if (intel_panel_use_ssc(dev_priv)) {
-			refclk = dev_priv->display.vbt.lvds_ssc_freq;
+			refclk = dev_priv->display.vbt.data.lvds_ssc_freq;
 			drm_dbg_kms(&dev_priv->drm,
 				    "using SSC reference clock of %d kHz\n",
 				    refclk);
@@ -1564,7 +1564,7 @@ static int i9xx_crtc_compute_clock(struct intel_atomic_state *state,
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_LVDS)) {
 		if (intel_panel_use_ssc(dev_priv)) {
-			refclk = dev_priv->display.vbt.lvds_ssc_freq;
+			refclk = dev_priv->display.vbt.data.lvds_ssc_freq;
 			drm_dbg_kms(&dev_priv->drm,
 				    "using SSC reference clock of %d kHz\n",
 				    refclk);
@@ -1604,7 +1604,7 @@ static int i8xx_crtc_compute_clock(struct intel_atomic_state *state,
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_LVDS)) {
 		if (intel_panel_use_ssc(dev_priv)) {
-			refclk = dev_priv->display.vbt.lvds_ssc_freq;
+			refclk = dev_priv->display.vbt.data.lvds_ssc_freq;
 			drm_dbg_kms(&dev_priv->drm,
 				    "using SSC reference clock of %d kHz\n",
 				    refclk);

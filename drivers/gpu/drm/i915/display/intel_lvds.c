@@ -850,12 +850,12 @@ void intel_lvds_init(struct drm_i915_private *i915)
 
 	/* Skip init on machines we know falsely report LVDS */
 	if (dmi_check_system(intel_no_lvds)) {
-		drm_WARN(&i915->drm, !i915->display.vbt.int_lvds_support,
+		drm_WARN(&i915->drm, !i915->display.vbt.data.int_lvds_support,
 			 "Useless DMI match. Internal LVDS support disabled by VBT\n");
 		return;
 	}
 
-	if (!i915->display.vbt.int_lvds_support) {
+	if (!i915->display.vbt.data.int_lvds_support) {
 		drm_dbg_kms(&i915->drm,
 			    "Internal LVDS support disabled by VBT\n");
 		return;
