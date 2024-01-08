@@ -3081,8 +3081,9 @@ err_unmap_oprom:
  */
 void intel_bios_init(struct drm_i915_private *i915)
 {
-	const struct vbt_header *vbt = i915->display.vbt.vbt;
+	struct intel_vbt *vbt = &i915->display.vbt;
 	struct vbt_header *oprom_vbt = NULL;
+	struct vbt_header *header = NULL;
 	const struct bdb_header *bdb;
 	const char * const vbt_type[] = {
 		[I915_VBT_NONE] = "None",
@@ -3092,8 +3093,8 @@ void intel_bios_init(struct drm_i915_private *i915)
 		[I915_VBT_SPI] = "SPI",
 	};
 
-	INIT_LIST_HEAD(&i915->display.vbt.data.display_devices);
-	INIT_LIST_HEAD(&i915->display.vbt.data.bdb_blocks);
+	INIT_LIST_HEAD(&vbt->data.display_devices);
+	INIT_LIST_HEAD(&vbt->data.bdb_blocks);
 
 	if (!HAS_DISPLAY(i915)) {
 		drm_dbg_kms(&i915->drm,
@@ -3107,25 +3108,26 @@ void intel_bios_init(struct drm_i915_private *i915)
 	 * If the OpRegion does not have VBT, look in SPI flash through MMIO or
 	 * PCI mapping
 	 */
-	if (!vbt && IS_DGFX(i915)) {
+	if (!vbt->vbt && IS_DGFX(i915)) {
 		oprom_vbt = spi_oprom_get_vbt(i915);
-		vbt = oprom_vbt;
+		vbt->vbt = oprom_vbt;
 	}
 
-	if (!vbt) {
+	if (!vbt->vbt) {
 		oprom_vbt = oprom_get_vbt(i915);
-		vbt = oprom_vbt;
+		vbt->vbt = oprom_vbt;
 	}
 
-	if (!vbt)
+	if (!vbt->vbt)
 		goto out;
 
-	bdb = get_bdb_header(vbt);
-	i915->display.vbt.data.version = bdb->version;
+	header = (struct vbt_header *)vbt->vbt;
+	bdb = get_bdb_header(header);
+	vbt->data.version = bdb->version;
 
 	drm_dbg_kms(&i915->drm, "%s VBT signature \"%.*s\", BDB version %d\n",
-		    vbt_type[i915->display.vbt.type], (int)sizeof(vbt->signature),
-		    vbt->signature, i915->display.vbt.data.version);
+		    vbt_type[vbt->type], (int)sizeof(header->signature),
+		    header->signature, vbt->data.version);
 
 	init_bdb_blocks(i915, bdb);
 
@@ -3138,7 +3140,7 @@ void intel_bios_init(struct drm_i915_private *i915)
 	parse_compression_parameters(i915);
 
 out:
-	if (!vbt) {
+	if (!vbt->vbt) {
 		drm_info(&i915->drm,
 			 "Failed to find VBIOS tables (VBT)\n");
 		init_vbt_missing_defaults(i915);
