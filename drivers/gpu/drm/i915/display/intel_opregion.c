@@ -1257,7 +1257,6 @@ void intel_opregion_unregister(struct drm_i915_private *i915)
 void intel_opregion_cleanup(struct drm_i915_private *i915)
 {
 	struct intel_opregion *opregion = &i915->display.opregion;
-	struct intel_vbt *vbt = &i915->display.vbt;
 
 	if (!opregion->header)
 		return;
@@ -1268,14 +1267,11 @@ void intel_opregion_cleanup(struct drm_i915_private *i915)
 		memunmap(opregion->rvda);
 		opregion->rvda = NULL;
 	}
-	kfree(vbt->vbt_firmware);
-	vbt->vbt_firmware = NULL;
 	opregion->header = NULL;
 	opregion->acpi = NULL;
 	opregion->swsci = NULL;
 	opregion->asle = NULL;
 	opregion->asle_ext = NULL;
 	opregion->asls = 0;
-	vbt->vbt = NULL;
 	opregion->lid_state = NULL;
 }

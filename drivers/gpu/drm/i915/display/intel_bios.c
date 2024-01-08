@@ -3219,8 +3219,24 @@ void intel_bios_driver_remove(struct drm_i915_private *i915)
 		kfree(entry);
 	}
 
-	/* FIXME: Handle vbt free in opregion case. */
-	kfree(vbt->vbt);
+	switch (vbt->type) {
+	case I915_VBT_SPI:
+	case I915_VBT_OPROM:
+		kfree(vbt->vbt);
+		vbt->type = I915_VBT_NONE;
+		break;
+	case I915_VBT_FIRMWARE:
+		kfree(vbt->vbt_firmware);
+		fallthrough;
+	case I915_VBT_OPREGION:
+		vbt->vbt = NULL;
+		vbt->type = I915_VBT_NONE;
+		break;
+	case I915_VBT_NONE:
+		break;
+	default:
+		MISSING_CASE(vbt->type);
+	}
 }
 
 void intel_bios_fini_panel(struct intel_panel *panel)
