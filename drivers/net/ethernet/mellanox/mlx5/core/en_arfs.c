@@ -252,13 +252,14 @@ static int arfs_create_groups(struct mlx5e_flow_table *ft,
 	int err;
 	u8 *mc;
 
+	ft->num_groups = 0;
+
 	ft->g = kcalloc(MLX5E_ARFS_NUM_GROUPS,
 			sizeof(*ft->g), GFP_KERNEL);
 	in = kvzalloc(inlen, GFP_KERNEL);
 	if  (!in || !ft->g) {
-		kfree(ft->g);
-		kvfree(in);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto free_ft;
 	}
 
 	mc = MLX5_ADDR_OF(create_flow_group_in, in, match_criteria);
@@ -278,7 +279,7 @@ static int arfs_create_groups(struct mlx5e_flow_table *ft,
 		break;
 	default:
 		err = -EINVAL;
-		goto out;
+		goto free_ft;
 	}
 
 	switch (type) {
@@ -300,7 +301,7 @@ static int arfs_create_groups(struct mlx5e_flow_table *ft,
 		break;
 	default:
 		err = -EINVAL;
-		goto out;
+		goto free_ft;
 	}
 
 	MLX5_SET_CFG(in, match_criteria_enable, MLX5_MATCH_OUTER_HEADERS);
@@ -327,7 +328,9 @@ static int arfs_create_groups(struct mlx5e_flow_table *ft,
 err:
 	err = PTR_ERR(ft->g[ft->num_groups]);
 	ft->g[ft->num_groups] = NULL;
-out:
+free_ft:
+	kfree(ft->g);
+	ft->g = NULL;
 	kvfree(in);
 
 	return err;
@@ -342,8 +345,6 @@ static int arfs_create_table(struct mlx5e_flow_steering *fs,
 	struct mlx5e_flow_table *ft = &arfs->arfs_tables[type].ft;
 	struct mlx5_flow_table_attr ft_attr = {};
 	int err;
-
-	ft->num_groups = 0;
 
 	ft_attr.max_fte = MLX5E_ARFS_TABLE_SIZE;
 	ft_attr.level = MLX5E_ARFS_FT_LEVEL;

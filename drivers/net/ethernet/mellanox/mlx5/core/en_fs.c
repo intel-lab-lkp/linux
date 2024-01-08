@@ -883,7 +883,6 @@ void mlx5e_fs_init_l2_addr(struct mlx5e_flow_steering *fs, struct net_device *ne
 void mlx5e_destroy_flow_table(struct mlx5e_flow_table *ft)
 {
 	mlx5e_destroy_groups(ft);
-	kfree(ft->g);
 	mlx5_destroy_flow_table(ft->t);
 	ft->t = NULL;
 }
