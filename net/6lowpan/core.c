@@ -178,5 +178,5 @@ static void __exit lowpan_module_exit(void)
 
 module_init(lowpan_module_init);
 module_exit(lowpan_module_exit);
-
+MODULE_DESCRIPTION("IPv6 over Low power Wireless Personal Area Network module");
 MODULE_LICENSE("GPL");
