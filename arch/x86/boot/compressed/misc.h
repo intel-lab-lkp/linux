@@ -33,7 +33,6 @@
 #include <linux/elf.h>
 #include <asm/page.h>
 #include <asm/boot.h>
-#include <asm/bootparam.h>
 #include <asm/desc_defs.h>
 
 #include "tdx.h"
@@ -52,6 +51,8 @@
 #else
 #define memptr unsigned
 #endif
+
+struct boot_params;
 
 /* boot/compressed/vmlinux start and end markers */
 extern char _head[], _end[];
