@@ -59,6 +59,9 @@ extern struct resource *platform_get_resource(struct platform_device *,
 					      unsigned int, unsigned int);
 extern struct resource *platform_get_mem_or_io(struct platform_device *,
 					       unsigned int);
+extern struct resource *devm_platform_get_and_request_resource(
+		struct platform_device *pdev, unsigned int type,
+		unsigned int num, const char *name);
 
 extern struct device *
 platform_find_device_by_driver(struct device *start,
