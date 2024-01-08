@@ -21,6 +21,14 @@ properties:
   reg:
     maxItems: 1
 
+  clocks:
+    items:
+      - description: 25Mhz referance clock
+
+  clock-names:
+    items:
+      - const: refclk
+
   '#clock-cells':
     const: 1
     description:
@@ -30,12 +38,20 @@ properties:
 required:
   - compatible
   - reg
+  - clocks
+  - clock-names
   - '#clock-cells'
 
 additionalProperties: false
 
 examples:
   - |
+    refclk: refclk-25mhz {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <25000000>;
+    }; 
+  
     ahb {
         #address-cells = <2>;
         #size-cells = <2>;
