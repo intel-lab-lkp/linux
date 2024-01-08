@@ -59,10 +59,10 @@
 			nuvoton,sysgcr = <&gcr>;
 		};
 
-		clk: clock-controller@f0801000 {
+		clk: clock-controller {
 			compatible = "nuvoton,npcm845-clk";
 			#clock-cells = <1>;
-			reg = <0x0 0xf0801000 0x0 0x1000>;
+			nuvoton,sysclk = <&clk_rst>;
 			clocks = <&refclk>;
 			clock-names = "refclk";
 		};
