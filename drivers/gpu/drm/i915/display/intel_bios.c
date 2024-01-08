@@ -34,6 +34,7 @@
 #include "intel_display.h"
 #include "intel_display_types.h"
 #include "intel_gmbus.h"
+#include "intel_opregion.h"
 
 #define _INTEL_BIOS_PRIVATE
 #include "intel_vbt_defs.h"
@@ -3082,6 +3083,7 @@ err_unmap_oprom:
 void intel_bios_init(struct drm_i915_private *i915)
 {
 	struct intel_vbt *vbt = &i915->display.vbt;
+	struct intel_opregion *opregion = &i915->display.opregion;
 	struct vbt_header *oprom_vbt = NULL;
 	struct vbt_header *header = NULL;
 	const struct bdb_header *bdb;
@@ -3104,6 +3106,8 @@ void intel_bios_init(struct drm_i915_private *i915)
 
 	init_vbt_defaults(i915);
 
+	if (opregion->asls)
+		intel_load_opregion_vbt(i915, opregion, vbt);
 	/*
 	 * If the OpRegion does not have VBT, look in SPI flash through MMIO or
 	 * PCI mapping

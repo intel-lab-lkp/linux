@@ -878,19 +878,19 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
-static int intel_load_opregion_vbt(struct drm_i915_private *i915,
-				   struct intel_opregion *opregion,
-				   struct intel_vbt *vbt)
+void intel_load_opregion_vbt(struct drm_i915_private *i915,
+			     struct intel_opregion *opregion,
+			     struct intel_vbt *vbt)
 {
 	const void *vbt_data;
 	u32 vbt_size;
 	void *base = opregion->header;
 
 	if (intel_load_vbt_firmware(i915) == 0)
-		goto out;
+		return;
 
 	if (dmi_check_system(intel_no_opregion_vbt))
-		goto out;
+		return;
 
 	if (opregion->header->over.major >= 2 && opregion->asle &&
 	    opregion->asle->rvda && opregion->asle->rvds) {
@@ -920,7 +920,7 @@ static int intel_load_opregion_vbt(struct drm_i915_private *i915,
 			vbt->vbt = vbt_data;
 			vbt->vbt_size = vbt_size;
 			vbt->type = I915_VBT_OPREGION;
-			goto out;
+			return;
 		} else {
 			drm_dbg_kms(&i915->drm,
 				    "Invalid VBT in ACPI OpRegion (RVDA)\n");
@@ -950,15 +950,11 @@ static int intel_load_opregion_vbt(struct drm_i915_private *i915,
 		drm_dbg_kms(&i915->drm,
 			    "Invalid VBT in ACPI OpRegion (Mailbox #4)\n");
 	}
-
-out:
-	return 0;
 }
 
 int intel_opregion_setup(struct drm_i915_private *dev_priv)
 {
 	struct intel_opregion *opregion = &dev_priv->display.opregion;
-	struct intel_vbt *vbt = &dev_priv->display.vbt;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	u32 asls, mboxes;
 	char buf[sizeof(OPREGION_SIGNATURE)];
@@ -1044,7 +1040,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 		drm_dbg(&dev_priv->drm, "Mailbox #2 for backlight present\n");
 	}
 
-	return intel_load_opregion_vbt(dev_priv, opregion, vbt);
+	return 0;
 
 err_out:
 	memunmap(base);

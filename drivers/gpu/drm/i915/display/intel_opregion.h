@@ -31,6 +31,7 @@
 struct drm_i915_private;
 struct intel_connector;
 struct intel_encoder;
+struct intel_vbt;
 
 struct opregion_header;
 struct opregion_acpi;
@@ -77,6 +78,9 @@ const struct drm_edid *intel_opregion_get_edid(struct intel_connector *connector
 
 bool intel_opregion_headless_sku(struct drm_i915_private *i915);
 
+void intel_load_opregion_vbt(struct drm_i915_private *i915,
+			     struct intel_opregion *opregion,
+			     struct intel_vbt *vbt);
 #else /* CONFIG_ACPI*/
 
 static inline int intel_opregion_setup(struct drm_i915_private *dev_priv)
@@ -137,6 +141,11 @@ static inline bool intel_opregion_headless_sku(struct drm_i915_private *i915)
 	return false;
 }
 
+static inline void intel_load_opregion_vbt(struct drm_i915_private *i915,
+					   struct intel_opregion *opregion,
+					   struct intel_vbt *vbt)
+{
+}
 #endif /* CONFIG_ACPI */
 
 #endif
