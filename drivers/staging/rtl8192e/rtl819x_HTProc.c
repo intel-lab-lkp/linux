@@ -87,36 +87,36 @@ static u16 ht_mcs_to_data_rate(struct rtllib_device *ieee, u8 mcs_rate)
 {
 	struct rt_hi_throughput *ht_info = ieee->ht_info;
 
-	u8	is40MHz = (ht_info->cur_bw_40mhz) ? 1 : 0;
+	u8	is_40mhz = (ht_info->cur_bw_40mhz) ? 1 : 0;
 	u8	isShortGI = (ht_info->cur_bw_40mhz) ?
 			    ((ht_info->cur_short_gi_40mhz) ? 1 : 0) :
 			    ((ht_info->cur_short_gi_20mhz) ? 1 : 0);
-	return MCS_DATA_RATE[is40MHz][isShortGI][(mcs_rate & 0x7f)];
+	return MCS_DATA_RATE[is_40mhz][isShortGI][(mcs_rate & 0x7f)];
 }
 
 u16  tx_count_to_data_rate(struct rtllib_device *ieee, u8 data_rate)
 {
 	u16	cck_of_dm_rate[12] = {0x02, 0x04, 0x0b, 0x16, 0x0c, 0x12, 0x18,
 				   0x24, 0x30, 0x48, 0x60, 0x6c};
-	u8	is40MHz = 0;
+	u8	is_40mhz = 0;
 	u8	isShortGI = 0;
 
 	if (data_rate < 12)
 		return cck_of_dm_rate[data_rate];
 	if (data_rate >= 0x10 && data_rate <= 0x1f) {
-		is40MHz = 0;
+		is_40mhz = 0;
 		isShortGI = 0;
 	} else if (data_rate >= 0x20  && data_rate <= 0x2f) {
-		is40MHz = 1;
+		is_40mhz = 1;
 		isShortGI = 0;
 	} else if (data_rate >= 0x30  && data_rate <= 0x3f) {
-		is40MHz = 0;
+		is_40mhz = 0;
 		isShortGI = 1;
 	} else if (data_rate >= 0x40  && data_rate <= 0x4f) {
-		is40MHz = 1;
+		is_40mhz = 1;
 		isShortGI = 1;
 	}
-	return MCS_DATA_RATE[is40MHz][isShortGI][data_rate & 0xf];
+	return MCS_DATA_RATE[is_40mhz][isShortGI][data_rate & 0xf];
 }
 
 bool is_ht_half_nmode_aps(struct rtllib_device *ieee)
