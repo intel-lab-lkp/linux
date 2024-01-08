@@ -1175,23 +1175,13 @@ static int user_event_parse_field(char *field, struct user_event *user,
 		goto skip_next;
 	}
 
-	len = str_has_prefix(field, "__data_loc unsigned ");
-	if (len)
-		goto skip_next;
+	if (!(len = str_has_prefix(field, "__data_loc unsigned ")) &&
+	    !(len = str_has_prefix(field, "__data_loc ")) &&
+	    !(len = str_has_prefix(field, "__rel_loc unsigned ")) &&
+	    !(len = str_has_prefix(field, "__rel_loc "))) {
+		goto parse;
+	}
 
-	len = str_has_prefix(field, "__data_loc ");
-	if (len)
-		goto skip_next;
-
-	len = str_has_prefix(field, "__rel_loc unsigned ");
-	if (len)
-		goto skip_next;
-
-	len = str_has_prefix(field, "__rel_loc ");
-	if (len)
-		goto skip_next;
-
-	goto parse;
 skip_next:
 	type = field;
 	field = strpbrk(field + len, " ");
