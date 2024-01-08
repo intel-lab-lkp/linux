@@ -27,7 +27,6 @@
 
 #include <linux/acpi.h>
 #include <linux/dmi.h>
-#include <linux/firmware.h>
 #include <acpi/video.h>
 
 #include <drm/drm_edid.h>
@@ -837,47 +836,6 @@ static const struct dmi_system_id intel_no_opregion_vbt[] = {
 	{ }
 };
 
-static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
-{
-	struct intel_vbt *vbt = &dev_priv->display.vbt;
-	const struct firmware *fw = NULL;
-	const char *name = dev_priv->display.params.vbt_firmware;
-	int ret;
-
-	if (!name || !*name)
-		return -ENOENT;
-
-	ret = request_firmware(&fw, name, dev_priv->drm.dev);
-	if (ret) {
-		drm_err(&dev_priv->drm,
-			"Requesting VBT firmware \"%s\" failed (%d)\n",
-			name, ret);
-		return ret;
-	}
-
-	if (intel_bios_is_valid_vbt(fw->data, fw->size)) {
-		vbt->vbt_firmware = kmemdup(fw->data, fw->size, GFP_KERNEL);
-		if (vbt->vbt_firmware) {
-			drm_dbg_kms(&dev_priv->drm,
-				    "Found valid VBT firmware \"%s\"\n", name);
-			vbt->vbt = vbt->vbt_firmware;
-			vbt->vbt_size = fw->size;
-			vbt->type = I915_VBT_FIRMWARE;
-			ret = 0;
-		} else {
-			ret = -ENOMEM;
-		}
-	} else {
-		drm_dbg_kms(&dev_priv->drm, "Invalid VBT firmware \"%s\"\n",
-			    name);
-		ret = -EINVAL;
-	}
-
-	release_firmware(fw);
-
-	return ret;
-}
-
 void intel_load_opregion_vbt(struct drm_i915_private *i915,
 			     struct intel_opregion *opregion,
 			     struct intel_vbt *vbt)
@@ -885,9 +843,6 @@ void intel_load_opregion_vbt(struct drm_i915_private *i915,
 	const void *vbt_data;
 	u32 vbt_size;
 	void *base = opregion->header;
-
-	if (intel_load_vbt_firmware(i915) == 0)
-		return;
 
 	if (dmi_check_system(intel_no_opregion_vbt))
 		return;
