@@ -22,6 +22,11 @@
 			reg = <0x0 0xf0800000 0x0 0x1000>;
 		};
 
+		clk_rst: syscon@f0801000 {
+			compatible = "nuvoton,npcm845-clk-rst", "syscon", "simple-mfd";
+			reg = <0x0 0xf0801000 0x0 0xC4>;
+		};
+
 		gic: interrupt-controller@dfff9000 {
 			compatible = "arm,gic-400";
 			reg = <0x0 0xdfff9000 0x0 0x1000>,
