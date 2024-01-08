@@ -121,7 +121,7 @@ u16  tx_count_to_data_rate(struct rtllib_device *ieee, u8 data_rate)
 
 bool is_ht_half_nmode_aps(struct rtllib_device *ieee)
 {
-	bool			retValue = false;
+	bool			ret_value = false;
 	struct rtllib_network *net = &ieee->current_network;
 
 	if ((memcmp(net->bssid, BELKINF5D8233V1_RALINK, 3) == 0) ||
@@ -130,18 +130,18 @@ bool is_ht_half_nmode_aps(struct rtllib_device *ieee)
 	    (memcmp(net->bssid, EDIMAX_RALINK, 3) == 0) ||
 	    (memcmp(net->bssid, AIRLINK_RALINK, 3) == 0) ||
 	    (net->ralink_cap_exist))
-		retValue = true;
+		ret_value = true;
 	else if (!memcmp(net->bssid, UNKNOWN_BORADCOM, 3) ||
 		 !memcmp(net->bssid, LINKSYSWRT330_LINKSYSWRT300_BROADCOM, 3) ||
 		 !memcmp(net->bssid, LINKSYSWRT350_LINKSYSWRT150_BROADCOM, 3) ||
 		(net->broadcom_cap_exist))
-		retValue = true;
+		ret_value = true;
 	else if (net->bssht.bd_rt2rt_aggregation)
-		retValue = true;
+		ret_value = true;
 	else
-		retValue = false;
+		ret_value = false;
 
-	return retValue;
+	return ret_value;
 }
 
 static void ht_iot_peer_determine(struct rtllib_device *ieee)
@@ -190,21 +190,21 @@ static void ht_iot_peer_determine(struct rtllib_device *ieee)
 static u8 ht_iot_act_is_mgnt_use_cck_6m(struct rtllib_device *ieee,
 				 struct rtllib_network *network)
 {
-	u8	retValue = 0;
+	u8	ret_value = 0;
 
 	if (ieee->ht_info->iot_peer == HT_IOT_PEER_BROADCOM)
-		retValue = 1;
+		ret_value = 1;
 
-	return retValue;
+	return ret_value;
 }
 
 static u8 ht_iot_act_is_ccd_fsync(struct rtllib_device *ieee)
 {
-	u8	retValue = 0;
+	u8	ret_value = 0;
 
 	if (ieee->ht_info->iot_peer == HT_IOT_PEER_BROADCOM)
-		retValue = 1;
-	return retValue;
+		ret_value = 1;
+	return ret_value;
 }
 
 static void ht_iot_act_determine_ra_func(struct rtllib_device *ieee, bool bPeerRx2ss)
