@@ -3119,6 +3119,11 @@ err_unmap_oprom:
 	return;
 }
 
+static inline bool is_empty_vbt(struct intel_vbt *vbt)
+{
+	return vbt && vbt->type == I915_VBT_NONE;
+}
+
 /**
  * intel_bios_init - find VBT and initialize settings from the BIOS
  * @i915: i915 device instance
@@ -3154,19 +3159,19 @@ void intel_bios_init(struct drm_i915_private *i915)
 
 	intel_load_vbt_firmware(i915, vbt);
 
-	if (!vbt->vbt && opregion->asls)
+	if (is_empty_vbt(vbt) && opregion->asls)
 		intel_load_opregion_vbt(i915, opregion, vbt);
 	/*
 	 * If the OpRegion does not have VBT, look in SPI flash through MMIO or
 	 * PCI mapping
 	 */
-	if (!vbt->vbt && IS_DGFX(i915))
+	if (is_empty_vbt(vbt) && IS_DGFX(i915))
 		spi_oprom_get_vbt(i915, vbt);
 
-	if (!vbt->vbt)
+	if (is_empty_vbt(vbt))
 		oprom_get_vbt(i915, vbt);
 
-	if (!vbt->vbt)
+	if (is_empty_vbt(vbt))
 		goto out;
 
 	header = (struct vbt_header *)vbt->vbt;
