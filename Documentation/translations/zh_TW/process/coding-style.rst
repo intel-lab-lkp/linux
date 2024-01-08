@@ -922,25 +922,48 @@ Linux內核布爾（bool）類型是C99 _Bool類型的別名。布爾值只能�
 
 總之，在結構體和參數中有限地使用布爾可以提高可讀性。
 
+
 18) 不要重新發明內核宏
 ----------------------
 
-頭文件 include/linux/kernel.h 包含了一些宏，你應該使用它們，而不要自己寫一些
-它們的變種。比如，如果你需要計算一個數組的長度，使用這個宏
+``include/linux`` 目錄下的頭文件提供了一些宏，你應該使用它們，而不要自己寫
+一些它們的變種。比如，如果你需要計算一個數組的長度，使用
+``include/linux/array_size.h`` 提供的 ``ARRAY_SIZE()`` 宏
 
 .. code-block:: c
 
-	#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+	#include <linux/array_size.h>
+	ARRAY_SIZE(x) // The size of array x
 
-類似的，如果你要計算某結構體成員的大小，使用
+類似的，如果你要計算某結構體成員的大小，使用 ``include/linux/stddef.h`` 當
+中的 ``sizeof_field()`` 宏。
+
+還有 ``include/linux/minmax.h`` 提供能做嚴格的類型檢查的 ``min()`` 和
+``max()`` 宏，如果你需要可以使用它們。
+
+使用共用頭文件所提供的宏也能避免命名衝突。比如說，如果有個開發者在頭文件
+``foo.h`` 中定義了
 
 .. code-block:: c
 
-	#define sizeof_field(t, f) (sizeof(((t*)0)->f))
+	#define __stringify(x) __stringify_1(x)
+	#define __stringify_1(x) #x
 
-還有可以做嚴格的類型檢查的 min() 和 max() 宏，如果你需要可以使用它們。你可以
-自己看看那個頭文件裏還定義了什麼你可以拿來用的東西，如果有定義的話，你就不應
-在你的代碼裏自己重新定義。
+但另一個開發者在頭文件 ``bar.h`` 中定義了
+
+.. code-block:: c
+
+	#define stringify(x) __stringify(x)
+	#define __stringify(x) #x
+
+當兩個頭文件都被 ``#include`` 進同一份文件，``foo.h`` 提供的工具可能會被
+``bar.h`` 破壞。
+
+如果兩個頭文件都使用 ``include/linux/stringify.h`` 提供的 ``__stringify()``
+宏，就不會互相干擾了。
+
+你可以自己搜尋、看看那些頭文件裏還定義了什麼你可以拿來用的東西，如果有定義的
+話，你就不應在你的代碼裏自己重新定義。
 
 
 19) 編輯器模式行和其他需要羅嗦的事情
