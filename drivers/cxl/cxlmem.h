@@ -410,6 +410,7 @@ enum cxl_devtype {
  * @ram_res: Active Volatile memory capacity configuration
  * @serial: PCIe Device Serial Number
  * @type: Generic Memory Class device or Vendor Specific Memory device
+ * @irq_supported: Flag if irqs are supported by the device
  */
 struct cxl_dev_state {
 	struct device *dev;
@@ -424,6 +425,7 @@ struct cxl_dev_state {
 	struct resource ram_res;
 	u64 serial;
 	enum cxl_devtype type;
+	bool irq_supported;
 };
 
 /**

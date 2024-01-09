@@ -443,6 +443,12 @@ static int cxl_pci_setup_mailbox(struct cxl_memdev_state *mds)
 	if (!(cap & CXLDEV_MBOX_CAP_BG_CMD_IRQ))
 		return 0;
 
+	if (!cxlds->irq_supported) {
+		dev_err(cxlds->dev, "Mailbox interrupts enabled but device indicates no interrupt vectors supported.\n");
+		dev_err(cxlds->dev, "Skip mailbox iterrupt configuration.\n");
+		return 0;
+	}
+
 	msgnum = FIELD_GET(CXLDEV_MBOX_CAP_IRQ_MSGNUM_MASK, cap);
 	irq = pci_irq_vector(to_pci_dev(cxlds->dev), msgnum);
 	if (irq < 0)
@@ -587,7 +593,8 @@ static int cxl_mem_alloc_event_buf(struct cxl_memdev_state *mds)
 	return devm_add_action_or_reset(mds->cxlds.dev, free_event_buf, buf);
 }
 
-static int cxl_alloc_irq_vectors(struct pci_dev *pdev)
+static void cxl_alloc_irq_vectors(struct pci_dev *pdev,
+				  struct cxl_dev_state *cxlds)
 {
 	int nvecs;
 
@@ -604,9 +611,10 @@ static int cxl_alloc_irq_vectors(struct pci_dev *pdev)
 				      PCI_IRQ_MSIX | PCI_IRQ_MSI);
 	if (nvecs < 1) {
 		dev_dbg(&pdev->dev, "Failed to alloc irq vectors: %d\n", nvecs);
-		return -ENXIO;
+		return;
 	}
-	return 0;
+
+	cxlds->irq_supported = true;
 }
 
 static irqreturn_t cxl_event_thread(int irq, void *id)
@@ -754,6 +762,13 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 	if (!host_bridge->native_cxl_error)
 		return 0;
 
+	/* Polling not supported */
+	if (!mds->cxlds.irq_supported) {
+		dev_err(mds->cxlds.dev, "Host events enabled but device indicates no interrupt vectors supported.\n");
+		dev_err(mds->cxlds.dev, "Event polling is not supported, skip event processing.\n");
+		return 0;
+	}
+
 	rc = cxl_mem_alloc_event_buf(mds);
 	if (rc)
 		return rc;
@@ -845,9 +860,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	else
 		dev_warn(&pdev->dev, "Media not active (%d)\n", rc);
 
-	rc = cxl_alloc_irq_vectors(pdev);
-	if (rc)
-		return rc;
+	cxl_alloc_irq_vectors(pdev, cxlds);
 
 	rc = cxl_pci_setup_mailbox(mds);
 	if (rc)
