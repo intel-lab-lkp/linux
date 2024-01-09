@@ -340,9 +340,9 @@ static void rtllib_query_HTCapShortGI(struct rtllib_device *ieee,
 	if (!ht_info->current_ht_support || !ht_info->enable_ht)
 		return;
 
-	if (ht_info->cur_bw_40mhz && ht_info->cur_short_gi_40mhz)
+	if (ht_info->cur_bw_40MHz && ht_info->cur_short_gi_40mhz)
 		tcb_desc->bUseShortGI = true;
-	else if (!ht_info->cur_bw_40mhz && ht_info->cur_short_gi_20mhz)
+	else if (!ht_info->cur_bw_40MHz && ht_info->cur_short_gi_20mhz)
 		tcb_desc->bUseShortGI = true;
 }
 
@@ -361,7 +361,7 @@ static void rtllib_query_BandwidthMode(struct rtllib_device *ieee,
 
 	if ((tcb_desc->data_rate & 0x80) == 0)
 		return;
-	if (ht_info->cur_bw_40mhz && ht_info->cur_tx_bw40mhz &&
+	if (ht_info->cur_bw_40MHz && ht_info->cur_tx_bw40mhz &&
 	    !ieee->bandwidth_auto_switch.bforced_tx20Mhz)
 		tcb_desc->bPacketBW = true;
 }
@@ -419,9 +419,9 @@ static void rtllib_query_protectionmode(struct rtllib_device *ieee,
 		if (ht_info->current_ht_support && ht_info->enable_ht) {
 			u8 HTOpMode = ht_info->current_op_mode;
 
-			if ((ht_info->cur_bw_40mhz && (HTOpMode == 2 ||
+			if ((ht_info->cur_bw_40MHz && (HTOpMode == 2 ||
 						      HTOpMode == 3)) ||
-			     (!ht_info->cur_bw_40mhz && HTOpMode == 3)) {
+			     (!ht_info->cur_bw_40MHz && HTOpMode == 3)) {
 				tcb_desc->rts_rate = MGN_24M;
 				tcb_desc->bRTSEnable = true;
 				break;
