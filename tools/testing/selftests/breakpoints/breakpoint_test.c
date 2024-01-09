@@ -284,9 +284,9 @@ static void check_success(const char *msg)
 	nr_tests++;
 
 	if (ret)
-		ksft_test_result_pass(msg);
+		ksft_test_result_pass("%s\n", msg);
 	else
-		ksft_test_result_fail(msg);
+		ksft_test_result_fail("%s\n", msg);
 }
 
 static void launch_instruction_breakpoints(char *buf, int local, int global)
