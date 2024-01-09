@@ -290,7 +290,7 @@ static int match_cxlrd_qos_class(struct device *dev, void *data)
 	return 0;
 }
 
-static void cxl_qos_match(struct cxl_port *root_port,
+static void cxl_qos_match(struct cxl_root *cxl_root,
 			  struct list_head *work_list,
 			  struct list_head *discard_list)
 {
@@ -302,7 +302,7 @@ static void cxl_qos_match(struct cxl_port *root_port,
 		if (dpa_perf->qos_class == CXL_QOS_CLASS_INVALID)
 			return;
 
-		rc = device_for_each_child(&root_port->dev,
+		rc = device_for_each_child(&cxl_root->port.dev,
 					   (void *)&dpa_perf->qos_class,
 					   match_cxlrd_qos_class);
 		if (!rc)
@@ -348,20 +348,17 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	LIST_HEAD(__discard);
 	struct list_head *discard __free(dpa_perf) = &__discard;
-	struct cxl_port *root_port;
 	int rc;
 
 	struct cxl_root *cxl_root __free(put_cxl_root) =
 		find_cxl_root(cxlmd->endpoint);
 
-	root_port = &cxl_root->port;
-
 	/* Check that the QTG IDs are all sane between end device and root decoders */
-	cxl_qos_match(root_port, &mds->ram_perf_list, discard);
-	cxl_qos_match(root_port, &mds->pmem_perf_list, discard);
+	cxl_qos_match(cxl_root, &mds->ram_perf_list, discard);
+	cxl_qos_match(cxl_root, &mds->pmem_perf_list, discard);
 
 	/* Check to make sure that the device's host bridge is under a root decoder */
-	rc = device_for_each_child(&root_port->dev,
+	rc = device_for_each_child(&cxl_root->port.dev,
 				   (void *)cxlmd->endpoint->host_bridge,
 				   match_cxlrd_hb);
 	if (!rc) {
