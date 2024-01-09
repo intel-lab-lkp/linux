@@ -101,10 +101,9 @@ static inline int fsnotify_file(struct file *file, __u32 mask)
 }
 
 /*
- * fsnotify_file_area_perm - permission hook before access to file range
+ * fsnotify_file_perm - permission hook before file access
  */
-static inline int fsnotify_file_area_perm(struct file *file, int perm_mask,
-					  const loff_t *ppos, size_t count)
+static inline int fsnotify_file_perm(struct file *file, int perm_mask)
 {
 	__u32 fsnotify_mask = FS_ACCESS_PERM;
 
@@ -119,14 +118,6 @@ static inline int fsnotify_file_area_perm(struct file *file, int perm_mask,
 		return 0;
 
 	return fsnotify_file(file, fsnotify_mask);
-}
-
-/*
- * fsnotify_file_perm - permission hook before file access
- */
-static inline int fsnotify_file_perm(struct file *file, int perm_mask)
-{
-	return fsnotify_file_area_perm(file, perm_mask, NULL, 0);
 }
 
 /*

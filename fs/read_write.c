@@ -354,9 +354,6 @@ out_putf:
 
 int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t count)
 {
-	int mask = read_write == READ ? MAY_READ : MAY_WRITE;
-	int ret;
-
 	if (unlikely((ssize_t) count < 0))
 		return -EINVAL;
 
@@ -374,11 +371,8 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 		}
 	}
 
-	ret = security_file_permission(file, mask);
-	if (ret)
-		return ret;
-
-	return fsnotify_file_area_perm(file, mask, ppos, count);
+	return security_file_permission(file,
+				read_write == READ ? MAY_READ : MAY_WRITE);
 }
 EXPORT_SYMBOL(rw_verify_area);
 
