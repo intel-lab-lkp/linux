@@ -18,7 +18,7 @@ static unsigned long try_accept_one(phys_addr_t start, unsigned long len,
 	 * Pass the page physical address to the TDX module to accept the
 	 * pending, private page.
 	 *
-	 * Bits 2:0 of RCX encode page size: 0 - 4K, 1 - 2M, 2 - 1G.
+	 * Bits 2:0 of RCX encode page size: 0 - 4K, 1 - 2M.
 	 */
 	switch (pg_level) {
 	case PG_LEVEL_4K:
@@ -26,9 +26,6 @@ static unsigned long try_accept_one(phys_addr_t start, unsigned long len,
 		break;
 	case PG_LEVEL_2M:
 		page_size = TDX_PS_2M;
-		break;
-	case PG_LEVEL_1G:
-		page_size = TDX_PS_1G;
 		break;
 	default:
 		return 0;
@@ -55,11 +52,14 @@ bool tdx_accept_memory(phys_addr_t start, phys_addr_t end)
 		 * Try larger accepts first. It gives chance to VMM to keep
 		 * 1G/2M Secure EPT entries where possible and speeds up
 		 * process by cutting number of hypercalls (if successful).
-		 */
+		 * Since per current TDX spec, only support for adding 4KB or
+		 * 2MB page dynamically.
+		 * /
 
-		accept_size = try_accept_one(start, len, PG_LEVEL_1G);
-		if (!accept_size)
+		if (IS_ALIGNED(start, PMD_SIZE) && len >= PMD_SIZE)
 			accept_size = try_accept_one(start, len, PG_LEVEL_2M);
+
+		/* The 4KB page case or accept 2MB page failed case. */
 		if (!accept_size)
 			accept_size = try_accept_one(start, len, PG_LEVEL_4K);
 		if (!accept_size)
