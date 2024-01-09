@@ -1016,6 +1016,8 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 
 		msg_pl = &rec->msg_plaintext;
 		msg_en = &rec->msg_encrypted;
+		if (msg_pl->sg.end >= MAX_MSG_FRAGS)
+			return -EINVAL;
 
 		orig_size = msg_pl->sg.size;
 		full_record = false;
