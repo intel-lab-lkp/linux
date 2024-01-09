@@ -153,9 +153,29 @@ static struct inode *fsnotify_update_iref(struct fsnotify_mark_connector *conn,
 	return inode;
 }
 
+/*
+ * To avoid the performance penalty of rare access event watchers in the hot
+ * io path, keep track of whether any such watchers exists on the filesystem.
+ */
+static void fsnotify_update_sb_watchers(struct fsnotify_mark_connector *conn,
+					u32 old_mask, u32 new_mask)
+{
+	struct super_block *sb = fsnotify_connector_sb(conn);
+	bool old_watchers = old_mask & ALL_FSNOTIFY_ACCESS_EVENTS;
+	bool new_watchers = new_mask & ALL_FSNOTIFY_ACCESS_EVENTS;
+
+	if (!sb || old_watchers == new_watchers)
+		return;
+
+	if (new_watchers)
+		atomic_long_inc(&sb->s_fsnotify_access_watchers);
+	else
+		atomic_long_dec(&sb->s_fsnotify_access_watchers);
+}
+
 static void *__fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 {
-	u32 new_mask = 0;
+	u32 old_mask, new_mask = 0;
 	bool want_iref = false;
 	struct fsnotify_mark *mark;
 
@@ -163,6 +183,7 @@ static void *__fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 	/* We can get detached connector here when inode is getting unlinked. */
 	if (!fsnotify_valid_obj_type(conn->type))
 		return NULL;
+	old_mask = fsnotify_conn_mask(conn);
 	hlist_for_each_entry(mark, &conn->list, obj_list) {
 		if (!(mark->flags & FSNOTIFY_MARK_FLAG_ATTACHED))
 			continue;
@@ -172,6 +193,7 @@ static void *__fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 			want_iref = true;
 	}
 	*fsnotify_conn_mask_p(conn) = new_mask;
+	fsnotify_update_sb_watchers(conn, old_mask, new_mask);
 
 	return fsnotify_update_iref(conn, want_iref);
 }
@@ -243,11 +265,13 @@ static void *fsnotify_detach_connector_from_object(
 					unsigned int *type)
 {
 	struct inode *inode = NULL;
+	u32 old_mask;
 
 	*type = conn->type;
 	if (conn->type == FSNOTIFY_OBJ_TYPE_DETACHED)
 		return NULL;
 
+	old_mask = fsnotify_conn_mask(conn);
 	if (conn->type == FSNOTIFY_OBJ_TYPE_INODE) {
 		inode = fsnotify_conn_inode(conn);
 		inode->i_fsnotify_mask = 0;
@@ -261,6 +285,7 @@ static void *fsnotify_detach_connector_from_object(
 		fsnotify_conn_sb(conn)->s_fsnotify_mask = 0;
 	}
 
+	fsnotify_update_sb_watchers(conn, old_mask, 0);
 	fsnotify_put_sb_connectors(conn);
 	rcu_assign_pointer(*(conn->obj), NULL);
 	conn->obj = NULL;
