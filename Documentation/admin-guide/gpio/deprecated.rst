@@ -9,4 +9,5 @@ Deprecated GPIO APIs
 
     Character Device Userspace API (v1) <../../userspace-api/gpio/chardev_v1>
     Sysfs Interface <../../userspace-api/gpio/sysfs>
+    Mockup Testing Module <gpio-mockup>
 
