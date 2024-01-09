@@ -404,7 +404,7 @@ pvr_set_dma_info(struct pvr_device *pvr_dev)
  *  * Any error returned by pvr_memory_context_init(), or
  *  * Any error returned by pvr_request_firmware().
  */
-static int
+int
 pvr_device_gpu_init(struct pvr_device *pvr_dev)
 {
 	int err;
@@ -444,6 +444,10 @@ pvr_device_gpu_init(struct pvr_device *pvr_dev)
 	if (err)
 		goto err_vm_ctx_put;
 
+	err = pvr_device_irq_init(pvr_dev);
+	if (err)
+		goto err_vm_ctx_put;
+
 	return 0;
 
 err_vm_ctx_put:
@@ -459,9 +463,15 @@ err_vm_ctx_put:
  * pvr_device_gpu_fini() - GPU-specific deinitialization for a PowerVR device
  * @pvr_dev: Target PowerVR device.
  */
-static void
+void
 pvr_device_gpu_fini(struct pvr_device *pvr_dev)
 {
+	/*
+	 * Deinitialization stages are performed in reverse order compared to
+	 * the initialization stages in pvr_device_gpu_init().
+	 */
+	pvr_device_irq_fini(pvr_dev);
+
 	pvr_fw_fini(pvr_dev);
 
 	if (pvr_dev->fw_dev.processor_type != PVR_FW_PROCESSOR_TYPE_MIPS) {
@@ -519,41 +529,14 @@ pvr_device_init(struct pvr_device *pvr_dev)
 	if (err)
 		goto err_pm_runtime_put;
 
-	/* Perform GPU-specific initialization steps. */
-	err = pvr_device_gpu_init(pvr_dev);
-	if (err)
-		goto err_pm_runtime_put;
-
-	err = pvr_device_irq_init(pvr_dev);
-	if (err)
-		goto err_device_gpu_fini;
-
 	pm_runtime_put(dev);
 
 	return 0;
-
-err_device_gpu_fini:
-	pvr_device_gpu_fini(pvr_dev);
 
 err_pm_runtime_put:
 	pm_runtime_put_sync_suspend(dev);
 
 	return err;
-}
-
-/**
- * pvr_device_fini() - Deinitialize a PowerVR device
- * @pvr_dev: Target PowerVR device.
- */
-void
-pvr_device_fini(struct pvr_device *pvr_dev)
-{
-	/*
-	 * Deinitialization stages are performed in reverse order compared to
-	 * the initialization stages in pvr_device_init().
-	 */
-	pvr_device_irq_fini(pvr_dev);
-	pvr_device_gpu_fini(pvr_dev);
 }
 
 bool

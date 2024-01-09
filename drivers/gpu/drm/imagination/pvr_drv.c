@@ -1309,10 +1309,18 @@ pvr_drm_driver_open(struct drm_device *drm_dev, struct drm_file *file)
 {
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 	struct pvr_file *pvr_file;
+	int err;
+
+	/* Perform GPU-specific initialization steps. */
+	err = pvr_device_gpu_init(pvr_dev);
+	if (err)
+		return err;
 
 	pvr_file = kzalloc(sizeof(*pvr_file), GFP_KERNEL);
-	if (!pvr_file)
+	if (!pvr_file) {
+		pvr_device_gpu_fini(pvr_dev);
 		return -ENOMEM;
+	}
 
 	/*
 	 * Store reference to base DRM file private data for use by
@@ -1354,6 +1362,7 @@ static void
 pvr_drm_driver_postclose(__always_unused struct drm_device *drm_dev,
 			 struct drm_file *file)
 {
+	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 	struct pvr_file *pvr_file = to_pvr_file(file);
 
 	/* Kill remaining contexts. */
@@ -1363,6 +1372,8 @@ pvr_drm_driver_postclose(__always_unused struct drm_device *drm_dev,
 	pvr_destroy_free_lists_for_file(pvr_file);
 	pvr_destroy_hwrt_datasets_for_file(pvr_file);
 	pvr_destroy_vm_contexts_for_file(pvr_file);
+
+	pvr_device_gpu_fini(pvr_dev);
 
 	kfree(pvr_file);
 	file->driver_priv = NULL;
@@ -1430,15 +1441,12 @@ pvr_probe(struct platform_device *plat_dev)
 
 	err = drm_dev_register(drm_dev, 0);
 	if (err)
-		goto err_device_fini;
+		goto err_watchdog_fini;
 
 	xa_init_flags(&pvr_dev->free_list_ids, XA_FLAGS_ALLOC1);
 	xa_init_flags(&pvr_dev->job_ids, XA_FLAGS_ALLOC1);
 
 	return 0;
-
-err_device_fini:
-	pvr_device_fini(pvr_dev);
 
 err_watchdog_fini:
 	pvr_watchdog_fini(pvr_dev);
@@ -1464,7 +1472,6 @@ pvr_remove(struct platform_device *plat_dev)
 	xa_destroy(&pvr_dev->free_list_ids);
 
 	pm_runtime_suspend(drm_dev->dev);
-	pvr_device_fini(pvr_dev);
 	drm_dev_unplug(drm_dev);
 	pvr_watchdog_fini(pvr_dev);
 	pvr_queue_device_fini(pvr_dev);

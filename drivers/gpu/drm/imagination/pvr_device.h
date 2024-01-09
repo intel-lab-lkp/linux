@@ -481,6 +481,8 @@ packed_bvnc_to_pvr_gpu_id(u64 bvnc, struct pvr_gpu_id *gpu_id)
 	gpu_id->c = bvnc & GENMASK_ULL(15, 0);
 }
 
+int pvr_device_gpu_init(struct pvr_device *pvr_dev);
+void pvr_device_gpu_fini(struct pvr_device *pvr_dev);
 int pvr_device_init(struct pvr_device *pvr_dev);
 void pvr_device_fini(struct pvr_device *pvr_dev);
 void pvr_device_reset(struct pvr_device *pvr_dev);
