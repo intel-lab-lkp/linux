@@ -406,11 +406,14 @@ static void parse_dacl(struct mnt_idmap *idmap,
 		return;
 
 	ret = init_acl_state(&acl_state, num_aces);
-	if (ret)
+	if (ret) {
+		kfree(ppace);
 		return;
+	}
 	ret = init_acl_state(&default_acl_state, num_aces);
 	if (ret) {
 		free_acl_state(&acl_state);
+		kfree(ppace);
 		return;
 	}
 
