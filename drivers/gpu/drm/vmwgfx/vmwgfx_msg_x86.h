@@ -68,6 +68,8 @@
                 "=d"(edx),			\
                 "=S"(si),			\
                 "=D"(di) :			\
+         [port] "i" (VMWARE_HYPERVISOR_PORT),	\
+         [mode] "m" (vmware_hypercall_mode),	\
                 "a"(magic),			\
                 "b"(in_ebx),			\
                 "c"(cmd),			\
@@ -110,7 +112,7 @@
 		"push %%rbp;"				\
 		UNWIND_HINT_UNDEFINED			\
                 "mov %12, %%rbp;"			\
-                VMWARE_HYPERCALL_HB_OUT			\
+                "rep outsb;"				\
                 "pop %%rbp;"				\
 		UNWIND_HINT_RESTORE :			\
                 "=a"(eax),				\
@@ -139,7 +141,7 @@
 		"push %%rbp;"				\
 		UNWIND_HINT_UNDEFINED			\
                 "mov %12, %%rbp;"			\
-                VMWARE_HYPERCALL_HB_IN			\
+                "rep insb;"				\
                 "pop %%rbp;"				\
 		UNWIND_HINT_RESTORE :			\
                 "=a"(eax),				\

@@ -29,6 +29,8 @@ static int ptp_vmw_pclk_read(u64 *ns)
 	asm volatile (VMWARE_HYPERCALL :
 		"=a"(ret), "=b"(nsec_hi), "=c"(nsec_lo), "=d"(unused1),
 		"=S"(unused2), "=D"(unused3) :
+		[port] "i" (VMWARE_HYPERVISOR_PORT),
+		[mode] "m" (vmware_hypercall_mode),
 		"a"(VMWARE_MAGIC), "b"(0),
 		"c"(VMWARE_CMD_PCLK_GETTIME), "d"(0) :
 		"memory");
