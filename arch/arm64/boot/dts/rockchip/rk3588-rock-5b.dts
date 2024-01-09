@@ -765,3 +765,7 @@
 &usb_host1_ohci {
 	status = "okay";
 };
+
+&tsadc {
+	status = "okay";
+};
