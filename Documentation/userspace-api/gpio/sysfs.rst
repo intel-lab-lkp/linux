@@ -5,12 +5,10 @@ GPIO Sysfs Interface for Userspace
 
   THIS ABI IS DEPRECATED, THE ABI DOCUMENTATION HAS BEEN MOVED TO
   Documentation/ABI/obsolete/sysfs-gpio AND NEW USERSPACE CONSUMERS
-  ARE SUPPOSED TO USE THE CHARACTER DEVICE ABI. THIS OLD SYSFS ABI WILL
-  NOT BE DEVELOPED (NO NEW FEATURES), IT WILL JUST BE MAINTAINED.
+  SHOULD USE THE chardev.rst.
 
-Refer to the examples in tools/gpio/* for an introduction to the new
-character device ABI. Also see the userspace header in
-include/uapi/linux/gpio.h
+  THIS OLD SYSFS ABI WILL NOT BE DEVELOPED (NO NEW FEATURES), IT WILL JUST BE
+  MAINTAINED.
 
 The deprecated sysfs ABI
 ------------------------
@@ -34,7 +32,7 @@ standard kernels won't know about. And for some tasks, simple userspace
 GPIO drivers could be all that the system really needs.
 
 DO NOT ABUSE SYSFS TO CONTROL HARDWARE THAT HAS PROPER KERNEL DRIVERS.
-PLEASE READ THE DOCUMENT AT Documentation/driver-api/gpio/drivers-on-gpio.rst
+PLEASE READ Documentation/driver-api/gpio/drivers-on-gpio.rst
 TO AVOID REINVENTING KERNEL WHEELS IN USERSPACE. I MEAN IT. REALLY.
 
 Paths in Sysfs
