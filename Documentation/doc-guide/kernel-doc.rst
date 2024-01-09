@@ -341,6 +341,32 @@ Typedefs with function prototypes can also be documented::
    */
    typedef void (*type_name)(struct v4l2_ctrl *arg1, void *arg2);
 
+Preprocessor defines documentation
+----------------------------------
+
+There are two ways to document preprocessor defines. The first works more or
+less like kernel-doc for functions, including parameters::
+
+  /**
+   * FUNC_NAME() - Brief description
+   * @arg1: description of arg1
+   * @arg2: description of arg2
+   *
+   * Description of the preprocessor function, may have multiple paragraphs.
+   */
+  #define FUNC_NAME(arg1, arg2)
+
+The second type is different and for object-like preprocessor macros without any
+parameters::
+
+  /**
+   * define MACRO - Brief description
+   *
+   * Description of the object-like preprocessor macro, may have multiple
+   * paragraphs.
+   */
+   #define MACRO
+
 Highlights and cross-references
 -------------------------------
 
