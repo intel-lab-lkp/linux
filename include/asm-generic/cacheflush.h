@@ -102,7 +102,8 @@ static inline void flush_cache_vunmap(unsigned long start, unsigned long end)
 	do { \
 		instrument_copy_to_user((void __user *)dst, src, len); \
 		memcpy(dst, src, len); \
-		flush_icache_user_page(vma, page, vaddr, len); \
+		if (vma->vm_flags & VM_EXEC) \
+			flush_icache_user_page(vma, page, vaddr, len); \
 	} while (0)
 #endif
 
