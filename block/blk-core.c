@@ -962,11 +962,15 @@ EXPORT_SYMBOL_GPL(iocb_bio_iopoll);
 void update_io_ticks(struct block_device *part, unsigned long now, bool end)
 {
 	unsigned long stamp;
+	bool precise = blk_queue_precise_io_stat(part->bd_queue);
 again:
 	stamp = READ_ONCE(part->bd_stamp);
-	if (unlikely(time_after(now, stamp))) {
-		if (likely(try_cmpxchg(&part->bd_stamp, &stamp, now)))
-			__part_stat_add(part, io_ticks, end ? now - stamp : 1);
+	if (unlikely(time_after(now, stamp)) &&
+	    likely(try_cmpxchg(&part->bd_stamp, &stamp, now))) {
+		if (end || (precise && part_in_flight(part)))
+			__part_stat_add(part, io_ticks, now - stamp);
+		else if (!precise)
+			__part_stat_add(part, io_ticks, 1);
 	}
 	if (part->bd_partno) {
 		part = bdev_whole(part);
