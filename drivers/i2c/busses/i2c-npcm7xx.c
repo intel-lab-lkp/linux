@@ -1260,12 +1260,13 @@ static irqreturn_t npcm_i2c_int_slave_handler(struct npcm_i2c *bus)
 static int npcm_i2c_reg_slave(struct i2c_client *client)
 {
 	unsigned long lock_flags;
-	struct npcm_i2c *bus = i2c_get_adapdata(client->adapter);
+	struct npcm_i2c *bus;
 
-	bus->slave = client;
-
-	if (!bus->slave)
+	if (!client)
 		return -EINVAL;
+
+	bus = i2c_get_adapdata(client->adapter);
+	bus->slave = client;
 
 	if (client->flags & I2C_CLIENT_TEN)
 		return -EAFNOSUPPORT;
