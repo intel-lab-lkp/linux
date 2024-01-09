@@ -332,7 +332,8 @@ EXPORT_SYMBOL(__init_rwsem);
 
 enum rwsem_waiter_type {
 	RWSEM_WAITING_FOR_WRITE,
-	RWSEM_WAITING_FOR_READ
+	RWSEM_WAITING_FOR_READ,
+	RWSEM_WAITING_FOR_RELEASE,
 };
 
 struct rwsem_waiter {
@@ -511,7 +512,8 @@ static void rwsem_mark_wake(struct rw_semaphore *sem,
 		if (waiter->type == RWSEM_WAITING_FOR_WRITE)
 			continue;
 
-		woken++;
+		if (waiter->type == RWSEM_WAITING_FOR_READ)
+			woken++;
 		list_move_tail(&waiter->list, &wlist);
 
 		/*
@@ -1401,6 +1403,67 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
 	preempt_enable();
 }
 
+static inline int __wait_read_common(struct rw_semaphore *sem, int state)
+{
+	int ret = 0;
+	long adjustment = 0;
+	struct rwsem_waiter waiter;
+	DEFINE_WAKE_Q(wake_q);
+
+	waiter.task = current;
+	waiter.type = RWSEM_WAITING_FOR_RELEASE;
+	waiter.timeout = jiffies + RWSEM_WAIT_TIMEOUT;
+	waiter.handoff_set = false;
+
+	preempt_disable();
+	raw_spin_lock_irq(&sem->wait_lock);
+	if (list_empty(&sem->wait_list)) {
+		if (!(atomic_long_read(&sem->count) & RWSEM_WRITER_MASK)) {
+			/* Provide lock ACQUIRE */
+			smp_acquire__after_ctrl_dep();
+			raw_spin_unlock_irq(&sem->wait_lock);
+			goto done;
+		}
+		adjustment = RWSEM_FLAG_WAITERS;
+	}
+	rwsem_add_waiter(sem, &waiter);
+	if (adjustment) {
+		long count = atomic_long_add_return(adjustment, &sem->count);
+		rwsem_cond_wake_waiter(sem, count, &wake_q);
+	}
+	raw_spin_unlock_irq(&sem->wait_lock);
+
+	if (!wake_q_empty(&wake_q))
+		wake_up_q(&wake_q);
+
+	for (;;) {
+		set_current_state(state);
+		if (!smp_load_acquire(&waiter.task)) {
+			/* Matches rwsem_mark_wake()'s smp_store_release(). */
+			break;
+		}
+		if (signal_pending_state(state, current)) {
+			raw_spin_lock_irq(&sem->wait_lock);
+			if (waiter.task)
+				goto out_nolock;
+			raw_spin_unlock_irq(&sem->wait_lock);
+			/* Ordered by sem->wait_lock against rwsem_mark_wake(). */
+			break;
+		}
+		schedule_preempt_disabled();
+	}
+
+	__set_current_state(TASK_RUNNING);
+done:
+	preempt_enable();
+	return ret;
+out_nolock:
+	rwsem_del_wake_waiter(sem, &waiter, &wake_q);
+	__set_current_state(TASK_RUNNING);
+	ret = -EINTR;
+	goto done;
+}
+
 #else /* !CONFIG_PREEMPT_RT */
 
 #define RT_MUTEX_BUILD_MUTEX
@@ -1498,6 +1561,11 @@ static inline void __up_write(struct rw_semaphore *sem)
 static inline void __downgrade_write(struct rw_semaphore *sem)
 {
 	rwbase_write_downgrade(&sem->rwbase);
+}
+
+static inline int __wait_read_killable(struct rw_semaphore *sem)
+{
+	return rwbase_wait_lock(&sem->rwbase, TASK_KILLABLE);
 }
 
 /* Debug stubs for the common API */
@@ -1642,6 +1710,38 @@ void downgrade_write(struct rw_semaphore *sem)
 	__downgrade_write(sem);
 }
 EXPORT_SYMBOL(downgrade_write);
+
+/**
+ * rwsem_wait_killable - Wait for current write lock holder to release lock
+ * @sem: The semaphore to wait on.
+ *
+ * This is equivalent to calling down_read(); up_read() but avoids the
+ * possibility that the thread will be preempted while holding the lock
+ * causing threads that want to take the lock for writes to block.  The
+ * intended use case is for lockless readers who notice an inconsistent
+ * state and want to wait for the current writer to finish.
+ */
+int rwsem_wait_killable(struct rw_semaphore *sem)
+{
+	might_sleep();
+
+	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
+	rwsem_release(&sem->dep_map, _RET_IP_);
+
+	return __wait_read_common(sem, TASK_KILLABLE);
+}
+EXPORT_SYMBOL(rwsem_wait_killable);
+
+void rwsem_wait(struct rw_semaphore *sem)
+{
+	might_sleep();
+
+	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
+	rwsem_release(&sem->dep_map, _RET_IP_);
+
+	__wait_read_common(sem, TASK_UNINTERRUPTIBLE);
+}
+EXPORT_SYMBOL(rwsem_wait);
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 

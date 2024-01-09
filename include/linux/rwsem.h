@@ -214,6 +214,12 @@ DEFINE_GUARD_COND(rwsem_write, _try, down_write_trylock(_T))
  */
 extern void downgrade_write(struct rw_semaphore *sem);
 
+/*
+ * wait for current writer to be finished
+ */
+void rwsem_wait(struct rw_semaphore *sem);
+int __must_check rwsem_wait_killable(struct rw_semaphore *sem);
+
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 /*
  * nested locking. NOTE: rwsems are not allowed to recurse
