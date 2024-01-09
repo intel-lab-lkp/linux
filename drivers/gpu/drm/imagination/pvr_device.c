@@ -295,8 +295,16 @@ pvr_request_firmware(struct pvr_device *pvr_dev)
 	 */
 	err = request_firmware(&fw, filename, pvr_dev->base.dev);
 	if (err) {
-		drm_err(drm_dev, "failed to load firmware %s (err=%d)\n",
-			filename, err);
+		/*
+		 * Defer probe if the firmware is not available yet (e.g: the driver
+		 * is built-in and the firmware not present in the initramfs image).
+		 */
+		if (err == -ENOENT)
+			err = -EPROBE_DEFER;
+
+		dev_err_probe(drm_dev->dev, err, "failed to load firmware %s (err=%d)\n",
+			      filename, err);
+
 		goto err_free_filename;
 	}
 
