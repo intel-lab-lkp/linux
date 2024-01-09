@@ -176,9 +176,6 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 
 	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
 
-	if (!cxl_root)
-		return -ENODEV;
-
 	if (!cxl_root->ops || !cxl_root->ops->qos_class)
 		return -EOPNOTSUPP;
 
@@ -356,9 +353,6 @@ static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 
 	struct cxl_root *cxl_root __free(put_cxl_root) =
 		find_cxl_root(cxlmd->endpoint);
-
-	if (!cxl_root)
-		return -ENODEV;
 
 	root_port = &cxl_root->port;
 
