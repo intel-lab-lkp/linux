@@ -73,6 +73,16 @@ static struct wakeup_source deleted_ws = {
 
 static DEFINE_IDA(wakeup_ida);
 
+#ifdef CONFIG_PM_DEBUG
+static DEFINE_MUTEX(pm_abort_suspend_list_lock);
+
+struct pm_abort_suspend_source {
+	struct list_head list;
+	char *source_triggering_abort_suspend;
+};
+static LIST_HEAD(pm_abort_suspend_list);
+#endif
+
 /**
  * wakeup_source_create - Create a struct wakeup_source object.
  * @name: Name of the new wakeup source.
@@ -575,6 +585,52 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 	trace_wakeup_source_activate(ws->name, cec);
 }
 
+#ifdef CONFIG_PM_DEBUG
+/**
+ * pm_abort_suspend_list_clear - Clear pm_abort_suspend_list.
+ *
+ * The pm_abort_suspend_list will be cleared when system PM exits.
+ */
+static void pm_abort_suspend_list_clear(void)
+{
+	struct pm_abort_suspend_source *info, *tmp;
+
+	mutex_lock(&pm_abort_suspend_list_lock);
+	list_for_each_entry_safe(info, tmp, &pm_abort_suspend_list, list) {
+		list_del(&info->list);
+		kfree(info);
+	}
+	mutex_unlock(&pm_abort_suspend_list_lock);
+}
+
+/**
+ * pm_abort_suspend_source_add - Update pm_abort_suspend_list
+ * @source_name: Wakeup_source or function aborting suspend transitions.
+ *
+ * Add the source name responsible for updating the abort_suspend flag in the
+ * pm_abort_suspend_list.
+ */
+static void pm_abort_suspend_source_add(const char *source_name)
+{
+	struct pm_abort_suspend_source *info;
+
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return;
+
+	INIT_LIST_HEAD(&info->list);
+	info->source_triggering_abort_suspend = kstrdup(source_name, GFP_KERNEL);
+	if (!info->source_triggering_abort_suspend) {
+		kfree(info);
+		return;
+	}
+
+	mutex_lock(&pm_abort_suspend_list_lock);
+	list_add_tail(&info->list, &pm_abort_suspend_list);
+	mutex_unlock(&pm_abort_suspend_list_lock);
+}
+#endif
+
 /**
  * wakeup_source_report_event - Report wakeup event using the given source.
  * @ws: Wakeup source to report the event for.
@@ -590,8 +646,13 @@ static void wakeup_source_report_event(struct wakeup_source *ws, bool hard)
 	if (!ws->active)
 		wakeup_source_activate(ws);
 
-	if (hard)
+	if (hard) {
+#ifdef CONFIG_PM_DEBUG
+		if (pm_suspend_target_state != PM_SUSPEND_ON)
+			pm_abort_suspend_source_add(ws->name);
+#endif
 		pm_system_wakeup();
+	}
 }
 
 /**
@@ -893,12 +954,47 @@ bool pm_wakeup_pending(void)
 		pm_print_active_wakeup_sources();
 	}
 
+#ifdef CONFIG_PM_DEBUG
+	if (atomic_read(&pm_abort_suspend) > 0) {
+		struct pm_abort_suspend_source *info;
+
+		mutex_lock(&pm_abort_suspend_list_lock);
+		list_for_each_entry(info, &pm_abort_suspend_list, list) {
+			pm_pr_dbg("wakeup source or subsystem %s aborted suspend\n",
+					info->source_triggering_abort_suspend);
+		}
+		mutex_unlock(&pm_abort_suspend_list_lock);
+		pm_abort_suspend_list_clear();
+	}
+#endif
+
 	return ret || atomic_read(&pm_abort_suspend) > 0;
 }
 EXPORT_SYMBOL_GPL(pm_wakeup_pending);
 
 void pm_system_wakeup(void)
 {
+
+#ifdef CONFIG_PM_DEBUG
+#ifdef CONFIG_DEBUG_INFO
+	if (pm_suspend_target_state != PM_SUSPEND_ON) {
+		char *source_name = kasprintf(GFP_KERNEL,
+					"%ps",
+					__builtin_return_address(0));
+		if (!source_name)
+			goto exit;
+
+		if (strcmp(source_name, "pm_wakeup_ws_event"))
+			pm_abort_suspend_source_add(source_name);
+
+		kfree(source_name);
+	}
+exit:
+#else
+	if (pm_suspend_target_state != PM_SUSPEND_ON)
+		pm_pr_dbg("Some wakeup source or subsystem aborted suspend\n");
+#endif
+#endif
 	atomic_inc(&pm_abort_suspend);
 	s2idle_wake();
 }
