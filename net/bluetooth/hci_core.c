@@ -1523,10 +1523,21 @@ static void hci_cmd_timeout(struct work_struct *work)
 					    cmd_timer.work);
 
 	if (hdev->sent_cmd) {
-		struct hci_command_hdr *sent = (void *) hdev->sent_cmd->data;
-		u16 opcode = __le16_to_cpu(sent->opcode);
+		u16 opcode = hci_skb_opcode(hdev->sent_cmd);
+		u8 status = HCI_ERROR_CONNECTION_TIMEOUT;
+		hci_req_complete_t req_complete = NULL;
+		hci_req_complete_skb_t req_complete_skb = NULL;
 
 		bt_dev_err(hdev, "command 0x%4.4x tx timeout", opcode);
+
+		hci_req_cmd_complete(hdev, opcode, status, &req_complete,
+				     &req_complete_skb);
+
+		/* Notify hci_req the command has timed out */
+		if (req_complete)
+			req_complete(hdev, status, opcode);
+		else if (req_complete_skb)
+			req_complete_skb(hdev, status, opcode, NULL);
 	} else {
 		bt_dev_err(hdev, "command tx timeout");
 	}
