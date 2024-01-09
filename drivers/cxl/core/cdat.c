@@ -162,6 +162,7 @@ static int cxl_cdat_endpoint_process(struct cxl_port *port,
 static int cxl_port_perf_data_calculate(struct cxl_port *port,
 					struct xarray *dsmas_xa)
 {
+	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
 	struct access_coordinate c;
 	struct dsmas_entry *dent;
 	int valid_entries = 0;
@@ -173,8 +174,6 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 		dev_dbg(&port->dev, "Failed to retrieve perf coordinates.\n");
 		return rc;
 	}
-
-	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
 
 	if (!cxl_root->ops || !cxl_root->ops->qos_class)
 		return -EOPNOTSUPP;
@@ -344,14 +343,12 @@ DEFINE_FREE(dpa_perf, struct list_head *, if (!list_empty(_T)) discard_dpa_perf(
 
 static int cxl_qos_class_verify(struct cxl_memdev *cxlmd)
 {
+	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(cxlmd->endpoint);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	LIST_HEAD(__discard);
 	struct list_head *discard __free(dpa_perf) = &__discard;
 	int rc;
-
-	struct cxl_root *cxl_root __free(put_cxl_root) =
-		find_cxl_root(cxlmd->endpoint);
 
 	/* Check that the QTG IDs are all sane between end device and root decoders */
 	cxl_qos_match(cxl_root, &mds->ram_perf_list, discard);
