@@ -249,6 +249,12 @@ INSTALL_DTBS_PATH specifies where to install device tree blobs for
 relocations required by build roots.  This is not defined in the
 makefile but the argument can be passed to make if needed.
 
+INSTALL_DTBS_PRIMITIVE
+----------------------
+INSTALL_DTBS_PRIMITIVE, if defined, will cause the dtbs_install target to
+install the base dtb and overlay dtbo files instead of assembled dtb files
+constructed by overlay application.
+
 KBUILD_ABS_SRCTREE
 --------------------------------------------------
 Kbuild uses a relative path to point to the tree when possible. For instance,

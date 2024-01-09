@@ -22,7 +22,13 @@ quiet_cmd_dtb_install = INSTALL $@
 $(dst)/%: $(obj)/%
 	$(call cmd,dtb_install)
 
-dtbs := $(patsubst $(obj)/%,%,$(call read-file, $(obj)/dtbs-list))
+dtbs := $(call read-file, $(obj)/dtbs-list)
+
+ifdef INSTALL_DTBS_PRIMITIVE
+dtbs := $(foreach f, $(dtbs), $(if $(filter %.dtb,$(f)),$(call read-file, $(patsubst %.dtb,%.dtlst,$(f))),$(f)))
+endif
+
+dtbs := $(patsubst $(obj)/%,%,$(dtbs))
 
 ifdef CONFIG_ARCH_WANT_FLAT_DTB_INSTALL
 
