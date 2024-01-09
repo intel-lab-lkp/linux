@@ -8,6 +8,7 @@ GPIO
     :maxdepth: 1
 
     Character Device Userspace API <chardev>
+    Deprecated Userspace APIs <deprecated>
 
 .. only::  subproject and html
 
