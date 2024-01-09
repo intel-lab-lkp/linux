@@ -883,6 +883,12 @@ static int acpi_power_meter_add(struct acpi_device *device)
 	strcpy(acpi_device_class(device), ACPI_POWER_METER_CLASS);
 	device->driver_data = resource;
 
+	if (dmi_match(DMI_SYS_VENDOR, "Dell Inc.") &&
+	    acpi_dev_get_first_match_dev("IPI0001", NULL, -1)) {
+		if (acpi_wait_for_acpi_ipmi())
+			dev_warn(&device->dev, "Waiting for ACPI IPMI timeout");
+	}
+
 	res = read_capabilities(resource);
 	if (res)
 		goto exit_free;
