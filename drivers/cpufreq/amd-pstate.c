@@ -14,7 +14,7 @@
  * communicate the performance hints to hardware.
  *
  * AMD P-State is supported on recent AMD Zen base CPU series include some of
- * Zen2 and Zen3 processors. _CPC needs to be present in the ACPI tables of AMD
+ * Zen2, Zen3 and Zen4 processors. _CPC needs to be present in the ACPI tables of AMD
  * P-State supported system. And there are two types of hardware implementations
  * for AMD P-State: 1) Full MSR Solution and 2) Shared Memory Solution.
  * X86_FEATURE_CPPC CPU feature flag is used to distinguish the different types.
