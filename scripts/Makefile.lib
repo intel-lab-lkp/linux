@@ -93,6 +93,8 @@ base-dtb-y := $(filter %.dtb, $(call real-search, $(multi-dtb-y), .dtb, -dtbs))
 
 always-y			+= $(dtb-y)
 
+always-y	+= $(patsubst %.dtb, %.dtlst, $(filter %.dtb, $(dtb-y)))
+
 # Add subdir path
 
 ifneq ($(obj),.)

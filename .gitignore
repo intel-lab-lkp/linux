@@ -21,6 +21,7 @@
 *.dtbo
 *.dtb.S
 *.dtbo.S
+*.dtlst
 *.dwo
 *.elf
 *.gcno

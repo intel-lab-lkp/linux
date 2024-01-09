@@ -252,6 +252,12 @@ cmd_mod = printf '%s\n' $(call real-search, $*.o, .o, -objs -y -m) | \
 $(obj)/%.mod: FORCE
 	$(call if_changed,mod)
 
+cmd_dt_list = printf '%s\n' $(call real-search, $*.dtb, .dtb, -dtbs) | \
+	$(AWK) '!x[$$0]++ { print("$(obj)/"$$0) }' > $@
+
+$(obj)/%.dtlst: FORCE
+	$(call if_changed,dt_list)
+
 quiet_cmd_cc_lst_c = MKLST   $@
       cmd_cc_lst_c = $(CC) $(c_flags) -g -c -o $*.o $< && \
 		     $(CONFIG_SHELL) $(srctree)/scripts/makelst $*.o \
