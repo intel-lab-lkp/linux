@@ -75,7 +75,7 @@ __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private)
 
 	if (private) {
 		drm_gem_private_object_init(dev, obj, size);
-		shmem->map_wc = false; /* dma-buf mappings use always writecombine */
+		shmem->map_wc = false; /* dma-buf mappings are never write-combined */
 	} else {
 		ret = drm_gem_object_init(dev, obj, size);
 	}
