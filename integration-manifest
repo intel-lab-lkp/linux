@@ -1,0 +1,36 @@
+drm drm-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-misc drm-misc-fixes 024b32db43a359e0ded3fcc6cd86247cbbed4224
+	drm/bridge: parade-ps8640: Wait for HPD when doing an AUX transfer
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-xe drm-xe-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm drm-next 3c064aea46d071ccf95a142be5532768a7fa6f02
+	Merge tag 'drm-misc-next-fixes-2024-01-04' of git://anongit.freedesktop.org/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 196da3f3f76a46905f7daab29c56974f1aba9a7a
+	drm/rockchip: vop2: Drop unused if_dclk_rate variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-xe drm-xe-next-fixes 315acff5196f4e2f84a2a2d093000e0c6b0b4d1c
+	drm/xe: Fix warning on impossible condition
+drm-misc drm-misc-next 49ddab089611ae5ddd0201ddbbf633da75bfcc25
+	drm/panel-edp: use put_sync in unprepare
+drm-intel drm-intel-next cd7b0b2dd3d9fecc6057c07b40e8087db2f9f71a
+	drm/i915/dp: Fix the max DSC bpc supported by source
+drm-intel drm-intel-gt-next a797099562267ebb281acd59750f1a8dbba36eef
+	drm/i915/huc: Allow for very slow HuC loading
+drm-xe drm-xe-next b6e1b708176846248c87318786d22465ac96dd2c
+	drm/xe: Remove uninitialized variable from warning
+drm-intel topic/core-for-CI 4ed7492a358d8405f0fff43b17db7f2e33295110
+	HAX net/phy: Suppress WARN from phy_error
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
