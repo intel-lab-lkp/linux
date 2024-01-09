@@ -32,6 +32,10 @@ driver implementation may support the following properties:
    root port to downstream device and host bridge drivers can do programming
    which depends on CLKREQ signal existence. For example, programming root port
    not to advertise ASPM L1 Sub-States support if there is no CLKREQ signal.
+- preserve-boot-config:
+   If present this property specifies that this host bridge is already
+   configured by the platform firmware and the OS doesn't need to reconfigure
+   it again.
 
 PCI-PCI Bridge properties
 -------------------------
