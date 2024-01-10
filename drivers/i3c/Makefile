@@ -5,3 +5,4 @@ obj-$(CONFIG_I3C)		+= master/
 obj-$(CONFIG_I3C_TARGET)		+= target.o
 obj-$(CONFIG_I3C_TARGET_CONFIGFS)	+= i3c-cfs.o
 obj-$(CONFIG_I3C_TARGET)		+= target/
+obj-$(CONFIG_I3C_TARGET)		+= func/

@@ -50,4 +50,5 @@ config I3C_TARGET_CONFIGFS
 
 if I3C_TARGET
 source "drivers/i3c/target/Kconfig"
+source "drivers/i3c/func/Kconfig"
 endif # I3C_TARGET
