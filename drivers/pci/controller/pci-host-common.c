@@ -68,13 +68,16 @@ int pci_host_common_probe(struct platform_device *pdev)
 
 	of_pci_check_probe_only();
 
+	bridge->preserve_config =
+		of_pci_check_preserve_boot_config(dev->of_node);
+
 	/* Parse and map our Configuration Space windows */
 	cfg = gen_pci_init(dev, bridge, ops);
 	if (IS_ERR(cfg))
 		return PTR_ERR(cfg);
 
 	/* Do not reassign resources if probe only */
-	if (!pci_has_flag(PCI_PROBE_ONLY))
+	if (!(pci_has_flag(PCI_PROBE_ONLY) || bridge->preserve_config))
 		pci_add_flags(PCI_REASSIGN_ALL_BUS);
 
 	bridge->sysdata = cfg;
