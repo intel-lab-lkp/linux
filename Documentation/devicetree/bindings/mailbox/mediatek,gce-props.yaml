@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/mediatek,gce-props.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Global Command Engine common propertes for both Mailbox Providers and Consumers.
+
+maintainers:
+  - Houlong Wei <houlong.wei@mediatek.com>
+
+description:
+  The Global Command Engine (GCE) is used to implement a Command Queue (CMDQ)
+  driver using the Linux Mailbox framework. The GCE is an instruction based,
+  multi-threaded, single-core command dispatcher for MediaTek hardware.
+  We use GCE Mailbox binding to define GCE core properties for GCE Mailbox Provider.
+  A device that uses the CMDQ driver to confige its hardware registers by requesting
+  the Linux Mailbox Channels in the GCE Mailbox Controller is a Mailbox Consumer.
+  This binding defines the common GCE properties for both Mailbox Providers and Consumers.
+
+properties:
+  mediatek,gce-events:
+    description:
+      Each gce-events is an event id corresponding to a specific hardware event
+      signal sent to GCE. The event id is defined in the GCE header
+      include/dt-bindings/gce/<chip>-gce.h of each chips.
+      CMDQ client drivers have two usage of GCE event signals,
+      one is sfotware tokens and the other is hardware events.
+      Software tokens refer to GCE event signals triggered by drivers.
+      e.g. software drivers append GCE commands to set a GCE event after specific
+      GCE commands. Or CMDQ client driver uses the CPU to write the event id
+      into GCE register to trigger the GCE event corresponding to the event id.
+      Hardware events refer to GCE event signals triggered by hardware engines.
+      e.g. When OVL fetches all the data in the frame buffer, OVL will send
+      a frame done irq and send a frame done GCE event via hardware bus directly
+      at the same time.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 1024
+
+additionalProperties: true
