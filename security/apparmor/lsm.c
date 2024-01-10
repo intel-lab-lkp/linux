@@ -64,6 +64,143 @@ static LIST_HEAD(aa_global_buffers);
 static DEFINE_SPINLOCK(aa_buffers_lock);
 static DEFINE_PER_CPU(struct aa_local_cache, aa_local_buffers);
 
+static struct workqueue_struct *aa_label_reclaim_wq;
+static void aa_label_reclaim_work_fn(struct work_struct *work);
+
+/*
+ * Dummy llist nodes, for lockless list traveral and deletions by
+ * the reclaim worker, while nodes are added from normal label
+ * insertion paths.
+ */
+struct aa_label_reclaim_node {
+	bool inuse;
+	struct llist_node node;
+};
+
+/*
+ * We need two dummy head nodes for lockless list manipulations from reclaim
+ * worker - first dummy node will be used in current reclaim iteration;
+ * the second one will be used in next iteration. Next iteration marks
+ * the first dummy node as free, for use in following iteration.
+ */
+#define AA_LABEL_RECLAIM_NODE_MAX     2
+
+#define AA_MAX_LABEL_RECLAIMS	100
+#define AA_LABEL_RECLAIM_INTERVAL_MS	5000
+
+static LLIST_HEAD(aa_label_reclaim_head);
+static struct llist_node *last_reclaim_label;
+static struct aa_label_reclaim_node aa_label_reclaim_nodes[AA_LABEL_RECLAIM_NODE_MAX];
+static DECLARE_DELAYED_WORK(aa_label_reclaim_work, aa_label_reclaim_work_fn);
+
+void aa_label_reclaim_add_label(struct aa_label *label)
+{
+	percpu_ref_get(&label->count);
+	llist_add(&label->reclaim_node, &aa_label_reclaim_head);
+}
+
+static bool aa_label_is_reclaim_node(struct llist_node *node)
+{
+	return &aa_label_reclaim_nodes[0].node <= node &&
+		node <= &aa_label_reclaim_nodes[AA_LABEL_RECLAIM_NODE_MAX - 1].node;
+}
+
+static struct llist_node *aa_label_get_reclaim_node(void)
+{
+	int i;
+	struct aa_label_reclaim_node *rn;
+
+	for (i = 0; i < AA_LABEL_RECLAIM_NODE_MAX; i++) {
+		rn = &aa_label_reclaim_nodes[i];
+		if (!rn->inuse) {
+			rn->inuse = true;
+			return &rn->node;
+		}
+	}
+
+	return NULL;
+}
+
+static void aa_label_put_reclaim_node(struct llist_node *node)
+{
+	struct aa_label_reclaim_node *rn = container_of(node, struct aa_label_reclaim_node, node);
+
+	rn->inuse = false;
+}
+
+static void aa_put_all_reclaim_nodes(void)
+{
+	int i;
+
+	for (i = 0; i < AA_LABEL_RECLAIM_NODE_MAX; i++)
+		aa_label_reclaim_nodes[i].inuse = false;
+}
+
+static void aa_label_reclaim_work_fn(struct work_struct *work)
+{
+	struct llist_node *pos, *first, *head, *prev, *next;
+	struct llist_node *reclaim_node;
+	struct aa_label *label;
+	int cnt = 0;
+	bool held;
+
+	first = aa_label_reclaim_head.first;
+	if (!first)
+		goto queue_reclaim_work;
+
+	if (last_reclaim_label == NULL || last_reclaim_label->next == NULL) {
+		reclaim_node = aa_label_get_reclaim_node();
+		WARN_ONCE(!reclaim_node, "Reclaim heads exhausted\n");
+		if (unlikely(!reclaim_node)) {
+			head = first->next;
+			if (!head) {
+				aa_put_all_reclaim_nodes();
+				goto queue_reclaim_work;
+			}
+			prev = first;
+		} else {
+			llist_add(reclaim_node, &aa_label_reclaim_head);
+			prev = reclaim_node;
+			head = prev->next;
+		}
+	} else {
+		prev = last_reclaim_label;
+		head = prev->next;
+	}
+
+	last_reclaim_label = NULL;
+	llist_for_each_safe(pos, next, head) {
+		/* Free reclaim node, which is present in the list */
+		if (aa_label_is_reclaim_node(pos)) {
+			prev->next = pos->next;
+			aa_label_put_reclaim_node(pos);
+			continue;
+		}
+
+		label = container_of(pos, struct aa_label, reclaim_node);
+		percpu_ref_switch_to_atomic_sync(&label->count);
+		rcu_read_lock();
+		percpu_ref_put(&label->count);
+		held = percpu_ref_tryget(&label->count);
+		if (!held)
+			prev->next = pos->next;
+		rcu_read_unlock();
+		if (!held)
+			continue;
+		percpu_ref_switch_to_percpu(&label->count);
+		cnt++;
+		if (cnt == AA_MAX_LABEL_RECLAIMS) {
+			last_reclaim_label = pos;
+			break;
+		}
+		prev = pos;
+	}
+
+queue_reclaim_work:
+	queue_delayed_work(aa_label_reclaim_wq, &aa_label_reclaim_work,
+			msecs_to_jiffies(AA_LABEL_RECLAIM_INTERVAL_MS));
+}
+
 /*
  * LSM hook functions
  */
@@ -2277,6 +2414,14 @@ static int __init apparmor_init(void)
 		aa_free_root_ns();
 		goto buffers_out;
 	}
+
+	aa_label_reclaim_wq = alloc_workqueue("aa_label_reclaim",
+				WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE, 0);
+	WARN_ON(!aa_label_reclaim_wq);
+	if (aa_label_reclaim_wq)
+		queue_delayed_work(aa_label_reclaim_wq, &aa_label_reclaim_work,
+				   AA_LABEL_RECLAIM_INTERVAL_MS);
+
 	security_add_hooks(apparmor_hooks, ARRAY_SIZE(apparmor_hooks),
 				&apparmor_lsmid);
 

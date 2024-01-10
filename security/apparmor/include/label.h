@@ -125,6 +125,7 @@ struct aa_label {
 	long flags;
 	struct aa_proxy *proxy;
 	struct rb_node node;
+	struct llist_node reclaim_node;
 	struct rcu_head rcu;
 	__counted char *hname;
 	u32 secid;
@@ -464,5 +465,7 @@ static inline void aa_put_proxy(struct aa_proxy *proxy)
 }
 
 void __aa_proxy_redirect(struct aa_label *orig, struct aa_label *new);
+
+void aa_label_reclaim_add_label(struct aa_label *label);
 
 #endif /* __AA_LABEL_H */
