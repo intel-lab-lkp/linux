@@ -118,6 +118,7 @@ struct shmem_options {
 	umode_t mode;
 	bool full_inums;
 	int huge;
+	unsigned int no_split;
 	int seen;
 	bool noswap;
 	unsigned short quota_types;
@@ -128,6 +129,7 @@ struct shmem_options {
 #define SHMEM_SEEN_INUMS 8
 #define SHMEM_SEEN_NOSWAP 16
 #define SHMEM_SEEN_QUOTA 32
+#define SHMEM_SEEN_NO_SPLIT 64
 };
 
 #ifdef CONFIG_TMPFS
@@ -2235,6 +2237,79 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	return ret;
 }
 
+static vm_fault_t shmem_huge_fault(struct vm_fault *vmf, pmd_t orig_pmd)
+{
+	vm_fault_t ret = VM_FAULT_FALLBACK;
+	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+	struct folio *old_folio, *new_folio;
+	pmd_t entry;
+	int gfp_flags = GFP_HIGHUSER_MOVABLE | __GFP_COMP;
+	struct vm_area_struct *vma = vmf->vma;
+	struct shmem_sb_info *sbinfo = NULL;
+	struct inode *inode = file_inode(vma->vm_file);
+	struct shmem_inode_info *info = SHMEM_I(inode);
+
+	sbinfo = SHMEM_SB(info->vfs_inode.i_sb);
+
+	if (sbinfo->no_split == 0)
+		return VM_FAULT_FALLBACK;
+
+	/* ShmemPmdMapped in tmpfs will not split huge pmd */
+	if (!(vmf->flags & FAULT_FLAG_WRITE)
+			|| (vma->vm_flags & VM_SHARED))
+		return VM_FAULT_FALLBACK;
+
+	new_folio = vma_alloc_folio(gfp_flags, HPAGE_PMD_ORDER,
+			vmf->vma, haddr, true);
+	if (!new_folio)
+		ret = VM_FAULT_FALLBACK;
+
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (pmd_none(*vmf->pmd)) {
+		ret = VM_FAULT_FALLBACK;
+		goto out;
+	}
+	if (!pmd_same(*vmf->pmd, orig_pmd)) {
+		ret = 0;
+		goto out;
+	}
+
+	if (!new_folio) {
+		count_vm_event(THP_FAULT_FALLBACK);
+		ret = VM_FAULT_FALLBACK;
+		goto out;
+	}
+	old_folio = page_folio(pmd_page(*vmf->pmd));
+	page_remove_rmap(&old_folio->page, vma, true);
+	pmdp_huge_clear_flush(vma, haddr, vmf->pmd);
+
+	__folio_set_locked(new_folio);
+	__folio_set_swapbacked(new_folio);
+	__folio_mark_uptodate(new_folio);
+
+	flush_icache_pages(vma, &new_folio->page, HPAGE_PMD_NR);
+	entry = mk_huge_pmd(&new_folio->page, vma->vm_page_prot);
+	entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
+
+	page_add_file_rmap(&new_folio->page, vma, true);
+	set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
+	update_mmu_cache_pmd(vma, haddr, vmf->pmd);
+	count_vm_event(THP_FILE_MAPPED);
+
+	folio_unlock(new_folio);
+	spin_unlock(vmf->ptl);
+	copy_user_large_folio(new_folio, old_folio, haddr, vma);
+	folio_put(old_folio);
+	ret = 0;
+	return ret;
+
+out:
+	if (new_folio)
+		folio_put(new_folio);
+	spin_unlock(vmf->ptl);
+	return ret;
+}
+
 unsigned long shmem_get_unmapped_area(struct file *file,
 				      unsigned long uaddr, unsigned long len,
 				      unsigned long pgoff, unsigned long flags)
@@ -3866,6 +3941,7 @@ enum shmem_param {
 	Opt_usrquota_inode_hardlimit,
 	Opt_grpquota_block_hardlimit,
 	Opt_grpquota_inode_hardlimit,
+	Opt_no_split,
 };
 
 static const struct constant_table shmem_param_enums_huge[] = {
@@ -3897,6 +3973,7 @@ const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_string("grpquota_block_hardlimit", Opt_grpquota_block_hardlimit),
 	fsparam_string("grpquota_inode_hardlimit", Opt_grpquota_inode_hardlimit),
 #endif
+	fsparam_u32   ("no_split",	Opt_no_split),
 	{}
 };
 
@@ -4061,6 +4138,10 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 			return invalfc(fc,
 				       "Group quota inode hardlimit too large.");
 		ctx->qlimits.grpquota_ihardlimit = size;
+		break;
+	case Opt_no_split:
+		ctx->no_split = result.uint_32;
+		ctx->seen |= SHMEM_SEEN_NO_SPLIT;
 		break;
 	}
 	return 0;
@@ -4258,6 +4339,8 @@ static int shmem_show_options(struct seq_file *seq, struct dentry *root)
 	/* Rightly or wrongly, show huge mount option unmasked by shmem_huge */
 	if (sbinfo->huge)
 		seq_printf(seq, ",huge=%s", shmem_format_huge(sbinfo->huge));
+	if (sbinfo->huge && sbinfo->no_split)
+		seq_puts(seq, ",no_split");
 #endif
 	mpol = shmem_get_sbmpol(sbinfo);
 	shmem_show_mpol(seq, mpol);
@@ -4312,6 +4395,7 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 		if (!(ctx->seen & SHMEM_SEEN_INUMS))
 			ctx->full_inums = IS_ENABLED(CONFIG_TMPFS_INODE64);
 		sbinfo->noswap = ctx->noswap;
+		sbinfo->no_split = ctx->no_split;
 	} else {
 		sb->s_flags |= SB_NOUSER;
 	}
@@ -4565,6 +4649,7 @@ static const struct super_operations shmem_ops = {
 static const struct vm_operations_struct shmem_vm_ops = {
 	.fault		= shmem_fault,
 	.map_pages	= filemap_map_pages,
+	.shmem_huge_fault	= shmem_huge_fault,
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,

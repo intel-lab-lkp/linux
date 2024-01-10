@@ -73,6 +73,7 @@ struct shmem_sb_info {
 	struct list_head shrinklist;  /* List of shinkable inodes */
 	unsigned long shrinklist_len; /* Length of shrinklist */
 	struct shmem_quota_limits qlimits; /* Default quota limits */
+	unsigned int no_split;  /* Do not split shmempmdmaped in tmpfs */
 };
 
 static inline struct shmem_inode_info *SHMEM_I(struct inode *inode)

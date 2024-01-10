@@ -5047,6 +5047,13 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 		}
 	}
 
+	if (vmf->vma->vm_ops->shmem_huge_fault) {
+		vm_fault_t ret = vmf->vma->vm_ops->shmem_huge_fault(vmf, vmf->orig_pmd);
+
+		if (!(ret & VM_FAULT_FALLBACK))
+			return ret;
+	}
+
 split:
 	/* COW or write-notify handled on pte level: split pmd. */
 	__split_huge_pmd(vma, vmf->pmd, vmf->address, false, NULL);
