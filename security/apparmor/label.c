@@ -710,6 +710,8 @@ static struct aa_label *__label_insert(struct aa_labelset *ls,
 	rb_link_node(&label->node, parent, new);
 	rb_insert_color(&label->node, &ls->root);
 	label->flags |= FLAG_IN_TREE;
+	percpu_ref_switch_to_percpu(&label->count);
+	aa_label_reclaim_add_label(label);
 
 	return aa_get_label(label);
 }
