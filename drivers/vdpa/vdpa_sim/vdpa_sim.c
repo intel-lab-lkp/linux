@@ -74,6 +74,17 @@ static void vdpasim_worker_change_mm_sync(struct vdpasim *vdpasim,
 	kthread_flush_work(work);
 }
 
+static void flush_work_fn(struct kthread_work *work) {}
+
+static void vdpasim_flush_work(struct vdpasim *vdpasim)
+{
+	struct kthread_work work;
+
+	kthread_init_work(&work, flush_work_fn);
+	kthread_queue_work(vdpasim->worker, &work);
+	kthread_flush_work(&work);
+}
+
 static struct vdpasim *vdpa_to_sim(struct vdpa_device *vdpa)
 {
 	return container_of(vdpa, struct vdpasim, vdpa);
@@ -511,6 +522,8 @@ static int vdpasim_suspend(struct vdpa_device *vdpa)
 	mutex_lock(&vdpasim->mutex);
 	vdpasim->running = false;
 	mutex_unlock(&vdpasim->mutex);
+
+	vdpasim_flush_work(vdpasim);
 
 	return 0;
 }
