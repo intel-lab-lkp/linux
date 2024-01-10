@@ -448,7 +448,7 @@ Function-specific configfs interface
 The function name to use when creating the function directory is "ncm".
 The NCM function provides these attributes in its function directory:
 
-	===============   ==================================================
+	================  ==================================================
 	ifname		  network device interface name associated with this
 			  function instance
 	qmult		  queue length multiplier for high and super speed
@@ -458,7 +458,7 @@ The NCM function provides these attributes in its function directory:
 			  Ethernet over USB link
 	max_segment_size  Segment size required for P2P connections. This
 			  will set MTU to (max_segment_size - 14 bytes)
-	===============   ==================================================
+	================  ==================================================
 
 and after creating the functions/ncm.<instance name> they contain default
 values: qmult is 5, dev_addr and host_addr are randomly selected.
