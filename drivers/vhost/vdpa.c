@@ -59,6 +59,7 @@ struct vhost_vdpa {
 	int in_batch;
 	struct vdpa_iova_range range;
 	u32 batch_asid;
+	long pinned_vm;
 };
 
 static DEFINE_IDA(vhost_vdpa_ida);
@@ -893,6 +894,7 @@ static void vhost_vdpa_pa_unmap(struct vhost_vdpa *v, struct vhost_iotlb *iotlb,
 			unpin_user_page(page);
 		}
 		atomic64_sub(PFN_DOWN(map->size), &dev->mm->pinned_vm);
+		v->pinned_vm -= PFN_DOWN(map->size);
 		vhost_vdpa_general_unmap(v, map, asid);
 		vhost_iotlb_map_free(iotlb, map);
 	}
@@ -975,9 +977,10 @@ static int vhost_vdpa_map(struct vhost_vdpa *v, struct vhost_iotlb *iotlb,
 		return r;
 	}
 
-	if (!vdpa->use_va)
+	if (!vdpa->use_va) {
 		atomic64_add(PFN_DOWN(size), &dev->mm->pinned_vm);
-
+		v->pinned_vm += PFN_DOWN(size);
+	}
 	return 0;
 }
 
