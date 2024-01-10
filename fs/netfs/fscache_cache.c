@@ -179,7 +179,6 @@ EXPORT_SYMBOL(fscache_acquire_cache);
 void fscache_put_cache(struct fscache_cache *cache,
 		       enum fscache_cache_trace where)
 {
-	unsigned int debug_id = cache->debug_id;
 	bool zero;
 	int ref;
 
@@ -187,7 +186,7 @@ void fscache_put_cache(struct fscache_cache *cache,
 		return;
 
 	zero = __refcount_dec_and_test(&cache->ref, &ref);
-	trace_fscache_cache(debug_id, ref - 1, where);
+	trace_fscache_cache(cache->debug_id, ref - 1, where);
 
 	if (zero) {
 		down_write(&fscache_addremove_sem);
