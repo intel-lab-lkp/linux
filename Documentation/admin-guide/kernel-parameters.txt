@@ -4576,6 +4576,14 @@
 			allocator.  This parameter is primarily	for debugging
 			and performance comparison.
 
+	percpu-rcurefcount.ref_scan_interval= [KNL]
+			Interval (in ms) between 2 scans of percpu rcu ref
+			managed refs.
+
+	percpu-rcurefcount.max_ref_scan_count= [KNL]
+			Count of the maximum number of pcpu refs scanned during
+			one scan of managed refs.
+
 	pirq=		[SMP,APIC] Manual mp-table setup
 			See Documentation/arch/x86/i386/IO-APIC.rst.
 
