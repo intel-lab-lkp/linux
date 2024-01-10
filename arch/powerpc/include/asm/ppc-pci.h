@@ -29,6 +29,9 @@ void *pci_traverse_device_nodes(struct device_node *start,
 				void *(*fn)(struct device_node *, void *),
 				void *data);
 extern void pci_devs_phb_init_dynamic(struct pci_controller *phb);
+extern void pci_register_device_dynamic(struct pci_controller *phb);
+extern void pci_unregister_device_dynamic(struct pci_controller *phb);
+
 
 /* From rtas_pci.h */
 extern void init_pci_config_tokens (void);

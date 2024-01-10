@@ -35,6 +35,8 @@ struct pci_controller *init_phb_dynamic(struct device_node *dn)
 
 	pseries_msi_allocate_domains(phb);
 
+	pci_register_device_dynamic(phb);
+
 	/* Create EEH devices for the PHB */
 	eeh_phb_pe_create(phb);
 
@@ -75,6 +77,8 @@ int remove_phb_dynamic(struct pci_controller *phb)
 			return 1;
 		}
 	}
+
+	pci_unregister_device_dynamic(phb);
 
 	pseries_msi_free_domains(phb);
 
