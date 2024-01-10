@@ -123,6 +123,16 @@
 #define VHOST_SET_BACKEND_FEATURES _IOW(VHOST_VIRTIO, 0x25, __u64)
 #define VHOST_GET_BACKEND_FEATURES _IOR(VHOST_VIRTIO, 0x26, __u64)
 
+/* Set current process as the new owner of this file descriptor.  The fd must
+ * already be owned, via a prior call to VHOST_SET_OWNER.  The pinned memory
+ * count is transferred from the previous to the new owner.
+ * Errors:
+ *   EINVAL: not owned
+ *   EBUSY:  caller is already the owner
+ *   ENOMEM: RLIMIT_MEMLOCK exceeded
+ */
+#define VHOST_NEW_OWNER _IO(VHOST_VIRTIO, 0x27)
+
 /* VHOST_NET specific defines */
 
 /* Attach virtio net ring to a raw socket, or tap device.

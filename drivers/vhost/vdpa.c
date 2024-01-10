@@ -613,6 +613,40 @@ static long vhost_vdpa_resume(struct vhost_vdpa *v)
 	return ops->resume(vdpa);
 }
 
+static long vhost_vdpa_new_owner(struct vhost_vdpa *v)
+{
+	int r;
+	struct vhost_dev *vdev = &v->vdev;
+	struct mm_struct *mm_old = vdev->mm;
+	struct mm_struct *mm_new = current->mm;
+	long pinned_vm = v->pinned_vm;
+	unsigned long lock_limit = PFN_DOWN(rlimit(RLIMIT_MEMLOCK));
+
+	if (!mm_old)
+		return -EINVAL;
+
+	if (!v->vdpa->use_va &&
+	    pinned_vm + atomic64_read(&mm_new->pinned_vm) > lock_limit)
+		return -ENOMEM;
+
+	r = vhost_vdpa_bind_mm(v, mm_new);
+	if (r)
+		return r;
+
+	r = vhost_dev_new_owner(vdev);
+	if (r) {
+		vhost_vdpa_bind_mm(v, mm_old);
+		return r;
+	}
+
+	if (!v->vdpa->use_va) {
+		atomic64_sub(pinned_vm, &mm_old->pinned_vm);
+		atomic64_add(pinned_vm, &mm_new->pinned_vm);
+	}
+
+	return r;
+}
+
 static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 				   void __user *argp)
 {
@@ -842,6 +876,9 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 		break;
 	case VHOST_VDPA_RESUME:
 		r = vhost_vdpa_resume(v);
+		break;
+	case VHOST_NEW_OWNER:
+		r = vhost_vdpa_new_owner(v);
 		break;
 	default:
 		r = vhost_dev_ioctl(&v->vdev, cmd, argp);
