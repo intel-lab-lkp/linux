@@ -2389,8 +2389,13 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ SYS_DESC(SYS_ERXCTLR_EL1), trap_raz_wi },
 	{ SYS_DESC(SYS_ERXSTATUS_EL1), trap_raz_wi },
 	{ SYS_DESC(SYS_ERXADDR_EL1), trap_raz_wi },
+	{ SYS_DESC(SYS_ERXPFGF_EL1), trap_raz_wi },
+	{ SYS_DESC(SYS_ERXPFGCTL_EL1), trap_raz_wi },
+	{ SYS_DESC(SYS_ERXPFGCDN_EL1), trap_raz_wi },
 	{ SYS_DESC(SYS_ERXMISC0_EL1), trap_raz_wi },
 	{ SYS_DESC(SYS_ERXMISC1_EL1), trap_raz_wi },
+	{ SYS_DESC(SYS_ERXMISC2_EL1), trap_raz_wi },
+	{ SYS_DESC(SYS_ERXMISC3_EL1), trap_raz_wi },
 
 	MTE_REG(TFSR_EL1),
 	MTE_REG(TFSRE0_EL1),
