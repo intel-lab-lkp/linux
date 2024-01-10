@@ -86,6 +86,15 @@ properties:
       Maximum pressure value the sensor can measure in pascal.
       To be specified only if honeywell,pressure-triplet is set to "NA".
 
+  honeywell,sleep-mode:
+    description: |
+      'Sleep Mode' is a special factory set mode of the chip that allows the
+      sensor to power down between measurements. It is implemented only on
+      special request, and it is an attribute not present in the HSC/SSC series
+      nomenclature.
+      Set in order to enable the special wakeup sequence prior to conversion.
+    $ref: /schemas/types.yaml#/definitions/flag
+
   vdd-supply:
     description:
       Provide VDD power to the sensor (either 3.3V or 5V depending on the chip)
@@ -140,6 +149,7 @@ examples:
             honeywell,pressure-triplet = "NA";
             honeywell,pmin-pascal = <0>;
             honeywell,pmax-pascal = <200000>;
+            //honeywell,sleep-mode;
         };
     };
 ...
