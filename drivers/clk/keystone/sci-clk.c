@@ -459,6 +459,9 @@ static int ti_sci_scan_clocks_from_fw(struct sci_clk_provider *provider)
 			tmp_clks = devm_kmalloc_array(dev, max_clks + 64,
 						      sizeof(sci_clk),
 						      GFP_KERNEL);
+			if (!tmp_clks)
+				return -ENOMEM;
+
 			memcpy(tmp_clks, clks, max_clks * sizeof(sci_clk));
 			if (max_clks)
 				devm_kfree(dev, clks);
