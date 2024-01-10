@@ -17,6 +17,19 @@ KCSAN_SANITIZE := n
 # Avoid recursion by not calling KMSAN hooks for CEA code.
 KMSAN_SANITIZE_cpu_entry_area.o := n
 
+# clang allows -fPIE with mcmodel=kernel; gcc currently does not.
+ifdef CONFIG_CC_IS_CLANG
+# Enforce PC-relative addressing for SEV/SME global variables.
+CFLAGS_mem_encrypt_amd.o 	+= -fPIE
+CFLAGS_mem_encrypt_identity.o 	+= -fPIE
+# Disable relocation relaxation in case the link is not PIE.
+CFLAGS_mem_encrypt_amd.o 	+= $(call cc-option,-Wa$(comma)-mrelax-relocations=no)
+CFLAGS_mem_encrypt_identity.o 	+= $(call cc-option,-Wa$(comma)-mrelax-relocations=no)
+# Avoid unnecessary GOT overhead in PC-relative addressing.
+CFLAGS_mem_encrypt_amd.o 	+= -include $(srctree)/include/linux/hidden.h
+CFLAGS_mem_encrypt_identity.o 	+= -include $(srctree)/include/linux/hidden.h
+endif
+
 ifdef CONFIG_FUNCTION_TRACER
 CFLAGS_REMOVE_mem_encrypt.o		= -pg
 CFLAGS_REMOVE_mem_encrypt_amd.o		= -pg
