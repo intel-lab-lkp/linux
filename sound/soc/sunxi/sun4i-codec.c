@@ -1805,7 +1805,7 @@ static int sun4i_codec_probe(struct platform_device *pdev)
 
 	snd_soc_card_set_drvdata(card, scodec);
 
-	ret = snd_soc_register_card(card);
+	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret, "Failed to register our card\n");
 		goto err_assert_reset;
@@ -1826,7 +1826,6 @@ static void sun4i_codec_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct sun4i_codec *scodec = snd_soc_card_get_drvdata(card);
 
-	snd_soc_unregister_card(card);
 	if (scodec->rst)
 		reset_control_assert(scodec->rst);
 	clk_disable_unprepare(scodec->clk_apb);
