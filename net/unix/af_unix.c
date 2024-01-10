@@ -2500,6 +2500,14 @@ static int unix_read_skb(struct sock *sk, skb_read_actor_t recv_actor)
 	return recv_actor(sk, skb);
 }
 
+static int unix_stream_data_wake_function(wait_queue_entry_t *wait, unsigned int mode,
+					int sync, void *key)
+{
+	if (key && !(key_to_poll(key) & (EPOLLIN | EPOLLERR)))
+		return 0;
+	return autoremove_wake_function(wait, mode, sync, key);
+}
+
 /*
  *	Sleep until more data has arrived. But check for races..
  */
@@ -2509,7 +2517,7 @@ static long unix_stream_data_wait(struct sock *sk, long timeo,
 {
 	unsigned int state = TASK_INTERRUPTIBLE | freezable * TASK_FREEZABLE;
 	struct sk_buff *tail;
-	DEFINE_WAIT(wait);
+	DEFINE_WAIT_FUNC(wait, unix_stream_data_wake_function);
 
 	unix_state_lock(sk);
 
