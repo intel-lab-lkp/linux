@@ -259,6 +259,24 @@ void of_pci_check_probe_only(void)
 EXPORT_SYMBOL_GPL(of_pci_check_probe_only);
 
 /**
+ * of_pci_check_preserve_boot_config - Return true if the boot configuration
+ *                                     needs to be preserved
+ * @node: Device tree node with the domain information.
+ *
+ * This function looks for a property called "preserve-boot-config" for a given
+ * PCIe controller's node and returns true if found. Having this property
+ * for a PCIe controller ensures that the kernel doesn't re-enumerate and
+ * reconfigure the BAR resources that are already done by the platform firmware.
+ *
+ * Return: true if the property exists false otherwise.
+ */
+bool of_pci_check_preserve_boot_config(struct device_node *node)
+{
+	return of_property_read_bool(node, "preserve-boot-config");
+}
+EXPORT_SYMBOL_GPL(of_pci_check_preserve_boot_config);
+
+/**
  * devm_of_pci_get_host_bridge_resources() - Resource-managed parsing of PCI
  *                                           host bridge resources from DT
  * @dev: host bridge device
