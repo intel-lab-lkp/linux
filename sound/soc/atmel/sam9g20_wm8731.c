@@ -171,7 +171,7 @@ static int at91sam9g20ek_audio_probe(struct platform_device *pdev)
 	of_node_put(codec_np);
 	of_node_put(cpu_np);
 
-	ret = snd_soc_register_card(card);
+	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret,
 			      "snd_soc_register_card() failed\n");
@@ -187,9 +187,6 @@ err:
 
 static void at91sam9g20ek_audio_remove(struct platform_device *pdev)
 {
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-
-	snd_soc_unregister_card(card);
 	atmel_ssc_put_audio(0);
 }
 

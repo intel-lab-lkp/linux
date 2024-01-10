@@ -398,7 +398,7 @@ static int tse850_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = snd_soc_register_card(card);
+	ret = devm_snd_soc_register_card(dev, card);
 	if (ret) {
 		dev_err(dev, "snd_soc_register_card failed\n");
 		goto err_disable_ana;
@@ -416,7 +416,6 @@ static void tse850_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct tse850_priv *tse850 = snd_soc_card_get_drvdata(card);
 
-	snd_soc_unregister_card(card);
 	regulator_disable(tse850->ana);
 }
 
