@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <linux/list.h>
+#include <linux/pm_runtime.h>
 
 #include "internal.h"
 
@@ -233,6 +234,10 @@ static ssize_t regmap_read_debugfs(struct regmap *map, unsigned int from,
 	if (!buf)
 		return -ENOMEM;
 
+	ret = pm_runtime_resume_and_get(map->dev);
+	if (ret)
+		goto out_free;
+
 	regmap_calc_tot_len(map, buf, count);
 
 	/* Work out which register we're starting at */
@@ -277,6 +282,8 @@ static ssize_t regmap_read_debugfs(struct regmap *map, unsigned int from,
 	*ppos += buf_pos;
 
 out:
+	pm_runtime_put(map->dev);
+out_free:
 	kfree(buf);
 	return ret;
 }
