@@ -336,7 +336,7 @@ void aa_label_destroy(struct aa_label *label)
 			rcu_assign_pointer(label->proxy->label, NULL);
 		aa_put_proxy(label->proxy);
 	}
-	percpu_ref_exit(&label->count);
+	percpu_rcuref_exit(&label->count);
 	aa_free_secid(label->secid);
 
 	label->proxy = (struct aa_proxy *) PROXY_POISON + 1;
@@ -372,7 +372,7 @@ static void label_free_rcu(struct rcu_head *head)
 
 void aa_label_percpu_ref(struct percpu_ref *ref)
 {
-	struct aa_label *label = container_of(ref, struct aa_label, count);
+	struct aa_label *label = container_of(ref, struct aa_label, count.pcpu_ref);
 	struct aa_ns *ns = labels_ns(label);
 
 	if (!ns) {
@@ -409,7 +409,7 @@ bool aa_label_init(struct aa_label *label, int size, gfp_t gfp)
 
 	label->size = size;			/* doesn't include null */
 	label->vec[size] = NULL;		/* null terminate */
-	if (percpu_ref_init(&label->count, aa_label_percpu_ref, PERCPU_REF_INIT_ATOMIC, gfp)) {
+	if (percpu_rcuref_init_unmanaged(&label->count, aa_label_percpu_ref, gfp)) {
 		aa_free_secid(label->secid);
 		return false;
 	}
@@ -710,8 +710,6 @@ static struct aa_label *__label_insert(struct aa_labelset *ls,
 	rb_link_node(&label->node, parent, new);
 	rb_insert_color(&label->node, &ls->root);
 	label->flags |= FLAG_IN_TREE;
-	percpu_ref_switch_to_percpu(&label->count);
-	aa_label_reclaim_add_label(label);
 
 	return aa_get_label(label);
 }

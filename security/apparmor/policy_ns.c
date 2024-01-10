@@ -124,7 +124,6 @@ static struct aa_ns *alloc_ns(const char *prefix, const char *name)
 		goto fail_unconfined;
 	/* ns and ns->unconfined share ns->unconfined refcount */
 	ns->unconfined->ns = ns;
-	aa_switch_ref_ns(ns, true);
 
 	atomic_set(&ns->uniq_null, 0);
 
@@ -337,7 +336,7 @@ void __aa_remove_ns(struct aa_ns *ns)
 	/* remove ns from namespace list */
 	list_del_rcu(&ns->base.list);
 	destroy_ns(ns);
-	aa_kill_ref_ns(ns);
+	aa_put_ns(ns);
 }
 
 /**
@@ -378,7 +377,6 @@ int __init aa_alloc_root_ns(void)
 	}
 	kernel_t = &kernel_p->label;
 	root_ns->unconfined->ns = aa_get_ns(root_ns);
-	aa_switch_ref_ns(root_ns, true);
 
 	return 0;
 }
@@ -394,5 +392,5 @@ void __init aa_free_root_ns(void)
 
 	 aa_label_free(kernel_t);
 	 destroy_ns(ns);
-	 aa_kill_ref_ns(ns);
+	 aa_put_ns(ns);
 }

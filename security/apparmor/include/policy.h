@@ -329,7 +329,7 @@ static inline aa_state_t ANY_RULE_MEDIATES(struct list_head *head,
 static inline struct aa_profile *aa_get_profile(struct aa_profile *p)
 {
 	if (p)
-		percpu_ref_get(&(p->label.count));
+		percpu_rcuref_get(&(p->label.count));
 
 	return p;
 }
@@ -343,7 +343,7 @@ static inline struct aa_profile *aa_get_profile(struct aa_profile *p)
  */
 static inline struct aa_profile *aa_get_profile_not0(struct aa_profile *p)
 {
-	if (p && percpu_ref_tryget(&p->label.count))
+	if (p && percpu_rcuref_tryget(&p->label.count))
 		return p;
 
 	return NULL;
@@ -363,7 +363,7 @@ static inline struct aa_profile *aa_get_profile_rcu(struct aa_profile __rcu **p)
 	rcu_read_lock();
 	do {
 		c = rcu_dereference(*p);
-	} while (c && !percpu_ref_tryget(&c->label.count));
+	} while (c && !percpu_rcuref_tryget(&c->label.count));
 	rcu_read_unlock();
 
 	return c;
@@ -376,31 +376,7 @@ static inline struct aa_profile *aa_get_profile_rcu(struct aa_profile __rcu **p)
 static inline void aa_put_profile(struct aa_profile *p)
 {
 	if (p)
-		percpu_ref_put(&p->label.count);
-}
-
-/**
- * aa_switch_ref_profile - switch percpu-ref mode for profile @p
- * @p: profile  (MAYBE NULL)
- */
-static inline void aa_switch_ref_profile(struct aa_profile *p, bool percpu)
-{
-	if (p) {
-		if (percpu)
-			percpu_ref_switch_to_percpu(&p->label.count);
-		else
-			percpu_ref_switch_to_atomic_sync(&p->label.count);
-	}
-}
-
-/**
- * aa_kill_ref_profile - percpu-ref kill for profile @p
- * @p: profile  (MAYBE NULL)
- */
-static inline void aa_kill_ref_profile(struct aa_profile *p)
-{
-	if (p)
-		percpu_ref_kill(&p->label.count);
+		percpu_rcuref_put(&p->label.count);
 }
 
 static inline int AUDIT_MODE(struct aa_profile *profile)

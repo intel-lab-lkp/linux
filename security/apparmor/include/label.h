@@ -14,6 +14,7 @@
 #include <linux/audit.h>
 #include <linux/rbtree.h>
 #include <linux/rcupdate.h>
+#include <linux/percpu-rcurefcount.h>
 
 #include "apparmor.h"
 #include "lib.h"
@@ -121,11 +122,10 @@ struct label_it {
  * @ent: set of profiles for label, actual size determined by @size
  */
 struct aa_label {
-	struct percpu_ref count;
+	struct percpu_rcuref count;
 	long flags;
 	struct aa_proxy *proxy;
 	struct rb_node node;
-	struct llist_node reclaim_node;
 	struct rcu_head rcu;
 	__counted char *hname;
 	u32 secid;
@@ -374,7 +374,7 @@ int aa_label_match(struct aa_profile *profile, struct aa_ruleset *rules,
  */
 static inline struct aa_label *__aa_get_label(struct aa_label *l)
 {
-	if (l && percpu_ref_tryget(&l->count))
+	if (l && percpu_rcuref_tryget(&l->count))
 		return l;
 
 	return NULL;
@@ -383,7 +383,7 @@ static inline struct aa_label *__aa_get_label(struct aa_label *l)
 static inline struct aa_label *aa_get_label(struct aa_label *l)
 {
 	if (l)
-		percpu_ref_get(&(l->count));
+		percpu_rcuref_get(&(l->count));
 
 	return l;
 }
@@ -403,7 +403,7 @@ static inline struct aa_label *aa_get_label_rcu(struct aa_label __rcu **l)
 	rcu_read_lock();
 	do {
 		c = rcu_dereference(*l);
-	} while (c && !percpu_ref_tryget(&c->count));
+	} while (c && !percpu_rcuref_tryget(&c->count));
 	rcu_read_unlock();
 
 	return c;
@@ -443,7 +443,7 @@ static inline struct aa_label *aa_get_newest_label(struct aa_label *l)
 static inline void aa_put_label(struct aa_label *l)
 {
 	if (l)
-		percpu_ref_put(&l->count);
+		percpu_rcuref_put(&l->count);
 }
 
 
@@ -465,7 +465,5 @@ static inline void aa_put_proxy(struct aa_proxy *proxy)
 }
 
 void __aa_proxy_redirect(struct aa_label *orig, struct aa_label *new);
-
-void aa_label_reclaim_add_label(struct aa_label *label);
 
 #endif /* __AA_LABEL_H */
