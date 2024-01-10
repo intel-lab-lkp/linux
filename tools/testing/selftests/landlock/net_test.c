@@ -18,7 +18,6 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-
 #include "common.h"
 
 const short sock_port_start = (1 << 10);
@@ -88,7 +87,7 @@ static int set_service(struct service_fixture *const srv,
 	case AF_UNIX:
 		srv->unix_addr.sun_family = prot.domain;
 		sprintf(srv->unix_addr.sun_path,
-			"_selftests-landlock-net-tid%d-index%d", gettid(),
+			"_selftests-landlock-net-tid%ld-index%d", syscall(SYS_gettid),
 			index);
 		srv->unix_addr_len = SUN_LEN(&srv->unix_addr);
 		srv->unix_addr.sun_path[0] = '\0';

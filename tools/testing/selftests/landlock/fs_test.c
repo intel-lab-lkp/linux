@@ -4572,7 +4572,10 @@ FIXTURE_VARIANT(layout3_fs)
 /* clang-format off */
 FIXTURE_VARIANT_ADD(layout3_fs, tmpfs) {
 	/* clang-format on */
-	.mnt = mnt_tmp,
+	.mnt = {
+		.type = "tmpfs",
+        	.data = "size=4m,mode=700",
+	},
 	.file_path = file1_s1d1,
 };
 
