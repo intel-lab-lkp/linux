@@ -430,7 +430,13 @@ static u64 vdpasim_get_device_features(struct vdpa_device *vdpa)
 
 static u64 vdpasim_get_backend_features(const struct vdpa_device *vdpa)
 {
-	return BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK);
+	u64 features = BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK) |
+		       BIT_ULL(VHOST_BACKEND_F_NEW_OWNER);
+
+	if (use_va)
+		features += BIT_ULL(VHOST_BACKEND_F_IOTLB_REMAP);
+
+	return features;
 }
 
 static int vdpasim_set_driver_features(struct vdpa_device *vdpa, u64 features)
