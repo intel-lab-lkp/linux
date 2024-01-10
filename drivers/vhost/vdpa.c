@@ -1219,6 +1219,37 @@ free:
 
 }
 
+static int vhost_vdpa_process_iotlb_remap(struct vhost_vdpa *v,
+					  struct vhost_iotlb *iotlb,
+					  struct vhost_iotlb_msg *msg)
+{
+	struct vdpa_device *vdpa = v->vdpa;
+	const struct vdpa_config_ops *ops = vdpa->config;
+	u32 asid = iotlb_to_asid(iotlb);
+	u64 start = msg->iova;
+	u64 last = start + msg->size - 1;
+	struct vhost_iotlb_map *map;
+	int r = 0;
+
+	if (msg->perm || !msg->size)
+		return -EINVAL;
+
+	map = vhost_iotlb_itree_first(iotlb, start, last);
+	if (!map)
+		return -ENOENT;
+
+	if (map->start != start || map->last != last)
+		return -EINVAL;
+
+	/* batch will finish with remap.  non-batch must do it now. */
+	if (!v->in_batch)
+		r = ops->set_map(vdpa, asid, iotlb);
+	if (!r)
+		map->addr = msg->uaddr;
+
+	return r;
+}
+
 static int vhost_vdpa_process_iotlb_update(struct vhost_vdpa *v,
 					   struct vhost_iotlb *iotlb,
 					   struct vhost_iotlb_msg *msg)
@@ -1297,6 +1328,9 @@ static int vhost_vdpa_process_iotlb_msg(struct vhost_dev *dev, u32 asid,
 		if (v->in_batch && ops->set_map)
 			ops->set_map(vdpa, asid, iotlb);
 		v->in_batch = false;
+		break;
+	case VHOST_IOTLB_REMAP:
+		r = vhost_vdpa_process_iotlb_remap(v, iotlb, msg);
 		break;
 	default:
 		r = -EINVAL;
