@@ -535,6 +535,9 @@ subdev_ioctl_get_state(struct v4l2_subdev *sd, struct v4l2_subdev_fh *subdev_fh,
 	case VIDIOC_SUBDEV_S_ROUTING:
 		which = ((struct v4l2_subdev_routing *)arg)->which;
 		break;
+	case VIDIOC_SUBDEV_G_VC:
+	case VIDIOC_SUBDEV_S_VC:
+		which = ((struct v4l2_subdev_vc *)arg)->which;
 	}
 
 	return which == V4L2_SUBDEV_FORMAT_TRY ?
@@ -967,6 +970,26 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 
 		return v4l2_subdev_call(sd, pad, set_routing, state,
 					routing->which, &krouting);
+	}
+
+	case VIDIOC_SUBDEV_G_VC: {
+		struct v4l2_subdev_vc *vc = arg;
+
+		if (!client_supports_streams)
+			vc->stream = 0;
+
+		memset(vc->reserved, 0, sizeof(vc->reserved));
+		return v4l2_subdev_call(sd, pad, get_vc, state, vc);
+	}
+
+	case VIDIOC_SUBDEV_S_VC: {
+		struct v4l2_subdev_vc *vc = arg;
+
+		if (!client_supports_streams)
+			vc->stream = 0;
+
+		memset(vc->reserved, 0, sizeof(vc->reserved));
+		return v4l2_subdev_call(sd, pad, set_vc, state, vc);
 	}
 
 	case VIDIOC_SUBDEV_G_CLIENT_CAP: {
@@ -1602,6 +1625,20 @@ int v4l2_subdev_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_fmt);
 
+int v4l2_subdev_get_vc(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
+		       struct v4l2_subdev_vc *vc)
+{
+	u32 vc_id = 0;
+
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS)
+		vc_id = v4l2_subdev_state_get_stream_vc(state, vc->pad, vc->stream);
+
+	vc->vc = vc_id;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_vc);
+
 int v4l2_subdev_set_routing(struct v4l2_subdev *sd,
 			    struct v4l2_subdev_state *state,
 			    const struct v4l2_subdev_krouting *routing)
@@ -1744,6 +1781,26 @@ v4l2_subdev_state_get_stream_compose(struct v4l2_subdev_state *state,
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_state_get_stream_compose);
+
+u32 v4l2_subdev_state_get_stream_vc(struct v4l2_subdev_state *state,
+				    unsigned int pad, u32 stream)
+{
+	struct v4l2_subdev_stream_configs *stream_configs;
+	unsigned int i;
+
+	lockdep_assert_held(state->lock);
+
+	stream_configs = &state->stream_configs;
+
+	for (i = 0; i < stream_configs->num_configs; ++i) {
+		if (stream_configs->configs[i].pad == pad &&
+		    stream_configs->configs[i].stream == stream)
+			return stream_configs->configs[i].vc;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_state_get_stream_vc);
 
 int v4l2_subdev_routing_find_opposite_end(const struct v4l2_subdev_krouting *routing,
 					  u32 pad, u32 stream, u32 *other_pad,

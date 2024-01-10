@@ -722,6 +722,7 @@ struct v4l2_subdev_stream_config {
 	u32 stream;
 	bool enabled;
 
+	u32 vc;
 	struct v4l2_mbus_framefmt fmt;
 	struct v4l2_rect crop;
 	struct v4l2_rect compose;
@@ -858,6 +859,12 @@ struct v4l2_subdev_pad_ops {
 	int (*set_fmt)(struct v4l2_subdev *sd,
 		       struct v4l2_subdev_state *state,
 		       struct v4l2_subdev_format *format);
+	int (*get_vc)(struct v4l2_subdev *sd,
+		      struct v4l2_subdev_state *state,
+		      struct v4l2_subdev_vc *vc);
+	int (*set_vc)(struct v4l2_subdev *sd,
+		      struct v4l2_subdev_state *state,
+		      struct v4l2_subdev_vc *vc);
 	int (*get_selection)(struct v4l2_subdev *sd,
 			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel);
@@ -1495,6 +1502,23 @@ int v4l2_subdev_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 			struct v4l2_subdev_format *format);
 
 /**
+ * v4l2_subdev_get_vc() - Fill virtual channel based on state
+ * @sd: subdevice
+ * @state: subdevice state
+ * @vc: pointer to &struct v4l2_subdev_vc
+ *
+ * Fill @vc->vc field based on the information in the @vc struct.
+ *
+ * This function can be used by the subdev drivers which support active state to
+ * implement v4l2_subdev_pad_ops.get_vc if the subdev driver does not need to
+ * do anything special in their get_vc op.
+ *
+ * Returns 0 on success, error value otherwise.
+ */
+int v4l2_subdev_get_vc(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
+		       struct v4l2_subdev_vc *vc);
+
+/**
  * v4l2_subdev_set_routing() - Set given routing to subdev state
  * @sd: The subdevice
  * @state: The subdevice state
@@ -1584,6 +1608,21 @@ v4l2_subdev_state_get_stream_crop(struct v4l2_subdev_state *state,
 struct v4l2_rect *
 v4l2_subdev_state_get_stream_compose(struct v4l2_subdev_state *state,
 				     unsigned int pad, u32 stream);
+
+/**
+ * v4l2_subdev_state_get_stream_vc() - Get the virtual channel of a stream
+ * @state: subdevice state
+ * @pad: pad id
+ * @stream: stream id
+ *
+ * This returns the virtual channel for the given pad + stream in the
+ * subdev state.
+ *
+ * If the state does not contain the given pad + stream, 0 is returned.
+ */
+u32
+v4l2_subdev_state_get_stream_vc(struct v4l2_subdev_state *state,
+				unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_routing_find_opposite_end() - Find the opposite stream

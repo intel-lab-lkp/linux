@@ -187,6 +187,22 @@ struct v4l2_subdev_capability {
 	__u32 reserved[14];
 };
 
+/**
+ * struct v4l2_subdev_vc - Pad-level virtual channel settings
+ * @which: format type (from enum v4l2_subdev_format_whence)
+ * @pad: pad number, as reported by the media API
+ * @vc: virtual channel
+ * @stream: stream number, defined in subdev routing
+ * @reserved: drivers and applications must zero this array
+ */
+struct v4l2_subdev_vc {
+	__u32 which;
+	__u32 pad;
+	__u32 vc;
+	__u32 stream;
+	__u32 reserved[7];
+};
+
 /* The v4l2 sub-device video device node is registered in read-only mode. */
 #define V4L2_SUBDEV_CAP_RO_SUBDEV		0x00000001
 
@@ -268,6 +284,8 @@ struct v4l2_subdev_client_capability {
 #define VIDIOC_SUBDEV_S_SELECTION		_IOWR('V', 62, struct v4l2_subdev_selection)
 #define VIDIOC_SUBDEV_G_ROUTING			_IOWR('V', 38, struct v4l2_subdev_routing)
 #define VIDIOC_SUBDEV_S_ROUTING			_IOWR('V', 39, struct v4l2_subdev_routing)
+#define VIDIOC_SUBDEV_G_VC			_IOWR('V', 40, struct v4l2_subdev_vc)
+#define VIDIOC_SUBDEV_S_VC			_IOWR('V', 41, struct v4l2_subdev_vc)
 #define VIDIOC_SUBDEV_G_CLIENT_CAP		_IOR('V',  101, struct v4l2_subdev_client_capability)
 #define VIDIOC_SUBDEV_S_CLIENT_CAP		_IOWR('V',  102, struct v4l2_subdev_client_capability)
 
