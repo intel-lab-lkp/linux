@@ -25,6 +25,7 @@
 #include <linux/sched/mm.h>
 #include <uapi/linux/vduse.h>
 #include <uapi/linux/vdpa.h>
+#include <uapi/linux/vhost_types.h>
 #include <uapi/linux/virtio_config.h>
 #include <uapi/linux/virtio_ids.h>
 #include <uapi/linux/virtio_blk.h>
@@ -608,6 +609,12 @@ static u32 vduse_vdpa_get_vq_align(struct vdpa_device *vdpa)
 	return dev->vq_align;
 }
 
+static u64 vduse_vdpa_get_backend_features(const struct vdpa_device *vdpa)
+{
+	return BIT_ULL(VHOST_BACKEND_F_IOTLB_REMAP) |
+	       BIT_ULL(VHOST_BACKEND_F_NEW_OWNER);
+}
+
 static u64 vduse_vdpa_get_device_features(struct vdpa_device *vdpa)
 {
 	struct vduse_dev *dev = vdpa_to_vduse(vdpa);
@@ -801,6 +808,7 @@ static const struct vdpa_config_ops vduse_vdpa_config_ops = {
 	.set_vq_state		= vduse_vdpa_set_vq_state,
 	.get_vq_state		= vduse_vdpa_get_vq_state,
 	.get_vq_align		= vduse_vdpa_get_vq_align,
+	.get_backend_features	= vduse_vdpa_get_backend_features,
 	.get_device_features	= vduse_vdpa_get_device_features,
 	.set_driver_features	= vduse_vdpa_set_driver_features,
 	.get_driver_features	= vduse_vdpa_get_driver_features,
