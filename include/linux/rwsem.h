@@ -258,4 +258,10 @@ extern void up_read_non_owner(struct rw_semaphore *sem);
 # define up_read_non_owner(sem)			up_read(sem)
 #endif
 
+DEFINE_LOCK_GUARD_ARGS(rwsem_read_nested,
+		       struct rw_semaphore *,
+		       down_read_nested(_T, subclass),
+		       up_read(_T),
+		       int subclass);
+
 #endif /* _LINUX_RWSEM_H */
