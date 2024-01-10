@@ -2310,8 +2310,6 @@ schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
 	hrtimer_cancel(&t.timer);
 	destroy_hrtimer_on_stack(&t.timer);
 
-	__set_current_state(TASK_RUNNING);
-
 	return !t.task ? 0 : -EINTR;
 }
 EXPORT_SYMBOL_GPL(schedule_hrtimeout_range_clock);
