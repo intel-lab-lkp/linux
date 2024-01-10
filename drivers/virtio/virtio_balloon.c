@@ -459,12 +459,12 @@ static void start_update_balloon_size(struct virtio_balloon *vb)
 
 static void end_update_balloon_size(struct virtio_balloon *vb)
 {
-	spin_lock(&vb->adjustment_lock);
+	spin_lock_irq(&vb->adjustment_lock);
 	if (!vb->adjustment_signal_pending && vb->adjustment_in_progress) {
 		vb->adjustment_in_progress = false;
 		pm_relax(vb->vdev->dev.parent);
 	}
-	spin_unlock(&vb->adjustment_lock);
+	spin_unlock_irq(&vb->adjustment_lock);
 }
 
 static void virtballoon_changed(struct virtio_device *vdev)
@@ -506,9 +506,9 @@ static void update_balloon_size_func(struct work_struct *work)
 	vb = container_of(work, struct virtio_balloon,
 			  update_balloon_size_work);
 
-	spin_lock(&vb->adjustment_lock);
+	spin_lock_irq(&vb->adjustment_lock);
 	vb->adjustment_signal_pending = false;
-	spin_unlock(&vb->adjustment_lock);
+	spin_unlock_irq(&vb->adjustment_lock);
 
 	diff = towards_target(vb);
 
