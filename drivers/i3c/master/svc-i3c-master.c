@@ -1376,6 +1376,11 @@ static int svc_i3c_master_priv_xfers(struct i3c_dev_desc *dev,
 		cmd->len = xfers[i].len;
 		cmd->actual_len = xfers[i].rnw ? xfers[i].len : 0;
 		cmd->continued = (i + 1) < nxfers;
+
+		if (cmd->rnw && cmd->len > 255) {
+			dev_err(master->dev, "only support read less than 255 each xfer\n");
+			return -EINVAL;
+		}
 	}
 
 	mutex_lock(&master->lock);
