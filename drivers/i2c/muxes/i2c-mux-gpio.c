@@ -161,6 +161,7 @@ static int i2c_mux_gpio_probe(struct platform_device *pdev)
 	}
 	mux->gpios = muxc->priv;
 	muxc->priv = mux;
+	muxc->register_spd = mux->data.register_spd;
 
 	platform_set_drvdata(pdev, muxc);
 
