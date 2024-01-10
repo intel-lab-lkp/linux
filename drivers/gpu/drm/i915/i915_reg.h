@@ -3059,6 +3059,7 @@
 #define   MCURSOR_MODE_64_ARGB_AX	(0x20 | MCURSOR_MODE_64_32B_AX)
 #define _CURABASE		0x70084
 #define _CURAPOS		0x70088
+#define _CURAPOS_ERLY_TPT	0x7008c
 #define   CURSOR_POS_Y_SIGN		REG_BIT(31)
 #define   CURSOR_POS_Y_MASK		REG_GENMASK(30, 16)
 #define   CURSOR_POS_Y(y)		REG_FIELD_PREP(CURSOR_POS_Y_MASK, (y))
@@ -3087,6 +3088,7 @@
 #define CURCNTR(pipe) _MMIO_CURSOR2(pipe, _CURACNTR)
 #define CURBASE(pipe) _MMIO_CURSOR2(pipe, _CURABASE)
 #define CURPOS(pipe) _MMIO_CURSOR2(pipe, _CURAPOS)
+#define CURPOS_ERLY_TPT(pipe) _MMIO_CURSOR2(pipe, _CURAPOS_ERLY_TPT)
 #define CURSIZE(pipe) _MMIO_CURSOR2(pipe, _CURASIZE)
 #define CUR_FBC_CTL(pipe) _MMIO_CURSOR2(pipe, _CUR_FBC_CTL_A)
 #define CUR_CHICKEN(pipe) _MMIO_CURSOR2(pipe, _CUR_CHICKEN_A)
@@ -5652,6 +5654,10 @@ enum skl_power_gate {
 #define  DP_TP_CTL_MODE_SST			(0 << 27)
 #define  DP_TP_CTL_MODE_MST			(1 << 27)
 #define  DP_TP_CTL_FORCE_ACT			(1 << 25)
+#define  DP_TP_CTL_TRAIN_PAT4_SEL_MASK		(3 << 19)
+#define  DP_TP_CTL_TRAIN_PAT4_SEL_TP4A		(0 << 19)
+#define  DP_TP_CTL_TRAIN_PAT4_SEL_TP4B		(1 << 19)
+#define  DP_TP_CTL_TRAIN_PAT4_SEL_TP4C		(2 << 19)
 #define  DP_TP_CTL_ENHANCED_FRAME_ENABLE	(1 << 18)
 #define  DP_TP_CTL_FDI_AUTOTRAIN		(1 << 15)
 #define  DP_TP_CTL_LINK_TRAIN_MASK		(7 << 8)
