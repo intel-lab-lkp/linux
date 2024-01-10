@@ -4095,6 +4095,8 @@ static int em28xx_usb_probe(struct usb_interface *intf,
 	 */
 #ifdef CONFIG_MEDIA_CONTROLLER
 	retval = media_device_register(dev->media_dev);
+	if (retval)
+		goto err_free;
 #endif
 
 	return 0;
