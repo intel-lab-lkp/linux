@@ -22,6 +22,7 @@
 #include <linux/acpi.h>
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>
+#include <linux/i2c-smbus.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -428,6 +429,9 @@ int i2c_mux_add_adapter(struct i2c_mux_core *muxc,
 	     "can't create symlink to channel %u\n", chan_id);
 	dev_info(&parent->dev, "Added multiplexed i2c bus %d\n",
 		 i2c_adapter_id(&priv->adap));
+
+	if (muxc->register_spd)
+		i2c_register_spd(&priv->adap);
 
 	muxc->adapter[muxc->num_adapters++] = &priv->adap;
 	return 0;
