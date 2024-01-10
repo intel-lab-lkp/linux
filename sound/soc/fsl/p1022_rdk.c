@@ -325,7 +325,7 @@ static int p1022_rdk_probe(struct platform_device *pdev)
 	mdata->card.dai_link = mdata->dai;
 
 	/* Register with ASoC */
-	ret = snd_soc_register_card(&mdata->card);
+	ret = devm_snd_soc_register_card(&pdev->dev, &mdata->card);
 	if (ret) {
 		dev_err(&pdev->dev, "could not register card (ret=%i)\n", ret);
 		goto error;
@@ -351,7 +351,6 @@ static void p1022_rdk_remove(struct platform_device *pdev)
 	struct machine_data *mdata =
 		container_of(card, struct machine_data, card);
 
-	snd_soc_unregister_card(card);
 	kfree(mdata);
 }
 

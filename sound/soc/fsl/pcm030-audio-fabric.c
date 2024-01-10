@@ -97,7 +97,7 @@ static int pcm030_fabric_probe(struct platform_device *op)
 		platform_device_put(pdata->codec_device);
 	}
 
-	ret = snd_soc_register_card(card);
+	ret = devm_snd_soc_register_card(&op->dev, card);
 	if (ret) {
 		dev_err(&op->dev, "snd_soc_register_card() failed: %d\n", ret);
 		platform_device_unregister(pdata->codec_device);
@@ -112,7 +112,6 @@ static void pcm030_fabric_remove(struct platform_device *op)
 {
 	struct pcm030_audio_data *pdata = platform_get_drvdata(op);
 
-	snd_soc_unregister_card(pdata->card);
 	platform_device_unregister(pdata->codec_device);
 }
 
