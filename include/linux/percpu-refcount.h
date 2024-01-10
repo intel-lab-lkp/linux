@@ -131,6 +131,8 @@ void percpu_ref_kill_and_confirm(struct percpu_ref *ref,
 void percpu_ref_resurrect(struct percpu_ref *ref);
 void percpu_ref_reinit(struct percpu_ref *ref);
 bool percpu_ref_is_zero(struct percpu_ref *ref);
+void percpu_ref_swap_percpu_sync(struct percpu_ref *ref1, struct percpu_ref *ref2);
+void percpu_ref_transfer_percpu_count(struct percpu_ref *ref1, struct percpu_ref *ref2);
 
 /**
  * percpu_ref_kill - drop the initial ref

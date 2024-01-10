@@ -92,6 +92,7 @@ static LLIST_HEAD(aa_label_reclaim_head);
 static struct llist_node *last_reclaim_label;
 static struct aa_label_reclaim_node aa_label_reclaim_nodes[AA_LABEL_RECLAIM_NODE_MAX];
 static DECLARE_DELAYED_WORK(aa_label_reclaim_work, aa_label_reclaim_work_fn);
+static struct percpu_ref aa_label_reclaim_ref;
 
 void aa_label_reclaim_add_label(struct aa_label *label)
 {
@@ -135,14 +136,18 @@ static void aa_put_all_reclaim_nodes(void)
 	for (i = 0; i < AA_LABEL_RECLAIM_NODE_MAX; i++)
 		aa_label_reclaim_nodes[i].inuse = false;
 }
+static void aa_release_reclaim_ref_noop(struct percpu_ref *ref)
+{
+}
 
 static void aa_label_reclaim_work_fn(struct work_struct *work)
 {
 	struct llist_node *pos, *first, *head, *prev, *next;
+	static bool reclaim_ref_dead_once;
 	struct llist_node *reclaim_node;
 	struct aa_label *label;
 	int cnt = 0;
-	bool held;
+	bool held, ref_is_zero;
 
 	first = aa_label_reclaim_head.first;
 	if (!first)
@@ -178,16 +183,72 @@ static void aa_label_reclaim_work_fn(struct work_struct *work)
 		}
 
 		label = container_of(pos, struct aa_label, reclaim_node);
-		percpu_ref_switch_to_atomic_sync(&label->count);
-		rcu_read_lock();
-		percpu_ref_put(&label->count);
-		held = percpu_ref_tryget(&label->count);
-		if (!held)
-			prev->next = pos->next;
-		rcu_read_unlock();
-		if (!held)
-			continue;
-		percpu_ref_switch_to_percpu(&label->count);
+		if (reclaim_ref_dead_once)
+			percpu_ref_reinit(&aa_label_reclaim_ref);
+
+		/*
+		 * Switch counters of label ref and reclaim ref.
+		 * Label's refcount becomes 1
+		 * Percpu refcount has the current refcount value
+		 * of the label percpu_ref.
+		 */
+		percpu_ref_swap_percpu_sync(&label->count, &aa_label_reclaim_ref);
+
+		/* Switch reclaim ref to percpu, to check for 0 */
+		percpu_ref_switch_to_atomic_sync(&aa_label_reclaim_ref);
+
+		/*
+		 * Release a count (original label percpu ref had an extra count,
+		 * from the llist addition).
+		 * When all percpu references have been released, this should
+		 * be the initial count, which gets dropped.
+		 */
+		percpu_ref_put(&aa_label_reclaim_ref);
+		/*
+		 * Release function of reclaim ref is noop; we store the result
+		 * for later processing after common code.
+		 */
+		if (percpu_ref_is_zero(&aa_label_reclaim_ref))
+			ref_is_zero = true;
+
+		/*
+		 * Restore back initial count. Switch reclaim ref to
+		 * percpu, for switching back the label percpu and
+		 * atomic counters.
+		 */
+		percpu_ref_get(&aa_label_reclaim_ref);
+		percpu_ref_switch_to_percpu(&aa_label_reclaim_ref);
+		/*
+		 * Swap the refs again. Label gets all old counts
+		 * in its atomic counter after this operation.
+		 */
+		percpu_ref_swap_percpu_sync(&label->count, &aa_label_reclaim_ref);
+
+		/*
+		 * Transfer the percpu counts, which got added, while this
+		 * switch was going on. The counters are accumulated into
+		 * the label ref's atomic counter.
+		 */
+		percpu_ref_transfer_percpu_count(&label->count, &aa_label_reclaim_ref);
+
+		/* Kill reclaim ref for reinitialization, for next iteration */
+		percpu_ref_kill(&aa_label_reclaim_ref);
+		reclaim_ref_dead_once = true;
+
+		/* If refcount of label ref was found to be 0, reclaim it now! */
+		if (ref_is_zero) {
+			percpu_ref_switch_to_atomic_sync(&label->count);
+			rcu_read_lock();
+			percpu_ref_put(&label->count);
+			held = percpu_ref_tryget(&label->count);
+			if (!held)
+				prev->next = pos->next;
+			rcu_read_unlock();
+			if (!held)
+				continue;
+			percpu_ref_switch_to_percpu(&label->count);
+		}
+
 		cnt++;
 		if (cnt == AA_MAX_LABEL_RECLAIMS) {
 			last_reclaim_label = pos;
@@ -2136,6 +2197,16 @@ static int __init set_init_ctx(void)
 	return 0;
 }
 
+static int __init clear_init_ctx(void)
+{
+	struct cred *cred = (__force struct cred *)current->real_cred;
+
+	set_cred_label(cred, NULL);
+	aa_put_label(ns_unconfined(root_ns));
+
+	return 0;
+}
+
 static void destroy_buffers(void)
 {
 	union aa_buffer *aa_buf;
@@ -2421,6 +2492,14 @@ static int __init apparmor_init(void)
 	if (aa_label_reclaim_wq)
 		queue_delayed_work(aa_label_reclaim_wq, &aa_label_reclaim_work,
 				   AA_LABEL_RECLAIM_INTERVAL_MS);
+
+	if (!percpu_ref_init(&aa_label_reclaim_ref, aa_release_reclaim_ref_noop,
+			     PERCPU_REF_ALLOW_REINIT, GFP_KERNEL)) {
+		AA_ERROR("Failed to allocate label reclaim percpu ref\n");
+		aa_free_root_ns();
+		clear_init_ctx();
+		goto buffers_out;
+	}
 
 	security_add_hooks(apparmor_hooks, ARRAY_SIZE(apparmor_hooks),
 				&apparmor_lsmid);
