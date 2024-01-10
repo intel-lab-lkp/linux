@@ -108,7 +108,7 @@ enum {
 	RESCUER_NICE_LEVEL	= MIN_NICE,
 	HIGHPRI_NICE_LEVEL	= MIN_NICE,
 
-	WQ_NAME_LEN		= 24,
+	WQ_NAME_LEN		= 32,
 };
 
 /*
@@ -4670,9 +4670,10 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 					 unsigned int flags,
 					 int max_active, ...)
 {
-	va_list args;
+	va_list args, args_copy;
 	struct workqueue_struct *wq;
 	struct pool_workqueue *pwq;
+	int len;
 
 	/*
 	 * Unbound && max_active == 1 used to imply ordered, which is no longer
@@ -4699,6 +4700,13 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	}
 
 	va_start(args, max_active);
+	va_copy(args_copy, args);
+	len = vsnprintf(NULL, 0, fmt, args_copy);
+	WARN(len > WQ_NAME_LEN,
+		"workqueue: wq->name too long (%d). Truncated to WQ_NAME_LEN (%d)\n",
+		len, WQ_NAME_LEN);
+
+	va_end(args_copy);
 	vsnprintf(wq->name, sizeof(wq->name), fmt, args);
 	va_end(args);
 
