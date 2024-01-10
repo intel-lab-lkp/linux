@@ -122,6 +122,17 @@ u8 cmdq_get_shift_pa(struct mbox_chan *chan)
 }
 EXPORT_SYMBOL(cmdq_get_shift_pa);
 
+void cmdq_mbox_set_thread_timeout(void *chan, u32 timeout)
+{
+	struct cmdq_thread *thread = ((struct mbox_chan *)chan)->con_priv;
+	unsigned long flags;
+
+	spin_lock_irqsave(&thread->chan->lock, flags);
+	thread->timeout_ms = timeout;
+	spin_unlock_irqrestore(&thread->chan->lock, flags);
+}
+EXPORT_SYMBOL(cmdq_mbox_set_thread_timeout);
+
 static int cmdq_thread_suspend(struct cmdq *cmdq, struct cmdq_thread *thread)
 {
 	u32 status;

@@ -82,5 +82,6 @@ struct cmdq_pkt {
 };
 
 u8 cmdq_get_shift_pa(struct mbox_chan *chan);
+void cmdq_mbox_set_thread_timeout(void *chan, u32 timeout);
 
 #endif /* __MTK_CMDQ_MAILBOX_H__ */
