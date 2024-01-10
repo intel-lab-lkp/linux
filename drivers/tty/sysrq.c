@@ -51,6 +51,8 @@
 #include <linux/syscalls.h>
 #include <linux/of.h>
 #include <linux/rcupdate.h>
+#include <linux/kmsg_dump.h>
+#include <linux/console.h>
 
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
@@ -450,6 +452,51 @@ static const struct sysrq_key_op sysrq_unrt_op = {
 	.enable_mask	= SYSRQ_ENABLE_RTNICE,
 };
 
+static void dmesg_dump_callback(struct work_struct *work)
+{
+	struct kmsg_dump_iter iter;
+	size_t len;
+	char *buf;
+	struct console *con;
+	int cookie;
+
+	/* Size to be updated if PRINTK_MESSAGE_MAX changes */
+	buf = kzalloc(2048, GFP_KERNEL);
+	if (!buf)
+		return;
+
+	kmsg_dump_rewind(&iter);
+	while (kmsg_dump_get_line(&iter, 1, buf, 2048, &len)) {
+		/*
+		 * Since using printk() or pr_*() will append the message to the
+		 * printk ring buffer, they cannot be used to display the retrieved
+		 * message. Hence console_write() of serial drivers is used.
+		 */
+		console_lock();
+		cookie = console_srcu_read_lock();
+		for_each_console_srcu(con) {
+			if ((console_srcu_read_flags(con) & CON_ENABLED) && con->write)
+				con->write(con, buf, len);
+		}
+		console_srcu_read_unlock(cookie);
+		console_unlock();
+	}
+	kfree(buf);
+}
+
+static DECLARE_WORK(sysrq_dmesg_work, dmesg_dump_callback);
+
+static void sysrq_handle_dmesg_dump(u8 key)
+{
+	queue_work(system_unbound_wq, &sysrq_dmesg_work);
+}
+static struct sysrq_key_op sysrq_dmesg_dump_op = {
+	.handler        = sysrq_handle_dmesg_dump,
+	.help_msg       = "dump-dmesg(D)",
+	.action_msg     = "Dump dmesg",
+	.enable_mask    = SYSRQ_ENABLE_DUMP,
+};
+
 /* Key Operations table and lock */
 static DEFINE_SPINLOCK(sysrq_key_table_lock);
 
@@ -505,7 +552,7 @@ static const struct sysrq_key_op *sysrq_key_table[62] = {
 	NULL,				/* A */
 	NULL,				/* B */
 	NULL,				/* C */
-	NULL,				/* D */
+	&sysrq_dmesg_dump_op,		/* D */
 	NULL,				/* E */
 	NULL,				/* F */
 	NULL,				/* G */
