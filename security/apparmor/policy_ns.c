@@ -124,6 +124,7 @@ static struct aa_ns *alloc_ns(const char *prefix, const char *name)
 		goto fail_unconfined;
 	/* ns and ns->unconfined share ns->unconfined refcount */
 	ns->unconfined->ns = ns;
+	percpu_rcuref_manage(&ns->unconfined->label.count);
 
 	atomic_set(&ns->uniq_null, 0);
 
@@ -377,6 +378,7 @@ int __init aa_alloc_root_ns(void)
 	}
 	kernel_t = &kernel_p->label;
 	root_ns->unconfined->ns = aa_get_ns(root_ns);
+	percpu_rcuref_manage(&root_ns->unconfined->label.count);
 
 	return 0;
 }
