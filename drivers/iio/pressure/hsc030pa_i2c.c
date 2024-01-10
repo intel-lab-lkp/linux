@@ -24,7 +24,26 @@ static int hsc_i2c_recv(struct hsc_data *data)
 {
 	struct i2c_client *client = to_i2c_client(data->dev);
 	struct i2c_msg msg;
+	u8 buf;
 	int ret;
+
+	if (data->capabilities & HSC_CAP_SLEEP) {
+		/*
+		 * Send the Full Measurement Request (FMR) command on the CS
+		 * line in order to wake up the sensor as per
+		 * "Sleep Mode for Use with Honeywell Digital Pressure Sensors"
+		 * technical note (consult the datasheet link in the header).
+		 *
+		 * These specifications require a dummy packet comprised only by
+		 * a single byte that contains the 7bit slave address and the
+		 * READ bit followed by a STOP.
+		 * Because the i2c API does not allow packets without a payload,
+		 * the driver sends two bytes in this implementation.
+		 */
+		ret = i2c_master_recv(client, &buf, 1);
+		if (ret < 0)
+			return ret;
+	}
 
 	msleep_interruptible(HSC_RESP_TIME_MS);
 

@@ -15,6 +15,8 @@
 #define HSC_REG_MEASUREMENT_RD_SIZE 4
 #define HSC_RESP_TIME_MS            2
 
+#define HSC_CAP_SLEEP               0x1
+
 struct device;
 
 struct iio_chan_spec;
@@ -29,6 +31,7 @@ typedef int (*hsc_recv_fn)(struct hsc_data *);
  * struct hsc_data
  * @dev: current device structure
  * @chip: structure containing chip's channel properties
+ * @capabilities: chip specific attributes
  * @recv_cb: function that implements the chip reads
  * @is_valid: true if last transfer has been validated
  * @pmin: minimum measurable pressure limit
@@ -45,6 +48,7 @@ typedef int (*hsc_recv_fn)(struct hsc_data *);
 struct hsc_data {
 	struct device *dev;
 	const struct hsc_chip_data *chip;
+	u32 capabilities;
 	hsc_recv_fn recv_cb;
 	bool is_valid;
 	s32 pmin;

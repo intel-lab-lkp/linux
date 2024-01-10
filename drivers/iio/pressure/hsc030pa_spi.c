@@ -25,12 +25,40 @@ static int hsc_spi_recv(struct hsc_data *data)
 	struct spi_device *spi = to_spi_device(data->dev);
 	struct spi_transfer xfer = {
 		.tx_buf = NULL,
-		.rx_buf = data->buffer,
-		.len = HSC_REG_MEASUREMENT_RD_SIZE,
+		.rx_buf = NULL,
+		.len = 0,
 	};
+	u16 orig_cs_setup_value;
+	u8 orig_cs_setup_unit;
+
+	if (data->capabilities & HSC_CAP_SLEEP) {
+		/*
+		 * Send the Full Measurement Request (FMR) command on the CS
+		 * line in order to wake up the sensor as per
+		 * "Sleep Mode for Use with Honeywell Digital Pressure Sensors"
+		 * technical note (consult the datasheet link in the header).
+		 *
+		 * These specifications require the CS line to be held asserted
+		 * for at least 8µs without any payload being generated.
+		 */
+		orig_cs_setup_value = spi->cs_setup.value;
+		orig_cs_setup_unit = spi->cs_setup.unit;
+		spi->cs_setup.value = 8;
+		spi->cs_setup.unit = SPI_DELAY_UNIT_USECS;
+		/*
+		 * Send a dummy 0-size packet so that CS gets toggled.
+		 * Trying to manually call spi->controller->set_cs() instead
+		 * does not work as expected during the second call.
+		 */
+		spi_sync_transfer(spi, &xfer, 1);
+		spi->cs_setup.value = orig_cs_setup_value;
+		spi->cs_setup.unit = orig_cs_setup_unit;
+	}
 
 	msleep_interruptible(HSC_RESP_TIME_MS);
 
+	xfer.rx_buf = data->buffer;
+	xfer.len = HSC_REG_MEASUREMENT_RD_SIZE;
 	return spi_sync_transfer(spi, &xfer, 1);
 }
 
