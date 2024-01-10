@@ -121,12 +121,12 @@ struct label_it {
  * @ent: set of profiles for label, actual size determined by @size
  */
 struct aa_label {
-	struct kref count;
+	struct percpu_ref count;
+	long flags;
+	struct aa_proxy *proxy;
 	struct rb_node node;
 	struct rcu_head rcu;
-	struct aa_proxy *proxy;
 	__counted char *hname;
-	long flags;
 	u32 secid;
 	int size;
 	struct aa_profile *vec[];
@@ -276,7 +276,7 @@ void __aa_labelset_update_subtree(struct aa_ns *ns);
 
 void aa_label_destroy(struct aa_label *label);
 void aa_label_free(struct aa_label *label);
-void aa_label_kref(struct kref *kref);
+void aa_label_percpu_ref(struct percpu_ref *ref);
 bool aa_label_init(struct aa_label *label, int size, gfp_t gfp);
 struct aa_label *aa_label_alloc(int size, struct aa_proxy *proxy, gfp_t gfp);
 
@@ -373,7 +373,7 @@ int aa_label_match(struct aa_profile *profile, struct aa_ruleset *rules,
  */
 static inline struct aa_label *__aa_get_label(struct aa_label *l)
 {
-	if (l && kref_get_unless_zero(&l->count))
+	if (l && percpu_ref_tryget(&l->count))
 		return l;
 
 	return NULL;
@@ -382,7 +382,7 @@ static inline struct aa_label *__aa_get_label(struct aa_label *l)
 static inline struct aa_label *aa_get_label(struct aa_label *l)
 {
 	if (l)
-		kref_get(&(l->count));
+		percpu_ref_get(&(l->count));
 
 	return l;
 }
@@ -402,7 +402,7 @@ static inline struct aa_label *aa_get_label_rcu(struct aa_label __rcu **l)
 	rcu_read_lock();
 	do {
 		c = rcu_dereference(*l);
-	} while (c && !kref_get_unless_zero(&c->count));
+	} while (c && !percpu_ref_tryget(&c->count));
 	rcu_read_unlock();
 
 	return c;
@@ -442,7 +442,7 @@ static inline struct aa_label *aa_get_newest_label(struct aa_label *l)
 static inline void aa_put_label(struct aa_label *l)
 {
 	if (l)
-		kref_put(&l->count, aa_label_kref);
+		percpu_ref_put(&l->count);
 }
 
 
