@@ -73,6 +73,7 @@ struct inode *hfsplus_iget(struct super_block *sb, unsigned long ino)
 	HFSPLUS_I(inode)->flags = 0;
 	HFSPLUS_I(inode)->extent_state = 0;
 	HFSPLUS_I(inode)->rsrc_inode = NULL;
+	HFSPLUS_I(inode)->create_date = 0;
 	atomic_set(&HFSPLUS_I(inode)->opencnt, 0);
 
 	if (inode->i_ino >= HFSPLUS_FIRSTUSER_CNID ||
