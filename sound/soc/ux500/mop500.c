@@ -126,7 +126,7 @@ static int mop500_probe(struct platform_device *pdev)
 		__func__, mop500_card.name,
 		mop500_card.dai_link[0].stream_name);
 
-	ret = snd_soc_register_card(&mop500_card);
+	ret = devm_snd_soc_register_card(&pdev->dev, &mop500_card);
 	if (ret)
 		dev_err(&pdev->dev,
 			"Error: snd_soc_register_card failed (%d)!\n", ret);
@@ -140,7 +140,6 @@ static void mop500_remove(struct platform_device *pdev)
 
 	pr_debug("%s: Enter.\n", __func__);
 
-	snd_soc_unregister_card(card);
 	mop500_ab8500_remove(card);
 	mop500_of_node_put();
 }
