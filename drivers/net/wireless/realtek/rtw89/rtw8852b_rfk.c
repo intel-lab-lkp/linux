@@ -1388,17 +1388,15 @@ static void _iqk_get_ch_info(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy, u
 	u32 reg_rf18;
 	u32 reg_35c;
 	u8 idx;
-	u8 get_empty_table = false;
 
 	for (idx = 0; idx < RTW89_IQK_CHS_NR; idx++) {
 		if (iqk_info->iqk_mcc_ch[idx][path] == 0) {
-			get_empty_table = true;
 			break;
 		}
 	}
 	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK] (1)idx = %x\n", idx);
 
-	if (!get_empty_table) {
+	if (idx >= RTW89_IQK_CHS_NR) {
 		idx = iqk_info->iqk_table_idx[path] + 1;
 		if (idx > 1)
 			idx = 0;
