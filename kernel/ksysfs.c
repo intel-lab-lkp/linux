@@ -165,16 +165,34 @@ static ssize_t vmcoreinfo_show(struct kobject *kobj,
 }
 KERNEL_ATTR_RO(vmcoreinfo);
 
+static ssize_t crash_dm_crypt_key_show(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  char *buf)
+{
+	return 0;
+}
+
+static ssize_t crash_dm_crypt_key_store(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					   const char *buf, size_t count)
+{
+	int ret;
+
+	ret = crash_sysfs_dm_crypt_key_write(buf, count);
+	return ret < 0 ? ret : count;
+}
+KERNEL_ATTR_RW(crash_dm_crypt_key);
+
 #ifdef CONFIG_CRASH_HOTPLUG
 static ssize_t crash_elfcorehdr_size_show(struct kobject *kobj,
-			       struct kobj_attribute *attr, char *buf)
+					  struct kobj_attribute *attr,
+					  char *buf)
 {
 	unsigned int sz = crash_get_elfcorehdr_size();
 
 	return sysfs_emit(buf, "%u\n", sz);
 }
 KERNEL_ATTR_RO(crash_elfcorehdr_size);
-
 #endif
 
 #endif /* CONFIG_CRASH_CORE */
@@ -267,6 +285,7 @@ static struct attribute * kernel_attrs[] = {
 #endif
 #ifdef CONFIG_CRASH_CORE
 	&vmcoreinfo_attr.attr,
+	&crash_dm_crypt_key_attr.attr,
 #ifdef CONFIG_CRASH_HOTPLUG
 	&crash_elfcorehdr_size_attr.attr,
 #endif

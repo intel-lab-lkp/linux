@@ -125,6 +125,12 @@ static inline void __init reserve_crashkernel_generic(char *cmdline,
 {}
 #endif
 
+struct kimage;
+
+int crash_sysfs_dm_crypt_key_write(const char *key_des, size_t count);
+int crash_pass_temp_dm_crypt_key(void **addr, unsigned long *sz);
+int crash_load_dm_crypt_key(struct kimage *image);
+
 /* Alignment required for elf header segment */
 #define ELF_CORE_HEADER_ALIGN   4096
 
@@ -140,7 +146,6 @@ extern int crash_exclude_mem_range(struct crash_mem *mem,
 extern int crash_prepare_elf64_headers(struct crash_mem *mem, int need_kernel_map,
 				       void **addr, unsigned long *sz);
 
-struct kimage;
 struct kexec_segment;
 
 #define KEXEC_CRASH_HP_NONE			0

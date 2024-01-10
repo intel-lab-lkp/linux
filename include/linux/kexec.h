@@ -366,6 +366,10 @@ struct kimage {
 	void *elf_headers;
 	unsigned long elf_headers_sz;
 	unsigned long elf_load_addr;
+
+	/* dm crypt key buffer */
+	unsigned long dm_crypt_key_addr;
+	unsigned long dm_crypt_key_sz;
 };
 
 /* kexec interface functions */
