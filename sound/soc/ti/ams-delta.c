@@ -569,7 +569,7 @@ static int ams_delta_probe(struct platform_device *pdev)
 	if (IS_ERR(handsfree_mute))
 		return PTR_ERR(handsfree_mute);
 
-	ret = snd_soc_register_card(card);
+	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
 		card->dev = NULL;
@@ -580,12 +580,7 @@ static int ams_delta_probe(struct platform_device *pdev)
 
 static void ams_delta_remove(struct platform_device *pdev)
 {
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-
 	tty_unregister_ldisc(&cx81801_ops);
-
-	snd_soc_unregister_card(card);
-	card->dev = NULL;
 }
 
 #define DRV_NAME "ams-delta-audio"
