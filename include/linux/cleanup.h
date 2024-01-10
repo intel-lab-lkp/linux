@@ -246,5 +246,11 @@ __DEFINE_LOCK_GUARD_0(_name, _lock)
 	static inline void * class_##_name##_ext##_lock_ptr(class_##_name##_t *_T) \
 	{ return class_##_name##_lock_ptr(_T); }
 
+/*
+ * Helper for implementing guard locks with additional arguments passed to
+ * the locking function.
+ */
+#define DEFINE_LOCK_GUARD_ARGS(_name, _type, _lock, _unlock, _args...)	\
+DEFINE_CLASS(_name, _type, _unlock, ({ _lock; _T; }), _type _T, _args)
 
 #endif /* __LINUX_GUARDS_H */
