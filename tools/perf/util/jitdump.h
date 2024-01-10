@@ -22,7 +22,7 @@
 #define PADDING_8ALIGNED(x) ((((x) + 7) & 7) ^ 7)
 #define ALIGN_8(x) (((x) + 7) & (~7))
 
-#define JITHEADER_VERSION 1
+#define JITHEADER_VERSION 2
 
 enum jitdump_flags_bits {
 	JITDUMP_FLAGS_ARCH_TIMESTAMP_BIT,
