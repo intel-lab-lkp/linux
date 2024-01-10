@@ -546,14 +546,32 @@ static void kexec_mark_crashkres(bool protect)
 	kexec_mark_range(control, crashk_res.end, protect);
 }
 
+static void kexec_mark_dm_crypt_key(bool protect)
+{
+	unsigned long start_paddr, end_paddr;
+	unsigned int nr_pages;
+
+	if (kexec_crash_image->dm_crypt_key_addr) {
+		start_paddr = kexec_crash_image->dm_crypt_key_addr;
+		end_paddr = start_paddr + kexec_crash_image->dm_crypt_key_sz - 1;
+		nr_pages = (PAGE_ALIGN(end_paddr) - PAGE_ALIGN_DOWN(start_paddr))/PAGE_SIZE;
+		if (protect)
+			set_memory_np((unsigned long)phys_to_virt(start_paddr), nr_pages);
+		else
+			set_memory_rw((unsigned long)phys_to_virt(start_paddr), nr_pages);
+	}
+}
+
 void arch_kexec_protect_crashkres(void)
 {
 	kexec_mark_crashkres(true);
+	kexec_mark_dm_crypt_key(true);
 }
 
 void arch_kexec_unprotect_crashkres(void)
 {
 	kexec_mark_crashkres(false);
+	kexec_mark_dm_crypt_key(false);
 }
 
 /*
