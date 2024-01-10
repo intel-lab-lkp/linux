@@ -46,6 +46,14 @@ properties:
     minItems: 2               # Wrapper and 1 slot
     maxItems: 5               # Wrapper and 4 slots
 
+  slot:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 4
+    items:
+      enum: [ 0, 1, 2, 3 ]
+    description: Available slot index
+
 required:
   - compatible
   - reg
@@ -71,6 +79,7 @@ examples:
                         <&pd IMX_SC_R_MJPEG_DEC_S1>,
                         <&pd IMX_SC_R_MJPEG_DEC_S2>,
                         <&pd IMX_SC_R_MJPEG_DEC_S3>;
+        slot = <0>;
     };
 
     jpegenc: jpegenc@58450000 {
@@ -85,5 +94,6 @@ examples:
                         <&pd IMX_SC_R_MJPEG_ENC_S1>,
                         <&pd IMX_SC_R_MJPEG_ENC_S2>,
                         <&pd IMX_SC_R_MJPEG_ENC_S3>;
+        slot = <0>;
     };
 ...
