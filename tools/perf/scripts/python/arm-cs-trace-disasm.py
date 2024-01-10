@@ -36,7 +36,10 @@ option_list = [
 		    help="Set path to objdump executable file"),
 	make_option("-v", "--verbose", dest="verbose",
 		    action="store_true", default=False,
-		    help="Enable debugging log")
+		    help="Enable debugging log"),
+	make_option("-a", "--vaddr", dest="vaddr",
+			action="store_true", default=False,
+			help="Enable virtual address")
 ]
 
 parser = OptionParser(option_list=option_list)
@@ -108,6 +111,14 @@ def print_disam(dso_fname, dso_start, start_addr, stop_addr):
 			m = disasm_re.search(line)
 			if m is None:
 				continue
+
+		# Replace offset with virtual address
+		if (options.vaddr == True):
+			offset = re.search(r"^\s*([0-9a-fA-F]+)", line).group()
+			if offset:
+				virt_addr = dso_start + int(offset, 16)
+				line = line.replace(offset.lstrip(), "%x" % virt_addr)
+
 		print("\t" + line)
 
 def print_sample(sample):
