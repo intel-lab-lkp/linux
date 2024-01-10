@@ -379,6 +379,30 @@ static inline void aa_put_profile(struct aa_profile *p)
 		percpu_ref_put(&p->label.count);
 }
 
+/**
+ * aa_switch_ref_profile - switch percpu-ref mode for profile @p
+ * @p: profile  (MAYBE NULL)
+ */
+static inline void aa_switch_ref_profile(struct aa_profile *p, bool percpu)
+{
+	if (p) {
+		if (percpu)
+			percpu_ref_switch_to_percpu(&p->label.count);
+		else
+			percpu_ref_switch_to_atomic_sync(&p->label.count);
+	}
+}
+
+/**
+ * aa_kill_ref_profile - percpu-ref kill for profile @p
+ * @p: profile  (MAYBE NULL)
+ */
+static inline void aa_kill_ref_profile(struct aa_profile *p)
+{
+	if (p)
+		percpu_ref_kill(&p->label.count);
+}
+
 static inline int AUDIT_MODE(struct aa_profile *profile)
 {
 	if (aa_g_audit != AUDIT_NORMAL)

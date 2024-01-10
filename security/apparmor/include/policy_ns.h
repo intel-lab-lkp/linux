@@ -128,6 +128,30 @@ static inline void aa_put_ns(struct aa_ns *ns)
 }
 
 /**
+ * aa_switch_ref_ns - switch percpu-ref mode for @ns
+ * @ns: namespace to switch percpu-ref mode of
+ *
+ * Switch percpu-ref mode of @ns between percpu and atomic
+ */
+static inline void aa_switch_ref_ns(struct aa_ns *ns, bool percpu)
+{
+	if (ns)
+		aa_switch_ref_profile(ns->unconfined, percpu);
+}
+
+/**
+ * aa_kill_ref_ns - do percpu-ref kill for @ns
+ * @ns: namespace to perform percpu-ref kill for
+ *
+ * Do percpu-ref kill of @ns refcount
+ */
+static inline void aa_kill_ref_ns(struct aa_ns *ns)
+{
+	if (ns)
+		aa_kill_ref_profile(ns->unconfined);
+}
+
+/**
  * __aa_findn_ns - find a namespace on a list by @name
  * @head: list to search for namespace on  (NOT NULL)
  * @name: name of namespace to look for  (NOT NULL)
