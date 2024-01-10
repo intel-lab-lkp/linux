@@ -41,6 +41,7 @@ subdirectories.
    :maxdepth: 1
 
    apparmor
+   ApparmorRefcount
    LoadPin
    SELinux
    Smack
