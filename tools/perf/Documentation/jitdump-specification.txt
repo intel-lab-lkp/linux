@@ -155,10 +155,10 @@ The record is used to describe the unwinding information for a jitted function.
 
 The record has the following fields following the fixed-size record header in order:
 
-uint64_t unwind_data_size   : the size in bytes of the unwinding data table at the end of the record
-uint64_t eh_frame_hdr_size  : the size in bytes of the DWARF EH Frame Header at the start of the unwinding data table at the end of the record
+uint64_t unwind_data_size   : the size in bytes of the unwinding data (EH Frame table and EH Frame Header) at the end of the record
+uint64_t eh_frame_hdr_size  : the size in bytes of the DWARF EH Frame Header at the end of the record
 uint64_t mapped_size        : the size of the unwinding data mapped in memory
-const char unwinding_data[n]: an array of unwinding data, consisting of the EH Frame Header, followed by the actual EH Frame
+const char unwinding_data[n]: an array of unwinding data, consisting of the actual EH Frame, followed by the EH Frame Header
 
 
 The EH Frame header follows the Linux Standard Base (LSB) specification as described in the document at https://refspecs.linuxfoundation.org/LSB_1.3.0/gLSB/gLSB/ehframehdr.html
