@@ -32,7 +32,7 @@ static inline int eeprom_no_data_bits(struct scsi_qla_host *ha)
 	return FM93C56A_DATA_BITS_16;
 }
 
-static int fm93c56a_select(struct scsi_qla_host * ha)
+static int fm93c56a_select(struct scsi_qla_host *ha)
 {
 	DEBUG5(printk(KERN_ERR "fm93c56a_select:\n"));
 
@@ -41,7 +41,7 @@ static int fm93c56a_select(struct scsi_qla_host * ha)
 	return 1;
 }
 
-static int fm93c56a_cmd(struct scsi_qla_host * ha, int cmd, int addr)
+static int fm93c56a_cmd(struct scsi_qla_host *ha, int cmd, int addr)
 {
 	int i;
 	int mask;
@@ -105,14 +105,14 @@ static int fm93c56a_cmd(struct scsi_qla_host * ha, int cmd, int addr)
 	return 1;
 }
 
-static int fm93c56a_deselect(struct scsi_qla_host * ha)
+static int fm93c56a_deselect(struct scsi_qla_host *ha)
 {
 	ha->eeprom_cmd_data = AUBURN_EEPROM_CS_0 | 0x000f0000;
 	eeprom_cmd(ha->eeprom_cmd_data, ha);
 	return 1;
 }
 
-static int fm93c56a_datain(struct scsi_qla_host * ha, unsigned short *value)
+static int fm93c56a_datain(struct scsi_qla_host *ha, unsigned short *value)
 {
 	int i;
 	int data = 0;
@@ -135,8 +135,8 @@ static int fm93c56a_datain(struct scsi_qla_host * ha, unsigned short *value)
 	return 1;
 }
 
-static int eeprom_readword(int eepromAddr, u16 * value,
-			   struct scsi_qla_host * ha)
+static int eeprom_readword(int eepromAddr, u16 *value,
+			   struct scsi_qla_host *ha)
 {
 	fm93c56a_select(ha);
 	fm93c56a_cmd(ha, FM93C56A_READ, eepromAddr);
@@ -146,7 +146,7 @@ static int eeprom_readword(int eepromAddr, u16 * value,
 }
 
 /* Hardware_lock must be set before calling */
-u16 rd_nvram_word(struct scsi_qla_host * ha, int offset)
+u16 rd_nvram_word(struct scsi_qla_host *ha, int offset)
 {
 	u16 val = 0;
 
@@ -176,7 +176,7 @@ u8 rd_nvram_byte(struct scsi_qla_host *ha, int offset)
 	return rval;
 }
 
-int qla4xxx_is_nvram_configuration_valid(struct scsi_qla_host * ha)
+int qla4xxx_is_nvram_configuration_valid(struct scsi_qla_host *ha)
 {
 	int status = QLA_ERROR;
 	uint16_t checksum = 0;
