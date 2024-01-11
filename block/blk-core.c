@@ -600,17 +600,21 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 
 static void __submit_bio(struct bio *bio)
 {
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+
 	if (unlikely(!blk_crypto_bio_prep(&bio)))
+		return;
+	if (unlikely(bio_queue_enter(bio)))
 		return;
 
 	if (!bio->bi_bdev->bd_has_submit_bio) {
-		blk_mq_submit_bio(bio);
-	} else if (likely(bio_queue_enter(bio) == 0)) {
-		struct gendisk *disk = bio->bi_bdev->bd_disk;
-
+		if (blk_mq_submit_bio(bio))
+			return;
+	} else {
 		disk->fops->submit_bio(bio);
-		blk_queue_exit(disk->queue);
 	}
+
+	blk_queue_exit(disk->queue);
 }
 
 /*

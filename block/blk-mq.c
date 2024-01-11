@@ -2948,14 +2948,17 @@ static void bio_set_ioprio(struct bio *bio)
  *
  * It will not queue the request if there is an error with the bio, or at the
  * request creation.
+ *
+ * Returns %true if the q_usage_counter usage is consumed, or %false if it
+ * isn't.
  */
-void blk_mq_submit_bio(struct bio *bio)
+bool blk_mq_submit_bio(struct bio *bio)
 {
 	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 	struct blk_plug *plug = blk_mq_plug(bio);
 	const int is_sync = op_is_sync(bio->bi_opf);
 	struct blk_mq_hw_ctx *hctx;
-	struct request *rq = NULL;
+	struct request *rq;
 	unsigned int nr_segs = 1;
 	blk_status_t ret;
 
@@ -2963,39 +2966,28 @@ void blk_mq_submit_bio(struct bio *bio)
 	if (bio_may_exceed_limits(bio, &q->limits)) {
 		bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 		if (!bio)
-			return;
+			return false;
 	}
 
 	bio_set_ioprio(bio);
 
+	if (!bio_integrity_prep(bio))
+		return false;
+
 	if (plug) {
 		rq = rq_list_peek(&plug->cached_rq);
-		if (rq && rq->q != q)
-			rq = NULL;
-	}
-	if (rq) {
-		if (!bio_integrity_prep(bio))
-			return;
-		if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
-			return;
-		if (blk_mq_use_cached_rq(rq, plug, bio))
-			goto done;
-		percpu_ref_get(&q->q_usage_counter);
-	} else {
-		if (unlikely(bio_queue_enter(bio)))
-			return;
-		if (!bio_integrity_prep(bio))
-			goto fail;
+		if (rq && rq->q == q) {
+			if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
+				return false;
+			if (blk_mq_use_cached_rq(rq, plug, bio))
+				goto has_rq;
+		}
 	}
 
 	rq = blk_mq_get_new_requests(q, plug, bio, nr_segs);
-	if (unlikely(!rq)) {
-fail:
-		blk_queue_exit(q);
-		return;
-	}
-
-done:
+	if (unlikely(!rq))
+		return false;
+has_rq:
 	trace_block_getrq(bio);
 
 	rq_qos_track(q, rq, bio);
@@ -3007,15 +2999,15 @@ done:
 		bio->bi_status = ret;
 		bio_endio(bio);
 		blk_mq_free_request(rq);
-		return;
+		return true;
 	}
 
 	if (op_is_flush(bio->bi_opf) && blk_insert_flush(rq))
-		return;
+		return true;
 
 	if (plug) {
 		blk_add_rq_to_plug(plug, rq);
-		return;
+		return true;
 	}
 
 	hctx = rq->mq_hctx;
@@ -3026,6 +3018,8 @@ done:
 	} else {
 		blk_mq_run_dispatch_ops(q, blk_mq_try_issue_directly(hctx, rq));
 	}
+
+	return true;
 }
 
 #ifdef CONFIG_BLK_MQ_STACKING
