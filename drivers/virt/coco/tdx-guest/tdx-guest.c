@@ -228,6 +228,12 @@ static int tdx_report_new(struct tsm_report *report, void *data)
 		goto done;
 	}
 
+	if (quote_buf->status != GET_QUOTE_SUCCESS) {
+		pr_err("GetQuote request failed, ret %llx\n", quote_buf->status);
+		ret = -EIO;
+		goto done;
+	}
+
 	buf = kvmemdup(quote_buf->data, quote_buf->out_len, GFP_KERNEL);
 	if (!buf) {
 		ret = -ENOMEM;
