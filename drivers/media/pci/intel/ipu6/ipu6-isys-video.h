@@ -90,7 +90,7 @@ struct ipu6_isys_video {
 	struct mutex mutex;
 	struct media_pad pad;
 	struct video_device vdev;
-	struct v4l2_pix_format_mplane mpix;
+	struct v4l2_format vfmt;
 	const struct ipu6_isys_pixelformat *pfmt;
 	struct ipu6_isys *isys;
 	struct ipu6_isys_stream *stream;
@@ -132,5 +132,10 @@ ipu6_isys_query_stream_by_source(struct ipu6_isys *isys, int source, u8 vc);
 void ipu6_isys_configure_stream_watermark(struct ipu6_isys_video *av,
 					  bool state);
 void ipu6_isys_update_stream_watermark(struct ipu6_isys_video *av, bool state);
+
+u32 ipu6_get_data_size(struct v4l2_format *vfmt, int plane);
+u32 ipu6_get_bytes_per_line(struct v4l2_format *vfmt);
+u32 ipu6_get_frame_width(struct v4l2_format *vfmt);
+u32 ipu6_get_frame_height(struct v4l2_format *vfmt);
 
 #endif /* IPU6_ISYS_VIDEO_H */
