@@ -486,7 +486,7 @@ static void sti_hda_pre_enable(struct drm_bridge *bridge)
 	hda_write(hda, SCALE_CTRL_CR_DFLT, HDA_ANA_SCALE_CTRL_CR);
 
 	/* Configure sampler */
-	hda_write(hda , src_filter_y, HDA_ANA_SRC_Y_CFG);
+	hda_write(hda, src_filter_y, HDA_ANA_SRC_Y_CFG);
 	hda_write(hda, src_filter_c,  HDA_ANA_SRC_C_CFG);
 	for (i = 0; i < SAMPLER_COEF_NB; i++) {
 		hda_write(hda, coef_y[i], HDA_COEFF_Y_PH1_TAP123 + i * 4);
