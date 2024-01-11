@@ -35,11 +35,14 @@ static int queue_setup(struct vb2_queue *q, unsigned int *num_buffers,
 	/* num_planes == 0: we're being called through VIDIOC_REQBUFS */
 	if (!*num_planes) {
 		use_fmt = true;
-		*num_planes = av->mpix.num_planes;
+		if (av->vfmt.type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+			*num_planes = av->vfmt.fmt.pix_mp.num_planes;
+		else if (av->vfmt.type == V4L2_BUF_TYPE_META_CAPTURE)
+			*num_planes = 1;
 	}
 
 	for (i = 0; i < *num_planes; i++) {
-		size = av->mpix.plane_fmt[i].sizeimage;
+		size = ipu6_get_data_size(&av->vfmt, i);
 		if (use_fmt) {
 			sizes[i] = size;
 		} else if (sizes[i] < size) {
@@ -59,16 +62,17 @@ static int ipu6_isys_buf_prepare(struct vb2_buffer *vb)
 	struct ipu6_isys_queue *aq = vb2_queue_to_isys_queue(vb->vb2_queue);
 	struct ipu6_isys_video *av = ipu6_isys_queue_to_video(aq);
 	struct device *dev = &av->isys->adev->auxdev.dev;
+	u32 bytesperline = ipu6_get_bytes_per_line(&av->vfmt);
+	u32 height = ipu6_get_frame_height(&av->vfmt);
+	u32 size = ipu6_get_data_size(&av->vfmt, 0);
 
 	dev_dbg(dev, "buffer: %s: configured size %u, buffer size %lu\n",
-		av->vdev.name, av->mpix.plane_fmt[0].sizeimage,
-		vb2_plane_size(vb, 0));
+		av->vdev.name, size, vb2_plane_size(vb, 0));
 
-	if (av->mpix.plane_fmt[0].sizeimage > vb2_plane_size(vb, 0))
+	if (size > vb2_plane_size(vb, 0))
 		return -EINVAL;
 
-	vb2_set_plane_payload(vb, 0, av->mpix.plane_fmt[0].bytesperline *
-			      av->mpix.height);
+	vb2_set_plane_payload(vb, 0, bytesperline * height);
 	vb->planes[0].data_offset = 0;
 
 	return 0;
@@ -437,18 +441,22 @@ static int ipu6_isys_link_fmt_validate(struct ipu6_isys_queue *aq)
 		return ret;
 	}
 
-	if (format.width != av->mpix.width ||
-	    format.height != av->mpix.height) {
-		dev_dbg(dev, "wrong width or height %ux%u (%ux%u expected)\n",
-			av->mpix.width, av->mpix.height,
-			format.width, format.height);
+	if (format.width != ipu6_get_frame_width(&av->vfmt) ||
+	    format.height != ipu6_get_frame_height(&av->vfmt)) {
+		dev_err(dev, "wrong width or height %ux%u (%ux%u expected)\n",
+			ipu6_get_frame_width(&av->vfmt),
+			ipu6_get_frame_height(&av->vfmt), format.width,
+			format.height);
 		return -EINVAL;
 	}
 
-	if (format.field != av->mpix.field) {
-		dev_dbg(dev, "wrong field value 0x%8.8x (0x%8.8x expected)\n",
-			av->mpix.field, format.field);
-		return -EINVAL;
+	if (av->vfmt.type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		if (format.field != av->vfmt.fmt.pix_mp.field) {
+			dev_dbg(dev,
+				"wrong field value 0x%8.8x (%8.8x expected)\n",
+				av->vfmt.fmt.pix_mp.field, format.field);
+			return -EINVAL;
+		}
 	}
 
 	if (format.code != av->pfmt->code) {
@@ -531,8 +539,8 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 	int nr_queues, ret;
 
 	dev_dbg(dev, "stream: %s: width %u, height %u, css pixelformat %u\n",
-		av->vdev.name, av->mpix.width, av->mpix.height,
-		av->pfmt->css_pixelformat);
+		av->vdev.name, ipu6_get_frame_width(&av->vfmt),
+		ipu6_get_frame_height(&av->vfmt), av->pfmt->css_pixelformat);
 
 	ret = ipu6_isys_setup_video(av, &source_entity, &nr_queues);
 	if (ret < 0) {
