@@ -2229,29 +2229,30 @@ enum scan_balance {
 	SCAN_FILE,
 };
 
-static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
+static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc,
+			   struct mem_cgroup *memcg)
 {
 	unsigned long file;
-	struct lruvec *target_lruvec;
+	struct lruvec *lruvec;
 
 	if (lru_gen_enabled())
 		return;
 
-	target_lruvec = mem_cgroup_lruvec(sc->target_mem_cgroup, pgdat);
+	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
 	/*
 	 * Flush the memory cgroup stats, so that we read accurate per-memcg
 	 * lruvec stats for heuristics.
 	 */
-	mem_cgroup_flush_stats(sc->target_mem_cgroup);
+	mem_cgroup_flush_stats(memcg);
 
 	/*
 	 * Determine the scan balance between anon and file LRUs.
 	 */
-	spin_lock_irq(&target_lruvec->lru_lock);
-	sc->anon_cost = target_lruvec->anon_cost;
-	sc->file_cost = target_lruvec->file_cost;
-	spin_unlock_irq(&target_lruvec->lru_lock);
+	spin_lock_irq(&lruvec->lru_lock);
+	sc->anon_cost = lruvec->anon_cost;
+	sc->file_cost = lruvec->file_cost;
+	spin_unlock_irq(&lruvec->lru_lock);
 
 	/*
 	 * Target desirable inactive:active list ratios for the anon
@@ -2265,18 +2266,18 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 		 * workingset is being established. Deactivate to get
 		 * rid of any stale active pages quickly.
 		 */
-		refaults = lruvec_page_state(target_lruvec,
+		refaults = lruvec_page_state(lruvec,
 				WORKINGSET_ACTIVATE_ANON);
-		if (refaults != target_lruvec->refaults[WORKINGSET_ANON] ||
-			inactive_is_low(target_lruvec, LRU_INACTIVE_ANON))
+		if (refaults != lruvec->refaults[WORKINGSET_ANON] ||
+			inactive_is_low(lruvec, LRU_INACTIVE_ANON))
 			sc->may_deactivate |= DEACTIVATE_ANON;
 		else
 			sc->may_deactivate &= ~DEACTIVATE_ANON;
 
-		refaults = lruvec_page_state(target_lruvec,
+		refaults = lruvec_page_state(lruvec,
 				WORKINGSET_ACTIVATE_FILE);
-		if (refaults != target_lruvec->refaults[WORKINGSET_FILE] ||
-		    inactive_is_low(target_lruvec, LRU_INACTIVE_FILE))
+		if (refaults != lruvec->refaults[WORKINGSET_FILE] ||
+		    inactive_is_low(lruvec, LRU_INACTIVE_FILE))
 			sc->may_deactivate |= DEACTIVATE_FILE;
 		else
 			sc->may_deactivate &= ~DEACTIVATE_FILE;
@@ -2288,7 +2289,7 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 	 * thrashing, try to reclaim those first before touching
 	 * anonymous pages.
 	 */
-	file = lruvec_page_state(target_lruvec, NR_INACTIVE_FILE);
+	file = lruvec_page_state(lruvec, NR_INACTIVE_FILE);
 	if (file >> sc->priority && !(sc->may_deactivate & DEACTIVATE_FILE))
 		sc->cache_trim_mode = 1;
 	else
@@ -5885,6 +5886,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 		reclaimed = sc->nr_reclaimed;
 		scanned = sc->nr_scanned;
 
+		prepare_scan_control(pgdat, sc, memcg);
+
 		shrink_lruvec(lruvec, sc);
 
 		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
@@ -5917,8 +5920,6 @@ again:
 
 	nr_reclaimed = sc->nr_reclaimed;
 	nr_scanned = sc->nr_scanned;
-
-	prepare_scan_control(pgdat, sc);
 
 	shrink_node_memcgs(pgdat, sc);
 
