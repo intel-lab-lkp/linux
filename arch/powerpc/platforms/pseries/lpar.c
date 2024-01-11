@@ -16,6 +16,7 @@
 #include <linux/export.h>
 #include <linux/jump_label.h>
 #include <linux/delay.h>
+#include <linux/of.h>
 #include <linux/stop_machine.h>
 #include <linux/spinlock.h>
 #include <linux/cpuhotplug.h>
@@ -1772,16 +1773,24 @@ static void pSeries_set_page_state(struct page *page, int order,
 	}
 }
 
+static bool migratable_partition;
+
 void arch_free_page(struct page *page, int order)
 {
-	if (radix_enabled())
-		return;
-	if (!cmo_free_hint_flag || !firmware_has_feature(FW_FEATURE_CMO))
-		return;
-
-	pSeries_set_page_state(page, order, H_PAGE_SET_UNUSED);
+	if (migratable_partition ||
+	    (firmware_has_feature(FW_FEATURE_CMO) && cmo_free_hint_flag))
+		pSeries_set_page_state(page, order, H_PAGE_SET_UNUSED);
 }
 EXPORT_SYMBOL(arch_free_page);
+
+static int __init check_migratable_partition(void)
+{
+	struct device_node *root = of_find_node_by_path("/");
+	migratable_partition = !!of_find_property(root, "ibm,migratable-partition", NULL);
+	of_node_put(root);
+	return 0;
+}
+machine_device_initcall(pseries, check_migratable_partition);
 
 #endif /* CONFIG_PPC_SMLPAR */
 #endif /* CONFIG_PPC_BOOK3S_64 */
