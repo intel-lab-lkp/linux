@@ -248,6 +248,16 @@ pub fn to_result(err: core::ffi::c_int) -> Result {
     }
 }
 
+/// Converts an unsigned integer as returned by a C kernel function to EINVAL if it's zero,
+/// and `Ok(u64)` otherwise.
+pub fn to_result_zero(val: core::ffi::c_ulong) -> Result<u64> {
+    if val == 0 {
+        Err(code::EINVAL)
+    } else {
+        Ok(val)
+    }
+}
+
 /// Transform a kernel "error pointer" to a normal pointer.
 ///
 /// Some kernel C API functions return an "error pointer" which optionally
