@@ -13,6 +13,8 @@
 #include <drm/drm_kunit_helpers.h>
 #include <kunit/test.h>
 
+#define TTM_PL_MULTIHOP (TTM_PL_PRIV + 1)
+
 extern struct ttm_device_funcs ttm_dev_funcs;
 
 struct ttm_test_devices {
