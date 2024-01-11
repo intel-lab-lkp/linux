@@ -39,7 +39,7 @@
 #define _wait_for(COND, MS, W) ({ \
 	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS);	\
 	int ret__ = 0;							\
-	while (! (COND)) {						\
+	while (!(COND)) {						\
 		if (time_after(jiffies, timeout__)) {			\
 			ret__ = -ETIMEDOUT;				\
 			break;						\
