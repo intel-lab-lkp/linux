@@ -16,7 +16,7 @@
 #include "sti_vtg.h"
 
 /* Module parameter to set the background color of the mixer */
-static unsigned int bkg_color = 0x000000;
+static unsigned int bkg_color;
 MODULE_PARM_DESC(bkgcolor, "Value of the background color 0xRRGGBB");
 module_param_named(bkgcolor, bkg_color, int, 0644);
 
