@@ -397,12 +397,12 @@ int aac_close_fib_context(struct aac_dev * dev, struct aac_fib_context * fibctx)
  *	This routine will close down the fibctx passed in from the user.
  */
 
-static int close_getadapter_fib(struct aac_dev * dev, void __user *arg)
+static int close_getadapter_fib(struct aac_dev *dev, void __user *arg)
 {
 	struct aac_fib_context *fibctx;
 	int status;
 	unsigned long flags;
-	struct list_head * entry;
+	struct list_head *entry;
 
 	/*
 	 *	Verify that the HANDLE passed in was a valid AdapterFibContext
@@ -414,7 +414,7 @@ static int close_getadapter_fib(struct aac_dev * dev, void __user *arg)
 	entry = dev->fib_list.next;
 	fibctx = NULL;
 
-	while(entry != &dev->fib_list) {
+	while (entry != &dev->fib_list) {
 		fibctx = list_entry(entry, struct aac_fib_context, next);
 		/*
 		 *	Extract the fibctx from the input parameters
@@ -428,7 +428,7 @@ static int close_getadapter_fib(struct aac_dev * dev, void __user *arg)
 	if (!fibctx)
 		return 0; /* Already gone */
 
-	if((fibctx->type != FSAFS_NTC_GET_ADAPTER_FIB_CONTEXT) ||
+	if ((fibctx->type != FSAFS_NTC_GET_ADAPTER_FIB_CONTEXT) ||
 		 (fibctx->size != sizeof(struct aac_fib_context)))
 		return -EINVAL;
 	spin_lock_irqsave(&dev->fib_lock, flags);
@@ -476,9 +476,9 @@ static int check_revision(struct aac_dev *dev, void __user *arg)
  *	@dev:	adapter is being processed
  *	@arg:	arguments to the send call
  */
-static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
+static int aac_send_raw_srb(struct aac_dev *dev, void __user *arg)
 {
-	struct fib* srbfib;
+	struct fib *srbfib;
 	int status;
 	struct aac_srb *srbcmd = NULL;
 	struct aac_hba_cmd_req *hbacmd = NULL;
@@ -505,7 +505,7 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 		dprintk((KERN_DEBUG"aacraid: send raw srb -EBUSY\n"));
 		return -EBUSY;
 	}
-	if (!capable(CAP_SYS_ADMIN)){
+	if (!capable(CAP_SYS_ADMIN)) {
 		dprintk((KERN_DEBUG"aacraid: No permission to send raw srb\n"));
 		return -EPERM;
 	}
