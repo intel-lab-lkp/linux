@@ -87,8 +87,7 @@ struct rpc_channel {
 
 #if IS_ENABLED(CONFIG_DRM_VMWGFX_MKSSTATS)
 /* Kernel mksGuestStats counter names and desciptions; same order as enum mksstat_kern_stats_t */
-static const char* const mksstat_kern_name_desc[MKSSTAT_KERN_COUNT][2] =
-{
+static const char * const mksstat_kern_name_desc[MKSSTAT_KERN_COUNT][2] = {
 	{ "vmw_execbuf_ioctl", "vmw_execbuf_ioctl" },
 	{ "vmw_cotable_resize", "vmw_cotable_resize" },
 };
