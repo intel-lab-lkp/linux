@@ -2351,6 +2351,20 @@ static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
 	if (flags & MSG_PEEK) {
 		peek_seq = tp->copied_seq;
 		seq = &peek_seq;
+		if (!msg->msg_iter.__iov[0].iov_base) {
+			size_t peek_offset;
+
+			if (msg->msg_iter.nr_segs < 2) {
+				err = -EINVAL;
+				goto out;
+			}
+			peek_offset = msg->msg_iter.__iov[0].iov_len;
+			msg->msg_iter.__iov = &msg->msg_iter.__iov[1];
+			msg->msg_iter.nr_segs -= 1;
+			msg->msg_iter.count -= peek_offset;
+			len -= peek_offset;
+			*seq += peek_offset;
+		}
 	}
 
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
