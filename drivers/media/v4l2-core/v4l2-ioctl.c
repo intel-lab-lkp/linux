@@ -1544,7 +1544,7 @@ static int v4l_enum_fmt(const struct v4l2_ioctl_ops *ops,
 		p->mbus_code = 0;
 
 	mbus_code = p->mbus_code;
-	memset_after(p, 0, type);
+	memset_after(p, 0, flags);
 	p->mbus_code = mbus_code;
 
 	switch (p->type) {
