@@ -754,6 +754,7 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 	int layer, agent;
 	int id = pci_dev_id(dev);
 	const char *level;
+	struct aer_capability_regs aer_caps;
 
 	if (info->severity == AER_CORRECTABLE) {
 		status = info->cor_status;
@@ -790,8 +791,18 @@ out:
 	if (info->id && info->error_dev_num > 1 && info->id == id)
 		pci_err(dev, "  Error of this Agent is reported first\n");
 
+	aer_caps = (struct aer_capability_regs) {
+	  .cor_status = info->cor_status,
+	  .cor_mask = info->cor_mask,
+	  .uncor_status = info->uncor_status,
+	  .uncor_severity = info->uncor_severity,
+	  .uncor_mask = info->uncor_mask,
+	  .cap_control = info->aer_cap_ctrl
+	};
 	trace_aer_event(dev_name(&dev->dev), (status & ~mask),
-			info->severity, info->tlp_header_valid, &info->tlp);
+			info->severity, info->tlp_header_valid, &info->tlp,
+			&aer_caps, info->link_status,
+			info->device_status, info->device_control_2);
 }
 
 static void aer_print_port_info(struct pci_dev *dev, struct aer_err_info *info)
@@ -867,7 +878,9 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 		__print_tlp_header(dev, &aer->header_log);
 
 	trace_aer_event(dev_name(&dev->dev), (status & ~mask),
-			aer_severity, tlp_header_valid, &aer->header_log);
+			aer_severity, tlp_header_valid, &aer->header_log,
+			aer, info.link_status,
+			info.device_status, info.device_control_2);
 }
 EXPORT_SYMBOL_NS_GPL(pci_print_aer, CXL);
 

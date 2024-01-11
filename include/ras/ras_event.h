@@ -300,9 +300,14 @@ TRACE_EVENT(aer_event,
 		 const u32 status,
 		 const u8 severity,
 		 const u8 tlp_header_valid,
-		 struct aer_header_log_regs *tlp),
+		 struct aer_header_log_regs *tlp,
+		 struct aer_capability_regs *aer_caps,
+		 const u16 link_status,
+		 const u16 device_status,
+		 const u16 device_control_2),
 
-	TP_ARGS(dev_name, status, severity, tlp_header_valid, tlp),
+	TP_ARGS(dev_name, status, severity, tlp_header_valid, tlp,
+		aer_caps, link_status, device_status, device_control_2),
 
 	TP_STRUCT__entry(
 		__string(	dev_name,	dev_name	)
@@ -310,6 +315,10 @@ TRACE_EVENT(aer_event,
 		__field(	u8,		severity	)
 		__field(	u8, 		tlp_header_valid)
 		__array(	u32, 		tlp_header, 4	)
+		__field_struct(struct aer_capability_regs, aer_caps)
+		__field(	u16,		link_status	)
+		__field(	u16,		device_status	)
+		__field(	u16,		device_control_2)
 	),
 
 	TP_fast_assign(
@@ -317,6 +326,10 @@ TRACE_EVENT(aer_event,
 		__entry->status		= status;
 		__entry->severity	= severity;
 		__entry->tlp_header_valid = tlp_header_valid;
+		__entry->aer_caps	= *aer_caps;
+		__entry->link_status	= link_status;
+		__entry->device_status	= device_status;
+		__entry->device_control_2 = device_control_2;
 		if (tlp_header_valid) {
 			__entry->tlp_header[0] = tlp->dw0;
 			__entry->tlp_header[1] = tlp->dw1;
@@ -325,7 +338,20 @@ TRACE_EVENT(aer_event,
 		}
 	),
 
-	TP_printk("%s PCIe Bus Error: severity=%s, %s, TLP Header=%s\n",
+	TP_printk("%s PCIe Bus Error: severity=%s, %s, TLP Header=%s, "
+		  "Correctable Error Status=0x%08x, "
+		  "Correctable Error Mask=0x%08x, "
+		  "Uncorrectable Error Status=0x%08x, "
+		  "Uncorrectable Error Severity=0x%08x, "
+		  "Uncorrectable Error Mask=0x%08x, "
+		  "AER Capability and Control=0x%08x, "
+		  "First Error Pointer=0x%x, "
+		  "Completion Timeout Prefix/Header Log Capable=%s, "
+		  "Link Status=0x%04x, "
+		  "Device Status=0x%04x, "
+		  "Device Control 2=0x%04x, "
+		  "Completion Timeout Value=0x%x, "
+		  "Completion Timeout Disable=%s\n",
 		__get_str(dev_name),
 		__entry->severity == AER_CORRECTABLE ? "Corrected" :
 			__entry->severity == AER_FATAL ?
@@ -335,7 +361,21 @@ TRACE_EVENT(aer_event,
 		__print_flags(__entry->status, "|", aer_uncorrectable_errors),
 		__entry->tlp_header_valid ?
 			__print_array(__entry->tlp_header, 4, 4) :
-			"Not available")
+			"Not available",
+		__entry->aer_caps.cor_status,
+		__entry->aer_caps.cor_mask,
+		__entry->aer_caps.uncor_status,
+		__entry->aer_caps.uncor_severity,
+		__entry->aer_caps.uncor_mask,
+		__entry->aer_caps.cap_control,
+		PCI_ERR_CAP_FEP(__entry->aer_caps.cap_control),
+		__entry->aer_caps.cap_control & PCI_ERR_CAP_CTO_LOGC ? "True" : "False",
+		__entry->link_status,
+		__entry->device_status,
+		__entry->device_control_2,
+		__entry->device_control_2 & PCI_EXP_DEVCTL2_COMP_TIMEOUT,
+		__entry->device_control_2 & PCI_EXP_DEVCTL2_COMP_TMOUT_DIS ?
+					    "True" : "False")
 );
 
 /*
