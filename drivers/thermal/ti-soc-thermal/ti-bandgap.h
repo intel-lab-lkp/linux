@@ -189,8 +189,10 @@ struct temp_sensor_regval {
  * @div_clk: pointer to divider clock of temperature sensor fclk
  * @lock: spinlock for ti_bandgap structure
  * @irq: MPU IRQ number for thermal alert
- * @tshut_gpio: GPIO where Tshut signal is routed
+ * @tshut_gpiod: GPIO where Tshut signal is routed
  * @clk_rate: Holds current clock rate
+ * @nb: notifier block
+ * @is_suspended: set if the bandgap device is suspended
  *
  * The bandgap device structure representing the bandgap device instance.
  * It holds most of the dynamic stuff. Configurations and sensor specific
@@ -276,7 +278,7 @@ struct ti_temp_sensor {
  * TI_BANDGAP_FEATURE_HISTORY_BUFFER - used when the bandgap device features
  *	a history buffer of temperatures.
  *
- * TI_BANDGAP_FEATURE_ERRATA_814 - used to workaorund when the bandgap device
+ * TI_BANDGAP_FEATURE_ERRATA_814 - used to workaround when the bandgap device
  *	has Errata 814
  * TI_BANDGAP_FEATURE_UNRELIABLE - used when the sensor readings are too
  *	inaccurate.
