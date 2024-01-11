@@ -822,7 +822,8 @@ EXPORT_SYMBOL_GPL(cper_severity_to_aer);
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
-		   struct aer_capability_regs *aer, u16 device_status)
+		   struct aer_capability_regs *aer, u16 device_status,
+		   u16 link_status, u16 device_control_2)
 {
 	int layer, agent, tlp_header_valid = 0;
 	u32 status, mask;
@@ -847,7 +848,10 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	info.uncor_status = aer->uncor_status;
 	info.uncor_severity = aer->uncor_severity;
 	info.uncor_mask = aer->uncor_mask;
+	info.link_status = link_status;
+	info.aer_cap_ctrl = aer->cap_control;
 	info.device_status = device_status;
+	info.device_control_2 = device_control_2;
 	info.first_error = PCI_ERR_CAP_FEP(aer->cap_control);
 
 	pci_err(dev, "aer_status: 0x%08x, aer_mask: 0x%08x\n", status, mask);
@@ -1197,7 +1201,9 @@ struct aer_recover_entry {
 	u8	devfn;
 	u16	domain;
 	int	severity;
+	u16	link_status;
 	u16	device_status;
+	u16	device_control_2;
 	struct aer_capability_regs *regs;
 };
 
@@ -1218,7 +1224,8 @@ static void aer_recover_work_func(struct work_struct *work)
 			       PCI_SLOT(entry.devfn), PCI_FUNC(entry.devfn));
 			continue;
 		}
-		pci_print_aer(pdev, entry.severity, entry.regs, entry.device_status);
+		pci_print_aer(pdev, entry.severity, entry.regs, entry.device_status,
+			      entry.link_status, entry.device_control_2);
 		/*
 		 * Memory for aer_capability_regs(entry.regs) is being allocated from the
 		 * ghes_estatus_pool to protect it from overwriting when multiple sections
@@ -1247,7 +1254,8 @@ static DEFINE_SPINLOCK(aer_recover_ring_lock);
 static DECLARE_WORK(aer_recover_work, aer_recover_work_func);
 
 void aer_recover_queue(int domain, unsigned int bus, unsigned int devfn,
-		       int severity, struct aer_capability_regs *aer_regs, u16 device_status)
+		       int severity, struct aer_capability_regs *aer_regs, u16 device_status,
+		       u16 link_status, u16 device_control_2)
 {
 	struct aer_recover_entry entry = {
 		.bus		= bus,
@@ -1255,7 +1263,9 @@ void aer_recover_queue(int domain, unsigned int bus, unsigned int devfn,
 		.domain		= domain,
 		.severity	= severity,
 		.regs		= aer_regs,
+		.link_status	= link_status,
 		.device_status	= device_status,
+		.device_control_2 = device_control_2,
 	};
 
 	if (kfifo_in_spinlocked(&aer_recover_ring, &entry, 1,
@@ -1281,7 +1291,6 @@ int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 {
 	int type = pci_pcie_type(dev);
 	int aer = dev->aer_cap;
-	int temp;
 
 	/* Must reset in this function */
 	info->cor_status = 0;
@@ -1309,8 +1318,14 @@ int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 			&info->uncor_severity);
 		pci_read_config_dword(dev, aer + PCI_ERR_UNCOR_MASK,
 			&info->uncor_mask);
+		pci_read_config_dword(dev, aer + PCI_ERR_CAP,
+			&info->aer_cap_ctrl);
+		pcie_capability_read_word(dev, PCI_EXP_LNKSTA,
+			&info->link_status);
 		pcie_capability_read_word(dev, PCI_EXP_DEVSTA,
 			&info->device_status);
+		pcie_capability_read_word(dev, PCI_EXP_DEVCTL2,
+			&info->device_control_2);
 	} else {
 		return 1;
 	}
@@ -1323,8 +1338,7 @@ int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 			return 0;
 
 		/* Get First Error Pointer */
-		pci_read_config_dword(dev, aer + PCI_ERR_CAP, &temp);
-		info->first_error = PCI_ERR_CAP_FEP(temp);
+		info->first_error = PCI_ERR_CAP_FEP(info->aer_cap_ctrl);
 
 		if (info->uncor_status & AER_LOG_TLP_MASKS) {
 			info->tlp_header_valid = 1;

@@ -52,9 +52,11 @@ static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
-		    struct aer_capability_regs *aer, u16 device_status);
+		    struct aer_capability_regs *aer, u16 device_status,
+		    u16 link_status, u16 device_control_2);
 int cper_severity_to_aer(int cper_severity);
 void aer_recover_queue(int domain, unsigned int bus, unsigned int devfn,
-		       int severity, struct aer_capability_regs *aer_regs, u16 device_status);
+		       int severity, struct aer_capability_regs *aer_regs, u16 device_status,
+		       u16 link_status, u16 device_control_2);
 #endif //_AER_H_
 

@@ -410,7 +410,11 @@ struct aer_err_info {
 	u32 uncor_mask;		/* UNCOR Error Mask */
 	u32 uncor_status;	/* UNCOR Error Status */
 	u32 uncor_severity;	/* UNCOR Error Severity */
+
+	u16 link_status;
+	u32 aer_cap_ctrl;	/* AER Capabilities and Control */
 	u16 device_status;
+	u16 device_control_2;
 	struct aer_header_log_regs tlp;	/* TLP Header */
 };
 
