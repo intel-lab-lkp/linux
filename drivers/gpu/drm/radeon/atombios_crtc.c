@@ -213,8 +213,7 @@ static void atombios_enable_crtc_memreq(struct drm_crtc *crtc, int state)
 	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
 }
 
-static const u32 vga_control_regs[6] =
-{
+static const u32 vga_control_regs[6] = {
 	AVIVO_D1VGA_CONTROL,
 	AVIVO_D2VGA_CONTROL,
 	EVERGREEN_D3VGA_CONTROL,
