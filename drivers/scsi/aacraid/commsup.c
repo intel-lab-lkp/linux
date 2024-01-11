@@ -129,7 +129,7 @@ void aac_fib_vector_assign(struct aac_dev *dev)
  *	fib area, the unmapped fib data and also the free list
  */
 
-int aac_fib_setup(struct aac_dev * dev)
+int aac_fib_setup(struct aac_dev *dev)
 {
 	struct fib *fibptr;
 	struct hw_fib *hw_fib;
@@ -144,7 +144,7 @@ int aac_fib_setup(struct aac_dev * dev)
 		if (dev->comm_interface != AAC_COMM_MESSAGE_TYPE3)
 			dev->init->r7.max_io_commands = cpu_to_le32(max_cmds);
 	}
-	if (i<0)
+	if (i < 0)
 		return -ENOMEM;
 
 	memset(dev->hw_fib_va, 0,
