@@ -686,12 +686,12 @@ static int get_num_of_incomplete_fibs(struct aac_dev *aac)
 	return fcnt.mlcnt + fcnt.llcnt + fcnt.ehcnt + fcnt.fwcnt;
 }
 
-static int aac_eh_abort(struct scsi_cmnd* cmd)
+static int aac_eh_abort(struct scsi_cmnd *cmd)
 {
 	struct aac_cmd_priv *cmd_priv = aac_priv(cmd);
-	struct scsi_device * dev = cmd->device;
-	struct Scsi_Host * host = dev->host;
-	struct aac_dev * aac = (struct aac_dev *)host->hostdata;
+	struct scsi_device *dev = cmd->device;
+	struct Scsi_Host *host = dev->host;
+	struct aac_dev *aac = (struct aac_dev *)host->hostdata;
 	int count, found;
 	u32 bus, cid;
 	int ret = FAILED;
@@ -910,9 +910,9 @@ static void aac_tmf_callback(void *context, struct fib *fibptr)
  */
 static int aac_eh_dev_reset(struct scsi_cmnd *cmd)
 {
-	struct scsi_device * dev = cmd->device;
-	struct Scsi_Host * host = dev->host;
-	struct aac_dev * aac = (struct aac_dev *)host->hostdata;
+	struct scsi_device *dev = cmd->device;
+	struct Scsi_Host *host = dev->host;
+	struct aac_dev *aac = (struct aac_dev *)host->hostdata;
 	struct aac_hba_map_info *info;
 	int count;
 	u32 bus, cid;
