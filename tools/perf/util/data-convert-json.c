@@ -97,6 +97,11 @@ static void output_json_format(FILE *out, bool comma, int depth, const char *for
 static void output_json_key_string(FILE *out, bool comma, int depth,
 		const char *key, const char *value)
 {
+	if (!value) {
+		pr_info("No value set for key %s\n", key);
+		return;
+	}
+
 	output_json_delimiters(out, comma, depth);
 	output_json_string(out, key);
 	fputs(": ", out);
