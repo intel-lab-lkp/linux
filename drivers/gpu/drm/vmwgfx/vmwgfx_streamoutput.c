@@ -96,7 +96,7 @@ static int vmw_dx_streamoutput_unscrub(struct vmw_resource *res)
 		SVGA3dCmdDXBindStreamOutput body;
 	} *cmd;
 
-	if (!list_empty(&so->cotable_head) || !so->committed )
+	if (!list_empty(&so->cotable_head) || !so->committed)
 		return 0;
 
 	cmd = VMW_CMD_CTX_RESERVE(dev_priv, sizeof(*cmd), so->ctx->id);
@@ -363,6 +363,6 @@ void vmw_dx_streamoutput_cotable_list_scrub(struct vmw_private *dev_priv,
 	list_for_each_entry_safe(entry, next, list, cotable_head) {
 		WARN_ON(vmw_dx_streamoutput_scrub(&entry->res));
 		if (!readback)
-			entry->committed =false;
+			entry->committed = false;
 	}
 }
