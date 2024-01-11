@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include "../kselftest.h"
 
 #define MAP_LENGTH		(2UL * 1024 * 1024)
 
@@ -77,7 +78,7 @@ static int check_page_flags(unsigned long pfn)
 	read(fd, &pageflags, sizeof(pageflags));
 	if ((pageflags & HEAD_PAGE_FLAGS) != HEAD_PAGE_FLAGS) {
 		close(fd);
-		printf("Head page flags (%lx) is invalid\n", pageflags);
+		ksft_print_msg("Head page flags (%lx) is invalid\n", pageflags);
 		return -1;
 	}
 
@@ -91,7 +92,7 @@ static int check_page_flags(unsigned long pfn)
 		if ((pageflags & TAIL_PAGE_FLAGS) != TAIL_PAGE_FLAGS ||
 		    (pageflags & HEAD_PAGE_FLAGS) == HEAD_PAGE_FLAGS) {
 			close(fd);
-			printf("Tail page flags (%lx) is invalid\n", pageflags);
+			ksft_print_msg("Tail page flags (%lx) is invalid\n", pageflags);
 			return -1;
 		}
 	}
@@ -106,11 +107,12 @@ int main(int argc, char **argv)
 	void *addr;
 	unsigned long pfn;
 
+	ksft_print_header();
+	ksft_set_plan(1);
+
 	addr = mmap(MAP_ADDR, MAP_LENGTH, PROT_READ | PROT_WRITE, MAP_FLAGS, -1, 0);
-	if (addr == MAP_FAILED) {
-		perror("mmap");
-		exit(1);
-	}
+	if (addr == MAP_FAILED)
+		ksft_exit_fail_msg("mmap: %s\n", strerror(errno));
 
 	/* Trigger allocation of HugeTLB page. */
 	write_bytes(addr, MAP_LENGTH);
@@ -118,23 +120,19 @@ int main(int argc, char **argv)
 	pfn = virt_to_pfn(addr);
 	if (pfn == -1UL) {
 		munmap(addr, MAP_LENGTH);
-		perror("virt_to_pfn");
-		exit(1);
+		ksft_exit_fail_msg("virt_to_pfn: %s\n", strerror(errno));
+	} else if (!pfn && geteuid()) {
+		ksft_test_result_skip("Unable to read the pfn as non-root user\n");
+		ksft_finished();
 	}
 
-	printf("Returned address is %p whose pfn is %lx\n", addr, pfn);
+	ksft_print_msg("Returned address is %p whose pfn is %lx\n", addr, pfn);
 
-	if (check_page_flags(pfn) < 0) {
-		munmap(addr, MAP_LENGTH);
-		perror("check_page_flags");
-		exit(1);
-	}
+	ksft_test_result(!check_page_flags(pfn), "Check page flags\n");
 
 	/* munmap() length of MAP_HUGETLB memory must be hugepage aligned */
-	if (munmap(addr, MAP_LENGTH)) {
-		perror("munmap");
-		exit(1);
-	}
+	if (munmap(addr, MAP_LENGTH))
+		ksft_exit_fail_msg("munmap: %s\n", strerror(errno));
 
-	return 0;
+	ksft_finished();
 }
