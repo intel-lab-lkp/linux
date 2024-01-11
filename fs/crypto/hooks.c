@@ -94,52 +94,45 @@ int __fscrypt_prepare_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 EXPORT_SYMBOL_GPL(__fscrypt_prepare_rename);
 
-int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
-			     struct fscrypt_name *fname)
-{
-	int err = fscrypt_setup_filename(dir, &dentry->d_name, 1, fname);
-
-	if (err && err != -ENOENT)
-		return err;
-
-	if (fname->is_nokey_name) {
-		spin_lock(&dentry->d_lock);
-		dentry->d_flags |= DCACHE_NOKEY_NAME;
-		spin_unlock(&dentry->d_lock);
-	}
-	return err;
-}
-EXPORT_SYMBOL_GPL(__fscrypt_prepare_lookup);
-
 /**
- * fscrypt_prepare_lookup_partial() - prepare lookup without filename setup
+ * fscrypt_prepare_lookup_dentry() - prepare lookup without filename setup
  * @dir: the encrypted directory being searched
  * @dentry: the dentry being looked up in @dir
  *
- * This function should be used by the ->lookup and ->atomic_open methods of
- * filesystems that handle filename encryption and no-key name encoding
- * themselves and thus can't use fscrypt_prepare_lookup().  Like
- * fscrypt_prepare_lookup(), this will try to set up the directory's encryption
- * key and will set DCACHE_NOKEY_NAME on the dentry if the key is unavailable.
- * However, this function doesn't set up a struct fscrypt_name for the filename.
+ * This function should be used by the ->lookup and ->atomic_open
+ * methods of filesystems that handle filename encryption and no-key
+ * name encoding themselves and thus can't use fscrypt_prepare_lookup()
+ * directly.  This will try to set up the directory's encryption key and
+ * will set DCACHE_NOKEY_NAME on the dentry if the key is unavailable.
+ * However, this function doesn't set up a struct fscrypt_name for the
+ * filename.
  *
  * Return: 0 on success; -errno on error.  Note that the encryption key being
  *	   unavailable is not considered an error.  It is also not an error if
  *	   the encryption policy is unsupported by this kernel; that is treated
  *	   like the key being unavailable, so that files can still be deleted.
  */
-int fscrypt_prepare_lookup_partial(struct inode *dir, struct dentry *dentry)
+int fscrypt_prepare_lookup_dentry(struct inode *dir,
+				  struct dentry *dentry)
 {
-	int err = fscrypt_get_encryption_info(dir, true);
+	bool nokey_name = false;
+	int err = 0;
 
-	if (!err && !fscrypt_has_encryption_key(dir)) {
-		spin_lock(&dentry->d_lock);
-		dentry->d_flags |= DCACHE_NOKEY_NAME;
-		spin_unlock(&dentry->d_lock);
+	if (IS_ENCRYPTED(dir)) {
+		err = fscrypt_get_encryption_info(dir, true);
+		if (!err && !fscrypt_has_encryption_key(dir))
+			nokey_name = true;
 	}
+
+	spin_lock(&dentry->d_lock);
+	if (nokey_name) {
+		dentry->d_flags |= DCACHE_NOKEY_NAME;
+	}
+	spin_unlock(&dentry->d_lock);
+
 	return err;
 }
-EXPORT_SYMBOL_GPL(fscrypt_prepare_lookup_partial);
+EXPORT_SYMBOL_GPL(fscrypt_prepare_lookup_dentry);
 
 int __fscrypt_prepare_readdir(struct inode *dir)
 {
