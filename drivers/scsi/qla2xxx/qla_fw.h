@@ -1942,14 +1942,16 @@ struct nvram_81xx {
 	__le16	reserved_6[24];
 
 	/* Offset 128. */
-	__le16	ex_version;
-	uint8_t prio_fcf_matching_flags;
-	uint8_t reserved_6_1[3];
-	__le16	pri_fcf_vlan_id;
-	uint8_t pri_fcf_fabric_name[8];
-	__le16	reserved_6_2[7];
-	uint8_t spma_mac_addr[6];
-	__le16	reserved_6_3[14];
+	struct_group(ex_cb_81xx,
+		__le16	ex_version;
+		uint8_t prio_fcf_matching_flags;
+		uint8_t reserved_6_1[3];
+		__le16	pri_fcf_vlan_id;
+		uint8_t pri_fcf_fabric_name[8];
+		__le16	reserved_6_2[7];
+		uint8_t spma_mac_addr[6];
+		__le16	reserved_6_3[14];
+	);
 
 	/* Offset 192. */
 	uint8_t min_supported_speed;

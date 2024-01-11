@@ -9187,7 +9187,7 @@ qla81xx_nvram_config(scsi_qla_host_t *vha)
 	}
 
 	/* Use extended-initialization control block. */
-	memcpy(ha->ex_init_cb, &nv->ex_version, sizeof(*ha->ex_init_cb));
+	memcpy(ha->ex_init_cb, &nv->ex_cb_81xx, sizeof(*ha->ex_init_cb));
 	ha->frame_payload_size = le16_to_cpu(icb->frame_payload_size);
 	/*
 	 * Setup driver NVRAM options.
