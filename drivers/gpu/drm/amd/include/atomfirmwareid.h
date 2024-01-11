@@ -28,8 +28,7 @@
 #ifndef _ATOMFIRMWAREID_H_
 #define _ATOMFIRMWAREID_H_
 
-enum atom_master_data_table_id
-{
+enum atom_master_data_table_id {
     VBIOS_DATA_TBL_ID__UTILITY_PIPELINE,
     VBIOS_DATA_TBL_ID__MULTIMEDIA_INF,
     VBIOS_DATA_TBL_ID__FIRMWARE_INF,
@@ -51,8 +50,7 @@ enum atom_master_data_table_id
     VBIOS_DATA_TBL_ID__UNDEFINED,
 };
 
-enum atom_master_command_table_id
-{
+enum atom_master_command_table_id {
     VBIOS_CMD_TBL_ID__ASIC_INIT,
     VBIOS_CMD_TBL_ID__DIGX_ENCODER_CONTROL,
     VBIOS_CMD_TBL_ID__SET_ENGINE_CLOCK,
