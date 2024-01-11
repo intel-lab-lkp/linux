@@ -405,8 +405,12 @@ struct aer_err_info {
 	unsigned int __pad2:2;
 	unsigned int tlp_header_valid:1;
 
-	unsigned int status;		/* COR/UNCOR Error Status */
-	unsigned int mask;		/* COR/UNCOR Error Mask */
+	u32 cor_mask;		/* COR Error Mask */
+	u32 cor_status;		/* COR Error Status */
+	u32 uncor_mask;		/* UNCOR Error Mask */
+	u32 uncor_status;	/* UNCOR Error Status */
+	u32 uncor_severity;	/* UNCOR Error Severity */
+	u16 device_status;
 	struct aer_header_log_regs tlp;	/* TLP Header */
 };
 

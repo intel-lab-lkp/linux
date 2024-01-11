@@ -318,6 +318,33 @@ struct pci_sriov;
 struct pci_p2pdma;
 struct rcec_ea;
 
+struct pcie_capability_regs {
+	u8 pcie_cap_id;
+	u8 next_cap_ptr;
+	u16 pcie_caps;
+	u32 device_caps;
+	u16 device_control;
+	u16 device_status;
+	u32 link_caps;
+	u16 link_control;
+	u16 link_status;
+	u32 slot_caps;
+	u16 slot_control;
+	u16 slot_status;
+	u16 root_control;
+	u16 root_caps;
+	u32 root_status;
+	u32 device_caps_2;
+	u16 device_control_2;
+	u16 device_status_2;
+	u32 link_caps_2;
+	u16 link_control_2;
+	u16 link_status_2;
+	u32 slot_caps_2;
+	u16 slot_control_2;
+	u16 slot_status_2;
+};
+
 /* The pci_dev structure describes PCI devices */
 struct pci_dev {
 	struct list_head bus_list;	/* Node in per-bus list */

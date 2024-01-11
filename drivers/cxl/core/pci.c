@@ -902,6 +902,7 @@ static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	struct aer_capability_regs aer_regs;
 	struct cxl_dport *dport;
 	struct cxl_port *port;
+	u16 device_status;
 	int severity;
 
 	port = cxl_pci_find_port(pdev, &dport);
@@ -916,7 +917,10 @@ static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
 		return;
 
-	pci_print_aer(pdev, severity, &aer_regs);
+	if (pcie_capability_read_word(pdev, PCI_EXP_DEVSTA, &device_status))
+		return;
+
+	pci_print_aer(pdev, severity, &aer_regs, device_status);
 
 	if (severity == AER_CORRECTABLE)
 		cxl_handle_rdport_cor_ras(cxlds, dport);

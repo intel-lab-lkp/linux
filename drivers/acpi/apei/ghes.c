@@ -576,6 +576,8 @@ static void ghes_handle_aer(struct acpi_hest_generic_data *gdata)
 
 	if (pcie_err->validation_bits & CPER_PCIE_VALID_DEVICE_ID &&
 	    pcie_err->validation_bits & CPER_PCIE_VALID_AER_INFO) {
+		struct pcie_capability_regs *pcie_caps;
+		u16 device_status = 0;
 		unsigned int devfn;
 		int aer_severity;
 		u8 *aer_info;
@@ -598,11 +600,17 @@ static void ghes_handle_aer(struct acpi_hest_generic_data *gdata)
 			return;
 		memcpy(aer_info, pcie_err->aer_info, sizeof(struct aer_capability_regs));
 
+		if (pcie_err->validation_bits & CPER_PCIE_VALID_CAPABILITY) {
+			pcie_caps = (struct pcie_capability_regs *) &pcie_err->capability;
+			device_status = pcie_caps->device_status;
+		}
+
 		aer_recover_queue(pcie_err->device_id.segment,
 				  pcie_err->device_id.bus,
 				  devfn, aer_severity,
 				  (struct aer_capability_regs *)
-				  aer_info);
+				  aer_info,
+				  device_status);
 	}
 #endif
 }
