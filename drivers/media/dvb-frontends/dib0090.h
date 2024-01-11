@@ -82,7 +82,7 @@ extern u16 dib0090_get_wbd_offset(struct dvb_frontend *fe);
 extern int dib0090_gain_control(struct dvb_frontend *fe);
 extern enum frontend_tune_state dib0090_get_tune_state(struct dvb_frontend *fe);
 extern int dib0090_set_tune_state(struct dvb_frontend *fe, enum frontend_tune_state tune_state);
-extern void dib0090_get_current_gain(struct dvb_frontend *fe, u16 * rf, u16 * bb, u16 * rf_gain_limit, u16 * rflt);
+extern void dib0090_get_current_gain(struct dvb_frontend *fe, u16* rf, u16* bb, u16* rf_gain_limit, u16* rflt);
 extern void dib0090_set_dc_servo(struct dvb_frontend *fe, u8 DC_servo_cutoff);
 extern int dib0090_set_switch(struct dvb_frontend *fe, u8 sw1, u8 sw2, u8 sw3);
 extern int dib0090_set_vga(struct dvb_frontend *fe, u8 onoff);
