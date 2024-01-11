@@ -451,7 +451,7 @@ static const char *cmd_status_names[] = {
 static bool psb_intel_sdvo_write_cmd(struct psb_intel_sdvo *psb_intel_sdvo, u8 cmd,
 				 const void *args, int args_len)
 {
-	u8 buf[MAX_ARG_LEN*2 + 2], status;
+	u8 buf[MAX_ARG_LEN * 2 + 2], status;
 	struct i2c_msg msgs[MAX_ARG_LEN + 3];
 	int i, ret;
 
@@ -466,16 +466,16 @@ static bool psb_intel_sdvo_write_cmd(struct psb_intel_sdvo *psb_intel_sdvo, u8 c
 		msgs[i].addr = psb_intel_sdvo->slave_addr;
 		msgs[i].flags = 0;
 		msgs[i].len = 2;
-		msgs[i].buf = buf + 2 *i;
-		buf[2*i + 0] = SDVO_I2C_ARG_0 - i;
-		buf[2*i + 1] = ((u8*)args)[i];
+		msgs[i].buf = buf + 2 * i;
+		buf[2 * i + 0] = SDVO_I2C_ARG_0 - i;
+		buf[2 * i + 1] = ((u8 *)args)[i];
 	}
 	msgs[i].addr = psb_intel_sdvo->slave_addr;
 	msgs[i].flags = 0;
 	msgs[i].len = 2;
-	msgs[i].buf = buf + 2*i;
-	buf[2*i + 0] = SDVO_I2C_OPCODE;
-	buf[2*i + 1] = cmd;
+	msgs[i].buf = buf + 2 * i;
+	buf[2 * i + 0] = SDVO_I2C_OPCODE;
+	buf[2 * i + 1] = cmd;
 
 	/* the following two are to read the response */
 	status = SDVO_I2C_CMD_STATUS;
@@ -798,7 +798,7 @@ static void psb_intel_sdvo_get_dtd_from_mode(struct psb_intel_sdvo_dtd *dtd,
 	dtd->part2.reserved = 0;
 }
 
-static void psb_intel_sdvo_get_mode_from_dtd(struct drm_display_mode * mode,
+static void psb_intel_sdvo_get_mode_from_dtd(struct drm_display_mode *mode,
 					 const struct psb_intel_sdvo_dtd *dtd)
 {
 	mode->hdisplay = dtd->part1.h_active;
