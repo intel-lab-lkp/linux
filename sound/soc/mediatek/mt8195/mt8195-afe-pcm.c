@@ -3193,16 +3193,9 @@ err_pm_put:
 	return ret;
 }
 
-static void mt8195_afe_pcm_dev_remove(struct platform_device *pdev)
-{
-	pm_runtime_disable(&pdev->dev);
-	if (!pm_runtime_status_suspended(&pdev->dev))
-		mt8195_afe_runtime_suspend(&pdev->dev);
-}
-
 static const struct of_device_id mt8195_afe_pcm_dt_match[] = {
-	{.compatible = "mediatek,mt8195-audio", },
-	{},
+	{ .compatible = "mediatek,mt8195-audio" },
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, mt8195_afe_pcm_dt_match);
 
@@ -3218,7 +3211,6 @@ static struct platform_driver mt8195_afe_pcm_driver = {
 		   .pm = &mt8195_afe_pm_ops,
 	},
 	.probe = mt8195_afe_pcm_dev_probe,
-	.remove_new = mt8195_afe_pcm_dev_remove,
 };
 
 module_platform_driver(mt8195_afe_pcm_driver);
