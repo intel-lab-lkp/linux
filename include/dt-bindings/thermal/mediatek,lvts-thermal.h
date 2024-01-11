@@ -26,6 +26,22 @@
 #define MT8186_TS3_1		7
 #define MT8186_TS3_2		8
 
+#define MT8188_MCU_TS1_0	0
+#define MT8188_MCU_TS1_1	1
+#define MT8188_MCU_TS1_2	2
+#define MT8188_MCU_TS1_3	3
+#define MT8188_MCU_TS2_0	4
+#define MT8188_MCU_TS2_1	5
+
+#define MT8188_AP_TS3_1		0
+#define MT8188_AP_TS4_0		1
+#define MT8188_AP_TS4_1		2
+#define MT8188_AP_TS4_2		3
+#define MT8188_AP_TS5_0		4
+#define MT8188_AP_TS5_1		5
+#define MT8188_AP_TS6_0		6
+#define MT8188_AP_TS6_1		7
+
 #define MT8195_MCU_BIG_CPU0     0
 #define MT8195_MCU_BIG_CPU1     1
 #define MT8195_MCU_BIG_CPU2     2
