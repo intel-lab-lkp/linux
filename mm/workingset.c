@@ -372,15 +372,15 @@ void workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_pages)
 
 /**
  * workingset_eviction - note the eviction of a folio from memory
- * @target_memcg: the cgroup that is causing the reclaim
  * @folio: the folio being evicted
  *
  * Return: a shadow entry to be stored in @folio->mapping->i_pages in place
  * of the evicted @folio so that a later refault can be detected.
  */
-void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
+void *workingset_eviction(struct folio *folio)
 {
 	struct pglist_data *pgdat = folio_pgdat(folio);
+	struct mem_cgroup *memcg = folio_memcg(folio);
 	unsigned long eviction;
 	struct lruvec *lruvec;
 	int memcgid;
@@ -393,7 +393,7 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
 	if (lru_gen_enabled())
 		return lru_gen_eviction(folio);
 
-	lruvec = mem_cgroup_lruvec(target_memcg, pgdat);
+	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 	/* XXX: target_memcg can be NULL, go through lruvec */
 	memcgid = mem_cgroup_id(lruvec_memcg(lruvec));
 	eviction = atomic_long_read(&lruvec->nonresident_age);
