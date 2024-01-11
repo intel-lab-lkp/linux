@@ -616,7 +616,7 @@ qla4xxx_update_local_ifcb(struct scsi_qla_host *ha,
  * qla4xxx_initialize_fw_cb - initializes firmware control block.
  * @ha: Pointer to host adapter structure.
  **/
-int qla4xxx_initialize_fw_cb(struct scsi_qla_host * ha)
+int qla4xxx_initialize_fw_cb(struct scsi_qla_host *ha)
 {
 	struct addr_ctrl_blk *init_fw_cb;
 	dma_addr_t init_fw_cb_dma;
@@ -698,7 +698,7 @@ exit_init_fw_cb_no_free:
  * qla4xxx_get_dhcp_ip_address - gets HBA ip address via DHCP
  * @ha: Pointer to host adapter structure.
  **/
-int qla4xxx_get_dhcp_ip_address(struct scsi_qla_host * ha)
+int qla4xxx_get_dhcp_ip_address(struct scsi_qla_host *ha)
 {
 	struct addr_ctrl_blk *init_fw_cb;
 	dma_addr_t init_fw_cb_dma;
@@ -737,7 +737,7 @@ int qla4xxx_get_dhcp_ip_address(struct scsi_qla_host * ha)
  * qla4xxx_get_firmware_state - gets firmware state of HBA
  * @ha: Pointer to host adapter structure.
  **/
-int qla4xxx_get_firmware_state(struct scsi_qla_host * ha)
+int qla4xxx_get_firmware_state(struct scsi_qla_host *ha)
 {
 	uint32_t mbox_cmd[MBOX_REG_COUNT];
 	uint32_t mbox_sts[MBOX_REG_COUNT];
@@ -768,7 +768,7 @@ int qla4xxx_get_firmware_state(struct scsi_qla_host * ha)
  * qla4xxx_get_firmware_status - retrieves firmware status
  * @ha: Pointer to host adapter structure.
  **/
-int qla4xxx_get_firmware_status(struct scsi_qla_host * ha)
+int qla4xxx_get_firmware_status(struct scsi_qla_host *ha)
 {
 	uint32_t mbox_cmd[MBOX_REG_COUNT];
 	uint32_t mbox_sts[MBOX_REG_COUNT];
