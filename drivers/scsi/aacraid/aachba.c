@@ -224,7 +224,7 @@ static long aac_build_sghba(struct scsi_cmnd *scsicmd,
 static int aac_convert_sgraw2(struct aac_raw_io2 *rio2,
 				int pages, int nseg, int nseg_new);
 static void aac_probe_container_scsi_done(struct scsi_cmnd *scsi_cmnd);
-static int aac_send_srb_fib(struct scsi_cmnd* scsicmd);
+static int aac_send_srb_fib(struct scsi_cmnd *scsicmd);
 static int aac_send_hba_fib(struct scsi_cmnd *scsicmd);
 #ifdef AAC_DETAILED_STATUS_INFO
 static char *aac_get_status_string(u32 status);
