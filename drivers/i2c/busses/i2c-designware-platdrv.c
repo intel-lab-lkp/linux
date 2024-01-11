@@ -176,23 +176,17 @@ static const struct i2c_dw_semaphore_callbacks i2c_dw_semaphore_cb_table[] = {
 	{}
 };
 
-static void i2c_dw_remove_lock_support(void *data)
-{
-	struct dw_i2c_dev *dev = data;
-
-	if (!dev->semaphore_cb)
-		return;
-
-	if (dev->semaphore_cb->remove)
-		dev->semaphore_cb->remove(dev);
-}
-
 static int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev)
 {
 	const struct i2c_dw_semaphore_callbacks *ptr;
+	int i = 0;
 	int ret;
 
-	for (ptr = i2c_dw_semaphore_cb_table; ptr->probe; ptr++) {
+	ptr = i2c_dw_semaphore_cb_table;
+
+	dev->semaphore_idx = -1;
+
+	while (ptr->probe) {
 		ret = ptr->probe(dev);
 		if (ret) {
 			/*
@@ -203,14 +197,25 @@ static int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev)
 			if (ret != -ENODEV)
 				return ret;
 
+			i++;
+			ptr++;
 			continue;
 		}
 
-		dev->semaphore_cb = ptr;
+		dev->semaphore_idx = i;
 		break;
 	}
 
-	return devm_add_action_or_reset(dev->dev, i2c_dw_remove_lock_support, dev);
+	return 0;
+}
+
+static void i2c_dw_remove_lock_support(struct dw_i2c_dev *dev)
+{
+	if (dev->semaphore_idx < 0)
+		return;
+
+	if (i2c_dw_semaphore_cb_table[dev->semaphore_idx].remove)
+		i2c_dw_semaphore_cb_table[dev->semaphore_idx].remove(dev);
 }
 
 static void dw_i2c_plat_assert_reset(void *data)
@@ -340,6 +345,8 @@ static void dw_i2c_plat_remove(struct platform_device *pdev)
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
+
+	i2c_dw_remove_lock_support(dev);
 }
 
 static const struct of_device_id dw_i2c_of_match[] = {
