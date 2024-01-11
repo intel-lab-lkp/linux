@@ -666,7 +666,7 @@ struct psb_intel_sdvo_enhancement_limits_reply {
 #define SDVO_CMD_SET_TV_LUMA_FILTER			0x79
 struct psb_intel_sdvo_enhancements_arg {
     u16 value;
-}__attribute__((packed));
+} __attribute__((packed));
 
 #define SDVO_CMD_GET_DOT_CRAWL				0x70
 #define SDVO_CMD_SET_DOT_CRAWL				0x71
