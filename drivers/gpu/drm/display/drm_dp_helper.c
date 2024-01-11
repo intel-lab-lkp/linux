@@ -2134,7 +2134,7 @@ void drm_dp_aux_unregister(struct drm_dp_aux *aux)
 }
 EXPORT_SYMBOL(drm_dp_aux_unregister);
 
-#define PSR_SETUP_TIME(x) [DP_PSR_SETUP_TIME_ ## x >> DP_PSR_SETUP_TIME_SHIFT] = (x)
+#define PSR_SETUP_TIME(x)[DP_PSR_SETUP_TIME_ ## x >> DP_PSR_SETUP_TIME_SHIFT] = (x)
 
 /**
  * drm_dp_psr_setup_time() - PSR setup in time usec
