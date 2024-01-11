@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
@@ -113,6 +114,12 @@ static int cbmem_entry_probe(struct coreboot_device *dev)
 
 	return 0;
 }
+
+static const struct coreboot_device_id cbmem_ids[] = {
+	{ .tag = LB_TAG_CBMEM_ENTRY },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(coreboot, cbmem_ids);
 
 static struct coreboot_driver cbmem_entry_driver = {
 	.probe = cbmem_entry_probe,
