@@ -126,7 +126,7 @@ static void oaktrail_lvds_mode_set(struct drm_encoder *encoder,
 		return;
 	}
 
-	drm_object_property_get_value( &connector->base,
+	drm_object_property_get_value(&connector->base,
 		dev->mode_config.scaling_mode_property, &v);
 	drm_connector_list_iter_end(&conn_iter);
 
