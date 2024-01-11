@@ -317,6 +317,7 @@ struct dw_pcie_rp {
 	phys_addr_t		io_bus_addr;
 	u32			io_size;
 	int			irq;
+	u8			coherent_dma_bits;
 	const struct dw_pcie_host_ops *ops;
 	int			msi_irq[MAX_MSI_CTRLS];
 	struct irq_domain	*irq_domain;

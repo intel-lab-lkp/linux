@@ -331,6 +331,8 @@ static int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 	u64 *msi_vaddr;
 	int ret;
 	u32 ctrl, num_ctrls;
+	struct device_node *np;
+	struct resource r;
 
 	for (ctrl = 0; ctrl < MAX_MSI_CTRLS; ctrl++)
 		pp->irq_mask[ctrl] = ~0;
@@ -374,20 +376,44 @@ static int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 	 * order not to miss MSI TLPs from those devices the MSI target
 	 * address has to be within the lowest 4GB.
 	 *
-	 * Note until there is a better alternative found the reservation is
-	 * done by allocating from the artificially limited DMA-coherent
-	 * memory.
+	 * Check if there is memory region reserved for this device. If yes,
+	 * pick up the msi_data from this region. This will be helpful for
+	 * platforms that do not use/have 32-bit DMA addresses but want to use
+	 * endpoints which support only 32-bit MSI address.
+	 * Else, if the memory region is not reserved, try to allocate a 32-bit
+	 * IOVA. Additionally, if this allocation also fails, attempt a 64-bit
+	 * allocation. If the 64-bit MSI address is allocated, then the EPs
+	 * supporting 32-bit MSI address will not work.
 	 */
-	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
-	if (ret)
-		dev_warn(dev, "Failed to set DMA mask to 32-bit. Devices with only 32-bit MSI support may not work properly\n");
+	np = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (np) {
+		ret = of_address_to_resource(np, 0, &r);
+		if (ret) {
+			dev_err(dev, "No memory address assigned to the region\n");
+			return ret;
+		}
 
-	msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
-					GFP_KERNEL);
-	if (!msi_vaddr) {
-		dev_err(dev, "Failed to alloc and map MSI data\n");
-		dw_pcie_free_msi(pp);
-		return -ENOMEM;
+		pp->msi_data = r.start;
+	} else {
+		dev_dbg(dev, "No %s specified\n", "memory-region");
+		ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
+		if (ret)
+			dev_warn(dev, "Failed to set DMA mask to 32-bit. Devices with only 32-bit MSI support may not work properly\n");
+
+		msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
+						GFP_KERNEL);
+		if (!msi_vaddr) {
+			dev_warn(dev, "Failed to alloc 32-bit MSI data. Attempting 64-bit now\n");
+			dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
+			msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
+							GFP_KERNEL);
+		}
+
+		if (!msi_vaddr) {
+			dev_err(dev, "Failed to alloc and map MSI data\n");
+			dw_pcie_free_msi(pp);
+			return -ENOMEM;
+		}
 	}
 
 	return 0;
