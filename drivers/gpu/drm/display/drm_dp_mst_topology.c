@@ -100,7 +100,7 @@ static bool drm_dp_mst_port_downstream_of_branch(struct drm_dp_mst_port *port,
 
 #define DBG_PREFIX "[dp_mst]"
 
-#define DP_STR(x) [DP_ ## x] = #x
+#define DP_STR(x)[DP_ ## x] = #x
 
 static const char *drm_dp_mst_req_type_str(u8 req_type)
 {
@@ -131,7 +131,7 @@ static const char *drm_dp_mst_req_type_str(u8 req_type)
 }
 
 #undef DP_STR
-#define DP_STR(x) [DP_NAK_ ## x] = #x
+#define DP_STR(x)[DP_NAK_ ## x] = #x
 
 static const char *drm_dp_mst_nak_reason_str(u8 nak_reason)
 {
@@ -156,7 +156,7 @@ static const char *drm_dp_mst_nak_reason_str(u8 nak_reason)
 }
 
 #undef DP_STR
-#define DP_STR(x) [DRM_DP_SIDEBAND_TX_ ## x] = #x
+#define DP_STR(x)[DRM_DP_SIDEBAND_TX_ ## x] = #x
 
 static const char *drm_dp_mst_sideband_tx_state_str(int state)
 {
