@@ -154,9 +154,11 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	/*
 	 * Retrieve the modifier (SME encryption mask if SME is active) to be
 	 * added to the initial pgdir entry that will be programmed into CR3.
+	 * Since we may have not completed page table fixups, use RIP-relative
+	 * addressing for sme_me_mask.
 	 */
 #ifdef CONFIG_AMD_MEM_ENCRYPT
-	movq	sme_me_mask, %rax
+	movq	sme_me_mask(%rip), %rax
 #else
 	xorq	%rax, %rax
 #endif

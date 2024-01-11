@@ -17,6 +17,34 @@
 
 #include <asm/bootparam.h>
 
+/*
+ * Generates an RIP-relative pointer to a data variable "var".
+ * This macro can be used to safely access global data variables prior to kernel
+ * relocation, similar to fixup_pointer() in arch/x86/kernel/head64.c.
+ */
+#define GET_RIP_RELATIVE_PTR(var)	\
+({					\
+	void *rip_rel_ptr;		\
+	asm ("lea "#var"(%%rip), %0"	\
+		: "=r" (rip_rel_ptr)	\
+		: "p" (&var));		\
+	rip_rel_ptr;			\
+})
+
+/*
+ * Converts an existing pointer "ptr" to an RIP-relative pointer.
+ * This macro can be used to safely access global pointers prior to kernel
+ * relocation, similar to fixup_pointer() in arch/x86/kernel/head64.c.
+ */
+#define PTR_TO_RIP_RELATIVE_PTR(ptr)	\
+({					\
+	void *rip_rel_ptr;		\
+	asm ("lea "#ptr"(%%rip), %0"	\
+		: "=r" (rip_rel_ptr)	\
+		: "p" (ptr));		\
+	rip_rel_ptr;			\
+})
+
 #ifdef CONFIG_X86_MEM_ENCRYPT
 void __init mem_encrypt_init(void);
 void __init mem_encrypt_setup_arch(void);
@@ -106,9 +134,14 @@ void add_encrypt_protection_map(void);
 
 extern char __start_bss_decrypted[], __end_bss_decrypted[], __start_bss_decrypted_unused[];
 
-static inline u64 sme_get_me_mask(void)
+static inline u64 sme_get_me_mask_fixup(void)
 {
-	return sme_me_mask;
+	return *((u64 *) GET_RIP_RELATIVE_PTR(sme_me_mask));
+}
+
+static inline u64 sev_get_status_fixup(void)
+{
+	return *((u64 *) GET_RIP_RELATIVE_PTR(sev_status));
 }
 
 #endif	/* __ASSEMBLY__ */

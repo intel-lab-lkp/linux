@@ -5,6 +5,11 @@
  * Copyright (C) 2019 SUSE
  *
  * Author: Joerg Roedel <jroedel@suse.de>
+ *
+ * WARNING!!
+ * Select functions in this file can execute prior to page table fixups and thus
+ * require pointer fixups for global variable accesses. See WARNING in
+ * arch/x86/kernel/head64.c.
  */
 
 #define pr_fmt(fmt)	"SEV: " fmt
@@ -748,7 +753,7 @@ void __init early_snp_set_memory_private(unsigned long vaddr, unsigned long padd
 	 * This eliminates worries about jump tables or checking boot_cpu_data
 	 * in the cc_platform_has() function.
 	 */
-	if (!(sev_status & MSR_AMD64_SEV_SNP_ENABLED))
+	if (!(sev_get_status_fixup() & MSR_AMD64_SEV_SNP_ENABLED))
 		return;
 
 	 /*
@@ -767,7 +772,7 @@ void __init early_snp_set_memory_shared(unsigned long vaddr, unsigned long paddr
 	 * This eliminates worries about jump tables or checking boot_cpu_data
 	 * in the cc_platform_has() function.
 	 */
-	if (!(sev_status & MSR_AMD64_SEV_SNP_ENABLED))
+	if (!(sev_get_status_fixup() & MSR_AMD64_SEV_SNP_ENABLED))
 		return;
 
 	 /* Ask hypervisor to mark the memory pages shared in the RMP table. */
@@ -2111,7 +2116,8 @@ void __init __noreturn snp_abort(void)
 
 static void dump_cpuid_table(void)
 {
-	const struct snp_cpuid_table *cpuid_table = snp_cpuid_get_table();
+	const struct snp_cpuid_table *cpuid_table = (const struct
+		snp_cpuid_table *) GET_RIP_RELATIVE_PTR(cpuid_table_copy);
 	int i = 0;
 
 	pr_info("count=%d reserved=0x%x reserved2=0x%llx\n",
@@ -2135,7 +2141,8 @@ static void dump_cpuid_table(void)
  */
 static int __init report_cpuid_table(void)
 {
-	const struct snp_cpuid_table *cpuid_table = snp_cpuid_get_table();
+	const struct snp_cpuid_table *cpuid_table = (const struct
+		snp_cpuid_table *) GET_RIP_RELATIVE_PTR(cpuid_table_copy);
 
 	if (!cpuid_table->count)
 		return 0;

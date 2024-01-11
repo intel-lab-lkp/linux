@@ -5,6 +5,11 @@
  * Copyright (C) 2016 Advanced Micro Devices, Inc.
  *
  * Author: Tom Lendacky <thomas.lendacky@amd.com>
+ *
+ * WARNING!!
+ * Select functions in this file can execute prior to page table fixups and thus
+ * require pointer fixups for global variable accesses. See WARNING in
+ * arch/x86/kernel/head64.c.
  */
 
 #define DISABLE_BRANCH_PROFILING
@@ -305,7 +310,7 @@ void __init sme_encrypt_kernel(struct boot_params *bp)
 	 * instrumentation or checking boot_cpu_data in the cc_platform_has()
 	 * function.
 	 */
-	if (!sme_get_me_mask() || sev_status & MSR_AMD64_SEV_ENABLED)
+	if (!sme_get_me_mask_fixup() || sev_get_status_fixup() & MSR_AMD64_SEV_ENABLED)
 		return;
 
 	/*
@@ -346,9 +351,7 @@ void __init sme_encrypt_kernel(struct boot_params *bp)
 	 * We're running identity mapped, so we must obtain the address to the
 	 * SME encryption workarea using rip-relative addressing.
 	 */
-	asm ("lea sme_workarea(%%rip), %0"
-	     : "=r" (workarea_start)
-	     : "p" (sme_workarea));
+	workarea_start = (unsigned long) PTR_TO_RIP_RELATIVE_PTR(sme_workarea);
 
 	/*
 	 * Calculate required number of workarea bytes needed:
@@ -511,7 +514,7 @@ void __init sme_enable(struct boot_params *bp)
 	unsigned long me_mask;
 	char buffer[16];
 	bool snp;
-	u64 msr;
+	u64 msr, *sme_me_mask_ptr, *sev_status_ptr;
 
 	snp = snp_init(bp);
 
@@ -542,12 +545,14 @@ void __init sme_enable(struct boot_params *bp)
 
 	me_mask = 1UL << (ebx & 0x3f);
 
+	sev_status_ptr = (u64 *) GET_RIP_RELATIVE_PTR(sev_status);
+
 	/* Check the SEV MSR whether SEV or SME is enabled */
-	sev_status   = __rdmsr(MSR_AMD64_SEV);
-	feature_mask = (sev_status & MSR_AMD64_SEV_ENABLED) ? AMD_SEV_BIT : AMD_SME_BIT;
+	*sev_status_ptr   = __rdmsr(MSR_AMD64_SEV);
+	feature_mask = (*sev_status_ptr & MSR_AMD64_SEV_ENABLED) ? AMD_SEV_BIT : AMD_SME_BIT;
 
 	/* The SEV-SNP CC blob should never be present unless SEV-SNP is enabled. */
-	if (snp && !(sev_status & MSR_AMD64_SEV_SNP_ENABLED))
+	if (snp && !(*sev_status_ptr & MSR_AMD64_SEV_SNP_ENABLED))
 		snp_abort();
 
 	/* Check if memory encryption is enabled */
@@ -573,7 +578,8 @@ void __init sme_enable(struct boot_params *bp)
 			return;
 	} else {
 		/* SEV state cannot be controlled by a command line option */
-		sme_me_mask = me_mask;
+		sme_me_mask_ptr = (u64 *) GET_RIP_RELATIVE_PTR(sme_me_mask);
+		*sme_me_mask_ptr = me_mask;
 		goto out;
 	}
 
@@ -582,15 +588,9 @@ void __init sme_enable(struct boot_params *bp)
 	 * identity mapped, so we must obtain the address to the SME command
 	 * line argument data using rip-relative addressing.
 	 */
-	asm ("lea sme_cmdline_arg(%%rip), %0"
-	     : "=r" (cmdline_arg)
-	     : "p" (sme_cmdline_arg));
-	asm ("lea sme_cmdline_on(%%rip), %0"
-	     : "=r" (cmdline_on)
-	     : "p" (sme_cmdline_on));
-	asm ("lea sme_cmdline_off(%%rip), %0"
-	     : "=r" (cmdline_off)
-	     : "p" (sme_cmdline_off));
+	cmdline_arg = (const char *) PTR_TO_RIP_RELATIVE_PTR(sme_cmdline_arg);
+	cmdline_on = (const char *) PTR_TO_RIP_RELATIVE_PTR(sme_cmdline_on);
+	cmdline_off = (const char *) PTR_TO_RIP_RELATIVE_PTR(sme_cmdline_off);
 
 	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT_ACTIVE_BY_DEFAULT))
 		active_by_default = true;
@@ -603,16 +603,18 @@ void __init sme_enable(struct boot_params *bp)
 	if (cmdline_find_option(cmdline_ptr, cmdline_arg, buffer, sizeof(buffer)) < 0)
 		return;
 
+	sme_me_mask_ptr = (u64 *) GET_RIP_RELATIVE_PTR(sme_me_mask);
+
 	if (!strncmp(buffer, cmdline_on, sizeof(buffer)))
-		sme_me_mask = me_mask;
+		*sme_me_mask_ptr = me_mask;
 	else if (!strncmp(buffer, cmdline_off, sizeof(buffer)))
-		sme_me_mask = 0;
+		*sme_me_mask_ptr = 0;
 	else
-		sme_me_mask = active_by_default ? me_mask : 0;
+		*sme_me_mask_ptr = active_by_default ? me_mask : 0;
 out:
-	if (sme_me_mask) {
-		physical_mask &= ~sme_me_mask;
+	if (*sme_me_mask_ptr) {
+		physical_mask &= ~(*sme_me_mask_ptr);
 		cc_vendor = CC_VENDOR_AMD;
-		cc_set_mask(sme_me_mask);
+		cc_set_mask(*sme_me_mask_ptr);
 	}
 }

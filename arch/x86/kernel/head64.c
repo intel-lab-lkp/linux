@@ -130,6 +130,7 @@ static unsigned long __head sme_postprocess_startup(struct boot_params *bp, pmdv
 {
 	unsigned long vaddr, vaddr_end;
 	int i;
+	const u64 sme_me_mask_fixed_up = sme_get_me_mask_fixup();
 
 	/* Encrypt the kernel and related (if SME is active) */
 	sme_encrypt_kernel(bp);
@@ -140,7 +141,7 @@ static unsigned long __head sme_postprocess_startup(struct boot_params *bp, pmdv
 	 * there is no need to zero it after changing the memory encryption
 	 * attribute.
 	 */
-	if (sme_get_me_mask()) {
+	if (sme_me_mask_fixed_up) {
 		vaddr = (unsigned long)__start_bss_decrypted;
 		vaddr_end = (unsigned long)__end_bss_decrypted;
 
@@ -158,7 +159,7 @@ static unsigned long __head sme_postprocess_startup(struct boot_params *bp, pmdv
 			early_snp_set_memory_shared(__pa(vaddr), __pa(vaddr), PTRS_PER_PMD);
 
 			i = pmd_index(vaddr);
-			pmd[i] -= sme_get_me_mask();
+			pmd[i] -= sme_me_mask_fixed_up;
 		}
 	}
 
@@ -166,14 +167,16 @@ static unsigned long __head sme_postprocess_startup(struct boot_params *bp, pmdv
 	 * Return the SME encryption mask (if SME is active) to be used as a
 	 * modifier for the initial pgdir entry programmed into CR3.
 	 */
-	return sme_get_me_mask();
+	return sme_me_mask_fixed_up;
 }
 
-/* Code in __startup_64() can be relocated during execution, but the compiler
+/*
+ * WARNING!!
+ * Code in __startup_64() can be relocated during execution, but the compiler
  * doesn't have to generate PC-relative relocations when accessing globals from
  * that function. Clang actually does not generate them, which leads to
  * boot-time crashes. To work around this problem, every global pointer must
- * be adjusted using fixup_pointer().
+ * be adjusted using fixup_pointer() or GET_RIP_RELATIVE_PTR().
  */
 unsigned long __head __startup_64(unsigned long physaddr,
 				  struct boot_params *bp)
@@ -188,6 +191,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	bool la57;
 	int i;
 	unsigned int *next_pgt_ptr;
+	const u64 sme_me_mask_fixed_up = sme_get_me_mask_fixup();
 
 	la57 = check_la57_support(physaddr);
 
@@ -206,7 +210,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 		for (;;);
 
 	/* Include the SME encryption mask in the fixup value */
-	load_delta += sme_get_me_mask();
+	load_delta += sme_me_mask_fixed_up;
 
 	/* Fixup the physical addresses in the page table */
 
@@ -242,7 +246,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	pud = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++], physaddr);
 	pmd = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++], physaddr);
 
-	pgtable_flags = _KERNPG_TABLE_NOENC + sme_get_me_mask();
+	pgtable_flags = _KERNPG_TABLE_NOENC + sme_me_mask_fixed_up;
 
 	if (la57) {
 		p4d = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++],
@@ -269,7 +273,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	/* Filter out unsupported __PAGE_KERNEL_* bits: */
 	mask_ptr = fixup_pointer(&__supported_pte_mask, physaddr);
 	pmd_entry &= *mask_ptr;
-	pmd_entry += sme_get_me_mask();
+	pmd_entry += sme_me_mask_fixed_up;
 	pmd_entry +=  physaddr;
 
 	for (i = 0; i < DIV_ROUND_UP(_end - _text, PMD_SIZE); i++) {
@@ -313,7 +317,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	 * Fixup phys_base - remove the memory encryption mask to obtain
 	 * the true physical address.
 	 */
-	*fixup_long(&phys_base, physaddr) += load_delta - sme_get_me_mask();
+	*fixup_long(&phys_base, physaddr) += load_delta - sme_me_mask_fixed_up;
 
 	return sme_postprocess_startup(bp, pmd);
 }

@@ -5,6 +5,11 @@
  * Copyright (C) 2021 Advanced Micro Devices, Inc.
  *
  * Author: Tom Lendacky <thomas.lendacky@amd.com>
+ *
+ * WARNING!!
+ * Select functions in this file can execute prior to page table fixups and thus
+ * require pointer fixups for global variable accesses. See WARNING in
+ * arch/x86/kernel/head64.c.
  */
 
 #include <linux/export.h>
@@ -61,33 +66,34 @@ static __maybe_unused __always_inline bool amd_cc_platform_vtom(enum cc_attr att
 static bool noinstr amd_cc_platform_has(enum cc_attr attr)
 {
 #ifdef CONFIG_AMD_MEM_ENCRYPT
+	const u64 sev_status_fixed_up = sev_get_status_fixup();
 
-	if (sev_status & MSR_AMD64_SNP_VTOM)
+	if (sev_status_fixed_up & MSR_AMD64_SNP_VTOM)
 		return amd_cc_platform_vtom(attr);
 
 	switch (attr) {
 	case CC_ATTR_MEM_ENCRYPT:
-		return sme_me_mask;
+		return sme_get_me_mask_fixup();
 
 	case CC_ATTR_HOST_MEM_ENCRYPT:
-		return sme_me_mask && !(sev_status & MSR_AMD64_SEV_ENABLED);
+		return sme_get_me_mask_fixup() && !(sev_status_fixed_up & MSR_AMD64_SEV_ENABLED);
 
 	case CC_ATTR_GUEST_MEM_ENCRYPT:
-		return sev_status & MSR_AMD64_SEV_ENABLED;
+		return sev_status_fixed_up & MSR_AMD64_SEV_ENABLED;
 
 	case CC_ATTR_GUEST_STATE_ENCRYPT:
-		return sev_status & MSR_AMD64_SEV_ES_ENABLED;
+		return sev_status_fixed_up & MSR_AMD64_SEV_ES_ENABLED;
 
 	/*
 	 * With SEV, the rep string I/O instructions need to be unrolled
 	 * but SEV-ES supports them through the #VC handler.
 	 */
 	case CC_ATTR_GUEST_UNROLL_STRING_IO:
-		return (sev_status & MSR_AMD64_SEV_ENABLED) &&
-			!(sev_status & MSR_AMD64_SEV_ES_ENABLED);
+		return (sev_status_fixed_up & MSR_AMD64_SEV_ENABLED) &&
+			!(sev_status_fixed_up & MSR_AMD64_SEV_ES_ENABLED);
 
 	case CC_ATTR_GUEST_SEV_SNP:
-		return sev_status & MSR_AMD64_SEV_SNP_ENABLED;
+		return sev_status_fixed_up & MSR_AMD64_SEV_SNP_ENABLED;
 
 	default:
 		return false;

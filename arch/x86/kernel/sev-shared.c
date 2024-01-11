@@ -7,6 +7,11 @@
  * This file is not compiled stand-alone. It contains code shared
  * between the pre-decompression boot code and the running Linux kernel
  * and is included directly into both code-bases.
+ *
+ * WARNING!!
+ * Select functions in this file can execute prior to page table fixups and thus
+ * require pointer fixups for global variable accesses. See WARNING in
+ * arch/x86/kernel/head64.c.
  */
 
 #ifndef __BOOT_COMPRESSED
@@ -110,8 +115,9 @@ static void __noreturn sev_es_terminate(unsigned int set, unsigned int reason)
 static u64 get_hv_features(void)
 {
 	u64 val;
+	const u16 *ghcb_version_ptr = (const u16 *) GET_RIP_RELATIVE_PTR(ghcb_version);
 
-	if (ghcb_version < 2)
+	if (*ghcb_version_ptr < 2)
 		return 0;
 
 	sev_es_wr_ghcb_msr(GHCB_MSR_HV_FT_REQ);
@@ -143,6 +149,7 @@ static void snp_register_ghcb_early(unsigned long paddr)
 static bool sev_es_negotiate_protocol(void)
 {
 	u64 val;
+	u16 *ghcb_version_ptr;
 
 	/* Do the GHCB protocol version negotiation */
 	sev_es_wr_ghcb_msr(GHCB_MSR_SEV_INFO_REQ);
@@ -156,7 +163,8 @@ static bool sev_es_negotiate_protocol(void)
 	    GHCB_MSR_PROTO_MIN(val) > GHCB_PROTOCOL_MAX)
 		return false;
 
-	ghcb_version = min_t(size_t, GHCB_MSR_PROTO_MAX(val), GHCB_PROTOCOL_MAX);
+	ghcb_version_ptr = (u16 *) GET_RIP_RELATIVE_PTR(ghcb_version);
+	*ghcb_version_ptr = min_t(size_t, GHCB_MSR_PROTO_MAX(val), GHCB_PROTOCOL_MAX);
 
 	return true;
 }
@@ -319,23 +327,6 @@ static int sev_cpuid_hv(struct ghcb *ghcb, struct es_em_ctxt *ctxt, struct cpuid
 }
 
 /*
- * This may be called early while still running on the initial identity
- * mapping. Use RIP-relative addressing to obtain the correct address
- * while running with the initial identity mapping as well as the
- * switch-over to kernel virtual addresses later.
- */
-static const struct snp_cpuid_table *snp_cpuid_get_table(void)
-{
-	void *ptr;
-
-	asm ("lea cpuid_table_copy(%%rip), %0"
-	     : "=r" (ptr)
-	     : "p" (&cpuid_table_copy));
-
-	return ptr;
-}
-
-/*
  * The SNP Firmware ABI, Revision 0.9, Section 7.1, details the use of
  * XCR0_IN and XSS_IN to encode multiple versions of 0xD subfunctions 0
  * and 1 based on the corresponding features enabled by a particular
@@ -357,7 +348,8 @@ static const struct snp_cpuid_table *snp_cpuid_get_table(void)
  */
 static u32 snp_cpuid_calc_xsave_size(u64 xfeatures_en, bool compacted)
 {
-	const struct snp_cpuid_table *cpuid_table = snp_cpuid_get_table();
+	const struct snp_cpuid_table *cpuid_table = (const struct
+		snp_cpuid_table *) GET_RIP_RELATIVE_PTR(cpuid_table_copy);
 	u64 xfeatures_found = 0;
 	u32 xsave_size = 0x240;
 	int i;
@@ -394,7 +386,8 @@ static u32 snp_cpuid_calc_xsave_size(u64 xfeatures_en, bool compacted)
 static bool
 snp_cpuid_get_validated_func(struct cpuid_leaf *leaf)
 {
-	const struct snp_cpuid_table *cpuid_table = snp_cpuid_get_table();
+	const struct snp_cpuid_table *cpuid_table = (const struct
+		snp_cpuid_table *) GET_RIP_RELATIVE_PTR(cpuid_table_copy);
 	int i;
 
 	for (i = 0; i < cpuid_table->count; i++) {
@@ -530,7 +523,9 @@ static int snp_cpuid_postprocess(struct ghcb *ghcb, struct es_em_ctxt *ctxt,
  */
 static int snp_cpuid(struct ghcb *ghcb, struct es_em_ctxt *ctxt, struct cpuid_leaf *leaf)
 {
-	const struct snp_cpuid_table *cpuid_table = snp_cpuid_get_table();
+	const struct snp_cpuid_table *cpuid_table = (const struct
+		snp_cpuid_table *) GET_RIP_RELATIVE_PTR(cpuid_table_copy);
+	const u32 *cpuid_std_range_max_ptr, *cpuid_hyp_range_max_ptr, *cpuid_ext_range_max_ptr;
 
 	if (!cpuid_table->count)
 		return -EOPNOTSUPP;
@@ -555,10 +550,14 @@ static int snp_cpuid(struct ghcb *ghcb, struct es_em_ctxt *ctxt, struct cpuid_le
 		 */
 		leaf->eax = leaf->ebx = leaf->ecx = leaf->edx = 0;
 
+		cpuid_std_range_max_ptr = (const u32 *) GET_RIP_RELATIVE_PTR(cpuid_std_range_max);
+		cpuid_hyp_range_max_ptr = (const u32 *) GET_RIP_RELATIVE_PTR(cpuid_hyp_range_max);
+		cpuid_ext_range_max_ptr = (const u32 *) GET_RIP_RELATIVE_PTR(cpuid_ext_range_max);
+
 		/* Skip post-processing for out-of-range zero leafs. */
-		if (!(leaf->fn <= cpuid_std_range_max ||
-		      (leaf->fn >= 0x40000000 && leaf->fn <= cpuid_hyp_range_max) ||
-		      (leaf->fn >= 0x80000000 && leaf->fn <= cpuid_ext_range_max)))
+		if (!(leaf->fn <= *cpuid_std_range_max_ptr ||
+		      (leaf->fn >= 0x40000000 && leaf->fn <= *cpuid_hyp_range_max_ptr) ||
+		      (leaf->fn >= 0x80000000 && leaf->fn <= *cpuid_ext_range_max_ptr)))
 			return 0;
 	}
 
@@ -1046,6 +1045,7 @@ static struct cc_blob_sev_info *find_cc_blob_setup_data(struct boot_params *bp)
 static void __init setup_cpuid_table(const struct cc_blob_sev_info *cc_info)
 {
 	const struct snp_cpuid_table *cpuid_table_fw, *cpuid_table;
+	u32 *cpuid_std_range_max_ptr, *cpuid_hyp_range_max_ptr, *cpuid_ext_range_max_ptr;
 	int i;
 
 	if (!cc_info || !cc_info->cpuid_phys || cc_info->cpuid_len < PAGE_SIZE)
@@ -1055,19 +1055,24 @@ static void __init setup_cpuid_table(const struct cc_blob_sev_info *cc_info)
 	if (!cpuid_table_fw->count || cpuid_table_fw->count > SNP_CPUID_COUNT_MAX)
 		sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_CPUID);
 
-	cpuid_table = snp_cpuid_get_table();
+	cpuid_table = (const struct snp_cpuid_table *) GET_RIP_RELATIVE_PTR(
+		cpuid_table_copy);
 	memcpy((void *)cpuid_table, cpuid_table_fw, sizeof(*cpuid_table));
+
+	cpuid_std_range_max_ptr = (u32 *) GET_RIP_RELATIVE_PTR(cpuid_std_range_max);
+	cpuid_hyp_range_max_ptr = (u32 *) GET_RIP_RELATIVE_PTR(cpuid_hyp_range_max);
+	cpuid_ext_range_max_ptr = (u32 *) GET_RIP_RELATIVE_PTR(cpuid_ext_range_max);
 
 	/* Initialize CPUID ranges for range-checking. */
 	for (i = 0; i < cpuid_table->count; i++) {
 		const struct snp_cpuid_fn *fn = &cpuid_table->fn[i];
 
 		if (fn->eax_in == 0x0)
-			cpuid_std_range_max = fn->eax;
+			*cpuid_std_range_max_ptr = fn->eax;
 		else if (fn->eax_in == 0x40000000)
-			cpuid_hyp_range_max = fn->eax;
+			*cpuid_hyp_range_max_ptr = fn->eax;
 		else if (fn->eax_in == 0x80000000)
-			cpuid_ext_range_max = fn->eax;
+			*cpuid_ext_range_max_ptr = fn->eax;
 	}
 }
 
