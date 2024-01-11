@@ -53,7 +53,7 @@ int mcp_driver_register(struct mcp_driver *);
 void mcp_driver_unregister(struct mcp_driver *);
 
 #define mcp_get_drvdata(mcp)	dev_get_drvdata(&(mcp)->attached_device)
-#define mcp_set_drvdata(mcp,d)	dev_set_drvdata(&(mcp)->attached_device, d)
+#define mcp_set_drvdata(mcp, d)	dev_set_drvdata(&(mcp)->attached_device, d)
 
 static inline void *mcp_priv(struct mcp *mcp)
 {
