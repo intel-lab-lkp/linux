@@ -63,6 +63,12 @@ static LIST_HEAD(migrc_folios);
 static DEFINE_SPINLOCK(migrc_lock);
 
 /*
+ * Increase on entry of handling high memory pressure e.g. direct
+ * reclaim, decrease on the exit. See __alloc_pages_slowpath().
+ */
+atomic_t migrc_pause_cnt = ATOMIC_INIT(0);
+
+/*
  * Need to synchronize between TLB flush and managing pending CPUs in
  * migrc_ubc. Take a look at the following scenario:
  *
@@ -1885,6 +1891,7 @@ static int migrate_pages_batch(struct list_head *from,
 	 */
 	init_tlb_ubc(&pending_ubc);
 	do_migrc = (reason == MR_DEMOTION || reason == MR_NUMA_MISPLACED);
+	do_migrc = do_migrc && !migrc_paused();
 
 	for (pass = 0; pass < nr_pass && retry; pass++) {
 		retry = 0;
@@ -1921,6 +1928,15 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_failed_pages += nr_pages;
 				list_move_tail(&folio->lru, ret_folios);
 				continue;
+			}
+
+			/*
+			 * In case that the system is in high memory
+			 * pressure, give up migrc mechanism this turn.
+			 */
+			if (unlikely(do_migrc && migrc_paused())) {
+				fold_ubc(tlb_ubc, &pending_ubc);
+				do_migrc = false;
 			}
 
 			can_migrc_init();
