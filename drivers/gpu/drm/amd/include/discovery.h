@@ -32,8 +32,7 @@
 #define VCN_INFO_TABLE_ID               0x004E4356
 #define MALL_INFO_TABLE_ID              0x4C4C414D
 
-typedef enum
-{
+typedef enum {
 	IP_DISCOVERY = 0,
 	GC,
 	HARVEST_INFO,
@@ -45,16 +44,14 @@ typedef enum
 
 #pragma pack(1)
 
-typedef struct table_info
-{
+typedef struct table_info {
 	uint16_t offset;   /* Byte offset */
 	uint16_t checksum; /* Byte sum of the table */
 	uint16_t size;     /* Table size */
 	uint16_t padding;
 } table_info;
 
-typedef struct binary_header
-{
+typedef struct binary_header {
 	/* psp structure should go at the top of this structure */
 	uint32_t binary_signature; /* 0x7, 0x14, 0x21, 0x28 */
 	uint16_t version_major;
@@ -64,15 +61,13 @@ typedef struct binary_header
 	table_info table_list[TOTAL_TABLES];
 } binary_header;
 
-typedef struct die_info
-{
+typedef struct die_info {
 	uint16_t die_id;
 	uint16_t die_offset; /* Points to the corresponding die_header structure */
 } die_info;
 
 
-typedef struct ip_discovery_header
-{
+typedef struct ip_discovery_header {
 	uint32_t signature;    /* Table Signature */
 	uint16_t version;      /* Table Version */
 	uint16_t size;         /* Table Size */
@@ -89,8 +84,7 @@ typedef struct ip_discovery_header
 	};
 } ip_discovery_header;
 
-typedef struct ip
-{
+typedef struct ip {
 	uint16_t hw_id;           /* Hardware ID */
 	uint8_t number_instance;  /* instance of the IP */
 	uint8_t num_base_address; /* Number of Base Addresses */
@@ -107,8 +101,7 @@ typedef struct ip
 	uint32_t base_address[]; /* variable number of Addresses */
 } ip;
 
-typedef struct ip_v3
-{
+typedef struct ip_v3 {
 	uint16_t hw_id;                         /* Hardware ID */
 	uint8_t instance_number;                /* Instance number for the IP */
 	uint8_t num_base_address;               /* Number of base addresses*/
@@ -145,15 +138,13 @@ typedef struct ip_v4 {
 	} __packed;
 } ip_v4;
 
-typedef struct die_header
-{
+typedef struct die_header {
 	uint16_t die_id;
 	uint16_t num_ips;
 } die_header;
 
-typedef struct ip_structure
-{
-	ip_discovery_header* header;
+typedef struct ip_structure {
+	ip_discovery_header *header;
 	struct die
 	{
 		die_header *die_header;
@@ -357,8 +348,7 @@ struct vcn_info_header {
     uint32_t size_bytes; /* size of the entire header+data in bytes */
 };
 
-struct vcn_instance_info_v1_0
-{
+struct vcn_instance_info_v1_0 {
 	uint32_t instance_num; /* VCN IP instance number. 0 - VCN0; 1 - VCN1 etc*/
 	union _fuse_data {
 		struct {
