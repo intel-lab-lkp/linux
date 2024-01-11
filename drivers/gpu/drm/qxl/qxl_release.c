@@ -299,8 +299,7 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 	} else if (type == QXL_RELEASE_CURSOR_CMD) {
 		cur_idx = 2;
 		priority = 1;
-	}
-	else {
+	} else {
 		DRM_ERROR("got illegal type: %d\n", type);
 		return -EINVAL;
 	}
