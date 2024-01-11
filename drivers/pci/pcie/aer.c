@@ -107,6 +107,12 @@ struct aer_stats {
 					PCI_ERR_ROOT_MULTI_COR_RCV |	\
 					PCI_ERR_ROOT_MULTI_UNCOR_RCV)
 
+#define AER_ERR_ANFE_UNC_MASK		(PCI_ERR_UNC_POISON_TLP |	\
+					PCI_ERR_UNC_COMP_TIME |		\
+					PCI_ERR_UNC_COMP_ABORT |	\
+					PCI_ERR_UNC_UNX_COMP |		\
+					PCI_ERR_UNC_UNSUP)
+
 static int pcie_aer_disable;
 static pci_ers_result_t aer_root_reset(struct pci_dev *dev);
 
@@ -612,6 +618,29 @@ const struct attribute_group aer_stats_attr_group = {
 	.is_visible = aer_stats_attrs_are_visible,
 };
 
+static int anfe_get_related_err(struct aer_err_info *info)
+{
+	/*
+	 * Take the most conservative route here. If there are
+	 * Non-Fatal/Fatal errors detected, do not assume any
+	 * bit in uncor_status is set by ANFE.
+	 */
+	if (info->device_status & (PCI_EXP_DEVSTA_NFED | PCI_EXP_DEVSTA_FED))
+		return 0;
+	/*
+	 * An UNCOR error may cause Advisory Non-Fatal error if:
+	 *	a. The severity of the error is Non-Fatal.
+	 *	b. The error is one of the following:
+	 *		1. Poisoned TLP
+	 *		2. Completion Timeout
+	 *		3. Completer Abort
+	 *		4. Unexpected Completion
+	 *		5. Unsupported Request
+	 */
+	return info->uncor_status & ~info->uncor_mask
+		& AER_ERR_ANFE_UNC_MASK & ~info->severity;
+}
+
 static void pci_dev_aer_stats_incr(struct pci_dev *pdev,
 				   struct aer_err_info *info)
 {
@@ -678,6 +707,7 @@ static void __aer_print_error(struct pci_dev *dev,
 			      struct aer_err_info *info)
 {
 	unsigned long status;
+	unsigned long anfe_status;
 	const char **strings;
 	const char *level, *errmsg;
 	int i;
@@ -700,6 +730,21 @@ static void __aer_print_error(struct pci_dev *dev,
 		pci_printk(level, dev, "   [%2d] %-22s%s\n", i, errmsg,
 				info->first_error == i ? " (First)" : "");
 	}
+
+	if (info->severity == AER_CORRECTABLE && (status & PCI_ERR_COR_ADV_NFAT)) {
+		anfe_status = anfe_get_related_err(info);
+		if (anfe_status) {
+			pci_printk(level, dev, "Uncorrectable errors that may cause Advisory Non-Fatal:");
+			for_each_set_bit(i, &anfe_status, 32) {
+				errmsg = aer_uncorrectable_error_string[i];
+				if (!errmsg)
+					errmsg = "Unknown Error Bit";
+
+				pci_printk(level, dev, "   [%2d] %-22s\n", i, errmsg);
+			}
+		}
+	}
+
 	pci_dev_aer_stats_incr(dev, info);
 }
 
@@ -1092,6 +1137,14 @@ static inline void cxl_rch_handle_error(struct pci_dev *dev,
 					struct aer_err_info *info) { }
 #endif
 
+static void handle_advisory_nonfatal(struct pci_dev *dev, struct aer_err_info *info)
+{
+	int aer = dev->aer_cap;
+
+	pci_write_config_dword(dev, aer + PCI_ERR_UNCOR_STATUS,
+			       anfe_get_related_err(info));
+}
+
 /**
  * pci_aer_handle_error - handle logging error into an event log
  * @dev: pointer to pci_dev data structure of error source device
@@ -1108,9 +1161,12 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 		 * Correctable error does not need software intervention.
 		 * No need to go through error recovery process.
 		 */
-		if (aer)
+		if (aer) {
 			pci_write_config_dword(dev, aer + PCI_ERR_COR_STATUS,
 					info->cor_status);
+			if (info->cor_status & PCI_ERR_COR_ADV_NFAT)
+				handle_advisory_nonfatal(dev, info);
+		}
 		if (pcie_aer_is_native(dev)) {
 			struct pci_driver *pdrv = dev->driver;
 
