@@ -57,13 +57,15 @@ properties:
       user space from
     type: boolean
 
-if:
-  not:
-    required: [ reg ]
-then:
-  properties:
-    $nodename:
-      pattern: '^partition-.*$'
+allOf:
+  - $ref: /schemas/nvmem/nvmem.yaml
+  - if:
+      not:
+        required: [ reg ]
+    then:
+      properties:
+        $nodename:
+          pattern: '^partition-.*$'
 
 # This is a generic file other binding inherit from and extend
 additionalProperties: true
