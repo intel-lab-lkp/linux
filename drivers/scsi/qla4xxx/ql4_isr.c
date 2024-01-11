@@ -161,7 +161,7 @@ static void qla4xxx_status_entry(struct scsi_qla_host *ha,
 			break;
 		}
 
-		if (sts_entry->iscsiFlags &ISCSI_FLAG_RESIDUAL_UNDER) {
+		if (sts_entry->iscsiFlags & ISCSI_FLAG_RESIDUAL_UNDER) {
 			scsi_set_resid(cmd, residual);
 			if (!scsi_status && ((scsi_bufflen(cmd) - residual) <
 				cmd->underflow)) {
@@ -653,7 +653,7 @@ static void qla4xxx_default_router_changed(struct scsi_qla_host *ha,
  * This routine decodes the mailbox status during the ISR.
  * Hardware_lock locked upon entry. runs in interrupt context.
  **/
-static void qla4xxx_isr_decode_mailbox(struct scsi_qla_host * ha,
+static void qla4xxx_isr_decode_mailbox(struct scsi_qla_host *ha,
 				       uint32_t mbox_status)
 {
 	int i;
