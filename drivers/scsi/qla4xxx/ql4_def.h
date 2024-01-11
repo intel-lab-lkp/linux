@@ -918,54 +918,54 @@ static inline int adapter_up(struct scsi_qla_host *ha)
 	       (!test_bit(AF_LOOPBACK, &ha->flags));
 }
 
-static inline struct scsi_qla_host* to_qla_host(struct Scsi_Host *shost)
+static inline struct scsi_qla_host *to_qla_host(struct Scsi_Host *shost)
 {
 	return (struct scsi_qla_host *)iscsi_host_priv(shost);
 }
 
-static inline void __iomem* isp_semaphore(struct scsi_qla_host *ha)
+static inline void __iomem *isp_semaphore(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u1.isp4010.nvram :
 		&ha->reg->u1.isp4022.semaphore);
 }
 
-static inline void __iomem* isp_nvram(struct scsi_qla_host *ha)
+static inline void __iomem *isp_nvram(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u1.isp4010.nvram :
 		&ha->reg->u1.isp4022.nvram);
 }
 
-static inline void __iomem* isp_ext_hw_conf(struct scsi_qla_host *ha)
+static inline void __iomem *isp_ext_hw_conf(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u2.isp4010.ext_hw_conf :
 		&ha->reg->u2.isp4022.p0.ext_hw_conf);
 }
 
-static inline void __iomem* isp_port_status(struct scsi_qla_host *ha)
+static inline void __iomem *isp_port_status(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u2.isp4010.port_status :
 		&ha->reg->u2.isp4022.p0.port_status);
 }
 
-static inline void __iomem* isp_port_ctrl(struct scsi_qla_host *ha)
+static inline void __iomem *isp_port_ctrl(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u2.isp4010.port_ctrl :
 		&ha->reg->u2.isp4022.p0.port_ctrl);
 }
 
-static inline void __iomem* isp_port_error_status(struct scsi_qla_host *ha)
+static inline void __iomem *isp_port_error_status(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u2.isp4010.port_err_status :
 		&ha->reg->u2.isp4022.p0.port_err_status);
 }
 
-static inline void __iomem * isp_gp_out(struct scsi_qla_host *ha)
+static inline void __iomem *isp_gp_out(struct scsi_qla_host *ha)
 {
 	return (is_qla4010(ha) ?
 		&ha->reg->u2.isp4010.gp_out :
@@ -979,9 +979,9 @@ static inline int eeprom_ext_hw_conf_offset(struct scsi_qla_host *ha)
 		offsetof(struct eeprom_data, isp4022.ext_hw_conf) / 2);
 }
 
-int ql4xxx_sem_spinlock(struct scsi_qla_host * ha, u32 sem_mask, u32 sem_bits);
-void ql4xxx_sem_unlock(struct scsi_qla_host * ha, u32 sem_mask);
-int ql4xxx_sem_lock(struct scsi_qla_host * ha, u32 sem_mask, u32 sem_bits);
+int ql4xxx_sem_spinlock(struct scsi_qla_host *ha, u32 sem_mask, u32 sem_bits);
+void ql4xxx_sem_unlock(struct scsi_qla_host *ha, u32 sem_mask);
+int ql4xxx_sem_lock(struct scsi_qla_host *ha, u32 sem_mask, u32 sem_bits);
 
 static inline int ql4xxx_lock_flash(struct scsi_qla_host *a)
 {
