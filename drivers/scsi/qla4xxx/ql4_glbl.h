@@ -44,7 +44,7 @@ int qla4xxx_get_fwddb_entry(struct scsi_qla_host *ha,
 			    uint16_t *tcp_source_port_num,
 			    uint16_t *connection_id);
 
-int qla4xxx_set_ddb_entry(struct scsi_qla_host * ha, uint16_t fw_ddb_index,
+int qla4xxx_set_ddb_entry(struct scsi_qla_host *ha, uint16_t fw_ddb_index,
 			  dma_addr_t fw_ddb_entry_dma, uint32_t *mbx_sts);
 uint8_t qla4xxx_get_ifcb(struct scsi_qla_host *ha, uint32_t *mbox_cmd,
 			 uint32_t *mbox_sts, dma_addr_t init_fw_cb_dma);
