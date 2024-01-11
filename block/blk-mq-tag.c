@@ -179,6 +179,25 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 
 		sbitmap_prepare_to_wait(bt, ws, &wait, TASK_UNINTERRUPTIBLE);
 
+		/*
+		 * Add one explicit barrier since __blk_mq_get_tag() may not
+		 * imply barrier in case of failure.
+		 *
+		 * Order adding us to wait queue and the following allocating
+		 * tag in  __blk_mq_get_tag().
+		 *
+		 * The pair is the one implied in sbitmap_queue_wake_up()
+		 * which orders clearing sbitmap tag bits and
+		 * waitqueue_active() in __sbitmap_queue_wake_up(), since
+		 * waitqueue_active() is lockless
+		 *
+		 * Otherwise, re-order of adding wait queue and getting tag
+		 * may cause __sbitmap_queue_wake_up() to wake up nothing
+		 * because the waitqueue_active() may not observe us in wait
+		 * queue.
+		 */
+		smp_mb();
+
 		tag = __blk_mq_get_tag(data, bt);
 		if (tag != BLK_MQ_NO_TAG)
 			break;
