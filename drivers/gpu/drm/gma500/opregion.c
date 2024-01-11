@@ -211,7 +211,7 @@ void psb_intel_opregion_enable_asle(struct drm_device *dev)
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct opregion_asle *asle = dev_priv->opregion.asle;
 
-	if (asle && system_opregion ) {
+	if (asle && system_opregion) {
 		/* Don't do this on Medfield or other non PC like devices, they
 		   use the bit for something different altogether */
 		gma_enable_pipestat(dev_priv, 0, PIPE_LEGACY_BLC_EVENT_ENABLE);
