@@ -13,3 +13,6 @@
 	compatible = "google,juniper-sku16", "google,juniper", "mediatek,mt8183";
 };
 
+&cros_ec {
+	/delete-node/ cbas;
+};
