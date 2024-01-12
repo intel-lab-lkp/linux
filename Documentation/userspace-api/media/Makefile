@@ -12,38 +12,38 @@ FILES = ca.h.rst dmx.h.rst frontend.h.rst net.h.rst \
 
 TARGETS := $(addprefix $(BUILDDIR)/, $(FILES))
 
-gen_rst = \
+cmd_parse_headers = \
 	echo ${PARSER} $< $@ $(SRC_DIR)/$(notdir $@).exceptions; \
 	${PARSER} $< $@ $(SRC_DIR)/$(notdir $@).exceptions
 
-quiet_gen_rst = echo '  PARSE   $(patsubst $(srctree)/%,%,$<)'; \
+quiet_cmd_parse_headers = echo '  PARSE   $(patsubst $(srctree)/%,%,$<)'; \
 	${PARSER} $< $@ $(SRC_DIR)/$(notdir $@).exceptions
 
-silent_gen_rst = ${gen_rst}
+silent_cmd_parse_headers = ${cmd_parse_headers}
 
 $(BUILDDIR)/ca.h.rst: ${UAPI}/dvb/ca.h ${PARSER} $(SRC_DIR)/ca.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/dmx.h.rst: ${UAPI}/dvb/dmx.h ${PARSER} $(SRC_DIR)/dmx.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/frontend.h.rst: ${UAPI}/dvb/frontend.h ${PARSER} $(SRC_DIR)/frontend.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/net.h.rst: ${UAPI}/dvb/net.h ${PARSER} $(SRC_DIR)/net.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/videodev2.h.rst: ${UAPI}/videodev2.h ${PARSER} $(SRC_DIR)/videodev2.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/media.h.rst: ${UAPI}/media.h ${PARSER} $(SRC_DIR)/media.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/cec.h.rst: ${UAPI}/cec.h ${PARSER} $(SRC_DIR)/cec.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 $(BUILDDIR)/lirc.h.rst: ${UAPI}/lirc.h ${PARSER} $(SRC_DIR)/lirc.h.rst.exceptions
-	@$($(quiet)gen_rst)
+	@$($(quiet)cmd_parse_headers)
 
 # Media build rules
 
