@@ -1,0 +1,36 @@
+drm drm-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-misc drm-misc-fixes 62b143b5ec4a14e1ae0dede5aabaf1832e3b0073
+	drm/panel: samsung-s6d7aa0: drop DRM_BUS_FLAG_DE_HIGH for lsl080al02
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-xe drm-xe-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm drm-next b76c01f1d950425924ee1c1377760de3c024ef78
+	Merge tag 'drm-intel-gt-next-2023-12-15' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+drm-misc drm-misc-next-fixes 2ad62d16cd24b5e2f18318e97e1f06bef9f1ce7d
+	drm/v3d: Free the job and assign it to NULL if initialization fails
+drm-intel drm-intel-next-fixes d505a16e00c35919fd9fe5735894645e0f70a415
+	drm/i915/perf: reconcile Excess struct member kernel-doc warnings
+drm-xe drm-xe-next-fixes 315acff5196f4e2f84a2a2d093000e0c6b0b4d1c
+	drm/xe: Fix warning on impossible condition
+drm-misc drm-misc-next 9f78b3ae051d9eeeed9658cf54b3f0ea6920097b
+	drm/panel: Simplify with dev_err_probe()
+drm-intel drm-intel-next f3c2031db7dfdf470a2d9bf3bd1efa6edfa72d8d
+	drm/i915/psr: Disable early transport by default
+drm-intel drm-intel-gt-next 284781470de227e6177e491ad091d72492290a65
+	drm/i915/gt: Use rc6.supported flag from intel_gt for rc6_enable sysfs
+drm-xe drm-xe-next b6e1b708176846248c87318786d22465ac96dd2c
+	drm/xe: Remove uninitialized variable from warning
+drm-intel topic/core-for-CI 4ed7492a358d8405f0fff43b17db7f2e33295110
+	HAX net/phy: Suppress WARN from phy_error
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
+drm-xe topic/xe-for-CI e4cfe0cd981952f6ed3d5b92a0b7e3ae0b3ad2b4
+	drm/xe/guc: define LNL FW
