@@ -3743,8 +3743,6 @@ static int ocfs2_try_to_merge_extent(handle_t *handle,
 			goto out;
 		}
 
-		rec = &el->l_recs[split_index];
-
 		/*
 		 * Note that we don't pass split_rec here on purpose -
 		 * we've merged it into the rec already.
