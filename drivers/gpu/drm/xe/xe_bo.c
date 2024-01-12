@@ -828,7 +828,7 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
 	if (WARN_ON(!xe_bo_is_vram(bo)))
 		return -EINVAL;
 
-	ret = ttm_bo_mem_space(&bo->ttm, &placement, &new_mem, &ctx);
+	ret = ttm_bo_mem_space(&bo->ttm, &placement, &new_mem, &ctx, false);
 	if (ret)
 		return ret;
 
@@ -893,7 +893,7 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
 	if (WARN_ON(xe_bo_is_vram(bo) || !bo->ttm.ttm))
 		return -EINVAL;
 
-	ret = ttm_bo_mem_space(&bo->ttm, &bo->placement, &new_mem, &ctx);
+	ret = ttm_bo_mem_space(&bo->ttm, &bo->placement, &new_mem, &ctx, false);
 	if (ret)
 		return ret;
 

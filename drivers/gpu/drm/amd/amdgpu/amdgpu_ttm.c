@@ -966,7 +966,7 @@ int amdgpu_ttm_alloc_gart(struct ttm_buffer_object *bo)
 	placements.mem_type = TTM_PL_TT;
 	placements.flags = bo->resource->placement;
 
-	r = ttm_bo_mem_space(bo, &placement, &tmp, &ctx);
+	r = ttm_bo_mem_space(bo, &placement, &tmp, &ctx, true);
 	if (unlikely(r))
 		return r;
 
