@@ -69,7 +69,6 @@ static int vfio_set_trigger(struct vfio_fsl_mc_device *vdev,
 	hwirq = vdev->mc_dev->irqs[index]->virq;
 	if (irq->trigger) {
 		free_irq(hwirq, irq);
-		kfree(irq->name);
 		eventfd_ctx_put(irq->trigger);
 		irq->trigger = NULL;
 	}
