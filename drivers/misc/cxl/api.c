@@ -389,19 +389,22 @@ struct file *cxl_get_fd(struct cxl_context *ctx, struct file_operations *fops,
 			int *fd)
 {
 	struct file *file;
-	int rc, flags, fdtmp;
+	int rc = 0, flags, fdtmp;
 	char *name = NULL;
 
 	/* only allow one per context */
-	if (ctx->mapping)
-		return ERR_PTR(-EEXIST);
+	if (ctx->mapping) {
+		rc = -EEXIST;
+		goto err;
+	}
 
 	flags = O_RDWR | O_CLOEXEC;
 
 	/* This code is similar to anon_inode_getfd() */
 	rc = get_unused_fd_flags(flags);
 	if (rc < 0)
-		return ERR_PTR(rc);
+		goto err;
+
 	fdtmp = rc;
 
 	/*
@@ -419,6 +422,10 @@ struct file *cxl_get_fd(struct cxl_context *ctx, struct file_operations *fops,
 		fops = (struct file_operations *)&afu_fops;
 
 	name = kasprintf(GFP_KERNEL, "cxl:%d", ctx->pe);
+	if (!name) {
+		rc = -ENOMEM;
+		goto err_fd;
+	}
 	file = cxl_getfile(name, fops, ctx, flags);
 	kfree(name);
 	if (IS_ERR(file))
@@ -430,6 +437,9 @@ struct file *cxl_get_fd(struct cxl_context *ctx, struct file_operations *fops,
 
 err_fd:
 	put_unused_fd(fdtmp);
+err:
+	if (rc < 0)
+		return ERR_PTR(rc);
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(cxl_get_fd);
