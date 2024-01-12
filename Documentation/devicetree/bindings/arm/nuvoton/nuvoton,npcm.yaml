@@ -30,6 +30,7 @@ properties:
       - description: NPCM845 based boards
         items:
           - enum:
+              - facebook,yosemite4-n-bmc
               - nuvoton,npcm845-evb         # NPCM845 evaluation board
           - const: nuvoton,npcm845
 
