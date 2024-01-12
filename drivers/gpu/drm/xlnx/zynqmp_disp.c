@@ -20,8 +20,10 @@
 #include <linux/dmaengine.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/media-bus-format.h>
 
 #include "zynqmp_disp.h"
 #include "zynqmp_disp_regs.h"
@@ -67,12 +69,16 @@
 /**
  * struct zynqmp_disp_format - Display subsystem format information
  * @drm_fmt: DRM format (4CC)
+ * @bus_fmt: Live video media bus format
  * @buf_fmt: AV buffer format
  * @swap: Flag to swap R & B for RGB formats, and U & V for YUV formats
  * @sf: Scaling factors for color components
  */
 struct zynqmp_disp_format {
-	u32 drm_fmt;
+	union {
+		u32 drm_fmt;
+		u32 bus_fmt;
+	};
 	u32 buf_fmt;
 	bool swap;
 	const u32 *sf;
@@ -354,6 +360,16 @@ static const struct zynqmp_disp_format avbuf_gfx_fmts[] = {
 	},
 };
 
+/* TODO: add support for different formats */
+static const struct zynqmp_disp_format avbuf_live_vid_fmts[] = {
+	{
+		.bus_fmt	= MEDIA_BUS_FMT_UYVY8_1X16,
+		.buf_fmt	= ZYNQMP_DISP_AV_BUF_LIVE_CONFIG_BPC_8 |
+				  ZYNQMP_DISP_AV_BUF_LIVE_CONFIG_FMT_YUV422,
+		.sf		= scaling_factors_888,
+	}
+};
+
 static u32 zynqmp_disp_avbuf_read(struct zynqmp_disp *disp, int reg)
 {
 	return readl(disp->avbuf.base + reg);
@@ -367,6 +383,34 @@ static void zynqmp_disp_avbuf_write(struct zynqmp_disp *disp, int reg, u32 val)
 static bool zynqmp_disp_layer_is_video(const struct zynqmp_disp_layer *layer)
 {
 	return layer->id == ZYNQMP_DPSUB_LAYER_VID;
+}
+
+/**
+ * zynqmp_disp_avbuf_set_live_format - Set live input format for a layer
+ * @disp: Display controller
+ * @layer: The layer
+ * @fmt: The format information
+ *
+ * Set the live video input format for @layer to @fmt.
+ */
+static void zynqmp_disp_avbuf_set_live_format(struct zynqmp_disp *disp,
+					      struct zynqmp_disp_layer *layer,
+					      const struct zynqmp_disp_format *fmt)
+{
+	u32 reg, i;
+
+	reg = zynqmp_disp_layer_is_video(layer)
+	    ? ZYNQMP_DISP_AV_BUF_LIVE_VID_CONFIG
+	    : ZYNQMP_DISP_AV_BUF_LIVE_GFX_CONFIG;
+	zynqmp_disp_avbuf_write(disp, reg, fmt->buf_fmt);
+
+	for (i = 0; i < ZYNQMP_DISP_AV_BUF_NUM_SF; ++i) {
+		reg = zynqmp_disp_layer_is_video(layer)
+		    ? ZYNQMP_DISP_AV_BUF_LIVD_VID_COMP_SF(i)
+		    : ZYNQMP_DISP_AV_BUF_LIVD_GFX_COMP_SF(i);
+		zynqmp_disp_avbuf_write(disp, reg, fmt->sf[i]);
+	}
+	layer->disp_fmt = fmt;
 }
 
 /**
@@ -902,15 +946,12 @@ u32 *zynqmp_disp_layer_drm_formats(struct zynqmp_disp_layer *layer,
 /**
  * zynqmp_disp_layer_enable - Enable a layer
  * @layer: The layer
- * @mode: Operating mode of layer
  *
  * Enable the @layer in the audio/video buffer manager and the blender. DMA
  * channels are started separately by zynqmp_disp_layer_update().
  */
-void zynqmp_disp_layer_enable(struct zynqmp_disp_layer *layer,
-			      enum zynqmp_dpsub_layer_mode mode)
+void zynqmp_disp_layer_enable(struct zynqmp_disp_layer *layer)
 {
-	layer->mode = mode;
 	zynqmp_disp_avbuf_enable_video(layer->disp, layer);
 	zynqmp_disp_blend_layer_enable(layer->disp, layer);
 }
@@ -950,10 +991,11 @@ void zynqmp_disp_layer_set_format(struct zynqmp_disp_layer *layer,
 	layer->disp_fmt = zynqmp_disp_layer_find_format(layer, info->format);
 	layer->drm_fmt = info;
 
-	zynqmp_disp_avbuf_set_format(layer->disp, layer, layer->disp_fmt);
-
-	if (!layer->disp->dpsub->dma_enabled)
+	/* Live format set during layer creation */
+	if (layer->mode == ZYNQMP_DPSUB_LAYER_LIVE)
 		return;
+
+	zynqmp_disp_avbuf_set_format(layer->disp, layer, layer->disp_fmt);
 
 	/*
 	 * Set pconfig for each DMA channel to indicate they're part of a
@@ -1083,7 +1125,7 @@ static int zynqmp_disp_layer_request_dma(struct zynqmp_disp *disp,
 	unsigned int i;
 	int ret;
 
-	if (!disp->dpsub->dma_enabled)
+	if (layer->mode == ZYNQMP_DPSUB_LAYER_LIVE)
 		return 0;
 
 	for (i = 0; i < layer->info->num_channels; i++) {
@@ -1102,6 +1144,43 @@ static int zynqmp_disp_layer_request_dma(struct zynqmp_disp *disp,
 	}
 
 	return 0;
+}
+
+/**
+ * zynqmp_disp_get_live_fmt - Get live video format
+ * @disp: Display controller
+ * @layer: Display layer
+ *
+ * Parse connected remote endpoint and retrieve configured bus-format
+ *
+ * Return: live format pointer on success, NULL otherwise
+ */
+static const struct zynqmp_disp_format *zynqmp_disp_get_live_fmt(struct zynqmp_disp *disp,
+								 struct zynqmp_disp_layer *layer)
+{
+	struct device_node *local, *remote, *dpsub = disp->dev->of_node;
+	int rc, i;
+	u32 fmt;
+
+	local = of_graph_get_endpoint_by_regs(dpsub, layer->id, -1);
+	if (!local)
+		return NULL;
+
+	remote = of_graph_get_remote_endpoint(local);
+	of_node_put(local);
+	if (!remote)
+		return NULL;
+
+	rc = of_property_read_u32_index(remote, "bus-format", 0, &fmt);
+	of_node_put(remote);
+	if (rc)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(avbuf_live_vid_fmts); ++i)
+		if (avbuf_live_vid_fmts[i].bus_fmt == fmt)
+			return &avbuf_live_vid_fmts[i];
+
+	return NULL;
 }
 
 /**
@@ -1130,9 +1209,15 @@ static int zynqmp_disp_create_layers(struct zynqmp_disp *disp)
 
 	for (i = 0; i < ARRAY_SIZE(disp->layers); i++) {
 		struct zynqmp_disp_layer *layer = &disp->layers[i];
+		const struct zynqmp_disp_format *disp_fmt;
 
 		layer->id = i;
 		layer->disp = disp;
+		/* For now we assume dpsub works in either live or non-live mode for both layers.
+		 * Hybrid mode is not supported yet.
+		 */
+		layer->mode = disp->dpsub->dma_enabled ? ZYNQMP_DPSUB_LAYER_NONLIVE
+						       : ZYNQMP_DPSUB_LAYER_LIVE;
 		layer->info = &layer_info[i];
 
 		ret = zynqmp_disp_layer_request_dma(disp, layer);
@@ -1140,6 +1225,12 @@ static int zynqmp_disp_create_layers(struct zynqmp_disp *disp)
 			goto err;
 
 		disp->dpsub->layers[i] = layer;
+
+		if (layer->mode == ZYNQMP_DPSUB_LAYER_LIVE) {
+			disp_fmt = zynqmp_disp_get_live_fmt(disp, layer);
+			if (disp_fmt)
+				zynqmp_disp_avbuf_set_live_format(disp, layer, disp_fmt);
+		}
 	}
 
 	return 0;
