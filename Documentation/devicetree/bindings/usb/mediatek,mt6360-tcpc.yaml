@@ -24,7 +24,7 @@ properties:
 
   interrupt-names:
     items:
-      - const: PD_IRQB
+      - const: PD-IRQB
 
   connector:
     type: object
@@ -58,7 +58,7 @@ examples:
         tcpc {
           compatible = "mediatek,mt6360-tcpc";
           interrupts-extended = <&gpio26 3 IRQ_TYPE_LEVEL_LOW>;
-          interrupt-names = "PD_IRQB";
+          interrupt-names = "PD-IRQB";
 
           connector {
             compatible = "usb-c-connector";
