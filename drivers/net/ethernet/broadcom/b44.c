@@ -2027,7 +2027,7 @@ static void b44_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
 	switch(stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, *b44_gstrings, sizeof(b44_gstrings));
+		memcpy(data, b44_gstrings, sizeof(b44_gstrings));
 		break;
 	}
 }
