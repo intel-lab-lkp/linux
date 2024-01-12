@@ -657,8 +657,8 @@
 #define EEPROM_RF_OPT7				0xCC
 
 #define EEPROM_DEF_PART_NO			0x3FD    /* Byte */
-#define EEPROME_CHIP_VERSION_L			0x3FF
-#define EEPROME_CHIP_VERSION_H			0x3FE
+#define EEPROME_CHIP_VERSION_L			0x3FE
+#define EEPROME_CHIP_VERSION_H			0x3FF
 
 /*
  * Current IOREG MAP
