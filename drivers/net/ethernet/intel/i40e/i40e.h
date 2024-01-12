@@ -23,6 +23,8 @@
 /* Useful i40e defaults */
 #define I40E_MAX_VEB			16
 
+#define I40_BYTES_PER_WORD		2
+
 #define I40E_MAX_NUM_DESCRIPTORS	4096
 #define I40E_MAX_NUM_DESCRIPTORS_XL710	8160
 #define I40E_MAX_CSR_SPACE		(4 * 1024 * 1024 - 64 * 1024)

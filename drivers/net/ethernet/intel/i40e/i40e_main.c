@@ -15414,6 +15414,39 @@ static int i40e_handle_resets(struct i40e_pf *pf)
 }
 
 /**
+ * i40e_log_fw_recovery_mode - log current FW state in Recovery Mode
+ * @pf: board private structure
+ *
+ * Read alternate RAM and CSR registers and print them to the log
+ **/
+static void i40e_log_fw_recovery_mode(struct i40e_pf *pf)
+{
+	u8 buf[I40E_FW_STATE_BUFF_SIZE] = {0};
+	struct i40e_hw *hw = &pf->hw;
+	u8 fws0b, fws1b;
+	u32 fwsts;
+	int ret;
+
+	ret = i40e_aq_alternate_read_indirect(hw, I40E_ALT_CANARY,
+					      I40E_ALT_BUFF_DWORD_SIZE, buf);
+	if (ret) {
+		dev_warn(&pf->pdev->dev,
+			 "Cannot get FW trace buffer due to FW err %d aq_err %s\n",
+			 ret, i40e_aq_str(hw, hw->aq.asq_last_status));
+		return;
+	}
+
+	fwsts = rd32(&pf->hw, I40E_GL_FWSTS);
+	fws0b = FIELD_GET(I40E_GL_FWSTS_FWS0B_MASK, fwsts);
+	fws1b = FIELD_GET(I40E_GL_FWSTS_FWS1B_MASK, fwsts);
+
+	print_hex_dump(KERN_DEBUG, "Trace Buffer: ", DUMP_PREFIX_NONE,
+		       BITS_PER_BYTE * I40_BYTES_PER_WORD, 1, buf,
+		       I40E_FW_STATE_BUFF_SIZE, true);
+	dev_dbg(&pf->pdev->dev, "FWS0B=0x%x, FWS1B=0x%x\n", fws0b, fws1b);
+}
+
+/**
  * i40e_init_recovery_mode - initialize subsystems needed in recovery mode
  * @pf: board private structure
  * @hw: ptr to the hardware info
@@ -15495,6 +15528,8 @@ static int i40e_init_recovery_mode(struct i40e_pf *pf, struct i40e_hw *hw)
 	/* since everything's happy, start the service_task timer */
 	mod_timer(&pf->service_timer,
 		  round_jiffies(jiffies + pf->service_timer_period));
+
+	i40e_log_fw_recovery_mode(pf);
 
 	return 0;
 

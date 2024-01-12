@@ -1372,6 +1372,11 @@ struct i40e_lldp_variables {
 #define I40E_ALT_BW_VALUE_MASK		0xFF
 #define I40E_ALT_BW_VALID_MASK		0x80000000
 
+/* Alternate Ram Trace Buffer*/
+#define I40E_ALT_CANARY				0xABCDEFAB
+#define I40E_ALT_BUFF_DWORD_SIZE		0x14 /* in dwords */
+#define I40E_FW_STATE_BUFF_SIZE			80
+
 /* RSS Hash Table Size */
 #define I40E_PFQF_CTL_0_HASHLUTSIZE_512	0x00010000
 
