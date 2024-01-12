@@ -354,7 +354,8 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	cpumask_var_t *node_to_cpumask __free(free_node_to_cpumask) = alloc_node_to_cpumask();
 	struct cpumask *masks __free(kfree) = kcalloc(numgrps, sizeof(*masks), GFP_KERNEL);
 	cpumask_var_t npresmsk __free(free_cpumask_var);
-	unsigned int curgrp, nr_present, nr_others;
+	unsigned int curgrp;
+	int nr_present, nr_others;
 
 	if (!masks || !node_to_cpumask || !alloc_cpumask_var(&npresmsk, GFP_KERNEL))
 		return NULL;
