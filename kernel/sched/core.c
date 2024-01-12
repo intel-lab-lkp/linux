@@ -8756,17 +8756,6 @@ static bool klp_override;
 
 static void __sched_dynamic_update(int mode)
 {
-	/*
-	 * Avoid {NONE,VOLUNTARY} -> FULL transitions from ever ending up in
-	 * the ZERO state, which is invalid.
-	 */
-	if (!klp_override)
-		preempt_dynamic_enable(cond_resched);
-	preempt_dynamic_enable(might_resched);
-	preempt_dynamic_enable(preempt_schedule);
-	preempt_dynamic_enable(preempt_schedule_notrace);
-	preempt_dynamic_enable(irqentry_exit_cond_resched);
-
 	switch (mode) {
 	case preempt_dynamic_none:
 		if (!klp_override)
