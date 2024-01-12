@@ -76,9 +76,10 @@ struct dw_mipi_dsi_plat_data {
 	void *priv_data;
 };
 
-struct dw_mipi_dsi *dw_mipi_dsi_probe(struct platform_device *pdev,
+int dw_mipi_dsi_probe(struct platform_device *pdev,
 				      const struct dw_mipi_dsi_plat_data
-				      *plat_data);
+				      *plat_data,
+					  struct dw_mipi_dsi **dsi_p);
 void dw_mipi_dsi_remove(struct dw_mipi_dsi *dsi);
 int dw_mipi_dsi_bind(struct dw_mipi_dsi *dsi, struct drm_encoder *encoder);
 void dw_mipi_dsi_unbind(struct dw_mipi_dsi *dsi);

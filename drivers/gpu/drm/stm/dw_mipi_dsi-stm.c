@@ -518,9 +518,8 @@ static int dw_mipi_dsi_stm_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dsi);
 
-	dsi->dsi = dw_mipi_dsi_probe(pdev, &dw_mipi_dsi_stm_plat_data);
-	if (IS_ERR(dsi->dsi)) {
-		ret = PTR_ERR(dsi->dsi);
+	ret = dw_mipi_dsi_probe(pdev, &dw_mipi_dsi_stm_plat_data, &dsi->dsi);
+	if (ret < 0) {
 		dev_err_probe(dev, ret, "Failed to initialize mipi dsi host\n");
 		goto err_dsi_probe;
 	}

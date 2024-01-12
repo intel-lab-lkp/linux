@@ -881,8 +881,8 @@ static int imx93_dsi_probe(struct platform_device *pdev)
 	dsi->pdata.priv_data = dsi;
 	platform_set_drvdata(pdev, dsi);
 
-	dsi->dmd = dw_mipi_dsi_probe(pdev, &dsi->pdata);
-	if (IS_ERR(dsi->dmd))
+	ret = dw_mipi_dsi_probe(pdev, &dsi->pdata, &dsi->dmd);
+	if (ret < 0)
 		return dev_err_probe(dev, PTR_ERR(dsi->dmd),
 				     "failed to probe dw_mipi_dsi\n");
 

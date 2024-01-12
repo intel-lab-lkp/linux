@@ -1184,18 +1184,19 @@ static void dw_mipi_dsi_debugfs_remove(struct dw_mipi_dsi *dsi) { }
 
 #endif /* CONFIG_DEBUG_FS */
 
-static struct dw_mipi_dsi *
-__dw_mipi_dsi_probe(struct platform_device *pdev,
-		    const struct dw_mipi_dsi_plat_data *plat_data)
+int __dw_mipi_dsi_probe(struct platform_device *pdev,
+		    const struct dw_mipi_dsi_plat_data *plat_data, struct dw_mipi_dsi **dsi_p)
 {
 	struct device *dev = &pdev->dev;
 	struct reset_control *apb_rst;
 	struct dw_mipi_dsi *dsi;
 	int ret;
 
-	dsi = devm_kzalloc(dev, sizeof(*dsi), GFP_KERNEL);
-	if (!dsi)
-		return ERR_PTR(-ENOMEM);
+	*dsi_p = devm_kzalloc(dev, sizeof(*dsi), GFP_KERNEL);
+	if (!*dsi_p)
+		return -ENOMEM;
+
+	dsi = *dsi_p;
 
 	dsi->dev = dev;
 	dsi->plat_data = plat_data;
@@ -1203,13 +1204,13 @@ __dw_mipi_dsi_probe(struct platform_device *pdev,
 	if (!plat_data->phy_ops->init || !plat_data->phy_ops->get_lane_mbps ||
 	    !plat_data->phy_ops->get_timing) {
 		DRM_ERROR("Phy not properly configured\n");
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 	}
 
 	if (!plat_data->base) {
 		dsi->base = devm_platform_ioremap_resource(pdev, 0);
 		if (IS_ERR(dsi->base))
-			return ERR_PTR(-ENODEV);
+			return -ENODEV;
 
 	} else {
 		dsi->base = plat_data->base;
@@ -1219,7 +1220,7 @@ __dw_mipi_dsi_probe(struct platform_device *pdev,
 	if (IS_ERR(dsi->pclk)) {
 		ret = PTR_ERR(dsi->pclk);
 		dev_err(dev, "Unable to get pclk: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	/*
@@ -1233,14 +1234,14 @@ __dw_mipi_dsi_probe(struct platform_device *pdev,
 		if (ret != -EPROBE_DEFER)
 			dev_err(dev, "Unable to get reset control: %d\n", ret);
 
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	if (apb_rst) {
 		ret = clk_prepare_enable(dsi->pclk);
 		if (ret) {
 			dev_err(dev, "%s: Failed to enable pclk\n", __func__);
-			return ERR_PTR(ret);
+			return ret;
 		}
 
 		reset_control_assert(apb_rst);
@@ -1255,19 +1256,20 @@ __dw_mipi_dsi_probe(struct platform_device *pdev,
 
 	dsi->dsi_host.ops = &dw_mipi_dsi_host_ops;
 	dsi->dsi_host.dev = dev;
+	dsi->bridge.driver_private = dsi;
+	dsi->bridge.funcs = &dw_mipi_dsi_bridge_funcs;
+	dsi->bridge.of_node = pdev->dev.of_node;
+
 	ret = mipi_dsi_host_register(&dsi->dsi_host);
 	if (ret) {
 		dev_err(dev, "Failed to register MIPI host: %d\n", ret);
 		pm_runtime_disable(dev);
 		dw_mipi_dsi_debugfs_remove(dsi);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
-	dsi->bridge.driver_private = dsi;
-	dsi->bridge.funcs = &dw_mipi_dsi_bridge_funcs;
-	dsi->bridge.of_node = pdev->dev.of_node;
 
-	return dsi;
+	return 0;
 }
 
 static void __dw_mipi_dsi_remove(struct dw_mipi_dsi *dsi)
@@ -1301,11 +1303,11 @@ EXPORT_SYMBOL_GPL(dw_mipi_dsi_get_bridge);
 /*
  * Probe/remove API, used from platforms based on the DRM bridge API.
  */
-struct dw_mipi_dsi *
-dw_mipi_dsi_probe(struct platform_device *pdev,
-		  const struct dw_mipi_dsi_plat_data *plat_data)
+int dw_mipi_dsi_probe(struct platform_device *pdev,
+		  const struct dw_mipi_dsi_plat_data *plat_data,
+		  struct dw_mipi_dsi **dsi_p)
 {
-	return __dw_mipi_dsi_probe(pdev, plat_data);
+	return __dw_mipi_dsi_probe(pdev, plat_data, dsi_p);
 }
 EXPORT_SYMBOL_GPL(dw_mipi_dsi_probe);
 

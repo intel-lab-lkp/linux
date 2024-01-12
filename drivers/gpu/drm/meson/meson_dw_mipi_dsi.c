@@ -262,6 +262,7 @@ static int meson_dw_mipi_dsi_probe(struct platform_device *pdev)
 {
 	struct meson_dw_mipi_dsi *mipi_dsi;
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	mipi_dsi = devm_kzalloc(dev, sizeof(*mipi_dsi), GFP_KERNEL);
 	if (!mipi_dsi)
@@ -315,10 +316,9 @@ static int meson_dw_mipi_dsi_probe(struct platform_device *pdev)
 	mipi_dsi->pdata.priv_data = mipi_dsi;
 	platform_set_drvdata(pdev, mipi_dsi);
 
-	mipi_dsi->dmd = dw_mipi_dsi_probe(pdev, &mipi_dsi->pdata);
-	if (IS_ERR(mipi_dsi->dmd))
-		return dev_err_probe(dev, PTR_ERR(mipi_dsi->dmd),
-				     "Failed to probe dw_mipi_dsi\n");
+	ret = dw_mipi_dsi_probe(pdev, &mipi_dsi->pdata, &mipi_dsi->dmd);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to probe dw_mipi_dsi\n");
 
 	return 0;
 }
