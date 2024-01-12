@@ -6141,13 +6141,25 @@ static void vmx_get_exit_info(struct kvm_vcpu *vcpu, u32 *reason,
 
 	*reason = vmx->exit_reason.full;
 	*info1 = vmx_get_exit_qual(vcpu);
+
 	if (!(vmx->exit_reason.failed_vmentry)) {
-		*info2 = vmx->idt_vectoring_info;
-		*intr_info = vmx_get_intr_info(vcpu);
+		*intr_info = vmx->idt_vectoring_info;
 		if (is_exception_with_error_code(*intr_info))
-			*error_code = vmcs_read32(VM_EXIT_INTR_ERROR_CODE);
+			*error_code = vmcs_read32(IDT_VECTORING_ERROR_CODE);
 		else
 			*error_code = 0;
+
+		/* various *info2 semantics according to exit reason */
+		switch (vmx->exit_reason.basic) {
+		case EXIT_REASON_EPT_VIOLATION:
+			*info2 = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
+			break;
+		/* To do: *info2 for other exit reasons */
+		default:
+			*info2 = 0;
+			break;
+		}
+
 	} else {
 		*info2 = 0;
 		*intr_info = 0;
