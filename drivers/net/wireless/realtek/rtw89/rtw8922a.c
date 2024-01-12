@@ -644,6 +644,32 @@ static void rtw8922a_phycap_parsing_pa_bias_trim(struct rtw89_dev *rtwdev,
 	}
 }
 
+static void rtw8922a_pa_bias_trim(struct rtw89_dev *rtwdev)
+{
+	struct rtw89_power_trim_info *info = &rtwdev->pwr_trim;
+	u8 pabias_2g, pabias_5g;
+	u8 i;
+
+	if (!info->pg_pa_bias_trim) {
+		rtw89_debug(rtwdev, RTW89_DBG_RFK,
+			    "[PA_BIAS][TRIM] no PG, do nothing\n");
+
+		return;
+	}
+
+	for (i = 0; i < RF_PATH_NUM_8922A; i++) {
+		pabias_2g = FIELD_GET(GENMASK(3, 0), info->pa_bias_trim[i]);
+		pabias_5g = FIELD_GET(GENMASK(7, 4), info->pa_bias_trim[i]);
+
+		rtw89_debug(rtwdev, RTW89_DBG_RFK,
+			    "[PA_BIAS][TRIM] path=%d 2G=0x%x 5G=0x%x\n",
+			    i, pabias_2g, pabias_5g);
+
+		rtw89_write_rf(rtwdev, i, RR_BIASA, RR_BIASA_TXG_V1, pabias_2g);
+		rtw89_write_rf(rtwdev, i, RR_BIASA, RR_BIASA_TXA_V1, pabias_5g);
+	}
+}
+
 static void rtw8922a_phycap_parsing_pad_bias_trim(struct rtw89_dev *rtwdev,
 						  u8 *phycap_map)
 {
@@ -661,6 +687,31 @@ static void rtw8922a_phycap_parsing_pad_bias_trim(struct rtw89_dev *rtwdev,
 	}
 }
 
+static void rtw8922a_pad_bias_trim(struct rtw89_dev *rtwdev)
+{
+	struct rtw89_power_trim_info *info = &rtwdev->pwr_trim;
+	u8 pad_bias_2g, pad_bias_5g;
+	u8 i;
+
+	if (!info->pg_pa_bias_trim) {
+		rtw89_debug(rtwdev, RTW89_DBG_RFK,
+			    "[PAD_BIAS][TRIM] no PG, do nothing\n");
+		return;
+	}
+
+	for (i = 0; i < RF_PATH_NUM_8922A; i++) {
+		pad_bias_2g = u8_get_bits(info->pad_bias_trim[i], GENMASK(3, 0));
+		pad_bias_5g = u8_get_bits(info->pad_bias_trim[i], GENMASK(7, 4));
+
+		rtw89_debug(rtwdev, RTW89_DBG_RFK,
+			    "[PAD_BIAS][TRIM] path=%d 2G=0x%x 5G=0x%x\n",
+			    i, pad_bias_2g, pad_bias_5g);
+
+		rtw89_write_rf(rtwdev, i, RR_BIASA, RR_BIASD_TXG_V1, pad_bias_2g);
+		rtw89_write_rf(rtwdev, i, RR_BIASA, RR_BIASD_TXA_V1, pad_bias_5g);
+	}
+}
+
 static int rtw8922a_read_phycap(struct rtw89_dev *rtwdev, u8 *phycap_map)
 {
 	rtw8922a_phycap_parsing_thermal_trim(rtwdev, phycap_map);
@@ -668,6 +719,12 @@ static int rtw8922a_read_phycap(struct rtw89_dev *rtwdev, u8 *phycap_map)
 	rtw8922a_phycap_parsing_pad_bias_trim(rtwdev, phycap_map);
 
 	return 0;
+}
+
+static void rtw8922a_power_trim(struct rtw89_dev *rtwdev)
+{
+	rtw8922a_pa_bias_trim(rtwdev);
+	rtw8922a_pad_bias_trim(rtwdev);
 }
 
 struct rtw8922a_bb_gain {
@@ -1008,6 +1065,131 @@ static void rtw8922a_set_channel(struct rtw89_dev *rtwdev,
 	rtw8922a_set_channel_bb(rtwdev, chan, phy_idx);
 }
 
+struct rtw8922a_bb_txpwr_ref_parm {
+	u16 ofst;
+	u16 dbm;
+	u16 cw;
+};
+
+static void rtw8922a_bb_cal_txpwr_ref(struct rtw89_dev *rtwdev,
+				      enum rtw89_phy_idx phy_idx,
+				      struct rtw8922a_bb_txpwr_ref_parm *parm,
+				      s16 ref_s9_2)
+{
+	const s16 tssi_16dbm_cw = 0x140;
+	const u8 base_cw_0db = 0x27;
+	u32 tssi_ofst_cw;
+	s16 pwr_s10_3;
+	s16 rf_pwr_cw;
+	u32 pwr_cw;
+
+	pwr_s10_3 = (ref_s9_2 << 1) + (s16)(base_cw_0db << 3);
+	rf_pwr_cw = clamp_t(s16, pwr_s10_3 >> 3, 15, 63);
+	pwr_cw = (rf_pwr_cw << 3) | u16_get_bits(pwr_s10_3, GENMASK(2, 0));
+	tssi_ofst_cw = tssi_16dbm_cw + (ref_s9_2 << 1) - (16 << 3);
+
+	parm->dbm = ref_s9_2;
+	parm->cw = pwr_cw;
+	parm->ofst = tssi_ofst_cw;
+}
+
+static void rtw8922a_set_txpwr_ref(struct rtw89_dev *rtwdev,
+				   enum rtw89_phy_idx phy_idx)
+{
+	struct rtw8922a_bb_txpwr_ref_parm ofdm, cck;
+	s16 ref_ofdm = 0;
+	s16 ref_cck = 0;
+
+	rtw89_debug(rtwdev, RTW89_DBG_TXPWR, "[TXPWR] set txpwr reference\n");
+
+	rtw89_mac_txpwr_write32_mask(rtwdev, phy_idx, R_BE_PWR_REF_CTRL,
+				     B_BE_PWR_REF_CTRL_OFDM, ref_ofdm);
+	rtw89_mac_txpwr_write32_mask(rtwdev, phy_idx, R_BE_PWR_REF_CTRL,
+				     B_BE_PWR_REF_CTRL_CCK, ref_cck);
+
+	rtw8922a_bb_cal_txpwr_ref(rtwdev, phy_idx, &ofdm, ref_ofdm);
+	rtw89_debug(rtwdev, RTW89_DBG_TXPWR,
+		    "[TXPWR] bb cal ofdm: ref 0x%x cw 0x%x ofst 0x%x\n",
+		    ofdm.dbm, ofdm.cw, ofdm.ofst);
+
+	rtw8922a_bb_cal_txpwr_ref(rtwdev, phy_idx, &cck, ref_cck);
+	rtw89_debug(rtwdev, RTW89_DBG_TXPWR,
+		    "[TXPWR] bb cal cck: ref 0x%x cw 0x%x ofst 0x%x\n",
+		    cck.dbm, cck.cw, cck.ofst);
+
+	/* path 0 */
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P0, B_TXAGC_REF0_OFDM_DBM,
+			       ofdm.dbm);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P0, B_TXAGC_REF0_CCK_DBM,
+			       cck.dbm);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P0, B_TXAGC_REF0_OFDM_CW,
+			       ofdm.cw);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF1_P0, B_TXAGC_REF1_CCK_CW,
+			       cck.cw);
+	rtw89_phy_write32_mask(rtwdev, R_TSSI_MAP_OFST_P0, B_TSSI_MAP_OFST_OFDM,
+			       ofdm.ofst);
+	rtw89_phy_write32_mask(rtwdev, R_TSSI_MAP_OFST_P0, B_TSSI_MAP_OFST_CCK,
+			       cck.ofst);
+
+	/* path 1 */
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P1, B_TXAGC_REF0_OFDM_DBM,
+			       ofdm.dbm);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P1, B_TXAGC_REF0_CCK_DBM,
+			       cck.dbm);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF0_P1, B_TXAGC_REF0_OFDM_CW,
+			       ofdm.cw);
+	rtw89_phy_write32_mask(rtwdev, R_TXAGC_REF1_P1, B_TXAGC_REF1_CCK_CW,
+			       cck.cw);
+	rtw89_phy_write32_mask(rtwdev, R_TSSI_MAP_OFST_P1, B_TSSI_MAP_OFST_OFDM,
+			       ofdm.ofst);
+	rtw89_phy_write32_mask(rtwdev, R_TSSI_MAP_OFST_P1, B_TSSI_MAP_OFST_CCK,
+			       cck.ofst);
+}
+
+static void rtw8922a_bb_tx_triangular(struct rtw89_dev *rtwdev, bool en,
+				      enum rtw89_phy_idx phy_idx)
+{
+	u8 ctrl = en ? 0x1 : 0x0;
+
+	rtw89_phy_write32_idx(rtwdev, R_BEDGE3, B_BEDGE_CFG, ctrl, phy_idx);
+}
+
+static void rtw8922a_set_tx_shape(struct rtw89_dev *rtwdev,
+				  const struct rtw89_chan *chan,
+				  enum rtw89_phy_idx phy_idx)
+{
+	const struct rtw89_rfe_parms *rfe_parms = rtwdev->rfe_parms;
+	const struct rtw89_tx_shape *tx_shape = &rfe_parms->tx_shape;
+	u8 tx_shape_idx;
+	u8 band, regd;
+
+	band = chan->band_type;
+	regd = rtw89_regd_get(rtwdev, band);
+	tx_shape_idx = (*tx_shape->lmt)[band][RTW89_RS_OFDM][regd];
+
+	if (tx_shape_idx == 0)
+		rtw8922a_bb_tx_triangular(rtwdev, false, phy_idx);
+	else
+		rtw8922a_bb_tx_triangular(rtwdev, true, phy_idx);
+}
+
+static void rtw8922a_set_txpwr(struct rtw89_dev *rtwdev,
+			       const struct rtw89_chan *chan,
+			       enum rtw89_phy_idx phy_idx)
+{
+	rtw89_phy_set_txpwr_byrate(rtwdev, chan, phy_idx);
+	rtw89_phy_set_txpwr_offset(rtwdev, chan, phy_idx);
+	rtw8922a_set_tx_shape(rtwdev, chan, phy_idx);
+	rtw89_phy_set_txpwr_limit(rtwdev, chan, phy_idx);
+	rtw89_phy_set_txpwr_limit_ru(rtwdev, chan, phy_idx);
+}
+
+static void rtw8922a_set_txpwr_ctrl(struct rtw89_dev *rtwdev,
+				    enum rtw89_phy_idx phy_idx)
+{
+	rtw8922a_set_txpwr_ref(rtwdev, phy_idx);
+}
+
 static int rtw8922a_mac_enable_bb_rf(struct rtw89_dev *rtwdev)
 {
 	rtw89_write8_set(rtwdev, R_BE_FEN_RST_ENABLE,
@@ -1044,6 +1226,11 @@ static const struct rtw89_chip_ops rtw8922a_chip_ops = {
 	.set_channel		= rtw8922a_set_channel,
 	.read_efuse		= rtw8922a_read_efuse,
 	.read_phycap		= rtw8922a_read_phycap,
+	.power_trim		= rtw8922a_power_trim,
+	.set_txpwr		= rtw8922a_set_txpwr,
+	.set_txpwr_ctrl		= rtw8922a_set_txpwr_ctrl,
+	.init_txpwr_unit	= NULL,
+	.set_txpwr_ul_tb_offset	= NULL,
 	.pwr_on_func		= rtw8922a_pwr_on_func,
 	.pwr_off_func		= rtw8922a_pwr_off_func,
 };
