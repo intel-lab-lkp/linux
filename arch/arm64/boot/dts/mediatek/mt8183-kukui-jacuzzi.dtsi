@@ -483,3 +483,6 @@
 	};
 };
 
+&cros_ec {
+	/delete-node/ cbas;
+};
