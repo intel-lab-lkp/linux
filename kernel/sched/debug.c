@@ -235,7 +235,8 @@ static ssize_t sched_dynamic_write(struct file *filp, const char __user *ubuf,
 	if (mode < 0)
 		return mode;
 
-	sched_dynamic_update(mode);
+	if (preempt_dynamic_mode != mode)
+		sched_dynamic_update(mode);
 
 	*ppos += cnt;
 
