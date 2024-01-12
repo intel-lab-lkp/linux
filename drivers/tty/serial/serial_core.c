@@ -723,10 +723,12 @@ static void uart_throttle(struct tty_struct *tty)
 	if (C_CRTSCTS(tty))
 		mask |= UPSTAT_AUTORTS;
 
+	uart_port_lock_irq(port);
 	if (port->status & mask) {
 		port->ops->throttle(port);
 		mask &= ~port->status;
 	}
+	uart_port_unlock_irq(port);
 
 	if (mask & UPSTAT_AUTORTS)
 		uart_clear_mctrl(port, TIOCM_RTS);
@@ -752,10 +754,12 @@ static void uart_unthrottle(struct tty_struct *tty)
 	if (C_CRTSCTS(tty))
 		mask |= UPSTAT_AUTORTS;
 
+	uart_port_lock_irq(port);
 	if (port->status & mask) {
 		port->ops->unthrottle(port);
 		mask &= ~port->status;
 	}
+	uart_port_unlock_irq(port);
 
 	if (mask & UPSTAT_AUTORTS)
 		uart_set_mctrl(port, TIOCM_RTS);
