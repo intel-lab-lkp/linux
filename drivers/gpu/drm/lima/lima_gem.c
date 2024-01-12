@@ -92,8 +92,13 @@ int lima_heap_alloc(struct lima_bo *bo, struct lima_vm *vm)
 
 	if (vm) {
 		ret = lima_vm_map_bo(vm, bo, old_size >> PAGE_SHIFT);
-		if (ret)
+		if (ret) {
+			dma_unmap_sgtable(dev, &sgt, DMA_BIDIRECTIONAL, 0);
+			sg_free_table(&sgt);
+			kfree(bo->base.sgt);
+			bo->base.sgt = NULL;
 			return ret;
+		}
 	}
 
 	bo->heap_size = new_size;
