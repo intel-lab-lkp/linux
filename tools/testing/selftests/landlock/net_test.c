@@ -21,6 +21,15 @@
 
 #include "common.h"
 
+#ifndef gettid
+static pid_t gettid(void)
+{
+        return syscall(__NR_gettid);
+}
+
+#endif
+
+
 const short sock_port_start = (1 << 10);
 
 static const char loopback_ipv4[] = "127.0.0.1";
