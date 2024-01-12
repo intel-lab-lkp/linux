@@ -4376,6 +4376,46 @@ static int i40e_aq_alternate_read(struct i40e_hw *hw,
 }
 
 /**
+ * i40e_aq_alternate_read_indirect
+ * @hw: pointer to the hardware structure
+ * @addr: address of the alternate structure field
+ * @dw_count: number of alternate structure fields to read
+ * @buffer: pointer to the command buffer
+ *
+ * Read 'dw_count' dwords from alternate structure starting at 'addr' and
+ * place them in 'buffer'. The buffer should be allocated by caller.
+ *
+ **/
+int i40e_aq_alternate_read_indirect(struct i40e_hw *hw, u32 addr, u32 dw_count,
+				    void *buffer)
+{
+	struct i40e_aqc_alternate_ind_read_write *cmd_resp;
+	struct i40e_aq_desc desc;
+	int status;
+
+	if (!buffer)
+		return -EINVAL;
+
+	cmd_resp = (struct i40e_aqc_alternate_ind_read_write *)&desc.params.raw;
+
+	i40e_fill_default_direct_cmd_desc(&desc,
+					  i40e_aqc_opc_alternate_read_indirect);
+
+	desc.flags |= cpu_to_le16(I40E_AQ_FLAG_RD);
+	desc.flags |= cpu_to_le16(I40E_AQ_FLAG_BUF);
+	if (dw_count > I40E_AQ_LARGE_BUF / 4)
+		desc.flags |= cpu_to_le16((u16)I40E_AQ_FLAG_LB);
+
+	cmd_resp->address = cpu_to_le32(addr);
+	cmd_resp->length = cpu_to_le32(dw_count);
+
+	status = i40e_asq_send_command(hw, &desc, buffer,
+				       lower_16_bits(4 * dw_count), NULL);
+
+	return status;
+}
+
+/**
  * i40e_aq_suspend_port_tx
  * @hw: pointer to the hardware structure
  * @seid: port seid

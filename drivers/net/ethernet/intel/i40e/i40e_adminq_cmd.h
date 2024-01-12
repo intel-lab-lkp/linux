@@ -1983,14 +1983,14 @@ I40E_CHECK_CMD_LENGTH(i40e_aqc_alternate_write);
  * Indirect read (indirect 0x0903)
  */
 
-struct i40e_aqc_alternate_ind_write {
+struct i40e_aqc_alternate_ind_read_write {
 	__le32 address;
 	__le32 length;
 	__le32 addr_high;
 	__le32 addr_low;
 };
 
-I40E_CHECK_CMD_LENGTH(i40e_aqc_alternate_ind_write);
+I40E_CHECK_CMD_LENGTH(i40e_aqc_alternate_ind_read_write);
 
 /* Done alternate write (direct 0x0904)
  * uses i40e_aq_desc

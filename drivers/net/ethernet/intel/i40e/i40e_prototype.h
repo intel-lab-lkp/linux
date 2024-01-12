@@ -322,6 +322,9 @@ i40e_aq_rem_cloud_filters_bb(struct i40e_hw *hw, u16 seid,
 			     u8 filter_count);
 int i40e_read_lldp_cfg(struct i40e_hw *hw,
 		       struct i40e_lldp_variables *lldp_cfg);
+
+int i40e_aq_alternate_read_indirect(struct i40e_hw *hw, u32 addr, u32 dw_count,
+				    void *buffer);
 int
 i40e_aq_suspend_port_tx(struct i40e_hw *hw, u16 seid,
 			struct i40e_asq_cmd_details *cmd_details);
