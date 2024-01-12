@@ -453,6 +453,7 @@
 };
 
 &usbss0 {
+	bootph-all;
 	status = "okay";
 	ti,vbus-divider;
 };
@@ -463,6 +464,7 @@
 };
 
 &usb0 {
+	bootph-all;
 	#address-cells = <1>;
 	#size-cells = <0>;
 	usb-role-switch;
