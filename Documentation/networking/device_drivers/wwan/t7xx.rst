@@ -39,6 +39,34 @@ command and receive response:
 
 - open the AT control channel using a UART tool or a special user tool
 
+Sysfs
+=====
+The driver provides sysfs interfaces to userspace.
+
+t7xx_mode
+---------
+The sysfs interface provides userspace with access to the device mode, this interface
+supports read and write operations.
+
+Device mode:
+
+- ``UNKNOW`` represents that device in unknown status
+- ``READY`` represents that device in ready status
+- ``RESET`` represents that device in reset status
+- ``FASTBOOT_DL_SWITCHING`` represents that device in fastboot switching status
+- ``FASTBOOT_DL_MODE`` represents that device in fastboot download status
+- ``FASTBOOT_DL_DUMP_MODE`` represents that device in fastboot dump status
+
+Read from userspace to get the current device mode.
+
+::
+  $ cat /sys/bus/pci/devices/${bdf}/t7xx_mode
+
+Write from userspace to set the device mode.
+
+::
+  $ echo FASTBOOT_DL_SWITCHING > /sys/bus/pci/devices/${bdf}/t7xx_mode
+
 Management application development
 ==================================
 The driver and userspace interfaces are described below. The MBIM protocol is
