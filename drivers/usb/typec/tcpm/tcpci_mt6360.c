@@ -153,7 +153,7 @@ static int mt6360_tcpc_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	mti->irq = platform_get_irq_byname(pdev, "PD_IRQB");
+	mti->irq = platform_get_irq_byname(pdev, "PD-IRQB");
 	if (mti->irq < 0)
 		return mti->irq;
 
