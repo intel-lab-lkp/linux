@@ -2222,17 +2222,21 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file, u8 *kbuf,
 	add_wait_queue(&tty->read_wait, &wait);
 	while (nr) {
 		/* First test for status change. */
+		spin_lock_irq(&tty->link->ctrl.lock);
 		if (packet && tty->link->ctrl.pktstatus) {
 			u8 cs;
-			if (kb != kbuf)
+			if (kb != kbuf) {
+				spin_unlock_irq(&tty->link->ctrl.lock);
 				break;
-			spin_lock_irq(&tty->link->ctrl.lock);
+			}
 			cs = tty->link->ctrl.pktstatus;
 			tty->link->ctrl.pktstatus = 0;
 			spin_unlock_irq(&tty->link->ctrl.lock);
 			*kb++ = cs;
 			nr--;
 			break;
+		} else {
+			spin_unlock_irq(&tty->link->ctrl.lock);
 		}
 
 		if (!input_available_p(tty, 0)) {
