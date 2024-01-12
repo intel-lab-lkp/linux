@@ -1884,6 +1884,8 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 	phy->phy_link_change = phylink_phy_change;
 
 	irq_str = phy_attached_info_irq(phy);
+	if (!irq_str)
+		return -ENOMEM;
 	phylink_info(pl,
 		     "PHY [%s] driver [%s] (irq=%s)\n",
 		     dev_name(&phy->mdio.dev), phy->drv->name, irq_str);
