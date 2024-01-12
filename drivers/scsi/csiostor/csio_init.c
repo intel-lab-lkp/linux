@@ -698,8 +698,7 @@ csio_lnodes_block_request(struct csio_hw *hw)
 	struct csio_lnode **lnode_list;
 	int cur_cnt = 0, ii;
 
-	lnode_list = kzalloc((sizeof(struct csio_lnode *) * hw->num_lns),
-			GFP_KERNEL);
+	lnode_list = kcalloc(hw->num_lns, sizeof(*lnode_list), GFP_KERNEL);
 	if (!lnode_list) {
 		csio_err(hw, "Failed to allocate lnodes_list");
 		return;
@@ -737,8 +736,7 @@ csio_lnodes_unblock_request(struct csio_hw *hw)
 	struct csio_lnode **lnode_list;
 	int cur_cnt = 0, ii;
 
-	lnode_list = kzalloc((sizeof(struct csio_lnode *) * hw->num_lns),
-			GFP_KERNEL);
+	lnode_list = kcalloc(hw->num_lns, sizeof(*lnode_list), GFP_KERNEL);
 	if (!lnode_list) {
 		csio_err(hw, "Failed to allocate lnodes_list");
 		return;
@@ -775,8 +773,7 @@ csio_lnodes_block_by_port(struct csio_hw *hw, uint8_t portid)
 	struct csio_lnode **lnode_list;
 	int cur_cnt = 0, ii;
 
-	lnode_list = kzalloc((sizeof(struct csio_lnode *) * hw->num_lns),
-			GFP_KERNEL);
+	lnode_list = kcalloc(hw->num_lns, sizeof(*lnode_list), GFP_KERNEL);
 	if (!lnode_list) {
 		csio_err(hw, "Failed to allocate lnodes_list");
 		return;
@@ -816,8 +813,7 @@ csio_lnodes_unblock_by_port(struct csio_hw *hw, uint8_t portid)
 	struct csio_lnode **lnode_list;
 	int cur_cnt = 0, ii;
 
-	lnode_list = kzalloc((sizeof(struct csio_lnode *) * hw->num_lns),
-			GFP_KERNEL);
+	lnode_list = kcalloc(hw->num_lns, sizeof(*lnode_list), GFP_KERNEL);
 	if (!lnode_list) {
 		csio_err(hw, "Failed to allocate lnodes_list");
 		return;
@@ -855,8 +851,7 @@ csio_lnodes_exit(struct csio_hw *hw, bool npiv)
 	struct csio_lnode **lnode_list;
 	int cur_cnt = 0, ii;
 
-	lnode_list = kzalloc((sizeof(struct csio_lnode *) * hw->num_lns),
-			GFP_KERNEL);
+	lnode_list = kcalloc(hw->num_lns, sizeof(*lnode_list), GFP_KERNEL);
 	if (!lnode_list) {
 		csio_err(hw, "lnodes_exit: Failed to allocate lnodes_list.\n");
 		return;
