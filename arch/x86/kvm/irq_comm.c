@@ -399,7 +399,7 @@ static const struct kvm_irq_routing_entry empty_routing[] = {};
 
 int kvm_setup_empty_irq_routing(struct kvm *kvm)
 {
-	return kvm_set_irq_routing(kvm, empty_routing, 0, 0);
+	return kvm_set_irq_routing(kvm, empty_routing, 0, NONEED_SYNC_SRCU);
 }
 
 void kvm_arch_post_irq_routing_update(struct kvm *kvm)

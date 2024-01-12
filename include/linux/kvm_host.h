@@ -2037,6 +2037,8 @@ static inline int mmu_invalidate_retry_gfn(struct kvm *kvm,
 
 #define KVM_MAX_IRQ_ROUTES 4096 /* might need extension/rework in the future */
 
+#define NONEED_SYNC_SRCU	(1U << 0)
+
 bool kvm_arch_can_set_irq_routing(struct kvm *kvm);
 int kvm_set_irq_routing(struct kvm *kvm,
 			const struct kvm_irq_routing_entry *entries,

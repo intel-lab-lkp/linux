@@ -224,7 +224,8 @@ int kvm_set_irq_routing(struct kvm *kvm,
 
 	kvm_arch_post_irq_routing_update(kvm);
 
-	synchronize_srcu_expedited(&kvm->irq_srcu);
+	if (!(flags & NONEED_SYNC_SRCU))
+		synchronize_srcu_expedited(&kvm->irq_srcu);
 
 	new = old;
 	r = 0;
