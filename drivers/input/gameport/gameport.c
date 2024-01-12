@@ -202,8 +202,13 @@ static void gameport_run_poll_handler(struct timer_list *t)
 	struct gameport *gameport = from_timer(gameport, t, poll_timer);
 
 	gameport->poll_handler(gameport);
+
+	spin_lock(&gameport->timer_lock);
+
 	if (gameport->poll_cnt)
 		mod_timer(&gameport->poll_timer, jiffies + msecs_to_jiffies(gameport->poll_interval));
+
+	spin_unlock(&gameport->timer_lock);
 }
 
 /*
