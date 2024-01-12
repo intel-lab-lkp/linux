@@ -1730,7 +1730,7 @@ int intel_hdmi_hdcp2_check_link(struct intel_digital_port *dig_port,
 
 static
 int intel_hdmi_hdcp2_capable(struct intel_connector *connector,
-			     bool *capable)
+			     bool *capable, bool remote_req)
 {
 	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
 	u8 hdcp2_version;

@@ -649,13 +649,13 @@ int intel_dp_hdcp2_check_link(struct intel_digital_port *dig_port,
 
 static
 int intel_dp_hdcp2_capable(struct intel_connector *connector,
-			   bool *capable)
+			   bool *capable, bool remote_req)
 {
 	struct drm_dp_aux *aux;
 	u8 rx_caps[3];
 	int ret;
 
-	aux = intel_dp_hdcp_get_aux(connector, true);
+	aux = intel_dp_hdcp_get_aux(connector, remote_req);
 
 	*capable = false;
 	ret = drm_dp_dpcd_read(aux,

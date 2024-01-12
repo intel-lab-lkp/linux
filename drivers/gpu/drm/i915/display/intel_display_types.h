@@ -507,7 +507,7 @@ struct intel_hdcp_shim {
 
 	/* Detects whether sink is HDCP2.2 capable */
 	int (*hdcp_2_2_capable)(struct intel_connector *connector,
-				bool *capable);
+				bool *capable, bool remote_req);
 
 	/* Write HDCP2.2 messages */
 	int (*write_2_2_msg)(struct intel_connector *connector,
