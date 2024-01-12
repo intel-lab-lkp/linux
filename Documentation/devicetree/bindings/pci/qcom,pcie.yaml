@@ -777,6 +777,8 @@ allOf:
               - qcom,pcie-sa8540p
               - qcom,pcie-sa8775p
               - qcom,pcie-sc8280xp
+              - qcom,pcie-sm8450-pcie0
+              - qcom,pcie-sm8450-pcie1
     then:
       required:
         - interconnects
