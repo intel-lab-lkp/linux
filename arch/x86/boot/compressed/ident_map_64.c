@@ -387,7 +387,10 @@ void do_boot_page_fault(struct pt_regs *regs, unsigned long error_code)
 	kernel_add_identity_map(address, end);
 }
 
+extern int spurious_nmi_count;
+
 void do_boot_nmi_trap(struct pt_regs *regs, unsigned long error_code)
 {
 	/* Empty handler to ignore NMI during early boot */
+	spurious_nmi_count++;
 }

@@ -357,6 +357,8 @@ unsigned long decompress_kernel(unsigned char *outbuf, unsigned long virt_addr,
 	return entry;
 }
 
+int spurious_nmi_count;
+
 /*
  * The compressed kernel image (ZO), has been moved so that its position
  * is against the end of the buffer used to hold the uncompressed kernel
@@ -492,6 +494,12 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 
 	/* Disable exception handling before booting the kernel */
 	cleanup_exception_handling();
+
+	if (spurious_nmi_count) {
+		error_putstr("Spurious early NMI ignored. Number of NMIs: 0x");
+		error_puthex(spurious_nmi_count);
+		error_putstr("\n");
+	}
 
 	return output + entry_offset;
 }
