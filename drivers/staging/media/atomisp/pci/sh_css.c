@@ -4936,9 +4936,10 @@ unload_video_binaries(struct ia_css_pipe *pipe)
 	ia_css_binary_unload(&pipe->pipe_settings.video.video_binary);
 	ia_css_binary_unload(&pipe->pipe_settings.video.vf_pp_binary);
 
-	for (i = 0; i < pipe->pipe_settings.video.num_yuv_scaler; i++)
-		ia_css_binary_unload(&pipe->pipe_settings.video.yuv_scaler_binary[i]);
-
+	if (pipe->pipe_settings.video.yuv_scaler_binary)
+		for (i = 0; i < pipe->pipe_settings.video.num_yuv_scaler; i++)
+			ia_css_binary_unload(&pipe->pipe_settings.video.yuv_scaler_binary[i]);
+		
 	kfree(pipe->pipe_settings.video.is_output_stage);
 	pipe->pipe_settings.video.is_output_stage = NULL;
 	kfree(pipe->pipe_settings.video.yuv_scaler_binary);
