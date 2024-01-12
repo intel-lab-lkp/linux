@@ -4,7 +4,7 @@
 
 set -e
 
-err=0
+err=1
 
 shelldir=$(dirname "$0")
 # shellcheck source=lib/setup_python.sh
@@ -36,7 +36,6 @@ test_json_converter_command()
 		echo "Perf Data Converter Command to JSON [SUCCESS]"
 	else
 		echo "Perf Data Converter Command to JSON [FAILED]"
-		err=1
 		exit
 	fi
 }
@@ -49,7 +48,6 @@ validate_json_format()
 			echo "The file contains valid JSON format [SUCCESS]"
 		else
 			echo "The file does not contain valid JSON format [FAILED]"
-			err=1
 			exit
 		fi
 	else
@@ -62,4 +60,7 @@ validate_json_format()
 test_json_converter_command
 validate_json_format
 
-exit ${err}
+# Set -e is on, so it was only successful if it ran up to this point.
+# Therefore only set err=0 here.
+err=0
+exit
