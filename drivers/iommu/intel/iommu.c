@@ -3750,7 +3750,6 @@ static void domain_context_clear(struct device_domain_info *info)
 static void dmar_remove_one_dev_info(struct device *dev)
 {
 	struct device_domain_info *info = dev_iommu_priv_get(dev);
-	struct dmar_domain *domain = info->domain;
 	struct intel_iommu *iommu = info->iommu;
 	unsigned long flags;
 
@@ -3763,11 +3762,14 @@ static void dmar_remove_one_dev_info(struct device *dev)
 		domain_context_clear(info);
 	}
 
-	spin_lock_irqsave(&domain->lock, flags);
-	list_del(&info->link);
-	spin_unlock_irqrestore(&domain->lock, flags);
+	if (!info->domain)
+		return;
 
-	domain_detach_iommu(domain, iommu);
+	spin_lock_irqsave(&info->domain->lock, flags);
+	list_del(&info->link);
+	spin_unlock_irqrestore(&info->domain->lock, flags);
+
+	domain_detach_iommu(info->domain, iommu);
 	info->domain = NULL;
 }
 
