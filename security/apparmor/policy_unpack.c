@@ -1116,7 +1116,6 @@ static int verify_header(struct aa_ext *e, int start, const char **ns)
 {
 	int error = -EPROTONOSUPPORT;
 	const char *name = NULL;
-	*ns = NULL;
 
 	/* get the interface version */
 	if (!aa_unpack_u32(e, &e->version, "version")) {
@@ -1138,20 +1137,35 @@ static int verify_header(struct aa_ext *e, int start, const char **ns)
 		return error;
 	}
 
-	/* read the namespace if present */
+	/* read the namespace if present and check it against policy load
+	 * namespace specified in the data start header
+	 */
 	if (aa_unpack_str(e, &name, "namespace")) {
 		if (*name == '\0') {
 			audit_iface(NULL, NULL, NULL, "invalid namespace name",
 				    e, error);
 			return error;
 		}
+
+		/* don't allow different namespaces be specified in the same
+		 * policy load set
+		 */
+		error = -EACCES;
 		if (*ns && strcmp(*ns, name)) {
-			audit_iface(NULL, NULL, NULL, "invalid ns change", e,
+			audit_iface(NULL, NULL, NULL,
+				    "policy load has mixed namespaces", e,
 				    error);
-		} else if (!*ns) {
+			return error;
+		} else if (!*ns && start) {
+			/* fill current policy load namespace at data start */
 			*ns = kstrdup(name, GFP_KERNEL);
 			if (!*ns)
 				return -ENOMEM;
+		} else if (!*ns) {
+			audit_iface(NULL, NULL, NULL,
+				    "policy load has mixed namespaces", e,
+				    error);
+			return error;
 		}
 	}
 
