@@ -4885,6 +4885,7 @@ free_sb_buf:
 free_sbi:
 	if (sbi->s_chksum_driver)
 		crypto_free_shash(sbi->s_chksum_driver);
+	sb->s_fs_info = NULL;
 	kfree(sbi);
 
 	/* give only one another chance */
