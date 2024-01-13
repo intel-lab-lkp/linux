@@ -753,6 +753,37 @@ static struct cxl_decoder *cxl_region_find_decoder(struct cxl_port *port,
 	return to_cxl_decoder(dev);
 }
 
+bool auto_order_ok(struct cxl_port *port, struct cxl_region *cxlr_a,
+		   struct cxl_region *cxlr_b)
+{
+	struct cxl_region_ref *cxl_rr;
+	struct cxl_decoder *cxld_a, *cxld_b;
+
+	/*
+	 * Allow the out of order assembly of auto-discovered regions as
+	 * long as correct decoder programming order can be verified.
+	 *
+	 * Per CXL Spec 3.1 8.2.4.20.12 Committing Decoder Programming,
+	 * software must commit decoders in HPA order. Therefore it is
+	 * sufficient to sanity check that the lowered number decoder
+	 * has the lower HPA starting address.
+	 */
+	if (!test_bit(CXL_REGION_F_AUTO, &cxlr_a->flags))
+		return false;
+
+	cxld_a = cxl_region_find_decoder(port, cxlr_a);
+	cxl_rr = cxl_rr_load(port, cxlr_b);
+	cxld_b = cxl_rr->decoder;
+
+	if (cxld_b->id > cxld_a->id) {
+		dev_dbg(&cxlr_a->dev,
+			"allow out of order region ref alloc\n");
+		return true;
+	}
+
+	return false;
+}
+
 static struct cxl_region_ref *alloc_region_ref(struct cxl_port *port,
 					       struct cxl_region *cxlr)
 {
@@ -767,7 +798,8 @@ static struct cxl_region_ref *alloc_region_ref(struct cxl_port *port,
 		if (!ip->res)
 			continue;
 
-		if (ip->res->start > p->res->start) {
+		if (ip->res->start > p->res->start &&
+		    (!auto_order_ok(port, cxlr, iter->region))) {
 			dev_dbg(&cxlr->dev,
 				"%s: HPA order violation %s:%pr vs %pr\n",
 				dev_name(&port->dev),
