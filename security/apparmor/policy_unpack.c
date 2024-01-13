@@ -1107,12 +1107,12 @@ fail:
 /**
  * verify_header - unpack serialized stream header
  * @e: serialized data read head (NOT NULL)
- * @required: whether the header is required or optional
+ * @start: whether the header is located at the start of data
  * @ns: Returns - namespace if one is specified else NULL (NOT NULL)
  *
  * Returns: error or 0 if header is good
  */
-static int verify_header(struct aa_ext *e, int required, const char **ns)
+static int verify_header(struct aa_ext *e, int start, const char **ns)
 {
 	int error = -EPROTONOSUPPORT;
 	const char *name = NULL;
@@ -1120,7 +1120,8 @@ static int verify_header(struct aa_ext *e, int required, const char **ns)
 
 	/* get the interface version */
 	if (!aa_unpack_u32(e, &e->version, "version")) {
-		if (required) {
+		/* the header is required at the start of data */
+		if (start) {
 			audit_iface(NULL, NULL, NULL, "invalid profile format",
 				    e, error);
 			return error;
