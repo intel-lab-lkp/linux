@@ -146,6 +146,11 @@ static size_t glink_smem_tx_avail(struct qcom_glink_pipe *np)
 	else
 		avail -= FIFO_FULL_RESERVE + TX_BLOCKED_CMD_RESERVE;
 
+	if (avail > pipe->native.length) {
+		pr_warn_once("%s: avail clamped\n", __func__);
+		avail = 0;
+	}
+
 	return avail;
 }
 
@@ -177,6 +182,10 @@ static void glink_smem_tx_write(struct qcom_glink_pipe *glink_pipe,
 	unsigned int head;
 
 	head = le32_to_cpu(*pipe->head);
+	if (head > pipe->native.length) {
+		pr_warn_once("%s: head overflow\n", __func__);
+		return;
+	}
 
 	head = glink_smem_tx_write_one(pipe, head, hdr, hlen);
 	head = glink_smem_tx_write_one(pipe, head, data, dlen);
