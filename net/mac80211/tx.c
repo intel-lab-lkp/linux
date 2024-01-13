@@ -10,6 +10,7 @@
  * Transmit and frame generation functions.
  */
 
+#include <linux/compiler_types.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/skbuff.h>
@@ -4974,6 +4975,7 @@ static int ieee80211_beacon_add_tim(struct ieee80211_sub_if_data *sdata,
 static void ieee80211_set_beacon_cntdwn(struct ieee80211_sub_if_data *sdata,
 					struct beacon_data *beacon,
 					struct ieee80211_link_data *link)
+	__must_hold(link)
 {
 	u8 *beacon_data, count, max_count = 1;
 	struct probe_resp *resp;
