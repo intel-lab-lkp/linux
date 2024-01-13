@@ -146,6 +146,7 @@
 
 /* Fuse readout registers for GT */
 #define XEHP_FUSE4				XE_REG(0x9114)
+#define   CFEG_WMTP_DISABLE			REG_BIT(20)
 #define   CCS_EN_MASK				REG_GENMASK(19, 16)
 #define   GT_L3_EXC_MASK			REG_GENMASK(6, 4)
 
@@ -344,6 +345,9 @@
 #define ROW_CHICKEN3				XE_REG_MCR(0xe49c, XE_REG_OPTION_MASKED)
 #define   DIS_FIX_EOT1_FLUSH			REG_BIT(9)
 
+#define TDL_TSL_CHICKEN				XE_REG_MCR(0xe4c4, XE_REG_OPTION_MASKED)
+#define   SLM_WMTP_RESTORE			REG_BIT(11)
+
 #define ROW_CHICKEN				XE_REG_MCR(0xe4f0, XE_REG_OPTION_MASKED)
 #define   UGM_BACKUP_MODE			REG_BIT(13)
 #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
@@ -430,6 +434,15 @@
 #define   VOLTAGE_MASK				REG_GENMASK(10, 0)
 
 #define GT_INTR_DW(x)				XE_REG(0x190018 + ((x) * 4))
+#define   INTR_GSC				REG_BIT(31)
+#define   INTR_GUC				REG_BIT(25)
+#define   INTR_MGUC				REG_BIT(24)
+#define   INTR_BCS8				REG_BIT(23)
+#define   INTR_BCS(x)				REG_BIT(15 - (x))
+#define   INTR_CCS(x)				REG_BIT(4 + (x))
+#define   INTR_RCS0				REG_BIT(0)
+#define   INTR_VECS(x)				REG_BIT(31 - (x))
+#define   INTR_VCS(x)				REG_BIT(x)
 
 #define RENDER_COPY_INTR_ENABLE			XE_REG(0x190030)
 #define VCS_VECS_INTR_ENABLE			XE_REG(0x190034)

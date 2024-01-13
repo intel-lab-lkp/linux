@@ -125,9 +125,9 @@ static struct xe_mem_region *res_to_mem_region(struct ttm_resource *res)
 static void try_add_system(struct xe_device *xe, struct xe_bo *bo,
 			   u32 bo_flags, u32 *c)
 {
-	xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
-
 	if (bo_flags & XE_BO_CREATE_SYSTEM_BIT) {
+		xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
+
 		bo->placements[*c] = (struct ttm_place) {
 			.mem_type = XE_PL_TT,
 		};
@@ -144,6 +144,8 @@ static void add_vram(struct xe_device *xe, struct xe_bo *bo,
 	struct ttm_place place = { .mem_type = mem_type };
 	struct xe_mem_region *vram;
 	u64 io_size;
+
+	xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
 
 	vram = to_xe_ttm_vram_mgr(ttm_manager_type(&xe->ttm, mem_type))->vram;
 	xe_assert(xe, vram && vram->usable_size);
@@ -175,8 +177,6 @@ static void add_vram(struct xe_device *xe, struct xe_bo *bo,
 static void try_add_vram(struct xe_device *xe, struct xe_bo *bo,
 			 u32 bo_flags, u32 *c)
 {
-	xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
-
 	if (bo->props.preferred_gt == XE_GT1) {
 		if (bo_flags & XE_BO_CREATE_VRAM1_BIT)
 			add_vram(xe, bo, bo->placements, bo_flags, XE_PL_VRAM1, c);
@@ -193,9 +193,9 @@ static void try_add_vram(struct xe_device *xe, struct xe_bo *bo,
 static void try_add_stolen(struct xe_device *xe, struct xe_bo *bo,
 			   u32 bo_flags, u32 *c)
 {
-	xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
-
 	if (bo_flags & XE_BO_CREATE_STOLEN_BIT) {
+		xe_assert(xe, *c < ARRAY_SIZE(bo->placements));
+
 		bo->placements[*c] = (struct ttm_place) {
 			.mem_type = XE_PL_STOLEN,
 			.flags = bo_flags & (XE_BO_CREATE_PINNED_BIT |
@@ -442,7 +442,7 @@ static int xe_ttm_io_mem_reserve(struct ttm_device *bdev,
 
 		if (vram->mapping &&
 		    mem->placement & TTM_PL_FLAG_CONTIGUOUS)
-			mem->bus.addr = (u8 *)vram->mapping +
+			mem->bus.addr = (u8 __force *)vram->mapping +
 				mem->bus.offset;
 
 		mem->bus.offset += vram->io_start;
@@ -586,6 +586,8 @@ static int xe_bo_move_notify(struct xe_bo *bo,
 {
 	struct ttm_buffer_object *ttm_bo = &bo->ttm;
 	struct xe_device *xe = ttm_to_xe_device(ttm_bo->bdev);
+	struct ttm_resource *old_mem = ttm_bo->resource;
+	u32 old_mem_type = old_mem ? old_mem->mem_type : XE_PL_SYSTEM;
 	int ret;
 
 	/*
@@ -604,6 +606,18 @@ static int xe_bo_move_notify(struct xe_bo *bo,
 	/* Don't call move_notify() for imported dma-bufs. */
 	if (ttm_bo->base.dma_buf && !ttm_bo->base.import_attach)
 		dma_buf_move_notify(ttm_bo->base.dma_buf);
+
+	/*
+	 * TTM has already nuked the mmap for us (see ttm_bo_unmap_virtual),
+	 * so if we moved from VRAM make sure to unlink this from the userfault
+	 * tracking.
+	 */
+	if (mem_type_is_vram(old_mem_type)) {
+		mutex_lock(&xe->mem_access.vram_userfault.lock);
+		if (!list_empty(&bo->vram_userfault_link))
+			list_del_init(&bo->vram_userfault_link);
+		mutex_unlock(&xe->mem_access.vram_userfault.lock);
+	}
 
 	return 0;
 }
@@ -734,7 +748,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 			/* Create a new VMAP once kernel BO back in VRAM */
 			if (!ret && resource_is_vram(new_mem)) {
 				struct xe_mem_region *vram = res_to_mem_region(new_mem);
-				void *new_addr = vram->mapping +
+				void __iomem *new_addr = vram->mapping +
 					(new_mem->start << PAGE_SHIFT);
 
 				if (XE_WARN_ON(new_mem->start == XE_BO_INVALID_OFFSET)) {
@@ -1063,6 +1077,11 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 	if (bo->vm && xe_bo_is_user(bo))
 		xe_vm_put(bo->vm);
 
+	mutex_lock(&xe->mem_access.vram_userfault.lock);
+	if (!list_empty(&bo->vram_userfault_link))
+		list_del(&bo->vram_userfault_link);
+	mutex_unlock(&xe->mem_access.vram_userfault.lock);
+
 	kfree(bo);
 }
 
@@ -1110,16 +1129,20 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
 {
 	struct ttm_buffer_object *tbo = vmf->vma->vm_private_data;
 	struct drm_device *ddev = tbo->base.dev;
+	struct xe_device *xe = to_xe_device(ddev);
+	struct xe_bo *bo = ttm_to_xe_bo(tbo);
+	bool needs_rpm = bo->flags & XE_BO_CREATE_VRAM_MASK;
 	vm_fault_t ret;
 	int idx, r = 0;
 
+	if (needs_rpm)
+		xe_device_mem_access_get(xe);
+
 	ret = ttm_bo_vm_reserve(tbo, vmf);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (drm_dev_enter(ddev, &idx)) {
-		struct xe_bo *bo = ttm_to_xe_bo(tbo);
-
 		trace_xe_bo_cpu_fault(bo);
 
 		if (should_migrate_to_system(bo)) {
@@ -1137,10 +1160,24 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
 	} else {
 		ret = ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
 	}
+
 	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
-		return ret;
+		goto out;
+	/*
+	 * ttm_bo_vm_reserve() already has dma_resv_lock.
+	 */
+	if (ret == VM_FAULT_NOPAGE && mem_type_is_vram(tbo->resource->mem_type)) {
+		mutex_lock(&xe->mem_access.vram_userfault.lock);
+		if (list_empty(&bo->vram_userfault_link))
+			list_add(&bo->vram_userfault_link, &xe->mem_access.vram_userfault.list);
+		mutex_unlock(&xe->mem_access.vram_userfault.lock);
+	}
 
 	dma_resv_unlock(tbo->base.resv);
+out:
+	if (needs_rpm)
+		xe_device_mem_access_put(xe);
+
 	return ret;
 }
 
@@ -1254,6 +1291,7 @@ struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 #ifdef CONFIG_PROC_FS
 	INIT_LIST_HEAD(&bo->client_link);
 #endif
+	INIT_LIST_HEAD(&bo->vram_userfault_link);
 
 	drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
 
@@ -2262,6 +2300,16 @@ int xe_bo_dumb_create(struct drm_file *file_priv,
 	if (!err)
 		args->handle = handle;
 	return err;
+}
+
+void xe_bo_runtime_pm_release_mmap_offset(struct xe_bo *bo)
+{
+	struct ttm_buffer_object *tbo = &bo->ttm;
+	struct ttm_device *bdev = tbo->bdev;
+
+	drm_vma_node_unmap(&tbo->base.vma_node, bdev->dev_mapping);
+
+	list_del_init(&bo->vram_userfault_link);
 }
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
