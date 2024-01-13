@@ -1404,6 +1404,7 @@ static void i801_add_mux(struct i801_priv *priv)
 	gpio_data.n_values = mux_config->n_values;
 	gpio_data.classes = mux_config->classes;
 	gpio_data.idle = I2C_MUX_GPIO_NO_IDLE;
+	gpio_data.register_spd = 1;
 
 	/* Register GPIO descriptor lookup table */
 	lookup = devm_kzalloc(dev,
