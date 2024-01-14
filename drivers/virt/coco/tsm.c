@@ -472,8 +472,68 @@ static ssize_t tsm_rtmr_index_show(struct config_item *cfg,
 }
 CONFIGFS_ATTR(tsm_rtmr_, index);
 
+static ssize_t tsm_rtmr_tcg_map_store(struct config_item *cfg,
+				      const char *buf, size_t len)
+{
+	struct tsm_rtmr_state *rtmr_state = to_tsm_rtmr_state(cfg);
+	int i, pcrs[TPM2_PLATFORM_PCR + 1];
+
+	get_options(buf, ARRAY_SIZE(pcrs), pcrs);
+
+	if (pcrs[0] > TPM2_PLATFORM_PCR - 1)
+		return -EINVAL;
+
+	guard(rwsem_write)(&tsm_rwsem);
+	/* Check that the PCR list is valid  */
+	for (i = 0; i < pcrs[0]; i++) {
+		/* It must be a valid TPM2 PCR number */
+		if (pcrs[i] > TPM2_PLATFORM_PCR - 1)
+			return -EINVAL;
+
+		/* If another RTMR maps to this PCR, the list is discarded */
+		if (tsm_rtmrs->tcg_map[pcrs[i + 1]] &&
+		    tsm_rtmrs->tcg_map[pcrs[i + 1]] != rtmr_state)
+			return -EBUSY;
+	}
+
+	for (i = 0; i < pcrs[0]; i++)
+		tsm_rtmrs->tcg_map[pcrs[i + 1]] = rtmr_state;
+
+	return len;
+}
+
+static ssize_t tsm_rtmr_tcg_map_show(struct config_item *cfg,
+				     char *buf)
+{
+	struct tsm_rtmr_state *rtmr_state = to_tsm_rtmr_state(cfg);
+	unsigned int nr_pcrs = ARRAY_SIZE(tsm_rtmrs->tcg_map), i;
+	unsigned long *pcr_mask;
+	ssize_t len;
+
+	/* Build a bitmap mask of all PCRs that this RTMR covers */
+	pcr_mask = bitmap_zalloc(nr_pcrs, GFP_KERNEL);
+	if (!pcr_mask)
+		return -ENOMEM;
+
+	guard(rwsem_read)(&tsm_rwsem);
+	for (i = 0; i < nr_pcrs; i++) {
+		if (tsm_rtmrs->tcg_map[i] != rtmr_state)
+			continue;
+
+		__set_bit(i, pcr_mask);
+	}
+
+	len = bitmap_print_list_to_buf(buf, pcr_mask, nr_pcrs, 0,
+				       nr_pcrs * 3 /* 2 ASCII digits and one comma */);
+	bitmap_free(pcr_mask);
+
+	return len;
+}
+CONFIGFS_ATTR(tsm_rtmr_, tcg_map);
+
 static struct configfs_attribute *tsm_rtmr_attrs[] = {
 	&tsm_rtmr_attr_index,
+	&tsm_rtmr_attr_tcg_map,
 	NULL,
 };
 
