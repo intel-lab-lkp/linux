@@ -5,6 +5,8 @@
  * Copyright 2014 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
  */
 
+/* TEST patch - please ignore */
+
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
