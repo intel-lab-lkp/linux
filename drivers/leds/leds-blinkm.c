@@ -2,6 +2,7 @@
 /*
  *  leds-blinkm.c
  *  (c) Jan-Simon Möller (dl9pf@gmx.de)
+ *  (c) Joseph Strauss (jstrauss@mailbox.org)
  */
 
 #include <linux/module.h>
@@ -15,6 +16,10 @@
 #include <linux/pm_runtime.h>
 #include <linux/leds.h>
 #include <linux/delay.h>
+#include <linux/led-class-multicolor.h>
+#include <linux/kconfig.h>
+
+#define NUM_LEDS 3
 
 /* Addresses to scan - BlinkM is on 0x09 by default*/
 static const unsigned short normal_i2c[] = { 0x09, I2C_CLIENT_END };
@@ -22,19 +27,24 @@ static const unsigned short normal_i2c[] = { 0x09, I2C_CLIENT_END };
 static int blinkm_transfer_hw(struct i2c_client *client, int cmd);
 static int blinkm_test_run(struct i2c_client *client);
 
+/* Contains data structures for both the color-seperated sysfs classes, and the new multicolor class */
 struct blinkm_led {
 	struct i2c_client *i2c_client;
+	/* used when multicolor support is disabled */
 	struct led_classdev led_cdev;
+	struct led_classdev_mc mcled_cdev;
 	int id;
 };
 
-#define cdev_to_blmled(c)          container_of(c, struct blinkm_led, led_cdev)
+#define led_cdev_to_blmled(c)				container_of(c, struct blinkm_led, led_cdev)
+#define mcled_cdev_to_led(c)				container_of(c, struct blinkm_led, mcled_cdev)
 
 struct blinkm_data {
 	struct i2c_client *i2c_client;
 	struct mutex update_lock;
 	/* used for led class interface */
-	struct blinkm_led blinkm_leds[3];
+	struct blinkm_led blinkm_leds[NUM_LEDS];
+
 	/* used for "blinkm" sysfs interface */
 	u8 red;			/* color red */
 	u8 green;		/* color green */
@@ -419,11 +429,29 @@ static int blinkm_transfer_hw(struct i2c_client *client, int cmd)
 	return 0;
 }
 
+static int blinkm_set_mc_brightness(struct led_classdev *led_cdev,
+				 enum led_brightness value)
+{
+	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
+	struct blinkm_led *led = mcled_cdev_to_led(mcled_cdev);
+	struct blinkm_data *data = i2c_get_clientdata(led->i2c_client);
+
+	led_mc_calc_color_components(mcled_cdev, value);
+
+	data->next_red = (u8) mcled_cdev->subled_info[RED].brightness;
+	data->next_green = (u8) mcled_cdev->subled_info[GREEN].brightness;
+	data->next_blue = (u8) mcled_cdev->subled_info[BLUE].brightness;
+
+	blinkm_transfer_hw(led->i2c_client, BLM_GO_RGB);
+
+	return 0;
+}
+
 static int blinkm_led_common_set(struct led_classdev *led_cdev,
 				 enum led_brightness value, int color)
 {
 	/* led_brightness is 0, 127 or 255 - we just use it here as-is */
-	struct blinkm_led *led = cdev_to_blmled(led_cdev);
+	struct blinkm_led *led = led_cdev_to_blmled(led_cdev);
 	struct blinkm_data *data = i2c_get_clientdata(led->i2c_client);
 
 	switch (color) {
@@ -569,7 +597,11 @@ static int blinkm_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct blinkm_data *data;
-	struct blinkm_led *led[3];
+	/* For multicolor support */
+	struct blinkm_led *mc_led;
+	struct mc_subled *mc_led_info;
+	/* 3 seperate classes for red, green, and blue respectively */
+	struct blinkm_led *leds[NUM_LEDS];
 	int err, i;
 	char blinkm_led_name[28];
 
@@ -580,6 +612,12 @@ static int blinkm_probe(struct i2c_client *client,
 		goto exit;
 	}
 
+	mc_led_info = devm_kcalloc(&client->dev, NUM_LEDS, sizeof(*mc_led_info),
+					GFP_KERNEL);
+	if (!mc_led_info) {
+		err = -ENOMEM;
+		goto exit;
+	}
 	data->i2c_addr = 0x08;
 	/* i2c addr  - use fake addr of 0x08 initially (real is 0x09) */
 	data->fw_ver = 0xfe;
@@ -598,81 +636,118 @@ static int blinkm_probe(struct i2c_client *client,
 		goto exit;
 	}
 
-	for (i = 0; i < 3; i++) {
-		/* RED = 0, GREEN = 1, BLUE = 2 */
-		led[i] = &data->blinkm_leds[i];
-		led[i]->i2c_client = client;
-		led[i]->id = i;
-		led[i]->led_cdev.max_brightness = 255;
-		led[i]->led_cdev.flags = LED_CORE_SUSPENDRESUME;
-		switch (i) {
-		case RED:
-			snprintf(blinkm_led_name, sizeof(blinkm_led_name),
-					 "blinkm-%d-%d-red",
-					 client->adapter->nr,
-					 client->addr);
-			led[i]->led_cdev.name = blinkm_led_name;
-			led[i]->led_cdev.brightness_set_blocking =
-							blinkm_led_red_set;
-			err = led_classdev_register(&client->dev,
-						    &led[i]->led_cdev);
-			if (err < 0) {
-				dev_err(&client->dev,
-					"couldn't register LED %s\n",
-					led[i]->led_cdev.name);
-				goto failred;
-			}
-			break;
-		case GREEN:
-			snprintf(blinkm_led_name, sizeof(blinkm_led_name),
-					 "blinkm-%d-%d-green",
-					 client->adapter->nr,
-					 client->addr);
-			led[i]->led_cdev.name = blinkm_led_name;
-			led[i]->led_cdev.brightness_set_blocking =
-							blinkm_led_green_set;
-			err = led_classdev_register(&client->dev,
-						    &led[i]->led_cdev);
-			if (err < 0) {
-				dev_err(&client->dev,
-					"couldn't register LED %s\n",
-					led[i]->led_cdev.name);
-				goto failgreen;
-			}
-			break;
-		case BLUE:
-			snprintf(blinkm_led_name, sizeof(blinkm_led_name),
-					 "blinkm-%d-%d-blue",
-					 client->adapter->nr,
-					 client->addr);
-			led[i]->led_cdev.name = blinkm_led_name;
-			led[i]->led_cdev.brightness_set_blocking =
-							blinkm_led_blue_set;
-			err = led_classdev_register(&client->dev,
-						    &led[i]->led_cdev);
-			if (err < 0) {
-				dev_err(&client->dev,
-					"couldn't register LED %s\n",
-					led[i]->led_cdev.name);
-				goto failblue;
-			}
-			break;
-		}		/* end switch */
-	}			/* end for */
+	if (!IS_ENABLED(CONFIG_LEDS_BLINKM_MULTICOLOR)) {
+		/* Register red, green, and blue sysfs classes */
+		for (i = 0; i < NUM_LEDS; i++) {
+			/* RED = 0, GREEN = 1, BLUE = 2 */
+			leds[i] = &data->blinkm_leds[i];
+			leds[i]->i2c_client = client;
+			leds[i]->id = i;
+			leds[i]->led_cdev.max_brightness = 255;
+			leds[i]->led_cdev.flags = LED_CORE_SUSPENDRESUME;
+			switch (i) {
+			case RED:
+				scnprintf(blinkm_led_name, sizeof(blinkm_led_name),
+						 "blinkm-%d-%d-red",
+						 client->adapter->nr,
+						 client->addr);
+				leds[i]->led_cdev.name = blinkm_led_name;
+				leds[i]->led_cdev.brightness_set_blocking =
+								blinkm_led_red_set;
+				err = led_classdev_register(&client->dev,
+								&leds[i]->led_cdev);
+				if (err < 0) {
+					dev_err(&client->dev,
+						"couldn't register LED %s\n",
+						leds[i]->led_cdev.name);
+					goto failred;
+				}
+				break;
+			case GREEN:
+				scnprintf(blinkm_led_name, sizeof(blinkm_led_name),
+						 "blinkm-%d-%d-green",
+						 client->adapter->nr,
+						 client->addr);
+				leds[i]->led_cdev.name = blinkm_led_name;
+				leds[i]->led_cdev.brightness_set_blocking =
+								blinkm_led_green_set;
+				err = led_classdev_register(&client->dev,
+							&leds[i]->led_cdev);
+				if (err < 0) {
+					dev_err(&client->dev,
+						"couldn't register LED %s\n",
+						leds[i]->led_cdev.name);
+					goto failgreen;
+				}
+				break;
+			case BLUE:
+				scnprintf(blinkm_led_name, sizeof(blinkm_led_name),
+						 "blinkm-%d-%d-blue",
+						 client->adapter->nr,
+						 client->addr);
+				leds[i]->led_cdev.name = blinkm_led_name;
+				leds[i]->led_cdev.brightness_set_blocking =
+								blinkm_led_blue_set;
+				err = led_classdev_register(&client->dev,
+								&leds[i]->led_cdev);
+				if (err < 0) {
+					dev_err(&client->dev,
+						"couldn't register LED %s\n",
+						leds[i]->led_cdev.name);
+					goto failblue;
+				}
+				break;
+			default:
+				break;
+			}		/* end switch */
+		}			/* end for */
+	} else {
+		/* Register multicolor sysfs class */
+		/* The first element of leds is used for multicolor facilities */
+		mc_led = &data->blinkm_leds[RED];
+		mc_led->i2c_client = client;
 
-	/* Initialize the blinkm */
+		mc_led_info[RED].color_index = LED_COLOR_ID_RED;
+		mc_led_info[GREEN].color_index = LED_COLOR_ID_GREEN;
+		mc_led_info[BLUE].color_index = LED_COLOR_ID_BLUE;
+
+		mc_led->mcled_cdev.subled_info = mc_led_info;
+		mc_led->mcled_cdev.num_colors = NUM_LEDS;
+		mc_led->mcled_cdev.led_cdev.brightness = 255;
+		mc_led->mcled_cdev.led_cdev.max_brightness = 255;
+		mc_led->mcled_cdev.led_cdev.flags = LED_CORE_SUSPENDRESUME;
+
+		scnprintf(blinkm_led_name, sizeof(blinkm_led_name),
+			 "blinkm-%d-%d:rgb:indicator",
+			 client->adapter->nr,
+			 client->addr);
+		mc_led->mcled_cdev.led_cdev.name = blinkm_led_name;
+		mc_led->mcled_cdev.led_cdev.brightness_set_blocking = blinkm_set_mc_brightness;
+
+		err = led_classdev_multicolor_register(&client->dev, &mc_led->mcled_cdev);
+		if (err < 0) {
+			dev_err(&client->dev, "couldn't register LED %s\n",
+					mc_led->led_cdev.name);
+			goto failmulti;
+		}
+	}
+
 	blinkm_init_hw(client);
 
 	return 0;
 
+failmulti:
+	led_classdev_unregister(&leds[BLUE]->led_cdev);
+
 failblue:
-	led_classdev_unregister(&led[GREEN]->led_cdev);
+	led_classdev_unregister(&leds[GREEN]->led_cdev);
 
 failgreen:
-	led_classdev_unregister(&led[RED]->led_cdev);
+	led_classdev_unregister(&leds[RED]->led_cdev);
 
 failred:
 	sysfs_remove_group(&client->dev.kobj, &blinkm_group);
+
 exit:
 	return err;
 }
@@ -684,7 +759,7 @@ static void blinkm_remove(struct i2c_client *client)
 	int i;
 
 	/* make sure no workqueue entries are pending */
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < NUM_LEDS; i++)
 		led_classdev_unregister(&data->blinkm_leds[i].led_cdev);
 
 	/* reset rgb */
@@ -741,6 +816,6 @@ static struct i2c_driver blinkm_driver = {
 module_i2c_driver(blinkm_driver);
 
 MODULE_AUTHOR("Jan-Simon Moeller <dl9pf@gmx.de>");
+MODULE_AUTHOR("Joseph Strauss <jstrauss@mailbox.org>");
 MODULE_DESCRIPTION("BlinkM RGB LED driver");
 MODULE_LICENSE("GPL");
-

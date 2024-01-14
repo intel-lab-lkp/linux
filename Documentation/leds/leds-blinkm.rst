@@ -13,9 +13,27 @@ The device accepts RGB and HSB color values through separate commands.
 Also you can store blinking sequences as "scripts" in
 the controller and run them. Also fading is an option.
 
-The interface this driver provides is 2-fold:
+The interface this driver provides is 3-fold:
 
-a) LED class interface for use with triggers
+a) LED multicolor class interface for use with triggers
+#######################################################
+
+The registration follows the scheme::
+
+  blinkm-<i2c-bus-nr>-<i2c-device-nr>:rgb:indicator
+
+  $ ls -h /sys/class/leds/blinkm-1-9:rgb:indicator
+  brightness  device  max_brightness  multi_index  multi_intensity  power  subsystem  trigger  uevent
+
+The order in which to write the intensity values can be found in multi_index.
+Exactly three values between 0 and 255 must be written to multi_intensity to change the color::
+
+  $ echo 255 100 50 > multi_intensity
+
+The overall brightness of the color that you choose can also be changed by
+writing a value between 0 and 255 to the brightness file.
+
+b) LED class interface for use with triggers
 ############################################
 
 The registration follows the scheme::
@@ -50,7 +68,7 @@ E.g.::
   $
 
 
-b) Sysfs group to control rgb, fade, hsb, scripts ...
+c) Sysfs group to control rgb, fade, hsb, scripts ...
 #####################################################
 
 This extended interface is available as folder blinkm
@@ -79,6 +97,7 @@ E.g.::
 
 
 
-as of 6/2012
+as of 01/2024
 
 dl9pf <at> gmx <dot> de
+jstrauss <at> mailbox <dot> org
