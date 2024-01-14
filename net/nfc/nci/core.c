@@ -145,6 +145,8 @@ inline int nci_request(struct nci_dev *ndev,
 {
 	int rc;
 
+	if (test_bit(NCI_UNREG, &ndev->flags))
+		return -ENODEV;
 	/* Serialize all requests */
 	mutex_lock(&ndev->req_lock);
 	/* check the state after obtaing the lock against any races
