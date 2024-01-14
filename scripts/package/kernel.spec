@@ -69,6 +69,12 @@ ln -fns /usr/src/kernels/%{KERNELRELEASE} %{buildroot}/lib/modules/%{KERNELRELEA
 %clean
 rm -rf %{buildroot}
 
+%pre
+if [ $(uname -r) == %{KERNELRELEASE} ];then
+echo "same kernel release is running" > /dev/stderr
+exit 1
+fi
+
 %post
 if [ -x /usr/bin/kernel-install ]; then
 /usr/bin/kernel-install add %{KERNELRELEASE} /lib/modules/%{KERNELRELEASE}/vmlinuz
@@ -85,6 +91,10 @@ fi
 done
 
 %preun
+if [ $(uname -r) == %{KERNELRELEASE} ];then
+echo "same kernel release is running" > /dev/stderr
+exit 1
+fi
 if [ -x /sbin/new-kernel-pkg ]; then
 new-kernel-pkg --remove %{KERNELRELEASE} --rminitrd --initrdfile=/boot/initramfs-%{KERNELRELEASE}.img
 elif [ -x /usr/bin/kernel-install ]; then
