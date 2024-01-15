@@ -23960,6 +23960,13 @@ S:	Supported
 W:	http://www.marvell.com
 F:	drivers/i2c/busses/i2c-xlp9xx.c
 
+XMOS XVF3500 VOICE PROCESSOR DRIVER
+M:	Javier Carrasco <javier.carrasco@wolfvision.net>
+L:	linux-sound@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/sound/xmos,xvf3500.yaml
+F:	sound/usb/xvf3500/xvf3500.c
+
 XRA1403 GPIO EXPANDER
 M:	Nandor Han <nandor.han@ge.com>
 L:	linux-gpio@vger.kernel.org

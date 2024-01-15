@@ -176,6 +176,15 @@ config SND_BCD2000
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-bcd2000.
 
+config SND_XVF3500
+	tristate "XMOS XVF3500 voice processor driver"
+	help
+	  Say Y here to include support for the XMOS XVF3500 voice
+	  processor.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-xvf3500.
+
 source "sound/usb/line6/Kconfig"
 
 endif	# SND_USB
