@@ -1254,6 +1254,9 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 
 	info = get_flush_tlb_info(NULL, 0, TLB_FLUSH_ALL, 0, false,
 				  TLB_GENERATION_INVALID);
+
+	migrc_flush_start();
+
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling
@@ -1268,6 +1271,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		local_irq_enable();
 	}
 
+	migrc_flush_end(batch);
 	cpumask_clear(&batch->cpumask);
 
 	put_flush_tlb_info();

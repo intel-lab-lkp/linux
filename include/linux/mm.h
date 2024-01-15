@@ -2038,6 +2038,14 @@ static inline bool folio_is_longterm_pinnable(struct folio *folio)
 }
 #endif
 
+#if defined(CONFIG_MIGRATION) && defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+extern void migrc_flush_start(void);
+extern void migrc_flush_end(struct arch_tlbflush_unmap_batch *arch);
+#else
+static inline void migrc_flush_start(void) {}
+static inline void migrc_flush_end(struct arch_tlbflush_unmap_batch *arch) {}
+#endif
+
 static inline void set_page_zone(struct page *page, enum zone_type zone)
 {
 	page->flags &= ~(ZONES_MASK << ZONES_PGSHIFT);
