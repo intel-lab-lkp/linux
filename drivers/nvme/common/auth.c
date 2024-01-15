@@ -250,9 +250,7 @@ struct nvme_dhchap_key *nvme_auth_transform_key(
 	if (key->hash == 0) {
 		key_len = nvme_auth_key_struct_size(key->len);
 		transformed_key = kmemdup(key, key_len, GFP_KERNEL);
-		if (!transformed_key)
-			return ERR_PTR(-ENOMEM);
-		return transformed_key;
+		return transformed_key ? transformed_key : ERR_PTR(-ENOMEM);
 	}
 	hmac_name = nvme_auth_hmac_name(key->hash);
 	if (!hmac_name) {
