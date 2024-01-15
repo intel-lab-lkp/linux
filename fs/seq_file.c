@@ -172,6 +172,8 @@ ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct seq_file *m = iocb->ki_filp->private_data;
 	size_t copied = 0;
+	loff_t orig_index;
+	size_t orig_count;
 	size_t n;
 	void *p;
 	int err = 0;
@@ -220,6 +222,10 @@ ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 		if (m->count)	// hadn't managed to copy everything
 			goto Done;
 	}
+
+	orig_index = m->index;
+	orig_count = m->count;
+Again:
 	// get a non-empty record in the buffer
 	m->from = 0;
 	p = m->op->start(m, &m->index);
@@ -278,6 +284,22 @@ Fill:
 		}
 	}
 	m->op->stop(m, p);
+	/* Note: we validate even if err<0 to prevent publishing copied data */
+	if (m->op->validate) {
+		int val_err = m->op->validate(m, p);
+
+		if (val_err) {
+			if (val_err == -EAGAIN) {
+				m->index = orig_index;
+				m->count = orig_count;
+				// data is stale, retry
+				goto Again;
+			}
+			// data is invalid, return the last error
+			err = val_err;
+			goto Done;
+		}
+	}
 	n = copy_to_iter(m->buf, m->count, iter);
 	copied += n;
 	m->count -= n;
@@ -572,7 +594,7 @@ static void single_stop(struct seq_file *p, void *v)
 int single_open(struct file *file, int (*show)(struct seq_file *, void *),
 		void *data)
 {
-	struct seq_operations *op = kmalloc(sizeof(*op), GFP_KERNEL_ACCOUNT);
+	struct seq_operations *op = kzalloc(sizeof(*op), GFP_KERNEL_ACCOUNT);
 	int res = -ENOMEM;
 
 	if (op) {
