@@ -141,6 +141,22 @@ static struct vm_area_struct *proc_get_vma(struct proc_maps_private *priv,
 	return vma;
 }
 
+static const struct seq_operations proc_pid_maps_op;
+
+static inline bool needs_mmap_lock(struct seq_file *m)
+{
+#ifdef CONFIG_PER_VMA_LOCK
+	/*
+	 * smaps and numa_maps perform page table walk, therefore require
+	 * mmap_lock but maps can be read under RCU.
+	 */
+	return m->op != &proc_pid_maps_op;
+#else
+	/* Without per-vma locks VMA access is not RCU-safe */
+	return true;
+#endif
+}
+
 static void *m_start(struct seq_file *m, loff_t *ppos)
 {
 	struct proc_maps_private *priv = m->private;
@@ -162,11 +178,17 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 		return NULL;
 	}
 
-	if (mmap_read_lock_killable(mm)) {
-		mmput(mm);
-		put_task_struct(priv->task);
-		priv->task = NULL;
-		return ERR_PTR(-EINTR);
+	if (needs_mmap_lock(m)) {
+		if (mmap_read_lock_killable(mm)) {
+			mmput(mm);
+			put_task_struct(priv->task);
+			priv->task = NULL;
+			return ERR_PTR(-EINTR);
+		}
+	} else {
+		/* For memory barrier see the comment for mm_lock_seq in mm_struct */
+		priv->mm_lock_seq = smp_load_acquire(&priv->mm->mm_lock_seq);
+		rcu_read_lock();
 	}
 
 	vma_iter_init(&priv->iter, mm, last_addr);
@@ -195,7 +217,10 @@ static void m_stop(struct seq_file *m, void *v)
 		return;
 
 	release_task_mempolicy(priv);
-	mmap_read_unlock(mm);
+	if (needs_mmap_lock(m))
+		mmap_read_unlock(mm);
+	else
+		rcu_read_unlock();
 	mmput(mm);
 	put_task_struct(priv->task);
 	priv->task = NULL;
@@ -283,8 +308,10 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	start = vma->vm_start;
 	end = vma->vm_end;
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
-	if (mm)
-		anon_name = anon_vma_name(vma);
+	if (mm) {
+		anon_name = needs_mmap_lock(m) ? anon_vma_name(vma) :
+				anon_vma_name_get_rcu(vma);
+	}
 
 	/*
 	 * Print the dentry name for named mappings, and a
@@ -338,19 +365,96 @@ done:
 		seq_puts(m, name);
 	}
 	seq_putc(m, '\n');
+	if (anon_name && !needs_mmap_lock(m))
+		anon_vma_name_put(anon_name);
+}
+
+/*
+ * Pin vm_area_struct fields used by show_map_vma. We also copy pinned fields
+ * into proc_maps_private because by the time put_vma_fields() is called, VMA
+ * might have changed and these fields might be pointing to different objects.
+ */
+static bool get_vma_fields(struct vm_area_struct *vma, struct proc_maps_private *priv)
+{
+	if (vma->vm_file) {
+		priv->vm_file =  get_file_rcu(&vma->vm_file);
+		if (!priv->vm_file)
+			return false;
+
+	} else
+		priv->vm_file = NULL;
+
+	if (vma->anon_name) {
+		priv->anon_name = anon_vma_name_get_rcu(vma);
+		if (!priv->anon_name) {
+			if (priv->vm_file) {
+				fput(priv->vm_file);
+				return false;
+			}
+		}
+	} else
+		priv->anon_name = NULL;
+
+	return true;
+}
+
+static void put_vma_fields(struct proc_maps_private *priv)
+{
+	if (priv->anon_name)
+		anon_vma_name_put(priv->anon_name);
+	if (priv->vm_file)
+		fput(priv->vm_file);
 }
 
 static int show_map(struct seq_file *m, void *v)
 {
-	show_map_vma(m, v);
+	struct proc_maps_private *priv = m->private;
+
+	if (needs_mmap_lock(m))
+		show_map_vma(m, v);
+	else {
+		/*
+		 * Stop immediately if the VMA changed from under us.
+		 * Validation step will prevent publishing already cached data.
+		 */
+		if (!get_vma_fields(v, priv))
+			return -EAGAIN;
+
+		show_map_vma(m, v);
+		put_vma_fields(priv);
+	}
+
 	return 0;
 }
 
+static int validate_map(struct seq_file *m, void *v)
+{
+	if (!needs_mmap_lock(m)) {
+		struct proc_maps_private *priv = m->private;
+		int mm_lock_seq;
+
+		/* For memory barrier see the comment for mm_lock_seq in mm_struct */
+		mm_lock_seq = smp_load_acquire(&priv->mm->mm_lock_seq);
+		if (mm_lock_seq != priv->mm_lock_seq) {
+			/*
+			 * mmap_lock contention is detected. Wait for mmap_lock
+			 * write to be released, discard stale data and retry.
+			 */
+			mmap_read_lock(priv->mm);
+			mmap_read_unlock(priv->mm);
+			return -EAGAIN;
+		}
+	}
+	return 0;
+
+}
+
 static const struct seq_operations proc_pid_maps_op = {
-	.start	= m_start,
-	.next	= m_next,
-	.stop	= m_stop,
-	.show	= show_map
+	.start		= m_start,
+	.next		= m_next,
+	.stop		= m_stop,
+	.show		= show_map,
+	.validate	= validate_map,
 };
 
 static int pid_maps_open(struct inode *inode, struct file *file)

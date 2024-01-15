@@ -290,6 +290,9 @@ struct proc_maps_private {
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct vma_iterator iter;
+	int mm_lock_seq;
+	struct anon_vma_name *anon_name;
+	struct file *vm_file;
 #ifdef CONFIG_NUMA
 	struct mempolicy *task_mempolicy;
 #endif
