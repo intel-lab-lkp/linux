@@ -799,6 +799,7 @@ struct perf_event {
 	struct perf_event		*aux_event;
 
 	void (*destroy)(struct perf_event *);
+	void (*free)(struct perf_event *);
 	struct rcu_head			rcu_head;
 
 	struct pid_namespace		*ns;

@@ -5242,6 +5242,9 @@ static void _free_event(struct perf_event *event)
 	exclusive_event_destroy(event);
 	module_put(event->pmu->module);
 
+	if (event->free)
+		event->free(event);
+
 	call_rcu(&event->rcu_head, free_event_rcu);
 }
 
@@ -11683,8 +11686,12 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 		    event_has_any_exclude_flag(event))
 			ret = -EINVAL;
 
-		if (ret && event->destroy)
-			event->destroy(event);
+		if (ret) {
+			if (event->destroy)
+				event->destroy(event);
+			if (event->free)
+				event->free(event);
+		}
 	}
 
 	if (ret)
@@ -12111,6 +12118,8 @@ err_pmu:
 		perf_detach_cgroup(event);
 	if (event->destroy)
 		event->destroy(event);
+	if (event->free)
+		event->free(event);
 	module_put(pmu->module);
 err_ns:
 	if (event->hw.target)
