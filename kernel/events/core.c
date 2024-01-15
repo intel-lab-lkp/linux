@@ -4873,6 +4873,9 @@ find_get_pmu_context(struct pmu *pmu, struct perf_event_context *ctx,
 			atomic_inc(&epc->refcount);
 		}
 		raw_spin_unlock_irq(&ctx->lock);
+
+		atomic_inc(&pmu->cpu_pmu_context_refcount);
+
 		return epc;
 	}
 
@@ -4928,6 +4931,12 @@ found_epc:
 	return epc;
 }
 
+static void put_pmu_context(struct pmu *pmu)
+{
+	if (atomic_dec_and_test(&pmu->cpu_pmu_context_refcount))
+		free_percpu(pmu->cpu_pmu_context);
+}
+
 static void get_pmu_ctx(struct perf_event_pmu_context *epc)
 {
 	WARN_ON_ONCE(!atomic_inc_not_zero(&epc->refcount));
@@ -4967,8 +4976,10 @@ static void put_pmu_ctx(struct perf_event_pmu_context *epc)
 
 	raw_spin_unlock_irqrestore(&ctx->lock, flags);
 
-	if (epc->embedded)
+	if (epc->embedded) {
+		put_pmu_context(epc->pmu);
 		return;
+	}
 
 	call_rcu(&epc->rcu_head, free_epc_rcu);
 }
@@ -11354,11 +11365,6 @@ static int perf_event_idx_default(struct perf_event *event)
 	return 0;
 }
 
-static void free_pmu_context(struct pmu *pmu)
-{
-	free_percpu(pmu->cpu_pmu_context);
-}
-
 /*
  * Let userspace know that this PMU supports address range filtering:
  */
@@ -11594,6 +11600,7 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
 		pmu->event_idx = perf_event_idx_default;
 
 	list_add_rcu(&pmu->entry, &pmus);
+	atomic_set(&pmu->cpu_pmu_context_refcount, 1);
 	atomic_set(&pmu->exclusive_cnt, 0);
 	ret = 0;
 unlock:
@@ -11636,7 +11643,7 @@ void perf_pmu_unregister(struct pmu *pmu)
 		device_del(pmu->dev);
 		put_device(pmu->dev);
 	}
-	free_pmu_context(pmu);
+	put_pmu_context(pmu);
 	mutex_unlock(&pmus_lock);
 }
 EXPORT_SYMBOL_GPL(perf_pmu_unregister);
