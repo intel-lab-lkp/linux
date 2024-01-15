@@ -1190,7 +1190,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	 * Ensure proper count is passed which otherwise would stuck in the
 	 * below while (list_empty(list)) loop.
 	 */
-	count = min(pcp->count, count);
+	count = min(pcp->total_count, count);
 
 	/* Ensure requested pindex is drained first. */
 	pindex = pindex - 1;
@@ -1220,7 +1220,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			/* must delete to avoid corrupting pcp list */
 			list_del(&page->pcp_list);
 			count -= nr_pages;
-			pcp->count -= nr_pages;
+			pcp->total_count -= nr_pages;
 
 			/* MIGRATE_ISOLATE page should not go to pcplists */
 			VM_BUG_ON_PAGE(is_migrate_isolate(mt), page);
@@ -2202,13 +2202,13 @@ int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 	 * control latency.  This caps pcp->high decrement too.
 	 */
 	if (pcp->high > high_min) {
-		pcp->high = max3(pcp->count - (batch << CONFIG_PCP_BATCH_SCALE_MAX),
+		pcp->high = max3(pcp->total_count - (batch << CONFIG_PCP_BATCH_SCALE_MAX),
 				 pcp->high - (pcp->high >> 3), high_min);
 		if (pcp->high > high_min)
 			todo++;
 	}
 
-	to_drain = pcp->count - pcp->high;
+	to_drain = pcp->total_count - pcp->high;
 	if (to_drain > 0) {
 		spin_lock(&pcp->lock);
 		free_pcppages_bulk(zone, to_drain, pcp, 0);
@@ -2230,7 +2230,7 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
 	int to_drain, batch;
 
 	batch = READ_ONCE(pcp->batch);
-	to_drain = min(pcp->count, batch);
+	to_drain = min(pcp->total_count, batch);
 	if (to_drain > 0) {
 		spin_lock(&pcp->lock);
 		free_pcppages_bulk(zone, to_drain, pcp, 0);
@@ -2247,9 +2247,9 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 	struct per_cpu_pages *pcp;
 
 	pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-	if (pcp->count) {
+	if (pcp->total_count) {
 		spin_lock(&pcp->lock);
-		free_pcppages_bulk(zone, pcp->count, pcp, 0);
+		free_pcppages_bulk(zone, pcp->total_count, pcp, 0);
 		spin_unlock(&pcp->lock);
 	}
 }
@@ -2285,7 +2285,7 @@ void drain_local_pages(struct zone *zone)
  *
  * drain_all_pages() is optimized to only execute on cpus where pcplists are
  * not empty. The check for non-emptiness can however race with a free to
- * pcplist that has not yet increased the pcp->count from 0 to 1. Callers
+ * pcplist that has not yet increased the pcp->total_count from 0 to 1. Callers
  * that need the guarantee that every CPU has drained can disable the
  * optimizing racy check.
  */
@@ -2329,12 +2329,12 @@ static void __drain_all_pages(struct zone *zone, bool force_all_cpus)
 			has_pcps = true;
 		} else if (zone) {
 			pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-			if (pcp->count)
+			if (pcp->total_count)
 				has_pcps = true;
 		} else {
 			for_each_populated_zone(z) {
 				pcp = per_cpu_ptr(z->per_cpu_pageset, cpu);
-				if (pcp->count) {
+				if (pcp->total_count) {
 					has_pcps = true;
 					break;
 				}
@@ -2386,7 +2386,7 @@ static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free
 
 	/* Free as much as possible if batch freeing high-order pages. */
 	if (unlikely(free_high))
-		return min(pcp->count, batch << CONFIG_PCP_BATCH_SCALE_MAX);
+		return min(pcp->total_count, batch << CONFIG_PCP_BATCH_SCALE_MAX);
 
 	/* Check for PCP disabled or boot pageset */
 	if (unlikely(high < batch))
@@ -2441,8 +2441,8 @@ static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
 		int free_count = max_t(int, pcp->free_count, batch);
 
 		pcp->high = max(high - free_count, high_min);
-		high = max(pcp->count, high_min);
-	} else if (pcp->count >= high) {
+		high = max(pcp->total_count, high_min);
+	} else if (pcp->total_count >= high) {
 		int need_high = pcp->free_count + batch;
 
 		/* pcp->high should be large enough to hold batch freed pages */
@@ -2470,7 +2470,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	__count_vm_events(PGFREE, 1 << order);
 	pindex = order_to_pindex(migratetype, order);
 	list_add(&page->pcp_list, &pcp->lists[pindex]);
-	pcp->count += 1 << order;
+	pcp->total_count += 1 << order;
 
 	batch = READ_ONCE(pcp->batch);
 	/*
@@ -2483,7 +2483,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 		free_high = (pcp->free_count >= batch &&
 			     (pcp->flags & PCPF_PREV_FREE_HIGH_ORDER) &&
 			     (!(pcp->flags & PCPF_FREE_HIGH_BATCH) ||
-			      pcp->count >= READ_ONCE(batch)));
+			      pcp->total_count >= READ_ONCE(batch)));
 		pcp->flags |= PCPF_PREV_FREE_HIGH_ORDER;
 	} else if (pcp->flags & PCPF_PREV_FREE_HIGH_ORDER) {
 		pcp->flags &= ~PCPF_PREV_FREE_HIGH_ORDER;
@@ -2491,7 +2491,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	if (pcp->free_count < (batch << CONFIG_PCP_BATCH_SCALE_MAX))
 		pcp->free_count += (1 << order);
 	high = nr_pcp_high(pcp, zone, batch, free_high);
-	if (pcp->count >= high) {
+	if (pcp->total_count >= high) {
 		free_pcppages_bulk(zone, nr_pcp_free(pcp, batch, high, free_high),
 				   pcp, pindex);
 		if (test_bit(ZONE_BELOW_HIGH, &zone->flags) &&
@@ -2808,7 +2808,7 @@ static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
 		high = pcp->high = min(high + batch, high_max);
 
 	if (!order) {
-		max_nr_alloc = max(high - pcp->count - base_batch, base_batch);
+		max_nr_alloc = max(high - pcp->total_count - base_batch, base_batch);
 		/*
 		 * Double the number of pages allocated each time there is
 		 * subsequent allocation of order-0 pages without any freeing.
@@ -2850,14 +2850,14 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 					batch, list,
 					migratetype, alloc_flags);
 
-			pcp->count += alloced << order;
+			pcp->total_count += alloced << order;
 			if (unlikely(list_empty(list)))
 				return NULL;
 		}
 
 		page = list_first_entry(list, struct page, pcp_list);
 		list_del(&page->pcp_list);
-		pcp->count -= 1 << order;
+		pcp->total_count -= 1 << order;
 	} while (check_new_pages(page, order));
 
 	return page;
@@ -5475,7 +5475,7 @@ static int zone_highsize(struct zone *zone, int batch, int cpu_online,
 
 /*
  * pcp->high and pcp->batch values are related and generally batch is lower
- * than high. They are also related to pcp->count such that count is lower
+ * than high. They are also related to pcp->total_count such that count is lower
  * than high, and as soon as it reaches high, the pcplist is flushed.
  *
  * However, guaranteeing these relations at all times would require e.g. write
@@ -5483,7 +5483,7 @@ static int zone_highsize(struct zone *zone, int batch, int cpu_online,
  * thus be prone to error and bad for performance. Thus the update only prevents
  * store tearing. Any new users of pcp->batch, pcp->high_min and pcp->high_max
  * should ensure they can cope with those fields changing asynchronously, and
- * fully trust only the pcp->count field on the local CPU with interrupts
+ * fully trust only the pcp->total_count field on the local CPU with interrupts
  * disabled.
  *
  * mutex_is_locked(&pcp_batch_high_lock) required when calling this function

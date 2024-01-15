@@ -197,7 +197,7 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 			continue;
 
 		for_each_online_cpu(cpu)
-			free_pcp += per_cpu_ptr(zone->per_cpu_pageset, cpu)->count;
+			free_pcp += per_cpu_ptr(zone->per_cpu_pageset, cpu)->total_count;
 	}
 
 	printk("active_anon:%lu inactive_anon:%lu isolated_anon:%lu\n"
@@ -299,7 +299,7 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 
 		free_pcp = 0;
 		for_each_online_cpu(cpu)
-			free_pcp += per_cpu_ptr(zone->per_cpu_pageset, cpu)->count;
+			free_pcp += per_cpu_ptr(zone->per_cpu_pageset, cpu)->total_count;
 
 		show_node(zone);
 		printk(KERN_CONT
@@ -342,7 +342,7 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 			K(zone_page_state(zone, NR_MLOCK)),
 			K(zone_page_state(zone, NR_BOUNCE)),
 			K(free_pcp),
-			K(this_cpu_read(zone->per_cpu_pageset->count)),
+			K(this_cpu_read(zone->per_cpu_pageset->total_count)),
 			K(zone_page_state(zone, NR_FREE_CMA_PAGES)));
 		printk("lowmem_reserve[]:");
 		for (i = 0; i < MAX_NR_ZONES; i++)
