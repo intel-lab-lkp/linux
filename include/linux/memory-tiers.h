@@ -50,10 +50,16 @@ int mt_set_default_dram_perf(int nid, struct node_hmem_attrs *perf,
 int mt_perf_to_adistance(struct node_hmem_attrs *perf, int *adist);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
+int next_promotion_node(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
 bool node_is_toptier(int node);
 #else
 static inline int next_demotion_node(int node)
+{
+	return NUMA_NO_NODE;
+}
+
+static inline int next_promotion_node(int node)
 {
 	return NUMA_NO_NODE;
 }
@@ -97,6 +103,11 @@ static inline void clear_node_memory_type(int node, struct memory_dev_type *memt
 }
 
 static inline int next_demotion_node(int node)
+{
+	return NUMA_NO_NODE;
+}
+
+static inline int next_promotion_node(int node)
 {
 	return NUMA_NO_NODE;
 }

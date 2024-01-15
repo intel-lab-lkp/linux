@@ -335,6 +335,49 @@ int next_demotion_node(int node)
 	return target;
 }
 
+/*
+ * Select a promotion target that is close to the from node among the given
+ * two nodes.
+ *
+ * TODO: consider other decision policy as node_distance may not be precise.
+ */
+static int select_promotion_target(int a, int b, int from)
+{
+	if (node_distance(from, a) < node_distance(from, b))
+		return a;
+	else
+		return b;
+}
+
+/**
+ * next_promotion_node() - Get the next node in the promotion path
+ * @node: The starting node to lookup the next node
+ *
+ * Return: node id for next memory node in the promotion path hierarchy
+ * from @node; NUMA_NO_NODE if @node is the toptier.
+ */
+int next_promotion_node(int node)
+{
+	int target = NUMA_NO_NODE;
+	int nid;
+
+	if (node_is_toptier(node))
+		return NUMA_NO_NODE;
+
+	rcu_read_lock();
+	for_each_node_state(nid, N_MEMORY) {
+		if (node_isset(node, node_demotion[nid].preferred)) {
+			if (target == NUMA_NO_NODE)
+				target = nid;
+			else
+				target = select_promotion_target(nid, target, node);
+		}
+	}
+	rcu_read_unlock();
+
+	return target;
+}
+
 static void disable_all_demotion_targets(void)
 {
 	struct memory_tier *memtier;
