@@ -286,6 +286,7 @@ no-dot-config-targets := $(clean-targets) \
 no-sync-config-targets := $(no-dot-config-targets) %install modules_sign kernelrelease \
 			  image_name
 single-targets := %.a %.i %.ko %.lds %.ll %.lst %.mod %.o %.rsi %.s %.symtypes %/
+no-single-targets := vmlinux.o vmlinux.a
 
 config-build	:=
 mixed-build	:=
@@ -321,9 +322,12 @@ ifeq ($(KBUILD_EXTMOD),)
 endif
 
 # We cannot build single targets and the others at the same time
-ifneq ($(filter $(single-targets), $(MAKECMDGOALS)),)
+ifneq ($(filter-out $(no-single-targets), $(filter $(single-targets), $(MAKECMDGOALS))),)
 	single-build := 1
 	ifneq ($(filter-out $(single-targets), $(MAKECMDGOALS)),)
+		mixed-build := 1
+	endif
+	ifneq ($(filter $(no-single-targets), $(MAKECMDGOALS)),)
 		mixed-build := 1
 	endif
 endif
