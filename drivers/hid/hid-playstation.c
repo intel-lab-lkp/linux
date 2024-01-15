@@ -1966,7 +1966,10 @@ static int dualshock4_get_mac_address(struct dualshock4 *ds4)
 				DS4_FEATURE_REPORT_PAIRING_INFO_SIZE, false);
 		if (ret) {
 			hid_err(hdev, "Failed to retrieve DualShock4 pairing info: %d\n", ret);
-			goto err_free;
+			hid_err(hdev, "Generating fake MAC address for this device.\n");
+			buf[1] = (hdev->id >>  0) & 0xff;
+			buf[2] = (hdev->id >>  8) & 0xff;
+			buf[3] = (hdev->id >> 16) & 0xff;
 		}
 
 		memcpy(ds4->base.mac_address, &buf[1], sizeof(ds4->base.mac_address));
@@ -1986,7 +1989,6 @@ static int dualshock4_get_mac_address(struct dualshock4 *ds4)
 		return 0;
 	}
 
-err_free:
 	kfree(buf);
 	return ret;
 }
@@ -2552,7 +2554,7 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 	ret = dualshock4_get_mac_address(ds4);
 	if (ret) {
 		hid_err(hdev, "Failed to get MAC address from DualShock4\n");
-		return ERR_PTR(ret);
+		hid_err(hdev, "Can't detect simultaneous USB/BT connections from this device.\n");
 	}
 	snprintf(hdev->uniq, sizeof(hdev->uniq), "%pMR", ds4->base.mac_address);
 
