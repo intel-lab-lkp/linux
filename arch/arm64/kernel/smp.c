@@ -90,6 +90,21 @@ static struct irq_desc *ipi_desc[MAX_IPI] __ro_after_init;
 
 static void ipi_setup(int cpu);
 
+int (*__cpu_to_node)(int cpu);
+EXPORT_SYMBOL(__cpu_to_node);
+
+#ifdef CONFIG_USE_PERCPU_NUMA_NODE_ID
+static int arm64_cpu_to_node(int cpu)
+{
+	return per_cpu(numa_node, cpu);
+}
+#else
+static int arm64_cpu_to_node(int cpu)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_HOTPLUG_CPU
 static void ipi_teardown(int cpu);
 static int op_cpu_kill(unsigned int cpu);
@@ -613,6 +628,7 @@ static void __init acpi_parse_and_init_cpus(void)
 
 	for (i = 0; i < nr_cpu_ids; i++)
 		early_map_cpu_to_node(i, acpi_numa_get_nid(i));
+	__cpu_to_node = early_cpu_to_node;
 }
 #else
 #define acpi_parse_and_init_cpus(...)	do { } while (0)
@@ -674,6 +690,7 @@ static void __init of_parse_and_init_cpus(void)
 next:
 		cpu_count++;
 	}
+	__cpu_to_node = early_cpu_to_node;
 }
 
 /*
@@ -733,7 +750,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	 * secondary CPUs present.
 	 */
 	if (max_cpus == 0)
-		return;
+		goto out;
 
 	/*
 	 * Initialise the present map (which describes the set of CPUs
@@ -758,6 +775,8 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 		set_cpu_present(cpu, true);
 		numa_store_cpu_info(cpu);
 	}
+out:
+	__cpu_to_node = arm64_cpu_to_node;
 }
 
 static const char *ipi_types[NR_IPI] __tracepoint_string = {

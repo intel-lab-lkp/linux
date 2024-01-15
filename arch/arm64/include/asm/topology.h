@@ -12,6 +12,10 @@ int pcibus_to_node(struct pci_bus *bus);
 				 cpu_all_mask :				\
 				 cpumask_of_node(pcibus_to_node(bus)))
 
+/* override generic percpu implementation of cpu_to_node */
+extern int (*__cpu_to_node)(int cpu);
+#define cpu_to_node(cpu) __cpu_to_node(cpu)
+
 #endif /* CONFIG_NUMA */
 
 #include <linux/arch_topology.h>
