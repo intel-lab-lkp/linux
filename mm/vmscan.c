@@ -2107,15 +2107,16 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 	return nr_reclaimed;
 }
 
-unsigned long reclaim_pages(struct list_head *folio_list)
+static unsigned long reclaim_or_migrate_folios(struct list_head *folio_list,
+		unsigned int (*handler)(struct list_head *, struct pglist_data *))
 {
 	int nid;
-	unsigned int nr_reclaimed = 0;
+	unsigned int nr_folios = 0;
 	LIST_HEAD(node_folio_list);
 	unsigned int noreclaim_flag;
 
 	if (list_empty(folio_list))
-		return nr_reclaimed;
+		return nr_folios;
 
 	noreclaim_flag = memalloc_noreclaim_save();
 
@@ -2129,15 +2130,20 @@ unsigned long reclaim_pages(struct list_head *folio_list)
 			continue;
 		}
 
-		nr_reclaimed += reclaim_folio_list(&node_folio_list, NODE_DATA(nid));
+		nr_folios += handler(&node_folio_list, NODE_DATA(nid));
 		nid = folio_nid(lru_to_folio(folio_list));
 	} while (!list_empty(folio_list));
 
-	nr_reclaimed += reclaim_folio_list(&node_folio_list, NODE_DATA(nid));
+	nr_folios += handler(&node_folio_list, NODE_DATA(nid));
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
-	return nr_reclaimed;
+	return nr_folios;
+}
+
+unsigned long reclaim_pages(struct list_head *folio_list)
+{
+	return reclaim_or_migrate_folios(folio_list, reclaim_folio_list);
 }
 
 static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
