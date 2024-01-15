@@ -2523,8 +2523,11 @@ static int joycon_init(struct hid_device *hdev)
 		/* set baudrate for improved latency */
 		ret = joycon_send_usb(ctlr, JC_USB_CMD_BAUDRATE_3M, HZ);
 		if (ret) {
+			/*
+			 * We can function with the default baudrate.
+			 * Provide a warning, and continue on.
+			 */
 			hid_err(hdev, "Failed to set baudrate; ret=%d\n", ret);
-			goto out_unlock;
 		}
 		/* handshake */
 		ret = joycon_send_usb(ctlr, JC_USB_CMD_HANDSHAKE, HZ);
