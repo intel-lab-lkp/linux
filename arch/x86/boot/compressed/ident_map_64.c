@@ -390,4 +390,5 @@ void do_boot_page_fault(struct pt_regs *regs, unsigned long error_code)
 void do_boot_nmi_trap(struct pt_regs *regs, unsigned long error_code)
 {
 	/* Empty handler to ignore NMI during early boot */
+	spurious_nmi_count++;
 }
