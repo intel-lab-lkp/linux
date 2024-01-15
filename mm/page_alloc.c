@@ -1221,6 +1221,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			list_del(&page->pcp_list);
 			count -= nr_pages;
 			pcp->total_count -= nr_pages;
+			pcp->count[order] -= 1;
 
 			/* MIGRATE_ISOLATE page should not go to pcplists */
 			VM_BUG_ON_PAGE(is_migrate_isolate(mt), page);
@@ -2471,6 +2472,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	pindex = order_to_pindex(migratetype, order);
 	list_add(&page->pcp_list, &pcp->lists[pindex]);
 	pcp->total_count += 1 << order;
+	pcp->count[order] += 1;
 
 	batch = READ_ONCE(pcp->batch);
 	/*
@@ -2851,6 +2853,7 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 					migratetype, alloc_flags);
 
 			pcp->total_count += alloced << order;
+			pcp->count[order] += alloced;
 			if (unlikely(list_empty(list)))
 				return NULL;
 		}
@@ -2858,6 +2861,7 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 		page = list_first_entry(list, struct page, pcp_list);
 		list_del(&page->pcp_list);
 		pcp->total_count -= 1 << order;
+		pcp->count[order] -= 1;
 	} while (check_new_pages(page, order));
 
 	return page;

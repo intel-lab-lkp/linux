@@ -1735,19 +1735,25 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 
 	seq_printf(m, "\n  pagesets");
 	for_each_online_cpu(i) {
+		int j;
 		struct per_cpu_pages *pcp;
 		struct per_cpu_zonestat __maybe_unused *pzstats;
 
 		pcp = per_cpu_ptr(zone->per_cpu_pageset, i);
 		seq_printf(m,
 			   "\n    cpu: %i"
-			   "\n              count: %i"
-			   "\n              high:  %i"
-			   "\n              batch: %i",
+			   "\n              total_count: %i",
 			   i,
-			   pcp->total_count,
-			   pcp->high,
-			   pcp->batch);
+			   pcp->total_count);
+		for (j = 0; j < NR_PCP_LISTS; j++)
+			seq_printf(m,
+				   "\n                  order%-2i: %-3i",
+				   j, pcp->count[j]);
+		seq_printf(m,
+                          "\n              high:  %i"
+                          "\n              batch: %i",
+                          pcp->high,
+                          pcp->batch);
 #ifdef CONFIG_SMP
 		pzstats = per_cpu_ptr(zone->per_cpu_zonestats, i);
 		seq_printf(m, "\n  vm stats threshold: %d",
