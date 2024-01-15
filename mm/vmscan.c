@@ -999,6 +999,66 @@ static bool may_enter_fs(struct folio *folio, gfp_t gfp_mask)
 }
 
 /*
+ * __demote_folio_list() returns the number of demoted pages
+ */
+static unsigned int __demote_folio_list(struct list_head *folio_list,
+		struct pglist_data *pgdat, struct scan_control *sc)
+{
+	LIST_HEAD(ret_folios);
+	LIST_HEAD(demote_folios);
+	unsigned int nr_demoted = 0;
+
+	if (next_demotion_node(pgdat->node_id) == NUMA_NO_NODE)
+		return 0;
+
+	cond_resched();
+
+	while (!list_empty(folio_list)) {
+		struct folio *folio;
+		enum folio_references references;
+
+		cond_resched();
+
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+
+		if (!folio_trylock(folio))
+			goto keep;
+
+		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
+
+		references = folio_check_references(folio, sc);
+		if (references == FOLIOREF_KEEP)
+			goto keep_locked;
+
+		/* Relocate its contents to another node. */
+		list_add(&folio->lru, &demote_folios);
+		folio_unlock(folio);
+		continue;
+keep_locked:
+		folio_unlock(folio);
+keep:
+		list_add(&folio->lru, &ret_folios);
+		VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
+	}
+	/* 'folio_list' is always empty here */
+
+	/* Migrate folios selected for demotion */
+	nr_demoted += demote_folio_list(&demote_folios, pgdat);
+	/* Folios that could not be demoted are still in @demote_folios */
+	if (!list_empty(&demote_folios)) {
+		/* Folios which weren't demoted go back on @folio_list */
+		list_splice_init(&demote_folios, folio_list);
+	}
+
+	try_to_unmap_flush();
+
+	list_splice(&ret_folios, folio_list);
+
+	return nr_demoted;
+}
+
+/*
  * shrink_folio_list() returns the number of reclaimed pages
  */
 static unsigned int shrink_folio_list(struct list_head *folio_list,
@@ -2107,6 +2167,25 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 	return nr_reclaimed;
 }
 
+static unsigned int do_demote_folio_list(struct list_head *folio_list,
+				      struct pglist_data *pgdat)
+{
+	unsigned int nr_demoted;
+	struct folio *folio;
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+	};
+
+	nr_demoted = __demote_folio_list(folio_list, pgdat, &sc);
+	while (!list_empty(folio_list)) {
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+		folio_putback_lru(folio);
+	}
+
+	return nr_demoted;
+}
+
 static unsigned long reclaim_or_migrate_folios(struct list_head *folio_list,
 		unsigned int (*handler)(struct list_head *, struct pglist_data *))
 {
@@ -2144,6 +2223,11 @@ static unsigned long reclaim_or_migrate_folios(struct list_head *folio_list,
 unsigned long reclaim_pages(struct list_head *folio_list)
 {
 	return reclaim_or_migrate_folios(folio_list, reclaim_folio_list);
+}
+
+unsigned long demote_pages(struct list_head *folio_list)
+{
+	return reclaim_or_migrate_folios(folio_list, do_demote_folio_list);
 }
 
 static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,

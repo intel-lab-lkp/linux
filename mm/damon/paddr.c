@@ -224,7 +224,7 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 	return false;
 }
 
-static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s)
+static unsigned long damon_pa_reclaim(struct damon_region *r, struct damos *s, bool is_demote)
 {
 	unsigned long addr, applied;
 	LIST_HEAD(folio_list);
@@ -242,14 +242,17 @@ static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s)
 		folio_test_clear_young(folio);
 		if (!folio_isolate_lru(folio))
 			goto put_folio;
-		if (folio_test_unevictable(folio))
+		if (folio_test_unevictable(folio) && !is_demote)
 			folio_putback_lru(folio);
 		else
 			list_add(&folio->lru, &folio_list);
 put_folio:
 		folio_put(folio);
 	}
-	applied = reclaim_pages(&folio_list);
+	if (is_demote)
+		applied = demote_pages(&folio_list);
+	else
+		applied = reclaim_pages(&folio_list);
 	cond_resched();
 	return applied * PAGE_SIZE;
 }
@@ -297,13 +300,15 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 {
 	switch (scheme->action) {
 	case DAMOS_PAGEOUT:
-		return damon_pa_pageout(r, scheme);
+		return damon_pa_reclaim(r, scheme, false);
 	case DAMOS_LRU_PRIO:
 		return damon_pa_mark_accessed(r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_pa_deactivate_pages(r, scheme);
 	case DAMOS_STAT:
 		break;
+	case DAMOS_DEMOTE:
+		return damon_pa_reclaim(r, scheme, true);
 	default:
 		/* DAMOS actions that not yet supported by 'paddr'. */
 		break;
@@ -317,11 +322,11 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 {
 	switch (scheme->action) {
 	case DAMOS_PAGEOUT:
+	case DAMOS_LRU_DEPRIO:
+	case DAMOS_DEMOTE:
 		return damon_cold_score(context, r, scheme);
 	case DAMOS_LRU_PRIO:
 		return damon_hot_score(context, r, scheme);
-	case DAMOS_LRU_DEPRIO:
-		return damon_cold_score(context, r, scheme);
 	default:
 		break;
 	}
