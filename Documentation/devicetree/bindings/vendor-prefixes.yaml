@@ -1578,6 +1578,8 @@ patternProperties:
     description: Xiphera Ltd.
   "^xlnx,.*":
     description: Xilinx
+  "^xmos,.*":
+    description: XMOS
   "^xnano,.*":
     description: Xnano
   "^xunlong,.*":
