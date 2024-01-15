@@ -3441,13 +3441,28 @@ static int throttle_thermal_policy_write(struct asus_wmi *asus)
 		return -EIO;
 	}
 
-	/* Must set to disabled if mode is toggled */
-	if (asus->cpu_fan_curve_available)
-		asus->custom_fan_curves[FAN_CURVE_DEV_CPU].enabled = false;
-	if (asus->gpu_fan_curve_available)
-		asus->custom_fan_curves[FAN_CURVE_DEV_GPU].enabled = false;
-	if (asus->mid_fan_curve_available)
-		asus->custom_fan_curves[FAN_CURVE_DEV_MID].enabled = false;
+	/* Re-enable fan curves after profile change */
+	if (asus->cpu_fan_curve_available && asus->custom_fan_curves[FAN_CURVE_DEV_CPU].enabled) {
+		err = fan_curve_write(asus, &asus->custom_fan_curves[FAN_CURVE_DEV_CPU]);
+		if (err) {
+			pr_warn("Failed to re-enable CPU fan curve: %d\n", err);
+			return err;
+		}
+	}
+	if (asus->gpu_fan_curve_available && asus->custom_fan_curves[FAN_CURVE_DEV_GPU].enabled) {
+		err = fan_curve_write(asus, &asus->custom_fan_curves[FAN_CURVE_DEV_GPU]);
+		if (err) {
+			pr_warn("Failed to re-enable GPU fan curve: %d\n", err);
+			return err;
+		}
+	}
+	if (asus->mid_fan_curve_available && asus->custom_fan_curves[FAN_CURVE_DEV_MID].enabled) {
+		err = fan_curve_write(asus, &asus->custom_fan_curves[FAN_CURVE_DEV_MID]);
+		if (err) {
+			pr_warn("Failed to re-enable MID fan curve: %d\n", err);
+			return err;
+		}
+	}
 
 	return 0;
 }
