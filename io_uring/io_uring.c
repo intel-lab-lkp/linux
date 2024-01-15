@@ -153,7 +153,9 @@ static void io_queue_sqe(struct io_kiocb *req);
 struct kmem_cache *req_cachep;
 
 static int __read_mostly sysctl_io_uring_disabled;
-static int __read_mostly sysctl_io_uring_group = -1;
+static unsigned int __read_mostly sysctl_io_uring_group;
+static unsigned int min_gid;
+static unsigned int max_gid  = 4294967294;  /*4294967294 is the max guid*/
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table kernel_io_uring_disabled_table[] = {
@@ -171,7 +173,9 @@ static struct ctl_table kernel_io_uring_disabled_table[] = {
 		.data		= &sysctl_io_uring_group,
 		.maxlen		= sizeof(gid_t),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1         = &min_gid,
+		.extra2         = &max_gid,
 	},
 	{},
 };

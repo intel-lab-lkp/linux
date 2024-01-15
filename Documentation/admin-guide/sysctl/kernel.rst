@@ -469,11 +469,10 @@ shrinks the kernel's attack surface.
 io_uring_group
 ==============
 
-When io_uring_disabled is set to 1, a process must either be
-privileged (CAP_SYS_ADMIN) or be in the io_uring_group group in order
-to create an io_uring instance.  If io_uring_group is set to -1 (the
-default), only processes with the CAP_SYS_ADMIN capability may create
-io_uring instances.
+When io_uring_disabled is set to 1, only processes with the
+CAP_SYS_ADMIN may create io_uring instances or process must be in the
+io_uring_group group in order to create an io_uring_instance.
+io_uring_group is set to 0.This is the default setting.
 
 
 kexec_load_disabled
