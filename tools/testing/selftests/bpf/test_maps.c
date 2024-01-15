@@ -1159,6 +1159,7 @@ static void test_map_in_map(void)
 	__u32 len = sizeof(info);
 	__u32 id = 0;
 	libbpf_print_fn_t old_print_fn;
+	int ret;
 
 	obj = bpf_object__open(MAPINMAP_PROG);
 
@@ -1190,7 +1191,11 @@ static void test_map_in_map(void)
 		goto out_map_in_map;
 	}
 
-	bpf_object__load(obj);
+	ret = bpf_object__load(obj);
+	if (ret) {
+		printf("Failed to load test prog\n");
+		goto out_map_in_map;
+	}
 
 	map = bpf_object__find_map_by_name(obj, "mim_array");
 	if (!map) {
@@ -1223,6 +1228,28 @@ static void test_map_in_map(void)
 	err = bpf_map_update_elem(mim_fd, &pos, &fd, 0);
 	if (err) {
 		printf("Failed to update hash of maps\n");
+		goto out_map_in_map;
+	}
+
+	map = bpf_object__find_map_by_name(obj, "mim_array_pe");
+	if (!map) {
+		printf("Failed to load array of perf event array maps\n");
+		goto out_map_in_map;
+	}
+	mim_fd = bpf_map__fd(map);
+	if (mim_fd < 0) {
+		printf("Failed to get descriptor for array of perf event array maps\n");
+		goto out_map_in_map;
+	}
+
+	map = bpf_object__find_map_by_name(obj, "mim_hash_pe");
+	if (!map) {
+		printf("Failed to load hash of perf event array maps\n");
+		goto out_map_in_map;
+	}
+	mim_fd = bpf_map__fd(map);
+	if (mim_fd < 0) {
+		printf("Failed to get descriptor for array of perf event array maps\n");
 		goto out_map_in_map;
 	}
 
