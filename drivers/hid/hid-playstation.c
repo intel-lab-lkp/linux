@@ -2747,6 +2747,10 @@ static const struct hid_device_id ps_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_SONY, USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE),
 		.driver_data = PS_TYPE_PS4_DUALSHOCK4 },
 
+	/* Third-party controllers identifying as "SZ-MYPOWER" */
+	{ HID_USB_DEVICE(USB_VENDOR_ID_7545, USB_DEVICE_ID_7545_0104),
+		.driver_data = PS_TYPE_PS4_DUALSHOCK4 },
+
 	/* Sony DualSense controllers for PS5 */
 	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SONY, USB_DEVICE_ID_SONY_PS5_CONTROLLER),
 		.driver_data = PS_TYPE_PS5_DUALSENSE },
