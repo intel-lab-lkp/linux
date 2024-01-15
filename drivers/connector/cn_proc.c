@@ -108,8 +108,10 @@ static inline void send_msg(struct cn_msg *msg)
 		filter_data[1] = 0;
 	}
 
-	if (cn_netlink_send_mult(msg, msg->len, 0, CN_IDX_PROC, GFP_NOWAIT,
-			     cn_filter, (void *)filter_data) == -ESRCH)
+	if (netlink_has_listeners(get_cdev_nls(), CN_IDX_PROC))
+		cn_netlink_send_mult(msg, msg->len, 0, CN_IDX_PROC, GFP_NOWAIT,
+			     cn_filter, (void *)filter_data);
+	else
 		atomic_set(&proc_event_num_listeners, 0);
 
 	local_unlock(&local_event.lock);
