@@ -514,7 +514,7 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 	return HRTIMER_RESTART;
 }
 
-static void i915_pmu_event_destroy(struct perf_event *event)
+static void i915_pmu_event_free(struct perf_event *event)
 {
 	struct i915_pmu *pmu = event_to_pmu(event);
 	struct drm_i915_private *i915 = pmu_to_i915(pmu);
@@ -630,7 +630,7 @@ static int i915_pmu_event_init(struct perf_event *event)
 
 	if (!event->parent) {
 		drm_dev_get(&i915->drm);
-		event->destroy = i915_pmu_event_destroy;
+		event->free = i915_pmu_event_free;
 	}
 
 	return 0;
