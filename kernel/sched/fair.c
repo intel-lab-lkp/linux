@@ -848,12 +848,12 @@ struct sched_entity *__pick_root_entity(struct cfs_rq *cfs_rq)
 
 struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
 {
-	struct rb_node *left = rb_first_cached(&cfs_rq->tasks_timeline);
+	struct rb_node *leftmost = rb_first_cached(&cfs_rq->tasks_timeline);
 
-	if (!left)
+	if (!leftmost)
 		return NULL;
 
-	return __node_2_se(left);
+	return __node_2_se(leftmost);
 }
 
 /*
