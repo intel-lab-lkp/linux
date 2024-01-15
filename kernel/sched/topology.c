@@ -1542,8 +1542,8 @@ static int			sched_domains_numa_levels;
 static int			sched_domains_curr_level;
 
 int				sched_max_numa_distance;
-static int			*sched_domains_numa_distance;
-static struct cpumask		***sched_domains_numa_masks;
+static int			__rcu *sched_domains_numa_distance;
+static struct cpumask		** __rcu *sched_domains_numa_masks;
 #endif
 
 /*
@@ -1988,8 +1988,8 @@ void sched_init_numa(int offline_node)
 
 static void sched_reset_numa(void)
 {
-	int nr_levels, *distances;
-	struct cpumask ***masks;
+	int nr_levels, __rcu *distances;
+	struct cpumask ** __rcu *masks;
 
 	nr_levels = sched_domains_numa_levels;
 	sched_domains_numa_levels = 0;
@@ -2003,7 +2003,7 @@ static void sched_reset_numa(void)
 		int i, j;
 
 		synchronize_rcu();
-		kfree(distances);
+		kfree((void *)distances);
 		for (i = 0; i < nr_levels && masks; i++) {
 			if (!masks[i])
 				continue;
@@ -2011,7 +2011,7 @@ static void sched_reset_numa(void)
 				kfree(masks[i][j]);
 			kfree(masks[i]);
 		}
-		kfree(masks);
+		kfree((void *)masks);
 	}
 	if (sched_domain_topology_saved) {
 		kfree(sched_domain_topology);
