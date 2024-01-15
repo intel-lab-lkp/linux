@@ -910,7 +910,7 @@ static void folio_check_dirty_writeback(struct folio *folio,
 		mapping->a_ops->is_dirty_writeback(folio, dirty, writeback);
 }
 
-static struct folio *alloc_demote_folio(struct folio *src,
+static struct folio *alloc_migrate_folio(struct folio *src,
 		unsigned long private)
 {
 	struct folio *dst;
@@ -973,11 +973,53 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 	node_get_allowed_targets(pgdat, &allowed_mask);
 
 	/* Demotion ignores all cpuset and mempolicy settings */
-	migrate_pages(demote_folios, alloc_demote_folio, NULL,
+	migrate_pages(demote_folios, alloc_migrate_folio, NULL,
 		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
 		      &nr_succeeded);
 
 	__count_vm_events(PGDEMOTE_KSWAPD + reclaimer_offset(), nr_succeeded);
+
+	return nr_succeeded;
+}
+
+/*
+ * Take folios on @promote_folios and attempt to promote them to another node.
+ * Folios which are not promoted are left on @promote_folios.
+ */
+static unsigned int promote_folio_list(struct list_head *promote_folios,
+				     struct pglist_data *pgdat)
+{
+	int target_nid = next_promotion_node(pgdat->node_id);
+	unsigned int nr_succeeded;
+	nodemask_t allowed_mask = NODE_MASK_NONE;
+
+	struct migration_target_control mtc = {
+		/*
+		 * Allocate from 'node', or fail quickly and quietly.
+		 * When this happens, 'page' will likely be stayed
+		 * instead of migrated.
+		 */
+		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) | __GFP_NOWARN |
+			__GFP_NOMEMALLOC | GFP_NOWAIT,
+		.nid = target_nid,
+		.nmask = &allowed_mask
+	};
+
+	if (pgdat->node_id == target_nid)
+		return 0;
+
+	if (list_empty(promote_folios))
+		return 0;
+
+	if (target_nid == NUMA_NO_NODE)
+		return 0;
+
+	/* Promotion ignores all cpuset and mempolicy settings */
+	migrate_pages(promote_folios, alloc_migrate_folio, NULL,
+		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_PROMOTION,
+		      &nr_succeeded);
+
+	__count_vm_events(PGPROMOTE, nr_succeeded);
 
 	return nr_succeeded;
 }
@@ -1056,6 +1098,65 @@ keep:
 	list_splice(&ret_folios, folio_list);
 
 	return nr_demoted;
+}
+
+/*
+ * __promote_folio_list() returns the number of promoted pages
+ */
+static unsigned int __promote_folio_list(struct list_head *folio_list,
+		struct pglist_data *pgdat, struct scan_control *sc)
+{
+	LIST_HEAD(ret_folios);
+	LIST_HEAD(promote_folios);
+	unsigned int nr_promoted = 0;
+
+	cond_resched();
+
+	while (!list_empty(folio_list)) {
+		struct folio *folio;
+		enum folio_references references;
+
+		cond_resched();
+
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+
+		if (!folio_trylock(folio))
+			goto keep;
+
+		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
+
+		references = folio_check_references(folio, sc);
+		if (references == FOLIOREF_KEEP ||
+		    references == FOLIOREF_RECLAIM ||
+		    references == FOLIOREF_RECLAIM_CLEAN)
+			goto keep_locked;
+
+		/* Relocate its contents to another node. */
+		list_add(&folio->lru, &promote_folios);
+		folio_unlock(folio);
+		continue;
+keep_locked:
+		folio_unlock(folio);
+keep:
+		list_add(&folio->lru, &ret_folios);
+		VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
+	}
+	/* 'folio_list' is always empty here */
+
+	/* Migrate folios selected for promotion */
+	nr_promoted += promote_folio_list(&promote_folios, pgdat);
+	/* Folios that could not be promoted are still in @promote_folios */
+	if (!list_empty(&promote_folios)) {
+		/* Folios which weren't promoted go back on @folio_list */
+		list_splice_init(&promote_folios, folio_list);
+	}
+
+	try_to_unmap_flush();
+
+	list_splice(&ret_folios, folio_list);
+
+	return nr_promoted;
 }
 
 /*
@@ -2186,6 +2287,25 @@ static unsigned int do_demote_folio_list(struct list_head *folio_list,
 	return nr_demoted;
 }
 
+static unsigned int do_promote_folio_list(struct list_head *folio_list,
+				      struct pglist_data *pgdat)
+{
+	unsigned int nr_promoted;
+	struct folio *folio;
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+	};
+
+	nr_promoted = __promote_folio_list(folio_list, pgdat, &sc);
+	while (!list_empty(folio_list)) {
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+		folio_putback_lru(folio);
+	}
+
+	return nr_promoted;
+}
+
 static unsigned long reclaim_or_migrate_folios(struct list_head *folio_list,
 		unsigned int (*handler)(struct list_head *, struct pglist_data *))
 {
@@ -2228,6 +2348,11 @@ unsigned long reclaim_pages(struct list_head *folio_list)
 unsigned long demote_pages(struct list_head *folio_list)
 {
 	return reclaim_or_migrate_folios(folio_list, do_demote_folio_list);
+}
+
+unsigned long promote_pages(struct list_head *folio_list)
+{
+	return reclaim_or_migrate_folios(folio_list, do_promote_folio_list);
 }
 
 static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,

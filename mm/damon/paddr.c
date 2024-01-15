@@ -257,6 +257,32 @@ put_folio:
 	return applied * PAGE_SIZE;
 }
 
+static unsigned long damon_pa_promote(struct damon_region *r, struct damos *s)
+{
+	unsigned long addr, applied;
+	LIST_HEAD(folio_list);
+
+	for (addr = r->ar.start; addr < r->ar.end; addr += PAGE_SIZE) {
+		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
+
+		if (!folio)
+			continue;
+
+		if (damos_pa_filter_out(s, folio))
+			goto put_folio;
+
+		if (!folio_isolate_lru(folio))
+			goto put_folio;
+
+		list_add(&folio->lru, &folio_list);
+put_folio:
+		folio_put(folio);
+	}
+	applied = promote_pages(&folio_list);
+	cond_resched();
+	return applied * PAGE_SIZE;
+}
+
 static inline unsigned long damon_pa_mark_accessed_or_deactivate(
 		struct damon_region *r, struct damos *s, bool mark_accessed)
 {
@@ -309,6 +335,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		break;
 	case DAMOS_DEMOTE:
 		return damon_pa_reclaim(r, scheme, true);
+	case DAMOS_PROMOTE:
+		return damon_pa_promote(r, scheme);
 	default:
 		/* DAMOS actions that not yet supported by 'paddr'. */
 		break;
@@ -326,6 +354,7 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 	case DAMOS_DEMOTE:
 		return damon_cold_score(context, r, scheme);
 	case DAMOS_LRU_PRIO:
+	case DAMOS_PROMOTE:
 		return damon_hot_score(context, r, scheme);
 	default:
 		break;
