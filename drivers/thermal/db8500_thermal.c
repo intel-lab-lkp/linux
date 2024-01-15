@@ -20,7 +20,7 @@
 #define PRCMU_DEFAULT_MEASURE_TIME	0xFFF
 #define PRCMU_DEFAULT_LOW_TEMP		0
 
-/**
+/*
  * db8500_thermal_points - the interpolation points that trigger
  * interrupts
  */
