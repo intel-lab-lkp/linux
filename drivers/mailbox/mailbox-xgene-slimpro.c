@@ -32,7 +32,7 @@
 #define REG_DB_STATMASK		0x24
 
 /**
- * X-Gene SlimPRO mailbox channel information
+ * struct slimpro_mbox_chan - X-Gene SlimPRO mailbox channel information
  *
  * @dev:	Device to which it is attached
  * @chan:	Pointer to mailbox communication channel
@@ -49,15 +49,14 @@ struct slimpro_mbox_chan {
 };
 
 /**
- * X-Gene SlimPRO Mailbox controller data
- *
- * X-Gene SlimPRO Mailbox controller has 8 communication channels.
- * Each channel has a separate IRQ number assigned to it.
+ * struct slimpro_mbox - X-Gene SlimPRO Mailbox controller data
  *
  * @mb_ctrl:	Representation of the communication channel controller
  * @mc:		Array of SlimPRO mailbox channels of the controller
  * @chans:	Array of mailbox communication channels
  *
+ * X-Gene SlimPRO Mailbox controller has 8 communication channels.
+ * Each channel has a separate IRQ number assigned to it.
  */
 struct slimpro_mbox {
 	struct mbox_controller		mb_ctrl;
