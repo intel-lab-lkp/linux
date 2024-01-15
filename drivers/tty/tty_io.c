@@ -2286,7 +2286,7 @@ static int tiocsti(struct tty_struct *tty, u8 __user *p)
 	if (!tty_legacy_tiocsti && !capable(CAP_SYS_ADMIN))
 		return -EIO;
 
-	if ((current->signal->tty != tty) && !capable(CAP_SYS_ADMIN))
+	if ((current->signal->tty != tty) && !capable(CAP_SYS_TTY_CONFIG))
 		return -EPERM;
 	if (get_user(ch, p))
 		return -EFAULT;
@@ -2390,7 +2390,7 @@ static int tiocswinsz(struct tty_struct *tty, struct winsize __user *arg)
  */
 static int tioccons(struct file *file)
 {
-	if (!capable(CAP_SYS_ADMIN))
+	if (!capable(CAP_SYS_TTY_CONFIG))
 		return -EPERM;
 	if (file->f_op->write_iter == redirected_tty_write) {
 		struct file *f;
@@ -2719,7 +2719,7 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case TIOCSETD:
 		return tiocsetd(tty, p);
 	case TIOCVHANGUP:
-		if (!capable(CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_TTY_CONFIG))
 			return -EPERM;
 		tty_vhangup(tty);
 		return 0;
