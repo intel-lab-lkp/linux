@@ -193,8 +193,8 @@ static int vfio_set_trigger(struct vfio_platform_device *vdev, int index,
 
 	trigger = eventfd_ctx_fdget(fd);
 	if (IS_ERR(trigger)) {
-		kfree(irq->name);
-		return PTR_ERR(trigger);
+		ret = PTR_ERR(trigger);
+		goto free_name;
 	}
 
 	irq->trigger = trigger;
@@ -202,9 +202,10 @@ static int vfio_set_trigger(struct vfio_platform_device *vdev, int index,
 	irq_set_status_flags(irq->hwirq, IRQ_NOAUTOEN);
 	ret = request_irq(irq->hwirq, handler, 0, irq->name, irq);
 	if (ret) {
-		kfree(irq->name);
 		eventfd_ctx_put(trigger);
 		irq->trigger = NULL;
+free_name:
+		kfree(irq->name);
 		return ret;
 	}
 
