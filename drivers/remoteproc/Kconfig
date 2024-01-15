@@ -316,6 +316,7 @@ config STM32_RPROC
 	depends on ARCH_STM32 || COMPILE_TEST
 	depends on REMOTEPROC
 	select MAILBOX
+	select TEE_REMOTEPROC
 	help
 	  Say y here to support STM32 MCU processors via the
 	  remote processor framework.
@@ -367,7 +368,7 @@ config XLNX_R5_REMOTEPROC
 
 
 config TEE_REMOTEPROC
-	tristate "trusted firmware support by a TEE application"
+	tristate "trusted firmware support by a trusted application"
 	depends on OPTEE
 	help
 	  Support for trusted remote processors firmware. The firmware
