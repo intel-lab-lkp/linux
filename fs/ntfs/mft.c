@@ -159,7 +159,7 @@ MFT_RECORD *map_mft_record(ntfs_inode *ni)
 
 	mutex_unlock(&ni->mrec_lock);
 	atomic_dec(&ni->count);
-	ntfs_error(ni->vol->sb, "Failed with error code %lu.", -PTR_ERR(m));
+	ntfs_error(ni->vol->sb, "Failed with error %pe.", m);
 	return m;
 }
 
@@ -285,8 +285,8 @@ MFT_RECORD *map_extent_mft_record(ntfs_inode *base_ni, MFT_REF mref,
 			return ERR_PTR(-EIO);
 		}
 map_err_out:
-		ntfs_error(base_ni->vol->sb, "Failed to map extent "
-				"mft record, error code %ld.", -PTR_ERR(m));
+		ntfs_error(base_ni->vol->sb,
+			   "Failed to map extent mft record, error %pe.", m);
 		return m;
 	}
 	/* Record wasn't there. Get a new ntfs inode and initialize it. */

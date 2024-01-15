@@ -88,8 +88,7 @@ MFT_REF ntfs_lookup_inode_by_name(ntfs_inode *dir_ni, const ntfschar *uname,
 	/* Get hold of the mft record for the directory. */
 	m = map_mft_record(dir_ni);
 	if (IS_ERR(m)) {
-		ntfs_error(sb, "map_mft_record() failed with error code %ld.",
-				-PTR_ERR(m));
+		ntfs_error(sb, "map_mft_record() failed with error %pe.", m);
 		return ERR_MREF(PTR_ERR(m));
 	}
 	ctx = ntfs_attr_get_search_ctx(dir_ni, m);
@@ -308,8 +307,7 @@ descend_into_child_node:
 	page = ntfs_map_page(ia_mapping, vcn <<
 			dir_ni->itype.index.vcn_size_bits >> PAGE_SHIFT);
 	if (IS_ERR(page)) {
-		ntfs_error(sb, "Failed to map directory index page, error %ld.",
-				-PTR_ERR(page));
+		ntfs_error(sb, "Failed to map directory index page, error %pe.", page);
 		err = PTR_ERR(page);
 		goto err_out;
 	}
@@ -639,8 +637,7 @@ u64 ntfs_lookup_inode_by_name(ntfs_inode *dir_ni, const ntfschar *uname,
 	/* Get hold of the mft record for the directory. */
 	m = map_mft_record(dir_ni);
 	if (IS_ERR(m)) {
-		ntfs_error(sb, "map_mft_record() failed with error code %ld.",
-				-PTR_ERR(m));
+		ntfs_error(sb, "map_mft_record() failed with error %pe.", m);
 		return ERR_MREF(PTR_ERR(m));
 	}
 	ctx = ntfs_attr_get_search_ctx(dir_ni, m);
@@ -786,8 +783,7 @@ descend_into_child_node:
 	page = ntfs_map_page(ia_mapping, vcn <<
 			dir_ni->itype.index.vcn_size_bits >> PAGE_SHIFT);
 	if (IS_ERR(page)) {
-		ntfs_error(sb, "Failed to map directory index page, error %ld.",
-				-PTR_ERR(page));
+		ntfs_error(sb, "Failed to map directory index page, error %pe.", page);
 		err = PTR_ERR(page);
 		goto err_out;
 	}

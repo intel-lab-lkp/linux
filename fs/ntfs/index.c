@@ -137,8 +137,7 @@ int ntfs_index_lookup(const void *key, const int key_len,
 	/* Get hold of the mft record for the index inode. */
 	m = map_mft_record(base_ni);
 	if (IS_ERR(m)) {
-		ntfs_error(sb, "map_mft_record() failed with error code %ld.",
-				-PTR_ERR(m));
+		ntfs_error(sb, "map_mft_record() failed with code %pe.", m);
 		return PTR_ERR(m);
 	}
 	actx = ntfs_attr_get_search_ctx(base_ni, m);
@@ -264,8 +263,7 @@ descend_into_child_node:
 	page = ntfs_map_page(ia_mapping, vcn <<
 			idx_ni->itype.index.vcn_size_bits >> PAGE_SHIFT);
 	if (IS_ERR(page)) {
-		ntfs_error(sb, "Failed to map index page, error %ld.",
-				-PTR_ERR(page));
+		ntfs_error(sb, "Failed to map index page, error %pe.", page);
 		err = PTR_ERR(page);
 		goto err_out;
 	}
