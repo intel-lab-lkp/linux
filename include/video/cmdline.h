@@ -7,7 +7,9 @@
 
 const char *video_get_options(const char *name);
 
+#if defined(CONFIG_FB_CORE)
 /* exported for compatibility with fbdev; don't use in new code */
 bool __video_get_options(const char *name, const char **option, bool is_of);
+#endif
 
 #endif
