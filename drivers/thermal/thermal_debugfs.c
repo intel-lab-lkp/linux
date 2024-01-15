@@ -172,12 +172,8 @@ struct thermal_debugfs {
 void thermal_debug_init(void)
 {
 	d_root = debugfs_create_dir("thermal", NULL);
-	if (!d_root)
-		return;
 
 	d_cdev = debugfs_create_dir("cooling_devices", d_root);
-	if (!d_cdev)
-		return;
 
 	d_tz = debugfs_create_dir("thermal_zones", d_root);
 }
