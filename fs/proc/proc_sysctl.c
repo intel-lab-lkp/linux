@@ -683,8 +683,8 @@ static bool proc_sys_fill_cache(struct file *file,
 	struct dentry *child, *dir = file->f_path.dentry;
 	struct inode *inode;
 	struct qstr qname;
-	ino_t ino = 0;
-	unsigned type = DT_UNKNOWN;
+	ino_t ino;
+	unsigned type;
 
 	qname.name = table->procname;
 	qname.len  = strlen(table->procname);
