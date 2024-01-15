@@ -1262,13 +1262,14 @@ static int insert_links(struct ctl_table_header *head)
 	links = new_links(core_parent, head);
 
 	spin_lock(&sysctl_lock);
-	err = -ENOMEM;
-	if (!links)
+	if (!links) {
+		err = -ENOMEM;
 		goto out;
+	}
 
-	err = 0;
 	if (get_links(core_parent, head, head->root)) {
 		kfree(links);
+		err = 0;
 		goto out;
 	}
 
