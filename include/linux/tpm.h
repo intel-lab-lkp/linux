@@ -116,6 +116,8 @@ struct tpm_chip_seqops {
 	const struct seq_operations *seqops;
 };
 
+#define TPM_MAX_LOCALITY		4
+
 struct tpm_chip {
 	struct device dev;
 	struct device devs;

@@ -49,7 +49,7 @@ static int tpm_request_locality(struct tpm_chip *chip)
 		return rc;
 
 	chip->locality = rc;
-	return 0;
+	return chip->locality;
 }
 
 static void tpm_relinquish_locality(struct tpm_chip *chip)
