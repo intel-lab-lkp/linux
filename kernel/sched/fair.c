@@ -9407,10 +9407,9 @@ static unsigned long task_h_load(struct task_struct *p)
 }
 #endif
 
-static void update_blocked_averages(int cpu)
+static void update_blocked_averages(struct rq *rq)
 {
 	bool decayed = false, done = true;
-	struct rq *rq = cpu_rq(cpu);
 	struct rq_flags rf;
 
 	rq_lock_irqsave(rq, &rf);
@@ -12084,7 +12083,7 @@ static bool update_nohz_stats(struct rq *rq)
 	if (!time_after(jiffies, READ_ONCE(rq->last_blocked_load_update_tick)))
 		return true;
 
-	update_blocked_averages(cpu);
+	update_blocked_averages(rq);
 
 	return rq->has_blocked_load;
 }
@@ -12344,7 +12343,7 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 	raw_spin_rq_unlock(this_rq);
 
 	t0 = sched_clock_cpu(this_cpu);
-	update_blocked_averages(this_cpu);
+	update_blocked_averages(this_rq);
 
 	rcu_read_lock();
 	for_each_domain(this_cpu, sd) {
@@ -12434,7 +12433,7 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 		return;
 
 	/* normal load balance */
-	update_blocked_averages(this_rq->cpu);
+	update_blocked_averages(this_rq);
 	rebalance_domains(this_rq, idle);
 }
 
