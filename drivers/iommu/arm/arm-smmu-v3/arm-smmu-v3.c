@@ -1997,6 +1997,14 @@ static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
 static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
 				  size_t granule, void *cookie)
 {
+	struct arm_smmu_domain *smmu_domain = cookie;
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+
+	if (!(smmu->features & ARM_SMMU_FEAT_RANGE_INV) &&
+	    size >= CMDQ_MAX_TLBI_OPS(granule) * granule) {
+		arm_smmu_tlb_inv_context(cookie);
+		return;
+	}
 	arm_smmu_tlb_inv_range_domain(iova, size, granule, false, cookie);
 }
 
@@ -2502,13 +2510,20 @@ static void arm_smmu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *gather)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	size_t size = gather->end - gather->start + 1;
+	size_t granule = gather->pgsize;
 
-	if (!gather->pgsize)
+	if (!granule)
 		return;
 
-	arm_smmu_tlb_inv_range_domain(gather->start,
-				      gather->end - gather->start + 1,
-				      gather->pgsize, true, smmu_domain);
+	if (!(smmu->features & ARM_SMMU_FEAT_RANGE_INV) &&
+	    size >= CMDQ_MAX_TLBI_OPS(granule) * granule) {
+		arm_smmu_tlb_inv_context(smmu_domain);
+		return;
+	}
+	arm_smmu_tlb_inv_range_domain(gather->start, size,
+				      granule, true, smmu_domain);
 }
 
 static phys_addr_t

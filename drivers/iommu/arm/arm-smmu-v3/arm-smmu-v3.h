@@ -431,6 +431,16 @@ struct arm_smmu_ste {
 #define MSI_IOVA_BASE			0x8000000
 #define MSI_IOVA_LENGTH			0x100000
 
+/*
+ * Similar to MAX_DVM_OPS in arch/arm64/include/asm/tlbflush.h, this is used
+ * as a threshold to replace per-page TLBI commands to issue in the command
+ * queue with an address-space TLBI command, when SMMU w/o a range invalidation
+ * feature handles too many per-page TLBI commands, which will otherwise result
+ * in a soft lockup.
+ */
+
+#define CMDQ_MAX_TLBI_OPS(granule)    (1 << (ilog2(granule) - 3))
+
 enum pri_resp {
 	PRI_RESP_DENY = 0,
 	PRI_RESP_FAIL = 1,
