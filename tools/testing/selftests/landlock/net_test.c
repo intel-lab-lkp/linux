@@ -21,6 +21,11 @@
 
 #include "common.h"
 
+static pid_t landlock_gettid(void)
+{
+        return syscall(__NR_gettid);
+}
+
 const short sock_port_start = (1 << 10);
 
 static const char loopback_ipv4[] = "127.0.0.1";
@@ -88,7 +93,7 @@ static int set_service(struct service_fixture *const srv,
 	case AF_UNIX:
 		srv->unix_addr.sun_family = prot.domain;
 		sprintf(srv->unix_addr.sun_path,
-			"_selftests-landlock-net-tid%d-index%d", gettid(),
+			"_selftests-landlock-net-tid%d-index%d", landlock_gettid(),
 			index);
 		srv->unix_addr_len = SUN_LEN(&srv->unix_addr);
 		srv->unix_addr.sun_path[0] = '\0';
