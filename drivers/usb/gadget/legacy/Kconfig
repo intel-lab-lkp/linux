@@ -62,6 +62,21 @@ config USB_ZERO
 	  Say "y" to link the driver statically, or "m" to build a
 	  dynamically linked module called "g_zero".
 
+config USB_9PFS
+	tristate "Gadget 9PFS"
+	select USB_LIBCOMPOSITE
+	select USB_U_SERIAL
+	select USB_U_ETHER
+	select USB_F_ACM
+	select USB_F_EEM
+	select USB_F_9PFS
+	select NET_9P
+	help
+	  9PFS Transport Layer
+
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "g_9pfs".
+
 config USB_ZERO_HNPTEST
 	bool "HNP Test Device"
 	depends on USB_ZERO && USB_OTG
