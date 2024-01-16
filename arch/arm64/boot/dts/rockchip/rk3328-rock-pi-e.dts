@@ -152,8 +152,11 @@
 	phy-mode = "rgmii";
 	phy-supply = <&vcc_io>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&rgmiim1_pins>;
+	pinctrl-0 = <&rgmiim1_pins>, <&eth_phy_reset_pin>;
 	snps,aal;
+	snps,reset-gpio = <&gpio1 RK_PC2 GPIO_ACTIVE_LOW>;
+	snps,reset-active-low;
+	snps,reset-delays-us = <0 10000 50000>;
 	snps,rxpbl = <0x4>;
 	snps,txpbl = <0x4>;
 	tx_delay = <0x26>;
@@ -167,13 +170,10 @@
 
 		rtl8211: ethernet-phy@1 {
 			reg = <1>;
-			pinctrl-0 = <&eth_phy_int_pin>, <&eth_phy_reset_pin>;
+			pinctrl-0 = <&eth_phy_int_pin>;
 			pinctrl-names = "default";
 			interrupt-parent = <&gpio1>;
 			interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
-			reset-assert-us = <10000>;
-			reset-deassert-us = <50000>;
-			reset-gpios = <&gpio1 RK_PC2 GPIO_ACTIVE_LOW>;
 		};
 	};
 };
