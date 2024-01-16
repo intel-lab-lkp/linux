@@ -799,4 +799,19 @@ config CRYPTO_DEV_SA2UL
 source "drivers/crypto/aspeed/Kconfig"
 source "drivers/crypto/starfive/Kconfig"
 
+config CRYPTO_DEV_ZHAOXIN_SHA
+	tristate "Support for Zhaoxin SHA1/SHA256/SHA384/SHA512 algorithms"
+	select CRYPTO_HASH
+	select CRYPTO_SHA1
+	select CRYPTO_SHA256
+	select CRYPTO_SHA384
+	select CRYPTO_SHA512
+	help
+	  Use Zhaoxin HW engine for SHA1/SHA256/SHA384/SHA512 algorithms.
+
+	  Available in ZX-C+ and newer processors.
+
+	  If unsure say M. The compiled module will be
+	  called zhaoxin-sha.
+
 endif # CRYPTO_HW
