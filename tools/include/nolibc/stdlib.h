@@ -104,27 +104,19 @@ char *getenv(const char *name)
 static __attribute__((unused))
 unsigned long getauxval(unsigned long type)
 {
-	const unsigned long *auxv = _auxv;
-	unsigned long ret;
+	const struct {
+		unsigned long type, val;
+	} *auxv = (void *)_auxv;
 
-	if (!auxv)
-		return 0;
+	if (!auxv || !type)
+		goto out;
 
-	while (1) {
-		if (!auxv[0] && !auxv[1]) {
-			ret = 0;
-			break;
-		}
-
-		if (auxv[0] == type) {
-			ret = auxv[1];
-			break;
-		}
-
-		auxv += 2;
-	}
-
-	return ret;
+	for (; auxv->type; ++auxv)
+		if (auxv->type == type)
+			return auxv->val;
+out:
+	SET_ERRNO(ENOENT);
+	return 0;
 }
 
 static __attribute__((unused))
