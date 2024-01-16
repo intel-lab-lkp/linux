@@ -92,6 +92,7 @@ xe-y += xe_bb.o \
 	xe_guc.o \
 	xe_guc_ads.o \
 	xe_guc_ct.o \
+	xe_guc_db_mgr.o \
 	xe_guc_debugfs.o \
 	xe_guc_hwconfig.o \
 	xe_guc_log.o \
@@ -137,6 +138,7 @@ xe-y += xe_bb.o \
 	xe_uc_debugfs.o \
 	xe_uc_fw.o \
 	xe_vm.o \
+	xe_vram_freq.o \
 	xe_wait_user_fence.o \
 	xe_wa.o \
 	xe_wopcm.o
@@ -145,12 +147,18 @@ xe-y += xe_bb.o \
 xe-$(CONFIG_HWMON) += xe_hwmon.o
 
 # graphics virtualization (SR-IOV) support
-xe-y += xe_sriov.o
+xe-y += \
+	xe_guc_relay.o \
+	xe_memirq.o \
+	xe_sriov.o
 
 xe-$(CONFIG_PCI_IOV) += \
 	xe_lmtt.o \
 	xe_lmtt_2l.o \
 	xe_lmtt_ml.o
+
+xe-$(CONFIG_DRM_XE_KUNIT_TEST) += \
+	tests/xe_kunit_helpers.o
 
 # i915 Display compat #defines and #includes
 subdir-ccflags-$(CONFIG_DRM_XE_DISPLAY) += \
