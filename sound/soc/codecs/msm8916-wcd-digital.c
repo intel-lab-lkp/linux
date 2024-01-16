@@ -228,17 +228,6 @@ struct msm8916_wcd_digital_priv {
 	struct clk *ahbclk, *mclk;
 };
 
-static const unsigned long rx_gain_reg[] = {
-	LPASS_CDC_RX1_VOL_CTL_B2_CTL,
-	LPASS_CDC_RX2_VOL_CTL_B2_CTL,
-	LPASS_CDC_RX3_VOL_CTL_B2_CTL,
-};
-
-static const unsigned long tx_gain_reg[] = {
-	LPASS_CDC_TX1_VOL_CTL_GAIN,
-	LPASS_CDC_TX2_VOL_CTL_GAIN,
-};
-
 static const char *const rx_mix1_text[] = {
 	"ZERO", "IIR1", "IIR2", "RX1", "RX2", "RX3"
 };
@@ -580,12 +569,6 @@ static int msm8916_wcd_digital_enable_interpolator(
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 
 	switch (event) {
-	case SND_SOC_DAPM_POST_PMU:
-		/* apply the digital gain after the interpolator is enabled */
-		usleep_range(10000, 10100);
-		snd_soc_component_write(component, rx_gain_reg[w->shift],
-			      snd_soc_component_read(component, rx_gain_reg[w->shift]));
-		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_component_update_bits(component, LPASS_CDC_CLK_RX_RESET_CTL,
 					      1 << w->shift, 1 << w->shift);
@@ -630,9 +613,6 @@ static int msm8916_wcd_digital_enable_dec(struct snd_soc_dapm_widget *w,
 		snd_soc_component_update_bits(component, tx_mux_ctl_reg,
 				    TX_MUX_CTL_HPF_BP_SEL_MASK,
 				    TX_MUX_CTL_HPF_BP_SEL_NO_BYPASS);
-		/* apply the digital gain after the decimator is enabled */
-		snd_soc_component_write(component, tx_gain_reg[w->shift],
-			      snd_soc_component_read(component, tx_gain_reg[w->shift]));
 		snd_soc_component_update_bits(component, tx_vol_ctl_reg,
 				    TX_VOL_CTL_CFG_MUTE_EN_MASK, 0);
 		break;
@@ -739,13 +719,13 @@ static const struct snd_soc_dapm_widget msm8916_wcd_digital_dapm_widgets[] = {
 	/* Interpolator */
 	SND_SOC_DAPM_MIXER_E("RX1 INT", LPASS_CDC_CLK_RX_B1_CTL, 0, 0, NULL,
 			     0, msm8916_wcd_digital_enable_interpolator,
-			     SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+			     SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIXER_E("RX2 INT", LPASS_CDC_CLK_RX_B1_CTL, 1, 0, NULL,
 			     0, msm8916_wcd_digital_enable_interpolator,
-			     SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+			     SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIXER_E("RX3 INT", LPASS_CDC_CLK_RX_B1_CTL, 2, 0, NULL,
 			     0, msm8916_wcd_digital_enable_interpolator,
-			     SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+			     SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MUX("RX1 MIX1 INP1", SND_SOC_NOPM, 0, 0,
 			 &rx_mix1_inp1_mux),
 	SND_SOC_DAPM_MUX("RX1 MIX1 INP2", SND_SOC_NOPM, 0, 0,
