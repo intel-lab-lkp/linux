@@ -294,9 +294,9 @@ pub unsafe trait RawWorkItem<const ID: u64> {
 
 /// Defines the method that should be called directly when a work item is executed.
 ///
-/// This trait is implemented by `Pin<Box<T>>` and [`Arc<T>`], and is mainly intended to be
-/// implemented for smart pointer types. For your own structs, you would implement [`WorkItem`]
-/// instead. The [`run`] method on this trait will usually just perform the appropriate
+/// This trait is implemented by <code>[Pin]<[`Box<T>`]></code> and [`Arc<T>`], and is mainly
+/// intended to be implemented for smart pointer types. For your own structs, you would implement
+/// [`WorkItem`] instead. The [`run`] method on this trait will usually just perform the appropriate
 /// `container_of` translation and then call into the [`run`][WorkItem::run] method from the
 /// [`WorkItem`] trait.
 ///
@@ -325,8 +325,8 @@ pub unsafe trait WorkItemPointer<const ID: u64>: RawWorkItem<ID> {
 ///
 /// This trait is used when the `work_struct` field is defined using the [`Work`] helper.
 pub trait WorkItem<const ID: u64 = 0> {
-    /// The pointer type that this struct is wrapped in. This will typically be `Arc<Self>` or
-    /// `Pin<Box<Self>>`.
+    /// The pointer type that this struct is wrapped in. This will typically be
+    /// <code>[Arc]\<Self\></code> or <code>[Pin]<[Box]\<Self\>></code>.
     type Pointer: WorkItemPointer<ID>;
 
     /// The method that should be called when this work item is executed.

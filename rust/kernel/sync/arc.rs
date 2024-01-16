@@ -368,10 +368,10 @@ impl<T: ?Sized> From<Pin<UniqueArc<T>>> for Arc<T> {
 /// to use just `&T`, which we can trivially get from an [`Arc<T>`] instance.
 ///
 /// However, when one may need to increment the refcount, it is preferable to use an `ArcBorrow<T>`
-/// over `&Arc<T>` because the latter results in a double-indirection: a pointer (shared reference)
-/// to a pointer ([`Arc<T>`]) to the object (`T`). An [`ArcBorrow`] eliminates this double
-/// indirection while still allowing one to increment the refcount and getting an [`Arc<T>`] when/if
-/// needed.
+/// over <code>&[`Arc<T>`]</code> because the latter results in a double-indirection: a pointer
+/// (shared reference) to a pointer ([`Arc<T>`]) to the object (`T`). An [`ArcBorrow`] eliminates
+/// this double indirection while still allowing one to increment the refcount and getting an
+/// [`Arc<T>`] when/if needed.
 ///
 /// # Invariants
 ///
@@ -489,8 +489,8 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 /// # Examples
 ///
 /// In the following example, we make changes to the inner object before turning it into an
-/// `Arc<Test>` object (after which point, it cannot be mutated directly). Note that `x.into()`
-/// cannot fail.
+/// <code>[Arc]\<Test\></code> object (after which point, it cannot be mutated directly).
+/// Note that `x.into()` cannot fail.
 ///
 /// ```
 /// use kernel::sync::{Arc, UniqueArc};
@@ -512,8 +512,9 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 ///
 /// In the following example we first allocate memory for a refcounted `Example` but we don't
 /// initialise it on allocation. We do initialise it later with a call to [`UniqueArc::write`],
-/// followed by a conversion to `Arc<Example>`. This is particularly useful when allocation happens
-/// in one context (e.g., sleepable) and initialisation in another (e.g., atomic):
+/// followed by a conversion to <code>[Arc]\<Example\></code>. This is particularly useful when
+/// allocation happens in one context (e.g., sleepable) and initialisation in another
+/// (e.g., atomic):
 ///
 /// ```
 /// use kernel::sync::{Arc, UniqueArc};
@@ -532,8 +533,8 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 /// ```
 ///
 /// In the last example below, the caller gets a pinned instance of `Example` while converting to
-/// `Arc<Example>`; this is useful in scenarios where one needs a pinned reference during
-/// initialisation, for example, when initialising fields that are wrapped in locks.
+/// <code>[Arc]\<Example\></code>; this is useful in scenarios where one needs a pinned reference
+/// during initialisation, for example, when initialising fields that are wrapped in locks.
 ///
 /// ```
 /// use kernel::sync::{Arc, UniqueArc};
@@ -582,7 +583,8 @@ impl<T> UniqueArc<T> {
 }
 
 impl<T> UniqueArc<MaybeUninit<T>> {
-    /// Converts a `UniqueArc<MaybeUninit<T>>` into a `UniqueArc<T>` by writing a value into it.
+    /// Converts a <code>UniqueArc<[`MaybeUninit<T>`]></code> into a `UniqueArc<T>`
+    /// by writing a value into it.
     pub fn write(mut self, value: T) -> UniqueArc<T> {
         self.deref_mut().write(value);
         // SAFETY: We just wrote the value to be initialized.

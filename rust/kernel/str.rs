@@ -14,7 +14,8 @@ use crate::{
 
 /// Byte string without UTF-8 validity guarantee.
 ///
-/// `BStr` is simply an alias to `[u8]`, but has a more evident semantical meaning.
+/// `BStr` is simply an alias to <code>[[u8]]</code>, but has a more evident
+/// semantical meaning.
 pub type BStr = [u8];
 
 /// Creates a new [`BStr`] from a string literal.
@@ -106,7 +107,7 @@ impl CStr {
         unsafe { Self::from_bytes_with_nul_unchecked(bytes) }
     }
 
-    /// Creates a [`CStr`] from a `[u8]`.
+    /// Creates a [`CStr`] from a <code>[[u8]]</code>.
     ///
     /// The provided slice must be `NUL`-terminated, does not contain any
     /// interior `NUL` bytes.
@@ -130,7 +131,7 @@ impl CStr {
         Ok(unsafe { Self::from_bytes_with_nul_unchecked(bytes) })
     }
 
-    /// Creates a [`CStr`] from a `[u8]` without performing any additional
+    /// Creates a [`CStr`] from a <code>[[u8]]</code> without performing any additional
     /// checks.
     ///
     /// # Safety
