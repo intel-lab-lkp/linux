@@ -339,6 +339,14 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 			handled |= SPURIOUS_DEFERRED;
 			if (handled != desc->threads_handled_last) {
 				action_ret = IRQ_HANDLED;
+
+				/*
+				 * If the thread handlers handle
+				 * one IRQ reset the unhandled
+				 * IRQ counter.
+				 */
+				desc->irqs_unhandled = 0;
+
 				/*
 				 * Note: We keep the SPURIOUS_DEFERRED
 				 * bit set. We are handling the
