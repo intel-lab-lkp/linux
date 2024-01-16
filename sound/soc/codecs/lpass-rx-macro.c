@@ -1956,10 +1956,9 @@ static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
 					int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
-	u16 gain_reg, reg;
+	u16 reg;
 
 	reg = CDC_RX_RXn_RX_PATH_CTL(w->shift);
-	gain_reg = CDC_RX_RXn_RX_VOL_CTL(w->shift);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -1968,10 +1967,6 @@ static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
 			snd_soc_component_update_bits(component, reg,
 						      CDC_RX_PATH_CLK_EN_MASK,
 						      CDC_RX_PATH_CLK_ENABLE);
-		break;
-	case SND_SOC_DAPM_POST_PMU:
-		snd_soc_component_write(component, gain_reg,
-			snd_soc_component_read(component, gain_reg));
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		rx_macro_enable_interp_clk(component, event, w->shift);
@@ -3031,16 +3026,13 @@ static const struct snd_soc_dapm_widget rx_macro_dapm_widgets[] = {
 
 	SND_SOC_DAPM_MUX_E("RX INT0_1 INTERP", SND_SOC_NOPM, INTERP_HPHL, 0,
 		&rx_int0_1_interp_mux, rx_macro_enable_main_path,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MUX_E("RX INT1_1 INTERP", SND_SOC_NOPM, INTERP_HPHR, 0,
 		&rx_int1_1_interp_mux, rx_macro_enable_main_path,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MUX_E("RX INT2_1 INTERP", SND_SOC_NOPM, INTERP_AUX, 0,
 		&rx_int2_1_interp_mux, rx_macro_enable_main_path,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MUX("RX INT0_2 INTERP", SND_SOC_NOPM, 0, 0,
 			 &rx_int0_2_interp_mux),
