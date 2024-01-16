@@ -1197,6 +1197,12 @@ static int rmi_driver_probe(struct device *dev)
 		rmi_driver_set_input_params(rmi_dev, data->input);
 		data->input->phys = devm_kasprintf(dev, GFP_KERNEL,
 						"%s/input0", dev_name(dev));
+		if (!data->input->phys) {
+			dev_err(dev, "%s: Failed to allocate memory.\n",
+					__func__);
+			retval = -ENOMEM;
+			goto err;
+		}
 	}
 
 	retval = rmi_init_functions(data);
