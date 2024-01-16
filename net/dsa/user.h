@@ -53,7 +53,11 @@ int dsa_user_manage_vlan_filtering(struct net_device *dev,
 
 static inline struct dsa_port *dsa_user_to_port(const struct net_device *dev)
 {
-	struct dsa_user_priv *p = netdev_priv(dev);
+	const struct rtnl_link_ops *ops = dev->rtnl_link_ops;
+	struct dsa_user_priv *p = ops->priv_size >= sizeof(*p) ? 
+		netdev_priv(dev) : NULL;
+	if (!p)
+		return NULL;
 
 	return p->dp;
 }
