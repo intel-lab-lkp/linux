@@ -3776,10 +3776,7 @@ static int parse_xed(const struct option *opt __maybe_unused,
 		     const char *str __maybe_unused,
 		     int unset __maybe_unused)
 {
-	if (isatty(1))
-		force_pager("xed -F insn: -A -64 | less");
-	else
-		force_pager("xed -F insn: -A -64");
+	pr_warning("xed option is deprecated\n");
 	return 0;
 }
 
@@ -3915,7 +3912,7 @@ int cmd_script(int argc, const char **argv)
 	OPT_CALLBACK_OPTARG(0, "insn-trace", &itrace_synth_opts, NULL, NULL,
 			"Decode instructions from itrace", parse_insn_trace),
 	OPT_CALLBACK_OPTARG(0, "xed", NULL, NULL, NULL,
-			"Run xed disassembler on output", parse_xed),
+			"Run xed disassembler on output (deprecated)", parse_xed),
 	OPT_CALLBACK_OPTARG(0, "call-trace", &itrace_synth_opts, NULL, NULL,
 			"Decode calls from itrace", parse_call_trace),
 	OPT_CALLBACK_OPTARG(0, "call-ret-trace", &itrace_synth_opts, NULL, NULL,

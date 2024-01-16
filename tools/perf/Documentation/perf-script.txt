@@ -442,11 +442,10 @@ include::itrace.txt[]
 	default, disable with --no-inline.
 
 --insn-trace::
-	Show instruction stream for intel_pt traces. Combine with --xed to
-	show disassembly.
+	Show instruction stream for intel_pt traces.
 
 --xed::
-	Run xed disassembler on output. Requires installing the xed disassembler.
+	Run xed disassembler on output. (deprecated)
 
 -S::
 --symbols=symbol[,symbol...]::

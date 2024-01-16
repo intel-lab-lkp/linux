@@ -37,7 +37,7 @@ void attr_to_script(char *extra_format, struct perf_event_attr *attr)
 	if (attr->read_format & PERF_FORMAT_GROUP)
 		strcat(extra_format, " -F +metric");
 	if (attr->sample_type & PERF_SAMPLE_BRANCH_STACK)
-		strcat(extra_format, " -F +brstackinsn --xed");
+		strcat(extra_format, " -F +brstackinsn");
 	if (attr->sample_type & PERF_SAMPLE_REGS_INTR)
 		strcat(extra_format, " -F +iregs");
 	if (attr->sample_type & PERF_SAMPLE_REGS_USER)
@@ -107,7 +107,7 @@ static int list_scripts(char *script_name, bool *custom,
 	if (evsel)
 		attr_to_script(scriptc.extra_format, &evsel->core.attr);
 	add_script_option("Show individual samples", "", &scriptc);
-	add_script_option("Show individual samples with assembler", "-F +insn --xed",
+	add_script_option("Show individual samples with assembler", "-F +insn",
 			  &scriptc);
 	add_script_option("Show individual samples with source", "-F +srcline,+srccode",
 			  &scriptc);
