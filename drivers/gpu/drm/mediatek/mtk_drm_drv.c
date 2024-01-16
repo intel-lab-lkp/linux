@@ -315,6 +315,7 @@ static const struct mtk_mmsys_driver_data mt8195_vdosys1_driver_data = {
 	.ext_len = ARRAY_SIZE(mt8195_mtk_ddp_ext),
 	.mmsys_id = 1,
 	.mmsys_dev_num = 2,
+	.prefetch_rate = 32,
 };
 
 static const struct of_device_id mtk_drm_of_ids[] = {

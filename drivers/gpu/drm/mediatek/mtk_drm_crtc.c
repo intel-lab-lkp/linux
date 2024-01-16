@@ -16,6 +16,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -35,6 +36,7 @@
  * @mutex: handle to one of the ten disp_mutex streams
  * @ddp_comp_nr: number of components in ddp_comp
  * @ddp_comp: array of pointers the mtk_ddp_comp structures used by this crtc
+ * @prefetch_rate: hardware prefetch data rate of the vdosys
  *
  * TODO: Needs update: this header is missing a bunch of member descriptions.
  */
@@ -69,6 +71,8 @@ struct mtk_drm_crtc {
 	/* lock for display hardware access */
 	struct mutex			hw_lock;
 	bool				config_updating;
+
+	u32				prefetch_rate;
 };
 
 struct mtk_crtc_state {
@@ -211,6 +215,61 @@ static void mtk_drm_crtc_destroy_state(struct drm_crtc *crtc,
 {
 	__drm_atomic_helper_crtc_destroy_state(state);
 	kfree(to_mtk_crtc_state(state));
+}
+
+static enum drm_mode_status
+mtk_drm_crtc_mode_valid(struct drm_crtc *crtc,
+			const struct drm_display_mode *mode)
+{
+	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	unsigned long rate = 0;
+	int i;
+
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		rate = mtk_ddp_comp_clk_rate(mtk_crtc->ddp_comp[i]);
+		if (rate)
+			break;
+	}
+
+	/* Convert to KHz and round the number */
+	rate = (rate + 500) / 1000;
+	if (rate && mode->clock > rate) {
+		pr_debug("crtc-%d: invalid clock: %d KHz (>%lu)\n",
+			 drm_crtc_index(crtc), mode->clock, rate);
+		return MODE_CLOCK_HIGH;
+	}
+
+	/*
+	 * Measure the bandwidth requirement of hardware prefetch (per frame)
+	 * ticks = htotal * vbp
+	 * data  = htotal * vtotal
+	 * rate  = data / ticks
+	 *       = (htotal * vtotal) / (htotal * vbp)
+	 *       = vtotal / vbp
+	 *
+	 * Say 4K60 (CAE-861) is the maximum mode supported by the SoC
+	 * rate = 2250 / 72 ~= 32 pixels per tick interval
+	 *
+	 * For 2560x1440@144 (htotal=2720, vtotal=1490, vbp=17):
+	 * rate = 1490 / 17 ~= 88 (NG)
+	 *
+	 * For 2560x1440@120 (htotal=2720, vtotal=1525, vbp=77):
+	 * rate = 1525 / 77 ~= 20 (OK)
+	 *
+	 * Bandwidth requirement of hardware prefetch increases significantly
+	 * when the VBP decreases (almost 3x in this example).
+	 */
+	i = mode->vtotal - mode->vsync_end; /* vbp */
+	rate = ((mode->vtotal * 10 / i) + 5) / 10;
+
+	if (mtk_crtc->prefetch_rate && rate > mtk_crtc->prefetch_rate) {
+		pr_debug("crtc-%d: invalid rate: %lu (>%u): " DRM_MODE_FMT "\n",
+			 drm_crtc_index(crtc), rate, mtk_crtc->prefetch_rate,
+			 DRM_MODE_ARG(mode));
+		return MODE_BAD;
+	}
+
+	return MODE_OK;
 }
 
 static bool mtk_drm_crtc_mode_fixup(struct drm_crtc *crtc,
@@ -829,6 +888,7 @@ static const struct drm_crtc_funcs mtk_crtc_funcs = {
 };
 
 static const struct drm_crtc_helper_funcs mtk_crtc_helper_funcs = {
+	.mode_valid	= mtk_drm_crtc_mode_valid,
 	.mode_fixup	= mtk_drm_crtc_mode_fixup,
 	.mode_set_nofb	= mtk_drm_crtc_mode_set_nofb,
 	.atomic_begin	= mtk_drm_crtc_atomic_begin,
@@ -1122,6 +1182,8 @@ int mtk_drm_crtc_create(struct drm_device *drm_dev,
 		/* increase ddp_comp_nr at the end of mtk_drm_crtc_create */
 		mtk_crtc->ddp_comp_nr++;
 	}
+
+	mtk_crtc->prefetch_rate = priv->data->prefetch_rate;
 
 	return 0;
 }

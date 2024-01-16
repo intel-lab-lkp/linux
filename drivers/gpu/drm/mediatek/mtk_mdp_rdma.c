@@ -272,6 +272,13 @@ void mtk_mdp_rdma_clk_disable(struct device *dev)
 	clk_disable_unprepare(rdma->clk);
 }
 
+unsigned long mtk_mdp_rdma_clk_rate(struct device *dev)
+{
+	struct mtk_mdp_rdma *rdma = dev_get_drvdata(dev);
+
+	return clk_get_rate(rdma->clk);
+}
+
 static int mtk_mdp_rdma_bind(struct device *dev, struct device *master,
 			     void *data)
 {

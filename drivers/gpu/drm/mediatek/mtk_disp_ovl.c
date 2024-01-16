@@ -204,6 +204,13 @@ void mtk_ovl_clk_disable(struct device *dev)
 	clk_disable_unprepare(ovl->clk);
 }
 
+unsigned long mtk_ovl_clk_rate(struct device *dev)
+{
+	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+
+	return clk_get_rate(ovl->clk);
+}
+
 void mtk_ovl_start(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);

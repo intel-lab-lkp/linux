@@ -86,6 +86,7 @@ static const struct mtk_ddp_comp_funcs rdma = {
 	.power_off = mtk_mdp_rdma_power_off,
 	.clk_enable = mtk_mdp_rdma_clk_enable,
 	.clk_disable = mtk_mdp_rdma_clk_disable,
+	.clk_rate = mtk_mdp_rdma_clk_rate,
 };
 
 static const struct ovl_adaptor_comp_match comp_matches[OVL_ADAPTOR_ID_MAX] = {
@@ -315,6 +316,20 @@ void mtk_ovl_adaptor_clk_disable(struct device *dev)
 		if (i < OVL_ADAPTOR_MERGE0)
 			pm_runtime_put(comp);
 	}
+}
+
+unsigned long mtk_ovl_adaptor_clk_rate(struct device *dev)
+{
+	int i;
+	struct mtk_disp_ovl_adaptor *ovl_adaptor = dev_get_drvdata(dev);
+
+	for (i = 0; i < OVL_ADAPTOR_ID_MAX; i++) {
+		dev = ovl_adaptor->ovl_adaptor_comp[i];
+		if (!dev || !comp_matches[i].funcs->clk_rate)
+			continue;
+		return comp_matches[i].funcs->clk_rate(dev);
+	}
+	return 0;
 }
 
 unsigned int mtk_ovl_adaptor_layer_nr(struct device *dev)

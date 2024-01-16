@@ -51,6 +51,7 @@ struct mtk_ddp_comp_funcs {
 	void (*power_off)(struct device *dev);
 	int (*clk_enable)(struct device *dev);
 	void (*clk_disable)(struct device *dev);
+	unsigned long (*clk_rate)(struct device *dev);
 	void (*config)(struct device *dev, unsigned int w,
 		       unsigned int h, unsigned int vrefresh,
 		       unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
@@ -124,6 +125,13 @@ static inline void mtk_ddp_comp_clk_disable(struct mtk_ddp_comp *comp)
 {
 	if (comp->funcs && comp->funcs->clk_disable)
 		comp->funcs->clk_disable(comp->dev);
+}
+
+static inline unsigned long mtk_ddp_comp_clk_rate(struct mtk_ddp_comp *comp)
+{
+	if (comp && comp->funcs && comp->funcs->clk_rate)
+		return comp->funcs->clk_rate(comp->dev);
+	return 0;
 }
 
 static inline void mtk_ddp_comp_config(struct mtk_ddp_comp *comp,
