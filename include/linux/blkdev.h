@@ -974,6 +974,11 @@ static inline void blk_flush_plug(struct blk_plug *plug, bool async)
 
 int blkdev_issue_flush(struct block_device *bdev);
 long nr_blockdev_pages(void);
+
+static inline u64 blk_time_get_ns(void)
+{
+	return ktime_get_ns();
+}
 #else /* CONFIG_BLOCK */
 struct blk_plug {
 };
