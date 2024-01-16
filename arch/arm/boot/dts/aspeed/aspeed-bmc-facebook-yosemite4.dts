@@ -595,6 +595,18 @@
 	};
 };
 
+&i3c0 {
+       status = "okay";
+       pinctrl-names = "default";
+       pinctrl-0 = <&pinctrl_i3c1_default>;
+};
+
+&i3c1 {
+       status = "okay";
+       pinctrl-names = "default";
+       pinctrl-0 = <&pinctrl_i3c2_default>;
+};
+
 &adc0 {
 	ref_voltage = <2500>;
 	status = "okay";
