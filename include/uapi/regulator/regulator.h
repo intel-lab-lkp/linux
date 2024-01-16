@@ -69,6 +69,7 @@ struct reg_genl_event {
 enum {
 	REG_GENL_ATTR_UNSPEC,
 	REG_GENL_ATTR_EVENT,	/* reg event info needed by user space */
+	REG_GENL_ATTR_SET_EVENT_MASK,	/* reg event mask */
 	__REG_GENL_ATTR_MAX,
 };
 
