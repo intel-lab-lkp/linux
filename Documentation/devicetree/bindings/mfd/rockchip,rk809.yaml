@@ -147,6 +147,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/clock/px30-cru.h>
     #include <dt-bindings/pinctrl/rockchip.h>
     #include <dt-bindings/interrupt-controller/irq.h>
     #include <dt-bindings/gpio/gpio.h>
@@ -161,10 +162,13 @@ examples:
             clock-output-names = "xin32k", "rk808-clkout2";
             interrupt-parent = <&gpio3>;
             interrupts = <10 IRQ_TYPE_LEVEL_LOW>;
+            clock-names = "mclk";
+            clocks = <&cru SCLK_I2S1_OUT>;
             pinctrl-names = "default";
-            pinctrl-0 = <&pmic_int_l_pin>;
+            pinctrl-0 = <&pmic_int_l_pin>, <&i2s1_2ch_mclk>;
             rockchip,system-power-controller;
             wakeup-source;
+            #sound-dai-cells = <0>;
 
             vcc1-supply = <&vcc_sysin>;
             vcc2-supply = <&vcc_sysin>;
@@ -308,6 +312,9 @@ examples:
                         regulator-off-in-suspend;
                     };
                 };
+            };
+            rk817_codec: codec {
+                rockchip,mic-in-differential;
             };
         };
     };
