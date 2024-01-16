@@ -247,7 +247,7 @@ struct gsi_trans *gsi_channel_trans_complete(struct gsi_channel *channel)
 			return NULL;
 	}
 
-	return &trans_info->trans[trans_id %= channel->tre_count];
+	return &trans_info->trans[trans_id % channel->tre_count];
 }
 
 /* Move a transaction from allocated to committed state */
