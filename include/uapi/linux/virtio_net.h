@@ -394,6 +394,7 @@ struct virtio_net_ctrl_coal_rx {
 #define VIRTIO_NET_CTRL_NOTF_COAL_RX_SET		1
 #define VIRTIO_NET_CTRL_NOTF_COAL_VQ_SET		2
 #define VIRTIO_NET_CTRL_NOTF_COAL_VQ_GET		3
+#define VIRTIO_NET_CTRL_NOTF_COAL_VQS_SET		4
 
 struct virtio_net_ctrl_coal {
 	__le32 max_packets;

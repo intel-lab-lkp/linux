@@ -133,6 +133,11 @@ struct virtnet_interrupt_coalesce {
 	u32 max_usecs;
 };
 
+struct virtnet_batch_coal {
+	__le32 num_entries;
+	struct virtio_net_ctrl_coal_vq coal_vqs[];
+};
+
 /* The dma information of pages allocated at a time. */
 struct virtnet_rq_dma {
 	dma_addr_t addr;
@@ -321,6 +326,7 @@ struct virtnet_info {
 	bool rx_dim_enabled;
 
 	/* Interrupt coalescing settings */
+	struct virtnet_batch_coal *batch_coal;
 	struct virtnet_interrupt_coalesce intr_coal_tx;
 	struct virtnet_interrupt_coalesce intr_coal_rx;
 
@@ -3520,9 +3526,10 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 	struct receive_queue *rq = container_of(dim,
 			struct receive_queue, dim);
 	struct virtnet_info *vi = rq->vq->vdev->priv;
-	struct net_device *dev = vi->dev;
 	struct dim_cq_moder update_moder;
-	int i, qnum, err;
+	struct virtnet_batch_coal *coal = vi->batch_coal;
+	struct scatterlist sgs;
+	int i, j = 0;
 
 	if (!rtnl_trylock()) {
 		schedule_work(&dim->work);
@@ -3538,7 +3545,6 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 	for (i = 0; i < vi->curr_queue_pairs; i++) {
 		rq = &vi->rq[i];
 		dim = &rq->dim;
-		qnum = rq - vi->rq;
 
 		if (!rq->dim_enabled)
 			continue;
@@ -3546,16 +3552,32 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 		update_moder = net_dim_get_rx_moderation(dim->mode, dim->profile_ix);
 		if (update_moder.usec != rq->intr_coal.max_usecs ||
 		    update_moder.pkts != rq->intr_coal.max_packets) {
-			err = virtnet_send_rx_ctrl_coal_vq_cmd(vi, qnum,
-							       update_moder.usec,
-							       update_moder.pkts);
-			if (err)
-				pr_debug("%s: Failed to send dim parameters on rxq%d\n",
-					 dev->name, qnum);
-			dim->state = DIM_START_MEASURE;
+			coal->coal_vqs[j].vqn = cpu_to_le16(rxq2vq(i));
+			coal->coal_vqs[j].coal.max_usecs = cpu_to_le32(update_moder.usec);
+			coal->coal_vqs[j].coal.max_packets = cpu_to_le32(update_moder.pkts);
+			rq->intr_coal.max_usecs = update_moder.usec;
+			rq->intr_coal.max_packets = update_moder.pkts;
+			j++;
 		}
 	}
 
+	if (!j)
+		goto ret;
+
+	coal->num_entries = cpu_to_le32(j);
+	sg_init_one(&sgs, coal, sizeof(struct virtnet_batch_coal) +
+		    j * sizeof(struct virtio_net_ctrl_coal_vq));
+	if (!virtnet_send_command(vi, VIRTIO_NET_CTRL_NOTF_COAL,
+				  VIRTIO_NET_CTRL_NOTF_COAL_VQS_SET,
+				  &sgs))
+		dev_warn(&vi->vdev->dev, "Failed to add dim command\n.");
+
+	for (i = 0; i < j; i++) {
+		rq = &vi->rq[(coal->coal_vqs[i].vqn) / 2];
+		rq->dim.state = DIM_START_MEASURE;
+	}
+
+ret:
 	rtnl_unlock();
 }
 
@@ -4379,7 +4401,7 @@ err_vq:
 
 static int virtnet_alloc_queues(struct virtnet_info *vi)
 {
-	int i;
+	int i, len;
 
 	if (vi->has_cvq) {
 		vi->ctrl = kzalloc(sizeof(*vi->ctrl), GFP_KERNEL);
@@ -4394,6 +4416,12 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	vi->rq = kcalloc(vi->max_queue_pairs, sizeof(*vi->rq), GFP_KERNEL);
 	if (!vi->rq)
 		goto err_rq;
+
+	len = sizeof(struct virtnet_batch_coal) +
+	      vi->max_queue_pairs * sizeof(struct virtio_net_ctrl_coal_vq);
+	vi->batch_coal = kzalloc(len, GFP_KERNEL);
+	if (!vi->batch_coal)
+		goto err_coal;
 
 	INIT_DELAYED_WORK(&vi->refill, refill_work);
 	for (i = 0; i < vi->max_queue_pairs; i++) {
@@ -4417,6 +4445,8 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 
 	return 0;
 
+err_coal:
+	kfree(vi->rq);
 err_rq:
 	kfree(vi->sq);
 err_sq:
@@ -4900,6 +4930,8 @@ static void virtnet_remove(struct virtio_device *vdev)
 	unregister_netdev(vi->dev);
 
 	net_failover_destroy(vi->failover);
+
+	kfree(vi->batch_coal);
 
 	remove_vq_common(vi);
 
