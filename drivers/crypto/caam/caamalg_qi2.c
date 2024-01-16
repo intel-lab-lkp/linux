@@ -4571,7 +4571,7 @@ static int caam_hash_cra_init(struct crypto_tfm *tfm)
 
 	ctx->dev = caam_hash->dev;
 
-	if (alg->setkey) {
+	if (crypto_hash_alg_has_setkey(halg)) {
 		ctx->adata.key_dma = dma_map_single_attrs(ctx->dev, ctx->key,
 							  ARRAY_SIZE(ctx->key),
 							  DMA_TO_DEVICE,
@@ -4611,7 +4611,7 @@ static int caam_hash_cra_init(struct crypto_tfm *tfm)
 	 * For keyed hash algorithms shared descriptors
 	 * will be created later in setkey() callback
 	 */
-	return alg->setkey ? 0 : ahash_set_sh_desc(ahash);
+	return crypto_hash_alg_has_setkey(halg) ? 0 : ahash_set_sh_desc(ahash);
 }
 
 static void caam_hash_cra_exit(struct crypto_tfm *tfm)

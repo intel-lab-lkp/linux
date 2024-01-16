@@ -1804,7 +1804,7 @@ static int caam_hash_cra_init(struct crypto_tfm *tfm)
 	} else {
 		if (priv->era >= 6) {
 			ctx->dir = DMA_BIDIRECTIONAL;
-			ctx->key_dir = alg->setkey ? DMA_TO_DEVICE : DMA_NONE;
+			ctx->key_dir = crypto_hash_alg_has_setkey(halg) ? DMA_TO_DEVICE : DMA_NONE;
 		} else {
 			ctx->dir = DMA_TO_DEVICE;
 			ctx->key_dir = DMA_NONE;
@@ -1862,7 +1862,7 @@ static int caam_hash_cra_init(struct crypto_tfm *tfm)
 	 * For keyed hash algorithms shared descriptors
 	 * will be created later in setkey() callback
 	 */
-	return alg->setkey ? 0 : ahash_set_sh_desc(ahash);
+	return crypto_hash_alg_has_setkey(halg) ? 0 : ahash_set_sh_desc(ahash);
 }
 
 static void caam_hash_cra_exit(struct crypto_tfm *tfm)
