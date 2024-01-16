@@ -31,7 +31,7 @@ int sparx5_sdlb_clk_hz_get(struct sparx5 *sparx5)
 		clk_per_100ps = SPX5_CLK_PER_100PS_DEFAULT;
 
 	clk_hz = (10 * 1000 * 1000) / clk_per_100ps;
-	return clk_hz *= 1000;
+	return clk_hz * 1000;
 }
 
 static int sparx5_sdlb_pup_interval_get(struct sparx5 *sparx5, u32 max_token,
