@@ -1626,17 +1626,14 @@ static int tun_xdp_act(struct tun_struct *tun, struct bpf_prog *xdp_prog,
 		       struct xdp_buff *xdp, u32 act)
 {
 	int err;
+	unsigned int datasize = xdp->data_end - xdp->data;
 
 	switch (act) {
 	case XDP_REDIRECT:
 		err = xdp_do_redirect(tun->dev, xdp, xdp_prog);
-		if (err)
-			return err;
 		break;
 	case XDP_TX:
 		err = tun_xdp_tx(tun->dev, xdp);
-		if (err < 0)
-			return err;
 		break;
 	case XDP_PASS:
 		break;
@@ -1649,6 +1646,13 @@ static int tun_xdp_act(struct tun_struct *tun, struct bpf_prog *xdp_prog,
 	case XDP_DROP:
 		dev_core_stats_rx_dropped_inc(tun->dev);
 		break;
+	}
+
+	if (err < 0) {
+		act = err;
+		dev_core_stats_rx_dropped_inc(tun->dev);
+	} else if (act == XDP_REDIRECT || act == XDP_TX) {
+		dev_sw_netstats_rx_add(tun->dev, datasize);
 	}
 
 	return act;
