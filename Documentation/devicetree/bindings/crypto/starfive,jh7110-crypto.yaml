@@ -12,7 +12,11 @@ maintainers:
 
 properties:
   compatible:
-    const: starfive,jh7110-crypto
+    oneOf:
+      - items:
+          - const: starfive,jh8100-crypto
+          - const: starfive,jh7110-crypto
+      - const: starfive,jh7110-crypto
 
   reg:
     maxItems: 1
