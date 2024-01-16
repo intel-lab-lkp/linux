@@ -53,6 +53,17 @@ mount points. Each 9P export is seen by the client as a virtio device with an
 associated "mount_tag" property. Available mount tags can be
 seen by reading /sys/bus/virtio/drivers/9pnet_virtio/virtio<n>/mount_tag files.
 
+For usb gadget file server::
+
+	mount -t 9p -o trans=usbg,aname=/path/to/fs <mount_tag> /mnt/9
+
+For usb gadget root file system::
+
+	root=<mount_tag> rootfstype=9p rootflags=trans=usbg,cache=loose,uname=root,access=0,dfltuid=0,dfltgid=0,aname=/path/to/rootfs
+
+where mount_tag is the tag associated by the usb gadget transport. The
+pattern is usb9pfs0, usb9pfs1, ...
+
 Options
 =======
 
@@ -68,6 +79,7 @@ Options
 			virtio	  connect to the next virtio channel available
 				  (from QEMU with trans_virtio module)
 			rdma	  connect to a specified RDMA channel
+			usbg	  connect to a specified usb gadget channel
 			========  ============================================
 
   uname=name	user name to attempt mount as on the remote server.  The

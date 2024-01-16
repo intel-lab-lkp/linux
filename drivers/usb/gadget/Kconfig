@@ -153,6 +153,10 @@ config USB_F_ACM
 config USB_F_SS_LB
 	tristate
 
+config USB_F_9PFS
+	tristate
+	select NET_9P
+
 config USB_U_SERIAL
 	tristate
 
@@ -362,6 +366,13 @@ config USB_CONFIGFS_F_LB_SS
 	  USB peripheral controller driver.  Then you can use host-side
 	  test software, like the "usbtest" driver, to put your hardware
 	  and its driver through a basic set of functional tests.
+
+config USB_CONFIGFS_F_9PFS
+	bool "9pfs over usb gadget"
+	depends on USB_CONFIGFS
+	select USB_F_9PFS
+	help
+	  9pfs support for usb gadget
 
 config USB_CONFIGFS_F_FS
 	bool "Function filesystem (FunctionFS)"
