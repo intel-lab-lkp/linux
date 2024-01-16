@@ -22,6 +22,9 @@
 #define xe_gt_notice(_gt, _fmt, ...) \
 	xe_gt_printk((_gt), notice, _fmt, ##__VA_ARGS__)
 
+#define xe_gt_notice_ratelimited(_gt, _fmt, ...) \
+	xe_gt_printk((_gt), err_ratelimited, _fmt, ##__VA_ARGS__)
+
 #define xe_gt_info(_gt, _fmt, ...) \
 	xe_gt_printk((_gt), info, _fmt, ##__VA_ARGS__)
 
