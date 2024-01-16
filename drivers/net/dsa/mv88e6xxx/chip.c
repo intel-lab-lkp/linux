@@ -3739,8 +3739,10 @@ static int mv88e6xxx_mdio_register(struct mv88e6xxx_chip *chip,
 
 	bus->read = mv88e6xxx_mdio_read;
 	bus->write = mv88e6xxx_mdio_write;
-	bus->read_c45 = mv88e6xxx_mdio_read_c45;
-	bus->write_c45 = mv88e6xxx_mdio_write_c45;
+	bus->read_c45 = chip->info->ops->phy_read_c45
+		? mv88e6xxx_mdio_read_c45 : NULL;
+	bus->write_c45 = chip->info->ops->phy_write_c45
+		? mv88e6xxx_mdio_write_c45 : NULL;
 	bus->parent = chip->dev;
 	bus->phy_mask = ~GENMASK(chip->info->phy_base_addr +
 				 mv88e6xxx_num_ports(chip) - 1,
