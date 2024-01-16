@@ -7,6 +7,7 @@
 #define _I915_GEM_OBJECT_H_
 
 #include <linux/types.h>
+#include <linux/iosys-map.h>
 
 #include "xe_bo.h"
 
@@ -36,6 +37,7 @@ static inline int i915_gem_object_read_from_page(struct xe_bo *bo,
 {
 	struct ttm_bo_kmap_obj map;
 	void *virtual;
+	struct iosys_map vaddr;
 	bool is_iomem;
 	int ret;
 
@@ -52,10 +54,11 @@ static inline int i915_gem_object_read_from_page(struct xe_bo *bo,
 	ofs &= ~PAGE_MASK;
 	virtual = ttm_kmap_obj_virtual(&map, &is_iomem);
 	if (is_iomem)
-		*ptr = readq((void __iomem *)(virtual + ofs));
+		iosys_map_set_vaddr_iomem(&vaddr, (void __iomem *)(virtual));
 	else
-		*ptr = *(u64 *)(virtual + ofs);
+		iosys_map_set_vaddr(&vaddr, virtual);
 
+	*ptr = iosys_map_rd(&vaddr, ofs, u64);
 	ttm_bo_kunmap(&map);
 out_unlock:
 	xe_bo_unlock(bo);
