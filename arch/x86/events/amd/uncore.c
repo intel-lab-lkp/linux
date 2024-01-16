@@ -479,8 +479,8 @@ static int amd_uncore_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 				goto fail;
 
 			curr->cpu = cpu;
-			curr->events = kzalloc_node(sizeof(*curr->events) *
-						    pmu->num_counters,
+			curr->events = kcalloc_node(pmu->num_counters,
+						    sizeof(*curr->events),
 						    GFP_KERNEL, node);
 			if (!curr->events) {
 				kfree(curr);
@@ -928,7 +928,7 @@ int amd_uncore_umc_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		uncore->num_pmus += group_num_pmus[gid];
 	}
 
-	uncore->pmus = kzalloc(sizeof(*uncore->pmus) * uncore->num_pmus,
+	uncore->pmus = kcalloc(uncore->num_pmus, sizeof(*uncore->pmus),
 			       GFP_KERNEL);
 	if (!uncore->pmus) {
 		uncore->num_pmus = 0;
