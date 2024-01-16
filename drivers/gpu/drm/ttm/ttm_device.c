@@ -63,7 +63,7 @@ out:
 	mutex_unlock(&ttm_global_mutex);
 }
 
-static int ttm_global_init(void)
+static int ttm_global_init(bool use_dma32)
 {
 	struct ttm_global *glob = &ttm_glob;
 	unsigned long num_pages, num_dma32;
@@ -95,7 +95,8 @@ static int ttm_global_init(void)
 	ttm_pool_mgr_init(num_pages);
 	ttm_tt_mgr_init(num_pages, num_dma32);
 
-	glob->dummy_read_page = alloc_page(__GFP_ZERO | GFP_DMA32);
+	glob->dummy_read_page = use_dma32 ? alloc_page(__GFP_ZERO | GFP_DMA32) :
+					    alloc_page(__GFP_ZERO);
 
 	if (unlikely(glob->dummy_read_page == NULL)) {
 		ret = -ENOMEM;
@@ -200,7 +201,7 @@ int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *func
 	if (WARN_ON(vma_manager == NULL))
 		return -EINVAL;
 
-	ret = ttm_global_init();
+	ret = ttm_global_init(use_dma32);
 	if (ret)
 		return ret;
 
