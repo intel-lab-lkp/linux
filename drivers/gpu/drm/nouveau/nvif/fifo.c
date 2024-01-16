@@ -73,9 +73,9 @@ u64
 nvif_fifo_runlist(struct nvif_device *device, u64 engine)
 {
 	u64 runm = 0;
-	int ret, i;
+	int i;
 
-	if ((ret = nvif_fifo_runlists(device)))
+	if (nvif_fifo_runlists(device))
 		return runm;
 
 	for (i = 0; i < device->runlists; i++) {
