@@ -1233,6 +1233,8 @@ patternProperties:
     description: Si-En Technology Ltd.
   "^si-linux,.*":
     description: Silicon Linux Corporation
+  "^sielaff,.*":
+    description: Sielaff GmbH & Co. KG Automatenbau Herrieden
   "^siemens,.*":
     description: Siemens AG
   "^sifive,.*":
