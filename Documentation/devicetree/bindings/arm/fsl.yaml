@@ -1275,6 +1275,12 @@ properties:
           - const: tq,imx93-tqma9352        # TQ-Systems GmbH i.MX93 TQMa93xxCA/LA SOM
           - const: fsl,imx93
 
+      - description: i.MX93 PHYTEC phyBOARD-Segin
+        items:
+          - const: phytec,imx93-phycore-segin
+          - const: phytec,imx93-phycore-som
+          - const: fsl,imx93
+
       - description:
           Freescale Vybrid Platform Device Tree Bindings
 
