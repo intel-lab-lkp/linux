@@ -128,6 +128,12 @@ int cn_netlink_send(struct cn_msg *msg, u32 portid, u32 __group,
 }
 EXPORT_SYMBOL_GPL(cn_netlink_send);
 
+struct sock *get_cdev_nls(void)
+{
+	return cdev.nls;
+}
+EXPORT_SYMBOL_GPL(get_cdev_nls);
+
 /*
  * Callback helper - queues work and setup destructor for given data.
  */
