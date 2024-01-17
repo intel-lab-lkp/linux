@@ -50,6 +50,12 @@
 /* The artificial cap on the number of segments passed to kexec_load. */
 #define KEXEC_SEGMENT_MAX 16
 
+/* KHO passes an array of kho_mem as "mem cache" to the new kernel */
+struct kho_mem {
+	__u64 addr;
+	__u64 len;
+};
+
 #ifndef __KERNEL__
 /*
  * This structure is used to hold the arguments that are used when
