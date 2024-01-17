@@ -655,6 +655,7 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct request_sock_queue *queue = &icsk->icsk_accept_queue;
+	struct request_sock_queue *newqueue;
 	struct request_sock *req;
 	struct sock *newsk;
 	int error;
@@ -727,6 +728,13 @@ out:
 	}
 	if (req)
 		reqsk_put(req);
+
+	if (newsk) {
+		newqueue = &inet_csk(newsk)->icsk_accept_queue;
+		spin_lock_init(&newqueue->rskq_lock);
+		spin_lock_init(&newqueue->fastopenq.lock);
+	}
+
 	return newsk;
 out_err:
 	newsk = NULL;

@@ -244,6 +244,14 @@ out:
 }
 EXPORT_SYMBOL(inet_listen);
 
+static void __inet_init_csk_lock(struct sock *sk)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+
+	spin_lock_init(&icsk->icsk_accept_queue.rskq_lock);
+	spin_lock_init(&icsk->icsk_accept_queue.fastopenq.lock);
+}
+
 /*
  *	Create an inet socket.
  */
@@ -329,6 +337,9 @@ lookup_protocol:
 	err = 0;
 	if (INET_PROTOSW_REUSE & answer_flags)
 		sk->sk_reuse = SK_CAN_REUSE;
+
+	if (INET_PROTOSW_ICSK & answer_flags)
+		__inet_init_csk_lock(sk);
 
 	inet = inet_sk(sk);
 	inet_assign_bit(IS_ICSK, sk, INET_PROTOSW_ICSK & answer_flags);
