@@ -197,7 +197,7 @@ static int lima_pp_hard_reset(struct lima_ip *ip)
 	pp_write(LIMA_PP_CTRL, LIMA_PP_CTRL_FORCE_RESET);
 	ret = lima_poll_timeout(ip, lima_pp_hard_reset_poll, 10, 100);
 	if (ret) {
-		dev_err(dev->dev, "pp hard reset timeout\n");
+		dev_err(dev->dev, "pp %s hard reset timeout\n", lima_ip_name(ip));
 		return ret;
 	}
 
@@ -423,8 +423,8 @@ static void lima_pp_task_error(struct lima_sched_pipe *pipe)
 	for (i = 0; i < pipe->num_processor; i++) {
 		struct lima_ip *ip = pipe->processor[i];
 
-		dev_err(ip->dev->dev, "pp task error %d int_state=%x status=%x\n",
-			i, pp_read(LIMA_PP_INT_STATUS), pp_read(LIMA_PP_STATUS));
+		dev_err(ip->dev->dev, "pp %s task error int_state=%x status=%x\n",
+			lima_ip_name(ip), pp_read(LIMA_PP_INT_STATUS), pp_read(LIMA_PP_STATUS));
 
 		lima_pp_hard_reset(ip);
 	}
