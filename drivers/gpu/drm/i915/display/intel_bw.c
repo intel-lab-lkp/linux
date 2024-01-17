@@ -852,6 +852,27 @@ static unsigned int icl_max_bw_qgv_point(struct drm_i915_private *i915,
 	return max_bw_point;
 }
 
+void icl_force_disable_sagv(struct drm_i915_private *i915, struct intel_bw_state *bw_state)
+{
+	unsigned int max_bw_qgv_point = icl_max_bw_qgv_point(i915, 0);
+	unsigned int qgv_points;
+	unsigned int psf_points;
+
+	qgv_points = BIT(max_bw_qgv_point);
+
+	/*
+	 * We don't restrict PSF GV points, when disabling SAGV
+	 */
+	psf_points = 0;
+
+	bw_state->qgv_points_mask = ~(ICL_PCODE_REQ_QGV_PT(qgv_points) |
+				      ADLS_PCODE_REQ_PSF_PT(psf_points)) &
+				      icl_qgv_points_mask(i915);
+
+	drm_dbg_kms(&i915->drm, "Forcing SAGV disable: leaving QGV point %d\n",
+				max_bw_qgv_point);
+}
+
 static int mtl_find_qgv_points(struct drm_i915_private *i915,
 			       unsigned int data_rate,
 			       unsigned int num_active_planes,
@@ -1350,6 +1371,9 @@ int intel_bw_init(struct drm_i915_private *dev_priv)
 
 	intel_atomic_global_obj_init(dev_priv, &dev_priv->display.bw.obj,
 				     &state->base, &intel_bw_funcs);
+
+	if (DISPLAY_VER(dev_priv) < 14)
+		icl_force_disable_sagv(dev_priv, state);
 
 	return 0;
 }

@@ -74,5 +74,7 @@ int intel_bw_calc_min_cdclk(struct intel_atomic_state *state,
 			    bool *need_cdclk_calc);
 int intel_bw_min_cdclk(struct drm_i915_private *i915,
 		       const struct intel_bw_state *bw_state);
+void icl_force_disable_sagv(struct drm_i915_private *dev_priv,
+			    struct intel_bw_state *bw_state);
 
 #endif /* __INTEL_BW_H__ */
