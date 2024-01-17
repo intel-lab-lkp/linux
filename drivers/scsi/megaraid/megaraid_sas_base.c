@@ -6378,11 +6378,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 			if (!fusion->stream_detect_by_ld[i]) {
 				dev_err(&instance->pdev->dev,
 					"unable to allocate stream detect by LD\n ");
-				for (j = 0; j < i; ++j)
-					kfree(fusion->stream_detect_by_ld[j]);
-				kfree(fusion->stream_detect_by_ld);
-				fusion->stream_detect_by_ld = NULL;
-				goto fail_get_ld_pd_list;
+				goto fail_alloc_stream_detect;
 			}
 			fusion->stream_detect_by_ld[i]->mru_bit_map
 				= MR_STREAM_BITMAP;
@@ -6502,7 +6498,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 			megasas_start_timer(instance);
 		} else {
 			instance->skip_heartbeat_timer_del = 1;
-			goto fail_get_ld_pd_list;
+			goto fail_alloc_stream_detect;
 		}
 	}
 
@@ -6520,6 +6516,13 @@ static int megasas_init_fw(struct megasas_instance *instance)
 fail_start_watchdog:
 	if (instance->requestorId && !instance->skip_heartbeat_timer_del)
 		del_timer_sync(&instance->sriov_heartbeat_timer);
+fail_alloc_stream_detect:
+	if (instance->adapter_type >= VENTURA_SERIES) {
+		for (i = 0; i < MAX_LOGICAL_DRIVES_EXT; ++i)
+			kfree(fusion->stream_detect_by_ld[i]);
+		kfree(fusion->stream_detect_by_ld);
+		fusion->stream_detect_by_ld = NULL;
+	}
 fail_get_ld_pd_list:
 	instance->instancet->disable_intr(instance);
 	megasas_destroy_irqs(instance);
