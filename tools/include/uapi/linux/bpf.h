@@ -995,6 +995,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_SK_LOOKUP,
 	BPF_PROG_TYPE_SYSCALL, /* a program that can execute syscalls */
 	BPF_PROG_TYPE_NETFILTER,
+	BPF_PROG_TYPE_QDISC,
 };
 
 enum bpf_attach_type {
@@ -1054,6 +1055,8 @@ enum bpf_attach_type {
 	BPF_CGROUP_UNIX_GETSOCKNAME,
 	BPF_NETKIT_PRIMARY,
 	BPF_NETKIT_PEER,
+	BPF_QDISC_ENQUEUE,
+	BPF_QDISC_DEQUEUE,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -7354,5 +7357,23 @@ struct bpf_iter_num {
 	 */
 	__u64 __opaque[1];
 } __attribute__((aligned(8)));
+
+struct bpf_qdisc_ctx {
+	__bpf_md_ptr(struct sk_buff *, skb);
+	__u32 classid;
+	__u64 expire;
+	__u64 delta_ns;
+};
+
+enum {
+	SCH_BPF_QUEUED,
+	SCH_BPF_DEQUEUED = SCH_BPF_QUEUED,
+	SCH_BPF_DROP,
+	SCH_BPF_CN,
+	SCH_BPF_THROTTLE,
+	SCH_BPF_PASS,
+	SCH_BPF_BYPASS,
+	SCH_BPF_STOLEN,
+};
 
 #endif /* _UAPI__LINUX_BPF_H__ */

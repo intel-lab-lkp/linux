@@ -217,6 +217,7 @@ enum btf_kfunc_hook {
 	BTF_KFUNC_HOOK_SOCKET_FILTER,
 	BTF_KFUNC_HOOK_LWT,
 	BTF_KFUNC_HOOK_NETFILTER,
+	BTF_KFUNC_HOOK_QDISC,
 	BTF_KFUNC_HOOK_MAX,
 };
 
@@ -5928,6 +5929,8 @@ static bool prog_args_trusted(const struct bpf_prog *prog)
 		return bpf_lsm_is_trusted(prog);
 	case BPF_PROG_TYPE_STRUCT_OPS:
 		return true;
+	case BPF_PROG_TYPE_QDISC:
+		return true;
 	default:
 		return false;
 	}
@@ -7865,6 +7868,8 @@ static int bpf_prog_type_to_kfunc_hook(enum bpf_prog_type prog_type)
 		return BTF_KFUNC_HOOK_LWT;
 	case BPF_PROG_TYPE_NETFILTER:
 		return BTF_KFUNC_HOOK_NETFILTER;
+	case BPF_PROG_TYPE_QDISC:
+		return BTF_KFUNC_HOOK_QDISC;
 	default:
 		return BTF_KFUNC_HOOK_MAX;
 	}

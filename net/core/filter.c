@@ -8898,6 +8898,90 @@ static int tc_cls_act_btf_struct_access(struct bpf_verifier_log *log,
 	return ret;
 }
 
+static int tc_qdisc_prologue(struct bpf_insn *insn_buf, bool direct_write,
+			     const struct bpf_prog *prog)
+{
+	return bpf_unclone_prologue(insn_buf, direct_write, prog,
+				    SCH_BPF_DROP);
+}
+
+BTF_ID_LIST_SINGLE(tc_qdisc_ctx_access_btf_ids, struct, sk_buff)
+
+static bool tc_qdisc_is_valid_access(int off, int size,
+				     enum bpf_access_type type,
+				     const struct bpf_prog *prog,
+				     struct bpf_insn_access_aux *info)
+{
+	struct btf *btf;
+
+	if (off < 0 || off >= sizeof(struct bpf_qdisc_ctx))
+		return false;
+
+	switch (off) {
+	case offsetof(struct bpf_qdisc_ctx, skb):
+		if (type == BPF_WRITE ||
+		    size != sizeof_field(struct bpf_qdisc_ctx, skb))
+			return false;
+
+		if (prog->expected_attach_type != BPF_QDISC_ENQUEUE)
+			return false;
+
+		btf = bpf_get_btf_vmlinux();
+		if (IS_ERR_OR_NULL(btf))
+			return false;
+
+		info->btf = btf;
+		info->btf_id = tc_qdisc_ctx_access_btf_ids[0];
+		info->reg_type = PTR_TO_BTF_ID | PTR_TRUSTED;
+		return true;
+	case bpf_ctx_range(struct bpf_qdisc_ctx, classid):
+		return size == sizeof_field(struct bpf_qdisc_ctx, classid);
+	case bpf_ctx_range(struct bpf_qdisc_ctx, expire):
+		return size == sizeof_field(struct bpf_qdisc_ctx, expire);
+	case bpf_ctx_range(struct bpf_qdisc_ctx, delta_ns):
+		return size == sizeof_field(struct bpf_qdisc_ctx, delta_ns);
+	default:
+		return false;
+	}
+
+	return false;
+}
+
+static int tc_qdisc_btf_struct_access(struct bpf_verifier_log *log,
+				      const struct bpf_reg_state *reg,
+				      int off, int size)
+{
+	const struct btf_type *skbt, *t;
+	size_t end;
+
+	skbt = btf_type_by_id(reg->btf, tc_qdisc_ctx_access_btf_ids[0]);
+	t = btf_type_by_id(reg->btf, reg->btf_id);
+	if (t != skbt)
+		return -EACCES;
+
+	switch (off) {
+	case offsetof(struct sk_buff, cb) ...
+	     offsetofend(struct sk_buff, cb) - 1:
+		end = offsetofend(struct sk_buff, cb);
+		break;
+	case offsetof(struct sk_buff, tstamp):
+		end = offsetofend(struct sk_buff, tstamp);
+		break;
+	default:
+		bpf_log(log, "no write support to skb at off %d\n", off);
+		return -EACCES;
+	}
+
+	if (off + size > end) {
+		bpf_log(log,
+			"write access at off %d with size %d beyond the member of sk_buff ended at %zu\n",
+			off, size, end);
+		return -EACCES;
+	}
+
+	return 0;
+}
+
 static bool __is_valid_xdp_access(int off, int size)
 {
 	if (off < 0 || off >= sizeof(struct xdp_md))
@@ -10896,6 +10980,18 @@ const struct bpf_verifier_ops tc_cls_act_verifier_ops = {
 };
 
 const struct bpf_prog_ops tc_cls_act_prog_ops = {
+	.test_run		= bpf_prog_test_run_skb,
+};
+
+const struct bpf_verifier_ops tc_qdisc_verifier_ops = {
+	.get_func_proto		= tc_cls_act_func_proto,
+	.is_valid_access	= tc_qdisc_is_valid_access,
+	.gen_prologue		= tc_qdisc_prologue,
+	.gen_ld_abs		= bpf_gen_ld_abs,
+	.btf_struct_access	= tc_qdisc_btf_struct_access,
+};
+
+const struct bpf_prog_ops tc_qdisc_prog_ops = {
 	.test_run		= bpf_prog_test_run_skb,
 };
 
