@@ -212,10 +212,21 @@ static void help(char *name)
 
 int main(int argc, char *argv[])
 {
+	FILE *f;
 	int opt;
+	int ret, numa_balancing;
 
 	TEST_REQUIRE(get_kvm_param_bool("eager_page_split"));
 	TEST_REQUIRE(get_kvm_param_bool("tdp_mmu"));
+	f = fopen("/proc/sys/kernel/numa_balancing", "r");
+	if (f) {
+		ret = fscanf(f, "%d", &numa_balancing);
+		TEST_ASSERT(ret == 1, "Error reading numa_balancing");
+		TEST_ASSERT(!numa_balancing, "please run "
+			    "'echo 0 > /proc/sys/kernel/numa_balancing'");
+		fclose(f);
+		f = NULL;
+	}
 
 	while ((opt = getopt(argc, argv, "b:hs:")) != -1) {
 		switch (opt) {
