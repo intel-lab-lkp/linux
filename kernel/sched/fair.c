@@ -9744,6 +9744,14 @@ static bool sched_use_asym_prio(struct sched_domain *sd, int cpu)
 		(sd->flags & SD_SHARE_CPUCAPACITY) || is_core_idle(cpu);
 }
 
+static inline bool _sched_asym(struct sched_domain *sd,
+			int dst_cpu, int repl_cpu)
+{
+	/* Ensure that the whole local core is idle, if applicable. */
+	return sched_use_asym_prio(sd, dst_cpu) &&
+			sched_asym_prefer(dst_cpu, repl_cpu);
+}
+
 /**
  * sched_asym - Check if the destination CPU can do asym_packing load balance
  * @env:	The load balancing environment
@@ -9767,20 +9775,13 @@ static bool sched_use_asym_prio(struct sched_domain *sd, int cpu)
 static inline bool
 sched_asym(struct lb_env *env, struct sg_lb_stats *sgs, struct sched_group *group)
 {
-	/* Ensure that the whole local core is idle, if applicable. */
-	if (!sched_use_asym_prio(env->sd, env->dst_cpu))
-		return false;
-
 	/*
 	 * CPU priorities does not make sense for SMT cores with more than one
 	 * busy sibling.
 	 */
-	if (group->flags & SD_SHARE_CPUCAPACITY) {
-		if (sgs->group_weight - sgs->idle_cpus != 1)
-			return false;
-	}
-
-	return sched_asym_prefer(env->dst_cpu, group->asym_prefer_cpu);
+	return !(group->flags & SD_SHARE_CPUCAPACITY &&
+			sgs->group_weight - sgs->idle_cpus != 1) &&
+		_sched_asym(env->sd, env->dst_cpu, group->asym_prefer_cpu);
 }
 
 /* One group has more than one SMT CPU while the other group does not */
@@ -11035,8 +11036,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 		 * SMT cores with more than one busy sibling.
 		 */
 		if ((env->sd->flags & SD_ASYM_PACKING) &&
-		    sched_use_asym_prio(env->sd, i) &&
-		    sched_asym_prefer(i, env->dst_cpu) &&
+		    _sched_asym(env->sd, i, env->dst_cpu) &&
 		    nr_running == 1)
 			continue;
 
@@ -11906,8 +11906,7 @@ static void nohz_balancer_kick(struct rq *rq)
 		 * preferred CPU must be idle.
 		 */
 		for_each_cpu_and(i, sched_domain_span(sd), nohz.idle_cpus_mask) {
-			if (sched_use_asym_prio(sd, i) &&
-			    sched_asym_prefer(i, cpu)) {
+			if (_sched_asym(sd, i, cpu)) {
 				flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
 				goto unlock;
 			}
