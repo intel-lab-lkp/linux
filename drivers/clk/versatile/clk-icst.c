@@ -351,8 +351,8 @@ struct clk *icst_clk_setup(struct device *dev,
 
 	pclone = kmemdup(desc->params, sizeof(*pclone), GFP_KERNEL);
 	if (!pclone) {
-		kfree(icst);
-		return ERR_PTR(-ENOMEM);
+		clk = ERR_PTR(-ENOMEM);
+		goto free_icst;
 	}
 
 	init.name = name;
@@ -370,6 +370,7 @@ struct clk *icst_clk_setup(struct device *dev,
 	clk = clk_register(dev, &icst->hw);
 	if (IS_ERR(clk)) {
 		kfree(pclone);
+free_icst:
 		kfree(icst);
 	}
 
