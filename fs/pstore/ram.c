@@ -595,6 +595,9 @@ static int ramoops_init_prz(const char *name,
 	}
 
 	label = kasprintf(GFP_KERNEL, "ramoops:%s", name);
+	if (!label)
+		return -ENOMEM;
+
 	*prz = persistent_ram_new(*paddr, sz, sig, &cxt->ecc_info,
 				  cxt->memtype, PRZ_FLAG_ZAP_OLD, label);
 	kfree(label);
