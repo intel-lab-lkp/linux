@@ -537,10 +537,12 @@ static void __init of_syscon_icst_setup(struct device_node *np)
 		return;
 	}
 
+	name = kasprintf(GFP_KERNEL, "%pOFP", np);
+	if (!name)
+		return;
+
 	/* Parent clock name is not the same as node parent */
 	parent_name = of_clk_get_parent_name(np, 0);
-	name = kasprintf(GFP_KERNEL, "%pOFP", np);
-
 	regclk = icst_clk_setup(NULL, &icst_desc, name, parent_name, map, ctype);
 	if (IS_ERR(regclk)) {
 		pr_err("error setting up syscon ICST clock %s\n", name);
