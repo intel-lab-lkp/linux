@@ -12,6 +12,9 @@
 #define DP_TEST_BIT_DEPTH_UNKNOWN 0xFFFFFFFF
 #define DP_LINK_CAP_ENHANCED_FRAMING (1 << 0)
 
+#define DP_MISC0_LEGACY_RGB		0
+#define DP_MISC0_CEA_RGB		0x04
+
 struct dp_link_info {
 	unsigned char revision;
 	unsigned int rate;
