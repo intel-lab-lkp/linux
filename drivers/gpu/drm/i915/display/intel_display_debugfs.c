@@ -647,6 +647,10 @@ static int i915_display_capabilities(struct seq_file *m, void *unused)
 	struct drm_i915_private *i915 = node_to_i915(m->private);
 	struct drm_printer p = drm_seq_file_printer(m);
 
+	kernel_param_lock(THIS_MODULE);
+	intel_display_params_dump(i915, &p);
+	kernel_param_unlock(THIS_MODULE);
+
 	intel_display_device_info_print(DISPLAY_INFO(i915),
 					DISPLAY_RUNTIME_INFO(i915), &p);
 
