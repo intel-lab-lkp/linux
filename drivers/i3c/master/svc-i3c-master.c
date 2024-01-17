@@ -977,7 +977,7 @@ rpm_out:
 }
 
 static int svc_i3c_master_read(struct svc_i3c_master *master,
-			       u8 *in, unsigned int len)
+			       u8 *in, unsigned int len, bool auto_term)
 {
 	int offset = 0, i;
 	u32 mdctrl, mstatus;
@@ -995,16 +995,60 @@ static int svc_i3c_master_read(struct svc_i3c_master *master,
 			return -ETIMEDOUT;
 		}
 
-		mdctrl = readl(master->regs + SVC_I3C_MDATACTRL);
-		count = SVC_I3C_MDATACTRL_RXCOUNT(mdctrl);
-		if (offset + count > len) {
-			dev_err(master->dev, "I3C receive length too long!\n");
-			return -EINVAL;
-		}
-		for (i = 0; i < count; i++)
-			in[offset + i] = readl(master->regs + SVC_I3C_MRDATAB);
+		if (auto_term || completed) {
+			/* auto termate or early termate by target */
+			mdctrl = readl(master->regs + SVC_I3C_MDATACTRL);
+			count = SVC_I3C_MDATACTRL_RXCOUNT(mdctrl);
+			if (offset + count > len) {
+				dev_err(master->dev, "I3C receive length too long!\n");
+				return -EINVAL;
+			}
+			for (i = 0; i < count; i++)
+				in[offset + i] = readl(master->regs + SVC_I3C_MRDATAB);
 
-		offset += count;
+			offset += count;
+
+		} else {
+			/*
+			 * Controller will fill whole RX FIFO in manual mode. FIFO full can prevent
+			 * controller continue fetch data from target.
+			 *
+			 * When left data length is FIFO size + 1, issue terminate
+			 * (RDTERM(1) | REQUEST_NONE). So hardware will stop fetch data after next
+			 * data.
+			 *
+			 * │ ◄──────────  buff length     ────────►│
+			 * │                                       │
+			 * │                       ┌─┬─────────────┤
+			 * │                       │ │  FIFO SIZE  │
+			 * │                       └─┴─────────────┘
+			 *                         ▲
+			 *                         │
+			 *                         Wait FIFO Full and Issue read termniate here!!
+			 */
+			mdctrl = readl_relaxed(master->regs + SVC_I3C_MDATACTRL);
+			count = SVC_I3C_MDATACTRL_RXCOUNT(mdctrl);
+
+			if (offset + count + SVC_I3C_FIFO_SIZE < len) {
+				for (i = 0; i < count; i++) {
+					in[offset] = readl_relaxed(master->regs + SVC_I3C_MRDATAB);
+					offset++;
+				}
+			} else {
+				if (count != SVC_I3C_FIFO_SIZE)
+					continue;
+
+				/* Issue manual read terminate at next data */
+				if (offset + SVC_I3C_FIFO_SIZE == len - 1)
+					writel_relaxed(SVC_I3C_MCTRL_REQUEST_NONE |
+						       SVC_I3C_MCTRL_DIR(1) |
+						       SVC_I3C_MCTRL_RDTERM(1),
+						       master->regs + SVC_I3C_MCTRL);
+
+				in[offset] = readl_relaxed(master->regs + SVC_I3C_MRDATAB);
+				offset++;
+			}
+		}
 	}
 
 	return offset;
@@ -1042,8 +1086,16 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 			       u8 *in, const u8 *out, unsigned int xfer_len,
 			       unsigned int *actual_len, bool continued)
 {
+	int rdterm = 0;
 	u32 reg;
 	int ret;
+
+	if (rnw)
+		rdterm = xfer_len;
+
+	/* If read length > max RDTERM in MCTRL, using manual terminate */
+	if (xfer_len > 255)
+		rdterm = 0;
 
 	/* clean SVC_I3C_MINT_IBIWON w1c bits */
 	writel(SVC_I3C_MINT_IBIWON, master->regs + SVC_I3C_MSTATUS);
@@ -1053,7 +1105,7 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 	       SVC_I3C_MCTRL_IBIRESP_NACK |
 	       SVC_I3C_MCTRL_DIR(rnw) |
 	       SVC_I3C_MCTRL_ADDR(addr) |
-	       SVC_I3C_MCTRL_RDTERM(*actual_len),
+	       SVC_I3C_MCTRL_RDTERM(rdterm),
 	       master->regs + SVC_I3C_MCTRL);
 
 	ret = readl_poll_timeout(master->regs + SVC_I3C_MSTATUS, reg,
@@ -1086,7 +1138,7 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 	}
 
 	if (rnw)
-		ret = svc_i3c_master_read(master, in, xfer_len);
+		ret = svc_i3c_master_read(master, in, xfer_len, !!rdterm);
 	else
 		ret = svc_i3c_master_write(master, out, xfer_len);
 	if (ret < 0)
