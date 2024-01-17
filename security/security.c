@@ -792,7 +792,7 @@ int lsm_fill_user_ctx(struct lsm_ctx __user *uctx, size_t *uctx_len,
 	size_t nctx_len;
 	int rc = 0;
 
-	nctx_len = ALIGN(struct_size(nctx, ctx, val_len), sizeof(void *));
+	nctx_len = ALIGN(sizeof(struct lsm_ctx) + val_len, sizeof(void *));
 	if (nctx_len > *uctx_len) {
 		rc = -E2BIG;
 		goto out;
