@@ -1205,6 +1205,7 @@ static bool process_madvise_behavior_valid(int behavior)
 	case MADV_PAGEOUT:
 	case MADV_WILLNEED:
 	case MADV_COLLAPSE:
+	case MADV_TRY_COLLAPSE:
 		return true;
 	default:
 		return false;
