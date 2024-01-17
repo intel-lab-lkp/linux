@@ -2,9 +2,10 @@
 /*
  * HMC425A and similar Gain Amplifiers
  *
- * Copyright 2020 Analog Devices Inc.
+ * Copyright 2020, 2023 Analog Devices Inc.
  */
 
+#include <linux/bits.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -20,10 +21,24 @@
 #include <linux/regulator/consumer.h>
 #include <linux/sysfs.h>
 
+/*
+ * The LTC6373 amplifier supports configuring gain using GPIO's with the following
+ *  values (OUTPUT_V / INPUT_V): 0(shutdown), 0.25, 0.5, 1, 2, 4, 8, 16
+ *
+ * Except for the shutdown value, all can be converted to dB using 20 * log10(x)
+ * From here, it is observed that all values are multiples of the '2' gain setting,
+ *  with the correspondent of 6.020dB.
+ */
+#define LTC6373_CONVERSION_CONSTANT	6020
+#define LTC6373_MIN_GAIN_CODE		0x6
+#define LTC6373_CONVERSION_MASK		GENMASK(2, 0)
+#define LTC6373_SHUTDOWN		GENMASK(2, 0)
+
 enum hmc425a_type {
 	ID_HMC425A,
 	ID_HMC540S,
-	ID_ADRF5740
+	ID_ADRF5740,
+	ID_LTC6373,
 };
 
 struct hmc425a_chip_info {
@@ -34,6 +49,8 @@ struct hmc425a_chip_info {
 	int				gain_min;
 	int				gain_max;
 	int				default_gain;
+	int				powerdown_val;
+	bool				has_powerdown;
 };
 
 struct hmc425a_state {
@@ -42,6 +59,7 @@ struct hmc425a_state {
 	struct				gpio_descs *gpios;
 	enum				hmc425a_type type;
 	u32				gain;
+	bool				powerdown;
 };
 
 static int hmc425a_write(struct iio_dev *indio_dev, u32 value)
@@ -80,6 +98,17 @@ static int hmc425a_gain_dB_to_code(struct hmc425a_state *st, int val, int val2, 
 		temp = (abs(gain) / 2000) & 0xF;
 		*code = temp & BIT(3) ? temp | BIT(2) : temp;
 		return 0;
+	case ID_LTC6373:
+		if (st->powerdown)
+			return -EPERM;
+
+		/* add half of the value for rounding */
+		temp = LTC6373_CONVERSION_CONSTANT / 2;
+		if (val < 0)
+			temp *= -1;
+		*code = ~((gain + temp) / LTC6373_CONVERSION_CONSTANT + 3)
+			& LTC6373_CONVERSION_MASK;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -100,6 +129,12 @@ static int hmc425a_code_to_gain_dB(struct hmc425a_state *st, int *val, int *val2
 	case ID_ADRF5740:
 		code = code & BIT(3) ? code & ~BIT(2) : code;
 		gain = code * -2000;
+		break;
+	case ID_LTC6373:
+		if (st->powerdown)
+			return -EPERM;
+		gain = ((~code & LTC6373_CONVERSION_MASK) - 3) *
+		       LTC6373_CONVERSION_CONSTANT;
 		break;
 	}
 
@@ -174,6 +209,48 @@ static const struct iio_info hmc425a_info = {
 	.write_raw_get_fmt = &hmc425a_write_raw_get_fmt,
 };
 
+static ssize_t ltc6373_read_powerdown(struct iio_dev *indio_dev,
+				      uintptr_t private,
+				      const struct iio_chan_spec *chan,
+				      char *buf)
+{
+	struct hmc425a_state *st = iio_priv(indio_dev);
+
+	return sysfs_emit(buf, "%d\n", st->powerdown);
+}
+
+static ssize_t ltc6373_write_powerdown(struct iio_dev *indio_dev,
+				       uintptr_t private,
+				       const struct iio_chan_spec *chan,
+				       const char *buf,
+				       size_t len)
+{
+	struct hmc425a_state *st = iio_priv(indio_dev);
+	bool powerdown;
+	int code, ret;
+
+	ret = kstrtobool(buf, &powerdown);
+	if (ret)
+		return ret;
+
+	mutex_lock(&st->lock);
+	st->powerdown = powerdown;
+	code = (powerdown) ? LTC6373_SHUTDOWN : st->gain;
+	ret = hmc425a_write(indio_dev, code);
+	mutex_unlock(&st->lock);
+	return len;
+}
+
+static const struct iio_chan_spec_ext_info ltc6373_ext_info[] = {
+	{
+		.name = "powerdown",
+		.read = ltc6373_read_powerdown,
+		.write = ltc6373_write_powerdown,
+		.shared = IIO_SEPARATE,
+	},
+	{},
+};
+
 #define HMC425A_CHAN(_channel)						\
 {									\
 	.type = IIO_VOLTAGE,						\
@@ -183,8 +260,22 @@ static const struct iio_info hmc425a_info = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_HARDWAREGAIN),		\
 }
 
+#define LTC6373_CHAN(_channel)						\
+{									\
+	.type = IIO_VOLTAGE,						\
+	.output = 1,							\
+	.indexed = 1,							\
+	.channel = _channel,						\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_HARDWAREGAIN),		\
+	.ext_info = ltc6373_ext_info,					\
+}
+
 static const struct iio_chan_spec hmc425a_channels[] = {
 	HMC425A_CHAN(0),
+};
+
+static const struct iio_chan_spec ltc6373_channels[] = {
+	LTC6373_CHAN(0),
 };
 
 static struct hmc425a_chip_info hmc425a_chip_info_tbl[] = {
@@ -215,6 +306,18 @@ static struct hmc425a_chip_info hmc425a_chip_info_tbl[] = {
 		.gain_max = 0,
 		.default_gain = 0xF, /* set default gain -22.0db*/
 	},
+	[ID_LTC6373] = {
+		.name = "ltc6373",
+		.channels = ltc6373_channels,
+		.num_channels = ARRAY_SIZE(ltc6373_channels),
+		.num_gpios = 3,
+		.gain_min = -12041, /* gain setting x0.25*/
+		.gain_max = 24082,  /* gain setting x16  */
+		.default_gain = LTC6373_MIN_GAIN_CODE,
+		.powerdown_val = LTC6373_SHUTDOWN,
+		.has_powerdown = true,
+	},
+
 };
 
 /* Match table for of_platform binding */
@@ -225,6 +328,8 @@ static const struct of_device_id hmc425a_of_match[] = {
 	  .data = &hmc425a_chip_info_tbl[ID_HMC540S]},
 	{ .compatible = "adi,adrf5740",
 	  .data = &hmc425a_chip_info_tbl[ID_ADRF5740]},
+	{ .compatible = "adi,ltc6373",
+	  .data = &hmc425a_chip_info_tbl[ID_LTC6373]},
 	{},
 };
 MODULE_DEVICE_TABLE(of, hmc425a_of_match);
@@ -270,8 +375,13 @@ static int hmc425a_probe(struct platform_device *pdev)
 	indio_dev->info = &hmc425a_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
-	/* Set default gain */
-	hmc425a_write(indio_dev, st->gain);
+	if (st->chip_info->has_powerdown) {
+		st->powerdown = true;
+		hmc425a_write(indio_dev, st->chip_info->powerdown_val);
+	} else {
+		/* Set default gain */
+		hmc425a_write(indio_dev, st->gain);
+	}
 
 	return devm_iio_device_register(&pdev->dev, indio_dev);
 }
