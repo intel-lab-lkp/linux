@@ -8991,6 +8991,10 @@ static const struct bpf_sec_def section_defs[] = {
 	SEC_DEF("struct_ops.s+",	STRUCT_OPS, 0, SEC_SLEEPABLE),
 	SEC_DEF("sk_lookup",		SK_LOOKUP, BPF_SK_LOOKUP, SEC_ATTACHABLE),
 	SEC_DEF("netfilter",		NETFILTER, BPF_NETFILTER, SEC_NONE),
+	SEC_DEF("qdisc/enqueue",	QDISC, BPF_QDISC_ENQUEUE, SEC_ATTACHABLE_OPT),
+	SEC_DEF("qdisc/dequeue",	QDISC, BPF_QDISC_DEQUEUE, SEC_ATTACHABLE_OPT),
+	SEC_DEF("qdisc/reset",		QDISC, BPF_QDISC_RESET, SEC_ATTACHABLE_OPT),
+	SEC_DEF("qdisc/init",		QDISC, BPF_QDISC_INIT, SEC_ATTACHABLE_OPT),
 };
 
 int libbpf_register_prog_handler(const char *sec,
