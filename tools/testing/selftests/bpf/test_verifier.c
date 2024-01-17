@@ -41,6 +41,7 @@
 #include "test_btf.h"
 #include "../../../include/linux/filter.h"
 #include "testing_helpers.h"
+#include "bpf/libbpf_internal.h"
 
 #ifndef ENOTSUPP
 #define ENOTSUPP 524
@@ -74,6 +75,7 @@
 		    1ULL << CAP_BPF)
 #define UNPRIV_SYSCTL "kernel/unprivileged_bpf_disabled"
 static bool unpriv_disabled = false;
+static bool jit_disabled;
 static int skips;
 static bool verbose = false;
 static int verif_log_level = 0;
@@ -1143,8 +1145,8 @@ static void do_test_fixup(struct bpf_test *test, enum bpf_prog_type prog_type,
 		} while (*fixup_map_xskmap);
 	}
 	if (*fixup_map_stacktrace) {
-		map_fds[12] = create_map(BPF_MAP_TYPE_STACK_TRACE, sizeof(u32),
-					 sizeof(u64), 1);
+		map_fds[12] = create_map(BPF_MAP_TYPE_STACK_TRACE, sizeof(__u32),
+					 sizeof(__u64), 1);
 		do {
 			prog[*fixup_map_stacktrace].imm = map_fds[12];
 			fixup_map_stacktrace++;
@@ -1203,7 +1205,7 @@ static void do_test_fixup(struct bpf_test *test, enum bpf_prog_type prog_type,
 	}
 	if (*fixup_map_reuseport_array) {
 		map_fds[19] = __create_map(BPF_MAP_TYPE_REUSEPORT_SOCKARRAY,
-					   sizeof(u32), sizeof(u64), 1, 0);
+					   sizeof(__u32), sizeof(__u64), 1, 0);
 		do {
 			prog[*fixup_map_reuseport_array].imm = map_fds[19];
 			fixup_map_reuseport_array++;
@@ -1622,6 +1624,16 @@ static void do_test_single(struct bpf_test *test, bool unpriv,
 	alignment_prevented_execution = 0;
 
 	if (expected_ret == ACCEPT || expected_ret == VERBOSE_ACCEPT) {
+		if (fd_prog < 0 && saved_errno == EINVAL && jit_disabled) {
+			for (i = 0; i < prog_len; i++, prog++) {
+				if (!insn_is_pseudo_func(prog))
+					continue;
+				printf("SKIP (callbacks are not allowed in non-JITed programs)\n");
+				skips++;
+				goto close_fds;
+			}
+		}
+
 		if (fd_prog < 0) {
 			printf("FAIL\nFailed to load prog '%s'!\n",
 			       strerror(saved_errno));
@@ -1843,6 +1855,8 @@ int main(int argc, char **argv)
 		       UNPRIV_SYSCTL);
 		return EXIT_FAILURE;
 	}
+
+	jit_disabled = !is_jit_enabled();
 
 	/* Use libbpf 1.0 API mode */
 	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
