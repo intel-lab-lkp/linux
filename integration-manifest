@@ -1,0 +1,36 @@
+drm drm-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-misc drm-misc-fixes 26db46bc9c675e43230cc6accd110110a7654299
+	drm/bridge: parade-ps8640: Ensure bridge is suspended in .post_disable()
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-xe drm-xe-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm drm-next 205e18c13545ab43cc4fe4930732b4feef551198
+	nouveau/gsp: handle engines in runl without nonstall interrupts.
+drm-misc drm-misc-next-fixes 1f1626ac0428820f998245478610f452650bcab5
+	drm/ttm: fix ttm pool initialization for no-dma-device drivers
+drm-intel drm-intel-next-fixes d505a16e00c35919fd9fe5735894645e0f70a415
+	drm/i915/perf: reconcile Excess struct member kernel-doc warnings
+drm-xe drm-xe-next-fixes bf3ff145df184698a8a80b33265064638572366f
+	drm/xe: display support should not depend on EXPERT
+drm-misc drm-misc-next 2e722c868b3a056eb6a2c00cfc0e395cf996290c
+	drm/tests: managed: Add a simple test for drmm_managed_release
+drm-intel drm-intel-next dc524d05974f615b145404191fcf91b478950499
+	Revert "drm/i915/dsi: Do display on sequence later on icl+"
+drm-intel drm-intel-gt-next 284781470de227e6177e491ad091d72492290a65
+	drm/i915/gt: Use rc6.supported flag from intel_gt for rc6_enable sysfs
+drm-xe drm-xe-next 85f3b79fb5788e2a1ec938a70d8f5c7150a670b9
+	drm/xe: Group normal kunit tests in a single module
+drm-intel topic/core-for-CI 4ed7492a358d8405f0fff43b17db7f2e33295110
+	HAX net/phy: Suppress WARN from phy_error
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
+drm-xe topic/xe-for-CI e4cfe0cd981952f6ed3d5b92a0b7e3ae0b3ad2b4
+	drm/xe/guc: define LNL FW
