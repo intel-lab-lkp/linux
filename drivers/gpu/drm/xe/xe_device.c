@@ -29,12 +29,14 @@
 #include "xe_gt.h"
 #include "xe_gt_mcr.h"
 #include "xe_irq.h"
+#include "xe_memirq.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
 #include "xe_pat.h"
 #include "xe_pcode.h"
 #include "xe_pm.h"
 #include "xe_query.h"
+#include "xe_sriov.h"
 #include "xe_tile.h"
 #include "xe_ttm_stolen_mgr.h"
 #include "xe_ttm_sys_mgr.h"
@@ -436,6 +438,10 @@ int xe_device_probe(struct xe_device *xe)
 
 	xe_pat_init_early(xe);
 
+	err = xe_sriov_init(xe);
+	if (err)
+		return err;
+
 	xe->info.mem_region_mask = 1;
 	err = xe_display_init_nommio(xe);
 	if (err)
@@ -456,6 +462,11 @@ int xe_device_probe(struct xe_device *xe)
 		err = xe_ggtt_init_early(tile->mem.ggtt);
 		if (err)
 			return err;
+		if (IS_SRIOV_VF(xe)) {
+			err = xe_memirq_init(&tile->sriov.vf.memirq);
+			if (err)
+				return err;
+		}
 	}
 
 	err = drmm_add_action_or_reset(&xe->drm, xe_driver_flr_fini, xe);
