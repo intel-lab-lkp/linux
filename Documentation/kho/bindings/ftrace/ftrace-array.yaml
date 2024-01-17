@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/kho/ftrace/ftrace-array.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Ftrace trace array
+
+maintainers:
+  - Alexander Graf <graf@amazon.com>
+
+description: |
+  Ftrace can create and expose multiple different trace instances, see
+  https://docs.kernel.org/trace/ftrace.html#instances. Each instance is
+  backed by a single trace array which contains all information about where
+  the corresponding trace buffers are located and how they are configured.
+
+properties:
+  compatible:
+    enum:
+      - ftrace,array-v1
+
+  trace-flags:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Bitmap of all the trace flags that were enabled in the trace array at the
+      point of serialization.
+
+patternProperties:
+  cpu[0-9a-f]*:
+    $ref: ftrace-cpu.yaml#
+    description: Trace buffer location for each CPU
+
+required:
+  - compatible
+  - trace-flags
+
+additionalProperties: false

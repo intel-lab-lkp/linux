@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/kho/ftrace/ftrace-cpu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Ftrace per-CPU ring buffer contents
+
+maintainers:
+  - Alexander Graf <graf@amazon.com>
+
+description: |
+  An ftrace trace array contains a ring buffers for each CPU. This
+  object describes the buffers of such a single CPU. It describes which
+  CPU it was used in and which memory was backing the ring buffer.
+
+properties:
+  compatible:
+    enum:
+      - ftrace,cpu-v1
+
+  cpu:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      CPU number of the CPU that this ring buffer belonged to when it was
+      serialized.
+
+  mem:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      Array of { u64 phys_addr, u64 len } elements that describe a list of ring
+      buffer pages. Each page consists of two elements. The first element
+      describes the location of the struct buffer_page that contains metadata
+      for a given ring buffer page, such as the ring's head indicator. The
+      second element points to the ring buffer data page which contains the raw
+      trace data.
+
+required:
+  - compatible
+  - cpu
+  - mem
+
+additionalProperties: false
