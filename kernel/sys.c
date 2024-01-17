@@ -1798,7 +1798,13 @@ void getrusage(struct task_struct *p, int who, struct rusage *r)
 		goto out;
 	}
 
-	if (!lock_task_sighand(p, &flags))
+	/*
+	 * We use lock_task_sighand_safe here instead of lock_task_sighand
+	 * because one process with many threads all calling getrusage may
+	 * otherwise cause an NMI watchdog timeout by disabling IRQs for too
+	 * long.
+	 */
+	if (!lock_task_sighand_safe(p, &flags))
 		return;
 
 	switch (who) {

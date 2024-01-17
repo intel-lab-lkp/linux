@@ -1388,6 +1388,49 @@ int zap_other_threads(struct task_struct *p)
 	return count;
 }
 
+struct sighand_struct *__lock_task_sighand_safe(struct task_struct *tsk,
+						unsigned long *flags)
+{
+	struct sighand_struct *sighand;
+	int n;
+	bool lock = false;
+
+again:
+	rcu_read_lock();
+	local_irq_save(*flags);
+	for (n = 0; n < 500; n++) {
+		sighand = rcu_dereference(tsk->sighand);
+		if (unlikely(sighand == NULL))
+			break;
+
+		/*
+		 * The downside of this approach is we loose the fairness of
+		 * FIFO waiting because the acqusition order between multiple
+		 * waiting tasks is effectively random.
+		 */
+		lock = spin_trylock(&sighand->siglock);
+		if (!lock) {
+			cpu_relax();
+			continue;
+		}
+
+		/* __lock_task_sighand has context explaining this check. */
+		if (likely(sighand == rcu_access_pointer(tsk->sighand)))
+			break;
+		spin_unlock(&sighand->siglock);
+		lock = false;
+	}
+	rcu_read_unlock();
+
+	/* Handle pending IRQ */
+	if (!lock && sighand) {
+		local_irq_restore(*flags);
+		goto again;
+	}
+
+	return sighand;
+}
+
 struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 					   unsigned long *flags)
 {

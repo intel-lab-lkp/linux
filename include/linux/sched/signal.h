@@ -749,6 +749,19 @@ static inline struct sighand_struct *lock_task_sighand(struct task_struct *task,
 	return ret;
 }
 
+extern struct sighand_struct *__lock_task_sighand_safe(struct task_struct *task,
+							unsigned long *flags);
+
+static inline struct sighand_struct *lock_task_sighand_safe(struct task_struct *task,
+						       unsigned long *flags)
+{
+	struct sighand_struct *ret;
+
+	ret = __lock_task_sighand_safe(task, flags);
+	(void)__cond_lock(&task->sighand->siglock, ret);
+	return ret;
+}
+
 static inline void unlock_task_sighand(struct task_struct *task,
 						unsigned long *flags)
 {
