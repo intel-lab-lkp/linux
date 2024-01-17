@@ -13,6 +13,16 @@
 	interrupt-controller;
 	#interrupt-cells = <1>;
 
+	pmic {
+		compatible = "ti,tps65217-pmic";
+		status = "okay";
+	};
+
+	bl {
+		compatible = "ti,tps65217-bl";
+		status = "okay";
+	};
+
 	charger {
 		compatible = "ti,tps65217-charger";
 		interrupts = <0>, <1>;
