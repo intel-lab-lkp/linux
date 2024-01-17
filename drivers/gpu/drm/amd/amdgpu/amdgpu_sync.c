@@ -30,6 +30,7 @@
  */
 
 #include <linux/dma-fence-chain.h>
+#include <trace/events/dma_fence.h>
 
 #include "amdgpu.h"
 #include "amdgpu_trace.h"
@@ -149,10 +150,12 @@ static bool amdgpu_sync_add_later(struct amdgpu_sync *sync, struct dma_fence *f)
  *
  * @sync: sync object to add fence to
  * @f: fence to sync to
+ * @reason: why do we sync to this fence
  *
  * Add the fence to the sync object.
  */
-int amdgpu_sync_fence(struct amdgpu_sync *sync, struct dma_fence *f)
+int amdgpu_sync_fence(struct amdgpu_sync *sync, struct dma_fence *f,
+		      const char *reason)
 {
 	struct amdgpu_sync_entry *e;
 
@@ -165,6 +168,8 @@ int amdgpu_sync_fence(struct amdgpu_sync *sync, struct dma_fence *f)
 	e = kmem_cache_alloc(amdgpu_sync_slab, GFP_KERNEL);
 	if (!e)
 		return -ENOMEM;
+
+	trace_dma_fence_sync_to(f, reason);
 
 	hash_add(sync->fences, &e->node, f->context);
 	e->fence = dma_fence_get(f);
@@ -248,7 +253,7 @@ int amdgpu_sync_resv(struct amdgpu_device *adev, struct amdgpu_sync *sync,
 			struct dma_fence *tmp = dma_fence_chain_contained(f);
 
 			if (amdgpu_sync_test_fence(adev, mode, owner, tmp)) {
-				r = amdgpu_sync_fence(sync, f);
+				r = amdgpu_sync_fence(sync, f, __func__);
 				dma_fence_put(f);
 				if (r)
 					return r;
@@ -357,7 +362,7 @@ int amdgpu_sync_clone(struct amdgpu_sync *source, struct amdgpu_sync *clone)
 	hash_for_each_safe(source->fences, i, tmp, e, node) {
 		f = e->fence;
 		if (!dma_fence_is_signaled(f)) {
-			r = amdgpu_sync_fence(clone, f);
+			r = amdgpu_sync_fence(clone, f, __func__);
 			if (r)
 				return r;
 		} else {
