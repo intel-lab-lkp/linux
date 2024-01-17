@@ -535,13 +535,38 @@ enum kho_event {
 extern phys_addr_t kho_scratch_phys;
 extern phys_addr_t kho_scratch_len;
 
+/* ingest handover metadata */
+void kho_reserve_previous_mem(void);
+void kho_populate(phys_addr_t dt_phys, phys_addr_t scratch_phys, u64 scratch_len,
+		  phys_addr_t mem_phys, u64 mem_len);
+void kho_populate_refcount(void);
+const void *kho_get_fdt(void);
+void kho_return_mem(const struct kho_mem *mem);
+void *kho_claim_mem(const struct kho_mem *mem);
+static inline bool is_kho_boot(void)
+{
+	return !!kho_scratch_phys;
+}
+
 /* egest handover metadata */
 void kho_reserve_scratch(void);
 int register_kho_notifier(struct notifier_block *nb);
 int unregister_kho_notifier(struct notifier_block *nb);
 bool kho_is_active(void);
 #else
-static inline void kho_reserve_scratch(void) {}
+/* ingest handover metadata */
+static inline void kho_reserve_previous_mem(void) { }
+static inline void kho_populate(phys_addr_t dt_phys, phys_addr_t scratch_phys,
+				u64 scratch_len, phys_addr_t mem_phys,
+				u64 mem_len) { }
+static inline void kho_populate_refcount(void) { }
+static inline void *kho_get_fdt(void) { return NULL; }
+static inline void kho_return_mem(const struct kho_mem *mem) { }
+static inline void *kho_claim_mem(const struct kho_mem *mem) { return NULL; }
+static inline bool is_kho_boot(void) { return false; }
+
+/* egest handover metadata */
+static inline void kho_reserve_scratch(void) { }
 static inline int register_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
 static inline int unregister_kho_notifier(struct notifier_block *nb) { return -EINVAL; }
 static inline bool kho_is_active(void) { return false; }
