@@ -485,6 +485,7 @@ efct_hw_setup_io(struct efct_hw *hw)
 	bool new_alloc = true;
 	struct efc_dma *dma;
 	struct efct *efct = hw->os;
+	int ret;
 
 	if (!hw->io) {
 		hw->io = kmalloc_array(hw->config.n_io, sizeof(io), GFP_KERNEL);
@@ -495,16 +496,18 @@ efct_hw_setup_io(struct efct_hw *hw)
 
 		for (i = 0; i < hw->config.n_io; i++) {
 			hw->io[i] = kzalloc(sizeof(*io), GFP_KERNEL);
-			if (!hw->io[i])
+			if (!hw->io[i]) {
+				ret = -ENOMEM;
 				goto error;
+			}
 		}
 
 		/* Create WQE buffs for IO */
 		hw->wqe_buffs = kzalloc((hw->config.n_io * hw->sli.wqe_size),
 					GFP_KERNEL);
 		if (!hw->wqe_buffs) {
-			kfree(hw->io);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto error;
 		}
 
 	} else {
@@ -517,8 +520,10 @@ efct_hw_setup_io(struct efct_hw *hw)
 		dma->size = sizeof(struct fcp_txrdy) * hw->config.n_io;
 		dma->virt = dma_alloc_coherent(&efct->pci->dev,
 					       dma->size, &dma->phys, GFP_KERNEL);
-		if (!dma->virt)
-			return -ENOMEM;
+		if (!dma->virt) {
+			ret = -ENOMEM;
+			goto free_wqe_buffs;
+		}
 	}
 	xfer_virt = (uintptr_t)hw->xfer_rdy.virt;
 	xfer_phys = hw->xfer_rdy.phys;
@@ -539,7 +544,8 @@ efct_hw_setup_io(struct efct_hw *hw)
 		wqcb = efct_hw_reqtag_alloc(hw, efct_hw_wq_process_io, io);
 		if (!wqcb) {
 			efc_log_err(hw->os, "can't allocate request tag\n");
-			return -ENOSPC;
+			ret = -ENOSPC;
+			goto free_dma_virt;
 		}
 		io->reqtag = wqcb->instance_index;
 
@@ -553,7 +559,8 @@ efct_hw_setup_io(struct efct_hw *hw)
 				       &io->indicator, &index)) {
 			efc_log_err(hw->os,
 				    "sli_resource_alloc failed @ %d\n", i);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_dma_virt;
 		}
 
 		if (new_alloc) {
@@ -567,7 +574,8 @@ efct_hw_setup_io(struct efct_hw *hw)
 				efc_log_err(hw->os, "dma_alloc fail %d\n", i);
 				memset(&io->def_sgl, 0,
 				       sizeof(struct efc_dma));
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto free_dma_virt;
 			}
 		}
 		io->def_sgl_count = hw->config.n_sgl;
@@ -585,6 +593,12 @@ efct_hw_setup_io(struct efct_hw *hw)
 	}
 
 	return 0;
+free_dma_virt:
+	dma = &hw->xfer_rdy;
+	dma_free_coherent(&efct->pci->dev, dma->size, dma->virt, dma->phys);
+	memset(dma, 0, sizeof(struct efc_dma));
+free_wqe_buffs:
+	kfree(hw->wqe_buffs);
 error:
 	for (i = 0; i < hw->config.n_io && hw->io[i]; i++) {
 		kfree(hw->io[i]);
@@ -594,7 +608,7 @@ error:
 	kfree(hw->io);
 	hw->io = NULL;
 
-	return -ENOMEM;
+	return ret;
 }
 
 static int
