@@ -83,6 +83,40 @@ DEFINE_EVENT(dma_fence, dma_fence_wait_end,
 	TP_ARGS(fence)
 );
 
+DECLARE_EVENT_CLASS(dma_fence_from,
+
+	TP_PROTO(struct dma_fence *fence, const char *reason),
+
+	TP_ARGS(fence, reason),
+
+	TP_STRUCT__entry(
+		__string(driver, fence->ops->get_driver_name(fence))
+		__string(timeline, fence->ops->get_timeline_name(fence))
+		__field(unsigned int, context)
+		__field(unsigned int, seqno)
+		__string(reason, reason)
+	),
+
+	TP_fast_assign(
+		__assign_str(driver, fence->ops->get_driver_name(fence));
+		__assign_str(timeline, fence->ops->get_timeline_name(fence));
+		__entry->context = fence->context;
+		__entry->seqno = fence->seqno;
+		__assign_str(reason, reason);
+	),
+
+	TP_printk("driver=%s timeline=%s context=%u seqno=%u reason=%s",
+		  __get_str(driver), __get_str(timeline), __entry->context,
+		  __entry->seqno, __get_str(reason))
+);
+
+DEFINE_EVENT(dma_fence_from, dma_fence_sync_to,
+
+	TP_PROTO(struct dma_fence *fence, const char *reason),
+
+	TP_ARGS(fence, reason)
+);
+
 #endif /*  _TRACE_DMA_FENCE_H */
 
 /* This part must be outside protection */
