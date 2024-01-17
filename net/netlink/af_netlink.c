@@ -2693,6 +2693,7 @@ static int netlink_native_seq_show(struct seq_file *seq, void *v)
 		struct sock *s = v;
 		struct netlink_sock *nlk = nlk_sk(s);
 
+		netlink_lock_table();
 		seq_printf(seq, "%pK %-3d %-10u %08x %-8d %-8d %-5d %-8d %-8u %-8lu\n",
 			   s,
 			   s->sk_protocol,
@@ -2705,7 +2706,7 @@ static int netlink_native_seq_show(struct seq_file *seq, void *v)
 			   atomic_read(&s->sk_drops),
 			   sock_i_ino(s)
 			);
-
+		netlink_unlock_table();
 	}
 	return 0;
 }
