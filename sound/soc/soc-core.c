@@ -1804,6 +1804,8 @@ static const char * const dmi_blacklist[] = {
 	"Board Manufacturer",
 	"Board Vendor Name",
 	"Board Product Name",
+	"Unknown",
+	"Unknown Product",
 	NULL,	/* terminator */
 };
 
