@@ -68,8 +68,9 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,am64-pcie-ep
+          items:
+            - const: ti,am64-pcie-ep
+            - const: ti,j721e-pcie-ep
     then:
       properties:
         num-lanes:
@@ -78,9 +79,9 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,j7200-pcie-ep
-            - ti,j721e-pcie-ep
+          items:
+            - const: ti,j7200-pcie-ep
+            - const: ti,j721e-pcie-ep
     then:
       properties:
         num-lanes:
@@ -90,8 +91,19 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,j784s4-pcie-ep
+          items:
+            - const: ti,j721e-pcie-ep
+    then:
+      properties:
+        num-lanes:
+          minimum: 1
+          maximum: 4
+
+  - if:
+      properties:
+        compatible:
+          items:
+            - const: ti,j784s4-pcie-ep
     then:
       properties:
         num-lanes:

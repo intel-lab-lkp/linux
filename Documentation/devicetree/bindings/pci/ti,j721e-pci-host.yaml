@@ -97,8 +97,9 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,am64-pcie-host
+          items:
+            - const: ti,am64-pcie-host
+            - const: ti,j721e-pcie-host
     then:
       properties:
         num-lanes:
@@ -107,9 +108,9 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,j7200-pcie-host
-            - ti,j721e-pcie-host
+          items:
+            - const: ti,j7200-pcie-host
+            - const: ti,j721e-pcie-host
     then:
       properties:
         num-lanes:
@@ -119,8 +120,19 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - ti,j784s4-pcie-host
+          items:
+            - const: ti,j721e-pcie-host
+    then:
+      properties:
+        num-lanes:
+          minimum: 1
+          maximum: 4
+
+  - if:
+      properties:
+        compatible:
+          items:
+            - const: ti,j784s4-pcie-host
     then:
       properties:
         num-lanes:
