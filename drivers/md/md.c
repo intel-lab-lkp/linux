@@ -4483,6 +4483,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	int err = 0;
 	enum array_state st = match_word(buf, array_states);
+	bool clear_md_closing = false;
 
 	/* No lock dependent actions */
 	switch (st) {
@@ -4517,6 +4518,16 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		spin_unlock(&mddev->lock);
 		return err ?: len;
 	}
+
+	/* we will call set readonly or stop raid, sync blockdev */
+	if (st == clear || (mddev->pers && (st == readonly ||
+	    st == inactive || (st == read_auto && md_is_rdwr(mddev))))) {
+		err = mddev_sync_blockdev(mddev);
+		if (err)
+			return err;
+		clear_md_closing = true;
+	}
+
 	err = mddev_lock(mddev);
 	if (err)
 		return err;
@@ -4529,6 +4540,8 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		break;
 	case clear:
 		err = do_md_stop(mddev, 0, NULL);
+		if (!err)
+			clear_md_closing = false;
 		break;
 	case readonly:
 		if (mddev->pers)
@@ -4591,6 +4604,8 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		sysfs_notify_dirent_safe(mddev->sysfs_state);
 	}
 	mddev_unlock(mddev);
+	if (clear_md_closing)
+		clear_bit(MD_CLOSING, &mddev->flags);
 	return err ?: len;
 }
 static struct md_sysfs_entry md_array_state =
