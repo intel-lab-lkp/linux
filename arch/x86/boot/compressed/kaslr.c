@@ -29,6 +29,7 @@
 #include <linux/uts.h>
 #include <linux/utsname.h>
 #include <linux/ctype.h>
+#include <uapi/linux/kexec.h>
 #include <generated/utsversion.h>
 #include <generated/utsrelease.h>
 
@@ -471,6 +472,60 @@ static bool mem_avoid_overlap(struct mem_vector *img,
 				is_overlapping = true;
 			}
 		}
+
+#ifdef CONFIG_KEXEC_KHO
+		if (ptr->type == SETUP_KEXEC_KHO) {
+			struct kho_data *kho = (struct kho_data *)ptr->data;
+			struct kho_mem *mems = (void *)kho->mem_cache_addr;
+			int nr_mems = kho->mem_cache_size / sizeof(*mems);
+			int i;
+
+			/* Avoid the mem cache */
+			avoid = (struct mem_vector) {
+				.start = kho->mem_cache_addr,
+				.size = kho->mem_cache_size,
+			};
+
+			if (mem_overlaps(img, &avoid) && (avoid.start < earliest)) {
+				*overlap = avoid;
+				earliest = overlap->start;
+				is_overlapping = true;
+			}
+
+			/* And the KHO DT */
+			avoid = (struct mem_vector) {
+				.start = kho->dt_addr,
+				.size = kho->dt_size,
+			};
+
+			if (mem_overlaps(img, &avoid) && (avoid.start < earliest)) {
+				*overlap = avoid;
+				earliest = overlap->start;
+				is_overlapping = true;
+			}
+
+			/* As well as any other KHO memory reservations */
+			for (i = 0; i < nr_mems; i++) {
+				avoid = (struct mem_vector) {
+					.start = mems[i].addr,
+					.size = mems[i].len,
+				};
+
+				/*
+				 * This mem starts after our current break.
+				 * The array is sorted, so we're done.
+				 */
+				if (avoid.start >= earliest)
+					break;
+
+				if (mem_overlaps(img, &avoid)) {
+					*overlap = avoid;
+					earliest = overlap->start;
+					is_overlapping = true;
+				}
+			}
+		}
+#endif
 
 		ptr = (struct setup_data *)(unsigned long)ptr->next;
 	}

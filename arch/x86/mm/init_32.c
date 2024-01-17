@@ -20,6 +20,7 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/highmem.h>
+#include <linux/kexec.h>
 #include <linux/pagemap.h>
 #include <linux/pci.h>
 #include <linux/pfn.h>
@@ -737,6 +738,12 @@ void __init mem_init(void)
 
 	after_bootmem = 1;
 	x86_init.hyper.init_after_bootmem();
+
+	/*
+	 * Now that all KHO pages are marked as reserved, let's flip them back
+	 * to normal pages with accurate refcount.
+	 */
+	kho_populate_refcount();
 
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can

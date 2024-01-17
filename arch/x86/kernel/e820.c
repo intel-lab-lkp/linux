@@ -1341,6 +1341,15 @@ void __init e820__memblock_setup(void)
 			continue;
 
 		memblock_add(entry->addr, entry->size);
+
+		/*
+		 * At this point with KHO we only allocate from scratch memory
+		 * and only from memory below ISA_END_ADDRESS. Make sure that
+		 * when we add memory for the eligible range, we add it as
+		 * scratch memory so that we can resize the memblocks array.
+		 */
+		if (is_kho_boot() && (end <= ISA_END_ADDRESS))
+			memblock_mark_scratch(entry->addr, end);
 	}
 
 	/* Throw away partial pages: */
