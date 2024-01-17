@@ -18,6 +18,7 @@
  *
  */
 
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
@@ -312,6 +313,8 @@ static int renesas_sdhi_start_signal_voltage_switch(struct mmc_host *mmc,
 #define SH_MOBILE_SDHI_SCC_SMPCMP_CMD_REQDOWN	BIT(8)
 #define SH_MOBILE_SDHI_SCC_SMPCMP_CMD_REQUP	BIT(24)
 #define SH_MOBILE_SDHI_SCC_SMPCMP_CMD_ERR	(BIT(8) | BIT(24))
+#define SH_MOBILE_SDHI_SCC_SMPCMP_CMPNGU_DATA	GENMASK(23, 16)
+#define SH_MOBILE_SDHI_SCC_SMPCMP_CMPNGD_DATA	GENMASK(7, 0)
 
 #define SH_MOBILE_SDHI_SCC_TMPPORT2_HS400OSEL	BIT(4)
 #define SH_MOBILE_SDHI_SCC_TMPPORT2_HS400EN	BIT(31)
@@ -641,7 +644,14 @@ static int renesas_sdhi_select_tuning(struct tmio_mmc_host *host)
 	 * identifying the change point of data.
 	 */
 	if (bitmap_full(priv->taps, taps_size)) {
-		bitmap = priv->smpcmp;
+		/*
+		 * On some setups it happens that all TAPS are OK but
+		 * no change point of data. Any tap should be OK for this.
+		 */
+		if (bitmap_empty(priv->smpcmp, taps_size))
+			bitmap = priv->taps;
+		else
+			bitmap = priv->smpcmp;
 		min_tap_row = 1;
 	} else {
 		bitmap = priv->taps;
@@ -706,11 +716,18 @@ static int renesas_sdhi_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		if (mmc_send_tuning(mmc, opcode, &cmd_error) == 0)
 			set_bit(i, priv->taps);
 
-		if (sd_scc_read32(host, priv, SH_MOBILE_SDHI_SCC_SMPCMP) == 0)
-			set_bit(i, priv->smpcmp);
-
-		if (cmd_error)
+		if (cmd_error) {
 			mmc_send_abort_tuning(mmc, opcode);
+		} else {
+			u32 val, cmpngu_data, cmpngd_data;
+
+			val = sd_scc_read32(host, priv, SH_MOBILE_SDHI_SCC_SMPCMP);
+			cmpngu_data = FIELD_GET(SH_MOBILE_SDHI_SCC_SMPCMP_CMPNGU_DATA, val);
+			cmpngd_data = FIELD_GET(SH_MOBILE_SDHI_SCC_SMPCMP_CMPNGD_DATA, val);
+
+			if (cmpngu_data != cmpngd_data)
+				set_bit(i, priv->smpcmp);
+		}
 	}
 
 	ret = renesas_sdhi_select_tuning(host);
