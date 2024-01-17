@@ -29,6 +29,8 @@ struct lima_sched_task {
 	bool recoverable;
 	struct lima_bo *heap;
 
+	struct dma_fence *done_fence;
+
 	/* pipe fence */
 	struct dma_fence *fence;
 };
