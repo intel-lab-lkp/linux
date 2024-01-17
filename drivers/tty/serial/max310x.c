@@ -1217,7 +1217,7 @@ static int max310x_gpio_set_config(struct gpio_chip *chip, unsigned int offset,
 				1 << ((offset % 4) + 4), 0);
 		return 0;
 	default:
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 	}
 }
 #endif
