@@ -43,6 +43,7 @@ struct bpf_sched_data {
 	struct sch_bpf_prog __rcu enqueue_prog;
 	struct sch_bpf_prog __rcu dequeue_prog;
 	struct sch_bpf_prog __rcu reset_prog;
+	struct sch_bpf_prog __rcu init_prog;
 
 	struct qdisc_watchdog watchdog;
 };
@@ -87,6 +88,9 @@ static int sch_bpf_dump(struct Qdisc *sch, struct sk_buff *skb)
 		goto nla_put_failure;
 	if (sch_bpf_dump_prog(&q->reset_prog, skb, TCA_SCH_BPF_RESET_PROG_NAME,
 			      TCA_SCH_BPF_RESET_PROG_ID, TCA_SCH_BPF_RESET_PROG_TAG))
+		goto nla_put_failure;
+	if (sch_bpf_dump_prog(&q->init_prog, skb, TCA_SCH_BPF_INIT_PROG_NAME,
+			      TCA_SCH_BPF_INIT_PROG_ID, TCA_SCH_BPF_INIT_PROG_TAG))
 		goto nla_put_failure;
 
 	return nla_nest_end(skb, opts);
@@ -269,6 +273,9 @@ static const struct nla_policy sch_bpf_policy[TCA_SCH_BPF_MAX + 1] = {
 	[TCA_SCH_BPF_RESET_PROG_FD]	= { .type = NLA_U32 },
 	[TCA_SCH_BPF_RESET_PROG_NAME]	= { .type = NLA_NUL_STRING,
 					    .len = ACT_BPF_NAME_LEN },
+	[TCA_SCH_BPF_INIT_PROG_FD]	= { .type = NLA_U32 },
+	[TCA_SCH_BPF_INIT_PROG_NAME]	= { .type = NLA_NUL_STRING,
+					    .len = ACT_BPF_NAME_LEN },
 };
 
 static int bpf_init_prog(struct nlattr *fd, struct nlattr *name,
@@ -348,6 +355,10 @@ static int sch_bpf_change(struct Qdisc *sch, struct nlattr *opt,
 		goto failure;
 	err = bpf_init_prog(tb[TCA_SCH_BPF_RESET_PROG_FD],
 			    tb[TCA_SCH_BPF_RESET_PROG_NAME], &q->reset_prog, true);
+	if (err)
+		goto failure;
+	err = bpf_init_prog(tb[TCA_SCH_BPF_INIT_PROG_FD],
+			    tb[TCA_SCH_BPF_INIT_PROG_NAME], &q->init_prog, true);
 failure:
 	sch_tree_unlock(sch);
 	return err;
@@ -357,6 +368,8 @@ static int sch_bpf_init(struct Qdisc *sch, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {
 	struct bpf_sched_data *q = qdisc_priv(sch);
+	struct bpf_qdisc_ctx ctx = {};
+	struct bpf_prog *init;
 	int err;
 
 	qdisc_watchdog_init(&q->watchdog, sch);
@@ -370,7 +383,14 @@ static int sch_bpf_init(struct Qdisc *sch, struct nlattr *opt,
 	if (err)
 		return err;
 
-	return qdisc_class_hash_init(&q->clhash);
+	err = qdisc_class_hash_init(&q->clhash);
+	if (err < 0)
+		return err;
+
+	init = rcu_dereference(q->init_prog.prog);
+	if (init)
+		bpf_prog_run(init, &ctx);
+	return 0;
 }
 
 static void sch_bpf_reset(struct Qdisc *sch)
@@ -420,6 +440,7 @@ static void sch_bpf_destroy(struct Qdisc *sch)
 	bpf_cleanup_prog(&q->enqueue_prog);
 	bpf_cleanup_prog(&q->dequeue_prog);
 	bpf_cleanup_prog(&q->reset_prog);
+	bpf_cleanup_prog(&q->init_prog);
 	sch_tree_unlock(sch);
 }
 

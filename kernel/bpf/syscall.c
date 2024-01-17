@@ -2499,6 +2499,7 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 		case BPF_QDISC_ENQUEUE:
 		case BPF_QDISC_DEQUEUE:
 		case BPF_QDISC_RESET:
+		case BPF_QDISC_INIT:
 			return 0;
 		default:
 			return -EINVAL;
