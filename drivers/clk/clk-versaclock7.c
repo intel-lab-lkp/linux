@@ -1127,8 +1127,11 @@ static int vc7_probe(struct i2c_client *client)
 		node_name = client->dev.of_node->name;
 
 	/* Register APLL */
-	apll_rate = vc7_get_apll_rate(vc7);
 	apll_name = kasprintf(GFP_KERNEL, "%s_apll", node_name);
+	if (!apll_name)
+		return -ENOMEM;
+
+	apll_rate = vc7_get_apll_rate(vc7);
 	vc7->clk_apll.clk = clk_register_fixed_rate(&client->dev, apll_name,
 						    __clk_get_name(vc7->pin_xin),
 						    0, apll_rate);
