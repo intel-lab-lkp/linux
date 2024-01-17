@@ -571,6 +571,73 @@ __bpf_kfunc void bpf_qdisc_set_skb_dequeue(struct sk_buff *skb)
 	__this_cpu_write(bpf_skb_dequeue, skb);
 }
 
+/* bpf_skb_tc_classify - Classify an skb using an existing filter referred
+ * to by the specified handle on the net device of index ifindex.
+ * @skb: The skb to be classified.
+ * @handle: The handle of the filter to be referenced.
+ * @ifindex: The ifindex of the net device where the filter is attached.
+ *
+ * Returns a 64-bit integer containing the tc action verdict and the classid,
+ * created as classid << 32 | action.
+ */
+__bpf_kfunc u64 bpf_skb_tc_classify(struct sk_buff *skb, int ifindex,
+				    u32 handle)
+{
+	struct net *net = dev_net(skb->dev);
+	const struct Qdisc_class_ops *cops;
+	struct tcf_result res = {};
+	struct tcf_block *block;
+	struct tcf_chain *chain;
+	struct net_device *dev;
+	int result = TC_ACT_OK;
+	unsigned long cl = 0;
+	struct Qdisc *q;
+
+	rcu_read_lock();
+	dev = dev_get_by_index_rcu(net, ifindex);
+	if (!dev)
+		goto out;
+	q = qdisc_lookup_rcu(dev, handle);
+	if (!q)
+		goto out;
+
+	cops = q->ops->cl_ops;
+	if (!cops)
+		goto out;
+	if (!cops->tcf_block)
+		goto out;
+	if (TC_H_MIN(handle)) {
+		cl = cops->find(q, handle);
+		if (cl == 0)
+			goto out;
+	}
+	block = cops->tcf_block(q, cl, NULL);
+	if (!block)
+		goto out;
+
+	for (chain = tcf_get_next_chain(block, NULL);
+	     chain;
+	     chain = tcf_get_next_chain(block, chain)) {
+		struct tcf_proto *tp;
+
+		result = tcf_classify(skb, NULL, tp, &res, false);
+		if (result >= 0) {
+			switch (result) {
+			case TC_ACT_QUEUED:
+			case TC_ACT_STOLEN:
+			case TC_ACT_TRAP:
+				fallthrough;
+			case TC_ACT_SHOT:
+				rcu_read_unlock();
+				return result;
+			}
+		}
+	}
+out:
+	rcu_read_unlock();
+	return (res.class << 32 | result);
+}
+
 __diag_pop();
 
 BTF_SET8_START(skb_kfunc_btf_ids)
@@ -578,6 +645,7 @@ BTF_ID_FLAGS(func, bpf_skb_acquire, KF_ACQUIRE)
 BTF_ID_FLAGS(func, bpf_skb_release, KF_RELEASE)
 BTF_ID_FLAGS(func, bpf_skb_get_hash)
 BTF_ID_FLAGS(func, bpf_qdisc_set_skb_dequeue, KF_RELEASE)
+BTF_ID_FLAGS(func, bpf_skb_tc_classify)
 BTF_SET8_END(skb_kfunc_btf_ids)
 
 static const struct btf_kfunc_id_set skb_kfunc_set = {
