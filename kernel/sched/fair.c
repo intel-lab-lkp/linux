@@ -9740,8 +9740,8 @@ group_type group_classify(unsigned int imbalance_pct,
  */
 static bool sched_use_asym_prio(struct sched_domain *sd, int cpu)
 {
-	return (!sched_smt_active()) ||
-		(sd->flags & SD_SHARE_CPUCAPACITY) || is_core_idle(cpu);
+	return	(sd->flags & SD_SHARE_CPUCAPACITY) ||
+		(!sched_smt_active() && is_core_idle(cpu));
 }
 
 static inline bool _sched_asym(struct sched_domain *sd,
