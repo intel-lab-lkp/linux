@@ -895,6 +895,14 @@ void nvme_mpath_remove_disk(struct nvme_ns_head *head)
 	/* make sure all pending bios are cleaned up */
 	kblockd_schedule_work(&head->requeue_work);
 	flush_work(&head->requeue_work);
+	if (!test_bit(NVME_NSHEAD_DISK_LIVE, &head->flags)) {
+		/*
+		* if device_add_disk wasn't called, prevent
+                * disk release to put a bogus reference on the
+                * request queue
+                */
+		head->disk->queue = NULL;
+	}
 	put_disk(head->disk);
 }
 
