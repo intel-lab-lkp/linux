@@ -27,20 +27,31 @@
 static inline bool check_xstate_in_sigframe(struct fxregs_state __user *fxbuf,
 					    struct _fpx_sw_bytes *fx_sw)
 {
-	int min_xstate_size = sizeof(struct fxregs_state) +
-			      sizeof(struct xstate_header);
-	void __user *fpstate = fxbuf;
+	struct fpstate *fpstate = current->thread.fpu.fpstate;
+	void __user *buf = fxbuf;
 	unsigned int magic2;
 
 	if (__copy_from_user(fx_sw, &fxbuf->sw_reserved[0], sizeof(*fx_sw)))
 		return false;
 
+	/* Restore enabled features only. */
+	fx_sw->xfeatures &= fpstate->user_xfeatures;
+
 	/* Check for the first magic field and other error scenarios. */
 	if (fx_sw->magic1 != FP_XSTATE_MAGIC1 ||
-	    fx_sw->xstate_size < min_xstate_size ||
-	    fx_sw->xstate_size > current->thread.fpu.fpstate->user_size ||
 	    fx_sw->xstate_size > fx_sw->extended_size)
 		goto setfx;
+
+	/* xstate_size has to fit all requested components. */
+	if (fx_sw->xstate_size != fpstate->user_size) {
+		int min_xstate_size =
+			xstate_calculate_size(fx_sw->xfeatures, false);
+
+		if (min_xstate_size < 0 ||
+		    fx_sw->xstate_size < min_xstate_size ||
+		    fx_sw->xstate_size > fpstate->user_size)
+			goto setfx;
+	}
 
 	/*
 	 * Check for the presence of second magic word at the end of memory
@@ -48,7 +59,7 @@ static inline bool check_xstate_in_sigframe(struct fxregs_state __user *fxbuf,
 	 * fpstate layout with out copying the extended state information
 	 * in the memory layout.
 	 */
-	if (__get_user(magic2, (__u32 __user *)(fpstate + fx_sw->xstate_size)))
+	if (__get_user(magic2, (__u32 __user *)(buf + fx_sw->xstate_size)))
 		return false;
 
 	if (likely(magic2 == FP_XSTATE_MAGIC2))
