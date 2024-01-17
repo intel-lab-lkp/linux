@@ -24,6 +24,8 @@ DECLARE_RWSEM(trace_event_sem);
 
 static struct hlist_head event_hash[EVENT_HASHSIZE] __read_mostly;
 
+static bool trace_is_kho_event(int type);
+
 enum print_line_t trace_print_bputs_msg_only(struct trace_iterator *iter)
 {
 	struct trace_seq *s = &iter->seq;
@@ -784,7 +786,7 @@ static DEFINE_IDA(trace_event_ida);
 
 static void free_trace_event_type(int type)
 {
-	if (type >= __TRACE_LAST_TYPE)
+	if (type >= __TRACE_LAST_TYPE && !trace_is_kho_event(type))
 		ida_free(&trace_event_ida, type);
 }
 
@@ -808,6 +810,156 @@ void trace_event_read_lock(void)
 void trace_event_read_unlock(void)
 {
 	up_read(&trace_event_sem);
+}
+
+
+/**
+ * trace_kho_get_map - Return the KHO event map
+ * @pmap: Pointer to a trace map array. Will be filled on success.
+ * @plen: Pointer to the length of the map. Will be filled on success.
+ * @unallocated: True if the event does not have an ID yet
+ *
+ * Event types are semi-dynamically generated. To ensure that
+ * their identifiers match before and after kexec with KHO,
+ * we store an event map in the KHO DT. Whenever we need the
+ * map, this function provides it.
+ *
+ * The first time we request a map, it also walks through it and
+ * reserves all identifiers so later event registration has find their
+ * identifier already reserved.
+ */
+static int trace_kho_get_map(const struct trace_event_map **pmap, int *plen,
+			     bool unallocated)
+{
+	static const struct trace_event_map *event_map;
+	static int event_map_len;
+	static bool event_map_reserved;
+	const struct trace_event_map *map = NULL;
+	const void *fdt = kho_get_fdt();
+	const char *path = "/ftrace";
+	int off, err, len = 0;
+	int i;
+
+	if (!IS_ENABLED(CONFIG_FTRACE_KHO) || !fdt)
+		return -EINVAL;
+
+	if (event_map) {
+		map = event_map;
+		len = event_map_len;
+	}
+
+	if (!map) {
+		off = fdt_path_offset(fdt, path);
+
+		if (off < 0) {
+			pr_debug("Could not find '%s' in DT", path);
+			return -EINVAL;
+		}
+
+		err = fdt_node_check_compatible(fdt, off, "ftrace-v1");
+		if (err) {
+			pr_warn("Node '%s' has invalid compatible", path);
+			return -EINVAL;
+		}
+
+		map = fdt_getprop(fdt, off, "events", &len);
+		if (!map)
+			return -EINVAL;
+
+		event_map = map;
+		event_map_len = len;
+	}
+
+	if (unallocated && !event_map_reserved) {
+		/*
+		 * Reserve all IDs in our IDA. We only have a working IDA later
+		 * in boot, so restrict it to when we allocate a dynamic type id
+		 * for an event.
+		 */
+		for (i = 0; i < len; i += sizeof(*map)) {
+			const struct trace_event_map *imap = (void *)map + i;
+
+			if (imap->type < __TRACE_LAST_TYPE)
+				continue;
+			if (ida_alloc_range(&trace_event_ida, imap->type, imap->type,
+					    GFP_KERNEL) != imap->type) {
+				pr_warn("Unable to reserve id %d", imap->type);
+				return -EINVAL;
+			}
+		}
+
+		event_map_reserved = true;
+	}
+
+	*pmap = map;
+	*plen = len;
+
+	return 0;
+}
+
+/**
+ * trace_is_kho_event - returns true if the event type is KHO reserved
+ * @event: the event type to enumerate
+ *
+ * With KHO, we reserve all previous kernel's trace event types in the
+ * KHO DT. Then, when we allocate a type, we just reuse the previous
+ * kernel's value. However, that means we have to keep these type identifiers
+ * reserved across the lifetime of the system, because we may get a new event
+ * that matches the old kernel's event fingerprint. This function is a small
+ * helper that allows us to check whether a type ID is in use by KHO.
+ */
+static bool trace_is_kho_event(int type)
+{
+	const struct trace_event_map *map = NULL;
+	int len, i;
+
+	if (trace_kho_get_map(&map, &len, false))
+		return false;
+
+	if (!map)
+		return false;
+
+	for (i = 0; i < len; i += sizeof(*map), map++)
+		if (map->type == type)
+			return true;
+
+	return false;
+}
+
+/**
+ * trace_kho_fill_event_type - restore event type info from KHO
+ * @event: the event to enumerate
+ *
+ * Event types are semi-dynamically generated. To ensure that
+ * their identifiers match before and after kexec with KHO,
+ * let's match up unique fingerprint - either their predetermined
+ * type or their crc32 value - and fill in the respective type
+ * information if we booted with KHO.
+ */
+static bool trace_kho_fill_event_type(struct trace_event *event)
+{
+	const struct trace_event_map *map = NULL;
+	int len = 0, i;
+	u32 crc32;
+
+	if (trace_kho_get_map(&map, &len, !event->type))
+		return false;
+
+	crc32 = event2fp(event);
+
+	for (i = 0; i < len; i += sizeof(*map), map++) {
+		if (map->crc32 == crc32) {
+			if (!map->type)
+				return false;
+
+			event->type = map->type;
+			return true;
+		}
+	}
+
+	pr_debug("Could not find event");
+
+	return false;
 }
 
 /**
@@ -838,7 +990,9 @@ int register_trace_event(struct trace_event *event)
 	if (WARN_ON(!event->funcs))
 		goto out;
 
-	if (!event->type) {
+	if (trace_kho_fill_event_type(event)) {
+		pr_debug("Recovered id=%d", event->type);
+	} else if (!event->type) {
 		event->type = alloc_trace_event_type();
 		if (!event->type)
 			goto out;
