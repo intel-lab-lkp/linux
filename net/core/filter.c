@@ -8914,6 +8914,9 @@ static bool tc_qdisc_is_valid_access(int off, int size,
 {
 	struct btf *btf;
 
+	if (prog->expected_attach_type == BPF_QDISC_RESET)
+		return false;
+
 	if (off < 0 || off >= sizeof(struct bpf_qdisc_ctx))
 		return false;
 

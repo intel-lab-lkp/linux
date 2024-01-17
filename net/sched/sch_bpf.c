@@ -42,6 +42,7 @@ struct bpf_sched_data {
 	struct Qdisc_class_hash clhash;
 	struct sch_bpf_prog __rcu enqueue_prog;
 	struct sch_bpf_prog __rcu dequeue_prog;
+	struct sch_bpf_prog __rcu reset_prog;
 
 	struct qdisc_watchdog watchdog;
 };
@@ -50,6 +51,9 @@ static int sch_bpf_dump_prog(const struct sch_bpf_prog *prog, struct sk_buff *sk
 			     int name, int id, int tag)
 {
 	struct nlattr *nla;
+
+	if (!prog->prog)
+		return 0;
 
 	if (prog->name &&
 	    nla_put_string(skb, name, prog->name))
@@ -80,6 +84,9 @@ static int sch_bpf_dump(struct Qdisc *sch, struct sk_buff *skb)
 		goto nla_put_failure;
 	if (sch_bpf_dump_prog(&q->dequeue_prog, skb, TCA_SCH_BPF_DEQUEUE_PROG_NAME,
 			      TCA_SCH_BPF_DEQUEUE_PROG_ID, TCA_SCH_BPF_DEQUEUE_PROG_TAG))
+		goto nla_put_failure;
+	if (sch_bpf_dump_prog(&q->reset_prog, skb, TCA_SCH_BPF_RESET_PROG_NAME,
+			      TCA_SCH_BPF_RESET_PROG_ID, TCA_SCH_BPF_RESET_PROG_TAG))
 		goto nla_put_failure;
 
 	return nla_nest_end(skb, opts);
@@ -259,16 +266,21 @@ static const struct nla_policy sch_bpf_policy[TCA_SCH_BPF_MAX + 1] = {
 	[TCA_SCH_BPF_DEQUEUE_PROG_FD]	= { .type = NLA_U32 },
 	[TCA_SCH_BPF_DEQUEUE_PROG_NAME]	= { .type = NLA_NUL_STRING,
 					    .len = ACT_BPF_NAME_LEN },
+	[TCA_SCH_BPF_RESET_PROG_FD]	= { .type = NLA_U32 },
+	[TCA_SCH_BPF_RESET_PROG_NAME]	= { .type = NLA_NUL_STRING,
+					    .len = ACT_BPF_NAME_LEN },
 };
 
-static int bpf_init_prog(struct nlattr *fd, struct nlattr *name, struct sch_bpf_prog *prog)
+static int bpf_init_prog(struct nlattr *fd, struct nlattr *name,
+			 struct sch_bpf_prog *prog, bool optional)
 {
 	struct bpf_prog *fp, *old_fp;
 	char *prog_name = NULL;
 	u32 bpf_fd;
 
 	if (!fd)
-		return -EINVAL;
+		return optional ? 0 : -EINVAL;
+
 	bpf_fd = nla_get_u32(fd);
 
 	fp = bpf_prog_get_type(bpf_fd, BPF_PROG_TYPE_QDISC);
@@ -327,11 +339,15 @@ static int sch_bpf_change(struct Qdisc *sch, struct nlattr *opt,
 	sch_tree_lock(sch);
 
 	err = bpf_init_prog(tb[TCA_SCH_BPF_ENQUEUE_PROG_FD],
-			    tb[TCA_SCH_BPF_ENQUEUE_PROG_NAME], &q->enqueue_prog);
+			    tb[TCA_SCH_BPF_ENQUEUE_PROG_NAME], &q->enqueue_prog, false);
 	if (err)
 		goto failure;
 	err = bpf_init_prog(tb[TCA_SCH_BPF_DEQUEUE_PROG_FD],
-			    tb[TCA_SCH_BPF_DEQUEUE_PROG_NAME], &q->dequeue_prog);
+			    tb[TCA_SCH_BPF_DEQUEUE_PROG_NAME], &q->dequeue_prog, false);
+	if (err)
+		goto failure;
+	err = bpf_init_prog(tb[TCA_SCH_BPF_RESET_PROG_FD],
+			    tb[TCA_SCH_BPF_RESET_PROG_NAME], &q->reset_prog, true);
 failure:
 	sch_tree_unlock(sch);
 	return err;
@@ -360,7 +376,9 @@ static int sch_bpf_init(struct Qdisc *sch, struct nlattr *opt,
 static void sch_bpf_reset(struct Qdisc *sch)
 {
 	struct bpf_sched_data *q = qdisc_priv(sch);
+	struct bpf_qdisc_ctx ctx = {};
 	struct sch_bpf_class *cl;
+	struct bpf_prog *reset;
 	unsigned int i;
 
 	for (i = 0; i < q->clhash.hashsize; i++) {
@@ -371,6 +389,9 @@ static void sch_bpf_reset(struct Qdisc *sch)
 	}
 
 	qdisc_watchdog_cancel(&q->watchdog);
+	reset = rcu_dereference(q->reset_prog.prog);
+	if (reset)
+		bpf_prog_run(reset, &ctx);
 }
 
 static void sch_bpf_destroy_class(struct Qdisc *sch, struct sch_bpf_class *cl)
@@ -398,6 +419,7 @@ static void sch_bpf_destroy(struct Qdisc *sch)
 	sch_tree_lock(sch);
 	bpf_cleanup_prog(&q->enqueue_prog);
 	bpf_cleanup_prog(&q->dequeue_prog);
+	bpf_cleanup_prog(&q->reset_prog);
 	sch_tree_unlock(sch);
 }
 
