@@ -56,35 +56,72 @@ static int hmc425a_write(struct iio_dev *indio_dev, u32 value)
 	return 0;
 }
 
+static int hmc425a_gain_dB_to_code(struct hmc425a_state *st, int val, int val2, int *code)
+{
+	struct hmc425a_chip_info *inf = st->chip_info;
+	int gain, temp;
+
+	if (val < 0)
+		gain = (val * 1000) - (val2 / 1000);
+	else
+		gain = (val * 1000) + (val2 / 1000);
+
+	if (gain > inf->gain_max || gain < inf->gain_min)
+		return -EINVAL;
+
+	switch (st->type) {
+	case ID_HMC425A:
+		*code = ~((abs(gain) / 500) & 0x3F);
+		return 0;
+	case ID_HMC540S:
+		*code = ~((abs(gain) / 1000) & 0xF);
+		return 0;
+	case ID_ADRF5740:
+		temp = (abs(gain) / 2000) & 0xF;
+		*code = temp & BIT(3) ? temp | BIT(2) : temp;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int hmc425a_code_to_gain_dB(struct hmc425a_state *st, int *val, int *val2)
+{
+	int code, gain;
+
+	code = st->gain;
+	switch (st->type) {
+	case ID_HMC425A:
+		gain = ~code * -500;
+		break;
+	case ID_HMC540S:
+		gain = ~code * -1000;
+		break;
+	case ID_ADRF5740:
+		code = code & BIT(3) ? code & ~BIT(2) : code;
+		gain = code * -2000;
+		break;
+	}
+
+	*val = gain / 1000;
+	*val2 = (gain % 1000) * 1000;
+
+	return 0;
+}
+
 static int hmc425a_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan, int *val,
 			    int *val2, long m)
 {
 	struct hmc425a_state *st = iio_priv(indio_dev);
-	int code, gain = 0;
 	int ret;
 
 	mutex_lock(&st->lock);
 	switch (m) {
 	case IIO_CHAN_INFO_HARDWAREGAIN:
-		code = st->gain;
-
-		switch (st->type) {
-		case ID_HMC425A:
-			gain = ~code * -500;
+		ret = hmc425a_code_to_gain_dB(st, val, val2);
+		if (ret)
 			break;
-		case ID_HMC540S:
-			gain = ~code * -1000;
-			break;
-		case ID_ADRF5740:
-			code = code & BIT(3) ? code & ~BIT(2) : code;
-			gain = code * -2000;
-			break;
-		}
-
-		*val = gain / 1000;
-		*val2 = (gain % 1000) * 1000;
-
 		ret = IIO_VAL_INT_PLUS_MICRO_DB;
 		break;
 	default:
@@ -100,36 +137,15 @@ static int hmc425a_write_raw(struct iio_dev *indio_dev,
 			     int val2, long mask)
 {
 	struct hmc425a_state *st = iio_priv(indio_dev);
-	struct hmc425a_chip_info *inf = st->chip_info;
-	int code = 0, gain;
-	int ret;
-
-	if (val < 0)
-		gain = (val * 1000) - (val2 / 1000);
-	else
-		gain = (val * 1000) + (val2 / 1000);
-
-	if (gain > inf->gain_max || gain < inf->gain_min)
-		return -EINVAL;
-
-	switch (st->type) {
-	case ID_HMC425A:
-		code = ~((abs(gain) / 500) & 0x3F);
-		break;
-	case ID_HMC540S:
-		code = ~((abs(gain) / 1000) & 0xF);
-		break;
-	case ID_ADRF5740:
-		code = (abs(gain) / 2000) & 0xF;
-		code = code & BIT(3) ? code | BIT(2) : code;
-		break;
-	}
+	int code = 0, ret;
 
 	mutex_lock(&st->lock);
 	switch (mask) {
 	case IIO_CHAN_INFO_HARDWAREGAIN:
+		ret = hmc425a_gain_dB_to_code(st, val, val2, &code);
+		if (ret)
+			break;
 		st->gain = code;
-
 		ret = hmc425a_write(indio_dev, st->gain);
 		break;
 	default:
