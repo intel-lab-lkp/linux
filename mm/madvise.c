@@ -60,6 +60,7 @@ static int madvise_need_mmap_write(int behavior)
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
 	case MADV_COLLAPSE:
+	case MADV_TRY_COLLAPSE:
 		return 0;
 	default:
 		/* be safe, default to 1. list exceptions explicitly */
@@ -1082,8 +1083,10 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 		if (error)
 			goto out;
 		break;
+	case MADV_TRY_COLLAPSE:
+		return madvise_collapse(vma, prev, start, end, true);
 	case MADV_COLLAPSE:
-		return madvise_collapse(vma, prev, start, end);
+		return madvise_collapse(vma, prev, start, end, false);
 	}
 
 	anon_name = anon_vma_name(vma);
@@ -1178,6 +1181,7 @@ madvise_behavior_valid(int behavior)
 	case MADV_HUGEPAGE:
 	case MADV_NOHUGEPAGE:
 	case MADV_COLLAPSE:
+	case MADV_TRY_COLLAPSE:
 #endif
 	case MADV_DONTDUMP:
 	case MADV_DODUMP:
@@ -1368,6 +1372,8 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
  *		transparent huge pages so the existing pages will not be
  *		coalesced into THP and new pages will not be allocated as THP.
  *  MADV_COLLAPSE - synchronously coalesce pages into new THP.
+ *  MADV_TRY_COLLAPSE - similar to COLLAPSE, but avoids direct reclaim
+ *		and/or compaction.
  *  MADV_DONTDUMP - the application wants to prevent pages in the given range
  *		from being included in its core dump.
  *  MADV_DODUMP - cancel MADV_DONTDUMP: no longer exclude from core dump.

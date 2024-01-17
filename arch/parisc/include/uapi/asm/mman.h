@@ -71,6 +71,7 @@
 #define MADV_DONTNEED_LOCKED	24	/* like DONTNEED, but drop locked pages too */
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
+#define MADV_TRY_COLLAPSE	26	/* Similar to COLLAPSE, but avoids direct reclaim and/or compaction */
 
 #define MADV_HWPOISON     100		/* poison a page for testing */
 #define MADV_SOFT_OFFLINE 101		/* soft offline page for testing */

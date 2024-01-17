@@ -95,6 +95,7 @@ static struct kmem_cache *mm_slot_cache __ro_after_init;
 
 struct collapse_control {
 	bool is_khugepaged;
+	bool is_try;
 
 	/* Num pages scanned per node */
 	u32 node_load[MAX_NUMNODES];
@@ -1057,10 +1058,14 @@ out:
 static int alloc_charge_hpage(struct page **hpage, struct mm_struct *mm,
 			      struct collapse_control *cc)
 {
-	gfp_t gfp = (cc->is_khugepaged ? alloc_hugepage_khugepaged_gfpmask() :
-		     GFP_TRANSHUGE);
 	int node = hpage_collapse_find_target_node(cc);
 	struct folio *folio;
+	gfp_t gfp;
+
+	if (cc->is_khugepaged)
+		gfp = alloc_hugepage_khugepaged_gfpmask();
+	else
+		gfp = cc->is_try ? GFP_TRANSHUGE_LIGHT : GFP_TRANSHUGE;
 
 	if (!hpage_collapse_alloc_folio(&folio, gfp, node, &cc->alloc_nmask)) {
 		*hpage = NULL;
@@ -2696,7 +2701,7 @@ static int madvise_collapse_errno(enum scan_result r)
 }
 
 int madvise_collapse(struct vm_area_struct *vma, struct vm_area_struct **prev,
-		     unsigned long start, unsigned long end)
+		     unsigned long start, unsigned long end, bool is_try)
 {
 	struct collapse_control *cc;
 	struct mm_struct *mm = vma->vm_mm;
@@ -2717,6 +2722,7 @@ int madvise_collapse(struct vm_area_struct *vma, struct vm_area_struct **prev,
 	if (!cc)
 		return -ENOMEM;
 	cc->is_khugepaged = false;
+	cc->is_try = is_try;
 
 	mmgrab(mm);
 	lru_add_drain_all();
@@ -2772,6 +2778,13 @@ handle_result:
 			result = collapse_pte_mapped_thp(mm, addr, true);
 			mmap_read_unlock(mm);
 			goto handle_result;
+		/* MADV_TRY_COLLAPSE: fail quickly */
+		case SCAN_ALLOC_HUGE_PAGE_FAIL:
+		case SCAN_CGROUP_CHARGE_FAIL:
+			if (cc->is_try) {
+				last_fail = result;
+				goto out_maybelock;
+			}
 		/* Whitelisted set of results where continuing OK */
 		case SCAN_PMD_NULL:
 		case SCAN_PTE_NON_PRESENT:
