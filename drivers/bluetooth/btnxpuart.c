@@ -170,6 +170,7 @@ struct btnxpuart_dev {
 	bool timeout_changed;
 	bool baudrate_changed;
 	bool helper_downloaded;
+	struct delayed_work setup_retry_work;
 
 	struct ps_data psdata;
 	struct btnxpuart_data *nxp_data;
@@ -238,6 +239,8 @@ struct v3_start_ind {
 	u8 loader_ver;
 	u8 crc;
 } __packed;
+
+#define NXP_SETUP_RETRY_TIME_MS	5000
 
 /* UART register addresses of BT chip */
 #define CLKDIVADDR	0x7f00008f
@@ -992,6 +995,15 @@ static int nxp_check_boot_sign(struct btnxpuart_dev *nxpdev)
 					       msecs_to_jiffies(1000));
 }
 
+static void nxp_setup_retry_work(struct work_struct *work)
+{
+	struct btnxpuart_dev *nxpdev = container_of(work, struct btnxpuart_dev,
+						    setup_retry_work.work);
+	struct hci_dev *hdev = nxpdev->hdev;
+
+	queue_work(hdev->req_workqueue, &hdev->power_on);
+}
+
 static int nxp_set_ind_reset(struct hci_dev *hdev, void *data)
 {
 	static const u8 ir_hw_err[] = { HCI_EV_HARDWARE_ERROR,
@@ -1020,6 +1032,13 @@ static int nxp_setup(struct hci_dev *hdev)
 		err = nxp_download_firmware(hdev);
 		if (err < 0)
 			return err;
+	} else if (!serdev_device_get_cts(nxpdev->serdev)) {
+		/* CTS is high and no bootloader signatures detected */
+		bt_dev_dbg(hdev, "Controller not detected. Will check again in %d msec",
+			   NXP_SETUP_RETRY_TIME_MS);
+		schedule_delayed_work(&nxpdev->setup_retry_work,
+				      msecs_to_jiffies(NXP_SETUP_RETRY_TIME_MS));
+		return -ENODEV;
 	} else {
 		bt_dev_dbg(hdev, "FW already running.");
 		clear_bit(BTNXPUART_FW_DOWNLOADING, &nxpdev->tx_state);
@@ -1357,6 +1376,7 @@ static int nxp_serdev_probe(struct serdev_device *serdev)
 	}
 
 	ps_setup(hdev);
+	INIT_DELAYED_WORK(&nxpdev->setup_retry_work, nxp_setup_retry_work);
 
 	return 0;
 }
@@ -1375,6 +1395,7 @@ static void nxp_serdev_remove(struct serdev_device *serdev)
 		nxp_set_baudrate_cmd(hdev, NULL);
 	}
 
+	cancel_delayed_work_sync(&nxpdev->setup_retry_work);
 	ps_cancel_timer(nxpdev);
 	hci_unregister_dev(hdev);
 	hci_free_dev(hdev);
