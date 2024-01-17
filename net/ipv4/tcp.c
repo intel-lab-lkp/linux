@@ -726,6 +726,7 @@ void tcp_push(struct sock *sk, int flags, int mss_now,
 		/* It is possible TX completion already happened
 		 * before we set TSQ_THROTTLED.
 		 */
+		smp_mb__after_atomic();
 		if (refcount_read(&sk->sk_wmem_alloc) > skb->truesize)
 			return;
 	}
