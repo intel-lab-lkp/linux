@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s " fmt, KBUILD_MODNAME
@@ -90,6 +91,15 @@ enum {
 #define CMD_MSGID_WRITE			BIT(16)
 #define CMD_STATUS_ISSUED		BIT(8)
 #define CMD_STATUS_COMPL		BIT(16)
+
+#define ACCL_TYPE(addr)			((addr >> 16) & 0xF)
+#define VREG_ADDR(addr)			(addr & ~0xF)
+
+enum {
+	HW_ACCL_CLK = 0x3,
+	HW_ACCL_VREG,
+	HW_ACCL_BUS,
+};
 
 /*
  * Here's a high level overview of how all the registers in RPMH work
@@ -557,7 +567,15 @@ static int check_for_req_inflight(struct rsc_drv *drv, struct tcs_group *tcs,
 		for_each_set_bit(j, &curr_enabled, MAX_CMDS_PER_TCS) {
 			addr = read_tcs_cmd(drv, drv->regs[RSC_DRV_CMD_ADDR], i, j);
 			for (k = 0; k < msg->num_cmds; k++) {
-				if (addr == msg->cmds[k].addr)
+				/*
+				 * Each RPMh VREG accelerator resource has 3 or 4 contiguous 4-byte
+				 * aligned addresses associated with it. Ignore the offset to check
+				 * for in-flight VREG requests.
+				 */
+				if (HW_ACCL_VREG == ACCL_TYPE(msg->cmds[k].addr) &&
+				    VREG_ADDR(addr) == VREG_ADDR(msg->cmds[k].addr))
+					return -EBUSY;
+				else if (addr == msg->cmds[k].addr)
 					return -EBUSY;
 			}
 		}
