@@ -102,6 +102,8 @@ allOf:
             - const: ti,j721e-pcie-host
     then:
       properties:
+        max-link-speed:
+          const: 2
         num-lanes:
           const: 1
 
@@ -113,6 +115,8 @@ allOf:
             - const: ti,j721e-pcie-host
     then:
       properties:
+        max-link-speed:
+          const: 3
         num-lanes:
           minimum: 1
           maximum: 2
@@ -124,6 +128,8 @@ allOf:
             - const: ti,j721e-pcie-host
     then:
       properties:
+        max-link-speed:
+          const: 3
         num-lanes:
           minimum: 1
           maximum: 4
@@ -135,6 +141,8 @@ allOf:
             - const: ti,j784s4-pcie-host
     then:
       properties:
+        max-link-speed:
+          const: 3
         num-lanes:
           minimum: 1
           maximum: 4
