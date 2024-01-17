@@ -748,11 +748,6 @@ static bool is_call_insn(const struct bpf_insn *insn)
 	return insn->code == (BPF_JMP | BPF_CALL);
 }
 
-static bool insn_is_pseudo_func(struct bpf_insn *insn)
-{
-	return is_ldimm64_insn(insn) && insn->src_reg == BPF_PSEUDO_FUNC;
-}
-
 static int
 bpf_object__init_prog(struct bpf_object *obj, struct bpf_program *prog,
 		      const char *name, size_t sec_idx, const char *sec_name,
