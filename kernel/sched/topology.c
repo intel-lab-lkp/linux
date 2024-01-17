@@ -1554,6 +1554,7 @@ static struct cpumask		***sched_domains_numa_masks;
  * function:
  *
  *   SD_SHARE_CPUCAPACITY   - describes SMT topologies
+ *   SD_CLUSTER		    - describes Cluster topologies
  *   SD_SHARE_PKG_RESOURCES - describes shared caches
  *   SD_NUMA                - describes NUMA topologies
  *
