@@ -2251,4 +2251,19 @@ config KEEMBAY_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called keembay_wdt.
 
+#
+# ChromeOS EC-based Watchdog
+#
+
+config CROS_EC_WATCHDOG
+	tristate "ChromeOS EC-based watchdog driver"
+	select WATCHDOG_CORE
+	depends on CROS_EC
+	help
+	  This is the watchdog driver for ChromeOS devices equipped with EC.
+	  The EC watchdog - when enabled - expects to be kicked within a given
+	  time (default set to 30 seconds) otherwise it will simple reboot
+	  the AP. Priori to that it can also send an event (configurable timeout)
+	  about upcoming reboot.
+
 endif # WATCHDOG
