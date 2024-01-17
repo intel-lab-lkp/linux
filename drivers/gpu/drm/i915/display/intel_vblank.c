@@ -266,9 +266,10 @@ int intel_crtc_scanline_to_hw(struct intel_crtc *crtc, int scanline)
 }
 
 /*
- * The uncore version of the spin lock functions is used to decide
- * whether we need to lock the uncore lock or not.  This is only
- * needed in i915, not in Xe.
+ * These functions help enter and exit vblank critical sections.  When
+ * entering, they disable interrupts and, for i915, acquire the
+ * uncore's spinlock.  Conversely, when exiting, they release the
+ * spinlock and restore the interrupts state.
  *
  * This lock in i915 is needed because some old platforms (at least
  * IVB and possibly HSW as well), which are not supported in Xe, need
@@ -278,6 +279,7 @@ int intel_crtc_scanline_to_hw(struct intel_crtc *crtc, int scanline)
 static void intel_vblank_section_enter(struct drm_i915_private *i915)
 	__acquires(i915->uncore.lock)
 {
+	local_irq_save(irqflags);
 #ifdef I915
 	spin_lock(&i915->uncore.lock);
 #endif
@@ -289,6 +291,7 @@ static void intel_vblank_section_exit(struct drm_i915_private *i915)
 #ifdef I915
 	spin_unlock(&i915->uncore.lock);
 #endif
+	local_irq_restore(irqflags);
 }
 
 static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
@@ -332,7 +335,6 @@ static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
 	 * timing critical raw register reads, potentially with
 	 * preemption disabled, so the following code must not block.
 	 */
-	local_irq_save(irqflags);
 	intel_vblank_section_enter(dev_priv);
 
 	/* preempt_disable_rt() should go right here in PREEMPT_RT patchset. */
@@ -402,7 +404,6 @@ static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
 	/* preempt_enable_rt() should go right here in PREEMPT_RT patchset. */
 
 	intel_vblank_section_exit(dev_priv);
-	local_irq_restore(irqflags);
 
 	/*
 	 * While in vblank, position will be negative
@@ -440,13 +441,11 @@ int intel_get_crtc_scanline(struct intel_crtc *crtc)
 	unsigned long irqflags;
 	int position;
 
-	local_irq_save(irqflags);
 	intel_vblank_section_enter(dev_priv);
 
 	position = __intel_get_crtc_scanline(crtc);
 
 	intel_vblank_section_exit(dev_priv);
-	local_irq_restore(irqflags);
 
 	return position;
 }
@@ -569,6 +568,13 @@ void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
 	 * Need to audit everything to make sure it's safe.
 	 */
 	spin_lock_irqsave(&i915->drm.vblank_time_lock, irqflags);
+
+	/*
+	 * At this point we have already disabled interrupts, and
+	 * intel_vblank_section_enter() does that too.  But the
+	 * nesting is safe here, so it shouldn't be a problem to do it
+	 * twice.
+	*/
 	intel_vblank_section_enter(i915);
 
 	drm_calc_timestamping_constants(&crtc->base, &adjusted_mode);
