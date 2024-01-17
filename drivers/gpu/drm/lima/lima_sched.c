@@ -427,7 +427,8 @@ static enum drm_gpu_sched_stat lima_sched_timedout_job(struct drm_sched_job *job
 	pipe->current_vm = NULL;
 	pipe->current_task = NULL;
 
-	lima_pm_idle(ldev);
+	if (pipe->error)
+		lima_pm_idle(ldev);
 
 	drm_sched_resubmit_jobs(&pipe->base);
 	drm_sched_start(&pipe->base, true);
