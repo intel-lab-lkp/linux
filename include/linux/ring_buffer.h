@@ -84,19 +84,22 @@ void ring_buffer_discard_commit(struct trace_buffer *buffer,
 /*
  * size is in bytes for each per CPU buffer.
  */
-struct trace_buffer *
-__ring_buffer_alloc(unsigned long size, unsigned flags, struct lock_class_key *key);
+struct trace_buffer *__ring_buffer_alloc(unsigned long size, unsigned flags,
+					 struct lock_class_key *key,
+					 int tr_off);
 
 /*
  * Because the ring buffer is generic, if other users of the ring buffer get
  * traced by ftrace, it can produce lockdep warnings. We need to keep each
  * ring buffer's lock class separate.
  */
-#define ring_buffer_alloc(size, flags)			\
-({							\
-	static struct lock_class_key __key;		\
-	__ring_buffer_alloc((size), (flags), &__key);	\
+#define ring_buffer_alloc_kho(size, flags, tr_off)		\
+({								\
+	static struct lock_class_key __key;			\
+	__ring_buffer_alloc((size), (flags), &__key, tr_off);	\
 })
+
+#define ring_buffer_alloc(size, flags) ring_buffer_alloc_kho(size, flags, 0)
 
 int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full);
 __poll_t ring_buffer_poll_wait(struct trace_buffer *buffer, int cpu,

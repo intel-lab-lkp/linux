@@ -9362,16 +9362,46 @@ static struct dentry *trace_instance_dir;
 static void
 init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer);
 
+static int trace_kho_off_tr(struct trace_array *tr)
+{
+	const char *name = tr->name ? tr->name : "global_trace";
+	const void *fdt = kho_get_fdt();
+	char *path;
+	int off;
+
+	if (!IS_ENABLED(CONFIG_FTRACE_KHO))
+		return 0;
+
+	if (!fdt)
+		return 0;
+
+	path = kasprintf(GFP_KERNEL, "/ftrace/%s", name);
+	if (!path)
+		return -ENOMEM;
+
+	pr_debug("Trying to revive trace buffer '%s'", path);
+
+	off = fdt_path_offset(fdt, path);
+	if (off < 0) {
+		pr_debug("Could not find '%s' in DT", path);
+		off = 0;
+	}
+
+	kfree(path);
+	return off;
+}
+
 static int
 allocate_trace_buffer(struct trace_array *tr, struct array_buffer *buf, int size)
 {
+	int tr_off = trace_kho_off_tr(tr);
 	enum ring_buffer_flags rb_flags;
 
 	rb_flags = tr->trace_flags & TRACE_ITER_OVERWRITE ? RB_FL_OVERWRITE : 0;
 
 	buf->tr = tr;
 
-	buf->buffer = ring_buffer_alloc(size, rb_flags);
+	buf->buffer = ring_buffer_alloc_kho(size, rb_flags, tr_off);
 	if (!buf->buffer)
 		return -ENOMEM;
 
