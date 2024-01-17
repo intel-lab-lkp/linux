@@ -15,6 +15,7 @@
 #include <linux/compiler.h>
 #include <linux/rbtree.h>
 #include <linux/sbitmap.h>
+#include <linux/mm_inline.h>
 
 #include <trace/events/block.h>
 
@@ -224,14 +225,42 @@ static void deadline_remove_request(struct request_queue *q,
 		q->last_merge = NULL;
 }
 
+static enum dd_prio dd_req_ioprio(struct request *rq)
+{
+	enum dd_prio prio;
+	const u8 ioprio_class = dd_rq_ioclass(rq);
+#ifdef CONFIG_ACTIVITY_BASED_IOPRIO
+	struct bio *bio;
+	struct bio_vec bv;
+	struct bvec_iter iter;
+	struct page *page;
+	int gen = 0;
+	int cnt = 0;
+
+	if (req_op(rq) == REQ_OP_READ) {
+		__rq_for_each_bio(bio, rq) {
+			bio_for_each_bvec(bv, bio, iter) {
+				page = bv.bv_page;
+				gen += PageWorkingset(page) ? 1 : 0;
+				cnt++;
+			}
+		}
+		prio = (gen >= cnt / 2) ? ioprio_class_to_prio[IOPRIO_CLASS_RT] :
+			ioprio_class_to_prio[ioprio_class];
+	} else
+		prio = ioprio_class_to_prio[ioprio_class];
+#else
+	prio = ioprio_class_to_prio[ioprio_class];
+#endif
+	return prio;
+}
+
 static void dd_request_merged(struct request_queue *q, struct request *req,
 			      enum elv_merge type)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(req);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	const enum dd_prio prio = dd_req_ioprio(req);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
-
 	/*
 	 * if the merge was a front merge, we need to reposition request
 	 */
@@ -248,8 +277,7 @@ static void dd_merged_requests(struct request_queue *q, struct request *req,
 			       struct request *next)
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(next);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	const enum dd_prio prio = dd_req_ioprio(next);
 
 	lockdep_assert_held(&dd->lock);
 
@@ -745,10 +773,30 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 {
 	struct deadline_data *dd = q->elevator->elevator_data;
 	const u8 ioprio_class = IOPRIO_PRIO_CLASS(bio->bi_ioprio);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
-	struct dd_per_prio *per_prio = &dd->per_prio[prio];
+	struct dd_per_prio *per_prio;
 	sector_t sector = bio_end_sector(bio);
 	struct request *__rq;
+#ifdef CONFIG_ACTIVITY_BASED_IOPRIO
+	enum dd_prio prio;
+	struct bio_vec bv;
+	struct bvec_iter iter;
+	struct page *page;
+	int gen = 0;
+	int cnt = 0;
+
+	if (bio_op(bio) == REQ_OP_READ) {
+		bio_for_each_bvec(bv, bio, iter) {
+			page = bv.bv_page;
+			gen += PageWorkingset(page) ? 1 : 0;
+			cnt++;
+		}
+	}
+	prio = (gen >= cnt / 2) ? ioprio_class_to_prio[IOPRIO_CLASS_RT] :
+			ioprio_class_to_prio[ioprio_class];
+#else
+	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+#endif
+	per_prio = &dd->per_prio[prio];
 
 	if (!dd->front_merges)
 		return ELEVATOR_NO_MERGE;
@@ -798,10 +846,8 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	struct request_queue *q = hctx->queue;
 	struct deadline_data *dd = q->elevator->elevator_data;
 	const enum dd_data_dir data_dir = rq_data_dir(rq);
-	u16 ioprio = req_get_ioprio(rq);
-	u8 ioprio_class = IOPRIO_PRIO_CLASS(ioprio);
 	struct dd_per_prio *per_prio;
-	enum dd_prio prio;
+	enum dd_prio prio = dd_req_ioprio(rq);
 
 	lockdep_assert_held(&dd->lock);
 
@@ -811,7 +857,6 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	 */
 	blk_req_zone_write_unlock(rq);
 
-	prio = ioprio_class_to_prio[ioprio_class];
 	per_prio = &dd->per_prio[prio];
 	if (!rq->elv.priv[0]) {
 		per_prio->stats.inserted++;
@@ -920,8 +965,7 @@ static void dd_finish_request(struct request *rq)
 {
 	struct request_queue *q = rq->q;
 	struct deadline_data *dd = q->elevator->elevator_data;
-	const u8 ioprio_class = dd_rq_ioclass(rq);
-	const enum dd_prio prio = ioprio_class_to_prio[ioprio_class];
+	const enum dd_prio prio = dd_req_ioprio(rq);
 	struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 	/*

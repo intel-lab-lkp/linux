@@ -44,4 +44,11 @@ config BFQ_CGROUP_DEBUG
 	Enable some debugging help. Currently it exports additional stat
 	files in a cgroup which can be useful for debugging.
 
+config ACTIVITY_BASED_IOPRIO
+	bool "Enable folio activity based ioprio on deadline"
+	depends on LRU_GEN && MQ_IOSCHED_DEADLINE
+	default n
+	help
+	This item enable the feature of adjust request's priority by
+	calculating its folio's activity.
 endmenu
