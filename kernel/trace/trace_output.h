@@ -25,6 +25,11 @@ extern enum print_line_t print_event_fields(struct trace_iterator *iter,
 extern void trace_event_read_lock(void);
 extern void trace_event_read_unlock(void);
 extern struct trace_event *ftrace_find_event(int type);
+#ifdef CONFIG_FTRACE_KHO
+extern int trace_kho_write_events(void *fdt);
+#else
+static inline int trace_kho_write_events(void *fdt) { return -EINVAL; }
+#endif
 
 extern enum print_line_t trace_nop_print(struct trace_iterator *iter,
 					 int flags, struct trace_event *event);

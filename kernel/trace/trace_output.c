@@ -12,6 +12,8 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/mm.h>
 #include <linux/idr.h>
+#include <linux/kexec.h>
+#include <linux/crc32.h>
 
 #include "trace_output.h"
 
@@ -668,6 +670,93 @@ int trace_print_lat_context(struct trace_iterator *iter)
 
 	return !trace_seq_has_overflowed(s);
 }
+
+/**
+ * event2fp - Return fingerprint of an event
+ * @event: The event to fingerprint
+ *
+ * For KHO, we need to match events before and after kexec to recover its type
+ * id. This function returns a hash that combines an event's name, and all of
+ * its fields' lengths.
+ */
+static u32 event2fp(struct trace_event *event)
+{
+	struct ftrace_event_field *field;
+	struct trace_event_call *call;
+	struct list_head *head;
+	const char *name;
+	u32 crc32 = ~0;
+
+	/* Low type numbers are static, nothing to checksum */
+	if (event->type && event->type < __TRACE_LAST_TYPE)
+		return event->type;
+
+	call = container_of(event, struct trace_event_call, event);
+	name = trace_event_name(call);
+	if (name)
+		crc32 = crc32_le(crc32, name, strlen(name));
+
+	head = trace_get_fields(call);
+	list_for_each_entry(field, head, link)
+		crc32 = crc32_le(crc32, (char *)&field->size, sizeof(field->size));
+
+	return crc32;
+}
+
+struct trace_event_map {
+	u32 crc32;
+	u32 type;
+};
+
+static int __maybe_unused _trace_kho_write_events(void *fdt)
+{
+	struct trace_event_call *call;
+	int count = __TRACE_LAST_TYPE - 1;
+	struct trace_event_map *map;
+	int err = 0;
+	int i;
+
+	down_read(&trace_event_sem);
+	/* Allocate an array that we can place all maps into */
+	list_for_each_entry(call, &ftrace_events, list)
+		count++;
+
+	map = vmalloc(count * sizeof(*map));
+	if (!map)
+		return -ENOMEM;
+
+	/* Then fill the array with all crc32 values */
+	count = 0;
+	for (i = 1; i < __TRACE_LAST_TYPE; i++)
+		map[count++] = (struct trace_event_map) {
+			.crc32 = count,
+			.type = count,
+		};
+
+	list_for_each_entry(call, &ftrace_events, list) {
+		struct trace_event *event = &call->event;
+
+		map[count++] = (struct trace_event_map) {
+			.crc32 = event2fp(event),
+			.type = event->type,
+		};
+	}
+	up_read(&trace_event_sem);
+
+	/* And finally write it into a DT variable */
+	err |= fdt_property(fdt, "events", map, count * sizeof(*map));
+
+	vfree(map);
+	return err;
+}
+
+#ifdef CONFIG_FTRACE_KHO
+int trace_kho_write_events(void *fdt)
+{
+	return _trace_kho_write_events(fdt);
+}
+#endif
+
 
 /**
  * ftrace_find_event - find a registered event

@@ -9364,7 +9364,7 @@ init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer);
 
 static int trace_kho_off_tr(struct trace_array *tr)
 {
-	const char *name = tr->name ? tr->name : "global_trace";
+	const char *name = tr->name ? tr->name : "global-trace";
 	const void *fdt = kho_get_fdt();
 	char *path;
 	int off;
@@ -10648,6 +10648,7 @@ static int trace_kho_notifier(struct notifier_block *self,
 
 	err |= fdt_begin_node(fdt, "ftrace");
 	err |= fdt_property(fdt, "compatible", compatible, sizeof(compatible));
+	err |= trace_kho_write_events(fdt);
 	err |= trace_kho_write_trace_array(fdt, &global_trace);
 	err |= fdt_end_node(fdt);
 
