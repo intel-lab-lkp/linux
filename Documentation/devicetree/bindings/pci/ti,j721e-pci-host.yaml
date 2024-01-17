@@ -14,6 +14,7 @@ properties:
   compatible:
     oneOf:
       - const: ti,j721e-pcie-host
+      - const: ti,j722s-pcie-host
       - const: ti,j784s4-pcie-host
       - description: PCIe controller in AM64
         items:
@@ -133,6 +134,18 @@ allOf:
         num-lanes:
           minimum: 1
           maximum: 4
+
+  - if:
+      properties:
+        compatible:
+          items:
+            - const: ti,j722s-pcie-host
+    then:
+      properties:
+        max-link-speed:
+          const: 3
+        num-lanes:
+          const: 1
 
   - if:
       properties:
