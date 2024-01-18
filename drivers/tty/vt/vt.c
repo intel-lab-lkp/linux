@@ -1505,7 +1505,7 @@ enum {
 	CSI_J_FULL		= 3,
 };
 
-static void csi_J(struct vc_data *vc, int vpar)
+static void csi_J(struct vc_data *vc, unsigned int vpar)
 {
 	unsigned short *start;
 	unsigned int count;
@@ -1548,7 +1548,7 @@ enum {
 	CSI_K_LINE			= 2,
 };
 
-static void csi_K(struct vc_data *vc, int vpar)
+static void csi_K(struct vc_data *vc, unsigned int vpar)
 {
 	unsigned int count;
 	unsigned short *start = (unsigned short *)vc->vc_pos;
