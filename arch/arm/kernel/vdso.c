@@ -172,11 +172,8 @@ static void __init patch_vdso(void *ehdr)
 	 * want programs to incur the slight additional overhead of
 	 * dispatching through the VDSO only to fall back to syscalls.
 	 */
-	if (!cntvct_ok) {
+	if (!cntvct_ok)
 		vdso_nullpatch_one(&einfo, "__vdso_gettimeofday");
-		vdso_nullpatch_one(&einfo, "__vdso_clock_gettime");
-		vdso_nullpatch_one(&einfo, "__vdso_clock_gettime64");
-	}
 }
 
 static int __init vdso_init(void)
