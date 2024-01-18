@@ -2601,7 +2601,7 @@ static void macsec_set_head_tail_room(struct net_device *dev)
 	const struct macsec_ops *ops;
 
 	ops = macsec_get_ops(macsec, NULL);
-	if (ops) {
+	if (ops && ops->mdo_insert_tx_tag) {
 		needed_headroom = ops->needed_headroom;
 		needed_tailroom = ops->needed_tailroom;
 	} else {
