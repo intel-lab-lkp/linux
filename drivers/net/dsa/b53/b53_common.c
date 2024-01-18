@@ -1541,7 +1541,6 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 		 const struct switchdev_obj_port_vlan *vlan)
 {
 	struct b53_device *dev = ds->priv;
-	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct b53_vlan *vl;
 	u16 pvid;
 
@@ -1555,9 +1554,6 @@ int b53_vlan_del(struct dsa_switch *ds, int port,
 
 	if (pvid == vlan->vid)
 		pvid = b53_default_pvid(dev);
-
-	if (untagged && !b53_vlan_port_needs_forced_tagged(ds, port))
-		vl->untag &= ~(BIT(port));
 
 	b53_set_vlan_entry(dev, vlan->vid, vl);
 	b53_fast_age_vlan(dev, vlan->vid);
