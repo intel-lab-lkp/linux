@@ -31,6 +31,15 @@ enum con_scroll {
 	SM_DOWN,
 };
 
+/* Note: fbcon defines the below as macros for userspace (in fb.h). */
+enum vesa_blank_mode {
+	VESA_NO_BLANKING	= 0,
+	VESA_VSYNC_SUSPEND	= 1,
+	VESA_HSYNC_SUSPEND	= 2,
+	VESA_POWERDOWN		= VESA_VSYNC_SUSPEND | VESA_HSYNC_SUSPEND,
+	VESA_BLANK_MAX		= VESA_POWERDOWN,
+};
+
 enum vc_intensity;
 
 /**
@@ -69,7 +78,8 @@ struct consw {
 			unsigned int bottom, enum con_scroll dir,
 			unsigned int lines);
 	bool	(*con_switch)(struct vc_data *vc);
-	int	(*con_blank)(struct vc_data *vc, int blank, int mode_switch);
+	int	(*con_blank)(struct vc_data *vc, enum vesa_blank_mode blank,
+			     int mode_switch);
 	int	(*con_font_set)(struct vc_data *vc, struct console_font *font,
 			unsigned int vpitch, unsigned int flags);
 	int	(*con_font_get)(struct vc_data *vc, struct console_font *font,
@@ -519,12 +529,6 @@ void vcs_remove_sysfs(int index);
  * WARN_CONSOLE_UNLOCKED() for debugging purposes.
  */
 extern atomic_t ignore_console_lock_warning;
-
-/* VESA Blanking Levels */
-#define VESA_NO_BLANKING        0
-#define VESA_VSYNC_SUSPEND      1
-#define VESA_HSYNC_SUSPEND      2
-#define VESA_POWERDOWN          3
 
 extern void console_init(void);
 

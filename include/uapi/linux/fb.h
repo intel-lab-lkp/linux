@@ -294,11 +294,14 @@ struct fb_con2fbmap {
 };
 
 /* VESA Blanking Levels */
+#ifdef __KERNEL__
+#include <linux/console.h>
+#else
 #define VESA_NO_BLANKING        0
 #define VESA_VSYNC_SUSPEND      1
 #define VESA_HSYNC_SUSPEND      2
 #define VESA_POWERDOWN          3
-
+#endif
 
 enum {
 	/* screen: unblanked, hsync: on,  vsync: on */
