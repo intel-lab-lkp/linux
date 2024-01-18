@@ -722,7 +722,7 @@ static struct reg_default wsa883x_defaults[] = {
 	{ WSA883X_WAVG_PER_6_7, 0x88 },
 	{ WSA883X_WAVG_STA, 0x00 },
 	{ WSA883X_DRE_CTL_0, 0x70 },
-	{ WSA883X_DRE_CTL_1, 0x08 },
+	{ WSA883X_DRE_CTL_1, 0x1e },
 	{ WSA883X_DRE_IDLE_DET_CTL, 0x1F },
 	{ WSA883X_CLSH_CTL_0, 0x37 },
 	{ WSA883X_CLSH_CTL_1, 0x81 },
