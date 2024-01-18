@@ -13,6 +13,16 @@
 
 #include <drm/ttm/ttm_bo.h>
 
+static bool is_compressed(const struct drm_framebuffer *fb)
+{
+	struct xe_bo *bo = intel_fb_obj(fb);
+	struct xe_device *xe = to_xe_device(to_intel_framebuffer(fb)->base.dev);
+	struct xe_ggtt *ggtt = xe_device_get_root_tile(xe)->mem.ggtt;
+	u16 pat_index_compressed = tile_to_xe(ggtt->tile)->pat.idx[XE_CACHE_WT];
+
+	return (bo->pat_index == pat_index_compressed);
+}
+
 static void
 write_dpt_rotated(struct xe_bo *bo, struct iosys_map *map, u32 *dpt_ofs, u32 bo_ofs,
 		  u32 width, u32 height, u32 src_stride, u32 dst_stride)
@@ -349,11 +359,18 @@ void intel_unpin_fb_vma(struct i915_vma *vma, unsigned long flags)
 int intel_plane_pin_fb(struct intel_plane_state *plane_state)
 {
 	struct drm_framebuffer *fb = plane_state->hw.fb;
+	struct xe_device *xe = to_xe_device(to_intel_framebuffer(fb)->base.dev);
 	struct xe_bo *bo = intel_fb_obj(fb);
 	struct i915_vma *vma;
 
 	/* We reject creating !SCANOUT fb's, so this is weird.. */
 	drm_WARN_ON(bo->ttm.base.dev, !(bo->flags & XE_BO_SCANOUT_BIT));
+
+	if (GRAPHICS_VER(xe) >= 20 && fb->modifier != I915_FORMAT_MOD_4_TILED &&
+	    is_compressed(fb)) {
+		drm_warn(&xe->drm, "Cannot create ccs framebuffer with other than tile4 mofifier\n");
+		return -EINVAL;
+	}
 
 	vma = __xe_pin_fb_vma(to_intel_framebuffer(fb), &plane_state->view.gtt);
 	if (IS_ERR(vma))
