@@ -43,6 +43,7 @@ static const u32 sbp_unit_directory_template[] = {
 };
 
 #define SESSION_MAINTENANCE_INTERVAL HZ
+#define SBP_MAX_TARGET	256
 
 static atomic_t login_id = ATOMIC_INIT(0);
 
@@ -1961,12 +1962,12 @@ static struct se_portal_group *sbp_make_tpg(struct se_wwn *wwn,
 		container_of(wwn, struct sbp_tport, tport_wwn);
 
 	struct sbp_tpg *tpg;
-	unsigned long tpgt;
+	u16 tpgt;
 	int ret;
 
 	if (strstr(name, "tpgt_") != name)
 		return ERR_PTR(-EINVAL);
-	if (kstrtoul(name + 5, 10, &tpgt) || tpgt > UINT_MAX)
+	if (kstrtou16(name + 5, 10, &tpgt) || tpgt >= SBP_MAX_TARGET)
 		return ERR_PTR(-EINVAL);
 
 	if (tport->tpg) {
