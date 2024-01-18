@@ -219,9 +219,14 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 		if (rc)
 			return rc;
 	} else {
-		rc = ahci_platform_enable_clks(hpriv);
+		rc = ahci_platform_enable_regulators(hpriv);
 		if (rc)
 			return rc;
+
+		rc = ahci_platform_enable_clks(hpriv);
+		if (rc)
+			goto disable_regulator;
+
 		/* Assert the controller reset */
 		reset_control_assert(cevapriv->rst);
 
@@ -339,6 +344,9 @@ disable_phys:
 
 disable_clks:
 	ahci_platform_disable_clks(hpriv);
+
+disable_regulator:
+	ahci_platform_disable_regulators(hpriv);
 
 	return rc;
 }
