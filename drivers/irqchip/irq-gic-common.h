@@ -19,6 +19,11 @@ struct gic_quirk {
 	u32 mask;
 };
 
+static inline unsigned int gic_irq(struct irq_data *d)
+{
+	return d->hwirq;
+}
+
 int gic_configure_irq(unsigned int irq, unsigned int type,
                        void __iomem *base, void (*sync_access)(void));
 void gic_dist_config(void __iomem *base, int gic_irqs,

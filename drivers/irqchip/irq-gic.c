@@ -162,11 +162,6 @@ static inline void __iomem *gic_cpu_base(struct irq_data *d)
 	return gic_data_cpu_base(gic_data);
 }
 
-static inline unsigned int gic_irq(struct irq_data *d)
-{
-	return d->hwirq;
-}
-
 static inline bool cascading_gic_irq(struct irq_data *d)
 {
 	void *data = irq_data_get_irq_handler_data(d);
