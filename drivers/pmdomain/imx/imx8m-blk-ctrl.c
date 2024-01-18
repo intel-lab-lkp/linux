@@ -258,7 +258,7 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 
 		domain->power_dev =
 			dev_pm_domain_attach_by_name(dev, data->gpc_name);
-		if (IS_ERR(domain->power_dev)) {
+		if (IS_ERR_OR_NULL(domain->power_dev)) {
 			dev_err_probe(dev, PTR_ERR(domain->power_dev),
 				      "failed to attach power domain \"%s\"\n",
 				      data->gpc_name);
