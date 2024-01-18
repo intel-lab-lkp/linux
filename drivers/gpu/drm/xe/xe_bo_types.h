@@ -91,6 +91,12 @@ struct xe_bo {
 
 	/** @vram_userfault_link: Link into @mem_access.vram_userfault.list */
 		struct list_head vram_userfault_link;
+
+	/**
+	 * @pat_index: The pat index requested when bind this BO
+	 */
+	u16 pat_index;
+
 };
 
 #define intel_bo_to_drm_bo(bo) (&(bo)->ttm.base)
