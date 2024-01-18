@@ -107,6 +107,7 @@
 #include <linux/interrupt.h>
 #include <linux/poll.h>
 #include <linux/tcp.h>
+#include <linux/udp.h>
 #include <linux/init.h>
 #include <linux/highmem.h>
 #include <linux/user_namespace.h>
@@ -4143,8 +4144,15 @@ subsys_initcall(proto_init);
 bool sk_busy_loop_end(void *p, unsigned long start_time)
 {
 	struct sock *sk = p;
+	bool packet_ready;
 
-	return !skb_queue_empty_lockless(&sk->sk_receive_queue) ||
+	packet_ready = !skb_queue_empty_lockless(&sk->sk_receive_queue);
+	if (!packet_ready && sk_is_udp(sk)) {
+		struct sk_buff_head *reader_queue = &udp_sk(sk)->reader_queue;
+
+		packet_ready = !skb_queue_empty_lockless(reader_queue);
+	}
+	return packet_ready ||
 	       sk_busy_loop_timeout(sk, start_time);
 }
 EXPORT_SYMBOL(sk_busy_loop_end);
