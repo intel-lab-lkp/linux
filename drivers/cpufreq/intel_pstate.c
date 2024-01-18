@@ -2532,7 +2532,14 @@ static void intel_pstate_update_perf_limits(struct cpudata *cpu,
 		int freq;
 
 		freq = max_policy_perf * perf_ctl_scaling;
-		max_policy_perf = DIV_ROUND_UP(freq, scaling);
+
+		if (freq == cpu->pstate.turbo_freq)
+			max_policy_perf = cpu->pstate.turbo_pstate;
+		else if (freq == cpu->pstate.max_freq)
+			max_policy_perf = cpu->pstate.max_pstate;
+		else
+			max_policy_perf = DIV_ROUND_UP(freq, scaling);
+
 		freq = min_policy_perf * perf_ctl_scaling;
 		min_policy_perf = DIV_ROUND_UP(freq, scaling);
 	}
