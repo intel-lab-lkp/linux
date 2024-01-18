@@ -2859,11 +2859,9 @@ conv_err_out:
  *
  * See ntfs_truncate() description above for details.
  */
-#ifdef NTFS_RW
 void ntfs_truncate_vfs(struct inode *vi) {
 	ntfs_truncate(vi);
 }
-#endif
 
 /**
  * ntfs_setattr - called from notify_change() when an attribute is being changed
