@@ -154,6 +154,7 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Variable Bitrate",
 		"Constant Bitrate",
 		"Constant Quality",
+		"Maximum Bitrate",
 		NULL
 	};
 	static const char * const mpeg_stream_type[] = {
