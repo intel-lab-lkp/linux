@@ -378,6 +378,11 @@ void post_mobility_fixup(void)
 	rc = pseries_devicetree_update(MIGRATION_SCOPE);
 	if (rc)
 		pr_err("device tree update failed: %d\n", rc);
+	/*
+	 * Rebuild the hardware description printed in stack traces
+	 * using the updated device tree.
+	 */
+	pseries_update_hw_description();
 
 	cacheinfo_rebuild();
 

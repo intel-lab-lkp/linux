@@ -1034,6 +1034,76 @@ static void pseries_add_hw_description(struct seq_buf *sb)
 		seq_buf_printf(sb, "hv:phyp ");
 }
 
+static void pseries_rebuild_hw_desc(struct seq_buf *sb)
+{
+	struct device_node *cpudn, *root;
+	const char *model;
+	u32 cpu_version;
+
+	seq_buf_clear(sb);
+
+	root = of_find_node_by_path("/");
+	if (!of_property_read_string(root, "model", &model))
+		seq_buf_printf(sb, "%s ", model);
+	of_node_put(root);
+
+	seq_buf_printf(sb, "%s 0x%04lx ", cur_cpu_spec->cpu_name, mfspr(SPRN_PVR));
+
+	cpudn = of_get_next_cpu_node(NULL);
+	if (!of_property_read_u32(cpudn, "cpu-version", &cpu_version)) {
+		if ((cpu_version & 0xff000000) == 0x0f000000)
+			seq_buf_printf(sb, "0x%04x ", cpu_version);
+	}
+	of_node_put(cpudn);
+
+	pseries_add_hw_description(sb);
+
+	seq_buf_puts(sb, ppc_md.name);
+}
+
+void pseries_update_hw_description(void)
+{
+	struct seq_buf sb = { // todo: use DECLARE_SEQ_BUF() once it's fixed
+		.buffer = (char[128]) { 0 },
+		.size = sizeof(char[128]),
+	};
+
+	pseries_rebuild_hw_desc(&sb);
+	dump_stack_update_arch_desc("%s", seq_buf_str(&sb));
+}
+
+static int __init pseries_test_update_hw_desc(void)
+{
+	struct seq_buf sb = { // todo: use DECLARE_SEQ_BUF() once it's fixed
+		.buffer = (char[128]) { 0 },
+		.size = sizeof(char[128]),
+	};
+	bool mismatch;
+
+	/*
+	 * Ensure the rebuilt description matches the one built during
+	 * boot.
+	 */
+	pseries_rebuild_hw_desc(&sb);
+
+	mismatch = strcmp(seq_buf_str(&ppc_hw_desc), seq_buf_str(&sb));
+	if (WARN(mismatch, "rebuilt hardware description string mismatch")) {
+		pr_err("  boot:    '%s'\n", ppc_hw_desc.buffer);
+		pr_err("  runtime: '%s'\n", sb.buffer);
+		return -EINVAL;
+	}
+
+	/*
+	 * Invoke dump_stack_update_arch_desc() *twice* to ensure it
+	 * exercises the free path.
+	 */
+	dump_stack_update_arch_desc("%s", sb.buffer);
+	dump_stack_update_arch_desc("%s", sb.buffer);
+
+	return 0;
+}
+late_initcall(pseries_test_update_hw_desc);
+
 /*
  * Early initialization.  Relocation is on but do not reference unbolted pages
  */
