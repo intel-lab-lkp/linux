@@ -3,7 +3,11 @@ config RTS5208
 	tristate "Realtek PCI-E Card Reader RTS5208/5288 support"
 	depends on PCI && SCSI
 	help
-	  Say Y here to include driver code to support the Realtek
-	  PCI-E card reader rts5208/rts5288.
+      Choose Y here to enable support for the Realtek PCI-E card reader RTS5208/5288.
+	  This driver facilitates communication between the Linux kernel and the Realtek
+	  PCI-E card reader.
 
-	  If this driver is compiled as a module, it will be named rts5208.
+	  If you opt to compile this driver as a module, it will be named rts5208. Selecting
+	  N will exclude this driver from the kernel build. Choose option Y if your system includes
+	  the Realtek PCI-E card reader rts5208/rts5288. When in doubt, it is generally safe
+	  to select N.
