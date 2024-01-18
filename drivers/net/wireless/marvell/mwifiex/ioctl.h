@@ -37,11 +37,6 @@ struct mwifiex_chan_freq {
 	u32 freq;
 };
 
-struct mwifiex_ssid_bssid {
-	struct cfg80211_ssid ssid;
-	u8 bssid[ETH_ALEN];
-};
-
 enum {
 	BAND_B = 1,
 	BAND_G = 2,
@@ -88,7 +83,7 @@ struct mwifiex_uap_bss_param {
 	u16 rts_threshold;
 	u16 frag_threshold;
 	u8 retry_limit;
-	struct mwifiex_802_11_ssid ssid;
+	struct cfg80211_ssid ssid;
 	u8 bcast_ssid_ctl;
 	u8 radio_ctl;
 	u8 dtim_period;
