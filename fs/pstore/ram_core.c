@@ -586,21 +586,23 @@ struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
 			unsigned int memtype, u32 flags, char *label)
 {
 	struct persistent_ram_zone *prz;
-	int ret = -ENOMEM;
+	int ret;
 
 	prz = kzalloc(sizeof(struct persistent_ram_zone), GFP_KERNEL);
 	if (!prz) {
 		pr_err("failed to allocate persistent ram zone\n");
-		goto err;
+		return ERR_PTR(-ENOMEM);
+	}
+
+	prz->label = kstrdup(label, GFP_KERNEL);
+	if (!prz->label) {
+		kfree(prz);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	/* Initialize general buffer state. */
 	raw_spin_lock_init(&prz->buffer_lock);
 	prz->flags = flags;
-	prz->label = kstrdup(label, GFP_KERNEL);
-	if (!prz->label)
-		goto err;
-
 	ret = persistent_ram_buffer_map(start, size, prz, memtype);
 	if (ret)
 		goto err;
