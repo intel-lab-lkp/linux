@@ -89,6 +89,8 @@
 	pinctrl-0 = <&pinctrl_rmii3_default>;
 	use-ncsi;
 	mlx,multi-host;
+	ncsi-ctrl,start-redo-probe;
+	ncsi-ctrl,no-channel-monitor;
 };
 
 &mac3 {
@@ -97,6 +99,8 @@
 	pinctrl-0 = <&pinctrl_rmii4_default>;
 	use-ncsi;
 	mlx,multi-host;
+	ncsi-ctrl,start-redo-probe;
+	ncsi-ctrl,no-channel-monitor;
 };
 
 &fmc {
