@@ -1252,6 +1252,10 @@ __xe_pt_bind_vma(struct xe_tile *tile, struct xe_vma *vma, struct xe_exec_queue 
 		return ERR_PTR(-ENOMEM);
 	}
 
+	if (xe_vma_bo(vma)) {
+		xe_vma_bo(vma)->pat_index = vma->pat_index;
+	}
+
 	fence = xe_migrate_update_pgtables(tile->migrate,
 					   vm, xe_vma_bo(vma), q,
 					   entries, num_entries,
