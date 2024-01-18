@@ -120,6 +120,12 @@ static const char *get_shadow_bug_type(struct kasan_report_info *info)
 	case KASAN_VMALLOC_INVALID:
 		bug_type = "vmalloc-out-of-bounds";
 		break;
+#ifdef CONFIG_KASAN_MEM_TRACK
+	default:
+		if (!((*shadow_addr) & 0x80))
+			bug_type = "memory-track";
+		break;
+#endif
 	}
 
 	return bug_type;

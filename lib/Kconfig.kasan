@@ -183,6 +183,15 @@ config KASAN_VMALLOC
 	  With Hardware Tag-Based KASAN, only non-executable VM_ALLOC mappings
 	  are checked. There is no additional memory usage.
 
+config KASAN_MEM_TRACK
+	bool "Capture allocated memory corruption based on KASAN"
+	depends on KASAN_GENERIC && KASAN_OUTLINE
+	help
+	  Enable memory tracking bases on kasan. This is a tools to capture
+	  memory corruption on allocated memory.
+
+	  If unsure, say N.
+
 config KASAN_KUNIT_TEST
 	tristate "KUnit-compatible tests of KASAN bug detection capabilities" if !KUNIT_ALL_TESTS
 	depends on KASAN && KUNIT && TRACEPOINTS

@@ -42,9 +42,94 @@
  * depending on memory access size X.
  */
 
-static __always_inline bool memory_is_poisoned_1(const void *addr)
+#ifdef CONFIG_KASAN_MEM_TRACK
+#define KASAN_SHADOW_VALUE_MASK_ONE_BYTE	0x07
+#define KASAN_TRACK_VALUE_MASK_ONE_BYTE		0x78
+#define KASAN_SHADOW_VALUE_MASK_TWO_BYTE	0x0707
+#define KASAN_SHADOW_VALUE_MASK_EIGHT_BYTE	0x0707070707070707
+#define KASAN_TRACK_VALUE_MASK_EIGHT_BYTE	0x7878787878787878
+#define KASAN_TRACK_VALUE_OFFSET			3
+static __always_inline bool is_poison_value_1_byte(s8 shadow_value)
+{
+	if (shadow_value & 0x80)
+		return true;
+	return false;
+}
+
+static __always_inline bool is_poison_value_8_byte(u64 shadow_value)
+{
+	if (shadow_value & 0x8080808080808080)
+		return true;
+	return false;
+}
+
+static __always_inline s8 to_shadow_value_1_byte(s8 shadow_value)
+{
+	if (is_poison_value_1_byte(shadow_value))
+		return shadow_value;
+	return shadow_value & KASAN_SHADOW_VALUE_MASK_ONE_BYTE;
+}
+
+static __always_inline s8 to_track_value_1_byte(s8 shadow_value)
+{
+	if (is_poison_value_1_byte(shadow_value))
+		return shadow_value;
+	return (shadow_value & KASAN_TRACK_VALUE_MASK_ONE_BYTE) >>
+				KASAN_TRACK_VALUE_OFFSET;
+}
+
+static __always_inline u64 to_shadow_value_8_byte(u64 shadow_value)
+{
+	if (is_poison_value_8_byte(shadow_value))
+		return shadow_value;
+	return shadow_value & KASAN_SHADOW_VALUE_MASK_EIGHT_BYTE;
+}
+
+static __always_inline u64 to_track_value_8_byte(u64 shadow_value)
+{
+	if (is_poison_value_8_byte(shadow_value))
+		return shadow_value;
+	return shadow_value & KASAN_TRACK_VALUE_MASK_EIGHT_BYTE;
+}
+
+static __always_inline s8 get_shadow_value_1_byte(const void *addr)
 {
 	s8 shadow_value = *(s8 *)kasan_mem_to_shadow(addr);
+	return to_shadow_value_1_byte(shadow_value);
+}
+
+static __always_inline u16 get_shadow_value_2_byte(const void *addr)
+{
+	u16 shadow_value = *(u16 *)kasan_mem_to_shadow(addr);
+
+	return shadow_value & KASAN_SHADOW_VALUE_MASK_TWO_BYTE;
+}
+#else
+static __always_inline s8 to_shadow_value_1_byte(s8 shadow_value)
+{
+	return shadow_value;
+}
+static __always_inline u64 to_shadow_value_8_byte(u64 shadow_value)
+{
+	return shadow_value;
+}
+static __always_inline s8 get_shadow_value_1_byte(const void *addr)
+{
+	return *(s8 *)kasan_mem_to_shadow(addr);
+}
+static __always_inline u16 get_shadow_value_2_byte(const void *addr)
+{
+	return *(u16 *)kasan_mem_to_shadow(addr);
+}
+static __always_inline bool memory_is_tracked(const void *addr, size_t size)
+{
+	return 0;
+}
+#endif
+
+static __always_inline bool memory_is_poisoned_1(const void *addr)
+{
+	s8 shadow_value = get_shadow_value_1_byte(addr);
 
 	if (unlikely(shadow_value)) {
 		s8 last_accessible_byte = (unsigned long)addr & KASAN_GRANULE_MASK;
@@ -57,34 +142,30 @@ static __always_inline bool memory_is_poisoned_1(const void *addr)
 static __always_inline bool memory_is_poisoned_2_4_8(const void *addr,
 						unsigned long size)
 {
-	u8 *shadow_addr = (u8 *)kasan_mem_to_shadow(addr);
-
 	/*
 	 * Access crosses 8(shadow size)-byte boundary. Such access maps
 	 * into 2 shadow bytes, so we need to check them both.
 	 */
 	if (unlikely((((unsigned long)addr + size - 1) & KASAN_GRANULE_MASK) < size - 1))
-		return *shadow_addr || memory_is_poisoned_1(addr + size - 1);
+		return get_shadow_value_1_byte(addr) || memory_is_poisoned_1(addr + size - 1);
 
 	return memory_is_poisoned_1(addr + size - 1);
 }
 
 static __always_inline bool memory_is_poisoned_16(const void *addr)
 {
-	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
-
 	/* Unaligned 16-bytes access maps into 3 shadow bytes. */
 	if (unlikely(!IS_ALIGNED((unsigned long)addr, KASAN_GRANULE_SIZE)))
-		return *shadow_addr || memory_is_poisoned_1(addr + 15);
+		return get_shadow_value_2_byte(addr) || memory_is_poisoned_1(addr + 15);
 
-	return *shadow_addr;
+	return get_shadow_value_2_byte(addr);
 }
 
-static __always_inline unsigned long bytes_is_nonzero(const u8 *start,
+static __always_inline unsigned long bytes_is_nonzero(const s8 *start,
 					size_t size)
 {
 	while (size) {
-		if (unlikely(*start))
+		if (unlikely(to_shadow_value_1_byte(*start)))
 			return (unsigned long)start;
 		start++;
 		size--;
@@ -93,7 +174,7 @@ static __always_inline unsigned long bytes_is_nonzero(const u8 *start,
 	return 0;
 }
 
-static __always_inline unsigned long memory_is_nonzero(const void *start,
+static __always_inline unsigned long shadow_val_is_nonzero(const void *start,
 						const void *end)
 {
 	unsigned int words;
@@ -113,7 +194,7 @@ static __always_inline unsigned long memory_is_nonzero(const void *start,
 
 	words = (end - start) / 8;
 	while (words) {
-		if (unlikely(*(u64 *)start))
+		if (unlikely(to_shadow_value_8_byte(*(u64 *)start)))
 			return bytes_is_nonzero(start, 8);
 		start += 8;
 		words--;
@@ -126,7 +207,7 @@ static __always_inline bool memory_is_poisoned_n(const void *addr, size_t size)
 {
 	unsigned long ret;
 
-	ret = memory_is_nonzero(kasan_mem_to_shadow(addr),
+	ret = shadow_val_is_nonzero(kasan_mem_to_shadow(addr),
 			kasan_mem_to_shadow(addr + size - 1) + 1);
 
 	if (unlikely(ret)) {
@@ -135,7 +216,7 @@ static __always_inline bool memory_is_poisoned_n(const void *addr, size_t size)
 		s8 last_accessible_byte = (unsigned long)last_byte & KASAN_GRANULE_MASK;
 
 		if (unlikely(ret != (unsigned long)last_shadow ||
-			     last_accessible_byte >= *last_shadow))
+			     last_accessible_byte >= to_shadow_value_1_byte(*last_shadow)))
 			return true;
 	}
 	return false;
@@ -161,6 +242,168 @@ static __always_inline bool memory_is_poisoned(const void *addr, size_t size)
 	return memory_is_poisoned_n(addr, size);
 }
 
+#ifdef CONFIG_KASAN_MEM_TRACK
+static __always_inline s8 get_track_value(const void *addr)
+{
+	s8 shadow_value = *(s8 *)kasan_mem_to_shadow(addr);
+
+	/* In the early stages of system startup, when Kasan is not fully ready,
+	 * some illegal values may be obtained. Ignore it.
+	 */
+	if (unlikely(shadow_value & 0x80))
+		return 0;
+	return (shadow_value >> KASAN_TRACK_VALUE_OFFSET);
+}
+
+/* ================================== size :	  1     2     3     4     5     6     7    8 */
+static const s8 kasan_track_mask_odd_array[] = {0x01, 0x03, 0x03, 0x07, 0x07, 0x0f, 0x0f};
+static const s8 kasan_track_mask_even_array[] = {-1,  0x01,  -1,  0x03,  -1,  0x07,  -1, 0x0f};
+static s8 kasan_track_mask_odd(size_t size)
+{
+	return kasan_track_mask_odd_array[size - 1];
+}
+
+static s8 kasan_track_mask_even(size_t size)
+{
+	return kasan_track_mask_even_array[size - 1];
+}
+
+/* check with addr do not cross 8(shadow size)-byte boundary */
+static __always_inline bool _memory_is_tracked(const void *addr, size_t size)
+{
+	s8 mask;
+	u8 offset = (unsigned long)addr & KASAN_GRANULE_MASK;
+
+	if ((unsigned long)addr & 0x01)
+		mask = kasan_track_mask_odd(size);
+	else
+		mask = kasan_track_mask_even(size);
+
+	return unlikely(get_track_value(addr) & (mask << (offset >> 1)));
+}
+
+static __always_inline bool memory_is_tracked_1(const void *addr)
+{
+	u8 last_accessible_byte = (unsigned long)addr & KASAN_GRANULE_MASK;
+
+	return unlikely(get_track_value(addr) & (0x01 << (last_accessible_byte >> 1)));
+}
+
+static __always_inline bool memory_is_tracked_2_4_8(const void *addr, size_t size)
+{
+	/*
+	 * Access crosses 8(shadow size)-byte boundary. Such access maps
+	 * into 2 shadow bytes, so we need to check them both.
+	 */
+	if (unlikely((((unsigned long)addr + size - 1) & KASAN_GRANULE_MASK) < size - 1)) {
+		u8 part = (unsigned long)addr & KASAN_GRANULE_MASK;
+
+		part = 8 - part;
+		return ((unlikely(get_track_value(addr)) && _memory_is_tracked(addr, part)) ||
+					_memory_is_tracked(addr + part, size - part));
+	}
+
+	return _memory_is_tracked(addr, size);
+}
+
+static __always_inline bool memory_is_tracked_16(const void *addr)
+{
+	/* Unaligned 16-bytes access maps into 3 shadow bytes. */
+	if (unlikely(!IS_ALIGNED((unsigned long)addr, KASAN_GRANULE_SIZE))) {
+		u8 part = (unsigned long)addr & KASAN_GRANULE_MASK;
+
+		part = 8 - part;
+		return ((unlikely(get_track_value(addr)) && _memory_is_tracked(addr, part)) ||
+			_memory_is_tracked(addr + part, 8) ||
+			_memory_is_tracked(addr + part + 8, 8 - part));
+	}
+
+	return unlikely(get_track_value(addr) || get_track_value(addr + 8));
+}
+
+static __always_inline unsigned long track_bytes_is_nonzero(const s8 *start,
+					size_t size)
+{
+	while (size) {
+		if (unlikely(to_track_value_1_byte(*start)))
+			return (unsigned long)start;
+		start++;
+		size--;
+	}
+
+	return 0;
+}
+
+static __always_inline unsigned long track_val_is_nonzero(const void *start,
+						const void *end)
+{
+	unsigned int words;
+	unsigned long ret;
+	unsigned int prefix = (unsigned long)start % 8;
+
+	if (end - start <= 16)
+		return track_bytes_is_nonzero(start, end - start);
+
+	if (prefix) {
+		prefix = 8 - prefix;
+		ret = track_bytes_is_nonzero(start, prefix);
+		if (unlikely(ret))
+			return ret;
+		start += prefix;
+	}
+
+	words = (end - start) / 8;
+	while (words) {
+		if (unlikely(to_track_value_8_byte(*(u64 *)start)))
+			return track_bytes_is_nonzero(start, 8);
+		start += 8;
+		words--;
+	}
+
+	return track_bytes_is_nonzero(start, (end - start) % 8);
+}
+
+static __always_inline bool memory_is_tracked_n(const void *addr, size_t size)
+{
+	unsigned long ret;
+
+	ret = track_val_is_nonzero(kasan_mem_to_shadow(addr),
+			kasan_mem_to_shadow(addr + size - 1) + 1);
+
+	if (unlikely(ret)) {
+		const void *last_byte = addr + size - 1;
+		s8 *last_shadow = (s8 *)kasan_mem_to_shadow(last_byte);
+
+		if (unlikely(ret != (unsigned long)last_shadow ||
+				_memory_is_tracked(
+				(void *)((unsigned long)last_byte & ~KASAN_GRANULE_MASK),
+				((unsigned long)last_byte & KASAN_GRANULE_MASK) + 1)))
+			return true;
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_tracked(const void *addr, size_t size)
+{
+	if (__builtin_constant_p(size)) {
+		switch (size) {
+		case 1:
+			return memory_is_tracked_1(addr);
+		case 2:
+		case 4:
+		case 8:
+			return memory_is_tracked_2_4_8(addr, size);
+		case 16:
+			return memory_is_tracked_16(addr);
+		default:
+			BUILD_BUG();
+		}
+	}
+
+	return memory_is_tracked_n(addr, size);
+}
+#endif
+
 static __always_inline bool check_region_inline(const void *addr,
 						size_t size, bool write,
 						unsigned long ret_ip)
@@ -177,7 +420,8 @@ static __always_inline bool check_region_inline(const void *addr,
 	if (unlikely(!addr_has_metadata(addr)))
 		return !kasan_report(addr, size, write, ret_ip);
 
-	if (likely(!memory_is_poisoned(addr, size)))
+	if ((likely(!memory_is_poisoned(addr, size))) &&
+		(!write || likely(!memory_is_tracked(addr, size))))
 		return true;
 
 	return !kasan_report(addr, size, write, ret_ip);
@@ -196,7 +440,7 @@ bool kasan_byte_accessible(const void *addr)
 	if (!kasan_arch_is_ready())
 		return true;
 
-	shadow_byte = READ_ONCE(*(s8 *)kasan_mem_to_shadow(addr));
+	shadow_byte = (s8)to_shadow_value_1_byte(READ_ONCE(*(s8 *)kasan_mem_to_shadow(addr)));
 
 	return shadow_byte >= 0 && shadow_byte < KASAN_GRANULE_SIZE;
 }
