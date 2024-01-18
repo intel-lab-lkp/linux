@@ -81,7 +81,16 @@ struct dd_per_prio {
 
 enum {
 	DD_DISPATCHING	= 0,
+	DD_INSERTING	= 1,
 };
+
+#define DD_CPU_BUCKETS		32
+#define DD_CPU_BUCKETS_MASK	(DD_CPU_BUCKETS - 1)
+
+struct dd_bucket_list {
+	struct list_head list;
+	spinlock_t lock;
+} ____cacheline_aligned_in_smp;
 
 struct deadline_data {
 	/*
@@ -93,6 +102,9 @@ struct deadline_data {
 	} ____cacheline_aligned_in_smp;
 
 	unsigned long run_state;
+
+	atomic_t insert_seq;
+	struct dd_bucket_list bucket_lists[DD_CPU_BUCKETS];
 
 	struct dd_per_prio per_prio[DD_PRIO_COUNT];
 
@@ -711,7 +723,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 	struct deadline_data *dd;
 	struct elevator_queue *eq;
 	enum dd_prio prio;
-	int ret = -ENOMEM;
+	int i, ret = -ENOMEM;
 
 	eq = elevator_alloc(q, e);
 	if (!eq)
@@ -725,6 +737,12 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 
 	spin_lock_init(&dd->lock);
 	spin_lock_init(&dd->zone_lock);
+	atomic_set(&dd->insert_seq, 0);
+
+	for (i = 0; i < DD_CPU_BUCKETS; i++) {
+		INIT_LIST_HEAD(&dd->bucket_lists[i].list);
+		spin_lock_init(&dd->bucket_lists[i].lock);
+	}
 
 	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
 		struct dd_per_prio *per_prio = &dd->per_prio[prio];
@@ -876,6 +894,67 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	}
 }
 
+static void dd_dispatch_from_buckets(struct deadline_data *dd,
+				     struct list_head *list)
+{
+	int i;
+
+	for (i = 0; i < DD_CPU_BUCKETS; i++) {
+		struct dd_bucket_list *bucket = &dd->bucket_lists[i];
+
+		if (list_empty_careful(&bucket->list))
+			continue;
+		spin_lock(&bucket->lock);
+		list_splice_init(&bucket->list, list);
+		spin_unlock(&bucket->lock);
+	}
+}
+
+/*
+ * If we can grab the dd->lock, then just return and do the insertion as per
+ * usual. If not, add to one of our internal buckets, and afterwards recheck
+ * if if we should retry.
+ */
+static bool dd_insert_to_bucket(struct deadline_data *dd,
+				struct list_head *list, int *seq)
+	__acquires(&dd->lock)
+{
+	struct dd_bucket_list *bucket;
+	int next_seq;
+
+	*seq = atomic_read(&dd->insert_seq);
+
+	if (spin_trylock(&dd->lock))
+		return false;
+	if (!test_bit(DD_INSERTING, &dd->run_state)) {
+		spin_lock(&dd->lock);
+		return false;
+	}
+
+	*seq = atomic_inc_return(&dd->insert_seq);
+
+	bucket = &dd->bucket_lists[get_cpu() & DD_CPU_BUCKETS_MASK];
+	spin_lock(&bucket->lock);
+	list_splice_init(list, &bucket->list);
+	spin_unlock(&bucket->lock);
+	put_cpu();
+
+	/*
+	 * If seq still matches, we should be safe to just exit with the
+	 * pending requests queued in a bucket.
+	 */
+	next_seq = atomic_inc_return(&dd->insert_seq);
+	if (next_seq == *seq + 1)
+		return true;
+
+	/*
+	 * Seq changed, be safe and grab the lock and insert. Don't update
+	 * sequence, so that we flusht the buckets too.
+	 */
+	spin_lock(&dd->lock);
+	return false;
+}
+
 /*
  * Called from blk_mq_insert_request() or blk_mq_dispatch_plug_list().
  */
@@ -886,16 +965,39 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 	struct request_queue *q = hctx->queue;
 	struct deadline_data *dd = q->elevator->elevator_data;
 	LIST_HEAD(free);
+	int seq;
 
-	spin_lock(&dd->lock);
-	while (!list_empty(list)) {
-		struct request *rq;
+	/*
+	 * If dispatch is busy and we ended up adding to our internal bucket,
+	 * then we're done for now.
+	 */
+	if (dd_insert_to_bucket(dd, list, &seq))
+		return;
 
-		rq = list_first_entry(list, struct request, queuelist);
-		list_del_init(&rq->queuelist);
-		dd_insert_request(hctx, rq, flags, &free);
-	}
+	set_bit(DD_INSERTING, &dd->run_state);
+	do {
+		int next_seq;
+
+		while (!list_empty(list)) {
+			struct request *rq;
+
+			rq = list_first_entry(list, struct request, queuelist);
+			list_del_init(&rq->queuelist);
+			dd_insert_request(hctx, rq, flags, &free);
+		}
+
+		/*
+		 * If sequence changed, flush internal buckets
+		 */
+		next_seq = atomic_inc_return(&dd->insert_seq);
+		if (next_seq == seq + 1)
+			break;
+		seq = next_seq;
+		dd_dispatch_from_buckets(dd, list);
+	} while (1);
+
 	spin_unlock(&dd->lock);
+	clear_bit(DD_INSERTING, &dd->run_state);
 
 	blk_mq_free_requests(&free);
 }
