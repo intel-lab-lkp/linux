@@ -856,6 +856,8 @@ found:
 #ifdef CONFIG_DEBUG_FS
 	chan->dbg_client_name = kasprintf(GFP_KERNEL, "%s:%s", dev_name(dev),
 					  name);
+	if (!chan->dbg_client_name)
+		return chan;
 #endif
 
 	chan->name = kasprintf(GFP_KERNEL, "dma:%s", name);
