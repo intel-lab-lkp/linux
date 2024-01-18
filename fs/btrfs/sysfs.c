@@ -1306,6 +1306,44 @@ static ssize_t btrfs_bg_reclaim_threshold_store(struct kobject *kobj,
 BTRFS_ATTR_RW(, bg_reclaim_threshold, btrfs_bg_reclaim_threshold_show,
 	      btrfs_bg_reclaim_threshold_store);
 
+static ssize_t btrfs_inline_csum_show(struct kobject *kobj,
+				      struct kobj_attribute *a,
+				      char *buf)
+{
+	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
+
+	switch (fs_devices->inline_csum_mode) {
+	case BTRFS_INLINE_CSUM_AUTO:
+		return sysfs_emit(buf, "auto\n");
+	case BTRFS_INLINE_CSUM_FORCE_ON:
+		return sysfs_emit(buf, "on\n");
+	case BTRFS_INLINE_CSUM_FORCE_OFF:
+		return sysfs_emit(buf, "off\n");
+	default:
+		WARN_ON(1);
+		return -EINVAL;
+	}
+}
+
+static ssize_t btrfs_inline_csum_store(struct kobject *kobj,
+				       struct kobj_attribute *a,
+				       const char *buf, size_t len)
+{
+	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
+
+	if (sysfs_streq(buf, "auto"))
+		fs_devices->inline_csum_mode = BTRFS_INLINE_CSUM_AUTO;
+	else if (sysfs_streq(buf, "on"))
+		fs_devices->inline_csum_mode = BTRFS_INLINE_CSUM_FORCE_ON;
+	else if (sysfs_streq(buf, "off"))
+		fs_devices->inline_csum_mode = BTRFS_INLINE_CSUM_FORCE_OFF;
+	else
+		return -EINVAL;
+
+	return len;
+}
+BTRFS_ATTR_RW(, inline_csum, btrfs_inline_csum_show, btrfs_inline_csum_store);
+
 /*
  * Per-filesystem information and stats.
  *
@@ -1325,6 +1363,7 @@ static const struct attribute *btrfs_attrs[] = {
 	BTRFS_ATTR_PTR(, bg_reclaim_threshold),
 	BTRFS_ATTR_PTR(, commit_stats),
 	BTRFS_ATTR_PTR(, temp_fsid),
+	BTRFS_ATTR_PTR(, inline_csum),
 	NULL,
 };
 

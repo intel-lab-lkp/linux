@@ -276,6 +276,22 @@ enum btrfs_read_policy {
 	BTRFS_NR_READ_POLICY,
 };
 
+/*
+ * Checksum mode - do it in btrfs_submit_chunk() or offload it.
+ */
+enum btrfs_inline_csum_mode {
+	/*
+	 * Choose inline checksum or offloading automatically. Do it
+	 * inline if the checksum is fast, or offload to workqueues
+	 * otherwise.
+	 */
+	BTRFS_INLINE_CSUM_AUTO,
+	/* Never offload checksum to workqueues. */
+	BTRFS_INLINE_CSUM_FORCE_ON,
+	/* Always offload checksum to workqueues. */
+	BTRFS_INLINE_CSUM_FORCE_OFF,
+};
+
 struct btrfs_fs_devices {
 	u8 fsid[BTRFS_FSID_SIZE]; /* FS specific uuid */
 
@@ -380,6 +396,9 @@ struct btrfs_fs_devices {
 
 	/* Policy used to read the mirrored stripes. */
 	enum btrfs_read_policy read_policy;
+
+	/* Checksum mode - do it inline or offload it. */
+	enum btrfs_inline_csum_mode inline_csum_mode;
 };
 
 #define BTRFS_MAX_DEVS(info) ((BTRFS_MAX_ITEM_SIZE(info)	\

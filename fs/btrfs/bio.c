@@ -611,8 +611,14 @@ static void run_one_async_done(struct btrfs_work *work, bool do_free)
 
 static bool should_async_write(struct btrfs_bio *bbio)
 {
+	struct btrfs_fs_devices *fs_devices = bbio->fs_info->fs_devices;
+
+	if (fs_devices->inline_csum_mode == BTRFS_INLINE_CSUM_FORCE_ON)
+		return false;
+
 	/* Submit synchronously if the checksum implementation is fast. */
-	if (test_bit(BTRFS_FS_CSUM_IMPL_FAST, &bbio->fs_info->flags))
+	if (fs_devices->inline_csum_mode == BTRFS_INLINE_CSUM_AUTO &&
+	    test_bit(BTRFS_FS_CSUM_IMPL_FAST, &bbio->fs_info->flags))
 		return false;
 
 	/*
