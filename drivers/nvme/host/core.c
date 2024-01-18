@@ -4,6 +4,7 @@
  * Copyright (c) 2011-2014, Intel Corporation.
  */
 
+#include <linux/async.h>
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 #include <linux/blk-integrity.h>
@@ -3740,12 +3741,38 @@ out:
 		nvme_ns_remove(ns);
 }
 
-static void nvme_scan_ns(struct nvme_ctrl *ctrl, unsigned nsid)
+/*
+ * struct nvme_scan_state - keeps track of controller & NSIDs to scan
+ * @ctrl:	Controller on which namespaces are being scanned
+ * @count:	Next NSID to scan (for sequential scan), or
+ *		Index of next NSID to scan in ns_list (for list scan)
+ * @ns_list:	pointer to list of NSIDs to scan (NULL if sequential scan)
+ */
+struct nvme_scan_state {
+	struct nvme_ctrl *ctrl;
+	atomic_t count;
+	__le32 *ns_list;
+};
+
+static void nvme_scan_ns(void *data, async_cookie_t cookie)
 {
-	struct nvme_ns_info info = { .nsid = nsid };
+	struct nvme_ns_info info = {};
+	struct nvme_scan_state *scan_state;
+	struct nvme_ctrl *ctrl;
+	u32 nsid;
 	struct nvme_ns *ns;
 	int ret;
 
+	scan_state = data;
+	ctrl = scan_state->ctrl;
+	nsid = (u32)atomic_fetch_add(1, &scan_state->count);
+	/*
+	 * get NSID from list (if scanning from a list, not sequentially)
+	 */
+	if (scan_state->ns_list)
+		nsid = le32_to_cpu(scan_state->ns_list[nsid]);
+
+	info.nsid = nsid;
 	if (nvme_identify_ns_descs(ctrl, &info))
 		return;
 
@@ -3809,11 +3836,15 @@ static int nvme_scan_ns_list(struct nvme_ctrl *ctrl)
 	__le32 *ns_list;
 	u32 prev = 0;
 	int ret = 0, i;
+	ASYNC_DOMAIN(domain);
+	struct nvme_scan_state scan_state;
 
 	ns_list = kzalloc(NVME_IDENTIFY_DATA_SIZE, GFP_KERNEL);
 	if (!ns_list)
 		return -ENOMEM;
 
+	scan_state.ctrl = ctrl;
+	scan_state.ns_list = ns_list;
 	for (;;) {
 		struct nvme_command cmd = {
 			.identify.opcode	= nvme_admin_identify,
@@ -3829,19 +3860,25 @@ static int nvme_scan_ns_list(struct nvme_ctrl *ctrl)
 			goto free;
 		}
 
+		/*
+		 * scan list starting at list offset 0
+		 */
+		atomic_set(&scan_state.count, 0);
 		for (i = 0; i < nr_entries; i++) {
 			u32 nsid = le32_to_cpu(ns_list[i]);
 
 			if (!nsid)	/* end of the list? */
 				goto out;
-			nvme_scan_ns(ctrl, nsid);
+			async_schedule_domain(nvme_scan_ns, &scan_state, &domain);
 			while (++prev < nsid)
 				nvme_ns_remove_by_nsid(ctrl, prev);
 		}
+		async_synchronize_full_domain(&domain);
 	}
  out:
 	nvme_remove_invalid_namespaces(ctrl, prev);
  free:
+	async_synchronize_full_domain(&domain);
 	kfree(ns_list);
 	return ret;
 }
@@ -3850,14 +3887,23 @@ static void nvme_scan_ns_sequential(struct nvme_ctrl *ctrl)
 {
 	struct nvme_id_ctrl *id;
 	u32 nn, i;
+	ASYNC_DOMAIN(domain);
+	struct nvme_scan_state scan_state;
 
 	if (nvme_identify_ctrl(ctrl, &id))
 		return;
 	nn = le32_to_cpu(id->nn);
 	kfree(id);
 
+	scan_state.ctrl = ctrl;
+	/*
+	 * scan sequentially starting at NSID 1
+	 */
+	atomic_set(&scan_state.count, 1);
+	scan_state.ns_list = NULL;
 	for (i = 1; i <= nn; i++)
-		nvme_scan_ns(ctrl, i);
+		async_schedule_domain(nvme_scan_ns, &scan_state, &domain);
+	async_synchronize_full_domain(&domain);
 
 	nvme_remove_invalid_namespaces(ctrl, nn);
 }
