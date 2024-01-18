@@ -5701,6 +5701,26 @@ static int mvpp2_ethtool_set_rxfh(struct net_device *dev,
 	return ret;
 }
 
+static int mvpp2_get_eee(struct net_device *dev, struct ethtool_eee *edata)
+{
+	int ret = -EOPNOTSUPP;
+
+	if (dev->phydev)
+		ret = phy_ethtool_get_eee(dev->phydev, edata);
+
+	return ret;
+}
+
+static int mvpp2_set_eee(struct net_device *dev, struct ethtool_eee *edata)
+{
+	int ret = -EOPNOTSUPP;
+
+	if (dev->phydev)
+		ret = phy_ethtool_set_eee(dev->phydev, edata);
+
+	return ret;
+}
+
 /* Device ops */
 
 static const struct net_device_ops mvpp2_netdev_ops = {
@@ -5743,6 +5763,8 @@ static const struct ethtool_ops mvpp2_eth_tool_ops = {
 	.get_rxfh_indir_size	= mvpp2_ethtool_get_rxfh_indir_size,
 	.get_rxfh		= mvpp2_ethtool_get_rxfh,
 	.set_rxfh		= mvpp2_ethtool_set_rxfh,
+	.get_eee		= mvpp2_get_eee,
+	.set_eee		= mvpp2_set_eee,
 };
 
 /* Used for PPv2.1, or PPv2.2 with the old Device Tree binding that
