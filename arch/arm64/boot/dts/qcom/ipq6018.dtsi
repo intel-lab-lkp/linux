@@ -167,6 +167,11 @@
 						regulator-max-microvolt = <1062500>;
 						regulator-always-on;
 					};
+
+					ipq6018_l2: l2 {
+						regulator-min-microvolt = <1800000>;
+						regulator-max-microvolt = <3300000>;
+					};
 				};
 			};
 		};
