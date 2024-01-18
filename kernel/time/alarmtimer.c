@@ -27,11 +27,14 @@
 #include <linux/compat.h>
 #include <linux/module.h>
 #include <linux/time_namespace.h>
+#include <linux/sysfs.h>
 
 #include "posix-timers.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/alarmtimer.h>
+
+static const char alarmtimer_group_name[] = "alarmtimer";
 
 /**
  * struct alarm_base - Alarm timer bases
@@ -62,6 +65,99 @@ static DEFINE_SPINLOCK(freezer_delta_lock);
 static struct rtc_timer		rtctimer;
 static struct rtc_device	*rtcdev;
 static DEFINE_SPINLOCK(rtcdev_lock);
+
+/**
+ * alarmtimer_init_soonest - Initializes parameters to find soonest alarm.
+ * @min: ptr to relative time to the soonest alarm to expire
+ * @expires: ptr to absolute time of the soonest alarm to expire
+ * @type: ptr to alarm type
+ * @reset_freezer_delta: boolean to indicate if freezer_delta should be reset to 0
+ *
+ */
+static void alarmtimer_init_soonest(ktime_t *min, ktime_t *expires, int *type,
+			bool reset_freezer_delta)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&freezer_delta_lock, flags);
+	*min = freezer_delta;
+	*expires = freezer_expires;
+	*type = freezer_alarmtype;
+	if (reset_freezer_delta)
+		freezer_delta = 0;
+	spin_unlock_irqrestore(&freezer_delta_lock, flags);
+}
+
+/**
+ * alarmtimer_get_soonest - Finds the soonest alarm to expire among the alarm bases.
+ * @min: ptr to relative time to the soonest alarm to expire
+ * @expires: ptr to absolute time of the soonest alarm to expire
+ * @type: ptr to alarm type
+ *
+ */
+static void alarmtimer_get_soonest(ktime_t *min, ktime_t *expires, int *type)
+{
+	int i;
+	unsigned long flags;
+
+	/* Find the soonest timer to expire */
+	for (i = 0; i < ALARM_NUMTYPE; i++) {
+		struct alarm_base *base = &alarm_bases[i];
+		struct timerqueue_node *next;
+		ktime_t delta;
+
+		spin_lock_irqsave(&base->lock, flags);
+		next = timerqueue_getnext(&base->timerqueue);
+		spin_unlock_irqrestore(&base->lock, flags);
+		if (!next)
+			continue;
+		delta = ktime_sub(next->expires, base->get_ktime());
+		if (!(*min) || (delta < *min)) {
+			*expires = next->expires;
+			*min = delta;
+			*type = i;
+		}
+	}
+}
+
+static ssize_t next_alarm_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	ktime_t min, expires;
+	int type;
+
+	/* Init and find the soonest timer to expire */
+	alarmtimer_init_soonest(&min, &expires, &type, false);
+	alarmtimer_get_soonest(&min, &expires, &type);
+
+	return sysfs_emit(buf, "%lld\n", ktime_to_ns(min));
+}
+static struct kobj_attribute next_alarm = __ATTR_RO(next_alarm);
+
+static struct attribute *alarmtimer_attrs[] = {
+	&next_alarm.attr,
+	NULL,
+};
+
+static const struct attribute_group alarmtimer_attr_group = {
+	.name	= alarmtimer_group_name,
+	.attrs	= alarmtimer_attrs,
+};
+
+/**
+ * alarmtimer_sysfs_add - Adds sysfs attributes for alarmtimer
+ *
+ * Returns 0 if successful, non-zero value for error.
+ */
+static int alarmtimer_sysfs_add(void)
+{
+	int ret = sysfs_create_group(kernel_kobj, &alarmtimer_attr_group);
+
+	if (ret)
+		pr_warn("[%s] failed to create a sysfs group\n", __func__);
+
+	return ret;
+}
 
 /**
  * alarmtimer_get_rtcdev - Return selected rtcdevice
@@ -98,8 +194,11 @@ static int alarmtimer_rtc_add_device(struct device *dev)
 
 	pdev = platform_device_register_data(dev, "alarmtimer",
 					     PLATFORM_DEVID_AUTO, NULL, 0);
-	if (!IS_ERR(pdev))
+	if (!IS_ERR(pdev)) {
 		device_init_wakeup(&pdev->dev, true);
+		if (alarmtimer_sysfs_add())
+			pr_warn("[%s] failed to add alarmtimer sysfs attributes\n", __func__);
+	}
 
 	spin_lock_irqsave(&rtcdev_lock, flags);
 	if (!IS_ERR(pdev) && !rtcdev) {
@@ -241,41 +340,21 @@ EXPORT_SYMBOL_GPL(alarm_expires_remaining);
 static int alarmtimer_suspend(struct device *dev)
 {
 	ktime_t min, now, expires;
-	int i, ret, type;
+	int ret, type;
 	struct rtc_device *rtc;
-	unsigned long flags;
 	struct rtc_time tm;
 
-	spin_lock_irqsave(&freezer_delta_lock, flags);
-	min = freezer_delta;
-	expires = freezer_expires;
-	type = freezer_alarmtype;
-	freezer_delta = 0;
-	spin_unlock_irqrestore(&freezer_delta_lock, flags);
+	/* Initialize parameters to find soonest timer */
+	alarmtimer_init_soonest(&min, &expires, &type, true);
 
 	rtc = alarmtimer_get_rtcdev();
 	/* If we have no rtcdev, just return */
 	if (!rtc)
 		return 0;
 
-	/* Find the soonest timer to expire*/
-	for (i = 0; i < ALARM_NUMTYPE; i++) {
-		struct alarm_base *base = &alarm_bases[i];
-		struct timerqueue_node *next;
-		ktime_t delta;
+	/* Find the soonest timer to expire */
+	alarmtimer_get_soonest(&min, &expires, &type);
 
-		spin_lock_irqsave(&base->lock, flags);
-		next = timerqueue_getnext(&base->timerqueue);
-		spin_unlock_irqrestore(&base->lock, flags);
-		if (!next)
-			continue;
-		delta = ktime_sub(next->expires, base->get_ktime());
-		if (!min || (delta < min)) {
-			expires = next->expires;
-			min = delta;
-			type = i;
-		}
-	}
 	if (min == 0)
 		return 0;
 
