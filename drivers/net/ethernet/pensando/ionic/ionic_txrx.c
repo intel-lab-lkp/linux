@@ -177,7 +177,7 @@ static bool ionic_rx_buf_recycle(struct ionic_queue *q,
 	if (page_to_nid(buf_info->page) != numa_mem_id())
 		return false;
 
-	size = ALIGN(used, IONIC_PAGE_SPLIT_SZ);
+	size = ALIGN(used, q->xdp_rxq_info ? IONIC_PAGE_SIZE : IONIC_PAGE_SPLIT_SZ);
 	buf_info->page_offset += size;
 	if (buf_info->page_offset >= IONIC_PAGE_SIZE)
 		return false;
@@ -287,6 +287,54 @@ static struct sk_buff *ionic_rx_copybreak(struct ionic_queue *q,
 	return skb;
 }
 
+static bool ionic_run_xdp(struct ionic_rx_stats *stats,
+			  struct net_device *netdev,
+			  struct ionic_queue *rxq,
+			  struct ionic_buf_info *buf_info,
+			  int len)
+{
+	u32 xdp_action = XDP_ABORTED;
+	struct bpf_prog *xdp_prog;
+	struct xdp_buff xdp_buf;
+
+	xdp_prog = READ_ONCE(rxq->lif->xdp_prog);
+	if (!xdp_prog)
+		return false;
+
+	xdp_init_buff(&xdp_buf, IONIC_PAGE_SIZE, rxq->xdp_rxq_info);
+	xdp_prepare_buff(&xdp_buf, ionic_rx_buf_va(buf_info),
+			 0, len, false);
+
+	dma_sync_single_range_for_cpu(rxq->dev, ionic_rx_buf_pa(buf_info),
+				      0, len,
+				      DMA_FROM_DEVICE);
+
+	prefetchw(&xdp_buf.data_hard_start);
+
+	xdp_action = bpf_prog_run_xdp(xdp_prog, &xdp_buf);
+
+	switch (xdp_action) {
+	case XDP_PASS:
+		stats->xdp_pass++;
+		return false;  /* false = we didn't consume the packet */
+
+	case XDP_DROP:
+		ionic_rx_page_free(rxq, buf_info);
+		stats->xdp_drop++;
+		break;
+
+	case XDP_REDIRECT:
+	case XDP_TX:
+	case XDP_ABORTED:
+	default:
+		trace_xdp_exception(netdev, xdp_prog, xdp_action);
+		ionic_rx_page_free(rxq, buf_info);
+		stats->xdp_aborted++;
+	}
+
+	return true;
+}
+
 static void ionic_rx_clean(struct ionic_queue *q,
 			   struct ionic_desc_info *desc_info,
 			   struct ionic_cq_info *cq_info,
@@ -297,6 +345,7 @@ static void ionic_rx_clean(struct ionic_queue *q,
 	struct ionic_rx_stats *stats;
 	struct ionic_rxq_comp *comp;
 	struct sk_buff *skb;
+	u16 len;
 
 	comp = cq_info->cq_desc + qcq->cq.desc_size - sizeof(*comp);
 
@@ -307,10 +356,14 @@ static void ionic_rx_clean(struct ionic_queue *q,
 		return;
 	}
 
+	len = le16_to_cpu(comp->len);
 	stats->pkts++;
-	stats->bytes += le16_to_cpu(comp->len);
+	stats->bytes += len;
 
-	if (le16_to_cpu(comp->len) <= q->lif->rx_copybreak)
+	if (ionic_run_xdp(stats, netdev, q, desc_info->bufs, len))
+		return;
+
+	if (len <= q->lif->rx_copybreak)
 		skb = ionic_rx_copybreak(q, desc_info, comp);
 	else
 		skb = ionic_rx_frags(q, desc_info, comp);
@@ -380,7 +433,7 @@ static void ionic_rx_clean(struct ionic_queue *q,
 		}
 	}
 
-	if (le16_to_cpu(comp->len) <= q->lif->rx_copybreak)
+	if (len <= q->lif->rx_copybreak)
 		napi_gro_receive(&qcq->napi, skb);
 	else
 		napi_gro_frags(&qcq->napi);
