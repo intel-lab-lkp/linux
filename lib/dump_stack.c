@@ -6,6 +6,7 @@
 
 #include <linux/kernel.h>
 #include <linux/buildid.h>
+#include <linux/cache.h>
 #include <linux/export.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
@@ -15,7 +16,7 @@
 #include <linux/utsname.h>
 #include <linux/stop_machine.h>
 
-static char dump_stack_arch_desc_str[128];
+static char dump_stack_arch_desc_str[128] __ro_after_init;
 
 /**
  * dump_stack_set_arch_desc - set arch-specific str to show with task dumps
