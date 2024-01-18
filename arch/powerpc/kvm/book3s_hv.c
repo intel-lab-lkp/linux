@@ -439,7 +439,7 @@ static int kvmppc_set_arch_compat(struct kvm_vcpu *vcpu, u32 arch_compat)
 	if (guest_pcr_bit > host_pcr_bit)
 		return -EINVAL;
 
-	if (kvmhv_on_pseries() && kvmhv_is_nestedv2()) {
+	if (kvmhv_on_pseries() && kvmhv_is_nestedv2() && arch_compat) {
 		if (!(cap & nested_capabilities))
 			return -EINVAL;
 	}
