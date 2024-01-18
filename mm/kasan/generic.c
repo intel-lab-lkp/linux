@@ -402,6 +402,167 @@ static __always_inline bool memory_is_tracked(const void *addr, size_t size)
 
 	return memory_is_tracked_n(addr, size);
 }
+
+/* deal with addr do not cross 8(shadow size)-byte boundary */
+static void __kasan_track_memory(const void *shadow_addr, size_t offset, size_t size)
+{
+	s8 mask;
+
+	if ((offset & 0x01) || (size & 0x01))
+		mask = kasan_track_mask_odd(size);
+	else
+		mask = kasan_track_mask_even(size);
+	offset = offset >> 1;
+	*(s8 *)shadow_addr |= mask << (KASAN_TRACK_VALUE_OFFSET + offset);
+}
+
+static void _kasan_track_memory(const void *addr, size_t size)
+{
+	unsigned int words;
+	const void *start = kasan_mem_to_shadow(addr);
+	unsigned int prefix = (unsigned long)addr % 8;
+
+	if (prefix) {
+		unsigned int tmp_size = (unsigned int)size;
+
+		tmp_size = min(8 - prefix, tmp_size);
+		__kasan_track_memory(start, prefix, tmp_size);
+		start++;
+		size -= tmp_size;
+	}
+
+	words = size / 8;
+	while (words) {
+		__kasan_track_memory(start, 0, 8);
+		start++;
+		words--;
+	}
+
+	if (size % 8)
+		__kasan_track_memory(start, 0, size % 8);
+}
+
+static inline bool is_cpu_entry_area_addr(unsigned long addr)
+{
+	return ((addr >= CPU_ENTRY_AREA_BASE) &&
+		(addr < CPU_ENTRY_AREA_BASE + CPU_ENTRY_AREA_MAP_SIZE));
+}
+
+static inline bool is_kernel_text_data(unsigned long addr)
+{
+	return ((addr >= (unsigned long)_stext) && (addr < (unsigned long)_end));
+}
+
+static bool can_track(unsigned long addr)
+{
+	if (!virt_addr_valid(addr) &&
+		!is_module_address(addr) &&
+#ifdef CONFIG_KASAN_VMALLOC
+		!is_vmalloc_addr((const void *)addr) &&
+#endif
+		!is_cpu_entry_area_addr(addr) &&
+		!is_kernel_text_data(addr)
+	)
+		return false;
+
+	return true;
+}
+
+int kasan_track_memory(const void *addr, size_t size)
+{
+	if (!kasan_arch_is_ready())
+		return -EINVAL;
+
+	if (unlikely(size == 0))
+		return -EINVAL;
+
+	if (unlikely(addr + size < addr))
+		return -EINVAL;
+
+	if (unlikely(!addr_has_metadata(addr)))
+		return -EINVAL;
+
+	if (likely(memory_is_poisoned(addr, size)))
+		return -EINVAL;
+
+	if (!can_track((unsigned long)addr))
+		return -EINVAL;
+
+	_kasan_track_memory(addr, size);
+	return 0;
+}
+EXPORT_SYMBOL(kasan_track_memory);
+
+/* deal with addr do not cross 8(shadow size)-byte boundary */
+static void __kasan_untrack_memory(const void *shadow_addr, size_t offset, size_t size)
+{
+	s8 mask;
+
+	if (size % 0x01) {
+		offset = (offset - 1) >> 1;
+		mask = kasan_track_mask_odd(size);
+		/*
+		 * SIZE is odd, which means we may clear someone else's tracking flags of
+		 * nearby tracked memory.
+		 */
+		pr_info("It's possible to clear someone else's tracking flags\n");
+	} else {
+		offset = offset >> 1;
+		mask = kasan_track_mask_even(size);
+	}
+	*(s8 *)shadow_addr &= ~(mask << (KASAN_TRACK_VALUE_OFFSET + offset));
+}
+
+static void _kasan_untrack_memory(const void *addr, size_t size)
+{
+	unsigned int words;
+	const void *start = kasan_mem_to_shadow(addr);
+	unsigned int prefix = (unsigned long)addr % 8;
+
+	if (prefix) {
+		unsigned int tmp_size = (unsigned int)size;
+
+		tmp_size = min(8 - prefix, tmp_size);
+		__kasan_untrack_memory(start, prefix, tmp_size);
+		start++;
+		size -= tmp_size;
+	}
+
+	words = size / 8;
+	while (words) {
+		__kasan_untrack_memory(start, 0, 8);
+		start++;
+		words--;
+	}
+
+	if (size % 8)
+		__kasan_untrack_memory(start, 0, size % 8);
+}
+
+int kasan_untrack_memory(const void *addr, size_t size)
+{
+	if (!kasan_arch_is_ready())
+		return -EINVAL;
+
+	if (unlikely(size == 0))
+		return -EINVAL;
+
+	if (unlikely(addr + size < addr))
+		return -EINVAL;
+
+	if (unlikely(!addr_has_metadata(addr)))
+		return -EINVAL;
+
+	if (likely(memory_is_poisoned(addr, size)))
+		return -EINVAL;
+
+	if (!can_track((unsigned long)addr))
+		return -EINVAL;
+
+	_kasan_untrack_memory(addr, size);
+	return 0;
+}
+EXPORT_SYMBOL(kasan_untrack_memory);
 #endif
 
 static __always_inline bool check_region_inline(const void *addr,

@@ -62,6 +62,31 @@ static noinline void __init copy_user_test(void)
 	kfree(kmem);
 }
 
+#ifdef CONFIG_KASAN_MEM_TRACK
+static noinline void __init mem_track_test(void)
+{
+	int ret;
+	int *ptr = kmalloc(sizeof(int), GFP_KERNEL);
+
+	if (!ptr)
+		return;
+
+	ret = kasan_track_memory(ptr, sizeof(int));
+	if (ret) {
+		pr_warn("There is a bug of mem_track\n");
+		goto out;
+	}
+	pr_info("trigger mem_track\n");
+	WRITE_ONCE(*ptr, 1);
+	kasan_untrack_memory(ptr, sizeof(int));
+
+out:
+	kfree(ptr);
+}
+#else
+static inline void __init mem_track_test(void) {}
+#endif
+
 static int __init test_kasan_module_init(void)
 {
 	/*
@@ -72,6 +97,7 @@ static int __init test_kasan_module_init(void)
 	bool multishot = kasan_save_enable_multi_shot();
 
 	copy_user_test();
+	mem_track_test();
 
 	kasan_restore_multi_shot(multishot);
 	return -EAGAIN;

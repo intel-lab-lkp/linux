@@ -604,4 +604,9 @@ void kasan_non_canonical_hook(unsigned long addr);
 static inline void kasan_non_canonical_hook(unsigned long addr) { }
 #endif /* CONFIG_KASAN_GENERIC || CONFIG_KASAN_SW_TAGS */
 
+#ifdef CONFIG_KASAN_MEM_TRACK
+int kasan_track_memory(const void *addr, size_t size);
+int kasan_untrack_memory(const void *addr, size_t size);
+#endif
+
 #endif /* LINUX_KASAN_H */
