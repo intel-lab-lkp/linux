@@ -1498,13 +1498,20 @@ static inline void del(struct vc_data *vc)
 	/* ignored */
 }
 
+enum {
+	CSI_J_CURSOR_TO_END	= 0,
+	CSI_J_START_TO_CURSOR	= 1,
+	CSI_J_VISIBLE		= 2,
+	CSI_J_FULL		= 3,
+};
+
 static void csi_J(struct vc_data *vc, int vpar)
 {
 	unsigned int count;
 	unsigned short * start;
 
 	switch (vpar) {
-		case 0:	/* erase from cursor to end of display */
+		case CSI_J_CURSOR_TO_END:
 			vc_uniscr_clear_line(vc, vc->state.x,
 					     vc->vc_cols - vc->state.x);
 			vc_uniscr_clear_lines(vc, vc->state.y + 1,
@@ -1512,16 +1519,16 @@ static void csi_J(struct vc_data *vc, int vpar)
 			count = (vc->vc_scr_end - vc->vc_pos) >> 1;
 			start = (unsigned short *)vc->vc_pos;
 			break;
-		case 1:	/* erase from start to cursor */
+		case CSI_J_START_TO_CURSOR:
 			vc_uniscr_clear_line(vc, 0, vc->state.x + 1);
 			vc_uniscr_clear_lines(vc, 0, vc->state.y);
 			count = ((vc->vc_pos - vc->vc_origin) >> 1) + 1;
 			start = (unsigned short *)vc->vc_origin;
 			break;
-		case 3: /* include scrollback */
+		case CSI_J_FULL:
 			flush_scrollback(vc);
 			fallthrough;
-		case 2: /* erase whole display */
+		case CSI_J_VISIBLE:
 			vc_uniscr_clear_lines(vc, 0, vc->vc_rows);
 			count = vc->vc_cols * vc->vc_rows;
 			start = (unsigned short *)vc->vc_origin;
