@@ -798,8 +798,6 @@ static void cleanup_offline_cgwbs_workfn(struct work_struct *work)
 	while (!list_empty(&offline_cgwbs)) {
 		wb = list_first_entry(&offline_cgwbs, struct bdi_writeback,
 				      offline_node);
-		list_move(&wb->offline_node, &processed);
-
 		/*
 		 * If wb is dirty, cleaning up the writeback by switching
 		 * attached inodes will result in an effective removal of any
@@ -814,6 +812,8 @@ static void cleanup_offline_cgwbs_workfn(struct work_struct *work)
 
 		if (!wb_tryget(wb))
 			continue;
+
+		list_move(&wb->offline_node, &processed);
 
 		spin_unlock_irq(&cgwb_lock);
 		while (cleanup_offline_cgwb(wb))
