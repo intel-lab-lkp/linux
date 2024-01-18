@@ -3455,9 +3455,11 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 	/* Don't let the compiler play games with cpu_buffer->tail_page */
 	tail_page = info->tail_page = READ_ONCE(cpu_buffer->tail_page);
 
- /*A*/	w = local_read(&tail_page->write) & RB_WRITE_MASK;
+ /*A*/	w = local_read(&tail_page->write);
 	barrier();
 	rb_time_read(&cpu_buffer->before_stamp, &info->before);
+	/* Read before_stamp only the first time through */
+ again:
 	rb_time_read(&cpu_buffer->write_stamp, &info->after);
 	barrier();
 	info->ts = rb_time_stamp(cpu_buffer->buffer);
@@ -3470,7 +3472,7 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 		 * absolute timestamp.
 		 * Don't bother if this is the start of a new page (w == 0).
 		 */
-		if (!w) {
+		if (!(w & RB_WRITE_MASK)) {
 			/* Use the sub-buffer timestamp */
 			info->delta = 0;
 		} else if (unlikely(info->before != info->after)) {
@@ -3487,89 +3489,49 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 
  /*B*/	rb_time_set(&cpu_buffer->before_stamp, info->ts);
 
- /*C*/	write = local_add_return(info->length, &tail_page->write);
+ /*C*/	if (!local_try_cmpxchg(&tail_page->write, &w, w + info->length))
+		goto again;
 
-	/* set write to only the index of the write */
-	write &= RB_WRITE_MASK;
+	/* Set write to the start of this event */
+	write = w & RB_WRITE_MASK;
 
-	tail = write - info->length;
+	/* set tail to the end of the event */
+	tail = write + info->length;
 
 	/* See if we shot pass the end of this buffer page */
-	if (unlikely(write > cpu_buffer->buffer->subbuf_size)) {
+	if (unlikely(tail > cpu_buffer->buffer->subbuf_size)) {
 		check_buffer(cpu_buffer, info, CHECK_FULL_PAGE);
-		return rb_move_tail(cpu_buffer, tail, info);
+		return rb_move_tail(cpu_buffer, write, info);
 	}
 
-	if (likely(tail == w)) {
-		/* Nothing interrupted us between A and C */
- /*D*/		rb_time_set(&cpu_buffer->write_stamp, info->ts);
-		/*
-		 * If something came in between C and D, the write stamp
-		 * may now not be in sync. But that's fine as the before_stamp
-		 * will be different and then next event will just be forced
-		 * to use an absolute timestamp.
-		 */
-		if (likely(!(info->add_timestamp &
-			     (RB_ADD_STAMP_FORCE | RB_ADD_STAMP_ABSOLUTE))))
-			/* This did not interrupt any time update */
-			info->delta = info->ts - info->after;
-		else
-			/* Just use full timestamp for interrupting event */
-			info->delta = info->ts;
-		check_buffer(cpu_buffer, info, tail);
-	} else {
-		u64 ts;
-		/* SLOW PATH - Interrupted between A and C */
-
-		/* Save the old before_stamp */
-		rb_time_read(&cpu_buffer->before_stamp, &info->before);
-
-		/*
-		 * Read a new timestamp and update the before_stamp to make
-		 * the next event after this one force using an absolute
-		 * timestamp. This is in case an interrupt were to come in
-		 * between E and F.
-		 */
-		ts = rb_time_stamp(cpu_buffer->buffer);
-		rb_time_set(&cpu_buffer->before_stamp, ts);
-
-		barrier();
- /*E*/		rb_time_read(&cpu_buffer->write_stamp, &info->after);
-		barrier();
- /*F*/		if (write == (local_read(&tail_page->write) & RB_WRITE_MASK) &&
-		    info->after == info->before && info->after < ts) {
-			/*
-			 * Nothing came after this event between C and F, it is
-			 * safe to use info->after for the delta as it
-			 * matched info->before and is still valid.
-			 */
-			info->delta = ts - info->after;
-		} else {
-			/*
-			 * Interrupted between C and F:
-			 * Lost the previous events time stamp. Just set the
-			 * delta to zero, and this will be the same time as
-			 * the event this event interrupted. And the events that
-			 * came after this will still be correct (as they would
-			 * have built their delta on the previous event.
-			 */
-			info->delta = 0;
-		}
-		info->ts = ts;
-		info->add_timestamp &= ~RB_ADD_STAMP_FORCE;
-	}
+	/* Nothing interrupted us between A and C */
+ /*D*/	rb_time_set(&cpu_buffer->write_stamp, info->ts);
+	/*
+	 * If something came in between C and D, the write stamp
+	 * may now not be in sync. But that's fine as the before_stamp
+	 * will be different and then next event will just be forced
+	 * to use an absolute timestamp.
+	 */
+	if (likely(!(info->add_timestamp &
+		     (RB_ADD_STAMP_FORCE | RB_ADD_STAMP_ABSOLUTE))))
+		/* This did not interrupt any time update */
+		info->delta = info->ts - info->after;
+	else
+		/* Just use full timestamp for interrupting event */
+		info->delta = info->ts;
+	check_buffer(cpu_buffer, info, write);
 
 	/*
 	 * If this is the first commit on the page, then it has the same
 	 * timestamp as the page itself.
 	 */
-	if (unlikely(!tail && !(info->add_timestamp &
+	if (unlikely(!write && !(info->add_timestamp &
 				(RB_ADD_STAMP_FORCE | RB_ADD_STAMP_ABSOLUTE))))
 		info->delta = 0;
 
 	/* We reserved something on the buffer */
 
-	event = __rb_page_index(tail_page, tail);
+	event = __rb_page_index(tail_page, write);
 	rb_update_event(cpu_buffer, event, info);
 
 	local_inc(&tail_page->entries);
@@ -3578,7 +3540,7 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 	 * If this is the first commit on the page, then update
 	 * its timestamp.
 	 */
-	if (unlikely(!tail))
+	if (unlikely(!write))
 		tail_page->page->time_stamp = info->ts;
 
 	/* account for these added bytes */
