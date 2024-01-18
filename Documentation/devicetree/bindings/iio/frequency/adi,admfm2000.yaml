@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2023 Analog Devices Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/frequency/adi,admfm2000.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ADMFM2000 Dual Microwave Down Converter
+
+maintainers:
+  - Kim Seer Paller <kimseer.paller@analog.com>
+
+description:
+  Dual microwave down converter module with input RF and LO frequency ranges
+  from 0.5 to 32 GHz and an output IF frequency range from 0.1 to 8 GHz.
+  It consists of a LNA, mixer, IF filter, DSA, and IF amplifier for each down
+  conversion path.
+
+properties:
+  compatible:
+    enum:
+      - adi,admfm2000
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^channel@[0-1]$":
+    type: object
+    description: Represents a channel of the device.
+
+    additionalProperties: false
+
+    properties:
+      reg:
+        description:
+          The channel number.
+        minimum: 0
+        maximum: 1
+
+      adi,mode:
+        description:
+          RF path selected for the channel.
+            0 - Direct IF mode
+            1 - Mixer mode
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+
+      switch-gpios:
+        description: |
+          GPIOs to select the RF path for the channel.
+          SW-CH1   CTRL-A   CTRL-B
+          SW-CH2   CTRL-A   CTRL-B    CH1 Status        CH2 Status
+                   1        0         Direct IF mode    Mixer mode
+                   0        1         Mixer mode        Direct IF mode
+
+        items:
+          - description: SW-CH-CTRL-A GPIO
+          - description: SW-CH-CTRL-B GPIO
+
+      attenuation-gpios:
+        description: |
+          Choice of attenuation:
+          DSA-V4  DSA-V3  DSA-V2  DSA-V1  DSA-V0
+          1       1       1       1       1        0 dB
+          1       1       1       1       0        -1 dB
+          1       1       1       0       1        -2 dB
+          1       1       0       1       1        -4 dB
+          1       0       1       1       1        -8 dB
+          0       1       1       1       1        -16 dB
+          0       0       0       0       0        -31 dB
+
+        items:
+          - description: DSA-V0 GPIO
+          - description: DSA-V1 GPIO
+          - description: DSA-V2 GPIO
+          - description: DSA-V3 GPIO
+          - description: DSA-V4 GPIO
+
+    required:
+      - reg
+      - adi,mode
+      - switch-gpios
+      - attenuation-gpios
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    converter {
+      compatible = "adi,admfm2000";
+
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      channel@0 {
+        reg = <0>;
+        adi,mode = <1>;
+        switch-gpios = <&gpio 1 GPIO_ACTIVE_LOW>,
+                       <&gpio 2 GPIO_ACTIVE_HIGH>;
+
+        attenuation-gpios = <&gpio 17 GPIO_ACTIVE_LOW>,
+                            <&gpio 22 GPIO_ACTIVE_LOW>,
+                            <&gpio 23 GPIO_ACTIVE_LOW>,
+                            <&gpio 24 GPIO_ACTIVE_LOW>,
+                            <&gpio 25 GPIO_ACTIVE_LOW>;
+      };
+
+      channel@1 {
+        reg = <1>;
+        adi,mode = <1>;
+        switch-gpios = <&gpio 3 GPIO_ACTIVE_LOW>,
+                       <&gpio 4 GPIO_ACTIVE_HIGH>;
+
+        attenuation-gpios = <&gpio 0 GPIO_ACTIVE_LOW>,
+                            <&gpio 5 GPIO_ACTIVE_LOW>,
+                            <&gpio 6 GPIO_ACTIVE_LOW>,
+                            <&gpio 16 GPIO_ACTIVE_LOW>,
+                            <&gpio 26 GPIO_ACTIVE_LOW>;
+      };
+    };
+...
