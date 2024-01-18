@@ -251,6 +251,9 @@ static int io_sq_thread(void *data)
 		}
 
 		cap_entries = !list_is_singular(&sqd->ctx_list);
+		ktime_t start, diff;
+
+		start = ktime_get();
 		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
 			int ret = __io_sq_thread(ctx, cap_entries);
 
@@ -259,6 +262,10 @@ static int io_sq_thread(void *data)
 		}
 		if (io_run_task_work())
 			sqt_spin = true;
+
+		diff = ktime_sub(ktime_get(), start);
+		if (sqt_spin == true)
+			sqd->work_time += ktime_to_us(diff);
 
 		if (sqt_spin || !time_after(jiffies, timeout)) {
 			if (sqt_spin)
