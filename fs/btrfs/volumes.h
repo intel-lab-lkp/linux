@@ -384,6 +384,8 @@ struct btrfs_fs_devices {
 	bool seeding;
 	/* The mount needs to use a randomly generated fsid. */
 	bool temp_fsid;
+	/* Has a block group writing stripes to multiple devices. (RAID0/10/5/6). */
+	bool striped_writing;
 
 	struct btrfs_fs_info *fs_info;
 	/* sysfs kobjects */

@@ -616,9 +616,13 @@ static bool should_async_write(struct btrfs_bio *bbio)
 	if (fs_devices->inline_csum_mode == BTRFS_INLINE_CSUM_FORCE_ON)
 		return false;
 
-	/* Submit synchronously if the checksum implementation is fast. */
+	/*
+	 * Submit synchronously if the checksum implementation is
+	 * fast, and it is not backed by multiple devices striping.
+	 */
 	if (fs_devices->inline_csum_mode == BTRFS_INLINE_CSUM_AUTO &&
-	    test_bit(BTRFS_FS_CSUM_IMPL_FAST, &bbio->fs_info->flags))
+	    test_bit(BTRFS_FS_CSUM_IMPL_FAST, &bbio->fs_info->flags) &&
+	    !fs_devices->striped_writing)
 		return false;
 
 	/*

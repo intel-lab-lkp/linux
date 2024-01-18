@@ -41,6 +41,12 @@
 					 BTRFS_BLOCK_GROUP_RAID10 | \
 					 BTRFS_BLOCK_GROUP_RAID56_MASK)
 
+/*
+ * Maximum number of devices automatically enabling inline checksum for
+ * a striped write.
+ */
+#define BTRFS_INLINE_CSUM_MAX_DEVS 2
+
 struct btrfs_io_geometry {
 	u32 stripe_index;
 	u32 stripe_nr;
@@ -5124,6 +5130,19 @@ static void check_raid1c34_incompat_flag(struct btrfs_fs_info *info, u64 type)
 	btrfs_set_fs_incompat(info, RAID1C34);
 }
 
+static void check_striped_block_group(struct btrfs_fs_info *info, u64 type, int num_stripes)
+{
+	if (btrfs_raid_array[btrfs_bg_flags_to_raid_index(type)].devs_max != 0 ||
+	    num_stripes <= BTRFS_INLINE_CSUM_MAX_DEVS)
+		return;
+
+	/*
+	 * Found a block group writing to multiple devices, disable
+	 * inline automatic checksum.
+	 */
+	info->fs_devices->striped_writing = true;
+}
+
 /*
  * Structure used internally for btrfs_create_chunk() function.
  * Wraps needed parameters.
@@ -5592,6 +5611,7 @@ static struct btrfs_block_group *create_chunk(struct btrfs_trans_handle *trans,
 
 	check_raid56_incompat_flag(info, type);
 	check_raid1c34_incompat_flag(info, type);
+	check_striped_block_group(info, type, map->num_stripes);
 
 	return block_group;
 }
