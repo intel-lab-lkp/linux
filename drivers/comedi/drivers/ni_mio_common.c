@@ -3798,8 +3798,7 @@ static int ni_serial_hw_readwrite8(struct comedi_device *dev,
 	devpriv->dio_control &= ~NISTC_DIO_CTRL_HW_SER_START;
 
 	/* Wait until STC says we're done, but don't loop infinitely. */
-	while ((status1 = ni_stc_readw(dev, NISTC_STATUS1_REG)) &
-	       NISTC_STATUS1_SERIO_IN_PROG) {
+	while (ni_stc_readw(dev, NISTC_STATUS1_REG) & NISTC_STATUS1_SERIO_IN_PROG) {
 		/* Delay one bit per loop */
 		udelay((devpriv->serial_interval_ns + 999) / 1000);
 		if (--count < 0) {
