@@ -763,7 +763,9 @@ static int sdei_device_freeze(struct device *dev)
 	int err;
 
 	/* unregister private events */
-	cpuhp_remove_state(sdei_entry_point);
+	cpuhp_remove_state(sdei_hp_state);
+
+	sdei_hp_state = 0;
 
 	err = sdei_unregister_shared();
 	if (err)
