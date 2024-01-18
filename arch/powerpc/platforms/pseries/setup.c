@@ -1007,7 +1007,7 @@ static void __init pSeries_cmo_feature_init(void)
 	pr_debug(" <- fw_cmo_feature_init()\n");
 }
 
-static void __init pseries_add_hw_description(void)
+static void pseries_add_hw_description(struct seq_buf *sb)
 {
 	struct device_node *dn;
 	const char *s;
@@ -1015,7 +1015,7 @@ static void __init pseries_add_hw_description(void)
 	dn = of_find_node_by_path("/openprom");
 	if (dn) {
 		if (of_property_read_string(dn, "model", &s) == 0)
-			seq_buf_printf(&ppc_hw_desc, "of:%s ", s);
+			seq_buf_printf(sb, "of:%s ", s);
 
 		of_node_put(dn);
 	}
@@ -1023,7 +1023,7 @@ static void __init pseries_add_hw_description(void)
 	dn = of_find_node_by_path("/hypervisor");
 	if (dn) {
 		if (of_property_read_string(dn, "compatible", &s) == 0)
-			seq_buf_printf(&ppc_hw_desc, "hv:%s ", s);
+			seq_buf_printf(sb, "hv:%s ", s);
 
 		of_node_put(dn);
 		return;
@@ -1031,7 +1031,7 @@ static void __init pseries_add_hw_description(void)
 
 	if (of_property_read_bool(of_root, "ibm,powervm-partition") ||
 	    of_property_read_bool(of_root, "ibm,fw-net-version"))
-		seq_buf_printf(&ppc_hw_desc, "hv:phyp ");
+		seq_buf_printf(sb, "hv:phyp ");
 }
 
 /*
@@ -1041,7 +1041,7 @@ static void __init pseries_init(void)
 {
 	pr_debug(" -> pseries_init()\n");
 
-	pseries_add_hw_description();
+	pseries_add_hw_description(&ppc_hw_desc);
 
 #ifdef CONFIG_HVC_CONSOLE
 	if (firmware_has_feature(FW_FEATURE_LPAR))
