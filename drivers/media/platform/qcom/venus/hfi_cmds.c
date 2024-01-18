@@ -645,17 +645,33 @@ static int pkt_session_set_property_1x(struct hfi_session_set_property_pkt *pkt,
 	case HFI_PROPERTY_PARAM_VENC_RATE_CONTROL: {
 		u32 *in = pdata;
 
-		switch (*in) {
-		case HFI_RATE_CONTROL_OFF:
-		case HFI_RATE_CONTROL_CBR_CFR:
-		case HFI_RATE_CONTROL_CBR_VFR:
-		case HFI_RATE_CONTROL_VBR_CFR:
-		case HFI_RATE_CONTROL_VBR_VFR:
-		case HFI_RATE_CONTROL_CQ:
-			break;
-		default:
-			ret = -EINVAL;
-			break;
+		if (hfi_ver == HFI_VERSION_4XX) {
+			switch (*in) {
+			case HFI_RATE_CONTROL_OFF:
+			case HFI_RATE_CONTROL_CBR_CFR:
+			case HFI_RATE_CONTROL_CBR_VFR:
+			case HFI_RATE_CONTROL_VBR_CFR:
+			case HFI_RATE_CONTROL_VBR_VFR:
+			case HFI_RATE_CONTROL_CQ:
+			case HFI_RATE_CONTROL_MBR_CFR:
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			switch (*in) {
+			case HFI_RATE_CONTROL_OFF:
+			case HFI_RATE_CONTROL_CBR_CFR:
+			case HFI_RATE_CONTROL_CBR_VFR:
+			case HFI_RATE_CONTROL_VBR_CFR:
+			case HFI_RATE_CONTROL_VBR_VFR:
+			case HFI_RATE_CONTROL_CQ:
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
 		}
 
 		pkt->data[1] = *in;

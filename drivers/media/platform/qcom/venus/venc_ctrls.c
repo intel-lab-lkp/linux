@@ -387,10 +387,11 @@ int venc_ctrl_init(struct venus_inst *inst)
 
 	v4l2_ctrl_new_std_menu(&inst->ctrl_handler, &venc_ctrl_ops,
 		V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
-		V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
+		V4L2_MPEG_VIDEO_BITRATE_MODE_MBR,
 		~((1 << V4L2_MPEG_VIDEO_BITRATE_MODE_VBR) |
 		  (1 << V4L2_MPEG_VIDEO_BITRATE_MODE_CBR) |
-		  (1 << V4L2_MPEG_VIDEO_BITRATE_MODE_CQ)),
+		  (1 << V4L2_MPEG_VIDEO_BITRATE_MODE_CQ)  |
+		  (1 << V4L2_MPEG_VIDEO_BITRATE_MODE_MBR)),
 		V4L2_MPEG_VIDEO_BITRATE_MODE_VBR);
 
 	v4l2_ctrl_new_std_menu(&inst->ctrl_handler, &venc_ctrl_ops,
