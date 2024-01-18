@@ -8,15 +8,18 @@
 #include <linux/buildid.h>
 #include <linux/cache.h>
 #include <linux/export.h>
+#include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/smp.h>
+#include <linux/spinlock.h>
 #include <linux/atomic.h>
 #include <linux/kexec.h>
 #include <linux/utsname.h>
 #include <linux/stop_machine.h>
 
 static char dump_stack_arch_desc_str[128] __ro_after_init;
+static const char *dump_stack_arch_desc_ptr = dump_stack_arch_desc_str;
 
 /**
  * dump_stack_set_arch_desc - set arch-specific str to show with task dumps
@@ -28,7 +31,7 @@ static char dump_stack_arch_desc_str[128] __ro_after_init;
  * arch wants to make use of such an ID string, it should initialize this
  * as soon as possible during boot.
  */
-void __init dump_stack_set_arch_desc(const char *fmt, ...)
+void dump_stack_set_arch_desc(const char *fmt, ...)
 {
 	va_list args;
 
@@ -36,6 +39,45 @@ void __init dump_stack_set_arch_desc(const char *fmt, ...)
 	vsnprintf(dump_stack_arch_desc_str, sizeof(dump_stack_arch_desc_str),
 		  fmt, args);
 	va_end(args);
+}
+
+/**
+ * dump_stack_update_arch_desc() - Update the arch description string at runtime.
+ * @fmt: printf-style format string
+ * @...: arguments for the format string
+ *
+ * A runtime counterpart of dump_stack_set_arch_desc(). Arch code
+ * should use this when the arch description set at boot potentially
+ * has become inaccurate, such as after a guest migration.
+ *
+ * Context: May sleep.
+ */
+void dump_stack_update_arch_desc(const char *fmt, ...)
+{
+	static DEFINE_SPINLOCK(arch_desc_update_lock);
+	const char *old;
+	const char *new;
+	va_list args;
+
+	va_start(args, fmt);
+	new = kvasprintf(GFP_KERNEL, fmt, args);
+	va_end(args);
+
+	if (!new)
+		return;
+
+	spin_lock(&arch_desc_update_lock);
+	old = rcu_replace_pointer(dump_stack_arch_desc_ptr, new,
+				  lockdep_is_held(&arch_desc_update_lock));
+	spin_unlock(&arch_desc_update_lock);
+
+	/*
+	 * Avoid freeing the static buffer initialized during boot.
+	 */
+	if (old == dump_stack_arch_desc_str)
+		return;
+
+	kfree_rcu_mightsleep(old);
 }
 
 #if IS_ENABLED(CONFIG_STACKTRACE_BUILD_ID)
@@ -55,6 +97,8 @@ void __init dump_stack_set_arch_desc(const char *fmt, ...)
  */
 void dump_stack_print_info(const char *log_lvl)
 {
+	const char *arch_str;
+
 	printk("%sCPU: %d PID: %d Comm: %.20s %s%s %s %.*s" BUILD_ID_FMT "\n",
 	       log_lvl, raw_smp_processor_id(), current->pid, current->comm,
 	       kexec_crash_loaded() ? "Kdump: loaded " : "",
@@ -63,9 +107,11 @@ void dump_stack_print_info(const char *log_lvl)
 	       (int)strcspn(init_utsname()->version, " "),
 	       init_utsname()->version, BUILD_ID_VAL);
 
-	if (dump_stack_arch_desc_str[0] != '\0')
-		printk("%sHardware name: %s\n",
-		       log_lvl, dump_stack_arch_desc_str);
+	rcu_read_lock();
+	arch_str = rcu_dereference(dump_stack_arch_desc_ptr);
+	if (arch_str[0] != '\0')
+		printk("%sHardware name: %s\n", log_lvl, arch_str);
+	rcu_read_unlock();
 
 	print_worker_info(log_lvl, current);
 	print_stop_info(log_lvl, current);

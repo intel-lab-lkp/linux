@@ -187,6 +187,7 @@ u32 log_buf_len_get(void);
 void log_buf_vmcoreinfo_setup(void);
 void __init setup_log_buf(int early);
 __printf(1, 2) void dump_stack_set_arch_desc(const char *fmt, ...);
+__printf(1, 2) void dump_stack_update_arch_desc(const char *fmt, ...);
 void dump_stack_print_info(const char *log_lvl);
 void show_regs_print_info(const char *log_lvl);
 extern asmlinkage void dump_stack_lvl(const char *log_lvl) __cold;
@@ -250,6 +251,10 @@ static inline void setup_log_buf(int early)
 }
 
 static inline __printf(1, 2) void dump_stack_set_arch_desc(const char *fmt, ...)
+{
+}
+
+static inline __printf(1, 2) void dump_stack_update_arch_desc(const char *fmt, ...)
 {
 }
 
