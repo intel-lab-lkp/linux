@@ -196,7 +196,7 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 	struct ahci_host_priv *hpriv;
 	struct ceva_ahci_priv *cevapriv;
 	enum dev_dma_attr attr;
-	int rc;
+	int rc, i;
 
 	cevapriv = devm_kzalloc(dev, sizeof(*cevapriv), GFP_KERNEL);
 	if (!cevapriv)
@@ -219,8 +219,6 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 		if (rc)
 			return rc;
 	} else {
-		int i;
-
 		rc = ahci_platform_enable_clks(hpriv);
 		if (rc)
 			return rc;
@@ -229,8 +227,11 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 
 		for (i = 0; i < hpriv->nports; i++) {
 			rc = phy_init(hpriv->phys[i]);
-			if (rc)
-				return rc;
+			if (rc) {
+				while (--i >= 0)
+					phy_exit(hpriv->phys[i]);
+				goto disable_clks;
+			}
 		}
 
 		/* De-assert the controller reset */
@@ -240,7 +241,7 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 			rc = phy_power_on(hpriv->phys[i]);
 			if (rc) {
 				phy_exit(hpriv->phys[i]);
-				return rc;
+				goto disable_phys;
 			}
 		}
 	}
@@ -252,52 +253,60 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 	if (of_property_read_u8_array(np, "ceva,p0-cominit-params",
 					(u8 *)&cevapriv->pp2c[0], 4) < 0) {
 		dev_warn(dev, "ceva,p0-cominit-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	if (of_property_read_u8_array(np, "ceva,p1-cominit-params",
 					(u8 *)&cevapriv->pp2c[1], 4) < 0) {
 		dev_warn(dev, "ceva,p1-cominit-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	/* Read OOB timing value for COMWAKE from device-tree*/
 	if (of_property_read_u8_array(np, "ceva,p0-comwake-params",
 					(u8 *)&cevapriv->pp3c[0], 4) < 0) {
 		dev_warn(dev, "ceva,p0-comwake-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	if (of_property_read_u8_array(np, "ceva,p1-comwake-params",
 					(u8 *)&cevapriv->pp3c[1], 4) < 0) {
 		dev_warn(dev, "ceva,p1-comwake-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	/* Read phy BURST timing value from device-tree */
 	if (of_property_read_u8_array(np, "ceva,p0-burst-params",
 					(u8 *)&cevapriv->pp4c[0], 4) < 0) {
 		dev_warn(dev, "ceva,p0-burst-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	if (of_property_read_u8_array(np, "ceva,p1-burst-params",
 					(u8 *)&cevapriv->pp4c[1], 4) < 0) {
 		dev_warn(dev, "ceva,p1-burst-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	/* Read phy RETRY interval timing value from device-tree */
 	if (of_property_read_u16_array(np, "ceva,p0-retry-params",
 					(u16 *)&cevapriv->pp5c[0], 2) < 0) {
 		dev_warn(dev, "ceva,p0-retry-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	if (of_property_read_u16_array(np, "ceva,p1-retry-params",
 					(u16 *)&cevapriv->pp5c[1], 2) < 0) {
 		dev_warn(dev, "ceva,p1-retry-params property not defined\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto disable_phys;
 	}
 
 	/*
@@ -321,6 +330,16 @@ static int ceva_ahci_probe(struct platform_device *pdev)
 
 disable_resources:
 	ahci_platform_disable_resources(hpriv);
+
+disable_phys:
+	while (--i >= 0) {
+		phy_power_off(hpriv->phys[i]);
+		phy_exit(hpriv->phys[i]);
+	}
+
+disable_clks:
+	ahci_platform_disable_clks(hpriv);
+
 	return rc;
 }
 
