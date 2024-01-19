@@ -10,6 +10,12 @@
 #define do_extend_cmdline 0
 #endif
 
+#if defined(CONFIG_ARM_ATAG_DTB_COMPAT_IGNORE_MEM)
+#define do_ignore_mem 1
+#else
+#define do_ignore_mem 0
+#endif
+
 #define NR_BANKS 16
 
 static int node_offset(void *fdt, const char *node_path)
@@ -170,6 +176,10 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 				setprop_string(fdt, "/chosen", "bootargs",
 					       atag->u.cmdline.cmdline);
 		} else if (atag->hdr.tag == ATAG_MEM) {
+			/* Bootloader MEM ATAG are broken and should be ignored */
+			if (do_ignore_mem)
+				continue;
+
 			if (memcount >= sizeof(mem_reg_property)/4)
 				continue;
 			if (!atag->u.mem.size)
