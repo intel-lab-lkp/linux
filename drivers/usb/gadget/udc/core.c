@@ -774,14 +774,14 @@ static int usb_gadget_disconnect_locked(struct usb_gadget *gadget)
 		goto out;
 	}
 
-	ret = gadget->ops->pullup(gadget, 0);
-	if (!ret)
-		gadget->connected = 0;
-
 	mutex_lock(&udc_lock);
 	if (gadget->udc->driver)
 		gadget->udc->driver->disconnect(gadget);
 	mutex_unlock(&udc_lock);
+
+	ret = gadget->ops->pullup(gadget, 0);
+	if (!ret)
+		gadget->connected = 0;
 
 out:
 	trace_usb_gadget_disconnect(gadget, ret);
