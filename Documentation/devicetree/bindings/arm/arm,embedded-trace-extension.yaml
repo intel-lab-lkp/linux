@@ -22,8 +22,6 @@ description: |
   with any optional connection graph as per the coresight bindings.
 
 properties:
-  $nodename:
-    pattern: "^ete([0-9a-f]+)$"
   compatible:
     items:
       - const: arm,embedded-trace-extension
@@ -55,13 +53,13 @@ examples:
 
 # An ETE node without legacy CoreSight connections
   - |
-    ete0 {
+    ete {
       compatible = "arm,embedded-trace-extension";
       cpu = <&cpu_0>;
     };
 # An ETE node with legacy CoreSight connections
   - |
-   ete1 {
+   ete {
       compatible = "arm,embedded-trace-extension";
       cpu = <&cpu_1>;
 
