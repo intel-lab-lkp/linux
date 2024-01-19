@@ -10,9 +10,28 @@ maintainers:
   - Krzysztof Kozlowski <krzk@kernel.org>
   - Markus Mayer <mmayer@broadcom.com>
 
+description: |
+
+  The DCPU (DDR PHY Front End CPU) interfaces directly with the DDR PHY
+  chip on Broadcom STB SoCs. An API exists for other agents to retrieve
+  or set certain DDR PHY chip parameters by JEDEC.
+
+  Different, incompatible versions of this API have been created over
+  time. The API has changed for the some chips as development progressed
+  and features were added or changed.
+
+  We rely on the boot firmware (which already knows the API version
+  required) to populate Device Tree with the corresponding compatible
+  string.
+
 properties:
   compatible:
     items:
+      - enum:
+          - brcm,dpfe-cpu-v1
+          - brcm,dpfe-cpu-v2
+          - brcm,dpfe-cpu-v3
+          - brcm,dpfe-cpu-v4
       - enum:
           - brcm,bcm7271-dpfe-cpu
           - brcm,bcm7268-dpfe-cpu
@@ -41,7 +60,7 @@ additionalProperties: false
 examples:
   - |
     dpfe-cpu@f1132000 {
-        compatible = "brcm,bcm7271-dpfe-cpu";
+        compatible = "brcm,dpfe-cpu-v1", "brcm,bcm7271-dpfe-cpu";
         reg = <0xf1132000 0x180>,
               <0xf1134000 0x1000>,
               <0xf1138000 0x4000>;
