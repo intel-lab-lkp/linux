@@ -555,6 +555,7 @@ struct xdp_buff *xp_alloc(struct xsk_buff_pool *pool)
 
 	xskb->xdp.data = xskb->xdp.data_hard_start + XDP_PACKET_HEADROOM;
 	xskb->xdp.data_meta = xskb->xdp.data;
+	xskb->xdp.flags = 0;
 
 	if (pool->dma_need_sync) {
 		dma_sync_single_range_for_device(pool->dev, xskb->dma, 0,
@@ -601,6 +602,7 @@ static u32 xp_alloc_new_from_fq(struct xsk_buff_pool *pool, struct xdp_buff **xd
 		}
 
 		*xdp = &xskb->xdp;
+		xskb->xdp.flags = 0;
 		xdp++;
 	}
 
@@ -621,6 +623,7 @@ static u32 xp_alloc_reused(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u3
 		list_del_init(&xskb->free_list_node);
 
 		*xdp = &xskb->xdp;
+		xskb->xdp.flags = 0;
 		xdp++;
 	}
 	pool->free_list_cnt -= nb_entries;
