@@ -57,6 +57,7 @@ properties:
           - enum:
               - fsl,imx8mm-usb
               - fsl,imx8mn-usb
+              - fsl,imx93-usb
           - const: fsl,imx7d-usb
           - const: fsl,imx27-usb
       - items:
@@ -455,19 +456,23 @@ allOf:
   - if:
       properties:
         compatible:
-          contains:
-            oneOf:
-              - const: chipidea,usb2
-              - const: fsl,imx23-usb
-              - const: fsl,imx28-usb
-              - const: fsl,imx7d-usb
-              - const: fsl,vf610-usb
-              - const: lsi,zevio-usb
-              - const: nuvoton,npcm750-udc
-              - pattern: '^fsl,imx5[0-3]+-usb$'
-              - pattern: '^fsl,imx6[a-z]+-usb$'
-              - pattern: '^nvidia,tegra[0-9]+-ehci$'
-              - pattern: '^nvidia,tegra[0-9]+-udc$'
+          oneOf:
+            - contains:
+                oneOf:
+                  - const: chipidea,usb2
+                  - const: fsl,imx23-usb
+                  - const: fsl,imx28-usb
+                  - const: fsl,vf610-usb
+                  - const: lsi,zevio-usb
+                  - const: nuvoton,npcm750-udc
+                  - pattern: '^fsl,imx5[0-3]+-usb$'
+                  - pattern: '^fsl,imx6[a-z]+-usb$'
+                  - pattern: '^fsl,imx8[a-z]+-usb$'
+                  - pattern: '^nvidia,tegra[0-9]+-ehci$'
+                  - pattern: '^nvidia,tegra[0-9]+-udc$'
+            - items:
+                - const: fsl,imx7d-usb
+                - const: fsl,imx27-usb
     then:
       properties:
         clocks:
@@ -476,6 +481,22 @@ allOf:
         clock-names:
           minItems: 1
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx93-usb
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          minItems: 2
+          maxItems: 2
+          contains:
+            const: usb_wakeup_clk
 
   - if:
       properties:
