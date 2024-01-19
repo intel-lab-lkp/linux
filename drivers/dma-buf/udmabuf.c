@@ -179,6 +179,31 @@ static int end_cpu_udmabuf(struct dma_buf *buf,
 	return 0;
 }
 
+static int begin_udmabuf(struct dma_buf_attachment *attach,
+			 struct sg_table *sgt,
+			 enum dma_data_direction dir)
+{
+	struct dma_buf *buf = attach->dmabuf;
+	struct udmabuf *ubuf = buf->priv;
+	struct device *dev = ubuf->device->this_device;
+
+	dma_sync_sg_for_device(dev, sgt->sgl, sg_nents(sgt->sgl), dir);
+	return 0;
+}
+
+static int end_udmabuf(struct dma_buf_attachment *attach,
+		       struct sg_table *sgt,
+		       enum dma_data_direction dir)
+{
+	struct dma_buf *buf = attach->dmabuf;
+	struct udmabuf *ubuf = buf->priv;
+	struct device *dev = ubuf->device->this_device;
+
+	if (dir != DMA_TO_DEVICE)
+		dma_sync_sg_for_cpu(dev, sgt->sgl, sg_nents(sgt->sgl), dir);
+	return 0;
+}
+
 static const struct dma_buf_ops udmabuf_ops = {
 	.cache_sgt_mapping = true,
 	.map_dma_buf	   = map_udmabuf,
@@ -189,6 +214,8 @@ static const struct dma_buf_ops udmabuf_ops = {
 	.vunmap		   = vunmap_udmabuf,
 	.begin_cpu_access  = begin_cpu_udmabuf,
 	.end_cpu_access    = end_cpu_udmabuf,
+	.begin_access      = begin_udmabuf,
+	.end_access        = end_udmabuf,
 };
 
 #define SEALS_WANTED (F_SEAL_SHRINK)
