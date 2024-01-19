@@ -556,10 +556,15 @@ int ice_vsi_cfg_rxq(struct ice_rx_ring *ring)
 
 		ring->xsk_pool = ice_xsk_pool(ring);
 		if (ring->xsk_pool) {
-			xdp_rxq_info_unreg_mem_model(&ring->xdp_rxq);
+			xdp_rxq_info_unreg(&ring->xdp_rxq);
 
 			ring->rx_buf_len =
 				xsk_pool_get_rx_frame_size(ring->xsk_pool);
+			/* coverity[check_return] */
+			__xdp_rxq_info_reg(&ring->xdp_rxq, ring->netdev,
+					   ring->q_index,
+					   ring->q_vector->napi.napi_id,
+					   ring->rx_buf_len);
 			err = xdp_rxq_info_reg_mem_model(&ring->xdp_rxq,
 							 MEM_TYPE_XSK_BUFF_POOL,
 							 NULL);
