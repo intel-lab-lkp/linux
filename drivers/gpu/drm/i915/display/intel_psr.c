@@ -3011,7 +3011,7 @@ exit:
 	mutex_unlock(&psr->lock);
 }
 
-bool intel_psr_enabled(struct intel_dp *intel_dp)
+bool intel_psr_hw_controls_link_retrain(struct intel_dp *intel_dp)
 {
 	bool ret;
 

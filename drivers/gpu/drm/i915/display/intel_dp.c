@@ -4951,7 +4951,7 @@ intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
 	 * Also when exiting PSR, HW will retrain the link anyways fixing
 	 * any link status error.
 	 */
-	if (intel_psr_enabled(intel_dp))
+	if (intel_psr_hw_controls_link_retrain(intel_dp))
 		return false;
 
 	if (drm_dp_dpcd_read_phy_link_status(&intel_dp->aux, DP_PHY_DPRX,
