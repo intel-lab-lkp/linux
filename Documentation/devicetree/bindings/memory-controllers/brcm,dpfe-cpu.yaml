@@ -16,6 +16,8 @@ properties:
       - enum:
           - brcm,bcm7271-dpfe-cpu
           - brcm,bcm7268-dpfe-cpu
+          - brcm,bcm7278-dpfe-cpu
+          - brcm,bcm7211-dpfe-cpu
 
   reg:
     items:
