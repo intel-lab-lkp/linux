@@ -130,9 +130,10 @@ cpumask_var_t __read_mostly	tracing_buffer_mask;
  * /proc/sys/kernel/ftrace_dump_on_oops
  * Set 1 if you want to dump buffers of all CPUs
  * Set 2 if you want to dump the buffer of the CPU that triggered oops
+ * Set instance name if you want to dump the specific trace instance
  */
-
-enum ftrace_dump_mode ftrace_dump_on_oops;
+/* Set to string format zero to disable by default */
+char ftrace_dump_on_oops[MAX_TRACER_SIZE] = "0";
 
 /* When set, tracing will stop when a WARN*() is hit */
 int __disable_trace_on_warning;
@@ -178,7 +179,6 @@ static void ftrace_trace_userstack(struct trace_array *tr,
 				   struct trace_buffer *buffer,
 				   unsigned int trace_ctx);
 
-#define MAX_TRACER_SIZE		100
 static char bootup_tracer_buf[MAX_TRACER_SIZE] __initdata;
 static char *default_bootup_tracer;
 
@@ -201,19 +201,32 @@ static int __init set_cmdline_ftrace(char *str)
 }
 __setup("ftrace=", set_cmdline_ftrace);
 
+enum ftrace_dump_mode get_ftrace_dump_mode(void)
+{
+	if (!strcmp("0", ftrace_dump_on_oops))
+		return DUMP_NONE;
+	else if (!strcmp("1", ftrace_dump_on_oops))
+		return DUMP_ALL;
+	else if (!strcmp("orig_cpu", ftrace_dump_on_oops) ||
+			!strcmp("2", ftrace_dump_on_oops))
+		return DUMP_ORIG;
+	else
+		return DUMP_INSTANCE;
+}
+
 static int __init set_ftrace_dump_on_oops(char *str)
 {
-	if (*str++ != '=' || !*str || !strcmp("1", str)) {
-		ftrace_dump_on_oops = DUMP_ALL;
+	if (!*str) {
+		strscpy(ftrace_dump_on_oops, "1", MAX_TRACER_SIZE);
 		return 1;
 	}
 
-	if (!strcmp("orig_cpu", str) || !strcmp("2", str)) {
-		ftrace_dump_on_oops = DUMP_ORIG;
-                return 1;
-        }
+	if (*str++ == '=') {
+		strscpy(ftrace_dump_on_oops, str, MAX_TRACER_SIZE);
+		return 1;
+	}
 
-        return 0;
+	return 0;
 }
 __setup("ftrace_dump_on_oops", set_ftrace_dump_on_oops);
 
@@ -10071,14 +10084,16 @@ static struct notifier_block trace_die_notifier = {
 static int trace_die_panic_handler(struct notifier_block *self,
 				unsigned long ev, void *unused)
 {
-	if (!ftrace_dump_on_oops)
+	enum ftrace_dump_mode dump_mode = get_ftrace_dump_mode();
+
+	if (!dump_mode)
 		return NOTIFY_DONE;
 
 	/* The die notifier requires DIE_OOPS to trigger */
 	if (self == &trace_die_notifier && ev != DIE_OOPS)
 		return NOTIFY_DONE;
 
-	ftrace_dump(ftrace_dump_on_oops);
+	ftrace_dump(dump_mode);
 
 	return NOTIFY_DONE;
 }
@@ -10119,12 +10134,12 @@ trace_printk_seq(struct trace_seq *s)
 	trace_seq_init(s);
 }
 
-void trace_init_global_iter(struct trace_iterator *iter)
+static void trace_init_iter(struct trace_iterator *iter, struct trace_array *tr)
 {
-	iter->tr = &global_trace;
+	iter->tr = tr;
 	iter->trace = iter->tr->current_trace;
 	iter->cpu_file = RING_BUFFER_ALL_CPUS;
-	iter->array_buffer = &global_trace.array_buffer;
+	iter->array_buffer = &tr->array_buffer;
 
 	if (iter->trace && iter->trace->open)
 		iter->trace->open(iter);
@@ -10144,6 +10159,11 @@ void trace_init_global_iter(struct trace_iterator *iter)
 	iter->fmt_size = STATIC_FMT_BUF_SIZE;
 }
 
+void trace_init_global_iter(struct trace_iterator *iter)
+{
+	trace_init_iter(iter, &global_trace);
+}
+
 void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 {
 	/* use static because iter can be a bit big for the stack */
@@ -10153,6 +10173,15 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 	unsigned int old_userobj;
 	unsigned long flags;
 	int cnt = 0, cpu;
+
+	if (oops_dump_mode == DUMP_INSTANCE) {
+		tr = trace_array_find(ftrace_dump_on_oops);
+		if (!tr) {
+			printk(KERN_TRACE "Instance %s not found\n",
+				ftrace_dump_on_oops);
+			return;
+		}
+	}
 
 	/* Only allow one dump user at a time. */
 	if (atomic_inc_return(&dump_running) != 1) {
@@ -10168,12 +10197,12 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 	 * If the user does a sysrq-z, then they can re-enable
 	 * tracing with echo 1 > tracing_on.
 	 */
-	tracing_off();
+	tracer_tracing_off(tr);
 
 	local_irq_save(flags);
 
 	/* Simulate the iterator */
-	trace_init_global_iter(&iter);
+	trace_init_iter(&iter, tr);
 
 	for_each_tracing_cpu(cpu) {
 		atomic_inc(&per_cpu_ptr(iter.array_buffer->data, cpu)->disabled);
@@ -10186,6 +10215,7 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 
 	switch (oops_dump_mode) {
 	case DUMP_ALL:
+	case DUMP_INSTANCE:
 		iter.cpu_file = RING_BUFFER_ALL_CPUS;
 		break;
 	case DUMP_ORIG:

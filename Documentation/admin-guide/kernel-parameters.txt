@@ -1548,12 +1548,13 @@
 			The above will cause the "foo" tracing instance to trigger
 			a snapshot at the end of boot up.
 
-	ftrace_dump_on_oops[=orig_cpu]
+	ftrace_dump_on_oops[=orig_cpu | =<instance>]
 			[FTRACE] will dump the trace buffers on oops.
-			If no parameter is passed, ftrace will dump
-			buffers of all CPUs, but if you pass orig_cpu, it will
+			If no parameter is passed, ftrace will dump global
+			buffers of all CPUs, if you pass orig_cpu, it will
 			dump only the buffer of the CPU that triggered the
-			oops.
+			oops, or specific instance will be dumped if instance
+			name is passed.
 
 	ftrace_filter=[function-list]
 			[FTRACE] Limit the functions traced by the function

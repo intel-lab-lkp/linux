@@ -296,11 +296,12 @@ kernel panic). This will output the contents of the ftrace buffers to
 the console.  This is very useful for capturing traces that lead to
 crashes and outputting them to a serial console.
 
-= ===================================================
-0 Disabled (default).
-1 Dump buffers of all CPUs.
-2 Dump the buffer of the CPU that triggered the oops.
-= ===================================================
+=========== ===================================================
+0           Disabled (default).
+1           Dump buffers of all CPUs.
+2(orig_cpu) Dump the buffer of the CPU that triggered the oops.
+<instance>  Dump the specific instance buffer.
+=========== ===================================================
 
 
 ftrace_enabled, stack_tracer_enabled
