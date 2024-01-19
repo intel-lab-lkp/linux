@@ -125,11 +125,6 @@ static ssize_t tpdm_simple_dataset_store(struct device *dev,
 	return ret;
 }
 
-static bool tpdm_has_dsb_dataset(struct tpdm_drvdata *drvdata)
-{
-	return (drvdata->datasets & TPDM_PIDR0_DS_DSB);
-}
-
 static umode_t tpdm_dsb_is_visible(struct kobject *kobj,
 				   struct attribute *attr, int n)
 {
@@ -232,38 +227,39 @@ static void tpdm_enable_dsb(struct tpdm_drvdata *drvdata)
 {
 	u32 val, i;
 
-	for (i = 0; i < TPDM_DSB_MAX_EDCR; i++)
-		writel_relaxed(drvdata->dsb->edge_ctrl[i],
-			   drvdata->base + TPDM_DSB_EDCR(i));
-	for (i = 0; i < TPDM_DSB_MAX_EDCMR; i++)
-		writel_relaxed(drvdata->dsb->edge_ctrl_mask[i],
-			   drvdata->base + TPDM_DSB_EDCMR(i));
-	for (i = 0; i < TPDM_DSB_MAX_PATT; i++) {
-		writel_relaxed(drvdata->dsb->patt_val[i],
-			   drvdata->base + TPDM_DSB_TPR(i));
-		writel_relaxed(drvdata->dsb->patt_mask[i],
-			   drvdata->base + TPDM_DSB_TPMR(i));
-		writel_relaxed(drvdata->dsb->trig_patt[i],
-			   drvdata->base + TPDM_DSB_XPR(i));
-		writel_relaxed(drvdata->dsb->trig_patt_mask[i],
-			   drvdata->base + TPDM_DSB_XPMR(i));
+	if (tpdm_has_dsb_dataset(drvdata)) {
+		for (i = 0; i < TPDM_DSB_MAX_EDCR; i++)
+			writel_relaxed(drvdata->dsb->edge_ctrl[i],
+				       drvdata->base + TPDM_DSB_EDCR(i));
+		for (i = 0; i < TPDM_DSB_MAX_EDCMR; i++)
+			writel_relaxed(drvdata->dsb->edge_ctrl_mask[i],
+				       drvdata->base + TPDM_DSB_EDCMR(i));
+		for (i = 0; i < TPDM_DSB_MAX_PATT; i++) {
+			writel_relaxed(drvdata->dsb->patt_val[i],
+				       drvdata->base + TPDM_DSB_TPR(i));
+			writel_relaxed(drvdata->dsb->patt_mask[i],
+				       drvdata->base + TPDM_DSB_TPMR(i));
+			writel_relaxed(drvdata->dsb->trig_patt[i],
+				       drvdata->base + TPDM_DSB_XPR(i));
+			writel_relaxed(drvdata->dsb->trig_patt_mask[i],
+				       drvdata->base + TPDM_DSB_XPMR(i));
+		}
+
+		set_dsb_tier(drvdata);
+		set_dsb_msr(drvdata);
+
+		val = readl_relaxed(drvdata->base + TPDM_DSB_CR);
+		/* Set the mode of DSB dataset */
+		set_dsb_mode(drvdata, &val);
+		/* Set trigger type */
+		if (drvdata->dsb->trig_type)
+			val |= TPDM_DSB_CR_TRIG_TYPE;
+		else
+			val &= ~TPDM_DSB_CR_TRIG_TYPE;
+		/* Set the enable bit of DSB control register to 1 */
+		val |= TPDM_DSB_CR_ENA;
+		writel_relaxed(val, drvdata->base + TPDM_DSB_CR);
 	}
-
-	set_dsb_tier(drvdata);
-
-	set_dsb_msr(drvdata);
-
-	val = readl_relaxed(drvdata->base + TPDM_DSB_CR);
-	/* Set the mode of DSB dataset */
-	set_dsb_mode(drvdata, &val);
-	/* Set trigger type */
-	if (drvdata->dsb->trig_type)
-		val |= TPDM_DSB_CR_TRIG_TYPE;
-	else
-		val &= ~TPDM_DSB_CR_TRIG_TYPE;
-	/* Set the enable bit of DSB control register to 1 */
-	val |= TPDM_DSB_CR_ENA;
-	writel_relaxed(val, drvdata->base + TPDM_DSB_CR);
 }
 
 /*
@@ -278,8 +274,7 @@ static void __tpdm_enable(struct tpdm_drvdata *drvdata)
 {
 	CS_UNLOCK(drvdata->base);
 
-	if (tpdm_has_dsb_dataset(drvdata))
-		tpdm_enable_dsb(drvdata);
+	tpdm_enable_dsb(drvdata);
 
 	CS_LOCK(drvdata->base);
 }
@@ -307,10 +302,12 @@ static void tpdm_disable_dsb(struct tpdm_drvdata *drvdata)
 {
 	u32 val;
 
-	/* Set the enable bit of DSB control register to 0 */
-	val = readl_relaxed(drvdata->base + TPDM_DSB_CR);
-	val &= ~TPDM_DSB_CR_ENA;
-	writel_relaxed(val, drvdata->base + TPDM_DSB_CR);
+	if (tpdm_has_dsb_dataset(drvdata)) {
+		/* Set the enable bit of DSB control register to 0 */
+		val = readl_relaxed(drvdata->base + TPDM_DSB_CR);
+		val &= ~TPDM_DSB_CR_ENA;
+		writel_relaxed(val, drvdata->base + TPDM_DSB_CR);
+	}
 }
 
 /* TPDM disable operations */
@@ -318,8 +315,7 @@ static void __tpdm_disable(struct tpdm_drvdata *drvdata)
 {
 	CS_UNLOCK(drvdata->base);
 
-	if (tpdm_has_dsb_dataset(drvdata))
-		tpdm_disable_dsb(drvdata);
+	tpdm_disable_dsb(drvdata);
 
 	CS_LOCK(drvdata->base);
 }
