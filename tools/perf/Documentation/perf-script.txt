@@ -442,9 +442,9 @@ include::itrace.txt[]
 	will be printed. Each entry has function name and file/line. Enabled by
 	default, disable with --no-inline.
 
---insn-trace::
-	Show instruction stream for intel_pt traces. Combine with --xed to
-	show disassembly.
+--insn-trace[=<raw|disasm>]::
+	Show raw or mnemonic instruction stream for intel_pt traces. You can
+	also combine raw instructions with --xed to show disassembly.
 
 --xed::
 	Run xed disassembler on output. Requires installing the xed disassembler.
