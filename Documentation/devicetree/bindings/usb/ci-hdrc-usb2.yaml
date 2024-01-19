@@ -73,22 +73,10 @@ properties:
               - nuvoton,npcm845-udc
           - const: nuvoton,npcm750-udc
 
-  reg:
-    minItems: 1
-    maxItems: 2
-
-  interrupts:
-    minItems: 1
-    maxItems: 2
-
-  clocks:
-    minItems: 1
-    maxItems: 3
-
-  clock-names:
-    minItems: 1
-    maxItems: 3
-
+  reg: true
+  interrupts: true
+  clocks: true
+  clock-names: true
   dr_mode: true
 
   power-domains:
@@ -411,6 +399,104 @@ allOf:
         external-vbus-divider: false
         samsung,picophy-pre-emp-curr-control: false
         samsung,picophy-dc-vol-level-adjust: false
+
+  - if:
+      properties:
+        compatible:
+          oneOf:
+            - items:
+                - const: fsl,imx27-usb
+            - items:
+                - enum:
+                    - fsl,imx25-usb
+                    - fsl,imx35-usb
+                - const: fsl,imx27-usb
+    then:
+      properties:
+        clocks:
+          minItems: 3
+          maxItems: 3
+        clock-names:
+          minItems: 3
+          maxItems: 3
+          items:
+            anyOf:
+              - const: ipg
+              - const: ahb
+              - const: per
+
+  - if:
+      properties:
+        compatible:
+          oneOf:
+            - items:
+                - const: qcom,ci-hdrc
+    then:
+      properties:
+        reg:
+          minItems: 2
+          maxItems: 2
+        interrupts:
+          minItems: 1
+          maxItems: 2
+        clocks:
+          minItems: 2
+          maxItems: 3
+        clock-names:
+          minItems: 2
+          maxItems: 3
+          items:
+            anyOf:
+              - const: core
+              - const: iface
+              - const: fs
+                description: optional
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            oneOf:
+              - const: chipidea,usb2
+              - const: fsl,imx23-usb
+              - const: fsl,imx28-usb
+              - const: fsl,imx7d-usb
+              - const: fsl,vf610-usb
+              - const: lsi,zevio-usb
+              - const: nuvoton,npcm750-udc
+              - pattern: '^fsl,imx5[0-3]+-usb$'
+              - pattern: '^fsl,imx6[a-z]+-usb$'
+              - pattern: '^nvidia,tegra[0-9]+-ehci$'
+              - pattern: '^nvidia,tegra[0-9]+-udc$'
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 1
+        clock-names:
+          minItems: 1
+          maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            oneOf:
+              - const: chipidea,usb2
+              - const: fsl,imx27-usb
+              - const: fsl,imx6ul-usb
+              - const: lsi,zevio-usb
+              - const: nuvoton,npcm750-udc
+              - pattern: '^nvidia,tegra[0-9]+-ehci$'
+              - pattern: '^nvidia,tegra[0-9]+-udc$'
+    then:
+      properties:
+        reg:
+          minItems: 1
+          maxItems: 1
+        interrupts:
+          minItems: 1
+          maxItems: 1
 
 unevaluatedProperties: false
 
