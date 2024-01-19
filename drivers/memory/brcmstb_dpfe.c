@@ -922,7 +922,20 @@ static const struct of_device_id brcmstb_dpfe_of_match[] = {
 	{ .compatible = "brcm,bcm7271-dpfe-cpu", .data = &dpfe_api_old_v2 },
 	{ .compatible = "brcm,bcm7278-dpfe-cpu", .data = &dpfe_api_old_v2 },
 	{ .compatible = "brcm,bcm7211-dpfe-cpu", .data = &dpfe_api_new_v2 },
-	/* API v3 is the default going forward */
+
+	/*
+	 * Match the DPFE API flavour based on a versioned compatible string
+	 * that tells us which API version the hardware speaks.
+	 */
+	{ .compatible = "brcm,dpfe-cpu-v1", .data = &dpfe_api_old_v2 },
+	{ .compatible = "brcm,dpfe-cpu-v2", .data = &dpfe_api_new_v2 },
+	{ .compatible = "brcm,dpfe-cpu-v3", .data = &dpfe_api_v3 },
+
+	/*
+	 * This "default" compatible string should no longer be used. It has
+	 * been removed from the binding but kept here for backward
+	 * compatibility.
+	 */
 	{ .compatible = "brcm,dpfe-cpu", .data = &dpfe_api_v3 },
 	{}
 };
