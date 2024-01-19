@@ -247,6 +247,38 @@ struct dma_buf_ops {
 	int (*end_cpu_access)(struct dma_buf *, enum dma_data_direction);
 
 	/**
+	 * @begin_access:
+	 *
+	 * This is called from dma_buf_begin_access() when a device driver
+	 * wants to access the data of the DMABUF. The exporter can use this
+	 * to flush/sync the caches if needed.
+	 *
+	 * This callback is optional.
+	 *
+	 * Returns:
+	 *
+	 * 0 on success or a negative error code on failure.
+	 */
+	int (*begin_access)(struct dma_buf_attachment *, struct sg_table *,
+			    enum dma_data_direction);
+
+	/**
+	 * @end_access:
+	 *
+	 * This is called from dma_buf_end_access() when a device driver is
+	 * done accessing the data of the DMABUF. The exporter can use this
+	 * to flush/sync the caches if needed.
+	 *
+	 * This callback is optional.
+	 *
+	 * Returns:
+	 *
+	 * 0 on success or a negative error code on failure.
+	 */
+	int (*end_access)(struct dma_buf_attachment *, struct sg_table *,
+			  enum dma_data_direction);
+
+	/**
 	 * @mmap:
 	 *
 	 * This callback is used by the dma_buf_mmap() function
@@ -605,6 +637,11 @@ void dma_buf_detach(struct dma_buf *dmabuf,
 		    struct dma_buf_attachment *attach);
 int dma_buf_pin(struct dma_buf_attachment *attach);
 void dma_buf_unpin(struct dma_buf_attachment *attach);
+
+int dma_buf_begin_access(struct dma_buf_attachment *attach,
+			 struct sg_table *sgt, enum dma_data_direction dir);
+int dma_buf_end_access(struct dma_buf_attachment *attach,
+		       struct sg_table *sgt, enum dma_data_direction dir);
 
 struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info);
 

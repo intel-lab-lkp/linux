@@ -830,6 +830,8 @@ static struct sg_table * __map_dma_buf(struct dma_buf_attachment *attach,
  *     - dma_buf_mmap()
  *     - dma_buf_begin_cpu_access()
  *     - dma_buf_end_cpu_access()
+ *     - dma_buf_begin_access()
+ *     - dma_buf_end_access()
  *     - dma_buf_map_attachment_unlocked()
  *     - dma_buf_unmap_attachment_unlocked()
  *     - dma_buf_vmap_unlocked()
@@ -1601,6 +1603,70 @@ void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map)
 	dma_resv_unlock(dmabuf->resv);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_vunmap_unlocked, DMA_BUF);
+
+/**
+ * @dma_buf_begin_access - Call before any hardware access from/to the DMABUF
+ * @attach:	[in]	attachment used for hardware access
+ * @sg_table:	[in]	scatterlist used for the DMA transfer
+ * @direction:  [in]    direction of DMA transfer
+ */
+int dma_buf_begin_access(struct dma_buf_attachment *attach,
+			 struct sg_table *sgt, enum dma_data_direction dir)
+{
+	struct dma_buf *dmabuf;
+	bool cookie;
+	int ret;
+
+	if (WARN_ON(!attach))
+		return -EINVAL;
+
+	dmabuf = attach->dmabuf;
+
+	if (!dmabuf->ops->begin_access)
+		return 0;
+
+	cookie = dma_fence_begin_signalling();
+	ret = dmabuf->ops->begin_access(attach, sgt, dir);
+	dma_fence_end_signalling(cookie);
+
+	if (WARN_ON_ONCE(ret))
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_begin_access, DMA_BUF);
+
+/**
+ * @dma_buf_end_access - Call after any hardware access from/to the DMABUF
+ * @attach:	[in]	attachment used for hardware access
+ * @sg_table:	[in]	scatterlist used for the DMA transfer
+ * @direction:  [in]    direction of DMA transfer
+ */
+int dma_buf_end_access(struct dma_buf_attachment *attach,
+		       struct sg_table *sgt, enum dma_data_direction dir)
+{
+	struct dma_buf *dmabuf;
+	bool cookie;
+	int ret;
+
+	if (WARN_ON(!attach))
+		return -EINVAL;
+
+	dmabuf = attach->dmabuf;
+
+	if (!dmabuf->ops->end_access)
+		return 0;
+
+	cookie = dma_fence_begin_signalling();
+	ret = dmabuf->ops->end_access(attach, sgt, dir);
+	dma_fence_end_signalling(cookie);
+
+	if (WARN_ON_ONCE(ret))
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_end_access, DMA_BUF);
 
 #ifdef CONFIG_DEBUG_FS
 static int dma_buf_debug_show(struct seq_file *s, void *unused)
