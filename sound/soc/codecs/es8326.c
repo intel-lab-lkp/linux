@@ -151,12 +151,34 @@ static const char *const winsize[] = {
 static const char *const dacpol_txt[] =	{
 	"Normal", "R Invert", "L Invert", "L + R Invert" };
 
+static const char *const hpvol[] = {
+	"0 dB",
+	"-6 dB",
+	"-24 dB",
+	"+3.5 dB",
+	"-3.5 dB",
+	"-18 dB",
+};
+static const unsigned int hp_vol_values[] = { 0, 1, 2, 4, 5, 6 };
+
+static const char *const hp_spkvol_switch[] = {
+	"HPVOL: HPL+HPL, SPKVOL: HPL+HPL",
+	"HPVOL: HPL+HPR, SPKVOL: HPL+HPR",
+	"HPVOL: HPL+HPL, SPKVOL: SPKL+SPKR",
+	"HPVOL: HPL+HPR, SPKVOL: SPKL+SPKR",
+};
+
 static const struct soc_enum dacpol =
 	SOC_ENUM_SINGLE(ES8326_DAC_DSM, 4, 4, dacpol_txt);
 static const struct soc_enum alc_winsize =
 	SOC_ENUM_SINGLE(ES8326_ADC_RAMPRATE, 4, 16, winsize);
 static const struct soc_enum drc_winsize =
 	SOC_ENUM_SINGLE(ES8326_DRC_WINSIZE, 4, 16, winsize);
+static const struct soc_enum hp_vol =
+	SOC_VALUE_ENUM_DOUBLE(ES8326_HP_VOL, 4, 0, 7,
+			ARRAY_SIZE(hpvol), hpvol, hp_vol_values);
+static const struct soc_enum hpvol_spkvol_switch =
+	SOC_ENUM_SINGLE(ES8326_HP_MISC, 6, 4, hp_spkvol_switch);
 
 static const struct snd_kcontrol_new es8326_snd_controls[] = {
 	SOC_SINGLE_TLV("DAC Playback Volume", ES8326_DAC_VOL, 0, 0xbf, 0, dac_vol_tlv),
@@ -182,6 +204,14 @@ static const struct snd_kcontrol_new es8326_snd_controls[] = {
 			es8326_crosstalk1_get, es8326_crosstalk1_set),
 	SOC_SINGLE_EXT("CROSSTALK2", SND_SOC_NOPM, 0, 31, 0,
 			es8326_crosstalk2_get, es8326_crosstalk2_set),
+
+	SOC_SINGLE_TLV("HPL Playback Volume", ES8326_DACL_VOL, 0, 0xbf, 0, dac_vol_tlv),
+	SOC_SINGLE_TLV("HPR Playback Volume", ES8326_DACR_VOL, 0, 0xbf, 0, dac_vol_tlv),
+	SOC_SINGLE_TLV("SPKL Playback Volume", ES8326_SPKL_VOL, 0, 0xbf, 0, dac_vol_tlv),
+	SOC_SINGLE_TLV("SPKR Playback Volume", ES8326_SPKR_VOL, 0, 0xbf, 0, dac_vol_tlv),
+
+	SOC_ENUM("HP Volume", hp_vol),
+	SOC_ENUM("HPVol SPKVol switch", hpvol_spkvol_switch),
 };
 
 static const struct snd_soc_dapm_widget es8326_dapm_widgets[] = {
