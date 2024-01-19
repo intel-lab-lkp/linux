@@ -813,7 +813,7 @@ retry:
 	ihold(dir);
 	if (IS_ENCRYPTED(dir)) {
 		set_bit(CEPH_MDS_R_FSCRYPT_FILE, &req->r_req_flags);
-		err = fscrypt_prepare_lookup_partial(dir, dentry);
+		err = fscrypt_prepare_lookup_dentry(dir, dentry);
 		if (err < 0)
 			goto out_req;
 	}
