@@ -81,7 +81,17 @@ struct dd_per_prio {
 
 enum {
 	DD_DISPATCHING	= 0,
+	DD_INSERTING	= 1,
+	DD_BUCKETS	= 2,
 };
+
+#define DD_CPU_BUCKETS		32
+#define DD_CPU_BUCKETS_MASK	(DD_CPU_BUCKETS - 1)
+
+struct dd_bucket_list {
+	struct list_head list;
+	spinlock_t lock;
+} ____cacheline_aligned_in_smp;
 
 struct deadline_data {
 	/*
@@ -93,6 +103,8 @@ struct deadline_data {
 	} ____cacheline_aligned_in_smp;
 
 	unsigned long run_state;
+
+	struct dd_bucket_list bucket_lists[DD_CPU_BUCKETS];
 
 	struct dd_per_prio per_prio[DD_PRIO_COUNT];
 
@@ -714,7 +726,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 	struct deadline_data *dd;
 	struct elevator_queue *eq;
 	enum dd_prio prio;
-	int ret = -ENOMEM;
+	int i, ret = -ENOMEM;
 
 	eq = elevator_alloc(q, e);
 	if (!eq)
@@ -728,6 +740,11 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 
 	spin_lock_init(&dd->lock);
 	spin_lock_init(&dd->zone_lock);
+
+	for (i = 0; i < DD_CPU_BUCKETS; i++) {
+		INIT_LIST_HEAD(&dd->bucket_lists[i].list);
+		spin_lock_init(&dd->bucket_lists[i].lock);
+	}
 
 	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
 		struct dd_per_prio *per_prio = &dd->per_prio[prio];
@@ -878,6 +895,94 @@ static void dd_insert_request(struct request_queue *q, struct request *rq,
 	}
 }
 
+static void dd_dispatch_from_buckets(struct deadline_data *dd,
+				     struct list_head *list)
+{
+	int i;
+
+	if (!test_bit(DD_BUCKETS, &dd->run_state) ||
+	    !test_and_clear_bit(DD_BUCKETS, &dd->run_state))
+		return;
+
+	for (i = 0; i < DD_CPU_BUCKETS; i++) {
+		struct dd_bucket_list *bucket = &dd->bucket_lists[i];
+
+		if (list_empty_careful(&bucket->list))
+			continue;
+		spin_lock(&bucket->lock);
+		list_splice_init(&bucket->list, list);
+		spin_unlock(&bucket->lock);
+	}
+}
+
+/*
+ * If we can grab the dd->lock, then just return and do the insertion as per
+ * usual. If not, add to one of our internal buckets, and afterwards recheck
+ * if if we should retry.
+ */
+static bool dd_insert_to_bucket(struct deadline_data *dd,
+				struct list_head *list)
+	__acquires(&dd->lock)
+{
+	struct dd_bucket_list *bucket;
+
+	/*
+	 * If we can grab the lock, proceed as per usual. If not, and insert
+	 * isn't running, force grab the lock and proceed as per usual.
+	 */
+	if (spin_trylock(&dd->lock))
+		return false;
+	if (!test_bit(DD_INSERTING, &dd->run_state)) {
+		spin_lock(&dd->lock);
+		return false;
+	}
+
+	if (!test_bit(DD_BUCKETS, &dd->run_state))
+		set_bit(DD_BUCKETS, &dd->run_state);
+
+	bucket = &dd->bucket_lists[get_cpu() & DD_CPU_BUCKETS_MASK];
+	spin_lock(&bucket->lock);
+	list_splice_init(list, &bucket->list);
+	spin_unlock(&bucket->lock);
+	put_cpu();
+
+	/*
+	 * Insertion still running, we are done.
+	 */
+	if (test_bit(DD_INSERTING, &dd->run_state))
+		return true;
+
+	/*
+	 * We may be too late, play it safe and grab the lock. This will
+	 * flush the above bucket insert as well and insert it.
+	 */
+	spin_lock(&dd->lock);
+	return false;
+}
+
+static void __dd_insert_requests(struct request_queue *q,
+				 struct deadline_data *dd,
+				 struct list_head *list, blk_insert_t flags,
+				 struct list_head *free)
+{
+	set_bit(DD_INSERTING, &dd->run_state);
+	do {
+		while (!list_empty(list)) {
+			struct request *rq;
+
+			rq = list_first_entry(list, struct request, queuelist);
+			list_del_init(&rq->queuelist);
+			dd_insert_request(q, rq, flags, free);
+		}
+
+		dd_dispatch_from_buckets(dd, list);
+		if (list_empty(list))
+			break;
+	} while (1);
+
+	clear_bit(DD_INSERTING, &dd->run_state);
+}
+
 /*
  * Called from blk_mq_insert_request() or blk_mq_dispatch_plug_list().
  */
@@ -889,16 +994,23 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 	struct deadline_data *dd = q->elevator->elevator_data;
 	LIST_HEAD(free);
 
-	spin_lock(&dd->lock);
-	while (!list_empty(list)) {
-		struct request *rq;
+	/*
+	 * If dispatch is busy and we ended up adding to our internal bucket,
+	 * then we're done for now.
+	 */
+	if (dd_insert_to_bucket(dd, list))
+		return;
 
-		rq = list_first_entry(list, struct request, queuelist);
-		list_del_init(&rq->queuelist);
-		dd_insert_request(q, rq, flags, &free);
-	}
+	do {
+		__dd_insert_requests(q, dd, list, flags, &free);
+
+		/*
+		 * If buckets is set after inserting was cleared, be safe and do
+		 * another loop as we could be racing with bucket insertion.
+		 */
+	} while (test_bit(DD_BUCKETS, &dd->run_state));
+
 	spin_unlock(&dd->lock);
-
 	blk_mq_free_requests(&free);
 }
 
