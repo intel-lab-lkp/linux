@@ -16,7 +16,6 @@ properties:
       - enum:
           - brcm,bcm7271-dpfe-cpu
           - brcm,bcm7268-dpfe-cpu
-      - const: brcm,dpfe-cpu
 
   reg:
     items:
@@ -40,7 +39,7 @@ additionalProperties: false
 examples:
   - |
     dpfe-cpu@f1132000 {
-        compatible = "brcm,bcm7271-dpfe-cpu", "brcm,dpfe-cpu";
+        compatible = "brcm,bcm7271-dpfe-cpu";
         reg = <0xf1132000 0x180>,
               <0xf1134000 0x1000>,
               <0xf1138000 0x4000>;
