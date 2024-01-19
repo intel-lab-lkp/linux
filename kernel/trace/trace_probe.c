@@ -11,6 +11,7 @@
  */
 #define pr_fmt(fmt)	"trace_probe: " fmt
 
+#include <linux/dcache.h>
 #include <linux/bpf.h>
 #include "trace_btf.h"
 
@@ -85,6 +86,8 @@ static const struct fetch_type probe_fetch_types[] = {
 	__ASSIGN_FETCH_TYPE("ustring", string, string, sizeof(u32), 1, 1,
 			    "__data_loc char[]"),
 	__ASSIGN_FETCH_TYPE("symstr", string, string, sizeof(u32), 1, 1,
+			    "__data_loc char[]"),
+	__ASSIGN_FETCH_TYPE("pd", string, string, sizeof(u32), 1, 1,
 			    "__data_loc char[]"),
 	/* Basic types */
 	ASSIGN_FETCH_TYPE(u8,  u8,  0),
@@ -1090,6 +1093,25 @@ static int __parse_bitfield_probe_arg(const char *bf,
 	return (BYTES_TO_BITS(t->size) < (bw + bo)) ? -EINVAL : 0;
 }
 
+static char* traceprobe_expand_dentry(const char *argv)
+{
+	#define DENTRY_EXPAND_LEN 7  /* +0xXX() */
+	char *new_argv;
+	int len = strlen(argv) + 1 + DENTRY_EXPAND_LEN;
+
+	new_argv = kmalloc(len, GFP_KERNEL);
+	if (!new_argv)
+		return NULL;
+
+	if (snprintf(new_argv, len, "+0x%lx(%s)",
+		     offsetof(struct dentry, d_name.name), argv) >= len) {
+		kfree(new_argv);
+		return NULL;
+	}
+
+	return new_argv;
+}
+
 /* String length checking wrapper */
 static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 					   struct probe_arg *parg,
@@ -1099,6 +1121,7 @@ static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 	char *t, *t2, *t3;
 	int ret, len;
 	char *arg;
+	char *org_arg = NULL;
 
 	arg = kstrdup(argv, GFP_KERNEL);
 	if (!arg)
@@ -1182,6 +1205,16 @@ static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 			 parg->count);
 	}
 
+	if (!strcmp("pd", parg->type->name)) {
+		char *temp;
+
+		temp = traceprobe_expand_dentry(arg);
+		if (!temp)
+			goto out;
+		org_arg = arg;
+		arg = temp;
+	}
+
 	code = tmp = kcalloc(FETCH_INSN_MAX, sizeof(*code), GFP_KERNEL);
 	if (!code)
 		goto out;
@@ -1243,6 +1276,10 @@ static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 				goto fail;
 			}
 		}
+
+		if (!strcmp(parg->type->name, "pd"))
+			code++;
+
 		/* If op == DEREF, replace it with STRING */
 		if (!strcmp(parg->type->name, "ustring") ||
 		    code->op == FETCH_OP_UDEREF)
@@ -1321,6 +1358,7 @@ fail:
 	kfree(tmp);
 out:
 	kfree(arg);
+	kfree(org_arg);
 
 	return ret;
 }
