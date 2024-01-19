@@ -160,6 +160,12 @@ static int __init meson_mx_socinfo_init(void)
 							   metal_rev);
 	soc_dev_attr->soc_id = meson_mx_socinfo_soc_id(major_ver, metal_rev);
 
+	if (!soc_dev_attr->revision || !soc_dev_attr->soc_id) {
+		kfree_const(soc_dev_attr->revision);
+		kfree_const(soc_dev_attr->soc_id);
+		kfree(soc_dev_attr);
+		return -ENOMEM;
+	}
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
 		kfree_const(soc_dev_attr->revision);
