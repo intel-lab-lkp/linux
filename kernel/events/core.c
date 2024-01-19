@@ -11988,10 +11988,13 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	local64_set(&hwc->period_left, hwc->sample_period);
 
 	/*
-	 * We currently do not support PERF_SAMPLE_READ on inherited events.
+	 * We do not support PERF_SAMPLE_READ on inherited events unless
+	 * inherit_stat and PERF_SAMPLE_TID are also selected, which allows
+	 * inherited events to collect per-thread samples.
 	 * See perf_output_read().
 	 */
-	if (attr->inherit && (attr->sample_type & PERF_SAMPLE_READ))
+	if (attr->inherit && (attr->sample_type & PERF_SAMPLE_READ)
+		&& !(attr->inherit_stat && (attr->sample_type & PERF_SAMPLE_TID)))
 		goto err_ns;
 
 	if (!has_branch_stack(event))
