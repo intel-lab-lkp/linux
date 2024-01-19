@@ -1,0 +1,36 @@
+drm drm-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-misc drm-misc-fixes a20f1b02bafcbf5a32d96a1d4185d6981cf7d016
+	drm/bridge: parade-ps8640: Make sure we drop the AUX mutex in the error case
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-xe drm-xe-fixes ceb6a6f023fd3e8b07761ed900352ef574010bcb
+	Linux 6.7-rc6
+drm drm-next 009f0a64f9ccee9db9d758b883059e5c74bb7330
+	Merge tag 'drm-xe-next-fixes-2024-01-16' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes 1f1626ac0428820f998245478610f452650bcab5
+	drm/ttm: fix ttm pool initialization for no-dma-device drivers
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes bf3ff145df184698a8a80b33265064638572366f
+	drm/xe: display support should not depend on EXPERT
+drm-misc drm-misc-next 2095d5071d60fd6835f14f29621c6f234a1c0293
+	drm/panel: novatek-nt36672e: Include <linux/of.h>
+drm-intel drm-intel-next bddacdf4861c0586f6d515e0c25861443a32b92a
+	drm/i915: Add additional ARL PCI IDs
+drm-intel drm-intel-gt-next c44d4ef47fdad0a33966de89f9064e19736bb52f
+	drm/i915/xelpg: Extend some workarounds/tuning to gfx version 12.74
+drm-xe drm-xe-next 43d48379c9399654059bd2af5898fc464641837c
+	drm/xe: correct the calculation of remaining size
+drm-intel topic/core-for-CI 4ed7492a358d8405f0fff43b17db7f2e33295110
+	HAX net/phy: Suppress WARN from phy_error
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
+drm-xe topic/xe-for-CI e4cfe0cd981952f6ed3d5b92a0b7e3ae0b3ad2b4
+	drm/xe/guc: define LNL FW
