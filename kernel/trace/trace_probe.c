@@ -12,6 +12,7 @@
 #define pr_fmt(fmt)	"trace_probe: " fmt
 
 #include <linux/dcache.h>
+#include <linux/fs.h>
 #include <linux/bpf.h>
 #include "trace_btf.h"
 
@@ -88,6 +89,8 @@ static const struct fetch_type probe_fetch_types[] = {
 	__ASSIGN_FETCH_TYPE("symstr", string, string, sizeof(u32), 1, 1,
 			    "__data_loc char[]"),
 	__ASSIGN_FETCH_TYPE("pd", string, string, sizeof(u32), 1, 1,
+			    "__data_loc char[]"),
+	__ASSIGN_FETCH_TYPE("pD", string, string, sizeof(u32), 1, 1,
 			    "__data_loc char[]"),
 	/* Basic types */
 	ASSIGN_FETCH_TYPE(u8,  u8,  0),
@@ -1093,18 +1096,26 @@ static int __parse_bitfield_probe_arg(const char *bf,
 	return (BYTES_TO_BITS(t->size) < (bw + bo)) ? -EINVAL : 0;
 }
 
-static char* traceprobe_expand_dentry(const char *argv)
+static char* traceprobe_expand_dentry_file(const char *argv, bool is_dentry)
 {
 	#define DENTRY_EXPAND_LEN 7  /* +0xXX() */
+	#define FILE_EXPAND_LEN   15 /* +0xXX(+0xXXX()) */
 	char *new_argv;
-	int len = strlen(argv) + 1 + DENTRY_EXPAND_LEN;
+	int len, ret;
 
+	len = strlen(argv) + 1 + (is_dentry ? DENTRY_EXPAND_LEN : FILE_EXPAND_LEN);
 	new_argv = kmalloc(len, GFP_KERNEL);
 	if (!new_argv)
 		return NULL;
 
-	if (snprintf(new_argv, len, "+0x%lx(%s)",
-		     offsetof(struct dentry, d_name.name), argv) >= len) {
+	if (is_dentry)
+		ret = snprintf(new_argv, len, "+0x%lx(%s)",
+			       offsetof(struct dentry, d_name.name), argv);
+	else
+		ret = snprintf(new_argv, len, "+0x%lx(+0x%lx(%s))",
+			       offsetof(struct dentry, d_name.name),
+			       offsetof(struct file, f_path.dentry), argv);
+	if (ret >= len) {
 		kfree(new_argv);
 		return NULL;
 	}
@@ -1205,10 +1216,11 @@ static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 			 parg->count);
 	}
 
-	if (!strcmp("pd", parg->type->name)) {
+	if (!strcasecmp("pd", parg->type->name)) {
 		char *temp;
 
-		temp = traceprobe_expand_dentry(arg);
+		temp = traceprobe_expand_dentry_file(arg,
+						     parg->type->name[1] == 'd');
 		if (!temp)
 			goto out;
 		org_arg = arg;
@@ -1277,7 +1289,7 @@ static int traceprobe_parse_probe_arg_body(const char *argv, ssize_t *size,
 			}
 		}
 
-		if (!strcmp(parg->type->name, "pd"))
+		if (!strcasecmp(parg->type->name, "pd"))
 			code++;
 
 		/* If op == DEREF, replace it with STRING */
