@@ -677,15 +677,20 @@ static void hsw_psr_setup_aux(struct intel_dp *intel_dp)
 		       aux_ctl);
 }
 
-static bool psr2_su_region_et_valid(struct intel_dp *intel_dp)
+static bool psr2_su_region_et_valid(struct intel_dp *intel_dp,
+				    const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	if (crtc_state->has_panel_replay)
+		goto unsupported;
 
 	if (DISPLAY_VER(i915) >= 20 &&
 	    intel_dp->psr_dpcd[0] == DP_PSR2_WITH_Y_COORD_ET_SUPPORTED &&
 	    !(intel_dp->psr.debug & I915_PSR_DEBUG_SU_REGION_ET_DISABLE))
 		return true;
 
+unsupported:
 	return false;
 }
 
@@ -714,7 +719,7 @@ void intel_psr_enable_sink(struct intel_dp *intel_dp,
 					   DP_ALPM_LOCK_ERROR_IRQ_HPD_ENABLE);
 
 		dpcd_val |= DP_PSR_ENABLE_PSR2 | DP_PSR_IRQ_HPD_WITH_CRC_ERRORS;
-		if (psr2_su_region_et_valid(intel_dp))
+		if (crtc_state->enable_psr2_su_region_et)
 			dpcd_val |= DP_PSR_ENABLE_SU_REGION_ET;
 	} else {
 		if (intel_dp->psr.link_standby)
@@ -973,7 +978,7 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 		intel_de_write(dev_priv, PSR2_MAN_TRK_CTL(cpu_transcoder), 0);
 	}
 
-	if (psr2_su_region_et_valid(intel_dp))
+	if (intel_dp->psr.sel_update_et_enabled)
 		val |= LNL_EDP_PSR2_SU_REGION_ET_ENABLE;
 
 	/*
@@ -1138,7 +1143,7 @@ static bool intel_psr2_sel_fetch_config_valid(struct intel_dp *intel_dp,
 		return false;
 	}
 
-	if (psr2_su_region_et_valid(intel_dp))
+	if (psr2_su_region_et_valid(intel_dp, crtc_state))
 		crtc_state->enable_psr2_su_region_et = true;
 
 	return crtc_state->enable_psr2_sel_fetch = true;
@@ -1746,6 +1751,7 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 	drm_WARN_ON(&dev_priv->drm, intel_dp->psr.enabled);
 
 	intel_dp->psr.sel_update_enabled = crtc_state->has_sel_update;
+	intel_dp->psr.sel_update_et_enabled = crtc_state->enable_psr2_su_region_et;
 	intel_dp->psr.panel_replay_enabled = crtc_state->has_panel_replay;
 	intel_dp->psr.busy_frontbuffer_bits = 0;
 	intel_dp->psr.pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
@@ -1896,6 +1902,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 	intel_dp->psr.enabled = false;
 	intel_dp->psr.panel_replay_enabled = false;
 	intel_dp->psr.sel_update_enabled = false;
+	intel_dp->psr.sel_update_et_enabled = false;
 	intel_dp->psr.psr2_sel_fetch_enabled = false;
 	intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
 }

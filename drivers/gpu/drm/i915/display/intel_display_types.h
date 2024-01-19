@@ -1706,6 +1706,7 @@ struct intel_psr {
 	bool sink_psr2_support;
 	bool link_standby;
 	bool sel_update_enabled;
+	bool sel_update_et_enabled;
 	bool psr2_sel_fetch_enabled;
 	bool psr2_sel_fetch_cff_enabled;
 	bool req_psr2_sdp_prior_scanline;
