@@ -443,6 +443,28 @@ restart:	adr	r0, LC1
 		add	r6, r6, r5
 		add	r10, r10, r5
 		add	sp, sp, r5
+
+#ifdef CONFIG_AUTO_ZRELADDR
+		/*
+		 * Validate calculated start of physical memory with appended DTB.
+		 * In the first iteration for physical memory start calculation,
+		 * we skipped validating it as it could have been augumented by
+		 * ATAGS stored at an offset from the same start of physical memory.
+		 *
+		 * We now have parsed them and augumented the appended DTB if asked
+		 * so we can finally validate the start of physical memory.
+		 *
+		 * This is needed to apply additional fixup with
+		 * linux,usable-memory-range or to make sure AUTO_ZRELADDR detected
+		 * the correct value.
+		 */
+		sub	r0, r4, #TEXT_OFFSET	@ revert to base address
+		mov	r1, r8			@ use appended DTB
+		bl	fdt_check_mem_start
+
+		/* Determine final kernel image address. */
+		add	r4, r0, #TEXT_OFFSET
+#endif
 dtb_check_done:
 #endif
 
