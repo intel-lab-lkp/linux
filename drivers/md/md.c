@@ -544,7 +544,8 @@ static void md_end_flush(struct bio *bio)
 
 	if (atomic_dec_and_test(&mddev->flush_pending)) {
 		/* The pair is percpu_ref_get() from md_flush_request() */
-		percpu_ref_put(&mddev->active_io);
+		if (mddev->gendisk)
+			percpu_ref_put(&mddev->active_io);
 
 		/* The pre-request flush has finished */
 		queue_work(md_wq, &mddev->flush_work);
@@ -640,7 +641,8 @@ bool md_flush_request(struct mddev *mddev, struct bio *bio)
 		 * concurrently.
 		 */
 		WARN_ON(percpu_ref_is_zero(&mddev->active_io));
-		percpu_ref_get(&mddev->active_io);
+		if (mddev->gendisk)
+			percpu_ref_get(&mddev->active_io);
 		mddev->flush_bio = bio;
 		bio = NULL;
 	}
