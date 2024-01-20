@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwinfo/board-id.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Board Identifier for Devicetree Selection
+
+maintainers:
+  - Amrit Anand <quic_amrianan@quicinc.com>
+  - Elliot Berman <quic_eberman@quicinc.com>
+
+description: |
+  Device manufacturers frequently ship multiple boards under a single
+  software package. These software packages will ship multiple devicetree
+  blobs and require some mechanism to pick the correct DTB for the board
+  the software package was deployed. board-id provides a mechanism for
+  bootloaders to select the appropriate DTB which is vendor/OEM-agnostic.
+
+select:
+  anyOf:
+    - required:
+        - 'board-id'
+    - required:
+        - 'board-id-types'
+    - required:
+        - '#board-id-cells'
+
+properties:
+  $nodename:
+    const: "/"
+  board-id:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    description: |
+      A list of identifiers that can be used to match with this devicetree.
+      The interpretatation of each cell can be matched with the
+      board-id-type at the same index.
+
+  board-id-types:
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
+    description:
+      Defines the type of each cell, indicating to the DeviceTree selection
+      mechanism how to parse the board-id.
+
+  '#board-id-cells':
+    minimum: 1
+
+required:
+  - board-id
+  - board-id-types
+  - '#board-id-cells'
+
+additionalProperties: true
