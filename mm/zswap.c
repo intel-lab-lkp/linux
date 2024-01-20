@@ -1790,17 +1790,12 @@ void zswap_swapon(int type)
 void zswap_swapoff(int type)
 {
 	struct zswap_tree *tree = zswap_trees[type];
-	struct zswap_entry *entry, *n;
 
 	if (!tree)
 		return;
 
-	/* walk the tree and free everything */
-	spin_lock(&tree->lock);
-	rbtree_postorder_for_each_entry_safe(entry, n, &tree->rbroot, rbnode)
-		zswap_free_entry(entry);
-	tree->rbroot = RB_ROOT;
-	spin_unlock(&tree->lock);
+	/* try_to_unuse() invalidated all entries already */
+	WARN_ON_ONCE(!RB_EMPTY_ROOT(&tree->rbroot));
 	kfree(tree);
 	zswap_trees[type] = NULL;
 }
