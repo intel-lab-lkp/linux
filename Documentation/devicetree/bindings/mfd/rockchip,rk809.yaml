@@ -12,7 +12,7 @@ maintainers:
 
 description: |
   Rockchip RK809 series PMIC. This device consists of an i2c controlled MFD
-  that includes regulators, an RTC, and power button.
+  that includes regulators, an RTC, a power button, and an audio codec.
 
 properties:
   compatible:
@@ -93,6 +93,22 @@ properties:
         unevaluatedProperties: false
     unevaluatedProperties: false
 
+  '#sound-dai-cells':
+    const: 0
+
+  codec:
+    description: |
+      The child node for the codec to hold additional properties. If no
+      additional properties are required for the codec, this node can be
+      omitted.
+    type: object
+    additionalProperties: false
+    properties:
+      rockchip,mic-in-differential:
+        type: boolean
+        description:
+          Describes if the microphone uses differential mode.
+
 allOf:
   - if:
       properties:
@@ -137,6 +153,7 @@ examples:
             pinctrl-0 = <&pmic_int_l_pin>;
             rockchip,system-power-controller;
             wakeup-source;
+            #sound-dai-cells = <0>;
 
             vcc1-supply = <&vcc_sysin>;
             vcc2-supply = <&vcc_sysin>;
@@ -280,6 +297,10 @@ examples:
                         regulator-off-in-suspend;
                     };
                 };
+            };
+
+            rk817_codec: codec {
+                rockchip,mic-in-differential;
             };
         };
     };
