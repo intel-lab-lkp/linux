@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwinfo/qcom,board-id.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: QCOM Board Identifier for Devicetree Selection
+
+maintainers:
+  - Amrit Anand <quic_amrianan@quicinc.com>
+  - Elliot Berman <quic_eberman@quicinc.com>
+
+description: |
+  Qualcomm uses two and sometimes three hardware identifiers to describe
+  its boards
+      - a SoC identifier is used to match chipsets (e.g. sm8550 vs sm8450)
+      - a board identifier is used to match board form factor (e.g. MTP, QRD,
+        ADP, CRD)
+      - a PMIC identifier is occasionally used when different PMICs are used
+        for a given board/SoC combination.
+  Each field and helper macros are defined at::
+      - include/dt-bindings/arm/qcom,ids.h
+
+  For example,
+    / {
+        #board-id-cells = <2>;
+        board-id = <456 0>, <457 0>, <10 0>;
+        board-id-types = "qcom,soc-id", "qcom,soc-id", "qcom,board-id";
+     }
+
+allOf:
+  - $ref: board-id.yaml#
+
+properties:
+  board-id:
+    minItems: 2
+
+  board-id-types:
+    minItems: 2
+    items:
+      oneOf:
+        - const: qcom,soc-id
+          description: |
+            Matches Qualcomm Technologies, Inc. boards with the specified SoC.
+            2 integers are needed to describe a soc-id. The first integer is the
+            SoC ID and the second integer is the SoC revision.
+            qcom,soc-id = <soc-id  soc-revision>
+        - const: qcom,board-id
+          description: |
+            Matches Qualcomm Technologies, Inc. boards with the specified board.
+            2 integers are needed to describe a board-id. The first integer is the
+            board ID. The second integer is the board-subtype.
+            qcom,board-id = <board-id  board-subtype>
+        - const: qcom,pmic-id
+          description: |
+            QUALCOMM boards can be atached to mutliple PMICs where slave-id (SID)
+            indicates the address of the bus on which the PMIC is attached. It can be
+            any number. The model for a PMIC indicates the PMIC name attached to bus
+            described by SID along with  major and minor version. 2 integers are needed
+            to describe qcom,pmic-id. The first integer is the slave-id and the second integer
+            is the pmic model.
+            qcom,pmic-id = <pmic-sid pmic-model>
+
+  '#board-id-cells':
+    minimum: 2
+
+additionalProperties: true
+
+examples:
+   - |
+     #include <dt-bindings/arm/qcom,ids.h>
+     / {
+         model = "Qualcomm Technologies, Inc. sc7280 IDP SKU1 platform";
+         compatible = "qcom,sc7280-idp", "google,senor", "qcom,sc7280";
+
+         #board-id-cells = <2>;
+         board-id = <QCOM_SOC_ID(SC7280) QCOM_SOC_REVISION(1)>,
+                    <QCOM_SOC_ID(SC7280) QCOM_SOC_REVISION(2)>,
+                    <QCOM_BOARD_ID(IDP, 1, 0) QCOM_BOARD_SUBTYPE(UFS, ANY, 1)>;
+         board-id-types = "qcom,soc-id",
+                          "qcom,soc-id",
+                          "qcom,board-id";
+
+         #address-cells = <2>;
+         #size-cells = <2>;
+      };
