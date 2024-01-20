@@ -4909,6 +4909,14 @@ static void stop_sync_thread(struct mddev *mddev, bool locked, bool check_seq)
 	if (work_pending(&mddev->sync_work))
 		flush_work(&mddev->sync_work);
 
+	if (!mddev->gendisk) {
+		mddev_lock_nointr(mddev);
+		md_reap_sync_thread(mddev);
+		if (!locked)
+			mddev_unlock(mddev);
+		return;
+	}
+
 	wait_event(resync_wait,
 		   !test_bit(MD_RECOVERY_RUNNING, &mddev->recovery) ||
 		   (check_seq && sync_seq != atomic_read(&mddev->sync_seq)));
