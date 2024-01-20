@@ -29,6 +29,18 @@ struct nfsd_nfs_version {
 	__u32 minor;
 };
 
+struct nfsd_server_instance {
+	struct {
+		__u32 transport_name_len;
+		__u32 port:1;
+		__u32 inet_proto:1;
+	} _present;
+
+	char *transport_name;
+	__u32 port;
+	__u16 inet_proto;
+};
+
 /* ============== NFSD_CMD_RPC_STATUS_GET ============== */
 /* NFSD_CMD_RPC_STATUS_GET - dump */
 struct nfsd_rpc_status_get_rsp_dump {
@@ -163,5 +175,48 @@ void nfsd_version_get_rsp_free(struct nfsd_version_get_rsp *rsp);
  * get nfs enabled versions
  */
 struct nfsd_version_get_rsp *nfsd_version_get(struct ynl_sock *ys);
+
+/* ============== NFSD_CMD_LISTENER_SET ============== */
+/* NFSD_CMD_LISTENER_SET - do */
+struct nfsd_listener_set_req {
+	unsigned int n_instance;
+	struct nfsd_server_instance *instance;
+};
+
+static inline struct nfsd_listener_set_req *nfsd_listener_set_req_alloc(void)
+{
+	return calloc(1, sizeof(struct nfsd_listener_set_req));
+}
+void nfsd_listener_set_req_free(struct nfsd_listener_set_req *req);
+
+static inline void
+__nfsd_listener_set_req_set_instance(struct nfsd_listener_set_req *req,
+				     struct nfsd_server_instance *instance,
+				     unsigned int n_instance)
+{
+	free(req->instance);
+	req->instance = instance;
+	req->n_instance = n_instance;
+}
+
+/*
+ * set nfs running listeners
+ */
+int nfsd_listener_set(struct ynl_sock *ys, struct nfsd_listener_set_req *req);
+
+/* ============== NFSD_CMD_LISTENER_GET ============== */
+/* NFSD_CMD_LISTENER_GET - do */
+
+struct nfsd_listener_get_rsp {
+	unsigned int n_instance;
+	struct nfsd_server_instance *instance;
+};
+
+void nfsd_listener_get_rsp_free(struct nfsd_listener_get_rsp *rsp);
+
+/*
+ * get nfs running listeners
+ */
+struct nfsd_listener_get_rsp *nfsd_listener_get(struct ynl_sock *ys);
 
 #endif /* _LINUX_NFSD_GEN_H */

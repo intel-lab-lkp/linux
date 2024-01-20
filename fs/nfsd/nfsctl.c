@@ -1899,6 +1899,202 @@ err_free_msg:
 }
 
 /**
+ * nfsd_nl_listener_set_doit - set the nfs running listeners
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nlattr *tb[ARRAY_SIZE(nfsd_server_instance_nl_policy)];
+	struct net *net = genl_info_net(info);
+	struct svc_xprt *xprt, *tmp_xprt;
+	const struct nlattr *attr;
+	struct svc_serv *serv;
+	const char *xcl_name;
+	struct nfsd_net *nn;
+	int port, err, rem;
+	sa_family_t af;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_LISTENER_INSTANCE))
+		return -EINVAL;
+
+	mutex_lock(&nfsd_mutex);
+
+	err = nfsd_create_serv(net);
+	if (err) {
+		mutex_unlock(&nfsd_mutex);
+		return err;
+	}
+
+	nn = net_generic(net, nfsd_net_id);
+	serv = nn->nfsd_serv;
+
+	/* 1- create brand new listeners */
+	nlmsg_for_each_attr(attr, info->nlhdr, GENL_HDRLEN, rem) {
+		if (nla_type(attr) != NFSD_A_SERVER_LISTENER_INSTANCE)
+			continue;
+
+		if (nla_parse_nested(tb, ARRAY_SIZE(tb), attr,
+				     nfsd_server_instance_nl_policy,
+				     info->extack) < 0)
+			continue;
+
+		if (!tb[NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME] ||
+		    !tb[NFSD_A_SERVER_INSTANCE_PORT])
+			continue;
+
+		xcl_name = nla_data(tb[NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME]);
+		port = nla_get_u32(tb[NFSD_A_SERVER_INSTANCE_PORT]);
+		if (port < 1 || port > USHRT_MAX)
+			continue;
+
+		af = nla_get_u32(tb[NFSD_A_SERVER_INSTANCE_INET_PROTO]);
+		if (af != PF_INET && af != PF_INET6)
+			continue;
+
+		xprt = svc_find_xprt(serv, xcl_name, net, PF_INET, port);
+		if (xprt) {
+			svc_xprt_put(xprt);
+			continue;
+		}
+
+		/* create new listerner */
+		if (svc_xprt_create(serv, xcl_name, net, af, port,
+				    SVC_SOCK_ANONYMOUS, get_current_cred()))
+			continue;
+	}
+
+	/* 2- remove stale listeners */
+	spin_lock_bh(&serv->sv_lock);
+	list_for_each_entry_safe(xprt, tmp_xprt, &serv->sv_permsocks,
+				 xpt_list) {
+		struct svc_xprt *rqt_xprt = NULL;
+
+		nlmsg_for_each_attr(attr, info->nlhdr, GENL_HDRLEN, rem) {
+			if (nla_type(attr) != NFSD_A_SERVER_LISTENER_INSTANCE)
+				continue;
+
+			if (nla_parse_nested(tb, ARRAY_SIZE(tb), attr,
+					     nfsd_server_instance_nl_policy,
+					     info->extack) < 0)
+				continue;
+
+			if (!tb[NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME] ||
+			    !tb[NFSD_A_SERVER_INSTANCE_PORT])
+				continue;
+
+			xcl_name = nla_data(
+				tb[NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME]);
+			port = nla_get_u32(tb[NFSD_A_SERVER_INSTANCE_PORT]);
+			if (port < 1 || port > USHRT_MAX)
+				continue;
+
+			af = nla_get_u32(tb[NFSD_A_SERVER_INSTANCE_INET_PROTO]);
+			if (af != PF_INET && af != PF_INET6)
+				continue;
+
+			if (!strcmp(xprt->xpt_class->xcl_name, xcl_name) &&
+			    port == svc_xprt_local_port(xprt) &&
+			    af == xprt->xpt_local.ss_family &&
+			    xprt->xpt_net == net) {
+				rqt_xprt = xprt;
+				break;
+			}
+		}
+
+		/* remove stale listener */
+		if (!rqt_xprt) {
+			spin_unlock_bh(&serv->sv_lock);
+			svc_xprt_close(xprt);
+			spin_lock_bh(&serv->sv_lock);
+		}
+	}
+	spin_unlock_bh(&serv->sv_lock);
+
+	if (!serv->sv_nrthreads && list_empty(&nn->nfsd_serv->sv_permsocks))
+		nfsd_destroy_serv(net);
+
+	mutex_unlock(&nfsd_mutex);
+
+	return 0;
+}
+
+/**
+ * nfsd_nl_listener_get_doit - get the nfs running listeners
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_listener_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct svc_xprt *xprt;
+	struct svc_serv *serv;
+	struct nfsd_net *nn;
+	void *hdr;
+	int err;
+
+	skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!skb)
+		return -ENOMEM;
+
+	hdr = genlmsg_iput(skb, info);
+	if (!hdr) {
+		err = -EMSGSIZE;
+		goto err_free_msg;
+	}
+
+	mutex_lock(&nfsd_mutex);
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	if (!nn->nfsd_serv) {
+		err = -EINVAL;
+		goto err_nfsd_unlock;
+	}
+
+	serv = nn->nfsd_serv;
+	spin_lock_bh(&serv->sv_lock);
+	list_for_each_entry(xprt, &serv->sv_permsocks, xpt_list) {
+		struct nlattr *attr;
+
+		attr = nla_nest_start_noflag(skb,
+					     NFSD_A_SERVER_LISTENER_INSTANCE);
+		if (!attr) {
+			err = -EINVAL;
+			goto err_serv_unlock;
+		}
+
+		if (nla_put_string(skb, NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME,
+				   xprt->xpt_class->xcl_name) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_INSTANCE_PORT,
+				svc_xprt_local_port(xprt)) ||
+		    nla_put_u16(skb, NFSD_A_SERVER_INSTANCE_INET_PROTO,
+				xprt->xpt_local.ss_family)) {
+			err = -EINVAL;
+			goto err_serv_unlock;
+		}
+
+		nla_nest_end(skb, attr);
+	}
+	spin_unlock_bh(&serv->sv_lock);
+	mutex_unlock(&nfsd_mutex);
+
+	genlmsg_end(skb, hdr);
+
+	return genlmsg_reply(skb, info);
+
+err_serv_unlock:
+	spin_unlock_bh(&serv->sv_lock);
+err_nfsd_unlock:
+	mutex_unlock(&nfsd_mutex);
+err_free_msg:
+	nlmsg_free(skb);
+
+	return err;
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *

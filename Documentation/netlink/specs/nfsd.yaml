@@ -85,6 +85,26 @@ attribute-sets:
         type: nest
         nested-attributes: nfs-version
         multi-attr: true
+  -
+    name: server-instance
+    attributes:
+      -
+        name: transport-name
+        type: string
+      -
+        name: port
+        type: u32
+      -
+        name: inet-proto
+        type: u16
+  -
+    name: server-listener
+    attributes:
+      -
+        name: instance
+        type: nest
+        nested-attributes: server-instance
+        multi-attr: true
 
 operations:
   list:
@@ -144,3 +164,20 @@ operations:
         reply:
           attributes:
             - version
+    -
+      name: listener-set
+      doc: set nfs running listeners
+      attribute-set: server-listener
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - instance
+    -
+      name: listener-get
+      doc: get nfs running listeners
+      attribute-set: server-listener
+      do:
+        reply:
+          attributes:
+            - instance

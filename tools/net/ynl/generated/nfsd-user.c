@@ -19,6 +19,8 @@ static const char * const nfsd_op_strmap[] = {
 	[NFSD_CMD_THREADS_GET] = "threads-get",
 	[NFSD_CMD_VERSION_SET] = "version-set",
 	[NFSD_CMD_VERSION_GET] = "version-get",
+	[NFSD_CMD_LISTENER_SET] = "listener-set",
+	[NFSD_CMD_LISTENER_GET] = "listener-get",
 };
 
 const char *nfsd_op_str(int op)
@@ -37,6 +39,17 @@ struct ynl_policy_attr nfsd_nfs_version_policy[NFSD_A_NFS_VERSION_MAX + 1] = {
 struct ynl_policy_nest nfsd_nfs_version_nest = {
 	.max_attr = NFSD_A_NFS_VERSION_MAX,
 	.table = nfsd_nfs_version_policy,
+};
+
+struct ynl_policy_attr nfsd_server_instance_policy[NFSD_A_SERVER_INSTANCE_MAX + 1] = {
+	[NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME] = { .name = "transport-name", .type = YNL_PT_NUL_STR, },
+	[NFSD_A_SERVER_INSTANCE_PORT] = { .name = "port", .type = YNL_PT_U32, },
+	[NFSD_A_SERVER_INSTANCE_INET_PROTO] = { .name = "inet-proto", .type = YNL_PT_U16, },
+};
+
+struct ynl_policy_nest nfsd_server_instance_nest = {
+	.max_attr = NFSD_A_SERVER_INSTANCE_MAX,
+	.table = nfsd_server_instance_policy,
 };
 
 struct ynl_policy_attr nfsd_rpc_status_policy[NFSD_A_RPC_STATUS_MAX + 1] = {
@@ -79,6 +92,15 @@ struct ynl_policy_nest nfsd_server_proto_nest = {
 	.table = nfsd_server_proto_policy,
 };
 
+struct ynl_policy_attr nfsd_server_listener_policy[NFSD_A_SERVER_LISTENER_MAX + 1] = {
+	[NFSD_A_SERVER_LISTENER_INSTANCE] = { .name = "instance", .type = YNL_PT_NEST, .nest = &nfsd_server_instance_nest, },
+};
+
+struct ynl_policy_nest nfsd_server_listener_nest = {
+	.max_attr = NFSD_A_SERVER_LISTENER_MAX,
+	.table = nfsd_server_listener_policy,
+};
+
 /* Common nested types */
 void nfsd_nfs_version_free(struct nfsd_nfs_version *obj)
 {
@@ -118,6 +140,64 @@ int nfsd_nfs_version_parse(struct ynl_parse_arg *yarg,
 				return MNL_CB_ERROR;
 			dst->_present.minor = 1;
 			dst->minor = mnl_attr_get_u32(attr);
+		}
+	}
+
+	return 0;
+}
+
+void nfsd_server_instance_free(struct nfsd_server_instance *obj)
+{
+	free(obj->transport_name);
+}
+
+int nfsd_server_instance_put(struct nlmsghdr *nlh, unsigned int attr_type,
+			     struct nfsd_server_instance *obj)
+{
+	struct nlattr *nest;
+
+	nest = mnl_attr_nest_start(nlh, attr_type);
+	if (obj->_present.transport_name_len)
+		mnl_attr_put_strz(nlh, NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME, obj->transport_name);
+	if (obj->_present.port)
+		mnl_attr_put_u32(nlh, NFSD_A_SERVER_INSTANCE_PORT, obj->port);
+	if (obj->_present.inet_proto)
+		mnl_attr_put_u16(nlh, NFSD_A_SERVER_INSTANCE_INET_PROTO, obj->inet_proto);
+	mnl_attr_nest_end(nlh, nest);
+
+	return 0;
+}
+
+int nfsd_server_instance_parse(struct ynl_parse_arg *yarg,
+			       const struct nlattr *nested)
+{
+	struct nfsd_server_instance *dst = yarg->data;
+	const struct nlattr *attr;
+
+	mnl_attr_for_each_nested(attr, nested) {
+		unsigned int type = mnl_attr_get_type(attr);
+
+		if (type == NFSD_A_SERVER_INSTANCE_TRANSPORT_NAME) {
+			unsigned int len;
+
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+
+			len = strnlen(mnl_attr_get_str(attr), mnl_attr_get_payload_len(attr));
+			dst->_present.transport_name_len = len;
+			dst->transport_name = malloc(len + 1);
+			memcpy(dst->transport_name, mnl_attr_get_str(attr), len);
+			dst->transport_name[len] = 0;
+		} else if (type == NFSD_A_SERVER_INSTANCE_PORT) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.port = 1;
+			dst->port = mnl_attr_get_u32(attr);
+		} else if (type == NFSD_A_SERVER_INSTANCE_INET_PROTO) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.inet_proto = 1;
+			dst->inet_proto = mnl_attr_get_u16(attr);
 		}
 	}
 
@@ -464,6 +544,117 @@ struct nfsd_version_get_rsp *nfsd_version_get(struct ynl_sock *ys)
 
 err_free:
 	nfsd_version_get_rsp_free(rsp);
+	return NULL;
+}
+
+/* ============== NFSD_CMD_LISTENER_SET ============== */
+/* NFSD_CMD_LISTENER_SET - do */
+void nfsd_listener_set_req_free(struct nfsd_listener_set_req *req)
+{
+	unsigned int i;
+
+	for (i = 0; i < req->n_instance; i++)
+		nfsd_server_instance_free(&req->instance[i]);
+	free(req->instance);
+	free(req);
+}
+
+int nfsd_listener_set(struct ynl_sock *ys, struct nfsd_listener_set_req *req)
+{
+	struct ynl_req_state yrs = { .yarg = { .ys = ys, }, };
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_LISTENER_SET, 1);
+	ys->req_policy = &nfsd_server_listener_nest;
+
+	for (unsigned int i = 0; i < req->n_instance; i++)
+		nfsd_server_instance_put(nlh, NFSD_A_SERVER_LISTENER_INSTANCE, &req->instance[i]);
+
+	err = ynl_exec(ys, nlh, &yrs);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
+
+/* ============== NFSD_CMD_LISTENER_GET ============== */
+/* NFSD_CMD_LISTENER_GET - do */
+void nfsd_listener_get_rsp_free(struct nfsd_listener_get_rsp *rsp)
+{
+	unsigned int i;
+
+	for (i = 0; i < rsp->n_instance; i++)
+		nfsd_server_instance_free(&rsp->instance[i]);
+	free(rsp->instance);
+	free(rsp);
+}
+
+int nfsd_listener_get_rsp_parse(const struct nlmsghdr *nlh, void *data)
+{
+	struct nfsd_listener_get_rsp *dst;
+	struct ynl_parse_arg *yarg = data;
+	unsigned int n_instance = 0;
+	const struct nlattr *attr;
+	struct ynl_parse_arg parg;
+	int i;
+
+	dst = yarg->data;
+	parg.ys = yarg->ys;
+
+	if (dst->instance)
+		return ynl_error_parse(yarg, "attribute already present (server-listener.instance)");
+
+	mnl_attr_for_each(attr, nlh, sizeof(struct genlmsghdr)) {
+		unsigned int type = mnl_attr_get_type(attr);
+
+		if (type == NFSD_A_SERVER_LISTENER_INSTANCE) {
+			n_instance++;
+		}
+	}
+
+	if (n_instance) {
+		dst->instance = calloc(n_instance, sizeof(*dst->instance));
+		dst->n_instance = n_instance;
+		i = 0;
+		parg.rsp_policy = &nfsd_server_instance_nest;
+		mnl_attr_for_each(attr, nlh, sizeof(struct genlmsghdr)) {
+			if (mnl_attr_get_type(attr) == NFSD_A_SERVER_LISTENER_INSTANCE) {
+				parg.data = &dst->instance[i];
+				if (nfsd_server_instance_parse(&parg, attr))
+					return MNL_CB_ERROR;
+				i++;
+			}
+		}
+	}
+
+	return MNL_CB_OK;
+}
+
+struct nfsd_listener_get_rsp *nfsd_listener_get(struct ynl_sock *ys)
+{
+	struct ynl_req_state yrs = { .yarg = { .ys = ys, }, };
+	struct nfsd_listener_get_rsp *rsp;
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_LISTENER_GET, 1);
+	ys->req_policy = &nfsd_server_listener_nest;
+	yrs.yarg.rsp_policy = &nfsd_server_listener_nest;
+
+	rsp = calloc(1, sizeof(*rsp));
+	yrs.yarg.data = rsp;
+	yrs.cb = nfsd_listener_get_rsp_parse;
+	yrs.rsp_cmd = NFSD_CMD_LISTENER_GET;
+
+	err = ynl_exec(ys, nlh, &yrs);
+	if (err < 0)
+		goto err_free;
+
+	return rsp;
+
+err_free:
+	nfsd_listener_get_rsp_free(rsp);
 	return NULL;
 }
 
