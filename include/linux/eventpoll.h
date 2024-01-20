@@ -22,6 +22,8 @@ struct file;
 struct file *get_epoll_tfile_raw_ptr(struct file *file, int tfd, unsigned long toff);
 #endif
 
+unsigned long eventpoll_fcntl(struct file *file, unsigned int cmd, unsigned long arg);
+
 /* Used to release the epoll bits inside the "struct file" */
 void eventpoll_release_file(struct file *file);
 

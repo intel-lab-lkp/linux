@@ -57,6 +57,12 @@
 #define F_SET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 14)
 
 /*
+ * Set/Get busy poll usecs for an epoll instance.
+ */
+#define F_EPOLL_GET_BUSY_POLL_USECS (F_LINUX_SPECIFIC_BASE + 15)
+#define F_EPOLL_SET_BUSY_POLL_USECS (F_LINUX_SPECIFIC_BASE + 16)
+
+/*
  * Valid hint values for F_{GET,SET}_RW_HINT. 0 is "not set", or can be
  * used to clear any hints previously set.
  */

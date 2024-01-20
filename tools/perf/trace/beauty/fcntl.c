@@ -94,7 +94,8 @@ size_t syscall_arg__scnprintf_fcntl_arg(char *bf, size_t size, struct syscall_ar
 	    cmd == F_OFD_SETLK || cmd == F_OFD_SETLKW || cmd == F_OFD_GETLK ||
 	    cmd == F_GETOWN_EX || cmd == F_SETOWN_EX ||
 	    cmd == F_GET_RW_HINT || cmd == F_SET_RW_HINT ||
-	    cmd == F_GET_FILE_RW_HINT || cmd == F_SET_FILE_RW_HINT)
+	    cmd == F_GET_FILE_RW_HINT || cmd == F_SET_FILE_RW_HINT ||
+	    cmd == F_EPOLL_GET_BUSY_POLL_USECS || cmd == F_EPOLL_SET_BUSY_POLL_USECS)
 		return syscall_arg__scnprintf_hex(bf, size, arg);
 
 	return syscall_arg__scnprintf_long(bf, size, arg);

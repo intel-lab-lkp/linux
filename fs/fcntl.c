@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/sched/task.h>
+#include <linux/eventpoll.h>
 #include <linux/fs.h>
 #include <linux/filelock.h>
 #include <linux/file.h>
@@ -418,6 +419,10 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	case F_GET_RW_HINT:
 	case F_SET_RW_HINT:
 		err = fcntl_rw_hint(filp, cmd, arg);
+		break;
+	case F_EPOLL_GET_BUSY_POLL_USECS:
+	case F_EPOLL_SET_BUSY_POLL_USECS:
+		err = eventpoll_fcntl(filp, cmd, arg);
 		break;
 	default:
 		break;
