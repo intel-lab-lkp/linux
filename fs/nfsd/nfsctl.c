@@ -1759,6 +1759,146 @@ err_free_msg:
 }
 
 /**
+ * nfsd_nl_version_set_doit - set the nfs enabled versions
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	const struct nlattr *attr;
+	struct nfsd_net *nn;
+	int i, rem;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_PROTO_VERSION))
+		return -EINVAL;
+
+	mutex_lock(&nfsd_mutex);
+
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	if (nn->nfsd_serv) {
+		mutex_unlock(&nfsd_mutex);
+		return -EBUSY;
+	}
+
+	/* clear current supported versions. */
+	nfsd_vers(nn, 2, NFSD_CLEAR);
+	nfsd_vers(nn, 3, NFSD_CLEAR);
+	for (i = 0; i <= NFSD_SUPPORTED_MINOR_VERSION; i++)
+		nfsd_minorversion(nn, i, NFSD_CLEAR);
+
+	nlmsg_for_each_attr(attr, info->nlhdr, GENL_HDRLEN, rem) {
+		struct nlattr *tb[ARRAY_SIZE(nfsd_nfs_version_nl_policy)];
+		u32 major, minor = 0;
+
+		if (nla_type(attr) != NFSD_A_SERVER_PROTO_VERSION)
+			continue;
+
+		if (nla_parse_nested(tb, ARRAY_SIZE(tb), attr,
+				     nfsd_nfs_version_nl_policy,
+				     info->extack) < 0)
+			continue;
+
+		if (!tb[NFSD_A_NFS_VERSION_MAJOR])
+			continue;
+
+		major = nla_get_u32(tb[NFSD_A_NFS_VERSION_MAJOR]);
+		if (tb[NFSD_A_NFS_VERSION_MINOR])
+			minor = nla_get_u32(tb[NFSD_A_NFS_VERSION_MINOR]);
+
+		switch (major) {
+		case 4:
+			nfsd_minorversion(nn, minor, NFSD_SET);
+			break;
+		case 3:
+		case 2:
+			if (!minor)
+				nfsd_vers(nn, major, NFSD_SET);
+			break;
+		default:
+			break;
+		}
+	}
+
+	mutex_unlock(&nfsd_mutex);
+
+	return 0;
+}
+
+/**
+ * nfsd_nl_version_get_doit - get the nfs enabled versions
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_version_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn;
+	int i, err;
+	void *hdr;
+
+	skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!skb)
+		return -ENOMEM;
+
+	hdr = genlmsg_iput(skb, info);
+	if (!hdr) {
+		err = -EMSGSIZE;
+		goto err_free_msg;
+	}
+
+	mutex_lock(&nfsd_mutex);
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+
+	for (i = 2; i <= 4; i++) {
+		int j;
+
+		for (j = 0; j <= NFSD_SUPPORTED_MINOR_VERSION; j++) {
+			struct nlattr *attr;
+
+			if (!nfsd_vers(nn, i, NFSD_TEST))
+				continue;
+
+			/* NFSv{2,3} does not support minor numbers */
+			if (i < 4 && j)
+				continue;
+
+			if (i == 4 && !nfsd_minorversion(nn, j, NFSD_TEST))
+				continue;
+
+			attr = nla_nest_start_noflag(skb,
+					NFSD_A_SERVER_PROTO_VERSION);
+			if (!attr) {
+				err = -EINVAL;
+				goto err_nfsd_unlock;
+			}
+
+			if (nla_put_u32(skb, NFSD_A_NFS_VERSION_MAJOR, i) ||
+			    nla_put_u32(skb, NFSD_A_NFS_VERSION_MINOR, j)) {
+				err = -EINVAL;
+				goto err_nfsd_unlock;
+			}
+
+			nla_nest_end(skb, attr);
+		}
+	}
+
+	mutex_unlock(&nfsd_mutex);
+	genlmsg_end(skb, hdr);
+
+	return genlmsg_reply(skb, info);
+
+err_nfsd_unlock:
+	mutex_unlock(&nfsd_mutex);
+err_free_msg:
+	nlmsg_free(skb);
+
+	return err;
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *

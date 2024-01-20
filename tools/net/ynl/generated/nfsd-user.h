@@ -19,6 +19,16 @@ extern const struct ynl_family ynl_nfsd_family;
 const char *nfsd_op_str(int op);
 
 /* Common nested types */
+struct nfsd_nfs_version {
+	struct {
+		__u32 major:1;
+		__u32 minor:1;
+	} _present;
+
+	__u32 major;
+	__u32 minor;
+};
+
 /* ============== NFSD_CMD_RPC_STATUS_GET ============== */
 /* NFSD_CMD_RPC_STATUS_GET - dump */
 struct nfsd_rpc_status_get_rsp_dump {
@@ -110,5 +120,48 @@ void nfsd_threads_get_rsp_free(struct nfsd_threads_get_rsp *rsp);
  * get the number of running threads
  */
 struct nfsd_threads_get_rsp *nfsd_threads_get(struct ynl_sock *ys);
+
+/* ============== NFSD_CMD_VERSION_SET ============== */
+/* NFSD_CMD_VERSION_SET - do */
+struct nfsd_version_set_req {
+	unsigned int n_version;
+	struct nfsd_nfs_version *version;
+};
+
+static inline struct nfsd_version_set_req *nfsd_version_set_req_alloc(void)
+{
+	return calloc(1, sizeof(struct nfsd_version_set_req));
+}
+void nfsd_version_set_req_free(struct nfsd_version_set_req *req);
+
+static inline void
+__nfsd_version_set_req_set_version(struct nfsd_version_set_req *req,
+				   struct nfsd_nfs_version *version,
+				   unsigned int n_version)
+{
+	free(req->version);
+	req->version = version;
+	req->n_version = n_version;
+}
+
+/*
+ * set nfs enabled versions
+ */
+int nfsd_version_set(struct ynl_sock *ys, struct nfsd_version_set_req *req);
+
+/* ============== NFSD_CMD_VERSION_GET ============== */
+/* NFSD_CMD_VERSION_GET - do */
+
+struct nfsd_version_get_rsp {
+	unsigned int n_version;
+	struct nfsd_nfs_version *version;
+};
+
+void nfsd_version_get_rsp_free(struct nfsd_version_get_rsp *rsp);
+
+/*
+ * get nfs enabled versions
+ */
+struct nfsd_version_get_rsp *nfsd_version_get(struct ynl_sock *ys);
 
 #endif /* _LINUX_NFSD_GEN_H */

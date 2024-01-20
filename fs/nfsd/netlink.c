@@ -10,9 +10,20 @@
 
 #include <uapi/linux/nfsd_netlink.h>
 
+/* Common nested types */
+const struct nla_policy nfsd_nfs_version_nl_policy[NFSD_A_NFS_VERSION_MINOR + 1] = {
+	[NFSD_A_NFS_VERSION_MAJOR] = { .type = NLA_U32, },
+	[NFSD_A_NFS_VERSION_MINOR] = { .type = NLA_U32, },
+};
+
 /* NFSD_CMD_THREADS_SET - do */
 static const struct nla_policy nfsd_threads_set_nl_policy[NFSD_A_SERVER_WORKER_THREADS + 1] = {
 	[NFSD_A_SERVER_WORKER_THREADS] = { .type = NLA_U32, },
+};
+
+/* NFSD_CMD_VERSION_SET - do */
+static const struct nla_policy nfsd_version_set_nl_policy[NFSD_A_SERVER_PROTO_VERSION + 1] = {
+	[NFSD_A_SERVER_PROTO_VERSION] = NLA_POLICY_NESTED(nfsd_nfs_version_nl_policy),
 };
 
 /* Ops table for nfsd */
@@ -34,6 +45,18 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
 		.cmd	= NFSD_CMD_THREADS_GET,
 		.doit	= nfsd_nl_threads_get_doit,
+		.flags	= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= NFSD_CMD_VERSION_SET,
+		.doit		= nfsd_nl_version_set_doit,
+		.policy		= nfsd_version_set_nl_policy,
+		.maxattr	= NFSD_A_SERVER_PROTO_VERSION,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd	= NFSD_CMD_VERSION_GET,
+		.doit	= nfsd_nl_version_get_doit,
 		.flags	= GENL_CMD_CAP_DO,
 	},
 };

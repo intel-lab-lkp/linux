@@ -68,6 +68,23 @@ attribute-sets:
       -
         name: threads
         type: u32
+  -
+    name: nfs-version
+    attributes:
+      -
+        name: major
+        type: u32
+      -
+        name: minor
+        type: u32
+  -
+    name: server-proto
+    attributes:
+      -
+        name: version
+        type: nest
+        nested-attributes: nfs-version
+        multi-attr: true
 
 operations:
   list:
@@ -110,3 +127,20 @@ operations:
         reply:
           attributes:
             - threads
+    -
+      name: version-set
+      doc: set nfs enabled versions
+      attribute-set: server-proto
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - version
+    -
+      name: version-get
+      doc: get nfs enabled versions
+      attribute-set: server-proto
+      do:
+        reply:
+          attributes:
+            - version
