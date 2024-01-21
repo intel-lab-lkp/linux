@@ -52,6 +52,7 @@ struct axp_data {
 	const int			*curr_lim_table;
 	int				input_curr_lim_table_size;
 	const int			*input_curr_lim_table;
+	int				force_input_curr_lim;
 	struct reg_field		curr_lim_fld;
 	struct reg_field		input_curr_lim_fld;
 	struct reg_field		vbus_valid_bit;
@@ -599,6 +600,7 @@ static const struct axp_data axp813_data = {
 	.input_curr_lim_table_size = ARRAY_SIZE(axp_813_usb_input_curr_lim_table),
 	.input_curr_lim_table = axp_813_usb_input_curr_lim_table,
 	.input_curr_lim_fld = REG_FIELD(AXP22X_CHRG_CTRL3, 4, 7),
+	.force_input_curr_lim = 500000,
 	.usb_bc_en_bit	= REG_FIELD(AXP288_BC_GLOBAL, 0, 0),
 	.usb_bc_det_fld = REG_FIELD(AXP288_BC_DET_STAT, 5, 7),
 	.vbus_disable_bit = REG_FIELD(AXP20X_VBUS_IPSOUT_MGMT, 7, 7),
@@ -782,6 +784,17 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 		else
 			ret = configure_adc_registers(power);
 
+		if (ret)
+			return ret;
+	}
+
+	if (power->axp_data->force_input_curr_lim) {
+		/*
+		 * Certain chips set the input current limit to 3A when there is
+		 * no battery connected. Normally the default is 500mA.
+		 */
+		ret = axp20x_usb_power_set_input_current_limit(power,
+				power->axp_data->force_input_curr_lim);
 		if (ret)
 			return ret;
 	}
