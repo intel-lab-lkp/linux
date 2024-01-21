@@ -133,7 +133,7 @@ allOf:
       properties:
         clocks:
           minItems: 2
-          maxItems: 7
+          maxItems: 8
 
         clock-names:
           items:
@@ -148,6 +148,8 @@ allOf:
                 description: GPU Memory Interface clock
               - const: alt_mem_iface
                 description: GPU Alternative Memory Interface clock
+              - const: alwayson
+                description: GPU Always-On clock
               - const: gfx3d
                 description: GPU 3D engine clock
               - const: rbbmtimer
@@ -155,7 +157,7 @@ allOf:
               - const: rbcpr
                 description: GPU RB Core Power Reduction clock
           minItems: 2
-          maxItems: 7
+          maxItems: 8
 
       required:
         - clocks
