@@ -77,7 +77,7 @@
 		};
 	};
 
-	i2c-gpio-led {
+	i2c_led_gpio: i2c-gpio-led {
 		compatible = "i2c-gpio";
 		#address-cells = <1>;
 		#size-cells = <0>;
