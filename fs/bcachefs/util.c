@@ -979,7 +979,8 @@ void sort_cmp_size(void *base, size_t num, size_t size,
 	  void (*swap_func)(void *, void *, size_t size))
 {
 	/* pre-scale counters for performance */
-	int i = (num/2 - 1) * size, n = num * size, c, r;
+	int i = (num / 2 - 1) * size, n = num * size, j, k;
+	const size_t lsbit = size & -size;
 
 	if (!swap_func) {
 		if (size == 4 && alignment_ok(base, 4))
@@ -992,28 +993,45 @@ void sort_cmp_size(void *base, size_t num, size_t size,
 
 	/* heapify */
 	for ( ; i >= 0; i -= size) {
-		for (r = i; r * 2 + size < n; r  = c) {
-			c = r * 2 + size;
-			if (c < n - size &&
-			    cmp_func(base + c, base + c + size, size) < 0)
-				c += size;
-			if (cmp_func(base + r, base + c, size) >= 0)
-				break;
-			swap_func(base + r, base + c, size);
+		/* Find the sift-down path all the way to the leaves. */
+		for (j = i; k = j * 2 + size, k + size < n;)
+			j = cmp_func(base + k, base + k + size, size) > 0 ? k : k + size;
+
+		/* Special case for the last leaf with no sibling. */
+		if (j * 2 + size * 2 == n)
+			j = j * 2 + size;
+
+		/* Backtrack to the correct location. */
+		while (j != i && cmp_func(base + i, base + j, size) >= 0)
+			j = parent(j, lsbit, size);
+
+		/* Shift the element into its correct place. */
+		for (k = j; j != i;) {
+			j = parent(j, lsbit, size);
+			swap_func(base + j, base + k, size);
 		}
 	}
 
 	/* sort */
 	for (i = n - size; i > 0; i -= size) {
 		swap_func(base, base + i, size);
-		for (r = 0; r * 2 + size < i; r = c) {
-			c = r * 2 + size;
-			if (c < i - size &&
-			    cmp_func(base + c, base + c + size, size) < 0)
-				c += size;
-			if (cmp_func(base + r, base + c, size) >= 0)
-				break;
-			swap_func(base + r, base + c, size);
+
+		/* Find the sift-down path all the way to the leaves. */
+		for (j = 0; k = j * 2 + size, k + size < i;)
+			j = cmp_func(base + k, base + k + size, size) > 0 ? k : k + size;
+
+		/* Special case for the last leaf with no sibling. */
+		if (j * 2 + size * 2 == i)
+			j = j * 2 + size;
+
+		/* Backtrack to the correct location. */
+		while (j && cmp_func(base, base + j, size) >= 0)
+			j = parent(j, lsbit, size);
+
+		/* Shift the element into its correct place. */
+		for (k = j; j;) {
+			j = parent(j, lsbit, size);
+			swap_func(base + j, base + k, size);
 		}
 	}
 }
