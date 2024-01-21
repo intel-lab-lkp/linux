@@ -57,6 +57,7 @@ struct axp_data {
 	struct reg_field		vbus_valid_bit;
 	struct reg_field		vbus_mon_bit;
 	struct reg_field		usb_bc_en_bit;
+	struct reg_field		usb_bc_det_fld;
 	struct reg_field		vbus_disable_bit;
 	bool				vbus_needs_polling: 1;
 };
@@ -69,6 +70,7 @@ struct axp20x_usb_power {
 	struct regmap_field *vbus_valid_bit;
 	struct regmap_field *vbus_mon_bit;
 	struct regmap_field *usb_bc_en_bit;
+	struct regmap_field *usb_bc_det_fld;
 	struct regmap_field *vbus_disable_bit;
 	struct power_supply *supply;
 	const struct axp_data *axp_data;
@@ -197,6 +199,37 @@ axp20x_usb_power_get_input_current_limit(struct axp20x_usb_power *power,
 	return 0;
 }
 
+static int axp20x_get_usb_type(struct axp20x_usb_power *power,
+			       union power_supply_propval *val)
+{
+	unsigned int reg;
+	int ret;
+
+	if (!power->usb_bc_det_fld)
+		return -EINVAL;
+
+	ret = regmap_field_read(power->usb_bc_det_fld, &reg);
+	if (ret)
+		return ret;
+
+	switch (reg) {
+	case 1:
+		val->intval = POWER_SUPPLY_USB_TYPE_SDP;
+		break;
+	case 2:
+		val->intval = POWER_SUPPLY_USB_TYPE_CDP;
+		break;
+	case 3:
+		val->intval = POWER_SUPPLY_USB_TYPE_DCP;
+		break;
+	default:
+		val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+		break;
+	}
+
+	return 0;
+}
+
 static int axp20x_usb_power_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
@@ -266,6 +299,8 @@ static int axp20x_usb_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		return axp20x_usb_power_get_input_current_limit(power,
 								&val->intval);
+	case POWER_SUPPLY_PROP_USB_TYPE:
+		return axp20x_get_usb_type(power, val);
 	default:
 		break;
 	}
@@ -423,6 +458,14 @@ static enum power_supply_property axp813_usb_power_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_USB_TYPE,
+};
+
+static enum power_supply_usb_type axp813_usb_types[] = {
+	POWER_SUPPLY_USB_TYPE_SDP,
+	POWER_SUPPLY_USB_TYPE_DCP,
+	POWER_SUPPLY_USB_TYPE_CDP,
+	POWER_SUPPLY_USB_TYPE_UNKNOWN,
 };
 
 static const struct power_supply_desc axp20x_usb_power_desc = {
@@ -453,6 +496,8 @@ static const struct power_supply_desc axp813_usb_power_desc = {
 	.property_is_writeable = axp20x_usb_power_prop_writeable,
 	.get_property = axp20x_usb_power_get_property,
 	.set_property = axp20x_usb_power_set_property,
+	.usb_types = axp813_usb_types,
+	.num_usb_types = ARRAY_SIZE(axp813_usb_types),
 };
 
 static const char * const axp20x_irq_names[] = {
@@ -555,6 +600,7 @@ static const struct axp_data axp813_data = {
 	.input_curr_lim_table = axp_813_usb_input_curr_lim_table,
 	.input_curr_lim_fld = REG_FIELD(AXP22X_CHRG_CTRL3, 4, 7),
 	.usb_bc_en_bit	= REG_FIELD(AXP288_BC_GLOBAL, 0, 0),
+	.usb_bc_det_fld = REG_FIELD(AXP288_BC_DET_STAT, 5, 7),
 	.vbus_disable_bit = REG_FIELD(AXP20X_VBUS_IPSOUT_MGMT, 7, 7),
 	.vbus_needs_polling = true,
 };
@@ -705,6 +751,12 @@ static int axp20x_usb_power_probe(struct platform_device *pdev)
 	ret = axp20x_regmap_field_alloc_optional(&pdev->dev, power->regmap,
 						 axp_data->usb_bc_en_bit,
 						 &power->usb_bc_en_bit);
+	if (ret)
+		return ret;
+
+	ret = axp20x_regmap_field_alloc_optional(&pdev->dev, power->regmap,
+						 axp_data->usb_bc_det_fld,
+						 &power->usb_bc_det_fld);
 	if (ret)
 		return ret;
 
