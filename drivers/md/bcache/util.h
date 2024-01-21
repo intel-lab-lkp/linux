@@ -56,17 +56,20 @@ do {									\
 
 #define heap_sift(h, i, cmp)						\
 do {									\
-	size_t _r, _j = i;						\
+	size_t _j, _k;							\
 									\
-	for (; _j * 2 + 1 < (h)->used; _j = _r) {			\
-		_r = _j * 2 + 1;					\
-		if (_r + 1 < (h)->used &&				\
-		    cmp((h)->data[_r], (h)->data[_r + 1]))		\
-			_r++;						\
-									\
-		if (cmp((h)->data[_r], (h)->data[_j]))			\
-			break;						\
-		heap_swap(h, _r, _j);					\
+	for (_j = i; _k = 2 * _j + 1, _k + 1 < (h)->used;) {		\
+		if (cmp((h)->data[_k], (h)->data[_k + 1]))		\
+			_k++;						\
+		_j = _k;						\
+	}								\
+	if (_j * 2 + 2 == (h)->used)					\
+		_j = _j * 2 + 1;					\
+	while (_j != i && cmp((h)->data[_j], (h)->data[i]))		\
+		_j = (_j - 1) / 2;					\
+	for (_k = _j; _j != i;) {					\
+		_j = (_j - 1) / 2;					\
+		heap_swap(h, _j, _k);					\
 	}								\
 } while (0)
 
