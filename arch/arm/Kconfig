@@ -1550,6 +1550,18 @@ config ARM_ATAG_DTB_COMPAT
 	  bootloaders, this option allows zImage to extract the information
 	  from the ATAG list and store it at run time into the appended DTB.
 
+config ARM_ATAG_DTB_COMPAT_IGNORE_MEM
+	bool "Ignore MEM ATAG information from bootloader"
+	depends on ARM_ATAG_DTB_COMPAT
+	help
+	  Some bootloaders can pass broken MEM ATAGs that provide hardcoded
+	  information about mounted RAM size and physical location.
+	  Example booloader provide RAM of size 1.7Gb but actual mounted RAM
+	  size is 512Mb causing kernel panic.
+
+	  Enable this option if MEM ATAGs should be ignored and the memory
+	  node in the appended DTB should NOT be augumented.
+
 choice
 	prompt "Kernel command line type" if ARM_ATAG_DTB_COMPAT
 	default ARM_ATAG_DTB_COMPAT_CMDLINE_FROM_BOOTLOADER

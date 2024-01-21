@@ -170,6 +170,10 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 				setprop_string(fdt, "/chosen", "bootargs",
 					       atag->u.cmdline.cmdline);
 		} else if (atag->hdr.tag == ATAG_MEM) {
+			/* Bootloader MEM ATAG are broken and should be ignored */
+			if (IS_ENABLED(CONFIG_ARM_ATAG_DTB_COMPAT_IGNORE_MEM))
+				continue;
+
 			if (memcount >= sizeof(mem_reg_property)/4)
 				continue;
 			if (!atag->u.mem.size)
