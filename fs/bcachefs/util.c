@@ -907,6 +907,13 @@ static inline void do_swap(void *base, size_t n, size_t size,
 		  size);
 }
 
+static inline size_t parent(size_t i, size_t lsbit, size_t size)
+{
+	i -= size;
+	i -= size & -(i & lsbit);
+	return i >> 1;
+}
+
 void eytzinger0_sort(void *base, size_t n, size_t size,
 		     int (*cmp_func)(const void *, const void *, size_t),
 		     void (*swap_func)(void *, void *, size_t))
