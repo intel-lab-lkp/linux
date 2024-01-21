@@ -911,7 +911,7 @@ void eytzinger0_sort(void *base, size_t n, size_t size,
 		     int (*cmp_func)(const void *, const void *, size_t),
 		     void (*swap_func)(void *, void *, size_t))
 {
-	int i, c, r;
+	int i, j, k;
 
 	if (!swap_func) {
 		if (size == 4 && alignment_ok(base, 4))
@@ -924,17 +924,22 @@ void eytzinger0_sort(void *base, size_t n, size_t size,
 
 	/* heapify */
 	for (i = n / 2 - 1; i >= 0; --i) {
-		for (r = i; r * 2 + 1 < n; r = c) {
-			c = r * 2 + 1;
+		/* Find the sift-down path all the way to the leaves. */
+		for (j = i; k = j * 2 + 1, k + 1 < n;)
+			j = do_cmp(base, n, size, cmp_func, k, k + 1) > 0 ? k : k + 1;
 
-			if (c + 1 < n &&
-			    do_cmp(base, n, size, cmp_func, c, c + 1) < 0)
-				c++;
+		/* Special case for the last leaf with no sibling. */
+		if (j * 2 + 2 == n)
+			j = j * 2 + 1;
 
-			if (do_cmp(base, n, size, cmp_func, r, c) >= 0)
-				break;
+		/* Backtrack to the correct location. */
+		while (j != i && do_cmp(base, n, size, cmp_func, i, j) >= 0)
+			j = (j - 1) / 2;
 
-			do_swap(base, n, size, swap_func, r, c);
+		/* Shift the element into its correct place. */
+		for (k = j; j != i;) {
+			j = (j - 1) / 2;
+			do_swap(base, n, size, swap_func, j, k);
 		}
 	}
 
@@ -942,17 +947,22 @@ void eytzinger0_sort(void *base, size_t n, size_t size,
 	for (i = n - 1; i > 0; --i) {
 		do_swap(base, n, size, swap_func, 0, i);
 
-		for (r = 0; r * 2 + 1 < i; r = c) {
-			c = r * 2 + 1;
+		/* Find the sift-down path all the way to the leaves. */
+		for (j = 0; k = j * 2 + 1, k + 1 < i;)
+			j = do_cmp(base, n, size, cmp_func, k, k + 1) > 0 ? k : k + 1;
 
-			if (c + 1 < i &&
-			    do_cmp(base, n, size, cmp_func, c, c + 1) < 0)
-				c++;
+		/* Special case for the last leaf with no sibling. */
+		if (j * 2 + 2 == i)
+			j = j * 2 + 1;
 
-			if (do_cmp(base, n, size, cmp_func, r, c) >= 0)
-				break;
+		/* Backtrack to the correct location. */
+		while (j && do_cmp(base, n, size, cmp_func, 0, j) >= 0)
+			j = (j - 1) / 2;
 
-			do_swap(base, n, size, swap_func, r, c);
+		/* Shift the element into its correct place. */
+		for (k = j; j;) {
+			j = (j - 1) / 2;
+			do_swap(base, n, size, swap_func, j, k);
 		}
 	}
 }
