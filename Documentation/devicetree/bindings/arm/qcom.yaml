@@ -223,6 +223,7 @@ properties:
               - fairphone,fp2
               - oneplus,bacon
               - samsung,klte
+              - samsung,kltechn
               - sony,xperia-castor
           - const: qcom,msm8974pro
           - const: qcom,msm8974
