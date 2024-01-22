@@ -1565,6 +1565,40 @@ error:
 	return ERR_PTR(ret);
 }
 
+int traceprobe_expand_dentry_args(int argc, const char *argv[], char *buf,
+				  int bufsize)
+{
+	int i, used, ret;
+
+	used = 0;
+	for (i = 0; i < argc; i++) {
+		if (str_has_suffix(argv[i], ":%pd")) {
+			char *tmp = kstrdup(argv[i], GFP_KERNEL);
+			char *equal;
+
+			if (!tmp)
+				return -ENOMEM;
+
+			equal = strchr(tmp, '=');
+			if (equal)
+				*equal = '\0';
+			tmp[strlen(argv[i]) - 4] = '\0';
+			ret = snprintf(buf + used, bufsize - used,
+				       "%s%s+0x0(+0x%zx(%s)):string",
+				       equal ? tmp : "", equal ? "=" : "",
+				       offsetof(struct dentry, d_name.name),
+				       equal ? equal + 1 : tmp);
+			kfree(tmp);
+			if (ret >= bufsize - used)
+				return -ENOMEM;
+			argv[i] = buf + used;
+			used += ret + 1;
+		}
+	}
+
+	return 0;
+}
+
 void traceprobe_finish_parse(struct traceprobe_parse_context *ctx)
 {
 	clear_btf_context(ctx);
