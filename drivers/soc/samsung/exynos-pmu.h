@@ -25,7 +25,11 @@ struct exynos_pmu_data {
 	void (*pmu_init)(void);
 	void (*powerdown_conf)(enum sys_powerdown);
 	void (*powerdown_conf_extra)(enum sys_powerdown);
+	u32 quirks;
 };
+
+int set_priv_reg(phys_addr_t reg, u32 val);
+int rmw_priv_reg(phys_addr_t reg, u32 mask, u32 val);
 
 extern void __iomem *pmu_base_addr;
 
