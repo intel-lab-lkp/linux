@@ -16,6 +16,7 @@
 #include "xe_heci_gsc.h"
 #include "xe_gt_types.h"
 #include "xe_lmtt_types.h"
+#include "xe_memirq_types.h"
 #include "xe_platform_types.h"
 #include "xe_pt_types.h"
 #include "xe_sriov_types.h"
@@ -192,6 +193,10 @@ struct xe_tile {
 			/** @sriov.pf.lmtt: Local Memory Translation Table. */
 			struct xe_lmtt lmtt;
 		} pf;
+		struct {
+			/** @sriov.vf.memirq: Memory Based Interrupts. */
+			struct xe_memirq memirq;
+		} vf;
 	} sriov;
 
 	/** @migrate: Migration helper for vram blits and clearing */
@@ -316,6 +321,8 @@ struct xe_device {
 	struct {
 		/** @sriov.__mode: SR-IOV mode (Don't access directly!) */
 		enum xe_sriov_mode __mode;
+		/** @sriov.wq: workqueue used by the virtualization workers */
+		struct workqueue_struct *wq;
 	} sriov;
 
 	/** @clients: drm clients info */
@@ -380,6 +387,22 @@ struct xe_device {
 	struct {
 		/** @ref: ref count of memory accesses */
 		atomic_t ref;
+
+		/** @vram_userfault: Encapsulate vram_userfault related stuff */
+		struct {
+			/**
+			 * @lock: Protects access to @vram_usefault.list
+			 * Using mutex instead of spinlock as lock is applied to entire
+			 * list operation which may sleep
+			 */
+			struct mutex lock;
+
+			/**
+			 * @list: Keep list of userfaulted vram bo, which require to release their
+			 * mmap mappings at runtime suspend path
+			 */
+			struct list_head list;
+		} vram_userfault;
 	} mem_access;
 
 	/**
