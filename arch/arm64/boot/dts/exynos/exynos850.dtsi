@@ -216,7 +216,6 @@
 			interrupts = <GIC_SPI 228 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&cmu_peri CLK_GOUT_WDT0_PCLK>, <&oscclk>;
 			clock-names = "watchdog", "watchdog_src";
-			samsung,syscon-phandle = <&pmu_system_controller>;
 			samsung,cluster-index = <0>;
 			status = "disabled";
 		};
@@ -227,7 +226,6 @@
 			interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&cmu_peri CLK_GOUT_WDT1_PCLK>, <&oscclk>;
 			clock-names = "watchdog", "watchdog_src";
-			samsung,syscon-phandle = <&pmu_system_controller>;
 			samsung,cluster-index = <1>;
 			status = "disabled";
 		};
