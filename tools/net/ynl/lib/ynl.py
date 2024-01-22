@@ -449,7 +449,7 @@ class YnlFamily(SpecFamily):
         self.sock.setsockopt(Netlink.SOL_NETLINK, Netlink.NETLINK_ADD_MEMBERSHIP,
                              mcast_id)
 
-    def _add_attr(self, space, name, value):
+    def _add_attr(self, space, name, value, vals):
         try:
             attr = self.attr_sets[space][name]
         except KeyError:
@@ -458,8 +458,13 @@ class YnlFamily(SpecFamily):
         if attr["type"] == 'nest':
             nl_type |= Netlink.NLA_F_NESTED
             attr_payload = b''
-            for subname, subvalue in value.items():
-                attr_payload += self._add_attr(attr['nested-attributes'], subname, subvalue)
+            # Check if it's a list of values (i.e. it contains multi-attr elements)
+            for subname, subvalue in (
+                ((k, v) for item in value for k, v in item.items())
+                if isinstance(value, list)
+                else value.items()
+            ):
+                attr_payload += self._add_attr(attr['nested-attributes'], subname, subvalue, vals)
         elif attr["type"] == 'flag':
             attr_payload = b''
         elif attr["type"] == 'string':
@@ -481,6 +486,12 @@ class YnlFamily(SpecFamily):
             attr_payload = format.pack(int(value))
         elif attr['type'] in "bitfield32":
             attr_payload = struct.pack("II", int(value["value"]), int(value["selector"]))
+        elif attr['type'] == "sub-message":
+            spec = self._resolve_selector(attr, vals)
+            attr_spec = spec["attribute-set"]
+            attr_payload = b''
+            for subname, subvalue in value.items():
+                attr_payload += self._add_attr(attr_spec, subname, subvalue, vals)
         else:
             raise Exception(f'Unknown type at {space} {name} {value} {attr["type"]}')
 
@@ -555,9 +566,40 @@ class YnlFamily(SpecFamily):
         sub_msg_spec = self.sub_msgs[sub_msg]
 
         selector = attr_spec.selector
-        if selector not in vals:
+
+        def _find_attr_path(attr, vals, path=None):
+            if path is None:
+                path = []
+            if isinstance(vals, dict):
+                if attr in vals:
+                    return path
+                for k, v in vals.items():
+                    result = _find_attr_path(attr, v, path + [k])
+                    if result is not None:
+                        return result
+            elif isinstance(vals, list):
+                for idx, v in enumerate(vals):
+                    result = _find_attr_path(attr, v, path + [idx])
+                    if result is not None:
+                        return result
+            return None
+
+        def _find_selector_val(sel, vals, path):
+            while path != []:
+                v = vals.copy()
+                for step in path:
+                    v = v[step]
+                if sel in v:
+                    return v[sel]
+                path.pop()
+            return vals[sel] if sel in vals else None
+
+        attr_path = _find_attr_path(attr_spec.name, vals)
+        value = _find_selector_val(selector, vals, attr_path)
+
+        if value is None:
             raise Exception(f"There is no value for {selector} to resolve '{attr_spec.name}'")
-        value = vals[selector]
+
         if value not in sub_msg_spec.formats:
             raise Exception(f"No message format for '{value}' in sub-message spec '{sub_msg}'")
 
@@ -772,7 +814,7 @@ class YnlFamily(SpecFamily):
                     format = NlAttr.get_format(m.type, m.byte_order)
                     msg += format.pack(value)
         for name, value in vals.items():
-            msg += self._add_attr(op.attr_set.name, name, value)
+            msg += self._add_attr(op.attr_set.name, name, value, vals)
         msg = _genl_msg_finalize(msg)
 
         self.sock.send(msg, 0)
