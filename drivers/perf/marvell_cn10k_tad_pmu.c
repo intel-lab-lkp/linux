@@ -214,6 +214,24 @@ static const struct attribute_group tad_pmu_events_attr_group = {
 	.attrs = tad_pmu_event_attrs,
 };
 
+static struct attribute *ody_tad_pmu_event_attrs[] = {
+	TAD_PMU_EVENT_ATTR(tad_req_msh_in_exlmn, 0x3),
+	TAD_PMU_EVENT_ATTR(tad_alloc_dtg, 0x1a),
+	TAD_PMU_EVENT_ATTR(tad_alloc_ltg, 0x1b),
+	TAD_PMU_EVENT_ATTR(tad_alloc_any, 0x1c),
+	TAD_PMU_EVENT_ATTR(tad_hit_dtg, 0x1d),
+	TAD_PMU_EVENT_ATTR(tad_hit_ltg, 0x1e),
+	TAD_PMU_EVENT_ATTR(tad_hit_any, 0x1f),
+	TAD_PMU_EVENT_ATTR(tad_tag_rd, 0x20),
+	TAD_PMU_EVENT_ATTR(tad_tot_cycle, 0xFF),
+	NULL
+};
+
+static const struct attribute_group ody_tad_pmu_events_attr_group = {
+	.name = "events",
+	.attrs = ody_tad_pmu_event_attrs,
+};
+
 PMU_FORMAT_ATTR(event, "config:0-7");
 
 static struct attribute *tad_pmu_format_attrs[] = {
@@ -252,11 +270,19 @@ static const struct attribute_group *tad_pmu_attr_groups[] = {
 	NULL
 };
 
+static const struct attribute_group *ody_tad_pmu_attr_groups[] = {
+	&ody_tad_pmu_events_attr_group,
+	&tad_pmu_format_attr_group,
+	&tad_pmu_cpumask_attr_group,
+	NULL
+};
+
 static int tad_pmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct tad_region *regions;
 	struct tad_pmu *tad_pmu;
+	const char *compatible;
 	struct resource *res;
 	u32 tad_pmu_page_size;
 	u32 tad_page_size;
@@ -274,6 +300,12 @@ static int tad_pmu_probe(struct platform_device *pdev)
 	if (!res) {
 		dev_err(&pdev->dev, "Mem resource not found\n");
 		return -ENODEV;
+	}
+
+	ret = device_property_read_string(dev, "compatible", &compatible);
+	if (ret) {
+		dev_err(&pdev->dev, "compatible property not found\n");
+		return ret;
 	}
 
 	ret = device_property_read_u32(dev, "marvell,tad-page-size",
@@ -319,7 +351,6 @@ static int tad_pmu_probe(struct platform_device *pdev)
 	tad_pmu->pmu = (struct pmu) {
 
 		.module		= THIS_MODULE,
-		.attr_groups	= tad_pmu_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
 				  PERF_PMU_CAP_NO_INTERRUPT,
 		.task_ctx_nr	= perf_invalid_context,
@@ -331,6 +362,13 @@ static int tad_pmu_probe(struct platform_device *pdev)
 		.stop		= tad_pmu_event_counter_stop,
 		.read		= tad_pmu_event_counter_read,
 	};
+
+	if ((strncmp("marvell,cn10k-ddr-pmu", compatible,
+		     strlen(compatible)) == 0)) {
+		tad_pmu->pmu.attr_groups = tad_pmu_attr_groups;
+	} else {
+		tad_pmu->pmu.attr_groups = ody_tad_pmu_attr_groups;
+	}
 
 	tad_pmu->cpu = raw_smp_processor_id();
 
@@ -372,6 +410,7 @@ static const struct of_device_id tad_pmu_of_match[] = {
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id tad_pmu_acpi_match[] = {
 	{"MRVL000B", 0},
+	{"MRVL000D", 0},
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, tad_pmu_acpi_match);
