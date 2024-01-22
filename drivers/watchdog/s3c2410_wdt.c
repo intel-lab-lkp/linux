@@ -28,6 +28,8 @@
 #include <linux/regmap.h>
 #include <linux/delay.h>
 
+#include <linux/soc/samsung/exynos-pmu.h>
+
 #define S3C2410_WTCON		0x00
 #define S3C2410_WTDAT		0x04
 #define S3C2410_WTCNT		0x08
@@ -187,7 +189,6 @@ struct s3c2410_wdt {
 	struct watchdog_device	wdt_device;
 	struct notifier_block	freq_transition;
 	const struct s3c2410_wdt_variant *drv_data;
-	struct regmap *pmureg;
 };
 
 static const struct s3c2410_wdt_variant drv_data_s3c2410 = {
@@ -355,8 +356,8 @@ static int s3c2410wdt_disable_wdt_reset(struct s3c2410_wdt *wdt, bool mask)
 	const u32 val = mask ? mask_val : 0;
 	int ret;
 
-	ret = regmap_update_bits(wdt->pmureg, wdt->drv_data->disable_reg,
-				 mask_val, val);
+	ret = exynos_pmu_update(wdt->drv_data->disable_reg,
+				mask_val, val);
 	if (ret < 0)
 		dev_err(wdt->dev, "failed to update reg(%d)\n", ret);
 
@@ -370,8 +371,8 @@ static int s3c2410wdt_mask_wdt_reset(struct s3c2410_wdt *wdt, bool mask)
 	const u32 val = (mask ^ val_inv) ? mask_val : 0;
 	int ret;
 
-	ret = regmap_update_bits(wdt->pmureg, wdt->drv_data->mask_reset_reg,
-				 mask_val, val);
+	ret = exynos_pmu_update(wdt->drv_data->mask_reset_reg,
+				mask_val, val);
 	if (ret < 0)
 		dev_err(wdt->dev, "failed to update reg(%d)\n", ret);
 
@@ -384,8 +385,8 @@ static int s3c2410wdt_enable_counter(struct s3c2410_wdt *wdt, bool en)
 	const u32 val = en ? mask_val : 0;
 	int ret;
 
-	ret = regmap_update_bits(wdt->pmureg, wdt->drv_data->cnt_en_reg,
-				 mask_val, val);
+	ret = exynos_pmu_update(wdt->drv_data->cnt_en_reg,
+				mask_val, val);
 	if (ret < 0)
 		dev_err(wdt->dev, "failed to update reg(%d)\n", ret);
 
@@ -617,7 +618,7 @@ static inline unsigned int s3c2410wdt_get_bootstatus(struct s3c2410_wdt *wdt)
 	if (!(wdt->drv_data->quirks & QUIRK_HAS_PMU_RST_STAT))
 		return 0;
 
-	ret = regmap_read(wdt->pmureg, wdt->drv_data->rst_stat_reg, &rst_stat);
+	ret = exynos_pmu_read(wdt->drv_data->rst_stat_reg, &rst_stat);
 	if (ret)
 		dev_warn(wdt->dev, "Couldn't get RST_STAT register\n");
 	else if (rst_stat & BIT(wdt->drv_data->rst_stat_bit))
@@ -697,14 +698,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	ret = s3c2410_get_wdt_drv_data(pdev, wdt);
 	if (ret)
 		return ret;
-
-	if (wdt->drv_data->quirks & QUIRKS_HAVE_PMUREG) {
-		wdt->pmureg = syscon_regmap_lookup_by_phandle(dev->of_node,
-						"samsung,syscon-phandle");
-		if (IS_ERR(wdt->pmureg))
-			return dev_err_probe(dev, PTR_ERR(wdt->pmureg),
-					     "syscon regmap lookup failed.\n");
-	}
 
 	wdt_irq = platform_get_irq(pdev, 0);
 	if (wdt_irq < 0)
