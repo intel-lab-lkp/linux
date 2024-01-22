@@ -55,6 +55,16 @@ properties:
     minItems: 4
     maxItems: 4
 
+  sprd,mod:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 4
+    items:
+      minimum: 0xFF
+      maximum: 0xFFF
+    description: |
+      The number of different duty cycles that could be set for PWM's waveform output.
+
   "#pwm-cells":
     const: 2
 
@@ -63,6 +73,7 @@ required:
   - reg
   - clocks
   - clock-names
+  - sprd,mod
 
 additionalProperties: false
 
@@ -88,6 +99,7 @@ examples:
                                  <&ext_26m>,
                                  <&ext_26m>,
                                  <&ext_26m>;
+        sprd,mod = <0xFF 0x1FF 0x3FF 0xFFF>;
         #pwm-cells = <2>;
     };
 
