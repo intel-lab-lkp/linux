@@ -30,6 +30,7 @@
 #include "file-item.h"
 #include "file.h"
 #include "super.h"
+#include "zoned.h"
 
 #define BITS_PER_BITMAP		(PAGE_SIZE * 8UL)
 #define MAX_CACHE_BYTES_PER_GIG	SZ_64K
@@ -2694,6 +2695,7 @@ out:
 static int __btrfs_add_free_space_zoned(struct btrfs_block_group *block_group,
 					u64 bytenr, u64 size, bool used)
 {
+	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	struct btrfs_space_info *sinfo = block_group->space_info;
 	struct btrfs_free_space_ctl *ctl = block_group->free_space_ctl;
 	u64 offset = bytenr - block_group->start;
@@ -2744,6 +2746,10 @@ static int __btrfs_add_free_space_zoned(struct btrfs_block_group *block_group,
 		   mult_perc(block_group->zone_capacity, bg_reclaim_threshold)) {
 		btrfs_mark_bg_to_reclaim(block_group);
 	}
+
+	if (btrfs_zoned_should_reclaim(fs_info) &&
+	    !test_bit(BTRFS_FS_CLEANER_RUNNING, &fs_info->flags))
+		wake_up_process(fs_info->cleaner_kthread);
 
 	return 0;
 }
