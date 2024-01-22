@@ -56,6 +56,7 @@ properties:
     description:
       Phandle to the PMU system controller node (in case of Exynos5250,
       Exynos5420, Exynos7, Exynos850 and gs101).
+    deprecated: true
 
 required:
   - compatible
@@ -66,20 +67,6 @@ required:
 
 allOf:
   - $ref: watchdog.yaml#
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - google,gs101-wdt
-              - samsung,exynos5250-wdt
-              - samsung,exynos5420-wdt
-              - samsung,exynos7-wdt
-              - samsung,exynos850-wdt
-              - samsung,exynosautov9-wdt
-    then:
-      required:
-        - samsung,syscon-phandle
   - if:
       properties:
         compatible:
