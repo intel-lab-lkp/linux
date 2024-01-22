@@ -184,6 +184,39 @@ static const void *simple_bridge_get_match_data(const struct device *dev)
 	return NULL;
 }
 
+static int simple_bridge_get_next_bridge_by_fwnode(struct device *dev,
+						   struct drm_bridge **next_bridge)
+{
+	struct drm_bridge *bridge;
+	struct fwnode_handle *ep;
+	struct fwnode_handle *remote;
+
+	ep = fwnode_graph_get_endpoint_by_id(dev->fwnode, 1, 0, 0);
+	if (!ep) {
+		dev_err(dev, "The endpoint is unconnected\n");
+		return -EINVAL;
+	}
+
+	remote = fwnode_graph_get_remote_port_parent(ep);
+	fwnode_handle_put(ep);
+	if (!remote) {
+		dev_err(dev, "No valid remote node\n");
+		return -ENODEV;
+	}
+
+	bridge = drm_bridge_find_by_fwnode(remote);
+	fwnode_handle_put(remote);
+
+	if (!bridge) {
+		dev_warn(dev, "Next bridge not found, deferring probe\n");
+		return -EPROBE_DEFER;
+	}
+
+	*next_bridge = bridge;
+
+	return 0;
+}
+
 static int simple_bridge_probe(struct platform_device *pdev)
 {
 	struct simple_bridge *sbridge;
@@ -199,14 +232,17 @@ static int simple_bridge_probe(struct platform_device *pdev)
 	else
 		sbridge->info = simple_bridge_get_match_data(&pdev->dev);
 
-	/* Get the next bridge in the pipeline. */
-	remote = of_graph_get_remote_node(pdev->dev.of_node, 1, -1);
-	if (!remote)
-		return -EINVAL;
+	if (pdev->dev.of_node) {
+		/* Get the next bridge in the pipeline. */
+		remote = of_graph_get_remote_node(pdev->dev.of_node, 1, -1);
+		if (!remote)
+			return -EINVAL;
 
-	sbridge->next_bridge = of_drm_find_bridge(remote);
-	of_node_put(remote);
-
+		sbridge->next_bridge = of_drm_find_bridge(remote);
+		of_node_put(remote);
+	} else {
+		simple_bridge_get_next_bridge_by_fwnode(&pdev->dev, &sbridge->next_bridge);
+	}
 	if (!sbridge->next_bridge) {
 		dev_dbg(&pdev->dev, "Next bridge not found, deferring probe\n");
 		return -EPROBE_DEFER;
@@ -231,6 +267,7 @@ static int simple_bridge_probe(struct platform_device *pdev)
 	/* Register the bridge. */
 	sbridge->bridge.funcs = &simple_bridge_bridge_funcs;
 	sbridge->bridge.of_node = pdev->dev.of_node;
+	sbridge->bridge.fwnode = pdev->dev.fwnode;
 	sbridge->bridge.timings = sbridge->info->timings;
 
 	drm_bridge_add(&sbridge->bridge);
