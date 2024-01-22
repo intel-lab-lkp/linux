@@ -1573,6 +1573,7 @@ attribute-sets:
         name: entry
         type: nest
         nested-attributes: tc-taprio-sched-entry
+        multi-attr: true
   -
     name: tc-taprio-sched-entry
     attributes:
@@ -1667,7 +1668,7 @@ attribute-sets:
         type: binary
       -
         name: app
-        type: binary # TODO sub-message needs 2+ level deep lookup
+        type: binary
         sub-message: tca-stats-app-msg
         selector: kind
       -
