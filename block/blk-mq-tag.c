@@ -479,6 +479,35 @@ void blk_mq_tagset_wait_completed_request(struct blk_mq_tag_set *tagset)
 }
 EXPORT_SYMBOL(blk_mq_tagset_wait_completed_request);
 
+static bool blk_mq_tagset_count_inflight_rqs(struct request *rq, void *data)
+{
+	unsigned int *count = data;
+
+	if (blk_mq_request_started(rq) && !blk_mq_request_completed(rq))
+		(*count)++;
+	return true;
+}
+
+/**
+ * blk_mq_tagset_wait_request_completed - Wait for all inflight requests
+ * to become completed.
+ *
+ * Note: This function has to be run after all IO queues are shutdown.
+ */
+void blk_mq_tagset_wait_request_completed(struct blk_mq_tag_set *tagset)
+{
+	while (true) {
+		unsigned int count = 0;
+
+		blk_mq_tagset_busy_iter(tagset,
+				blk_mq_tagset_count_inflight_rqs, &count);
+		if (!count)
+			break;
+		msleep(20);
+	}
+}
+EXPORT_SYMBOL(blk_mq_tagset_wait_request_completed);
+
 /**
  * blk_mq_queue_tag_busy_iter - iterate over all requests with a driver tag
  * @q:		Request queue to examine.
