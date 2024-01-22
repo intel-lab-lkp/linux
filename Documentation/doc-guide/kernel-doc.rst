@@ -505,9 +505,6 @@ no-identifiers: *[ function/type ...]*
     .. kernel-doc:: lib/bitmap.c
        :no-identifiers: bitmap_parselist
 
-functions: *[ function/type ...]*
-  This is an alias of the 'identifiers' directive and deprecated.
-
 doc: *title*
   Include documentation for the ``DOC:`` paragraph identified by *title* in
   *source*. Spaces are allowed in *title*; do not quote the *title*. The *title*

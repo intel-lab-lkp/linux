@@ -53,7 +53,6 @@ class KernelDocDirective(Directive):
         'internal': directives.unchanged,
         'identifiers': directives.unchanged,
         'no-identifiers': directives.unchanged,
-        'functions': directives.unchanged,
     }
     has_content = False
 
@@ -73,10 +72,6 @@ class KernelDocDirective(Directive):
         env.note_dependency(os.path.abspath(filename))
 
         tab_width = self.options.get('tab-width', self.state.document.settings.tab_width)
-
-        # 'function' is an alias of 'identifiers'
-        if 'functions' in self.options:
-            self.options['identifiers'] = self.options.get('functions')
 
         # FIXME: make this nicer and more robust against errors
         if 'export' in self.options:
