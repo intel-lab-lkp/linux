@@ -202,6 +202,24 @@ static int display_connector_get_supply(struct platform_device *pdev,
 	return PTR_ERR_OR_ZERO(conn->supply);
 }
 
+static const void *display_connector_get_match_data(const struct device *dev)
+{
+	const struct of_device_id *matches = dev->driver->of_match_table;
+
+	/* Try to get the match data by software node */
+	while (matches) {
+		if (!matches->compatible[0])
+			break;
+
+		if (device_is_compatible(dev, matches->compatible))
+			return matches->data;
+
+		matches++;
+	}
+
+	return NULL;
+}
+
 static int display_connector_probe(struct platform_device *pdev)
 {
 	struct display_connector *conn;
@@ -215,7 +233,10 @@ static int display_connector_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, conn);
 
-	type = (uintptr_t)of_device_get_match_data(&pdev->dev);
+	if (pdev->dev.of_node)
+		type = (uintptr_t)of_device_get_match_data(&pdev->dev);
+	else
+		type = (uintptr_t)display_connector_get_match_data(&pdev->dev);
 
 	/* Get the exact connector type. */
 	switch (type) {
@@ -434,3 +455,4 @@ module_platform_driver(display_connector_driver);
 MODULE_AUTHOR("Laurent Pinchart <laurent.pinchart@ideasonboard.com>");
 MODULE_DESCRIPTION("Display connector driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:display-connector");
