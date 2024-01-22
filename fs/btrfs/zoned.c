@@ -2423,15 +2423,15 @@ bool btrfs_zoned_should_reclaim(struct btrfs_fs_info *fs_info)
 	if (fs_info->bg_reclaim_threshold == 0)
 		return false;
 
-	mutex_lock(&fs_devices->device_list_mutex);
-	list_for_each_entry(device, &fs_devices->devices, dev_list) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(device, &fs_devices->devices, dev_list) {
 		if (!device->bdev)
 			continue;
 
 		total += device->disk_total_bytes;
 		used += device->bytes_used;
 	}
-	mutex_unlock(&fs_devices->device_list_mutex);
+	rcu_read_unlock();
 
 	factor = div64_u64(used * 100, total);
 	return factor >= fs_info->bg_reclaim_threshold;
