@@ -404,4 +404,24 @@ static __always_inline size_t str_has_prefix(const char *str, const char *prefix
 	return strncmp(str, prefix, len) == 0 ? len : 0;
 }
 
+/**
+ * str_has_suffix - Test if a string has a given suffix
+ * @str: The string to test
+ * @suffix: The string to see if @str ends with
+ *
+ * Returns:
+ * * strlen(@suffix) if @str ends with @suffix
+ * * 0 if @str does not end with @suffix
+ */
+static __always_inline size_t str_has_suffix(const char *str, const char *suffix)
+{
+	size_t len = strlen(suffix);
+	size_t str_len = strlen(str);
+
+	if (len > str_len)
+		return 0;
+
+	return strncmp(str + str_len - len, suffix, len) == 0 ? len : 0;
+}
+
 #endif /* _LINUX_STRING_H_ */
