@@ -12,7 +12,7 @@ User Space Memory Access
    :export:
 
 .. kernel-doc:: mm/gup.c
-   :functions: get_user_pages_fast
+   :identifiers: get_user_pages_fast
 
 .. _mm-api-gfp-flags:
 
@@ -44,7 +44,7 @@ The Slab Cache
    :export:
 
 .. kernel-doc:: mm/util.c
-   :functions: kfree_const kvmalloc_node kvfree
+   :identifiers: kfree_const kvmalloc_node kvfree
 
 Virtually Contiguous Mappings
 =============================
@@ -114,7 +114,7 @@ More Memory Management Functions
 .. kernel-doc:: include/linux/page_ref.h
 .. kernel-doc:: include/linux/mmzone.h
 .. kernel-doc:: mm/util.c
-   :functions: folio_mapping
+   :identifiers: folio_mapping
 
 .. kernel-doc:: mm/rmap.c
 .. kernel-doc:: mm/migrate.c

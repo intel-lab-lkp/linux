@@ -78,7 +78,7 @@ The frequency of such scans is defined by
 Reference
 ---------
 .. kernel-doc:: mm/ksm.c
-   :functions: mm_slot ksm_scan stable_node rmap_item
+   :identifiers: mm_slot ksm_scan stable_node rmap_item
 
 --
 Izik Eidus,

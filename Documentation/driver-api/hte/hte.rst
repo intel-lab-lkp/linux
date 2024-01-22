@@ -25,13 +25,13 @@ The HTE framework APIs for the providers
 ----------------------------------------
 
 .. kernel-doc:: drivers/hte/hte.c
-   :functions: devm_hte_register_chip hte_push_ts_ns
+   :identifiers: devm_hte_register_chip hte_push_ts_ns
 
 The HTE framework APIs for the consumers
 ----------------------------------------
 
 .. kernel-doc:: drivers/hte/hte.c
-   :functions: hte_init_line_attr hte_ts_get hte_ts_put devm_hte_request_ts_ns hte_request_ts_ns hte_enable_ts hte_disable_ts of_hte_req_count hte_get_clk_src_info
+   :identifiers: hte_init_line_attr hte_ts_get hte_ts_put devm_hte_request_ts_ns hte_request_ts_ns hte_enable_ts hte_disable_ts of_hte_req_count hte_get_clk_src_info
 
 The HTE framework public structures
 -----------------------------------

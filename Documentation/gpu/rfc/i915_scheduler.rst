@@ -138,7 +138,7 @@ extension.
 .. c:namespace-push:: rfc
 
 .. kernel-doc:: include/uapi/drm/i915_drm.h
-        :functions: i915_context_engines_parallel_submit
+        :identifiers: i915_context_engines_parallel_submit
 
 .. c:namespace-pop::
 

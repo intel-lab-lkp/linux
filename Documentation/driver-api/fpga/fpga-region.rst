@@ -76,34 +76,34 @@ following APIs to handle building or tearing down that list.
 * fpga_bridges_put() - Given a list of bridges, put them
 
 .. kernel-doc:: include/linux/fpga/fpga-region.h
-   :functions: fpga_region
+   :identifiers: fpga_region
 
 .. kernel-doc:: include/linux/fpga/fpga-region.h
-   :functions: fpga_region_info
+   :identifiers: fpga_region_info
 
 .. kernel-doc:: drivers/fpga/fpga-region.c
-   :functions: fpga_region_register_full
+   :identifiers: fpga_region_register_full
 
 .. kernel-doc:: drivers/fpga/fpga-region.c
-   :functions: fpga_region_register
+   :identifiers: fpga_region_register
 
 .. kernel-doc:: drivers/fpga/fpga-region.c
-   :functions: fpga_region_unregister
+   :identifiers: fpga_region_unregister
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_mgr_get
+   :identifiers: fpga_mgr_get
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: of_fpga_mgr_get
+   :identifiers: of_fpga_mgr_get
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_mgr_put
+   :identifiers: fpga_mgr_put
 
 .. kernel-doc:: drivers/fpga/fpga-bridge.c
-   :functions: fpga_bridge_get_to_list
+   :identifiers: fpga_bridge_get_to_list
 
 .. kernel-doc:: drivers/fpga/fpga-bridge.c
-   :functions: of_fpga_bridge_get_to_list
+   :identifiers: of_fpga_bridge_get_to_list
 
 .. kernel-doc:: drivers/fpga/fpga-bridge.c
-   :functions: fpga_bridges_put
+   :identifiers: fpga_bridges_put

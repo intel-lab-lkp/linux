@@ -10,13 +10,13 @@ API to implement a new FPGA bridge
 * fpga_bridge_unregister() - Unregister a bridge
 
 .. kernel-doc:: include/linux/fpga/fpga-bridge.h
-   :functions: fpga_bridge
+   :identifiers: fpga_bridge
 
 .. kernel-doc:: include/linux/fpga/fpga-bridge.h
-   :functions: fpga_bridge_ops
+   :identifiers: fpga_bridge_ops
 
 .. kernel-doc:: drivers/fpga/fpga-bridge.c
-   :functions: fpga_bridge_register
+   :identifiers: fpga_bridge_register
 
 .. kernel-doc:: drivers/fpga/fpga-bridge.c
-   :functions: fpga_bridge_unregister
+   :identifiers: fpga_bridge_unregister

@@ -15,7 +15,7 @@ appropriate trigger, which will then be triggered appropriately by
 mac80211.
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_get_tx_led_name
 	ieee80211_get_rx_led_name
 	ieee80211_get_assoc_led_name
@@ -31,7 +31,7 @@ Hardware crypto acceleration
    :doc: Hardware crypto acceleration
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	set_key_cmd
 	ieee80211_key_conf
 	ieee80211_key_flags
@@ -52,7 +52,7 @@ Beacon filter support
    :doc: Beacon filter support
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_beacon_loss
+   :identifiers: ieee80211_beacon_loss
 
 Multiple queues and QoS support
 ===============================
@@ -60,7 +60,7 @@ Multiple queues and QoS support
 TBD
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_tx_queue_params
+   :identifiers: ieee80211_tx_queue_params
 
 Access point mode support
 =========================
@@ -79,7 +79,7 @@ support for powersaving clients
    :doc: AP support for powersaving clients
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_get_buffered_bc
 	ieee80211_beacon_get
 	ieee80211_sta_eosp
@@ -101,7 +101,7 @@ addresses here, note which configurations are supported by mac80211, add
 notes about supporting hw crypto with it.
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_iterate_active_interfaces
 	ieee80211_iterate_active_interfaces_atomic
 
@@ -111,7 +111,7 @@ Station handling
 TODO
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_sta
 	sta_notify_cmd
 	ieee80211_find_sta
@@ -123,7 +123,7 @@ Hardware scan offload
 TBD
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_scan_completed
+   :identifiers: ieee80211_scan_completed
 
 Aggregation
 ===========
@@ -145,7 +145,7 @@ RX A-MPDU aggregation
 .. WARNING: DOCPROC directive not supported: !Cnet/mac80211/agg-rx.c
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_ampdu_mlme_action
+   :identifiers: ieee80211_ampdu_mlme_action
 
 Spatial Multiplexing Powersave (SMPS)
 =====================================
@@ -154,7 +154,7 @@ Spatial Multiplexing Powersave (SMPS)
    :doc: Spatial multiplexing power save
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_request_smps
 	ieee80211_smps_mode
 
@@ -169,7 +169,7 @@ Rate Control API
 TBD
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_start_tx_ba_session
 	ieee80211_start_tx_ba_cb_irqsafe
 	ieee80211_stop_tx_ba_session
@@ -212,7 +212,7 @@ Programming information
 -----------------------
 
 .. kernel-doc:: net/mac80211/sta_info.h
-   :functions:
+   :identifiers:
 	sta_info
 	ieee80211_sta_info_flags
 
@@ -226,7 +226,7 @@ Aggregation Functions
 =====================
 
 .. kernel-doc:: net/mac80211/sta_info.h
-   :functions:
+   :identifiers:
 	sta_ampdu_mlme
 	tid_ampdu_tx
 	tid_ampdu_rx

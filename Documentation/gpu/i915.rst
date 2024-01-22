@@ -32,13 +32,13 @@ Interrupt Handling
    :doc: interrupt handling
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_irq.c
-   :functions: intel_irq_init intel_irq_init_hw intel_hpd_init
+   :identifiers: intel_irq_init intel_irq_init_hw intel_hpd_init
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_irq.c
-   :functions: intel_runtime_pm_disable_interrupts
+   :identifiers: intel_runtime_pm_disable_interrupts
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_irq.c
-   :functions: intel_runtime_pm_enable_interrupts
+   :identifiers: intel_runtime_pm_enable_interrupts
 
 Intel GVT-g Guest Support(vGPU)
 -------------------------------
@@ -430,7 +430,7 @@ User Batchbuffer Execution
 Scheduling
 ----------
 .. kernel-doc:: drivers/gpu/drm/i915/i915_scheduler_types.h
-   :functions: i915_sched_engine
+   :identifiers: i915_sched_engine
 
 Logical Rings, Logical Ring Contexts and Execlists
 --------------------------------------------------
@@ -520,7 +520,7 @@ GuC Memory Management
 .. kernel-doc:: drivers/gpu/drm/i915/gt/uc/intel_guc.c
    :doc: GuC Memory Management
 .. kernel-doc:: drivers/gpu/drm/i915/gt/uc/intel_guc.c
-   :functions: intel_guc_allocate_vma
+   :identifiers: intel_guc_allocate_vma
 
 
 GuC-specific firmware loader
@@ -549,7 +549,7 @@ HuC
 .. kernel-doc:: drivers/gpu/drm/i915/gt/uc/intel_huc.c
    :doc: HuC
 .. kernel-doc:: drivers/gpu/drm/i915/gt/uc/intel_huc.c
-   :functions: intel_huc_auth
+   :identifiers: intel_huc_auth
 
 HuC Memory Management
 ~~~~~~~~~~~~~~~~~~~~~
@@ -603,21 +603,21 @@ This section covers the entrypoints exported outside of i915_perf.c to
 integrate with drm/i915 and to handle the `DRM_I915_PERF_OPEN` ioctl.
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_init
+   :identifiers: i915_perf_init
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_fini
+   :identifiers: i915_perf_fini
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_register
+   :identifiers: i915_perf_register
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_unregister
+   :identifiers: i915_perf_unregister
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_open_ioctl
+   :identifiers: i915_perf_open_ioctl
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_release
+   :identifiers: i915_perf_release
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_add_config_ioctl
+   :identifiers: i915_perf_add_config_ioctl
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_remove_config_ioctl
+   :identifiers: i915_perf_remove_config_ioctl
 
 i915 Perf Stream
 ----------------
@@ -626,47 +626,47 @@ This section covers the stream-semantics-agnostic structures and functions
 for representing an i915 perf stream FD and associated file operations.
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf_types.h
-   :functions: i915_perf_stream
+   :identifiers: i915_perf_stream
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf_types.h
-   :functions: i915_perf_stream_ops
+   :identifiers: i915_perf_stream_ops
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: read_properties_unlocked
+   :identifiers: read_properties_unlocked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_open_ioctl_locked
+   :identifiers: i915_perf_open_ioctl_locked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_destroy_locked
+   :identifiers: i915_perf_destroy_locked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_read
+   :identifiers: i915_perf_read
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_ioctl
+   :identifiers: i915_perf_ioctl
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_enable_locked
+   :identifiers: i915_perf_enable_locked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_disable_locked
+   :identifiers: i915_perf_disable_locked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_poll
+   :identifiers: i915_perf_poll
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_perf_poll_locked
+   :identifiers: i915_perf_poll_locked
 
 i915 Perf Observation Architecture Stream
 -----------------------------------------
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf_types.h
-   :functions: i915_oa_ops
+   :identifiers: i915_oa_ops
 
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_stream_init
+   :identifiers: i915_oa_stream_init
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_read
+   :identifiers: i915_oa_read
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_stream_enable
+   :identifiers: i915_oa_stream_enable
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_stream_disable
+   :identifiers: i915_oa_stream_disable
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_wait_unlocked
+   :identifiers: i915_oa_wait_unlocked
 .. kernel-doc:: drivers/gpu/drm/i915/i915_perf.c
-   :functions: i915_oa_poll_wait
+   :identifiers: i915_oa_poll_wait
 
 Other i915 Perf Internals
 -------------------------

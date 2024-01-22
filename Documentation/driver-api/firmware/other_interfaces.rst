@@ -33,19 +33,19 @@ and processed one by one. ARM’s SMCCC is used to pass the execution
 of the requests on to a secure monitor (EL3).
 
 .. kernel-doc:: include/linux/firmware/intel/stratix10-svc-client.h
-   :functions: stratix10_svc_command_code
+   :identifiers: stratix10_svc_command_code
 
 .. kernel-doc:: include/linux/firmware/intel/stratix10-svc-client.h
-   :functions: stratix10_svc_client_msg
+   :identifiers: stratix10_svc_client_msg
 
 .. kernel-doc:: include/linux/firmware/intel/stratix10-svc-client.h
-   :functions: stratix10_svc_command_config_type
+   :identifiers: stratix10_svc_command_config_type
 
 .. kernel-doc:: include/linux/firmware/intel/stratix10-svc-client.h
-   :functions: stratix10_svc_cb_data
+   :identifiers: stratix10_svc_cb_data
 
 .. kernel-doc:: include/linux/firmware/intel/stratix10-svc-client.h
-   :functions: stratix10_svc_client
+   :identifiers: stratix10_svc_client
 
 .. kernel-doc:: drivers/firmware/stratix10-svc.c
    :export:

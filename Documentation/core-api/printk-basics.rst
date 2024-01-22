@@ -108,5 +108,5 @@ Function reference
 ==================
 
 .. kernel-doc:: include/linux/printk.h
-   :functions: printk pr_emerg pr_alert pr_crit pr_err pr_warn pr_notice pr_info
-      pr_fmt pr_debug pr_devel pr_cont
+   :identifiers: printk pr_emerg pr_alert pr_crit pr_err pr_warn pr_notice pr_info
+		 pr_fmt pr_debug pr_devel pr_cont

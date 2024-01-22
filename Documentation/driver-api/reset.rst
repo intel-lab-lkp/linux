@@ -189,18 +189,18 @@ query the reset line status using reset_control_status().
    :internal:
 
 .. kernel-doc:: drivers/reset/core.c
-   :functions: reset_control_reset
-               reset_control_assert
-               reset_control_deassert
-               reset_control_status
-               reset_control_acquire
-               reset_control_release
-               reset_control_rearm
-               reset_control_put
-               of_reset_control_get_count
-               of_reset_control_array_get
-               devm_reset_control_array_get
-               reset_control_get_count
+   :identifiers: reset_control_reset
+		 reset_control_assert
+		 reset_control_deassert
+		 reset_control_status
+		 reset_control_acquire
+		 reset_control_release
+		 reset_control_rearm
+		 reset_control_put
+		 of_reset_control_get_count
+		 of_reset_control_array_get
+		 devm_reset_control_array_get
+		 reset_control_get_count
 
 Reset controller driver API
 ---------------------------
@@ -214,8 +214,8 @@ devm_reset_controller_register().
    :internal:
 
 .. kernel-doc:: drivers/reset/core.c
-   :functions: of_reset_simple_xlate
-               reset_controller_register
-               reset_controller_unregister
-               devm_reset_controller_register
-               reset_controller_add_lookup
+   :identifiers: of_reset_simple_xlate
+		 reset_controller_register
+		 reset_controller_unregister
+		 devm_reset_controller_register
+		 reset_controller_add_lookup

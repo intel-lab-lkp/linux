@@ -17,7 +17,7 @@ required, and prioritize using the non-CPU visible portion of
 I915_MEMORY_CLASS_DEVICE.
 
 .. kernel-doc:: Documentation/gpu/rfc/i915_small_bar.h
-   :functions: __drm_i915_gem_create_ext
+   :identifiers: __drm_i915_gem_create_ext
 
 probed_cpu_visible_size attribute
 ---------------------------------
@@ -32,7 +32,7 @@ where the total size of the heap needs to be known. It also wants to be able to
 give a rough estimate of how memory can potentially be allocated.
 
 .. kernel-doc:: Documentation/gpu/rfc/i915_small_bar.h
-   :functions: __drm_i915_memory_region_info
+   :identifiers: __drm_i915_memory_region_info
 
 Error Capture restrictions
 --------------------------

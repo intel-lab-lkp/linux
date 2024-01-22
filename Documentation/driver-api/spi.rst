@@ -47,7 +47,7 @@ policies for how they use the bits transferred with SPI.
    :internal:
 
 .. kernel-doc:: drivers/spi/spi.c
-   :functions: spi_register_board_info
+   :identifiers: spi_register_board_info
 
 .. kernel-doc:: drivers/spi/spi.c
    :export:

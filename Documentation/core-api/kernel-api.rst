@@ -25,7 +25,7 @@ String Conversions
    :export:
 
 .. kernel-doc:: include/linux/kstrtox.h
-   :functions: kstrtol kstrtoul
+   :identifiers: kstrtol kstrtoul
 
 .. kernel-doc:: lib/kstrtox.c
    :export:
@@ -46,8 +46,8 @@ String Manipulation
    :internal:
 
 .. kernel-doc:: mm/util.c
-   :functions: kstrdup kstrdup_const kstrndup kmemdup kmemdup_nul memdup_user
-               vmemdup_user strndup_user memdup_user_nul
+   :identifiers: kstrdup kstrdup_const kstrndup kmemdup kmemdup_nul memdup_user
+		 vmemdup_user strndup_user memdup_user_nul
 
 Basic Kernel Library Functions
 ==============================
@@ -121,8 +121,8 @@ Text Searching
    :export:
 
 .. kernel-doc:: include/linux/textsearch.h
-   :functions: textsearch_find textsearch_next \
-               textsearch_get_pattern textsearch_get_pattern_len
+   :identifiers: textsearch_find textsearch_next \
+		 textsearch_get_pattern textsearch_get_pattern_len
 
 CRC and Math Functions in Linux
 ===============================
@@ -177,7 +177,7 @@ Division Functions
 ------------------
 
 .. kernel-doc:: include/asm-generic/div64.h
-   :functions: do_div
+   :identifiers: do_div
 
 .. kernel-doc:: include/linux/math64.h
    :internal:

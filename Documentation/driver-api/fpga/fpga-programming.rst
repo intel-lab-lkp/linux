@@ -90,7 +90,7 @@ API for programming an FPGA
 * fpga_image_info_free() -  Free an FPGA image info struct
 
 .. kernel-doc:: drivers/fpga/fpga-region.c
-   :functions: fpga_region_program_fpga
+   :identifiers: fpga_region_program_fpga
 
 FPGA Manager flags
 
@@ -98,10 +98,10 @@ FPGA Manager flags
    :doc: FPGA Manager flags
 
 .. kernel-doc:: include/linux/fpga/fpga-mgr.h
-   :functions: fpga_image_info
+   :identifiers: fpga_image_info
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_image_info_alloc
+   :identifiers: fpga_image_info_alloc
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_image_info_free
+   :identifiers: fpga_image_info_free

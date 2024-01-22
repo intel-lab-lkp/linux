@@ -79,13 +79,13 @@ initialization with a pointer to a structure describing the driver
 (``struct pci_driver``):
 
 .. kernel-doc:: include/linux/pci.h
-   :functions: pci_driver
+   :identifiers: pci_driver
 
 The ID table is an array of ``struct pci_device_id`` entries ending with an
 all-zero entry.  Definitions with static const are generally preferred.
 
 .. kernel-doc:: include/linux/mod_devicetable.h
-   :functions: pci_device_id
+   :identifiers: pci_device_id
 
 Most drivers only need ``PCI_DEVICE()`` or ``PCI_DEVICE_CLASS()`` to set up
 a pci_device_id table.

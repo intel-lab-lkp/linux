@@ -95,10 +95,10 @@ access, special privileged instructions are then used to copy data into enclave
 pages and establish enclave page permissions.
 
 .. kernel-doc:: arch/x86/kernel/cpu/sgx/ioctl.c
-   :functions: sgx_ioc_enclave_create
-               sgx_ioc_enclave_add_pages
-               sgx_ioc_enclave_init
-               sgx_ioc_enclave_provision
+   :identifiers: sgx_ioc_enclave_create
+		 sgx_ioc_enclave_add_pages
+		 sgx_ioc_enclave_init
+		 sgx_ioc_enclave_provision
 
 Enclave runtime management
 --------------------------
@@ -111,9 +111,9 @@ regular page will be dynamically added to the enclave. The enclave is
 still required to run EACCEPT on the new page before it can be used.
 
 .. kernel-doc:: arch/x86/kernel/cpu/sgx/ioctl.c
-   :functions: sgx_ioc_enclave_restrict_permissions
-               sgx_ioc_enclave_modify_types
-               sgx_ioc_enclave_remove_pages
+   :identifiers: sgx_ioc_enclave_restrict_permissions
+		 sgx_ioc_enclave_modify_types
+		 sgx_ioc_enclave_remove_pages
 
 Enclave vDSO
 ------------
@@ -136,7 +136,7 @@ a signal and return the fault information directly to its caller.  This avoids
 the need to juggle signal handlers.
 
 .. kernel-doc:: arch/x86/include/uapi/asm/sgx.h
-   :functions: vdso_sgx_enter_enclave_t
+   :identifiers: vdso_sgx_enter_enclave_t
 
 ksgxd
 =====

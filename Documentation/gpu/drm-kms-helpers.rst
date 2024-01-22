@@ -303,11 +303,11 @@ These functions aren't exported to drivers, but are documented here to help make
 the MST topology helpers easier to understand
 
 .. kernel-doc:: drivers/gpu/drm/display/drm_dp_mst_topology.c
-   :functions: drm_dp_mst_topology_try_get_mstb drm_dp_mst_topology_get_mstb
-               drm_dp_mst_topology_put_mstb
-               drm_dp_mst_topology_try_get_port drm_dp_mst_topology_get_port
-               drm_dp_mst_topology_put_port
-               drm_dp_mst_get_mstb_malloc drm_dp_mst_put_mstb_malloc
+   :identifiers: drm_dp_mst_topology_try_get_mstb drm_dp_mst_topology_get_mstb
+		 drm_dp_mst_topology_put_mstb
+		 drm_dp_mst_topology_try_get_port drm_dp_mst_topology_get_port
+		 drm_dp_mst_topology_put_port
+		 drm_dp_mst_get_mstb_malloc drm_dp_mst_put_mstb_malloc
 
 MIPI DBI Helper Functions Reference
 ===================================

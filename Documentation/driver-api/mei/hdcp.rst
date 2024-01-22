@@ -28,5 +28,5 @@ mei_hdcp api
 ------------
 
 .. kernel-doc:: drivers/misc/mei/hdcp/mei_hdcp.c
-    :functions:
+    :identifiers:
 

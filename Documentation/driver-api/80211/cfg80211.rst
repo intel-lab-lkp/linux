@@ -12,7 +12,7 @@ Device registration
    :doc: Device registration
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	ieee80211_channel_flags
 	ieee80211_channel
 	ieee80211_rate_flags
@@ -46,7 +46,7 @@ Actions and configuration
    :doc: Actions and configuration
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	cfg80211_ops
 	vif_params
 	key_params
@@ -100,7 +100,7 @@ Scanning and BSS list handling
    :doc: Scanning and BSS list handling
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	cfg80211_ssid
 	cfg80211_scan_request
 	cfg80211_scan_done
@@ -119,7 +119,7 @@ Utility functions
    :doc: Utility functions
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	ieee80211_channel_to_frequency
 	ieee80211_frequency_to_channel
 	ieee80211_get_channel
@@ -135,7 +135,7 @@ Data path helpers
    :doc: Data path helpers
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	ieee80211_data_to_8023
 	ieee80211_amsdu_to_8023s
 	cfg80211_classify8021d
@@ -147,7 +147,7 @@ Regulatory enforcement infrastructure
    :doc: Regulatory enforcement infrastructure
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	regulatory_hint
 	wiphy_apply_custom_regulatory
 	freq_reg_info
@@ -159,7 +159,7 @@ RFkill integration
    :doc: RFkill integration
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	wiphy_rfkill_set_hw_state
 	wiphy_rfkill_start_polling
 	wiphy_rfkill_stop_polling
@@ -171,7 +171,7 @@ Test mode
    :doc: Test mode
 
 .. kernel-doc:: include/net/cfg80211.h
-   :functions:
+   :identifiers:
 	cfg80211_testmode_alloc_reply_skb
 	cfg80211_testmode_reply
 	cfg80211_testmode_alloc_event_skb

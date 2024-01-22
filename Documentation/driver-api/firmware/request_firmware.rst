@@ -18,27 +18,27 @@ an error is returned.
 request_firmware
 ----------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: request_firmware
+   :identifiers: request_firmware
 
 firmware_request_nowarn
 -----------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: firmware_request_nowarn
+   :identifiers: firmware_request_nowarn
 
 firmware_request_platform
 -------------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: firmware_request_platform
+   :identifiers: firmware_request_platform
 
 request_firmware_direct
 -----------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: request_firmware_direct
+   :identifiers: request_firmware_direct
 
 request_firmware_into_buf
 -------------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: request_firmware_into_buf
+   :identifiers: request_firmware_into_buf
 
 Asynchronous firmware requests
 ==============================
@@ -52,7 +52,7 @@ in atomic contexts.
 request_firmware_nowait
 -----------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: request_firmware_nowait
+   :identifiers: request_firmware_nowait
 
 Special optimizations on reboot
 ===============================
@@ -66,7 +66,7 @@ firmware to be loaded.
 firmware_request_cache()
 ------------------------
 .. kernel-doc:: drivers/base/firmware_loader/main.c
-   :functions: firmware_request_cache
+   :identifiers: firmware_request_cache
 
 request firmware API expected driver use
 ========================================

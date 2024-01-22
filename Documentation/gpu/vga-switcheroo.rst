@@ -35,31 +35,31 @@ Public structures
 -----------------
 
 .. kernel-doc:: include/linux/vga_switcheroo.h
-   :functions: vga_switcheroo_handler
+   :identifiers: vga_switcheroo_handler
 
 .. kernel-doc:: include/linux/vga_switcheroo.h
-   :functions: vga_switcheroo_client_ops
+   :identifiers: vga_switcheroo_client_ops
 
 Public constants
 ----------------
 
 .. kernel-doc:: include/linux/vga_switcheroo.h
-   :functions: vga_switcheroo_handler_flags_t
+   :identifiers: vga_switcheroo_handler_flags_t
 
 .. kernel-doc:: include/linux/vga_switcheroo.h
-   :functions: vga_switcheroo_client_id
+   :identifiers: vga_switcheroo_client_id
 
 .. kernel-doc:: include/linux/vga_switcheroo.h
-   :functions: vga_switcheroo_state
+   :identifiers: vga_switcheroo_state
 
 Private structures
 ------------------
 
 .. kernel-doc:: drivers/gpu/vga/vga_switcheroo.c
-   :functions: vgasr_priv
+   :identifiers: vgasr_priv
 
 .. kernel-doc:: drivers/gpu/vga/vga_switcheroo.c
-   :functions: vga_switcheroo_client
+   :identifiers: vga_switcheroo_client
 
 Handlers
 ========

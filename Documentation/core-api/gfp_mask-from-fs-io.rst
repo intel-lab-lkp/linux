@@ -36,9 +36,9 @@ scope will inherently drop __GFP_FS respectively __GFP_IO from the given
 mask so no memory allocation can recurse back in the FS/IO.
 
 .. kernel-doc:: include/linux/sched/mm.h
-   :functions: memalloc_nofs_save memalloc_nofs_restore
+   :identifiers: memalloc_nofs_save memalloc_nofs_restore
 .. kernel-doc:: include/linux/sched/mm.h
-   :functions: memalloc_noio_save memalloc_noio_restore
+   :identifiers: memalloc_noio_save memalloc_noio_restore
 
 FS/IO code then simply calls the appropriate save function before
 any critical section with respect to the reclaim is started - e.g.

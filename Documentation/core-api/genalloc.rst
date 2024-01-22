@@ -18,10 +18,10 @@ Code using this allocator should include <linux/genalloc.h>.  The action
 begins with the creation of a pool using one of:
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_create		
+   :identifiers: gen_pool_create
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: devm_gen_pool_create
+   :identifiers: devm_gen_pool_create
 
 A call to gen_pool_create() will create a pool.  The granularity of
 allocations is set with min_alloc_order; it is a log-base-2 number like
@@ -39,7 +39,7 @@ pool when the given device is destroyed.
 A pool is shut down with:
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_destroy
+   :identifiers: gen_pool_destroy
 
 It's worth noting that, if there are still allocations outstanding from the
 given pool, this function will take the rather extreme step of invoking
@@ -50,10 +50,10 @@ that state, so one of the first orders of business is usually to add memory
 to the pool.  That can be done with one of:
 
 .. kernel-doc:: include/linux/genalloc.h
-   :functions: gen_pool_add
+   :identifiers: gen_pool_add
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_add_owner
+   :identifiers: gen_pool_add_owner
 
 A call to gen_pool_add() will place the size bytes of memory
 starting at addr (in the kernel's virtual address space) into the given
@@ -66,13 +66,13 @@ The functions for allocating memory from the pool (and putting it back)
 are:
 
 .. kernel-doc:: include/linux/genalloc.h
-   :functions: gen_pool_alloc
+   :identifiers: gen_pool_alloc
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_dma_alloc
+   :identifiers: gen_pool_dma_alloc
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_free_owner
+   :identifiers: gen_pool_free_owner
 
 As one would expect, gen_pool_alloc() will allocate size< bytes
 from the given pool.  The gen_pool_dma_alloc() variant allocates
@@ -89,10 +89,10 @@ return.  If that sort of control is needed, the following functions will be
 of interest:
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_alloc_algo_owner
+   :identifiers: gen_pool_alloc_algo_owner
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_set_algo
+   :identifiers: gen_pool_set_algo
 
 Allocations with gen_pool_alloc_algo() specify an algorithm to be
 used to choose the memory to be allocated; the default algorithm can be set
@@ -123,22 +123,22 @@ above.  With luck, wider awareness of this module will help to prevent the
 writing of special-purpose memory allocators in the future.
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_virt_to_phys
+   :identifiers: gen_pool_virt_to_phys
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_for_each_chunk
+   :identifiers: gen_pool_for_each_chunk
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_has_addr
+   :identifiers: gen_pool_has_addr
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_avail
+   :identifiers: gen_pool_avail
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_size
+   :identifiers: gen_pool_size
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: gen_pool_get
+   :identifiers: gen_pool_get
 
 .. kernel-doc:: lib/genalloc.c
-   :functions: of_gen_pool_get
+   :identifiers: of_gen_pool_get

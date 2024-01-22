@@ -135,28 +135,28 @@ API for implementing a new FPGA Manager driver
 * fpga_mgr_unregister() -  Unregister an FPGA manager
 
 .. kernel-doc:: include/linux/fpga/fpga-mgr.h
-   :functions: fpga_mgr_states
+   :identifiers: fpga_mgr_states
 
 .. kernel-doc:: include/linux/fpga/fpga-mgr.h
-   :functions: fpga_manager
+   :identifiers: fpga_manager
 
 .. kernel-doc:: include/linux/fpga/fpga-mgr.h
-   :functions: fpga_manager_ops
+   :identifiers: fpga_manager_ops
 
 .. kernel-doc:: include/linux/fpga/fpga-mgr.h
-   :functions: fpga_manager_info
+   :identifiers: fpga_manager_info
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_mgr_register_full
+   :identifiers: fpga_mgr_register_full
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_mgr_register
+   :identifiers: fpga_mgr_register
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: devm_fpga_mgr_register_full
+   :identifiers: devm_fpga_mgr_register_full
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: devm_fpga_mgr_register
+   :identifiers: devm_fpga_mgr_register
 
 .. kernel-doc:: drivers/fpga/fpga-mgr.c
-   :functions: fpga_mgr_unregister
+   :identifiers: fpga_mgr_unregister

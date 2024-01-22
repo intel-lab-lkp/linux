@@ -65,7 +65,7 @@ Debug functions
 ===============
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_init
+   :identifiers: debug_object_init
 
 This function is called whenever the initialization function of a real
 object is called.
@@ -88,7 +88,7 @@ calling code must use debug_object_init_on_stack() and remove the
 object before leaving the function which allocated it. See next section.
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_init_on_stack
+   :identifiers: debug_object_init_on_stack
 
 This function is called whenever the initialization function of a real
 object which resides on the stack is called.
@@ -112,7 +112,7 @@ calling debug_object_free() before the function which allocates the
 object returns. Otherwise we keep track of stale objects.
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_activate
+   :identifiers: debug_object_activate
 
 This function is called whenever the activation function of a real
 object is called.
@@ -137,7 +137,7 @@ tracker object is set to ODEBUG_STATE_ACTIVE.
 
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_deactivate
+   :identifiers: debug_object_deactivate
 
 This function is called whenever the deactivation function of a real
 object is called.
@@ -150,7 +150,7 @@ When the deactivation is legitimate, then the state of the associated
 tracker object is set to ODEBUG_STATE_INACTIVE.
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_destroy
+   :identifiers: debug_object_destroy
 
 This function is called to mark an object destroyed. This is useful to
 prevent the usage of invalid objects, which are still available in
@@ -169,7 +169,7 @@ When the destruction is legitimate, then the state of the associated
 tracker object is set to ODEBUG_STATE_DESTROYED.
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_free
+   :identifiers: debug_object_free
 
 This function is called before an object is freed.
 
@@ -186,7 +186,7 @@ usage of the object is detected by the other debug checks.
 
 
 .. kernel-doc:: lib/debugobjects.c
-   :functions: debug_object_assert_init
+   :identifiers: debug_object_assert_init
 
 This function is called to assert that an object has been initialized.
 

@@ -254,7 +254,7 @@ State machine
 =============
 
 .. kernel-doc:: include/linux/device.h
-   :functions: device_link_state
+   :identifiers: device_link_state
 
 ::
 

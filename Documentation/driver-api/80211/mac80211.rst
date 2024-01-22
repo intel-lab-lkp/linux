@@ -30,7 +30,7 @@ Finally, a discussion of hardware capabilities should be done with
 references to other parts of the book.
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_hw
 	ieee80211_hw_flags
 	SET_IEEE80211_DEV
@@ -50,7 +50,7 @@ This chapter should describe PHY handling including start/stop callbacks
 and the various structures used.
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_conf
 	ieee80211_conf_flags
 
@@ -72,7 +72,7 @@ the recommendation to allow only a single interface in STA mode at
 first!
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_vif
+   :identifiers: ieee80211_vif
 
 Receive and transmit processing
 ===============================
@@ -107,7 +107,7 @@ functions/definitions
 ---------------------
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_rx_status
 	mac80211_rx_encoding_flags
 	mac80211_rx_flags
@@ -141,7 +141,7 @@ Frame filtering
    :doc: Frame filtering
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions: ieee80211_filter_flags
+   :identifiers: ieee80211_filter_flags
 
 The mac80211 workqueue
 ======================
@@ -150,6 +150,6 @@ The mac80211 workqueue
    :doc: mac80211 workqueue
 
 .. kernel-doc:: include/net/mac80211.h
-   :functions:
+   :identifiers:
 	ieee80211_queue_work
 	ieee80211_queue_delayed_work

@@ -95,28 +95,28 @@ Alternate mode structs
 ~~~~~~~~~~~~~~~~~~~~~~
 
 .. kernel-doc:: include/linux/usb/typec_altmode.h
-   :functions: typec_altmode_driver typec_altmode_ops
+   :identifiers: typec_altmode_driver typec_altmode_ops
 
 Alternate mode driver registering/unregistering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. kernel-doc:: include/linux/usb/typec_altmode.h
-   :functions: typec_altmode_register_driver typec_altmode_unregister_driver
+   :identifiers: typec_altmode_register_driver typec_altmode_unregister_driver
 
 Alternate mode driver operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. kernel-doc:: drivers/usb/typec/bus.c
-   :functions: typec_altmode_enter typec_altmode_exit typec_altmode_attention typec_altmode_vdm typec_altmode_notify
+   :identifiers: typec_altmode_enter typec_altmode_exit typec_altmode_attention typec_altmode_vdm typec_altmode_notify
 
 API for the port drivers
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. kernel-doc:: drivers/usb/typec/bus.c
-   :functions: typec_match_altmode
+   :identifiers: typec_match_altmode
 
 Cable Plug operations
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. kernel-doc:: drivers/usb/typec/bus.c
-   :functions: typec_altmode_get_plug typec_altmode_put_plug
+   :identifiers: typec_altmode_get_plug typec_altmode_put_plug

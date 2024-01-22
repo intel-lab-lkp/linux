@@ -79,6 +79,6 @@ Functions and structures
 ========================
 
 .. kernel-doc:: include/linux/idr.h
-   :functions:
+   :identifiers:
 .. kernel-doc:: lib/idr.c
-   :functions:
+   :identifiers:

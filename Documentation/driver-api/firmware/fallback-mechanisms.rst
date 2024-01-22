@@ -112,7 +112,7 @@ expected to be used regularly by userspace.
 firmware_fallback_sysfs
 -----------------------
 .. kernel-doc:: drivers/base/firmware_loader/fallback.c
-   :functions: firmware_fallback_sysfs
+   :identifiers: firmware_fallback_sysfs
 
 Firmware kobject uevent fallback mechanism
 ==========================================
@@ -220,7 +220,7 @@ A device driver which needs this can describe the firmware it needs
 using an efi_embedded_fw_desc struct:
 
 .. kernel-doc:: include/linux/efi_embedded_fw.h
-   :functions: efi_embedded_fw_desc
+   :identifiers: efi_embedded_fw_desc
 
 The EFI embedded-fw code works by scanning all EFI_BOOT_SERVICES_CODE memory
 segments for an eight byte sequence matching prefix; if the prefix is found it

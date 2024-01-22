@@ -63,7 +63,7 @@ The port drivers will describe every Type-C port they control with struct
 typec_capability data structure, and register them with the following API:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_register_port typec_unregister_port
+   :identifiers: typec_register_port typec_unregister_port
 
 When registering the ports, the prefer_role member in struct typec_capability
 deserves special notice. If the port that is being registered does not have
@@ -82,7 +82,7 @@ registration. The class offers the following API for registering/unregistering
 partners.
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_register_partner typec_unregister_partner
+   :identifiers: typec_register_partner typec_unregister_partner
 
 The class will provide a handle to struct typec_partner if the registration was
 successful, or NULL.
@@ -94,7 +94,7 @@ create a sysfs directory for the identity under the partner device. The result
 of Discover Identity command can then be reported with the following API:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_partner_set_identity
+   :identifiers: typec_partner_set_identity
 
 Registering Cables
 ~~~~~~~~~~~~~~~~~~
@@ -115,7 +115,7 @@ the details during registration. The class offers the following API for
 registering/unregistering cables and their plugs:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_register_cable typec_unregister_cable typec_register_plug typec_unregister_plug
+   :identifiers: typec_register_cable typec_unregister_cable typec_register_plug typec_unregister_plug
 
 The class will provide a handle to struct typec_cable and struct typec_plug if
 the registration is successful, or NULL if it isn't.
@@ -127,7 +127,7 @@ sysfs directory for the identity under the cable device. The result of Discover
 Identity command can then be reported with the following API:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_cable_set_identity
+   :identifiers: typec_cable_set_identity
 
 Notifications
 ~~~~~~~~~~~~~
@@ -137,7 +137,7 @@ during connection of a partner or cable, the port driver must use the following
 APIs to report it to the class:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_set_data_role typec_set_pwr_role typec_set_vconn_role typec_set_pwr_opmode
+   :identifiers: typec_set_data_role typec_set_pwr_role typec_set_vconn_role typec_set_pwr_opmode
 
 Alternate Modes
 ~~~~~~~~~~~~~~~
@@ -152,7 +152,7 @@ Ports that support Alternate Modes need to register each SVID they support with
 the following API:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_port_register_altmode
+   :identifiers: typec_port_register_altmode
 
 If a partner or cable plug provides a list of SVIDs as response to USB Power
 Delivery Structured VDM Discover SVIDs message, each SVID needs to be
@@ -161,12 +161,12 @@ registered.
 API for the partners:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_partner_register_altmode
+   :identifiers: typec_partner_register_altmode
 
 API for the Cable Plugs:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_plug_register_altmode
+   :identifiers: typec_plug_register_altmode
 
 So ports, partners and cable plugs will register the alternate modes with their
 own functions, but the registration will always return a handle to struct
@@ -174,13 +174,13 @@ typec_altmode on success, or NULL. The unregistration will happen with the same
 function:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_unregister_altmode
+   :identifiers: typec_unregister_altmode
 
 If a partner or cable plug enters or exits a mode, the port driver needs to
 notify the class with the following API:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_altmode_update_active
+   :identifiers: typec_altmode_update_active
 
 Multiplexer/DeMultiplexer Switches
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -193,7 +193,7 @@ route the pins on the connector to some other component besides USB. USB Type-C
 Connector Class supplies an API for registering those switches.
 
 .. kernel-doc:: drivers/usb/typec/mux.c
-   :functions: typec_switch_register typec_switch_unregister typec_mux_register typec_mux_unregister
+   :identifiers: typec_switch_register typec_switch_unregister typec_mux_register typec_mux_unregister
 
 In most cases the same physical mux will handle both the orientation and mode.
 However, as the port drivers will be responsible for the orientation, and the
@@ -205,7 +205,7 @@ the switch for the port. The drivers can then use the following API for
 controlling them:
 
 .. kernel-doc:: drivers/usb/typec/class.c
-   :functions: typec_set_orientation typec_set_mode
+   :identifiers: typec_set_orientation typec_set_mode
 
 If the connector is dual-role capable, there may also be a switch for the data
 role. USB Type-C Connector Class does not supply separate API for them. The
