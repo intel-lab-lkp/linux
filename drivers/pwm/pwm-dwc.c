@@ -25,15 +25,47 @@
 
 #include "pwm-dwc.h"
 
+/* Elkhart Lake */
+static const struct dwc_pwm_info ehl_pwm_info = {
+	.nr = 2,
+	.size = 0x1000,
+};
+
+static int dwc_pwm_init(struct device *dev, const struct dwc_pwm_info *info, void __iomem *base)
+{
+	/* Default values for single instance devices */
+	unsigned int nr = 1, size = 0;
+	int i, ret;
+
+	/* Fill up values from driver_data, if any */
+	if (info) {
+		nr = info->nr;
+		size = info->size;
+	}
+
+	for (i = 0; i < nr; i++) {
+		struct dwc_pwm *dwc;
+
+		dwc = dwc_pwm_alloc(dev);
+		if (!dwc)
+			return -ENOMEM;
+
+		dwc->base = base + (i * size);
+
+		ret = devm_pwmchip_add(dev, &dwc->chip);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 {
+	const struct dwc_pwm_info *info;
 	struct device *dev = &pci->dev;
-	struct dwc_pwm *dwc;
+	void __iomem *base;
 	int ret;
-
-	dwc = dwc_pwm_alloc(dev);
-	if (!dwc)
-		return -ENOMEM;
 
 	ret = pcim_enable_device(pci);
 	if (ret) {
@@ -49,13 +81,14 @@ static int dwc_pwm_probe(struct pci_dev *pci, const struct pci_device_id *id)
 		return ret;
 	}
 
-	dwc->base = pcim_iomap_table(pci)[0];
-	if (!dwc->base) {
+	base = pcim_iomap_table(pci)[0];
+	if (!base) {
 		dev_err(dev, "Base address missing\n");
 		return -ENOMEM;
 	}
 
-	ret = devm_pwmchip_add(dev, &dwc->chip);
+	info = (const struct dwc_pwm_info *)id->driver_data;
+	ret = dwc_pwm_init(dev, info, base);
 	if (ret)
 		return ret;
 
@@ -109,7 +142,7 @@ static int dwc_pwm_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(dwc_pwm_pm_ops, dwc_pwm_suspend, dwc_pwm_resume);
 
 static const struct pci_device_id dwc_pwm_id_table[] = {
-	{ PCI_VDEVICE(INTEL, 0x4bb7) }, /* Elkhart Lake */
+	{ PCI_VDEVICE(INTEL, 0x4bb7), (kernel_ulong_t)&ehl_pwm_info },
 	{  }	/* Terminating Entry */
 };
 MODULE_DEVICE_TABLE(pci, dwc_pwm_id_table);
