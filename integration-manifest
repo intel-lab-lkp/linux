@@ -1,0 +1,36 @@
+drm drm-fixes 6613476e225e090cc9aad49be7fa504e290dd33d
+	Linux 6.8-rc1
+drm-misc drm-misc-fixes b246271d257b4b0573e88f443ed8091f8b044895
+	accel/ivpu: Deprecate DRM_IVPU_PARAM_CONTEXT_PRIORITY param
+drm-intel drm-intel-fixes 0dd3ee31125508cd67f7e7172247f05b7fd1753a
+	Linux 6.7
+drm-xe drm-xe-fixes 6613476e225e090cc9aad49be7fa504e290dd33d
+	Linux 6.8-rc1
+drm drm-next 6613476e225e090cc9aad49be7fa504e290dd33d
+	Linux 6.8-rc1
+drm-misc drm-misc-next-fixes 1f1626ac0428820f998245478610f452650bcab5
+	drm/ttm: fix ttm pool initialization for no-dma-device drivers
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes bf3ff145df184698a8a80b33265064638572366f
+	drm/xe: display support should not depend on EXPERT
+drm-misc drm-misc-next 70a46e1fda3b3584da01fe072bc959003ebbd8a9
+	drm/doc/rfc: Removing missing reference to xe.rst
+drm-intel drm-intel-next 92b47c3b8b242a1f1b73d5c1181d5b678ac1382b
+	drm/i915: Replace a memset() with zero initialization
+drm-intel drm-intel-gt-next c44d4ef47fdad0a33966de89f9064e19736bb52f
+	drm/i915/xelpg: Extend some workarounds/tuning to gfx version 12.74
+drm-xe drm-xe-next 6a02867560f77328ae5637b70b06704b140aafa6
+	drm/xe/xe2: Use XE_CACHE_WB pat index
+drm-intel topic/core-for-CI 240520520b9051b237e59e8746ac08ccf9c0fa27
+	HAX net/phy: Suppress WARN from phy_error
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
+drm-xe topic/xe-for-CI e4cfe0cd981952f6ed3d5b92a0b7e3ae0b3ad2b4
+	drm/xe/guc: define LNL FW
