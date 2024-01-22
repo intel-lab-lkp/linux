@@ -264,6 +264,7 @@ struct i915_vma {
 #define I915_VMA_SCANOUT	((int)BIT(I915_VMA_SCANOUT_BIT))
 
 	struct i915_active active;
+	intel_wakeref_t wakeref;
 
 #define I915_VMA_PAGES_BIAS 24
 #define I915_VMA_PAGES_ACTIVE (BIT(24) | 1)
