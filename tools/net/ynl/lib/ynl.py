@@ -449,7 +449,7 @@ class YnlFamily(SpecFamily):
         self.sock.setsockopt(Netlink.SOL_NETLINK, Netlink.NETLINK_ADD_MEMBERSHIP,
                              mcast_id)
 
-    def _add_attr(self, space, name, value):
+    def _add_attr(self, space, name, value, vals):
         try:
             attr = self.attr_sets[space][name]
         except KeyError:
@@ -458,8 +458,10 @@ class YnlFamily(SpecFamily):
         if attr["type"] == 'nest':
             nl_type |= Netlink.NLA_F_NESTED
             attr_payload = b''
+            subvals = ChainMap(value, vals)
             for subname, subvalue in value.items():
-                attr_payload += self._add_attr(attr['nested-attributes'], subname, subvalue)
+                attr_payload += self._add_attr(attr['nested-attributes'],
+                                               subname, subvalue, subvals)
         elif attr["type"] == 'flag':
             attr_payload = b''
         elif attr["type"] == 'string':
@@ -469,6 +471,8 @@ class YnlFamily(SpecFamily):
                 attr_payload = value
             elif isinstance(value, str):
                 attr_payload = bytes.fromhex(value)
+            elif isinstance(value, dict) and attr.struct_name:
+                attr_payload = self._encode_struct(attr.struct_name, value)
             else:
                 raise Exception(f'Unknown type for binary attribute, value: {value}')
         elif attr.is_auto_scalar:
@@ -481,6 +485,20 @@ class YnlFamily(SpecFamily):
             attr_payload = format.pack(int(value))
         elif attr['type'] in "bitfield32":
             attr_payload = struct.pack("II", int(value["value"]), int(value["selector"]))
+        elif attr['type'] == 'sub-message':
+            msg_format = self._resolve_selector(attr, vals)
+            attr_payload = b''
+            if msg_format.fixed_header:
+                attr_payload += self._encode_struct(msg_format.fixed_header, value)
+            if msg_format.attr_set:
+                if msg_format.attr_set in self.attr_sets:
+                    nl_type |= Netlink.NLA_F_NESTED
+                    subvals = ChainMap(value, vals)
+                    for subname, subvalue in value.items():
+                        attr_payload += self._add_attr(msg_format.attr_set,
+                                                       subname, subvalue, subvals)
+                else:
+                    raise Exception(f"Unknown attribute-set '{msg_format.attr_set}'")
         else:
             raise Exception(f'Unknown type at {space} {name} {value} {attr["type"]}')
 
@@ -777,7 +795,7 @@ class YnlFamily(SpecFamily):
         if op.fixed_header:
             msg += self._encode_struct(op.fixed_header, vals)
         for name, value in vals.items():
-            msg += self._add_attr(op.attr_set.name, name, value)
+            msg += self._add_attr(op.attr_set.name, name, value, vals)
         msg = _genl_msg_finalize(msg)
 
         self.sock.send(msg, 0)
