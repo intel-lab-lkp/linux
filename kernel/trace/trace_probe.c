@@ -12,6 +12,7 @@
 #define pr_fmt(fmt)	"trace_probe: " fmt
 
 #include <linux/bpf.h>
+#include <linux/fs.h>
 #include "trace_btf.h"
 
 #include "trace_probe.h"
@@ -1574,28 +1575,38 @@ int traceprobe_expand_dentry_args(int argc, const char *argv[], char *buf,
 	for (i = 0; i < argc; i++) {
 		size_t idx;
 
-		if (str_has_suffix(argv[i], ":%pd", &idx)) {
-			char *tmp = kstrdup(argv[i], GFP_KERNEL);
-			char *equal;
+		if (!str_has_suffix(argv[i], ":%pd", &idx) &&
+		    !str_has_suffix(argv[i], ":%pD", &idx))
+			continue;
 
-			if (!tmp)
-				return -ENOMEM;
+		char *tmp = kstrdup(argv[i], GFP_KERNEL);
+		char *equal;
 
-			equal = strchr(tmp, '=');
-			if (equal)
-				*equal = '\0';
-			tmp[idx] = '\0';
+		if (!tmp)
+			return -ENOMEM;
+
+		equal = strchr(tmp, '=');
+		if (equal)
+			*equal = '\0';
+		tmp[idx] = '\0';
+		if (argv[i][idx + 3] == 'd')
 			ret = snprintf(buf + used, bufsize - used,
 				       "%s%s+0x0(+0x%zx(%s)):string",
 				       equal ? tmp : "", equal ? "=" : "",
 				       offsetof(struct dentry, d_name.name),
 				       equal ? equal + 1 : tmp);
-			kfree(tmp);
-			if (ret >= bufsize - used)
-				return -ENOMEM;
-			argv[i] = buf + used;
-			used += ret + 1;
-		}
+		else
+			ret = snprintf(buf + used, bufsize - used,
+				       "%s%s+0x0(+0x%zx(+0x%zx(%s))):string",
+				       equal ? tmp : "", equal ? "=" : "",
+				       offsetof(struct dentry, d_name.name),
+				       offsetof(struct file, f_path.dentry),
+				       equal ? equal + 1 : tmp);
+		kfree(tmp);
+		if (ret >= bufsize - used)
+			return -ENOMEM;
+		argv[i] = buf + used;
+		used += ret + 1;
 	}
 
 	return 0;
