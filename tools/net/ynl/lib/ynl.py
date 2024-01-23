@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 
-from collections import namedtuple
+from collections import namedtuple, ChainMap
 import functools
 import os
 import random
@@ -564,8 +564,8 @@ class YnlFamily(SpecFamily):
         spec = sub_msg_spec.formats[value]
         return spec
 
-    def _decode_sub_msg(self, attr, attr_spec, rsp):
-        msg_format = self._resolve_selector(attr_spec, rsp)
+    def _decode_sub_msg(self, attr, attr_spec, vals):
+        msg_format = self._resolve_selector(attr_spec, vals)
         decoded = {}
         offset = 0
         if msg_format.fixed_header:
@@ -579,10 +579,11 @@ class YnlFamily(SpecFamily):
                 raise Exception(f"Unknown attribute-set '{attr_space}' when decoding '{attr_spec.name}'")
         return decoded
 
-    def _decode(self, attrs, space):
+    def _decode(self, attrs, space, outer_vals = ChainMap()):
         if space:
             attr_space = self.attr_sets[space]
         rsp = dict()
+        vals = ChainMap(rsp, outer_vals)
         for attr in attrs:
             try:
                 attr_spec = attr_space.attrs_by_val[attr.type]
@@ -594,7 +595,7 @@ class YnlFamily(SpecFamily):
                 continue
 
             if attr_spec["type"] == 'nest':
-                subdict = self._decode(NlAttrs(attr.raw), attr_spec['nested-attributes'])
+                subdict = self._decode(NlAttrs(attr.raw), attr_spec['nested-attributes'], vals)
                 decoded = subdict
             elif attr_spec["type"] == 'string':
                 decoded = attr.as_strz()
@@ -617,7 +618,7 @@ class YnlFamily(SpecFamily):
                     selector = self._decode_enum(selector, attr_spec)
                 decoded = {"value": value, "selector": selector}
             elif attr_spec["type"] == 'sub-message':
-                decoded = self._decode_sub_msg(attr, attr_spec, rsp)
+                decoded = self._decode_sub_msg(attr, attr_spec, vals)
             else:
                 if not self.process_unknown:
                     raise Exception(f'Unknown {attr_spec["type"]} with name {attr_spec["name"]}')
