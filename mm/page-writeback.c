@@ -198,10 +198,8 @@ static void wb_min_max_ratio(struct bdi_writeback *wb,
 			min *= this_bw;
 			min = div64_ul(min, tot_bw);
 		}
-		if (max < 100 * BDI_RATIO_SCALE) {
-			max *= this_bw;
-			max = div64_ul(max, tot_bw);
-		}
+		max *= this_bw;
+		max = div64_ul(max, tot_bw);
 	}
 
 	*minp = min;
