@@ -422,9 +422,12 @@ static struct irq_desc *alloc_desc(int irq, int node, unsigned int flags,
 	desc->kstat_irqs = alloc_percpu(unsigned int);
 	if (!desc->kstat_irqs)
 		goto err_desc;
+	desc->irq_time = alloc_percpu(struct per_irqtime);
+	if (!desc->irq_time)
+		goto err_kstat;
 
 	if (alloc_masks(desc, node))
-		goto err_kstat;
+		goto err_irqtime;
 
 	raw_spin_lock_init(&desc->lock);
 	lockdep_set_class(&desc->lock, &irq_desc_lock_class);
@@ -439,6 +442,8 @@ static struct irq_desc *alloc_desc(int irq, int node, unsigned int flags,
 
 	return desc;
 
+err_irqtime:
+	free_percpu(desc->irq_time);
 err_kstat:
 	free_percpu(desc->kstat_irqs);
 err_desc:
@@ -451,6 +456,7 @@ static void irq_kobj_release(struct kobject *kobj)
 	struct irq_desc *desc = container_of(kobj, struct irq_desc, kobj);
 
 	free_masks(desc);
+	free_percpu(desc->irq_time);
 	free_percpu(desc->kstat_irqs);
 	kfree(desc);
 }
@@ -594,6 +600,7 @@ int __init early_irq_init(void)
 
 	for (i = 0; i < count; i++) {
 		desc[i].kstat_irqs = alloc_percpu(unsigned int);
+		desc[i].irq_time = alloc_percpu(struct per_irqtime);
 		alloc_masks(&desc[i], node);
 		raw_spin_lock_init(&desc[i].lock);
 		lockdep_set_class(&desc[i].lock, &irq_desc_lock_class);

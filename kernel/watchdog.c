@@ -25,6 +25,12 @@
 #include <linux/stop_machine.h>
 #include <linux/kernel_stat.h>
 #include <linux/math64.h>
+#include <linux/tracepoint.h>
+#include <linux/irq.h>
+#include <linux/bitops.h>
+#include <trace/events/irq.h>
+#include <linux/irqdesc.h>
+#include <linux/timekeeping.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>
@@ -411,11 +417,15 @@ void touch_softlockup_watchdog_sync(void)
 	__this_cpu_write(watchdog_report_ts, SOFTLOCKUP_DELAY_REPORT);
 }
 
+static void set_potential_softlockup(unsigned long now, unsigned long touch_ts);
+
 static int is_softlockup(unsigned long touch_ts,
 			 unsigned long period_ts,
 			 unsigned long now)
 {
 	if ((watchdog_enabled & WATCHDOG_SOFTOCKUP_ENABLED) && watchdog_thresh) {
+		/* Softlockup may occur in the current period */
+		set_potential_softlockup(now, period_ts);
 		/* Warn about unreasonable delays. */
 		if (time_after(now, period_ts + get_softlockup_thresh()))
 			return now - touch_ts;
@@ -427,6 +437,8 @@ static int is_softlockup(unsigned long touch_ts,
 static DEFINE_PER_CPU(u64, cpustat_old[NR_STATS]);
 static DEFINE_PER_CPU(u64, cpustat_diff[5][NR_STATS]);
 static DEFINE_PER_CPU(int, cpustat_tail);
+
+static void print_hardirq_time(void);
 
 static void update_cpustat(void)
 {
@@ -469,10 +481,179 @@ static void print_cpustat(void)
 			a[i][CPUTIME_IRQ], b[i][CPUTIME_IRQ],
 			a[i][CPUTIME_IDLE], b[i][CPUTIME_IDLE]);
 	}
+	print_hardirq_time();
 }
+
+static DEFINE_PER_CPU(u64, hardirq_start_time);
+
+#define SOFTLOCKUP_HARDIRQ	0
+static DEFINE_PER_CPU(long, softlockup_flags);
+
+static void find_irqtime_top3(u64 *irqtime, int *irq, u64 perirq_time, int perirq_id)
+{
+	if (perirq_time > irqtime[0] || (perirq_time == irqtime[0] && perirq_id < irq[0])) {
+		irqtime[2] = irqtime[1];
+		irq[2] = irq[1];
+		irqtime[1] = irqtime[0];
+		irq[1] = irq[0];
+		irqtime[0] = perirq_time;
+		irq[0] = perirq_id;
+	} else if (perirq_time > irqtime[1] || (perirq_time == irqtime[1] && perirq_id < irq[1])) {
+		irqtime[2] = irqtime[1];
+		irq[2] = irq[1];
+		irqtime[1] = perirq_time;
+		irq[1] = perirq_id;
+	} else if (perirq_time > irqtime[1] || (perirq_time == irqtime[2] && perirq_id < irq[2])) {
+		irqtime[2] = perirq_time;
+		irq[2] = perirq_id;
+	}
+}
+
+/*
+ * If the proportion of time spent handling irq exceeds 50% during a sampling period,
+ * then it is necessary to tally the handling time of each irq.
+ */
+static inline bool need_trace_irqtime(int type)
+{
+	int tail = this_cpu_read(cpustat_tail);
+
+	if (--tail == -1)
+		tail = 4;
+	return this_cpu_read(cpustat_diff[tail][type]) > sample_period/2;
+}
+
+static void irq_handler_entry_callback(void *data, int irq, struct irqaction *action)
+{
+	this_cpu_ptr(irq_to_desc(irq)->irq_time)->start_time = local_clock();
+}
+
+static void irq_handler_exit_callback(void *data, int irq, struct irqaction *action, int ret)
+{
+	u64 delta;
+	struct per_irqtime *irq_time;
+
+	if (test_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags))) {
+		irq_time = this_cpu_ptr(irq_to_desc(irq)->irq_time);
+		delta = local_clock() - irq_time->start_time;
+		irq_time->delta += delta;
+	}
+}
+/*
+ * Mark softlockup as potentially caused by hardirq
+ */
+static void set_potential_softlockup_hardirq(void)
+{
+	if (!need_trace_irqtime(CPUTIME_IRQ))
+		return;
+
+	if (test_and_set_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags)))
+		return;
+
+	__this_cpu_write(hardirq_start_time, local_clock());
+}
+
+static void clear_potential_softlockup_hardirq(void)
+{
+	unsigned int i;
+	unsigned long flags;
+	struct irq_desc *desc;
+
+	local_irq_save(flags);
+	clear_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags));
+	for_each_irq_desc(i, desc) {
+		if (!desc)
+			continue;
+		memset(this_cpu_ptr(desc->irq_time), 0, sizeof(struct per_irqtime));
+	}
+	local_irq_restore(flags);
+}
+
+static void hook_hardirq_events(void)
+{
+	int ret;
+
+	ret = register_trace_irq_handler_entry(irq_handler_entry_callback, NULL);
+	if (ret)
+		goto out_err;
+	ret = register_trace_irq_handler_exit(irq_handler_exit_callback, NULL);
+	if (ret)
+		goto out_unreg_entry;
+	return;
+
+out_unreg_entry:
+	unregister_trace_irq_handler_entry(irq_handler_entry_callback, NULL);
+out_err:
+	return;
+}
+
+static void unhook_hardirq_events(void)
+{
+	unregister_trace_irq_handler_entry(irq_handler_entry_callback, NULL);
+	unregister_trace_irq_handler_exit(irq_handler_exit_callback, NULL);
+}
+
+/*
+ * Mark that softlockup may occur
+ */
+static void set_potential_softlockup(unsigned long now, unsigned long period_ts)
+{
+	if (time_after_eq(now, period_ts + get_softlockup_thresh()/5))
+		set_potential_softlockup_hardirq();
+}
+
+static void clear_potential_softlockup(void)
+{
+	clear_potential_softlockup_hardirq();
+}
+
+static void print_hardirq_time(void)
+{
+	struct per_irqtime *irq_time;
+	struct irq_desc *desc;
+	u64 hardirqtime_top3[3] = {0, 0, 0};
+	int hardirq_top3[3] = {-1, -1, -1};
+	u64 start_time, now, a;
+	u32 period_us, i, b;
+
+	if (test_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags))) {
+		start_time = __this_cpu_read(hardirq_start_time);
+		now = local_clock();
+		period_us = (now - start_time)/1000;
+		/* Find the top three most time-consuming interrupts */
+		for_each_irq_desc(i, desc) {
+			if (!desc)
+				continue;
+			irq_time = this_cpu_ptr(desc->irq_time);
+			find_irqtime_top3(hardirqtime_top3, hardirq_top3, irq_time->delta, i);
+		}
+		printk(KERN_CRIT "CPU#%d Detect HardIRQ Time exceeds 50%% since %llds. Most time-consuming HardIRQs:\n",
+			smp_processor_id(), ns_to_timespec64(start_time - sample_period).tv_sec);
+		for (i = 0; i < 3; i++) {
+			if (hardirq_top3[i] == -1)
+				break;
+			a = 100 * (hardirqtime_top3[i] / 1000);
+			b = 10 * do_div(a, period_us);
+			do_div(b, period_us);
+			desc = irq_to_desc(hardirq_top3[i]);
+			if (desc && desc->action)
+				printk(KERN_CRIT "\t#%u: %llu.%u%% irq#%d(%s)\n",
+					i+1, a, b, hardirq_top3[i], desc->action->name);
+			else
+				printk(KERN_CRIT "\t#%u: %llu.%u%% irq#%d\n",
+				i+1, a, b, hardirq_top3[i]);
+		}
+		if (!need_trace_irqtime(CPUTIME_IRQ))
+			clear_potential_softlockup_hardirq();
+	}
+}
+
 #else
 static inline void update_cpustat(void) { }
 static inline void print_cpustat(void) { }
+static inline void set_potential_softlockup(unsigned long now, unsigned long period_ts) { }
+static inline void clear_potential_softlockup(void) { }
+static inline void hook_hardirq_events(void) { }
+static inline void unhook_hardirq_events(void) { }
 #endif
 
 /* watchdog detector functions */
@@ -490,6 +671,7 @@ static DEFINE_PER_CPU(struct cpu_stop_work, softlockup_stop_work);
 static int softlockup_fn(void *data)
 {
 	update_touch_ts();
+	clear_potential_softlockup();
 	complete(this_cpu_ptr(&softlockup_completion));
 
 	return 0;
@@ -650,6 +832,8 @@ static void softlockup_stop_all(void)
 	if (!softlockup_initialized)
 		return;
 
+	unhook_hardirq_events();
+
 	for_each_cpu(cpu, &watchdog_allowed_mask)
 		smp_call_on_cpu(cpu, softlockup_stop_fn, NULL, false);
 
@@ -665,6 +849,8 @@ static int softlockup_start_fn(void *data)
 static void softlockup_start_all(void)
 {
 	int cpu;
+
+	hook_hardirq_events();
 
 	cpumask_copy(&watchdog_allowed_mask, &watchdog_cpumask);
 	for_each_cpu(cpu, &watchdog_allowed_mask)

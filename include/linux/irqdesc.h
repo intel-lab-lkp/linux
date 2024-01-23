@@ -29,6 +29,7 @@ struct pt_regs;
  * @wake_depth:		enable depth, for multiple irq_set_irq_wake() callers
  * @tot_count:		stats field for non-percpu irqs
  * @irq_count:		stats field to detect stalled irqs
+ * @irq_time:		stats field to detect interrupt storm
  * @last_unhandled:	aging timer for unhandled count
  * @irqs_unhandled:	stats field for spurious unhandled interrupts
  * @threads_handled:	stats field for deferred spurious detection of threaded handlers
@@ -64,6 +65,7 @@ struct irq_desc {
 	unsigned int		wake_depth;	/* nested wake enables */
 	unsigned int		tot_count;
 	unsigned int		irq_count;	/* For detecting broken IRQs */
+	struct per_irqtime __percpu *irq_time;
 	unsigned long		last_unhandled;	/* Aging timer for unhandled count */
 	unsigned int		irqs_unhandled;
 	atomic_t		threads_handled;

@@ -251,6 +251,15 @@ enum {
 	IRQD_RESEND_WHEN_IN_PROGRESS    = BIT(30),
 };
 
+
+/*
+ * struct per_irqtime - per irq stats for interrupt storm detection
+ */
+struct per_irqtime {
+	u64	start_time;
+	u64	delta;
+};
+
 #define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
 
 static inline bool irqd_is_setaffinity_pending(struct irq_data *d)
