@@ -61,13 +61,15 @@ __visible u64 jiffies_64 __cacheline_aligned_in_smp = INITIAL_JIFFIES;
 
 EXPORT_SYMBOL(jiffies_64);
 
-/*
- * The timer wheel has LVL_DEPTH array levels. Each level provides an array of
- * LVL_SIZE buckets. Each level is driven by its own clock and therefor each
- * level has a different granularity.
+/**
+ * DOC: Concept of the timer wheel
  *
- * The level granularity is:		LVL_CLK_DIV ^ lvl
- * The level clock frequency is:	HZ / (LVL_CLK_DIV ^ level)
+ * The timer wheel has ``LVL_DEPTH`` array levels. Each level provides an array
+ * of ``LVL_SIZE`` buckets. Each level is driven by its own clock and therefor
+ * each level has a different granularity.
+ *
+ * * The level granularity is: ``LVL_CLK_DIV ^ lvl``
+ * * The level clock frequency is: ``HZ / (LVL_CLK_DIV ^ level)``
  *
  * The array level of a newly armed timer depends on the relative expiry
  * time. The farther the expiry time is away the higher the array level and
@@ -99,54 +101,54 @@ EXPORT_SYMBOL(jiffies_64);
  * The currently chosen array constants values are a good compromise between
  * array size and granularity.
  *
- * This results in the following granularity and range levels:
+ * This results in the following granularity and range levels::
  *
- * HZ 1000 steps
- * Level Offset  Granularity            Range
- *  0      0         1 ms                0 ms -         63 ms
- *  1     64         8 ms               64 ms -        511 ms
- *  2    128        64 ms              512 ms -       4095 ms (512ms - ~4s)
- *  3    192       512 ms             4096 ms -      32767 ms (~4s - ~32s)
- *  4    256      4096 ms (~4s)      32768 ms -     262143 ms (~32s - ~4m)
- *  5    320     32768 ms (~32s)    262144 ms -    2097151 ms (~4m - ~34m)
- *  6    384    262144 ms (~4m)    2097152 ms -   16777215 ms (~34m - ~4h)
- *  7    448   2097152 ms (~34m)  16777216 ms -  134217727 ms (~4h - ~1d)
- *  8    512  16777216 ms (~4h)  134217728 ms - 1073741822 ms (~1d - ~12d)
+ *  HZ 1000 steps
+ *  Level Offset  Granularity            Range
+ *   0      0         1 ms                0 ms -         63 ms
+ *   1     64         8 ms               64 ms -        511 ms
+ *   2    128        64 ms              512 ms -       4095 ms (512ms - ~4s)
+ *   3    192       512 ms             4096 ms -      32767 ms (~4s - ~32s)
+ *   4    256      4096 ms (~4s)      32768 ms -     262143 ms (~32s - ~4m)
+ *   5    320     32768 ms (~32s)    262144 ms -    2097151 ms (~4m - ~34m)
+ *   6    384    262144 ms (~4m)    2097152 ms -   16777215 ms (~34m - ~4h)
+ *   7    448   2097152 ms (~34m)  16777216 ms -  134217727 ms (~4h - ~1d)
+ *   8    512  16777216 ms (~4h)  134217728 ms - 1073741822 ms (~1d - ~12d)
  *
- * HZ  300
- * Level Offset  Granularity            Range
- *  0	   0         3 ms                0 ms -        210 ms
- *  1	  64        26 ms              213 ms -       1703 ms (213ms - ~1s)
- *  2	 128       213 ms             1706 ms -      13650 ms (~1s - ~13s)
- *  3	 192      1706 ms (~1s)      13653 ms -     109223 ms (~13s - ~1m)
- *  4	 256     13653 ms (~13s)    109226 ms -     873810 ms (~1m - ~14m)
- *  5	 320    109226 ms (~1m)     873813 ms -    6990503 ms (~14m - ~1h)
- *  6	 384    873813 ms (~14m)   6990506 ms -   55924050 ms (~1h - ~15h)
- *  7	 448   6990506 ms (~1h)   55924053 ms -  447392423 ms (~15h - ~5d)
- *  8    512  55924053 ms (~15h) 447392426 ms - 3579139406 ms (~5d - ~41d)
+ *  HZ  300
+ *  Level Offset  Granularity            Range
+ *   0     0         3 ms                0 ms -        210 ms
+ *   1    64        26 ms              213 ms -       1703 ms (213ms - ~1s)
+ *   2   128       213 ms             1706 ms -      13650 ms (~1s - ~13s)
+ *   3   192      1706 ms (~1s)      13653 ms -     109223 ms (~13s - ~1m)
+ *   4   256     13653 ms (~13s)    109226 ms -     873810 ms (~1m - ~14m)
+ *   5   320    109226 ms (~1m)     873813 ms -    6990503 ms (~14m - ~1h)
+ *   6   384    873813 ms (~14m)   6990506 ms -   55924050 ms (~1h - ~15h)
+ *   7   448   6990506 ms (~1h)   55924053 ms -  447392423 ms (~15h - ~5d)
+ *   8   512  55924053 ms (~15h) 447392426 ms - 3579139406 ms (~5d - ~41d)
  *
- * HZ  250
- * Level Offset  Granularity            Range
- *  0	   0         4 ms                0 ms -        255 ms
- *  1	  64        32 ms              256 ms -       2047 ms (256ms - ~2s)
- *  2	 128       256 ms             2048 ms -      16383 ms (~2s - ~16s)
- *  3	 192      2048 ms (~2s)      16384 ms -     131071 ms (~16s - ~2m)
- *  4	 256     16384 ms (~16s)    131072 ms -    1048575 ms (~2m - ~17m)
- *  5	 320    131072 ms (~2m)    1048576 ms -    8388607 ms (~17m - ~2h)
- *  6	 384   1048576 ms (~17m)   8388608 ms -   67108863 ms (~2h - ~18h)
- *  7	 448   8388608 ms (~2h)   67108864 ms -  536870911 ms (~18h - ~6d)
- *  8    512  67108864 ms (~18h) 536870912 ms - 4294967288 ms (~6d - ~49d)
+ *  HZ  250
+ *  Level Offset  Granularity            Range
+ *   0     0         4 ms                0 ms -        255 ms
+ *   1    64        32 ms              256 ms -       2047 ms (256ms - ~2s)
+ *   2   128       256 ms             2048 ms -      16383 ms (~2s - ~16s)
+ *   3   192      2048 ms (~2s)      16384 ms -     131071 ms (~16s - ~2m)
+ *   4   256     16384 ms (~16s)    131072 ms -    1048575 ms (~2m - ~17m)
+ *   5   320    131072 ms (~2m)    1048576 ms -    8388607 ms (~17m - ~2h)
+ *   6   384   1048576 ms (~17m)   8388608 ms -   67108863 ms (~2h - ~18h)
+ *   7   448   8388608 ms (~2h)   67108864 ms -  536870911 ms (~18h - ~6d)
+ *   8   512  67108864 ms (~18h) 536870912 ms - 4294967288 ms (~6d - ~49d)
  *
- * HZ  100
- * Level Offset  Granularity            Range
- *  0	   0         10 ms               0 ms -        630 ms
- *  1	  64         80 ms             640 ms -       5110 ms (640ms - ~5s)
- *  2	 128        640 ms            5120 ms -      40950 ms (~5s - ~40s)
- *  3	 192       5120 ms (~5s)     40960 ms -     327670 ms (~40s - ~5m)
- *  4	 256      40960 ms (~40s)   327680 ms -    2621430 ms (~5m - ~43m)
- *  5	 320     327680 ms (~5m)   2621440 ms -   20971510 ms (~43m - ~5h)
- *  6	 384    2621440 ms (~43m) 20971520 ms -  167772150 ms (~5h - ~1d)
- *  7	 448   20971520 ms (~5h) 167772160 ms - 1342177270 ms (~1d - ~15d)
+ *  HZ  100
+ *  Level Offset  Granularity            Range
+ *   0     0         10 ms               0 ms -        630 ms
+ *   1    64         80 ms             640 ms -       5110 ms (640ms - ~5s)
+ *   2   128        640 ms            5120 ms -      40950 ms (~5s - ~40s)
+ *   3   192       5120 ms (~5s)     40960 ms -     327670 ms (~40s - ~5m)
+ *   4   256      40960 ms (~40s)   327680 ms -    2621430 ms (~5m - ~43m)
+ *   5   320     327680 ms (~5m)   2621440 ms -   20971510 ms (~43m - ~5h)
+ *   6   384    2621440 ms (~43m) 20971520 ms -  167772150 ms (~5h - ~1d)
+ *   7   448   20971520 ms (~5h) 167772160 ms - 1342177270 ms (~1d - ~15d)
  */
 
 /* Clock divisor for the next level */
@@ -181,11 +183,20 @@ EXPORT_SYMBOL(jiffies_64);
 #define WHEEL_TIMEOUT_MAX	(WHEEL_TIMEOUT_CUTOFF - LVL_GRAN(LVL_DEPTH - 1))
 
 /*
- * The resulting wheel size. If NOHZ is configured we allocate two
- * wheels so we have a separate storage for the deferrable timers.
+ * The resulting wheel size.
  */
 #define WHEEL_SIZE	(LVL_SIZE * LVL_DEPTH)
 
+/**
+ * DOC: NOHZ and timer bases
+ *
+ * If NOHZ is configured two timer bases are allocated to have a separate
+ * storage for deferrable timers:
+ *
+ * @BASE_STD: Contains are all non deferrable timers
+ *
+ * @BASE_DEF: Contains all deferrable timers (with ``TIMER_DEFERRABLE`` flag)
+ */
 #ifdef CONFIG_NO_HZ_COMMON
 # define NR_BASES	2
 # define BASE_STD	0
@@ -1013,16 +1024,18 @@ static inline void forward_timer_base(struct timer_base *base)
 	__forward_timer_base(base, READ_ONCE(jiffies));
 }
 
-/*
- * We are using hashed locking: Holding per_cpu(timer_bases[x]).lock means
- * that all timers which are tied to this base are locked, and the base itself
- * is locked too.
+/**
+ * DOC: Timer bases and hashed locking
  *
- * So __run_timers/migrate_timers can safely modify all timers which could
+ * For locking, hashed locking is used: Holding ``per_cpu(timer_bases[x]).lock``
+ * means that all timers which are tied to this base are locked, and the base
+ * itself is locked too.
+ *
+ * So __run_timers()/migrate_timer_list() can safely modify all timers which could
  * be found in the base->vectors array.
  *
- * When a timer is migrating then the TIMER_MIGRATING flag is set and we need
- * to wait until the migration is done.
+ * When a timer is migrating then the ``TIMER_MIGRATING`` flag is set and it's
+ * required to wait before grabbing the lock, until the migration is done.
  */
 static struct timer_base *lock_timer_base(struct timer_list *timer,
 					  unsigned long *flags)

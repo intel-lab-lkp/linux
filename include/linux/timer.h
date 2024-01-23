@@ -23,6 +23,8 @@
 #endif
 
 /**
+ * DOC: Flags of the timer list timers
+ *
  * @TIMER_DEFERRABLE: A deferrable timer will work normally when the
  * system is busy, but will not cause a CPU to come out of idle just
  * to service it; instead, the timer will be serviced when the CPU
@@ -40,12 +42,13 @@
  * placement heuristics (like, NOHZ) and will always expire on the CPU
  * on which the timer was enqueued.
  *
- * Note: Because enqueuing of timers can migrate the timer from one
- * CPU to another, pinned timers are not guaranteed to stay on the
- * initialy selected CPU.  They move to the CPU on which the enqueue
- * function is invoked via mod_timer() or add_timer().  If the timer
- * should be placed on a particular CPU, then add_timer_on() has to be
- * used.
+ * .. note::
+ *   Because enqueuing of timers can migrate the timer from one
+ *   CPU to another, pinned timers are not guaranteed to stay on the
+ *   initialy selected CPU.  They move to the CPU on which the enqueue
+ *   function is invoked via mod_timer() or add_timer().  If the timer
+ *   should be placed on a particular CPU, then add_timer_on() has to be
+ *   used.
  */
 #define TIMER_CPUMASK		0x0003FFFF
 #define TIMER_MIGRATING		0x00040000

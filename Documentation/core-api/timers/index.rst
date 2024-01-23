@@ -20,7 +20,13 @@ Information for Users
    :maxdepth: 1
 
    api
+   timer-list-timers
 
 
 Information about concepts and internals
 ========================================
+
+.. toctree::
+   :maxdepth: 1
+
+   timer-wheel
