@@ -23,6 +23,8 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 #include <linux/stop_machine.h>
+#include <linux/kernel_stat.h>
+#include <linux/math64.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>
@@ -421,6 +423,58 @@ static int is_softlockup(unsigned long touch_ts,
 	return 0;
 }
 
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+static DEFINE_PER_CPU(u64, cpustat_old[NR_STATS]);
+static DEFINE_PER_CPU(u64, cpustat_diff[5][NR_STATS]);
+static DEFINE_PER_CPU(int, cpustat_tail);
+
+static void update_cpustat(void)
+{
+	u64 *old = this_cpu_ptr(cpustat_old);
+	u64 (*diff)[NR_STATS] = this_cpu_ptr(cpustat_diff);
+	int tail = this_cpu_read(cpustat_tail), i;
+	struct kernel_cpustat kcpustat;
+	u64 *cpustat = kcpustat.cpustat;
+
+	kcpustat_cpu_fetch(&kcpustat, smp_processor_id());
+	for (i = 0; i < NR_STATS; i++) {
+		diff[tail][i] = cpustat[i] - old[i];
+		old[i] = cpustat[i];
+	}
+	this_cpu_write(cpustat_tail, (tail + 1) % 5);
+}
+
+static void print_cpustat(void)
+{
+	int i, j, k;
+	u64 a[5][NR_STATS], b[5][NR_STATS];
+	u64 (*diff)[NR_STATS] = this_cpu_ptr(cpustat_diff);
+	int tail = this_cpu_read(cpustat_tail);
+	u32 period_us = sample_period / 1000;
+
+	for (i = 0; i < 5; i++) {
+		for (j = 0; j < NR_STATS; j++) {
+			a[i][j] = 100 * (diff[i][j] / 1000);
+			b[i][j] = 10 * do_div(a[i][j], period_us);
+			do_div(b[i][j], period_us);
+		}
+	}
+	printk(KERN_CRIT "CPU#%d Utilization every %us during lockup:\n",
+		smp_processor_id(), period_us/1000000);
+	for (k = 0, i = tail; k < 5; k++, i = (i + 1) % 5) {
+		printk(KERN_CRIT "\t#%d: %llu.%llu%% system,\t%llu.%llu%% softirq,\t"
+			"%llu.%llu%% hardirq,\t%llu.%llu%% idle\n", k+1,
+			a[i][CPUTIME_SYSTEM], b[i][CPUTIME_SYSTEM],
+			a[i][CPUTIME_SOFTIRQ], b[i][CPUTIME_SOFTIRQ],
+			a[i][CPUTIME_IRQ], b[i][CPUTIME_IRQ],
+			a[i][CPUTIME_IDLE], b[i][CPUTIME_IDLE]);
+	}
+}
+#else
+static inline void update_cpustat(void) { }
+static inline void print_cpustat(void) { }
+#endif
+
 /* watchdog detector functions */
 static DEFINE_PER_CPU(struct completion, softlockup_completion);
 static DEFINE_PER_CPU(struct cpu_stop_work, softlockup_stop_work);
@@ -483,6 +537,9 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	 */
 	period_ts = READ_ONCE(*this_cpu_ptr(&watchdog_report_ts));
 
+	/* update cpu usage stat */
+	update_cpustat();
+
 	/* Reset the interval when touched by known problematic code. */
 	if (period_ts == SOFTLOCKUP_DELAY_REPORT) {
 		if (unlikely(__this_cpu_read(softlockup_touch_sync))) {
@@ -517,6 +574,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
 			smp_processor_id(), duration,
 			current->comm, task_pid_nr(current));
+		print_cpustat();
 		print_modules();
 		print_irqtrace_events(current);
 		if (regs)
