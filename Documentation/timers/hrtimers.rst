@@ -2,6 +2,11 @@
 hrtimers - subsystem for high-resolution kernel timers
 ======================================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
+
 This patch introduces a new subsystem for high-resolution kernel timers.
 
 One might ask the question: we already have a timer subsystem

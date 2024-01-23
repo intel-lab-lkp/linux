@@ -2,6 +2,10 @@
 NO_HZ: Reducing Scheduling-Clock Ticks
 ======================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
 
 This document describes Kconfig options and boot parameters that can
 reduce the number of scheduling-clock interrupts, thereby improving energy

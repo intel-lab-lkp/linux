@@ -2,6 +2,11 @@
 Clock sources, Clock events, sched_clock() and delay timers
 ===========================================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
+
 This document tries to briefly explain some basic kernel timekeeping
 abstractions. It partly pertains to the drivers usually found in
 drivers/clocksource in the kernel tree, but the code may be spread out

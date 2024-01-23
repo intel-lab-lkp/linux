@@ -2,6 +2,11 @@
 High resolution timers and dynamic ticks design notes
 =====================================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
+
 Further information can be found in the paper of the OLS 2006 talk "hrtimers
 and beyond". The paper is part of the OLS 2006 Proceedings Volume 1, which can
 be found on the OLS website:

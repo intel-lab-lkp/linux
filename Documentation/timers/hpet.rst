@@ -2,6 +2,11 @@
 High Precision Event Timer Driver for Linux
 ===========================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
+
 The High Precision Event Timer (HPET) hardware follows a specification
 by Intel and Microsoft, revision 1.
 

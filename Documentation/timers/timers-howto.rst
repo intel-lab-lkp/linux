@@ -2,6 +2,11 @@
 delays - Information on the various kernel delay / sleep mechanisms
 ===================================================================
 
+.. warning:: Documents in this folder might be outdated, as they haven't
+	     been revisited for a longer time. Up to date documentation is
+	     located in the core-api documentation:
+	     :doc:`../core-api/timers/index`
+
 This document seeks to answer the common question: "What is the
 RightWay (TM) to insert a delay?"
 

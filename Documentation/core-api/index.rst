@@ -128,6 +128,7 @@ Documents that don't fit elsewhere or which have yet to be categorized.
 
    librs
    netlink
+   timers/index
 
 .. only:: subproject and html
 
