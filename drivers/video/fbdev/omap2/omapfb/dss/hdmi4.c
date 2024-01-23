@@ -529,7 +529,7 @@ static int hdmi_probe_of(struct platform_device *pdev)
 	struct device_node *ep;
 	int r;
 
-	ep = omapdss_of_get_first_endpoint(node);
+	ep = of_graph_get_next_endpoint(node, NULL);
 	if (!ep)
 		return 0;
 

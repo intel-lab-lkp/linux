@@ -5079,7 +5079,7 @@ static int dsi_probe_of(struct platform_device *pdev)
 	struct device_node *ep;
 	struct omap_dsi_pin_config pin_cfg;
 
-	ep = omapdss_of_get_first_endpoint(node);
+	ep = of_graph_get_next_endpoint(node, NULL);
 	if (!ep)
 		return 0;
 
