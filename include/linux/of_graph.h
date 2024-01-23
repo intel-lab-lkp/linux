@@ -57,6 +57,8 @@ int of_graph_get_port_count(const struct device_node *np);
 struct device_node *of_graph_get_port_by_id(struct device_node *node, u32 id);
 struct device_node *of_graph_get_next_endpoint(const struct device_node *parent,
 					struct device_node *previous);
+struct device_node *of_graph_get_next_endpoint_raw(const struct device_node *port,
+						   struct device_node *prev);
 struct device_node *of_graph_get_next_port(const struct device_node *parent,
 					   struct device_node *previous);
 struct device_node *of_graph_get_endpoint_by_regs(
