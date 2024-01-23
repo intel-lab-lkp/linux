@@ -812,10 +812,6 @@ static inline bool omapdss_device_is_enabled(struct omap_dss_device *dssdev)
 }
 
 struct device_node *
-omapdss_of_get_next_port(const struct device_node *parent,
-			 struct device_node *prev);
-
-struct device_node *
 omapdss_of_get_next_endpoint(const struct device_node *parent,
 			     struct device_node *prev);
 
