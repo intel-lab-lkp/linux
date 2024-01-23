@@ -190,6 +190,8 @@ void rtl83xx_remove(struct realtek_priv *priv)
 	if (!priv)
 		return;
 
+	dsa_unregister_switch(priv->ds);
+
 	/* leave the device reset asserted */
 	if (priv->reset)
 		gpiod_set_value(priv->reset, 1);
