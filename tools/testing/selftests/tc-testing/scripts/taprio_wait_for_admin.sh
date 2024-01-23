@@ -3,6 +3,11 @@
 TC="$1"; shift
 ETH="$1"; shift
 
+if ! command -v jq &> /dev/null; then
+    echo "Please install jq"
+    exit 1
+fi
+
 # The taprio architecture changes the admin schedule from a hrtimer and not
 # from process context, so we need to wait in order to make sure that any
 # schedule change actually took place.
