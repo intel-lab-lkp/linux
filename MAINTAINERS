@@ -24121,6 +24121,12 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	arch/x86/kernel/cpu/zhaoxin.c
 
+ZHAOXIN SHA SUPPORT
+M:	<TonyWWang-oc@zhaoxin.com>
+M:	<GeorgeXue@zhaoxin.com>
+S:	Maintained
+F:	drivers/crypto/zhaoxin-sha.c
+
 ZONEFS FILESYSTEM
 M:	Damien Le Moal <dlemoal@kernel.org>
 M:	Naohiro Aota <naohiro.aota@wdc.com>
