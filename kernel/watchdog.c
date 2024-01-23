@@ -283,6 +283,9 @@ unsigned int __read_mostly softlockup_panic =
 static bool softlockup_initialized __read_mostly;
 static u64 __read_mostly sample_period;
 
+static int __read_mostly softlockup_irqtrace;
+static bool softlockup_irqtrace_initialized __read_mostly;
+
 /* Timestamp taken after the last successful reschedule. */
 static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
 /* Timestamp of the last softlockup report. */
@@ -297,6 +300,13 @@ static int __init softlockup_panic_setup(char *str)
 	return 1;
 }
 __setup("softlockup_panic=", softlockup_panic_setup);
+
+static int __init softlockup_irqtrace_setup(char *str)
+{
+	get_option(&str, &softlockup_irqtrace);
+	return 1;
+}
+__setup("softlockup_irqtrace=", softlockup_irqtrace_setup);
 
 static int __init nowatchdog_setup(char *str)
 {
@@ -615,7 +625,7 @@ static void print_hardirq_time(void)
 	u64 start_time, now, a;
 	u32 period_us, i, b;
 
-	if (test_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags))) {
+	if (softlockup_irqtrace && test_bit(SOFTLOCKUP_HARDIRQ, this_cpu_ptr(&softlockup_flags))) {
 		start_time = __this_cpu_read(hardirq_start_time);
 		now = local_clock();
 		period_us = (now - start_time)/1000;
@@ -832,7 +842,10 @@ static void softlockup_stop_all(void)
 	if (!softlockup_initialized)
 		return;
 
-	unhook_hardirq_events();
+	if (softlockup_irqtrace_initialized) {
+		unhook_hardirq_events();
+		softlockup_irqtrace_initialized = false;
+	}
 
 	for_each_cpu(cpu, &watchdog_allowed_mask)
 		smp_call_on_cpu(cpu, softlockup_stop_fn, NULL, false);
@@ -850,7 +863,10 @@ static void softlockup_start_all(void)
 {
 	int cpu;
 
-	hook_hardirq_events();
+	if (softlockup_irqtrace && !softlockup_irqtrace_initialized) {
+		hook_hardirq_events();
+		softlockup_irqtrace_initialized = true;
+	}
 
 	cpumask_copy(&watchdog_allowed_mask, &watchdog_cpumask);
 	for_each_cpu(cpu, &watchdog_allowed_mask)
@@ -1067,6 +1083,26 @@ int proc_watchdog_thresh(struct ctl_table *table, int write,
 }
 
 /*
+ * /proc/sys/kernel/softlockup_irqtrace
+ */
+int proc_softlockup_irqtrace(struct ctl_table *table, int write,
+			 void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int err, old;
+
+	mutex_lock(&watchdog_mutex);
+
+	old = READ_ONCE(softlockup_irqtrace);
+	err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+
+	if (!err && write && old != READ_ONCE(softlockup_irqtrace))
+		proc_watchdog_update();
+
+	mutex_unlock(&watchdog_mutex);
+	return err;
+}
+
+/*
  * The cpumask is the mask of possible cpus that the watchdog can run
  * on, not the mask of cpus it is actually running on.  This allows the
  * user to specify a mask that will include cpus that have not yet
@@ -1131,6 +1167,15 @@ static struct ctl_table watchdog_sysctls[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "softlockup_irqtrace",
+		.data		= &softlockup_irqtrace,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_softlockup_irqtrace,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
