@@ -16,7 +16,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/spi/spi.h>
 
-
 #define MAX_SPI_PORTS		12
 #define S3C64XX_SPI_QUIRK_CS_AUTO	(1 << 1)
 #define AUTOSUSPEND_TIMEOUT	2000
