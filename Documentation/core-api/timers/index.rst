@@ -16,6 +16,10 @@ kernel/timers/ and also the timer related includes.
 Information for Users
 =====================
 
+.. toctree::
+   :maxdepth: 1
+
+   api
 
 
 Information about concepts and internals

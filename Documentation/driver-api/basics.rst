@@ -33,30 +33,6 @@ Delaying and scheduling routines
 .. kernel-doc:: include/linux/completion.h
    :internal:
 
-Time and timer routines
------------------------
-
-.. kernel-doc:: include/linux/jiffies.h
-   :internal:
-
-.. kernel-doc:: kernel/time/time.c
-   :export:
-
-.. kernel-doc:: kernel/time/timer.c
-   :export:
-
-High-resolution timers
-----------------------
-
-.. kernel-doc:: include/linux/ktime.h
-   :internal:
-
-.. kernel-doc:: include/linux/hrtimer.h
-   :internal:
-
-.. kernel-doc:: kernel/time/hrtimer.c
-   :export:
-
 Wait queues and Wake events
 ---------------------------
 

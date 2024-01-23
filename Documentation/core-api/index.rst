@@ -11,12 +11,14 @@ Core utilities
 This section has general and "core core" documentation.  The first is a
 massive grab-bag of kerneldoc info left over from the docbook days; it
 should really be broken up someday when somebody finds the energy to do
-it.
+it. :doc:`core-api` is a first step to clean things up. It should only
+contain "core core" API documentation.
 
 .. toctree::
    :maxdepth: 1
 
    kernel-api
+   core-api
    workqueue
    watch_queue
    printk-basics

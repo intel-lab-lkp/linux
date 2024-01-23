@@ -1,7 +1,13 @@
-====================
-The Linux Kernel API
-====================
+===========================
+The Linux Kernel (Misc) API
+===========================
 
+.. warning::
+   This API description is not the "core core" API description. It can be
+   found in :doc:`core-api`.
+
+   This document contains a collection of kernel related APIs and needs to
+   be split and sorted when there is time.
 
 List Management Functions
 =========================
