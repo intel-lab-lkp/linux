@@ -1,0 +1,327 @@
+.. SPDX-License-Identifier: GPL-2.0
+
+================
+ADIS16475 driver
+================
+
+This driver supports Analog Device's IMUs on SPI bus.
+
+1. Supported devices
+====================
+
+* `ADIS16465 <https://www.analog.com/ADIS16465>`_
+* `ADIS16467 <https://www.analog.com/ADIS16467>`_
+* `ADIS16470 <https://www.analog.com/ADIS16470>`_
+* `ADIS16475 <https://www.analog.com/ADIS16475>`_
+* `ADIS16477 <https://www.analog.com/ADIS16477>`_
+* `ADIS16500 <https://www.analog.com/ADIS16500>`_
+* `ADIS16505 <https://www.analog.com/ADIS16505>`_
+* `ADIS16507 <https://www.analog.com/ADIS16507>`_
+
+Each supported device is a precision, miniature microelectromechanical system
+(MEMS) inertial measurement unit (IMU) that includes a triaxial gyroscope and a
+triaxial accelerometer. Each inertial sensor in the IMU device combines with
+signal conditioning that optimizes dynamic performance. The factory calibration
+characterizes each sensor for sensitivity, bias, alignment, linear acceleration
+(gyroscope bias), and point of percussion (accelerometer location). As a result,
+each sensor has dynamic compensation formulas that provide accurate sensor
+measurements over a broad set of conditions.
+
+2. Device attributes
+====================
+
+Accelerometer, gyroscope measures are always provided. Furthermore, the driver
+offers the capability to retrieve the delta angle and the delta velocity
+measurements computed by the device.
+
+The delta angle measurements represent a calculation of angular displacement
+between each sample update, while  the delta velocity measurements represent a
+calculation of linear velocity change between each sample update.
+
+Finally, temperature data are provided which show a coarse measurement of
+the temperature inside of the IMU device. This data is most useful for
+monitoring relative changes in the thermal environment.
+
+The signal chain of each inertial sensor (accelerometers and
+gyroscopes) includes the application of unique correction
+formulas, which are derived from extensive characterization
+of bias, sensitivity, alignment, response to linear acceleration
+(gyroscopes), and point of percussion (accelerometer location)
+over a temperature range of −40°C to +85°C, for each ADIS device.
+These correction formulas are not accessible, but users do have
+the opportunity to adjust the bias for each sensor individually
+through the calibbias attribute.
+
++-------------------------------------------+----------------------------------------------------------+
+| 3-Axis Accelerometer related device files | Description                                              |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_scale                            | Scale for the accelerometer channels.                    |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_x_calibbias                      | Calibration offset for the X-axis accelerometer channel. |
++-------------------------------------------+----------------------------------------------------------+
+| accel_calibbias_x                         | x-axis acceleration offset correction                    |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_x_raw                            | Raw X-axis accelerometer channel value.                  |
++-------------------------------------------+----------------------------------------------------------+
+| accel_calibbias_y                         | y-axis acceleration offset correction                    |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_y_raw                            | Raw Y-axis accelerometer channel value.                  |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_z_calibbias                      | Calibration offset for the Z-axis accelerometer channel. |
++-------------------------------------------+----------------------------------------------------------+
+| in_accel_z_raw                            | Raw Z-axis accelerometer channel value.                  |
++-------------------------------------------+----------------------------------------------------------+
+| in_deltavelocity_scale                    | Scale for delta velocity channels.                       |
++-------------------------------------------+----------------------------------------------------------+
+| in_deltavelocity_x_raw                    | Raw X-axis delta velocity channel value.                 |
++-------------------------------------------+----------------------------------------------------------+
+| in_deltavelocity_y_raw                    | Raw Y-axis delta velocity channel value.                 |
++-------------------------------------------+----------------------------------------------------------+
+| in_deltavelocity_z_raw                    | Raw Z-axis delta velocity channel value.                 |
++-------------------------------------------+----------------------------------------------------------+
+
++---------------------------------------+------------------------------------------------------+
+| 3-Axis Gyroscope related device files | Description                                          |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_scale                      | Scale for the gyroscope channels.                    |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_x_calibbias                | Calibration offset for the X-axis gyroscope channel. |
++---------------------------------------+------------------------------------------------------+
+| anglvel_calibbias_x                   | x-axis gyroscope offset correction                   |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_x_raw                      | Raw X-axis gyroscope channel value.                  |
++---------------------------------------+------------------------------------------------------+
+| anglvel_calibbias_y                   | y-axis gyroscope offset correction                   |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_y_raw                      | Raw Y-axis gyroscope channel value.                  |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_z_calibbias                | Calibration offset for the Z-axis gyroscope channel. |
++---------------------------------------+------------------------------------------------------+
+| in_anglvel_z_raw                      | Raw Z-axis gyroscope channel value.                  |
++---------------------------------------+------------------------------------------------------+
+| in_deltaangl_scale                    | Scale for delta angle channels.                      |
++---------------------------------------+------------------------------------------------------+
+| in_deltaangl_x_raw                    | Raw X-axis delta angle channel value.                |
++---------------------------------------+------------------------------------------------------+
+| in_deltaangl_y_raw                    | Raw Y-axis delta angle channel value.                |
++---------------------------------------+------------------------------------------------------+
+| in_deltaangl_z_raw                    | Raw Z-axis delta angle channel value.                |
++---------------------------------------+------------------------------------------------------+
+
++----------------------------------+-------------------------------------------+
+| Temperature sensor related files | Description                               |
++----------------------------------+-------------------------------------------+
+| in_temp0_raw                     | Raw temperature channel value.            |
++----------------------------------+-------------------------------------------+
+| in_temp0_scale                   | Scale for the temperature sensor channel. |
++----------------------------------+-------------------------------------------+
+
++-------------------------------+---------------------------------------------------------+
+| Miscellaneous device files    | Description                                             |
++-------------------------------+---------------------------------------------------------+
+| name                          | Name of the IIO device.                                 |
++-------------------------------+---------------------------------------------------------+
+| sampling_frequency            | Currently selected sample rate.                         |
++-------------------------------+---------------------------------------------------------+
+| filter_low_pass_3db_frequency | Bandwidth for the accelerometer and gyroscope channels. |
++-------------------------------+---------------------------------------------------------+
+
++----------------------+-------------------------------------------------------------------------+
+| Debugfs device files | Description                                                             |
++----------------------+-------------------------------------------------------------------------+
+| serial_number        | The serial number of the chip in hexadecimal format.                    |
++----------------------+-------------------------------------------------------------------------+
+| product_id           | Chip specific product id (e.g. 16475, 16500, 16505, etc.).              |
++----------------------+-------------------------------------------------------------------------+
+| flash_count          | The number of flash writes performed on the device.                     |
++----------------------+-------------------------------------------------------------------------+
+| firmware_revision    | String containing the firmware revision in the following format ##.##.  |
++----------------------+-------------------------------------------------------------------------+
+| firmware_date        | String containing the firmware date in the following format mm-dd-yyyy. |
++----------------------+-------------------------------------------------------------------------+
+
+Usage examples
+--------------
+
+Show device name:
+
+.. code-block:: bash
+
+	root:/sys/bus/iio/devices/iio:device0> cat name
+        adis16505-2
+
+Show accelerometer channels value:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_x_raw
+        -275924
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_y_raw
+        -30142222
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_z_raw
+        261265769
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_scale
+        0.000000037
+
+- X-axis acceleration = in_accel_x_raw * in_accel_scale = −0.010209188 m/s^2
+- Y-axis acceleration = in_accel_y_raw * in_accel_scale = −1.115262214 m/s^2
+- Z-axis acceleration = in_accel_z_raw * in_accel_scale = 9.666833453 m/s^2
+
+Show gyroscope channels value:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_x_raw
+        -3324626
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_y_raw
+        1336980
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_z_raw
+        -602983
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_scale
+        0.000000006
+
+- X-axis angular velocity = in_anglvel_x_raw * in_anglvel_scale = −0.019947756 rad/s
+- Y-axis angular velocity = in_anglvel_y_raw * in_anglvel_scale = 0.00802188 rad/s
+- Z-axis angular velocity = in_anglvel_z_raw * in_anglvel_scale = −0.003617898 rad/s
+
+Set calibration offset for accelerometer channels:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_x_calibbias
+        0
+
+        root:/sys/bus/iio/devices/iio:device0> echo 5000 > in_accel_x_calibbias
+        root:/sys/bus/iio/devices/iio:device0> cat in_accel_x_calibbias
+        5000
+
+Set calibration offset for gyroscope channels:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_y_calibbias
+        0
+
+        root:/sys/bus/iio/devices/iio:device0> echo -5000 > in_anglvel_y_calibbias
+        root:/sys/bus/iio/devices/iio:device0> cat in_anglvel_y_calibbias
+        -5000
+
+Set sampling frequency:
+
+.. code-block:: bash
+
+	root:/sys/bus/iio/devices/iio:device0> cat sampling_frequency
+        2000.000000
+
+        root:/sys/bus/iio/devices/iio:device0> echo 1000 > sampling_frequency
+        1000.000000
+
+Set bandwidth for accelerometer and gyroscope:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat filter_low_pass_3db_frequency
+        720
+
+        root:/sys/bus/iio/devices/iio:device0> echo 360 > filter_low_pass_3db_frequency
+        root:/sys/bus/iio/devices/iio:device0> cat filter_low_pass_3db_frequency
+        360
+
+Show serial number:
+
+.. code-block:: bash
+
+        root:/sys/kernel/debug/iio/iio:device0> cat serial_number
+        0x04f9
+
+Show product id:
+
+.. code-block:: bash
+
+        root:/sys/kernel/debug/iio/iio:device0> cat product_id
+        16505
+
+Show flash count:
+
+.. code-block:: bash
+
+        root:/sys/kernel/debug/iio/iio:device0> cat flash_count
+        150
+
+Show firmware revision:
+
+.. code-block:: bash
+
+        root:/sys/kernel/debug/iio/iio:device0> cat firmware_revision
+        1.6
+
+Show firmware date:
+
+.. code-block:: bash
+
+        root:/sys/kernel/debug/iio/iio:device0> cat firmware_date
+        06-27-2019
+
+
+Device buffers
+==============
+
+This driver supports IIO buffers.
+
+All devices support retrieving the raw acceleration, gyroscope and temperature measurements using buffers.
+
+The following device families also support retrieving the delta velocity, delta angle and temperature measurements using buffers:
+ - ADIS16477
+ - ADIS16500
+ - ADIS16505
+ - ADIS16507
+
+However, when retrieving acceleration or gyroscope data using buffers, delta readings will not be available and vice versa.
+
+Usage examples
+--------------
+
+Set trigger if not available:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> cat trigger/current_trigger
+
+        root:/sys/bus/iio/devices/iio:device0> echo adis16505-2-dev0 > trigger/current_trigger
+        root:/sys/bus/iio/devices/iio:device0> cat trigger/current_trigger
+        adis16505-2-dev0
+
+Select channels for buffer read:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> echo 1 > scan_elements/in_deltavelocity_x_en
+        root:/sys/bus/iio/devices/iio:device0> echo 1 > scan_elements/in_deltavelocity_y_en
+        root:/sys/bus/iio/devices/iio:device0> echo 1 > scan_elements/in_deltavelocity_z_en
+        root:/sys/bus/iio/devices/iio:device0> echo 1 > scan_elements/in_temp0_en
+
+Set the number of samples to be stored in the buffer:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> echo 10 > buffer/length
+
+Enable buffer readings:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> echo 1 > buffer/enable
+
+Obtain buffered data:
+
+.. code-block:: bash
+
+        root:/sys/bus/iio/devices/iio:device0> hexdump /dev/iio\:device0
+        ...
+        0044760 3901 0000 ffff f9fe ffff 29ee 0100 f79b
+        0044770 3901 0000 ffff 98fe ffff 1aef 0100 439a
+        0044780 3901 0000 ffff b4fe ffff 32ef 0100 c199
+        0044790 3901 0000 ffff bdfe ffff 20ef 0100 5f9a
+        00447a0 3901 0000 ffff 37ff ffff 1eef 0100 389b
+        00447b0 3901 0000 ffff 7dff ffff 96ee 0100 5a9c
+        ...
