@@ -744,7 +744,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 		}
 
 		if (nports == 0) {
-			endpoint = of_get_next_child(port, NULL);
+			endpoint = of_graph_get_next_endpoint_raw(port, NULL);
 			if (endpoint)
 				has_endpoint = true;
 			of_node_put(endpoint);
