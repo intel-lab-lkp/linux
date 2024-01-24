@@ -13,6 +13,7 @@
 
 struct btrfs_bio;
 struct btrfs_fs_info;
+struct fscrypt_extent_info;
 
 #define BTRFS_BIO_INLINE_CSUM_SIZE	64
 
@@ -40,13 +41,20 @@ struct btrfs_bio {
 	union {
 		/*
 		 * For data reads: checksumming and original I/O information.
-		 * (for internal use in the btrfs_submit_bio machinery only)
+		 * (for internal use in the btrfs_submit_bio machinery only).
+		 *
+		 * The fscrypt context is used for read repair, this is the only
+		 * thing not internal to btrfs_submit_bio machinery.
 		 */
 		struct {
 			u8 *csum;
 			u8 csum_inline[BTRFS_BIO_INLINE_CSUM_SIZE];
 			bool csum_done;
 			struct bvec_iter saved_iter;
+
+			/* Used for read repair. */
+			struct fscrypt_extent_info *fscrypt_info;
+			u64 orig_start;
 		};
 
 		/*

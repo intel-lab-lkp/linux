@@ -99,6 +99,10 @@ static struct btrfs_bio *btrfs_split_bio(struct btrfs_fs_info *fs_info,
 		bbio->ordered = orig_bbio->ordered;
 		bbio->orig_logical = orig_bbio->orig_logical;
 		orig_bbio->orig_logical += map_length;
+	} else if (is_data_bbio(bbio)) {
+		bbio->fscrypt_info =
+			fscrypt_get_extent_info(orig_bbio->fscrypt_info);
+		bbio->orig_start = orig_bbio->orig_start;
 	}
 	atomic_inc(&orig_bbio->pending_ios);
 	return bbio;
@@ -107,8 +111,12 @@ static struct btrfs_bio *btrfs_split_bio(struct btrfs_fs_info *fs_info,
 /* Free a bio that was never submitted to the underlying device. */
 static void btrfs_cleanup_bio(struct btrfs_bio *bbio)
 {
-	if (bbio_has_ordered_extent(bbio))
+	if (bbio_has_ordered_extent(bbio)) {
 		btrfs_put_ordered_extent(bbio->ordered);
+	} else if (is_data_bbio(bbio)) {
+		fscrypt_put_extent_info(bbio->fscrypt_info);
+		bbio->fscrypt_info = NULL;
+	}
 	bio_put(&bbio->bio);
 }
 
@@ -121,6 +129,10 @@ static void __btrfs_bio_end_io(struct btrfs_bio *bbio)
 		btrfs_put_ordered_extent(ordered);
 	} else {
 		bbio->end_io(bbio);
+		if (is_data_bbio(bbio)) {
+			fscrypt_put_extent_info(bbio->fscrypt_info);
+			bbio->fscrypt_info = NULL;
+		}
 	}
 }
 
@@ -188,6 +200,23 @@ static void btrfs_repair_done(struct btrfs_failed_bio *fbio)
 	}
 }
 
+static void handle_repair(struct btrfs_bio *repair_bbio)
+{
+	struct btrfs_failed_bio *fbio = repair_bbio->private;
+	struct btrfs_inode *inode = repair_bbio->inode;
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct bio_vec *bv = bio_first_bvec_all(&repair_bbio->bio);
+	int mirror = repair_bbio->mirror_num;
+
+	do {
+		mirror = prev_repair_mirror(fbio, mirror);
+		btrfs_repair_io_failure(fs_info, btrfs_ino(inode),
+				  repair_bbio->file_offset, fs_info->sectorsize,
+				  repair_bbio->saved_iter.bi_sector << SECTOR_SHIFT,
+				  page_folio(bv->bv_page), bv->bv_offset, mirror);
+	} while (mirror != fbio->bbio->mirror_num);
+}
+
 static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 				 struct btrfs_device *dev)
 {
@@ -203,6 +232,13 @@ static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 	 */
 	ASSERT(folio_order(page_folio(bv->bv_page)) == 0);
 
+	/*
+	 * If we got here from the encrypted path with ->csum_done set then
+	 * we've already csumed and repaired this sector, we're all done.
+	 */
+	if (repair_bbio->csum_done)
+		goto done;
+
 	if (repair_bbio->bio.bi_status ||
 	    !btrfs_data_csum_ok(repair_bbio, dev, 0, bv)) {
 		bio_reset(&repair_bbio->bio, NULL, REQ_OP_READ);
@@ -215,18 +251,17 @@ static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 			goto done;
 		}
 
+		btrfs_set_bio_crypt_ctx_from_extent(&repair_bbio->bio,
+						    repair_bbio->inode,
+						    repair_bbio->fscrypt_info,
+						    repair_bbio->file_offset -
+						    repair_bbio->orig_start);
+
 		btrfs_submit_bio(repair_bbio, mirror);
 		return;
 	}
 
-	do {
-		mirror = prev_repair_mirror(fbio, mirror);
-		btrfs_repair_io_failure(fs_info, btrfs_ino(inode),
-				  repair_bbio->file_offset, fs_info->sectorsize,
-				  repair_bbio->saved_iter.bi_sector << SECTOR_SHIFT,
-				  page_folio(bv->bv_page), bv->bv_offset, mirror);
-	} while (mirror != fbio->bbio->mirror_num);
-
+	handle_repair(repair_bbio);
 done:
 	btrfs_repair_done(fbio);
 	bio_put(&repair_bbio->bio);
@@ -281,6 +316,14 @@ static struct btrfs_failed_bio *repair_one_sector(struct btrfs_bio *failed_bbio,
 	btrfs_bio_init(repair_bbio, fs_info, NULL, fbio);
 	repair_bbio->inode = failed_bbio->inode;
 	repair_bbio->file_offset = failed_bbio->file_offset + bio_offset;
+	repair_bbio->fscrypt_info =
+		fscrypt_get_extent_info(failed_bbio->fscrypt_info);
+	repair_bbio->orig_start = failed_bbio->orig_start;
+
+	btrfs_set_bio_crypt_ctx_from_extent(repair_bio, repair_bbio->inode,
+					    failed_bbio->fscrypt_info,
+					    repair_bbio->file_offset -
+					    failed_bbio->orig_start);
 
 	mirror = next_repair_mirror(fbio, failed_bbio->mirror_num);
 	btrfs_debug(fs_info, "submitting repair read to mirror %d", mirror);
@@ -312,7 +355,29 @@ blk_status_t btrfs_check_encrypted_read_bio(struct btrfs_bio *bbio,
 		offset += sectorsize;
 	}
 
+	/*
+	 * Read repair is slightly different for encrypted bio's.  This callback
+	 * is before we decrypt the bio in the block crypto layer, we're not
+	 * actually in the endio handler.
+	 *
+	 * We don't trigger the repair process here either, that is handled in
+	 * the actual endio path because we don't want to create another psuedo
+	 * endio path through this callback.  This is because when we call
+	 * btrfs_repair_done() we want to call the endio for the original bbio.
+	 * Short circuiting that for the encrypted case would be ugly.  We
+	 * really want to the repair case to be handled generically.
+	 *
+	 * However for the actual repair part we need to use this page
+	 * pre-decrypted, which is why we call the btrfs_repair_io_failure()
+	 * code from this path.  The repair path is synchronous so we are safe
+	 * there.  Then we simply mark the repair bbio as completed so the
+	 * actual btrfs_end_repair_bio() code can skip the repair part.
+	 */
+	if (bbio->bio.bi_pool == &btrfs_repair_bioset)
+		handle_repair(bbio);
 	bbio->csum_done = true;
+	fscrypt_put_extent_info(bbio->fscrypt_info);
+	bbio->fscrypt_info = NULL;
 	return BLK_STS_OK;
 }
 

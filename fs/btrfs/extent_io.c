@@ -834,6 +834,9 @@ static void alloc_new_bio(struct btrfs_inode *inode,
 	} else {
 		fscrypt_info = bio_ctrl->fscrypt_info;
 		offset = file_offset - bio_ctrl->orig_start;
+		bbio->fscrypt_info =
+			fscrypt_get_extent_info(fscrypt_info);
+		bbio->orig_start = bio_ctrl->orig_start;
 	}
 
 	btrfs_set_bio_crypt_ctx_from_extent(&bbio->bio, inode, fscrypt_info,
