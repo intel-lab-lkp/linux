@@ -566,7 +566,7 @@ static struct vgic_irq *__vgic_its_check_cache(struct vgic_dist *dist,
 {
 	struct vgic_translation_cache_entry *cte;
 
-	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
+	list_for_each_entry_rcu(cte, &dist->lpi_translation_cache, entry) {
 		/*
 		 * If we hit a NULL entry, there is nothing after this
 		 * point.
@@ -671,7 +671,7 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 			goto out;
 		}
 
-		list_del(&victim->entry);
+		list_del_rcu(&victim->entry);
 		dist->lpi_cache_count--;
 	} else {
 		victim = NULL;
@@ -690,7 +690,8 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	rcu_assign_pointer(new->irq, irq);
 
 	/* Move the new translation to the head of the list */
-	list_add(&new->entry, &dist->lpi_translation_cache);
+	list_add_rcu(&new->entry, &dist->lpi_translation_cache);
+	dist->lpi_cache_count++;
 
 out:
 	rcu_read_unlock();
@@ -704,6 +705,7 @@ out:
 	if (victim && victim->irq)
 		vgic_put_irq(kvm, victim->irq);
 
+	synchronize_rcu();
 	kfree(victim);
 }
 
