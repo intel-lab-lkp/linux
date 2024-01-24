@@ -687,7 +687,6 @@ static int
 qcaspi_netdev_open(struct net_device *dev)
 {
 	struct qcaspi *qca = netdev_priv(dev);
-	int ret = 0;
 
 	if (!qca)
 		return -EINVAL;
@@ -697,13 +696,7 @@ qcaspi_netdev_open(struct net_device *dev)
 	qca->sync = QCASPI_SYNC_UNKNOWN;
 	qcafrm_fsm_init_spi(&qca->frm_handle);
 
-	ret = request_irq(qca->spi_dev->irq, qcaspi_intr_handler, 0,
-			  dev->name, qca);
-	if (ret) {
-		netdev_err(dev, "%s: unable to get IRQ %d (irqval=%d).\n",
-			   QCASPI_DRV_NAME, qca->spi_dev->irq, ret);
-		return ret;
-	}
+	enable_irq(qca->spi_dev->irq);
 
 	/* SPI thread takes care of TX queue */
 	kthread_unpark(qca->spi_thread);
@@ -720,7 +713,7 @@ qcaspi_netdev_close(struct net_device *dev)
 	kthread_park(qca->spi_thread);
 
 	qcaspi_write_register(qca, SPI_REG_INTR_ENABLE, 0, wr_verify);
-	free_irq(qca->spi_dev->irq, qca);
+	disable_irq(qca->spi_dev->irq);
 
 	return 0;
 }
@@ -986,6 +979,15 @@ qca_spi_probe(struct spi_device *spi)
 	qca->legacy_mode = legacy_mode;
 
 	spi_set_drvdata(spi, qcaspi_devs);
+
+	ret = devm_request_irq(&spi->dev, spi->irq, qcaspi_intr_handler,
+			       IRQF_NO_AUTOEN, qca->net_dev->name, qca);
+	if (ret) {
+		dev_err(&spi->dev, "Unable to get IRQ %d (irqval=%d).\n",
+			spi->irq, ret);
+		free_netdev(qcaspi_devs);
+		return ret;
+	}
 
 	ret = of_get_ethdev_address(spi->dev.of_node, qca->net_dev);
 	if (ret) {
