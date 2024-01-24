@@ -337,6 +337,14 @@ out:
 	return ret;
 }
 
+static inline bool inode_skip_csum(struct btrfs_inode *inode)
+{
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+
+	return (inode->flags & BTRFS_INODE_NODATASUM) ||
+		test_bit(BTRFS_FS_STATE_NO_CSUMS, &fs_info->fs_state);
+}
+
 /*
  * Lookup the checksum for the read bio in csum tree.
  *
@@ -356,8 +364,7 @@ blk_status_t btrfs_lookup_bio_sums(struct btrfs_bio *bbio)
 	blk_status_t ret = BLK_STS_OK;
 	u32 bio_offset = 0;
 
-	if ((inode->flags & BTRFS_INODE_NODATASUM) ||
-	    test_bit(BTRFS_FS_STATE_NO_CSUMS, &fs_info->fs_state))
+	if (inode_skip_csum(inode))
 		return BLK_STS_OK;
 
 	/*
@@ -744,6 +751,9 @@ blk_status_t btrfs_csum_one_bio(struct btrfs_bio *bbio, struct bio *bio)
 	unsigned int blockcount;
 	int i;
 	unsigned nofs_flag;
+
+	if (inode_skip_csum(inode))
+		return BLK_STS_OK;
 
 	nofs_flag = memalloc_nofs_save();
 	sums = kvzalloc(btrfs_ordered_sum_size(fs_info, bio->bi_iter.bi_size),
