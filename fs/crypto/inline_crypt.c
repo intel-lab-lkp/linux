@@ -106,8 +106,11 @@ int fscrypt_select_encryption_impl(struct fscrypt_inode_info *ci)
 	if (ci->ci_mode->blk_crypto_mode == BLK_ENCRYPTION_MODE_INVALID)
 		return 0;
 
-	/* The filesystem must be mounted with -o inlinecrypt */
-	if (!(sb->s_flags & SB_INLINECRYPT))
+	/*
+	 * The filesystem must be mounted with -o inlinecrypt or have
+	 * has_per_extent_encryption enabled.
+	 */
+	if (!(sb->s_flags & SB_INLINECRYPT) && !sb->s_cop->has_per_extent_encryption)
 		return 0;
 
 	/*
