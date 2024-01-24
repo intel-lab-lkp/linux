@@ -1732,9 +1732,8 @@ static int find_extent_clone(struct send_ctx *sctx,
 	return ret;
 }
 
-static int read_symlink(struct btrfs_root *root,
-			u64 ino,
-			struct fs_path *dest)
+static int read_symlink_unencrypted(struct btrfs_root *root, u64 ino,
+				    struct fs_path *dest)
 {
 	int ret;
 	struct btrfs_path *path;
@@ -1798,6 +1797,48 @@ static int read_symlink(struct btrfs_root *root,
 out:
 	btrfs_free_path(path);
 	return ret;
+}
+
+static int read_symlink_encrypted(struct btrfs_root *root, u64 ino,
+				  struct fs_path *dest)
+{
+	DEFINE_DELAYED_CALL(done);
+	const char *buf;
+	struct page *page;
+	struct inode *inode;
+	int ret = 0;
+
+	inode = btrfs_iget(root->fs_info->sb, ino, root);
+	if (IS_ERR(inode))
+		return PTR_ERR(inode);
+
+	page = read_mapping_page(inode->i_mapping, 0, NULL);
+	if (IS_ERR(page)) {
+		ret = PTR_ERR(page);
+		goto out;
+	}
+
+	buf = fscrypt_get_symlink(inode, page_address(page),
+				  BTRFS_MAX_INLINE_DATA_SIZE(root->fs_info),
+				  &done);
+	if (IS_ERR(buf))
+		goto out_page;
+	ret = fs_path_add(dest, buf, strlen(buf));
+out_page:
+	put_page(page);
+	do_delayed_call(&done);
+out:
+	iput(inode);
+	return ret;
+}
+
+
+static int read_symlink(struct btrfs_root *root, u64 ino,
+			struct fs_path *dest)
+{
+	if (btrfs_fs_incompat(root->fs_info, ENCRYPT))
+		return read_symlink_encrypted(root, ino, dest);
+	return read_symlink_unencrypted(root, ino, dest);
 }
 
 /*
