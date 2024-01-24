@@ -3823,6 +3823,9 @@ static const struct of_device_id qmp_pcie_of_match_table[] = {
 		.compatible = "qcom,sa8775p-qmp-gen4x4-pcie-phy",
 		.data = &sa8775p_qmp_gen4x4_pciephy_cfg,
 	}, {
+		.compatible = "qcom,sc7280-qmp-pcie-phy",
+		.data = &sm8250_qmp_gen3x2_pciephy_cfg,
+	}, {
 		.compatible = "qcom,sc8180x-qmp-pcie-phy",
 		.data = &sc8180x_pciephy_cfg,
 	}, {
