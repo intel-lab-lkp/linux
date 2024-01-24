@@ -2328,7 +2328,15 @@ static inline void qphy_clrbits(void __iomem *base, u32 offset, u32 val)
 	readl(base + offset);
 }
 
-/* list of clocks required by phy */
+/* list of clocks required by phy
+ *
+ * PCIe PHY hw on some SoCs require PCIE_PHY_AUX_CLK when the link enters L1SS
+ * state. Historically, DTs of those SoCs passed this clock as "aux" clock. But,
+ * SA8775P passed PCIE_PHY_AUX_CLK as "phy_aux" and PCIE_AUX_CLK as "aux"
+ * mistakenly as the latter is not needed at all. Even though the SA8775P DT got
+ * fixed, both of these clocks are kept here for backwards compatibility.
+ */
+
 static const char * const qmp_pciephy_clk_l[] = {
 	"aux", "cfg_ahb", "ref", "refgen", "rchng", "phy_aux",
 };
