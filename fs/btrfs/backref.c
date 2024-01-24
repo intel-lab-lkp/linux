@@ -20,6 +20,7 @@
 #include "extent-tree.h"
 #include "relocation.h"
 #include "tree-checker.h"
+#include "fscrypt.h"
 
 /* Just arbitrary numbers so we can be sure one of these happened. */
 #define BACKREF_FOUND_SHARED     6
@@ -2117,6 +2118,42 @@ int btrfs_find_one_extref(struct btrfs_root *root, u64 inode_objectid,
 	return ret;
 }
 
+static int copy_resolved_iref_to_buf(struct btrfs_root *fs_root,
+				     struct extent_buffer *eb,
+				     char *dest, u64 parent,
+				     unsigned long name_off, u32 name_len,
+				     s64 *bytes_left)
+{
+	struct btrfs_fs_info *fs_info = fs_root->fs_info;
+	struct fscrypt_str fname = FSTR_INIT(NULL, 0);
+	int ret;
+
+	/* No encryption, just copy the name in. */
+	if (!btrfs_fs_incompat(fs_info, ENCRYPT)) {
+		*bytes_left -= name_len;
+		if (*bytes_left >= 0)
+			read_extent_buffer(eb, dest + *bytes_left,
+					   name_off, name_len);
+		return 0;
+	}
+
+	ret = fscrypt_fname_alloc_buffer(BTRFS_NAME_LEN, &fname);
+	if (ret)
+		return ret;
+
+	ret = btrfs_decrypt_name(fs_root, eb, name_off, name_len, parent,
+				 &fname);
+	if (ret)
+		goto out;
+
+	*bytes_left -= fname.len;
+	if (*bytes_left >= 0)
+		memcpy(dest + *bytes_left, fname.name, fname.len);
+out:
+	fscrypt_fname_free_buffer(&fname);
+	return ret;
+}
+
 /*
  * this iterates to turn a name (from iref/extref) into a full filesystem path.
  * Elements of the path are separated by '/' and the path is guaranteed to be
@@ -2148,10 +2185,10 @@ char *btrfs_ref_to_path(struct btrfs_root *fs_root, struct btrfs_path *path,
 		dest[bytes_left] = '\0';
 
 	while (1) {
-		bytes_left -= name_len;
-		if (bytes_left >= 0)
-			read_extent_buffer(eb, dest + bytes_left,
-					   name_off, name_len);
+		ret = copy_resolved_iref_to_buf(fs_root, eb, dest, parent,
+						name_off, name_len, &bytes_left);
+		if (ret)
+			break;
 		if (eb != eb_in) {
 			if (!path->skip_locking)
 				btrfs_tree_read_unlock(eb);

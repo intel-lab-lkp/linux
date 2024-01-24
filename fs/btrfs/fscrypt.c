@@ -365,6 +365,52 @@ int btrfs_fscrypt_bio_length(struct bio *bio, u64 map_length)
 	return map_length;
 }
 
+int btrfs_decrypt_name(struct btrfs_root *root, struct extent_buffer *eb,
+		       unsigned long name_off, u32 name_len,
+		       u64 parent_ino, struct fscrypt_str *name)
+{
+	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct inode *dir;
+	struct fscrypt_str iname = FSTR_INIT(NULL, 0);
+	int ret;
+
+	ASSERT(name_len <= BTRFS_NAME_LEN);
+
+	ret = fscrypt_fname_alloc_buffer(name_len, &iname);
+	if (ret)
+		return ret;
+
+	dir = btrfs_iget(fs_info->sb, parent_ino, root);
+	if (IS_ERR(dir)) {
+		ret = PTR_ERR(dir);
+		goto out;
+	}
+
+	/*
+	 * Directory isn't encrypted, the name isn't encrypted, we can just copy
+	 * it into the buffer.
+	 */
+	if (!IS_ENCRYPTED(dir)) {
+		read_extent_buffer(eb, name->name, name_off, name_len);
+		name->len = name_len;
+		goto out_inode;
+	}
+
+	read_extent_buffer(eb, iname.name, name_off, name_len);
+
+	ret = fscrypt_prepare_readdir(dir);
+	if (ret)
+		goto out_inode;
+
+	ASSERT(dir->i_crypt_info);
+	ret = fscrypt_fname_disk_to_usr(dir, 0, 0, &iname, name);
+out_inode:
+	iput(dir);
+out:
+	fscrypt_fname_free_buffer(&iname);
+	return ret;
+}
+
 const struct fscrypt_operations btrfs_fscrypt_ops = {
 	.has_per_extent_encryption = 1,
 	.get_context = btrfs_fscrypt_get_context,

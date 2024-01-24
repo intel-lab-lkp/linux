@@ -38,6 +38,9 @@ bool btrfs_mergeable_encrypted_bio(struct bio *bio, struct inode *inode,
 				   struct fscrypt_extent_info *fi,
 				   u64 logical_offset);
 int btrfs_fscrypt_bio_length(struct bio *bio, u64 map_length);
+int btrfs_decrypt_name(struct btrfs_root *root, struct extent_buffer *eb,
+		       unsigned long name_off, u32 name_len,
+		       u64 parent_ino, struct fscrypt_str *name);
 
 #else
 static inline void btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
@@ -96,6 +99,14 @@ static inline bool btrfs_mergeable_encrypted_bio(struct bio *bio,
 static inline u64 btrfs_fscrypt_bio_length(struct bio *bio, u64 map_length)
 {
 	return map_length;
+}
+
+static inline int btrfs_decrypt_name(struct btrfs_root *root,
+				     struct extent_buffer *eb,
+				     unsigned long name_off, u32 name_len,
+				     u64 parent_ino, struct fscrypt_str *name)
+{
+	return -EINVAL;
 }
 
 #endif /* CONFIG_FS_ENCRYPTION */
