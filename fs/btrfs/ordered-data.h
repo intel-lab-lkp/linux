@@ -108,6 +108,9 @@ struct btrfs_ordered_extent {
 	/* compression algorithm */
 	int compress_type;
 
+	/* encryption mode */
+	int encryption_type;
+
 	/* Qgroup reserved space */
 	int qgroup_rsv;
 
@@ -116,6 +119,9 @@ struct btrfs_ordered_extent {
 
 	/* the inode we belong to */
 	struct inode *inode;
+
+	/* the fscrypt_info for this extent, if necessary */
+	struct fscrypt_extent_info *fscrypt_info;
 
 	/* list of checksums for insertion when the extent io is done */
 	struct list_head list;
