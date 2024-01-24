@@ -169,9 +169,10 @@ static int vhost_net_buf_is_empty(struct vhost_net_buf *rxq)
 
 static void *vhost_net_buf_consume(struct vhost_net_buf *rxq)
 {
-	void *ret = vhost_net_buf_get_ptr(rxq);
-	++rxq->head;
-	return ret;
+	if (rxq->tail == rxq->head)
+		return NULL;
+
+	return rxq->queue[rxq->head++];
 }
 
 static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq)
@@ -993,12 +994,19 @@ out:
 
 static int peek_head_len(struct vhost_net_virtqueue *rvq, struct sock *sk)
 {
+	struct socket *sock = sk->sk_socket;
 	struct sk_buff *head;
 	int len = 0;
 	unsigned long flags;
 
-	if (rvq->rx_ring)
-		return vhost_net_buf_peek(rvq);
+	if (rvq->rx_ring) {
+		len = vhost_net_buf_peek(rvq);
+		if (likely(len))
+			return len;
+	}
+
+	if (sock->ops->peek_len)
+		return sock->ops->peek_len(sock);
 
 	spin_lock_irqsave(&sk->sk_receive_queue.lock, flags);
 	head = skb_peek(&sk->sk_receive_queue);
