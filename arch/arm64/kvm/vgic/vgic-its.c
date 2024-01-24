@@ -154,6 +154,7 @@ struct vgic_translation_cache_entry {
 	u32			devid;
 	u32			eventid;
 	struct vgic_irq		*irq;
+	atomic64_t		usage_count;
 };
 
 /**
@@ -577,13 +578,7 @@ static struct vgic_irq *__vgic_its_check_cache(struct vgic_dist *dist,
 		    cte->eventid != eventid)
 			continue;
 
-		/*
-		 * Move this entry to the head, as it is the most
-		 * recently used.
-		 */
-		if (!list_is_first(&cte->entry, &dist->lpi_translation_cache))
-			list_move(&cte->entry, &dist->lpi_translation_cache);
-
+		atomic64_inc(&cte->usage_count);
 		return cte->irq;
 	}
 
@@ -616,6 +611,30 @@ static unsigned int vgic_its_max_cache_size(struct kvm *kvm)
 	return atomic_read(&kvm->online_vcpus) * LPI_DEFAULT_PCPU_CACHE_SIZE;
 }
 
+static struct vgic_translation_cache_entry *vgic_its_cache_victim(struct vgic_dist *dist)
+{
+	struct vgic_translation_cache_entry *cte, *victim = NULL;
+	u64 min, tmp;
+
+	/*
+	 * Find the least used cache entry since the last cache miss, preferring
+	 * older entries in the case of a tie. Note that usage accounting is
+	 * deliberately non-atomic, so this is all best-effort.
+	 */
+	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
+		if (!cte->irq)
+			return cte;
+
+		tmp = atomic64_xchg_relaxed(&cte->usage_count, 0);
+		if (!victim || tmp <= min) {
+			victim = cte;
+			min = tmp;
+		}
+	}
+
+	return victim;
+}
+
 static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 				       u32 devid, u32 eventid,
 				       struct vgic_irq *irq)
@@ -645,9 +664,12 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 		goto out;
 
 	if (dist->lpi_cache_count >= vgic_its_max_cache_size(kvm)) {
-		/* Always reuse the last entry (LRU policy) */
-		victim = list_last_entry(&dist->lpi_translation_cache,
-				      typeof(*cte), entry);
+		victim = vgic_its_cache_victim(dist);
+		if (WARN_ON_ONCE(!victim)) {
+			victim = new;
+			goto out;
+		}
+
 		list_del(&victim->entry);
 		dist->lpi_cache_count--;
 	} else {
