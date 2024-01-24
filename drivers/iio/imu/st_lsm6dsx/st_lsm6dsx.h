@@ -15,29 +15,30 @@
 #include <linux/iio/iio.h>
 #include <linux/regulator/consumer.h>
 
-#define ST_LSM6DS3_DEV_NAME	"lsm6ds3"
-#define ST_LSM6DS3H_DEV_NAME	"lsm6ds3h"
-#define ST_LSM6DSL_DEV_NAME	"lsm6dsl"
-#define ST_LSM6DSM_DEV_NAME	"lsm6dsm"
-#define ST_ISM330DLC_DEV_NAME	"ism330dlc"
-#define ST_LSM6DSO_DEV_NAME	"lsm6dso"
-#define ST_ASM330LHH_DEV_NAME	"asm330lhh"
-#define ST_LSM6DSOX_DEV_NAME	"lsm6dsox"
-#define ST_LSM6DSR_DEV_NAME	"lsm6dsr"
-#define ST_LSM6DS3TRC_DEV_NAME	"lsm6ds3tr-c"
-#define ST_ISM330DHCX_DEV_NAME	"ism330dhcx"
-#define ST_LSM9DS1_DEV_NAME	"lsm9ds1-imu"
-#define ST_LSM6DS0_DEV_NAME	"lsm6ds0"
-#define ST_LSM6DSRX_DEV_NAME	"lsm6dsrx"
-#define ST_LSM6DST_DEV_NAME	"lsm6dst"
-#define ST_LSM6DSOP_DEV_NAME	"lsm6dsop"
-#define ST_ASM330LHHX_DEV_NAME	"asm330lhhx"
-#define ST_LSM6DSTX_DEV_NAME	"lsm6dstx"
-#define ST_LSM6DSV_DEV_NAME	"lsm6dsv"
-#define ST_LSM6DSV16X_DEV_NAME	"lsm6dsv16x"
-#define ST_LSM6DSO16IS_DEV_NAME	"lsm6dso16is"
-#define ST_ISM330IS_DEV_NAME	"ism330is"
-#define ST_ASM330LHB_DEV_NAME	"asm330lhb"
+#define ST_LSM6DS3_DEV_NAME		"lsm6ds3"
+#define ST_LSM6DS3H_DEV_NAME		"lsm6ds3h"
+#define ST_LSM6DSL_DEV_NAME		"lsm6dsl"
+#define ST_LSM6DSM_DEV_NAME		"lsm6dsm"
+#define ST_ISM330DLC_DEV_NAME		"ism330dlc"
+#define ST_LSM6DSO_DEV_NAME		"lsm6dso"
+#define ST_ASM330LHH_DEV_NAME		"asm330lhh"
+#define ST_LSM6DSOX_DEV_NAME		"lsm6dsox"
+#define ST_LSM6DSR_DEV_NAME		"lsm6dsr"
+#define ST_LSM6DS3TRC_DEV_NAME		"lsm6ds3tr-c"
+#define ST_ISM330DHCX_DEV_NAME		"ism330dhcx"
+#define ST_LSM9DS1_DEV_NAME		"lsm9ds1-imu"
+#define ST_LSM6DS0_DEV_NAME		"lsm6ds0"
+#define ST_LSM6DSRX_DEV_NAME		"lsm6dsrx"
+#define ST_LSM6DST_DEV_NAME		"lsm6dst"
+#define ST_LSM6DSOP_DEV_NAME		"lsm6dsop"
+#define ST_ASM330LHHX_DEV_NAME		"asm330lhhx"
+#define ST_LSM6DSTX_DEV_NAME		"lsm6dstx"
+#define ST_LSM6DSV_DEV_NAME		"lsm6dsv"
+#define ST_LSM6DSV16X_DEV_NAME		"lsm6dsv16x"
+#define ST_LSM6DSO16IS_DEV_NAME		"lsm6dso16is"
+#define ST_ISM330IS_DEV_NAME		"ism330is"
+#define ST_ASM330LHB_DEV_NAME		"asm330lhb"
+#define ST_ASM330LHHXG1_DEV_NAME	"asm330lhhxg1"
 
 enum st_lsm6dsx_hw_id {
 	ST_LSM6DS3_ID = 1,
@@ -63,6 +64,7 @@ enum st_lsm6dsx_hw_id {
 	ST_LSM6DSO16IS_ID,
 	ST_ISM330IS_ID,
 	ST_ASM330LHB_ID,
+	ST_ASM330LHHXG1_ID,
 	ST_LSM6DSX_MAX_ID,
 };
 
