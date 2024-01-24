@@ -567,21 +567,133 @@ void rvu_nix_flr_free_bpids(struct rvu *rvu, u16 pcifunc)
 	mutex_unlock(&rvu->rsrc_lock);
 }
 
-int rvu_mbox_handler_nix_bp_disable(struct rvu *rvu,
-				    struct nix_bp_cfg_req *req,
+int rvu_mbox_handler_nix_rx_chan_cfg(struct rvu *rvu,
+				     struct nix_rx_chan_cfg *req,
+				     struct nix_rx_chan_cfg *rsp)
+{
+	struct rvu_pfvf *pfvf;
+	int blkaddr;
+	u16 chan;
+
+	pfvf = rvu_get_pfvf(rvu, req->hdr.pcifunc);
+	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, req->hdr.pcifunc);
+	chan = pfvf->rx_chan_base + req->chan;
+
+	if (req->type == NIX_INTF_TYPE_CPT)
+		chan = chan | BIT(11);
+
+	if (req->read) {
+		rsp->val = rvu_read64(rvu, blkaddr,
+				      NIX_AF_RX_CHANX_CFG(chan));
+		rsp->chan = req->chan;
+	} else {
+		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan), req->val);
+	}
+	return 0;
+}
+
+int rvu_mbox_handler_nix_alloc_bpids(struct rvu *rvu,
+				     struct nix_alloc_bpid_req *req,
+				     struct nix_bpids *rsp)
+{
+	u16 pcifunc = req->hdr.pcifunc;
+	struct nix_hw *nix_hw;
+	int blkaddr, cnt = 0;
+	struct nix_bp *bp;
+	int bpid, err;
+
+	err = nix_get_struct_ptrs(rvu, pcifunc, &nix_hw, &blkaddr);
+	if (err)
+		return err;
+
+	bp = &nix_hw->bp;
+
+	/* For interface like sso uses same bpid across multiple
+	 * application. Find the bpid is it already allocate or
+	 * allocate a new one.
+	 */
+	mutex_lock(&rvu->rsrc_lock);
+	if (req->type > NIX_INTF_TYPE_CPT || req->type == NIX_INTF_TYPE_LBK) {
+		for (bpid = 0; bpid < bp->bpids.max; bpid++) {
+			if (bp->intf_map[bpid] == req->type) {
+				rsp->bpids[cnt] = bpid + bp->free_pool_base;
+				rsp->bpid_cnt++;
+				bp->ref_cnt[bpid]++;
+				cnt++;
+			}
+		}
+		if (rsp->bpid_cnt)
+			goto exit;
+	}
+
+	for (cnt = 0; cnt < req->bpid_cnt; cnt++) {
+		bpid = rvu_alloc_rsrc(&bp->bpids);
+		if (bpid < 0)
+			goto exit;
+		rsp->bpids[cnt] = bpid + bp->free_pool_base;
+		bp->intf_map[bpid] = req->type;
+		bp->fn_map[bpid] = pcifunc;
+		bp->ref_cnt[bpid]++;
+		rsp->bpid_cnt++;
+	}
+exit:
+	mutex_unlock(&rvu->rsrc_lock);
+	return 0;
+}
+
+int rvu_mbox_handler_nix_free_bpids(struct rvu *rvu,
+				    struct nix_bpids *req,
 				    struct msg_rsp *rsp)
 {
 	u16 pcifunc = req->hdr.pcifunc;
-	int blkaddr, pf, type, err;
-	u16 chan_base, chan, bpid;
-	struct rvu_pfvf *pfvf;
+	int blkaddr, cnt, err, id;
 	struct nix_hw *nix_hw;
 	struct nix_bp *bp;
+	u16 bpid;
+
+	err = nix_get_struct_ptrs(rvu, pcifunc, &nix_hw, &blkaddr);
+	if (err)
+		return err;
+
+	bp = &nix_hw->bp;
+	mutex_lock(&rvu->rsrc_lock);
+	for (cnt = 0; cnt < req->bpid_cnt; cnt++) {
+		bpid = req->bpids[cnt] - bp->free_pool_base;
+		bp->ref_cnt[bpid]--;
+		if (bp->ref_cnt[bpid])
+			continue;
+		rvu_free_rsrc(&bp->bpids, bpid);
+		for (id = 0; id < bp->bpids.max; id++) {
+			if (bp->fn_map[id] == pcifunc)
+				bp->fn_map[id] = 0;
+		}
+	}
+	mutex_unlock(&rvu->rsrc_lock);
+	return 0;
+}
+
+static int nix_bp_disable(struct rvu *rvu,
+			  struct nix_bp_cfg_req *req,
+			  struct msg_rsp *rsp, bool cpt_link)
+{
+	u16 pcifunc = req->hdr.pcifunc;
+	int blkaddr, pf, type, err;
+	struct rvu_pfvf *pfvf;
+	struct nix_hw *nix_hw;
+	u16 chan_base, chan;
+	struct nix_bp *bp;
+	u16 chan_v, bpid;
 	u64 cfg;
 
 	pf = rvu_get_pf(pcifunc);
 	type = is_afvf(pcifunc) ? NIX_INTF_TYPE_LBK : NIX_INTF_TYPE_CGX;
 	if (!is_pf_cgxmapped(rvu, pf) && type != NIX_INTF_TYPE_LBK)
+		return 0;
+
+	if (is_sdp_pfvf(pcifunc))
+		type = NIX_INTF_TYPE_SDP;
+
+	if (cpt_link && !rvu->hw->cpt_links)
 		return 0;
 
 	pfvf = rvu_get_pfvf(rvu, pcifunc);
@@ -591,9 +703,27 @@ int rvu_mbox_handler_nix_bp_disable(struct rvu *rvu,
 
 	bp = &nix_hw->bp;
 	chan_base = pfvf->rx_chan_base + req->chan_base;
+
+	if (cpt_link) {
+		type = NIX_INTF_TYPE_CPT;
+		cfg = rvu_read64(rvu, blkaddr, CPT_AF_X2PX_LINK_CFG(0));
+		/* MODE=0 or MODE=1 => CPT looks only channels starting from cpt chan base */
+		cfg = (cfg >> 20) & 0x3;
+		if (cfg != 2)
+			chan_base = rvu->hw->cpt_chan_base;
+	}
+
 	for (chan = chan_base; chan < (chan_base + req->chan_cnt); chan++) {
-		cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan));
-		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan),
+		/* CPT channel for a given link channel is always
+		 * assumed to be BIT(11) set in link channel.
+		 */
+		if (cpt_link)
+			chan_v = chan | BIT(11);
+		else
+			chan_v = chan;
+
+		cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v));
+		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v),
 			    cfg & ~BIT_ULL(16));
 
 		if (type == NIX_INTF_TYPE_LBK) {
@@ -612,6 +742,19 @@ int rvu_mbox_handler_nix_bp_disable(struct rvu *rvu,
 	return 0;
 }
 
+int rvu_mbox_handler_nix_bp_disable(struct rvu *rvu,
+				    struct nix_bp_cfg_req *req,
+				    struct msg_rsp *rsp)
+{
+	return nix_bp_disable(rvu, req, rsp, false);
+}
+
+int rvu_mbox_handler_nix_cpt_bp_disable(struct rvu *rvu,
+					struct nix_bp_cfg_req *req,
+					struct msg_rsp *rsp)
+{
+	return nix_bp_disable(rvu, req, rsp, true);
+}
 static int rvu_nix_get_bpid(struct rvu *rvu, struct nix_bp_cfg_req *req,
 			    int type, int chan_id)
 {
@@ -654,7 +797,9 @@ static int rvu_nix_get_bpid(struct rvu *rvu, struct nix_bp_cfg_req *req,
 		if (bpid > bp->cgx_bpid_cnt)
 			return NIX_AF_ERR_INVALID_BPID;
 		break;
-
+	case NIX_INTF_TYPE_CPT:
+		bpid = bp->cgx_bpid_cnt + bp->sdp_bpid_cnt;
+		break;
 	case NIX_INTF_TYPE_LBK:
 		/* Alloc bpid from the free pool */
 		mutex_lock(&rvu->rsrc_lock);
@@ -691,15 +836,17 @@ static int rvu_nix_get_bpid(struct rvu *rvu, struct nix_bp_cfg_req *req,
 	return bpid;
 }
 
-int rvu_mbox_handler_nix_bp_enable(struct rvu *rvu,
-				   struct nix_bp_cfg_req *req,
-				   struct nix_bp_cfg_rsp *rsp)
+static int nix_bp_enable(struct rvu *rvu,
+			 struct nix_bp_cfg_req *req,
+			 struct nix_bp_cfg_rsp *rsp,
+			 bool cpt_link)
 {
 	int blkaddr, pf, type, chan_id = 0;
 	u16 pcifunc = req->hdr.pcifunc;
+	s16 bpid, bpid_base = -1;
 	struct rvu_pfvf *pfvf;
 	u16 chan_base, chan;
-	s16 bpid, bpid_base;
+	u16 chan_v;
 	u64 cfg;
 
 	pf = rvu_get_pf(pcifunc);
@@ -712,25 +859,46 @@ int rvu_mbox_handler_nix_bp_enable(struct rvu *rvu,
 	    type != NIX_INTF_TYPE_SDP)
 		return 0;
 
+	if (cpt_link && !rvu->hw->cpt_links)
+		return 0;
+
 	pfvf = rvu_get_pfvf(rvu, pcifunc);
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, pcifunc);
 
-	bpid_base = rvu_nix_get_bpid(rvu, req, type, chan_id);
 	chan_base = pfvf->rx_chan_base + req->chan_base;
-	bpid = bpid_base;
+
+	if (cpt_link) {
+		type = NIX_INTF_TYPE_CPT;
+		cfg = rvu_read64(rvu, blkaddr, CPT_AF_X2PX_LINK_CFG(0));
+		/* MODE=0 or MODE=1 => CPT looks only channels starting from cpt chan base */
+		cfg = (cfg >> 20) & 0x3;
+		if (cfg != 2)
+			chan_base = rvu->hw->cpt_chan_base;
+	}
 
 	for (chan = chan_base; chan < (chan_base + req->chan_cnt); chan++) {
+		bpid = rvu_nix_get_bpid(rvu, req, type, chan_id);
 		if (bpid < 0) {
 			dev_warn(rvu->dev, "Fail to enable backpressure\n");
 			return -EINVAL;
 		}
+		if (bpid_base < 0)
+			bpid_base = bpid;
 
-		cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan));
+		/* CPT channel for a given link channel is always
+		 * assumed to be BIT(11) set in link channel.
+		 */
+
+		if (cpt_link)
+			chan_v = chan | BIT(11);
+		else
+			chan_v = chan;
+
+		cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v));
 		cfg &= ~GENMASK_ULL(8, 0);
-		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan),
+		rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(chan_v),
 			    cfg | (bpid & GENMASK_ULL(8, 0)) | BIT_ULL(16));
 		chan_id++;
-		bpid = rvu_nix_get_bpid(rvu, req, type, chan_id);
 	}
 
 	for (chan = 0; chan < req->chan_cnt; chan++) {
@@ -743,6 +911,20 @@ int rvu_mbox_handler_nix_bp_enable(struct rvu *rvu,
 	rsp->chan_cnt = req->chan_cnt;
 
 	return 0;
+}
+
+int rvu_mbox_handler_nix_bp_enable(struct rvu *rvu,
+				   struct nix_bp_cfg_req *req,
+				   struct nix_bp_cfg_rsp *rsp)
+{
+	return nix_bp_enable(rvu, req, rsp, false);
+}
+
+int rvu_mbox_handler_nix_cpt_bp_enable(struct rvu *rvu,
+				       struct nix_bp_cfg_req *req,
+				       struct nix_bp_cfg_rsp *rsp)
+{
+	return nix_bp_enable(rvu, req, rsp, true);
 }
 
 static void nix_setup_lso_tso_l3(struct rvu *rvu, int blkaddr,
