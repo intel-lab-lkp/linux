@@ -812,3 +812,169 @@ int fscrypt_drop_inode(struct inode *inode)
 	return !READ_ONCE(ci->ci_master_key->mk_present);
 }
 EXPORT_SYMBOL_GPL(fscrypt_drop_inode);
+
+static struct fscrypt_extent_info *
+setup_extent_info(struct inode *inode, const u8 nonce[FSCRYPT_FILE_NONCE_SIZE])
+{
+	struct fscrypt_extent_info *ei;
+	struct fscrypt_inode_info *ci;
+	struct fscrypt_master_key *mk;
+	u8 derived_key[FSCRYPT_MAX_KEY_SIZE];
+	int err;
+
+	ci = inode->i_crypt_info;
+	mk = ci->ci_master_key;
+	if (WARN_ON_ONCE(!mk))
+		return ERR_PTR(-ENOKEY);
+
+	ei = kmem_cache_zalloc(fscrypt_extent_info_cachep, GFP_KERNEL);
+	if (!ei)
+		return ERR_PTR(-ENOMEM);
+
+	refcount_set(&ei->refs, 1);
+	memcpy(ei->nonce, nonce, FSCRYPT_FILE_NONCE_SIZE);
+	ei->sb = inode->i_sb;
+
+	down_read(&mk->mk_sem);
+	/*
+	 * We specifically don't check ->mk_present here because if the inode is
+	 * open and has a reference on the master key then it should be
+	 * available for us to use.
+	 */
+	err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
+				  HKDF_CONTEXT_PER_EXTENT_ENC_KEY, ei->nonce,
+				  FSCRYPT_FILE_NONCE_SIZE, derived_key,
+				  ci->ci_mode->keysize);
+	if (err)
+		goto out_free;
+
+	err = fscrypt_prepare_inline_crypt_key(&ei->prep_key, derived_key, ci);
+	memzero_explicit(derived_key, ci->ci_mode->keysize);
+	if (err)
+		goto out_free;
+	up_read(&mk->mk_sem);
+	return ei;
+out_free:
+	up_read(&mk->mk_sem);
+	memzero_explicit(ei, sizeof(*ei));
+	kmem_cache_free(fscrypt_extent_info_cachep, ei);
+	return ERR_PTR(err);
+}
+
+/**
+ * fscrypt_prepare_new_extent() - prepare to create a new extent for a file
+ * @inode: the possibly-encrypted inode
+ *
+ * If the inode is encrypted, setup the fscrypt_extent_info for a new extent.
+ * This will include the nonce and the derived key necessary for the extent to
+ * be encrypted.  This is only meant to be used with inline crypto and on inodes
+ * that need their contents encrypted.
+ *
+ * This doesn't persist the new extents encryption context, this is done later
+ * by calling fscrypt_set_extent_context().
+ *
+ * Return: The newly allocated fscrypt_extent_info on success, -EOPNOTSUPP if
+ *	   we're not encrypted, or another -errno code
+ */
+struct fscrypt_extent_info *fscrypt_prepare_new_extent(struct inode *inode)
+{
+	u8 nonce[FSCRYPT_FILE_NONCE_SIZE];
+
+	if (WARN_ON_ONCE(!inode->i_crypt_info))
+		return ERR_PTR(-EOPNOTSUPP);
+	if (WARN_ON_ONCE(!fscrypt_inode_uses_inline_crypto(inode)))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	get_random_bytes(nonce, FSCRYPT_FILE_NONCE_SIZE);
+	return setup_extent_info(inode, nonce);
+}
+EXPORT_SYMBOL_GPL(fscrypt_prepare_new_extent);
+
+/**
+ * fscrypt_load_extent_info() - create an fscrypt_extent_info from the context
+ * @inode: the inode
+ * @ctx: the context buffer
+ * @ctx_size: the size of the context buffer
+ *
+ * Create the fscrypt_extent_info and derive the key based on the
+ * fscrypt_extent_context buffer that is provided.
+ *
+ * Return: The newly allocated fscrypt_extent_info on success, -EOPNOTSUPP if
+ *	   we're not encrypted, or another -errno code
+ */
+struct fscrypt_extent_info *fscrypt_load_extent_info(struct inode *inode,
+						     u8 *ctx, size_t ctx_size)
+{
+	struct fscrypt_extent_context extent_ctx;
+	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
+	const struct fscrypt_policy_v2 *policy = &ci->ci_policy.v2;
+
+	if (WARN_ON_ONCE(!ci))
+		return ERR_PTR(-EOPNOTSUPP);
+	if (WARN_ON_ONCE(!fscrypt_inode_uses_inline_crypto(inode)))
+		return ERR_PTR(-EOPNOTSUPP);
+	if (ctx_size < sizeof(extent_ctx))
+		return ERR_PTR(-EINVAL);
+
+	memcpy(&extent_ctx, ctx, sizeof(extent_ctx));
+
+	if (extent_ctx.version != FSCRYPT_EXTENT_CONTEXT_V1) {
+		fscrypt_warn(inode, "Invalid extent encryption context version");
+		return ERR_PTR(-EINVAL);
+	}
+
+	/*
+	 * For now we need to validate that the master key and the encryption
+	 * mode matches what is in the inode.
+	 */
+	if (memcmp(extent_ctx.master_key_identifier,
+		   policy->master_key_identifier,
+		   sizeof(extent_ctx.master_key_identifier))) {
+		fscrypt_warn(inode, "Mismatching master key identifier");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (extent_ctx.encryption_mode != policy->contents_encryption_mode) {
+		fscrypt_warn(inode, "Mismatching encryption mode");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return setup_extent_info(inode, extent_ctx.nonce);
+}
+EXPORT_SYMBOL_GPL(fscrypt_load_extent_info);
+
+/**
+ * fscrypt_put_extent_info() - put a reference to a fscrypt_extent_info
+ * @ei: the fscrypt_extent_info being put or NULL.
+ *
+ * Drop a reference and possibly free the fscrypt_extent_info.
+ *
+ * Might sleep, since this may call blk_crypto_evict_key() which can sleep.
+ */
+void fscrypt_put_extent_info(struct fscrypt_extent_info *ei)
+{
+	if (ei && refcount_dec_and_test(&ei->refs)) {
+		fscrypt_destroy_prepared_key(ei->sb, &ei->prep_key);
+		memzero_explicit(ei, sizeof(*ei));
+		kmem_cache_free(fscrypt_extent_info_cachep, ei);
+	}
+}
+EXPORT_SYMBOL_GPL(fscrypt_put_extent_info);
+
+/**
+ * fscrypt_get_extent_info() - get a reference to a fscrypt_extent_info
+ * @ei: the extent_info to get.
+ *
+ * Get a reference on the fscrypt_extent_info. This is useful for file systems
+ * that need to pass the fscrypt_extent_info through various other structures to
+ * make lifetime tracking simpler.
+ *
+ * Return: the ei with an extra ref, NULL if ei was NULL.
+ */
+struct fscrypt_extent_info *fscrypt_get_extent_info(struct fscrypt_extent_info *ei)
+{
+	if (ei)
+		refcount_inc(&ei->refs);
+	return ei;
+}
+EXPORT_SYMBOL_GPL(fscrypt_get_extent_info);
