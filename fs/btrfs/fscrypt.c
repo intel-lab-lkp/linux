@@ -215,7 +215,65 @@ static struct block_device **btrfs_fscrypt_get_devices(struct super_block *sb,
 	return devs;
 }
 
+int btrfs_fscrypt_load_extent_info(struct btrfs_inode *inode,
+				   struct extent_map *em,
+				   struct btrfs_fscrypt_ctx *ctx)
+{
+	struct fscrypt_extent_info *info;
+	unsigned long nofs_flag;
+
+	if (ctx->size == 0)
+		return 0;
+
+	nofs_flag = memalloc_nofs_save();
+	info = fscrypt_load_extent_info(&inode->vfs_inode, ctx->ctx, ctx->size);
+	memalloc_nofs_restore(nofs_flag);
+	if (IS_ERR(info))
+		return PTR_ERR(info);
+	em->fscrypt_info = info;
+	return 0;
+}
+
+void btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
+				    struct btrfs_path *path,
+				    u8 *ctx, ssize_t ctx_size)
+{
+	struct btrfs_file_extent_item *ei;
+
+	/*
+	 * ctx_size includes the btrfs_encryption_info size because we need that
+	 * for inserting the item, subtract that from our ctx_size to get the
+	 * actual size of the context.
+	 */
+	ctx_size -= sizeof(struct btrfs_encryption_info);
+
+	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+	write_extent_buffer(path->nodes[0], ctx,
+			    btrfs_file_extent_encryption_ctx_offset(ei),
+			    ctx_size);
+	btrfs_set_file_extent_encryption_ctx_size(path->nodes[0], ei, ctx_size);
+}
+
+ssize_t btrfs_fscrypt_context_for_new_extent(struct btrfs_inode *inode,
+					     struct fscrypt_extent_info *info,
+					     u8 *ctx)
+{
+	ssize_t ret;
+
+	if (!info)
+		return 0;
+
+	ret = fscrypt_context_for_new_extent(&inode->vfs_inode, info, ctx);
+	if (ret < 0) {
+		btrfs_err_rl(inode->root->fs_info, "invalid encrypt context");
+		return ret;
+	}
+	return ret + sizeof(struct btrfs_encryption_info);
+}
+
 const struct fscrypt_operations btrfs_fscrypt_ops = {
+	.has_per_extent_encryption = 1,
 	.get_context = btrfs_fscrypt_get_context,
 	.set_context = btrfs_fscrypt_set_context,
 	.empty_dir = btrfs_fscrypt_empty_dir,

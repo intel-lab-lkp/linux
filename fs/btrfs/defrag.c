@@ -16,6 +16,7 @@
 #include "defrag.h"
 #include "file-item.h"
 #include "super.h"
+#include "fscrypt.h"
 
 static struct kmem_cache *btrfs_inode_defrag_cachep;
 
@@ -631,8 +632,11 @@ static struct extent_map *defrag_get_extent(struct btrfs_inode *inode,
 	struct btrfs_path path = { 0 };
 	struct extent_map *em;
 	struct btrfs_key key;
+	struct btrfs_fscrypt_ctx ctx;
 	u64 ino = btrfs_ino(inode);
 	int ret;
+
+	ctx.size = 0;
 
 	em = alloc_extent_map();
 	if (!em) {
@@ -728,7 +732,7 @@ iterate:
 			goto next;
 
 		/* Now this extent covers @start, convert it to em */
-		btrfs_extent_item_to_extent_map(inode, &path, fi, em);
+		btrfs_extent_item_to_extent_map(inode, &path, fi, em, &ctx);
 		break;
 next:
 		ret = btrfs_next_item(root, &path);
@@ -738,6 +742,10 @@ next:
 			goto not_found;
 	}
 	btrfs_release_path(&path);
+
+	ret = btrfs_fscrypt_load_extent_info(inode, em, &ctx);
+	if (ret)
+		goto err;
 	return em;
 
 not_found:

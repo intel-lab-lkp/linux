@@ -2915,8 +2915,15 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 	u64 num_bytes = btrfs_stack_file_extent_num_bytes(stack_fi);
 	u64 ram_bytes = btrfs_stack_file_extent_ram_bytes(stack_fi);
 	struct btrfs_drop_extents_args drop_args = { 0 };
-	size_t fscrypt_context_size = 0;
+	u8 fscrypt_ctx[FSCRYPT_SET_CONTEXT_MAX_SIZE];
+	ssize_t fscrypt_context_size = 0;
 	int ret;
+
+	fscrypt_context_size = btrfs_fscrypt_context_for_new_extent(inode,
+								    fscrypt_info,
+								    fscrypt_ctx);
+	if (fscrypt_context_size < 0)
+		return (int)fscrypt_context_size;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -2955,6 +2962,10 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 	write_extent_buffer(leaf, stack_fi,
 			btrfs_item_ptr_offset(leaf, path->slots[0]),
 			sizeof(struct btrfs_file_extent_item));
+
+	if (fscrypt_context_size)
+		btrfs_fscrypt_save_extent_info(inode, path, fscrypt_ctx,
+					       fscrypt_context_size);
 
 	btrfs_mark_buffer_dirty(trans, leaf);
 	btrfs_release_path(path);
@@ -6890,6 +6901,7 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 	struct btrfs_key found_key;
 	struct extent_map *em = NULL;
 	struct extent_map_tree *em_tree = &inode->extent_tree;
+	struct btrfs_fscrypt_ctx ctx;
 
 	read_lock(&em_tree->lock);
 	em = lookup_extent_mapping(em_tree, start, len);
@@ -6903,6 +6915,9 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 		else
 			goto out;
 	}
+
+	ctx.size = 0;
+
 	em = alloc_extent_map();
 	if (!em) {
 		ret = -ENOMEM;
@@ -7007,7 +7022,7 @@ next:
 		goto insert;
 	}
 
-	btrfs_extent_item_to_extent_map(inode, path, item, em);
+	btrfs_extent_item_to_extent_map(inode, path, item, em, &ctx);
 
 	if (extent_type == BTRFS_FILE_EXTENT_REG ||
 	    extent_type == BTRFS_FILE_EXTENT_PREALLOC) {
@@ -7050,6 +7065,10 @@ insert:
 		ret = -EIO;
 		goto out;
 	}
+
+	ret = btrfs_fscrypt_load_extent_info(inode, em, &ctx);
+	if (ret)
+		goto out;
 
 	write_lock(&em_tree->lock);
 	ret = btrfs_add_extent_mapping(fs_info, em_tree, &em, start, len);
@@ -9730,6 +9749,7 @@ static struct btrfs_trans_handle *insert_prealloc_file_extent(
 				       u64 file_offset)
 {
 	struct btrfs_file_extent_item stack_fi;
+	u8 fscrypt_ctx[FSCRYPT_SET_CONTEXT_MAX_SIZE];
 	struct btrfs_replace_extent_info extent_info;
 	struct btrfs_trans_handle *trans = trans_in;
 	struct btrfs_path *path;
@@ -9765,6 +9785,14 @@ static struct btrfs_trans_handle *insert_prealloc_file_extent(
 		return trans;
 	}
 
+	fscrypt_context_size = btrfs_fscrypt_context_for_new_extent(inode,
+								    fscrypt_info,
+								    fscrypt_ctx);
+	if (fscrypt_context_size < 0) {
+		ret = (int)fscrypt_context_size;
+		goto free_qgroup;
+	}
+
 	extent_info.disk_offset = start;
 	extent_info.disk_len = len;
 	extent_info.data_offset = 0;
@@ -9776,6 +9804,8 @@ static struct btrfs_trans_handle *insert_prealloc_file_extent(
 	extent_info.update_times = true;
 	extent_info.qgroup_reserved = qgroup_released;
 	extent_info.insertions = 0;
+	extent_info.fscrypt_ctx = fscrypt_ctx;
+	extent_info.fscrypt_context_size = fscrypt_context_size;
 
 	path = btrfs_alloc_path();
 	if (!path) {

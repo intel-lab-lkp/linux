@@ -30,6 +30,7 @@
 #include "file.h"
 #include "orphan.h"
 #include "tree-checker.h"
+#include "fscrypt.h"
 
 #define MAX_CONFLICT_INODES 10
 
@@ -4623,12 +4624,19 @@ static int log_one_extent(struct btrfs_trans_handle *trans,
 	struct btrfs_file_extent_item fi = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
+	u8 fscrypt_ctx[FSCRYPT_SET_CONTEXT_MAX_SIZE];
 	enum btrfs_compression_type compress_type;
 	u64 extent_offset = em->start - em->orig_start;
 	u64 block_len;
 	int ret;
-	size_t fscrypt_context_size = 0;
+	ssize_t fscrypt_context_size = 0;
 	u8 encryption = extent_map_encryption(em);
+
+	fscrypt_context_size = btrfs_fscrypt_context_for_new_extent(inode,
+								    em->fscrypt_info,
+								    fscrypt_ctx);
+	if (fscrypt_context_size < 0)
+		return (int)fscrypt_context_size;
 
 	btrfs_set_stack_file_extent_generation(&fi, trans->transid);
 	if (em->flags & EXTENT_FLAG_PREALLOC)
@@ -4691,6 +4699,9 @@ static int log_one_extent(struct btrfs_trans_handle *trans,
 	write_extent_buffer(leaf, &fi,
 			    btrfs_item_ptr_offset(leaf, path->slots[0]),
 			    sizeof(fi));
+	if (fscrypt_context_size)
+		btrfs_fscrypt_save_extent_info(inode, path, fscrypt_ctx,
+					       fscrypt_context_size);
 	btrfs_mark_buffer_dirty(trans, leaf);
 
 	btrfs_release_path(path);
