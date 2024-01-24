@@ -58,7 +58,7 @@ macvlan_over_bond()
 	ip -n ${m2_ns} addr add ${m2_ip4}/24 dev macv0
 	ip -n ${m2_ns} addr add ${m2_ip6}/24 dev macv0
 
-	sleep 2
+	busywait 2000 ip netns exec ${c_ns} ping ${s_ip4} -c 1 -W 0.1 &> /dev/null
 
 	check_connection "${c_ns}" "${s_ip4}" "IPv4: client->server"
 	check_connection "${c_ns}" "${s_ip6}" "IPv6: client->server"
@@ -69,8 +69,7 @@ macvlan_over_bond()
 	check_connection "${m1_ns}" "${m2_ip4}" "IPv4: macvlan_1->macvlan_2"
 	check_connection "${m1_ns}" "${m2_ip6}" "IPv6: macvlan_1->macvlan_2"
 
-
-	sleep 5
+	busywait 5000 ip netns exec ${s_ns} ping ${c_ip4} -c 1 -W 0.1 &> /dev/null
 
 	check_connection "${s_ns}" "${c_ip4}" "IPv4: server->client"
 	check_connection "${s_ns}" "${c_ip6}" "IPv6: server->client"
