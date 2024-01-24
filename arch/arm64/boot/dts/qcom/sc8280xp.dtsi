@@ -1785,13 +1785,12 @@
 			compatible = "qcom,sc8280xp-qmp-gen3x1-pcie-phy";
 			reg = <0x0 0x01c06000 0x0 0x2000>;
 
-			clocks = <&gcc GCC_PCIE_4_AUX_CLK>,
-				 <&gcc GCC_PCIE_4_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_4_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_4_CLKREF_CLK>,
 				 <&gcc GCC_PCIE4_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_4_PIPE_CLK>,
 				 <&gcc GCC_PCIE_4_PIPEDIV2_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "rchng",
+			clock-names = "cfg_ahb", "ref", "rchng",
 				      "pipe", "pipediv2";
 
 			assigned-clocks = <&gcc GCC_PCIE4_PHY_RCHNG_CLK>;
@@ -1883,13 +1882,12 @@
 			compatible = "qcom,sc8280xp-qmp-gen3x2-pcie-phy";
 			reg = <0x0 0x01c0e000 0x0 0x2000>;
 
-			clocks = <&gcc GCC_PCIE_3B_AUX_CLK>,
-				 <&gcc GCC_PCIE_3B_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_3B_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_3A3B_CLKREF_CLK>,
 				 <&gcc GCC_PCIE3B_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_3B_PIPE_CLK>,
 				 <&gcc GCC_PCIE_3B_PIPEDIV2_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "rchng",
+			clock-names = "cfg_ahb", "ref", "rchng",
 				      "pipe", "pipediv2";
 
 			assigned-clocks = <&gcc GCC_PCIE3B_PHY_RCHNG_CLK>;
@@ -1982,13 +1980,12 @@
 			reg = <0x0 0x01c14000 0x0 0x2000>,
 			      <0x0 0x01c16000 0x0 0x2000>;
 
-			clocks = <&gcc GCC_PCIE_3A_AUX_CLK>,
-				 <&gcc GCC_PCIE_3A_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_3A_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_3A3B_CLKREF_CLK>,
 				 <&gcc GCC_PCIE3A_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_3A_PIPE_CLK>,
 				 <&gcc GCC_PCIE_3A_PIPEDIV2_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "rchng",
+			clock-names = "cfg_ahb", "ref", "rchng",
 				      "pipe", "pipediv2";
 
 			assigned-clocks = <&gcc GCC_PCIE3A_PHY_RCHNG_CLK>;
@@ -2082,13 +2079,12 @@
 			compatible = "qcom,sc8280xp-qmp-gen3x2-pcie-phy";
 			reg = <0x0 0x01c1e000 0x0 0x2000>;
 
-			clocks = <&gcc GCC_PCIE_2B_AUX_CLK>,
-				 <&gcc GCC_PCIE_2B_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_2B_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_2A2B_CLKREF_CLK>,
 				 <&gcc GCC_PCIE2B_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_2B_PIPE_CLK>,
 				 <&gcc GCC_PCIE_2B_PIPEDIV2_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "rchng",
+			clock-names = "cfg_ahb", "ref", "rchng",
 				      "pipe", "pipediv2";
 
 			assigned-clocks = <&gcc GCC_PCIE2B_PHY_RCHNG_CLK>;
@@ -2181,13 +2177,12 @@
 			reg = <0x0 0x01c24000 0x0 0x2000>,
 			      <0x0 0x01c26000 0x0 0x2000>;
 
-			clocks = <&gcc GCC_PCIE_2A_AUX_CLK>,
-				 <&gcc GCC_PCIE_2A_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_2A_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_2A2B_CLKREF_CLK>,
 				 <&gcc GCC_PCIE2A_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_2A_PIPE_CLK>,
 				 <&gcc GCC_PCIE_2A_PIPEDIV2_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "rchng",
+			clock-names = "cfg_ahb", "ref", "rchng",
 				      "pipe", "pipediv2";
 
 			assigned-clocks = <&gcc GCC_PCIE2A_PHY_RCHNG_CLK>;
