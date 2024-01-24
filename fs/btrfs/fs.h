@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #include <linux/btrfs_tree.h>
 #include <linux/sizes.h>
+#include <linux/fscrypt.h>
 #include "extent-io-tree.h"
 #include "extent_map.h"
 #include "async-thread.h"
@@ -189,6 +190,7 @@ enum {
 	BTRFS_MOUNT_IGNOREDATACSUMS		= (1UL << 28),
 	BTRFS_MOUNT_NODISCARD			= (1UL << 29),
 	BTRFS_MOUNT_NOSPACECACHE		= (1UL << 30),
+	BTRFS_MOUNT_TEST_DUMMY_ENCRYPTION	= (1UL << 31),
 };
 
 /*
@@ -828,6 +830,7 @@ struct btrfs_fs_info {
 	spinlock_t eb_leak_lock;
 	struct list_head allocated_ebs;
 #endif
+	struct fscrypt_dummy_policy dummy_enc_policy;
 };
 
 static inline u64 btrfs_get_fs_generation(const struct btrfs_fs_info *fs_info)

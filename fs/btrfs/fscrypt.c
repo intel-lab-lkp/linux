@@ -243,6 +243,11 @@ static blk_status_t btrfs_process_encrypted_bio(struct bio *orig_bio,
 	return btrfs_csum_one_bio(bbio, enc_bio);
 }
 
+static const union fscrypt_policy *btrfs_get_dummy_policy(struct super_block *sb)
+{
+	return btrfs_sb(sb)->dummy_enc_policy.policy;
+}
+
 int btrfs_fscrypt_load_extent_info(struct btrfs_inode *inode,
 				   struct extent_map *em,
 				   struct btrfs_fscrypt_ctx *ctx)
@@ -367,4 +372,5 @@ const struct fscrypt_operations btrfs_fscrypt_ops = {
 	.empty_dir = btrfs_fscrypt_empty_dir,
 	.get_devices = btrfs_fscrypt_get_devices,
 	.process_bio = btrfs_process_encrypted_bio,
+	.get_dummy_policy = btrfs_get_dummy_policy,
 };
