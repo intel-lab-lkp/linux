@@ -18,6 +18,7 @@ properties:
     enum:
       - qcom,sa8775p-qmp-gen4x2-pcie-phy
       - qcom,sa8775p-qmp-gen4x4-pcie-phy
+      - qcom,sc7280-qmp-pcie-phy
       - qcom,sc8180x-qmp-pcie-phy
       - qcom,sc8280xp-qmp-gen3x1-pcie-phy
       - qcom,sc8280xp-qmp-gen3x2-pcie-phy
@@ -44,19 +45,12 @@ properties:
     maxItems: 2
 
   clocks:
-    minItems: 5
-    maxItems: 7
+    minItems: 4
+    maxItems: 6
 
   clock-names:
-    minItems: 5
-    items:
-      - const: aux
-      - const: cfg_ahb
-      - const: ref
-      - enum: [rchng, refgen]
-      - const: pipe
-      - const: pipediv2
-      - const: phy_aux
+    minItems: 4
+    maxItems: 6
 
   power-domains:
     maxItems: 1
@@ -135,6 +129,28 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,sc7280-qmp-pcie-phy
+              - qcom,sm8350-qmp-gen3x1-pcie-phy
+              - qcom,sm8450-qmp-gen3x1-pcie-phy
+              - qcom,sm8450-qmp-gen3x2-pcie-phy
+              - qcom,sm8550-qmp-gen3x2-pcie-phy
+              - qcom,sm8650-qmp-gen3x2-pcie-phy
+    then:
+      properties:
+        clocks:
+          maxItems: 4
+        clock-names:
+          items:
+            - const: cfg_ahb
+            - const: ref
+            - enum: [rchng, refgen]
+            - const: pipe
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,sc8180x-qmp-pcie-phy
               - qcom,sdm845-qhp-pcie-phy
               - qcom,sdm845-qmp-pcie-phy
@@ -144,19 +160,19 @@ allOf:
               - qcom,sm8250-qmp-gen3x1-pcie-phy
               - qcom,sm8250-qmp-gen3x2-pcie-phy
               - qcom,sm8250-qmp-modem-pcie-phy
-              - qcom,sm8350-qmp-gen3x1-pcie-phy
-              - qcom,sm8450-qmp-gen3x1-pcie-phy
-              - qcom,sm8450-qmp-gen3x2-pcie-phy
-              - qcom,sm8550-qmp-gen3x2-pcie-phy
               - qcom,sm8550-qmp-gen4x2-pcie-phy
-              - qcom,sm8650-qmp-gen3x2-pcie-phy
               - qcom,sm8650-qmp-gen4x2-pcie-phy
     then:
       properties:
         clocks:
           maxItems: 5
         clock-names:
-          maxItems: 5
+          items:
+            - const: aux
+            - const: cfg_ahb
+            - const: ref
+            - enum: [rchng, refgen]
+            - const: pipe
 
   - if:
       properties:
@@ -169,9 +185,14 @@ allOf:
     then:
       properties:
         clocks:
-          minItems: 6
+          maxItems: 5
         clock-names:
-          minItems: 6
+          items:
+            - const: cfg_ahb
+            - const: ref
+            - const: rchng
+            - const: pipe
+            - const: pipediv2
 
   - if:
       properties:
@@ -183,9 +204,15 @@ allOf:
     then:
       properties:
         clocks:
-          minItems: 7
+          minItems: 6
         clock-names:
-          minItems: 7
+          items:
+            - const: aux
+            - const: cfg_ahb
+            - const: ref
+            - const: rchng
+            - const: pipe
+            - const: pipediv2
 
   - if:
       properties:
@@ -215,13 +242,12 @@ examples:
       compatible = "qcom,sc8280xp-qmp-gen3x2-pcie-phy";
       reg = <0x01c18000 0x2000>;
 
-      clocks = <&gcc GCC_PCIE_2B_AUX_CLK>,
-               <&gcc GCC_PCIE_2B_CFG_AHB_CLK>,
+      clocks = <&gcc GCC_PCIE_2B_CFG_AHB_CLK>,
                <&gcc GCC_PCIE_2A2B_CLKREF_CLK>,
                <&gcc GCC_PCIE2B_PHY_RCHNG_CLK>,
                <&gcc GCC_PCIE_2B_PIPE_CLK>,
                <&gcc GCC_PCIE_2B_PIPEDIV2_CLK>;
-      clock-names = "aux", "cfg_ahb", "ref", "rchng",
+      clock-names = "cfg_ahb", "ref", "rchng",
                     "pipe", "pipediv2";
 
       power-domains = <&gcc PCIE_2B_GDSC>;
@@ -242,13 +268,12 @@ examples:
       compatible = "qcom,sc8280xp-qmp-gen3x4-pcie-phy";
       reg = <0x01c24000 0x2000>, <0x01c26000 0x2000>;
 
-      clocks = <&gcc GCC_PCIE_2A_AUX_CLK>,
-               <&gcc GCC_PCIE_2A_CFG_AHB_CLK>,
+      clocks = <&gcc GCC_PCIE_2A_CFG_AHB_CLK>,
                <&gcc GCC_PCIE_2A2B_CLKREF_CLK>,
                <&gcc GCC_PCIE2A_PHY_RCHNG_CLK>,
                <&gcc GCC_PCIE_2A_PIPE_CLK>,
                <&gcc GCC_PCIE_2A_PIPEDIV2_CLK>;
-      clock-names = "aux", "cfg_ahb", "ref", "rchng",
+      clock-names = "cfg_ahb", "ref", "rchng",
                     "pipe", "pipediv2";
 
       power-domains = <&gcc PCIE_2A_GDSC>;
