@@ -147,6 +147,7 @@ static int btrfs_fscrypt_set_context(struct inode *inode, const void *ctx,
 			goto out_err;
 	}
 
+	set_bit(BTRFS_INODE_NEEDS_FULL_SYNC, &BTRFS_I(inode)->runtime_flags);
 	leaf = path->nodes[0];
 	ptr = btrfs_item_ptr_offset(leaf, path->slots[0]);
 

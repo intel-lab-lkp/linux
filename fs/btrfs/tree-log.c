@@ -715,6 +715,7 @@ static noinline int replay_one_extent(struct btrfs_trans_handle *trans,
 	if (found_type == BTRFS_FILE_EXTENT_REG ||
 	    found_type == BTRFS_FILE_EXTENT_PREALLOC) {
 		u64 offset;
+		u32 item_size;
 		unsigned long dest_offset;
 		struct btrfs_key ins;
 
@@ -722,14 +723,16 @@ static noinline int replay_one_extent(struct btrfs_trans_handle *trans,
 		    btrfs_fs_incompat(fs_info, NO_HOLES))
 			goto update_inode;
 
+		item_size = btrfs_item_size(eb, slot);
+
 		ret = btrfs_insert_empty_item(trans, root, path, key,
-					      sizeof(*item));
+					      item_size);
 		if (ret)
 			goto out;
 		dest_offset = btrfs_item_ptr_offset(path->nodes[0],
 						    path->slots[0]);
 		copy_extent_buffer(path->nodes[0], eb, dest_offset,
-				(unsigned long)item,  sizeof(*item));
+				(unsigned long)item, item_size);
 
 		ins.objectid = btrfs_file_extent_disk_bytenr(eb, item);
 		ins.offset = btrfs_file_extent_disk_num_bytes(eb, item);
@@ -2511,7 +2514,8 @@ static int replay_one_buffer(struct btrfs_root *log, struct extent_buffer *eb,
 			continue;
 
 		/* these keys are simply copied */
-		if (key.type == BTRFS_XATTR_ITEM_KEY) {
+		if (key.type == BTRFS_XATTR_ITEM_KEY ||
+		    key.type == BTRFS_FSCRYPT_INODE_CTX_ITEM_KEY) {
 			ret = overwrite_item(wc->trans, root, path,
 					     eb, i, &key);
 			if (ret)
