@@ -4573,6 +4573,10 @@ long btrfs_ioctl(struct file *file, unsigned int
 			return -EOPNOTSUPP;
 		if (sb_rdonly(fs_info->sb))
 			return -EROFS;
+		if (btrfs_fs_incompat(fs_info, RAID56)) {
+			btrfs_warn(fs_info, "can't enable encryption with RAID5/6");
+			return -EINVAL;
+		}
 		/*
 		 *  If we crash before we commit, nothing encrypted could have
 		 * been written so it doesn't matter whether the encrypted
