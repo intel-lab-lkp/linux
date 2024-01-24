@@ -37,6 +37,7 @@ void btrfs_set_bio_crypt_ctx_from_extent(struct bio *bio,
 bool btrfs_mergeable_encrypted_bio(struct bio *bio, struct inode *inode,
 				   struct fscrypt_extent_info *fi,
 				   u64 logical_offset);
+int btrfs_fscrypt_bio_length(struct bio *bio, u64 map_length);
 
 #else
 static inline void btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
@@ -90,6 +91,11 @@ static inline bool btrfs_mergeable_encrypted_bio(struct bio *bio,
 						 u64 logical_offset)
 {
 	return true;
+}
+
+static inline u64 btrfs_fscrypt_bio_length(struct bio *bio, u64 map_length)
+{
+	return map_length;
 }
 
 #endif /* CONFIG_FS_ENCRYPTION */
