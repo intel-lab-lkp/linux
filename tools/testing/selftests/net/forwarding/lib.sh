@@ -41,6 +41,7 @@ fi
 # Kselftest framework requirement - SKIP code is 4.
 ksft_skip=4
 
+# timeout in milliseconds
 busywait()
 {
 	local timeout=$1; shift
@@ -61,6 +62,32 @@ busywait()
 			echo -n "$out"
 			return 1
 		fi
+	done
+}
+
+# timeout in seconds
+slowwait()
+{
+	local timeout=$1; shift
+
+	local start_time="$(date -u +%s)"
+	while true
+	do
+		local out
+		out=$("$@")
+		local ret=$?
+		if ((!ret)); then
+			echo -n "$out"
+			return 0
+		fi
+
+		local current_time="$(date -u +%s)"
+		if ((current_time - start_time > timeout)); then
+			echo -n "$out"
+			return 1
+		fi
+
+		sleep 1
 	done
 }
 
@@ -503,6 +530,15 @@ busywait_for_counter()
 
 	local base=$("$@")
 	busywait "$timeout" until_counter_is ">= $((base + delta))" "$@"
+}
+
+slowwait_for_counter()
+{
+	local timeout=$1; shift
+	local delta=$1; shift
+
+	local base=$("$@")
+	slowwait "$timeout" until_counter_is ">= $((base + delta))" "$@"
 }
 
 setup_wait_dev()
