@@ -2238,15 +2238,13 @@
 		};
 
 		pcie1_phy: phy@1c0e000 {
-			compatible = "qcom,sm8250-qmp-gen3x2-pcie-phy";
+			compatible = "qcom,sc7280-qmp-pcie-phy";
 			reg = <0 0x01c0e000 0 0x1000>;
-			clocks = <&gcc GCC_PCIE_1_AUX_CLK>,
-				 <&gcc GCC_PCIE_1_CFG_AHB_CLK>,
+			clocks = <&gcc GCC_PCIE_1_CFG_AHB_CLK>,
 				 <&gcc GCC_PCIE_CLKREF_EN>,
 				 <&gcc GCC_PCIE1_PHY_RCHNG_CLK>,
 				 <&gcc GCC_PCIE_1_PIPE_CLK>;
-			clock-names = "aux",
-				      "cfg_ahb",
+			clock-names = "cfg_ahb",
 				      "ref",
 				      "refgen",
 				      "pipe";
