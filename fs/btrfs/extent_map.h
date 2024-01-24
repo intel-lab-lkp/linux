@@ -18,6 +18,7 @@ enum {
 	ENUM_BIT(EXTENT_FLAG_COMPRESS_ZLIB),
 	ENUM_BIT(EXTENT_FLAG_COMPRESS_LZO),
 	ENUM_BIT(EXTENT_FLAG_COMPRESS_ZSTD),
+	ENUM_BIT(EXTENT_FLAG_ENCRYPT_FSCRYPT),
 	/* pre-allocated extent */
 	ENUM_BIT(EXTENT_FLAG_PREALLOC),
 	/* Logging this extent */
@@ -54,6 +55,7 @@ struct extent_map {
 	u64 generation;
 	u32 flags;
 	refcount_t refs;
+	struct fscrypt_extent_info *fscrypt_info;
 	struct list_head list;
 	struct list_head free_list;
 };
@@ -71,6 +73,20 @@ struct extent_map_tree {
 };
 
 struct btrfs_inode;
+
+static inline void extent_map_set_encryption(struct extent_map *em,
+					     enum btrfs_encryption_type type)
+{
+	if (type == BTRFS_ENCRYPTION_FSCRYPT)
+		em->flags |= EXTENT_FLAG_ENCRYPT_FSCRYPT;
+}
+
+static inline enum btrfs_encryption_type extent_map_encryption(const struct extent_map *em)
+{
+	if (em->flags & EXTENT_FLAG_ENCRYPT_FSCRYPT)
+		return BTRFS_ENCRYPTION_FSCRYPT;
+	return BTRFS_ENCRYPTION_NONE;
+}
 
 static inline void extent_map_set_compression(struct extent_map *em,
 					      enum btrfs_compression_type type)
