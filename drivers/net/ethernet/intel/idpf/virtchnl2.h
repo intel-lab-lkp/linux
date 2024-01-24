@@ -23,7 +23,7 @@
  * is not exactly the correct length.
  */
 #define VIRTCHNL2_CHECK_STRUCT_LEN(n, X)	\
-	static_assert((n) == sizeof(struct X))
+	static_assert(sizeof(struct X) == (n))
 
 /* New major set of opcodes introduced and so leaving room for
  * old misc opcodes to be added in future. Also these opcodes may only
@@ -978,7 +978,7 @@ struct virtchnl2_ptype {
 	u8 proto_id_count;
 	__le16 pad;
 	__le16 proto_id[];
-};
+} __packed __aligned(2);
 VIRTCHNL2_CHECK_STRUCT_LEN(6, virtchnl2_ptype);
 
 /**
