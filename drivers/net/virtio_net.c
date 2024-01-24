@@ -1251,6 +1251,9 @@ static struct sk_buff *receive_small_xdp(struct net_device *dev,
 	if (unlikely(!skb))
 		goto err;
 
+	/* Store the original virtio header for subsequent use by the driver. */
+	memcpy(skb_vnet_common_hdr(skb), &virtnet_xdp.hdr, vi->hdr_len);
+
 	if (metasize)
 		skb_metadata_set(skb, metasize);
 
@@ -1616,6 +1619,9 @@ static struct sk_buff *receive_mergeable_xdp(struct net_device *dev,
 		head_skb = build_skb_from_xdp_buff(dev, vi, xdp, xdp_frags_truesz);
 		if (unlikely(!head_skb))
 			break;
+		/* Store the original virtio header for subsequent use by the driver. */
+		memcpy(skb_vnet_common_hdr(head_skb), &virtnet_xdp.hdr, vi->hdr_len);
+
 		return head_skb;
 
 	case XDP_TX:
