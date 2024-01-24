@@ -1676,6 +1676,8 @@ err_unlock:
 	return err;
 }
 
+static bool dump_pdp_en;
+
 static int gtp_genl_dump_pdp(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
@@ -1685,12 +1687,19 @@ static int gtp_genl_dump_pdp(struct sk_buff *skb,
 	struct pdp_ctx *pctx;
 	struct gtp_net *gn;
 
-	gn = net_generic(net, gtp_net_id);
-
-	if (cb->args[4])
+	/* Do not allow further operations if the module is
+	 * unloaded before or after the process is blocked.
+	 */
+	if (!dump_pdp_en)
 		return 0;
 
 	rcu_read_lock();
+	if (!dump_pdp_en || cb->args[4]) {
+		rcu_read_unlock();
+		return 0;
+	}
+	gn = net_generic(net, gtp_net_id);
+
 	list_for_each_entry_rcu(gtp, &gn->gtp_dev_list, list) {
 		if (last_gtp && last_gtp != gtp)
 			continue;
@@ -1915,6 +1924,8 @@ static int __init gtp_init(void)
 	if (err < 0)
 		goto unreg_genl_family;
 
+	dump_pdp_en = true;
+
 	pr_info("GTP module loaded (pdp ctx size %zd bytes)\n",
 		sizeof(struct pdp_ctx));
 	return 0;
@@ -1931,6 +1942,7 @@ late_initcall(gtp_init);
 
 static void __exit gtp_fini(void)
 {
+	dump_pdp_en = false;
 	genl_unregister_family(&gtp_genl_family);
 	rtnl_link_unregister(&gtp_link_ops);
 	unregister_pernet_subsys(&gtp_net_ops);
