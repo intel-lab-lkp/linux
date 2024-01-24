@@ -305,9 +305,6 @@ int vgic_init(struct kvm *kvm)
 		}
 	}
 
-	if (vgic_has_its(kvm))
-		vgic_lpi_translation_cache_init(kvm);
-
 	/*
 	 * If we have GICv4.1 enabled, unconditionnaly request enable the
 	 * v4 support so that we get HW-accelerated vSGIs. Otherwise, only
