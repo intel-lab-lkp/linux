@@ -209,11 +209,14 @@ blk_crypto_fallback_alloc_cipher_req(struct blk_crypto_keyslot *slot,
 
 static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
 {
+	struct bio_crypt_ctx *bc;
 	struct bio *bio = *bio_ptr;
 	unsigned int i = 0;
 	unsigned int num_sectors = 0;
 	struct bio_vec bv;
 	struct bvec_iter iter;
+
+	bc = bio->bi_crypt_context;
 
 	bio_for_each_segment(bv, bio, iter) {
 		num_sectors += bv.bv_len >> SECTOR_SHIFT;
@@ -222,6 +225,16 @@ static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
 	}
 	if (num_sectors < bio_sectors(bio)) {
 		struct bio *split_bio;
+
+		/*
+		 * We cannot split bio's that have process_bio, as they require
+		 * the original bio.  The upper layer must make sure to limit
+		 * the submitted bio's appropriately.
+		 */
+		if (bc->bc_key->crypto_cfg.process_bio) {
+			bio->bi_status = BLK_STS_RESOURCE;
+			return false;
+		}
 
 		split_bio = bio_split(bio, num_sectors, GFP_NOIO,
 				      &crypto_bio_split);
@@ -346,6 +359,15 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 		}
 	}
 
+	/* Process the encrypted bio before we submit it. */
+	if (bc->bc_key->crypto_cfg.process_bio) {
+		blk_st = bc->bc_key->crypto_cfg.process_bio(src_bio, enc_bio);
+		if (blk_st != BLK_STS_OK) {
+			src_bio->bi_status = blk_st;
+			goto out_free_bounce_pages;
+		}
+	}
+
 	enc_bio->bi_private = src_bio;
 	enc_bio->bi_end_io = blk_crypto_fallback_encrypt_endio;
 	*bio_ptr = enc_bio;
@@ -390,6 +412,15 @@ static void blk_crypto_fallback_decrypt_bio(struct work_struct *work)
 	const int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
 	unsigned int i;
 	blk_status_t blk_st;
+
+	/* Process the bio first before trying to decrypt. */
+	if (bc->bc_key->crypto_cfg.process_bio) {
+		blk_st = bc->bc_key->crypto_cfg.process_bio(bio, bio);
+		if (blk_st != BLK_STS_OK) {
+			bio->bi_status = blk_st;
+			goto out_no_keyslot;
+		}
+	}
 
 	/*
 	 * Get a blk-crypto-fallback keyslot that contains a crypto_skcipher for
@@ -438,6 +469,18 @@ out:
 out_no_keyslot:
 	mempool_free(f_ctx, bio_fallback_crypt_ctx_pool);
 	bio_endio(bio);
+}
+
+/**
+ * blk_crypto_profile_is_fallback - check if this profile is the fallback
+ *				    profile
+ * @profile: the profile we're checking
+ *
+ * This is just a quick check to make sure @profile is the fallback profile.
+ */
+bool blk_crypto_profile_is_fallback(struct blk_crypto_profile *profile)
+{
+	return profile == blk_crypto_fallback_profile;
 }
 
 /**
