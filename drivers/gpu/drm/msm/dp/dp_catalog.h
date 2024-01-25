@@ -7,6 +7,7 @@
 #define _DP_CATALOG_H_
 
 #include <drm/drm_modes.h>
+#include <drm/display/drm_dp_helper.h>
 
 #include "dp_parser.h"
 #include "disp/msm_disp_snapshot.h"
@@ -76,6 +77,8 @@ struct dp_catalog {
 	u32 dp_active;
 	enum dp_catalog_audio_sdp_type sdp_type;
 	enum dp_catalog_audio_header_type sdp_header;
+	struct dp_sdp sdp;
+	struct drm_dp_vsc_sdp vsc_sdp_data;
 	u32 audio_data;
 	bool wide_bus_en;
 };
@@ -196,6 +199,7 @@ u32 dp_catalog_ctrl_read_phy_pattern(struct dp_catalog *dp_catalog);
 
 /* DP Panel APIs */
 int dp_catalog_panel_timing_cfg(struct dp_catalog *dp_catalog);
+void dp_catalog_panel_config_vsc_sdp(struct dp_catalog *dp_catalog, bool en);
 void dp_catalog_dump_regs(struct dp_catalog *dp_catalog);
 void dp_catalog_panel_tpg_enable(struct dp_catalog *dp_catalog,
 				struct drm_display_mode *drm_mode);

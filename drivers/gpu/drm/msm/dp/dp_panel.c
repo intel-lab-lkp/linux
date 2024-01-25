@@ -307,6 +307,49 @@ bool dp_panel_vsc_sdp_supported(struct dp_panel *dp_panel)
 	return panel->major >= 1 && panel->minor >= 3 && panel->vsc_supported;
 }
 
+static int dp_panel_setup_vsc_sdp(struct dp_panel *dp_panel)
+{
+	struct dp_catalog *catalog;
+	struct dp_panel_private *panel;
+	struct dp_display_mode *dp_mode;
+	int rc = 0;
+
+	if (!dp_panel) {
+		pr_err("invalid input\n");
+		rc = -EINVAL;
+		return rc;
+	}
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+	catalog = panel->catalog;
+	dp_mode = &dp_panel->dp_mode;
+
+	memset(&catalog->sdp, 0, sizeof(catalog->sdp));
+	memset(&catalog->vsc_sdp_data, 0, sizeof(catalog->vsc_sdp_data));
+
+	/* VSC SDP header as per table 2-118 of DP 1.4 specification */
+	catalog->sdp.sdp_header.HB0 = 0x00;
+	catalog->sdp.sdp_header.HB1 = 0x07;
+	catalog->sdp.sdp_header.HB2 = 0x05;
+	catalog->sdp.sdp_header.HB3 = 0x13;
+
+	/* VSC SDP Payload for DB16 */
+	catalog->vsc_sdp_data.pixelformat = DP_PIXELFORMAT_YUV420;
+	catalog->vsc_sdp_data.colorimetry = DP_COLORIMETRY_DEFAULT;
+
+	/* VSC SDP Payload for DB17 */
+	catalog->vsc_sdp_data.dynamic_range = DP_DYNAMIC_RANGE_CTA;
+
+	/* VSC SDP Payload for DB18 */
+	catalog->vsc_sdp_data.content_type = DP_CONTENT_TYPE_GRAPHICS;
+
+	catalog->vsc_sdp_data.bpc = dp_mode->bpp / 3;
+
+	dp_catalog_panel_config_vsc_sdp(catalog, true);
+
+	return rc;
+}
+
 void dp_panel_dump_regs(struct dp_panel *dp_panel)
 {
 	struct dp_catalog *catalog;
@@ -370,6 +413,10 @@ int dp_panel_timing_cfg(struct dp_panel *dp_panel)
 	catalog->dp_active = data;
 
 	dp_catalog_panel_timing_cfg(catalog);
+
+	if (dp_panel->dp_mode.out_fmt_is_yuv_420)
+		dp_panel_setup_vsc_sdp(dp_panel);
+
 	panel->panel_on = true;
 
 	return 0;

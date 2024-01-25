@@ -29,6 +29,9 @@
 
 #define DP_INTF_CONFIG_DATABUS_WIDEN     BIT(4)
 
+#define DP_GENERIC0_6_YUV_8_BPC		BIT(0)
+#define DP_GENERIC0_6_YUV_10_BPC	BIT(1)
+
 #define DP_INTERRUPT_STATUS1 \
 	(DP_INTR_AUX_XFER_DONE| \
 	DP_INTR_WRONG_ADDR | DP_INTR_TIMEOUT | \
@@ -905,6 +908,150 @@ int dp_catalog_panel_timing_cfg(struct dp_catalog *dp_catalog)
 
 	dp_write_p0(catalog, MMSS_DP_INTF_CONFIG, reg);
 	return 0;
+}
+
+static void dp_catalog_panel_setup_vsc_sdp(struct dp_catalog *dp_catalog)
+{
+	struct dp_catalog_private *catalog;
+	u32 header, parity, data;
+	u8 bpc, off = 0;
+	u8 buf[SZ_128];
+
+	if (!dp_catalog) {
+		pr_err("invalid input\n");
+		return;
+	}
+
+	catalog = container_of(dp_catalog, struct dp_catalog_private, dp_catalog);
+
+	/* HEADER BYTE 1 */
+	header = dp_catalog->sdp.sdp_header.HB1;
+	parity = dp_catalog_calculate_parity(header);
+	data   = ((header << HEADER_BYTE_1_BIT) | (parity << PARITY_BYTE_1_BIT));
+	dp_write_link(catalog, MMSS_DP_GENERIC0_0, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	/* HEADER BYTE 2 */
+	header = dp_catalog->sdp.sdp_header.HB2;
+	parity = dp_catalog_calculate_parity(header);
+	data   = ((header << HEADER_BYTE_2_BIT) | (parity << PARITY_BYTE_2_BIT));
+	dp_write_link(catalog, MMSS_DP_GENERIC0_1, data);
+
+	/* HEADER BYTE 3 */
+	header = dp_catalog->sdp.sdp_header.HB3;
+	parity = dp_catalog_calculate_parity(header);
+	data   = ((header << HEADER_BYTE_3_BIT) | (parity << PARITY_BYTE_3_BIT));
+	data |= dp_read_link(catalog, MMSS_DP_GENERIC0_1);
+	dp_write_link(catalog, MMSS_DP_GENERIC0_1, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	data = 0;
+	dp_write_link(catalog, MMSS_DP_GENERIC0_2, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_3, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_4, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_5, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	switch (dp_catalog->vsc_sdp_data.bpc) {
+	case 10:
+		bpc = DP_GENERIC0_6_YUV_10_BPC;
+		break;
+	case 8:
+	default:
+		bpc = DP_GENERIC0_6_YUV_8_BPC;
+		break;
+	}
+
+	/* VSC SDP payload as per table 2-117 of DP 1.4 specification */
+	data = (dp_catalog->vsc_sdp_data.colorimetry & 0xF) |
+	       ((dp_catalog->vsc_sdp_data.pixelformat & 0xF) << 4) |
+	       (bpc << 8) |
+	       ((dp_catalog->vsc_sdp_data.dynamic_range & 0x1) << 15) |
+	       ((dp_catalog->vsc_sdp_data.content_type & 0x7) << 16);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_6, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	data = 0;
+	dp_write_link(catalog, MMSS_DP_GENERIC0_7, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_8, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	dp_write_link(catalog, MMSS_DP_GENERIC0_9, data);
+	memcpy(buf + off, &data, sizeof(data));
+	off += sizeof(data);
+
+	print_hex_dump(KERN_DEBUG, "[drm-dp] VSC: ", DUMP_PREFIX_NONE, 16, 4, buf, off, false);
+}
+
+void dp_catalog_panel_config_vsc_sdp(struct dp_catalog *dp_catalog, bool en)
+{
+	struct dp_catalog_private *catalog;
+	u32 cfg, cfg2, misc;
+	u16 major = 0, minor = 0;
+
+	if (!dp_catalog) {
+		pr_err("invalid input\n");
+		return;
+	}
+
+	catalog = container_of(dp_catalog, struct dp_catalog_private, dp_catalog);
+
+	cfg = dp_read_link(catalog, MMSS_DP_SDP_CFG);
+	cfg2 = dp_read_link(catalog, MMSS_DP_SDP_CFG2);
+	misc = dp_read_link(catalog, REG_DP_MISC1_MISC0);
+
+	if (en) {
+		cfg |= GEN0_SDP_EN;
+		dp_write_link(catalog, MMSS_DP_SDP_CFG, cfg);
+
+		cfg2 |= GENERIC0_SDPSIZE;
+		dp_write_link(catalog, MMSS_DP_SDP_CFG2, cfg2);
+
+		dp_catalog_panel_setup_vsc_sdp(dp_catalog);
+
+		/* indicates presence of VSC (BIT(6) of MISC1) */
+		misc |= DP_MISC1_VSC_SDP;
+
+		drm_dbg_dp(catalog->drm_dev, "vsc sdp enable=%d\n", en);
+	} else {
+		cfg &= ~GEN0_SDP_EN;
+		dp_write_link(catalog, MMSS_DP_SDP_CFG, cfg);
+
+		cfg2 &= ~GENERIC0_SDPSIZE;
+		dp_write_link(catalog, MMSS_DP_SDP_CFG2, cfg2);
+
+		/* switch back to MSA */
+		misc &= ~DP_MISC1_VSC_SDP;
+
+		drm_dbg_dp(catalog->drm_dev, "vsc sdp enable=%d\n", en);
+	}
+
+	pr_debug("misc settings = 0x%x\n", misc);
+	dp_write_link(catalog, REG_DP_MISC1_MISC0, misc);
+
+	dp_catalog_hw_revision(dp_catalog, &major, &minor);
+	if (major == 1 && minor < 2) {
+		dp_write_link(catalog, MMSS_DP_SDP_CFG3, 0x01);
+		dp_write_link(catalog, MMSS_DP_SDP_CFG3, 0x00);
+	}
 }
 
 void dp_catalog_panel_tpg_enable(struct dp_catalog *dp_catalog,

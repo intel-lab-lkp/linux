@@ -1952,6 +1952,8 @@ int dp_ctrl_off_link_stream(struct dp_ctrl *dp_ctrl)
 	dp_io = &ctrl->parser->io;
 	phy = dp_io->phy;
 
+	dp_catalog_panel_config_vsc_sdp(ctrl->catalog, false);
+
 	/* set dongle to D3 (power off) mode */
 	dp_link_psm_config(ctrl->link, &ctrl->panel->link_info, true);
 
@@ -2025,6 +2027,8 @@ int dp_ctrl_off(struct dp_ctrl *dp_ctrl)
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 	dp_io = &ctrl->parser->io;
 	phy = dp_io->phy;
+
+	dp_catalog_panel_config_vsc_sdp(ctrl->catalog, false);
 
 	dp_catalog_ctrl_mainlink_ctrl(ctrl->catalog, false);
 
