@@ -227,7 +227,7 @@ trace_raw_output_##call(struct trace_iterator *iter, int flags,		\
 									\
 	field = (typeof(field))entry;					\
 									\
-	trace_seq_init(p);						\
+	trace_seq_reset(p);						\
 	return trace_output_call(iter, #call, print);			\
 }									\
 static struct trace_event_functions trace_event_type_funcs_##call = {	\

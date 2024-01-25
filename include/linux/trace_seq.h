@@ -29,6 +29,17 @@ trace_seq_init(struct trace_seq *s)
 	s->readpos = 0;
 }
 
+static inline void
+trace_seq_reset(struct trace_seq *s)
+{
+	if (WARN_ON_ONCE(!s->seq.size))
+		seq_buf_init(&s->seq, s->buffer, TRACE_SEQ_BUFFER_SIZE);
+	else
+		seq_buf_clear(&s->seq);
+	s->full = 0;
+	s->readpos = 0;
+}
+
 /**
  * trace_seq_used - amount of actual data written to buffer
  * @s: trace sequence descriptor
