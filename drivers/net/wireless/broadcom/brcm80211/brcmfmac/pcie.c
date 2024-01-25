@@ -965,6 +965,7 @@ static irqreturn_t brcmf_pcie_isr_thread(int irq, void *arg)
 
 static int brcmf_pcie_request_irq(struct brcmf_pciedev_info *devinfo)
 {
+	int ret;
 	struct pci_dev *pdev = devinfo->pdev;
 	struct brcmf_bus *bus = dev_get_drvdata(&pdev->dev);
 
@@ -972,11 +973,16 @@ static int brcmf_pcie_request_irq(struct brcmf_pciedev_info *devinfo)
 
 	brcmf_dbg(PCIE, "Enter\n");
 
-	pci_enable_msi(pdev);
-	if (request_threaded_irq(pdev->irq, brcmf_pcie_quick_check_isr,
-				 brcmf_pcie_isr_thread, IRQF_SHARED,
-				 "brcmf_pcie_intr", devinfo)) {
-		pci_disable_msi(pdev);
+	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
+	if (ret < 0)
+		return ret;
+
+	if (devm_request_threaded_irq(&pdev->dev,
+				      pci_irq_vector(pdev, 0),
+				      brcmf_pcie_quick_check_isr,
+				      brcmf_pcie_isr_thread, IRQF_SHARED,
+				      "brcmf_pcie_intr", devinfo)) {
+		pci_free_irq_vectors(pdev);
 		brcmf_err(bus, "Failed to request IRQ %d\n", pdev->irq);
 		return -EIO;
 	}
@@ -996,8 +1002,8 @@ static void brcmf_pcie_release_irq(struct brcmf_pciedev_info *devinfo)
 		return;
 
 	brcmf_pcie_intr_disable(devinfo);
-	free_irq(pdev->irq, devinfo);
-	pci_disable_msi(pdev);
+	devm_free_irq(&pdev->dev, pdev->irq, devinfo);
+	pci_free_irq_vectors(pdev);
 
 	msleep(50);
 	count = 0;
