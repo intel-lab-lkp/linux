@@ -234,6 +234,7 @@ static void dpu_encoder_phys_vid_setup_timing_engine(
 {
 	struct drm_display_mode mode;
 	struct dpu_hw_intf_timing_params timing_params = { 0 };
+	struct dpu_hw_cdm *hw_cdm;
 	const struct dpu_format *fmt = NULL;
 	u32 fmt_fourcc = DRM_FORMAT_RGB888;
 	unsigned long lock_flags;
@@ -254,17 +255,26 @@ static void dpu_encoder_phys_vid_setup_timing_engine(
 	DPU_DEBUG_VIDENC(phys_enc, "enabling mode:\n");
 	drm_mode_debug_printmodeline(&mode);
 
-	if (phys_enc->split_role != ENC_ROLE_SOLO) {
+	hw_cdm = phys_enc->hw_cdm;
+	if (hw_cdm) {
+		intf_cfg.cdm = hw_cdm->idx;
+		fmt_fourcc = dpu_encoder_get_drm_fmt(phys_enc->parent, &mode);
+	}
+
+	if (phys_enc->split_role != ENC_ROLE_SOLO ||
+	    dpu_encoder_get_drm_fmt(phys_enc->parent, &mode) == DRM_FORMAT_YUV420) {
 		mode.hdisplay >>= 1;
 		mode.htotal >>= 1;
 		mode.hsync_start >>= 1;
 		mode.hsync_end >>= 1;
+		mode.hskew >>= 1;
 
 		DPU_DEBUG_VIDENC(phys_enc,
-			"split_role %d, halve horizontal %d %d %d %d\n",
+			"split_role %d, halve horizontal %d %d %d %d %d\n",
 			phys_enc->split_role,
 			mode.hdisplay, mode.htotal,
-			mode.hsync_start, mode.hsync_end);
+			mode.hsync_start, mode.hsync_end,
+			mode.hskew);
 	}
 
 	drm_mode_to_intf_timing_params(phys_enc, &mode, &timing_params);
@@ -412,8 +422,15 @@ end:
 static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
 {
 	struct dpu_hw_ctl *ctl;
+	struct dpu_hw_cdm *hw_cdm;
+	const struct dpu_format *fmt = NULL;
+	u32 fmt_fourcc = DRM_FORMAT_RGB888;
 
 	ctl = phys_enc->hw_ctl;
+	hw_cdm = phys_enc->hw_cdm;
+	if (hw_cdm)
+		fmt_fourcc = dpu_encoder_get_drm_fmt(phys_enc->parent, &phys_enc->cached_mode);
+	fmt = dpu_get_dpu_format(fmt_fourcc);
 
 	DPU_DEBUG_VIDENC(phys_enc, "\n");
 
@@ -421,6 +438,8 @@ static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
 		return;
 
 	dpu_encoder_helper_split_config(phys_enc, phys_enc->hw_intf->idx);
+
+	dpu_encoder_helper_phys_setup_cdm(phys_enc, fmt, CDM_CDWN_OUTPUT_HDMI);
 
 	dpu_encoder_phys_vid_setup_timing_engine(phys_enc);
 
@@ -437,7 +456,15 @@ static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
 	if (ctl->ops.update_pending_flush_merge_3d && phys_enc->hw_pp->merge_3d)
 		ctl->ops.update_pending_flush_merge_3d(ctl, phys_enc->hw_pp->merge_3d->idx);
 
-	if (ctl->ops.update_pending_flush_periph && phys_enc->hw_intf->cap->type == INTF_DP)
+	if (ctl->ops.update_pending_flush_cdm && phys_enc->hw_cdm)
+		ctl->ops.update_pending_flush_cdm(ctl, hw_cdm->idx);
+
+	/*
+	 * Peripheral flush must be updated whenever flushing SDP packets is needed.
+	 * SDP packets are required for any YUV format (YUV420, YUV422, YUV444).
+	 */
+	if (ctl->ops.update_pending_flush_periph && phys_enc->hw_intf->cap->type == INTF_DP &&
+	    phys_enc->hw_cdm)
 		ctl->ops.update_pending_flush_periph(ctl, phys_enc->hw_intf->idx);
 
 skip_flush:

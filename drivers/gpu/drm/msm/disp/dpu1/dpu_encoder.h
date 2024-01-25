@@ -163,6 +163,14 @@ int dpu_encoder_get_vsync_count(struct drm_encoder *drm_enc);
 bool dpu_encoder_is_widebus_enabled(const struct drm_encoder *drm_enc);
 
 /**
+ * dpu_encoder_get_drm_fmt - return DRM fourcc format
+ * @drm_enc:    Pointer to previously created drm encoder structure
+ * @mode:	Corresponding drm_display_mode for dpu encoder
+ */
+u32 dpu_encoder_get_drm_fmt(const struct drm_encoder *drm_enc,
+			    const struct drm_display_mode *mode);
+
+/**
  * dpu_encoder_get_crc_values_cnt - get number of physical encoders contained
  *	in virtual encoder that can collect CRC values
  * @drm_enc:    Pointer to previously created drm encoder structure
