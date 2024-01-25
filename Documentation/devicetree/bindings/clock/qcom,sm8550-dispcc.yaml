@@ -25,7 +25,6 @@ properties:
     items:
       - description: Board XO source
       - description: Board Always On XO source
-      - description: Display's AHB clock
       - description: sleep clock
       - description: Byte clock from DSI PHY0
       - description: Pixel clock from DSI PHY0
@@ -82,7 +81,6 @@ examples:
       reg = <0x0af00000 0x10000>;
       clocks = <&rpmhcc RPMH_CXO_CLK>,
                <&rpmhcc RPMH_CXO_CLK_A>,
-               <&gcc GCC_DISP_AHB_CLK>,
                <&sleep_clk>,
                <&dsi0_phy 0>,
                <&dsi0_phy 1>,
