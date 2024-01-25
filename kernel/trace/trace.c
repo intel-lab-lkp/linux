@@ -4903,6 +4903,9 @@ __tracing_open(struct inode *inode, struct file *file, bool snapshot)
 
 	mutex_unlock(&trace_types_lock);
 
+	trace_seq_init(&iter->seq);
+	trace_seq_init(&iter->tmp_seq);
+
 	return iter;
 
  fail:
@@ -6784,6 +6787,7 @@ static int tracing_open_pipe(struct inode *inode, struct file *filp)
 	}
 
 	trace_seq_init(&iter->seq);
+	trace_seq_init(&iter->tmp_seq);
 	iter->trace = tr->current_trace;
 
 	if (!alloc_cpumask_var(&iter->started, GFP_KERNEL)) {
@@ -6961,6 +6965,7 @@ waitagain:
 	trace_iterator_reset(iter);
 	cpumask_clear(iter->started);
 	trace_seq_init(&iter->seq);
+	trace_seq_init(&iter->tmp_seq);
 
 	trace_event_read_lock();
 	trace_access_lock(iter->cpu_file);
@@ -8290,6 +8295,9 @@ static int tracing_buffers_open(struct inode *inode, struct file *filp)
 	ret = nonseekable_open(inode, filp);
 	if (ret < 0)
 		trace_array_put(tr);
+
+	trace_seq_init(&info->iter.seq);
+	trace_seq_init(&info->iter.tmp_seq);
 
 	return ret;
 }
@@ -10314,6 +10322,9 @@ void trace_init_global_iter(struct trace_iterator *iter)
 	iter->temp_size = STATIC_TEMP_BUF_SIZE;
 	iter->fmt = static_fmt_buf;
 	iter->fmt_size = STATIC_FMT_BUF_SIZE;
+
+	trace_seq_init(&iter->seq);
+	trace_seq_init(&iter->tmp_seq);
 }
 
 void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
@@ -10726,6 +10737,9 @@ void __init early_trace_init(void)
 			tracepoint_printk = 0;
 		else
 			static_key_enable(&tracepoint_printk_key.key);
+
+		trace_seq_init(&tracepoint_print_iter->seq);
+		trace_seq_init(&tracepoint_print_iter->tmp_seq);
 	}
 	tracer_alloc_buffers();
 
