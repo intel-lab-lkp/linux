@@ -17,6 +17,9 @@ struct dp_panel_private {
 	struct dp_link *link;
 	struct dp_catalog *catalog;
 	bool panel_on;
+	bool vsc_supported;
+	u8 major;
+	u8 minor;
 };
 
 static void dp_panel_read_psr_cap(struct dp_panel_private *panel)
@@ -43,9 +46,10 @@ static void dp_panel_read_psr_cap(struct dp_panel_private *panel)
 static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 {
 	int rc;
+	ssize_t rlen;
 	struct dp_panel_private *panel;
 	struct dp_link_info *link_info;
-	u8 *dpcd, major, minor;
+	u8 *dpcd, rx_feature;
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	dpcd = dp_panel->dpcd;
@@ -53,10 +57,19 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 	if (rc)
 		return rc;
 
+	rlen = drm_dp_dpcd_read(panel->aux, DP_DPRX_FEATURE_ENUMERATION_LIST, &rx_feature, 1);
+	if (rlen != 1) {
+		panel->vsc_supported = false;
+		pr_debug("failed to read DP_DPRX_FEATURE_ENUMERATION_LIST\n");
+	} else {
+		panel->vsc_supported = !!(rx_feature & DP_VSC_SDP_EXT_FOR_COLORIMETRY_SUPPORTED);
+		pr_debug("vsc=%d\n", panel->vsc_supported);
+	}
+
 	link_info = &dp_panel->link_info;
 	link_info->revision = dpcd[DP_DPCD_REV];
-	major = (link_info->revision >> 4) & 0x0f;
-	minor = link_info->revision & 0x0f;
+	panel->major = (link_info->revision >> 4) & 0x0f;
+	panel->minor = link_info->revision & 0x0f;
 
 	link_info->rate = drm_dp_max_link_rate(dpcd);
 	link_info->num_lanes = drm_dp_max_lane_count(dpcd);
@@ -69,7 +82,7 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
 	if (link_info->rate > dp_panel->max_dp_link_rate)
 		link_info->rate = dp_panel->max_dp_link_rate;
 
-	drm_dbg_dp(panel->drm_dev, "version: %d.%d\n", major, minor);
+	drm_dbg_dp(panel->drm_dev, "version: %d.%d\n", panel->major, panel->minor);
 	drm_dbg_dp(panel->drm_dev, "link_rate=%d\n", link_info->rate);
 	drm_dbg_dp(panel->drm_dev, "lane_count=%d\n", link_info->num_lanes);
 
@@ -278,6 +291,20 @@ void dp_panel_tpg_config(struct dp_panel *dp_panel, bool enable)
 
 	drm_dbg_dp(panel->drm_dev, "calling catalog tpg_enable\n");
 	dp_catalog_panel_tpg_enable(catalog, &panel->dp_panel.dp_mode.drm_mode);
+}
+
+bool dp_panel_vsc_sdp_supported(struct dp_panel *dp_panel)
+{
+	struct dp_panel_private *panel;
+
+	if (!dp_panel) {
+		pr_err("invalid input\n");
+		return false;
+	}
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	return panel->major >= 1 && panel->minor >= 3 && panel->vsc_supported;
 }
 
 void dp_panel_dump_regs(struct dp_panel *dp_panel)
