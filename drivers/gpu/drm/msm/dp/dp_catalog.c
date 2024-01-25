@@ -24,6 +24,9 @@
 #define DP_INTERRUPT_STATUS_ACK_SHIFT	1
 #define DP_INTERRUPT_STATUS_MASK_SHIFT	2
 
+#define DP_HW_VERSION_MAJOR(reg)	FIELD_GET(GENMASK(31, 28), reg)
+#define DP_HW_VERSION_MINOR(reg)	FIELD_GET(GENMASK(27, 16), reg)
+
 #define DP_INTF_CONFIG_DATABUS_WIDEN     BIT(4)
 
 #define DP_INTERRUPT_STATUS1 \
@@ -531,15 +534,18 @@ int dp_catalog_ctrl_set_pattern_state_bit(struct dp_catalog *dp_catalog,
  *
  * @dp_catalog: DP catalog structure
  *
- * Return: DP controller hw revision
+ * Return: void
  *
  */
-u32 dp_catalog_hw_revision(const struct dp_catalog *dp_catalog)
+void dp_catalog_hw_revision(const struct dp_catalog *dp_catalog, u16 *major, u16 *minor)
 {
 	const struct dp_catalog_private *catalog = container_of(dp_catalog,
 				struct dp_catalog_private, dp_catalog);
+	u32 reg_dp_hw_version;
 
-	return dp_read_ahb(catalog, REG_DP_HW_VERSION);
+	reg_dp_hw_version = dp_read_ahb(catalog, REG_DP_HW_VERSION);
+	*major = DP_HW_VERSION_MAJOR(reg_dp_hw_version);
+	*minor = DP_HW_VERSION_MINOR(reg_dp_hw_version);
 }
 
 /**
