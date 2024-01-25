@@ -9,6 +9,7 @@
 #include <linux/math64.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
 
@@ -23,7 +24,6 @@
 #define SPRD_PWM_ENABLE_BIT	BIT(0)
 
 #define SPRD_PWM_CHN_NUM	4
-#define SPRD_PWM_REGS_SHIFT	5
 #define SPRD_PWM_CHN_CLKS_NUM	2
 #define SPRD_PWM_CHN_OUTPUT_CLK	1
 
@@ -32,12 +32,25 @@ struct sprd_pwm_chn {
 	u32 clk_rate;
 };
 
+struct sprd_pwm_data {
+	int reg_shift;
+};
+
 struct sprd_pwm_chip {
 	void __iomem *base;
 	struct device *dev;
 	struct pwm_chip chip;
+	const struct sprd_pwm_data *pdata;
 	int num_pwms;
 	struct sprd_pwm_chn chn[SPRD_PWM_CHN_NUM];
+};
+
+static const struct sprd_pwm_data ums512_data = {
+	.reg_shift = 5,
+};
+
+static const struct sprd_pwm_data ums9620_data = {
+	.reg_shift = 14,
 };
 
 static inline struct sprd_pwm_chip* sprd_pwm_from_chip(struct pwm_chip *chip)
@@ -58,7 +71,7 @@ static const char * const sprd_pwm_clks[] = {
 
 static u32 sprd_pwm_read(struct sprd_pwm_chip *spc, u32 hwid, u32 reg)
 {
-	u32 offset = reg + (hwid << SPRD_PWM_REGS_SHIFT);
+	u32 offset = reg + (hwid << spc->pdata->reg_shift);
 
 	return readl_relaxed(spc->base + offset);
 }
@@ -66,7 +79,7 @@ static u32 sprd_pwm_read(struct sprd_pwm_chip *spc, u32 hwid, u32 reg)
 static void sprd_pwm_write(struct sprd_pwm_chip *spc, u32 hwid,
 			   u32 reg, u32 val)
 {
-	u32 offset = reg + (hwid << SPRD_PWM_REGS_SHIFT);
+	u32 offset = reg + (hwid << spc->pdata->reg_shift);
 
 	writel_relaxed(val, spc->base + offset);
 }
@@ -253,6 +266,7 @@ static int sprd_pwm_clk_init(struct sprd_pwm_chip *spc)
 static int sprd_pwm_probe(struct platform_device *pdev)
 {
 	struct sprd_pwm_chip *spc;
+	const void *priv;
 	int ret;
 
 	spc = devm_kzalloc(&pdev->dev, sizeof(*spc), GFP_KERNEL);
@@ -262,6 +276,11 @@ static int sprd_pwm_probe(struct platform_device *pdev)
 	spc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(spc->base))
 		return PTR_ERR(spc->base);
+
+	priv = of_device_get_match_data(&pdev->dev);
+	if (!priv)
+		return dev_err_probe(&pdev->dev, -EINVAL, "get regs shift failed!\n");
+	spc->pdata = priv;
 
 	spc->dev = &pdev->dev;
 
@@ -281,7 +300,8 @@ static int sprd_pwm_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sprd_pwm_of_match[] = {
-	{ .compatible = "sprd,ums512-pwm", },
+	{ .compatible = "sprd,ums512-pwm",	.data = (void *)&ums512_data},
+	{ .compatible = "sprd,ums9620-pwm",	.data = (void *)&ums9620_data},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sprd_pwm_of_match);
