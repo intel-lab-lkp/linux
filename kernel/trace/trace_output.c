@@ -308,7 +308,7 @@ int trace_raw_output_prep(struct trace_iterator *iter,
 		return TRACE_TYPE_UNHANDLED;
 	}
 
-	trace_seq_init(p);
+	trace_seq_reset(p);
 	trace_seq_printf(s, "%s: ", trace_event_name(event));
 
 	return trace_handle_return(s);

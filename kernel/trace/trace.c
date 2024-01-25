@@ -2942,7 +2942,7 @@ static void output_printk(struct trace_event_buffer *fbuffer)
 	event = &fbuffer->trace_file->event_call->event;
 
 	raw_spin_lock_irqsave(&tracepoint_iter_lock, flags);
-	trace_seq_init(&iter->seq);
+	trace_seq_reset(&iter->seq);
 	iter->ent = fbuffer->entry;
 	event_call->event.funcs->trace(iter, 0, event);
 	trace_seq_putc(&iter->seq, 0);
@@ -6939,7 +6939,7 @@ tracing_read_pipe(struct file *filp, char __user *ubuf,
 	if (sret != -EBUSY)
 		goto out;
 
-	trace_seq_init(&iter->seq);
+	trace_seq_reset(&iter->seq);
 
 	if (iter->trace->read) {
 		sret = iter->trace->read(iter, filp, ubuf, cnt, ppos);
@@ -7012,7 +7012,7 @@ waitagain:
 	/* Now copy what we have to the user */
 	sret = trace_seq_to_user(&iter->seq, ubuf, cnt);
 	if (iter->seq.readpos >= trace_seq_used(&iter->seq))
-		trace_seq_init(&iter->seq);
+		trace_seq_reset(&iter->seq);
 
 	/*
 	 * If there was nothing to send to user, in spite of consuming trace
@@ -7144,7 +7144,7 @@ static ssize_t tracing_splice_read_pipe(struct file *filp,
 		spd.partial[i].offset = 0;
 		spd.partial[i].len = trace_seq_used(&iter->seq);
 
-		trace_seq_init(&iter->seq);
+		trace_seq_reset(&iter->seq);
 	}
 
 	trace_access_unlock(iter->cpu_file);
@@ -10296,7 +10296,7 @@ trace_printk_seq(struct trace_seq *s)
 
 	printk(KERN_TRACE "%s", s->buffer);
 
-	trace_seq_init(s);
+	trace_seq_reset(s);
 }
 
 void trace_init_global_iter(struct trace_iterator *iter)

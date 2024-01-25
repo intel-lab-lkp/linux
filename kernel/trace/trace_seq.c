@@ -59,7 +59,7 @@ int trace_print_seq(struct seq_file *m, struct trace_seq *s)
 	 * do something else with the contents.
 	 */
 	if (!ret)
-		trace_seq_init(s);
+		trace_seq_reset(s);
 
 	return ret;
 }
