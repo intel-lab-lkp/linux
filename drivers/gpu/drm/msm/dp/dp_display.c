@@ -370,11 +370,14 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 
 	dp_link_process_request(dp->link);
 
-	if (!dp->dp_display.is_edp)
+	if (!dp->dp_display.is_edp) {
+		if (dp_panel_vsc_sdp_supported(dp->panel))
+			dp->dp_display.connector->ycbcr_420_allowed = true;
 		drm_dp_set_subconnector_property(dp->dp_display.connector,
 						 connector_status_connected,
 						 dp->panel->dpcd,
 						 dp->panel->downstream_ports);
+	}
 
 	edid = dp->panel->edid;
 
