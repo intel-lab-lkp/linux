@@ -916,9 +916,10 @@ enum drm_mode_status dp_bridge_mode_valid(struct drm_bridge *bridge,
 	const u32 num_components = 3, default_bpp = 24;
 	struct dp_display_private *dp_display;
 	struct dp_link_info *link_info;
-	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
 	struct msm_dp *dp;
 	int mode_pclk_khz = mode->clock;
+	int rate_ratio = RGB_24BPP_TMDS_CHAR_RATE_RATIO;
+	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
 
 	dp = to_dp_bridge(bridge)->dp_display;
 
@@ -932,6 +933,11 @@ enum drm_mode_status dp_bridge_mode_valid(struct drm_bridge *bridge,
 
 	dp_display = container_of(dp, struct dp_display_private, dp_display);
 	link_info = &dp_display->panel->link_info;
+
+	if (drm_mode_is_420_only(&dp->connector->display_info, mode))
+		rate_ratio = YUV420_24BPP_TMDS_CHAR_RATE_RATIO;
+
+	mode_pclk_khz /= rate_ratio;
 
 	mode_bpp = dp->connector->display_info.bpc * num_components;
 	if (!mode_bpp)

@@ -15,6 +15,9 @@
 
 #define MAX_PLANE	4
 
+#define RGB_24BPP_TMDS_CHAR_RATE_RATIO		1
+#define YUV420_24BPP_TMDS_CHAR_RATE_RATIO	2
+
 /* As there are different display controller blocks depending on the
  * snapdragon version, the kms support is split out and the appropriate
  * implementation is loaded at runtime.  The kms module is responsible
