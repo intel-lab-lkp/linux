@@ -1151,6 +1151,7 @@ static s32 brcmf_p2p_af_searching_channel(struct brcmf_p2p_info *p2p)
 {
 	struct afx_hdl *afx_hdl = &p2p->afx_hdl;
 	struct brcmf_cfg80211_vif *pri_vif;
+	bool timeout = false;
 	s32 retry;
 
 	brcmf_dbg(TRACE, "Enter\n");
@@ -1173,8 +1174,10 @@ static s32 brcmf_p2p_af_searching_channel(struct brcmf_p2p_info *p2p)
 			  retry);
 		/* search peer on peer's listen channel */
 		schedule_work(&afx_hdl->afx_work);
-		wait_for_completion_timeout(&afx_hdl->act_frm_scan,
-					    P2P_AF_FRM_SCAN_MAX_WAIT);
+		timeout = !wait_for_completion_timeout
+			(&afx_hdl->act_frm_scan, P2P_AF_FRM_SCAN_MAX_WAIT);
+		if (timeout)
+			break;
 		if ((afx_hdl->peer_chan != P2P_INVALID_CHANNEL) ||
 		    (!test_bit(BRCMF_P2P_STATUS_FINDING_COMMON_CHANNEL,
 			       &p2p->status)))
@@ -1186,8 +1189,11 @@ static s32 brcmf_p2p_af_searching_channel(struct brcmf_p2p_info *p2p)
 			/* listen on my listen channel */
 			afx_hdl->is_listen = true;
 			schedule_work(&afx_hdl->afx_work);
-			wait_for_completion_timeout(&afx_hdl->act_frm_scan,
-						    P2P_AF_FRM_SCAN_MAX_WAIT);
+			timeout = !wait_for_completion_timeout
+				(&afx_hdl->act_frm_scan,
+				 P2P_AF_FRM_SCAN_MAX_WAIT);
+			if (timeout)
+				break;
 		}
 		if ((afx_hdl->peer_chan != P2P_INVALID_CHANNEL) ||
 		    (!test_bit(BRCMF_P2P_STATUS_FINDING_COMMON_CHANNEL,
@@ -1209,7 +1215,7 @@ static s32 brcmf_p2p_af_searching_channel(struct brcmf_p2p_info *p2p)
 
 	clear_bit(BRCMF_P2P_STATUS_FINDING_COMMON_CHANNEL, &p2p->status);
 
-	return afx_hdl->peer_chan;
+	return timeout ? P2P_INVALID_CHANNEL : afx_hdl->peer_chan;
 }
 
 
@@ -1580,10 +1586,11 @@ static s32 brcmf_p2p_tx_action_frame(struct brcmf_p2p_info *p2p,
 		  (p2p->wait_for_offchan_complete) ?
 		   "off-channel" : "on-channel");
 
+	/* timeout would cause the code to proceed in the else branch below */
 	wait_for_completion_timeout(&p2p->send_af_done, P2P_AF_MAX_WAIT_TIME);
 
 	if (test_bit(BRCMF_P2P_STATUS_ACTION_TX_COMPLETED, &p2p->status)) {
-		brcmf_dbg(TRACE, "TX action frame operation is success\n");
+		brcmf_dbg(TRACE, "TX action frame operation has succeeded\n");
 	} else {
 		err = -EIO;
 		brcmf_dbg(TRACE, "TX action frame operation has failed\n");
@@ -2371,7 +2378,7 @@ int brcmf_p2p_del_vif(struct wiphy *wiphy, struct wireless_dev *wdev)
 	struct brcmf_cfg80211_vif *vif;
 	enum nl80211_iftype iftype;
 	bool wait_for_disable = false;
-	int err;
+	int err = 0;
 
 	brcmf_dbg(TRACE, "delete P2P vif\n");
 	vif = container_of(wdev, struct brcmf_cfg80211_vif, wdev);
@@ -2403,14 +2410,15 @@ int brcmf_p2p_del_vif(struct wiphy *wiphy, struct wireless_dev *wdev)
 	clear_bit(BRCMF_P2P_STATUS_GO_NEG_PHASE, &p2p->status);
 	brcmf_dbg(INFO, "P2P: GO_NEG_PHASE status cleared\n");
 
-	if (wait_for_disable)
-		wait_for_completion_timeout(&cfg->vif_disabled,
-					    BRCMF_P2P_DISABLE_TIMEOUT);
-
-	err = 0;
 	if (iftype != NL80211_IFTYPE_P2P_DEVICE) {
-		brcmf_vif_clear_mgmt_ies(vif);
-		err = brcmf_p2p_release_p2p_if(vif);
+		if (wait_for_disable)
+			err = (wait_for_completion_timeout
+			       (&cfg->vif_disabled,
+				BRCMF_P2P_DISABLE_TIMEOUT) ? 0 : -ETIMEDOUT);
+		if (!err) {
+			brcmf_vif_clear_mgmt_ies(vif);
+			err = brcmf_p2p_release_p2p_if(vif);
+		}
 	}
 	if (!err) {
 		/* wait for firmware event */
