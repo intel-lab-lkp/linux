@@ -1296,9 +1296,19 @@ spapr_tce_platform_iommu_attach_dev(struct iommu_domain *platform_domain,
 	if (!grp)
 		return -ENODEV;
 
-	table_group = iommu_group_get_iommudata(grp);
-	ret = table_group->ops->take_ownership(table_group);
-	iommu_group_put(grp);
+	if (platform_domain->type == IOMMU_DOMAIN_PLATFORM) {
+		ret = 0;
+		table_group = iommu_group_get_iommudata(grp);
+		/*
+		 * The domain being set to PLATFORM from earlier
+		 * BLOCKED. The table_group ownership has to be released.
+		 */
+		table_group->ops->release_ownership(table_group);
+	} else if (platform_domain->type == IOMMU_DOMAIN_BLOCKED) {
+		table_group = iommu_group_get_iommudata(grp);
+		ret = table_group->ops->take_ownership(table_group);
+		iommu_group_put(grp);
+	}
 
 	return ret;
 }
