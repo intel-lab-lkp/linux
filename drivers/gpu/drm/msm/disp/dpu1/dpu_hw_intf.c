@@ -168,7 +168,9 @@ static void dpu_hw_intf_setup_timing_engine(struct dpu_hw_intf *ctx,
 	 * video timing. It is recommended to enable it for all cases, except
 	 * if compression is enabled in 1 pixel per clock mode
 	 */
-	if (p->wide_bus_en)
+	if (dp_intf && fmt->base.pixel_format == DRM_FORMAT_YUV420)
+		intf_cfg2 |= INTF_CFG2_DATA_HCTL_EN;
+	else if (p->wide_bus_en)
 		intf_cfg2 |= INTF_CFG2_DATABUS_WIDEN | INTF_CFG2_DATA_HCTL_EN;
 
 	data_width = p->width;
