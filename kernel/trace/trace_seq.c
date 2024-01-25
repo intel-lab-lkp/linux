@@ -32,7 +32,7 @@
  */
 static inline void __trace_seq_init(struct trace_seq *s)
 {
-	if (unlikely(!s->seq.size))
+	if (WARN_ON_ONCE(!s->seq.size))
 		trace_seq_init(s);
 }
 
