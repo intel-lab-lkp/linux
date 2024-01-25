@@ -23,6 +23,7 @@ properties:
     items:
       - enum:
           - sprd,ums512-pwm
+          - sprd,ums9620-pwm
 
   reg:
     maxItems: 1
