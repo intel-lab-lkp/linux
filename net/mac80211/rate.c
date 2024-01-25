@@ -351,6 +351,7 @@ static void __rate_control_send_low(struct ieee80211_hw *hw,
 	int i;
 	u32 rate_flags =
 		ieee80211_chandef_rate_flags(&hw->conf.chandef);
+	bool scanning = !!(info->control.flags & IEEE80211_TX_CTRL_SCAN_TX);
 
 	if (sband->band == NL80211_BAND_S1GHZ) {
 		info->control.rates[0].flags |= IEEE80211_TX_RC_S1G_MCS;
@@ -364,7 +365,8 @@ static void __rate_control_send_low(struct ieee80211_hw *hw,
 
 	info->control.rates[0].idx = 0;
 	for (i = 0; i < sband->n_bitrates; i++) {
-		if (!(rate_mask & BIT(i)))
+		/* Do not use the bitrate mask when scanning. */
+		if (!scanning && !(rate_mask & BIT(i)))
 			continue;
 
 		if ((rate_flags & sband->bitrates[i].flags) != rate_flags)
