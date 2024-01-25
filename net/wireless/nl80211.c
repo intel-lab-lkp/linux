@@ -10277,6 +10277,7 @@ skip_beacons:
 			goto free;
 	}
 
+	params.link_id = link_id;
 	err = rdev_channel_switch(rdev, dev, &params);
 
 free:
