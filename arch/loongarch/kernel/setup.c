@@ -393,7 +393,7 @@ static void __init arch_mem_init(char **cmdline_p)
 
 	early_fdt_scan_reserved_mem();
 
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 	/*
 	 * In order to reduce the possibility of kernel panic when failed to
 	 * get IO TLB memory under CONFIG_SWIOTLB, it is better to allocate
