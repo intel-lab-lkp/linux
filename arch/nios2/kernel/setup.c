@@ -169,9 +169,10 @@ void __init setup_arch(char **cmdline_p)
 
 	early_init_fdt_reserve_self();
 	early_fdt_scan_reserved_mem();
-	fdt_init_reserved_mem();
 
 	unflatten_and_copy_device_tree();
+
+	fdt_init_reserved_mem();
 
 	setup_cpuinfo();
 
