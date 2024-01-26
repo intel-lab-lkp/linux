@@ -1310,16 +1310,11 @@ static void iommu_disable_pci_caps(struct device_domain_info *info)
 static void __iommu_flush_dev_iotlb(struct device_domain_info *info,
 				    u64 addr, unsigned int mask)
 {
-	u16 sid, qdep;
-
 	if (!info || !info->ats_enabled)
 		return;
 
-	sid = info->bus << 8 | info->devfn;
-	qdep = info->ats_qdep;
-	qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
-			   qdep, addr, mask);
-	quirk_extra_dev_tlb_flush(info, addr, mask, IOMMU_NO_PASID, qdep);
+	qi_flush_dev_iotlb(info->iommu, info, addr, mask);
+	quirk_extra_dev_tlb_flush(info, addr, IOMMU_NO_PASID, mask);
 }
 
 static void iommu_flush_dev_iotlb(struct dmar_domain *domain,
@@ -1342,11 +1337,7 @@ static void iommu_flush_dev_iotlb(struct dmar_domain *domain,
 		if (!info->ats_enabled)
 			continue;
 
-		qi_flush_dev_iotlb_pasid(info->iommu,
-					 PCI_DEVID(info->bus, info->devfn),
-					 info->pfsid, dev_pasid->pasid,
-					 info->ats_qdep, addr,
-					 mask);
+		qi_flush_dev_iotlb_pasid(info->iommu, info, addr, dev_pasid->pasid, mask);
 	}
 	spin_unlock_irqrestore(&domain->lock, flags);
 }
@@ -4990,9 +4981,8 @@ static void __init check_tylersburg_isoch(void)
  *
  * As a reminder, #6 will *NEED* this quirk as we enable nested translation.
  */
-void quirk_extra_dev_tlb_flush(struct device_domain_info *info,
-			       unsigned long address, unsigned long mask,
-			       u32 pasid, u16 qdep)
+void quirk_extra_dev_tlb_flush(struct device_domain_info *info, u32 pasid,
+			       unsigned long address, unsigned long mask)
 {
 	u16 sid;
 
@@ -5001,11 +4991,9 @@ void quirk_extra_dev_tlb_flush(struct device_domain_info *info,
 
 	sid = PCI_DEVID(info->bus, info->devfn);
 	if (pasid == IOMMU_NO_PASID) {
-		qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
-				   qdep, address, mask);
+		qi_flush_dev_iotlb(info->iommu, info, address, mask);
 	} else {
-		qi_flush_dev_iotlb_pasid(info->iommu, sid, info->pfsid,
-					 pasid, qdep, address, mask);
+		qi_flush_dev_iotlb_pasid(info->iommu, info, address, pasid, mask);
 	}
 }
 

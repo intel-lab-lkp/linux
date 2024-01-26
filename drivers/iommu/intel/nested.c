@@ -78,18 +78,13 @@ static void nested_flush_dev_iotlb(struct dmar_domain *domain, u64 addr,
 {
 	struct device_domain_info *info;
 	unsigned long flags;
-	u16 sid, qdep;
 
 	spin_lock_irqsave(&domain->lock, flags);
 	list_for_each_entry(info, &domain->devices, link) {
 		if (!info->ats_enabled)
 			continue;
-		sid = info->bus << 8 | info->devfn;
-		qdep = info->ats_qdep;
-		qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
-				   qdep, addr, mask);
-		quirk_extra_dev_tlb_flush(info, addr, mask,
-					  IOMMU_NO_PASID, qdep);
+		qi_flush_dev_iotlb(info->iommu, info, addr, mask);
+		quirk_extra_dev_tlb_flush(info, IOMMU_NO_PASID, addr, mask);
 	}
 	spin_unlock_irqrestore(&domain->lock, flags);
 }
