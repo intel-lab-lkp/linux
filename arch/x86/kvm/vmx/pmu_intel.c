@@ -823,10 +823,83 @@ void intel_passthrough_pmu_msrs(struct kvm_vcpu *vcpu)
 
 static void intel_save_pmu_context(struct kvm_vcpu *vcpu)
 {
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	u32 i;
+
+	if (pmu->version != 2) {
+		pr_warn("only PerfMon v2 is supported for passthrough PMU");
+		return;
+	}
+
+	/* Global ctrl register is already saved at VM-exit. */
+	rdmsrl(MSR_CORE_PERF_GLOBAL_STATUS, pmu->global_status);
+	/* Clear hardware MSR_CORE_PERF_GLOBAL_STATUS MSR, if non-zero. */
+	if (pmu->global_status)
+		wrmsrl(MSR_CORE_PERF_GLOBAL_OVF_CTRL, pmu->global_status);
+
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		pmc = &pmu->gp_counters[i];
+		rdpmcl(i, pmc->counter);
+		rdmsrl(i + MSR_ARCH_PERFMON_EVENTSEL0, pmc->eventsel);
+		/*
+		 * Clear hardware PERFMON_EVENTSELx and its counter to avoid
+		 * leakage and also avoid this guest GP counter get accidentally
+		 * enabled during host running when host enable global ctrl.
+		 */
+		if (pmc->eventsel)
+			wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, 0);
+		if (pmc->counter)
+			wrmsrl(MSR_IA32_PMC0 + i, 0);
+	}
+
+	rdmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, pmu->fixed_ctr_ctrl);
+	/*
+	 * Clear hardware FIXED_CTR_CTRL MSR to avoid information leakage and
+	 * also avoid these guest fixed counters get accidentially enabled
+	 * during host running when host enable global ctrl.
+	 */
+	if (pmu->fixed_ctr_ctrl)
+		wrmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmc = &pmu->fixed_counters[i];
+		rdpmcl(INTEL_PMC_FIXED_RDPMC_BASE | i, pmc->counter);
+		if (pmc->counter)
+			wrmsrl(MSR_CORE_PERF_FIXED_CTR0 + i, 0);
+	}
 }
 
 static void intel_restore_pmu_context(struct kvm_vcpu *vcpu)
 {
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	u64 global_status;
+	int i;
+
+	if (pmu->version != 2) {
+		pr_warn("only PerfMon v2 is supported for passthrough PMU");
+		return;
+	}
+
+	/* Clear host global_ctrl and global_status MSR if non-zero. */
+	wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL, 0);
+	rdmsrl(MSR_CORE_PERF_GLOBAL_STATUS, global_status);
+	if (global_status)
+		wrmsrl(MSR_CORE_PERF_GLOBAL_OVF_CTRL, global_status);
+
+	wrmsrl(MSR_CORE_PERF_GLOBAL_STATUS_SET, pmu->global_status);
+
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		pmc = &pmu->gp_counters[i];
+		wrmsrl(MSR_IA32_PMC0 + i, pmc->counter);
+		wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, pmc->eventsel);
+	}
+
+	wrmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, pmu->fixed_ctr_ctrl);
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmc = &pmu->fixed_counters[i];
+		wrmsrl(MSR_CORE_PERF_FIXED_CTR0 + i, pmc->counter);
+	}
 }
 
 struct kvm_pmu_ops intel_pmu_ops __initdata = {
