@@ -26,6 +26,7 @@
 #include <linux/nodemask.h>
 #include <linux/mm.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/dma-map-ops.h>
 
 #include <asm/bootparam.h>
@@ -47,7 +48,8 @@ void __init bootmem_init(void)
 	 */
 	memblock_reserve(0, PHYS_OFFSET ? PHYS_OFFSET : 1);
 
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
+	fdt_init_reserved_mem();
 
 	if (!memblock_phys_mem_size())
 		panic("No memory found!\n");
