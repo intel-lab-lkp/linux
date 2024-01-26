@@ -3425,10 +3425,8 @@ static int ext4_ext_convert_to_initialized(handle_t *handle,
 	struct ext4_extent zero_ex1, zero_ex2;
 	struct ext4_extent *ex, *abut_ex;
 	ext4_lblk_t ee_block, eof_block;
-	unsigned int ee_len, depth, map_len = map->m_len;
-	int allocated = 0, max_zeroout = 0;
-	int err = 0;
-	int split_flag = EXT4_EXT_DATA_VALID2;
+	unsigned int ee_len, depth, map_len = map->m_len, max_zeroout = 0;
+	int err = 0, allocated = 0, split_flag = EXT4_EXT_DATA_VALID2;
 
 	ext_debug(inode, "logical block %llu, max_blocks %u\n",
 		  (unsigned long long)map->m_lblk, map_len);
