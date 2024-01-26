@@ -532,6 +532,7 @@ struct kvm_pmu {
 	u64 fixed_ctr_ctrl_mask;
 	u64 global_ctrl;
 	u64 global_status;
+	u64 synthesized_overflow;
 	u64 counter_bitmask[2];
 	u64 global_ctrl_mask;
 	u64 global_status_mask;
@@ -550,6 +551,7 @@ struct kvm_pmu {
 		atomic64_t __reprogram_pmi;
 	};
 	DECLARE_BITMAP(all_valid_pmc_idx, X86_PMC_IDX_MAX);
+	DECLARE_BITMAP(incremented_pmc_idx, X86_PMC_IDX_MAX);
 	DECLARE_BITMAP(pmc_in_use, X86_PMC_IDX_MAX);
 
 	u64 ds_area;

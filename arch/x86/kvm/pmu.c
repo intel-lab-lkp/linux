@@ -449,6 +449,26 @@ static bool kvm_passthrough_pmu_incr_counter(struct kvm_pmc *pmc)
 	return false;
 }
 
+void kvm_passthrough_pmu_handle_event(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	int bit;
+
+	for_each_set_bit(bit, pmu->incremented_pmc_idx, X86_PMC_IDX_MAX) {
+		struct kvm_pmc *pmc = static_call(kvm_x86_pmu_pmc_idx_to_pmc)(pmu, bit);
+
+		if (kvm_passthrough_pmu_incr_counter(pmc)) {
+			__set_bit(pmc->idx, (unsigned long *)&pmc_to_pmu(pmc)->synthesized_overflow);
+
+			if (pmc->eventsel & ARCH_PERFMON_EVENTSEL_INT)
+				kvm_make_request(KVM_REQ_PMI, vcpu);
+		}
+	}
+	bitmap_zero(pmu->incremented_pmc_idx, X86_PMC_IDX_MAX);
+	pmu->global_status |= pmu->synthesized_overflow;
+	pmu->synthesized_overflow = 0;
+}
+
 void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -748,7 +768,29 @@ static inline bool cpl_is_matched(struct kvm_pmc *pmc)
 	return (static_call(kvm_x86_get_cpl)(pmc->vcpu) == 0) ? select_os : select_user;
 }
 
-void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
+static void __kvm_passthrough_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	int i;
+
+	for_each_set_bit(i, pmu->all_valid_pmc_idx, X86_PMC_IDX_MAX) {
+		pmc = static_call(kvm_x86_pmu_pmc_idx_to_pmc)(pmu, i);
+
+		if (!pmc || !pmc_speculative_in_use(pmc) ||
+		    !check_pmu_event_filter(pmc))
+			continue;
+
+		/* Ignore checks for edge detect, pin control, invert and CMASK bits */
+		if (eventsel_match_perf_hw_id(pmc, perf_hw_id) && cpl_is_matched(pmc)) {
+			pmc->emulated_counter += 1;
+			__set_bit(pmc->idx, pmu->incremented_pmc_idx);
+			kvm_make_request(KVM_REQ_PMU, vcpu);
+		}
+	}
+}
+
+static void __kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct kvm_pmc *pmc;
@@ -764,6 +806,14 @@ void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
 		if (eventsel_match_perf_hw_id(pmc, perf_hw_id) && cpl_is_matched(pmc))
 			kvm_pmu_incr_counter(pmc);
 	}
+}
+
+void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
+{
+	if (is_passthrough_pmu_enabled(vcpu))
+		__kvm_passthrough_pmu_trigger_event(vcpu, perf_hw_id);
+	else
+		__kvm_pmu_trigger_event(vcpu, perf_hw_id);
 }
 EXPORT_SYMBOL_GPL(kvm_pmu_trigger_event);
 

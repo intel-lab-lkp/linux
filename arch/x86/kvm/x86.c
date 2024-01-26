@@ -10726,8 +10726,12 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		}
 		if (kvm_check_request(KVM_REQ_STEAL_UPDATE, vcpu))
 			record_steal_time(vcpu);
-		if (kvm_check_request(KVM_REQ_PMU, vcpu))
-			kvm_pmu_handle_event(vcpu);
+		if (kvm_check_request(KVM_REQ_PMU, vcpu)) {
+			if (is_passthrough_pmu_enabled(vcpu))
+				kvm_passthrough_pmu_handle_event(vcpu);
+			else
+				kvm_pmu_handle_event(vcpu);
+		}
 		if (kvm_check_request(KVM_REQ_PMI, vcpu))
 			kvm_pmu_deliver_pmi(vcpu);
 #ifdef CONFIG_KVM_SMM
