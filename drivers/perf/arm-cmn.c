@@ -591,6 +591,7 @@ struct arm_cmn_hw_event {
 	u8 dtm_offset;
 	bool wide_sel;
 	enum cmn_filter_select filter_sel;
+	int wp_idx;
 };
 
 #define for_each_hw_dn(hw, dn, i) \
@@ -1337,7 +1338,35 @@ static const struct attribute_group *arm_cmn_attr_groups[] = {
 
 static int arm_cmn_wp_idx(struct perf_event *event)
 {
-	return CMN_EVENT_EVENTID(event) + CMN_EVENT_WP_GRP(event);
+	struct arm_cmn_hw_event *hw = to_cmn_hw(event);
+
+	return hw->wp_idx;
+}
+
+static int arm_cmn_wp_idx_unused(struct perf_event *event, struct arm_cmn_dtm *dtm,
+	struct arm_cmn_dtc *dtc)
+{
+	struct arm_cmn_hw_event *hw = to_cmn_hw(event);
+	int idx, tmp, direction = CMN_EVENT_EVENTID(event);
+
+	/*
+	 * Examine wp 0 & 1 for the up direction,
+	 * examine wp 2 & 3 for the down direction
+	 */
+	for (idx = direction; idx < direction + 2; idx++)
+		if (dtm->wp_event[idx] < 0)
+			break;
+
+	if (idx == direction + 2)
+		return -ENOSPC;
+
+	tmp = dtm->wp_event[idx ^ 1];
+	if (tmp >= 0 && CMN_EVENT_WP_COMBINE(event) !=
+	    CMN_EVENT_WP_COMBINE(dtc->counters[tmp]))
+		return -ENOSPC;
+
+	hw->wp_idx = idx;
+	return hw->wp_idx;
 }
 
 static u32 arm_cmn_wp_config(struct perf_event *event)
@@ -1785,6 +1814,8 @@ static void arm_cmn_event_clear(struct arm_cmn *cmn, struct perf_event *event,
 
 	for_each_hw_dtc_idx(hw, j, idx)
 		cmn->dtc[j].counters[idx] = NULL;
+
+	hw->wp_idx = -1;
 }
 
 static int arm_cmn_event_add(struct perf_event *event, int flags)
@@ -1794,6 +1825,7 @@ static int arm_cmn_event_add(struct perf_event *event, int flags)
 	struct arm_cmn_node *dn;
 	enum cmn_node_type type = CMN_EVENT_TYPE(event);
 	unsigned int input_sel, i = 0;
+	int wp_idx;
 
 	if (type == CMN_TYPE_DTC) {
 		while (cmn->dtc[i].cycles)
@@ -1822,6 +1854,7 @@ static int arm_cmn_event_add(struct perf_event *event, int flags)
 	}
 
 	/* ...then the local counters to feed them */
+	wp_idx = -1;
 	for_each_hw_dn(hw, dn, i) {
 		struct arm_cmn_dtm *dtm = &cmn->dtms[dn->dtm] + hw->dtm_offset;
 		unsigned int dtm_idx, shift, d = max_t(int, dn->dtc, 0);
@@ -1835,16 +1868,17 @@ static int arm_cmn_event_add(struct perf_event *event, int flags)
 		if (type == CMN_TYPE_XP) {
 			input_sel = CMN__PMEVCNT0_INPUT_SEL_XP + dtm_idx;
 		} else if (type == CMN_TYPE_WP) {
-			int tmp, wp_idx = arm_cmn_wp_idx(event);
 			u32 cfg = arm_cmn_wp_config(event);
 
-			if (dtm->wp_event[wp_idx] >= 0)
-				goto free_dtms;
-
-			tmp = dtm->wp_event[wp_idx ^ 1];
-			if (tmp >= 0 && CMN_EVENT_WP_COMBINE(event) !=
-					CMN_EVENT_WP_COMBINE(cmn->dtc[d].counters[tmp]))
-				goto free_dtms;
+			/*
+			 * wp_config register index is currently allocated per
+			 * mesh instance rather than per node.
+			 */
+			if (wp_idx < 0) {
+				wp_idx = arm_cmn_wp_idx_unused(event, dtm, &cmn->dtc[d]);
+				if (wp_idx < 0)
+					goto free_dtms;
+			}
 
 			input_sel = CMN__PMEVCNT0_INPUT_SEL_WP + wp_idx;
 			dtm->wp_event[wp_idx] = hw->dtc_idx[d];
