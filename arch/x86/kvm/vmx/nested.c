@@ -561,6 +561,55 @@ static inline void nested_vmx_set_intercept_for_msr(struct vcpu_vmx *vmx,
 						   msr_bitmap_l0, msr);
 }
 
+/* Pass PMU MSRs to nested VM if L0 and L1 are set to passthrough. */
+static void nested_vmx_set_passthru_pmu_intercept_for_msr(struct kvm_vcpu *vcpu,
+							  unsigned long *msr_bitmap_l1,
+							  unsigned long *msr_bitmap_l0)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	int i;
+
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+						 msr_bitmap_l0,
+						 MSR_ARCH_PERFMON_EVENTSEL0 + i,
+						 MSR_TYPE_RW);
+		nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+						 msr_bitmap_l0,
+						 MSR_IA32_PERFCTR0 + i,
+						 MSR_TYPE_RW);
+		nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+						 msr_bitmap_l0,
+						 MSR_IA32_PMC0 + i,
+						 MSR_TYPE_RW);
+	}
+
+	for (i = 0; i < vcpu_to_pmu(vcpu)->nr_arch_fixed_counters; i++) {
+		nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+						 msr_bitmap_l0,
+						 MSR_CORE_PERF_FIXED_CTR0 + i,
+						 MSR_TYPE_RW);
+	}
+	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+					 msr_bitmap_l0,
+					 MSR_CORE_PERF_FIXED_CTR_CTRL,
+					 MSR_TYPE_RW);
+
+	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+					 msr_bitmap_l0,
+					 MSR_CORE_PERF_GLOBAL_STATUS,
+					 MSR_TYPE_RW);
+	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+					 msr_bitmap_l0,
+					 MSR_CORE_PERF_GLOBAL_CTRL,
+					 MSR_TYPE_RW);
+	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1,
+					 msr_bitmap_l0,
+					 MSR_CORE_PERF_GLOBAL_OVF_CTRL,
+					 MSR_TYPE_RW);
+}
+
 /*
  * Merge L0's and L1's MSR bitmap, return false to indicate that
  * we do not use the hardware.
@@ -659,6 +708,9 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 
 	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1, msr_bitmap_l0,
 					 MSR_IA32_FLUSH_CMD, MSR_TYPE_W);
+
+	if (is_passthrough_pmu_enabled(vcpu))
+		nested_vmx_set_passthru_pmu_intercept_for_msr(vcpu, msr_bitmap_l1, msr_bitmap_l0);
 
 	kvm_vcpu_unmap(vcpu, &vmx->nested.msr_bitmap_map, false);
 
