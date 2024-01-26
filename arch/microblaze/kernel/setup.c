@@ -55,11 +55,11 @@ void __init setup_arch(char **cmdline_p)
 
 	setup_memory();
 
-	fdt_init_reserved_mem();
-
 	console_verbose();
 
 	unflatten_device_tree();
+
+	fdt_init_reserved_mem();
 
 	setup_cpuinfo();
 
