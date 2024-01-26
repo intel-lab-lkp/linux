@@ -623,6 +623,10 @@ acpi_video_device_EDID(struct acpi_video_device *device,
 		arg0.integer.value = 1;
 	else if (length == 256)
 		arg0.integer.value = 2;
+	else if (length == 384)
+		arg0.integer.value = 3;
+	else if (length == 512)
+		arg0.integer.value = 4;
 	else
 		return -EINVAL;
 
@@ -1442,7 +1446,7 @@ int acpi_video_get_edid(struct acpi_device *device, int type, int device_id,
 
 	for (i = 0; i < video->attached_count; i++) {
 		video_device = video->attached_array[i].bind_info;
-		length = 256;
+		length = 512;
 
 		if (!video_device)
 			continue;
@@ -1477,13 +1481,18 @@ int acpi_video_get_edid(struct acpi_device *device, int type, int device_id,
 
 		if (ACPI_FAILURE(status) || !buffer ||
 		    buffer->type != ACPI_TYPE_BUFFER) {
-			length = 128;
-			status = acpi_video_device_EDID(video_device, &buffer,
-							length);
-			if (ACPI_FAILURE(status) || !buffer ||
-			    buffer->type != ACPI_TYPE_BUFFER) {
-				continue;
+			while (length) {
+				length -= 128;
+				status = acpi_video_device_EDID(video_device, &buffer,
+								length);
+				if (ACPI_FAILURE(status) || !buffer ||
+				    buffer->type != ACPI_TYPE_BUFFER) {
+					continue;
+				}
+				break;
 			}
+			if (!length)
+				continue;
 		}
 
 		*edid = buffer->buffer.pointer;
