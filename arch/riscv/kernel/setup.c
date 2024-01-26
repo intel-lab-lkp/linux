@@ -262,8 +262,6 @@ void __init setup_arch(char **cmdline_p)
 	efi_init();
 	paging_init();
 
-	fdt_init_reserved_mem();
-
 	/* Parse the ACPI tables for possible boot-time configuration */
 	acpi_boot_table_init();
 
@@ -272,6 +270,8 @@ void __init setup_arch(char **cmdline_p)
 #else
 	unflatten_device_tree();
 #endif
+
+	fdt_init_reserved_mem();
 	misc_mem_init();
 
 	init_resources();
