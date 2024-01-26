@@ -29,6 +29,7 @@
 #include <linux/pci.h>
 #include <linux/cache.h>
 #include <linux/of.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/dma-mapping.h>
 #include <asm/cacheflush.h>
 #include <asm/entry.h>
@@ -53,6 +54,8 @@ void __init setup_arch(char **cmdline_p)
 	*cmdline_p = boot_command_line;
 
 	setup_memory();
+
+	fdt_init_reserved_mem();
 
 	console_verbose();
 

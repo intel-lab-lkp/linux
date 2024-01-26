@@ -262,7 +262,7 @@ asmlinkage void __init mmu_init(void)
 
 	parse_early_param();
 
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
 
 	/* CMA initialization */
 	dma_contiguous_reserve(memory_start + lowmem_size - 1);
