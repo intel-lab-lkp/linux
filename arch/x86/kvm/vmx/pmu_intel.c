@@ -429,6 +429,13 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	default:
 		if ((pmc = get_gp_pmc(pmu, msr, MSR_IA32_PERFCTR0)) ||
 		    (pmc = get_gp_pmc(pmu, msr, MSR_IA32_PMC0))) {
+			if (is_passthrough_pmu_enabled(vcpu) &&
+			    !(msr & MSR_PMC_FULL_WIDTH_BIT) &&
+			    !msr_info->host_initiated) {
+				pr_warn_once("passthrough PMU never intercepts non-full-width PMU counters\n");
+				return 1;
+			}
+
 			if ((msr & MSR_PMC_FULL_WIDTH_BIT) &&
 			    (data & ~pmu->counter_bitmask[KVM_PMC_GP]))
 				return 1;
@@ -801,7 +808,8 @@ void intel_passthrough_pmu_msrs(struct kvm_vcpu *vcpu)
 	for (i = 0; i < vcpu_to_pmu(vcpu)->nr_arch_gp_counters; i++) {
 		vmx_set_intercept_for_msr(vcpu, MSR_ARCH_PERFMON_EVENTSEL0 + i, MSR_TYPE_RW, false);
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PERFCTR0 + i, MSR_TYPE_RW, false);
-		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i, MSR_TYPE_RW, false);
+		if (fw_writes_is_enabled(vcpu))
+			vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i, MSR_TYPE_RW, false);
 	}
 
 	vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_FIXED_CTR_CTRL, MSR_TYPE_RW, false);
