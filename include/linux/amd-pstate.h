@@ -80,7 +80,6 @@ struct amd_cpudata {
 	struct amd_aperf_mperf prev;
 
 	u64	freq;
-	bool	boost_supported;
 
 	/* EPP feature related attributes*/
 	s16	epp_policy;
