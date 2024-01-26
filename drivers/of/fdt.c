@@ -712,6 +712,33 @@ void __init early_init_fdt_scan_reserved_mem(void)
 }
 
 /**
+ * early_fdt_scan_reserved_mem() - create reserved memory regions
+ *
+ * This function grabs memory from early allocator for device exclusive use
+ * defined in device tree structures. It should be called by arch specific code
+ * once the early allocator (i.e. memblock) has been fully activated.
+ */
+void __init early_fdt_scan_reserved_mem(void)
+{
+	int n;
+	u64 base, size;
+
+	if (!initial_boot_params)
+		return;
+
+	fdt_scan_reserved_mem();
+	fdt_reserve_elfcorehdr();
+
+	/* Process header /memreserve/ fields */
+	for (n = 0; ; n++) {
+		fdt_get_mem_rsv(initial_boot_params, n, &base, &size);
+		if (!size)
+			break;
+		memblock_reserve(base, size);
+	}
+}
+
+/**
  * early_init_fdt_reserve_self() - reserve the memory used by the FDT blob
  */
 void __init early_init_fdt_reserve_self(void)
