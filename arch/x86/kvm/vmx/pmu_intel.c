@@ -825,7 +825,6 @@ void intel_passthrough_pmu_msrs(struct kvm_vcpu *vcpu)
 			vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i, MSR_TYPE_RW, false);
 	}
 
-	vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_FIXED_CTR_CTRL, MSR_TYPE_RW, false);
 	for (i = 0; i < vcpu_to_pmu(vcpu)->nr_arch_fixed_counters; i++)
 		vmx_set_intercept_for_msr(vcpu, MSR_CORE_PERF_FIXED_CTR0 + i, MSR_TYPE_RW, false);
 
