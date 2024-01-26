@@ -28,6 +28,7 @@
 #include <linux/dma-map-ops.h>
 #include <linux/decompress/generic.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/dmi.h>
 #include <linux/crash_dump.h>
 
@@ -649,7 +650,8 @@ static void __init arch_mem_init(char **cmdline_p)
 	check_kernel_sections_mem();
 
 	early_init_fdt_reserve_self();
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
+	fdt_init_reserved_mem();
 
 #ifndef CONFIG_NUMA
 	memblock_set_node(0, PHYS_ADDR_MAX, &memblock.memory, 0);
