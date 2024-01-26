@@ -1,0 +1,36 @@
+drm drm-fixes 66dbd9004a55073c5931f5f65f5fe2bbd414bdaa
+	drm/sched: Drain all entities in DRM sched run job worker
+drm-misc drm-misc-fixes 27d19268cf394f2c78db732be0cb31852eeadb0a
+	accel/ivpu: Improve recovery and reset support
+drm-intel drm-intel-fixes f9f031dd21a7ce13a13862fa5281d32e1029c70f
+	drm/i915/psr: Only allow PSR in LPSP mode on HSW non-ULT
+drm-xe drm-xe-fixes 9e3a13f3eef6b14a26cc2660ca2f43f0e46b4318
+	drm/xe: Remove PVC from xe_wa kunit tests
+drm drm-next 6613476e225e090cc9aad49be7fa504e290dd33d
+	Linux 6.8-rc1
+drm-misc drm-misc-next-fixes 1f1626ac0428820f998245478610f452650bcab5
+	drm/ttm: fix ttm pool initialization for no-dma-device drivers
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes bf3ff145df184698a8a80b33265064638572366f
+	drm/xe: display support should not depend on EXPERT
+drm-misc drm-misc-next a78a8da51b36c7a0c0c16233f91d60aac03a5a49
+	drm/ttm: replace busy placement with flags v6
+drm-intel drm-intel-next 4073dbbc56baafcf1ada13dca2af40e06806580e
+	drm/i915: Convert PLL flags to booleans
+drm-intel drm-intel-gt-next 4104e634bba446a7b32b4accc980d97dde849f0d
+	drm/i915/gt: Reflect the true and current status of rc6_enable
+drm-xe drm-xe-next c6878e47431c72168da08dfbc1496c09b2d3c246
+	drm/xe: Fix crash in trace_dma_fence_init()
+drm-intel topic/core-for-CI 43751d3da708cb3f7bf61db6aada0c1576ac9c4e
+	kunit: Mark filter* params as rw
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
+drm-xe topic/xe-for-CI e4cfe0cd981952f6ed3d5b92a0b7e3ae0b3ad2b4
+	drm/xe/guc: define LNL FW
