@@ -88,6 +88,7 @@ static struct perf_event_attr wd_hw_attr = {
 	.size		= sizeof(struct perf_event_attr),
 	.pinned		= 1,
 	.disabled	= 1,
+	.exclude_guest  = 1,
 };
 
 /* Callback function for perf event subsystem */
