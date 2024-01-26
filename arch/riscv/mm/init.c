@@ -264,7 +264,7 @@ static void __init setup_bootmem(void)
 	 * in the device tree, otherwise the allocation could end up in a
 	 * reserved region.
 	 */
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
 
 	/*
 	 * If DTB is built in, no need to reserve its memblock.

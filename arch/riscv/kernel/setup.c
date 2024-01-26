@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/console.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/sched/task.h>
 #include <linux/smp.h>
 #include <linux/efi.h>
@@ -260,6 +261,8 @@ void __init setup_arch(char **cmdline_p)
 
 	efi_init();
 	paging_init();
+
+	fdt_init_reserved_mem();
 
 	/* Parse the ACPI tables for possible boot-time configuration */
 	acpi_boot_table_init();
