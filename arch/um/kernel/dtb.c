@@ -2,6 +2,7 @@
 
 #include <linux/init.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/printk.h>
 #include <linux/memblock.h>
 #include <init.h>
@@ -25,7 +26,8 @@ void uml_dtb_init(void)
 		return;
 	}
 
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
+	fdt_init_reserved_mem();
 	unflatten_device_tree();
 }
 
