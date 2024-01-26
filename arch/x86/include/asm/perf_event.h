@@ -574,7 +574,7 @@ static inline void perf_check_microcode(void) { }
 #endif
 
 extern void perf_guest_switch_to_host_pmi_vector(void);
-extern void perf_guest_switch_to_kvm_pmi_vector(void);
+extern void perf_guest_switch_to_kvm_pmi_vector(bool mask);
 
 #if defined(CONFIG_PERF_EVENTS) && defined(CONFIG_CPU_SUP_INTEL)
 extern struct perf_guest_switch_msr *perf_guest_get_msrs(int *nr, void *data);
