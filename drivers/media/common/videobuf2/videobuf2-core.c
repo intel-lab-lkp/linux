@@ -858,8 +858,10 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 		 * In case of REQBUFS(0) return immediately without calling
 		 * driver's queue_setup() callback and allocating resources.
 		 */
-		if (*count == 0)
+		if (*count == 0) {
+			q->is_busy = 0;
 			return 0;
+		}
 	}
 
 	/*
@@ -966,6 +968,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	 */
 	*count = allocated_buffers;
 	q->waiting_for_buffers = !q->is_output;
+	q->is_busy = 1;
 
 	return 0;
 
@@ -1091,6 +1094,7 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 	 * to the userspace.
 	 */
 	*count = allocated_buffers;
+	q->is_busy = 1;
 
 	return 0;
 
