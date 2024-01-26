@@ -698,7 +698,6 @@ static bool is_valid_passthrough_msr(u32 msr)
 	case MSR_LBR_CORE_FROM ... MSR_LBR_CORE_FROM + 8:
 	case MSR_LBR_CORE_TO ... MSR_LBR_CORE_TO + 8:
 		/* LBR MSRs. These are handled in vmx_update_intercept_for_lbr_msrs() */
-	case MSR_ARCH_PERFMON_EVENTSEL0 ... MSR_ARCH_PERFMON_EVENTSEL0 + 7:
 	case MSR_IA32_PMC0 ... MSR_IA32_PMC0 + 7:
 	case MSR_IA32_PERFCTR0 ... MSR_IA32_PERFCTR0 + 7:
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:

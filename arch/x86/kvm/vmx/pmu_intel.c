@@ -809,7 +809,6 @@ void intel_passthrough_pmu_msrs(struct kvm_vcpu *vcpu)
 	int i;
 
 	for (i = 0; i < vcpu_to_pmu(vcpu)->nr_arch_gp_counters; i++) {
-		vmx_set_intercept_for_msr(vcpu, MSR_ARCH_PERFMON_EVENTSEL0 + i, MSR_TYPE_RW, false);
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_PERFCTR0 + i, MSR_TYPE_RW, false);
 		if (fw_writes_is_enabled(vcpu))
 			vmx_set_intercept_for_msr(vcpu, MSR_IA32_PMC0 + i, MSR_TYPE_RW, false);
