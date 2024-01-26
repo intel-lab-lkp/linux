@@ -332,28 +332,6 @@ static int ivpu_boot_top_noc_qrenqn_check(struct ivpu_device *vdev, u32 exp_val)
 	return 0;
 }
 
-static int ivpu_boot_top_noc_qacceptn_check(struct ivpu_device *vdev, u32 exp_val)
-{
-	u32 val = REGV_RD32(VPU_37XX_TOP_NOC_QACCEPTN);
-
-	if (!REG_TEST_FLD_NUM(VPU_37XX_TOP_NOC_QACCEPTN, CPU_CTRL, exp_val, val) ||
-	    !REG_TEST_FLD_NUM(VPU_37XX_TOP_NOC_QACCEPTN, HOSTIF_L2CACHE, exp_val, val))
-		return -EIO;
-
-	return 0;
-}
-
-static int ivpu_boot_top_noc_qdeny_check(struct ivpu_device *vdev, u32 exp_val)
-{
-	u32 val = REGV_RD32(VPU_37XX_TOP_NOC_QDENY);
-
-	if (!REG_TEST_FLD_NUM(VPU_37XX_TOP_NOC_QDENY, CPU_CTRL, exp_val, val) ||
-	    !REG_TEST_FLD_NUM(VPU_37XX_TOP_NOC_QDENY, HOSTIF_L2CACHE, exp_val, val))
-		return -EIO;
-
-	return 0;
-}
-
 static int ivpu_boot_host_ss_configure(struct ivpu_device *vdev)
 {
 	ivpu_boot_host_ss_rst_clr_assert(vdev);
@@ -396,37 +374,68 @@ static int ivpu_boot_host_ss_axi_enable(struct ivpu_device *vdev)
 	return ivpu_boot_host_ss_axi_drive(vdev, true);
 }
 
-static int ivpu_boot_host_ss_top_noc_drive(struct ivpu_device *vdev, bool enable)
+static int ivpu_boot_host_ss_top_noc_qacceptn_check(struct ivpu_device *vdev, bool enable, u32 mask)
 {
-	int ret;
+	u32 val = REGV_RD32(VPU_37XX_TOP_NOC_QACCEPTN) & mask;
+
+	if (enable && val == mask)
+		return 0;
+
+	if (!enable && val == 0)
+		return 0;
+
+	ivpu_dbg(vdev, PM, "Failed qacceptn check 0x%x (mask 0x%x enable %d)\n", val, mask, enable);
+	return -EIO;
+}
+
+static int ivpu_boot_host_ss_top_noc_qdeny_check(struct ivpu_device *vdev, u32 mask)
+{
+	u32 val = REGV_RD32(VPU_37XX_TOP_NOC_QDENY) & mask;
+
+	if (val) {
+		ivpu_dbg(vdev, PM, "Failed qdeny check 0x%x (mask 0x%x)\n", val, mask);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int ivpu_boot_host_ss_top_noc_drive(struct ivpu_device *vdev, bool enable, u32 mask)
+{
 	u32 val;
 
 	val = REGV_RD32(VPU_37XX_TOP_NOC_QREQN);
-	if (enable) {
-		val = REG_SET_FLD(VPU_37XX_TOP_NOC_QREQN, CPU_CTRL, val);
-		val = REG_SET_FLD(VPU_37XX_TOP_NOC_QREQN, HOSTIF_L2CACHE, val);
-	} else {
-		val = REG_CLR_FLD(VPU_37XX_TOP_NOC_QREQN, CPU_CTRL, val);
-		val = REG_CLR_FLD(VPU_37XX_TOP_NOC_QREQN, HOSTIF_L2CACHE, val);
-	}
-	REGV_WR32(VPU_37XX_TOP_NOC_QREQN, val);
+	if (enable)
+		REGV_WR32(VPU_37XX_TOP_NOC_QREQN, val | mask);
+	else
+		REGV_WR32(VPU_37XX_TOP_NOC_QREQN, val & ~mask);
 
-	ret = ivpu_boot_top_noc_qacceptn_check(vdev, enable ? 0x1 : 0x0);
-	if (ret) {
-		ivpu_err(vdev, "Failed qacceptn check: %d\n", ret);
-		return ret;
-	}
+	if (!ivpu_boot_host_ss_top_noc_qacceptn_check(vdev, enable, mask))
+		return 0;
 
-	ret = ivpu_boot_top_noc_qdeny_check(vdev, 0x0);
-	if (ret)
-		ivpu_err(vdev, "Failed qdeny check: %d\n", ret);
+	if (!enable && ivpu_boot_host_ss_top_noc_qdeny_check(vdev, mask))
+		REGV_WR32(VPU_37XX_TOP_NOC_QREQN, val | mask);
 
-	return ret;
+	return -EIO;
 }
 
 static int ivpu_boot_host_ss_top_noc_enable(struct ivpu_device *vdev)
 {
-	return ivpu_boot_host_ss_top_noc_drive(vdev, true);
+	return ivpu_boot_host_ss_top_noc_drive(vdev, true,
+					       VPU_37XX_TOP_NOC_QREQN_CPU_CTRL_MASK |
+					       VPU_37XX_TOP_NOC_QREQN_HOSTIF_L2CACHE_MASK);
+}
+
+static int ivpu_boot_host_ss_top_noc_cpu_ctrl_disable(struct ivpu_device *vdev)
+{
+	return ivpu_boot_host_ss_top_noc_drive(vdev, false,
+					       VPU_37XX_TOP_NOC_QREQN_CPU_CTRL_MASK);
+}
+
+static int ivpu_boot_host_ss_top_noc_hostif_l2cache_disable(struct ivpu_device *vdev)
+{
+	return ivpu_boot_host_ss_top_noc_drive(vdev, false,
+					       VPU_37XX_TOP_NOC_QREQN_HOSTIF_L2CACHE_MASK);
 }
 
 static void ivpu_boot_pwr_island_trickle_drive(struct ivpu_device *vdev, bool enable)
@@ -508,16 +517,6 @@ static int ivpu_boot_pwr_domain_enable(struct ivpu_device *vdev)
 	ivpu_boot_dpu_active_drive(vdev, true);
 
 	return ret;
-}
-
-static int ivpu_boot_pwr_domain_disable(struct ivpu_device *vdev)
-{
-	ivpu_boot_dpu_active_drive(vdev, false);
-	ivpu_boot_pwr_island_isolation_drive(vdev, true);
-	ivpu_boot_pwr_island_trickle_drive(vdev, false);
-	ivpu_boot_pwr_island_drive(vdev, false);
-
-	return ivpu_boot_wait_for_pwr_island_status(vdev, 0x0);
 }
 
 static void ivpu_boot_no_snoop_enable(struct ivpu_device *vdev)
@@ -618,19 +617,18 @@ static int ivpu_hw_37xx_info_init(struct ivpu_device *vdev)
 
 static int ivpu_hw_37xx_reset(struct ivpu_device *vdev)
 {
-	int ret = 0;
+	int retries = 100;
 
-	if (ivpu_boot_pwr_domain_disable(vdev)) {
-		ivpu_err(vdev, "Failed to disable power domain\n");
-		ret = -EIO;
-	}
+	while (ivpu_boot_host_ss_top_noc_cpu_ctrl_disable(vdev) && --retries > 0)
+		ivpu_warn(vdev, "Retrying to disable CPU control, retries left: %d\n", retries);
 
-	if (ivpu_pll_disable(vdev)) {
-		ivpu_err(vdev, "Failed to disable PLL\n");
-		ret = -EIO;
-	}
+	while (ivpu_boot_host_ss_top_noc_hostif_l2cache_disable(vdev) && --retries > 0)
+		ivpu_warn(vdev, "Retrying to disable HostIf L2 Cache, retries left: %d\n", retries);
 
-	return ret;
+	while (ivpu_pll_disable(vdev) && --retries > 0)
+		ivpu_warn(vdev, "Retrying to disable PLL, retries left: %d\n", retries);
+
+	return retries > 0 ? 0 : -EIO;
 }
 
 static int ivpu_hw_37xx_d0i3_enable(struct ivpu_device *vdev)
