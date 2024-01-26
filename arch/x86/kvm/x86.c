@@ -10611,6 +10611,18 @@ void __kvm_request_immediate_exit(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(__kvm_request_immediate_exit);
 
+void kvm_passthrough_pmu_handler(void)
+{
+	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
+
+	if (!vcpu) {
+		pr_warn_once("%s: no running vcpu found!\n", __func__);
+		return;
+	}
+
+	kvm_make_request(KVM_REQ_PMI, vcpu);
+}
+
 /*
  * Called within kvm->srcu read side.
  * Returns 1 to let vcpu_run() continue the guest execution loop without
@@ -13815,6 +13827,7 @@ static int __init kvm_x86_init(void)
 {
 	kvm_mmu_x86_module_init();
 	mitigate_smt_rsb &= boot_cpu_has_bug(X86_BUG_SMT_RSB) && cpu_smt_possible();
+	kvm_set_vpmu_handler(kvm_passthrough_pmu_handler);
 	return 0;
 }
 module_init(kvm_x86_init);
@@ -13825,5 +13838,6 @@ static void __exit kvm_x86_exit(void)
 	 * If module_init() is implemented, module_exit() must also be
 	 * implemented to allow module unload.
 	 */
+	kvm_set_vpmu_handler(NULL);
 }
 module_exit(kvm_x86_exit);
