@@ -177,7 +177,7 @@ static inline struct device_node *__of_get_dma_parent(const struct device_node *
 #endif
 
 void update_reserved_mem_max_cnt(int max_count);
-void fdt_reserved_mem_save_node(struct device_node *node, const char *uname,
-				phys_addr_t base, phys_addr_t size);
+void dt_reserved_mem_save_node(struct device_node *node, const char *uname,
+			       phys_addr_t base, phys_addr_t size);
 
 #endif /* _LINUX_OF_PRIVATE_H */
