@@ -70,6 +70,9 @@ static inline u64 pmc_read_counter(struct kvm_pmc *pmc)
 	u64 counter, enabled, running;
 
 	counter = pmc->counter;
+	if (pmc_to_pmu(pmc)->passthrough)
+		return counter & pmc_bitmask(pmc);
+
 	if (pmc->perf_event && !pmc->is_paused)
 		counter += perf_event_read_value(pmc->perf_event,
 						 &enabled, &running);
@@ -79,7 +82,12 @@ static inline u64 pmc_read_counter(struct kvm_pmc *pmc)
 
 static inline void pmc_write_counter(struct kvm_pmc *pmc, u64 val)
 {
-	pmc->counter += val - pmc_read_counter(pmc);
+	/* In passthrough PMU, counter value is the actual value in HW. */
+	if (pmc_to_pmu(pmc)->passthrough)
+		pmc->counter = val;
+	else
+		pmc->counter += val - pmc_read_counter(pmc);
+
 	pmc->counter &= pmc_bitmask(pmc);
 }
 
