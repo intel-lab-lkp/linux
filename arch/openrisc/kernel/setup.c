@@ -31,6 +31,7 @@
 #include <linux/serial.h>
 #include <linux/initrd.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/of.h>
 #include <linux/device.h>
 
@@ -86,7 +87,8 @@ static void __init setup_memory(void)
 #endif /* CONFIG_BLK_DEV_INITRD */
 
 	early_init_fdt_reserve_self();
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
+	fdt_init_reserved_mem();
 
 	memblock_dump_all();
 }
