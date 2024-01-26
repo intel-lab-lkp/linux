@@ -25,6 +25,7 @@
 #include <linux/cpu.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 
 #if defined(CONFIG_VGA_CONSOLE) || defined(CONFIG_DUMMY_CONSOLE)
 # include <linux/console.h>
@@ -357,6 +358,7 @@ void __init setup_arch(char **cmdline_p)
 	kasan_init();
 	unflatten_and_copy_device_tree();
 
+	fdt_init_reserved_mem();
 #ifdef CONFIG_SMP
 	smp_init_cpus();
 #endif
