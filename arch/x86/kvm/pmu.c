@@ -893,3 +893,8 @@ cleanup:
 	kfree(filter);
 	return r;
 }
+
+void kvm_pmu_passthrough_pmu_msrs(struct kvm_vcpu *vcpu)
+{
+	static_call_cond(kvm_x86_pmu_passthrough_pmu_msrs)(vcpu);
+}
