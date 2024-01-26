@@ -91,10 +91,13 @@
 #define CMN600_WPn_CONFIG_WP_COMBINE	BIT(6)
 #define CMN600_WPn_CONFIG_WP_EXCLUSIVE	BIT(5)
 #define CMN_DTM_WPn_CONFIG_WP_GRP	GENMASK_ULL(5, 4)
+#define CMN600_WPn_CONFIG_WP_GRP	BIT(4)
 #define CMN_DTM_WPn_CONFIG_WP_CHN_SEL	GENMASK_ULL(3, 1)
 #define CMN_DTM_WPn_CONFIG_WP_DEV_SEL	BIT(0)
 #define CMN_DTM_WPn_VAL(n)		(CMN_DTM_WPn(n) + 0x08)
 #define CMN_DTM_WPn_MASK(n)		(CMN_DTM_WPn(n) + 0x10)
+#define CMN_DTM_WP_CHN_SEL_REQ_VC	0
+#define CMN_DTM_WP_GRP_TERTIARY		0x2
 
 #define CMN_DTM_PMU_CONFIG		0x210
 #define CMN__PMEVCNT0_INPUT_SEL		GENMASK_ULL(37, 32)
@@ -175,8 +178,8 @@
 #define CMN_CONFIG_WP_DEV_SEL		GENMASK_ULL(50, 48)
 #define CMN_CONFIG_WP_CHN_SEL		GENMASK_ULL(55, 51)
 /* Note that we don't yet support the tertiary match group on newer IPs */
-#define CMN_CONFIG_WP_GRP		BIT_ULL(56)
-#define CMN_CONFIG_WP_EXCLUSIVE		BIT_ULL(57)
+#define CMN_CONFIG_WP_GRP		GENMASK_ULL(57, 56)
+#define CMN_CONFIG_WP_EXCLUSIVE		BIT_ULL(58)
 #define CMN_CONFIG1_WP_VAL		GENMASK_ULL(63, 0)
 #define CMN_CONFIG2_WP_MASK		GENMASK_ULL(63, 0)
 
@@ -1298,7 +1301,9 @@ static struct attribute *arm_cmn_format_attrs[] = {
 
 	CMN_FORMAT_ATTR(CMN_ANY, wp_dev_sel, CMN_CONFIG_WP_DEV_SEL),
 	CMN_FORMAT_ATTR(CMN_ANY, wp_chn_sel, CMN_CONFIG_WP_CHN_SEL),
-	CMN_FORMAT_ATTR(CMN_ANY, wp_grp, CMN_CONFIG_WP_GRP),
+	CMN_FORMAT_ATTR(CMN600, wp_grp, CMN600_WPn_CONFIG_WP_GRP),
+	CMN_FORMAT_ATTR(NOT_CMN600, wp_grp, CMN_CONFIG_WP_GRP),
+
 	CMN_FORMAT_ATTR(CMN_ANY, wp_exclusive, CMN_CONFIG_WP_EXCLUSIVE),
 	CMN_FORMAT_ATTR(CMN_ANY, wp_combine, CMN_CONFIG_WP_COMBINE),
 
@@ -1398,8 +1403,11 @@ static u32 arm_cmn_wp_config(struct perf_event *event)
 
 	config = FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_DEV_SEL, dev) |
 		 FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_CHN_SEL, chn) |
-		 FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_GRP, grp) |
 		 FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_DEV_SEL2, dev >> 1);
+
+	if (grp)
+		config |= is_cmn600 ? CMN600_WPn_CONFIG_WP_GRP :
+				      FIELD_PREP(CMN_DTM_WPn_CONFIG_WP_GRP, grp);
 	if (exc)
 		config |= is_cmn600 ? CMN600_WPn_CONFIG_WP_EXCLUSIVE :
 				      CMN_DTM_WPn_CONFIG_WP_EXCLUSIVE;
@@ -1764,6 +1772,13 @@ static int arm_cmn_event_init(struct perf_event *event)
 		/* ...and we need a "real" direction */
 		if (eventid != CMN_WP_UP && eventid != CMN_WP_DOWN)
 			return -EINVAL;
+
+		if (cmn->part != PART_CMN600)
+			if (CMN_EVENT_WP_GRP(event) > CMN_DTM_WP_GRP_TERTIARY ||
+			    (CMN_EVENT_WP_GRP(event) == CMN_DTM_WP_GRP_TERTIARY &&
+			     CMN_EVENT_WP_CHN_SEL(event) != CMN_DTM_WP_CHN_SEL_REQ_VC))
+				return -EINVAL;
+
 		/* ...but the DTM may depend on which port we're watching */
 		if (cmn->multi_dtm)
 			hw->dtm_offset = CMN_EVENT_WP_DEV_SEL(event) / 2;
