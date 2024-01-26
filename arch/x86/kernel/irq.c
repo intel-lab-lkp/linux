@@ -181,6 +181,13 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 		seq_printf(p, "%10u ",
 			   irq_stats(j)->kvm_posted_intr_wakeup_ipis);
 	seq_puts(p, "  Posted-interrupt wakeup event\n");
+
+	seq_printf(p, "%*s: ", prec, "VPMU");
+	for_each_online_cpu(j)
+		seq_printf(p, "%10u ",
+			   irq_stats(j)->kvm_vpmu_pmis);
+	seq_puts(p, " PT PMU PMI\n");
+
 #endif
 	return 0;
 }
@@ -293,6 +300,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_x86_platform_ipi)
 #ifdef CONFIG_HAVE_KVM
 static void dummy_handler(void) {}
 static void (*kvm_posted_intr_wakeup_handler)(void) = dummy_handler;
+static void (*kvm_vpmu_handler)(void) = dummy_handler;
 
 void kvm_set_posted_intr_wakeup_handler(void (*handler)(void))
 {
@@ -304,6 +312,17 @@ void kvm_set_posted_intr_wakeup_handler(void (*handler)(void))
 	}
 }
 EXPORT_SYMBOL_GPL(kvm_set_posted_intr_wakeup_handler);
+
+void kvm_set_vpmu_handler(void (*handler)(void))
+{
+	if (handler)
+		kvm_vpmu_handler = handler;
+	else {
+		kvm_vpmu_handler = dummy_handler;
+		synchronize_rcu();
+	}
+}
+EXPORT_SYMBOL_GPL(kvm_set_vpmu_handler);
 
 /*
  * Handler for POSTED_INTERRUPT_VECTOR.
@@ -331,6 +350,16 @@ DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_kvm_posted_intr_nested_ipi)
 {
 	apic_eoi();
 	inc_irq_stat(kvm_posted_intr_nested_ipis);
+}
+
+/*
+ * Handler for KVM_PT_PMU_VECTOR.
+ */
+DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_vpmu_handler)
+{
+	apic_eoi();
+	inc_irq_stat(kvm_vpmu_pmis);
+	kvm_vpmu_handler();
 }
 #endif
 

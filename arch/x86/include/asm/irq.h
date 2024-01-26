@@ -31,6 +31,7 @@ extern void fixup_irqs(void);
 
 #ifdef CONFIG_HAVE_KVM
 extern void kvm_set_posted_intr_wakeup_handler(void (*handler)(void));
+extern void kvm_set_vpmu_handler(void (*handler)(void));
 #endif
 
 extern void (*x86_platform_ipi_callback)(void);
