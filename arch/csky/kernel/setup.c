@@ -6,6 +6,7 @@
 #include <linux/initrd.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/start_kernel.h>
 #include <linux/dma-map-ops.h>
 #include <asm/sections.h>
@@ -22,7 +23,7 @@ static void __init csky_memblock_init(void)
 	memblock_reserve(__pa(_start), _end - _start);
 
 	early_init_fdt_reserve_self();
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
 
 	memblock_dump_all();
 
@@ -71,6 +72,8 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 
 	csky_memblock_init();
+
+	fdt_init_reserved_mem();
 
 	unflatten_and_copy_device_tree();
 
