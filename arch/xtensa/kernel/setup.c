@@ -358,7 +358,7 @@ void __init setup_arch(char **cmdline_p)
 	kasan_init();
 	unflatten_and_copy_device_tree();
 
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 #ifdef CONFIG_SMP
 	smp_init_cpus();
 #endif
