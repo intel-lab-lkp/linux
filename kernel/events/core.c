@@ -3803,6 +3803,8 @@ static inline void group_update_userpage(struct perf_event *group_event)
 		event_update_userpage(event);
 }
 
+static DEFINE_PER_CPU(bool, __perf_force_exclude_guest);
+
 static int merge_sched_in(struct perf_event *event, void *data)
 {
 	struct perf_event_context *ctx = event->ctx;
@@ -3812,6 +3814,14 @@ static int merge_sched_in(struct perf_event *event, void *data)
 		return 0;
 
 	if (!event_filter_match(event))
+		return 0;
+
+	/*
+	 * The __perf_force_exclude_guest indicates entering the guest.
+	 * No events of the passthrough PMU should be scheduled.
+	 */
+	if (__this_cpu_read(__perf_force_exclude_guest) &&
+	    has_vpmu_passthrough_cap(event->pmu))
 		return 0;
 
 	if (group_can_go_on(event, *can_add_hw)) {
@@ -5706,6 +5716,165 @@ u64 perf_event_pause(struct perf_event *event, bool reset)
 	return count;
 }
 EXPORT_SYMBOL_GPL(perf_event_pause);
+
+static void __perf_force_exclude_guest_pmu(struct perf_event_pmu_context *pmu_ctx,
+					   struct perf_event *event)
+{
+	struct perf_event_context *ctx = pmu_ctx->ctx;
+	struct perf_event *sibling;
+	bool include_guest = false;
+
+	event_sched_out(event, ctx);
+	if (!event->attr.exclude_guest)
+		include_guest = true;
+	for_each_sibling_event(sibling, event) {
+		event_sched_out(sibling, ctx);
+		if (!sibling->attr.exclude_guest)
+			include_guest = true;
+	}
+	if (include_guest) {
+		perf_event_set_state(event, PERF_EVENT_STATE_ERROR);
+		for_each_sibling_event(sibling, event)
+			perf_event_set_state(event, PERF_EVENT_STATE_ERROR);
+	}
+}
+
+static void perf_force_exclude_guest_pmu(struct perf_event_pmu_context *pmu_ctx)
+{
+	struct perf_event *event, *tmp;
+	struct pmu *pmu = pmu_ctx->pmu;
+
+	perf_pmu_disable(pmu);
+
+	/*
+	 * Sched out all active events.
+	 * For the !exclude_guest events, they are forced to be sched out and
+	 * moved to the error state.
+	 * For the exclude_guest events, they should be scheduled out anyway
+	 * when the guest is running.
+	 */
+	list_for_each_entry_safe(event, tmp, &pmu_ctx->pinned_active, active_list)
+		__perf_force_exclude_guest_pmu(pmu_ctx, event);
+
+	list_for_each_entry_safe(event, tmp, &pmu_ctx->flexible_active, active_list)
+		__perf_force_exclude_guest_pmu(pmu_ctx, event);
+
+	pmu_ctx->rotate_necessary = 0;
+
+	perf_pmu_enable(pmu);
+}
+
+static void perf_force_exclude_guest_enter(struct perf_event_context *ctx)
+{
+	struct perf_event_pmu_context *pmu_ctx;
+
+	update_context_time(ctx);
+	list_for_each_entry(pmu_ctx, &ctx->pmu_ctx_list, pmu_ctx_entry) {
+		/*
+		 * The PMU, which doesn't have the capability of excluding guest
+		 * e.g., uncore PMU, is not impacted.
+		 */
+		if (!has_vpmu_passthrough_cap(pmu_ctx->pmu))
+			continue;
+		perf_force_exclude_guest_pmu(pmu_ctx);
+	}
+}
+
+/*
+ * When a guest enters, force all active events of the PMU, which supports
+ * the VPMU_PASSTHROUGH feature, to be scheduled out. The events of other
+ * PMUs, such as uncore PMU, should not be impacted. The guest can
+ * temporarily own all counters of the PMU.
+ * During the period, all the creation of the new event of the PMU with
+ * !exclude_guest are error out.
+ */
+void perf_guest_enter(void)
+{
+	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
+
+	lockdep_assert_irqs_disabled();
+
+	if (__this_cpu_read(__perf_force_exclude_guest))
+		return;
+
+	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
+
+	perf_force_exclude_guest_enter(&cpuctx->ctx);
+	if (cpuctx->task_ctx)
+		perf_force_exclude_guest_enter(cpuctx->task_ctx);
+
+	perf_ctx_unlock(cpuctx, cpuctx->task_ctx);
+
+	__this_cpu_write(__perf_force_exclude_guest, true);
+}
+EXPORT_SYMBOL_GPL(perf_guest_enter);
+
+static void perf_force_exclude_guest_exit(struct perf_event_context *ctx)
+{
+	struct perf_event_pmu_context *pmu_ctx;
+	struct pmu *pmu;
+
+	update_context_time(ctx);
+	list_for_each_entry(pmu_ctx, &ctx->pmu_ctx_list, pmu_ctx_entry) {
+		pmu = pmu_ctx->pmu;
+		if (!has_vpmu_passthrough_cap(pmu))
+			continue;
+
+		perf_pmu_disable(pmu);
+		pmu_groups_sched_in(ctx, &ctx->pinned_groups, pmu);
+		pmu_groups_sched_in(ctx, &ctx->flexible_groups, pmu);
+		perf_pmu_enable(pmu);
+	}
+}
+
+void perf_guest_exit(void)
+{
+	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
+
+	lockdep_assert_irqs_disabled();
+
+	if (!__this_cpu_read(__perf_force_exclude_guest))
+		return;
+
+	__this_cpu_write(__perf_force_exclude_guest, false);
+
+	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
+
+	perf_force_exclude_guest_exit(&cpuctx->ctx);
+	if (cpuctx->task_ctx)
+		perf_force_exclude_guest_exit(cpuctx->task_ctx);
+
+	perf_ctx_unlock(cpuctx, cpuctx->task_ctx);
+}
+EXPORT_SYMBOL_GPL(perf_guest_exit);
+
+static inline int perf_force_exclude_guest_check(struct perf_event *event,
+						 int cpu, struct task_struct *task)
+{
+	bool *force_exclude_guest = NULL;
+
+	if (!has_vpmu_passthrough_cap(event->pmu))
+		return 0;
+
+	if (event->attr.exclude_guest)
+		return 0;
+
+	if (cpu != -1) {
+		force_exclude_guest = per_cpu_ptr(&__perf_force_exclude_guest, cpu);
+	} else if (task && (task->flags & PF_VCPU)) {
+		/*
+		 * Just need to check the running CPU in the event creation. If the
+		 * task is moved to another CPU which supports the force_exclude_guest.
+		 * The event will filtered out and be moved to the error stage. See
+		 * merge_sched_in().
+		 */
+		force_exclude_guest = per_cpu_ptr(&__perf_force_exclude_guest, task_cpu(task));
+	}
+
+	if (force_exclude_guest && *force_exclude_guest)
+		return -EBUSY;
+	return 0;
+}
 
 /*
  * Holding the top-level event's child_mutex means that any
@@ -11971,6 +12140,11 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (IS_ERR(pmu)) {
 		err = PTR_ERR(pmu);
 		goto err_ns;
+	}
+
+	if (perf_force_exclude_guest_check(event, cpu, task)) {
+		err = -EBUSY;
+		goto err_pmu;
 	}
 
 	/*

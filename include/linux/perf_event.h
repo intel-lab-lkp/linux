@@ -1392,6 +1392,11 @@ static inline int is_exclusive_pmu(struct pmu *pmu)
 	return pmu->capabilities & PERF_PMU_CAP_EXCLUSIVE;
 }
 
+static inline int has_vpmu_passthrough_cap(struct pmu *pmu)
+{
+	return pmu->capabilities & PERF_PMU_CAP_VPMU_PASSTHROUGH;
+}
+
 extern struct static_key perf_swevent_enabled[PERF_COUNT_SW_MAX];
 
 extern void ___perf_sw_event(u32, u64, struct pt_regs *, u64);
@@ -1709,6 +1714,8 @@ extern void perf_event_task_tick(void);
 extern int perf_event_account_interrupt(struct perf_event *event);
 extern int perf_event_period(struct perf_event *event, u64 value);
 extern u64 perf_event_pause(struct perf_event *event, bool reset);
+extern void perf_guest_enter(void);
+extern void perf_guest_exit(void);
 #else /* !CONFIG_PERF_EVENTS: */
 static inline void *
 perf_aux_output_begin(struct perf_output_handle *handle,
@@ -1795,6 +1802,8 @@ static inline u64 perf_event_pause(struct perf_event *event, bool reset)
 {
 	return 0;
 }
+static inline void perf_guest_enter(void)				{ }
+static inline void perf_guest_exit(void)				{ }
 #endif
 
 #if defined(CONFIG_PERF_EVENTS) && defined(CONFIG_CPU_SUP_INTEL)
