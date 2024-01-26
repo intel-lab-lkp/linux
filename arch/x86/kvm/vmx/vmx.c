@@ -7896,32 +7896,33 @@ static void vmx_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	vmx_update_exception_bitmap(vcpu);
 }
 
-static u64 vmx_get_perf_capabilities(void)
+static void vmx_get_perf_capabilities(void)
 {
 	u64 perf_cap = PMU_CAP_FW_WRITES;
 	struct x86_pmu_lbr lbr;
-	u64 host_perf_cap = 0;
+
+	kvm_caps.host_perf_cap = 0;
 
 	if (!enable_pmu)
-		return 0;
+		return;
 
 	if (boot_cpu_has(X86_FEATURE_PDCM))
-		rdmsrl(MSR_IA32_PERF_CAPABILITIES, host_perf_cap);
+		rdmsrl(MSR_IA32_PERF_CAPABILITIES, kvm_caps.host_perf_cap);
 
 	if (!cpu_feature_enabled(X86_FEATURE_ARCH_LBR) &&
 	    !enable_passthrough_pmu) {
 		x86_perf_get_lbr(&lbr);
 		if (lbr.nr)
-			perf_cap |= host_perf_cap & PMU_CAP_LBR_FMT;
+			perf_cap |= kvm_caps.host_perf_cap & PMU_CAP_LBR_FMT;
 	}
 
 	if (vmx_pebs_supported() && !enable_passthrough_pmu) {
-		perf_cap |= host_perf_cap & PERF_CAP_PEBS_MASK;
+		perf_cap |= kvm_caps.host_perf_cap & PERF_CAP_PEBS_MASK;
 		if ((perf_cap & PERF_CAP_PEBS_FORMAT) < 4)
 			perf_cap &= ~PERF_CAP_PEBS_BASELINE;
 	}
 
-	return perf_cap;
+	kvm_caps.supported_perf_cap = perf_cap;
 }
 
 static __init void vmx_set_cpu_caps(void)
@@ -7946,7 +7947,7 @@ static __init void vmx_set_cpu_caps(void)
 
 	if (!enable_pmu)
 		kvm_cpu_cap_clear(X86_FEATURE_PDCM);
-	kvm_caps.supported_perf_cap = vmx_get_perf_capabilities();
+	vmx_get_perf_capabilities();
 
 	if (!enable_sgx) {
 		kvm_cpu_cap_clear(X86_FEATURE_SGX);
