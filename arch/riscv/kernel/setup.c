@@ -271,7 +271,7 @@ void __init setup_arch(char **cmdline_p)
 	unflatten_device_tree();
 #endif
 
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 	misc_mem_init();
 
 	init_resources();
