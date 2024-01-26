@@ -501,6 +501,7 @@ struct kvm_pmc {
 	bool is_paused;
 	bool intr;
 	u64 counter;
+	u64 emulated_counter;
 	u64 prev_counter;
 	u64 eventsel;
 	u64 eventsel_hw;

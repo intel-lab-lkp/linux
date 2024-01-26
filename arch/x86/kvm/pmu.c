@@ -434,6 +434,21 @@ reprogram_complete:
 	pmc->prev_counter = 0;
 }
 
+static bool kvm_passthrough_pmu_incr_counter(struct kvm_pmc *pmc)
+{
+	if (!pmc->emulated_counter)
+		return false;
+
+	pmc->counter += pmc->emulated_counter;
+	pmc->emulated_counter = 0;
+	pmc->counter &= pmc_bitmask(pmc);
+
+	if (!pmc->counter)
+		return true;
+
+	return false;
+}
+
 void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
