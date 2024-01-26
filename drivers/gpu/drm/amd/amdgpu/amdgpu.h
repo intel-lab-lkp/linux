@@ -1479,6 +1479,7 @@ int amdgpu_acpi_get_mem_info(struct amdgpu_device *adev, int xcc_id,
 
 void amdgpu_acpi_get_backlight_caps(struct amdgpu_dm_backlight_caps *caps);
 bool amdgpu_acpi_should_gpu_reset(struct amdgpu_device *adev);
+void *amdgpu_acpi_edid(struct amdgpu_device *adev, struct drm_connector *connector);
 void amdgpu_acpi_detect(void);
 void amdgpu_acpi_release(void);
 #else
@@ -1496,6 +1497,7 @@ static inline int amdgpu_acpi_get_mem_info(struct amdgpu_device *adev,
 }
 static inline void amdgpu_acpi_fini(struct amdgpu_device *adev) { }
 static inline bool amdgpu_acpi_should_gpu_reset(struct amdgpu_device *adev) { return false; }
+static inline void *amdgpu_acpi_edid(struct amdgpu_device *adev, struct drm_connector *connector) { return NULL; }
 static inline void amdgpu_acpi_detect(void) { }
 static inline void amdgpu_acpi_release(void) { }
 static inline bool amdgpu_acpi_is_power_shift_control_supported(void) { return false; }

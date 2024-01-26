@@ -1380,6 +1380,36 @@ bool amdgpu_acpi_should_gpu_reset(struct amdgpu_device *adev)
 #endif
 }
 
+/**
+ * amdgpu_acpi_edid
+ * @adev: amdgpu_device pointer
+ * @connector: drm_connector pointer
+ *
+ * Returns the EDID used for the internal panel if present, NULL otherwise.
+ */
+void *
+amdgpu_acpi_edid(struct amdgpu_device *adev, struct drm_connector *connector)
+{
+	struct drm_device *ddev = adev_to_drm(adev);
+	struct acpi_device *acpidev = ACPI_COMPANION(ddev->dev);
+	void *edid;
+	int r;
+
+	if (!acpidev)
+		return NULL;
+
+	if (connector->connector_type != DRM_MODE_CONNECTOR_eDP)
+		return NULL;
+
+	r = acpi_video_get_edid(acpidev, ACPI_VIDEO_DISPLAY_LCD, -1, &edid);
+	if (r < 0) {
+		DRM_DEBUG_DRIVER("Failed to get EDID from ACPI: %d\n", r);
+		return NULL;
+	}
+
+	return kmemdup(edid, r, GFP_KERNEL);
+}
+
 /*
  * amdgpu_acpi_detect - detect ACPI ATIF/ATCS methods
  *

@@ -280,6 +280,11 @@ static void amdgpu_connector_get_edid(struct drm_connector *connector)
 	if (amdgpu_connector->edid)
 		return;
 
+	/* if the BIOS specifies the EDID via _DDC, prefer this */
+	amdgpu_connector->edid = amdgpu_acpi_edid(adev, connector);
+	if (amdgpu_connector->edid)
+		return;
+
 	/* on hw with routers, select right port */
 	if (amdgpu_connector->router.ddc_valid)
 		amdgpu_i2c_router_select_ddc_port(amdgpu_connector);
