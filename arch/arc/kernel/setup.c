@@ -524,11 +524,10 @@ void __init setup_arch(char **cmdline_p)
 	setup_processor();
 	setup_arch_memory();
 
-	fdt_init_reserved_mem();
-
 	/* copy flat DT out of .init and then unflatten it */
 	unflatten_and_copy_device_tree();
 
+	fdt_init_reserved_mem();
 	/* Can be issue if someone passes cmd line arg "ro"
 	 * But that is unlikely so keeping it as it is
 	 */
