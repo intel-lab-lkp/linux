@@ -891,7 +891,7 @@ void __init setup_arch(char **cmdline_p)
 	/* Unflatten the device-tree passed by prom_init or kexec */
 	unflatten_device_tree();
 
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 
 	/*
 	 * Initialize cache line/block info from device-tree (on ppc64) or
