@@ -15,6 +15,7 @@
 #include <linux/cpu.h>
 #include <linux/of_clk.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/of.h>
 #include <linux/cache.h>
 #include <uapi/linux/mount.h>
@@ -522,6 +523,8 @@ void __init setup_arch(char **cmdline_p)
 
 	setup_processor();
 	setup_arch_memory();
+
+	fdt_init_reserved_mem();
 
 	/* copy flat DT out of .init and then unflatten it */
 	unflatten_and_copy_device_tree();

@@ -118,7 +118,7 @@ void __init setup_arch_memory(void)
 #endif
 
 	early_init_fdt_reserve_self();
-	early_init_fdt_scan_reserved_mem();
+	early_fdt_scan_reserved_mem();
 
 	memblock_dump_all();
 
