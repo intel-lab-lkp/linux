@@ -88,7 +88,7 @@ static void __init setup_memory(void)
 
 	early_init_fdt_reserve_self();
 	early_fdt_scan_reserved_mem();
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 
 	memblock_dump_all();
 }
