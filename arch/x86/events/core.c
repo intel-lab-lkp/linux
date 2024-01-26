@@ -3026,6 +3026,7 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	cap->events_mask	= (unsigned int)x86_pmu.events_maskl;
 	cap->events_mask_len	= x86_pmu.events_mask_len;
 	cap->pebs_ept		= x86_pmu.pebs_ept;
+	cap->passthrough	= !!(x86_pmu.flags & PMU_FL_PASSTHROUGH);
 }
 EXPORT_SYMBOL_GPL(perf_get_x86_pmu_capability);
 

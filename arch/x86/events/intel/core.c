@@ -6140,8 +6140,10 @@ __init int intel_pmu_init(void)
 			pr_cont(" AnyThread deprecated, ");
 	}
 
-	if (version >= 4)
+	if (version >= 4) {
+		x86_pmu.flags |= PMU_FL_PASSTHROUGH;
 		x86_get_pmu(smp_processor_id())->capabilities |= PERF_PMU_CAP_VPMU_PASSTHROUGH;
+	}
 
 	/*
 	 * Install the hw-cache-events table:
