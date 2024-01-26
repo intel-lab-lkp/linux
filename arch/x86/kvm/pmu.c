@@ -906,11 +906,15 @@ void kvm_pmu_save_pmu_context(struct kvm_vcpu *vcpu)
 	static_call_cond(kvm_x86_pmu_save_pmu_context)(vcpu);
 
 	perf_guest_switch_to_host_pmi_vector();
+
+	perf_guest_exit();
 }
 
 void kvm_pmu_restore_pmu_context(struct kvm_vcpu *vcpu)
 {
 	lockdep_assert_irqs_disabled();
+
+	perf_guest_enter();
 
 	perf_guest_switch_to_kvm_pmi_vector(kvm_lapic_get_lvtpc_mask(vcpu));
 
