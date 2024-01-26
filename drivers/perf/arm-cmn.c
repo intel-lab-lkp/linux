@@ -628,6 +628,7 @@ struct arm_cmn_event_attr {
 
 struct arm_cmn_format_attr {
 	struct device_attribute attr;
+	enum cmn_model model;
 	u64 field;
 	int config;
 };
@@ -1265,29 +1266,44 @@ static ssize_t arm_cmn_format_show(struct device *dev,
 	return sysfs_emit(buf, "config%d:%d-%d\n", fmt->config, lo, hi);
 }
 
-#define _CMN_FORMAT_ATTR(_name, _cfg, _fld)				\
+static umode_t arm_cmn_format_attr_is_visible(struct kobject *kobj,
+					      struct attribute *attr,
+					      int unused)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct arm_cmn *cmn = to_cmn(dev_get_drvdata(dev));
+	struct arm_cmn_format_attr *fmt = container_of(attr, typeof(*fmt), attr.attr);
+
+	if (!(fmt->model & arm_cmn_model(cmn)))
+		return 0;
+
+	return attr->mode;
+}
+
+#define _CMN_FORMAT_ATTR(_model, _name, _cfg, _fld)			\
 	(&((struct arm_cmn_format_attr[]) {{				\
 		.attr = __ATTR(_name, 0444, arm_cmn_format_show, NULL),	\
+		.model = _model,					\
 		.config = _cfg,						\
 		.field = _fld,						\
 	}})[0].attr.attr)
-#define CMN_FORMAT_ATTR(_name, _fld)	_CMN_FORMAT_ATTR(_name, 0, _fld)
+#define CMN_FORMAT_ATTR(_model, _name, _fld)	_CMN_FORMAT_ATTR(_model, _name, 0, _fld)
 
 static struct attribute *arm_cmn_format_attrs[] = {
-	CMN_FORMAT_ATTR(type, CMN_CONFIG_TYPE),
-	CMN_FORMAT_ATTR(eventid, CMN_CONFIG_EVENTID),
-	CMN_FORMAT_ATTR(occupid, CMN_CONFIG_OCCUPID),
-	CMN_FORMAT_ATTR(bynodeid, CMN_CONFIG_BYNODEID),
-	CMN_FORMAT_ATTR(nodeid, CMN_CONFIG_NODEID),
+	CMN_FORMAT_ATTR(CMN_ANY, type, CMN_CONFIG_TYPE),
+	CMN_FORMAT_ATTR(CMN_ANY, eventid, CMN_CONFIG_EVENTID),
+	CMN_FORMAT_ATTR(CMN_ANY, occupid, CMN_CONFIG_OCCUPID),
+	CMN_FORMAT_ATTR(CMN_ANY, bynodeid, CMN_CONFIG_BYNODEID),
+	CMN_FORMAT_ATTR(CMN_ANY, nodeid, CMN_CONFIG_NODEID),
 
-	CMN_FORMAT_ATTR(wp_dev_sel, CMN_CONFIG_WP_DEV_SEL),
-	CMN_FORMAT_ATTR(wp_chn_sel, CMN_CONFIG_WP_CHN_SEL),
-	CMN_FORMAT_ATTR(wp_grp, CMN_CONFIG_WP_GRP),
-	CMN_FORMAT_ATTR(wp_exclusive, CMN_CONFIG_WP_EXCLUSIVE),
-	CMN_FORMAT_ATTR(wp_combine, CMN_CONFIG_WP_COMBINE),
+	CMN_FORMAT_ATTR(CMN_ANY, wp_dev_sel, CMN_CONFIG_WP_DEV_SEL),
+	CMN_FORMAT_ATTR(CMN_ANY, wp_chn_sel, CMN_CONFIG_WP_CHN_SEL),
+	CMN_FORMAT_ATTR(CMN_ANY, wp_grp, CMN_CONFIG_WP_GRP),
+	CMN_FORMAT_ATTR(CMN_ANY, wp_exclusive, CMN_CONFIG_WP_EXCLUSIVE),
+	CMN_FORMAT_ATTR(CMN_ANY, wp_combine, CMN_CONFIG_WP_COMBINE),
 
-	_CMN_FORMAT_ATTR(wp_val, 1, CMN_CONFIG1_WP_VAL),
-	_CMN_FORMAT_ATTR(wp_mask, 2, CMN_CONFIG2_WP_MASK),
+	_CMN_FORMAT_ATTR(CMN_ANY, wp_val, 1, CMN_CONFIG1_WP_VAL),
+	_CMN_FORMAT_ATTR(CMN_ANY, wp_mask, 2, CMN_CONFIG2_WP_MASK),
 
 	NULL
 };
@@ -1295,6 +1311,7 @@ static struct attribute *arm_cmn_format_attrs[] = {
 static const struct attribute_group arm_cmn_format_attrs_group = {
 	.name = "format",
 	.attrs = arm_cmn_format_attrs,
+	.is_visible = arm_cmn_format_attr_is_visible,
 };
 
 static ssize_t arm_cmn_cpumask_show(struct device *dev,
