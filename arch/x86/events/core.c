@@ -701,6 +701,21 @@ struct perf_guest_switch_msr *perf_guest_get_msrs(int *nr, void *data)
 }
 EXPORT_SYMBOL_GPL(perf_guest_get_msrs);
 
+void perf_guest_switch_to_host_pmi_vector(void)
+{
+	lockdep_assert_irqs_disabled();
+
+	apic_write(APIC_LVTPC, APIC_DM_NMI);
+}
+EXPORT_SYMBOL_GPL(perf_guest_switch_to_host_pmi_vector);
+
+void perf_guest_switch_to_kvm_pmi_vector(void)
+{
+	lockdep_assert_irqs_disabled();
+
+	apic_write(APIC_LVTPC, APIC_DM_FIXED | KVM_VPMU_VECTOR);
+}
+EXPORT_SYMBOL_GPL(perf_guest_switch_to_kvm_pmi_vector);
 /*
  * There may be PMI landing after enabled=0. The PMI hitting could be before or
  * after disable_all.
