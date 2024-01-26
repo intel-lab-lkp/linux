@@ -1163,8 +1163,6 @@ void __init setup_arch(char **cmdline_p)
 
 	paging_init(mdesc);
 
-	fdt_init_reserved_mem();
-
 	kasan_init();
 	request_standard_resources(mdesc);
 
@@ -1174,6 +1172,8 @@ void __init setup_arch(char **cmdline_p)
 	}
 
 	unflatten_device_tree();
+
+	fdt_init_reserved_mem();
 
 	arm_dt_init_cpu_maps();
 	psci_dt_init();
