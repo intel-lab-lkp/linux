@@ -32,6 +32,7 @@
 #include <linux/memblock.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/of_irq.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
@@ -889,6 +890,8 @@ void __init setup_arch(char **cmdline_p)
 
 	/* Unflatten the device-tree passed by prom_init or kexec */
 	unflatten_device_tree();
+
+	fdt_init_reserved_mem();
 
 	/*
 	 * Initialize cache line/block info from device-tree (on ppc64) or
