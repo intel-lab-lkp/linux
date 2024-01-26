@@ -68,6 +68,25 @@ static int fixed_pmc_events[] = {
 	[2] = PSEUDO_ARCH_REFERENCE_CYCLES,
 };
 
+static void reprogram_fixed_counters_in_passthrough_pmu(struct kvm_pmu *pmu, u64 data)
+{
+	struct kvm_pmc *pmc;
+	u64 new_data = 0;
+	int i;
+
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmc = get_fixed_pmc(pmu, MSR_CORE_PERF_FIXED_CTR0 + i);
+		if (check_pmu_event_filter(pmc)) {
+			pmc->current_config = fixed_ctrl_field(data, i);
+			new_data |= intel_fixed_bits_by_idx(i, pmc->current_config);
+		} else {
+			pmc->counter = 0;
+		}
+	}
+	pmu->fixed_ctr_ctrl_hw = new_data;
+	pmu->fixed_ctr_ctrl = data;
+}
+
 static void reprogram_fixed_counters(struct kvm_pmu *pmu, u64 data)
 {
 	struct kvm_pmc *pmc;
@@ -401,7 +420,9 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (data & pmu->fixed_ctr_ctrl_mask)
 			return 1;
 
-		if (pmu->fixed_ctr_ctrl != data)
+		if (is_passthrough_pmu_enabled(vcpu))
+			reprogram_fixed_counters_in_passthrough_pmu(pmu, data);
+		else if (pmu->fixed_ctr_ctrl != data)
 			reprogram_fixed_counters(pmu, data);
 		break;
 	case MSR_IA32_PEBS_ENABLE:
@@ -864,13 +885,12 @@ static void intel_save_pmu_context(struct kvm_vcpu *vcpu)
 			wrmsrl(MSR_IA32_PMC0 + i, 0);
 	}
 
-	rdmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, pmu->fixed_ctr_ctrl);
 	/*
 	 * Clear hardware FIXED_CTR_CTRL MSR to avoid information leakage and
 	 * also avoid these guest fixed counters get accidentially enabled
 	 * during host running when host enable global ctrl.
 	 */
-	if (pmu->fixed_ctr_ctrl)
+	if (pmu->fixed_ctr_ctrl_hw)
 		wrmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
 	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
 		pmc = &pmu->fixed_counters[i];
@@ -915,7 +935,7 @@ static void intel_restore_pmu_context(struct kvm_vcpu *vcpu)
 		wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, 0);
 	}
 
-	wrmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, pmu->fixed_ctr_ctrl);
+	wrmsrl(MSR_CORE_PERF_FIXED_CTR_CTRL, pmu->fixed_ctr_ctrl_hw);
 	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
 		pmc = &pmu->fixed_counters[i];
 		wrmsrl(MSR_CORE_PERF_FIXED_CTR0 + i, pmc->counter);
