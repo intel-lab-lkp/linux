@@ -19,3 +19,7 @@
 	enable-gpios = <&pinctrl RZG2L_GPIO(4, 4) GPIO_ACTIVE_HIGH>;
 	reset-gpios = <&pinctrl RZG2L_GPIO(0, 1) GPIO_ACTIVE_LOW>;
 };
+
+&i2c0 {
+	clock-frequency = <100000>;
+};
