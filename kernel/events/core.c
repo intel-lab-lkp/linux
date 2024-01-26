@@ -5848,6 +5848,11 @@ void perf_guest_exit(void)
 }
 EXPORT_SYMBOL_GPL(perf_guest_exit);
 
+bool perf_is_in_guest_passthrough(void)
+{
+	return __this_cpu_read(__perf_force_exclude_guest);
+}
+
 static inline int perf_force_exclude_guest_check(struct perf_event *event,
 						 int cpu, struct task_struct *task)
 {
