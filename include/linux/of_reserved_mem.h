@@ -33,7 +33,6 @@ typedef int (*reservedmem_of_init_fn)(struct reserved_mem *rmem);
 	_OF_DECLARE(reservedmem, name, compat, init, reservedmem_of_init_fn)
 
 void dt_init_reserved_mem(void);
-void fdt_init_reserved_mem(void);
 int of_reserved_mem_device_init_by_idx(struct device *dev,
 				       struct device_node *np, int idx);
 int of_reserved_mem_device_init_by_name(struct device *dev,
@@ -49,8 +48,6 @@ struct reserved_mem *of_reserved_mem_lookup(struct device_node *np);
 	_OF_DECLARE_STUB(reservedmem, name, compat, init, reservedmem_of_init_fn)
 
 static inline void dt_init_reserved_mem(void) { }
-
-static inline void fdt_init_reserved_mem(void) { }
 
 static inline int of_reserved_mem_device_init_by_idx(struct device *dev,
 					struct device_node *np, int idx)
