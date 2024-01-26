@@ -28,7 +28,7 @@ void uml_dtb_init(void)
 
 	early_fdt_scan_reserved_mem();
 	unflatten_device_tree();
-	fdt_init_reserved_mem();
+	dt_init_reserved_mem();
 }
 
 static int __init uml_dtb_setup(char *line, int *add)
