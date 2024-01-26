@@ -4387,6 +4387,74 @@ static u32 vmx_pin_based_exec_ctrl(struct vcpu_vmx *vmx)
 	return pin_based_exec_ctrl;
 }
 
+static void vmx_set_perf_global_ctrl(struct vcpu_vmx *vmx)
+{
+	u32 vmentry_ctrl = vm_entry_controls_get(vmx);
+	u32 vmexit_ctrl = vm_exit_controls_get(vmx);
+	int i;
+
+       /*
+	* PERF_GLOBAL_CTRL is toggled dynamically in emulated vPMU.
+	*/
+	if (cpu_has_perf_global_ctrl_bug() ||
+	    !is_passthrough_pmu_enabled(&vmx->vcpu)) {
+		vmentry_ctrl &= ~VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL;
+		vmexit_ctrl &= ~VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL;
+		vmexit_ctrl &= ~VM_EXIT_SAVE_IA32_PERF_GLOBAL_CTRL;
+	}
+
+	if (is_passthrough_pmu_enabled(&vmx->vcpu)) {
+		/*
+		 * Setup auto restore guest PERF_GLOBAL_CTRL MSR at vm entry.
+		 */
+		if (vmentry_ctrl & VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL)
+			vmcs_write64(GUEST_IA32_PERF_GLOBAL_CTRL, 0);
+		else {
+			i = vmx_find_loadstore_msr_slot(&vmx->msr_autoload.guest,
+						       MSR_CORE_PERF_GLOBAL_CTRL);
+			if (i < 0) {
+				i = vmx->msr_autoload.guest.nr++;
+				vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT,
+					     vmx->msr_autoload.guest.nr);
+			}
+			vmx->msr_autoload.guest.val[i].index = MSR_CORE_PERF_GLOBAL_CTRL;
+			vmx->msr_autoload.guest.val[i].value = 0;
+		}
+		/*
+		 * Setup auto clear host PERF_GLOBAL_CTRL msr at vm exit.
+		 */
+		if (vmexit_ctrl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL)
+			vmcs_write64(HOST_IA32_PERF_GLOBAL_CTRL, 0);
+		else {
+			i = vmx_find_loadstore_msr_slot(&vmx->msr_autoload.host,
+							MSR_CORE_PERF_GLOBAL_CTRL);
+			if (i < 0) {
+				i = vmx->msr_autoload.host.nr++;
+				vmcs_write32(VM_EXIT_MSR_LOAD_COUNT,
+					     vmx->msr_autoload.host.nr);
+			}
+			vmx->msr_autoload.host.val[i].index = MSR_CORE_PERF_GLOBAL_CTRL;
+			vmx->msr_autoload.host.val[i].value = 0;
+		}
+		/*
+		 * Setup auto save guest PERF_GLOBAL_CTRL msr at vm exit
+		 */
+		if (!(vmexit_ctrl & VM_EXIT_SAVE_IA32_PERF_GLOBAL_CTRL)) {
+			i = vmx_find_loadstore_msr_slot(&vmx->msr_autostore.guest,
+							MSR_CORE_PERF_GLOBAL_CTRL);
+			if (i < 0) {
+				i = vmx->msr_autostore.guest.nr++;
+				vmcs_write32(VM_EXIT_MSR_STORE_COUNT,
+					     vmx->msr_autostore.guest.nr);
+			}
+			vmx->msr_autostore.guest.val[i].index = MSR_CORE_PERF_GLOBAL_CTRL;
+		}
+	}
+
+	vm_entry_controls_set(vmx, vmentry_ctrl);
+	vm_exit_controls_set(vmx, vmexit_ctrl);
+}
+
 static u32 vmx_vmentry_ctrl(void)
 {
 	u32 vmentry_ctrl = vmcs_config.vmentry_ctrl;
@@ -4394,15 +4462,9 @@ static u32 vmx_vmentry_ctrl(void)
 	if (vmx_pt_mode_is_system())
 		vmentry_ctrl &= ~(VM_ENTRY_PT_CONCEAL_PIP |
 				  VM_ENTRY_LOAD_IA32_RTIT_CTL);
-	/*
-	 * IA32e mode, and loading of EFER and PERF_GLOBAL_CTRL are toggled dynamically.
-	 */
-	vmentry_ctrl &= ~(VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL |
-			  VM_ENTRY_LOAD_IA32_EFER |
-			  VM_ENTRY_IA32E_MODE);
 
-	if (cpu_has_perf_global_ctrl_bug())
-		vmentry_ctrl &= ~VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL;
+	/* IA32e mode, and loading of EFER is toggled dynamically. */
+	vmentry_ctrl &= ~(VM_ENTRY_LOAD_IA32_EFER | VM_ENTRY_IA32E_MODE);
 
 	return vmentry_ctrl;
 }
@@ -4422,12 +4484,8 @@ static u32 vmx_vmexit_ctrl(void)
 		vmexit_ctrl &= ~(VM_EXIT_PT_CONCEAL_PIP |
 				 VM_EXIT_CLEAR_IA32_RTIT_CTL);
 
-	if (cpu_has_perf_global_ctrl_bug())
-		vmexit_ctrl &= ~VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL;
-
-	/* Loading of EFER and PERF_GLOBAL_CTRL are toggled dynamically */
-	return vmexit_ctrl &
-		~(VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL | VM_EXIT_LOAD_IA32_EFER);
+       /* Loading of EFER is toggled dynamically */
+       return vmexit_ctrl & ~VM_EXIT_LOAD_IA32_EFER;
 }
 
 static void vmx_refresh_apicv_exec_ctrl(struct kvm_vcpu *vcpu)
@@ -4765,6 +4823,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		vmcs_write64(VM_FUNCTION_CONTROL, 0);
 
 	vmcs_write32(VM_EXIT_MSR_STORE_COUNT, 0);
+	vmcs_write64(VM_EXIT_MSR_STORE_ADDR, __pa(vmx->msr_autostore.guest.val));
 	vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, 0);
 	vmcs_write64(VM_EXIT_MSR_LOAD_ADDR, __pa(vmx->msr_autoload.host.val));
 	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
@@ -7821,6 +7880,8 @@ static void vmx_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 
 	if (is_passthrough_pmu_enabled(&vmx->vcpu))
 		exec_controls_clearbit(vmx, CPU_BASED_RDPMC_EXITING);
+
+	vmx_set_perf_global_ctrl(vmx);
 
 	/* Refresh #PF interception to account for MAXPHYADDR changes. */
 	vmx_update_exception_bitmap(vcpu);
