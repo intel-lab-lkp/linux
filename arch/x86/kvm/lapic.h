@@ -277,4 +277,10 @@ static inline u8 kvm_xapic_id(struct kvm_lapic *apic)
 {
 	return kvm_lapic_get_reg(apic, APIC_ID) >> 24;
 }
+
+static inline bool kvm_lapic_get_lvtpc_mask(struct kvm_vcpu *vcpu)
+{
+	return lapic_in_kernel(vcpu) &&
+	       (kvm_lapic_get_reg(vcpu->arch.apic, APIC_LVTPC) & APIC_LVT_MASKED);
+}
 #endif
