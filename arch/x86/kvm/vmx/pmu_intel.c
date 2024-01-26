@@ -458,7 +458,18 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			if (data & reserved_bits)
 				return 1;
 
-			if (data != pmc->eventsel) {
+			if (is_passthrough_pmu_enabled(vcpu)) {
+				pmc->eventsel = data;
+				if (!check_pmu_event_filter(pmc)) {
+					/* When guest request an invalid event,
+					 * stop the counter by clearing the
+					 * event selector MSR.
+					 */
+					pmc->eventsel_hw = 0;
+					return 0;
+				}
+				pmc->eventsel_hw = data;
+			} else if (data != pmc->eventsel) {
 				pmc->eventsel = data;
 				kvm_pmu_request_counter_reprogram(pmc);
 			}
@@ -843,13 +854,12 @@ static void intel_save_pmu_context(struct kvm_vcpu *vcpu)
 	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
 		pmc = &pmu->gp_counters[i];
 		rdpmcl(i, pmc->counter);
-		rdmsrl(i + MSR_ARCH_PERFMON_EVENTSEL0, pmc->eventsel);
 		/*
 		 * Clear hardware PERFMON_EVENTSELx and its counter to avoid
 		 * leakage and also avoid this guest GP counter get accidentally
 		 * enabled during host running when host enable global ctrl.
 		 */
-		if (pmc->eventsel)
+		if (pmc->eventsel_hw)
 			wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, 0);
 		if (pmc->counter)
 			wrmsrl(MSR_IA32_PMC0 + i, 0);
@@ -894,7 +904,7 @@ static void intel_restore_pmu_context(struct kvm_vcpu *vcpu)
 	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
 		pmc = &pmu->gp_counters[i];
 		wrmsrl(MSR_IA32_PMC0 + i, pmc->counter);
-		wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, pmc->eventsel);
+		wrmsrl(MSR_ARCH_PERFMON_EVENTSEL0 + i, pmc->eventsel_hw);
 	}
 
 	/*

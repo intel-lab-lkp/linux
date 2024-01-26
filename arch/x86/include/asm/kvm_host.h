@@ -503,6 +503,7 @@ struct kvm_pmc {
 	u64 counter;
 	u64 prev_counter;
 	u64 eventsel;
+	u64 eventsel_hw;
 	struct perf_event *perf_event;
 	struct kvm_vcpu *vcpu;
 	/*
