@@ -232,9 +232,139 @@ del_device_store(const struct bus_type *bus, const char *buf, size_t count)
 }
 static BUS_ATTR_WO(del_device);
 
+static ssize_t link_device_store(const struct bus_type *bus, const char *buf, size_t count)
+{
+	unsigned int netnsid_a, netnsid_b, ifidx_a, ifidx_b;
+	struct netdevsim *nsim_a, *nsim_b;
+	struct net_device *dev_a, *dev_b;
+	struct net *ns_a, *ns_b;
+	int err;
+
+	err = sscanf(buf, "%u:%u %u:%u", &netnsid_a, &ifidx_a, &netnsid_b, &ifidx_b);
+	if (err != 4) {
+		pr_err("Format for linking two devices is \"netnsid_a:ifidx_a netnsid_b:ifidx_b\" (uint uint unit uint).\n");
+		return -EINVAL;
+	}
+
+	err = -EINVAL;
+	rtnl_lock();
+	ns_a = get_net_ns_by_id(current->nsproxy->net_ns, netnsid_a);
+	if (!ns_a) {
+		pr_err("Could not find netns with id: %u\n", netnsid_a);
+		goto out_unlock_rtnl;
+	}
+
+	dev_a = __dev_get_by_index(ns_a, ifidx_a);
+	if (!dev_a) {
+		pr_err("Could not find device with ifindex %u in netnsid %u\n", ifidx_a, netnsid_a);
+		goto out_put_netns_a;
+	}
+
+	if (!netdev_is_nsim(dev_a)) {
+		pr_err("Device with ifindex %u in netnsid %u is not a netdevsim\n", ifidx_a, netnsid_a);
+		goto out_put_netns_a;
+	}
+
+	ns_b = get_net_ns_by_id(current->nsproxy->net_ns, netnsid_b);
+	if (!ns_b) {
+		pr_err("Could not find netns with id: %u\n", netnsid_b);
+		goto out_put_netns_a;
+	}
+
+	dev_b = __dev_get_by_index(ns_b, ifidx_b);
+	if (!dev_b) {
+		pr_err("Could not find device with ifindex %u in netnsid %u\n", ifidx_b, netnsid_b);
+		goto out_put_netns_b;
+	}
+
+	if (!netdev_is_nsim(dev_b)) {
+		pr_err("Device with ifindex %u in netnsid %u is not a netdevsim\n", ifidx_b, netnsid_b);
+		goto out_put_netns_b;
+	}
+
+	err = 0;
+	nsim_a = netdev_priv(dev_a);
+	if (nsim_a->peer) {
+		pr_err("Netdevsim %u:%u is already linked\n", netnsid_a, ifidx_a);
+		goto out_put_netns_b;
+	}
+
+	nsim_b = netdev_priv(dev_b);
+	if (nsim_b->peer) {
+		pr_err("Netdevsim %u:%u is already linked\n", netnsid_b, ifidx_b);
+		goto out_put_netns_b;
+	}
+
+	rcu_assign_pointer(nsim_a->peer, nsim_b);
+	rcu_assign_pointer(nsim_b->peer, nsim_a);
+
+out_put_netns_b:
+	put_net(ns_b);
+out_put_netns_a:
+	put_net(ns_a);
+out_unlock_rtnl:
+	rtnl_unlock();
+
+	return !err ? count : err;
+}
+static BUS_ATTR_WO(link_device);
+
+static ssize_t unlink_device_store(const struct bus_type *bus, const char *buf, size_t count)
+{
+	struct netdevsim *nsim, *peer;
+	unsigned int netnsid, ifidx;
+	struct net_device *dev;
+	struct net *ns;
+	int err;
+
+	err = sscanf(buf, "%u:%u", &netnsid, &ifidx);
+	if (err != 2) {
+		pr_err("Format for unlinking a device is \"netnsid:ifidx\" (uint uint).\n");
+		return -EINVAL;
+	}
+
+	err = -EINVAL;
+	rtnl_lock();
+	ns = get_net_ns_by_id(current->nsproxy->net_ns, netnsid);
+	if (!ns) {
+		pr_err("Could not find netns with id: %u\n", netnsid);
+		goto out_unlock_rtnl;
+	}
+
+	dev = __dev_get_by_index(ns, ifidx);
+	if (!dev) {
+		pr_err("Could not find device with ifindex %u in netnsid %u\n", ifidx, netnsid);
+		goto out_put_netns;
+	}
+
+	if (!netdev_is_nsim(dev)) {
+		pr_err("Device with ifindex %u in netnsid %u is not a netdevsim\n", ifidx, netnsid);
+		goto out_put_netns;
+	}
+
+	err = 0;
+	nsim = netdev_priv(dev);
+	if (!nsim->peer)
+		goto out_put_netns;
+	peer = nsim->peer;
+
+	RCU_INIT_POINTER(nsim->peer, NULL);
+	RCU_INIT_POINTER(peer->peer, NULL);
+
+out_put_netns:
+	put_net(ns);
+out_unlock_rtnl:
+	rtnl_unlock();
+
+	return !err ? count : err;
+}
+static BUS_ATTR_WO(unlink_device);
+
 static struct attribute *nsim_bus_attrs[] = {
 	&bus_attr_new_device.attr,
 	&bus_attr_del_device.attr,
+	&bus_attr_link_device.attr,
+	&bus_attr_unlink_device.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(nsim_bus);
