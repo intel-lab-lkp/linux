@@ -170,7 +170,7 @@ static void unix_table_double_lock(struct net *net,
 		swap(hash1, hash2);
 
 	spin_lock(&net->unx.table.locks[hash1]);
-	spin_lock_nested(&net->unx.table.locks[hash2], SINGLE_DEPTH_NESTING);
+	spin_lock(&net->unx.table.locks[hash2]);
 }
 
 static void unix_table_double_unlock(struct net *net,
@@ -997,6 +997,7 @@ static struct sock *unix_create1(struct net *net, struct socket *sock, int kern,
 	u->path.dentry = NULL;
 	u->path.mnt = NULL;
 	spin_lock_init(&u->lock);
+	lock_set_cmp_fn_ptr_order(&u->lock);
 	atomic_long_set(&u->inflight, 0);
 	INIT_LIST_HEAD(&u->link);
 	mutex_init(&u->iolock); /* single task reading lock */
@@ -1340,17 +1341,11 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 static void unix_state_double_lock(struct sock *sk1, struct sock *sk2)
 {
-	if (unlikely(sk1 == sk2) || !sk2) {
+	if (sk1 > sk2)
+		swap(sk1, sk2);
+	if (sk1 && sk1 != sk2)
 		unix_state_lock(sk1);
-		return;
-	}
-	if (sk1 < sk2) {
-		unix_state_lock(sk1);
-		unix_state_lock_nested(sk2);
-	} else {
-		unix_state_lock(sk2);
-		unix_state_lock_nested(sk1);
-	}
+	unix_state_lock(sk2);
 }
 
 static void unix_state_double_unlock(struct sock *sk1, struct sock *sk2)
@@ -1591,7 +1586,7 @@ restart:
 		goto out_unlock;
 	}
 
-	unix_state_lock_nested(sk);
+	unix_state_lock(sk);
 
 	if (sk->sk_state != st) {
 		unix_state_unlock(sk);
@@ -3575,6 +3570,7 @@ static int __net_init unix_net_init(struct net *net)
 
 	for (i = 0; i < UNIX_HASH_SIZE; i++) {
 		spin_lock_init(&net->unx.table.locks[i]);
+		lock_set_cmp_fn_ptr_order(&net->unx.table.locks[i]);
 		INIT_HLIST_HEAD(&net->unx.table.buckets[i]);
 	}
 
