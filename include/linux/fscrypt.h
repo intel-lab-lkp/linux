@@ -232,6 +232,10 @@ static inline bool fscrypt_needs_contents_encryption(const struct inode *inode)
  */
 static inline void fscrypt_handle_d_move(struct dentry *dentry)
 {
+	/* Ignore volumes that don't care about fscrypt. */
+	if (dentry->d_sb->s_cop)
+		return;
+
 	dentry->d_flags &= ~DCACHE_NOKEY_NAME;
 
 	/*
