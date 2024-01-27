@@ -637,12 +637,17 @@ int intel_dp_hdcp2_check_link(struct intel_digital_port *dig_port,
 
 static
 int intel_dp_hdcp2_capable(struct intel_connector *connector,
-			   bool *capable)
+			   bool *capable, bool remote_req)
 {
 	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
-	struct drm_dp_aux *aux = &dig_port->dp.aux;
+	struct drm_dp_aux *aux;
 	u8 rx_caps[3];
 	int ret;
+
+	if (remote_req)
+		aux = &connector->port->aux;
+	else
+		aux = &dig_port->dp.aux;
 
 	*capable = false;
 	ret = drm_dp_dpcd_read(aux,
