@@ -18,34 +18,24 @@ struct tomoyo_domain_info *tomoyo_domain(void)
 {
 	struct tomoyo_task *s = tomoyo_task(current);
 
-	if (s->old_domain_info && !current->in_execve) {
-		atomic_dec(&s->old_domain_info->users);
-		s->old_domain_info = NULL;
-	}
 	return s->domain_info;
 }
 
 /**
- * tomoyo_cred_prepare - Target for security_prepare_creds().
+ * tomoyo_bprm_aborting_creds - Target for security_bprm_aborting_creds().
  *
- * @new: Pointer to "struct cred".
- * @old: Pointer to "struct cred".
- * @gfp: Memory allocation flags.
- *
- * Returns 0.
+ * @bprm: Pointer to "struct linux_binprm".
  */
-static int tomoyo_cred_prepare(struct cred *new, const struct cred *old,
-			       gfp_t gfp)
+static void tomoyo_bprm_aborting_creds(const struct linux_binprm *bprm)
 {
-	/* Restore old_domain_info saved by previous execve() request. */
+	/* Restore old_domain_info saved by execve() request. */
 	struct tomoyo_task *s = tomoyo_task(current);
 
-	if (s->old_domain_info && !current->in_execve) {
+	if (s->old_domain_info) {
 		atomic_dec(&s->domain_info->users);
 		s->domain_info = s->old_domain_info;
 		s->old_domain_info = NULL;
 	}
-	return 0;
 }
 
 /**
@@ -553,8 +543,8 @@ static const struct lsm_id tomoyo_lsmid = {
  * registering TOMOYO.
  */
 static struct security_hook_list tomoyo_hooks[] __ro_after_init = {
-	LSM_HOOK_INIT(cred_prepare, tomoyo_cred_prepare),
 	LSM_HOOK_INIT(bprm_committed_creds, tomoyo_bprm_committed_creds),
+	LSM_HOOK_INIT(bprm_aborting_creds, tomoyo_bprm_aborting_creds),
 	LSM_HOOK_INIT(task_alloc, tomoyo_task_alloc),
 	LSM_HOOK_INIT(task_free, tomoyo_task_free),
 #ifndef CONFIG_SECURITY_TOMOYO_OMIT_USERSPACE_LOADER
