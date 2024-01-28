@@ -4939,9 +4939,8 @@ u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 }
 
 #if IS_ENABLED(CONFIG_PAGE_POOL)
-static int
-netif_skb_segment_for_xdp(struct page_pool *pool, struct sk_buff **pskb,
-			  struct bpf_prog *prog)
+int netif_skb_segment_for_xdp(struct page_pool *pool, struct sk_buff **pskb,
+			      struct bpf_prog *prog)
 {
 	u32 size, truesize, len, max_head_size, off;
 	struct sk_buff *skb = *pskb, *nskb;
@@ -5016,6 +5015,7 @@ netif_skb_segment_for_xdp(struct page_pool *pool, struct sk_buff **pskb,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(netif_skb_segment_for_xdp);
 #endif
 
 static int

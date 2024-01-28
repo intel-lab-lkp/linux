@@ -3955,6 +3955,10 @@ static inline void dev_consume_skb_any(struct sk_buff *skb)
 	dev_kfree_skb_any_reason(skb, SKB_CONSUMED);
 }
 
+#if IS_ENABLED(CONFIG_PAGE_POOL)
+int netif_skb_segment_for_xdp(struct page_pool *pool, struct sk_buff **pskb,
+			      struct bpf_prog *prog);
+#endif
 u32 bpf_prog_run_generic_xdp(struct sk_buff *skb, struct xdp_buff *xdp,
 			     struct bpf_prog *xdp_prog);
 void generic_xdp_tx(struct sk_buff *skb, struct bpf_prog *xdp_prog);
