@@ -37,13 +37,15 @@
 #define recycle_stat_inc(pool, __stat)							\
 	do {										\
 		struct page_pool_recycle_stats __percpu *s = pool->recycle_stats;	\
-		this_cpu_inc(s->__stat);						\
+		if (s)									\
+			this_cpu_inc(s->__stat);					\
 	} while (0)
 
 #define recycle_stat_add(pool, __stat, val)						\
 	do {										\
 		struct page_pool_recycle_stats __percpu *s = pool->recycle_stats;	\
-		this_cpu_add(s->__stat, val);						\
+		if (s)									\
+			this_cpu_add(s->__stat, val);					\
 	} while (0)
 
 static const char pp_stats[][ETH_GSTRING_LEN] = {
@@ -77,6 +79,9 @@ bool page_pool_get_stats(const struct page_pool *pool,
 	int cpu = 0;
 
 	if (!stats)
+		return false;
+
+	if (!pool->recycle_stats)
 		return false;
 
 	/* The caller is responsible to initialize stats. */
@@ -218,19 +223,8 @@ static int page_pool_init(struct page_pool *pool,
 	}
 
 	pool->has_init_callback = !!pool->slow.init_callback;
-
-#ifdef CONFIG_PAGE_POOL_STATS
-	pool->recycle_stats = alloc_percpu(struct page_pool_recycle_stats);
-	if (!pool->recycle_stats)
+	if (ptr_ring_init(&pool->ring, ring_qsize, GFP_KERNEL) < 0)
 		return -ENOMEM;
-#endif
-
-	if (ptr_ring_init(&pool->ring, ring_qsize, GFP_KERNEL) < 0) {
-#ifdef CONFIG_PAGE_POOL_STATS
-		free_percpu(pool->recycle_stats);
-#endif
-		return -ENOMEM;
-	}
 
 	atomic_set(&pool->pages_state_release_cnt, 0);
 
@@ -295,7 +289,21 @@ EXPORT_SYMBOL(page_pool_create_percpu);
  */
 struct page_pool *page_pool_create(const struct page_pool_params *params)
 {
-	return page_pool_create_percpu(params, -1);
+	struct page_pool *pool;
+
+	pool = page_pool_create_percpu(params, -1);
+	if (IS_ERR(pool))
+		return pool;
+
+#ifdef CONFIG_PAGE_POOL_STATS
+	pool->recycle_stats = alloc_percpu(struct page_pool_recycle_stats);
+	if (!pool->recycle_stats) {
+		page_pool_uninit(pool);
+		kfree(pool);
+		pool = ERR_PTR(-ENOMEM);
+	}
+#endif
+	return pool;
 }
 EXPORT_SYMBOL(page_pool_create);
 
