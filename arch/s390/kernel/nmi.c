@@ -32,6 +32,7 @@
 #include <asm/asm-offsets.h>
 #include <asm/pai.h>
 #include <asm/vx-insn.h>
+#include <asm/vtime.h>
 #include <asm/fpu/api.h>
 
 struct mcck_struct {
