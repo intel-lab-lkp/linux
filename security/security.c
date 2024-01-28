@@ -1224,6 +1224,20 @@ void security_bprm_committed_creds(const struct linux_binprm *bprm)
 }
 
 /**
+ * security_bprm_aborting_creds() - Destroy creds for a process during exec()
+ * @bprm: binary program information
+ *
+ * Prepare to destroy the new security attributes which became unused due to
+ * failed execve operation.  @bprm points to the linux_binprm structure.
+ * This hook is a good place to undo changes which cannot be discarded by
+ * abort_creds().
+ */
+void security_bprm_aborting_creds(const struct linux_binprm *bprm)
+{
+	call_void_hook(bprm_aborting_creds, bprm);
+}
+
+/**
  * security_fs_context_submount() - Initialise fc->security
  * @fc: new filesystem context
  * @reference: dentry reference for submount/remount
