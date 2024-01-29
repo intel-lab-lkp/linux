@@ -187,23 +187,23 @@ char *strndup(const char *str, size_t maxlen)
 static __attribute__((unused))
 size_t strlcat(char *dst, const char *src, size_t size)
 {
-	size_t len;
 	char c;
+	size_t len = strlen(dst);
+	size_t ret = strlen(src) + (size < len? size: len);
 
-	for (len = 0; dst[len];	len++)
-		;
-
-	for (;;) {
+	for (;len < size;) {
 		c = *src;
-		if (len < size)
+		if (len < size - 1)
 			dst[len] = c;
+		if (len == size - 1)
+			dst[len] = '\0';
 		if (!c)
 			break;
 		len++;
 		src++;
 	}
 
-	return len;
+	return ret;
 }
 
 static __attribute__((unused))
