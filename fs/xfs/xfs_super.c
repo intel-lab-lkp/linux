@@ -1376,14 +1376,22 @@ xfs_fs_parse_param(
 	case Opt_nodiscard:
 		parsing_mp->m_features &= ~XFS_FEAT_DISCARD;
 		return 0;
-#ifdef CONFIG_FS_DAX
 	case Opt_dax:
-		xfs_mount_set_dax_mode(parsing_mp, XFS_DAX_ALWAYS);
-		return 0;
+		if (dax_is_supported()) {
+			xfs_mount_set_dax_mode(parsing_mp, XFS_DAX_ALWAYS);
+			return 0;
+		} else {
+			xfs_warn(parsing_mp, "dax option not supported.");
+			return -EINVAL;
+		}
 	case Opt_dax_enum:
-		xfs_mount_set_dax_mode(parsing_mp, result.uint_32);
-		return 0;
-#endif
+		if (dax_is_supported()) {
+			xfs_mount_set_dax_mode(parsing_mp, result.uint_32);
+			return 0;
+		} else {
+			xfs_warn(parsing_mp, "dax option not supported.");
+			return -EINVAL;
+		}
 	/* Following mount options will be removed in September 2025 */
 	case Opt_ikeep:
 		xfs_fs_warn_deprecated(fc, param, XFS_FEAT_IKEEP, true);
