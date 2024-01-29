@@ -79,6 +79,7 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio);
 void folio_migrate_copy(struct folio *newfolio, struct folio *folio);
 int folio_migrate_mapping(struct address_space *mapping,
 		struct folio *newfolio, struct folio *folio, int extra_count);
+int folio_expected_refs(struct address_space *mapping, struct folio *folio);
 
 #else
 

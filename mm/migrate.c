@@ -375,8 +375,7 @@ unlock:
 }
 #endif
 
-static int folio_expected_refs(struct address_space *mapping,
-		struct folio *folio)
+int folio_expected_refs(struct address_space *mapping, struct folio *folio)
 {
 	int refs = 1;
 	if (!mapping)

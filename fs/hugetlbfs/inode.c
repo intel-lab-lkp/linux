@@ -1119,6 +1119,14 @@ static int hugetlbfs_migrate_folio(struct address_space *mapping,
 {
 	int rc;
 
+	/* Check whether src does not have extra refs before we do more work */
+	if (folio_ref_count(src) != folio_expected_refs(mapping, src))
+		return -EAGAIN;
+
+	rc = folio_mc_copy(dst, src);
+	if (rc)
+		return rc;
+
 	rc = migrate_huge_page_move_mapping(mapping, dst, src);
 	if (rc != MIGRATEPAGE_SUCCESS)
 		return rc;
@@ -1129,7 +1137,7 @@ static int hugetlbfs_migrate_folio(struct address_space *mapping,
 		hugetlb_set_folio_subpool(src, NULL);
 	}
 
-	folio_migrate_copy(dst, src);
+	folio_migrate_flags(dst, src);
 
 	return MIGRATEPAGE_SUCCESS;
 }
