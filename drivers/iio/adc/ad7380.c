@@ -202,7 +202,7 @@ static int ad7380_regmap_reg_read(void *context, unsigned int reg,
 	return 0;
 }
 
-const struct regmap_config ad7380_regmap_config = {
+static const struct regmap_config ad7380_regmap_config = {
 	.reg_bits = 3,
 	.val_bits = 12,
 	.reg_read = ad7380_regmap_reg_read,
