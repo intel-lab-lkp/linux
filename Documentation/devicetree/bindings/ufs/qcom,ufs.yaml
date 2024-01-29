@@ -108,6 +108,8 @@ properties:
 required:
   - compatible
   - reg
+  - resets
+  - reset-names
 
 allOf:
   - $ref: ufs-common.yaml
