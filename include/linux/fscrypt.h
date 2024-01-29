@@ -232,6 +232,15 @@ static inline bool fscrypt_needs_contents_encryption(const struct inode *inode)
  */
 static inline void fscrypt_handle_d_move(struct dentry *dentry)
 {
+	/*
+	 * VFS calls fscrypt_handle_d_move even for non-fscrypt
+	 * filesystems.  Since we only care about DCACHE_NOKEY_NAME
+	 * dentries here, check that to bail out quickly, if possible.
+	 */
+	if (!(dentry->d_flags & DCACHE_NOKEY_NAME))
+		return;
+
+	 /* Mark the dentry as a plaintext dentry. */
 	dentry->d_flags &= ~DCACHE_NOKEY_NAME;
 
 	/*
