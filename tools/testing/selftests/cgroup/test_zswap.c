@@ -60,17 +60,39 @@ static long get_zswpout(const char *cgroup)
 	return cg_read_key_long(cgroup, "memory.stat", "zswpout ");
 }
 
-static int allocate_bytes(const char *cgroup, void *arg)
+static int allocate_bytes_and_read(const char *cgroup, void *arg, bool read)
 {
 	size_t size = (size_t)arg;
 	char *mem = (char *)malloc(size);
+	int ret = 0;
 
 	if (!mem)
 		return -1;
 	for (int i = 0; i < size; i += 4095)
 		mem[i] = 'a';
+
+	if (read) {
+		/* cycle through the allocated memory to (z)swap in and out pages */
+		for (int t = 0; t < 5; t++) {
+			for (int i = 0; i < size; i += 4095) {
+				if (mem[i] != 'a')
+					ret = -1;
+			}
+		}
+	}
+
 	free(mem);
-	return 0;
+	return ret;
+}
+
+static int allocate_bytes(const char *cgroup, void *arg)
+{
+	return allocate_bytes_and_read(cgroup, arg, false);
+}
+
+static int read_bytes(const char *cgroup, void *arg)
+{
+	return allocate_bytes_and_read(cgroup, arg, true);
 }
 
 static char *setup_test_group_1M(const char *root, const char *name)
@@ -131,6 +153,45 @@ out:
 	cg_destroy(test_group);
 	free(test_group);
 	return ret;
+}
+
+/* Simple test to verify the (z)swapin code paths */
+static int test_zswapin_size(const char *root, char *zswap_size)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+
+	/* Set up */
+	test_group = cg_name(root, "zswapin_test");
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.max", "8M"))
+		goto out;
+	if (cg_write(test_group, "memory.zswap.max", zswap_size))
+		goto out;
+
+	/* Allocate and read more than memory.max to trigger (z)swap in */
+	if (cg_run(test_group, read_bytes, (void *)MB(32)))
+		goto out;
+
+	ret = KSFT_PASS;
+
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
+static int test_swapin(const char *root)
+{
+	return test_zswapin_size(root, "0");
+}
+
+static int test_zswapin_no_limit(const char *root)
+{
+	return test_zswapin_size(root, "max");
 }
 
 /*
@@ -309,6 +370,8 @@ struct zswap_test {
 	const char *name;
 } tests[] = {
 	T(test_zswap_usage),
+	T(test_swapin),
+	T(test_zswapin_no_limit),
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
 };
