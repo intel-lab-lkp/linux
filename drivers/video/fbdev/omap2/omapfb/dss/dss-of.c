@@ -51,24 +51,6 @@ u32 dss_of_port_get_port_number(struct device_node *port)
 	return reg;
 }
 
-struct device_node *
-omapdss_of_get_first_endpoint(const struct device_node *parent)
-{
-	struct device_node *port, *ep;
-
-	port = of_graph_get_next_port(parent, NULL);
-
-	if (!port)
-		return NULL;
-
-	ep = of_graph_get_next_endpoint_raw(port, NULL);
-
-	of_node_put(port);
-
-	return ep;
-}
-EXPORT_SYMBOL_GPL(omapdss_of_get_first_endpoint);
-
 struct omap_dss_device *
 omapdss_of_find_source_for_first_ep(struct device_node *node)
 {
@@ -76,7 +58,7 @@ omapdss_of_find_source_for_first_ep(struct device_node *node)
 	struct device_node *src_port;
 	struct omap_dss_device *src;
 
-	ep = omapdss_of_get_first_endpoint(node);
+	ep = of_graph_get_next_endpoint(node, NULL);
 	if (!ep)
 		return ERR_PTR(-EINVAL);
 
