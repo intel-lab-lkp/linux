@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/radix-tree.h>
+#include <linux/cacheinfo.h>
 
 typedef unsigned long dax_entry_t;
 
@@ -78,6 +79,10 @@ static inline bool daxdev_mapping_supported(struct vm_area_struct *vma,
 		return false;
 	return dax_synchronous(dax_dev);
 }
+static inline bool dax_is_supported(void)
+{
+	return !cache_is_aliasing();
+}
 #else
 static inline void *dax_holder(struct dax_device *dax_dev)
 {
@@ -121,6 +126,10 @@ static inline size_t dax_recovery_write(struct dax_device *dax_dev,
 		pgoff_t pgoff, void *addr, size_t bytes, struct iov_iter *i)
 {
 	return 0;
+}
+static inline bool dax_is_supported(void)
+{
+	return false;
 }
 #endif
 
