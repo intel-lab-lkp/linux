@@ -2359,34 +2359,32 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		return ext4_parse_test_dummy_encryption(param, ctx);
 	case Opt_dax:
 	case Opt_dax_type:
-#ifdef CONFIG_FS_DAX
-	{
-		int type = (token == Opt_dax) ?
-			   Opt_dax : result.uint_32;
+		if (dax_is_supported()) {
+			int type = (token == Opt_dax) ?
+				   Opt_dax : result.uint_32;
 
-		switch (type) {
-		case Opt_dax:
-		case Opt_dax_always:
-			ctx_set_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
-			ctx_clear_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
-			break;
-		case Opt_dax_never:
-			ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
-			ctx_clear_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
-			break;
-		case Opt_dax_inode:
-			ctx_clear_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
-			ctx_clear_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
-			/* Strictly for printing options */
-			ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_INODE);
-			break;
+			switch (type) {
+			case Opt_dax:
+			case Opt_dax_always:
+				ctx_set_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
+				ctx_clear_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
+				break;
+			case Opt_dax_never:
+				ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
+				ctx_clear_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
+				break;
+			case Opt_dax_inode:
+				ctx_clear_mount_opt(ctx, EXT4_MOUNT_DAX_ALWAYS);
+				ctx_clear_mount_opt2(ctx, EXT4_MOUNT2_DAX_NEVER);
+				/* Strictly for printing options */
+				ctx_set_mount_opt2(ctx, EXT4_MOUNT2_DAX_INODE);
+				break;
+			}
+			return 0;
+		} else {
+			ext4_msg(NULL, KERN_INFO, "dax option not supported");
+			return -EINVAL;
 		}
-		return 0;
-	}
-#else
-		ext4_msg(NULL, KERN_INFO, "dax option not supported");
-		return -EINVAL;
-#endif
 	case Opt_data_err:
 		if (result.uint_32 == Opt_data_err_abort)
 			ctx_set_mount_opt(ctx, m->mount_opt);
