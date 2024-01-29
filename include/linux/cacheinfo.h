@@ -138,4 +138,12 @@ static inline int get_cpu_cacheinfo_id(int cpu, int level)
 #define use_arch_cache_info()	(false)
 #endif
 
+#ifdef CONFIG_ARCH_HAS_CACHE_ALIASING
+#define cache_is_aliasing()	true
+#elif defined(CONFIG_ARCH_HAS_CACHE_ALIASING_DYNAMIC)
+#include <asm/cachetype.h>
+#else
+#define cache_is_aliasing()	false
+#endif
+
 #endif /* _LINUX_CACHEINFO_H */

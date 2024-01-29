@@ -539,9 +539,11 @@ config CPU_CACHE_NOP
 	bool
 
 config CPU_CACHE_VIVT
+	select ARCH_HAS_CACHE_ALIASING
 	bool
 
 config CPU_CACHE_VIPT
+	select ARCH_HAS_CACHE_ALIASING_DYNAMIC if CPU_V6 || CPU_V6K
 	bool
 
 config CPU_CACHE_FA

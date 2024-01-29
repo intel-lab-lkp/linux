@@ -1016,6 +1016,16 @@ config IDLE_PAGE_TRACKING
 	  See Documentation/admin-guide/mm/idle_page_tracking.rst for
 	  more details.
 
+# Architectures which alias the data cache (VIVT or VIPT with dcache
+# aliasing) need to select this.
+config ARCH_HAS_CACHE_ALIASING
+	bool
+
+# Architectures which need to query at runtime whether the data cache is
+# aliased need to select this.
+config ARCH_HAS_CACHE_ALIASING_DYNAMIC
+	bool
+
 config ARCH_HAS_CACHE_LINE_SIZE
 	bool
 
