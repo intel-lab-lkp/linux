@@ -500,6 +500,7 @@ ice_dpll_hw_input_prio_set(struct ice_pf *pf, struct ice_dpll *dpll,
 static int
 ice_dpll_lock_status_get(const struct dpll_device *dpll, void *dpll_priv,
 			 enum dpll_lock_status *status,
+			 enum dpll_lock_status_error *status_error,
 			 struct netlink_ext_ack *extack)
 {
 	struct ice_dpll *d = dpll_priv;
