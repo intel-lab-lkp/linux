@@ -2114,6 +2114,8 @@
 					<&bimc MASTER_AMPSS_M0 &cnoc SLAVE_UFS_CFG>;
 			interconnect-names = "ufs-ddr", "cpu-ufs";
 
+			resets = <&gcc GCC_UFS_BCR>;
+			reset-names = "rst";
 			lanes-per-direction = <1>;
 			#reset-cells = <1>;
 			status = "disabled";
