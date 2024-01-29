@@ -419,8 +419,12 @@ static const struct fs_parameter_spec erofs_fs_parameters[] = {
 
 static bool erofs_fc_set_dax_mode(struct fs_context *fc, unsigned int mode)
 {
-#ifdef CONFIG_FS_DAX
 	struct erofs_fs_context *ctx = fc->fs_private;
+
+	if (!dax_is_supported()) {
+		errorfc(fc, "dax options not supported");
+		return false;
+	}
 
 	switch (mode) {
 	case EROFS_MOUNT_DAX_ALWAYS:
@@ -436,10 +440,6 @@ static bool erofs_fc_set_dax_mode(struct fs_context *fc, unsigned int mode)
 		DBG_BUGON(1);
 		return false;
 	}
-#else
-	errorfc(fc, "dax options not supported");
-	return false;
-#endif
 }
 
 static int erofs_fc_parse_param(struct fs_context *fc,
