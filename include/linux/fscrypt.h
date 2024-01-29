@@ -942,11 +942,22 @@ static inline int fscrypt_prepare_rename(struct inode *old_dir,
 static inline void fscrypt_prepare_lookup_dentry(struct dentry *dentry,
 						 bool is_nokey_name)
 {
-	if (is_nokey_name) {
-		spin_lock(&dentry->d_lock);
+	spin_lock(&dentry->d_lock);
+
+	if (is_nokey_name)
 		dentry->d_flags |= DCACHE_NOKEY_NAME;
-		spin_unlock(&dentry->d_lock);
+	else if (dentry->d_flags & DCACHE_OP_REVALIDATE &&
+		 dentry->d_op->d_revalidate == fscrypt_d_revalidate) {
+		/*
+		 * Unencrypted dentries and encrypted dentries where the
+		 * key is available are always valid from fscrypt
+		 * perspective. Avoid the cost of calling
+		 * fscrypt_d_revalidate unnecessarily.
+		 */
+		dentry->d_flags &= ~DCACHE_OP_REVALIDATE;
 	}
+
+	spin_unlock(&dentry->d_lock);
 }
 
 /**
