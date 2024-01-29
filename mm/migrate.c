@@ -661,6 +661,14 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 {
 	int rc;
 
+	/* Check whether src does not have extra refs before we do more work */
+	if (folio_ref_count(src) != folio_expected_refs(mapping, src))
+		return -EAGAIN;
+
+	rc = folio_mc_copy(dst, src);
+	if (rc)
+		return rc;
+
 	rc = folio_migrate_mapping(mapping, dst, src, 0);
 	if (rc != MIGRATEPAGE_SUCCESS)
 		return rc;
@@ -668,7 +676,7 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 	if (src_private)
 		folio_attach_private(dst, folio_detach_private(src));
 
-	folio_migrate_copy(dst, src);
+	folio_migrate_flags(dst, src);
 
 	return MIGRATEPAGE_SUCCESS;
 }
