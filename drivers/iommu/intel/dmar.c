@@ -1517,10 +1517,19 @@ void qi_flush_iotlb(struct intel_iommu *iommu, u16 did, u64 addr,
 	qi_submit_sync(iommu, &desc, 1, 0);
 }
 
-void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			u16 qdep, u64 addr, unsigned mask)
+void qi_flush_dev_iotlb(struct intel_iommu *iommu,
+			struct device_domain_info *info, u64 addr,
+			unsigned int mask)
 {
+	u16 sid, qdep, pfsid;
 	struct qi_desc desc;
+
+	if (!info || !info->ats_enabled)
+		return;
+
+	sid = info->bus << 8 | info->devfn;
+	qdep = info->ats_qdep;
+	pfsid = info->pfsid;
 
 	/*
 	 * VT-d spec, section 4.3:
@@ -1590,11 +1599,20 @@ void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
 }
 
 /* PASID-based device IOTLB Invalidate */
-void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			      u32 pasid,  u16 qdep, u64 addr, unsigned int size_order)
+void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu,
+			      struct device_domain_info *info, u64 addr, u32 pasid,
+			      unsigned int size_order)
 {
 	unsigned long mask = 1UL << (VTD_PAGE_SHIFT + size_order - 1);
 	struct qi_desc desc = {.qw1 = 0, .qw2 = 0, .qw3 = 0};
+	u16 sid, qdep, pfsid;
+
+	if (!info || !dev_is_pci(info->dev))
+		return;
+
+	sid = info->bus << 8 | info->devfn;
+	qdep = info->ats_qdep;
+	pfsid = info->pfsid;
 
 	/*
 	 * VT-d spec, section 4.3:

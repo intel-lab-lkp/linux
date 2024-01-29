@@ -1037,18 +1037,17 @@ void qi_flush_context(struct intel_iommu *iommu, u16 did,
 		      u16 sid, u8 fm, u64 type);
 void qi_flush_iotlb(struct intel_iommu *iommu, u16 did, u64 addr,
 		    unsigned int size_order, u64 type);
-void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			u16 qdep, u64 addr, unsigned mask);
-
+void qi_flush_dev_iotlb(struct intel_iommu *iommu,
+			struct device_domain_info *info, u64 addr,
+			unsigned int mask);
 void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
 		     unsigned long npages, bool ih);
 
-void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			      u32 pasid, u16 qdep, u64 addr,
-			      unsigned int size_order);
-void quirk_extra_dev_tlb_flush(struct device_domain_info *info,
-			       unsigned long address, unsigned long pages,
-			       u32 pasid, u16 qdep);
+void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu,
+			      struct device_domain_info *info, u64 addr,
+			      u32 pasid, unsigned int size_order);
+void quirk_extra_dev_tlb_flush(struct device_domain_info *info, u32 pasid,
+			       unsigned long address, unsigned long mask);
 void qi_flush_pasid_cache(struct intel_iommu *iommu, u16 did, u64 granu,
 			  u32 pasid);
 
