@@ -585,13 +585,13 @@ static int parse_options(char *options, struct super_block *sb,
 			set_opt(opts->s_mount_opt, XIP);
 			fallthrough;
 		case Opt_dax:
-#ifdef CONFIG_FS_DAX
-			ext2_msg(sb, KERN_WARNING,
-		"DAX enabled. Warning: EXPERIMENTAL, use at your own risk");
-			set_opt(opts->s_mount_opt, DAX);
-#else
-			ext2_msg(sb, KERN_INFO, "dax option not supported");
-#endif
+			if (dax_is_supported()) {
+				ext2_msg(sb, KERN_WARNING,
+					 "DAX enabled. Warning: EXPERIMENTAL, use at your own risk");
+				set_opt(opts->s_mount_opt, DAX);
+			} else {
+				ext2_msg(sb, KERN_INFO, "dax option not supported");
+			}
 			break;
 
 #if defined(CONFIG_QUOTA)
