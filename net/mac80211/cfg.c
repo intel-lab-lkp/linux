@@ -1339,8 +1339,6 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 			return -EOPNOTSUPP;
 
 		link_conf->eht_support = true;
-		link_conf->eht_puncturing = params->punct_bitmap;
-		changed |= BSS_CHANGED_EHT_PUNCTURING;
 
 		link_conf->eht_su_beamformer =
 			params->eht_cap->fixed.phy_cap_info[0] &
@@ -3666,12 +3664,6 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 	if (err)
 		return err;
 
-	if (sdata->vif.bss_conf.eht_puncturing != sdata->vif.bss_conf.csa_punct_bitmap) {
-		sdata->vif.bss_conf.eht_puncturing =
-					sdata->vif.bss_conf.csa_punct_bitmap;
-		changed |= BSS_CHANGED_EHT_PUNCTURING;
-	}
-
 	ieee80211_link_info_change_notify(sdata, link_data, changed);
 
 	if (link_data->csa_block_tx) {
@@ -3685,8 +3677,7 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 		return err;
 
 	cfg80211_ch_switch_notify(sdata->dev, &link_data->csa_chanreq.oper,
-				  link_data->link_id,
-				  link_data->conf->eht_puncturing);
+				  link_data->link_id);
 
 	return 0;
 }
@@ -3887,6 +3878,9 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 				       &sdata->vif.bss_conf.chanreq.oper))
 		return -EINVAL;
 
+	if (chanreq.oper.punctured && !sdata->vif.bss_conf.eht_support)
+		return -EINVAL;
+
 	/* don't allow another channel switch if one is already active. */
 	if (sdata->vif.bss_conf.csa_active)
 		return -EBUSY;
@@ -3939,13 +3933,9 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 		goto out;
 	}
 
-	if (params->punct_bitmap && !sdata->vif.bss_conf.eht_support)
-		goto out;
-
 	sdata->deflink.csa_chanreq = chanreq; 
 	sdata->deflink.csa_block_tx = params->block_tx;
 	sdata->vif.bss_conf.csa_active = true;
-	sdata->vif.bss_conf.csa_punct_bitmap = params->punct_bitmap;
 
 	if (sdata->deflink.csa_block_tx)
 		ieee80211_stop_vif_queues(local, sdata,
@@ -3953,8 +3943,7 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 	cfg80211_ch_switch_started_notify(sdata->dev,
 					  &sdata->deflink.csa_chanreq.oper, 0,
-					  params->count, params->block_tx,
-					  sdata->vif.bss_conf.csa_punct_bitmap);
+					  params->count, params->block_tx);
 
 	if (changed) {
 		ieee80211_link_info_change_notify(sdata, &sdata->deflink,
