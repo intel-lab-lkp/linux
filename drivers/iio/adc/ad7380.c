@@ -350,7 +350,8 @@ static int ad7380_init(struct ad7380_state *st)
 	/* select internal or external reference voltage */
 	ret = regmap_update_bits(st->regmap, AD7380_REG_ADDR_CONFIG1,
 				 AD7380_CONFIG1_REFSEL,
-				 FIELD_PREP(AD7380_CONFIG1_REFSEL, !!st->vref));
+				 FIELD_PREP(AD7380_CONFIG1_REFSEL,
+					    st->vref ? 1 : 0));
 	if (ret < 0)
 		return ret;
 
