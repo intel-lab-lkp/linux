@@ -1272,6 +1272,7 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index,
 {
 	u32 fault;
 	int head, tail;
+	u64 iqe_err, ite_sid;
 	struct q_inval *qi = iommu->qi;
 	int shift = qi_shift(iommu);
 
@@ -1316,6 +1317,13 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index,
 		tail = readl(iommu->reg + DMAR_IQT_REG);
 		tail = ((tail >> shift) - 1 + QI_LENGTH) % QI_LENGTH;
 
+		/*
+		 * SID field is valid only when the ITE field is Set in FSTS_REG
+		 * see Intel VT-d spec r4.1, section 11.4.9.9
+		 */
+		iqe_err = dmar_readq(iommu->reg + DMAR_IQER_REG);
+		ite_sid = DMAR_IQER_REG_ITESID(iqe_err);
+
 		writel(DMA_FSTS_ITE, iommu->reg + DMAR_FSTS_REG);
 		pr_info("Invalidation Time-out Error (ITE) cleared\n");
 
@@ -1324,6 +1332,16 @@ static int qi_check_fault(struct intel_iommu *iommu, int index, int wait_index,
 				qi->desc_status[head] = QI_ABORT;
 			head = (head - 2 + QI_LENGTH) % QI_LENGTH;
 		} while (head != tail);
+
+		/*
+		 * If got ITE, we need to check if the sid of ITE is the same as
+		 * current ATS invalidation target device, if yes, don't try this
+		 * request anymore if the target device isn't present.
+		 * 0 value of ite_sid means old VT-d device, no ite_sid value.
+		 */
+		if (pdev && ite_sid && !pci_device_is_present(pdev) &&
+			ite_sid == pci_dev_id(pci_physfn(pdev)))
+			return -ETIMEDOUT;
 
 		if (qi->desc_status[wait_index] == QI_ABORT)
 			return -EAGAIN;
