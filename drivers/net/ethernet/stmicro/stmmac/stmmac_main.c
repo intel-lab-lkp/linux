@@ -941,8 +941,17 @@ static struct phylink_pcs *stmmac_mac_select_pcs(struct phylink_config *config,
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
 
-	if (priv->hw->xpcs)
+	if (priv->hw->xpcs) {
+		if (interface != PHY_INTERFACE_MODE_NA &&
+		    interface != priv->plat->phy_interface) {
+			/* When there are major changes, we reconfigure
+			 * the setup for xpcs according to the interface.
+			 */
+			xpcs_destroy(priv->hw->xpcs);
+			stmmac_xpcs_setup(priv->mii, interface);
+		}
 		return &priv->hw->xpcs->pcs;
+	}
 
 	if (priv->hw->lynx_pcs)
 		return priv->hw->lynx_pcs;
@@ -7740,7 +7749,7 @@ int stmmac_dvr_probe(struct device *device,
 		priv->plat->speed_mode_2500(ndev, priv->plat->bsp_priv);
 
 	if (priv->plat->mdio_bus_data && priv->plat->mdio_bus_data->has_xpcs) {
-		ret = stmmac_xpcs_setup(priv->mii);
+		ret = stmmac_xpcs_setup(priv->mii, priv->plat->phy_interface);
 		if (ret)
 			goto error_xpcs_setup;
 	}

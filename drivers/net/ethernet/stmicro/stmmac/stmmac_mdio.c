@@ -495,19 +495,18 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 	return 0;
 }
 
-int stmmac_xpcs_setup(struct mii_bus *bus)
+int stmmac_xpcs_setup(struct mii_bus *bus, phy_interface_t interface)
 {
 	struct net_device *ndev = bus->priv;
 	struct stmmac_priv *priv;
 	struct dw_xpcs *xpcs;
-	int mode, addr;
+	int addr;
 
 	priv = netdev_priv(ndev);
-	mode = priv->plat->phy_interface;
 
 	/* Try to probe the XPCS by scanning all addresses. */
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
-		xpcs = xpcs_create_mdiodev(bus, addr, mode);
+		xpcs = xpcs_create_mdiodev(bus, addr, interface);
 		if (IS_ERR(xpcs))
 			continue;
 
