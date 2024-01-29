@@ -212,15 +212,16 @@ size_t strlcpy(char *dst, const char *src, size_t size)
 	size_t len;
 	char c;
 
-	for (len = 0;;) {
+	for (len = 0; len < size; len++) {
 		c = src[len];
-		if (len < size)
+		if (len < size - 1)
 			dst[len] = c;
+		if (len == size - 1)
+			dst[len] = '\0';
 		if (!c)
 			break;
-		len++;
 	}
-	return len;
+	return strlen(src);
 }
 
 static __attribute__((unused))
