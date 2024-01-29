@@ -335,6 +335,7 @@ struct trace_array {
 	struct array_buffer	max_buffer;
 	bool			allocated_snapshot;
 	unsigned int		snapshot;
+	int			mapped;
 #endif
 #ifdef CONFIG_TRACER_MAX_TRACE
 	unsigned long		max_latency;
