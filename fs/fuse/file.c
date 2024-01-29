@@ -3247,6 +3247,6 @@ void fuse_init_file_inode(struct inode *inode, unsigned int flags)
 	init_waitqueue_head(&fi->page_waitq);
 	fi->writepages = RB_ROOT;
 
-	if (IS_ENABLED(CONFIG_FUSE_DAX))
+	if (fuse_dax_is_supported())
 		fuse_dax_inode_init(inode, flags);
 }

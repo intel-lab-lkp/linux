@@ -108,7 +108,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	if (!fi->forget)
 		goto out_free;
 
-	if (IS_ENABLED(CONFIG_FUSE_DAX) && !fuse_dax_inode_alloc(sb, fi))
+	if (fuse_dax_is_supported() && !fuse_dax_inode_alloc(sb, fi))
 		goto out_free_forget;
 
 	return &fi->inode;
@@ -126,9 +126,8 @@ static void fuse_free_inode(struct inode *inode)
 
 	mutex_destroy(&fi->mutex);
 	kfree(fi->forget);
-#ifdef CONFIG_FUSE_DAX
-	kfree(fi->dax);
-#endif
+	if (fuse_dax_is_supported())
+		kfree(fuse_inode_get_dax(fi));
 	kmem_cache_free(fuse_inode_cachep, fi);
 }
 
@@ -361,7 +360,7 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 			invalidate_inode_pages2(inode->i_mapping);
 	}
 
-	if (IS_ENABLED(CONFIG_FUSE_DAX))
+	if (fuse_dax_is_supported())
 		fuse_dax_dontcache(inode, attr->flags);
 }
 
@@ -856,14 +855,16 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 		if (sb->s_bdev && sb->s_blocksize != FUSE_DEFAULT_BLKSIZE)
 			seq_printf(m, ",blksize=%lu", sb->s_blocksize);
 	}
-#ifdef CONFIG_FUSE_DAX
-	if (fc->dax_mode == FUSE_DAX_ALWAYS)
-		seq_puts(m, ",dax=always");
-	else if (fc->dax_mode == FUSE_DAX_NEVER)
-		seq_puts(m, ",dax=never");
-	else if (fc->dax_mode == FUSE_DAX_INODE_USER)
-		seq_puts(m, ",dax=inode");
-#endif
+	if (fuse_dax_is_supported()) {
+		enum fuse_dax_mode dax_mode = fuse_conn_get_dax_mode(fc);
+
+		if (dax_mode == FUSE_DAX_ALWAYS)
+			seq_puts(m, ",dax=always");
+		else if (dax_mode == FUSE_DAX_NEVER)
+			seq_puts(m, ",dax=never");
+		else if (dax_mode == FUSE_DAX_INODE_USER)
+			seq_puts(m, ",dax=inode");
+	}
 
 	return 0;
 }
@@ -936,7 +937,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 		struct fuse_iqueue *fiq = &fc->iq;
 		struct fuse_sync_bucket *bucket;
 
-		if (IS_ENABLED(CONFIG_FUSE_DAX))
+		if (fuse_dax_is_supported())
 			fuse_dax_conn_free(fc);
 		if (fiq->ops->release)
 			fiq->ops->release(fiq);
@@ -1264,7 +1265,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 					min_t(unsigned int, fc->max_pages_limit,
 					max_t(unsigned int, arg->max_pages, 1));
 			}
-			if (IS_ENABLED(CONFIG_FUSE_DAX)) {
+			if (fuse_dax_is_supported()) {
 				if (flags & FUSE_MAP_ALIGNMENT &&
 				    !fuse_dax_check_alignment(fc, arg->map_alignment)) {
 					ok = false;
@@ -1331,12 +1332,12 @@ void fuse_send_init(struct fuse_mount *fm)
 		FUSE_HANDLE_KILLPRIV_V2 | FUSE_SETXATTR_EXT | FUSE_INIT_EXT |
 		FUSE_SECURITY_CTX | FUSE_CREATE_SUPP_GROUP |
 		FUSE_HAS_EXPIRE_ONLY | FUSE_DIRECT_IO_ALLOW_MMAP;
-#ifdef CONFIG_FUSE_DAX
-	if (fm->fc->dax)
-		flags |= FUSE_MAP_ALIGNMENT;
-	if (fuse_is_inode_dax_mode(fm->fc->dax_mode))
-		flags |= FUSE_HAS_INODE_DAX;
-#endif
+	if (fuse_dax_is_supported()) {
+		if (fuse_conn_get_dax(fm->fc))
+			flags |= FUSE_MAP_ALIGNMENT;
+		if (fuse_is_inode_dax_mode(fuse_conn_get_dax_mode(fm->fc)))
+			flags |= FUSE_HAS_INODE_DAX;
+	}
 	if (fm->fc->auto_submounts)
 		flags |= FUSE_SUBMOUNTS;
 
@@ -1643,7 +1644,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 
 	sb->s_subtype = ctx->subtype;
 	ctx->subtype = NULL;
-	if (IS_ENABLED(CONFIG_FUSE_DAX)) {
+	if (fuse_dax_is_supported()) {
 		err = fuse_dax_conn_alloc(fc, ctx->dax_mode, ctx->dax_dev);
 		if (err)
 			goto err;
@@ -1709,7 +1710,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	if (fud)
 		fuse_dev_free(fud);
  err_free_dax:
-	if (IS_ENABLED(CONFIG_FUSE_DAX))
+	if (fuse_dax_is_supported())
 		fuse_dax_conn_free(fc);
  err:
 	return err;

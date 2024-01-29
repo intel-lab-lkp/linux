@@ -31,6 +31,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/refcount.h>
 #include <linux/user_namespace.h>
+#include <linux/dax.h>
 
 /** Default max number of pages that can be used in a single read request */
 #define FUSE_DEFAULT_MAX_PAGES_PER_REQ 32
@@ -979,6 +980,38 @@ static inline void fuse_sync_bucket_dec(struct fuse_sync_bucket *bucket)
 	rcu_read_unlock();
 }
 
+#ifdef CONFIG_FUSE_DAX
+static inline struct fuse_inode_dax *fuse_inode_get_dax(struct fuse_inode *inode)
+{
+	return inode->dax;
+}
+
+static inline enum fuse_dax_mode fuse_conn_get_dax_mode(struct fuse_conn *fc)
+{
+	return fc->dax_mode;
+}
+
+static inline struct fuse_conn_dax *fuse_conn_get_dax(struct fuse_conn *fc)
+{
+	return fc->dax;
+}
+#else
+static inline struct fuse_inode_dax *fuse_inode_get_dax(struct fuse_inode *inode)
+{
+	return NULL;
+}
+
+static inline enum fuse_dax_mode fuse_conn_get_dax_mode(struct fuse_conn *fc)
+{
+	return FUSE_DAX_INODE_DEFAULT;
+}
+
+static inline struct fuse_conn_dax *fuse_conn_get_dax(struct fuse_conn *fc)
+{
+	return NULL;
+}
+#endif
+
 /** Device operations */
 extern const struct file_operations fuse_dev_operations;
 
@@ -1324,7 +1357,8 @@ void fuse_free_conn(struct fuse_conn *fc);
 
 /* dax.c */
 
-#define FUSE_IS_DAX(inode) (IS_ENABLED(CONFIG_FUSE_DAX) && IS_DAX(inode))
+#define fuse_dax_is_supported()	(IS_ENABLED(CONFIG_FUSE_DAX) && dax_is_supported())
+#define FUSE_IS_DAX(inode) (fuse_dax_is_supported() && IS_DAX(inode))
 
 ssize_t fuse_dax_read_iter(struct kiocb *iocb, struct iov_iter *to);
 ssize_t fuse_dax_write_iter(struct kiocb *iocb, struct iov_iter *from);
