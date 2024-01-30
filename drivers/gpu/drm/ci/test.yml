@@ -98,7 +98,7 @@ msm:sc7180-trogdor-lazor-limozeen:
   variables:
     DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
     DTB: sc7180-trogdor-lazor-limozeen-nots-r5
-    GPU_VERSION: ${DEVICE_TYPE}
+    GPU_VERSION: msm-${DEVICE_TYPE}
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
 
 msm:sc7180-trogdor-kingoftown:
@@ -108,7 +108,7 @@ msm:sc7180-trogdor-kingoftown:
   variables:
     DEVICE_TYPE: sc7180-trogdor-kingoftown
     DTB: sc7180-trogdor-kingoftown
-    GPU_VERSION: ${DEVICE_TYPE}
+    GPU_VERSION: msm-${DEVICE_TYPE}
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
 
 msm:apq8016:
@@ -118,7 +118,7 @@ msm:apq8016:
   variables:
     DRIVER_NAME: msm
     BM_DTB: https://${PIPELINE_ARTIFACTS_BASE}/arm64/apq8016-sbc-usb-host.dtb
-    GPU_VERSION: apq8016
+    GPU_VERSION: msm-apq8016
     BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 $BM_KERNEL_EXTRA_ARGS root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init $BM_KERNELARGS"
     RUNNER_TAG: google-freedreno-db410c
   script:
@@ -132,7 +132,7 @@ msm:apq8096:
     DRIVER_NAME: msm
     BM_KERNEL_EXTRA_ARGS: maxcpus=2
     BM_DTB: https://${PIPELINE_ARTIFACTS_BASE}/arm64/apq8096-db820c.dtb
-    GPU_VERSION: apq8096
+    GPU_VERSION: msm-apq8096
     RUNNER_TAG: google-freedreno-db820c
   script:
     - ./install/bare-metal/fastboot.sh
@@ -145,7 +145,7 @@ msm:sdm845:
   variables:
     DRIVER_NAME: msm
     BM_KERNEL: https://${PIPELINE_ARTIFACTS_BASE}/arm64/cheza-kernel
-    GPU_VERSION: sdm845
+    GPU_VERSION: msm-sdm845
     RUNNER_TAG: google-freedreno-cheza
   script:
     - ./install/bare-metal/cros-servo.sh
@@ -160,7 +160,7 @@ rockchip:rk3288:
     DTB: ${DEVICE_TYPE}
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: "zimage"
-    GPU_VERSION: rk3288
+    GPU_VERSION: rockchip-rk3288
     RUNNER_TAG: mesa-ci-x86-64-lava-rk3288-veyron-jaq
 
 rockchip:rk3399:
@@ -174,7 +174,7 @@ rockchip:rk3399:
     DTB: ${DEVICE_TYPE}
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
-    GPU_VERSION: rk3399
+    GPU_VERSION: rockchip-rk3399
     RUNNER_TAG: mesa-ci-x86-64-lava-rk3399-gru-kevin
 
 .i915:
@@ -194,7 +194,7 @@ i915:apl:
   timeout: "1h30m"
   variables:
     DEVICE_TYPE: asus-C523NA-A20057-coral
-    GPU_VERSION: apl
+    GPU_VERSION: i915-apl
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
 
 i915:glk:
@@ -204,7 +204,7 @@ i915:glk:
   timeout: "1h30m"
   variables:
     DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
-    GPU_VERSION: glk
+    GPU_VERSION: i915-glk
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
 
 i915:amly:
@@ -214,7 +214,7 @@ i915:amly:
   timeout: "1h30m"
   variables:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
-    GPU_VERSION: amly
+    GPU_VERSION: i915-amly
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
 
 i915:kbl:
@@ -223,7 +223,7 @@ i915:kbl:
   parallel: 3
   variables:
     DEVICE_TYPE: hp-x360-14-G1-sona
-    GPU_VERSION: kbl
+    GPU_VERSION: i915-kbl
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
 
 i915:whl:
@@ -233,7 +233,7 @@ i915:whl:
   timeout: "1h30m"
   variables:
     DEVICE_TYPE: dell-latitude-5400-8665U-sarien
-    GPU_VERSION: whl
+    GPU_VERSION: i915-whl
     RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
 
 i915:cml:
@@ -243,7 +243,7 @@ i915:cml:
   timeout: "1h30m"
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
-    GPU_VERSION: cml
+    GPU_VERSION: i915-cml
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
 
 i915:tgl:
@@ -252,7 +252,7 @@ i915:tgl:
   parallel: 8
   variables:
     DEVICE_TYPE: asus-cx9400-volteer
-    GPU_VERSION: tgl
+    GPU_VERSION: i915-tgl
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
 
 .amdgpu:
@@ -271,7 +271,7 @@ amdgpu:stoney:
   parallel: 2
   variables:
     DEVICE_TYPE: hp-11A-G6-EE-grunt
-    GPU_VERSION: stoney
+    GPU_VERSION: amdgpu-stoney
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
 
 .mediatek:
@@ -279,28 +279,39 @@ amdgpu:stoney:
     - .lava-igt:arm64
   stage: mediatek
   variables:
-    DRIVER_NAME: mediatek
     DTB: ${DEVICE_TYPE}
     BOOT_METHOD: depthcharge
     KERNEL_IMAGE_TYPE: ""
 
-mediatek:mt8173:
+.mt8173:
   extends:
     - .mediatek
   parallel: 4
   variables:
     DEVICE_TYPE: mt8173-elm-hana
-    GPU_VERSION: mt8173
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8173-elm-hana
 
-mediatek:mt8183:
+.mt8183:
   extends:
     - .mediatek
   parallel: 3
   variables:
     DEVICE_TYPE: mt8183-kukui-jacuzzi-juniper-sku16
-    GPU_VERSION: mt8183
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8183-kukui-jacuzzi-juniper-sku16
+
+mediatek:mt8173-display:
+  extends:
+    - .mt8173
+  variables:
+    GPU_VERSION: mediatek-mt8173-display
+    DRIVER_NAME: mediatek
+
+mediatek:mt8183-display:
+  extends:
+    - .mt8183
+  variables:
+    GPU_VERSION: mediatek-mt8183-display
+    DRIVER_NAME: mediatek
 
 # drm-mtk doesn't even probe yet in mainline for mt8192
 .mediatek:mt8192:
@@ -309,7 +320,7 @@ mediatek:mt8183:
   parallel: 3
   variables:
     DEVICE_TYPE: mt8192-asurada-spherion-r0
-    GPU_VERSION: mt8192
+    GPU_VERSION: mediatek-mt8192
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8192-asurada-spherion-r0
 
 .meson:
@@ -328,7 +339,7 @@ meson:g12b:
   parallel: 3
   variables:
     DEVICE_TYPE: meson-g12b-a311d-khadas-vim3
-    GPU_VERSION: g12b
+    GPU_VERSION: meson-g12b
     RUNNER_TAG: mesa-ci-x86-64-lava-meson-g12b-a311d-khadas-vim3
 
 virtio_gpu:none:
@@ -336,7 +347,7 @@ virtio_gpu:none:
   variables:
     CROSVM_GALLIUM_DRIVER: llvmpipe
     DRIVER_NAME: virtio_gpu
-    GPU_VERSION: none
+    GPU_VERSION: virtio_gpu-none
   extends:
     - .test-gl
     - .test-rules

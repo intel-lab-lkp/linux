@@ -20,16 +20,6 @@ cat /sys/kernel/debug/dri/*/state
 set -e
 
 case "$DRIVER_NAME" in
-    rockchip|meson)
-        export IGT_FORCE_DRIVER="panfrost"
-        ;;
-    mediatek)
-        if [ "$GPU_VERSION" = "mt8173" ]; then
-            export IGT_FORCE_DRIVER=${DRIVER_NAME}
-        elif [ "$GPU_VERSION" = "mt8183" ]; then
-            export IGT_FORCE_DRIVER="panfrost"
-        fi
-        ;;
     amdgpu)
         # Cannot use HWCI_KERNEL_MODULES as at that point we don't have the module in /lib
         mv /install/modules/lib/modules/* /lib/modules/.
@@ -37,16 +27,16 @@ case "$DRIVER_NAME" in
         ;;
 esac
 
-if [ -e "/install/xfails/$DRIVER_NAME-$GPU_VERSION-skips.txt" ]; then
-    IGT_SKIPS="--skips /install/xfails/$DRIVER_NAME-$GPU_VERSION-skips.txt"
+if [ -e "/install/xfails/$GPU_VERSION-skips.txt" ]; then
+    IGT_SKIPS="--skips /install/xfails/$GPU_VERSION-skips.txt"
 fi
 
-if [ -e "/install/xfails/$DRIVER_NAME-$GPU_VERSION-flakes.txt" ]; then
-    IGT_FLAKES="--flakes /install/xfails/$DRIVER_NAME-$GPU_VERSION-flakes.txt"
+if [ -e "/install/xfails/$GPU_VERSION-flakes.txt" ]; then
+    IGT_FLAKES="--flakes /install/xfails/$GPU_VERSION-flakes.txt"
 fi
 
-if [ -e "/install/xfails/$DRIVER_NAME-$GPU_VERSION-fails.txt" ]; then
-    IGT_FAILS="--baseline /install/xfails/$DRIVER_NAME-$GPU_VERSION-fails.txt"
+if [ -e "/install/xfails/$GPU_VERSION-fails.txt" ]; then
+    IGT_FAILS="--baseline /install/xfails/$GPU_VERSION-fails.txt"
 fi
 
 if [ "`uname -m`" = "aarch64" ]; then
