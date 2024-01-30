@@ -6,14 +6,14 @@
 #ifndef __LINUX_DRM_FORMAT_HELPER_H
 #define __LINUX_DRM_FORMAT_HELPER_H
 
+#include <linux/iosys-map.h>
 #include <linux/types.h>
 
-struct drm_device;
-struct drm_format_info;
-struct drm_framebuffer;
-struct drm_rect;
+#include <drm/drm_fourcc.h>
+#include <drm/drm_rect.h>
 
-struct iosys_map;
+struct drm_device;
+struct drm_framebuffer;
 
 /**
  * struct drm_format_conv_state - Stores format-conversion state
@@ -65,6 +65,34 @@ void drm_format_conv_state_copy(struct drm_format_conv_state *state,
 void *drm_format_conv_state_reserve(struct drm_format_conv_state *state,
 				    size_t new_size, gfp_t flags);
 void drm_format_conv_state_release(struct drm_format_conv_state *state);
+
+/**
+ * struct drm_pixmap - source pixmap for format-conversion helpers
+ *
+ * A pixmap represents the source data for drawing operations. All
+ * fields are considered private.
+ */
+struct drm_pixmap {
+	/**
+	 * @format: The pixmap's color format
+	 */
+	const struct drm_format_info *format;
+	/**
+	 * @clip: The cliping rectangle.
+	 */
+	struct drm_rect clip;
+	/**
+	 * @pitches: Per-plane offset between two consecutive rows of pixels in Bytes
+	 */
+	unsigned int pitches[DRM_FORMAT_MAX_PLANES];
+	/**
+	 * @data: Per-plane source buffer
+	 */
+	struct iosys_map data[DRM_FORMAT_MAX_PLANES];
+};
+
+void drm_pixmap_init_from_framebuffer(struct drm_pixmap *pix, const struct drm_framebuffer *fb,
+				      const struct iosys_map *data, const struct drm_rect *clip);
 
 unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info *format,
 				const struct drm_rect *clip);

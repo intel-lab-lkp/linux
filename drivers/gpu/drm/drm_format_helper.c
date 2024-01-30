@@ -132,6 +132,55 @@ unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info
 }
 EXPORT_SYMBOL(drm_fb_clip_offset);
 
+static void drm_pixmap_init(struct drm_pixmap *pix, const struct drm_format_info *format,
+			    const struct iosys_map *data, const unsigned int *pitches,
+			    const struct drm_rect *clip)
+{
+	size_t i;
+
+	pix->format = format;
+
+	/*
+	 * TODO: Set the size and data pointers from the
+	 * clipping rectangle and remove their computation
+	 * from the xfrm helpers.
+	 */
+	memcpy(&pix->clip, clip, sizeof(pix->clip));
+
+	for (i = 0; i < format->num_planes; ++i)
+		pix->pitches[i] = pitches[i];
+	for (; i < ARRAY_SIZE(pix->pitches); ++i)
+		pix->pitches[i] = 0;
+
+	for (i = 0; i < format->num_planes; ++i)
+		pix->data[i] = data[i];
+	for (; i < ARRAY_SIZE(pix->data); ++i)
+		iosys_map_clear(&pix->data[i]);
+}
+
+/**
+ * drm_pixmap_init_from_framebuffer - Initializes a pixmap from a DRM framebuffer
+ * @pix: The pixmap to initialize
+ * @fb: DRM framebuffer
+ * @data: Array of source buffers
+ * @clip: Clip rectangle area to copy
+ *
+ * The parameter @data refers to an array with least as many entries as
+ * there are planes in @fb's format. Each entry stores the value for the
+ * format's respective color plane at the same index.
+ */
+void drm_pixmap_init_from_framebuffer(struct drm_pixmap *pix, const struct drm_framebuffer *fb,
+				      const struct iosys_map *data, const struct drm_rect *clip)
+{
+	const struct drm_rect full_clip = DRM_RECT_INIT(0, 0, fb->width, fb->height);
+
+	if (!clip)
+		clip = &full_clip;
+
+	drm_pixmap_init(pix, fb->format, data, fb->pitches, clip);
+}
+EXPORT_SYMBOL(drm_pixmap_init_from_framebuffer);
+
 /* TODO: Make this function work with multi-plane formats. */
 static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
 			 const void *vaddr, const struct drm_framebuffer *fb,
