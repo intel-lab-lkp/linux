@@ -118,19 +118,17 @@ static int int340x_thermal_read_trips(struct acpi_device *zone_adev,
 	return trip_cnt;
 }
 
-static struct thermal_zone_params int340x_thermal_params = {
-	.governor_name = "user_space",
-	.no_hwmon = true,
-};
-
 struct int34x_thermal_zone *int340x_thermal_zone_add(struct acpi_device *adev,
 						     int (*get_temp) (struct thermal_zone_device *, int *))
 {
+	struct thermal_governor_params tgp = {
+		.governor_name = "user_space"
+	};
 	struct int34x_thermal_zone *int34x_zone;
+	struct thermal_zone_device_params tzdp;
 	struct thermal_trip *zone_trips;
 	unsigned long long trip_cnt = 0;
 	unsigned long long hyst;
-	int trip_mask = 0;
 	acpi_status status;
 	int i, ret;
 
@@ -153,7 +151,7 @@ struct int34x_thermal_zone *int340x_thermal_zone_add(struct acpi_device *adev,
 	status = acpi_evaluate_integer(adev->handle, "PATC", NULL, &trip_cnt);
 	if (ACPI_SUCCESS(status)) {
 		int34x_zone->aux_trip_nr = trip_cnt;
-		trip_mask = BIT(trip_cnt) - 1;
+		tzdp.tzp.mask = BIT(trip_cnt) - 1;
 	}
 
 	zone_trips = kzalloc(sizeof(*zone_trips) * (trip_cnt + INT340X_THERMAL_MAX_TRIP_COUNT),
@@ -183,13 +181,15 @@ struct int34x_thermal_zone *int340x_thermal_zone_add(struct acpi_device *adev,
 
 	int34x_zone->lpat_table = acpi_lpat_get_conversion_table(adev->handle);
 
-	int34x_zone->zone = thermal_zone_device_register_with_trips(
-							acpi_device_bid(adev),
-							zone_trips, trip_cnt,
-							trip_mask, int34x_zone,
-							int34x_zone->ops,
-							&int340x_thermal_params,
-							0, 0);
+	tzdp.tzp.type = acpi_device_bid(adev);
+	tzdp.tzp.ops = int34x_zone->ops;
+	tzdp.tzp.devdata = int34x_zone;
+	tzdp.tzp.trips = zone_trips;
+	tzdp.tzp.num_trips = trip_cnt;
+	tzdp.tzp.no_hwmon = true;
+	tzdp.tgp = &tgp;
+
+	int34x_zone->zone = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(int34x_zone->zone)) {
 		ret = PTR_ERR(int34x_zone->zone);
 		goto err_thermal_zone;
