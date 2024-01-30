@@ -242,13 +242,19 @@ static struct thermal_zone_device_ops tzone_ops = {
 	.set_trip_temp	= sys_set_trip_temp,
 };
 
-static struct thermal_zone_params tzone_params = {
-	.governor_name = "user_space",
-	.no_hwmon = true,
-};
-
 static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "TCPU_PCI",
+			.mask = 1,
+			.no_hwmon = true,
+			.ops = &tzone_ops,
+		},
+	};
+	struct thermal_governor_params tgp = {
+		.governor_name = "user_space"
+	};
 	struct proc_thermal_device *proc_priv;
 	struct proc_thermal_pci *pci_info;
 	int irq_flag = 0, irq, ret;
@@ -289,10 +295,12 @@ static int proc_thermal_pci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	psv_trip.temperature = get_trip_temp(pci_info);
 
-	pci_info->tzone = thermal_zone_device_register_with_trips("TCPU_PCI", &psv_trip,
-							1, 1, pci_info,
-							&tzone_ops,
-							&tzone_params, 0, 0);
+	tzdp.tzp.devdata = pci_info;
+	tzdp.tzp.trips = &psv_trip;
+	tzdp.tzp.num_trips = 1;
+	tzdp.tgp = &tgp;
+
+	pci_info->tzone = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(pci_info->tzone)) {
 		ret = PTR_ERR(pci_info->tzone);
 		goto err_del_legacy;
