@@ -117,6 +117,12 @@ static const struct of_device_id dove_thermal_id_table[] = {
 
 static int dove_thermal_probe(struct platform_device *pdev)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "dove_thermal",
+			.ops = &ops
+		}
+	};
 	struct thermal_zone_device *thermal = NULL;
 	struct dove_thermal_priv *priv;
 	int ret;
@@ -139,8 +145,8 @@ static int dove_thermal_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	thermal = thermal_tripless_zone_device_register("dove_thermal", priv,
-							&ops, NULL);
+	tzdp.tzp.devdata = priv;
+	thermal = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(thermal)) {
 		dev_err(&pdev->dev,
 			"Failed to register thermal zone device\n");
