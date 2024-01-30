@@ -1113,8 +1113,7 @@ static int ext4_block_write_begin(struct folio *folio, loff_t pos, unsigned len,
  * ext4_write_begin() is the right place.
  */
 static int ext4_write_begin(struct file *file, struct address_space *mapping,
-			    loff_t pos, unsigned len,
-			    struct page **pagep, void **fsdata)
+		loff_t pos, size_t len, struct folio **foliop, void **fsdata)
 {
 	struct inode *inode = mapping->host;
 	int ret, needed_blocks;
@@ -1139,7 +1138,7 @@ static int ext4_write_begin(struct file *file, struct address_space *mapping,
 
 	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_try_to_write_inline_data(mapping, inode, pos, len,
-						    pagep);
+						    foliop);
 		if (ret < 0)
 			return ret;
 		if (ret == 1)
@@ -1239,7 +1238,7 @@ retry_journal:
 		folio_put(folio);
 		return ret;
 	}
-	*pagep = &folio->page;
+	*foliop = folio;
 	return ret;
 }
 
@@ -1264,12 +1263,10 @@ static int write_end_fn(handle_t *handle, struct inode *inode,
  * ext4 never places buffers on inode->i_mapping->i_private_list.  metadata
  * buffers are managed internally.
  */
-static int ext4_write_end(struct file *file,
-			  struct address_space *mapping,
-			  loff_t pos, unsigned len, unsigned copied,
-			  struct page *page, void *fsdata)
+static int ext4_write_end(struct file *file, struct address_space *mapping,
+		loff_t pos, size_t len, size_t copied, struct folio *folio,
+		void **fsdata)
 {
-	struct folio *folio = page_folio(page);
 	handle_t *handle = ext4_journal_current_handle();
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
@@ -1284,7 +1281,7 @@ static int ext4_write_end(struct file *file,
 		return ext4_write_inline_data_end(inode, pos, len, copied,
 						  folio);
 
-	copied = block_write_end(file, mapping, pos, len, copied, page, fsdata);
+	copied = block_write_end(file, mapping, pos, len, copied, &folio->page, *fsdata);
 	/*
 	 * it's important to update i_size while still holding folio lock:
 	 * page writeout could otherwise come in and zero beyond i_size.
@@ -1369,11 +1366,9 @@ static void ext4_journalled_zero_new_buffers(handle_t *handle,
 }
 
 static int ext4_journalled_write_end(struct file *file,
-				     struct address_space *mapping,
-				     loff_t pos, unsigned len, unsigned copied,
-				     struct page *page, void *fsdata)
+		struct address_space *mapping, loff_t pos, size_t len,
+		size_t copied, struct folio *folio, void **fsdata)
 {
-	struct folio *folio = page_folio(page);
 	handle_t *handle = ext4_journal_current_handle();
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
@@ -2856,9 +2851,9 @@ static int ext4_nonda_switch(struct super_block *sb)
 	return 0;
 }
 
-static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
-			       loff_t pos, unsigned len,
-			       struct page **pagep, void **fsdata)
+static int ext4_da_write_begin(struct file *file,
+		struct address_space *mapping, loff_t pos, size_t len,
+		struct folio **foliop, void **fsdata)
 {
 	int ret, retries = 0;
 	struct folio *folio;
@@ -2873,14 +2868,14 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 	if (ext4_nonda_switch(inode->i_sb) || ext4_verity_in_progress(inode)) {
 		*fsdata = (void *)FALL_BACK_TO_NONDELALLOC;
 		return ext4_write_begin(file, mapping, pos,
-					len, pagep, fsdata);
+					len, foliop, fsdata);
 	}
 	*fsdata = (void *)0;
 	trace_ext4_da_write_begin(inode, pos, len);
 
 	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_da_write_inline_data_begin(mapping, inode, pos, len,
-						      pagep, fsdata);
+						      foliop, fsdata);
 		if (ret < 0)
 			return ret;
 		if (ret == 1)
@@ -2918,7 +2913,7 @@ retry:
 		return ret;
 	}
 
-	*pagep = &folio->page;
+	*foliop = folio;
 	return ret;
 }
 
@@ -2945,9 +2940,8 @@ static int ext4_da_should_update_i_disksize(struct folio *folio,
 	return 1;
 }
 
-static int ext4_da_do_write_end(struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
-			struct folio *folio)
+static int ext4_da_do_write_end(struct address_space *mapping, loff_t pos,
+		size_t len, size_t copied, struct folio *folio)
 {
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
@@ -3007,18 +3001,16 @@ static int ext4_da_do_write_end(struct address_space *mapping,
 	return copied;
 }
 
-static int ext4_da_write_end(struct file *file,
-			     struct address_space *mapping,
-			     loff_t pos, unsigned len, unsigned copied,
-			     struct page *page, void *fsdata)
+static int ext4_da_write_end(struct file *file, struct address_space *mapping,
+		loff_t pos, size_t len, size_t copied, struct folio *folio,
+		void **fsdata)
 {
 	struct inode *inode = mapping->host;
-	int write_mode = (int)(unsigned long)fsdata;
-	struct folio *folio = page_folio(page);
+	int write_mode = (int)(unsigned long)*fsdata;
 
 	if (write_mode == FALL_BACK_TO_NONDELALLOC)
 		return ext4_write_end(file, mapping, pos,
-				      len, copied, &folio->page, fsdata);
+				      len, copied, folio, fsdata);
 
 	trace_ext4_da_write_end(inode, pos, len, copied);
 
@@ -3556,8 +3548,6 @@ static const struct address_space_operations ext4_aops = {
 	.read_folio		= ext4_read_folio,
 	.readahead		= ext4_readahead,
 	.writepages		= ext4_writepages,
-	.write_begin		= ext4_write_begin,
-	.write_end		= ext4_write_end,
 	.dirty_folio		= ext4_dirty_folio,
 	.bmap			= ext4_bmap,
 	.invalidate_folio	= ext4_invalidate_folio,
@@ -3573,8 +3563,6 @@ static const struct address_space_operations ext4_journalled_aops = {
 	.read_folio		= ext4_read_folio,
 	.readahead		= ext4_readahead,
 	.writepages		= ext4_writepages,
-	.write_begin		= ext4_write_begin,
-	.write_end		= ext4_journalled_write_end,
 	.dirty_folio		= ext4_journalled_dirty_folio,
 	.bmap			= ext4_bmap,
 	.invalidate_folio	= ext4_journalled_invalidate_folio,
@@ -3590,8 +3578,6 @@ static const struct address_space_operations ext4_da_aops = {
 	.read_folio		= ext4_read_folio,
 	.readahead		= ext4_readahead,
 	.writepages		= ext4_writepages,
-	.write_begin		= ext4_da_write_begin,
-	.write_end		= ext4_da_write_end,
 	.dirty_folio		= ext4_dirty_folio,
 	.bmap			= ext4_bmap,
 	.invalidate_folio	= ext4_invalidate_folio,
@@ -3609,6 +3595,21 @@ static const struct address_space_operations ext4_dax_aops = {
 	.dirty_folio		= noop_dirty_folio,
 	.bmap			= ext4_bmap,
 	.swap_activate		= ext4_iomap_swap_activate,
+};
+
+const struct buffered_write_operations ext4_bw_ops = {
+	.write_begin		= ext4_write_begin,
+	.write_end		= ext4_write_end,
+};
+
+const struct buffered_write_operations ext4_journalled_bw_ops = {
+	.write_begin		= ext4_write_begin,
+	.write_end		= ext4_journalled_write_end,
+};
+
+const struct buffered_write_operations ext4_da_bw_ops = {
+	.write_begin		= ext4_da_write_begin,
+	.write_end		= ext4_da_write_end,
 };
 
 void ext4_set_aops(struct inode *inode)

@@ -287,16 +287,24 @@ static ssize_t ext4_buffered_write_iter(struct kiocb *iocb,
 {
 	ssize_t ret;
 	struct inode *inode = file_inode(iocb->ki_filp);
+	const struct buffered_write_operations *ops;
 
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		return -EOPNOTSUPP;
+
+	if (ext4_inode_journal_mode(inode))
+		ops = &ext4_journalled_bw_ops;
+	else if (test_opt(inode->i_sb, DELALLOC))
+		ops = &ext4_da_bw_ops;
+	else
+		ops = &ext4_bw_ops;
 
 	inode_lock(inode);
 	ret = ext4_write_checks(iocb, from);
 	if (ret <= 0)
 		goto out;
 
-	ret = generic_perform_write(iocb, from);
+	ret = filemap_perform_write(iocb, from, ops);
 
 out:
 	inode_unlock(inode);
