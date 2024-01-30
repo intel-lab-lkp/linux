@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/radix-tree.h>
+#include <linux/cacheinfo.h>
 
 typedef unsigned long dax_entry_t;
 
@@ -80,9 +81,7 @@ static inline bool daxdev_mapping_supported(struct vm_area_struct *vma,
 }
 static inline bool dax_is_supported(void)
 {
-	return !IS_ENABLED(CONFIG_ARM) &&
-	       !IS_ENABLED(CONFIG_MIPS) &&
-	       !IS_ENABLED(CONFIG_SPARC);
+	return !dcache_is_aliasing();
 }
 #else
 static inline void *dax_holder(struct dax_device *dax_dev)
