@@ -319,6 +319,17 @@ static long fcntl_set_rw_hint(struct file *file, unsigned int cmd,
 	inode->i_write_hint = hint;
 	inode_unlock(inode);
 
+	/*
+	 * file->f_mapping->host may differ from inode. As an example,
+	 * blkdev_open() modifies file->f_mapping.
+	 */
+	if (file->f_mapping->host != inode) {
+		inode = file->f_mapping->host;
+		inode_lock(inode);
+		inode->i_write_hint = hint;
+		inode_unlock(inode);
+	}
+
 	return 0;
 }
 
