@@ -156,6 +156,7 @@ static int gud_prep_flush(struct gud_device *gdrm, struct drm_framebuffer *fb,
 			  struct gud_set_buffer_req *req,
 			  struct drm_format_conv_state *fmtcnv_state)
 {
+	struct drm_device *drm = &gdrm->drm;
 	u8 compression = gdrm->compression;
 	struct iosys_map dst;
 	void *vaddr, *buf;
@@ -199,7 +200,7 @@ retry:
 			len = gud_xrgb8888_to_color(buf, format, vaddr, fb, rect);
 		}
 	} else if (gud_is_big_endian() && format->cpp[0] > 1) {
-		drm_fb_swab(&dst, NULL, src, fb, rect, cached_reads, fmtcnv_state);
+		drm_fb_swab(drm, &dst, NULL, &src_pix, cached_reads, fmtcnv_state);
 	} else if (compression && cached_reads && pitch == fb->pitches[0]) {
 		/* can compress directly from the framebuffer */
 		buf = vaddr + rect->y1 * pitch;

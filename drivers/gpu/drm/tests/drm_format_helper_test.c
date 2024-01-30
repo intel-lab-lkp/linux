@@ -1099,6 +1099,7 @@ static void drm_test_fb_swab(struct kunit *test)
 		.format = drm_format_info(DRM_FORMAT_XRGB8888),
 		.pitches = { params->pitch, 0, 0 },
 	};
+	struct drm_pixmap src_pix;
 
 	dst_size = conversion_buf_size(DRM_FORMAT_XRGB8888, result->dst_pitch, &params->clip, 0);
 
@@ -1115,7 +1116,9 @@ static void drm_test_fb_swab(struct kunit *test)
 	const unsigned int *dst_pitch = (result->dst_pitch == TEST_USE_DEFAULT_PITCH) ?
 		NULL : &result->dst_pitch;
 
-	drm_fb_swab(&dst, dst_pitch, &src, &fb, &params->clip, false, &fmtcnv_state);
+	drm_pixmap_init_from_framebuffer(&src_pix, &fb, &src, &params->clip);
+
+	drm_fb_swab(NULL, &dst, dst_pitch, &src_pix, false, &fmtcnv_state);
 	buf = le32buf_to_cpu(test, (__force const __le32 *)buf, dst_size / sizeof(u32));
 	KUNIT_EXPECT_MEMEQ(test, buf, result->expected, dst_size);
 

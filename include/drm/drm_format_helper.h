@@ -99,9 +99,9 @@ unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info
 
 void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 		   const struct drm_pixmap *src_pix);
-void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
-		 const struct iosys_map *src, const struct drm_framebuffer *fb,
-		 const struct drm_rect *clip, bool cached,
+void drm_fb_swab(struct drm_device *dev,
+		 struct iosys_map *dst, const unsigned int *dst_pitch,
+		 const struct drm_pixmap *src_pix, bool cached,
 		 struct drm_format_conv_state *state);
 void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pitch,
 			       const struct iosys_map *src, const struct drm_framebuffer *fb,

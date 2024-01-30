@@ -368,19 +368,18 @@ static void drm_fb_swab32_line(void *dbuf, const void *sbuf, unsigned int pixels
 
 /**
  * drm_fb_swab - Swap bytes into clip buffer
+ * @dev: DRM device
  * @dst: Array of destination buffers
  * @dst_pitch: Array of numbers of bytes between the start of two consecutive scanlines
  *             within @dst; can be NULL if scanlines are stored next to each other.
- * @src: Array of source buffers
- * @fb: DRM framebuffer
- * @clip: Clip rectangle area to copy
+ * @src_pix: Source pixmap to copy from
  * @cached: Source buffer is mapped cached (eg. not write-combined)
  * @state: Transform and conversion state
  *
  * This function copies parts of a framebuffer to display memory and swaps per-pixel
  * bytes during the process. Destination and framebuffer formats must match. The
- * parameters @dst, @dst_pitch and @src refer to arrays. Each array must have at
- * least as many entries as there are planes in @fb's format. Each entry stores the
+ * parameters @dst and @dst_pitch refer to arrays. Each array must have at least
+ * as many entries as there are planes in the pixmap's format. Each entry stores the
  * value for the format's respective color plane at the same index. If @cached is
  * false a temporary buffer is used to cache one pixel line at a time to speed up
  * slow uncached reads.
@@ -388,17 +387,14 @@ static void drm_fb_swab32_line(void *dbuf, const void *sbuf, unsigned int pixels
  * This function does not apply clipping on @dst (i.e. the destination is at the
  * top-left corner).
  */
-void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
-		 const struct iosys_map *src, const struct drm_framebuffer *fb,
-		 const struct drm_rect *clip, bool cached,
+void drm_fb_swab(struct drm_device *dev,
+		 struct iosys_map *dst, const unsigned int *dst_pitch,
+		 const struct drm_pixmap *src_pix, bool cached,
 		 struct drm_format_conv_state *state)
 {
-	const struct drm_format_info *format = fb->format;
+	const struct drm_format_info *format = src_pix->format;
 	u8 cpp = DIV_ROUND_UP(drm_format_info_bpp(format, 0), 8);
 	void (*swab_line)(void *dbuf, const void *sbuf, unsigned int npixels);
-	struct drm_pixmap pixmap;
-	struct drm_pixmap *src_pix = &pixmap;
-	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
 	switch (cpp) {
 	case 4:
@@ -408,7 +404,7 @@ void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 		swab_line = drm_fb_swab16_line;
 		break;
 	default:
-		drm_warn_once(fb->dev, "Format %p4cc has unsupported pixel size.\n",
+		drm_warn_once(dev, "Format %p4cc has unsupported pixel size.\n",
 			      &format->format);
 		return;
 	}
@@ -1095,6 +1091,7 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 		const struct iosys_map *src, const struct drm_framebuffer *fb,
 		const struct drm_rect *clip, struct drm_format_conv_state *state)
 {
+	struct drm_device *dev = fb->dev;
 	uint32_t fb_format = fb->format->format;
 	struct drm_pixmap pixmap;
 	struct drm_pixmap *src_pix = &pixmap;
@@ -1104,10 +1101,10 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 		drm_fb_memcpy(dst, dst_pitch, src_pix);
 		return 0;
 	} else if (fb_format == (dst_format | DRM_FORMAT_BIG_ENDIAN)) {
-		drm_fb_swab(dst, dst_pitch, src, fb, clip, false, state);
+		drm_fb_swab(dev, dst, dst_pitch, src_pix, false, state);
 		return 0;
 	} else if (fb_format == (dst_format & ~DRM_FORMAT_BIG_ENDIAN)) {
-		drm_fb_swab(dst, dst_pitch, src, fb, clip, false, state);
+		drm_fb_swab(dev, dst, dst_pitch, src_pix, false, state);
 		return 0;
 	} else if (fb_format == DRM_FORMAT_XRGB8888) {
 		if (dst_format == DRM_FORMAT_RGB565) {
@@ -1141,7 +1138,7 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 			drm_fb_xrgb8888_to_argb2101010(dst, dst_pitch, src, fb, clip, state);
 			return 0;
 		} else if (dst_format == DRM_FORMAT_BGRX8888) {
-			drm_fb_swab(dst, dst_pitch, src, fb, clip, false, state);
+			drm_fb_swab(dev, dst, dst_pitch, src_pix, false, state);
 			return 0;
 		}
 	}
