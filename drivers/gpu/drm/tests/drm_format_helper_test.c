@@ -1801,6 +1801,7 @@ static void drm_test_fb_memcpy(struct kunit *test)
 	struct drm_framebuffer fb = {
 		.format = drm_format_info(params->format),
 	};
+	struct drm_pixmap src_pix;
 
 	memcpy(fb.pitches, params->src_pitches, DRM_FORMAT_MAX_PLANES * sizeof(int));
 
@@ -1820,7 +1821,9 @@ static void drm_test_fb_memcpy(struct kunit *test)
 	const unsigned int *dst_pitches = params->dst_pitches[0] == TEST_USE_DEFAULT_PITCH ? NULL :
 		params->dst_pitches;
 
-	drm_fb_memcpy(dst, dst_pitches, src, &fb, &params->clip);
+	drm_pixmap_init_from_framebuffer(&src_pix, &fb, src, &params->clip);
+
+	drm_fb_memcpy(dst, dst_pitches, &src_pix);
 
 	for (size_t i = 0; i < fb.format->num_planes; i++) {
 		expected[i] = cpubuf_to_le32(test, params->expected[i], TEST_BUF_SIZE);

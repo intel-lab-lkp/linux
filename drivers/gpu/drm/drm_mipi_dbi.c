@@ -208,11 +208,14 @@ int mipi_dbi_buf_copy(void *dst, struct iosys_map *src, struct drm_framebuffer *
 {
 	struct drm_gem_object *gem = drm_gem_fb_get_obj(fb, 0);
 	struct iosys_map dst_map = IOSYS_MAP_INIT_VADDR(dst);
+	struct drm_pixmap src_pix;
 	int ret;
 
 	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
 	if (ret)
 		return ret;
+
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, src, clip);
 
 	switch (fb->format->format) {
 	case DRM_FORMAT_RGB565:
@@ -220,7 +223,7 @@ int mipi_dbi_buf_copy(void *dst, struct iosys_map *src, struct drm_framebuffer *
 			drm_fb_swab(&dst_map, NULL, src, fb, clip, !gem->import_attach,
 				    fmtcnv_state);
 		else
-			drm_fb_memcpy(&dst_map, NULL, src, fb, clip);
+			drm_fb_memcpy(&dst_map, NULL, &src_pix);
 		break;
 	case DRM_FORMAT_XRGB8888:
 		drm_fb_xrgb8888_to_rgb565(&dst_map, NULL, src, fb, clip, fmtcnv_state, swap);

@@ -98,8 +98,7 @@ unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info
 				const struct drm_rect *clip);
 
 void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
-		   const struct iosys_map *src, const struct drm_framebuffer *fb,
-		   const struct drm_rect *clip);
+		   const struct drm_pixmap *src_pix);
 void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 		 const struct iosys_map *src, const struct drm_framebuffer *fb,
 		 const struct drm_rect *clip, bool cached,

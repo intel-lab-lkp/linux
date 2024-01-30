@@ -160,6 +160,7 @@ static int gud_prep_flush(struct gud_device *gdrm, struct drm_framebuffer *fb,
 	struct iosys_map dst;
 	void *vaddr, *buf;
 	size_t pitch, len;
+	struct drm_pixmap src_pix;
 
 	pitch = drm_format_info_min_pitch(format, 0, drm_rect_width(rect));
 	len = pitch * drm_rect_height(rect);
@@ -173,6 +174,8 @@ retry:
 	else
 		buf = gdrm->bulk_buf;
 	iosys_map_set_vaddr(&dst, buf);
+
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, src, rect);
 
 	/*
 	 * Imported buffers are assumed to be write-combined and thus uncached
@@ -201,7 +204,7 @@ retry:
 		/* can compress directly from the framebuffer */
 		buf = vaddr + rect->y1 * pitch;
 	} else {
-		drm_fb_memcpy(&dst, NULL, src, fb, rect);
+		drm_fb_memcpy(&dst, NULL, &src_pix);
 	}
 
 	memset(req, 0, sizeof(*req));
@@ -392,6 +395,7 @@ static int gud_fb_queue_damage(struct gud_device *gdrm, struct drm_framebuffer *
 {
 	struct drm_framebuffer *old_fb = NULL;
 	struct iosys_map shadow_map;
+	struct drm_pixmap src_pix;
 
 	mutex_lock(&gdrm->damage_lock);
 
@@ -405,7 +409,8 @@ static int gud_fb_queue_damage(struct gud_device *gdrm, struct drm_framebuffer *
 
 	iosys_map_set_vaddr(&shadow_map, gdrm->shadow_buf);
 	iosys_map_incr(&shadow_map, drm_fb_clip_offset(fb->pitches[0], fb->format, damage));
-	drm_fb_memcpy(&shadow_map, fb->pitches, src, fb, damage);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, src, damage);
+	drm_fb_memcpy(&shadow_map, fb->pitches, &src_pix);
 
 	if (fb != gdrm->fb) {
 		old_fb = gdrm->fb;

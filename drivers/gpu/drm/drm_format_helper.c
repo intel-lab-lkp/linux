@@ -298,29 +298,29 @@ static int drm_fb_xfrm(struct iosys_map *dst,
  * @dst: Array of destination buffers
  * @dst_pitch: Array of numbers of bytes between the start of two consecutive scanlines
  *             within @dst; can be NULL if scanlines are stored next to each other.
- * @src: Array of source buffers
- * @fb: DRM framebuffer
- * @clip: Clip rectangle area to copy
+ * @src_pix: Source pixmap to copy from
  *
  * This function copies parts of a framebuffer to display memory. Destination and
- * framebuffer formats must match. No conversion takes place. The parameters @dst,
- * @dst_pitch and @src refer to arrays. Each array must have at least as many entries
- * as there are planes in @fb's format. Each entry stores the value for the format's
+ * framebuffer formats must match. No conversion takes place. The parameters @dst
+ * and @dst_pitch refer to arrays. Each array must have at least as many entries
+ * as there are planes in pixmap's format. Each entry stores the value for the format's
  * respective color plane at the same index.
  *
  * This function does not apply clipping on @dst (i.e. the destination is at the
  * top-left corner).
  */
 void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
-		   const struct iosys_map *src, const struct drm_framebuffer *fb,
-		   const struct drm_rect *clip)
+		   const struct drm_pixmap *src_pix)
 {
 	static const unsigned int default_dst_pitch[DRM_FORMAT_MAX_PLANES] = {
 		0, 0, 0, 0
 	};
 
-	const struct drm_format_info *format = fb->format;
-	unsigned int i, y, lines = drm_rect_height(clip);
+	const struct drm_format_info *format = src_pix->format;
+	const struct drm_rect *src_clip = &src_pix->clip;
+	const unsigned int *src_pitches = src_pix->pitches;
+	const struct iosys_map *src = src_pix->data;
+	unsigned int i, y, lines = drm_rect_height(src_clip);
 
 	if (!dst_pitch)
 		dst_pitch = default_dst_pitch;
@@ -328,7 +328,7 @@ void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 	for (i = 0; i < format->num_planes; ++i) {
 		unsigned int bpp_i = drm_format_info_bpp(format, i);
 		unsigned int cpp_i = DIV_ROUND_UP(bpp_i, 8);
-		size_t len_i = DIV_ROUND_UP(drm_rect_width(clip) * bpp_i, 8);
+		size_t len_i = DIV_ROUND_UP(drm_rect_width(src_clip) * bpp_i, 8);
 		unsigned int dst_pitch_i = dst_pitch[i];
 		struct iosys_map dst_i = dst[i];
 		struct iosys_map src_i = src[i];
@@ -336,11 +336,11 @@ void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 		if (!dst_pitch_i)
 			dst_pitch_i = len_i;
 
-		iosys_map_incr(&src_i, clip_offset(clip, fb->pitches[i], cpp_i));
+		iosys_map_incr(&src_i, clip_offset(src_clip, src_pitches[i], cpp_i));
 		for (y = 0; y < lines; y++) {
 			/* TODO: handle src_i in I/O memory here */
 			iosys_map_memcpy_to(&dst_i, 0, src_i.vaddr, len_i);
-			iosys_map_incr(&src_i, fb->pitches[i]);
+			iosys_map_incr(&src_i, src_pitches[i]);
 			iosys_map_incr(&dst_i, dst_pitch_i);
 		}
 	}
@@ -1058,9 +1058,12 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 		const struct drm_rect *clip, struct drm_format_conv_state *state)
 {
 	uint32_t fb_format = fb->format->format;
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
 	if (fb_format == dst_format) {
-		drm_fb_memcpy(dst, dst_pitch, src, fb, clip);
+		drm_fb_memcpy(dst, dst_pitch, src_pix);
 		return 0;
 	} else if (fb_format == (dst_format | DRM_FORMAT_BIG_ENDIAN)) {
 		drm_fb_swab(dst, dst_pitch, src, fb, clip, false, state);

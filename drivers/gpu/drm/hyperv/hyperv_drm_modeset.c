@@ -25,13 +25,15 @@ static int hyperv_blit_to_vram_rect(struct drm_framebuffer *fb,
 {
 	struct hyperv_drm_device *hv = to_hv(fb->dev);
 	struct iosys_map dst = IOSYS_MAP_INIT_VADDR_IOMEM(hv->vram);
+	struct drm_pixmap src_pix;
 	int idx;
 
 	if (!drm_dev_enter(&hv->dev, &idx))
 		return -ENODEV;
 
 	iosys_map_incr(&dst, drm_fb_clip_offset(fb->pitches[0], fb->format, rect));
-	drm_fb_memcpy(&dst, fb->pitches, vmap, fb, rect);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, vmap, rect);
+	drm_fb_memcpy(&dst, fb->pitches, &src_pix);
 
 	drm_dev_exit(idx);
 

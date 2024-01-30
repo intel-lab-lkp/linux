@@ -433,9 +433,11 @@ static void mgag200_handle_damage(struct mga_device *mdev, const struct iosys_ma
 				  struct drm_framebuffer *fb, struct drm_rect *clip)
 {
 	struct iosys_map dst = IOSYS_MAP_INIT_VADDR_IOMEM(mdev->vram);
+	struct drm_pixmap src_pix;
 
 	iosys_map_incr(&dst, drm_fb_clip_offset(fb->pitches[0], fb->format, clip));
-	drm_fb_memcpy(&dst, fb->pitches, vmap, fb, clip);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, vmap, clip);
+	drm_fb_memcpy(&dst, fb->pitches, &src_pix);
 }
 
 /*
