@@ -1190,8 +1190,9 @@ int fnic_send(struct fc_lport *lp, struct fc_frame *fp)
  *
  * Called without fnic_lock held.
  */
-void fnic_flush_tx(struct fnic *fnic)
+void fnic_flush_tx(struct work_struct *work)
 {
+	struct fnic *fnic = container_of(work, struct fnic, flush_work);
 	struct sk_buff *skb;
 	struct fc_frame *fp;
 
