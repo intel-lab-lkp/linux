@@ -256,21 +256,9 @@ int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 }
 
 static inline
-int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs,
-			struct virtqueue *vqs[], vq_callback_t *callbacks[],
-			const char * const names[], const bool *ctx,
-			struct irq_affinity *desc)
+int virtio_find_vqs_cfg(struct virtio_device *vdev, struct virtio_vq_config *cfg)
 {
-	struct virtio_vq_config cfg = {};
-
-	cfg.nvqs = nvqs;
-	cfg.vqs = vqs;
-	cfg.callbacks = callbacks;
-	cfg.names = names;
-	cfg.ctx = ctx;
-	cfg.desc = desc;
-
-	return vdev->config->find_vqs(vdev, &cfg);
+	return vdev->config->find_vqs(vdev, cfg);
 }
 
 /**
