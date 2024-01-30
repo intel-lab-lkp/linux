@@ -462,6 +462,45 @@ static void drm_fb_xrgb8888_to_rgb332_line(void *dbuf, const void *sbuf, unsigne
 	}
 }
 
+static void drm_fb_c1_to_xrgb8888_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
+{
+	__le32 *dbuf32 = dbuf;
+	const __le32 *sbuf32 = sbuf;
+	unsigned int shift = 0;
+	unsigned int x;
+	u32 pix;
+	u32 bit;
+	u32 val32;
+
+	for (x = 0; x < pixels; x++) {
+		if (!shift) {
+			pix = le32_to_cpu(sbuf32[x / 32]);
+			shift = 32;
+		}
+		--shift;
+		bit = (pix >> shift) & BIT(0);
+
+		val32 = GENMASK(31, 24) |
+			((palette[bit].red   >> 8) << 16) |
+			((palette[bit].green >> 8) << 8) |
+			((palette[bit].blue  >> 8));
+		dbuf32[x] = cpu_to_le32(val32);
+	}
+}
+
+void drm_fb_c1_to_xrgb8888(struct iosys_map *dst, const unsigned int *dst_pitch,
+			   const struct drm_pixmap *src_pix, struct drm_format_conv_state *state)
+{
+	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
+		4,
+	};
+
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
+		    drm_fb_c1_to_xrgb8888_line);
+}
+EXPORT_SYMBOL(drm_fb_c1_to_xrgb8888);
+
 /**
  * drm_fb_xrgb8888_to_rgb332 - Convert XRGB8888 to RGB332 clip buffer
  * @dst: Array of RGB332 destination buffers
