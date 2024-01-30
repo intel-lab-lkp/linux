@@ -219,6 +219,8 @@ static void __of_attach_node(struct device_node *np)
 			np->phandle = 0;
 	}
 
+	__of_phandle_update_cache(np, true);
+
 	np->child = NULL;
 	np->sibling = np->parent->child;
 	np->parent->child = np;

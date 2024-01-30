@@ -153,6 +153,8 @@ void __of_phandle_cache_inv_entry(phandle handle)
 	u32 handle_hash;
 	struct device_node *np;
 
+	lockdep_assert_held(&devtree_lock);
+
 	if (!handle)
 		return;
 
@@ -195,8 +197,8 @@ void __init of_core_init(void)
 	}
 	for_each_of_allnodes(np) {
 		__of_attach_node_sysfs(np);
-		if (np->phandle && !phandle_cache[of_phandle_cache_hash(np->phandle)])
-			phandle_cache[of_phandle_cache_hash(np->phandle)] = np;
+
+		__of_phandle_update_cache(np, false);
 	}
 	mutex_unlock(&of_mutex);
 
