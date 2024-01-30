@@ -155,4 +155,15 @@ size_t drm_fb_build_fourcc_list(struct drm_device *dev,
 				const u32 *native_fourccs, size_t native_nfourccs,
 				u32 *fourccs_out, size_t nfourccs_out);
 
+void drm_fb_fill_rgb565(struct iosys_map *dst, const unsigned int *dst_pitch,
+			unsigned int src_color, unsigned long pixels, unsigned long lines,
+			struct drm_format_conv_state *state);
+void drm_fb_fill_xrgb8888(struct iosys_map *dst, const unsigned int *dst_pitch,
+			  unsigned int src_color, unsigned long pixels, unsigned long lines,
+			  struct drm_format_conv_state *state);
+int drm_fb_fill(struct drm_device *dev,
+		struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t dst_format,
+		unsigned int src_color, unsigned long pixels, unsigned long lines,
+		struct drm_format_conv_state *state);
+
 #endif /* __LINUX_DRM_FORMAT_HELPER_H */

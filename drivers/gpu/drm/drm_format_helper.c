@@ -1413,3 +1413,153 @@ size_t drm_fb_build_fourcc_list(struct drm_device *dev,
 	return fourccs - fourccs_out;
 }
 EXPORT_SYMBOL(drm_fb_build_fourcc_list);
+
+/*
+ * FILL
+ */
+
+static int __drm_fill(void *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
+		      unsigned int src_color, unsigned long npixels, unsigned long lines,
+		      struct drm_format_conv_state *state,
+		      void (*fill_line)(void *dbuf, unsigned int npixels,
+					const struct drm_color_lut *color))
+{
+	const struct drm_color_lut *color = &state->palette[src_color];
+	unsigned long i;
+
+	if (!dst_pitch)
+		dst_pitch = npixels * dst_pixsize;
+
+	for (i = 0; i < lines; ++i) {
+		fill_line(dst, npixels, color);
+		dst += dst_pitch;
+	}
+
+	return 0;
+}
+
+static int __drm_fill_toio(void __iomem *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
+			   unsigned int src_color, unsigned long npixels, unsigned long lines,
+			   struct drm_format_conv_state *state,
+			   void (*fill_line)(void *dbuf, unsigned int npixels,
+					     const struct drm_color_lut *color))
+{
+	const struct drm_color_lut *color = &state->palette[src_color];
+	size_t dbuf_len = npixels * dst_pixsize;
+	unsigned long i;
+	void *dbuf;
+
+	dbuf = drm_format_conv_state_reserve(state, dbuf_len, GFP_KERNEL);
+	if (!dbuf)
+		return -ENOMEM;
+
+	if (!dst_pitch)
+		dst_pitch = npixels * dst_pixsize;
+
+	for (i = 0; i < lines; ++i) {
+		fill_line(dbuf, npixels, color);
+		memcpy_toio(dst, dbuf, dbuf_len);
+		dst += dst_pitch;
+	}
+
+	return 0;
+}
+
+static int drm_fill(struct iosys_map *dst,
+		    const unsigned int *dst_pitch, const u8 *dst_pixsize,
+		    unsigned int src_color, unsigned long pixels, unsigned long lines,
+		    struct drm_format_conv_state *state,
+		    void (*fill_line)(void *dbuf, unsigned int npixels,
+				      const struct drm_color_lut *color))
+{
+	static const unsigned int default_dst_pitch[DRM_FORMAT_MAX_PLANES] = {
+		0, 0, 0, 0
+	};
+
+	if (!dst_pitch)
+		dst_pitch = default_dst_pitch;
+
+	/* TODO: handle src in I/O memory here */
+	if (dst[0].is_iomem)
+		return __drm_fill_toio(
+			dst[0].vaddr_iomem, dst_pitch[0], dst_pixsize[0],
+			src_color, pixels, lines, state, fill_line);
+	else
+		return __drm_fill(
+			dst[0].vaddr, dst_pitch[0], dst_pixsize[0],
+			src_color, pixels, lines, state, fill_line);
+}
+
+static void drm_fill_rgb565_line(void *dbuf, unsigned int pixels,
+				 const struct drm_color_lut *color)
+{
+
+	__le32 *dbuf16 = dbuf;
+	unsigned int x;
+	u16 pix = ((color->red   >> 11) << 11) |
+		  ((color->green >> 10) << 5) |
+		  ((color->blue  >> 11));
+
+	for (x = 0; x < pixels; x++)
+		*dbuf16++ = cpu_to_le16(pix);
+}
+
+void drm_fb_fill_rgb565(struct iosys_map *dst, const unsigned int *dst_pitch,
+			unsigned int src_color, unsigned long pixels, unsigned long lines,
+			struct drm_format_conv_state *state)
+{
+	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
+		2,
+	};
+
+	drm_fill(dst, dst_pitch, dst_pixsize, src_color, pixels, lines,
+		 state, drm_fill_rgb565_line);
+}
+EXPORT_SYMBOL(drm_fb_fill_rgb565);
+
+static void drm_fill_xrgb8888_line(void *dbuf, unsigned int pixels,
+				   const struct drm_color_lut *color)
+{
+
+	__le32 *dbuf32 = dbuf;
+	unsigned int x;
+	u32 pix = GENMASK(31, 24) | /* fill unused bits */
+		  ((color->red   >> 8) << 16) |
+		  ((color->green >> 8) << 8) |
+		  ((color->blue  >> 8));
+
+	for (x = 0; x < pixels; x++)
+		*dbuf32++ = cpu_to_le32(pix);
+}
+
+void drm_fb_fill_xrgb8888(struct iosys_map *dst, const unsigned int *dst_pitch,
+			  unsigned int src_color, unsigned long pixels, unsigned long lines,
+			  struct drm_format_conv_state *state)
+{
+	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
+		4,
+	};
+
+	drm_fill(dst, dst_pitch, dst_pixsize, src_color, pixels, lines,
+		 state, drm_fill_xrgb8888_line);
+}
+EXPORT_SYMBOL(drm_fb_fill_xrgb8888);
+
+int drm_fb_fill(struct drm_device *dev,
+		struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t dst_format,
+		unsigned int src_color, unsigned long pixels, unsigned long lines,
+		struct drm_format_conv_state *state)
+{
+	if (dst_format == DRM_FORMAT_RGB565) {
+		drm_fb_fill_rgb565(dst, dst_pitch, src_color, pixels, lines, state);
+		return 0;
+	} else if (dst_format == DRM_FORMAT_XRGB8888) {
+		drm_fb_fill_xrgb8888(dst, dst_pitch, src_color, pixels, lines, state);
+		return 0;
+	}
+
+	drm_warn_once(dev, "No fill helper for %p4cc found.\n", &dst_format);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(drm_fb_fill);
