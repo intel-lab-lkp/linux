@@ -1208,7 +1208,7 @@ static bool
 xfs_inode_should_enable_dax(
 	struct xfs_inode *ip)
 {
-	if (!IS_ENABLED(CONFIG_FS_DAX))
+	if (!dax_is_supported())
 		return false;
 	if (xfs_has_dax_never(ip->i_mount))
 		return false;
