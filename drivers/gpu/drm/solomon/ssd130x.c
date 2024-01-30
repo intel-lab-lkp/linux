@@ -1069,6 +1069,7 @@ static int ssd133x_fb_blit_rect(struct drm_framebuffer *fb,
 	const struct drm_format_info *fi = drm_format_info(DRM_FORMAT_RGB332);
 	unsigned int dst_pitch;
 	struct iosys_map dst;
+	struct drm_pixmap src_pix;
 	int ret = 0;
 
 	if (!fi)
@@ -1081,7 +1082,8 @@ static int ssd133x_fb_blit_rect(struct drm_framebuffer *fb,
 		return ret;
 
 	iosys_map_set_vaddr(&dst, data_array);
-	drm_fb_xrgb8888_to_rgb332(&dst, &dst_pitch, vmap, fb, rect, fmtcnv_state);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, vmap, rect);
+	drm_fb_xrgb8888_to_rgb332(&dst, &dst_pitch, &src_pix, fmtcnv_state);
 
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 
