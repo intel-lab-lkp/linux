@@ -78,6 +78,12 @@ static inline bool daxdev_mapping_supported(struct vm_area_struct *vma,
 		return false;
 	return dax_synchronous(dax_dev);
 }
+static inline bool dax_is_supported(void)
+{
+	return !IS_ENABLED(CONFIG_ARM) &&
+	       !IS_ENABLED(CONFIG_MIPS) &&
+	       !IS_ENABLED(CONFIG_SPARC);
+}
 #else
 static inline void *dax_holder(struct dax_device *dax_dev)
 {
@@ -121,6 +127,10 @@ static inline size_t dax_recovery_write(struct dax_device *dax_dev,
 		pgoff_t pgoff, void *addr, size_t bytes, struct iov_iter *i)
 {
 	return 0;
+}
+static inline bool dax_is_supported(void)
+{
+	return false;
 }
 #endif
 
