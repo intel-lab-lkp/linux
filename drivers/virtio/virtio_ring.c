@@ -242,6 +242,7 @@ static struct virtqueue *__vring_new_virtqueue(unsigned int index,
 					       struct virtio_device *vdev,
 					       bool weak_barriers,
 					       bool context,
+					       bool premapped,
 					       bool (*notify)(struct virtqueue *),
 					       void (*callback)(struct virtqueue *),
 					       const char *name,
@@ -1192,6 +1193,7 @@ static struct virtqueue *vring_create_virtqueue_split(
 	bool weak_barriers,
 	bool may_reduce_num,
 	bool context,
+	bool premapped,
 	bool (*notify)(struct virtqueue *),
 	void (*callback)(struct virtqueue *),
 	const char *name,
@@ -1207,7 +1209,7 @@ static struct virtqueue *vring_create_virtqueue_split(
 		return NULL;
 
 	vq = __vring_new_virtqueue(index, &vring_split, vdev, weak_barriers,
-				   context, notify, callback, name, dma_dev);
+				   context, premapped, notify, callback, name, dma_dev);
 	if (!vq) {
 		vring_free_split(&vring_split, vdev, dma_dev);
 		return NULL;
@@ -2121,6 +2123,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	bool weak_barriers,
 	bool may_reduce_num,
 	bool context,
+	bool premapped,
 	bool (*notify)(struct virtqueue *),
 	void (*callback)(struct virtqueue *),
 	const char *name,
@@ -2153,7 +2156,11 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	vq->packed_ring = true;
 	vq->dma_dev = dma_dev;
 	vq->use_dma_api = vring_use_dma_api(vdev);
-	vq->premapped = false;
+
+	if (premapped && vq->use_dma_api)
+		vq->premapped = true;
+	else
+		vq->premapped = false;
 
 	vq->indirect = virtio_has_feature(vdev, VIRTIO_RING_F_INDIRECT_DESC) &&
 		!context;
@@ -2668,6 +2675,7 @@ static struct virtqueue *__vring_new_virtqueue(unsigned int index,
 					       struct virtio_device *vdev,
 					       bool weak_barriers,
 					       bool context,
+					       bool premapped,
 					       bool (*notify)(struct virtqueue *),
 					       void (*callback)(struct virtqueue *),
 					       const char *name,
@@ -2699,7 +2707,11 @@ static struct virtqueue *__vring_new_virtqueue(unsigned int index,
 #endif
 	vq->dma_dev = dma_dev;
 	vq->use_dma_api = vring_use_dma_api(vdev);
-	vq->premapped = false;
+
+	if (premapped && vq->use_dma_api)
+		vq->premapped = true;
+	else
+		vq->premapped = false;
 
 	vq->indirect = virtio_has_feature(vdev, VIRTIO_RING_F_INDIRECT_DESC) &&
 		!context;
@@ -2734,6 +2746,7 @@ struct virtqueue *vring_create_virtqueue(
 	bool weak_barriers,
 	bool may_reduce_num,
 	bool context,
+	bool premapped,
 	bool (*notify)(struct virtqueue *),
 	void (*callback)(struct virtqueue *),
 	const char *name)
@@ -2742,11 +2755,11 @@ struct virtqueue *vring_create_virtqueue(
 	if (virtio_has_feature(vdev, VIRTIO_F_RING_PACKED))
 		return vring_create_virtqueue_packed(index, num, vring_align,
 				vdev, weak_barriers, may_reduce_num,
-				context, notify, callback, name, vdev->dev.parent);
+				context, premapped, notify, callback, name, vdev->dev.parent);
 
 	return vring_create_virtqueue_split(index, num, vring_align,
 			vdev, weak_barriers, may_reduce_num,
-			context, notify, callback, name, vdev->dev.parent);
+			context, premapped, notify, callback, name, vdev->dev.parent);
 }
 EXPORT_SYMBOL_GPL(vring_create_virtqueue);
 
@@ -2758,6 +2771,7 @@ struct virtqueue *vring_create_virtqueue_dma(
 	bool weak_barriers,
 	bool may_reduce_num,
 	bool context,
+	bool premapped,
 	bool (*notify)(struct virtqueue *),
 	void (*callback)(struct virtqueue *),
 	const char *name,
@@ -2767,11 +2781,11 @@ struct virtqueue *vring_create_virtqueue_dma(
 	if (virtio_has_feature(vdev, VIRTIO_F_RING_PACKED))
 		return vring_create_virtqueue_packed(index, num, vring_align,
 				vdev, weak_barriers, may_reduce_num,
-				context, notify, callback, name, dma_dev);
+				context, premapped, notify, callback, name, dma_dev);
 
 	return vring_create_virtqueue_split(index, num, vring_align,
 			vdev, weak_barriers, may_reduce_num,
-			context, notify, callback, name, dma_dev);
+			context, premapped, notify, callback, name, dma_dev);
 }
 EXPORT_SYMBOL_GPL(vring_create_virtqueue_dma);
 
@@ -2923,6 +2937,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      struct virtio_device *vdev,
 				      bool weak_barriers,
 				      bool context,
+				      bool premapped,
 				      void *pages,
 				      bool (*notify)(struct virtqueue *vq),
 				      void (*callback)(struct virtqueue *vq),
@@ -2935,7 +2950,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 
 	vring_init(&vring_split.vring, num, pages, vring_align);
 	return __vring_new_virtqueue(index, &vring_split, vdev, weak_barriers,
-				     context, notify, callback, name,
+				     context, premapped, notify, callback, name,
 				     vdev->dev.parent);
 }
 EXPORT_SYMBOL_GPL(vring_new_virtqueue);

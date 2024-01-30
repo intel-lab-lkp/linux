@@ -317,7 +317,7 @@ static int parallel_test(u64 features,
 			err(1, "Could not set affinity to cpu %u", first_cpu);
 
 		vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &gvdev.vdev, true,
-					 false, guest_map,
+					 false, false, guest_map,
 					 fast_vringh ? no_notify_host
 					 : parallel_notify_host,
 					 never_callback_guest, "guest vq");
@@ -391,7 +391,7 @@ static int parallel_test(u64 features,
 				/* Swallow all notifies at once. */
 				if (read(to_guest[0], buf, sizeof(buf)) < 1)
 					break;
-				
+
 				receives++;
 				virtqueue_disable_cb(vq);
 				continue;
@@ -424,7 +424,7 @@ static int parallel_test(u64 features,
 				continue;
 			if (read(to_guest[0], buf, sizeof(buf)) < 1)
 				break;
-				
+
 			receives++;
 			virtqueue_disable_cb(vq);
 		}
@@ -485,7 +485,7 @@ int main(int argc, char *argv[])
 	memset(__user_addr_min, 0, vring_size(RINGSIZE, ALIGN));
 
 	/* Set up guest side. */
-	vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true, false,
+	vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true, false, false,
 				 __user_addr_min,
 				 never_notify_host, never_callback_guest,
 				 "guest vq");
@@ -669,7 +669,7 @@ int main(int argc, char *argv[])
 		/* Force creation of direct, which we modify. */
 		__virtio_clear_bit(&vdev, VIRTIO_RING_F_INDIRECT_DESC);
 		vq = vring_new_virtqueue(0, RINGSIZE, ALIGN, &vdev, true,
-					 false, __user_addr_min,
+					 false, false, __user_addr_min,
 					 never_notify_host,
 					 never_callback_guest,
 					 "guest vq");

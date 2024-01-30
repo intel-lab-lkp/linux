@@ -501,6 +501,7 @@ static void virtio_ccw_del_vqs(struct virtio_device *vdev)
 static struct virtqueue *virtio_ccw_setup_vq(struct virtio_device *vdev,
 					     int i, vq_callback_t *callback,
 					     const char *name, bool ctx,
+					     bool premapped,
 					     struct ccw1 *ccw)
 {
 	struct virtio_ccw_device *vcdev = to_vc_device(vdev);
@@ -539,7 +540,7 @@ static struct virtqueue *virtio_ccw_setup_vq(struct virtio_device *vdev,
 	may_reduce = vcdev->revision > 0;
 	vq = vring_create_virtqueue(i, info->num, KVM_VIRTIO_CCW_RING_ALIGN,
 				    vdev, true, may_reduce, ctx,
-				    notify, callback, name);
+				    premapped, notify, callback, name);
 
 	if (!vq) {
 		/* For now, we fail if we can't get the requested size. */
@@ -655,6 +656,7 @@ static int virtio_ccw_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 			       vq_callback_t *callbacks[],
 			       const char * const names[],
 			       const bool *ctx,
+			       const bool *premapped,
 			       struct irq_affinity *desc)
 {
 	struct virtio_ccw_device *vcdev = to_vc_device(vdev);
@@ -673,7 +675,9 @@ static int virtio_ccw_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 		}
 
 		vqs[i] = virtio_ccw_setup_vq(vdev, queue_idx++, callbacks[i],
-					     names[i], ctx ? ctx[i] : false,
+					     names[i],
+					     ctx ? ctx[i] : false,
+					     premapped ? premapped[i] : false,
 					     ccw);
 		if (IS_ERR(vqs[i])) {
 			ret = PTR_ERR(vqs[i]);

@@ -994,6 +994,7 @@ static int mlxbf_tmfifo_virtio_find_vqs(struct virtio_device *vdev,
 					vq_callback_t *callbacks[],
 					const char * const names[],
 					const bool *ctx,
+					const bool *premapped,
 					struct irq_affinity *desc)
 {
 	struct mlxbf_tmfifo_vdev *tm_vdev = mlxbf_vdev_to_tmfifo(vdev);
@@ -1015,7 +1016,7 @@ static int mlxbf_tmfifo_virtio_find_vqs(struct virtio_device *vdev,
 		size = vring_size(vring->num, vring->align);
 		memset(vring->va, 0, size);
 		vq = vring_new_virtqueue(i, vring->num, vring->align, vdev,
-					 false, false, vring->va,
+					 false, false, premapped, vring->va,
 					 mlxbf_tmfifo_virtio_notify,
 					 callbacks[i], names[i]);
 		if (!vq) {

@@ -103,7 +103,7 @@ EXPORT_SYMBOL(rproc_vq_interrupt);
 static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 				    unsigned int id,
 				    void (*callback)(struct virtqueue *vq),
-				    const char *name, bool ctx)
+				    const char *name, bool ctx, bool premapped)
 {
 	struct rproc_vdev *rvdev = vdev_to_rvdev(vdev);
 	struct rproc *rproc = vdev_to_rproc(vdev);
@@ -144,7 +144,8 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 	 * the 'weak' smp barriers, since we're talking with a real device.
 	 */
 	vq = vring_new_virtqueue(id, num, rvring->align, vdev, false, ctx,
-				 addr, rproc_virtio_notify, callback, name);
+				 premapped, addr, rproc_virtio_notify, callback,
+				 name);
 	if (!vq) {
 		dev_err(dev, "vring_new_virtqueue %s failed\n", name);
 		rproc_free_vring(rvring);
@@ -185,6 +186,7 @@ static int rproc_virtio_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 				 vq_callback_t *callbacks[],
 				 const char * const names[],
 				 const bool * ctx,
+				 const bool * premapped,
 				 struct irq_affinity *desc)
 {
 	int i, ret, queue_idx = 0;
@@ -196,7 +198,8 @@ static int rproc_virtio_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 		}
 
 		vqs[i] = rp_find_vq(vdev, queue_idx++, callbacks[i], names[i],
-				    ctx ? ctx[i] : false);
+				    ctx ? ctx[i] : false,
+				    premapped ? premapped[i] : false);
 		if (IS_ERR(vqs[i])) {
 			ret = PTR_ERR(vqs[i]);
 			goto error;
