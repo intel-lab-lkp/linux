@@ -536,11 +536,6 @@ static struct thermal_zone_device_ops int3400_thermal_ops = {
 	.change_mode = int3400_thermal_change_mode,
 };
 
-static struct thermal_zone_params int3400_thermal_params = {
-	.governor_name = "user_space",
-	.no_hwmon = true,
-};
-
 static void int3400_setup_gddv(struct int3400_thermal_priv *priv)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
@@ -572,6 +567,16 @@ out_free:
 static int int3400_thermal_probe(struct platform_device *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "INT3400 Thermal",
+			.no_hwmon = true,
+			.ops = &int3400_thermal_ops,
+		}
+	};
+	struct thermal_governor_params tgp = {
+		.governor_name = "user_space"
+	};
 	struct int3400_thermal_priv *priv;
 	int result;
 
@@ -609,9 +614,8 @@ static int int3400_thermal_probe(struct platform_device *pdev)
 
 	evaluate_odvp(priv);
 
-	priv->thermal = thermal_tripless_zone_device_register("INT3400 Thermal", priv,
-							      &int3400_thermal_ops,
-							      &int3400_thermal_params);
+	tzdp.tgp = &tgp;
+	priv->thermal = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(priv->thermal)) {
 		result = PTR_ERR(priv->thermal);
 		goto free_art_trt;
