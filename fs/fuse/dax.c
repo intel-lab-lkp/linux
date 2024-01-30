@@ -1337,6 +1337,13 @@ static bool fuse_should_enable_dax(struct inode *inode, unsigned int flags)
 		return false;
 
 	/*
+	 * Silently fallback to 'never' mode if the architecture does
+	 * not support DAX.
+	 */
+	if (!dax_is_supported())
+		return false;
+
+	/*
 	 * fc->dax may be NULL in 'inode' mode when filesystem device doesn't
 	 * support DAX, in which case it will silently fallback to 'never' mode.
 	 */
