@@ -181,16 +181,15 @@ void drm_pixmap_init_from_framebuffer(struct drm_pixmap *pix, const struct drm_f
 }
 EXPORT_SYMBOL(drm_pixmap_init_from_framebuffer);
 
-/* TODO: Make this function work with multi-plane formats. */
 static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
-			 const void *vaddr, const struct drm_framebuffer *fb,
-			 const struct drm_rect *clip, bool vaddr_cached_hint,
+			 const void *src, unsigned long src_pitch, unsigned long src_pixsize,
+			 const struct drm_rect *src_clip, bool src_cached_hint,
 			 struct drm_format_conv_state *state,
 			 void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
 {
-	unsigned long linepixels = drm_rect_width(clip);
-	unsigned long lines = drm_rect_height(clip);
-	size_t sbuf_len = linepixels * fb->format->cpp[0];
+	unsigned long pixels = drm_rect_width(src_clip);
+	unsigned long lines = drm_rect_height(src_clip);
+	size_t sbuf_len = pixels * src_pixsize;
 	void *stmp = NULL;
 	unsigned long i;
 	const void *sbuf;
@@ -200,47 +199,46 @@ static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_p
 	 * caching, so reads are uncached. Speed up access by fetching
 	 * one line at a time.
 	 */
-	if (!vaddr_cached_hint) {
+	if (!src_cached_hint) {
 		stmp = drm_format_conv_state_reserve(state, sbuf_len, GFP_KERNEL);
 		if (!stmp)
 			return -ENOMEM;
 	}
 
 	if (!dst_pitch)
-		dst_pitch = drm_rect_width(clip) * dst_pixsize;
-	vaddr += clip_offset(clip, fb->pitches[0], fb->format->cpp[0]);
+		dst_pitch = pixels * dst_pixsize;
+	src += clip_offset(src_clip, src_pitch, src_pixsize);
 
 	for (i = 0; i < lines; ++i) {
 		if (stmp)
-			sbuf = memcpy(stmp, vaddr, sbuf_len);
+			sbuf = memcpy(stmp, src, sbuf_len);
 		else
-			sbuf = vaddr;
-		xfrm_line(dst, sbuf, linepixels);
-		vaddr += fb->pitches[0];
+			sbuf = src;
+		xfrm_line(dst, sbuf, pixels);
+		src += src_pitch;
 		dst += dst_pitch;
 	}
 
 	return 0;
 }
 
-/* TODO: Make this function work with multi-plane formats. */
 static int __drm_fb_xfrm_toio(void __iomem *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
-			      const void *vaddr, const struct drm_framebuffer *fb,
-			      const struct drm_rect *clip, bool vaddr_cached_hint,
+			      const void *src, unsigned long src_pitch, unsigned long src_pixsize,
+			      const struct drm_rect *src_clip, bool src_cached_hint,
 			      struct drm_format_conv_state *state,
 			      void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
 {
-	unsigned long linepixels = drm_rect_width(clip);
-	unsigned long lines = drm_rect_height(clip);
-	size_t dbuf_len = linepixels * dst_pixsize;
+	unsigned long npixels = drm_rect_width(src_clip);
+	unsigned long lines = drm_rect_height(src_clip);
+	size_t dbuf_len = npixels * dst_pixsize;
 	size_t stmp_off = round_up(dbuf_len, ARCH_KMALLOC_MINALIGN); /* for sbuf alignment */
-	size_t sbuf_len = linepixels * fb->format->cpp[0];
+	size_t sbuf_len = npixels * src_pixsize;
 	void *stmp = NULL;
 	unsigned long i;
 	const void *sbuf;
 	void *dbuf;
 
-	if (vaddr_cached_hint) {
+	if (src_cached_hint) {
 		dbuf = drm_format_conv_state_reserve(state, dbuf_len, GFP_KERNEL);
 	} else {
 		dbuf = drm_format_conv_state_reserve(state, stmp_off + sbuf_len, GFP_KERNEL);
@@ -250,17 +248,17 @@ static int __drm_fb_xfrm_toio(void __iomem *dst, unsigned long dst_pitch, unsign
 		return -ENOMEM;
 
 	if (!dst_pitch)
-		dst_pitch = linepixels * dst_pixsize;
-	vaddr += clip_offset(clip, fb->pitches[0], fb->format->cpp[0]);
+		dst_pitch = npixels * dst_pixsize;
+	src += clip_offset(src_clip, src_pitch, src_pixsize);
 
 	for (i = 0; i < lines; ++i) {
 		if (stmp)
-			sbuf = memcpy(stmp, vaddr, sbuf_len);
+			sbuf = memcpy(stmp, src, sbuf_len);
 		else
-			sbuf = vaddr;
-		xfrm_line(dbuf, sbuf, linepixels);
+			sbuf = src;
+		xfrm_line(dbuf, sbuf, npixels);
 		memcpy_toio(dst, dbuf, dbuf_len);
-		vaddr += fb->pitches[0];
+		src += src_pitch;
 		dst += dst_pitch;
 	}
 
@@ -284,13 +282,15 @@ static int drm_fb_xfrm(struct iosys_map *dst,
 
 	/* TODO: handle src in I/O memory here */
 	if (dst[0].is_iomem)
-		return __drm_fb_xfrm_toio(dst[0].vaddr_iomem, dst_pitch[0], dst_pixsize[0],
-					  src[0].vaddr, fb, clip, vaddr_cached_hint, state,
-					  xfrm_line);
+		return __drm_fb_xfrm_toio(
+			dst[0].vaddr_iomem, dst_pitch[0], dst_pixsize[0],
+			src[0].vaddr, fb->pitches[0], fb->format->cpp[0],
+			clip, vaddr_cached_hint, state, xfrm_line);
 	else
-		return __drm_fb_xfrm(dst[0].vaddr, dst_pitch[0], dst_pixsize[0],
-				     src[0].vaddr, fb, clip, vaddr_cached_hint, state,
-				     xfrm_line);
+		return __drm_fb_xfrm(
+			dst[0].vaddr, dst_pitch[0], dst_pixsize[0],
+			src[0].vaddr, fb->pitches[0], fb->format->cpp[0],
+			clip, vaddr_cached_hint, state, xfrm_line);
 }
 
 /**
