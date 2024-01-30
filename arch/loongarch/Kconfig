@@ -132,6 +132,7 @@ config LOONGARCH
 	select HAVE_KPROBES_ON_FTRACE
 	select HAVE_KRETPROBES
 	select HAVE_KVM
+	select HAVE_LIVEPATCH
 	select HAVE_MOD_ARCH_SPECIFIC
 	select HAVE_NMI
 	select HAVE_OBJTOOL if AS_HAS_EXPLICIT_RELOCS
@@ -141,6 +142,7 @@ config LOONGARCH
 	select HAVE_PERF_USER_STACK_DUMP
 	select HAVE_PREEMPT_DYNAMIC_KEY
 	select HAVE_REGS_AND_STACK_ACCESS_API
+	select HAVE_RELIABLE_STACKTRACE if UNWINDER_ORC
 	select HAVE_RETHOOK
 	select HAVE_RSEQ
 	select HAVE_RUST
@@ -694,6 +696,8 @@ config KASAN_SHADOW_OFFSET
 	hex
 	default 0x0
 	depends on KASAN
+
+source "kernel/livepatch/Kconfig"
 
 menu "Power management options"
 
