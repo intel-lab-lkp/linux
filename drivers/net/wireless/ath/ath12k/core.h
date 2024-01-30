@@ -600,7 +600,12 @@ struct ath12k {
 struct ath12k_hw {
 	struct ieee80211_hw *hw;
 
+	/* To synchronize hardware restart operation */
+	struct mutex conf_mutex;
+
 	u8 num_radio;
+
+	/* Keep last */
 	struct ath12k radio[] __aligned(sizeof(void *));
 };
 

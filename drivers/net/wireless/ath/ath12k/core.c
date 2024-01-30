@@ -978,6 +978,8 @@ static void ath12k_core_post_reconfigure_recovery(struct ath12k_base *ab)
 		if (!ah)
 			continue;
 
+		mutex_lock(&ah->conf_mutex);
+
 		for (j = 0, restart_count = 0; j < ah->num_radio; j++) {
 			ar = &ah->radio[j];
 			if (ar->state == ATH12K_STATE_OFF)
@@ -1012,6 +1014,8 @@ static void ath12k_core_post_reconfigure_recovery(struct ath12k_base *ab)
 		/* Restart after all the link/radio got restart */
 		if (restart_count == ah->num_radio)
 			ieee80211_restart_hw(ah->hw);
+
+		mutex_unlock(&ah->conf_mutex);
 	}
 
 	complete(&ab->driver_recovery);
