@@ -31,6 +31,8 @@ struct drm_format_conv_state {
 		size_t size;
 		bool preallocated;
 	} tmp;
+
+	const struct drm_color_lut *palette;
 };
 
 #define __DRM_FORMAT_CONV_STATE_INIT(_mem, _size, _preallocated) { \

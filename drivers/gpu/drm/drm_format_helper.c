@@ -212,7 +212,8 @@ static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_p
 			 const void *src, unsigned long src_pitch, unsigned long src_pixsize,
 			 const struct drm_rect *src_clip, bool src_cached_hint,
 			 struct drm_format_conv_state *state,
-			 void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
+			 void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels,
+				 	   const struct drm_color_lut *palette))
 {
 	unsigned long pixels = drm_rect_width(src_clip);
 	unsigned long lines = drm_rect_height(src_clip);
@@ -241,7 +242,7 @@ static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_p
 			sbuf = memcpy(stmp, src, sbuf_len);
 		else
 			sbuf = src;
-		xfrm_line(dst, sbuf, pixels);
+		xfrm_line(dst, sbuf, pixels, state->palette);
 		src += src_pitch;
 		dst += dst_pitch;
 	}
@@ -253,7 +254,8 @@ static int __drm_fb_xfrm_toio(void __iomem *dst, unsigned long dst_pitch, unsign
 			      const void *src, unsigned long src_pitch, unsigned long src_pixsize,
 			      const struct drm_rect *src_clip, bool src_cached_hint,
 			      struct drm_format_conv_state *state,
-			      void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
+			      void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels,
+						const struct drm_color_lut* palette))
 {
 	unsigned long npixels = drm_rect_width(src_clip);
 	unsigned long lines = drm_rect_height(src_clip);
@@ -283,7 +285,7 @@ static int __drm_fb_xfrm_toio(void __iomem *dst, unsigned long dst_pitch, unsign
 			sbuf = memcpy(stmp, src, sbuf_len);
 		else
 			sbuf = src;
-		xfrm_line(dbuf, sbuf, npixels);
+		xfrm_line(dbuf, sbuf, npixels, state->palette);
 		memcpy_toio(dst, dbuf, dbuf_len);
 		src += src_pitch;
 		dst += dst_pitch;
@@ -297,7 +299,8 @@ static int drm_fb_xfrm(struct iosys_map *dst,
 		       const unsigned int *dst_pitch, const u8 *dst_pixsize,
 		       const struct drm_pixmap *src_pix, bool vaddr_cached_hint,
 		       struct drm_format_conv_state *state,
-		       void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
+		       void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels,
+			       		 const struct drm_color_lut *palette))
 {
 	static const unsigned int default_dst_pitch[DRM_FORMAT_MAX_PLANES] = {
 		0, 0, 0, 0
@@ -373,7 +376,8 @@ void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 }
 EXPORT_SYMBOL(drm_fb_memcpy);
 
-static void drm_fb_swab16_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_swab16_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       const struct drm_color_lut *palette)
 {
 	u16 *dbuf16 = dbuf;
 	const u16 *sbuf16 = sbuf;
@@ -383,7 +387,8 @@ static void drm_fb_swab16_line(void *dbuf, const void *sbuf, unsigned int pixels
 		*dbuf16++ = swab16(*sbuf16++);
 }
 
-static void drm_fb_swab32_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_swab32_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       const struct drm_color_lut *palette)
 {
 	u32 *dbuf32 = dbuf;
 	const u32 *sbuf32 = sbuf;
@@ -421,7 +426,8 @@ void drm_fb_swab(struct drm_device *dev,
 {
 	const struct drm_format_info *format = src_pix->format;
 	u8 cpp = DIV_ROUND_UP(drm_format_info_bpp(format, 0), 8);
-	void (*swab_line)(void *dbuf, const void *sbuf, unsigned int npixels);
+	void (*swab_line)(void *dbuf, const void *sbuf, unsigned int npixels,
+			  const struct drm_color_lut *palette);
 
 	switch (cpp) {
 	case 4:
@@ -440,7 +446,8 @@ void drm_fb_swab(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_fb_swab);
 
-static void drm_fb_xrgb8888_to_rgb332_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_rgb332_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	u8 *dbuf8 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -486,7 +493,8 @@ void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pi
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb332);
 
-static void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -505,7 +513,8 @@ static void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigne
 
 /* TODO: implement this helper as conversion to RGB565|BIG_ENDIAN */
 static void drm_fb_xrgb8888_to_rgb565_swab_line(void *dbuf, const void *sbuf,
-						unsigned int pixels)
+						unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -550,7 +559,8 @@ void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pi
 		2,
 	};
 
-	void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels);
+	void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels,
+			  const struct drm_color_lut *palette);
 
 	if (swab)
 		xfrm_line = drm_fb_xrgb8888_to_rgb565_swab_line;
@@ -561,7 +571,8 @@ void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pi
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb565);
 
-static void drm_fb_xrgb8888_to_xrgb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_xrgb1555_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -611,7 +622,8 @@ void drm_fb_xrgb8888_to_xrgb1555(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb1555);
 
-static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -662,7 +674,8 @@ void drm_fb_xrgb8888_to_argb1555(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb1555);
 
-static void drm_fb_xrgb8888_to_rgba5551_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_rgba5551_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -713,7 +726,8 @@ void drm_fb_xrgb8888_to_rgba5551(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgba5551);
 
-static void drm_fb_xrgb8888_to_rgb888_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_rgb888_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	u8 *dbuf8 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -762,7 +776,8 @@ void drm_fb_xrgb8888_to_rgb888(struct iosys_map *dst, const unsigned int *dst_pi
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb888);
 
-static void drm_fb_xrgb8888_to_argb8888_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_argb8888_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -809,7 +824,8 @@ void drm_fb_xrgb8888_to_argb8888(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb8888);
 
-static void drm_fb_xrgb8888_to_abgr8888_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_abgr8888_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -838,7 +854,8 @@ static void drm_fb_xrgb8888_to_abgr8888(struct iosys_map *dst, const unsigned in
 		    drm_fb_xrgb8888_to_abgr8888_line);
 }
 
-static void drm_fb_xrgb8888_to_xbgr8888_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_xbgr8888_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -867,7 +884,8 @@ static void drm_fb_xrgb8888_to_xbgr8888(struct iosys_map *dst, const unsigned in
 		    drm_fb_xrgb8888_to_xbgr8888_line);
 }
 
-static void drm_fb_xrgb8888_to_xrgb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_xrgb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -918,7 +936,8 @@ void drm_fb_xrgb8888_to_xrgb2101010(struct iosys_map *dst, const unsigned int *d
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb2101010);
 
-static void drm_fb_xrgb8888_to_argb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_argb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -970,7 +989,8 @@ void drm_fb_xrgb8888_to_argb2101010(struct iosys_map *dst, const unsigned int *d
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb2101010);
 
-static void drm_fb_xrgb8888_to_gray8_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_xrgb8888_to_gray8_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	u8 *dbuf8 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -1109,7 +1129,8 @@ int drm_fb_blit(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_fb_blit);
 
-static void drm_fb_gray8_to_mono_line(void *dbuf, const void *sbuf, unsigned int pixels)
+static void drm_fb_gray8_to_mono_line(void *dbuf, const void *sbuf, unsigned int pixels,
+			       		 const struct drm_color_lut *palette)
 {
 	u8 *dbuf8 = dbuf;
 	const u8 *sbuf8 = sbuf;
@@ -1208,8 +1229,8 @@ void drm_fb_xrgb8888_to_mono(struct drm_device *dev,
 	vaddr += clip_offset(clip, src_pix->pitches[0], cpp);
 	for (y = 0; y < lines; y++) {
 		src32 = memcpy(src32, vaddr, len_src32);
-		drm_fb_xrgb8888_to_gray8_line(gray8, src32, linepixels);
-		drm_fb_gray8_to_mono_line(mono, gray8, linepixels);
+		drm_fb_xrgb8888_to_gray8_line(gray8, src32, linepixels, state->palette);
+		drm_fb_gray8_to_mono_line(mono, gray8, linepixels, state->palette);
 		vaddr += src_pix->pitches[0];
 		mono += dst_pitch_0;
 	}
