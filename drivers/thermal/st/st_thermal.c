@@ -143,9 +143,9 @@ int st_thermal_register(struct platform_device *pdev,
 	struct st_thermal_sensor *sensor;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	struct thermal_zone_device_params tzdp;
 	const struct of_device_id *match;
 
-	int polling_delay;
 	int ret;
 
 	if (!np) {
@@ -197,14 +197,17 @@ int st_thermal_register(struct platform_device *pdev,
 	if (ret)
 		goto sensor_off;
 
-	polling_delay = sensor->ops->register_enable_irq ? 0 : 1000;
-
 	trip.temperature = sensor->cdata->crit_temp;
 	trip.type = THERMAL_TRIP_CRITICAL;
 
-	sensor->thermal_dev =
-		thermal_zone_device_register_with_trips(dev_name(dev), &trip, 1, 0, sensor,
-							&st_tz_ops, NULL, 0, polling_delay);
+	tzdp.tzp.type = dev_name(dev);
+	tzdp.tzp.ops = &st_tz_ops;
+	tzdp.tzp.devdata = sensor;
+	tzdp.tzp.trips = &trip;
+	tzdp.tzp.num_trips = 1;
+	tzdp.tzp.polling_delay = sensor->ops->register_enable_irq ? 0 : 1000;
+
+	sensor->thermal_dev = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(sensor->thermal_dev)) {
 		dev_err(dev, "failed to register thermal zone device\n");
 		ret = PTR_ERR(sensor->thermal_dev);
