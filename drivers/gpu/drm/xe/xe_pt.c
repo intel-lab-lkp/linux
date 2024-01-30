@@ -1208,10 +1208,11 @@ __xe_pt_bind_vma(struct xe_tile *tile, struct xe_vma *vma, struct xe_exec_queue 
 	struct dma_fence *fence;
 	struct invalidation_fence *ifence = NULL;
 	struct xe_range_fence *rfence;
+	struct xe_bo *bo = xe_vma_bo(vma);
 	int err;
 
 	bind_pt_update.locked = false;
-	xe_bo_assert_held(xe_vma_bo(vma));
+	xe_bo_assert_held(bo);
 	xe_vm_assert_held(vm);
 
 	vm_dbg(&xe_vma_vm(vma)->xe->drm,
@@ -1252,8 +1253,21 @@ __xe_pt_bind_vma(struct xe_tile *tile, struct xe_vma *vma, struct xe_exec_queue 
 		return ERR_PTR(-ENOMEM);
 	}
 
+	/*
+	 * On Xe2 BO which was pinned as framebuffer before with different
+	 * PAT index cannot be bound with different PAT index. This is
+	 * to prevent switching CCS on/off from framebuffers on the fly
+	 * with Xe2.
+	 */
+	if (bo) {
+		if (bo->has_sealed_pat_index && bo->pat_index != vma->pat_index)
+			return ERR_PTR(-EINVAL);
+
+		bo->pat_index = vma->pat_index;
+	}
+
 	fence = xe_migrate_update_pgtables(tile->migrate,
-					   vm, xe_vma_bo(vma), q,
+					   vm, bo, q,
 					   entries, num_entries,
 					   syncs, num_syncs,
 					   &bind_pt_update.base);
@@ -1287,8 +1301,8 @@ __xe_pt_bind_vma(struct xe_tile *tile, struct xe_vma *vma, struct xe_exec_queue 
 				   DMA_RESV_USAGE_KERNEL :
 				   DMA_RESV_USAGE_BOOKKEEP);
 
-		if (!xe_vma_has_no_bo(vma) && !xe_vma_bo(vma)->vm)
-			dma_resv_add_fence(xe_vma_bo(vma)->ttm.base.resv, fence,
+		if (!xe_vma_has_no_bo(vma) && !bo->vm)
+			dma_resv_add_fence(bo->ttm.base.resv, fence,
 					   DMA_RESV_USAGE_BOOKKEEP);
 		xe_pt_commit_bind(vma, entries, num_entries, rebind,
 				  bind_pt_update.locked ? &deferred : NULL);
