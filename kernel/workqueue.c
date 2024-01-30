@@ -1702,32 +1702,14 @@ static int wq_select_unbound_cpu(int cpu)
 	return new_cpu;
 }
 
-static void __queue_work(int cpu, struct workqueue_struct *wq,
-			 struct work_struct *work)
+static void __queue_work_rcu_locked(int cpu, struct workqueue_struct *wq,
+				    struct work_struct *work)
 {
 	struct pool_workqueue *pwq;
 	struct worker_pool *last_pool, *pool;
 	unsigned int work_flags;
 	unsigned int req_cpu = cpu;
 
-	/*
-	 * While a work item is PENDING && off queue, a task trying to
-	 * steal the PENDING will busy-loop waiting for it to either get
-	 * queued or lose PENDING.  Grabbing PENDING and queueing should
-	 * happen with IRQ disabled.
-	 */
-	lockdep_assert_irqs_disabled();
-
-
-	/*
-	 * For a draining wq, only works from the same workqueue are
-	 * allowed. The __WQ_DESTROYING helps to spot the issue that
-	 * queues a new work item to a wq after destroy_workqueue(wq).
-	 */
-	if (unlikely(wq->flags & (__WQ_DESTROYING | __WQ_DRAINING) &&
-		     WARN_ON_ONCE(!is_chained_work(wq))))
-		return;
-	rcu_read_lock();
 retry:
 	/* pwq which will be used unless @work is executing elsewhere */
 	if (req_cpu == WORK_CPU_UNBOUND) {
@@ -1808,6 +1790,30 @@ retry:
 
 out:
 	raw_spin_unlock(&pool->lock);
+}
+
+static void __queue_work(int cpu, struct workqueue_struct *wq,
+			 struct work_struct *work)
+{
+	/*
+	 * While a work item is PENDING && off queue, a task trying to
+	 * steal the PENDING will busy-loop waiting for it to either get
+	 * queued or lose PENDING.  Grabbing PENDING and queueing should
+	 * happen with IRQ disabled.
+	 */
+	lockdep_assert_irqs_disabled();
+
+	/*
+	 * For a draining wq, only works from the same workqueue are
+	 * allowed. The __WQ_DESTROYING helps to spot the issue that
+	 * queues a new work item to a wq after destroy_workqueue(wq).
+	 */
+	if (unlikely(wq->flags & (__WQ_DESTROYING | __WQ_DRAINING) &&
+		     WARN_ON_ONCE(!is_chained_work(wq))))
+		return;
+
+	rcu_read_lock();
+	__queue_work_rcu_locked(cpu, wq, work);
 	rcu_read_unlock();
 }
 
