@@ -7,13 +7,16 @@
 #ifndef __INTER_CORE_VIRT_ETH_H__
 #define __INTER_CORE_VIRT_ETH_H__
 
+#include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/netdevice.h>
 #include <linux/rpmsg.h>
 
 enum icve_msg_type {
 	ICVE_REQUEST_MSG = 0,
 	ICVE_RESPONSE_MSG,
+	ICVE_NOTIFY_MSG,
 };
 
 enum icve_rpmsg_type {
@@ -22,6 +25,11 @@ enum icve_rpmsg_type {
 
 	/* Response types */
 	ICVE_RESP_SHM_INFO,
+
+	/* Notification types */
+	ICVE_NOTIFY_PORT_UP,
+	ICVE_NOTIFY_PORT_DOWN,
+	ICVE_NOTIFY_REMOTE_READY,
 };
 
 struct icve_shm_info {
@@ -70,7 +78,11 @@ struct shared_mem {
 struct icve_port {
 	struct shared_mem *tx_buffer; /* Write buffer for data to be consumed remote side */
 	struct shared_mem *rx_buffer; /* Read buffer for data to be consumed by this driver */
+	struct timer_list rx_timer;
 	struct icve_common *common;
+	struct napi_struct rx_napi;
+	u8 local_mac_addr[ETH_ALEN];
+	struct net_device *ndev;
 	u32 icve_max_buffers;
 	u32 port_id; /* Unique ID for the port : TODO: Define range for use by Linux and non linux */
 
@@ -85,5 +97,9 @@ struct icve_common {
 	struct icve_port *port;
 	struct device *dev;
 } __packed;
+
+struct icve_ndev_priv {
+	struct icve_port *port;
+};
 
 #endif /* __INTER_CORE_VIRT_ETH_H__ */
