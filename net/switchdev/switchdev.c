@@ -22,16 +22,102 @@
 static LIST_HEAD(deferred);
 static DEFINE_SPINLOCK(deferred_lock);
 
-typedef void switchdev_deferred_func_t(struct net_device *dev,
-				       const void *data);
-
 struct switchdev_deferred_item {
 	struct list_head list;
-	struct net_device *dev;
+
+	enum switchdev_notifier_type nt;
+	union {
+		/* Guaranteed to be first in all subtypes */
+		struct switchdev_notifier_info info;
+
+		struct {
+			struct switchdev_notifier_port_attr_info info;
+			struct switchdev_attr attr;
+		} attr;
+
+		struct {
+			struct switchdev_notifier_port_obj_info info;
+			union {
+				struct switchdev_obj_port_vlan vlan;
+				struct switchdev_obj_port_mdb mdb;
+			};
+		} obj;
+	};
 	netdevice_tracker dev_tracker;
-	switchdev_deferred_func_t *func;
-	unsigned long data[];
 };
+
+static int switchdev_port_notify(struct net_device *dev,
+				 enum switchdev_notifier_type nt,
+				 struct switchdev_notifier_info *info,
+				 struct netlink_ext_ack *extack)
+{
+	const struct switchdev_notifier_port_attr_info *attri;
+	const struct switchdev_notifier_port_obj_info *obji;
+	int err;
+	int rc;
+
+	rc = call_switchdev_blocking_notifiers(nt, dev, info, extack);
+	err = notifier_to_errno(rc);
+
+	switch (nt) {
+	case SWITCHDEV_PORT_ATTR_SET:
+		attri = container_of(info, typeof(*attri), info);
+		if (err) {
+			WARN_ON(!attri->handled);
+			return err;
+		}
+		if (!attri->handled)
+			return -EOPNOTSUPP;
+		break;
+	case SWITCHDEV_PORT_OBJ_ADD:
+	case SWITCHDEV_PORT_OBJ_DEL:
+		obji = container_of(info, typeof(*obji), info);
+		if (err) {
+			WARN_ON(!obji->handled);
+			return err;
+		}
+		if (!obji->handled)
+			return -EOPNOTSUPP;
+		break;
+	default:
+		break;
+	}
+
+	return err;
+}
+
+static void switchdev_deferred_notify(struct switchdev_deferred_item *dfitem)
+{
+	const struct switchdev_attr *attr;
+	const struct switchdev_obj *obj;
+	char info_str[128];
+	int err;
+
+	err = switchdev_port_notify(dfitem->info.dev, dfitem->nt, &dfitem->info, NULL);
+	if (err && err != -EOPNOTSUPP) {
+		switchdev_notifier_str(dfitem->nt, &dfitem->info,
+				       info_str, sizeof(info_str));
+		netdev_err(dfitem->info.dev,
+			   "deferred switchdev call failed (err=%d): %s",
+			   err, info_str);
+	}
+
+	switch (dfitem->nt) {
+	case SWITCHDEV_PORT_ATTR_SET:
+		attr = &dfitem->attr.attr;
+		if (attr->complete)
+			attr->complete(dfitem->info.dev, err, attr->complete_priv);
+		break;
+	case SWITCHDEV_PORT_OBJ_ADD:
+	case SWITCHDEV_PORT_OBJ_DEL:
+		obj = dfitem->obj.info.obj;
+		if (obj->complete)
+			obj->complete(dfitem->info.dev, err, obj->complete_priv);
+		break;
+	default:
+		break;
+	}
+}
 
 static struct switchdev_deferred_item *switchdev_deferred_dequeue(void)
 {
@@ -63,8 +149,8 @@ void switchdev_deferred_process(void)
 	ASSERT_RTNL();
 
 	while ((dfitem = switchdev_deferred_dequeue())) {
-		dfitem->func(dfitem->dev, dfitem->data);
-		netdev_put(dfitem->dev, &dfitem->dev_tracker);
+		switchdev_deferred_notify(dfitem);
+		netdev_put(dfitem->info.dev, &dfitem->dev_tracker);
 		kfree(dfitem);
 	}
 }
@@ -79,19 +165,9 @@ static void switchdev_deferred_process_work(struct work_struct *work)
 
 static DECLARE_WORK(deferred_process_work, switchdev_deferred_process_work);
 
-static int switchdev_deferred_enqueue(struct net_device *dev,
-				      const void *data, size_t data_len,
-				      switchdev_deferred_func_t *func)
+static int switchdev_deferred_enqueue(struct switchdev_deferred_item *dfitem)
 {
-	struct switchdev_deferred_item *dfitem;
-
-	dfitem = kmalloc(struct_size(dfitem, data, data_len), GFP_ATOMIC);
-	if (!dfitem)
-		return -ENOMEM;
-	dfitem->dev = dev;
-	dfitem->func = func;
-	memcpy(dfitem->data, data, data_len);
-	netdev_hold(dev, &dfitem->dev_tracker, GFP_ATOMIC);
+	netdev_hold(dfitem->info.dev, &dfitem->dev_tracker, GFP_ATOMIC);
 	spin_lock_bh(&deferred_lock);
 	list_add_tail(&dfitem->list, &deferred);
 	spin_unlock_bh(&deferred_lock);
@@ -99,60 +175,22 @@ static int switchdev_deferred_enqueue(struct net_device *dev,
 	return 0;
 }
 
-static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
-				      struct net_device *dev,
-				      const struct switchdev_attr *attr,
-				      struct netlink_ext_ack *extack)
+static int switchdev_port_attr_defer(struct net_device *dev,
+				     const struct switchdev_attr *attr)
 {
-	int err;
-	int rc;
+	struct switchdev_deferred_item *dfitem;
 
-	struct switchdev_notifier_port_attr_info attr_info = {
-		.attr = attr,
-		.handled = false,
-	};
+	dfitem = kzalloc(sizeof(*dfitem), GFP_ATOMIC);
+	if (!dfitem)
+		return -ENOMEM;
 
-	rc = call_switchdev_blocking_notifiers(nt, dev,
-					       &attr_info.info, extack);
-	err = notifier_to_errno(rc);
-	if (err) {
-		WARN_ON(!attr_info.handled);
-		return err;
-	}
-
-	if (!attr_info.handled)
-		return -EOPNOTSUPP;
-
+	dfitem->nt = SWITCHDEV_PORT_ATTR_SET;
+	dfitem->info.dev = dev;
+	dfitem->attr.attr = *attr;
+	dfitem->attr.info.attr = &dfitem->attr.attr;
+	dfitem->attr.info.handled = false;
+	switchdev_deferred_enqueue(dfitem);
 	return 0;
-}
-
-static int switchdev_port_attr_set_now(struct net_device *dev,
-				       const struct switchdev_attr *attr,
-				       struct netlink_ext_ack *extack)
-{
-	return switchdev_port_attr_notify(SWITCHDEV_PORT_ATTR_SET, dev, attr,
-					  extack);
-}
-
-static void switchdev_port_attr_set_deferred(struct net_device *dev,
-					     const void *data)
-{
-	const struct switchdev_attr *attr = data;
-	int err;
-
-	err = switchdev_port_attr_set_now(dev, attr, NULL);
-	if (err && err != -EOPNOTSUPP)
-		netdev_err(dev, "failed (err=%d) to set attribute (id=%d)\n",
-			   err, attr->id);
-	if (attr->complete)
-		attr->complete(dev, err, attr->complete_priv);
-}
-
-static int switchdev_port_attr_set_defer(struct net_device *dev,
-					 const struct switchdev_attr *attr)
-{
-	return switchdev_deferred_enqueue(dev, attr, sizeof(*attr),
-					  switchdev_port_attr_set_deferred);
 }
 
 /**
@@ -169,73 +207,75 @@ int switchdev_port_attr_set(struct net_device *dev,
 			    const struct switchdev_attr *attr,
 			    struct netlink_ext_ack *extack)
 {
+	struct switchdev_notifier_port_attr_info attr_info = {
+		.attr = attr,
+		.handled = false,
+	};
+
 	if (attr->flags & SWITCHDEV_F_DEFER)
-		return switchdev_port_attr_set_defer(dev, attr);
+		return switchdev_port_attr_defer(dev, attr);
+
 	ASSERT_RTNL();
-	return switchdev_port_attr_set_now(dev, attr, extack);
+	return switchdev_port_notify(dev, SWITCHDEV_PORT_ATTR_SET,
+				     &attr_info.info, extack);
 }
 EXPORT_SYMBOL_GPL(switchdev_port_attr_set);
 
-static size_t switchdev_obj_size(const struct switchdev_obj *obj)
+static int switchdev_port_obj_defer(struct net_device *dev,
+				    enum switchdev_notifier_type nt,
+				    const struct switchdev_obj *obj)
 {
+	const struct switchdev_obj_port_vlan *vlan;
+	const struct switchdev_obj_port_mdb *mdb;
+	struct switchdev_deferred_item *dfitem;
+
+	dfitem = kzalloc(sizeof(*dfitem), GFP_ATOMIC);
+	if (!dfitem)
+		return -ENOMEM;
+
+	dfitem->nt = nt;
+	dfitem->info.dev = dev;
+	dfitem->obj.info.handled = false;
+
 	switch (obj->id) {
 	case SWITCHDEV_OBJ_ID_PORT_VLAN:
-		return sizeof(struct switchdev_obj_port_vlan);
+		vlan = SWITCHDEV_OBJ_PORT_VLAN(obj);
+		dfitem->obj.vlan = *vlan;
+		dfitem->obj.info.obj = &dfitem->obj.vlan.obj;
+		break;
 	case SWITCHDEV_OBJ_ID_PORT_MDB:
-		return sizeof(struct switchdev_obj_port_mdb);
 	case SWITCHDEV_OBJ_ID_HOST_MDB:
-		return sizeof(struct switchdev_obj_port_mdb);
+		mdb = SWITCHDEV_OBJ_PORT_MDB(obj);
+		dfitem->obj.mdb = *mdb;
+		dfitem->obj.info.obj = &dfitem->obj.mdb.obj;
+		break;
 	default:
-		BUG();
+		goto err_free;
 	}
+
+	switchdev_deferred_enqueue(dfitem);
 	return 0;
+
+err_free:
+	kfree(dfitem);
+	return -EINVAL;
 }
 
-static int switchdev_port_obj_notify(enum switchdev_notifier_type nt,
-				     struct net_device *dev,
-				     const struct switchdev_obj *obj,
-				     struct netlink_ext_ack *extack)
+static int switchdev_port_obj_op(struct net_device *dev,
+				 enum switchdev_notifier_type nt,
+				 const struct switchdev_obj *obj,
+				 struct netlink_ext_ack *extack)
 {
-	int rc;
-	int err;
-
 	struct switchdev_notifier_port_obj_info obj_info = {
 		.obj = obj,
 		.handled = false,
 	};
 
-	rc = call_switchdev_blocking_notifiers(nt, dev, &obj_info.info, extack);
-	err = notifier_to_errno(rc);
-	if (err) {
-		WARN_ON(!obj_info.handled);
-		return err;
-	}
-	if (!obj_info.handled)
-		return -EOPNOTSUPP;
-	return 0;
-}
-
-static void switchdev_port_obj_add_deferred(struct net_device *dev,
-					    const void *data)
-{
-	const struct switchdev_obj *obj = data;
-	int err;
+	if (obj->flags & SWITCHDEV_F_DEFER)
+		return switchdev_port_obj_defer(dev, nt, obj);
 
 	ASSERT_RTNL();
-	err = switchdev_port_obj_notify(SWITCHDEV_PORT_OBJ_ADD,
-					dev, obj, NULL);
-	if (err && err != -EOPNOTSUPP)
-		netdev_err(dev, "failed (err=%d) to add object (id=%d)\n",
-			   err, obj->id);
-	if (obj->complete)
-		obj->complete(dev, err, obj->complete_priv);
-}
-
-static int switchdev_port_obj_add_defer(struct net_device *dev,
-					const struct switchdev_obj *obj)
-{
-	return switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
-					  switchdev_port_obj_add_deferred);
+	return switchdev_port_notify(dev, nt, &obj_info.info, extack);
 }
 
 /**
@@ -252,41 +292,9 @@ int switchdev_port_obj_add(struct net_device *dev,
 			   const struct switchdev_obj *obj,
 			   struct netlink_ext_ack *extack)
 {
-	if (obj->flags & SWITCHDEV_F_DEFER)
-		return switchdev_port_obj_add_defer(dev, obj);
-	ASSERT_RTNL();
-	return switchdev_port_obj_notify(SWITCHDEV_PORT_OBJ_ADD,
-					 dev, obj, extack);
+	return switchdev_port_obj_op(dev, SWITCHDEV_PORT_OBJ_ADD, obj, extack);
 }
 EXPORT_SYMBOL_GPL(switchdev_port_obj_add);
-
-static int switchdev_port_obj_del_now(struct net_device *dev,
-				      const struct switchdev_obj *obj)
-{
-	return switchdev_port_obj_notify(SWITCHDEV_PORT_OBJ_DEL,
-					 dev, obj, NULL);
-}
-
-static void switchdev_port_obj_del_deferred(struct net_device *dev,
-					    const void *data)
-{
-	const struct switchdev_obj *obj = data;
-	int err;
-
-	err = switchdev_port_obj_del_now(dev, obj);
-	if (err && err != -EOPNOTSUPP)
-		netdev_err(dev, "failed (err=%d) to del object (id=%d)\n",
-			   err, obj->id);
-	if (obj->complete)
-		obj->complete(dev, err, obj->complete_priv);
-}
-
-static int switchdev_port_obj_del_defer(struct net_device *dev,
-					const struct switchdev_obj *obj)
-{
-	return switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
-					  switchdev_port_obj_del_deferred);
-}
 
 /**
  *	switchdev_port_obj_del - Delete port object
@@ -300,10 +308,7 @@ static int switchdev_port_obj_del_defer(struct net_device *dev,
 int switchdev_port_obj_del(struct net_device *dev,
 			   const struct switchdev_obj *obj)
 {
-	if (obj->flags & SWITCHDEV_F_DEFER)
-		return switchdev_port_obj_del_defer(dev, obj);
-	ASSERT_RTNL();
-	return switchdev_port_obj_del_now(dev, obj);
+	return switchdev_port_obj_op(dev, SWITCHDEV_PORT_OBJ_DEL, obj, NULL);
 }
 EXPORT_SYMBOL_GPL(switchdev_port_obj_del);
 
