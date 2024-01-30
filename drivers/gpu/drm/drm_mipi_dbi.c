@@ -226,7 +226,7 @@ int mipi_dbi_buf_copy(void *dst, struct iosys_map *src, struct drm_framebuffer *
 			drm_fb_memcpy(&dst_map, NULL, &src_pix);
 		break;
 	case DRM_FORMAT_XRGB8888:
-		drm_fb_xrgb8888_to_rgb565(&dst_map, NULL, src, fb, clip, fmtcnv_state, swap);
+		drm_fb_xrgb8888_to_rgb565(&dst_map, NULL, &src_pix, fmtcnv_state, swap);
 		break;
 	default:
 		drm_err_once(fb->dev, "Format is not supported: %p4cc\n",

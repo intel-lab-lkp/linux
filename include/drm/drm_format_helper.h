@@ -106,9 +106,8 @@ void drm_fb_swab(struct drm_device *dev,
 void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pitch,
 			       const struct drm_pixmap *src_pix, struct drm_format_conv_state *state);
 void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pitch,
-			       const struct iosys_map *src, const struct drm_framebuffer *fb,
-			       const struct drm_rect *clip, struct drm_format_conv_state *state,
-			       bool swab);
+			       const struct drm_pixmap *src_pix,
+			       struct drm_format_conv_state *state, bool swab);
 void drm_fb_xrgb8888_to_xrgb1555(struct iosys_map *dst, const unsigned int *dst_pitch,
 				 const struct iosys_map *src, const struct drm_framebuffer *fb,
 				 const struct drm_rect *clip, struct drm_format_conv_state *state);
