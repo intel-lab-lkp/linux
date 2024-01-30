@@ -644,7 +644,10 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 
 	if (test_opt(&sbi->opt, DAX_ALWAYS)) {
-		if (!sbi->dax_dev) {
+		if (!dax_is_supported()) {
+			errorfc(fc, "DAX unsupported by architecture. Turning off DAX.");
+			clear_opt(&sbi->opt, DAX_ALWAYS);
+		} else if (!sbi->dax_dev) {
 			errorfc(fc, "DAX unsupported by block device. Turning off DAX.");
 			clear_opt(&sbi->opt, DAX_ALWAYS);
 		} else if (sbi->blkszbits != PAGE_SHIFT) {
