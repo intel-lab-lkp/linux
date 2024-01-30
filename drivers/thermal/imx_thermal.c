@@ -599,6 +599,15 @@ static inline void imx_thermal_unregister_legacy_cooling(struct imx_thermal_data
 
 static int imx_thermal_probe(struct platform_device *pdev)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "imx_thermal_zone",
+			.ops = &imx_tz_ops,
+			.mask = BIT(IMX_TRIP_PASSIVE),
+			.passive_delay = IMX_PASSIVE_DELAY,
+			.polling_delay = IMX_POLLING_DELAY,
+		}
+	};
 	struct imx_thermal_data *data;
 	struct regmap *map;
 	int measure_freq;
@@ -696,13 +705,11 @@ static int imx_thermal_probe(struct platform_device *pdev)
 		goto legacy_cleanup;
 	}
 
-	data->tz = thermal_zone_device_register_with_trips("imx_thermal_zone",
-							   trips,
-							   ARRAY_SIZE(trips),
-							   BIT(IMX_TRIP_PASSIVE), data,
-							   &imx_tz_ops, NULL,
-							   IMX_PASSIVE_DELAY,
-							   IMX_POLLING_DELAY);
+	tzdp.tzp.devdata = data;
+	tzdp.tzp.trips = &trips;
+	tzdp.tzp.num_trips = ARRAY_SIZE(trips);
+
+	data->tz = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(data->tz)) {
 		ret = PTR_ERR(data->tz);
 		dev_err(&pdev->dev,
