@@ -1,0 +1,2 @@
+# Panfrost is not a KMS driver, so skip the KMS tests
+kms_.*
