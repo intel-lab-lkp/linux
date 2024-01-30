@@ -57,10 +57,6 @@ struct zone_device {
 	struct cpumask			cpumask;
 };
 
-static struct thermal_zone_params pkg_temp_tz_params = {
-	.no_hwmon	= true,
-};
-
 /* Keep track of how many zone pointers we allocated in init() */
 static int max_id __read_mostly;
 /* Array of zone pointers */
@@ -312,6 +308,13 @@ static struct thermal_trip *pkg_temp_thermal_trips_init(int cpu, int tj_max, int
 
 static int pkg_temp_thermal_device_add(unsigned int cpu)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "x86_pkg_temp",
+			.ops = &tzone_ops,
+			.no_hwmon = true,
+		}
+	};
 	int id = topology_logical_die_id(cpu);
 	u32 eax, ebx, ecx, edx;
 	struct zone_device *zonedev;
@@ -344,10 +347,13 @@ static int pkg_temp_thermal_device_add(unsigned int cpu)
 
 	INIT_DELAYED_WORK(&zonedev->work, pkg_temp_thermal_threshold_work_fn);
 	zonedev->cpu = cpu;
-	zonedev->tzone = thermal_zone_device_register_with_trips("x86_pkg_temp",
-			zonedev->trips, thres_count,
-			(thres_count == MAX_NUMBER_OF_TRIPS) ? 0x03 : 0x01,
-			zonedev, &tzone_ops, &pkg_temp_tz_params, 0, 0);
+
+	tzdp.tzp.devdata = zonedev;
+	tzdp.tzp.trips = zonedev->trips;
+	tzdp.tzp.num_trips = thres_count;
+	tzdp.tzp.mask = (thres_count == MAX_NUMBER_OF_TRIPS) ? 0x03 : 0x01;
+
+	zonedev->tzone = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(zonedev->tzone)) {
 		err = PTR_ERR(zonedev->tzone);
 		goto out_kfree_trips;
