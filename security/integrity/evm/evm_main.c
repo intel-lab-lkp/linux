@@ -721,6 +721,13 @@ static void evm_reset_status(struct inode *inode)
 		iint->evm_status = INTEGRITY_UNKNOWN;
 }
 
+void evm_reset_cache_status(struct dentry *dentry,
+			    struct integrity_iint_cache *iint)
+{
+	if (d_real_inode(dentry) != d_backing_inode(dentry))
+		iint->evm_status = INTEGRITY_UNKNOWN;
+}
+
 /**
  * evm_revalidate_status - report whether EVM status re-validation is necessary
  * @xattr_name: pointer to the affected extended attribute name

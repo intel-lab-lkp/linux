@@ -26,6 +26,7 @@
 #include <linux/ima.h>
 #include <linux/fs.h>
 #include <linux/iversion.h>
+#include <linux/evm.h>
 
 #include "ima.h"
 
@@ -295,6 +296,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 		    !inode_eq_iversion(backing_inode, iint->version)) {
 			iint->flags &= ~IMA_DONE_MASK;
 			iint->measured_pcrs = 0;
+			evm_reset_cache_status(file_dentry(file), iint);
 		}
 	}
 
