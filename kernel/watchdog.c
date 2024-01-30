@@ -23,6 +23,8 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 #include <linux/stop_machine.h>
+#include <linux/kernel_stat.h>
+#include <linux/math64.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>
@@ -441,6 +443,73 @@ static int is_softlockup(unsigned long touch_ts,
 	return 0;
 }
 
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+#define NUM_STATS_GROUPS	5
+#define STATS_SYSTEM		0
+#define STATS_SOFTIRQ		1
+#define STATS_HARDIRQ		2
+#define STATS_IDLE		3
+#define NUM_STATS_PER_GROUP	4
+static DEFINE_PER_CPU(u16, cpustat_old[NUM_STATS_PER_GROUP]);
+static DEFINE_PER_CPU(u8, cpustat_utilization[NUM_STATS_GROUPS][NUM_STATS_PER_GROUP]);
+static DEFINE_PER_CPU(u8, cpustat_tail);
+static enum cpu_usage_stat idx_to_stat[NUM_STATS_PER_GROUP] = {
+	CPUTIME_SYSTEM, CPUTIME_SOFTIRQ, CPUTIME_IRQ, CPUTIME_IDLE
+};
+
+static void update_cpustat(void)
+{
+	u8 i;
+	u16 *old = this_cpu_ptr(cpustat_old);
+	u8 (*utilization)[NUM_STATS_PER_GROUP] = this_cpu_ptr(cpustat_utilization);
+	u8 tail = this_cpu_read(cpustat_tail);
+	struct kernel_cpustat kcpustat;
+	u64 *cpustat = kcpustat.cpustat;
+	u16 sample_period_ms = sample_period >> 24LL; /* 2^24ns ~= 16.8ms */
+
+	kcpustat_cpu_fetch(&kcpustat, smp_processor_id());
+	for (i = STATS_SYSTEM; i < NUM_STATS_PER_GROUP; i++) {
+		/*
+		 * We don't need nanosecond resolution. A granularity of 16ms is
+		 * sufficient for our precision, allowing us to use u16 to store
+		 * cpustats, which will roll over roughly every ~1000 seconds.
+		 * 2^24 ~= 16 * 10^6
+		 */
+		cpustat[idx_to_stat[i]] = lower_16_bits(cpustat[idx_to_stat[i]] >> 24LL);
+		utilization[tail][i] = 100 * (u16)(cpustat[idx_to_stat[i]] - old[i])
+					/ sample_period_ms;
+		old[i] = cpustat[idx_to_stat[i]];
+	}
+	this_cpu_write(cpustat_tail, (tail + 1) % NUM_STATS_GROUPS);
+}
+
+static void print_cpustat(void)
+{
+	u8 i, j;
+	u8 (*utilization)[NUM_STATS_PER_GROUP] = this_cpu_ptr(cpustat_utilization);
+	u8 tail = this_cpu_read(cpustat_tail);
+	u64 sample_period_second = sample_period;
+
+	do_div(sample_period_second, NSEC_PER_SEC);
+	/*
+	 * We do not want the "watchdog: " prefix on every line,
+	 * hence we use "printk" instead of "pr_crit".
+	 */
+	printk(KERN_CRIT "CPU#%d Utilization every %llus during lockup:\n",
+		smp_processor_id(), sample_period_second);
+	for (j = STATS_SYSTEM, i = tail; j < NUM_STATS_GROUPS;
+		j++, i = (i + 1) % NUM_STATS_GROUPS) {
+		printk(KERN_CRIT "\t#%d: %3u%% system,\t%3u%% softirq,\t"
+			"%3u%% hardirq,\t%3u%% idle\n", j+1,
+			utilization[i][STATS_SYSTEM], utilization[i][STATS_SOFTIRQ],
+			utilization[i][STATS_HARDIRQ], utilization[i][STATS_IDLE]);
+	}
+}
+#else
+static inline void update_cpustat(void) { }
+static inline void print_cpustat(void) { }
+#endif
+
 /* watchdog detector functions */
 static DEFINE_PER_CPU(struct completion, softlockup_completion);
 static DEFINE_PER_CPU(struct cpu_stop_work, softlockup_stop_work);
@@ -504,6 +573,8 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	 */
 	period_ts = READ_ONCE(*this_cpu_ptr(&watchdog_report_ts));
 
+	update_cpustat();
+
 	/* Reset the interval when touched by known problematic code. */
 	if (period_ts == SOFTLOCKUP_DELAY_REPORT) {
 		if (unlikely(__this_cpu_read(softlockup_touch_sync))) {
@@ -539,6 +610,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
 			smp_processor_id(), duration,
 			current->comm, task_pid_nr(current));
+		print_cpustat();
 		print_modules();
 		print_irqtrace_events(current);
 		if (regs)
