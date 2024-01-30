@@ -95,7 +95,7 @@
  *    ->invalidate_lock		(filemap_fault)
  *      ->lock_page		(filemap_fault, access_process_vm)
  *
- *  ->i_rwsem			(generic_perform_write)
+ *  ->i_rwsem			(filemap_perform_write)
  *    ->mmap_lock		(fault_in_readable->do_page_fault)
  *
  *  bdi->wb.list_lock
@@ -3890,7 +3890,8 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 }
 EXPORT_SYMBOL(generic_file_direct_write);
 
-ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
+ssize_t filemap_perform_write(struct kiocb *iocb, struct iov_iter *i,
+		const struct buffered_write_operations *ops)
 {
 	struct file *file = iocb->ki_filp;
 	loff_t pos = iocb->ki_pos;
@@ -3900,9 +3901,9 @@ ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 	ssize_t written = 0;
 
 	do {
-		struct page *page;
-		unsigned long offset;	/* Offset into pagecache page */
-		unsigned long bytes;	/* Bytes to write to page */
+		struct folio *folio;
+		size_t offset;		/* Offset into pagecache folio */
+		size_t bytes;		/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
 		void *fsdata = NULL;
 
@@ -3927,19 +3928,31 @@ again:
 			break;
 		}
 
-		status = a_ops->write_begin(file, mapping, pos, bytes,
+		if (ops)
+			status = ops->write_begin(file, mapping, pos, bytes,
+						&folio, &fsdata);
+		else {
+			struct page *page;
+			status = a_ops->write_begin(file, mapping, pos, bytes,
 						&page, &fsdata);
+			if (status >= 0)
+				folio = page_folio(page);
+		}
 		if (unlikely(status < 0))
 			break;
 
 		if (mapping_writably_mapped(mapping))
-			flush_dcache_page(page);
+			flush_dcache_folio(folio);
 
-		copied = copy_page_from_iter_atomic(page, offset, bytes, i);
-		flush_dcache_page(page);
+		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
+		flush_dcache_folio(folio);
 
-		status = a_ops->write_end(file, mapping, pos, bytes, copied,
-						page, fsdata);
+		if (ops)
+			status = ops->write_end(file, mapping, pos, bytes,
+					copied, folio, &fsdata);
+		else
+			status = a_ops->write_end(file, mapping, pos, bytes,
+					copied, &folio->page, fsdata);
 		if (unlikely(status != copied)) {
 			iov_iter_revert(i, copied - max(status, 0L));
 			if (unlikely(status < 0))
@@ -3969,12 +3982,13 @@ again:
 	iocb->ki_pos += written;
 	return written;
 }
-EXPORT_SYMBOL(generic_perform_write);
+EXPORT_SYMBOL(filemap_perform_write);
 
 /**
- * __generic_file_write_iter - write data to a file
- * @iocb:	IO state structure (file, offset, etc.)
- * @from:	iov_iter with data to write
+ * __filemap_write_iter - write data to a file
+ * @iocb: IO state structure (file, offset, etc.)
+ * @from: iov_iter with data to write
+ * @ops: How to inform the filesystem that a write is starting/finishing.
  *
  * This function does all the work needed for actually writing data to a
  * file. It does all basic checks, removes SUID from the file, updates
@@ -3992,7 +4006,8 @@ EXPORT_SYMBOL(generic_perform_write);
  * * number of bytes written, even for truncated writes
  * * negative error code if no data has been written at all
  */
-ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+ssize_t __filemap_write_iter(struct kiocb *iocb, struct iov_iter *from,
+		const struct buffered_write_operations *ops)
 {
 	struct file *file = iocb->ki_filp;
 	struct address_space *mapping = file->f_mapping;
@@ -4019,27 +4034,29 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		if (ret < 0 || !iov_iter_count(from) || IS_DAX(inode))
 			return ret;
 		return direct_write_fallback(iocb, from, ret,
-				generic_perform_write(iocb, from));
+				filemap_perform_write(iocb, from, ops));
 	}
 
-	return generic_perform_write(iocb, from);
+	return filemap_perform_write(iocb, from, ops);
 }
-EXPORT_SYMBOL(__generic_file_write_iter);
+EXPORT_SYMBOL(__filemap_write_iter);
 
 /**
- * generic_file_write_iter - write data to a file
+ * filemap_write_iter - write data to a file
  * @iocb:	IO state structure
  * @from:	iov_iter with data to write
  *
- * This is a wrapper around __generic_file_write_iter() to be used by most
+ * This is a wrapper around __filemap_write_iter() to be used by most
  * filesystems. It takes care of syncing the file in case of O_SYNC file
  * and acquires i_rwsem as needed.
+ *
  * Return:
- * * negative error code if no data has been written at all of
+ * * negative error code if no data has been written at all or if
  *   vfs_fsync_range() failed for a synchronous write
  * * number of bytes written, even for truncated writes
  */
-ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+ssize_t filemap_write_iter(struct kiocb *iocb, struct iov_iter *from,
+		const struct buffered_write_operations *ops)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
@@ -4048,12 +4065,17 @@ ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	inode_lock(inode);
 	ret = generic_write_checks(iocb, from);
 	if (ret > 0)
-		ret = __generic_file_write_iter(iocb, from);
+		ret = __filemap_write_iter(iocb, from, ops);
 	inode_unlock(inode);
 
 	if (ret > 0)
 		ret = generic_write_sync(iocb, ret);
 	return ret;
+}
+
+ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	return filemap_write_iter(iocb, from, NULL);
 }
 EXPORT_SYMBOL(generic_file_write_iter);
 
