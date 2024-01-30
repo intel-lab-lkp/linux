@@ -235,13 +235,13 @@ int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 }
 
 static inline
-int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs,
-			struct virtqueue *vqs[], vq_callback_t *callbacks[],
-			const char * const names[], const bool *ctx,
-			struct irq_affinity *desc)
+int virtio_find_vqs_ctx_premapped(struct virtio_device *vdev, unsigned int nvqs,
+				  struct virtqueue *vqs[], vq_callback_t *callbacks[],
+				  const char * const names[], const bool *ctx,
+				  const bool *premapped, struct irq_affinity *desc)
 {
 	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, ctx,
-				      NULL, desc);
+				      premapped, desc);
 }
 
 /**
