@@ -56,6 +56,11 @@ static const struct onboard_hub_pdata vialab_vl817_data = {
 	.num_supplies = 1,
 };
 
+static const struct onboard_hub_pdata xmos_xvf3500_data = {
+	.reset_us = 1,
+	.num_supplies = 2,
+};
+
 static const struct of_device_id onboard_hub_match[] = {
 	{ .compatible = "usb424,2412", .data = &microchip_usb424_data, },
 	{ .compatible = "usb424,2514", .data = &microchip_usb424_data, },
@@ -77,6 +82,7 @@ static const struct of_device_id onboard_hub_match[] = {
 	{ .compatible = "usbbda,5414", .data = &realtek_rts5411_data, },
 	{ .compatible = "usb2109,817", .data = &vialab_vl817_data, },
 	{ .compatible = "usb2109,2817", .data = &vialab_vl817_data, },
+	{ .compatible = "usb20b1,0013", .data = &xmos_xvf3500_data, },
 	{}
 };
 
