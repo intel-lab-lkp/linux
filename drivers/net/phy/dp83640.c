@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <dt-bindings/net/ti-dp83640.h>
 #include <linux/crc32.h>
 #include <linux/ethtool.h>
 #include <linux/kernel.h>
@@ -16,6 +17,7 @@
 #include <linux/net_tstamp.h>
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
+#include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
@@ -1418,15 +1420,142 @@ static int dp83640_ts_info(struct mii_timestamper *mii_ts,
 	return 0;
 }
 
+#ifdef CONFIG_OF_MDIO
+static int dp83640_of_init(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	struct device_node *of_node = dev->of_node;
+	int reg_val;
+	u32 of_val;
+	int ret;
+
+	if (!of_node)
+		return 0;
+
+	/* All configured features reside in PAGE 0 */
+	phy_write(phydev, PAGESEL, 0);
+
+	/* Energy detect mode */
+	reg_val = phy_read(phydev, EDCR);
+	if (of_property_present(of_node, "ti,energy-detect-en"))
+		reg_val |= ED_EN;
+	else
+		reg_val &= ~ED_EN;
+	phy_write(phydev, EDCR, reg_val);
+
+	/* CLK_OUTPUT Pin */
+	if (of_property_present(of_node, "ti,clk-output")) {
+		ret = of_property_read_u32(of_node, "ti,clk-output", &of_val);
+		if (ret)
+			return ret;
+
+		reg_val = phy_read(phydev, PHYCR2);
+		switch (of_val) {
+		case 0:
+			reg_val |= CLK_OUT_DIS;
+			break;
+		case 1:
+			reg_val &= ~CLK_OUT_DIS;
+			break;
+		default:
+			phydev_err(phydev, "Invalid value for ti,clk-output property (%d)"
+					, of_val);
+			return -EINVAL;
+		}
+		phy_write(phydev, PHYCR2, reg_val);
+	}
+
+	/* LED configuration */
+	if (of_property_present(of_node, "ti,led-config"))  {
+		ret = of_property_read_u32(of_node, "ti,led-config", &of_val);
+		if (ret)
+			return ret;
+
+		reg_val = phy_read(phydev, PHYCR) & ~(LED_CNFG_1 | LED_CNFG_0);
+		switch (of_val) {
+		case DP83640_PHYCR_LED_CNFG_MODE_1:
+			reg_val |= LED_CNFG_0;
+			break;
+		case DP83640_PHYCR_LED_CNFG_MODE_2:
+			/* Keeping LED_CNFG_1 and LED_CNFG_0 unset */
+			break;
+		case DP83640_PHYCR_LED_CNFG_MODE_3:
+			reg_val |= LED_CNFG_1;
+			break;
+		default:
+			phydev_err(phydev, "Invalid value for ti,led-config property (%d)"
+					, of_val);
+			return -EINVAL;
+		}
+		phy_write(phydev, PHYCR, reg_val);
+	}
+	if (of_property_present(of_node, "ti,phy-control-frames")) {
+		of_property_read_u32(of_node, "ti,phy-control-frames", &of_val);
+		if (ret)
+			return ret;
+
+		reg_val = phy_read(phydev, PCFCR);
+		switch (of_val) {
+		case 0:
+			reg_val &= ~PCF_EN;
+			break;
+		case 1:
+			reg_val |= PCF_EN;
+			break;
+		default:
+			phydev_err(phydev, "Invalid value for ti,phy-control-frames property (%d)"
+					, of_val);
+			return -EINVAL;
+		}
+		phy_write(phydev, PCFCR, reg_val);
+	}
+	if (of_property_present(of_node, "ti,fiber-mode")) {
+		ret = of_property_read_u32(of_node, "ti,fiber-mode", &of_val);
+		if (ret)
+			return ret;
+
+		reg_val = phy_read(phydev, PCSR);
+		switch (of_val) {
+		case 0:
+			reg_val &= ~FX_EN;
+			break;
+		case 1:
+			reg_val |= FX_EN;
+			break;
+		default:
+			phydev_err(phydev, "Invalid value for ti,fiber-mode property (%d)"
+					, of_val);
+			return -EINVAL;
+		}
+		phy_write(phydev, PCSR, reg_val);
+		/* Write SOFT_RESET bit to ensure configuration */
+		reg_val = phy_read(phydev, PHYCR2) | SOFT_RESET;
+		phy_write(phydev, PHYCR2, reg_val);
+	}
+
+	return 0;
+}
+#else
+static int dp83640_of_init(struct phy_device *phydev)
+{
+	return 0;
+}
+#endif /* CONFIG_OF_MDIO */
+
 static int dp83640_probe(struct phy_device *phydev)
 {
 	struct dp83640_clock *clock;
 	struct dp83640_private *dp83640;
-	int err = -ENOMEM, i;
+	int err, i;
 
 	if (phydev->mdio.addr == BROADCAST_ADDR)
 		return 0;
 
+	err = dp83640_of_init(phydev);
+	if (err < 0)
+		return err;
+
+	err = -ENOMEM;
 	clock = dp83640_clock_get_bus(phydev->mdio.bus);
 	if (!clock)
 		goto no_clock;

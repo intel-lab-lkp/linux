@@ -6,7 +6,11 @@
 #define HAVE_DP83640_REGISTERS
 
 /* #define PAGE0                  0x0000 */
+#define PCSR                      0x0016 /* PCS Configuration and Status Register */
+#define PHYCR                     0x0019 /* PHY Control Register */
 #define PHYCR2                    0x001c /* PHY Control Register 2 */
+#define EDCR                      0x001D /* Energy Detect Control Register */
+#define PCFCR                     0x001F /* PHY Control Frames Control Register */
 
 #define PAGE4                     0x0004
 #define PTP_CTL                   0x0014 /* PTP Control Register */
@@ -50,8 +54,23 @@
 #define PTP_GPIOMON               0x001e /* PTP GPIO Monitor Register */
 #define PTP_RXHASH                0x001f /* PTP Receive Hash Register */
 
+/* Bit definitions for the PCSR register */
+#define FX_EN		          BIT(6)  /* Enable FX Fiber Mode */
+
+/* Bit definitions for the PHYCR register */
+#define LED_CNFG_0	          BIT(5)  /* LED configuration, bit 0 */
+#define LED_CNFG_1	          BIT(6)  /* LED configuration, bit 1 */
+
 /* Bit definitions for the PHYCR2 register */
-#define BC_WRITE                  (1<<11) /* Broadcast Write Enable */
+#define CLK_OUT_DIS	          BIT(1)  /* Disable CLK_OUT pin */
+#define SOFT_RESET		  BIT(9)  /* Soft Reset */
+#define BC_WRITE                  BIT(11) /* Broadcast Write Enable */
+
+/* Bit definitions for the EDCR register */
+#define ED_EN		          BIT(15) /* Enable Energy Detect Mode */
+
+/* Bit definitions for the PCFCR register */
+#define PCF_EN	                  BIT(0)  /* Enable PHY Control Frames */
 
 /* Bit definitions for the PTP_CTL register */
 #define TRIG_SEL_SHIFT            (10)    /* PTP Trigger Select */
