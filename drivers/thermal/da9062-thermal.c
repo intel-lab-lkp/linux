@@ -158,6 +158,13 @@ MODULE_DEVICE_TABLE(of, da9062_compatible_reg_id_table);
 
 static int da9062_thermal_probe(struct platform_device *pdev)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.ops = &da9062_thermal_ops,
+			.trips = trips,
+			.num_trips = ARRAY_SIZE(trips),
+		}
+	};
 	struct da9062 *chip = dev_get_drvdata(pdev->dev.parent);
 	struct da9062_thermal *thermal;
 	const struct of_device_id *match;
@@ -196,10 +203,11 @@ static int da9062_thermal_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&thermal->work, da9062_thermal_poll_on);
 	mutex_init(&thermal->lock);
 
-	thermal->zone = thermal_zone_device_register_with_trips(thermal->config->name,
-								trips, ARRAY_SIZE(trips), 0, thermal,
-								&da9062_thermal_ops, NULL, pp_tmp,
-								0);
+	tzdp.tzp.type = thermal->config->name;
+	tzdp.tzp.devdata = thermal;
+	tzdp.tzp.passive_delay = pp_tmp;
+
+	thermal->zone = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(thermal->zone)) {
 		dev_err(&pdev->dev, "Cannot register thermal zone device\n");
 		ret = PTR_ERR(thermal->zone);
