@@ -9,6 +9,7 @@
 #include <asm/asmmacro.h>
 #include <asm/cpu.h>
 #include <asm/regdef.h>
+#include <asm/unwind_hints.h>
 
 .section .noinstr.text, "ax"
 
@@ -109,6 +110,7 @@ SYM_FUNC_START_NOALIGN(__memcpy_small)
 	jr	ra
 SYM_FUNC_END(__memcpy_small)
 _ASM_NOKPROBE(__memcpy_small)
+STACK_FRAME_NON_STANDARD __memcpy_small
 
 /*
  * void *__memcpy_fast(void *dst, const void *src, size_t n)
