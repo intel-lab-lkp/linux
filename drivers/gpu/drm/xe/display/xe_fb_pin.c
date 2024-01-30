@@ -10,8 +10,17 @@
 #include "intel_fb_pin.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
+#include "xe_pat.h"
 
 #include <drm/ttm/ttm_bo.h>
+
+static bool is_compressed(const struct drm_framebuffer *fb)
+{
+	struct xe_bo *bo = intel_fb_obj(fb);
+	struct xe_device *xe = to_xe_device(to_intel_framebuffer(fb)->base.dev);
+
+	return xe_pat_index_has_compression(xe, bo->pat_index);
+}
 
 static void
 write_dpt_rotated(struct xe_bo *bo, struct iosys_map *map, u32 *dpt_ofs, u32 bo_ofs,
@@ -283,6 +292,17 @@ static struct i915_vma *__xe_pin_fb_vma(struct intel_framebuffer *fb,
 	if (ret)
 		goto err;
 
+	if (GRAPHICS_VER(xe) >= 20) {
+		if (fb->base.modifier != I915_FORMAT_MOD_4_TILED &&
+		    is_compressed(&fb->base)) {
+			drm_warn(&xe->drm, "Cannot create ccs framebuffer with other than tile4 mofifier\n");
+			ttm_bo_unreserve(&bo->ttm);
+			ret = -EINVAL;
+			goto err;
+		}
+		bo->has_sealed_pat_index = true;
+	}
+
 	if (IS_DGFX(xe))
 		ret = xe_bo_migrate(bo, XE_PL_VRAM0);
 	else
@@ -308,6 +328,7 @@ err_unpin:
 	ttm_bo_unpin(&bo->ttm);
 	ttm_bo_unreserve(&bo->ttm);
 err:
+	bo->has_sealed_pat_index = false;
 	kfree(vma);
 	return ERR_PTR(ret);
 }
@@ -322,6 +343,8 @@ static void __xe_unpin_fb_vma(struct i915_vma *vma)
 	else if (!drm_mm_node_allocated(&vma->bo->ggtt_node) ||
 		 vma->bo->ggtt_node.start != vma->node.start)
 		xe_ggtt_remove_node(ggtt, &vma->node);
+
+	vma->bo->has_sealed_pat_index = false;
 
 	ttm_bo_reserve(&vma->bo->ttm, false, false, NULL);
 	ttm_bo_unpin(&vma->bo->ttm);
