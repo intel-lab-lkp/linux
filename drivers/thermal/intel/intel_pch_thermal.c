@@ -160,6 +160,7 @@ static int intel_pch_thermal_probe(struct pci_dev *pdev,
 				   const struct pci_device_id *id)
 {
 	enum pch_board_ids board_id = id->driver_data;
+	struct thermal_zone_device_params tzdp;
 	struct pch_thermal_device *ptd;
 	int nr_trips = 0;
 	u16 trip_temp;
@@ -233,10 +234,13 @@ read_trips:
 
 	nr_trips += pch_wpt_add_acpi_psv_trip(ptd, nr_trips);
 
-	ptd->tzd = thermal_zone_device_register_with_trips(board_names[board_id],
-							   ptd->trips, nr_trips,
-							   0, ptd, &tzd_ops,
-							   NULL, 0, 0);
+	tzdp.tzp.type = board_names[board_id];
+	tzdp.tzp.devdata = ptd;
+	tzdp.tzp.trips = ptd->trips;
+	tzdp.tzp.num_trips = nr_trips;
+	tzdp.tzp.ops = &tzd_ops;
+
+	ptd->tzd = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(ptd->tzd)) {
 		dev_err(&pdev->dev, "Failed to register thermal zone %s\n",
 			board_names[board_id]);
