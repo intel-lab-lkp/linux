@@ -64,10 +64,20 @@ if ! grep -q "core_getversion" /install/testlist.txt; then
 fi
 
 set +e
+if [ "$DRIVER_NAME" = "amdgpu" ]; then
+    TEST_LIST="/install/testlist-amdgpu.txt"
+elif [ "$DRIVER_NAME" = "msm" ]; then
+    TEST_LIST="/install/testlist-msm.txt"
+elif [ "$DRIVER_NAME" = "panfrost" ]; then
+    TEST_LIST="/install/testlist-panfrost.txt"
+else
+    TEST_LIST="/install/testlist.txt"
+fi
+
 igt-runner \
     run \
     --igt-folder /igt/libexec/igt-gpu-tools \
-    --caselist /install/testlist.txt \
+    --caselist $TEST_LIST \
     --output /results \
     $IGT_SKIPS \
     $IGT_FLAKES \

@@ -1,2 +1,10 @@
 # Suspend to RAM seems to be broken on this machine
 .*suspend.*
+
+# GPU reset seen and it hangs the machine
+amdgpu/amd_deadlock@amdgpu-gfx-illegal-reg-access
+amdgpu/amd_dispatch@amdgpu-reset-test-gfx-with-IP-GFX-and-COMPUTE
+
+# Skip this test as core_getrevision fails with
+# Module amdgpu already inserted
+amdgpu/amd_module_load@reload
