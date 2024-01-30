@@ -163,6 +163,22 @@ void __of_phandle_cache_inv_entry(phandle handle)
 		phandle_cache[handle_hash] = NULL;
 }
 
+void __of_phandle_update_cache(struct device_node *np, bool lock)
+{
+	u32 hash;
+
+	if (lock)
+		lockdep_assert_held(&devtree_lock);
+
+	if (unlikely(!np || !np->phandle))
+		return;
+
+	hash = of_phandle_cache_hash(np->phandle);
+
+	if (!phandle_cache[hash])
+		phandle_cache[hash] = np;
+}
+
 void __init of_core_init(void)
 {
 	struct device_node *np;

@@ -94,6 +94,7 @@ int of_resolve_phandles(struct device_node *tree);
 #endif
 
 void __of_phandle_cache_inv_entry(phandle handle);
+void __of_phandle_update_cache(struct device_node *np, bool lock);
 
 #if defined(CONFIG_OF_OVERLAY)
 void of_overlay_mutex_lock(void);
