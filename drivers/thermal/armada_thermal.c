@@ -864,8 +864,16 @@ static int armada_thermal_probe(struct platform_device *pdev)
 	 * into it, which requires the use of regmaps across all the driver.
 	 */
 	if (IS_ERR(syscon_node_to_regmap(pdev->dev.parent->of_node))) {
+		struct thermal_zone_device_params tzdp = {
+			.tzp = {
+				.ops = &legacy_ops,
+				.devdata = priv
+			}
+		};
+
 		/* Ensure device name is correct for the thermal core */
 		armada_set_sane_name(pdev, priv);
+		tzdp.tzp.type = priv->zone_name;
 
 		ret = armada_thermal_probe_legacy(pdev, priv);
 		if (ret)
@@ -876,9 +884,7 @@ static int armada_thermal_probe(struct platform_device *pdev)
 		/* Wait the sensors to be valid */
 		armada_wait_sensor_validity(priv);
 
-		tz = thermal_tripless_zone_device_register(priv->zone_name,
-							   priv, &legacy_ops,
-							   NULL);
+		tz = thermal_zone_device_register(&tzdp);
 		if (IS_ERR(tz)) {
 			dev_err(&pdev->dev,
 				"Failed to register thermal zone device\n");
