@@ -1,0 +1,6 @@
+# Suspend to RAM seems to be broken on this machine
+.*suspend.*
+
+# Machine ends up hanging after lots of Oopses with linux version 6.7.0-rc4
+# rockchip-dp ff970000.dp: AUX CH error happened: 0x2
+kms_plane_multiple.*
