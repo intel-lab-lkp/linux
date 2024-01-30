@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2024 Nanometrics Inc
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/ti,dp83640.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI DP83640 ethernet PHY
+
+allOf:
+  - $ref: ethernet-controller.yaml#
+
+maintainers:
+  - Bastien Curutchet <bastien.curutchet@bootlin.com>
+
+description: |
+  The DP83640 Precision PHYTER device delivers the highest level of precision
+  clock synchronization for real time industrial connectivity based on the
+  IEEE 1588 standard. The DP83640 has deterministic, low latency and allows
+  choice of microcontroller with no hardware customization required
+
+  This device interfaces directly to the MAC layer through the
+  IEEE 802.3 Standard Media Independent Interface (MII), or Reduced MII (RMII).
+
+  Specifications about the Ethernet PHY can be found at:
+    https://www.ti.com/lit/gpn/dp83640
+
+properties:
+  reg:
+    maxItems: 1
+
+  ti,clk-output:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    description: |
+      If present, enables or disables the CLK_OUT pin.
+      CLK_OUT pin disabling can also be strapped. If the strap pin is not set
+      correctly or not set at all then this can be used to configure it.
+       - 0     = CLK_OUT pin disabled
+       - 1     = CLK_OUT pin enabled
+       - unset = Configured by straps
+
+  ti,led-config:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2, 3]
+    description: |
+      If present, configures the LED Mode (values defined in
+      dt-bindings/net/ti-dp83640.h).
+      LED configuration can also be strapped. If the strap pin is not set
+      correctly or not set at all then this can be used to configure it.
+       - 1     = Mode 1
+        LED_LINK = ON for Good Link, OFF for No Link
+        LED_SPEED = ON in 100 Mb/s, OFF in 10 Mb/s
+        LED_ACT = ON for Activity, OFF for No Activity
+       - 2     = Mode 2
+        LED_LINK = ON for Good Link, BLINK for Activity
+        LED_SPEED = ON in 100 Mb/s, OFF in 10 Mb/s
+        LED_ACT = ON for Collision, OFF for No Collision
+       - 3     = Mode 3
+        LED_LINK = ON for Good Link, BLINK for Activity
+        LED_SPEED = ON in 100 Mb/s, OFF in 10 Mb/s
+        LED_ACT = ON for Full Duplex, OFF for Half Duplex
+       - unset = Configured by straps
+
+  ti,phy-control-frames:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    description: |
+      If present, enables or disables the PHY control frames.
+      PHY Control Frames support can also be strapped. If the strap pin is not
+      set correctly or not set at all then this can be used to configure it.
+       - 0     = PHY Control Frames disabled
+       - 1     = PHY Control Frames enabled
+       - unset = Configured by straps
+
+  ti,fiber-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    description: |
+      If present, enables or disables the FX Fiber Mode.
+      Fiber mode support can also be strapped. If the strap pin is not set
+      correctly or not set at all then this can be used to configure it.
+       - 0     = FX Fiber Mode disabled
+       - 1     = FX Fiber Mode enabled
+       - unset = Configured by straps
+
+  ti,energy-detect-en:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description: |
+      If present, Energy Detect Mode is enabled. If not present, Energy Detect
+      Mode is disabled. This feature can not be strapped.
+
+required:
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/net/ti-dp83640.h>
+
+    mdio0 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      ethphy0: ethernet-phy@0 {
+        reg = <0>;
+        ti,clk-output = <0>;
+        ti,energy-detect-en;
+        ti,led-config = <DP83640_PHYCR_LED_CNFG_MODE_3>;
+        ti,phy-control-frames = <1>;
+        ti,fiber-mode = <1>;
+      };
+    };
