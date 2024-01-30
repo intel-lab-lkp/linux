@@ -141,13 +141,13 @@ int thermal_register_governor(struct thermal_governor *governor)
 
 	list_for_each_entry(pos, &thermal_tz_list, node) {
 		/*
-		 * only thermal zones with specified tz->tzp->governor_name
+		 * only thermal zones with specified tz->tgp->governor_name
 		 * may run with tz->govenor unset
 		 */
 		if (pos->governor)
 			continue;
 
-		name = pos->tzp->governor_name;
+		name = pos->tgp->governor_name;
 
 		if (!strncasecmp(name, governor->name, THERMAL_NAME_LENGTH)) {
 			int ret;
@@ -1261,6 +1261,8 @@ EXPORT_SYMBOL_GPL(thermal_zone_get_crit_temp);
  *		   whether trip points have been crossed (0 for interrupt
  *		   driven systems)
  *
+ * This function is deprecated. See thermal_zone_device_register().
+ *
  * This interface function adds a new thermal zone device (sensor) to
  * /sys/class/thermal folder as thermal_zone[0-*]. It tries to bind all the
  * thermal cooling devices registered at the same time.
@@ -1277,19 +1279,80 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 					const struct thermal_zone_params *tzp, int passive_delay,
 					int polling_delay)
 {
+	struct thermal_zone_device_params tzdp = {
+		/* Thermal Zone Platform parameters */
+		.tzp = {
+			.type = type,
+			.ops = ops,
+			.trips = trips,
+			.num_trips = num_trips,
+			.mask = mask,
+			.passive_delay = passive_delay,
+			.polling_delay = polling_delay,
+			.devdata = devdata
+		},
+	};
 	struct thermal_zone_device *tz;
+
+	/* Thermal Zone Governor parameters */
+	if (tzp) {
+		tzdp.tgp = kzalloc(sizeof(*tzdp.tgp), GFP_KERNEL);
+		if (!tzdp.tgp)
+			return ERR_PTR(-ENOMEM);
+
+		tzdp.tgp->governor_name = tzp->governor_name;
+		tzdp.tzp.no_hwmon = tzp->no_hwmon;
+		memcpy(&tzdp.tgp->ipa_params, tzp, sizeof(*tzp));
+	}
+
+	tz = thermal_zone_device_register(&tzdp);
+	kfree(tzdp.tgp);
+	return tz;
+}
+EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
+
+/* This function is deprecated. See thermal_zone_device_register(). */
+struct thermal_zone_device *thermal_tripless_zone_device_register(
+					const char *type,
+					void *devdata,
+					struct thermal_zone_device_ops *ops,
+					const struct thermal_zone_params *tzp)
+{
+	return thermal_zone_device_register_with_trips(type, NULL, 0, 0, devdata,
+						       ops, tzp, 0, 0);
+}
+EXPORT_SYMBOL_GPL(thermal_tripless_zone_device_register);
+
+/**
+ * thermal_zone_device_register() - register a new thermal zone device
+ * @tzdp:	Parameters of the new thermal zone device
+ *		See struct thermal_zone_device_register.
+ *
+ * This interface function adds a new thermal zone device (sensor) to
+ * /sys/class/thermal folder as thermal_zone[0-*]. It tries to bind all the
+ * thermal cooling devices registered at the same time.
+ * thermal_zone_device_unregister() must be called when the device is no
+ * longer needed. The passive cooling depends on the .get_trend() return value.
+ *
+ * Return: a pointer to the created struct thermal_zone_device or an
+ * in case of error, an ERR_PTR. Caller must check return value with
+ * IS_ERR*() helpers.
+ */
+struct thermal_zone_device *thermal_zone_device_register(struct thermal_zone_device_params *tzdp)
+{
+	struct thermal_zone_device *tz;
+	struct thermal_governor *gov;
 	int id;
 	int result;
-	struct thermal_governor *governor;
 
-	if (!type || strlen(type) == 0) {
+	if (!tzdp->tzp.type || strlen(tzdp->tzp.type) == 0) {
 		pr_err("No thermal zone type defined\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (strlen(type) >= THERMAL_NAME_LENGTH) {
+	if (strlen(tzdp->tzp.type) >= THERMAL_NAME_LENGTH) {
 		pr_err("Thermal zone name (%s) too long, should be under %d chars\n",
-		       type, THERMAL_NAME_LENGTH);
+		       tzdp->tzp.type, THERMAL_NAME_LENGTH);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -1306,17 +1369,19 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 	 * Check will be true when the bit 31 of the mask is set.
 	 * 32 bit shift will cause overflow of 4 byte integer.
 	 */
-	if (num_trips > (BITS_PER_TYPE(int) - 1) || num_trips < 0 || mask >> num_trips) {
+	if (tzdp->tzp.num_trips > (BITS_PER_TYPE(int) - 1) ||
+	    tzdp->tzp.num_trips < 0 ||
+	    tzdp->tzp.mask >> tzdp->tzp.num_trips) {
 		pr_err("Incorrect number of thermal trips\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (!ops || !ops->get_temp) {
+	if (!tzdp->tzp.ops || !tzdp->tzp.ops->get_temp) {
 		pr_err("Thermal zone device ops not defined\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (num_trips > 0 && !trips)
+	if (tzdp->tzp.num_trips > 0 && !tzdp->tzp.trips)
 		return ERR_PTR(-EINVAL);
 
 	if (!thermal_class)
@@ -1326,11 +1391,17 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 	if (!tz)
 		return ERR_PTR(-ENOMEM);
 
-	if (tzp) {
-		tz->tzp = kmemdup(tzp, sizeof(*tzp), GFP_KERNEL);
-		if (!tz->tzp) {
+	tz->tzp = kmemdup(&tzdp->tzp, sizeof(tzdp->tzp), GFP_KERNEL);
+	if (!tz->tzp) {
+		result = -ENOMEM;
+		goto free_tz;
+	}
+
+	if (tzdp->tgp) {
+		tz->tgp = kmemdup(tzdp->tgp, sizeof(*tzdp->tgp), GFP_KERNEL);
+		if (!tz->tgp) {
 			result = -ENOMEM;
-			goto free_tz;
+			goto free_tzp;
 		}
 	}
 
@@ -1342,27 +1413,27 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 	id = ida_alloc(&thermal_tz_ida, GFP_KERNEL);
 	if (id < 0) {
 		result = id;
-		goto free_tzp;
+		goto free_tgp;
 	}
 
 	tz->id = id;
-	strscpy(tz->type, type, sizeof(tz->type));
+	strscpy(tz->type, tzdp->tzp.type, sizeof(tz->type));
 
-	if (!ops->critical)
-		ops->critical = thermal_zone_device_critical;
+	if (!tzdp->tzp.ops->critical)
+		tzdp->tzp.ops->critical = thermal_zone_device_critical;
 
-	tz->ops = ops;
+	tz->ops = tzdp->tzp.ops;
 	tz->device.class = thermal_class;
-	tz->devdata = devdata;
-	tz->trips = trips;
-	tz->num_trips = num_trips;
+	tz->devdata = tzdp->tzp.devdata;
+	tz->trips = tzdp->tzp.trips;
+	tz->num_trips = tzdp->tzp.num_trips;
 
-	thermal_set_delay_jiffies(&tz->passive_delay_jiffies, passive_delay);
-	thermal_set_delay_jiffies(&tz->polling_delay_jiffies, polling_delay);
+	thermal_set_delay_jiffies(&tz->passive_delay_jiffies, tzdp->tzp.passive_delay);
+	thermal_set_delay_jiffies(&tz->polling_delay_jiffies, tzdp->tzp.polling_delay);
 
 	/* sys I/F */
 	/* Add nodes that are always present via .groups */
-	result = thermal_zone_create_device_groups(tz, mask);
+	result = thermal_zone_create_device_groups(tz, tzdp->tzp.mask);
 	if (result)
 		goto remove_id;
 
@@ -1381,12 +1452,12 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 	/* Update 'this' zone's governor information */
 	mutex_lock(&thermal_governor_lock);
 
-	if (tz->tzp)
-		governor = __find_governor(tz->tzp->governor_name);
+	if (tzdp->tgp)
+		gov = __find_governor(tzdp->tgp->governor_name);
 	else
-		governor = def_governor;
+		gov = def_governor;
 
-	result = thermal_set_governor(tz, governor);
+	result = thermal_set_governor(tz, gov);
 	if (result) {
 		mutex_unlock(&thermal_governor_lock);
 		goto unregister;
@@ -1394,7 +1465,7 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 
 	mutex_unlock(&thermal_governor_lock);
 
-	if (!tz->tzp || !tz->tzp->no_hwmon) {
+	if (!tzdp->tzp.no_hwmon) {
 		result = thermal_add_hwmon_sysfs(tz);
 		if (result)
 			goto unregister;
@@ -1426,24 +1497,15 @@ release_device:
 	put_device(&tz->device);
 remove_id:
 	ida_free(&thermal_tz_ida, id);
+free_tgp:
+	kfree(tz->tgp);
 free_tzp:
 	kfree(tz->tzp);
 free_tz:
 	kfree(tz);
 	return ERR_PTR(result);
 }
-EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
-
-struct thermal_zone_device *thermal_tripless_zone_device_register(
-					const char *type,
-					void *devdata,
-					struct thermal_zone_device_ops *ops,
-					const struct thermal_zone_params *tzp)
-{
-	return thermal_zone_device_register_with_trips(type, NULL, 0, 0, devdata,
-						       ops, tzp, 0, 0);
-}
-EXPORT_SYMBOL_GPL(thermal_tripless_zone_device_register);
+EXPORT_SYMBOL_GPL(thermal_zone_device_register);
 
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
 {
@@ -1514,7 +1576,7 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 
 	device_del(&tz->device);
 
-	kfree(tz->tzp);
+	kfree(tz->tgp);
 
 	put_device(&tz->device);
 

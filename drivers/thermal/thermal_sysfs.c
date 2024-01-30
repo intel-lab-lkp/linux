@@ -271,8 +271,8 @@ sustainable_power_show(struct device *dev, struct device_attribute *devattr,
 {
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 
-	if (tz->tzp)
-		return sprintf(buf, "%u\n", tz->tzp->sustainable_power);
+	if (tz->tgp)
+		return sprintf(buf, "%u\n", tz->tgp->ipa_params.sustainable_power);
 	else
 		return -EIO;
 }
@@ -284,13 +284,13 @@ sustainable_power_store(struct device *dev, struct device_attribute *devattr,
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 	u32 sustainable_power;
 
-	if (!tz->tzp)
+	if (!tz->tgp)
 		return -EIO;
 
 	if (kstrtou32(buf, 10, &sustainable_power))
 		return -EINVAL;
 
-	tz->tzp->sustainable_power = sustainable_power;
+	tz->tgp->ipa_params.sustainable_power = sustainable_power;
 
 	return count;
 }
@@ -302,8 +302,8 @@ sustainable_power_store(struct device *dev, struct device_attribute *devattr,
 	{								\
 	struct thermal_zone_device *tz = to_thermal_zone(dev);		\
 									\
-	if (tz->tzp)							\
-		return sprintf(buf, "%d\n", tz->tzp->name);		\
+	if (tz->tgp)							\
+		return sprintf(buf, "%d\n", tz->tgp->ipa_params.name);	\
 	else								\
 		return -EIO;						\
 	}								\
@@ -315,13 +315,13 @@ sustainable_power_store(struct device *dev, struct device_attribute *devattr,
 		struct thermal_zone_device *tz = to_thermal_zone(dev);	\
 		s32 value;						\
 									\
-		if (!tz->tzp)						\
+		if (!tz->tgp)						\
 			return -EIO;					\
 									\
 		if (kstrtos32(buf, 10, &value))				\
 			return -EINVAL;					\
 									\
-		tz->tzp->name = value;					\
+		tz->tgp->ipa_params.name = value;			\
 									\
 		return count;						\
 	}								\

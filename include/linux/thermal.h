@@ -149,7 +149,8 @@ struct thermal_cooling_device {
 			passive trip point.
  * @need_update:	if equals 1, thermal_zone_device_update needs to be invoked.
  * @ops:	operations this &thermal_zone_device supports
- * @tzp:	thermal zone parameters
+ * @tzp:		Thermal zone parameters
+ * @tgp:		Thermal zone governor parameters
  * @governor:	pointer to the governor for this thermal zone
  * @governor_data:	private pointer for governor data
  * @thermal_instances:	list of &struct thermal_instance of this thermal zone
@@ -184,7 +185,8 @@ struct thermal_zone_device {
 	int prev_high_trip;
 	atomic_t need_update;
 	struct thermal_zone_device_ops *ops;
-	struct thermal_zone_params *tzp;
+	struct thermal_zone_platform_params *tzp;
+	struct thermal_governor_params *tgp;
 	struct thermal_governor *governor;
 	void *governor_data;
 	struct list_head thermal_instances;
@@ -224,15 +226,12 @@ struct thermal_governor {
 	struct list_head	governor_list;
 };
 
-/* Structure to define Thermal Zone parameters */
+/* Structure to define Thermal Zone IPA parameters */
 struct thermal_zone_params {
+	/* Scheduled for removal - see struct thermal_governor_params. */
 	const char *governor_name;
 
-	/*
-	 * a boolean to indicate if the thermal to hwmon sysfs interface
-	 * is required. when no_hwmon == false, a hwmon sysfs interface
-	 * will be created. when no_hwmon == true, nothing will be done
-	 */
+	/* Scheduled for removal - see struct thermal_zone_platform_params. */
 	bool no_hwmon;
 
 	/*
@@ -272,6 +271,58 @@ struct thermal_zone_params {
 	 * 		Used by thermal zone drivers (default 0).
 	 */
 	int offset;
+};
+
+/**
+ * struct thermal_governor_params - Thermal Zone governor parameters
+ * @governor_name:	Name of the Thermal Zone governor
+ * @ipa_params:		IPA parameters for Thermal Zone governors
+ */
+struct thermal_governor_params {
+	const char *governor_name;
+	struct thermal_zone_params ipa_params;
+};
+
+/**
+ * struct thermal_zone_platform_params - Thermal Zone parameters
+ * @type:		The thermal zone device type
+ * @ops:		Standard thermal zone device callbacks
+ * @trips:		Pointer to an array of thermal trips, if any
+ * @num_trips:		Number of trip points the thermal zone support
+ * @mask:		Bit string indicating the writeablility of trip points
+ * @passive_delay:	Number of milliseconds to wait between polls when
+ *			performing passive cooling
+ * @polling_delay:	Number of milliseconds to wait between polls when checking
+ *			whether trip points have been crossed (0 for interrupt
+ *			driven systems)
+ * @devdata:		Private device data
+ * @no_hwmon:		Indicates whether the thermal to hwmon sysfs interface is
+ *			required; this means that when no_hwmon == false, a hwmon
+ *			sysfs interface will be created and when no_hwmon == true
+ *			nothing will be done
+ */
+struct thermal_zone_platform_params {
+	const char *type;
+	struct thermal_zone_device_ops *ops;
+	struct thermal_trip *trips;
+	int num_trips;
+	int mask;
+
+	int passive_delay;
+	int polling_delay;
+
+	void *devdata;
+	bool no_hwmon;
+};
+
+/**
+ * struct thermal_zone_device_params - Thermal Zone device parameters
+ * @tzp:		Thermal zone platform parameters
+ * @tgp:		Thermal zone governor parameters
+ */
+struct thermal_zone_device_params {
+	struct thermal_zone_platform_params tzp;
+	struct thermal_governor_params *tgp;
 };
 
 /* Function declarations */
@@ -327,6 +378,8 @@ struct thermal_zone_device *thermal_tripless_zone_device_register(
 					void *devdata,
 					struct thermal_zone_device_ops *ops,
 					const struct thermal_zone_params *tzp);
+
+struct thermal_zone_device *thermal_zone_device_register(struct thermal_zone_device_params *tzdp);
 
 void thermal_zone_device_unregister(struct thermal_zone_device *tz);
 
@@ -388,6 +441,10 @@ static inline struct thermal_zone_device *thermal_tripless_zone_device_register(
 					void *devdata,
 					struct thermal_zone_device_ops *ops,
 					const struct thermal_zone_params *tzp)
+{ return ERR_PTR(-ENODEV); }
+
+static inline struct thermal_zone_device *thermal_zone_device_register(
+					struct thermal_zone_device_params *tzdp)
 { return ERR_PTR(-ENODEV); }
 
 static inline void thermal_zone_device_unregister(struct thermal_zone_device *tz)

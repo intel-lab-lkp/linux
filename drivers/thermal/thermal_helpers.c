@@ -211,8 +211,8 @@ void thermal_cdev_update(struct thermal_cooling_device *cdev)
  */
 int thermal_zone_get_slope(struct thermal_zone_device *tz)
 {
-	if (tz && tz->tzp)
-		return tz->tzp->slope;
+	if (tz && tz->tgp)
+		return tz->tgp->ipa_params.slope;
 	return 1;
 }
 EXPORT_SYMBOL_GPL(thermal_zone_get_slope);
@@ -226,8 +226,8 @@ EXPORT_SYMBOL_GPL(thermal_zone_get_slope);
  */
 int thermal_zone_get_offset(struct thermal_zone_device *tz)
 {
-	if (tz && tz->tzp)
-		return tz->tzp->offset;
+	if (tz && tz->tgp)
+		return tz->tgp->ipa_params.offset;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(thermal_zone_get_offset);

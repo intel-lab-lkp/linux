@@ -252,8 +252,8 @@ int tsens_read_calibration_legacy(struct tsens_priv *priv,
 /*
  * Use this function on devices where slope and offset calculations
  * depend on calibration data read from qfprom. On others the slope
- * and offset values are derived from tz->tzp->slope and tz->tzp->offset
- * resp.
+ * and offset values are derived from tz->tgp->ipa_params.slope and
+ * tz->tgp->ipa_params.offset resp.
  */
 void compute_intercept_slope(struct tsens_priv *priv, u32 *p1,
 			     u32 *p2, u32 mode)

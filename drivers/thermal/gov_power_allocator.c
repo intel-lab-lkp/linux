@@ -167,14 +167,14 @@ static void estimate_pid_constants(struct thermal_zone_device *tz,
 	if (!temperature_threshold)
 		return;
 
-	tz->tzp->k_po = int_to_frac(sustainable_power) /
+	tz->tgp->ipa_params.k_po = int_to_frac(sustainable_power) /
 		temperature_threshold;
 
-	tz->tzp->k_pu = int_to_frac(2 * sustainable_power) /
+	tz->tgp->ipa_params.k_pu = int_to_frac(2 * sustainable_power) /
 		temperature_threshold;
 
-	k_i = tz->tzp->k_pu / 10;
-	tz->tzp->k_i = k_i > 0 ? k_i : 1;
+	k_i = tz->tgp->ipa_params.k_pu / 10;
+	tz->tgp->ipa_params.k_i = k_i > 0 ? k_i : 1;
 
 	/*
 	 * The default for k_d and integral_cutoff is 0, so we can
@@ -199,10 +199,10 @@ static u32 get_sustainable_power(struct thermal_zone_device *tz,
 {
 	u32 sustainable_power;
 
-	if (!tz->tzp->sustainable_power)
+	if (!tz->tgp->ipa_params.sustainable_power)
 		sustainable_power = estimate_sustainable_power(tz);
 	else
-		sustainable_power = tz->tzp->sustainable_power;
+		sustainable_power = tz->tgp->ipa_params.sustainable_power;
 
 	/* Check if it's init value 0 or there was update via sysfs */
 	if (sustainable_power != params->sustainable_power) {
@@ -210,7 +210,7 @@ static u32 get_sustainable_power(struct thermal_zone_device *tz,
 				       params->trip_switch_on, control_temp);
 
 		/* Do the estimation only once and make available in sysfs */
-		tz->tzp->sustainable_power = sustainable_power;
+		tz->tgp->ipa_params.sustainable_power = sustainable_power;
 		params->sustainable_power = sustainable_power;
 	}
 
@@ -252,7 +252,7 @@ static u32 pid_controller(struct thermal_zone_device *tz,
 	err = int_to_frac(err);
 
 	/* Calculate the proportional term */
-	p = mul_frac(err < 0 ? tz->tzp->k_po : tz->tzp->k_pu, err);
+	p = mul_frac(err < 0 ? tz->tgp->ipa_params.k_po : tz->tgp->ipa_params.k_pu, err);
 
 	/*
 	 * Calculate the integral term
@@ -260,10 +260,10 @@ static u32 pid_controller(struct thermal_zone_device *tz,
 	 * if the error is less than cut off allow integration (but
 	 * the integral is limited to max power)
 	 */
-	i = mul_frac(tz->tzp->k_i, params->err_integral);
+	i = mul_frac(tz->tgp->ipa_params.k_i, params->err_integral);
 
-	if (err < int_to_frac(tz->tzp->integral_cutoff)) {
-		s64 i_next = i + mul_frac(tz->tzp->k_i, err);
+	if (err < int_to_frac(tz->tgp->ipa_params.integral_cutoff)) {
+		s64 i_next = i + mul_frac(tz->tgp->ipa_params.k_i, err);
 
 		if (abs(i_next) < max_power_frac) {
 			i = i_next;
@@ -278,7 +278,7 @@ static u32 pid_controller(struct thermal_zone_device *tz,
 	 * error (i.e. driving closer to the line) results in less
 	 * power being applied, slowing down the controller)
 	 */
-	d = mul_frac(tz->tzp->k_d, err - params->prev_err);
+	d = mul_frac(tz->tgp->ipa_params.k_d, err - params->prev_err);
 	d = div_frac(d, jiffies_to_msecs(tz->passive_delay_jiffies));
 	params->prev_err = err;
 
@@ -699,9 +699,9 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 		return ret;
 	}
 
-	if (!tz->tzp) {
-		tz->tzp = kzalloc(sizeof(*tz->tzp), GFP_KERNEL);
-		if (!tz->tzp) {
+	if (!tz->tgp) {
+		tz->tgp = kzalloc(sizeof(*tz->tgp), GFP_KERNEL);
+		if (!tz->tgp) {
 			ret = -ENOMEM;
 			goto free_params;
 		}
@@ -709,10 +709,10 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 		params->allocated_tzp = true;
 	}
 
-	if (!tz->tzp->sustainable_power)
+	if (!tz->tgp->ipa_params.sustainable_power)
 		dev_warn(&tz->device, "power_allocator: sustainable_power will be estimated\n");
 
-	estimate_pid_constants(tz, tz->tzp->sustainable_power,
+	estimate_pid_constants(tz, tz->tgp->ipa_params.sustainable_power,
 			       params->trip_switch_on,
 			       params->trip_max->temperature);
 
@@ -736,8 +736,8 @@ static void power_allocator_unbind(struct thermal_zone_device *tz)
 	dev_dbg(&tz->device, "Unbinding from thermal zone %d\n", tz->id);
 
 	if (params->allocated_tzp) {
-		kfree(tz->tzp);
-		tz->tzp = NULL;
+		kfree(tz->tgp);
+		tz->tgp = NULL;
 	}
 
 	kfree(params->power);
