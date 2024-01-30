@@ -130,8 +130,8 @@ void drm_fb_xrgb8888_to_argb2101010(struct iosys_map *dst, const unsigned int *d
 				    const struct drm_pixmap *src_pix,
 				    struct drm_format_conv_state *state);
 void drm_fb_xrgb8888_to_gray8(struct iosys_map *dst, const unsigned int *dst_pitch,
-			      const struct iosys_map *src, const struct drm_framebuffer *fb,
-			      const struct drm_rect *clip, struct drm_format_conv_state *state);
+			      const struct drm_pixmap *src_pix,
+			      struct drm_format_conv_state *state);
 
 int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t dst_format,
 		const struct iosys_map *src, const struct drm_framebuffer *fb,

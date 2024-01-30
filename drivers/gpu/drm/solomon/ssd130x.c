@@ -1039,6 +1039,7 @@ static int ssd132x_fb_blit_rect(struct drm_framebuffer *fb,
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(fb->dev);
 	unsigned int dst_pitch = drm_rect_width(rect);
 	struct iosys_map dst;
+	struct drm_pixmap src_pix;
 	int ret = 0;
 
 	/* Align x to display segment boundaries */
@@ -1051,7 +1052,8 @@ static int ssd132x_fb_blit_rect(struct drm_framebuffer *fb,
 		return ret;
 
 	iosys_map_set_vaddr(&dst, buf);
-	drm_fb_xrgb8888_to_gray8(&dst, &dst_pitch, vmap, fb, rect, fmtcnv_state);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, vmap, rect);
+	drm_fb_xrgb8888_to_gray8(&dst, &dst_pitch, &src_pix, fmtcnv_state);
 
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 

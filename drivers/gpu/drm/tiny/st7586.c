@@ -71,6 +71,7 @@ static void st7586_xrgb8888_to_gray332(u8 *dst, void *vaddr,
 	unsigned int x, y;
 	u8 *src, *buf, val;
 	struct iosys_map dst_map, vmap;
+	struct drm_pixmap src_pix;
 
 	buf = kmalloc(len, GFP_KERNEL);
 	if (!buf)
@@ -78,7 +79,8 @@ static void st7586_xrgb8888_to_gray332(u8 *dst, void *vaddr,
 
 	iosys_map_set_vaddr(&dst_map, buf);
 	iosys_map_set_vaddr(&vmap, vaddr);
-	drm_fb_xrgb8888_to_gray8(&dst_map, NULL, &vmap, fb, clip, fmtcnv_state);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, &vmap, clip);
+	drm_fb_xrgb8888_to_gray8(&dst_map, NULL, &src_pix, fmtcnv_state);
 	src = buf;
 
 	for (y = clip->y1; y < clip->y2; y++) {
