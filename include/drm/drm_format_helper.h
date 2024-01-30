@@ -14,6 +14,7 @@
 
 struct drm_device;
 struct drm_framebuffer;
+struct font_desc;
 
 /**
  * struct drm_format_conv_state - Stores format-conversion state
@@ -93,6 +94,9 @@ struct drm_pixmap {
 
 void drm_pixmap_init_from_framebuffer(struct drm_pixmap *pix, const struct drm_framebuffer *fb,
 				      const struct iosys_map *data, const struct drm_rect *clip);
+void drm_pixmap_init_from_font_desc(struct drm_pixmap *pix, const struct font_desc *font,
+				    const struct iosys_map *data, int c);
+void drm_pixmap_set_font_char(struct drm_pixmap *pix, const struct iosys_map *data, int c);
 
 unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info *format,
 				const struct drm_rect *clip);

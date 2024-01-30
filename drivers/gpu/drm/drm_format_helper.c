@@ -8,6 +8,7 @@
  * (at your option) any later version.
  */
 
+#include <linux/font.h>
 #include <linux/io.h>
 #include <linux/iosys-map.h>
 #include <linux/module.h>
@@ -180,6 +181,32 @@ void drm_pixmap_init_from_framebuffer(struct drm_pixmap *pix, const struct drm_f
 	drm_pixmap_init(pix, fb->format, data, fb->pitches, clip);
 }
 EXPORT_SYMBOL(drm_pixmap_init_from_framebuffer);
+
+void drm_pixmap_init_from_font_desc(struct drm_pixmap *pix, const struct font_desc *font,
+				    const struct iosys_map *data, int c)
+{
+	const struct drm_rect clip = DRM_RECT_INIT(0, 0, font->width, font->height);
+	const struct drm_format_info *format = drm_format_info(DRM_FORMAT_C1);
+	const unsigned int pitches[DRM_FORMAT_MAX_PLANES] = {
+		drm_format_info_min_pitch(format, 0, font->width),
+	};
+	struct iosys_map cdata[DRM_FORMAT_MAX_PLANES] = {
+		IOSYS_MAP_INIT_OFFSET(&data[0], c * font->height * pitches[0]),
+	};
+
+	drm_pixmap_init(pix, format, cdata, pitches, &clip);
+}
+EXPORT_SYMBOL(drm_pixmap_init_from_font_desc);
+
+void drm_pixmap_set_font_char(struct drm_pixmap *pix, const struct iosys_map *data, int c)
+{
+	unsigned int height = drm_rect_height(&pix->clip);
+	size_t i;
+
+	for (i = 0; i < pix->format->num_planes; ++i)
+		pix->data[i] = IOSYS_MAP_INIT_OFFSET(&data[i], c * height * pix->pitches[i]);
+}
+EXPORT_SYMBOL(drm_pixmap_set_font_char);
 
 static int __drm_fb_xfrm(void *dst, unsigned long dst_pitch, unsigned long dst_pixsize,
 			 const void *src, unsigned long src_pitch, unsigned long src_pixsize,
