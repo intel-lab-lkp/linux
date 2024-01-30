@@ -268,8 +268,7 @@ static int __drm_fb_xfrm_toio(void __iomem *dst, unsigned long dst_pitch, unsign
 /* TODO: Make this function work with multi-plane formats. */
 static int drm_fb_xfrm(struct iosys_map *dst,
 		       const unsigned int *dst_pitch, const u8 *dst_pixsize,
-		       const struct iosys_map *src, const struct drm_framebuffer *fb,
-		       const struct drm_rect *clip, bool vaddr_cached_hint,
+		       const struct drm_pixmap *src_pix, bool vaddr_cached_hint,
 		       struct drm_format_conv_state *state,
 		       void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels))
 {
@@ -284,13 +283,13 @@ static int drm_fb_xfrm(struct iosys_map *dst,
 	if (dst[0].is_iomem)
 		return __drm_fb_xfrm_toio(
 			dst[0].vaddr_iomem, dst_pitch[0], dst_pixsize[0],
-			src[0].vaddr, fb->pitches[0], fb->format->cpp[0],
-			clip, vaddr_cached_hint, state, xfrm_line);
+			src_pix->data[0].vaddr, src_pix->pitches[0], src_pix->format->cpp[0],
+			&src_pix->clip, vaddr_cached_hint, state, xfrm_line);
 	else
 		return __drm_fb_xfrm(
 			dst[0].vaddr, dst_pitch[0], dst_pixsize[0],
-			src[0].vaddr, fb->pitches[0], fb->format->cpp[0],
-			clip, vaddr_cached_hint, state, xfrm_line);
+			src_pix->data[0].vaddr, src_pix->pitches[0], src_pix->format->cpp[0],
+			&src_pix->clip, vaddr_cached_hint, state, xfrm_line);
 }
 
 /**
@@ -397,6 +396,9 @@ void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 	const struct drm_format_info *format = fb->format;
 	u8 cpp = DIV_ROUND_UP(drm_format_info_bpp(format, 0), 8);
 	void (*swab_line)(void *dbuf, const void *sbuf, unsigned int npixels);
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
 	switch (cpp) {
 	case 4:
@@ -411,7 +413,7 @@ void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 		return;
 	}
 
-	drm_fb_xfrm(dst, dst_pitch, &cpp, src, fb, clip, cached, state, swab_line);
+	drm_fb_xfrm(dst, dst_pitch, &cpp, src_pix, cached, state, swab_line);
 }
 EXPORT_SYMBOL(drm_fb_swab);
 
@@ -458,8 +460,11 @@ void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pi
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		1,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_rgb332_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb332);
@@ -530,6 +535,9 @@ void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pi
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		2,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
 	void (*xfrm_line)(void *dbuf, const void *sbuf, unsigned int npixels);
 
@@ -538,7 +546,7 @@ void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pi
 	else
 		xfrm_line = drm_fb_xrgb8888_to_rgb565_line;
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state, xfrm_line);
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state, xfrm_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb565);
 
@@ -588,8 +596,11 @@ void drm_fb_xrgb8888_to_xrgb1555(struct iosys_map *dst, const unsigned int *dst_
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		2,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_xrgb1555_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb1555);
@@ -641,8 +652,11 @@ void drm_fb_xrgb8888_to_argb1555(struct iosys_map *dst, const unsigned int *dst_
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		2,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_argb1555_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb1555);
@@ -694,8 +708,11 @@ void drm_fb_xrgb8888_to_rgba5551(struct iosys_map *dst, const unsigned int *dst_
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		2,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_rgba5551_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgba5551);
@@ -745,8 +762,11 @@ void drm_fb_xrgb8888_to_rgb888(struct iosys_map *dst, const unsigned int *dst_pi
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		3,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_rgb888_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb888);
@@ -794,8 +814,11 @@ void drm_fb_xrgb8888_to_argb8888(struct iosys_map *dst, const unsigned int *dst_
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		4,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_argb8888_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb8888);
@@ -826,8 +849,11 @@ static void drm_fb_xrgb8888_to_abgr8888(struct iosys_map *dst, const unsigned in
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		4,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_abgr8888_line);
 }
 
@@ -857,8 +883,11 @@ static void drm_fb_xrgb8888_to_xbgr8888(struct iosys_map *dst, const unsigned in
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		4,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_xbgr8888_line);
 }
 
@@ -910,8 +939,11 @@ void drm_fb_xrgb8888_to_xrgb2101010(struct iosys_map *dst, const unsigned int *d
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		4,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_xrgb2101010_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb2101010);
@@ -965,8 +997,11 @@ void drm_fb_xrgb8888_to_argb2101010(struct iosys_map *dst, const unsigned int *d
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		4,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_argb2101010_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb2101010);
@@ -1021,8 +1056,11 @@ void drm_fb_xrgb8888_to_gray8(struct iosys_map *dst, const unsigned int *dst_pit
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		1,
 	};
+	struct drm_pixmap pixmap;
+	struct drm_pixmap *src_pix = &pixmap;
+	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
-	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src, fb, clip, false, state,
+	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_gray8_line);
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_gray8);
