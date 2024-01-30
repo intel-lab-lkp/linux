@@ -75,7 +75,7 @@ static void bind_previous_governor(struct thermal_zone_device *tz,
 		if (tz->governor->bind_to_tz(tz)) {
 			dev_err(&tz->device,
 				"governor %s failed to bind and the previous one (%s) failed to bind again, thermal zone %s has no governor\n",
-				failed_gov_name, tz->governor->name, tz->type);
+				failed_gov_name, tz->governor->name, tz->tzp->type);
 			tz->governor = NULL;
 		}
 	}
@@ -156,7 +156,7 @@ int thermal_register_governor(struct thermal_governor *governor)
 			if (ret)
 				dev_err(&pos->device,
 					"Failed to set governor %s for thermal zone %s: %d\n",
-					governor->name, pos->type, ret);
+					governor->name, pos->tzp->type, ret);
 		}
 	}
 
@@ -327,7 +327,7 @@ static void thermal_zone_device_halt(struct thermal_zone_device *tz, bool shutdo
 	int poweroff_delay_ms = CONFIG_THERMAL_EMERGENCY_POWEROFF_DELAY_MS;
 	const char *msg = "Temperature too high";
 
-	dev_emerg(&tz->device, "%s: critical temperature reached\n", tz->type);
+	dev_emerg(&tz->device, "%s: critical temperature reached\n", tz->tzp->type);
 
 	if (shutdown)
 		hw_protection_shutdown(msg, poweroff_delay_ms);
@@ -356,9 +356,9 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 	trace_thermal_zone_trip(tz, thermal_zone_trip_id(tz, trip), trip->type);
 
 	if (trip->type == THERMAL_TRIP_CRITICAL)
-		tz->ops->critical(tz);
-	else if (tz->ops->hot)
-		tz->ops->hot(tz);
+		tz->tzp->ops->critical(tz);
+	else if (tz->tzp->ops->hot)
+		tz->tzp->ops->hot(tz);
 }
 
 static void handle_thermal_trip(struct thermal_zone_device *tz,
@@ -493,8 +493,8 @@ static int thermal_zone_device_set_mode(struct thermal_zone_device *tz,
 		return ret;
 	}
 
-	if (tz->ops->change_mode)
-		ret = tz->ops->change_mode(tz, mode);
+	if (tz->tzp->ops->change_mode)
+		ret = tz->tzp->ops->change_mode(tz, mode);
 
 	if (!ret)
 		tz->mode = mode;
@@ -764,10 +764,10 @@ int thermal_zone_bind_cooling_device(struct thermal_zone_device *tz,
 				     unsigned long upper, unsigned long lower,
 				     unsigned int weight)
 {
-	if (trip_index < 0 || trip_index >= tz->num_trips)
+	if (trip_index < 0 || trip_index >= tz->tzp->num_trips)
 		return -EINVAL;
 
-	return thermal_bind_cdev_to_trip(tz, &tz->trips[trip_index], cdev,
+	return thermal_bind_cdev_to_trip(tz, &tz->tzp->trips[trip_index], cdev,
 					 upper, lower, weight);
 }
 EXPORT_SYMBOL_GPL(thermal_zone_bind_cooling_device);
@@ -823,10 +823,10 @@ int thermal_zone_unbind_cooling_device(struct thermal_zone_device *tz,
 				       int trip_index,
 				       struct thermal_cooling_device *cdev)
 {
-	if (trip_index < 0 || trip_index >= tz->num_trips)
+	if (trip_index < 0 || trip_index >= tz->tzp->num_trips)
 		return -EINVAL;
 
-	return thermal_unbind_cdev_from_trip(tz, &tz->trips[trip_index], cdev);
+	return thermal_unbind_cdev_from_trip(tz, &tz->tzp->trips[trip_index], cdev);
 }
 EXPORT_SYMBOL_GPL(thermal_zone_unbind_cooling_device);
 
@@ -858,7 +858,7 @@ void print_bind_err_msg(struct thermal_zone_device *tz,
 			struct thermal_cooling_device *cdev, int ret)
 {
 	dev_err(&tz->device, "binding zone %s with cdev %s failed:%d\n",
-		tz->type, cdev->type, ret);
+		tz->tzp->type, cdev->type, ret);
 }
 
 static void bind_cdev(struct thermal_cooling_device *cdev)
@@ -867,8 +867,8 @@ static void bind_cdev(struct thermal_cooling_device *cdev)
 	struct thermal_zone_device *pos = NULL;
 
 	list_for_each_entry(pos, &thermal_tz_list, node) {
-		if (pos->ops->bind) {
-			ret = pos->ops->bind(pos, cdev);
+		if (pos->tzp->ops->bind) {
+			ret = pos->tzp->ops->bind(pos, cdev);
 			if (ret)
 				print_bind_err_msg(pos, cdev, ret);
 		}
@@ -1184,8 +1184,8 @@ void thermal_cooling_device_unregister(struct thermal_cooling_device *cdev)
 
 	/* Unbind all thermal zones associated with 'this' cdev */
 	list_for_each_entry(tz, &thermal_tz_list, node) {
-		if (tz->ops->unbind)
-			tz->ops->unbind(tz, cdev);
+		if (tz->tzp->ops->unbind)
+			tz->tzp->ops->unbind(tz, cdev);
 	}
 
 	mutex_unlock(&thermal_list_lock);
@@ -1199,13 +1199,13 @@ static void bind_tz(struct thermal_zone_device *tz)
 	int ret;
 	struct thermal_cooling_device *pos = NULL;
 
-	if (!tz->ops->bind)
+	if (!tz->tzp->ops->bind)
 		return;
 
 	mutex_lock(&thermal_list_lock);
 
 	list_for_each_entry(pos, &thermal_cdev_list, node) {
-		ret = tz->ops->bind(tz, pos);
+		ret = tz->tzp->ops->bind(tz, pos);
 		if (ret)
 			print_bind_err_msg(tz, pos, ret);
 	}
@@ -1224,17 +1224,17 @@ int thermal_zone_get_crit_temp(struct thermal_zone_device *tz, int *temp)
 {
 	int i, ret = -EINVAL;
 
-	if (tz->ops->get_crit_temp)
-		return tz->ops->get_crit_temp(tz, temp);
+	if (tz->tzp->ops->get_crit_temp)
+		return tz->tzp->ops->get_crit_temp(tz, temp);
 
-	if (!tz->trips)
+	if (!tz->tzp->trips)
 		return -EINVAL;
 
 	mutex_lock(&tz->lock);
 
-	for (i = 0; i < tz->num_trips; i++) {
-		if (tz->trips[i].type == THERMAL_TRIP_CRITICAL) {
-			*temp = tz->trips[i].temperature;
+	for (i = 0; i < tz->tzp->num_trips; i++) {
+		if (tz->tzp->trips[i].type == THERMAL_TRIP_CRITICAL) {
+			*temp = tz->tzp->trips[i].temperature;
 			ret = 0;
 			break;
 		}
@@ -1417,16 +1417,11 @@ struct thermal_zone_device *thermal_zone_device_register(struct thermal_zone_dev
 	}
 
 	tz->id = id;
-	strscpy(tz->type, tzdp->tzp.type, sizeof(tz->type));
 
 	if (!tzdp->tzp.ops->critical)
 		tzdp->tzp.ops->critical = thermal_zone_device_critical;
 
-	tz->ops = tzdp->tzp.ops;
 	tz->device.class = thermal_class;
-	tz->devdata = tzdp->tzp.devdata;
-	tz->trips = tzdp->tzp.trips;
-	tz->num_trips = tzdp->tzp.num_trips;
 
 	thermal_set_delay_jiffies(&tz->passive_delay_jiffies, tzdp->tzp.passive_delay);
 	thermal_set_delay_jiffies(&tz->polling_delay_jiffies, tzdp->tzp.polling_delay);
@@ -1509,13 +1504,13 @@ EXPORT_SYMBOL_GPL(thermal_zone_device_register);
 
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd)
 {
-	return tzd->devdata;
+	return tzd->tzp->devdata;
 }
 EXPORT_SYMBOL_GPL(thermal_zone_device_priv);
 
 const char *thermal_zone_device_type(struct thermal_zone_device *tzd)
 {
-	return tzd->type;
+	return tzd->tzp->type;
 }
 EXPORT_SYMBOL_GPL(thermal_zone_device_type);
 
@@ -1561,8 +1556,8 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 
 	/* Unbind all cdevs associated with 'this' thermal zone */
 	list_for_each_entry(cdev, &thermal_cdev_list, node)
-		if (tz->ops->unbind)
-			tz->ops->unbind(tz, cdev);
+		if (tz->tzp->ops->unbind)
+			tz->tzp->ops->unbind(tz, cdev);
 
 	mutex_unlock(&thermal_list_lock);
 
@@ -1607,7 +1602,7 @@ struct thermal_zone_device *thermal_zone_get_zone_by_name(const char *name)
 
 	mutex_lock(&thermal_list_lock);
 	list_for_each_entry(pos, &thermal_tz_list, node)
-		if (!strncasecmp(name, pos->type, THERMAL_NAME_LENGTH)) {
+		if (!strncasecmp(name, pos->tzp->type, THERMAL_NAME_LENGTH)) {
 			found++;
 			ref = pos;
 		}

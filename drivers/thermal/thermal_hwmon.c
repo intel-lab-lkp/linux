@@ -80,7 +80,7 @@ temp_crit_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	mutex_lock(&tz->lock);
 
-	ret = tz->ops->get_crit_temp(tz, &temperature);
+	ret = tz->tzp->ops->get_crit_temp(tz, &temperature);
 
 	mutex_unlock(&tz->lock);
 
@@ -99,7 +99,7 @@ thermal_hwmon_lookup_by_type(const struct thermal_zone_device *tz)
 
 	mutex_lock(&thermal_hwmon_list_lock);
 	list_for_each_entry(hwmon, &thermal_hwmon_list, node) {
-		strcpy(type, tz->type);
+		strcpy(type, tz->tzp->type);
 		strreplace(type, '-', '_');
 		if (!strcmp(hwmon->type, type)) {
 			mutex_unlock(&thermal_hwmon_list_lock);
@@ -132,7 +132,7 @@ thermal_hwmon_lookup_temp(const struct thermal_hwmon_device *hwmon,
 static bool thermal_zone_crit_temp_valid(struct thermal_zone_device *tz)
 {
 	int temp;
-	return tz->ops->get_crit_temp && !tz->ops->get_crit_temp(tz, &temp);
+	return tz->tzp->ops->get_crit_temp && !tz->tzp->ops->get_crit_temp(tz, &temp);
 }
 
 int thermal_add_hwmon_sysfs(struct thermal_zone_device *tz)
@@ -153,7 +153,7 @@ int thermal_add_hwmon_sysfs(struct thermal_zone_device *tz)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&hwmon->tz_list);
-	strscpy(hwmon->type, tz->type, THERMAL_NAME_LENGTH);
+	strscpy(hwmon->type, tz->tzp->type, THERMAL_NAME_LENGTH);
 	strreplace(hwmon->type, '-', '_');
 	hwmon->device = hwmon_device_register_for_thermal(&tz->device,
 							  hwmon->type, hwmon);

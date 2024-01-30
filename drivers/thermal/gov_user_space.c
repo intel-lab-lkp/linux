@@ -37,7 +37,7 @@ static int notify_user_space(struct thermal_zone_device *tz,
 
 	lockdep_assert_held(&tz->lock);
 
-	thermal_prop[0] = kasprintf(GFP_KERNEL, "NAME=%s", tz->type);
+	thermal_prop[0] = kasprintf(GFP_KERNEL, "NAME=%s", tz->tzp->type);
 	thermal_prop[1] = kasprintf(GFP_KERNEL, "TEMP=%d", tz->temperature);
 	thermal_prop[2] = kasprintf(GFP_KERNEL, "TRIP=%d",
 				    thermal_zone_trip_id(tz, trip));

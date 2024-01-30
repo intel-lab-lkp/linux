@@ -28,14 +28,14 @@ TRACE_EVENT(thermal_temperature,
 	TP_ARGS(tz),
 
 	TP_STRUCT__entry(
-		__string(thermal_zone, tz->type)
+		__string(thermal_zone, tz->tzp->type)
 		__field(int, id)
 		__field(int, temp_prev)
 		__field(int, temp)
 	),
 
 	TP_fast_assign(
-		__assign_str(thermal_zone, tz->type);
+		__assign_str(thermal_zone, tz->tzp->type);
 		__entry->id = tz->id;
 		__entry->temp_prev = tz->last_temperature;
 		__entry->temp = tz->temperature;
@@ -73,14 +73,14 @@ TRACE_EVENT(thermal_zone_trip,
 	TP_ARGS(tz, trip, trip_type),
 
 	TP_STRUCT__entry(
-		__string(thermal_zone, tz->type)
+		__string(thermal_zone, tz->tzp->type)
 		__field(int, id)
 		__field(int, trip)
 		__field(enum thermal_trip_type, trip_type)
 	),
 
 	TP_fast_assign(
-		__assign_str(thermal_zone, tz->type);
+		__assign_str(thermal_zone, tz->tzp->type);
 		__entry->id = tz->id;
 		__entry->trip = trip;
 		__entry->trip_type = trip_type;

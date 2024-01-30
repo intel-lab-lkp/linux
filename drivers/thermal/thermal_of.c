@@ -274,7 +274,7 @@ static struct device_node *thermal_of_zone_get_by_name(struct thermal_zone_devic
 	if (!np)
 		return ERR_PTR(-ENODEV);
 
-	tz_np = of_get_child_by_name(np, tz->type);
+	tz_np = of_get_child_by_name(np, tz->tzp->type);
 
 	of_node_put(np);
 
@@ -310,7 +310,7 @@ static int __thermal_of_unbind(struct device_node *map_np, int index, int trip_i
 
 	ret = thermal_zone_unbind_cooling_device(tz, trip_id, cdev);
 	if (ret)
-		pr_err("Failed to unbind '%s' with '%s': %d\n", tz->type, cdev->type, ret);
+		pr_err("Failed to unbind '%s' with '%s': %d\n", tz->tzp->type, cdev->type, ret);
 
 	return ret;
 }
@@ -345,7 +345,7 @@ static int __thermal_of_bind(struct device_node *map_np, int index, int trip_id,
 					       cooling_spec.args[0],
 					       weight);
 	if (ret)
-		pr_err("Failed to bind '%s' with '%s': %d\n", tz->type, cdev->type, ret);
+		pr_err("Failed to bind '%s' with '%s': %d\n", tz->tzp->type, cdev->type, ret);
 
 	return ret;
 }
@@ -438,8 +438,8 @@ static int thermal_of_unbind(struct thermal_zone_device *tz,
  */
 static void thermal_of_zone_unregister(struct thermal_zone_device *tz)
 {
-	struct thermal_trip *trips = tz->trips;
-	struct thermal_zone_device_ops *ops = tz->ops;
+	struct thermal_trip *trips = tz->tzp->trips;
+	struct thermal_zone_device_ops *ops = tz->tzp->ops;
 
 	thermal_zone_device_disable(tz);
 	thermal_zone_device_unregister(tz);
@@ -529,7 +529,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 	ret = thermal_zone_device_enable(tz);
 	if (ret) {
 		pr_err("Failed to enabled thermal zone '%s', id=%d: %d\n",
-		       tz->type, tz->id, ret);
+		       tz->tzp->type, tz->id, ret);
 		thermal_of_zone_unregister(tz);
 		return ERR_PTR(ret);
 	}

@@ -28,7 +28,7 @@ type_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 
-	return sprintf(buf, "%s\n", tz->type);
+	return sprintf(buf, "%s\n", tz->tzp->type);
 }
 
 static ssize_t
@@ -88,7 +88,7 @@ trip_point_type_show(struct device *dev, struct device_attribute *attr,
 	if (sscanf(attr->attr.name, "trip_point_%d_type", &trip_id) != 1)
 		return -EINVAL;
 
-	switch (tz->trips[trip_id].type) {
+	switch (tz->tzp->trips[trip_id].type) {
 	case THERMAL_TRIP_CRITICAL:
 		return sprintf(buf, "critical\n");
 	case THERMAL_TRIP_HOT:
@@ -120,11 +120,11 @@ trip_point_temp_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&tz->lock);
 
-	trip = &tz->trips[trip_id];
+	trip = &tz->tzp->trips[trip_id];
 
 	if (temp != trip->temperature) {
-		if (tz->ops->set_trip_temp) {
-			ret = tz->ops->set_trip_temp(tz, trip_id, temp);
+		if (tz->tzp->ops->set_trip_temp) {
+			ret = tz->tzp->ops->set_trip_temp(tz, trip_id, temp);
 			if (ret)
 				goto unlock;
 		}
@@ -150,7 +150,7 @@ trip_point_temp_show(struct device *dev, struct device_attribute *attr,
 	if (sscanf(attr->attr.name, "trip_point_%d_temp", &trip_id) != 1)
 		return -EINVAL;
 
-	return sprintf(buf, "%d\n", tz->trips[trip_id].temperature);
+	return sprintf(buf, "%d\n", tz->tzp->trips[trip_id].temperature);
 }
 
 static ssize_t
@@ -171,11 +171,11 @@ trip_point_hyst_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&tz->lock);
 
-	trip = &tz->trips[trip_id];
+	trip = &tz->tzp->trips[trip_id];
 
 	if (hyst != trip->hysteresis) {
-		if (tz->ops->set_trip_hyst) {
-			ret = tz->ops->set_trip_hyst(tz, trip_id, hyst);
+		if (tz->tzp->ops->set_trip_hyst) {
+			ret = tz->tzp->ops->set_trip_hyst(tz, trip_id, hyst);
 			if (ret)
 				goto unlock;
 		}
@@ -201,7 +201,7 @@ trip_point_hyst_show(struct device *dev, struct device_attribute *attr,
 	if (sscanf(attr->attr.name, "trip_point_%d_hyst", &trip_id) != 1)
 		return -EINVAL;
 
-	return sprintf(buf, "%d\n", tz->trips[trip_id].hysteresis);
+	return sprintf(buf, "%d\n", tz->tzp->trips[trip_id].hysteresis);
 }
 
 static ssize_t
@@ -250,10 +250,10 @@ emul_temp_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&tz->lock);
 
-	if (!tz->ops->set_emul_temp)
+	if (!tz->tzp->ops->set_emul_temp)
 		tz->emul_temperature = temperature;
 	else
-		ret = tz->ops->set_emul_temp(tz, temperature);
+		ret = tz->tzp->ops->set_emul_temp(tz, temperature);
 
 	if (!ret)
 		__thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
@@ -405,22 +405,22 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 	int indx;
 
 	/* This function works only for zones with at least one trip */
-	if (tz->num_trips <= 0)
+	if (tz->tzp->num_trips <= 0)
 		return -EINVAL;
 
-	tz->trip_type_attrs = kcalloc(tz->num_trips, sizeof(*tz->trip_type_attrs),
+	tz->trip_type_attrs = kcalloc(tz->tzp->num_trips, sizeof(*tz->trip_type_attrs),
 				      GFP_KERNEL);
 	if (!tz->trip_type_attrs)
 		return -ENOMEM;
 
-	tz->trip_temp_attrs = kcalloc(tz->num_trips, sizeof(*tz->trip_temp_attrs),
+	tz->trip_temp_attrs = kcalloc(tz->tzp->num_trips, sizeof(*tz->trip_temp_attrs),
 				      GFP_KERNEL);
 	if (!tz->trip_temp_attrs) {
 		kfree(tz->trip_type_attrs);
 		return -ENOMEM;
 	}
 
-	tz->trip_hyst_attrs = kcalloc(tz->num_trips,
+	tz->trip_hyst_attrs = kcalloc(tz->tzp->num_trips,
 				      sizeof(*tz->trip_hyst_attrs),
 				      GFP_KERNEL);
 	if (!tz->trip_hyst_attrs) {
@@ -429,7 +429,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 		return -ENOMEM;
 	}
 
-	attrs = kcalloc(tz->num_trips * 3 + 1, sizeof(*attrs), GFP_KERNEL);
+	attrs = kcalloc(tz->tzp->num_trips * 3 + 1, sizeof(*attrs), GFP_KERNEL);
 	if (!attrs) {
 		kfree(tz->trip_type_attrs);
 		kfree(tz->trip_temp_attrs);
@@ -437,7 +437,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 		return -ENOMEM;
 	}
 
-	for (indx = 0; indx < tz->num_trips; indx++) {
+	for (indx = 0; indx < tz->tzp->num_trips; indx++) {
 		/* create trip type attribute */
 		snprintf(tz->trip_type_attrs[indx].name, THERMAL_NAME_LENGTH,
 			 "trip_point_%d_type", indx);
@@ -464,7 +464,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 			tz->trip_temp_attrs[indx].attr.store =
 							trip_point_temp_store;
 		}
-		attrs[indx + tz->num_trips] = &tz->trip_temp_attrs[indx].attr.attr;
+		attrs[indx + tz->tzp->num_trips] = &tz->trip_temp_attrs[indx].attr.attr;
 
 		snprintf(tz->trip_hyst_attrs[indx].name, THERMAL_NAME_LENGTH,
 			 "trip_point_%d_hyst", indx);
@@ -474,15 +474,15 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 					tz->trip_hyst_attrs[indx].name;
 		tz->trip_hyst_attrs[indx].attr.attr.mode = S_IRUGO;
 		tz->trip_hyst_attrs[indx].attr.show = trip_point_hyst_show;
-		if (tz->ops->set_trip_hyst) {
+		if (tz->tzp->ops->set_trip_hyst) {
 			tz->trip_hyst_attrs[indx].attr.attr.mode |= S_IWUSR;
 			tz->trip_hyst_attrs[indx].attr.store =
 					trip_point_hyst_store;
 		}
-		attrs[indx + tz->num_trips * 2] =
+		attrs[indx + tz->tzp->num_trips * 2] =
 					&tz->trip_hyst_attrs[indx].attr.attr;
 	}
-	attrs[tz->num_trips * 3] = NULL;
+	attrs[tz->tzp->num_trips * 3] = NULL;
 
 	tz->trips_attribute_group.attrs = attrs;
 
@@ -522,7 +522,7 @@ int thermal_zone_create_device_groups(struct thermal_zone_device *tz,
 	for (i = 0; i < size - 2; i++)
 		groups[i] = thermal_zone_attribute_groups[i];
 
-	if (tz->num_trips) {
+	if (tz->tzp->num_trips) {
 		result = create_trip_attrs(tz, mask);
 		if (result) {
 			kfree(groups);
@@ -543,7 +543,7 @@ void thermal_zone_destroy_device_groups(struct thermal_zone_device *tz)
 	if (!tz)
 		return;
 
-	if (tz->num_trips)
+	if (tz->tzp->num_trips)
 		destroy_trip_attrs(tz);
 
 	kfree(tz->device.groups);

@@ -122,16 +122,12 @@ struct thermal_cooling_device {
 /**
  * struct thermal_zone_device - structure for a thermal zone
  * @id:		unique id number for each thermal zone
- * @type:	the thermal zone device type
  * @device:	&struct device for this thermal zone
  * @removal:	removal completion
  * @trip_temp_attrs:	attributes for trip points for sysfs: trip temperature
  * @trip_type_attrs:	attributes for trip points for sysfs: trip type
  * @trip_hyst_attrs:	attributes for trip points for sysfs: trip hysteresis
  * @mode:		current mode of this thermal zone
- * @devdata:	private pointer for device private data
- * @trips:	an array of struct thermal_trip
- * @num_trips:	number of trip points the thermal zone supports
  * @passive_delay_jiffies: number of jiffies to wait between polls when
  *			performing passive cooling.
  * @polling_delay_jiffies: number of jiffies to wait between polls when
@@ -148,7 +144,6 @@ struct thermal_cooling_device {
  * @prev_high_trip:	the above current temperature if you've crossed a
 			passive trip point.
  * @need_update:	if equals 1, thermal_zone_device_update needs to be invoked.
- * @ops:	operations this &thermal_zone_device supports
  * @tzp:		Thermal zone parameters
  * @tgp:		Thermal zone governor parameters
  * @governor:	pointer to the governor for this thermal zone
@@ -164,7 +159,6 @@ struct thermal_cooling_device {
  */
 struct thermal_zone_device {
 	int id;
-	char type[THERMAL_NAME_LENGTH];
 	struct device device;
 	struct completion removal;
 	struct attribute_group trips_attribute_group;
@@ -172,9 +166,6 @@ struct thermal_zone_device {
 	struct thermal_attr *trip_type_attrs;
 	struct thermal_attr *trip_hyst_attrs;
 	enum thermal_device_mode mode;
-	void *devdata;
-	struct thermal_trip *trips;
-	int num_trips;
 	unsigned long passive_delay_jiffies;
 	unsigned long polling_delay_jiffies;
 	int temperature;
@@ -184,7 +175,6 @@ struct thermal_zone_device {
 	int prev_low_trip;
 	int prev_high_trip;
 	atomic_t need_update;
-	struct thermal_zone_device_ops *ops;
 	struct thermal_zone_platform_params *tzp;
 	struct thermal_governor_params *tgp;
 	struct thermal_governor *governor;
