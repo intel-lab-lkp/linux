@@ -220,8 +220,15 @@ static void remove_dts_thermal_zone(struct intel_soc_dts_sensor_entry *dts)
 static int add_dts_thermal_zone(int id, struct intel_soc_dts_sensor_entry *dts,
 				bool critical_trip)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.devdata = dts,
+			.ops = &tzone_ops,
+			.trips = dts->trips,
+			.num_trips = SOC_MAX_DTS_TRIPS,
+		}
+	};
 	int writable_trip_cnt = SOC_MAX_DTS_TRIPS;
-	char name[10];
 	unsigned long trip;
 	int trip_mask;
 	unsigned long ptps;
@@ -253,12 +260,15 @@ static int add_dts_thermal_zone(int id, struct intel_soc_dts_sensor_entry *dts,
 			trip_mask &= ~BIT(i / 8);
 	}
 	dts->trip_mask = trip_mask;
-	snprintf(name, sizeof(name), "soc_dts%d", id);
-	dts->tzone = thermal_zone_device_register_with_trips(name, dts->trips,
-							     SOC_MAX_DTS_TRIPS,
-							     trip_mask,
-							     dts, &tzone_ops,
-							     NULL, 0, 0);
+
+	tzdp.tzp.type = kasprintf(GFP_KERNEL, "soc_dts%d", id);
+	if (!tzdp.tzp.type)
+		return -ENOMEM;
+
+	tzdp.tzp.mask = trip_mask;
+
+	dts->tzone = thermal_zone_device_register(&tzdp);
+	kfree(tzdp.tzp.type);
 	if (IS_ERR(dts->tzone)) {
 		ret = PTR_ERR(dts->tzone);
 		goto err_ret;
