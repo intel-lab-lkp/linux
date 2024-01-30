@@ -653,6 +653,13 @@ static int pkt_session_set_property_1x(struct hfi_session_set_property_pkt *pkt,
 		case HFI_RATE_CONTROL_VBR_VFR:
 		case HFI_RATE_CONTROL_CQ:
 			break;
+		case HFI_RATE_CONTROL_MBR_CFR:
+			if (hfi_ver == HFI_VERSION_4XX) {
+				break;
+			} else {
+				ret = -ENOTSUPP;
+				break;
+			}
 		default:
 			ret = -EINVAL;
 			break;
