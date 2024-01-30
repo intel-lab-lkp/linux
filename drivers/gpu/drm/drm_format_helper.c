@@ -999,19 +999,18 @@ EXPORT_SYMBOL(drm_fb_xrgb8888_to_gray8);
 
 /**
  * drm_fb_blit - Copy parts of a framebuffer to display memory
+ * @dev:	DRM device
  * @dst:	Array of display-memory addresses to copy to
  * @dst_pitch: Array of numbers of bytes between the start of two consecutive scanlines
  *             within @dst; can be NULL if scanlines are stored next to each other.
  * @dst_format:	FOURCC code of the display's color format
- * @src:	The framebuffer memory to copy from
- * @fb:		The framebuffer to copy from
- * @clip:	Clip rectangle area to copy
+ * @src_pix: Source pixmap to copy from
  * @state: Transform and conversion state
  *
  * This function copies parts of a framebuffer to display memory. If the
  * formats of the display and the framebuffer mismatch, the blit function
- * will attempt to convert between them during the process. The parameters @dst,
- * @dst_pitch and @src refer to arrays. Each array must have at least as many
+ * will attempt to convert between them during the process. The parameters @dst
+ * and @dst_pitch refer to arrays. Each array must have at least as many
  * entries as there are planes in @dst_format's format. Each entry stores the
  * value for the format's respective color plane at the same index.
  *
@@ -1023,15 +1022,12 @@ EXPORT_SYMBOL(drm_fb_xrgb8888_to_gray8);
  * -EINVAL if the color-format conversion failed, or
  * a negative error code otherwise.
  */
-int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t dst_format,
-		const struct iosys_map *src, const struct drm_framebuffer *fb,
-		const struct drm_rect *clip, struct drm_format_conv_state *state)
+int drm_fb_blit(struct drm_device *dev,
+		struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t dst_format,
+		const struct drm_pixmap *src_pix,
+		struct drm_format_conv_state *state)
 {
-	struct drm_device *dev = fb->dev;
-	uint32_t fb_format = fb->format->format;
-	struct drm_pixmap pixmap;
-	struct drm_pixmap *src_pix = &pixmap;
-	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
+	uint32_t fb_format = src_pix->format->format;
 
 	if (fb_format == dst_format) {
 		drm_fb_memcpy(dst, dst_pitch, src_pix);
@@ -1079,7 +1075,7 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 		}
 	}
 
-	drm_warn_once(fb->dev, "No conversion helper from %p4cc to %p4cc found.\n",
+	drm_warn_once(dev, "No conversion helper from %p4cc to %p4cc found.\n",
 		      &fb_format, &dst_format);
 
 	return -EINVAL;

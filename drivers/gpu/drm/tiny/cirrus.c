@@ -410,9 +410,11 @@ static void cirrus_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		unsigned int offset = drm_fb_clip_offset(pitch, format, &damage);
 		struct iosys_map dst = IOSYS_MAP_INIT_OFFSET(&vaddr, offset);
+		struct drm_pixmap src_pix;
 
-		drm_fb_blit(&dst, &pitch, format->format, shadow_plane_state->data, fb,
-			    &damage, &shadow_plane_state->fmtcnv_state);
+		drm_pixmap_init_from_framebuffer(&src_pix, fb, shadow_plane_state->data, &damage);
+		drm_fb_blit(plane->dev, &dst, &pitch, format->format, &src_pix,
+			    &shadow_plane_state->fmtcnv_state);
 	}
 
 	drm_dev_exit(idx);

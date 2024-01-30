@@ -641,13 +641,15 @@ static void simpledrm_primary_plane_helper_atomic_update(struct drm_plane *plane
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		struct drm_rect dst_clip = plane_state->dst;
 		struct iosys_map dst = sdev->screen_base;
+		struct drm_pixmap src_pix;
 
 		if (!drm_rect_intersect(&dst_clip, &damage))
 			continue;
 
 		iosys_map_incr(&dst, drm_fb_clip_offset(sdev->pitch, sdev->format, &dst_clip));
-		drm_fb_blit(&dst, &sdev->pitch, sdev->format->format, shadow_plane_state->data,
-			    fb, &damage, &shadow_plane_state->fmtcnv_state);
+		drm_pixmap_init_from_framebuffer(&src_pix, fb, shadow_plane_state->data, &damage);
+		drm_fb_blit(dev, &dst, &sdev->pitch, sdev->format->format, &src_pix,
+			    &shadow_plane_state->fmtcnv_state);
 	}
 
 	drm_dev_exit(idx);
