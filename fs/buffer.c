@@ -2441,11 +2441,13 @@ EXPORT_SYMBOL(block_read_full_folio);
  * truncates.  Uses filesystem pagecache writes to allow the filesystem to
  * deal with the hole.  
  */
-int generic_cont_expand_simple(struct inode *inode, loff_t size)
+int generic_cont_expand_simple(struct inode *inode, loff_t size,
+		const struct buffered_write_operations *ops)
 {
 	struct address_space *mapping = inode->i_mapping;
 	const struct address_space_operations *aops = mapping->a_ops;
 	struct page *page;
+	struct folio *folio;
 	void *fsdata = NULL;
 	int err;
 
@@ -2453,11 +2455,17 @@ int generic_cont_expand_simple(struct inode *inode, loff_t size)
 	if (err)
 		goto out;
 
-	err = aops->write_begin(NULL, mapping, size, 0, &page, &fsdata);
+	if (ops)
+		err = ops->write_begin(NULL, mapping, size, 0, &folio, &fsdata);
+	else
+		err = aops->write_begin(NULL, mapping, size, 0, &page, &fsdata);
 	if (err)
 		goto out;
 
-	err = aops->write_end(NULL, mapping, size, 0, 0, page, fsdata);
+	if (ops)
+		err = ops->write_end(NULL, mapping, size, 0, 0, folio, &fsdata);
+	else
+		err = aops->write_end(NULL, mapping, size, 0, 0, page, fsdata);
 	BUG_ON(err > 0);
 
 out:
@@ -2466,12 +2474,14 @@ out:
 EXPORT_SYMBOL(generic_cont_expand_simple);
 
 static int cont_expand_zero(struct file *file, struct address_space *mapping,
-			    loff_t pos, loff_t *bytes)
+		loff_t pos, loff_t *bytes,
+		const struct buffered_write_operations *ops)
 {
 	struct inode *inode = mapping->host;
 	const struct address_space_operations *aops = mapping->a_ops;
 	unsigned int blocksize = i_blocksize(inode);
 	struct page *page;
+	struct folio *folio;
 	void *fsdata = NULL;
 	pgoff_t index, curidx;
 	loff_t curpos;
@@ -2489,13 +2499,23 @@ static int cont_expand_zero(struct file *file, struct address_space *mapping,
 		}
 		len = PAGE_SIZE - zerofrom;
 
-		err = aops->write_begin(file, mapping, curpos, len,
-					    &page, &fsdata);
+		if (ops) {
+			err = ops->write_begin(file, mapping, curpos, len,
+					&folio, &fsdata);
+			page = &folio->page;
+		} else {
+			err = aops->write_begin(file, mapping, curpos, len,
+					&page, &fsdata);
+		}
 		if (err)
 			goto out;
 		zero_user(page, zerofrom, len);
-		err = aops->write_end(file, mapping, curpos, len, len,
-						page, fsdata);
+		if (ops)
+			err = ops->write_end(file, mapping, curpos, len, len,
+					folio, &fsdata);
+		else
+			err = aops->write_end(file, mapping, curpos, len, len,
+					page, fsdata);
 		if (err < 0)
 			goto out;
 		BUG_ON(err != len);
@@ -2522,13 +2542,23 @@ static int cont_expand_zero(struct file *file, struct address_space *mapping,
 		}
 		len = offset - zerofrom;
 
-		err = aops->write_begin(file, mapping, curpos, len,
-					    &page, &fsdata);
+		if (ops) {
+			err = ops->write_begin(file, mapping, curpos, len,
+					&folio, &fsdata);
+			page = &folio->page;
+		} else {
+			err = aops->write_begin(file, mapping, curpos, len,
+					&page, &fsdata);
+		}
 		if (err)
 			goto out;
 		zero_user(page, zerofrom, len);
-		err = aops->write_end(file, mapping, curpos, len, len,
-						page, fsdata);
+		if (ops)
+			err = ops->write_end(file, mapping, curpos, len, len,
+					folio, &fsdata);
+		else
+			err = aops->write_end(file, mapping, curpos, len, len,
+					page, fsdata);
 		if (err < 0)
 			goto out;
 		BUG_ON(err != len);
@@ -2543,16 +2573,16 @@ out:
  * We may have to extend the file.
  */
 int cont_write_begin(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len,
-			struct page **pagep, void **fsdata,
-			get_block_t *get_block, loff_t *bytes)
+		loff_t pos, unsigned len, struct page **pagep, void **fsdata,
+		get_block_t *get_block, loff_t *bytes,
+		const struct buffered_write_operations *ops)
 {
 	struct inode *inode = mapping->host;
 	unsigned int blocksize = i_blocksize(inode);
 	unsigned int zerofrom;
 	int err;
 
-	err = cont_expand_zero(file, mapping, pos, bytes);
+	err = cont_expand_zero(file, mapping, pos, bytes, ops);
 	if (err)
 		return err;
 
