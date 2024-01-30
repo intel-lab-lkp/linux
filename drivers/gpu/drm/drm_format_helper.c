@@ -607,15 +607,13 @@ static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsig
  * @dst: Array of ARGB1555 destination buffers
  * @dst_pitch: Array of numbers of bytes between the start of two consecutive scanlines
  *             within @dst; can be NULL if scanlines are stored next to each other.
- * @src: Array of XRGB8888 source buffer
- * @fb: DRM framebuffer
- * @clip: Clip rectangle area to copy
+ * @src_pix: Source pixmap to copy from
  * @state: Transform and conversion state
  *
  * This function copies parts of a framebuffer to display memory and converts
- * the color format during the process. The parameters @dst, @dst_pitch and
- * @src refer to arrays. Each array must have at least as many entries as
- * there are planes in @fb's format. Each entry stores the value for the
+ * the color format during the process. The parameters @dst and @dst_pitch refer
+ * to arrays. Each array must have at least as many entries as there are planes
+ * in the pixmap's format. Each entry stores the value for the
  * format's respective color plane at the same index.
  *
  * This function does not apply clipping on @dst (i.e. the destination is at the
@@ -625,15 +623,12 @@ static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsig
  * XRGB8888 natively. It sets an opaque alpha channel as part of the conversion.
  */
 void drm_fb_xrgb8888_to_argb1555(struct iosys_map *dst, const unsigned int *dst_pitch,
-				 const struct iosys_map *src, const struct drm_framebuffer *fb,
-				 const struct drm_rect *clip, struct drm_format_conv_state *state)
+				 const struct drm_pixmap *src_pix,
+				 struct drm_format_conv_state *state)
 {
 	static const u8 dst_pixsize[DRM_FORMAT_MAX_PLANES] = {
 		2,
 	};
-	struct drm_pixmap pixmap;
-	struct drm_pixmap *src_pix = &pixmap;
-	drm_pixmap_init_from_framebuffer(src_pix, fb, src, clip);
 
 	drm_fb_xfrm(dst, dst_pitch, dst_pixsize, src_pix, false, state,
 		    drm_fb_xrgb8888_to_argb1555_line);
@@ -1097,7 +1092,7 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 			drm_fb_xrgb8888_to_xrgb1555(dst, dst_pitch, src_pix, state);
 			return 0;
 		} else if (dst_format == DRM_FORMAT_ARGB1555) {
-			drm_fb_xrgb8888_to_argb1555(dst, dst_pitch, src, fb, clip, state);
+			drm_fb_xrgb8888_to_argb1555(dst, dst_pitch, src_pix, state);
 			return 0;
 		} else if (dst_format == DRM_FORMAT_RGBA5551) {
 			drm_fb_xrgb8888_to_rgba5551(dst, dst_pitch, src, fb, clip, state);
