@@ -1665,6 +1665,9 @@ static __init void apic_read_boot_cpu_id(bool x2apic)
 		boot_cpu_physical_apicid = native_apic_msr_read(APIC_ID);
 		boot_cpu_apic_version = GET_APIC_VERSION(native_apic_msr_read(APIC_LVR));
 	} else {
+		if (boot_cpu_physical_apicid != BAD_APICID)
+			return;
+
 		boot_cpu_physical_apicid = read_apic_id();
 		boot_cpu_apic_version = GET_APIC_VERSION(apic_read(APIC_LVR));
 	}
