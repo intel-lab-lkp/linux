@@ -517,6 +517,7 @@ static int repaper_fb_dirty(struct drm_framebuffer *fb,
 	unsigned int dst_pitch = 0;
 	struct iosys_map dst, vmap;
 	struct drm_rect clip;
+	struct drm_pixmap src_pix;
 	int idx, ret = 0;
 	u8 *buf = NULL;
 
@@ -546,7 +547,8 @@ static int repaper_fb_dirty(struct drm_framebuffer *fb,
 
 	iosys_map_set_vaddr(&dst, buf);
 	iosys_map_set_vaddr(&vmap, dma_obj->vaddr);
-	drm_fb_xrgb8888_to_mono(&dst, &dst_pitch, &vmap, fb, &clip, fmtcnv_state);
+	drm_pixmap_init_from_framebuffer(&src_pix, fb, &vmap, &clip);
+	drm_fb_xrgb8888_to_mono(fb->dev, &dst, &dst_pitch, &src_pix, fmtcnv_state);
 
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 

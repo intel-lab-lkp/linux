@@ -137,9 +137,10 @@ int drm_fb_blit(struct iosys_map *dst, const unsigned int *dst_pitch, uint32_t d
 		const struct iosys_map *src, const struct drm_framebuffer *fb,
 		const struct drm_rect *clip, struct drm_format_conv_state *state);
 
-void drm_fb_xrgb8888_to_mono(struct iosys_map *dst, const unsigned int *dst_pitch,
-			     const struct iosys_map *src, const struct drm_framebuffer *fb,
-			     const struct drm_rect *clip, struct drm_format_conv_state *state);
+void drm_fb_xrgb8888_to_mono(struct drm_device *dev,
+			     struct iosys_map *dst, const unsigned int *dst_pitch,
+			     const struct drm_pixmap *src_pix,
+			     struct drm_format_conv_state *state);
 
 size_t drm_fb_build_fourcc_list(struct drm_device *dev,
 				const u32 *native_fourccs, size_t native_nfourccs,

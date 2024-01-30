@@ -1105,18 +1105,17 @@ static void drm_fb_gray8_to_mono_line(void *dbuf, const void *sbuf, unsigned int
 
 /**
  * drm_fb_xrgb8888_to_mono - Convert XRGB8888 to monochrome
+ * @dev: DRM device
  * @dst: Array of monochrome destination buffers (0=black, 1=white)
  * @dst_pitch: Array of numbers of bytes between the start of two consecutive scanlines
  *             within @dst; can be NULL if scanlines are stored next to each other.
- * @src: Array of XRGB8888 source buffers
- * @fb: DRM framebuffer
- * @clip: Clip rectangle area to copy
+ * @src_pix: Source pixmap to copy from
  * @state: Transform and conversion state
  *
  * This function copies parts of a framebuffer to display memory and converts the
  * color format during the process. Destination and framebuffer formats must match. The
- * parameters @dst, @dst_pitch and @src refer to arrays. Each array must have at
- * least as many entries as there are planes in @fb's format. Each entry stores the
+ * parameters @dst and @dst_pitch refer to arrays. Each array must have at
+ * least as many entries as there are planes in the pixmap's format. Each entry stores the
  * value for the format's respective color plane at the same index.
  *
  * This function does not apply clipping on @dst (i.e. the destination is at the
@@ -1134,25 +1133,26 @@ static void drm_fb_gray8_to_mono_line(void *dbuf, const void *sbuf, unsigned int
  * This function uses drm_fb_xrgb8888_to_gray8() to convert to grayscale and
  * then the result is converted from grayscale to monochrome.
  */
-void drm_fb_xrgb8888_to_mono(struct iosys_map *dst, const unsigned int *dst_pitch,
-			     const struct iosys_map *src, const struct drm_framebuffer *fb,
-			     const struct drm_rect *clip, struct drm_format_conv_state *state)
+void drm_fb_xrgb8888_to_mono(struct drm_device *dev,
+			     struct iosys_map *dst, const unsigned int *dst_pitch,
+			     const struct drm_pixmap *src_pix,
+			     struct drm_format_conv_state *state)
 {
 	static const unsigned int default_dst_pitch[DRM_FORMAT_MAX_PLANES] = {
 		0, 0, 0, 0
 	};
+	const struct drm_rect *clip = &src_pix->clip;
 	unsigned int linepixels = drm_rect_width(clip);
 	unsigned int lines = drm_rect_height(clip);
-	unsigned int cpp = fb->format->cpp[0];
+	unsigned int cpp = src_pix->format->cpp[0];
 	unsigned int len_src32 = linepixels * cpp;
-	struct drm_device *dev = fb->dev;
-	void *vaddr = src[0].vaddr;
+	void *vaddr = src_pix->data[0].vaddr;
 	unsigned int dst_pitch_0;
 	unsigned int y;
 	u8 *mono = dst[0].vaddr, *gray8;
 	u32 *src32;
 
-	if (drm_WARN_ON(dev, fb->format->format != DRM_FORMAT_XRGB8888))
+	if (drm_WARN_ON(dev, src_pix->format->format != DRM_FORMAT_XRGB8888))
 		return;
 
 	if (!dst_pitch)
@@ -1182,12 +1182,12 @@ void drm_fb_xrgb8888_to_mono(struct iosys_map *dst, const unsigned int *dst_pitc
 
 	gray8 = (u8 *)src32 + len_src32;
 
-	vaddr += clip_offset(clip, fb->pitches[0], cpp);
+	vaddr += clip_offset(clip, src_pix->pitches[0], cpp);
 	for (y = 0; y < lines; y++) {
 		src32 = memcpy(src32, vaddr, len_src32);
 		drm_fb_xrgb8888_to_gray8_line(gray8, src32, linepixels);
 		drm_fb_gray8_to_mono_line(mono, gray8, linepixels);
-		vaddr += fb->pitches[0];
+		vaddr += src_pix->pitches[0];
 		mono += dst_pitch_0;
 	}
 }
