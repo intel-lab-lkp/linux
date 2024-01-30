@@ -4743,7 +4743,10 @@ static int ext4_check_feature_compatibility(struct super_block *sb,
 	}
 
 	if (sbi->s_mount_opt & EXT4_MOUNT_DAX_ALWAYS) {
-		if (ext4_has_feature_inline_data(sb)) {
+		if (!dax_is_supported()) {
+			ext4_msg(sb, KERN_ERR, "DAX unsupported by architecture.");
+			return -EINVAL;
+		} else if (ext4_has_feature_inline_data(sb)) {
 			ext4_msg(sb, KERN_ERR, "Cannot use DAX on a filesystem"
 					" that may contain inline data");
 			return -EINVAL;
