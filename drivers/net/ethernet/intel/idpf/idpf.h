@@ -39,6 +39,11 @@ struct idpf_vport_max_q;
 	((IDPF_CTLQ_MAX_BUF_LEN - (struct_sz)) / (chunk_sz))
 #define IDPF_WAIT_FOR_EVENT_TIMEO_MIN	2000
 #define IDPF_WAIT_FOR_EVENT_TIMEO	60000
+#define IDPF_VC_XN_MIN_TIMEOUT_MSEC	2000
+#define IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC	(60 * 1000)
+#define IDPF_VC_XN_IDX_M		GENMASK(7, 0)
+#define IDPF_VC_XN_SALT_M		GENMASK(15, 8)
+#define IDPF_VC_XN_RING_LEN		U8_MAX
 
 #define IDPF_MAX_WAIT			500
 
@@ -66,14 +71,12 @@ struct idpf_mac_filter {
 
 /**
  * enum idpf_state - State machine to handle bring up
- * @__IDPF_STARTUP: Start the state machine
  * @__IDPF_VER_CHECK: Negotiate virtchnl version
  * @__IDPF_GET_CAPS: Negotiate capabilities
  * @__IDPF_INIT_SW: Init based on given capabilities
  * @__IDPF_STATE_LAST: Must be last, used to determine size
  */
 enum idpf_state {
-	__IDPF_STARTUP,
 	__IDPF_VER_CHECK,
 	__IDPF_GET_CAPS,
 	__IDPF_INIT_SW,
@@ -312,6 +315,96 @@ struct idpf_port_stats {
 	u64_stats_t tx_drops;
 	u64_stats_t tx_dma_map_errs;
 	struct virtchnl2_vport_stats vport_stats;
+};
+
+/**
+ * enum idpf_vc_xn_state - Virtchnl transaction status
+ * @IDPF_VC_XN_IDLE: not expecting a reply, ready to be used
+ * @IDPF_VC_XN_WAITING: expecting a reply, not yet received
+ * @IDPF_VC_XN_COMPLETED_SUCCESS: a reply was expected and received,
+ *				  buffer updated
+ * @IDPF_VC_XN_COMPLETED_FAILED: a reply was expected and received, but there
+ *				 was an error, buffer not updated
+ * @IDPF_VC_XN_SHUTDOWN: transaction object cannot be used, VC torn down
+ * @IDPF_VC_XN_ASYNC: transaction sent asynchronously and doesn't have the
+ *		      return context; a callback may be provided to handle
+ *		      return
+ */
+enum idpf_vc_xn_state {
+	IDPF_VC_XN_IDLE = 1,
+	IDPF_VC_XN_WAITING,
+	IDPF_VC_XN_COMPLETED_SUCCESS,
+	IDPF_VC_XN_COMPLETED_FAILED,
+	IDPF_VC_XN_SHUTDOWN,
+	IDPF_VC_XN_ASYNC,
+};
+
+struct idpf_vc_xn;
+/* Callback for asynchronous messages */
+typedef int (*async_vc_cb) (struct idpf_adapter *, struct idpf_vc_xn *,
+			    const struct idpf_ctlq_msg *);
+
+/**
+ * struct idpf_vc_xn - Data structure representing virtchnl transactions
+ * @completed: virtchnl event loop uses that to signal when a reply is
+ *	       available, uses kernel completion API
+ * @state: virtchnl event loop stores the data below, protected by the
+ *	   completion's lock.
+ * @reply_sz: Original size of reply, may be > reply_buf.iov_len; it will be
+ *	      truncated on its way to the receiver thread according to
+ *	      reply_buf.iov_len.
+ * @reply: Reference to the buffer(s) where the reply data should be written
+ *	   to. May be 0-length (then NULL address permitted) if the reply data
+ *	   should be ignored.
+ * @async_handler: if sent asynchronously, a callback can be provided to handle
+ *		   the reply when it's received
+ * @vc_op: corresponding opcode sent with this transaction
+ * @idx: index used as retrieval on reply receive, used for cookie
+ * @salt: changed every message to make unique, used for cookie
+ */
+struct idpf_vc_xn {
+	struct completion completed;
+	enum idpf_vc_xn_state state;
+	size_t reply_sz;
+	struct kvec reply;
+	async_vc_cb async_handler;
+	u32 vc_op;
+	u8 idx;
+	u8 salt;
+};
+
+/**
+ * struct idpf_vc_xn_params - Parameters for executing transaction
+ * @send_buf: kvec for send buffer
+ * @recv_buf: kvec for recv buffer, may be NULL, must then have zero length
+ * @timeout_ms: timeout to wait for reply
+ * @async: send message asynchronously, will not wait on completion
+ * @async_handler: If sent asynchronously, optional callback handler. The user
+ *		   must be careful when using async handlers as the memory for
+ *		   the recv_buf _cannot_ be on stack if this is async.
+ * @vc_op: virtchnl op to send
+ */
+struct idpf_vc_xn_params {
+	struct kvec send_buf;
+	struct kvec recv_buf;
+	int timeout_ms;
+	bool async;
+	async_vc_cb async_handler;
+	u32 vc_op;
+};
+
+/**
+ * struct idpf_vc_xn_manager - Manager for tracking transactions
+ * @ring: backing and lookup for transactions
+ * @free_xn_bm: bitmap for free transactions
+ * @xn_bm_lock: make bitmap access synchronous where necessary
+ * @salt: used to make cookie unique every message
+ */
+struct idpf_vc_xn_manager {
+	struct idpf_vc_xn ring[IDPF_VC_XN_RING_LEN];
+	DECLARE_BITMAP(free_xn_bm, IDPF_VC_XN_RING_LEN);
+	spinlock_t xn_bm_lock;
+	u8 salt;
 };
 
 /**
@@ -604,6 +697,7 @@ struct idpf_vport_config {
  * @vchnl_wq: Wait queue for virtchnl messages
  * @vc_state: Virtchnl message state
  * @vc_msg: Virtchnl message buffer
+ * @vcxn_mngr: Virtchnl transaction manager
  * @dev_ops: See idpf_dev_ops
  * @num_vfs: Number of allocated VFs through sysfs. PF does not directly talk
  *	     to VFs but is used to initialize them
@@ -663,6 +757,7 @@ struct idpf_adapter {
 	wait_queue_head_t vchnl_wq;
 	DECLARE_BITMAP(vc_state, IDPF_VC_NBITS);
 	char vc_msg[IDPF_CTLQ_MAX_BUF_LEN];
+	struct idpf_vc_xn_manager vcxn_mngr;
 	struct idpf_dev_ops dev_ops;
 	int num_vfs;
 	bool crc_enable;
@@ -939,7 +1034,7 @@ int idpf_get_vec_ids(struct idpf_adapter *adapter,
 int idpf_recv_mb_msg(struct idpf_adapter *adapter, u32 op,
 		     void *msg, int msg_size);
 int idpf_send_mb_msg(struct idpf_adapter *adapter, u32 op,
-		     u16 msg_size, u8 *msg);
+		     u16 msg_size, u8 *msg, u16 cookie);
 void idpf_set_ethtool_ops(struct net_device *netdev);
 int idpf_vport_alloc_max_qs(struct idpf_adapter *adapter,
 			    struct idpf_vport_max_q *max_q);
