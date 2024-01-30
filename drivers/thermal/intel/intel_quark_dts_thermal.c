@@ -320,10 +320,16 @@ static void free_soc_dts(struct soc_sensor_entry *aux_entry)
 
 static struct soc_sensor_entry *alloc_soc_dts(void)
 {
+	struct thermal_zone_device_params tzdp = {
+		.tzp = {
+			.type = "quark_dts",
+			.ops = &tzone_ops,
+			.polling_delay = polling_delay,
+		}
+	};
 	struct soc_sensor_entry *aux_entry;
 	int err;
 	u32 out;
-	int wr_mask;
 
 	aux_entry = kzalloc(sizeof(*aux_entry), GFP_KERNEL);
 	if (!aux_entry) {
@@ -339,10 +345,10 @@ static struct soc_sensor_entry *alloc_soc_dts(void)
 
 	if (out & QRK_DTS_LOCK_BIT) {
 		aux_entry->locked = true;
-		wr_mask = QRK_DTS_WR_MASK_CLR;
+		tzdp.tzp.mask = QRK_DTS_WR_MASK_CLR;
 	} else {
 		aux_entry->locked = false;
-		wr_mask = QRK_DTS_WR_MASK_SET;
+		tzdp.tzp.mask = QRK_DTS_WR_MASK_SET;
 	}
 
 	/* Store DTS default state if DTS registers are not locked */
@@ -368,12 +374,11 @@ static struct soc_sensor_entry *alloc_soc_dts(void)
 	aux_entry->trips[QRK_DTS_ID_TP_HOT].temperature = get_trip_temp(QRK_DTS_ID_TP_HOT);
 	aux_entry->trips[QRK_DTS_ID_TP_HOT].type = THERMAL_TRIP_HOT;
 
-	aux_entry->tzone = thermal_zone_device_register_with_trips("quark_dts",
-								   aux_entry->trips,
-								   QRK_MAX_DTS_TRIPS,
-								   wr_mask,
-								   aux_entry, &tzone_ops,
-								   NULL, 0, polling_delay);
+	tzdp.tzp.devdata = aux_entry;
+	tzdp.tzp.trips = aux_entry->trips;
+	tzdp.tzp.num_trips = QRK_MAX_DTS_TRIPS;
+
+	aux_entry->tzone = thermal_zone_device_register(&tzdp);
 	if (IS_ERR(aux_entry->tzone)) {
 		err = PTR_ERR(aux_entry->tzone);
 		goto err_ret;
