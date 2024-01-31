@@ -7,7 +7,7 @@
 #define __LINUX_BLK_TYPES_H
 
 #include <linux/types.h>
-#include <linux/bvec.h>
+#include <linux/bvec_types.h>
 #include <linux/device.h>
 #include <linux/ktime.h>
 
