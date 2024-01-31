@@ -36,6 +36,11 @@
 			compatible = "ti,sci-reset";
 			#reset-cells = <2>;
 		};
+
+		k3_reboot: reboot-controller {
+			bootph-all;
+			compatible = "ti,sci-reboot";
+		};
 	};
 
 	wkup_conf: bus@43000000 {
