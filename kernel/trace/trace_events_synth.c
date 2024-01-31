@@ -2312,7 +2312,7 @@ core_initcall(trace_events_synth_init_early);
 
 static __init int trace_events_synth_init(void)
 {
-	struct dentry *entry = NULL;
+	struct kernfs_node *entry = NULL;
 	int err = 0;
 	err = tracing_init_dentry();
 	if (err)
@@ -2320,7 +2320,7 @@ static __init int trace_events_synth_init(void)
 
 	entry = tracefs_create_file("synthetic_events", TRACE_MODE_WRITE,
 				    NULL, NULL, &synth_events_fops);
-	if (!entry) {
+	if (IS_ERR(entry)) {
 		err = -ENODEV;
 		goto err;
 	}

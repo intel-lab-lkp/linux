@@ -54,9 +54,9 @@ static struct trace_array	*hwlat_trace;
 #define DEFAULT_SAMPLE_WIDTH	500000			/* 0.5s */
 #define DEFAULT_LAT_THRESHOLD	10			/* 10us */
 
-static struct dentry *hwlat_sample_width;	/* sample width us */
-static struct dentry *hwlat_sample_window;	/* sample window us */
-static struct dentry *hwlat_thread_mode;	/* hwlat thread mode */
+static struct kernfs_node *hwlat_sample_width;	/* sample width us */
+static struct kernfs_node *hwlat_sample_window;	/* sample window us */
+static struct kernfs_node *hwlat_thread_mode;	/* hwlat thread mode */
 
 enum {
 	MODE_NONE = 0,
@@ -769,7 +769,7 @@ static const struct file_operations thread_mode_fops = {
 static int init_tracefs(void)
 {
 	int ret;
-	struct dentry *top_dir;
+	struct kernfs_node *top_dir;
 
 	ret = tracing_init_dentry();
 	if (ret)

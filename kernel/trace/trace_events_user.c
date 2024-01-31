@@ -2698,7 +2698,7 @@ static const struct file_operations user_status_fops = {
  */
 static int create_user_tracefs(void)
 {
-	struct dentry *edata, *emmap;
+	struct kernfs_node *edata, *emmap;
 
 	edata = tracefs_create_file("user_events_data", TRACE_MODE_WRITE,
 				    NULL, NULL, &user_data_fops);
