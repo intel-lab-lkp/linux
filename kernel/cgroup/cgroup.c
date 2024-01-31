@@ -35,6 +35,7 @@
 #include <linux/errno.h>
 #include <linux/init_task.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/magic.h>
 #include <linux/mutex.h>
 #include <linux/mount.h>

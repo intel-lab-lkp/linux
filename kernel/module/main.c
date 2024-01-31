@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/kernel_read_file.h>
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>

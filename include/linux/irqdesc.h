@@ -3,7 +3,7 @@
 #define _LINUX_IRQDESC_H
 
 #include <linux/rcupdate.h>
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 #include <linux/mutex_types.h>
 
 /*

@@ -43,6 +43,7 @@
 #include <linux/iversion.h>
 #include <linux/unicode.h>
 #include <linux/part_stat.h>
+#include <linux/kobject.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/fsnotify.h>

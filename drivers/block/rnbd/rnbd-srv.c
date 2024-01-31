@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/blkdev.h>
+#include <linux/kobject.h>
 
 #include "rnbd-srv.h"
 #include "rnbd-srv-trace.h"

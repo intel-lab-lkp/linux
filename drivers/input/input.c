@@ -22,6 +22,7 @@
 #include <linux/pm.h>
 #include <linux/poll.h>
 #include <linux/device.h>
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>

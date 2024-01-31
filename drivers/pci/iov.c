@@ -9,6 +9,7 @@
 
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/kobject.h>
 #include <linux/export.h>
 #include <linux/string.h>
 #include <linux/delay.h>

@@ -11,6 +11,8 @@
 #include "qlcnic_83xx_hw.h"
 #include "qlcnic_hw.h"
 
+#include <linux/kobject.h>
+
 #define QLC_83XX_MINIDUMP_FLASH		0x520000
 #define QLC_83XX_OCM_INDEX			3
 #define QLC_83XX_PCI_INDEX			0

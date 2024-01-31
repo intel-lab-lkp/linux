@@ -6,6 +6,7 @@
 #include "wacom_wac.h"
 #include "wacom.h"
 #include <linux/input/mt.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 
 #define WAC_MSG_RETRIES		5

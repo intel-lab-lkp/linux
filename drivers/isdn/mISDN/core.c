@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/stddef.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/mISDNif.h>

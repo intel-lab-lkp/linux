@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/idr.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>

@@ -71,6 +71,8 @@
 #include <linux/user_events.h>
 #include <linux/uaccess.h>
 #include <linux/hrtimer.h>
+#include <linux/sysfs.h>
+#include <linux/kobject.h>
 
 #include <uapi/linux/wait.h>
 

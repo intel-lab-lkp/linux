@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/notifier.h>
+#include <linux/kobject.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/io.h>

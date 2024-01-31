@@ -10,6 +10,7 @@
 #include <linux/backing-dev.h>
 #include <linux/blktrace_api.h>
 #include <linux/debugfs.h>
+#include <linux/kobject.h>
 
 #include "blk.h"
 #include "blk-mq.h"

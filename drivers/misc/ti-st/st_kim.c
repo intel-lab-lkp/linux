@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/sysfs.h>
 #include <linux/tty.h>
+#include <linux/kobject.h>
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>

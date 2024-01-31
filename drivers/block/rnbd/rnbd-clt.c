@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
+#include <linux/kobject.h>
 #include <linux/scatterlist.h>
 #include <linux/idr.h>
 

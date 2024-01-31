@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/completion.h>
 #include <linux/interrupt.h>
+#include <linux/kobject.h>
 
 #include <sound/core.h>
 #include <sound/control.h>

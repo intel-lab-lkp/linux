@@ -43,6 +43,7 @@
 #include <asm/page.h>
 #include <linux/task_work.h>
 #include <linux/namei.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 #include <uapi/linux/ublk_cmd.h>
 

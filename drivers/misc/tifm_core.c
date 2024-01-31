@@ -7,6 +7,7 @@
 
 #include <linux/tifm.h>
 #include <linux/slab.h>
+#include <linux/kobject.h>
 #include <linux/init.h>
 #include <linux/idr.h>
 #include <linux/module.h>

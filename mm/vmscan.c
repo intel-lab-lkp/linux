@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/gfp.h>
 #include <linux/kernel_stat.h>
+#include <linux/kobject.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>

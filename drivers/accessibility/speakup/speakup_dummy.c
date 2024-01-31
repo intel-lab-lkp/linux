@@ -14,6 +14,8 @@
 #include "spk_priv.h"
 #include "speakup.h"
 
+#include <linux/kobject.h>
+
 #define PROCSPEECH '\n'
 #define DRV_VERSION "2.11"
 #define SYNTH_CLEAR '!'

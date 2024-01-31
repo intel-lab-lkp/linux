@@ -4,6 +4,7 @@
  *  Copyright (c) 2016-2018 Cavium Inc.
  */
 #include "qedf_dbg.h"
+#include <linux/kobject.h>
 #include <linux/vmalloc.h>
 
 void

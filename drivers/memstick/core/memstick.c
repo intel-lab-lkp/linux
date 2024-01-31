@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 

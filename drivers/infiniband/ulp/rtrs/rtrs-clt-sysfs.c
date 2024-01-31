@@ -13,6 +13,8 @@
 #include "rtrs-clt.h"
 #include "rtrs-log.h"
 
+#include <linux/kobject.h>
+
 #define MIN_MAX_RECONN_ATT -1
 #define MAX_MAX_RECONN_ATT 9999
 

@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>
+#include <linux/kobject.h>
 #include <sound/core.h>
 #include <sound/hdaudio.h>
 #include "local.h"

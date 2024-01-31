@@ -10,6 +10,7 @@
 #define DSS_SUBSYS_NAME "DISPLAY"
 
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>

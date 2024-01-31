@@ -10,6 +10,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <linux/greybus.h>
+#include <linux/kobject.h>
 #include "greybus_trace.h"
 
 #define GB_BUNDLE_AUTOSUSPEND_MS	3000

@@ -55,6 +55,7 @@
 #include <linux/nl80211.h>
 #include <linux/platform_device.h>
 #include <linux/verification.h>
+#include <linux/kobject.h>
 #include <linux/moduleparam.h>
 #include <linux/firmware.h>
 #include <net/cfg80211.h>

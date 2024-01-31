@@ -34,6 +34,7 @@
 #include <linux/sysfs.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/nospec.h>
+#include <linux/kobject.h>
 
 #include "pnode.h"
 #include "internal.h"

@@ -18,6 +18,7 @@
 #include <linux/init_syscalls.h>
 #include <linux/task_work.h>
 #include <linux/umh.h>
+#include <linux/kobject.h> // for firmware_kobj
 
 static __initdata bool csum_present;
 static __initdata u32 io_csum;

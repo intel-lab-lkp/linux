@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/cpu.h>
 #include <linux/padata.h>
+#include <linux/kobject.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/slab.h>

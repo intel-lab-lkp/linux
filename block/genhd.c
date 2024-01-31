@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
 #include <linux/init.h>

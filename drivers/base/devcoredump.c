@@ -6,6 +6,7 @@
  * Author: Johannes Berg <johannes@sipsolutions.net>
  */
 #include <linux/module.h>
+#include <linux/kobject.h>
 #include <linux/device.h>
 #include <linux/devcoredump.h>
 #include <linux/list.h>

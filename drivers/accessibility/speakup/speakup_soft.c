@@ -10,6 +10,7 @@
  */
 
 #include <linux/unistd.h>
+#include <linux/kobject.h>
 #include <linux/miscdevice.h>	/* for misc_register, and MISC_DYNAMIC_MINOR */
 #include <linux/poll.h>		/* for poll_wait() */
 

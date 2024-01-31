@@ -7,6 +7,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>

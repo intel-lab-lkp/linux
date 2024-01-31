@@ -7,6 +7,7 @@
 
 #include <linux/sysfs.h>
 #include <linux/platform_device.h>
+#include <linux/kobject.h>
 
 #include "hidma_mgmt.h"
 

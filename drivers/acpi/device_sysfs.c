@@ -14,6 +14,7 @@
 #include <linux/acpi.h>
 #include <linux/device.h>
 #include <linux/export.h>
+#include <linux/kobject.h>
 #include <linux/nls.h>
 
 #include "internal.h"

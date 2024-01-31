@@ -38,6 +38,7 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/blk-mq.h>
+#include <linux/kobject.h>
 
 #include <linux/uaccess.h>
 #include <asm/types.h>

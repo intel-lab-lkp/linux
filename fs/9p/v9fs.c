@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include <linux/parser.h>

@@ -14,6 +14,8 @@
 #include "speakup.h"
 #include "speakup_acnt.h" /* local header file for Accent values */
 
+#include <linux/kobject.h>
+
 #define DRV_VERSION "2.11"
 #define PROCSPEECH '\r'
 

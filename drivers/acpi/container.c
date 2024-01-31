@@ -11,6 +11,7 @@
  */
 #include <linux/acpi.h>
 #include <linux/container.h>
+#include <linux/kobject.h>
 
 #include "internal.h"
 

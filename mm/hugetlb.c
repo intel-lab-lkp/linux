@@ -36,6 +36,7 @@
 #include <linux/memory.h>
 #include <linux/mm_inline.h>
 #include <linux/padata.h>
+#include <linux/kobject.h>
 
 #include <asm/page.h>
 #include <asm/pgalloc.h>

@@ -43,6 +43,7 @@
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
 #include <linux/mm.h>
+#include <linux/kobject.h>
 #include <linux/notifier.h>
 #include <linux/export.h>
 #include <linux/semaphore.h>

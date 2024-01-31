@@ -5,6 +5,7 @@
  */
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/kobject.h>
 #include <linux/pci.h>
 #include <linux/ratelimit.h>
 #include "ql4_def.h"

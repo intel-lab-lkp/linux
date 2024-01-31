@@ -21,6 +21,7 @@
 #include <linux/backing-dev.h>
 #include <linux/dax.h>
 #include <linux/khugepaged.h>
+#include <linux/kobject.h>
 #include <linux/freezer.h>
 #include <linux/pfn_t.h>
 #include <linux/mman.h>

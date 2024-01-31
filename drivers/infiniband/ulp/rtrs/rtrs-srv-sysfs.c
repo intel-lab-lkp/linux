@@ -13,6 +13,8 @@
 #include "rtrs-srv.h"
 #include "rtrs-log.h"
 
+#include <linux/kobject.h>
+
 static void rtrs_srv_release(struct kobject *kobj)
 {
 	struct rtrs_srv_path *srv_path;

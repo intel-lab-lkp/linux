@@ -6,7 +6,7 @@
  */
 
 #include <linux/damon.h>
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 
 extern struct mutex damon_sysfs_lock;
 

@@ -19,6 +19,7 @@
 #include <linux/workqueue.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>

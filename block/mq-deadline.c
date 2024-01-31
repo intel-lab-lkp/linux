@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>

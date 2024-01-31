@@ -4,6 +4,7 @@
  */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/kobject.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/pagemap.h>

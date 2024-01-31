@@ -15,6 +15,7 @@
 #include <linux/idr.h>
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/kobject.h>
 #include "rc-core-priv.h"
 
 /* Sizes are in bytes, 256 bytes allows for 32 entries on x64 */

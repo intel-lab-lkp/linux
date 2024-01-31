@@ -5,6 +5,7 @@
  * Author: SeongJae Park <sj@kernel.org>
  */
 
+#include <linux/kobject.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 

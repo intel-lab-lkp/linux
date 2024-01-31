@@ -9,6 +9,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/fs_context.h>

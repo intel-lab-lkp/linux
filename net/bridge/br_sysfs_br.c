@@ -9,6 +9,7 @@
 
 #include <linux/capability.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>

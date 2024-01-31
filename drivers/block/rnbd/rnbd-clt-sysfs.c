@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/device.h>
+#include <linux/kobject.h>
 #include <rdma/ib.h>
 #include <rdma/rdma_cm.h>
 

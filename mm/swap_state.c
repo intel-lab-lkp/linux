@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/gfp.h>
 #include <linux/kernel_stat.h>
+#include <linux/kobject.h>
 #include <linux/mempolicy.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>

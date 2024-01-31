@@ -25,6 +25,7 @@
 #include <linux/fs.h>
 #include <linux/comedi/comedidev.h>
 #include <linux/cdev.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 
 #include <linux/io.h>

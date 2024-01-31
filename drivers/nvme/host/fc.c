@@ -17,6 +17,7 @@
 #include "fc.h"
 #include <scsi/scsi_transport_fc.h>
 #include <linux/blk-mq-pci.h>
+#include <linux/kobject.h>
 
 /* *************************** Data Structures/Defines ****************** */
 

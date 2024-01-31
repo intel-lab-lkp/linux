@@ -9,6 +9,7 @@
 #define pr_fmt(fmt) "ACPI: AC: " fmt
 
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>

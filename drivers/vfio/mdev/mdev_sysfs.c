@@ -10,6 +10,7 @@
 #include <linux/sysfs.h>
 #include <linux/ctype.h>
 #include <linux/slab.h>
+#include <linux/kobject.h>
 #include <linux/mdev.h>
 
 #include "mdev_private.h"

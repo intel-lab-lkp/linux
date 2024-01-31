@@ -18,6 +18,7 @@
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/key.h>
+#include <linux/kobject.h>
 #include <linux/parser.h>
 #include <linux/fs_stack.h>
 #include <linux/slab.h>

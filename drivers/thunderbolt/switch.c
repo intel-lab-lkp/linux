@@ -8,6 +8,7 @@
 
 #include <linux/delay.h>
 #include <linux/idr.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>
 #include <linux/pm_runtime.h>

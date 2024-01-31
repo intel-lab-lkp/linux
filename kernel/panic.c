@@ -23,6 +23,7 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/kexec.h>
+#include <linux/kobject.h>
 #include <linux/panic_notifier.h>
 #include <linux/sched.h>
 #include <linux/string_helpers.h>

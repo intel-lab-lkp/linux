@@ -9,6 +9,7 @@
 
 
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include "ubifs.h"
 
 enum attr_id_t {

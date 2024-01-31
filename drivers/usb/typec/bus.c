@@ -7,6 +7,7 @@
  */
 
 #include <linux/usb/pd_vdo.h>
+#include <linux/kobject.h>
 
 #include "bus.h"
 #include "class.h"

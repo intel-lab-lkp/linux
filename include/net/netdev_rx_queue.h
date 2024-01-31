@@ -2,7 +2,7 @@
 #ifndef _LINUX_NETDEV_RX_QUEUE_H
 #define _LINUX_NETDEV_RX_QUEUE_H
 
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 #include <linux/netdevice.h>
 #include <linux/sysfs.h>
 #include <net/xdp.h>

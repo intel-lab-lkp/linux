@@ -83,6 +83,7 @@
 #include <linux/timer.h>
 #include <linux/ctype.h>
 #include <linux/kd.h>
+#include <linux/kobject.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/slab.h>

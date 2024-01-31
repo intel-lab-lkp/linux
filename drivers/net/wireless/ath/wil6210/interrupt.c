@@ -5,6 +5,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/kobject.h>
 
 #include "wil6210.h"
 #include "trace.h"

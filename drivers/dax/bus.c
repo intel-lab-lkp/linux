@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/dax.h>
 #include <linux/io.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 #include "dax-private.h"
 #include "bus.h"

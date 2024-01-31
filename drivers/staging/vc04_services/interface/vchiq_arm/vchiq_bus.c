@@ -7,6 +7,7 @@
 
 #include <linux/device/bus.h>
 #include <linux/dma-mapping.h>
+#include <linux/kobject.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
 #include <linux/string.h>

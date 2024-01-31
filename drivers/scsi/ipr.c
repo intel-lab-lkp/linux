@@ -45,6 +45,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/ioport.h>

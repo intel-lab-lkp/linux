@@ -8,6 +8,7 @@
 
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/sbitmap.h>
 #include <linux/sysfs.h>
