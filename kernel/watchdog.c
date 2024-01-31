@@ -25,6 +25,9 @@
 #include <linux/stop_machine.h>
 #include <linux/kernel_stat.h>
 #include <linux/math64.h>
+#include <linux/irq.h>
+#include <linux/bitops.h>
+#include <linux/irqdesc.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>
@@ -431,11 +434,15 @@ void touch_softlockup_watchdog_sync(void)
 	__this_cpu_write(watchdog_report_ts, SOFTLOCKUP_DELAY_REPORT);
 }
 
+static void set_potential_softlockup(unsigned long now, unsigned long touch_ts);
+
 static int is_softlockup(unsigned long touch_ts,
 			 unsigned long period_ts,
 			 unsigned long now)
 {
 	if ((watchdog_enabled & WATCHDOG_SOFTOCKUP_ENABLED) && watchdog_thresh) {
+		/* Softlockup may occur in the current period */
+		set_potential_softlockup(now, period_ts);
 		/* Warn about unreasonable delays. */
 		if (time_after(now, period_ts + get_softlockup_thresh()))
 			return now - touch_ts;
@@ -461,6 +468,8 @@ static enum cpu_usage_stat stats[NUM_STATS_PER_GROUP] = {
 static DEFINE_PER_CPU(u16, cpustat_old[NUM_STATS_PER_GROUP]);
 static DEFINE_PER_CPU(u8, cpustat_utilization[NUM_STATS_GROUPS][NUM_STATS_PER_GROUP]);
 static DEFINE_PER_CPU(u8, cpustat_tail);
+
+static void print_hardirq_counts(void);
 
 /*
  * We don't need nanosecond resolution. A granularity of 16ms is
@@ -516,10 +525,156 @@ static void print_cpustat(void)
 			__this_cpu_read(cpustat_utilization[i][STATS_HARDIRQ]),
 			__this_cpu_read(cpustat_utilization[i][STATS_IDLE]));
 	}
+	print_hardirq_counts();
 }
+
+#define HARDIRQ_PERCENT_THRESH		50
+#define NUM_HARDIRQ_REPORT		5
+static DECLARE_BITMAP(softlockup_hardirq_cpus, CONFIG_NR_CPUS);
+static DEFINE_PER_CPU(u32 *, hardirq_counts);
+
+struct irq_counts {
+	int irq;
+	u32 counts;
+};
+
+static void find_counts_top(struct irq_counts *irq_counts, int irq, u32 counts, int range)
+{
+	unsigned int i, j;
+
+	for (i = 0; i < range; i++) {
+		if (counts > irq_counts[i].counts) {
+			for (j = range - 1; j > i; j--) {
+				irq_counts[j].counts = irq_counts[j - 1].counts;
+				irq_counts[j].irq = irq_counts[j - 1].irq;
+			}
+			irq_counts[j].counts = counts;
+			irq_counts[j].irq = irq;
+			break;
+		}
+	}
+}
+
+/*
+ * If the proportion of time spent handling irq exceeds HARDIRQ_PERCENT_THRESH%
+ * during sample_period, then it is necessary to record the counts of each irq.
+ */
+static inline bool need_record_irq_counts(int type)
+{
+	int tail = __this_cpu_read(cpustat_tail);
+	u8 utilization;
+
+	if (--tail == -1)
+		tail = 4;
+	utilization = __this_cpu_read(cpustat_utilization[tail][type]);
+	return utilization > HARDIRQ_PERCENT_THRESH;
+}
+
+/*
+ * Mark softlockup as potentially caused by hardirq
+ */
+static void set_potential_softlockup_hardirq(void)
+{
+	u32 i;
+	u32 *counts = __this_cpu_read(hardirq_counts);
+	int cpu = smp_processor_id();
+	struct irq_desc *desc;
+
+	if (!need_record_irq_counts(STATS_HARDIRQ))
+		return;
+
+	if (!test_bit(cpu, softlockup_hardirq_cpus)) {
+		counts = kmalloc_array(nr_irqs, sizeof(u32), GFP_ATOMIC);
+		if (!counts)
+			return;
+		for_each_irq_desc(i, desc) {
+			if (!desc)
+				continue;
+			counts[i] = desc->kstat_irqs ?
+				*this_cpu_ptr(desc->kstat_irqs) : 0;
+		}
+		__this_cpu_write(hardirq_counts, counts);
+		set_bit(cpu, softlockup_hardirq_cpus);
+	}
+}
+
+static void clear_potential_softlockup_hardirq(void)
+{
+	u32 *counts = __this_cpu_read(hardirq_counts);
+	int cpu = smp_processor_id();
+
+	if (test_bit(cpu, softlockup_hardirq_cpus)) {
+		kfree(counts);
+		counts = NULL;
+		__this_cpu_write(hardirq_counts, counts);
+		clear_bit(cpu, softlockup_hardirq_cpus);
+	}
+}
+
+/*
+ * Mark that softlockup may occur
+ */
+static void set_potential_softlockup(unsigned long now, unsigned long period_ts)
+{
+	if (time_after_eq(now, period_ts + get_softlockup_thresh() / 5))
+		set_potential_softlockup_hardirq();
+}
+
+static void clear_potential_softlockup(void)
+{
+	clear_potential_softlockup_hardirq();
+}
+
+static void print_hardirq_counts(void)
+{
+	u32 i;
+	struct irq_desc *desc;
+	u32 counts_diff;
+	u32 *counts = __this_cpu_read(hardirq_counts);
+	int cpu = smp_processor_id();
+	struct irq_counts hardirq_counts_top[NUM_HARDIRQ_REPORT] = {
+		{-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	};
+
+	if (test_bit(cpu, softlockup_hardirq_cpus)) {
+		/* Find the top NUM_HARDIRQ_REPORT most frequent interrupts */
+		for_each_irq_desc(i, desc) {
+			if (!desc)
+				continue;
+			counts_diff = desc->kstat_irqs ?
+				*this_cpu_ptr(desc->kstat_irqs) - counts[i] : 0;
+			find_counts_top(hardirq_counts_top, i, counts_diff,
+					NUM_HARDIRQ_REPORT);
+		}
+		/*
+		 * We do not want the "watchdog: " prefix on every line,
+		 * hence we use "printk" instead of "pr_crit".
+		 */
+		printk(KERN_CRIT "CPU#%d Detect HardIRQ Time exceeds %d%%. Most frequent HardIRQs:\n",
+			smp_processor_id(), HARDIRQ_PERCENT_THRESH);
+		for (i = 0; i < NUM_HARDIRQ_REPORT; i++) {
+			if (hardirq_counts_top[i].irq == -1)
+				break;
+			desc = irq_to_desc(hardirq_counts_top[i].irq);
+			if (desc && desc->action)
+				printk(KERN_CRIT "\t#%u: %-10u\tirq#%d(%s)\n",
+					i+1, hardirq_counts_top[i].counts,
+					hardirq_counts_top[i].irq, desc->action->name);
+			else
+				printk(KERN_CRIT "\t#%u: %-10u\tirq#%d\n",
+					i+1, hardirq_counts_top[i].counts,
+					hardirq_counts_top[i].irq);
+		}
+		if (!need_record_irq_counts(STATS_HARDIRQ))
+			clear_potential_softlockup_hardirq();
+	}
+}
+
 #else
 static inline void update_cpustat(void) { }
 static inline void print_cpustat(void) { }
+static inline void set_potential_softlockup(unsigned long now, unsigned long period_ts) { }
+static inline void clear_potential_softlockup(void) { }
 #endif
 
 /* watchdog detector functions */
@@ -537,6 +692,7 @@ static DEFINE_PER_CPU(struct cpu_stop_work, softlockup_stop_work);
 static int softlockup_fn(void *data)
 {
 	update_touch_ts();
+	clear_potential_softlockup();
 	complete(this_cpu_ptr(&softlockup_completion));
 
 	return 0;
