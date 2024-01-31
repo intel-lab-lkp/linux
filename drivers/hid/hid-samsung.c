@@ -49,31 +49,35 @@
  * Report #3 has an array field with logical range 0..1 instead of 1..3.
  */
 static inline void samsung_irda_dev_trace(struct hid_device *hdev,
-		unsigned int rsize)
+					  unsigned int rsize)
 {
 	hid_info(hdev, "fixing up Samsung IrDA %d byte report descriptor\n",
 		 rsize);
 }
 
 static __u8 *samsung_irda_report_fixup(struct hid_device *hdev, __u8 *rdesc,
-		unsigned int *rsize)
+				       unsigned int *rsize)
 {
-	if (*rsize == 184 && !memcmp(&rdesc[175], "\x25\x40\x75\x30\x95\x01", 6) &&
-			rdesc[182] == 0x40) {
+	if (*rsize == 184 &&
+	    !memcmp(&rdesc[175], "\x25\x40\x75\x30\x95\x01", 6) &&
+	    rdesc[182] == 0x40) {
 		samsung_irda_dev_trace(hdev, 184);
 		rdesc[176] = 0xff;
 		rdesc[178] = 0x08;
 		rdesc[180] = 0x06;
 		rdesc[182] = 0x42;
-	} else if (*rsize == 203 && !memcmp(&rdesc[192], "\x15\x00\x25\x12", 4)) {
+	} else if (*rsize == 203 &&
+		   !memcmp(&rdesc[192], "\x15\x00\x25\x12", 4)) {
 		samsung_irda_dev_trace(hdev, 203);
 		rdesc[193] = 0x01;
 		rdesc[195] = 0x0f;
-	} else if (*rsize == 135 && !memcmp(&rdesc[124], "\x15\x00\x25\x11", 4)) {
+	} else if (*rsize == 135 &&
+		   !memcmp(&rdesc[124], "\x15\x00\x25\x11", 4)) {
 		samsung_irda_dev_trace(hdev, 135);
 		rdesc[125] = 0x01;
 		rdesc[127] = 0x0e;
-	} else if (*rsize == 171 && !memcmp(&rdesc[160], "\x15\x00\x25\x01", 4)) {
+	} else if (*rsize == 171 &&
+		   !memcmp(&rdesc[160], "\x15\x00\x25\x01", 4)) {
 		samsung_irda_dev_trace(hdev, 171);
 		rdesc[161] = 0x01;
 		rdesc[163] = 0x03;
@@ -82,19 +86,21 @@ static __u8 *samsung_irda_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 }
 
 struct key_clear_map {
-	unsigned use;
+	unsigned int use;
 	__u16 kb;
 };
 
 static int samsung_kbd_mouse_input_mapping(struct hid_device *hdev,
-	struct hid_input *hi, struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+					   struct hid_input *hi,
+					   struct hid_field *field,
+					   struct hid_usage *usage,
+					   unsigned long **bit, int *max)
 {
 	struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 	unsigned short ifnum = intf->cur_altsetting->desc.bInterfaceNumber;
 	int i;
-	unsigned use;
-	unsigned up = usage->hid & HID_USAGE_PAGE;
+	unsigned int use;
+	unsigned int up = usage->hid & HID_USAGE_PAGE;
 	static const struct key_clear_map kcm[] = {
 		{ 0x183, KEY_MEDIA },
 		{ 0x195, KEY_EMAIL },
@@ -129,12 +135,14 @@ static int samsung_kbd_mouse_input_mapping(struct hid_device *hdev,
 }
 
 static int samsung_kbd_input_mapping(struct hid_device *hdev,
-	struct hid_input *hi, struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+				     struct hid_input *hi,
+				     struct hid_field *field,
+				     struct hid_usage *usage,
+				     unsigned long **bit, int *max)
 {
 	int i;
-	unsigned use;
-	unsigned up = usage->hid & HID_USAGE_PAGE;
+	unsigned int use;
+	unsigned int up = usage->hid & HID_USAGE_PAGE;
 
 	if (!(up == HID_UP_CONSUMER || up == HID_UP_KEYBOARD))
 		return 0;
@@ -193,12 +201,14 @@ static int samsung_kbd_input_mapping(struct hid_device *hdev,
 }
 
 static int samsung_gamepad_input_mapping(struct hid_device *hdev,
-	struct hid_input *hi, struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+					 struct hid_input *hi,
+					 struct hid_field *field,
+					 struct hid_usage *usage,
+					 unsigned long **bit, int *max)
 {
 	int i;
-	unsigned use;
-	unsigned up = usage->hid & HID_USAGE_PAGE;
+	unsigned int use;
+	unsigned int up = usage->hid & HID_USAGE_PAGE;
 
 	if (!(up == HID_UP_BUTTON || up == HID_UP_CONSUMER))
 		return 0;
@@ -258,12 +268,14 @@ static int samsung_gamepad_input_mapping(struct hid_device *hdev,
 }
 
 static int samsung_actionmouse_input_mapping(struct hid_device *hdev,
-	struct hid_input *hi, struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+					     struct hid_input *hi,
+					     struct hid_field *field,
+					     struct hid_usage *usage,
+					     unsigned long **bit, int *max)
 {
 	int i;
-	unsigned use;
-	unsigned up = usage->hid & HID_USAGE_PAGE;
+	unsigned int use;
+	unsigned int up = usage->hid & HID_USAGE_PAGE;
 	static const struct key_clear_map kcm[] = {
 		{ 0x301, 254 },
 	};
@@ -271,7 +283,8 @@ static int samsung_actionmouse_input_mapping(struct hid_device *hdev,
 	use = usage->hid & HID_USAGE;
 
 	dbg_hid("samsung wireless actionmouse input mapping event [0x%x], [0x%x], %ld, %ld, [0x%x]\n",
-		use, usage->hid & HID_USAGE, hi->input->evbit[0], hi->input->absbit[0],
+		use, usage->hid & HID_USAGE,
+		hi->input->evbit[0], hi->input->absbit[0],
 		up);
 
 	if (!(up == HID_UP_CONSUMER || up == HID_UP_BUTTON))
@@ -288,12 +301,14 @@ static int samsung_actionmouse_input_mapping(struct hid_device *hdev,
 }
 
 static int samsung_universal_kbd_input_mapping(struct hid_device *hdev,
-	struct hid_input *hi, struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+					       struct hid_input *hi,
+					       struct hid_field *field,
+					       struct hid_usage *usage,
+					       unsigned long **bit, int *max)
 {
 	int i;
-	unsigned use;
-	unsigned up = usage->hid & HID_USAGE_PAGE;
+	unsigned int use;
+	unsigned int up = usage->hid & HID_USAGE_PAGE;
 
 	if (!(up == HID_UP_CONSUMER || up == HID_UP_KEYBOARD))
 		return 0;
@@ -362,43 +377,46 @@ static int samsung_universal_kbd_input_mapping(struct hid_device *hdev,
 }
 
 static __u8 *samsung_report_fixup(struct hid_device *hdev, __u8 *rdesc,
-	unsigned int *rsize)
+				  unsigned int *rsize)
 {
-	if (hdev->product == USB_DEVICE_ID_SAMSUNG_IR_REMOTE && hid_is_usb(hdev))
+	if (hdev->product == USB_DEVICE_ID_SAMSUNG_IR_REMOTE &&
+	    hid_is_usb(hdev))
 		rdesc = samsung_irda_report_fixup(hdev, rdesc, rsize);
 	return rdesc;
 }
 
-static int samsung_input_mapping(struct hid_device *hdev, struct hid_input *hi,
-	struct hid_field *field, struct hid_usage *usage,
-	unsigned long **bit, int *max)
+static int samsung_input_mapping(struct hid_device *hdev,
+				 struct hid_input *hi,
+				 struct hid_field *field,
+				 struct hid_usage *usage,
+				 unsigned long **bit, int *max)
 {
-	int ret = 0;
+	switch (hdev->product) {
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD_MOUSE:
+		if (hid_is_usb(hdev))
+			return samsung_kbd_mouse_input_mapping(hdev, hi, field,
+							       usage, bit, max);
+		break;
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD:
+		return samsung_kbd_input_mapping(hdev, hi, field,
+						 usage, bit, max);
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_GAMEPAD:
+		return samsung_gamepad_input_mapping(hdev, hi, field,
+						     usage, bit, max);
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_ACTIONMOUSE:
+		return samsung_actionmouse_input_mapping(hdev, hi, field,
+							 usage, bit, max);
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_UNIVERSAL_KBD:
+	case USB_DEVICE_ID_SAMSUNG_WIRELESS_MULTI_HOGP_KBD:
+		return samsung_universal_kbd_input_mapping(hdev, hi, field,
+							   usage, bit, max);
+	}
 
-	if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD_MOUSE && hid_is_usb(hdev))
-		ret = samsung_kbd_mouse_input_mapping(hdev,
-			hi, field, usage, bit, max);
-	else if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD)
-		ret = samsung_kbd_input_mapping(hdev,
-			hi, field, usage, bit, max);
-	else if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_GAMEPAD)
-		ret = samsung_gamepad_input_mapping(hdev,
-			hi, field, usage, bit, max);
-	else if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_ACTIONMOUSE)
-		ret = samsung_actionmouse_input_mapping(hdev,
-			hi, field, usage, bit, max);
-	else if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_UNIVERSAL_KBD)
-		ret = samsung_universal_kbd_input_mapping(hdev,
-			hi, field, usage, bit, max);
-	else if (hdev->product == USB_DEVICE_ID_SAMSUNG_WIRELESS_MULTI_HOGP_KBD)
-		ret = samsung_universal_kbd_input_mapping(hdev,
-			hi, field, usage, bit, max);
-
-	return ret;
+	return 0;
 }
 
 static int samsung_probe(struct hid_device *hdev,
-		const struct hid_device_id *id)
+			 const struct hid_device_id *id)
 {
 	int ret;
 	unsigned int cmask = HID_CONNECT_DEFAULT;
@@ -406,14 +424,13 @@ static int samsung_probe(struct hid_device *hdev,
 	ret = hid_parse(hdev);
 	if (ret) {
 		hid_err(hdev, "parse failed\n");
-		goto err_free;
+		return ret;
 	}
 
 	if (hdev->product == USB_DEVICE_ID_SAMSUNG_IR_REMOTE) {
-		if (!hid_is_usb(hdev)) {
-			ret = -EINVAL;
-			goto err_free;
-		}
+		if (!hid_is_usb(hdev))
+			return -EINVAL;
+
 		if (hdev->rsize == 184) {
 			/* disable hidinput, force hiddev */
 			cmask = (cmask & ~HID_CONNECT_HIDINPUT) |
@@ -424,22 +441,27 @@ static int samsung_probe(struct hid_device *hdev,
 	ret = hid_hw_start(hdev, cmask);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
-		goto err_free;
+		return ret;
 	}
 
 	return 0;
-err_free:
-	return ret;
 }
 
 static const struct hid_device_id samsung_devices[] = {
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG, USB_DEVICE_ID_SAMSUNG_IR_REMOTE) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG, USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD_MOUSE) },
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD) },
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_WIRELESS_GAMEPAD) },
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_WIRELESS_ACTIONMOUSE) },
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_WIRELESS_UNIVERSAL_KBD) },
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS, USB_DEVICE_ID_SAMSUNG_WIRELESS_MULTI_HOGP_KBD) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG,
+			 USB_DEVICE_ID_SAMSUNG_IR_REMOTE) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG,
+			 USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD_MOUSE) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS,
+			       USB_DEVICE_ID_SAMSUNG_WIRELESS_KBD) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS,
+			       USB_DEVICE_ID_SAMSUNG_WIRELESS_GAMEPAD) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS,
+			       USB_DEVICE_ID_SAMSUNG_WIRELESS_ACTIONMOUSE) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS,
+			       USB_DEVICE_ID_SAMSUNG_WIRELESS_UNIVERSAL_KBD) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SAMSUNG_ELECTRONICS,
+			       USB_DEVICE_ID_SAMSUNG_WIRELESS_MULTI_HOGP_KBD) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, samsung_devices);
