@@ -666,6 +666,27 @@ int intel_dp_hdcp2_capable(struct intel_connector *connector,
 	return _intel_dp_hdcp2_capable(aux, capable);
 }
 
+static
+int intel_dp_hdcp_remote_cap(struct intel_connector *connector,
+			     bool *hdcp_capable, bool *hdcp2_capable)
+{
+	struct drm_dp_aux *aux = &connector->port->aux;
+	u8 bcaps;
+	int ret;
+
+	ret =  _intel_dp_hdcp2_capable(aux, hdcp2_capable);
+	if (ret)
+		return ret;
+
+	ret = intel_dp_hdcp_read_bcaps(aux, &bcaps);
+	if (ret)
+		return ret;
+
+	*hdcp_capable = bcaps & DP_BCAPS_HDCP_CAPABLE;
+
+	return 0;
+}
+
 static const struct intel_hdcp_shim intel_dp_hdcp_shim = {
 	.write_an_aksv = intel_dp_hdcp_write_an_aksv,
 	.read_bksv = intel_dp_hdcp_read_bksv,
@@ -683,6 +704,7 @@ static const struct intel_hdcp_shim intel_dp_hdcp_shim = {
 	.config_stream_type = intel_dp_hdcp2_config_stream_type,
 	.check_2_2_link = intel_dp_hdcp2_check_link,
 	.hdcp_2_2_capable = intel_dp_hdcp2_capable,
+	.remote_hdcp_cap = intel_dp_hdcp_remote_cap,
 	.protocol = HDCP_PROTOCOL_DP,
 };
 
