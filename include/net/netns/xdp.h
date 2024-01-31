@@ -3,7 +3,7 @@
 #define __NETNS_XDP_H__
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 
 struct netns_xdp {

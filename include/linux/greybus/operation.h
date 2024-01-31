@@ -11,9 +11,9 @@
 
 #include <linux/completion.h>
 #include <linux/kref.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct gb_host_device;
 struct gb_operation;

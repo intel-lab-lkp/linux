@@ -11,7 +11,7 @@
 #define PN_DEV_H
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 struct net;
 

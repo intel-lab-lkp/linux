@@ -5,7 +5,7 @@
 
 #include <linux/of.h>
 #include <linux/types.h>
-#include <linux/hrtimer.h>
+#include <linux/hrtimer_types.h>
 #include <linux/completion.h>
 
 struct device;

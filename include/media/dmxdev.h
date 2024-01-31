@@ -20,12 +20,12 @@
 #define _DMXDEV_H_
 
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/time.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/fs.h>
 #include <linux/string.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/slab.h>
 
 #include <linux/dvb/dmx.h>

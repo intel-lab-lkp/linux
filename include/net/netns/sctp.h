@@ -2,7 +2,7 @@
 #ifndef __NETNS_SCTP_H__
 #define __NETNS_SCTP_H__
 
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <net/snmp.h>
 
 struct sock;

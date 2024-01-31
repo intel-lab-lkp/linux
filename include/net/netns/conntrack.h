@@ -12,7 +12,6 @@
 #ifdef CONFIG_NF_CT_PROTO_SCTP
 #include <linux/netfilter/nf_conntrack_sctp.h>
 #endif
-#include <linux/seqlock.h>
 
 struct ctl_table_header;
 struct nf_conntrack_ecache;

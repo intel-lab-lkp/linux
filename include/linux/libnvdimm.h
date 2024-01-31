@@ -10,7 +10,7 @@
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 
 struct bio;
 

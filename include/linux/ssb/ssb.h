@@ -5,7 +5,7 @@
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/pci.h>
 #include <linux/gpio/driver.h>
 #include <linux/mod_devicetable.h>

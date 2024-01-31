@@ -8,7 +8,7 @@
 #ifndef _LINUX_FPGA_MGR_H
 #define _LINUX_FPGA_MGR_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/platform_device.h>
 
 struct fpga_manager;

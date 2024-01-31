@@ -4,7 +4,7 @@
 #define _LINUX_OBJPOOL_H
 
 #include <linux/types.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 /*
  * objpool: ring-array based lockless MPMC queue

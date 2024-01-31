@@ -22,8 +22,8 @@
 #include <linux/in.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
-#include <linux/rbtree.h>
-#include <linux/refcount.h>
+#include <linux/rbtree_types.h>
+#include <linux/refcount_types.h>
 #include <linux/rwsem.h>
 
 #include <linux/sunrpc/debug.h>

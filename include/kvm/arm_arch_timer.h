@@ -8,7 +8,7 @@
 #define __ASM_ARM_KVM_ARCH_TIMER_H
 
 #include <linux/clocksource.h>
-#include <linux/hrtimer.h>
+#include <linux/hrtimer_types.h>
 
 enum kvm_arch_timers {
 	TIMER_PTIMER,

@@ -5,7 +5,7 @@
 #include <linux/ssb/ssb.h>
 #include <linux/bug.h>
 #include <linux/pci.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 
 
 #ifdef CONFIG_SSB_DRIVER_GIGE

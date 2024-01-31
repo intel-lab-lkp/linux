@@ -9,7 +9,7 @@
 
 #include <linux/jiffies.h>
 #include <linux/proc_fs.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h>
 #include <linux/irqreturn.h>
 #include <linux/semaphore.h>

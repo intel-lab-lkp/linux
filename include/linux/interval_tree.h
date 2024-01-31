@@ -2,7 +2,8 @@
 #ifndef _LINUX_INTERVAL_TREE_H
 #define _LINUX_INTERVAL_TREE_H
 
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
+#include <linux/types.h>
 
 struct interval_tree_node {
 	struct rb_node rb;

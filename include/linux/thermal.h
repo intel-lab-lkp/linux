@@ -14,7 +14,7 @@
 #include <linux/idr.h>
 #include <linux/device.h>
 #include <linux/sysfs.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <uapi/linux/thermal.h>
 
 /* invalid cooling state */

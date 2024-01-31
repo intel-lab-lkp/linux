@@ -10,7 +10,7 @@
 
 #ifdef __KERNEL__
 
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 
 extern const char raid6_empty_zero_page[PAGE_SIZE];
 

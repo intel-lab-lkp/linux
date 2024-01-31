@@ -7,10 +7,10 @@
 #define _LINUX_XDP_SOCK_H
 
 #include <linux/bpf.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/if_xdp.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
+#include <linux/mutex_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/mm.h>
 #include <net/sock.h>
 

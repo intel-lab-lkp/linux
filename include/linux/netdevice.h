@@ -21,7 +21,7 @@
 #ifndef _LINUX_NETDEVICE_H
 #define _LINUX_NETDEVICE_H
 
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
@@ -47,7 +47,7 @@
 #include <uapi/linux/pkt_cls.h>
 #include <uapi/linux/netdev.h>
 #include <linux/hashtable.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <net/net_trackers.h>
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>

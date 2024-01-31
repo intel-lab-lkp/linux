@@ -17,7 +17,7 @@
 #include <linux/of.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_qos.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/sysfs.h>
 #include <linux/minmax.h>
 

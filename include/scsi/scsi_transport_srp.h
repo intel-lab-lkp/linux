@@ -4,7 +4,7 @@
 
 #include <linux/transport_class.h>
 #include <linux/types.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define SRP_RPORT_ROLE_INITIATOR 0
 #define SRP_RPORT_ROLE_TARGET 1

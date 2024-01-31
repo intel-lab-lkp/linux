@@ -12,7 +12,7 @@
  * has asm/spinlock.h, or 2.4, which has linux/spinlock.h
  */
 #include <linux/sched.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 typedef enum {
 	FL_READY,

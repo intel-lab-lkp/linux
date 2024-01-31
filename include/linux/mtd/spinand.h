@@ -8,7 +8,7 @@
 #ifndef __LINUX_MTD_SPINAND_H
 #define __LINUX_MTD_SPINAND_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/mtd/mtd.h>

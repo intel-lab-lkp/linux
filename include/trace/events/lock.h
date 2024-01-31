@@ -19,7 +19,7 @@
 
 #ifdef CONFIG_LOCKDEP
 
-#include <linux/lockdep.h>
+#include <linux/lockdep_types.h>
 
 TRACE_EVENT(lock_acquire,
 

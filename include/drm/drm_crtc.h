@@ -25,7 +25,7 @@
 #ifndef __DRM_CRTC_H__
 #define __DRM_CRTC_H__
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 #include <drm/drm_modeset_lock.h>
 #include <drm/drm_mode_object.h>

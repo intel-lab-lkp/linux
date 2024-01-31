@@ -8,7 +8,7 @@
 #ifndef _LIBFC_H_
 #define _LIBFC_H_
 
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/if.h>
 #include <linux/percpu.h>
 #include <linux/refcount.h>

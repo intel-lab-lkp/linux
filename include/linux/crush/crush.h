@@ -3,7 +3,7 @@
 #define CEPH_CRUSH_CRUSH_H
 
 #ifdef __KERNEL__
-# include <linux/rbtree.h>
+# include <linux/rbtree_types.h>
 # include <linux/types.h>
 #else
 # include "crush_compat.h"

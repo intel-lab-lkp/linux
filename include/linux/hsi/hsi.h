@@ -11,7 +11,7 @@
 #define __LINUX_HSI_H__
 
 #include <linux/device.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/scatterlist.h>
 #include <linux/list.h>
 #include <linux/module.h>

@@ -13,7 +13,7 @@
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/local_lock.h>
 #include <linux/random.h>
 #include <scsi/fc/fc_fcoe.h>

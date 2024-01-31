@@ -13,7 +13,7 @@
 #include <linux/sched/topology.h>
 #include <linux/sched/task.h>
 #include <linux/cpumask.h>
-#include <linux/nodemask.h>
+#include <linux/nodemask_types.h>
 #include <linux/mm.h>
 #include <linux/mmu_context.h>
 #include <linux/jump_label.h>

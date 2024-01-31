@@ -7,14 +7,14 @@
 #include <uapi/linux/bpf.h>
 #include <uapi/linux/filter.h>
 
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/file.h>
 #include <linux/percpu.h>
 #include <linux/err.h>
 #include <linux/rbtree_latch.h>
 #include <linux/numa.h>
 #include <linux/mm_types.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/kallsyms.h>

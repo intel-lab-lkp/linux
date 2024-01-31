@@ -15,7 +15,7 @@
 
 #include <linux/wait.h>
 #include <linux/vt.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct uni_pagedict;
 

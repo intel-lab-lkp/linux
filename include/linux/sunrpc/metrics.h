@@ -27,7 +27,7 @@
 #define _LINUX_SUNRPC_METRICS_H
 
 #include <linux/ktime.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 
 #define RPC_IOSTATS_VERS	"1.1"
 

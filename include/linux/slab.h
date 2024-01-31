@@ -13,7 +13,7 @@
 #define	_LINUX_SLAB_H
 
 #include <linux/cache.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/overflow.h>
 #include <linux/types.h>
 #include <linux/percpu-refcount.h>

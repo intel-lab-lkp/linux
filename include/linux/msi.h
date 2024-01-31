@@ -22,7 +22,7 @@
 #include <linux/cpumask.h>
 #include <linux/msi_api.h>
 #include <linux/xarray.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/list.h>
 #include <linux/irq.h>
 #include <linux/bits.h>

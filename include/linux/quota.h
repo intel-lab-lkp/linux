@@ -33,9 +33,9 @@
 #define _LINUX_QUOTA_
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/rwsem.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/percpu_counter.h>
 
 #include <linux/dqblk_xfs.h>
@@ -43,7 +43,7 @@
 #include <linux/dqblk_v2.h>
 
 #include <linux/atomic.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/projid.h>
 #include <uapi/linux/quota.h>
 

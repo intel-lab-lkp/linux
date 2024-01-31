@@ -12,7 +12,7 @@
 #include <linux/cache.h>
 #include <linux/crypto.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 /*
  * Maximum values for blocksize and alignmask, used to allocate

@@ -4,9 +4,12 @@
 
 #include <linux/kernel.h>
 #include <linux/list.h>
-#include <linux/pid.h>
 
 #ifdef CONFIG_PROC_CPU_RESCTRL
+
+#include <linux/pid_types.h>
+
+struct pid;
 
 int proc_resctrl_show(struct seq_file *m,
 		      struct pid_namespace *ns,

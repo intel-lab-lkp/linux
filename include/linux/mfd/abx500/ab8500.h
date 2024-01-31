@@ -8,7 +8,7 @@
 #define MFD_AB8500_H
 
 #include <linux/atomic.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/irqdomain.h>
 
 struct device;

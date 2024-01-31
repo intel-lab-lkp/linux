@@ -19,8 +19,8 @@
 #define _LINUX_IF_EQL_H
 
 
-#include <linux/timer.h>
-#include <linux/spinlock.h>
+#include <linux/timer_types.h>
+#include <linux/spinlock_types.h>
 #include <net/net_trackers.h>
 #include <uapi/linux/if_eql.h>
 

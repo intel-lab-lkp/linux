@@ -4,8 +4,8 @@
 
 #include <linux/socket.h>
 #include <linux/un.h>
-#include <linux/mutex.h>
-#include <linux/refcount.h>
+#include <linux/mutex_types.h>
+#include <linux/refcount_types.h>
 #include <net/sock.h>
 
 #if IS_ENABLED(CONFIG_UNIX)

@@ -17,7 +17,7 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 
 #include <net/inet_connection_sock.h>

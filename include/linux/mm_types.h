@@ -7,16 +7,16 @@
 #include <linux/auxvec.h>
 #include <linux/kref.h>
 #include <linux/list.h>
-#include <linux/spinlock.h>
-#include <linux/rbtree.h>
+#include <linux/spinlock_types.h>
+#include <linux/rbtree_types.h>
 #include <linux/maple_tree.h>
 #include <linux/rwsem.h>
 #include <linux/cpumask.h>
 #include <linux/uprobes.h>
 #include <linux/rcupdate.h>
 #include <linux/page-flags-layout.h>
-#include <linux/workqueue.h>
-#include <linux/seqlock.h>
+#include <linux/workqueue_types.h>
+#include <linux/seqlock_types.h>
 #include <linux/percpu_counter.h>
 
 #include <asm/mmu.h>

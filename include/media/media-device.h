@@ -13,7 +13,7 @@
 
 #include <linux/idr.h> // for struct ida
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 

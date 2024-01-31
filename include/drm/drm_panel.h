@@ -27,7 +27,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 struct backlight_device;
 struct dentry;

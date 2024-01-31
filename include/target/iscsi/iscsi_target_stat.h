@@ -3,7 +3,7 @@
 #define ISCSI_TARGET_STAT_H
 
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/socket.h>
 
 /*

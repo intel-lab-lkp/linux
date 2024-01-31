@@ -9,7 +9,7 @@
 #define _DAMON_H_
 
 #include <linux/memcontrol.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/time64.h>
 #include <linux/types.h>
 #include <linux/random.h>

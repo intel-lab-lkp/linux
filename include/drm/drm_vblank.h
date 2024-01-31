@@ -24,7 +24,7 @@
 #ifndef _DRM_VBLANK_H_
 #define _DRM_VBLANK_H_
 
-#include <linux/seqlock.h>
+#include <linux/seqlock_types.h>
 #include <linux/idr.h>
 #include <linux/poll.h>
 #include <linux/kthread.h>

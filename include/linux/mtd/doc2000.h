@@ -12,7 +12,7 @@
 #define __MTD_DOC2000_H__
 
 #include <linux/mtd/mtd.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define DoC_Sig1 0
 #define DoC_Sig2 1

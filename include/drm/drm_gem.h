@@ -37,7 +37,7 @@
 #include <linux/kref.h>
 #include <linux/dma-resv.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #include <drm/drm_vma_manager.h>
 

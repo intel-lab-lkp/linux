@@ -10,12 +10,12 @@
 
 #include <linux/device.h>
 #include <linux/ktime.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/pm.h>
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/notifier.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/cpumask.h>
 #include <linux/time64.h>
 

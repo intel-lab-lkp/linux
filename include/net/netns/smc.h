@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __NETNS_SMC_H__
 #define __NETNS_SMC_H__
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/percpu.h>
 
 struct smc_stats_rsn;

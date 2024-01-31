@@ -9,7 +9,7 @@
 #ifndef _PRUSS_DRIVER_H_
 #define _PRUSS_DRIVER_H_
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/remoteproc/pruss.h>
 #include <linux/types.h>
 #include <linux/err.h>

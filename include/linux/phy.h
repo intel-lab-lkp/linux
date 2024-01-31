@@ -20,12 +20,12 @@
 #include <linux/mii.h>
 #include <linux/mii_timestamper.h>
 #include <linux/module.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/mod_devicetable.h>
 #include <linux/u64_stats_sync.h>
 #include <linux/irqreturn.h>
 #include <linux/iopoll.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 #include <linux/atomic.h>
 

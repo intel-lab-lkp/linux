@@ -10,7 +10,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/kfifo.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/spinlock_types.h>
 #include <linux/types.h>
 #include <linux/wait.h>

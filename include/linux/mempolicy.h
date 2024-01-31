@@ -9,8 +9,8 @@
 #include <linux/sched.h>
 #include <linux/mmzone.h>
 #include <linux/slab.h>
-#include <linux/rbtree.h>
-#include <linux/nodemask.h>
+#include <linux/rbtree_types.h>
+#include <linux/nodemask_types.h>
 #include <linux/pagemap.h>
 #include <uapi/linux/mempolicy.h>
 

@@ -14,7 +14,7 @@
 
 #include <linux/io.h>
 #include <linux/reset-controller.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 
 /**
  * struct reset_simple_data - driver data for simple reset controllers

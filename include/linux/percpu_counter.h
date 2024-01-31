@@ -7,7 +7,7 @@
  * WARNING: these things are HUGE.  4 kbytes per counter on 32-way P4.
  */
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/list.h>
 #include <linux/threads.h>
 #include <linux/percpu.h>

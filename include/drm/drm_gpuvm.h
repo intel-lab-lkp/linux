@@ -27,7 +27,7 @@
 
 #include <linux/dma-resv.h>
 #include <linux/list.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/types.h>
 
 #include <drm/drm_device.h>

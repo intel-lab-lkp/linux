@@ -26,7 +26,7 @@
 #ifndef _AGP_H
 #define _AGP_H 1
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/agp_backend.h>
 #include <uapi/linux/agpgart.h>
 

@@ -9,7 +9,7 @@
 
 #include <linux/io.h>
 #include <linux/interrupt.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/mmc/host.h>

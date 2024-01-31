@@ -9,7 +9,7 @@
 #ifndef _BLK_BSG_
 #define _BLK_BSG_
 
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 
 struct bsg_job;
 struct request;

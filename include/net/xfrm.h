@@ -4,7 +4,7 @@
 
 #include <linux/compiler.h>
 #include <linux/xfrm.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include <linux/socket.h>

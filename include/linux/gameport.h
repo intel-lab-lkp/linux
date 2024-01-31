@@ -9,7 +9,7 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/device.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/slab.h>
 #include <uapi/linux/gameport.h>
 

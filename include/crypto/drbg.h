@@ -50,7 +50,7 @@
 #include <crypto/internal/rng.h>
 #include <crypto/rng.h>
 #include <linux/fips.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/list.h>
 
 /*

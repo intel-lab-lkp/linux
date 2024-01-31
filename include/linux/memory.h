@@ -18,7 +18,7 @@
 
 #include <linux/node.h>
 #include <linux/compiler.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define MIN_MEMORY_BLOCK_SIZE     (1UL << SECTION_SIZE_BITS)
 

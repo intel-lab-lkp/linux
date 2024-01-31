@@ -11,7 +11,7 @@
 
 #include <linux/ieee802154.h>
 #include <linux/netdevice.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/bug.h>
 
 #include <net/nl802154.h>

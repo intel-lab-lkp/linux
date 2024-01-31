@@ -8,7 +8,7 @@
  * Author: Tom Lyon, pugs@cisco.com
  */
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/pci.h>
 #include <linux/vfio.h>
 #include <linux/irqbypass.h>

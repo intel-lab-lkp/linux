@@ -20,11 +20,11 @@
 #include <linux/sysfs.h>
 #include <linux/compiler.h>
 #include <linux/container_of.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/kref.h>
 #include <linux/kobject_ns.h>
 #include <linux/workqueue.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 
 #define UEVENT_HELPER_PATH_LEN		256
 #define UEVENT_NUM_ENVP			64	/* number of env pointers */

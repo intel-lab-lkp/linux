@@ -10,7 +10,7 @@
 #define __LINUX_I8253_H
 
 #include <linux/param.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/timex.h>
 
 /* i8253A PIT registers */

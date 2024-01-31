@@ -10,10 +10,10 @@
 
 #include <linux/export.h>
 #include <linux/list.h>
-#include <linux/workqueue.h>
-#include <linux/spinlock.h>
+#include <linux/workqueue_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h>
-#include <linux/hrtimer.h>
+#include <linux/hrtimer_types.h>
 #include <linux/completion.h>
 
 #ifdef CONFIG_PM_CLK

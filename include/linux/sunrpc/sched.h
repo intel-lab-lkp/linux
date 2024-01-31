@@ -12,9 +12,9 @@
 
 #include <linux/ktime.h>
 #include <linux/sunrpc/types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait_bit.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/sunrpc/xdr.h>
 
 /*

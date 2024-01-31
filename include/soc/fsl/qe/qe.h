@@ -14,7 +14,7 @@
 
 #include <linux/compiler.h>
 #include <linux/genalloc.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <soc/fsl/cpm.h>

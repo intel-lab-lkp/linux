@@ -5,7 +5,7 @@
 
 #include <linux/sched/signal.h>
 #include <linux/types.h>
-#include <linux/nodemask.h>
+#include <linux/nodemask_types.h>
 #include <uapi/linux/oom.h>
 #include <linux/sched/coredump.h> /* MMF_* */
 #include <linux/mm.h> /* VM_FAULT* */

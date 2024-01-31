@@ -2,7 +2,7 @@
 #ifndef LINUX_BCM47XX_WDT_H_
 #define LINUX_BCM47XX_WDT_H_
 
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/types.h>
 #include <linux/watchdog.h>
 

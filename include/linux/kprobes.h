@@ -22,7 +22,7 @@
 #include <linux/bug.h>
 #include <linux/percpu.h>
 #include <linux/rcupdate.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/ftrace.h>
 #include <linux/objpool.h>
 #include <linux/rethook.h>

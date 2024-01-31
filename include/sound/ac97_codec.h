@@ -12,7 +12,7 @@
 
 #include <linux/bitops.h>
 #include <linux/device.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <sound/ac97/regs.h>
 #include <sound/pcm.h>
 #include <sound/control.h>

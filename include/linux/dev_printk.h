@@ -14,7 +14,7 @@
 #include <linux/compiler.h>
 #include <linux/stdarg.h>
 #include <linux/types.h>
-#include <linux/ratelimit.h>
+#include <linux/ratelimit_types.h>
 
 #ifndef dev_fmt
 #define dev_fmt(fmt) fmt

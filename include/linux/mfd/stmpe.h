@@ -8,7 +8,7 @@
 #ifndef __LINUX_MFD_STMPE_H
 #define __LINUX_MFD_STMPE_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define STMPE_SAMPLE_TIME(x)	((x & 0xf) << 4)
 #define STMPE_MOD_12B(x)	((x & 0x1) << 3)

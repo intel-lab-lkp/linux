@@ -19,7 +19,7 @@
 #include <linux/pm-trace.h>
 
 #ifdef __KERNEL__
-#include <linux/spinlock.h>		/* spinlock_t */
+#include <linux/spinlock_types.h>	/* spinlock_t */
 extern spinlock_t rtc_lock;		/* serialize CMOS RAM access */
 
 /* Some RTCs extend the mc146818 register set to support alarms of more

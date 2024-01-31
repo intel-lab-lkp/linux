@@ -17,7 +17,7 @@
 #include <linux/scatterlist.h>
 #include <linux/io.h>
 #include <linux/ata.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <scsi/scsi_host.h>
 #include <linux/acpi.h>
 #include <linux/cdrom.h>

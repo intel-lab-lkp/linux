@@ -16,7 +16,7 @@
 #include <linux/kernfs.h>
 #include <linux/compiler.h>
 #include <linux/list.h>
-#include <linux/lockdep.h>
+#include <linux/lockdep_types.h>
 
 struct kobject;
 struct module;

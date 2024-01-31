@@ -7,7 +7,7 @@
  */
 
 #include <linux/umh.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/stddef.h>
 #include <linux/errno.h>
 #include <linux/compiler.h>

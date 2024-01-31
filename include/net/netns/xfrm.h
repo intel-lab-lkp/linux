@@ -3,7 +3,7 @@
 #define __NETNS_XFRM_H
 
 #include <linux/list.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/rhashtable-types.h>
 #include <linux/xfrm.h>
 #include <net/dst_ops.h>

@@ -3,7 +3,7 @@
 #define _LINUX_NS_COMMON_H
 
 #include <linux/atomic.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 struct proc_ns_operations;
 

@@ -4,7 +4,7 @@
 
 #include <linux/path.h>
 #include <linux/spinlock.h>
-#include <linux/seqlock.h>
+#include <linux/seqlock_types.h>
 
 struct fs_struct {
 	int users;

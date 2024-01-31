@@ -5,7 +5,7 @@
 #if !defined(_TRACE_KYBER_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_KYBER_H
 
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 #include <linux/tracepoint.h>
 
 #define DOMAIN_LEN		16

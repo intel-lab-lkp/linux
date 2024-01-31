@@ -15,7 +15,7 @@
 #include <linux/i3c/ccc.h>
 #include <linux/i3c/device.h>
 #include <linux/rwsem.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 #define I3C_HOT_JOIN_ADDR		0x2
 #define I3C_BROADCAST_ADDR		0x7e

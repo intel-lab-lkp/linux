@@ -11,7 +11,7 @@
 #include <linux/i2c.h>		/* for i2c subsystem */
 #include <asm/io.h>		/* for accessing devices */
 #include <linux/stringify.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/scatterlist.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>

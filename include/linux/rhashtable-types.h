@@ -11,7 +11,7 @@
 
 #include <linux/atomic.h>
 #include <linux/compiler.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/workqueue_types.h>
 
 struct rhash_head {

@@ -17,7 +17,7 @@
 
 #include <linux/types.h>
 #include <linux/time.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 
 struct kstat {
 	u32		result_mask;	/* What fields the user got */

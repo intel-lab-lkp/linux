@@ -13,8 +13,8 @@
 #include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/kmsg_dump.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
+#include <linux/mutex_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/time.h>
 #include <linux/types.h>
 

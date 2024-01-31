@@ -2,7 +2,7 @@
 #ifndef _FS_CEPH_OSDMAP_H
 #define _FS_CEPH_OSDMAP_H
 
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/ceph/types.h>
 #include <linux/ceph/decode.h>
 #include <linux/crush/crush.h>

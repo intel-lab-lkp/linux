@@ -13,7 +13,7 @@
 #define _MEDIA_VIDEOBUF2_CORE_H
 
 #include <linux/mm_types.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/poll.h>
 #include <linux/dma-buf.h>
 #include <linux/bitops.h>

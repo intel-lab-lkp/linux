@@ -9,7 +9,7 @@
 #define __LINUX_PLATFORM_DATA_CROS_EC_SENSORHUB_H
 
 #include <linux/ktime.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/notifier.h>
 #include <linux/platform_data/cros_ec_commands.h>
 

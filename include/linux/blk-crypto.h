@@ -70,7 +70,7 @@ struct bio_crypt_ctx {
 };
 
 #include <linux/blk_types.h>
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
 

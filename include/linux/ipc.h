@@ -3,10 +3,10 @@
 #define _LINUX_IPC_H
 
 #include <linux/spinlock_types.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/rhashtable-types.h>
 #include <uapi/linux/ipc.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/cache.h> // for ____cacheline_aligned_in_smp
 #include <linux/compiler_types.h> // for __randomize_layout
 

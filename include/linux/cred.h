@@ -13,7 +13,7 @@
 #include <linux/key.h>
 #include <linux/atomic.h>
 #include <linux/refcount.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/sched.h>
 #include <linux/sched/user.h>
 

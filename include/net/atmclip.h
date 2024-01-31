@@ -11,7 +11,7 @@
 #include <linux/atm.h>
 #include <linux/atmdev.h>
 #include <linux/atmarp.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <net/neighbour.h>
 
 

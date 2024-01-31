@@ -6,7 +6,7 @@
 
 #include <linux/list.h>
 #include <linux/percpu-refcount.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct bpf_prog_array;
 

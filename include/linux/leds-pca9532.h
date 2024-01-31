@@ -11,7 +11,7 @@
 #define __LINUX_PCA9532_H
 
 #include <linux/leds.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <dt-bindings/leds/leds-pca9532.h>
 
 enum pca9532_state {

@@ -15,7 +15,7 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/list.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/rculist_nulls.h>
 #include <linux/hash.h>
 #include <linux/jhash.h>

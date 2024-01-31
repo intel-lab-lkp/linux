@@ -6,7 +6,7 @@
 #ifndef __MTD_TRANS_H__
 #define __MTD_TRANS_H__
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/kref.h>
 #include <linux/list.h>
 

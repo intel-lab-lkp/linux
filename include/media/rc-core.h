@@ -8,7 +8,7 @@
 #ifndef _RC_CORE
 #define _RC_CORE
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/cdev.h>
 #include <linux/kfifo.h>
 #include <linux/time.h>

@@ -7,7 +7,7 @@ struct tty_struct;
 #include <linux/fs.h>
 #include <linux/atomic.h>
 #include <linux/list.h>
-#include <linux/lockdep.h>
+#include <linux/lockdep_types.h>
 
 /*
  * the semaphore definition

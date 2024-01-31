@@ -14,7 +14,7 @@
 
 #include <linux/device.h>
 #include <linux/sched.h>	/* task_struct, completion */
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #ifdef CONFIG_CARDBUS
 #include <linux/pci.h>

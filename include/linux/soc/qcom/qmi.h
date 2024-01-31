@@ -11,7 +11,7 @@
 #include <linux/list.h>
 #include <linux/qrtr.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct socket;
 

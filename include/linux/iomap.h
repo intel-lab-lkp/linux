@@ -8,7 +8,7 @@
 #include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/mm_types.h>
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 
 struct address_space;
 struct fiemap_extent_info;

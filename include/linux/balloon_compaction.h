@@ -39,7 +39,7 @@
 #include <linux/pagemap.h>
 #include <linux/page-flags.h>
 #include <linux/migrate.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/list.h>

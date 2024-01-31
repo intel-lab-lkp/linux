@@ -4,7 +4,7 @@
 
 #include <linux/if_ether.h>
 #include <linux/phy.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 
 struct ll_temac_platform_data {
 	bool txcsum;		/* Enable/disable TX checksum */

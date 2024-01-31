@@ -17,8 +17,8 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/percpu-defs.h>
-#include <linux/seqlock.h>
-#include <linux/timer.h>
+#include <linux/seqlock_types.h>
+#include <linux/timerqueue_types.h>
 #include <asm/processor.h>  /* for cpu_relax() */
 
 struct restart_block;

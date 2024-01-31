@@ -13,7 +13,7 @@
 #define _LINUX_CRYPTO_H
 
 #include <linux/completion.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 

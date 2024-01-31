@@ -11,7 +11,7 @@
 #ifndef _SMC_H
 #define _SMC_H
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 #include "linux/ism.h"

@@ -9,8 +9,8 @@
 #include <linux/kvm.h>
 #include <linux/irqreturn.h>
 #include <linux/kref.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
+#include <linux/mutex_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/static_key.h>
 #include <linux/types.h>
 #include <kvm/iodev.h>

@@ -3,8 +3,8 @@
 #define _LINUX_SWAP_SLOTS_H
 
 #include <linux/swap.h>
-#include <linux/spinlock.h>
-#include <linux/mutex.h>
+#include <linux/spinlock_types.h>
+#include <linux/mutex_types.h>
 
 #define SWAP_SLOTS_CACHE_SIZE			SWAP_BATCH
 #define THRESHOLD_ACTIVATE_SWAP_SLOTS_CACHE	(5*SWAP_SLOTS_CACHE_SIZE)

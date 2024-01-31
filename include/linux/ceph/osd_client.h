@@ -6,8 +6,8 @@
 #include <linux/completion.h>
 #include <linux/kref.h>
 #include <linux/mempool.h>
-#include <linux/rbtree.h>
-#include <linux/refcount.h>
+#include <linux/rbtree_types.h>
+#include <linux/refcount_types.h>
 #include <linux/ktime.h>
 
 #include <linux/ceph/types.h>

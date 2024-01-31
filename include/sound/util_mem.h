@@ -3,7 +3,7 @@
 #define __SOUND_UTIL_MEM_H
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 /*
  *  Copyright (C) 2000 Takashi Iwai <tiwai@suse.de>
  *

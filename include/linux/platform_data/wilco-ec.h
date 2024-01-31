@@ -8,7 +8,7 @@
 #ifndef WILCO_EC_H
 #define WILCO_EC_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 
 /* Message flags for using the mailbox() interface */
