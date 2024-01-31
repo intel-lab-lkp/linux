@@ -152,46 +152,46 @@ static void wave5_update_pix_fmt(struct v4l2_pix_format_mplane *pix_mp, unsigned
 	case V4L2_PIX_FMT_YUV420:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = round_up(width, 32) * height * 3 / 2;
+		pix_mp->width = round_up(width, 32);
+		pix_mp->height = round_up(height, 16);
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height * 3 / 2;
 		break;
 	case V4L2_PIX_FMT_YUV420M:
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = round_up(width, 32) * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[1].sizeimage = round_up(width, 32) * height / 4;
-		pix_mp->plane_fmt[2].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[2].sizeimage = round_up(width, 32) * height / 4;
+		pix_mp->width = round_up(width, 32);
+		pix_mp->height = round_up(height, 16);
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height / 4;
+		pix_mp->plane_fmt[2].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[2].sizeimage = pix_mp->width * pix_mp->height / 4;
 		break;
 	case V4L2_PIX_FMT_NV12M:
 	case V4L2_PIX_FMT_NV21M:
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = round_up(width, 32) * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[1].sizeimage = round_up(width, 32) * height / 2;
+		pix_mp->width = round_up(width, 32);
+		pix_mp->height = round_up(height, 16);
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height / 2;
 		break;
 	case V4L2_PIX_FMT_YUV422P:
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = round_up(width, 32) * height * 2;
+		pix_mp->width = round_up(width, 32);
+		pix_mp->height = round_up(height, 16);
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height * 2;
 		break;
 	case V4L2_PIX_FMT_NV16M:
 	case V4L2_PIX_FMT_NV61M:
-		pix_mp->width = width;
-		pix_mp->height = height;
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = round_up(width, 32) * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[1].sizeimage = round_up(width, 32) * height;
+		pix_mp->width = round_up(width, 32);
+		pix_mp->height = round_up(height, 16);
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height;
 		break;
 	default:
 		pix_mp->width = width;
@@ -638,6 +638,8 @@ static int wave5_vpu_enc_s_fmt_out(struct file *file, void *fh, struct v4l2_form
 	inst->xfer_func = f->fmt.pix_mp.xfer_func;
 
 	wave5_update_pix_fmt(&inst->dst_fmt, f->fmt.pix_mp.width, f->fmt.pix_mp.height);
+	inst->conf_win.width = inst->dst_fmt.width;
+	inst->conf_win.height = inst->dst_fmt.height;
 
 	return 0;
 }
@@ -653,11 +655,16 @@ static int wave5_vpu_enc_g_selection(struct file *file, void *fh, struct v4l2_se
 	switch (s->target) {
 	case V4L2_SEL_TGT_CROP_DEFAULT:
 	case V4L2_SEL_TGT_CROP_BOUNDS:
-	case V4L2_SEL_TGT_CROP:
 		s->r.left = 0;
 		s->r.top = 0;
 		s->r.width = inst->dst_fmt.width;
 		s->r.height = inst->dst_fmt.height;
+		break;
+	case V4L2_SEL_TGT_CROP:
+		s->r.left = 0;
+		s->r.top = 0;
+		s->r.width = inst->conf_win.width;
+		s->r.height = inst->conf_win.height;
 		break;
 	default:
 		return -EINVAL;
@@ -681,8 +688,10 @@ static int wave5_vpu_enc_s_selection(struct file *file, void *fh, struct v4l2_se
 
 	s->r.left = 0;
 	s->r.top = 0;
-	s->r.width = inst->src_fmt.width;
-	s->r.height = inst->src_fmt.height;
+	s->r.width = min(s->r.width, inst->dst_fmt.width);
+	s->r.height = min(s->r.height, inst->dst_fmt.height);
+
+	inst->conf_win = s->r;
 
 	return 0;
 }
@@ -1229,8 +1238,8 @@ static void wave5_set_enc_openparam(struct enc_open_param *open_param,
 	open_param->wave_param.lambda_scaling_enable = 1;
 
 	open_param->line_buf_int_en = true;
-	open_param->pic_width = inst->dst_fmt.width;
-	open_param->pic_height = inst->dst_fmt.height;
+	open_param->pic_width = inst->conf_win.width;
+	open_param->pic_height = inst->conf_win.height;
 	open_param->frame_rate_info = inst->frame_rate;
 	open_param->rc_enable = inst->rc_enable;
 	if (inst->rc_enable) {
@@ -1806,6 +1815,8 @@ static int wave5_vpu_open_enc(struct file *filp)
 	v4l2_ctrl_handler_setup(v4l2_ctrl_hdl);
 
 	wave5_set_default_format(&inst->src_fmt, &inst->dst_fmt);
+	inst->conf_win.width = inst->dst_fmt.width;
+	inst->conf_win.height = inst->dst_fmt.height;
 	inst->colorspace = V4L2_COLORSPACE_REC709;
 	inst->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	inst->quantization = V4L2_QUANTIZATION_DEFAULT;

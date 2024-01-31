@@ -243,54 +243,54 @@ static void wave5_update_pix_fmt(struct v4l2_pix_format_mplane *pix_mp, unsigned
 	case V4L2_PIX_FMT_NV21:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height * 3 / 2;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height * 3 / 2;
 		break;
 	case V4L2_PIX_FMT_YUV422P:
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height * 2;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height * 2;
 		break;
 	case V4L2_PIX_FMT_YUV420M:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[1].sizeimage = width * height / 4;
-		pix_mp->plane_fmt[2].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[2].sizeimage = width * height / 4;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height / 4;
+		pix_mp->plane_fmt[2].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[2].sizeimage = pix_mp->width * pix_mp->height / 4;
 		break;
 	case V4L2_PIX_FMT_NV12M:
 	case V4L2_PIX_FMT_NV21M:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[1].sizeimage = width * height / 2;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height / 2;
 		break;
 	case V4L2_PIX_FMT_YUV422M:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[1].sizeimage = width * height / 2;
-		pix_mp->plane_fmt[2].bytesperline = round_up(width, 32) / 2;
-		pix_mp->plane_fmt[2].sizeimage = width * height / 2;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height / 2;
+		pix_mp->plane_fmt[2].bytesperline = pix_mp->width / 2;
+		pix_mp->plane_fmt[2].sizeimage = pix_mp->width * pix_mp->height / 2;
 		break;
 	case V4L2_PIX_FMT_NV16M:
 	case V4L2_PIX_FMT_NV61M:
 		pix_mp->width = round_up(width, 32);
 		pix_mp->height = round_up(height, 16);
-		pix_mp->plane_fmt[0].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[0].sizeimage = width * height;
-		pix_mp->plane_fmt[1].bytesperline = round_up(width, 32);
-		pix_mp->plane_fmt[1].sizeimage = width * height;
+		pix_mp->plane_fmt[0].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[0].sizeimage = pix_mp->width * pix_mp->height;
+		pix_mp->plane_fmt[1].bytesperline = pix_mp->width;
+		pix_mp->plane_fmt[1].sizeimage = pix_mp->width * pix_mp->height;
 		break;
 	default:
 		pix_mp->width = width;
@@ -1003,6 +1003,7 @@ static int wave5_vpu_dec_queue_setup(struct vb2_queue *q, unsigned int *num_buff
 	struct vpu_instance *inst = vb2_get_drv_priv(q);
 	struct v4l2_pix_format_mplane inst_format =
 		(q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) ? inst->src_fmt : inst->dst_fmt;
+	unsigned int i;
 
 	dev_dbg(inst->dev->dev, "%s: num_buffers: %u | num_planes: %u | type: %u\n", __func__,
 		*num_buffers, *num_planes, q->type);
@@ -1016,31 +1017,9 @@ static int wave5_vpu_dec_queue_setup(struct vb2_queue *q, unsigned int *num_buff
 		if (*num_buffers < inst->fbc_buf_count)
 			*num_buffers = inst->fbc_buf_count;
 
-		if (*num_planes == 1) {
-			if (inst->output_format == FORMAT_422)
-				sizes[0] = inst_format.width * inst_format.height * 2;
-			else
-				sizes[0] = inst_format.width * inst_format.height * 3 / 2;
-			dev_dbg(inst->dev->dev, "%s: size[0]: %u\n", __func__, sizes[0]);
-		} else if (*num_planes == 2) {
-			sizes[0] = inst_format.width * inst_format.height;
-			if (inst->output_format == FORMAT_422)
-				sizes[1] = inst_format.width * inst_format.height;
-			else
-				sizes[1] = inst_format.width * inst_format.height / 2;
-			dev_dbg(inst->dev->dev, "%s: size[0]: %u | size[1]: %u\n",
-				__func__, sizes[0], sizes[1]);
-		} else if (*num_planes == 3) {
-			sizes[0] = inst_format.width * inst_format.height;
-			if (inst->output_format == FORMAT_422) {
-				sizes[1] = inst_format.width * inst_format.height / 2;
-				sizes[2] = inst_format.width * inst_format.height / 2;
-			} else {
-				sizes[1] = inst_format.width * inst_format.height / 4;
-				sizes[2] = inst_format.width * inst_format.height / 4;
-			}
-			dev_dbg(inst->dev->dev, "%s: size[0]: %u | size[1]: %u | size[2]: %u\n",
-				__func__, sizes[0], sizes[1], sizes[2]);
+		for (i = 0; i < *num_planes; i++) {
+			sizes[i] = inst_format.plane_fmt[i].sizeimage;
+			dev_dbg(inst->dev->dev, "%s: size[%u]: %u\n", __func__, i, sizes[i]);
 		}
 	}
 
