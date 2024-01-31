@@ -48,6 +48,7 @@
 #include <linux/magic.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
+#include <linux/quota.h>
 
 static const struct super_operations xfs_super_operations;
 

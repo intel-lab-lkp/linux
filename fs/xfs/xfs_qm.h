@@ -9,6 +9,7 @@
 #include "xfs_dquot_item.h"
 #include "xfs_dquot.h"
 
+struct qc_dqblk;
 struct xfs_inode;
 
 extern struct kmem_cache	*xfs_dqtrx_cache;

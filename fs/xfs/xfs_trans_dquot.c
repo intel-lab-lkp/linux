@@ -18,6 +18,8 @@
 #include "xfs_trace.h"
 #include "xfs_error.h"
 
+#include <linux/quota.h>
+
 STATIC void	xfs_trans_alloc_dqinfo(xfs_trans_t *);
 
 /*
