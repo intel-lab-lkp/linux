@@ -34,6 +34,7 @@
  * which something happened with proportion of type j.
  */
 #include <linux/flex_proportions.h>
+#include <linux/percpu_counter.h>
 #include <linux/math64.h>
 #include <linux/seqlock.h>
 
