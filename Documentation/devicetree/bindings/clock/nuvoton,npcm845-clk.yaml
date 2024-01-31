@@ -21,6 +21,14 @@ properties:
   reg:
     maxItems: 1
 
+  clocks:
+    items:
+      - description: 25Mhz reference clock
+
+  clock-names:
+    items:
+      - const: refclk
+
   '#clock-cells':
     const: 1
     description:
@@ -30,6 +38,8 @@ properties:
 required:
   - compatible
   - reg
+  - clocks
+  - clock-names
   - '#clock-cells'
 
 additionalProperties: false
@@ -44,6 +54,8 @@ examples:
             compatible = "nuvoton,npcm845-clk";
             reg = <0x0 0xf0801000 0x0 0x1000>;
             #clock-cells = <1>;
+            clocks = <&refclk>;
+            clock-names = "refclk";
         };
     };
 ...
