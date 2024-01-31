@@ -70,6 +70,9 @@ obj-$(CONFIG_YOGABOOK)		+= lenovo-yogabook.o
 # Intel
 obj-y				+= intel/
 
+# Microsoft
+obj-$(CONFIG_ACPI_QUICKSTART)  += quickstart.o
+
 # MSI
 obj-$(CONFIG_MSI_EC)		+= msi-ec.o
 obj-$(CONFIG_MSI_LAPTOP)	+= msi-laptop.o
