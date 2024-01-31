@@ -53,7 +53,8 @@ enum cc_attr {
 	 * Use this in places where the cache coherency of the memory matters
 	 * but the encryption status does not.
 	 *
-	 * Includes all systems that set CC_ATTR_HOST_MEM_ENCRYPT.
+	 * Includes all systems that set CC_ATTR_HOST_MEM_ENCRYPT, but
+	 * additionally adds TDX hosts.
 	 */
 	CC_ATTR_HOST_MEM_INCOHERENT,
 

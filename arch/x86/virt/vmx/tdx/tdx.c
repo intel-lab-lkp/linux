@@ -37,6 +37,7 @@
 #include <asm/intel-family.h>
 #include <asm/processor.h>
 #include <asm/mce.h>
+#include <asm/coco.h>
 #include "tdx.h"
 
 static u32 tdx_global_keyid __ro_after_init;
@@ -1487,6 +1488,8 @@ void __init tdx_init(void)
 	tdx_nr_guest_keyids = nr_tdx_keyids - 1;
 
 	setup_force_cpu_cap(X86_FEATURE_TDX_HOST_PLATFORM);
+
+	cc_vendor = CC_VENDOR_INTEL;
 
 	check_tdx_erratum();
 }

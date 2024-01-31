@@ -12,11 +12,12 @@
 
 #include <asm/coco.h>
 #include <asm/processor.h>
+#include <asm/cpufeature.h>
 
 enum cc_vendor cc_vendor __ro_after_init = CC_VENDOR_NONE;
 static u64 cc_mask __ro_after_init;
 
-static bool noinstr intel_cc_platform_has(enum cc_attr attr)
+static bool noinstr intel_cc_platform_guest_has(enum cc_attr attr)
 {
 	switch (attr) {
 	case CC_ATTR_GUEST_UNROLL_STRING_IO:
@@ -27,6 +28,24 @@ static bool noinstr intel_cc_platform_has(enum cc_attr attr)
 	default:
 		return false;
 	}
+}
+
+static bool noinstr intel_cc_platform_host_has(enum cc_attr attr)
+{
+	switch (attr) {
+	case CC_ATTR_HOST_MEM_INCOHERENT:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool noinstr intel_cc_platform_has(enum cc_attr attr)
+{
+	if (boot_cpu_has(X86_FEATURE_TDX_HOST_PLATFORM))
+		return intel_cc_platform_host_has(attr);
+
+	return intel_cc_platform_guest_has(attr);
 }
 
 /*
