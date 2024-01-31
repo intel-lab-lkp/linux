@@ -20,22 +20,67 @@ enum ntsync_type {
 };
 
 struct ntsync_obj {
+	spinlock_t lock;
+
 	enum ntsync_type type;
 
+	struct file *file;
+	struct ntsync_device *dev;
+
+	/* The following fields are protected by the object lock. */
 	union {
 		struct {
 			__u32 count;
 			__u32 max;
 		} sem;
 	} u;
-
-	struct file *file;
-	struct ntsync_device *dev;
 };
 
 struct ntsync_device {
 	struct file *file;
 };
+
+/*
+ * Actually change the semaphore state, returning -EOVERFLOW if it is made
+ * invalid.
+ */
+static int post_sem_state(struct ntsync_obj *sem, __u32 count)
+{
+	lockdep_assert_held(&sem->lock);
+
+	if (sem->u.sem.count + count < sem->u.sem.count ||
+	    sem->u.sem.count + count > sem->u.sem.max)
+		return -EOVERFLOW;
+
+	sem->u.sem.count += count;
+	return 0;
+}
+
+static int ntsync_sem_post(struct ntsync_obj *sem, void __user *argp)
+{
+	__u32 __user *user_args = argp;
+	__u32 prev_count;
+	__u32 args;
+	int ret;
+
+	if (copy_from_user(&args, argp, sizeof(args)))
+		return -EFAULT;
+
+	if (sem->type != NTSYNC_TYPE_SEM)
+		return -EINVAL;
+
+	spin_lock(&sem->lock);
+
+	prev_count = sem->u.sem.count;
+	ret = post_sem_state(sem, args);
+
+	spin_unlock(&sem->lock);
+
+	if (!ret && put_user(prev_count, user_args))
+		ret = -EFAULT;
+
+	return ret;
+}
 
 static int ntsync_obj_release(struct inode *inode, struct file *file)
 {
@@ -47,9 +92,25 @@ static int ntsync_obj_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static long ntsync_obj_ioctl(struct file *file, unsigned int cmd,
+			     unsigned long parm)
+{
+	struct ntsync_obj *obj = file->private_data;
+	void __user *argp = (void __user *)parm;
+
+	switch (cmd) {
+	case NTSYNC_IOC_SEM_POST:
+		return ntsync_sem_post(obj, argp);
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
 static const struct file_operations ntsync_obj_fops = {
 	.owner		= THIS_MODULE,
 	.release	= ntsync_obj_release,
+	.unlocked_ioctl	= ntsync_obj_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 	.llseek		= no_llseek,
 };
 
@@ -64,6 +125,7 @@ static struct ntsync_obj *ntsync_alloc_obj(struct ntsync_device *dev,
 	obj->type = type;
 	obj->dev = dev;
 	get_file(dev->file);
+	spin_lock_init(&obj->lock);
 
 	return obj;
 }
