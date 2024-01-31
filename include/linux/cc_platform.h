@@ -43,6 +43,21 @@ enum cc_attr {
 	CC_ATTR_HOST_MEM_ENCRYPT,
 
 	/**
+	 * @CC_ATTR_HOST_MEM_INCOHERENT: Host memory encryption can be
+	 * incoherent
+	 *
+	 * The platform/OS is running as a bare-metal system or a hypervisor.
+	 * The memory encryption engine might have left non-cache-coherent
+	 * data in the caches that needs to be flushed.
+	 *
+	 * Use this in places where the cache coherency of the memory matters
+	 * but the encryption status does not.
+	 *
+	 * Includes all systems that set CC_ATTR_HOST_MEM_ENCRYPT.
+	 */
+	CC_ATTR_HOST_MEM_INCOHERENT,
+
+	/**
 	 * @CC_ATTR_GUEST_MEM_ENCRYPT: Guest memory encryption is active
 	 *
 	 * The platform/OS is running as a guest/virtual machine and actively

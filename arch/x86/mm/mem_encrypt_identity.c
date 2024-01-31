@@ -570,9 +570,19 @@ void __init sme_enable(struct boot_params *bp)
 		msr = __rdmsr(MSR_AMD64_SYSCFG);
 		if (!(msr & MSR_AMD64_SYSCFG_MEM_ENCRYPT))
 			return;
+
+		/*
+		 * Always set CC vendor when the platform has SME enabled
+		 * regardless whether the kernel will actually activates the
+		 * SME or not.  This reports the CC_ATTR_HOST_MEM_INCOHERENT
+		 * being true as long as the platform has SME enabled so that
+		 * stop_this_cpu() can do necessary WBINVD during kexec().
+		 */
+		cc_vendor = CC_VENDOR_AMD;
 	} else {
 		/* SEV state cannot be controlled by a command line option */
 		sme_me_mask = me_mask;
+		cc_vendor = CC_VENDOR_AMD;
 		goto out;
 	}
 
@@ -608,7 +618,6 @@ void __init sme_enable(struct boot_params *bp)
 out:
 	if (sme_me_mask) {
 		physical_mask &= ~sme_me_mask;
-		cc_vendor = CC_VENDOR_AMD;
 		cc_set_mask(sme_me_mask);
 	}
 }

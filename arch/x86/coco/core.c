@@ -72,6 +72,19 @@ static bool noinstr amd_cc_platform_has(enum cc_attr attr)
 	case CC_ATTR_HOST_MEM_ENCRYPT:
 		return sme_me_mask && !(sev_status & MSR_AMD64_SEV_ENABLED);
 
+	case CC_ATTR_HOST_MEM_INCOHERENT:
+		/*
+		 * CC_ATTR_HOST_MEM_INCOHERENT represents whether SME has
+		 * enabled on the platform regardless whether the kernel
+		 * has actually enabled the SME.
+		 */
+		return !(sev_status & MSR_AMD64_SEV_ENABLED);
+
+	/*
+	 * For all CC_ATTR_GUEST_* there's no need to check sme_me_mask
+	 * as it must be true when there's any SEV enable bit set in
+	 * sev_status.
+	 */
 	case CC_ATTR_GUEST_MEM_ENCRYPT:
 		return sev_status & MSR_AMD64_SEV_ENABLED;
 

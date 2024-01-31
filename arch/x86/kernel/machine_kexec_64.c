@@ -358,7 +358,7 @@ void machine_kexec(struct kimage *image)
 				       (unsigned long)page_list,
 				       image->start,
 				       image->preserve_context,
-				       cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT));
+				       cc_platform_has(CC_ATTR_HOST_MEM_INCOHERENT));
 
 #ifdef CONFIG_KEXEC_JUMP
 	if (image->preserve_context)
