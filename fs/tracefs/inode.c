@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/fs_parser.h>
 #include <linux/mount.h>
 #include <linux/kobject.h>
 #include <linux/namei.h>
@@ -24,204 +25,47 @@
 #include "internal.h"
 
 #define TRACEFS_DEFAULT_MODE	0700
-static struct kmem_cache *tracefs_inode_cachep __ro_after_init;
+static struct kernfs_root *trace_fs_root;
+static struct kernfs_node *trace_kfs_root_node;
 
 static struct vfsmount *tracefs_mount;
 static int tracefs_mount_count;
 static bool tracefs_registered;
 
-static struct inode *tracefs_alloc_inode(struct super_block *sb)
-{
-	struct tracefs_inode *ti;
-
-	ti = kmem_cache_alloc(tracefs_inode_cachep, GFP_KERNEL);
-	if (!ti)
-		return NULL;
-
-	ti->flags = 0;
-
-	return &ti->vfs_inode;
-}
-
-static void tracefs_free_inode(struct inode *inode)
-{
-	kmem_cache_free(tracefs_inode_cachep, get_tracefs(inode));
-}
-
-static ssize_t default_read_file(struct file *file, char __user *buf,
-				 size_t count, loff_t *ppos)
+static ssize_t trace_fs_kf_read(struct kernfs_open_file *of, char *buf,
+				size_t count, loff_t pos)
 {
 	return 0;
 }
 
-static ssize_t default_write_file(struct file *file, const char __user *buf,
-				   size_t count, loff_t *ppos)
+static ssize_t trace_fs_kf_write(struct kernfs_open_file *of, char *buf,
+				 size_t count, loff_t pos)
 {
-	return count;
+	return 0;
 }
 
-static const struct file_operations tracefs_file_operations = {
-	.read =		default_read_file,
-	.write =	default_write_file,
-	.open =		simple_open,
-	.llseek =	noop_llseek,
+static loff_t trace_fs_kf_llseek(struct kernfs_open_file *of, loff_t offset,
+				 int whence)
+{
+	return noop_llseek(of->file, offset, whence);
+}
+
+static int trace_fs_kf_open(struct kernfs_open_file *of)
+{
+	return 0;
+}
+
+static const struct kernfs_ops tracefs_file_kfops = {
+	.read		= trace_fs_kf_read,
+	.write		= trace_fs_kf_write,
+	.open		= trace_fs_kf_open,
+	.llseek		= trace_fs_kf_llseek,
 };
 
 static struct tracefs_dir_ops {
 	int (*mkdir)(const char *name);
 	int (*rmdir)(const char *name);
 } tracefs_ops __ro_after_init;
-
-static char *get_dname(struct dentry *dentry)
-{
-	const char *dname;
-	char *name;
-	int len = dentry->d_name.len;
-
-	dname = dentry->d_name.name;
-	name = kmalloc(len + 1, GFP_KERNEL);
-	if (!name)
-		return NULL;
-	memcpy(name, dname, len);
-	name[len] = 0;
-	return name;
-}
-
-static int tracefs_syscall_mkdir(struct mnt_idmap *idmap,
-				 struct inode *inode, struct dentry *dentry,
-				 umode_t mode)
-{
-	struct tracefs_inode *ti;
-	char *name;
-	int ret;
-
-	name = get_dname(dentry);
-	if (!name)
-		return -ENOMEM;
-
-	/*
-	 * This is a new directory that does not take the default of
-	 * the rootfs. It becomes the default permissions for all the
-	 * files and directories underneath it.
-	 */
-	ti = get_tracefs(inode);
-	ti->flags |= TRACEFS_INSTANCE_INODE;
-	ti->private = inode;
-
-	/*
-	 * The mkdir call can call the generic functions that create
-	 * the files within the tracefs system. It is up to the individual
-	 * mkdir routine to handle races.
-	 */
-	inode_unlock(inode);
-	ret = tracefs_ops.mkdir(name);
-	inode_lock(inode);
-
-	kfree(name);
-
-	return ret;
-}
-
-static int tracefs_syscall_rmdir(struct inode *inode, struct dentry *dentry)
-{
-	char *name;
-	int ret;
-
-	name = get_dname(dentry);
-	if (!name)
-		return -ENOMEM;
-
-	/*
-	 * The rmdir call can call the generic functions that create
-	 * the files within the tracefs system. It is up to the individual
-	 * rmdir routine to handle races.
-	 * This time we need to unlock not only the parent (inode) but
-	 * also the directory that is being deleted.
-	 */
-	inode_unlock(inode);
-	inode_unlock(d_inode(dentry));
-
-	ret = tracefs_ops.rmdir(name);
-
-	inode_lock_nested(inode, I_MUTEX_PARENT);
-	inode_lock(d_inode(dentry));
-
-	kfree(name);
-
-	return ret;
-}
-
-static void set_tracefs_inode_owner(struct inode *inode)
-{
-	struct tracefs_inode *ti = get_tracefs(inode);
-	struct inode *root_inode = ti->private;
-
-	/*
-	 * If this inode has never been referenced, then update
-	 * the permissions to the superblock.
-	 */
-	if (!(ti->flags & TRACEFS_UID_PERM_SET))
-		inode->i_uid = root_inode->i_uid;
-
-	if (!(ti->flags & TRACEFS_GID_PERM_SET))
-		inode->i_gid = root_inode->i_gid;
-}
-
-static int tracefs_permission(struct mnt_idmap *idmap,
-			      struct inode *inode, int mask)
-{
-	set_tracefs_inode_owner(inode);
-	return generic_permission(idmap, inode, mask);
-}
-
-static int tracefs_getattr(struct mnt_idmap *idmap,
-			   const struct path *path, struct kstat *stat,
-			   u32 request_mask, unsigned int flags)
-{
-	struct inode *inode = d_backing_inode(path->dentry);
-
-	set_tracefs_inode_owner(inode);
-	generic_fillattr(idmap, request_mask, inode, stat);
-	return 0;
-}
-
-static int tracefs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
-			   struct iattr *attr)
-{
-	unsigned int ia_valid = attr->ia_valid;
-	struct inode *inode = d_inode(dentry);
-	struct tracefs_inode *ti = get_tracefs(inode);
-
-	if (ia_valid & ATTR_UID)
-		ti->flags |= TRACEFS_UID_PERM_SET;
-
-	if (ia_valid & ATTR_GID)
-		ti->flags |= TRACEFS_GID_PERM_SET;
-
-	return simple_setattr(idmap, dentry, attr);
-}
-
-static const struct inode_operations tracefs_instance_dir_inode_operations = {
-	.lookup		= simple_lookup,
-	.mkdir		= tracefs_syscall_mkdir,
-	.rmdir		= tracefs_syscall_rmdir,
-	.permission	= tracefs_permission,
-	.getattr	= tracefs_getattr,
-	.setattr	= tracefs_setattr,
-};
-
-static const struct inode_operations tracefs_dir_inode_operations = {
-	.lookup		= simple_lookup,
-	.permission	= tracefs_permission,
-	.getattr	= tracefs_getattr,
-	.setattr	= tracefs_setattr,
-};
-
-static const struct inode_operations tracefs_file_inode_operations = {
-	.permission	= tracefs_permission,
-	.getattr	= tracefs_getattr,
-	.setattr	= tracefs_setattr,
-};
 
 struct inode *tracefs_get_inode(struct super_block *sb)
 {
@@ -241,80 +85,101 @@ struct tracefs_mount_opts {
 	unsigned int opts;
 };
 
-enum {
+struct tracefs_mount_opts global_opts = {
+	.mode	= TRACEFS_DEFAULT_MODE,
+	.uid	= GLOBAL_ROOT_UID,
+	.gid	= GLOBAL_ROOT_GID,
+	.opts	= 0,
+};
+
+enum trace_fs_param {
 	Opt_uid,
 	Opt_gid,
 	Opt_mode,
-	Opt_err
 };
 
-static const match_table_t tokens = {
-	{Opt_uid, "uid=%u"},
-	{Opt_gid, "gid=%u"},
-	{Opt_mode, "mode=%o"},
-	{Opt_err, NULL}
+static const struct fs_parameter_spec trace_fs_parameters[] = {
+	fsparam_u32   ("gid",		Opt_gid),
+	fsparam_u32oct("mode",		Opt_mode),
+	fsparam_u32   ("uid",		Opt_uid),
+	{}
 };
 
-struct tracefs_fs_info {
+struct trace_fs_context {
+	struct kernfs_fs_context kfc;
 	struct tracefs_mount_opts mount_opts;
 };
 
-static int tracefs_parse_options(char *data, struct tracefs_mount_opts *opts)
+static inline struct trace_fs_context *trace_fc2context(struct fs_context *fc)
 {
-	substring_t args[MAX_OPT_ARGS];
-	int option;
-	int token;
-	kuid_t uid;
-	kgid_t gid;
-	char *p;
+	struct kernfs_fs_context *kfc = fc->fs_private;
 
-	opts->opts = 0;
-	opts->mode = TRACEFS_DEFAULT_MODE;
+	return container_of(kfc, struct trace_fs_context, kfc);
+}
 
-	while ((p = strsep(&data, ",")) != NULL) {
-		if (!*p)
-			continue;
+static int trace_fs_parse_param(struct fs_context *fc, struct fs_parameter *param)
+{
+	struct trace_fs_context *ctx = trace_fc2context(fc);
+	struct tracefs_mount_opts *mount_opts = &ctx->mount_opts;
+	struct fs_parse_result result;
+	int opt;
+	kuid_t kuid;
+	kgid_t kgid;
 
-		token = match_token(p, tokens, args);
-		switch (token) {
-		case Opt_uid:
-			if (match_int(&args[0], &option))
-				return -EINVAL;
-			uid = make_kuid(current_user_ns(), option);
-			if (!uid_valid(uid))
-				return -EINVAL;
-			opts->uid = uid;
-			break;
-		case Opt_gid:
-			if (match_int(&args[0], &option))
-				return -EINVAL;
-			gid = make_kgid(current_user_ns(), option);
-			if (!gid_valid(gid))
-				return -EINVAL;
-			opts->gid = gid;
-			break;
-		case Opt_mode:
-			if (match_octal(&args[0], &option))
-				return -EINVAL;
-			opts->mode = option & S_IALLUGO;
-			break;
+	opt = fs_parse(fc, trace_fs_parameters, param, &result);
+	if (opt < 0)
+		return opt;
+
+	switch (opt) {
+	case Opt_mode:
+		mount_opts->mode = result.uint_32 & 07777;
+		mount_opts->opts |= BIT(Opt_mode);
+		break;
+	case Opt_uid:
+		kuid = make_kuid(current_user_ns(), result.uint_32);
+		if (!uid_valid(kuid))
+			goto bad_value;
+
 		/*
-		 * We might like to report bad mount options here;
-		 * but traditionally tracefs has ignored all mount options
+		 * The requested uid must be representable in the
+		 * filesystem's idmapping.
 		 */
-		}
+		if (!kuid_has_mapping(fc->user_ns, kuid))
+			goto bad_value;
 
-		opts->opts |= BIT(token);
+		mount_opts->uid = kuid;
+		mount_opts->opts |= BIT(Opt_uid);
+		break;
+	case Opt_gid:
+		kgid = make_kgid(current_user_ns(), result.uint_32);
+		if (!gid_valid(kgid))
+			goto bad_value;
+
+		/*
+		 * The requested gid must be representable in the
+		 * filesystem's idmapping.
+		 */
+		if (!kgid_has_mapping(fc->user_ns, kgid))
+			goto bad_value;
+
+		mount_opts->gid = kgid;
+		mount_opts->opts |= BIT(Opt_gid);
+		break;
+	default:
+		return invalfc(fc, "Unsupported parameter '%s'", param->key);
 	}
 
-	return 0;
+bad_value:
+	return invalfc(fc, "Bad value for '%s'", param->key);
 }
 
 static int tracefs_apply_options(struct super_block *sb, bool remount)
 {
-	struct tracefs_fs_info *fsi = sb->s_fs_info;
 	struct inode *inode = d_inode(sb->s_root);
-	struct tracefs_mount_opts *opts = &fsi->mount_opts;
+	kuid_t kuid = global_opts.uid;
+	kgid_t kgid = global_opts.gid;
+	umode_t mode = global_opts.mode;
+	unsigned int opts = global_opts.opts;
 	umode_t tmp_mode;
 
 	/*
@@ -322,126 +187,126 @@ static int tracefs_apply_options(struct super_block *sb, bool remount)
 	 * options.
 	 */
 
-	if (!remount || opts->opts & BIT(Opt_mode)) {
+	if (!remount || opts & BIT(Opt_mode)) {
 		tmp_mode = READ_ONCE(inode->i_mode) & ~S_IALLUGO;
-		tmp_mode |= opts->mode;
+		tmp_mode |= mode;
 		WRITE_ONCE(inode->i_mode, tmp_mode);
 	}
 
-	if (!remount || opts->opts & BIT(Opt_uid))
-		inode->i_uid = opts->uid;
+	if (!remount || opts & BIT(Opt_uid))
+		inode->i_uid = kuid;
 
-	if (!remount || opts->opts & BIT(Opt_gid))
-		inode->i_gid = opts->gid;
-
-	return 0;
-}
-
-static int tracefs_remount(struct super_block *sb, int *flags, char *data)
-{
-	int err;
-	struct tracefs_fs_info *fsi = sb->s_fs_info;
-
-	sync_filesystem(sb);
-	err = tracefs_parse_options(data, &fsi->mount_opts);
-	if (err)
-		goto fail;
-
-	tracefs_apply_options(sb, true);
-
-fail:
-	return err;
-}
-
-static int tracefs_show_options(struct seq_file *m, struct dentry *root)
-{
-	struct tracefs_fs_info *fsi = root->d_sb->s_fs_info;
-	struct tracefs_mount_opts *opts = &fsi->mount_opts;
-
-	if (!uid_eq(opts->uid, GLOBAL_ROOT_UID))
-		seq_printf(m, ",uid=%u",
-			   from_kuid_munged(&init_user_ns, opts->uid));
-	if (!gid_eq(opts->gid, GLOBAL_ROOT_GID))
-		seq_printf(m, ",gid=%u",
-			   from_kgid_munged(&init_user_ns, opts->gid));
-	if (opts->mode != TRACEFS_DEFAULT_MODE)
-		seq_printf(m, ",mode=%o", opts->mode);
+	if (!remount || opts & BIT(Opt_gid))
+		inode->i_gid = kgid;
 
 	return 0;
 }
 
-static const struct super_operations tracefs_super_operations = {
-	.alloc_inode    = tracefs_alloc_inode,
-	.free_inode     = tracefs_free_inode,
-	.drop_inode     = generic_delete_inode,
-	.statfs		= simple_statfs,
-	.remount_fs	= tracefs_remount,
-	.show_options	= tracefs_show_options,
+static int trace_fs_reconfigure(struct fs_context *fc)
+{
+	tracefs_apply_options(fc->root->d_sb, true);
+	return 0;
+}
+
+static int trace_fs_show_options(struct seq_file *seq, struct kernfs_root *kf_root)
+{
+	kuid_t kuid = global_opts.uid;
+	kgid_t kgid = global_opts.gid;
+	umode_t mode = global_opts.mode;
+
+	if (!uid_eq(kuid, GLOBAL_ROOT_UID))
+		seq_printf(seq, ",uid=%u", from_kuid_munged(&init_user_ns, kuid));
+	if (!gid_eq(kgid, GLOBAL_ROOT_GID))
+		seq_printf(seq, ",gid=%u", from_kgid_munged(&init_user_ns, kgid));
+	if (mode != TRACEFS_DEFAULT_MODE)
+		seq_printf(seq, ",mode=%o", mode);
+
+	return 0;
+}
+
+static int trace_fs_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
+{
+	int ret;
+	struct kernfs_node *kn;
+
+	if (parent_kn != trace_instance_dir)
+		return -EPERM;
+
+	kn = tracefs_create_dir(name, parent_kn);
+	if (IS_ERR(kn))
+		return PTR_ERR(kn);
+
+	ret = tracefs_ops.mkdir(name);
+	if (ret)
+		kernfs_remove(kn);
+	return ret;
+}
+
+static int trace_fs_rmdir(struct kernfs_node *kn)
+{
+	int ret;
+
+	if (kn != trace_instance_dir)
+		return -EPERM;
+
+ 	ret = tracefs_ops.rmdir(kn->name);
+	if (!ret)
+		kernfs_remove(kn);
+
+	return ret;
+}
+
+static struct kernfs_syscall_ops trace_fs_kf_syscall_ops = {
+	.show_options		= trace_fs_show_options,
+	.mkdir			= trace_fs_mkdir,
+	.rmdir			= trace_fs_rmdir,
 };
 
-static void tracefs_dentry_iput(struct dentry *dentry, struct inode *inode)
+static int trace_fs_get_tree(struct fs_context *fc)
 {
-	struct tracefs_inode *ti;
+	int ret;
 
-	if (!dentry || !inode)
-		return;
-
-	ti = get_tracefs(inode);
-	if (ti && ti->flags & TRACEFS_EVENT_INODE)
-		eventfs_set_ei_status_free(ti, dentry);
-	iput(inode);
+	ret = kernfs_get_tree(fc);
+	if (!ret)
+		tracefs_apply_options(fc->root->d_sb, false);
+	return ret;
 }
 
-static const struct dentry_operations tracefs_dentry_operations = {
-	.d_iput = tracefs_dentry_iput,
+static void trace_fs_context_free(struct fs_context *fc)
+{
+	struct trace_fs_context *ctx = trace_fc2context(fc);
+	kernfs_free_fs_context(fc);
+	kfree(ctx);
+}
+
+static const struct fs_context_operations trace_fs_context_ops = {
+	.free		= trace_fs_context_free,
+	.parse_param	= trace_fs_parse_param,
+	.get_tree	= trace_fs_get_tree,
+	.reconfigure	= trace_fs_reconfigure,
 };
 
-static int trace_fill_super(struct super_block *sb, void *data, int silent)
+static int trace_fs_init_fs_context(struct fs_context *fc)
 {
-	static const struct tree_descr trace_files[] = {{""}};
-	struct tracefs_fs_info *fsi;
-	int err;
+	struct trace_fs_context *ctx;
 
-	fsi = kzalloc(sizeof(struct tracefs_fs_info), GFP_KERNEL);
-	sb->s_fs_info = fsi;
-	if (!fsi) {
-		err = -ENOMEM;
-		goto fail;
-	}
+	ctx = kzalloc(sizeof(struct trace_fs_context), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
 
-	err = tracefs_parse_options(data, &fsi->mount_opts);
-	if (err)
-		goto fail;
-
-	err  =  simple_fill_super(sb, TRACEFS_MAGIC, trace_files);
-	if (err)
-		goto fail;
-
-	sb->s_op = &tracefs_super_operations;
-	sb->s_d_op = &tracefs_dentry_operations;
-
-	tracefs_apply_options(sb, false);
-
+	ctx->kfc.magic = TRACEFS_MAGIC;
+	ctx->mount_opts.mode = TRACEFS_DEFAULT_MODE;
+	fc->fs_private = &ctx->kfc;
+	fc->global = true;
+	fc->ops = &trace_fs_context_ops;
 	return 0;
-
-fail:
-	kfree(fsi);
-	sb->s_fs_info = NULL;
-	return err;
-}
-
-static struct dentry *trace_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name,
-			void *data)
-{
-	return mount_single(fs_type, flags, data, trace_fill_super);
 }
 
 static struct file_system_type trace_fs_type = {
-	.owner =	THIS_MODULE,
-	.name =		"tracefs",
-	.mount =	trace_mount,
-	.kill_sb =	kill_litter_super,
+	.name			= "tracefs",
+	.init_fs_context	= trace_fs_init_fs_context,
+	.parameters		= trace_fs_parameters,
+	.kill_sb		= kill_litter_super,
 };
 MODULE_ALIAS_FS("tracefs");
 
@@ -566,26 +431,6 @@ struct dentry *eventfs_end_creating(struct dentry *dentry)
 	return dentry;
 }
 
-/* Find the inode that this will use for default */
-static struct inode *instance_inode(struct dentry *parent, struct inode *inode)
-{
-	struct tracefs_inode *ti;
-
-	/* If parent is NULL then use root inode */
-	if (!parent)
-		return d_inode(inode->i_sb->s_root);
-
-	/* Find the inode that is flagged as an instance or the root inode */
-	while (!IS_ROOT(parent)) {
-		ti = get_tracefs(d_inode(parent));
-		if (ti->flags & TRACEFS_INSTANCE_INODE)
-			break;
-		parent = parent->d_parent;
-	}
-
-	return d_inode(parent);
-}
-
 /**
  * tracefs_create_file - create a file in the tracefs filesystem
  * @name: a pointer to a string containing the name of the file to create.
@@ -612,73 +457,24 @@ static struct inode *instance_inode(struct dentry *parent, struct inode *inode)
  * If tracefs is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *tracefs_create_file(const char *name, umode_t mode,
-				   struct dentry *parent, void *data,
-				   const struct file_operations *fops)
+struct kernfs_node *tracefs_create_file(const char *name, umode_t mode,
+					struct kernfs_node *parent, void *data,
+					const struct kernfs_ops *ops)
 {
-	struct tracefs_inode *ti;
-	struct dentry *dentry;
-	struct inode *inode;
-
 	if (security_locked_down(LOCKDOWN_TRACEFS))
 		return NULL;
 
 	if (!(mode & S_IFMT))
 		mode |= S_IFREG;
 	BUG_ON(!S_ISREG(mode));
-	dentry = tracefs_start_creating(name, parent);
 
-	if (IS_ERR(dentry))
-		return NULL;
+	// inode->i_op = &tracefs_file_inode_operations;
 
-	inode = tracefs_get_inode(dentry->d_sb);
-	if (unlikely(!inode))
-		return tracefs_failed_creating(dentry);
-
-	ti = get_tracefs(inode);
-	ti->private = instance_inode(parent, inode);
-
-	inode->i_mode = mode;
-	inode->i_op = &tracefs_file_inode_operations;
-	inode->i_fop = fops ? fops : &tracefs_file_operations;
-	inode->i_private = data;
-	inode->i_uid = d_inode(dentry->d_parent)->i_uid;
-	inode->i_gid = d_inode(dentry->d_parent)->i_gid;
-	d_instantiate(dentry, inode);
-	fsnotify_create(d_inode(dentry->d_parent), dentry);
-	return tracefs_end_creating(dentry);
-}
-
-static struct dentry *__create_dir(const char *name, struct dentry *parent,
-				   const struct inode_operations *ops)
-{
-	struct tracefs_inode *ti;
-	struct dentry *dentry = tracefs_start_creating(name, parent);
-	struct inode *inode;
-
-	if (IS_ERR(dentry))
-		return NULL;
-
-	inode = tracefs_get_inode(dentry->d_sb);
-	if (unlikely(!inode))
-		return tracefs_failed_creating(dentry);
-
-	/* Do not set bits for OTH */
-	inode->i_mode = S_IFDIR | S_IRWXU | S_IRUSR| S_IRGRP | S_IXUSR | S_IXGRP;
-	inode->i_op = ops;
-	inode->i_fop = &simple_dir_operations;
-	inode->i_uid = d_inode(dentry->d_parent)->i_uid;
-	inode->i_gid = d_inode(dentry->d_parent)->i_gid;
-
-	ti = get_tracefs(inode);
-	ti->private = instance_inode(parent, inode);
-
-	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
-	d_instantiate(dentry, inode);
-	inc_nlink(d_inode(dentry->d_parent));
-	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
-	return tracefs_end_creating(dentry);
+	return __kernfs_create_file(parent ?: trace_kfs_root_node, name, mode,
+				    kernfs_node_owner(parent),
+				    kernfs_node_group(parent), PAGE_SIZE,
+				    ops ? : &tracefs_file_kfops, data, NULL,
+				    NULL);
 }
 
 /**
@@ -698,12 +494,17 @@ static struct dentry *__create_dir(const char *name, struct dentry *parent,
  * If tracing is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *tracefs_create_dir(const char *name, struct dentry *parent)
+struct kernfs_node *tracefs_create_dir(const char *name,
+				       struct kernfs_node *parent)
 {
 	if (security_locked_down(LOCKDOWN_TRACEFS))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
-	return __create_dir(name, parent, &tracefs_dir_inode_operations);
+	return kernfs_create_dir_ns(parent ?: trace_kfs_root_node, name,
+				  S_IFDIR | S_IRWXU | S_IRUSR | S_IRGRP |
+				  S_IXUSR | S_IXGRP,
+				  kernfs_node_owner(parent),
+				  kernfs_node_group(parent), NULL, NULL);
 }
 
 /**
@@ -723,30 +524,23 @@ struct dentry *tracefs_create_dir(const char *name, struct dentry *parent)
  *
  * Returns the dentry of the instances directory.
  */
-__init struct dentry *tracefs_create_instance_dir(const char *name,
-					  struct dentry *parent,
-					  int (*mkdir)(const char *name),
-					  int (*rmdir)(const char *name))
+__init struct kernfs_node *
+tracefs_create_instance_dir(int (*mkdir)(const char *name),
+			    int (*rmdir)(const char *name))
 {
-	struct dentry *dentry;
+	struct kernfs_node *kn;
 
 	/* Only allow one instance of the instances directory. */
 	if (WARN_ON(tracefs_ops.mkdir || tracefs_ops.rmdir))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
-	dentry = __create_dir(name, parent, &tracefs_instance_dir_inode_operations);
-	if (!dentry)
-		return NULL;
+	kn = tracefs_create_dir("instances", trace_kfs_root_node);
+	if (IS_ERR(kn))
+		return kn;
 
 	tracefs_ops.mkdir = mkdir;
 	tracefs_ops.rmdir = rmdir;
-
-	return dentry;
-}
-
-static void remove_one(struct dentry *victim)
-{
-	simple_release_fs(&tracefs_mount, &tracefs_mount_count);
+	return kn;
 }
 
 /**
@@ -757,14 +551,12 @@ static void remove_one(struct dentry *victim)
  * was previously created with a call to another tracefs function
  * (like tracefs_create_file() or variants thereof.)
  */
-void tracefs_remove(struct dentry *dentry)
+void tracefs_remove(struct kernfs_node *kn)
 {
-	if (IS_ERR_OR_NULL(dentry))
+	if (IS_ERR_OR_NULL(kn))
 		return;
 
-	simple_pin_fs(&trace_fs_type, &tracefs_mount, &tracefs_mount_count);
-	simple_recursive_removal(dentry, remove_one);
-	simple_release_fs(&tracefs_mount, &tracefs_mount_count);
+	kernfs_remove(kn);
 }
 
 /**
@@ -775,33 +567,30 @@ bool tracefs_initialized(void)
 	return tracefs_registered;
 }
 
-static void init_once(void *foo)
-{
-	struct tracefs_inode *ti = (struct tracefs_inode *) foo;
-
-	inode_init_once(&ti->vfs_inode);
-}
-
 static int __init tracefs_init(void)
 {
 	int retval;
+	struct kernfs_root *kfs_root;
 
-	tracefs_inode_cachep = kmem_cache_create("tracefs_inode_cache",
-						 sizeof(struct tracefs_inode),
-						 0, (SLAB_RECLAIM_ACCOUNT|
-						     SLAB_MEM_SPREAD|
-						     SLAB_ACCOUNT),
-						 init_once);
-	if (!tracefs_inode_cachep)
-		return -ENOMEM;
+	kfs_root = kernfs_create_root(&trace_fs_kf_syscall_ops,
+				      KERNFS_ROOT_CREATE_DEACTIVATED, NULL);
+	if (IS_ERR(kfs_root))
+                return PTR_ERR(kfs_root);
 
 	retval = sysfs_create_mount_point(kernel_kobj, "tracing");
-	if (retval)
+	if (retval) {
+		kernfs_destroy_root(kfs_root);
 		return -EINVAL;
+	}
 
 	retval = register_filesystem(&trace_fs_type);
 	if (!retval)
 		tracefs_registered = true;
+	else
+		kernfs_destroy_root(kfs_root);
+
+	trace_fs_root = kfs_root;
+	trace_kfs_root_node = kernfs_root_to_node(kfs_root);
 
 	return retval;
 }

@@ -9494,7 +9494,7 @@ static const struct file_operations buffer_subbuf_size_fops = {
 	.llseek		= default_llseek,
 };
 
-static struct dentry *trace_instance_dir;
+struct kernfs_node *trace_instance_dir;
 
 static void
 init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer);
@@ -9885,9 +9885,7 @@ static __init void create_trace_instances(struct dentry *d_tracer)
 {
 	struct trace_array *tr;
 
-	trace_instance_dir = tracefs_create_instance_dir("instances", d_tracer,
-							 instance_mkdir,
-							 instance_rmdir);
+	trace_instance_dir = tracefs_create_instance_dir(instance_mkdir, instance_rmdir);
 	if (MEM_FAIL(!trace_instance_dir, "Failed to create instances directory\n"))
 		return;
 

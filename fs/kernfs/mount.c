@@ -243,6 +243,16 @@ struct dentry *kernfs_node_dentry(struct kernfs_node *kn,
 	} while (true);
 }
 
+kuid_t kernfs_node_owner(struct kernfs_node *kn)
+{
+	return kn->iattrs->ia_uid;
+}
+
+kuid_t kernfs_node_group(struct kernfs_node *kn)
+{
+	return kn->iattrs->ia_gid;
+}
+
 static int kernfs_fill_super(struct super_block *sb, struct kernfs_fs_context *kfc)
 {
 	struct kernfs_super_info *info = kernfs_info(sb);

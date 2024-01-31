@@ -14,6 +14,7 @@
 
 #include <linux/fs.h>
 #include <linux/seq_file.h>
+#include <linux/kernfs.h>
 
 #include <linux/types.h>
 
@@ -22,6 +23,7 @@ struct file_operations;
 #ifdef CONFIG_TRACING
 
 struct eventfs_file;
+extern struct kernfs_node *trace_instance_dir;
 
 /**
  * eventfs_callback - A callback function to create dynamic files in eventfs
@@ -87,17 +89,17 @@ struct eventfs_inode *eventfs_create_dir(const char *name, struct eventfs_inode 
 void eventfs_remove_events_dir(struct eventfs_inode *ei);
 void eventfs_remove_dir(struct eventfs_inode *ei);
 
-struct dentry *tracefs_create_file(const char *name, umode_t mode,
-				   struct dentry *parent, void *data,
-				   const struct file_operations *fops);
+struct kernfs_node *tracefs_create_file(const char *name, umode_t mode,
+					struct kernfs_node *parent, void *data,
+					const struct kernfs_ops *ops);
 
-struct dentry *tracefs_create_dir(const char *name, struct dentry *parent);
+struct kernfs_node *tracefs_create_dir(const char *name,
+				       struct kernfs_node *parent);
 
-void tracefs_remove(struct dentry *dentry);
+void tracefs_remove(struct kernfs_node *kn);
 
-struct dentry *tracefs_create_instance_dir(const char *name, struct dentry *parent,
-					   int (*mkdir)(const char *name),
-					   int (*rmdir)(const char *name));
+struct kernfs_node *tracefs_create_instance_dir(int (*mkdir)(const char *name),
+						int (*rmdir)(const char *name));
 
 bool tracefs_initialized(void);
 

@@ -244,6 +244,9 @@ struct kernfs_syscall_ops {
 			 struct kernfs_root *root);
 };
 
+kuid_t kernfs_node_owner(struct kernfs_node *kn);
+kgid_t kernfs_node_group(struct kernfs_node *kn);
+
 struct kernfs_node *kernfs_root_to_node(struct kernfs_root *root);
 
 struct kernfs_open_file {
