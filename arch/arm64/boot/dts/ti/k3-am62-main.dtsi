@@ -203,6 +203,11 @@
 			compatible = "ti,sci-reset";
 			#reset-cells = <2>;
 		};
+
+		k3_reboot: reboot-controller {
+			bootph-all;
+			compatible = "ti,sci-reboot";
+		};
 	};
 
 	crypto: crypto@40900000 {
