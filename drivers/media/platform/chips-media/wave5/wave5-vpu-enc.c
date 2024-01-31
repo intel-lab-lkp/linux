@@ -5,6 +5,7 @@
  * Copyright (C) 2021-2023 CHIPS&MEDIA INC
  */
 
+#include <linux/pm_runtime.h>
 #include "wave5-helper.h"
 
 #define VPU_ENC_DEV_NAME "C&M Wave5 VPU encoder"
@@ -1387,8 +1388,16 @@ static int wave5_vpu_enc_start_streaming(struct vb2_queue *q, unsigned int count
 
 	if (inst->state == VPU_INST_STATE_NONE && q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		struct enc_open_param open_param;
+		int err = 0;
 
 		memset(&open_param, 0, sizeof(struct enc_open_param));
+
+		err = pm_runtime_resume_and_get(inst->dev->dev);
+		if (err) {
+			dev_err(inst->dev->dev, "encoder runtime resume failed %d\n", err);
+			ret = -EINVAL;
+			goto return_buffers;
+		}
 
 		wave5_set_enc_openparam(&open_param, inst);
 
