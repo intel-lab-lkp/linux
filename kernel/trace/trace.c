@@ -4913,7 +4913,7 @@ release:
 	return ERR_PTR(-ENOMEM);
 }
 
-int tracing_open_generic(struct inode *inode, struct file *filp)
+int tracing_open_generic(struct kernfs_open_file *of)
 {
 	int ret;
 
@@ -4921,7 +4921,7 @@ int tracing_open_generic(struct inode *inode, struct file *filp)
 	if (ret)
 		return ret;
 
-	filp->private_data = inode->i_private;
+	of->priv = of->kn->priv;
 	return 0;
 }
 
@@ -4934,17 +4934,16 @@ bool tracing_is_disabled(void)
  * Open and update trace_array ref count.
  * Must have the current trace_array passed to it.
  */
-int tracing_open_generic_tr(struct inode *inode, struct file *filp)
+int tracing_open_generic_tr(struct kernfs_open_file *of)
 {
-	struct trace_array *tr = inode->i_private;
+	struct trace_array *tr = of->kn->priv;
 	int ret;
 
 	ret = tracing_check_open_get_tr(tr);
 	if (ret)
 		return ret;
 
-	filp->private_data = inode->i_private;
-
+	of->priv = of->kn->priv;
 	return 0;
 }
 
@@ -5057,9 +5056,10 @@ static int tracing_single_release_tr(struct inode *inode, struct file *file)
 	return single_release(inode, file);
 }
 
-static int tracing_open(struct inode *inode, struct file *file)
+static int tracing_open(struct kernfs_open_file *of)
 {
-	struct trace_array *tr = inode->i_private;
+	struct trace_array *tr = of->kn->priv;
+	struct file *filp = of->file;
 	struct trace_iterator *iter;
 	int ret;
 
