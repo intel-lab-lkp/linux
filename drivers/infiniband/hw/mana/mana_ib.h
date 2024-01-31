@@ -48,6 +48,7 @@ struct mana_ib_adapter_caps {
 struct mana_ib_dev {
 	struct ib_device ib_dev;
 	struct gdma_dev *gdma_dev;
+	struct gdma_queue *fatal_err_eq;
 	struct mana_ib_adapter_caps adapter_caps;
 };
 
@@ -228,4 +229,8 @@ int mana_ib_query_gid(struct ib_device *ibdev, u32 port, int index,
 void mana_ib_disassociate_ucontext(struct ib_ucontext *ibcontext);
 
 int mana_ib_gd_query_adapter_caps(struct mana_ib_dev *mdev);
+
+void mana_ib_gd_create_rnic_adapter(struct mana_ib_dev *mdev);
+
+void mana_ib_gd_destroy_rnic_adapter(struct mana_ib_dev *mdev);
 #endif
