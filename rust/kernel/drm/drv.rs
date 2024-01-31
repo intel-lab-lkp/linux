@@ -14,11 +14,13 @@ use crate::{
     str::CStr,
     types::{ARef, ForeignOwnable},
     ThisModule,
+    sync::Arc,
 };
 use core::{
     marker::{PhantomData, PhantomPinned},
     pin::Pin,
     ptr::NonNull,
+    sync::atomic::{AtomicBool, Ordering},
 };
 use macros::vtable;
 
@@ -178,7 +180,7 @@ impl DriverOps {
 /// drm is always a valid pointer to an allocated drm_device
 pub struct Registration<T: Driver> {
     drm: ARef<drm::device::Device<T>>,
-    registered: bool,
+    registered: Arc<AtomicBool>,
     #[allow(dead_code)]
     ops: Pin<Box<DriverOps>>,
     _p: PhantomData<T>,
@@ -235,9 +237,17 @@ macro_rules! new_drm_registration {
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! drm_device_register {
-    ($reg:expr, $data:expr, $flags:expr $(,)?) => {{
-        $crate::drm::drv::Registration::register($reg, $data, $flags, &crate::THIS_MODULE)
+    ($info: expr, $data:expr, $flags:expr $(,)?) => {{
+        $crate::drm::drv::Registration::register($info, $data, $flags, &crate::THIS_MODULE)
     }};
+}
+
+/// Since the Registration object will be moved into the DeviceData object, we need to have another
+/// object which contains references to the information from said object that will be needed during
+/// actual device registration.
+pub struct RegistrationInfo<T: Driver> {
+    registered: Arc<AtomicBool>,
+    drm: ARef<drm::device::Device<T>>,
 }
 
 impl<T: Driver> Registration<T> {
@@ -276,10 +286,13 @@ impl<T: Driver> Registration<T> {
     /// Creates a new [`Registration`] but does not register it yet.
     ///
     /// It is allowed to move.
+    /// XXX: Write up a macro for calling this, since we now handle as much init here as possible to
+    /// avoid having to handle it after we've moved away the Registration object
     pub fn new(
         parent: &dyn device::RawDevice,
         module: &'static ThisModule,
     ) -> Result<Self> {
+        let registered = Arc::try_new(AtomicBool::new(false))?;
         let ops = DriverOps::try_new(Self::VTABLE, module)?;
 
         let raw_drm = unsafe { bindings::drm_dev_alloc(&ops.vtable, parent.raw_device()) };
@@ -291,11 +304,20 @@ impl<T: Driver> Registration<T> {
 
         Ok(Self {
             drm,
-            registered: false,
+            registered,
             ops,
             _pin: PhantomPinned,
             _p: PhantomData,
         })
+    }
+
+    /// Returns the information that will be needed to register the DRM device with the rest of the
+    /// kernel.
+    pub fn registration_info(&self) -> RegistrationInfo<T> {
+        RegistrationInfo {
+            drm: self.drm.clone(),
+            registered: self.registered.clone(),
+        }
     }
 
     /// Registers a DRM device with the rest of the kernel.
@@ -303,33 +325,36 @@ impl<T: Driver> Registration<T> {
     /// Users are encouraged to use the [`drm_device_register!()`] macro because it automatically
     /// picks up the current module.
     pub fn register(
-        self: Pin<&mut Self>,
+        info: RegistrationInfo<T>,
         data: T::Data,
         flags: usize,
         _module: &'static ThisModule,
     ) -> Result {
-        if self.registered {
+        // Check if we've already registered this device, otherwise mark it as registered so no
+        // one else can try registering it.
+        if info
+            .registered
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
             // Already registered.
             return Err(EINVAL);
         }
 
-        // SAFETY: We never move out of `this`.
-        let this = unsafe { self.get_unchecked_mut() };
         let data_pointer = <T::Data as ForeignOwnable>::into_foreign(data);
         // SAFETY: This is the only code touching dev_private, so it is safe to upgrade to a
         // mutable reference.
-        unsafe { this.drm.raw_mut() }.dev_private = data_pointer as *mut _;
-
+        unsafe { info.drm.raw_mut() }.dev_private = data_pointer as *mut _;
 
         // SAFETY: The device is now initialized and ready to be registered.
-        let ret = unsafe { bindings::drm_dev_register(this.drm.raw_mut(), flags as u64) };
+        let ret = unsafe { bindings::drm_dev_register(info.drm.raw_mut(), flags as u64) };
         if ret < 0 {
             // SAFETY: `data_pointer` was returned by `into_foreign` above.
             unsafe { T::Data::from_foreign(data_pointer) };
+            info.registered.store(false, Ordering::Relaxed);
             return Err(Error::from_errno(ret));
         }
 
-        this.registered = true;
         Ok(())
     }
 
@@ -353,7 +378,11 @@ unsafe impl<T: Driver> Send for Registration<T> {}
 impl<T: Driver> Drop for Registration<T> {
     /// Removes the registration from the kernel if it has completed successfully before.
     fn drop(&mut self) {
-        if self.registered {
+        if self
+            .registered
+            .compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
             // Get a pointer to the data stored in device before destroying it.
             // SAFETY: `drm` is valid per the type invariant
             let data_pointer = unsafe { self.drm.raw_mut().dev_private };
