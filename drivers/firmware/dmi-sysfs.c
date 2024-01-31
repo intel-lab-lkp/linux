@@ -24,6 +24,7 @@
 #include <linux/dmi.h>
 #include <linux/capability.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/list.h>
 #include <linux/io.h>
 #include <asm/dmi.h>

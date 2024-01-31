@@ -13,7 +13,7 @@
 #include <linux/of.h>
 #include <linux/idr.h>
 #include <linux/device.h>
-#include <linux/sysfs.h>
+#include <linux/sysfs_types.h>
 #include <linux/workqueue_types.h>
 #include <uapi/linux/thermal.h>
 

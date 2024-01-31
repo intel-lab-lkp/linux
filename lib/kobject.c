@@ -21,6 +21,7 @@
 #include <linux/uidgid.h>
 #include <linux/workqueue.h>
 #include <linux/kref.h>
+#include <linux/sysfs.h>
 
 /**
  * kobject_namespace() - Return @kobj's namespace tag.

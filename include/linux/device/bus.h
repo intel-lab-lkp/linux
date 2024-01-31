@@ -16,7 +16,7 @@
 
 #include <linux/klist.h>
 #include <linux/pm.h>
-#include <linux/sysfs.h> // for struct attribute
+#include <linux/sysfs_types.h> // for struct attribute
 
 struct device_driver;
 struct device_node;

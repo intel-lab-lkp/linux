@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 
 #include "of_private.h"
 
