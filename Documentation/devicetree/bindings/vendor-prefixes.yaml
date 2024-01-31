@@ -781,6 +781,8 @@ patternProperties:
     description: LG Corporation
   "^lgphilips,.*":
     description: LG Display
+  "^lge,.*":
+    description: LG Electronics, Inc.
   "^libretech,.*":
     description: Shenzhen Libre Technology Co., Ltd
   "^licheepi,.*":
