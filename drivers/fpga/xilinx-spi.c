@@ -74,7 +74,8 @@ static int xilinx_spi_probe(struct spi_device *spi)
 	conf->spi = spi;
 
 	return xilinx_core_probe(&conf->core, &spi->dev, xilinx_spi_write,
-				 xilinx_spi_apply_cclk_cycles);
+				 xilinx_spi_apply_cclk_cycles, "prog_b",
+				 "init-b");
 }
 
 #ifdef CONFIG_OF

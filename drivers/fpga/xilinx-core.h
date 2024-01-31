@@ -22,6 +22,7 @@ struct xilinx_fpga_core {
 
 int xilinx_core_probe(struct xilinx_fpga_core *core, struct device *dev,
 		      xilinx_write_func write,
-		      xilinx_write_one_dummy_byte_func write_one_dummy_byte);
+		      xilinx_write_one_dummy_byte_func write_one_dummy_byte,
+		      const char *prog_con_id, const char *init_con_id);
 
 #endif /* __XILINX_CORE_H */

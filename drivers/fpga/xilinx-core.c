@@ -180,21 +180,26 @@ static const struct fpga_manager_ops xilinx_core_ops = {
 
 int xilinx_core_probe(struct xilinx_fpga_core *core, struct device *dev,
 		      xilinx_write_func write,
-		      xilinx_write_one_dummy_byte_func write_one_dummy_byte)
+		      xilinx_write_one_dummy_byte_func write_one_dummy_byte,
+		      const char *prog_con_id, const char *init_con_id)
 {
 	struct fpga_manager *mgr;
+
+	if (!core || !dev || !write || !write_one_dummy_byte || !prog_con_id ||
+	    !init_con_id)
+		return -EINVAL;
 
 	core->dev = dev;
 	core->write = write;
 	core->write_one_dummy_byte = write_one_dummy_byte;
 
 	/* PROGRAM_B is active low */
-	core->prog_b = devm_gpiod_get(dev, "prog_b", GPIOD_OUT_LOW);
+	core->prog_b = devm_gpiod_get(dev, prog_con_id, GPIOD_OUT_LOW);
 	if (IS_ERR(core->prog_b))
 		return dev_err_probe(dev, PTR_ERR(core->prog_b),
 				     "Failed to get PROGRAM_B gpio\n");
 
-	core->init_b = devm_gpiod_get_optional(dev, "init-b", GPIOD_IN);
+	core->init_b = devm_gpiod_get_optional(dev, init_con_id, GPIOD_IN);
 	if (IS_ERR(core->init_b))
 		return dev_err_probe(dev, PTR_ERR(core->init_b),
 				     "Failed to get INIT_B gpio\n");
