@@ -9,7 +9,7 @@
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
 #include <linux/rbtree_types.h>
-#include <linux/maple_tree.h>
+#include <linux/maple_tree_types.h>
 #include <linux/rwsem.h>
 #include <linux/cpumask.h>
 #include <linux/uprobes.h>
