@@ -1158,16 +1158,28 @@ void nfp_ctrl_close(struct nfp_net *nn)
 	rtnl_unlock();
 }
 
+struct nfp_dim {
+	u16 usec;
+	u16 pkts;
+};
+
 static void nfp_net_rx_dim_work(struct work_struct *work)
 {
+	static const struct nfp_dim rx_profile[] = {
+		{.usec = 0, .pkts = 1},
+		{.usec = 4, .pkts = 32},
+		{.usec = 64, .pkts = 64},
+		{.usec = 128, .pkts = 256},
+		{.usec = 256, .pkts = 256},
+	};
 	struct nfp_net_r_vector *r_vec;
 	unsigned int factor, value;
-	struct dim_cq_moder moder;
+	struct nfp_dim moder;
 	struct nfp_net *nn;
 	struct dim *dim;
 
 	dim = container_of(work, struct dim, work);
-	moder = net_dim_get_rx_moderation(dim->mode, dim->profile_ix);
+	moder = rx_profile[dim->profile_ix];
 	r_vec = container_of(dim, struct nfp_net_r_vector, rx_dim);
 	nn = r_vec->nfp_net;
 
@@ -1190,14 +1202,21 @@ static void nfp_net_rx_dim_work(struct work_struct *work)
 
 static void nfp_net_tx_dim_work(struct work_struct *work)
 {
+	static const struct nfp_dim tx_profile[] = {
+		{.usec = 0, .pkts = 1},
+		{.usec = 4, .pkts = 16},
+		{.usec = 32, .pkts = 64},
+		{.usec = 64, .pkts = 128},
+		{.usec = 128, .pkts = 128},
+	};
 	struct nfp_net_r_vector *r_vec;
 	unsigned int factor, value;
-	struct dim_cq_moder moder;
+	struct nfp_dim moder;
 	struct nfp_net *nn;
 	struct dim *dim;
 
 	dim = container_of(work, struct dim, work);
-	moder = net_dim_get_tx_moderation(dim->mode, dim->profile_ix);
+	moder = tx_profile[dim->profile_ix];
 	r_vec = container_of(dim, struct nfp_net_r_vector, tx_dim);
 	nn = r_vec->nfp_net;
 
