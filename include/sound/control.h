@@ -7,7 +7,7 @@
  *  Copyright (c) by Jaroslav Kysela <perex@perex.cz>
  */
 
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/nospec.h>
 #include <sound/asound.h>
 

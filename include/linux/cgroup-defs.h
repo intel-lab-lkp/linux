@@ -11,7 +11,7 @@
 #include <linux/limits.h>
 #include <linux/list.h>
 #include <linux/idr.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/mutex_types.h>
 #include <linux/rcupdate.h>
 #include <linux/refcount_types.h>

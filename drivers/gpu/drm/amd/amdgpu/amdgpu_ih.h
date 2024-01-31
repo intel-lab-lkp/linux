@@ -25,7 +25,7 @@
 #define __AMDGPU_IH_H__
 
 #include <linux/types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 /* Maximum number of IVs processed at once */
 #define AMDGPU_IH_MAX_NUM_IVS	32

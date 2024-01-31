@@ -8,7 +8,7 @@
 #include <linux/spinlock_types.h>
 #include <linux/list.h>
 #include <linux/list_nulls.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/bitops.h>
 #include <linux/cache.h>
 #include <linux/threads.h>

@@ -3,7 +3,7 @@
 #define __LINUX_RTNETLINK_H
 
 #include <linux/netdevice.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/refcount.h>
 #include <uapi/linux/rtnetlink.h>
 

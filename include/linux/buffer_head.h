@@ -13,7 +13,7 @@
 #include <linux/fs.h>
 #include <linux/linkage.h>
 #include <linux/pagemap.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/atomic.h>
 
 enum bh_state_bits {

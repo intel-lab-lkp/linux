@@ -12,7 +12,7 @@
 #include <linux/list.h>
 #include <linux/workqueue_types.h>
 #include <linux/spinlock_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/hrtimer_types.h>
 #include <linux/completion.h>
 

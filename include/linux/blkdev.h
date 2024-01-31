@@ -13,7 +13,7 @@
 #include <linux/minmax.h>
 #include <linux/timer_types.h>
 #include <linux/workqueue_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/bio.h>
 #include <linux/gfp_types.h>
 #include <linux/kdev_t.h>

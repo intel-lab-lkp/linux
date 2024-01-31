@@ -10,7 +10,7 @@
 #include <linux/percpu-refcount.h>
 #include <linux/flex_proportions.h>
 #include <linux/timer_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/workqueue_types.h>
 #include <linux/kref_types.h>
 

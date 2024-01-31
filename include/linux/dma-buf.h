@@ -21,7 +21,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/dma-fence.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct device;
 struct dma_buf;

@@ -13,7 +13,7 @@
 
 #include <linux/spinlock_types.h>
 #include <linux/types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include "linux/ism.h"
 
 struct device;

@@ -16,7 +16,7 @@
 
 #include <linux/stringify.h>
 #include <linux/random.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/fcntl.h>	/* For O_CLOEXEC and O_NONBLOCK */
 #include <linux/rcupdate.h>
 #include <linux/once.h>

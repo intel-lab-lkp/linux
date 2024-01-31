@@ -14,7 +14,7 @@
 #include <linux/mutex_types.h>
 #include <linux/rwsem_types.h>
 #include <linux/types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct gnss_device;
 
