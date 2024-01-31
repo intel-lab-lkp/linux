@@ -49,6 +49,9 @@ properties:
       - items:
           - const: st,asm330lhb
           - const: st,asm330lhh
+      - items:
+          - const: st,asm330lhhxg1
+          - const: st,lsm6dsr
 
   reg:
     maxItems: 1
