@@ -10,6 +10,7 @@
 #include <rdma/restrack.h>
 #include <linux/socket.h>
 #include <linux/skbuff.h>
+#include <linux/kref.h>
 #include <crypto/hash.h>
 #include <linux/crc32.h>
 #include <linux/crc32c.h>

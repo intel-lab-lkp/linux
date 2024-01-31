@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
 #include <linux/bsg.h>
+#include <linux/kref.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>

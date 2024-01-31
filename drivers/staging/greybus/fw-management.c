@@ -14,6 +14,7 @@
 #include <linux/ioctl.h>
 #include <linux/uaccess.h>
 #include <linux/greybus.h>
+#include <linux/kref.h>
 
 #include "firmware.h"
 #include "greybus_firmware.h"

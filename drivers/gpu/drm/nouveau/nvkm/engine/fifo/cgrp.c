@@ -27,6 +27,7 @@
 
 #include <core/gpuobj.h>
 #include <subdev/mmu.h>
+#include <linux/kref.h>
 
 static void
 nvkm_cgrp_ectx_put(struct nvkm_cgrp *cgrp, struct nvkm_ectx **pectx)

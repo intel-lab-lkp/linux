@@ -8,6 +8,7 @@
 #include <linux/hid.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/kref.h>
 
 #include "hid-ids.h"
 

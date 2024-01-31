@@ -10,7 +10,7 @@
 #include <linux/cgroup.h>
 #include <linux/page_ref.h>
 #include <linux/list.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/pgtable.h>
 #include <linux/gfp_types.h>
 #include <linux/userfaultfd_k.h>

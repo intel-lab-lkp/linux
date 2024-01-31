@@ -11,6 +11,7 @@
 #include <linux/hid.h>
 #include <linux/module.h>
 #include <linux/kfifo.h>
+#include <linux/kref.h>
 #include <linux/delay.h>
 #include <linux/usb.h> /* For to_usb_interface for kvm extra intf check */
 #include <asm/unaligned.h>

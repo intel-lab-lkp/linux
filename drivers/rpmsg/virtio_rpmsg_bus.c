@@ -15,6 +15,7 @@
 #include <linux/idr.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/rpmsg.h>

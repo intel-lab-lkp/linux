@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/capability.h>
 #include <linux/iommu.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/vfio.h>
 #include <uapi/linux/vfio.h>

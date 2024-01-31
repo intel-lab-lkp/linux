@@ -7,6 +7,8 @@
 #include "efct_driver.h"
 #include "efct_hw.h"
 
+#include <linux/kref.h>
+
 #define enable_tsend_auto_resp(efct)	1
 #define enable_treceive_auto_resp(efct)	0
 

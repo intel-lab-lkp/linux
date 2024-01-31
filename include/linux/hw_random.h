@@ -15,7 +15,7 @@
 #include <linux/completion.h>
 #include <linux/types.h>
 #include <linux/list.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 /**
  * struct hwrng - Hardware Random Number Generator driver

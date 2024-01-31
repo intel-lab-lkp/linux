@@ -14,6 +14,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/kref.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cm.h>
 #include <rdma/rdma_cm.h>

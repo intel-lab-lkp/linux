@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/smem_state.h>
+#include <linux/kref.h>
 
 static LIST_HEAD(smem_states);
 static DEFINE_MUTEX(list_lock);

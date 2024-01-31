@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/apr.h>
 #include <linux/wait.h>
+#include <linux/kref.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm.h>

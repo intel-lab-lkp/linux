@@ -29,6 +29,7 @@
 #include <linux/idr.h>
 #include <linux/leds.h>
 #include <linux/rculist.h>
+#include <linux/kref.h>
 
 #include <net/bluetooth/hci.h>
 #include <net/bluetooth/hci_sync.h>

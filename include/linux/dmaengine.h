@@ -13,6 +13,7 @@
 #include <linux/scatterlist.h>
 #include <linux/bitmap.h>
 #include <linux/types.h>
+#include <linux/kref.h>
 #include <asm/page.h>
 
 /**

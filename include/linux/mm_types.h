@@ -5,7 +5,7 @@
 #include <linux/mm_types_task.h>
 
 #include <linux/auxvec.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
 #include <linux/rbtree_types.h>

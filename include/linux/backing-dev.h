@@ -16,6 +16,7 @@
 #include <linux/writeback.h>
 #include <linux/backing-dev-defs.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 
 static inline struct backing_dev_info *bdi_get(struct backing_dev_info *bdi)
 {

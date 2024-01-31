@@ -44,6 +44,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/configfs.h>
+#include <linux/kref.h>
 
 #include <generated/utsrelease.h>
 

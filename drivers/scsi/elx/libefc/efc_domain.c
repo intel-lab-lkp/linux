@@ -10,6 +10,8 @@
 
 #include "efc.h"
 
+#include <linux/kref.h>
+
 int
 efc_domain_cb(void *arg, int event, void *data)
 {

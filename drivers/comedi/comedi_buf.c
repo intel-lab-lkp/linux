@@ -9,6 +9,7 @@
 
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <linux/comedi/comedidev.h>
 #include "comedi_internal.h"
 

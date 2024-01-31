@@ -9,6 +9,7 @@
  ******************************************************************************/
 
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 #include <target/iscsi/iscsi_target_core.h>

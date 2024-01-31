@@ -11,6 +11,7 @@
 /* Copyright (c) 2017, Open Grid Computing, Inc. */
 
 #include <linux/workqueue.h>
+#include <linux/kref.h>
 #include <trace/events/sock.h>
 
 #include "erdma.h"

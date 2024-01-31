@@ -15,6 +15,7 @@
 #include <linux/printk.h>
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
+#include <linux/kref.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/poll.h>

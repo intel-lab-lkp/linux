@@ -7,6 +7,7 @@
 #define _UVERBS_TYPES_
 
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <rdma/ib_verbs.h>
 
 struct uverbs_obj_type;

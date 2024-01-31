@@ -7,6 +7,8 @@
 #ifndef RXE_POOL_H
 #define RXE_POOL_H
 
+#include <linux/kref.h>
+
 enum rxe_elem_type {
 	RXE_TYPE_UC,
 	RXE_TYPE_PD,

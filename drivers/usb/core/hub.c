@@ -31,6 +31,7 @@
 #include <linux/random.h>
 #include <linux/pm_qos.h>
 #include <linux/kobject.h>
+#include <linux/kref.h>
 
 #include <linux/bitfield.h>
 #include <linux/uaccess.h>

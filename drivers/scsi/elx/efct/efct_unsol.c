@@ -7,6 +7,8 @@
 #include "efct_driver.h"
 #include "efct_unsol.h"
 
+#include <linux/kref.h>
+
 #define frame_printf(efct, hdr, fmt, ...) \
 	do { \
 		char s_id_text[16]; \

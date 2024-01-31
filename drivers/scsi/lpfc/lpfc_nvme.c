@@ -23,6 +23,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/kref.h>
 #include <linux/delay.h>
 #include <asm/unaligned.h>
 #include <linux/crc-t10dif.h>

@@ -21,6 +21,8 @@
  */
 #include "chid.h"
 
+#include <linux/kref.h>
+
 void
 nvkm_chid_put(struct nvkm_chid *chid, int id, spinlock_t *data_lock)
 {

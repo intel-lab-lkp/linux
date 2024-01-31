@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/pagemap.h>
+#include <linux/kref.h>
 #include <net/genetlink.h>
 #include <scsi/scsi_common.h>
 #include <scsi/scsi_proto.h>

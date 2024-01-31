@@ -7,6 +7,7 @@
  */
 
 #include <linux/workqueue.h>
+#include <linux/kref.h>
 #include <linux/greybus.h>
 
 #include "greybus_trace.h"

@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <linux/uaccess.h>
+#include <linux/kref.h>
 
 #include "greybus_authentication.h"
 #include "firmware.h"

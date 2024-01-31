@@ -37,6 +37,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/kref.h>
 
 #include "../pci.h"
 #include "acpiphp.h"

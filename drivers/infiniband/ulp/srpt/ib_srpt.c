@@ -38,6 +38,7 @@
 #include <linux/err.h>
 #include <linux/ctype.h>
 #include <linux/kthread.h>
+#include <linux/kref.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>

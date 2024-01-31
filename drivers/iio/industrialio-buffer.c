@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/sched/signal.h>
+#include <linux/kref.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/iio-opaque.h>

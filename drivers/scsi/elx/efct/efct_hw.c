@@ -8,6 +8,8 @@
 #include "efct_hw.h"
 #include "efct_unsol.h"
 
+#include <linux/kref.h>
+
 struct efct_hw_link_stat_cb_arg {
 	void (*cb)(int status, u32 num_counters,
 		   struct efct_hw_link_stat_counts *counters, void *arg);

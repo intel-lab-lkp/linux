@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/device.h>
+#include <linux/kref.h>
 #include <asm/byteorder.h>
 #include "usb.h"
 

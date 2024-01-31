@@ -10,7 +10,7 @@
 #include <linux/irqnr.h>
 #include <linux/hardirq.h>
 #include <linux/irqflags.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/workqueue_types.h>
 #include <linux/jump_label.h>
 

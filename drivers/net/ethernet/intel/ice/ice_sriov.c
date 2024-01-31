@@ -14,6 +14,8 @@
 #include "ice_vf_vsi_vlan_ops.h"
 #include "ice_vlan.h"
 
+#include <linux/kref.h>
+
 /**
  * ice_free_vf_entries - Free all VF entries from the hash table
  * @pf: pointer to the PF structure

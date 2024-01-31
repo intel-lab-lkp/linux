@@ -11,7 +11,7 @@
 #define _LINUX_WATCH_QUEUE_H
 
 #include <uapi/linux/watch_queue.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/rcupdate.h>
 
 #ifdef CONFIG_WATCH_QUEUE

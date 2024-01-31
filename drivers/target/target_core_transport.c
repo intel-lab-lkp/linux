@@ -16,6 +16,7 @@
 #include <linux/timer.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/kref.h>
 #include <linux/kthread.h>
 #include <linux/in.h>
 #include <linux/cdrom.h>

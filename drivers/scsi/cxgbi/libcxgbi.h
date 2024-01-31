@@ -15,6 +15,7 @@
 #define	__LIBCXGBI_H__
 
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/debugfs.h>

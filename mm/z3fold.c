@@ -40,6 +40,7 @@
 #include <linux/spinlock.h>
 #include <linux/zpool.h>
 #include <linux/kmemleak.h>
+#include <linux/kref.h>
 
 /*
  * NCHUNKS_ORDER determines the internal allocation granularity, effectively

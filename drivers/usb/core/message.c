@@ -21,6 +21,7 @@
 #include <linux/usb/quirks.h>
 #include <linux/usb/hcd.h>	/* for usbcore internals */
 #include <linux/usb/of.h>
+#include <linux/kref.h>
 #include <asm/byteorder.h>
 
 #include "usb.h"

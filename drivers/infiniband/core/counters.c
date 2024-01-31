@@ -8,6 +8,8 @@
 #include "core_priv.h"
 #include "restrack.h"
 
+#include <linux/kref.h>
+
 #define ALL_AUTO_MODE_MASKS (RDMA_COUNTER_MASK_QP_TYPE | RDMA_COUNTER_MASK_PID)
 
 static int __counter_set_mode(struct rdma_port_counter *port_counter,

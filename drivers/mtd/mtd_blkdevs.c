@@ -20,6 +20,7 @@
 #include <linux/hdreg.h>
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
+#include <linux/kref.h>
 
 #include "mtdcore.h"
 

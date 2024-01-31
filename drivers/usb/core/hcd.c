@@ -32,6 +32,7 @@
 #include <linux/genalloc.h>
 #include <linux/io.h>
 #include <linux/kcov.h>
+#include <linux/kref.h>
 
 #include <linux/phy/phy.h>
 #include <linux/usb.h>

@@ -3,7 +3,7 @@
 #define _FS_CEPH_MON_CLIENT_H
 
 #include <linux/completion.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/rbtree_types.h>
 
 #include <linux/ceph/messenger.h>

@@ -24,6 +24,7 @@
 #include <linux/mutex.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

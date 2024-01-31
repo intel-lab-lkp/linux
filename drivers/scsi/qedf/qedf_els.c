@@ -5,6 +5,8 @@
  */
 #include "qedf.h"
 
+#include <linux/kref.h>
+
 /* It's assumed that the lock is held when calling this function. */
 static int qedf_initiate_els(struct qedf_rport *fcport, unsigned int op,
 	void *data, uint32_t data_len,

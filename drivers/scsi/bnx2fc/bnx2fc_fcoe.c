@@ -17,6 +17,7 @@
 #include "bnx2fc.h"
 
 #include <linux/ethtool.h>
+#include <linux/kref.h>
 
 static struct list_head adapter_list;
 static struct list_head if_list;

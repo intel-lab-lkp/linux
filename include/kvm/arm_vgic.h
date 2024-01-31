@@ -8,7 +8,7 @@
 #include <linux/bits.h>
 #include <linux/kvm.h>
 #include <linux/irqreturn.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/mutex_types.h>
 #include <linux/spinlock_types.h>
 #include <linux/static_key.h>

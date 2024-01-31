@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/inet.h>
+#include <linux/kref.h>
 
 #include "rtrs-pri.h"
 #include "rtrs-log.h"

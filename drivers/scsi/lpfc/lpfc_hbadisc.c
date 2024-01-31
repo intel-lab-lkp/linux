@@ -29,6 +29,7 @@
 #include <linux/interrupt.h>
 #include <linux/lockdep.h>
 #include <linux/utsname.h>
+#include <linux/kref.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>

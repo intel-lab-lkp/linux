@@ -11,6 +11,7 @@
 #include <linux/io.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/kref.h>
 #include "nd-core.h"
 #include "label.h"
 #include "pmem.h"

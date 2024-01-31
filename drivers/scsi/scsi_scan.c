@@ -35,6 +35,7 @@
 #include <linux/spinlock.h>
 #include <linux/async.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <asm/unaligned.h>
 
 #include <scsi/scsi.h>

@@ -16,7 +16,7 @@
 #include <linux/in6.h>
 #include <net/ipv6.h>
 #include <linux/fs.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/refcount_types.h>
 #include <linux/utsname.h>
 #include <linux/lockd/bind.h>

@@ -10,6 +10,10 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/swapops.h>
 
+#ifdef CONFIG_ANON_VMA_NAME
+#include <linux/kref.h>
+#endif
+
 /**
  * folio_is_file_lru - Should the folio be on a file LRU or anon LRU?
  * @folio: The folio to test.

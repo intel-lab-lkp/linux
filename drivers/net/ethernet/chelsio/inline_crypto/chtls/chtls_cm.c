@@ -14,6 +14,7 @@
 #include <linux/inetdevice.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/kref.h>
 #include <linux/sched/signal.h>
 #include <linux/kallsyms.h>
 #include <linux/kprobes.h>

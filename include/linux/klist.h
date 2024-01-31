@@ -11,7 +11,7 @@
 #define _LINUX_KLIST_H
 
 #include <linux/spinlock_types.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 
 struct klist_node;

@@ -14,7 +14,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/ktime.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/sunrpc/sched.h>
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/msg_prot.h>

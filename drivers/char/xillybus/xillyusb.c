@@ -28,6 +28,7 @@
 #include <linux/poll.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
+#include <linux/kref.h>
 
 #include "xillybus_class.h"
 

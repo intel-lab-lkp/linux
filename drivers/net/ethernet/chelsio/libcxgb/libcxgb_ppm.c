@@ -47,6 +47,7 @@
 #include <linux/skbuff.h>
 #include <linux/pci.h>
 #include <linux/scatterlist.h>
+#include <linux/kref.h>
 
 #include "libcxgb_ppm.h"
 

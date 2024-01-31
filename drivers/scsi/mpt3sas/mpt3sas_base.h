@@ -68,6 +68,7 @@
 #include <linux/pci.h>
 #include <linux/poll.h>
 #include <linux/irq_poll.h>
+#include <linux/kref.h>
 
 #include "mpt3sas_debug.h"
 #include "mpt3sas_trigger_diag.h"

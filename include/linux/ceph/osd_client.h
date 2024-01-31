@@ -4,7 +4,7 @@
 
 #include <linux/bitrev.h>
 #include <linux/completion.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/mempool.h>
 #include <linux/rbtree_types.h>
 #include <linux/refcount_types.h>

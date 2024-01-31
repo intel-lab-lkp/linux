@@ -46,6 +46,8 @@
 #include "trace.h"
 #include "crypto.h"
 
+#include <linux/kref.h>
+
 #define INVALID_NODE_SIG	0x10000
 #define NODE_CLEANUP_AFTER	300000
 

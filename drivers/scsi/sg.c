@@ -48,6 +48,7 @@ static int sg_version_num = 30536;	/* 2 digits for each component */
 #include <linux/ratelimit.h>
 #include <linux/uio.h>
 #include <linux/cred.h> /* for sg_check_file_access() */
+#include <linux/kref.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

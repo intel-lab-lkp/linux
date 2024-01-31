@@ -7,6 +7,7 @@
  */
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/kref.h>
 #include <linux/module.h>
 #include <asm/unaligned.h>
 #include <scsi/scsi.h>

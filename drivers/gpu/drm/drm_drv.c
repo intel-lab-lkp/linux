@@ -34,6 +34,7 @@
 #include <linux/pseudo_fs.h>
 #include <linux/slab.h>
 #include <linux/srcu.h>
+#include <linux/kref.h>
 
 #include <drm/drm_accel.h>
 #include <drm/drm_cache.h>

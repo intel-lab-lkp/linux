@@ -8,6 +8,8 @@
 #include "efct_hw.h"
 #include "efct_io.h"
 
+#include <linux/kref.h>
+
 struct efct_io_pool {
 	struct efct *efct;
 	spinlock_t lock;	/* IO pool lock */

@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/log2.h>
+#include <linux/kref.h>
 
 #include <scsi/fc/fc_fc2.h>
 

@@ -15,6 +15,7 @@
 #include <scsi/libsas.h>
 #include <scsi/sas_ata.h>
 #include <linux/pm_runtime.h>
+#include <linux/kref.h>
 
 #ifdef pr_fmt
 #undef pr_fmt

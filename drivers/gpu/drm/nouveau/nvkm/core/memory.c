@@ -26,6 +26,8 @@
 #include <subdev/fb.h>
 #include <subdev/instmem.h>
 
+#include <linux/kref.h>
+
 void
 nvkm_memory_tags_put(struct nvkm_memory *memory, struct nvkm_device *device,
 		     struct nvkm_tags **ptags)

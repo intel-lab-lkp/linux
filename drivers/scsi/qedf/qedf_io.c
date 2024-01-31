@@ -5,6 +5,7 @@
  */
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
+#include <linux/kref.h>
 #include "qedf.h"
 #include <scsi/scsi_tcq.h>
 

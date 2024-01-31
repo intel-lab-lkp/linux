@@ -56,6 +56,7 @@
 #include <linux/slab.h>
 #include <linux/miscdevice.h>
 #include <linux/workqueue.h>
+#include <linux/kref.h>
 
 #include <xen/xenbus.h>
 #include <xen/xen.h>

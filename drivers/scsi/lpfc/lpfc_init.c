@@ -28,6 +28,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/kthread.h>
+#include <linux/kref.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include <linux/sched/clock.h>

@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
+#include <linux/kref.h>
 
 #define RNG_MODULE_NAME		"hw_random"
 

@@ -20,6 +20,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
 #include <linux/cpu.h>
+#include <linux/kref.h>
 #include "qedf.h"
 #include "qedf_dbg.h"
 #include <uapi/linux/pci_regs.h>

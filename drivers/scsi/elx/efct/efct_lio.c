@@ -9,6 +9,8 @@
 #include "efct_driver.h"
 #include "efct_lio.h"
 
+#include <linux/kref.h>
+
 /*
  * lio_wq is used to call the LIO backed during creation or deletion of
  * sessions. This brings serialization to the session management as we create

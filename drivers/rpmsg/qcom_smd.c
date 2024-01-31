@@ -20,6 +20,7 @@
 #include <linux/wait.h>
 #include <linux/rpmsg.h>
 #include <linux/rpmsg/qcom_smd.h>
+#include <linux/kref.h>
 
 #include "rpmsg_internal.h"
 

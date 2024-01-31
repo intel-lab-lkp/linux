@@ -2,7 +2,7 @@
 #ifndef _IIO_BUFFER_GENERIC_IMPL_H_
 #define _IIO_BUFFER_GENERIC_IMPL_H_
 #include <linux/sysfs.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 #ifdef CONFIG_IIO_BUFFER
 

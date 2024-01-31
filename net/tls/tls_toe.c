@@ -34,6 +34,7 @@
 #include <linux/list.h>
 #include <linux/rcupdate.h>
 #include <linux/spinlock.h>
+#include <linux/kref.h>
 #include <net/inet_connection_sock.h>
 #include <net/tls.h>
 #include <net/tls_toe.h>

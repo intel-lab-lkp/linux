@@ -25,6 +25,7 @@
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/list.h>
+#include <linux/kref.h>
 
 #include <asm/unaligned.h>
 

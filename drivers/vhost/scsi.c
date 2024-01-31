@@ -36,6 +36,7 @@
 #include <linux/virtio_scsi.h>
 #include <linux/llist.h>
 #include <linux/bitmap.h>
+#include <linux/kref.h>
 
 #include "vhost.h"
 

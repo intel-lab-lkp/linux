@@ -15,6 +15,8 @@
 
 #include "bnx2fc.h"
 
+#include <linux/kref.h>
+
 DECLARE_PER_CPU(struct bnx2fc_percpu_s, bnx2fc_percpu);
 
 static void bnx2fc_fastpath_notification(struct bnx2fc_hba *hba,

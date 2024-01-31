@@ -13,11 +13,8 @@
 #ifndef _KREF_H_
 #define _KREF_H_
 
+#include <linux/kref_types.h>
 #include <linux/refcount.h>
-
-struct kref {
-	refcount_t refcount;
-};
 
 #define KREF_INIT(n)	{ .refcount = REFCOUNT_INIT(n), }
 

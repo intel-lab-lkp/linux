@@ -19,6 +19,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/mailbox_client.h>
+#include <linux/kref.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"

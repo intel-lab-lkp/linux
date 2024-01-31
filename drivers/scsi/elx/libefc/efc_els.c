@@ -11,6 +11,7 @@
 #include "efc.h"
 #include "efc_els.h"
 #include "../libefc_sli/sli4.h"
+#include <linux/kref.h>
 
 #define EFC_LOG_ENABLE_ELS_TRACE(efc)		\
 		(((efc) != NULL) ? (((efc)->logmask & (1U << 1)) != 0) : 0)

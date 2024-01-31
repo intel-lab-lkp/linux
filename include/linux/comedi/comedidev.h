@@ -14,7 +14,7 @@
 #include <linux/mutex_types.h>
 #include <linux/spinlock_types.h>
 #include <linux/rwsem.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/comedi.h>
 
 #define COMEDI_VERSION(a, b, c) (((a) << 16) + ((b) << 8) + (c))

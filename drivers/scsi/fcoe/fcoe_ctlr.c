@@ -20,6 +20,7 @@
 #include <linux/errno.h>
 #include <linux/bitops.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <net/rtnetlink.h>
 
 #include <scsi/fc/fc_els.h>

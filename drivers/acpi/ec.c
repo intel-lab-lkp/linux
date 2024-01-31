@@ -28,6 +28,7 @@
 #include <linux/suspend.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
+#include <linux/kref.h>
 #include <asm/io.h>
 
 #include "internal.h"

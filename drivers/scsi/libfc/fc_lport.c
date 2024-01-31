@@ -79,6 +79,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <asm/unaligned.h>
 
 #include <scsi/fc/fc_gs.h>

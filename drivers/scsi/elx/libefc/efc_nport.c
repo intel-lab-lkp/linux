@@ -27,6 +27,8 @@
 
 #include "efc.h"
 
+#include <linux/kref.h>
+
 void
 efc_nport_cb(void *arg, int event, void *data)
 {

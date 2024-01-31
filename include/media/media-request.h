@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/refcount.h>
+#include <linux/kref.h>
 
 #include <media/media-device.h>
 
