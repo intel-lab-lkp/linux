@@ -83,6 +83,10 @@ properties:
     type: object
     $ref: /schemas/reset/ti,sci-reset.yaml#
 
+  reboot-controller:
+    type: object
+    $ref: /schemas/power/reset/ti,sci-reboot.yaml#
+
 required:
   - compatible
   - mbox-names
@@ -125,5 +129,9 @@ examples:
       k3_reset: reset-controller {
         compatible = "ti,sci-reset";
         #reset-cells = <2>;
+      };
+
+      k3_reboot: reboot-controller {
+        compatible = "ti,sci-reboot";
       };
     };
