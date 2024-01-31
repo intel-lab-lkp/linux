@@ -21755,6 +21755,7 @@ F:	drivers/clk/keystone/sci-clk.c
 F:	drivers/firmware/ti_sci*
 F:	drivers/irqchip/irq-ti-sci-inta.c
 F:	drivers/irqchip/irq-ti-sci-intr.c
+F:	drivers/power/reset/ti-sci-reboot.c
 F:	drivers/reset/reset-ti-sci.c
 F:	drivers/soc/ti/ti_sci_inta_msi.c
 F:	drivers/pmdomain/ti/ti_sci_pm_domains.c

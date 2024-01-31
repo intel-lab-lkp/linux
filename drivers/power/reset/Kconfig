@@ -205,6 +205,13 @@ config POWER_RESET_ST
 	help
 	  Reset support for STMicroelectronics boards.
 
+config POWER_RESET_TI_SCI
+	tristate "TI System Control Interface (TI-SCI) reboot driver"
+	depends on TI_SCI_PROTOCOL
+	help
+	  This enables the reboot driver support over TI System Control
+	  Interface available on some TI's SoCs.
+
 config POWER_RESET_TPS65086
 	bool "TPS65086 restart driver"
 	depends on MFD_TPS65086
