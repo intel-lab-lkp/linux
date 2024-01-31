@@ -39,7 +39,6 @@
 #include <linux/mutex.h>
 #include <linux/virtio.h>
 #include <linux/cdev.h>
-#include <linux/completion.h>
 #include <linux/idr.h>
 #include <linux/of.h>
 

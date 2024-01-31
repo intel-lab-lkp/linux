@@ -13,7 +13,6 @@
 #include <linux/vfio.h>
 #include <linux/irqbypass.h>
 #include <linux/types.h>
-#include <linux/uuid.h>
 #include <linux/notifier.h>
 
 #ifndef VFIO_PCI_CORE_H

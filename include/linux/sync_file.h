@@ -16,7 +16,6 @@
 #include <linux/types.h>
 #include <linux/ktime.h>
 #include <linux/list.h>
-#include <linux/spinlock.h>
 #include <linux/dma-fence.h>
 #include <linux/dma-fence-array.h>
 

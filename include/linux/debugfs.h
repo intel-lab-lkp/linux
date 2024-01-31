@@ -20,6 +20,7 @@
 
 struct device;
 struct file_operations;
+struct seq_file;
 
 struct debugfs_blob_wrapper {
 	void *data;

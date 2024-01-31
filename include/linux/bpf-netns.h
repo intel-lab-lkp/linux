@@ -2,7 +2,6 @@
 #ifndef _BPF_NETNS_H
 #define _BPF_NETNS_H
 
-#include <linux/mutex.h>
 #include <net/netns/bpf.h>
 #include <uapi/linux/bpf.h>
 

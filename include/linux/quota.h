@@ -36,7 +36,6 @@
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/spinlock.h>
-#include <linux/wait.h>
 #include <linux/percpu_counter.h>
 
 #include <linux/dqblk_xfs.h>

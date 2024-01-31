@@ -11,7 +11,6 @@
 
 #include <linux/sched.h>
 #include <linux/cpumask.h>
-#include <linux/nodemask.h>
 #include <linux/rculist.h>
 #include <linux/cgroupstats.h>
 #include <linux/fs.h>

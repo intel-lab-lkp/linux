@@ -10,7 +10,6 @@
 #ifndef __MFD_WM831X_CORE_H__
 #define __MFD_WM831X_CORE_H__
 
-#include <linux/completion.h>
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <linux/list.h>

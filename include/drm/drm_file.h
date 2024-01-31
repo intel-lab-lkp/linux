@@ -31,13 +31,13 @@
 #define _DRM_FILE_H_
 
 #include <linux/types.h>
-#include <linux/completion.h>
 #include <linux/idr.h>
 
 #include <uapi/drm/drm.h>
 
 #include <drm/drm_prime.h>
 
+struct completion;
 struct dma_fence;
 struct drm_file;
 struct drm_device;

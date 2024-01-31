@@ -7,7 +7,6 @@
 #include <linux/t10-pi.h>
 #include <linux/list.h>
 #include <linux/types.h>
-#include <linux/timer.h>
 #include <linux/scatterlist.h>
 #include <scsi/scsi_device.h>
 

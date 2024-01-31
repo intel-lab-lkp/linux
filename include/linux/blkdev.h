@@ -10,7 +10,6 @@
 #include <linux/blk_types.h>
 #include <linux/device.h>
 #include <linux/list.h>
-#include <linux/llist.h>
 #include <linux/minmax.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
@@ -22,7 +21,6 @@
 #include <linux/percpu-refcount.h>
 #include <linux/blkzoned.h>
 #include <linux/sched.h>
-#include <linux/sbitmap.h>
 #include <linux/uio.h> // for iov_iter_is_aligned()
 #include <linux/uuid.h>
 #include <linux/xarray.h>

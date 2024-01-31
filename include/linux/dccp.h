@@ -8,7 +8,6 @@
 #include <linux/ktime.h>
 #include <linux/list.h>
 #include <linux/uio.h>
-#include <linux/workqueue.h>
 
 #include <net/inet_connection_sock.h>
 #include <net/inet_sock.h>

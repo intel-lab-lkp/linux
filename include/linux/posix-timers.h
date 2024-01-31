@@ -4,7 +4,6 @@
 
 #include <linux/alarmtimer.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
 #include <linux/posix-timers_types.h>
 #include <linux/spinlock.h>
 #include <linux/timerqueue.h>

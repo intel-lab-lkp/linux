@@ -13,6 +13,7 @@
 #include <linux/seq_file.h>
 #include <keys/asymmetric-type.h>
 
+struct seq_file;
 struct kernel_pkey_query;
 struct kernel_pkey_params;
 struct public_key_signature;

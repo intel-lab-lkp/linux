@@ -9,16 +9,11 @@
 #include <linux/err.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
-#include <linux/idr.h>
 #include <linux/lockdep.h>
 #include <linux/rbtree.h>
-#include <linux/atomic.h>
 #include <linux/bug.h>
 #include <linux/types.h>
 #include <linux/uidgid.h>
-#include <linux/wait.h>
-#include <linux/rwsem.h>
-#include <linux/cache.h>
 
 struct file;
 struct dentry;

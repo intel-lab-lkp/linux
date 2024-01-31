@@ -15,17 +15,12 @@
 
 #include <linux/kernfs.h>
 #include <linux/compiler.h>
-#include <linux/errno.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
-#include <linux/kobject_ns.h>
-#include <linux/stat.h>
-#include <linux/atomic.h>
 
 struct kobject;
 struct module;
 struct bin_attribute;
-enum kobj_ns_type;
 
 struct attribute {
 	const char		*name;

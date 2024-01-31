@@ -4,7 +4,6 @@
 
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/radix-tree.h>
 
 typedef unsigned long dax_entry_t;
 

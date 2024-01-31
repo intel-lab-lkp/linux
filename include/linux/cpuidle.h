@@ -13,7 +13,6 @@
 
 #include <linux/percpu.h>
 #include <linux/list.h>
-#include <linux/hrtimer.h>
 #include <linux/context_tracking.h>
 
 #define CPUIDLE_STATE_MAX	10

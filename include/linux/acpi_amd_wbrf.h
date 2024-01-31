@@ -7,8 +7,11 @@
 #ifndef _ACPI_AMD_WBRF_H
 #define _ACPI_AMD_WBRF_H
 
-#include <linux/device.h>
-#include <linux/notifier.h>
+#include <linux/errno.h>
+#include <linux/types.h>
+
+struct device;
+struct notifier_block;
 
 /* The maximum number of frequency band ranges */
 #define MAX_NUM_OF_WBRF_RANGES		11

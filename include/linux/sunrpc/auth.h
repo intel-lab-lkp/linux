@@ -16,7 +16,6 @@
 
 #include <linux/atomic.h>
 #include <linux/rcupdate.h>
-#include <linux/uidgid.h>
 #include <linux/utsname.h>
 
 /*

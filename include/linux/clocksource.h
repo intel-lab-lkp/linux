@@ -14,7 +14,6 @@
 #include <linux/time.h>
 #include <linux/list.h>
 #include <linux/cache.h>
-#include <linux/timer.h>
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/clocksource_ids.h>

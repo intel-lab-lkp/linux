@@ -26,9 +26,10 @@
 #include <net/snmp.h>
 #include <net/ip.h>
 #include <linux/ipv6.h>
-#include <linux/seq_file.h>
 #include <linux/poll.h>
 #include <linux/indirect_call_wrapper.h>
+
+struct seq_file;
 
 /**
  *	struct udp_skb_cb  -  UDP(-Lite) private variables

@@ -10,9 +10,10 @@
 #ifndef _LINUX_APPLE_RTKIT_H_
 #define _LINUX_APPLE_RTKIT_H_
 
-#include <linux/device.h>
 #include <linux/types.h>
 #include <linux/mailbox_client.h>
+
+struct device;
 
 /*
  * Struct to represent implementation-specific RTKit operations.

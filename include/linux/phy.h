@@ -12,7 +12,6 @@
 #define __PHY_H
 
 #include <linux/compiler.h>
-#include <linux/spinlock.h>
 #include <linux/ethtool.h>
 #include <linux/leds.h>
 #include <linux/linkmode.h>
@@ -21,7 +20,6 @@
 #include <linux/mii.h>
 #include <linux/mii_timestamper.h>
 #include <linux/module.h>
-#include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/mod_devicetable.h>
 #include <linux/u64_stats_sync.h>

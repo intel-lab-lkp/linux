@@ -23,7 +23,6 @@
 #include <linux/spinlock.h>
 #include <linux/time.h>
 #include <linux/timer.h>
-#include <linux/wait.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mutex.h>

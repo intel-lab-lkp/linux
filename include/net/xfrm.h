@@ -11,7 +11,6 @@
 #include <linux/pfkeyv2.h>
 #include <linux/ipsec.h>
 #include <linux/in6.h>
-#include <linux/mutex.h>
 #include <linux/audit.h>
 #include <linux/slab.h>
 #include <linux/refcount.h>

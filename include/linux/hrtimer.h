@@ -17,7 +17,6 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/percpu-defs.h>
-#include <linux/rbtree.h>
 #include <linux/seqlock.h>
 #include <linux/timer.h>
 #include <asm/processor.h>  /* for cpu_relax() */

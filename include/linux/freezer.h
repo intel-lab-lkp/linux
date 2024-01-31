@@ -6,7 +6,6 @@
 
 #include <linux/debug_locks.h>
 #include <linux/sched.h>
-#include <linux/wait.h>
 #include <linux/atomic.h>
 #include <linux/jump_label.h>
 

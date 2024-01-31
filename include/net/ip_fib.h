@@ -13,7 +13,6 @@
 #define _NET_IP_FIB_H
 
 #include <net/flow.h>
-#include <linux/seq_file.h>
 #include <linux/rcupdate.h>
 #include <net/fib_notifier.h>
 #include <net/fib_rules.h>

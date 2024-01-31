@@ -2,7 +2,6 @@
 #ifndef _LINUX_USER_NAMESPACE_H
 #define _LINUX_USER_NAMESPACE_H
 
-#include <linux/kref.h>
 #include <linux/nsproxy.h>
 #include <linux/ns_common.h>
 #include <linux/sched.h>

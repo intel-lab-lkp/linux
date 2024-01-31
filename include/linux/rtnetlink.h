@@ -2,8 +2,6 @@
 #ifndef __LINUX_RTNETLINK_H
 #define __LINUX_RTNETLINK_H
 
-
-#include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/wait.h>
 #include <linux/refcount.h>

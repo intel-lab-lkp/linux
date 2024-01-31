@@ -23,7 +23,6 @@
 #include <linux/cache.h>
 #include <linux/percpu.h>
 #include <linux/skbuff.h>
-#include <linux/kref.h>
 #include <linux/ktime.h>
 #include <linux/indirect_call_wrapper.h>
 #include <linux/hrtimer.h> // for hrtimer_try_to_cancel()
@@ -43,10 +42,11 @@
 #include <net/dst.h>
 #include <net/mptcp.h>
 
-#include <linux/seq_file.h>
 #include <linux/memcontrol.h>
 #include <linux/bpf-cgroup.h>
 #include <linux/siphash.h>
+
+struct seq_file;
 
 extern struct inet_hashinfo tcp_hashinfo;
 

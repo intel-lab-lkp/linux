@@ -22,8 +22,6 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
-#include <linux/pm.h>
-#include <linux/atomic.h>
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/overflow.h>

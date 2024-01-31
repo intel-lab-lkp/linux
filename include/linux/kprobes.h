@@ -19,10 +19,8 @@
 #include <linux/linkage.h>
 #include <linux/list.h>
 #include <linux/notifier.h>
-#include <linux/smp.h>
 #include <linux/bug.h>
 #include <linux/percpu.h>
-#include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/mutex.h>
 #include <linux/ftrace.h>

@@ -26,7 +26,6 @@
 #include <drm/drm_mm.h>
 #include <linux/mm.h>
 #include <linux/rbtree.h>
-#include <linux/spinlock.h>
 #include <linux/types.h>
 
 /* We make up offsets for buffer objects so we can recognize them at

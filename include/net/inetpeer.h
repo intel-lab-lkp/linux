@@ -11,7 +11,6 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
-#include <linux/spinlock.h>
 #include <linux/rtnetlink.h>
 #include <net/ipv6.h>
 #include <linux/atomic.h>

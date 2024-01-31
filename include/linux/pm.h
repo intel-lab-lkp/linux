@@ -13,7 +13,6 @@
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
-#include <linux/timer.h>
 #include <linux/hrtimer.h>
 #include <linux/completion.h>
 

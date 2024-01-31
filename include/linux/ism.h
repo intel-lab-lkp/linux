@@ -9,8 +9,6 @@
 #ifndef _ISM_H
 #define _ISM_H
 
-#include <linux/workqueue.h>
-
 struct ism_dmb {
 	u64 dmb_tok;
 	u64 rgid;

@@ -61,7 +61,10 @@
  */
 
 #include <asm/bitsperlong.h>
+
+#if BITS_PER_LONG == 64
 #include <linux/seqlock.h>
+#endif
 
 struct u64_stats_sync {
 #if BITS_PER_LONG == 32

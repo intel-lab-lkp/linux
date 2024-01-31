@@ -14,7 +14,6 @@
 #include <linux/list.h>
 #include <linux/timer.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
 
 #include <net/inet_sock.h>
 #include <net/sock.h>

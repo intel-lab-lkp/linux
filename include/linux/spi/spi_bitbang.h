@@ -4,7 +4,6 @@
 
 #include <linux/mutex.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
 
 struct spi_bitbang {
 	struct mutex		lock;

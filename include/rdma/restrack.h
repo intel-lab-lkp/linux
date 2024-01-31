@@ -12,7 +12,6 @@
 #include <linux/completion.h>
 #include <linux/sched/task.h>
 #include <uapi/rdma/rdma_netlink.h>
-#include <linux/xarray.h>
 
 struct ib_device;
 struct sk_buff;

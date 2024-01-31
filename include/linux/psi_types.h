@@ -5,7 +5,6 @@
 #include <linux/kthread.h>
 #include <linux/seqlock.h>
 #include <linux/types.h>
-#include <linux/kref.h>
 #include <linux/wait.h>
 
 #ifdef CONFIG_PSI

@@ -12,7 +12,6 @@
 #include <linux/cdev.h>
 #include <linux/kfifo.h>
 #include <linux/time.h>
-#include <linux/timer.h>
 #include <media/rc-map.h>
 
 /**

@@ -3,7 +3,6 @@
  * include/net/dsa_stubs.h - Stubs for the Distributed Switch Architecture framework
  */
 
-#include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/net_tstamp.h>
 #include <net/dsa.h>

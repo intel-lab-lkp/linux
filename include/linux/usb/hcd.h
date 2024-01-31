@@ -8,7 +8,6 @@
 
 #ifdef __KERNEL__
 
-#include <linux/rwsem.h>
 #include <linux/interrupt.h>
 #include <linux/idr.h>
 

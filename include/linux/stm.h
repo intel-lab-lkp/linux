@@ -7,7 +7,9 @@
 #ifndef _STM_H_
 #define _STM_H_
 
-#include <linux/device.h>
+#include <linux/types.h>
+
+struct device;
 
 /**
  * enum stp_packet_type - STP packets that an STM driver sends

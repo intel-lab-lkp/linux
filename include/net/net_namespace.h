@@ -7,7 +7,6 @@
 
 #include <linux/atomic.h>
 #include <linux/refcount.h>
-#include <linux/workqueue.h>
 #include <linux/list.h>
 #include <linux/sysctl.h>
 #include <linux/uidgid.h>

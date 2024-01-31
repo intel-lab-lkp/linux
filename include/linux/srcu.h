@@ -16,9 +16,7 @@
 #ifndef _LINUX_SRCU_H
 #define _LINUX_SRCU_H
 
-#include <linux/mutex.h>
 #include <linux/rcupdate.h>
-#include <linux/workqueue.h>
 #include <linux/rcu_segcblist.h>
 
 struct srcu_struct;

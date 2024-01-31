@@ -9,8 +9,6 @@
 #ifndef __ATMEL_LCDC_H__
 #define __ATMEL_LCDC_H__
 
-#include <linux/workqueue.h>
-
 /* Way LCD wires are connected to the chip:
  * Some Atmel chips use BGR color mode (instead of standard RGB)
  * A swapped wiring onboard can bring to RGB mode.

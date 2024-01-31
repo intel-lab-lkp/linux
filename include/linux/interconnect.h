@@ -7,7 +7,6 @@
 #ifndef __LINUX_INTERCONNECT_H
 #define __LINUX_INTERCONNECT_H
 
-#include <linux/mutex.h>
 #include <linux/types.h>
 
 /* macros for converting to icc units */

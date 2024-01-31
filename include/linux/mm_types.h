@@ -11,7 +11,6 @@
 #include <linux/rbtree.h>
 #include <linux/maple_tree.h>
 #include <linux/rwsem.h>
-#include <linux/completion.h>
 #include <linux/cpumask.h>
 #include <linux/uprobes.h>
 #include <linux/rcupdate.h>

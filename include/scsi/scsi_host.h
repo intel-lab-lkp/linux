@@ -11,6 +11,7 @@
 #include <linux/blk-mq.h>
 #include <scsi/scsi.h>
 
+struct seq_file;
 struct block_device;
 struct completion;
 struct module;

@@ -3,8 +3,6 @@
 #ifndef LINUX_ATMDEV_H
 #define LINUX_ATMDEV_H
 
-
-#include <linux/wait.h> /* wait_queue_head_t */
 #include <linux/time.h> /* struct timeval */
 #include <linux/net.h>
 #include <linux/bug.h>

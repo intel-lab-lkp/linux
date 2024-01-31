@@ -5,8 +5,8 @@
 #include <linux/kobject.h>
 #include <linux/kdev_t.h>
 #include <linux/list.h>
-#include <linux/device.h>
 
+struct device;
 struct file_operations;
 struct inode;
 struct module;

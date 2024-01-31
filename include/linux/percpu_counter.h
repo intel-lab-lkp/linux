@@ -8,7 +8,6 @@
  */
 
 #include <linux/spinlock.h>
-#include <linux/smp.h>
 #include <linux/list.h>
 #include <linux/threads.h>
 #include <linux/percpu.h>

@@ -15,7 +15,6 @@
 #include <linux/refcount.h>
 #include <net/neighbour.h>
 #include <net/sock.h>
-#include <linux/seq_file.h>
 
 #define	AX25_T1CLAMPLO  		1
 #define	AX25_T1CLAMPHI 			(30 * HZ)

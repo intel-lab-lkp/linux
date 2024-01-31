@@ -18,7 +18,6 @@
 #include <linux/sunrpc/auth.h>
 #include <linux/sunrpc/svcauth.h>
 #include <linux/lwq.h>
-#include <linux/wait.h>
 #include <linux/mm.h>
 #include <linux/pagevec.h>
 

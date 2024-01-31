@@ -6,7 +6,6 @@
 
 #include <asm/unaligned.h>
 #include <linux/backing-dev.h>
-#include <linux/completion.h>
 #include <linux/exportfs.h>
 #include <linux/bug.h>
 #include <linux/fs.h>

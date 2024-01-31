@@ -11,7 +11,8 @@
 #include <linux/types.h>
 #include <linux/uuid.h>
 #include <linux/spinlock.h>
-#include <linux/bio.h>
+
+struct bio;
 
 struct badrange_entry {
 	u64 start;

@@ -11,7 +11,6 @@
 #include <linux/interrupt.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
-#include <linux/sysfs.h>
 #include <asm/cputype.h>
 
 #ifdef CONFIG_ARM_PMU

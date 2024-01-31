@@ -17,7 +17,6 @@
 #include <linux/minmax.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
-#include <linux/smp.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 

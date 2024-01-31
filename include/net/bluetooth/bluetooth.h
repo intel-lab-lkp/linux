@@ -28,7 +28,8 @@
 
 #include <linux/poll.h>
 #include <net/sock.h>
-#include <linux/seq_file.h>
+
+struct seq_file;
 
 #define BT_SUBSYS_VERSION	2
 #define BT_SUBSYS_REVISION	22

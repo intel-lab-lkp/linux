@@ -3,7 +3,6 @@
 #define __LINUX_PWM_H
 
 #include <linux/err.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
 
 struct pwm_chip;

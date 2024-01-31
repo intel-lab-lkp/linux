@@ -9,8 +9,10 @@
  */
 #ifndef __LINUX_MDIO_MUX_H
 #define __LINUX_MDIO_MUX_H
-#include <linux/device.h>
-#include <linux/phy.h>
+
+struct device;
+struct device_node;
+struct mii_bus;
 
 /* mdio_mux_init() - Initialize a MDIO mux
  * @dev		The device owning the MDIO mux

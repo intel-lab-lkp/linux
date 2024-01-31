@@ -13,7 +13,6 @@
 #include <linux/workqueue.h>
 #include <linux/notifier.h>
 #include <linux/list.h>
-#include <linux/backlight.h>
 #include <linux/slab.h>
 
 #include <asm/fb.h>
@@ -24,6 +23,7 @@ struct device;
 struct file;
 struct videomode;
 struct device_node;
+struct backlight_device;
 
 /* Definitions below are used in the parsed monitor specs */
 #define FB_DPMS_ACTIVE_OFF	1

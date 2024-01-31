@@ -22,13 +22,14 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/rcupdate.h>
-#include <linux/seq_file.h>
 #include <linux/bitmap.h>
 
 #include <linux/err.h>
 #include <linux/sysctl.h>
 #include <linux/workqueue.h>
 #include <net/rtnetlink.h>
+
+struct seq_file;
 
 /*
  * NUD stands for "neighbor unreachability detection"

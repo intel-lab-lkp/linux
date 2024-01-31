@@ -5,7 +5,6 @@
 
 #include <linux/bug.h>
 #include <linux/kernel.h>
-#include <linux/list.h>
 
 #include <uapi/linux/random.h>
 

@@ -49,7 +49,6 @@
 #include <linux/sunrpc/rpc_rdma_cid.h>
 #include <linux/sunrpc/svc_rdma_pcl.h>
 
-#include <linux/percpu_counter.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
 

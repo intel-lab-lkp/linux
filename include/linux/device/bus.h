@@ -14,13 +14,14 @@
 #ifndef _DEVICE_BUS_H_
 #define _DEVICE_BUS_H_
 
-#include <linux/kobject.h>
 #include <linux/klist.h>
 #include <linux/pm.h>
 #include <linux/sysfs.h> // for struct attribute
 
 struct device_driver;
+struct device_node;
 struct fwnode_handle;
+struct kobj_uevent_env;
 
 /**
  * struct bus_type - The bus type of the device

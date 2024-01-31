@@ -2,7 +2,6 @@
 #ifndef _LINUX_VMALLOC_H
 #define _LINUX_VMALLOC_H
 
-#include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/llist.h>

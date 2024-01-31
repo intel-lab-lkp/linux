@@ -9,7 +9,6 @@
 #include <linux/mutex.h>
 #include <linux/kref.h>
 #include <linux/list.h>
-#include <linux/sysfs.h>
 
 struct hd_geometry;
 struct mtd_info;

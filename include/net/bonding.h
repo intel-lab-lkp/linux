@@ -13,7 +13,6 @@
 #ifndef _NET_BONDING_H
 #define _NET_BONDING_H
 
-#include <linux/timer.h>
 #include <linux/proc_fs.h>
 #include <linux/if_bonding.h>
 #include <linux/cpumask.h>

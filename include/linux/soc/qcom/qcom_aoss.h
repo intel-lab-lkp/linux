@@ -7,8 +7,8 @@
 #define __QCOM_AOSS_H__
 
 #include <linux/err.h>
-#include <linux/device.h>
 
+struct device;
 struct qmp;
 
 #if IS_ENABLED(CONFIG_QCOM_AOSS_QMP)

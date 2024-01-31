@@ -412,7 +412,8 @@ struct mISDN_ctrl_req {
 #include <linux/skbuff.h>
 #include <linux/net.h>
 #include <net/sock.h>
-#include <linux/completion.h>
+
+struct completion;
 
 #define DEBUG_CORE		0x000000ff
 #define DEBUG_CORE_FUNC		0x00000002

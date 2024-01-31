@@ -23,8 +23,6 @@
 #include <linux/spinlock.h>
 #include <linux/kref.h>
 #include <linux/kobject_ns.h>
-#include <linux/wait.h>
-#include <linux/atomic.h>
 #include <linux/workqueue.h>
 #include <linux/uidgid.h>
 

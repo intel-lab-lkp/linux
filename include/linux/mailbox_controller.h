@@ -6,9 +6,9 @@
 #include <linux/of.h>
 #include <linux/types.h>
 #include <linux/hrtimer.h>
-#include <linux/device.h>
 #include <linux/completion.h>
 
+struct device;
 struct mbox_chan;
 
 /**

@@ -8,8 +8,8 @@
 #define __MAILBOX_CLIENT_H
 
 #include <linux/of.h>
-#include <linux/device.h>
 
+struct device;
 struct mbox_chan;
 
 /**

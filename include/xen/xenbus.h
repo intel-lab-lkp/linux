@@ -36,7 +36,6 @@
 
 #include <linux/device.h>
 #include <linux/notifier.h>
-#include <linux/mutex.h>
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/completion.h>

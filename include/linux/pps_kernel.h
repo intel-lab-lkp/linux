@@ -10,8 +10,9 @@
 
 #include <linux/pps.h>
 #include <linux/cdev.h>
-#include <linux/device.h>
 #include <linux/time.h>
+
+struct device;
 
 /*
  * Global defines

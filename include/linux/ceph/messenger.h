@@ -7,7 +7,6 @@
 #include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/net.h>
-#include <linux/radix-tree.h>
 #include <linux/uio.h>
 #include <linux/workqueue.h>
 #include <net/net_namespace.h>

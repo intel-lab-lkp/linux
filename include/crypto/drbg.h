@@ -52,7 +52,6 @@
 #include <linux/fips.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
-#include <linux/workqueue.h>
 
 /*
  * Concatenation Helper and string operation helper

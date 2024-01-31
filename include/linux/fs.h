@@ -12,7 +12,6 @@
 #include <linux/list.h>
 #include <linux/list_lru.h>
 #include <linux/llist.h>
-#include <linux/radix-tree.h>
 #include <linux/xarray.h>
 #include <linux/rbtree.h>
 #include <linux/init.h>
