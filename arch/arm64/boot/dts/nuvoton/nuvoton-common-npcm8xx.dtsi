@@ -58,6 +58,8 @@
 			compatible = "nuvoton,npcm845-clk";
 			#clock-cells = <1>;
 			reg = <0x0 0xf0801000 0x0 0x1000>;
+			clocks = <&refclk>;
+			clock-names = "refclk";
 		};
 
 		apb {
