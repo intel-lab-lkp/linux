@@ -47,6 +47,7 @@
 #include <linux/refcount.h>
 #include <linux/uio.h>
 #include <linux/bits.h>
+#include <linux/blkdev.h>
 
 #include <linux/sched/signal.h>
 #include <linux/fs.h>

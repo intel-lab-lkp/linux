@@ -13,7 +13,7 @@
 
 #include <linux/fs.h>		/* not really needed, later.. */
 #include <linux/list.h>
-#include <linux/blkdev.h>
+#include <linux/blkdev_types.h>
 #include <scsi/scsi_common.h>
 #include <uapi/linux/cdrom.h>
 
