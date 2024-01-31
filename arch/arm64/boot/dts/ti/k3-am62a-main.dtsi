@@ -215,6 +215,10 @@
 			compatible = "ti,sci-reset";
 			#reset-cells = <2>;
 		};
+
+		k3_reboot: reboot-controller {
+			compatible = "ti,sci-reboot";
+		};
 	};
 
 	secure_proxy_sa3: mailbox@43600000 {
