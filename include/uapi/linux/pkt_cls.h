@@ -554,6 +554,9 @@ enum {
 	TCA_FLOWER_KEY_SPI,		/* be32 */
 	TCA_FLOWER_KEY_SPI_MASK,	/* be32 */
 
+	TCA_FLOWER_KEY_ENC_FLAGS,	/* be16 */
+	TCA_FLOWER_KEY_ENC_FLAGS_MASK,	/* be16 */
+
 	__TCA_FLOWER_MAX,
 };
 
