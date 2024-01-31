@@ -8,6 +8,8 @@
 
 #include "dell-wmi-sysman.h"
 
+#include <linux/kobject.h>
+
 get_instance_id(enumeration);
 
 static ssize_t current_value_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)

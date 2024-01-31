@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/regulator/consumer.h>
 #include <linux/sched.h>
+#include <linux/hrtimer.h>
 
 #include <video/omapfb_dss.h>
 

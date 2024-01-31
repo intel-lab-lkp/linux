@@ -9,6 +9,7 @@
 #include <linux/atomic.h>
 #include <linux/device.h>
 #include <linux/hrtimer.h>
+#include <linux/kobject.h>
 #include <linux/llist.h>
 #include <linux/poll.h>
 #include <linux/sysfs.h>

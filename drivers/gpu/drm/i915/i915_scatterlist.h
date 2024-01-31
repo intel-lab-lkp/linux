@@ -7,6 +7,7 @@
 #ifndef I915_SCATTERLIST_H
 #define I915_SCATTERLIST_H
 
+#include <linux/kref.h>
 #include <linux/pfn.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>

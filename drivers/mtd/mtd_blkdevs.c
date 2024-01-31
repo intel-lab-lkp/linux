@@ -5,6 +5,7 @@
  * Copyright © 2003-2010 David Woodhouse <dwmw2@infradead.org>
  */
 
+#include <linux/highmem.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>

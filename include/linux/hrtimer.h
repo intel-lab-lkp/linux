@@ -20,7 +20,9 @@
 #include <linux/rbtree.h>
 #include <linux/seqlock.h>
 #include <linux/timer.h>
+#include <asm/processor.h>  /* for cpu_relax() */
 
+struct restart_block;
 struct hrtimer_clock_base;
 struct hrtimer_cpu_base;
 

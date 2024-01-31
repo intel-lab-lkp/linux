@@ -97,6 +97,7 @@
 #include <linux/compat.h>
 #include <linux/ptrace.h>
 #include <linux/swap.h>
+#include <linux/sysfs.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/migrate.h>

@@ -6,7 +6,7 @@
 #include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/tty_buffer.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct attribute_group;
 struct tty_driver;

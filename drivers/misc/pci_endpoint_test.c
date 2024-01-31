@@ -9,6 +9,7 @@
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>

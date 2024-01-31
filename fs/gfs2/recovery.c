@@ -5,6 +5,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/blkdev.h> // for bdev_read_only()
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>

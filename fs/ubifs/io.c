@@ -60,6 +60,7 @@
 
 #include <linux/crc32.h>
 #include <linux/slab.h>
+#include <linux/hrtimer.h>
 #include "ubifs.h"
 
 /**

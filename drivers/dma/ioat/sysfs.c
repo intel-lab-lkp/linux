@@ -5,6 +5,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/dmaengine.h>
 #include <linux/pci.h>

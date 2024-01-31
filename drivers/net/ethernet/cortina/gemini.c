@@ -36,6 +36,7 @@
 #include <linux/ethtool.h>
 #include <linux/tcp.h>
 #include <linux/u64_stats_sync.h>
+#include <linux/hrtimer.h>
 
 #include <linux/in.h>
 #include <linux/ip.h>

@@ -7,6 +7,7 @@
 #include <linux/sched/mm.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sysfs.h>
 #include <linux/completion.h>
 #include <linux/bug.h>
 #include <linux/list.h>

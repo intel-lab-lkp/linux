@@ -34,6 +34,7 @@
 #include <linux/pci.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/apple-gmux.h>
+#include <linux/ratelimit.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>

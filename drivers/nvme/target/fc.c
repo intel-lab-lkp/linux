@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/blk-mq.h>
+#include <linux/idr.h>
 #include <linux/parser.h>
 #include <linux/random.h>
 #include <uapi/scsi/fc/fc_fs.h>

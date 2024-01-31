@@ -13,6 +13,7 @@
 
 #include <linux/console.h>
 #include <linux/sched/clock.h>
+#include <linux/mm.h> // for page_address()
 #include <linux/random.h>
 #include <linux/prefetch.h>
 

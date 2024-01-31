@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include <linux/sched/rt.h>
 #include <linux/sched/task.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"

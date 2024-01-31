@@ -11,6 +11,8 @@
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/uaccess.h>
+#include <linux/hrtimer.h>
+#include <linux/ratelimit.h>
 
 #include <clocksource/arm_arch_timer.h>
 #include <asm/arch_timer.h>

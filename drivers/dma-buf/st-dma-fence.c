@@ -11,6 +11,7 @@
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/timer.h>
 
 #include "selftest.h"
 

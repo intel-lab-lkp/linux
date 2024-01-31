@@ -7,6 +7,8 @@
 
 #include "komeda_color_mgmt.h"
 
+#include <linux/array_size.h> // for ARRAY_SIZE()
+
 /* 10bit precision YUV2RGB matrix */
 static const s32 yuv2rgb_bt601_narrow[KOMEDA_N_YUV2RGB_COEFFS] = {
 	1192,    0, 1634,

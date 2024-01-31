@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/dax.h>
 #include <linux/dcache.h>
+#include <linux/idr.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pagemap.h>

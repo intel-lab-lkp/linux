@@ -22,6 +22,7 @@
 #include <linux/magic.h>
 #include <linux/pstore.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/uaccess.h>
 #include <linux/cleanup.h>
 

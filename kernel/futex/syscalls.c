@@ -2,6 +2,7 @@
 
 #include <linux/syscalls.h>
 #include <linux/time_namespace.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 

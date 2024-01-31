@@ -22,6 +22,7 @@
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 #include <linux/perf_event.h>
+#include <linux/hrtimer.h>
 
 #include <soc/rockchip/rockchip_grf.h>
 #include <soc/rockchip/rk3399_grf.h>

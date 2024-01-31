@@ -13,6 +13,7 @@
 #include <linux/capability.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
+#include <linux/uidgid.h>
 
 static int msg_max_limit_min = MIN_MSGMAX;
 static int msg_max_limit_max = HARD_MSGMAX;

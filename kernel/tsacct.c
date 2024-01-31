@@ -13,6 +13,7 @@
 #include <linux/acct.h>
 #include <linux/jiffies.h>
 #include <linux/mm.h>
+#include <linux/timekeeping.h> // for ktime_get_ns()
 
 /*
  * fill in basic accounting fields

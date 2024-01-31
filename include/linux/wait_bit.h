@@ -5,6 +5,9 @@
 /*
  * Linux wait-bit related types and methods:
  */
+#include <linux/bitops.h>
+#include <linux/init.h> // for __init
+#include <linux/kernel.h> // for might_sleep()
 #include <linux/wait.h>
 
 struct wait_bit_key {

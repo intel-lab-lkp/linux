@@ -33,6 +33,7 @@
 
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/kref.h>
 
 #include <rdma/ib_user_verbs.h>
 #include <rdma/ib_addr.h>

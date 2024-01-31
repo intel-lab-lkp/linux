@@ -31,6 +31,7 @@
 #include <linux/device/class.h>
 #include <linux/device/driver.h>
 #include <linux/cleanup.h>
+#include <linux/sysfs.h> // for __ATTR_*
 #include <asm/device.h>
 
 struct device;

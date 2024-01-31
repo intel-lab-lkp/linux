@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
+#include <linux/hrtimer.h>
 
 #include <linux/usb/cdc.h>
 

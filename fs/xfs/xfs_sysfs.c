@@ -13,6 +13,7 @@
 #include "xfs_log.h"
 #include "xfs_log_priv.h"
 #include "xfs_mount.h"
+#include <linux/sysfs.h>
 
 struct xfs_sysfs_attr {
 	struct attribute attr;

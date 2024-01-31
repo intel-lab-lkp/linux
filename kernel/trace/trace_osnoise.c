@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 #include <linux/cpumask.h>
 #include <linux/delay.h>
+#include <linux/hrtimer.h>
 #include <linux/sched/clock.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/sched.h>

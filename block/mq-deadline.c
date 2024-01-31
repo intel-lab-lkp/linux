@@ -15,6 +15,7 @@
 #include <linux/compiler.h>
 #include <linux/rbtree.h>
 #include <linux/sbitmap.h>
+#include <linux/sysfs.h>
 
 #include <trace/events/block.h>
 

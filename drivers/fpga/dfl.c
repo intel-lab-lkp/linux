@@ -12,6 +12,8 @@
  */
 #include <linux/dfl.h>
 #include <linux/fpga-dfl.h>
+#include <linux/idr.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/uaccess.h>

@@ -11,6 +11,7 @@
 #ifndef __SOUND_SOC_SOF_AUDIO_H
 #define __SOUND_SOC_SOF_AUDIO_H
 
+#include <linux/idr.h>
 #include <linux/workqueue.h>
 
 #include <sound/soc.h>

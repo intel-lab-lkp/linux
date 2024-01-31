@@ -11,9 +11,8 @@
 #if !defined(_TRACE_IOMMU_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_IOMMU_H
 
+#include <linux/device.h> // for dev_driver_string()
 #include <linux/tracepoint.h>
-
-struct device;
 
 DECLARE_EVENT_CLASS(iommu_group_event,
 

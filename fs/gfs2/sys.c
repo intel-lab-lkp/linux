@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include <linux/spinlock.h>
+#include <linux/sysfs.h>
 #include <linux/completion.h>
 #include <linux/buffer_head.h>
 #include <linux/module.h>

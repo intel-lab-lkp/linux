@@ -18,6 +18,8 @@
 #include <linux/stat.h>
 #include <linux/slab.h>
 #include <linux/random.h>
+#include <linux/uidgid.h>
+#include <linux/workqueue.h>
 
 /**
  * kobject_namespace() - Return @kobj's namespace tag.

@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/nfs_fs.h>
 #include <linux/hashtable.h>
+#include <linux/list_lru.h>
 #include <linux/refcount.h>
 #include <uapi/linux/xattr.h>
 

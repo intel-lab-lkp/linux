@@ -60,6 +60,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/statfs.h>
+#include <linux/ratelimit.h>
 
 #include "debug.h"
 #include "ntfs.h"

@@ -15,6 +15,7 @@
 #include <linux/of_net.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
+#include <linux/hrtimer.h>
 
 #define SC_PPE_RESET_DREQ		0x026C
 

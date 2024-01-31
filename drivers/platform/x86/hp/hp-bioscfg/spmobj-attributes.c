@@ -8,6 +8,8 @@
 
 #include "bioscfg.h"
 
+#include <linux/kobject.h>
+
 static const char * const spm_state_types[] = {
 	"not provisioned",
 	"provisioned",

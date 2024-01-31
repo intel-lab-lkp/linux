@@ -9,6 +9,7 @@
 #include <linux/ipv6.h>
 #include <net/ip6_checksum.h>
 #include <linux/bitfield.h>
+#include <linux/hrtimer.h>
 #include "rmnet_config.h"
 #include "rmnet_map.h"
 #include "rmnet_private.h"

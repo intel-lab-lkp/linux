@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/rtc.h>
 #include <linux/kdev_t.h>
+#include <linux/hrtimer.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>

@@ -3,6 +3,7 @@
 
 #include <linux/arm-smccc.h>
 #include <linux/kvm_host.h>
+#include <linux/ratelimit.h>
 
 #include <asm/kvm_emulate.h>
 

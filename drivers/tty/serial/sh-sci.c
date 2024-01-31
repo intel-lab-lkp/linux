@@ -48,6 +48,7 @@
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/hrtimer.h>
 
 #ifdef CONFIG_SUPERH
 #include <asm/sh_bios.h>

@@ -2,6 +2,7 @@
 /* Builtin firmware support */
 
 #include <linux/firmware.h>
+#include <linux/string.h> // for memcpy()
 #include "../firmware.h"
 
 /* Only if FW_LOADER=y */

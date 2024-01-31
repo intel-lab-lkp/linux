@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2005 - James Bottomley <James.Bottomley@steeleye.com>
  */
+
+#include <linux/device.h>
 #include <linux/transport_class.h>
 
 struct raid_template {

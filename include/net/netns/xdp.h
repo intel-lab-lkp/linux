@@ -2,6 +2,7 @@
 #ifndef __NETNS_XDP_H__
 #define __NETNS_XDP_H__
 
+#include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
 

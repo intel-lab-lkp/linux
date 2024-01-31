@@ -8,6 +8,7 @@
 #include <linux/pid.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 
 #include "sysfs-common.h"
 

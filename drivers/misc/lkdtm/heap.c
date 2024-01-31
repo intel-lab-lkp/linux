@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
+#include <linux/jiffies.h>
 
 static struct kmem_cache *double_free_cache;
 static struct kmem_cache *a_cache;

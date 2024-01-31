@@ -30,6 +30,7 @@
 #include <linux/sys_soc.h>
 #include <linux/dma/ti-cppi5.h>
 #include <linux/dma/k3-udma-glue.h>
+#include <linux/hrtimer.h>
 #include <net/switchdev.h>
 
 #include "cpsw_ale.h"

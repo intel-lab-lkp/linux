@@ -9,6 +9,7 @@
 #include <linux/irq.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
+#include <linux/ratelimit.h>
 #include <kvm/iodev.h>
 #include <kvm/arm_arch_timer.h>
 #include <kvm/arm_vgic.h>

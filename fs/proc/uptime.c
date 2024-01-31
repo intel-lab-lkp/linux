@@ -7,6 +7,7 @@
 #include <linux/time.h>
 #include <linux/time_namespace.h>
 #include <linux/kernel_stat.h>
+#include <linux/timekeeping.h> // for ktime_get_boottime_ts64()
 #include "internal.h"
 
 static int uptime_proc_show(struct seq_file *m, void *v)

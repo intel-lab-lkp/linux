@@ -26,6 +26,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio/consumer.h>
+#include <linux/hrtimer.h>
 
 #define MAX3420_MAX_EPS		4
 #define MAX3420_EP_MAX_PACKET		64  /* Same for all Endpoints */

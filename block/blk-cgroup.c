@@ -29,6 +29,7 @@
 #include <linux/resume_user_mode.h>
 #include <linux/psi.h>
 #include <linux/part_stat.h>
+#include <linux/hrtimer.h>
 #include "blk.h"
 #include "blk-cgroup.h"
 #include "blk-ioprio.h"

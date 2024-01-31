@@ -13,6 +13,7 @@
 #include <linux/numa.h>
 #include <linux/scs.h>
 #include <linux/plist.h>
+#include <linux/posix-timers.h> // for INIT_CPU_TIMERS()
 
 #include <linux/uaccess.h>
 

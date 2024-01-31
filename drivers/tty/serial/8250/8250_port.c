@@ -32,6 +32,7 @@
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
 #include <linux/ktime.h>
+#include <linux/hrtimer.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>

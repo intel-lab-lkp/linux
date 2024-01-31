@@ -2,6 +2,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/suspend.h>
 #include <linux/cpu.h>
+#include <linux/device.h>
 
 #include <asm/msr.h>
 #include <asm/mwait.h>

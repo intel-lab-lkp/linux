@@ -7,6 +7,7 @@
 
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/idr.h> // for struct ida
 #include <linux/uio.h>
 #include <linux/bug.h>
 #include <linux/scatterlist.h>

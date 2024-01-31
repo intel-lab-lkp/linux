@@ -26,6 +26,7 @@
 #include <linux/uaccess.h>
 #include <linux/dmi.h>
 #include <linux/kdebug.h>
+#include <linux/kobject.h>
 #include <linux/reboot.h>
 #include <linux/efi.h>
 #include <linux/module.h>

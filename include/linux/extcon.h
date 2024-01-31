@@ -19,6 +19,9 @@
 #define __LINUX_EXTCON_H__
 
 #include <linux/device.h>
+#include <linux/errno.h>
+#include <linux/notifier.h>
+#include <linux/types.h>
 
 /*
  * Define the type of supported external connectors

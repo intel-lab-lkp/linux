@@ -17,6 +17,10 @@
 #include <linux/hrtimer.h>
 #include <linux/completion.h>
 
+#ifdef CONFIG_PM_CLK
+#include <linux/mutex_types.h>
+#endif
+
 /*
  * Callbacks for platform drivers to implement.
  */

@@ -6,6 +6,7 @@
 
 #include <asm/barrier.h>
 #include <linux/err.h>
+#include <linux/idr.h> // for DEFINE_IDA
 #include <linux/hw_random.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>

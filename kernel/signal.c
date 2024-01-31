@@ -47,6 +47,7 @@
 #include <linux/cgroup.h>
 #include <linux/audit.h>
 #include <linux/sysctl.h>
+#include <linux/hrtimer.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/signal.h>

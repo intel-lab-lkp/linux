@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
+#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/sched.h>

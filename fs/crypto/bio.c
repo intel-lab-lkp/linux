@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/bio.h>
 #include <linux/namei.h>
+#include <linux/blkdev.h> // errno_to_blk_status()
 #include "fscrypt_private.h"
 
 /**

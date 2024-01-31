@@ -7,6 +7,7 @@
 #include <linux/file.h>
 #include <linux/blkdev.h>
 #include <linux/cdev.h>
+#include <linux/device.h>
 #include <linux/jiffies.h>
 #include <linux/percpu.h>
 #include <linux/idr.h>

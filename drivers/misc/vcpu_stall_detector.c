@@ -17,6 +17,7 @@
 #include <linux/percpu.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/hrtimer.h>
 
 #define VCPU_STALL_REG_STATUS		(0x00)
 #define VCPU_STALL_REG_LOAD_CNT		(0x04)

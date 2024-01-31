@@ -65,6 +65,7 @@
 #include <linux/bsearch.h>
 #include <linux/cpumask.h>
 #include <linux/crash_dump.h>
+#include <linux/device.h>
 #include <linux/kstrtox.h>
 #include <linux/sort.h>
 #include <linux/stop_machine.h>

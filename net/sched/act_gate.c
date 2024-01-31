@@ -10,6 +10,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/hrtimer.h>
 #include <net/act_api.h>
 #include <net/netlink.h>
 #include <net/pkt_cls.h>

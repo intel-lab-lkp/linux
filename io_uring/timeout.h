@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/hrtimer.h>
+
 struct io_timeout_data {
 	struct io_kiocb			*req;
 	struct hrtimer			timer;

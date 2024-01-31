@@ -10,6 +10,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/kobject_ns.h>
 #include <linux/magic.h>
 #include <linux/mount.h>
 #include <linux/init.h>

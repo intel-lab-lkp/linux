@@ -5,6 +5,8 @@
 
 #include "mt76x02_usb.h"
 
+#include <linux/hrtimer.h>
+
 static void mt76x02u_remove_dma_hdr(struct sk_buff *skb)
 {
 	int hdr_len;

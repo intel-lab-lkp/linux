@@ -16,6 +16,7 @@
 #include <linux/user_namespace.h>
 #include <linux/proc_ns.h>
 #include <linux/sched/task.h>
+#include <linux/workqueue.h>
 
 #include "util.h"
 

@@ -9,6 +9,7 @@
 
 #include <linux/cpufreq.h>
 #include <linux/module.h>
+#include <linux/sysfs.h>
 
 /*********************************************************************
  *                     FREQUENCY TABLE HELPERS                       *

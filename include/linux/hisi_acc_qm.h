@@ -5,6 +5,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/debugfs.h>
+#include <linux/idr.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/pci.h>

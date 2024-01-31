@@ -3,6 +3,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
+#include <linux/bvec.h>
 #include <linux/hdreg.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

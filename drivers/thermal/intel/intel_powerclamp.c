@@ -31,6 +31,7 @@
 #include <linux/thermal.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/sysfs.h>
 #include <linux/idle_inject.h>
 
 #include <asm/msr.h>

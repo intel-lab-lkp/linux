@@ -21,6 +21,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/chipidea.h>
 #include <linux/regulator/consumer.h>
+#include <linux/hrtimer.h>
 
 #include "ci.h"
 #include "bits.h"

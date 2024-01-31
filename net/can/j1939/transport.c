@@ -9,6 +9,7 @@
 //                         Oleksij Rempel <kernel@pengutronix.de>
 
 #include <linux/can/skb.h>
+#include <linux/hrtimer.h>
 
 #include "j1939-priv.h"
 

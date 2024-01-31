@@ -12,6 +12,7 @@
 #include <linux/spinlock.h>
 #include <linux/seqlock.h>
 #include <linux/gfp.h>
+#include <linux/irqflags.h> // for local_irq_save()
 
 /*
  * When maximum proportion of some event type is specified, this is the

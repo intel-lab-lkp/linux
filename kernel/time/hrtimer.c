@@ -39,6 +39,7 @@
 #include <linux/sched/nohz.h>
 #include <linux/sched/debug.h>
 #include <linux/timer.h>
+#include <linux/timerqueue.h>
 #include <linux/freezer.h>
 #include <linux/compat.h>
 

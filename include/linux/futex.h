@@ -4,6 +4,7 @@
 
 #include <linux/sched.h>
 #include <linux/ktime.h>
+#include <linux/mutex.h>
 
 #include <uapi/linux/futex.h>
 

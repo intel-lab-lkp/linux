@@ -8,6 +8,8 @@
 
 #include "xe_guc_ct_types.h"
 
+#include <linux/workqueue.h>
+
 struct drm_printer;
 
 int xe_guc_ct_init(struct xe_guc_ct *ct);

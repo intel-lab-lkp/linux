@@ -4,6 +4,7 @@
 
 #include <linux/percpu.h>
 #include <linux/hashtable.h>
+#include <linux/module.h>
 #include "blk-mq.h"
 
 struct io_cq;

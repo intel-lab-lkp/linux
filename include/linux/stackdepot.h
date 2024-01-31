@@ -21,6 +21,7 @@
 #define _LINUX_STACKDEPOT_H
 
 #include <linux/gfp.h>
+#include <linux/init.h>
 
 typedef u32 depot_stack_handle_t;
 

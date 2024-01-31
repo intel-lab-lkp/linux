@@ -11,6 +11,7 @@
 #include <linux/sched.h>
 #include <linux/cpu.h>
 #include <linux/crypto.h>
+#include <linux/gfp.h> // for free_pages()
 
 #include "zcomp.h"
 

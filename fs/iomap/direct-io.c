@@ -12,6 +12,7 @@
 #include <linux/backing-dev.h>
 #include <linux/uio.h>
 #include <linux/task_io_accounting_ops.h>
+#include <linux/blkdev.h>
 #include "trace.h"
 
 #include "../internal.h"

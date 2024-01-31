@@ -72,6 +72,7 @@
 #include <linux/io_uring/cmd.h>
 #include <linux/audit.h>
 #include <linux/security.h>
+#include <linux/hrtimer.h>
 #include <asm/shmparam.h>
 
 #define CREATE_TRACE_POINTS

@@ -193,6 +193,7 @@
 
 #include <linux/anon_inodes.h>
 #include <linux/nospec.h>
+#include <linux/ratelimit.h>
 #include <linux/sizes.h>
 #include <linux/uuid.h>
 

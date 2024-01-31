@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mm.h>

@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/rcupdate.h>
+#include <linux/refcount.h>
 
 #define	PADATA_WORK_ONSTACK	1	/* Work's memory is on stack */
 

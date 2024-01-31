@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/pm_runtime.h>
+#include <linux/ratelimit.h>
 #include <linux/reset.h>
 #include <linux/spi/spi.h>
 

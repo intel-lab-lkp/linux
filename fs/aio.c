@@ -45,6 +45,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/nospec.h>
+#include <linux/hrtimer.h>
 
 #include "internal.h"
 

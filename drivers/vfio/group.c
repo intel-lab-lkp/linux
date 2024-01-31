@@ -11,6 +11,7 @@
  */
 
 #include <linux/vfio.h>
+#include <linux/idr.h>
 #include <linux/iommufd.h>
 #include <linux/anon_inodes.h>
 #include "vfio.h"

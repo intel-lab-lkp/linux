@@ -39,6 +39,7 @@
 #include <linux/sched/wake_q.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/user.h>
+#include <linux/hrtimer.h>
 
 #include <net/sock.h>
 #include "util.h"

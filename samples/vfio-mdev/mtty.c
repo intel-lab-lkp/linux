@@ -20,6 +20,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/vfio.h>
+#include <linux/idr.h>
 #include <linux/iommu.h>
 #include <linux/sysfs.h>
 #include <linux/ctype.h>

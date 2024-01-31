@@ -9,6 +9,7 @@
 #include <linux/miscdevice.h>
 #include <linux/bitfield.h>
 #include <linux/pci-epf.h>
+#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>

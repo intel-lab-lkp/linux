@@ -17,6 +17,7 @@
 #include <linux/kobject.h>
 #include <linux/klist.h>
 #include <linux/pm.h>
+#include <linux/uidgid_types.h>
 #include <linux/device/bus.h>
 
 struct device;

@@ -41,6 +41,7 @@
 #include <linux/crash_dump.h>
 #include <linux/cpu.h>
 #include <linux/cpuhotplug.h>
+#include <linux/hrtimer.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>

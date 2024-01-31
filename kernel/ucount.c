@@ -7,6 +7,7 @@
 #include <linux/hash.h>
 #include <linux/kmemleak.h>
 #include <linux/user_namespace.h>
+#include <linux/uidgid.h>
 
 struct ucounts init_ucounts = {
 	.ns    = &init_user_ns,

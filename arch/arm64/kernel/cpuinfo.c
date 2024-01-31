@@ -23,6 +23,7 @@
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
+#include <linux/sysfs.h> // for __ATTR_RO()
 #include <linux/delay.h>
 
 /*

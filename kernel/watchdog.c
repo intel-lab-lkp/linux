@@ -23,6 +23,7 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 #include <linux/stop_machine.h>
+#include <linux/hrtimer.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>

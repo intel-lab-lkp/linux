@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/export.h>
 #include <linux/lockref.h>
+#include <linux/build_bug.h>
+#include <linux/spinlock.h>
 
 #if USE_CMPXCHG_LOCKREF
 

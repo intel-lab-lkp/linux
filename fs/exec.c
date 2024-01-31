@@ -67,6 +67,7 @@
 #include <linux/time_namespace.h>
 #include <linux/user_events.h>
 #include <linux/rseq.h>
+#include <linux/posix-timers.h> // for posix_cpu_timers_exit()
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>

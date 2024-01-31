@@ -15,6 +15,7 @@
 #include <linux/percpu.h>
 #include <linux/kthread.h>
 #include <linux/smpboot.h>
+#include <linux/topology.h> // for cpu_to_node()
 
 #include "smpboot.h"
 

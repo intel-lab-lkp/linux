@@ -9,6 +9,7 @@
 
 #include <linux/atomic.h>
 #include <linux/ctype.h>
+#include <linux/device.h>
 #include <linux/export.h>
 #include <linux/kexec.h>
 #include <linux/kmod.h>

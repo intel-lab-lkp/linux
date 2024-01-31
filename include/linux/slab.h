@@ -20,6 +20,7 @@
 #include <linux/percpu-refcount.h>
 #include <linux/cleanup.h>
 #include <linux/hash.h>
+#include <linux/mmzone.h>
 
 
 /*

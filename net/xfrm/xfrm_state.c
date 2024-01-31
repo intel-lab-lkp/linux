@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/hrtimer.h>
 
 #include <crypto/aead.h>
 

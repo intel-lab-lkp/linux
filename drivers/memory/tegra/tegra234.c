@@ -6,6 +6,7 @@
 #include <soc/tegra/mc.h>
 
 #include <dt-bindings/memory/tegra234-mc.h>
+#include <linux/device.h>
 #include <linux/interconnect.h>
 #include <linux/tegra-icc.h>
 

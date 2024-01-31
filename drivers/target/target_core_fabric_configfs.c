@@ -24,6 +24,7 @@
 #include <linux/unistd.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
+#include <linux/sysfs.h>
 #include <linux/configfs.h>
 
 #include <target/target_core_base.h>

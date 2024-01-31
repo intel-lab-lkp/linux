@@ -4,6 +4,7 @@
 #include <linux/sched/task.h>
 #include <linux/sched/signal.h>
 #include <linux/freezer.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 

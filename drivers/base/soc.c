@@ -13,6 +13,7 @@
 #include <linux/idr.h>
 #include <linux/spinlock.h>
 #include <linux/sys_soc.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/glob.h>
 

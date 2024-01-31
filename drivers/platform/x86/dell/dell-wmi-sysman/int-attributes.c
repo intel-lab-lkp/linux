@@ -8,6 +8,8 @@
 
 #include "dell-wmi-sysman.h"
 
+#include <linux/kobject.h>
+
 enum int_properties {MIN_VALUE = 6, MAX_VALUE, SCALAR_INCR};
 
 get_instance_id(integer);

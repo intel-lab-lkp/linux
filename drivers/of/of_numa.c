@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/nodemask.h>
+#include <linux/topology.h> // for LOCAL_DISTANCE
 
 #include <asm/numa.h>
 

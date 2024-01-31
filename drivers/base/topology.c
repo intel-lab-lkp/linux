@@ -10,8 +10,10 @@
  */
 #include <linux/mm.h>
 #include <linux/cpu.h>
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/hardirq.h>
+#include <linux/sysfs.h>
 #include <linux/topology.h>
 
 #define define_id_show_func(name, fmt)					\

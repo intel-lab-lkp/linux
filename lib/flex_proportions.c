@@ -34,6 +34,8 @@
  * which something happened with proportion of type j.
  */
 #include <linux/flex_proportions.h>
+#include <linux/math64.h>
+#include <linux/seqlock.h>
 
 int fprop_global_init(struct fprop_global *p, gfp_t gfp)
 {

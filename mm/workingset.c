@@ -11,6 +11,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/pagemap.h>
 #include <linux/atomic.h>
+#include <linux/list_lru.h>
 #include <linux/module.h>
 #include <linux/swap.h>
 #include <linux/dax.h>

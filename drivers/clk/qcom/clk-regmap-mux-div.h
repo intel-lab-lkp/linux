@@ -8,6 +8,7 @@
 #define __QCOM_CLK_REGMAP_MUX_DIV_H__
 
 #include <linux/clk-provider.h>
+#include <linux/notifier.h>
 #include "clk-regmap.h"
 
 /**

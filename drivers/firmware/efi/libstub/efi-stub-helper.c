@@ -9,6 +9,7 @@
 
 #include <linux/stdarg.h>
 
+#include <linux/ctype.h>
 #include <linux/efi.h>
 #include <linux/kernel.h>
 #include <asm/efi.h>

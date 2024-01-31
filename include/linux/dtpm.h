@@ -12,6 +12,8 @@
 #define MAX_DTPM_DESCR 8
 #define MAX_DTPM_CONSTRAINTS 1
 
+struct of_device_id;
+
 struct dtpm {
 	struct powercap_zone zone;
 	struct dtpm *parent;

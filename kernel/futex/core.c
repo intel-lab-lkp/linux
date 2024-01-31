@@ -38,6 +38,7 @@
 #include <linux/memblock.h>
 #include <linux/fault-inject.h>
 #include <linux/slab.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"

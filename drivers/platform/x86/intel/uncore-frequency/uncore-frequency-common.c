@@ -6,6 +6,7 @@
  *
  */
 #include <linux/cpu.h>
+#include <linux/idr.h>
 #include <linux/module.h>
 #include "uncore-frequency-common.h"
 

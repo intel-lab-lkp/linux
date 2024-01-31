@@ -7,6 +7,7 @@
 
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/device.h> // for devm_kzalloc()
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/export.h>

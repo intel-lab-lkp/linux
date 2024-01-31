@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/proc_fs.h>
 #include <linux/part_stat.h>
 

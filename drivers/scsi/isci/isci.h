@@ -57,6 +57,7 @@
 #define __ISCI_H__
 
 #include <linux/interrupt.h>
+#include <linux/timer.h>
 #include <linux/types.h>
 
 #define DRV_NAME "isci"

@@ -8,6 +8,8 @@
 
 #include "dell-wmi-sysman.h"
 
+#include <linux/kobject.h>
+
 enum string_properties {MIN_LEN = 6, MAX_LEN};
 
 get_instance_id(str);

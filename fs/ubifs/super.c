@@ -24,6 +24,7 @@
 #include <linux/mount.h>
 #include <linux/math64.h>
 #include <linux/writeback.h>
+#include <linux/hrtimer.h>
 #include "ubifs.h"
 
 static int ubifs_default_version_set(const char *val, const struct kernel_param *kp)

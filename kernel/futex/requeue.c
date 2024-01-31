@@ -2,6 +2,7 @@
 
 #include <linux/plist.h>
 #include <linux/sched/signal.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"

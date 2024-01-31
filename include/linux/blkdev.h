@@ -6,6 +6,7 @@
 #define _LINUX_BLKDEV_H
 
 #include <linux/types.h>
+#include <linux/fs.h> // for inode_unhashed()
 #include <linux/blk_types.h>
 #include <linux/device.h>
 #include <linux/list.h>
@@ -22,6 +23,7 @@
 #include <linux/blkzoned.h>
 #include <linux/sched.h>
 #include <linux/sbitmap.h>
+#include <linux/uio.h> // for iov_iter_is_aligned()
 #include <linux/uuid.h>
 #include <linux/xarray.h>
 

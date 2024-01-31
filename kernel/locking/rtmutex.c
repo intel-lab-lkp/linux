@@ -23,6 +23,7 @@
 #include <linux/sched/rt.h>
 #include <linux/sched/wake_q.h>
 #include <linux/ww_mutex.h>
+#include <linux/hrtimer.h>
 
 #include <trace/events/lock.h>
 

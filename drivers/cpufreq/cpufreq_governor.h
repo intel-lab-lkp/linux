@@ -18,6 +18,7 @@
 #include <linux/irq_work.h>
 #include <linux/cpufreq.h>
 #include <linux/sched/cpufreq.h>
+#include <linux/sysfs.h>
 #include <linux/kernel_stat.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

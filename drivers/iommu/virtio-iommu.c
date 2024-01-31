@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/dma-map-ops.h>
 #include <linux/freezer.h>
+#include <linux/idr.h>
 #include <linux/interval_tree.h>
 #include <linux/iommu.h>
 #include <linux/module.h>

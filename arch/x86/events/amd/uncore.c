@@ -13,6 +13,7 @@
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/cpufeature.h>
+#include <linux/device.h>
 #include <linux/smp.h>
 
 #include <asm/perf_event.h>

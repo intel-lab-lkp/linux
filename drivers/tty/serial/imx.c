@@ -27,6 +27,7 @@
 #include <linux/of.h>
 #include <linux/io.h>
 #include <linux/dma-mapping.h>
+#include <linux/hrtimer.h>
 
 #include <asm/irq.h>
 #include <linux/dma/imx-dma.h>

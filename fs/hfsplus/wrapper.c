@@ -10,6 +10,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/cdrom.h>
 #include <asm/unaligned.h>

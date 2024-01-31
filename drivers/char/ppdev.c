@@ -53,6 +53,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/sched/signal.h>
 #include <linux/device.h>

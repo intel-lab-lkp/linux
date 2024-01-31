@@ -11,6 +11,8 @@
  */
 
 #include <net/sock.h>
+#include <linux/hrtimer.h>
+#include <linux/kref.h>
 
 #include "j1939-priv.h"
 

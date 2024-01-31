@@ -6,6 +6,7 @@
 
 #include <linux/mdio-mux.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mux/consumer.h>
 #include <linux/platform_device.h>
 

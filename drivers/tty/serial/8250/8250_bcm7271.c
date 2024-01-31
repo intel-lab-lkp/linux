@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
+#include <linux/hrtimer.h>
 
 #include "8250.h"
 

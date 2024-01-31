@@ -70,6 +70,7 @@
 #include <linux/sysfs.h>
 #include <linux/user_events.h>
 #include <linux/uaccess.h>
+#include <linux/hrtimer.h>
 
 #include <uapi/linux/wait.h>
 

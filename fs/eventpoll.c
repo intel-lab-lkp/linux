@@ -37,6 +37,7 @@
 #include <linux/seq_file.h>
 #include <linux/compat.h>
 #include <linux/rculist.h>
+#include <linux/hrtimer.h>
 #include <net/busy_poll.h>
 
 /*

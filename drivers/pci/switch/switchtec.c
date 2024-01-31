@@ -7,6 +7,7 @@
 #include <linux/switchtec.h>
 #include <linux/switchtec_ioctl.h>
 
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/fs.h>

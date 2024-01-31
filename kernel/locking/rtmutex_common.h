@@ -14,6 +14,7 @@
 #define __KERNEL_RTMUTEX_COMMON_H
 
 #include <linux/debug_locks.h>
+#include <linux/rbtree.h>
 #include <linux/rtmutex.h>
 #include <linux/sched/wake_q.h>
 

@@ -23,6 +23,7 @@
 #include <net/ieee80211_radiotap.h>
 #include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
+#include <linux/hrtimer.h>
 #include <linux/etherdevice.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>

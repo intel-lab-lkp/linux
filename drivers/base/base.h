@@ -10,7 +10,12 @@
  * shared outside of the drivers/base/ directory.
  *
  */
+
+#include <linux/klist.h>
+#include <linux/kobject.h>
 #include <linux/notifier.h>
+#include <linux/device/bus.h>
+#include <linux/device/driver.h>
 
 /**
  * struct subsys_private - structure to hold the private to the driver core portions of the bus_type/class structure.

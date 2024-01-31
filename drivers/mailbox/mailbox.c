@@ -18,6 +18,7 @@
 #include <linux/mailbox_client.h>
 #include <linux/mailbox_controller.h>
 #include <linux/of.h>
+#include <linux/hrtimer.h>
 
 #include "mailbox.h"
 

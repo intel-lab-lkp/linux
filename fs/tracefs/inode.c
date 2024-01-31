@@ -21,6 +21,7 @@
 #include <linux/parser.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include "internal.h"
 
 #define TRACEFS_DEFAULT_MODE	0700

@@ -3,6 +3,7 @@
  * Copyright 2023 Ondrej Zary
  * based on paride.c by Grant R. Guenther <grant@torque.net>
  */
+#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/parport.h>

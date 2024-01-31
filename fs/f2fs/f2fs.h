@@ -16,6 +16,7 @@
 #include <linux/crc32.h>
 #include <linux/magic.h>
 #include <linux/kobject.h>
+#include <linux/radix-tree.h>
 #include <linux/sched.h>
 #include <linux/cred.h>
 #include <linux/sched/mm.h>

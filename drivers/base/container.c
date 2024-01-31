@@ -7,6 +7,7 @@
  */
 
 #include <linux/container.h>
+#include <linux/device.h>
 
 #include "base.h"
 

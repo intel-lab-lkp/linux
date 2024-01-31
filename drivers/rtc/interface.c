@@ -9,6 +9,7 @@
  */
 
 #include <linux/rtc.h>
+#include <linux/hrtimer.h>
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/log2.h>

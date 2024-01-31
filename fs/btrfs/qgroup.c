@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/btrfs.h>
+#include <linux/ratelimit.h>
 #include <linux/sched/mm.h>
 
 #include "ctree.h"

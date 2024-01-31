@@ -37,11 +37,13 @@
 #define pr_fmt(fmt) "xen-blkback: " fmt
 
 #include <linux/spinlock.h>
+#include <linux/highmem.h>
 #include <linux/kthread.h>
 #include <linux/list.h>
 #include <linux/delay.h>
 #include <linux/freezer.h>
 #include <linux/bitmap.h>
+#include <linux/bio.h>
 
 #include <xen/events.h>
 #include <xen/page.h>

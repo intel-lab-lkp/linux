@@ -8,6 +8,9 @@
 
 #include "bioscfg.h"
 
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+
 GET_INSTANCE_ID(password);
 /*
  * Clear all passwords copied to memory for a particular

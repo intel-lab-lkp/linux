@@ -13,6 +13,7 @@
 #include "lapic.h"
 
 #include <linux/eventfd.h>
+#include <linux/hrtimer.h>
 #include <linux/kvm_host.h>
 #include <linux/sched/stat.h>
 

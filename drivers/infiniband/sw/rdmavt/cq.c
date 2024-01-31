@@ -3,6 +3,7 @@
  * Copyright(c) 2016 - 2018 Intel Corporation.
  */
 
+#include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include "cq.h"

@@ -7,6 +7,8 @@
 #include <linux/rhashtable-types.h>
 #include <uapi/linux/ipc.h>
 #include <linux/refcount.h>
+#include <linux/cache.h> // for ____cacheline_aligned_in_smp
+#include <linux/compiler_types.h> // for __randomize_layout
 
 /* used by in-kernel data structures */
 struct kern_ipc_perm {

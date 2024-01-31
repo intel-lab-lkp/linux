@@ -5,6 +5,7 @@
 
 #include <linux/bitops.h>
 #include <linux/cpu.h>
+#include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/prctl.h>
@@ -13,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>
+#include <linux/sysfs.h>
 #include <linux/thread_info.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>

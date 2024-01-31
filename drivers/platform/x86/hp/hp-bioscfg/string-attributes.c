@@ -8,6 +8,9 @@
 
 #include "bioscfg.h"
 
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+
 #define WMI_STRING_TYPE "HPBIOS_BIOSString"
 
 GET_INSTANCE_ID(string);

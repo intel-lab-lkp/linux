@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/uaccess.h>
 #include <linux/file.h>
+#include <linux/hrtimer.h>
 
 static unsigned int time_secs;
 module_param(time_secs, uint, 0600);

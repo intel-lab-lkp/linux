@@ -39,6 +39,7 @@
 #include <linux/string.h>
 #include <linux/parser.h>
 #include <linux/random.h>
+#include <linux/kobject_ns.h>
 #include <linux/jiffies.h>
 #include <linux/lockdep.h>
 #include <linux/inet.h>

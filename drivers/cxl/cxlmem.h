@@ -7,6 +7,7 @@
 #include <linux/uuid.h>
 #include <linux/rcuwait.h>
 #include <linux/cxl-event.h>
+#include <linux/ioport.h>
 #include <linux/node.h>
 #include "cxl.h"
 

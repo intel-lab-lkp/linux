@@ -25,6 +25,7 @@
 #include <linux/of_device.h>
 #include <linux/sizes.h>
 #include <linux/kthread.h>
+#include <linux/hrtimer.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

@@ -30,6 +30,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/component.h>
+#include <linux/hrtimer.h>
 
 #include <video/omapfb_dss.h>
 #include <video/mipi_display.h>

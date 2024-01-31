@@ -15,6 +15,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/irqnr.h>
 #include <linux/time.h>

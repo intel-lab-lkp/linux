@@ -51,6 +51,7 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/bitops.h>
+#include <linux/device.h>
 #include <linux/nospec.h>
 #include <linux/regmap.h>
 #include "lm75.h"

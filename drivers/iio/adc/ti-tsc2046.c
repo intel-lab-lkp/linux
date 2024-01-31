@@ -11,6 +11,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/units.h>
+#include <linux/hrtimer.h>
 
 #include <asm/unaligned.h>
 

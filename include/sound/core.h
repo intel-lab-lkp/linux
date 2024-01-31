@@ -14,6 +14,7 @@
 #include <linux/pm.h>			/* pm_message_t */
 #include <linux/stringify.h>
 #include <linux/printk.h>
+#include <linux/wait.h>
 #include <linux/xarray.h>
 
 /* number of supported soundcards */

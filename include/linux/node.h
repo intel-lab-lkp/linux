@@ -18,6 +18,8 @@
 #include <linux/device.h>
 #include <linux/cpumask.h>
 #include <linux/list.h>
+#include <linux/mmzone.h> // for enum meminit_context
+#include <linux/nodemask.h> // for node_online()
 
 /**
  * struct access_coordinate - generic performance coordinates container

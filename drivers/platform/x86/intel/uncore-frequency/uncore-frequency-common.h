@@ -10,6 +10,7 @@
 #define __INTEL_UNCORE_FREQ_COMMON_H
 
 #include <linux/device.h>
+#include <linux/kobject.h>
 
 /**
  * struct uncore_data - Encapsulate all uncore data

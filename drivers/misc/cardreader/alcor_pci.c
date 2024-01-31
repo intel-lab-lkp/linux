@@ -6,6 +6,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>

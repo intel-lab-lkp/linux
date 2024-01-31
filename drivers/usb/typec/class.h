@@ -4,6 +4,7 @@
 #define __USB_TYPEC_CLASS__
 
 #include <linux/device.h>
+#include <linux/idr.h>
 #include <linux/usb/typec.h>
 
 struct typec_mux;
