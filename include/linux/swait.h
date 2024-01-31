@@ -2,6 +2,7 @@
 #ifndef _LINUX_SWAIT_H
 #define _LINUX_SWAIT_H
 
+#include <linux/swait_types.h>
 #include <linux/list.h>
 #include <linux/stddef.h>
 #include <linux/spinlock_types.h>
@@ -36,18 +37,6 @@
  * very specific realtime constraints -- it is best to stick with the regular
  * wait queues in most cases.
  */
-
-struct task_struct;
-
-struct swait_queue_head {
-	raw_spinlock_t		lock;
-	struct list_head	task_list;
-};
-
-struct swait_queue {
-	struct task_struct	*task;
-	struct list_head	task_list;
-};
 
 #define __SWAITQUEUE_INITIALIZER(name) {				\
 	.task		= current,					\
