@@ -16,6 +16,7 @@
 #include <linux/uts.h>
 #include <linux/utsname.h>
 #include <linux/proc_ns.h>
+#include <generated/utsrelease.h>
 
 static int __init early_hostname(char *arg)
 {
@@ -48,6 +49,8 @@ BUILD_LTO_INFO;
 
 struct uts_namespace init_uts_ns __weak;
 const char linux_banner[] __weak;
+const char uts_release[] = UTS_RELEASE;
+EXPORT_SYMBOL_GPL(uts_release);
 
 #include "version-timestamp.c"
 

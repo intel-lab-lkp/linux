@@ -88,5 +88,6 @@ static inline struct new_utsname *init_utsname(void)
 }
 
 extern struct rw_semaphore uts_sem;
+extern const char uts_release[];
 
 #endif /* _LINUX_UTSNAME_H */
