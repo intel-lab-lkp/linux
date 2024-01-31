@@ -145,6 +145,32 @@ pub trait Driver {
     const IOCTLS: &'static [drm::ioctl::DrmIoctlDescriptor];
 }
 
+/// The struct which contains both the driver's fops and vtable
+///
+/// These live in the same structure since it needs to be self-referential, so having them in their
+/// own structure allows us to pin this struct without pinning the [`Registration`] object
+#[pin_data]
+pub struct DriverOps {
+    #[pin]
+    fops: bindings::file_operations,
+    #[pin]
+    vtable: bindings::drm_driver,
+}
+
+impl DriverOps {
+    fn try_new(vtable: bindings::drm_driver, module: &'static ThisModule) -> Result<Pin<Box<Self>>> {
+        let mut this = Pin::new(Box::try_new(Self {
+            fops: drm::gem::create_fops(),
+            vtable
+        })?);
+
+        this.fops.owner = module.0;
+        this.vtable.fops = &this.fops;
+
+        Ok(this)
+    }
+}
+
 /// A registration of a DRM device
 ///
 /// # Invariants:
@@ -153,8 +179,8 @@ pub trait Driver {
 pub struct Registration<T: Driver> {
     drm: ARef<drm::device::Device<T>>,
     registered: bool,
-    fops: bindings::file_operations,
-    vtable: Pin<Box<bindings::drm_driver>>,
+    #[allow(dead_code)]
+    ops: Pin<Box<DriverOps>>,
     _p: PhantomData<T>,
     _pin: PhantomPinned,
 }
@@ -188,6 +214,19 @@ macro_rules! drm_legacy_fields {
             $( $field: $val ),*
         }
     }
+}
+
+/// Creates a Registration object which can later be used to register a DRM device with the rest of
+/// the kernel.
+///
+/// It automatically picks up THIS_MODULE. Note that this macro does not register the device yet,
+/// use [`drm_device_register!()`] for that.
+#[allow(clippy::crate_in_macro_def)]
+#[macro_export]
+macro_rules! new_drm_registration {
+    ($type:ty, $parent:expr) => {{
+        $crate::drm::drv::Registration::<$type>::new($parent, &crate::THIS_MODULE)
+    }};
 }
 
 /// Registers a DRM device with the rest of the kernel.
@@ -237,9 +276,13 @@ impl<T: Driver> Registration<T> {
     /// Creates a new [`Registration`] but does not register it yet.
     ///
     /// It is allowed to move.
-    pub fn new(parent: &dyn device::RawDevice) -> Result<Self> {
-        let vtable = Pin::new(Box::try_new(Self::VTABLE)?);
-        let raw_drm = unsafe { bindings::drm_dev_alloc(&*vtable, parent.raw_device()) };
+    pub fn new(
+        parent: &dyn device::RawDevice,
+        module: &'static ThisModule,
+    ) -> Result<Self> {
+        let ops = DriverOps::try_new(Self::VTABLE, module)?;
+
+        let raw_drm = unsafe { bindings::drm_dev_alloc(&ops.vtable, parent.raw_device()) };
         let raw_drm = NonNull::new(from_err_ptr(raw_drm)? as *mut _).ok_or(ENOMEM)?;
 
         // The reference count is one, and now we take ownership of that reference as a
@@ -249,8 +292,7 @@ impl<T: Driver> Registration<T> {
         Ok(Self {
             drm,
             registered: false,
-            vtable,
-            fops: drm::gem::create_fops(),
+            ops,
             _pin: PhantomPinned,
             _p: PhantomData,
         })
@@ -264,7 +306,7 @@ impl<T: Driver> Registration<T> {
         self: Pin<&mut Self>,
         data: T::Data,
         flags: usize,
-        module: &'static ThisModule,
+        _module: &'static ThisModule,
     ) -> Result {
         if self.registered {
             // Already registered.
@@ -278,8 +320,6 @@ impl<T: Driver> Registration<T> {
         // mutable reference.
         unsafe { this.drm.raw_mut() }.dev_private = data_pointer as *mut _;
 
-        this.fops.owner = module.0;
-        this.vtable.fops = &this.fops;
 
         // SAFETY: The device is now initialized and ready to be registered.
         let ret = unsafe { bindings::drm_dev_register(this.drm.raw_mut(), flags as u64) };
