@@ -836,7 +836,6 @@
 	bootph-all;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sd_pins_default>;
-
 	vmmc-supply = <&vdd_3v3_sd>;
 	vqmmc-supply = <&vdd_sd_dv>;
 	disable-wp;
@@ -850,7 +849,6 @@
 	vmmc-supply = <&wlan_en>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&wifi_pins_default>, <&wifi_32k_clk>;
-	bus-width = <4>;
 	non-removable;
 	ti,fails-without-test-cd;
 	cap-power-off-card;

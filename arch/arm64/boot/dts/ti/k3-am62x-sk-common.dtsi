@@ -407,10 +407,12 @@
 };
 
 &sdhci0 {
+	/* eMMC */
 	bootph-all;
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&main_mmc0_pins_default>;
+	non-removable;
 	disable-wp;
 };
 
