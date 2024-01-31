@@ -8,7 +8,7 @@
 #ifndef _LINUX_PM_CLOCK_H
 #define _LINUX_PM_CLOCK_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/notifier.h>
 
 struct pm_clk_notifier_block {

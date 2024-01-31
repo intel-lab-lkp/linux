@@ -4,6 +4,7 @@
  * Author: Tomi Valkeinen <tomi.valkeinen@ti.com>
  */
 
+#include <linux/device.h> // for dev_dbg()
 #include <linux/export.h>
 
 #include <drm/drm_atomic_helper.h>

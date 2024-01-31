@@ -5,6 +5,7 @@
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/blkdev.h>
+#include <linux/device.h>
 #include <linux/kobject.h>
 #include "blk.h"
 

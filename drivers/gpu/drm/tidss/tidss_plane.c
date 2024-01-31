@@ -11,6 +11,7 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
+#include <linux/device.h> // for dev_dbg()
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"

@@ -3,7 +3,7 @@
 #ifndef _LINUX_FPGA_BRIDGE_H
 #define _LINUX_FPGA_BRIDGE_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/fpga/fpga-mgr.h>
 
 struct fpga_bridge;

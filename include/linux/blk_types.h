@@ -8,7 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/bvec_types.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/ktime.h>
 
 struct bio_set;

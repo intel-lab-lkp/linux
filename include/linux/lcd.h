@@ -9,7 +9,7 @@
 #ifndef _LINUX_LCD_H
 #define _LINUX_LCD_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
 #include <linux/fb.h>

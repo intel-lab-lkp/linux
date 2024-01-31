@@ -9,6 +9,7 @@
 #include <linux/major.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
+#include <linux/device.h>
 #include <linux/vmalloc.h>
 #include <linux/raid/detect.h>
 #include "check.h"

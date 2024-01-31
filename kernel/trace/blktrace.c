@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
+#include <linux/device.h>
 #include <linux/export.h>
 #include <linux/time.h>
 #include <linux/uaccess.h>

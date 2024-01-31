@@ -7,7 +7,7 @@
 #define _COUNTER_H_
 
 #include <linux/cdev.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/kernel.h>
 #include <linux/kfifo.h>
 #include <linux/mutex_types.h>

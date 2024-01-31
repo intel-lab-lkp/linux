@@ -14,7 +14,7 @@
 #include <linux/mutex_types.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/workqueue_types.h>
 
 /**

@@ -2,6 +2,7 @@
 #ifndef _SCSI_SCSI_DEVICE_H
 #define _SCSI_SCSI_DEVICE_H
 
+#include <linux/device.h> // for device_reprobe()
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
 #include <linux/workqueue_types.h>

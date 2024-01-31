@@ -6,7 +6,7 @@
 #ifndef __LINUX_W1_H
 #define __LINUX_W1_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 
 /**
  * struct w1_reg_num - broken out slave device id

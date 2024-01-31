@@ -7,7 +7,7 @@
 #ifndef _INDUSTRIAL_IO_H_
 #define _INDUSTRIAL_IO_H_
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/slab.h>

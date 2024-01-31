@@ -7,7 +7,7 @@
 #ifndef __POWERCAP_H__
 #define __POWERCAP_H__
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/idr.h>
 
 /*

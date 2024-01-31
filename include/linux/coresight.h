@@ -8,7 +8,7 @@
 
 #include <linux/amba/bus.h>
 #include <linux/clk.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/io.h>
 #include <linux/perf_event.h>
 #include <linux/sched.h>

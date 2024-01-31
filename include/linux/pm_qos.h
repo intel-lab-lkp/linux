@@ -14,7 +14,7 @@
 
 #include <linux/plist.h>
 #include <linux/notifier.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 
 enum pm_qos_flags_status {
 	PM_QOS_FLAGS_UNDEFINED = -1,

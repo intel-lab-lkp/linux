@@ -13,6 +13,8 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_writeback.h>
 
+#include <linux/device.h> // for dev_dbg()
+
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
 #include "rcar_du_kms.h"

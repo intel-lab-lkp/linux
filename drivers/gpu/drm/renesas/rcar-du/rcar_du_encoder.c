@@ -7,6 +7,7 @@
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  */
 
+#include <linux/device.h> // for dev_dbg()
 #include <linux/export.h>
 #include <linux/of.h>
 

@@ -8,7 +8,7 @@
 #include <linux/types.h>
 #include <linux/fs.h> // for inode_unhashed()
 #include <linux/blk_types.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/list.h>
 #include <linux/minmax.h>
 #include <linux/timer_types.h>

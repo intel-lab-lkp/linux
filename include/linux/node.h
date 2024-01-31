@@ -15,7 +15,7 @@
 #ifndef _LINUX_NODE_H_
 #define _LINUX_NODE_H_
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/cpumask.h>
 #include <linux/list.h>
 #include <linux/mmzone.h> // for enum meminit_context

@@ -5,7 +5,7 @@
 #ifndef LINUX_DMAENGINE_H
 #define LINUX_DMAENGINE_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/err.h>
 #include <linux/idr.h> // for struct ida
 #include <linux/uio.h>
