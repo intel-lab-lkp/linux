@@ -13,6 +13,7 @@
 #include <linux/uio.h>
 #include <linux/dax.h>
 #include <linux/fs.h>
+#include <linux/cacheinfo.h>
 #include "dax-private.h"
 
 /**
@@ -446,9 +447,7 @@ struct dax_device *alloc_dax(void *private, const struct dax_operations *ops)
 	int minor;
 
 	/* Unavailable on architectures with virtually aliased data caches. */
-	if (IS_ENABLED(CONFIG_ARM) ||
-	    IS_ENABLED(CONFIG_MIPS) ||
-	    IS_ENABLED(CONFIG_SPARC))
+	if (cpu_dcache_is_aliasing())
 		return NULL;
 
 	if (WARN_ON_ONCE(ops && !ops->zero_page_range))
