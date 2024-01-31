@@ -43,6 +43,12 @@ properties:
       - const: arm,coresight-stm
       - const: arm,primecell
 
+  device-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      device is for.
+
   reg:
     maxItems: 2
 

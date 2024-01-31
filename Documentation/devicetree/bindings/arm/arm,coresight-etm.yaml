@@ -60,6 +60,12 @@ properties:
           Embedded Trace Macrocell (version 4.x), with system register access only
         const: arm,coresight-etm4x-sysreg
 
+  device-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      device is for.
+
   reg:
     maxItems: 1
 

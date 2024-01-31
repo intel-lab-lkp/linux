@@ -54,6 +54,12 @@ properties:
       - const: qcom,coresight-tpda
       - const: arm,primecell
 
+  device-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      device is for.
+
   reg:
     minItems: 1
     maxItems: 2

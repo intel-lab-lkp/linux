@@ -27,6 +27,12 @@ properties:
   compatible:
     const: arm,coresight-static-replicator
 
+  device-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      device is for.
+
   power-domains:
     maxItems: 1
 
