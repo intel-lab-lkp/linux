@@ -647,25 +647,12 @@ static void s_mode_stop(struct seq_file *s, void *v)
 	mutex_unlock(&hwlat_data.lock);
 }
 
-static const struct seq_operations thread_mode_seq_ops = {
-	.start		= s_mode_start,
-	.next		= s_mode_next,
-	.show		= s_mode_show,
-	.stop		= s_mode_stop
-};
-
-static int hwlat_mode_open(struct inode *inode, struct file *file)
-{
-	return seq_open(file, &thread_mode_seq_ops);
-};
-
 static void hwlat_tracer_start(struct trace_array *tr);
 static void hwlat_tracer_stop(struct trace_array *tr);
 
 /**
  * hwlat_mode_write - Write function for "mode" entry
  * @filp: The active open file structure
- * @ubuf: The user buffer that contains the value to write
  * @cnt: The maximum number of bytes to write to "file"
  * @ppos: The current position in @file
  *
@@ -677,8 +664,8 @@ static void hwlat_tracer_stop(struct trace_array *tr);
  * among the allowed CPUs in a round-robin fashion. The "per-cpu" mode
  * creates one hwlatd thread per allowed CPU.
  */
-static ssize_t hwlat_mode_write(struct file *filp, const char __user *ubuf,
-				 size_t cnt, loff_t *ppos)
+static ssize_t hwlat_mode_write(struct kernfs_open_file *of, char *buf,
+				size_t cnt, loff_t ppos)
 {
 	struct trace_array *tr = hwlat_trace;
 	const char *mode;
@@ -687,9 +674,6 @@ static ssize_t hwlat_mode_write(struct file *filp, const char __user *ubuf,
 
 	if (cnt >= sizeof(buf))
 		return -EINVAL;
-
-	if (copy_from_user(buf, ubuf, cnt))
-		return -EFAULT;
 
 	buf[cnt] = 0;
 
@@ -720,10 +704,6 @@ static ssize_t hwlat_mode_write(struct file *filp, const char __user *ubuf,
 		hwlat_tracer_start(tr);
 	mutex_unlock(&trace_types_lock);
 
-	*ppos += cnt;
-
-
-
 	return ret;
 }
 
@@ -751,12 +731,13 @@ static struct trace_min_max_param hwlat_window = {
 	.min		= &hwlat_data.sample_width,
 };
 
-static const struct file_operations thread_mode_fops = {
-	.open		= hwlat_mode_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
-	.write		= hwlat_mode_write
+static const struct kernfs_ops thread_mode_fops = {
+	.atomic_write_len	= PAGE_SIZE,
+	.start			= s_mode_start,
+	.next			= s_mode_next,
+	.show			= s_mode_show,
+	.stop			= s_mode_stop,
+	.write			= hwlat_mode_write,
 };
 /**
  * init_tracefs - A function to initialize the tracefs interface files
