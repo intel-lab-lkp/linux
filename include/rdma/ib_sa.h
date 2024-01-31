@@ -8,7 +8,7 @@
 #ifndef IB_SA_H
 #define IB_SA_H
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/compiler.h>
 
 #include <linux/atomic.h>

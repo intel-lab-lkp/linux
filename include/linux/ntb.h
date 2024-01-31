@@ -56,7 +56,7 @@
 #ifndef _NTB_H_
 #define _NTB_H_
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 

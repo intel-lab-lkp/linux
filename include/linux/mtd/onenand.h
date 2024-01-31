@@ -10,7 +10,7 @@
 #define __LINUX_MTD_ONENAND_H
 
 #include <linux/spinlock_types.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/mtd/flashchip.h>
 #include <linux/mtd/onenand_regs.h>
 #include <linux/mtd/bbm.h>

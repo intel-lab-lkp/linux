@@ -14,7 +14,7 @@
 #include <linux/spinlock_types.h>
 #include <linux/wait_types.h>
 #include <linux/hrtimer_types.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 
 #ifdef CONFIG_PM_CLK
 #include <linux/mutex_types.h>

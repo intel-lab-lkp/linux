@@ -12,7 +12,7 @@
 #ifndef LINUX_HWRANDOM_H_
 #define LINUX_HWRANDOM_H_
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/kref_types.h>

@@ -6,7 +6,7 @@
  *                         Cirrus Logic International Semiconductor Ltd.
  */
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/mutex_types.h>

@@ -9,7 +9,7 @@
 #ifndef __OPERATION_H
 #define __OPERATION_H
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/kref_types.h>
 #include <linux/timer_types.h>
 #include <linux/types.h>

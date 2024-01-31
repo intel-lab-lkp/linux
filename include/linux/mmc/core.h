@@ -5,7 +5,7 @@
 #ifndef LINUX_MMC_CORE_H
 #define LINUX_MMC_CORE_H
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/types.h>
 
 struct mmc_data;

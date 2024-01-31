@@ -7,7 +7,7 @@
 #include <linux/sbitmap.h>
 #include <linux/percpu-refcount.h>
 #include <linux/semaphore.h>     /* struct semaphore */
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 
 #define TARGET_CORE_VERSION		"v5.0"
 
