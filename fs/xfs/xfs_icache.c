@@ -1876,7 +1876,12 @@ xfs_inodegc_worker(
 	llist_for_each_entry_safe(ip, n, node, i_gclist) {
 		int	error;
 
-		xfs_iflags_set(ip, XFS_INACTIVATING);
+		/* Switch state to inactivating. */
+		spin_lock(&ip->i_flags_lock);
+		ip->i_flags |= XFS_INACTIVATING;
+		ip->i_flags &= ~XFS_NEED_INACTIVE;
+		spin_unlock(&ip->i_flags_lock);
+
 		error = xfs_inodegc_inactivate(ip);
 		if (error && !gc->error)
 			gc->error = error;
@@ -2069,9 +2074,13 @@ xfs_inodegc_queue(
 	unsigned long		queue_delay = 1;
 
 	trace_xfs_inode_set_need_inactive(ip);
+
+	/*
+	 * Put the addition of the inode to the gc list under the
+	 * ip->i_flags_lock so that the state change and list addition are
+	 * atomic w.r.t. lookup operations under the ip->i_flags_lock.
+	 */
 	spin_lock(&ip->i_flags_lock);
-	ip->i_flags |= XFS_NEED_INACTIVE;
-	spin_unlock(&ip->i_flags_lock);
 
 	cpu_nr = get_cpu();
 	gc = this_cpu_ptr(mp->m_inodegc);
@@ -2079,6 +2088,9 @@ xfs_inodegc_queue(
 	items = READ_ONCE(gc->items);
 	WRITE_ONCE(gc->items, items + 1);
 	shrinker_hits = READ_ONCE(gc->shrinker_hits);
+
+	ip->i_flags |= XFS_NEED_INACTIVE;
+	spin_unlock(&ip->i_flags_lock);
 
 	/*
 	 * Ensure the list add is always seen by anyone who finds the cpumask
