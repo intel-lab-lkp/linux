@@ -18,12 +18,14 @@ struct device;
 
 struct sdsi_priv {
 	struct mutex			mb_lock;	/* Mailbox access lock */
+	struct mutex			meter_lock;
 	struct device			*dev;
 	struct intel_vsec_device	*ivdev;
 	struct list_head		node;
 	void __iomem			*control_addr;
 	void __iomem			*mbox_addr;
 	void __iomem			*regs_addr;
+	u64				control_flags;
 	int				control_size;
 	int				maibox_size;
 	int				registers_size;
