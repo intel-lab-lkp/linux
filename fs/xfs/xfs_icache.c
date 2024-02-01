@@ -1878,15 +1878,23 @@ xfs_inodegc_worker(
 		int	error;
 
 		/*
-		 * Switch state to inactivating and remove the inode from the
-		 * gclist. This allows the use of llist_on_list() in the queuing
-		 * code to determine if the inode is already on an inodegc
-		 * queue.
+		 * Remove the inode from the gclist and determine if it needs to
+		 * be processed. The XFS_NEED_INACTIVE flag gets cleared if the
+		 * inode is reactivated after queuing, but the list removal is
+		 * lazy and left up to us.
+		 *
+		 * We always remove the inode from the list to allow the use of
+		 * llist_on_list() in the queuing code to determine if the inode
+		 * is already on an inodegc queue.
 		 */
 		spin_lock(&ip->i_flags_lock);
+		init_llist_node(&ip->i_gclist);
+		if (!(ip->i_flags & XFS_NEED_INACTIVE)) {
+			spin_unlock(&ip->i_flags_lock);
+			continue;
+		}
 		ip->i_flags |= XFS_INACTIVATING;
 		ip->i_flags &= ~XFS_NEED_INACTIVE;
-		init_llist_node(&ip->i_gclist);
 		spin_unlock(&ip->i_flags_lock);
 
 		error = xfs_inodegc_inactivate(ip);
@@ -2154,7 +2162,6 @@ xfs_inode_mark_reclaimable(
 	struct xfs_inode	*ip)
 {
 	struct xfs_mount	*mp = ip->i_mount;
-	bool			need_inactive;
 
 	XFS_STATS_INC(mp, vn_reclaim);
 
@@ -2163,8 +2170,23 @@ xfs_inode_mark_reclaimable(
 	 */
 	ASSERT_ALWAYS(!xfs_iflags_test(ip, XFS_ALL_IRECLAIM_FLAGS));
 
-	need_inactive = xfs_inode_needs_inactive(ip);
-	if (need_inactive) {
+	/*
+	 * If the inode is already queued for inactivation because it was
+	 * re-activated and is now being reclaimed again (e.g. fs has been
+	 * frozen for a while) we must ensure that the inode waits for inodegc
+	 * to be run and removes it from the inodegc queue before it moves to
+	 * the reclaimable state and gets freed.
+	 *
+	 * We don't care about races here. We can't race with a list addition
+	 * because only one thread can be evicting the inode from the VFS cache,
+	 * hence false negatives can't occur and we only need to worry about
+	 * list removal races.  If we get a false positive from a list removal
+	 * race, then the inode goes through the inactive list whether it needs
+	 * to or not. This will slow down reclaim of this inode slightly but
+	 * should have no other side effects.
+	 */
+	if (llist_on_list(&ip->i_gclist) ||
+	    xfs_inode_needs_inactive(ip)) {
 		xfs_inodegc_queue(ip);
 		return;
 	}
