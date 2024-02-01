@@ -114,6 +114,7 @@ xfs_inode_alloc(
 	spin_lock_init(&ip->i_ioend_lock);
 	ip->i_next_unlinked = NULLAGINO;
 	ip->i_prev_unlinked = 0;
+	init_llist_node(&ip->i_gclist);
 
 	return ip;
 }
@@ -1876,10 +1877,16 @@ xfs_inodegc_worker(
 	llist_for_each_entry_safe(ip, n, node, i_gclist) {
 		int	error;
 
-		/* Switch state to inactivating. */
+		/*
+		 * Switch state to inactivating and remove the inode from the
+		 * gclist. This allows the use of llist_on_list() in the queuing
+		 * code to determine if the inode is already on an inodegc
+		 * queue.
+		 */
 		spin_lock(&ip->i_flags_lock);
 		ip->i_flags |= XFS_INACTIVATING;
 		ip->i_flags &= ~XFS_NEED_INACTIVE;
+		init_llist_node(&ip->i_gclist);
 		spin_unlock(&ip->i_flags_lock);
 
 		error = xfs_inodegc_inactivate(ip);
@@ -2076,11 +2083,20 @@ xfs_inodegc_queue(
 	trace_xfs_inode_set_need_inactive(ip);
 
 	/*
-	 * Put the addition of the inode to the gc list under the
+	 * The addition of the inode to the gc list is done under the
 	 * ip->i_flags_lock so that the state change and list addition are
 	 * atomic w.r.t. lookup operations under the ip->i_flags_lock.
+	 * The removal is also done under the ip->i_flags_lock and so this
+	 * allows us to safely use llist_on_list() here to determine if the
+	 * inode is already queued on an inactivation queue.
 	 */
 	spin_lock(&ip->i_flags_lock);
+	ip->i_flags |= XFS_NEED_INACTIVE;
+
+	if (llist_on_list(&ip->i_gclist)) {
+		spin_unlock(&ip->i_flags_lock);
+		return;
+	}
 
 	cpu_nr = get_cpu();
 	gc = this_cpu_ptr(mp->m_inodegc);
@@ -2089,7 +2105,6 @@ xfs_inodegc_queue(
 	WRITE_ONCE(gc->items, items + 1);
 	shrinker_hits = READ_ONCE(gc->shrinker_hits);
 
-	ip->i_flags |= XFS_NEED_INACTIVE;
 	spin_unlock(&ip->i_flags_lock);
 
 	/*
