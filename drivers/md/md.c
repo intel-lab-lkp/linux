@@ -7636,11 +7636,9 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	 * Commands dealing with the RAID driver but not any
 	 * particular array:
 	 */
-	switch (cmd) {
-	case RAID_VERSION:
+	if (cmd == RAID_VERSION) {
 		err = get_version(argp);
 		goto out;
-	default:;
 	}
 
 	/*
