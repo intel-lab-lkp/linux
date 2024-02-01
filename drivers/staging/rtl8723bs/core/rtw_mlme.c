@@ -1498,30 +1498,25 @@ void _rtw_join_timeout_handler(struct timer_list *t)
 
 	spin_lock_bh(&pmlmepriv->lock);
 
-	if (rtw_to_roam(adapter) > 0) { /* join timeout caused by roaming */
+	if (rtw_to_roam(adapter) == 0) {
+		rtw_indicate_disconnect(adapter);
+		free_scanqueue(pmlmepriv);
+		/* indicate disconnect for the case that join_timeout
+		 * and check_fwstate != FW_LINKED
+		 */
+		rtw_cfg80211_indicate_disconnect(adapter);
+	} else { /* join timeout caused by roaming */
 		while (1) {
 			rtw_dec_to_roam(adapter);
-			if (rtw_to_roam(adapter) != 0) { /* try another */
-				int do_join_r;
-
-				do_join_r = rtw_do_join(adapter);
-				if (do_join_r != _SUCCESS)
-					continue;
-
-				break;
-			} else {
+			if (rtw_to_roam(adapter) == 0) {
 				rtw_indicate_disconnect(adapter);
 				break;
+			} else if (rtw_do_join(adapter) != _SUCCESS) { /* try another */
+				continue;
 			}
+
+			break;
 		}
-
-	} else {
-		rtw_indicate_disconnect(adapter);
-		free_scanqueue(pmlmepriv);/*  */
-
-		/* indicate disconnect for the case that join_timeout and check_fwstate != FW_LINKED */
-		rtw_cfg80211_indicate_disconnect(adapter);
-
 	}
 
 	spin_unlock_bh(&pmlmepriv->lock);
@@ -2052,12 +2047,9 @@ signed int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, u
 	}
 
 	iEntry = SecIsInPMKIDList(adapter, pmlmepriv->assoc_bssid);
-	if (iEntry < 0) {
-		return ielength;
-	} else {
-		if (authmode == WLAN_EID_RSN)
-			ielength = rtw_append_pmkid(adapter, iEntry, out_ie, ielength);
-	}
+	if (iEntry > 0 && authmode == WLAN_EID_RSN)
+		ielength = rtw_append_pmkid(adapter, iEntry, out_ie, ielength);
+
 	return ielength;
 }
 
