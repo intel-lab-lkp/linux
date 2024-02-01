@@ -95,6 +95,22 @@ impl Device {
         unsafe { (*phydev).phy_id }
     }
 
+    /// Gets the current crossover of the PHY.
+    pub fn mdix(&self) -> u8 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).mdix }
+    }
+
+    /// Gets the speed of the PHY.
+    pub fn speed(&mut self) -> u32 {
+        let phydev = self.0.get();
+        // SAFETY: The struct invariant ensures that we may access
+        // this field without additional synchronization.
+        unsafe { (*phydev).speed as u32 }
+    }
+
     /// Gets the state of PHY state machine states.
     pub fn state(&self) -> DeviceState {
         let phydev = self.0.get();
@@ -299,6 +315,15 @@ impl Device {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
         to_result(unsafe { bindings::genphy_read_abilities(phydev) })
+    }
+
+    /// Writes BMCR
+    pub fn genphy_config_aneg(&mut self) -> Result {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        // second param = false => autoneg not requested
+        to_result(unsafe { bindings::__genphy_config_aneg(phydev, false) })
     }
 }
 
@@ -580,6 +605,12 @@ pub trait Driver {
 
     /// Issues a PHY software reset.
     fn soft_reset(_dev: &mut Device) -> Result {
+        Err(code::ENOTSUPP)
+    }
+
+    /// Called to initialize the PHY,
+    /// including after a reset
+    fn config_init(_dev: &mut Device) -> Result {
         Err(code::ENOTSUPP)
     }
 
