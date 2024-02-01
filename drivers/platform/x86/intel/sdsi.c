@@ -11,6 +11,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
@@ -34,6 +35,7 @@
 
 #define SDSI_ENABLED_FEATURES_OFFSET	16
 #define SDSI_FEATURE_SDSI		BIT(3)
+#define SDSI_FEATURE_ATTESTATION	BIT(12)
 #define SDSI_FEATURE_METERING		BIT(26)
 
 #define SDSI_SOCKET_ID_OFFSET		64
@@ -76,11 +78,15 @@
 #define GUID_V2_CNTRL_SIZE		16
 #define GUID_V2_REGS_SIZE		80
 
+LIST_HEAD(sdsi_list);
+DEFINE_MUTEX(sdsi_list_lock);
+
 enum sdsi_command {
 	SDSI_CMD_PROVISION_AKC		= 0x0004,
 	SDSI_CMD_PROVISION_CAP		= 0x0008,
 	SDSI_CMD_READ_STATE		= 0x0010,
 	SDSI_CMD_READ_METER		= 0x0014,
+	SDSI_CMD_ATTESTATION		= 0x1012,
 };
 
 struct sdsi_mbox_info {
@@ -533,6 +539,99 @@ static const struct attribute_group sdsi_group = {
 };
 __ATTRIBUTE_GROUPS(sdsi);
 
+bool sdsi_supports_attestation(struct sdsi_priv *priv)
+{
+	return priv->features & SDSI_FEATURE_ATTESTATION;
+}
+
+/* SPDM transport  */
+int sdsi_spdm_exchange(void *private, const void *request, size_t request_sz,
+		       void *response, size_t response_sz)
+{
+	struct sdsi_priv *priv = private;
+	struct sdsi_mbox_info info = {};
+	size_t spdm_msg_size, size;
+	int ret;
+	u64 *payload __free(kfree) = NULL;
+
+	/*
+	 * For the attestation command, the mailbox write size is the sum of:
+	 *     Size of the SPDM request payload, padded for qword alignment
+	 *     8 bytes for the mailbox command
+	 *     8 bytes for the actual (non-padded) size of the SPDM request
+	 */
+	if (request_sz > (SDSI_SIZE_WRITE_MSG - (2 * sizeof(u64))))
+		return -EOVERFLOW;
+
+	info.size = round_up(request_sz, sizeof(u64)) + 2 * sizeof(u64);
+
+	payload = kzalloc(info.size, GFP_KERNEL);
+	if (!payload)
+		return -ENOMEM;
+
+	memcpy(payload, request, request_sz);
+
+	/* The non-padded SPDM payload size is the 2nd-to-last qword */
+	payload[(info.size / sizeof(u64)) - 2] = request_sz;
+
+	/* Attestation mailbox command is the last qword of payload buffer */
+	payload[(info.size / sizeof(u64)) - 1] = SDSI_CMD_ATTESTATION;
+
+	info.payload = payload;
+	info.buffer = response;
+
+	ret = mutex_lock_interruptible(&priv->mb_lock);
+	if (ret)
+		return ret;
+	ret = sdsi_mbox_write(priv, &info, &size);
+	mutex_unlock(&priv->mb_lock);
+
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * The read size is the sum of:
+	 *     Size of the SPDM response payload, padded for qword alignment
+	 *     8 bytes for the actual (non-padded) size of the SPDM payload
+	 */
+
+	if (size < sizeof(u64)) {
+		dev_err(priv->dev,
+			"Attestation error: Mailbox reply size, %ld, too small\n",
+			size);
+		return -EPROTO;
+	}
+
+	if (!IS_ALIGNED(size, sizeof(u64))) {
+		dev_err(priv->dev,
+			"Attestation error: Mailbox reply size, %ld, is not aligned\n",
+			size);
+		return -EPROTO;
+	}
+
+	/*
+	 * Get the SPDM response size from the last QWORD and check it fits
+	 * with no more than 7 bytes of padding
+	 */
+	spdm_msg_size = ((u64 *)info.buffer)[(size - sizeof(u64)) / sizeof(u64)];
+	if (!in_range(size - spdm_msg_size - sizeof(u64), 0, 8)) {
+		dev_err(priv->dev,
+			"Attestation error: Invalid SPDM response size, %ld\n",
+			spdm_msg_size);
+		return -EPROTO;
+	}
+
+	if (spdm_msg_size > response_sz) {
+		dev_err(priv->dev, "Attestation error: Expected response size %ld, got %ld\n",
+			 response_sz, spdm_msg_size);
+		return -EOVERFLOW;
+	}
+
+	memcpy(response, info.buffer, spdm_msg_size);
+
+	return spdm_msg_size;
+}
+
 static int sdsi_get_layout(struct sdsi_priv *priv, struct disc_table *table)
 {
 	switch (table->guid) {
@@ -614,6 +713,7 @@ static int sdsi_probe(struct auxiliary_device *auxdev, const struct auxiliary_de
 		return -ENOMEM;
 
 	priv->dev = &auxdev->dev;
+	priv->id = auxdev->id;
 	mutex_init(&priv->mb_lock);
 	auxiliary_set_drvdata(auxdev, priv);
 
@@ -637,7 +737,34 @@ static int sdsi_probe(struct auxiliary_device *auxdev, const struct auxiliary_de
 	if (ret)
 		return ret;
 
+	mutex_lock(&sdsi_list_lock);
+	list_add(&priv->node, &sdsi_list);
+	mutex_unlock(&sdsi_list_lock);
+
 	return 0;
+}
+
+static void sdsi_remove(struct auxiliary_device *auxdev)
+{
+	struct sdsi_priv *priv = auxiliary_get_drvdata(auxdev);
+
+	list_del(&priv->node);
+}
+
+struct sdsi_priv *sdsi_dev_get_by_id(int id)
+{
+	struct sdsi_priv *priv, *match = NULL;
+
+	mutex_lock(&sdsi_list_lock);
+	list_for_each_entry(priv, &sdsi_list, node) {
+		if (priv->id == id) {
+			match = priv;
+			break;
+		}
+	}
+	mutex_unlock(&sdsi_list_lock);
+
+	return match;
 }
 
 static const struct auxiliary_device_id sdsi_aux_id_table[] = {
@@ -652,9 +779,42 @@ static struct auxiliary_driver sdsi_aux_driver = {
 	},
 	.id_table	= sdsi_aux_id_table,
 	.probe		= sdsi_probe,
-	/* No remove. All resources are handled under devm */
+	.remove		= sdsi_remove,
 };
-module_auxiliary_driver(sdsi_aux_driver);
+
+static bool netlink_initialized;
+
+static int __init sdsi_init(void)
+{
+	int ret;
+
+	ret = auxiliary_driver_register(&sdsi_aux_driver);
+	if (ret)
+		goto error;
+
+	if (sdsi_netlink_init())
+		pr_warn("Intel SDSi failed to init netlink\n");
+	else
+		netlink_initialized = true;
+
+	return 0;
+
+error:
+	mutex_destroy(&sdsi_list_lock);
+	return ret;
+}
+module_init(sdsi_init);
+
+static void __exit sdsi_exit(void)
+{
+	if (netlink_initialized)
+		sdsi_netlink_exit();
+
+	auxiliary_driver_unregister(&sdsi_aux_driver);
+
+	mutex_destroy(&sdsi_list_lock);
+}
+module_exit(sdsi_exit);
 
 MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
 MODULE_DESCRIPTION("Intel On Demand (SDSi) driver");

@@ -11041,8 +11041,10 @@ F:	drivers/platform/x86/intel_scu_*
 INTEL SDSI DRIVER
 M:	David E. Box <david.e.box@linux.intel.com>
 S:	Supported
+F:	drivers/platform/x86/intel/sdsi_genl.c
 F:	drivers/platform/x86/intel/sdsi.c
 F:	drivers/platform/x86/intel/sdsi.h
+F:	include/uapi/linux/sdsi_nl.h
 F:	tools/arch/x86/intel_sdsi/
 F:	tools/testing/selftests/drivers/sdsi/
 

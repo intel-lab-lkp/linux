@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: intel-sdsi
+
+protocol: genetlink
+
+doc:
+  Intel On Demand generic netlink ABI for Attestation servives.
+
+attribute-sets:
+  -
+    name: sdsi
+    name-prefix: sdsi-genl-attr-
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: devs
+        doc: List of On Demand entries
+        type: nest
+        multi-attr: true
+        nested-attributes: dev-info
+      -
+        name: dev-id
+        type: u32
+      -
+        name: dev-name
+        type: string
+      -
+        name: spdm-req
+        type: binary
+      -
+        name: spdm-rsp
+        type: binary
+      -
+        name: spdm-rsp-size
+        type: u32
+      -
+        name: spdm-req-size
+        type: u32
+  -
+    name: dev-info
+    subset-of: sdsi
+    attributes:
+      -
+        name: dev-id
+        type: u32
+      -
+        name: dev-name
+        type: string
+
+operations:
+  name-prefix: sdsi-genl-cmd-
+  list:
+    -
+      name: unspec
+      doc: unused
+      value: 0
+    -
+      name: get-devs
+      doc: Returns a list of available On Demand entries
+      attribute-set: sdsi
+      do: &get-devs-op
+        request:
+          attributes:
+            - dev-id
+        reply:
+          attributes:
+            - devs
+      dump: *get-devs-op
+    -
+      name: get-info
+      doc: Returns information about On Demand devices
+      attribute-set: sdsi
+      do:
+        request:
+          attributes:
+            - dev-id
+        reply:
+          attributes:
+            - spdm-req-size
+            - spdm-rsp-size
+    -
+      name: get-spdm
+      doc: Send and receive SPDM messages
+      attribute-set: sdsi
+      do:
+        request:
+          attributes:
+            - dev-id
+            - spdm-req
+        reply:
+          attributes:
+            - dev-id
+            - spdm-rsp
