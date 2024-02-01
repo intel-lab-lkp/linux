@@ -263,6 +263,10 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 			folio_set_readahead(folio);
 		ractl->_workingset |= folio_test_workingset(folio);
 		ractl->_nr_pages++;
+		if (unlikely(folio_test_workingset(folio)))
+			ractl->_active_refault++;
+		else if (unlikely(ractl->_active_refault))
+			ractl->_active_refault--;
 	}
 
 	/*

@@ -960,6 +960,7 @@ struct fown_struct {
  *      the first of these pages is accessed.
  * @ra_pages: Maximum size of a readahead request, copied from the bdi.
  * @mmap_miss: How many mmap accesses missed in the page cache.
+ * @active_refault: Number of active page refault.
  * @prev_pos: The last byte in the most recent read request.
  *
  * When this structure is passed to ->readahead(), the "most recent"
@@ -971,6 +972,7 @@ struct file_ra_state {
 	unsigned int async_size;
 	unsigned int ra_pages;
 	unsigned int mmap_miss;
+	unsigned int active_refault;
 	loff_t prev_pos;
 };
 
