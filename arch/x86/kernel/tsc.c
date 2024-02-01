@@ -53,7 +53,6 @@ static int __read_mostly tsc_force_recalibrate;
 static u32 art_to_tsc_numerator;
 static u32 art_to_tsc_denominator;
 static u64 art_to_tsc_offset;
-static struct clocksource *art_related_clocksource;
 static bool have_art;
 
 struct cyc2ns {
@@ -1313,7 +1312,6 @@ struct system_counterval_t convert_art_to_tsc(u64 art)
 	res += tmp + art_to_tsc_offset;
 
 	return (struct system_counterval_t) {
-		.cs = art_related_clocksource,
 		.cs_id = have_art ? CSID_X86_TSC : CSID_GENERIC,
 		.cycles = res
 	};
@@ -1350,7 +1348,6 @@ struct system_counterval_t convert_art_ns_to_tsc(u64 art_ns)
 	res += tmp;
 
 	return (struct system_counterval_t) {
-		.cs = art_related_clocksource,
 		.cs_id = have_art ? CSID_X86_TSC : CSID_GENERIC,
 		.cycles = res
 	};
@@ -1459,10 +1456,8 @@ out:
 	if (tsc_unstable)
 		goto unreg;
 
-	if (boot_cpu_has(X86_FEATURE_ART)) {
-		art_related_clocksource = &clocksource_tsc;
+	if (boot_cpu_has(X86_FEATURE_ART))
 		have_art = true;
-	}
 	clocksource_register_khz(&clocksource_tsc, tsc_khz);
 unreg:
 	clocksource_unregister(&clocksource_tsc_early);
@@ -1487,10 +1482,8 @@ static int __init init_tsc_clocksource(void)
 	 * the refined calibration and directly register it as a clocksource.
 	 */
 	if (boot_cpu_has(X86_FEATURE_TSC_KNOWN_FREQ)) {
-		if (boot_cpu_has(X86_FEATURE_ART)) {
-			art_related_clocksource = &clocksource_tsc;
+		if (boot_cpu_has(X86_FEATURE_ART))
 			have_art = true;
-		}
 		clocksource_register_khz(&clocksource_tsc, tsc_khz);
 		clocksource_unregister(&clocksource_tsc_early);
 
