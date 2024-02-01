@@ -459,20 +459,33 @@ EXPORT_SYMBOL(of_mdio_find_bus);
  * found, set the of_node pointer for the mdio device. This allows
  * auto-probed phy devices to be supplied with information passed in
  * via DT.
+ * If a PHY package is found, PHY is searched also there.
  */
-static void of_mdiobus_link_mdiodev(struct mii_bus *bus,
-				    struct mdio_device *mdiodev)
+static int of_mdiobus_find_phy(struct device *dev, struct mdio_device *mdiodev,
+			       struct device_node *np, int base_addr)
 {
-	struct device *dev = &mdiodev->dev;
 	struct device_node *child;
 
-	if (dev->of_node || !bus->dev.of_node)
-		return;
+	for_each_available_child_of_node(np, child) {
+		int addr, ret;
 
-	for_each_available_child_of_node(bus->dev.of_node, child) {
-		int addr;
+		if (of_node_name_eq(child, "ethernet-phy-package")) {
+			ret = of_property_read_u32(child, "reg", &addr);
+			if (ret)
+				return ret;
 
-		addr = of_mdio_parse_addr(dev, child);
+			if (!of_mdiobus_find_phy(dev, mdiodev, child, addr)) {
+				of_node_put(child);
+				return 0;
+			}
+
+			continue;
+		}
+
+		if (base_addr)
+			addr = of_mdio_parse_addr_offset(dev, child, base_addr);
+		else
+			addr = of_mdio_parse_addr(dev, child);
 		if (addr < 0)
 			continue;
 
@@ -481,9 +494,22 @@ static void of_mdiobus_link_mdiodev(struct mii_bus *bus,
 			/* The refcount on "child" is passed to the mdio
 			 * device. Do _not_ use of_node_put(child) here.
 			 */
-			return;
+			return 0;
 		}
 	}
+
+	return -ENODEV;
+}
+
+static void of_mdiobus_link_mdiodev(struct mii_bus *bus,
+				    struct mdio_device *mdiodev)
+{
+	struct device *dev = &mdiodev->dev;
+
+	if (dev->of_node || !bus->dev.of_node)
+		return;
+
+	of_mdiobus_find_phy(dev, mdiodev, bus->dev.of_node, 0);
 }
 #else /* !IS_ENABLED(CONFIG_OF_MDIO) */
 static inline void of_mdiobus_link_mdiodev(struct mii_bus *mdio,

@@ -72,6 +72,27 @@ static inline int of_mdio_parse_addr(struct device *dev,
 	return addr;
 }
 
+static inline int of_mdio_parse_addr_offset(struct device *dev,
+					    const struct device_node *np,
+					    u16 offset)
+{
+	int addr;
+
+	addr = of_mdio_parse_addr(dev, np);
+	if (addr < 0)
+		return addr;
+
+	/* Validate final address with offset */
+	addr += offset;
+	if (addr >= PHY_MAX_ADDR) {
+		dev_err(dev, "%s PHY address offset %i is too large\n",
+			np->full_name, addr);
+		return -EINVAL;
+	}
+
+	return addr;
+}
+
 #else /* CONFIG_OF_MDIO */
 static inline bool of_mdiobus_child_is_phy(struct device_node *child)
 {
@@ -127,6 +148,11 @@ static inline struct mii_bus *of_mdio_find_bus(struct device_node *mdio_np)
 
 static inline int of_mdio_parse_addr(struct device *dev,
 				     const struct device_node *np)
+{
+	return -ENOSYS;
+}
+static inline int of_mdio_parse_addr_offset(struct device *dev,
+					    const struct device_node *np)
 {
 	return -ENOSYS;
 }
