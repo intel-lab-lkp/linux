@@ -382,7 +382,9 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 	    !dissector_uses_key(flow_dissector,
 				FLOW_DISSECTOR_KEY_ENC_IP) &&
 	    !dissector_uses_key(flow_dissector,
-				FLOW_DISSECTOR_KEY_ENC_OPTS))
+				FLOW_DISSECTOR_KEY_ENC_OPTS) &&
+	    !dissector_uses_key(flow_dissector,
+				FLOW_DISSECTOR_KEY_ENC_FLAGS))
 		return;
 
 	info = skb_tunnel_info(skb);
@@ -466,6 +468,15 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 			enc_opt->dst_opt_type = info->key.tun_flags &
 						TUNNEL_OPTIONS_PRESENT;
 		}
+	}
+
+	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_FLAGS)) {
+		struct flow_dissector_key_enc_flags *enc_flags;
+
+		enc_flags = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_ENC_FLAGS,
+						      target_container);
+		enc_flags->flags = info->key.tun_flags & TUNNEL_FLAGS_PRESENT;
 	}
 }
 EXPORT_SYMBOL(skb_flow_dissect_tunnel_info);
