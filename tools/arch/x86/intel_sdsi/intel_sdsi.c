@@ -43,7 +43,6 @@
 #define METER_CERT_MAX_SIZE	4096
 #define STATE_MAX_NUM_LICENSES	16
 #define STATE_MAX_NUM_IN_BUNDLE	(uint32_t)8
-#define METER_MAX_NUM_BUNDLES	8
 
 #define __round_mask(x, y) ((__typeof__(x))((y) - 1))
 #define round_up(x, y) ((((x) - 1) | __round_mask(x, y)) + 1)
@@ -154,11 +153,12 @@ struct bundle_encoding {
 };
 
 struct meter_certificate {
-	uint32_t block_signature;
-	uint32_t counter_unit;
+	uint32_t signature;
+	uint32_t version;
 	uint64_t ppin;
+	uint32_t counter_unit;
 	uint32_t bundle_length;
-	uint32_t reserved;
+	uint64_t reserved;
 	uint32_t mmrc_encoding;
 	uint32_t mmrc_counter;
 };
@@ -167,6 +167,9 @@ struct bundle_encoding_counter {
 	uint32_t encoding;
 	uint32_t counter;
 };
+#define METER_MAX_NUM_BUNDLES							\
+		(METER_CERT_MAX_SIZE - sizeof(struct meter_certificate) /	\
+		 sizeof(struct bundle_encoding_counter))
 
 struct sdsi_dev {
 	struct sdsi_regs regs;
@@ -334,6 +337,7 @@ static int sdsi_meter_cert_show(struct sdsi_dev *s)
 	uint32_t count = 0;
 	FILE *cert_ptr;
 	int ret, size;
+	char name[4];
 
 	ret = sdsi_update_registers(s);
 	if (ret)
@@ -375,32 +379,39 @@ static int sdsi_meter_cert_show(struct sdsi_dev *s)
 	printf("\n");
 	printf("Meter certificate for device %s\n", s->dev_name);
 	printf("\n");
-	printf("Block Signature:       0x%x\n", mc->block_signature);
-	printf("Count Unit:            %dms\n", mc->counter_unit);
-	printf("PPIN:                  0x%lx\n", mc->ppin);
-	printf("Feature Bundle Length: %d\n", mc->bundle_length);
-	printf("MMRC encoding:         %d\n", mc->mmrc_encoding);
-	printf("MMRC counter:          %d\n", mc->mmrc_counter);
+
+	get_feature(mc->signature, name);
+	printf("Signature:                    %.4s\n", name);
+
+	printf("Version:                      %d\n", mc->version);
+	printf("Count Unit:                   %dms\n", mc->counter_unit);
+	printf("PPIN:                         0x%lx\n", mc->ppin);
+	printf("Feature Bundle Length:        %d\n", mc->bundle_length);
+
+	get_feature(mc->mmrc_encoding, name);
+	printf("MMRC encoding:                %.4s\n", name);
+
+	printf("MMRC counter:                 %d\n", mc->mmrc_counter);
 	if (mc->bundle_length % 8) {
 		fprintf(stderr, "Invalid bundle length\n");
 		return -1;
 	}
 
 	if (mc->bundle_length > METER_MAX_NUM_BUNDLES * 8)  {
-		fprintf(stderr, "More than %d bundles: %d\n",
+		fprintf(stderr, "More than %ld bundles: actual %d\n",
 			METER_MAX_NUM_BUNDLES, mc->bundle_length / 8);
 		return -1;
 	}
 
-	bec = (void *)(mc) + sizeof(mc);
+	bec = (void *)(mc) + sizeof(*mc);
 
-	printf("Number of Feature Counters:          %d\n", mc->bundle_length / 8);
-	while (count++ < mc->bundle_length / 8) {
-		char feature[5];
+	printf("Number of Feature Counters:   %d\n", mc->bundle_length / 8);
+	while (count < mc->bundle_length / 8) {
+		char feature[4];
 
-		feature[4] = '\0';
 		get_feature(bec[count].encoding, feature);
-		printf("    %s:          %d\n", feature, bec[count].counter);
+		printf("    %.4s:          %d\n", feature, bec[count].counter);
+		++count;
 	}
 
 	return 0;
@@ -480,7 +491,7 @@ static int sdsi_state_cert_show(struct sdsi_dev *s)
 			sizeof(*lki) +			// size of the license key info
 			offset;				// offset to this blob content
 		struct bundle_encoding *bundle = (void *)(lbc) + sizeof(*lbc);
-		char feature[5];
+		char feature[4];
 		uint32_t i;
 
 		printf("     Blob %d:\n", count - 1);
@@ -493,11 +504,9 @@ static int sdsi_state_cert_show(struct sdsi_dev *s)
 		printf("        Blob revision ID:           %u\n", lbc->rev_id);
 		printf("        Number of Features:         %u\n", lbc->num_bundles);
 
-		feature[4] = '\0';
-
 		for (i = 0; i < min(lbc->num_bundles, STATE_MAX_NUM_IN_BUNDLE); i++) {
 			get_feature(bundle[i].encoding, feature);
-			printf("                 Feature %d:         %s\n", i, feature);
+			printf("                 Feature %d:         %.4s\n", i, feature);
 		}
 
 		if (lbc->num_bundles > STATE_MAX_NUM_IN_BUNDLE)
