@@ -278,6 +278,10 @@ static void amdgpu_connector_get_edid(struct drm_connector *connector)
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_connector *amdgpu_connector = to_amdgpu_connector(connector);
 
+	/* if the BIOS specifies the EDID via _DDC, prefer this */
+	if (acpi_edid && !amdgpu_connector->edid)
+		amdgpu_connector->edid = drm_get_acpi_edid(connector);
+
 	if (amdgpu_connector->edid)
 		return;
 
