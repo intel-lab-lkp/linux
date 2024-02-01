@@ -199,6 +199,12 @@ static void mgbe_uphy_lane_bringup_serdes_down(struct net_device *ndev, void *mg
 	writel(value, mgbe->xpcs + XPCS_WRAP_UPHY_RX_CONTROL);
 }
 
+static const struct stmmac_axi tegra234_mgbe_axi = {
+	.axi_wr_osr_lmt = 63,
+	.axi_rd_osr_lmt = 63,
+	.axi_blen = { 256, },
+};
+
 static int tegra_mgbe_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat;
@@ -283,6 +289,9 @@ static int tegra_mgbe_probe(struct platform_device *pdev)
 	err = reset_control_deassert(mgbe->rst_pcs);
 	if (err < 0)
 		goto disable_clks;
+
+	/* setup default AXI configuration */
+	res.axi = &tegra234_mgbe_axi;
 
 	plat = devm_stmmac_probe_config_dt(pdev, &res);
 	if (IS_ERR(plat)) {
