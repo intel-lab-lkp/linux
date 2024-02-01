@@ -17,6 +17,7 @@
 #define user_mode(regs)			(((regs)->iaoq[0] & 3) != PRIV_KERNEL)
 #define user_space(regs)		((regs)->iasq[1] != PRIV_KERNEL)
 #define instruction_pointer(regs)	((regs)->iaoq[0] & ~3)
+#define exception_ip(regs)			instruction_pointer(regs)
 #define user_stack_pointer(regs)	((regs)->gr[30])
 unsigned long profile_pc(struct pt_regs *);
 

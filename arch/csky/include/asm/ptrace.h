@@ -22,6 +22,7 @@
 
 #define user_mode(regs) (!((regs)->sr & PS_S))
 #define instruction_pointer(regs) ((regs)->pc)
+#define exception_ip(regs) instruction_pointer(regs)
 #define profile_pc(regs) instruction_pointer(regs)
 #define trap_no(regs) ((regs->sr >> 16) & 0xff)
 

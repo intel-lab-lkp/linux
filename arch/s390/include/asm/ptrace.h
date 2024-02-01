@@ -211,6 +211,7 @@ static inline int test_and_clear_pt_regs_flag(struct pt_regs *regs, int flag)
 
 #define user_mode(regs) (((regs)->psw.mask & PSW_MASK_PSTATE) != 0)
 #define instruction_pointer(regs) ((regs)->psw.addr)
+#define exception_ip(regs) instruction_pointer(regs)
 #define user_stack_pointer(regs)((regs)->gprs[15])
 #define profile_pc(regs) instruction_pointer(regs)
 

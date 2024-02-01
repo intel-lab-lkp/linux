@@ -66,7 +66,8 @@ struct switch_stack {
 #define user_mode(regs)	(((regs)->estatus & ESTATUS_EU))
 
 #define instruction_pointer(regs)	((regs)->ra)
-#define profile_pc(regs)		instruction_pointer(regs)
+#define exception_ip(regs)			instruction_pointer(regs)
+#define profile_pc(regs)			instruction_pointer(regs)
 #define user_stack_pointer(regs)	((regs)->sp)
 extern void show_regs(struct pt_regs *);
 

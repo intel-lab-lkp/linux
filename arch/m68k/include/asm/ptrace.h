@@ -13,6 +13,7 @@
 
 #define user_mode(regs) (!((regs)->sr & PS_S))
 #define instruction_pointer(regs) ((regs)->pc)
+#define exception_ip(regs) instruction_pointer(regs)
 #define profile_pc(regs) instruction_pointer(regs)
 #define current_pt_regs() \
 	(struct pt_regs *)((char *)current_thread_info() + THREAD_SIZE) - 1

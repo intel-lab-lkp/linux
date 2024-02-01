@@ -89,6 +89,7 @@ static inline long regs_return_value(struct pt_regs *regs)
 }
 
 #define instruction_pointer(regs)	(regs)->ARM_pc
+#define exception_ip(regs)			instruction_pointer(regs)
 
 #ifdef CONFIG_THUMB2_KERNEL
 #define frame_pointer(regs) (regs)->ARM_r7

@@ -12,7 +12,8 @@
 #define user_mode(regs)			(!kernel_mode(regs))
 
 #define instruction_pointer(regs)	((regs)->pc)
-#define profile_pc(regs)		instruction_pointer(regs)
+#define exception_ip(regs)			instruction_pointer(regs)
+#define profile_pc(regs)			instruction_pointer(regs)
 #define user_stack_pointer(regs)	((regs)->r1)
 
 static inline long regs_return_value(struct pt_regs *regs)

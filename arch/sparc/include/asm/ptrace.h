@@ -63,6 +63,7 @@ extern union global_cpu_snapshot global_cpu_snapshot[NR_CPUS];
 #define force_successful_syscall_return() set_thread_noerror(1)
 #define user_mode(regs) (!((regs)->tstate & TSTATE_PRIV))
 #define instruction_pointer(regs) ((regs)->tpc)
+#define exception_ip(regs) instruction_pointer(regs)
 #define instruction_pointer_set(regs, val) do { \
 		(regs)->tpc = (val); \
 		(regs)->tnpc = (val)+4; \
@@ -142,6 +143,7 @@ static inline bool pt_regs_clear_syscall(struct pt_regs *regs)
 
 #define user_mode(regs) (!((regs)->psr & PSR_PS))
 #define instruction_pointer(regs) ((regs)->pc)
+#define exception_ip(regs) instruction_pointer(regs)
 #define user_stack_pointer(regs) ((regs)->u_regs[UREG_FP])
 unsigned long profile_pc(struct pt_regs *);
 #else /* (!__ASSEMBLY__) */

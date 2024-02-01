@@ -26,6 +26,7 @@ struct pt_regs {
 #define PT_REGS_SYSCALL_NR(r) UPT_SYSCALL_NR(&(r)->regs)
 
 #define instruction_pointer(regs) PT_REGS_IP(regs)
+#define exception_ip(regs) instruction_pointer(regs)
 
 #define PTRACE_OLDSETOPTIONS 21
 

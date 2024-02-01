@@ -105,6 +105,7 @@ struct callee_regs {
 #endif
 
 #define instruction_pointer(regs)	((regs)->ret)
+#define exception_ip(regs)		instruction_pointer(regs)
 #define profile_pc(regs)		instruction_pointer(regs)
 
 /* return 1 if user mode or 0 if kernel mode */

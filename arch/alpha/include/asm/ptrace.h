@@ -8,6 +8,7 @@
 #define arch_has_single_step()		(1)
 #define user_mode(regs) (((regs)->ps & 8) != 0)
 #define instruction_pointer(regs) ((regs)->pc)
+#define exception_ip(regs) instruction_pointer(regs)
 #define profile_pc(regs) instruction_pointer(regs)
 #define current_user_stack_pointer() rdusp()
 

@@ -25,6 +25,7 @@
 #include <asm/registers.h>
 
 #define instruction_pointer(regs) pt_elr(regs)
+#define exception_ip(regs) instruction_pointer(regs)
 #define user_stack_pointer(regs) ((regs)->r29)
 
 #define profile_pc(regs) instruction_pointer(regs)
