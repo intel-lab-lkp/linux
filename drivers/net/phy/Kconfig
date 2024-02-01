@@ -362,6 +362,14 @@ config ROCKCHIP_PHY
 	help
 	  Currently supports the integrated Ethernet PHY.
 
+config ROCKCHIP_RUST_PHY
+	bool "Rust driver for Rockchip Ethernet PHYs"
+	depends on RUST_PHYLIB_ABSTRACTIONS && ROCKCHIP_PHY
+	help
+	  Uses the Rust reference driver for Rockchip PHYs (rockchip_rust.ko).
+	  The features are equivalent. It supports the integrated Ethernet PHY.
+
+
 config SMSC_PHY
 	tristate "SMSC PHYs"
 	select CRC16
