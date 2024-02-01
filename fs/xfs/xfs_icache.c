@@ -64,6 +64,8 @@ static int xfs_icwalk_ag(struct xfs_perag *pag,
 					 XFS_ICWALK_FLAG_RECLAIM_SICK | \
 					 XFS_ICWALK_FLAG_UNION)
 
+static void xfs_inodegc_queue(struct xfs_inode *ip);
+
 /*
  * Allocate and initialise an xfs_inode.
  */
@@ -328,6 +330,7 @@ xfs_reinit_inode(
 	return error;
 }
 
+
 /*
  * Carefully nudge an inode whose VFS state has been torn down back into a
  * usable state.  Drops the i_flags_lock and the rcu read lock.
@@ -391,7 +394,71 @@ xfs_iget_recycle(
 	inode->i_state = I_NEW;
 	spin_unlock(&ip->i_flags_lock);
 	spin_unlock(&pag->pag_ici_lock);
+	XFS_STATS_INC(mp, xs_ig_frecycle);
+	return 0;
+}
 
+static int
+xfs_iget_reactivate(
+	struct xfs_perag	*pag,
+	struct xfs_inode	*ip) __releases(&ip->i_flags_lock)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct inode		*inode = VFS_I(ip);
+	int			error;
+
+	trace_xfs_iget_recycle(ip);
+
+	/*
+	 * Take the ILOCK here to serialise against lookup races with putting
+	 * the inode back on the inodegc queue during error handling.
+	 */
+	if (!xfs_ilock_nowait(ip, XFS_ILOCK_EXCL))
+		return -EAGAIN;
+
+	/*
+	 * Move the state to inactivating so both inactivation and racing
+	 * lookups will skip over this inode until we've finished reactivating
+	 * it and can return it to the XFS_INEW state.
+	 */
+	ip->i_flags &= ~XFS_NEED_INACTIVE;
+	ip->i_flags |= XFS_INACTIVATING;
+	spin_unlock(&ip->i_flags_lock);
+	rcu_read_unlock();
+
+	ASSERT(!rwsem_is_locked(&inode->i_rwsem));
+	error = xfs_reinit_inode(mp, inode);
+	if (error) {
+		/*
+		 * Well, that sucks. Put the inode back on the inactive queue.
+		 * Do this while still under the ILOCK so that we can set the
+		 * NEED_INACTIVE flag and clear the INACTIVATING flag an not
+		 * have another lookup race with us before we've finished
+		 * putting the inode back on the inodegc queue.
+		 */
+		spin_unlock(&ip->i_flags_lock);
+		ip->i_flags |= XFS_NEED_INACTIVE;
+		ip->i_flags &= ~XFS_INACTIVATING;
+		spin_unlock(&ip->i_flags_lock);
+
+		xfs_inodegc_queue(ip);
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+		return error;
+	}
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+	/*
+	 * Reset the inode state to new so that xfs_iget() will complete
+	 * the required remaining inode initialisation before it returns the
+	 * inode to the caller.
+	 */
+	spin_lock(&ip->i_flags_lock);
+	ip->i_flags &= ~XFS_IRECLAIM_RESET_FLAGS;
+	ip->i_flags |= XFS_INEW;
+	inode->i_state = I_NEW;
+	spin_unlock(&ip->i_flags_lock);
+	XFS_STATS_INC(mp, xs_ig_frecycle);
 	return 0;
 }
 
@@ -523,14 +590,6 @@ xfs_iget_cache_hit(
 	if (ip->i_flags & (XFS_INEW | XFS_IRECLAIM | XFS_INACTIVATING))
 		goto out_skip;
 
-	if (ip->i_flags & XFS_NEED_INACTIVE) {
-		/* Unlinked inodes cannot be re-grabbed. */
-		if (VFS_I(ip)->i_nlink == 0) {
-			error = -ENOENT;
-			goto out_error;
-		}
-		goto out_inodegc_flush;
-	}
 
 	/*
 	 * Check the inode free state is valid. This also detects lookup
@@ -542,11 +601,18 @@ xfs_iget_cache_hit(
 
 	/* Skip inodes that have no vfs state. */
 	if ((flags & XFS_IGET_INCORE) &&
-	    (ip->i_flags & XFS_IRECLAIMABLE))
+	    (ip->i_flags & (XFS_IRECLAIMABLE | XFS_NEED_INACTIVE)))
 		goto out_skip;
 
 	/* The inode fits the selection criteria; process it. */
-	if (ip->i_flags & XFS_IRECLAIMABLE) {
+	if (ip->i_flags & XFS_NEED_INACTIVE) {
+		/* Drops i_flags_lock and RCU read lock. */
+		error = xfs_iget_reactivate(pag, ip);
+		if (error == -EAGAIN)
+			goto out_skip;
+		if (error)
+			return error;
+	} else if (ip->i_flags & XFS_IRECLAIMABLE) {
 		/* Drops i_flags_lock and RCU read lock. */
 		error = xfs_iget_recycle(pag, ip);
 		if (error == -EAGAIN)
@@ -575,23 +641,11 @@ xfs_iget_cache_hit(
 
 out_skip:
 	trace_xfs_iget_skip(ip);
-	XFS_STATS_INC(mp, xs_ig_frecycle);
 	error = -EAGAIN;
 out_error:
 	spin_unlock(&ip->i_flags_lock);
 	rcu_read_unlock();
 	return error;
-
-out_inodegc_flush:
-	spin_unlock(&ip->i_flags_lock);
-	rcu_read_unlock();
-	/*
-	 * Do not wait for the workers, because the caller could hold an AGI
-	 * buffer lock.  We're just going to sleep in a loop anyway.
-	 */
-	if (xfs_is_inodegc_enabled(mp))
-		xfs_inodegc_queue_all(mp);
-	return -EAGAIN;
 }
 
 static int
