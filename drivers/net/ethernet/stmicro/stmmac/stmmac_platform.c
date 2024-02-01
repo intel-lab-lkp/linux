@@ -424,13 +424,14 @@ static void stmmac_remove_config_dt(struct platform_device *pdev,
 /**
  * stmmac_probe_config_dt - parse device-tree driver parameters
  * @pdev: platform_device structure
- * @mac: MAC address to use
+ * @res: driver-specific parameters
  * Description:
  * this function is to read the driver parameters from device-tree and
  * set some private fields that will be used by the main at runtime.
  */
 static struct plat_stmmacenet_data *
-stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
+stmmac_probe_config_dt(struct platform_device *pdev,
+		       struct stmmac_resources *res)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct plat_stmmacenet_data *plat;
@@ -443,12 +444,12 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 	if (!plat)
 		return ERR_PTR(-ENOMEM);
 
-	rc = of_get_mac_address(np, mac);
+	rc = of_get_mac_address(np, res->mac);
 	if (rc) {
 		if (rc == -EPROBE_DEFER)
 			return ERR_PTR(rc);
 
-		eth_zero_addr(mac);
+		eth_zero_addr(res->mac);
 	}
 
 	phy_mode = device_get_phy_mode(&pdev->dev);
@@ -605,7 +606,7 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 
 	of_property_read_u32(np, "snps,ps-speed", &plat->mac_port_sel_speed);
 
-	plat->axi = stmmac_axi_setup(pdev);
+	plat->axi = stmmac_axi_setup(pdev, res);
 
 	rc = stmmac_mtl_setup(pdev, plat);
 	if (rc) {
@@ -677,17 +678,18 @@ static void devm_stmmac_remove_config_dt(void *data)
 /**
  * devm_stmmac_probe_config_dt
  * @pdev: platform_device structure
- * @mac: MAC address to use
+ * @res: driver-specific parameters
  * Description: Devres variant of stmmac_probe_config_dt(). Does not require
  * the user to call stmmac_remove_config_dt() at driver detach.
  */
 struct plat_stmmacenet_data *
-devm_stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
+devm_stmmac_probe_config_dt(struct platform_device *pdev,
+			    struct stmmac_resources *res)
 {
 	struct plat_stmmacenet_data *plat;
 	int ret;
 
-	plat = stmmac_probe_config_dt(pdev, mac);
+	plat = stmmac_probe_config_dt(pdev, res);
 	if (IS_ERR(plat))
 		return plat;
 
@@ -700,7 +702,8 @@ devm_stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 }
 #else
 struct plat_stmmacenet_data *
-devm_stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
+devm_stmmac_probe_config_dt(struct platform_device *pdev,
+			    struct stmmac_resources *res)
 {
 	return ERR_PTR(-EINVAL);
 }
