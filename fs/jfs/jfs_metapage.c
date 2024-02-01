@@ -78,7 +78,7 @@ struct meta_anchor {
 	atomic_t io_count;
 	struct metapage *mp[MPS_PER_PAGE];
 };
-#define mp_anchor(page) ((struct meta_anchor *)page_private(page))
+#define mp_anchor(folio) (folio->private)
 
 static inline struct metapage *folio_to_mp(struct folio *folio, int offset)
 {
@@ -116,7 +116,7 @@ static inline int insert_metapage(struct folio *folio, struct metapage *mp)
 
 static inline void remove_metapage(struct folio *folio, struct metapage *mp)
 {
-	struct meta_anchor *a = mp_anchor(&folio->page);
+	struct meta_anchor *a = mp_anchor(folio);
 	int l2mp_blocks = L2PSIZE - folio->mapping->host->i_blkbits;
 	int index;
 
@@ -132,9 +132,9 @@ static inline void remove_metapage(struct folio *folio, struct metapage *mp)
 	}
 }
 
-static inline void inc_io(struct page *page)
+static inline void inc_io(struct folio *folio)
 {
-	atomic_inc(&mp_anchor(page)->io_count);
+	atomic_inc(&mp_anchor(folio)->io_count);
 }
 
 static inline void dec_io(struct folio *folio, void (*handler) (struct folio *))
@@ -166,7 +166,7 @@ static inline void remove_metapage(struct folio *folio, struct metapage *mp)
 	kunmap(&folio->page);
 }
 
-#define inc_io(page) do {} while(0)
+#define inc_io(folio) do {} while(0)
 #define dec_io(folio, handler) handler(folio)
 
 #endif
@@ -395,14 +395,14 @@ static int metapage_write_folio(struct folio *folio,
 			 * Increment counter before submitting i/o to keep
 			 * count from hitting zero before we're through
 			 */
-			inc_io(&folio->page);
+			inc_io(folio);
 			if (!bio->bi_iter.bi_size)
 				goto dump_bio;
 			submit_bio(bio);
 			nr_underway++;
 			bio = NULL;
 		} else
-			inc_io(&folio->page);
+			inc_io(folio);
 		xlen = (folio_size(folio) - offset) >> inode->i_blkbits;
 		pblock = metapage_get_blocks(inode, lblock, &xlen);
 		if (!pblock) {
@@ -496,7 +496,7 @@ static int metapage_read_folio(struct file *fp, struct folio *folio)
 		if (pblock) {
 			if (!folio->private)
 				insert_metapage(folio, NULL);
-			inc_io(&folio->page);
+			inc_io(folio);
 			if (bio)
 				submit_bio(bio);
 
