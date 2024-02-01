@@ -3394,6 +3394,34 @@ static void skl_read_wm_latency(struct drm_i915_private *i915, u16 wm[])
 	adjust_wm_latency(i915, wm, num_levels, read_latency);
 }
 
+/*
+ * Program PKG_C_LATENCY Pkg C with highest valid latency from
+ * watermark level1 and up and above. If watermark level 1 is
+ * invalid program it with all 1's.
+ * Program PKG_C_LATENCY Added Wake Time = 0.
+ */
+static void intel_program_pkgc_latency(struct drm_i915_private *i915,
+				       u16 wm_latency[])
+{
+	u16 max_value = 0;
+	u32 clear = 0, val = 0;
+	int max_level = i915->display.wm.num_levels, i;
+
+	for (i = 1; i <= max_level; i++) {
+		if (wm_latency[i] == 0)
+			break;
+	else if (wm_latency[i] > max_value)
+		max_value = wm_latency[i];
+	}
+
+	if (max_value == 0)
+		max_value = ~0 & LNL_PKG_C_LATENCY_MASK;
+
+	clear |= LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
+	val |= max_value;
+	intel_uncore_rmw(&i915->uncore, LNL_PKG_C_LATENCY, clear, val);
+}
+
 static void skl_setup_wm_latency(struct drm_i915_private *i915)
 {
 	if (HAS_HW_SAGV_WM(i915))
@@ -3407,6 +3435,9 @@ static void skl_setup_wm_latency(struct drm_i915_private *i915)
 		skl_read_wm_latency(i915, i915->display.wm.skl_latency);
 
 	intel_print_wm_latency(i915, "Gen9 Plane", i915->display.wm.skl_latency);
+
+	if (DISPLAY_VER(i915) >= 20)
+		intel_program_pkgc_latency(i915, i915->display.wm.skl_latency);
 }
 
 static const struct intel_wm_funcs skl_wm_funcs = {
