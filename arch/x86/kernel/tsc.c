@@ -1329,10 +1329,6 @@ EXPORT_SYMBOL(convert_art_to_tsc);
  * Return:
  * struct system_counterval_t - system counter value with the pointer to the
  *	corresponding clocksource
- *	@cycles:	System counter value
- *	@cs:		Clocksource corresponding to system counter value. Used
- *			by timekeeping code to verify comparability of two cycle
- *			values.
  */
 
 struct system_counterval_t convert_art_ns_to_tsc(u64 art_ns)
@@ -1357,7 +1353,7 @@ static void tsc_refine_calibration_work(struct work_struct *work);
 static DECLARE_DELAYED_WORK(tsc_irqwork, tsc_refine_calibration_work);
 /**
  * tsc_refine_calibration_work - Further refine tsc freq calibration
- * @work - ignored.
+ * @work: ignored.
  *
  * This functions uses delayed work over a period of a
  * second to further refine the TSC freq value. Since this is
