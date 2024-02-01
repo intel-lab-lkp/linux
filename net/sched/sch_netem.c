@@ -44,9 +44,8 @@
 	 duplication, and reordering can also be emulated.
 
 	 This qdisc does not do classification that can be handled in
-	 layering other disciplines.  It does not need to do bandwidth
-	 control either since that can be handled by using token
-	 bucket or other rate control.
+	 layering other disciplines. Netem includes an optional internal
+	 rate limiter (tfifo) based on next time to send.
 
      Correlated Loss Generator models
 
