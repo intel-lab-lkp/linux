@@ -447,10 +447,19 @@ class YnlFamily(SpecFamily):
         if attr["type"] == 'nest':
             nl_type |= Netlink.NLA_F_NESTED
             attr_payload = b''
-            sub_attrs = SpaceAttrs(self.attr_sets[space], value, search_attrs)
-            for subname, subvalue in value.items():
-                attr_payload += self._add_attr(attr['nested-attributes'],
-                                               subname, subvalue, sub_attrs)
+            nested_attrs = self.attr_sets[attr["nested-attributes"]]
+
+            if any(v.is_multi for _,v in nested_attrs.items()) and isinstance(value, list):
+                for item in value:
+                    sub_attrs = SpaceAttrs(self.attr_sets[space], item, search_attrs)
+                    for subname, subvalue in item.items():
+                        attr_payload += self._add_attr(attr['nested-attributes'],
+                                                       subname, subvalue, sub_attrs)
+            else:
+                sub_attrs = SpaceAttrs(self.attr_sets[space], value, search_attrs)
+                for subname, subvalue in value.items():
+                    attr_payload += self._add_attr(attr['nested-attributes'],
+                                                   subname, subvalue, sub_attrs)
         elif attr["type"] == 'flag':
             attr_payload = b''
         elif attr["type"] == 'string':
