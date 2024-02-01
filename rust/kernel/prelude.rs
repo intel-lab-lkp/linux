@@ -38,3 +38,19 @@ pub use super::{str::CStr, ThisModule};
 pub use super::init::{InPlaceInit, Init, PinInit};
 
 pub use super::current;
+
+/// Returns a `u32` number that has only the `n`th bit set.
+///
+/// # Arguments
+///
+/// * `n` - A `u32` that specifies the bit position (zero-based index)
+///
+/// # Example
+///
+/// ```
+/// let b = bit(2);
+/// assert_eq!(b, 4);
+#[inline]
+pub const fn bit(n: u32) -> u32 {
+    1 << n
+}
