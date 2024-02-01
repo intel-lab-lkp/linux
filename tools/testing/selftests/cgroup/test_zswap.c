@@ -60,6 +60,27 @@ static long get_zswpout(const char *cgroup)
 	return cg_read_key_long(cgroup, "memory.stat", "zswpout ");
 }
 
+static int allocate_bytes_and_read(const char *cgroup, void *arg)
+{
+	size_t size = (size_t)arg;
+	char *mem = (char *)malloc(size);
+	int ret = 0;
+
+	if (!mem)
+		return -1;
+	for (int i = 0; i < size; i += 4095)
+		mem[i] = 'a';
+
+	/* go through the allocated memory to (z)swap in and out pages */
+	for (int i = 0; i < size; i += 4095) {
+		if (mem[i] != 'a')
+			ret = -1;
+	}
+
+	free(mem);
+	return ret;
+}
+
 static int allocate_bytes(const char *cgroup, void *arg)
 {
 	size_t size = (size_t)arg;
@@ -125,6 +146,80 @@ static int test_zswap_usage(const char *root)
 		ksft_print_msg("zswpout does not increase after test program\n");
 		goto out;
 	}
+	ret = KSFT_PASS;
+
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
+/*
+ * Check that when memory.zswap.max = 0, no pages can go to the zswap pool for
+ * the cgroup.
+ */
+static int test_swapin_nozswap(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+	long zswpout;
+
+	/* Set up */
+	test_group = cg_name(root, "no_zswap_test");
+
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.max", "8M"))
+		goto out;
+	/* Disable zswap */
+	if (cg_write(test_group, "memory.zswap.max", "0"))
+		goto out;
+
+	/* Allocate and read more than memory.max to trigger swapin */
+	if (cg_run(test_group, allocate_bytes_and_read, (void *)MB(32)))
+		goto out;
+
+	/* Verify that no zswap happened */
+	zswpout = get_zswpout(test_group);
+	if (zswpout < 0) {
+		ksft_print_msg("Failed to get zswpout\n");
+		goto out;
+	} else if (zswpout > 0) {
+		ksft_print_msg(
+			"Pages should not go to zswap when memory.zswap.max = 0\n");
+		goto out;
+	}
+	ret = KSFT_PASS;
+
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
+/* Simple test to verify the (z)swapin code paths */
+static int test_zswapin_no_limit(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+
+	/* Set up */
+	test_group = cg_name(root, "zswapin_test");
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.max", "8M"))
+		goto out;
+	if (cg_write(test_group, "memory.zswap.max", "max"))
+		goto out;
+
+	/* Allocate and read more than memory.max to trigger (z)swap in */
+	if (cg_run(test_group, allocate_bytes_and_read, (void *)MB(32)))
+		goto out;
+
 	ret = KSFT_PASS;
 
 out:
@@ -309,6 +404,8 @@ struct zswap_test {
 	const char *name;
 } tests[] = {
 	T(test_zswap_usage),
+	T(test_swapin_nozswap),
+	T(test_zswapin_no_limit),
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
 };
