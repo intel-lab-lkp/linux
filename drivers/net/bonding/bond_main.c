@@ -6419,34 +6419,34 @@ static void __net_exit bond_net_exit_batch(struct list_head *net_list)
 {
 	struct bond_net *bn;
 	struct net *net;
-	LIST_HEAD(list);
 
 	list_for_each_entry(net, net_list, exit_list) {
 		bn = net_generic(net, bond_net_id);
 		bond_destroy_sysfs(bn);
+		bond_destroy_proc_dir(bn);
 	}
+}
+
+static void __net_exit bond_net_exit_batch_rtnl(struct list_head *net_list,
+						struct list_head *dev_kill_list)
+{
+	struct bond_net *bn;
+	struct net *net;
 
 	/* Kill off any bonds created after unregistering bond rtnl ops */
-	rtnl_lock();
 	list_for_each_entry(net, net_list, exit_list) {
 		struct bonding *bond, *tmp_bond;
 
 		bn = net_generic(net, bond_net_id);
 		list_for_each_entry_safe(bond, tmp_bond, &bn->dev_list, bond_list)
-			unregister_netdevice_queue(bond->dev, &list);
-	}
-	unregister_netdevice_many(&list);
-	rtnl_unlock();
-
-	list_for_each_entry(net, net_list, exit_list) {
-		bn = net_generic(net, bond_net_id);
-		bond_destroy_proc_dir(bn);
+			unregister_netdevice_queue(bond->dev, dev_kill_list);
 	}
 }
 
 static struct pernet_operations bond_net_ops = {
 	.init = bond_net_init,
 	.exit_batch = bond_net_exit_batch,
+	.exit_batch_rtnl = bond_net_exit_batch_rtnl,
 	.id   = &bond_net_id,
 	.size = sizeof(struct bond_net),
 };
