@@ -22,23 +22,15 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
+#include "sdsi.h"
 #include "vsec.h"
 
 #define ACCESS_TYPE_BARID		2
 #define ACCESS_TYPE_LOCAL		3
 
 #define SDSI_MIN_SIZE_DWORDS		276
-#define SDSI_SIZE_MAILBOX		1024
 #define SDSI_SIZE_REGS			80
 #define SDSI_SIZE_CMD			sizeof(u64)
-
-/*
- * Write messages are currently up to the size of the mailbox
- * while read messages are up to 4 times the size of the
- * mailbox, sent in packets
- */
-#define SDSI_SIZE_WRITE_MSG		SDSI_SIZE_MAILBOX
-#define SDSI_SIZE_READ_MSG		(SDSI_SIZE_MAILBOX * 4)
 
 #define SDSI_ENABLED_FEATURES_OFFSET	16
 #define SDSI_FEATURE_SDSI		BIT(3)
@@ -101,19 +93,6 @@ struct disc_table {
 	u32	access_info;
 	u32	guid;
 	u32	offset;
-};
-
-struct sdsi_priv {
-	struct mutex		mb_lock;	/* Mailbox access lock */
-	struct device		*dev;
-	void __iomem		*control_addr;
-	void __iomem		*mbox_addr;
-	void __iomem		*regs_addr;
-	int			control_size;
-	int			maibox_size;
-	int			registers_size;
-	u32			guid;
-	u32			features;
 };
 
 /* SDSi mailbox operations must be performed using 64bit mov instructions */
