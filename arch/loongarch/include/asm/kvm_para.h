@@ -3,6 +3,13 @@
 #define _ASM_LOONGARCH_KVM_PARA_H
 
 /*
+ * Hypcall code field
+ */
+#define HYPERVISOR_KVM			1
+#define HYPERVISOR_VENDOR_SHIFT		8
+#define HYPERCALL_CODE(vendor, code)	((vendor << HYPERVISOR_VENDOR_SHIFT) + code)
+
+/*
  * LoongArch hypcall return code
  */
 #define KVM_HC_STATUS_SUCCESS		0
