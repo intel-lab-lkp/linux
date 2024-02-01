@@ -176,9 +176,9 @@ of_get_gpio_regulator_config(struct device *dev, struct device_node *np,
 			ret = of_property_read_u32_index(np, "gpios-states", i,
 							 &val);
 
-			/* Default to high per specification */
+			/* Default to low per specification */
 			if (ret)
-				config->gflags[i] = GPIOD_OUT_HIGH;
+				config->gflags[i] = GPIOD_OUT_LOW;
 			else
 				config->gflags[i] =
 					val ? GPIOD_OUT_HIGH : GPIOD_OUT_LOW;
