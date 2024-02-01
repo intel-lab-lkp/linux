@@ -413,7 +413,9 @@ int handle_misaligned_load(struct pt_regs *regs)
 
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, regs, addr);
 
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 	*this_cpu_ptr(&misaligned_access_speed) = RISCV_HWPROBE_MISALIGNED_EMULATED;
+#endif
 
 	if (!unaligned_enabled)
 		return -1;
@@ -596,6 +598,7 @@ int handle_misaligned_store(struct pt_regs *regs)
 	return 0;
 }
 
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 bool check_unaligned_access_emulated(int cpu)
 {
 	long *mas_ptr = per_cpu_ptr(&misaligned_access_speed, cpu);
@@ -640,6 +643,7 @@ void unaligned_emulation_finish(void)
 	}
 	unaligned_ctl = true;
 }
+#endif
 
 bool unaligned_ctl_available(void)
 {

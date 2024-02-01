@@ -43,10 +43,12 @@ static DECLARE_BITMAP(riscv_isa, RISCV_ISA_EXT_MAX) __read_mostly;
 /* Per-cpu ISA extensions. */
 struct riscv_isainfo hart_isa[NR_CPUS];
 
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 /* Performance information */
 DEFINE_PER_CPU(long, misaligned_access_speed);
 
 static cpumask_t fast_misaligned_access;
+#endif
 
 /**
  * riscv_isa_extension_base() - Get base extension word
@@ -706,6 +708,7 @@ unsigned long riscv_get_elf_hwcap(void)
 	return hwcap;
 }
 
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 static int check_unaligned_access(void *param)
 {
 	int cpu = smp_processor_id();
@@ -946,6 +949,7 @@ out:
 }
 
 arch_initcall(check_unaligned_access_all_cpus);
+#endif /* CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS */
 
 void riscv_user_isa_enable(void)
 {

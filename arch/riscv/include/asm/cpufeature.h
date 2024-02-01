@@ -137,10 +137,17 @@ static __always_inline bool riscv_cpu_has_extension_unlikely(int cpu, const unsi
 	return __riscv_isa_extension_available(hart_isa[cpu].isa, ext);
 }
 
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 DECLARE_STATIC_KEY_FALSE(fast_misaligned_access_speed_key);
 
 static __always_inline bool has_fast_misaligned_accesses(void)
 {
 	return static_branch_likely(&fast_misaligned_access_speed_key);
 }
+#else
+static __always_inline bool has_fast_misaligned_accesses(void)
+{
+	return true;
+}
+#endif
 #endif

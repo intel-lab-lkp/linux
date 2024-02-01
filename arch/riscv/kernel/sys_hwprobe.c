@@ -149,6 +149,7 @@ static bool hwprobe_ext0_has(const struct cpumask *cpus, unsigned long ext)
 
 static u64 hwprobe_misaligned(const struct cpumask *cpus)
 {
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 	int cpu;
 	u64 perf = -1ULL;
 
@@ -168,6 +169,9 @@ static u64 hwprobe_misaligned(const struct cpumask *cpus)
 		return RISCV_HWPROBE_MISALIGNED_UNKNOWN;
 
 	return perf;
+#else
+	return RISCV_HWPROBE_MISALIGNED_FAST;
+#endif
 }
 
 static void hwprobe_one_pair(struct riscv_hwprobe *pair,
