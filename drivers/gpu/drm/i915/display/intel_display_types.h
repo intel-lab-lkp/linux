@@ -545,6 +545,7 @@ struct intel_hdcp {
 	u64 value;
 	struct delayed_work check_work;
 	struct work_struct prop_work;
+	struct drm_modeset_acquire_ctx *acquire_ctx;
 
 	/* HDCP1.4 Encryption status */
 	bool hdcp_encrypted;

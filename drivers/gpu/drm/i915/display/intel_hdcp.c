@@ -30,12 +30,13 @@
 #define KEY_LOAD_TRIES	5
 #define HDCP2_LC_RETRY_CNT			3
 
-static int intel_conn_to_vcpi(struct drm_atomic_state *state,
-			      struct intel_connector *connector)
+static int intel_conn_to_vcpi(struct intel_connector *connector)
 {
 	struct drm_dp_mst_topology_mgr *mgr;
 	struct drm_dp_mst_atomic_payload *payload;
 	struct drm_dp_mst_topology_state *mst_state;
+	struct intel_hdcp *hdcp = &connector->hdcp;
+	struct drm_modeset_acquire_ctx *acquire_ctx = hdcp->acquire_ctx;
 	int vcpi = 0;
 
 	/* For HDMI this is forced to be 0x0. For DP SST also this is 0x0. */
@@ -43,7 +44,7 @@ static int intel_conn_to_vcpi(struct drm_atomic_state *state,
 		return 0;
 	mgr = connector->port->mgr;
 
-	drm_modeset_lock(&mgr->base.lock, state->acquire_ctx);
+	drm_modeset_lock(&mgr->base.lock, acquire_ctx);
 	mst_state = to_drm_dp_mst_topology_state(mgr->base.state);
 	payload = drm_atomic_get_mst_payload_state(mst_state, connector->port);
 	if (drm_WARN_ON(mgr->dev, !payload))
@@ -2315,8 +2316,7 @@ int intel_hdcp_init(struct intel_connector *connector,
 }
 
 static int
-intel_hdcp_set_streams(struct intel_digital_port *dig_port,
-		       struct intel_atomic_state *state)
+intel_hdcp_set_streams(struct intel_digital_port *dig_port)
 {
 	struct drm_connector_list_iter conn_iter;
 	struct intel_digital_port *conn_dig_port;
@@ -2345,7 +2345,7 @@ intel_hdcp_set_streams(struct intel_digital_port *dig_port,
 			continue;
 
 		data->streams[data->k].stream_id =
-			intel_conn_to_vcpi(&state->base, connector);
+			intel_conn_to_vcpi(connector);
 		data->k++;
 
 		/* if there is only one active stream */
@@ -2400,12 +2400,13 @@ static int _intel_hdcp_enable(struct intel_atomic_state *state,
 		dig_port->hdcp_port_data.hdcp_transcoder =
 			intel_get_hdcp_transcoder(hdcp->cpu_transcoder);
 
+	hdcp->acquire_ctx = state->base.acquire_ctx;
 	/*
 	 * Considering that HDCP2.2 is more secure than HDCP1.4, If the setup
 	 * is capable of HDCP2.2, it is preferred to use HDCP2.2.
 	 */
 	if (intel_hdcp2_capable(connector)) {
-		ret = intel_hdcp_set_streams(dig_port, state);
+		ret = intel_hdcp_set_streams(dig_port);
 		if (!ret) {
 			ret = _intel_hdcp2_enable(connector);
 			if (!ret)
