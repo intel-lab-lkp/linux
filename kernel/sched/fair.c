@@ -5462,7 +5462,7 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * 5) do not run the "skip" process, if something else is available
  */
 static struct sched_entity *
-pick_next_entity(struct cfs_rq *cfs_rq, bool throttled)
+pick_next_entity(struct cfs_rq *cfs_rq)
 {
 #ifdef CONFIG_CFS_BANDWIDTH
 	/*
@@ -5473,7 +5473,7 @@ pick_next_entity(struct cfs_rq *cfs_rq, bool throttled)
 	 * throttle_cfs_rq.
 	 */
 	WARN_ON_ONCE(list_empty(&cfs_rq->kernel_children));
-	if (throttled && !list_empty(&cfs_rq->kernel_children)) {
+	if (cfs_rq->throttle_pending && !list_empty(&cfs_rq->kernel_children)) {
 		/*
 		 * TODO: you'd want to factor out pick_eevdf to just take
 		 * tasks_timeline, and replace this list with a second rbtree
@@ -5791,8 +5791,12 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	 * We don't actually throttle, though account() will have made sure to
 	 * resched us so that we pick into a kernel task.
 	 */
-	if (cfs_rq->h_kernel_running)
+	if (cfs_rq->h_kernel_running) {
+		cfs_rq->throttle_pending = true;
 		return false;
+	}
+
+	cfs_rq->throttle_pending = false;
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -6664,20 +6668,6 @@ static void dequeue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int c
 	    !group_cfs_rq(se)->h_kernel_running)
 		list_del_init(&se->kernel_node);
 	cfs_rq->h_kernel_running -= count;
-}
-
-/*
- * Returns if the cfs_rq "should" be throttled but might not be because of
- * kernel threads bypassing throttle.
- */
-static bool cfs_rq_throttled_loose(struct cfs_rq *cfs_rq)
-{
-	if (!cfs_bandwidth_used())
-		return false;
-
-	if (likely(!cfs_rq->runtime_enabled || cfs_rq->runtime_remaining > 0))
-		return false;
-	return true;
 }
 
 static void unthrottle_on_enqueue(struct task_struct *p)
@@ -8546,7 +8536,6 @@ static struct task_struct *pick_task_fair(struct rq *rq)
 {
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
-	bool throttled = false;
 
 again:
 	cfs_rq = &rq->cfs;
@@ -8567,10 +8556,7 @@ again:
 				goto again;
 		}
 
-		if (cfs_rq_throttled_loose(cfs_rq))
-			throttled = true;
-
-		se = pick_next_entity(cfs_rq, throttled);
+		se = pick_next_entity(cfs_rq);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
 
@@ -8585,7 +8571,6 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
 	struct sched_entity *se;
 	struct task_struct *p;
 	int new_tasks;
-	bool throttled;
 
 	/*
 	 * We want to handle this before check_cfs_runtime(prev). We'll
@@ -8609,8 +8594,6 @@ again:
 	 * Therefore attempt to avoid putting and setting the entire cgroup
 	 * hierarchy, only change the part that actually changes.
 	 */
-
-	throttled = false;
 	do {
 		struct sched_entity *curr = cfs_rq->curr;
 
@@ -8641,11 +8624,7 @@ again:
 				goto simple;
 			}
 		}
-
-		if (cfs_rq_throttled_loose(cfs_rq))
-			throttled = true;
-
-		se = pick_next_entity(cfs_rq, throttled);
+		se = pick_next_entity(cfs_rq);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
 
@@ -8683,11 +8662,8 @@ simple:
 	if (prev)
 		put_prev_task(rq, prev);
 
-	throttled = false;
 	do {
-		if (cfs_rq_throttled_loose(cfs_rq))
-			throttled = true;
-		se = pick_next_entity(cfs_rq, throttled);
+		se = pick_next_entity(cfs_rq);
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
