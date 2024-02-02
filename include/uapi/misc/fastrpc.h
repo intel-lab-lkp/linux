@@ -182,9 +182,17 @@ struct fastrpc_ctrl_smmu {
 	u32 sharedcb;	/* Set to SMMU share context bank */
 };
 
+struct fastrpc_ctrl_latency {
+	u32 enable;	/* latency control enable */
+	u32 latency;	/* latency request in us */
+};
+
 struct fastrpc_internal_control {
 	u32 req;
-	struct fastrpc_ctrl_smmu smmu;
+	union {
+		struct fastrpc_ctrl_smmu smmu;
+		struct fastrpc_ctrl_latency lp;
+	};
 };
 
 enum fastrpc_perfkeys {
