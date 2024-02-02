@@ -92,15 +92,19 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 		goto deregister_device;
 	}
 
+	mana_ib_gd_create_rnic_adapter(dev);
+
 	ret = ib_register_device(&dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
 	if (ret)
-		goto deregister_device;
+		goto destroy_rnic_adapter;
 
 	dev_set_drvdata(&adev->dev, dev);
 
 	return 0;
 
+destroy_rnic_adapter:
+	mana_ib_gd_destroy_rnic_adapter(dev);
 deregister_device:
 	mana_gd_deregister_device(dev->gdma_dev);
 free_ib_device:
@@ -113,9 +117,8 @@ static void mana_ib_remove(struct auxiliary_device *adev)
 	struct mana_ib_dev *dev = dev_get_drvdata(&adev->dev);
 
 	ib_unregister_device(&dev->ib_dev);
-
+	mana_ib_gd_destroy_rnic_adapter(dev);
 	mana_gd_deregister_device(dev->gdma_dev);
-
 	ib_dealloc_device(&dev->ib_dev);
 }
 
