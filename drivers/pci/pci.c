@@ -3127,6 +3127,9 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 		 */
 		if (dmi_get_bios_year() >= 2015)
 			return true;
+
+		if (bridge->bridge_d3_capable)
+			return true;
 		break;
 	}
 
