@@ -211,6 +211,15 @@ struct fastrpc_internal_notif_rsp {
 	u32 status;		/* Status of the process */
 };
 
+struct fastrpc_internal_dspsignal {
+	u32 req;
+	u32 signal_id;
+	union {
+		u32 flags;
+		u32 timeout_usec;
+	};
+};
+
 enum fastrpc_perfkeys {
 	PERF_COUNT = 0,
 	PERF_FLUSH = 1,
@@ -223,6 +232,14 @@ enum fastrpc_perfkeys {
 	PERF_INVOKE = 8,
 	PERF_TID = 9,
 	PERF_KEY_MAX = 10,
+};
+
+enum fastrpc_dspsignal_type {
+	FASTRPC_DSPSIGNAL_SIGNAL = 1,
+	FASTRPC_DSPSIGNAL_WAIT = 2,
+	FASTRPC_DSPSIGNAL_CREATE = 3,
+	FASTRPC_DSPSIGNAL_DESTROY = 4,
+	FASTRPC_DSPSIGNAL_CANCEL_WAIT = 5,
 };
 
 enum fastrpc_status_flags {
