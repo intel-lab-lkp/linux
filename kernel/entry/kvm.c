@@ -14,7 +14,7 @@ static int xfer_to_guest_mode_work(struct kvm_vcpu *vcpu, unsigned long ti_work)
 		}
 
 		if (ti_work & _TIF_NEED_RESCHED)
-			schedule();
+			schedule_usermode();
 
 		if (ti_work & _TIF_NOTIFY_RESUME)
 			resume_user_mode_work(NULL);

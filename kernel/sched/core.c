@@ -4529,6 +4529,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
 #endif
+#ifdef CONFIG_CFS_BANDWIDTH
+	INIT_LIST_HEAD(&p->se.kernel_node);
+	atomic_set(&p->in_return_to_user, 0);
+#endif
 
 #ifdef CONFIG_SCHEDSTATS
 	/* Even if schedstat is disabled, there should not be garbage */
@@ -6817,6 +6821,22 @@ asmlinkage __visible void __sched schedule(void)
 	sched_update_worker(tsk);
 }
 EXPORT_SYMBOL(schedule);
+
+asmlinkage __visible void __sched schedule_usermode(void)
+{
+#ifdef CONFIG_CFS_BANDWIDTH
+	/*
+	 * This is only atomic because of this simple implementation. We could
+	 * do something with an SM_USER to avoid other-cpu scheduler operations
+	 * racing against these writes.
+	 */
+	atomic_set(&current->in_return_to_user, true);
+	schedule();
+	atomic_set(&current->in_return_to_user, false);
+#else
+	schedule();
+#endif
+}
 
 /*
  * synchronize_rcu_tasks() makes sure that no task is stuck in preempted

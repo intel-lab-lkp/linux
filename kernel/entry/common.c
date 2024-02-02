@@ -156,7 +156,7 @@ static unsigned long exit_to_user_mode_loop(struct pt_regs *regs,
 		local_irq_enable_exit_to_user(ti_work);
 
 		if (ti_work & _TIF_NEED_RESCHED)
-			schedule();
+			schedule_usermode(); /* TODO: also all of the arch/ loops that don't use this yet */
 
 		if (ti_work & _TIF_UPROBE)
 			uprobe_notify_resume(regs);

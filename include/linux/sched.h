@@ -303,6 +303,7 @@ extern long schedule_timeout_killable(long timeout);
 extern long schedule_timeout_uninterruptible(long timeout);
 extern long schedule_timeout_idle(long timeout);
 asmlinkage void schedule(void);
+asmlinkage void schedule_usermode(void);
 extern void schedule_preempt_disabled(void);
 asmlinkage void preempt_schedule_irq(void);
 #ifdef CONFIG_PREEMPT_RT
@@ -553,6 +554,9 @@ struct sched_entity {
 	struct cfs_rq			*my_q;
 	/* cached value of my_q->h_nr_running */
 	unsigned long			runnable_weight;
+#ifdef CONFIG_CFS_BANDWIDTH
+	struct list_head		kernel_node;
+#endif
 #endif
 
 #ifdef CONFIG_SMP
@@ -1539,6 +1543,9 @@ struct task_struct {
 	struct user_event_mm		*user_event_mm;
 #endif
 
+#ifdef CONFIG_CFS_BANDWIDTH
+	atomic_t			in_return_to_user;
+#endif
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.

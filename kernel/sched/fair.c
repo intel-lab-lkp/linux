@@ -128,6 +128,7 @@ int __weak arch_asym_cpu_priority(int cpu)
  * (default: 5 msec, units: microseconds)
  */
 static unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
+static unsigned int sysctl_sched_cfs_bandwidth_kernel_bypass	= 1;
 #endif
 
 #ifdef CONFIG_NUMA_BALANCING
@@ -145,6 +146,15 @@ static struct ctl_table sched_fair_sysctls[] = {
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec_minmax,
 		.extra1         = SYSCTL_ONE,
+	},
+	{
+		.procname       = "sched_cfs_bandwidth_kernel_bypass",
+		.data           = &sysctl_sched_cfs_bandwidth_kernel_bypass,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
 	},
 #endif
 #ifdef CONFIG_NUMA_BALANCING
@@ -5445,14 +5455,34 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 /*
  * Pick the next process, keeping these things in mind, in this order:
- * 1) keep things fair between processes/task groups
- * 2) pick the "next" process, since someone really wants that to run
- * 3) pick the "last" process, for cache locality
- * 4) do not run the "skip" process, if something else is available
+ * 1) If we're inside a throttled cfs_rq, only pick threads in the kernel
+ * 2) keep things fair between processes/task groups
+ * 3) pick the "next" process, since someone really wants that to run
+ * 4) pick the "last" process, for cache locality
+ * 5) do not run the "skip" process, if something else is available
  */
 static struct sched_entity *
-pick_next_entity(struct cfs_rq *cfs_rq)
+pick_next_entity(struct cfs_rq *cfs_rq, bool throttled)
 {
+#ifdef CONFIG_CFS_BANDWIDTH
+	/*
+	 * TODO: This might trigger, I'm not sure/don't remember. Regardless,
+	 * while we do not explicitly handle the case where h_kernel_running
+	 * goes to 0, we will call account/check_cfs_rq_runtime at worst in
+	 * entity_tick and notice that we can now properly do the full
+	 * throttle_cfs_rq.
+	 */
+	WARN_ON_ONCE(list_empty(&cfs_rq->kernel_children));
+	if (throttled && !list_empty(&cfs_rq->kernel_children)) {
+		/*
+		 * TODO: you'd want to factor out pick_eevdf to just take
+		 * tasks_timeline, and replace this list with a second rbtree
+		 * and a call to pick_eevdf.
+		 */
+		return list_first_entry(&cfs_rq->kernel_children,
+					struct sched_entity, kernel_node);
+	}
+#endif
 	/*
 	 * Enabling NEXT_BUDDY will affect latency but not fairness.
 	 */
@@ -5651,8 +5681,14 @@ static void __account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec)
 	/*
 	 * if we're unable to extend our runtime we resched so that the active
 	 * hierarchy can be throttled
+	 *
+	 * Don't resched_curr() if curr is in the kernel. We won't throttle the
+	 * cfs_rq if any task is in the kernel, and if curr in particular is we
+	 * don't need to preempt it in favor of whatever other task is in the
+	 * kernel.
 	 */
-	if (!assign_cfs_rq_runtime(cfs_rq) && likely(cfs_rq->curr))
+	if (!assign_cfs_rq_runtime(cfs_rq) && likely(cfs_rq->curr) &&
+	    list_empty(&rq_of(cfs_rq)->curr->se.kernel_node))
 		resched_curr(rq_of(cfs_rq));
 }
 
@@ -5741,12 +5777,22 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 	return 0;
 }
 
+static void enqueue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count);
+static void dequeue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count);
+
 static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long task_delta, idle_task_delta, dequeue = 1;
+	long task_delta, idle_task_delta, kernel_delta, dequeue = 1;
+
+	/*
+	 * We don't actually throttle, though account() will have made sure to
+	 * resched us so that we pick into a kernel task.
+	 */
+	if (cfs_rq->h_kernel_running)
+		return false;
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5778,6 +5824,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	task_delta = cfs_rq->h_nr_running;
 	idle_task_delta = cfs_rq->idle_h_nr_running;
+	kernel_delta = cfs_rq->h_kernel_running;
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
 		/* throttled entity or throttle-on-deactivate */
@@ -5791,6 +5838,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		qcfs_rq->h_nr_running -= task_delta;
 		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		dequeue_kernel(qcfs_rq, se, kernel_delta);
 
 		if (qcfs_rq->load.weight) {
 			/* Avoid re-evaluating load for this entity: */
@@ -5813,6 +5861,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		qcfs_rq->h_nr_running -= task_delta;
 		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		dequeue_kernel(qcfs_rq, se, kernel_delta);
 	}
 
 	/* At this point se is NULL and we are at root level*/
@@ -5835,7 +5884,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long task_delta, idle_task_delta;
+	long task_delta, idle_task_delta, kernel_delta;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
@@ -5870,6 +5919,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	task_delta = cfs_rq->h_nr_running;
 	idle_task_delta = cfs_rq->idle_h_nr_running;
+	kernel_delta = cfs_rq->h_kernel_running;
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
 
@@ -5882,6 +5932,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		qcfs_rq->h_nr_running += task_delta;
 		qcfs_rq->idle_h_nr_running += idle_task_delta;
+		enqueue_kernel(qcfs_rq, se, kernel_delta);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(qcfs_rq))
@@ -5899,6 +5950,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		qcfs_rq->h_nr_running += task_delta;
 		qcfs_rq->idle_h_nr_running += idle_task_delta;
+		enqueue_kernel(qcfs_rq, se, kernel_delta);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(qcfs_rq))
@@ -6557,6 +6609,86 @@ static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
 }
 #endif
 
+/*
+ * We keep track of all children that are runnable in the kernel with a count of
+ * all descendants. The state is checked on enqueue and put_prev (and hard
+ * cleared on dequeue), and is stored just as the filled/empty state of the
+ * kernel_node list entry.
+ *
+ * These are simple helpers that do both parts, and should be called bottom-up
+ * until hitting a throttled cfs_rq whenever a task changes state (or a cfs_rq
+ * is (un)throttled).
+ */
+static void enqueue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count)
+{
+	if (count == 0)
+		return;
+
+	if (list_empty(&se->kernel_node))
+		list_add(&se->kernel_node, &cfs_rq->kernel_children);
+	cfs_rq->h_kernel_running += count;
+}
+
+static bool is_kernel_task(struct task_struct *p)
+{
+	return sysctl_sched_cfs_bandwidth_kernel_bypass && !atomic_read(&p->in_return_to_user);
+}
+
+/*
+ * When called on a task this always transitions it to a !kernel state.
+ *
+ * When called on a group it is just synchronizing the state with the new
+ * h_kernel_waiters, unless this it has been throttled and is !on_rq
+ */
+static void dequeue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count)
+{
+	if (count == 0)
+		return;
+
+	if (!se->on_rq || entity_is_task(se) ||
+	    !group_cfs_rq(se)->h_kernel_running)
+		list_del_init(&se->kernel_node);
+	cfs_rq->h_kernel_running -= count;
+}
+
+/*
+ * Returns if the cfs_rq "should" be throttled but might not be because of
+ * kernel threads bypassing throttle.
+ */
+static bool cfs_rq_throttled_loose(struct cfs_rq *cfs_rq)
+{
+	if (!cfs_bandwidth_used())
+		return false;
+
+	if (likely(!cfs_rq->runtime_enabled || cfs_rq->runtime_remaining > 0))
+		return false;
+	return true;
+}
+
+static void unthrottle_on_enqueue(struct task_struct *p)
+{
+	struct sched_entity *se = &p->se;
+
+	if (!cfs_bandwidth_used() || !sysctl_sched_cfs_bandwidth_kernel_bypass)
+		return;
+	if (!cfs_rq_of(&p->se)->throttle_count)
+		return;
+
+	/*
+	 * MAYBE TODO: doing it this simple way is O(throttle_count *
+	 * cgroup_depth). We could optimize that into a single pass, but making
+	 * a mostly-copy of unthrottle_cfs_rq that does that is a pain and easy
+	 * to get wrong. (And even without unthrottle_on_enqueue it's O(nm),
+	 * just not while holding rq->lock the whole time)
+	 */
+
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+		if (cfs_rq->throttled)
+			unthrottle_cfs_rq(cfs_rq);
+	}
+}
+
 #else /* CONFIG_CFS_BANDWIDTH */
 
 static inline bool cfs_bandwidth_used(void)
@@ -6604,6 +6736,16 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 	return false;
 }
 #endif
+static void enqueue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count) {}
+static void dequeue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count) {}
+static inline bool is_kernel_task(struct task_struct *p)
+{
+	return false;
+}
+static bool cfs_rq_throttled_loose(struct cfs_rq *cfs_rq)
+{
+	return false;
+}
 #endif /* CONFIG_CFS_BANDWIDTH */
 
 #if !defined(CONFIG_CFS_BANDWIDTH) || !defined(CONFIG_NO_HZ_FULL)
@@ -6707,6 +6849,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	int task_new = !(flags & ENQUEUE_WAKEUP);
+	bool kernel_task = is_kernel_task(p);
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -6735,6 +6878,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
+		if (kernel_task)
+			enqueue_kernel(cfs_rq, se, 1);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -6755,6 +6900,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
+		if (kernel_task)
+			enqueue_kernel(cfs_rq, se, 1);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -6785,6 +6932,9 @@ enqueue_throttle:
 	assert_list_leaf_cfs_rq(rq);
 
 	hrtick_update(rq);
+
+	if (kernel_task)
+		unthrottle_on_enqueue(p);
 }
 
 static void set_next_buddy(struct sched_entity *se);
@@ -6801,6 +6951,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int task_sleep = flags & DEQUEUE_SLEEP;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	bool was_sched_idle = sched_idle_rq(rq);
+	bool kernel_task = !list_empty(&p->se.kernel_node);
 
 	util_est_dequeue(&rq->cfs, p);
 
@@ -6813,6 +6964,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
+		if (kernel_task)
+			dequeue_kernel(cfs_rq, se, 1);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -6845,6 +6998,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
+		if (kernel_task)
+			dequeue_kernel(cfs_rq, se, 1);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -8343,11 +8498,40 @@ preempt:
 	resched_curr(rq);
 }
 
+static void handle_kernel_task_prev(struct task_struct *prev)
+{
+#ifdef CONFIG_CFS_BANDWIDTH
+	struct sched_entity *se = &prev->se;
+	bool p_in_kernel = is_kernel_task(prev);
+	bool p_in_kernel_tree = !list_empty(&se->kernel_node);
+	/*
+	 * These extra loops are bad and against the whole point of the merged
+	 * PNT, but it's a pain to merge, particularly since we want it to occur
+	 * before check_cfs_runtime().
+	 */
+	if (p_in_kernel_tree && !p_in_kernel) {
+		WARN_ON_ONCE(!se->on_rq); /* dequeue should have removed us */
+		for_each_sched_entity(se) {
+			dequeue_kernel(cfs_rq_of(se), se, 1);
+			if (cfs_rq_throttled(cfs_rq_of(se)))
+				break;
+		}
+	} else if (!p_in_kernel_tree && p_in_kernel && se->on_rq) {
+		for_each_sched_entity(se) {
+			enqueue_kernel(cfs_rq_of(se), se, 1);
+			if (cfs_rq_throttled(cfs_rq_of(se)))
+				break;
+		}
+	}
+#endif
+}
+
 #ifdef CONFIG_SMP
 static struct task_struct *pick_task_fair(struct rq *rq)
 {
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
+	bool throttled = false;
 
 again:
 	cfs_rq = &rq->cfs;
@@ -8368,7 +8552,10 @@ again:
 				goto again;
 		}
 
-		se = pick_next_entity(cfs_rq);
+		if (cfs_rq_throttled_loose(cfs_rq))
+			throttled = true;
+
+		se = pick_next_entity(cfs_rq, throttled);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
 
@@ -8383,6 +8570,14 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
 	struct sched_entity *se;
 	struct task_struct *p;
 	int new_tasks;
+	bool throttled;
+
+	/*
+	 * We want to handle this before check_cfs_runtime(prev). We'll
+	 * duplicate a little work in the goto simple case, but that's fine
+	 */
+	if (prev)
+		handle_kernel_task_prev(prev);
 
 again:
 	if (!sched_fair_runnable(rq))
@@ -8400,6 +8595,7 @@ again:
 	 * hierarchy, only change the part that actually changes.
 	 */
 
+	throttled = false;
 	do {
 		struct sched_entity *curr = cfs_rq->curr;
 
@@ -8431,7 +8627,10 @@ again:
 			}
 		}
 
-		se = pick_next_entity(cfs_rq);
+		if (cfs_rq_throttled_loose(cfs_rq))
+			throttled = true;
+
+		se = pick_next_entity(cfs_rq, throttled);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
 
@@ -8469,8 +8668,11 @@ simple:
 	if (prev)
 		put_prev_task(rq, prev);
 
+	throttled = false;
 	do {
-		se = pick_next_entity(cfs_rq);
+		if (cfs_rq_throttled_loose(cfs_rq))
+			throttled = true;
+		se = pick_next_entity(cfs_rq, throttled);
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
@@ -8533,6 +8735,8 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev)
 {
 	struct sched_entity *se = &prev->se;
 	struct cfs_rq *cfs_rq;
+
+	handle_kernel_task_prev(prev);
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -12818,6 +13022,9 @@ void init_cfs_rq(struct cfs_rq *cfs_rq)
 #ifdef CONFIG_SMP
 	raw_spin_lock_init(&cfs_rq->removed.lock);
 #endif
+#ifdef CONFIG_CFS_BANDWIDTH
+	INIT_LIST_HEAD(&cfs_rq->kernel_children);
+#endif
 }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -12970,6 +13177,9 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	/* guarantee group entities always have weight */
 	update_load_set(&se->load, NICE_0_LOAD);
 	se->parent = parent;
+#ifdef CONFIG_CFS_BANDWIDTH
+	INIT_LIST_HEAD(&se->kernel_node);
+#endif
 }
 
 static DEFINE_MUTEX(shares_mutex);

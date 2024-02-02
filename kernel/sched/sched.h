@@ -580,6 +580,7 @@ struct cfs_rq {
 
 	struct rb_root_cached	tasks_timeline;
 
+
 	/*
 	 * 'curr' points to currently running entity on this cfs_rq.
 	 * It is set to NULL otherwise (i.e when none are currently running).
@@ -658,8 +659,10 @@ struct cfs_rq {
 	u64			throttled_clock_self_time;
 	int			throttled;
 	int			throttle_count;
+	int			h_kernel_running;
 	struct list_head	throttled_list;
 	struct list_head	throttled_csd_list;
+	struct list_head	kernel_children;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 };

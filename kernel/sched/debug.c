@@ -319,6 +319,32 @@ static const struct file_operations sched_verbose_fops = {
 	.llseek =       default_llseek,
 };
 
+static DEFINE_MUTEX(sched_debug_spin_mutex);
+static int sched_debug_spin_show(struct seq_file *m, void *v) {
+	int count;
+	mutex_lock(&sched_debug_spin_mutex);
+	for (count = 0; count < 1000; count++) {
+		u64 start2;
+		start2 = jiffies;
+		while (jiffies == start2)
+			cpu_relax();
+		schedule();
+	}
+	mutex_unlock(&sched_debug_spin_mutex);
+	return 0;
+}
+static int sched_debug_spin_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_debug_spin_show, NULL);
+}
+
+static const struct file_operations sched_debug_spin_fops = {
+	.open		= sched_debug_spin_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static const struct seq_operations sched_debug_sops;
 
 static int sched_debug_open(struct inode *inode, struct file *filp)
@@ -374,6 +400,8 @@ static __init int sched_init_debug(void)
 
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);
 
+	debugfs_create_file("sched_locked_spin", 0444, NULL, NULL,
+			    &sched_debug_spin_fops);
 	return 0;
 }
 late_initcall(sched_init_debug);
