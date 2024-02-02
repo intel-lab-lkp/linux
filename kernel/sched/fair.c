@@ -6631,7 +6631,22 @@ static void enqueue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int c
 
 static bool is_kernel_task(struct task_struct *p)
 {
-	return sysctl_sched_cfs_bandwidth_kernel_bypass && !atomic_read(&p->in_return_to_user);
+	/*
+	 * The flag is updated within __schedule() with preemption disabled,
+	 * under the rq lock, and only when the task is current.
+	 *
+	 * Holding the rq lock for that task's CPU is thus sufficient for the
+	 * value to be stable, if the task is enqueued.
+	 *
+	 * If the task is dequeued, then task_cpu(p) *can* change, but this
+	 * so far only happens in enqueue_task_fair() which means either:
+	 * - the task is being activated, its CPU has been set previously in ttwu()
+	 * - the task is going through a "change" cycle (e.g. sched_move_task()),
+	 *   the pi_lock is also held so the CPU is stable.
+	 */
+	lockdep_assert_rq_held(cpu_rq(task_cpu(p)));
+
+	return sysctl_sched_cfs_bandwidth_kernel_bypass && !p->in_return_to_user;
 }
 
 /*

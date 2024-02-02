@@ -1544,7 +1544,7 @@ struct task_struct {
 #endif
 
 #ifdef CONFIG_CFS_BANDWIDTH
-	atomic_t			in_return_to_user;
+	int				in_return_to_user;
 #endif
 	/*
 	 * New fields for task_struct should be added above here, so that

@@ -4531,7 +4531,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
 	INIT_LIST_HEAD(&p->se.kernel_node);
-	atomic_set(&p->in_return_to_user, 0);
+	p->in_return_to_user            = false;
 #endif
 
 #ifdef CONFIG_SCHEDSTATS
@@ -5147,6 +5147,9 @@ prepare_lock_switch(struct rq *rq, struct task_struct *next, struct rq_flags *rf
 
 static inline void finish_lock_switch(struct rq *rq)
 {
+#ifdef CONFIG_CFS_BANDWIDTH
+	current->in_return_to_user = false;
+#endif
 	/*
 	 * If we are tracking spinlock dependencies then we have to
 	 * fix up the runqueue lock - which gets 'carried over' from
@@ -6562,6 +6565,18 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 #define SM_PREEMPT		0x1
 #define SM_RTLOCK_WAIT		0x2
 
+/*
+ * Special case for CFS_BANDWIDTH where we need to know if the call to
+ * __schedule() is directely preceding an entry into userspace.
+ * It is removed from the mode argument as soon as it is used to not go against
+ * the SM_MASK_PREEMPT optimisation below.
+ */
+#ifdef CONFIG_CFS_BANDWIDTH
+# define SM_USER                0x4
+#else
+# define SM_USER                SM_NONE
+#endif
+
 #ifndef CONFIG_PREEMPT_RT
 # define SM_MASK_PREEMPT	(~0U)
 #else
@@ -6645,6 +6660,14 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	 */
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	if (sched_mode & SM_USER) {
+		prev->in_return_to_user = true;
+		sched_mode &= ~SM_USER;
+	}
+#endif
+	SCHED_WARN_ON(sched_mode & SM_USER);
 
 	/* Promote REQ to ACT */
 	rq->clock_update_flags <<= 1;
@@ -6807,7 +6830,7 @@ static __always_inline void __schedule_loop(unsigned int sched_mode)
 	} while (need_resched());
 }
 
-asmlinkage __visible void __sched schedule(void)
+static __always_inline void schedule_with_mode(unsigned int sched_mode)
 {
 	struct task_struct *tsk = current;
 
@@ -6817,22 +6840,20 @@ asmlinkage __visible void __sched schedule(void)
 
 	if (!task_is_running(tsk))
 		sched_submit_work(tsk);
-	__schedule_loop(SM_NONE);
+	__schedule_loop(sched_mode);
 	sched_update_worker(tsk);
+}
+
+asmlinkage __visible void __sched schedule(void)
+{
+	schedule_with_mode(SM_NONE);
 }
 EXPORT_SYMBOL(schedule);
 
 asmlinkage __visible void __sched schedule_usermode(void)
 {
 #ifdef CONFIG_CFS_BANDWIDTH
-	/*
-	 * This is only atomic because of this simple implementation. We could
-	 * do something with an SM_USER to avoid other-cpu scheduler operations
-	 * racing against these writes.
-	 */
-	atomic_set(&current->in_return_to_user, true);
-	schedule();
-	atomic_set(&current->in_return_to_user, false);
+	schedule_with_mode(SM_USER);
 #else
 	schedule();
 #endif
