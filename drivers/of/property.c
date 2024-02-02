@@ -1232,7 +1232,6 @@ DEFINE_SIMPLE_PROP(pinctrl5, "pinctrl-5", NULL)
 DEFINE_SIMPLE_PROP(pinctrl6, "pinctrl-6", NULL)
 DEFINE_SIMPLE_PROP(pinctrl7, "pinctrl-7", NULL)
 DEFINE_SIMPLE_PROP(pinctrl8, "pinctrl-8", NULL)
-DEFINE_SIMPLE_PROP(remote_endpoint, "remote-endpoint", NULL)
 DEFINE_SIMPLE_PROP(pwms, "pwms", "#pwm-cells")
 DEFINE_SIMPLE_PROP(resets, "resets", "#reset-cells")
 DEFINE_SIMPLE_PROP(leds, "leds", NULL)
@@ -1301,6 +1300,24 @@ static struct device_node *parse_interrupts(struct device_node *np,
 static struct device_node *get_remote_endpoint_dev(struct device_node *np)
 {
 	return to_of_node(fwnode_graph_get_port_parent(of_fwnode_handle(np)));
+}
+
+static struct device_node *parse_remote_endpoint(struct device_node *np,
+						 const char *prop_name,
+						 int index)
+{
+	struct device_node *endpoint, *sup;
+
+	if (strcmp(prop_name, "remote-endpoint"))
+		return NULL;
+
+	endpoint = of_parse_phandle(np, prop_name, index);
+	if (!endpoint)
+		return NULL;
+
+	sup = get_remote_endpoint_dev(endpoint);
+	of_node_put(endpoint);
+	return sup;
 }
 
 static const struct supplier_bindings of_supplier_bindings[] = {
