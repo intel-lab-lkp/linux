@@ -125,6 +125,11 @@
 /* Process status notifications from DSP will be sent with this unique context */
 #define FASTRPC_NOTIF_CTX_RESERVED 0xABCDABCD
 
+/* Maximum PM timeout that can be voted through fastrpc */
+#define FASTRPC_MAX_PM_TIMEOUT_MS 50
+#define FASTRPC_NON_SECURE_WAKE_SOURCE_CLIENT_NAME	"fastrpc-non_secure"
+#define FASTRPC_SECURE_WAKE_SOURCE_CLIENT_NAME		"fastrpc-secure"
+
 #define miscdev_to_fdevice(d) container_of(d, struct fastrpc_device, miscdev)
 
 #define AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME   "audio_pdr_adsp"
@@ -419,6 +424,10 @@ struct fastrpc_channel_ctx {
 	struct fastrpc_device *secure_fdevice;
 	struct fastrpc_device *fdevice;
 	struct list_head rmaps;
+	/* Secure subsystems like ADSP/SLPI will use secure client */
+	struct wakeup_source *wake_source_secure;
+	/* Non-secure subsystem like CDSP will use regular client */
+	struct wakeup_source *wake_source;
 	bool secure;
 	bool unsigned_support;
 	bool cpuinfo_status;
@@ -449,6 +458,8 @@ struct fastrpc_user {
 	u32 profile;
 	/* Threads poll for specified timeout and fall back to glink wait */
 	u32 poll_timeout;
+	u32 ws_timeout;
+	u32 wake_enable;
 	int tgid;
 	int pd;
 	bool is_secure_dev;
@@ -995,6 +1006,43 @@ static void fastrpc_session_free(struct fastrpc_channel_ctx *cctx,
 	spin_lock_irqsave(&cctx->lock, flags);
 	session->used = false;
 	spin_unlock_irqrestore(&cctx->lock, flags);
+}
+
+static void fastrpc_pm_awake(struct fastrpc_user *fl,
+					u32 is_secure_channel)
+{
+	struct fastrpc_channel_ctx *cctx = fl->cctx;
+	struct wakeup_source *wake_source = NULL;
+
+	/*
+	 * Vote with PM to abort any suspend in progress and
+	 * keep system awake for specified timeout
+	 */
+	if (is_secure_channel)
+		wake_source = cctx->wake_source_secure;
+	else
+		wake_source = cctx->wake_source;
+
+	if (wake_source)
+		pm_wakeup_ws_event(wake_source, fl->ws_timeout, true);
+}
+
+static void fastrpc_pm_relax(struct fastrpc_user *fl,
+					u32 is_secure_channel)
+{
+	struct fastrpc_channel_ctx *cctx = fl->cctx;
+	struct wakeup_source *wake_source = NULL;
+
+	if (!fl->wake_enable)
+		return;
+
+	if (is_secure_channel)
+		wake_source = cctx->wake_source_secure;
+	else
+		wake_source = cctx->wake_source;
+
+	if (wake_source)
+		__pm_relax(wake_source);
 }
 
 static int fastrpc_map_create(struct fastrpc_user *fl, int fd,
@@ -2070,6 +2118,7 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
 		fastrpc_buf_free(buf);
 	}
 
+	fastrpc_pm_relax(fl, cctx->secure);
 	fastrpc_session_free(cctx, fl->sctx);
 	fastrpc_channel_ctx_put(cctx);
 
@@ -2357,13 +2406,31 @@ static int fastrpc_internal_control(struct fastrpc_user *fl,
 	case FASTRPC_CONTROL_SMMU:
 		fl->sharedcb = cp->smmu.sharedcb;
 		break;
-	case FASTRPC_CONTROL_RPC_POLL:
-		err = fastrpc_manage_poll_mode(fl, cp->lp.enable, cp->lp.latency);
+	case FASTRPC_CONTROL_WAKELOCK:
+		if (!fl->is_secure_dev) {
+			dev_err(&fl->cctx->rpdev->dev,
+				"PM voting not allowed for non-secure device node");
+			err = -EPERM;
+			return err;
+		}
+		fl->wake_enable = cp->wp.enable;
+		break;
+	case FASTRPC_CONTROL_PM:
+		if (!fl->wake_enable)
+			return -EACCES;
+		if (cp->pm.timeout > FASTRPC_MAX_PM_TIMEOUT_MS)
+			fl->ws_timeout = FASTRPC_MAX_PM_TIMEOUT_MS;
+		else
+			fl->ws_timeout = cp->pm.timeout;
+		fastrpc_pm_awake(fl, fl->cctx->secure);
 		break;
 	case FASTRPC_CONTROL_DSPPROCESS_CLEAN:
 		err = fastrpc_release_current_dsp_process(fl);
 		if (!err)
 			fastrpc_queue_pd_status(fl, fl->cctx->domain_id, FASTRPC_USERPD_FORCE_KILL);
+		break;
+	case FASTRPC_CONTROL_RPC_POLL:
+		err = fastrpc_manage_poll_mode(fl, cp->lp.enable, cp->lp.latency);
 		break;
 	default:
 		err = -EBADRQC;
@@ -3268,6 +3335,21 @@ bail:
 	return err;
 }
 
+static void fastrpc_register_wakeup_source(struct device *dev,
+	const char *client_name, struct wakeup_source **device_wake_source)
+{
+	struct wakeup_source *wake_source = NULL;
+
+	wake_source = wakeup_source_register(dev, client_name);
+	if (IS_ERR_OR_NULL(wake_source)) {
+		dev_err(dev, "wakeup_source_register failed for dev %s, client %s with err %ld\n",
+		dev_name(dev), client_name, PTR_ERR(wake_source));
+		return;
+	}
+
+	*device_wake_source = wake_source;
+}
+
 static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 {
 	struct device *rdev = &rpdev->dev;
@@ -3368,6 +3450,13 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 			goto populate_error;
 	}
 
+	if (data->fdevice)
+		fastrpc_register_wakeup_source(data->fdevice->miscdev.this_device,
+			FASTRPC_NON_SECURE_WAKE_SOURCE_CLIENT_NAME, &data->wake_source);
+	if (data->secure_fdevice)
+		fastrpc_register_wakeup_source(data->secure_fdevice->miscdev.this_device,
+			FASTRPC_SECURE_WAKE_SOURCE_CLIENT_NAME, &data->wake_source_secure);
+
 	kref_init(&data->refcount);
 
 	dev_set_drvdata(&rpdev->dev, data);
@@ -3420,6 +3509,11 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	} else if (cctx->domain_id == SDSP_DOMAIN_ID) {
 		pdr_handle_release(cctx->spd[0].pdrhandle);
 	}
+
+	if (cctx->wake_source)
+		wakeup_source_unregister(cctx->wake_source);
+	if (cctx->wake_source_secure)
+		wakeup_source_unregister(cctx->wake_source_secure);
 
 	if (cctx->fdevice)
 		misc_deregister(&cctx->fdevice->miscdev);

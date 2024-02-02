@@ -187,11 +187,21 @@ struct fastrpc_ctrl_latency {
 	u32 latency;	/* latency request in us */
 };
 
+struct fastrpc_ctrl_wakelock {
+	u32 enable;		/* wakelock control enable */
+};
+
+struct fastrpc_ctrl_pm {
+	u32 timeout;	/* timeout(in ms) for PM to keep system awake */
+};
+
 struct fastrpc_internal_control {
 	u32 req;
 	union {
 		struct fastrpc_ctrl_smmu smmu;
 		struct fastrpc_ctrl_latency lp;
+		struct fastrpc_ctrl_wakelock wp;
+		struct fastrpc_ctrl_pm pm;
 	};
 };
 
