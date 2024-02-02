@@ -10,6 +10,7 @@
 #include <regex.h>
 
 #include "lkc.h"
+#include "util.h"
 
 struct symbol symbol_yes = {
 	.name = "y",
@@ -801,15 +802,6 @@ const char *sym_get_string_value(struct symbol *sym)
 bool sym_is_changeable(struct symbol *sym)
 {
 	return sym->visible > sym->rev_dep.tri;
-}
-
-static unsigned strhash(const char *s)
-{
-	/* fnv32 hash */
-	unsigned hash = 2166136261U;
-	for (; *s; s++)
-		hash = (hash ^ *s) * 0x01000193;
-	return hash;
 }
 
 struct symbol *sym_lookup(const char *name, int flags)
