@@ -5780,6 +5780,30 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 static void enqueue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count);
 static void dequeue_kernel(struct cfs_rq *cfs_rq, struct sched_entity *se, int count);
 
+#ifdef CONFIG_CFS_BANDWIDTH
+static inline void assert_cfs_rq_counts(struct cfs_rq *cfs_rq)
+{
+	lockdep_assert_rq_held(rq_of(cfs_rq));
+
+	/*
+	 * When !throttle_pending, this is the normal operating mode, all tasks
+	 * are pickable, so:
+	 * nr_kernel_tasks + nr_user_tasks == nr_pickable_tasks
+	 */
+	SCHED_WARN_ON(!cfs_rq->throttle_pending &&
+		      (cfs_rq->h_kernel_running + cfs_rq->h_user_running !=
+		       cfs_rq->h_nr_running));
+	/*
+	 * When throttle_pending, only kernel tasks are pickable, so:
+	 * nr_kernel_tasks == nr_pickable_tasks
+	 */
+	SCHED_WARN_ON(cfs_rq->throttle_pending &&
+		      (cfs_rq->h_kernel_running != cfs_rq->h_nr_running));
+}
+#else
+static inline void assert_cfs_rq_counts(struct cfs_rq *cfs_rq) { }
+#endif
+
 static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	struct rq *rq = rq_of(cfs_rq);
@@ -5894,6 +5918,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		dequeue_kernel(qcfs_rq, se, kernel_delta);
 		qcfs_rq->h_user_running -= user_delta;
 
+		assert_cfs_rq_counts(qcfs_rq);
 
 		if (qcfs_rq->load.weight) {
 			/* Avoid re-evaluating load for this entity: */
@@ -5918,6 +5943,8 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->idle_h_nr_running -= idle_task_delta;
 		dequeue_kernel(qcfs_rq, se, kernel_delta);
 		qcfs_rq->h_user_running -= user_delta;
+
+		assert_cfs_rq_counts(qcfs_rq);
 	}
 
 	/* At this point se is NULL and we are at root level*/
@@ -6012,6 +6039,8 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->idle_h_nr_running += idle_task_delta;
 		enqueue_kernel(qcfs_rq, se, kernel_delta);
 		qcfs_rq->h_user_running += user_delta;
+
+		assert_cfs_rq_counts(qcfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(qcfs_rq))
@@ -6950,6 +6979,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
 
+		assert_cfs_rq_counts(cfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -6965,6 +6995,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		se_update_runnable(se);
 		update_cfs_group(se);
 
+		assert_cfs_rq_counts(cfs_rq);
 
 		if (kernel_task || (!throttle_pending && !cfs_rq->throttle_pending))
 			cfs_rq->h_nr_running++;
@@ -6979,6 +7010,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
 
+		assert_cfs_rq_counts(cfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -7051,6 +7083,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
 
+		assert_cfs_rq_counts(cfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -7092,6 +7125,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			idle_h_nr_running = 1;
 
+		assert_cfs_rq_counts(cfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -8631,6 +8665,8 @@ static void handle_kernel_task_prev(struct task_struct *prev)
 
 			throttle_pending |= cfs_rq->throttle_pending;
 
+			assert_cfs_rq_counts(cfs_rq);
+
 			if (cfs_rq_throttled(cfs_rq))
 				break;
 		}
@@ -8647,6 +8683,8 @@ static void handle_kernel_task_prev(struct task_struct *prev)
 				cfs_rq->h_user_running--;
 
 			throttle_pending |= cfs_rq->throttle_pending;
+
+			assert_cfs_rq_counts(cfs_rq);
 
 			if (cfs_rq_throttled(cfs_rq))
 				break;
