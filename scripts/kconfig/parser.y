@@ -28,8 +28,6 @@ static void zconf_error(const char *err, ...);
 static bool zconf_endtoken(const char *tokenname,
 			   const char *expected_tokenname);
 
-struct symbol *symbol_hash[SYMBOL_HASHSIZE];
-
 struct menu *current_menu, *current_entry;
 
 %}
@@ -474,7 +472,6 @@ assign_val:
 void conf_parse(const char *name)
 {
 	struct symbol *sym;
-	int i;
 
 	autoconf_cmd = str_new();
 
@@ -517,7 +514,7 @@ void conf_parse(const char *name)
 	}
 
 	menu_finalize(&rootmenu);
-	for_all_symbols(i, sym) {
+	for_all_symbols(sym) {
 		if (sym_check_deps(sym))
 			yynerrs++;
 	}
