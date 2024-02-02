@@ -3806,6 +3806,16 @@ static int parse_callret_trace(const struct option *opt __maybe_unused,
 	return 0;
 }
 
+static void dump_kmaps(struct perf_session *session)
+{
+	int save_verbose = verbose;
+
+	pr_debug("Kernel and module maps:\n");
+	verbose = 0; /* Suppress verbose to print a summary only */
+	maps__fprintf(machine__kernel_maps(&session->machines.host), stderr);
+	verbose = save_verbose;
+}
+
 int cmd_script(int argc, const char **argv)
 {
 	bool show_full_info = false;
@@ -4365,6 +4375,9 @@ script_found:
 	err = __cmd_script(&script);
 
 	flush_scripting();
+
+	if (verbose > 2)
+		dump_kmaps(session);
 
 out_delete:
 	if (script.ptime_range) {
