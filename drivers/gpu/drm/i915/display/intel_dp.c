@@ -4008,18 +4008,27 @@ static bool intel_dp_mst_detect(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
-	bool sink_can_mst = drm_dp_read_mst_cap(&intel_dp->aux, intel_dp->dpcd) == DP_MST_CAPABLE;
+	enum drm_dp_mst_mode sink_mst_mode;
+	const char *mst_mode_str;
+
+	sink_mst_mode = drm_dp_read_mst_cap(&intel_dp->aux, intel_dp->dpcd);
+
+	if (sink_mst_mode == DP_MST_SIDEBAND_MSG)
+		mst_mode_str = "single-stream sideband messaging";
+	else
+		mst_mode_str = str_yes_no(sink_mst_mode == DP_MST_CAPABLE);
 
 	intel_dp->is_mst = i915->display.params.enable_dp_mst &&
 		intel_dp_mst_source_support(intel_dp) &&
-		sink_can_mst;
+		sink_mst_mode == DP_MST_CAPABLE;
 
 	drm_dbg_kms(&i915->drm,
-		    "[ENCODER:%d:%s] MST support: port: %s, sink: %s, modparam: %s\n",
+		    "[ENCODER:%d:%s] MST support: port: %s, sink: %s, modparam: %s -> enable: %s\n",
 		    encoder->base.base.id, encoder->base.name,
 		    str_yes_no(intel_dp_mst_source_support(intel_dp)),
-		    str_yes_no(sink_can_mst),
-		    str_yes_no(i915->display.params.enable_dp_mst));
+		    mst_mode_str,
+		    str_yes_no(i915->display.params.enable_dp_mst),
+		    str_yes_no(intel_dp->is_mst));
 
 	return intel_dp->is_mst;
 }
