@@ -195,6 +195,12 @@ struct fastrpc_internal_control {
 	};
 };
 
+struct fastrpc_internal_notif_rsp {
+	u32 domain;		/* Domain of User PD */
+	u32 session;	/* Session ID of User PD */
+	u32 status;		/* Status of the process */
+};
+
 enum fastrpc_perfkeys {
 	PERF_COUNT = 0,
 	PERF_FLUSH = 1,
@@ -207,6 +213,14 @@ enum fastrpc_perfkeys {
 	PERF_INVOKE = 8,
 	PERF_TID = 9,
 	PERF_KEY_MAX = 10,
+};
+
+enum fastrpc_status_flags {
+	FASTRPC_USERPD_UP			= 0,
+	FASTRPC_USERPD_EXIT			= 1,
+	FASTRPC_USERPD_FORCE_KILL	= 2,
+	FASTRPC_USERPD_EXCEPTION	= 3,
+	FASTRPC_DSP_SSR				= 4,
 };
 
 #endif /* __QCOM_FASTRPC_H__ */
