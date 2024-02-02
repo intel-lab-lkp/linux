@@ -13,8 +13,14 @@
 #include <linux/notifier.h>
 #include <linux/types.h>
 
+#define SCMI_PAYLOAD_LEN	100
+
+#define SCMI_ARRAY(X, Y)	((SCMI_PAYLOAD_LEN - (X)) / sizeof(Y))
+#define MISC_MAX_VAL		SCMI_ARRAY(8, uint32_t)
+
 enum scmi_nxp_protocol {
 	SCMI_PROTOCOL_IMX_BBM = 0x81,
+	SCMI_PROTOCOL_IMX_MISC = 0x84,
 };
 
 struct scmi_imx_bbm_proto_ops {
@@ -46,5 +52,16 @@ struct scmi_imx_bbm_notif_report {
 	ktime_t			timestamp;
 	unsigned int		rtc_id;
 	unsigned int		rtc_evt;
+};
+
+struct scmi_imx_misc_ctrl_notify_report {
+	ktime_t			timestamp;
+	unsigned int		ctrl_id;
+	unsigned int		flags;
+};
+
+struct scmi_imx_misc_proto_ops {
+	int (*misc_ctrl_set)(const struct scmi_protocol_handle *ph, u32 id, u32 num, u32 *val);
+	int (*misc_ctrl_get)(const struct scmi_protocol_handle *ph, u32 id, u32 *num, u32 *val);
 };
 #endif
