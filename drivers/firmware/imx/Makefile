@@ -2,3 +2,4 @@
 obj-$(CONFIG_IMX_DSP)		+= imx-dsp.o
 obj-$(CONFIG_IMX_SCU)		+= imx-scu.o misc.o imx-scu-irq.o rm.o imx-scu-soc.o
 obj-${CONFIG_IMX_SCMI_BBM_EXT}	+= sm-bbm.o
+obj-${CONFIG_IMX_SCMI_MISC_EXT}	+= sm-misc.o
