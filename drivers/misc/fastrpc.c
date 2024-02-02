@@ -471,6 +471,7 @@ struct fastrpc_user {
 	bool sharedcb;
 	/* If set, threads will poll for DSP response instead of glink wait */
 	bool poll_mode;
+	bool untrusted_process;
 	char *servloc_name;
 	/* Lock for lists */
 	spinlock_t lock;
@@ -1722,20 +1723,24 @@ bail:
 
 static bool is_session_rejected(struct fastrpc_user *fl, bool unsigned_pd_request)
 {
-	/* Check if the device node is non-secure and channel is secure*/
+	/* Check if the device node is non-secure and channel is secure */
 	if (!fl->is_secure_dev && fl->cctx->secure) {
 		/*
 		 * Allow untrusted applications to offload only to Unsigned PD when
 		 * channel is configured as secure and block untrusted apps on channel
 		 * that does not support unsigned PD offload
 		 */
-		if (!fl->cctx->unsigned_support || !unsigned_pd_request) {
-			dev_err(&fl->cctx->rpdev->dev, "Error: Untrusted application trying to offload to signed PD");
-			return true;
-		}
+		if (!fl->cctx->unsigned_support || !unsigned_pd_request)
+			goto reject_session;
 	}
+	/* Check if untrusted process is trying to offload to signed PD */
+	if (fl->untrusted_process && !unsigned_pd_request)
+		goto reject_session;
 
 	return false;
+reject_session:
+	dev_err(&fl->cctx->rpdev->dev, "Error: Untrusted application trying to offload to signed PD");
+	return true;
 }
 
 static int fastrpc_mmap_remove_ssr(struct fastrpc_channel_ctx *cctx)
@@ -1821,6 +1826,11 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 		u32 namelen;
 		u32 pageslen;
 	} inbuf;
+
+	if (!fl->is_secure_dev) {
+		dev_err(&fl->cctx->rpdev->dev, "untrusted app trying to attach to privileged DSP PD\n");
+		return -EACCES;
+	}
 
 	args = kcalloc(FASTRPC_CREATE_STATIC_PROCESS_NARGS, sizeof(*args), GFP_KERNEL);
 	if (!args)
@@ -1981,11 +1991,19 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 		goto err;
 	}
 
+	/*
+	 * Third-party apps don't have permission to open the fastrpc device, so
+	 * it is opened on their behalf by DSP HAL. This is detected by
+	 * comparing current PID with the one stored during device open.
+	 */
+	if (current->tgid != fl->tgid)
+		fl->untrusted_process = true;
+
 	if (init.attrs & FASTRPC_MODE_UNSIGNED_MODULE)
 		fl->is_unsigned_pd = true;
 
 	if (is_session_rejected(fl, fl->is_unsigned_pd)) {
-		err = -ECONNREFUSED;
+		err = -EACCES;
 		goto err;
 	}
 
@@ -2243,6 +2261,11 @@ static int fastrpc_init_attach(struct fastrpc_user *fl, int pd)
 	struct fastrpc_invoke_args args[1];
 	struct fastrpc_enhanced_invoke ioctl;
 	int tgid = fl->tgid;
+
+	if (!fl->is_secure_dev) {
+		dev_err(&fl->cctx->rpdev->dev, "untrusted app trying to attach to privileged DSP PD\n");
+		return -EACCES;
+	}
 
 	fl->sctx = fastrpc_session_alloc(fl->cctx, fl->sharedcb);
 	if (!fl->sctx)
