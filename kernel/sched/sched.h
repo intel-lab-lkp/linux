@@ -660,6 +660,8 @@ struct cfs_rq {
 	int			throttled;
 	int			throttle_count;
 	int			h_kernel_running;
+	int			h_user_running;
+	int                     throttle_pending;
 	struct list_head	throttled_list;
 	struct list_head	throttled_csd_list;
 	struct list_head	kernel_children;
