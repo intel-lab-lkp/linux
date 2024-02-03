@@ -112,6 +112,7 @@ void unix_init_vertex(struct unix_sock *u)
 
 DEFINE_SPINLOCK(unix_gc_lock);
 static LIST_HEAD(unix_unvisited_vertices);
+unsigned int unix_tot_inflight;
 
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 {
@@ -148,6 +149,9 @@ void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 		}
 	}
 
+	WRITE_ONCE(unix_tot_inflight, unix_tot_inflight + fpl->count_unix);
+	WRITE_ONCE(fpl->user->unix_inflight, fpl->user->unix_inflight + fpl->count);
+
 	spin_unlock(&unix_gc_lock);
 
 	fpl->inflight = true;
@@ -167,6 +171,9 @@ void unix_del_edges(struct scm_fp_list *fpl)
 		if (!--edge->predecessor->out_degree)
 			list_del_init(&edge->predecessor->entry);
 	}
+
+	WRITE_ONCE(unix_tot_inflight, unix_tot_inflight - fpl->count_unix);
+	WRITE_ONCE(fpl->user->unix_inflight, fpl->user->unix_inflight - fpl->count);
 
 	spin_unlock(&unix_gc_lock);
 
@@ -210,7 +217,6 @@ void unix_free_edges(struct scm_fp_list *fpl)
 	kvfree(fpl->edges);
 }
 
-unsigned int unix_tot_inflight;
 static LIST_HEAD(gc_candidates);
 static LIST_HEAD(gc_inflight_list);
 
@@ -231,12 +237,7 @@ void unix_inflight(struct user_struct *user, struct file *filp)
 			WARN_ON_ONCE(list_empty(&u->link));
 		}
 		u->inflight++;
-
-		/* Paired with READ_ONCE() in wait_for_unix_gc() */
-		WRITE_ONCE(unix_tot_inflight, unix_tot_inflight + 1);
 	}
-
-	WRITE_ONCE(user->unix_inflight, user->unix_inflight + 1);
 
 	spin_unlock(&unix_gc_lock);
 }
@@ -254,12 +255,7 @@ void unix_notinflight(struct user_struct *user, struct file *filp)
 		u->inflight--;
 		if (!u->inflight)
 			list_del_init(&u->link);
-
-		/* Paired with READ_ONCE() in wait_for_unix_gc() */
-		WRITE_ONCE(unix_tot_inflight, unix_tot_inflight - 1);
 	}
-
-	WRITE_ONCE(user->unix_inflight, user->unix_inflight - 1);
 
 	spin_unlock(&unix_gc_lock);
 }
