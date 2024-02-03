@@ -106,12 +106,14 @@ void unix_init_vertex(struct unix_sock *u)
 	struct unix_vertex *vertex = &u->vertex;
 
 	vertex->out_degree = 0;
+	vertex->self_degree = 0;
 	INIT_LIST_HEAD(&vertex->edges);
 	INIT_LIST_HEAD(&vertex->entry);
 	INIT_LIST_HEAD(&vertex->scc_entry);
 }
 
 static bool unix_graph_updated;
+static bool unix_graph_maybe_cyclic;
 
 static void unix_graph_update(struct unix_edge *edge)
 {
@@ -122,6 +124,7 @@ static void unix_graph_update(struct unix_edge *edge)
 		return;
 
 	unix_graph_updated = true;
+	unix_graph_maybe_cyclic = true;
 }
 
 DEFINE_SPINLOCK(unix_gc_lock);
@@ -158,6 +161,9 @@ void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 		edge = fpl->edges + i++;
 		edge->predecessor = &inflight->vertex;
 		edge->successor = successor;
+
+		if (edge->predecessor == edge->successor)
+			edge->predecessor->self_degree++;
 
 		if (!edge->predecessor->out_degree++) {
 			edge->predecessor->index = unix_vertex_unvisited_index;
@@ -199,6 +205,9 @@ void unix_del_edges(struct scm_fp_list *fpl)
 
 		if (!--edge->predecessor->out_degree)
 			list_del_init(&edge->predecessor->entry);
+
+		if (edge->predecessor == edge->successor)
+			edge->predecessor->self_degree--;
 	}
 
 	WRITE_ONCE(unix_tot_inflight, unix_tot_inflight - fpl->count_unix);
@@ -217,6 +226,9 @@ void unix_update_edges(struct unix_sock *receiver)
 
 	list_for_each_entry(edge, &receiver->vertex.edges, embryo_entry) {
 		unix_graph_update(edge);
+
+		if (edge->predecessor == edge->successor)
+			edge->predecessor->self_degree--;
 
 		edge->successor = &receiver->vertex;
 	}
@@ -293,6 +305,14 @@ next_edge:
 			vertex->index = unix_vertex_grouped_index;
 		}
 
+		if (!list_is_singular(&scc)) {
+			unix_graph_maybe_cyclic = true;
+		} else {
+			vertex = list_first_entry(&scc, typeof(*vertex), scc_entry);
+			if (vertex->self_degree)
+				unix_graph_maybe_cyclic = true;
+		}
+
 		list_del(&scc);
 	}
 
@@ -308,6 +328,8 @@ next_edge:
 
 static void unix_walk_scc(void)
 {
+	unix_graph_maybe_cyclic = false;
+
 	while (!list_empty(&unix_unvisited_vertices)) {
 		struct unix_vertex *vertex;
 
@@ -485,6 +507,9 @@ static void __unix_gc(struct work_struct *work)
 
 	spin_lock(&unix_gc_lock);
 
+	if (!unix_graph_maybe_cyclic)
+		goto skip_gc;
+
 	if (unix_graph_updated)
 		unix_walk_scc();
 	else
@@ -573,7 +598,7 @@ static void __unix_gc(struct work_struct *work)
 
 	/* All candidates should have been detached by now. */
 	WARN_ON_ONCE(!list_empty(&gc_candidates));
-
+skip_gc:
 	/* Paired with READ_ONCE() in wait_for_unix_gc(). */
 	WRITE_ONCE(gc_in_progress, false);
 
