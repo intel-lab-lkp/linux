@@ -38,7 +38,7 @@ struct unix_vertex {
 	unsigned long out_degree;
 	unsigned long self_degree;
 	unsigned long index;
-	unsigned long lowlink;
+	unsigned long scc_index;
 };
 
 struct unix_edge {
