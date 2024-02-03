@@ -2778,6 +2778,18 @@ void phy_advertise_supported(struct phy_device *phydev)
 EXPORT_SYMBOL(phy_advertise_supported);
 
 /**
+ * phy_advertise_eee_all - Advertise all supported EEE modes
+ * @phydev: target phy_device struct
+ *
+ * Description: Called to advertise all supported EEE modes
+ */
+void phy_advertise_eee_all(struct phy_device *phydev)
+{
+	linkmode_copy(phydev->advertising_eee, phydev->supported_eee);
+}
+EXPORT_SYMBOL_GPL(phy_advertise_eee_all);
+
+/**
  * phy_support_sym_pause - Enable support of symmetrical pause
  * @phydev: target phy_device struct
  *
