@@ -1819,6 +1819,9 @@ static int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 	for (i = scm->fp->count - 1; i >= 0; i--)
 		unix_inflight(scm->fp->user, scm->fp->fp[i]);
 
+	if (unix_alloc_edges(UNIXCB(skb).fp))
+		return -ENOMEM;
+
 	return 0;
 }
 
@@ -1828,6 +1831,8 @@ static void unix_detach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 
 	scm->fp = UNIXCB(skb).fp;
 	UNIXCB(skb).fp = NULL;
+
+	unix_free_edges(scm->fp);
 
 	for (i = scm->fp->count - 1; i >= 0; i--)
 		unix_notinflight(scm->fp->user, scm->fp->fp[i]);

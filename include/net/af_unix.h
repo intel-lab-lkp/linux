@@ -23,6 +23,8 @@ extern unsigned int unix_tot_inflight;
 void unix_inflight(struct user_struct *user, struct file *fp);
 void unix_notinflight(struct user_struct *user, struct file *fp);
 void unix_init_vertex(struct unix_sock *u);
+int unix_alloc_edges(struct scm_fp_list *fpl);
+void unix_free_edges(struct scm_fp_list *fpl);
 void unix_gc(void);
 void wait_for_unix_gc(struct scm_fp_list *fpl);
 
@@ -30,6 +32,12 @@ struct unix_vertex {
 	struct list_head edges;
 	struct list_head entry;
 	unsigned long out_degree;
+};
+
+struct unix_edge {
+	struct unix_vertex *predecessor;
+	struct unix_vertex *successor;
+	struct list_head entry;
 };
 
 struct sock *unix_peer_get(struct sock *sk);

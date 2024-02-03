@@ -110,6 +110,24 @@ void unix_init_vertex(struct unix_sock *u)
 	INIT_LIST_HEAD(&vertex->entry);
 }
 
+int unix_alloc_edges(struct scm_fp_list *fpl)
+{
+	if (!fpl->count_unix)
+		return 0;
+
+	fpl->edges = kvmalloc_array(fpl->count_unix, sizeof(*fpl->edges),
+				    GFP_KERNEL_ACCOUNT);
+	if (!fpl->edges)
+		return -ENOMEM;
+
+	return 0;
+}
+
+void unix_free_edges(struct scm_fp_list *fpl)
+{
+	kvfree(fpl->edges);
+}
+
 DEFINE_SPINLOCK(unix_gc_lock);
 unsigned int unix_tot_inflight;
 static LIST_HEAD(gc_candidates);
