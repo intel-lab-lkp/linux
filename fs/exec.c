@@ -1521,6 +1521,7 @@ static void free_bprm(struct linux_binprm *bprm)
 	if (bprm->cred) {
 		mutex_unlock(&current->signal->cred_guard_mutex);
 		abort_creds(bprm->cred);
+		security_execve_abort();
 	}
 	do_close_execat(bprm->file);
 	if (bprm->executable)

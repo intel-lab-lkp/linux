@@ -299,6 +299,7 @@ int security_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *
 int security_bprm_check(struct linux_binprm *bprm);
 void security_bprm_committing_creds(const struct linux_binprm *bprm);
 void security_bprm_committed_creds(const struct linux_binprm *bprm);
+void security_execve_abort(void);
 int security_fs_context_submount(struct fs_context *fc, struct super_block *reference);
 int security_fs_context_dup(struct fs_context *fc, struct fs_context *src_fc);
 int security_fs_context_parse_param(struct fs_context *fc, struct fs_parameter *param);
@@ -645,6 +646,10 @@ static inline void security_bprm_committing_creds(const struct linux_binprm *bpr
 }
 
 static inline void security_bprm_committed_creds(const struct linux_binprm *bprm)
+{
+}
+
+static inline void security_execve_abort(void)
 {
 }
 

@@ -1224,6 +1224,17 @@ void security_bprm_committed_creds(const struct linux_binprm *bprm)
 }
 
 /**
+ * security_execve_abort() - Notify that exec() has failed
+ *
+ * This hook is for undoing changes which cannot be discarded by
+ * abort_creds().
+ */
+void security_execve_abort(void)
+{
+	call_void_hook(execve_abort);
+}
+
+/**
  * security_fs_context_submount() - Initialise fc->security
  * @fc: new filesystem context
  * @reference: dentry reference for submount/remount
