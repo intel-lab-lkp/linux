@@ -261,6 +261,29 @@ void unix_free_edges(struct scm_fp_list *fpl)
 	kvfree(fpl->edges);
 }
 
+static bool unix_vertex_dead(struct unix_vertex *vertex)
+{
+	struct unix_edge *edge;
+	struct unix_sock *u;
+	long total_ref;
+
+	list_for_each_entry(edge, &vertex->edges, entry) {
+		if (!edge->successor->out_degree)
+			return false;
+
+		if (edge->successor->scc_index != vertex->scc_index)
+			return false;
+	}
+
+	u = container_of(vertex, typeof(*u), vertex);
+	total_ref = file_count(u->sk.sk_socket->file);
+
+	if (total_ref != vertex->out_degree)
+		return false;
+
+	return true;
+}
+
 static LIST_HEAD(unix_visited_vertices);
 static unsigned long unix_vertex_grouped_index = UNIX_VERTEX_INDEX_MARK2;
 static unsigned long unix_vertex_last_index = UNIX_VERTEX_INDEX_START;
@@ -295,6 +318,7 @@ next_edge:
 	}
 
 	if (vertex->index == vertex->scc_index) {
+		bool dead = true;
 		LIST_HEAD(scc);
 
 		list_cut_position(&scc, &vertex_stack, &vertex->scc_entry);
@@ -303,6 +327,9 @@ next_edge:
 			list_move_tail(&vertex->entry, &unix_visited_vertices);
 
 			vertex->index = unix_vertex_grouped_index;
+
+			if (dead)
+				dead = unix_vertex_dead(vertex);
 		}
 
 		if (!list_is_singular(&scc)) {
@@ -347,13 +374,18 @@ static void unix_walk_scc_fast(void)
 {
 	while (!list_empty(&unix_unvisited_vertices)) {
 		struct unix_vertex *vertex;
+		bool dead = true;
 		LIST_HEAD(scc);
 
 		vertex = list_first_entry(&unix_unvisited_vertices, typeof(*vertex), entry);
 		list_add(&scc, &vertex->scc_entry);
 
-		list_for_each_entry_reverse(vertex, &scc, scc_entry)
+		list_for_each_entry_reverse(vertex, &scc, scc_entry) {
 			list_move_tail(&vertex->entry, &unix_visited_vertices);
+
+			if (dead)
+				dead = unix_vertex_dead(vertex);
+		}
 
 		list_del(&scc);
 	}
