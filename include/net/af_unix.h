@@ -22,8 +22,15 @@ extern unsigned int unix_tot_inflight;
 
 void unix_inflight(struct user_struct *user, struct file *fp);
 void unix_notinflight(struct user_struct *user, struct file *fp);
+void unix_init_vertex(struct unix_sock *u);
 void unix_gc(void);
 void wait_for_unix_gc(struct scm_fp_list *fpl);
+
+struct unix_vertex {
+	struct list_head edges;
+	struct list_head entry;
+	unsigned long out_degree;
+};
 
 struct sock *unix_peer_get(struct sock *sk);
 
@@ -62,6 +69,7 @@ struct unix_sock {
 	struct path		path;
 	struct mutex		iolock, bindlock;
 	struct sock		*peer;
+	struct unix_vertex	vertex;
 	struct list_head	link;
 	unsigned long		inflight;
 	spinlock_t		lock;

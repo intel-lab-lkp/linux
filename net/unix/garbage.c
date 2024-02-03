@@ -101,6 +101,15 @@ struct unix_sock *unix_get_socket(struct file *filp)
 	return NULL;
 }
 
+void unix_init_vertex(struct unix_sock *u)
+{
+	struct unix_vertex *vertex = &u->vertex;
+
+	vertex->out_degree = 0;
+	INIT_LIST_HEAD(&vertex->edges);
+	INIT_LIST_HEAD(&vertex->entry);
+}
+
 DEFINE_SPINLOCK(unix_gc_lock);
 unsigned int unix_tot_inflight;
 static LIST_HEAD(gc_candidates);
