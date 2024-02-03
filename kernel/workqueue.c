@@ -6354,6 +6354,32 @@ out_unlock:
 }
 #endif /* CONFIG_FREEZER */
 
+/*
+ * Check the given ordered workqueue to see if its non-default pwq's have
+ * zero reference count and if so thaw the frozen default pwq.
+ *
+ * Return:
+ * %true if dfl_pwq has been thawed or %false otherwise.
+ */
+static bool ordered_workqueue_ref_check(struct workqueue_struct *wq)
+{
+	int refs = 0;
+	struct pool_workqueue *pwq;
+
+	if (!READ_ONCE(wq->dfl_pwq->frozen))
+		return true;
+	mutex_lock(&wq->mutex);
+	for_each_pwq(pwq, wq) {
+		if (pwq == wq->dfl_pwq)
+			continue;
+		refs += pwq->refcnt;
+	}
+	if (!refs)
+		thaw_pwq(wq->dfl_pwq);
+	mutex_unlock(&wq->mutex);
+	return !refs;
+}
+
 static int workqueue_apply_unbound_cpumask(const cpumask_var_t unbound_cpumask)
 {
 	LIST_HEAD(ctxs);
@@ -6378,12 +6404,12 @@ static int workqueue_apply_unbound_cpumask(const cpumask_var_t unbound_cpumask)
 
 			if (!(wq->flags & __WQ_ORDERED_EXPLICIT)) {
 				wq->flags &= ~__WQ_ORDERED;
-			} else if (pwq && pwq->frozen) {
+			} else if (pwq && !ordered_workqueue_ref_check(wq)) {
 				int i;
 
 				for (i = 0; i < 10; i++) {
 					msleep(10);
-					if (!pwq->frozen)
+					if (ordered_workqueue_ref_check(wq))
 						break;
 				}
 				if (WARN_ON_ONCE(pwq->frozen))
