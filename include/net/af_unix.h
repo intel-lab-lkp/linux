@@ -25,6 +25,7 @@ void unix_notinflight(struct user_struct *user, struct file *fp);
 void unix_init_vertex(struct unix_sock *u);
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver);
 void unix_del_edges(struct scm_fp_list *fpl);
+void unix_update_edges(struct unix_sock *receiver);
 int unix_alloc_edges(struct scm_fp_list *fpl);
 void unix_free_edges(struct scm_fp_list *fpl);
 void unix_gc(void);
@@ -40,6 +41,7 @@ struct unix_edge {
 	struct unix_vertex *predecessor;
 	struct unix_vertex *successor;
 	struct list_head entry;
+	struct list_head embryo_entry;
 };
 
 struct sock *unix_peer_get(struct sock *sk);
