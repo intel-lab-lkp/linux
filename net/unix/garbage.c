@@ -115,6 +115,14 @@ DEFINE_SPINLOCK(unix_gc_lock);
 static LIST_HEAD(unix_unvisited_vertices);
 unsigned int unix_tot_inflight;
 
+enum unix_vertex_index {
+	UNIX_VERTEX_INDEX_MARK1,
+	UNIX_VERTEX_INDEX_MARK2,
+	UNIX_VERTEX_INDEX_START,
+};
+
+static unsigned long unix_vertex_unvisited_index = UNIX_VERTEX_INDEX_MARK1;
+
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 {
 	struct unix_vertex *successor;
@@ -138,8 +146,11 @@ void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 		edge->predecessor = &inflight->vertex;
 		edge->successor = successor;
 
-		if (!edge->predecessor->out_degree++)
+		if (!edge->predecessor->out_degree++) {
+			edge->predecessor->index = unix_vertex_unvisited_index;
+
 			list_add_tail(&edge->predecessor->entry, &unix_unvisited_vertices);
+		}
 
 		INIT_LIST_HEAD(&edge->entry);
 		list_add_tail(&edge->entry, &edge->predecessor->edges);
@@ -218,12 +229,8 @@ void unix_free_edges(struct scm_fp_list *fpl)
 	kvfree(fpl->edges);
 }
 
-enum unix_vertex_index {
-	UNIX_VERTEX_INDEX_UNVISITED,
-	UNIX_VERTEX_INDEX_START,
-};
-
 static LIST_HEAD(unix_visited_vertices);
+static unsigned long unix_vertex_grouped_index = UNIX_VERTEX_INDEX_MARK2;
 
 static void __unix_walk_scc(struct unix_vertex *vertex)
 {
@@ -237,21 +244,20 @@ next_vertex:
 	vertex->lowlink = index;
 	index++;
 
-	vertex->on_stack = true;
 	list_move(&vertex->scc_entry, &vertex_stack);
 
 	list_for_each_entry(edge, &vertex->edges, entry) {
 		if (!edge->successor->out_degree)
 			continue;
 
-		if (edge->successor->index == UNIX_VERTEX_INDEX_UNVISITED) {
+		if (edge->successor->index == unix_vertex_unvisited_index) {
 			list_add(&edge->stack_entry, &edge_stack);
 
 			vertex = edge->successor;
 			goto next_vertex;
 		}
 
-		if (edge->successor->on_stack)
+		if (edge->successor->index != unix_vertex_grouped_index)
 			vertex->lowlink = min(vertex->lowlink, edge->successor->index);
 next_edge:
 	}
@@ -264,7 +270,7 @@ next_edge:
 		list_for_each_entry_reverse(vertex, &scc, scc_entry) {
 			list_move_tail(&vertex->entry, &unix_visited_vertices);
 
-			vertex->on_stack = false;
+			vertex->index = unix_vertex_grouped_index;
 		}
 
 		list_del(&scc);
@@ -282,17 +288,15 @@ next_edge:
 
 static void unix_walk_scc(void)
 {
-	struct unix_vertex *vertex;
-
-	list_for_each_entry(vertex, &unix_unvisited_vertices, entry)
-		vertex->index = UNIX_VERTEX_INDEX_UNVISITED;
-
 	while (!list_empty(&unix_unvisited_vertices)) {
+		struct unix_vertex *vertex;
+
 		vertex = list_first_entry(&unix_unvisited_vertices, typeof(*vertex), entry);
 		__unix_walk_scc(vertex);
 	}
 
 	list_replace_init(&unix_visited_vertices, &unix_unvisited_vertices);
+	swap(unix_vertex_unvisited_index, unix_vertex_grouped_index);
 }
 
 static LIST_HEAD(gc_candidates);
