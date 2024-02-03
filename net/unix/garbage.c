@@ -127,7 +127,7 @@ static void unix_graph_update(struct unix_edge *edge)
 	unix_graph_maybe_cyclic = true;
 }
 
-DEFINE_SPINLOCK(unix_gc_lock);
+static DEFINE_SPINLOCK(unix_gc_lock);
 static LIST_HEAD(unix_unvisited_vertices);
 unsigned int unix_tot_inflight;
 
