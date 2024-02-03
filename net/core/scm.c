@@ -87,6 +87,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 		*fplp = fpl;
 		fpl->count = 0;
 		fpl->count_unix = 0;
+		fpl->inflight = false;
 		fpl->edges = NULL;
 		fpl->max = SCM_MAX_FD;
 		fpl->user = NULL;
@@ -378,6 +379,7 @@ struct scm_fp_list *scm_fp_dup(struct scm_fp_list *fpl)
 		for (i = 0; i < fpl->count; i++)
 			get_file(fpl->fp[i]);
 
+		new_fpl->inflight = false;
 		new_fpl->edges = NULL;
 		new_fpl->max = new_fpl->count;
 		new_fpl->user = get_uid(fpl->user);
