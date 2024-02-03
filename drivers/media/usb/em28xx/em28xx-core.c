@@ -416,8 +416,9 @@ int em28xx_audio_analog_set(struct em28xx *dev)
 	int ret, i;
 	u8 xclk;
 
+	/* GPIOs are set later for boards with audio */
 	if (dev->int_audio_type == EM28XX_INT_AUDIO_NONE)
-		return 0;
+		return em28xx_gpio_set(dev, INPUT(dev->ctl_input)->gpio);
 
 	/*
 	 * It is assumed that all devices use master volume for output.
