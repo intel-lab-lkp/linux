@@ -111,6 +111,19 @@ void unix_init_vertex(struct unix_sock *u)
 	INIT_LIST_HEAD(&vertex->scc_entry);
 }
 
+static bool unix_graph_updated;
+
+static void unix_graph_update(struct unix_edge *edge)
+{
+	if (unix_graph_updated)
+		return;
+
+	if (!edge->successor->out_degree)
+		return;
+
+	unix_graph_updated = true;
+}
+
 DEFINE_SPINLOCK(unix_gc_lock);
 static LIST_HEAD(unix_unvisited_vertices);
 unsigned int unix_tot_inflight;
@@ -159,6 +172,8 @@ void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 			INIT_LIST_HEAD(&edge->embryo_entry);
 			list_add_tail(&edge->embryo_entry, &receiver->vertex.edges);
 		}
+
+		unix_graph_update(edge);
 	}
 
 	WRITE_ONCE(unix_tot_inflight, unix_tot_inflight + fpl->count_unix);
@@ -177,6 +192,8 @@ void unix_del_edges(struct scm_fp_list *fpl)
 
 	while (i < fpl->count_unix) {
 		struct unix_edge *edge = fpl->edges + i++;
+
+		unix_graph_update(edge);
 
 		list_del(&edge->entry);
 
@@ -198,8 +215,11 @@ void unix_update_edges(struct unix_sock *receiver)
 
 	spin_lock(&unix_gc_lock);
 
-	list_for_each_entry(edge, &receiver->vertex.edges, embryo_entry)
+	list_for_each_entry(edge, &receiver->vertex.edges, embryo_entry) {
+		unix_graph_update(edge);
+
 		edge->successor = &receiver->vertex;
+	}
 
 	list_del_init(&receiver->vertex.edges);
 
@@ -297,6 +317,25 @@ static void unix_walk_scc(void)
 
 	list_replace_init(&unix_visited_vertices, &unix_unvisited_vertices);
 	swap(unix_vertex_unvisited_index, unix_vertex_grouped_index);
+	unix_graph_updated = false;
+}
+
+static void unix_walk_scc_fast(void)
+{
+	while (!list_empty(&unix_unvisited_vertices)) {
+		struct unix_vertex *vertex;
+		LIST_HEAD(scc);
+
+		vertex = list_first_entry(&unix_unvisited_vertices, typeof(*vertex), entry);
+		list_add(&scc, &vertex->scc_entry);
+
+		list_for_each_entry_reverse(vertex, &scc, scc_entry)
+			list_move_tail(&vertex->entry, &unix_visited_vertices);
+
+		list_del(&scc);
+	}
+
+	list_replace_init(&unix_visited_vertices, &unix_unvisited_vertices);
 }
 
 static LIST_HEAD(gc_candidates);
@@ -446,7 +485,10 @@ static void __unix_gc(struct work_struct *work)
 
 	spin_lock(&unix_gc_lock);
 
-	unix_walk_scc();
+	if (unix_graph_updated)
+		unix_walk_scc();
+	else
+		unix_walk_scc_fast();
 
 	/* First, select candidates for garbage collection.  Only
 	 * in-flight sockets are considered, and from those only ones
