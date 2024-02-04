@@ -271,6 +271,32 @@ static ssize_t power_supply_show_usb_type(struct device *dev,
 	return count;
 }
 
+static ssize_t power_supply_show_charge_behaviour(struct device *dev,
+						  struct power_supply *psy,
+						  struct power_supply_attr *ps_attr,
+						  union power_supply_propval *value,
+						  char *buf)
+{
+	union power_supply_propval available;
+	int ret;
+
+	ret = power_supply_get_property(psy,
+					POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
+					value);
+	if (ret < 0)
+		return ret;
+
+	ret = power_supply_get_property(psy,
+					POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR_AVAILABLE,
+					&available);
+	if (ret == -EINVAL)
+		return sysfs_emit(buf, "%s\n", ps_attr->text_values[value->intval]);
+	else if (ret < 0)
+		return ret;
+
+	return power_supply_charge_behaviour_show(dev, available.intval, value->intval, buf);
+}
+
 static ssize_t power_supply_show_property(struct device *dev,
 					  struct device_attribute *attr,
 					  char *buf) {
@@ -282,6 +308,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 
 	if (psp == POWER_SUPPLY_PROP_TYPE) {
 		value.intval = psy->desc->type;
+	} else if (psp == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR) {
+		value.intval = -1;
 	} else {
 		ret = power_supply_get_property(psy, psp, &value);
 
@@ -307,6 +335,10 @@ static ssize_t power_supply_show_property(struct device *dev,
 	case POWER_SUPPLY_PROP_USB_TYPE:
 		ret = power_supply_show_usb_type(dev, psy->desc,
 						&value, buf);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
+		ret = power_supply_show_charge_behaviour(dev, psy, ps_attr,
+							 &value, buf);
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME ... POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		ret = sysfs_emit(buf, "%s\n", value.strval);
