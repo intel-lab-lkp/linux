@@ -395,7 +395,8 @@ out:
  * Output is listener if incoming packet would not create a child
  *           NULL if memory could not be allocated.
  */
-struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
+struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
+					     enum skb_drop_reason *reason)
 {
 	struct ip_options *opt = &TCP_SKB_CB(skb)->header.h4.opt;
 	const struct tcphdr *th = tcp_hdr(skb);
@@ -420,8 +421,10 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 		if (IS_ERR(req))
 			goto out;
 	}
-	if (!req)
+	if (!req) {
+		*reason = SKB_DROP_REASON_NO_REQSK_ALLOC;
 		goto out_drop;
+	}
 
 	ireq = inet_rsk(req);
 
@@ -433,8 +436,10 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 	 */
 	RCU_INIT_POINTER(ireq->ireq_opt, tcp_v4_save_options(net, skb));
 
-	if (security_inet_conn_request(sk, skb, req))
+	if (security_inet_conn_request(sk, skb, req)) {
+		*reason = SKB_DROP_REASON_SECURITY_HOOK;
 		goto out_free;
+	}
 
 	tcp_ao_syncookie(sk, skb, req, AF_INET);
 
@@ -451,8 +456,10 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 			   ireq->ir_loc_addr, th->source, th->dest, sk->sk_uid);
 	security_req_classify_flow(req, flowi4_to_flowi_common(&fl4));
 	rt = ip_route_output_key(net, &fl4);
-	if (IS_ERR(rt))
+	if (IS_ERR(rt)) {
+		*reason = SKB_DROP_REASON_IP_ROUTEOUTPUTKEY;
 		goto out_free;
+	}
 
 	/* Try to redo what tcp_v4_send_synack did. */
 	req->rsk_window_clamp = tp->window_clamp ? :dst_metric(&rt->dst, RTAX_WINDOW);
@@ -477,6 +484,9 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 	 */
 	if (ret)
 		inet_sk(ret)->cork.fl.u.ip4 = fl4;
+	else
+		*reason = SKB_DROP_REASON_COOKIE_NOCHILD;
+
 out:
 	return ret;
 out_free:
