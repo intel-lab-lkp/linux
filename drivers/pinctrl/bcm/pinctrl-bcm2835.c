@@ -1112,6 +1112,47 @@ static const struct pinconf_ops bcm2835_pinconf_ops = {
 	.pin_config_set = bcm2835_pinconf_set,
 };
 
+static int bcm2711_pinconf_get(struct pinctrl_dev *pctldev, unsigned pin,
+			       unsigned long *config)
+{
+	struct bcm2835_pinctrl *pc = pinctrl_dev_get_drvdata(pctldev);
+	enum pin_config_param param = pinconf_to_config_param(*config);
+	u32 offset, shift, val;
+
+	offset = PUD_2711_REG_OFFSET(pin);
+	shift = PUD_2711_REG_SHIFT(pin);
+	val = bcm2835_gpio_rd(pc, GP_GPIO_PUP_PDN_CNTRL_REG0 + (offset * 4));
+
+	switch (param) {
+	case PIN_CONFIG_BIAS_DISABLE:
+		if (((val >> shift) & PUD_2711_MASK) == BCM2711_PULL_NONE)
+			return 0;
+		else
+			return -EINVAL;
+
+	case PIN_CONFIG_BIAS_PULL_UP:
+		if (((val >> shift) & PUD_2711_MASK) == BCM2711_PULL_UP) {
+			*config = pinconf_to_config_packed(param, 47000);
+			return 0;
+		} else {
+			return -EINVAL;
+		}
+
+	case PIN_CONFIG_BIAS_PULL_DOWN:
+		if (((val >> shift) & PUD_2711_MASK) == BCM2711_PULL_DOWN) {
+			*config = pinconf_to_config_packed(param, 47000);
+			return 0;
+		} else {
+			return -EINVAL;
+		}
+
+	default:
+		break;
+	}
+
+	return bcm2835_pinconf_get(pctldev, pin, config);
+}
+
 static void bcm2711_pull_config_set(struct bcm2835_pinctrl *pc,
 				    unsigned int pin, unsigned int arg)
 {
@@ -1179,7 +1220,7 @@ static int bcm2711_pinconf_set(struct pinctrl_dev *pctldev,
 
 static const struct pinconf_ops bcm2711_pinconf_ops = {
 	.is_generic = true,
-	.pin_config_get = bcm2835_pinconf_get,
+	.pin_config_get = bcm2711_pinconf_get,
 	.pin_config_set = bcm2711_pinconf_set,
 };
 
