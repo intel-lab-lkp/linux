@@ -1003,7 +1003,40 @@ static const struct pinmux_ops bcm2835_pmx_ops = {
 static int bcm2835_pinconf_get(struct pinctrl_dev *pctldev,
 			unsigned pin, unsigned long *config)
 {
-	/* No way to read back config in HW */
+	enum pin_config_param param = pinconf_to_config_param(*config);
+	struct bcm2835_pinctrl *pc = pinctrl_dev_get_drvdata(pctldev);
+	enum bcm2835_fsel fsel = bcm2835_pinctrl_fsel_get(pc, pin);
+	u32 val;
+
+	/* No way to read back bias config in HW */
+
+	switch (param) {
+	case PIN_CONFIG_INPUT_ENABLE:
+		if (fsel != BCM2835_FSEL_GPIO_IN)
+			return -EINVAL;
+
+		*config = pinconf_to_config_packed(param, 1);
+		return 0;
+
+	case PIN_CONFIG_OUTPUT_ENABLE:
+		if (fsel != BCM2835_FSEL_GPIO_OUT)
+			return -EINVAL;
+
+		*config = pinconf_to_config_packed(param, 1);
+		return 0;
+
+	case PIN_CONFIG_OUTPUT:
+		if (fsel != BCM2835_FSEL_GPIO_OUT)
+			return -EINVAL;
+
+		val = bcm2835_gpio_get_bit(pc, GPLEV0, pin);
+		*config = pinconf_to_config_packed(param, val);
+		return 0;
+
+	default:
+		break;
+	}
+
 	return -ENOTSUPP;
 }
 
