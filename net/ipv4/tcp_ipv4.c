@@ -1846,13 +1846,14 @@ put_and_exit:
 }
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
 
-static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
+static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb,
+			 enum skb_drop_reason *reason)
 {
 #ifdef CONFIG_SYN_COOKIES
 	const struct tcphdr *th = tcp_hdr(skb);
 
 	if (!th->syn)
-		sk = cookie_v4_check(sk, skb);
+		sk = cookie_v4_check(sk, skb, reason);
 #endif
 	return sk;
 }
@@ -1912,7 +1913,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto csum_err;
 
 	if (sk->sk_state == TCP_LISTEN) {
-		struct sock *nsk = tcp_v4_cookie_check(sk, skb);
+		struct sock *nsk = tcp_v4_cookie_check(sk, skb, &reason);
 
 		if (!nsk)
 			goto discard;
