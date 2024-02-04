@@ -45,6 +45,8 @@ void intel_plane_free(struct intel_plane *plane);
 struct drm_plane_state *intel_plane_duplicate_state(struct drm_plane *plane);
 void intel_plane_destroy_state(struct drm_plane *plane,
 			       struct drm_plane_state *state);
+void intel_cursor_destroy_state(struct drm_plane *plane,
+				struct drm_plane_state *state);
 void intel_crtc_planes_update_noarm(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc);
 void intel_crtc_planes_update_arm(struct intel_atomic_state *state,
