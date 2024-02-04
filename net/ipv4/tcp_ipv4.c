@@ -1918,7 +1918,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		if (!nsk)
 			goto discard;
 		if (nsk != sk) {
-			if (tcp_child_process(sk, nsk, skb)) {
+			if (tcp_child_process(sk, nsk, skb, &reason)) {
 				rsk = nsk;
 				goto reset;
 			}
@@ -1927,7 +1927,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	} else
 		sock_rps_save_rxhash(sk, skb);
 
-	if (tcp_rcv_state_process(sk, skb)) {
+	if (tcp_rcv_state_process(sk, skb, &reason)) {
 		rsk = sk;
 		goto reset;
 	}
@@ -2276,7 +2276,7 @@ process:
 		if (nsk == sk) {
 			reqsk_put(req);
 			tcp_v4_restore_cb(skb);
-		} else if (tcp_child_process(sk, nsk, skb)) {
+		} else if (tcp_child_process(sk, nsk, skb, &drop_reason)) {
 			tcp_v4_send_reset(nsk, skb);
 			goto discard_and_relse;
 		} else {

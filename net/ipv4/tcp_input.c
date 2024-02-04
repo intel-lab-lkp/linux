@@ -6616,7 +6616,8 @@ static void tcp_rcv_synrecv_state_fastopen(struct sock *sk)
  *	address independent.
  */
 
-int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
+int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+					 enum skb_drop_reason *drop_reason)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -6632,8 +6633,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
-		if (th->ack)
+		if (th->ack) {
+			SKB_DR_SET(*drop_reason, TCP_FLAGS);
 			return 1;
+		}
 
 		if (th->rst) {
 			SKB_DR_SET(reason, TCP_RESET);
@@ -6653,8 +6656,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			local_bh_enable();
 			rcu_read_unlock();
 
-			if (!acceptable)
+			if (!acceptable) {
+				SKB_DR_SET(*drop_reason, TCP_CONNREQNOTACCEPTABLE);
 				return 1;
+			}
 			consume_skb(skb);
 			return 0;
 		}
@@ -6704,8 +6709,11 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 				  FLAG_NO_CHALLENGE_ACK);
 
 	if ((int)reason <= 0) {
-		if (sk->sk_state == TCP_SYN_RECV)
+		if (sk->sk_state == TCP_SYN_RECV) {
+			if ((int)reason < 0)
+				*drop_reason = -reason;
 			return 1;	/* send one RST */
+		}
 		/* accept old ack during closing */
 		if ((int)reason < 0) {
 			tcp_send_challenge_ack(sk);
@@ -6781,6 +6789,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (READ_ONCE(tp->linger2) < 0) {
 			tcp_done(sk);
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPABORTONDATA);
+			SKB_DR_SET(*drop_reason, TCP_ABORTONDATA);
 			return 1;
 		}
 		if (TCP_SKB_CB(skb)->end_seq != TCP_SKB_CB(skb)->seq &&
@@ -6790,6 +6799,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 				tcp_fastopen_active_disable(sk);
 			tcp_done(sk);
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPABORTONDATA);
+			SKB_DR_SET(*drop_reason, TCP_ABORTONDATA);
 			return 1;
 		}
 
@@ -6855,6 +6865,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			    after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
 				NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPABORTONDATA);
 				tcp_reset(sk, skb);
+				SKB_DR_SET(*drop_reason, TCP_ABORTONDATA);
 				return 1;
 			}
 		}

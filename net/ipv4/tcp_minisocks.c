@@ -912,7 +912,7 @@ EXPORT_SYMBOL(tcp_check_req);
  */
 
 int tcp_child_process(struct sock *parent, struct sock *child,
-		      struct sk_buff *skb)
+		      struct sk_buff *skb, enum skb_drop_reason *reason)
 	__releases(&((child)->sk_lock.slock))
 {
 	int ret = 0;
@@ -923,7 +923,7 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 
 	tcp_segs_in(tcp_sk(child), skb);
 	if (!sock_owned_by_user(child)) {
-		ret = tcp_rcv_state_process(child, skb);
+		ret = tcp_rcv_state_process(child, skb, reason);
 		/* Wakeup parent, send SIGIO */
 		if (state == TCP_SYN_RECV && child->sk_state != state)
 			parent->sk_data_ready(parent);

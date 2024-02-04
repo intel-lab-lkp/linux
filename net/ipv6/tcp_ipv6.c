@@ -1657,7 +1657,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 			goto discard;
 
 		if (nsk != sk) {
-			if (tcp_child_process(sk, nsk, skb))
+			if (tcp_child_process(sk, nsk, skb, &reason))
 				goto reset;
 			if (opt_skb)
 				__kfree_skb(opt_skb);
@@ -1666,7 +1666,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	} else
 		sock_rps_save_rxhash(sk, skb);
 
-	if (tcp_rcv_state_process(sk, skb))
+	if (tcp_rcv_state_process(sk, skb, &reason))
 		goto reset;
 	if (opt_skb)
 		goto ipv6_pktoptions;
@@ -1856,7 +1856,7 @@ process:
 		if (nsk == sk) {
 			reqsk_put(req);
 			tcp_v6_restore_cb(skb);
-		} else if (tcp_child_process(sk, nsk, skb)) {
+		} else if (tcp_child_process(sk, nsk, skb, &drop_reason)) {
 			tcp_v6_send_reset(nsk, skb);
 			goto discard_and_relse;
 		} else {
