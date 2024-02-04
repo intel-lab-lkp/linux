@@ -1171,12 +1171,18 @@ static void
 intel_cleanup_plane_fb(struct drm_plane *plane,
 		       struct drm_plane_state *_old_plane_state)
 {
+	struct drm_i915_private *i915 = to_i915(_old_plane_state->plane->dev);
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(_old_plane_state);
 	struct intel_atomic_state *state =
 		to_intel_atomic_state(old_plane_state->uapi.state);
 	struct drm_i915_private *dev_priv = to_i915(plane->dev);
-	struct drm_i915_gem_object *obj = intel_fb_obj(old_plane_state->hw.fb);
+	struct drm_i915_gem_object *obj = NULL;
+
+	if (old_plane_state && old_plane_state->hw.fb)
+		obj = intel_fb_obj(old_plane_state->hw.fb);
+	else
+		drm_err_ratelimited(&i915->drm, "Invalid plane state or fb\n");
 
 	if (!obj)
 		return;
