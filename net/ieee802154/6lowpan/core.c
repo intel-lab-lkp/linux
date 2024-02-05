@@ -280,5 +280,6 @@ static void __exit lowpan_cleanup_module(void)
 
 module_init(lowpan_init_module);
 module_exit(lowpan_cleanup_module);
+MODULE_DESCRIPTION("IEEE 802.15.4 IPv6 over Low-Power Wireless Personal Area Network module");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_RTNL_LINK("lowpan");

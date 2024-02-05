@@ -1136,5 +1136,6 @@ static void __exit af_ieee802154_remove(void)
 module_init(af_ieee802154_init);
 module_exit(af_ieee802154_remove);
 
+MODULE_DESCRIPTION("IEEE 802.15.4 socket interface");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_NETPROTO(PF_IEEE802154);
