@@ -134,6 +134,16 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
  *	an anonymous instance of the (guard) class, not recommended for
  *	conditional locks.
  *
+ * cond_guard(name, fail, args...):
+ *	a guard to be used with the conditional variants of locks, like
+ *	down_read_trylock() or mutex_lock_interruptible. 'fail' are one or more
+ *	statements that are executed when waiting for a lock is interrupted or
+ *	when a _trylock() fails in case of contention.
+ *
+ *	Example:
+ *
+ *		cond_guard(rwsem_read_try, { printk(...); return 0; }, &semaphore);
+ *
  * scoped_guard (name, args...) { }:
  *	similar to CLASS(name, scope)(args), except the variable (with the
  *	explicit name 'scope') is declard in a for-loop such that its scope is
@@ -164,6 +174,10 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 	CLASS(_name, __UNIQUE_ID(guard))
 
 #define __guard_ptr(_name) class_##_name##_lock_ptr
+
+#define cond_guard(_name, _fail, args...) \
+	CLASS(_name, scope)(args); \
+	if (!__guard_ptr(_name)(&scope)) _fail
 
 #define scoped_guard(_name, args...)					\
 	for (CLASS(_name, scope)(args),					\
