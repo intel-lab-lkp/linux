@@ -4707,17 +4707,11 @@ void __init tcp_init(void)
 			    thash_entries, 21,  /* one slot per 2 MB*/
 			    0, 64 * 1024);
 	tcp_hashinfo.bind_bucket_cachep =
-		kmem_cache_create("tcp_bind_bucket",
-				  sizeof(struct inet_bind_bucket), 0,
-				  SLAB_HWCACHE_ALIGN | SLAB_PANIC |
-				  SLAB_ACCOUNT,
-				  NULL);
+		KMEM_CACHE(inet_bind_bucket,
+			   SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT);
 	tcp_hashinfo.bind2_bucket_cachep =
-		kmem_cache_create("tcp_bind2_bucket",
-				  sizeof(struct inet_bind2_bucket), 0,
-				  SLAB_HWCACHE_ALIGN | SLAB_PANIC |
-				  SLAB_ACCOUNT,
-				  NULL);
+		KMEM_CACHE(inet_bind2_bucket,
+			   SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT);
 
 	/* Size and allocate the main established and bind bucket
 	 * hash tables.
