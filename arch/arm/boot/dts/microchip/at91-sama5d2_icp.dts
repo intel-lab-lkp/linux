@@ -712,6 +712,8 @@
 	bus-width = <4>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_sdmmc0_default>;
+	vmmc-supply = <&vdd_io_reg>;	// 3.3V
+	vqmmc-supply = <&vdd_io_reg>;	// 3.3V
 	status = "okay";
 };
 
