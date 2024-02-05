@@ -662,7 +662,7 @@ void intel_cursor_unpin_work(struct kthread_work *base)
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
 
 	intel_plane_unpin_fb(plane_state);
-	intel_plane_destroy_state(&plane->base, &plane_state->uapi);
+	intel_cursor_destroy_state(&plane->base, &plane_state->uapi);
 }
 
 static int
