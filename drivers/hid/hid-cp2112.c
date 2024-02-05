@@ -27,6 +27,25 @@
 #include <linux/usb/ch9.h>
 #include "hid-ids.h"
 
+/**
+ * enum cp2112_child_acpi_cell_addrs - Child ACPI addresses for CP2112 sub-functions
+ * @CP2112_I2C_ADR: Address for I2C node
+ * @CP2112_GPIO_ADR: Address for GPIO node
+ */
+enum cp2112_child_acpi_cell_addrs {
+	CP2112_I2C_ADR = 0,
+	CP2112_GPIO_ADR = 1,
+};
+
+/**
+ * CP2112 Fwnode child names.
+ * CP2112 sub-functions can be described by named fwnode children or by ACPI _ADR
+ */
+static const char * const cp2112_cell_names[] = {
+	[CP2112_I2C_ADR]	= "i2c",
+	[CP2112_GPIO_ADR]	= "gpio",
+};
+
 #define CP2112_REPORT_MAX_LENGTH		64
 #define CP2112_GPIO_CONFIG_LENGTH		5
 #define CP2112_GPIO_GET_LENGTH			2
@@ -1195,7 +1214,11 @@ static int cp2112_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	struct cp2112_device *dev;
 	u8 buf[3];
 	struct cp2112_smbus_config_report config;
+	struct fwnode_handle *child;
 	struct gpio_irq_chip *girq;
+	struct i2c_timings timings;
+	const char *name;
+	u32 addr;
 	int ret;
 
 	dev = devm_kzalloc(&hdev->dev, sizeof(*dev), GFP_KERNEL);
@@ -1208,6 +1231,30 @@ static int cp2112_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return -ENOMEM;
 
 	mutex_init(&dev->lock);
+
+	device_for_each_child_node(&hdev->dev, child) {
+		name = fwnode_get_name(child);
+		if (name) {
+			ret = match_string(cp2112_cell_names,
+							ARRAY_SIZE(cp2112_cell_names), name);
+			if (ret >= 0)
+				addr = ret;
+		}
+		if (!name || ret < 0)
+			ret = acpi_get_local_address(ACPI_HANDLE_FWNODE(child), &addr);
+
+		if (ret < 0)
+			continue;
+
+		switch (addr) {
+		case CP2112_I2C_ADR:
+			device_set_node(&dev->adap.dev, child);
+			break;
+		case CP2112_GPIO_ADR:
+			dev->gc.fwnode = child;
+			break;
+		}
+	}
 
 	ret = hid_parse(hdev);
 	if (ret) {
@@ -1254,6 +1301,9 @@ static int cp2112_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto err_power_normal;
 	}
 
+	i2c_parse_fw_timings(&dev->adap.dev, &timings, true);
+
+	config.clock_speed = cpu_to_be32(timings.bus_freq_hz);
 	config.retry_time = cpu_to_be16(1);
 
 	ret = cp2112_hid_output(hdev, (u8 *)&config, sizeof(config),
