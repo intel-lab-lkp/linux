@@ -31,7 +31,7 @@ extern void evm_inode_post_setxattr(struct dentry *dentry,
 				    const char *xattr_name,
 				    const void *xattr_value,
 				    size_t xattr_value_len);
-extern int evm_inode_copy_up_xattr(const char *name);
+extern int evm_inode_copy_up_xattr(struct dentry *dentry, const char *name);
 extern int evm_inode_removexattr(struct mnt_idmap *idmap,
 				 struct dentry *dentry, const char *xattr_name);
 extern void evm_inode_post_removexattr(struct dentry *dentry,
@@ -118,7 +118,8 @@ static inline void evm_inode_post_setxattr(struct dentry *dentry,
 	return;
 }
 
-static inline int  evm_inode_copy_up_xattr(const char *name)
+static inline int evm_inode_copy_up_xattr(struct dentry *dentry,
+					  const char *name)
 {
 	return 0;
 }

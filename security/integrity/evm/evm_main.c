@@ -896,7 +896,7 @@ void evm_inode_post_setattr(struct dentry *dentry, int ia_valid)
 		evm_update_evmxattr(dentry, NULL, NULL, 0);
 }
 
-int evm_inode_copy_up_xattr(const char *name)
+int evm_inode_copy_up_xattr(struct dentry *src, const char *name)
 {
 	if (strcmp(name, XATTR_NAME_EVM) == 0)
 		return 1; /* Discard */
