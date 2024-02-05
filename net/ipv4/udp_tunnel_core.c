@@ -253,4 +253,5 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_dst_lookup);
 
+MODULE_DESCRIPTION("IPv4 UDP tunnel driver");
 MODULE_LICENSE("GPL");
