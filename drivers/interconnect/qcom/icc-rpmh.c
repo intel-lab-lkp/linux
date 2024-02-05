@@ -1,18 +1,59 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/clk.h>
 #include <linux/interconnect.h>
 #include <linux/interconnect-provider.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include <linux/bits.h>
 
 #include "bcm-voter.h"
 #include "icc-common.h"
 #include "icc-rpmh.h"
+
+/* QNOC QoS */
+#define QOSGEN_MAINCTL_LO(p, qp)	(0x8 + (p->port_offsets[qp]))
+#define QOS_SLV_URG_MSG_EN_MASK		BIT_MASK(3)
+#define QOS_DFLT_PRIO_MASK		GENMASK(6, 4)
+#define QOS_DISABLE_MASK		BIT_MASK(24)
+
+/**
+ * qcom_icc_set_qos - initialize static QoS configurations
+ * @qp: qcom icc provider to which @node belongs
+ * @node: qcom icc node to operate on
+ */
+static void qcom_icc_set_qos(struct qcom_icc_provider *qp,
+				struct qcom_icc_node *node)
+{
+	const struct qcom_icc_qosbox *qos = node->qosbox;
+	int port;
+
+	if (!qp->regmap)
+		return;
+
+	if (!qos)
+		return;
+
+	for (port = 0; port < qos->num_ports; port++) {
+		regmap_update_bits(qp->regmap, QOSGEN_MAINCTL_LO(qos, port),
+				   QOS_DISABLE_MASK,
+				   FIELD_PREP(QOS_DISABLE_MASK, qos->prio_fwd_disable));
+
+		regmap_update_bits(qp->regmap, QOSGEN_MAINCTL_LO(qos, port),
+				   QOS_DFLT_PRIO_MASK,
+				   FIELD_PREP(QOS_DFLT_PRIO_MASK, qos->prio));
+
+		regmap_update_bits(qp->regmap, QOSGEN_MAINCTL_LO(qos, port),
+				   QOS_SLV_URG_MSG_EN_MASK,
+				   FIELD_PREP(QOS_SLV_URG_MSG_EN_MASK, qos->urg_fwd));
+	}
+}
 
 /**
  * qcom_icc_pre_aggregate - cleans up stale values from prior icc_set
@@ -20,9 +61,9 @@
  */
 void qcom_icc_pre_aggregate(struct icc_node *node)
 {
-	size_t i;
-	struct qcom_icc_node *qn;
 	struct qcom_icc_provider *qp;
+	struct qcom_icc_node *qn;
+	size_t i;
 
 	qn = node->data;
 	qp = to_qcom_provider(node->provider);
@@ -49,8 +90,8 @@ EXPORT_SYMBOL_GPL(qcom_icc_pre_aggregate);
 int qcom_icc_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
 		       u32 peak_bw, u32 *agg_avg, u32 *agg_peak)
 {
-	size_t i;
 	struct qcom_icc_node *qn;
+	size_t i;
 
 	qn = node->data;
 
@@ -159,13 +200,96 @@ int qcom_icc_bcm_init(struct qcom_icc_bcm *bcm, struct device *dev)
 }
 EXPORT_SYMBOL_GPL(qcom_icc_bcm_init);
 
+static bool bcm_needs_qos_proxy(struct qcom_icc_bcm *bcm)
+{
+	int i;
+
+	for (i = 0; i < bcm->num_nodes; i++)
+		if (bcm->nodes[i]->qosbox)
+			return true;
+
+	return false;
+}
+
+static int enable_qos_deps(struct qcom_icc_provider *qp)
+{
+	struct qcom_icc_bcm *bcm;
+	bool keepalive;
+	int ret, i;
+
+	for (i = 0; i < qp->num_bcms; i++) {
+		bcm = qp->bcms[i];
+		if (bcm_needs_qos_proxy(bcm)) {
+			keepalive = bcm->keepalive;
+			bcm->keepalive = true;
+
+			qcom_icc_bcm_voter_add(qp->voter, bcm);
+			ret = qcom_icc_bcm_voter_commit(qp->voter);
+
+			bcm->keepalive = keepalive;
+
+			if (ret) {
+				dev_err(qp->dev, "failed to vote BW to %s for QoS\n",
+					bcm->name);
+				return ret;
+			}
+		}
+	}
+
+	ret = clk_bulk_prepare_enable(qp->num_clks, qp->clks);
+	if (ret)
+		dev_err(qp->dev, "failed to enable clocks for QoS\n");
+
+	return ret;
+}
+
+static void disable_qos_deps(struct qcom_icc_provider *qp)
+{
+	struct qcom_icc_bcm *bcm;
+	int i;
+
+	clk_bulk_disable_unprepare(qp->num_clks, qp->clks);
+
+	for (i = 0; i < qp->num_bcms; i++) {
+		bcm = qp->bcms[i];
+		if (bcm_needs_qos_proxy(bcm)) {
+			qcom_icc_bcm_voter_add(qp->voter, bcm);
+			qcom_icc_bcm_voter_commit(qp->voter);
+		}
+	}
+}
+
+static int qcom_icc_rpmh_configure_qos(struct qcom_icc_provider *qp)
+{
+	struct qcom_icc_node *qnode;
+	size_t i;
+	int ret;
+
+	ret = enable_qos_deps(qp);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < qp->num_nodes; i++) {
+		qnode = qp->nodes[i];
+		if (!qnode)
+			continue;
+
+		if (qnode->qosbox)
+			qcom_icc_set_qos(qp, qnode);
+	}
+
+	disable_qos_deps(qp);
+
+	return ret;
+}
+
 int qcom_icc_rpmh_probe(struct platform_device *pdev)
 {
+	struct qcom_icc_node * const *qnodes, *qn;
 	const struct qcom_icc_desc *desc;
 	struct device *dev = &pdev->dev;
 	struct icc_onecell_data *data;
 	struct icc_provider *provider;
-	struct qcom_icc_node * const *qnodes, *qn;
 	struct qcom_icc_provider *qp;
 	struct icc_node *node;
 	size_t num_nodes, i, j;
@@ -199,11 +323,34 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 
 	qp->dev = dev;
 	qp->bcms = desc->bcms;
+	qp->nodes = desc->nodes;
 	qp->num_bcms = desc->num_bcms;
+	qp->num_nodes = desc->num_nodes;
 
 	qp->voter = of_bcm_voter_get(qp->dev, NULL);
 	if (IS_ERR(qp->voter))
 		return PTR_ERR(qp->voter);
+
+	if (desc->config) {
+		struct resource *res;
+		void __iomem *base;
+
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		if (!res)
+			return -ENODEV;
+
+		base = devm_ioremap(dev, res->start, resource_size(res));
+		if (IS_ERR(base))
+			return PTR_ERR(base);
+
+		qp->regmap = devm_regmap_init_mmio(dev, base, desc->config);
+		if (IS_ERR(qp->regmap))
+			return PTR_ERR(qp->regmap);
+	}
+
+	qp->num_clks = devm_clk_bulk_get_all(qp->dev, &qp->clks);
+	if (qp->num_clks < 0)
+		return qp->num_clks;
 
 	for (i = 0; i < qp->num_bcms; i++)
 		qcom_icc_bcm_init(qp->bcms[i], dev);
@@ -229,6 +376,10 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 		data->nodes[i] = node;
 	}
 
+	ret = qcom_icc_rpmh_configure_qos(qp);
+	if (ret)
+		goto err_remove_nodes;
+
 	ret = icc_provider_register(provider);
 	if (ret)
 		goto err_remove_nodes;
@@ -247,6 +398,7 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 err_deregister_provider:
 	icc_provider_deregister(provider);
 err_remove_nodes:
+	clk_bulk_put_all(qp->num_clks, qp->clks);
 	icc_nodes_remove(provider);
 
 	return ret;
@@ -258,6 +410,7 @@ void qcom_icc_rpmh_remove(struct platform_device *pdev)
 	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
 
 	icc_provider_deregister(&qp->provider);
+	clk_bulk_put_all(qp->num_clks, qp->clks);
 	icc_nodes_remove(&qp->provider);
 }
 EXPORT_SYMBOL_GPL(qcom_icc_rpmh_remove);
