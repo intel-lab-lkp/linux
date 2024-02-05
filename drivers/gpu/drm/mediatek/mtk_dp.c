@@ -33,6 +33,7 @@
 
 #include "mtk_dp.h"
 #include "mtk_dp_reg.h"
+#include "mtk_dp_hdcp1x.h"
 #include "mtk_dp_hdcp2.h"
 
 #define MTK_DP_SIP_CONTROL_AARCH32	MTK_SIP_SMC_CMD(0x523)
@@ -1811,6 +1812,9 @@ void mtk_dp_check_hdcp_version(struct mtk_dp *mtk_dp, bool only_hdcp1x)
 	if (!only_hdcp1x && dp_tx_hdcp2_support(&mtk_dp->hdcp_info))
 		return;
 
+	if (dp_tx_hdcp1x_support(&mtk_dp->hdcp_info))
+		return;
+
 	if (tee_add_device(&mtk_dp->hdcp_info, HDCP_NONE) != RET_SUCCESS)
 		mtk_dp->hdcp_info.auth_status = AUTH_FAIL;
 }
@@ -1860,15 +1864,34 @@ static void mtk_dp_hdcp_handle(struct work_struct *data)
 		mtk_dp_check_hdcp_version(mtk_dp, false);
 		if (mtk_dp->hdcp_info.hdcp2_info.enable)
 			dp_tx_hdcp2_set_start_auth(&mtk_dp->hdcp_info, true);
+		else if (mtk_dp->hdcp_info.hdcp1x_info.enable &&
+			 mtk_dp->hdcp_info.hdcp_content_type != DRM_MODE_HDCP_CONTENT_TYPE1)
+			dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, true);
 		else
 			mtk_dp->hdcp_info.auth_status = AUTH_ZERO;
 	}
 
-	while (mtk_dp->hdcp_info.hdcp2_info.enable &&
-	       mtk_dp->hdcp_info.auth_status != AUTH_FAIL &&
+	while ((mtk_dp->hdcp_info.hdcp1x_info.enable ||
+		mtk_dp->hdcp_info.hdcp2_info.enable) &&
+			mtk_dp->hdcp_info.auth_status != AUTH_FAIL &&
 			mtk_dp->hdcp_info.auth_status != AUTH_PASS) {
-		if (mtk_dp->hdcp_info.hdcp2_info.enable)
+		if (mtk_dp->hdcp_info.hdcp2_info.enable) {
 			dp_tx_hdcp2_fsm(&mtk_dp->hdcp_info);
+			if (mtk_dp->hdcp_info.auth_status == AUTH_FAIL) {
+				tee_remove_device(&mtk_dp->hdcp_info);
+				mtk_dp_check_hdcp_version(mtk_dp, true);
+				if (mtk_dp->hdcp_info.hdcp1x_info.enable &&
+				    mtk_dp->hdcp_info.hdcp_content_type !=
+					DRM_MODE_HDCP_CONTENT_TYPE1) {
+					mtk_dp->hdcp_info.hdcp2_info.enable = false;
+					dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, true);
+				}
+			}
+		}
+
+		if (mtk_dp->hdcp_info.hdcp1x_info.enable &&
+		    mtk_dp->hdcp_info.hdcp_content_type != DRM_MODE_HDCP_CONTENT_TYPE1)
+			dp_tx_hdcp1x_fsm(&mtk_dp->hdcp_info);
 	}
 }
 
@@ -1924,6 +1947,8 @@ static void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, struct drm_connector
 		dev_dbg(mtk_dp->dev, "disable HDCP\n");
 		if (mtk_dp->hdcp_info.hdcp2_info.enable)
 			dp_tx_hdcp2_set_start_auth(&mtk_dp->hdcp_info, false);
+		else if (mtk_dp->hdcp_info.hdcp1x_info.enable)
+			dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, false);
 
 		drm_hdcp_update_content_protection(mtk_dp->conn,
 						   mtk_dp->hdcp_info.content_protection);
@@ -2394,6 +2419,8 @@ static void mtk_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 
 	if (mtk_dp->hdcp_info.hdcp2_info.enable)
 		dp_tx_hdcp2_set_start_auth(&mtk_dp->hdcp_info, false);
+	else if (mtk_dp->hdcp_info.hdcp1x_info.enable)
+		dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, false);
 
 	if (mtk_dp->hdcp_info.content_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED) {
 		mtk_dp->hdcp_info.content_protection = DRM_MODE_CONTENT_PROTECTION_DESIRED;

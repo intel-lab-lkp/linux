@@ -276,6 +276,9 @@
 #define MTK_DP_TRANS_P0_3430				0x3430
 #define HPD_INT_THD_ECO_DP_TRANS_P0_MASK			GENMASK(1, 0)
 #define HPD_INT_THD_ECO_DP_TRANS_P0_HIGH_BOUND_EXT		BIT(1)
+#define MTK_DP_TRANS_P0_3480                0x3480
+#define REQ_BLOCK_CIPHER_AUTH                           BIT(12)
+#define KM_GENERATED                                    BIT(4)
 #define MTK_DP_TRANS_P0_34A4				0x34a4
 #define LANE_NUM_DP_TRANS_P0_MASK				GENMASK(3, 2)
 #define MTK_DP_TRANS_P0_34D0                0x34D0
