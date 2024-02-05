@@ -136,6 +136,25 @@ intel_plane_destroy_state(struct drm_plane *plane,
 {
 	struct intel_plane_state *plane_state = to_intel_plane_state(state);
 
+	/* Do not proceed if vblank unpin worker is yet to be executed */
+	if (plane_state->unpin_work.vblank)
+		return;
+
+	drm_WARN_ON(plane->dev, plane_state->ggtt_vma);
+	drm_WARN_ON(plane->dev, plane_state->dpt_vma);
+
+	__drm_atomic_helper_plane_destroy_state(&plane_state->uapi);
+	if (plane_state->hw.fb)
+		drm_framebuffer_put(plane_state->hw.fb);
+	kfree(plane_state);
+}
+
+void
+intel_cursor_destroy_state(struct drm_plane *plane,
+			   struct drm_plane_state *state)
+{
+	struct intel_plane_state *plane_state = to_intel_plane_state(state);
+
 	drm_WARN_ON(plane->dev, plane_state->ggtt_vma);
 	drm_WARN_ON(plane->dev, plane_state->dpt_vma);
 
