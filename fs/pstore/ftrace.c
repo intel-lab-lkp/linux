@@ -23,10 +23,11 @@
 /* This doesn't need to be atomic: speed is chosen over correctness here. */
 static u64 pstore_ftrace_stamp;
 
-static void notrace pstore_ftrace_call(unsigned long ip,
+static void notrace pstore_do_ftrace(unsigned long ip,
 				       unsigned long parent_ip,
 				       struct ftrace_ops *op,
-				       struct ftrace_regs *fregs)
+				       struct ftrace_regs *fregs,
+				       struct ftrace_info *psinfo)
 {
 	int bit;
 	unsigned long flags;
@@ -55,6 +56,20 @@ static void notrace pstore_ftrace_call(unsigned long ip,
 
 	local_irq_restore(flags);
 	ftrace_test_recursion_unlock(bit);
+}
+
+static void notrace pstore_ftrace_call(unsigned long ip,
+				       unsigned long parent_ip,
+				       struct ftrace_ops *op,
+				       struct pt_regs *regs)
+{
+	struct pstore_info_list *entry;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(entry, &psback->list_entry, list)
+		if (entry->psi->flags & PSTORE_FLAGS_FTRACE)
+			pstore_do_ftrace(ip, parent_ip, op, regs, entry->psi);
+	rcu_read_unlock();
 }
 
 static struct ftrace_ops pstore_ftrace_ops __read_mostly = {
@@ -131,8 +146,14 @@ MODULE_PARM_DESC(record_ftrace,
 
 void pstore_register_ftrace(void)
 {
-	if (!psinfo->write)
-		return;
+	rcu_read_lock();
+	list_for_each_entry_rcu(entry, &psback->list_entry, list)
+		if (entry->psi->flags & PSTORE_FLAGS_FTRACE)
+			if (!entry->psi->write) {
+				rcu_read_unlock();
+				return;
+			}
+	rcu_read_unlock();
 
 	pstore_ftrace_dir = debugfs_create_dir("pstore", NULL);
 
