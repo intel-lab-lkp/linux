@@ -7006,10 +7006,8 @@ static void intel_atomic_commit_fence_wait(struct intel_atomic_state *intel_stat
 	}
 }
 
-static void intel_atomic_cleanup_work(struct work_struct *work)
+static void intel_atomic_cleanup_work(struct intel_atomic_state *state)
 {
-	struct intel_atomic_state *state =
-		container_of(work, struct intel_atomic_state, base.commit_work);
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *old_crtc_state;
 	struct intel_crtc *crtc;
@@ -7283,8 +7281,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	 * schedule point (cond_resched()) here anyway to keep latencies
 	 * down.
 	 */
-	INIT_WORK(&state->base.commit_work, intel_atomic_cleanup_work);
-	queue_work(system_highpri_wq, &state->base.commit_work);
+
+	intel_atomic_cleanup_work(state);
 }
 
 static void intel_atomic_commit_work(struct work_struct *work)
