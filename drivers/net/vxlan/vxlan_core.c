@@ -4846,23 +4846,25 @@ static void vxlan_destroy_tunnels(struct net *net, struct list_head *head)
 
 }
 
-static void __net_exit vxlan_exit_batch_net(struct list_head *net_list)
+static void __net_exit vxlan_exit_batch_rtnl(struct list_head *net_list,
+					     struct list_head *dev_to_kill)
 {
 	struct net *net;
-	LIST_HEAD(list);
-	unsigned int h;
 
+	ASSERT_RTNL();
 	list_for_each_entry(net, net_list, exit_list) {
 		struct vxlan_net *vn = net_generic(net, vxlan_net_id);
 
-		unregister_nexthop_notifier(net, &vn->nexthop_notifier_block);
-	}
-	rtnl_lock();
-	list_for_each_entry(net, net_list, exit_list)
-		vxlan_destroy_tunnels(net, &list);
+		__unregister_nexthop_notifier(net, &vn->nexthop_notifier_block);
 
-	unregister_netdevice_many(&list);
-	rtnl_unlock();
+		vxlan_destroy_tunnels(net, dev_to_kill);
+	}
+}
+
+static void __net_exit vxlan_exit_batch_net(struct list_head *net_list)
+{
+	struct net *net;
+	unsigned int h;
 
 	list_for_each_entry(net, net_list, exit_list) {
 		struct vxlan_net *vn = net_generic(net, vxlan_net_id);
@@ -4875,6 +4877,7 @@ static void __net_exit vxlan_exit_batch_net(struct list_head *net_list)
 static struct pernet_operations vxlan_net_ops = {
 	.init = vxlan_init_net,
 	.exit_batch = vxlan_exit_batch_net,
+	.exit_batch_rtnl = vxlan_exit_batch_rtnl,
 	.id   = &vxlan_net_id,
 	.size = sizeof(struct vxlan_net),
 };
