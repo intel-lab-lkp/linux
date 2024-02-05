@@ -14,6 +14,7 @@
 #include <linux/xattr.h>
 #include <linux/evm.h>
 #include <linux/fsverity.h>
+#include <linux/iversion.h>
 
 #include "ima.h"
 
@@ -250,7 +251,6 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 	int result = 0;
 	int length;
 	void *tmpbuf;
-	u64 i_version = 0;
 
 	/*
 	 * Always collect the modsig, because IMA might have already collected
@@ -263,16 +263,6 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 	if (iint->flags & IMA_COLLECTED)
 		goto out;
 
-	/*
-	 * Detecting file change is based on i_version. On filesystems
-	 * which do not support i_version, support was originally limited
-	 * to an initial measurement/appraisal/audit, but was modified to
-	 * assume the file changed.
-	 */
-	result = vfs_getattr_nosec(&file->f_path, &stat, STATX_CHANGE_COOKIE,
-				   AT_STATX_SYNC_AS_STAT);
-	if (!result && (stat.result_mask & STATX_CHANGE_COOKIE))
-		i_version = stat.change_cookie;
 	hash.hdr.algo = algo;
 	hash.hdr.length = hash_digest_size[algo];
 
@@ -302,10 +292,22 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 
 	iint->ima_hash = tmpbuf;
 	memcpy(iint->ima_hash, &hash, length);
-	iint->version = i_version;
-	if (real_inode != inode) {
+	if (real_inode == inode) {
+		/*
+		 * Detecting file change is based on i_version. On filesystems
+		 * which do not support i_version, support was originally limited
+		 * to an initial measurement/appraisal/audit, but was modified to
+		 * assume the file changed.
+		 */
+		result = vfs_getattr_nosec(&file->f_path, &stat,
+					   STATX_CHANGE_COOKIE,
+					   AT_STATX_SYNC_AS_STAT);
+		if (!result && (stat.result_mask & STATX_CHANGE_COOKIE))
+			iint->version = stat.change_cookie;
+	} else {
 		iint->real_ino = real_inode->i_ino;
 		iint->real_dev = real_inode->i_sb->s_dev;
+		iint->version = inode_query_iversion(real_inode);
 	}
 
 	/* Possibly temporary failure due to type of read (eg. O_DIRECT) */
