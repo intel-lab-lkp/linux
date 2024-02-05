@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2019-2022 MediaTek Inc.
+ * Copyright (c) 2019-2024 MediaTek Inc.
  * Copyright (c) 2022 BayLibre
  */
+
 #ifndef _MTK_DP_REG_H_
 #define _MTK_DP_REG_H_
 
@@ -277,6 +278,7 @@
 #define HPD_INT_THD_ECO_DP_TRANS_P0_HIGH_BOUND_EXT		BIT(1)
 #define MTK_DP_TRANS_P0_34A4				0x34a4
 #define LANE_NUM_DP_TRANS_P0_MASK				GENMASK(3, 2)
+#define MTK_DP_TRANS_P0_34D0                0x34D0
 #define MTK_DP_TRANS_P0_3540				0x3540
 #define FEC_EN_DP_TRANS_P0_MASK					BIT(0)
 #define FEC_CLOCK_EN_MODE_DP_TRANS_P0				BIT(3)
