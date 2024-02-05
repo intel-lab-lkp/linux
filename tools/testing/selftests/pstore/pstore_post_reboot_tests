@@ -36,45 +36,46 @@ else
 fi
 
 cd ${mount_point}
+for backend in ${backends}; do
+    prlog -n "Checking ${backend}-dmesg files exist in pstore filesystem ... "
+    check_files_exist dmesg ${backend}
 
-prlog -n "Checking dmesg files exist in pstore filesystem ... "
-check_files_exist dmesg
+    prlog -n "Checking ${backend}-console files exist in pstore filesystem ... "
+    check_files_exist console ${backend}
 
-prlog -n "Checking console files exist in pstore filesystem ... "
-check_files_exist console
+    prlog -n "Checking ${backend}-pmsg files exist in pstore filesystem ... "
+    check_files_exist pmsg ${backend}
 
-prlog -n "Checking pmsg files exist in pstore filesystem ... "
-check_files_exist pmsg
+    prlog -n "Checking ${backend}-dmesg files contain oops end marker"
+    grep_end_trace() {
+        grep -q "\---\[ end trace" $1
+    }
+    files=`ls dmesg-${backend}-*`
+    operate_files $? "$files" grep_end_trace
 
-prlog -n "Checking dmesg files contain oops end marker"
-grep_end_trace() {
-    grep -q "\---\[ end trace" $1
-}
-files=`ls dmesg-${backend}-*`
-operate_files $? "$files" grep_end_trace
+    prlog -n "Checking ${backend}-console file contains oops end marker ... "
+    grep -q "\---\[ end trace" console-${backend}-0
+    show_result $?
 
-prlog -n "Checking console file contains oops end marker ... "
-grep -q "\---\[ end trace" console-${backend}-0
-show_result $?
-
-prlog -n "Checking pmsg file properly keeps the content written before crash ... "
-prev_uuid=`cat $TOP_DIR/prev_uuid`
-if [ $? -eq 0 ]; then
-    nr_matched=`grep -c "$TEST_STRING_PATTERN" pmsg-${backend}-0`
-    if [ $nr_matched -eq 1 ]; then
-	grep -q "$TEST_STRING_PATTERN"$prev_uuid pmsg-${backend}-0
-	show_result $?
+    prlog -n "Checking ${backend}-pmsg file properly keeps the content written before crash ... "
+    prev_uuid=`cat $TOP_DIR/prev_uuid`
+    if [ $? -eq 0 ]; then
+        nr_matched=`grep -c "$TEST_STRING_PATTERN" pmsg-${backend}-0`
+        if [ $nr_matched -eq 1 ]; then
+	    grep -q "$TEST_STRING_PATTERN"$prev_uuid pmsg-${backend}-0
+	    show_result $?
+        else
+            prlog "FAIL"
+            rc=1
+        fi
     else
-	prlog "FAIL"
-	rc=1
+        prlog "FAIL"
+        rc=1
     fi
-else
-    prlog "FAIL"
-    rc=1
-fi
 
-prlog -n "Removing all files in pstore filesystem "
-files=`ls *-${backend}-*`
-operate_files $? "$files" rm
+    prlog -n "Removing all ${backend} files in pstore filesystem "
+    files=`ls *-${backend}-*`
+    operate_files $? "$files" rm
+done
 
 exit $rc
