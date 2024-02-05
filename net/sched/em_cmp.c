@@ -87,6 +87,7 @@ static void __exit exit_em_cmp(void)
 	tcf_em_unregister(&em_cmp_ops);
 }
 
+MODULE_DESCRIPTION("Simple packet data comparison network helpers");
 MODULE_LICENSE("GPL");
 
 module_init(init_em_cmp);

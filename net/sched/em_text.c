@@ -147,6 +147,7 @@ static void __exit exit_em_text(void)
 	tcf_em_unregister(&em_text_ops);
 }
 
+MODULE_DESCRIPTION("Textsearch comparison network helpers");
 MODULE_LICENSE("GPL");
 
 module_init(init_em_text);

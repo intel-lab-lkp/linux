@@ -52,6 +52,7 @@ static void __exit exit_em_u32(void)
 	tcf_em_unregister(&em_u32_ops);
 }
 
+MODULE_DESCRIPTION("U32 Key comparison network helpers");
 MODULE_LICENSE("GPL");
 
 module_init(init_em_u32);
