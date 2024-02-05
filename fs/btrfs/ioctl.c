@@ -2620,6 +2620,15 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 				range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
 				range.extent_thresh = (u32)-1;
 			}
+
+			if (!(range.flags & BTRFS_DEFRAG_RANGE_LONE_RATIO))
+				range.lone_ratio = 0;
+			else if (range.lone_ratio > 65536) {
+				ret = -EINVAL;
+				goto out;
+			}
+			if (!(range.flags & BTRFS_DEFRAG_RANGE_LONE_RATIO))
+				range.lone_wasted_bytes = U32_MAX;
 		} else {
 			/* the rest are all set to zero by kzalloc */
 			range.len = (u64)-1;

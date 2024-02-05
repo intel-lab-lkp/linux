@@ -612,10 +612,14 @@ struct btrfs_ioctl_clone_range_args {
  * Used by:
  * struct btrfs_ioctl_defrag_range_args.flags
  */
-#define BTRFS_DEFRAG_RANGE_COMPRESS 1
-#define BTRFS_DEFRAG_RANGE_START_IO 2
-#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |		\
-					 BTRFS_DEFRAG_RANGE_START_IO)
+#define BTRFS_DEFRAG_RANGE_COMPRESS		(1ULL << 0)
+#define BTRFS_DEFRAG_RANGE_START_IO		(1ULL << 1)
+#define BTRFS_DEFRAG_RANGE_LONE_RATIO		(1ULL << 2)
+#define BTRFS_DEFRAG_RANGE_LONE_WASTED_BYTES	(1ULL << 3)
+#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |	\
+					 BTRFS_DEFRAG_RANGE_START_IO |	\
+					 BTRFS_DEFRAG_RANGE_LONE_RATIO |\
+					 BTRFS_DEFRAG_RANGE_LONE_WASTED_BYTES)
 
 struct btrfs_ioctl_defrag_range_args {
 	/* start of the defrag operation */
@@ -644,8 +648,22 @@ struct btrfs_ioctl_defrag_range_args {
 	 */
 	__u32 compress_type;
 
+	/*
+	 * If a lone extent (has no adjacent file extent) is utilizing less
+	 * than the ratio (0 means 0%, while 65536 means 100%) of the on-disk
+	 * space, it would be considered as a defrag target.
+	 */
+	__u32 lone_ratio;
+
+	/*
+	 * If we defrag a lone extent (has no adjacent file extent) can free
+	 * up more space than this value (in bytes), it would be considered
+	 * as a defrag target.
+	 */
+	__u32 lone_wasted_bytes;
+
 	/* spare for later */
-	__u32 unused[4];
+	__u32 unused[2];
 };
 
 

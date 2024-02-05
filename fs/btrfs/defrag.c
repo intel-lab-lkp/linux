@@ -958,26 +958,28 @@ struct defrag_target_range {
  * any adjacent ones), but we may still want to defrag them, to free up
  * some space if possible.
  */
-static bool should_defrag_under_utilized(struct extent_map *em)
+static bool should_defrag_under_utilized(struct extent_map *em, u32 lone_ratio,
+					 u32 lone_wasted_bytes)
 {
 	/*
 	 * Ratio based check.
 	 *
-	 * If the current extent is only utilizing 1/16 of its on-disk size,
+	 * If the current extent is only utilizing less than
+	 * (%lone_ratio/65536) of its on-disk size,
 	 * it's definitely under-utilized, and defragging it may free up
 	 * the whole extent.
 	 */
-	if (em->len < em->orig_block_len / 16)
+	if (lone_ratio && em->len < em->orig_block_len * lone_ratio / 65536)
 		return true;
 
 	/*
 	 * Wasted space based check.
 	 *
-	 * If we can free up at least 16MiB, then it may be a good idea
-	 * to defrag.
+	 * If we can free up at least @lone_wasted_bytes, then it may be a
+	 * good idea to defrag.
 	 */
 	if (em->len < em->orig_block_len &&
-	    em->orig_block_len - em->len > SZ_16M)
+	    em->orig_block_len - em->len > lone_wasted_bytes)
 		return true;
 	return false;
 }
@@ -998,7 +1000,8 @@ static bool should_defrag_under_utilized(struct extent_map *em)
  */
 static int defrag_collect_targets(struct btrfs_inode *inode,
 				  u64 start, u64 len, u32 extent_thresh,
-				  u64 newer_than, bool do_compress,
+				  u64 newer_than, u32 lone_ratio,
+				  u32 lone_wasted_bytes, bool do_compress,
 				  bool locked, struct list_head *target_list,
 				  u64 *last_scanned_ret)
 {
@@ -1109,7 +1112,7 @@ static int defrag_collect_targets(struct btrfs_inode *inode,
 			 * But if we may free up some space, it is still worth
 			 * defragging.
 			 */
-			if (should_defrag_under_utilized(em))
+			if (should_defrag_under_utilized(em, lone_ratio, lone_wasted_bytes))
 				goto add;
 
 			/* Empty target list, no way to merge with last entry */
@@ -1240,7 +1243,8 @@ static int defrag_one_locked_target(struct btrfs_inode *inode,
 }
 
 static int defrag_one_range(struct btrfs_inode *inode, u64 start, u32 len,
-			    u32 extent_thresh, u64 newer_than, bool do_compress,
+			    u32 extent_thresh, u64 newer_than,
+			    u32 lone_ratio, u32 lone_wasted_bytes, bool do_compress,
 			    u64 *last_scanned_ret)
 {
 	struct extent_state *cached_state = NULL;
@@ -1286,7 +1290,8 @@ static int defrag_one_range(struct btrfs_inode *inode, u64 start, u32 len,
 	 * so that we won't relock the extent range and cause deadlock.
 	 */
 	ret = defrag_collect_targets(inode, start, len, extent_thresh,
-				     newer_than, do_compress, true,
+				     newer_than, lone_ratio, lone_wasted_bytes,
+				     do_compress, true,
 				     &target_list, last_scanned_ret);
 	if (ret < 0)
 		goto unlock_extent;
@@ -1320,7 +1325,9 @@ free_pages:
 static int defrag_one_cluster(struct btrfs_inode *inode,
 			      struct file_ra_state *ra,
 			      u64 start, u32 len, u32 extent_thresh,
-			      u64 newer_than, bool do_compress,
+			      u64 newer_than, u32 lone_ratio,
+			      u32 lone_wasted_bytes,
+			      bool do_compress,
 			      unsigned long *sectors_defragged,
 			      unsigned long max_sectors,
 			      u64 *last_scanned_ret)
@@ -1332,8 +1339,8 @@ static int defrag_one_cluster(struct btrfs_inode *inode,
 	int ret;
 
 	ret = defrag_collect_targets(inode, start, len, extent_thresh,
-				     newer_than, do_compress, false,
-				     &target_list, NULL);
+				     newer_than, lone_ratio, lone_wasted_bytes,
+				     do_compress, false, &target_list, NULL);
 	if (ret < 0)
 		goto out;
 
@@ -1371,7 +1378,8 @@ static int defrag_one_cluster(struct btrfs_inode *inode,
 		 * accounting.
 		 */
 		ret = defrag_one_range(inode, entry->start, range_len,
-				       extent_thresh, newer_than, do_compress,
+				       extent_thresh, newer_than, lone_ratio,
+				       lone_wasted_bytes, do_compress,
 				       last_scanned_ret);
 		if (ret < 0)
 			break;
@@ -1497,7 +1505,9 @@ int btrfs_defrag_file(struct inode *inode, struct file_ra_state *ra,
 			BTRFS_I(inode)->defrag_compress = compress_type;
 		ret = defrag_one_cluster(BTRFS_I(inode), ra, cur,
 				cluster_end + 1 - cur, extent_thresh,
-				newer_than, do_compress, &sectors_defragged,
+				newer_than, range->lone_ratio,
+				range->lone_wasted_bytes, do_compress,
+				&sectors_defragged,
 				max_to_defrag, &last_scanned);
 
 		if (sectors_defragged > prev_sectors_defragged)
