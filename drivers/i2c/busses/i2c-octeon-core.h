@@ -7,6 +7,7 @@
 #include <linux/i2c-smbus.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/pci.h>
 
 /* Controller command patterns */
 #define SW_TWSI_V		BIT_ULL(63)	/* Valid bit */
@@ -97,6 +98,8 @@ struct octeon_i2c_reg_offset {
 #define SW_TWSI(x)	(x->roff.sw_twsi)
 #define TWSI_INT(x)	(x->roff.twsi_int)
 #define SW_TWSI_EXT(x)	(x->roff.sw_twsi_ext)
+
+#define INITIAL_DELTA_HZ	1000000
 
 struct octeon_i2c {
 	wait_queue_head_t queue;
@@ -209,6 +212,20 @@ static inline u64 octeon_i2c_read_int(struct octeon_i2c *i2c)
 static inline void octeon_i2c_write_int(struct octeon_i2c *i2c, u64 data)
 {
 	octeon_i2c_writeq_flush(data, i2c->twsi_base + TWSI_INT(i2c));
+}
+
+#define PCI_SUBSYS_DEVID_9XXX 0xB
+/**
+ * octeon_i2c_is_otx2 - check for chip ID
+ * @pdev: PCI dev structure
+ *
+ * Returns TRUE if OcteonTX2, FALSE otherwise.
+ */
+static inline bool octeon_i2c_is_otx2(struct pci_dev *pdev)
+{
+	u32 chip_id = (pdev->subsystem_device >> 12) & 0xF;
+
+	return (chip_id == PCI_SUBSYS_DEVID_9XXX);
 }
 
 /* Prototypes */

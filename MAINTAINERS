@@ -4725,6 +4725,7 @@ F:	drivers/net/wireless/ath/carl9170/
 
 CAVIUM I2C DRIVER
 M:	Robert Richter <rric@kernel.org>
+M:	Suneel Garapati <sgarapati@marvell.com>
 S:	Odd Fixes
 W:	http://www.marvell.com
 F:	drivers/i2c/busses/i2c-octeon*
