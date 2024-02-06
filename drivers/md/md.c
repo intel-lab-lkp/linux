@@ -4475,8 +4475,8 @@ array_state_show(struct mddev *mddev, char *page)
 	return sprintf(page, "%s\n", array_states[st]);
 }
 
-static int do_md_stop(struct mddev *mddev, int ro, struct block_device *bdev);
-static int md_set_readonly(struct mddev *mddev, struct block_device *bdev);
+static int do_md_stop(struct mddev *mddev, int ro);
+static int md_set_readonly(struct mddev *mddev);
 static int restart_array(struct mddev *mddev);
 
 static ssize_t
@@ -4537,14 +4537,14 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	case inactive:
 		/* stop an active array, return 0 otherwise */
 		if (mddev->pers)
-			err = do_md_stop(mddev, 2, NULL);
+			err = do_md_stop(mddev, 2);
 		break;
 	case clear:
-		err = do_md_stop(mddev, 0, NULL);
+		err = do_md_stop(mddev, 0);
 		break;
 	case readonly:
 		if (mddev->pers)
-			err = md_set_readonly(mddev, NULL);
+			err = md_set_readonly(mddev);
 		else {
 			mddev->ro = MD_RDONLY;
 			set_disk_ro(mddev->gendisk, 1);
@@ -4554,7 +4554,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	case read_auto:
 		if (mddev->pers) {
 			if (md_is_rdwr(mddev))
-				err = md_set_readonly(mddev, NULL);
+				err = md_set_readonly(mddev);
 			else if (mddev->ro == MD_RDONLY)
 				err = restart_array(mddev);
 			if (err == 0) {
@@ -6412,7 +6412,7 @@ void md_stop(struct mddev *mddev)
 
 EXPORT_SYMBOL_GPL(md_stop);
 
-static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
+static int md_set_readonly(struct mddev *mddev)
 {
 	int err = 0;
 	int did_freeze = 0;
@@ -6440,9 +6440,7 @@ static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
 		   !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags));
 	mddev_lock_nointr(mddev);
 
-	mutex_lock(&mddev->open_mutex);
-	if ((mddev->pers && atomic_read(&mddev->openers) > !!bdev) ||
-	    mddev->sync_thread ||
+	if (mddev->sync_thread ||
 	    test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
 		pr_warn("md: %s still in use.\n",mdname(mddev));
 		if (did_freeze) {
@@ -6468,7 +6466,6 @@ static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
 		err = 0;
 	}
 out:
-	mutex_unlock(&mddev->open_mutex);
 	return err;
 }
 
@@ -6476,8 +6473,7 @@ out:
  *   0 - completely stop and dis-assemble array
  *   2 - stop but do not disassemble array
  */
-static int do_md_stop(struct mddev *mddev, int mode,
-		      struct block_device *bdev)
+static int do_md_stop(struct mddev *mddev, int mode)
 {
 	struct gendisk *disk = mddev->gendisk;
 	struct md_rdev *rdev;
@@ -6503,13 +6499,9 @@ static int do_md_stop(struct mddev *mddev, int mode,
 					   &mddev->recovery)));
 	mddev_lock_nointr(mddev);
 
-	mutex_lock(&mddev->open_mutex);
-	if ((mddev->pers && atomic_read(&mddev->openers) > !!bdev) ||
-	    mddev->sysfs_active ||
-	    mddev->sync_thread ||
+	if (mddev->sysfs_active || mddev->sync_thread ||
 	    test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
 		pr_warn("md: %s still in use.\n",mdname(mddev));
-		mutex_unlock(&mddev->open_mutex);
 		if (did_freeze) {
 			clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 			set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
@@ -6532,13 +6524,11 @@ static int do_md_stop(struct mddev *mddev, int mode,
 				sysfs_unlink_rdev(mddev, rdev);
 
 		set_capacity_and_notify(disk, 0);
-		mutex_unlock(&mddev->open_mutex);
 		mddev->changed = 1;
 
 		if (!md_is_rdwr(mddev))
 			mddev->ro = MD_RDWR;
-	} else
-		mutex_unlock(&mddev->open_mutex);
+	}
 	/*
 	 * Free resources if final stop
 	 */
@@ -6584,7 +6574,7 @@ static void autorun_array(struct mddev *mddev)
 	err = do_md_run(mddev);
 	if (err) {
 		pr_warn("md: do_md_run() returned %d\n", err);
-		do_md_stop(mddev, 0, NULL);
+		do_md_stop(mddev, 0);
 	}
 }
 
@@ -7758,11 +7748,11 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		goto unlock;
 
 	case STOP_ARRAY:
-		err = do_md_stop(mddev, 0, bdev);
+		err = do_md_stop(mddev, 0);
 		goto unlock;
 
 	case STOP_ARRAY_RO:
-		err = md_set_readonly(mddev, bdev);
+		err = md_set_readonly(mddev);
 		goto unlock;
 
 	case HOT_REMOVE_DISK:
