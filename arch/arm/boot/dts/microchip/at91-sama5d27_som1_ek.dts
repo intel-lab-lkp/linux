@@ -56,6 +56,8 @@
 			bus-width = <8>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_sdmmc0_default>;
+			vmmc-supply = <&vddin_3v3>;
+			vqmmc-supply = <&vddin_3v3>;
 			status = "okay";
 		};
 
@@ -63,6 +65,8 @@
 			bus-width = <4>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_sdmmc1_default>;
+			vmmc-supply = <&vddin_3v3>;
+			vqmmc-supply = <&vddin_3v3>;
 			status = "okay";
 		};
 
