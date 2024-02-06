@@ -11336,7 +11336,9 @@ static pci_ers_result_t ixgbe_io_error_detected(struct pci_dev *pdev,
 	if (!pos)
 		goto skip_bad_vf_detection;
 
-	ret = pcie_read_tlp_log(pdev, pos + PCI_ERR_HEADER_LOG, &tlp_log);
+	ret = pcie_read_tlp_log(pdev, pos + PCI_ERR_HEADER_LOG,
+				pos + PCI_ERR_PREFIX_LOG,
+				aer_tlp_log_len(pdev), &tlp_log);
 	if (ret < 0) {
 		ixgbe_check_cfg_remove(hw, pdev);
 		goto skip_bad_vf_detection;

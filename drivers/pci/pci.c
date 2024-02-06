@@ -1067,23 +1067,48 @@ disable_acs_redir:
 }
 
 /**
- * pcie_read_tlp_log - Reads TLP Header Log
+ * aer_tlp_log_len - Calculates TLP Header/Prefix Log length
+ * @dev:	PCIe device
+ *
+ * Return: TLP Header/Prefix Log length
+ */
+unsigned int aer_tlp_log_len(struct pci_dev *dev)
+{
+	return 4 + dev->eetlp_prefix_max;
+}
+EXPORT_SYMBOL_GPL(aer_tlp_log_len);
+
+/**
+ * pcie_read_tlp_log - Reads TLP Header and Prefix Log
  * @dev:	PCIe device
  * @where:	PCI Config offset of TLP Header Log
+ * @where2:	PCI Config offset of TLP Prefix Log
+ * @tlp_len:	TLP Log length (in DWORDs)
  * @tlp_log:	TLP Log structure to fill
  *
- * Fills @tlp_log from TLP Header Log registers.
+ * Fills @tlp_log from TLP Header and Prefix Log registers.
  *
  * Return: 0 on success and filled TLP Log structure, <0 on error.
  */
-int pcie_read_tlp_log(struct pci_dev *dev, int where, struct pcie_tlp_log *tlp_log)
+int pcie_read_tlp_log(struct pci_dev *dev, int where, int where2,
+		      unsigned int tlp_len, struct pcie_tlp_log *tlp_log)
 {
-	int i, ret;
+	unsigned int i;
+	int off, ret;
+	u32 *to;
 
 	memset(tlp_log, 0, sizeof(*tlp_log));
 
-	for (i = 0; i < 4; i++) {
-		ret = pci_read_config_dword(dev, where + i * 4, &tlp_log->dw[i]);
+	for (i = 0; i < tlp_len; i++) {
+		if (i < 4) {
+			to = &tlp_log->dw[i];
+			off = where + i * 4;
+		} else {
+			to = &tlp_log->prefix[i - 4];
+			off = where2 + (i - 4) * 4;
+		}
+
+		ret = pci_read_config_dword(dev, off, to);
 		if (ret)
 			return pcibios_err_to_errno(ret);
 	}
