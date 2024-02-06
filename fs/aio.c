@@ -411,6 +411,10 @@ static int aio_migrate_folio(struct address_space *mapping, struct folio *dst,
 	pgoff_t idx;
 	int rc = 0;
 
+	/* Large folios aren't supported */
+	if (folio_test_large(src))
+		return -EINVAL;
+
 	/* mapping->i_private_lock here protects against the kioctx teardown.  */
 	spin_lock(&mapping->i_private_lock);
 	ctx = mapping->i_private_data;
