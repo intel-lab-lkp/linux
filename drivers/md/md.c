@@ -6412,6 +6412,7 @@ void md_stop(struct mddev *mddev)
 
 EXPORT_SYMBOL_GPL(md_stop);
 
+/* ensure 'mddev->pers' exist before calling md_set_readonly() */
 static int md_set_readonly(struct mddev *mddev)
 {
 	int err = 0;
@@ -6451,20 +6452,18 @@ static int md_set_readonly(struct mddev *mddev)
 		err = -EBUSY;
 		goto out;
 	}
-	if (mddev->pers) {
-		__md_stop_writes(mddev);
+	__md_stop_writes(mddev);
 
-		err  = -ENXIO;
-		if (mddev->ro == MD_RDONLY)
-			goto out;
-		mddev->ro = MD_RDONLY;
-		set_disk_ro(mddev->gendisk, 1);
-		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
-		sysfs_notify_dirent_safe(mddev->sysfs_state);
-		err = 0;
-	}
+	err  = -ENXIO;
+	if (mddev->ro == MD_RDONLY)
+		goto out;
+	mddev->ro = MD_RDONLY;
+	set_disk_ro(mddev->gendisk, 1);
+	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
+	md_wakeup_thread(mddev->thread);
+	sysfs_notify_dirent_safe(mddev->sysfs_state);
+	err = 0;
 out:
 	return err;
 }
@@ -7752,7 +7751,8 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		goto unlock;
 
 	case STOP_ARRAY_RO:
-		err = md_set_readonly(mddev);
+		if (mddev->pers)
+			err = md_set_readonly(mddev);
 		goto unlock;
 
 	case HOT_REMOVE_DISK:
