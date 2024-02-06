@@ -1067,6 +1067,32 @@ disable_acs_redir:
 }
 
 /**
+ * pcie_read_tlp_log - Reads TLP Header Log
+ * @dev:	PCIe device
+ * @where:	PCI Config offset of TLP Header Log
+ * @tlp_log:	TLP Log structure to fill
+ *
+ * Fills @tlp_log from TLP Header Log registers.
+ *
+ * Return: 0 on success and filled TLP Log structure, <0 on error.
+ */
+int pcie_read_tlp_log(struct pci_dev *dev, int where, struct pcie_tlp_log *tlp_log)
+{
+	int i, ret;
+
+	memset(tlp_log, 0, sizeof(*tlp_log));
+
+	for (i = 0; i < 4; i++) {
+		ret = pci_read_config_dword(dev, where + i * 4, &tlp_log->dw[i]);
+		if (ret)
+			return pcibios_err_to_errno(ret);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pcie_read_tlp_log);
+
+/**
  * pci_restore_bars - restore a device's BAR values (e.g. after wake-up)
  * @dev: PCI device to have its BARs restored
  *
