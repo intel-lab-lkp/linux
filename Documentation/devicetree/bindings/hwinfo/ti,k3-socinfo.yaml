@@ -26,9 +26,24 @@ properties:
   reg:
     maxItems: 1
 
+  nvmem-cells:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+
+  nvmem-cell-names:
+    items:
+      - const: chipvariant
+      - const: chippartno
+      - const: chipmanufacturer
+
 required:
   - compatible
-  - reg
+
+oneOf:
+  - required:
+      - reg
+  - required:
+      - nvmem-cells
+      - nvmem-cell-names
 
 additionalProperties: false
 
@@ -37,4 +52,10 @@ examples:
     chipid@43000014 {
         compatible = "ti,am654-chipid";
         reg = <0x43000014 0x4>;
+    };
+  - |
+    chipid: chipid@14 {
+        compatible = "ti,am654-chipid";
+        nvmem-cells = <&chip_variant>, <&chip_partno>, <&chip_manufacturer>;
+        nvmem-cell-names = "chipvariant", "chippartno", "chipmanufacturer";
     };
