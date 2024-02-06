@@ -338,7 +338,7 @@ __setup("watchdog_thresh=", watchdog_thresh_setup);
 
 static void __lockup_detector_cleanup(void);
 
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+#ifdef CONFIG_SOFTLOCKUP_DETECTOR_INTR_STORM
 #define NUM_STATS_GROUPS	5
 #define NUM_STATS_PER_GROUP	4
 enum stats_per_group {
