@@ -2287,6 +2287,7 @@ static const struct drm_display_mode sdvo_tv_modes[] = {
 static int intel_sdvo_get_tv_modes(struct drm_connector *connector)
 {
 	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct drm_i915_private *i915 = to_i915(intel_sdvo->base.base.dev);
 	struct intel_sdvo_connector *intel_sdvo_connector =
 		to_intel_sdvo_connector(connector);
 	const struct drm_connector_state *conn_state = connector->state;
@@ -2297,6 +2298,9 @@ static int intel_sdvo_get_tv_modes(struct drm_connector *connector)
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n",
 		      connector->base.id, connector->name);
+
+	if (!intel_display_driver_check_access(i915))
+		return 0;
 
 	/*
 	 * Read the list of supported input resolutions for the selected TV
