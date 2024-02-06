@@ -32,21 +32,20 @@ static struct dentry *f2fs_debugfs_root;
 void f2fs_update_sit_info(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
-	unsigned long long blks_per_sec, hblks_per_sec, total_vblocks;
+	unsigned long long hblks_per_sec, total_vblocks;
 	unsigned long long bimodal, dist;
 	unsigned int segno, vblocks;
 	int ndirty = 0;
 
 	bimodal = 0;
 	total_vblocks = 0;
-	blks_per_sec = CAP_BLKS_PER_SEC(sbi);
-	hblks_per_sec = blks_per_sec / 2;
+	hblks_per_sec = BLKS_PER_SEC(sbi) / 2;
 	for (segno = 0; segno < MAIN_SEGS(sbi); segno += SEGS_PER_SEC(sbi)) {
 		vblocks = get_valid_blocks(sbi, segno, true);
 		dist = abs(vblocks - hblks_per_sec);
 		bimodal += dist * dist;
 
-		if (vblocks > 0 && vblocks < blks_per_sec) {
+		if (vblocks > 0 && vblocks < BLKS_PER_SEC(sbi)) {
 			total_vblocks += vblocks;
 			ndirty++;
 		}
