@@ -10,6 +10,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -29,6 +30,7 @@
 
 static const struct platform_device_id gpu_ids[] = {
 	{ .name = "etnaviv-gpu,2d" },
+	{ .name = "etnaviv-gpu,3d" },
 	{ },
 };
 
@@ -1555,13 +1557,21 @@ static void dump_mmu_fault(struct etnaviv_gpu *gpu)
 
 static irqreturn_t irq_handler(int irq, void *data)
 {
-	struct etnaviv_gpu *gpu = data;
+	struct etnaviv_drm_private *priv = data;
 	irqreturn_t ret = IRQ_NONE;
+	int i;
 
-	u32 intr = gpu_read(gpu, VIVS_HI_INTR_ACKNOWLEDGE);
-
-	if (intr != 0) {
+	for (i = 0; i < priv->num_gpus; i++) {
+		struct etnaviv_gpu *gpu = priv->gpu[i];
+		u32 intr;
 		int event;
+
+		if (!gpu)
+			continue;
+
+		intr = gpu_read(gpu, VIVS_HI_INTR_ACKNOWLEDGE);
+		if (!intr)
+			continue;
 
 		pm_runtime_mark_last_busy(gpu->dev);
 
@@ -1893,10 +1903,44 @@ static const struct of_device_id etnaviv_gpu_match[] = {
 };
 MODULE_DEVICE_TABLE(of, etnaviv_gpu_match);
 
+/*
+ * dev point to the master. For platform device, it is virtual.
+ * For PCI(e) device, it is real.
+ */
+int etnaviv_register_irq_handler(struct device *dev,
+				 struct etnaviv_drm_private *priv)
+{
+	bool is_pci = dev_is_pci(dev);
+	int ret = 0;
+
+	if (is_pci) {
+		struct pci_dev *pdev = to_pci_dev(dev);
+
+		ret = request_irq(pdev->irq, irq_handler, IRQF_SHARED,
+				  dev_name(dev), priv);
+	} else {
+		int i;
+
+		for (i = 0; i < priv->num_gpus; i++) {
+			struct etnaviv_gpu *gpu = priv->gpu[i];
+
+			ret = devm_request_irq(gpu->dev, gpu->irq, irq_handler,
+					       0, dev_name(dev), priv);
+			if (ret) {
+				dev_err(dev, "failed to request IRQ handler: %d\n", ret);
+				break;
+			}
+		}
+	}
+
+	return ret;
+}
+
 static int etnaviv_gpu_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct etnaviv_gpu *gpu;
+	bool is_pci;
 	int err;
 
 	gpu = devm_kzalloc(dev, sizeof(*gpu), GFP_KERNEL);
@@ -1912,22 +1956,23 @@ static int etnaviv_gpu_platform_probe(struct platform_device *pdev)
 	if (IS_ERR(gpu->mmio))
 		return PTR_ERR(gpu->mmio);
 
+	is_pci = dev->parent ? dev_is_pci(dev->parent) : false;
+
 	/* Get Interrupt: */
-	gpu->irq = platform_get_irq(pdev, 0);
+	if (is_pci)
+		gpu->irq = to_pci_dev(dev->parent)->irq;
+	else
+		gpu->irq = platform_get_irq(pdev, 0);
+
 	if (gpu->irq < 0)
 		return gpu->irq;
 
-	err = devm_request_irq(dev, gpu->irq, irq_handler, 0,
-			       dev_name(dev), gpu);
-	if (err) {
-		dev_err(dev, "failed to request IRQ%u: %d\n", gpu->irq, err);
-		return err;
-	}
-
 	/* Get Clocks: */
-	err = etnaviv_gpu_clk_get(gpu);
-	if (err)
-		return err;
+	if (!is_pci) {
+		err = etnaviv_gpu_clk_get(gpu);
+		if (err)
+			return err;
+	}
 
 	/* TODO: figure out max mapped size */
 	dev_set_drvdata(dev, gpu);

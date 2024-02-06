@@ -208,6 +208,10 @@ static inline u32 gpu_read_power(struct etnaviv_gpu *gpu, u32 reg)
 int etnaviv_gpu_get_param(struct etnaviv_gpu *gpu, u32 param, u64 *value);
 
 int etnaviv_gpu_init(struct etnaviv_gpu *gpu);
+
+int etnaviv_register_irq_handler(struct device *dev,
+				 struct etnaviv_drm_private *priv);
+
 bool etnaviv_fill_identity_from_hwdb(struct etnaviv_gpu *gpu);
 
 #ifdef CONFIG_DEBUG_FS
