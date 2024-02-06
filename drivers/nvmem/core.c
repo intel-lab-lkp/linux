@@ -1806,12 +1806,14 @@ static int nvmem_cell_read_common(struct device *dev, const char *cell_id,
 		nvmem_cell_put(cell);
 		return PTR_ERR(buf);
 	}
-	if (len != count) {
+	if (len > count) {
 		kfree(buf);
 		nvmem_cell_put(cell);
 		return -EINVAL;
+	} else if (len < count) {
+		memset(val + len, 0, count - len);
 	}
-	memcpy(val, buf, count);
+	memcpy(val, buf, len);
 	kfree(buf);
 	nvmem_cell_put(cell);
 
