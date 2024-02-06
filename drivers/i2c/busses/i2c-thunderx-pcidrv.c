@@ -27,7 +27,7 @@
 
 #define PCI_DEVICE_ID_THUNDER_TWSI	0xa012
 
-#define SYS_FREQ_DEFAULT		700000000
+#define SYS_FREQ_DEFAULT		800000000
 #define OTX2_REF_FREQ_DEFAULT		100000000
 
 #define TWSI_INT_ENA_W1C		0x1028
@@ -100,7 +100,8 @@ static void thunder_i2c_clock_enable(struct device *dev, struct octeon_i2c *i2c)
 		i2c->sys_freq = clk_get_rate(i2c->clk);
 	} else {
 		/* ACPI */
-		device_property_read_u32(dev, "sclk", &i2c->sys_freq);
+		if (device_property_read_u32(dev, "sclk", &i2c->sys_freq))
+			device_property_read_u32(dev, "ioclk", &i2c->sys_freq);
 	}
 
 skip:
@@ -182,7 +183,6 @@ static int thunder_i2c_probe_pci(struct pci_dev *pdev,
 	if (!i2c->twsi_base)
 		return -EINVAL;
 
-	thunder_i2c_clock_enable(dev, i2c);
 	ret = device_property_read_u32(dev, "clock-frequency", &i2c->twsi_freq);
 	if (ret)
 		i2c->twsi_freq = I2C_MAX_STANDARD_MODE_FREQ;
@@ -196,12 +196,12 @@ static int thunder_i2c_probe_pci(struct pci_dev *pdev,
 
 	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSIX);
 	if (ret < 0)
-		goto error;
+		return ret;
 
 	ret = devm_request_irq(dev, pci_irq_vector(pdev, 0), octeon_i2c_isr, 0,
 			       DRV_NAME, i2c);
 	if (ret)
-		goto error;
+		return ret;
 
 	ret = octeon_i2c_init_lowlevel(i2c);
 	if (ret)
@@ -213,6 +213,9 @@ static int thunder_i2c_probe_pci(struct pci_dev *pdev,
 	 */
 	if (octeon_i2c_is_otx2(pdev) && IS_LS_FREQ(i2c->twsi_freq))
 		i2c->sys_freq = OTX2_REF_FREQ_DEFAULT;
+	else
+		thunder_i2c_clock_enable(dev, i2c);
+
 	octeon_i2c_set_clock(i2c);
 
 	i2c->adap = thunderx_i2c_ops;
@@ -240,6 +243,8 @@ static int thunder_i2c_probe_pci(struct pci_dev *pdev,
 
 error:
 	thunder_i2c_clock_disable(dev, i2c->clk);
+	if (!IS_LS_FREQ(i2c->twsi_freq))
+		thunder_i2c_clock_disable(dev, i2c->clk);
 	return ret;
 }
 
