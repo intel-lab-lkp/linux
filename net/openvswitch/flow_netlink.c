@@ -48,6 +48,9 @@ struct ovs_len_tbl {
 
 #define OVS_ATTR_NESTED -1
 #define OVS_ATTR_VARIABLE -2
+#define OVS_COPY_ACTIONS_MAX_DEPTH 16
+
+static DEFINE_PER_CPU(int, copy_actions_depth);
 
 static bool actions_may_change_flow(const struct nlattr *actions)
 {
@@ -3148,11 +3151,11 @@ static int copy_action(const struct nlattr *from,
 	return 0;
 }
 
-static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
-				  const struct sw_flow_key *key,
-				  struct sw_flow_actions **sfa,
-				  __be16 eth_type, __be16 vlan_tci,
-				  u32 mpls_label_count, bool log)
+static int ___ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
+				   const struct sw_flow_key *key,
+				   struct sw_flow_actions **sfa,
+				   __be16 eth_type, __be16 vlan_tci,
+				   u32 mpls_label_count, bool log)
 {
 	u8 mac_proto = ovs_key_mac_proto(key);
 	const struct nlattr *a;
@@ -3476,6 +3479,26 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		return -EINVAL;
 
 	return 0;
+}
+
+static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
+				  const struct sw_flow_key *key,
+				  struct sw_flow_actions **sfa,
+				  __be16 eth_type, __be16 vlan_tci,
+				  u32 mpls_label_count, bool log)
+{
+	int level = this_cpu_read(copy_actions_depth);
+	int ret;
+
+	if (level > OVS_COPY_ACTIONS_MAX_DEPTH)
+		return -EOVERFLOW;
+
+	__this_cpu_inc(copy_actions_depth);
+	ret = ___ovs_nla_copy_actions(net, attr, key, sfa, eth_type,
+				      vlan_tci, mpls_label_count, log);
+	__this_cpu_dec(copy_actions_depth);
+
+	return ret;
 }
 
 /* 'key' must be the masked key. */
