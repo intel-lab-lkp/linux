@@ -286,7 +286,7 @@ static bool pmif_is_fsm_vldclr(struct pmif *arb)
 	return GET_SWINF(reg_rdata) == SWINF_WFVLDCLR;
 }
 
-static int pmif_arb_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid)
+static int pmif_arb_cmd(struct spmi_controller *ctrl, u8 opc, u8 master_id, u8 sid)
 {
 	struct pmif *arb = spmi_controller_get_drvdata(ctrl);
 	u32 rdata, cmd;
@@ -308,7 +308,7 @@ static int pmif_arb_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid)
 	return ret;
 }
 
-static int pmif_spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
+static int pmif_spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 master_id, u8 sid,
 			      u16 addr, u8 *buf, size_t len)
 {
 	struct pmif *arb = spmi_controller_get_drvdata(ctrl);
@@ -375,7 +375,7 @@ static int pmif_spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 	return 0;
 }
 
-static int pmif_spmi_write_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
+static int pmif_spmi_write_cmd(struct spmi_controller *ctrl, u8 opc, u8 master_id, u8 sid,
 			       u16 addr, const u8 *buf, size_t len)
 {
 	struct pmif *arb = spmi_controller_get_drvdata(ctrl);

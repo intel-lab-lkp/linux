@@ -64,7 +64,7 @@ int spmi_device_add(struct spmi_device *sdev)
 	struct spmi_controller *ctrl = sdev->ctrl;
 	int err;
 
-	dev_set_name(&sdev->dev, "%d-%02x", ctrl->nr, sdev->usid);
+	dev_set_name(&sdev->dev, "%d-%02x-%02x", ctrl->nr, sdev->mid, sdev->usid);
 
 	err = device_add(&sdev->dev);
 	if (err < 0) {
@@ -91,19 +91,19 @@ void spmi_device_remove(struct spmi_device *sdev)
 EXPORT_SYMBOL_GPL(spmi_device_remove);
 
 static inline int
-spmi_cmd(struct spmi_controller *ctrl, u8 opcode, u8 sid)
+spmi_cmd(struct spmi_controller *ctrl, u8 opcode, u8 mid, u8 sid)
 {
 	int ret;
 
 	if (!ctrl || !ctrl->cmd || ctrl->dev.type != &spmi_ctrl_type)
 		return -EINVAL;
 
-	ret = ctrl->cmd(ctrl, opcode, sid);
+	ret = ctrl->cmd(ctrl, opcode, mid, sid);
 	trace_spmi_cmd(opcode, sid, ret);
 	return ret;
 }
 
-static inline int spmi_read_cmd(struct spmi_controller *ctrl, u8 opcode,
+static inline int spmi_read_cmd(struct spmi_controller *ctrl, u8 opcode, u8 mid,
 				u8 sid, u16 addr, u8 *buf, size_t len)
 {
 	int ret;
@@ -112,12 +112,12 @@ static inline int spmi_read_cmd(struct spmi_controller *ctrl, u8 opcode,
 		return -EINVAL;
 
 	trace_spmi_read_begin(opcode, sid, addr);
-	ret = ctrl->read_cmd(ctrl, opcode, sid, addr, buf, len);
+	ret = ctrl->read_cmd(ctrl, opcode, mid, sid, addr, buf, len);
 	trace_spmi_read_end(opcode, sid, addr, ret, len, buf);
 	return ret;
 }
 
-static inline int spmi_write_cmd(struct spmi_controller *ctrl, u8 opcode,
+static inline int spmi_write_cmd(struct spmi_controller *ctrl, u8 opcode, u8 mid,
 				 u8 sid, u16 addr, const u8 *buf, size_t len)
 {
 	int ret;
@@ -126,7 +126,7 @@ static inline int spmi_write_cmd(struct spmi_controller *ctrl, u8 opcode,
 		return -EINVAL;
 
 	trace_spmi_write_begin(opcode, sid, addr, len, buf);
-	ret = ctrl->write_cmd(ctrl, opcode, sid, addr, buf, len);
+	ret = ctrl->write_cmd(ctrl, opcode, mid, sid, addr, buf, len);
 	trace_spmi_write_end(opcode, sid, addr, ret);
 	return ret;
 }
@@ -145,7 +145,7 @@ int spmi_register_read(struct spmi_device *sdev, u8 addr, u8 *buf)
 	if (addr > 0x1F)
 		return -EINVAL;
 
-	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_READ, sdev->usid, addr,
+	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_READ, sdev->mid, sdev->usid, addr,
 			     buf, 1);
 }
 EXPORT_SYMBOL_GPL(spmi_register_read);
@@ -167,7 +167,7 @@ int spmi_ext_register_read(struct spmi_device *sdev, u8 addr, u8 *buf,
 	if (len == 0 || len > 16)
 		return -EINVAL;
 
-	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_EXT_READ, sdev->usid, addr,
+	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_EXT_READ, sdev->mid, sdev->usid, addr,
 			     buf, len);
 }
 EXPORT_SYMBOL_GPL(spmi_ext_register_read);
@@ -189,7 +189,7 @@ int spmi_ext_register_readl(struct spmi_device *sdev, u16 addr, u8 *buf,
 	if (len == 0 || len > 8)
 		return -EINVAL;
 
-	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_EXT_READL, sdev->usid, addr,
+	return spmi_read_cmd(sdev->ctrl, SPMI_CMD_EXT_READL, sdev->mid, sdev->usid, addr,
 			     buf, len);
 }
 EXPORT_SYMBOL_GPL(spmi_ext_register_readl);
@@ -208,7 +208,7 @@ int spmi_register_write(struct spmi_device *sdev, u8 addr, u8 data)
 	if (addr > 0x1F)
 		return -EINVAL;
 
-	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_WRITE, sdev->usid, addr,
+	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_WRITE, sdev->mid, sdev->usid, addr,
 			      &data, 1);
 }
 EXPORT_SYMBOL_GPL(spmi_register_write);
@@ -222,7 +222,7 @@ EXPORT_SYMBOL_GPL(spmi_register_write);
  */
 int spmi_register_zero_write(struct spmi_device *sdev, u8 data)
 {
-	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_ZERO_WRITE, sdev->usid, 0,
+	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_ZERO_WRITE, sdev->mid, sdev->usid, 0,
 			      &data, 1);
 }
 EXPORT_SYMBOL_GPL(spmi_register_zero_write);
@@ -244,7 +244,7 @@ int spmi_ext_register_write(struct spmi_device *sdev, u8 addr, const u8 *buf,
 	if (len == 0 || len > 16)
 		return -EINVAL;
 
-	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_EXT_WRITE, sdev->usid, addr,
+	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_EXT_WRITE, sdev->mid, sdev->usid, addr,
 			      buf, len);
 }
 EXPORT_SYMBOL_GPL(spmi_ext_register_write);
@@ -266,7 +266,7 @@ int spmi_ext_register_writel(struct spmi_device *sdev, u16 addr, const u8 *buf,
 	if (len == 0 || len > 8)
 		return -EINVAL;
 
-	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_EXT_WRITEL, sdev->usid,
+	return spmi_write_cmd(sdev->ctrl, SPMI_CMD_EXT_WRITEL, sdev->mid, sdev->usid,
 			      addr, buf, len);
 }
 EXPORT_SYMBOL_GPL(spmi_ext_register_writel);
@@ -281,7 +281,7 @@ EXPORT_SYMBOL_GPL(spmi_ext_register_writel);
  */
 int spmi_command_reset(struct spmi_device *sdev)
 {
-	return spmi_cmd(sdev->ctrl, SPMI_CMD_RESET, sdev->usid);
+	return spmi_cmd(sdev->ctrl, SPMI_CMD_RESET, sdev->mid, sdev->usid);
 }
 EXPORT_SYMBOL_GPL(spmi_command_reset);
 
@@ -293,7 +293,7 @@ EXPORT_SYMBOL_GPL(spmi_command_reset);
  */
 int spmi_command_sleep(struct spmi_device *sdev)
 {
-	return spmi_cmd(sdev->ctrl, SPMI_CMD_SLEEP, sdev->usid);
+	return spmi_cmd(sdev->ctrl, SPMI_CMD_SLEEP, sdev->mid, sdev->usid);
 }
 EXPORT_SYMBOL_GPL(spmi_command_sleep);
 
@@ -306,7 +306,7 @@ EXPORT_SYMBOL_GPL(spmi_command_sleep);
  */
 int spmi_command_wakeup(struct spmi_device *sdev)
 {
-	return spmi_cmd(sdev->ctrl, SPMI_CMD_WAKEUP, sdev->usid);
+	return spmi_cmd(sdev->ctrl, SPMI_CMD_WAKEUP, sdev->mid, sdev->usid);
 }
 EXPORT_SYMBOL_GPL(spmi_command_wakeup);
 
@@ -318,7 +318,7 @@ EXPORT_SYMBOL_GPL(spmi_command_wakeup);
  */
 int spmi_command_shutdown(struct spmi_device *sdev)
 {
-	return spmi_cmd(sdev->ctrl, SPMI_CMD_SHUTDOWN, sdev->usid);
+	return spmi_cmd(sdev->ctrl, SPMI_CMD_SHUTDOWN, sdev->mid, sdev->usid);
 }
 EXPORT_SYMBOL_GPL(spmi_command_shutdown);
 
@@ -477,15 +477,16 @@ struct spmi_controller *spmi_controller_alloc(struct device *parent,
 }
 EXPORT_SYMBOL_GPL(spmi_controller_alloc);
 
-static void of_spmi_register_devices(struct spmi_controller *ctrl)
+static void of_spmi_register_devices(struct spmi_controller *ctrl,
+				     struct device_node *parent, u8 mid)
 {
 	struct device_node *node;
 	int err;
 
-	if (!ctrl->dev.of_node)
+	if (!parent)
 		return;
 
-	for_each_available_child_of_node(ctrl->dev.of_node, node) {
+	for_each_available_child_of_node(parent, node) {
 		struct spmi_device *sdev;
 		u32 reg[2];
 
@@ -519,6 +520,7 @@ static void of_spmi_register_devices(struct spmi_controller *ctrl)
 
 		sdev->dev.of_node = node;
 		sdev->usid = (u8)reg[0];
+		sdev->mid = mid;
 
 		err = spmi_device_add(sdev);
 		if (err) {
@@ -527,6 +529,30 @@ static void of_spmi_register_devices(struct spmi_controller *ctrl)
 			spmi_device_put(sdev);
 		}
 	}
+}
+
+static int of_spmi_register_bus_masters(struct spmi_controller *ctrl)
+{
+	struct device_node *node = ctrl->dev.of_node, *child;
+	int mid = 0;
+
+	for_each_available_child_of_node(node, child) {
+		if (of_node_name_eq(child, "spmi-bus-master"))
+			of_spmi_register_devices(ctrl, child, mid++);
+	}
+
+	return 0;
+}
+
+static bool of_spmi_has_bus_multi_master(struct spmi_controller *ctrl)
+{
+	struct device_node *node = ctrl->dev.of_node, *child;
+
+	for_each_available_child_of_node(node, child)
+		if (of_node_name_eq(child, "spmi-bus-master"))
+			return true;
+
+	return false;
 }
 
 /**
@@ -548,8 +574,12 @@ int spmi_controller_add(struct spmi_controller *ctrl)
 	if (ret)
 		return ret;
 
-	if (IS_ENABLED(CONFIG_OF))
-		of_spmi_register_devices(ctrl);
+	if (IS_ENABLED(CONFIG_OF)) {
+		if (of_spmi_has_bus_multi_master(ctrl))
+			of_spmi_register_bus_masters(ctrl);
+		else
+			of_spmi_register_devices(ctrl, ctrl->dev.of_node, 0);
+	}
 
 	dev_dbg(&ctrl->dev, "spmi-%d registered: dev:%p\n",
 		ctrl->nr, &ctrl->dev);

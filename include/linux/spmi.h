@@ -34,12 +34,14 @@
  * struct spmi_device - Basic representation of an SPMI device
  * @dev:	Driver model representation of the device.
  * @ctrl:	SPMI controller managing the bus hosting this device.
- * @usid:	This devices' Unique Slave IDentifier.
+ * @usid:	This device's Unique Slave IDentifier.
+ * @mid:	This device's Bus Master IDentifier.
  */
 struct spmi_device {
 	struct device		dev;
 	struct spmi_controller	*ctrl;
 	u8			usid;
+	u8			mid;
 };
 
 static inline struct spmi_device *to_spmi_device(struct device *d)
@@ -80,10 +82,10 @@ void spmi_device_remove(struct spmi_device *sdev);
 struct spmi_controller {
 	struct device		dev;
 	unsigned int		nr;
-	int	(*cmd)(struct spmi_controller *ctrl, u8 opcode, u8 sid);
-	int	(*read_cmd)(struct spmi_controller *ctrl, u8 opcode,
+	int	(*cmd)(struct spmi_controller *ctrl, u8 opcode, u8 mid, u8 sid);
+	int	(*read_cmd)(struct spmi_controller *ctrl, u8 opcode, u8 mid,
 			    u8 sid, u16 addr, u8 *buf, size_t len);
-	int	(*write_cmd)(struct spmi_controller *ctrl, u8 opcode,
+	int	(*write_cmd)(struct spmi_controller *ctrl, u8 opcode, u8 mid,
 			     u8 sid, u16 addr, const u8 *buf, size_t len);
 };
 
