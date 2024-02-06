@@ -1028,9 +1028,18 @@ config SERIAL_SC16IS7XX
 	select SERIAL_CORE
 	depends on (SPI_MASTER && !I2C) || I2C
 	help
-	  This selects support for SC16IS7xx serial ports.
-	  Supported ICs are SC16IS740, SC16IS741, SC16IS750, SC16IS752,
-	  SC16IS760 and SC16IS762. Select supported buses using options below.
+	  Core driver for NXP SC16IS7xx serial ports.
+	  Supported ICs are:
+
+	    SC16IS740
+	    SC16IS741
+	    SC16IS750
+	    SC16IS752
+	    SC16IS760
+	    SC16IS762
+
+	  You also must select at least one of I2C and SPI interface
+	  drivers below.
 
 config SERIAL_SC16IS7XX_I2C
 	bool "SC16IS7xx for I2C interface"
@@ -1041,9 +1050,7 @@ config SERIAL_SC16IS7XX_I2C
 	default y
 	help
 	  Enable SC16IS7xx driver on I2C bus,
-	  If required say y, and say n to i2c if not required,
-	  Enabled by default to support oldconfig.
-	  You must select at least one bus for the driver to be built.
+	  enabled by default to support oldconfig.
 
 config SERIAL_SC16IS7XX_SPI
 	bool "SC16IS7xx for spi interface"
@@ -1052,10 +1059,7 @@ config SERIAL_SC16IS7XX_SPI
 	select SERIAL_SC16IS7XX_CORE if SERIAL_SC16IS7XX
 	select REGMAP_SPI if SPI_MASTER
 	help
-	  Enable SC16IS7xx driver on SPI bus,
-	  If required say y, and say n to spi if not required,
-	  This is additional support to existing driver.
-	  You must select at least one bus for the driver to be built.
+	  Enable SC16IS7xx driver on SPI bus.
 
 config SERIAL_TIMBERDALE
 	tristate "Support for timberdale UART"
