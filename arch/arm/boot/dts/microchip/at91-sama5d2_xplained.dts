@@ -67,6 +67,8 @@
 			pinctrl-0 = <&pinctrl_sdmmc0_default>;
 			non-removable;
 			mmc-ddr-3_3v;
+			vmmc-supply = <&vdd_3v3_reg>;
+			vqmmc-supply = <&vdd_3v3_reg>;
 			status = "okay";
 		};
 
