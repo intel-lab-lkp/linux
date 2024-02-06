@@ -33,12 +33,31 @@
  * include the client id in the top 8 bits of the handle.
  */
 #define HOST_SESSION_CLIENT_MASK GENMASK_ULL(63, 56)
+#define HOST_SESSION_PXP_SINGLE BIT_ULL(60)
 
 static struct xe_gt *
 gsc_to_gt(struct xe_gsc *gsc)
 {
 	return container_of(gsc, struct xe_gt, uc.gsc);
 }
+
+/**
+ * xe_gsc_get_host_session_id - Create host session id based on HECI
+ * client address
+ * @heci_client_id: client id identifying the type of command (see abi for values)
+ *
+ * Returns: random host_session_id which can be used to send messages to gsc cs
+ */
+u64 xe_gsc_get_host_session_id(u8 heci_client_id)
+{
+	u64 host_session_id;
+
+	get_random_bytes(&host_session_id, sizeof(u64));
+	host_session_id &= ~HOST_SESSION_CLIENT_MASK;
+	if (host_session_id && heci_client_id == HECI_MEADDRESS_PXP)
+		host_session_id |= HOST_SESSION_PXP_SINGLE;
+	return host_session_id;
+};
 
 /**
  * xe_gsc_emit_header - write the MTL GSC header in memory
