@@ -99,8 +99,6 @@ static inline void sanity_check_seg_type(struct f2fs_sb_info *sbi,
 	((!__is_valid_data_blkaddr(blk_addr)) ?			\
 	NULL_SEGNO : GET_L2R_SEGNO(FREE_I(sbi),			\
 		GET_SEGNO_FROM_SEG0(sbi, blk_addr)))
-#define BLKS_PER_SEC(sbi)					\
-	((sbi)->segs_per_sec * (sbi)->blocks_per_seg)
 #define CAP_BLKS_PER_SEC(sbi)					\
 	((sbi)->segs_per_sec * (sbi)->blocks_per_seg -		\
 	 (sbi)->unusable_blocks_per_sec)
@@ -364,7 +362,7 @@ static inline unsigned int get_ckpt_valid_blocks(struct f2fs_sb_info *sbi,
 		unsigned int blocks = 0;
 		int i;
 
-		for (i = 0; i < sbi->segs_per_sec; i++, start_segno++) {
+		for (i = 0; i < SEGS_PER_SEC(sbi); i++, start_segno++) {
 			struct seg_entry *se = get_seg_entry(sbi, start_segno);
 
 			blocks += se->ckpt_valid_blocks;
@@ -449,7 +447,7 @@ static inline void __set_free(struct f2fs_sb_info *sbi, unsigned int segno)
 	free_i->free_segments++;
 
 	next = find_next_bit(free_i->free_segmap,
-			start_segno + sbi->segs_per_sec, start_segno);
+			start_segno + SEGS_PER_SEC(sbi), start_segno);
 	if (next >= start_segno + usable_segs) {
 		clear_bit(secno, free_i->free_secmap);
 		free_i->free_sections++;
@@ -485,7 +483,7 @@ static inline void __set_test_and_free(struct f2fs_sb_info *sbi,
 		if (!inmem && IS_CURSEC(sbi, secno))
 			goto skip_free;
 		next = find_next_bit(free_i->free_segmap,
-				start_segno + sbi->segs_per_sec, start_segno);
+				start_segno + SEGS_PER_SEC(sbi), start_segno);
 		if (next >= start_segno + usable_segs) {
 			if (test_and_clear_bit(secno, free_i->free_secmap))
 				free_i->free_sections++;
@@ -793,10 +791,10 @@ static inline int check_block_count(struct f2fs_sb_info *sbi,
 		return -EFSCORRUPTED;
 	}
 
-	if (usable_blks_per_seg < sbi->blocks_per_seg)
+	if (usable_blks_per_seg < BLKS_PER_SEG(sbi))
 		f2fs_bug_on(sbi, find_next_bit_le(&raw_sit->valid_map,
-				sbi->blocks_per_seg,
-				usable_blks_per_seg) != sbi->blocks_per_seg);
+				BLKS_PER_SEG(sbi),
+				usable_blks_per_seg) != BLKS_PER_SEG(sbi));
 
 	/* check segment usage, and check boundary of a given segment number */
 	if (unlikely(GET_SIT_VBLOCKS(raw_sit) > usable_blks_per_seg
@@ -915,9 +913,9 @@ static inline int nr_pages_to_skip(struct f2fs_sb_info *sbi, int type)
 		return 0;
 
 	if (type == DATA)
-		return sbi->blocks_per_seg;
+		return BLKS_PER_SEG(sbi);
 	else if (type == NODE)
-		return 8 * sbi->blocks_per_seg;
+		return 8 * BLKS_PER_SEG(sbi);
 	else if (type == META)
 		return 8 * BIO_MAX_VECS;
 	else
