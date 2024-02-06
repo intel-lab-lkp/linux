@@ -646,8 +646,12 @@ static const struct drm_edid *intel_crt_get_edid(struct drm_connector *connector
 static int intel_crt_ddc_get_modes(struct drm_connector *connector,
 				   struct i2c_adapter *ddc)
 {
+	struct drm_i915_private *i915 = to_i915(connector->dev);
 	const struct drm_edid *drm_edid;
 	int ret;
+
+	if (!intel_display_driver_check_access(i915))
+		return drm_edid_connector_add_modes(connector);
 
 	drm_edid = intel_crt_get_edid(connector, ddc);
 	if (!drm_edid)
@@ -932,6 +936,9 @@ static int intel_crt_get_modes(struct drm_connector *connector)
 	intel_wakeref_t wakeref;
 	struct i2c_adapter *ddc;
 	int ret;
+
+	if (!intel_display_driver_check_access(dev_priv))
+		return drm_edid_connector_add_modes(connector);
 
 	wakeref = intel_display_power_get(dev_priv,
 					  intel_encoder->power_domain);
