@@ -185,6 +185,7 @@ static const char * const map_type_name[] = {
 	[BPF_MAP_TYPE_BLOOM_FILTER]		= "bloom_filter",
 	[BPF_MAP_TYPE_USER_RINGBUF]             = "user_ringbuf",
 	[BPF_MAP_TYPE_CGRP_STORAGE]		= "cgrp_storage",
+	[BPF_MAP_TYPE_ARENA]			= "arena",
 };
 
 static const char * const prog_type_name[] = {
@@ -4852,6 +4853,7 @@ static int bpf_object__create_map(struct bpf_object *obj, struct bpf_map *map, b
 	case BPF_MAP_TYPE_SOCKHASH:
 	case BPF_MAP_TYPE_QUEUE:
 	case BPF_MAP_TYPE_STACK:
+	case BPF_MAP_TYPE_ARENA:
 		create_attr.btf_fd = 0;
 		create_attr.btf_key_type_id = 0;
 		create_attr.btf_value_type_id = 0;
@@ -4907,6 +4909,22 @@ static int bpf_object__create_map(struct bpf_object *obj, struct bpf_map *map, b
 	/* obj->gen_loader case, prevent reuse_fd() from closing map_fd */
 	if (map->fd == map_fd)
 		return 0;
+
+	if (def->type == BPF_MAP_TYPE_ARENA) {
+		size_t mmap_sz;
+
+		mmap_sz = bpf_map_mmap_sz(def->value_size, def->max_entries);
+		map->mmaped = mmap((void *)map->map_extra, mmap_sz, PROT_READ | PROT_WRITE,
+				   map->map_extra ? MAP_SHARED | MAP_FIXED : MAP_SHARED,
+				   map_fd, 0);
+		if (map->mmaped == MAP_FAILED) {
+			err = -errno;
+			map->mmaped = NULL;
+			pr_warn("map '%s': failed to mmap bpf_arena: %d\n",
+				bpf_map__name(map), err);
+			return err;
+		}
+	}
 
 	/* Keep placeholder FD value but now point it to the BPF map object.
 	 * This way everything that relied on this map's FD (e.g., relocated
