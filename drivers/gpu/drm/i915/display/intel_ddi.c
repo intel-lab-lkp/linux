@@ -2502,6 +2502,7 @@ static void mtl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 				 crtc_state->port_clock,
 				 crtc_state->lane_count);
 
+retry:
 	/*
 	 * We only configure what the register value will be here.  Actual
 	 * enabling happens during link training farther down.
@@ -2586,7 +2587,14 @@ static void mtl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	 *     Pattern, wait for 5 idle patterns (DP_TP_STATUS Min_Idles_Sent)
 	 *     (timeout after 800 us)
 	 */
-	intel_dp_start_link_train(intel_dp, crtc_state);
+	if (!intel_dp_start_link_train(intel_dp, crtc_state)) {
+		/* Link Training failed, retain */
+		intel_dp->link_trained = false;
+		intel_dp_stop_link_train(intel_dp, crtc_state);
+		encoder->post_disable(state, encoder,
+				   crtc_state, conn_state);
+		goto retry;
+	}
 
 	/* 6.n Set DP_TP_CTL link training to Normal */
 	if (!is_trans_port_sync_mode(crtc_state))
