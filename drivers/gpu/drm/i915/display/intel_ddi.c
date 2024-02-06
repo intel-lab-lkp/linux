@@ -334,18 +334,18 @@ static void intel_ddi_init_dp_buf_reg(struct intel_encoder *encoder,
 
 	/* DDI_BUF_CTL_ENABLE will be set by intel_ddi_prepare_link_retrain() later */
 	intel_dp->DP = dig_port->saved_port_bits |
-		DDI_PORT_WIDTH(crtc_state->lane_count) |
+		DDI_PORT_WIDTH(intel_dp->lane_count) |
 		DDI_BUF_TRANS_SELECT(0);
 
 	if (DISPLAY_VER(i915) >= 14) {
-		if (intel_dp_is_uhbr(crtc_state))
+		if (intel_dp_is_uhbr(intel_dp))
 			intel_dp->DP |= DDI_BUF_PORT_DATA_40BIT;
 		else
 			intel_dp->DP |= DDI_BUF_PORT_DATA_10BIT;
 	}
 
 	if (IS_ALDERLAKE_P(i915) && intel_phy_is_tc(i915, phy)) {
-		intel_dp->DP |= ddi_buf_phy_link_rate(crtc_state->port_clock);
+		intel_dp->DP |= ddi_buf_phy_link_rate(intel_dp->link_rate);
 		if (!intel_tc_port_in_tbt_alt_mode(dig_port))
 			intel_dp->DP |= DDI_BUF_CTL_TC_PHY_OWNERSHIP;
 	}
@@ -456,10 +456,11 @@ intel_ddi_config_transcoder_dp2(struct intel_encoder *encoder,
 				const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 val = 0;
 
-	if (intel_dp_is_uhbr(crtc_state))
+	if (intel_dp_is_uhbr(intel_dp))
 		val = TRANS_DP2_128B132B_CHANNEL_CODING;
 
 	intel_de_write(i915, TRANS_DP2_CTL(cpu_transcoder), val);
@@ -477,6 +478,7 @@ intel_ddi_transcoder_func_reg_val_get(struct intel_encoder *encoder,
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum pipe pipe = crtc->pipe;
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	enum port port = encoder->port;
@@ -552,11 +554,11 @@ intel_ddi_transcoder_func_reg_val_get(struct intel_encoder *encoder,
 		temp |= TRANS_DDI_MODE_SELECT_FDI_OR_128B132B;
 		temp |= (crtc_state->fdi_lanes - 1) << 1;
 	} else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST)) {
-		if (intel_dp_is_uhbr(crtc_state))
+		if (intel_dp_is_uhbr(intel_dp))
 			temp |= TRANS_DDI_MODE_SELECT_FDI_OR_128B132B;
 		else
 			temp |= TRANS_DDI_MODE_SELECT_DP_MST;
-		temp |= DDI_PORT_WIDTH(crtc_state->lane_count);
+		temp |= DDI_PORT_WIDTH(intel_dp->lane_count);
 
 		if (DISPLAY_VER(dev_priv) >= 12) {
 			enum transcoder master;
@@ -1414,7 +1416,7 @@ static int intel_ddi_dp_level(struct intel_dp *intel_dp,
 {
 	u8 train_set = intel_dp->train_set[lane];
 
-	if (intel_dp_is_uhbr(crtc_state)) {
+	if (intel_dp_is_uhbr(intel_dp)) {
 		return train_set & DP_TX_FFE_PRESET_VALUE_MASK;
 	} else {
 		u8 signal_levels = train_set & (DP_TRAIN_VOLTAGE_SWING_MASK |
@@ -2456,15 +2458,16 @@ static void mtl_port_buf_ctl_program(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum port port = encoder->port;
 	u32 val;
 
 	val = intel_de_read(i915, XELPDP_PORT_BUF_CTL1(i915, port));
 	val &= ~XELPDP_PORT_WIDTH_MASK;
-	val |= XELPDP_PORT_WIDTH(mtl_get_port_width(crtc_state->lane_count));
+	val |= XELPDP_PORT_WIDTH(mtl_get_port_width(intel_dp->lane_count));
 
 	val &= ~XELPDP_PORT_BUF_PORT_DATA_WIDTH_MASK;
-	if (intel_dp_is_uhbr(crtc_state))
+	if (intel_dp_is_uhbr(intel_dp))
 		val |= XELPDP_PORT_BUF_PORT_DATA_40BIT;
 	else
 		val |= XELPDP_PORT_BUF_PORT_DATA_10BIT;

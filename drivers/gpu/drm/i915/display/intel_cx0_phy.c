@@ -414,6 +414,7 @@ void intel_cx0_phy_set_signal_levels(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	const struct intel_ddi_buf_trans *trans;
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum phy phy = intel_port_to_phy(i915, encoder->port);
 	u8 owned_lane_mask;
 	intel_wakeref_t wakeref;
@@ -446,7 +447,7 @@ void intel_cx0_phy_set_signal_levels(struct intel_encoder *encoder,
 			      MB_WRITE_COMMITTED);
 	}
 
-	for (ln = 0; ln < crtc_state->lane_count; ln++) {
+	for (ln = 0; ln < intel_dp->lane_count; ln++) {
 		int level = intel_ddi_level(encoder, crtc_state, ln);
 		int lane = ln / 2;
 		int tx = ln % 2;
@@ -2327,10 +2328,11 @@ static void intel_c20_pll_program(struct drm_i915_private *i915,
 				  const struct intel_crtc_state *crtc_state,
 				  struct intel_encoder *encoder)
 {
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	const struct intel_c20pll_state *pll_state = &crtc_state->cx0pll_state.c20;
 	bool dp = false;
-	int lane = crtc_state->lane_count > 2 ? INTEL_CX0_BOTH_LANES : INTEL_CX0_LANE0;
-	u32 clock = crtc_state->port_clock;
+	int lane = intel_dp->lane_count > 2 ? INTEL_CX0_BOTH_LANES : INTEL_CX0_LANE0;
+	u32 clock = intel_dp->link_rate;
 	bool cntx;
 	int i;
 
@@ -2455,6 +2457,7 @@ static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 					 const struct intel_crtc_state *crtc_state,
 					 bool lane_reversal)
 {
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	u32 val = 0;
 
@@ -2475,7 +2478,7 @@ static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 
 	/* TODO: HDMI FRL */
 	/* DP2.0 10G and 20G rates enable MPLLA*/
-	if (crtc_state->port_clock == 1000000 || crtc_state->port_clock == 2000000)
+	if (intel_dp->link_rate == 1000000 || intel_dp->link_rate == 2000000)
 		val |= crtc_state->cx0pll_state.ssc_enabled ? XELPDP_SSC_ENABLE_PLLA : 0;
 	else
 		val |= crtc_state->cx0pll_state.ssc_enabled ? XELPDP_SSC_ENABLE_PLLB : 0;
@@ -2705,6 +2708,7 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 				const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum phy phy = intel_port_to_phy(i915, encoder->port);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	bool lane_reversal = dig_port->saved_port_bits & DDI_BUF_PORT_REVERSAL;
@@ -2744,7 +2748,7 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	 * 6. Program the enabled and disabled owned PHY lane
 	 * transmitters over message bus
 	 */
-	intel_cx0_program_phy_lane(i915, encoder, crtc_state->lane_count, lane_reversal);
+	intel_cx0_program_phy_lane(i915, encoder, intel_dp->lane_count, lane_reversal);
 
 	/*
 	 * 7. Follow the Display Voltage Frequency Switching - Sequence
@@ -2756,7 +2760,7 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	 * clock frequency.
 	 */
 	intel_de_write(i915, DDI_CLK_VALFREQ(encoder->port),
-		       crtc_state->port_clock);
+		       intel_dp->link_rate);
 
 	/*
 	 * 9. Set PORT_CLOCK_CTL register PCLK PLL Request

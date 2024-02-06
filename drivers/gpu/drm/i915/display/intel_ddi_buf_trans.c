@@ -1679,8 +1679,10 @@ dg2_get_snps_buf_trans(struct intel_encoder *encoder,
 		       const struct intel_crtc_state *crtc_state,
 		       int *n_entries)
 {
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
 	if (intel_crtc_has_dp_encoder(crtc_state) &&
-	    intel_dp_is_uhbr(crtc_state))
+	    intel_dp_is_uhbr(intel_dp))
 		return intel_get_buf_trans(&dg2_snps_trans_uhbr, n_entries);
 	else
 		return intel_get_buf_trans(&dg2_snps_trans, n_entries);
@@ -1692,9 +1694,10 @@ mtl_get_cx0_buf_trans(struct intel_encoder *encoder,
 		      int *n_entries)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	enum phy phy = intel_port_to_phy(i915, encoder->port);
 
-	if (intel_crtc_has_dp_encoder(crtc_state) && crtc_state->port_clock >= 1000000)
+	if (intel_crtc_has_dp_encoder(crtc_state) && intel_dp_is_uhbr(intel_dp))
 		return intel_get_buf_trans(&mtl_c20_trans_uhbr, n_entries);
 	else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) && !(intel_is_c10phy(i915, phy)))
 		return intel_get_buf_trans(&mtl_c20_trans_hdmi, n_entries);

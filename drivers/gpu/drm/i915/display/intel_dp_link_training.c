@@ -355,7 +355,7 @@ static u8 intel_dp_get_lane_adjust_vswing_preemph(struct intel_dp *intel_dp,
 		v = drm_dp_get_adjust_request_voltage(link_status, lane);
 		p = drm_dp_get_adjust_request_pre_emphasis(link_status, lane);
 	} else {
-		for (lane = 0; lane < crtc_state->lane_count; lane++) {
+		for (lane = 0; lane < intel_dp->lane_count; lane++) {
 			v = max(v, drm_dp_get_adjust_request_voltage(link_status, lane));
 			p = max(p, drm_dp_get_adjust_request_pre_emphasis(link_status, lane));
 		}
@@ -380,7 +380,7 @@ static u8 intel_dp_get_lane_adjust_train(struct intel_dp *intel_dp,
 					 const u8 link_status[DP_LINK_STATUS_SIZE],
 					 int lane)
 {
-	if (intel_dp_is_uhbr(crtc_state))
+	if (intel_dp_is_uhbr(intel_dp))
 		return intel_dp_get_lane_adjust_tx_ffe_preset(intel_dp, crtc_state,
 							      dp_phy, link_status, lane);
 	else
@@ -419,18 +419,18 @@ intel_dp_get_adjust_train(struct intel_dp *intel_dp,
 {
 	int lane;
 
-	if (intel_dp_is_uhbr(crtc_state)) {
+	if (intel_dp_is_uhbr(intel_dp)) {
 		lt_dbg(intel_dp, dp_phy,
 		       "128b/132b, lanes: %d, "
 		       "TX FFE request: " TRAIN_REQ_FMT "\n",
-		       crtc_state->lane_count,
+		       intel_dp->lane_count,
 		       TRAIN_REQ_TX_FFE_ARGS(link_status));
 	} else {
 		lt_dbg(intel_dp, dp_phy,
 		       "8b/10b, lanes: %d, "
 		       "vswing request: " TRAIN_REQ_FMT ", "
 		       "pre-emphasis request: " TRAIN_REQ_FMT "\n",
-		       crtc_state->lane_count,
+		       intel_dp->lane_count,
 		       TRAIN_REQ_VSWING_ARGS(link_status),
 		       TRAIN_REQ_PREEMPH_ARGS(link_status));
 	}
@@ -464,7 +464,7 @@ intel_dp_set_link_train(struct intel_dp *intel_dp,
 
 	buf[0] = dp_train_pat;
 	/* DP_TRAINING_LANEx_SET follow DP_TRAINING_PATTERN_SET */
-	memcpy(buf + 1, intel_dp->train_set, crtc_state->lane_count);
+	memcpy(buf + 1, intel_dp->train_set, intel_dp->lane_count);
 	len = crtc_state->lane_count + 1;
 
 	return drm_dp_dpcd_write(&intel_dp->aux, reg, buf, len) == len;
@@ -531,18 +531,18 @@ void intel_dp_set_signal_levels(struct intel_dp *intel_dp,
 {
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 
-	if (intel_dp_is_uhbr(crtc_state)) {
+	if (intel_dp_is_uhbr(intel_dp)){
 		lt_dbg(intel_dp, dp_phy,
 		       "128b/132b, lanes: %d, "
 		       "TX FFE presets: " TRAIN_SET_FMT "\n",
-		       crtc_state->lane_count,
+		       intel_dp->lane_count,
 		       TRAIN_SET_TX_FFE_ARGS(intel_dp->train_set));
 	} else {
 		lt_dbg(intel_dp, dp_phy,
 		       "8b/10b, lanes: %d, "
 		       "vswing levels: " TRAIN_SET_FMT ", "
 		       "pre-emphasis levels: " TRAIN_SET_FMT "\n",
-		       crtc_state->lane_count,
+		       intel_dp->lane_count,
 		       TRAIN_SET_VSWING_ARGS(intel_dp->train_set),
 		       TRAIN_SET_PREEMPH_ARGS(intel_dp->train_set));
 	}
@@ -575,9 +575,9 @@ intel_dp_update_link_train(struct intel_dp *intel_dp,
 	intel_dp_set_signal_levels(intel_dp, crtc_state, dp_phy);
 
 	ret = drm_dp_dpcd_write(&intel_dp->aux, reg,
-				intel_dp->train_set, crtc_state->lane_count);
+				intel_dp->train_set, intel_dp->lane_count);
 
-	return ret == crtc_state->lane_count;
+	return ret == intel_dp->lane_count;
 }
 
 /* 128b/132b */
@@ -618,10 +618,10 @@ static bool intel_dp_link_max_vswing_reached(struct intel_dp *intel_dp,
 {
 	int lane;
 
-	for (lane = 0; lane < crtc_state->lane_count; lane++) {
+	for (lane = 0; lane < intel_dp->lane_count; lane++) {
 		u8 train_set_lane = intel_dp->train_set[lane];
 
-		if (intel_dp_is_uhbr(crtc_state)) {
+		if (intel_dp_is_uhbr(intel_dp)) {
 			if (!intel_dp_lane_max_tx_ffe_reached(train_set_lane))
 				return false;
 		} else {
@@ -640,7 +640,7 @@ intel_dp_update_downspread_ctrl(struct intel_dp *intel_dp,
 	u8 link_config[2];
 
 	link_config[0] = crtc_state->vrr.flipline ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
-	link_config[1] = intel_dp_is_uhbr(crtc_state) ?
+	link_config[1] = intel_dp_is_uhbr(intel_dp) ?
 			 DP_SET_ANSI_128B132B : DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
 }
@@ -650,7 +650,7 @@ intel_dp_update_link_bw_set(struct intel_dp *intel_dp,
 			    const struct intel_crtc_state *crtc_state,
 			    u8 link_bw, u8 rate_select)
 {
-	u8 lane_count = crtc_state->lane_count;
+	u8 lane_count = intel_dp->lane_count;
 
 	if (crtc_state->enhanced_framing)
 		lane_count |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
@@ -689,7 +689,7 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 	if (intel_dp->prepare_link_retrain)
 		intel_dp->prepare_link_retrain(intel_dp, crtc_state);
 
-	intel_dp_compute_rate(intel_dp, crtc_state->port_clock,
+	intel_dp_compute_rate(intel_dp, intel_dp->link_rate,
 			      &link_bw, &rate_select);
 
 	/*
@@ -730,16 +730,16 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 	return true;
 }
 
-static bool intel_dp_adjust_request_changed(const struct intel_crtc_state *crtc_state,
+static bool intel_dp_adjust_request_changed(struct intel_dp *intel_dp,
 					    const u8 old_link_status[DP_LINK_STATUS_SIZE],
 					    const u8 new_link_status[DP_LINK_STATUS_SIZE])
 {
 	int lane;
 
-	for (lane = 0; lane < crtc_state->lane_count; lane++) {
+	for (lane = 0; lane < intel_dp->lane_count; lane++) {
 		u8 old, new;
 
-		if (intel_dp_is_uhbr(crtc_state)) {
+		if (intel_dp_is_uhbr(intel_dp)) {
 			old = drm_dp_get_adjust_tx_ffe_preset(old_link_status, lane);
 			new = drm_dp_get_adjust_tx_ffe_preset(new_link_status, lane);
 		} else {
@@ -783,7 +783,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp,
 
 	delay_us = drm_dp_read_clock_recovery_delay(&intel_dp->aux,
 						    intel_dp->dpcd, dp_phy,
-						    intel_dp_is_uhbr(crtc_state));
+						    intel_dp_is_uhbr(intel_dp));
 
 	/* clock recovery */
 	if (!intel_dp_reset_link_train(intel_dp, crtc_state, dp_phy,
@@ -816,7 +816,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp,
 			return false;
 		}
 
-		if (drm_dp_clock_recovery_ok(link_status, crtc_state->lane_count)) {
+		if (drm_dp_clock_recovery_ok(link_status, intel_dp->lane_count)) {
 			lt_dbg(intel_dp, dp_phy, "Clock recovery OK\n");
 			return true;
 		}
@@ -841,7 +841,7 @@ intel_dp_link_training_clock_recovery(struct intel_dp *intel_dp,
 			return false;
 		}
 
-		if (!intel_dp_adjust_request_changed(crtc_state, old_link_status, link_status))
+		if (!intel_dp_adjust_request_changed(intel_dp, old_link_status, link_status))
 			++voltage_tries;
 		else
 			voltage_tries = 1;
@@ -872,7 +872,7 @@ static u32 intel_dp_training_pattern(struct intel_dp *intel_dp,
 	bool source_tps3, sink_tps3, source_tps4, sink_tps4;
 
 	/* UHBR+ use separate 128b/132b TPS2 */
-	if (intel_dp_is_uhbr(crtc_state))
+	if (intel_dp_is_uhbr(intel_dp))
 		return DP_TRAINING_PATTERN_2;
 
 	/*
@@ -886,7 +886,7 @@ static u32 intel_dp_training_pattern(struct intel_dp *intel_dp,
 		    drm_dp_tps4_supported(intel_dp->dpcd);
 	if (source_tps4 && sink_tps4) {
 		return DP_TRAINING_PATTERN_4;
-	} else if (crtc_state->port_clock == 810000) {
+	} else if (intel_dp->link_rate == 810000) {
 		if (!source_tps4)
 			lt_dbg(intel_dp, dp_phy,
 			       "8.1 Gbps link rate without source TPS4 support\n");
@@ -904,7 +904,7 @@ static u32 intel_dp_training_pattern(struct intel_dp *intel_dp,
 		    drm_dp_tps3_supported(intel_dp->dpcd);
 	if (source_tps3 && sink_tps3) {
 		return  DP_TRAINING_PATTERN_3;
-	} else if (crtc_state->port_clock >= 540000) {
+	} else if (intel_dp->link_rate >= 540000) {
 		if (!source_tps3)
 			lt_dbg(intel_dp, dp_phy,
 			       ">=5.4/6.48 Gbps link rate without source TPS3 support\n");
@@ -934,7 +934,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp,
 
 	delay_us = drm_dp_read_channel_eq_delay(&intel_dp->aux,
 						intel_dp->dpcd, dp_phy,
-						intel_dp_is_uhbr(crtc_state));
+						intel_dp_is_uhbr(intel_dp));
 
 	training_pattern = intel_dp_training_pattern(intel_dp, crtc_state, dp_phy);
 	/* Scrambling is disabled for TPS2/3 and enabled for TPS4 */
@@ -959,7 +959,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp,
 
 		/* Make sure clock is still ok */
 		if (!drm_dp_clock_recovery_ok(link_status,
-					      crtc_state->lane_count)) {
+					      intel_dp->lane_count)) {
 			intel_dp_dump_link_status(intel_dp, dp_phy, link_status);
 			lt_dbg(intel_dp, dp_phy,
 			       "Clock recovery check failed, cannot continue channel equalization\n");
@@ -967,7 +967,7 @@ intel_dp_link_training_channel_equalization(struct intel_dp *intel_dp,
 		}
 
 		if (drm_dp_channel_eq_ok(link_status,
-					 crtc_state->lane_count)) {
+					 intel_dp->lane_count)) {
 			channel_eq = true;
 			lt_dbg(intel_dp, dp_phy, "Channel EQ done. DP Training successful\n");
 			break;
@@ -1041,7 +1041,7 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 	intel_dp_program_link_training_pattern(intel_dp, crtc_state, DP_PHY_DPRX,
 					       DP_TRAINING_PATTERN_DISABLE);
 
-	if (intel_dp_is_uhbr(crtc_state) &&
+	if (intel_dp_is_uhbr(intel_dp) &&
 	    wait_for(intel_dp_128b132b_intra_hop(intel_dp, crtc_state) == 0, 500)) {
 		lt_dbg(intel_dp, DP_PHY_DPRX, "128b/132b intra-hop not clearing\n");
 	}
@@ -1066,7 +1066,7 @@ out:
 	lt_dbg(intel_dp, dp_phy,
 	       "Link Training %s at link rate = %d, lane count = %d\n",
 	       ret ? "passed" : "failed",
-	       crtc_state->port_clock, crtc_state->lane_count);
+	       intel_dp->link_rate, intel_dp->lane_count);
 
 	return ret;
 }
@@ -1085,8 +1085,8 @@ static void intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
 		       "Link Training failed with HOBL active, not enabling it from now on\n");
 		intel_dp->hobl_failed = true;
 	} else if (intel_dp_get_link_train_fallback_values(intel_dp,
-							   crtc_state->port_clock,
-							   crtc_state->lane_count)) {
+							   intel_dp->link_rate,
+							   intel_dp->lane_count)) {
 		return;
 	}
 
@@ -1192,7 +1192,7 @@ intel_dp_128b132b_lane_eq(struct intel_dp *intel_dp,
 			return false;
 		}
 
-		if (drm_dp_128b132b_lane_channel_eq_done(link_status, crtc_state->lane_count)) {
+		if (drm_dp_128b132b_lane_channel_eq_done(link_status, intel_dp->lane_count)) {
 			lt_dbg(intel_dp, DP_PHY_DPRX, "Lane channel eq done\n");
 			break;
 		}
@@ -1287,7 +1287,7 @@ intel_dp_128b132b_lane_cds(struct intel_dp *intel_dp,
 
 		if (drm_dp_128b132b_eq_interlane_align_done(link_status) &&
 		    drm_dp_128b132b_cds_interlane_align_done(link_status) &&
-		    drm_dp_128b132b_lane_symbol_locked(link_status, crtc_state->lane_count)) {
+		    drm_dp_128b132b_lane_symbol_locked(link_status, intel_dp->lane_count)) {
 			lt_dbg(intel_dp, DP_PHY_DPRX, "CDS interlane align done\n");
 			break;
 		}
@@ -1330,7 +1330,7 @@ intel_dp_128b132b_link_train(struct intel_dp *intel_dp,
 	lt_dbg(intel_dp, DP_PHY_DPRX,
 	       "128b/132b Link Training %s at link rate = %d, lane count = %d\n",
 	       passed ? "passed" : "failed",
-	       crtc_state->port_clock, crtc_state->lane_count);
+	       intel_dp->link_rate, intel_dp->lane_count);
 
 	return passed;
 }
@@ -1344,8 +1344,9 @@ intel_dp_128b132b_link_train(struct intel_dp *intel_dp,
  * retraining with reduced link rate/lane parameters if the link training
  * fails.
  * After calling this function intel_dp_stop_link_train() must be called.
+ * Return: Link trained status success/failure.
  */
-void intel_dp_start_link_train(struct intel_dp *intel_dp,
+bool intel_dp_start_link_train(struct intel_dp *intel_dp,
 			       const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
@@ -1363,7 +1364,7 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp,
 
 	intel_dp_prepare_link_train(intel_dp, crtc_state);
 
-	if (intel_dp_is_uhbr(crtc_state))
+	if (intel_dp_is_uhbr(intel_dp))
 		passed = intel_dp_128b132b_link_train(intel_dp, crtc_state, lttpr_count);
 	else
 		passed = intel_dp_link_train_all_phys(intel_dp, crtc_state, lttpr_count);
@@ -1382,11 +1383,13 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp,
 	 */
 	if (!passed && i915->display.hotplug.ignore_long_hpd) {
 		lt_dbg(intel_dp, DP_PHY_DPRX, "Ignore the link failure\n");
-		return;
+		return true;
 	}
 
 	if (!passed)
 		intel_dp_schedule_fallback_link_training(intel_dp, crtc_state);
+
+	return passed;
 }
 
 void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
@@ -1398,7 +1401,7 @@ void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
 	 * Default value of bit 31 is '0' hence discarding the write
 	 * TODO: Corrective actions on SDP corruption yet to be defined
 	 */
-	if (!intel_dp_is_uhbr(crtc_state))
+	if (!intel_dp_is_uhbr(intel_dp))
 		return;
 
 	/* DP v2.0 SCR on SDP CRC16 for 128b/132b Link Layer */

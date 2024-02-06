@@ -52,13 +52,13 @@
 
 static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp,
 					  const struct drm_display_mode *adjusted_mode,
-					  struct intel_crtc_state *crtc_state,
+					  struct intel_dp *intel_dp,
 					  bool dsc)
 {
-	if (intel_dp_is_uhbr(crtc_state) && DISPLAY_VER(i915) < 14 && dsc) {
+	if (intel_dp_is_uhbr(intel_dp) && DISPLAY_VER(i915) < 14 && dsc) {
 		int output_bpp = bpp;
 		/* DisplayPort 2 128b/132b, bits per lane is always 32 */
-		int symbol_clock = crtc_state->port_clock / 32;
+		int symbol_clock = intel_dp->link_rate / 32;
 
 		if (output_bpp * adjusted_mode->crtc_clock >=
 		    symbol_clock * 72) {
@@ -71,7 +71,8 @@ static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp
 	return 0;
 }
 
-static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
+static int intel_dp_mst_bw_overhead(struct intel_dp *intel_dp,
+				    const struct intel_crtc_state *crtc_state,
 				    const struct intel_connector *connector,
 				    bool ssc, bool dsc, int bpp_x16)
 {
@@ -81,7 +82,7 @@ static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
 	int dsc_slice_count = 0;
 	int overhead;
 
-	flags |= intel_dp_is_uhbr(crtc_state) ? DRM_DP_BW_OVERHEAD_UHBR : 0;
+	flags |= intel_dp_is_uhbr(intel_dp) ? DRM_DP_BW_OVERHEAD_UHBR : 0;
 	flags |= ssc ? DRM_DP_BW_OVERHEAD_SSC_REF_CLK : 0;
 	flags |= crtc_state->fec_enable ? DRM_DP_BW_OVERHEAD_FEC : 0;
 
@@ -170,12 +171,12 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		if (!intel_dp_supports_fec(intel_dp, connector, crtc_state))
 			return -EINVAL;
 
-		crtc_state->fec_enable = !intel_dp_is_uhbr(crtc_state);
+		crtc_state->fec_enable = !intel_dp_is_uhbr(intel_dp);
 	}
 
 	mst_state->pbn_div = drm_dp_get_vc_payload_bw(&intel_dp->mst_mgr,
-						      crtc_state->port_clock,
-						      crtc_state->lane_count);
+						      intel_dp->link_rate,
+						      intel_dp->lane_count);
 
 	drm_dbg_kms(&i915->drm, "Looking for slots in range min bpp %d max bpp %d\n",
 		    min_bpp, max_bpp);
@@ -188,16 +189,18 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 
 		drm_dbg_kms(&i915->drm, "Trying bpp %d\n", bpp);
 
-		ret = intel_dp_mst_check_constraints(i915, bpp, adjusted_mode, crtc_state, dsc);
+		ret = intel_dp_mst_check_constraints(i915, bpp, adjusted_mode, intel_dp, dsc);
 		if (ret)
 			continue;
 
 		link_bpp_x16 = to_bpp_x16(dsc ? bpp :
 					  intel_dp_output_bpp(crtc_state->output_format, bpp));
 
-		local_bw_overhead = intel_dp_mst_bw_overhead(crtc_state, connector,
+		local_bw_overhead = intel_dp_mst_bw_overhead(intel_dp,
+							     crtc_state, connector,
 							     false, dsc, link_bpp_x16);
-		remote_bw_overhead = intel_dp_mst_bw_overhead(crtc_state, connector,
+		remote_bw_overhead = intel_dp_mst_bw_overhead(intel_dp,
+							      crtc_state, connector,
 							      true, dsc, link_bpp_x16);
 
 		intel_dp_mst_compute_m_n(crtc_state, connector,
@@ -368,7 +371,7 @@ static int intel_dp_mst_update_slots(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = &intel_mst->primary->dp;
 	struct drm_dp_mst_topology_mgr *mgr = &intel_dp->mst_mgr;
 	struct drm_dp_mst_topology_state *topology_state;
-	u8 link_coding_cap = intel_dp_is_uhbr(crtc_state) ?
+	u8 link_coding_cap = intel_dp_is_uhbr(intel_dp) ?
 		DP_CAP_ANSI_128B132B : DP_CAP_ANSI_8B10B;
 
 	topology_state = drm_atomic_get_mst_topology_state(conn_state->state, mgr);
@@ -1123,7 +1126,7 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 
 	drm_WARN_ON(&dev_priv->drm, pipe_config->has_pch_encoder);
 
-	if (intel_dp_is_uhbr(pipe_config)) {
+	if (intel_dp_is_uhbr(intel_dp)) {
 		const struct drm_display_mode *adjusted_mode =
 			&pipe_config->hw.adjusted_mode;
 		u64 crtc_clock_hz = KHz(adjusted_mode->crtc_clock);

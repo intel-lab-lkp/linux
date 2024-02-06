@@ -167,9 +167,9 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
 
 /* Is link rate UHBR and thus 128b/132b? */
-bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state)
+bool intel_dp_is_uhbr(struct intel_dp *intel_dp)
 {
-	return drm_dp_is_uhbr_rate(crtc_state->port_clock);
+	return drm_dp_is_uhbr_rate(intel_dp->link_rate);
 }
 
 /**
@@ -2901,12 +2901,14 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
 {
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
 	pipe_config->has_audio =
 		intel_dp_has_audio(encoder, pipe_config, conn_state) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	pipe_config->sdp_split_enable = pipe_config->has_audio &&
-					intel_dp_is_uhbr(pipe_config);
+					intel_dp_is_uhbr(intel_dp);
 }
 
 int
