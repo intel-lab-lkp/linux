@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_VIDEO_CC_SM8450_H
@@ -19,6 +19,11 @@
 #define VIDEO_CC_MVS1C_DIV2_DIV_CLK_SRC				9
 #define VIDEO_CC_PLL0						10
 #define VIDEO_CC_PLL1						11
+#define VIDEO_CC_MVS0_SHIFT_CLK					12
+#define VIDEO_CC_MVS0C_SHIFT_CLK				13
+#define VIDEO_CC_MVS1_SHIFT_CLK					14
+#define VIDEO_CC_MVS1C_SHIFT_CLK				15
+#define VIDEO_CC_XO_CLK_SRC					16
 
 /* VIDEO_CC power domains */
 #define VIDEO_CC_MVS0C_GDSC					0
@@ -34,5 +39,6 @@
 #define CVP_VIDEO_CC_MVS1C_BCR					4
 #define VIDEO_CC_MVS0C_CLK_ARES					5
 #define VIDEO_CC_MVS1C_CLK_ARES					6
+#define VIDEO_CC_XO_CLK_ARES					7
 
 #endif
