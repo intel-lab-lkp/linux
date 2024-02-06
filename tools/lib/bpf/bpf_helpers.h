@@ -13,6 +13,7 @@
 #define __uint(name, val) int (*name)[val]
 #define __type(name, val) typeof(val) *name
 #define __array(name, val) typeof(val) *name[]
+#define __ulong(name, val) enum name##__enum { name##__value = val } name
 
 /*
  * Helper macro to place programs, maps, license in
