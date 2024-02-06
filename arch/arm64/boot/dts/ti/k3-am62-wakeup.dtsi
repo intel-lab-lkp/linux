@@ -14,10 +14,44 @@
 		#size-cells = <1>;
 		ranges = <0x0 0x00 0x43000000 0x20000>;
 
+		wkup_efuse: efuse@0 {
+			compatible = "socionext,uniphier-efuse";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0x0 0x200>;
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				chip_manufacturer: jtagidmfg@14 {
+					reg = <0x14 0x2>;
+					bits = <1 11>;
+				};
+
+				chip_partno: jtagidpartno@15 {
+					reg = <0x15 0x3>;
+					bits = <4 16>;
+				};
+
+				chip_variant: jtagidvariant@17 {
+					reg = <0x17 0x1>;
+					bits = <4 4>;
+				};
+
+				chip_speed: jtaguseridspeed@18 {
+					reg = <0x18 0x4>;
+					bits = <6 5>;
+				};
+			};
+		};
+
 		chipid: chipid@14 {
 			bootph-all;
 			compatible = "ti,am654-chipid";
-			reg = <0x14 0x4>;
+			nvmem-cells = <&chip_variant>, <&chip_partno>, <&chip_manufacturer>;
+			nvmem-cell-names = "chipvariant", "chippartno", "chipmanufacturer";
 		};
 	};
 
