@@ -1699,6 +1699,21 @@ static void btf_free_struct_meta_tab(struct btf *btf)
 static void btf_free_struct_ops_tab(struct btf *btf)
 {
 	struct btf_struct_ops_tab *tab = btf->struct_ops_tab;
+	struct bpf_struct_ops_member_arg_info *ma_info;
+	int i, j;
+
+	if (!tab)
+		return;
+
+	for (i = 0; i < tab->cnt; i++) {
+		ma_info = tab->ops[i].member_arg_info;
+		if (!ma_info)
+			continue;
+
+		for (j = 0; j < btf_type_vlen(tab->ops[i].type); j++)
+			kfree(ma_info[j].arg_info);
+		kfree(ma_info);
+	}
 
 	kfree(tab);
 	btf->struct_ops_tab = NULL;
@@ -6128,6 +6143,31 @@ static bool prog_args_trusted(const struct bpf_prog *prog)
 	default:
 		return false;
 	}
+}
+
+int btf_ctx_arg_offset(struct btf *btf, const struct btf_type *func_proto,
+		       u32 arg_no)
+{
+	const struct btf_param *args;
+	const struct btf_type *t;
+	int off = 0, i;
+	u32 sz, nargs;
+
+	nargs = btf_type_vlen(func_proto);
+	/* It is the return value if arg_no == nargs */
+	if (arg_no > nargs)
+		return -EINVAL;
+
+	args = btf_params(func_proto);
+	for (i = 0; i < arg_no; i++) {
+		t = btf_type_by_id(btf, args[i].type);
+		t = btf_resolve_size(btf, t, &sz);
+		if (IS_ERR(t))
+			return -EINVAL;
+		off += roundup(sz, 8);
+	}
+
+	return off;
 }
 
 bool btf_ctx_access(int off, int size, enum bpf_access_type type,
