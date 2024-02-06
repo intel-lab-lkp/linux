@@ -9,6 +9,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/array_size.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
@@ -1116,6 +1117,33 @@ int pcie_read_tlp_log(struct pci_dev *dev, int where, int where2,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pcie_read_tlp_log);
+
+/**
+ * pcie_print_tlp_log - Print TLP Header / Prefix Log contents
+ * @dev:	PCIe device
+ * @tlp_log:	TLP Log structure
+ * @pfx:	Internal string prefix (for indentation)
+ *
+ * Prints TLP Header and Prefix Log information held by @tlp_log.
+ */
+void pcie_print_tlp_log(const struct pci_dev *dev,
+			const struct pcie_tlp_log *tlp_log, const char *pfx)
+{
+	unsigned int i;
+
+	pci_err(dev, "%sTLP Header: %#010x %#010x %#010x %#010x",
+		pfx, tlp_log->dw[0], tlp_log->dw[1], tlp_log->dw[2], tlp_log->dw[3]);
+
+	if (tlp_log->prefix[0])
+		pr_cont(" E-E Prefixes:");
+	for (i = 0; i < ARRAY_SIZE(tlp_log->prefix); i++) {
+		if (!tlp_log->prefix[i])
+			break;
+		pr_cont(" %#010x", tlp_log->prefix[i]);
+	}
+	pr_cont("\n");
+}
+EXPORT_SYMBOL_GPL(pcie_print_tlp_log);
 
 /**
  * pci_restore_bars - restore a device's BAR values (e.g. after wake-up)
