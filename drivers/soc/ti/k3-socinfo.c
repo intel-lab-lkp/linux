@@ -6,6 +6,7 @@
  */
 
 #include <linux/mfd/syscon.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/regmap.h>
@@ -114,31 +115,52 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	u32 partno_id;
 	u32 variant;
-	u32 jtag_id;
 	u32 mfg;
 	int ret;
 
-	regmap = device_node_to_regmap(node);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+	ret = nvmem_cell_read_u32(dev, "chipvariant", &variant);
+	if (ret && ret != -ENOENT)
+		return dev_err_probe(dev, ret,
+				     "Failed to read nvmem cell 'chipvariant': %pe",
+				     ERR_PTR(ret));
 
-	ret = regmap_read(regmap, CTRLMMR_WKUP_JTAGID_REG, &jtag_id);
-	if (ret < 0)
-		return ret;
+	if (ret != -ENOENT) {
+		ret = nvmem_cell_read_u32(dev, "chippartno", &partno_id);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to read nvmem cell 'chippartno': %pe",
+					     ERR_PTR(ret));
 
-	mfg = (jtag_id & CTRLMMR_WKUP_JTAGID_MFG_MASK) >>
-	       CTRLMMR_WKUP_JTAGID_MFG_SHIFT;
+		ret = nvmem_cell_read_u32(dev, "chipmanufacturer", &mfg);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to read nvmem cell 'chipmanufacturer': %pe",
+					     ERR_PTR(ret));
+	} else {
+		u32 jtag_id;
+
+		regmap = device_node_to_regmap(node);
+		if (IS_ERR(regmap))
+			return PTR_ERR(regmap);
+
+		ret = regmap_read(regmap, CTRLMMR_WKUP_JTAGID_REG, &jtag_id);
+		if (ret < 0)
+			return ret;
+
+		mfg = (jtag_id & CTRLMMR_WKUP_JTAGID_MFG_MASK) >>
+		       CTRLMMR_WKUP_JTAGID_MFG_SHIFT;
+
+		variant = (jtag_id & CTRLMMR_WKUP_JTAGID_VARIANT_MASK) >>
+			  CTRLMMR_WKUP_JTAGID_VARIANT_SHIFT;
+
+		partno_id = (jtag_id & CTRLMMR_WKUP_JTAGID_PARTNO_MASK) >>
+			 CTRLMMR_WKUP_JTAGID_PARTNO_SHIFT;
+	}
 
 	if (mfg != CTRLMMR_WKUP_JTAGID_MFG_TI) {
 		dev_err(dev, "Invalid MFG SoC\n");
 		return -ENODEV;
 	}
-
-	variant = (jtag_id & CTRLMMR_WKUP_JTAGID_VARIANT_MASK) >>
-		  CTRLMMR_WKUP_JTAGID_VARIANT_SHIFT;
-
-	partno_id = (jtag_id & CTRLMMR_WKUP_JTAGID_PARTNO_MASK) >>
-		 CTRLMMR_WKUP_JTAGID_PARTNO_SHIFT;
 
 	soc_dev_attr = kzalloc(sizeof(*soc_dev_attr), GFP_KERNEL);
 	if (!soc_dev_attr)
@@ -146,13 +168,15 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 
 	ret = k3_chipinfo_partno_to_names(partno_id, soc_dev_attr);
 	if (ret) {
-		dev_err(dev, "Unknown SoC JTAGID[0x%08X]: %d\n", jtag_id, ret);
+		dev_err(dev, "Unknown SoC JTAGID[variant=0x%X, partno=0x%X]: %d\n",
+			variant, partno_id, ret);
 		goto err;
 	}
 
 	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr);
 	if (ret) {
-		dev_err(dev, "Unknown SoC SR[0x%08X]: %d\n", jtag_id, ret);
+		dev_err(dev, "Unknown SoC SR[variant=0x%X, partno=0x%X]: %d\n",
+			variant, partno_id, ret);
 		goto err;
 	}
 
@@ -166,9 +190,10 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 		goto err_free_rev;
 	}
 
-	dev_info(dev, "Family:%s rev:%s JTAGID[0x%08x] Detected\n",
+	dev_info(dev, "Family:%s rev:%s JTAGID[variant=0x%X, partno=0x%X] Detected\n",
 		 soc_dev_attr->family,
-		 soc_dev_attr->revision, jtag_id);
+		 soc_dev_attr->revision,
+		 variant, partno_id);
 
 	return 0;
 
