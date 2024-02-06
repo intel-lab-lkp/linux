@@ -3843,21 +3843,13 @@ static int f2fs_report_zone_cb(struct blk_zone *zone, unsigned int idx,
 			      void *data)
 {
 	struct f2fs_report_zones_args *rz_args = data;
-	block_t unusable_blocks = (zone->len - zone->capacity) >>
-					F2FS_LOG_SECTORS_PER_BLOCK;
 
-	if (zone->type == BLK_ZONE_TYPE_CONVENTIONAL)
-		return 0;
-
-	set_bit(idx, rz_args->dev->blkz_seq);
-	if (!rz_args->sbi->unusable_blocks_per_sec) {
-		rz_args->sbi->unusable_blocks_per_sec = unusable_blocks;
-		return 0;
-	}
-	if (rz_args->sbi->unusable_blocks_per_sec != unusable_blocks) {
-		f2fs_err(rz_args->sbi, "F2FS supports single zone capacity\n");
+	if (zone->len != zone->capacity) {
+		f2fs_err(rz_args->sbi, "F2FS does not support zone capacity.\n");
 		return -EINVAL;
 	}
+	if (zone->type != BLK_ZONE_TYPE_CONVENTIONAL)
+		set_bit(idx, rz_args->dev->blkz_seq);
 	return 0;
 }
 

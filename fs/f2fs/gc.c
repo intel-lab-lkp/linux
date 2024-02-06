@@ -340,14 +340,13 @@ static unsigned int get_cb_cost(struct f2fs_sb_info *sbi, unsigned int segno)
 	unsigned char age = 0;
 	unsigned char u;
 	unsigned int i;
-	unsigned int usable_segs_per_sec = f2fs_usable_segs_in_sec(sbi, segno);
 
-	for (i = 0; i < usable_segs_per_sec; i++)
+	for (i = 0; i < SEGS_PER_SEC(sbi); i++)
 		mtime += get_seg_entry(sbi, start + i)->mtime;
 	vblocks = get_valid_blocks(sbi, segno, true);
 
-	mtime = div_u64(mtime, usable_segs_per_sec);
-	vblocks = div_u64(vblocks, usable_segs_per_sec);
+	mtime = div_u64(mtime, SEGS_PER_SEC(sbi));
+	vblocks = div_u64(vblocks, SEGS_PER_SEC(sbi));
 
 	u = (vblocks * 100) >> sbi->log_blocks_per_seg;
 
@@ -530,7 +529,6 @@ static void atgc_lookup_victim(struct f2fs_sb_info *sbi,
 	unsigned long long age, u, accu;
 	unsigned long long max_mtime = sit_i->dirty_max_mtime;
 	unsigned long long min_mtime = sit_i->dirty_min_mtime;
-	unsigned int sec_blocks = CAP_BLKS_PER_SEC(sbi);
 	unsigned int vblocks;
 	unsigned int dirty_threshold = max(am->max_candidate_count,
 					am->candidate_ratio *
@@ -560,13 +558,13 @@ next:
 
 	/* age = 10000 * x% * 60 */
 	age = div64_u64(accu * (max_mtime - ve->mtime), total_time) *
-								age_weight;
+							age_weight;
 
 	vblocks = get_valid_blocks(sbi, ve->segno, true);
-	f2fs_bug_on(sbi, !vblocks || vblocks == sec_blocks);
+	f2fs_bug_on(sbi, !vblocks || vblocks == BLKS_PER_SEC(sbi));
 
 	/* u = 10000 * x% * 40 */
-	u = div64_u64(accu * (sec_blocks - vblocks), sec_blocks) *
+	u = div64_u64(accu * (BLKS_PER_SEC(sbi) - vblocks), BLKS_PER_SEC(sbi)) *
 							(100 - age_weight);
 
 	f2fs_bug_on(sbi, age + u >= UINT_MAX);
@@ -1003,7 +1001,6 @@ static int gc_node_segment(struct f2fs_sb_info *sbi,
 	int phase = 0;
 	bool fggc = (gc_type == FG_GC);
 	int submitted = 0;
-	unsigned int usable_blks_in_seg = f2fs_usable_blks_in_seg(sbi, segno);
 
 	start_addr = START_BLOCK(sbi, segno);
 
@@ -1013,7 +1010,7 @@ next_step:
 	if (fggc && phase == 2)
 		atomic_inc(&sbi->wb_sync_req[NODE]);
 
-	for (off = 0; off < usable_blks_in_seg; off++, entry++) {
+	for (off = 0; off < BLKS_PER_SEG(sbi); off++, entry++) {
 		nid_t nid = le32_to_cpu(entry->nid);
 		struct page *node_page;
 		struct node_info ni;
@@ -1498,14 +1495,13 @@ static int gc_data_segment(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	int off;
 	int phase = 0;
 	int submitted = 0;
-	unsigned int usable_blks_in_seg = f2fs_usable_blks_in_seg(sbi, segno);
 
 	start_addr = START_BLOCK(sbi, segno);
 
 next_step:
 	entry = sum;
 
-	for (off = 0; off < usable_blks_in_seg; off++, entry++) {
+	for (off = 0; off < BLKS_PER_SEG(sbi); off++, entry++) {
 		struct page *data_page;
 		struct inode *inode;
 		struct node_info dni; /* dnode info for the data */
@@ -1520,7 +1516,7 @@ next_step:
 		 */
 		if ((gc_type == BG_GC && has_not_enough_free_secs(sbi, 0, 0)) ||
 			(!force_migrate && get_valid_blocks(sbi, segno, true) ==
-							CAP_BLKS_PER_SEC(sbi)))
+							BLKS_PER_SEC(sbi)))
 			return submitted;
 
 		if (check_valid_map(sbi, segno, off) == 0)
@@ -1679,15 +1675,6 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 
 	if (__is_large_section(sbi))
 		end_segno = rounddown(end_segno, SEGS_PER_SEC(sbi));
-
-	/*
-	 * zone-capacity can be less than zone-size in zoned devices,
-	 * resulting in less than expected usable segments in the zone,
-	 * calculate the end segno in the zone which can be garbage collected
-	 */
-	if (f2fs_sb_has_blkzoned(sbi))
-		end_segno -= SEGS_PER_SEC(sbi) -
-					f2fs_usable_segs_in_sec(sbi, segno);
 
 	sanity_check_seg_type(sbi, get_seg_entry(sbi, segno)->type);
 
@@ -1862,7 +1849,7 @@ retry:
 
 	total_freed += seg_freed;
 
-	if (seg_freed == f2fs_usable_segs_in_sec(sbi, segno)) {
+	if (seg_freed == SEGS_PER_SEC(sbi)) {
 		sec_freed++;
 		total_sec_freed++;
 	}

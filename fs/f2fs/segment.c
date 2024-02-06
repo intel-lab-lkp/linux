@@ -769,7 +769,7 @@ static void __locate_dirty_segment(struct f2fs_sb_info *sbi, unsigned int segno,
 				get_valid_blocks(sbi, segno, true);
 
 			f2fs_bug_on(sbi, unlikely(!valid_blocks ||
-					valid_blocks == CAP_BLKS_PER_SEC(sbi)));
+					valid_blocks == BLKS_PER_SEC(sbi)));
 
 			if (!IS_CURSEC(sbi, secno))
 				set_bit(secno, dirty_i->dirty_secmap);
@@ -805,7 +805,7 @@ static void __remove_dirty_segment(struct f2fs_sb_info *sbi, unsigned int segno,
 			unsigned int secno = GET_SEC_FROM_SEG(sbi, segno);
 
 			if (!valid_blocks ||
-					valid_blocks == CAP_BLKS_PER_SEC(sbi)) {
+					valid_blocks == BLKS_PER_SEC(sbi)) {
 				clear_bit(secno, dirty_i->dirty_secmap);
 				return;
 			}
@@ -825,22 +825,20 @@ static void locate_dirty_segment(struct f2fs_sb_info *sbi, unsigned int segno)
 {
 	struct dirty_seglist_info *dirty_i = DIRTY_I(sbi);
 	unsigned short valid_blocks, ckpt_valid_blocks;
-	unsigned int usable_blocks;
 
 	if (segno == NULL_SEGNO || IS_CURSEG(sbi, segno))
 		return;
 
-	usable_blocks = f2fs_usable_blks_in_seg(sbi, segno);
 	mutex_lock(&dirty_i->seglist_lock);
 
 	valid_blocks = get_valid_blocks(sbi, segno, false);
 	ckpt_valid_blocks = get_ckpt_valid_blocks(sbi, segno, false);
 
 	if (valid_blocks == 0 && (!is_sbi_flag_set(sbi, SBI_CP_DISABLED) ||
-		ckpt_valid_blocks == usable_blocks)) {
+		ckpt_valid_blocks == BLKS_PER_SEG(sbi))) {
 		__locate_dirty_segment(sbi, segno, PRE);
 		__remove_dirty_segment(sbi, segno, DIRTY);
-	} else if (valid_blocks < usable_blocks) {
+	} else if (valid_blocks < BLKS_PER_SEG(sbi)) {
 		__locate_dirty_segment(sbi, segno, DIRTY);
 	} else {
 		/* Recovery routine with SSR needs this */
@@ -882,12 +880,7 @@ block_t f2fs_get_unusable_blocks(struct f2fs_sb_info *sbi)
 	mutex_lock(&dirty_i->seglist_lock);
 	for_each_set_bit(segno, dirty_i->dirty_segmap[DIRTY], MAIN_SEGS(sbi)) {
 		se = get_seg_entry(sbi, segno);
-		if (IS_NODESEG(se->type))
-			holes[NODE] += f2fs_usable_blks_in_seg(sbi, segno) -
-							se->valid_blocks;
-		else
-			holes[DATA] += f2fs_usable_blks_in_seg(sbi, segno) -
-							se->valid_blocks;
+		holes[SE_PAGETYPE(se)] += BLKS_PER_SEG(sbi) - se->valid_blocks;
 	}
 	mutex_unlock(&dirty_i->seglist_lock);
 
@@ -2408,8 +2401,7 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	new_vblocks = se->valid_blocks + del;
 	offset = GET_BLKOFF_FROM_SEG0(sbi, blkaddr);
 
-	f2fs_bug_on(sbi, (new_vblocks < 0 ||
-			(new_vblocks > f2fs_usable_blks_in_seg(sbi, segno))));
+	f2fs_bug_on(sbi, new_vblocks < 0 || new_vblocks > BLKS_PER_SEG(sbi));
 
 	se->valid_blocks = new_vblocks;
 
@@ -3450,7 +3442,7 @@ void f2fs_allocate_data_block(struct f2fs_sb_info *sbi, struct page *page,
 		if (F2FS_OPTION(sbi).fs_mode == FS_MODE_FRAGMENT_BLK)
 			f2fs_randomize_chunk(sbi, curseg);
 	}
-	if (curseg->next_blkoff >= f2fs_usable_blks_in_seg(sbi, curseg->segno))
+	if (curseg->next_blkoff >= BLKS_PER_SEG(sbi))
 		segment_full = true;
 	stat_inc_block_count(sbi, curseg);
 
@@ -4689,8 +4681,6 @@ static void init_free_segmap(struct f2fs_sb_info *sbi)
 	struct seg_entry *sentry;
 
 	for (start = 0; start < MAIN_SEGS(sbi); start++) {
-		if (f2fs_usable_blks_in_seg(sbi, start) == 0)
-			continue;
 		sentry = get_seg_entry(sbi, start);
 		if (!sentry->valid_blocks)
 			__set_free(sbi, start);
@@ -4712,7 +4702,7 @@ static void init_dirty_segmap(struct f2fs_sb_info *sbi)
 	struct dirty_seglist_info *dirty_i = DIRTY_I(sbi);
 	struct free_segmap_info *free_i = FREE_I(sbi);
 	unsigned int segno = 0, offset = 0, secno;
-	block_t valid_blocks, usable_blks_in_seg;
+	block_t valid_blocks;
 
 	while (1) {
 		/* find dirty segment based on free segmap */
@@ -4721,10 +4711,9 @@ static void init_dirty_segmap(struct f2fs_sb_info *sbi)
 			break;
 		offset = segno + 1;
 		valid_blocks = get_valid_blocks(sbi, segno, false);
-		usable_blks_in_seg = f2fs_usable_blks_in_seg(sbi, segno);
-		if (valid_blocks == usable_blks_in_seg || !valid_blocks)
+		if (valid_blocks == BLKS_PER_SEG(sbi) || !valid_blocks)
 			continue;
-		if (valid_blocks > usable_blks_in_seg) {
+		if (valid_blocks > BLKS_PER_SEG(sbi)) {
 			f2fs_bug_on(sbi, 1);
 			continue;
 		}
@@ -4741,7 +4730,7 @@ static void init_dirty_segmap(struct f2fs_sb_info *sbi)
 		valid_blocks = get_valid_blocks(sbi, segno, true);
 		secno = GET_SEC_FROM_SEG(sbi, segno);
 
-		if (!valid_blocks || valid_blocks == CAP_BLKS_PER_SEC(sbi))
+		if (!valid_blocks || valid_blocks == BLKS_PER_SEC(sbi))
 			continue;
 		if (IS_CURSEC(sbi, secno))
 			continue;
@@ -5099,42 +5088,6 @@ int f2fs_check_write_pointer(struct f2fs_sb_info *sbi)
 
 	return 0;
 }
-
-/*
- * Return the number of usable blocks in a segment. The number of blocks
- * returned is always equal to the number of blocks in a segment for
- * segments fully contained within a sequential zone capacity or a
- * conventional zone. For segments partially contained in a sequential
- * zone capacity, the number of usable blocks up to the zone capacity
- * is returned. 0 is returned in all other cases.
- */
-static inline unsigned int f2fs_usable_zone_blks_in_seg(
-			struct f2fs_sb_info *sbi, unsigned int segno)
-{
-	block_t seg_start, sec_start_blkaddr, sec_cap_blkaddr;
-	unsigned int secno;
-
-	if (!sbi->unusable_blocks_per_sec)
-		return BLKS_PER_SEG(sbi);
-
-	secno = GET_SEC_FROM_SEG(sbi, segno);
-	seg_start = START_BLOCK(sbi, segno);
-	sec_start_blkaddr = START_BLOCK(sbi, GET_SEG_FROM_SEC(sbi, secno));
-	sec_cap_blkaddr = sec_start_blkaddr + CAP_BLKS_PER_SEC(sbi);
-
-	/*
-	 * If segment starts before zone capacity and spans beyond
-	 * zone capacity, then usable blocks are from seg start to
-	 * zone capacity. If the segment starts after the zone capacity,
-	 * then there are no usable blocks.
-	 */
-	if (seg_start >= sec_cap_blkaddr)
-		return 0;
-	if (seg_start + BLKS_PER_SEG(sbi) > sec_cap_blkaddr)
-		return sec_cap_blkaddr - seg_start;
-
-	return BLKS_PER_SEG(sbi);
-}
 #else
 int f2fs_fix_curseg_write_pointer(struct f2fs_sb_info *sbi)
 {
@@ -5145,31 +5098,7 @@ int f2fs_check_write_pointer(struct f2fs_sb_info *sbi)
 {
 	return 0;
 }
-
-static inline unsigned int f2fs_usable_zone_blks_in_seg(struct f2fs_sb_info *sbi,
-							unsigned int segno)
-{
-	return 0;
-}
-
 #endif
-unsigned int f2fs_usable_blks_in_seg(struct f2fs_sb_info *sbi,
-					unsigned int segno)
-{
-	if (f2fs_sb_has_blkzoned(sbi))
-		return f2fs_usable_zone_blks_in_seg(sbi, segno);
-
-	return BLKS_PER_SEG(sbi);
-}
-
-unsigned int f2fs_usable_segs_in_sec(struct f2fs_sb_info *sbi,
-					unsigned int segno)
-{
-	if (f2fs_sb_has_blkzoned(sbi))
-		return CAP_SEGS_PER_SEC(sbi);
-
-	return SEGS_PER_SEC(sbi);
-}
 
 /*
  * Update min, max modified time for cost-benefit GC algorithm
