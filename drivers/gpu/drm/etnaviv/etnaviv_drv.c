@@ -5,6 +5,7 @@
 
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-map-ops.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -56,6 +57,8 @@ static int etnaviv_private_init(struct device *dev,
 		dev_err(dev, "Failed to create cmdbuf suballocator\n");
 		return -ENOMEM;
 	}
+
+	priv->cached_coherent = dev_is_dma_coherent(dev);
 
 	return 0;
 }
