@@ -2498,7 +2498,7 @@ void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr)
 	struct sit_info *sit_i = SIT_I(sbi);
 
 	f2fs_bug_on(sbi, addr == NULL_ADDR);
-	if (addr == NEW_ADDR || addr == COMPRESS_ADDR)
+	if (segno == NULL_SEGNO)
 		return;
 
 	f2fs_invalidate_internal_cache(sbi, addr);
@@ -3702,6 +3702,8 @@ void f2fs_do_replace_block(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	unsigned char old_alloc_type;
 
 	segno = GET_SEGNO(sbi, new_blkaddr);
+	if (segno == NULL_SEGNO)
+		return;
 	se = get_seg_entry(sbi, segno);
 	type = se->type;
 

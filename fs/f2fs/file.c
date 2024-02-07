@@ -2987,9 +2987,14 @@ static int f2fs_ioc_flush_device(struct file *filp, unsigned long arg)
 	if (ret)
 		return ret;
 
-	if (range.dev_num != 0)
+	if (range.dev_num != 0) {
 		dev_start_segno = GET_SEGNO(sbi, FDEV(range.dev_num).start_blk);
+		if (dev_start_segno == NULL_SEGNO)
+			return -EINVAL;
+	}
 	dev_end_segno = GET_SEGNO(sbi, FDEV(range.dev_num).end_blk);
+	if (dev_end_segno == NULL_SEGNO)
+		return -EINVAL;
 
 	start_segno = sm->last_victim[FLUSH_DEVICE];
 	if (start_segno < dev_start_segno || start_segno >= dev_end_segno)
