@@ -109,6 +109,8 @@
 #define XENON_EMMC_PHY_LOGIC_TIMING_ADJUST	(XENON_EMMC_PHY_REG_BASE + 0x18)
 #define XENON_LOGIC_TIMING_VALUE		0x00AA8977
 
+#define XENON_MAX_PHY_TIMEOUT_LOOPS		100
+
 /*
  * List offset of PHY registers and some special register values
  * in eMMC PHY 5.0 or eMMC PHY 5.1
@@ -244,7 +246,7 @@ static int xenon_check_stability_internal_clk(struct sdhci_host *host)
  */
 static int xenon_emmc_phy_init(struct sdhci_host *host)
 {
-	u32 reg;
+	u32 reg, retry;
 	u32 wait, clock;
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct xenon_priv *priv = sdhci_pltfm_priv(pltfm_host);
@@ -282,14 +284,31 @@ static int xenon_emmc_phy_init(struct sdhci_host *host)
 	/* get the wait time */
 	wait /= clock;
 	wait++;
-	/* wait for host eMMC PHY init completes */
-	udelay(wait);
 
-	reg = sdhci_readl(host, phy_regs->timing_adj);
-	reg &= XENON_PHY_INITIALIZAION;
+	/*
+	 * AC5X spec says bit must be polled until zero.
+	 * We see cases in which timeout can take longer
+	 * than the standard calculation on AC5X, which is
+	 * expected following the spec comment above.
+	 * According to the spec, we must wait as long as
+	 * it takes for that bit to toggle on AC5X.
+	 * Cap that with 100 delay loops so we won't get
+	 * stuck here forever:
+	 */
+
+	retry = XENON_MAX_PHY_TIMEOUT_LOOPS;
+
+	do {
+		/* wait for host eMMC PHY init completes */
+		udelay(wait);
+
+		reg = sdhci_readl(host, phy_regs->timing_adj);
+		reg &= XENON_PHY_INITIALIZAION;
+	} while (reg && retry--);
+
 	if (reg) {
 		dev_err(mmc_dev(host->mmc), "eMMC PHY init cannot complete after %d us\n",
-			wait);
+			wait * XENON_MAX_PHY_TIMEOUT_LOOPS);
 		return -ETIMEDOUT;
 	}
 
