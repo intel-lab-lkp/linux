@@ -201,6 +201,35 @@ struct pstore_info {
 	int		(*erase)(struct pstore_record *record);
 };
 
+/* Supported multibackends */
+#define PSTORE_MAX_BACKEND_LENGTH 100
+#define PSTORE_BACKEND_NUM 16
+
+#define PSTORE_LIST_FULL (BIT(PSTORE_BACKEND_NUM) - 1)
+#define PSOTRE_LIST_EMPTY 0
+
+extern struct mutex psback_lock;
+
+struct pstore_info_list {
+	struct pstore_info *psi;
+	struct list_head list;
+	int index;
+};
+
+/**
+ * struct pstore_backends - management of pstore backends
+ * @list_entry:	entry of pstore backend driver information list
+ * @front_cnt:	count of each enabled frontend
+ * @flag:	bitmap of enabled pstore backend
+ *
+ */
+
+struct pstore_backends {
+	struct list_head list_entry;
+	int front_cnt[PSTORE_TYPE_MAX];
+	u16 flag;
+};
+
 /* Supported frontends */
 #define PSTORE_FLAGS_DMESG	BIT(0)
 #define PSTORE_FLAGS_CONSOLE	BIT(1)
