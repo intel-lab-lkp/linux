@@ -216,6 +216,24 @@ static int xenon_alloc_emmc_phy(struct sdhci_host *host)
 	return 0;
 }
 
+static int xenon_check_stability_internal_clk(struct sdhci_host *host)
+{
+	u32 reg;
+	ktime_t timeout;
+
+	/* Wait max 20 ms */
+	timeout = ktime_add_ms(ktime_get(), 20);
+	while (!((reg = sdhci_readw(host, SDHCI_CLOCK_CONTROL))
+		& SDHCI_CLOCK_INT_STABLE)) {
+		if (ktime_after(ktime_get(), timeout)) {
+			dev_err(mmc_dev(host->mmc), "phy_init: Internal clock never stabilized.\n");
+			return -ETIMEDOUT;
+		}
+		usleep_range(900, 1100);
+	}
+	return 0;
+}
+
 /*
  * eMMC 5.0/5.1 PHY init/re-init.
  * eMMC PHY init should be executed after:
@@ -231,6 +249,11 @@ static int xenon_emmc_phy_init(struct sdhci_host *host)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct xenon_priv *priv = sdhci_pltfm_priv(pltfm_host);
 	struct xenon_emmc_phy_regs *phy_regs = priv->emmc_phy_regs;
+
+	int ret = xenon_check_stability_internal_clk(host);
+
+	if (ret)
+		return ret;
 
 	reg = sdhci_readl(host, phy_regs->timing_adj);
 	reg |= XENON_PHY_INITIALIZAION;
