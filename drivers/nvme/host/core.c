@@ -2242,20 +2242,21 @@ static int nvme_wait_ready(struct nvme_ctrl *ctrl, u32 mask, u32 val,
 	return ret;
 }
 
-int nvme_disable_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
+int nvme_disable_ctrl_send(struct nvme_ctrl *ctrl, bool shutdown)
 {
-	int ret;
-
 	ctrl->ctrl_config &= ~NVME_CC_SHN_MASK;
 	if (shutdown)
 		ctrl->ctrl_config |= NVME_CC_SHN_NORMAL;
 	else
 		ctrl->ctrl_config &= ~NVME_CC_ENABLE;
 
-	ret = ctrl->ops->reg_write32(ctrl, NVME_REG_CC, ctrl->ctrl_config);
-	if (ret)
-		return ret;
+	return ctrl->ops->reg_write32(ctrl, NVME_REG_CC, ctrl->ctrl_config);
+}
+EXPORT_SYMBOL_GPL(nvme_disable_ctrl_send);
 
+
+int nvme_disable_ctrl_wait(struct nvme_ctrl *ctrl, bool shutdown)
+{
 	if (shutdown) {
 		return nvme_wait_ready(ctrl, NVME_CSTS_SHST_MASK,
 				       NVME_CSTS_SHST_CMPLT,
@@ -2265,6 +2266,19 @@ int nvme_disable_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
 		msleep(NVME_QUIRK_DELAY_AMOUNT);
 	return nvme_wait_ready(ctrl, NVME_CSTS_RDY, 0,
 			       (NVME_CAP_TIMEOUT(ctrl->cap) + 1) / 2, "reset");
+}
+EXPORT_SYMBOL_GPL(nvme_disable_ctrl_wait);
+
+
+int nvme_disable_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
+{
+	int ret;
+
+	ret = nvme_disable_ctrl_send(ctrl, shutdown);
+	if (!ret)
+		ret = nvme_disable_ctrl_wait(ctrl, shutdown);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(nvme_disable_ctrl);
 

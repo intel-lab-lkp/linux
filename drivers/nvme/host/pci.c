@@ -112,6 +112,12 @@ static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown);
 static void nvme_delete_io_queues(struct nvme_dev *dev);
 static void nvme_update_attrs(struct nvme_dev *dev);
 
+enum nvme_disable_state {
+	NVME_DISABLE_START = 0,
+	NVME_DISABLE_WAIT = 1,
+	NVME_DISABLE_DONE = 2,
+};
+
 /*
  * Represents an NVM Express device.  Each nvme_dev is a PCI function.
  */
@@ -159,6 +165,7 @@ struct nvme_dev {
 	unsigned int nr_allocated_queues;
 	unsigned int nr_write_queues;
 	unsigned int nr_poll_queues;
+	enum nvme_disable_state disable_state;
 };
 
 static int io_queue_depth_set(const char *val, const struct kernel_param *kp)
@@ -2574,11 +2581,13 @@ static bool nvme_pci_ctrl_is_dead(struct nvme_dev *dev)
 	return (csts & NVME_CSTS_CFS) || !(csts & NVME_CSTS_RDY);
 }
 
-static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown)
+static void nvme_dev_disable_start(struct nvme_dev *dev, bool shutdown)
 {
 	enum nvme_ctrl_state state = nvme_ctrl_state(&dev->ctrl);
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 	bool dead;
+
+	dev->disable_state = NVME_DISABLE_START;
 
 	mutex_lock(&dev->shutdown_lock);
 	dead = nvme_pci_ctrl_is_dead(dev);
@@ -2597,7 +2606,20 @@ static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown)
 
 	if (!dead && dev->ctrl.queue_count > 0) {
 		nvme_delete_io_queues(dev);
-		nvme_disable_ctrl(&dev->ctrl, shutdown);
+		nvme_disable_ctrl_send(&dev->ctrl, shutdown);
+		dev->disable_state = NVME_DISABLE_WAIT;
+	}
+}
+
+static void nvme_dev_disable_end(struct nvme_dev *dev, bool shutdown)
+{
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+
+	if (dev->disable_state == NVME_DISABLE_DONE)
+		return;
+
+	if (dev->disable_state == NVME_DISABLE_WAIT) {
+		nvme_disable_ctrl_wait(&dev->ctrl, shutdown);
 		nvme_poll_irqdisable(&dev->queues[0]);
 	}
 	nvme_suspend_io_queues(dev);
@@ -2621,6 +2643,12 @@ static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown)
 			nvme_unquiesce_admin_queue(&dev->ctrl);
 	}
 	mutex_unlock(&dev->shutdown_lock);
+}
+
+static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown)
+{
+	nvme_dev_disable_start(dev, shutdown);
+	nvme_dev_disable_end(dev, shutdown);
 }
 
 static int nvme_disable_prepare_reset(struct nvme_dev *dev, bool shutdown)
@@ -3120,6 +3148,25 @@ static void nvme_shutdown(struct pci_dev *pdev)
 	nvme_disable_prepare_reset(dev, true);
 }
 
+static void nvme_shutdown_start(struct pci_dev *pdev)
+{
+	struct nvme_dev *dev = pci_get_drvdata(pdev);
+
+        if (!nvme_wait_reset(&dev->ctrl)) {
+		dev->disable_state = NVME_DISABLE_DONE;
+                return;
+	}
+        nvme_dev_disable_start(dev, true);
+}
+
+static void nvme_shutdown_end(struct pci_dev *pdev)
+{
+	struct nvme_dev *dev = pci_get_drvdata(pdev);
+
+	nvme_dev_disable_end(dev, true);
+}
+
+
 /*
  * The driver's remove may be called on a device in a partially initialized
  * state. This function must not have any dependencies on the device state in
@@ -3511,6 +3558,8 @@ static struct pci_driver nvme_driver = {
 	.probe		= nvme_probe,
 	.remove		= nvme_remove,
 	.shutdown	= nvme_shutdown,
+	.async_shutdown_start 	= nvme_shutdown_start,
+	.async_shutdown_end 	= nvme_shutdown_end,
 	.driver		= {
 		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,
 #ifdef CONFIG_PM_SLEEP
