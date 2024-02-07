@@ -4720,9 +4720,10 @@ out:
 EXPORT_SYMBOL_GPL(device_change_owner);
 
 
-#define MAX_ASYNC_SHUTDOWNS 32
+#define MAX_ASYNC_SHUTDOWNS 256
 static int async_shutdown_count;
 static LIST_HEAD(async_shutdown_list);
+static LIST_HEAD(async_delayed_list);
 
 /**
  * If a device has a child busy with an async shutdown or there are too many
@@ -4730,15 +4731,15 @@ static LIST_HEAD(async_shutdown_list);
  */
 static bool may_shutdown_device(struct device *dev)
 {
-	struct device *tmp;
-
-	if (async_shutdown_count >= MAX_ASYNC_SHUTDOWNS)
+	if (dev->p->child_shutdown) {
+		if (list_empty(&async_shutdown_list)) {
+			dev_err(dev, "child_shutdown set but no children? Clearing\n");
+			dev->p->child_shutdown = 0;
+			return true;
+		}
 		return false;
-
-	list_for_each_entry(tmp, &async_shutdown_list, kobj.entry) {
-		if (tmp->parent == dev)
-			return false;
 	}
+
 	return true;
 }
 
@@ -4753,6 +4754,9 @@ static void async_shutdown_start(struct device *dev, void (*callback) (struct de
 	(*callback)(dev);
 	list_add_tail(&dev->kobj.entry, &async_shutdown_list);
 	async_shutdown_count++;
+
+	if (dev->parent)
+		dev->parent->p->child_shutdown = 1;
 }
 
 /**
@@ -4760,7 +4764,7 @@ static void async_shutdown_start(struct device *dev, void (*callback) (struct de
  */
 static void wait_for_active_async_shutdown(void)
 {
-	struct device *dev, *parent;
+	struct device *dev, *parent, *tmp;
 
         while (!list_empty(&async_shutdown_list)) {
                 dev = list_entry(async_shutdown_list.next, struct device,
@@ -4787,15 +4791,29 @@ static void wait_for_active_async_shutdown(void)
 			dev->driver->async_shutdown_end(dev);
 		}
                 device_unlock(dev);
-                if (parent)
-                        device_unlock(parent);
+                if (parent) {
+			tmp = parent;
+			do {
+				tmp->p->child_shutdown = 0;
+				device_unlock(tmp);
 
+				tmp = tmp->parent;
+				if (!tmp || !tmp->p->child_shutdown)
+					break;
+				device_lock(tmp);
+			} while (1);
+		}
                 put_device(dev);
                 put_device(parent);
         }
 	if (initcall_debug)
 		printk(KERN_INFO "device shutdown: waited for %d async shutdown callbacks\n", async_shutdown_count);
+
 	async_shutdown_count = 0;
+	spin_lock(&devices_kset->list_lock);
+	list_splice_tail_init(&async_delayed_list, &devices_kset->list);
+	spin_unlock(&devices_kset->list_lock);
+
 }
 
 /**
@@ -4810,7 +4828,7 @@ void device_shutdown(void)
 	device_block_probing();
 
 	cpufreq_suspend();
-
+restart:
 	spin_lock(&devices_kset->list_lock);
 	/*
 	 * Walk the devices list backward, shutting down each in turn.
@@ -4832,12 +4850,15 @@ void device_shutdown(void)
 		get_device(dev);
 
                 if (!may_shutdown_device(dev)) {
+			list_move(&dev->kobj.entry, &async_delayed_list);
+			if (parent) {
+				device_lock(parent);
+				parent->p->child_shutdown = 1;
+				device_unlock(parent);
+			}
+
 			put_device(dev);
 			put_device(parent);
-
-			spin_unlock(&devices_kset->list_lock);
-			wait_for_active_async_shutdown();
-			spin_lock(&devices_kset->list_lock);
 			continue;
 		}
 
@@ -4863,14 +4884,16 @@ void device_shutdown(void)
 			dev->class->shutdown_pre(dev);
 		}
 		if (dev->bus && dev->bus->async_shutdown_start) {
-			async_shutdown_start(dev, dev->bus->async_shutdown_start);
+			async_shutdown_start(dev,
+					     dev->bus->async_shutdown_start);
 			async_busy = true;
 		} else if (dev->bus && dev->bus->shutdown) {
 			if (initcall_debug)
 				dev_info(dev, "shutdown\n");
 			dev->bus->shutdown(dev);
 		} else if (dev->driver && dev->driver->async_shutdown_start) {
-			async_shutdown_start(dev, dev->driver->async_shutdown_start);
+			async_shutdown_start(dev,
+					     dev->driver->async_shutdown_start);
 			async_busy = true;
 		} else if (dev->driver && dev->driver->shutdown) {
 			if (initcall_debug)
@@ -4891,14 +4914,22 @@ void device_shutdown(void)
 			put_device(parent);
 		}
 
+		if (async_shutdown_count == MAX_ASYNC_SHUTDOWNS)
+			wait_for_active_async_shutdown();
+
 		spin_lock(&devices_kset->list_lock);
 	}
 	spin_unlock(&devices_kset->list_lock);
 	/*
-	 * Wait for any async shutdown still running.
+	 * Wait for any async shutdown still running, then restart the loop
+	 * if the list is no longer empty from delayed entries returning to
+	 * the list.
 	 */
 	if (!list_empty(&async_shutdown_list))
 		wait_for_active_async_shutdown();
+
+	if(!list_empty(&devices_kset->list))
+		goto restart;
 }
 
 /*
