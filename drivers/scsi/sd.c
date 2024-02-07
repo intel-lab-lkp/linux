@@ -3838,23 +3838,64 @@ static int sd_start_stop_device(struct scsi_disk *sdkp, int start)
 	return 0;
 }
 
-/*
- * Send a SYNCHRONIZE CACHE instruction down to the device through
- * the normal SCSI command structure.  Wait for the command to
- * complete.
- */
-static void sd_shutdown(struct device *dev)
+static void sd_sync_cache_callback(struct scsi_cmnd *scmd,
+				   struct scsi_exec_args *args) {
+	struct scsi_disk *sdkp;
+
+	sdkp = container_of(args, struct scsi_disk, shutdown_params);
+	complete(&sdkp->shutdown_done);
+}
+
+static void sd_async_shutdown_start(struct device *dev)
 {
 	struct scsi_disk *sdkp = dev_get_drvdata(dev);
+	const int timeout = sdkp->device->request_queue->rq_timeout
+			    * SD_FLUSH_TIMEOUT_MULTIPLIER;
+	int ret;
 
 	if (!sdkp)
 		return;         /* this can happen */
+
+	init_completion(&sdkp->shutdown_done);
+	sdkp->shutdown_params.callback = sd_sync_cache_callback;
 
 	if (pm_runtime_suspended(dev))
 		return;
 
 	if (sdkp->WCE && sdkp->media_present) {
+		unsigned char cmd[16] = { 0 };
+
 		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
+		if (sdkp->device->use_16_for_sync)
+			cmd[0] = SYNCHRONIZE_CACHE_16;
+		else
+			cmd[0] = SYNCHRONIZE_CACHE;
+
+		ret = scsi_execute_cmd_nowait(sdkp->device, cmd, REQ_OP_DRV_IN,
+					      timeout, sdkp->max_retries,
+					      &sdkp->shutdown_params);
+		if (!ret)
+			return;
+		sdkp->shutdown_params.result = ret;
+	}
+	/* no async I/O to do, go ahead and mark it complete */
+	complete(&sdkp->shutdown_done);
+}
+
+static void sd_async_shutdown_end(struct device *dev)
+{
+	struct scsi_disk *sdkp = dev_get_drvdata(dev);
+
+	if (!sdkp)
+		return;
+
+	if (pm_runtime_suspended(dev))
+		return;
+
+	wait_for_completion(&sdkp->shutdown_done);
+
+	if (sdkp->WCE && sdkp->media_present && sdkp->shutdown_params.result) {
+		/* for any error with the async flush, retry as sync */
 		sd_sync_cache(sdkp);
 	}
 
@@ -3865,6 +3906,17 @@ static void sd_shutdown(struct device *dev)
 		sd_printk(KERN_NOTICE, sdkp, "Stopping disk\n");
 		sd_start_stop_device(sdkp, 0);
 	}
+}
+
+/*
+ * Send a SYNCHRONIZE CACHE instruction down to the device through
+ * the normal SCSI command structure.  Wait for the command to
+ * complete.
+ */
+static void sd_shutdown(struct device *dev)
+{
+	sd_async_shutdown_start(dev);
+	sd_async_shutdown_end(dev);
 }
 
 static inline bool sd_do_start_stop(struct scsi_device *sdev, bool runtime)
@@ -4003,6 +4055,8 @@ static struct scsi_driver sd_template = {
 		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,
 		.remove		= sd_remove,
 		.shutdown	= sd_shutdown,
+		.async_shutdown_start = sd_async_shutdown_start,
+		.async_shutdown_end   = sd_async_shutdown_end,
 		.pm		= &sd_pm_ops,
 	},
 	.rescan			= sd_rescan,

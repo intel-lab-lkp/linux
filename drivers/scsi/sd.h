@@ -91,6 +91,8 @@ struct scsi_disk {
 	struct device	disk_dev;
 	struct gendisk	*disk;
 	struct opal_dev *opal_dev;
+	struct scsi_exec_args shutdown_params;
+	struct completion shutdown_done;
 #ifdef CONFIG_BLK_DEV_ZONED
 	/* Updated during revalidation before the gendisk capacity is known. */
 	struct zoned_disk_info	early_zone_info;
