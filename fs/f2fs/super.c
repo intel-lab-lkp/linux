@@ -111,8 +111,6 @@ enum {
 	Opt_norecovery,
 	Opt_discard,
 	Opt_nodiscard,
-	Opt_noheap,
-	Opt_heap,
 	Opt_user_xattr,
 	Opt_nouser_xattr,
 	Opt_acl,
@@ -189,8 +187,6 @@ static match_table_t f2fs_tokens = {
 	{Opt_norecovery, "norecovery"},
 	{Opt_discard, "discard"},
 	{Opt_nodiscard, "nodiscard"},
-	{Opt_noheap, "no_heap"},
-	{Opt_heap, "heap"},
 	{Opt_user_xattr, "user_xattr"},
 	{Opt_nouser_xattr, "nouser_xattr"},
 	{Opt_acl, "acl"},
@@ -725,12 +721,6 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				return -EINVAL;
 			}
 			clear_opt(sbi, DISCARD);
-			break;
-		case Opt_noheap:
-			set_opt(sbi, NOHEAP);
-			break;
-		case Opt_heap:
-			clear_opt(sbi, NOHEAP);
 			break;
 #ifdef CONFIG_F2FS_FS_XATTR
 		case Opt_user_xattr:
@@ -1956,10 +1946,6 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	} else {
 		seq_puts(seq, ",nodiscard");
 	}
-	if (test_opt(sbi, NOHEAP))
-		seq_puts(seq, ",no_heap");
-	else
-		seq_puts(seq, ",heap");
 #ifdef CONFIG_F2FS_FS_XATTR
 	if (test_opt(sbi, XATTR_USER))
 		seq_puts(seq, ",user_xattr");
@@ -2136,7 +2122,6 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 	set_opt(sbi, INLINE_XATTR);
 	set_opt(sbi, INLINE_DATA);
 	set_opt(sbi, INLINE_DENTRY);
-	set_opt(sbi, NOHEAP);
 	set_opt(sbi, MERGE_CHECKPOINT);
 	F2FS_OPTION(sbi).unusable_cap = 0;
 	sbi->sb->s_flags |= SB_LAZYTIME;
