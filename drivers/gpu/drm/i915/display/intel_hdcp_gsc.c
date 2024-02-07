@@ -123,8 +123,10 @@ static int intel_hdcp_gsc_hdcp2_init(struct drm_i915_private *i915)
 	i915->display.hdcp.hdcp_message = hdcp_message;
 	ret = intel_hdcp_gsc_initialize_message(i915, hdcp_message);
 
-	if (ret)
+	if (ret) {
 		drm_err(&i915->drm, "Could not initialize hdcp_message\n");
+		kfree(hdcp_message);
+	}
 
 	return ret;
 }
