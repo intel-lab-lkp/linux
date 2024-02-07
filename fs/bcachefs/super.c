@@ -69,9 +69,12 @@
 #include <linux/sysfs.h>
 #include <crypto/hash.h>
 
+#ifndef CONFIG_BCACHEFS_RUST
+/* when enabled, the Rust module exports these modinfo attributes */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Kent Overstreet <kent.overstreet@gmail.com>");
 MODULE_DESCRIPTION("bcachefs filesystem");
+#endif
 MODULE_SOFTDEP("pre: crc32c");
 MODULE_SOFTDEP("pre: crc64");
 MODULE_SOFTDEP("pre: sha256");
@@ -2082,6 +2085,7 @@ err:
 
 /* Global interfaces/init */
 
+#ifndef CONFIG_BCACHEFS_RUST
 static void bcachefs_exit(void)
 {
 	bch2_debug_exit();
@@ -2109,6 +2113,30 @@ err:
 	return -ENOMEM;
 }
 
+module_exit(bcachefs_exit);
+module_init(bcachefs_init);
+
+#else /* CONFIG_BCACHEFS_RUST */
+/*
+ * bch2_kset_init() and bch2_kset_exit() are wrappers around the kset functions
+ * to be called from the Rust module init and exit because there is not
+ * currently a Rust API for ksets. If/when a Rust API is provided, these
+ * wrappers can be removed and the Rust kernel module can use that directly.
+ */
+int __init bch2_kset_init(void)
+{
+	bcachefs_kset = kset_create_and_add("bcachefs", NULL, fs_kobj);
+
+	return !bcachefs_kset;
+}
+
+void bch2_kset_exit(void)
+{
+	if (bcachefs_kset)
+		kset_unregister(bcachefs_kset);
+}
+#endif
+
 #define BCH_DEBUG_PARAM(name, description)			\
 	bool bch2_##name;					\
 	module_param_named(name, bch2_##name, bool, 0644);	\
@@ -2119,6 +2147,3 @@ BCH_DEBUG_PARAMS()
 __maybe_unused
 static unsigned bch2_metadata_version = bcachefs_metadata_version_current;
 module_param_named(version, bch2_metadata_version, uint, 0400);
-
-module_exit(bcachefs_exit);
-module_init(bcachefs_init);

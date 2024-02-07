@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0
 
---allowlist-function ''
+--allowlist-function bch2_bkey_pack_test
+--allowlist-function bch2_kset_init
+--allowlist-function bch2_btree_key_cache_init
+--allowlist-function bch2_chardev_init
+--allowlist-function bch2_vfs_init
+--allowlist-function bch2_debug_init
+--allowlist-function bch2_debug_exit
+--allowlist-function bch2_vfs_exit
+--allowlist-function bch2_chardev_exit
+--allowlist-function bch2_btree_key_cache_exit
+--allowlist-function bch2_kset_exit
+
 --allowlist-type ''
 --allowlist-var ''

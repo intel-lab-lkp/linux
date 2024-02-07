@@ -1252,4 +1252,9 @@ static inline struct stdio_redirect *bch2_fs_stdio_redirect(struct bch_fs *c)
 #define BKEY_PADDED_ONSTACK(key, pad)				\
 	struct { struct bkey_i key; __u64 key ## _pad[pad]; }
 
+#ifdef CONFIG_BCACHEFS_RUST
+int bch2_kset_init(void);
+void bch2_kset_exit(void);
+#endif
+
 #endif /* _BCACHEFS_H */

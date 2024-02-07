@@ -89,7 +89,10 @@ bcachefs-y		:=	\
 	varint.o		\
 	xattr.o
 
+bcachefs-$(CONFIG_BCACHEFS_RUST)	+= bcachefs_module.o
 always-$(CONFIG_BCACHEFS_RUST)		+= bindings/bcachefs_generated.rs
+
+$(obj)/bcachefs_module.o: $(src)/bindings/bcachefs_generated.rs
 
 $(obj)/bindings/bcachefs_generated.rs: private bindgen_target_flags = \
     $(shell grep -Ev '^#|^$$' $(srctree)/$(src)/bindgen_parameters)
