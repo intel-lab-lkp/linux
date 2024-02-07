@@ -410,6 +410,7 @@
 };
 
 &sdhci0 {
+	bootph-all;
 	status = "okay";
 	ti,driver-strength-ohm = <50>;
 	disable-wp;
@@ -417,13 +418,13 @@
 
 &sdhci1 {
 	/* SD/MMC */
+	bootph-all;
 	status = "okay";
 	vmmc-supply = <&vdd_mmc1>;
 	vqmmc-supply = <&vddshv_sdio>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&main_mmc1_pins_default>;
 	disable-wp;
-	bootph-all;
 };
 
 &cpsw3g {
