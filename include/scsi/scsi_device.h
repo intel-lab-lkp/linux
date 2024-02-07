@@ -497,12 +497,20 @@ struct scsi_exec_args {
 	blk_mq_req_flags_t req_flags;	/* BLK_MQ_REQ flags */
 	int scmd_flags;			/* SCMD flags */
 	int *resid;			/* residual length */
+	void *buffer;			/* data buffer */
+	unsigned int bufflen;		/* buffer length */
+	int result;			/* scsi layer result */
+	void (*callback)(struct scsi_cmnd *scmd, struct scsi_exec_args *args);
 };
 
 int scsi_execute_cmd(struct scsi_device *sdev, const unsigned char *cmd,
 		     blk_opf_t opf, void *buffer, unsigned int bufflen,
 		     int timeout, int retries,
 		     const struct scsi_exec_args *args);
+
+int scsi_execute_cmd_nowait(struct scsi_device *sdev, const unsigned char *cmd,
+			    blk_opf_t opf, int timeout, int retries,
+			    struct scsi_exec_args *args);
 
 extern void sdev_disable_disk_events(struct scsi_device *sdev);
 extern void sdev_enable_disk_events(struct scsi_device *sdev);

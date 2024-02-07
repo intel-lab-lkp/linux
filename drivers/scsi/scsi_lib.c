@@ -185,6 +185,87 @@ void scsi_queue_insert(struct scsi_cmnd *cmd, int reason)
 }
 
 /**
+ * scsi_execute_init - helper for setting up a scsi_cmnd in a request
+ * @sdev:	scsi_device
+ * @cmd:	scsi command
+ * @opf:	block layer request cmd_flags
+ * @timeout:	request timeout in HZ
+ * @retries:	number of times to retry request
+ * @args:	scsi command args
+ *
+ * Returns a request if successful, or an error pointer if there was a failure.
+ */
+static struct request *scsi_execute_init(struct scsi_device *sdev,
+					 const unsigned char *cmd,
+					 blk_opf_t opf,
+					 int timeout, int retries,
+					 struct scsi_exec_args *args)
+{
+	struct request *req;
+	struct scsi_cmnd *scmd;
+	int ret;
+
+	if (WARN_ON_ONCE(args->sense &&
+			 args->sense_len != SCSI_SENSE_BUFFERSIZE))
+		return ERR_PTR(-EINVAL);
+
+	req = scsi_alloc_request(sdev->request_queue, opf, args->req_flags);
+	if (IS_ERR(req))
+		return req;
+
+	if (args->bufflen) {
+		ret = blk_rq_map_kern(sdev->request_queue, req, args->buffer,
+				      args->bufflen, GFP_NOIO);
+		if (ret)
+			goto out;
+	}
+	scmd = blk_mq_rq_to_pdu(req);
+	scmd->cmd_len = COMMAND_SIZE(cmd[0]);
+	memcpy(scmd->cmnd, cmd, scmd->cmd_len);
+	scmd->allowed = retries;
+	scmd->flags |= args->scmd_flags;
+	req->timeout = timeout;
+	req->rq_flags |= RQF_QUIET;
+
+	return req;
+out:
+	blk_mq_free_request(req);
+	return ERR_PTR(ret);
+}
+
+static int scsi_execute_uninit(struct request *req,
+				struct scsi_exec_args *args)
+{
+	struct scsi_cmnd *scmd;
+
+	scmd = blk_mq_rq_to_pdu(req);
+	/*
+	 * Some devices (USB mass-storage in particular) may transfer
+	 * garbage data together with a residue indicating that the data
+	 * is invalid.  Prevent the garbage from being misinterpreted
+	 * and prevent security leaks by zeroing out the excess data.
+	 */
+	if (unlikely(scmd->resid_len > 0 && scmd->resid_len <= args->bufflen))
+		memset(args->buffer + args->bufflen - scmd->resid_len, 0,
+		       scmd->resid_len);
+
+	if (args->resid)
+		*args->resid = scmd->resid_len;
+	if (args->sense)
+		memcpy(args->sense, scmd->sense_buffer, SCSI_SENSE_BUFFERSIZE);
+	if (args->sshdr)
+		scsi_normalize_sense(scmd->sense_buffer, scmd->sense_len,
+				     args->sshdr);
+
+	args->result = scmd->result;
+
+	if (args->callback)
+		args->callback(scmd, args);
+
+	return scmd->result;
+}
+
+/**
  * scsi_execute_cmd - insert request and wait for the result
  * @sdev:	scsi_device
  * @cmd:	scsi command
@@ -201,66 +282,67 @@ void scsi_queue_insert(struct scsi_cmnd *cmd, int reason)
 int scsi_execute_cmd(struct scsi_device *sdev, const unsigned char *cmd,
 		     blk_opf_t opf, void *buffer, unsigned int bufflen,
 		     int timeout, int retries,
-		     const struct scsi_exec_args *args)
+		     const struct scsi_exec_args *const_args)
 {
-	static const struct scsi_exec_args default_args;
-	struct request *req;
-	struct scsi_cmnd *scmd;
+	struct scsi_exec_args args;
 	int ret;
+	struct request *req;
 
-	if (!args)
-		args = &default_args;
-	else if (WARN_ON_ONCE(args->sense &&
-			      args->sense_len != SCSI_SENSE_BUFFERSIZE))
-		return -EINVAL;
+	if (!const_args)
+		memset(&args, 0, sizeof(struct scsi_exec_args));
+	else
+		args = *const_args;
 
-	req = scsi_alloc_request(sdev->request_queue, opf, args->req_flags);
+	args.buffer = buffer;
+	args.bufflen = bufflen;
+
+	req = scsi_execute_init(sdev, cmd, opf, timeout, retries, &args);
+
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-
-	if (bufflen) {
-		ret = blk_rq_map_kern(sdev->request_queue, req,
-				      buffer, bufflen, GFP_NOIO);
-		if (ret)
-			goto out;
-	}
-	scmd = blk_mq_rq_to_pdu(req);
-	scmd->cmd_len = COMMAND_SIZE(cmd[0]);
-	memcpy(scmd->cmnd, cmd, scmd->cmd_len);
-	scmd->allowed = retries;
-	scmd->flags |= args->scmd_flags;
-	req->timeout = timeout;
-	req->rq_flags |= RQF_QUIET;
 
 	/*
 	 * head injection *required* here otherwise quiesce won't work
 	 */
 	blk_execute_rq(req, true);
 
-	/*
-	 * Some devices (USB mass-storage in particular) may transfer
-	 * garbage data together with a residue indicating that the data
-	 * is invalid.  Prevent the garbage from being misinterpreted
-	 * and prevent security leaks by zeroing out the excess data.
-	 */
-	if (unlikely(scmd->resid_len > 0 && scmd->resid_len <= bufflen))
-		memset(buffer + bufflen - scmd->resid_len, 0, scmd->resid_len);
+	ret = scsi_execute_uninit(req, &args);
 
-	if (args->resid)
-		*args->resid = scmd->resid_len;
-	if (args->sense)
-		memcpy(args->sense, scmd->sense_buffer, SCSI_SENSE_BUFFERSIZE);
-	if (args->sshdr)
-		scsi_normalize_sense(scmd->sense_buffer, scmd->sense_len,
-				     args->sshdr);
-
-	ret = scmd->result;
- out:
 	blk_mq_free_request(req);
 
 	return ret;
 }
 EXPORT_SYMBOL(scsi_execute_cmd);
+
+
+static enum rq_end_io_ret scsi_execute_cmd_complete(struct request *req,
+						    blk_status_t ret)
+{
+	struct scsi_exec_args *args = req->end_io_data;
+
+	scsi_execute_uninit(req, args);
+	return RQ_END_IO_FREE;
+}
+
+int scsi_execute_cmd_nowait(struct scsi_device *sdev, const unsigned char *cmd,
+			    blk_opf_t opf, int timeout, int retries,
+			    struct scsi_exec_args *args)
+{
+	struct request *req;
+
+	req = scsi_execute_init(sdev, cmd, opf, timeout, retries, args);
+
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	req->end_io = scsi_execute_cmd_complete;
+	req->end_io_data = args;
+
+	blk_execute_rq_nowait(req, true);
+
+	return 0;
+}
+EXPORT_SYMBOL(scsi_execute_cmd_nowait);
 
 /*
  * Wake up the error handler if necessary. Avoid as follows that the error
