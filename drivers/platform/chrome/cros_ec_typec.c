@@ -28,6 +28,7 @@ static int cros_typec_parse_port_props(struct typec_capability *cap,
 				       struct fwnode_handle *fwnode,
 				       struct device *dev)
 {
+	struct fwnode_handle *sw_fwnode;
 	const char *buf;
 	int ret;
 
@@ -64,6 +65,16 @@ static int cros_typec_parse_port_props(struct typec_capability *cap,
 		if (ret < 0)
 			return ret;
 		cap->prefer_role = ret;
+	}
+
+	/* Assing the USB role switch the correct pld_crc if it's missing. */
+	sw_fwnode = fwnode_find_reference(fwnode, "usb-role-switch", 0);
+	if (!IS_ERR_OR_NULL(sw_fwnode)) {
+		struct acpi_device *adev = to_acpi_device_node(sw_fwnode);
+
+		if (adev && !adev->pld_crc)
+			adev->pld_crc = to_acpi_device_node(fwnode)->pld_crc;
+		fwnode_handle_put(sw_fwnode);
 	}
 
 	cap->fwnode = fwnode;
