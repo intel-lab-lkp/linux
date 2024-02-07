@@ -5,15 +5,36 @@
 
 #include "i915_drv.h"
 #include "intel_hdcp_gsc.h"
+#include "xe_gt.h"
+#include "xe_gsc_proxy.h"
+#include "xe_pm.h"
 
 bool intel_hdcp_gsc_cs_required(struct drm_i915_private *i915)
 {
 	return true;
 }
 
-bool intel_hdcp_gsc_check_status(struct drm_i915_private *i915)
+bool intel_hdcp_gsc_check_status(struct xe_device *xe)
 {
-	return false;
+	struct xe_tile *tile = xe_device_get_root_tile(xe);
+	struct xe_gt *gt = tile->media_gt;
+	int ret = true;
+
+	xe_pm_runtime_get(xe);
+	ret = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
+	if (ret) {
+		drm_dbg_kms(&xe->drm, "failed to get forcewake to disable GSC interrupts\n");
+		return false;
+	}
+
+	if (!gsc_proxy_init_done(&gt->uc.gsc))
+		ret = false;
+
+	if (!ret)
+		xe_force_wake_put(gt_to_fw(gt), XE_FW_GSC);
+	xe_pm_runtime_get(xe);
+
+	return ret;
 }
 
 int intel_hdcp_gsc_init(struct drm_i915_private *i915)
