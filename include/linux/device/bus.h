@@ -48,7 +48,11 @@ struct fwnode_handle;
  *		will never get called until they do.
  * @remove:	Called when a device removed from this bus.
  * @shutdown:	Called at shut-down time to quiesce the device.
- *
+ * @async_shutdown_start:	Optional call to support and begin the shutdown
+ *				process on the device in an asynchronous manner.
+ * @async_shutdown_end:	        Optional call to complete an asynchronous
+ *				shutdown of the device. Must be provided if a
+ *				sync_shutdown_start call is provided.
  * @online:	Called to put the device back online (after offlining it).
  * @offline:	Called to put the device offline for hot-removal. May fail.
  *
@@ -87,6 +91,8 @@ struct bus_type {
 	void (*sync_state)(struct device *dev);
 	void (*remove)(struct device *dev);
 	void (*shutdown)(struct device *dev);
+	void (*async_shutdown_start)(struct device *dev);
+	void (*async_shutdown_end)(struct device *dev);
 
 	int (*online)(struct device *dev);
 	int (*offline)(struct device *dev);

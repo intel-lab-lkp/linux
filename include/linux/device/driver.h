@@ -71,6 +71,11 @@ enum probe_type {
  * @remove:	Called when the device is removed from the system to
  *		unbind a device from this driver.
  * @shutdown:	Called at shut-down time to quiesce the device.
+ * @async_shutdown_start:	Optional call to support and begin the shutdown
+ *				process on the device in an asynchronous manner.
+ * @async_shutdown_end:		Optional call to complete an asynchronous
+ *				shutdown of the device. Must be provided if a
+ *				sync_shutdown_start call is provided.
  * @suspend:	Called to put the device to sleep mode. Usually to a
  *		low power state.
  * @resume:	Called to bring a device from sleep mode.
@@ -110,6 +115,8 @@ struct device_driver {
 	void (*sync_state)(struct device *dev);
 	int (*remove) (struct device *dev);
 	void (*shutdown) (struct device *dev);
+	void (*async_shutdown_start) (struct device *dev);
+	void (*async_shutdown_end) (struct device *dev);
 	int (*suspend) (struct device *dev, pm_message_t state);
 	int (*resume) (struct device *dev);
 	const struct attribute_group **groups;

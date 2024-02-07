@@ -4719,12 +4719,92 @@ out:
 }
 EXPORT_SYMBOL_GPL(device_change_owner);
 
+
+#define MAX_ASYNC_SHUTDOWNS 32
+static int async_shutdown_count;
+static LIST_HEAD(async_shutdown_list);
+
+/**
+ * If a device has a child busy with an async shutdown or there are too many
+ * async shutdowns active, the device may not be shut down at this time.
+ */
+static bool may_shutdown_device(struct device *dev)
+{
+	struct device *tmp;
+
+	if (async_shutdown_count >= MAX_ASYNC_SHUTDOWNS)
+		return false;
+
+	list_for_each_entry(tmp, &async_shutdown_list, kobj.entry) {
+		if (tmp->parent == dev)
+			return false;
+	}
+	return true;
+}
+
+/**
+ * Call and track each async shutdown call
+ */
+static void async_shutdown_start(struct device *dev, void (*callback) (struct device *))
+{
+	if (initcall_debug)
+		dev_info(dev, "async_shutdown_start\n");
+
+	(*callback)(dev);
+	list_add_tail(&dev->kobj.entry, &async_shutdown_list);
+	async_shutdown_count++;
+}
+
+/**
+ * Wait for all async shutdown operations currently active to complete
+ */
+static void wait_for_active_async_shutdown(void)
+{
+	struct device *dev, *parent;
+
+        while (!list_empty(&async_shutdown_list)) {
+                dev = list_entry(async_shutdown_list.next, struct device,
+                                kobj.entry);
+
+                parent = dev->parent;
+
+                /*
+                 * Make sure the device is off the list
+                 */
+                list_del_init(&dev->kobj.entry);
+                if (parent)
+                        device_lock(parent);
+                device_lock(dev);
+                if (dev->bus && dev->bus->async_shutdown_end) {
+                        if (initcall_debug)
+                                dev_info(dev,
+                                "async_shutdown_end called\n");
+                        dev->bus->async_shutdown_end(dev);
+                } else if (dev->driver && dev->driver->async_shutdown_end) {
+			if (initcall_debug)
+				dev_info(dev,
+				"async_shutdown_end called\n");
+			dev->driver->async_shutdown_end(dev);
+		}
+                device_unlock(dev);
+                if (parent)
+                        device_unlock(parent);
+
+                put_device(dev);
+                put_device(parent);
+        }
+	if (initcall_debug)
+		printk(KERN_INFO "device shutdown: waited for %d async shutdown callbacks\n", async_shutdown_count);
+	async_shutdown_count = 0;
+}
+
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
  */
 void device_shutdown(void)
 {
 	struct device *dev, *parent;
+	bool async_busy;
 
 	wait_for_device_probe();
 	device_block_probing();
@@ -4741,6 +4821,8 @@ void device_shutdown(void)
 		dev = list_entry(devices_kset->list.prev, struct device,
 				kobj.entry);
 
+		async_busy = false;
+
 		/*
 		 * hold reference count of device's parent to
 		 * prevent it from being freed because parent's
@@ -4748,6 +4830,17 @@ void device_shutdown(void)
 		 */
 		parent = get_device(dev->parent);
 		get_device(dev);
+
+                if (!may_shutdown_device(dev)) {
+			put_device(dev);
+			put_device(parent);
+
+			spin_unlock(&devices_kset->list_lock);
+			wait_for_active_async_shutdown();
+			spin_lock(&devices_kset->list_lock);
+			continue;
+		}
+
 		/*
 		 * Make sure the device is off the kset list, in the
 		 * event that dev->*->shutdown() doesn't remove it.
@@ -4769,26 +4862,43 @@ void device_shutdown(void)
 				dev_info(dev, "shutdown_pre\n");
 			dev->class->shutdown_pre(dev);
 		}
-		if (dev->bus && dev->bus->shutdown) {
+		if (dev->bus && dev->bus->async_shutdown_start) {
+			async_shutdown_start(dev, dev->bus->async_shutdown_start);
+			async_busy = true;
+		} else if (dev->bus && dev->bus->shutdown) {
 			if (initcall_debug)
 				dev_info(dev, "shutdown\n");
 			dev->bus->shutdown(dev);
+		} else if (dev->driver && dev->driver->async_shutdown_start) {
+			async_shutdown_start(dev, dev->driver->async_shutdown_start);
+			async_busy = true;
 		} else if (dev->driver && dev->driver->shutdown) {
 			if (initcall_debug)
 				dev_info(dev, "shutdown\n");
 			dev->driver->shutdown(dev);
+		} else {
+			if (initcall_debug)
+				dev_info(dev, "no shutdown callback\n");
 		}
 
 		device_unlock(dev);
 		if (parent)
 			device_unlock(parent);
 
-		put_device(dev);
-		put_device(parent);
+		/* if device has an async shutdown, drop the ref when done */
+		if (!async_busy) {
+			put_device(dev);
+			put_device(parent);
+		}
 
 		spin_lock(&devices_kset->list_lock);
 	}
 	spin_unlock(&devices_kset->list_lock);
+	/*
+	 * Wait for any async shutdown still running.
+	 */
+	if (!list_empty(&async_shutdown_list))
+		wait_for_active_async_shutdown();
 }
 
 /*
