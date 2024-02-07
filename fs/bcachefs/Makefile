@@ -89,4 +89,13 @@ bcachefs-y		:=	\
 	varint.o		\
 	xattr.o
 
+always-$(CONFIG_BCACHEFS_RUST)		+= bindings/bcachefs_generated.rs
+
+$(obj)/bindings/bcachefs_generated.rs: private bindgen_target_flags = \
+    $(shell grep -Ev '^#|^$$' $(srctree)/$(src)/bindgen_parameters)
+
+$(obj)/bindings/bcachefs_generated.rs: $(src)/bindings/bindings_helper.h  \
+	$(src)/bindgen_parameters FORCE
+	$(call if_changed_dep,bindgen)
+
 obj-$(CONFIG_MEAN_AND_VARIANCE_UNIT_TEST)   += mean_and_variance_test.o

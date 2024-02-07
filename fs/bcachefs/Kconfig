@@ -33,6 +33,12 @@ config BCACHEFS_QUOTA
 	depends on BCACHEFS_FS
 	select QUOTACTL
 
+config BCACHEFS_RUST
+	bool "bcachefs Rust support"
+	depends on BCACHEFS_FS && RUST
+	help
+	This enables the internal Rust bindings for bcachefs.
+
 config BCACHEFS_ERASURE_CODING
 	bool "bcachefs erasure coding (RAID5/6) support (EXPERIMENTAL)"
 	depends on BCACHEFS_FS
