@@ -51,5 +51,7 @@ examples:
             compatible = "ti,hdc3021", "ti,hdc3020";
             reg = <0x47>;
             vdd-supply = <&vcc_3v3>;
+            interrupt-parent = <&gpio3>;
+            interrupts = <23 IRQ_TYPE_EDGE_RISING>;
         };
     };
