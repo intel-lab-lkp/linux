@@ -4748,7 +4748,9 @@
 			[HW,MOUSE] Controls Logitech smartscroll autorepeat.
 			0 = disabled, 1 = enabled (default).
 
-	pstore.backend=	Specify the name of the pstore backend to use
+	pstore.backend=backend1,...,backendN
+			Specify the names of the pstore backends to use
+			or =all for all available backends
 
 	pti=		[X86-64] Control Page Table Isolation of user and
 			kernel address spaces.  Disabling this feature

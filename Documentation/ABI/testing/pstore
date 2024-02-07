@@ -41,7 +41,7 @@ Description:	Generic interface to platform dependent persistent storage.
 		persistent storage until at least this amount is reached.
 		Default is 10 Kbytes.
 
-		Pstore only supports one backend at a time. If multiple
-		backends are available, the preferred backend may be
-		set by passing the pstore.backend= argument to the kernel at
-		boot time.
+		Pstore now supports multiple backends at a time. If multiple
+		backends are available, the registrable backends may be
+		set by passing the pstore.backend= argument1, argument2...
+		or pstore.backend= all to the kernel at boot time.
