@@ -36,7 +36,7 @@ properties:
   reg:
     maxItems: 1
 
-  prog_b-gpios:
+  prog-gpios:
     description:
       config pin (referred to as PROGRAM_B in the manual)
     maxItems: 1
@@ -46,7 +46,7 @@ properties:
       config status pin (referred to as DONE in the manual)
     maxItems: 1
 
-  init-b-gpios:
+  init-gpios:
     description:
       initialization status and configuration error pin
       (referred to as INIT_B in the manual)
@@ -55,9 +55,9 @@ properties:
 required:
   - compatible
   - reg
-  - prog_b-gpios
+  - prog-gpios
   - done-gpios
-  - init-b-gpios
+  - init-gpios
 
 additionalProperties: false
 
@@ -72,8 +72,8 @@ examples:
         spi-max-frequency = <60000000>;
         spi-cpha;
         reg = <0>;
-        prog_b-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
-        init-b-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+        prog-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+        init-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
         done-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
       };
     };
