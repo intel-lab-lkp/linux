@@ -1631,21 +1631,19 @@ static void __net_exit fib_net_exit(struct net *net)
 	nl_fib_lookup_exit(net);
 }
 
-static void __net_exit fib_net_exit_batch(struct list_head *net_list)
+static void __net_exit fib_net_exit_batch_rtnl(struct list_head *net_list,
+					       struct list_head *dev_to_kill)
 {
 	struct net *net;
 
-	rtnl_lock();
 	list_for_each_entry(net, net_list, exit_list)
 		ip_fib_net_exit(net);
-
-	rtnl_unlock();
 }
 
 static struct pernet_operations fib_net_ops = {
 	.init = fib_net_init,
 	.exit = fib_net_exit,
-	.exit_batch = fib_net_exit_batch,
+	.exit_batch_rtnl = fib_net_exit_batch_rtnl,
 };
 
 void __init ip_fib_init(void)
