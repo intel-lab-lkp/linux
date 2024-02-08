@@ -49,6 +49,11 @@ properties:
       peripheral loader.
     type: boolean
 
+  qcom,adsp-skip-pll:
+    description:
+      Indicates if the LPASS PLL configuration is to be skipped.
+    type: boolean
+
 required:
   - compatible
   - reg
