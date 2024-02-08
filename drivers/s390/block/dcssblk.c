@@ -679,8 +679,8 @@ dcssblk_add_store(struct device *dev, struct device_attribute *attr, const char 
 		goto put_dev;
 
 	dax_dev = alloc_dax(dev_info, &dcssblk_dax_ops);
-	if (IS_ERR_OR_NULL(dax_dev)) {
-		rc = IS_ERR(dax_dev) ? PTR_ERR(dax_dev) : -EOPNOTSUPP;
+	if (IS_ERR(dax_dev)) {
+		rc = PTR_ERR(dax_dev);
 		goto put_dev;
 	}
 	set_dax_synchronous(dax_dev);
