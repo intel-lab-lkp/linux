@@ -1788,7 +1788,7 @@ static int writeback_single_inode(struct inode *inode,
 		else if (!(inode->i_state & I_SYNC_QUEUED)) {
 			if ((inode->i_state & I_DIRTY))
 				redirty_tail_locked(inode, wb);
-			else if (inode->i_state & I_DIRTY_TIME) {
+			else {
 				inode->dirtied_when = jiffies;
 				inode_io_list_move_locked(inode,
 							  wb,
