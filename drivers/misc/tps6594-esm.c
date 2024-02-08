@@ -45,13 +45,17 @@ static int tps6594_esm_probe(struct platform_device *pdev)
 	 * As a consequence, ESM can not be used on those PMIC.
 	 * Check the version and return an error in case of revision 1.
 	 */
-	ret = regmap_read(tps->regmap, TPS6594_REG_DEV_REV, &rev);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "Failed to read PMIC revision\n");
-	if (rev == TPS6594_DEV_REV_1)
-		return dev_err_probe(dev, -ENODEV,
-			      "ESM not supported for revision 1 PMIC\n");
+	if (tps->chip_id == TPS6594 ||
+	    tps->chip_id == TPS6593 ||
+	    tps->chip_id == LP8764) {
+		ret = regmap_read(tps->regmap, TPS6594_REG_DEV_REV, &rev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to read PMIC revision\n");
+		if (rev == TPS6594_DEV_REV_1)
+			return dev_err_probe(dev, -ENODEV,
+				      "ESM not supported for revision 1 PMIC\n");
+	}
 
 	for (i = 0; i < pdev->num_resources; i++) {
 		irq = platform_get_irq_byname(pdev, pdev->resource[i].name);
