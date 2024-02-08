@@ -331,7 +331,7 @@ back_patch()
 			if (cur_instr->patch_label->type != LABEL) {
 				char buf[255];
 
-				snprintf(buf, sizeof(buf),
+				scnprintf(buf, sizeof(buf),
 					 "Undefined label %s",
 					 cur_instr->patch_label->name);
 				stop(buf, EX_DATAERR);
