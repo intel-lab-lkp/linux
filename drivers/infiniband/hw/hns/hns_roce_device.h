@@ -594,11 +594,19 @@ struct hns_roce_work {
 	u32 queue_num;
 };
 
-enum cong_type {
-	CONG_TYPE_DCQCN,
-	CONG_TYPE_LDCP,
-	CONG_TYPE_HC3,
-	CONG_TYPE_DIP,
+enum hns_roce_scc_algo {
+	HNS_ROCE_SCC_ALGO_DCQCN = 0,
+	HNS_ROCE_SCC_ALGO_LDCP,
+	HNS_ROCE_SCC_ALGO_HC3,
+	HNS_ROCE_SCC_ALGO_DIP,
+	HNS_ROCE_SCC_ALGO_TOTAL,
+};
+
+enum hns_roce_cong_type {
+	CONG_TYPE_DCQCN = 1 << HNS_ROCE_SCC_ALGO_DCQCN,
+	CONG_TYPE_LDCP = 1 << HNS_ROCE_SCC_ALGO_LDCP,
+	CONG_TYPE_HC3 = 1 << HNS_ROCE_SCC_ALGO_HC3,
+	CONG_TYPE_DIP = 1 << HNS_ROCE_SCC_ALGO_DIP,
 };
 
 struct hns_roce_qp {
@@ -644,7 +652,7 @@ struct hns_roce_qp {
 	struct list_head	sq_node; /* all send qps are on a list */
 	struct hns_user_mmap_entry *dwqe_mmap_entry;
 	u32			config;
-	enum cong_type		cong_type;
+	enum hns_roce_cong_type	cong_type;
 };
 
 struct hns_roce_ib_iboe {
@@ -845,7 +853,8 @@ struct hns_roce_caps {
 	u16		default_aeq_period;
 	u16		default_aeq_arm_st;
 	u16		default_ceq_arm_st;
-	enum cong_type	cong_type;
+	u8		cong_cap;
+	enum hns_roce_cong_type	default_cong_type;
 };
 
 enum hns_roce_device_state {
