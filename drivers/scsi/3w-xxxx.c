@@ -1099,7 +1099,7 @@ static int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits)
 	command_packet->request_id = request_id;
 	command_packet->status = 0x0;
 	command_packet->flags = 0x0;
-	command_packet->byte6.message_credits = message_credits; 
+	command_packet->byte6.message_credits = message_credits;
 	command_packet->byte8.init_connection.response_queue_pointer = 0x0;
 	command_que_value = tw_dev->command_packet_physical_address[request_id];
 
