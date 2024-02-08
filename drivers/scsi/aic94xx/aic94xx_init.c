@@ -264,8 +264,7 @@ static ssize_t asd_show_dev_rev(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct asd_ha_struct *asd_ha = dev_to_asd_ha(dev);
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-			asd_dev_rev[asd_ha->revision_id]);
+	return sysfs_emit(buf, "%s\n", asd_dev_rev[asd_ha->revision_id]);
 }
 static DEVICE_ATTR(aic_revision, S_IRUGO, asd_show_dev_rev, NULL);
 
@@ -273,7 +272,7 @@ static ssize_t asd_show_dev_bios_build(struct device *dev,
 				       struct device_attribute *attr,char *buf)
 {
 	struct asd_ha_struct *asd_ha = dev_to_asd_ha(dev);
-	return snprintf(buf, PAGE_SIZE, "%d\n", asd_ha->hw_prof.bios.bld);
+	return sysfs_emit(buf, "%d\n", asd_ha->hw_prof.bios.bld);
 }
 static DEVICE_ATTR(bios_build, S_IRUGO, asd_show_dev_bios_build, NULL);
 
@@ -281,7 +280,7 @@ static ssize_t asd_show_dev_pcba_sn(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct asd_ha_struct *asd_ha = dev_to_asd_ha(dev);
-	return snprintf(buf, PAGE_SIZE, "%s\n", asd_ha->hw_prof.pcba_sn);
+	return sysfs_emit(buf, "%s\n", asd_ha->hw_prof.pcba_sn);
 }
 static DEVICE_ATTR(pcba_sn, S_IRUGO, asd_show_dev_pcba_sn, NULL);
 
@@ -452,7 +451,7 @@ static ssize_t asd_show_update_bios(struct device *dev,
 	if (asd_ha->bios_status != FLASH_IN_PROGRESS)
 		asd_ha->bios_status = FLASH_OK;
 
-	return snprintf(buf, PAGE_SIZE, "status=%x %s\n",
+	return sysfs_emit(buf, "status=%x %s\n",
 			flash_error_table[i].err_code,
 			flash_error_table[i].reason);
 }
@@ -937,7 +936,7 @@ static int asd_scan_finished(struct Scsi_Host *shost, unsigned long time)
 
 static ssize_t version_show(struct device_driver *driver, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n", ASD_DRIVER_VERSION);
+	return sysfs_emit(buf, "%s\n", ASD_DRIVER_VERSION);
 }
 static DRIVER_ATTR_RO(version);
 
