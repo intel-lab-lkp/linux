@@ -583,7 +583,7 @@ static ssize_t aac_show_unique_id(struct device *dev,
 	if (sdev_channel(sdev) == CONTAINER_CHANNEL)
 		memcpy(sn, aac->fsa_dev[sdev_id(sdev)].identifier, sizeof(sn));
 
-	return snprintf(buf, 16 * 2 + 2,
+	return scnprintf(buf, 16 * 2 + 2,
 		"%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
 		sn[0], sn[1], sn[2], sn[3],
 		sn[4], sn[5], sn[6], sn[7],
@@ -1302,13 +1302,13 @@ static ssize_t aac_show_serial_number(struct device *device,
 	int len = 0;
 
 	if (le32_to_cpu(dev->adapter_info.serial[0]) != 0xBAD0)
-		len = snprintf(buf, 16, "%06X\n",
+		len = scnprintf(buf, 16, "%06X\n",
 		  le32_to_cpu(dev->adapter_info.serial[0]));
 	if (len &&
 	  !memcmp(&dev->supplement_adapter_info.mfg_pcba_serial_no[
 	    sizeof(dev->supplement_adapter_info.mfg_pcba_serial_no)-len],
 	  buf, len-1))
-		len = snprintf(buf, 16, "%.*s\n",
+		len = scnprintf(buf, 16, "%.*s\n",
 		  (int)sizeof(dev->supplement_adapter_info.mfg_pcba_serial_no),
 		  dev->supplement_adapter_info.mfg_pcba_serial_no);
 
