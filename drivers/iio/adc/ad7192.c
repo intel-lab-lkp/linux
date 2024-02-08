@@ -384,9 +384,8 @@ static int ad7192_device_clock_select(struct ad7192_state *st)
 	return clock_sel;
 }
 
-static int ad7192_setup(struct iio_dev *indio_dev)
+static int ad7192_setup(struct ad7192_state *st)
 {
-	struct ad7192_state *st = iio_priv(indio_dev);
 	struct device *dev = &st->sd.spi->dev;
 	bool rej60_en, refin2_en;
 	bool buf_en, bipolar, burnout_curr_en;
@@ -458,7 +457,7 @@ static int ad7192_setup(struct iio_dev *indio_dev)
 	/* Populate available ADC input ranges */
 	for (i = 0; i < ARRAY_SIZE(st->scale_avail); i++) {
 		scale_uv = ((u64)st->int_vref_mv * 100000000)
-			>> (indio_dev->channels[0].scan_type.realbits -
+			>> (st->chip_info->channels[0].scan_type.realbits -
 			!FIELD_GET(AD7192_CONF_UNIPOLAR, st->conf));
 		scale_uv >>= i;
 
@@ -1150,7 +1149,7 @@ static int ad7192_probe(struct spi_device *spi)
 		}
 	}
 
-	ret = ad7192_setup(indio_dev);
+	ret = ad7192_setup(st);
 	if (ret)
 		return ret;
 
