@@ -85,11 +85,6 @@ struct ht16k33_fbdev {
 	uint8_t *cache;
 };
 
-struct ht16k33_seg {
-	struct linedisp linedisp;
-	char curr[4];
-};
-
 struct ht16k33_priv {
 	struct i2c_client *client;
 	struct delayed_work work;
@@ -97,7 +92,7 @@ struct ht16k33_priv {
 	struct ht16k33_keypad keypad;
 	union {
 		struct ht16k33_fbdev fbdev;
-		struct ht16k33_seg seg;
+		struct linedisp linedisp;
 	};
 	enum display_type type;
 	uint8_t blink;
@@ -412,10 +407,9 @@ static void ht16k33_seg7_update(struct work_struct *work)
 {
 	struct ht16k33_priv *priv = container_of(work, struct ht16k33_priv,
 						 work.work);
-	struct ht16k33_seg *seg = &priv->seg;
-	struct linedisp *linedisp = &seg->linedisp;
+	struct linedisp *linedisp = &priv->linedisp;
 	struct linedisp_map *map = linedisp->map;
-	char *s = seg->curr;
+	char *s = linedisp->curr;
 	uint8_t buf[9];
 
 	buf[0] = map_to_seg7(&map->map.seg7, *s++);
@@ -435,10 +429,9 @@ static void ht16k33_seg14_update(struct work_struct *work)
 {
 	struct ht16k33_priv *priv = container_of(work, struct ht16k33_priv,
 						 work.work);
-	struct ht16k33_seg *seg = &priv->seg;
-	struct linedisp *linedisp = &seg->linedisp;
+	struct linedisp *linedisp = &priv->linedisp;
 	struct linedisp_map *map = linedisp->map;
-	char *s = seg->curr;
+	char *s = linedisp->curr;
 	uint8_t buf[8];
 
 	put_unaligned_le16(map_to_seg14(&map->map.seg14, *s++), buf + 0);
@@ -451,8 +444,7 @@ static void ht16k33_seg14_update(struct work_struct *work)
 
 static int ht16k33_linedisp_get_map_type(struct linedisp *linedisp)
 {
-	struct ht16k33_priv *priv = container_of(linedisp, struct ht16k33_priv,
-						 seg.linedisp);
+	struct ht16k33_priv *priv = container_of(linedisp, struct ht16k33_priv, linedisp);
 
 	switch (priv->type) {
 	case DISP_MATRIX:
@@ -471,8 +463,7 @@ static int ht16k33_linedisp_get_map_type(struct linedisp *linedisp)
 
 static void ht16k33_linedisp_update(struct linedisp *linedisp)
 {
-	struct ht16k33_priv *priv = container_of(linedisp, struct ht16k33_priv,
-						 seg.linedisp);
+	struct ht16k33_priv *priv = container_of(linedisp, struct ht16k33_priv, linedisp);
 
 	schedule_delayed_work(&priv->work, 0);
 }
@@ -663,14 +654,13 @@ err_fbdev_buffer:
 static int ht16k33_seg_probe(struct device *dev, struct ht16k33_priv *priv,
 			     uint32_t brightness)
 {
-	struct ht16k33_seg *seg = &priv->seg;
 	int err;
 
 	err = ht16k33_brightness_set(priv, brightness);
 	if (err)
 		return err;
 
-	return linedisp_register(&seg->linedisp, dev, 4, seg->curr, &ht16k33_linedisp_ops);
+	return linedisp_register(&priv->linedisp, dev, 4, NULL, &ht16k33_linedisp_ops);
 }
 
 static int ht16k33_probe(struct i2c_client *client)
@@ -754,7 +744,7 @@ static void ht16k33_remove(struct i2c_client *client)
 
 	case DISP_QUAD_7SEG:
 	case DISP_QUAD_14SEG:
-		linedisp_unregister(&priv->seg.linedisp);
+		linedisp_unregister(&priv->linedisp);
 		break;
 	}
 }
