@@ -2046,6 +2046,23 @@ static long writeback_inodes_wb(struct bdi_writeback *wb, long nr_pages,
 	return nr_pages - work.nr_pages;
 }
 
+static void filter_expired_io(struct bdi_writeback *wb)
+{
+	struct inode *inode, *tmp;
+	unsigned long expired_jiffies = jiffies -
+		msecs_to_jiffies(dirty_expire_interval * 10);
+
+	spin_lock(&wb->list_lock);
+	list_for_each_entry_safe(inode, tmp, &wb->b_io, i_io_list)
+		if (inode_dirtied_after(inode, expired_jiffies))
+			redirty_tail(inode, wb);
+
+	list_for_each_entry_safe(inode, tmp, &wb->b_more_io, i_io_list)
+		if (inode_dirtied_after(inode, expired_jiffies))
+			redirty_tail(inode, wb);
+	spin_unlock(&wb->list_lock);
+}
+
 /*
  * Explicit flushing or periodic writeback of "old" data.
  *
@@ -2069,6 +2086,9 @@ static long wb_writeback(struct bdi_writeback *wb,
 	struct inode *inode;
 	long progress;
 	struct blk_plug plug;
+
+	if (work->for_kupdate)
+		filter_expired_io(wb);
 
 	blk_start_plug(&plug);
 	for (;;) {
