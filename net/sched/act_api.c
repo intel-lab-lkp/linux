@@ -886,8 +886,24 @@ new:
 }
 EXPORT_SYMBOL(tcf_idr_check_alloc);
 
-void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
-			 struct tcf_idrinfo *idrinfo)
+int tc_action_net_init(struct net *net, struct tc_action_net *tn,
+		       const struct tc_action_ops *ops)
+{
+	int err = 0;
+
+	tn->idrinfo = kmalloc(sizeof(*tn->idrinfo), GFP_KERNEL);
+	if (!tn->idrinfo)
+		return -ENOMEM;
+	tn->ops = ops;
+	tn->idrinfo->net = net;
+	mutex_init(&tn->idrinfo->lock);
+	idr_init(&tn->idrinfo->action_idr);
+	return err;
+}
+EXPORT_SYMBOL(tc_action_net_init);
+
+static void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
+				struct tcf_idrinfo *idrinfo)
 {
 	struct idr *idr = &idrinfo->action_idr;
 	struct tc_action *p;
@@ -904,7 +920,21 @@ void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
 	}
 	idr_destroy(&idrinfo->action_idr);
 }
-EXPORT_SYMBOL(tcf_idrinfo_destroy);
+
+void tc_action_net_exit(struct list_head *net_list, unsigned int id)
+{
+	struct net *net;
+
+	rtnl_lock();
+	list_for_each_entry(net, net_list, exit_list) {
+		struct tc_action_net *tn = net_generic(net, id);
+
+		tcf_idrinfo_destroy(tn->ops, tn->idrinfo);
+		kfree(tn->idrinfo);
+	}
+	rtnl_unlock();
+}
+EXPORT_SYMBOL(tc_action_net_exit);
 
 static LIST_HEAD(act_base);
 static DEFINE_RWLOCK(act_mod_lock);

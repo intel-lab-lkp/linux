@@ -146,39 +146,10 @@ struct tc_action_net {
 	const struct tc_action_ops *ops;
 };
 
-static inline
 int tc_action_net_init(struct net *net, struct tc_action_net *tn,
-		       const struct tc_action_ops *ops)
-{
-	int err = 0;
+		       const struct tc_action_ops *ops);
 
-	tn->idrinfo = kmalloc(sizeof(*tn->idrinfo), GFP_KERNEL);
-	if (!tn->idrinfo)
-		return -ENOMEM;
-	tn->ops = ops;
-	tn->idrinfo->net = net;
-	mutex_init(&tn->idrinfo->lock);
-	idr_init(&tn->idrinfo->action_idr);
-	return err;
-}
-
-void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
-			 struct tcf_idrinfo *idrinfo);
-
-static inline void tc_action_net_exit(struct list_head *net_list,
-				      unsigned int id)
-{
-	struct net *net;
-
-	rtnl_lock();
-	list_for_each_entry(net, net_list, exit_list) {
-		struct tc_action_net *tn = net_generic(net, id);
-
-		tcf_idrinfo_destroy(tn->ops, tn->idrinfo);
-		kfree(tn->idrinfo);
-	}
-	rtnl_unlock();
-}
+void tc_action_net_exit(struct list_head *net_list, unsigned int id);
 
 int tcf_generic_walker(struct tc_action_net *tn, struct sk_buff *skb,
 		       struct netlink_callback *cb, int type,
