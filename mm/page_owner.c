@@ -61,6 +61,22 @@ static __init bool need_page_owner(void)
 	return page_owner_enabled;
 }
 
+static void inc_stack_record_count(depot_stack_handle_t handle)
+{
+	struct stack_record *stack = stack_depot_get_stack(handle);
+
+	if (stack)
+		refcount_inc(&stack->count);
+}
+
+static void dec_stack_record_count(depot_stack_handle_t handle)
+{
+	struct stack_record *stack = stack_depot_get_stack(handle);
+
+	if (stack)
+		refcount_dec(&stack->count);
+}
+
 static __always_inline depot_stack_handle_t create_dummy_stack(void)
 {
 	unsigned long entries[4];
@@ -140,12 +156,16 @@ void __reset_page_owner(struct page *page, unsigned short order)
 	int i;
 	struct page_ext *page_ext;
 	depot_stack_handle_t handle;
+	depot_stack_handle_t alloc_handle;
 	struct page_owner *page_owner;
 	u64 free_ts_nsec = local_clock();
 
 	page_ext = page_ext_get(page);
 	if (unlikely(!page_ext))
 		return;
+
+	page_owner = get_page_owner(page_ext);
+	alloc_handle = page_owner->handle;
 
 	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
 	for (i = 0; i < (1 << order); i++) {
@@ -158,6 +178,15 @@ void __reset_page_owner(struct page *page, unsigned short order)
 		page_ext = page_ext_next(page_ext);
 	}
 	page_ext_put(page_ext);
+	if (alloc_handle != early_handle)
+		/*
+		 * early_handle is being set as a handle for all those
+		 * early allocated pages. See init_pages_in_zone().
+		 * Since their refcount is not being incremented because
+		 * the machinery is not ready yet, we cannot decrement
+		 * their refcount either.
+		 */
+		dec_stack_record_count(alloc_handle);
 }
 
 static inline void __set_page_owner_handle(struct page_ext *page_ext,
@@ -199,6 +228,7 @@ noinline void __set_page_owner(struct page *page, unsigned short order,
 		return;
 	__set_page_owner_handle(page_ext, handle, order, gfp_mask);
 	page_ext_put(page_ext);
+	inc_stack_record_count(handle);
 }
 
 void __set_page_owner_migrate_reason(struct page *page, int reason)

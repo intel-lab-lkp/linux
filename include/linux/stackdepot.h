@@ -176,6 +176,14 @@ depot_stack_handle_t stack_depot_save(unsigned long *entries,
 				      unsigned int nr_entries, gfp_t gfp_flags);
 
 /**
+ * stack_depo_get_stack - Get a pointer to a stack struct
+ * @handle: Stack depot handle
+ *
+ * Return: Returns a pointer to a stack struct
+ */
+struct stack_record *stack_depot_get_stack(depot_stack_handle_t handle);
+
+/**
  * stack_depot_fetch - Fetch a stack trace from stack depot
  *
  * @handle:	Stack depot handle returned from stack_depot_save()
