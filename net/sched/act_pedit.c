@@ -629,14 +629,15 @@ static __net_init int pedit_init_net(struct net *net)
 	return tc_action_net_init(net, tn, &act_pedit_ops);
 }
 
-static void __net_exit pedit_exit_net(struct list_head *net_list)
+static void __net_exit pedit_exit_batch_rtnl(struct list_head *net_list,
+					     struct list_head *dev_to_kill)
 {
-	tc_action_net_exit(net_list, act_pedit_ops.net_id);
+	tc_action_net_exit_batch_rtnl(net_list, act_pedit_ops.net_id);
 }
 
 static struct pernet_operations pedit_net_ops = {
 	.init = pedit_init_net,
-	.exit_batch = pedit_exit_net,
+	.exit_batch_rtnl = pedit_exit_batch_rtnl,
 	.id   = &act_pedit_ops.net_id,
 	.size = sizeof(struct tc_action_net),
 };

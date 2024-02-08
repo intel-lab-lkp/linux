@@ -149,7 +149,8 @@ struct tc_action_net {
 int tc_action_net_init(struct net *net, struct tc_action_net *tn,
 		       const struct tc_action_ops *ops);
 
-void tc_action_net_exit(struct list_head *net_list, unsigned int id);
+void tc_action_net_exit_batch_rtnl(struct list_head *net_list,
+				   unsigned int id);
 
 int tcf_generic_walker(struct tc_action_net *tn, struct sk_buff *skb,
 		       struct netlink_callback *cb, int type,

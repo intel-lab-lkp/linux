@@ -654,14 +654,15 @@ static __net_init int gate_init_net(struct net *net)
 	return tc_action_net_init(net, tn, &act_gate_ops);
 }
 
-static void __net_exit gate_exit_net(struct list_head *net_list)
+static void __net_exit gate_exit_batch_rtnl(struct list_head *net_list,
+					    struct list_head *dev_to_kill)
 {
-	tc_action_net_exit(net_list, act_gate_ops.net_id);
+	tc_action_net_exit_batch_rtnl(net_list, act_gate_ops.net_id);
 }
 
 static struct pernet_operations gate_net_ops = {
 	.init = gate_init_net,
-	.exit_batch = gate_exit_net,
+	.exit_batch_rtnl = gate_exit_batch_rtnl,
 	.id   = &act_gate_ops.net_id,
 	.size = sizeof(struct tc_action_net),
 };

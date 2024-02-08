@@ -921,20 +921,19 @@ static void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
 	idr_destroy(&idrinfo->action_idr);
 }
 
-void tc_action_net_exit(struct list_head *net_list, unsigned int id)
+void tc_action_net_exit_batch_rtnl(struct list_head *net_list, unsigned int id)
 {
 	struct net *net;
 
-	rtnl_lock();
+	ASSERT_RTNL();
 	list_for_each_entry(net, net_list, exit_list) {
 		struct tc_action_net *tn = net_generic(net, id);
 
 		tcf_idrinfo_destroy(tn->ops, tn->idrinfo);
 		kfree(tn->idrinfo);
 	}
-	rtnl_unlock();
 }
-EXPORT_SYMBOL(tc_action_net_exit);
+EXPORT_SYMBOL(tc_action_net_exit_batch_rtnl);
 
 static LIST_HEAD(act_base);
 static DEFINE_RWLOCK(act_mod_lock);
