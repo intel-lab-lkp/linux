@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * ESM (Error Signal Monitor) driver for TI TPS6594/TPS6593/LP8764 PMICs
+ * ESM (Error Signal Monitor) driver for TI TPS65224/TPS6594/TPS6593/LP8764 PMICs
  *
  * Copyright (C) 2023 BayLibre Incorporated - https://www.baylibre.com/
  */
@@ -20,6 +20,8 @@
 #define ESM_MODE_CFG_CLR  0x0
 #define ESM_START_CLR     0x0
 
+static struct reg_field tps65224_esm_mode_cfg = REG_FIELD(TPS6594_REG_ESM_MCU_MODE_CFG,  5, 6);
+static struct reg_field tps65224_esm_start    = REG_FIELD(TPS6594_REG_ESM_MCU_START_REG, 0, 0);
 static struct reg_field tps6594_esm_mode_cfg  = REG_FIELD(TPS6594_REG_ESM_SOC_MODE_CFG,  5, 6);
 static struct reg_field tps6594_esm_start     = REG_FIELD(TPS6594_REG_ESM_SOC_START_REG, 0, 0);
 
@@ -87,8 +89,14 @@ static int tps6594_esm_probe(struct platform_device *pdev)
 	if (!esm)
 		return -ENOMEM;
 
-	esm->esm_mode_cfg = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_mode_cfg);
-	esm->esm_start = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_start);
+	if (tps->chip_id == TPS65224) {
+		esm->esm_mode_cfg = devm_regmap_field_alloc(dev, tps->regmap,
+							    tps65224_esm_mode_cfg);
+		esm->esm_start = devm_regmap_field_alloc(dev, tps->regmap, tps65224_esm_start);
+	} else {
+		esm->esm_mode_cfg = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_mode_cfg);
+		esm->esm_start = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_start);
+	}
 
 	if (IS_ERR(esm->esm_mode_cfg)) {
 		dev_err(dev, "esm_mode_cfg reg field init failed\n");
@@ -176,5 +184,6 @@ module_platform_driver(tps6594_esm_driver);
 
 MODULE_ALIAS("platform:tps6594-esm");
 MODULE_AUTHOR("Julien Panis <jpanis@baylibre.com>");
+MODULE_AUTHOR("Bhargav Raviprakash <bhargav.r@ltts.com>");
 MODULE_DESCRIPTION("TPS6594 Error Signal Monitor Driver");
 MODULE_LICENSE("GPL");
