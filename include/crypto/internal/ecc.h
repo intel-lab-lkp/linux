@@ -57,6 +57,25 @@ static inline void ecc_swap_digits(const void *in, u64 *out, unsigned int ndigit
 }
 
 /**
+ * ecc_digits_from_array() - Create ndigits from a byte array of nbytes
+ * @in:       Input byte array
+ * @nbytes    Size of input byte array
+ * @out       Output digits array
+ * @ndigits:  Number of digits to create from byte array
+ */
+static inline void ecc_digits_from_array(const u8 *in, unsigned int nbytes,
+					 u64 *out, unsigned int ndigits)
+{
+	unsigned int sz = ndigits * sizeof(u64);
+	u8 tmp[ECC_MAX_DIGITS * sizeof(u64)];
+	unsigned int o = sz - nbytes;
+
+	memset(tmp, 0, o);
+	memcpy(&tmp[o], in, nbytes);
+	ecc_swap_digits(tmp, out, ndigits);
+}
+
+/**
  * ecc_is_key_valid() - Validate a given ECDH private key
  *
  * @curve_id:		id representing the curve to use
