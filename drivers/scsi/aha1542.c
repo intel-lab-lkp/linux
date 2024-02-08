@@ -772,7 +772,7 @@ static struct Scsi_Host *aha1542_hw_init(const struct scsi_host_template *tpnt,
 		goto unregister;
 
 	if (sh->dma_channel != 0xFF)
-		snprintf(dma_info, sizeof(dma_info), "DMA %d", sh->dma_channel);
+		scnprintf(dma_info, sizeof(dma_info), "DMA %d", sh->dma_channel);
 	shost_printk(KERN_INFO, sh, "Adaptec AHA-1542 (SCSI-ID %d) at IO 0x%x, IRQ %d, %s\n",
 				sh->this_id, base_io, sh->irq, dma_info);
 	if (aha1542->bios_translation == BIOS_TRANSLATION_25563)
