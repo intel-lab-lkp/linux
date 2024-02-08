@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -766,17 +767,22 @@ static int lpass_audio_cc_sc7280_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	clk_zonda_pll_configure(&lpass_audio_cc_pll, regmap, &lpass_audio_cc_pll_config);
+	if (!of_property_read_bool(pdev->dev.of_node, "qcom,adsp-skip-pll")) {
+		clk_zonda_pll_configure(&lpass_audio_cc_pll, regmap, &lpass_audio_cc_pll_config);
 
-	/* PLL settings */
-	regmap_write(regmap, 0x4, 0x3b);
-	regmap_write(regmap, 0x8, 0xff05);
+		/* PLL settings */
+		regmap_write(regmap, 0x4, 0x3b);
+		regmap_write(regmap, 0x8, 0xff05);
+	}
 
 	ret = qcom_cc_really_probe(pdev, &lpass_audio_cc_sc7280_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register LPASS AUDIO CC clocks\n");
 		goto exit;
 	}
+
+	lpass_audio_cc_sc7280_regmap_config.name = "lpassaudio_cc_reset";
+	lpass_audio_cc_sc7280_regmap_config.max_register = 0xc8;
 
 	ret = qcom_cc_probe_by_index(pdev, 1, &lpass_audio_cc_reset_sc7280_desc);
 	if (ret) {
