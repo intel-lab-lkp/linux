@@ -749,6 +749,89 @@ static const struct file_operations proc_page_owner_operations = {
 	.llseek		= lseek_page_owner,
 };
 
+struct stack_iterator {
+	unsigned long nr_table;
+	struct list_head *bucket;
+	struct stack_record *last_stack;
+};
+
+static void *stack_start(struct seq_file *m, loff_t *ppos)
+{
+	struct stack_iterator *iter = m->private;
+
+	if (*ppos == -1UL)
+		return NULL;
+
+	return stack_depot_get_next_stack(&iter->nr_table,
+					  &iter->bucket,
+					  &iter->last_stack);
+}
+
+static void *stack_next(struct seq_file *m, void *v, loff_t *ppos)
+{
+	struct stack_iterator *iter = m->private;
+	struct stack_record *stack;
+
+	stack = stack_depot_get_next_stack(&iter->nr_table,
+					   &iter->bucket,
+					   &iter->last_stack);
+	*ppos = stack ? *ppos + 1 : -1UL;
+
+	return stack;
+}
+
+static int stack_print(struct seq_file *m, void *v)
+{
+	char *buf;
+	int ret = 0;
+	struct stack_iterator *iter = m->private;
+	struct stack_record *stack = iter->last_stack;
+
+	if (!stack->size || stack->size < 0 || refcount_read(&stack->count) < 2)
+		return 0;
+
+	buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+
+	ret += stack_trace_snprint(buf, PAGE_SIZE, stack->entries, stack->size,
+				   0);
+	if (!ret)
+		goto out;
+
+	scnprintf(buf + ret, PAGE_SIZE - ret, "stack_count: %d\n\n",
+		  refcount_read(&stack->count));
+
+	seq_printf(m, buf);
+	seq_puts(m, "\n\n");
+out:
+	kfree(buf);
+
+	return 0;
+}
+
+static void stack_stop(struct seq_file *m, void *v)
+{
+}
+
+static const struct seq_operations page_owner_stack_op = {
+	.start	= stack_start,
+	.next	= stack_next,
+	.stop	= stack_stop,
+	.show	= stack_print
+};
+
+static int page_owner_stack_open(struct inode *inode, struct file *file)
+{
+	return seq_open_private(file, &page_owner_stack_op,
+				sizeof(struct stack_iterator));
+}
+
+const struct file_operations page_owner_stack_operations = {
+	.open		= page_owner_stack_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
 static int __init pageowner_init(void)
 {
 	if (!static_branch_unlikely(&page_owner_inited)) {
@@ -758,6 +841,8 @@ static int __init pageowner_init(void)
 
 	debugfs_create_file("page_owner", 0400, NULL, NULL,
 			    &proc_page_owner_operations);
+	debugfs_create_file("page_owner_stacks", 0400, NULL, NULL,
+			    &page_owner_stack_operations);
 
 	return 0;
 }

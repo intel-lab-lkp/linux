@@ -184,6 +184,26 @@ depot_stack_handle_t stack_depot_save(unsigned long *entries,
 struct stack_record *stack_depot_get_stack(depot_stack_handle_t handle);
 
 /**
+ * stack_depot_get_next_stack - Returns all stacks, one at a time
+ *
+ * @table:	Current table we are checking
+ * @bucket:	Current bucket we are checking
+ * @last_found:	Last stack that was found
+ *
+ * This function finds first a non-empty bucket and returns the first stack
+ * stored in it. On consequent calls, it walks the bucket to see whether
+ * it contains more stacks.
+ * Once we have walked all the stacks in a bucket, we check
+ * the next one, and we repeat the same steps until we have checked all of them
+ *
+ * Return: A pointer a to stack_record struct, or NULL when we have walked all
+ * buckets.
+ */
+struct stack_record *stack_depot_get_next_stack(unsigned long *table,
+						struct list_head **bucket,
+						struct stack_record **last_found);
+
+/**
  * stack_depot_fetch - Fetch a stack trace from stack depot
  *
  * @handle:	Stack depot handle returned from stack_depot_save()

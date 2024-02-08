@@ -782,6 +782,52 @@ unsigned int stack_depot_get_extra_bits(depot_stack_handle_t handle)
 }
 EXPORT_SYMBOL(stack_depot_get_extra_bits);
 
+struct stack_record *stack_depot_get_next_stack(unsigned long *table,
+						struct list_head **curr_bucket,
+						struct stack_record **last_found)
+{
+	struct list_head *bucket = *curr_bucket;
+	unsigned long nr_table = *table;
+	struct stack_record *found = NULL;
+	unsigned long stack_table_entries = stack_hash_mask + 1;
+
+	rcu_read_lock_sched_notrace();
+	if (!bucket) {
+		/*
+		 * Find a non-empty bucket. Once we have found it,
+		 * we will use list_for_each_entry_continue_rcu() on the next
+		 * call to keep walking the bucket.
+		 */
+new_table:
+		bucket = &stack_table[nr_table];
+		list_for_each_entry_rcu(found, bucket, hash_list) {
+			goto out;
+		}
+	} else {
+		 /* Check whether we have more stacks in this bucket */
+		found = *last_found;
+		list_for_each_entry_continue_rcu(found, bucket, hash_list) {
+			goto out;
+		}
+	}
+
+	/* No more stacks in this bucket, check the next one */
+	nr_table++;
+	if (nr_table < stack_table_entries)
+		goto new_table;
+
+	/* We are done walking all buckets */
+	found = NULL;
+
+out:
+	*table = nr_table;
+	*curr_bucket = bucket;
+	*last_found = found;
+	rcu_read_unlock_sched_notrace();
+
+	return found;
+}
+
 static int stats_show(struct seq_file *seq, void *v)
 {
 	/*
