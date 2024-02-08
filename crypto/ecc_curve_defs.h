@@ -119,6 +119,7 @@ static u64 nist_p521_b[] = { 0xef451fd46b503f00ull, 0x3573df883d2c34f1ull,
 				0x051ull };
 static struct ecc_curve nist_p521 = {
 	.name = "nist_521",
+	.nbits = 521,
 	.g = {
 		.x = nist_p521_g_x,
 		.y = nist_p521_g_y,
