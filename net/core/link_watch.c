@@ -70,8 +70,6 @@ static void rfc2863_policy(struct net_device *dev)
 	if (operstate == READ_ONCE(dev->operstate))
 		return;
 
-	write_lock(&dev_base_lock);
-
 	switch(dev->link_mode) {
 	case IF_LINK_MODE_TESTING:
 		if (operstate == IF_OPER_UP)
@@ -88,8 +86,6 @@ static void rfc2863_policy(struct net_device *dev)
 	}
 
 	WRITE_ONCE(dev->operstate, operstate);
-
-	write_unlock(&dev_base_lock);
 }
 
 
