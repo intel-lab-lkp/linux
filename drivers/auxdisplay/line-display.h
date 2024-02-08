@@ -14,6 +14,7 @@
 /**
  * struct linedisp - character line display private data structure
  * @dev: the line display device
+ * @id: instance id of this display
  * @timer: timer used to implement scrolling
  * @update: function called to update the display
  * @buf: pointer to the buffer for the string currently displayed
@@ -25,6 +26,7 @@
  */
 struct linedisp {
 	struct device dev;
+	unsigned int id;
 	struct timer_list timer;
 	void (*update)(struct linedisp *linedisp);
 	char *buf;
