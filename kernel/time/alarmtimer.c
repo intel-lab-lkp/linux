@@ -27,6 +27,7 @@
 #include <linux/compat.h>
 #include <linux/module.h>
 #include <linux/time_namespace.h>
+#include <linux/suspend.h>
 
 #include "posix-timers.h"
 
@@ -116,6 +117,87 @@ static int alarmtimer_sysfs_add(void)
 }
 
 /**
+ * alarmtimer_get_soonest - Finds the soonest alarm to expire among the
+ * alarm bases.
+ * @rtc: ptr to rtc_device struct
+ * @min: ptr to relative time to the soonest alarm to expire
+ * @expires: ptr to absolute time of the soonest alarm to expire
+ * @type: ptr to alarm type
+ *
+ * Returns 1 if soonest alarm was found, returns 0 if don't care.
+ */
+static int alarmtimer_get_soonest(struct rtc_device *rtc, ktime_t *min,
+					ktime_t *expires, int *type)
+{
+	int i;
+	unsigned long flags;
+
+	spin_lock_irqsave(&freezer_delta_lock, flags);
+	*min = freezer_delta;
+	*expires = freezer_expires;
+	*type = freezer_alarmtype;
+	freezer_delta = 0;
+	spin_unlock_irqrestore(&freezer_delta_lock, flags);
+
+	rtc = alarmtimer_get_rtcdev();
+	/* If we have no rtcdev, just return */
+	if (!rtc)
+		return 0;
+
+	/* Find the soonest timer to expire */
+	for (i = 0; i < ALARM_NUMTYPE; i++) {
+		struct alarm_base *base = &alarm_bases[i];
+		struct timerqueue_node *next;
+		ktime_t delta;
+
+		spin_lock_irqsave(&base->lock, flags);
+		next = timerqueue_getnext(&base->timerqueue);
+		spin_unlock_irqrestore(&base->lock, flags);
+		if (!next)
+			continue;
+		delta = ktime_sub(next->expires, base->get_ktime());
+		if (!*min || delta < *min) {
+			*expires = next->expires;
+			*min = delta;
+			*type = i;
+		}
+	}
+
+	if (*min == 0)
+		return 0;
+
+	return 1;
+}
+
+static int alarmtimer_pm_callback(struct notifier_block *nb,
+			    unsigned long mode, void *_unused)
+{
+	ktime_t min, expires;
+	struct rtc_device *rtc = NULL;
+	int type;
+
+	switch (mode) {
+	case PM_SUSPEND_PREPARE:
+		/* Find the soonest timer to expire */
+		if (!alarmtimer_get_soonest(rtc, &min, &expires, &type))
+			return NOTIFY_DONE;
+
+		if (ktime_to_ns(min) <
+			suspend_check_duration_ms * NSEC_PER_MSEC) {
+			pr_warn("[%s] Suspend abort due to imminent alarm\n", __func__);
+			pm_wakeup_event(&rtc->dev, suspend_check_duration_ms);
+			return notifier_from_errno(-ETIME);
+		}
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block alarmtimer_pm_notifier = {
+	.notifier_call = alarmtimer_pm_callback,
+};
+
+/**
  * alarmtimer_get_rtcdev - Return selected rtcdevice
  *
  * This function returns the rtc device to use for wakealarms.
@@ -181,6 +263,7 @@ unlock:
 static inline void alarmtimer_rtc_timer_init(void)
 {
 	rtc_timer_init(&rtctimer, NULL, NULL);
+	register_pm_notifier(&alarmtimer_pm_notifier);
 }
 
 static struct class_interface alarmtimer_rtc_interface = {
@@ -296,48 +379,13 @@ EXPORT_SYMBOL_GPL(alarm_expires_remaining);
 static int alarmtimer_suspend(struct device *dev)
 {
 	ktime_t min, now, expires;
-	int i, ret, type;
-	struct rtc_device *rtc;
-	unsigned long flags;
+	struct rtc_device *rtc = NULL;
 	struct rtc_time tm;
+	int ret, type;
 
-	spin_lock_irqsave(&freezer_delta_lock, flags);
-	min = freezer_delta;
-	expires = freezer_expires;
-	type = freezer_alarmtype;
-	freezer_delta = 0;
-	spin_unlock_irqrestore(&freezer_delta_lock, flags);
-
-	rtc = alarmtimer_get_rtcdev();
-	/* If we have no rtcdev, just return */
-	if (!rtc)
+	/* Find the soonest timer to expire */
+	if (!alarmtimer_get_soonest(rtc, &min, &expires, &type))
 		return 0;
-
-	/* Find the soonest timer to expire*/
-	for (i = 0; i < ALARM_NUMTYPE; i++) {
-		struct alarm_base *base = &alarm_bases[i];
-		struct timerqueue_node *next;
-		ktime_t delta;
-
-		spin_lock_irqsave(&base->lock, flags);
-		next = timerqueue_getnext(&base->timerqueue);
-		spin_unlock_irqrestore(&base->lock, flags);
-		if (!next)
-			continue;
-		delta = ktime_sub(next->expires, base->get_ktime());
-		if (!min || (delta < min)) {
-			expires = next->expires;
-			min = delta;
-			type = i;
-		}
-	}
-	if (min == 0)
-		return 0;
-
-	if (ktime_to_ns(min) < suspend_check_duration_ms * NSEC_PER_MSEC) {
-		pm_wakeup_event(dev, suspend_check_duration_ms);
-		return -EBUSY;
-	}
 
 	trace_alarmtimer_suspend(expires, type);
 
