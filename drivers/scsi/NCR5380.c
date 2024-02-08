@@ -421,14 +421,14 @@ static int NCR5380_init(struct Scsi_Host *instance, int flags)
 	if (!hostdata->work_q)
 		return -ENOMEM;
 
-	snprintf(hostdata->info, sizeof(hostdata->info),
-		"%s, irq %d, io_port 0x%lx, base 0x%lx, can_queue %d, cmd_per_lun %d, sg_tablesize %d, this_id %d, flags { %s%s%s}",
-		instance->hostt->name, instance->irq, hostdata->io_port,
-		hostdata->base, instance->can_queue, instance->cmd_per_lun,
-		instance->sg_tablesize, instance->this_id,
-		hostdata->flags & FLAG_DMA_FIXUP     ? "DMA_FIXUP "     : "",
-		hostdata->flags & FLAG_NO_PSEUDO_DMA ? "NO_PSEUDO_DMA " : "",
-		hostdata->flags & FLAG_TOSHIBA_DELAY ? "TOSHIBA_DELAY " : "");
+	scnprintf(hostdata->info, sizeof(hostdata->info),
+		 "%s, irq %d, io_port 0x%lx, base 0x%lx, can_queue %d, cmd_per_lun %d, sg_tablesize %d, this_id %d, flags { %s%s%s}",
+		 instance->hostt->name, instance->irq, hostdata->io_port,
+		 hostdata->base, instance->can_queue, instance->cmd_per_lun,
+		 instance->sg_tablesize, instance->this_id,
+		 hostdata->flags & FLAG_DMA_FIXUP     ? "DMA_FIXUP "     : "",
+		 hostdata->flags & FLAG_NO_PSEUDO_DMA ? "NO_PSEUDO_DMA " : "",
+		 hostdata->flags & FLAG_TOSHIBA_DELAY ? "TOSHIBA_DELAY " : "");
 
 	NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
 	NCR5380_write(MODE_REG, MR_BASE);
