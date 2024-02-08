@@ -558,11 +558,9 @@ static ssize_t aac_show_raid_level(struct device *dev, struct device_attribute *
 	struct scsi_device *sdev = to_scsi_device(dev);
 	struct aac_dev *aac = (struct aac_dev *)(sdev->host->hostdata);
 	if (sdev_channel(sdev) != CONTAINER_CHANNEL)
-		return snprintf(buf, PAGE_SIZE, sdev->no_uld_attach
-		  ? "Hidden\n" :
+		return sysfs_emit(buf, sdev->no_uld_attach ? "Hidden\n" :
 		  ((aac->jbod && (sdev->type == TYPE_DISK)) ? "JBOD\n" : ""));
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-	  get_container_type(aac->fsa_dev[sdev_id(sdev)].type));
+	return sysfs_emit(buf, "%s\n", get_container_type(aac->fsa_dev[sdev_id(sdev)].type));
 }
 
 static struct device_attribute aac_raid_level_attr = {
@@ -1195,10 +1193,9 @@ static ssize_t aac_show_model(struct device *device,
 			++cp;
 		while (*cp == ' ')
 			++cp;
-		len = snprintf(buf, PAGE_SIZE, "%s\n", cp);
+		len = sysfs_emit(buf, "%s\n", cp);
 	} else
-		len = snprintf(buf, PAGE_SIZE, "%s\n",
-		  aac_drivers[dev->cardtype].model);
+		len = sysfs_emit(buf, "%s\n", aac_drivers[dev->cardtype].model);
 	return len;
 }
 
@@ -1214,12 +1211,11 @@ static ssize_t aac_show_vendor(struct device *device,
 		char *cp = sup_adap_info->adapter_type_text;
 		while (*cp && *cp != ' ')
 			++cp;
-		len = snprintf(buf, PAGE_SIZE, "%.*s\n",
+		len = sysfs_emit(buf, "%.*s\n",
 			(int)(cp - (char *)sup_adap_info->adapter_type_text),
 					sup_adap_info->adapter_type_text);
 	} else
-		len = snprintf(buf, PAGE_SIZE, "%s\n",
-			aac_drivers[dev->cardtype].vname);
+		len = sysfs_emit(buf, "%s\n", aac_drivers[dev->cardtype].vname);
 	return len;
 }
 
@@ -1230,7 +1226,7 @@ static ssize_t aac_show_flags(struct device *cdev,
 	struct aac_dev *dev = (struct aac_dev*)class_to_shost(cdev)->hostdata;
 
 	if (nblank(dprintk(x)))
-		len = snprintf(buf, PAGE_SIZE, "dprintk\n");
+		len = sysfs_emit(buf, "dprintk\n");
 #ifdef AAC_DETAILED_STATUS_INFO
 	len += scnprintf(buf + len, PAGE_SIZE - len,
 			 "AAC_DETAILED_STATUS_INFO\n");
@@ -1258,7 +1254,7 @@ static ssize_t aac_show_kernel_version(struct device *device,
 	int len, tmp;
 
 	tmp = le32_to_cpu(dev->adapter_info.kernelrev);
-	len = snprintf(buf, PAGE_SIZE, "%d.%d-%d[%d]\n",
+	len = sysfs_emit(buf, "%d.%d-%d[%d]\n",
 	  tmp >> 24, (tmp >> 16) & 0xff, tmp & 0xff,
 	  le32_to_cpu(dev->adapter_info.kernelbuild));
 	return len;
@@ -1272,7 +1268,7 @@ static ssize_t aac_show_monitor_version(struct device *device,
 	int len, tmp;
 
 	tmp = le32_to_cpu(dev->adapter_info.monitorrev);
-	len = snprintf(buf, PAGE_SIZE, "%d.%d-%d[%d]\n",
+	len = sysfs_emit(buf, "%d.%d-%d[%d]\n",
 	  tmp >> 24, (tmp >> 16) & 0xff, tmp & 0xff,
 	  le32_to_cpu(dev->adapter_info.monitorbuild));
 	return len;
@@ -1286,7 +1282,7 @@ static ssize_t aac_show_bios_version(struct device *device,
 	int len, tmp;
 
 	tmp = le32_to_cpu(dev->adapter_info.biosrev);
-	len = snprintf(buf, PAGE_SIZE, "%d.%d-%d[%d]\n",
+	len = sysfs_emit(buf, "%d.%d-%d[%d]\n",
 	  tmp >> 24, (tmp >> 16) & 0xff, tmp & 0xff,
 	  le32_to_cpu(dev->adapter_info.biosbuild));
 	return len;
@@ -1296,7 +1292,7 @@ static ssize_t aac_show_driver_version(struct device *device,
 					struct device_attribute *attr,
 					char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n", aac_driver_version);
+	return sysfs_emit(buf, "%s\n", aac_driver_version);
 }
 
 static ssize_t aac_show_serial_number(struct device *device,
@@ -1322,15 +1318,13 @@ static ssize_t aac_show_serial_number(struct device *device,
 static ssize_t aac_show_max_channel(struct device *device,
 				    struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-	  class_to_shost(device)->max_channel);
+	return sysfs_emit(buf, "%d\n", class_to_shost(device)->max_channel);
 }
 
 static ssize_t aac_show_max_id(struct device *device,
 			       struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-	  class_to_shost(device)->max_id);
+	return sysfs_emit(buf, "%d\n", class_to_shost(device)->max_id);
 }
 
 static ssize_t aac_store_reset_adapter(struct device *device,
@@ -1360,7 +1354,7 @@ static ssize_t aac_show_reset_adapter(struct device *device,
 	tmp = aac_adapter_check_health(dev);
 	if ((tmp == 0) && dev->in_reset)
 		tmp = -EBUSY;
-	len = snprintf(buf, PAGE_SIZE, "0x%x\n", tmp);
+	len = sysfs_emit(buf, "0x%x\n", tmp);
 	return len;
 }
 
