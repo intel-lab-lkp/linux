@@ -3614,6 +3614,8 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 		goto out_free_session;
 
 	spin_lock(&nn->client_lock);
+
+	/* RFC 8881 Section 18.36.4 Phase 1: Client record look-up. */
 	unconf = find_unconfirmed_client(&cr_ses->clientid, true, nn);
 	conf = find_confirmed_client(&cr_ses->clientid, true, nn);
 	if (!conf && !unconf) {
@@ -3621,6 +3623,7 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 		goto out_free_conn;
 	}
 
+	/* RFC 8881 Section 18.36.4 Phase 2: Sequence ID processing. */
 	if (conf)
 		cs_slot = &conf->cl_cs_slot;
 	else
@@ -3636,6 +3639,7 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 	cs_slot->sl_seqid++;
 	cr_ses->seqid = cs_slot->sl_seqid;
 
+	/* RFC 8881 Section 18.36.4 Phase 3: Client ID confirmation. */
 	if (conf) {
 		status = nfserr_wrong_cred;
 		if (!nfsd4_mach_creds_match(conf, rqstp))
@@ -3662,6 +3666,8 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 		move_to_confirmed(unconf);
 		conf = unconf;
 	}
+
+	/* RFC 8881 Section 18.36.4 Phase 4: Session creation. */
 	status = nfs_ok;
 	/* Persistent sessions are not supported */
 	cr_ses->flags &= ~SESSION4_PERSIST;
