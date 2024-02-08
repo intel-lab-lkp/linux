@@ -270,6 +270,17 @@ static void virtio_fs_start_all_queues(struct virtio_fs *fs)
 	}
 }
 
+static void virtio_fs_uevent(struct virtio_fs *fs, enum kobject_action action)
+{
+	char tag_str[sizeof("TAG=") +
+		     sizeof_field(struct virtio_fs_config, tag) + 1];
+	char *envp[] = {tag_str, NULL};
+
+	snprintf(tag_str, sizeof(tag_str), "TAG=%s", fs->tag);
+
+	kobject_uevent_env(&fs->kobj, action, envp);
+}
+
 /* Add a new instance to the list or return -EEXIST if tag name exists*/
 static int virtio_fs_add_instance(struct virtio_device *vdev,
 				  struct virtio_fs *fs)
@@ -308,6 +319,8 @@ static int virtio_fs_add_instance(struct virtio_device *vdev,
 	list_add_tail(&fs->list, &virtio_fs_instances);
 
 	mutex_unlock(&virtio_fs_mutex);
+
+	virtio_fs_uevent(fs, KOBJ_ADD);
 
 	return 0;
 }
@@ -976,6 +989,8 @@ static void virtio_fs_stop_all_queues(struct virtio_fs *fs)
 static void virtio_fs_remove(struct virtio_device *vdev)
 {
 	struct virtio_fs *fs = vdev->priv;
+
+	virtio_fs_uevent(fs, KOBJ_REMOVE);
 
 	mutex_lock(&virtio_fs_mutex);
 	/* This device is going away. No one should get new reference */
