@@ -3196,8 +3196,30 @@ static ssize_t shmem_file_splice_read(struct file *in, loff_t *ppos,
 		if (unlikely(*ppos >= isize))
 			break;
 		part = min_t(loff_t, isize - *ppos, len);
+		if (folio && folio_test_large(folio) &&
+		    folio_test_private(folio)) {
+			unsigned long from = offset_in_folio(folio, *ppos);
+			unsigned int bfirst = from >> inode->i_blkbits;
+			unsigned int blast, blast_upd;
 
-		if (folio) {
+			len = min(folio_size(folio) - from, len);
+			blast = (from + len - 1) >> inode->i_blkbits;
+
+			blast_upd = sfs_get_last_block_uptodate(folio, bfirst,
+								blast);
+			if (blast_upd <= blast) {
+				unsigned int bsize = 1 << inode->i_blkbits;
+				unsigned int blks = blast_upd - bfirst + 1;
+				unsigned int bbytes = blks << inode->i_blkbits;
+				unsigned int boff = (*ppos % bsize);
+
+				part = min_t(loff_t, bbytes - boff, len);
+			}
+		}
+
+		if (folio && shmem_is_block_uptodate(
+				     folio, offset_in_folio(folio, *ppos) >>
+						    inode->i_blkbits)) {
 			/*
 			 * If users can be writing to this page using arbitrary
 			 * virtual addresses, take care about potential aliasing
