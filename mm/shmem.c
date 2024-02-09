@@ -2964,7 +2964,7 @@ shmem_write_end(struct file *file, struct address_space *mapping,
 	if (pos + copied > inode->i_size)
 		i_size_write(inode, pos + copied);
 
-	shmem_set_range_uptodate(folio, 0, folio_size(folio));
+	shmem_set_range_uptodate(folio, offset_in_folio(folio, pos), len);
 	folio_mark_dirty(folio);
 	folio_unlock(folio);
 	folio_put(folio);
