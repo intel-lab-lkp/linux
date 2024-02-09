@@ -13,7 +13,6 @@
 #define _TRACEFS_H_
 
 #include <linux/fs.h>
-#include <linux/seq_file.h>
 
 #include <linux/types.h>
 

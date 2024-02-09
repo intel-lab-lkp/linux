@@ -25,7 +25,6 @@
 #include <linux/rbtree.h>
 #include <linux/refcount.h>
 #include <linux/rwsem.h>
-#include <linux/wait.h>
 
 #include <linux/sunrpc/debug.h>
 #include <linux/sunrpc/auth.h>

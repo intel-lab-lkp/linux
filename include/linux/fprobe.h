@@ -5,7 +5,8 @@
 
 #include <linux/compiler.h>
 #include <linux/ftrace.h>
-#include <linux/rethook.h>
+
+struct rethook;
 
 /**
  * struct fprobe - ftrace based probe.

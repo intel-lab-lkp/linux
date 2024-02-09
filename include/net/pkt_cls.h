@@ -3,10 +3,11 @@
 #define __NET_PKT_CLS_H
 
 #include <linux/pkt_cls.h>
-#include <linux/workqueue.h>
 #include <net/sch_generic.h>
 #include <net/act_api.h>
 #include <net/net_namespace.h>
+
+struct rcu_work;
 
 /* TC action not accessible from user space */
 #define TC_ACT_CONSUMED		(TC_ACT_VALUE_MAX + 1)

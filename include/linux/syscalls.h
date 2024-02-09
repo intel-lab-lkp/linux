@@ -84,7 +84,6 @@ struct mnt_id_req;
 #include <linux/signal.h>
 #include <linux/list.h>
 #include <linux/bug.h>
-#include <linux/sem.h>
 #include <asm/siginfo.h>
 #include <linux/unistd.h>
 #include <linux/quota.h>

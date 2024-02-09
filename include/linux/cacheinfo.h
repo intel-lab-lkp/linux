@@ -4,7 +4,6 @@
 
 #include <linux/bitops.h>
 #include <linux/cpumask.h>
-#include <linux/smp.h>
 
 struct device_node;
 struct attribute;

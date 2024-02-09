@@ -9,7 +9,6 @@
 
 #include <linux/list.h>
 #include <linux/scatterlist.h>
-#include <linux/workqueue.h>
 #include <rdma/ib_verbs.h>
 
 struct ib_ucontext;

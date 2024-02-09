@@ -11,8 +11,6 @@
 #include <linux/if_ether.h>
 #include <linux/list.h>
 #include <linux/notifier.h>
-#include <linux/timer.h>
-#include <linux/workqueue.h>
 #include <linux/of.h>
 #include <linux/ethtool.h>
 #include <linux/net_tstamp.h>

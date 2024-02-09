@@ -31,8 +31,6 @@ enum rfkill_user_states {
 #undef RFKILL_STATE_HARD_BLOCKED
 
 #include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/mutex.h>
 #include <linux/leds.h>
 #include <linux/err.h>
 

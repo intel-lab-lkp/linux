@@ -10,7 +10,6 @@
 #include <linux/blk_types.h>
 #include <linux/device.h>
 #include <linux/list.h>
-#include <linux/llist.h>
 #include <linux/minmax.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
@@ -22,11 +21,9 @@
 #include <linux/percpu-refcount.h>
 #include <linux/blkzoned.h>
 #include <linux/sched.h>
-#include <linux/sbitmap.h>
 #include <linux/uio.h> // for iov_iter_is_aligned()
 #include <linux/uuid.h>
 #include <linux/xarray.h>
-#include <linux/file.h>
 
 struct module;
 struct request_queue;
@@ -42,6 +39,7 @@ struct rq_qos;
 struct blk_queue_stats;
 struct blk_stat_callback;
 struct blk_crypto_profile;
+struct file;
 
 extern const struct device_type disk_type;
 extern const struct device_type part_type;

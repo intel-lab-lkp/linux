@@ -32,7 +32,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/sockptr.h>
-#include <linux/bpf.h>
+#include <uapi/linux/bpf.h>
 #include <uapi/linux/lsm.h>
 
 struct linux_binprm;

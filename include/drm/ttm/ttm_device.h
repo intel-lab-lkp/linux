@@ -26,7 +26,6 @@
 #define _TTM_DEVICE_H_
 
 #include <linux/types.h>
-#include <linux/workqueue.h>
 #include <drm/ttm/ttm_resource.h>
 #include <drm/ttm/ttm_pool.h>
 

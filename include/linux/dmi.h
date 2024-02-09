@@ -3,7 +3,6 @@
 #define __DMI_H__
 
 #include <linux/list.h>
-#include <linux/kobject.h>
 #include <linux/mod_devicetable.h>
 
 /* enum dmi_field is in mod_devicetable.h */

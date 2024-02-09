@@ -16,7 +16,9 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/atomic.h>
+#ifdef CONFIG_KGDB_HONOUR_BLOCKLIST
 #include <linux/kprobes.h>
+#endif
 #ifdef CONFIG_HAVE_ARCH_KGDB
 #include <asm/kgdb.h>
 #endif

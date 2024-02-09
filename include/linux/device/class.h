@@ -14,14 +14,13 @@
 #ifndef _DEVICE_CLASS_H_
 #define _DEVICE_CLASS_H_
 
-#include <linux/kobject.h>
 #include <linux/klist.h>
-#include <linux/pm.h>
 #include <linux/uidgid_types.h>
 #include <linux/device/bus.h>
 
 struct device;
 struct fwnode_handle;
+struct kobj_uevent_env;
 
 /**
  * struct class - device classes

@@ -35,7 +35,6 @@
 #include <linux/interrupt.h>
 #include <linux/kgdb.h>
 #include <linux/preempt.h>
-#include <linux/smp.h>
 
 /*
  * Use EXPORT_SYMBOL_FOR_TESTS_ONLY() for functions that shall

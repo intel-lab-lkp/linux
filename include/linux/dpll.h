@@ -8,7 +8,6 @@
 #define __DPLL_H__
 
 #include <uapi/linux/dpll.h>
-#include <linux/device.h>
 #include <linux/netlink.h>
 
 struct dpll_device;

@@ -7,9 +7,9 @@
 #ifndef __MAILBOX_CLIENT_H
 #define __MAILBOX_CLIENT_H
 
-#include <linux/of.h>
-#include <linux/device.h>
+#include <linux/types.h>
 
+struct device;
 struct mbox_chan;
 
 /**

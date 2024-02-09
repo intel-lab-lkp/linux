@@ -10,7 +10,6 @@
 #include <linux/trace_recursion.h>
 #include <linux/trace_clock.h>
 #include <linux/jump_label.h>
-#include <linux/kallsyms.h>
 #include <linux/linkage.h>
 #include <linux/bitops.h>
 #include <linux/ptrace.h>

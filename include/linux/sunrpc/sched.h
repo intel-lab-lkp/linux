@@ -10,7 +10,6 @@
 #ifndef _LINUX_SUNRPC_SCHED_H_
 #define _LINUX_SUNRPC_SCHED_H_
 
-#include <linux/timer.h>
 #include <linux/ktime.h>
 #include <linux/sunrpc/types.h>
 #include <linux/spinlock.h>

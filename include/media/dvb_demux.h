@@ -20,7 +20,6 @@
 #define _DVB_DEMUX_H_
 
 #include <linux/time.h>
-#include <linux/timer.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 

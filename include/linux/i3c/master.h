@@ -15,7 +15,6 @@
 #include <linux/i3c/ccc.h>
 #include <linux/i3c/device.h>
 #include <linux/rwsem.h>
-#include <linux/spinlock.h>
 #include <linux/workqueue.h>
 
 #define I3C_HOT_JOIN_ADDR		0x2

@@ -22,13 +22,13 @@
 #include <linux/vmstat.h>
 #include <linux/writeback.h>
 #include <linux/page-flags.h>
-#include <linux/shrinker.h>
 
 struct mem_cgroup;
 struct obj_cgroup;
 struct page;
 struct mm_struct;
 struct kmem_cache;
+struct shrinker_info;
 
 /* Cgroup-specific page state, on top of universal node page state */
 enum memcg_stat_item {

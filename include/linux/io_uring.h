@@ -3,7 +3,6 @@
 #define _LINUX_IO_URING_H
 
 #include <linux/sched.h>
-#include <linux/xarray.h>
 #include <uapi/linux/io_uring.h>
 
 #if defined(CONFIG_IO_URING)

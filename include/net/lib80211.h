@@ -31,7 +31,8 @@
 #include <linux/skbuff.h>
 #include <linux/ieee80211.h>
 #include <linux/timer.h>
-#include <linux/seq_file.h>
+
+struct seq_file;
 
 #define NUM_WEP_KEYS	4
 
