@@ -848,7 +848,11 @@ struct kvm_hyperv_eventfd {
 /* x86-specific KVM_EXIT_HYPERCALL flags. */
 #define KVM_EXIT_HYPERCALL_LONG_MODE	_BITULL(0)
 
+/* Low bits of VM types provide confidential computing capabilities.  */
+#define __KVM_X86_PRIVATE_MEM_TYPE	1
+#define __KVM_X86_PROTECTED_STATE_TYPE	2
+
 #define KVM_X86_DEFAULT_VM	0
-#define KVM_X86_SW_PROTECTED_VM	1
+#define KVM_X86_SW_PROTECTED_VM	(KVM_X86_DEFAULT_VM | __KVM_X86_PRIVATE_MEM_TYPE)
 
 #endif /* _ASM_X86_KVM_H */
