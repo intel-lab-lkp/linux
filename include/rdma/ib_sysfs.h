@@ -5,7 +5,7 @@
 #ifndef DEF_RDMA_IB_SYSFS_H
 #define DEF_RDMA_IB_SYSFS_H
 
-#include <linux/sysfs.h>
+#include <linux/sysfs_types.h>
 
 struct ib_device;
 

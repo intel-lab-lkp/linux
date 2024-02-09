@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _IIO_BUFFER_GENERIC_IMPL_H_
 #define _IIO_BUFFER_GENERIC_IMPL_H_
-#include <linux/sysfs.h>
+
+#include <linux/sysfs_types.h> // for struct attribute_group
 #include <linux/kref_types.h>
 
 #ifdef CONFIG_IIO_BUFFER
