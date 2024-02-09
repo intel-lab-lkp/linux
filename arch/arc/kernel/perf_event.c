@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
+#include <linux/octal_permissions.h>
 #include <linux/of.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
