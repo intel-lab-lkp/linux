@@ -10,6 +10,7 @@
 #include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/init.h>
+#include <linux/kobject.h>
 
 #include "blk.h"
 

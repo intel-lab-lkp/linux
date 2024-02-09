@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/backing-dev.h>
 #include <linux/slab.h>

@@ -16,6 +16,7 @@
 #include <linux/idr.h>
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/kobject.h>
 #include "rc-core-priv.h"
 #include <linux/sprintf.h>
 

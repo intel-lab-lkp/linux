@@ -6,6 +6,7 @@
 #include <linux/security.h>
 #include <linux/umh.h>
 #include <linux/sysctl.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 
 #include "fallback.h"

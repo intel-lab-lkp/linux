@@ -36,6 +36,7 @@
 #include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
+#include <linux/kobject.h>
 
 #include <trace/events/block.h>
 

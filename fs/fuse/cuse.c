@@ -40,6 +40,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
+#include <linux/kobject.h>
 #include <linux/kthread.h>
 #include <linux/list.h>
 #include <linux/magic.h>

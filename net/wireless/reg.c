@@ -56,6 +56,7 @@
 #include <linux/platform_device.h>
 #include <linux/sprintf.h>
 #include <linux/verification.h>
+#include <linux/kobject.h>
 #include <linux/moduleparam.h>
 #include <linux/firmware.h>
 #include <net/cfg80211.h>

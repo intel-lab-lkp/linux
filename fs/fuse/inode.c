@@ -13,6 +13,7 @@
 #include <linux/file.h>
 #include <linux/seq_file.h>
 #include <linux/init.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/fs_context.h>
