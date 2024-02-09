@@ -459,9 +459,11 @@ static int decode_instructions(struct objtool_file *file)
 				continue;
 
 			if (!find_insn(file, sec, func->offset)) {
-				WARN("%s(): can't find starting instruction",
-				     func->name);
-				return -1;
+				/*
+				 * Can't find starting instruction likely due to data in
+				 * beginning of the section
+				 */
+				continue;
 			}
 
 			sym_for_each_insn(file, func, insn) {
