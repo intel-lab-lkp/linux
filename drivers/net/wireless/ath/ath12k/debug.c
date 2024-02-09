@@ -7,6 +7,7 @@
 #include <linux/vmalloc.h>
 #include "core.h"
 #include "debug.h"
+#include <linux/sprintf.h>
 
 void ath12k_info(struct ath12k_base *ab, const char *fmt, ...)
 {

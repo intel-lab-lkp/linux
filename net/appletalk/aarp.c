@@ -25,6 +25,7 @@
 
 #include <linux/if_arp.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <net/datalink.h>
 #include <net/psnap.h>

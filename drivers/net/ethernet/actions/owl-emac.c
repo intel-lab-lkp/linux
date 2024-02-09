@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include "owl-emac.h"
 

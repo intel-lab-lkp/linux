@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/ath9k_platform.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 struct owl_ctx {

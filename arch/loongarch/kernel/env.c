@@ -15,6 +15,7 @@
 #include <asm/loongson.h>
 #include <asm/setup.h>
 #include <asm/time.h>
+#include <linux/sprintf.h>
 
 u64 efi_system_table;
 struct loongson_system_configuration loongson_sysconf;

@@ -6,6 +6,7 @@
  */
 
 #include "tascam.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("TASCAM FireWire series Driver");
 MODULE_AUTHOR("Takashi Sakamoto <o-takashi@sakamocchi.jp>");

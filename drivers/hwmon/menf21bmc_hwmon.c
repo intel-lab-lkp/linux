@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 #define DRV_NAME  "menf21bmc_hwmon"
 

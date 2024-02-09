@@ -13,6 +13,7 @@
 #include <linux/gameport.h>
 #include <linux/input.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Gravis GrIP protocol joystick driver"
 

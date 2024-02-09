@@ -24,6 +24,7 @@
 
 #include "../i915_selftest.h"
 #include "i915_random.h"
+#include <linux/sprintf.h>
 
 static char *
 __sync_print(struct i915_syncmap *p,

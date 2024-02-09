@@ -28,6 +28,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
@@ -40,6 +41,7 @@
 #include <linux/clk.h>
 #include <linux/of.h>
 #include <linux/platform_data/g762.h>
+#include <linux/sprintf.h>
 
 #define DRVNAME "g762"
 

@@ -10,8 +10,10 @@
 #include <linux/uaccess.h>
 #include <linux/ftrace.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 
 #include "trace.h"
 #include "trace_output.h"

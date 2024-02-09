@@ -6,9 +6,11 @@
 
 #include <linux/init.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/jiffies.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/wait.h>
 #include <linux/hrtimer.h>

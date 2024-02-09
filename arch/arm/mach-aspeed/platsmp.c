@@ -6,6 +6,7 @@
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/smp.h>
+#include <asm/spinlock.h> // for dsb_sev()
 
 #define BOOT_ADDR	0x00
 #define BOOT_SIG	0x04

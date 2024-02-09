@@ -22,6 +22,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 #include <sound/soc.h>
 #include <sound/wm0010.h>

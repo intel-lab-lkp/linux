@@ -8,6 +8,7 @@
 
 #include <linux/iopoll.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/spi-nor.h>

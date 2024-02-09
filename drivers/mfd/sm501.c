@@ -20,6 +20,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/gpio/machine.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/sm501.h>
 #include <linux/sm501-regs.h>

@@ -14,6 +14,7 @@
 #include <linux/of_device.h>
 #include <linux/of_address.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/limits.h>
@@ -22,6 +23,7 @@
 #include <linux/acpi.h>
 #include <linux/iommu.h>
 #include <linux/dma-map-ops.h>
+#include <linux/sprintf.h>
 
 #include "fsl-mc-private.h"
 

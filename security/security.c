@@ -27,6 +27,7 @@
 #include <linux/mount.h>
 #include <linux/personality.h>
 #include <linux/backing-dev.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/msg.h>
 #include <net/flow.h>

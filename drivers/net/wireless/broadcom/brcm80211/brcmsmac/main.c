@@ -19,6 +19,7 @@
 
 #include <linux/pci_ids.h>
 #include <linux/if_ether.h>
+#include <linux/sprintf.h>
 #include <net/cfg80211.h>
 #include <net/mac80211.h>
 #include <brcm_hw_ids.h>

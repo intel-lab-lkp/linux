@@ -15,6 +15,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/hwmon.h>
@@ -31,6 +32,7 @@
 #include <linux/bitrev.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 /* Commands */
 #define SHT15_MEASURE_TEMP		0x03

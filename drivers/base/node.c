@@ -11,6 +11,7 @@
 #include <linux/notifier.h>
 #include <linux/node.h>
 #include <linux/hugetlb.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/compaction.h>
 #include <linux/cpumask.h>
 #include <linux/topology.h>

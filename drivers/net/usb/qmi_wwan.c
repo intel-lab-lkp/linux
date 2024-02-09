@@ -16,6 +16,7 @@
 #include <linux/kstrtox.h>
 #include <linux/mii.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/cdc.h>
 #include <linux/usb/usbnet.h>

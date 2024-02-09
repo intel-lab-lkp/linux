@@ -10,6 +10,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include "internal.h"
 

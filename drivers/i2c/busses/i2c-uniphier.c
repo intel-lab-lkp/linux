@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>

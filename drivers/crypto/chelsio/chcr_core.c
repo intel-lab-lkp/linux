@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/completion.h>
 
 #include <crypto/aes.h>
 #include <crypto/hash.h>

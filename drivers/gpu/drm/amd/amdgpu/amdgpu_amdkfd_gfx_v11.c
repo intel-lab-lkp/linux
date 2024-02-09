@@ -30,6 +30,7 @@
 #include "soc15d.h"
 #include "v11_structs.h"
 #include "soc21.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/linux/kfd_ioctl.h>
 
 enum hqd_dequeue_request_type {

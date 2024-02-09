@@ -38,6 +38,7 @@
 #include <linux/regmap.h>
 #include <linux/bitops.h>
 #include <linux/if_bridge.h>
+#include <linux/sprintf.h>
 
 #include "realtek.h"
 

@@ -9,6 +9,7 @@
 #include <linux/debugfs.h>
 #include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include <linux/io.h>

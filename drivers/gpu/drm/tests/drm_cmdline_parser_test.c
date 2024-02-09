@@ -5,6 +5,7 @@
  */
 
 #include <kunit/test.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_connector.h>
 #include <drm/drm_modes.h>

@@ -9,6 +9,8 @@
  ******************************************************************************/
 
 #include <linux/slab.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h> /* struct kvec */
 #include <target/iscsi/iscsi_target_core.h>
 #include "iscsi_target_util.h"

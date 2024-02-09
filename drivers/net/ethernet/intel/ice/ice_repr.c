@@ -7,6 +7,7 @@
 #include "ice_sriov.h"
 #include "ice_tc_lib.h"
 #include "ice_dcb_lib.h"
+#include <linux/sprintf.h>
 
 /**
  * ice_repr_get_sw_port_id - get port ID associated with representor

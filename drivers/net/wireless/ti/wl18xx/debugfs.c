@@ -7,6 +7,7 @@
  */
 
 #include <linux/pm_runtime.h>
+#include <linux/kstrtox.h>
 
 #include "../wlcore/debugfs.h"
 #include "../wlcore/wlcore.h"

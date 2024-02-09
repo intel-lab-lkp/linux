@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 
 #include <media/media-entity.h>

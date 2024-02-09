@@ -9,6 +9,9 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include "acpi_thermal_rel.h"
 

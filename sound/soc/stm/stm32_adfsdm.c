@@ -16,6 +16,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/consumer.h>
 #include <linux/iio/adc/stm32-dfsdm-adc.h>
+#include <linux/sprintf.h>
 
 #include <sound/pcm.h>
 #include <sound/soc.h>

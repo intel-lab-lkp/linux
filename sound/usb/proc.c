@@ -3,6 +3,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #include <sound/core.h>

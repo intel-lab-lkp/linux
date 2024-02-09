@@ -7,6 +7,7 @@
 
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/file.h> // for fput()
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
@@ -26,6 +27,7 @@
 #include <linux/badblocks.h>
 #include <linux/part_stat.h>
 #include <linux/blktrace_api.h>
+#include <linux/sprintf.h>
 
 #include "blk-throttle.h"
 #include "blk.h"

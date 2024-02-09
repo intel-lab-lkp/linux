@@ -8,6 +8,7 @@
 #include <linux/namei.h>
 #include <linux/nospec.h>
 #include <linux/io_uring.h>
+#include <linux/hrtimer.h>
 
 #include <uapi/linux/io_uring.h>
 

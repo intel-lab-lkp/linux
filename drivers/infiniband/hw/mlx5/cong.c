@@ -31,6 +31,8 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "mlx5_ib.h"
 #include "cmd.h"

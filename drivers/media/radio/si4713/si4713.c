@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-common.h>

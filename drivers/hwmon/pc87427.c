@@ -18,6 +18,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/platform_device.h>
@@ -25,6 +26,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/ioport.h>
 #include <linux/acpi.h>

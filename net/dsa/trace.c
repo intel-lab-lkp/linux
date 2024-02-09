@@ -4,6 +4,7 @@
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"
+#include <linux/sprintf.h>
 
 void dsa_db_print(const struct dsa_db *db, char buf[DSA_DB_BUFSIZ])
 {

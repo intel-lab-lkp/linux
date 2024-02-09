@@ -5,6 +5,7 @@
  */
 
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/shmem_fs.h>
 #include <linux/swap.h>
 

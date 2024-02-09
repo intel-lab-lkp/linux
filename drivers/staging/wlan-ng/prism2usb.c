@@ -4,6 +4,7 @@
 #include "prism2mib.c"
 #include "prism2sta.c"
 #include "prism2fw.c"
+#include <linux/completion.h>
 
 #define PRISM_DEV(vid, pid, name)		\
 	{ USB_DEVICE(vid, pid),			\

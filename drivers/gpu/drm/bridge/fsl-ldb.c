@@ -11,6 +11,7 @@
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>

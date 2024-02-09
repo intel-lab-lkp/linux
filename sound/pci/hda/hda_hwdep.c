@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/nospec.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/hda_codec.h>
 #include "hda_local.h"

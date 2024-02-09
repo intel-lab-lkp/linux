@@ -23,6 +23,7 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>

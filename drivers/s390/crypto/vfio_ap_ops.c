@@ -11,11 +11,13 @@
 #include <linux/string.h>
 #include <linux/vfio.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/ctype.h>
 #include <linux/bitops.h>
 #include <linux/kvm_host.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <asm/kvm.h>
 #include <asm/zcrypt.h>

@@ -6,6 +6,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include "internal.h"
 
 static const char cachefiles_charmap[64] =

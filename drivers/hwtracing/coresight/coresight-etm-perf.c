@@ -15,6 +15,7 @@
 #include <linux/perf_event.h>
 #include <linux/percpu-defs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stringhash.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>

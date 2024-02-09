@@ -17,6 +17,7 @@
 #include "vpu_cmds.h"
 #include "vpu_msgs.h"
 #include "vpu_v4l2.h"
+#include <linux/completion.h>
 
 #define VPU_PKT_HEADER_LENGTH		3
 

@@ -20,6 +20,7 @@
 #include <sound/soc.h>
 #include "rt715.h"
 #include "rt715-sdw.h"
+#include <linux/completion.h>
 
 static bool rt715_readable_register(struct device *dev, unsigned int reg)
 {

@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/kdev_t.h>
 #include <linux/console.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/smp.h>

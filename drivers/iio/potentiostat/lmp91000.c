@@ -19,6 +19,7 @@
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
+#include <linux/completion.h>
 
 #define LMP91000_REG_LOCK		0x01
 #define LMP91000_REG_TIACN		0x10

@@ -49,6 +49,7 @@
 #include <linux/freezer.h>
 #include <linux/kmod.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 
 #include <asm/page.h>
 #include <asm/desc.h>

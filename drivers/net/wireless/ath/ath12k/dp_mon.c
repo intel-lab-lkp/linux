@@ -9,6 +9,7 @@
 #include "dp_rx.h"
 #include "dp_tx.h"
 #include "peer.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void ath12k_dp_mon_rx_handle_ofdma_info(void *rx_tlv,
 					       struct hal_rx_user_status *rx_user_status)

@@ -20,6 +20,7 @@
 #include <linux/skbuff.h>
 #include <linux/percpu.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <linux/un.h>
 #include <net/af_unix.h>

@@ -43,6 +43,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/bitops.h>
+#include <linux/kstrtox.h>
 #include <linux/sizes.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -58,6 +59,7 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/ntb.h>
+#include <linux/sprintf.h>
 
 #include "ntb_hw_idt.h"
 

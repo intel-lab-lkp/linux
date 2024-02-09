@@ -6,6 +6,7 @@
  */
 
 #include "saa7164.h"
+#include <linux/sprintf.h>
 
 #define ENCODER_MAX_BITRATE 6500000
 #define ENCODER_MIN_BITRATE 1000000

@@ -16,6 +16,8 @@
 #include <linux/namei.h>
 #include <linux/module.h>
 #include <linux/exportfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sunrpc/svc_xprt.h>
 
 #include "nfsd.h"

@@ -6,6 +6,7 @@
  */
 
 #include "cx23885.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/list.h>

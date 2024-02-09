@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/sgi-w1.h>
 #include <linux/rtc/ds1685.h>
+#include <linux/sprintf.h>
 
 #include <asm/pci/bridge.h>
 #include <asm/sn/ioc3.h>

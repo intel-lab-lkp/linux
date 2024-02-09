@@ -25,6 +25,7 @@
 #include <linux/mutex.h>
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/debugfs.h>
 #include <linux/rculist.h>

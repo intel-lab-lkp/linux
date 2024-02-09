@@ -4,6 +4,7 @@
 #include <linux/fdtable.h>
 #include <linux/freezer.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/swap.h>
@@ -17,6 +18,8 @@
 #include <linux/key.h>
 #include <linux/personality.h>
 #include <linux/binfmts.h>
+#include <linux/bvec.h>
+#include <linux/completion.h>
 #include <linux/coredump.h>
 #include <linux/sched/coredump.h>
 #include <linux/sched/signal.h>

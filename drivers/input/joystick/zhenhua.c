@@ -34,6 +34,7 @@
 #include <linux/bitrev.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"RC transmitter with 5-byte Zhen Hua protocol joystick driver"
 

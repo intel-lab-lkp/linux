@@ -9,6 +9,8 @@
 #include <linux/dm-ioctl.h>
 #include "dm-core.h"
 #include "dm-rq.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 struct dm_sysfs_attr {
 	struct attribute attr;

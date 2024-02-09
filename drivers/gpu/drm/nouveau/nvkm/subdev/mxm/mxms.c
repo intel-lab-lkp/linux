@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs
  */
 #include "mxms.h"
+#include <linux/sprintf.h>
 
 #define ROM16(x) get_unaligned_le16(&(x))
 #define ROM32(x) get_unaligned_le32(&(x))

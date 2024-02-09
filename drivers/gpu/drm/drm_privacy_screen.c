@@ -16,6 +16,7 @@
 #include <drm/drm_privacy_screen_consumer.h>
 #include <drm/drm_privacy_screen_driver.h>
 #include "drm_internal.h"
+#include <linux/sprintf.h>
 
 /**
  * DOC: overview

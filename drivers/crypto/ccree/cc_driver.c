@@ -3,6 +3,8 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/crypto.h>
 #include <linux/moduleparam.h>

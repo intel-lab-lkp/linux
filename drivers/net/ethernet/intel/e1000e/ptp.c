@@ -7,6 +7,7 @@
  */
 
 #include "e1000.h"
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_E1000E_HWTS
 #include <linux/clocksource.h>

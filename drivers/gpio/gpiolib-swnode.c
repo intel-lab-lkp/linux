@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/printk.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <linux/gpio/consumer.h>

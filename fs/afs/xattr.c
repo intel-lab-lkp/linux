@@ -8,6 +8,7 @@
 
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include "internal.h"
 

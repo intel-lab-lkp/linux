@@ -13,6 +13,7 @@
 #define RTW_RX_HANDLED 2
 
 #include <osdep_service_linux.h>
+#include <linux/sprintf.h>
 
 #define BIT0	0x00000001
 #define BIT1	0x00000002

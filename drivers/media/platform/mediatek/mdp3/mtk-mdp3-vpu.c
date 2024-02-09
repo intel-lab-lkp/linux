@@ -8,6 +8,7 @@
 #include <linux/remoteproc/mtk_scp.h>
 #include "mtk-mdp3-vpu.h"
 #include "mtk-mdp3-core.h"
+#include <linux/completion.h>
 
 #define MDP_VPU_MESSAGE_TIMEOUT 500U
 

@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #include "pinctrl-msm.h"
 

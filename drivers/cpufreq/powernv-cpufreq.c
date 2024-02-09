@@ -10,6 +10,7 @@
 #define pr_fmt(fmt)	"powernv-cpufreq: " fmt
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/cpumask.h>
 #include <linux/module.h>

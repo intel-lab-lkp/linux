@@ -11,6 +11,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_prime.h>
 #include <drm/lima_drm.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include "lima_device.h"
 #include "lima_drv.h"

@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/control.h>
 #include <sound/tlv.h>
 #include <sound/hda_chmap.h>

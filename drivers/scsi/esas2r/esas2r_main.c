@@ -42,6 +42,8 @@
  */
 
 #include "esas2r.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION(ESAS2R_DRVR_NAME ": " ESAS2R_LONGNAME " driver");
 MODULE_AUTHOR("ATTO Technology, Inc.");

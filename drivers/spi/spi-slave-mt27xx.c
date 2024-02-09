@@ -2,6 +2,7 @@
 // Copyright (c) 2018 MediaTek Inc.
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>

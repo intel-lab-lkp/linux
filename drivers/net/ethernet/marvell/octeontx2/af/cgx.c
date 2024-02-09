@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/sprintf.h>
 
 #include "cgx.h"
 #include "rvu.h"

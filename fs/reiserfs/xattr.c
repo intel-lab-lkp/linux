@@ -43,11 +43,13 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/pagemap.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include "xattr.h"
 #include "acl.h"
 #include <linux/uaccess.h>
 #include <net/checksum.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/quotaops.h>
 #include <linux/security.h>

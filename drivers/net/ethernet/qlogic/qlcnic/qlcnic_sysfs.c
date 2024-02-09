@@ -6,6 +6,8 @@
 
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/swab.h>
 #include <linux/dma-mapping.h>
 #include <net/ip.h>

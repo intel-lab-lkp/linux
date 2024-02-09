@@ -14,6 +14,7 @@
 
 #include "asix.h"
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 
 struct ax88172a_private {
 	struct mii_bus *mdio;

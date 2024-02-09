@@ -6,6 +6,7 @@
 
 #include "vnic_resource.h"
 #include "vnic_devcmd.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #ifndef VNIC_PADDR_TARGET
 #define VNIC_PADDR_TARGET	0x0000000000000000ULL

@@ -14,6 +14,7 @@
  */
 
 #include "boot.h"
+#include <linux/sprintf.h>
 
 static int skip_atoi(const char **s)
 {

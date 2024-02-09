@@ -7,6 +7,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/dma-buf.h>
 #include <linux/genalloc.h>
 #include <linux/interrupt.h>

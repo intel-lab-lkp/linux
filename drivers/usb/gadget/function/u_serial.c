@@ -15,9 +15,11 @@
 /* #define VERBOSE_DEBUG */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/slab.h>

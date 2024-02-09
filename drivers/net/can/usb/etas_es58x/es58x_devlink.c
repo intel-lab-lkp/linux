@@ -9,6 +9,7 @@
 
 #include <linux/ctype.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <net/devlink.h>
 

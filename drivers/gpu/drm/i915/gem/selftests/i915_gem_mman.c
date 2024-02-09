@@ -5,6 +5,7 @@
  */
 
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/prime_numbers.h>
 
 #include "gem/i915_gem_internal.h"

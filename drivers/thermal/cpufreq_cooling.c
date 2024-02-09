@@ -20,6 +20,7 @@
 #include <linux/pm_opp.h>
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include <linux/units.h>
 

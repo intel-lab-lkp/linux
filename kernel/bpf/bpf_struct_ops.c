@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/btf_ids.h>
 #include <linux/rcupdate_wait.h>
+#include <linux/sprintf.h>
 
 struct bpf_struct_ops_value {
 	struct bpf_struct_ops_common_value common;

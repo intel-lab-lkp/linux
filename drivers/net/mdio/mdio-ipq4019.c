@@ -12,6 +12,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/sprintf.h>
 
 #define MDIO_MODE_REG				0x40
 #define   MDIO_MODE_MDC_MODE			BIT(12)

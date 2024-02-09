@@ -17,6 +17,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/io.h>
 #include <linux/platform_data/txx9/ndfmc.h>
+#include <linux/sprintf.h>
 
 /* TXX9 NDFMC Registers */
 #define TXX9_NDFDTR	0x00

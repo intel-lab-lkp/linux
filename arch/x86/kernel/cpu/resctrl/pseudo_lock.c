@@ -15,11 +15,13 @@
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/mman.h>
 #include <linux/perf_event.h>
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include <asm/cacheflush.h>

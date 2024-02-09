@@ -28,6 +28,7 @@
  */
 
 #include "smscoreapi.h"
+#include <linux/sprintf.h>
 
 #include <linux/moduleparam.h>
 #include <linux/slab.h>

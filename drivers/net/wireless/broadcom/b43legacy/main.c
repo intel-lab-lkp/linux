@@ -21,6 +21,7 @@
 #include <linux/if_arp.h>
 #include <linux/etherdevice.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sched/signal.h>
 #include <linux/skbuff.h>
@@ -28,6 +29,7 @@
 #include <linux/slab.h>
 #include <net/dst.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "b43legacy.h"
 #include "main.h"

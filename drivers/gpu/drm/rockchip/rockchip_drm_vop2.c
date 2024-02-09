@@ -5,6 +5,7 @@
  */
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/component.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
@@ -17,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/swab.h>
 
 #include <drm/drm.h>

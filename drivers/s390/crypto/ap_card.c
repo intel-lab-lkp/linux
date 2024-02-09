@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <asm/facility.h>
 #include <asm/sclp.h>
+#include <linux/sprintf.h>
 
 #include "ap_bus.h"
 

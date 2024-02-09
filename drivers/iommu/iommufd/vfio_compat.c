@@ -5,6 +5,7 @@
 #include <linux/interval_tree.h>
 #include <linux/iommu.h>
 #include <linux/iommufd.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/slab.h>
 #include <linux/vfio.h>
 #include <uapi/linux/vfio.h>

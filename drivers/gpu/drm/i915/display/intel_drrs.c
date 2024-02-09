@@ -12,6 +12,8 @@
 #include "intel_frontbuffer.h"
 #include "intel_panel.h"
 
+#include <linux/completion.h>
+
 /**
  * DOC: Display Refresh Rate Switching (DRRS)
  *

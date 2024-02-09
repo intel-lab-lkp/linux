@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/clocksource.h>
 #include <linux/console.h>

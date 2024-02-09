@@ -13,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/sched/signal.h>
+#include <linux/hrtimer.h>
 
 #include <media/dmxdev.h>
 #include <media/dvbdev.h>

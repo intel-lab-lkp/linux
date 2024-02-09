@@ -44,6 +44,9 @@
 
 #include "aic79xx_osm.h"
 #include "aic79xx_inline.h"
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <scsi/scsicam.h>
 
 static struct scsi_transport_template *ahd_linux_transport_template = NULL;

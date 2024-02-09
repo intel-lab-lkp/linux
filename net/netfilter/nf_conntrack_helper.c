@@ -11,6 +11,7 @@
 #include <linux/netfilter.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/stddef.h>
 #include <linux/random.h>

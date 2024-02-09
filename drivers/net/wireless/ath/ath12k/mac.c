@@ -14,6 +14,7 @@
 #include "dp_tx.h"
 #include "dp_rx.h"
 #include "peer.h"
+#include <linux/completion.h>
 
 #define CHAN2G(_channel, _freq, _flags) { \
 	.band                   = NL80211_BAND_2GHZ, \

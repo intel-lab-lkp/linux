@@ -34,6 +34,7 @@
 #include <linux/highmem.h>
 #include <linux/log2.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/sprintf.h>
 #include <rdma/mlx5-abi.h>
 #include "lib/eq.h"
 #include "en.h"

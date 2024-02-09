@@ -4,6 +4,7 @@
 #include <linux/skmsg.h>
 #include <linux/filter.h>
 #include <linux/bpf.h>
+#include <linux/bvec.h>
 #include <linux/init.h>
 #include <linux/wait.h>
 #include <linux/util_macros.h>

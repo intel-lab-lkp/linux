@@ -10,6 +10,7 @@
  *      registered, the devfreq cooling won't react to it.
  */
 
+#include <linux/device.h>
 #include <linux/devfreq.h>
 #include <linux/devfreq_cooling.h>
 #include <linux/energy_model.h>
@@ -17,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_qos.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include <linux/units.h>
 

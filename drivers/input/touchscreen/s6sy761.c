@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 /* commands */
 #define S6SY761_SENSE_ON		0x10

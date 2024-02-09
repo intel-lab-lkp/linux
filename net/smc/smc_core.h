@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/smc.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 #include <net/genetlink.h>
 #include <net/smc.h>

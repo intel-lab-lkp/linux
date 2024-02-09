@@ -10,6 +10,7 @@
 
 #include <linux/device.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-subdev.h>

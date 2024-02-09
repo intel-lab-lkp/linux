@@ -25,6 +25,7 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <video/mipi_display.h>
 
 #include <drm/drm_connector.h>

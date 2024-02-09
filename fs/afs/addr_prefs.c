@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/inet.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <keys/rxrpc-type.h>
 #include "internal.h"

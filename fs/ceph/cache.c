@@ -7,6 +7,7 @@
  */
 
 #include <linux/ceph/ceph_debug.h>
+#include <linux/sprintf.h>
 
 #include <linux/fs_context.h>
 #include "super.h"

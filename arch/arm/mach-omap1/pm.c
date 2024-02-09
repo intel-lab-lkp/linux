@@ -40,6 +40,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>
 #include <linux/io.h>

@@ -7,6 +7,7 @@
  */
 
 #include <linux/align.h>
+#include <linux/completion.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <linux/kernel.h>

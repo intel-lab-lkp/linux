@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/math.h>
+#include <linux/completion.h>
 
 #include <video/imx-ipu-image-convert.h>
 

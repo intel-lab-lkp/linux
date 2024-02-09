@@ -167,6 +167,7 @@ static int print_unex = 1;
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/fdreg.h>
@@ -176,6 +177,7 @@ static int print_unex = 1;
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/bio.h>
+#include <linux/completion.h>
 #include <linux/string.h>
 #include <linux/jiffies.h>
 #include <linux/fcntl.h>

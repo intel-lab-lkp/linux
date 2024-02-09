@@ -37,6 +37,7 @@
 #include <linux/list.h>
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define MODULE_NAME	"acpi-ged"
 

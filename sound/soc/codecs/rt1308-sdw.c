@@ -21,6 +21,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
+#include <linux/completion.h>
 
 #include "rt1308.h"
 #include "rt1308-sdw.h"

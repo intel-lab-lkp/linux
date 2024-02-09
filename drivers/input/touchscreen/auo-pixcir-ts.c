@@ -23,6 +23,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 /*
  * Coordinate calculation:

@@ -10,10 +10,13 @@
 
 #include <linux/time.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/proc_fs.h>
 #include <linux/part_stat.h>
+#include <linux/completion.h>
 
 #include "ext4.h"
 #include "ext4_jbd2.h"

@@ -48,6 +48,7 @@
 #include <linux/of.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <dt-bindings/leds/leds-pca955x.h>

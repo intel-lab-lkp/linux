@@ -38,6 +38,7 @@
 #include <linux/fcntl.h>
 #include <linux/sched/signal.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/bitfield.h>
 #include <linux/ctype.h>

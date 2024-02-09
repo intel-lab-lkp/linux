@@ -7,6 +7,7 @@
 
 #include <linux/ethtool.h>
 #include "xgene_enet_main.h"
+#include <linux/sprintf.h>
 
 struct xgene_gstrings_stats {
 	char name[ETH_GSTRING_LEN];

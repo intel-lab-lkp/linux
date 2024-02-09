@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
@@ -25,6 +26,7 @@
 #include <linux/firmware.h>
 #include <linux/mutex.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "usbatm.h"
 

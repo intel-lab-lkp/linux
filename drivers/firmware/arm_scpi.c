@@ -18,6 +18,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/export.h>
@@ -37,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #define CMD_ID_MASK		GENMASK(6, 0)
 #define CMD_TOKEN_ID_MASK	GENMASK(15, 8)

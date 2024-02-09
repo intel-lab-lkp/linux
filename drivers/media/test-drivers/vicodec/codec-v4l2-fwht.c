@@ -6,6 +6,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/printk.h> // for pr_err()
 #include <linux/string.h>
 #include <linux/videodev2.h>
 #include "codec-v4l2-fwht.h"

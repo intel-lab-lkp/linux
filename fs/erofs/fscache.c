@@ -5,6 +5,7 @@
  */
 #include <linux/fscache.h>
 #include "internal.h"
+#include <linux/sprintf.h>
 
 static DEFINE_MUTEX(erofs_domain_list_lock);
 static DEFINE_MUTEX(erofs_domain_cookies_lock);

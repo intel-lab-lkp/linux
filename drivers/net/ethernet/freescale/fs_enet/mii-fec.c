@@ -13,6 +13,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/string.h>

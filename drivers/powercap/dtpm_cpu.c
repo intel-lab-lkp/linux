@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct dtpm_cpu {
 	struct dtpm dtpm;

@@ -84,6 +84,7 @@
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/pci.h>

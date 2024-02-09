@@ -29,9 +29,11 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

@@ -15,6 +15,7 @@
 #include "control.h"
 #include "comm.h"
 #include "midi.h"
+#include <linux/sprintf.h>
 
 #include <linux/moduleparam.h>
 #include <linux/interrupt.h>

@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/ktime.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/videodev2.h>
 

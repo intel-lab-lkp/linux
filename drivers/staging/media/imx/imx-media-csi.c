@@ -22,6 +22,7 @@
 #include <video/imx-ipu-v3.h>
 #include <media/imx.h>
 #include "imx-media.h"
+#include <linux/completion.h>
 
 /*
  * Min/Max supported width and heights.

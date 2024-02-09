@@ -8,6 +8,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/err.h>
@@ -17,6 +18,7 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define ADT7411_REG_STAT_1			0x00
 #define ADT7411_STAT_1_INT_TEMP_HIGH		BIT(0)

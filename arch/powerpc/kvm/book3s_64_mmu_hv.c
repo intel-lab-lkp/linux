@@ -12,6 +12,7 @@
 #include <linux/gfp.h>
 #include <linux/slab.h>
 #include <linux/hugetlb.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/srcu.h>
 #include <linux/anon_inodes.h>

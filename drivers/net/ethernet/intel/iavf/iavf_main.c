@@ -3,6 +3,7 @@
 
 #include "iavf.h"
 #include "iavf_prototype.h"
+#include <linux/sprintf.h>
 /* All iavf tracepoints are defined by the include below, which must
  * be included exactly once across the whole kernel with
  * CREATE_TRACE_POINTS defined

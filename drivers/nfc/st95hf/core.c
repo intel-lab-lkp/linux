@@ -21,6 +21,7 @@
 #include <linux/wait.h>
 #include <net/nfc/digital.h>
 #include <net/nfc/nfc.h>
+#include <linux/completion.h>
 
 #include "spi.h"
 

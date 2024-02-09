@@ -4,6 +4,7 @@
  */
 
 #include <crypto/hash.h>
+#include <linux/completion.h>
 #include <linux/kernel.h>
 #include <linux/bio.h>
 #include <linux/blk-cgroup.h>

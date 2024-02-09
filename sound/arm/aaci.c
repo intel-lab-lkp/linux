@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/amba/bus.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>

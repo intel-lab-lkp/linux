@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #define DEFAULT_ITERATIONS 100

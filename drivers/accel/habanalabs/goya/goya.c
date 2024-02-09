@@ -10,6 +10,8 @@
 #include "../include/hw_ip/mmu/mmu_v1_0.h"
 #include "../include/goya/asic_reg/goya_masks.h"
 #include "../include/goya/goya_reg_map.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include <linux/pci.h>
 #include <linux/hwmon.h>

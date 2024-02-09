@@ -4,6 +4,7 @@
  */
 
 #include <linux/string.h>
+#include <linux/completion.h>
 
 #include "i915_drv.h"
 #include "intel_atomic.h"

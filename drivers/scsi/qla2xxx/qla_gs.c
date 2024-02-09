@@ -5,6 +5,8 @@
  */
 #include "qla_def.h"
 #include "qla_target.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 
 static int qla2x00_sns_ga_nxt(scsi_qla_host_t *, fc_port_t *);

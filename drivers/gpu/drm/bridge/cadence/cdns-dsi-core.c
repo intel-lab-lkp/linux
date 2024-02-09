@@ -8,6 +8,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_probe_helper.h>
+#include <linux/completion.h>
 #include <video/mipi_display.h>
 
 #include <linux/clk.h>

@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/ktime.h>
 #include <linux/rational.h>

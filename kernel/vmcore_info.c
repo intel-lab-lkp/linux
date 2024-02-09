@@ -9,11 +9,13 @@
 #include <linux/utsname.h>
 #include <linux/vmalloc.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/kexec.h>
 #include <linux/memory.h>
 #include <linux/cpuhotplug.h>
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
+#include <linux/timekeeping.h> // for ktime_get_real_seconds()
 
 #include <asm/page.h>
 #include <asm/sections.h>

@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/of_pdt.h>
+#include <linux/sprintf.h>
 
 static struct of_pdt_ops *of_pdt_prom_ops __initdata;
 

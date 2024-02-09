@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
+#include <linux/uidgid.h> // for make_kuid(), make_kgid()
 #include <linux/uio.h>
 #include <net/9p/9p.h>
 #include <net/9p/client.h>

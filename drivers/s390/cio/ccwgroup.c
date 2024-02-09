@@ -9,12 +9,14 @@
  */
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/ctype.h>
 #include <linux/dcache.h>
+#include <linux/sprintf.h>
 
 #include <asm/cio.h>
 #include <asm/ccwdev.h>

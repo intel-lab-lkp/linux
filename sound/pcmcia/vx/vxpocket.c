@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include "vxpocket.h"
 #include <pcmcia/ciscode.h>

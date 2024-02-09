@@ -16,6 +16,7 @@
 #include <linux/gameport.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/info.h>
 #include <sound/control.h>

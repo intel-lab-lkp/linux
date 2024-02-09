@@ -16,6 +16,7 @@
 #include <linux/ipv6.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/export.h>
 #include <net/net_namespace.h>

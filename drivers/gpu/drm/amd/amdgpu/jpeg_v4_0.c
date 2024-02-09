@@ -29,6 +29,8 @@
 #include "jpeg_v2_0.h"
 #include "jpeg_v4_0.h"
 #include "mmsch_v4_0.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include "vcn/vcn_4_0_0_offset.h"
 #include "vcn/vcn_4_0_0_sh_mask.h"

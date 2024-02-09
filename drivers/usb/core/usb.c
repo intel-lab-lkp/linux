@@ -26,6 +26,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <linux/slab.h>

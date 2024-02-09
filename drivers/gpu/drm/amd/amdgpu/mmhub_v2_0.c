@@ -23,6 +23,7 @@
 
 #include "amdgpu.h"
 #include "mmhub_v2_0.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "mmhub/mmhub_2_0_0_offset.h"
 #include "mmhub/mmhub_2_0_0_sh_mask.h"

@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/ctype.h>
 #include <linux/inet.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/net.h>
 #include <linux/string.h>

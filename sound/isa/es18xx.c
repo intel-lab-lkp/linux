@@ -70,6 +70,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include <asm/dma.h>
 #include <sound/core.h>

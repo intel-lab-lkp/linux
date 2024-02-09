@@ -22,6 +22,7 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/dmi.h>
 #include <linux/jiffies.h>

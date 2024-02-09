@@ -2,6 +2,8 @@
 /* Copyright (c) 2022 HiSilicon Limited. */
 #include <linux/hisi_acc_qm.h>
 #include "qm_common.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define QM_DFX_BASE			0x0100000
 #define QM_DFX_STATE1			0x0104000

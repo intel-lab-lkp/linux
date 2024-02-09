@@ -18,6 +18,7 @@
 #include <linux/kallsyms.h>
 #include <linux/debug_locks.h>
 #include <linux/vmalloc.h>
+#include <linux/sprintf.h>
 #include <linux/sort.h>
 #include <linux/uaccess.h>
 #include <asm/div64.h>

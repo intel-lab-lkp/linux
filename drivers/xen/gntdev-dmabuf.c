@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <xen/xen.h>
 #include <xen/grant_table.h>

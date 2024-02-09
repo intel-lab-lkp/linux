@@ -26,6 +26,7 @@
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_vblank.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "amdgpu.h"
 #include "amdgpu_pm.h"

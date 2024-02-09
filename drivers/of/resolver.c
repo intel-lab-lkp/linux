@@ -9,6 +9,7 @@
 #define pr_fmt(fmt)	"OF: resolver: " fmt
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>

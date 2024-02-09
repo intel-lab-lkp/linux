@@ -3,6 +3,7 @@
 #include <linux/crypto.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>

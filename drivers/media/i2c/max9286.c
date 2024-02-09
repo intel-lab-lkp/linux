@@ -23,6 +23,8 @@
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>

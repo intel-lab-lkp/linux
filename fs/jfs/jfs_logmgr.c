@@ -46,6 +46,7 @@
  * 32-bit lspn and page eor.
  */
 
+#include <linux/file.h> // for fput()
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/interrupt.h>

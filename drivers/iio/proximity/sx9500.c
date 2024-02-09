@@ -13,6 +13,7 @@
 #include <linux/i2c.h>
 #include <linux/irq.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/gpio/consumer.h>
 #include <linux/regmap.h>
 #include <linux/pm.h>

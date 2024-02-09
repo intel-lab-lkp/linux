@@ -5,6 +5,7 @@
 
 #include <linux/ethtool.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "ena_netdev.h"
 #include "ena_xdp.h"

@@ -5,8 +5,10 @@
  */
 
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include <linux/posix_acl.h>
 #include <linux/ratelimit.h>

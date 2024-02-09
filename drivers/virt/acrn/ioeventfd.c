@@ -11,6 +11,7 @@
 
 #include <linux/eventfd.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "acrn_drv.h"
 

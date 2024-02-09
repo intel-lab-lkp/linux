@@ -35,6 +35,7 @@
 
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/memblock.h>
 #include <linux/sizes.h>
 #include <linux/string.h>

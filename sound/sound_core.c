@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/kdev_t.h>
 #include <linux/major.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 
 #ifdef CONFIG_SOUND_OSS_CORE

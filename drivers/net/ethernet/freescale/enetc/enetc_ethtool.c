@@ -5,6 +5,7 @@
 #include <linux/net_tstamp.h>
 #include <linux/module.h>
 #include "enetc.h"
+#include <linux/sprintf.h>
 
 static const u32 enetc_si_regs[] = {
 	ENETC_SIMR, ENETC_SIPMAR0, ENETC_SIPMAR1, ENETC_SICBDRMR,

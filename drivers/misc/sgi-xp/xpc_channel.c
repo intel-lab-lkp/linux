@@ -16,6 +16,7 @@
 
 #include <linux/device.h>
 #include "xpc.h"
+#include <linux/completion.h>
 
 /*
  * Process a connect message from a remote partition.

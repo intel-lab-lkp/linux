@@ -2,6 +2,7 @@
 // Copyright 2011 Cisco Systems, Inc.  All rights reserved.
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/types.h>

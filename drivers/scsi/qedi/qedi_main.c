@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 #include <linux/kernel.h>
 #include <linux/if_arp.h>
+#include <linux/sprintf.h>
 #include <scsi/iscsi_if.h>
 #include <linux/inet.h>
 #include <net/arp.h>

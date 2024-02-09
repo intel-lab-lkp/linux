@@ -16,6 +16,7 @@
 
 #include <linux/hw_random.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 
 #include "ath9k.h"
 #include "hw.h"

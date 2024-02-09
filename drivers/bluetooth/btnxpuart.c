@@ -6,6 +6,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include <linux/serdev.h>
 #include <linux/of.h>

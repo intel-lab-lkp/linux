@@ -7,6 +7,7 @@
  */
 
 #include <linux/device-mapper.h>
+#include <linux/sprintf.h>
 
 #include "dm-rq.h"
 #include "dm-bio-record.h"

@@ -9,6 +9,7 @@
 *****************************************************************************/
 #include "common.h"
 #include "4965.h"
+#include <linux/sprintf.h>
 
 static const char *fmt_value = "  %-30s %10u\n";
 static const char *fmt_table = "  %-30s %10u  %10u  %10u  %10u\n";

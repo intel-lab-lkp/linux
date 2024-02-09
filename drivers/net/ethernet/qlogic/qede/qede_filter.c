@@ -6,6 +6,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <net/udp_tunnel.h>
 #include <linux/bitops.h>
 #include <linux/vmalloc.h>

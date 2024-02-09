@@ -5,6 +5,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/component.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>

@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/host1x.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -14,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

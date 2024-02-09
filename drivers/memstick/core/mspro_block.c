@@ -9,6 +9,7 @@
  */
 
 #include <linux/blk-mq.h>
+#include <linux/completion.h>
 #include <linux/idr.h>
 #include <linux/hdreg.h>
 #include <linux/kthread.h>
@@ -17,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/memstick.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME "mspro_block"
 

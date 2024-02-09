@@ -47,6 +47,7 @@
 #include <linux/refcount.h>
 #include <linux/uio.h>
 #include <linux/bits.h>
+#include <linux/completion.h>
 
 #include <linux/sched/signal.h>
 #include <linux/fs.h>
@@ -72,6 +73,7 @@
 #include <linux/io_uring/cmd.h>
 #include <linux/audit.h>
 #include <linux/security.h>
+#include <linux/hrtimer.h>
 #include <asm/shmparam.h>
 
 #define CREATE_TRACE_POINTS

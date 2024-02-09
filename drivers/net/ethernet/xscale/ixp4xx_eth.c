@@ -39,6 +39,7 @@
 #include <linux/soc/ixp4xx/npe.h>
 #include <linux/soc/ixp4xx/qmgr.h>
 #include <linux/soc/ixp4xx/cpu.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #define IXP4XX_ETH_NPEA		0x00

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/mISDNhw.h>
 #include "ipac.h"
+#include <linux/sprintf.h>
 
 
 #define DBUSY_TIMER_VALUE	80

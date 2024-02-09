@@ -6,6 +6,7 @@
  */
 
 #include "oxfw.h"
+#include <linux/sprintf.h>
 
 static int midi_capture_open(struct snd_rawmidi_substream *substream)
 {

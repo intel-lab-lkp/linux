@@ -25,6 +25,8 @@
 #include <linux/prime_numbers.h>
 #include <linux/pm_qos.h>
 #include <linux/sort.h>
+#include <linux/sprintf.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "gem/i915_gem_internal.h"
 #include "gem/i915_gem_pm.h"

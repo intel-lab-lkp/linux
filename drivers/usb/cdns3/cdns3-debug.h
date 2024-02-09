@@ -11,6 +11,7 @@
 #define __LINUX_CDNS3_DEBUG
 
 #include "core.h"
+#include <linux/sprintf.h>
 
 static inline char *cdns3_decode_usb_irq(char *str,
 					 enum usb_device_speed speed,

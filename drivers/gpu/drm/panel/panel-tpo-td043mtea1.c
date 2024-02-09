@@ -10,9 +10,11 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_connector.h>
 #include <drm/drm_modes.h>

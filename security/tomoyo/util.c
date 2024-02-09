@@ -6,7 +6,9 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/rculist.h>
+#include <linux/kstrtox.h>
 
 #include "common.h"
 

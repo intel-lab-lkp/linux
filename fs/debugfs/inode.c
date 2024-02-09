@@ -27,6 +27,8 @@
 #include <linux/magic.h>
 #include <linux/slab.h>
 #include <linux/security.h>
+#include <linux/sysfs.h>
+#include <linux/completion.h>
 
 #include "internal.h"
 

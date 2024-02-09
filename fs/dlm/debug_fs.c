@@ -14,6 +14,7 @@
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "dlm_internal.h"
 #include "midcomms.h"

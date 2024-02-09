@@ -58,6 +58,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/ntb.h>
+#include <linux/sprintf.h>
 
 #include "ntb_hw_amd.h"
 

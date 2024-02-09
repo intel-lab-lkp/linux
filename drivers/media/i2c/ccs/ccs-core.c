@@ -24,6 +24,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/smiapp.h>
+#include <linux/sprintf.h>
 #include <linux/v4l2-mediabus.h>
 #include <media/v4l2-cci.h>
 #include <media/v4l2-device.h>

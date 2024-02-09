@@ -5,6 +5,7 @@
 
 #include "iosm_ipc_imem.h"
 #include "iosm_ipc_task_queue.h"
+#include <linux/completion.h>
 
 /* Actual tasklet function, will be called whenever tasklet is scheduled.
  * Calls event handler involves callback for each element in the message queue

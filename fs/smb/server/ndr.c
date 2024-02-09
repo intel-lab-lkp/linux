@@ -5,6 +5,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 
 #include "glob.h"
 #include "ndr.h"

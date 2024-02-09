@@ -4,6 +4,7 @@
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/log2.h>
+#include <linux/sprintf.h>
 
 #include "../nfpcore/nfp_cpp.h"
 #include "../nfpcore/nfp_nffw.h"

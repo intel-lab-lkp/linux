@@ -9,6 +9,8 @@
 #include <linux/bitfield.h>
 #include <linux/export.h>
 #include <linux/errno.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/videodev2.h>
 

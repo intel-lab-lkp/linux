@@ -3,7 +3,9 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/hardirq.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/export.h>

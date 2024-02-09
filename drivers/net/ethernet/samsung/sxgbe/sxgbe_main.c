@@ -21,6 +21,7 @@
 #include <linux/interrupt.h>
 #include <linux/ip.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mii.h>
 #include <linux/module.h>
 #include <linux/net_tstamp.h>
@@ -30,6 +31,7 @@
 #include <linux/prefetch.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/sxgbe_platform.h>
 

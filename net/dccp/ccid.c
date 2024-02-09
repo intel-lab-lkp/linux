@@ -9,6 +9,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "ccid.h"
 #include "ccids/lib/tfrc.h"

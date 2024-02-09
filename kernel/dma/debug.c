@@ -10,7 +10,9 @@
 #include <linux/sched/task_stack.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-map-ops.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/sched/task.h>
+#include <linux/sprintf.h>
 #include <linux/stacktrace.h>
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
@@ -23,6 +25,7 @@
 #include <linux/ctype.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <asm/sections.h>
 #include "debug.h"
 

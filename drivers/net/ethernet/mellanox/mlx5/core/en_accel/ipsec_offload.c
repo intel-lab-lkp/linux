@@ -8,6 +8,7 @@
 #include "lib/ipsec_fs_roce.h"
 #include "fs_core.h"
 #include "eswitch.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 enum {
 	MLX5_IPSEC_ASO_REMOVE_FLOW_PKT_CNT_OFFSET,

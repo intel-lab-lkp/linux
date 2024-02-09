@@ -12,6 +12,8 @@
 #include <linux/platform_device.h>
 #include <linux/remoteproc/qcom_rproc.h>
 #include <linux/rpmsg.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "qcom_common.h"
 

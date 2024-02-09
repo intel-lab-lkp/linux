@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/bitops.h>
 #include <linux/etherdevice.h>

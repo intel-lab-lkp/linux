@@ -13,6 +13,7 @@
 
 #include <linux/debugfs.h>
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 static int rsnd_debugfs_show(struct seq_file *m, void *v)
 {

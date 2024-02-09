@@ -12,6 +12,8 @@
 #include "md.h"
 #include "md-bitmap.h"
 #include "md-cluster.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define LVB_SIZE	64
 #define NEW_DEV_TIMEOUT 5000

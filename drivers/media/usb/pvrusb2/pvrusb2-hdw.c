@@ -5,6 +5,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -27,6 +28,7 @@
 #include "pvrusb2-cx2584x-v4l.h"
 #include "pvrusb2-cs53l32a.h"
 #include "pvrusb2-audio.h"
+#include <linux/completion.h>
 
 #define TV_MIN_FREQ     55250000L
 #define TV_MAX_FREQ    850000000L

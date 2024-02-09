@@ -13,10 +13,12 @@
  */
 
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/edac.h>
 #include <linux/bug.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "edac_mc.h"

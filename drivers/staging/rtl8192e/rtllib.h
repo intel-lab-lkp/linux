@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/mutex.h>

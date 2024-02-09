@@ -11,6 +11,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include <sound/soc.h>

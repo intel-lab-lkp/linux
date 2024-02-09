@@ -26,6 +26,7 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 extern struct i2c_adapter amd756_smbus;
 

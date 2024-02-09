@@ -27,6 +27,7 @@
 #include "xfs_bmap_btree.h"
 #include "xfs_rmap_btree.h"
 #include "xfs_refcount_btree.h"
+#include <linux/completion.h>
 
 /*
  * Btree magic numbers.

@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
 #include <linux/kstrtox.h>

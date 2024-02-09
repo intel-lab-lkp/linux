@@ -17,8 +17,10 @@
  ***********************************************************************/
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <net/vxlan.h>
 #include <linux/kthread.h>
 #include "liquidio_common.h"
@@ -35,6 +37,7 @@
 #include "cn23xx_pf_device.h"
 #include "liquidio_image.h"
 #include "lio_vf_rep.h"
+#include <linux/completion.h>
 
 MODULE_AUTHOR("Cavium Networks, <support@cavium.com>");
 MODULE_DESCRIPTION("Cavium LiquidIO Intelligent Server Adapter Driver");

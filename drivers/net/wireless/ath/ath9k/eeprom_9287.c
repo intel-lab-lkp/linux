@@ -17,6 +17,7 @@
 #include <asm/unaligned.h>
 #include "hw.h"
 #include "ar9002_phy.h"
+#include <linux/sprintf.h>
 
 #define SIZE_EEPROM_AR9287 (sizeof(struct ar9287_eeprom) / sizeof(u16))
 

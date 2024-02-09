@@ -10,6 +10,7 @@
  * Hybrid USB devices (analog and DVB).
  */
 #include "dvb_usb_common.h"
+#include <linux/completion.h>
 
 /* URB stuff for streaming */
 

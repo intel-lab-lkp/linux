@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/types.h>
 

@@ -10,6 +10,7 @@
  */
 
 #include <linux/sunrpc/svc_xprt.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/sunrpc/addr.h>

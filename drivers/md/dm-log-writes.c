@@ -6,6 +6,7 @@
  */
 
 #include <linux/device-mapper.h>
+#include <linux/completion.h>
 
 #include <linux/module.h>
 #include <linux/init.h>

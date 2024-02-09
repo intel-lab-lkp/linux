@@ -6,6 +6,7 @@
  */
 
 #include "saa7164.h"
+#include <linux/sprintf.h>
 
 /* Take the encoder configuration from the port struct and
  * flush it to the hardware.

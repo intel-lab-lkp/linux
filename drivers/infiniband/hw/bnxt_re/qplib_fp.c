@@ -46,6 +46,7 @@
 #include <linux/delay.h>
 #include <linux/prefetch.h>
 #include <linux/if_ether.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_mad.h>
 
 #include "roce_hsi.h"

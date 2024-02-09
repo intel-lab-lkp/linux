@@ -13,6 +13,7 @@
 #include <linux/bug.h>
 #include <linux/gfp.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 

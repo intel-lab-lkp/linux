@@ -4,6 +4,7 @@
 #include <linux/host1x.h>
 #include <linux/iommu.h>
 #include <linux/list.h>
+#include <linux/property.h> // for device_get_dma_attr()
 
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>

@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/io.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
@@ -18,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/export.h>
 #include <linux/cpu.h>

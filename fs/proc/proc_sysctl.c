@@ -3,6 +3,7 @@
  * /proc/sys support
  */
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
@@ -15,6 +16,7 @@
 #include <linux/uio.h>
 #include <linux/module.h>
 #include <linux/bpf-cgroup.h>
+#include <linux/completion.h>
 #include <linux/mount.h>
 #include <linux/kmemleak.h>
 #include "internal.h"

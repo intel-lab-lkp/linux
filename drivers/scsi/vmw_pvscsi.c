@@ -23,8 +23,10 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/pci.h>
+#include <linux/completion.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>

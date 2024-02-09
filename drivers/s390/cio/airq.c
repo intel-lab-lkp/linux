@@ -17,6 +17,7 @@
 #include <linux/rculist.h>
 #include <linux/slab.h>
 #include <linux/dmapool.h>
+#include <linux/sprintf.h>
 
 #include <asm/airq.h>
 #include <asm/isc.h>

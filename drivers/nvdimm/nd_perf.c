@@ -11,6 +11,7 @@
 
 #include <linux/nd.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define EVENT(_name, _code)     enum{_name = _code}
 

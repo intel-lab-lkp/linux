@@ -43,6 +43,7 @@
 #include <linux/pci.h>
 #include <linux/prefetch.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "roce_hsi.h"
 #include "qplib_res.h"

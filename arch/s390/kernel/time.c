@@ -18,10 +18,12 @@
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/kernel.h>
 #include <linux/param.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>

@@ -9,6 +9,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/dmaengine.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>

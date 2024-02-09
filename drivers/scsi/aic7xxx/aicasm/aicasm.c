@@ -43,6 +43,7 @@
  */
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <linux/sprintf.h>
 
 #include <ctype.h>
 #include <inttypes.h>

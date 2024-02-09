@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

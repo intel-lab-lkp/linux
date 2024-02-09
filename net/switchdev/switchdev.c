@@ -18,6 +18,7 @@
 #include <linux/if_vlan.h>
 #include <linux/rtnetlink.h>
 #include <net/switchdev.h>
+#include <linux/completion.h>
 
 static LIST_HEAD(deferred);
 static DEFINE_SPINLOCK(deferred_lock);

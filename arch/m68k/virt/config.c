@@ -3,6 +3,7 @@
 #include <linux/reboot.h>
 #include <linux/serial_core.h>
 #include <clocksource/timer-goldfish.h>
+#include <linux/sprintf.h>
 
 #include <asm/bootinfo.h>
 #include <asm/bootinfo-virt.h>

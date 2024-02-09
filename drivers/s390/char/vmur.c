@@ -13,9 +13,11 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <asm/cio.h>

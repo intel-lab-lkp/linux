@@ -19,6 +19,7 @@
 #include "osdep_service.h"
 #include "drv_types.h"
 #include "mlme_osdep.h"
+#include <linux/sprintf.h>
 
 static void sitesurvey_ctrl_handler(struct timer_list *t)
 {

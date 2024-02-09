@@ -32,12 +32,14 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <sound/pcm.h>
 #include <sound/core.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/timer.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 

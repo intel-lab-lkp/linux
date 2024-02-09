@@ -11,8 +11,10 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/panic_notifier.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/sched/loadavg.h>

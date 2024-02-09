@@ -7,6 +7,7 @@
 
 #include <linux/capability.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/slab.h>

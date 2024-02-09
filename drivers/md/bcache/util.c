@@ -10,8 +10,10 @@
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/sched/clock.h>
 

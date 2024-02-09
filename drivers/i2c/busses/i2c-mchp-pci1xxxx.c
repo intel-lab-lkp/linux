@@ -10,6 +10,7 @@
  */
 
 #include <linux/bits.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/i2c-smbus.h>
@@ -17,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #define SMBUS_MAST_CORE_ADDR_BASE		0x00000

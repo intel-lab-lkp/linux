@@ -16,6 +16,7 @@
 #include <linux/of_gpio.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>

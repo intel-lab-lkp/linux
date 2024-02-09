@@ -5,6 +5,7 @@
 
 #include <linux/bitops.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/jiffies.h>

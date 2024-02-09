@@ -28,6 +28,7 @@ static const char version[] = "tc35815.c:v" DRV_VERSION "\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>

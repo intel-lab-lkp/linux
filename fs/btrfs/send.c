@@ -8,10 +8,12 @@
 #include <linux/file.h>
 #include <linux/sort.h>
 #include <linux/mount.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include <linux/posix_acl_xattr.h>
 #include <linux/radix-tree.h>
 #include <linux/vmalloc.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/compat.h>
 #include <linux/crc32c.h>

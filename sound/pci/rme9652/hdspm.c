@@ -127,6 +127,7 @@
 #include <linux/math64.h>
 #include <linux/io.h>
 #include <linux/nospec.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/control.h>

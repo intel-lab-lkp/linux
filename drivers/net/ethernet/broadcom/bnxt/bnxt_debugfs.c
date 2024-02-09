@@ -14,6 +14,7 @@
 #include <linux/dim.h>
 #include "bnxt.h"
 #include "bnxt_debugfs.h"
+#include <linux/sprintf.h>
 
 static struct dentry *bnxt_debug_mnt;
 

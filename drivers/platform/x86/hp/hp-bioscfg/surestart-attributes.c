@@ -7,6 +7,8 @@
  */
 
 #include "bioscfg.h"
+
+#include <linux/kobject.h>
 #include <linux/types.h>
 
 /* Maximum number of log entries supported when log entry size is 16

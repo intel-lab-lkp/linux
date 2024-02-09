@@ -50,12 +50,14 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>	/* for mdelay */
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/compat.h>
+#include <linux/completion.h>
 
 #include <asm/io.h>
 #include <linux/uaccess.h>

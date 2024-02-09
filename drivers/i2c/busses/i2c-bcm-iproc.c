@@ -10,6 +10,8 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define IDM_CTRL_DIRECT_OFFSET       0x00
 #define CFG_OFFSET                   0x00

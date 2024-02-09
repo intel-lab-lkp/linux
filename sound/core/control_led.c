@@ -7,8 +7,10 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/leds.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/control.h>
+#include <linux/kstrtox.h>
 
 MODULE_AUTHOR("Jaroslav Kysela <perex@perex.cz>");
 MODULE_DESCRIPTION("ALSA control interface to LED trigger code.");

@@ -8,6 +8,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/nospec.h>
 #include "mgb4_core.h"
 #include "mgb4_i2c.h"
@@ -15,6 +16,7 @@
 #include "mgb4_vin.h"
 #include "mgb4_cmt.h"
 #include "mgb4_sysfs.h"
+#include <linux/sprintf.h>
 
 static int loopin_cnt(struct mgb4_vin_dev *vindev)
 {

@@ -10,6 +10,7 @@
 #include <linux/if_ether.h>
 #include <linux/in.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 #include <linux/bitmap.h>
 #include <net/flow_offload.h>

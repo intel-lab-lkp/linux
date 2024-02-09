@@ -7,6 +7,7 @@
 #define pr_fmt(fmt) "pch-msi: " fmt
 
 #include <linux/irqchip.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_address.h>

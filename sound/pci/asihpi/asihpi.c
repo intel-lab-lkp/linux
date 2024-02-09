@@ -14,6 +14,7 @@
 #include "hpimsginit.h"
 #include "hpioctl.h"
 #include "hpicmn.h"
+#include <linux/sprintf.h>
 
 #include <linux/pci.h>
 #include <linux/init.h>

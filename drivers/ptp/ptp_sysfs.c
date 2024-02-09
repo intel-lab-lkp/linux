@@ -6,7 +6,9 @@
  * Copyright 2021 NXP
  */
 #include <linux/capability.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "ptp_private.h"
 

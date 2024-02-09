@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <asm/unaligned.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"

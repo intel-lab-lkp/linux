@@ -6,6 +6,7 @@
 #include "qla_def.h"
 #include "qla_gbl.h"
 #include "qla_target.h"
+#include <linux/completion.h>
 
 #include <linux/moduleparam.h>
 #include <linux/vmalloc.h>

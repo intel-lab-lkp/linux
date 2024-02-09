@@ -21,8 +21,11 @@
  */
 #include "gf100.h"
 #include "ctxgf100.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <nvif/class.h>
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void
 gv100_gr_trap_sm(struct gf100_gr *gr, int gpc, int tpc, int sm)

@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/platform_data/shtc1.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 /* commands (high precision mode) */
 static const unsigned char shtc1_cmd_measure_blocking_hpm[]    = { 0x7C, 0xA2 };

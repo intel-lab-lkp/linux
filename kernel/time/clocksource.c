@@ -10,11 +10,13 @@
 #include <linux/device.h>
 #include <linux/clocksource.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/module.h>
 #include <linux/sched.h> /* for spin_unlock_irq() using preempt_count() m68k */
 #include <linux/tick.h>
 #include <linux/kthread.h>
 #include <linux/prandom.h>
+#include <linux/sprintf.h>
 #include <linux/cpu.h>
 
 #include "tick-internal.h"

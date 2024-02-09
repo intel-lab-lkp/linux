@@ -26,12 +26,14 @@
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/pm.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ad7877.h>
 #include <linux/module.h>
 #include <asm/irq.h>
+#include <linux/sprintf.h>
 
 #define	TS_PEN_UP_TIMEOUT	msecs_to_jiffies(100)
 

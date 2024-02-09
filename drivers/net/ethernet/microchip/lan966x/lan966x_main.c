@@ -10,6 +10,7 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <net/addrconf.h>
 
 #include "lan966x_main.h"

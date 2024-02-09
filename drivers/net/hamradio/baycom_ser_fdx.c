@@ -57,8 +57,11 @@
 /*****************************************************************************/
 
 #include <linux/capability.h>
+#include <linux/kernel.h> // for get_options()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>

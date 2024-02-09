@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #include "uhci-hcd.h"
 

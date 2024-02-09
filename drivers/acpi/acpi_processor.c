@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <acpi/processor.h>
 

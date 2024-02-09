@@ -5,12 +5,16 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/uaccess.h>
+#include <linux/hrtimer.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/ratelimit.h>
 
 #include <clocksource/arm_arch_timer.h>
 #include <asm/arch_timer.h>

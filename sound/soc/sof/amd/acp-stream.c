@@ -14,6 +14,7 @@
 #include "../ops.h"
 #include "acp-dsp-offset.h"
 #include "acp.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define PTE_GRP1_OFFSET		0x00000000
 #define PTE_GRP2_OFFSET		0x00800000

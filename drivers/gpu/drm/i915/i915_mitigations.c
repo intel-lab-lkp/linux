@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include "i915_driver.h"

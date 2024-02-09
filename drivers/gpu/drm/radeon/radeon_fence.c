@@ -31,6 +31,7 @@
 
 #include <linux/atomic.h>
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kref.h>
 #include <linux/sched/signal.h>
 #include <linux/seq_file.h>

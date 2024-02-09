@@ -18,6 +18,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/units.h>
 #include <linux/fpga-dfl.h>

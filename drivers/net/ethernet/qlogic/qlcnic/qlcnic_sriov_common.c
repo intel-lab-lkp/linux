@@ -5,6 +5,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/completion.h>
 
 #include "qlcnic_sriov.h"
 #include "qlcnic.h"

@@ -5,6 +5,7 @@
 
 #include <linux/crc32.h>
 #include <linux/etherdevice.h>
+#include <linux/hex.h>
 #include <linux/if_ether.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>

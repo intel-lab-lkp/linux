@@ -30,6 +30,7 @@
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/poll.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include <drm/drm_crtc.h>

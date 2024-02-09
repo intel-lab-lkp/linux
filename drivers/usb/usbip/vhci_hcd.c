@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/file.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>

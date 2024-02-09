@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/edac.h>
 #include <linux/mmzone.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

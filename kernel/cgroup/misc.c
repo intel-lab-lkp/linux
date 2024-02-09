@@ -6,6 +6,7 @@
  * Author: Vipin Sharma <vipinsh@google.com>
  */
 
+#include <linux/kstrtox.h>
 #include <linux/limits.h>
 #include <linux/cgroup.h>
 #include <linux/errno.h>

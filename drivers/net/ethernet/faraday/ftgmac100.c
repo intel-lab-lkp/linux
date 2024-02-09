@@ -24,6 +24,7 @@
 #include <linux/crc32.h>
 #include <linux/if_vlan.h>
 #include <linux/of_net.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 #include <net/ncsi.h>
 

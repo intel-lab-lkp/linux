@@ -14,6 +14,7 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/leds.h>
+#include <linux/sprintf.h>
 
 #include "power_supply.h"
 

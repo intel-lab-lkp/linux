@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/of_platform.h>

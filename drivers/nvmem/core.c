@@ -18,6 +18,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "internals.h"
 

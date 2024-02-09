@@ -8,7 +8,10 @@
 
 #include <linux/sched.h>
 #include <linux/cred.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <linux/completion.h>
 #include <linux/buffer_head.h>
 #include <linux/module.h>

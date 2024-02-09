@@ -9,6 +9,7 @@
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_registers.h>
 #include "bus.h"
+#include <linux/sprintf.h>
 
 static struct dentry *sdw_debugfs_root;
 

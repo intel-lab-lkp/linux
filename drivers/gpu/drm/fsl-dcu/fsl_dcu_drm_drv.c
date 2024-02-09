@@ -17,6 +17,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>

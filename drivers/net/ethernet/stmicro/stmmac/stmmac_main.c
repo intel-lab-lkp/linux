@@ -18,6 +18,8 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/ip.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/skbuff.h>
 #include <linux/ethtool.h>

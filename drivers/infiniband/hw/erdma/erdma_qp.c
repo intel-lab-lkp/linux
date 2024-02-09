@@ -8,6 +8,8 @@
 
 #include "erdma_cm.h"
 #include "erdma_verbs.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 void erdma_qp_llp_close(struct erdma_qp *qp)
 {

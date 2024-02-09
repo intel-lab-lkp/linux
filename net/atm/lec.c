@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/bitops.h>
 #include <linux/capability.h>
+#include <linux/sprintf.h>
 
 /* We are ethernet device */
 #include <linux/if_ether.h>

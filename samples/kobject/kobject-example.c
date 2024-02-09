@@ -6,6 +6,7 @@
  * Copyright (C) 2007 Novell Inc.
  */
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>

@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/rwsem.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/hashtable.h>
 #include <net/net_namespace.h>

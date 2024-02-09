@@ -21,6 +21,7 @@
 #include <linux/of.h>
 #include <linux/spi/spi.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 
 enum altera_ps_devtype {
 	CYCLONE5,

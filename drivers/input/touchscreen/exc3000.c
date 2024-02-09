@@ -9,6 +9,7 @@
 
 #include <linux/acpi.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
@@ -21,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <asm/unaligned.h>
 

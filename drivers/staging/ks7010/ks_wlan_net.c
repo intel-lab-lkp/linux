@@ -10,6 +10,7 @@
 #include <linux/completion.h>
 #include <linux/if_arp.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/uaccess.h>
 

@@ -8,6 +8,8 @@
  */
 
 #include "debugfs.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/skbuff.h>
 #include <linux/slab.h>

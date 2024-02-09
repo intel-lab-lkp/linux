@@ -13,6 +13,7 @@
 #define dev_fmt(fmt) "DOE: " fmt
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>

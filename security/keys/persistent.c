@@ -7,6 +7,7 @@
 
 #include <linux/user_namespace.h>
 #include <linux/cred.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

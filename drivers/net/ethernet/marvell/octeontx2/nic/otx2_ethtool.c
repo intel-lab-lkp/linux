@@ -7,6 +7,7 @@
 
 #include <linux/pci.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/etherdevice.h>
 #include <linux/log2.h>

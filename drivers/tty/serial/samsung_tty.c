@@ -38,6 +38,7 @@
 #include <linux/serial_core.h>
 #include <linux/serial_s3c.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysrq.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>

@@ -13,6 +13,7 @@
 #include "iwl-prph.h"
 #include "iwl-csr.h"
 #include "pnvm.h"
+#include <linux/sprintf.h>
 
 #define FW_ASSERT_LMAC_FATAL			0x70
 #define FW_ASSERT_LMAC2_FATAL			0x72

@@ -17,6 +17,7 @@
 #include <linux/of_net.h>
 #include <linux/mfd/syscon.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/stmmac.h>
 
 #include "stmmac_platform.h"

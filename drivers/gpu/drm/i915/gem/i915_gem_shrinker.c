@@ -7,6 +7,7 @@
 #include <linux/oom.h>
 #include <linux/sched/mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/swap.h>
 #include <linux/pci.h>

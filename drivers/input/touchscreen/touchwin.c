@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Touchwindow serial touchscreen driver"
 

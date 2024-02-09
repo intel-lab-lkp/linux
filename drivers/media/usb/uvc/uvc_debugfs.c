@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #include "uvcvideo.h"

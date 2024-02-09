@@ -7,6 +7,7 @@
 #define _DRIVERS_SLIMBUS_H
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/idr.h>
 #include <linux/mutex.h>
 #include <linux/completion.h>
 #include <linux/slimbus.h>

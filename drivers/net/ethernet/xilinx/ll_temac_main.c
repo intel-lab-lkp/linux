@@ -41,6 +41,7 @@
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>      /* needed for sizeof(tcphdr) */
 #include <linux/udp.h>      /* needed for sizeof(udphdr) */
 #include <linux/phy.h>

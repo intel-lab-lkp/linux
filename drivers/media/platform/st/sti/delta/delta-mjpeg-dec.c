@@ -5,6 +5,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "delta.h"
 #include "delta-ipc.h"

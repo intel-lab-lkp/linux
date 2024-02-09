@@ -22,6 +22,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include "amdgpu.h"
 #include "soc15_common.h"
@@ -31,6 +32,7 @@
 #include "gc/gc_10_1_0_default.h"
 #include "v10_structs.h"
 #include "mes_api_def.h"
+#include <linux/sprintf.h>
 
 #define mmCP_MES_IC_OP_CNTL_Sienna_Cichlid               0x2820
 #define mmCP_MES_IC_OP_CNTL_Sienna_Cichlid_BASE_IDX      1

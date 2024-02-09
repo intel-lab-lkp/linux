@@ -29,6 +29,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "cgroup-internal.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/bpf-cgroup.h>
 #include <linux/cred.h>

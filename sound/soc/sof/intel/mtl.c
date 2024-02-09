@@ -10,6 +10,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <sound/sof/ipc4/header.h>
 #include <trace/events/sof_intel.h>
 #include "../ipc4-priv.h"

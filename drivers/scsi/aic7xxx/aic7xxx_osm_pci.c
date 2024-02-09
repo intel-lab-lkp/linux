@@ -41,6 +41,7 @@
 
 #include "aic7xxx_osm.h"
 #include "aic7xxx_pci.h"
+#include <linux/sprintf.h>
 
 /* Define the macro locally since it's different for different class of chips.
 */

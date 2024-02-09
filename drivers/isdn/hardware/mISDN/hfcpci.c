@@ -36,6 +36,7 @@
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "hfc_pci.h"
 

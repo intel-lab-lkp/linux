@@ -33,6 +33,8 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <linux/clocksource.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/completion.h>
 #include <linux/acpi.h>

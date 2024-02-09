@@ -13,6 +13,7 @@
 #include <linux/ata.h>
 #include <linux/delay.h>
 #include <linux/hdreg.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/random.h>
 #include <linux/smp.h>

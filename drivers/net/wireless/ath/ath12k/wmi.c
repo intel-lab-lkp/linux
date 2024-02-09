@@ -5,6 +5,7 @@
  */
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
 #include <linux/completion.h>

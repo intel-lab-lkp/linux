@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "omap-mcbsp.h"
 #include "omap-mcbsp-priv.h"

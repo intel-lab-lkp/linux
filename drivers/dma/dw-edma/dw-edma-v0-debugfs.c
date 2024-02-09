@@ -8,6 +8,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 
 #include "dw-edma-v0-debugfs.h"
 #include "dw-edma-v0-regs.h"

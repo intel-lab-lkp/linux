@@ -7,6 +7,7 @@
  */
 #include <linux/etherdevice.h>
 #include <net/mac80211.h>
+#include <linux/completion.h>
 
 #include "sta.h"
 #include "wfx.h"

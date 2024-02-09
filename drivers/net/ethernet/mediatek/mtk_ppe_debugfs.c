@@ -4,6 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include "mtk_eth_soc.h"
+#include <linux/sprintf.h>
 
 struct mtk_flow_addr_info
 {

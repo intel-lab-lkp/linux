@@ -4,6 +4,7 @@
  */
 
 #include "i915_drv.h"
+#include <linux/completion.h>
 
 #include "intel_pxp.h"
 #include "intel_pxp_cmd.h"

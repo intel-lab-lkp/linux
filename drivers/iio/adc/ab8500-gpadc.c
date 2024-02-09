@@ -24,6 +24,7 @@
  */
 #include <linux/init.h>
 #include <linux/bits.h>
+#include <linux/completion.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/device.h>

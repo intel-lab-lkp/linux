@@ -2,6 +2,7 @@
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/of.h>

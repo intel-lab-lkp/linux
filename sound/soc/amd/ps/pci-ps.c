@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <sound/pcm_params.h>
 #include <linux/pm_runtime.h>
 #include <linux/iopoll.h>

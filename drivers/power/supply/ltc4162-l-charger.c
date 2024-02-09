@@ -6,6 +6,7 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/power_supply.h>

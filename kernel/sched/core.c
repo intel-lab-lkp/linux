@@ -8,12 +8,16 @@
  */
 #include <linux/highmem.h>
 #include <linux/hrtimer_api.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/ktime_api.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls_api.h>
 #include <linux/debug_locks.h>
 #include <linux/prefetch.h>
 #include <linux/capability.h>
+#include <linux/completion.h>
 #include <linux/pgtable_api.h>
 #include <linux/wait_bit.h>
 #include <linux/jiffies.h>

@@ -5,11 +5,13 @@
 #include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pci.h>
 #include "i40e_adminq_cmd.h"
 #include "i40e_devids.h"
 #include "i40e_prototype.h"
 #include "i40e_register.h"
+#include <linux/sprintf.h>
 
 /**
  * i40e_set_mac_type - Sets MAC type

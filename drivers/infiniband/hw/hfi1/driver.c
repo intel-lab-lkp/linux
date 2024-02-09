@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>

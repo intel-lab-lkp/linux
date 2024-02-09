@@ -6,6 +6,7 @@
 
 #include <linux/vmalloc.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/swab.h>
 #include <linux/dma-mapping.h>
 #include <linux/if_vlan.h>

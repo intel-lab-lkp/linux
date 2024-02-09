@@ -10,6 +10,7 @@
 #include "ddbridge.h"
 #include "ddbridge-io.h"
 #include "ddbridge-mci.h"
+#include <linux/completion.h>
 
 static LIST_HEAD(mci_list);
 

@@ -11,6 +11,8 @@
 #include <linux/debugfs.h>
 #include <linux/ktime.h>
 #include <linux/bits.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_blend.h>

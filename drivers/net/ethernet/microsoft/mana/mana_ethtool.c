@@ -4,6 +4,7 @@
 #include <linux/inetdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include <net/mana/mana.h>
 

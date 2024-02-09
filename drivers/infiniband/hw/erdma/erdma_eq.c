@@ -5,6 +5,8 @@
 /* Copyright (c) 2020-2022, Alibaba Group. */
 
 #include "erdma_verbs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #define MAX_POLL_CHUNK_SIZE 16
 

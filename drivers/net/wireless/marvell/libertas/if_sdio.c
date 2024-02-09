@@ -36,6 +36,7 @@
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/host.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "host.h"
 #include "decl.h"

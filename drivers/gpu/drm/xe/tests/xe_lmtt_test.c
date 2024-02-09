@@ -4,6 +4,7 @@
  */
 
 #include <kunit/test.h>
+#include <linux/sprintf.h>
 
 static const struct lmtt_ops_param {
 	const char *desc;

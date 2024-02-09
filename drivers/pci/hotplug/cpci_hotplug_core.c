@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include "cpci_hotplug.h"
+#include <linux/sprintf.h>
 
 #define DRIVER_AUTHOR	"Scott Murray <scottm@somanetworks.com>"
 #define DRIVER_DESC	"CompactPCI Hot Plug Core"

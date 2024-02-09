@@ -13,6 +13,7 @@
 #include "hw.h"
 #include "trx.h"
 #include "led.h"
+#include <linux/completion.h>
 
 #include <linux/module.h>
 

@@ -36,6 +36,7 @@
 #include <linux/i2c.h>
 #include <linux/acpi.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 /* SIS964 id is defined here as we are the only file using it */
 #define PCI_DEVICE_ID_SI_964	0x0964

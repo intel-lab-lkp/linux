@@ -7,6 +7,7 @@
 #include "adf_accel_devices.h"
 #include "adf_cfg.h"
 #include "adf_common_drv.h"
+#include <linux/sprintf.h>
 
 static DEFINE_MUTEX(qat_cfg_read_lock);
 

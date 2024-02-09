@@ -14,6 +14,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/math64.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/io.h>
 #include <linux/nospec.h>

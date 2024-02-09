@@ -6,6 +6,7 @@
 #include <linux/moduleparam.h>
 #include <linux/blkdev.h>
 #include "blk.h"
+#include <linux/sprintf.h>
 
 struct disk_events {
 	struct list_head	node;		/* all disk_event's */

@@ -22,6 +22,7 @@
 #include <linux/soc/qcom/pdr.h>
 #include <net/sock.h>
 #include "slimbus.h"
+#include <linux/completion.h>
 
 /* NGD (Non-ported Generic Device) registers */
 #define	NGD_CFG			0x0

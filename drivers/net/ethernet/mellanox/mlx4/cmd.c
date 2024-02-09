@@ -37,6 +37,7 @@
 #include <linux/export.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
+#include <linux/completion.h>
 
 #include <linux/mlx4/cmd.h>
 #include <linux/mlx4/device.h>

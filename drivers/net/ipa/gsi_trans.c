@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/refcount.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-direction.h>

@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/iio/iio.h>
+#include <linux/kstrtox.h>
 #include <linux/limits.h>
 #include <linux/kernel.h>
 #include <linux/module.h>

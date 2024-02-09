@@ -7,6 +7,7 @@
  */
 #include <linux/skbuff.h>
 #include <linux/etherdevice.h>
+#include <linux/completion.h>
 
 #include "hif_rx.h"
 #include "wfx.h"

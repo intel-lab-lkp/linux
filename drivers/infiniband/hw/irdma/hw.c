@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
+#include <linux/sprintf.h>
 
 static struct irdma_rsrc_limits rsrc_limits_table[] = {
 	[0] = {

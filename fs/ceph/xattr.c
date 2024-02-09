@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/ceph/ceph_debug.h>
 #include <linux/ceph/pagelist.h>
+#include <linux/sprintf.h>
 
 #include "super.h"
 #include "mds_client.h"

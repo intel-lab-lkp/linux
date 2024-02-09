@@ -4,6 +4,7 @@
 #include "ixgbe.h"
 #include "ixgbe_common.h"
 #include "ixgbe_type.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/types.h>

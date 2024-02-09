@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/math64.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/audio.h>
 

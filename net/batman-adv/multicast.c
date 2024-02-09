@@ -6,6 +6,7 @@
 
 #include "multicast.h"
 #include "main.h"
+#include <linux/sprintf.h>
 
 #include <linux/atomic.h>
 #include <linux/bitops.h>

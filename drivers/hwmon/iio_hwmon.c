@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>

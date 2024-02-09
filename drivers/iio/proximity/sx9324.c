@@ -20,6 +20,7 @@
 #include <linux/pm.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 

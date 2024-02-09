@@ -25,6 +25,7 @@
 #include "recv_osdep.h"
 #include "rtl871x_ioctl.h"
 #include "usb_osintf.h"
+#include <linux/completion.h>
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("rtl871x wireless lan driver");

@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/clk/clk-conf.h>
+#include <linux/sprintf.h>
 
 /* -------------------------------------------------------------------------- */
 

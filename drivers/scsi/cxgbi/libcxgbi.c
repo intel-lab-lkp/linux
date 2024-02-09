@@ -17,6 +17,7 @@
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
@@ -27,6 +28,7 @@
 #include <net/ipv6.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
+#include <linux/completion.h>
 
 #include <linux/inetdevice.h>	/* ip_dev_find */
 #include <linux/module.h>

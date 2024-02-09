@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <sound/core.h>
 #include <asm/macio.h>
+#include <linux/completion.h>
 #include <linux/pci.h>
 #include <linux/module.h>
 #include "../soundbus.h"

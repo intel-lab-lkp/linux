@@ -5,6 +5,7 @@
  * Copyright (C) 2015-2016 Intel Deutschland GmbH
  */
 #include <linux/sort.h>
+#include <linux/sprintf.h>
 
 #include "mvm.h"
 

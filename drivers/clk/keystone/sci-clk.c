@@ -15,6 +15,7 @@
 #include <linux/soc/ti/ti_sci_protocol.h>
 #include <linux/bsearch.h>
 #include <linux/list_sort.h>
+#include <linux/sprintf.h>
 
 #define SCI_CLK_SSC_ENABLE		BIT(0)
 #define SCI_CLK_ALLOW_FREQ_CHANGE	BIT(1)

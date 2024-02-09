@@ -14,6 +14,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/kstrtox.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cm.h>
 #include <rdma/rdma_cm.h>
@@ -21,6 +22,7 @@
 #include <target/target_core_fabric.h>
 #include <target/iscsi/iscsi_transport.h>
 #include <linux/semaphore.h>
+#include <linux/completion.h>
 
 #include "ib_isert.h"
 

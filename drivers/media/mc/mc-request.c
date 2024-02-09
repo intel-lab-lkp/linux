@@ -13,6 +13,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/file.h>
 #include <linux/refcount.h>
+#include <linux/sprintf.h>
 
 #include <media/media-device.h>
 #include <media/media-request.h>

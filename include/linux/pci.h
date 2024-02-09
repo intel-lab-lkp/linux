@@ -43,6 +43,14 @@
 
 #include <linux/pci_ids.h>
 
+#ifdef CONFIG_PCI_DOE
+#include <linux/xarray.h>
+#endif
+
+#ifndef CONFIG_PCI_IOV
+#include <linux/err.h> // for ERR_PTR()
+#endif
+
 #define PCI_STATUS_ERROR_BITS (PCI_STATUS_DETECTED_PARITY  | \
 			       PCI_STATUS_SIG_SYSTEM_ERROR | \
 			       PCI_STATUS_REC_MASTER_ABORT | \

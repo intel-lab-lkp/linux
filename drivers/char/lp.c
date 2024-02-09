@@ -114,6 +114,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 
 #include <linux/errno.h>
 #include <linux/kernel.h>

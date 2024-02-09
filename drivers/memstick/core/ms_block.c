@@ -12,6 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/blk-mq.h>
+#include <linux/completion.h>
 #include <linux/memstick.h>
 #include <linux/idr.h>
 #include <linux/hdreg.h>
@@ -21,6 +22,7 @@
 #include <linux/bitmap.h>
 #include <linux/scatterlist.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 #include "ms_block.h"

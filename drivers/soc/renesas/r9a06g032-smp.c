@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/smp.h>
+#include <linux/spinlock.h>
 
 /*
  * The second CPU is parked in ROM at boot time. It requires waking it after

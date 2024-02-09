@@ -14,6 +14,7 @@
 #include <linux/of_address.h>
 #include <linux/of_pci.h>
 #include "pci.h"
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_PCI
 /**

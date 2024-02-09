@@ -11,6 +11,7 @@
 #include "aic94xx.h"
 #include "aic94xx_sas.h"
 #include "aic94xx_hwi.h"
+#include <linux/completion.h>
 
 /* ---------- Internal enqueue ---------- */
 

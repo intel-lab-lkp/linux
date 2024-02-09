@@ -2,6 +2,7 @@
 /* Copyright (c) 2018, Intel Corporation. */
 
 #include "ice_common.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define ICE_CQ_INIT_REGS(qinfo, prefix)				\
 do {								\

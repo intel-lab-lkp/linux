@@ -32,6 +32,7 @@
 #include "xgmi/xgmi_6_1_0_sh_mask.h"
 #include "wafl/wafl2_4_0_0_smn.h"
 #include "wafl/wafl2_4_0_0_sh_mask.h"
+#include <linux/sprintf.h>
 
 #include "amdgpu_reset.h"
 

@@ -31,6 +31,7 @@
 #include <linux/usb/serial.h>
 #include <linux/uaccess.h>
 #include <linux/parport.h>
+#include <linux/completion.h>
 
 #define DRIVER_AUTHOR "Aspire Communications pvt Ltd."
 #define DRIVER_DESC "Moschip USB Serial Driver"

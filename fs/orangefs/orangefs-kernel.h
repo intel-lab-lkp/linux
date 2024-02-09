@@ -23,6 +23,7 @@
 #include <linux/moduleparam.h>
 #include <linux/statfs.h>
 #include <linux/backing-dev.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/mpage.h>
 #include <linux/namei.h>

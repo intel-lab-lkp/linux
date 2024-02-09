@@ -7,6 +7,7 @@
 
 
 #include <asm/cacheflush.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/host1x.h>

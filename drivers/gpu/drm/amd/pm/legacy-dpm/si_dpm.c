@@ -23,6 +23,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "amdgpu.h"
 #include "amdgpu_pm.h"

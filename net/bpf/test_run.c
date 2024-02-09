@@ -4,6 +4,7 @@
 #include <linux/bpf.h>
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>

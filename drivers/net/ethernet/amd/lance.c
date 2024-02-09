@@ -46,6 +46,7 @@ static const char version[] = "lance.c:v1.16 2006/11/09 dplatt@3do.com, becker@c
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/errno.h>

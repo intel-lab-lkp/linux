@@ -6,6 +6,7 @@
 #include <linux/peci.h>
 #include <linux/peci-cpu.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

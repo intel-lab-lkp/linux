@@ -11,6 +11,8 @@
  */
 
 #include <linux/audit.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/init.h>
 #include <linux/mutex.h>

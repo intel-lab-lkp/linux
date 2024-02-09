@@ -14,6 +14,7 @@
 #include <sound/soc-acpi.h>
 #include "sof_sdw_common.h"
 #include "../../codecs/rt711.h"
+#include <linux/completion.h>
 
 unsigned long sof_sdw_quirk = RT711_JD1;
 static int quirk_override = -1;

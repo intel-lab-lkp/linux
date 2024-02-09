@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/control.h>
 #include <sound/pcm.h>

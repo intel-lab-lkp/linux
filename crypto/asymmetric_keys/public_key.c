@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 MODULE_DESCRIPTION("In-software asymmetric public-key subtype");

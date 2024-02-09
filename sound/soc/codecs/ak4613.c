@@ -103,6 +103,7 @@
 #include <linux/of_graph.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
 #include <sound/tlv.h>

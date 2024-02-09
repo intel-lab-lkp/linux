@@ -13,6 +13,7 @@
 #include <linux/personality.h>
 #include <linux/kallsyms.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
 #include <linux/kdebug.h>

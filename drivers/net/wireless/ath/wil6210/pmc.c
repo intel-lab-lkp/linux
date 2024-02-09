@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/seq_file.h>
 #include "wmi.h"
 #include "wil6210.h"

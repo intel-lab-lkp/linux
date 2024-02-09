@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/input/mt.h>
+#include <linux/kstrtox.h>
 #include <linux/serio.h>
 #include <linux/libps2.h>
 #include <linux/rmi.h>
@@ -31,6 +32,7 @@
 #include <linux/slab.h>
 #include "psmouse.h"
 #include "synaptics.h"
+#include <linux/sprintf.h>
 
 /*
  * The x/y limits are taken from the Synaptics TouchPad interfacing Guide,

@@ -24,6 +24,7 @@
 #include <asm/intel-family.h>
 #include <asm/processor.h>
 #include <asm/mce.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

@@ -9,12 +9,14 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/panic_notifier.h>
 #include <linux/reboot.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include "../leds.h"
 

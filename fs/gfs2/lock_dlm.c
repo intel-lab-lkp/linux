@@ -7,8 +7,11 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/fs.h>
+#include <linux/completion.h>
 #include <linux/dlm.h>
+#include <linux/hex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/gfs2_ondisk.h>

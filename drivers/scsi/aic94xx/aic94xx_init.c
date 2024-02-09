@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi_host.h>
 

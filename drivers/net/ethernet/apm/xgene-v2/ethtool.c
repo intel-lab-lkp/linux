@@ -8,6 +8,7 @@
  */
 
 #include "main.h"
+#include <linux/sprintf.h>
 
 #define XGE_STAT(m)		{ #m, offsetof(struct xge_pdata, stats.m) }
 #define XGE_EXTD_STAT(m, n)					\

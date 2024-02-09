@@ -7,10 +7,12 @@
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "netdevsim.h"

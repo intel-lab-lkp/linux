@@ -7,6 +7,8 @@
 */
 
 #include "common.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/rtnetlink.h>
 

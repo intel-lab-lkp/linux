@@ -2,6 +2,7 @@
 
 #include <linux/types.h>
 #include <linux/clk.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/acpi.h>
@@ -13,6 +14,7 @@
 #include <linux/netlink.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
+#include <linux/sprintf.h>
 
 #include <net/tcp.h>
 #include <net/page_pool/helpers.h>

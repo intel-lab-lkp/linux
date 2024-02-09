@@ -25,6 +25,7 @@
 #include <linux/power_supply.h>
 #include <linux/printk.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/wmi.h>

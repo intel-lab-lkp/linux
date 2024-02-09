@@ -7,6 +7,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 #include "cx18-driver.h"
 #include "cx18-io.h"

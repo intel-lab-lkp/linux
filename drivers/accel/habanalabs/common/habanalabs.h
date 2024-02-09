@@ -11,6 +11,7 @@
 #include <linux/habanalabs/cpucp_if.h>
 #include "../include/common/qman_if.h"
 #include "../include/hw_ip/mmu/mmu_general.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/drm/habanalabs_accel.h>
 
 #include <linux/cdev.h>

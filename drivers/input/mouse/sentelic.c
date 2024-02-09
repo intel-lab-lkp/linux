@@ -10,10 +10,12 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/libps2.h>
 #include <linux/serio.h>
 #include <linux/jiffies.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "psmouse.h"
 #include "sentelic.h"

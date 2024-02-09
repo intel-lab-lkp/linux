@@ -19,6 +19,7 @@
 #include <linux/cpumask.h>
 #include <linux/cpuhotplug.h>
 #include <linux/cpu_smt.h>
+#include <vdso/time64.h> // for NSEC_PER_USEC
 
 struct device;
 struct device_node;

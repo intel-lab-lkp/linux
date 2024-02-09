@@ -22,6 +22,7 @@
 #include <sound/hda-mlink.h>
 #include "../ops.h"
 #include "hda.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * HDA Operations.

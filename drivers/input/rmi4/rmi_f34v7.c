@@ -7,6 +7,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/kernel.h>
 #include <linux/rmi.h>
 #include <linux/firmware.h>
@@ -14,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include "rmi_driver.h"
 #include "rmi_f34.h"

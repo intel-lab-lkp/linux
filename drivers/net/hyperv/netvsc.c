@@ -21,6 +21,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/prefetch.h>
 #include <linux/filter.h>
+#include <linux/completion.h>
 
 #include <asm/sync_bitops.h>
 #include <asm/mshyperv.h>

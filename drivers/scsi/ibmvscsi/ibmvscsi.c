@@ -56,6 +56,8 @@
 #include <linux/kthread.h>
 #include <asm/firmware.h>
 #include <asm/vio.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>

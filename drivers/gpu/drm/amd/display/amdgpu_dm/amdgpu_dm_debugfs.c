@@ -25,6 +25,8 @@
 
 #include <linux/string_helpers.h>
 #include <linux/uaccess.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "dc.h"
 #include "amdgpu.h"

@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-flash-led-class.h>
 
 #define MODE_OFF		0

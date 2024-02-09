@@ -37,6 +37,7 @@
 #include <linux/mlx4/driver.h>
 #include <linux/mlx4/device.h>
 #include <linux/in.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 #include <linux/bitmap.h>
 #include <linux/mii.h>

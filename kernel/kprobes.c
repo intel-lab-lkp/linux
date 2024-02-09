@@ -20,9 +20,11 @@
 
 #define pr_fmt(fmt) "kprobes: " fmt
 
+#include <linux/kernel.h> // for core_kernel_text(), kernel_text_address()
 #include <linux/kprobes.h>
 #include <linux/hash.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
 #include <linux/export.h>

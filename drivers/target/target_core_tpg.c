@@ -11,6 +11,7 @@
  ******************************************************************************/
 
 #include <linux/net.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/slab.h>
@@ -20,6 +21,7 @@
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <scsi/scsi_proto.h>
+#include <linux/completion.h>
 
 #include <target/target_core_base.h>
 #include <target/target_core_backend.h>

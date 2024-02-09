@@ -26,6 +26,7 @@
 #include <linux/export.h>
 #include <linux/clocksource.h>
 #include <linux/cpu.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/reboot.h>
 #include <linux/static_call.h>
 #include <asm/div64.h>

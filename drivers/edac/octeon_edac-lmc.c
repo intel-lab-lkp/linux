@@ -11,10 +11,12 @@
  */
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/edac.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 
 #include <asm/octeon/octeon.h>
 #include <asm/octeon/cvmx-lmcx-defs.h>

@@ -32,6 +32,7 @@
 
 #include <linux/clk.h>
 #include <linux/clk/clk-conf.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>

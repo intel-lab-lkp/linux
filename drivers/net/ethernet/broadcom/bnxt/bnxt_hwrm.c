@@ -20,6 +20,7 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 
 #include "bnxt_hsi.h"
 #include "bnxt.h"

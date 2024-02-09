@@ -11,6 +11,7 @@
 #include <linux/list.h>
 #include <linux/minmax.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 
 #include "thermal_core.h"

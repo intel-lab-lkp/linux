@@ -17,6 +17,7 @@
 #include "iohelper.h"
 #include "netjet.h"
 #include "isdnhdlc.h"
+#include <linux/sprintf.h>
 
 #define NETJET_REV	"2.0"
 

@@ -9,6 +9,7 @@
 
 #include <linux/time.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/mpu401.h>
 #include "au88x0.h"

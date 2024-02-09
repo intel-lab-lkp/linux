@@ -3,6 +3,7 @@
 
 #include <linux/errno.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 
 #include "core.h"

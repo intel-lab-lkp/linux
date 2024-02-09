@@ -4,6 +4,7 @@
  */
 
 #include <net/nfc/hci.h>
+#include <linux/completion.h>
 
 #include "st21nfca.h"
 

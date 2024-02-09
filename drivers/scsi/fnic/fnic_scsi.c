@@ -27,6 +27,7 @@
 #include <scsi/fc_frame.h>
 #include "fnic_io.h"
 #include "fnic.h"
+#include <linux/completion.h>
 
 const char *fnic_state_str[] = {
 	[FNIC_IN_FC_MODE] =           "FNIC_IN_FC_MODE",

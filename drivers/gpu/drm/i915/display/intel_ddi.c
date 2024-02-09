@@ -25,6 +25,7 @@
  *
  */
 
+#include <linux/completion.h>
 #include <linux/iopoll.h>
 #include <linux/string_helpers.h>
 

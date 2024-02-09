@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kallsyms.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/random.h>
 #include <linux/sched/clock.h>
 #include <linux/kthread.h>

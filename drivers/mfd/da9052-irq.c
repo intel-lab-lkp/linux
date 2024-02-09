@@ -18,6 +18,7 @@
 #include <linux/irqdomain.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <linux/mfd/da9052/da9052.h>
 #include <linux/mfd/da9052/reg.h>

@@ -6,6 +6,7 @@
 #include <linux/skbuff.h>
 #include <linux/netfilter.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <net/protocol.h>
 #include <net/netfilter/nf_log.h>
 

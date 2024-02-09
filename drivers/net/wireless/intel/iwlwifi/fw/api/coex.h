@@ -10,6 +10,7 @@
 
 #include <linux/types.h>
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 #define BITS(nb) (BIT(nb) - 1)
 

@@ -9,8 +9,10 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include <asm/mipsregs.h>
 #include <asm/mipsmtregs.h>

@@ -5,8 +5,10 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/mutex.h>
 #include <linux/device.h>

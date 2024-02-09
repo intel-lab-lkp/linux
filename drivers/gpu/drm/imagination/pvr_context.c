@@ -14,6 +14,7 @@
 #include "pvr_stream.h"
 #include "pvr_stream_defs.h"
 #include "pvr_vm.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <drm/drm_auth.h>
 #include <drm/drm_managed.h>

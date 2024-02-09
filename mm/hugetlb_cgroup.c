@@ -20,6 +20,7 @@
 #include <linux/cgroup.h>
 #include <linux/page_counter.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/hugetlb.h>
 #include <linux/hugetlb_cgroup.h>
 

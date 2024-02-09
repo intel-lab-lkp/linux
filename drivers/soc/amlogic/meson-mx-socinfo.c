@@ -10,6 +10,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/bitfield.h>
 #include <linux/regmap.h>

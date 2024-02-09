@@ -8,6 +8,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/greybus.h>
 

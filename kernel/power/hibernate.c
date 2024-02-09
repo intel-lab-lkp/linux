@@ -13,6 +13,9 @@
 
 #include <linux/blkdev.h>
 #include <linux/export.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/reboot.h>
 #include <linux/string.h>

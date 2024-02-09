@@ -8,6 +8,7 @@
  *  Copyright (C) 2000-2001 Deep Blue Solutions Ltd.
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/slab.h>
@@ -16,6 +17,7 @@
 #include <linux/console.h>
 #include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/proc_fs.h>

@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>

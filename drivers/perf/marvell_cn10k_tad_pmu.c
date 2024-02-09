@@ -12,6 +12,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h> // used by PMU_FORMAT_ATTR()
 #include <linux/acpi.h>
 
 #define TAD_PFC_OFFSET		0x800

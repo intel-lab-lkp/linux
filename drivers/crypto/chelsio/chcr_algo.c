@@ -48,6 +48,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/highmem.h>
 #include <linux/scatterlist.h>
+#include <linux/completion.h>
 
 #include <crypto/aes.h>
 #include <crypto/algapi.h>

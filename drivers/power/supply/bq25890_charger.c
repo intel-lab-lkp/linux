@@ -11,6 +11,7 @@
 #include <linux/power/bq25890_charger.h>
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>

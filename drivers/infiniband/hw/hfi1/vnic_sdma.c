@@ -9,6 +9,7 @@
 
 #include "sdma.h"
 #include "vnic.h"
+#include <linux/sprintf.h>
 
 #define HFI1_VNIC_SDMA_Q_ACTIVE   BIT(0)
 #define HFI1_VNIC_SDMA_Q_DEFERRED BIT(1)

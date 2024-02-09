@@ -31,6 +31,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>

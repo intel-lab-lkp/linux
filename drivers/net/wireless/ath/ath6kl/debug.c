@@ -16,6 +16,10 @@
  */
 
 #include "core.h"
+#include <linux/completion.h>
+#include <linux/hex.h> // for mac_pton()
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/skbuff.h>
 #include <linux/fs.h>

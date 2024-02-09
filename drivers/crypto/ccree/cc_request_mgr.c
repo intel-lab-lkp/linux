@@ -7,6 +7,7 @@
 #include "cc_buffer_mgr.h"
 #include "cc_request_mgr.h"
 #include "cc_pm.h"
+#include <linux/completion.h>
 
 #define CC_MAX_POLL_ITER	10
 /* The highest descriptor count in used */

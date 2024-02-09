@@ -8,6 +8,7 @@
 #define _MHI_COMMON_H
 
 #include <linux/bitfield.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mhi.h>
 
 /* MHI registers */

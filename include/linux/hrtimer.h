@@ -20,7 +20,10 @@
 #include <linux/rbtree.h>
 #include <linux/seqlock.h>
 #include <linux/timer.h>
+#include <asm/percpu.h>  // for PER_CPU_BASE_SECTION needed by DECLARE_PER_CPU()
+#include <asm/processor.h>  /* for cpu_relax() */
 
+struct restart_block;
 struct hrtimer_clock_base;
 struct hrtimer_cpu_base;
 

@@ -10,6 +10,7 @@
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
+#include <linux/sprintf.h>
 #include <linux/sunrpc/addr.h>
 #include <linux/module.h>
 

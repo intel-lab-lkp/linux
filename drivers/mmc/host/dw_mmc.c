@@ -9,6 +9,7 @@
 
 #include <linux/blkdev.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>

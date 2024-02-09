@@ -2,6 +2,7 @@
 #ifndef __SOUND_UTIL_MEM_H
 #define __SOUND_UTIL_MEM_H
 
+#include <linux/list.h>
 #include <linux/mutex.h>
 /*
  *  Copyright (C) 2000 Takashi Iwai <tiwai@suse.de>

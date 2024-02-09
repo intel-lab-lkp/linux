@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 
 #define QT2160_VALID_CHIPID  0x11
 

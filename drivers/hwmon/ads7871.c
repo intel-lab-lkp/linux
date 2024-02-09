@@ -59,6 +59,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #define DEVICE_NAME	"ads7871"
 

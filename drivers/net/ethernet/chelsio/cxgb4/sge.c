@@ -41,10 +41,12 @@
 #include <linux/jiffies.h>
 #include <linux/prefetch.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <net/xfrm.h>
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <net/busy_poll.h>
+#include <linux/completion.h>
 #ifdef CONFIG_CHELSIO_T4_FCOE
 #include <scsi/fc/fc_fcoe.h>
 #endif /* CONFIG_CHELSIO_T4_FCOE */

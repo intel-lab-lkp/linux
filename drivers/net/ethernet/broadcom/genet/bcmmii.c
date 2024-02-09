@@ -6,6 +6,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/wait.h>

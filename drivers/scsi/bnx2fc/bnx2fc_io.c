@@ -13,6 +13,7 @@
  */
 
 #include "bnx2fc.h"
+#include <linux/completion.h>
 
 #define RESERVE_FREE_LIST_INDEX num_possible_cpus()
 

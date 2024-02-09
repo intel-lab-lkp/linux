@@ -25,6 +25,8 @@
 #include "trace.h"
 #include "sdio.h"
 #include "coredump.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 void ath10k_sdio_fw_crashed_dump(struct ath10k *ar);
 

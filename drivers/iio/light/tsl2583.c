@@ -11,6 +11,8 @@
 #include <linux/i2c.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mutex.h>
 #include <linux/unistd.h>

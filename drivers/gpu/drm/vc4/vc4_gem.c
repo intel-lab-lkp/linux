@@ -26,6 +26,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/sched/signal.h>
 #include <linux/dma-fence-array.h>
 

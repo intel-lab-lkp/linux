@@ -18,6 +18,7 @@
 #include <linux/init.h>	     // for kernel parameters
 #include <linux/kmod.h>	     // for requesting modules
 #include <linux/spinlock.h>  // for locks
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/list.h>
 #include <linux/slab.h>

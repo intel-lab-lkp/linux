@@ -9,6 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <net/netlink.h>
 #include <net/nl802154.h>

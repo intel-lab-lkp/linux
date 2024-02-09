@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <asm/atariints.h>

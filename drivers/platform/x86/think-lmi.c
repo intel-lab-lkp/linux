@@ -14,7 +14,10 @@
 #include <linux/acpi.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/dmi.h>

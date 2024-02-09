@@ -3,6 +3,7 @@
 
 #include "wifi.h"
 #include "cam.h"
+#include <linux/sprintf.h>
 
 #include <linux/moduleparam.h>
 #include <linux/vmalloc.h>

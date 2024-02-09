@@ -28,9 +28,11 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/cpu.h>
+#include <linux/kstrtox.h>
 #include <linux/thermal.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/sysfs.h>
 #include <linux/idle_inject.h>
 
 #include <asm/msr.h>

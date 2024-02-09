@@ -20,6 +20,7 @@
 #include <linux/reset.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 
 #include "mt7530.h"

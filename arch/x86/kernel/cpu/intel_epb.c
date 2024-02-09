@@ -12,6 +12,7 @@
 #include <linux/cpu.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/syscore_ops.h>
 #include <linux/pm.h>

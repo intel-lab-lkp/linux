@@ -8,6 +8,7 @@
 
 #include <kunit/test.h>
 #include <linux/idr.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "tb.h"
 #include "tunnel.h"

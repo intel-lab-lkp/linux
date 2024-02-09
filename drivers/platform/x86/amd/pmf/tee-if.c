@@ -9,6 +9,8 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/tee_drv.h>
 #include <linux/uuid.h>
 #include "pmf.h"

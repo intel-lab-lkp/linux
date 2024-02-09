@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/dm-io.h>
 #include <linux/dm-dirty-log.h>

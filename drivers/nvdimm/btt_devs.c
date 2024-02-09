@@ -11,6 +11,7 @@
 #include "nd-core.h"
 #include "btt.h"
 #include "nd.h"
+#include <linux/sprintf.h>
 
 static void nd_btt_release(struct device *dev)
 {

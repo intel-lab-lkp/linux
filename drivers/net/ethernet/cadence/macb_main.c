@@ -9,9 +9,11 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/crc32.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/circ_buf.h>
 #include <linux/slab.h>

@@ -7,12 +7,14 @@
 
 #include <linux/perf_event.h>
 #include <linux/percpu.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/cpufeature.h>
+#include <linux/device.h>
 #include <linux/smp.h>
 
 #include <asm/perf_event.h>

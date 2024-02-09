@@ -6,6 +6,7 @@
 #include <linux/filter.h>
 #include <linux/errno.h>
 #include <linux/file.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/net.h>
 #include <linux/workqueue.h>
 #include <linux/skmsg.h>

@@ -8,6 +8,8 @@
 #include <linux/interrupt.h>
 #include <linux/gpio/consumer.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/device.h>
 #include <linux/kernel.h>

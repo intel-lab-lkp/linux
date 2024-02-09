@@ -3,6 +3,8 @@
 #include "spk_types.h"
 #include "spk_priv.h"
 #include "speakup.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static struct st_var_header var_headers[] = {
 	{ "version", VERSION, VAR_PROC, NULL, NULL },

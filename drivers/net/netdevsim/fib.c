@@ -20,6 +20,7 @@
 #include <linux/list.h>
 #include <linux/rhashtable.h>
 #include <linux/spinlock_types.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <net/fib_notifier.h>
 #include <net/inet_dscp.h>

@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/edac.h>
 #include <asm/mmzone.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

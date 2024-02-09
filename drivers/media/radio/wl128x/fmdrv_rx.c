@@ -11,6 +11,7 @@
 #include "fmdrv.h"
 #include "fmdrv_common.h"
 #include "fmdrv_rx.h"
+#include <linux/completion.h>
 
 void fm_rx_reset_rds_cache(struct fmdev *fmdev)
 {

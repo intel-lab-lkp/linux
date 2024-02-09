@@ -9,6 +9,8 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <linux/list.h>

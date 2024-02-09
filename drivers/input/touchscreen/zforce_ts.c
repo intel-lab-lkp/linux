@@ -18,12 +18,14 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
 #include <linux/platform_data/zforce_ts.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of.h>
+#include <linux/completion.h>
 
 #define WAIT_TIMEOUT		msecs_to_jiffies(1000)
 

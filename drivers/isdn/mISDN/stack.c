@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/sched/cputime.h>
 #include <linux/signal.h>
+#include <linux/completion.h>
 
 #include "core.h"
 

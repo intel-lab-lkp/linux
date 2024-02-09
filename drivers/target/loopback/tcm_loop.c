@@ -23,7 +23,9 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/configfs.h>
 #include <scsi/scsi.h>
@@ -31,6 +33,7 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_cmnd.h>
+#include <linux/completion.h>
 
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>

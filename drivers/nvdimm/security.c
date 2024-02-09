@@ -3,6 +3,7 @@
 
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/ndctl.h>
 #include <linux/slab.h>
 #include <linux/io.h>
@@ -14,6 +15,7 @@
 #include <keys/encrypted-type.h>
 #include "nd-core.h"
 #include "nd.h"
+#include <linux/sprintf.h>
 
 #define NVDIMM_BASE_KEY		0
 #define NVDIMM_NEW_KEY		1

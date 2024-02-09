@@ -20,6 +20,7 @@
 #include <linux/usb/ch9.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include "osdep_service.h"
 #include "drv_types.h"

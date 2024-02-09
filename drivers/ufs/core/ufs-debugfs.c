@@ -2,6 +2,7 @@
 // Copyright (C) 2020 Intel Corporation
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 
 #include "ufs-debugfs.h"
 #include <ufs/ufshcd.h>

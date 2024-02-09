@@ -6,6 +6,7 @@
  */
 
 #include <linux/sort.h>
+#include <linux/completion.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_blend.h>

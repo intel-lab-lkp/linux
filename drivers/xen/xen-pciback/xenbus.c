@@ -10,6 +10,7 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include <xen/xenbus.h>

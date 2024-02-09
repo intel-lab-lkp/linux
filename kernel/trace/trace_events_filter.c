@@ -6,6 +6,8 @@
  */
 
 #include <linux/uaccess.h>
+#include <linux/kallsyms.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/mutex.h>

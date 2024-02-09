@@ -17,6 +17,7 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/fd.h>

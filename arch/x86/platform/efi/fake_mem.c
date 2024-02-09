@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/efi.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/memblock.h>
 #include <linux/types.h>
 #include <linux/sort.h>

@@ -13,7 +13,9 @@
 #include <linux/bitfield.h>
 #include <linux/errno.h>
 #include <linux/hwmon.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <uapi/linux/psci.h>
 

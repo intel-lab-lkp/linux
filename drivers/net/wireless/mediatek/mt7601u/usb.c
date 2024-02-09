@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/usb.h>
+#include <linux/completion.h>
 
 #include "mt7601u.h"
 #include "usb.h"

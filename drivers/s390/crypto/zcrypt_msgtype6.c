@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/uaccess.h>
 
 #include "ap_bus.h"

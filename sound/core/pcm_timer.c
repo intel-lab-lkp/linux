@@ -6,6 +6,7 @@
 
 #include <linux/time.h>
 #include <linux/gcd.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/timer.h>

@@ -21,6 +21,7 @@
  *
  */
 #include "qmgr.h"
+#include <linux/completion.h>
 
 static void
 nvkm_falcon_msgq_open(struct nvkm_falcon_msgq *msgq)

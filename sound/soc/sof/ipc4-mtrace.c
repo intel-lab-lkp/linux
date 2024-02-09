@@ -4,6 +4,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <sound/sof/ipc4/header.h>
 #include "sof-priv.h"
 #include "ipc4-priv.h"

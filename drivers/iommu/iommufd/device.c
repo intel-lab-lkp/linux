@@ -2,6 +2,7 @@
 /* Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
  */
 #include <linux/iommufd.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/slab.h>
 #include <linux/iommu.h>
 #include <uapi/linux/iommufd.h>

@@ -22,11 +22,13 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/uuid.h>

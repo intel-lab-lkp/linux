@@ -32,6 +32,7 @@
 
 #include <linux/completion.h>
 #include <linux/file.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/sched.h>

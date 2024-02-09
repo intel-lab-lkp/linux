@@ -25,6 +25,7 @@
 #include "head.h"
 #include "ior.h"
 #include "outp.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/client.h>
 #include <core/gpuobj.h>

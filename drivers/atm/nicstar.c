@@ -40,6 +40,7 @@
 #include <linux/atm.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/delay.h>

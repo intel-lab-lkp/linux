@@ -23,6 +23,7 @@
  */
 #include "bus.h"
 #include "pad.h"
+#include <linux/sprintf.h>
 
 #include <core/option.h>
 

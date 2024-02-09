@@ -35,6 +35,7 @@
 #include "dm_services_types.h"
 #include "logger_interface.h"
 #include "link_service_types.h"
+#include <linux/sprintf.h>
 
 #undef DEPRECATED
 

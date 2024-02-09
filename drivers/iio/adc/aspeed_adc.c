@@ -23,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/bitfield.h>
 #include <linux/regmap.h>

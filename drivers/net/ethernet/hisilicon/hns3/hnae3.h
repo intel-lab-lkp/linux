@@ -30,6 +30,7 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include <linux/pkt_sched.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/bitmap.h>
 #include <net/pkt_cls.h>

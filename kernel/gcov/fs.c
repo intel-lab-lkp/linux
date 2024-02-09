@@ -18,10 +18,13 @@
 #define pr_fmt(fmt)	"gcov: " fmt
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>

@@ -3,6 +3,7 @@
 
 #include "hnae3.h"
 #include "hclge_comm_cmd.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void hclge_comm_cmd_config_regs(struct hclge_comm_hw *hw,
 				       struct hclge_comm_cmq_ring *ring)

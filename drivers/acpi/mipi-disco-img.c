@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/string.h>

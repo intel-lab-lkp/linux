@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/soc/nxp/lpc32xx-misc.h>
+#include <linux/sprintf.h>
 
 #define MODNAME "lpc-eth"
 #define DRV_VERSION "1.00"

@@ -24,6 +24,8 @@
 #include <linux/module.h>
 #include <linux/nospec.h>
 #include <linux/jiffies.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "fmdrv.h"
 #include "fmdrv_v4l2.h"

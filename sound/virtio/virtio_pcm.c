@@ -4,6 +4,7 @@
  * Copyright (C) 2021 OpenSynergy GmbH
  */
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/virtio_config.h>
 
 #include "virtio_card.h"

@@ -29,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/cc_platform.h>
+#include <linux/sprintf.h>
 
 #include <asm/hypervisor.h>
 #include <drm/drm_ioctl.h>

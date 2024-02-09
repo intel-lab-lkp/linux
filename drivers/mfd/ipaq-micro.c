@@ -25,6 +25,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/completion.h>
 
 #include <mach/hardware.h>
 

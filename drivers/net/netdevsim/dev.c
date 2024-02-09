@@ -18,13 +18,16 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/etherdevice.h>
+#include <linux/hex.h>
 #include <linux/inet.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <net/devlink.h>
 #include <net/ip.h>

@@ -10,6 +10,7 @@
 #include "messages.h"
 #include "registers.h"
 #include "trace.h"
+#include <linux/completion.h>
 
 #define CATPT_IPC_TIMEOUT_MS	300
 

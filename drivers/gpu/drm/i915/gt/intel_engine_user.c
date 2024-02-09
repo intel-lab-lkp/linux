@@ -6,6 +6,7 @@
 #include <linux/list.h>
 #include <linux/list_sort.h>
 #include <linux/llist.h>
+#include <linux/sprintf.h>
 
 #include "i915_drv.h"
 #include "intel_engine.h"

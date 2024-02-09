@@ -4,6 +4,7 @@
 #include <linux/string.h>
 #include <linux/spinlock.h>
 #include <linux/ceph/string_table.h>
+#include <linux/rbtree.h>
 
 static DEFINE_SPINLOCK(string_tree_lock);
 static struct rb_root string_tree = RB_ROOT;

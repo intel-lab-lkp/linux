@@ -7,6 +7,7 @@
 
 #include "protocol.h"
 #include "orangefs-kernel.h"
+#include <linux/completion.h>
 
 /* tags assigned to kernel upcall operations */
 static __u64 next_tag_value;

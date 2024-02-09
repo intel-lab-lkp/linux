@@ -21,8 +21,11 @@
 #include <linux/delay.h>
 #include <linux/dma-map-ops.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for parse_option_str()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/async.h>
 #include <linux/pm_runtime.h>

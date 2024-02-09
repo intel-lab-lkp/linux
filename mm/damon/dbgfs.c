@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/page_idle.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define DAMON_DBGFS_DEPRECATION_NOTICE					\
 	"DAMON debugfs interface is deprecated, so users should move "	\

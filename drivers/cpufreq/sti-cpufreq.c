@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #define VERSION_ELEMENTS	3
 #define MAX_PCODE_NAME_LEN	7

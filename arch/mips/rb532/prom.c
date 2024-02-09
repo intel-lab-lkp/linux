@@ -10,6 +10,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/export.h>
 #include <linux/string.h>

@@ -11,6 +11,8 @@
 #include <linux/hid-debug.h>
 #include <linux/input.h>
 #include "hid-ids.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/fb.h>
 #include <linux/vmalloc.h>

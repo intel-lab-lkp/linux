@@ -11,6 +11,7 @@
 #include <linux/syscalls.h>
 #include <linux/export.h>
 #include <linux/capability.h>
+#include <linux/kstrtox.h>
 #include <linux/mnt_namespace.h>
 #include <linux/user_namespace.h>
 #include <linux/namei.h>
@@ -31,6 +32,7 @@
 #include <uapi/linux/mount.h>
 #include <linux/fs_context.h>
 #include <linux/shmem_fs.h>
+#include <linux/sysfs.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/nospec.h>
 

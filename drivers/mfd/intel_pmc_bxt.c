@@ -18,11 +18,13 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/kstrtox.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/intel_pmc_bxt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/itco_wdt.h>
+#include <linux/sprintf.h>
 
 #include <asm/intel_scu_ipc.h>
 

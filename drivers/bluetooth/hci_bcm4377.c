@@ -11,11 +11,13 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmi.h>
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/pci.h>
 #include <linux/printk.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 

@@ -15,6 +15,7 @@
  * Lesly A M <x0080970@ti.com>
  */
 #include <linux/power/smartreflex.h>
+#include <linux/sprintf.h>
 
 #include <linux/err.h>
 #include <linux/slab.h>

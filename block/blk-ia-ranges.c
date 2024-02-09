@@ -7,6 +7,8 @@
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <linux/init.h>
 
 #include "blk.h"

@@ -157,6 +157,7 @@
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
 #include <linux/mISDNdsp.h>
+#include <linux/sprintf.h>
 
 /*
   #define IRQCOUNT_DEBUG

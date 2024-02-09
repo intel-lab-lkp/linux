@@ -17,6 +17,7 @@
 #include <crypto/skcipher.h>
 #include <keys/user-type.h>
 #include <keys/encrypted-type.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/fs_stack.h>

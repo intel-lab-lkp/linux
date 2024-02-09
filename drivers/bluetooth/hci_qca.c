@@ -33,6 +33,7 @@
 #include <linux/serdev.h>
 #include <linux/mutex.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>

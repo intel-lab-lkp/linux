@@ -7,6 +7,7 @@
 
 #include <linux/greybus.h>
 #include "audio_codec.h"
+#include <linux/sprintf.h>
 
 #define GBAUDIO_INVALID_ID	0xFF
 

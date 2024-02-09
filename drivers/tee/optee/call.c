@@ -10,6 +10,7 @@
 #include <linux/tee_drv.h>
 #include <linux/types.h>
 #include "optee_private.h"
+#include <linux/completion.h>
 
 #define MAX_ARG_PARAM_COUNT	6
 

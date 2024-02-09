@@ -22,6 +22,7 @@
  *
  */
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/pm_runtime.h>
 
 #include "amdgpu.h"

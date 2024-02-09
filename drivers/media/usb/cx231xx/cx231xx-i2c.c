@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-common.h>
 #include <media/tuner.h>
 

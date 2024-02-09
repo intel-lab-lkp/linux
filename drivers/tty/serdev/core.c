@@ -7,6 +7,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>

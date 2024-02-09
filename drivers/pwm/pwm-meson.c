@@ -41,6 +41,7 @@
 #include <linux/pwm.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #define REG_PWM_A		0x0
 #define REG_PWM_B		0x4

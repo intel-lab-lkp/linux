@@ -12,6 +12,7 @@
  */
 
 #include <uapi/asm/boot.h>
+#include <linux/sprintf.h>
 
 #include "boot.h"
 #include "video.h"

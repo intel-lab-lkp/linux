@@ -45,6 +45,7 @@
 #include "udp_media.h"
 #include "trace.h"
 #include "crypto.h"
+#include <linux/sprintf.h>
 
 #define MAX_ADDR_STR 60
 

@@ -27,6 +27,7 @@
 #include "grulib.h"
 #include "gru_instructions.h"
 #include <asm/uv/uv_hub.h>
+#include <linux/completion.h>
 
 /* Return codes for vtop functions */
 #define VTOP_SUCCESS               0

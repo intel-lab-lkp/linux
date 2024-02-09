@@ -41,6 +41,7 @@
 #include <linux/if_vlan.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/task.h>
+#include <linux/sprintf.h>
 
 #include <net/ipv6.h>
 #include <net/addrconf.h>

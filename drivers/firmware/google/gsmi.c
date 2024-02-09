@@ -10,6 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -26,6 +27,7 @@
 #include <linux/uaccess.h>
 #include <linux/dmi.h>
 #include <linux/kdebug.h>
+#include <linux/kobject.h>
 #include <linux/reboot.h>
 #include <linux/efi.h>
 #include <linux/module.h>

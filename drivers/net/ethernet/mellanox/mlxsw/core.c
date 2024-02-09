@@ -11,6 +11,7 @@
 #include <linux/completion.h>
 #include <linux/skbuff.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/gfp.h>

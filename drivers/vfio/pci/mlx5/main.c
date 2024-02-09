@@ -6,6 +6,7 @@
 #include <linux/device.h>
 #include <linux/eventfd.h>
 #include <linux/file.h>
+#include <linux/highmem.h> // for kmap_local_page()
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
@@ -18,6 +19,7 @@
 #include <linux/vfio.h>
 #include <linux/sched/mm.h>
 #include <linux/anon_inodes.h>
+#include <linux/completion.h>
 
 #include "cmd.h"
 

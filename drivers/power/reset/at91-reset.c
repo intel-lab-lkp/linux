@@ -19,6 +19,7 @@
 #include <linux/reboot.h>
 #include <linux/reset-controller.h>
 #include <linux/power/power_on_reason.h>
+#include <linux/sprintf.h>
 
 #include <soc/at91/at91sam9_ddrsdr.h>
 #include <soc/at91/at91sam9_sdramc.h>

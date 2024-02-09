@@ -9,6 +9,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <linux/stringify.h>
 #include <linux/kernel.h>

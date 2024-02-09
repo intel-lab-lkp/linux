@@ -14,6 +14,8 @@
 #include "blk-cgroup-rwstat.h"
 #include "blk-stat.h"
 #include "blk-throttle.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /* Max dispatch from a group in 1 round */
 #define THROTL_GRP_QUANTUM 8

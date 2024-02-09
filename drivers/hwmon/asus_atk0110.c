@@ -17,6 +17,7 @@
 #include <linux/jiffies.h>
 #include <linux/err.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define ATK_HID "ATK0110"
 

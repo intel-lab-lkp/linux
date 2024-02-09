@@ -9,6 +9,7 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>

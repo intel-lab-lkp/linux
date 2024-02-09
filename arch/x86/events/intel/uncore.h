@@ -4,6 +4,7 @@
 #include <asm/apicdef.h>
 #include <asm/intel-family.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/sprintf.h>
 
 #include <linux/perf_event.h>
 #include "../perf_event.h"

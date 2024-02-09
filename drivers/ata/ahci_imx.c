@@ -19,6 +19,7 @@
 #include <linux/libata.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include "ahci.h"
 

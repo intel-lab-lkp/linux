@@ -17,6 +17,7 @@
 #include <linux/prefetch.h>
 #include <linux/sctp.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/types.h>
 #include <linux/vmalloc.h>

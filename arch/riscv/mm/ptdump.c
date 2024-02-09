@@ -8,6 +8,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/ptdump.h>
+#include <linux/sprintf.h>
 
 #include <linux/pgtable.h>
 #include <asm/kasan.h>

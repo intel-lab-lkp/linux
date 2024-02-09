@@ -5,6 +5,7 @@
 
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
 

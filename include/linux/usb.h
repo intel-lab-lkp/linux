@@ -21,6 +21,7 @@
 #include <linux/completion.h>	/* for struct completion */
 #include <linux/sched.h>	/* for current && schedule_timeout */
 #include <linux/mutex.h>	/* for struct mutex */
+#include <linux/sprintf.h>
 #include <linux/pm_runtime.h>	/* for runtime PM */
 
 struct usb_device;

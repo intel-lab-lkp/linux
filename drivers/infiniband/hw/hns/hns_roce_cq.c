@@ -36,6 +36,7 @@
 #include "hns_roce_cmd.h"
 #include "hns_roce_hem.h"
 #include "hns_roce_common.h"
+#include <linux/completion.h>
 
 static u8 get_least_load_bankid_for_cq(struct hns_roce_bank *bank)
 {

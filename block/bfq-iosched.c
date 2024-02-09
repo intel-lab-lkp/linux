@@ -117,12 +117,14 @@
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <linux/cgroup.h>
+#include <linux/kstrtox.h>
 #include <linux/ktime.h>
 #include <linux/rbtree.h>
 #include <linux/ioprio.h>
 #include <linux/sbitmap.h>
 #include <linux/delay.h>
 #include <linux/backing-dev.h>
+#include <linux/sprintf.h>
 
 #include <trace/events/block.h>
 

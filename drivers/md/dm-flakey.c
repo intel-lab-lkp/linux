@@ -7,11 +7,13 @@
  */
 
 #include <linux/device-mapper.h>
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>
+#include <linux/random.h>
 #include <linux/slab.h>
 
 #define DM_MSG_PREFIX "flakey"

@@ -15,6 +15,7 @@
  */
 
 #include "ath9k.h"
+#include <linux/completion.h>
 
 /* Set/change channels.  If the channel is really being changed, it's done
  * by reseting the chip.  To accomplish this we must first cleanup any pending

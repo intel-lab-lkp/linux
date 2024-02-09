@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/greybus.h>
+#include <linux/sprintf.h>
 
 #include "gbphy.h"
 

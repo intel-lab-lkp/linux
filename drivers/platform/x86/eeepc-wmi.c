@@ -21,6 +21,7 @@
 #include <linux/dmi.h>
 #include <linux/fb.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #include "asus-wmi.h"
 

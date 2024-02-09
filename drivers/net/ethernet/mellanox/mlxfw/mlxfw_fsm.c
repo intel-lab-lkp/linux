@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "mlxfw.h"
 #include "mlxfw_mfa2.h"

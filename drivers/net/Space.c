@@ -28,6 +28,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/netlink.h>
+#include <linux/sprintf.h>
 #include <net/Space.h>
 
 /*

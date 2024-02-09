@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 #include <linux/bitfield.h>
 #include <linux/of_mdio.h>
+#include <linux/sprintf.h>
 
 #include "spl2sw_register.h"
 #include "spl2sw_define.h"

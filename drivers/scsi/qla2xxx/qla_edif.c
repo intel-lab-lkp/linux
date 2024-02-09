@@ -5,6 +5,7 @@
  */
 #include "qla_def.h"
 #include "qla_edif.h"
+#include <linux/sprintf.h>
 
 #include <linux/kthread.h>
 #include <linux/vmalloc.h>

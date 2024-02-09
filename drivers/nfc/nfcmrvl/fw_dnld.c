@@ -9,6 +9,7 @@
 #include <asm/unaligned.h>
 #include <linux/firmware.h>
 #include <linux/nfc.h>
+#include <linux/sprintf.h>
 #include <net/nfc/nci.h>
 #include <net/nfc/nci_core.h>
 #include "nfcmrvl.h"

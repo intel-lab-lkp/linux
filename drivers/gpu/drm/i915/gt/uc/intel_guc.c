@@ -17,6 +17,7 @@
 #include "i915_drv.h"
 #include "i915_irq.h"
 #include "i915_reg.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * DOC: GuC

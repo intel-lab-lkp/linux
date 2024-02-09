@@ -101,6 +101,8 @@
  */
 
 #include <linux/aperture.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/version.h>
 
 #include "matroxfb_base.h"

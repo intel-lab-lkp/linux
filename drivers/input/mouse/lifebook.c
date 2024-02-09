@@ -14,6 +14,7 @@
 #include <linux/libps2.h>
 #include <linux/dmi.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "psmouse.h"

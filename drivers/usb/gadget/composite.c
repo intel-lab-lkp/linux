@@ -12,8 +12,10 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/uuid.h>
 
 #include <linux/usb/composite.h>

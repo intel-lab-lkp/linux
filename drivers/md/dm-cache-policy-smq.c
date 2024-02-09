@@ -9,6 +9,7 @@
 #include "dm-cache-policy-internal.h"
 #include "dm-cache-policy.h"
 #include "dm.h"
+#include <linux/kstrtox.h>
 
 #include <linux/hash.h>
 #include <linux/jiffies.h>

@@ -5,6 +5,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/mcb.h>
+#include <linux/sprintf.h>
 
 #include "mcb-internal.h"
 

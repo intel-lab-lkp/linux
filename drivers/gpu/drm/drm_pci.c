@@ -28,6 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_auth.h>
 #include <drm/drm.h>

@@ -14,6 +14,7 @@
 #include "dwmac4.h"
 #include "dwmac4_dma.h"
 #include "stmmac.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void dwmac4_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi)
 {

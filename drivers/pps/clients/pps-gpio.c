@@ -20,6 +20,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/list.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/jiffies.h>
 

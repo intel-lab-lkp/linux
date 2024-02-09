@@ -9,6 +9,7 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/idr.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_accel.h>
 #include <drm/drm_auth.h>

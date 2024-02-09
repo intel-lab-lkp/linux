@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/bitops.h>
@@ -17,6 +18,7 @@
 #include <linux/gameport.h>
 #include <linux/jiffies.h>
 #include <linux/seq_buf.h>
+#include <linux/sprintf.h>
 #include <linux/timex.h>
 #include <linux/timekeeping.h>
 

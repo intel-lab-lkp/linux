@@ -11,8 +11,11 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/compat.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>

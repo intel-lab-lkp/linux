@@ -6,8 +6,10 @@
 
 #include <linux/acpi.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 struct pch_fivr_resp {
 	u64 status;

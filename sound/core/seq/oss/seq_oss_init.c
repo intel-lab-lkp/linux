@@ -18,6 +18,7 @@
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 /*

@@ -6,11 +6,14 @@
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/idr.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tee_drv.h>
 #include <linux/uaccess.h>
 #include <crypto/hash.h>

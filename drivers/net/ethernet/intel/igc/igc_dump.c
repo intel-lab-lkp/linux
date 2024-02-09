@@ -2,6 +2,7 @@
 /* Copyright (c)  2018 Intel Corporation */
 
 #include "igc.h"
+#include <linux/sprintf.h>
 
 struct igc_reg_info {
 	u32 ofs;

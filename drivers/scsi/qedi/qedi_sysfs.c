@@ -8,6 +8,7 @@
 #include "qedi_gbl.h"
 #include "qedi_iscsi.h"
 #include "qedi_dbg.h"
+#include <linux/sprintf.h>
 
 static inline struct qedi_ctx *qedi_dev_to_hba(struct device *dev)
 {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/nsproxy.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
@@ -12,6 +13,7 @@
 #include <linux/security.h>
 #include <linux/keyctl.h>
 #include <linux/key-type.h>
+#include <linux/kstrtox.h>
 #include <keys/user-type.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>
@@ -21,6 +23,7 @@
 #include <linux/fs_struct.h>
 #include <linux/bsearch.h>
 #include <linux/sort.h>
+#include <linux/workqueue.h>
 
 static struct kmem_cache *user_ns_cachep __ro_after_init;
 static DEFINE_MUTEX(userns_state_mutex);

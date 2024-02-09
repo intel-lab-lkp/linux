@@ -8,6 +8,7 @@
 
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>

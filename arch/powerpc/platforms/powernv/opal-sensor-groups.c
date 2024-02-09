@@ -9,7 +9,9 @@
 
 #include <linux/of.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <asm/opal.h>
 

@@ -6,6 +6,7 @@
  */
 
 #include "dmaengine.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/circ_buf.h>
 #include <linux/dmaengine.h>

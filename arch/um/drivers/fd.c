@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <termios.h>
 #include "chan_user.h"
 #include <os.h>

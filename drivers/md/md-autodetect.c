@@ -10,6 +10,7 @@
 #include <linux/raid/md_u.h>
 #include <linux/raid/md_p.h>
 #include "md.h"
+#include <linux/sprintf.h>
 
 /*
  * When md (and any require personalities) are compiled into the kernel

@@ -11,6 +11,8 @@
 #include <linux/of.h>
 #include <linux/device.h>
 #include <linux/cpu.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <asm/firmware.h>
 #include <asm/interrupt.h>

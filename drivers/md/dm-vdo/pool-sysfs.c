@@ -5,14 +5,15 @@
 
 #include "pool-sysfs.h"
 
-#include <linux/kstrtox.h>
-
 #include "memory-alloc.h"
 #include "string-utils.h"
 
 #include "data-vio.h"
 #include "dedupe.h"
 #include "vdo.h"
+
+#include <linux/kstrtox.h>
+#include <linux/sysfs.h>
 
 struct pool_attribute {
 	struct attribute attr;

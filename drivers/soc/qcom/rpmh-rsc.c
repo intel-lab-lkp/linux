@@ -24,6 +24,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 
 #include <clocksource/arm_arch_timer.h>

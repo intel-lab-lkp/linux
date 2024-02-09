@@ -7,6 +7,8 @@
 
 #include "ubi.h"
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>

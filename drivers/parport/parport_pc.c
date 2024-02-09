@@ -45,6 +45,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/sched/signal.h>
 #include <linux/delay.h>
 #include <linux/errno.h>

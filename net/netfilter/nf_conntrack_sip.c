@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/skbuff.h>
 #include <linux/inet.h>
 #include <linux/in.h>

@@ -8,6 +8,7 @@
  * Author: Paul McKenney <paulmck@linux.ibm.com>
  */
 
+#include <linux/completion.h>
 #include <linux/export.h>
 #include <linux/mutex.h>
 #include <linux/preempt.h>
@@ -15,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/srcu.h>
+#include <linux/workqueue.h>
 
 #include <linux/rcu_node_tree.h>
 #include "rcu_segcblist.h"

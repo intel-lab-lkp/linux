@@ -12,9 +12,12 @@
 #include "../include/gaudi/gaudi_fw_if.h"
 #include "../include/gaudi/gaudi_reg_map.h"
 #include "../include/gaudi/gaudi_async_ids_map_extended.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/hwmon.h>
 #include <linux/iommu.h>

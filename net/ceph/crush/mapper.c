@@ -15,6 +15,7 @@
 # include <linux/slab.h>
 # include <linux/bug.h>
 # include <linux/kernel.h>
+# include <linux/math64.h>
 # include <linux/crush/crush.h>
 # include <linux/crush/hash.h>
 # include <linux/crush/mapper.h>

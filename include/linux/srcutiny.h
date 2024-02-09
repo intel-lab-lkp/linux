@@ -11,7 +11,15 @@
 #ifndef _LINUX_SRCU_TINY_H
 #define _LINUX_SRCU_TINY_H
 
+#include <linux/printk.h> // for pr_alert()
 #include <linux/swait.h>
+#include <linux/types.h>
+#include <linux/workqueue.h>
+#include <asm/rwonce.h> // for READ_ONCE(), WRITE_ONCE()
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+#include <linux/lockdep_types.h>
+#endif /* #ifdef CONFIG_DEBUG_LOCK_ALLOC */
 
 struct srcu_struct {
 	short srcu_lock_nesting[2];	/* srcu_read_lock() nesting depth. */

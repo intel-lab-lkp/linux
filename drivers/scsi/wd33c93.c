@@ -68,6 +68,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/kstrtox.h>
 
 #include <linux/string.h>
 #include <linux/delay.h>

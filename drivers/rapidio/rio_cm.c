@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -18,6 +19,7 @@
 #include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
 #include <linux/reboot.h>

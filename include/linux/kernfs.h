@@ -60,6 +60,7 @@ struct kernfs_iattrs;
  * completion time of these sysfs operations on each CPU.
  */
 #ifdef CONFIG_SMP
+#include <linux/log2.h>
 #define NR_KERNFS_LOCK_BITS (2 * (ilog2(NR_CPUS < 32 ? NR_CPUS : 32)))
 #else
 #define NR_KERNFS_LOCK_BITS     1

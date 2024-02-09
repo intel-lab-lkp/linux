@@ -9,6 +9,7 @@
 #include <crypto/xts.h>
 #include <crypto/sm4.h>
 #include <crypto/scatterwalk.h>
+#include <linux/sprintf.h>
 
 #include "cc_driver.h"
 #include "cc_lli_defs.h"

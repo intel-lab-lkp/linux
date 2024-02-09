@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_managed.h>
+#include <linux/kstrtox.h>
 
 #include "regs/xe_gt_regs.h"
 #include "xe_assert.h"

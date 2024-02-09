@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "3945.h"
+#include <linux/sprintf.h>
 
 static int
 il3945_stats_flag(struct il_priv *il, char *buf, int bufsz)

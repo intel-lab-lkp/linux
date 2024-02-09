@@ -12,6 +12,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
@@ -21,6 +22,7 @@
 #include <linux/pfn.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <media/ipu-bridge.h>

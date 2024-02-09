@@ -17,6 +17,7 @@
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/timekeeping.h>
 #include <linux/iopoll.h>

@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/range.h>
+#include <linux/sprintf.h>
 
 #include "bus_numa.h"
 

@@ -29,6 +29,7 @@
  */
 
 #include "bman_priv.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 u16 bman_ip_rev;
 EXPORT_SYMBOL(bman_ip_rev);

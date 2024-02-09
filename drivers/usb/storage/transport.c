@@ -32,6 +32,7 @@
 #include <linux/gfp.h>
 #include <linux/errno.h>
 #include <linux/export.h>
+#include <linux/completion.h>
 
 #include <linux/usb/quirks.h>
 

@@ -9,6 +9,7 @@ Copyright (C) 2006-2008, Uri Shkolnik
 ****************************************************************/
 
 #include "smscoreapi.h"
+#include <linux/completion.h>
 
 #include <linux/module.h>
 #include <linux/slab.h>

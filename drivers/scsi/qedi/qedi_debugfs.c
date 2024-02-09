@@ -6,6 +6,7 @@
 
 #include "qedi.h"
 #include "qedi_dbg.h"
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>

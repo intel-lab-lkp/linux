@@ -9,7 +9,9 @@
 #include <linux/jiffies.h>
 #include <linux/i2c.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/printk.h>
 #include <linux/pm_runtime.h>

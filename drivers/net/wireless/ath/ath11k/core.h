@@ -16,6 +16,7 @@
 #include <linux/rhashtable.h>
 #include <linux/average.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 
 #include "qmi.h"
 #include "htc.h"

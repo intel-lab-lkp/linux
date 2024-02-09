@@ -16,6 +16,7 @@
 #include "bfad_im.h"
 #include "bfa_fcs.h"
 #include "bfa_fcbuild.h"
+#include <linux/completion.h>
 
 BFA_TRC_FILE(FCS, FCS);
 

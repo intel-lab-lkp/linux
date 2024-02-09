@@ -17,7 +17,9 @@
 
 #include "tsnep.h"
 #include "tsnep_hw.h"
+#include <linux/sprintf.h>
 
+#include <linux/highmem.h> // for kmap_local_page()
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_net.h>

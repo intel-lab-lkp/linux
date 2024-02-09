@@ -12,6 +12,7 @@
 #include "intel_lrc_reg.h"
 #include "intel_ring.h"
 #include "intel_sseu.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int gen8_emit_rpcs_config(struct i915_request *rq,
 				 const struct intel_context *ce,

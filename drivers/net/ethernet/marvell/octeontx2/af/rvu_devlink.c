@@ -6,6 +6,8 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "rvu.h"
 #include "rvu_reg.h"

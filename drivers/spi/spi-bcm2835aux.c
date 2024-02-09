@@ -24,6 +24,7 @@
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 /* define polling limits */
 static unsigned int polling_limit_us = 30;

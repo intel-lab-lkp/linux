@@ -32,6 +32,7 @@
 #include "gmc/gmc_8_1_d.h"
 #include "vi_structs.h"
 #include "vid.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 enum hqd_dequeue_request_type {
 	NO_ACTION = 0,

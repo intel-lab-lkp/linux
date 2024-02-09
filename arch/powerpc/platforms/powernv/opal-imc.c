@@ -17,6 +17,7 @@
 #include <asm/io.h>
 #include <asm/imc-pmu.h>
 #include <asm/cputhreads.h>
+#include <linux/sprintf.h>
 
 static struct dentry *imc_debugfs_parent;
 

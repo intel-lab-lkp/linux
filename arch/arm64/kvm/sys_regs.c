@@ -12,6 +12,7 @@
 #include <linux/bitfield.h>
 #include <linux/bsearch.h>
 #include <linux/cacheinfo.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kvm_host.h>
 #include <linux/mm.h>
 #include <linux/printk.h>

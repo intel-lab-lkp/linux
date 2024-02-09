@@ -23,6 +23,7 @@
 #include "hid-ids.h"
 #include "hid-roccat-common.h"
 #include "hid-roccat-pyra.h"
+#include <linux/sprintf.h>
 
 static uint profile_numbers[5] = {0, 1, 2, 3, 4};
 

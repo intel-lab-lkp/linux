@@ -28,6 +28,7 @@
 
 #include <linux/sched/mm.h>
 #include <linux/sort.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include <drm/drm_debugfs.h>

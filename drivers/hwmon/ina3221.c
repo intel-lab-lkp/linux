@@ -10,11 +10,13 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/util_macros.h>
 
 #define INA3221_DRIVER_NAME		"ina3221"

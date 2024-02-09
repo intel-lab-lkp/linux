@@ -25,6 +25,7 @@
 #include "radeon.h"
 #include "radeon_asic.h"
 #include "rv770d.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * rv770_copy_dma - copy pages using the DMA engine

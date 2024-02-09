@@ -7,6 +7,7 @@
 #include "ql4_def.h"
 #include "ql4_glbl.h"
 #include "ql4_bsg.h"
+#include <linux/completion.h>
 
 static int
 qla4xxx_read_flash(struct bsg_job *bsg_job)

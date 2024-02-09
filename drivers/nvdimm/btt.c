@@ -6,6 +6,7 @@
 #include <linux/highmem.h>
 #include <linux/debugfs.h>
 #include <linux/blkdev.h>
+#include <linux/bio.h> // for struct bio_integrity_payload
 #include <linux/pagemap.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -19,6 +20,7 @@
 #include <linux/cleanup.h>
 #include "btt.h"
 #include "nd.h"
+#include <linux/sprintf.h>
 
 enum log_ent_request {
 	LOG_NEW_ENT = 0,

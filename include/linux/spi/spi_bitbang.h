@@ -2,6 +2,8 @@
 #ifndef	__SPI_BITBANG_H
 #define	__SPI_BITBANG_H
 
+#include <linux/mutex.h>
+#include <linux/types.h>
 #include <linux/workqueue.h>
 
 struct spi_bitbang {

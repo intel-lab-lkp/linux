@@ -6,6 +6,7 @@
 
 #include <linux/vfio.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/eventfd.h>
 

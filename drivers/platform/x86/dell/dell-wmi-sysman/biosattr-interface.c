@@ -6,6 +6,7 @@
  *  Copyright (c) 2020 Dell Inc.
  */
 
+#include <linux/kobject.h>
 #include <linux/wmi.h>
 #include "dell-wmi-sysman.h"
 

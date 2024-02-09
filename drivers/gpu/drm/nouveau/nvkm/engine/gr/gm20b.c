@@ -21,6 +21,7 @@
  */
 #include "gf100.h"
 #include "ctxgf100.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/firmware.h>
 #include <subdev/acr.h>
@@ -29,6 +30,8 @@
 #include <nvfw/flcn.h>
 
 #include <nvif/class.h>
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 void
 gm20b_gr_acr_bld_patch(struct nvkm_acr *acr, u32 bld, s64 adjust)

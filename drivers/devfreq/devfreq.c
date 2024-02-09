@@ -9,6 +9,7 @@
 
 #include <linux/kernel.h>
 #include <linux/kmod.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/debugfs.h>
 #include <linux/devfreq_cooling.h>
@@ -17,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/pm_opp.h>
 #include <linux/devfreq.h>

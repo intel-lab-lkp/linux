@@ -27,6 +27,7 @@
 #include "au88x0.h"
 #include "au88x0_eq.h"
 #include "au88x0_eqdata.c"
+#include <linux/sprintf.h>
 
 #define VORTEX_EQ_BASE	 0x2b000
 #define VORTEX_EQ_DEST   (VORTEX_EQ_BASE + 0x410)

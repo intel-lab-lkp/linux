@@ -35,6 +35,7 @@
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <net/addrconf.h>
 #include <rdma/ib_addr.h>

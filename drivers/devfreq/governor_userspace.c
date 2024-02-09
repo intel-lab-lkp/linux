@@ -13,6 +13,7 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include "governor.h"
+#include <linux/sprintf.h>
 
 struct userspace_data {
 	unsigned long user_frequency;

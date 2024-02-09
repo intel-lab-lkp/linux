@@ -7,6 +7,7 @@
 // Author: Radu Pirea <radu.pirea@microchip.com>
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-direction.h>

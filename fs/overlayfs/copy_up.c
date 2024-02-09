@@ -10,6 +10,7 @@
 #include <linux/file.h>
 #include <linux/fileattr.h>
 #include <linux/splice.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include <linux/security.h>
 #include <linux/uaccess.h>

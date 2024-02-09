@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/hid-sensor-hub.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger.h>

@@ -8,8 +8,10 @@
 
 #include <linux/ata.h>
 #include <linux/blk-mq.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/lv1call.h>
 #include <asm/ps3stor.h>

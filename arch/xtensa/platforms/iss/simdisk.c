@@ -13,6 +13,7 @@
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>

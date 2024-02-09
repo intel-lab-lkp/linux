@@ -8,8 +8,10 @@
 
 #include <linux/bitops.h>
 #include <linux/input.h>
+#include <linux/kstrtox.h>
 #include <linux/serio.h>
 #include <linux/libps2.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include "psmouse.h"
 #include "logips2pp.h"

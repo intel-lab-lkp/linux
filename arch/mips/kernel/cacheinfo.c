@@ -3,6 +3,7 @@
  * MIPS cacheinfo support
  */
 #include <linux/cacheinfo.h>
+#include <linux/smp.h> // for smp_processor_id(), used by current_cpu_data
 
 /* Populates leaf and increments to next leaf */
 #define populate_cache(cache, leaf, c_level, c_type)		\

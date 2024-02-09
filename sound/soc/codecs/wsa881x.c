@@ -3,6 +3,7 @@
 // Copyright (c) 2019, Linaro Limited
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>

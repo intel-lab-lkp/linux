@@ -7,6 +7,7 @@
 #include <linux/stmmac.h>
 #include "common.h"
 #include "dwxgmac2.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int dwxgmac2_get_tx_status(struct stmmac_extra_stats *x,
 				  struct dma_desc *p, void __iomem *ioaddr)

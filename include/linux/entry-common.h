@@ -11,6 +11,7 @@
 #include <linux/livepatch.h>
 #include <linux/resume_user_mode.h>
 #include <linux/tick.h>
+#include <linux/highmem.h> // for kmap_assert_nomap()
 #include <linux/kmsan.h>
 
 #include <asm/entry-common.h>

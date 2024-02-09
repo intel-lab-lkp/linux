@@ -7,6 +7,7 @@
  * Copyright (C) 2000, 2001, 2003 Broadcom Corporation
  */
 #include <linux/cache.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>

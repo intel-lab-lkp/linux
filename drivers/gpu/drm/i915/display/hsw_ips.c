@@ -11,6 +11,8 @@
 #include "intel_display_types.h"
 #include "intel_pcode.h"
 
+#include <linux/completion.h>
+
 static void hsw_ips_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);

@@ -21,6 +21,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "i2c-designware-core.h"
 

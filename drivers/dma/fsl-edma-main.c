@@ -19,6 +19,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pm_domain.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 #include "fsl-edma-common.h"
 

@@ -21,6 +21,8 @@
 #include <linux/moduleparam.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/kernel.h>
 #include <linux/fs.h>

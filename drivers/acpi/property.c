@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) "ACPI: " fmt
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/export.h>
 

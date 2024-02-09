@@ -10,6 +10,7 @@
 #include "btree.h"
 #include "debug.h"
 #include "extents.h"
+#include <linux/sprintf.h>
 
 #include <linux/console.h>
 #include <linux/debugfs.h>

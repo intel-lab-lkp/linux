@@ -14,9 +14,11 @@
 #include <linux/mempool.h>
 #include <linux/highmem.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
 #include <rdma/rw.h>
+#include <linux/completion.h>
 
 #include "glob.h"
 #include "connection.h"

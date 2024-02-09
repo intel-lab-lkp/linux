@@ -27,6 +27,7 @@
 
 #include <linux/bitops.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>

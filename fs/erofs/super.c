@@ -10,6 +10,7 @@
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/exportfs.h>
+#include <linux/blkdev.h>
 #include "xattr.h"
 
 #define CREATE_TRACE_POINTS

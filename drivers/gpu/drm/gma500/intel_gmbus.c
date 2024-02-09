@@ -31,6 +31,7 @@
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "psb_drv.h"
 #include "psb_intel_drv.h"

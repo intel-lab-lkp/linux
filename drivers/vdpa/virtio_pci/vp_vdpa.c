@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/vdpa.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>

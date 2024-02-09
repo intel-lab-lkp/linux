@@ -9,6 +9,7 @@
 #include "dwmac4.h"
 #include "stmmac.h"
 #include "stmmac_ptp.h"
+#include <linux/sprintf.h>
 
 struct intel_priv_data {
 	int mdio_adhoc_addr;	/* mdio address for serdes & etc */

@@ -8,6 +8,7 @@
 #include <linux/export.h>
 #include <linux/fips.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sysctl.h>

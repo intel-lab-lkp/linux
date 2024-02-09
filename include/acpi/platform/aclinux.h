@@ -54,6 +54,7 @@
 #include <linux/ctype.h>
 #include <linux/sched.h>
 #include <linux/atomic.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/slab.h>
 #include <linux/spinlock_types.h>

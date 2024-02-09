@@ -15,6 +15,8 @@
 #include <linux/slab.h>		/* For kmalloc. */
 #include <linux/kernel.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/string_helpers.h>
 #include <linux/sysfs.h>

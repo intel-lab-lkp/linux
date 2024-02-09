@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/dmapool.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 #include "ctl.h"
 

@@ -7,6 +7,7 @@
 #include <linux/nospec.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <uapi/drm/i915_drm.h>
 

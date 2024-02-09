@@ -7,6 +7,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/can/dev.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/ethtool.h>
 #include <linux/iopoll.h>

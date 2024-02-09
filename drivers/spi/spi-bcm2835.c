@@ -32,6 +32,7 @@
 #include <linux/overflow.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 /* SPI register offsets */
 #define BCM2835_SPI_CS			0x00

@@ -13,9 +13,12 @@
 
 #include <linux/uaccess.h>
 #include <linux/module.h>
+#include <linux/hex.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/parser.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/err.h>
 #include <keys/user-type.h>

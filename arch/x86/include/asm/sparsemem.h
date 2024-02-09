@@ -16,6 +16,8 @@
  *
  */
 
+#include <asm/pgtable_types.h> // for pgtable_l5_enabled()
+
 #ifdef CONFIG_X86_32
 # ifdef CONFIG_X86_PAE
 #  define SECTION_SIZE_BITS	29

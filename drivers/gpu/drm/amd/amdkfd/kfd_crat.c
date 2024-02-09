@@ -28,6 +28,7 @@
 #include "kfd_topology.h"
 #include "amdgpu.h"
 #include "amdgpu_amdkfd.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /* GPU Processor ID base for dGPUs for which VCRAT needs to be created.
  * GPU processor ID are expressed with Bit[31]=1.

@@ -18,7 +18,7 @@
 #include <linux/refcount.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
-#include <linux/kallsyms.h>
+#include <linux/kallsyms.h> // for KSYM_NAME_LEN
 #include <linux/capability.h>
 #include <linux/sched/mm.h>
 #include <linux/slab.h>

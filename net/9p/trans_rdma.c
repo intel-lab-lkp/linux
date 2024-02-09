@@ -31,6 +31,7 @@
 #include <net/9p/transport.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
+#include <linux/completion.h>
 
 #define P9_PORT			5640
 #define P9_RDMA_SQ_DEPTH	32

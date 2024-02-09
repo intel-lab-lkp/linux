@@ -21,6 +21,7 @@
 #include <linux/spi/spi_oc_tiny.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/completion.h>
 
 #define DRV_NAME "spi_oc_tiny"
 

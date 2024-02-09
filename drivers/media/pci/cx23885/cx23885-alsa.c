@@ -10,6 +10,7 @@
 
 #include "cx23885.h"
 #include "cx23885-reg.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/init.h>

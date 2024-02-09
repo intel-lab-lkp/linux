@@ -8,6 +8,7 @@
 
 #include <linux/compiler.h>
 #include <linux/clk-provider.h>
+#include <linux/notifier.h>
 
 #define CCU_FEATURE_FRACTIONAL		BIT(0)
 #define CCU_FEATURE_VARIABLE_PREDIV	BIT(1)

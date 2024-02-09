@@ -35,6 +35,7 @@
 #include <linux/stringify.h>
 #include <linux/tracepoint.h>
 #include <asm/tsc.h>
+#include <linux/sprintf.h>
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM gvt

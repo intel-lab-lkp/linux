@@ -3,6 +3,7 @@
 #define __LINUX_PWM_H
 
 #include <linux/err.h>
+#include <linux/math.h> // for DIV_ROUND_CLOSEST_ULL()
 #include <linux/mutex.h>
 #include <linux/of.h>
 

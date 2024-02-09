@@ -10,7 +10,10 @@
  */
 
 #include <linux/async.h>
+#include <linux/completion.h>
 #include <linux/devfreq.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/nls.h>
 #include <linux/of.h>
 #include <linux/bitfield.h>
@@ -24,6 +27,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/sched/clock.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_dbg.h>
 #include <scsi/scsi_driver.h>

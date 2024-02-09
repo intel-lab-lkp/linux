@@ -15,6 +15,7 @@
 #include <linux/input.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb/input.h>
 #include "usb.h"
 #include "debug.h"

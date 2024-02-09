@@ -14,8 +14,10 @@
 
 #include <linux/bitfield.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/export.h>
 #include <linux/topology.h>

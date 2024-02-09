@@ -2,6 +2,7 @@
 // Copyright (c) 2016-2017 Hisilicon Limited.
 
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/phy.h>
 #include <linux/sfp.h>

@@ -20,6 +20,7 @@
 #include <soc/fsl/cpm.h>
 #include <sysdev/fsl_soc.h>
 #include "tsa.h"
+#include <linux/completion.h>
 
 /* SCC general mode register high (32 bits) */
 #define SCC_GSMRL	0x00

@@ -22,6 +22,7 @@
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 
 /* Register definitions */
 #define RX8025_REG_SEC		0x00

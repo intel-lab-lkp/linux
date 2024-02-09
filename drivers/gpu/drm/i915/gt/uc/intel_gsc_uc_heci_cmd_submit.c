@@ -9,6 +9,7 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_ring.h"
 #include "intel_gsc_uc_heci_cmd_submit.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 struct gsc_heci_pkt {
 	u64 addr_in;

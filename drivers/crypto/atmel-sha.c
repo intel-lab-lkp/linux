@@ -16,9 +16,11 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/hw_random.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <linux/device.h>
 #include <linux/dmaengine.h>

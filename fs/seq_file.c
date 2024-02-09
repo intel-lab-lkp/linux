@@ -12,11 +12,14 @@
 #include <linux/fs.h>
 #include <linux/export.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
+#include <linux/hex.h>
 #include <linux/mm.h>
 #include <linux/printk.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/uio.h>
 

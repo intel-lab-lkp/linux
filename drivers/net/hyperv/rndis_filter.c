@@ -9,6 +9,7 @@
 #include <linux/ethtool.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/highmem.h>
 #include <linux/slab.h>
@@ -21,6 +22,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/ucs2_string.h>
 #include <linux/string.h>
+#include <linux/completion.h>
 
 #include "hyperv_net.h"
 #include "netvsc_trace.h"

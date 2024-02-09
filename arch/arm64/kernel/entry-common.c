@@ -9,6 +9,7 @@
 #include <linux/kasan.h>
 #include <linux/linkage.h>
 #include <linux/lockdep.h>
+#include <linux/ftrace.h> // for CALLER_ADDR0
 #include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>

@@ -14,6 +14,8 @@
 #include <rdma/erdma-abi.h>
 #include <rdma/ib_umem.h>
 #include <rdma/uverbs_ioctl.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "erdma.h"
 #include "erdma_cm.h"

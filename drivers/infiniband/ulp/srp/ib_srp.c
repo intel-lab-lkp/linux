@@ -33,16 +33,21 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/module.h>
+#include <linux/hex.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/parser.h>
 #include <linux/random.h>
+#include <linux/kobject_ns.h>
 #include <linux/jiffies.h>
 #include <linux/lockdep.h>
 #include <linux/inet.h>
 #include <rdma/ib_cache.h>
+#include <linux/completion.h>
 
 #include <linux/atomic.h>
 

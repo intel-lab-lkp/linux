@@ -2,6 +2,7 @@
 /* Copyright(c) 2009-2013  Realtek Corporation.*/
 
 #include "../wifi.h"
+#include <linux/completion.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 

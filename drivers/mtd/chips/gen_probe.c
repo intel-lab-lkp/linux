@@ -11,6 +11,7 @@
 #include <linux/mtd/map.h>
 #include <linux/mtd/cfi.h>
 #include <linux/mtd/gen_probe.h>
+#include <linux/sprintf.h>
 
 static struct mtd_info *check_cmd_set(struct map_info *, int);
 static struct cfi_private *genprobe_ident_chips(struct map_info *map,

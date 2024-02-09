@@ -19,6 +19,7 @@
 #include <linux/phy.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "dwxgmac2.h"
 #include "stmmac.h"

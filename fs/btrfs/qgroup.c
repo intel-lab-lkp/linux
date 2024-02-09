@@ -7,10 +7,12 @@
 #include <linux/pagemap.h>
 #include <linux/writeback.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/btrfs.h>
+#include <linux/ratelimit.h>
 #include <linux/sched/mm.h>
 
 #include "ctree.h"

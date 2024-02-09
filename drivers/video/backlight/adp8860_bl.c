@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/pm.h>
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
@@ -15,6 +16,7 @@
 #include <linux/backlight.h>
 #include <linux/leds.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include <linux/platform_data/adp8860.h>

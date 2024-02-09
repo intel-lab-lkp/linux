@@ -38,6 +38,7 @@
 #include <linux/kdb.h>
 #include <linux/irq.h>
 #include <linux/perf_event.h>
+#include <linux/sprintf.h>
 
 #include <asm/addrspace.h>
 #include <asm/bootinfo.h>

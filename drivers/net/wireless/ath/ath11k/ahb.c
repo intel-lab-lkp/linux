@@ -10,12 +10,14 @@
 #include <linux/of_device.h>
 #include <linux/of.h>
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of_address.h>
 #include <linux/iommu.h>
 #include "ahb.h"
 #include "debug.h"
 #include "hif.h"
 #include "qmi.h"
+#include <linux/completion.h>
 #include <linux/remoteproc.h>
 #include "pcic.h"
 #include <linux/soc/qcom/smem.h>

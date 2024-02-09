@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "dm-core.h"
+#include <linux/completion.h>
 
 /*
  * The kobject release method must not be placed in the module itself,

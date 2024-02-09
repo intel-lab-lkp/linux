@@ -7,10 +7,12 @@
  *	Bjorn Helgaas <bjorn.helgaas@hp.com>
  */
 
+#include <linux/hex.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/pnp.h>
 #include "base.h"
+#include <linux/sprintf.h>
 
 /**
  * pnp_is_active - Determines if a device is active based on its current

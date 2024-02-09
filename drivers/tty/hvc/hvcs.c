@@ -56,6 +56,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/kref.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/list.h>
 #include <linux/major.h>
@@ -64,6 +65,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>

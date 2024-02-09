@@ -25,6 +25,7 @@
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
@@ -37,6 +38,7 @@
 #include <linux/rfkill.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/units.h>
 

@@ -4,6 +4,7 @@
  */
 
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/sysfs.h>
 
 #include "i915_drv.h"

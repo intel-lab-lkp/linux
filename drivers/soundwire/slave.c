@@ -2,11 +2,13 @@
 // Copyright(c) 2015-17 Intel Corporation.
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
 #include "bus.h"
 #include "sysfs_local.h"
+#include <linux/sprintf.h>
 
 static void sdw_slave_release(struct device *dev)
 {

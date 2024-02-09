@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <crypto/b128ops.h>
 #include <crypto/gf128mul.h>

@@ -15,6 +15,7 @@
  *
  */
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -34,6 +35,7 @@
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "i2c-stm32.h"
 

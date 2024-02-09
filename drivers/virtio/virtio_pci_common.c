@@ -15,6 +15,7 @@
  */
 
 #include "virtio_pci_common.h"
+#include <linux/sprintf.h>
 
 static bool force_legacy = false;
 

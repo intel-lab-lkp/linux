@@ -32,6 +32,7 @@
  * SOFTWARE.
  */
 #include <net/ipv6.h>
+#include <linux/completion.h>
 
 #include "cxgb4.h"
 #include "t4_regs.h"

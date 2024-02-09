@@ -21,6 +21,7 @@
 #include <linux/netfs.h>
 #include <linux/fscache.h>
 #include <linux/hashtable.h>
+#include <linux/ratelimit.h>
 
 #include <linux/ceph/libceph.h>
 #include "crypto.h"

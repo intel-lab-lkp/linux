@@ -16,8 +16,10 @@
  */
 
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "dwc-xlgmac.h"
 #include "dwc-xlgmac-reg.h"

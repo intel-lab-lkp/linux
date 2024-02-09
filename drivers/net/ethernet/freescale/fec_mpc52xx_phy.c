@@ -21,6 +21,7 @@
 #include <asm/io.h>
 #include <asm/mpc52xx.h>
 #include "fec_mpc52xx.h"
+#include <linux/sprintf.h>
 
 struct mpc52xx_fec_mdio_priv {
 	struct mpc52xx_fec __iomem *regs;

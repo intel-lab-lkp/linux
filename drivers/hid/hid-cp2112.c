@@ -23,6 +23,7 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/nls.h>
+#include <linux/sprintf.h>
 #include <linux/string_choices.h>
 #include <linux/usb/ch9.h>
 #include "hid-ids.h"

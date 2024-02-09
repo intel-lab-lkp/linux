@@ -4,6 +4,7 @@
 #include <linux/debugfs.h>
 #include <linux/mlx5/fs.h>
 #include "mlx5_vnet.h"
+#include <linux/sprintf.h>
 
 static int tirn_show(struct seq_file *file, void *priv)
 {

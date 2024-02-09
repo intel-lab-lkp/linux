@@ -14,6 +14,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <linux/bitops.h>
 #include <linux/ctype.h>

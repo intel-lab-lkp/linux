@@ -17,6 +17,7 @@
 
 #include <sound/hdaudio_ext.h>
 #include <sound/hda_register.h>
+#include <linux/sprintf.h>
 
 #include <linux/acpi.h>
 #include <linux/module.h>

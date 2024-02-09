@@ -17,8 +17,10 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/hex.h>
 #include <linux/spinlock.h>
 #include <linux/export.h>
 #include <asm/unaligned.h>

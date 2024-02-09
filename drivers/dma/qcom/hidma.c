@@ -58,6 +58,7 @@
 #include <linux/atomic.h>
 #include <linux/pm_runtime.h>
 #include <linux/msi.h>
+#include <linux/sprintf.h>
 
 #include "../dmaengine.h"
 #include "hidma.h"

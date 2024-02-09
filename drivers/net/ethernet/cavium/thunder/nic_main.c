@@ -9,6 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/of.h>
 #include <linux/if_vlan.h>
+#include <linux/sprintf.h>
 
 #include "nic_reg.h"
 #include "nic.h"

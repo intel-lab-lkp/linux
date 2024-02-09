@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <sound/hda_codec.h>
 #include <sound/soc.h>
 #include <sound/tas2781.h>

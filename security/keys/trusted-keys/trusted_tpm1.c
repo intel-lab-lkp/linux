@@ -7,7 +7,10 @@
  */
 
 #include <crypto/hash_info.h>
+#include <linux/device.h> // for put_device()
+#include <linux/hex.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/parser.h>
 #include <linux/string.h>

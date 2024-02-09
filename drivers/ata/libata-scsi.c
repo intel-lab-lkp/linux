@@ -14,6 +14,8 @@
  */
 
 #include <linux/compat.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/blkdev.h>

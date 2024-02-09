@@ -5,6 +5,7 @@
  */
 
 #include "cfg80211.h"
+#include <linux/completion.h>
 
 #define GO_NEG_REQ			0x00
 #define GO_NEG_RSP			0x01

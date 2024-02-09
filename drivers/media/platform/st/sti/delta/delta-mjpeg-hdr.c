@@ -6,6 +6,7 @@
 
 #include "delta.h"
 #include "delta-mjpeg.h"
+#include <linux/sprintf.h>
 
 #define MJPEG_SOF_0  0xc0
 #define MJPEG_SOF_1  0xc1

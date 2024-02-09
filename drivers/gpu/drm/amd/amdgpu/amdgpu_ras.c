@@ -22,8 +22,10 @@
  *
  */
 #include <linux/debugfs.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/reboot.h>
 #include <linux/syscalls.h>

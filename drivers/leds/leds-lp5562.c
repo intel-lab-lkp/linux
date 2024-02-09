@@ -10,12 +10,14 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_data/leds-lp55xx.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "leds-lp55xx-common.h"
 

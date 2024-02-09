@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "mvpp2.h"
 #include "mvpp2_prs.h"

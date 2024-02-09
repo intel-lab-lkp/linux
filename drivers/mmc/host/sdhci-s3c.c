@@ -23,6 +23,7 @@
 #include <linux/of_gpio.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include <linux/mmc/host.h>
 

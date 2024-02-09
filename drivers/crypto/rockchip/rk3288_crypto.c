@@ -14,6 +14,7 @@
 #include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>

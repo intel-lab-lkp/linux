@@ -4,6 +4,8 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -26,6 +28,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/static_key.h>
 #include <linux/list.h>
 #include <linux/log2.h>

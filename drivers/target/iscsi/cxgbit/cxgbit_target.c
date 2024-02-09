@@ -6,6 +6,8 @@
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/sched/signal.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 
 #include <asm/unaligned.h>
 #include <net/tcp.h>

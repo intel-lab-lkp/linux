@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/wwan.h>
 #include <linux/debugfs.h>
 #include <linux/workqueue.h>

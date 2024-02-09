@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/slab.h>
 

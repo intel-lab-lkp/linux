@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/atomic.h>
+#include <linux/hex.h>
 #include <linux/uaccess.h>
 #include <linux/mod_devicetable.h>
 

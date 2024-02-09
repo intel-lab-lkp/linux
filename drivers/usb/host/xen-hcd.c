@@ -9,6 +9,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/list.h>
 #include <linux/usb/hcd.h>

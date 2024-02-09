@@ -12,6 +12,7 @@
 
 #include "dm.h"
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/dm-bufio.h>
 

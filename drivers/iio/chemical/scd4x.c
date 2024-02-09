@@ -24,6 +24,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/types.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>

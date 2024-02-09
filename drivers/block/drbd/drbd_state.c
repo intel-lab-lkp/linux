@@ -18,6 +18,8 @@
 #include "drbd_protocol.h"
 #include "drbd_req.h"
 #include "drbd_state_change.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 struct after_state_chg_work {
 	struct drbd_work w;

@@ -7,6 +7,7 @@
  * https://github.com/microchip-ung/sparx-5_reginfo
  */
 #include <linux/ptp_classify.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "sparx5_main_regs.h"
 #include "sparx5_main.h"

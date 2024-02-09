@@ -21,6 +21,7 @@
  */
 #include <core/device.h>
 #include <core/firmware.h>
+#include <linux/sprintf.h>
 
 #include <subdev/fb.h>
 #include <subdev/mmu.h>

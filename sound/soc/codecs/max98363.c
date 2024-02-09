@@ -11,6 +11,7 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>
+#include <linux/completion.h>
 
 #include "max98363.h"
 

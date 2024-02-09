@@ -16,6 +16,7 @@
 #include "b43.h"
 #include "leds.h"
 #include "rfkill.h"
+#include <linux/sprintf.h>
 
 
 static void b43_led_turn_on(struct b43_wldev *dev, u8 led_index,

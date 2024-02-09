@@ -9,6 +9,7 @@
 #include "malidp_io.h"
 #include "komeda_framebuffer.h"
 #include "komeda_color_mgmt.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void get_resources_id(u32 hw_id, u32 *pipe_id, u32 *comp_id)
 {

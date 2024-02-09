@@ -41,6 +41,7 @@
  */
 
 #include <linux/sunrpc/svc_rdma.h>
+#include <linux/completion.h>
 
 #include "xprt_rdma.h"
 #include <trace/events/rpcrdma.h>

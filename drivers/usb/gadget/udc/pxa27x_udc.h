@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/io.h>
 #include <linux/usb/otg.h>
+#include <linux/completion.h>
 
 /*
  * Register definitions

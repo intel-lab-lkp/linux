@@ -38,6 +38,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/comedi.h>

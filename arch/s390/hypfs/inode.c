@@ -15,6 +15,7 @@
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/namei.h>
+#include <linux/sprintf.h>
 #include <linux/vfs.h>
 #include <linux/slab.h>
 #include <linux/pagemap.h>

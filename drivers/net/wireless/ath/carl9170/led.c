@@ -39,6 +39,7 @@
 
 #include "carl9170.h"
 #include "cmd.h"
+#include <linux/sprintf.h>
 
 int carl9170_led_set_state(struct ar9170 *ar, const u32 led_state)
 {

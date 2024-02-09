@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/hrtimer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stm.h>
 
 #define STM_HEARTBEAT_MAX	32

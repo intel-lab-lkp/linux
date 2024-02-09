@@ -9,10 +9,12 @@
 
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kmod.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/prandom.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/utsname.h>
 #include <linux/uuid.h>

@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel.h>	/* Needed for KERN_INFO */
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -18,6 +19,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 /*
  * Addresses to scan.

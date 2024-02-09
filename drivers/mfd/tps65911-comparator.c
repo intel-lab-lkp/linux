@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/gpio.h>
 #include <linux/mfd/tps65910.h>
+#include <linux/sprintf.h>
 
 #define COMP1					0
 #define COMP2					1

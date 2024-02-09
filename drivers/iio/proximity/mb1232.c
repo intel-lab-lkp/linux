@@ -11,6 +11,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>

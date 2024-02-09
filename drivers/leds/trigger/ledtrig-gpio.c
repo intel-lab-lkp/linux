@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/slab.h>
 #include "../leds.h"

@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/completion.h>
 
 #include "camss.h"
 #include "camss-vfe.h"

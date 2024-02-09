@@ -7,6 +7,7 @@
 #include <linux/dmaengine.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "internal.h"

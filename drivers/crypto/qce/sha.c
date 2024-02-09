@@ -7,6 +7,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <crypto/internal/hash.h>
+#include <linux/sprintf.h>
 
 #include "common.h"
 #include "core.h"

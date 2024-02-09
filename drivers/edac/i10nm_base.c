@@ -12,6 +12,8 @@
 #include <asm/mce.h>
 #include "edac_module.h"
 #include "skx_common.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define I10NM_REVISION	"v0.0.6"
 #define EDAC_MOD_STR	"i10nm_edac"

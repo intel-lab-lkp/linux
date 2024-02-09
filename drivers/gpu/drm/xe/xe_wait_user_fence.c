@@ -4,6 +4,7 @@
  */
 
 #include "xe_wait_user_fence.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>

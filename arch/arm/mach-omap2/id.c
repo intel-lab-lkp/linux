@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_SOC_BUS
 #include <linux/sys_soc.h>

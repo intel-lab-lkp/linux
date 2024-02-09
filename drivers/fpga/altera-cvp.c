@@ -13,9 +13,11 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fpga/fpga-mgr.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 
 #define CVP_BAR		0	/* BAR used for data transfer in memory mode */
 #define CVP_DUMMY_WR	244	/* dummy writes to clear CvP state machine */

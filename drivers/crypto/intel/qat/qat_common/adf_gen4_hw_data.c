@@ -6,6 +6,7 @@
 #include "adf_common_drv.h"
 #include "adf_gen4_hw_data.h"
 #include "adf_gen4_pm.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static u64 build_csr_ring_base_addr(dma_addr_t addr, u32 size)
 {

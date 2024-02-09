@@ -43,6 +43,8 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_pma.h>
 #include "ocrdma_stats.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static struct dentry *ocrdma_dbgfs_dir;
 

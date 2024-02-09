@@ -10,6 +10,7 @@
 
 #include <linux/completion.h>
 #include <linux/err.h>
+#include <linux/hex.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -20,6 +21,7 @@
 #include <linux/mempool.h>
 #include <linux/slab.h>
 #include <linux/crypto.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/backing-dev.h>

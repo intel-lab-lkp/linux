@@ -11,6 +11,7 @@
 #include <linux/list.h>
 #include <linux/kobject.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/notifier.h>
 #include <linux/of.h>

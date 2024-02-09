@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <net/pkt_cls.h>
 
 #include "netdevsim.h"

@@ -3,6 +3,7 @@
  * Copyright (C) 2010 Felix Fietkau <nbd@openwrt.org>
  */
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/debugfs.h>

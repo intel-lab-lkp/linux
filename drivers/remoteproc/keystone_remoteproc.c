@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>

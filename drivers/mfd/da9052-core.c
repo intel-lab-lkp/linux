@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/property.h>
+#include <linux/completion.h>
 
 #include <linux/mfd/da9052/da9052.h>
 #include <linux/mfd/da9052/pdata.h>

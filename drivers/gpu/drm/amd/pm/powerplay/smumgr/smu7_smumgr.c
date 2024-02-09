@@ -30,6 +30,7 @@
 #include "smu7_ppsmc.h"
 #include "smu7_smumgr.h"
 #include "smu7_common.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "polaris10_pwrvirus.h"
 

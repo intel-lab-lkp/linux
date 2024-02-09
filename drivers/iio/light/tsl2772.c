@@ -13,10 +13,12 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>

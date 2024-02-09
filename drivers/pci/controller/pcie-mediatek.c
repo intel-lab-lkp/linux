@@ -26,6 +26,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include "../pci.h"
 

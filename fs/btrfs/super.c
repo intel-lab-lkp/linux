@@ -8,9 +8,12 @@
 #include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for memparse()
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/seq_file.h>
+#include <linux/shrinker.h>
 #include <linux/string.h>
 #include <linux/backing-dev.h>
 #include <linux/mount.h>

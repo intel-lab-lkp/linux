@@ -6,6 +6,7 @@
  */
 
 #include "digi00x.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("Digidesign Digi 002/003 family Driver");
 MODULE_AUTHOR("Takashi Sakamoto <o-takashi@sakamocchi.jp>");

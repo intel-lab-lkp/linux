@@ -33,6 +33,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_bitbang.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 
 #ifdef CONFIG_FSL_SOC
 #include <sysdev/fsl_soc.h>

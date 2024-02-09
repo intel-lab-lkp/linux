@@ -7,6 +7,7 @@
 
 #include "goyaP.h"
 #include "../include/goya/asic_reg/goya_regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * goya_set_block_as_protected - set the given block as protected

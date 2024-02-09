@@ -5,6 +5,7 @@
  */
 #include "qla_def.h"
 #include "qla_tmpl.h"
+#include <linux/sprintf.h>
 
 #define ISPREG(vha)	(&(vha)->hw->iobase->isp24)
 #define IOBAR(reg)	offsetof(typeof(*(reg)), iobase_addr)

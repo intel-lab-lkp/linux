@@ -14,6 +14,7 @@
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 
 #define DRVNAME "f71808e_wdt"

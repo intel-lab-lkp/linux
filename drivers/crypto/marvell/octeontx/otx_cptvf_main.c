@@ -9,6 +9,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include "otx_cptvf.h"
 #include "otx_cptvf_algs.h"

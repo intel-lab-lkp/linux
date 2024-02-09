@@ -23,6 +23,7 @@
 #ifndef __AMDGPU_CTX_H__
 #define __AMDGPU_CTX_H__
 
+#include <linux/idr.h>
 #include <linux/ktime.h>
 #include <linux/types.h>
 

@@ -17,6 +17,7 @@
 #include <linux/regmap.h>
 #include <linux/acpi.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/events.h>

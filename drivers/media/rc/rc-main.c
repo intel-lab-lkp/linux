@@ -7,6 +7,7 @@
 
 #include <media/rc-core.h>
 #include <linux/bsearch.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/input.h>
@@ -16,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include "rc-core-priv.h"
+#include <linux/sprintf.h>
 
 /* Sizes are in bytes, 256 bytes allows for 32 entries on x64 */
 #define IR_TAB_MIN_SIZE	256

@@ -7,6 +7,7 @@
 // Author: Codrin Ciubotariu <codrin.ciubotariu@microchip.com>
 
 #include <dt-bindings/sound/microchip,pdmc.h>
+#include <linux/sprintf.h>
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>

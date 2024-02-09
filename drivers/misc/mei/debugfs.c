@@ -6,6 +6,7 @@
 
 #include <linux/slab.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/device.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>

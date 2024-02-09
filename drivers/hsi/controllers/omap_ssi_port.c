@@ -12,6 +12,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
 #include <linux/delay.h>
+#include <linux/completion.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/pinctrl/consumer.h>

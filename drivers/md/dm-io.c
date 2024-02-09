@@ -7,6 +7,7 @@
  */
 
 #include "dm-core.h"
+#include <linux/completion.h>
 
 #include <linux/device-mapper.h>
 

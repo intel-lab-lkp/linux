@@ -11,6 +11,8 @@
 #include <linux/dma-direction.h>
 #include "mgb4_core.h"
 #include "mgb4_dma.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static void chan_irq(void *param)
 {

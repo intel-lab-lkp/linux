@@ -4,6 +4,7 @@
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/of_mdio.h>
 #include "sja1105.h"
+#include <linux/sprintf.h>
 
 #define SJA1110_PCS_BANK_REG		SJA1110_SPI_ADDR(0x3fc)
 

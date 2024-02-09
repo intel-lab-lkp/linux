@@ -5,6 +5,7 @@
 
 #include <linux/miscdevice.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/file.h>
 #include <linux/fs.h>

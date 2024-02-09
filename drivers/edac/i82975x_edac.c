@@ -15,6 +15,7 @@
 #include <linux/pci_ids.h>
 #include <linux/edac.h>
 #include "edac_module.h"
+#include <linux/sprintf.h>
 
 #define EDAC_MOD_STR		"i82975x_edac"
 

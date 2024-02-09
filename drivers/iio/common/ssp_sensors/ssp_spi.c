@@ -4,6 +4,7 @@
  */
 
 #include "ssp.h"
+#include <linux/completion.h>
 
 #define SSP_DEV (&data->spi->dev)
 #define SSP_GET_MESSAGE_TYPE(data) (data & (3 << SSP_RW))

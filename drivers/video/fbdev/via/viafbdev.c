@@ -6,6 +6,7 @@
  */
 
 #include <linux/compiler.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>

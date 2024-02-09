@@ -10,6 +10,7 @@
 
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/spi/spi.h>
 #include <linux/bcd.h>
 #include <linux/rtc.h>
@@ -19,6 +20,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/kstrtox.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 /* Register map */
 /* control section */

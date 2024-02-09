@@ -13,6 +13,8 @@
  * seq_buf_init() more than once to reset the seq_buf to start
  * from scratch.
  */
+#include <linux/hex.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/seq_file.h>
 #include <linux/seq_buf.h>

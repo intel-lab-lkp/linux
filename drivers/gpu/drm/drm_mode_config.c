@@ -21,6 +21,7 @@
  */
 
 #include <linux/uaccess.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <drm/drm_drv.h>
 #include <drm/drm_encoder.h>

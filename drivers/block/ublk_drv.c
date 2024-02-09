@@ -13,13 +13,16 @@
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/pagemap.h>
 #include <linux/file.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/major.h>
 #include <linux/wait.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/init.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
@@ -43,6 +46,8 @@
 #include <asm/page.h>
 #include <linux/task_work.h>
 #include <linux/namei.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
+#include <linux/kobject.h>
 #include <linux/kref.h>
 #include <uapi/linux/ublk_cmd.h>
 

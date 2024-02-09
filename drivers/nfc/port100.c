@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <net/nfc/digital.h>
+#include <linux/completion.h>
 
 #define VERSION "0.1"
 

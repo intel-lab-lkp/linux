@@ -17,6 +17,7 @@
 #include <linux/moduleparam.h>
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/watchdog.h>
 #include <linux/miscdevice.h>

@@ -7,6 +7,8 @@
 
 #include <uapi/drm/habanalabs_accel.h>
 #include "habanalabs.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <linux/uaccess.h>
 #include <linux/slab.h>

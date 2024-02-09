@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <linux/hrtimer.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/intel-family.h>

@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/moduleparam.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/initval.h>
 
 MODULE_AUTHOR("Uros Bizjak <uros@kss-loka.si>");

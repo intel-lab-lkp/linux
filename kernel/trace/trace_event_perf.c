@@ -11,6 +11,7 @@
 #include <linux/security.h>
 #include "trace.h"
 #include "trace_probe.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 static char __percpu *perf_trace_buf[PERF_NR_CONTEXTS];
 

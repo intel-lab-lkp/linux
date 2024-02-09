@@ -76,6 +76,7 @@
 #include <linux/init.h>
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/root_dev.h>
 #include <net/ipconfig.h>

@@ -14,6 +14,7 @@
  */
 #include <linux/fb.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define FB_CVT_CELLSIZE               8
 #define FB_CVT_GTF_C                 40

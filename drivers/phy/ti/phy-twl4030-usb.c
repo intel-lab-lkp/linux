@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/io.h>
 #include <linux/delay.h>

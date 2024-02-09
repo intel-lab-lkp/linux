@@ -3,10 +3,12 @@
 #include <linux/libnvdimm.h>
 #include <linux/ndctl.h>
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
 #include <linux/memregion.h>
 #include <asm/smp.h>
 #include "intel.h"
 #include "nfit.h"
+#include <linux/sprintf.h>
 
 static ssize_t firmware_activate_noidle_show(struct device *dev,
 		struct device_attribute *attr, char *buf)

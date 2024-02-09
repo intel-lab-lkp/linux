@@ -6,6 +6,8 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sysfs.h>
+#include <linux/kstrtox.h>
 
 #include "sysfs-common.h"
 

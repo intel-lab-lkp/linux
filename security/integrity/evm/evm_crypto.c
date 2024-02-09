@@ -14,6 +14,7 @@
 
 #include <linux/export.h>
 #include <linux/crypto.h>
+#include <linux/hex.h>
 #include <linux/xattr.h>
 #include <linux/evm.h>
 #include <keys/encrypted-type.h>

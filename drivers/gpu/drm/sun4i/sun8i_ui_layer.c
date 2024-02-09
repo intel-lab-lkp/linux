@@ -19,6 +19,7 @@
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_probe_helper.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "sun8i_mixer.h"
 #include "sun8i_ui_layer.h"

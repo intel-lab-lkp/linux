@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 #include <linux/crypto.h>
 #include <crypto/algapi.h>
 #include <crypto/internal/rsa.h>

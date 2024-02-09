@@ -6,6 +6,7 @@
 
 #include <linux/bug.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/libfdt.h>
 #include <linux/of_fdt.h>
 #include <linux/sizes.h>

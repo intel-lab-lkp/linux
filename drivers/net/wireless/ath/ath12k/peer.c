@@ -7,6 +7,7 @@
 #include "core.h"
 #include "peer.h"
 #include "debug.h"
+#include <linux/completion.h>
 
 struct ath12k_peer *ath12k_peer_find(struct ath12k_base *ab, int vdev_id,
 				     const u8 *addr)

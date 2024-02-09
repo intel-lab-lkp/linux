@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/etherdevice.h>

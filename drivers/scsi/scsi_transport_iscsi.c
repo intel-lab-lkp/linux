@@ -12,6 +12,8 @@
 #include <linux/slab.h>
 #include <linux/bsg-lib.h>
 #include <linux/idr.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>

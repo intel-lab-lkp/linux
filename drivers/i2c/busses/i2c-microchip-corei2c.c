@@ -9,6 +9,7 @@
  */
 #include <linux/clk.h>
 #include <linux/clkdev.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -16,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define CORE_I2C_CTRL	(0x00)
 #define  CTRL_CR0	BIT(0)

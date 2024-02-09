@@ -7,6 +7,7 @@
 
 #include <linux/hid.h>
 #include <linux/intel-ish-client-if.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/input.h>
 #include "ishtp-hid.h"
 

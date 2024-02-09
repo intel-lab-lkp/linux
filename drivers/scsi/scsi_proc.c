@@ -19,6 +19,8 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/proc_fs.h>

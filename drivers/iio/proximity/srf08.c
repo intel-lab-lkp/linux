@@ -15,6 +15,7 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/bitops.h>
 #include <linux/iio/iio.h>
@@ -22,6 +23,7 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
+#include <linux/sprintf.h>
 
 /* registers of SRF08 device */
 #define SRF08_WRITE_COMMAND	0x00	/* Command Register */

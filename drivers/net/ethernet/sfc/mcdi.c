@@ -11,6 +11,8 @@
 #include "nic.h"
 #include "io.h"
 #include "mcdi_pcol.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /**************************************************************************
  *

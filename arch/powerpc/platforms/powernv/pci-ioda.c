@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/memblock.h>

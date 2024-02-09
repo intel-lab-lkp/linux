@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include "core.h"
 #include "registers.h"
+#include <linux/completion.h>
 
 /* FW load (200ms) plus operational delays */
 #define FW_READY_TIMEOUT_MS	250

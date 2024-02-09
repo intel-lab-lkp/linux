@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/rtnetlink.h>
+#include <linux/completion.h>
 
 #include "mt7996.h"
 #include "mac.h"

@@ -5,6 +5,7 @@
 
 #include <linux/delay.h>
 #include <drm/drm_print.h>
+#include <linux/completion.h>
 
 #include "dp_reg.h"
 #include "dp_aux.h"

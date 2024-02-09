@@ -6,6 +6,7 @@
  */
 
 #include <linux/pnp.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/device.h>
@@ -14,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/errno.h>
 #include <linux/dma-mapping.h>
 

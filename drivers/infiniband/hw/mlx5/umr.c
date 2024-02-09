@@ -5,6 +5,7 @@
 #include "mlx5_ib.h"
 #include "umr.h"
 #include "wr.h"
+#include <linux/completion.h>
 
 /*
  * We can't use an array for xlt_emergency_page because dma_map_single doesn't

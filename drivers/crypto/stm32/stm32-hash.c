@@ -14,6 +14,7 @@
 #include <crypto/sha2.h>
 #include <crypto/sha3.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>

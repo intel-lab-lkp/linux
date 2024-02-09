@@ -9,12 +9,14 @@
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
 #include <linux/blktrace_api.h>
+#include <linux/kstrtox.h>
 #include <linux/percpu.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/uaccess.h>
 #include <linux/list.h>

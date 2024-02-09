@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/log2.h>
 #include <linux/kmsan.h>

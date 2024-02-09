@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #include <asm/io.h>
 #include <asm/console.h>

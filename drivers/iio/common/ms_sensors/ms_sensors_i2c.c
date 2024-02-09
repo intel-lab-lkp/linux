@@ -9,6 +9,7 @@
 #include <linux/iio/iio.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 
 #include "ms_sensors_i2c.h"
 

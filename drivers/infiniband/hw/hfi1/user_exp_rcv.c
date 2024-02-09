@@ -4,6 +4,7 @@
  * Copyright(c) 2015-2018 Intel Corporation.
  */
 #include <asm/page.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/string.h>
 
 #include "mmu_rb.h"

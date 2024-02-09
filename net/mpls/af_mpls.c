@@ -2,6 +2,7 @@
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/socket.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/net.h>
 #include <linux/module.h>

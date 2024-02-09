@@ -16,10 +16,12 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/regulator/consumer.h>
 #include <linux/mutex.h>
 #include <linux/bitops.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 /* Addresses to scan
  * The chip also supports addresses 0x35..0x37. Don't scan those addresses

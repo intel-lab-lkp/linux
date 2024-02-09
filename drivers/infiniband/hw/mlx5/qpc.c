@@ -8,6 +8,7 @@
 #include <linux/mlx5/driver.h>
 #include "mlx5_ib.h"
 #include "qp.h"
+#include <linux/completion.h>
 
 static int mlx5_core_drain_dct(struct mlx5_ib_dev *dev,
 			       struct mlx5_core_dct *dct);

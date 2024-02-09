@@ -5,6 +5,7 @@
 #include <linux/kallsyms.h>
 #include <linux/kcore.h>
 #include <linux/pgtable.h>
+#include <linux/random.h>
 
 #include <asm/cpu_entry_area.h>
 #include <asm/fixmap.h>

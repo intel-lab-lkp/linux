@@ -18,6 +18,7 @@
 #include <linux/pm_domain.h>
 #include <linux/reset-controller.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include <linux/platform_data/ti-prm.h>
 

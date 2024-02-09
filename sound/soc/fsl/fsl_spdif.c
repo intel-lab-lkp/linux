@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include <sound/asoundef.h>
 #include <sound/dmaengine_pcm.h>

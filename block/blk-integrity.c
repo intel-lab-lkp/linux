@@ -8,6 +8,7 @@
 
 #include <linux/blk-integrity.h>
 #include <linux/backing-dev.h>
+#include <linux/kstrtox.h>
 #include <linux/mempool.h>
 #include <linux/bio.h>
 #include <linux/scatterlist.h>

@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/netdevice.h>
 #include <linux/phy.h>
 

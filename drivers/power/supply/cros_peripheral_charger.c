@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stringify.h>
 #include <linux/types.h>
 #include <asm/unaligned.h>

@@ -12,6 +12,7 @@
 
 #include <linux/lockdep.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/xattr.h>

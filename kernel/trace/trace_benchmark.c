@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/kernel.h> // for tracing_is_on()
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 #include <linux/trace_clock.h>
 
 #define CREATE_TRACE_POINTS

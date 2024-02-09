@@ -10,6 +10,7 @@
 #include <media/v4l2-mc.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-v4l2.h>
+#include <linux/sprintf.h>
 
 #include "sun6i_isp.h"
 #include "sun6i_isp_capture.h"

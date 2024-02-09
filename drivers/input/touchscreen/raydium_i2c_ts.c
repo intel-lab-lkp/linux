@@ -25,6 +25,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 /* Slave I2C mode */
 #define RM_BOOT_BLDR		0x02

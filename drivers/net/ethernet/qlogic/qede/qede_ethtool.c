@@ -8,6 +8,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/pci.h>
 #include <linux/capability.h>

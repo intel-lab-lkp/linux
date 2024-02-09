@@ -7,7 +7,9 @@
 
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "qedf.h"

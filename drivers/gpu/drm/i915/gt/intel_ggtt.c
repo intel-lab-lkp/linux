@@ -5,6 +5,7 @@
 
 #include <asm/set_memory.h>
 #include <asm/smp.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/types.h>
 #include <linux/stop_machine.h>
 

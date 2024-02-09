@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
@@ -30,6 +31,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/component.h>
+#include <linux/hrtimer.h>
 
 #include <video/omapfb_dss.h>
 #include <video/mipi_display.h>

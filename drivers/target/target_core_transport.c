@@ -12,6 +12,7 @@
 
 #include <linux/net.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/slab.h>
@@ -19,6 +20,7 @@
 #include <linux/kthread.h>
 #include <linux/in.h>
 #include <linux/cdrom.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/ratelimit.h>
 #include <linux/vmalloc.h>

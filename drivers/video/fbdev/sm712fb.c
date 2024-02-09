@@ -24,6 +24,7 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/console.h>

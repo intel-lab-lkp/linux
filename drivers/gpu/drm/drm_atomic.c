@@ -28,6 +28,7 @@
 
 
 #include <linux/sync_file.h>
+#include <linux/completion.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_uapi.h>

@@ -26,6 +26,7 @@
 #include "kfd_device_queue_manager.h"
 #include "kfd_pm4_headers_vi.h"
 #include "kfd_pm4_opcodes.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 unsigned int pm_build_pm4_header(unsigned int opcode, size_t packet_size)
 {

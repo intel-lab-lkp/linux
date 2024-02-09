@@ -9,6 +9,7 @@
 #include <linux/sbitmap.h>
 #include <linux/dmaengine.h>
 #include <linux/percpu-rwsem.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/cdev.h>
 #include <linux/uuid.h>

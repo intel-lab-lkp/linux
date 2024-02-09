@@ -3,6 +3,7 @@
  */
 
 #include <linux/devcoredump.h>
+#include <linux/completion.h>
 
 #include "main.h"
 #include "regd.h"

@@ -20,6 +20,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 /* gain to pulse and scale conversion */
 #define HX711_GAIN_MAX		3

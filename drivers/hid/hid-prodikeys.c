@@ -16,6 +16,7 @@
 
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/mutex.h>
 #include <linux/hid.h>

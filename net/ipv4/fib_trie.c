@@ -36,6 +36,7 @@
  *		Patrick McHardy <kaber@trash.net>
  */
 #include <linux/cache.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/bitops.h>
 #include <linux/types.h>

@@ -5,11 +5,13 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/mfd/stm32-timers.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #define STM32_TIMERS_MAX_REGISTERS	0x3fc
 

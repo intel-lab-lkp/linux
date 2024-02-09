@@ -19,6 +19,7 @@
 #include <linux/spi/spi.h>
 #include <linux/nvmem-provider.h>
 #include <linux/eeprom_93xx46.h>
+#include <linux/sprintf.h>
 
 #define OP_START	0x4
 #define OP_WRITE	(OP_START | 0x1)

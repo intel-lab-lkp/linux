@@ -7,6 +7,7 @@
 
 #include <asm/unaligned.h>
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/error-injection.h>
 #include <linux/jiffies.h>
 #include <linux/kfifo.h>

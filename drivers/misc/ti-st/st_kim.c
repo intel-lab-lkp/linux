@@ -12,6 +12,7 @@
 #include <linux/jiffies.h>
 #include <linux/firmware.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/gpio.h>
 #include <linux/debugfs.h>
@@ -19,6 +20,7 @@
 #include <linux/sched.h>
 #include <linux/sysfs.h>
 #include <linux/tty.h>
+#include <linux/completion.h>
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>

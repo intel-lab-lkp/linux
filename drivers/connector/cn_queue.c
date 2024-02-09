@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>

@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mfd/syscon.h>
 #include <linux/msi.h>
 #include <linux/of.h>
@@ -26,6 +27,7 @@
 #include <linux/regmap.h>
 #include <linux/resource.h>
 #include <linux/signal.h>
+#include <linux/sprintf.h>
 
 #include "../../pci.h"
 #include "pcie-designware.h"

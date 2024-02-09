@@ -21,6 +21,9 @@
 static const char *verstr = "20160209";
 
 #include <linux/module.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/compat.h>
 #include <linux/fs.h>

@@ -38,10 +38,13 @@
  *
  */
 #include <linux/firmware.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include "pm8001_sas.h"
 #include "pm8001_ctl.h"
 #include "pm8001_chips.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /* scsi host attributes */
 

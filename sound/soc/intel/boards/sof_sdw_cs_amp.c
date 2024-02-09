@@ -7,6 +7,7 @@
 
 #include <linux/device.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <sound/soc-acpi.h>
 #include <sound/soc-dai.h>

@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/pci.h>
 #include "../pci.h"
+#include <linux/sprintf.h>
 
 /*
  * If the next upstream device supports PTM, return it; otherwise return

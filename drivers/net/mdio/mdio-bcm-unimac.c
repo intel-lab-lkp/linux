@@ -17,6 +17,7 @@
 #include <linux/platform_data/mdio-bcm-unimac.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #define MDIO_CMD		0x00
 #define  MDIO_START_BUSY	(1 << 29)

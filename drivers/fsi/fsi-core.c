@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/fsi.h>
 #include <linux/idr.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -22,6 +23,7 @@
 #include <linux/bitops.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "fsi-master.h"

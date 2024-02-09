@@ -20,6 +20,7 @@
 #include <linux/power/sbs-battery.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 
 enum {

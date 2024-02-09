@@ -18,6 +18,7 @@
 #include <linux/regmap.h>
 #include <asm/unaligned.h>
 #include <linux/iio/common/st_sensors.h>
+#include <linux/sprintf.h>
 
 #include "st_sensors_core.h"
 

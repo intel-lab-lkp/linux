@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>

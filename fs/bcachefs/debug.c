@@ -20,6 +20,7 @@
 #include "fsck.h"
 #include "inode.h"
 #include "super.h"
+#include <linux/sprintf.h>
 
 #include <linux/console.h>
 #include <linux/debugfs.h>

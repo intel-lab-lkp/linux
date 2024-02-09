@@ -7,6 +7,8 @@
 
 #include <linux/slab.h>
 #include <linux/security.h>
+#include <linux/timekeeping.h>
+#include <linux/workqueue.h>
 #include <keys/keyring-type.h>
 #include "internal.h"
 

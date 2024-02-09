@@ -9,9 +9,11 @@
 #include <linux/compiler.h>
 #include <linux/ctype.h>
 #include <linux/errno.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/slab.h>
 #include <linux/anon_inodes.h>
 #include <linux/file.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/idr.h>

@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/sort.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/hda_codec.h>
 #include "hda_local.h"

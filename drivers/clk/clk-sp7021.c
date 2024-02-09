@@ -11,6 +11,7 @@
 #include <linux/io.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/clock/sunplus,sp7021-clkc.h>
 

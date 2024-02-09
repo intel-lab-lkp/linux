@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <media/media-device.h>
 #include <media/videobuf2-v4l2.h>

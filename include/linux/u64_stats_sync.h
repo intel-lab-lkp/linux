@@ -59,6 +59,8 @@
  * Example of use in drivers/net/loopback.c, using per_cpu containers,
  * in BH disabled context.
  */
+
+#include <asm/bitsperlong.h>
 #include <linux/seqlock.h>
 
 struct u64_stats_sync {

@@ -14,6 +14,8 @@
 #include "../include/gaudi2/gaudi2_reg_map.h"
 #include "../include/gaudi2/gaudi2_async_ids_map_extended.h"
 #include "../include/gaudi2/arc/gaudi2_arc_common_packets.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/pci.h>

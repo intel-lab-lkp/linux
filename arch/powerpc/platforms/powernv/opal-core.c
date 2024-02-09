@@ -14,6 +14,7 @@
 #include <linux/elf.h>
 #include <linux/elfcore.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/vmcore_info.h>

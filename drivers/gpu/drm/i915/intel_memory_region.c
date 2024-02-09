@@ -4,6 +4,7 @@
  */
 
 #include <linux/prandom.h>
+#include <linux/sprintf.h>
 
 #include <uapi/drm/i915_drm.h>
 

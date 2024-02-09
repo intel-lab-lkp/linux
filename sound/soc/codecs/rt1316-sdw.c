@@ -18,6 +18,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include "rt1316-sdw.h"
+#include <linux/completion.h>
 
 static const struct reg_default rt1316_reg_defaults[] = {
 	{ 0x3004, 0x00 },

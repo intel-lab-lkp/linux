@@ -64,6 +64,7 @@
 #include <linux/pm.h>
 #include <linux/pm_domain.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* SCU Power Mode Protocol definition */
 struct imx_sc_msg_req_set_resource_power_mode {

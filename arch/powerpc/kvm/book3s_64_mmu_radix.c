@@ -12,6 +12,7 @@
 #include <linux/file.h>
 #include <linux/debugfs.h>
 #include <linux/pgtable.h>
+#include <linux/sprintf.h>
 
 #include <asm/kvm_ppc.h>
 #include <asm/kvm_book3s.h>

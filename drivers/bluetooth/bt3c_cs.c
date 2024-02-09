@@ -22,6 +22,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/kstrtox.h>
 
 #include <linux/kernel.h>
 #include <linux/init.h>

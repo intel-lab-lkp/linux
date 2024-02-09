@@ -44,6 +44,7 @@
  */
 
 #include <sys/types.h>
+#include <linux/sprintf.h>
 
 #include <inttypes.h>
 #include <regex.h>

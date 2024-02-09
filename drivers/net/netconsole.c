@@ -26,11 +26,13 @@
 
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/console.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/netpoll.h>
 #include <linux/inet.h>

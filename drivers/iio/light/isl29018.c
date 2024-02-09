@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
@@ -19,6 +20,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define ISL29018_CONV_TIME_MS		100
 

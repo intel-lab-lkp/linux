@@ -26,6 +26,7 @@
 #include "radeon_asic.h"
 #include "evergreen.h"
 #include "evergreend.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * evergreen_dma_fence_ring_emit - emit a fence on the DMA ring

@@ -25,6 +25,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <media/drv-intf/exynos-fimc.h>
 #include <media/v4l2-fwnode.h>

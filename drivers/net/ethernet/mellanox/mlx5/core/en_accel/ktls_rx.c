@@ -7,6 +7,7 @@
 #include "en_accel/ktls_txrx.h"
 #include "en_accel/ktls_utils.h"
 #include "en_accel/fs_tcp.h"
+#include <linux/completion.h>
 
 struct accel_rule {
 	struct work_struct work;

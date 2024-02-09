@@ -11,6 +11,7 @@
 #include <linux/workqueue.h>
 #include <linux/hrtimer.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/timex.h>
 #include <linux/time.h>

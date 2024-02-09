@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/mfd/core.h>

@@ -33,10 +33,12 @@
 
 #include <linux/device.h>
 #include <linux/hid.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/input/mt.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 

@@ -13,6 +13,7 @@
 #include <linux/interrupt.h>
 #include <asm/iosf_mbi.h>
 #include "intel_soc_dts_iosf.h"
+#include <linux/sprintf.h>
 
 #define SOC_DTS_OFFSET_ENABLE		0xB0
 #define SOC_DTS_OFFSET_TEMP		0xB1

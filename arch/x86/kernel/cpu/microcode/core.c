@@ -18,6 +18,7 @@
 #define pr_fmt(fmt) "microcode: " fmt
 
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/stop_machine.h>
 #include <linux/syscore_ops.h>
 #include <linux/miscdevice.h>
@@ -26,6 +27,7 @@
 #include <linux/cpumask.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/cpu.h>
 #include <linux/nmi.h>

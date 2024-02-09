@@ -29,6 +29,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <nvif/class.h>
 #include <nvif/if0001.h>
 #include "nouveau_debugfs.h"

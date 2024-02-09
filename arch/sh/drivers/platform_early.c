@@ -1,8 +1,10 @@
 // SPDX--License-Identifier: GPL-2.0
 
 #include <asm/platform_early.h>
+#include <linux/kstrtox.h>
 #include <linux/mod_devicetable.h>
 #include <linux/pm.h>
+#include <linux/sprintf.h>
 
 static __initdata LIST_HEAD(sh_early_platform_driver_list);
 static __initdata LIST_HEAD(sh_early_platform_device_list);

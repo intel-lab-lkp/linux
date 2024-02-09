@@ -24,6 +24,7 @@
 #define SWSMU_CODE_LAYER_L2
 
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pci.h>
 #include <linux/i2c.h>
 #include "amdgpu.h"
@@ -43,6 +44,7 @@
 #include "nbio/nbio_2_3_sh_mask.h"
 #include "thm/thm_11_0_2_offset.h"
 #include "thm/thm_11_0_2_sh_mask.h"
+#include <linux/sprintf.h>
 
 #include "asic_reg/mp/mp_11_0_sh_mask.h"
 #include "smu_cmn.h"

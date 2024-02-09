@@ -27,6 +27,7 @@
 #undef USE_CTRL_O_SYSRQ
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 
 #include <linux/tty_flip.h>

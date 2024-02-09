@@ -8,6 +8,8 @@
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
 #include <asm/core_marvel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #undef __EXTERN_INLINE
 
 #include <linux/types.h>

@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/key.h>
 #include <linux/crypto.h>
 #include <crypto/hash.h>

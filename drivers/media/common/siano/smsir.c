@@ -11,6 +11,7 @@
 
 
 #include "smscoreapi.h"
+#include <linux/sprintf.h>
 
 #include <linux/types.h>
 #include <linux/input.h>

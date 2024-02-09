@@ -3,6 +3,7 @@
 
 #include <crypto/aead.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <net/xfrm.h>
 
 #include "netdevsim.h"

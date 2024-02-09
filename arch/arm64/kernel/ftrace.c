@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/swab.h>
 #include <linux/uaccess.h>
+#include <linux/ratelimit.h>
 
 #include <asm/cacheflush.h>
 #include <asm/debug-monitors.h>

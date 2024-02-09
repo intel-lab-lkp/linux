@@ -7,6 +7,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/ioport.h> // for request_mem_region()
 #include <linux/smp.h>
 #include <linux/io.h>
 #include <linux/delay.h>

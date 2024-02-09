@@ -164,6 +164,9 @@
 #include <asm/io.h>
 #include <asm/byteorder.h>
 #include <asm/page.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/errno.h>

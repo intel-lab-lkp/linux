@@ -50,6 +50,8 @@
 #include <linux/irqdomain.h>
 #include <linux/acpi.h>
 #include <asm/mshyperv.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /*
  * Protocol versions. The low word is the minor version, the high word the

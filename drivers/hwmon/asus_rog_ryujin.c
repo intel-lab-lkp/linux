@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #define DRIVER_NAME	"asus_rog_ryujin"
 

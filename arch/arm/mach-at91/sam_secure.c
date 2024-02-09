@@ -4,7 +4,9 @@
  */
 
 #include <linux/arm-smccc.h>
+#include <linux/printk.h> // for pr_info()
 #include <linux/of.h>
+#include <asm/bug.h> // for WARN_ON()
 
 #include "sam_secure.h"
 

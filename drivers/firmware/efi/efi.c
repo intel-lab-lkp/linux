@@ -23,12 +23,14 @@
 #include <linux/of.h>
 #include <linux/initrd.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for parse_option_str()
 #include <linux/kexec.h>
 #include <linux/platform_device.h>
 #include <linux/random.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 #include <linux/ucs2_string.h>
 #include <linux/memblock.h>
 #include <linux/security.h>

@@ -14,6 +14,7 @@
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 
 #include <media/v4l2-fwnode.h>

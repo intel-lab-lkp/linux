@@ -10,6 +10,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/math64.h>

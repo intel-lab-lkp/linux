@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/energy_model.h>
+#include <linux/sprintf.h>
 
 #include "opp.h"
 

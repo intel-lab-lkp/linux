@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>

@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/net_tstamp.h>
+#include <linux/sprintf.h>
 
 #include "otx2_common.h"
 #include "otx2_reg.h"

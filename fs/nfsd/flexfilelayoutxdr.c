@@ -4,6 +4,7 @@
  */
 #include <linux/sunrpc/svc.h>
 #include <linux/nfs4.h>
+#include <linux/sprintf.h>
 
 #include "nfsd.h"
 #include "flexfilelayoutxdr.h"

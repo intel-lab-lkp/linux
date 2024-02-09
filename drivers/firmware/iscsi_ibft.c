@@ -69,6 +69,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/types.h>

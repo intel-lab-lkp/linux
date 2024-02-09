@@ -9,6 +9,7 @@
 #include "../include/goya/goya_coresight.h"
 #include "../include/goya/asic_reg/goya_regs.h"
 #include "../include/goya/asic_reg/goya_masks.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <uapi/drm/habanalabs_accel.h>
 

@@ -11,6 +11,7 @@
 #include <sound/pcm_params.h>
 #include <sound/dmaengine_pcm.h>
 #include <sound/soc.h>
+#include <linux/completion.h>
 
 #include "imx-pcm.h"
 #include "fsl_rpmsg.h"

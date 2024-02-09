@@ -5,10 +5,12 @@
 #include <linux/dmaengine.h>
 #include <linux/init.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include "virt-dma.h"
+#include <linux/sprintf.h>
 
 /* HiSilicon DMA register common field define */
 #define HISI_DMA_Q_SQ_BASE_L			0x0

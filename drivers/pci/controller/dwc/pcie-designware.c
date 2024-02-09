@@ -15,9 +15,11 @@
 #include <linux/dma/edma.h>
 #include <linux/gpio/consumer.h>
 #include <linux/ioport.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "../../pci.h"

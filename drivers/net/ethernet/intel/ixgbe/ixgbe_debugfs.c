@@ -3,6 +3,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "ixgbe.h"
 

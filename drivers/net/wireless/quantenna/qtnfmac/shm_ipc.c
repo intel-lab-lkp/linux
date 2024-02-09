@@ -3,6 +3,7 @@
 
 #include <linux/types.h>
 #include <linux/io.h>
+#include <linux/completion.h>
 
 #include "shm_ipc.h"
 

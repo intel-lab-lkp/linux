@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/err.h>

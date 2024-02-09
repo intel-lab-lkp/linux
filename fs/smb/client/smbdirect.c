@@ -10,6 +10,8 @@
 #include "cifs_debug.h"
 #include "cifsproto.h"
 #include "smb2proto.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static struct smbd_response *get_empty_queue_buffer(
 		struct smbd_connection *info);

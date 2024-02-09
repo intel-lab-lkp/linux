@@ -12,6 +12,7 @@
 #include <linux/mfd/max77693.h>
 #include <linux/mfd/max77693-common.h>
 #include <linux/mfd/max77693-private.h>
+#include <linux/kstrtox.h>
 
 #define MAX77693_CHARGER_NAME				"max77693-charger"
 static const char *max77693_charger_model		= "MAX77693";

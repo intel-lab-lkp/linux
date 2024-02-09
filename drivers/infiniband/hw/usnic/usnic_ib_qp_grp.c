@@ -33,6 +33,7 @@
 #include <linux/bug.h>
 #include <linux/errno.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include "usnic_log.h"
 #include "usnic_vnic.h"

@@ -42,6 +42,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 
 #include "qib.h"

@@ -15,6 +15,7 @@
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include "tegra30_ahub.h"
 

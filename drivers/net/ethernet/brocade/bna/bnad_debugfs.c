@@ -12,6 +12,8 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include "bnad.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /*
  * BNA debufs interface

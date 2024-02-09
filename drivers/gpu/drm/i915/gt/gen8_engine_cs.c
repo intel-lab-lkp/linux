@@ -9,6 +9,7 @@
 #include "intel_gt.h"
 #include "intel_lrc.h"
 #include "intel_ring.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 int gen8_emit_flush_rcs(struct i915_request *rq, u32 mode)
 {

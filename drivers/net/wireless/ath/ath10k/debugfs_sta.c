@@ -9,6 +9,8 @@
 #include "wmi-ops.h"
 #include "txrx.h"
 #include "debug.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static void ath10k_rx_stats_update_amsdu_subfrm(struct ath10k *ar,
 						struct ath10k_sta_tid_stats *stats,

@@ -7,6 +7,7 @@
 #define _INTEL_LRC_REG_H_
 
 #include <linux/types.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define CTX_DESC_FORCE_RESTORE BIT_ULL(2)
 

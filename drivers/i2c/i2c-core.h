@@ -4,6 +4,7 @@
  */
 
 #include <linux/kconfig.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/rwsem.h>
 
 struct i2c_devinfo {

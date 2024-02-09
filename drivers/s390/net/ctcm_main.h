@@ -10,6 +10,7 @@
 
 #include <asm/ccwdev.h>
 #include <asm/ccwgroup.h>
+#include <linux/kstrtox.h>
 
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>

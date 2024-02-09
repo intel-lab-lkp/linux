@@ -11,6 +11,7 @@
 
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/mm.h>

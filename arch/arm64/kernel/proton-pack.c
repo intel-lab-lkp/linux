@@ -24,6 +24,7 @@
 #include <linux/nospec.h>
 #include <linux/prctl.h>
 #include <linux/sched/task_stack.h>
+#include <linux/sprintf.h>
 
 #include <asm/debug-monitors.h>
 #include <asm/insn.h>

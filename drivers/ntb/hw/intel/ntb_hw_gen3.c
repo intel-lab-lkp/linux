@@ -53,6 +53,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/ntb.h>
+#include <linux/sprintf.h>
 
 #include "ntb_hw_intel.h"
 #include "ntb_hw_gen1.h"

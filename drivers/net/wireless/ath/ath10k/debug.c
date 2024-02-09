@@ -8,10 +8,13 @@
 
 #include <linux/module.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>
 #include <linux/kstrtox.h>
+#include <linux/completion.h>
 
 #include "core.h"
 #include "debug.h"

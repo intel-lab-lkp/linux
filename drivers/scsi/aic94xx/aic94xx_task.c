@@ -10,6 +10,7 @@
 #include "aic94xx.h"
 #include "aic94xx_sas.h"
 #include "aic94xx_hwi.h"
+#include <linux/completion.h>
 
 static void asd_unbuild_ata_ascb(struct asd_ascb *a);
 static void asd_unbuild_smp_ascb(struct asd_ascb *a);

@@ -82,6 +82,7 @@
 #include <linux/signal.h>
 #include <linux/sched/signal.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/dcache.h>

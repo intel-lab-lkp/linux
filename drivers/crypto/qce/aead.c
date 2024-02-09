@@ -13,6 +13,7 @@
 #include <crypto/sha2.h>
 #include <crypto/scatterwalk.h>
 #include "aead.h"
+#include <linux/sprintf.h>
 
 #define CCM_NONCE_ADATA_SHIFT		6
 #define CCM_NONCE_AUTHSIZE_SHIFT	3

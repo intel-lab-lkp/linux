@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/bitfield.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "sp-dev.h"
 #include "psp-dev.h"

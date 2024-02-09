@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/param.h>
 #include <linux/string.h>
 #include <linux/mc146818rtc.h>

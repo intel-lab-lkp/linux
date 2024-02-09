@@ -2,6 +2,7 @@
 /* Copyright (c)  2019 Intel Corporation */
 
 #include "igc.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/device.h>

@@ -26,6 +26,7 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #define NDFC_MAX_CS    4
 

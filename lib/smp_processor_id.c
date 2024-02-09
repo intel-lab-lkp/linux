@@ -5,6 +5,7 @@
  * DEBUG_PREEMPT variant of smp_processor_id().
  */
 #include <linux/export.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/kprobes.h>
 #include <linux/sched.h>
 

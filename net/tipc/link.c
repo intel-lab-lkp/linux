@@ -45,6 +45,7 @@
 #include "monitor.h"
 #include "trace.h"
 #include "crypto.h"
+#include <linux/sprintf.h>
 
 #include <linux/pkt_sched.h>
 

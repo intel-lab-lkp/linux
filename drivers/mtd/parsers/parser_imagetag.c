@@ -12,6 +12,7 @@
 
 #include <linux/bcm963xx_tag.h>
 #include <linux/crc32.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>

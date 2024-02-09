@@ -7,6 +7,7 @@
 #include <drm/drm_blend.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "i915_drv.h"
 #include "i915_reg.h"

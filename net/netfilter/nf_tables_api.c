@@ -10,6 +10,7 @@
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include <linux/netlink.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/rhashtable.h>
 #include <linux/audit.h>

@@ -22,11 +22,13 @@
  *******************************************************************/
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/lockdep.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

@@ -27,6 +27,7 @@
 
 #include <linux/dma-fence.h>
 #include <linux/ktime.h>
+#include <linux/completion.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

@@ -7,6 +7,9 @@
  */
 
 #include "dell-wmi-sysman.h"
+#include <linux/sprintf.h>
+
+#include <linux/kobject.h>
 
 enum string_properties {MIN_LEN = 6, MAX_LEN};
 

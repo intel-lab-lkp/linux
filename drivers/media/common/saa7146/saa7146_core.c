@@ -10,6 +10,7 @@
 
 #include <media/drv-intf/saa7146.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 static int saa7146_num;
 

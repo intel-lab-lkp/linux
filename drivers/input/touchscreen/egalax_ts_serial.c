@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"EETI Egalax serial touchscreen driver"
 

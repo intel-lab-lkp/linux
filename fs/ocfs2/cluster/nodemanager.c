@@ -5,8 +5,10 @@
 
 #include <linux/slab.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/configfs.h>
+#include <linux/sprintf.h>
 
 #include "tcp.h"
 #include "nodemanager.h"

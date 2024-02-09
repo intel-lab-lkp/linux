@@ -16,6 +16,7 @@
 #include <crypto/xts.h>
 #include <crypto/internal/skcipher.h>
 #include <crypto/scatterwalk.h>
+#include <linux/sprintf.h>
 
 #include "ccp-crypto.h"
 

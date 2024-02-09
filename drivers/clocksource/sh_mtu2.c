@@ -22,6 +22,7 @@
 #include <linux/sh_timer.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_SUPERH
 #include <asm/platform_early.h>

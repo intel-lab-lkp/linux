@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) "pci-p2pdma: " fmt
 #include <linux/ctype.h>
 #include <linux/dma-map-ops.h>
+#include <linux/kstrtox.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -19,6 +20,7 @@
 #include <linux/percpu-refcount.h>
 #include <linux/random.h>
 #include <linux/seq_buf.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 
 struct pci_p2pdma {

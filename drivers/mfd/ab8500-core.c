@@ -21,6 +21,7 @@
 #include <linux/mfd/abx500/ab8500.h>
 #include <linux/mfd/dbx500-prcmu.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 /*
  * Interrupt register offsets

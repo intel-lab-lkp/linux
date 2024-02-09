@@ -18,6 +18,7 @@
 #include <sound/soc.h>
 #include "rt715-sdca.h"
 #include "rt715-sdca-sdw.h"
+#include <linux/completion.h>
 
 static bool rt715_sdca_readable_register(struct device *dev, unsigned int reg)
 {

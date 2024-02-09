@@ -25,6 +25,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/dmi.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 /* uGuru3 bank addresses */
 #define ABIT_UGURU3_SETTINGS_BANK		0x01

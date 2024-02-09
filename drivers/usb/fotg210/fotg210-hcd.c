@@ -16,7 +16,9 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -33,6 +35,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/completion.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>

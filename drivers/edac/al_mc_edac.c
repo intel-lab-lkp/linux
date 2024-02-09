@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include "edac_module.h"
+#include <linux/sprintf.h>
 
 /* Registers Offset */
 #define AL_MC_ECC_CFG		0x70

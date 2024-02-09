@@ -13,6 +13,8 @@
 #include "otx_cpt_common.h"
 #include "otx_cptpf_ucode.h"
 #include "otx_cptpf.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define CSR_DELAY 30
 /* Tar archive defines */

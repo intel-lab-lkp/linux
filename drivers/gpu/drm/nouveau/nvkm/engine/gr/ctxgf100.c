@@ -22,11 +22,14 @@
  * Authors: Ben Skeggs
  */
 #include "ctxgf100.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <subdev/fb.h>
 #include <subdev/mc.h>
 #include <subdev/timer.h>
 #include <engine/fifo.h>
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*******************************************************************************
  * PGRAPH context register lists

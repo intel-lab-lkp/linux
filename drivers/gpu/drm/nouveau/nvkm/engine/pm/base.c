@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs
  */
 #include "priv.h"
+#include <linux/sprintf.h>
 
 #include <core/client.h>
 #include <core/option.h>

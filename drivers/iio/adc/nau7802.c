@@ -11,8 +11,10 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/log2.h>
+#include <linux/completion.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>

@@ -9,7 +9,9 @@
 #include <linux/gpio/consumer.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/list.h>
 #include <linux/spi/spi.h>

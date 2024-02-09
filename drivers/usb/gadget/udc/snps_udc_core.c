@@ -24,6 +24,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
@@ -35,6 +36,7 @@
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 #include "amd5536udc.h"
+#include <linux/completion.h>
 
 static void udc_setup_endpoints(struct udc *dev);
 static void udc_soft_reset(struct udc *dev);

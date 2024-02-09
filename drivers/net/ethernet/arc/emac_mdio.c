@@ -9,6 +9,7 @@
 #include <linux/of_mdio.h>
 #include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/sprintf.h>
 
 #include "emac.h"
 

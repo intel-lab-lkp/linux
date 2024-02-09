@@ -15,6 +15,7 @@
 #include <linux/platform_data/mlxreg.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/regmap.h>
 #include <linux/workqueue.h>

@@ -8,6 +8,7 @@
 
 #include "dm-core.h"
 #include "dm-rq.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/vmalloc.h>
@@ -18,6 +19,7 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>

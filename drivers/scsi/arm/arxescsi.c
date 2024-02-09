@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>

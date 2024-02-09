@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/freezer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <linux/sunrpc/addr.h>
 #include <linux/sunrpc/stats.h>

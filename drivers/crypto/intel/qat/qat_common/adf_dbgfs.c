@@ -11,6 +11,7 @@
 #include "adf_heartbeat_dbgfs.h"
 #include "adf_pm_dbgfs.h"
 #include "adf_tl_debugfs.h"
+#include <linux/sprintf.h>
 
 /**
  * adf_dbgfs_init() - add persistent debugfs entries

@@ -7,9 +7,11 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/mhi.h>
 #include <linux/module.h>
+#include <linux/kstrtox.h>
 #include "internal.h"
 
 static int mhi_debugfs_states_show(struct seq_file *m, void *d)

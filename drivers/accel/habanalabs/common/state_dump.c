@@ -8,6 +8,7 @@
 #include <linux/vmalloc.h>
 #include <uapi/drm/habanalabs_accel.h>
 #include "habanalabs.h"
+#include <linux/sprintf.h>
 
 /**
  * hl_format_as_binary - helper function, format an integer as binary

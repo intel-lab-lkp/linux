@@ -16,6 +16,7 @@
  *
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/device.h>

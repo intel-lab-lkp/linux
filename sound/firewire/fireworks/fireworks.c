@@ -15,6 +15,7 @@
  */
 
 #include "fireworks.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("Echo Fireworks driver");
 MODULE_AUTHOR("Takashi Sakamoto <o-takashi@sakamocchi.jp>");

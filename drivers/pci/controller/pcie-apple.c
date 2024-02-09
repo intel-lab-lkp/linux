@@ -29,6 +29,7 @@
 #include <linux/notifier.h>
 #include <linux/of_irq.h>
 #include <linux/pci-ecam.h>
+#include <linux/completion.h>
 
 #define CORE_RC_PHYIF_CTL		0x00024
 #define   CORE_RC_PHYIF_CTL_RUN		BIT(0)

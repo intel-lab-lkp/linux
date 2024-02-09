@@ -12,6 +12,7 @@
 #include <linux/brcmphy.h>
 #include <linux/of_mdio.h>
 #include "bgmac.h"
+#include <linux/sprintf.h>
 
 static bool bcma_mdio_wait_value(struct bcma_device *core, u16 reg, u32 mask,
 				 u32 value, int timeout)

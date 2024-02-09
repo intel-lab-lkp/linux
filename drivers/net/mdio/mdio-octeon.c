@@ -10,6 +10,7 @@
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include "mdio-cavium.h"
 

@@ -4,6 +4,7 @@
 #include "igb.h"
 #include "e1000_82575.h"
 #include "e1000_hw.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/types.h>

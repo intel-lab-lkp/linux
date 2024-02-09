@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/v4l2-mediabus.h>
 #include <linux/videodev2.h>
 #include <linux/wait.h>

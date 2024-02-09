@@ -10,6 +10,8 @@
  */
 
 #include <linux/fb.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>

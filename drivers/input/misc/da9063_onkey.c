@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/regmap.h>
 #include <linux/mfd/da9063/core.h>

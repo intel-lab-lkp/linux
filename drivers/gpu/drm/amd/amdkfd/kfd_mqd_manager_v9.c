@@ -33,6 +33,7 @@
 #include "sdma0/sdma0_4_0_sh_mask.h"
 #include "amdgpu_amdkfd.h"
 #include "kfd_device_queue_manager.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void update_mqd(struct mqd_manager *mm, void *mqd,
 		       struct queue_properties *q,

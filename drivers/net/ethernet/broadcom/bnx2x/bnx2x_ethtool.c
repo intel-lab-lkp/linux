@@ -21,6 +21,7 @@
 
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/crc32.h>

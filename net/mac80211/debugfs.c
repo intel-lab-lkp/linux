@@ -8,7 +8,9 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "ieee80211_i.h"
 #include "driver-ops.h"

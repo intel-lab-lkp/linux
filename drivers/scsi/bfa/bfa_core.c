@@ -11,6 +11,7 @@
 #include "bfad_drv.h"
 #include "bfa_modules.h"
 #include "bfi_reg.h"
+#include <linux/completion.h>
 
 BFA_TRC_FILE(HAL, CORE);
 

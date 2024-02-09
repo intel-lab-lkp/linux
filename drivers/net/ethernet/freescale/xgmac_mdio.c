@@ -24,6 +24,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* Number of microseconds to wait for a register to respond */
 #define TIMEOUT	1000

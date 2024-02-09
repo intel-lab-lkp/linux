@@ -25,6 +25,7 @@
 #include <linux/scatterlist.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 static unsigned int cryptd_max_cpu_qlen = 1000;

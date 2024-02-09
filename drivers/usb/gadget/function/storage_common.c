@@ -24,6 +24,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/usb/composite.h>
 
 #include "storage_common.h"

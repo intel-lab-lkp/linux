@@ -12,6 +12,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include "umcast.h"
 #include <net_kern.h>

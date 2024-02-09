@@ -34,6 +34,7 @@
 
 #include <uapi/drm/drm_mode.h>
 
+struct dentry;
 struct drm_connector_helper_funcs;
 struct drm_modeset_acquire_ctx;
 struct drm_device;

@@ -5,6 +5,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/thermal.h>
 #include <linux/hwmon.h>
@@ -12,6 +13,7 @@
 #include "core.h"
 #include "debug.h"
 #include "wmi-ops.h"
+#include <linux/completion.h>
 
 static int
 ath10k_thermal_get_max_throttle_state(struct thermal_cooling_device *cdev,

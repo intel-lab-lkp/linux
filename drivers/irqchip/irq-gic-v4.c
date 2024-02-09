@@ -10,6 +10,7 @@
 #include <linux/msi.h>
 #include <linux/pid.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #include <linux/irqchip/arm-gic-v4.h>
 

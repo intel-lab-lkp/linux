@@ -19,6 +19,7 @@
 #include "nic.h"
 #include "sriov.h"
 #include "workarounds.h"
+#include <linux/sprintf.h>
 
 /* This is the first interrupt mode to try out of:
  * 0 => MSI-X

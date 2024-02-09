@@ -6,6 +6,7 @@
  */
 
 #include "dm-core.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/init.h>

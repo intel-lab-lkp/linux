@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/timer.h>
 #include <linux/types.h>

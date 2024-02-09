@@ -12,6 +12,7 @@
 #define DEBUG
 
 #include <linux/device.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #undef DEBUG
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/rawnand.h>

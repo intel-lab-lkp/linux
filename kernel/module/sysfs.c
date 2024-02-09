@@ -8,11 +8,13 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/kallsyms.h>
 #include <linux/mutex.h>
 #include "internal.h"
+#include <linux/completion.h>
 
 /*
  * /sys/module/foo/sections stuff

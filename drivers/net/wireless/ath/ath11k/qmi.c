@@ -5,6 +5,7 @@
  */
 
 #include <linux/elf.h>
+#include <linux/sprintf.h>
 
 #include "qmi.h"
 #include "core.h"

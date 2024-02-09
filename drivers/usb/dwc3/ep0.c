@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
+#include <linux/completion.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>

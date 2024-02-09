@@ -39,6 +39,7 @@
 
 #include <linux/kernel.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
@@ -46,6 +47,7 @@
 #include <linux/notifier.h>
 #include <linux/export.h>
 #include <linux/semaphore.h>
+#include <linux/shrinker.h>
 
 #include <asm/page.h>
 #include <asm/xen/hypervisor.h>

@@ -4,6 +4,7 @@
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/refcount.h>
 #include <asm/ccwdev.h>

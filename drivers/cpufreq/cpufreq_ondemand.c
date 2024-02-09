@@ -12,6 +12,7 @@
 #include <linux/cpu.h>
 #include <linux/percpu-defs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tick.h>
 #include <linux/sched/cpufreq.h>
 

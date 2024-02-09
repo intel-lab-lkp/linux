@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/pgtable.h>
 #include <asm/page-states.h>
 #include <asm/ebcdic.h>

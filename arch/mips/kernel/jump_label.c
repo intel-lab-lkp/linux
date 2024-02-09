@@ -13,6 +13,10 @@
 #include <linux/types.h>
 #include <linux/cpu.h>
 
+#ifdef CONFIG_MODULES
+#include <linux/module.h>
+#endif
+
 #include <asm/cacheflush.h>
 #include <asm/inst.h>
 

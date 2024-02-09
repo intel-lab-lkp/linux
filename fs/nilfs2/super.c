@@ -29,6 +29,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>
+#include <linux/kstrtox.h>
 #include <linux/parser.h>
 #include <linux/crc32.h>
 #include <linux/vfs.h>

@@ -18,6 +18,7 @@
 #include <linux/sched/task.h>
 #include <linux/socket.h>
 #include <linux/file.h>
+#include <linux/highmem.h> // for kmap_local_page()
 #include <linux/uaccess.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>

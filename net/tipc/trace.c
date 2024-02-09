@@ -35,6 +35,7 @@
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"
+#include <linux/sprintf.h>
 
 /*
  * socket tuples for filtering in socket traces:
