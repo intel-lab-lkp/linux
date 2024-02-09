@@ -7,7 +7,6 @@
 #define __LINUX_USB_PD_H
 
 #include <uapi/asm/byteorder.h> // for __le16
-#include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/usb/typec.h>
 

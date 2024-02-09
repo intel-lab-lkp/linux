@@ -4,7 +4,6 @@
 
 #include <linux/seqlock_types.h>
 #include <linux/device.h>
-#include <linux/kernel.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
 

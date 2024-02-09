@@ -3,7 +3,6 @@
 #define _LINUX_NAMEI_H
 
 #include <linux/fs.h>
-#include <linux/kernel.h>
 #include <linux/path.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>

@@ -16,7 +16,6 @@
 #define _ASM_ARM64_FIXMAP_H
 
 #ifndef __ASSEMBLY__
-#include <linux/kernel.h>
 #include <linux/math.h>
 #include <linux/sizes.h>
 #include <asm/boot.h>

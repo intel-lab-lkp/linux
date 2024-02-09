@@ -9,7 +9,6 @@
 
 #include <linux/list.h>
 #include <linux/types.h>
-#include <linux/kernel.h>
 #include <linux/hash.h>
 #include <linux/rculist.h>
 

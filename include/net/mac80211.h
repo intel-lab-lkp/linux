@@ -14,7 +14,6 @@
 #define MAC80211_H
 
 #include <linux/bug.h>
-#include <linux/kernel.h>
 #include <linux/if_ether.h>
 #include <linux/skbuff.h>
 #include <linux/ieee80211.h>

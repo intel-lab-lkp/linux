@@ -2,7 +2,6 @@
 #ifndef _LINUX_VDPA_H
 #define _LINUX_VDPA_H
 
-#include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/vhost_iotlb.h>

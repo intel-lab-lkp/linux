@@ -17,7 +17,6 @@
 #include <linux/notifier.h>
 #include <linux/workqueue_types.h>
 #include <linux/interrupt.h>
-#include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/log2.h>
 #include <sound/core.h>

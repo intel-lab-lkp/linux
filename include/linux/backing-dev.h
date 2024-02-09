@@ -9,7 +9,6 @@
 #ifndef _LINUX_BACKING_DEV_H
 #define _LINUX_BACKING_DEV_H
 
-#include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/device.h>

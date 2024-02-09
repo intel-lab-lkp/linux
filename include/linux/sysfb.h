@@ -7,7 +7,6 @@
  * Copyright (c) 2012-2013 David Herrmann <dh.herrmann@gmail.com>
  */
 
-#include <linux/kernel.h>
 #include <linux/platform_data/simplefb.h>
 
 struct screen_info;

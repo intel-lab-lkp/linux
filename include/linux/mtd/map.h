@@ -12,7 +12,6 @@
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/bug.h>
-#include <linux/kernel.h>
 #include <linux/io.h>
 
 #include <asm/unaligned.h>
