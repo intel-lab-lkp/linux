@@ -683,6 +683,9 @@ enum sev_cmd_id {
 	/* Guest Migration Extension */
 	KVM_SEV_SEND_CANCEL,
 
+	/* Second time is the charm; improved versions of the above ioctls.  */
+	KVM_SEV_INIT2,
+
 	KVM_SEV_NR_MAX,
 };
 
@@ -692,6 +695,13 @@ struct kvm_sev_cmd {
 	__u64 data;
 	__u32 error;
 	__u32 sev_fd;
+};
+
+struct kvm_sev_init {
+	__u32 vm_type;
+	__u32 flags;
+	__u64 vmsa_features;
+	__u32 pad[8];
 };
 
 struct kvm_sev_launch_start {
