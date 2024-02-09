@@ -5,12 +5,12 @@
 #include <linux/fs.h>
 #include <linux/major.h>
 #include <linux/termios.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/tty_buffer.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_ldisc.h>
 #include <linux/tty_port.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/tty_flags.h>
 #include <uapi/linux/tty.h>
 #include <linux/rwsem.h>

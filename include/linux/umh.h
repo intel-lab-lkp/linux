@@ -1,11 +1,11 @@
 #ifndef __LINUX_UMH_H__
 #define __LINUX_UMH_H__
 
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/stddef.h>
 #include <linux/errno.h>
 #include <linux/compiler.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/sysctl.h>
 
 struct cred;

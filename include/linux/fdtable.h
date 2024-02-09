@@ -8,7 +8,7 @@
 
 #include <linux/posix_types.h>
 #include <linux/compiler.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/rcupdate.h>
 #include <linux/nospec.h>
 #include <linux/types.h>

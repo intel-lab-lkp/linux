@@ -26,7 +26,7 @@
 
 #include <linux/err.h>
 #include <linux/sysctl.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <net/rtnetlink.h>
 
 struct seq_file;

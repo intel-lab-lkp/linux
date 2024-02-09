@@ -3,7 +3,7 @@
 #define __FS_CEPH_PAGELIST_H
 
 #include <asm/byteorder.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/list.h>
 #include <linux/types.h>
 

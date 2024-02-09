@@ -11,7 +11,7 @@
  *
  * See the GNU General Public License for more details.
  */
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <net/llc_if.h>
 #include <net/sock.h>
 #include <linux/llc.h>

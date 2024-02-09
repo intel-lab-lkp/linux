@@ -8,8 +8,8 @@
 
 #include <linux/err.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
-#include <linux/lockdep.h>
+#include <linux/mutex_types.h>
+#include <linux/lockdep_types.h>
 #include <linux/rbtree.h>
 #include <linux/bug.h>
 #include <linux/types.h>

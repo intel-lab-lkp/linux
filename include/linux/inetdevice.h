@@ -9,7 +9,7 @@
 #include <linux/ip.h>
 #include <linux/netdevice.h>
 #include <linux/rcupdate.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/sysctl.h>
 #include <linux/rtnetlink.h>
 #include <linux/refcount.h>

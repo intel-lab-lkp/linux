@@ -34,7 +34,7 @@
 #include <linux/irqdomain_defs.h>
 #include <linux/irqhandler.h>
 #include <linux/of.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/radix-tree.h>
 
 struct device_node;

@@ -11,7 +11,7 @@
 #ifndef MISDNHW_H
 #define MISDNHW_H
 #include <linux/mISDNif.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 
 /*
  * HW DEBUG 0xHHHHGGGG

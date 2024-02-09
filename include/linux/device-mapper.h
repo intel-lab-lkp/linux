@@ -13,7 +13,6 @@
 #include <linux/blkdev.h>
 #include <linux/dm-ioctl.h>
 #include <linux/math64.h>
-#include <linux/ratelimit.h>
 #include <linux/sprintf.h> // for scnprintf()
 
 struct dm_dev;

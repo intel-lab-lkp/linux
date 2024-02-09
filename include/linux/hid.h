@@ -19,11 +19,10 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/mod_devicetable.h> /* hid_device_id */
-#include <linux/timer.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/input.h>
 #include <linux/semaphore.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/power_supply.h>
 #include <uapi/linux/hid.h>
 #include <linux/hid_bpf.h>

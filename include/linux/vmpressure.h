@@ -2,10 +2,10 @@
 #ifndef __LINUX_VMPRESSURE_H
 #define __LINUX_VMPRESSURE_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/list.h>
-#include <linux/workqueue.h>
-#include <linux/gfp.h>
+#include <linux/workqueue_types.h>
+#include <linux/gfp_types.h>
 #include <linux/types.h>
 #include <linux/cgroup.h>
 #include <linux/eventfd.h>

@@ -10,7 +10,7 @@
 #define _LINUX_KMSAN_H
 
 #include <linux/dma-direction.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/kmsan-checks.h>
 #include <linux/types.h>
 

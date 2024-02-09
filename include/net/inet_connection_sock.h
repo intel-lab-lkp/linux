@@ -13,7 +13,7 @@
 
 #include <linux/compiler.h>
 #include <linux/string.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/poll.h>
 #include <linux/kernel.h>
 #include <linux/sockptr.h>

@@ -39,7 +39,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/list_nulls.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/cache.h>
 #include <linux/bitops.h>
 #include <linux/lockdep.h>
@@ -55,7 +55,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/cgroup-defs.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/rculist_nulls.h>
 #include <linux/poll.h>
 #include <linux/sockptr.h>

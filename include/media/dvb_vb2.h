@@ -15,7 +15,7 @@
 #ifndef _DVB_VB2_H
 #define _DVB_VB2_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/poll.h>
 #include <linux/dvb/dmx.h>
 #include <media/videobuf2-core.h>

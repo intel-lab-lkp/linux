@@ -32,8 +32,8 @@
 #ifndef __DRM_PRIME_H__
 #define __DRM_PRIME_H__
 
-#include <linux/mutex.h>
-#include <linux/rbtree.h>
+#include <linux/mutex_types.h>
+#include <linux/rbtree_types.h>
 #include <linux/scatterlist.h>
 
 /**

@@ -10,10 +10,9 @@
 #define __LINUX_MFD_PCF50633_CORE_H
 
 #include <linux/i2c.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
-#include <linux/pm.h>
 #include <linux/power_supply.h>
 #include <linux/mfd/pcf50633/backlight.h>
 

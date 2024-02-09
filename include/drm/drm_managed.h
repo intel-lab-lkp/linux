@@ -3,7 +3,7 @@
 #ifndef _DRM_MANAGED_H_
 #define _DRM_MANAGED_H_
 
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/overflow.h>
 #include <linux/types.h>
 

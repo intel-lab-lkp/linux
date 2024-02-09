@@ -8,11 +8,11 @@
 #include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
-#include <linux/timer.h>
+#include <linux/mutex_types.h>
+#include <linux/spinlock_types.h>
+#include <linux/timer_types.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 #include <linux/atomic.h>
 #include <asm/byteorder.h>

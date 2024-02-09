@@ -15,7 +15,7 @@
 #include <linux/rcupdate.h>
 #include <linux/bug.h>
 #include <linux/jiffies.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/rcuref.h>
 #include <net/neighbour.h>
 #include <asm/processor.h>

@@ -16,7 +16,7 @@
 #include <sound/pcm-indirect.h>
 #include <sound/timer.h>
 #include <linux/interrupt.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/firmware.h>
 #include <linux/io.h>
 

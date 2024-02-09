@@ -8,7 +8,7 @@
  */
 
 #include <linux/cpumask.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/slab.h>
 #include <linux/kref.h>
 

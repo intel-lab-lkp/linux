@@ -11,7 +11,7 @@
 #include <linux/mfd/mcp.h>
 #include <linux/gpio.h>
 #include <linux/gpio/driver.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define UCB_IO_DATA	0x00
 #define UCB_IO_DIR	0x01

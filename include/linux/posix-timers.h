@@ -5,7 +5,7 @@
 #include <linux/alarmtimer.h>
 #include <linux/list.h>
 #include <linux/posix-timers_types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/timerqueue.h>
 
 struct kernel_siginfo;

@@ -11,7 +11,7 @@
 
 #include <linux/ipv6_route.h>
 #include <linux/rtnetlink.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/notifier.h>
 #include <net/dst.h>
 #include <net/flow.h>

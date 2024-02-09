@@ -5,7 +5,7 @@
 #include <linux/err.h>
 #include <linux/types.h>
 #include <linux/compiler.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 
 #define FW_ACTION_NOUEVENT 0
 #define FW_ACTION_UEVENT 1

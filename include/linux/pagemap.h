@@ -11,7 +11,7 @@
 #include <linux/highmem.h>
 #include <linux/compiler.h>
 #include <linux/uaccess.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/bitops.h>
 #include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/hugetlb_inline.h>

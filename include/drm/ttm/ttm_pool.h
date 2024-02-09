@@ -28,7 +28,7 @@
 
 #include <linux/mmzone.h>
 #include <linux/llist.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <drm/ttm/ttm_caching.h>
 
 struct device;

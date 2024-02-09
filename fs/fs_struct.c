@@ -4,6 +4,7 @@
 #include <linux/sched/task.h>
 #include <linux/fs.h>
 #include <linux/path.h>
+#include <linux/seqlock.h>
 #include <linux/slab.h>
 #include <linux/fs_struct.h>
 #include "internal.h"

@@ -42,14 +42,14 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/xarray.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/mempool.h>
 #include <linux/interrupt.h>
 #include <linux/idr.h>
 #include <linux/notifier.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/auxiliary_bus.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #include <linux/mlx5/device.h>
 #include <linux/mlx5/doorbell.h>

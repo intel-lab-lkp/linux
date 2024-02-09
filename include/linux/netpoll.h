@@ -12,7 +12,7 @@
 #include <linux/interrupt.h>
 #include <linux/rcupdate.h>
 #include <linux/list.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 union inet_addr {
 	__u32		all[4];

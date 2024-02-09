@@ -10,7 +10,7 @@
 
 
 #include <linux/wait.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <uapi/linux/lp.h>
 
 /* Magic numbers for defining port-device mappings */

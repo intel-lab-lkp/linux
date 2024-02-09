@@ -8,8 +8,8 @@
 #define _AX25_H 
 
 #include <linux/ax25.h>
-#include <linux/spinlock.h>
-#include <linux/timer.h>
+#include <linux/spinlock_types.h>
+#include <linux/timer_types.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/refcount.h>

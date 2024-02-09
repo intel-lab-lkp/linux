@@ -11,7 +11,7 @@
 
 #include <linux/iommu.h>
 #include <linux/mm.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/poll.h>
 #include <linux/cdev.h>
 #include <uapi/linux/vfio.h>

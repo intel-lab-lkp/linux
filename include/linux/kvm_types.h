@@ -20,7 +20,7 @@ struct kvm_memslots;
 enum kvm_mr_change;
 
 #include <linux/bits.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 #include <linux/spinlock_types.h>
 

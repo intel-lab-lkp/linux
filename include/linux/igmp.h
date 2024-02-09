@@ -11,10 +11,10 @@
 #define _LINUX_IGMP_H
 
 #include <linux/skbuff.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/in.h>
 #include <linux/ip.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/sockptr.h>
 #include <uapi/linux/igmp.h>
 
