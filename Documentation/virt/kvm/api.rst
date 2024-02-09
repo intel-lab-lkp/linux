@@ -8790,6 +8790,8 @@ means the VM type with value @n is supported.  Possible values of @n are::
 
   #define KVM_X86_DEFAULT_VM	0
   #define KVM_X86_SW_PROTECTED_VM	1
+  #define KVM_X86_SEV_VM	8
+  #define KVM_X86_SEV_ES_VM	10
 
 9. Known KVM API problems
 =========================

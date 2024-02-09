@@ -4795,6 +4795,10 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = BIT(KVM_X86_DEFAULT_VM);
 		if (kvm_is_vm_type_supported(KVM_X86_SW_PROTECTED_VM))
 			r |= BIT(KVM_X86_SW_PROTECTED_VM);
+		if (kvm_is_vm_type_supported(KVM_X86_SEV_VM))
+			r |= BIT(KVM_X86_SEV_VM);
+		if (kvm_is_vm_type_supported(KVM_X86_SEV_ES_VM))
+			r |= BIT(KVM_X86_SEV_ES_VM);
 		break;
 	default:
 		break;

@@ -854,5 +854,7 @@ struct kvm_hyperv_eventfd {
 
 #define KVM_X86_DEFAULT_VM	0
 #define KVM_X86_SW_PROTECTED_VM	(KVM_X86_DEFAULT_VM | __KVM_X86_PRIVATE_MEM_TYPE)
+#define KVM_X86_SEV_VM		8
+#define KVM_X86_SEV_ES_VM	(KVM_X86_SEV_VM | __KVM_X86_PROTECTED_STATE_TYPE)
 
 #endif /* _ASM_X86_KVM_H */
