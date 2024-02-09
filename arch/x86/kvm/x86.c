@@ -4804,37 +4804,53 @@ static inline void __user *kvm_get_attr_addr(struct kvm_device_attr *attr)
 	return uaddr;
 }
 
-static int kvm_x86_dev_get_attr(struct kvm_device_attr *attr)
+static int __kvm_x86_dev_get_attr(struct kvm_device_attr *attr, u64 *val)
 {
-	u64 __user *uaddr = kvm_get_attr_addr(attr);
+	int r;
 
 	if (attr->group)
 		return -ENXIO;
 
+	switch (attr->attr) {
+	case KVM_X86_XCOMP_GUEST_SUPP:
+		r = 0;
+		*val = kvm_caps.supported_xcr0;
+		break;
+	default:
+		r = -ENXIO;
+		if (kvm_x86_ops.dev_get_attr)
+			r = kvm_x86_ops.dev_get_attr(attr->attr, val);
+		break;
+	}
+
+	return r;
+}
+
+static int kvm_x86_dev_get_attr(struct kvm_device_attr *attr)
+{
+	u64 __user *uaddr;
+	int r;
+	u64 val;
+
+	r = __kvm_x86_dev_get_attr(attr, &val);
+	if (r < 0)
+		return r;
+
+	uaddr = kvm_get_attr_addr(attr);
 	if (IS_ERR(uaddr))
 		return PTR_ERR(uaddr);
 
-	switch (attr->attr) {
-	case KVM_X86_XCOMP_GUEST_SUPP:
-		if (put_user(kvm_caps.supported_xcr0, uaddr))
-			return -EFAULT;
-		return 0;
-	default:
-		return -ENXIO;
-	}
+	if (put_user(val, uaddr))
+		return -EFAULT;
+
+	return 0;
 }
 
 static int kvm_x86_dev_has_attr(struct kvm_device_attr *attr)
 {
-	if (attr->group)
-		return -ENXIO;
+	u64 val;
 
-	switch (attr->attr) {
-	case KVM_X86_XCOMP_GUEST_SUPP:
-		return 0;
-	default:
-		return -ENXIO;
-	}
+	return __kvm_x86_dev_get_attr(attr, &val);
 }
 
 long kvm_arch_dev_ioctl(struct file *filp,
