@@ -149,6 +149,14 @@ static inline bool sfs_is_fully_uptodate(struct folio *folio)
 	return bitmap_full(sfs->state, i_blocks_per_folio(inode, folio));
 }
 
+static inline bool sfs_is_any_uptodate(struct folio *folio)
+{
+	struct inode *inode = folio->mapping->host;
+	struct shmem_folio_state *sfs = folio->private;
+
+	return !bitmap_empty(sfs->state, i_blocks_per_folio(inode, folio));
+}
+
 static inline bool sfs_is_block_uptodate(struct shmem_folio_state *sfs,
 					 unsigned int block)
 {
@@ -237,6 +245,15 @@ static void sfs_free(struct folio *folio, bool force)
 			     folio_test_uptodate(folio));
 
 	kfree(folio_detach_private(folio));
+}
+
+static inline bool shmem_is_any_uptodate(struct folio *folio)
+{
+	struct shmem_folio_state *sfs = folio->private;
+
+	if (folio_test_large(folio) && sfs)
+		return sfs_is_any_uptodate(folio);
+	return folio_test_uptodate(folio);
 }
 
 static void shmem_set_range_uptodate(struct folio *folio, size_t off,
@@ -2845,6 +2862,9 @@ shmem_write_begin(struct file *file, struct address_space *mapping,
 	if (ret)
 		return ret;
 
+	if (!shmem_is_any_uptodate(folio))
+		folio_zero_range(folio, 0, folio_size(folio));
+
 	*pagep = folio_file_page(folio, index);
 	if (PageHWPoison(*pagep)) {
 		folio_unlock(folio);
@@ -2867,13 +2887,6 @@ shmem_write_end(struct file *file, struct address_space *mapping,
 	if (pos + copied > inode->i_size)
 		i_size_write(inode, pos + copied);
 
-	if (!folio_test_uptodate(folio)) {
-		if (copied < folio_size(folio)) {
-			size_t from = offset_in_folio(folio, pos);
-			folio_zero_segments(folio, 0, from,
-					from + copied, folio_size(folio));
-		}
-	}
 	shmem_set_range_uptodate(folio, 0, folio_size(folio));
 	folio_mark_dirty(folio);
 	folio_unlock(folio);
