@@ -16,7 +16,7 @@
 #include <linux/rcupdate.h>
 #include <linux/refcount_types.h>
 #include <linux/percpu-refcount_types.h>
-#include <linux/percpu-rwsem.h>
+#include <linux/percpu-rwsem_types.h>
 #include <linux/u64_stats_sync.h>
 #include <linux/workqueue.h>
 #include <linux/bpf-cgroup-defs.h>
