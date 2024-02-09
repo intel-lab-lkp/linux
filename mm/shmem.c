@@ -256,6 +256,16 @@ static inline bool shmem_is_any_uptodate(struct folio *folio)
 	return folio_test_uptodate(folio);
 }
 
+static inline bool shmem_is_block_uptodate(struct folio *folio,
+					   unsigned int block)
+{
+	struct shmem_folio_state *sfs = folio->private;
+
+	if (folio_test_large(folio) && sfs)
+		return sfs_is_block_uptodate(sfs, block);
+	return folio_test_uptodate(folio);
+}
+
 static void shmem_set_range_uptodate(struct folio *folio, size_t off,
 				     size_t len)
 {
@@ -2143,7 +2153,7 @@ repeat:
 		}
 		if (sgp == SGP_WRITE)
 			folio_mark_accessed(folio);
-		if (folio_test_uptodate(folio))
+		if (shmem_is_block_uptodate(folio, index - folio_index(folio)))
 			goto out;
 		/* fallocated folio */
 		if (sgp != SGP_READ)
