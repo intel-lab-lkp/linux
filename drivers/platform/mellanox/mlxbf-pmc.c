@@ -99,8 +99,8 @@
  */
 struct mlxbf_pmc_attribute {
 	struct device_attribute dev_attr;
-	int index;
-	int nr;
+	unsigned int index;
+	unsigned int nr;
 };
 
 /**
@@ -121,7 +121,7 @@ struct mlxbf_pmc_block_info {
 	void __iomem *mmio_base;
 	size_t blk_size;
 	size_t counters;
-	int type;
+	unsigned int type;
 	struct mlxbf_pmc_attribute *attr_counter;
 	struct mlxbf_pmc_attribute *attr_event;
 	struct mlxbf_pmc_attribute attr_event_list;
@@ -169,7 +169,7 @@ struct mlxbf_pmc_context {
  * @evt_name: Name of the event
  */
 struct mlxbf_pmc_events {
-	int evt_num;
+	u32 evt_num;
 	char *evt_name;
 };
 
@@ -959,7 +959,7 @@ static int mlxbf_pmc_write(void __iomem *addr, int command, u64 value)
 }
 
 /* Check if the register offset is within the mapped region for the block */
-static bool mlxbf_pmc_valid_range(int blk_num, u32 offset)
+static bool mlxbf_pmc_valid_range(unsigned int blk_num, u32 offset)
 {
 	if ((offset >= 0) && !(offset % MLXBF_PMC_REG_SIZE) &&
 	    (offset + MLXBF_PMC_REG_SIZE <= pmc->block[blk_num].blk_size))
@@ -970,7 +970,7 @@ static bool mlxbf_pmc_valid_range(int blk_num, u32 offset)
 
 /* Get the event list corresponding to a certain block */
 static const struct mlxbf_pmc_events *mlxbf_pmc_event_list(const char *blk,
-							   int *size)
+							   unsigned int *size)
 {
 	const struct mlxbf_pmc_events *events;
 
@@ -1047,7 +1047,7 @@ static const struct mlxbf_pmc_events *mlxbf_pmc_event_list(const char *blk,
 static int mlxbf_pmc_get_event_num(const char *blk, const char *evt)
 {
 	const struct mlxbf_pmc_events *events;
-	int i, size;
+	unsigned int size, i;
 
 	events = mlxbf_pmc_event_list(blk, &size);
 	if (!events)
@@ -1062,10 +1062,10 @@ static int mlxbf_pmc_get_event_num(const char *blk, const char *evt)
 }
 
 /* Get the event number given the name */
-static char *mlxbf_pmc_get_event_name(const char *blk, int evt)
+static char *mlxbf_pmc_get_event_name(const char *blk, u32 evt)
 {
 	const struct mlxbf_pmc_events *events;
-	int i, size;
+	unsigned int size, i;
 
 	events = mlxbf_pmc_event_list(blk, &size);
 	if (!events)
@@ -1080,7 +1080,7 @@ static char *mlxbf_pmc_get_event_name(const char *blk, int evt)
 }
 
 /* Method to enable/disable/reset l3cache counters */
-static int mlxbf_pmc_config_l3_counters(int blk_num, bool enable, bool reset)
+static int mlxbf_pmc_config_l3_counters(unsigned int blk_num, bool enable, bool reset)
 {
 	u32 perfcnt_cfg = 0;
 
@@ -1095,7 +1095,7 @@ static int mlxbf_pmc_config_l3_counters(int blk_num, bool enable, bool reset)
 }
 
 /* Method to handle l3cache counter programming */
-static int mlxbf_pmc_program_l3_counter(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_program_l3_counter(unsigned int blk_num, u32 cnt_num,
 					u32 evt)
 {
 	u32 perfcnt_sel_1 = 0, perfcnt_sel = 0, *wordaddr;
@@ -1160,7 +1160,7 @@ static int mlxbf_pmc_program_l3_counter(int blk_num, u32 cnt_num,
 }
 
 /* Method to handle crspace counter programming */
-static int mlxbf_pmc_program_crspace_counter(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_program_crspace_counter(unsigned int blk_num, u32 cnt_num,
 					     u32 evt)
 {
 	void *addr;
@@ -1185,7 +1185,7 @@ static int mlxbf_pmc_program_crspace_counter(int blk_num, u32 cnt_num,
 }
 
 /* Method to clear crspace counter value */
-static int mlxbf_pmc_clear_crspace_counter(int blk_num, u32 cnt_num)
+static int mlxbf_pmc_clear_crspace_counter(unsigned int blk_num, u32 cnt_num)
 {
 	void *addr;
 
@@ -1197,7 +1197,7 @@ static int mlxbf_pmc_clear_crspace_counter(int blk_num, u32 cnt_num)
 }
 
 /* Method to program a counter to monitor an event */
-static int mlxbf_pmc_program_counter(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_program_counter(unsigned int blk_num, u32 cnt_num,
 				     u32 evt, bool is_l3)
 {
 	u64 perfctl, perfevt, perfmon_cfg;
@@ -1261,7 +1261,7 @@ static int mlxbf_pmc_program_counter(int blk_num, u32 cnt_num,
 }
 
 /* Method to handle l3 counter reads */
-static int mlxbf_pmc_read_l3_counter(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_read_l3_counter(unsigned int blk_num, u32 cnt_num,
 				     u64 *result)
 {
 	u32 perfcnt_low = 0, perfcnt_high = 0;
@@ -1293,7 +1293,7 @@ static int mlxbf_pmc_read_l3_counter(int blk_num, u32 cnt_num,
 }
 
 /* Method to handle crspace counter reads */
-static int mlxbf_pmc_read_crspace_counter(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_read_crspace_counter(unsigned int blk_num, u32 cnt_num,
 					  u64 *result)
 {
 	int status = 0;
@@ -1311,7 +1311,7 @@ static int mlxbf_pmc_read_crspace_counter(int blk_num, u32 cnt_num,
 }
 
 /* Method to read the counter value */
-static int mlxbf_pmc_read_counter(int blk_num, u32 cnt_num, bool is_l3,
+static int mlxbf_pmc_read_counter(unsigned int blk_num, u32 cnt_num, bool is_l3,
 				  u64 *result)
 {
 	u32 perfcfg_offset, perfval_offset;
@@ -1349,7 +1349,7 @@ static int mlxbf_pmc_read_counter(int blk_num, u32 cnt_num, bool is_l3,
 }
 
 /* Method to read L3 block event */
-static int mlxbf_pmc_read_l3_event(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_read_l3_event(unsigned int blk_num, u32 cnt_num,
 				   u64 *result)
 {
 	u32 perfcnt_sel = 0, perfcnt_sel_1 = 0, *wordaddr;
@@ -1402,7 +1402,7 @@ static int mlxbf_pmc_read_l3_event(int blk_num, u32 cnt_num,
 }
 
 /* Method to read crspace block event */
-static int mlxbf_pmc_read_crspace_event(int blk_num, u32 cnt_num,
+static int mlxbf_pmc_read_crspace_event(unsigned int blk_num, u32 cnt_num,
 					u64 *result)
 {
 	u32 word, evt;
@@ -1426,7 +1426,7 @@ static int mlxbf_pmc_read_crspace_event(int blk_num, u32 cnt_num,
 }
 
 /* Method to find the event currently being monitored by a counter */
-static int mlxbf_pmc_read_event(int blk_num, u32 cnt_num, bool is_l3,
+static int mlxbf_pmc_read_event(unsigned int blk_num, u32 cnt_num, bool is_l3,
 				u64 *result)
 {
 	u32 perfcfg_offset, perfval_offset;
@@ -1466,7 +1466,7 @@ static int mlxbf_pmc_read_event(int blk_num, u32 cnt_num, bool is_l3,
 }
 
 /* Method to read a register */
-static int mlxbf_pmc_read_reg(int blk_num, u32 offset, u64 *result)
+static int mlxbf_pmc_read_reg(unsigned int blk_num, u32 offset, u64 *result)
 {
 	u32 ecc_out;
 
@@ -1487,7 +1487,7 @@ static int mlxbf_pmc_read_reg(int blk_num, u32 offset, u64 *result)
 }
 
 /* Method to write to a register */
-static int mlxbf_pmc_write_reg(int blk_num, u32 offset, u64 data)
+static int mlxbf_pmc_write_reg(unsigned int blk_num, u32 offset, u64 data)
 {
 	if (strstr(pmc->block_name[blk_num], "ecc")) {
 		return mlxbf_pmc_write(pmc->block[blk_num].mmio_base + offset,
@@ -1507,7 +1507,7 @@ static ssize_t mlxbf_pmc_counter_show(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_counter = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int blk_num, cnt_num, offset;
+	unsigned int blk_num, cnt_num, offset;
 	bool is_l3 = false;
 	u64 value;
 
@@ -1541,14 +1541,15 @@ static ssize_t mlxbf_pmc_counter_store(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_counter = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int blk_num, cnt_num, offset, err, data;
+	unsigned int blk_num, cnt_num, offset, data;
 	bool is_l3 = false;
 	u64 evt_num;
+	int err;
 
 	blk_num = attr_counter->nr;
 	cnt_num = attr_counter->index;
 
-	err = kstrtoint(buf, 0, &data);
+	err = kstrtouint(buf, 0, &data);
 	if (err < 0)
 		return err;
 
@@ -1577,7 +1578,7 @@ static ssize_t mlxbf_pmc_counter_store(struct device *dev,
 		if (err)
 			return err;
 	} else if (pmc->block[blk_num].type == MLXBF_PMC_TYPE_CRSPACE) {
-		if (sscanf(attr->attr.name, "counter%d", &cnt_num) != 1)
+		if (sscanf(attr->attr.name, "counter%u", &cnt_num) != 1)
 			return -EINVAL;
 		err = mlxbf_pmc_clear_crspace_counter(blk_num, cnt_num);
 	} else
@@ -1592,10 +1593,11 @@ static ssize_t mlxbf_pmc_event_show(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_event = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int blk_num, cnt_num, err;
+	unsigned int blk_num, cnt_num;
 	bool is_l3 = false;
-	u64 evt_num;
 	char *evt_name;
+	u64 evt_num;
+	int err;
 
 	blk_num = attr_event->nr;
 	cnt_num = attr_event->index;
@@ -1621,8 +1623,9 @@ static ssize_t mlxbf_pmc_event_store(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_event = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int blk_num, cnt_num, evt_num, err;
+	unsigned int blk_num, cnt_num, evt_num;
 	bool is_l3 = false;
+	int err;
 
 	blk_num = attr_event->nr;
 	cnt_num = attr_event->index;
@@ -1633,7 +1636,7 @@ static ssize_t mlxbf_pmc_event_store(struct device *dev,
 		if (evt_num < 0)
 			return -EINVAL;
 	} else {
-		err = kstrtoint(buf, 0, &evt_num);
+		err = kstrtouint(buf, 0, &evt_num);
 		if (err < 0)
 			return err;
 	}
@@ -1655,9 +1658,10 @@ static ssize_t mlxbf_pmc_event_list_show(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_event_list = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int blk_num, i, size, len = 0, ret = 0;
+	unsigned int blk_num, i, size, len = 0;
 	const struct mlxbf_pmc_events *events;
 	char e_info[MLXBF_PMC_EVENT_INFO_LEN];
+	int ret = 0;
 
 	blk_num = attr_event_list->nr;
 
@@ -1683,8 +1687,8 @@ static ssize_t mlxbf_pmc_enable_show(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_enable = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
+	unsigned int blk_num, value;
 	u32 perfcnt_cfg, word;
-	int blk_num, value;
 
 	blk_num = attr_enable->nr;
 
@@ -1704,7 +1708,7 @@ static ssize_t mlxbf_pmc_enable_show(struct device *dev,
 		value = FIELD_GET(MLXBF_PMC_L3C_PERF_CNT_CFG_EN, perfcnt_cfg);
 	}
 
-	return sysfs_emit(buf, "%d\n", value);
+	return sysfs_emit(buf, "%u\n", value);
 }
 
 /* Store function for "enable" sysfs files - only for l3cache & crspace */
@@ -1714,12 +1718,13 @@ static ssize_t mlxbf_pmc_enable_store(struct device *dev,
 {
 	struct mlxbf_pmc_attribute *attr_enable = container_of(
 		attr, struct mlxbf_pmc_attribute, dev_attr);
-	int err, en, blk_num;
+	unsigned int en, blk_num;
 	u32 word;
+	int err;
 
 	blk_num = attr_enable->nr;
 
-	err = kstrtoint(buf, 0, &en);
+	err = kstrtouint(buf, 0, &en);
 	if (err < 0)
 		return err;
 
@@ -1757,10 +1762,10 @@ static ssize_t mlxbf_pmc_enable_store(struct device *dev,
 }
 
 /* Populate attributes for blocks with counters to monitor performance */
-static int mlxbf_pmc_init_perftype_counter(struct device *dev, int blk_num)
+static int mlxbf_pmc_init_perftype_counter(struct device *dev, unsigned int blk_num)
 {
 	struct mlxbf_pmc_attribute *attr;
-	int i = 0, j = 0;
+	unsigned int i = 0, j = 0;
 
 	/* "event_list" sysfs to list events supported by the block */
 	attr = &pmc->block[blk_num].attr_event_list;
@@ -1810,7 +1815,7 @@ static int mlxbf_pmc_init_perftype_counter(struct device *dev, int blk_num)
 		attr->index = j;
 		attr->nr = blk_num;
 		attr->dev_attr.attr.name = devm_kasprintf(dev, GFP_KERNEL,
-							  "counter%d", j);
+							  "counter%u", j);
 		if (!attr->dev_attr.attr.name)
 			return -ENOMEM;
 		pmc->block[blk_num].block_attr[++i] = &attr->dev_attr.attr;
@@ -1823,7 +1828,7 @@ static int mlxbf_pmc_init_perftype_counter(struct device *dev, int blk_num)
 		attr->index = j;
 		attr->nr = blk_num;
 		attr->dev_attr.attr.name = devm_kasprintf(dev, GFP_KERNEL,
-							  "event%d", j);
+							  "event%u", j);
 		if (!attr->dev_attr.attr.name)
 			return -ENOMEM;
 		pmc->block[blk_num].block_attr[++i] = &attr->dev_attr.attr;
@@ -1834,11 +1839,11 @@ static int mlxbf_pmc_init_perftype_counter(struct device *dev, int blk_num)
 }
 
 /* Populate attributes for blocks with registers to monitor performance */
-static int mlxbf_pmc_init_perftype_reg(struct device *dev, int blk_num)
+static int mlxbf_pmc_init_perftype_reg(struct device *dev, unsigned int blk_num)
 {
-	struct mlxbf_pmc_attribute *attr;
 	const struct mlxbf_pmc_events *events;
-	int i = 0, j = 0;
+	struct mlxbf_pmc_attribute *attr;
+	unsigned int i = 0, j = 0;
 
 	events = mlxbf_pmc_event_list(pmc->block_name[blk_num], &j);
 	if (!events)
@@ -1869,7 +1874,7 @@ static int mlxbf_pmc_init_perftype_reg(struct device *dev, int blk_num)
 }
 
 /* Helper to create the bfperf sysfs sub-directories and files */
-static int mlxbf_pmc_create_groups(struct device *dev, int blk_num)
+static int mlxbf_pmc_create_groups(struct device *dev, unsigned int blk_num)
 {
 	int err;
 
@@ -1912,18 +1917,19 @@ static bool mlxbf_pmc_guid_match(const guid_t *guid,
 static int mlxbf_pmc_map_counters(struct device *dev)
 {
 	u64 info[MLXBF_PMC_INFO_SZ];
-	int i, tile_num, ret;
+	unsigned int tile_num, i;
+	int ret;
 
 	for (i = 0; i < pmc->total_blocks; ++i) {
 		/* Create sysfs for tiles only if block number <  tile_count */
 		if (strstr(pmc->block_name[i], "tilenet")) {
-			if (sscanf(pmc->block_name[i], "tilenet%d", &tile_num) != 1)
+			if (sscanf(pmc->block_name[i], "tilenet%u", &tile_num) != 1)
 				continue;
 
 			if (tile_num >= pmc->tile_count)
 				continue;
 		} else if (strstr(pmc->block_name[i], "tile")) {
-			if (sscanf(pmc->block_name[i], "tile%d", &tile_num) != 1)
+			if (sscanf(pmc->block_name[i], "tile%u", &tile_num) != 1)
 				continue;
 
 			if (tile_num >= pmc->tile_count)
@@ -1933,9 +1939,9 @@ static int mlxbf_pmc_map_counters(struct device *dev)
 		/* Create sysfs only for enabled MSS blocks */
 		if (strstr(pmc->block_name[i], "mss") &&
 		    pmc->event_set == MLXBF_PMC_EVENT_SET_BF3) {
-			int mss_num;
+			unsigned int mss_num;
 
-			if (sscanf(pmc->block_name[i], "mss%d", &mss_num) != 1)
+			if (sscanf(pmc->block_name[i], "mss%u", &mss_num) != 1)
 				continue;
 
 			if (!((pmc->mss_enable >> mss_num) & 0x1))
@@ -1944,17 +1950,17 @@ static int mlxbf_pmc_map_counters(struct device *dev)
 
 		/* Create sysfs only for enabled LLT blocks */
 		if (strstr(pmc->block_name[i], "llt_miss")) {
-			int llt_num;
+			unsigned int llt_num;
 
-			if (sscanf(pmc->block_name[i], "llt_miss%d", &llt_num) != 1)
+			if (sscanf(pmc->block_name[i], "llt_miss%u", &llt_num) != 1)
 				continue;
 
 			if (!((pmc->llt_enable >> llt_num) & 0x1))
 				continue;
 		} else if (strstr(pmc->block_name[i], "llt")) {
-			int llt_num;
+			unsigned int llt_num;
 
-			if (sscanf(pmc->block_name[i], "llt%d", &llt_num) != 1)
+			if (sscanf(pmc->block_name[i], "llt%u", &llt_num) != 1)
 				continue;
 
 			if (!((pmc->llt_enable >> llt_num) & 0x1))
