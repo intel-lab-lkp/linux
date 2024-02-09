@@ -7,7 +7,7 @@
  */
 
 #include <linux/rcupdate.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/sched.h>
 
 /*

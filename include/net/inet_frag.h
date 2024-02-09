@@ -3,7 +3,7 @@
 #define __NET_FRAG_H__
 
 #include <linux/rhashtable-types.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/in6.h>
 #include <linux/rbtree_types.h>
 #include <linux/refcount.h>

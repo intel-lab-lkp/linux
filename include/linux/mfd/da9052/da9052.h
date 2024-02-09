@@ -13,7 +13,7 @@
 #include <linux/interrupt.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/list.h>
 #include <linux/mfd/core.h>
 

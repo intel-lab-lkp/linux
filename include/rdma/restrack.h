@@ -9,7 +9,7 @@
 #include <linux/typecheck.h>
 #include <linux/sched.h>
 #include <linux/kref_types.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/sched/task.h>
 #include <uapi/rdma/rdma_netlink.h>
 

@@ -12,7 +12,7 @@
 #define _LINUX_SRCU_TREE_H
 
 #include <linux/rcu_node_tree.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/mutex_types.h>
 #include <linux/workqueue.h>
 
