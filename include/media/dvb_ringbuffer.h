@@ -24,7 +24,7 @@
 #define _DVB_RINGBUFFER_H_
 
 #include <linux/spinlock_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 /**
  * struct dvb_ringbuffer - Describes a ring buffer used at DVB framework

@@ -53,7 +53,7 @@
 #include <linux/memcontrol.h>
 #include <linux/static_key.h>
 #include <linux/sched.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/cgroup-defs.h>
 #include <linux/rbtree_types.h>
 #include <linux/rculist_nulls.h>

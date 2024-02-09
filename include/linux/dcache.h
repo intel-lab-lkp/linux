@@ -13,7 +13,7 @@
 #include <linux/rcupdate.h>
 #include <linux/lockref.h>
 #include <linux/stringhash.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct path;
 struct file;

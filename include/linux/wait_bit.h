@@ -8,7 +8,7 @@
 #include <linux/bitops.h>
 #include <linux/init.h> // for __init
 #include <linux/kernel.h> // for might_sleep()
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct wait_bit_key {
 	void			*flags;

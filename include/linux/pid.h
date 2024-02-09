@@ -7,7 +7,7 @@
 #include <linux/rcupdate.h>
 #include <linux/refcount.h>
 #include <linux/sched.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 /*
  * What is struct pid?

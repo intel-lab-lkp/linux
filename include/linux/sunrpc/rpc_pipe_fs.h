@@ -4,7 +4,7 @@
 
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 
 struct rpc_pipe_dir_head {
 	struct list_head pdh_entries;
