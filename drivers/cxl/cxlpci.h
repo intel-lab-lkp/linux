@@ -85,6 +85,26 @@ struct cdat_entry_header {
 	__le16 length;
 } __packed;
 
+union cdat_data {
+	struct cdat_header header;
+	struct cdat_entry_header entry;
+} __packed;
+
+/*
+ * Response contains the CDAT only response header of the DOE. The
+ * response payload is a CDAT structure (either CDAT header or entry),
+ * it may also mark the beginning of the CDAT table.
+ *
+ * Spec refs:
+ *
+ * CXL 3.1 Table 8-14: Read Entry Response
+ * CDAT Specification 1.03: 2 CDAT Data Structures
+ */
+struct cdat_doe_rsp {
+	__le32 doe_header;
+	u8 data[];
+} __packed;
+
 /*
  * CXL v3.0 6.2.3 Table 6-4
  * The table indicates that if PCIe Flit Mode is set, then CXL is in 256B flits
