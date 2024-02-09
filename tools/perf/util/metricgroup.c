@@ -1947,6 +1947,10 @@ static int insert_new_group(struct list_head *head,
 			   size_t num_fixed_counters)
 {
 	INIT_LIST_HEAD(&new_group->event_head);
+	if (sysctl__nmi_watchdog_enabled()) {
+		pr_debug("NMI watchdog is enabled. Reduce num of counters by 1\n");
+		num_counters -= 1;
+	}
 	fill_counter_bitmap(new_group->gp_counters, 0, num_counters);
 	fill_counter_bitmap(new_group->fixed_counters, 0, num_fixed_counters);
 	new_group->taken_alone = false;
