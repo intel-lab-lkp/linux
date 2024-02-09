@@ -56,7 +56,9 @@ _json_event_attributes = [
     # The list of counter(s) this event could use
     'counters',
     # Longer things (the last won't be iterated over during decompress).
-    'long_desc'
+    'long_desc',
+    # Taken alone event could not be collected in the same group with other taken alone event
+    'taken_alone'
 ]
 
 # Attributes that are in pmu_unit_layout.
@@ -355,6 +357,9 @@ class JsonEvent:
     self.num_counters = jd.get('NumCounters')
     # Number of fixed counter
     self.num_fixed_counters = jd.get('NumFixedCounters')
+    # If the event is taken alone event, which cannot be grouped with any other
+    # taken alone event.
+    self.taken_alone = jd.get('TakenAlone')
     filter = jd.get('Filter')
     self.unit = jd.get('ScaleUnit')
     self.perpkg = jd.get('PerPkg')

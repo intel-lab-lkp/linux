@@ -54,6 +54,7 @@ struct pmu_event {
 	const char *unit;
 	bool perpkg;
 	bool deprecated;
+	bool taken_alone;
 };
 
 struct pmu_metric {
