@@ -16,7 +16,7 @@
 #include <linux/err.h>
 #include <linux/list.h>
 #include <linux/bitops.h>
-#include <linux/kernel.h> // for lower_32_bits()
+#include <linux/wordpart.h> // for lower_32_bits()
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/printk.h>
