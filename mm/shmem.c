@@ -2253,7 +2253,8 @@ clear:
 		long i, n = folio_nr_pages(folio);
 
 		for (i = 0; i < n; i++)
-			clear_highpage(folio_page(folio, i));
+			if (!shmem_is_block_uptodate(folio, i))
+				clear_highpage(folio_page(folio, i));
 		flush_dcache_folio(folio);
 		shmem_set_range_uptodate(folio, 0, folio_size(folio));
 	}
