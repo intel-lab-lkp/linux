@@ -5402,6 +5402,10 @@ static long kvm_s390_vcpu_mem_op(struct kvm_vcpu *vcpu,
 			return -ENOMEM;
 	}
 
+	/* Swap host/guest access registers in the event of a MEM_OP with AR specified */
+	save_access_regs(vcpu->arch.host_acrs);
+	restore_access_regs(vcpu->run->s.regs.acrs);
+
 	acc_mode = mop->op == KVM_S390_MEMOP_LOGICAL_READ ? GACC_FETCH : GACC_STORE;
 	if (mop->flags & KVM_S390_MEMOP_F_CHECK_ONLY) {
 		r = check_gva_range(vcpu, mop->gaddr, mop->ar, mop->size,
@@ -5431,6 +5435,8 @@ out_inject:
 		kvm_s390_inject_prog_irq(vcpu, &vcpu->arch.pgm);
 
 out_free:
+	save_access_regs(vcpu->run->s.regs.acrs);
+	restore_access_regs(vcpu->arch.host_acrs);
 	vfree(tmpbuf);
 	return r;
 }
