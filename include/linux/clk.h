@@ -12,6 +12,7 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/notifier.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 
 struct device;
 struct clk;

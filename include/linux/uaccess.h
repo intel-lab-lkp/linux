@@ -6,6 +6,7 @@
 #include <linux/instrumented.h>
 #include <linux/minmax.h>
 #include <linux/sched.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_faul()
 #include <linux/thread_info.h>
 
 #include <asm/uaccess.h>
