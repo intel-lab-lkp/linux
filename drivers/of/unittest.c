@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/hashtable.h>
+#include <linux/kref.h>
 #include <linux/libfdt.h>
 #include <linux/of.h>
 #include <linux/of_address.h>

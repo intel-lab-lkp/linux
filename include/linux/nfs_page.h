@@ -16,7 +16,7 @@
 #include <linux/sunrpc/auth.h>
 #include <linux/nfs_xdr.h>
 
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 /*
  * Valid flags for a dirty buffer

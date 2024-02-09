@@ -11,6 +11,8 @@
 #include <linux/kstrtox.h>
 #include <linux/sprintf.h>
 
+#include <linux/kref.h>
+
 /*
  * lio_wq is used to call the LIO backed during creation or deletion of
  * sessions. This brings serialization to the session management as we create

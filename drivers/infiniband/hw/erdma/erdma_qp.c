@@ -11,6 +11,8 @@
 #include <linux/completion.h>
 #include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
+#include <linux/kref.h>
+
 void erdma_qp_llp_close(struct erdma_qp *qp)
 {
 	struct erdma_qp_attrs qp_attrs;

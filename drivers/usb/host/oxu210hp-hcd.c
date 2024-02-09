@@ -27,6 +27,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/completion.h>
+#include <linux/kref.h>
 
 #include <asm/irq.h>
 #include <asm/unaligned.h>

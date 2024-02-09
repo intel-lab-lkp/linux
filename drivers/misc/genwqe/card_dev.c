@@ -25,6 +25,7 @@
 #include <linux/wait.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
+#include <linux/kref.h>
 
 #include "card_base.h"
 #include "card_ddcb.h"

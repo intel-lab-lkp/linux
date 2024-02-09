@@ -10,7 +10,7 @@
 #define __OPERATION_H
 
 #include <linux/completion.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/timer_types.h>
 #include <linux/types.h>
 #include <linux/workqueue_types.h>

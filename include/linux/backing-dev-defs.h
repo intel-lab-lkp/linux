@@ -12,7 +12,7 @@
 #include <linux/timer_types.h>
 #include <linux/wait.h>
 #include <linux/workqueue_types.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 #ifdef CONFIG_CGROUP_WRITEBACK
 #include <linux/rwsem.h>

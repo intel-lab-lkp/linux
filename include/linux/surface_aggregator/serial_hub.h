@@ -13,7 +13,7 @@
 #define _LINUX_SURFACE_AGGREGATOR_SERIAL_HUB_H
 
 #include <linux/crc-itu-t.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/ktime.h>
 #include <linux/list.h>
 #include <linux/types.h>

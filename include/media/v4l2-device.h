@@ -13,6 +13,8 @@
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-dev.h>
 
+#include <linux/kref.h>
+
 struct v4l2_ctrl_handler;
 
 /**

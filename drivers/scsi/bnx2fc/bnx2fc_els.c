@@ -16,6 +16,8 @@
 
 #include "bnx2fc.h"
 
+#include <linux/kref.h>
+
 static void bnx2fc_logo_resp(struct fc_seq *seq, struct fc_frame *fp,
 			     void *arg);
 static void bnx2fc_flogi_resp(struct fc_seq *seq, struct fc_frame *fp,

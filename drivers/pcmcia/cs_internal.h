@@ -18,7 +18,7 @@
 #define _LINUX_CS_INTERNAL_H
 
 #include <linux/ioport.h> // for struct resource
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 /* Flags in client state */
 #define CLIENT_WIN_REQ(i)	(0x1<<(i))

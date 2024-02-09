@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
+#include <linux/kref.h>
 #include "label.h"
 #include "nd.h"
 

@@ -10,6 +10,7 @@
 #include <linux/rpmsg/mtk_rpmsg.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/kref.h>
 
 #include "rpmsg_internal.h"
 

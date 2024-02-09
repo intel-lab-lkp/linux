@@ -17,6 +17,7 @@
 #include <linux/can/skb.h>
 #include <linux/if_arp.h>
 #include <linux/module.h>
+#include <linux/kref.h>
 
 #include "j1939-priv.h"
 

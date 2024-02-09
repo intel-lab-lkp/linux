@@ -14,6 +14,8 @@
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/export.h>
+#include <linux/workqueue.h>
+#include <linux/kref.h>
 
 #include <target/target_core_base.h>
 #include <target/target_core_backend.h>
