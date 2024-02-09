@@ -120,7 +120,9 @@ static int page_cache_pipe_buf_confirm(struct pipe_inode_info *pipe,
 				       struct pipe_buffer *buf)
 {
 	struct folio *folio = page_folio(buf->page);
+	const struct address_space_operations *ops;
 	int err;
+	off_t off = folio_page_idx(folio, buf->page) * PAGE_SIZE + buf->offset;
 
 	if (!folio_test_uptodate(folio)) {
 		folio_lock(folio);
@@ -134,12 +136,21 @@ static int page_cache_pipe_buf_confirm(struct pipe_inode_info *pipe,
 			goto error;
 		}
 
+		ops = folio->mapping->a_ops;
 		/*
 		 * Uh oh, read-error from disk.
 		 */
-		if (!folio_test_uptodate(folio)) {
-			err = -EIO;
-			goto error;
+		if (!ops->is_partially_uptodate) {
+			if (!folio_test_uptodate(folio)) {
+				err = -EIO;
+				goto error;
+			}
+		} else {
+			if (!ops->is_partially_uptodate(folio, off,
+							buf->len)) {
+				err = -EIO;
+				goto error;
+			}
 		}
 
 		/* Folio is ok after all, we are done */
