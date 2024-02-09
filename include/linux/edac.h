@@ -13,7 +13,7 @@
 #define _LINUX_EDAC_H_
 
 #include <linux/atomic.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/completion_types.h>
 #include <linux/workqueue_types.h>
 #include <linux/debugfs.h>

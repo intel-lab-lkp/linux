@@ -11,6 +11,8 @@
 #include <drm/drm_blend.h>
 #include <drm/drm_gem_atomic_helper.h>
 
+#include <linux/device.h> // for devm_kzalloc()
+
 #include "sun4i_backend.h"
 #include "sun4i_frontend.h"
 #include "sun4i_layer.h"
