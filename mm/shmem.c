@@ -209,6 +209,28 @@ static void sfs_set_range_uptodate(struct folio *folio,
 	spin_unlock_irqrestore(&sfs->state_lock, flags);
 }
 
+static void sfs_clear_range_uptodate(struct folio *folio,
+				     struct shmem_folio_state *sfs, size_t off,
+				     size_t len)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int first_blk, last_blk;
+	unsigned long flags;
+
+	first_blk = DIV_ROUND_UP_ULL(off, 1 << inode->i_blkbits);
+	last_blk = DIV_ROUND_DOWN_ULL(off + len, 1 << inode->i_blkbits) - 1;
+	if (last_blk == UINT_MAX)
+		return;
+
+	if (first_blk > last_blk)
+		return;
+
+	spin_lock_irqsave(&sfs->state_lock, flags);
+	bitmap_clear(sfs->state, first_blk, last_blk - first_blk + 1);
+	folio_clear_uptodate(folio);
+	spin_unlock_irqrestore(&sfs->state_lock, flags);
+}
+
 static struct shmem_folio_state *sfs_alloc(struct inode *inode,
 					   struct folio *folio)
 {
@@ -276,6 +298,19 @@ static void shmem_set_range_uptodate(struct folio *folio, size_t off,
 	else
 		folio_mark_uptodate(folio);
 }
+
+static void shmem_clear_range_uptodate(struct folio *folio, size_t off,
+				     size_t len)
+{
+	struct shmem_folio_state *sfs = folio->private;
+
+	if (sfs)
+		sfs_clear_range_uptodate(folio, sfs, off, len);
+	else
+		folio_clear_uptodate(folio);
+
+}
+
 #ifdef CONFIG_TMPFS
 static unsigned long shmem_default_max_blocks(void)
 {
@@ -1103,12 +1138,33 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 	return folio;
 }
 
+static void shmem_clear(struct folio *folio, loff_t start, loff_t end, int mode)
+{
+	loff_t pos = folio_pos(folio);
+	unsigned int offset, length;
+
+	if (!(mode & FALLOC_FL_PUNCH_HOLE) || !(folio_test_large(folio)))
+		return;
+
+	if (pos < start)
+		offset = start - pos;
+	else
+		offset = 0;
+	length = folio_size(folio);
+	if (pos + length <= (u64)end)
+		length = length - offset;
+	else
+		length = end + 1 - pos - offset;
+
+	shmem_clear_range_uptodate(folio, offset, length);
+}
+
 /*
  * Remove range of pages and swap entries from page cache, and free them.
  * If !unfalloc, truncate or punch hole; if unfalloc, undo failed fallocate.
  */
 static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
-								 bool unfalloc)
+			     bool unfalloc, int mode)
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
@@ -1166,6 +1222,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 	if (folio) {
 		same_folio = lend < folio_pos(folio) + folio_size(folio);
 		folio_mark_dirty(folio);
+		shmem_clear(folio, lstart, lend, mode);
 		if (!truncate_inode_partial_folio(folio, lstart, lend)) {
 			start = folio_next_index(folio);
 			if (same_folio)
@@ -1255,9 +1312,17 @@ whole_folios:
 	shmem_recalc_inode(inode, 0, -nr_swaps_freed);
 }
 
+static void shmem_truncate_range_mode(struct inode *inode, loff_t lstart,
+				      loff_t lend, int mode)
+{
+	shmem_undo_range(inode, lstart, lend, false, mode);
+	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+	inode_inc_iversion(inode);
+}
+
 void shmem_truncate_range(struct inode *inode, loff_t lstart, loff_t lend)
 {
-	shmem_undo_range(inode, lstart, lend, false);
+	shmem_undo_range(inode, lstart, lend, false, 0);
 	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
 	inode_inc_iversion(inode);
 }
@@ -3315,7 +3380,7 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		if ((u64)unmap_end > (u64)unmap_start)
 			unmap_mapping_range(mapping, unmap_start,
 					    1 + unmap_end - unmap_start, 0);
-		shmem_truncate_range(inode, offset, offset + len - 1);
+		shmem_truncate_range_mode(inode, offset, offset + len - 1, mode);
 		/* No need to unmap again: hole-punching leaves COWed pages */
 
 		spin_lock(&inode->i_lock);
@@ -3381,9 +3446,10 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 			info->fallocend = undo_fallocend;
 			/* Remove the !uptodate folios we added */
 			if (index > start) {
-				shmem_undo_range(inode,
-				    (loff_t)start << PAGE_SHIFT,
-				    ((loff_t)index << PAGE_SHIFT) - 1, true);
+				shmem_undo_range(
+					inode, (loff_t)start << PAGE_SHIFT,
+					((loff_t)index << PAGE_SHIFT) - 1, true,
+					0);
 			}
 			goto undone;
 		}
