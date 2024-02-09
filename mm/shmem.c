@@ -836,6 +836,7 @@ next:
 			goto move_back;
 		}
 
+		shmem_set_range_uptodate(folio, 0, folio_size(folio));
 		ret = split_folio(folio);
 		folio_unlock(folio);
 		folio_put(folio);
