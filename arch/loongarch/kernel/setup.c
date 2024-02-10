@@ -597,8 +597,8 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 	reserve_initrd_mem();
 
-	platform_init();
 	arch_mem_init(cmdline_p);
+	platform_init();
 
 	resource_init();
 #ifdef CONFIG_SMP
