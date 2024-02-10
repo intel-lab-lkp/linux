@@ -28,6 +28,7 @@
 #include <asm/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
+#include <net/bluetooth/hci.h>
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/hci_sock.h>
 #include <net/bluetooth/l2cap.h>
@@ -67,6 +68,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_PIN_CODE_REPLY,
 	MGMT_OP_PIN_CODE_NEG_REPLY,
 	MGMT_OP_SET_IO_CAPABILITY,
+	MGMT_OP_GET_DEVICE_IO_CAPABILITY,
 	MGMT_OP_PAIR_DEVICE,
 	MGMT_OP_CANCEL_PAIR_DEVICE,
 	MGMT_OP_UNPAIR_DEVICE,
@@ -3362,6 +3364,92 @@ static int set_io_capability(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_SET_IO_CAPABILITY, 0,
 				 NULL, 0);
+}
+
+static int get_device_io_capability(struct sock *sk, struct hci_dev *hdev,
+				    void *data, u16 len)
+{
+	struct mgmt_cp_get_device_io_capability *cp = data;
+	struct mgmt_rp_get_device_io_capability rp;
+	struct hci_conn *conn;
+	int err = 0;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	memset(&rp, 0, sizeof(rp));
+	bacpy(&rp.addr.bdaddr, &cp->addr.bdaddr);
+	rp.addr.type = cp->addr.type;
+
+	if (!bdaddr_type_is_valid(cp->addr.type))
+		return mgmt_cmd_complete(sk, hdev->id,
+					 MGMT_OP_GET_DEVICE_IO_CAPABILITY,
+					 MGMT_STATUS_INVALID_PARAMS, &rp,
+					 sizeof(rp));
+	hci_dev_lock(hdev);
+
+	if (!hdev_is_powered(hdev)) {
+		err = mgmt_cmd_complete(sk, hdev->id,
+					MGMT_OP_GET_DEVICE_IO_CAPABILITY,
+					MGMT_STATUS_NOT_POWERED, &rp,
+					sizeof(rp));
+		goto unlock;
+	}
+
+	if (cp->addr.type == BDADDR_BREDR)
+		conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK,
+					       &cp->addr.bdaddr);
+	else
+		conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, &cp->addr.bdaddr);
+
+	if (!conn) {
+		err = mgmt_cmd_complete(sk, hdev->id,
+					MGMT_OP_GET_DEVICE_IO_CAPABILITY,
+					MGMT_STATUS_NOT_CONNECTED, &rp,
+					sizeof(rp));
+		goto unlock;
+	}
+
+	switch (conn->remote_cap) {
+	case HCI_IO_DISPLAY_ONLY:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_IO_DISPLAY_ONLY;
+		break;
+	case HCI_IO_DISPLAY_YESNO:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_IO_DISPLAY_YESNO;
+		break;
+	case HCI_IO_KEYBOARD_ONLY:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_IO_KEYBOARD_ONLY;
+		break;
+	case HCI_IO_NO_INPUT_OUTPUT:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_IO_NO_INPUT_OUTPUT;
+		break;
+	}
+
+	switch (conn->remote_auth) {
+	case HCI_AT_NO_BONDING_MITM:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_MITM;
+		fallthrough;
+	case HCI_AT_NO_BONDING:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_NO_BONDING;
+		break;
+	case HCI_AT_DEDICATED_BONDING_MITM:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_MITM;
+		fallthrough;
+	case HCI_AT_DEDICATED_BONDING:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_DEDICATED_BONDING;
+		break;
+	case HCI_AT_GENERAL_BONDING_MITM:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_MITM;
+		fallthrough;
+	case HCI_AT_GENERAL_BONDING:
+		rp.flags |= MGMT_DEVICE_IO_CAP_FLAG_AT_GENERAL_BONDING;
+		break;
+	}
+
+	err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_GET_DEVICE_IO_CAPABILITY,
+				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+unlock:
+	hci_dev_unlock(hdev);
+	return err;
 }
 
 static struct mgmt_pending_cmd *find_pairing(struct hci_conn *conn)
@@ -9278,6 +9366,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ pin_code_reply,          MGMT_PIN_CODE_REPLY_SIZE },
 	{ pin_code_neg_reply,      MGMT_PIN_CODE_NEG_REPLY_SIZE },
 	{ set_io_capability,       MGMT_SET_IO_CAPABILITY_SIZE },
+	{ get_device_io_capability,MGMT_GET_DEVICE_IO_CAPABILITY_SIZE },
 	{ pair_device,             MGMT_PAIR_DEVICE_SIZE },
 	{ cancel_pair_device,      MGMT_CANCEL_PAIR_DEVICE_SIZE },
 	{ unpair_device,           MGMT_UNPAIR_DEVICE_SIZE },

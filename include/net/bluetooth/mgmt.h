@@ -878,6 +878,25 @@ struct mgmt_cp_mesh_send_cancel {
 } __packed;
 #define MGMT_MESH_SEND_CANCEL_SIZE	1
 
+#define MGMT_OP_GET_DEVICE_IO_CAPABILITY         0x005B
+struct mgmt_cp_get_device_io_capability {
+	struct mgmt_addr_info addr;
+} __packed;
+#define MGMT_GET_DEVICE_IO_CAPABILITY_SIZE       MGMT_ADDR_INFO_SIZE
+struct mgmt_rp_get_device_io_capability {
+	struct mgmt_addr_info addr;
+	__u8 flags;
+} __packed;
+
+#define MGMT_DEVICE_IO_CAP_FLAG_IO_DISPLAY_ONLY       BIT(0)
+#define MGMT_DEVICE_IO_CAP_FLAG_IO_DISPLAY_YESNO      BIT(1)
+#define MGMT_DEVICE_IO_CAP_FLAG_IO_KEYBOARD_ONLY      BIT(2)
+#define MGMT_DEVICE_IO_CAP_FLAG_IO_NO_INPUT_OUTPUT    BIT(3)
+#define MGMT_DEVICE_IO_CAP_FLAG_AT_NO_BONDING         BIT(4)
+#define MGMT_DEVICE_IO_CAP_FLAG_AT_DEDICATED_BONDING  BIT(5)
+#define MGMT_DEVICE_IO_CAP_FLAG_AT_GENERAL_BONDING    BIT(6)
+#define MGMT_DEVICE_IO_CAP_FLAG_AT_MITM               BIT(7)
+
 #define MGMT_EV_CMD_COMPLETE		0x0001
 struct mgmt_ev_cmd_complete {
 	__le16	opcode;
