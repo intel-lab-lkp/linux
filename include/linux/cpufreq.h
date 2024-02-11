@@ -12,7 +12,7 @@
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/completion.h>
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/pm_opp.h>

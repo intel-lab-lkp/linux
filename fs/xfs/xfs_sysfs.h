@@ -7,6 +7,8 @@
 #ifndef __XFS_SYSFS_H__
 #define __XFS_SYSFS_H__
 
+#include <linux/kobject.h>
+
 extern const struct kobj_type xfs_mp_ktype;	/* xfs_mount */
 extern const struct kobj_type xfs_dbg_ktype;	/* debug */
 extern const struct kobj_type xfs_log_ktype;	/* xlog */

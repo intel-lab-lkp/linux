@@ -16,6 +16,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/bsg.h>
 #include <linux/sprintf.h>
+#include <linux/kobject.h>
 #include <linux/kref.h>
 
 #include <scsi/scsi.h>

@@ -10,6 +10,7 @@
 
 #include <linux/time.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>

@@ -4,6 +4,7 @@
 #include <linux/backing-dev.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/kobject.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/slab.h>

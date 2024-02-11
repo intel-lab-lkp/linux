@@ -13,6 +13,8 @@
 #include "spk_priv.h"
 #include "speakup_dtlk.h" /* local header file for LiteTalk values */
 
+#include <linux/kobject.h>
+
 #define DRV_VERSION "2.11"
 #define PROCSPEECH 0x0d
 

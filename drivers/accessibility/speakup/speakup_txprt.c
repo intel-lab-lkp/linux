@@ -12,6 +12,8 @@
 #include "spk_priv.h"
 #include "speakup.h"
 
+#include <linux/kobject.h>
+
 #define DRV_VERSION "2.11"
 #define SYNTH_CLEAR 0x18
 #define PROCSPEECH '\r' /* process speech char */
