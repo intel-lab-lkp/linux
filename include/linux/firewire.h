@@ -10,7 +10,6 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
-#include <linux/sysfs.h>
 #include <linux/timer.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>

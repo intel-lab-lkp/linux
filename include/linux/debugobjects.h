@@ -3,7 +3,6 @@
 #define _LINUX_DEBUGOBJECTS_H
 
 #include <linux/list.h>
-#include <linux/spinlock.h>
 
 enum debug_obj_state {
 	ODEBUG_STATE_NONE,

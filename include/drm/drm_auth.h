@@ -30,7 +30,6 @@
 
 #include <linux/idr.h>
 #include <linux/kref.h>
-#include <linux/wait.h>
 
 struct drm_file;
 

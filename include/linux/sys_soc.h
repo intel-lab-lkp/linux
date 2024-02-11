@@ -6,7 +6,8 @@
 #ifndef __SOC_BUS_H
 #define __SOC_BUS_H
 
-#include <linux/device.h>
+struct device;
+struct soc_device;
 
 struct soc_device_attribute {
 	const char *machine;

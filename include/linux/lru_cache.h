@@ -17,7 +17,6 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/bitops.h>
-#include <linux/string.h> /* for memset */
 #include <linux/seq_file.h>
 
 /*

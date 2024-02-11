@@ -6,7 +6,9 @@
 #ifndef _KOBJ_MAP_H_
 #define _KOBJ_MAP_H_
 
-#include <linux/mutex.h>
+#include <linux/types.h> // for dev_t
+
+struct mutex;
 
 typedef struct kobject *kobj_probe_t(dev_t, int *, void *);
 struct kobj_map;

@@ -3,7 +3,6 @@
 #define __SH_CLOCK_H
 
 #include <linux/list.h>
-#include <linux/seq_file.h>
 #include <linux/cpufreq.h>
 #include <linux/types.h>
 #include <linux/kref.h>

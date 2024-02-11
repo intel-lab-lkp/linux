@@ -95,7 +95,10 @@
 #include <linux/minmax.h>
 #include <linux/nodemask_types.h>
 #include <linux/numa.h>
+
+#if defined(CONFIG_NUMA) && (MAX_NUMNODES > 1)
 #include <linux/random.h>
+#endif
 
 extern nodemask_t _unused_nodemask_arg_;
 

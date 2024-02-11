@@ -10,7 +10,6 @@
 #ifndef __MFD_ALTERA_A10SR_H
 #define __MFD_ALTERA_A10SR_H
 
-#include <linux/completion.h>
 #include <linux/list.h>
 #include <linux/mfd/core.h>
 #include <linux/regmap.h>

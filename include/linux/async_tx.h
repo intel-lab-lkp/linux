@@ -5,7 +5,6 @@
 #ifndef _ASYNC_TX_H_
 #define _ASYNC_TX_H_
 #include <linux/dmaengine.h>
-#include <linux/spinlock.h>
 #include <linux/interrupt.h>
 
 /* on architectures without dma-mapping capabilities we need to ensure

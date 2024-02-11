@@ -3,11 +3,7 @@
 #ifndef _BPF_SK_STORAGE_H
 #define _BPF_SK_STORAGE_H
 
-#include <linux/rculist.h>
-#include <linux/list.h>
-#include <linux/hash.h>
 #include <linux/types.h>
-#include <linux/spinlock.h>
 #include <linux/bpf.h>
 #include <net/sock.h>
 #include <uapi/linux/sock_diag.h>

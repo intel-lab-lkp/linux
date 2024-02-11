@@ -10,7 +10,6 @@
 #ifndef __THERMAL_H__
 #define __THERMAL_H__
 
-#include <linux/of.h>
 #include <linux/idr.h>
 #include <linux/device.h>
 #include <linux/sysfs.h>

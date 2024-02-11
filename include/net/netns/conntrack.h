@@ -5,7 +5,6 @@
 #include <linux/list.h>
 #include <linux/list_nulls.h>
 #include <linux/atomic.h>
-#include <linux/workqueue.h>
 #include <linux/netfilter/nf_conntrack_tcp.h>
 #ifdef CONFIG_NF_CT_PROTO_DCCP
 #include <linux/netfilter/nf_conntrack_dccp.h>

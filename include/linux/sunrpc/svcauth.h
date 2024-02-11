@@ -16,7 +16,6 @@
 #include <linux/sunrpc/gss_api.h>
 #include <linux/hash.h>
 #include <linux/stringhash.h>
-#include <linux/cred.h>
 
 struct svc_cred {
 	kuid_t			cr_uid;

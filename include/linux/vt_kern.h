@@ -10,7 +10,6 @@
 #include <linux/vt.h>
 #include <linux/kd.h>
 #include <linux/tty.h>
-#include <linux/mutex.h>
 #include <linux/console_struct.h>
 #include <linux/mm.h>
 #include <linux/consolemap.h>
