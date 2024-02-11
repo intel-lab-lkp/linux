@@ -14,7 +14,6 @@
 #include <linux/rbtree_latch.h>
 #include <linux/numa.h>
 #include <linux/mm_types.h>
-#include <linux/wait.h>
 #include <linux/refcount.h>
 #include <linux/mutex.h>
 #include <linux/module.h>

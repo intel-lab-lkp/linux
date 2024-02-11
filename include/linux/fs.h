@@ -12,11 +12,9 @@
 #include <linux/list.h>
 #include <linux/list_lru.h>
 #include <linux/llist.h>
-#include <linux/radix-tree.h>
 #include <linux/xarray.h>
 #include <linux/rbtree.h>
 #include <linux/init.h>
-#include <linux/pid.h>
 #include <linux/bug.h>
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
@@ -26,7 +24,6 @@
 #include <linux/fcntl.h>
 #include <linux/rculist_bl.h>
 #include <linux/atomic.h>
-#include <linux/shrinker.h>
 #include <linux/migrate_mode.h>
 #include <linux/uidgid.h>
 #include <linux/lockdep.h>
@@ -40,7 +37,6 @@
 #include <linux/build_bug.h>
 #include <linux/stddef.h>
 #include <linux/mount.h>
-#include <linux/cred.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/slab.h>
 
@@ -75,6 +71,8 @@ struct fs_context;
 struct fs_parameter_spec;
 struct fileattr;
 struct iomap_ops;
+struct shrinker;
+struct shrink_control;
 
 extern void __init inode_init(void);
 extern void __init inode_init_early(void);

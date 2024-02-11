@@ -16,7 +16,6 @@
 
 #include <linux/cache.h>
 #include <linux/snmp.h>
-#include <linux/smp.h>
 
 /*
  * Mibs are stored in array of unsigned long.

@@ -10,7 +10,6 @@
 #define __LINUX_MFD_MAX8907_H
 
 #include <linux/mutex.h>
-#include <linux/pm.h>
 
 #define MAX8907_GEN_I2C_ADDR		(0x78 >> 1)
 #define MAX8907_ADC_I2C_ADDR		(0x8e >> 1)

@@ -6,7 +6,7 @@
 
 #ifndef _IIO_BUFFER_GENERIC_H_
 #define _IIO_BUFFER_GENERIC_H_
-#include <linux/sysfs.h>
+
 #include <linux/iio/iio.h>
 
 struct iio_buffer;

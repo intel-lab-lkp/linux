@@ -19,7 +19,6 @@
 #include <linux/init.h>
 #include <linux/jump_label.h>
 #include <linux/kconfig.h>
-#include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>

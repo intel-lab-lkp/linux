@@ -14,7 +14,6 @@
 
 #include <linux/types.h>
 #include <linux/videodev2.h>
-#include <linux/wait.h>
 
 struct v4l2_fh;
 struct v4l2_subdev;

@@ -5,7 +5,6 @@
 
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/mutex.h>
 
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
