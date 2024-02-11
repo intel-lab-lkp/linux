@@ -10,6 +10,7 @@
 
 #include <linux/can/skb.h>
 #include <linux/hrtimer.h>
+#include <linux/kref.h>
 
 #include "j1939-priv.h"
 

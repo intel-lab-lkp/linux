@@ -4,7 +4,7 @@
 
 #include <linux/bvec.h>
 #include <linux/crypto.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/mutex_types.h>
 #include <linux/net.h>
 #include <linux/uio.h>

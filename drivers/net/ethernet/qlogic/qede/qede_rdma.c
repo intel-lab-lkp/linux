@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/list.h>
+#include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/qed/qede_rdma.h>
 #include "qede.h"

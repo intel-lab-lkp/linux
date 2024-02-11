@@ -26,6 +26,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched/signal.h>
 #include <linux/kthread.h>
+#include <linux/kref.h>
 
 #include <media/dvb_ca_en50221.h>
 #include <media/dvb_ringbuffer.h>

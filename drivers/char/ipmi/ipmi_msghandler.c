@@ -38,6 +38,7 @@
 #include <linux/nospec.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
+#include <linux/kref.h>
 
 #define IPMI_DRIVER_VERSION "39.2"
 

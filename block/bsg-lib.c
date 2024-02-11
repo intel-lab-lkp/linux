@@ -9,6 +9,7 @@
 #include <linux/bsg.h>
 #include <linux/slab.h>
 #include <linux/blk-mq.h>
+#include <linux/kref.h>
 #include <linux/delay.h>
 #include <linux/scatterlist.h>
 #include <linux/bsg-lib.h>

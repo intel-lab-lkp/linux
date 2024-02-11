@@ -15,6 +15,8 @@
 #include "bnx2fc.h"
 #include <linux/completion.h>
 
+#include <linux/kref.h>
+
 #define RESERVE_FREE_LIST_INDEX num_possible_cpus()
 
 static int bnx2fc_split_bd(struct bnx2fc_cmd *io_req, u64 addr, int sg_len,

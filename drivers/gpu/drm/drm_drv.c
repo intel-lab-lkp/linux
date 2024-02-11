@@ -35,6 +35,7 @@
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/srcu.h>
+#include <linux/kref.h>
 
 #include <drm/drm_accel.h>
 #include <drm/drm_cache.h>

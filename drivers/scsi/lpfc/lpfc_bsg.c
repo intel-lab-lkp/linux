@@ -28,6 +28,7 @@
 #include <linux/list.h>
 #include <linux/bsg-lib.h>
 #include <linux/vmalloc.h>
+#include <linux/kref.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>

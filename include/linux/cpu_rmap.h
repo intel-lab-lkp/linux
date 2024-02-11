@@ -10,7 +10,7 @@
 #include <linux/cpumask.h>
 #include <linux/gfp_types.h>
 #include <linux/slab.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 /**
  * struct cpu_rmap - CPU affinity reverse-map

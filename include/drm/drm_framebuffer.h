@@ -26,6 +26,7 @@
 #include <linux/ctype.h>
 #include <linux/list.h>
 #include <linux/sched.h>
+#include <linux/kref.h>
 
 #include <drm/drm_fourcc.h>
 #include <drm/drm_mode_object.h>

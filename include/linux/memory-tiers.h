@@ -4,7 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/nodemask_types.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/mmzone.h>
 #include <linux/notifier.h>
 /*

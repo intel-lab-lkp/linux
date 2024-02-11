@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/io.h>
+#include <linux/kref.h>
 #include "nd-core.h"
 #include "nd.h"
 

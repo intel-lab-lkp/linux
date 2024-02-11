@@ -16,7 +16,7 @@
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 #include <linux/rwsem.h>
 #include <linux/workqueue_types.h>

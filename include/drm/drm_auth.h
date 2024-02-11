@@ -29,7 +29,7 @@
  */
 
 #include <linux/idr.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 
 struct drm_file;
 
