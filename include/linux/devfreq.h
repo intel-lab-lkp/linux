@@ -10,7 +10,7 @@
 #ifndef __LINUX_DEVFREQ_H__
 #define __LINUX_DEVFREQ_H__
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/notifier.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_qos.h>
