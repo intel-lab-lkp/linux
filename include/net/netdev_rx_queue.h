@@ -4,7 +4,7 @@
 
 #include <linux/kobject_types.h>
 #include <linux/netdevice.h>
-#include <linux/sysfs.h>
+#include <linux/sysfs_types.h>
 #include <net/xdp.h>
 
 /* This structure contains an instance of an RX queue. */

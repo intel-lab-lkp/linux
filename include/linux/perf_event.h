@@ -55,7 +55,7 @@ struct perf_guest_info_callbacks {
 #include <linux/static_key.h>
 #include <linux/jump_label_ratelimit.h>
 #include <linux/atomic.h>
-#include <linux/sysfs.h>
+#include <linux/sysfs_types.h>
 #include <linux/perf_regs.h>
 #include <linux/cgroup.h>
 #include <linux/refcount_types.h>
