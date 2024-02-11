@@ -15,6 +15,7 @@
 #include "xfs_icache.h"
 #include "xfs_qm.h"
 
+#include <linux/quota.h>
 
 static void
 xfs_qm_fill_state(
