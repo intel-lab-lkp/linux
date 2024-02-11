@@ -25,7 +25,7 @@
 #ifndef DRM_FIXED_H
 #define DRM_FIXED_H
 
-#include <linux/kernel.h>
+#include <linux/wordpart.h> // for lower_32_bits()
 #include <linux/math64.h>
 
 typedef union dfixed {

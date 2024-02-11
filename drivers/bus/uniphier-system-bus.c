@@ -6,7 +6,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/log2.h>
-#include <linux/kernel.h> // for upper_32_bits()
+#include <linux/wordpart.h> // for upper_32_bits()
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
