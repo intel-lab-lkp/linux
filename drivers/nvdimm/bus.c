@@ -20,6 +20,7 @@
 #include <linux/io.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
+#include <linux/kobject.h>
 #include "nd-core.h"
 #include "nd.h"
 #include "pfn.h"

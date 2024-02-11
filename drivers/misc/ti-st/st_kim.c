@@ -21,6 +21,7 @@
 #include <linux/sysfs.h>
 #include <linux/tty.h>
 #include <linux/completion.h>
+#include <linux/kobject.h>
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>

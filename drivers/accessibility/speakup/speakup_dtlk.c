@@ -13,6 +13,7 @@
 #include <linux/jiffies.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
+#include <linux/kobject.h>
 #include <linux/kthread.h>
 
 #include "spk_priv.h"

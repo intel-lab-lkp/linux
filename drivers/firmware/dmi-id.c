@@ -7,6 +7,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/init.h>
 #include <linux/dmi.h>
 #include <linux/device.h>

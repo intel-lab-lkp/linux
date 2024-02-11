@@ -19,6 +19,7 @@
 #include <linux/ipv6.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/un.h>
 #include <linux/uaccess.h>
 #include <linux/inet.h>

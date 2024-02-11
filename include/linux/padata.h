@@ -17,7 +17,7 @@
 #include <linux/workqueue_types.h>
 #include <linux/spinlock_types.h>
 #include <linux/list.h>
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 
 #define PADATA_CPU_SERIAL   0x01
 #define PADATA_CPU_PARALLEL 0x02

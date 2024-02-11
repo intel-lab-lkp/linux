@@ -11,6 +11,7 @@
 #include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/ipack.h>
+#include <linux/kobject.h>
 #include <linux/sprintf.h>
 
 #define to_ipack_dev(device) container_of(device, struct ipack_device, dev)

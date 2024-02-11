@@ -11,6 +11,7 @@
 #include <linux/backing-dev.h>
 #include <linux/blktrace_api.h>
 #include <linux/debugfs.h>
+#include <linux/kobject.h>
 #include <linux/sprintf.h>
 
 #include "blk.h"

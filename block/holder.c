@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/blkdev.h>
+#include <linux/kobject.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 

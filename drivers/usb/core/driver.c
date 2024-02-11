@@ -32,6 +32,7 @@
 #include <linux/usb.h>
 #include <linux/usb/quirks.h>
 #include <linux/usb/hcd.h>
+#include <linux/kobject.h>
 
 #include "usb.h"
 

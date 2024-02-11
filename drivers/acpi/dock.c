@@ -8,6 +8,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/init.h>

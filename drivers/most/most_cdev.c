@@ -13,6 +13,7 @@
 #include <linux/cdev.h>
 #include <linux/poll.h>
 #include <linux/kfifo.h>
+#include <linux/kobject.h>
 #include <linux/uaccess.h>
 #include <linux/idr.h>
 #include <linux/most.h>

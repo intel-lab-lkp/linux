@@ -10,6 +10,7 @@
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/idr.h>
+#include <linux/kobject.h>
 #include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/module.h>
 #include <linux/slab.h>

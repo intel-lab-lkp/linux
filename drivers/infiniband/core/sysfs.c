@@ -41,6 +41,7 @@
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
+#include <linux/kobject.h>
 
 #include <rdma/ib_mad.h>
 #include <rdma/ib_pma.h>

@@ -13,6 +13,7 @@
 #include <linux/blk-integrity.h>
 #include <linux/completion.h>
 #include <linux/kmemleak.h>
+#include <linux/kobject.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/slab.h>

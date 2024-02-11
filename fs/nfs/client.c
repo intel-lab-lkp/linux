@@ -12,6 +12,7 @@
 #include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
