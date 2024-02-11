@@ -3,7 +3,7 @@
 #define _FS_CEPH_OSD_CLIENT_H
 
 #include <linux/bitrev.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/kref_types.h>
 #include <linux/mempool.h>
 #include <linux/rbtree_types.h>

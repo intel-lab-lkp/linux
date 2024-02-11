@@ -8,7 +8,7 @@
 
 #include <linux/acpi.h>
 #include <linux/bits.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/kthread.h>

@@ -2,7 +2,7 @@
 #ifndef _LINUX_FIREWIRE_H
 #define _LINUX_FIREWIRE_H
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/kernel.h>

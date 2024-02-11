@@ -6,7 +6,7 @@
 #ifndef __QMI_HELPERS_H__
 #define __QMI_HELPERS_H__
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/idr.h>
 #include <linux/list.h>
 #include <linux/qrtr.h>

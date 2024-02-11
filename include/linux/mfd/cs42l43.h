@@ -9,7 +9,7 @@
 #ifndef CS42L43_CORE_EXT_H
 #define CS42L43_CORE_EXT_H
 
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/mutex_types.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>

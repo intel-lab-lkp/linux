@@ -11,7 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/mutex_types.h>
 #include <linux/interrupt.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/regmap.h>
 
 #include <linux/mfd/wm8350/audio.h>

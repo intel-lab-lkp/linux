@@ -11,7 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/ftrace.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/list.h>
 #include <linux/livepatch_sched.h>
 
