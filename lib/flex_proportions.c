@@ -36,6 +36,7 @@
 #include <linux/flex_proportions.h>
 #include <linux/log2.h>
 #include <linux/math64.h>
+#include <linux/percpu_counter.h>
 #include <linux/seqlock.h>
 
 int fprop_global_init(struct fprop_global *p, gfp_t gfp)
