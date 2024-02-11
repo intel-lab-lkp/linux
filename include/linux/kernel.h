@@ -32,14 +32,13 @@
 #include <linux/sprintf.h>
 #include <linux/static_call_types.h>
 #include <linux/instruction_pointer.h>
+#include <linux/ptr_util.h>
 #include <linux/wordpart.h>
 #include <asm/byteorder.h>
 
 #include <uapi/linux/kernel.h>
 
 #define STACK_MAGIC	0xdeadbeef
-
-#define PTR_IF(cond, ptr)	((cond) ? (ptr) : NULL)
 
 #define u64_to_user_ptr(x) (		\
 {					\
