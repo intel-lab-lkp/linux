@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/memblock.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/mm.h>
 
 /*

@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/kobject.h>
 #include <linux/init.h>
+#include <linux/sysfs.h>
 
 /*
  * Define kernel_headers_data and kernel_headers_data_end, within which the
