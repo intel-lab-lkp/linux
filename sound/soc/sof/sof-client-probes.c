@@ -12,6 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/stddef.h>
 

@@ -9,6 +9,7 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-vmalloc.h>
+#include <linux/sprintf.h>
 
 #include "vimc-common.h"
 #include "vimc-streamer.h"

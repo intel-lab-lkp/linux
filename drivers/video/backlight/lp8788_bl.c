@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* Register address */
 #define LP8788_BL_CONFIG		0x96

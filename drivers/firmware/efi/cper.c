@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/cper.h>
 #include <linux/dmi.h>

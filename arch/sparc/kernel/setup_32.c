@@ -7,6 +7,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>

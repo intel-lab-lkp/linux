@@ -11,9 +11,12 @@
  ******************************************************************************/
 
 #include <linux/string.h>
+#include <linux/kstrtox.h>
 #include <linux/parser.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/blkdev.h>
+#include <linux/bvec.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>

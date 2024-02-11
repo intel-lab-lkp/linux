@@ -34,6 +34,7 @@
 #include <linux/usb/hcd.h>	/* for usbcore internals */
 #include <linux/usb/quirks.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/notifier.h>
 #include <linux/security.h>
 #include <linux/user_namespace.h>

@@ -5,6 +5,8 @@
 
 #include "efa_com.h"
 #include "efa_regs_defs.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define ADMIN_CMD_TIMEOUT_US 30000000 /* usecs */
 

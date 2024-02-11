@@ -7,7 +7,9 @@
  * Author: Sebastian Andrzej Siewior <bigeasy at linutronix dot de>
  */
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/configfs.h>
@@ -20,6 +22,7 @@
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "tcm.h"
 #include "u_tcm.h"

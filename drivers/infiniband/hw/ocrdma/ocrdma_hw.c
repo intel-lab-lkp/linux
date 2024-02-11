@@ -42,9 +42,11 @@
 
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/log2.h>
 #include <linux/dma-mapping.h>
 #include <linux/if_ether.h>
+#include <linux/sprintf.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_user_verbs.h>

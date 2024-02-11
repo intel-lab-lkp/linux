@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/pci_ids.h>

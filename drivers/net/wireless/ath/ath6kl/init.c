@@ -23,6 +23,7 @@
 #include <linux/export.h>
 #include <linux/of.h>
 #include <linux/mmc/sdio_func.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "core.h"

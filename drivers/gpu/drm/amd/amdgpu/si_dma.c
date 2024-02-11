@@ -26,6 +26,8 @@
 #include "amdgpu_trace.h"
 #include "si.h"
 #include "sid.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 const u32 sdma_offsets[SDMA_MAX_INSTANCE] =
 {

@@ -19,6 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/gcd.h>
+#include <linux/sprintf.h>
 
 /* Each chip has different number of PLLs and outputs, for example:
  * The CECE925 has 2 PLLs which can be routed through dividers to 5 outputs.

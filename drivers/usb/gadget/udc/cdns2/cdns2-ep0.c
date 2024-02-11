@@ -9,6 +9,7 @@
 
 #include <linux/usb/composite.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "cdns2-gadget.h"
 #include "cdns2-trace.h"

@@ -8,6 +8,7 @@
 
 #include <linux/input.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/export.h>
 #include <sound/core.h>

@@ -2,6 +2,7 @@
 //
 // Copyright(c) 2020 Intel Corporation. All rights reserved.
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>

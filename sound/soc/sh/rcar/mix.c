@@ -31,6 +31,7 @@
  */
 
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define MIX_NAME_SIZE	16
 #define MIX_NAME "mix"

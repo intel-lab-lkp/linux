@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <scsi/sg.h>
 #include "aoe.h"
 

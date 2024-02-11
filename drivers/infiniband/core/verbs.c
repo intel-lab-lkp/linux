@@ -45,6 +45,7 @@
 #include <linux/in6.h>
 #include <net/addrconf.h>
 #include <linux/security.h>
+#include <linux/completion.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cache.h>

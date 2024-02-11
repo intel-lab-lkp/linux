@@ -18,6 +18,7 @@
 #include <linux/security.h>
 #include <linux/mnt_namespace.h>
 #include <linux/pid_namespace.h>
+#include <linux/sprintf.h>
 #include <linux/user_namespace.h>
 #include <net/net_namespace.h>
 #include <asm/sections.h>

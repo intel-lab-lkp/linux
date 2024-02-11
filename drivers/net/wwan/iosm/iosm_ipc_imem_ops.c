@@ -4,6 +4,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/completion.h>
 
 #include "iosm_ipc_chnl_cfg.h"
 #include "iosm_ipc_devlink.h"

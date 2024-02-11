@@ -22,6 +22,7 @@
 #include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/fs_parser.h>
+#include <linux/sprintf.h>
 #include <linux/statfs.h>
 #include <linux/sched.h>
 #include <linux/nsproxy.h>

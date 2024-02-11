@@ -7,11 +7,13 @@
 #include <linux/bitfield.h>
 #include <linux/completion.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/firmware/intel/stratix10-svc-client.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 

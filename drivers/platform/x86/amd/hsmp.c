@@ -13,12 +13,14 @@
 #include <asm/amd_nb.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/semaphore.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME		"amd_hsmp"
 #define DRIVER_VERSION		"2.2"

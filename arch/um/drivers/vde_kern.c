@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <net_kern.h>
 #include <net_user.h>

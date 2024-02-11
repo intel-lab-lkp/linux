@@ -15,12 +15,14 @@
 #include <linux/device.h>
 #include <linux/input.h>
 #include <linux/hid.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/hid-roccat.h>
 #include "hid-ids.h"
 #include "hid-roccat-common.h"
 #include "hid-roccat-kovaplus.h"
+#include <linux/sprintf.h>
 
 static uint profile_numbers[5] = {0, 1, 2, 3, 4};
 

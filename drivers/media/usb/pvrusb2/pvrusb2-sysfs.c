@@ -9,6 +9,7 @@
 #include "pvrusb2-sysfs.h"
 #include "pvrusb2-hdw.h"
 #include "pvrusb2-debug.h"
+#include <linux/sprintf.h>
 #ifdef CONFIG_VIDEO_PVRUSB2_DEBUGIFC
 #include "pvrusb2-debugifc.h"
 #endif /* CONFIG_VIDEO_PVRUSB2_DEBUGIFC */

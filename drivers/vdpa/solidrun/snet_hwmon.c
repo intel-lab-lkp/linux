@@ -8,6 +8,7 @@
  *
  */
 #include <linux/hwmon.h>
+#include <linux/sprintf.h>
 
 #include "snet_vdpa.h"
 

@@ -12,10 +12,12 @@
 
 #include <linux/cdev.h>
 #include <linux/compat.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/idr.h>
 #include <linux/iommu.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #ifdef CONFIG_HAVE_KVM
 #include <linux/kvm_host.h>
 #endif

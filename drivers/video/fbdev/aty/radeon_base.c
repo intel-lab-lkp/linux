@@ -53,6 +53,8 @@
 #define RADEON_VERSION	"0.2.0"
 
 #include "radeonfb.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/aperture.h>
 #include <linux/module.h>

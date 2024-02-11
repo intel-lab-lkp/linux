@@ -6,8 +6,10 @@
 
 #include <dt-bindings/dma/qcom-gpi.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/of_dma.h>
 #include <linux/platform_device.h>

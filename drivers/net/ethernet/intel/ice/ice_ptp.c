@@ -4,6 +4,8 @@
 #include "ice.h"
 #include "ice_lib.h"
 #include "ice_trace.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #define E810_OUT_PROP_DELAY_NS 1
 

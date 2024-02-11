@@ -7,6 +7,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/delay.h>

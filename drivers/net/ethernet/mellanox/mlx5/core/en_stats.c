@@ -36,6 +36,7 @@
 #include "en_accel/en_accel.h"
 #include "en/ptp.h"
 #include "en/port.h"
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_PAGE_POOL_STATS
 #include <net/page_pool/helpers.h>

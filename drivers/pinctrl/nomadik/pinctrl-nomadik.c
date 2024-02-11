@@ -25,6 +25,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 /* Since we request GPIOs from ourself */
 #include <linux/pinctrl/consumer.h>

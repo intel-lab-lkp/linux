@@ -10,6 +10,7 @@
 #include <drm/drm_mode.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <linux/sprintf.h>
 
 #include "mdp4_kms.h"
 #include "msm_gem.h"

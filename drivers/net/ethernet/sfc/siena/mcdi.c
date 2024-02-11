@@ -12,6 +12,8 @@
 #include "io.h"
 #include "farch_regs.h"
 #include "mcdi_pcol.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /**************************************************************************
  *

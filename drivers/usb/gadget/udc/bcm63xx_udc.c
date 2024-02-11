@@ -10,6 +10,7 @@
 #include <linux/bug.h>
 #include <linux/clk.h>
 #include <linux/compiler.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>

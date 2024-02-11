@@ -11,6 +11,7 @@
 #include "seq_system.h"
 #include "seq_ports.h"
 #include "seq_clientmgr.h"
+#include <linux/sprintf.h>
 
 /*
 

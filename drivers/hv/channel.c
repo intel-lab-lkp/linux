@@ -20,6 +20,7 @@
 #include <linux/set_memory.h>
 #include <asm/page.h>
 #include <asm/mshyperv.h>
+#include <linux/completion.h>
 
 #include "hyperv_vmbus.h"
 

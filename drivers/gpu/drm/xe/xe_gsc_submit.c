@@ -4,6 +4,7 @@
  */
 
 #include "xe_gsc_submit.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "abi/gsc_command_header_abi.h"
 #include "xe_bb.h"

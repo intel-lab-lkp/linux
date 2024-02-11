@@ -19,6 +19,7 @@
 #include <linux/pci_ids.h>
 #include <linux/jiffies.h>
 #include <asm/dma.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-dev.h>
 
 #include "tw5864.h"

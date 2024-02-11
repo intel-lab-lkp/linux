@@ -24,6 +24,7 @@
 #include "amdgpu_xcp.h"
 #include "gfxhub_v1_2.h"
 #include "gfxhub_v1_1.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "gc/gc_9_4_3_offset.h"
 #include "gc/gc_9_4_3_sh_mask.h"

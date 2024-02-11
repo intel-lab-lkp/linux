@@ -2,6 +2,7 @@
 #include <linux/compat.h>
 #include <linux/dma-mapping.h>
 #include <linux/iommu.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/poll.h>
 #include <linux/slab.h>

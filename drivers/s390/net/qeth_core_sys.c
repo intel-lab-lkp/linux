@@ -13,6 +13,7 @@
 #include <linux/list.h>
 #include <linux/rwsem.h>
 #include <asm/ebcdic.h>
+#include <linux/kstrtox.h>
 
 #include "qeth_core.h"
 

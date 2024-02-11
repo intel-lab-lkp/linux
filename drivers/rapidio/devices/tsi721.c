@@ -20,6 +20,7 @@
 #include <linux/interrupt.h>
 #include <linux/kfifo.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "tsi721.h"
 

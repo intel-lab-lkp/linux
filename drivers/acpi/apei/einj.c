@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/mm.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include "apei-internal.h"
 

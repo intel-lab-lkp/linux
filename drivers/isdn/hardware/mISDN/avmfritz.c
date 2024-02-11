@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <asm/unaligned.h>
 #include "ipac.h"
+#include <linux/sprintf.h>
 
 
 #define AVMFRITZ_REV	"2.3"

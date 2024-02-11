@@ -7,6 +7,8 @@
 
 #include <linux/string.h>
 #include <linux/sysfs.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "audio_manager.h"
 #include "audio_manager_private.h"

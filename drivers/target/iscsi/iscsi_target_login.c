@@ -9,7 +9,10 @@
  ******************************************************************************/
 
 #include <crypto/hash.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/kthread.h>
 #include <linux/sched/signal.h>

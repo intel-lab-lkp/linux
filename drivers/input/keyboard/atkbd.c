@@ -14,6 +14,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
@@ -21,6 +22,7 @@
 #include <linux/input.h>
 #include <linux/input/vivaldi-fmap.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/libps2.h>
 #include <linux/mutex.h>

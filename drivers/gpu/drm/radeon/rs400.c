@@ -28,6 +28,7 @@
 
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>

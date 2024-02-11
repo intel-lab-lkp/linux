@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_managed.h>
+#include <linux/sprintf.h>
 
 #include "lsdc_drv.h"
 #include "lsdc_output.h"

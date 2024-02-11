@@ -7,11 +7,13 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/hex.h>
 #include <linux/i2c.h>
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include "pmbus.h"
+#include <linux/sprintf.h>
 
 #define STORE_DEFAULT_ALL		0x11
 #define ERASE_BLACKBOX_DATA		0xD1

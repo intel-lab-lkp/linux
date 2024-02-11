@@ -9,6 +9,7 @@
 #include <linux/irqdomain.h>
 #include <linux/kvm_host.h>
 #include <linux/irqchip/arm-gic-v3.h>
+#include <linux/ratelimit.h>
 
 #include "vgic.h"
 

@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include "led.h"
+#include <linux/sprintf.h>
 
 void ieee80211_led_assoc(struct ieee80211_local *local, bool associated)
 {

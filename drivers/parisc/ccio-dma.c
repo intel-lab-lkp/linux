@@ -26,6 +26,7 @@
 #include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/pci.h>
 #include <linux/reboot.h>

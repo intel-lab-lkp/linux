@@ -17,6 +17,7 @@
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/linkmode.h>
 #include <linux/list.h>
@@ -25,6 +26,7 @@
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include "../leds.h"
 

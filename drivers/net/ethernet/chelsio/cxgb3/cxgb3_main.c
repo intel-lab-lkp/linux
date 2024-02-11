@@ -34,6 +34,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/netdevice.h>
@@ -41,6 +42,7 @@
 #include <linux/if_vlan.h>
 #include <linux/mdio.h>
 #include <linux/sockios.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/proc_fs.h>
 #include <linux/rtnetlink.h>

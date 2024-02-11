@@ -19,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <linux/prefetch.h>
 #include <linux/clk.h>
+#include <linux/sprintf.h>
 #include <linux/usb/gadget.h>
 #include <linux/of.h>
 #include <linux/regmap.h>

@@ -118,8 +118,10 @@
 #include <linux/mdio.h>
 #include <linux/clk.h>
 #include <linux/bitrev.h>
+#include <linux/completion.h>
 #include <linux/crc32.h>
 #include <linux/crc32poly.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "xgbe.h"
 #include "xgbe-common.h"

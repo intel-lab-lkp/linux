@@ -25,6 +25,7 @@
  */
 
 #include <drm/drm_gem_ttm_helper.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include "nouveau_drv.h"
 #include "nouveau_dma.h"

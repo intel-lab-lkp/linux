@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>

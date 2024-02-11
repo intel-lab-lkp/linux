@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/etherdevice.h>
 #include "rtllib.h"
+#include <linux/sprintf.h>
 
 static const char * const rtllib_modes[] = {
 	"a", "b", "g", "?", "N-24G"

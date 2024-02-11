@@ -156,6 +156,7 @@
 #include <linux/mISDNif.h>
 #include <linux/mISDNdsp.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "core.h"
 #include "dsp.h"

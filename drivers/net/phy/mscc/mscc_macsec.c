@@ -9,6 +9,7 @@
 
 #include <linux/phy.h>
 #include <dt-bindings/net/mscc-phy-vsc8531.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <crypto/aes.h>
 

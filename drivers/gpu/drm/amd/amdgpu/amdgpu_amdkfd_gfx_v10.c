@@ -32,6 +32,7 @@
 #include "v10_structs.h"
 #include "nv.h"
 #include "nvd.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/linux/kfd_ioctl.h>
 
 enum hqd_dequeue_request_type {

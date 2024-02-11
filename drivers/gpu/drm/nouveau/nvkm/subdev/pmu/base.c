@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs
  */
 #include "priv.h"
+#include <linux/completion.h>
 
 #include <core/firmware.h>
 #include <subdev/timer.h>

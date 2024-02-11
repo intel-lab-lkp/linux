@@ -22,6 +22,8 @@
  * Authors: Ben Skeggs
  */
 #include "priv.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <subdev/bios.h>
 #include <subdev/bios/boost.h>

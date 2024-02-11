@@ -5,6 +5,8 @@
 /* Copyright (c) 2020-2022, Alibaba Group. */
 
 #include "erdma.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void arm_cmdq_cq(struct erdma_cmdq *cmdq)
 {

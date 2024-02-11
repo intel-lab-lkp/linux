@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/of.h>
 

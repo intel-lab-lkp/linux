@@ -17,6 +17,8 @@
 #include <linux/relay.h>
 #include <linux/random.h>
 #include "ath9k.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static s8 fix_rssi_inv_only(u8 rssi_val)
 {

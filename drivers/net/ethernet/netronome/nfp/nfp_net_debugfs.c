@@ -3,6 +3,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 
 #include "nfp_net.h"
 #include "nfp_net_dp.h"

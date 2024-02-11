@@ -22,6 +22,7 @@
 #include <linux/crc32.h>
 #include <linux/crc32poly.h>
 #include <linux/dcbnl.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "dwc-xlgmac.h"
 #include "dwc-xlgmac-reg.h"

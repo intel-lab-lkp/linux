@@ -13,6 +13,7 @@
 #include <linux/posix-clock.h>
 #include <linux/pps_kernel.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>

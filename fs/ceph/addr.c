@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/ceph/ceph_debug.h>
+#include <linux/sprintf.h>
 
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
@@ -10,6 +11,7 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/signal.h>
+#include <linux/sprintf.h>
 #include <linux/iversion.h>
 #include <linux/ktime.h>
 #include <linux/netfs.h>

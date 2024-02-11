@@ -22,6 +22,7 @@
 #include <linux/rcupdate_wait.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/slab.h>

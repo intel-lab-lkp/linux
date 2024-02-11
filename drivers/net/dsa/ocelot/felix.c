@@ -21,6 +21,7 @@
 #include <linux/of_net.h>
 #include <linux/pci.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <net/pkt_sched.h>
 #include <net/dsa.h>
 #include "felix.h"

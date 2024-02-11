@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/keyctl.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/net_namespace.h>
 #include "internal.h"
 #include <keys/request_key_auth-type.h>

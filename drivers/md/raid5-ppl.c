@@ -5,7 +5,9 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/crc32c.h>
 #include <linux/async_tx.h>
@@ -13,6 +15,7 @@
 #include "md.h"
 #include "raid5.h"
 #include "raid5-log.h"
+#include <linux/sprintf.h>
 
 /*
  * PPL consists of a 4KB header (struct ppl_header) and at least 128KB for

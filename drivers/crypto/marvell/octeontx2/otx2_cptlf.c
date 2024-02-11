@@ -4,6 +4,7 @@
 #include "otx2_cpt_common.h"
 #include "otx2_cptlf.h"
 #include "rvu_reg.h"
+#include <linux/sprintf.h>
 
 #define CPT_TIMER_HOLD 0x03F
 #define CPT_COUNT_HOLD 32

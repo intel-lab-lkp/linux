@@ -13,7 +13,11 @@
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/device.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
+#include <linux/completion.h>
 
 #define REFRESH_INTERVAL	(2 * HZ)
 #define DRVNAME			"ibmpex"

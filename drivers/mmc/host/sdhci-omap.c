@@ -17,6 +17,7 @@
 #include <linux/pm_wakeirq.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/thermal.h>
 

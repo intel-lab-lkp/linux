@@ -25,6 +25,7 @@
 #include <linux/moduleparam.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/vmalloc.h>
 #include <linux/bitmap.h>

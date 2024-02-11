@@ -7,6 +7,7 @@
 
 #include <linux/firmware.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 
 #include <linux/mmc/sdio_ids.h>

@@ -6,12 +6,15 @@
 
 #include <linux/blkdev.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/cred.h>
 #include <linux/mount.h>
 #include <linux/vfs.h>
 #include <linux/quotaops.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/namei.h>
 #include <linux/exportfs.h>

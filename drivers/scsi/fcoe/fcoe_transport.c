@@ -13,6 +13,7 @@
 #include <linux/ethtool.h>
 #include <linux/errno.h>
 #include <linux/crc32.h>
+#include <linux/sprintf.h>
 #include <scsi/libfcoe.h>
 
 #include "libfcoe.h"

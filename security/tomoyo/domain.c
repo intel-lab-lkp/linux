@@ -9,6 +9,7 @@
 
 #include <linux/binfmts.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/rculist.h>
 
 /* Variables definitions.*/

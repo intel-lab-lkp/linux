@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct crypto_rfc3686_ctx {
 	struct crypto_skcipher *child;

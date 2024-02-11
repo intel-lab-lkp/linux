@@ -22,9 +22,12 @@
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
 #include <linux/device.h>
+#include <linux/file.h> // for fput()
 #include <linux/highmem.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/backing-dev.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/err.h>

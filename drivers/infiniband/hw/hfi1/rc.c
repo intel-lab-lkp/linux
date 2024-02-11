@@ -3,6 +3,7 @@
  * Copyright(c) 2015 - 2018 Intel Corporation.
  */
 
+#include <linux/hrtimer.h>
 #include <linux/io.h>
 #include <rdma/rdma_vt.h>
 #include <rdma/rdmavt_qp.h>

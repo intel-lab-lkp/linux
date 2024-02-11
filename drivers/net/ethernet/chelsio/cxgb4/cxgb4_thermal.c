@@ -6,6 +6,7 @@
  */
 
 #include "cxgb4.h"
+#include <linux/sprintf.h>
 
 #define CXGB4_NUM_TRIPS 1
 

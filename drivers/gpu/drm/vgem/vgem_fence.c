@@ -22,6 +22,7 @@
 
 #include <linux/dma-buf.h>
 #include <linux/dma-resv.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_file.h>
 

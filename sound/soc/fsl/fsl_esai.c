@@ -10,6 +10,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <sound/dmaengine_pcm.h>
 #include <sound/pcm_params.h>
 

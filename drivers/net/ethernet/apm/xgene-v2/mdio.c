@@ -8,6 +8,7 @@
  */
 
 #include "main.h"
+#include <linux/sprintf.h>
 
 static int xge_mdio_write(struct mii_bus *bus, int phy_id, int reg, u16 data)
 {

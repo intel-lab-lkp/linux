@@ -5,6 +5,7 @@
 
 #include "saa7134.h"
 #include "saa7134-reg.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/kernel.h>

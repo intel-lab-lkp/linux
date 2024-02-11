@@ -100,6 +100,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
@@ -107,6 +108,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-smbus.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/dmi.h>
 #include <linux/slab.h>

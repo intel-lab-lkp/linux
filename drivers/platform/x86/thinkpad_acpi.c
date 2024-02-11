@@ -47,6 +47,7 @@
 #include <linux/input.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/leds.h>
 #include <linux/list.h>
@@ -64,6 +65,7 @@
 #include <linux/sched/signal.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/string_helpers.h>
 #include <linux/sysfs.h>

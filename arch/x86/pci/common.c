@@ -11,6 +11,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/dmi.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 
 #include <asm/acpi.h>

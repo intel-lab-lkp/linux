@@ -18,6 +18,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #define MAG3110_STATUS 0x00
 #define MAG3110_OUT_X 0x01 /* MSB first */

@@ -8,6 +8,7 @@
  *
  */
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #include "snet_vdpa.h"
 

@@ -11,6 +11,7 @@
 
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/hda_register.h>
 #include <sound/hdaudio_ext.h>
 

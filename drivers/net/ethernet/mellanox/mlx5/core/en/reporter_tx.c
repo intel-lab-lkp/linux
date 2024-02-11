@@ -5,6 +5,7 @@
 #include "en/ptp.h"
 #include "en/devlink.h"
 #include "lib/tout.h"
+#include <linux/sprintf.h>
 
 /* Keep this string array consistent with the MLX5E_SQ_STATE_* enums in en.h */
 static const char * const sq_sw_state_type_name[] = {

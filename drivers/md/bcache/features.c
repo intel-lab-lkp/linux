@@ -9,6 +9,7 @@
 #include "bcache_ondisk.h"
 #include "bcache.h"
 #include "features.h"
+#include <linux/sprintf.h>
 
 struct feature {
 	int		compat;

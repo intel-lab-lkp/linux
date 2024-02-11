@@ -13,6 +13,7 @@
 
 #include <linux/tracepoint.h>
 #include <net/mac80211.h>
+#include <linux/sprintf.h>
 
 #include "bus.h"
 #include "hif_api_cmd.h"

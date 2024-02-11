@@ -24,6 +24,7 @@
 
 #include <linux/of_irq.h>
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define SRC_NAME "src"
 

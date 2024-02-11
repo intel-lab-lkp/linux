@@ -33,6 +33,8 @@
 #include "lib/eq.h"
 #include "fw_tracer.h"
 #include "fw_tracer_tracepoint.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 static int mlx5_query_mtrc_caps(struct mlx5_fw_tracer *tracer)
 {

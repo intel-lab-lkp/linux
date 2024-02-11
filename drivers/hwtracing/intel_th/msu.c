@@ -10,6 +10,8 @@
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/sizes.h>
 #include <linux/printk.h>

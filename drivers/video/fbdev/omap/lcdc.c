@@ -15,6 +15,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/vmalloc.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/gfp.h>
 
 #include <linux/soc/ti/omap1-io.h>

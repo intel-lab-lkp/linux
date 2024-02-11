@@ -8,6 +8,7 @@
 #include "intel_display_types.h"
 #include "intel_wm.h"
 #include "skl_watermark.h"
+#include <linux/sprintf.h>
 
 /**
  * intel_update_watermarks - update FIFO watermark values based on current modes

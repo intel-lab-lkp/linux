@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/font.h>
 #include <linux/mutex.h>

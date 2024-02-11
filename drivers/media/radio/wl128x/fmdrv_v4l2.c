@@ -16,6 +16,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include "fmdrv.h"
 #include "fmdrv_v4l2.h"

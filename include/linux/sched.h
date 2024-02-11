@@ -31,6 +31,7 @@
 #include <linux/refcount_types.h>
 #include <linux/resource.h>
 #include <linux/latencytop.h>
+#include <linux/log2.h>
 #include <linux/sched/prio.h>
 #include <linux/sched/types.h>
 #include <linux/signal_types.h>

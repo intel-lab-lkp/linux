@@ -4,6 +4,7 @@
 #include <linux/ethtool.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 
 #include "prestera_ethtool.h"
 #include "prestera.h"

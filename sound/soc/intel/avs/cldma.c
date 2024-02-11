@@ -5,11 +5,13 @@
 // Author: Cezary Rojewski <cezary.rojewski@intel.com>
 //
 
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pci.h>
 #include <sound/hda_register.h>
 #include <sound/hdaudio_ext.h>
 #include "cldma.h"
 #include "registers.h"
+#include <linux/completion.h>
 
 /* Stream Registers */
 #define AZX_CL_SD_BASE			0x80

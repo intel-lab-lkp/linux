@@ -6,6 +6,7 @@
 
 #include "qlcnic.h"
 #include "qlcnic_hw.h"
+#include <linux/sprintf.h>
 
 struct crb_addr_pair {
 	u32 addr;

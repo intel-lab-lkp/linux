@@ -87,6 +87,7 @@
 #include <linux/sched/wake_q.h>
 #include <linux/nospec.h>
 #include <linux/rhashtable.h>
+#include <linux/hrtimer.h>
 
 #include <linux/uaccess.h>
 #include "util.h"

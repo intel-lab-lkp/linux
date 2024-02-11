@@ -12,7 +12,9 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/ioctl.h>
 #include <linux/uaccess.h>
 #include <linux/list.h>

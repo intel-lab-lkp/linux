@@ -9,8 +9,10 @@
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>

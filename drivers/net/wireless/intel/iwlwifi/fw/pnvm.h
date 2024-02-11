@@ -7,6 +7,7 @@
 
 #include "iwl-drv.h"
 #include "fw/notif-wait.h"
+#include <linux/sprintf.h>
 
 #define MVM_UCODE_PNVM_TIMEOUT	(HZ / 4)
 

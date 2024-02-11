@@ -17,6 +17,7 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <generated/utsrelease.h>
+#include <linux/sprintf.h>
 
 enum test_power_id {
 	TEST_AC,

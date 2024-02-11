@@ -45,6 +45,7 @@
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/pci.h>
 

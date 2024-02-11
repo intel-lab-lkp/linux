@@ -5,6 +5,8 @@
  */
 
 #include "hisi_sas.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #define DRV_NAME "hisi_sas_v2_hw"
 
 /* global registers need init*/

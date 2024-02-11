@@ -8,6 +8,7 @@
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/mhi.h>

@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/math64.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>

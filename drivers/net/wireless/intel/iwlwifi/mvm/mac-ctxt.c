@@ -6,6 +6,7 @@
  */
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 #include "iwl-io.h"
 #include "iwl-prph.h"

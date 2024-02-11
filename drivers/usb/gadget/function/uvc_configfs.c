@@ -11,6 +11,9 @@
  */
 
 #include "uvc_configfs.h"
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/sort.h>
 #include <linux/usb/video.h>

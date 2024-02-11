@@ -6,6 +6,7 @@
 
 #include "msm_ringbuffer.h"
 #include "msm_gpu.h"
+#include <linux/sprintf.h>
 
 static uint num_hw_submissions = 8;
 MODULE_PARM_DESC(num_hw_submissions, "The max # of jobs to write into ringbuffer (default 8)");

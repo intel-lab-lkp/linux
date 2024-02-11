@@ -20,6 +20,7 @@
 
 #include <linux/init.h>
 #include <linux/extable.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>

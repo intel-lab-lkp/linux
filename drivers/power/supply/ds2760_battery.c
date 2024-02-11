@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/pm.h>
 #include <linux/slab.h>

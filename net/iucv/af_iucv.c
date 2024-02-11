@@ -16,6 +16,7 @@
 #include <linux/filter.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/limits.h>
 #include <linux/list.h>

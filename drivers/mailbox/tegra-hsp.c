@@ -11,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <soc/tegra/fuse.h>
 

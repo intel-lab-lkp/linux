@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <net/iucv/iucv.h>
 #include "smsgiucv.h"

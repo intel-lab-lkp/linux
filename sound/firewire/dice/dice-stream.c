@@ -7,6 +7,7 @@
  */
 
 #include "dice.h"
+#include <linux/completion.h>
 
 #define	READY_TIMEOUT_MS	200
 #define NOTIFICATION_TIMEOUT_MS	100

@@ -21,6 +21,7 @@
 #include <linux/sched/task.h>
 #include <linux/ctype.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/mount.h>

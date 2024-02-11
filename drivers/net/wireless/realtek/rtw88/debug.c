@@ -3,6 +3,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include "main.h"
 #include "coex.h"
@@ -13,6 +14,7 @@
 #include "reg.h"
 #include "ps.h"
 #include "regd.h"
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_RTW88_DEBUGFS
 

@@ -5,6 +5,7 @@
 
 #include <linux/firmware.h>
 #include <linux/mdio.h>
+#include <linux/sprintf.h>
 
 #include "cxgb4.h"
 #include "t4_regs.h"

@@ -18,8 +18,10 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/math64.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <linux/ctype.h>
 #include "ubifs.h"
 

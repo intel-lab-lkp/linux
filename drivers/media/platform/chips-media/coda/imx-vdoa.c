@@ -7,6 +7,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>

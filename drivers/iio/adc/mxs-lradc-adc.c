@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include <linux/iio/buffer.h>

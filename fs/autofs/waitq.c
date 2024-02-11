@@ -6,6 +6,7 @@
 
 #include <linux/sched/signal.h>
 #include "autofs_i.h"
+#include <linux/sprintf.h>
 
 /* We make this a static variable rather than a part of the superblock; it
  * is better if we don't reassign numbers easily even across filesystems

@@ -19,6 +19,7 @@
 #include <asm/vas.h>
 #include "vas.h"
 #include "copy-paste.h"
+#include <linux/sprintf.h>
 
 #define CREATE_TRACE_POINTS
 #include "vas-trace.h"

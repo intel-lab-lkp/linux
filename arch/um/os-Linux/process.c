@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/mman.h>

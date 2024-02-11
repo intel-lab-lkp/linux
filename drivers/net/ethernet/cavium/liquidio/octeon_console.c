@@ -29,6 +29,7 @@
 #include "octeon_device.h"
 #include "liquidio_image.h"
 #include "octeon_mem_ops.h"
+#include <linux/sprintf.h>
 
 static void octeon_remote_lock(void);
 static void octeon_remote_unlock(void);

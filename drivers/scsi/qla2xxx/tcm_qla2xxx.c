@@ -16,6 +16,7 @@
 
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/vmalloc.h>
 #include <linux/list.h>
@@ -25,6 +26,7 @@
 #include <linux/configfs.h>
 #include <linux/ctype.h>
 #include <asm/unaligned.h>
+#include <linux/kstrtox.h>
 #include <scsi/scsi_host.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>

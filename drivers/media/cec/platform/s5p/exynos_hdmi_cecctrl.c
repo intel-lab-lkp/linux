@@ -9,6 +9,7 @@
 
 #include <linux/io.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include "exynos_hdmi_cec.h"
 #include "regs-cec.h"

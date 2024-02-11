@@ -3,9 +3,11 @@
  * Functions related to generic timeout handling of requests.
  */
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/fault-inject.h>
+#include <linux/sprintf.h>
 
 #include "blk.h"
 #include "blk-mq.h"

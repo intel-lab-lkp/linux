@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 struct soc_info {
 	unsigned int num_pwms;

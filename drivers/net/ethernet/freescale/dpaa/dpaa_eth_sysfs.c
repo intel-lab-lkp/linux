@@ -9,6 +9,7 @@
 #include <linux/of_net.h>
 #include "dpaa_eth.h"
 #include "mac.h"
+#include <linux/sprintf.h>
 
 static ssize_t dpaa_eth_show_addr(struct device *dev,
 				  struct device_attribute *attr, char *buf)

@@ -38,6 +38,7 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/namei.h>
+#include <linux/sprintf.h>
 
 #include "qib.h"
 

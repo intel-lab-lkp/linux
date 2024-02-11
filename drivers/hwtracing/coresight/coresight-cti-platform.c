@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/arm/coresight-cti-dt.h>
 

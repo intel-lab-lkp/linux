@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/byteorder.h>
 

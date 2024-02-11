@@ -6,6 +6,7 @@
 // Copyright(c) 2022 Intel Corporation. All rights reserved.
 
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <sound/sof/ext_manifest4.h>
 #include <sound/sof/ipc4/header.h>
 #include <trace/events/sof.h>

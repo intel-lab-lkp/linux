@@ -19,6 +19,7 @@
 #include <linux/phy/phy.h>
 #include <linux/phy/tegra/xusb.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/usb/ch9.h>
 #include <linux/pm.h>
 #include <linux/pm_domain.h>

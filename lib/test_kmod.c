@@ -20,6 +20,7 @@
 #include <linux/printk.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
+#include <linux/completion.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/vmalloc.h>

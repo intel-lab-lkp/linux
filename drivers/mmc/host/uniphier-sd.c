@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mfd/syscon.h>
 #include <linux/mfd/tmio.h>
 #include <linux/mmc/host.h>

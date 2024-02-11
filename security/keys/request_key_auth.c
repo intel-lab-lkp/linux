@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include "internal.h"
 #include <keys/request_key_auth-type.h>

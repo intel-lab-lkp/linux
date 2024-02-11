@@ -6,6 +6,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <net/af_rxrpc.h>
 #include "ar-internal.h"

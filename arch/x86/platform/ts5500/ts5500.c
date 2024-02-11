@@ -22,6 +22,7 @@
 #include <linux/platform_data/max197.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* Product code register */
 #define TS5500_PRODUCT_CODE_ADDR	0x74

@@ -8,6 +8,7 @@
 #include <linux/bitops.h>
 #include <linux/bitfield.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>

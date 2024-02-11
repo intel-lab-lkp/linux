@@ -9,6 +9,7 @@
 #include <linux/clk.h>
 #include <asm/bootinfo.h>
 #include <asm/time.h>
+#include <linux/sprintf.h>
 
 #include <lantiq_soc.h>
 

@@ -26,6 +26,7 @@
 #include <linux/of_mdio.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/mdio-bitbang.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 
 /*

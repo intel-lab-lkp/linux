@@ -8,6 +8,8 @@
 #include <linux/pid.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
+#include <linux/kstrtox.h>
 
 #include "sysfs-common.h"
 

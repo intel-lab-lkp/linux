@@ -34,6 +34,8 @@
 #include "regs.h"
 #include "sge_defs.h"
 #include "firmware_exports.h"
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
 
 static void t3_port_intr_clear(struct adapter *adapter, int idx);
 

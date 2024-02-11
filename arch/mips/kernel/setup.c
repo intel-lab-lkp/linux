@@ -13,10 +13,12 @@
 #include <linux/init.h>
 #include <linux/cpu.h>
 #include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/ioport.h>
 #include <linux/export.h>
 #include <linux/memblock.h>
 #include <linux/initrd.h>
+#include <linux/random.h> // for add_bootloader_randomness()
 #include <linux/root_dev.h>
 #include <linux/highmem.h>
 #include <linux/console.h>

@@ -63,6 +63,7 @@
 #include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/backlight.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/rfkill.h>
 #include <linux/hwmon.h>
@@ -70,6 +71,7 @@
 #include <linux/power_supply.h>
 #include <linux/fb.h>
 #include <acpi/video.h>
+#include <linux/sprintf.h>
 
 /* ======= */
 /* Defines */

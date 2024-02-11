@@ -25,6 +25,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for get_options()
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/blkdev.h>
 #include <linux/delay.h>
@@ -33,6 +35,7 @@
 #include <linux/stat.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/jiffies.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>

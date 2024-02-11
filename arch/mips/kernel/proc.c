@@ -15,6 +15,7 @@
 #include <asm/mipsregs.h>
 #include <asm/processor.h>
 #include <asm/prom.h>
+#include <linux/sprintf.h>
 
 unsigned int vced_count, vcei_count;
 

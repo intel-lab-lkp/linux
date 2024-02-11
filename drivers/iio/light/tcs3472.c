@@ -17,6 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>

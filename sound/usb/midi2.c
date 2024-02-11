@@ -4,6 +4,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/slab.h>

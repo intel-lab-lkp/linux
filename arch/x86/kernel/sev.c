@@ -12,6 +12,7 @@
 #include <linux/sched/debug.h>	/* For show_regs() */
 #include <linux/percpu-defs.h>
 #include <linux/cc_platform.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/printk.h>
 #include <linux/mm_types.h>
 #include <linux/set_memory.h>

@@ -4,6 +4,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/sched/types.h>
 

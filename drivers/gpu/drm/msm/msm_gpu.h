@@ -11,6 +11,7 @@
 #include <linux/clk.h>
 #include <linux/devfreq.h>
 #include <linux/interconnect.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pm_opp.h>
 #include <linux/regulator/consumer.h>
 

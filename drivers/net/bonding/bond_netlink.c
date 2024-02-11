@@ -11,6 +11,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_link.h>
 #include <linux/if_ether.h>
+#include <linux/sprintf.h>
 #include <net/netlink.h>
 #include <net/rtnetlink.h>
 #include <net/bonding.h>

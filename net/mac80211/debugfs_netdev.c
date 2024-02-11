@@ -10,10 +10,12 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/notifier.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
 #include "ieee80211_i.h"

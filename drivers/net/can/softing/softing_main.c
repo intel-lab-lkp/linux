@@ -6,9 +6,11 @@
  */
 
 #include <linux/ethtool.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #include "softing.h"
 

@@ -3,6 +3,7 @@
 #ifndef _LINUX_BPFPTR_H
 #define _LINUX_BPFPTR_H
 
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/mm.h>
 #include <linux/sockptr.h>
 

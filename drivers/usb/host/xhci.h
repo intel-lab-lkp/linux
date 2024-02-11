@@ -15,6 +15,7 @@
 #include <linux/usb.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/usb/hcd.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 

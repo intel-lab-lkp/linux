@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/completion.h>
 
 #include <linux/completion.h>
 #include <linux/delay.h>

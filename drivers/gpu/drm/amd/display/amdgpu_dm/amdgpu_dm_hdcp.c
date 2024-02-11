@@ -30,6 +30,8 @@
 #include <drm/display/drm_hdcp_helper.h>
 #include "hdcp_psp.h"
 
+#include <linux/completion.h>
+
 /*
  * If the SRM version being loaded is less than or equal to the
  * currently loaded SRM, psp will return 0xFFFF as the version

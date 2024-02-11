@@ -19,8 +19,10 @@
 #include <linux/module.h>
 #include <linux/jiffies.h>
 #include <linux/drbd.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/types.h>
+#include <linux/completion.h>
 #include <net/sock.h>
 #include <linux/ctype.h>
 #include <linux/mutex.h>

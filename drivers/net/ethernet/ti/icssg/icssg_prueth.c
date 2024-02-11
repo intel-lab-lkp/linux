@@ -8,6 +8,7 @@
 
 #include <linux/bitops.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma/ti-cppi5.h>
@@ -27,6 +28,7 @@
 #include <linux/remoteproc/pruss.h>
 #include <linux/regmap.h>
 #include <linux/remoteproc.h>
+#include <linux/sprintf.h>
 
 #include "icssg_prueth.h"
 #include "icssg_mii_rt.h"

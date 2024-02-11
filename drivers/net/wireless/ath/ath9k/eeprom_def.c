@@ -17,6 +17,7 @@
 #include <asm/unaligned.h>
 #include "hw.h"
 #include "ar9002_phy.h"
+#include <linux/sprintf.h>
 
 static void ath9k_get_txgain_index(struct ath_hw *ah,
 		struct ath9k_channel *chan,

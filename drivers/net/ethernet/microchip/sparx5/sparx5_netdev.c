@@ -8,6 +8,7 @@
 #include "sparx5_main.h"
 #include "sparx5_port.h"
 #include "sparx5_tc.h"
+#include <linux/sprintf.h>
 
 /* The IFH bit position of the first VSTAX bit. This is because the
  * VSTAX bit positions in Data sheet is starting from zero.

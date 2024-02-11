@@ -15,6 +15,8 @@
  */
 
 #include "ath9k.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static void ath9k_tx99_stop(struct ath_softc *sc)
 {

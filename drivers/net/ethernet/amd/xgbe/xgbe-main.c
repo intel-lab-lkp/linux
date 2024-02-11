@@ -121,6 +121,7 @@
 #include <linux/etherdevice.h>
 #include <linux/io.h>
 #include <linux/notifier.h>
+#include <linux/completion.h>
 
 #include "xgbe.h"
 #include "xgbe-common.h"

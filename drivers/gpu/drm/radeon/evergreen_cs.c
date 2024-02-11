@@ -32,6 +32,7 @@
 #include "evergreend.h"
 #include "evergreen_reg_safe.h"
 #include "cayman_reg_safe.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define MAX(a, b)                   (((a) > (b)) ? (a) : (b))
 #define MIN(a, b)                   (((a) < (b)) ? (a) : (b))

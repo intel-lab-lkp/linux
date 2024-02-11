@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 
 /* Register map */
 /* rtc section */

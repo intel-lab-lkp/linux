@@ -18,6 +18,8 @@
 #include <linux/device.h>
 #include <linux/namei.h>
 #include <linux/fcntl.h>
+#include <linux/sizes.h> // for SZ_128M
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/writeback.h>
 #include "internal.h"

@@ -9,6 +9,7 @@
 #include <linux/serio.h>
 #include <linux/notifier.h>
 #include "rmi_driver.h"
+#include <linux/sprintf.h>
 
 #define RMI_F03_RX_DATA_OFB		0x01
 #define RMI_F03_OB_SIZE			2

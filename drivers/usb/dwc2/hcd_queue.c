@@ -17,7 +17,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
+#include <linux/hrtimer.h>
 
 #include <linux/usb/hcd.h>
 #include <linux/usb/ch11.h>

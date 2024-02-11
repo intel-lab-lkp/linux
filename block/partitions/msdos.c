@@ -27,6 +27,7 @@
  */
 #include <linux/msdos_fs.h>
 #include <linux/msdos_partition.h>
+#include <linux/sprintf.h>
 
 #include "check.h"
 #include "efi.h"

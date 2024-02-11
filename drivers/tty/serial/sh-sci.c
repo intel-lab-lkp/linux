@@ -29,6 +29,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/ktime.h>
 #include <linux/major.h>
 #include <linux/minmax.h>
@@ -43,11 +44,13 @@
 #include <linux/serial_sci.h>
 #include <linux/sh_dma.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sysrq.h>
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/hrtimer.h>
 
 #ifdef CONFIG_SUPERH
 #include <asm/sh_bios.h>

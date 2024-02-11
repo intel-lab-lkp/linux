@@ -7,6 +7,7 @@
 #include <linux/etherdevice.h>
 #include <linux/rtnetlink.h>
 #include <net/cfg80211.h>
+#include <linux/completion.h>
 
 #include <brcmu_wifi.h>
 #include <brcmu_utils.h>

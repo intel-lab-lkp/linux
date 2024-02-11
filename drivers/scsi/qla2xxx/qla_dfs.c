@@ -4,6 +4,8 @@
  * Copyright (c)  2003-2014 QLogic Corporation
  */
 #include "qla_def.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>

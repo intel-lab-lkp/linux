@@ -13,6 +13,7 @@
 #include <linux/aperture.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/init.h>

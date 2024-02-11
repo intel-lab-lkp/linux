@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-dev.h>
 #include <media/v4l2-fh.h>

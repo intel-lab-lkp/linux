@@ -27,6 +27,7 @@
 #include "radeon_trace.h"
 #include "si.h"
 #include "sid.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * si_dma_is_lockup - Check if the DMA engine is locked up

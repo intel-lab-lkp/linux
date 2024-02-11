@@ -14,6 +14,7 @@
 #include <linux/wait_bit.h>
 #include <linux/xarray.h>
 #include "internal.h"
+#include <linux/completion.h>
 
 static DEFINE_XARRAY(pgmap_array);
 

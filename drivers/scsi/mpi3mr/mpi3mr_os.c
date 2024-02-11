@@ -8,7 +8,9 @@
  */
 
 #include "mpi3mr.h"
+#include <linux/completion.h>
 #include <linux/idr.h>
+#include <linux/sprintf.h>
 
 /* global driver scop variables */
 LIST_HEAD(mrioc_list);

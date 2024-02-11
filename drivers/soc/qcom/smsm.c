@@ -13,6 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
+#include <linux/sprintf.h>
 
 /*
  * This driver implements the Qualcomm Shared Memory State Machine, a mechanism

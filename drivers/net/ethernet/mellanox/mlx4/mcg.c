@@ -33,6 +33,7 @@
 
 #include <linux/string.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 
 #include <linux/mlx4/cmd.h>
 #include <linux/mlx4/qp.h>

@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/sched.h>
 #include <linux/kthread.h>
@@ -24,6 +25,7 @@
 #include "hal.h"
 #include "errors.h"
 #include "sysfs.h"
+#include <linux/sprintf.h>
 
 #define DMA_CHANNELS (32 - 1)  /* channel 0 is a system channel */
 

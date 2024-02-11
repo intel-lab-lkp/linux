@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/kasan.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/memory.h>
 #include <linux/mm.h>
 #include <linux/static_key.h>

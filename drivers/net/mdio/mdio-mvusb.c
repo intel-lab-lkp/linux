@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #define USB_MARVELL_VID	0x1286

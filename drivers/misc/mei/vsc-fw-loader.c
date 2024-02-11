@@ -12,6 +12,7 @@
 #include <linux/firmware.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 

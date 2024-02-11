@@ -32,6 +32,7 @@
 #include <drm/drm_privacy_screen_consumer.h>
 #include <drm/drm_sysfs.h>
 #include <drm/drm_utils.h>
+#include <linux/sprintf.h>
 
 #include <linux/property.h>
 #include <linux/uaccess.h>

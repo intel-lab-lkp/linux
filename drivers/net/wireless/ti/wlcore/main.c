@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/completion.h>
 
 #include "wlcore.h"
 #include "debug.h"

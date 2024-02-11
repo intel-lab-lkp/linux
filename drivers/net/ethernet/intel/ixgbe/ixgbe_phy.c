@@ -5,6 +5,7 @@
 #include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #include "ixgbe.h"
 #include "ixgbe_phy.h"

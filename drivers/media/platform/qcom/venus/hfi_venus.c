@@ -11,6 +11,7 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include "core.h"
 #include "hfi_cmds.h"

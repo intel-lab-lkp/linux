@@ -5,6 +5,7 @@
  */
 
 #include "rxe.h"
+#include <linux/completion.h>
 
 #define RXE_POOL_TIMEOUT	(200)
 #define RXE_POOL_ALIGN		(16)

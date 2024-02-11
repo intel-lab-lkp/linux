@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb/input.h>
 
 MODULE_AUTHOR("Edouard TISSERANT <edouard.tisserant@wanadoo.fr>");

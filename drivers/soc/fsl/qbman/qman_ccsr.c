@@ -29,6 +29,7 @@
  */
 
 #include "qman_priv.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 u16 qman_ip_rev;
 EXPORT_SYMBOL(qman_ip_rev);

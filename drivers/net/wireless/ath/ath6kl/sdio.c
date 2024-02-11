@@ -29,6 +29,7 @@
 #include "debug.h"
 #include "cfg80211.h"
 #include "trace.h"
+#include <linux/completion.h>
 
 struct ath6kl_sdio {
 	struct sdio_func *func;

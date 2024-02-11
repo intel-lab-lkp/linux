@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/rmi.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/of.h>
 #include <asm/unaligned.h>

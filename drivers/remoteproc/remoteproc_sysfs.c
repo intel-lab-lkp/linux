@@ -5,6 +5,7 @@
 
 #include <linux/remoteproc.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "remoteproc_internal.h"
 

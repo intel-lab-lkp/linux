@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/mmzone.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

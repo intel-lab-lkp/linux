@@ -4,6 +4,7 @@
 
 #include <linux/pm_opp.h>
 #include "a5xx_gpu.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * The GPMU data block is a block of shared registers that can be used to

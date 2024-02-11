@@ -8,9 +8,11 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define RNG_CTRL		0x0
 #define  RNG_SOURCE			GENMASK(1, 0)

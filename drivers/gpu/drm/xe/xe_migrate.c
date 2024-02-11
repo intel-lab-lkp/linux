@@ -4,6 +4,7 @@
  */
 
 #include "xe_migrate.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/bitfield.h>
 #include <linux/sizes.h>

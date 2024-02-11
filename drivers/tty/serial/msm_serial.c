@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/console.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/serial_core.h>

@@ -13,6 +13,7 @@
 #include "bus.h"
 #include "cadence_master.h"
 #include "intel.h"
+#include <linux/sprintf.h>
 
 /*
  * debugfs

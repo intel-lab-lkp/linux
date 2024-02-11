@@ -6,6 +6,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include "zd_def.h"

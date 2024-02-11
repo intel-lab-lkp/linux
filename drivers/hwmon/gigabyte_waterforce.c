@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME	"gigabyte_waterforce"
 

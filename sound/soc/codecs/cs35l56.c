@@ -19,6 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/soundwire/sdw.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include <sound/pcm.h>

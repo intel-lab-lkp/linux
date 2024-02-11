@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/hrtimer.h>
 
 #include "mcp251xfd.h"
 

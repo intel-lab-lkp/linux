@@ -20,6 +20,7 @@
 #include "rsi_common.h"
 #include "rsi_ps.h"
 #include "rsi_hal.h"
+#include <linux/completion.h>
 
 static struct bootup_params boot_params_20 = {
 	.magic_number = cpu_to_le16(0x5aa5),

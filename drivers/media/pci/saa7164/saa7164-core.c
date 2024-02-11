@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 
 #include "saa7164.h"
 

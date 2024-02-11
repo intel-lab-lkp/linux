@@ -19,6 +19,7 @@
 #include <linux/debugfs.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
+#include <linux/sprintf.h>
 #include <linux/fs.h>
 
 #include "lock_events.h"

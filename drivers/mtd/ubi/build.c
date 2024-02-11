@@ -17,8 +17,10 @@
  */
 
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/stringify.h>
 #include <linux/namei.h>
 #include <linux/stat.h>

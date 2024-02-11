@@ -11,6 +11,7 @@
 #include <linux/debugfs.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-mem2mem.h>
 
 #include "visl-debugfs.h"

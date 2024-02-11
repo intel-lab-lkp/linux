@@ -22,6 +22,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include "amdgpu.h"
 #include "soc15_common.h"
@@ -31,6 +32,7 @@
 #include "gc/gc_11_0_0_default.h"
 #include "v11_structs.h"
 #include "mes_v11_api_def.h"
+#include <linux/sprintf.h>
 
 MODULE_FIRMWARE("amdgpu/gc_11_0_0_mes.bin");
 MODULE_FIRMWARE("amdgpu/gc_11_0_0_mes_2.bin");

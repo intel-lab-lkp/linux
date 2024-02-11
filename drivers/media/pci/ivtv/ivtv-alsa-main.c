@@ -12,6 +12,7 @@
 #include "ivtv-version.h"
 #include "ivtv-alsa.h"
 #include "ivtv-alsa-pcm.h"
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>

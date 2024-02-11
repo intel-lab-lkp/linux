@@ -25,10 +25,12 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/gpio/driver.h>
+#include <linux/sprintf.h>
 
 #include <linux/input/touchscreen.h>
 #include <linux/module.h>

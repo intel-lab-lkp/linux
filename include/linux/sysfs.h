@@ -14,6 +14,7 @@
 #define _SYSFS_H_
 
 #include <linux/kernfs.h>
+#include <linux/kernel.h> // for VERIFY_OCTAL_PERMISSIONS()
 #include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/list.h>

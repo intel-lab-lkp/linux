@@ -13,6 +13,8 @@
 #include <linux/module.h>
 #include <linux/rculist.h>
 #include <linux/random.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "rtrs-clt.h"
 #include "rtrs-log.h"

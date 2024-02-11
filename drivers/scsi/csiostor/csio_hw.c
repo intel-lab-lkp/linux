@@ -35,6 +35,7 @@
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/delay.h>
 #include <linux/string.h>

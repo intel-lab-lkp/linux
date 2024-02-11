@@ -23,6 +23,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/hashtable.h>
 #include <linux/wait.h>
 #include <rdma/ib_verbs.h>

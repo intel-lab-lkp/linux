@@ -18,6 +18,7 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/smp.h>
 #include <linux/cpu.h>

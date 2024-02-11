@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 /* Register offsets */
 #define HISI_SPI_CSCR		0x00	/* cs control register */

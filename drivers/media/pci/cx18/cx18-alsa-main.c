@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-device.h>
 

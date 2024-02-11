@@ -13,6 +13,8 @@
 #include "debug.h"
 #include "trace.h"
 #include "mac.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/log2.h>
 #include <linux/bitfield.h>

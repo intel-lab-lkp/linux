@@ -14,6 +14,7 @@
 #include <asm/insn.h>
 #include <asm/insn-eval.h>
 #include <asm/pgtable.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /* MMIO direction */
 #define EPT_READ	0

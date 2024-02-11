@@ -4,6 +4,7 @@
 #include "compress.h"
 #include "extents.h"
 #include "super-io.h"
+#include <linux/kstrtox.h>
 
 #include <linux/lz4.h>
 #include <linux/zlib.h>

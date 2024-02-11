@@ -34,13 +34,17 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/ctype.h>
+#include <linux/hex.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/inet.h>
 #include <rdma/ib_cache.h>
 #include <scsi/scsi_proto.h>

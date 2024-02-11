@@ -2,6 +2,7 @@
 /* Copyright(c) 2023 Advanced Micro Devices, Inc. */
 
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 

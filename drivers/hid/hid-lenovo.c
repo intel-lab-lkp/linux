@@ -25,10 +25,12 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>
 #include <linux/hid.h>
 #include <linux/input.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/workqueue.h>
 

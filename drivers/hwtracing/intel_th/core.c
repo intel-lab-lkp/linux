@@ -10,6 +10,8 @@
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/kdev_t.h>
 #include <linux/debugfs.h>

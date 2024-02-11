@@ -2,6 +2,7 @@
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
 
 #include <drm/panfrost_drm.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/atomic.h>
 #include <linux/bitfield.h>

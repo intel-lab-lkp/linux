@@ -10,6 +10,8 @@
 #include "dp_rx.h"
 #include "debug.h"
 #include "debugfs_htt_stats.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define HTT_MAX_PRINT_CHAR_PER_ELEM 15
 

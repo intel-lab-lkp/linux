@@ -29,6 +29,7 @@
 #include <linux/spinlock.h>
 #include <linux/reset.h>
 #include <linux/math64.h>
+#include <linux/sprintf.h>
 
 #include "ravb.h"
 

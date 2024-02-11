@@ -22,6 +22,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "hardware.h"
 #include "setup_protocol.h"

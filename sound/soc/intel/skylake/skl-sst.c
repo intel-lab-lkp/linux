@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include "../common/sst-dsp.h"
 #include "../common/sst-dsp-priv.h"

@@ -38,6 +38,7 @@
 #include "soc15d.h"
 #include "gfx_v9_0.h"
 #include "amdgpu_amdkfd_gfx_v9.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/linux/kfd_ioctl.h>
 
 enum hqd_dequeue_request_type {

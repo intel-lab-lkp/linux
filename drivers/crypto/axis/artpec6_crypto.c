@@ -7,6 +7,7 @@
 #define pr_fmt(fmt)     KBUILD_MODNAME ": " fmt
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/crypto.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>

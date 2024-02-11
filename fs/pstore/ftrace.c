@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/moduleparam.h>
 #include <linux/compiler.h>
 #include <linux/irqflags.h>
 #include <linux/percpu.h>

@@ -29,6 +29,7 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>

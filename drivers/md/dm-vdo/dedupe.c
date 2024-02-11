@@ -125,6 +125,7 @@
 #include <linux/ratelimit.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
+#include <linux/sysfs.h>
 
 #include "logger.h"
 #include "memory-alloc.h"

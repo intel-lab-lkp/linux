@@ -5,6 +5,7 @@
  */
 
 #include "hisi_sas.h"
+#include <linux/completion.h>
 #define DRV_NAME "hisi_sas"
 
 #define DEV_IS_GONE(dev) \

@@ -20,6 +20,7 @@
 #include "registers.h"
 #include "idxd.h"
 #include "perfmon.h"
+#include <linux/completion.h>
 
 MODULE_VERSION(IDXD_DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");

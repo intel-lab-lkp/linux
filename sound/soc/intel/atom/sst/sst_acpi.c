@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>

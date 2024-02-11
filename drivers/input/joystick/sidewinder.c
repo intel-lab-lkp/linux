@@ -14,6 +14,7 @@
 #include <linux/input.h>
 #include <linux/gameport.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Microsoft SideWinder joystick family driver"
 

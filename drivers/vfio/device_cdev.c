@@ -4,6 +4,7 @@
  */
 #include <linux/vfio.h>
 #include <linux/iommufd.h>
+#include <linux/sprintf.h>
 
 #include "vfio.h"
 

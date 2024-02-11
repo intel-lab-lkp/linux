@@ -17,6 +17,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
 #include <linux/delay.h>
+#include <linux/completion.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>

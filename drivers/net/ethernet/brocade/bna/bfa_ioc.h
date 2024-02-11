@@ -15,6 +15,7 @@
 #include "bfa_cs.h"
 #include "bfi.h"
 #include "cna.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define BFA_IOC_TOV		3000	/* msecs */
 #define BFA_IOC_HWSEM_TOV	500	/* msecs */

@@ -15,9 +15,11 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/export.h>
 #include <asm/unaligned.h>
+#include <linux/kstrtox.h>
 
 #include "ath9k.h"
 

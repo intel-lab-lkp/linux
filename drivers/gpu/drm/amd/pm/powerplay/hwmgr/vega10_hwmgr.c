@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "hwmgr.h"
 #include "amd_powerplay.h"

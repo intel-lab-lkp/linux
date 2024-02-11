@@ -5,6 +5,7 @@
  */
 
 #include <linux/etherdevice.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>

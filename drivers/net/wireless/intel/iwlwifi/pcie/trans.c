@@ -7,9 +7,11 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/bitops.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/wait.h>

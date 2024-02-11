@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * This module provides an interface to trigger and test firmware loading.
- *
+s *
  * It is designed to be used for basic evaluation of the firmware loading
  * subsystem (for example when validating firmware verification). It lacks
  * any extra dependencies, and will not normally be loaded by the system
@@ -20,6 +20,7 @@
 #include <linux/miscdevice.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/kstrtox.h>

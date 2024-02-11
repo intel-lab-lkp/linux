@@ -16,9 +16,11 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/iio-opaque.h>

@@ -24,6 +24,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>

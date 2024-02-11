@@ -14,6 +14,7 @@
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/init.h>
 #include <linux/fs.h>
@@ -24,6 +25,7 @@
 #include <linux/unistd.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
+#include <linux/sysfs.h>
 #include <linux/configfs.h>
 
 #include <target/target_core_base.h>

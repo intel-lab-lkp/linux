@@ -33,6 +33,7 @@
 
 #include <linux/mlx4/device.h>
 #include <linux/clocksource.h>
+#include <linux/sprintf.h>
 
 #include "mlx4_en.h"
 

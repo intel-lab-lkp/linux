@@ -7,6 +7,7 @@
 #include <rdma/uverbs_std_types.h>
 #include "rdma_core.h"
 #include "uverbs.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <rdma/uverbs_ioctl.h>
 #include <rdma/opa_addr.h>
 #include <rdma/ib_cache.h>

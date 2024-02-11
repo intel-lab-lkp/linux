@@ -4,6 +4,7 @@
  */
 
 #include <linux/mutex.h>
+#include <linux/sysfs.h>
 
 #include "logger.h"
 #include "string-utils.h"

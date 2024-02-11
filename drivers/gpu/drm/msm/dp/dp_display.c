@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
+#include <linux/completion.h>
 #include <linux/component.h>
 #include <linux/of_irq.h>
 #include <linux/delay.h>

@@ -9,7 +9,10 @@
 #include <keys/asymmetric-subtype.h>
 #include <keys/asymmetric-parser.h>
 #include <crypto/public_key.h>
+#include <linux/hex.h>
 #include <linux/seq_file.h>
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>

@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct ti_syscon_gate_clk_priv {
 	struct clk_hw hw;

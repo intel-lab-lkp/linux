@@ -15,6 +15,7 @@
 #include "global2.h"
 #include "hwtstamp.h"
 #include "ptp.h"
+#include <linux/sprintf.h>
 
 #define MV88E6XXX_MAX_ADJ_PPB	1000000
 

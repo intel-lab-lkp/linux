@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/compat.h>
 

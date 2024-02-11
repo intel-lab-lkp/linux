@@ -4,6 +4,7 @@
 #include <linux/cpu.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>
 

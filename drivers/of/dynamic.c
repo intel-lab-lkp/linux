@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/proc_fs.h>
 

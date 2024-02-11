@@ -31,6 +31,7 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

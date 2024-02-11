@@ -55,6 +55,7 @@
 #include <linux/gfp.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>

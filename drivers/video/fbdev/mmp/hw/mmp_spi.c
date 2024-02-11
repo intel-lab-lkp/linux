@@ -14,6 +14,7 @@
 #include <linux/io.h>
 #include <linux/spi/spi.h>
 #include "mmp_ctrl.h"
+#include <linux/completion.h>
 
 /**
  * spi_write - write command to the SPI port

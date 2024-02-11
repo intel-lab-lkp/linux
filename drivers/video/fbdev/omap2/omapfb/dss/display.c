@@ -16,6 +16,7 @@
 #include <linux/jiffies.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <video/omapfb_dss.h>
 #include "dss.h"

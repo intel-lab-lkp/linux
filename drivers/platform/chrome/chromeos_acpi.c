@@ -11,6 +11,7 @@
  * sysfs directory tree.
  */
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/kernel.h>
 #include <linux/list.h>

@@ -46,6 +46,7 @@
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/module.h>
 #include <linux/uio.h>

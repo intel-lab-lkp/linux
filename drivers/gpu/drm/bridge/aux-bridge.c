@@ -7,6 +7,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/slab.h>
 
 #include <drm/drm_bridge.h>
 #include <drm/bridge/aux-bridge.h>

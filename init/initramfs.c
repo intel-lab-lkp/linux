@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/dirent.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/utime.h>
 #include <linux/file.h>

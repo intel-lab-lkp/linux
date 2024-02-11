@@ -44,6 +44,10 @@
 #include "link_service_types.h"
 #include "link/protocols/link_dp_capability.h"
 #include "link/protocols/link_ddc.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "vid.h"
 #include "amdgpu.h"

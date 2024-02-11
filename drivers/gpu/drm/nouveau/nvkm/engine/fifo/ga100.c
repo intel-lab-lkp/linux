@@ -25,6 +25,7 @@
 #include "chid.h"
 #include "runl.h"
 #include "runq.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/gpuobj.h>
 #include <subdev/gsp.h>
@@ -32,6 +33,8 @@
 #include <subdev/vfn.h>
 
 #include <nvif/class.h>
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static u32
 ga100_chan_doorbell_handle(struct nvkm_chan *chan)

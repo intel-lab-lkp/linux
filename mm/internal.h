@@ -7,10 +7,12 @@
 #ifndef __MM_INTERNAL_H
 #define __MM_INTERNAL_H
 
+#include <linux/atomic.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
+#include <linux/sprintf.h>
 #include <linux/tracepoint-defs.h>
 
 struct folio_batch;
@@ -1238,6 +1240,8 @@ unsigned long shrink_slab(gfp_t gfp_mask, int nid, struct mem_cgroup *memcg,
 			  int priority);
 
 #ifdef CONFIG_SHRINKER_DEBUG
+#include <linux/shrinker.h>
+
 static inline __printf(2, 0) int shrinker_debugfs_name_alloc(
 			struct shrinker *shrinker, const char *fmt, va_list ap)
 {

@@ -6,9 +6,11 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/interrupt.h>
 #include "netxen_nic_hw.h"
+#include <linux/kstrtox.h>
 
 #include "netxen_nic.h"
 

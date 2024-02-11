@@ -3,6 +3,7 @@
 #define _I8042_ACPIPNPIO_H
 
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_X86
 #include <asm/x86_init.h>

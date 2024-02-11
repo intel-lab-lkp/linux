@@ -13,6 +13,8 @@
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
 #include <linux/bcm47xx_nvram.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/phy.h>
 #include <linux/phy_fixed.h>
 #include <net/dsa.h>

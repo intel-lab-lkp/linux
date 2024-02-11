@@ -13,6 +13,7 @@
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>

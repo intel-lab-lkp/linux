@@ -5,6 +5,7 @@
  */
 #include <linux/slab.h>
 #include <linux/iommu.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/xarray.h>
 #include <linux/file.h>
 #include <linux/anon_inodes.h>

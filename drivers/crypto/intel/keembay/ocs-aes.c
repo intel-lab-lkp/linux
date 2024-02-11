@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/swab.h>
+#include <linux/completion.h>
 
 #include <asm/byteorder.h>
 #include <asm/errno.h>

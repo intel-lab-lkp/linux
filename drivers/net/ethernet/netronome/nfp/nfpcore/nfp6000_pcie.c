@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/sort.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 

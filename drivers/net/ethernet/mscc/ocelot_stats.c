@@ -7,6 +7,7 @@
 #include <linux/ethtool_netlink.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include "ocelot.h"
 

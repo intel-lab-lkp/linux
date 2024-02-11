@@ -27,6 +27,7 @@
 
 #include "vmwgfx_bo.h"
 #include "vmwgfx_drv.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <drm/ttm/ttm_bo.h>
 

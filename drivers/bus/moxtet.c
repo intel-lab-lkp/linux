@@ -8,6 +8,7 @@
 #include <dt-bindings/bus/moxtet.h>
 #include <linux/bitops.h>
 #include <linux/debugfs.h>
+#include <linux/hex.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/moxtet.h>
@@ -15,6 +16,7 @@
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 /*
  * @name:	module name for sysfs

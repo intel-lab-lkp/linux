@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <linux/mii.h>
+#include <linux/sprintf.h>
 
 #include "chip.h"
 #include "global2.h"

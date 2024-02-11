@@ -9,6 +9,7 @@
  */
 
 #include <linux/exportfs.h>
+#include <linux/sprintf.h>
 
 #include <linux/sunrpc/svcauth_gss.h>
 #include "nfsd.h"

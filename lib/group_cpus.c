@@ -8,6 +8,7 @@
 #include <linux/cpu.h>
 #include <linux/sort.h>
 #include <linux/group_cpus.h>
+#include <linux/topology.h> // for cpu_to_node()
 
 #ifdef CONFIG_SMP
 

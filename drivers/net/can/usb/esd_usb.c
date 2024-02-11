@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <linux/signal.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 #include <linux/usb.h>
 

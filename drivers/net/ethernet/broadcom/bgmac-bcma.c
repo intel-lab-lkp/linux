@@ -14,6 +14,7 @@
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include "bgmac.h"
+#include <linux/sprintf.h>
 
 static inline bool bgmac_is_bcm4707_family(struct bcma_device *core)
 {

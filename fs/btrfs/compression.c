@@ -7,6 +7,7 @@
 #include <linux/bio.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/pagevec.h>
 #include <linux/highmem.h>

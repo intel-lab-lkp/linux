@@ -34,6 +34,7 @@
 #include <linux/genalloc.h>
 #include <linux/ratelimit.h>
 #include "iw_cxgb4.h"
+#include <linux/completion.h>
 
 static int c4iw_init_qid_table(struct c4iw_rdev *rdev)
 {

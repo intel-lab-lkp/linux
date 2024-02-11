@@ -26,6 +26,7 @@
 #include <linux/pci_ids.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>

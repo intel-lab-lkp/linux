@@ -17,6 +17,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "msi-ec.h"
+#include <linux/kstrtox.h>
 
 #include <acpi/battery.h>
 #include <linux/acpi.h>

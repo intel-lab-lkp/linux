@@ -6,6 +6,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/kmod.h>

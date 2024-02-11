@@ -5,6 +5,7 @@
  */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/virtio_config.h>
 #include <sound/initval.h>
 #include <uapi/linux/virtio_ids.h>

@@ -14,6 +14,7 @@
 #include <linux/mii.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include "net_driver.h"
 #include "bitfield.h"

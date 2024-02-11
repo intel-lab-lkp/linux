@@ -23,6 +23,7 @@
 #include <linux/key-type.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 #include "fscrypt_private.h"
 

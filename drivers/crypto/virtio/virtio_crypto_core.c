@@ -6,8 +6,10 @@
 
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/virtio_config.h>
 #include <linux/cpu.h>
+#include <linux/completion.h>
 
 #include <uapi/linux/virtio_crypto.h>
 #include "virtio_crypto_common.h"

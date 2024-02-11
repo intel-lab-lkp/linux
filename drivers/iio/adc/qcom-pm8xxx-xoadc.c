@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
+#include <linux/completion.h>
 
 /*
  * Definitions for the "user processor" registers lifted from the v3.4

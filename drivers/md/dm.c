@@ -10,8 +10,11 @@
 #include "dm-rq.h"
 #include "dm-uevent.h"
 #include "dm-ima.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
+#include <linux/file.h> // for fput()
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/sched/mm.h>

@@ -21,6 +21,8 @@
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/i2c.h>
 #include <linux/regulator/consumer.h>

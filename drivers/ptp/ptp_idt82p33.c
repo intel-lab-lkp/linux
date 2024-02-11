@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/timekeeping.h>
 #include <linux/bitops.h>
 #include <linux/of.h>

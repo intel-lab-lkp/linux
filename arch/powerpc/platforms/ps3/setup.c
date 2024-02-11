@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/memblock.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <asm/machdep.h>
 #include <asm/firmware.h>

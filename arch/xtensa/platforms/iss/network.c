@@ -15,6 +15,7 @@
 
 #include <linux/list.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/timer.h>

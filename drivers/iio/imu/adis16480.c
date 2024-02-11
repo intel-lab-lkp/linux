@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/lcm.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/swab.h>
 #include <linux/crc32.h>
 

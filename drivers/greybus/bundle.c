@@ -8,6 +8,7 @@
 
 #include <linux/greybus.h>
 #include "greybus_trace.h"
+#include <linux/sprintf.h>
 
 static ssize_t bundle_class_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)

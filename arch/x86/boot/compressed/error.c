@@ -6,6 +6,7 @@
  */
 #include "misc.h"
 #include "error.h"
+#include <linux/sprintf.h>
 
 void warn(const char *m)
 {

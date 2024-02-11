@@ -31,6 +31,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include "pcm_plugin.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define snd_pcm_plug_first(plug) ((plug)->runtime->oss.plugin_first)
 #define snd_pcm_plug_last(plug) ((plug)->runtime->oss.plugin_last)

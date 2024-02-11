@@ -19,6 +19,7 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <asm/xen/hypervisor.h>
 

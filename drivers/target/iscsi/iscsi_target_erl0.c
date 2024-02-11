@@ -10,6 +10,8 @@
  ******************************************************************************/
 
 #include <linux/sched/signal.h>
+#include <linux/completion.h>
+#include <linux/timer.h>
 
 #include <scsi/iscsi_proto.h>
 #include <target/target_core_base.h>

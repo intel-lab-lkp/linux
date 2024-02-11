@@ -5,6 +5,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
 

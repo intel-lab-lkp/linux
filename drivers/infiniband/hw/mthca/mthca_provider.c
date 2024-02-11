@@ -38,6 +38,7 @@
 #include <rdma/ib_umem.h>
 #include <rdma/ib_user_verbs.h>
 #include <rdma/uverbs_ioctl.h>
+#include <linux/sprintf.h>
 
 #include <linux/sched.h>
 #include <linux/slab.h>

@@ -9,6 +9,8 @@
  ******************************************************************************/
 
 #include <crypto/hash.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/kthread.h>
 #include <linux/completion.h>

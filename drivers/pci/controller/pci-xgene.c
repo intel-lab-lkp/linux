@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/memblock.h>
 #include <linux/init.h>
 #include <linux/of.h>

@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/pci-epc.h>
 #include <linux/pci-epf.h>
+#include <linux/completion.h>
 
 #define MHI_VERSION_1_0 0x01000000
 

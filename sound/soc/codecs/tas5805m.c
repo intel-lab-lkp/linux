@@ -24,6 +24,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/atomic.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include <sound/soc.h>

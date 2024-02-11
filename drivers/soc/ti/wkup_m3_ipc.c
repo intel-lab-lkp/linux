@@ -21,6 +21,7 @@
 #include <linux/remoteproc.h>
 #include <linux/suspend.h>
 #include <linux/wkup_m3_ipc.h>
+#include <linux/completion.h>
 
 #define AM33XX_CTRL_IPC_REG_COUNT	0x8
 #define AM33XX_CTRL_IPC_REG_OFFSET(m)	(0x4 + 4 * (m))

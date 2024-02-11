@@ -27,6 +27,8 @@
 #include "soc15d.h"
 #include "jpeg_v2_0.h"
 #include "jpeg_v2_5.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include "vcn/vcn_2_5_offset.h"
 #include "vcn/vcn_2_5_sh_mask.h"

@@ -10,6 +10,8 @@
 #ifndef __LINUX_CDNSP_DEBUG
 #define __LINUX_CDNSP_DEBUG
 
+#include <linux/sprintf.h>
+
 static inline const char *cdnsp_trb_comp_code_string(u8 status)
 {
 	switch (status) {

@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <scsi/fc/fc_fcp.h>
@@ -20,6 +21,7 @@
 #include "zfcp_dbf.h"
 #include "zfcp_fc.h"
 #include "zfcp_reqlist.h"
+#include <linux/completion.h>
 
 static unsigned int default_depth = 32;
 module_param_named(queue_depth, default_depth, uint, 0600);

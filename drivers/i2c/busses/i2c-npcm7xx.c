@@ -6,6 +6,7 @@
  */
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
@@ -19,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 enum i2c_mode {
 	I2C_MASTER,

@@ -4,6 +4,7 @@
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>

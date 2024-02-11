@@ -36,6 +36,7 @@
 #include <net/ip.h>
 #include <linux/slab.h>
 #include <linux/netdevice.h>
+#include <linux/completion.h>
 
 #include <rdma/ib_cache.h>
 #include <rdma/ib_pack.h>

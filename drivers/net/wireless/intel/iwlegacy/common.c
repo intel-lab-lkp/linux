@@ -13,6 +13,7 @@
 #include <linux/etherdevice.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/lockdep.h>
 #include <linux/pci.h>

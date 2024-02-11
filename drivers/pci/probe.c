@@ -20,6 +20,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/bitfield.h>
 #include "pci.h"
+#include <linux/sprintf.h>
 
 #define CARDBUS_LATENCY_TIMER	176	/* secondary latency timer */
 #define CARDBUS_RESERVE_BUSNR	3

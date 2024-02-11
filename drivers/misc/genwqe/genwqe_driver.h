@@ -24,6 +24,7 @@
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/printk.h>
+#include <linux/sprintf.h>
 
 #include <asm/byteorder.h>
 #include <linux/genwqe/genwqe_card.h>

@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/audit.h>
+#include <linux/kstrtox.h>
 #include "integrity.h"
 
 static int integrity_audit_info;

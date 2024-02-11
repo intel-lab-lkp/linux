@@ -24,6 +24,7 @@
 #include <linux/acpi.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/cper.h>
 #include <linux/cxl-event.h>

@@ -17,6 +17,7 @@
 #include <linux/soc/brcmstb/brcmstb.h>
 #include <dt-bindings/phy/phy.h>
 #include <linux/mfd/syscon.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 
 #include "phy-brcm-usb-init.h"

@@ -12,6 +12,7 @@
 
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/zorro.h>
 #include <linux/stat.h>
 #include <linux/string.h>

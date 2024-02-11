@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/static_call.h>
 #include <linux/bug.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/smp.h>
 #include <linux/sort.h>
 #include <linux/slab.h>

@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/parport.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/device.h>
 

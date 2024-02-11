@@ -217,10 +217,12 @@
 #include <linux/init.h>
 #include <linux/in.h>
 #include <linux/inet.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <linux/completion.h>
 
 #include <net/sock.h>
 #include "core.h"

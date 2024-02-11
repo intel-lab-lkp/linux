@@ -6,6 +6,7 @@
 #include <linux/string.h>
 #include <linux/time.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 #include <linux/efi.h>
 #include <linux/slab.h>
 #include <linux/memblock.h>

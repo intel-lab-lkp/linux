@@ -24,6 +24,7 @@
 #include "hal_rx.h"
 #include "reg.h"
 #include "dbring.h"
+#include <linux/sprintf.h>
 
 #define SM(_v, _f) (((_v) << _f##_LSB) & _f##_MASK)
 

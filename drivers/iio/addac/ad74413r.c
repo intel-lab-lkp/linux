@@ -6,6 +6,7 @@
 
 #include <asm/unaligned.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/crc8.h>
 #include <linux/device.h>
 #include <linux/err.h>

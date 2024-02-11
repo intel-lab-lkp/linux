@@ -31,6 +31,8 @@
  */
 
 #include <linux/configfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
 

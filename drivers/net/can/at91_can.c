@@ -13,6 +13,7 @@
 #include <linux/if_arp.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/of.h>

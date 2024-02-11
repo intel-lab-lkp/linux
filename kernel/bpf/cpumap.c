@@ -21,6 +21,7 @@
  */
 #include <linux/bitops.h>
 #include <linux/bpf.h>
+#include <linux/completion.h>
 #include <linux/filter.h>
 #include <linux/ptr_ring.h>
 #include <net/xdp.h>

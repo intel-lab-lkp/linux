@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <linux/posix_acl.h>
+#include <linux/quota.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
 #include <linux/statfs.h>

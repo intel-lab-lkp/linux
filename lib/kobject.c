@@ -13,11 +13,14 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/export.h>
 #include <linux/stat.h>
 #include <linux/slab.h>
 #include <linux/random.h>
+#include <linux/uidgid.h>
+#include <linux/workqueue.h>
 
 /**
  * kobject_namespace() - Return @kobj's namespace tag.

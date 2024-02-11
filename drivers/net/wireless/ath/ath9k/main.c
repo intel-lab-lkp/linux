@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include "ath9k.h"
 #include "btcoex.h"
+#include <linux/completion.h>
 
 static void ath9k_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			u32 queues, bool drop);

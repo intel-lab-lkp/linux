@@ -17,6 +17,7 @@
 #include <linux/firmware.h>
 #include <linux/etherdevice.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <net/mac80211.h>
 

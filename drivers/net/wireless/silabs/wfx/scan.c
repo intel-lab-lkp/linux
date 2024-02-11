@@ -6,6 +6,7 @@
  * Copyright (c) 2010, ST-Ericsson
  */
 #include <net/mac80211.h>
+#include <linux/completion.h>
 
 #include "scan.h"
 #include "wfx.h"

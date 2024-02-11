@@ -9,11 +9,13 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/eventfd.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/dma-map-ops.h>
 #include <linux/poll.h>

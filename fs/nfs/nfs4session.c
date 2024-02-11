@@ -16,6 +16,7 @@
 #include <linux/nfs4.h>
 #include <linux/nfs_fs.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include "nfs4_fs.h"
 #include "internal.h"

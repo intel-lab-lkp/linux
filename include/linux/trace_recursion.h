@@ -136,6 +136,7 @@ extern void ftrace_record_recursion(unsigned long ip, unsigned long parent_ip);
 #endif
 
 #ifdef CONFIG_ARCH_WANTS_NO_INSTR
+#include <linux/rcutree.h> // for rcu_is_watching()
 # define trace_warn_on_no_rcu(ip)					\
 	({								\
 		bool __ret = !rcu_is_watching();			\

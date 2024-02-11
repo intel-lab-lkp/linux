@@ -35,6 +35,7 @@
 #include <linux/device.h>
 #include <linux/dmapool.h>
 #include <linux/ratelimit.h>
+#include <linux/completion.h>
 
 #include "rds_single_path.h"
 #include "rds.h"

@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>

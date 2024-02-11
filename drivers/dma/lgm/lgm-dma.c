@@ -14,10 +14,12 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of_dma.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include "../dmaengine.h"
 #include "../virt-dma.h"

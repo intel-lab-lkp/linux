@@ -21,6 +21,7 @@
  *
  */
 #include "qmgr.h"
+#include <linux/completion.h>
 
 struct nvkm_falcon_qmgr_seq *
 nvkm_falcon_qmgr_seq_acquire(struct nvkm_falcon_qmgr *qmgr)

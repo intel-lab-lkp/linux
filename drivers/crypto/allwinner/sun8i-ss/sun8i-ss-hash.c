@@ -17,6 +17,7 @@
 #include <crypto/sha1.h>
 #include <crypto/sha2.h>
 #include <linux/bottom_half.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/kernel.h>

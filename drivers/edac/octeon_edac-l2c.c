@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/edac.h>
+#include <linux/sprintf.h>
 
 #include <asm/octeon/cvmx.h>
 

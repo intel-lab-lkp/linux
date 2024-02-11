@@ -43,6 +43,7 @@
 #include <linux/kdebug.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/export.h>
 

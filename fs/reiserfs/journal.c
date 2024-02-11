@@ -42,6 +42,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/fcntl.h>
+#include <linux/file.h> // for fput()
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/buffer_head.h>

@@ -42,6 +42,7 @@
 #include "nbio/nbio_4_3_0_sh_mask.h"
 #include "mp/mp_13_0_0_offset.h"
 #include "mp/mp_13_0_0_sh_mask.h"
+#include <linux/sprintf.h>
 
 #include "asic_reg/mp/mp_13_0_0_sh_mask.h"
 #include "smu_cmn.h"

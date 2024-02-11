@@ -6,6 +6,7 @@
  */
 
 #include "digi00x.h"
+#include <linux/sprintf.h>
 
 static int midi_open(struct snd_rawmidi_substream *substream)
 {

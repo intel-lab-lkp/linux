@@ -5,6 +5,8 @@
 #include <linux/ceph/types.h>
 #include <linux/percpu_counter.h>
 #include <linux/ktime.h>
+#include <linux/timer.h> // for round_jiffies_relative()
+#include <linux/workqueue.h> // for struct delayed_work
 
 extern bool disable_send_metrics;
 

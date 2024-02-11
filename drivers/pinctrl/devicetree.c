@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "devicetree.h"

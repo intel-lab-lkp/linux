@@ -15,6 +15,7 @@
  */
 
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/align.h>
 #include <linux/dma/amd_xdma.h>

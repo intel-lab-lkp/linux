@@ -14,6 +14,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <sound/ac97_codec.h>
 #include <sound/ac97/codec.h>

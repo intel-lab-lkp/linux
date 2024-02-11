@@ -7,6 +7,7 @@
 #define pr_fmt(fmt) "digital: %s: " fmt, __func__
 
 #include "digital.h"
+#include <linux/random.h>
 
 #define DIGITAL_NFC_DEP_N_RETRY_NACK	2
 #define DIGITAL_NFC_DEP_N_RETRY_ATN	2

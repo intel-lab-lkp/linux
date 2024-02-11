@@ -11,6 +11,7 @@
 #ifdef __KERNEL__
 
 #include <linux/blkdev.h>
+#include <asm/page.h> /* for PAGE_SIZE */
 
 extern const char raid6_empty_zero_page[PAGE_SIZE];
 

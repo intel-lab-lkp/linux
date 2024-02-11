@@ -16,6 +16,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 
 #define HISI_I2C_FRAME_CTRL		0x0000

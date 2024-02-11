@@ -14,6 +14,7 @@
 #include <crypto/utils.h>
 #include <keys/user-type.h>
 #include <keys/asymmetric-type.h>
+#include <linux/sprintf.h>
 
 #include "ubifs.h"
 

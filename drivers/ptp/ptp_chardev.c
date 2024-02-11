@@ -9,6 +9,7 @@
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timekeeping.h>
 #include <linux/debugfs.h>
 

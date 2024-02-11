@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
@@ -29,6 +30,7 @@
 #include <linux/irq.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/platform_data/mv_usb.h>
 #include <asm/unaligned.h>
 

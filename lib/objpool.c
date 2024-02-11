@@ -7,6 +7,8 @@
 #include <linux/irqflags.h>
 #include <linux/cpumask.h>
 #include <linux/log2.h>
+#include <linux/refcount.h>
+#include <linux/topology.h>
 
 /*
  * objpool: ring-array based lockless MPMC/FIFO queues

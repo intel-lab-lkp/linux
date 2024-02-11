@@ -11,6 +11,7 @@
  */
 
 #include "bcma_private.h"
+#include <linux/sprintf.h>
 
 #include <linux/bcma/bcma.h>
 

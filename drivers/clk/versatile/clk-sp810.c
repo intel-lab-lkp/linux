@@ -6,6 +6,7 @@
 
 #include <linux/amba/sp810.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/err.h>

@@ -11,6 +11,7 @@
 #include <linux/atomic.h>
 #include <linux/backlight.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/console.h>
 #include <linux/ctype.h>
 #include <linux/dma-mapping.h>
@@ -20,11 +21,13 @@
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/vmalloc.h>
 

@@ -8,8 +8,10 @@
  */
 #include <linux/module.h>
 #include <linux/edac.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 
 #include "edac_pci.h"
 #include "edac_module.h"

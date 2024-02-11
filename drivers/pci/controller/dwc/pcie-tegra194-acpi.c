@@ -10,6 +10,7 @@
 #include <linux/pci.h>
 #include <linux/pci-acpi.h>
 #include <linux/pci-ecam.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "pcie-designware.h"
 

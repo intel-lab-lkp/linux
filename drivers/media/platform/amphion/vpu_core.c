@@ -25,6 +25,7 @@
 #include "vpu_msgs.h"
 #include "vpu_rpc.h"
 #include "vpu_cmds.h"
+#include <linux/completion.h>
 
 void csr_writel(struct vpu_core *core, u32 reg, u32 val)
 {

@@ -8,6 +8,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/nfs_xdr.h>
 #include <linux/pr.h>
+#include <linux/sprintf.h>
 
 #include "blocklayout.h"
 

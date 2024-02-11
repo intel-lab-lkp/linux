@@ -10,6 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/module.h>
 #include <linux/smp.h>

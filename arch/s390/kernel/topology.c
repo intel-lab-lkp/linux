@@ -8,12 +8,14 @@
 
 #include <linux/workqueue.h>
 #include <linux/memblock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/sysctl.h>
 #include <linux/cpuset.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/sched/topology.h>
 #include <linux/delay.h>

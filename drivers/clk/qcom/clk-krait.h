@@ -4,6 +4,8 @@
 #define __QCOM_CLK_KRAIT_H
 
 #include <linux/clk-provider.h>
+#include <linux/notifier.h>
+#include <linux/types.h>
 
 struct krait_mux_clk {
 	unsigned int	*parent_map;

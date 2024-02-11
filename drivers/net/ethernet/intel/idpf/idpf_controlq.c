@@ -2,6 +2,9 @@
 /* Copyright (C) 2023 Intel Corporation */
 
 #include "idpf_controlq.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+
+#include <linux/kernel.h> // for lower_32_bits(), upper_32_bits()
 
 /**
  * idpf_ctlq_setup_regs - initialize control queue registers

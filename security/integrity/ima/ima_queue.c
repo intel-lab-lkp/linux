@@ -17,6 +17,7 @@
 
 #include <linux/rculist.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include "ima.h"
 
 #define AUDIT_CAUSE_LEN_MAX 32

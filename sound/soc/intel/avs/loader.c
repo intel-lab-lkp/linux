@@ -9,6 +9,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/hdaudio.h>
 #include <sound/hdaudio_ext.h>
 #include "avs.h"
@@ -16,6 +17,7 @@
 #include "messages.h"
 #include "registers.h"
 #include "topology.h"
+#include <linux/completion.h>
 
 #define AVS_ROM_STS_MASK		0xFF
 #define AVS_ROM_INIT_DONE		0x1

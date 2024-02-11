@@ -7,6 +7,10 @@
  */
 
 #include "bioscfg.h"
+#include <linux/kstrtox.h>
+
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 
 GET_INSTANCE_ID(integer);
 

@@ -11,6 +11,7 @@
 #include <linux/sched.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vbox_err.h>
 #include <linux/vbox_utils.h>
 #include <linux/vmalloc.h>

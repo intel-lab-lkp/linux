@@ -7,6 +7,7 @@
 
 #include <linux/host1x.h>
 #include <linux/iommu.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/slab.h>
 
 #include <trace/events/host1x.h>

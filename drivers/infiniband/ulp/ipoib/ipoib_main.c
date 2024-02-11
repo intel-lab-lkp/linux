@@ -33,6 +33,9 @@
  */
 
 #include "ipoib.h"
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 

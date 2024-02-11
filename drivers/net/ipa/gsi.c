@@ -7,6 +7,8 @@
 #include <linux/types.h>
 #include <linux/bits.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mutex.h>
 #include <linux/completion.h>
 #include <linux/io.h>

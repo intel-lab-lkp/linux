@@ -8,10 +8,12 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/mutex.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/export.h>
 #include <sound/core.h>

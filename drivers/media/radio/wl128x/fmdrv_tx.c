@@ -10,6 +10,7 @@
 #include "fmdrv.h"
 #include "fmdrv_common.h"
 #include "fmdrv_tx.h"
+#include <linux/completion.h>
 
 int fm_tx_set_stereo_mono(struct fmdev *fmdev, u16 mode)
 {

@@ -7,6 +7,7 @@
 
 #include "dm-verity-fec.h"
 #include <linux/math64.h>
+#include <linux/sprintf.h>
 
 #define DM_MSG_PREFIX	"verity-fec"
 

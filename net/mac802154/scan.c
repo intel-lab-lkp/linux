@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/rtnetlink.h>
 #include <net/mac802154.h>
+#include <linux/completion.h>
 
 #include "ieee802154_i.h"
 #include "driver-ops.h"

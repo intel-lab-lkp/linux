@@ -6,6 +6,7 @@
 
 #include "core.h"
 #include "debug.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define ATH11K_DB_MAGIC_VALUE 0xdeadbeaf
 

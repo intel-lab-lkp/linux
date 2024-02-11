@@ -17,6 +17,7 @@
 #include <linux/swab.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 #include "cs35l56.h"
 

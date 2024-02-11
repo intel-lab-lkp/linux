@@ -16,10 +16,12 @@
 #define pr_fmt(fmt) "devtmpfs: " fmt
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/syscalls.h>
 #include <linux/mount.h>
 #include <linux/device.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/namei.h>
 #include <linux/fs.h>
 #include <linux/shmem_fs.h>

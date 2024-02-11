@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
+#include <linux/sprintf.h>
 #include <sound/jack.h>
 #include <sound/pcm_params.h>
 #include <sound/simple_card_utils.h>

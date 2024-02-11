@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/list.h>
@@ -23,6 +24,7 @@
 #include <linux/dma-mapping.h>
 #include <asm/isc.h>
 #include <asm/crw.h>
+#include <linux/sprintf.h>
 
 #include "css.h"
 #include "cio.h"

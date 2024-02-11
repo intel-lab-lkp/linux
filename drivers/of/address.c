@@ -5,7 +5,9 @@
 #include <linux/fwnode.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/logic_pio.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/pci.h>

@@ -7,6 +7,7 @@
 #include <linux/iopoll.h>
 #include "stmmac.h"
 #include "dwxgmac2.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int dwxgmac2_dma_reset(void __iomem *ioaddr)
 {

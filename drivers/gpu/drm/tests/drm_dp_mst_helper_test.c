@@ -6,6 +6,7 @@
  */
 
 #include <kunit/test.h>
+#include <linux/sprintf.h>
 
 #include <drm/display/drm_dp_mst_helper.h>
 #include <drm/drm_print.h>

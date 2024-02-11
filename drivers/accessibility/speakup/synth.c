@@ -9,6 +9,7 @@
 #include <linux/delay.h>	/* for loops_per_sec */
 #include <linux/kmod.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>	/* for copy_from_user */
 #include <linux/sched.h>
 #include <linux/timer.h>

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 #include <linux/ptp_classify.h>
+#include <linux/sprintf.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "lan966x_main.h"
 #include "vcap_api.h"

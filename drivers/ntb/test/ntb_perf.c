@@ -69,8 +69,10 @@
 
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
@@ -83,6 +85,7 @@
 #include <linux/debugfs.h>
 #include <linux/random.h>
 #include <linux/ntb.h>
+#include <linux/completion.h>
 
 #define DRIVER_NAME		"ntb_perf"
 #define DRIVER_VERSION		"2.0"

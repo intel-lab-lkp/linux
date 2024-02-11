@@ -41,6 +41,8 @@
 
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>

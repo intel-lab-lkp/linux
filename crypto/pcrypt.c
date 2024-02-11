@@ -16,6 +16,7 @@
 #include <linux/kobject.h>
 #include <linux/cpu.h>
 #include <crypto/pcrypt.h>
+#include <linux/sprintf.h>
 
 static struct padata_instance *pencrypt;
 static struct padata_instance *pdecrypt;

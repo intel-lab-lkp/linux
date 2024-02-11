@@ -16,6 +16,7 @@
 #include "iostat.h"
 #include "fscache.h"
 #include "pnfs.h"
+#include <linux/sprintf.h>
 
 #include "nfstrace.h"
 

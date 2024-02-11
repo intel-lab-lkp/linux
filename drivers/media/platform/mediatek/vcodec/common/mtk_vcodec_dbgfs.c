@@ -5,6 +5,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "mtk_vcodec_dbgfs.h"
 #include "../decoder/mtk_vcodec_dec_drv.h"

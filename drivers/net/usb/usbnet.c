@@ -23,6 +23,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ctype.h>
 #include <linux/ethtool.h>
+#include <linux/hex.h>
 #include <linux/workqueue.h>
 #include <linux/mii.h>
 #include <linux/usb.h>

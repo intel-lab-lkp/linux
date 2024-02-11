@@ -3,6 +3,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/cpumask.h>
 #include <linux/firmware/qcom/qcom_scm.h>

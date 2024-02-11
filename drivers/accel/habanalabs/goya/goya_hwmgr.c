@@ -6,6 +6,8 @@
  */
 
 #include "goyaP.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 void goya_set_pll_profile(struct hl_device *hdev, enum hl_pll_frequency freq)
 {

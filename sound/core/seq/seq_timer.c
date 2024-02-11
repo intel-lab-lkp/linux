@@ -10,6 +10,7 @@
 #include "seq_timer.h"
 #include "seq_queue.h"
 #include "seq_info.h"
+#include <linux/sprintf.h>
 
 /* allowed sequencer timer frequencies, in Hz */
 #define MIN_FREQUENCY		10

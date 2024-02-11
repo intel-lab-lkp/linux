@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/highmem.h>
 #include <linux/sched/signal.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>

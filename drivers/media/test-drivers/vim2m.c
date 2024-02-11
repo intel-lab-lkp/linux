@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/platform_device.h>
 #include <media/v4l2-mem2mem.h>

@@ -8,6 +8,7 @@
 #include <net/cfg80211.h>
 #include <linux/etherdevice.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/inetdevice.h>
 #include <net/if_inet6.h>
 #include <net/ipv6.h>

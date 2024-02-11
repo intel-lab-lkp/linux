@@ -2,6 +2,7 @@
 /* Copyright(c) 2014 - 2020 Intel Corporation */
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/slab.h>

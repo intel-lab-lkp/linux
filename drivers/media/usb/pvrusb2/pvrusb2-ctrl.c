@@ -7,6 +7,8 @@
 #include "pvrusb2-ctrl.h"
 #include "pvrusb2-hdw-internal.h"
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mutex.h>
 

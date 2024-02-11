@@ -8,12 +8,14 @@
  */
 
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 struct virtual_consumer_data {
 	struct mutex lock;

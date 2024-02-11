@@ -6,6 +6,7 @@
 
 #include <linux/export.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
 

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/syscalls.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/fs_struct.h>
 #include <linux/fs.h>

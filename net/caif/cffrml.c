@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/crc-ccitt.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <net/caif/caif_layer.h>
 #include <net/caif/cfpkt.h>
 #include <net/caif/cffrml.h>

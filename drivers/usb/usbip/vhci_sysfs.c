@@ -6,9 +6,11 @@
 
 #include <linux/kthread.h>
 #include <linux/file.h>
+#include <linux/kstrtox.h>
 #include <linux/net.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* Hardening for Spectre-v1 */
 #include <linux/nospec.h>

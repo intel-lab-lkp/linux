@@ -21,6 +21,7 @@
 #include <linux/property.h>
 #include <linux/rational.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <media/i2c/ds90ub9xx.h>
 #include <media/v4l2-ctrls.h>

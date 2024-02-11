@@ -17,6 +17,7 @@
 #include "scsi/fc/fc_els.h"
 #include "scsi/fc/fc_fs.h"
 #include "../include/efc_common.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*************************************************************************
  * Common SLI-4 register offsets and field definitions

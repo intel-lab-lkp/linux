@@ -26,6 +26,7 @@
 #include "nouveau_mem.h"
 #include "nouveau_bo.h"
 #include "nouveau_svm.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <nvif/class.h>
 #include <nvif/object.h>

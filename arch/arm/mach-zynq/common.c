@@ -23,6 +23,7 @@
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/pgtable.h>
 

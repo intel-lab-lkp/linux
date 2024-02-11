@@ -17,6 +17,7 @@
 #include <linux/limits.h>
 #include <linux/slab.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include <asm/perf_event.h>
 #include <asm/insn.h>

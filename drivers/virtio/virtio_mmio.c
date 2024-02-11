@@ -59,6 +59,7 @@
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -66,6 +67,7 @@
 #include <linux/pm.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <uapi/linux/virtio_mmio.h>

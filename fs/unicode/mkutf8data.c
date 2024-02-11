@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <linux/sprintf.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>

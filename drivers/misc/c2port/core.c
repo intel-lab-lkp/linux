@@ -17,6 +17,7 @@
 #include <linux/idr.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/c2port.h>
 

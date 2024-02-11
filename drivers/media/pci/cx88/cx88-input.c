@@ -10,6 +10,7 @@
  */
 
 #include "cx88.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/hrtimer.h>

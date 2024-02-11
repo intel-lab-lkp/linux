@@ -11,8 +11,10 @@
 #include <linux/regmap.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/hrtimer.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/delay.h>
@@ -23,6 +25,7 @@
 #include <linux/seq_file.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>

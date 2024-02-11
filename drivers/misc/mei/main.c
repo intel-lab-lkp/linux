@@ -8,12 +8,15 @@
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/poll.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/ioctl.h>
 #include <linux/cdev.h>

@@ -56,6 +56,8 @@
  */
 
 #include "compat.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "regs.h"
 #include "intern.h"

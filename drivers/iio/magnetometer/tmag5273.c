@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/regmap.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>

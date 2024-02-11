@@ -3,6 +3,7 @@
 
 #include <linux/irqdomain.h>
 #include <linux/irq.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "internals.h"

@@ -26,6 +26,8 @@
 #include "octeon_main.h"
 #include "octeon_network.h"
 #include "lio_vf_rep.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static int lio_vf_rep_open(struct net_device *ndev);
 static int lio_vf_rep_stop(struct net_device *ndev);

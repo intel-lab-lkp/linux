@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/backlight.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/pnp.h>
 #include <linux/apple-gmux.h>
 #include <linux/slab.h>

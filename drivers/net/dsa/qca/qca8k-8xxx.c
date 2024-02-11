@@ -10,7 +10,9 @@
 #include <linux/phy.h>
 #include <linux/netdevice.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 #include <linux/of_net.h>
 #include <linux/of_mdio.h>

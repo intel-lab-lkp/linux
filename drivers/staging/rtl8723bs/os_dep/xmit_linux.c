@@ -5,6 +5,7 @@
  *
  ******************************************************************************/
 #include <drv_types.h>
+#include <linux/completion.h>
 #include <rtw_debug.h>
 
 

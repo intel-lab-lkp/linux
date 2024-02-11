@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/qrtr.h>
 #include <linux/soc/qcom/qmi.h>
+#include <linux/completion.h>
 
 #include "ipa.h"
 #include "ipa_endpoint.h"

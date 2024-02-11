@@ -8,7 +8,9 @@
 
 #include <linux/module.h>
 #include <linux/idr.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/pci-epc.h>
 #include <linux/pci-epf.h>

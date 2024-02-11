@@ -7,6 +7,8 @@
 
 #include <linux/sysfs.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "hidma_mgmt.h"
 

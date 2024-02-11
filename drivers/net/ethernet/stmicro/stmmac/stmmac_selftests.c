@@ -12,6 +12,7 @@
 #include <linux/ethtool.h>
 #include <linux/ip.h>
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <net/pkt_cls.h>
 #include <net/pkt_sched.h>

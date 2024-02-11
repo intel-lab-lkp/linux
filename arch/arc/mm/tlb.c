@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/bug.h>
 #include <linux/mm_types.h>
+#include <linux/sprintf.h>
 
 #include <asm/arcregs.h>
 #include <asm/setup.h>

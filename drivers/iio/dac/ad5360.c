@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/spi/spi.h>

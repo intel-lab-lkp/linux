@@ -17,6 +17,7 @@
 #include <linux/pgtable.h>
 
 #include <asm/cacheflush.h>
+#include <asm/compat.h> // for is_compat_thread()
 #include <asm/cpufeature.h>
 #include <asm/daifflags.h>
 #include <asm/proc-fns.h>

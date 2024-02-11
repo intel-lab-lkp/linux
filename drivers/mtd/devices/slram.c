@@ -34,6 +34,7 @@
 #include <linux/uaccess.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/string.h>

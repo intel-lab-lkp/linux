@@ -5,9 +5,11 @@
  */
 
 #include <linux/configfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <linux/stm.h>
 #include "stm.h"

@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/leds.h>
 #include <linux/hid.h>
+#include <linux/sprintf.h>
 
 #include "hid-ids.h"
 

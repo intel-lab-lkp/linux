@@ -56,6 +56,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/byteorder.h>
+#include <asm/kprobes.h> // for NOKPROBE_SYMBOL()
 #include <linux/atomic.h>
 
 #include "debug_core.h"

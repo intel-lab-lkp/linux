@@ -31,6 +31,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 
 #define MVMDIO_SMI_DATA_SHIFT		0

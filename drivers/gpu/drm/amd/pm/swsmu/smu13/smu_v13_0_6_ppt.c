@@ -50,6 +50,7 @@
 #include "mp/mp_13_0_6_offset.h"
 #include "mp/mp_13_0_6_sh_mask.h"
 #include "umc_v12_0.h"
+#include <linux/sprintf.h>
 
 #undef MP1_Public
 #undef smnMP1_FIRMWARE_FLAGS

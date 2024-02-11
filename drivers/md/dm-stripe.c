@@ -7,6 +7,8 @@
 
 #include "dm.h"
 #include <linux/device-mapper.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/init.h>

@@ -8,6 +8,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <media/rc-core.h>
 
 #include "av7110.h"

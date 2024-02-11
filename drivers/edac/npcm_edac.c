@@ -7,6 +7,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include "edac_module.h"
+#include <linux/sprintf.h>
 
 #define EDAC_MOD_NAME			"npcm-edac"
 #define EDAC_MSG_SIZE			256

@@ -145,6 +145,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
 #include <linux/spinlock.h>

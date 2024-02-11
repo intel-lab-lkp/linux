@@ -8,6 +8,7 @@
 #include "ql4_glbl.h"
 #include "ql4_dbg.h"
 #include "ql4_inline.h"
+#include <linux/completion.h>
 
 /**
  * qla4xxx_copy_sense - copy sense data	into cmd sense buffer

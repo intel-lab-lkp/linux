@@ -45,6 +45,7 @@
 #include "thm/thm_11_0_2_sh_mask.h"
 #include "mp/mp_11_0_offset.h"
 #include "mp/mp_11_0_sh_mask.h"
+#include <linux/sprintf.h>
 
 #include "asic_reg/mp/mp_11_0_sh_mask.h"
 #include "amdgpu_ras.h"

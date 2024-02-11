@@ -25,6 +25,7 @@
 #include <linux/reboot.h>
 #include <linux/gfp.h>
 #include <linux/context_tracking.h>
+#include <linux/sprintf.h>
 
 #include <asm/smp.h>
 #include <asm/delay.h>

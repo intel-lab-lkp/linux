@@ -8,6 +8,7 @@
 #define _MALIDP_IO_H_
 
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static inline u32
 malidp_read32(u32 __iomem *base, u32 offset)

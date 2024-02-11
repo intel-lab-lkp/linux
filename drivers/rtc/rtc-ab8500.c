@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/sprintf.h>
 
 #define AB8500_RTC_SOFF_STAT_REG	0x00
 #define AB8500_RTC_CC_CONF_REG		0x01

@@ -168,6 +168,8 @@ static const struct file_operations sched_feat_fops = {
 
 #ifdef CONFIG_SMP
 
+#include <linux/kstrtox.h>
+
 static ssize_t sched_scaling_write(struct file *filp, const char __user *ubuf,
 				   size_t cnt, loff_t *ppos)
 {

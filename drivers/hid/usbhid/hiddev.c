@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/hid.h>
 #include <linux/hiddev.h>

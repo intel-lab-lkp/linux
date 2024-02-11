@@ -9,9 +9,11 @@
  */
 
 #include <linux/compat.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/version.h>

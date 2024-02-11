@@ -22,6 +22,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pwm.h>
 #include <linux/pxa2xx_ssp.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/delay.h>
 

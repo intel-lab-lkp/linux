@@ -22,6 +22,8 @@
 #include "../ops.h"
 #include "../sof-audio.h"
 #include "hda.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #define HDA_LTRP_GB_VALUE_US	95
 

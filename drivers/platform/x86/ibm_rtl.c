@@ -18,6 +18,7 @@
 #include <linux/efi.h>
 #include <linux/mutex.h>
 #include <asm/bios_ebda.h>
+#include <linux/sprintf.h>
 
 #include <linux/io-64-nonatomic-lo-hi.h>
 

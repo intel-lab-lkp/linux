@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /*
  * imx_dsp_ring_doorbell - triggers an interrupt on the other side (DSP)

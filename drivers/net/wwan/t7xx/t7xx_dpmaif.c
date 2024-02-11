@@ -23,6 +23,7 @@
 #include <linux/dev_printk.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for lower_32_bits(), upper_32_bits()
 #include <linux/types.h>
 
 #include "t7xx_dpmaif.h"

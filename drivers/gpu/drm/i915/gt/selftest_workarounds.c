@@ -9,6 +9,7 @@
 #include "gt/intel_gt.h"
 #include "i915_selftest.h"
 #include "intel_reset.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "selftests/igt_flush_test.h"
 #include "selftests/igt_reset.h"

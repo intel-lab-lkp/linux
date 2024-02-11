@@ -9,6 +9,7 @@
 #include "hif.h"
 #include "ce.h"
 #include "debug.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * Support for Copy Engine hardware, which is mainly used for

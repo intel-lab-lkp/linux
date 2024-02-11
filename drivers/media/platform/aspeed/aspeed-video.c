@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/v4l2-controls.h>
 #include <linux/videodev2.h>

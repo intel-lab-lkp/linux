@@ -6,6 +6,7 @@
  * Copyright (c) 2013-2014 Takashi Sakamoto
  */
 #include "./fireworks.h"
+#include <linux/sprintf.h>
 
 /*
  * NOTE:

@@ -13,6 +13,7 @@
 #include <linux/sort.h>
 #include <linux/delay.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <linux/module.h>

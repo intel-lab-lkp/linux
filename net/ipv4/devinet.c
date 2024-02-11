@@ -26,6 +26,7 @@
 #include <linux/bitops.h>
 #include <linux/capability.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>

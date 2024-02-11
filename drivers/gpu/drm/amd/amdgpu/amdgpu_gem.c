@@ -25,6 +25,7 @@
  *          Alex Deucher
  *          Jerome Glisse
  */
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/ktime.h>
 #include <linux/module.h>
 #include <linux/pagemap.h>

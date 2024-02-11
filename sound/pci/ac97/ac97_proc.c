@@ -8,6 +8,7 @@
  */
 
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/ac97_codec.h>

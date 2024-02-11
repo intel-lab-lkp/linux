@@ -30,6 +30,7 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/spinlock.h>

@@ -5,8 +5,10 @@
  *
  */
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/pm_runtime.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

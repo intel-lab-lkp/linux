@@ -16,6 +16,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <sound/hdaudio_ext.h>
 #include <sound/hda_register.h>
 #include <sound/sof.h>

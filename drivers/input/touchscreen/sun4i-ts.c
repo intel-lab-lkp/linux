@@ -29,12 +29,14 @@
 
 #include <linux/err.h>
 #include <linux/hwmon.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>

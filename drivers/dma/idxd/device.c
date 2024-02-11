@@ -11,6 +11,7 @@
 #include "../dmaengine.h"
 #include "idxd.h"
 #include "registers.h"
+#include <linux/completion.h>
 
 static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 			  u32 *status);

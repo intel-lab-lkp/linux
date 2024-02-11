@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/serial_core.h>
 #include <linux/sizes.h>
 #include <linux/of.h>

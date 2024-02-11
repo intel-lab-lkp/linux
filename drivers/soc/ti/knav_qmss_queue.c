@@ -22,6 +22,7 @@
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/soc/ti/knav_qmss.h>
+#include <linux/sprintf.h>
 
 #include "knav_qmss.h"
 

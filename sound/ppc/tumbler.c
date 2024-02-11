@@ -16,6 +16,7 @@
 #include <linux/kmod.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/of_irq.h>
 #include <linux/io.h>

@@ -24,6 +24,7 @@
 #include "response_manager.h"
 #include "octeon_device.h"
 #include "octeon_main.h"
+#include <linux/completion.h>
 
 static void oct_poll_req_completion(struct work_struct *work);
 

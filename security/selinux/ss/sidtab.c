@@ -19,6 +19,7 @@
 #include "security.h"
 #include "sidtab.h"
 #include "services.h"
+#include <linux/sprintf.h>
 
 struct sidtab_str_cache {
 	struct rcu_head rcu_member;

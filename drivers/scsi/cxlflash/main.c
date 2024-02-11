@@ -9,9 +9,12 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 

@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "cipher.h"
 #include "util.h"

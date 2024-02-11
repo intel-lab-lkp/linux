@@ -19,6 +19,7 @@
 #include "osdep_service.h"
 #include "drv_types.h"
 #include "osdep_intf.h"
+#include <linux/completion.h>
 
 #define RTL8712_SDIO_LOCAL_BASE 0X10100000
 #define SDIO_HCPWM (RTL8712_SDIO_LOCAL_BASE + 0x0081)

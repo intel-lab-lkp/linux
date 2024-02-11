@@ -12,6 +12,7 @@
 #include <linux/percpu.h>
 #include <linux/slab.h>
 #include <linux/rculist_nulls.h>
+#include <linux/completion.h>
 #include <linux/cpu.h>
 #include <linux/task_work.h>
 #include <linux/audit.h>

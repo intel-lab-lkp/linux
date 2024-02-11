@@ -7,6 +7,7 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/smp.h>
 

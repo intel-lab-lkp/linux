@@ -13,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/edac.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/stop_machine.h>
 #include <linux/delay.h>

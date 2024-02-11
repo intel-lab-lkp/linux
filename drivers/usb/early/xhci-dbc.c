@@ -10,6 +10,8 @@
 #define pr_fmt(fmt)	KBUILD_MODNAME ":%s: " fmt, __func__
 
 #include <linux/console.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/pci_regs.h>
 #include <linux/pci_ids.h>
 #include <linux/memblock.h>

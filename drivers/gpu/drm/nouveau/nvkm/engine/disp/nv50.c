@@ -28,6 +28,7 @@
 #include "dp.h"
 #include "ior.h"
 #include "outp.h"
+#include <linux/sprintf.h>
 
 #include <core/client.h>
 #include <core/ramht.h>

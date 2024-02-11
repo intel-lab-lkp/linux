@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/soc/ti/knav_qmss.h>
+#include <linux/sprintf.h>
 
 #include "knav_qmss.h"
 

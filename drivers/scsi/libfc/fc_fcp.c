@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/crc32.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi.h>

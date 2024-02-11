@@ -9,6 +9,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/pm_runtime.h>

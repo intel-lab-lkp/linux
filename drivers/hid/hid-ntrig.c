@@ -11,6 +11,8 @@
 
 #include <linux/device.h>
 #include <linux/hid.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include "usbhid/usbhid.h"
 #include <linux/module.h>

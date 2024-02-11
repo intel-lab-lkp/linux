@@ -44,6 +44,7 @@
 #include "dcn10_hubbub.h"
 #include "dcn10_cm_common.h"
 #include "clk_mgr.h"
+#include <linux/sprintf.h>
 
 __printf(3, 4)
 unsigned int snprintf_count(char *pbuf, unsigned int bufsize, char *fmt, ...)

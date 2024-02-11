@@ -9,6 +9,7 @@
 #include <linux/seq_file.h>
 #include <linux/bootconfig.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 static char *saved_boot_config;
 

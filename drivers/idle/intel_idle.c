@@ -44,6 +44,7 @@
 #include <linux/acpi.h>
 #include <linux/kernel.h>
 #include <linux/cpuidle.h>
+#include <linux/sprintf.h>
 #include <linux/tick.h>
 #include <trace/events/power.h>
 #include <linux/sched.h>

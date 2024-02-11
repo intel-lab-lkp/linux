@@ -6,6 +6,8 @@
 #include "i40e_lan_hmc.h"
 #include "i40e_type.h"
 
+#include <linux/minmax.h>
+
 /* lan specific interface functions */
 
 /**

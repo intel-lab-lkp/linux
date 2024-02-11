@@ -19,6 +19,7 @@
 #include <linux/acpi.h>
 #include <linux/slab.h>
 #include <linux/regulator/machine.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>

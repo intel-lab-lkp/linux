@@ -152,6 +152,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>

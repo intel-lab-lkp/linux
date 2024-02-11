@@ -93,6 +93,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/of_graph.h>
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define RSND_RATES SNDRV_PCM_RATE_8000_192000
 #define RSND_FMTS (SNDRV_PCM_FMTBIT_S8 |\

@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <crypto/hash.h>
 #include <crypto/algapi.h>
+#include <linux/sprintf.h>
 #include <linux/static_key.h>
 #include <linux/notifier.h>
 

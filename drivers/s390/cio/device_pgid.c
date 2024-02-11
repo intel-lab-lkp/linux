@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/slab.h>

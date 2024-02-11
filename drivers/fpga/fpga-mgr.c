@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/highmem.h>
+#include <linux/sprintf.h>
 
 static DEFINE_IDA(fpga_mgr_ida);
 static const struct class fpga_mgr_class;

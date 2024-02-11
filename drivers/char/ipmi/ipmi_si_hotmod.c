@@ -13,6 +13,7 @@
 #include <linux/atomic.h>
 #include "ipmi_si.h"
 #include "ipmi_plat_data.h"
+#include <linux/kstrtox.h>
 
 static int hotmod_handler(const char *val, const struct kernel_param *kp);
 

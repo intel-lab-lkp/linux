@@ -4,6 +4,7 @@
 #include <linux/slab.h>
 #include <linux/cpumask.h>
 #include <linux/percpu.h>
+#include <linux/sprintf.h>
 
 #include <xen/events.h>
 

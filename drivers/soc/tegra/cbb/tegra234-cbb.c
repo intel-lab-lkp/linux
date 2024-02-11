@@ -21,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 #include <soc/tegra/fuse.h>
 #include <soc/tegra/tegra-cbb.h>
 

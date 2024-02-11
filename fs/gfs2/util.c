@@ -13,6 +13,7 @@
 #include <linux/crc32.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "gfs2.h"

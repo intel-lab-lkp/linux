@@ -4,6 +4,7 @@
  */
 
 #include "xe_query.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <linux/nospec.h>
 #include <linux/sched/clock.h>

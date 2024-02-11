@@ -9,6 +9,7 @@
 
 #include <linux/backing-dev.h>
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>
 

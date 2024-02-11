@@ -17,6 +17,7 @@
 #include <asm/dma-mapping.h>
 #include <linux/in.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 
 #include <linux/ip.h>
 #include <net/checksum.h>

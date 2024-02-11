@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/sort.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-h264.h>
 

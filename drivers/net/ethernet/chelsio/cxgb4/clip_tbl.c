@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <linux/jhash.h>
 #include <linux/if_vlan.h>
+#include <linux/sprintf.h>
 #include <net/addrconf.h>
 #include "cxgb4.h"
 #include "clip_tbl.h"

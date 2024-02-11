@@ -23,6 +23,7 @@
  */
 #define nv50_dmaobj(p) container_of((p), struct nv50_dmaobj, base)
 #include "user.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/client.h>
 #include <core/gpuobj.h>

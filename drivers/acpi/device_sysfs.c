@@ -12,9 +12,11 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/nls.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

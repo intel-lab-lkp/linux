@@ -23,6 +23,7 @@
 #include <linux/property.h>
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/completion.h>
 
 #include "cyttsp_core.h"
 

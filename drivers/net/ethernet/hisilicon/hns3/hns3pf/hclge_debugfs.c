@@ -3,6 +3,7 @@
 
 #include <linux/device.h>
 #include <linux/sched/clock.h>
+#include <linux/sprintf.h>
 
 #include "hclge_debugfs.h"
 #include "hclge_err.h"

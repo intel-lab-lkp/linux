@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/io.h>
 #include <linux/slab.h>

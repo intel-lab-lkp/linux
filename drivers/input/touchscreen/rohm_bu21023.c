@@ -9,8 +9,10 @@
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define BU21023_NAME			"bu21023_ts"
 #define BU21023_FIRMWARE_NAME		"bu21023.bin"

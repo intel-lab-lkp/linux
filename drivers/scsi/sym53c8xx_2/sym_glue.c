@@ -26,13 +26,16 @@
  */
 #include <linux/ctype.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_transport.h>
+#include <linux/completion.h>
 
 #include "sym_glue.h"
 #include "sym_nvram.h"

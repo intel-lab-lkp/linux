@@ -2,6 +2,7 @@
 /* Copyright (c) 2021, Microsoft Corporation. */
 
 #include <uapi/linux/bpf.h>
+#include <linux/completion.h>
 
 #include <linux/inetdevice.h>
 #include <linux/etherdevice.h>

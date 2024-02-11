@@ -26,6 +26,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/init.h>
@@ -33,7 +34,9 @@
 #include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/time.h>
 #include <linux/interrupt.h>

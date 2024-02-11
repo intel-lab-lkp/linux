@@ -9,6 +9,8 @@
 #include <linux/remoteproc.h>
 #include <linux/firmware.h>
 #include <linux/of.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "dp_tx.h"

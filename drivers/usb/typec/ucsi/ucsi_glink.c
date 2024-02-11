@@ -4,6 +4,7 @@
  * Copyright (c) 2023, Linaro Ltd
  */
 #include <linux/auxiliary_bus.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of_device.h>

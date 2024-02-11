@@ -7,10 +7,12 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <asm/unaligned.h>
 

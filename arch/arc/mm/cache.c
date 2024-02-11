@@ -10,7 +10,9 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/cache.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mmu_context.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/pagemap.h>

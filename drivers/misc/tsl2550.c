@@ -9,7 +9,9 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 #define TSL2550_DRV_NAME	"tsl2550"
 #define DRIVER_VERSION		"1.2"

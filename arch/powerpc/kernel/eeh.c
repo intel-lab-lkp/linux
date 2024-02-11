@@ -22,6 +22,7 @@
 #include <linux/export.h>
 #include <linux/of.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include <linux/atomic.h>
 #include <asm/eeh.h>

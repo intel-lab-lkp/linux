@@ -20,6 +20,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>

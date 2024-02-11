@@ -13,6 +13,7 @@
 #include "mae_counter_format.h"
 #include "mae.h"
 #include "rx_common.h"
+#include <linux/sprintf.h>
 
 /* Counter-management hashtables */
 

@@ -9,17 +9,21 @@
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
+#include <linux/completion.h>
 
 #include <linux/pci_regs.h>
 

@@ -2,6 +2,7 @@
 /* Copyright(c) 2007-2013  Realtek Corporation.*/
 
 #include "halbt_precomp.h"
+#include <linux/completion.h>
 
 /***************************************************
  *		Debug related function

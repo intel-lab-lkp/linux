@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <asm/byteorder.h>
+#include <linux/completion.h>
 #include <linux/sched.h>
 #include "sm_common.h"
 #include "r852.h"

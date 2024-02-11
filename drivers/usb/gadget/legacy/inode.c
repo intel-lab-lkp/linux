@@ -17,6 +17,7 @@
 #include <linux/uts.h>
 #include <linux/wait.h>
 #include <linux/compiler.h>
+#include <linux/completion.h>
 #include <linux/uaccess.h>
 #include <linux/sched.h>
 #include <linux/slab.h>

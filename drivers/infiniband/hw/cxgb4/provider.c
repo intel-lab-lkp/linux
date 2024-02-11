@@ -41,6 +41,7 @@
 #include <linux/ethtool.h>
 #include <linux/rtnetlink.h>
 #include <linux/inetdevice.h>
+#include <linux/sprintf.h>
 #include <net/addrconf.h>
 #include <linux/io.h>
 

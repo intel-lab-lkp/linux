@@ -6,9 +6,12 @@
  */
 #include <linux/vmalloc.h>
 #include <linux/err.h>
+#include <linux/hex.h>
 #include <linux/ieee80211.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/dmi.h>
+#include <linux/sprintf.h>
 
 #include "mvm.h"
 #include "sta.h"

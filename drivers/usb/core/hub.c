@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/kcov.h>
 #include <linux/ioctl.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usbdevice_fs.h>
 #include <linux/usb/hcd.h>

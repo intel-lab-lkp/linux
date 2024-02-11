@@ -13,8 +13,10 @@
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/pinctrl/pinctrl.h>
+#include <linux/sprintf.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>

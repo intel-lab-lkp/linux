@@ -14,6 +14,7 @@
 #include <linux/i3c/master.h>
 #include <linux/if_arp.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 #include <net/mctp.h>
 #include <net/mctpdevice.h>
 

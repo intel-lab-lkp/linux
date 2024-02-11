@@ -7,6 +7,7 @@
 #include "efct_driver.h"
 #include "efct_hw.h"
 #include "efct_unsol.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 int
 efct_hw_init_queues(struct efct_hw *hw)

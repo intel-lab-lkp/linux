@@ -8,6 +8,8 @@
 #include <linux/bpf_verifier.h>
 #include <linux/bsearch.h>
 #include <linux/btf.h>
+#include <linux/hex.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/syscalls.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>

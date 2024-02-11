@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/mfd/core.h>
 #include <linux/regmap.h>
 #include <linux/seq_file.h>

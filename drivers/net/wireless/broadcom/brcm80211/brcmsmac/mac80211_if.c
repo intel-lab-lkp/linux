@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/bcma/bcma.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 #include <defs.h>
 #include "phy/phy_int.h"

@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include "ctrl.h"
+#include <linux/sprintf.h>
 
 #include <core/client.h>
 #include <subdev/clk.h>

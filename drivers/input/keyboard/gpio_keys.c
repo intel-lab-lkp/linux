@@ -7,6 +7,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <linux/hrtimer.h>
 #include <linux/init.h>

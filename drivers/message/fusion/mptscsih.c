@@ -51,9 +51,11 @@
 #include <linux/errno.h>
 #include <linux/kdev_t.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/delay.h>	/* for mdelay */
 #include <linux/interrupt.h>
 #include <linux/reboot.h>	/* notifier code */
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include <scsi/scsi.h>

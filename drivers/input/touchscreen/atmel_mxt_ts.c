@@ -11,6 +11,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/dmi.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -27,6 +28,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-v4l2.h>

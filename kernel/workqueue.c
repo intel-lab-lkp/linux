@@ -27,11 +27,13 @@
 
 #include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/signal.h>
 #include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>
@@ -41,6 +43,7 @@
 #include <linux/mempolicy.h>
 #include <linux/freezer.h>
 #include <linux/debug_locks.h>
+#include <linux/device.h>
 #include <linux/lockdep.h>
 #include <linux/idr.h>
 #include <linux/jhash.h>

@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/hashtable.h>
 #include "ptp_private.h"
+#include <linux/sprintf.h>
 
 #define PTP_VCLOCK_CC_SHIFT		31
 #define PTP_VCLOCK_CC_MULT		(1 << PTP_VCLOCK_CC_SHIFT)

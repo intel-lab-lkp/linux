@@ -40,6 +40,8 @@
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/eq.h>
 #include <linux/debugfs.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "mlx5_core.h"
 #include "lib/eq.h"

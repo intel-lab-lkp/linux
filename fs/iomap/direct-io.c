@@ -4,6 +4,7 @@
  * Copyright (c) 2016-2021 Christoph Hellwig.
  */
 #include <linux/module.h>
+#include <linux/bio.h>
 #include <linux/compiler.h>
 #include <linux/fs.h>
 #include <linux/fscrypt.h>
@@ -12,6 +13,7 @@
 #include <linux/backing-dev.h>
 #include <linux/uio.h>
 #include <linux/task_io_accounting_ops.h>
+#include <linux/blkdev.h>
 #include "trace.h"
 
 #include "../internal.h"

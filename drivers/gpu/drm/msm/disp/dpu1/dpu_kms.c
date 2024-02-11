@@ -11,8 +11,10 @@
 
 #include <linux/debugfs.h>
 #include <linux/dma-buf.h>
+#include <linux/kstrtox.h>
 #include <linux/of_irq.h>
 #include <linux/pm_opp.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_file.h>

@@ -23,8 +23,10 @@
 
 #include <linux/hwmon-sysfs.h>
 #include <linux/hwmon.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/power_supply.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_vblank.h>
 

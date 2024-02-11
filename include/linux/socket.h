@@ -8,6 +8,7 @@
 #include <linux/uio.h>			/* iovec support		*/
 #include <linux/types.h>		/* pid_t			*/
 #include <linux/compiler.h>		/* __user			*/
+#include <linux/time64.h>		/* timespec64			*/
 #include <uapi/linux/socket.h>
 
 struct file;
@@ -391,7 +392,6 @@ struct ucred {
 extern int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *kaddr);
 extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 
-struct timespec64;
 struct __kernel_timespec;
 struct old_timespec32;
 

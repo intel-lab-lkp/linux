@@ -7,6 +7,9 @@
 #include "i40e_alloc.h"
 #include "i40e_io.h"
 #include "i40e_register.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+
+#include <linux/kernel.h> // for upper_32_bits()
 
 #define I40E_HMC_MAX_BP_COUNT 512
 

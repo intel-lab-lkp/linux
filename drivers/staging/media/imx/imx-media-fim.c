@@ -14,6 +14,7 @@
 #include <media/v4l2-subdev.h>
 #include <media/imx.h>
 #include "imx-media.h"
+#include <linux/completion.h>
 
 enum {
 	FIM_CL_ENABLE = 0,

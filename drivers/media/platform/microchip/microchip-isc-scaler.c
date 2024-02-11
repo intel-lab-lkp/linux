@@ -12,6 +12,7 @@
 #include <media/media-entity.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
+#include <linux/sprintf.h>
 
 #include "microchip-isc-regs.h"
 #include "microchip-isc.h"

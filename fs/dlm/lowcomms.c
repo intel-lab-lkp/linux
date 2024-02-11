@@ -46,6 +46,7 @@
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <linux/pagemap.h>
+#include <linux/bvec.h>
 #include <linux/file.h>
 #include <linux/mutex.h>
 #include <linux/sctp.h>

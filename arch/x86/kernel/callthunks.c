@@ -6,6 +6,7 @@
 #include <linux/kallsyms.h>
 #include <linux/memory.h>
 #include <linux/moduleloader.h>
+#include <linux/sprintf.h>
 #include <linux/static_call.h>
 
 #include <asm/alternative.h>

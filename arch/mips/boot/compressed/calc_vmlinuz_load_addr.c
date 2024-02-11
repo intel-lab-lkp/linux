@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

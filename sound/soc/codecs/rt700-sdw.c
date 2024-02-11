@@ -18,6 +18,7 @@
 #include <sound/soc.h>
 #include "rt700.h"
 #include "rt700-sdw.h"
+#include <linux/completion.h>
 
 static bool rt700_readable_register(struct device *dev, unsigned int reg)
 {

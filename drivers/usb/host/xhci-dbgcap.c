@@ -7,9 +7,11 @@
  * Author: Lu Baolu <baolu.lu@linux.intel.com>
  */
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/errno.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/nls.h>

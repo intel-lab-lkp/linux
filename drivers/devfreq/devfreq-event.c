@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 static struct class *devfreq_event_class;
 

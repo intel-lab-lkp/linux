@@ -10,10 +10,12 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/gfp.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/sysctl.h>
 #include <linux/swap.h>

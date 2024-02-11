@@ -9,6 +9,8 @@
  ******************************************************************************/
 
 #include <linux/slab.h>
+#include <linux/kref.h>
+#include <linux/sprintf.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 #include <target/iscsi/iscsi_target_core.h>
@@ -19,6 +21,7 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target.h"
 #include "iscsi_target_parameters.h"
+#include <linux/completion.h>
 
 #include <target/iscsi/iscsi_transport.h>
 

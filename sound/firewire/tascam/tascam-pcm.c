@@ -6,6 +6,7 @@
  */
 
 #include "tascam.h"
+#include <linux/sprintf.h>
 
 static int pcm_init_hw_params(struct snd_tscm *tscm,
 			      struct snd_pcm_substream *substream)

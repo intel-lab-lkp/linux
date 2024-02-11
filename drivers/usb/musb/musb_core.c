@@ -75,6 +75,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/of.h>
 

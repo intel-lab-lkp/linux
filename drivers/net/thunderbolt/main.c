@@ -13,6 +13,7 @@
 #include <linux/highmem.h>
 #include <linux/if_vlan.h>
 #include <linux/jhash.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/etherdevice.h>
 #include <linux/rtnetlink.h>

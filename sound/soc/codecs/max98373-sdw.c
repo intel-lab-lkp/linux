@@ -2,6 +2,7 @@
 // Copyright (c) 2020, Maxim Integrated
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>

@@ -11,6 +11,7 @@
 #include <linux/etherdevice.h>
 #include <linux/err.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <net/cfg80211.h>
 
 #include <brcmu_utils.h>

@@ -17,6 +17,7 @@
 #include <linux/crc16.h>
 #include "lan743x_main.h"
 #include "lan743x_ethtool.h"
+#include <linux/sprintf.h>
 
 #define MMD_ACCESS_ADDRESS	0
 #define MMD_ACCESS_WRITE	1

@@ -34,6 +34,7 @@
 #include <rdma/uverbs_ioctl.h>
 #include "rdma_core.h"
 #include "uverbs.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 struct bundle_alloc_head {
 	struct bundle_alloc_head *next;

@@ -25,6 +25,7 @@
  */
 
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <acpi/video.h>
 

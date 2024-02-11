@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* move to <linux/fieldbus_dev.h> when taking this out of staging */
 #include "../fieldbus_dev.h"

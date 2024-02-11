@@ -4,6 +4,7 @@
  */
 
 #include "gem/i915_gem_lmem.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "gen8_engine_cs.h"
 #include "i915_drv.h"

@@ -15,6 +15,7 @@
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/stacktrace.h>
 
 #include "kcsan.h"

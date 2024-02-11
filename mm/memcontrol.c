@@ -65,7 +65,9 @@
 #include <linux/psi.h>
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/kmemleak.h>
+#include <linux/kstrtox.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>

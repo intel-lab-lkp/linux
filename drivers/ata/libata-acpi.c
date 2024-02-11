@@ -18,6 +18,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_device.h>
 #include "libata.h"
 

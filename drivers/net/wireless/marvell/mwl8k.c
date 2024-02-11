@@ -20,6 +20,7 @@
 #include <linux/completion.h>
 #include <linux/etherdevice.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 #include <linux/moduleparam.h>
 #include <linux/firmware.h>

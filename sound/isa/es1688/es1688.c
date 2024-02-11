@@ -8,6 +8,7 @@
 #include <linux/err.h>
 #include <linux/isa.h>
 #include <linux/isapnp.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/wait.h>
 #include <linux/module.h>

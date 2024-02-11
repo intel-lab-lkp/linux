@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <engine/falcon.h>
+#include <linux/sprintf.h>
 
 #include <core/gpuobj.h>
 #include <subdev/mc.h>

@@ -6,6 +6,7 @@
 #define __RTW89_FW_H__
 
 #include "core.h"
+#include <linux/sprintf.h>
 
 enum rtw89_fw_dl_status {
 	RTW89_FWDL_INITIAL_STATE = 0,

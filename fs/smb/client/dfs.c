@@ -8,6 +8,7 @@
 #include "dns_resolve.h"
 #include "fs_context.h"
 #include "dfs.h"
+#include <linux/sprintf.h>
 
 /**
  * dfs_parse_target_referral - set fs context for dfs target referral

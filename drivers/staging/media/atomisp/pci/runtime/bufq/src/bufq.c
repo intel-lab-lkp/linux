@@ -24,6 +24,7 @@
 #include "sh_css_internal.h"		/* sh_css_queue_type */
 #include "sp_local.h"			/* sp_address_of */
 #include "sh_css_firmware.h"		/* sh_css_sp_fw*/
+#include <linux/sprintf.h>
 
 #define BUFQ_DUMP_FILE_NAME_PREFIX_SIZE 256
 

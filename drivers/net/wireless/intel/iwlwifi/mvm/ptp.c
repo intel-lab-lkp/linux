@@ -5,6 +5,7 @@
 
 #include "mvm.h"
 #include "iwl-debug.h"
+#include <linux/sprintf.h>
 #include <linux/timekeeping.h>
 #include <linux/math64.h>
 

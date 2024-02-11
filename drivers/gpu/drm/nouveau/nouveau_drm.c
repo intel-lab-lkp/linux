@@ -26,6 +26,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/vga_switcheroo.h>
 #include <linux/mmu_notifier.h>
 #include <linux/dynamic_debug.h>

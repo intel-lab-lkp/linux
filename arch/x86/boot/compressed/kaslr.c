@@ -23,6 +23,7 @@
 #include "error.h"
 #include "../string.h"
 #include "efi.h"
+#include <linux/kstrtox.h>
 
 #include <generated/compile.h>
 #include <linux/module.h>

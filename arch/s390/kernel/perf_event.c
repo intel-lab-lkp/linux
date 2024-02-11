@@ -15,6 +15,7 @@
 #include <linux/export.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
 #include <linux/sysfs.h>

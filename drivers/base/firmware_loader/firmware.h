@@ -3,6 +3,7 @@
 #define __FIRMWARE_LOADER_H
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/types.h>
 #include <linux/kref.h>

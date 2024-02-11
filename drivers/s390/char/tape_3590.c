@@ -16,6 +16,7 @@
 #include <linux/init.h>
 #include <linux/bio.h>
 #include <asm/ebcdic.h>
+#include <linux/sprintf.h>
 
 #define TAPE_DBF_AREA	tape_3590_dbf
 #define BUFSIZE 512	/* size of buffers for dynamic generated messages */

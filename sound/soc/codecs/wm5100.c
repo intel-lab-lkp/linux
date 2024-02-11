@@ -29,6 +29,7 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <sound/wm5100.h>
+#include <linux/completion.h>
 
 #include "wm5100.h"
 

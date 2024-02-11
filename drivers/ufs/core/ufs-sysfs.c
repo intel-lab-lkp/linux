@@ -2,6 +2,7 @@
 // Copyright (C) 2018 Western Digital Corporation
 
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/bitfield.h>
 #include <asm/unaligned.h>

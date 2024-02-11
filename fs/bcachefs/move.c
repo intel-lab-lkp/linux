@@ -25,6 +25,7 @@
 #include "snapshot.h"
 #include "super-io.h"
 #include "trace.h"
+#include <linux/sprintf.h>
 
 #include <linux/ioprio.h>
 #include <linux/kthread.h>

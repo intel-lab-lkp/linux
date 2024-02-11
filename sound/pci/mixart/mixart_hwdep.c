@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/module.h>

@@ -38,6 +38,7 @@
 #include <linux/idr.h>
 #include <linux/input/mt.h>
 #include <linux/crc32.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/timer.h>
 #include <asm/unaligned.h>

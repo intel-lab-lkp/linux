@@ -21,6 +21,7 @@
 #include <linux/serial_reg.h>
 #include <linux/slab.h>
 #include <linux/dev_printk.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/rawmidi.h>

@@ -22,6 +22,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/soundwire/sdw.h>
 #include "bus.h"
+#include <linux/sprintf.h>
 
 /**
  * sdw_master_read_prop() - Read Master properties

@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <media/rc-core.h>
 
 #include "budget.h"

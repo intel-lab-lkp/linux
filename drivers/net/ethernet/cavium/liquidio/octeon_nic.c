@@ -25,6 +25,7 @@
 #include "octeon_device.h"
 #include "octeon_nic.h"
 #include "octeon_main.h"
+#include <linux/completion.h>
 
 void *
 octeon_alloc_soft_command_resp(struct octeon_device    *oct,

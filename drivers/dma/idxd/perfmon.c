@@ -5,6 +5,7 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include "idxd.h"
 #include "perfmon.h"
+#include <linux/sprintf.h>
 
 static ssize_t cpumask_show(struct device *dev, struct device_attribute *attr,
 			    char *buf);

@@ -37,6 +37,7 @@
 
 #include <linux/rhashtable.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <trace/events/sock.h>
 
 #include "core.h"

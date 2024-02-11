@@ -31,6 +31,8 @@
 #include "dc.h"
 #include "amdgpu_securedisplay.h"
 
+#include <linux/completion.h>
+
 static const char *const pipe_crc_sources[] = {
 	"none",
 	"crtc",

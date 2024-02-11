@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/string.h>
 #include <linux/utsname.h>

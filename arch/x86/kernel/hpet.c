@@ -6,6 +6,7 @@
 #include <linux/hpet.h>
 #include <linux/cpu.h>
 #include <linux/irq.h>
+#include <linux/sprintf.h>
 
 #include <asm/irq_remapping.h>
 #include <asm/hpet.h>

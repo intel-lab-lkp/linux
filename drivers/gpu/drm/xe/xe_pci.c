@@ -4,6 +4,7 @@
  */
 
 #include "xe_pci.h"
+#include <linux/kstrtox.h>
 
 #include <kunit/static_stub.h>
 #include <linux/device/driver.h>

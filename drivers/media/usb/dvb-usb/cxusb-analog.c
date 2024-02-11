@@ -22,6 +22,7 @@
 //  * controls support
 
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/string.h>

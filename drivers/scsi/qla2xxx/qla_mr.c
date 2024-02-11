@@ -4,10 +4,12 @@
  * Copyright (c)  2003-2014 QLogic Corporation
  */
 #include "qla_def.h"
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/pci.h>
 #include <linux/ratelimit.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <scsi/scsi_tcq.h>
 #include <linux/utsname.h>

@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
 #include <linux/hdmi.h>

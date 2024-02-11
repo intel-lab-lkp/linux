@@ -18,6 +18,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
+#include <linux/completion.h>
 
 #include "rt1017-sdca-sdw.h"
 

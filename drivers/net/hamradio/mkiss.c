@@ -7,6 +7,7 @@
  */
 #include <linux/module.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/uaccess.h>
 #include <linux/crc16.h>
 #include <linux/string.h>

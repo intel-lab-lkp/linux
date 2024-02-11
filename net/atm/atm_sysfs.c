@@ -8,6 +8,7 @@
 #include <linux/atmdev.h>
 #include "common.h"
 #include "resources.h"
+#include <linux/sprintf.h>
 
 #define to_atm_dev(cldev) container_of(cldev, struct atm_dev, class_dev)
 

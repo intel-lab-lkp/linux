@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/timer.h>
 #include <linux/usb.h>
+#include <linux/completion.h>
 
 #define SIMPLE_IO_TIMEOUT	10000	/* in milliseconds */
 

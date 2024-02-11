@@ -9,6 +9,7 @@
 #include <linux/io.h>
 #include <linux/mdio-mux.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 
 #define ETH_REG2		0x0

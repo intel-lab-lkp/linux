@@ -70,6 +70,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 
 #include <linux/platform_data/st_sensors_pdata.h>
 

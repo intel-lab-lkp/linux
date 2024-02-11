@@ -21,6 +21,7 @@
 #include <linux/compiler.h>
 #include <linux/container_of.h>
 #include <linux/spinlock.h>
+#include <linux/stdarg.h> // for va_list
 #include <linux/kref.h>
 #include <linux/kobject_ns.h>
 #include <linux/wait.h>

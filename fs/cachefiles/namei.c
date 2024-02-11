@@ -7,6 +7,7 @@
 
 #include <linux/fs.h>
 #include <linux/namei.h>
+#include <linux/sprintf.h>
 #include "internal.h"
 
 /*

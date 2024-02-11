@@ -3,6 +3,7 @@
 #include <linux/bpf.h>
 #include <linux/bpf-netns.h>
 #include <linux/filter.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <net/net_namespace.h>
 
 /*

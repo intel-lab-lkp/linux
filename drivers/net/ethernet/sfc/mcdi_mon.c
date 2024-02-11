@@ -7,6 +7,7 @@
 #include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/hwmon.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 
 #include "net_driver.h"

@@ -13,6 +13,7 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_plane.h>
+#include <linux/sprintf.h>
 
 #include <linux/clk.h>
 #include <linux/dma/xilinx_dpdma.h>

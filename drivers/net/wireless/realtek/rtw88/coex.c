@@ -9,6 +9,7 @@
 #include "debug.h"
 #include "reg.h"
 #include "phy.h"
+#include <linux/sprintf.h>
 
 static u8 rtw_coex_next_rssi_state(struct rtw_dev *rtwdev, u8 pre_state,
 				   u8 rssi, u8 rssi_thresh)

@@ -15,6 +15,7 @@
 #include "pvr_rogue_fwif_client.h"
 #include "pvr_rogue_fwif_shared.h"
 #include "pvr_vm.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <uapi/drm/pvr_drm.h>
 

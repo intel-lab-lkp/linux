@@ -28,6 +28,7 @@
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/iopoll.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "remoteproc_internal.h"
 #include "qcom_common.h"

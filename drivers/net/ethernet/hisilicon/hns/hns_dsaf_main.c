@@ -16,6 +16,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "hns_dsaf_mac.h"

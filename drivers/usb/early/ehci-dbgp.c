@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/iopoll.h>
+#include <linux/kstrtox.h>
 #include <linux/pci_regs.h>
 #include <linux/pci_ids.h>
 #include <linux/usb/ch9.h>

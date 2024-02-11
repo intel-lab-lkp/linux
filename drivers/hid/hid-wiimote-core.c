@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include "hid-ids.h"
 #include "hid-wiimote.h"
+#include <linux/sprintf.h>
 
 /* output queue handling */
 

@@ -42,6 +42,7 @@
 #include "cio_debug.h"
 #include "chp.h"
 #include "trace.h"
+#include <linux/sprintf.h>
 
 debug_info_t *cio_debug_msg_id;
 debug_info_t *cio_debug_trace_id;

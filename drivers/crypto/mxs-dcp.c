@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/stmp_device.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 
 #include <crypto/aes.h>
 #include <crypto/sha1.h>

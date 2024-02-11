@@ -28,6 +28,7 @@
 #include <linux/net.h>
 #include <linux/in.h>
 #include <linux/inet.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/unistd.h>
@@ -37,6 +38,7 @@
 #include <linux/file.h>
 #include <linux/freezer.h>
 #include <linux/bvec.h>
+#include <linux/completion.h>
 
 #include <net/sock.h>
 #include <net/checksum.h>

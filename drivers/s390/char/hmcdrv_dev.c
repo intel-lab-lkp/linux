@@ -26,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/capability.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "hmcdrv_dev.h"

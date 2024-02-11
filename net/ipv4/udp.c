@@ -75,6 +75,7 @@
 #define pr_fmt(fmt) "UDP: " fmt
 
 #include <linux/bpf-cgroup.h>
+#include <linux/kstrtox.h>
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
 #include <linux/memblock.h>

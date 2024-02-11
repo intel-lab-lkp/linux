@@ -42,6 +42,8 @@
 #include "pm8001_sas.h"
 #include "pm8001_chips.h"
 #include "pm80xx_hwi.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static ulong logging_level = PM8001_FAIL_LOGGING | PM8001_IOERR_LOGGING |
 				PM8001_EVENT_LOGGING | PM8001_INIT_LOGGING;

@@ -31,6 +31,7 @@
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 
 #include <asm/irq.h>
 #include <asm/io.h>

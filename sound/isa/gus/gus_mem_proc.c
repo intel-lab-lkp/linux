@@ -5,6 +5,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/gus.h>
 #include <sound/info.h>

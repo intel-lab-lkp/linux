@@ -6,6 +6,7 @@
 #include <linux/backlight.h>
 #include <linux/kernel.h>
 #include <linux/pwm.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include <acpi/video.h>

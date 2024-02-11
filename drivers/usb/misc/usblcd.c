@@ -19,6 +19,7 @@
 #include <linux/errno.h>
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>
 

@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/mm_types.h>
 #include <linux/overflow.h>
+#include <linux/sprintf.h>
 #include <linux/affs_hardblocks.h>
 
 #include "check.h"

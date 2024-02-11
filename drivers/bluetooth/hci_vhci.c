@@ -10,6 +10,8 @@
 
 #include <linux/module.h>
 #include <asm/unaligned.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/atomic.h>
 #include <linux/kernel.h>

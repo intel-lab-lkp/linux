@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/jiffies.h>
@@ -26,6 +27,7 @@
 #include <linux/mutex.h>
 #include <linux/acpi.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 static int force_addr;
 module_param(force_addr, int, 0);

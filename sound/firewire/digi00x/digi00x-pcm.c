@@ -6,6 +6,7 @@
  */
 
 #include "digi00x.h"
+#include <linux/sprintf.h>
 
 static int hw_rule_rate(struct snd_pcm_hw_params *params,
 			struct snd_pcm_hw_rule *rule)

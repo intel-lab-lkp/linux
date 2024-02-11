@@ -19,6 +19,7 @@
 
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include "solo6x10.h"
 

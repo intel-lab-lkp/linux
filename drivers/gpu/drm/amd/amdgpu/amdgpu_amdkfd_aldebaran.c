@@ -26,6 +26,7 @@
 #include "amdgpu_amdkfd_aldebaran.h"
 #include "gc/gc_9_4_2_offset.h"
 #include "gc/gc_9_4_2_sh_mask.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/linux/kfd_ioctl.h>
 
 /*

@@ -9,6 +9,7 @@
 #include "iwl-context-info-gen3.h"
 #include "internal.h"
 #include "fw/dbg.h"
+#include <linux/sprintf.h>
 
 #define FW_RESET_TIMEOUT (HZ / 5)
 

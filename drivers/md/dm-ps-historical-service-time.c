@@ -23,6 +23,7 @@
 
 #include "dm.h"
 #include "dm-path-selector.h"
+#include <linux/sprintf.h>
 
 #include <linux/blkdev.h>
 #include <linux/slab.h>

@@ -39,6 +39,7 @@
  *
  */
 
+#include <linux/kref.h>
 #include <linux/module.h>
 #include <linux/inetdevice.h>
 #include <linux/init.h>
@@ -46,6 +47,7 @@
 #include <linux/errno.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 
 #include <rdma/ib_user_verbs.h>
 #include <rdma/ib_addr.h>

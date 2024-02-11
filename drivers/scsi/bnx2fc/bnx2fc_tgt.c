@@ -14,6 +14,7 @@
  */
 
 #include "bnx2fc.h"
+#include <linux/completion.h>
 static void bnx2fc_upld_timer(struct timer_list *t);
 static void bnx2fc_ofld_timer(struct timer_list *t);
 static int bnx2fc_init_tgt(struct bnx2fc_rport *tgt,

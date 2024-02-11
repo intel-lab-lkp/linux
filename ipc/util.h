@@ -13,6 +13,7 @@
 
 #include <linux/unistd.h>
 #include <linux/err.h>
+#include <linux/ipc.h>
 #include <linux/ipc_namespace.h>
 #include <linux/pid.h>
 

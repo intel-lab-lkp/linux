@@ -9,6 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/module.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include <net/ipv6.h>
 #include <net/ip6_route.h>

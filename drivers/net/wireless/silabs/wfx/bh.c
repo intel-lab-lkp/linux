@@ -7,6 +7,7 @@
  */
 #include <linux/gpio/consumer.h>
 #include <net/mac80211.h>
+#include <linux/completion.h>
 
 #include "bh.h"
 #include "wfx.h"

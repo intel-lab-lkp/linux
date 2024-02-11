@@ -10,11 +10,13 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/bitops.h>
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/sched.h>
 #include <linux/topology.h>

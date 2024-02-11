@@ -29,6 +29,7 @@
 #include <linux/if_vlan.h>
 #include <linux/sh_eth.h>
 #include <linux/of_mdio.h>
+#include <linux/sprintf.h>
 
 #include "sh_eth.h"
 

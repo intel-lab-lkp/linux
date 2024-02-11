@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/dma-fence.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <drm/drm_blend.h>
 #include <drm/drm_crtc.h>

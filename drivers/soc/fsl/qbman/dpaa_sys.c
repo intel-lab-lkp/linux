@@ -29,6 +29,7 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits()
 #include "dpaa_sys.h"
 
 /*

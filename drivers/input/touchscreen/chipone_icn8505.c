@@ -19,6 +19,7 @@
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 /* Normal operation mode defines */
 #define ICN8505_REG_ADDR_WIDTH		16

@@ -33,6 +33,7 @@
 #include <linux/idr.h>
 #include <linux/spinlock.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 struct vmwgfx_gmrid_man {
 	struct ttm_resource_manager manager;

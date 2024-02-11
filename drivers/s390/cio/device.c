@@ -13,12 +13,14 @@
 
 #include <linux/export.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/timer.h>

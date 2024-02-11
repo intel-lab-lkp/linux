@@ -17,6 +17,7 @@
 #include <asm/unaligned.h>
 #include "hw.h"
 #include "ar9002_phy.h"
+#include <linux/sprintf.h>
 
 static int ath9k_hw_4k_get_eeprom_ver(struct ath_hw *ah)
 {

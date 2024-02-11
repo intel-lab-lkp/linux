@@ -15,6 +15,7 @@
 #include <linux/security.h>
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/kthread.h>	/* for self test */
 #include <linux/module.h>
 #include <linux/percpu.h>
@@ -26,6 +27,7 @@
 #include <linux/list.h>
 #include <linux/cpu.h>
 #include <linux/oom.h>
+#include <linux/completion.h>
 
 #include <asm/local64.h>
 #include <asm/local.h>

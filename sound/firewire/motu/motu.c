@@ -6,6 +6,7 @@
  */
 
 #include "motu.h"
+#include <linux/sprintf.h>
 
 #define OUI_MOTU	0x0001f2
 

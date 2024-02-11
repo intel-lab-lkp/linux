@@ -34,6 +34,7 @@
 #include <linux/spinlock.h>
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
+#include <linux/completion.h>
 
 #include "qib.h"
 #include "qib_common.h"

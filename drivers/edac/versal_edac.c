@@ -14,6 +14,7 @@
 #include <linux/sizes.h>
 #include <linux/firmware/xlnx-zynqmp.h>
 #include <linux/firmware/xlnx-event-manager.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

@@ -7,6 +7,7 @@
 #include <linux/blkpg.h>
 #include <linux/hdreg.h>
 #include <linux/backing-dev.h>
+#include <linux/file.h> // for fput()
 #include <linux/fs.h>
 #include <linux/blktrace_api.h>
 #include <linux/pr.h>

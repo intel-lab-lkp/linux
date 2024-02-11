@@ -8,6 +8,8 @@
 
 #include <linux/kernel.h>
 #include <linux/cpuidle.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>

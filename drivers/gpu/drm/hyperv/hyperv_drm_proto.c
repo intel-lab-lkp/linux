@@ -6,6 +6,7 @@
  */
 
 #include <linux/hyperv.h>
+#include <linux/completion.h>
 
 #include <drm/drm_print.h>
 #include <drm/drm_simple_kms_helper.h>

@@ -32,6 +32,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -46,6 +47,7 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_cache.h>
 #include <rdma/rdma_counter.h>
+#include <linux/completion.h>
 
 #include "core_priv.h"
 #include "restrack.h"

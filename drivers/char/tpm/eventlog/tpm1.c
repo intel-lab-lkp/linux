@@ -21,6 +21,7 @@
 #include <linux/security.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tpm_eventlog.h>
 
 #include "../tpm.h"

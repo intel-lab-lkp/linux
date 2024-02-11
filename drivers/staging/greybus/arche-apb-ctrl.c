@@ -18,6 +18,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spinlock.h>
 #include "arche_platform.h"
+#include <linux/sprintf.h>
 
 static void apb_bootret_deassert(struct device *dev);
 

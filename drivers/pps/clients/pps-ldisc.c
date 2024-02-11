@@ -7,8 +7,10 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/serial_core.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/pps_kernel.h>
 #include <linux/bug.h>

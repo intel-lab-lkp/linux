@@ -5,6 +5,7 @@
 
 #include <linux/hwmon-sysfs.h>
 #include <linux/hwmon.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 
 #include <drm/drm_managed.h>

@@ -16,7 +16,10 @@
 #include "be.h"
 #include "be_cmds.h"
 #include <asm/div64.h>
+#include <linux/completion.h>
 #include <linux/if_bridge.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 #include <net/busy_poll.h>
 #include <net/vxlan.h>
 

@@ -7,12 +7,14 @@
 
 #include <linux/errno.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <asm/arcregs.h>
 #include <asm/stacktrace.h>
+#include <linux/sprintf.h>
 
 /* HW holds 8 symbols + one for null terminator */
 #define ARCPMU_EVENT_NAME_LEN	9

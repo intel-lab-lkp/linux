@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
+#include <linux/completion.h>
 
 #define GXP_MAX_I2C_ENGINE 10
 static const char * const gxp_i2c_name[] = {

@@ -5,6 +5,7 @@
 
 #include <linux/errno.h>
 #include "slimbus.h"
+#include <linux/completion.h>
 
 /**
  * slim_ctrl_clk_pause() - Called by slimbus controller to enter/exit

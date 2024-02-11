@@ -7,6 +7,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/export.h>
+#include <linux/completion.h>
 
 #ifdef CONFIG_PM
 /**

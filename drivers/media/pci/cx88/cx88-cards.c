@@ -9,6 +9,7 @@
 #include "cx88.h"
 #include "tea5767.h"
 #include "xc4000.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/module.h>

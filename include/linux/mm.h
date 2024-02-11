@@ -23,6 +23,8 @@
 #include <linux/err.h>
 #include <linux/page-flags.h>
 #include <linux/page_ref.h>
+#include <linux/percpu_counter.h>
+#include <linux/rwsem.h>
 #include <linux/overflow.h>
 #include <linux/sizes.h>
 #include <linux/sched.h>
@@ -30,6 +32,7 @@
 #include <linux/kasan.h>
 #include <linux/memremap.h>
 #include <linux/slab.h>
+#include <linux/seqlock.h>
 
 struct mempolicy;
 struct anon_vma;

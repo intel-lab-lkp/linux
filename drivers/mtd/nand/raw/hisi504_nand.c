@@ -13,6 +13,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/sizes.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/delay.h>

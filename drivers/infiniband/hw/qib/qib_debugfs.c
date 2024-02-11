@@ -33,6 +33,7 @@
 #include <linux/seq_file.h>
 #include <linux/kernel.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include "qib.h"
 #include "qib_verbs.h"

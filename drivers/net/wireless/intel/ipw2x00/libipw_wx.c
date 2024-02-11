@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 #include <net/lib80211.h>
 #include <linux/wireless.h>

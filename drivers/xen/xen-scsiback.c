@@ -34,8 +34,10 @@
 #define pr_fmt(fmt) "xen-pvscsi: " fmt
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
@@ -44,6 +46,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/configfs.h>
+#include <linux/completion.h>
 
 #include <generated/utsrelease.h>
 

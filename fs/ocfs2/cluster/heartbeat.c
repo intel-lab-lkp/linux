@@ -4,18 +4,21 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/configfs.h>
 #include <linux/random.h>
 #include <linux/crc32.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>

@@ -9,6 +9,7 @@
 
 #include "mtu3.h"
 #include "mtu3_trace.h"
+#include <linux/sprintf.h>
 
 void mtu3_req_complete(struct mtu3_ep *mep,
 		     struct usb_request *req, int status)

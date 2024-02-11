@@ -12,6 +12,7 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_probe_helper.h>
+#include <linux/sprintf.h>
 
 #include <kunit/test.h>
 

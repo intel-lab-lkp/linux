@@ -14,6 +14,7 @@
 #include <linux/leds.h>
 #include <linux/led-class-multicolor.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 

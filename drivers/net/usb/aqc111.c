@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
 #include <linux/mii.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/crc32.h>
 #include <linux/if_vlan.h>

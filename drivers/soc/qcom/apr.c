@@ -8,6 +8,7 @@
 #include <linux/spinlock.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/of_device.h>
 #include <linux/soc/qcom/apr.h>

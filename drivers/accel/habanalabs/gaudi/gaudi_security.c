@@ -7,6 +7,7 @@
 
 #include "gaudiP.h"
 #include "../include/gaudi/asic_reg/gaudi_regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define GAUDI_NUMBER_OF_LBW_RR_REGS	28
 #define GAUDI_NUMBER_OF_HBW_RR_REGS	24

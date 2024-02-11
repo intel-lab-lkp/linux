@@ -16,6 +16,7 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 /* Commands */
 #define DLH_START_SINGLE    0xAA

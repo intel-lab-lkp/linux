@@ -35,6 +35,7 @@
 #include <linux/module.h>
 #include <linux/pci_ids.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 
 #include "tw686x.h"

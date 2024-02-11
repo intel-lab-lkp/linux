@@ -19,6 +19,7 @@
 #include <linux/mailbox_client.h>
 #include <linux/platform_device.h>
 #include <soc/microchip/mpfs.h>
+#include <linux/completion.h>
 
 /*
  * This timeout must be long, as some services (example: image authentication)

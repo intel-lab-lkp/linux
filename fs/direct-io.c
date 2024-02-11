@@ -30,6 +30,7 @@
 #include <linux/pagemap.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/bio.h>
+#include <linux/completion.h>
 #include <linux/wait.h>
 #include <linux/err.h>
 #include <linux/blkdev.h>

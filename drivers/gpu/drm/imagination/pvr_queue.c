@@ -3,6 +3,7 @@
 
 #include <drm/drm_managed.h>
 #include <drm/gpu_scheduler.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "pvr_cccb.h"
 #include "pvr_context.h"

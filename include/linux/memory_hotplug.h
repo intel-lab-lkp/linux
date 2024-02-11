@@ -3,6 +3,7 @@
 #define __LINUX_MEMORY_HOTPLUG_H
 
 #include <linux/mmzone.h>
+#include <linux/seqlock.h>
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
 #include <linux/bug.h>

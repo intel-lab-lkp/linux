@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
 #include <linux/init.h>
@@ -16,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>

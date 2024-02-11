@@ -10,6 +10,7 @@
  */
 
 #include "cna.h"
+#include <linux/completion.h>
 
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>

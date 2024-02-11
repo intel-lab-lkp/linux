@@ -19,8 +19,10 @@
 #include <linux/fs.h>
 #include <linux/pci.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/fcntl.h>
+#include <linux/completion.h>
 
 #include "bfad_drv.h"
 #include "bfad_im.h"

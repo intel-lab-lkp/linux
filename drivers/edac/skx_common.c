@@ -21,6 +21,7 @@
 #include <asm/mce.h>
 #include "edac_module.h"
 #include "skx_common.h"
+#include <linux/sprintf.h>
 
 static const char * const component_names[] = {
 	[INDEX_SOCKET]		= "ProcessorSocketId",

@@ -44,6 +44,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/hwmon.h>
@@ -51,10 +52,12 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/bitops.h>
+#include <linux/device.h>
 #include <linux/nospec.h>
 #include <linux/regmap.h>
 #include "lm75.h"
 #include "nct6775.h"
+#include <linux/sprintf.h>
 
 #undef DEFAULT_SYMBOL_NAMESPACE
 #define DEFAULT_SYMBOL_NAMESPACE HWMON_NCT6775

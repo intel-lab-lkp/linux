@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "imx8-isi-core.h"

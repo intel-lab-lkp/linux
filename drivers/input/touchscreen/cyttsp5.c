@@ -22,6 +22,8 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define CYTTSP5_NAME				"cyttsp5"
 #define CY_I2C_DATA_SIZE			(2 * 256)

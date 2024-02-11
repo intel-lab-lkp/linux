@@ -9,6 +9,7 @@
 #include <linux/pci.h>
 #include <linux/iommu.h>
 #include <linux/iommu-helper.h>
+#include <linux/kstrtox.h>
 #include <linux/sizes.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>

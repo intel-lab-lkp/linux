@@ -6,6 +6,7 @@
  */
 
 #include "oxfw.h"
+#include <linux/sprintf.h>
 
 #define OXFORD_FIRMWARE_ID_ADDRESS	(CSR_REGISTER_BASE + 0x50000)
 /* 0x970?vvvv or 0x971?vvvv, where vvvv = firmware version */

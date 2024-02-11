@@ -18,6 +18,7 @@
 #include <linux/rtc/ds1307.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>

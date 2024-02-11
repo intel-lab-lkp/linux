@@ -19,6 +19,7 @@
 #include <linux/sched/signal.h>
 #include <linux/seq_file.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>

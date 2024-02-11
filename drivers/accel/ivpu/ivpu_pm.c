@@ -4,6 +4,7 @@
  */
 
 #include <linux/highmem.h>
+#include <linux/kobject.h>
 #include <linux/moduleparam.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>

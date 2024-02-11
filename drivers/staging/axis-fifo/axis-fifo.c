@@ -15,8 +15,10 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>
 #include <linux/device.h>

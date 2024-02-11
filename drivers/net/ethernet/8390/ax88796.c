@@ -16,6 +16,7 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

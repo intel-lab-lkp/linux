@@ -10,6 +10,7 @@
 #include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/extable.h>
+#include <linux/kernel.h> // for bust_spinlocks()
 #include <linux/kfence.h>
 #include <linux/signal.h>
 #include <linux/mm.h>

@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <asm/cputhreads.h>
 #include <asm/smp.h>
+#include <linux/sprintf.h>
 
 #include "cacheinfo.h"
 

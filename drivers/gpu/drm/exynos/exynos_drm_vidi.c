@@ -8,7 +8,9 @@
 
 #include <linux/component.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 
 #include <drm/drm_atomic_helper.h>

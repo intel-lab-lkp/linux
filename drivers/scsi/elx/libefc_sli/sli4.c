@@ -9,6 +9,7 @@
  * in this file.
  */
 #include "sli4.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static struct sli4_asic_entry_t sli4_asic_table[] = {
 	{ SLI4_ASIC_REV_B0, SLI4_ASIC_GEN_5},

@@ -39,6 +39,7 @@
 #include <crypto/nhpoly1305.h>
 #include <crypto/scatterwalk.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 /*
  * Size of right-hand part of input data, in bytes; also the size of the block

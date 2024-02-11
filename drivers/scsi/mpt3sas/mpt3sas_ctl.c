@@ -44,14 +44,17 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/compat.h>
+#include <linux/completion.h>
 #include <linux/poll.h>
 
 #include <linux/io.h>

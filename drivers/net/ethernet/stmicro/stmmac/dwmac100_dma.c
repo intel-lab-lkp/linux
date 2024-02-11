@@ -17,6 +17,7 @@
 #include <asm/io.h>
 #include "dwmac100.h"
 #include "dwmac_dma.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void dwmac100_dma_init(void __iomem *ioaddr,
 			      struct stmmac_dma_cfg *dma_cfg, int atds)

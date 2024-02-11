@@ -12,10 +12,12 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/configfs.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/dlmconstants.h>
+#include <linux/sprintf.h>
 #include <net/ipv6.h>
 #include <net/sock.h>
 

@@ -17,6 +17,8 @@
 
 #include <linux/debugfs.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "ath9k.h"
 #include "dfs_debug.h"

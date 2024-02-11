@@ -15,9 +15,11 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/mailbox_client.h>
 #include <linux/mailbox_controller.h>
 #include <linux/of.h>
+#include <linux/hrtimer.h>
 
 #include "mailbox.h"
 

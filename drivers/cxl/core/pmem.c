@@ -6,6 +6,7 @@
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
+#include <linux/sprintf.h>
 
 /**
  * DOC: cxl pmem

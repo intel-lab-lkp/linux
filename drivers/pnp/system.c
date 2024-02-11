@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 
 static const struct pnp_device_id pnp_dev_table[] = {
 	/* General ID for reserving resources */

@@ -4,6 +4,8 @@
  *  Copyright (c) 2016-2018 Cavium Inc.
  */
 #include "qedf.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 inline bool qedf_is_vport(struct qedf_ctx *qedf)
 {

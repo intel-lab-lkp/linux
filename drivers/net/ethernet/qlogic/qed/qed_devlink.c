@@ -6,6 +6,7 @@
 
 #include <linux/kernel.h>
 #include <linux/qed/qed_if.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "qed.h"
 #include "qed_devlink.h"

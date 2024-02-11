@@ -17,6 +17,7 @@
 #include "rx_common.h"
 #include "tc_bindings.h"
 #include "efx_devlink.h"
+#include <linux/sprintf.h>
 
 #define EFX_EF100_REP_DRIVER	"efx_ef100_rep"
 

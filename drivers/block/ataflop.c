@@ -63,6 +63,8 @@
  */
 
 #include <linux/module.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/fd.h>
 #include <linux/delay.h>

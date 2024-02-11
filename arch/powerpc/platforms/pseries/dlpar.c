@@ -10,11 +10,13 @@
 #define pr_fmt(fmt)	"dlpar: " fmt
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
 #include <linux/cpu.h>
 #include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include "of_helpers.h"
 #include "pseries.h"

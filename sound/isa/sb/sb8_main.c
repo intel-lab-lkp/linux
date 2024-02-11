@@ -19,6 +19,7 @@
 #include <linux/io.h>
 #include <asm/dma.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/module.h>
 #include <sound/core.h>

@@ -15,6 +15,7 @@
 #include <linux/of_address.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/io.h>
 #include <asm/smp.h>

@@ -10,6 +10,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/gpio/consumer.h>
@@ -17,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include "leds.h"
+#include <linux/sprintf.h>
 
 enum ns2_led_modes {
 	NS_V2_LED_OFF,

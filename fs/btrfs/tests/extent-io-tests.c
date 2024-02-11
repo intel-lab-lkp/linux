@@ -5,9 +5,11 @@
 
 #include <linux/pagemap.h>
 #include <linux/pagevec.h>
+#include <linux/random.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include "btrfs-tests.h"
 #include "../ctree.h"
 #include "../extent_io.h"

@@ -7,6 +7,7 @@
 #include <uapi/linux/idxd.h>
 #include "idxd.h"
 #include "registers.h"
+#include <linux/completion.h>
 
 static struct idxd_desc *__get_desc(struct idxd_wq *wq, int idx, int cpu)
 {

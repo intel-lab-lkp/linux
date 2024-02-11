@@ -13,6 +13,7 @@
 #include <linux/firmware.h>
 #include "sof-priv.h"
 #include "ops.h"
+#include <linux/sprintf.h>
 
 int snd_sof_load_firmware_raw(struct snd_sof_dev *sdev)
 {

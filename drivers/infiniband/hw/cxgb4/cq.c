@@ -31,6 +31,7 @@
  */
 
 #include <rdma/uverbs_ioctl.h>
+#include <linux/completion.h>
 
 #include "iw_cxgb4.h"
 

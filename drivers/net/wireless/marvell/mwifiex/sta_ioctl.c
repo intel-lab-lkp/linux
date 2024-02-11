@@ -13,6 +13,7 @@
 #include "wmm.h"
 #include "11n.h"
 #include "cfg80211.h"
+#include <linux/sprintf.h>
 
 static int disconnect_on_suspend;
 module_param(disconnect_on_suspend, int, 0644);

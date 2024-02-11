@@ -7,10 +7,12 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/miscdevice.h>
 #include <linux/kobject.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 
 #include "vas.h"
 

@@ -6,6 +6,7 @@
  */
 #include <drm/drm_atomic.h>
 #include <drm/drm_print.h>
+#include <linux/sprintf.h>
 
 #include "komeda_dev.h"
 

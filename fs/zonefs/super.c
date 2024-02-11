@@ -10,7 +10,9 @@
 #include <linux/iomap.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/sprintf.h>
 #include <linux/statfs.h>
 #include <linux/writeback.h>
 #include <linux/quotaops.h>

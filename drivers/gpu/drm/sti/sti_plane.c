@@ -7,6 +7,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>

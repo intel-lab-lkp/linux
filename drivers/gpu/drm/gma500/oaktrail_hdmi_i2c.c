@@ -31,6 +31,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include "psb_drv.h"
+#include <linux/completion.h>
 
 #define HDMI_READ(reg)		readl(hdmi_dev->regs + (reg))
 #define HDMI_WRITE(reg, val)	writel(val, hdmi_dev->regs + (reg))

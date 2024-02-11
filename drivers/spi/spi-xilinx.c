@@ -19,6 +19,7 @@
 #include <linux/spi/spi_bitbang.h>
 #include <linux/spi/xilinx_spi.h>
 #include <linux/io.h>
+#include <linux/completion.h>
 
 #define XILINX_SPI_MAX_CS	32
 

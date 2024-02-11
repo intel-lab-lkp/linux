@@ -9,6 +9,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/cpu.h>
 #include <linux/smp.h>
@@ -17,6 +18,7 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/hash.h>
+#include <linux/sprintf.h>
 #include <linux/tick.h>
 #include <linux/sysfs.h>
 #include <linux/dcache.h>
@@ -55,6 +57,7 @@
 #include <linux/pgtable.h>
 #include <linux/buildid.h>
 #include <linux/task_work.h>
+#include <linux/hrtimer.h>
 
 #include "internal.h"
 

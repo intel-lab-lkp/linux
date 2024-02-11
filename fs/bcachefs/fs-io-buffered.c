@@ -10,6 +10,7 @@
 #include "fs-io-pagecache.h"
 #include "io_read.h"
 #include "io_write.h"
+#include <linux/completion.h>
 
 #include <linux/backing-dev.h>
 #include <linux/pagemap.h>

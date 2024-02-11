@@ -8,8 +8,10 @@
  */
 
 #include <linux/compat.h>
+#include <linux/completion.h>
 #include <linux/etherdevice.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/capability.h>
 #include <linux/errno.h>

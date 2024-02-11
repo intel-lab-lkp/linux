@@ -11,6 +11,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/iio/types.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/mfd/mp2629.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>

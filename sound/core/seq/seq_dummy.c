@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include "seq_clientmgr.h"
 #include <sound/initval.h>

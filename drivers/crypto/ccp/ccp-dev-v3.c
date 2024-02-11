@@ -13,6 +13,7 @@
 #include <linux/kthread.h>
 #include <linux/interrupt.h>
 #include <linux/ccp.h>
+#include <linux/sprintf.h>
 
 #include "ccp-dev.h"
 

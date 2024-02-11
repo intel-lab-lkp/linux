@@ -10,7 +10,9 @@
 
 #include <linux/debugfs.h>
 #include <linux/dmar.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <asm/irq_remapping.h>
 

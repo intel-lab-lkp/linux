@@ -18,8 +18,11 @@
 #include <linux/clocksource.h>
 #include <linux/sched/task.h>
 #include <linux/kallsyms.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/security.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/tracefs.h>
 #include <linux/hardirq.h>
 #include <linux/kthread.h>

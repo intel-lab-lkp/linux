@@ -53,6 +53,7 @@
 #include <rdma/rdma_cm.h>
 #include "sa.h"
 #include "core_priv.h"
+#include <linux/completion.h>
 
 #define IB_SA_LOCAL_SVC_TIMEOUT_MIN		100
 #define IB_SA_LOCAL_SVC_TIMEOUT_DEFAULT		2000

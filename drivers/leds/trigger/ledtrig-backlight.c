@@ -8,11 +8,13 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/fb.h>
 #include <linux/leds.h>
 #include "../leds.h"
+#include <linux/sprintf.h>
 
 #define BLANK		1
 #define UNBLANK		0

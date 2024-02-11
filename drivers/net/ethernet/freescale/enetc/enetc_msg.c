@@ -2,6 +2,8 @@
 /* Copyright 2017-2019 NXP */
 
 #include "enetc_pf.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 static void enetc_msg_disable_mr_int(struct enetc_hw *hw)
 {

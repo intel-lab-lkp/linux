@@ -3,6 +3,7 @@
 
 #include <linux/string.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include "snic.h"
 

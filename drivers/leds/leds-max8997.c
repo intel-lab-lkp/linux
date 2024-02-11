@@ -13,6 +13,7 @@
 #include <linux/mfd/max8997.h>
 #include <linux/mfd/max8997-private.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define MAX8997_LED_FLASH_SHIFT			3
 #define MAX8997_LED_FLASH_CUR_MASK		0xf8

@@ -5,6 +5,7 @@
 
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "hfi.h"

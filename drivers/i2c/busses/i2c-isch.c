@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/ioport.h>
 #include <linux/i2c.h>

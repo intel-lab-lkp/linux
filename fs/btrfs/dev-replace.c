@@ -5,6 +5,7 @@
 
 #include <linux/sched.h>
 #include <linux/bio.h>
+#include <linux/file.h> // for fput()
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <linux/kthread.h>

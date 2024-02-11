@@ -12,6 +12,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/rculist.h>
+#include <linux/refcount.h>
 #include <trace/events/rpm.h>
 
 #include "../base.h"

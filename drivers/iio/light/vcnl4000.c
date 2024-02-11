@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 
 #include <linux/iio/buffer.h>

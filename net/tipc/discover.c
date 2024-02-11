@@ -37,6 +37,7 @@
 #include "core.h"
 #include "node.h"
 #include "discover.h"
+#include <linux/sprintf.h>
 
 /* min delay during bearer start up */
 #define TIPC_DISC_INIT	msecs_to_jiffies(125)

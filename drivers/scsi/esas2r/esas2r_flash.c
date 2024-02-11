@@ -43,6 +43,7 @@
  */
 
 #include "esas2r.h"
+#include <linux/sprintf.h>
 
 /* local macro defs */
 #define esas2r_nvramcalc_cksum(n)     \

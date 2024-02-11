@@ -40,6 +40,7 @@
 #include <linux/blk-mq.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/major.h>
@@ -47,6 +48,7 @@
 #include <linux/scatterlist.h>
 #include <linux/bitmap.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sched/mm.h>
 

@@ -20,11 +20,13 @@
  */
 
 #include <linux/aperture.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/slab.h>

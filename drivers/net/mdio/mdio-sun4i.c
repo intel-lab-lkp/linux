@@ -18,6 +18,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #define EMAC_MAC_MCMD_REG	(0x00)
 #define EMAC_MAC_MADR_REG	(0x04)

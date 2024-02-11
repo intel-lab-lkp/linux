@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "cgx.h"

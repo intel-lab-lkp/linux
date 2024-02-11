@@ -9,9 +9,11 @@
  */
 
 #include "hid-ids.h"
+#include <linux/completion.h>
 #include <linux/hidraw.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #ifdef DEBUG

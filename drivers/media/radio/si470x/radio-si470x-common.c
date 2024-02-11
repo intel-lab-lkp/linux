@@ -100,6 +100,7 @@
 
 /* kernel includes */
 #include "radio-si470x.h"
+#include <linux/completion.h>
 
 /**************************************************************************
  * Module Parameters

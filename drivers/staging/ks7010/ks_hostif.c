@@ -8,7 +8,9 @@
 
 #include <crypto/hash.h>
 #include <linux/circ_buf.h>
+#include <linux/completion.h>
 #include <linux/if_arp.h>
+#include <linux/sprintf.h>
 #include <net/iw_handler.h>
 #include <uapi/linux/llc.h>
 #include "eap_packet.h"

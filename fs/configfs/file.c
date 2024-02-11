@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>

@@ -6,12 +6,14 @@
 #include <linux/cpu.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/random.h>
 #include <linux/randomize_kstack.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/signal.h>
 #include <linux/signal.h>
 #include <linux/kdebug.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/kprobes.h>
 #include <linux/uprobes.h>

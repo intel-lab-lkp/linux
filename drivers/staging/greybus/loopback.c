@@ -22,6 +22,7 @@
 #include <linux/debugfs.h>
 #include <linux/list_sort.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/atomic.h>
 #include <linux/pm_runtime.h>

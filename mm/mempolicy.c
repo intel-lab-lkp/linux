@@ -82,6 +82,7 @@
 #include <linux/highmem.h>
 #include <linux/hugetlb.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/numa_balancing.h>
@@ -97,6 +98,7 @@
 #include <linux/compat.h>
 #include <linux/ptrace.h>
 #include <linux/swap.h>
+#include <linux/sysfs.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/migrate.h>

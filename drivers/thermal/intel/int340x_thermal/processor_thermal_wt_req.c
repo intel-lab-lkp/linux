@@ -8,6 +8,7 @@
 
 #include <linux/pci.h>
 #include "processor_thermal_device.h"
+#include <linux/sprintf.h>
 
 /* List of workload types */
 static const char * const workload_types[] = {

@@ -22,6 +22,7 @@
 #include "nouveau_bo.h"
 #include "nouveau_dma.h"
 #include "nouveau_mem.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <nvif/push906f.h>
 

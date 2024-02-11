@@ -5,6 +5,7 @@
 #if !defined(_TRACE_VMSCAN_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_VMSCAN_H
 
+#include <linux/shrinker.h>
 #include <linux/types.h>
 #include <linux/tracepoint.h>
 #include <linux/mm.h>

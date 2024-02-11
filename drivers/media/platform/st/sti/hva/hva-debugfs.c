@@ -6,6 +6,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "hva.h"
 #include "hva-hw.h"

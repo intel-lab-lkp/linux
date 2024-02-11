@@ -12,6 +12,7 @@
 #include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/mfd/gsc.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -19,6 +20,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 

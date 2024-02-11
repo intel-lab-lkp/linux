@@ -5,6 +5,7 @@
  */
 
 #include "qlcnic.h"
+#include <linux/sprintf.h>
 
 static const struct qlcnic_mailbox_metadata qlcnic_mbx_tbl[] = {
 	{QLCNIC_CMD_CREATE_RX_CTX, 4, 1},

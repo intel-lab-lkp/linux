@@ -7,6 +7,7 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mc146818rtc.h>
 #include <linux/export.h>
 #include <linux/string.h>

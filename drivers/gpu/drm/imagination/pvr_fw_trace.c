@@ -6,6 +6,7 @@
 #include "pvr_rogue_fwif.h"
 #include "pvr_rogue_fwif_sf.h"
 #include "pvr_fw_trace.h"
+#include <linux/sprintf.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>

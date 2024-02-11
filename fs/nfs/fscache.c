@@ -15,6 +15,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/iversion.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <linux/fscache.h>
 #include <linux/netfs.h>

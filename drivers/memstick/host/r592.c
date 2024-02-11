@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <asm/byteorder.h>
+#include <linux/completion.h>
 #include <linux/swab.h>
 #include "r592.h"
 

@@ -17,6 +17,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/usb/composite.h>
 

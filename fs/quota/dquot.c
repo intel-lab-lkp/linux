@@ -61,6 +61,7 @@
 #include <linux/mm.h>
 #include <linux/time.h>
 #include <linux/types.h>
+#include <linux/shrinker.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>

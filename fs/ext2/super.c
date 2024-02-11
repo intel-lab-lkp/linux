@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>

@@ -12,6 +12,7 @@
  *  Copyright (C) 2006 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
  */
 #include <linux/rwsem.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/mutex.h>
 #include <linux/ww_mutex.h>
 #include <linux/sched.h>

@@ -8,6 +8,7 @@
  * goes to the same location as the NFSv3 WRITE.
  */
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/nfsd/debug.h>
 

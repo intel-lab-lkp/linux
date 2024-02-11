@@ -27,6 +27,7 @@
 #include "r600d.h"
 #include "r600_dpm.h"
 #include "atom.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 const u32 r600_utc[R600_PM_NUMBER_OF_TC] = {
 	R600_UTC_DFLT_00,

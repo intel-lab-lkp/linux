@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/ccp.h>
+#include <linux/completion.h>
 #include <linux/scatterlist.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/akcipher.h>

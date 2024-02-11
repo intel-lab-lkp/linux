@@ -9,6 +9,7 @@
 
 #include "xgene_enet_main.h"
 #include "xgene_enet_hw.h"
+#include <linux/sprintf.h>
 
 static void xgene_enet_ring_init(struct xgene_enet_desc_ring *ring)
 {

@@ -5,6 +5,7 @@
  */
 
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include "sparx5_main_regs.h"
 #include "sparx5_main.h"

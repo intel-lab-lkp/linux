@@ -10,6 +10,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/async.h>
+#include <linux/completion.h>
 #include <linux/export.h>
 
 #include <scsi/sas_ata.h>

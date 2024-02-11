@@ -4,6 +4,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/device.h>
 #include <linux/wait.h>

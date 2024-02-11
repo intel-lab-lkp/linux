@@ -5,6 +5,7 @@
 #include <linux/jiffies.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/sprintf.h>
 
 #include <loongson.h>
 #include <boot_param.h>

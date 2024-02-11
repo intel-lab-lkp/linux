@@ -20,6 +20,7 @@
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>

@@ -2,6 +2,7 @@
 #ifndef __NVKM_OS_H__
 #define __NVKM_OS_H__
 #include <nvif/os.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #ifdef __BIG_ENDIAN
 #define ioread16_native ioread16be

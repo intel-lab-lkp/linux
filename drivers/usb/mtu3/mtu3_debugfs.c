@@ -8,6 +8,8 @@
  */
 
 #include <linux/uaccess.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "mtu3.h"
 #include "mtu3_dr.h"

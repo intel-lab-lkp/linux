@@ -7,6 +7,7 @@
 
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/math64.h>
 #include <linux/export.h>

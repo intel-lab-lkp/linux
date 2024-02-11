@@ -7,6 +7,7 @@
 
 #include <linux/bitops.h>
 #include <linux/byteorder/generic.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -18,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 #include <vdso/bits.h>
 
 #include <linux/iio/buffer.h>

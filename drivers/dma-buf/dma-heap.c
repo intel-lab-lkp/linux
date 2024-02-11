@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/dma-buf.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <linux/list.h>
 #include <linux/slab.h>

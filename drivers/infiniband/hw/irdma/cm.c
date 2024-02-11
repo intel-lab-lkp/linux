@@ -2,6 +2,8 @@
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
 #include "trace.h"
+#include <linux/completion.h>
+#include <linux/highmem.h> // for kmap_local_page()
 
 static void irdma_cm_post_event(struct irdma_cm_event *event);
 static void irdma_disconnect_worker(struct work_struct *work);

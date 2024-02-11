@@ -15,6 +15,7 @@
 #include <linux/irq.h>
 #include <linux/dma/edma.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 
 #include "dw-edma-core.h"
 #include "dw-edma-v0-core.h"

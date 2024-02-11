@@ -20,6 +20,7 @@
 #include <linux/pagemap.h>
 #include <linux/scatterlist.h>
 #include <linux/sys_soc.h>
+#include <linux/completion.h>
 
 #include "renesas_sdhi.h"
 #include "tmio_mmc.h"

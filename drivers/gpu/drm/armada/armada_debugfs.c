@@ -7,6 +7,7 @@
 #include <linux/ctype.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include <drm/drm_debugfs.h>

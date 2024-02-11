@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/syscon.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <net/switchdev.h>
 
 #include <soc/mscc/ocelot.h>

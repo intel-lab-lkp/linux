@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset-controller.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include <soc/tegra/fuse.h>

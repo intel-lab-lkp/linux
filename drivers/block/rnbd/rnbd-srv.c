@@ -11,6 +11,10 @@
 
 #include <linux/module.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
+#include <linux/file.h> // for fput()
+#include <linux/kobject.h>
+#include <linux/sprintf.h>
 
 #include "rnbd-srv.h"
 #include "rnbd-srv-trace.h"

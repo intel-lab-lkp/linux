@@ -79,6 +79,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/gameport.h>
 #include <linux/device.h>

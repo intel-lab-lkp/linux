@@ -10,6 +10,8 @@
 #include <linux/sched/signal.h>
 #include <linux/swap.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/compiler.h>
 #include <linux/export.h>
@@ -23,6 +25,7 @@
 #include <linux/vmalloc.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/migrate.h>
 #include <linux/page-isolation.h>
 #include <linux/pfn.h>

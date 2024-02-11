@@ -4,6 +4,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_work.h>
+#include <linux/kstrtox.h>
 
 #include <nvif/class.h>
 #include <nvif/cl0002.h>

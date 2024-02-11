@@ -5,6 +5,8 @@
  */
 
 #include "efct_driver.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "efct_hw.h"
 #include "efct_unsol.h"

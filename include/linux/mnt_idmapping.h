@@ -2,6 +2,7 @@
 #ifndef _LINUX_MNT_IDMAPPING_H
 #define _LINUX_MNT_IDMAPPING_H
 
+#include <linux/cred.h> // for current_fsuid()
 #include <linux/types.h>
 #include <linux/uidgid.h>
 

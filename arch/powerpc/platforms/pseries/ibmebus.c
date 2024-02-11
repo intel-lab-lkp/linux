@@ -45,6 +45,7 @@
 #include <linux/irqdomain.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>

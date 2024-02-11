@@ -9,6 +9,7 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 
 static struct irq_chip its_pmsi_irq_chip = {
 	.name			= "ITS-pMSI",

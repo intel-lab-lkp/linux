@@ -7,6 +7,7 @@
  * Copyright (C) 2021-2023 StarFive Technology Co., Ltd.
  */
 #include <media/v4l2-rect.h>
+#include <linux/sprintf.h>
 
 #include "stf-camss.h"
 

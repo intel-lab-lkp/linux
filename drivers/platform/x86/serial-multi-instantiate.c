@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #define IRQ_RESOURCE_TYPE	GENMASK(1, 0)

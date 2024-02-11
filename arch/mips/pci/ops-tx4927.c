@@ -16,6 +16,7 @@
 #include <linux/irq.h>
 #include <asm/txx9/pci.h>
 #include <asm/txx9/tx4927pcic.h>
+#include <linux/kstrtox.h>
 
 static struct {
 	struct pci_controller *channel;

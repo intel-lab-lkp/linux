@@ -34,10 +34,12 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/mm_types.h>
 #include <linux/init.h>
 #include <linux/capability.h>
 #include <linux/memory_hotplug.h>
+#include <linux/sprintf.h>
 
 #include <xen/xen.h>
 #include <xen/interface/xen.h>

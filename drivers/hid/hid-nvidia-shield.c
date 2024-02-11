@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/power_supply.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 

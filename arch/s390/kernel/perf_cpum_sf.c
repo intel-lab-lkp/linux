@@ -10,6 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/perf_event.h>
 #include <linux/percpu.h>
 #include <linux/pid.h>
@@ -23,6 +24,7 @@
 #include <asm/debug.h>
 #include <asm/timex.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 /* Minimum number of sample-data-block-tables:
  * At least one table is required for the sampling buffer structure.

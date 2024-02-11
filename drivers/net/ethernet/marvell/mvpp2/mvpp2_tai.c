@@ -33,6 +33,7 @@
  * Consequently, we support none of these.
  */
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/ptp_clock_kernel.h>
 #include <linux/slab.h>
 

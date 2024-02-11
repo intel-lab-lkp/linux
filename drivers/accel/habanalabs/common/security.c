@@ -6,6 +6,7 @@
  */
 
 #include "habanalabs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static const char * const hl_glbl_error_cause[HL_MAX_NUM_OF_GLBL_ERR_CAUSE] = {
 	"Error due to un-priv read",

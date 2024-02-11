@@ -23,6 +23,7 @@
  */
 #include "priv.h"
 #include "regsnv04.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 void
 nv04_timer_time(struct nvkm_timer *tmr, u64 time)

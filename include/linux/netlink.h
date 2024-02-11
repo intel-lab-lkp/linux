@@ -5,6 +5,7 @@
 
 #include <linux/capability.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/export.h>
 #include <net/scm.h>
 #include <uapi/linux/netlink.h>

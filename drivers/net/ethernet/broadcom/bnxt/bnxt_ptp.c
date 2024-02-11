@@ -12,6 +12,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/net_tstamp.h>
+#include <linux/sprintf.h>
 #include <linux/timekeeping.h>
 #include <linux/ptp_classify.h>
 #include <linux/clocksource.h>

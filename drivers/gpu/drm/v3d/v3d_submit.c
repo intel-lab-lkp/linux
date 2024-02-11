@@ -5,6 +5,7 @@
  */
 
 #include <drm/drm_syncobj.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include "v3d_drv.h"
 #include "v3d_regs.h"

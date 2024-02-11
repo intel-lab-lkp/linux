@@ -120,6 +120,7 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/unistd.h>
 #include <linux/string.h>
@@ -128,6 +129,7 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/capability.h>
+#include <linux/completion.h>
 #include <linux/hrtimer.h>
 #include <linux/freezer.h>
 #include <linux/delay.h>

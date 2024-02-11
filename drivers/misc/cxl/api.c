@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/file.h>
+#include <linux/sprintf.h>
 #include <misc/cxl.h>
 #include <linux/module.h>
 #include <linux/mount.h>

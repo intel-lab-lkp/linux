@@ -52,6 +52,7 @@
 #include <linux/interrupt.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #define DRIVER_DESC	"LK keyboard driver"

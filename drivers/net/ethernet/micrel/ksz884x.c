@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/micrel_phy.h>
+#include <linux/sprintf.h>
 
 
 /* DMA Registers */

@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/hw_random.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -25,6 +26,7 @@
 #include <linux/virtio.h>
 #include <linux/wait.h>
 #include <uapi/linux/nsm.h>
+#include <linux/completion.h>
 
 /* Timeout for NSM virtqueue respose in milliseconds. */
 #define NSM_DEFAULT_TIMEOUT_MSECS (120000) /* 2 minutes */

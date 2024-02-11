@@ -31,6 +31,7 @@
 #include <linux/poison.h>
 #include <linux/skbuff.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/netdevice.h>
 #include <linux/atmdev.h>

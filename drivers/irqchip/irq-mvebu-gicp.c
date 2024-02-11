@@ -11,6 +11,7 @@
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>

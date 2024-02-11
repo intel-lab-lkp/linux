@@ -8,6 +8,7 @@
 #include <linux/errno.h>
 #include <linux/buffer_head.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
 #include <linux/quotaops.h>

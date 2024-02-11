@@ -20,6 +20,7 @@
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
@@ -31,6 +32,7 @@
 #include <linux/spinlock.h>
 #include <linux/compat.h>
 #include <linux/blktrace_api.h>
+#include <linux/completion.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/dma-mapping.h>

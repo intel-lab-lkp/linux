@@ -15,6 +15,7 @@
 #include <linux/gfp.h>
 #include <linux/kconfig.h>
 #include <linux/kernel.h>
+#include <linux/math.h> // for DIV_ROUND_UP()
 #include <linux/rcupdate.h>
 #include <linux/sched/mm.h>
 #include <linux/spinlock.h>

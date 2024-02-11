@@ -7,6 +7,10 @@
  */
 
 #include "dell-wmi-sysman.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
+
+#include <linux/kobject.h>
 
 enum int_properties {MIN_VALUE = 6, MAX_VALUE, SCALAR_INCR};
 

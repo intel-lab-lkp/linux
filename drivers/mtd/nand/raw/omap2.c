@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/completion.h>
 
 #include <linux/platform_data/elm.h>
 

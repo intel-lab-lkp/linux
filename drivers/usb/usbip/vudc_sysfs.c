@@ -7,6 +7,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb/ch9.h>

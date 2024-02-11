@@ -4,6 +4,8 @@
  */
 
 #include "xe_exec_queue.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
+#include <linux/sprintf.h>
 
 #include <linux/nospec.h>
 

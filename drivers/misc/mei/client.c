@@ -7,6 +7,7 @@
 #include <linux/sched/signal.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
+#include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/dma-mapping.h>

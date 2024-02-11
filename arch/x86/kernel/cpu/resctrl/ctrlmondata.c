@@ -17,6 +17,7 @@
 
 #include <linux/cpu.h>
 #include <linux/kernfs.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include "internal.h"

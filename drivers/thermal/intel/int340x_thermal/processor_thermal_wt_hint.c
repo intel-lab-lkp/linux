@@ -29,6 +29,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include "processor_thermal_device.h"
 

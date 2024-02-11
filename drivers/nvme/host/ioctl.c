@@ -7,6 +7,7 @@
 #include <linux/nvme_ioctl.h>
 #include <linux/io_uring/cmd.h>
 #include "nvme.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 enum {
 	NVME_IOCTL_VEC		= (1 << 0),

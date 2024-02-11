@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "vmm.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <subdev/fb.h>
 #include <subdev/ltc.h>

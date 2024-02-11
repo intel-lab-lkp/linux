@@ -13,6 +13,7 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/dma-mapping.h>
 #include <linux/pci.h>

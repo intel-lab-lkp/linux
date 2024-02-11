@@ -8,6 +8,8 @@
 
 #include "bioscfg.h"
 
+#include <linux/kobject.h>
+
 GET_INSTANCE_ID(ordered_list);
 
 static ssize_t current_value_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)

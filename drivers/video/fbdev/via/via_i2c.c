@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/via-core.h>
 #include <linux/via_i2c.h>
 

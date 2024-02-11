@@ -7,6 +7,7 @@
 // Author: Codrin Ciubotariu <codrin.ciubotariu@microchip.com>
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>

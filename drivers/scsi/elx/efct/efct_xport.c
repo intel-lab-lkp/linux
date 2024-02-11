@@ -6,6 +6,8 @@
 
 #include "efct_driver.h"
 #include "efct_unsol.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static struct dentry *efct_debugfs_root;
 static atomic_t efct_debugfs_count;

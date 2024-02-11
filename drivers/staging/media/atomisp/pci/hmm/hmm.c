@@ -21,6 +21,7 @@
  * This file contains entry functions for memory management of ISP driver
  */
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>	/* for kmap */

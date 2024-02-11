@@ -72,7 +72,9 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "ad525x_dpot.h"
 

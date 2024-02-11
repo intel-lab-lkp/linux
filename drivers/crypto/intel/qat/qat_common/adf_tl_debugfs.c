@@ -8,10 +8,12 @@
 #include <linux/dcache.h>
 #include <linux/file.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 
 #include "adf_accel_devices.h"

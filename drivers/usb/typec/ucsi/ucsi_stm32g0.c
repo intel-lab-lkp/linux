@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "ucsi.h"
 

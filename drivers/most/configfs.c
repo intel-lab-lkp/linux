@@ -10,7 +10,9 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/configfs.h>
+#include <linux/kstrtox.h>
 #include <linux/most.h>
+#include <linux/sprintf.h>
 
 #define MAX_STRING_SIZE 80
 

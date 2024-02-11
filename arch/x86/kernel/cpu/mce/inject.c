@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include <asm/amd_nb.h>

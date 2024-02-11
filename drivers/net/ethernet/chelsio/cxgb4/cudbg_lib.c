@@ -5,6 +5,7 @@
 
 #include <linux/sort.h>
 #include <linux/string.h>
+#include <linux/kstrtox.h>
 
 #include "t4_regs.h"
 #include "cxgb4.h"

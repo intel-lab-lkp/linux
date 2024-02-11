@@ -7,12 +7,14 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/fb.h>
 #include <linux/backlight.h>
 #include <linux/mfd/adp5520.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 struct adp5520_bl {
 	struct device *master;

@@ -9,6 +9,7 @@
 #include "qed.h"
 #include "qed_sriov.h"
 #include "qed_vf.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void *qed_vf_pf_prep(struct qed_hwfn *p_hwfn, u16 type, u16 length)
 {

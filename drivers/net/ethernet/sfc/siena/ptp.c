@@ -31,6 +31,7 @@
  *	timestamp.
  */
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/time.h>
 #include <linux/ktime.h>

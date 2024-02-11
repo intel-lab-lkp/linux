@@ -2,6 +2,7 @@
 #include <linux/pci.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "nitrox_dev.h"
 #include "nitrox_csr.h"

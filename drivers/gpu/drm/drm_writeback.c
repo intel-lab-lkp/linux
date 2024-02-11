@@ -10,6 +10,8 @@
  */
 
 #include <linux/dma-fence.h>
+#include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>

@@ -19,6 +19,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/iio/iio.h>
 #include "hid-ids.h"
+#include <linux/sprintf.h>
 
 /* Commands codes in a raw output report */
 enum {

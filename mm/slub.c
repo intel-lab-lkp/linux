@@ -22,7 +22,9 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/kasan.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/kmsan.h>
+#include <linux/kstrtox.h>
 #include <linux/cpu.h>
 #include <linux/cpuset.h>
 #include <linux/mempolicy.h>
@@ -42,6 +44,7 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 #include <linux/sort.h>
+#include <linux/sysfs.h>
 
 #include <linux/debugfs.h>
 #include <trace/events/kmem.h>

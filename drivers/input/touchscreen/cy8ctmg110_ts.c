@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <asm/byteorder.h>
+#include <linux/sprintf.h>
 
 #define CY8CTMG110_DRIVER_NAME      "cy8ctmg110"
 

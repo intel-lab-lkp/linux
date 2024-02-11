@@ -13,6 +13,7 @@
 #include "intel_gsc_fw.h"
 #include "intel_gsc_uc_heci_cmd_submit.h"
 #include "i915_reg.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static bool gsc_is_in_reset(struct intel_uncore *uncore)
 {

@@ -14,6 +14,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>

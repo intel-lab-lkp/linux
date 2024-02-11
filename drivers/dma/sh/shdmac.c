@@ -29,6 +29,7 @@
 #include <linux/sh_dma.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include "../dmaengine.h"
 #include "shdma.h"

@@ -15,6 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "hif.h"
+#include <linux/completion.h>
 
 #include <linux/export.h>
 

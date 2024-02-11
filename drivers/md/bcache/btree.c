@@ -26,6 +26,7 @@
 #include "debug.h"
 #include "extents.h"
 
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/bitops.h>
 #include <linux/hash.h>

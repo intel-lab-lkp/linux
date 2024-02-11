@@ -5,6 +5,7 @@
  * Copyright (C) 2009, 2010, 2011 Amit Shah <amit.shah@redhat.com>
  */
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/completion.h>
 #include <linux/device.h>
@@ -20,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_console.h>
 #include <linux/wait.h>

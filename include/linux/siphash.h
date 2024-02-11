@@ -12,8 +12,10 @@
 #ifndef _LINUX_SIPHASH_H
 #define _LINUX_SIPHASH_H
 
+#include <linux/align.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <uapi/asm/byteorder.h> // for le32_to_cpup(), le64_to_cpu()
 
 #define SIPHASH_ALIGNMENT __alignof__(u64)
 typedef struct {

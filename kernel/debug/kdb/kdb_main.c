@@ -12,6 +12,8 @@
  */
 
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>

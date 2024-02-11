@@ -10,6 +10,7 @@
 #include <asm/nospec-branch.h>
 #include <asm/paravirt.h>
 #include <asm/mshyperv.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * Hyper-V always provides a single IO-APIC at this MMIO address.

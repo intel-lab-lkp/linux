@@ -8,6 +8,7 @@
 
 #include <linux/tracepoint.h>
 #include "core.h"
+#include <linux/sprintf.h>
 
 #define _TRACE_H_
 

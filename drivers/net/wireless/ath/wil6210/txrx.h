@@ -9,6 +9,7 @@
 
 #include "wil6210.h"
 #include "txrx_edma.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define BUF_SW_OWNED    (1)
 #define BUF_HW_OWNED    (0)

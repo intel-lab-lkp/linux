@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <asm/processor.h>
 #include <asm/udbg.h>
+#include <linux/sprintf.h>
 
 void (*udbg_putc)(char c);
 void (*udbg_flush)(void);

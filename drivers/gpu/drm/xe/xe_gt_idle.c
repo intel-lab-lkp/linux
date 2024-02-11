@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_managed.h>
+#include <linux/sprintf.h>
 
 #include "xe_device.h"
 #include "xe_gt.h"

@@ -25,6 +25,7 @@
 #define pr_fmt(fmt)	"efi: " fmt
 
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/efi.h>
 #include <linux/irqflags.h>
 #include <linux/mutex.h>

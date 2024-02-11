@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/hte.h>
 #include <linux/delay.h>

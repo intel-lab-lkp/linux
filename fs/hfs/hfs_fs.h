@@ -17,6 +17,7 @@
 
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/kernel.h> // for lower_32_bits()
 #include <linux/mutex.h>
 #include <linux/buffer_head.h>
 #include <linux/fs.h>

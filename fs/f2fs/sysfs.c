@@ -7,9 +7,12 @@
  * Copyright (c) 2017 Chao Yu <chao@kernel.org>
  */
 #include <linux/compiler.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 #include <linux/proc_fs.h>
 #include <linux/f2fs_fs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/unicode.h>
 #include <linux/ioprio.h>
 #include <linux/sysfs.h>

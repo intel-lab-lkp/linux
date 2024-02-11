@@ -12,9 +12,11 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/leds.h>
 #include "../leds.h"
+#include <linux/sprintf.h>
 
 #define DEFAULT_DELAY 100
 

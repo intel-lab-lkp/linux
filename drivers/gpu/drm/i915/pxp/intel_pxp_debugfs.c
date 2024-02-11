@@ -5,6 +5,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/string_helpers.h>
+#include <linux/completion.h>
 
 #include <drm/drm_print.h>
 

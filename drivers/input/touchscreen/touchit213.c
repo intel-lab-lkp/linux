@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Sahara TouchIT-213 serial touchscreen driver"
 

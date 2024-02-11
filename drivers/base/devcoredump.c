@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/devcoredump.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/fs.h>

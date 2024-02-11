@@ -37,6 +37,7 @@
 #include <linux/mlx5/cq.h>
 #include "mlx5_core.h"
 #include "lib/eq.h"
+#include <linux/completion.h>
 
 #define TASKLET_MAX_TIME 2
 #define TASKLET_MAX_TIME_JIFFIES msecs_to_jiffies(TASKLET_MAX_TIME)

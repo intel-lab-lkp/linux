@@ -6,6 +6,7 @@
 #include "mlx5_core.h"
 #include "vhca_event.h"
 #include "ecpf.h"
+#include <linux/sprintf.h>
 #define CREATE_TRACE_POINTS
 #include "diag/vhca_tracepoint.h"
 

@@ -7,6 +7,7 @@
 
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/sync_file.h>

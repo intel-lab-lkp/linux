@@ -50,6 +50,7 @@
 #include <linux/semaphore.h>
 #include <linux/slab.h>
 #include <linux/nospec.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 

@@ -12,6 +12,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

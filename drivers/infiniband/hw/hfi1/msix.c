@@ -7,6 +7,7 @@
 #include "affinity.h"
 #include "sdma.h"
 #include "netdev.h"
+#include <linux/sprintf.h>
 
 /**
  * msix_initialize() - Calculate, request and configure MSIx IRQs

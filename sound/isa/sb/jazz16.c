@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <asm/dma.h>
 #include <linux/isa.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/mpu401.h>
 #include <sound/opl3.h>

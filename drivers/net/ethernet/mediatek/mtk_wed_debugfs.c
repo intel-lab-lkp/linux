@@ -5,6 +5,7 @@
 #include <linux/soc/mediatek/mtk_wed.h>
 #include "mtk_wed.h"
 #include "mtk_wed_regs.h"
+#include <linux/sprintf.h>
 
 struct reg_dump {
 	const char *name;

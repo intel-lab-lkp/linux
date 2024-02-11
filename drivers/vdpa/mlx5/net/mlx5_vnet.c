@@ -2,6 +2,7 @@
 /* Copyright (c) 2020 Mellanox Technologies Ltd. */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vdpa.h>
 #include <linux/vringh.h>
 #include <uapi/linux/virtio_net.h>

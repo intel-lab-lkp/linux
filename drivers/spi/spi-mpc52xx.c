@@ -23,6 +23,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/completion.h>
 
 #include <asm/time.h>
 #include <asm/mpc52xx.h>

@@ -15,6 +15,7 @@
 #include <asm/uv/uv.h>
 #include <asm/uv/uv_hub.h>
 #include <asm/uv/uv_geo.h>
+#include <linux/sprintf.h>
 
 #define INVALID_CNODE -1
 

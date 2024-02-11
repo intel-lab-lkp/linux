@@ -10,6 +10,7 @@
 #ifndef __DRIVERS_PROVIDER_FRAMER_H
 #define __DRIVERS_PROVIDER_FRAMER_H
 
+#include <linux/device.h>
 #include <linux/export.h>
 #include <linux/framer/framer.h>
 #include <linux/types.h>

@@ -27,6 +27,10 @@
 #include <linux/cgroup.h>
 #include <linux/perf_event.h>
 
+#ifdef CONFIG_IPC_NS
+#include <linux/sem.h> // for exit_sem()
+#endif
+
 static struct kmem_cache *nsproxy_cachep;
 
 struct nsproxy init_nsproxy = {

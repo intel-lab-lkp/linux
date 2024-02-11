@@ -51,6 +51,7 @@
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include <sound/pcm.h>

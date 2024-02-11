@@ -32,11 +32,13 @@
 
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
 #include <linux/export.h>
 #include <asm/xen/hypervisor.h>
+#include <linux/completion.h>
 #include <xen/page.h>
 #include <xen/interface/xen.h>
 #include <xen/interface/event_channel.h>

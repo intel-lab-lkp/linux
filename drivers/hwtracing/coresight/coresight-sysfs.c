@@ -6,6 +6,7 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include "coresight-priv.h"
 

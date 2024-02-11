@@ -18,6 +18,7 @@
 #include <adf_cfg.h>
 #include <adf_dbgfs.h>
 #include "adf_dh895xccvf_hw_data.h"
+#include <linux/completion.h>
 
 static const struct pci_device_id adf_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_QAT_DH895XCC_VF), },

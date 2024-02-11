@@ -9,6 +9,9 @@
  */
 
 #include <linux/kobject.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "nilfs.h"
 #include "mdt.h"

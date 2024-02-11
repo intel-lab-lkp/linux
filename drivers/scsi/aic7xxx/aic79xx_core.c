@@ -43,6 +43,7 @@
 #include "aic79xx_osm.h"
 #include "aic79xx_inline.h"
 #include "aicasm/aicasm_insformat.h"
+#include <linux/sprintf.h>
 
 /***************************** Lookup Tables **********************************/
 static const char *const ahd_chip_names[] =

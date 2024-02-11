@@ -13,6 +13,7 @@
 #include <linux/skbuff.h>
 #include <linux/errno.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>

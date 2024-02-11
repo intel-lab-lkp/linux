@@ -22,8 +22,10 @@
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>
 #include <linux/if_arp.h>
+#include <linux/sprintf.h>
 #include <net/mctp.h>
 #include <net/mctpdevice.h>
+#include <linux/completion.h>
 
 /* byte_count is limited to u8 */
 #define MCTP_I2C_MAXBLOCK 255

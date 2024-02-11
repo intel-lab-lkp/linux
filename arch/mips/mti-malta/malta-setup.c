@@ -12,6 +12,7 @@
 #include <linux/of_fdt.h>
 #include <linux/pci.h>
 #include <linux/screen_info.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/dma-map-ops.h> /* for dma_default_coherent */
 

@@ -15,6 +15,7 @@
 #include "bfa_defs.h"
 #include "bfa_defs_svc.h"
 #include "bfi.h"
+#include <linux/sprintf.h>
 
 BFA_TRC_FILE(CNA, IOC);
 

@@ -4,6 +4,7 @@
 #include <linux/poll.h>
 #include <linux/sched/signal.h>
 #include <linux/eventfd.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <uapi/misc/ocxl.h>
 #include <asm/reg.h>

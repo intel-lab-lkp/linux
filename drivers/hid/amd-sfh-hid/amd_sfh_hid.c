@@ -8,6 +8,7 @@
  *	    Basavaraj Natikar <Basavaraj.Natikar@amd.com>
  */
 #include <linux/hid.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 

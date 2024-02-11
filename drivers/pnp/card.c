@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/ctype.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/pnp.h>
 #include <linux/dma-mapping.h>
 #include "base.h"

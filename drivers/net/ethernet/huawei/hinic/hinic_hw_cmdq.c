@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/sizes.h>
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/log2.h>
 #include <linux/io.h>
 #include <linux/completion.h>

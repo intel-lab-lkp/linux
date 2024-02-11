@@ -10,9 +10,11 @@
 
 #include <linux/slab.h>
 #include <linux/compat.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
 #include <linux/kernel_stat.h>

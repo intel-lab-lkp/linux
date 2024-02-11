@@ -9,6 +9,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/platform_device.h>
 #include <linux/mv643xx_eth.h>

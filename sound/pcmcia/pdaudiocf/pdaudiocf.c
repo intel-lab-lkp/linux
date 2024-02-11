@@ -7,6 +7,7 @@
 
 #include <sound/core.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/module.h>
 #include <pcmcia/ciscode.h>
 #include <pcmcia/cisreg.h>

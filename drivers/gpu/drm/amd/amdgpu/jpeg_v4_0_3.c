@@ -27,6 +27,8 @@
 #include "soc15d.h"
 #include "jpeg_v4_0_3.h"
 #include "mmsch_v4_0_3.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include "vcn/vcn_4_0_3_offset.h"
 #include "vcn/vcn_4_0_3_sh_mask.h"

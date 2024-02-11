@@ -37,8 +37,10 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/in.h>
 #include <linux/if.h>

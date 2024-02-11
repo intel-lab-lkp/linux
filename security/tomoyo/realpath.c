@@ -6,6 +6,7 @@
  */
 
 #include "common.h"
+#include <linux/kstrtox.h>
 #include <linux/magic.h>
 #include <linux/proc_fs.h>
 

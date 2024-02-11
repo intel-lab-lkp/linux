@@ -13,6 +13,7 @@
 #include "nvme.h"
 #include "fabrics.h"
 #include <linux/nvme-keyring.h>
+#include <linux/sprintf.h>
 
 static LIST_HEAD(nvmf_transports);
 static DECLARE_RWSEM(nvmf_transports_rwsem);

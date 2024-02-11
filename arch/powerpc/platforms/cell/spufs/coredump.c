@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/coredump.h>
 #include <linux/binfmts.h>

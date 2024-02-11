@@ -21,6 +21,7 @@
 #include "ef10_sriov.h"
 #include <linux/in.h>
 #include <linux/jhash.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <net/udp_tunnel.h>

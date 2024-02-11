@@ -12,6 +12,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

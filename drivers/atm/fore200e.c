@@ -31,6 +31,7 @@
 #include <asm/irq.h>
 #include <asm/dma.h>
 #include <asm/byteorder.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/atomic.h>
 

@@ -8,9 +8,11 @@
 
 #include <linux/slab.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/atomic.h>
+#include <linux/sprintf.h>
 
 #include "u_uac1_legacy.h"
 

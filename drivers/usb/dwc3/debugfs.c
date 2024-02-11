@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/ptrace.h>
 #include <linux/types.h>

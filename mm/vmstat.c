@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/vmstat.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>

@@ -8,6 +8,7 @@
 #include <linux/firmware.h>
 #include <linux/slab.h>
 #include <drv_types.h>
+#include <linux/completion.h>
 #include <rtw_debug.h>
 #include <rtl8723b_hal.h>
 #include "hal_com_h2c.h"

@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct userspace_policy {
 	unsigned int is_managed;

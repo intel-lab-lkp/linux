@@ -10,6 +10,7 @@
 #include <linux/io.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include "qlcnic.h"
 

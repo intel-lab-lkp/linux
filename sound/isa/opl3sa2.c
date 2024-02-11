@@ -12,6 +12,7 @@
 #include <linux/pnp.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/wss.h>
 #include <sound/mpu401.h>

@@ -7,6 +7,7 @@
 #include <linux/bitfield.h>
 #include <linux/irqreturn.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/kernel.h> // for lower_32_bits(), upper_32_bits()
 
 #include "dw-edma-core.h"
 #include "dw-hdma-v0-core.h"

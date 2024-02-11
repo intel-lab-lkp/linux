@@ -7,6 +7,7 @@
 
 #include <linux/export.h>
 #include <linux/security.h>
+#include <linux/timekeeping.h>
 #include "internal.h"
 
 /**

@@ -9,6 +9,7 @@
 #define _LINUX_PM_H
 
 #include <linux/export.h>
+#include <linux/kernel.h> // for PTR_IF()
 #include <linux/list.h>
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
@@ -16,6 +17,10 @@
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
 #include <linux/completion.h>
+
+#ifdef CONFIG_PM_CLK
+#include <linux/mutex_types.h>
+#endif
 
 /*
  * Callbacks for platform drivers to implement.

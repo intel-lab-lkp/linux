@@ -17,6 +17,7 @@
 
 #include <linux/export.h>
 #include <linux/profile.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/memblock.h>
 #include <linux/notifier.h>
 #include <linux/mm.h>

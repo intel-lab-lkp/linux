@@ -8,6 +8,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-common.h>
 #include <linux/v4l2-mediabus.h>
 #include <linux/mm.h>

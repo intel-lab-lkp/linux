@@ -12,6 +12,8 @@
 
 #include <linux/usb/composite.h>
 #include <linux/iopoll.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "cdns3-gadget.h"
 #include "cdns3-trace.h"

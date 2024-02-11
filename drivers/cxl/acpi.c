@@ -5,11 +5,13 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/node.h>
 #include <asm/div64.h>
 #include "cxlpci.h"
 #include "cxl.h"
+#include <linux/sprintf.h>
 
 #define CXL_RCRB_SIZE	SZ_8K
 

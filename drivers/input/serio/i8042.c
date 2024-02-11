@@ -10,6 +10,7 @@
 
 #include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
@@ -20,8 +21,10 @@
 #include <linux/platform_device.h>
 #include <linux/i8042.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/property.h>
+#include <linux/completion.h>
 
 #include <asm/io.h>
 

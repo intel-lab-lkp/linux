@@ -17,6 +17,7 @@
 #include <linux/iio/sysfs.h>
 #include <linux/iio/events.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 
 /* Registers Address */
 #define CM32181_REG_ADDR_CMD		0x00

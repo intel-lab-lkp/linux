@@ -11,6 +11,7 @@
 
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/slab.h>
 #include <linux/module.h>

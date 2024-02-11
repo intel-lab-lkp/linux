@@ -6,6 +6,7 @@
  *   Modified by Steve French (sfrench@us.ibm.com)
  */
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/kstrtox.h>

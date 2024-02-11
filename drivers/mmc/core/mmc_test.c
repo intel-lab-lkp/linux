@@ -8,6 +8,8 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 
 #include <linux/scatterlist.h>
 #include <linux/list.h>

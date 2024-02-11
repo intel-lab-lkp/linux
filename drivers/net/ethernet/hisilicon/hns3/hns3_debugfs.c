@@ -3,6 +3,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include "hnae3.h"
 #include "hns3_debugfs.h"

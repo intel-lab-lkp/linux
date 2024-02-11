@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vdpa.h>
 #include <uapi/linux/vdpa.h>
 #include <net/genetlink.h>

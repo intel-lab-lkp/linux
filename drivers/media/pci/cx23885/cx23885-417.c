@@ -13,6 +13,7 @@
 
 #include "cx23885.h"
 #include "cx23885-ioctl.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>

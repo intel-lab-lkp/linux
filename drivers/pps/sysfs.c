@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/pps_kernel.h>
 

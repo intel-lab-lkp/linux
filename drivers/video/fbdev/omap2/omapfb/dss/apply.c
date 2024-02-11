@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/jiffies.h>
+#include <linux/completion.h>
 
 #include <video/omapfb_dss.h>
 

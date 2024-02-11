@@ -27,6 +27,7 @@
 
 
 #include "vmwgfx_drv.h"
+#include <linux/sprintf.h>
 
 #include "vmwgfx_bo.h"
 #include "vmwgfx_binding.h"

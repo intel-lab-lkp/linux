@@ -2,8 +2,10 @@
 // Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 #include <linux/debugfs.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/version.h>
 #include "dr_types.h"
 

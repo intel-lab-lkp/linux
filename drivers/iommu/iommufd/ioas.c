@@ -5,6 +5,7 @@
 #include <linux/interval_tree.h>
 #include <linux/iommufd.h>
 #include <linux/iommu.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <uapi/linux/iommufd.h>
 
 #include "io_pagetable.h"

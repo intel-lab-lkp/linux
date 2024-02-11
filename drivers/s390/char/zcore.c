@@ -17,6 +17,7 @@
 #include <linux/debugfs.h>
 #include <linux/panic_notifier.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 
 #include <asm/asm-offsets.h>

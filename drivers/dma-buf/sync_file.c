@@ -13,6 +13,7 @@
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/anon_inodes.h>
 #include <linux/sync_file.h>

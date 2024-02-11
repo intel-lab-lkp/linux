@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 ssize_t of_modalias(const struct device_node *np, char *str, ssize_t len)

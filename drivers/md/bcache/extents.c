@@ -26,6 +26,7 @@
 #include "debug.h"
 #include "extents.h"
 #include "writeback.h"
+#include <linux/sprintf.h>
 
 static void sort_key_next(struct btree_iter *iter,
 			  struct btree_iter_set *i)

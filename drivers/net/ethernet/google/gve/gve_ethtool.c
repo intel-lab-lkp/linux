@@ -9,6 +9,7 @@
 #include "gve.h"
 #include "gve_adminq.h"
 #include "gve_dqo.h"
+#include <linux/sprintf.h>
 
 static void gve_get_drvinfo(struct net_device *netdev,
 			    struct ethtool_drvinfo *info)

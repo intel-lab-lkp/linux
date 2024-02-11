@@ -24,6 +24,7 @@
 #include <core/client.h>
 #include <core/device.h>
 #include <core/option.h>
+#include <linux/sprintf.h>
 
 #include <nvif/class.h>
 #include <nvif/event.h>

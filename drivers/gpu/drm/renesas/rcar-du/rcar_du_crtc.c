@@ -8,8 +8,10 @@
  */
 
 #include <linux/clk.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

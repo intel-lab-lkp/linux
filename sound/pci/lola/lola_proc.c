@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/info.h>
 #include <sound/pcm.h>

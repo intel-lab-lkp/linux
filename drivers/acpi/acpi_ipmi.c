@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/ipmi.h>
 #include <linux/spinlock.h>
 

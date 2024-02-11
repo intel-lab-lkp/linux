@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/wait.h>
 #include <linux/hw_random.h>

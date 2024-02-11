@@ -5,6 +5,7 @@
 
 #include <kunit/test.h>
 #include <kunit/static_stub.h>
+#include <linux/sprintf.h>
 
 #include "ext4.h"
 

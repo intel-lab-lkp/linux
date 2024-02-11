@@ -34,6 +34,7 @@
 
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
 #include <linux/module.h>

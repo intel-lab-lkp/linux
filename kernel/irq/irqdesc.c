@@ -14,6 +14,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/maple_tree.h>
 #include <linux/irqdomain.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "internals.h"

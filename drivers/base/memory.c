@@ -13,6 +13,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/topology.h>
 #include <linux/capability.h>
 #include <linux/device.h>

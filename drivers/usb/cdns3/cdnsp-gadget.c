@@ -18,6 +18,7 @@
 #include <linux/pci.h>
 #include <linux/irq.h>
 #include <linux/dmi.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "gadget-export.h"

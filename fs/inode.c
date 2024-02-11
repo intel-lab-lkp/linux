@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/filelock.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/backing-dev.h>
 #include <linux/hash.h>

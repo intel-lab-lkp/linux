@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include "cpci_hotplug.h"

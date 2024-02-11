@@ -23,9 +23,11 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 
 #include "cesa.h"
 

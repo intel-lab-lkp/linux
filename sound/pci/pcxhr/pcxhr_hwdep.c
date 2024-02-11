@@ -8,6 +8,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/firmware.h>
 #include <linux/pci.h>

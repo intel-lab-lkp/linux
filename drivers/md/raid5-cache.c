@@ -4,7 +4,9 @@
  * Copyright (C) 2016 Song Liu <songliubraving@fb.com>
  */
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
+#include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/slab.h>
 #include <linux/raid/md_p.h>

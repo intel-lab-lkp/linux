@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct ccm_instance_ctx {
 	struct crypto_skcipher_spawn ctr;

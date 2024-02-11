@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/syscon.h>

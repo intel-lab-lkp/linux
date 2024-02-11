@@ -41,6 +41,7 @@
 #include <linux/delay.h>
 #include <linux/gfp.h>
 #include "usbusx2yaudio.c"
+#include <linux/sprintf.h>
 
 #if defined(USX2Y_NRPACKS_VARIABLE) || USX2Y_NRPACKS == 1
 

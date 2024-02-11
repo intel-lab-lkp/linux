@@ -6,6 +6,7 @@
  *
  */
 #include <linux/clk-provider.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/if.h>
 #include <linux/hrtimer.h>

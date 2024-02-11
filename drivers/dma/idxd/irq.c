@@ -13,6 +13,7 @@
 #include "../dmaengine.h"
 #include "idxd.h"
 #include "registers.h"
+#include <linux/completion.h>
 
 enum irq_work_type {
 	IRQ_WORK_NORMAL = 0,

@@ -14,6 +14,7 @@
 #include <linux/seq_file.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <trace/events/block.h>
 #include "md.h"
 #include "raid0.h"

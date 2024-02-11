@@ -2,6 +2,7 @@
 #include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/screen_info.h>
 #include <linux/usb/ch9.h>

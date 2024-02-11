@@ -8,6 +8,7 @@
  * Author: Boris BREZILLON <boris.brezillon@free-electrons.com>
  */
 
+#include <linux/device.h> // for devm_kzalloc()
 #include <linux/media-bus-format.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>

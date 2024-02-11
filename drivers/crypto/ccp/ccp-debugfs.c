@@ -9,6 +9,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/ccp.h>
+#include <linux/sprintf.h>
 
 #include "ccp-dev.h"
 

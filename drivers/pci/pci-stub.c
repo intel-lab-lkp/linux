@@ -18,6 +18,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 static char ids[1024] __initdata;
 

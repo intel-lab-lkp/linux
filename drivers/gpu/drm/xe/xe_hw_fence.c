@@ -4,6 +4,7 @@
  */
 
 #include "xe_hw_fence.h"
+#include <linux/sprintf.h>
 
 #include <linux/device.h>
 #include <linux/slab.h>

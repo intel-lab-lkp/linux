@@ -30,6 +30,7 @@
 #include "nouveau_dma.h"
 #include "nouveau_drv.h"
 #include "nouveau_mem.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <nvif/push206e.h>
 

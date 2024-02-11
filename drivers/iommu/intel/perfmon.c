@@ -9,6 +9,7 @@
 #include <linux/dmar.h>
 #include "iommu.h"
 #include "perfmon.h"
+#include <linux/sprintf.h>
 
 PMU_FORMAT_ATTR(event,		"config:0-27");		/* ES: Events Select */
 PMU_FORMAT_ATTR(event_group,	"config:28-31");	/* EGI: Event Group Index */

@@ -50,6 +50,7 @@
 #include <linux/leds.h>
 #include <linux/platform_device.h>
 #include <acpi/video.h>
+#include <linux/sprintf.h>
 
 #define FUJITSU_DRIVER_VERSION		"0.6.0"
 

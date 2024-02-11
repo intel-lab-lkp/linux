@@ -30,6 +30,7 @@
 #include "amdgpu_atomfirmware.h"
 #include "amdgpu_i2c.h"
 #include "amdgpu_display.h"
+#include <linux/sprintf.h>
 
 #include "atom.h"
 #include "atom-bits.h"

@@ -15,6 +15,7 @@
 #include "mcdi.h"
 #include "mcdi_functions.h"
 #include "mcdi_pcol.h"
+#include <linux/sprintf.h>
 #ifdef CONFIG_SFC_SRIOV
 #include "mae.h"
 #include "ef100_rep.h"

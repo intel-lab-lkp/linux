@@ -25,6 +25,7 @@
 
 
 #include "hdcp.h"
+#include <linux/sprintf.h>
 
 void mod_hdcp_dump_binary_message(uint8_t *msg, uint32_t msg_size,
 		uint8_t *buf, uint32_t buf_size)

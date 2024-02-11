@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <net/nfc/nfc.h>
 #include "pn533.h"
+#include <linux/completion.h>
 
 #define VERSION "0.3"
 

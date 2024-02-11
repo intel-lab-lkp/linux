@@ -16,6 +16,7 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 #include "b43legacy.h"
 #include "main.h"

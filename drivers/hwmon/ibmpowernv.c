@@ -8,12 +8,14 @@
 #define pr_fmt(fmt)	DRVNAME ": " fmt
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/platform_device.h>
 #include <asm/opal.h>

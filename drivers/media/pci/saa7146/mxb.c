@@ -19,6 +19,7 @@
 #include <media/i2c/saa7115.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include "tea6415c.h"
 #include "tea6420.h"

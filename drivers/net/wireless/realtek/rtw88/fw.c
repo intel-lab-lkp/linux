@@ -3,6 +3,7 @@
  */
 
 #include <linux/iopoll.h>
+#include <linux/completion.h>
 
 #include "main.h"
 #include "coex.h"

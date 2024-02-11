@@ -8,9 +8,12 @@
  * Some code borrowed from drivers/usb/typec/ucsi/ucsi_acpi.c
  */
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/hex.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>

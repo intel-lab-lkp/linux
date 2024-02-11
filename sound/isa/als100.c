@@ -13,6 +13,7 @@
 */
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/time.h>
 #include <linux/pnp.h>

@@ -17,6 +17,7 @@
 #include <linux/pm.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/time.h>
 #include <linux/greybus.h>

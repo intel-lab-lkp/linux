@@ -17,6 +17,7 @@
 #include <linux/ratelimit.h>
 #include <linux/kthread.h>
 #include <linux/raid/md_p.h>
+#include <linux/sprintf.h>
 #include <trace/events/block.h>
 #include "md.h"
 

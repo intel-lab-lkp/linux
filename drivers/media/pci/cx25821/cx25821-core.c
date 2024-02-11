@@ -14,6 +14,7 @@
 #include "cx25821.h"
 #include "cx25821-sram.h"
 #include "cx25821-video.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("Driver for Athena cards");
 MODULE_AUTHOR("Shu Lin - Hiep Huynh");

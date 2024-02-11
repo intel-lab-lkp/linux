@@ -9,6 +9,7 @@
  */
 
 #include "ssb_private.h"
+#include <linux/kstrtox.h>
 
 #include <linux/ssb/ssb.h>
 #include <linux/ssb/ssb_regs.h>

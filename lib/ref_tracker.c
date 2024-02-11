@@ -6,6 +6,7 @@
 #include <linux/list_sort.h>
 #include <linux/ref_tracker.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stacktrace.h>
 #include <linux/stackdepot.h>
 

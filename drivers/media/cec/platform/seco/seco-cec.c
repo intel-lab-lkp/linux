@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 /* CEC Framework */
 #include <media/cec-notifier.h>

@@ -7,6 +7,7 @@
 
 #include <linux/irq.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/hdmi.h>

@@ -3,6 +3,7 @@
 
 #include "pvr_device.h"
 #include "pvr_device_info.h"
+#include <linux/sprintf.h>
 
 #include "pvr_fw.h"
 #include "pvr_params.h"

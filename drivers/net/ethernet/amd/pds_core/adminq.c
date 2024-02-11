@@ -2,6 +2,7 @@
 /* Copyright(c) 2023 Advanced Micro Devices, Inc */
 
 #include <linux/dynamic_debug.h>
+#include <linux/completion.h>
 
 #include "core.h"
 

@@ -8,6 +8,7 @@
 #include "core.h"
 #include "common.h"
 #include "brcm_hw_ids.h"
+#include <linux/sprintf.h>
 
 /* The DMI data never changes so we can use a static buf for this */
 static char dmi_board_type[128];

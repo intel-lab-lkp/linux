@@ -47,6 +47,7 @@
 #include <linux/list.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>

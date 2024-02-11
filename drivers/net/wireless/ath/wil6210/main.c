@@ -7,7 +7,9 @@
 #include <linux/moduleparam.h>
 #include <linux/if_arp.h>
 #include <linux/etherdevice.h>
+#include <linux/kstrtox.h>
 #include <linux/rtnetlink.h>
+#include <linux/completion.h>
 
 #include "wil6210.h"
 #include "txrx.h"

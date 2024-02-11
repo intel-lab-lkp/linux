@@ -9,6 +9,7 @@
 #include <linux/rcupdate.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "../nfpcore/nfp.h"
 #include "../nfpcore/nfp_cpp.h"

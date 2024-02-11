@@ -42,6 +42,7 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/workqueue.h>
 

@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/dmi.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/i2c.h>
@@ -21,6 +22,7 @@
 #include "psmouse.h"
 #include "elantech.h"
 #include "elan_i2c.h"
+#include <linux/sprintf.h>
 
 #define elantech_debug(fmt, ...)					\
 	do {								\

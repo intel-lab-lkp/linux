@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string_helpers.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <asm/unaligned.h>
 

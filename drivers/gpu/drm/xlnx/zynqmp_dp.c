@@ -17,6 +17,7 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_of.h>
+#include <linux/sprintf.h>
 
 #include <linux/clk.h>
 #include <linux/delay.h>

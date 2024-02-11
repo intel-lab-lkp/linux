@@ -8,8 +8,10 @@
 #include <linux/nospec.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/acpi.h>
 #include <linux/sort.h>

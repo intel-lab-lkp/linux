@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"SpaceTec SpaceOrb 360 and Avenger 6dof controller driver"
 

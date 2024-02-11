@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define ETH_PLL_STS		0x40
 #define ETH_PLL_CTL0		0x44

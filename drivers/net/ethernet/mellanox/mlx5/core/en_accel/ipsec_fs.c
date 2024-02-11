@@ -11,6 +11,7 @@
 #include "lib/fs_chains.h"
 #include "esw/ipsec_fs.h"
 #include "en_rep.h"
+#include <linux/completion.h>
 
 #define NUM_IPSEC_FTE BIT(15)
 #define MLX5_REFORMAT_TYPE_ADD_ESP_TRANSPORT_SIZE 16

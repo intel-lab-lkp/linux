@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) "microcode: " fmt
 #include <linux/earlycpio.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/initrd.h>
 #include <linux/kernel.h>

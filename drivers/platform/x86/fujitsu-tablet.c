@@ -18,6 +18,7 @@
 #include <linux/input.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
+#include <linux/sprintf.h>
 
 #define MODULENAME "fujitsu-tablet"
 

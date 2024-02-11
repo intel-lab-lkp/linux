@@ -17,6 +17,7 @@
 #define _RTL8712_CMD_C_
 
 #include <linux/compiler.h>
+#include <linux/completion.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>

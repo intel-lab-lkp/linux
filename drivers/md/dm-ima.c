@@ -9,6 +9,7 @@
 
 #include "dm-core.h"
 #include "dm-ima.h"
+#include <linux/sprintf.h>
 
 #include <linux/ima.h>
 #include <linux/sched/mm.h>

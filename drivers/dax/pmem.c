@@ -6,6 +6,7 @@
 #include "../nvdimm/pfn.h"
 #include "../nvdimm/nd.h"
 #include "bus.h"
+#include <linux/sprintf.h>
 
 static struct dev_dax *__dax_pmem_probe(struct device *dev)
 {

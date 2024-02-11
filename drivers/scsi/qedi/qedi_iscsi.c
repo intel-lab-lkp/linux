@@ -8,6 +8,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_tcq.h>
 
 #include "qedi.h"

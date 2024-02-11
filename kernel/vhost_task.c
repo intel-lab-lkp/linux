@@ -4,6 +4,7 @@
  */
 #include <linux/slab.h>
 #include <linux/completion.h>
+#include <linux/kernel.h> // for do_exit()
 #include <linux/sched/task.h>
 #include <linux/sched/vhost_task.h>
 #include <linux/sched/signal.h>

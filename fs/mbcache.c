@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/spinlock.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/list_bl.h>

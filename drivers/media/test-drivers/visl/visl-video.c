@@ -5,6 +5,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/font.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-vmalloc.h>

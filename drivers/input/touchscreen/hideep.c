@@ -11,7 +11,9 @@
 #include <linux/i2c.h>
 #include <linux/acpi.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
