@@ -12,6 +12,7 @@
 #ifndef __LINUX_TINY_H
 #define __LINUX_TINY_H
 
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 #include <asm/param.h> /* for HZ */
 
 struct rcu_gp_oldstate {

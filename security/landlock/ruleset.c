@@ -16,6 +16,7 @@
 #include <linux/overflow.h>
 #include <linux/rbtree.h>
 #include <linux/refcount.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep_if()
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
