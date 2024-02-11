@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/refcount.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
