@@ -13,7 +13,7 @@
 
 #include <linux/types.h>
 #include <linux/sched.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/list.h>
 #include <linux/irq_work.h>
 #include <linux/bug.h>

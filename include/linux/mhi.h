@@ -12,7 +12,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/spinlock_types.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/workqueue_types.h>
 
 #define MHI_MAX_OEM_PK_HASH_SEGMENTS 16
