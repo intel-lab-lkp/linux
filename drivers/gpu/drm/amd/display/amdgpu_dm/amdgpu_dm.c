@@ -6590,8 +6590,10 @@ static void create_eml_sink(struct amdgpu_dm_connector *aconnector)
 	 * Note: drm_get_edid gets edid in the following order:
 	 * 1) override EDID if set via edid_override debugfs,
 	 * 2) firmware EDID if set via edid_firmware module parameter
-	 * 3) regular DDC read.
+	 * 3) ACPI EDID if allowed via module parameter
+	 * 4) regular DDC read.
 	 */
+	connector->acpi_edid_allowed = acpi_edid;
 	edid = drm_get_edid(connector, &amdgpu_connector->ddc_bus->aux.ddc);
 	if (!edid) {
 		DRM_ERROR("No EDID found on connector: %s.\n", connector->name);
