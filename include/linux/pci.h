@@ -44,7 +44,7 @@
 #include <linux/pci_ids.h>
 
 #ifdef CONFIG_PCI_DOE
-#include <linux/xarray.h>
+#include <linux/xarray_types.h>
 #endif
 
 #ifndef CONFIG_PCI_IOV
