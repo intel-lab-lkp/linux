@@ -25,6 +25,7 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/kref.h>
 
 #define RDAC_NAME "rdac"
 #define RDAC_RETRY_COUNT 5

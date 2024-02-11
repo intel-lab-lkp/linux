@@ -14,6 +14,7 @@
 #include <linux/workqueue.h>
 #include <linux/greybus.h>
 #include <linux/completion.h>
+#include <linux/kref.h>
 
 #include "greybus_trace.h"
 

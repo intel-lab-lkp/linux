@@ -7,7 +7,7 @@
 #include <linux/auxvec.h>
 #include <linux/cache.h> // for ____cacheline_aligned_in_smp
 #include <linux/compiler_types.h> // for __randomize_layout
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
 #include <linux/rbtree_types.h>

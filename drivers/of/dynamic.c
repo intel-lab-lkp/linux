@@ -15,6 +15,7 @@
 #include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/proc_fs.h>
+#include <linux/kref.h>
 
 #include "of_private.h"
 

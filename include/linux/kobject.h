@@ -22,7 +22,7 @@
 #include <linux/container_of.h>
 #include <linux/spinlock_types.h>
 #include <linux/stdarg.h> // for va_list
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/kobject_ns.h>
 #include <linux/uidgid_types.h>
 

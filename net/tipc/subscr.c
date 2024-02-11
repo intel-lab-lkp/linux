@@ -39,6 +39,8 @@
 #include "name_table.h"
 #include "subscr.h"
 
+#include <linux/kref.h>
+
 static void tipc_sub_send_event(struct tipc_subscription *sub,
 				struct publication *p,
 				u32 event)

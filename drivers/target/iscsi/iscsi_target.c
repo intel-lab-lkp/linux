@@ -18,6 +18,7 @@
 #include <linux/vmalloc.h>
 #include <linux/idr.h>
 #include <linux/delay.h>
+#include <linux/kref.h>
 #include <linux/sched/signal.h>
 #include <asm/unaligned.h>
 #include <linux/inet.h>

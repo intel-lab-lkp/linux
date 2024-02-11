@@ -47,6 +47,7 @@
 #include <linux/spinlock.h>
 #include <linux/configfs.h>
 #include <linux/completion.h>
+#include <linux/kref.h>
 
 #include <generated/utsrelease.h>
 

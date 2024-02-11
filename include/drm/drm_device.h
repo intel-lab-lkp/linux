@@ -2,7 +2,7 @@
 #define _DRM_DEVICE_H_
 
 #include <linux/list.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/mutex_types.h>
 #include <linux/idr.h>
 

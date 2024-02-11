@@ -14,6 +14,7 @@
 #include <linux/wait.h>
 #include <linux/usb/hcd.h>
 #include <linux/scatterlist.h>
+#include <linux/kref.h>
 
 #define to_urb(d) container_of(d, struct urb, kref)
 

@@ -9,6 +9,7 @@
 #include <linux/completion.h>
 #include <linux/iscsi_boot_sysfs.h>
 #include <linux/inet.h>
+#include <linux/kref.h>
 #include <linux/sprintf.h>
 
 #include <scsi/scsi_tcq.h>

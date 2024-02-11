@@ -29,6 +29,7 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/kref.h>
 #include "edid.h"
 
 #define check_warn(status, fmt, args...) \

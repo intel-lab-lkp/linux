@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/sprintf.h>
 #include <linux/uaccess.h>
+#include <linux/kref.h>
 
 #include "mtdcore.h"
 

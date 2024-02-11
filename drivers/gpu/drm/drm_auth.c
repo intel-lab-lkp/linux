@@ -29,6 +29,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/kref.h>
 
 #include <drm/drm_auth.h>
 #include <drm/drm_drv.h>

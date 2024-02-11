@@ -40,6 +40,7 @@
 #include <linux/ctype.h>
 #include <linux/hex.h>
 #include <linux/kthread.h>
+#include <linux/kref.h>
 #include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/delay.h>

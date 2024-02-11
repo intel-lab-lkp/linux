@@ -54,6 +54,7 @@
 #include <linux/workqueue.h>
 #include <linux/export.h>
 #include <linux/rculist.h>
+#include <linux/kref.h>
 
 #include <asm/unaligned.h>
 
