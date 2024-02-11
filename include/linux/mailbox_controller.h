@@ -5,7 +5,7 @@
 
 #include <linux/types.h>
 #include <linux/hrtimer_types.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 
 struct device;
 struct of_phandle_args;
