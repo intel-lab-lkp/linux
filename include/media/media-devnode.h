@@ -18,7 +18,7 @@
 
 #include <linux/poll.h>
 #include <linux/fs.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/cdev.h>
 
 struct media_device;

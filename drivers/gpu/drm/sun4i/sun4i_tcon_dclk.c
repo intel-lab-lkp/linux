@@ -7,6 +7,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/device.h> // for devm_kzalloc()
 #include <linux/regmap.h>
 
 #include "sun4i_tcon.h"

@@ -8,7 +8,7 @@
 #ifndef _LINUX_PM_DOMAIN_H
 #define _LINUX_PM_DOMAIN_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/ktime.h>
 #include <linux/mutex_types.h>
 #include <linux/pm.h>
