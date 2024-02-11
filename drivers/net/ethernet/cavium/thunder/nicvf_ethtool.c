@@ -8,6 +8,7 @@
 #include <linux/ethtool.h>
 #include <linux/pci.h>
 #include <linux/net_tstamp.h>
+#include <linux/sprintf.h>
 
 #include "nic_reg.h"
 #include "nic.h"

@@ -5,6 +5,7 @@
 
 #include <linux/slab.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/writeback.h>
 #include <linux/sched/mm.h>
 #include "messages.h"

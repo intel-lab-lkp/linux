@@ -10,6 +10,7 @@
 
 #include <linux/ctype.h>
 #include <linux/security.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 #include <linux/seq_file.h>

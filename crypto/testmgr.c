@@ -26,6 +26,7 @@
 #include <linux/random.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/uio.h>
 #include <crypto/rng.h>

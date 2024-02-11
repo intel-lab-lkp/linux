@@ -19,6 +19,7 @@
 #include <linux/phy.h>
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/sprintf.h>
 
 #include "dp83640_reg.h"
 

@@ -11,6 +11,7 @@
 
 #include <linux/bits.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>

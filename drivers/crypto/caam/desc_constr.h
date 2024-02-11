@@ -11,6 +11,7 @@
 
 #include "desc.h"
 #include "regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define IMMEDIATE (1 << 23)
 #define CAAM_CMD_SZ sizeof(u32)

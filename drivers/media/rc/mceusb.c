@@ -25,11 +25,13 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/usb.h>
 #include <linux/usb/input.h>
 #include <linux/pm_wakeup.h>
 #include <media/rc-core.h>
+#include <linux/completion.h>
 
 #define DRIVER_VERSION	"1.95"
 #define DRIVER_AUTHOR	"Jarod Wilson <jarod@redhat.com>"

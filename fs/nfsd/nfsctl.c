@@ -9,6 +9,8 @@
 #include <linux/namei.h>
 #include <linux/ctype.h>
 #include <linux/fs_context.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/sunrpc/svcsock.h>
 #include <linux/lockd/lockd.h>

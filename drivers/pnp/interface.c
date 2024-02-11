@@ -9,8 +9,10 @@
  */
 
 #include <linux/pnp.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/types.h>
 #include <linux/stat.h>

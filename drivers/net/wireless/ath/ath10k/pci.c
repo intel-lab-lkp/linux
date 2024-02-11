@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "debug.h"

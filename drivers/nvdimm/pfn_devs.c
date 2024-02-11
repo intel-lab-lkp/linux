@@ -12,6 +12,7 @@
 #include "nd-core.h"
 #include "pfn.h"
 #include "nd.h"
+#include <linux/sprintf.h>
 
 static const bool page_struct_override = IS_ENABLED(CONFIG_NVDIMM_KMSAN);
 

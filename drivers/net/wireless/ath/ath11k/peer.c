@@ -7,6 +7,7 @@
 #include "core.h"
 #include "peer.h"
 #include "debug.h"
+#include <linux/completion.h>
 
 static struct ath11k_peer *ath11k_peer_find_list_by_id(struct ath11k_base *ab,
 						       int peer_id)

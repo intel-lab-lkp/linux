@@ -10,6 +10,7 @@
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/spi/spi.h>

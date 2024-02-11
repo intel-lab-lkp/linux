@@ -17,6 +17,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <drm/drm_fourcc.h>
 

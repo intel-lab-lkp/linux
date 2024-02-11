@@ -7,6 +7,7 @@
 #include <linux/bio.h>
 #include <linux/err.h>
 #include <linux/hash.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/log2.h>
 #include <linux/init.h>

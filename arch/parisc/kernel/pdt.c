@@ -20,6 +20,7 @@
 #include <linux/initrd.h>
 #include <linux/pgtable.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 
 #include <asm/pdc.h>
 #include <asm/pdcpat.h>

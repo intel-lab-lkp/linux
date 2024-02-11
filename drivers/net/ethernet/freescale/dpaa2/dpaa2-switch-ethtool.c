@@ -8,6 +8,7 @@
  */
 
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include "dpaa2-switch.h"
 

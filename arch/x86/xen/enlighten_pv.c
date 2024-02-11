@@ -15,6 +15,7 @@
 #include <linux/cpu.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/smp.h>
 #include <linux/preempt.h>
 #include <linux/hardirq.h>

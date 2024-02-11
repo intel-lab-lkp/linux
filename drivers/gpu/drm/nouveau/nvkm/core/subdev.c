@@ -24,6 +24,7 @@
 #include <core/subdev.h>
 #include <core/device.h>
 #include <core/option.h>
+#include <linux/sprintf.h>
 #include <subdev/mc.h>
 
 const char *

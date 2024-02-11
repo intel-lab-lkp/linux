@@ -4,6 +4,7 @@
 #include <linux/completion.h>
 #include <linux/iopoll.h>
 #include <linux/iosys-map.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>

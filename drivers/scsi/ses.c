@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/enclosure.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

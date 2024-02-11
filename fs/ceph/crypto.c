@@ -7,6 +7,8 @@
  * Modified by Jaegeuk Kim, 2015.
  */
 #include <linux/ceph/ceph_debug.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include <linux/fscrypt.h>
 #include <linux/ceph/striper.h>

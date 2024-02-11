@@ -6,6 +6,7 @@
  */
 
 #include <asm/div64.h>
+#include <linux/kstrtox.h>
 
 #include <linux/clk.h>
 #include <linux/device.h>

@@ -20,6 +20,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/mmc/host.h>

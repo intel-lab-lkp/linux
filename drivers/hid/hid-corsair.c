@@ -17,7 +17,9 @@
  */
 
 #include <linux/hid.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/leds.h>
 

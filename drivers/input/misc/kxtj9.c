@@ -8,9 +8,11 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/input/kxtj9.h>
+#include <linux/sprintf.h>
 
 #define NAME			"kxtj9"
 #define G_MAX			8000

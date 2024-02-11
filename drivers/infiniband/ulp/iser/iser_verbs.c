@@ -34,6 +34,8 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "iscsi_iser.h"
 

@@ -27,6 +27,7 @@
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <asm/irq.h>
+#include <linux/completion.h>
 
 #include <pcmcia/ss.h>
 #include <pcmcia/cistpl.h>

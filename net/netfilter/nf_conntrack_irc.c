@@ -12,6 +12,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/kstrtox.h>
 #include <linux/tcp.h>
 #include <linux/netfilter.h>
 #include <linux/slab.h>

@@ -24,6 +24,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define FSI_ENGID_I2C		0x7
 

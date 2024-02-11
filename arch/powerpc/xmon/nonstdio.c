@@ -6,6 +6,7 @@
 #include <asm/udbg.h>
 #include <asm/time.h>
 #include "nonstdio.h"
+#include <linux/sprintf.h>
 
 static bool paginating, paginate_skipping;
 static unsigned long paginate_lpp; /* Lines Per Page */

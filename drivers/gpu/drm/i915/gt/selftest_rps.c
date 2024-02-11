@@ -5,6 +5,7 @@
 
 #include <linux/pm_qos.h>
 #include <linux/sort.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "gem/i915_gem_internal.h"
 

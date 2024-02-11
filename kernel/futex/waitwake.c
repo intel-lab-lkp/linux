@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/plist.h>
 #include <linux/sched/task.h>
 #include <linux/sched/signal.h>
 #include <linux/freezer.h>
+#include <linux/hrtimer.h>
 
 #include "futex.h"
 

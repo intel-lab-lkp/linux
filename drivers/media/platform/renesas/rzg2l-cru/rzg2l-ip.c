@@ -6,6 +6,7 @@
  */
 
 #include "rzg2l-cru.h"
+#include <linux/sprintf.h>
 
 struct rzg2l_cru_ip_format {
 	u32 code;

@@ -19,6 +19,7 @@
 #include "g450_pll.h"
 #include <linux/matroxfb.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 
 #include "matroxfb_g450.h"
 

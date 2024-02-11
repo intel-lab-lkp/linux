@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-vid.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>

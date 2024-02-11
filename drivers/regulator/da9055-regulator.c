@@ -16,6 +16,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/of.h>
 #include <linux/regulator/of_regulator.h>
+#include <linux/sprintf.h>
 
 #include <linux/mfd/da9055/core.h>
 #include <linux/mfd/da9055/reg.h>

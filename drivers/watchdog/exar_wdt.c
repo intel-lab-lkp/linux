@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 
 #define DRV_NAME	"exar_wdt"

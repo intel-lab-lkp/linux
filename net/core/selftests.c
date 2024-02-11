@@ -13,6 +13,7 @@
 #include <net/selftests.h>
 #include <net/tcp.h>
 #include <net/udp.h>
+#include <linux/completion.h>
 
 struct net_packet_attrs {
 	const unsigned char *src;

@@ -24,6 +24,7 @@
  */
 
 #include <linux/stdarg.h>
+#include <linux/sprintf.h>
 
 #include <linux/io.h>
 #include <linux/moduleparam.h>

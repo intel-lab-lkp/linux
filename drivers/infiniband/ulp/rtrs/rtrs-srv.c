@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME " L" __stringify(__LINE__) ": " fmt
 
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include "rtrs-srv.h"
 #include "rtrs-log.h"

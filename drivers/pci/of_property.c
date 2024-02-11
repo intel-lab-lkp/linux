@@ -3,12 +3,14 @@
  * Copyright (C) 2022-2023, Advanced Micro Devices, Inc.
  */
 
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pci.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 #include "pci.h"
+#include <linux/sprintf.h>
 
 #define OF_PCI_ADDRESS_CELLS		3
 #define OF_PCI_SIZE_CELLS		2

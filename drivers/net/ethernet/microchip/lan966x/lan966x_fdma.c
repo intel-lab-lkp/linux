@@ -2,6 +2,7 @@
 
 #include <linux/bpf.h>
 #include <linux/filter.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <net/page_pool/helpers.h>
 
 #include "lan966x_main.h"

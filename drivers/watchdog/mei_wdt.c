@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/debugfs.h>
 #include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 
 #include <linux/uuid.h>

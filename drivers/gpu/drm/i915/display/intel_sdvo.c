@@ -30,6 +30,7 @@
 #include <linux/export.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <drm/display/drm_hdmi_helper.h>
 #include <drm/drm_atomic_helper.h>

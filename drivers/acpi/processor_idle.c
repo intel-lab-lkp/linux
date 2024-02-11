@@ -17,6 +17,7 @@
 #include <linux/dmi.h>
 #include <linux/sched.h>       /* need_resched() */
 #include <linux/sort.h>
+#include <linux/sprintf.h>
 #include <linux/tick.h>
 #include <linux/cpuidle.h>
 #include <linux/cpu.h>

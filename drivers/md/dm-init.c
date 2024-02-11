@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/device-mapper.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/moduleparam.h>
 

@@ -11,6 +11,7 @@
 #include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

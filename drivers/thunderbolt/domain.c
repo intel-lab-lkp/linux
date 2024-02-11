@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 #include <crypto/hash.h>
+#include <linux/completion.h>
 
 #include "tb.h"
 

@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/perf_event.h>
+#include <linux/sprintf.h> // used by PMU_FORMAT_ATTR()
 
 /* Performance monitor configuration */
 #define PMCFG1  			0x00

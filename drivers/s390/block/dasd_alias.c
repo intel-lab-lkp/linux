@@ -11,6 +11,7 @@
 #include <asm/ebcdic.h>
 #include "dasd_int.h"
 #include "dasd_eckd.h"
+#include <linux/completion.h>
 
 /*
  * General concept of alias management:

@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/byteorder.h>
 

@@ -33,12 +33,15 @@
 */
 
 #include <crypto/hash.h>
+#include <linux/completion.h>
 #include <linux/file.h>
+#include <linux/hex.h>
 #include <linux/slab.h>
 #include <linux/namei.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/net_namespace.h>
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <linux/sunrpc/clnt.h>

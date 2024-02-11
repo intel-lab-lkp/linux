@@ -7,11 +7,14 @@
 
 #include <linux/kernel.h>
 #include <linux/etherdevice.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <net/cfg80211.h>
 #include <net/netlink.h>
 #include <uapi/linux/if_arp.h>
+#include <linux/completion.h>
 
 #include <brcmu_utils.h>
 #include <defs.h>

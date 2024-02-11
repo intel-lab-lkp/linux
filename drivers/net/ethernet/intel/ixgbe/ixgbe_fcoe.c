@@ -6,6 +6,7 @@
 #include <linux/gfp.h>
 #include <linux/if_vlan.h>
 #include <generated/utsrelease.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 #include <scsi/fc/fc_fs.h>

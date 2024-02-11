@@ -4,6 +4,7 @@
  */
 
 #include "testmode.h"
+#include <linux/sprintf.h>
 
 #include <net/netlink.h>
 #include <linux/firmware.h>

@@ -65,6 +65,7 @@
 #include <linux/compat.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <linux/bitops.h>

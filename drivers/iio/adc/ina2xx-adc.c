@@ -26,6 +26,7 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
 #include <linux/iio/sysfs.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/of.h>

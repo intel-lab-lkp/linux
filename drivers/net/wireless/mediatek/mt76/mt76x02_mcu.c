@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/firmware.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "mt76x02_mcu.h"
 

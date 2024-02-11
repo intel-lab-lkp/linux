@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/pci.h>
 

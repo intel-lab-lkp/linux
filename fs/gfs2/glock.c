@@ -17,6 +17,7 @@
 #include <linux/kallsyms.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>

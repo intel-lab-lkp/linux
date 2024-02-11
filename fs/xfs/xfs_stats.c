@@ -4,6 +4,7 @@
  * All Rights Reserved.
  */
 #include "xfs.h"
+#include <linux/sprintf.h>
 
 struct xstats xfsstats;
 

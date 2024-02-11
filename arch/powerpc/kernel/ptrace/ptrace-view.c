@@ -2,6 +2,7 @@
 
 #include <linux/regset.h>
 #include <linux/elf.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/nospec.h>
 #include <linux/pkeys.h>
 

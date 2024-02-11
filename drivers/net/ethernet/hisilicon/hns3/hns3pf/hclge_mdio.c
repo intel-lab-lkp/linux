@@ -4,6 +4,7 @@
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/marvell_phy.h>
+#include <linux/sprintf.h>
 
 #include "hclge_cmd.h"
 #include "hclge_main.h"

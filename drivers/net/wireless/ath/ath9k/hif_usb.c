@@ -16,6 +16,8 @@
 
 #include <asm/unaligned.h>
 #include "htc.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 MODULE_FIRMWARE(HTC_7010_MODULE_FW);
 MODULE_FIRMWARE(HTC_9271_MODULE_FW);

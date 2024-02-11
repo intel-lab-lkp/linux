@@ -9,6 +9,7 @@
 #define _SURFACE_AGGREGATOR_SSH_PACKET_LAYER_H
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/kfifo.h>
 #include <linux/ktime.h>
 #include <linux/list.h>

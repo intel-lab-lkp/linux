@@ -13,6 +13,7 @@
 #include <linux/ptp_classify.h>
 #include <linux/interrupt.h>
 #include <linux/clocksource.h>
+#include <linux/sprintf.h>
 
 #include "aq_nic.h"
 #include "aq_ptp.h"

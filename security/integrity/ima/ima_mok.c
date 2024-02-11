@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/uidgid.h>
 #include <keys/system_keyring.h>
 
 

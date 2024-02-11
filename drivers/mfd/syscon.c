@@ -23,6 +23,7 @@
 #include <linux/reset.h>
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 static struct platform_driver syscon_driver;
 

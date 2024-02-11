@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/font.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>

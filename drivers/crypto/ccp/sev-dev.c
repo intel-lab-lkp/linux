@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -15,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/spinlock_types.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>

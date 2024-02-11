@@ -11,15 +11,18 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
 #include <linux/rtc.h>
 #include <linux/bcd.h>
+#include <linux/completion.h>
 #include <linux/reboot.h>
 #include <linux/cciss_ioctl.h>
 #include <linux/blk-mq-pci.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>

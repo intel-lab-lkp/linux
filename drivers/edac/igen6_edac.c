@@ -23,6 +23,7 @@
 #include <asm/mach_traps.h>
 #include <asm/nmi.h>
 #include <asm/mce.h>
+#include <linux/sprintf.h>
 
 #include "edac_mc.h"
 #include "edac_module.h"

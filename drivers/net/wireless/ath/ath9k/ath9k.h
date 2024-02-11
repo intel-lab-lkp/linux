@@ -23,6 +23,7 @@
 #include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/hw_random.h>
 

@@ -15,6 +15,7 @@
 #include <linux/idle_inject.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 
 /**

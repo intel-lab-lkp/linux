@@ -24,6 +24,7 @@
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/of_platform.h>
+#include <linux/sprintf.h>
 
 #include "fs_enet.h"
 

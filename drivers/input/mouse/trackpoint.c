@@ -7,11 +7,13 @@
 
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/serio.h>
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/libps2.h>
 #include <linux/proc_fs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include "psmouse.h"
 #include "trackpoint.h"

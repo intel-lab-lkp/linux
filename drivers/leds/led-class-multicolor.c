@@ -9,6 +9,7 @@
 #include <linux/math.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "leds.h"

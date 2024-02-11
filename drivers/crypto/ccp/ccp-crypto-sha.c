@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 #include <linux/crypto.h>
 #include <crypto/algapi.h>
 #include <crypto/hash.h>

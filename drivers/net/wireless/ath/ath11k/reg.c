@@ -4,6 +4,7 @@
  * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/rtnetlink.h>
+#include <linux/completion.h>
 
 #include "core.h"
 #include "debug.h"

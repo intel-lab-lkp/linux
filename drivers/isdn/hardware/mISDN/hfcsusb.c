@@ -18,6 +18,7 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/mISDNhw.h>
 #include <linux/slab.h>

@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/hwmon.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 
 #include "thermal_hwmon.h"

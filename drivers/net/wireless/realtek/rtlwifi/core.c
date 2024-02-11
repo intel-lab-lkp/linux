@@ -7,6 +7,7 @@
 #include "base.h"
 #include "ps.h"
 #include "pwrseqcmd.h"
+#include <linux/completion.h>
 
 #include "btcoexist/rtl_btc.h"
 #include <linux/firmware.h>

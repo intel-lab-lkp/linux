@@ -11,6 +11,8 @@
 #include <asm/irq_regs.h>
 #include <asm/perf_event.h>
 #include <asm/virt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include <clocksource/arm_arch_timer.h>
 

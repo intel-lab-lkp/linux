@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/poll.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 

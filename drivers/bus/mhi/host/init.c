@@ -5,13 +5,17 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 #include <linux/idr.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/list.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kobject.h>
 #include <linux/mhi.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>

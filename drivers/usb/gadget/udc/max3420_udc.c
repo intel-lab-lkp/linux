@@ -19,13 +19,16 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/prefetch.h>
+#include <linux/sprintf.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio/consumer.h>
+#include <linux/hrtimer.h>
 
 #define MAX3420_MAX_EPS		4
 #define MAX3420_EP_MAX_PACKET		64  /* Same for all Endpoints */

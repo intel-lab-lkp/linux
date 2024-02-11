@@ -18,6 +18,7 @@
 #include <linux/firmware.h>
 #include "ipac.h"
 #include "isar.h"
+#include <linux/sprintf.h>
 
 #define SPEEDFAX_REV	"2.0"
 

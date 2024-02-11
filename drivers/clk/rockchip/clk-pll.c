@@ -9,6 +9,7 @@
 
 #include <asm/div64.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/clk-provider.h>

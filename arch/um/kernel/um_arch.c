@@ -6,6 +6,7 @@
 #include <linux/cpu.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/ctype.h>
 #include <linux/module.h>

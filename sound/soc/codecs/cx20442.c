@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>

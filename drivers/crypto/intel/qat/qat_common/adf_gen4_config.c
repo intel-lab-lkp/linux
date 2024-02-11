@@ -10,6 +10,7 @@
 #include "adf_transport_access_macros.h"
 #include "qat_compression.h"
 #include "qat_crypto.h"
+#include <linux/sprintf.h>
 
 static int adf_crypto_dev_config(struct adf_accel_dev *accel_dev)
 {

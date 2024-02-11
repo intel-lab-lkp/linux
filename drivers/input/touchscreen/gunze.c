@@ -9,10 +9,12 @@
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Gunze AHL-51S touchscreen driver"
 

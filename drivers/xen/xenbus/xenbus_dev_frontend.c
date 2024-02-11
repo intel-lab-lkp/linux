@@ -39,6 +39,7 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/uio.h>
 #include <linux/notifier.h>
 #include <linux/wait.h>

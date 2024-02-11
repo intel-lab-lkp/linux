@@ -6,6 +6,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
 #include "qedf.h"
+#include <linux/completion.h>
 
 extern const struct qed_fcoe_ops *qed_ops;
 /*

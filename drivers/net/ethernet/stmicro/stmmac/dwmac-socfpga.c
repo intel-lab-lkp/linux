@@ -13,6 +13,7 @@
 #include <linux/mdio/mdio-regmap.h>
 #include <linux/pcs-lynx.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <linux/stmmac.h>
 
 #include "stmmac.h"

@@ -6,6 +6,7 @@
  */
 
 #include <linux/dmaengine.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
@@ -14,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kfifo.h>
 #include <linux/bitops.h>
 

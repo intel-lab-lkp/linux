@@ -15,6 +15,7 @@
 #include <linux/hdreg.h>
 #include <linux/scatterlist.h>
 #include <linux/idr.h>
+#include <linux/sprintf.h>
 
 #include "rnbd-clt.h"
 

@@ -5,6 +5,7 @@
  */
 
 #include <linux/inetdevice.h>
+#include <linux/sprintf.h>
 #include <net/addrconf.h>
 #include <linux/syscalls.h>
 #include <linux/namei.h>

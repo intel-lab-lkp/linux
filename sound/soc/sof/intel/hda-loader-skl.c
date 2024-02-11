@@ -12,6 +12,7 @@
 #include <linux/firmware.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pci.h>

@@ -19,6 +19,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 /* move to <linux/anybuss-controller.h> when taking this out of staging */
 #include "anybuss-controller.h"

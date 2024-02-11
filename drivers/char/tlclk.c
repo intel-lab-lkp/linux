@@ -38,6 +38,7 @@
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>

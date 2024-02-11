@@ -14,6 +14,7 @@
 
 #include <linux/perf_event.h>
 #include <linux/capability.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/hardirq.h>
 #include <linux/kprobes.h>
@@ -22,6 +23,7 @@
 #include <linux/kdebug.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/clock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>

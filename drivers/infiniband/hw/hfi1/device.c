@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 
 #include "hfi.h"
 #include "device.h"

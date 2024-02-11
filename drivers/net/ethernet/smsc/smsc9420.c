@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <asm/unaligned.h>
 #include "smsc9420.h"
+#include <linux/sprintf.h>
 
 #define DRV_NAME		"smsc9420"
 #define DRV_MDIONAME		"smsc9420-mdio"

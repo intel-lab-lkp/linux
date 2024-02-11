@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/ata.h>
+#include <linux/completion.h>
 #include <linux/libata.h>
 #include <linux/platform_device.h>
 #include <linux/dmaengine.h>

@@ -15,6 +15,7 @@
 #include <linux/sunrpc/cache.h>
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <net/net_namespace.h>
+#include <linux/completion.h>
 
 #include "cache_lib.h"
 

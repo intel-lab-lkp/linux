@@ -17,6 +17,7 @@
 #include <linux/isa.h>
 #include <linux/io.h>
 #include <asm/dma.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/wss.h>
 #include <sound/opl3.h>

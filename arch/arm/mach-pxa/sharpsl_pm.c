@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/apm-emulation.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/leds.h>

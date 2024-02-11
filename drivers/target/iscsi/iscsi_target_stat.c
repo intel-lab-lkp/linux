@@ -11,6 +11,7 @@
 
 #include <linux/configfs.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <scsi/iscsi_proto.h>
 #include <target/target_core_base.h>
 

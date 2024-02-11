@@ -5,6 +5,7 @@
 #include <linux/if_vlan.h>
 #include <linux/pm_runtime.h>
 #include <linux/mdio.h>
+#include <linux/sprintf.h>
 
 #include "igc.h"
 #include "igc_diag.h"

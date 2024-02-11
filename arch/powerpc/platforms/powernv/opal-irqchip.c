@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 
 #include <asm/machdep.h>
 #include <asm/opal.h>

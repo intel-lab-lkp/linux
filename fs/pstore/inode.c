@@ -10,6 +10,7 @@
 #include <linux/fsnotify.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -22,6 +23,8 @@
 #include <linux/magic.h>
 #include <linux/pstore.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <linux/uaccess.h>
 #include <linux/cleanup.h>
 

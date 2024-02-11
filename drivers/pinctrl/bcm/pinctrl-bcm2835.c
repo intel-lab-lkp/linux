@@ -34,6 +34,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <dt-bindings/pinctrl/bcm2835.h>
 

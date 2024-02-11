@@ -76,6 +76,7 @@
 
 #include <linux/module.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/mtd/rawnand.h>
 #include <linux/of.h>
 #include <linux/iopoll.h>

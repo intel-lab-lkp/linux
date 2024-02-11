@@ -7,6 +7,8 @@
 
 #include <linux/iopoll.h>
 #include <linux/firmware.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "decl.h"
 #include "ioctl.h"

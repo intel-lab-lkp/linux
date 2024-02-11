@@ -16,6 +16,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 
 #include "hnae.h"
 #include "hns_enet.h"

@@ -8,7 +8,10 @@
 
 #include <linux/miscdevice.h>
 #include <linux/bitfield.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/pci-epf.h>
+#include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -16,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #define DW_XDATA_DRIVER_NAME		"dw-xdata-pcie"
 

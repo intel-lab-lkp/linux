@@ -6,6 +6,8 @@
  */
 
 #include <linux/suspend.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "main.h"
 #include "wmm.h"

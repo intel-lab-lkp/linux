@@ -17,10 +17,13 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/list.h>

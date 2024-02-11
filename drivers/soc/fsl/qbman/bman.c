@@ -29,6 +29,7 @@
  */
 
 #include "bman_priv.h"
+#include <linux/sprintf.h>
 
 #define IRQNAME		"BMan portal %d"
 #define MAX_IRQNAME	16	/* big enough for "BMan portal %d" */

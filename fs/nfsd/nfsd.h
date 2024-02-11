@@ -11,6 +11,7 @@
 
 #include <linux/types.h>
 #include <linux/mount.h>
+#include <linux/sprintf.h>
 
 #include <linux/nfs.h>
 #include <linux/nfs2.h>

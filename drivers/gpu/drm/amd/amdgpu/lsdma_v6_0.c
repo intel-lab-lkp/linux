@@ -25,6 +25,7 @@
 #include "amdgpu.h"
 #include "lsdma_v6_0.h"
 #include "amdgpu_lsdma.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "lsdma/lsdma_6_0_0_offset.h"
 #include "lsdma/lsdma_6_0_0_sh_mask.h"

@@ -31,8 +31,10 @@
  * SOFTWARE.
  */
 #include <linux/acpi.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_addr.h>
 #include <rdma/ib_smi.h>
 #include <rdma/ib_user_verbs.h>

@@ -9,9 +9,11 @@
 #include <linux/ratelimit.h>
 #include <linux/kthread.h>
 #include <linux/semaphore.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <linux/list_sort.h>
 #include <linux/namei.h>
+#include <linux/file.h> // for fput()
 #include "misc.h"
 #include "ctree.h"
 #include "disk-io.h"

@@ -23,6 +23,7 @@
 #include <linux/btf_ids.h>
 #include <linux/bpf_mem_alloc.h>
 #include <linux/kasan.h>
+#include <linux/hrtimer.h>
 
 #include "../../lib/kstrtox.h"
 

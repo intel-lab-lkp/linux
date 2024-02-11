@@ -57,6 +57,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/pid_namespace.h>

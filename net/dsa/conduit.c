@@ -9,6 +9,7 @@
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 
 #include "conduit.h"

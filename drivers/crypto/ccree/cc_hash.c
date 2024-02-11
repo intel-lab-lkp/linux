@@ -8,6 +8,7 @@
 #include <crypto/md5.h>
 #include <crypto/sm3.h>
 #include <crypto/internal/hash.h>
+#include <linux/sprintf.h>
 
 #include "cc_driver.h"
 #include "cc_request_mgr.h"

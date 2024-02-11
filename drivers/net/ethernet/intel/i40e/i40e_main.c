@@ -6,6 +6,7 @@
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
 

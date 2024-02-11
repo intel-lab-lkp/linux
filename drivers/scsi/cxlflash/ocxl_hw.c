@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <asm/xive.h>
+#include <linux/sprintf.h>
 #include <misc/ocxl.h>
 
 #include <uapi/misc/cxl.h>

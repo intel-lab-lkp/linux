@@ -23,6 +23,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
+#include <linux/sprintf.h>
 
 #define REF_CLK_19_2MHZ         19200000
 #define REF_CLK_25MHZ           25000000

@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 /* PWM registers and bits definitions */

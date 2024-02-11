@@ -16,6 +16,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/mdt_loader.h>
+#include <linux/sprintf.h>
 
 static bool mdt_phdr_valid(const struct elf32_phdr *phdr)
 {

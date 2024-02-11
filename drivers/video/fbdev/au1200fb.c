@@ -31,6 +31,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/kernel.h>

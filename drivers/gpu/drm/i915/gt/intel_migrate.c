@@ -11,6 +11,7 @@
 #include "intel_migrate.h"
 #include "intel_ring.h"
 #include "gem/i915_gem_lmem.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 struct insert_pte_data {
 	u64 offset;

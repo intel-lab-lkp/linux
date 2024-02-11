@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #if IS_ENABLED(CONFIG_DRM_DEBUG_DP_MST_TOPOLOGY_REFS)
 #include <linux/stacktrace.h>

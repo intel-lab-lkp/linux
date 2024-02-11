@@ -59,6 +59,7 @@
 #include "remote_node_context.h"
 #include "scu_event_codes.h"
 #include "scu_task_context.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #undef C
 #define C(a) (#a)

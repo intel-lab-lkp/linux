@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/dcache.h>
 #include <linux/gfp.h>
+#include <linux/kstrtox.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
 #include <linux/nfs_fs.h>

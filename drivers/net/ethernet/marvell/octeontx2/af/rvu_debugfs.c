@@ -9,8 +9,10 @@
 
 #include <linux/fs.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "rvu_struct.h"
 #include "rvu_reg.h"

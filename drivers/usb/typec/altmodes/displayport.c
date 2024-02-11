@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_dp.h>
 #include <drm/drm_connector.h>

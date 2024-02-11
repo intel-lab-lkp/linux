@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>

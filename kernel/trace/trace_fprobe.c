@@ -6,6 +6,7 @@
 #define pr_fmt(fmt)	"trace_fprobe: " fmt
 
 #include <linux/fprobe.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/rculist.h>
 #include <linux/security.h>

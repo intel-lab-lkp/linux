@@ -11,6 +11,7 @@
 #include <linux/rcupdate.h>
 #include <linux/rculist.h>
 #include <linux/kernel.h>
+#include <linux/moduleparam.h>
 #include <linux/export.h>
 #include <linux/percpu.h>
 #include <linux/init.h>
@@ -25,6 +26,7 @@
 #include <linux/nmi.h>
 #include <linux/sched/debug.h>
 #include <linux/jump_label.h>
+#include <linux/completion.h>
 
 #include <trace/events/ipi.h>
 #define CREATE_TRACE_POINTS

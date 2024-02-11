@@ -16,6 +16,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
+#include <linux/completion.h>
 
 #define DRIVER_DESC "Wl1273 FM Radio"
 

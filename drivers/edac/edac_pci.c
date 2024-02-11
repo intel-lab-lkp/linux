@@ -7,6 +7,7 @@
  * 2007 (c) MontaVista Software, Inc.
  */
 #include <asm/page.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/ctype.h>
 #include <linux/highmem.h>

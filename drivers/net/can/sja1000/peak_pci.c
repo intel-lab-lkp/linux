@@ -19,6 +19,7 @@
 #include <linux/i2c-algo-bit.h>
 #include <linux/can.h>
 #include <linux/can/dev.h>
+#include <linux/sprintf.h>
 
 #include "sja1000.h"
 

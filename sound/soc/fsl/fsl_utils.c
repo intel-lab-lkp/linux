@@ -10,6 +10,7 @@
 #include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 
 #include "fsl_utils.h"

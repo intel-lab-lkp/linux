@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/input/elan-i2c-ids.h>
+#include <linux/sprintf.h>
 
 #include "hid-ids.h"
 

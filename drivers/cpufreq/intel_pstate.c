@@ -10,9 +10,11 @@
 
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
+#include <linux/sprintf.h>
 #include <linux/tick.h>
 #include <linux/slab.h>
 #include <linux/sched/cpufreq.h>

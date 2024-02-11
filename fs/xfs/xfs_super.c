@@ -44,6 +44,7 @@
 #include "xfs_dahash_test.h"
 #include "xfs_rtbitmap.h"
 #include "scrub/stats.h"
+#include <linux/kstrtox.h>
 
 #include <linux/magic.h>
 #include <linux/fs_context.h>

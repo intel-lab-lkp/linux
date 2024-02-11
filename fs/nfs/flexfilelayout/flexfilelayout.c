@@ -12,6 +12,7 @@
 #include <linux/nfs_page.h>
 #include <linux/module.h>
 #include <linux/sched/mm.h>
+#include <linux/sprintf.h>
 
 #include <linux/sunrpc/metrics.h>
 

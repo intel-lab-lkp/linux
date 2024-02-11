@@ -5,6 +5,8 @@
  */
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 struct uuidcmp {
 	const char *uuid;

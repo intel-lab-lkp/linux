@@ -6,8 +6,11 @@
  *
  */
 #include <linux/cpu.h>
+#include <linux/idr.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include "uncore-frequency-common.h"
+#include <linux/sprintf.h>
 
 /* Mutex to control all mutual exclusions */
 static DEFINE_MUTEX(uncore_lock);

@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/device.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 /* I2C command bytes */
 #define SHT21_TRIG_T_MEASUREMENT_HM  0xe3

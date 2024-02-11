@@ -42,6 +42,7 @@
  */
 
 #include "esas2r.h"
+#include <linux/sprintf.h>
 
 /*
  * this module within the driver is tasked with providing logging functionality.

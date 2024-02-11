@@ -6,12 +6,14 @@
 #include <linux/highmem.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/platform_device.h>
 #include <linux/ktime.h>
+#include <linux/completion.h>
 
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/host.h>

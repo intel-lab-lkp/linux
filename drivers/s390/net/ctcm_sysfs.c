@@ -13,6 +13,8 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include "ctcm_main.h"

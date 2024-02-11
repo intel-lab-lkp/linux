@@ -18,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include <sound/initval.h>
 #include <sound/control.h>

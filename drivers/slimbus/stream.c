@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/slimbus.h>
+#include <linux/sprintf.h>
 #include <uapi/sound/asound.h>
 #include "slimbus.h"
 

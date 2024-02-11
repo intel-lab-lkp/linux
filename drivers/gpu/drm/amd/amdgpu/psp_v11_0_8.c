@@ -25,6 +25,7 @@
 #include "amdgpu_ucode.h"
 #include "soc15_common.h"
 #include "psp_v11_0_8.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "mp/mp_11_0_8_offset.h"
 

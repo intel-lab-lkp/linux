@@ -23,6 +23,7 @@
 
 #include "cx23885.h"
 #include "cx23885-input.h"
+#include <linux/sprintf.h>
 
 #include <linux/slab.h>
 #include <media/rc-core.h>

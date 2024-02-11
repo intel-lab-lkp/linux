@@ -13,6 +13,9 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
 #include <linux/sched/mm.h>
@@ -49,6 +52,7 @@
 #include <linux/cpu.h>
 #include <linux/cgroup.h>
 #include <linux/security.h>
+#include <linux/hrtimer.h>
 #include <linux/hugetlb.h>
 #include <linux/seccomp.h>
 #include <linux/swap.h>

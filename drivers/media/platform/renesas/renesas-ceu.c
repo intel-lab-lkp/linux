@@ -26,6 +26,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/videodev2.h>
 

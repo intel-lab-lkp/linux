@@ -10,6 +10,7 @@
 #include <linux/pci.h>
 #include <linux/console.h>
 #include <linux/serial_core.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/interrupt.h>

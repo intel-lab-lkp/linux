@@ -8,6 +8,7 @@
  * The hwirq alloc and free code reuse from sysdev/mpic_msi.c
  */
 #include <linux/irq.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/msi.h>
 #include <linux/pci.h>
 #include <linux/slab.h>

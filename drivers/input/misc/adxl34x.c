@@ -12,7 +12,9 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/input/adxl34x.h>
 #include <linux/module.h>

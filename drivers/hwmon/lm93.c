@@ -27,6 +27,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/hwmon.h>
@@ -35,6 +36,7 @@
 #include <linux/err.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 /* LM93 REGISTER ADDRESSES */
 

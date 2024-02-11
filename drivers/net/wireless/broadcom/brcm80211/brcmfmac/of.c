@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_net.h>
+#include <linux/sprintf.h>
 
 #include <defs.h>
 #include "debug.h"

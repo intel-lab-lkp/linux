@@ -15,6 +15,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/qed/qed_chain.h>
 #include "qed.h"

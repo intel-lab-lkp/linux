@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/led-lm3530.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/regulator/consumer.h>
 #include <linux/module.h>

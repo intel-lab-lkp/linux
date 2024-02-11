@@ -21,6 +21,7 @@
 #include <net/dst.h>
 #include <linux/netdevice.h>
 #include <net/addrconf.h>
+#include <linux/completion.h>
 
 #include "t4_regs.h"
 #include "t4_msg.h"

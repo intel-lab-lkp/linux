@@ -10,10 +10,12 @@
 #include <linux/device.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_data/mlxreg.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 /* Attribute parameters. */
 #define MLXREG_IO_ATT_SIZE	10

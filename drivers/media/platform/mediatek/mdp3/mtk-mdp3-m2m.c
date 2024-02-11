@@ -5,6 +5,7 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
 #include <media/videobuf2-dma-contig.h>

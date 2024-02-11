@@ -29,6 +29,8 @@
 
 #include "ubifs.h"
 
+#include <linux/shrinker.h>
+
 /* List of all UBIFS file-system instances */
 LIST_HEAD(ubifs_infos);
 

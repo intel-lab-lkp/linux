@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 
 #include <drm/drm_connector.h>
 #include <drm/drm_device.h>

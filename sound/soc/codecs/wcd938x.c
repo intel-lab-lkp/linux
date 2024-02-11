@@ -20,6 +20,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <linux/regulator/consumer.h>
+#include <linux/completion.h>
 
 #include "wcd-clsh-v2.h"
 #include "wcd-mbhc-v2.h"

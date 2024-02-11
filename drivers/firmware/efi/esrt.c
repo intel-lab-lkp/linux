@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/memblock.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include <asm/io.h>

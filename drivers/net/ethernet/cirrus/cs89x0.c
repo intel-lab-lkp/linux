@@ -51,11 +51,13 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>

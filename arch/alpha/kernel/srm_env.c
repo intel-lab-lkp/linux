@@ -19,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <asm/console.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/machvec.h>
 

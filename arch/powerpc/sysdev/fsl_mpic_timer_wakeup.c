@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include <asm/mpic_timer.h>
 #include <asm/mpic.h>

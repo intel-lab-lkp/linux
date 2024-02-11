@@ -9,6 +9,7 @@
 #include "qat_compression.h"
 #include "adf_heartbeat.h"
 #include "adf_transport_access_macros.h"
+#include <linux/sprintf.h>
 
 static int adf_gen2_crypto_dev_config(struct adf_accel_dev *accel_dev)
 {

@@ -5,6 +5,8 @@
  */
 #include "xfs.h"
 #include <linux/backing-dev.h>
+#include <linux/bio.h>
+#include <linux/completion.h>
 #include <linux/dax.h>
 
 #include "xfs_shared.h"

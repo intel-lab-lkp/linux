@@ -16,6 +16,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include "../common/ms_sensors/ms_sensors_i2c.h"
 

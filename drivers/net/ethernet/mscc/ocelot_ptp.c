@@ -5,6 +5,8 @@
  * Copyright 2020 NXP
  */
 #include <linux/time64.h>
+#include <linux/sprintf.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/dsa/ocelot.h>
 #include <linux/ptp_classify.h>

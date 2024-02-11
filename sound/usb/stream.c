@@ -5,6 +5,7 @@
 
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/audio.h>
 #include <linux/usb/audio-v2.h>

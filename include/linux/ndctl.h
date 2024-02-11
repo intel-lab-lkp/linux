@@ -13,6 +13,8 @@
 #ifndef _LINUX_NDCTL_H
 #define _LINUX_NDCTL_H
 
+#include <asm/page.h> // for PAGE_SIZE
+
 #include <uapi/linux/ndctl.h>
 
 enum {

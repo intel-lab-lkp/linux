@@ -5,6 +5,7 @@
 #include <linux/iopoll.h>
 #include <linux/pci.h>
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_hw.h"

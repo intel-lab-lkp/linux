@@ -13,6 +13,7 @@
 #include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/i2c-algo-pca.h>
+#include <linux/completion.h>
 
 #define DEB1(fmt, args...) do { if (i2c_debug >= 1)			\
 				 printk(KERN_DEBUG fmt, ## args); } while (0)

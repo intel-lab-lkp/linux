@@ -6,7 +6,9 @@
  **/
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>

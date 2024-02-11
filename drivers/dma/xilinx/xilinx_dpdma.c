@@ -16,6 +16,8 @@
 #include <linux/dmaengine.h>
 #include <linux/dmapool.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>
@@ -23,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 
 #include <dt-bindings/dma/xlnx-zynqmp-dpdma.h>

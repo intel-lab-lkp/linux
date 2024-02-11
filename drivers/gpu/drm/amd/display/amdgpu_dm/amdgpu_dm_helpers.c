@@ -26,6 +26,7 @@
 #include <linux/string.h>
 #include <linux/acpi.h>
 #include <linux/i2c.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_probe_helper.h>

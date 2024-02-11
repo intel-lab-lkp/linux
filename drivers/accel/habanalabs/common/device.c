@@ -9,6 +9,8 @@
 
 #include <uapi/drm/habanalabs_accel.h>
 #include "habanalabs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include <linux/pci.h>
 #include <linux/hwmon.h>

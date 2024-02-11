@@ -43,8 +43,10 @@
  */
 
 #include <linux/io.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/pci.h>
 #include <linux/poll.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/export.h>
 #include <linux/fs.h>

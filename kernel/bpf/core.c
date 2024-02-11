@@ -19,6 +19,7 @@
 
 #include <uapi/linux/btf.h>
 #include <linux/filter.h>
+#include <linux/hex.h>
 #include <linux/skbuff.h>
 #include <linux/vmalloc.h>
 #include <linux/random.h>

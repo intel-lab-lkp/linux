@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/videodev2.h>
 #include <linux/mutex.h>

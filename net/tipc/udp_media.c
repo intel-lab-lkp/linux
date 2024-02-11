@@ -34,6 +34,7 @@
 
 #include <linux/socket.h>
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/inet.h>
 #include <linux/inetdevice.h>

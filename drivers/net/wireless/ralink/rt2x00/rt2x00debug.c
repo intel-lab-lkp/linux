@@ -12,10 +12,12 @@
 
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "rt2x00.h"

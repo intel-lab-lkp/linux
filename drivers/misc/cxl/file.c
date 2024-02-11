@@ -19,6 +19,7 @@
 #include <asm/cputable.h>
 #include <asm/current.h>
 #include <asm/copro.h>
+#include <linux/sprintf.h>
 
 #include "cxl.h"
 #include "trace.h"

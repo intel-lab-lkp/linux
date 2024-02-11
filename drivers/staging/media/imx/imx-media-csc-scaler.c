@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <video/imx-ipu-v3.h>
 #include <video/imx-ipu-image-convert.h>
 

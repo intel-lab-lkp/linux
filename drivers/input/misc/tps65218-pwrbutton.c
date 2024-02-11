@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct tps6521x_data {
 	unsigned int reg_status;

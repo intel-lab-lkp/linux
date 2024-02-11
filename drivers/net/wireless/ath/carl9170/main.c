@@ -41,11 +41,13 @@
 #include <linux/module.h>
 #include <linux/etherdevice.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
 #include "hw.h"
 #include "carl9170.h"
 #include "cmd.h"
+#include <linux/completion.h>
 
 static bool modparam_nohwcrypt;
 module_param_named(nohwcrypt, modparam_nohwcrypt, bool, 0444);

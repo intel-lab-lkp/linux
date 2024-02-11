@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /**
  * irdma_query_device - get device attributes

@@ -15,6 +15,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -27,6 +28,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include "i2c-stm32.h"
 

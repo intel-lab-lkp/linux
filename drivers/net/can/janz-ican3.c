@@ -6,11 +6,14 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/ethtool.h>
 #include <linux/platform_device.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/netdevice.h>
 #include <linux/can.h>

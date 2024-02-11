@@ -22,6 +22,7 @@
 #include <linux/idr.h>
 #include <linux/netdevice.h>
 #include <linux/linkmode.h>
+#include <linux/sprintf.h>
 
 #include "swphy.h"
 

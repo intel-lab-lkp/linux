@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <asm/push-switch.h>
+#include <linux/sprintf.h>
 
 #define DRV_NAME "push-switch"
 #define DRV_VERSION "0.1.1"

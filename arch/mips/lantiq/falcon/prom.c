@@ -9,6 +9,7 @@
 #include <asm/cacheflush.h>
 #include <asm/traps.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #include <lantiq_soc.h>
 

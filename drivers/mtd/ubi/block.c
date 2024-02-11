@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
@@ -41,6 +42,7 @@
 #include <linux/scatterlist.h>
 #include <linux/idr.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 
 #include "ubi-media.h"
 #include "ubi.h"

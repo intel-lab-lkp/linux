@@ -17,6 +17,7 @@
 #include <linux/kthread.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/un.h>
 #include <linux/uaccess.h>
 #include <linux/inet.h>

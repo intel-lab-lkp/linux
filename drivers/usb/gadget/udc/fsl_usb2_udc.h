@@ -10,6 +10,7 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/sprintf.h>
 
 /* ### define USB registers here
  */

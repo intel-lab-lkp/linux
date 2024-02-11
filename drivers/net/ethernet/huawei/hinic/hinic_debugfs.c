@@ -5,6 +5,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include "hinic_debugfs.h"
 

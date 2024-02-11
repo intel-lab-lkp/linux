@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/mempolicy.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -17,6 +18,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/kexec.h>
+#include <linux/kobject.h>
 #include <linux/of_device.h>
 #include <linux/acpi.h>
 #include <linux/dma-map-ops.h>

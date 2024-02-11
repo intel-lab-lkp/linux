@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/if_vlan.h>
 #include <linux/uaccess.h>

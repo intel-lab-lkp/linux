@@ -27,6 +27,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/log2.h>
 #include <linux/sizes.h>

@@ -72,6 +72,7 @@
 #include <linux/bitmap.h>
 #include <linux/capability.h>
 #include <linux/cpu.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/hash.h>

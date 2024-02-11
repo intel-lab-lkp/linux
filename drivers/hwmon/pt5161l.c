@@ -8,6 +8,7 @@
 #include <linux/hwmon.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 /* Aries current average temp ADC code CSR */
 #define ARIES_CURRENT_AVG_TEMP_ADC_CSR	0x42c

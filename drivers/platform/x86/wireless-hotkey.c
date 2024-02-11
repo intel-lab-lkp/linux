@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
 #include <acpi/acpi_bus.h>
+#include <linux/sprintf.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Alex Hung");

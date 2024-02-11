@@ -15,6 +15,7 @@
 #include <linux/phylink.h>
 #include <linux/net_tstamp.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #include "stmmac.h"
 #include "dwmac_dma.h"

@@ -59,6 +59,7 @@
 #include <asm/vdso.h>
 #include <asm/maccess.h>
 #include "entry.h"
+#include <linux/sprintf.h>
 
 enum {
 	ec_schedule = 0,

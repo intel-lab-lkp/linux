@@ -9,6 +9,7 @@
 #include <net/dsfield.h>
 #include "cfg80211.h"
 #include "wlan_cfg.h"
+#include <linux/completion.h>
 
 #define WAKE_UP_TRIAL_RETRY		10000
 

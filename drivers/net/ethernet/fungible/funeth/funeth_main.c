@@ -7,11 +7,13 @@
 #include <linux/filter.h>
 #include <linux/idr.h>
 #include <linux/if_vlan.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include <linux/rtnetlink.h>
 #include <linux/inetdevice.h>
+#include <linux/sprintf.h>
 
 #include "funeth.h"
 #include "funeth_devlink.h"

@@ -29,6 +29,7 @@
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_fourcc.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "amdgpu.h"
 #include "dal_asic_id.h"

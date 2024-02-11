@@ -7,6 +7,7 @@
  * 	Copyright 2002-2007 H. Peter Anvin
  */
 #include <linux/async_tx.h>
+#include <linux/completion.h>
 #include <linux/gfp.h>
 #include <linux/mm.h>
 #include <linux/random.h>

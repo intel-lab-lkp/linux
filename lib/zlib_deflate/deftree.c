@@ -36,6 +36,7 @@
 
 #include <linux/zutil.h>
 #include <linux/bitrev.h>
+#include <linux/minmax.h>
 #include "defutil.h"
 
 #ifdef DEBUG_ZLIB

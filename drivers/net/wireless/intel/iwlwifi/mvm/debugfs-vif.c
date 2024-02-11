@@ -6,6 +6,8 @@
  */
 #include "mvm.h"
 #include "debugfs.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static void iwl_dbgfs_update_pm(struct iwl_mvm *mvm,
 				 struct ieee80211_vif *vif,

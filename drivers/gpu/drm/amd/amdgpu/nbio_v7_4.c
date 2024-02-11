@@ -24,6 +24,7 @@
 #include "amdgpu_atombios.h"
 #include "nbio_v7_4.h"
 #include "amdgpu_ras.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "nbio/nbio_7_4_offset.h"
 #include "nbio/nbio_7_4_sh_mask.h"

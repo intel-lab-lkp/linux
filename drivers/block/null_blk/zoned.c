@@ -2,6 +2,7 @@
 #include <linux/vmalloc.h>
 #include <linux/bitmap.h>
 #include "null_blk.h"
+#include <linux/kstrtox.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"

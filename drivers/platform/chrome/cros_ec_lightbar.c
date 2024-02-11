@@ -14,6 +14,7 @@
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>

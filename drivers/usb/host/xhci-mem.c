@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/dmapool.h>
 #include <linux/dma-mapping.h>
+#include <linux/completion.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"

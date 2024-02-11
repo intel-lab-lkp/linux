@@ -11,6 +11,7 @@
 #include <linux/hid.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/usb/ch9.h>
 

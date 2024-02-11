@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <xen/xenbus.h>
 #include <xen/events.h>
 #include <xen/grant_table.h>

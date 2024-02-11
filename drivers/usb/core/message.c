@@ -6,6 +6,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/pci.h>	/* for scatterlist macros */
 #include <linux/usb.h>
 #include <linux/module.h>

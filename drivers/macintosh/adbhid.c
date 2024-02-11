@@ -40,6 +40,7 @@
 #include <linux/init.h>
 #include <linux/notifier.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 
 #include <linux/adb.h>
 #include <linux/cuda.h>

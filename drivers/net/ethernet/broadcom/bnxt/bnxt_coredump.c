@@ -14,6 +14,7 @@
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_coredump.h"
+#include <linux/sprintf.h>
 
 static int bnxt_hwrm_dbg_dma_data(struct bnxt *bp, void *msg,
 				  struct bnxt_hwrm_dbg_dma_info *info)

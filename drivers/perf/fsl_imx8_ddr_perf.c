@@ -14,6 +14,7 @@
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h> // used by PMU_FORMAT_ATTR()
 
 #define COUNTER_CNTL		0x0
 #define COUNTER_READ		0x20

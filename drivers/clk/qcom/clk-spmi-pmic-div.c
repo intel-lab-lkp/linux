@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #define REG_DIV_CTL1			0x43

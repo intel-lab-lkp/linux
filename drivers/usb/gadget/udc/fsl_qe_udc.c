@@ -40,6 +40,7 @@
 #include <asm/dma.h>
 #include <asm/reg.h>
 #include "fsl_qe_udc.h"
+#include <linux/completion.h>
 
 #define DRIVER_DESC     "Freescale QE/CPM USB Device Controller driver"
 #define DRIVER_AUTHOR   "Xie XiaoBo"

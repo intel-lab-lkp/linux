@@ -8,6 +8,7 @@
 // sifive@sifive.com
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>

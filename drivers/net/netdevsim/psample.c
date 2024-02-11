@@ -6,6 +6,7 @@
 #include <linux/etherdevice.h>
 #include <linux/inet.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <net/devlink.h>

@@ -19,6 +19,7 @@
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/gfp.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/nospec.h>
 #include <linux/blkdev.h>
@@ -26,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>

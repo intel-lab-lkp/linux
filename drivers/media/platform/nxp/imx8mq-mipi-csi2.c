@@ -23,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>

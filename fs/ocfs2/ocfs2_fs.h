@@ -11,6 +11,7 @@
 #define _OCFS2_FS_H
 
 #include <linux/magic.h>
+#include <linux/sprintf.h>
 
 /* Version */
 #define OCFS2_MAJOR_REV_LEVEL		0

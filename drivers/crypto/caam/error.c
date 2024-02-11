@@ -9,6 +9,7 @@
 #include "regs.h"
 #include "desc.h"
 #include "error.h"
+#include <linux/sprintf.h>
 
 #ifdef DEBUG
 #include <linux/highmem.h>

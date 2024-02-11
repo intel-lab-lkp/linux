@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
+#include <linux/completion.h>
 
 #include "hyperv_vmbus.h"
 #include "hv_utils_transport.h"

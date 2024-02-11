@@ -35,6 +35,8 @@
 
 #include <linux/unistd.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uio.h>
 #include <linux/kernel.h>

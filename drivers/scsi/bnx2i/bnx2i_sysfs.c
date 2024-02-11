@@ -13,6 +13,7 @@
  */
 
 #include "bnx2i.h"
+#include <linux/sprintf.h>
 
 /**
  * bnx2i_dev_to_hba - maps dev pointer to adapter struct

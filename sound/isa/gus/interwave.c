@@ -14,6 +14,7 @@
 #include <linux/pnp.h>
 #include <linux/module.h>
 #include <asm/dma.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/gus.h>
 #include <sound/wss.h>

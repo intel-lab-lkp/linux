@@ -17,6 +17,7 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"

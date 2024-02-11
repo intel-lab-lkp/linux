@@ -15,6 +15,7 @@
  */
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/mfd/intel_pmc_bxt.h>
 #include <linux/module.h>
 #include <linux/pci.h>

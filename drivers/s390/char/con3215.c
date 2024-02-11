@@ -12,6 +12,7 @@
 
 #include <linux/types.h>
 #include <linux/kdev_t.h>
+#include <linux/kstrtox.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/vt_kern.h>

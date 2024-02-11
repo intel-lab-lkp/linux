@@ -8,6 +8,7 @@
 
 #include <linux/pm_runtime.h>
 #include <linux/component.h>
+#include <linux/kstrtox.h>
 #include <linux/property.h>
 
 #include "tb.h"

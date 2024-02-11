@@ -7,7 +7,10 @@
 #include "api/commands.h"
 #include "debugfs.h"
 #include "dbg.h"
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 #define FWRT_DEBUGFS_OPEN_WRAPPER(name, buflen, argtype)		\
 struct dbgfs_##name##_data {						\

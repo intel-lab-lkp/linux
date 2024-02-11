@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct i2c_gpio_private_data {
 	struct gpio_desc *sda;

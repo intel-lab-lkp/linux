@@ -15,6 +15,7 @@
 #include <linux/async.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>

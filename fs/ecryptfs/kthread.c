@@ -12,6 +12,7 @@
 #include <linux/wait.h>
 #include <linux/mount.h>
 #include "ecryptfs_kernel.h"
+#include <linux/completion.h>
 
 struct ecryptfs_open_req {
 	struct file **lower_file;

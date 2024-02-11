@@ -12,6 +12,7 @@
 #include "bfa_ioc.h"
 #include "bfi_reg.h"
 #include "bfa_defs.h"
+#include <linux/sprintf.h>
 
 /* IOC local definitions */
 

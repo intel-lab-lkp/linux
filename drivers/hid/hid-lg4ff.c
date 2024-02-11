@@ -13,6 +13,8 @@
 
 
 #include <linux/input.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/hid.h>
 

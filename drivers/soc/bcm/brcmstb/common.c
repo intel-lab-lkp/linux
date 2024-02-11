@@ -9,6 +9,7 @@
 #include <linux/of_address.h>
 #include <linux/slab.h>
 #include <linux/soc/brcmstb/brcmstb.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 
 static u32 family_id;

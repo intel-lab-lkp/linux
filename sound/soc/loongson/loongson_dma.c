@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/pm_runtime.h>
 #include <linux/dma-mapping.h>
 #include <sound/soc.h>

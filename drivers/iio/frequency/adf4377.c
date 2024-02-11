@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/property.h>

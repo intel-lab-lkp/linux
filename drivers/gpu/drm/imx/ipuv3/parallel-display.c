@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/videodev2.h>
 
 #include <video/of_display_timing.h>

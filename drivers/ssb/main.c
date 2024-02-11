@@ -9,6 +9,7 @@
  */
 
 #include "ssb_private.h"
+#include <linux/sprintf.h>
 
 #include <linux/delay.h>
 #include <linux/io.h>

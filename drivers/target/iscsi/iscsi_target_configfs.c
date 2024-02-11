@@ -13,7 +13,9 @@
 #include <linux/ctype.h>
 #include <linux/export.h>
 #include <linux/inet.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/ipv6.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>

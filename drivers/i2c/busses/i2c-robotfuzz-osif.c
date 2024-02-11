@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #define OSIFI2C_READ		20

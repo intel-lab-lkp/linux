@@ -7,6 +7,7 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "usbip_common.h"
 #include "stub.h"

@@ -28,6 +28,7 @@
  */
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 

@@ -8,6 +8,7 @@
  */
 
 #include <linux/dm-bufio.h>
+#include <linux/sprintf.h>
 
 #include <linux/device-mapper.h>
 #include <linux/dm-io.h>

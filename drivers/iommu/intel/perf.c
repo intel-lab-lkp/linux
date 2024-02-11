@@ -9,6 +9,7 @@
  */
 
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include "iommu.h"
 #include "perf.h"

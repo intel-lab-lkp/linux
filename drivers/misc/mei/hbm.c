@@ -4,6 +4,7 @@
  * Intel Management Engine Interface (Intel MEI) Linux driver
  */
 #include <linux/export.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/pm_runtime.h>

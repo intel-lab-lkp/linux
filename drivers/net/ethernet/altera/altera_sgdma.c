@@ -8,6 +8,7 @@
 #include "altera_tse.h"
 #include "altera_sgdmahw.h"
 #include "altera_sgdma.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void sgdma_setup_descrip(struct sgdma_descrip __iomem *desc,
 				struct sgdma_descrip __iomem *ndesc,

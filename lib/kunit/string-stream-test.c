@@ -9,6 +9,7 @@
 #include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <linux/ktime.h>
+#include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
 

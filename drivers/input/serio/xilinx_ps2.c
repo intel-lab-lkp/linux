@@ -18,6 +18,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME		"xilinx_ps2"
 

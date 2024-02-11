@@ -226,6 +226,7 @@
 
 #include <linux/module.h>
 #include <asm/irq.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/blkdev.h>
 #include <linux/completion.h>

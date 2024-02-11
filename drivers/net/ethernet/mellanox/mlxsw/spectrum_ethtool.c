@@ -5,6 +5,7 @@
 #include "core.h"
 #include "spectrum.h"
 #include "core_env.h"
+#include <linux/sprintf.h>
 
 static const char mlxsw_sp_driver_version[] = "1.0";
 

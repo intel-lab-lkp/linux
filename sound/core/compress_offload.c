@@ -21,6 +21,7 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uio.h>
 #include <linux/uaccess.h>

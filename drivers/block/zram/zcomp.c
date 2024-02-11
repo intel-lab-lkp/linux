@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -11,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/cpu.h>
 #include <linux/crypto.h>
+#include <linux/gfp.h> // for free_pages()
 
 #include "zcomp.h"
 

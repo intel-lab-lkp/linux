@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/workqueue.h>
 #include <linux/devm-helpers.h>
 #include <linux/mutex.h>

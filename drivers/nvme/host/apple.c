@@ -30,6 +30,7 @@
 #include <linux/soc/apple/rtkit.h>
 #include <linux/soc/apple/sart.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <linux/time64.h>
 
 #include "nvme.h"

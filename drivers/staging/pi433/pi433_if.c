@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/idr.h>
 #include <linux/ioctl.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include <linux/device.h>

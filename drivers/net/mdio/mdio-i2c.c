@@ -14,6 +14,7 @@
 #include <linux/mdio/mdio-i2c.h>
 #include <linux/phy.h>
 #include <linux/sfp.h>
+#include <linux/sprintf.h>
 
 /*
  * I2C bus addresses 0x50 and 0x51 are normally an EEPROM, which is

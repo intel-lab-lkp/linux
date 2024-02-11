@@ -36,6 +36,7 @@
 #include "en.h"
 #include "en/port.h"
 #include "eswitch.h"
+#include <linux/completion.h>
 
 static int mlx5e_test_health_info(struct mlx5e_priv *priv)
 {

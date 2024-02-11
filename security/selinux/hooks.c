@@ -26,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/kernel_read_file.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/lsm_hooks.h>

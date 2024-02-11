@@ -15,6 +15,7 @@
 #define _DRBD_INT_H
 
 #include <crypto/hash.h>
+#include <linux/bio.h>
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/list.h>

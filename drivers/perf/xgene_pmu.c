@@ -13,6 +13,7 @@
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of_address.h>

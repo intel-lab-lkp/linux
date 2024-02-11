@@ -11,6 +11,7 @@
 
 #include <linux/proc_fs.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include "gru.h"

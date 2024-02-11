@@ -22,6 +22,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/uaccess.h>
 
 #include "kfd_priv.h"

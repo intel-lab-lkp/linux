@@ -25,6 +25,7 @@
  *
  */
 #include <core/enum.h>
+#include <linux/sprintf.h>
 
 const struct nvkm_enum *
 nvkm_enum_find(const struct nvkm_enum *en, u32 value)

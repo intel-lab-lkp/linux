@@ -21,6 +21,7 @@
 #include <asm/cpcmd.h>
 #include <asm/topology.h>
 #include <asm/fpu/api.h>
+#include <linux/sprintf.h>
 
 int topology_max_mnest;
 

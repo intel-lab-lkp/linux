@@ -43,6 +43,7 @@
 
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/workqueue.h>
 #include <linux/sunrpc/clnt.h>

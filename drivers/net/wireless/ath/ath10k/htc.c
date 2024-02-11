@@ -8,6 +8,7 @@
 #include "core.h"
 #include "hif.h"
 #include "debug.h"
+#include <linux/completion.h>
 
 /********/
 /* Send */

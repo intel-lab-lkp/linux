@@ -13,6 +13,7 @@
 #include <linux/printk.h>
 #include <linux/hrtimer.h>
 #include <linux/bitmap.h>
+#include <linux/completion.h>
 #include <linux/numa.h>
 #include <rdma/rdma_vt.h>
 

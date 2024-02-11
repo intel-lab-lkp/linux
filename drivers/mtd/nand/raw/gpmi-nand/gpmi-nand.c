@@ -6,6 +6,7 @@
  * Copyright (C) 2008 Embedded Alley Solutions, Inc.
  */
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/sched/task_stack.h>

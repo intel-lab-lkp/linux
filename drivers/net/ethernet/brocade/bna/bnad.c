@@ -9,6 +9,7 @@
  * www.qlogic.com
  */
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/etherdevice.h>
@@ -19,6 +20,7 @@
 #include <linux/ip.h>
 #include <linux/prefetch.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "bnad.h"
 #include "bna.h"

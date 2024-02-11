@@ -38,6 +38,7 @@
  *      - implemented limited ABI16/NVIF interop
  */
 
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/notifier.h>
 
 #include <nvif/client.h>

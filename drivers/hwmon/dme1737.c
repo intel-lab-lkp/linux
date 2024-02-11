@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/i2c.h>
@@ -27,6 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/acpi.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 /* ISA device, if found */
 static struct platform_device *pdev;

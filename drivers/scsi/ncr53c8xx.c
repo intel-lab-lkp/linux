@@ -90,11 +90,13 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/time.h>

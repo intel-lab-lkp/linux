@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/page-isolation.h>
 

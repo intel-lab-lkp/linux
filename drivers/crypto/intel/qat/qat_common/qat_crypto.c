@@ -10,6 +10,8 @@
 #include "adf_gen2_hw_data.h"
 #include "qat_crypto.h"
 #include "icp_qat_fw.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define SEC ADF_KERNEL_SEC
 

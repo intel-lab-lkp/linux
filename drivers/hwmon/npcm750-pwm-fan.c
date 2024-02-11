@@ -12,6 +12,7 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/thermal.h>
 

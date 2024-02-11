@@ -35,6 +35,7 @@
 #include "replicas.h"
 #include "super-io.h"
 #include "tests.h"
+#include <linux/kstrtox.h>
 
 #include <linux/blkdev.h>
 #include <linux/sort.h>

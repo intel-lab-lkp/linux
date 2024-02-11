@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/hda_codec.h>
 #include <sound/asoundef.h>
@@ -21,6 +22,7 @@
 #include "hda_local.h"
 #include "hda_beep.h"
 #include "hda_jack.h"
+#include <linux/completion.h>
 #include <sound/hda_hwdep.h>
 #include <sound/hda_component.h>
 

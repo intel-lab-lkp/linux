@@ -6,8 +6,10 @@
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/iscsi_boot_sysfs.h>
 #include <linux/inet.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsicam.h>

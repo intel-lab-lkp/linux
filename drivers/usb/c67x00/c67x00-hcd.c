@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/usb.h>
+#include <linux/completion.h>
 
 #include "c67x00.h"
 #include "c67x00-hcd.h"

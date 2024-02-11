@@ -25,6 +25,7 @@
 #include <linux/log2.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #ifdef CONFIG_SUPERH
 #include <asm/rtc.h>
 #else

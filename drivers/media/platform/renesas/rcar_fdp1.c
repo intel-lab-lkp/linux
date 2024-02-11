@@ -22,6 +22,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <media/rcar-fcp.h>
 #include <media/v4l2-ctrls.h>

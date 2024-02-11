@@ -18,6 +18,7 @@
 
 #include <linux/errno.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/sched/task.h>
 #include <linux/cpu.h>

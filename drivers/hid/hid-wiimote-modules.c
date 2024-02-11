@@ -35,6 +35,7 @@
 #include <linux/input.h>
 #include <linux/spinlock.h>
 #include "hid-wiimote.h"
+#include <linux/sprintf.h>
 
 /*
  * Keys

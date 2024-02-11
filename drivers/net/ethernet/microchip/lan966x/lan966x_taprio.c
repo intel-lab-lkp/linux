@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 #include "lan966x_main.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define LAN966X_TAPRIO_TIMEOUT_MS		1000
 #define LAN966X_TAPRIO_ENTRIES_PER_PORT		2

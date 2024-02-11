@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/usb.h>
 #include <linux/skbuff.h>
+#include <linux/completion.h>
 
 #include "mt7601u.h"
 #include "dma.h"

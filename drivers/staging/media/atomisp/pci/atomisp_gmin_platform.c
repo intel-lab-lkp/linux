@@ -3,10 +3,12 @@
 #include <linux/i2c.h>
 #include <linux/dmi.h>
 #include <linux/efi.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/acpi.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-subdev.h>
 #include <linux/mfd/intel_soc_pmic.h>
 #include <linux/regulator/consumer.h>

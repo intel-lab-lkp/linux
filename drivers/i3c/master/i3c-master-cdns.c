@@ -7,6 +7,7 @@
 
 #include <linux/bitops.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/i3c/master.h>

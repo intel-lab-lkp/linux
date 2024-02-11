@@ -9,6 +9,8 @@
 #define pr_fmt(fmt) KBUILD_BASENAME ": " fmt
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/idr.h>
 #include <linux/input/mt.h>

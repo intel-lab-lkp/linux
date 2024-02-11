@@ -20,6 +20,7 @@
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
 #include <linux/parser.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "ima.h"

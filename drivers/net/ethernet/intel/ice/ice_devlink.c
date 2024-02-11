@@ -2,6 +2,7 @@
 /* Copyright (c) 2020, Intel Corporation. */
 
 #include <linux/vmalloc.h>
+#include <linux/sprintf.h>
 
 #include "ice.h"
 #include "ice_lib.h"

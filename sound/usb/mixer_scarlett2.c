@@ -150,6 +150,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/moduleparam.h>
 

@@ -5,6 +5,7 @@
 #include <linux/device.h>
 #include <linux/pci.h>
 #include <linux/ptp_classify.h>
+#include <linux/sprintf.h>
 
 #include "igb.h"
 

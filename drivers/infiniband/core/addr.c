@@ -49,6 +49,7 @@
 #include <rdma/ib.h>
 #include <rdma/rdma_netlink.h>
 #include <net/netlink.h>
+#include <linux/completion.h>
 
 #include "core_priv.h"
 

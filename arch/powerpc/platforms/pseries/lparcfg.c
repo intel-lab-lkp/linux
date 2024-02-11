@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
 #include <asm/papr-sysparm.h>

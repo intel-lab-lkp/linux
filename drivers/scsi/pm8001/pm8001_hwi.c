@@ -43,6 +43,9 @@
  #include "pm8001_chips.h"
  #include "pm8001_ctl.h"
  #include "pm80xx_tracepoints.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 /**
  * read_main_config_table - read the configure table and save it.

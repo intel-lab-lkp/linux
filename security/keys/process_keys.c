@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/security.h>
+#include <linux/sprintf.h>
 #include <linux/user_namespace.h>
 #include <linux/uaccess.h>
 #include <linux/init_task.h>

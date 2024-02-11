@@ -10,6 +10,7 @@
 #include <kunit/test.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "string-stream.h"
 

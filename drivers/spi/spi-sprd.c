@@ -2,6 +2,7 @@
 // Copyright (C) 2018 Spreadtrum Communications Inc.
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma/sprd-dma.h>

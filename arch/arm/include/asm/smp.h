@@ -17,6 +17,7 @@
 
 #define raw_smp_processor_id() (current_thread_info()->cpu)
 
+struct completion;
 struct seq_file;
 
 /*

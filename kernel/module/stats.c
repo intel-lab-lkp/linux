@@ -6,10 +6,12 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/module.h>
 #include <linux/string.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/list.h>
 #include <linux/debugfs.h>
 #include <linux/rculist.h>

@@ -28,6 +28,7 @@
 #include <linux/torture.h>
 #include <linux/atomic.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/percpu.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>

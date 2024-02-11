@@ -39,6 +39,7 @@
 #include <linux/mm.h>
 #include <linux/bio.h>
 #include <linux/compat.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>

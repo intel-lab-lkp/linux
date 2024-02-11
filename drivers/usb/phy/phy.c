@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <linux/usb/phy.h>
 

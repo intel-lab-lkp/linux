@@ -11,6 +11,7 @@
 #include <linux/security.h>
 #include <linux/file.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/fs.h>
 #include <linux/filelock.h>
 

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/poll.h>
+#include <linux/sprintf.h>
 #include <linux/vbox_utils.h>
 #include "vboxguest_core.h"
 

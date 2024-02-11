@@ -9,8 +9,12 @@
 #include <linux/amba/bus.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/of.h>
 #include <linux/bits.h>
 #include <linux/bug.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/export.h>

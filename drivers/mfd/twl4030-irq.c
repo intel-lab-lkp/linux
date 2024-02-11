@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/irqdomain.h>
 #include <linux/mfd/twl.h>
+#include <linux/sprintf.h>
 
 #include "twl-core.h"
 

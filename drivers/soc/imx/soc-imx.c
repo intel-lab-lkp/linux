@@ -8,6 +8,7 @@
 #include <linux/of_address.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 
 #include <soc/imx/cpu.h>

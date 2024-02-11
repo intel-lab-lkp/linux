@@ -13,6 +13,7 @@
 #include <linux/connector.h>
 #include <linux/device-mapper.h>
 #include <linux/dm-log-userspace.h>
+#include <linux/completion.h>
 
 #include "dm-log-userspace-transfer.h"
 

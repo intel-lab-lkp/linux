@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/slab.h>
 #include <linux/mii.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/usbnet.h>
 #include <linux/etherdevice.h>

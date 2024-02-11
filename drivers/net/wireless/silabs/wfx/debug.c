@@ -8,6 +8,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/crc32.h>
+#include <linux/completion.h>
 
 #include "debug.h"
 #include "wfx.h"

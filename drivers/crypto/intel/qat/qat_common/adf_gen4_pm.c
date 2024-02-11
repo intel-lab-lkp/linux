@@ -3,6 +3,7 @@
 #include <linux/bitfield.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 
 #include "adf_accel_devices.h"
 #include "adf_admin.h"

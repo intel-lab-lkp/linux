@@ -35,11 +35,14 @@
 #include <linux/pci.h>
 #include <linux/poll.h>
 #include <linux/cdev.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
+#include <linux/sprintf.h>
 #include <linux/swap.h>
 #include <linux/vmalloc.h>
 #include <linux/highmem.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
+#include <linux/kobject.h>
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/uio.h>

@@ -28,6 +28,7 @@
 /*****************************************************************************/
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/net.h>
 #include <linux/in.h>

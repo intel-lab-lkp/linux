@@ -10,10 +10,12 @@
 #include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/irqflags.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "fsi-master.h"
 

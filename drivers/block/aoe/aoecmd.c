@@ -5,12 +5,14 @@
  */
 
 #include <linux/ata.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/hdreg.h>
 #include <linux/blk-mq.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <net/net_namespace.h>

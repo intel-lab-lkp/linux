@@ -11,6 +11,7 @@
 #include <linux/acpi.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include "internal.h"
 

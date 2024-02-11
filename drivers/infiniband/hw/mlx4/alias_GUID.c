@@ -40,9 +40,11 @@
 #include <linux/mlx4/cmd.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_user_verbs.h>
 #include <linux/delay.h>
 #include "mlx4_ib.h"
+#include <linux/completion.h>
 
 /*
 The driver keeps the current state of all guids, as they are in the HW.

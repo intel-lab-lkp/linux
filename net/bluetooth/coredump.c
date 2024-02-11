@@ -4,6 +4,7 @@
  */
 
 #include <linux/devcoredump.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 #include <net/bluetooth/bluetooth.h>

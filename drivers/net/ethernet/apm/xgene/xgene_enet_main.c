@@ -12,6 +12,7 @@
 #include "xgene_enet_hw.h"
 #include "xgene_enet_sgmac.h"
 #include "xgene_enet_xgmac.h"
+#include <linux/sprintf.h>
 
 #define RES_ENET_CSR	0
 #define RES_RING_CSR	1

@@ -6,6 +6,7 @@
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
 #include "qedf.h"
+#include <linux/completion.h>
 #include <scsi/scsi_tcq.h>
 
 void qedf_cmd_timer_set(struct qedf_ctx *qedf, struct qedf_ioreq *io_req,

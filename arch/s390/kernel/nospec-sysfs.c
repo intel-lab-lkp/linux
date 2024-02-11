@@ -3,6 +3,7 @@
 #include <linux/cpu.h>
 #include <asm/facility.h>
 #include <asm/nospec-branch.h>
+#include <linux/sprintf.h>
 
 ssize_t cpu_show_spectre_v1(struct device *dev,
 			    struct device_attribute *attr, char *buf)

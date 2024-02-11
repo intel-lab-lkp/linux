@@ -72,6 +72,7 @@ static int vortex_debug = 1;
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/errno.h>

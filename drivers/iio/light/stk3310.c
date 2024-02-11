@@ -16,6 +16,7 @@
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/sprintf.h>
 
 #define STK3310_REG_STATE			0x00
 #define STK3310_REG_PSCTRL			0x01

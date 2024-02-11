@@ -24,6 +24,8 @@
  */
 
 #include <linux/bsg-lib.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 #include <scsi/scsi_transport_iscsi.h>
 #include <scsi/scsi_bsg_iscsi.h>
 #include "be_mgmt.h"

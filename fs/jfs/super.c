@@ -5,6 +5,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/parser.h>
 #include <linux/completion.h>

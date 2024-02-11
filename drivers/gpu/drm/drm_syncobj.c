@@ -197,6 +197,7 @@
 #include <linux/eventfd.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/sched/signal.h>
 #include <linux/sync_file.h>
 #include <linux/uaccess.h>

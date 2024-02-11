@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/taskstats.h>
 #include <linux/sysctl.h>
+#include <linux/capability.h>
 #include <linux/delayacct.h>
 #include <linux/module.h>
 

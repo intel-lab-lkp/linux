@@ -6,6 +6,8 @@
  */
 
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "acx.h"
 #include "wlcore.h"

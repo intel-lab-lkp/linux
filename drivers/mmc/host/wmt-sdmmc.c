@@ -16,6 +16,7 @@
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/interrupt.h>
 
 #include <linux/of.h>

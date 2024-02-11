@@ -12,6 +12,7 @@
 
 #include <linux/dcache.h>
 #include <linux/file.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/namei.h>
 #include <linux/skbuff.h>
@@ -23,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/magic.h>
 #include "ecryptfs_kernel.h"
+#include <linux/sprintf.h>
 
 /*
  * Module parameter that defines the ecryptfs_verbosity level.

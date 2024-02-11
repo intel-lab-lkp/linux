@@ -28,6 +28,7 @@
 #include <linux/pm.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/err.h>
 #include <linux/string.h>

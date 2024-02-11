@@ -44,6 +44,7 @@
 #include "carl9170.h"
 #include "hw.h"
 #include "cmd.h"
+#include <linux/completion.h>
 
 static inline unsigned int __carl9170_get_queue(struct ar9170 *ar,
 						unsigned int queue)

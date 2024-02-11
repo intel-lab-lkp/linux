@@ -43,6 +43,7 @@
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 
 #include "esas2r.h"
+#include <linux/sprintf.h>
 
 static u8 esas2r_vdaioctl_versions[] = {
 	ATTO_VDA_VER_UNSUPPORTED,

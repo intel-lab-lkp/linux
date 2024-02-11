@@ -9,6 +9,7 @@
  * Based on ds2760_battery and ds2782_battery drivers
  */
 
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/param.h>

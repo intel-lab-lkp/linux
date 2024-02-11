@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/platform_device.h>
 #include <linux/power/charger-manager.h>

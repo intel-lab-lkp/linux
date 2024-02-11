@@ -9,6 +9,7 @@
 
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include "debug.h"
 #include "acx.h"

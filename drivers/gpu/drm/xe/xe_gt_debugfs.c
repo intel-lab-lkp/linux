@@ -4,6 +4,7 @@
  */
 
 #include "xe_gt_debugfs.h"
+#include <linux/sprintf.h>
 
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>

@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_blend.h>
+#include <linux/kstrtox.h>
 
 #include "i915_drv.h"
 #include "i915_fixed.h"

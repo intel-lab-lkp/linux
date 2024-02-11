@@ -32,6 +32,7 @@
  * SOFTWARE.
  */
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <rdma/ib_sysfs.h>
 
 #include "qib.h"

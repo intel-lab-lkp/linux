@@ -5,6 +5,7 @@
 
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/linkage.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>

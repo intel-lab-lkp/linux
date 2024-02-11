@@ -51,6 +51,7 @@
 #include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_domain.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <media/v4l2-jpeg.h>

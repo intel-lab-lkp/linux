@@ -24,6 +24,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
@@ -34,6 +35,7 @@
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
 #include <linux/freezer.h>
+#include <linux/sprintf.h>
 
 #include "windfarm.h"
 

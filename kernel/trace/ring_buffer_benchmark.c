@@ -6,6 +6,7 @@
  */
 #include <linux/ring_buffer.h>
 #include <linux/completion.h>
+#include <linux/kernel.h> // for trace_printk()
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/module.h>

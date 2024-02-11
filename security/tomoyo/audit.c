@@ -7,6 +7,7 @@
 
 #include "common.h"
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /**
  * tomoyo_print_bprm - Print "struct linux_binprm" for auditing.

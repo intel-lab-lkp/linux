@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/gfp.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 #include <linux/stop_machine.h>
 
 #include <asm/cputhreads.h>

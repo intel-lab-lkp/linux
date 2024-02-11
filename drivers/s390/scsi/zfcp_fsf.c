@@ -11,7 +11,9 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/blktrace_api.h>
+#include <linux/completion.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <scsi/fc/fc_els.h>

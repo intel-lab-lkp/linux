@@ -25,6 +25,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/mm_types.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "kfd_priv.h"
 #include "kfd_mqd_manager.h"

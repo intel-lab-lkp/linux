@@ -2,6 +2,7 @@
 /* Copyright(c) 2023 Advanced Micro Devices, Inc */
 
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "core.h"

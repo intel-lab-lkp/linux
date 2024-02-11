@@ -58,6 +58,7 @@
 #include <linux/skbuff.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/delay.h>

@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>

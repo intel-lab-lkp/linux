@@ -12,6 +12,7 @@
 
 #include <net/tcp.h>
 #include <rdma/ib_verbs.h>
+#include <linux/completion.h>
 
 #include "smc.h"
 #include "smc_core.h"

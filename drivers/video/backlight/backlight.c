@@ -12,11 +12,13 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/backlight.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/ctype.h>
 #include <linux/err.h>
 #include <linux/fb.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_PMAC_BACKLIGHT
 #include <asm/backlight.h>

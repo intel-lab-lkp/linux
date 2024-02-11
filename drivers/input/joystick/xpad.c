@@ -66,6 +66,7 @@
 #include <linux/input.h>
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/module.h>
 #include <linux/usb/input.h>

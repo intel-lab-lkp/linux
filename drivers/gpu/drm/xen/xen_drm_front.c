@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>

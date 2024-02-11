@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/backing-dev.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pr.h>
 #include <linux/ptrace.h>

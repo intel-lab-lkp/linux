@@ -4,6 +4,7 @@
  */
 
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/sysfs.h>
 

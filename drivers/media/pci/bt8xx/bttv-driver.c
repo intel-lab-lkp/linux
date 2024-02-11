@@ -35,6 +35,7 @@
 #include <linux/interrupt.h>
 #include <linux/kdev_t.h>
 #include "bttvp.h"
+#include <linux/sprintf.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>

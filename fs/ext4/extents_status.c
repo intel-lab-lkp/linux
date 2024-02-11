@@ -13,6 +13,7 @@
 #include <linux/list_sort.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/shrinker.h>
 #include "ext4.h"
 
 #include <trace/events/ext4.h>

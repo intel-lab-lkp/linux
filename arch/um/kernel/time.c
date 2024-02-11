@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>

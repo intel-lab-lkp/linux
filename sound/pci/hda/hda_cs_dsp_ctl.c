@@ -7,6 +7,7 @@
 // Author: Stefan Binding <sbinding@opensource.cirrus.com>
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
 #include <linux/firmware/cirrus/wmfw.h>

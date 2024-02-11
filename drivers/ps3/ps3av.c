@@ -12,6 +12,8 @@
 #include <linux/notifier.h>
 #include <linux/ioctl.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <asm/firmware.h>
 #include <asm/ps3av.h>

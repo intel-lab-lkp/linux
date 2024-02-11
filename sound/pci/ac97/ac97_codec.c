@@ -9,10 +9,12 @@
 
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/tlv.h>

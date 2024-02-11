@@ -11,6 +11,8 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for memparse()
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/fb.h>
 #include <linux/dma-mapping.h>

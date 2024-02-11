@@ -6,6 +6,7 @@
 #include "ice_ptp_hw.h"
 #include "ice_ptp_consts.h"
 #include "ice_cgu_regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static struct dpll_pin_frequency ice_cgu_pin_freq_common[] = {
 	DPLL_PIN_FREQUENCY_1PPS,

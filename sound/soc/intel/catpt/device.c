@@ -13,6 +13,7 @@
 //
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>

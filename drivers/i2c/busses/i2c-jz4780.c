@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 
 #define JZ4780_I2C_CTRL		0x00

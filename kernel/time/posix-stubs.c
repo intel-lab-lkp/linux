@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <linux/hrtimer.h>
 #include <linux/syscalls.h>
 #include <linux/ktime.h>
 #include <linux/timekeeping.h>

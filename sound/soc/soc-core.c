@@ -21,6 +21,7 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pm.h>
 #include <linux/bitops.h>
 #include <linux/debugfs.h>
@@ -32,6 +33,7 @@
 #include <linux/of_graph.h>
 #include <linux/dmi.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>

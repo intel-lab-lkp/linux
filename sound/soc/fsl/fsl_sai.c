@@ -14,6 +14,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <sound/core.h>
 #include <sound/dmaengine_pcm.h>

@@ -10,6 +10,7 @@
 #include <linux/component.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/hda_codec.h>
 #include "hda_component.h"
 #include "hda_local.h"

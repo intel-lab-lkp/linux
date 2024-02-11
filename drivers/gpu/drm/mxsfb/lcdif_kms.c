@@ -9,6 +9,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/media-bus-format.h>
 #include <linux/pm_runtime.h>
 #include <linux/spinlock.h>

@@ -7,6 +7,7 @@
  */
 
 #include "dm-bio-record.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/mempool.h>

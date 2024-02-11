@@ -5,6 +5,7 @@
 /* Copyright (c) 2020-2022, Alibaba Group. */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/addrconf.h>
 #include <rdma/erdma-abi.h>
 

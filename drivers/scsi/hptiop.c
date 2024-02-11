@@ -8,6 +8,7 @@
  * For more information, visit http://www.highpoint-tech.com
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>

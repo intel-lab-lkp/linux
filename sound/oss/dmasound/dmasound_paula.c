@@ -23,6 +23,7 @@
 #include <linux/soundcard.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <asm/setup.h>

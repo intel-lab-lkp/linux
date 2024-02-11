@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/sprintf.h>
 #include <string.h>
 #include <termios.h>
 #include <sys/wait.h>

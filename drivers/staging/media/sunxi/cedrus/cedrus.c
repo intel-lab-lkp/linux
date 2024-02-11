@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>

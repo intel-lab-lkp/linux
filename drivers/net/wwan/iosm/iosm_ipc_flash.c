@@ -6,6 +6,7 @@
 #include "iosm_ipc_coredump.h"
 #include "iosm_ipc_devlink.h"
 #include "iosm_ipc_flash.h"
+#include <linux/sprintf.h>
 
 /* This function will pack the data to be sent to the modem using the
  * payload, payload length and pack id

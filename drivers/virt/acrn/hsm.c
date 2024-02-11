@@ -11,6 +11,7 @@
 
 #include <linux/cpu.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>

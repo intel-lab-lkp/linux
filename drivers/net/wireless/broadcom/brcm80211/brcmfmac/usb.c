@@ -8,6 +8,7 @@
 #include <linux/firmware.h>
 #include <linux/usb.h>
 #include <linux/vmalloc.h>
+#include <linux/completion.h>
 
 #include <brcmu_utils.h>
 #include <brcm_hw_ids.h>

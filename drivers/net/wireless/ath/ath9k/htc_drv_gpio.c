@@ -15,6 +15,7 @@
  */
 
 #include "htc.h"
+#include <linux/sprintf.h>
 
 /******************/
 /*     BTCOEX     */

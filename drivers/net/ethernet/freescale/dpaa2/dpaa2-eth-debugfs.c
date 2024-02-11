@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 #include "dpaa2-eth.h"
 #include "dpaa2-eth-debugfs.h"
+#include <linux/sprintf.h>
 
 #define DPAA2_ETH_DBG_ROOT "dpaa2-eth"
 

@@ -12,8 +12,10 @@
 #endif
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>

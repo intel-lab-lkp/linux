@@ -2,6 +2,8 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
+#include <linux/hrtimer.h>
+#include <linux/kstrtox.h>
 #include <linux/sizes.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>

@@ -8,6 +8,7 @@
 #include <linux/uio.h>
 #include <linux/compat.h>
 #include <linux/fileattr.h>
+#include <linux/highmem.h> // for kmap_local_page()
 
 static ssize_t fuse_send_ioctl(struct fuse_mount *fm, struct fuse_args *args,
 			       struct fuse_ioctl_out *outarg)

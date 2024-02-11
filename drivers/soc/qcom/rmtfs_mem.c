@@ -12,6 +12,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/firmware/qcom/qcom_scm.h>

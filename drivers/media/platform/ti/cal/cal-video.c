@@ -11,6 +11,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 
 #include <media/media-device.h>

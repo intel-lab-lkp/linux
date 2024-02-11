@@ -16,6 +16,8 @@
 #include <linux/cpu.h>
 #include <linux/nmi.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for get_option()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/sysctl.h>
 #include <linux/tick.h>
@@ -23,6 +25,8 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/isolation.h>
 #include <linux/stop_machine.h>
+#include <linux/hrtimer.h>
+#include <linux/completion.h>
 
 #include <asm/irq_regs.h>
 #include <linux/kvm_para.h>

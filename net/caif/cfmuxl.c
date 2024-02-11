@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/rculist.h>
+#include <linux/sprintf.h>
 #include <net/caif/cfpkt.h>
 #include <net/caif/cfmuxl.h>
 #include <net/caif/cfsrvl.h>

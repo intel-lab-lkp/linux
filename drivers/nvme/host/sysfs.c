@@ -6,6 +6,7 @@
  */
 
 #include <linux/nvme-auth.h>
+#include <linux/kstrtox.h>
 
 #include "nvme.h"
 #include "fabrics.h"

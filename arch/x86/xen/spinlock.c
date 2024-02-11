@@ -7,6 +7,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
+#include <linux/sprintf.h>
 
 #include <asm/paravirt.h>
 #include <asm/qspinlock.h>

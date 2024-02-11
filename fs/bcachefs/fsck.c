@@ -16,6 +16,7 @@
 #include "snapshot.h"
 #include "super.h"
 #include "xattr.h"
+#include <linux/sprintf.h>
 
 #include <linux/bsearch.h>
 #include <linux/dcache.h> /* struct qstr */

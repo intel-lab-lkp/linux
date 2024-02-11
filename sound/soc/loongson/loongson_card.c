@@ -7,6 +7,7 @@
 //
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <sound/soc-acpi.h>
 #include <linux/acpi.h>

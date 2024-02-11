@@ -15,6 +15,7 @@
 #include <linux/mount.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/err.h>
 
 #include <linux/configfs.h>

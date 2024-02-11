@@ -13,6 +13,7 @@
 #include <linux/hid-sensor-ids.h>
 #include <linux/hid-sensor-hub.h>
 #include "hid-ids.h"
+#include <linux/completion.h>
 
 #define HID_SENSOR_HUB_ENUM_QUIRK	0x01
 

@@ -9,6 +9,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/crc-itu-t.h>
 #include <linux/delay.h>
 #include <linux/export.h>

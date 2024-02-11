@@ -12,10 +12,12 @@
 
 #include <linux/types.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/parser.h>
 #include <linux/module.h>
 #include <linux/in6.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <rdma/ib.h>

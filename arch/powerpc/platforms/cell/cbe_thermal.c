@@ -36,6 +36,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/cpu.h>
+#include <linux/sprintf.h>
 #include <linux/stringify.h>
 #include <asm/spu.h>
 #include <asm/io.h>

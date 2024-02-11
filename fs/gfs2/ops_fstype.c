@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
+#include <linux/bio.h>
 #include <linux/buffer_head.h>
 #include <linux/blkdev.h>
 #include <linux/kthread.h>
@@ -22,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/backing-dev.h>
 #include <linux/fs_parser.h>
+#include <linux/sprintf.h>
 
 #include "gfs2.h"
 #include "incore.h"

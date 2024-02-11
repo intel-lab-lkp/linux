@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/of_gpio.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>

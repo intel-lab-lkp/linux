@@ -4,6 +4,8 @@
  */
 
 #include "cmd.h"
+#include <linux/completion.h>
+#include <linux/highmem.h> // for kmap_local_page()
 
 enum { CQ_OK = 0, CQ_EMPTY = -1, CQ_POLL_ERR = -2 };
 

@@ -17,6 +17,7 @@
 #include <linux/gameport.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>	/* HZ */
 #include <linux/mutex.h>

@@ -22,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>

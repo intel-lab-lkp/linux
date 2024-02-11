@@ -5,6 +5,7 @@
 #include <linux/posix-clock.h>
 #include "i40e.h"
 #include "i40e_devids.h"
+#include <linux/sprintf.h>
 
 /* The XL710 timesync is very much like Intel's 82599 design when it comes to
  * the fundamental clock design. However, the clock operations are much simpler

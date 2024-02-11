@@ -37,12 +37,14 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/io-mapping.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <net/devlink.h>
 
 #include <uapi/rdma/mlx4-abi.h>

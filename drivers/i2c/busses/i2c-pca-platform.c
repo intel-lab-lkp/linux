@@ -22,6 +22,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <asm/irq.h>
 

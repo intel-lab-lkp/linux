@@ -9,6 +9,8 @@
 #include <linux/init.h>
 #include <linux/kobject.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <asm/xen/hypervisor.h>
 #include <asm/xen/hypercall.h>

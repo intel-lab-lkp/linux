@@ -8,6 +8,8 @@
 #include <target/target_core_fabric.h>
 #include "efct_driver.h"
 #include "efct_lio.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /*
  * lio_wq is used to call the LIO backed during creation or deletion of

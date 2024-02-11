@@ -2,6 +2,7 @@
 #include <linux/bpf.h>
 #include <linux/cpu.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include <asm/spectre.h>
 

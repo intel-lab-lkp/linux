@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/phy.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sxgbe_platform.h>
 
 #include "sxgbe_common.h"

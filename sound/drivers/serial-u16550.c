@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/io.h>
 #include <sound/core.h>
 #include <sound/rawmidi.h>

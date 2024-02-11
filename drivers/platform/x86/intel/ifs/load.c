@@ -5,6 +5,8 @@
 #include <linux/sizes.h>
 #include <asm/cpu.h>
 #include <asm/microcode.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "ifs.h"
 

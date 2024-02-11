@@ -20,6 +20,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfb.h>
 
 #include "of_private.h"

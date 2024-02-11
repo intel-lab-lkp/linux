@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/gpio.h>
 #include <linux/gpio/driver.h>

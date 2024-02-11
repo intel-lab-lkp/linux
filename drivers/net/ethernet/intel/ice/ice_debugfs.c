@@ -3,7 +3,9 @@
 
 #include <linux/fs.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "ice.h"
 

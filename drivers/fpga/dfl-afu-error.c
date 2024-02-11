@@ -15,6 +15,8 @@
  */
 
 #include <linux/fpga-dfl.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "dfl-afu.h"

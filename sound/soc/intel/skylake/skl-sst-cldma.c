@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <sound/hda_register.h>

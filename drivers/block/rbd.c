@@ -34,8 +34,10 @@
 #include <linux/ceph/cls_lock_client.h>
 #include <linux/ceph/striper.h>
 #include <linux/ceph/decode.h>
+#include <linux/completion.h>
 #include <linux/fs_parser.h>
 #include <linux/bsearch.h>
+#include <linux/sprintf.h>
 
 #include <linux/kernel.h>
 #include <linux/device.h>

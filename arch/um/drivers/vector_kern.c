@@ -13,6 +13,7 @@
 #include <linux/ethtool.h>
 #include <linux/inetdevice.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/netdevice.h>
 #include <linux/platform_device.h>

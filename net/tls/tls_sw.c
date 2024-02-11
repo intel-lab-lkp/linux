@@ -36,6 +36,7 @@
  */
 
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/sched/signal.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

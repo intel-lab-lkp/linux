@@ -20,6 +20,7 @@
 #include <linux/pci.h>
 #include <linux/blkdev.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_host.h>
 #include <linux/libata.h>
 

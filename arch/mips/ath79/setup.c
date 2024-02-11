@@ -18,6 +18,7 @@
 #include <linux/of_clk.h>
 #include <linux/of_fdt.h>
 #include <linux/irqchip.h>
+#include <linux/sprintf.h>
 
 #include <asm/bootinfo.h>
 #include <asm/idle.h>

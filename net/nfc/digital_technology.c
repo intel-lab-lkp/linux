@@ -8,6 +8,8 @@
 
 #include "digital.h"
 
+#include <linux/random.h>
+
 #define DIGITAL_CMD_SENS_REQ    0x26
 #define DIGITAL_CMD_ALL_REQ     0x52
 #define DIGITAL_CMD_SEL_REQ_CL1 0x93

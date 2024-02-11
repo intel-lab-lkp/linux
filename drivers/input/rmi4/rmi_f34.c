@@ -9,6 +9,8 @@
 #include <linux/firmware.h>
 #include <asm/unaligned.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "rmi_driver.h"
 #include "rmi_f34.h"

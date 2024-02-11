@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/log2.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/tty_driver.h>

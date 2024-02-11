@@ -5,6 +5,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 
 #include "net_driver.h"
 #include "phy.h"

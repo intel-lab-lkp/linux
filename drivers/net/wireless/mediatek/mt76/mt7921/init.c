@@ -4,6 +4,8 @@
 #include <linux/etherdevice.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include <linux/firmware.h>
 #include "mt7921.h"

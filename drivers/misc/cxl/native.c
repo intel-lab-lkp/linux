@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/irqdomain.h>

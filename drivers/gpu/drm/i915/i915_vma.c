@@ -25,6 +25,7 @@
 #include <linux/sched/mm.h>
 #include <linux/dma-fence-array.h>
 #include <drm/drm_gem.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "display/intel_display.h"
 #include "display/intel_frontbuffer.h"

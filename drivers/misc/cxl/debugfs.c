@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "cxl.h"
 

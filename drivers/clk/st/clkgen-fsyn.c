@@ -13,6 +13,7 @@
 #include <linux/of_address.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/sprintf.h>
 
 #include "clkgen.h"
 

@@ -10,6 +10,7 @@
 #include "ql4_dbg.h"
 #include "ql4_inline.h"
 #include "ql4_version.h"
+#include <linux/completion.h>
 
 void qla4xxx_queue_mbox_cmd(struct scsi_qla_host *ha, uint32_t *mbx_cmd,
 			    int in_count)

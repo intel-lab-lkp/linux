@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
@@ -30,6 +31,7 @@
 #include <linux/usb/otg.h>
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/prefetch.h>
 #include <linux/io.h>

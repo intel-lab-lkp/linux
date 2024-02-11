@@ -15,6 +15,7 @@
  */
 
 #include "htc.h"
+#include <linux/completion.h>
 
 static const char *wmi_cmd_to_name(enum wmi_cmd_id wmi_cmd)
 {

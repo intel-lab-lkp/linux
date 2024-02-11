@@ -12,6 +12,7 @@
 #include <linux/socket.h>
 #include <linux/if_vlan.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/wait.h>
 #include <linux/reboot.h>

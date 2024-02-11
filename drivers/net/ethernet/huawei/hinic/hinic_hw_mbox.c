@@ -4,6 +4,7 @@
  */
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/semaphore.h>

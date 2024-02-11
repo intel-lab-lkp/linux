@@ -11,6 +11,7 @@
 #include <linux/acpi.h>
 #include <linux/efi.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 static long __init parse_acpi_path(const struct efi_dev_path *node,
 				   struct device *parent, struct device **child)

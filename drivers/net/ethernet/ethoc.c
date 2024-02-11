@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <net/ethoc.h>
 
 static int buffer_size = 0x8000; /* 32 KBytes */

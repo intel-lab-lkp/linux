@@ -42,6 +42,7 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/io.h>
 

@@ -13,6 +13,7 @@
 #include <linux/bitops.h>
 #include <linux/io.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * Architecture-specific register access methods

@@ -21,6 +21,7 @@
 #include <linux/can/vxcan.h>
 #include <linux/can/can-ml.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/rtnetlink.h>
 
 #define DRV_NAME "vxcan"

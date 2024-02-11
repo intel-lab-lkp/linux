@@ -8,6 +8,8 @@
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/vmalloc.h>
 #include <linux/highmem.h>

@@ -10,9 +10,11 @@
 #include <linux/err.h>
 #include <linux/irq.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/serial_core.h>
+#include <linux/sprintf.h>
 
 #include <asm/io.h>
 #include <asm/xen/hypervisor.h>

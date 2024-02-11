@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "hidma.h"
 

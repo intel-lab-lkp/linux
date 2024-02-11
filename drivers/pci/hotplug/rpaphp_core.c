@@ -9,6 +9,7 @@
  *
  */
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/of.h>
@@ -16,6 +17,7 @@
 #include <linux/pci_hotplug.h>
 #include <linux/smp.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <asm/firmware.h>
 #include <asm/eeh.h>       /* for eeh_add_device() */

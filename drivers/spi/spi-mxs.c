@@ -29,6 +29,7 @@
 #include <linux/dmaengine.h>
 #include <linux/highmem.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/completion.h>
 #include <linux/pinctrl/consumer.h>

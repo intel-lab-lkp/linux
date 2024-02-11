@@ -32,6 +32,7 @@
 #include <linux/if_vlan.h>
 #include <linux/if_bridge.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/ktime.h>
 

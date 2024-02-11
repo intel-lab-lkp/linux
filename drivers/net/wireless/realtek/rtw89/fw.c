@@ -12,6 +12,8 @@
 #include "ps.h"
 #include "reg.h"
 #include "util.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static const u8 mss_signature[] = {0x4D, 0x53, 0x53, 0x4B, 0x50, 0x4F, 0x4F, 0x4C};
 

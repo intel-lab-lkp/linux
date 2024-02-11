@@ -7,6 +7,7 @@
 
 #include <linux/init.h>
 #include <linux/iscsi_ibft.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/kstrtox.h>
 #include <linux/mm.h>

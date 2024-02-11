@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 
 #include "i915_debugfs_params.h"
 #include "gt/intel_gt.h"

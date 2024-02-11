@@ -8,6 +8,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -20,6 +21,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include "pmbus.h"
 

@@ -26,6 +26,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #include "bmc150_magn.h"
 

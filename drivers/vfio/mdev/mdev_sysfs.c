@@ -9,7 +9,10 @@
 
 #include <linux/sysfs.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/mdev.h>
 
 #include "mdev_private.h"

@@ -7,6 +7,7 @@
 #define pr_fmt(fmt)    "fsl-pamu: %s: " fmt, __func__
 
 #include "fsl_pamu.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/fsl/guts.h>
 #include <linux/interrupt.h>

@@ -2,6 +2,8 @@
 /* Copyright (C) 2019 Netronome Systems, Inc. */
 
 #include <net/devlink.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "nfpcore/nfp.h"
 #include "nfpcore/nfp_nsp.h"

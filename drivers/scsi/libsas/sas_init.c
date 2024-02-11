@@ -10,12 +10,15 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <scsi/sas_ata.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_transport.h>
 #include <scsi/scsi_transport_sas.h>
+#include <linux/completion.h>
 
 #include "sas_internal.h"
 

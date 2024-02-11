@@ -31,6 +31,7 @@
 #include <linux/random.h>
 #include <linux/reset.h>
 #include <linux/resource.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include "pcie-designware.h"
 #include <soc/tegra/bpmp.h>

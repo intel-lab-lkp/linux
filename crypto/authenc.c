@@ -18,6 +18,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 struct authenc_instance_ctx {
 	struct crypto_ahash_spawn auth;

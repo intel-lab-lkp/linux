@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <linux/mpage.h>
+#include <linux/sprintf.h>
 #include <linux/vfs.h>
 #include <linux/seq_file.h>
 #include <linux/parser.h>

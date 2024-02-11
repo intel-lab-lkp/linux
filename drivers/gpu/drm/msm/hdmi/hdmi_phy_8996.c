@@ -5,6 +5,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "hdmi.h"
 

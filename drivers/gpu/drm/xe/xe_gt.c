@@ -4,6 +4,7 @@
  */
 
 #include "xe_gt.h"
+#include <linux/sprintf.h>
 
 #include <linux/minmax.h>
 

@@ -18,7 +18,9 @@
 
 #include <linux/usb.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
+#include <linux/hex.h>
 
 #include "osdep_service.h"
 #include "drv_types.h"

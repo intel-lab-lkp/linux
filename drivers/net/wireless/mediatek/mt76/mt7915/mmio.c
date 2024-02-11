@@ -6,6 +6,7 @@
 #include <linux/platform_device.h>
 #include <linux/rtnetlink.h>
 #include <linux/pci.h>
+#include <linux/completion.h>
 
 #include "mt7915.h"
 #include "mac.h"

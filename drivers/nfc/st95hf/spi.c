@@ -7,6 +7,7 @@
  */
 
 #include "spi.h"
+#include <linux/completion.h>
 
 /* Function to send user provided buffer to ST95HF through SPI */
 int st95hf_spi_send(struct st95hf_spi_context *spicontext,

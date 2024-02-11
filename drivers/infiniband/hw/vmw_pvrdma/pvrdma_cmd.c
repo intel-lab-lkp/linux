@@ -44,6 +44,7 @@
  */
 
 #include <linux/list.h>
+#include <linux/completion.h>
 
 #include "pvrdma.h"
 

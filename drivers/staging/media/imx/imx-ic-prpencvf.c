@@ -23,6 +23,7 @@
 #include <media/imx.h>
 #include "imx-media.h"
 #include "imx-ic.h"
+#include <linux/completion.h>
 
 /*
  * Min/Max supported width and heights.

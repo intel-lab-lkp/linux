@@ -2,6 +2,7 @@
 /* Copyright (c) 2019 Mellanox Technologies */
 
 #include <devlink.h>
+#include <linux/sprintf.h>
 
 #include "mlx5_core.h"
 #include "fw_reset.h"

@@ -16,6 +16,7 @@
 #include "rx_common.h"
 #include "ethtool_common.h"
 #include "mcdi_port_common.h"
+#include <linux/sprintf.h>
 
 struct efx_sw_stat_desc {
 	const char *name;

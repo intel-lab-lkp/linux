@@ -9,6 +9,7 @@
 
 #include <linux/hid.h>
 #include <linux/hid-debug.h>
+#include <linux/sprintf.h>
 
 #include <linux/fb.h>
 #include <linux/seq_file.h>

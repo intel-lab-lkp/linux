@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 
 #include <linux/netdevice.h>

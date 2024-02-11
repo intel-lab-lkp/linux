@@ -17,6 +17,7 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "coreboot_table.h"

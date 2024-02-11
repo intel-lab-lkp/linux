@@ -6,6 +6,7 @@
 #define _TRACE_POWER_H
 
 #include <linux/cpufreq.h>
+#include <linux/device.h>
 #include <linux/ktime.h>
 #include <linux/pm_qos.h>
 #include <linux/tracepoint.h>

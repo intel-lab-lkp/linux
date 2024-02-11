@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/videodev2.h>
+#include <linux/completion.h>
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>

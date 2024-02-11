@@ -14,6 +14,7 @@
 #include "intel_dp_aux_regs.h"
 #include "intel_pps.h"
 #include "intel_tc.h"
+#include <linux/sprintf.h>
 
 #define AUX_CH_NAME_BUFSIZE	6
 

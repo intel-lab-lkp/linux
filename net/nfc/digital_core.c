@@ -7,6 +7,7 @@
 #define pr_fmt(fmt) "digital: %s: " fmt, __func__
 
 #include <linux/module.h>
+#include <linux/random.h>
 
 #include "digital.h"
 

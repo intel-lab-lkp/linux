@@ -8,6 +8,8 @@
 
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "htc.h"

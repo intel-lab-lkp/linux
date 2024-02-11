@@ -16,6 +16,7 @@
 #include <linux/property.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/uleds.h>
 #include "leds.h"
 

@@ -5,6 +5,7 @@
 // Copyright (c) 2015 Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define CTU_NAME_SIZE	16
 #define CTU_NAME "ctu"

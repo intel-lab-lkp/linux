@@ -6,6 +6,7 @@
 #include <linux/btf.h>
 #include <linux/jhash.h>
 #include <linux/filter.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/rculist_nulls.h>
 #include <linux/rcupdate_wait.h>
 #include <linux/random.h>

@@ -17,6 +17,7 @@
 #include <linux/sh_dma.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>

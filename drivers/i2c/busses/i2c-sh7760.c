@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/clock.h>
 #include <asm/i2c-sh7760.h>

@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) "nbd: " fmt
 
 #include <linux/major.h>
+#include <linux/sprintf.h>
 
 #include <linux/blkdev.h>
 #include <linux/module.h>

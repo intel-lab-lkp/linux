@@ -12,6 +12,8 @@
 #include <linux/hashtable.h>
 #include <linux/inet.h>
 #include "qeth_l3.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define QETH_DEVICE_ATTR(_id, _name, _mode, _show, _store) \
 struct device_attribute dev_attr_##_id = __ATTR(_name, _mode, _show, _store)

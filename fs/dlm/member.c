@@ -17,6 +17,7 @@
 #include "config.h"
 #include "midcomms.h"
 #include "lowcomms.h"
+#include <linux/sprintf.h>
 
 int dlm_slots_version(const struct dlm_header *h)
 {

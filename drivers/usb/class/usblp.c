@@ -40,6 +40,7 @@
 #include <linux/slab.h>
 #include <linux/lp.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #undef DEBUG
 #include <linux/usb.h>
 #include <linux/usb/ch9.h>

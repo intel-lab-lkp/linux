@@ -21,6 +21,7 @@
 #include <linux/input/mt.h>
 #include <linux/acpi.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define WDT87XX_NAME		"wdt87xx_i2c"
 #define WDT87XX_FW_NAME		"wdt87xx_fw.bin"

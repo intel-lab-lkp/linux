@@ -7,6 +7,7 @@
 
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/hrtimer.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/regulator/consumer.h>

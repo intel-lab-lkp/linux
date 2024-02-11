@@ -8,6 +8,8 @@
  */
 
 #include <scsi/iscsi_proto.h>
+#include <linux/sprintf.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "be_main.h"
 #include "be.h"

@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>

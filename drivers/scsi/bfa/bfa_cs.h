@@ -16,6 +16,7 @@
 #define __BFA_CS_H__
 
 #include "bfad_drv.h"
+#include <linux/sprintf.h>
 
 /*
  * BFA TRC

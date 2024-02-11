@@ -17,6 +17,7 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/mm.h>
+#include <linux/ktime.h> //for timespec64_to_ktime()
 
 #include <vdso/datapage.h>
 

@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "zd_def.h"
 #include "zd_chip.h"

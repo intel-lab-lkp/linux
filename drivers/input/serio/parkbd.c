@@ -45,6 +45,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>");
 MODULE_DESCRIPTION("Parallel port to Keyboard port adapter driver");

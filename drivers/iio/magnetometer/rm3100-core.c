@@ -10,6 +10,7 @@
  * TODO: event generation, pm.
  */
 
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>

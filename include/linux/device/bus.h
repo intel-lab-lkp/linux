@@ -17,6 +17,7 @@
 #include <linux/kobject.h>
 #include <linux/klist.h>
 #include <linux/pm.h>
+#include <linux/sysfs.h> // for struct attribute
 
 struct device_driver;
 struct fwnode_handle;

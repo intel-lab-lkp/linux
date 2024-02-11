@@ -7,6 +7,7 @@
 
 #include <linux/pci.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <uapi/sound/skl-tplg-interface.h>
 #include "skl.h"
 #include "skl-sst-dsp.h"

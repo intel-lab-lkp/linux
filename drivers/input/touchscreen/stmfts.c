@@ -10,10 +10,13 @@
 #include <linux/input/touchscreen.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /* I2C commands */
 #define STMFTS_READ_INFO			0x80

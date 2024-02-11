@@ -16,6 +16,7 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/acct.h>
+#include <linux/kernel.h> // for do_exit()
 #include <linux/slab.h>
 #include <linux/proc_ns.h>
 #include <linux/reboot.h>

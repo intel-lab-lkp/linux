@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irq.h>

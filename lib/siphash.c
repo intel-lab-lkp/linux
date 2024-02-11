@@ -10,6 +10,8 @@
  */
 
 #include <linux/siphash.h>
+#include <linux/bitops.h>
+#include <linux/export.h>
 #include <asm/unaligned.h>
 
 #if defined(CONFIG_DCACHE_WORD_ACCESS) && BITS_PER_LONG == 64

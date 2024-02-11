@@ -8,6 +8,7 @@
 
 #include <dt-bindings/iio/adc/fsl-imx25-gcq.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/iio/iio.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/imx25-tsadc.h>
@@ -16,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #define MX25_GCQ_TIMEOUT (msecs_to_jiffies(2000))
 

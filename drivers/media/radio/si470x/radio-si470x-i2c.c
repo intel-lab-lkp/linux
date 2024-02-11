@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
+#include <linux/completion.h>
 
 #include "radio-si470x.h"
 

@@ -7,6 +7,8 @@
 
 #ifdef CONFIG_TASKS_RCU_GENERIC
 #include "rcu_segcblist.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 ////////////////////////////////////////////////////////////////////////
 //

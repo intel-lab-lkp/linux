@@ -12,6 +12,7 @@
  */
 
 #include "cx231xx.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>

@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/libfdt.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/memblock.h>
 #include <asm/setup.h>

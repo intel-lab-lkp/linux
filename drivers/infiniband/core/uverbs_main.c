@@ -39,13 +39,16 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fs.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/file.h>
 #include <linux/cdev.h>
 #include <linux/anon_inodes.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/sched/mm.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 

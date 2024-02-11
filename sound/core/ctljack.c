@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/control.h>
 

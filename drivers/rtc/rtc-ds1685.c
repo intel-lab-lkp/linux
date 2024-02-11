@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include <linux/rtc/ds1685.h>

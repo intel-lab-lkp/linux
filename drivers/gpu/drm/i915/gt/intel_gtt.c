@@ -4,6 +4,7 @@
  */
 
 #include <linux/slab.h> /* fault-inject.h is not standalone! */
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/fault-inject.h>
 #include <linux/sched/mm.h>

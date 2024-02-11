@@ -9,6 +9,7 @@
 #include <linux/hid-sensor-hub.h>
 #include <linux/iio/iio.h>
 #include <linux/rtc.h>
+#include <linux/completion.h>
 
 enum hid_time_channel {
 	CHANNEL_SCAN_INDEX_YEAR,

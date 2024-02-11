@@ -27,6 +27,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 
 /* Control register 1 */

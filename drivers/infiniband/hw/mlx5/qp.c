@@ -43,6 +43,7 @@
 #include "umr.h"
 #include "qp.h"
 #include "wr.h"
+#include <linux/completion.h>
 
 enum {
 	MLX5_IB_ACK_REQ_FREQ	= 8,

@@ -33,6 +33,7 @@
 #include <linux/bitmap.h>
 #include <linux/file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/inet_sock.h>
 
 #include "usnic_transport.h"

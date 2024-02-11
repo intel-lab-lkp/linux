@@ -6,6 +6,7 @@
 #ifndef __NETNS_MCTP_H__
 #define __NETNS_MCTP_H__
 
+#include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
 

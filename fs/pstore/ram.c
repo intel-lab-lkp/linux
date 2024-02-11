@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/version.h>
 #include <linux/pstore.h>
 #include <linux/io.h>

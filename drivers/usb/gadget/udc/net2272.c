@@ -22,6 +22,7 @@
 #include <linux/prefetch.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/usb.h>
 #include <linux/usb/ch9.h>

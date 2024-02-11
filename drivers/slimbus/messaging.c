@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include "slimbus.h"
+#include <linux/completion.h>
 
 /**
  * slim_msg_response() - Deliver Message response received from a device to the

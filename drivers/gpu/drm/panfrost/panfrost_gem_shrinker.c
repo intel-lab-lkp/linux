@@ -7,6 +7,7 @@
  */
 
 #include <linux/list.h>
+#include <linux/shrinker.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_gem_shmem_helper.h>

@@ -32,6 +32,7 @@
 #include <linux/io.h>
 #include <linux/iommu-helper.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/pfn.h>

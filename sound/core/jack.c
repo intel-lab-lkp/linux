@@ -6,11 +6,14 @@
  */
 
 #include <linux/input.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/mm.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <sound/jack.h>
 #include <sound/core.h>
 #include <sound/control.h>

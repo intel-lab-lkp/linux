@@ -20,6 +20,7 @@
 #include <linux/fb.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <video/omapfb_dss.h>
 

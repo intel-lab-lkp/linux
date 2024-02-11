@@ -20,6 +20,7 @@
 #include <linux/ip.h>
 #include <linux/if_ether.h>
 #include <linux/kmemleak.h>
+#include <linux/completion.h>
 
 #include "osdep_service.h"
 #include "drv_types.h"

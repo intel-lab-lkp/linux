@@ -4,6 +4,7 @@
  */
 #include <linux/sunrpc/clnt.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/sunrpc/addr.h>
 #include <linux/sunrpc/xprtsock.h>
 

@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/clk/ti.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/of.h>

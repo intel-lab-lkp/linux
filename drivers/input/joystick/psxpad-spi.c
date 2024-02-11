@@ -24,6 +24,7 @@
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>

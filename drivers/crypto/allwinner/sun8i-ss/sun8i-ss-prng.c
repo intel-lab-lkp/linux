@@ -10,6 +10,7 @@
  * You could find a link for the datasheet in Documentation/arch/arm/sunxi.rst
  */
 #include "sun8i-ss.h"
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>

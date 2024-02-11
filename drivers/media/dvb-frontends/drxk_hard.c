@@ -16,6 +16,7 @@
 #include <linux/i2c.h>
 #include <linux/hardirq.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 
 #include <media/dvb_frontend.h>
 #include "drxk.h"

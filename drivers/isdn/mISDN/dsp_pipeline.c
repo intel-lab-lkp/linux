@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/mISDNif.h>
 #include <linux/mISDNdsp.h>

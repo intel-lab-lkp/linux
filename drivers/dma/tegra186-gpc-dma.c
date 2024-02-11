@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <dt-bindings/memory/tegra186-mc.h>
 #include "virt-dma.h"
+#include <linux/sprintf.h>
 
 /* CSR register */
 #define TEGRA_GPCDMA_CHAN_CSR			0x00

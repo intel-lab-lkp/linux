@@ -6,6 +6,7 @@
  */
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -13,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/spi/spi.h>
 

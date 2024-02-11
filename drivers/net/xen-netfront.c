@@ -33,11 +33,13 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/ethtool.h>
 #include <linux/if_ether.h>
+#include <linux/sprintf.h>
 #include <net/tcp.h>
 #include <linux/udp.h>
 #include <linux/moduleparam.h>

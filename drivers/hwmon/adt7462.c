@@ -12,9 +12,11 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /* Addresses to scan */
 static const unsigned short normal_i2c[] = { 0x58, 0x5C, I2C_CLIENT_END };

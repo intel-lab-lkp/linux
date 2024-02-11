@@ -6,6 +6,7 @@
  */
 
 #include <kunit/test.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_framebuffer.h>

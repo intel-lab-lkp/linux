@@ -5,6 +5,7 @@
  */
 
 #include "hdmi.h"
+#include <linux/sprintf.h>
 
 struct hdmi_i2c_adapter {
 	struct i2c_adapter base;

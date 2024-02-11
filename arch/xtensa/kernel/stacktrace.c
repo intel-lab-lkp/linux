@@ -9,6 +9,7 @@
  * Copyright (C) 2015 Cadence Design Systems Inc.
  */
 #include <linux/export.h>
+#include <linux/kernel.h> // for kernel_text_address()
 #include <linux/sched.h>
 #include <linux/stacktrace.h>
 

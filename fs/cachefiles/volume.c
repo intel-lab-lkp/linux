@@ -7,6 +7,7 @@
 
 #include <linux/fs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include "internal.h"
 #include <trace/events/fscache.h>
 

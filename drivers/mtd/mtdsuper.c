@@ -12,6 +12,7 @@
 #include <linux/namei.h>
 #include <linux/export.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/major.h>
 #include <linux/backing-dev.h>

@@ -11,6 +11,7 @@
 #include <linux/blkdev.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/usb_usual.h>

@@ -4,6 +4,7 @@
  */
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/sched.h> // for TASK_INTERRUPTIBLE
 
 /* Needed for clk_hw_get_clk() */
 #include "clk.h"

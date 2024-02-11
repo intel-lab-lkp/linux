@@ -13,6 +13,7 @@
 #include <linux/bitops.h>
 #include <linux/ftrace.h>
 #include <linux/init.h>
+#include <linux/kallsyms.h> // is_kernel()
 #include <linux/kernel.h>
 #include <linux/lockdep.h>
 #include <linux/mm.h>

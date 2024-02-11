@@ -45,6 +45,7 @@
 #include <linux/of_mdio.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 
 #define AR9331_SW_NAME				"ar9331_switch"

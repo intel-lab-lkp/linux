@@ -6,8 +6,10 @@
 #include <linux/acpi.h>
 #include <linux/intel_tcc.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include "int340x_thermal_zone.h"
 #include "processor_thermal_device.h"

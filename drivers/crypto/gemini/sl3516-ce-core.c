@@ -11,6 +11,7 @@
 #include <crypto/internal/rng.h>
 #include <crypto/internal/skcipher.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/dev_printk.h>
 #include <linux/dma-mapping.h>

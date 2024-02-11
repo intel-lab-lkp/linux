@@ -15,6 +15,8 @@
 #include <linux/pm_qos.h>
 #include <linux/nvmem-consumer.h>
 #include <asm/byteorder.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "mac.h"

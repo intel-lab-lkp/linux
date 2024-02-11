@@ -9,6 +9,7 @@
 
 #include "mt2701-afe-common.h"
 #include "mt2701-afe-clock-ctrl.h"
+#include <linux/sprintf.h>
 
 static const char *const base_clks[] = {
 	[MT2701_INFRA_SYS_AUDIO] = "infra_sys_audio_clk",

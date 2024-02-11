@@ -6,6 +6,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "dpu_vbif.h"
 #include "dpu_hw_vbif.h"

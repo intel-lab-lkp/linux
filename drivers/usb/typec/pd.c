@@ -6,6 +6,7 @@
  * Author: Heikki Krogerus <heikki.krogerus@linux.intel.com>
  */
 
+#include <linux/idr.h>
 #include <linux/slab.h>
 #include <linux/usb/pd.h>
 

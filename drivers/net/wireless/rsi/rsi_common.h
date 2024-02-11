@@ -18,6 +18,7 @@
 #define __RSI_COMMON_H__
 
 #include <linux/kthread.h>
+#include <linux/completion.h>
 
 #define EVENT_WAIT_FOREVER              0
 #define FIRMWARE_RSI9113                "rs9113_wlan_qspi.rps"

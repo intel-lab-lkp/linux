@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 #include <linux/device.h>
 
 #include "tick-internal.h"

@@ -3,6 +3,7 @@
 
 #include <linux/etherdevice.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 #include <net/rtnetlink.h>
 #include "hclgevf_cmd.h"
 #include "hclgevf_main.h"

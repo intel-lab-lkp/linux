@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pm_runtime.h>
 #include <linux/power_supply.h>
 #include <linux/power/bq24190_charger.h>

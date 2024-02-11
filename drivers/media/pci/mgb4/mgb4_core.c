@@ -39,6 +39,7 @@
 #include "mgb4_vin.h"
 #include "mgb4_trigger.h"
 #include "mgb4_core.h"
+#include <linux/sprintf.h>
 
 #define MGB4_USER_IRQS 16
 

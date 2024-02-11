@@ -49,8 +49,10 @@
 #include <linux/spinlock.h>
 #include <linux/pci_ids.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/moduleparam.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>

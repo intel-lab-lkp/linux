@@ -62,6 +62,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>	/* MSch: for IRQ probe */
 #include <linux/console.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/kd.h>
 #include <linux/slab.h>

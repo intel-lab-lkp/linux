@@ -24,8 +24,10 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>

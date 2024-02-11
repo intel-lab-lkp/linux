@@ -29,6 +29,7 @@
  */
 
 #include "qman_priv.h"
+#include <linux/sprintf.h>
 
 #define DQRR_MAXFILL	15
 #define EQCR_ITHRESH	4	/* if EQCR congests, interrupt threshold */

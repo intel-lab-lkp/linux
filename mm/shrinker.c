@@ -4,6 +4,7 @@
 #include <linux/shrinker.h>
 #include <linux/rculist.h>
 #include <trace/events/vmscan.h>
+#include <linux/completion.h>
 
 #include "internal.h"
 

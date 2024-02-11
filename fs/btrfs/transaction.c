@@ -4,6 +4,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/radix-tree.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/sched/mm.h>

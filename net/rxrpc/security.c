@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/net.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/crypto.h>
 #include <net/sock.h>

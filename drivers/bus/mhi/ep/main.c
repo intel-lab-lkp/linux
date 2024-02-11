@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/dma-direction.h>
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>

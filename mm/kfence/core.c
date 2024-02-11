@@ -14,8 +14,10 @@
 #include <linux/irq_work.h>
 #include <linux/jhash.h>
 #include <linux/kcsan-checks.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/kfence.h>
 #include <linux/kmemleak.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
 #include <linux/log2.h>
@@ -29,6 +31,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <asm/kfence.h>

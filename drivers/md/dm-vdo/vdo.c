@@ -36,6 +36,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 
 #include "logger.h"

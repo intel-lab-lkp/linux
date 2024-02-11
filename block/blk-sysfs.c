@@ -3,6 +3,7 @@
  * Functions related to sysfs handling
  */
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/bio.h>
@@ -10,6 +11,7 @@
 #include <linux/backing-dev.h>
 #include <linux/blktrace_api.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "blk.h"
 #include "blk-mq.h"

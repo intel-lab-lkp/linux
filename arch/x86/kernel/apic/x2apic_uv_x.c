@@ -17,6 +17,7 @@
 #include <linux/pci.h>
 #include <linux/acpi.h>
 #include <linux/efi.h>
+#include <linux/sprintf.h>
 
 #include <asm/e820/api.h>
 #include <asm/uv/uv_mmrs.h>

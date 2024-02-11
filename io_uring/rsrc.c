@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/nospec.h>
 #include <linux/hugetlb.h>
+#include <linux/bvec.h>
 #include <linux/compat.h>
 #include <linux/io_uring.h>
 

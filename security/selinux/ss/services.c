@@ -39,6 +39,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>

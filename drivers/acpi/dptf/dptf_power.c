@@ -5,9 +5,11 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/acpi.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 /*
  * Presentation of attributes which are defined for INT3407 and INT3532.

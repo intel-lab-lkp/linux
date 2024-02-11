@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <crypto/aes.h>
 #include "chcr_ktls.h"
+#include <linux/completion.h>
 
 static LIST_HEAD(uld_ctx_list);
 static DEFINE_MUTEX(dev_mutex);

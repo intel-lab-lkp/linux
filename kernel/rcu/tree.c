@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
 #include <linux/smp.h>
 #include <linux/rcupdate_wait.h>
@@ -29,6 +30,7 @@
 #include <linux/nmi.h>
 #include <linux/atomic.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/export.h>
 #include <linux/completion.h>
 #include <linux/kmemleak.h>
@@ -39,6 +41,7 @@
 #include <linux/notifier.h>
 #include <linux/cpu.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/kernel_stat.h>
 #include <linux/wait.h>
@@ -48,6 +51,7 @@
 #include <linux/delay.h>
 #include <linux/random.h>
 #include <linux/trace_events.h>
+#include <linux/shrinker.h>
 #include <linux/suspend.h>
 #include <linux/ftrace.h>
 #include <linux/tick.h>

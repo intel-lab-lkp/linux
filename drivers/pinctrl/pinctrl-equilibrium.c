@@ -12,6 +12,7 @@
 #include <linux/pinctrl/pinmux.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 #include "core.h"
 #include "pinconf.h"

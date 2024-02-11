@@ -4,6 +4,7 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/kstrtox.h>
 #include <linux/kvm_host.h>
 #include <linux/preempt.h>
 #include <linux/export.h>

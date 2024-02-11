@@ -28,6 +28,7 @@
  */
 
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define RSND_DVC_NAME_SIZE	16
 

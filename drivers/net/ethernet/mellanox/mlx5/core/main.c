@@ -46,6 +46,7 @@
 #include <linux/kmod.h>
 #include <linux/mlx5/mlx5_ifc.h>
 #include <linux/mlx5/vport.h>
+#include <linux/sprintf.h>
 #include <linux/version.h>
 #include <net/devlink.h>
 #include "mlx5_core.h"

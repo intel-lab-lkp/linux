@@ -9,12 +9,15 @@
 
 #include <linux/export.h>
 #include <linux/extable.h>
+#include <linux/kstrtox.h>
 #include <linux/moduleloader.h>
 #include <linux/module_signature.h>
+#include <linux/sprintf.h>
 #include <linux/trace_events.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
 #include <linux/buildid.h>
+#include <linux/completion.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/kernel_read_file.h>

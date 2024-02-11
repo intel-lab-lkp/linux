@@ -15,6 +15,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/asoundef.h>

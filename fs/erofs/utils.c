@@ -5,6 +5,8 @@
  */
 #include "internal.h"
 
+#include <linux/shrinker.h>
+
 struct page *erofs_allocpage(struct page **pagepool, gfp_t gfp)
 {
 	struct page *page = *pagepool;

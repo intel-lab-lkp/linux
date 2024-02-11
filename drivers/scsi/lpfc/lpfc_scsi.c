@@ -26,6 +26,7 @@
 #include <linux/export.h>
 #include <linux/delay.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 #include <linux/t10-pi.h>
 #include <linux/crc-t10dif.h>
 #include <linux/blk-cgroup.h>

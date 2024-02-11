@@ -12,6 +12,7 @@
 #include <linux/irqdesc.h>
 #include <linux/percpu.h>
 #include <linux/perf/arm_pmu.h>
+#include <linux/sprintf.h>
 
 #include <asm/cpu.h>
 #include <asm/cputype.h>

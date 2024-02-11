@@ -11,6 +11,7 @@
 #include <linux/swap.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/balloon_compaction.h>

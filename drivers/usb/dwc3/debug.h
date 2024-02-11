@@ -12,6 +12,7 @@
 #define __DWC3_DEBUG_H
 
 #include "core.h"
+#include <linux/sprintf.h>
 
 /**
  * dwc3_gadget_ep_cmd_string - returns endpoint command string

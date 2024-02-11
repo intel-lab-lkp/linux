@@ -5,7 +5,9 @@
  */
 
 #include <linux/arm-smccc.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/preempt.h>
+#include <linux/kernel.h> // for lower_32_bits()
 #include <linux/kvm_host.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>

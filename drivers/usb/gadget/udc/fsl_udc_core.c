@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/err.h>
@@ -36,6 +37,7 @@
 #include <linux/platform_device.h>
 #include <linux/fsl_devices.h>
 #include <linux/dmapool.h>
+#include <linux/completion.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>

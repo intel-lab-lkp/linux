@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/module.h>
+#include <linux/kernel.h> // for trace_printk()
 #include <linux/kthread.h>
 #include <linux/ftrace.h>
 #ifndef CONFIG_ARM64

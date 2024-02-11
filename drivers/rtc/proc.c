@@ -12,6 +12,7 @@
 #include <linux/rtc.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 #include "rtc-core.h"
 

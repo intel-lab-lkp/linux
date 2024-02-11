@@ -31,6 +31,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/sb.h>
 #include <sound/initval.h>

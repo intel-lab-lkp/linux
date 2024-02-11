@@ -10,6 +10,7 @@
 #include <sound/emux_synth.h>
 #include <sound/info.h>
 #include "emux_voice.h"
+#include <linux/sprintf.h>
 
 static void
 snd_emux_proc_info_read(struct snd_info_entry *entry, 

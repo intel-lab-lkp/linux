@@ -15,6 +15,7 @@
 
 #include <linux/kernel.h>
 #include <linux/kcore.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/memblock.h>

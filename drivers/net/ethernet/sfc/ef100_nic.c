@@ -27,6 +27,7 @@
 #include "tc.h"
 #include "mae.h"
 #include "rx_common.h"
+#include <linux/sprintf.h>
 
 #define EF100_MAX_VIS 4096
 #define EF100_NUM_MCDI_BUFFERS	1

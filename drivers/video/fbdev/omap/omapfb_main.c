@@ -14,9 +14,11 @@
 #include <linux/platform_device.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/sysfs.h>
+#include <linux/kstrtox.h>
 
 #include <linux/omap-dma.h>
 

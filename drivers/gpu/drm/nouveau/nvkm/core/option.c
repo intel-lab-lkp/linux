@@ -23,6 +23,7 @@
  */
 #include <core/option.h>
 #include <core/debug.h>
+#include <linux/kstrtox.h>
 
 const char *
 nvkm_stropt(const char *optstr, const char *opt, int *arglen)

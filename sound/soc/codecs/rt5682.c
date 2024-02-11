@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/gpio/consumer.h>
 #include <linux/mutex.h>
 #include <sound/core.h>

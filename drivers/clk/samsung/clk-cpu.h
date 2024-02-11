@@ -10,6 +10,8 @@
 
 #include "clk.h"
 
+#include <linux/notifier.h>
+
 /**
  * struct exynos_cpuclk_cfg_data - config data to setup cpu clocks
  * @prate: frequency of the primary parent clock (in KHz)

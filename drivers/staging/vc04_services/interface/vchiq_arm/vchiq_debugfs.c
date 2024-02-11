@@ -8,6 +8,7 @@
 #include "vchiq_core.h"
 #include "vchiq_arm.h"
 #include "vchiq_debugfs.h"
+#include <linux/sprintf.h>
 
 #ifdef CONFIG_DEBUG_FS
 

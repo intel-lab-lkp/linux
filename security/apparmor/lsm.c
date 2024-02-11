@@ -16,6 +16,8 @@
 #include <linux/namei.h>
 #include <linux/ptrace.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/audit.h>
 #include <linux/user_namespace.h>

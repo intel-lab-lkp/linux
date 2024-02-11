@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/power/smartreflex.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME	"smartreflex"
 #define SMARTREFLEX_NAME_LEN	32

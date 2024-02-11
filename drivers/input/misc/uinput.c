@@ -29,6 +29,7 @@
 #include <linux/overflow.h>
 #include <linux/input/mt.h>
 #include "../input-compat.h"
+#include <linux/completion.h>
 
 #define UINPUT_NAME		"uinput"
 #define UINPUT_BUFFER_SIZE	16

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb/typec_dp.h>
 
 #include "ucsi.h"

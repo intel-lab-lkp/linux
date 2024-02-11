@@ -26,6 +26,7 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <trace/events/asoc.h>
+#include <linux/completion.h>
 
 #include <linux/mfd/wm8994/core.h>
 #include <linux/mfd/wm8994/registers.h>

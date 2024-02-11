@@ -8,8 +8,10 @@
 #include <linux/module.h>
 #include <linux/nfc.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <net/nfc/nci.h>
 #include <net/nfc/nci_core.h>
+#include <linux/completion.h>
 
 #include "st-nci.h"
 

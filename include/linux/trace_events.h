@@ -4,6 +4,8 @@
 #define _LINUX_TRACE_EVENT_H
 
 #include <linux/ring_buffer.h>
+#include <linux/module.h> // for try_module_get(), module_put()
+#include <linux/sprintf.h>
 #include <linux/trace_seq.h>
 #include <linux/percpu.h>
 #include <linux/hardirq.h>

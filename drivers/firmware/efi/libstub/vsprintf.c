@@ -11,6 +11,7 @@
  */
 
 #include <linux/stdarg.h>
+#include <linux/sprintf.h>
 
 #include <linux/compiler.h>
 #include <linux/ctype.h>

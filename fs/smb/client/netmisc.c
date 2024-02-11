@@ -23,6 +23,7 @@
 #include "smberr.h"
 #include "cifs_debug.h"
 #include "nterr.h"
+#include <linux/kstrtox.h>
 
 struct smb_to_posix_error {
 	__u16 smb_err;

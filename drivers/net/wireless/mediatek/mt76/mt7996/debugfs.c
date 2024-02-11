@@ -8,6 +8,8 @@
 #include "eeprom.h"
 #include "mcu.h"
 #include "mac.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define FW_BIN_LOG_MAGIC	0x44d9c99a
 

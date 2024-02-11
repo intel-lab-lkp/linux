@@ -7,6 +7,7 @@
 #include <linux/closure.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/sched/clock.h>
 #include <linux/llist.h>
 #include <linux/ratelimit.h>

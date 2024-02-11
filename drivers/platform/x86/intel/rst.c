@@ -4,8 +4,10 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 MODULE_LICENSE("GPL");
 

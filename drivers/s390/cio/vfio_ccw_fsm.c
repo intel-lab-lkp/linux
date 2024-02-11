@@ -10,6 +10,7 @@
  */
 
 #include <linux/vfio.h>
+#include <linux/completion.h>
 
 #include <asm/isc.h>
 

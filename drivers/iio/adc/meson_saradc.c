@@ -8,6 +8,7 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/iio/iio.h>
@@ -21,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/mfd/syscon.h>
+#include <linux/sprintf.h>
 
 #define MESON_SAR_ADC_REG0					0x00
 	#define MESON_SAR_ADC_REG0_PANEL_DETECT			BIT(31)

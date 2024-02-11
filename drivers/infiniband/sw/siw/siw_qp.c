@@ -9,6 +9,7 @@
 #include <linux/scatterlist.h>
 #include <linux/llist.h>
 #include <asm/barrier.h>
+#include <linux/completion.h>
 #include <net/tcp.h>
 #include <trace/events/sock.h>
 

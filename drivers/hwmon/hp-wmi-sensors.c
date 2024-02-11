@@ -27,6 +27,7 @@
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
 #include <linux/nls.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 #include <linux/wmi.h>
 

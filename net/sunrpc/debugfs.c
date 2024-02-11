@@ -6,6 +6,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/sunrpc/sched.h>
 #include <linux/sunrpc/clnt.h>
 

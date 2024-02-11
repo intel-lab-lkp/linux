@@ -8,8 +8,10 @@
 #include <linux/device.h>
 #include <linux/hid.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "hid-ids.h"
 

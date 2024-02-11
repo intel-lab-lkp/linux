@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <asm/hypervisor.h>
 #include <asm/vmware.h>
+#include <linux/sprintf.h>
 
 #include "psmouse.h"
 #include "vmmouse.h"

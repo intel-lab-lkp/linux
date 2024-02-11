@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <media/media-device.h>
 #include <media/tpg/v4l2-tpg.h>
 #include <media/v4l2-device.h>

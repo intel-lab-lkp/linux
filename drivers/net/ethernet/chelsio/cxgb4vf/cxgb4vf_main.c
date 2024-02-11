@@ -45,6 +45,7 @@
 #include <linux/debugfs.h>
 #include <linux/ethtool.h>
 #include <linux/mdio.h>
+#include <linux/sprintf.h>
 
 #include "t4vf_common.h"
 #include "t4vf_defs.h"

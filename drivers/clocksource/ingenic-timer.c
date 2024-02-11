@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/sched_clock.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/clock/ingenic,tcu.h>
 

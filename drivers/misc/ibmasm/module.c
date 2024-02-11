@@ -42,6 +42,7 @@
 #include "ibmasm.h"
 #include "lowlevel.h"
 #include "remote.h"
+#include <linux/sprintf.h>
 
 int ibmasm_debug = 0;
 module_param(ibmasm_debug, int , S_IRUGO | S_IWUSR);

@@ -10,6 +10,7 @@
 
 #include <linux/fs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/keyctl.h>
 #include <linux/key-type.h>

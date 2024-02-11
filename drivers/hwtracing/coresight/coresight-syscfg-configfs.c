@@ -5,6 +5,8 @@
  */
 
 #include <linux/configfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "coresight-config.h"
 #include "coresight-syscfg-configfs.h"

@@ -16,6 +16,7 @@
 #include "protocol.h"
 #include "orangefs-kernel.h"
 #include "orangefs-bufmap.h"
+#include <linux/completion.h>
 
 static int wait_for_matching_downcall(struct orangefs_kernel_op_s *op,
 		long timeout,

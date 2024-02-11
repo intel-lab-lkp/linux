@@ -5,6 +5,7 @@
 
 #include <linux/net_tstamp.h>
 #include <linux/nospec.h>
+#include <linux/sprintf.h>
 
 #include "dpni.h"	/* DPNI_LINK_OPT_* */
 #include "dpaa2-eth.h"

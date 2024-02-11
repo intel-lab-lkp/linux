@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/usb/ch9.h>
 
 static void usb_decode_get_status(__u8 bRequestType, __u16 wIndex,

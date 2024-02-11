@@ -9,7 +9,10 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/sched/mm.h>
+#include <linux/shrinker.h>
 #include <linux/statfs.h>
 #include <linux/buffer_head.h>
 #include <linux/kthread.h>

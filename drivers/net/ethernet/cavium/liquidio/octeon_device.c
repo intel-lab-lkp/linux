@@ -17,6 +17,7 @@
  ***********************************************************************/
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "liquidio_common.h"
 #include "octeon_droq.h"

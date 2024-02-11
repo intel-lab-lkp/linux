@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_device.h>
+#include <linux/kstrtox.h>
 #include <linux/sysfs.h>
 #include <linux/printk.h>
 

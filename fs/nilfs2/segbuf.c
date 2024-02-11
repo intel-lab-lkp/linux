@@ -9,6 +9,7 @@
  */
 
 #include <linux/buffer_head.h>
+#include <linux/completion.h>
 #include <linux/writeback.h>
 #include <linux/crc32.h>
 #include <linux/backing-dev.h>

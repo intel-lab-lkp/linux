@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "../core.h"
 #include "../pinconf.h"

@@ -16,9 +16,11 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sysfs.h>
 #include <linux/platform_device.h>

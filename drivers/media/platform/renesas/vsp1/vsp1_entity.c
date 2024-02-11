@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>

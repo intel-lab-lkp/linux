@@ -7,11 +7,13 @@
 #include <linux/ctype.h>
 #include <linux/dmi.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/kfifo.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/bsearch.h>

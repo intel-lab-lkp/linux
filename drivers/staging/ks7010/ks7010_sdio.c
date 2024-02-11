@@ -8,6 +8,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/jiffies.h>
 #include <linux/mmc/card.h>

@@ -23,6 +23,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/gpio/consumer.h>
+#include <linux/completion.h>
 
 #include <asm/mach/flash.h>
 

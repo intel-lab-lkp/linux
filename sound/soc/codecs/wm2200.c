@@ -28,6 +28,7 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <sound/wm2200.h>
+#include <linux/completion.h>
 
 #include "wm2200.h"
 #include "wm_adsp.h"

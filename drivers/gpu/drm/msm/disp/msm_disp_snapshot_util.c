@@ -6,6 +6,7 @@
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
 
 #include <generated/utsrelease.h>
+#include <linux/sprintf.h>
 
 #include "msm_disp_snapshot.h"
 

@@ -3,6 +3,7 @@
 
 #include <linux/firmware.h>
 #include "i40e.h"
+#include <linux/sprintf.h>
 
 #define I40_DDP_FLASH_REGION		100
 #define I40E_PROFILE_INFO_SIZE		48

@@ -29,6 +29,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/smem.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/arm/qcom,ids.h>
 

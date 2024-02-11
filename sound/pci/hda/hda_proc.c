@@ -9,6 +9,7 @@
 
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <linux/module.h>
 #include <sound/hda_codec.h>

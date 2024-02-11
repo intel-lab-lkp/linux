@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/input.h>
 #include <linux/slab.h>

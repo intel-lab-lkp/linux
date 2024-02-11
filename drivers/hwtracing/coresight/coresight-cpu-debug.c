@@ -21,6 +21,7 @@
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 

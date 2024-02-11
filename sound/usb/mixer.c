@@ -32,6 +32,7 @@
 #include <linux/list.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/usb.h>
 #include <linux/usb/audio.h>

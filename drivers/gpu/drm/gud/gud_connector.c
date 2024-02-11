@@ -4,6 +4,7 @@
  */
 
 #include <linux/backlight.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include <drm/drm_atomic.h>

@@ -12,6 +12,7 @@
 #include <crypto/engine.h>
 #include <crypto/internal/skcipher.h>
 #include <crypto/scatterwalk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/kernel.h>

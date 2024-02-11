@@ -12,6 +12,7 @@
 #include <linux/pm-trace.h>
 #include <linux/export.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/init.h>
 

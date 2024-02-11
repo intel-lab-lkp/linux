@@ -10,6 +10,8 @@
 #include "dm-bio-record.h"
 #include "dm-cache-metadata.h"
 #include "dm-io-tracker.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/dm-io.h>
 #include <linux/dm-kcopyd.h>

@@ -7,6 +7,7 @@
 #include <linux/stacktrace.h>
 #include <linux/security.h>
 #include <linux/kallsyms.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>

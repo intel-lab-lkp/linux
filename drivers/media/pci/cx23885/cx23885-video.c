@@ -7,6 +7,7 @@
 
 #include "cx23885.h"
 #include "cx23885-video.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/list.h>

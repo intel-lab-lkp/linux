@@ -7,6 +7,7 @@
 
 #include <linux/average.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/iopoll.h>
 #include <linux/workqueue.h>

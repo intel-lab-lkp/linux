@@ -16,6 +16,7 @@
 #include <linux/random.h>
 #include <linux/nvme-auth.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include "nvmet.h"
 

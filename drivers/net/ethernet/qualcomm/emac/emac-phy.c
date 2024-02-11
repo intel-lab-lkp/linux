@@ -10,6 +10,7 @@
 #include <linux/iopoll.h>
 #include <linux/acpi.h>
 #include "emac.h"
+#include <linux/sprintf.h>
 
 /* EMAC base register offsets */
 #define EMAC_MDIO_CTRL                                        0x001414

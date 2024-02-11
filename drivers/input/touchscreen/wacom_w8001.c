@@ -20,6 +20,8 @@
 #include <linux/serio.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Wacom W8001 serial touchscreen driver"
 

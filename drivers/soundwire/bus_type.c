@@ -9,6 +9,7 @@
 #include "bus.h"
 #include "irq.h"
 #include "sysfs_local.h"
+#include <linux/sprintf.h>
 
 /**
  * sdw_get_device_id - find the matching SoundWire device id

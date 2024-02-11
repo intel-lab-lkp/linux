@@ -24,6 +24,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define IQS626_VER_INFO				0x00
 #define IQS626_VER_INFO_PROD_NUM		0x51

@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/rpmsg.h>
 #include "imx-pcm-rpmsg.h"
+#include <linux/completion.h>
 
 /*
  * struct imx_audio_rpmsg: private data

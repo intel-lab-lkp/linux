@@ -10,6 +10,7 @@
 
 #include <linux/slab.h>
 #include "cpufreq_governor.h"
+#include <linux/sprintf.h>
 
 struct cs_policy_dbs_info {
 	struct policy_dbs_info policy_dbs;

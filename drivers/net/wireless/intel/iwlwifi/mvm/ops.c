@@ -6,6 +6,7 @@
  */
 #include <linux/module.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <net/mac80211.h>
 

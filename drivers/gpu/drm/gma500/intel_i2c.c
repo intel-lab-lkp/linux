@@ -10,6 +10,7 @@
 #include <linux/export.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
+#include <linux/sprintf.h>
 
 #include "psb_drv.h"
 #include "psb_intel_reg.h"

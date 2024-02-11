@@ -5,6 +5,7 @@
  */
 
 #include "rtkit-internal.h"
+#include <linux/completion.h>
 
 enum {
 	APPLE_RTKIT_PWR_STATE_OFF = 0x00, /* power off, cannot be restarted */

@@ -6,6 +6,7 @@
 #define __iwl_trans_queue_tx_h__
 #include "iwl-fh.h"
 #include "fw/api/tx.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 struct iwl_tso_hdr_page {
 	struct page *page;

@@ -23,6 +23,7 @@
 #include <linux/radix-tree.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <linux/pinctrl/machine.h>

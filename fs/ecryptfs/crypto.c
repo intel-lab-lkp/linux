@@ -12,6 +12,7 @@
 #include <crypto/hash.h>
 #include <crypto/skcipher.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/random.h>
@@ -23,6 +24,7 @@
 #include <linux/slab.h>
 #include <asm/unaligned.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include "ecryptfs_kernel.h"
 

@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/sched/signal.h>
 #include <linux/init.h>
 #include <linux/errno.h>
@@ -15,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/scatterlist.h>
 #include <linux/mei_cl_bus.h>
+#include <linux/sprintf.h>
 
 #include "mei_dev.h"
 #include "client.h"

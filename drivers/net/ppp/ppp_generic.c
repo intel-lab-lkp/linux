@@ -36,6 +36,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/if_arp.h>
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/spinlock.h>
 #include <linux/rwsem.h>

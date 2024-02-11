@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "priv.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/memory.h>
 #include <subdev/mmu.h>

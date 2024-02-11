@@ -3,6 +3,9 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include <drm/drm_debugfs.h>

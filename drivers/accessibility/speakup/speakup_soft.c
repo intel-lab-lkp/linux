@@ -10,8 +10,11 @@
  */
 
 #include <linux/unistd.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/miscdevice.h>	/* for misc_register, and MISC_DYNAMIC_MINOR */
 #include <linux/poll.h>		/* for poll_wait() */
+#include <linux/sprintf.h>
 
 /* schedule(), signal_pending(), TASK_INTERRUPTIBLE */
 #include <linux/sched/signal.h>

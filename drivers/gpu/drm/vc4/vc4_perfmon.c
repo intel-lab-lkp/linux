@@ -11,6 +11,7 @@
 
 #include "vc4_drv.h"
 #include "vc4_regs.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #define VC4_PERFMONID_MIN	1
 #define VC4_PERFMONID_MAX	U32_MAX

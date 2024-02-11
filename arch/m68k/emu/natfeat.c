@@ -10,6 +10,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/console.h>
 #include <linux/string.h>

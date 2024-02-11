@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/of_irq.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "i2c-octeon-core.h"
 

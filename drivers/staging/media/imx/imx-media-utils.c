@@ -6,6 +6,7 @@
  */
 #include <linux/module.h>
 #include "imx-media.h"
+#include <linux/sprintf.h>
 
 #define IMX_BUS_FMTS(fmt...) ((const u32[]) {fmt, 0})
 

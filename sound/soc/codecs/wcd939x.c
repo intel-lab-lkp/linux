@@ -27,6 +27,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/usb/typec_mux.h>
 #include <linux/usb/typec_altmode.h>
+#include <linux/completion.h>
 
 #include "wcd-clsh-v2.h"
 #include "wcd-mbhc-v2.h"

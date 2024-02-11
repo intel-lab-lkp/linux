@@ -6,6 +6,7 @@
 #include "iavf_register.h"
 #include "iavf_adminq.h"
 #include "iavf_prototype.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  *  iavf_alloc_adminq_asq_ring - Allocate Admin Queue send rings

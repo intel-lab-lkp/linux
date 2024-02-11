@@ -11,6 +11,8 @@
 #include <linux/kernel.h>
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "ksz_common.h"
 #include "ksz_ptp.h"

@@ -14,9 +14,11 @@
 #include <linux/hwmon-vid.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include "nct6775.h"
 

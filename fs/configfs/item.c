@@ -13,8 +13,11 @@
 
 #include <linux/string.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/kref.h>
 
 #include <linux/configfs.h>
 

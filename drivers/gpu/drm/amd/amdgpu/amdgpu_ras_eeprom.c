@@ -29,6 +29,7 @@
 #include "amdgpu_eeprom.h"
 #include "amdgpu_atomfirmware.h"
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "amdgpu_reset.h"

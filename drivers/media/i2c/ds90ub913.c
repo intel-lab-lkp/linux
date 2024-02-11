@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <media/i2c/ds90ub9xx.h>
 #include <media/v4l2-fwnode.h>

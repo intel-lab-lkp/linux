@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/dma-fence.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <trace/events/host1x.h>
 

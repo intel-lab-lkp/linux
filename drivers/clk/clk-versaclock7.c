@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/swab.h>
 
 /*

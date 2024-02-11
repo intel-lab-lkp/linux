@@ -8,6 +8,7 @@
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/io.h>

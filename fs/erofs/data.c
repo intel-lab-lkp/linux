@@ -5,6 +5,7 @@
  * Copyright (C) 2021, Alibaba Cloud
  */
 #include "internal.h"
+#include <linux/blkdev.h>
 #include <linux/sched/mm.h>
 #include <trace/events/erofs.h>
 

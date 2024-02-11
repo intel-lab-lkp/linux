@@ -13,6 +13,7 @@
 #include <linux/of_address.h>
 #include <linux/clk/ti.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/timekeeping.h>
 #include "clock.h"

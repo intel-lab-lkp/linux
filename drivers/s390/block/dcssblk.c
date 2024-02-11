@@ -18,6 +18,7 @@
 #include <linux/completion.h>
 #include <linux/interrupt.h>
 #include <linux/pfn_t.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/dax.h>
 #include <linux/io.h>

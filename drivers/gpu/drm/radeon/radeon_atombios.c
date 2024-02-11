@@ -25,6 +25,7 @@
  */
 
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_edid.h>

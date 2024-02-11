@@ -23,6 +23,7 @@
 
 #include <linux/firmware.h>
 #include <drm/drm_exec.h>
+#include <linux/sprintf.h>
 
 #include "amdgpu_mes.h"
 #include "amdgpu.h"

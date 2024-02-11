@@ -21,6 +21,7 @@
 #include <linux/of_irq.h>
 #include <linux/delay.h>
 #include "rsnd.h"
+#include <linux/sprintf.h>
 #define RSND_SSI_NAME_SIZE 16
 
 /*

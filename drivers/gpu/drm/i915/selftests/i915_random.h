@@ -27,6 +27,7 @@
 
 #include <linux/math64.h>
 #include <linux/random.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "../i915_selftest.h"
 

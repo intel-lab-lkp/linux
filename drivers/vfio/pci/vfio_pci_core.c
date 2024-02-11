@@ -22,6 +22,7 @@
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/vgaarb.h>

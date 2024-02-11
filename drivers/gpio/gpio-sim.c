@@ -21,6 +21,7 @@
 #include <linux/irq.h>
 #include <linux/irq_sim.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/minmax.h>
 #include <linux/mod_devicetable.h>
@@ -31,6 +32,7 @@
 #include <linux/property.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/string_helpers.h>
 #include <linux/sysfs.h>

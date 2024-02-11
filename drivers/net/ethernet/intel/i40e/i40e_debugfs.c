@@ -8,6 +8,7 @@
 #include <linux/if_bridge.h>
 #include "i40e.h"
 #include "i40e_virtchnl_pf.h"
+#include <linux/sprintf.h>
 
 static struct dentry *i40e_dbg_root;
 

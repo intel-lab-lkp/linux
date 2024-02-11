@@ -57,6 +57,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/reboot.h>
 #include <linux/property.h>
+#include <linux/hrtimer.h>
 
 struct ltc2952_poweroff {
 	struct hrtimer timer_trigger;

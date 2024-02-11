@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include "adf_admin.h"
 #include "adf_cfg.h"

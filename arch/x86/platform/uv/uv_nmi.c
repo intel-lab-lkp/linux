@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/clocksource.h>
 

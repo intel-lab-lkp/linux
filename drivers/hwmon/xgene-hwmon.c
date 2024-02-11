@@ -12,6 +12,7 @@
  *  - Retrieve SoC temperature (milli-degree C) and alarm
  */
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/dma-mapping.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>

@@ -12,6 +12,7 @@
  * own it's copyright ;-)
  */
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 
 #include "rtllib.h"
 

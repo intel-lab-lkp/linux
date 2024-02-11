@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/radix-tree.h>
 #include <linux/slab.h>
 #include <linux/security.h>
 #include <linux/sched/task.h>

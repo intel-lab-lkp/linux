@@ -23,6 +23,7 @@
 
 #include "amdgpu.h"
 #include "vcn_sw_ring.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 void vcn_dec_sw_ring_emit_fence(struct amdgpu_ring *ring, u64 addr,
 	u64 seq, uint32_t flags)

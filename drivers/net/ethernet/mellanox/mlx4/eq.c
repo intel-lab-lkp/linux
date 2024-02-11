@@ -36,6 +36,7 @@
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 
 #include <linux/mlx4/cmd.h>
 #include <linux/cpu_rmap.h>

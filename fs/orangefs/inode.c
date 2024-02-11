@@ -11,6 +11,7 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/bvec.h>
 #include <linux/fileattr.h>
 #include "protocol.h"
 #include "orangefs-kernel.h"

@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
@@ -23,6 +24,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/dmi.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 /* Banks */
 #define ABIT_UGURU_ALARM_BANK			0x20 /* 1x 3 bytes */

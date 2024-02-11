@@ -16,8 +16,10 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sysctl.h>
 #include <linux/uaccess.h>

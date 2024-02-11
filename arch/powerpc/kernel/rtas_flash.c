@@ -15,6 +15,7 @@
 #include <linux/proc_fs.h>
 #include <linux/reboot.h>
 #include <asm/delay.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/rtas.h>
 

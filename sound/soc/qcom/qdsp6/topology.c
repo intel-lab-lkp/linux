@@ -7,6 +7,7 @@
 #include <sound/control.h>
 #include <sound/asound.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <sound/soc-topology.h>
 #include <sound/soc-dpcm.h>
 #include <uapi/sound/snd_ar_tokens.h>

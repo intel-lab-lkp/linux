@@ -6,6 +6,8 @@
  */
 
 #include "dice.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("DICE driver");
 MODULE_AUTHOR("Clemens Ladisch <clemens@ladisch.de>");

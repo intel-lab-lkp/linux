@@ -3,6 +3,7 @@
 
 #include <net/devlink.h>
 #include "ice_sched.h"
+#include <linux/sprintf.h>
 
 /**
  * ice_sched_add_root_node - Insert the Tx scheduler root node in SW DB

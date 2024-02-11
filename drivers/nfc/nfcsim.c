@@ -10,6 +10,8 @@
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/nfc.h>
+#include <linux/random.h>
+#include <linux/sprintf.h>
 #include <net/nfc/nfc.h>
 #include <net/nfc/digital.h>
 

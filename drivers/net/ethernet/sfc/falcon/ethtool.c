@@ -15,6 +15,7 @@
 #include "efx.h"
 #include "filter.h"
 #include "nic.h"
+#include <linux/sprintf.h>
 
 struct ef4_sw_stat_desc {
 	const char *name;

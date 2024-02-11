@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/kstrtox.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

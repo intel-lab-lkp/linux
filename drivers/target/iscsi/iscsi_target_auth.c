@@ -9,7 +9,10 @@
  ******************************************************************************/
 
 #include <crypto/hash.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/err.h>
 #include <linux/random.h>

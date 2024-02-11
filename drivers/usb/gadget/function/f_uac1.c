@@ -16,6 +16,8 @@
 
 #include <linux/usb/audio.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "u_audio.h"
 #include "u_uac1.h"

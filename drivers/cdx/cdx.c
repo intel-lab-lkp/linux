@@ -57,6 +57,7 @@
 
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
@@ -69,6 +70,7 @@
 #include <linux/dma-map-ops.h>
 #include <linux/debugfs.h>
 #include "cdx.h"
+#include <linux/sprintf.h>
 
 /* Default DMA mask for devices on a CDX bus */
 #define CDX_DEFAULT_DMA_MASK	(~0ULL)

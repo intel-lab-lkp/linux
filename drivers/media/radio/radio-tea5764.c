@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/init.h>			/* Initdata			*/
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>		/* kernel radio structs		*/
 #include <linux/i2c.h>			/* I2C				*/
 #include <media/v4l2-common.h>

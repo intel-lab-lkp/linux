@@ -16,6 +16,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
+#include <linux/completion.h>
 
 #include <soc/microchip/mpfs.h>
 

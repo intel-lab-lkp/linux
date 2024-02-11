@@ -9,6 +9,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/irqreturn.h>
 #include <linux/kernel.h>
 #include <linux/log2.h>
@@ -16,6 +17,7 @@
 #include <linux/ratelimit.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 
 #include <media/v4l2-common.h>

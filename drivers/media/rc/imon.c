@@ -21,8 +21,10 @@
 #include <linux/ktime.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/ratelimit.h>
+#include <linux/completion.h>
 
 #include <linux/input.h>
 #include <linux/usb.h>

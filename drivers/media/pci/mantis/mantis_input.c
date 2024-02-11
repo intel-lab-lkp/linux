@@ -8,6 +8,7 @@
 
 #include <media/rc-core.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <media/dmxdev.h>
 #include <media/dvbdev.h>

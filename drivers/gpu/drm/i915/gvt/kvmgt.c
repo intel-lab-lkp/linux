@@ -37,6 +37,7 @@
 #include <linux/mm.h>
 #include <linux/kthread.h>
 #include <linux/sched/mm.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/rbtree.h>

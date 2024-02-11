@@ -17,6 +17,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/gpio/consumer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/mfd/wm831x/core.h>
 #include <linux/mfd/wm831x/regulator.h>

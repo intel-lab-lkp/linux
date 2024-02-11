@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/seq_file.h>
+#include <linux/completion.h>
 
 #include <video/omapfb_dss.h>
 

@@ -12,6 +12,7 @@
 #include <linux/pm.h>
 #include <linux/rmi.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/of.h>
 #include "rmi_bus.h"

@@ -20,6 +20,7 @@
 #include "rsi_sdio.h"
 #include "rsi_common.h"
 #include "rsi_ps.h"
+#include <linux/completion.h>
 
 static const struct ieee80211_channel rsi_2ghz_channels[] = {
 	{ .band = NL80211_BAND_2GHZ, .center_freq = 2412,

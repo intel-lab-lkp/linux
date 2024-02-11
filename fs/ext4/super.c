@@ -18,6 +18,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/fs.h>
 #include <linux/time.h>
@@ -26,6 +27,7 @@
 #include <linux/init.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
+#include <linux/completion.h>
 #include <linux/parser.h>
 #include <linux/buffer_head.h>
 #include <linux/exportfs.h>
@@ -43,6 +45,8 @@
 #include <linux/iversion.h>
 #include <linux/unicode.h>
 #include <linux/part_stat.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kobject.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/fsnotify.h>

@@ -8,6 +8,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/of_graph.h>
 #include <linux/pm_runtime.h>
+#include <linux/completion.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

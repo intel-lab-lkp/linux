@@ -15,6 +15,7 @@
 
 #include "boot.h"
 #include "cpustr.h"
+#include <linux/sprintf.h>
 
 static char *cpu_name(int level)
 {

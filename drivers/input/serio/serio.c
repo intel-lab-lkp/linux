@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 

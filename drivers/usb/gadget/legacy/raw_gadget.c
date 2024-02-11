@@ -8,16 +8,19 @@
  */
 
 #include <linux/compiler.h>
+#include <linux/completion.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/idr.h>
 #include <linux/kref.h>
+#include <linux/kstrtox.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/semaphore.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 

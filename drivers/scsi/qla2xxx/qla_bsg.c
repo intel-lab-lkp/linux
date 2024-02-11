@@ -5,6 +5,7 @@
  */
 #include "qla_def.h"
 #include "qla_gbl.h"
+#include <linux/completion.h>
 
 #include <linux/kthread.h>
 #include <linux/vmalloc.h>

@@ -8,6 +8,7 @@
 #ifndef _FC_ENCODE_H_
 #define _FC_ENCODE_H_
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <scsi/fc/fc_ms.h>
 

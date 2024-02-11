@@ -8,8 +8,10 @@
 /* Standard include files */
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 
 #define DRIVER_AUTHOR "Sam Hocevar, sam@zoy.org"

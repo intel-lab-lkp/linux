@@ -14,6 +14,7 @@
 #include <linux/ipc_namespace.h>
 #include <linux/msg.h>
 #include <linux/slab.h>
+#include <linux/uidgid.h> // for make_kuid(), make_kgid()
 #include <linux/cred.h>
 #include "util.h"
 

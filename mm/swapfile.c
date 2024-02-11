@@ -7,6 +7,7 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/mm.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/task.h>

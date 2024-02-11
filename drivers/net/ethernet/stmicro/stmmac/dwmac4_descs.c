@@ -12,6 +12,7 @@
 #include "common.h"
 #include "dwmac4.h"
 #include "dwmac4_descs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int dwmac4_wrback_get_tx_status(struct stmmac_extra_stats *x,
 				       struct dma_desc *p,

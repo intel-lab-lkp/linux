@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <drm/bridge/dw_hdmi.h>
 #include <drm/drm_edid.h>
+#include <linux/sprintf.h>
 
 #include <sound/asoundef.h>
 #include <sound/core.h>

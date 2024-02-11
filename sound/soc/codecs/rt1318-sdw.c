@@ -19,6 +19,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include "rt1318-sdw.h"
+#include <linux/completion.h>
 
 static const struct reg_sequence rt1318_blind_write[] = {
 	{ 0xc001, 0x43 },

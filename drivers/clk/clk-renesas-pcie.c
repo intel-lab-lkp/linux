@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #define RS9_REG_OE				0x0
 #define RS9_REG_SS				0x1

@@ -9,6 +9,7 @@
 
 
 #include "mv_sas.h"
+#include <linux/sprintf.h>
 
 int interrupt_coalescing = 0x80;
 

@@ -33,7 +33,9 @@
 
 #include <crypto/internal/geniv.h>
 #include <crypto/aead.h>
+#include <linux/completion.h>
 #include <linux/inetdevice.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/netdevice.h>
 #include <net/netevent.h>
 

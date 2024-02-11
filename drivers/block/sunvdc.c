@@ -6,8 +6,10 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/blk-mq.h>
+#include <linux/completion.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>
 #include <linux/slab.h>

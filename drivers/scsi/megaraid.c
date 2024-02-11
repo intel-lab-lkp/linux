@@ -29,6 +29,8 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include <linux/completion.h>

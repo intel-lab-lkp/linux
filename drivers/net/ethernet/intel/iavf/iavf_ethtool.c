@@ -2,6 +2,7 @@
 /* Copyright(c) 2013 - 2018 Intel Corporation. */
 
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 /* ethtool support for iavf */

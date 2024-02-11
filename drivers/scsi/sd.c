@@ -36,6 +36,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/bio.h>
 #include <linux/hdreg.h>
@@ -49,6 +50,7 @@
 #include <linux/delay.h>
 #include <linux/major.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/slab.h>
 #include <linux/sed-opal.h>

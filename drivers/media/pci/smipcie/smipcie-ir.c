@@ -6,6 +6,7 @@
  */
 
 #include "smipcie.h"
+#include <linux/sprintf.h>
 
 #define SMI_SAMPLE_PERIOD 83
 #define SMI_SAMPLE_IDLEMIN (10000 / SMI_SAMPLE_PERIOD)

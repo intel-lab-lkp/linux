@@ -42,6 +42,7 @@
 
 #include <linux/module.h>
 #include <linux/idr.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_user_verbs.h>
 #include <rdma/ib_addr.h>

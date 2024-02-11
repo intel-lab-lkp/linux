@@ -8,6 +8,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/security.h>

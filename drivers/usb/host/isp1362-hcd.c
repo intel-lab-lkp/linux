@@ -70,6 +70,7 @@
 #include <linux/errno.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/isp1362.h>
 #include <linux/usb/hcd.h>

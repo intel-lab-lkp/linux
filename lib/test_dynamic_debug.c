@@ -9,6 +9,8 @@
 #define pr_fmt(fmt) "test_dd: " fmt
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
+#include <asm/page.h> // for PAGE_SIZE
 
 /* run tests by reading or writing sysfs node: do_prints */
 

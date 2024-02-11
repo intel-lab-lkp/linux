@@ -31,6 +31,7 @@
 
 #include <linux/console.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/sysrq.h>
 #include <linux/vga_switcheroo.h>
 

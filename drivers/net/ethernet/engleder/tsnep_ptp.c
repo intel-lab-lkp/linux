@@ -2,6 +2,7 @@
 /* Copyright (C) 2021 Gerhard Engleder <gerhard@engleder-embedded.com> */
 
 #include "tsnep.h"
+#include <linux/sprintf.h>
 
 void tsnep_get_system_time(struct tsnep_adapter *adapter, u64 *time)
 {

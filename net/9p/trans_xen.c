@@ -12,6 +12,8 @@
 #include <xen/xen.h>
 #include <xen/xenbus.h>
 #include <xen/interface/io/9pfs.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include <linux/module.h>
 #include <linux/spinlock.h>

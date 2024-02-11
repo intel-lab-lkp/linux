@@ -137,6 +137,9 @@
  * sampling of the aggregate task states would be.
  */
 
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
+
 static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);

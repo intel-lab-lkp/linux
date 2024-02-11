@@ -14,6 +14,7 @@
 
 #include <linux/cpu.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

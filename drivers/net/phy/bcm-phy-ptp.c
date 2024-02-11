@@ -11,6 +11,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/net_tstamp.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include "bcm-phy-lib.h"

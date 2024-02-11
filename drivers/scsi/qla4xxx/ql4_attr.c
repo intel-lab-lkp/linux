@@ -7,6 +7,8 @@
 #include "ql4_def.h"
 #include "ql4_glbl.h"
 #include "ql4_dbg.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static ssize_t
 qla4_8xxx_sysfs_read_fw_dump(struct file *filep, struct kobject *kobj,

@@ -21,6 +21,7 @@
 #include <linux/irqreturn.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/regulator/consumer.h>

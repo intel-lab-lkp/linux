@@ -12,6 +12,7 @@
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>

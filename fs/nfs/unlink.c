@@ -7,6 +7,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/dcache.h>
 #include <linux/sunrpc/sched.h>
@@ -16,6 +17,7 @@
 #include <linux/wait.h>
 #include <linux/namei.h>
 #include <linux/fsnotify.h>
+#include <linux/completion.h>
 
 #include "internal.h"
 #include "nfs4_fs.h"

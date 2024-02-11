@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/printk.h>

@@ -22,6 +22,7 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include <asm/intel_scu_ipc.h>
 

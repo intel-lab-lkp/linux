@@ -29,9 +29,11 @@
 
 #include <linux/ascii85.h>
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/nmi.h>
 #include <linux/pagevec.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/utsname.h>
 #include <linux/zlib.h>

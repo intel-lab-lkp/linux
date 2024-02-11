@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 
 #include <net/netfilter/nf_conntrack_helper.h>

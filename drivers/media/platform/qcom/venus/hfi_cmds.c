@@ -3,6 +3,7 @@
  * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  * Copyright (C) 2017 Linaro Ltd.
  */
+#include <linux/kernel.h> // for lower_32_bits(), upper_32_bits()
 #include <linux/overflow.h>
 #include <linux/errno.h>
 #include <linux/hash.h>

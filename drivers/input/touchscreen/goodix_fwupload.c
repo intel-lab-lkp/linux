@@ -13,6 +13,7 @@
 #include <linux/firmware.h>
 #include <linux/i2c.h>
 #include "goodix.h"
+#include <linux/sprintf.h>
 
 #define GOODIX_FW_HEADER_LENGTH		sizeof(struct goodix_fw_header)
 #define GOODIX_FW_SECTION_LENGTH	0x2000

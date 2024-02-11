@@ -28,6 +28,7 @@
 #include <linux/file.h>
 #include <linux/fdtable.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/swap.h>
@@ -67,6 +68,7 @@
 #include <linux/time_namespace.h>
 #include <linux/user_events.h>
 #include <linux/rseq.h>
+#include <linux/posix-timers.h> // for posix_cpu_timers_exit()
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>

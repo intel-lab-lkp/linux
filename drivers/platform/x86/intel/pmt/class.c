@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "../vsec.h"
 #include "class.h"

@@ -27,6 +27,7 @@
 #include "chid.h"
 #include "runl.h"
 #include "runq.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <core/gpuobj.h>
 #include <subdev/bar.h>
@@ -36,6 +37,9 @@
 #include <engine/sw.h>
 
 #include <nvif/class.h>
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 void
 gf100_chan_preempt(struct nvkm_chan *chan)

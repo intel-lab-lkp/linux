@@ -14,6 +14,7 @@
 #include <linux/soundwire/sdw_registers.h>
 #include "rt712-sdca.h"
 #include "rt712-sdca-sdw.h"
+#include <linux/completion.h>
 
 static bool rt712_sdca_readable_register(struct device *dev, unsigned int reg)
 {

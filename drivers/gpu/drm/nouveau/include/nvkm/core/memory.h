@@ -2,6 +2,7 @@
 #ifndef __NVKM_MEMORY_H__
 #define __NVKM_MEMORY_H__
 #include <core/os.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 struct nvkm_device;
 struct nvkm_vma;
 struct nvkm_vmm;

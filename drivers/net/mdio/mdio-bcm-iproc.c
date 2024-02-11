@@ -13,6 +13,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #define IPROC_GPHY_MDCDIV    0x1a
 

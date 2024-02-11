@@ -17,6 +17,7 @@
 #include "zfcp_dbf.h"
 #include "zfcp_ext.h"
 #include "zfcp_fc.h"
+#include <linux/sprintf.h>
 
 static u32 dbfsize = 4;
 

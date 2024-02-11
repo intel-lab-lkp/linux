@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/notifier.h>
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/in.h>
 #include <linux/ethtool.h>

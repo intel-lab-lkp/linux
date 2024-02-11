@@ -38,10 +38,13 @@
 #define pr_fmt(fmt) "cma: " fmt
 
 #include <asm/page.h>
+#include <linux/sprintf.h>
 
 #include <linux/memblock.h>
 #include <linux/err.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/dma-map-ops.h>
 #include <linux/cma.h>
 #include <linux/nospec.h>

@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/minors.h>
 #include <linux/kmod.h>

@@ -8,6 +8,7 @@
 #include <linux/mailbox_client.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
+#include <linux/completion.h>
 
 #include <soc/tegra/bpmp.h>
 #include <soc/tegra/bpmp-abi.h>

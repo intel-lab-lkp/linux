@@ -120,6 +120,7 @@
 #include <linux/mdio.h>
 #include <linux/phy.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include "xgbe.h"
 #include "xgbe-common.h"

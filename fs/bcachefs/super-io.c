@@ -22,6 +22,7 @@
 #include "vstructs.h"
 
 #include <linux/backing-dev.h>
+#include <linux/file.h> // for fput()
 #include <linux/sort.h>
 
 static const struct blk_holder_ops bch2_sb_handle_bdev_ops = {

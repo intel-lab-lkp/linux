@@ -16,6 +16,7 @@
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 
 #define LUT_MAX_ENTRIES			40U

@@ -13,11 +13,14 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #define USB_VENDOR_ID_NZXT		0x1e71
 #define USB_PRODUCT_ID_X53		0x2007

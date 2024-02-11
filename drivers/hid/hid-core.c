@@ -23,6 +23,7 @@
 #include <asm/unaligned.h>
 #include <asm/byteorder.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>

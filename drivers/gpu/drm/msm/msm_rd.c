@@ -32,6 +32,7 @@
 #include <linux/circ_buf.h>
 #include <linux/debugfs.h>
 #include <linux/kfifo.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 

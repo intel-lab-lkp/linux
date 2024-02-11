@@ -16,9 +16,11 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/libiscsi.h>
 #include "bnx2i.h"
+#include <linux/completion.h>
 
 struct scsi_transport_template *bnx2i_scsi_xport_template;
 struct iscsi_transport bnx2i_iscsi_transport;

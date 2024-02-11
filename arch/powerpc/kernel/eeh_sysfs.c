@@ -8,6 +8,7 @@
  */
 #include <linux/of.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <asm/ppc-pci.h>
 #include <asm/pci-bridge.h>

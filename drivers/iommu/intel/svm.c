@@ -15,9 +15,11 @@
 #include <linux/dmar.h>
 #include <linux/interrupt.h>
 #include <linux/mm_types.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <asm/page.h>
 #include <asm/fpu/api.h>
+#include <linux/completion.h>
 
 #include "iommu.h"
 #include "pasid.h"

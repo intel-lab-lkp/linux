@@ -14,6 +14,7 @@
  */
 #include <linux/device.h>
 #include "tpm.h"
+#include <linux/sprintf.h>
 
 struct tpm_readpubek_out {
 	u8 algorithm[4];

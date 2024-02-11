@@ -11,6 +11,7 @@
 #include "pci_irq.h"
 #include "lib/sf.h"
 #include "lib/eq.h"
+#include <linux/sprintf.h>
 #ifdef CONFIG_RFS_ACCEL
 #include <linux/cpu_rmap.h>
 #endif

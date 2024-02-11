@@ -7,14 +7,17 @@
 
 #include <linux/atomic.h>
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include "internals.h"

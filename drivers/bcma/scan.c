@@ -7,6 +7,7 @@
 
 #include "scan.h"
 #include "bcma_private.h"
+#include <linux/sprintf.h>
 
 #include <linux/bcma/bcma.h>
 #include <linux/bcma/bcma_regs.h>

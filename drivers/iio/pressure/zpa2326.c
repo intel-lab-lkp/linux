@@ -66,6 +66,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <asm/unaligned.h>
 #include "zpa2326.h"
+#include <linux/completion.h>
 
 /* 200 ms should be enough for the longest conversion time in one-shot mode. */
 #define ZPA2326_CONVERSION_JIFFIES (HZ / 5)

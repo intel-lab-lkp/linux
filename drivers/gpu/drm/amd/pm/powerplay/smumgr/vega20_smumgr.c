@@ -32,6 +32,7 @@
 #include "smu_ucode_xfer_vi.h"
 #include "smu7_smumgr.h"
 #include "vega20_hwmgr.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "smu_v11_0_i2c.h"
 

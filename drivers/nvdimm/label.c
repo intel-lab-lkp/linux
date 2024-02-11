@@ -4,6 +4,7 @@
  */
 #include <linux/device.h>
 #include <linux/ndctl.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <linux/slab.h>
 #include <linux/io.h>

@@ -28,6 +28,8 @@
 #include "page_track.h"
 #include "cpuid.h"
 #include "spte.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 
 #include <linux/kvm_host.h>
 #include <linux/types.h>
@@ -36,6 +38,7 @@
 #include <linux/highmem.h>
 #include <linux/moduleparam.h>
 #include <linux/export.h>
+#include <linux/shrinker.h>
 #include <linux/swap.h>
 #include <linux/hugetlb.h>
 #include <linux/compiler.h>

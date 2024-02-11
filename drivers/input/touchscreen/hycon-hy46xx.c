@@ -12,6 +12,7 @@
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regmap.h>
 

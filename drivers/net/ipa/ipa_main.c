@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/bug.h>
 #include <linux/io.h>

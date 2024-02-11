@@ -31,6 +31,7 @@
 #include "amdgpu_psp.h"
 #include "nv.h"
 #include "nvd.h"
+#include <linux/sprintf.h>
 
 #include "gc/gc_10_1_0_offset.h"
 #include "gc/gc_10_1_0_sh_mask.h"

@@ -7,6 +7,7 @@
 
 #include <linux/interconnect.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include "msm_drv.h"
 

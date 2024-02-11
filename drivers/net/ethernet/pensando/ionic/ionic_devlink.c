@@ -3,6 +3,7 @@
 
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 
 #include "ionic.h"
 #include "ionic_bus.h"

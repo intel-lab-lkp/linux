@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define MAX_NAME_LEN	7
 

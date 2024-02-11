@@ -6,11 +6,13 @@
 
 #include <linux/debugfs.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/pm_opp.h>
 #include <linux/sort.h>
 #include <linux/clk.h>
 #include <linux/bitmap.h>
+#include <linux/sprintf.h>
 
 #include "dpu_kms.h"
 #include "dpu_trace.h"

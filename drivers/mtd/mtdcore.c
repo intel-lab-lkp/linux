@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/ptrace.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>

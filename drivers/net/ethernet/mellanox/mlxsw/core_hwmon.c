@@ -2,6 +2,8 @@
 /* Copyright (c) 2015-2018 Mellanox Technologies. All rights reserved */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/sysfs.h>

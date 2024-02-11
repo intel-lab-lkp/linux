@@ -24,6 +24,7 @@
 #include <linux/regmap.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #define MTK_STAR_DRVNAME			"mtk_star_emac"
 

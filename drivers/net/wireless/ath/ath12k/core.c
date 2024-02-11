@@ -14,6 +14,8 @@
 #include "dp_rx.h"
 #include "debug.h"
 #include "hif.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 unsigned int ath12k_debug_mask;
 module_param_named(debug_mask, ath12k_debug_mask, uint, 0644);

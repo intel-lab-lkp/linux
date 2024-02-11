@@ -17,6 +17,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include "wcn36xx.h"
 #include "debug.h"

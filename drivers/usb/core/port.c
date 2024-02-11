@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/pm_qos.h>
 #include <linux/component.h>
+#include <linux/sprintf.h>
 
 #include "hub.h"
 

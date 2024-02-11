@@ -2,6 +2,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/dmi.h>
@@ -10,6 +11,7 @@
 #include <linux/random.h>
 #include <asm/dmi.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #ifndef SMBIOS_ENTRY_POINT_SCAN_START
 #define SMBIOS_ENTRY_POINT_SCAN_START 0xF0000

@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-common.h>

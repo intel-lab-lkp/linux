@@ -9,10 +9,13 @@
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/hex.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/nvme.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/wait.h>
 #include <linux/inet.h>

@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/pstore.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/ucs2_string.h>
 
 MODULE_IMPORT_NS(EFIVAR);

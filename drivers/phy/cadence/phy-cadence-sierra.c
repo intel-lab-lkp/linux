@@ -22,6 +22,7 @@
 #include <linux/of_platform.h>
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/phy/phy-cadence.h>
+#include <linux/sprintf.h>
 
 #define NUM_SSC_MODE		3
 #define NUM_PHY_TYPE		5

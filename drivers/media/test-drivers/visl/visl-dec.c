@@ -14,6 +14,7 @@
 #include "visl-trace-h264.h"
 #include "visl-trace-hevc.h"
 #include "visl-trace-av1.h"
+#include <linux/sprintf.h>
 
 #include <linux/delay.h>
 #include <linux/workqueue.h>

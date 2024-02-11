@@ -9,6 +9,7 @@
 #include "mac.h"
 #include "coex.h"
 #include "debug.h"
+#include <linux/completion.h>
 
 static int rtw_ips_pwr_up(struct rtw_dev *rtwdev)
 {

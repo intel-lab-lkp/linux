@@ -4,6 +4,7 @@
  * Copyright (c)  2003-2014 QLogic Corporation
  */
 #include "qla_def.h"
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/pci.h>

@@ -13,10 +13,12 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of.h>
 #include <linux/of_dma.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include "virt-dma.h"
 #include "fsldma.h"

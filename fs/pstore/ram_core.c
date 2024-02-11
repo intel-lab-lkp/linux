@@ -15,6 +15,7 @@
 #include <linux/memblock.h>
 #include <linux/rslib.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>

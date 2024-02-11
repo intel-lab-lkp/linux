@@ -19,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <asm/ccwdev.h>

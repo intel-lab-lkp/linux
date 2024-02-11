@@ -8,12 +8,17 @@
 
 #define pr_fmt(fmt) "xen-blkback: " fmt
 
+#include <linux/file.h> // for fput()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/pagemap.h>
+#include <linux/sprintf.h>
 #include <xen/events.h>
 #include <xen/grant_table.h>
 #include "common.h"
+#include <linux/completion.h>
 
 /* On the XenBus the max length of 'ring-ref%u'. */
 #define RINGREF_NAME_LEN (20)

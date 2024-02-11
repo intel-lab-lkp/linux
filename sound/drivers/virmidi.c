@@ -28,6 +28,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>

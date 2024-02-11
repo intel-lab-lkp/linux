@@ -5,6 +5,7 @@
  */
 
 #include "netdev.h"
+#include <linux/completion.h>
 
 #define WILC_HIF_SCAN_TIMEOUT_MS                5000
 #define WILC_HIF_CONNECT_TIMEOUT_MS             9500

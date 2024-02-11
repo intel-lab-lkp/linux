@@ -33,6 +33,8 @@
 
 #include <linux/file.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/mm.h>

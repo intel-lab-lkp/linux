@@ -25,6 +25,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
 #include <linux/slab.h>
@@ -36,6 +37,7 @@
 #include <asm/mce.h>
 #include <asm/processor.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

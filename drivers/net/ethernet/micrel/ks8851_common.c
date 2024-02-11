@@ -19,6 +19,7 @@
 #include <linux/mii.h>
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>

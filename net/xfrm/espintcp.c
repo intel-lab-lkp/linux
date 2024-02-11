@@ -4,6 +4,7 @@
 #include <net/xfrm.h>
 #include <net/esp.h>
 #include <net/espintcp.h>
+#include <linux/bvec.h>
 #include <linux/skmsg.h>
 #include <net/inet_common.h>
 #include <trace/events/sock.h>

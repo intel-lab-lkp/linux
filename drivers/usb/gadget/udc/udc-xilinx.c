@@ -12,6 +12,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
@@ -21,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/prefetch.h>
+#include <linux/sprintf.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 

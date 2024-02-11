@@ -4,6 +4,7 @@
 #include <linux/skbuff.h>
 #include "hclge_main.h"
 #include "hnae3.h"
+#include <linux/sprintf.h>
 
 static int hclge_ptp_get_cycle(struct hclge_dev *hdev)
 {

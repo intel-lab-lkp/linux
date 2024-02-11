@@ -7,6 +7,7 @@
 #include <linux/moduleparam.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
+#include <linux/completion.h>
 
 #include "wil6210.h"
 #include "txrx.h"

@@ -53,6 +53,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 

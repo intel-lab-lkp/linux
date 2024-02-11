@@ -8,6 +8,7 @@
 
 #include <linux/errno.h>
 #include <linux/file.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/kvm_host.h>
 #include <linux/list.h>
 #include <linux/module.h>

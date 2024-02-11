@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/mempool.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "cifspdu.h"
 #include "cifsglob.h"
@@ -19,6 +20,7 @@
 #include "cifs_unicode.h"
 #include "smb2pdu.h"
 #include "cifsfs.h"
+#include <linux/completion.h>
 #ifdef CONFIG_CIFS_DFS_UPCALL
 #include "dns_resolve.h"
 #include "dfs_cache.h"

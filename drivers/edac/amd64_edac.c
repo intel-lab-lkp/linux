@@ -2,6 +2,8 @@
 #include <linux/ras.h>
 #include "amd64_edac.h"
 #include <asm/amd_nb.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static struct edac_pci_ctl_info *pci_ctl;
 

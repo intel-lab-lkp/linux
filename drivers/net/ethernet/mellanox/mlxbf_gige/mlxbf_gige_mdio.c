@@ -20,6 +20,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 #include "mlxbf_gige.h"
 #include "mlxbf_gige_regs.h"

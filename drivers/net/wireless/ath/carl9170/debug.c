@@ -40,6 +40,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include "carl9170.h"
 #include "cmd.h"

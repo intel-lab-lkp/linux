@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/limits.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "opp.h"
 

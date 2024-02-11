@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>

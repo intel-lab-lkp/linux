@@ -15,10 +15,12 @@
 #include <linux/security.h>
 #include <linux/spinlock.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 #include <linux/tracefs.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/kstrtox.h>
 #include <linux/sort.h>
 #include <linux/slab.h>
 #include <linux/delay.h>

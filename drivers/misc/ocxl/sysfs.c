@@ -2,6 +2,8 @@
 // Copyright 2017 IBM Corp.
 #include <linux/sysfs.h>
 #include "ocxl_internal.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static inline struct ocxl_afu *to_afu(struct device *device)
 {

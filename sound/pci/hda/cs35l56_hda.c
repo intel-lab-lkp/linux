@@ -13,6 +13,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/hda_codec.h>
 #include <sound/tlv.h>

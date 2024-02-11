@@ -22,6 +22,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 
 #include "rswitch.h"

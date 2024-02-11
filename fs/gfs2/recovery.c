@@ -5,6 +5,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/blkdev.h> // for bdev_read_only()
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
@@ -13,6 +14,7 @@
 #include <linux/crc32.h>
 #include <linux/crc32c.h>
 #include <linux/ktime.h>
+#include <linux/sprintf.h>
 
 #include "gfs2.h"
 #include "incore.h"

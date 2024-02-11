@@ -16,6 +16,7 @@
 #include <linux/msi.h>
 #include <linux/pci.h>
 #include <linux/file.h>
+#include <linux/sprintf.h>
 #include <linux/vfio.h>
 #include <linux/wait.h>
 #include <linux/slab.h>

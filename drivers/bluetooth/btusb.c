@@ -7,13 +7,16 @@
  */
 
 #include <linux/dmi.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/quirks.h>
 #include <linux/firmware.h>
 #include <linux/iopoll.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/gpio/consumer.h>
 #include <linux/debugfs.h>

@@ -14,6 +14,7 @@
 #include <linux/list.h>
 #include <linux/kthread.h>
 #include <linux/phylink.h>
+#include <linux/sprintf.h>
 #include <scsi/libfc.h>
 #include <scsi/scsi_host.h>
 #include <scsi/fc_frame.h>
@@ -22,6 +23,7 @@
 #include <linux/cpu.h>
 #include "qedf.h"
 #include "qedf_dbg.h"
+#include <linux/completion.h>
 #include <uapi/linux/pci_regs.h>
 
 const struct qed_fcoe_ops *qed_ops;

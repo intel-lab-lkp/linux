@@ -37,6 +37,7 @@
 #include <linux/reset.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/regulator/consumer.h>
 

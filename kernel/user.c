@@ -20,6 +20,8 @@
 #include <linux/user_namespace.h>
 #include <linux/binfmts.h>
 #include <linux/proc_ns.h>
+#include <linux/ratelimit.h>
+#include <linux/uidgid.h>
 
 #if IS_ENABLED(CONFIG_BINFMT_MISC)
 struct binfmt_misc init_binfmt_misc = {

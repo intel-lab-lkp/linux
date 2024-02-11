@@ -12,6 +12,7 @@
 #include "hpidspcd.h"
 #include "hpidebug.h"
 #include "hpi_version.h"
+#include <linux/sprintf.h>
 
 struct dsp_code_private {
 	/**  Firmware descriptor */

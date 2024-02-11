@@ -9,6 +9,8 @@
 #include "otx2_cptpf.h"
 #include "cn10k_cpt.h"
 #include "rvu_reg.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define OTX2_CPT_DRV_NAME    "rvu_cptpf"
 #define OTX2_CPT_DRV_STRING  "Marvell RVU CPT Physical Function Driver"

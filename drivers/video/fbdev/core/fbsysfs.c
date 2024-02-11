@@ -8,7 +8,9 @@
 #include <linux/console.h>
 #include <linux/fb.h>
 #include <linux/fbcon.h>
+#include <linux/kstrtox.h>
 #include <linux/major.h>
+#include <linux/sprintf.h>
 
 #include "fb_internal.h"
 

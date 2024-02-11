@@ -52,6 +52,7 @@
 #include <linux/delay.h>	/* for mdelay */
 #include <linux/interrupt.h>
 #include <linux/reboot.h>	/* notifier code */
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sort.h>
 #include <linux/slab.h>

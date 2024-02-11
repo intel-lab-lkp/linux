@@ -122,6 +122,9 @@
 
 #include "aic7xxx_osm.h"
 #include "aic7xxx_inline.h"
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <scsi/scsicam.h>
 
 static struct scsi_transport_template *ahc_linux_transport_template = NULL;

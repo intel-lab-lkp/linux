@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
+#include <linux/sprintf.h>
 #include <linux/syscore_ops.h>
 #include <linux/rwsem.h>
 #include <linux/cpu.h>

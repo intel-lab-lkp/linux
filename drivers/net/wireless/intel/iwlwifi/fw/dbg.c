@@ -13,6 +13,7 @@
 #include "iwl-prph.h"
 #include "iwl-csr.h"
 #include "iwl-fh.h"
+#include <linux/sprintf.h>
 /**
  * struct iwl_fw_dump_ptrs - set of pointers needed for the fw-error-dump
  *

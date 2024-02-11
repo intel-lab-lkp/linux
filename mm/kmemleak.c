@@ -60,6 +60,7 @@
 
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>

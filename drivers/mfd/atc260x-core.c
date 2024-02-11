@@ -7,6 +7,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/mfd/atc260x/core.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>

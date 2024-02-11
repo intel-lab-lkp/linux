@@ -9,6 +9,7 @@
 #include <sound/core.h>
 #include <sound/control.h>
 #include "pcsp.h"
+#include <linux/sprintf.h>
 
 
 static int pcsp_enable_info(struct snd_kcontrol *kcontrol,

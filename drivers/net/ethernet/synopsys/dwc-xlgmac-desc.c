@@ -17,6 +17,7 @@
 
 #include "dwc-xlgmac.h"
 #include "dwc-xlgmac-reg.h"
+#include <linux/sprintf.h>
 
 static void xlgmac_unmap_desc_data(struct xlgmac_pdata *pdata,
 				   struct xlgmac_desc_data *desc_data)

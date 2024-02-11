@@ -22,6 +22,7 @@
 
 #include <linux/blkdev.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/idr.h>
@@ -31,6 +32,7 @@
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <scsi/scsi.h>

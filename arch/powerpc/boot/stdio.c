@@ -7,6 +7,7 @@
 #include "string.h"
 #include "stdio.h"
 #include "ops.h"
+#include <linux/sprintf.h>
 
 size_t strnlen(const char * s, size_t count)
 {

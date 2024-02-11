@@ -8,6 +8,8 @@
 #include <linux/security.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/rculist.h>

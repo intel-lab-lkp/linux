@@ -9,6 +9,7 @@
 #include "hns_roce_device.h"
 #include "hns_roce_cmd.h"
 #include "hns_roce_hem.h"
+#include <linux/completion.h>
 
 void hns_roce_srq_event(struct hns_roce_dev *hr_dev, u32 srqn, int event_type)
 {

@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>

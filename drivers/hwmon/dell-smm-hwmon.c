@@ -31,6 +31,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/thermal.h>
 #include <linux/types.h>

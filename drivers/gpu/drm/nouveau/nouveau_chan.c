@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs
  */
 #include <nvif/push006c.h>
+#include <linux/sprintf.h>
 
 #include <nvif/class.h>
 #include <nvif/cl0002.h>

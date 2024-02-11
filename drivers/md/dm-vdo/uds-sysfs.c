@@ -8,6 +8,7 @@
 #include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 
 #include "logger.h"
 #include "memory-alloc.h"

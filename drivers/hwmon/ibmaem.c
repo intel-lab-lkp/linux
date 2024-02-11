@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/ipmi.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
@@ -22,8 +23,10 @@
 #include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/math64.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/err.h>
+#include <linux/completion.h>
 
 #define REFRESH_INTERVAL	(HZ)
 #define IPMI_TIMEOUT		(30 * HZ)

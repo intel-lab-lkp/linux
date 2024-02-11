@@ -8,6 +8,7 @@
 #include <linux/dma-map-ops.h>
 #include <linux/dma-direct.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/genalloc.h>
 #include <linux/set_memory.h>
 #include <linux/slab.h>

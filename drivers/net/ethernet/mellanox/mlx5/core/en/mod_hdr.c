@@ -3,6 +3,7 @@
 
 #include <linux/jhash.h>
 #include "mod_hdr.h"
+#include <linux/completion.h>
 
 #define MLX5_MH_ACT_SZ MLX5_UN_SZ_BYTES(set_add_copy_action_in_auto)
 

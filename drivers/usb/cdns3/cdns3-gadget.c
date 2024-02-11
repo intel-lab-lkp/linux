@@ -57,11 +57,14 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/usb/gadget.h>
 #include <linux/module.h>
 #include <linux/dmapool.h>
 #include <linux/iopoll.h>
 #include <linux/property.h>
+#include <linux/completion.h>
 
 #include "core.h"
 #include "gadget-export.h"

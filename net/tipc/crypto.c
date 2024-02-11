@@ -40,6 +40,8 @@
 #include "crypto.h"
 #include "msg.h"
 #include "bcast.h"
+#include <linux/hex.h>
+#include <linux/sprintf.h>
 
 #define TIPC_TX_GRACE_PERIOD	msecs_to_jiffies(5000) /* 5s */
 #define TIPC_TX_LASTING_TIME	msecs_to_jiffies(10000) /* 10s */

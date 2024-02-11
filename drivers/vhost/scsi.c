@@ -12,6 +12,9 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <generated/utsrelease.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/init.h>
 #include <linux/slab.h>

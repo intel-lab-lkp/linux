@@ -27,6 +27,7 @@
 #include "avs.h"
 #include "cldma.h"
 #include "messages.h"
+#include <linux/completion.h>
 
 static u32 pgctl_mask = AZX_PGCTL_LSRMD_MASK;
 module_param(pgctl_mask, uint, 0444);

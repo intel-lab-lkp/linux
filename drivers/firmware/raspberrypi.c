@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <soc/bcm2835/raspberrypi-firmware.h>
+#include <linux/completion.h>
 
 #define MBOX_MSG(chan, data28)		(((data28) & ~0xf) | ((chan) & 0xf))
 #define MBOX_CHAN(msg)			((msg) & 0xf)

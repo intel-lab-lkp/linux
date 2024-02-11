@@ -46,8 +46,10 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/ratelimit.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/jiffies.h>
 #include <linux/sched/mm.h>
 

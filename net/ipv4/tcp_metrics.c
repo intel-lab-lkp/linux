@@ -2,6 +2,7 @@
 #include <linux/rcupdate.h>
 #include <linux/spinlock.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/cache.h>
 #include <linux/slab.h>

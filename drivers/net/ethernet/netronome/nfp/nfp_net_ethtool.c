@@ -19,6 +19,7 @@
 #include <linux/ethtool.h>
 #include <linux/firmware.h>
 #include <linux/sfp.h>
+#include <linux/sprintf.h>
 
 #include "nfpcore/nfp.h"
 #include "nfpcore/nfp_dev.h"

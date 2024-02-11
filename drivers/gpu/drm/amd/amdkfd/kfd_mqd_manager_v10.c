@@ -31,6 +31,7 @@
 #include "gc/gc_10_1_0_offset.h"
 #include "gc/gc_10_1_0_sh_mask.h"
 #include "amdgpu_amdkfd.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static inline struct v10_compute_mqd *get_mqd(void *mqd)
 {

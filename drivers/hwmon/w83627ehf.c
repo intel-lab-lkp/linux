@@ -34,6 +34,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/platform_device.h>
@@ -45,6 +46,7 @@
 #include <linux/acpi.h>
 #include <linux/io.h>
 #include "lm75.h"
+#include <linux/sprintf.h>
 
 enum kinds {
 	w83627ehf, w83627dhg, w83627dhg_p, w83627uhg,

@@ -34,6 +34,7 @@
 #include <net/addrconf.h>
 #include <linux/etherdevice.h>
 #include <linux/mlx5/vport.h>
+#include <linux/completion.h>
 
 #include "mlx5_core.h"
 #include "lib/mlx5.h"

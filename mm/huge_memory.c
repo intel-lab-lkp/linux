@@ -12,6 +12,7 @@
 #include <linux/sched/numa_balancing.h>
 #include <linux/highmem.h>
 #include <linux/hugetlb.h>
+#include <linux/kstrtox.h>
 #include <linux/mmu_notifier.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>

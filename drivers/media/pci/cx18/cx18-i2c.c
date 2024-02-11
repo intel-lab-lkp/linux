@@ -14,6 +14,7 @@
 #include "cx18-gpio.h"
 #include "cx18-i2c.h"
 #include "cx18-irq.h"
+#include <linux/sprintf.h>
 
 #define CX18_REG_I2C_1_WR   0xf15000
 #define CX18_REG_I2C_1_RD   0xf15008

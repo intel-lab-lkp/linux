@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/hrtimer.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>

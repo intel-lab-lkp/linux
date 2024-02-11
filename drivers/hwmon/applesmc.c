@@ -18,11 +18,13 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/dmi.h>
 #include <linux/mutex.h>

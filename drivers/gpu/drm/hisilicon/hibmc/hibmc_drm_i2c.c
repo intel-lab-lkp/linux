@@ -11,6 +11,7 @@
 
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_probe_helper.h>

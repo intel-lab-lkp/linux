@@ -23,6 +23,8 @@
  *    - CRC error count sum
  */
 #include <linux/acpi.h>
+#include <linux/completion.h>
+#include <linux/kobject.h>
 #include <linux/iopoll.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>

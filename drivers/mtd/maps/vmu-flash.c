@@ -12,6 +12,7 @@
 #include <linux/maple.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
+#include <linux/sprintf.h>
 
 struct vmu_cache {
 	unsigned char *buffer;		/* Cache */

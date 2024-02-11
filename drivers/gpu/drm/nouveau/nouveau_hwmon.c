@@ -24,6 +24,8 @@
 
 #ifdef CONFIG_ACPI
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #endif
 #include <linux/power_supply.h>
 #include <linux/hwmon.h>

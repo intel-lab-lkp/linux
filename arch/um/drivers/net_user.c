@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/socket.h>

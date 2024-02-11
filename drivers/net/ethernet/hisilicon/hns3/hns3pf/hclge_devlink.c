@@ -2,6 +2,7 @@
 /* Copyright (c) 2021 Hisilicon Limited. */
 
 #include <net/devlink.h>
+#include <linux/sprintf.h>
 
 #include "hclge_devlink.h"
 

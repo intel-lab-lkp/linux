@@ -36,6 +36,7 @@
  */
 
 #include <linux/param.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/mm.h>
 #include <linux/errno.h>

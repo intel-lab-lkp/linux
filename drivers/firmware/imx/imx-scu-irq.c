@@ -12,6 +12,7 @@
 #include <linux/kobject.h>
 #include <linux/mailbox_client.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/sysfs.h>
 

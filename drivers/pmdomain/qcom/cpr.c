@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/list.h>

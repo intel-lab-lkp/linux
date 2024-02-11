@@ -41,6 +41,7 @@
 #include <linux/if_infiniband.h>
 #include "core.h"
 #include "bearer.h"
+#include <linux/sprintf.h>
 
 #define TIPC_MAX_IB_LINK_WIN 500
 

@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/list.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>

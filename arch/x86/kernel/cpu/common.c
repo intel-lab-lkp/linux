@@ -7,7 +7,9 @@
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/percpu.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>

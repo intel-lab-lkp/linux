@@ -11,8 +11,10 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/usb/composite.h>
 
 #include "g_zero.h"

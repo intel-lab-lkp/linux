@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/if_vlan.h>
 #include <linux/iommu.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>

@@ -9,6 +9,10 @@
 #include <linux/mailbox_controller.h>
 #include <linux/mailbox_client.h>
 
+#ifndef CONFIG_PCC
+#include <linux/err.h> // for ERR_PTR()
+#endif
+
 struct pcc_mbox_chan {
 	struct mbox_chan *mchan;
 	u64 shmem_base_addr;

@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 #include <linux/pm_clock.h>
 #include <linux/acpi.h>
 #include <linux/pm_domain.h>

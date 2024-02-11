@@ -9,6 +9,7 @@
 #include <linux/clk-provider.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include "meson-mx-sdhc.h"
 

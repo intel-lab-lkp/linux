@@ -29,10 +29,12 @@
 #include <linux/resume_user_mode.h>
 #include <linux/psi.h>
 #include <linux/part_stat.h>
+#include <linux/hrtimer.h>
 #include "blk.h"
 #include "blk-cgroup.h"
 #include "blk-ioprio.h"
 #include "blk-throttle.h"
+#include <linux/sprintf.h>
 
 static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu);
 

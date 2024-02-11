@@ -53,6 +53,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/sched/signal.h>
 #include <linux/device.h>
@@ -64,6 +65,7 @@
 #include <linux/major.h>
 #include <linux/ppdev.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
 

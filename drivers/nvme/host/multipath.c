@@ -5,6 +5,7 @@
 
 #include <linux/backing-dev.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <trace/events/block.h>
 #include "nvme.h"

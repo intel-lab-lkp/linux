@@ -8,6 +8,7 @@
 
 #include <linux/err.h>
 #include <linux/ratelimit.h>
+#include <linux/sprintf.h>
 #include <linux/key-type.h>
 #include <crypto/public_key.h>
 #include <crypto/hash_info.h>

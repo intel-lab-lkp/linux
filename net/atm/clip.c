@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/timer.h>
 #include <linux/if_arp.h> /* for some manifest constants */

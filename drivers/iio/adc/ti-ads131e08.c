@@ -10,6 +10,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 

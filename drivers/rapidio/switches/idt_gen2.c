@@ -12,6 +12,7 @@
 #include <linux/rio_drv.h>
 #include <linux/rio_ids.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include <asm/page.h>
 #include "../rio.h"

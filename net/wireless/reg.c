@@ -54,6 +54,7 @@
 #include <linux/ctype.h>
 #include <linux/nl80211.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/verification.h>
 #include <linux/moduleparam.h>
 #include <linux/firmware.h>

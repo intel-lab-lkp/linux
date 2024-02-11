@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/key.h>
 #include <linux/module.h>
+#include <linux/uidgid.h>
 #include "x509_parser.h"
 
 struct certs_test {

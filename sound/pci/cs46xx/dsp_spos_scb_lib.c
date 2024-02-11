@@ -12,6 +12,7 @@
 #include <linux/pm.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/mutex.h>
 
 #include <sound/core.h>

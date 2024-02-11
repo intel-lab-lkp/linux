@@ -16,6 +16,7 @@
 #include <linux/ioport.h>
 #include <linux/log2.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>

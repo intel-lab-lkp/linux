@@ -38,6 +38,7 @@
 #include "i915_reg.h"
 #include "gt/intel_ggtt_fencing.h"
 #include "gvt.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int alloc_gm(struct intel_vgpu *vgpu, bool high_gm)
 {

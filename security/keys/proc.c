@@ -10,6 +10,8 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
+#include <linux/timekeeping.h> // for ktime_get_real_seconds()
 #include <asm/errno.h>
 #include "internal.h"
 

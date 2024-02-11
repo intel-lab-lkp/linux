@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/sched/clock.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct cpufreq_stats {
 	unsigned int total_trans;

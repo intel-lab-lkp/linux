@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 /* Tests for error return values rely upon this value being < 0x80 */
 #define MAGIC_NUMBER 0x55

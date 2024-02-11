@@ -11,6 +11,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/mm.h>

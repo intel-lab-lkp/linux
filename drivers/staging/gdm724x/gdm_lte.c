@@ -6,6 +6,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/in.h>
 #include <linux/if_arp.h>

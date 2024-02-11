@@ -36,12 +36,14 @@
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sunrpc/svc_xprt.h>
 #include <net/net_namespace.h>
 #include "idmap.h"
 #include "nfsd.h"
 #include "netns.h"
 #include "vfs.h"
+#include <linux/kstrtox.h>
 
 /*
  * Turn off idmapping when using AUTH_SYS.

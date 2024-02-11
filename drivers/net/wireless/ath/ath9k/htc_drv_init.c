@@ -17,6 +17,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "htc.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 MODULE_AUTHOR("Atheros Communications");
 MODULE_LICENSE("Dual BSD/GPL");

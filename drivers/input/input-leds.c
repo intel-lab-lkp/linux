@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/leds.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 
 #if IS_ENABLED(CONFIG_VT)
 #define VT_TRIGGER(_name)	.trigger = _name

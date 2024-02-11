@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 

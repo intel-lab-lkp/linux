@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <linux/kernel.h> // for trace_printk()
 #include <linux/module.h>
 
 #include <linux/sched.h> /* for wake_up_process() */

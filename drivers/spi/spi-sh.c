@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/spi/spi.h>
+#include <linux/completion.h>
 
 #define SPI_SH_TBR		0x00
 #define SPI_SH_RBR		0x00

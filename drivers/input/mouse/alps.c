@@ -18,6 +18,7 @@
 #include <linux/serio.h>
 #include <linux/libps2.h>
 #include <linux/dmi.h>
+#include <linux/sprintf.h>
 
 #include "psmouse.h"
 #include "alps.h"

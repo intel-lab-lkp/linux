@@ -12,6 +12,7 @@
 #include <linux/prctl.h>
 #include <linux/seq_buf.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include <asm/asm-prototypes.h>
 #include <asm/code-patching.h>

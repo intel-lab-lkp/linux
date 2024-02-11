@@ -5,6 +5,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/filter.h>
 #include <linux/bpf.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/rcupdate_trace.h>
 
 struct bpf_iter_target_info {

@@ -6,6 +6,7 @@
  */
 
 #include <linux/cache.h>
+#include <linux/completion.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
 #include <linux/kernel.h>

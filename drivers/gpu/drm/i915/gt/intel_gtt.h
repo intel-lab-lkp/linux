@@ -17,6 +17,7 @@
 #define __INTEL_GTT_H__
 
 #include <linux/io-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kref.h>
 #include <linux/mm.h>
 #include <linux/pagevec.h>

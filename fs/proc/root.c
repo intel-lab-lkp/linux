@@ -7,12 +7,15 @@
  *  proc root directory handling functions
  */
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/sched/stat.h>
+#include <linux/shrinker.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/bitops.h>
 #include <linux/user_namespace.h>

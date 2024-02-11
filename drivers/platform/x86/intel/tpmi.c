@@ -50,6 +50,7 @@
 #include <linux/bitfield.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/idr.h>
 #include <linux/intel_tpmi.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -57,6 +58,7 @@
 #include <linux/pci.h>
 #include <linux/security.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include "vsec.h"

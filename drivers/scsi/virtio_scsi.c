@@ -23,6 +23,7 @@
 #include <linux/cpu.h>
 #include <linux/blkdev.h>
 #include <linux/blk-integrity.h>
+#include <linux/completion.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_cmnd.h>

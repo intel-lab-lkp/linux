@@ -42,6 +42,7 @@
 #include <linux/ioport.h>
 #include <linux/io.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include <sound/rawmidi.h>

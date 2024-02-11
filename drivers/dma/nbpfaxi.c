@@ -18,6 +18,7 @@
 #include <linux/of_dma.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/dma/nbpfaxi.h>
 

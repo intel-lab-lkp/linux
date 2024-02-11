@@ -7,6 +7,7 @@
  */
 
 #include <linux/blk-crypto-profile.h>
+#include <linux/sysfs.h>
 
 #include "blk-crypto-internal.h"
 

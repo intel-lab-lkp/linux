@@ -7,6 +7,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <brcmu_utils.h>
 

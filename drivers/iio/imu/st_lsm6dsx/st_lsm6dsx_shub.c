@@ -27,6 +27,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 
 #include "st_lsm6dsx.h"
 

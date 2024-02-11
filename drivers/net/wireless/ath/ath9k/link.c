@@ -15,6 +15,7 @@
  */
 
 #include "ath9k.h"
+#include <linux/completion.h>
 
 /*
  * TX polling - checks if the TX engine is stuck somewhere

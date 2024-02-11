@@ -18,8 +18,10 @@
 
 #include <linux/bitfield.h>
 #include <linux/iopoll.h>
+#include <linux/kstrtox.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 #include <linux/util_macros.h>
 

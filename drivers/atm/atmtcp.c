@@ -5,6 +5,7 @@
 
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/atmdev.h>
 #include <linux/atm_tcp.h>

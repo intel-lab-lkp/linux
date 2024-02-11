@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/interrupt.h>
@@ -27,9 +28,11 @@
 #include <linux/regmap.h>
 #include <linux/rtnetlink.h>
 #include <linux/mfd/syscon.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/dma/ti-cppi5.h>
 #include <linux/dma/k3-udma-glue.h>
+#include <linux/hrtimer.h>
 #include <net/switchdev.h>
 
 #include "cpsw_ale.h"

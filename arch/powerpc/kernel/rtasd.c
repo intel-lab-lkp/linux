@@ -7,12 +7,14 @@
 
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/spinlock.h>
 #include <linux/cpu.h>

@@ -21,6 +21,7 @@
  *
  */
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "amdgpu.h"
 #include "amdgpu_i2c.h"

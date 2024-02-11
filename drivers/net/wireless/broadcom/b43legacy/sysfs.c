@@ -15,6 +15,8 @@
 #include "main.h"
 #include "phy.h"
 #include "radio.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/capability.h>
 

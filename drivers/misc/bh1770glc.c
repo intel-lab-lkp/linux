@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -16,6 +17,7 @@
 #include <linux/platform_data/bh1770glc.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/wait.h>

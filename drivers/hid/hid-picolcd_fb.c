@@ -8,6 +8,7 @@
  ***************************************************************************/
 
 #include <linux/hid.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <linux/fb.h>

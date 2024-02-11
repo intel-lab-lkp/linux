@@ -61,8 +61,10 @@
 
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include "ibmasm.h"

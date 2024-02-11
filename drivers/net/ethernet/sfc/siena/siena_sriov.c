@@ -16,6 +16,7 @@
 #include "farch_regs.h"
 #include "siena_sriov.h"
 #include "vfdi.h"
+#include <linux/sprintf.h>
 
 /* Number of longs required to track all the VIs in a VF */
 #define VI_MASK_LENGTH BITS_TO_LONGS(1 << EFX_VI_SCALE_MAX)

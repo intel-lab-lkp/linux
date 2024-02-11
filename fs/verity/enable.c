@@ -8,6 +8,7 @@
 #include "fsverity_private.h"
 
 #include <crypto/hash.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/mount.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>

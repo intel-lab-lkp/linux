@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 
 #include <video/of_display_timing.h>

@@ -138,6 +138,8 @@
 
 #include <linux/fs.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>

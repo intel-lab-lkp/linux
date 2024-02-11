@@ -35,6 +35,7 @@
 #include <linux/fsldma.h>
 #include "dmaengine.h"
 #include "fsldma.h"
+#include <linux/sprintf.h>
 
 #define chan_dbg(chan, fmt, arg...)					\
 	dev_dbg(chan->dev, "%s: " fmt, chan->name, ##arg)

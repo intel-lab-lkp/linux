@@ -7,6 +7,7 @@
 #include "gt/intel_hwconfig.h"
 #include "i915_drv.h"
 #include "i915_memcpy.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * GuC has a blob containing hardware configuration information (HWConfig).

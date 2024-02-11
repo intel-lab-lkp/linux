@@ -18,6 +18,7 @@
 #include "hal_rx.h"
 #include "dp_tx.h"
 #include "peer.h"
+#include <linux/completion.h>
 
 #define ATH11K_DP_RX_FRAGMENT_TIMEOUT_MS (2 * HZ)
 

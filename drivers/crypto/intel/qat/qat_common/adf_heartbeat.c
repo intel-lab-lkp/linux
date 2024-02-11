@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/kstrtox.h>
 #include <linux/overflow.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/types.h>

@@ -5,6 +5,7 @@
 
 #include "iosm_ipc_protocol.h"
 #include "iosm_ipc_protocol_ops.h"
+#include <linux/completion.h>
 
 /* Get the next free message element.*/
 static union ipc_mem_msg_entry *

@@ -3,8 +3,10 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
+#include <linux/completion.h>
 
 #include <net/mana/mana.h>
 

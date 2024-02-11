@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/fs.h>
 

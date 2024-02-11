@@ -8,6 +8,7 @@
 #include <linux/acpi.h>
 #include <linux/atomic.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
 #include <linux/dmapool.h>

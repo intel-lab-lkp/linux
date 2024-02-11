@@ -2,6 +2,7 @@
 /* Copyright (c)  2018 Intel Corporation */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/if_vlan.h>
 #include <linux/tcp.h>

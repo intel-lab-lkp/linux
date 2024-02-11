@@ -3,6 +3,7 @@
 #include <linux/device.h>
 #include <linux/cpu.h>
 #include <asm/nospec-branch.h>
+#include <linux/kstrtox.h>
 
 static int __init nobp_setup_early(char *str)
 {

@@ -10,6 +10,8 @@
 #include <linux/slab.h>
 #include "core.h"
 #include "debugfs.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define DEBUGFS_READONLY_FILE(name, buflen, fmt, value...)		\
 static ssize_t name## _read(struct file *file, char __user *userbuf,	\

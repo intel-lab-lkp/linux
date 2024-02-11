@@ -15,11 +15,13 @@
 #include <linux/slab.h>
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 #include <linux/reboot.h>
 #include <linux/string.h>
 #include <linux/of.h>
 #include <linux/suspend.h>
+#include <linux/completion.h>
 
 #define CREATE_TRACE_POINTS
 #include "thermal_trace.h"

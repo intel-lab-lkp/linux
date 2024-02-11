@@ -25,6 +25,7 @@
 #include <linux/net.h>
 #include <linux/nls.h>
 #include <linux/connector.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/hyperv.h>
 #include <asm/hyperv-tlfs.h>

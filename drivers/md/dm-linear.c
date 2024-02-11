@@ -13,6 +13,7 @@
 #include <linux/dax.h>
 #include <linux/slab.h>
 #include <linux/device-mapper.h>
+#include <linux/sprintf.h>
 
 #define DM_MSG_PREFIX "linear"
 

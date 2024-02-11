@@ -14,8 +14,10 @@
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include "bus.h"
+#include <linux/completion.h>
 
 /*
  * Array of supported rows and columns as per MIPI SoundWire Specification 1.1

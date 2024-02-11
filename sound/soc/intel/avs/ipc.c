@@ -13,6 +13,7 @@
 #include "messages.h"
 #include "registers.h"
 #include "trace.h"
+#include <linux/completion.h>
 
 #define AVS_IPC_TIMEOUT_MS	300
 #define AVS_D0IX_DELAY_MS	300

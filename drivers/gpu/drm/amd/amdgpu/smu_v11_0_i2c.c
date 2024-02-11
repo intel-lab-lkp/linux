@@ -23,6 +23,7 @@
 
 #include "smuio/smuio_11_0_0_offset.h"
 #include "smuio/smuio_11_0_0_sh_mask.h"
+#include <linux/sprintf.h>
 
 #include "smu_v11_0_i2c.h"
 #include "amdgpu.h"

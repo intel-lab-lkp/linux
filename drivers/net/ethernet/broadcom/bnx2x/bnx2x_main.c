@@ -23,6 +23,7 @@
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/device.h>  /* for dev_info() */
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
@@ -35,6 +36,7 @@
 #include <linux/skbuff.h>
 #include <linux/dma-mapping.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/irq.h>
 #include <linux/delay.h>
 #include <asm/byteorder.h>

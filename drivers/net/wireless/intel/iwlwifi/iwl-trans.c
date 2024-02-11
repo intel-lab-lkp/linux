@@ -6,6 +6,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/bsearch.h>
+#include <linux/sprintf.h>
 
 #include "fw/api/tx.h"
 #include "iwl-trans.h"

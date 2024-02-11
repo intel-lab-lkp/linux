@@ -3,10 +3,12 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
+#include <linux/bvec.h>
 #include <linux/hdreg.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_blk.h>
 #include <linux/scatterlist.h>

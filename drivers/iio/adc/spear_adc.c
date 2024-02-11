@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/completion.h>
 #include <linux/of.h>

@@ -32,6 +32,7 @@
  */
 #include <linux/errno.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "usnic_ib.h"
 #include "vnic_resource.h"

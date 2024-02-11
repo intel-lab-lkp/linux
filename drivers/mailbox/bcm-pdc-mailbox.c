@@ -26,11 +26,13 @@
  */
 
 #include <linux/errno.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>

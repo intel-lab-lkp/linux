@@ -21,6 +21,7 @@
 #include <asm/cdmm.h>
 #include <asm/hazards.h>
 #include <asm/mipsregs.h>
+#include <linux/sprintf.h>
 
 /* Access control and status register fields */
 #define CDMM_ACSR_DEVTYPE_SHIFT	24

@@ -11,6 +11,7 @@
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
 #include <linux/cpu_pm.h>
+#include <linux/gfp.h> // for __get_free_page(), free_page()
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>

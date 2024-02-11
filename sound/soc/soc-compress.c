@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <sound/core.h>
 #include <sound/compress_params.h>

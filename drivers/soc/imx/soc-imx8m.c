@@ -7,6 +7,7 @@
 #include <linux/io.h>
 #include <linux/of_address.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/platform_device.h>
 #include <linux/arm-smccc.h>

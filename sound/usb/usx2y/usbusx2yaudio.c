@@ -19,6 +19,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/moduleparam.h>
 #include <sound/core.h>

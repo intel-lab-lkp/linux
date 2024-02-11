@@ -22,6 +22,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <dt-bindings/clock/versaclock.h>
 

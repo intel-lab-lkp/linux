@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
 #include <linux/poll.h>

@@ -9,6 +9,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/limits.h>
 #include <linux/math.h>
 #include <linux/module.h>
@@ -20,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 
 #include "../pci.h"

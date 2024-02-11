@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/irq.h>
 #include <linux/io.h>

@@ -6,6 +6,7 @@
  */
 
 #include "wave5-helper.h"
+#include <linux/completion.h>
 
 #define VPU_ENC_DEV_NAME "C&M Wave5 VPU encoder"
 #define VPU_ENC_DRV_NAME "wave5-enc"

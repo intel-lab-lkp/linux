@@ -13,6 +13,7 @@
 #include <linux/atmdev.h>
 #include <linux/sonet.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/delay.h>
 #include <linux/uio.h>

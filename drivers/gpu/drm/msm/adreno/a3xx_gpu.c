@@ -7,6 +7,7 @@
  */
 
 #include "a3xx_gpu.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define A3XX_INT0_MASK \
 	(A3XX_INT0_RBBM_AHB_ERROR |        \

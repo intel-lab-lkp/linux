@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>

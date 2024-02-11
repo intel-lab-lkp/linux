@@ -23,6 +23,7 @@
 #include <linux/pstore.h>
 #include <linux/range.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 
 #include <asm/page.h>

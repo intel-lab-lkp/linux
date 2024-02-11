@@ -8,6 +8,8 @@
 #include "dm-thin-metadata.h"
 #include "dm-bio-prison-v1.h"
 #include "dm.h"
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 
 #include <linux/device-mapper.h>
 #include <linux/dm-io.h>

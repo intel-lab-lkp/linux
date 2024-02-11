@@ -184,6 +184,7 @@
 #include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/freezer.h>
 #include <linux/module.h>

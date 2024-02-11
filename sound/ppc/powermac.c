@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include "pmac.h"

@@ -7,9 +7,11 @@
 
 #include <linux/module.h>
 #include <linux/kallsyms.h>
+#include <linux/kstrtox.h>
 #include <linux/security.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stacktrace.h>
 #include <linux/rculist.h>
 #include <linux/tracefs.h>

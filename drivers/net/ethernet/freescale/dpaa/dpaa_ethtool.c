@@ -11,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/net_tstamp.h>
 #include <linux/fsl/ptp_qoriq.h>
+#include <linux/sprintf.h>
 
 #include "dpaa_eth.h"
 #include "mac.h"

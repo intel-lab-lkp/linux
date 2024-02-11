@@ -54,6 +54,7 @@
  */
 #include <linux/circ_buf.h>
 #include <linux/device.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <scsi/sas.h>
 #include "host.h"
 #include "isci.h"

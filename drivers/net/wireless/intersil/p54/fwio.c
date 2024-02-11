@@ -14,9 +14,11 @@
  */
 
 #include <linux/slab.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/etherdevice.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include <net/mac80211.h>
 

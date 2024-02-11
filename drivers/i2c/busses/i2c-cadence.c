@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -17,6 +18,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 /* Register offsets for the I2C device. */
 #define CDNS_I2C_CR_OFFSET		0x00 /* Control Register, RW */

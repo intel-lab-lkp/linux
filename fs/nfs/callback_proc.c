@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/rcupdate.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 
 #include "nfs4_fs.h"
 #include "callback.h"

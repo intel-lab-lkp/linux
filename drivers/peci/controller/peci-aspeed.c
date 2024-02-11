@@ -3,11 +3,14 @@
 // Copyright (c) 2018-2021 Intel Corporation
 
 #include <asm/unaligned.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/clkdev.h>
 #include <linux/clk-provider.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>

@@ -16,8 +16,10 @@
  */
 #include <linux/blkdev.h>
 #include <linux/fs.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/slab.h>
 #include "check.h"
+#include <linux/sprintf.h>
 
 
 /* partition flags */

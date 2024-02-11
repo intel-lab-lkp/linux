@@ -14,6 +14,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
 #include <linux/fs.h>
@@ -35,6 +36,8 @@
 #include <linux/memory.h>
 #include <linux/mmu_notifier.h>
 #include <linux/swap.h>
+#include <linux/sysfs.h>
+#include <linux/kobject.h>
 #include <linux/ksm.h>
 #include <linux/hashtable.h>
 #include <linux/freezer.h>

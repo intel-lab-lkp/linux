@@ -29,6 +29,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 
 #include <linux/platform_data/x86/p2sb.h>
 

@@ -10,6 +10,7 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
 

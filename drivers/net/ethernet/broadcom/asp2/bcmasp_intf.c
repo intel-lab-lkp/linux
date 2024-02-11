@@ -13,6 +13,7 @@
 #include <linux/phy_fixed.h>
 #include <linux/ptp_classify.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 

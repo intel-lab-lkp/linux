@@ -14,6 +14,7 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define MAX_ID_LEN 4
 static char force_device_id[MAX_ID_LEN + 1] = "";

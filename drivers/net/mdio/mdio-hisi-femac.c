@@ -12,6 +12,7 @@
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define MDIO_RWCTRL		0x00
 #define MDIO_RO_DATA		0x04

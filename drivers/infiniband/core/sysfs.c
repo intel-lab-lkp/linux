@@ -33,6 +33,8 @@
  */
 
 #include "core_priv.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/slab.h>
 #include <linux/stat.h>

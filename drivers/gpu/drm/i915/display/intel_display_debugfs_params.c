@@ -5,6 +5,8 @@
 
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_drv.h>
 

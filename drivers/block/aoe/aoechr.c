@@ -13,6 +13,7 @@
 #include <linux/skbuff.h>
 #include <linux/export.h>
 #include "aoe.h"
+#include <linux/sprintf.h>
 
 enum {
 	//MINOR_STAT = 1, (moved to sysfs)

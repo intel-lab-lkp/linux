@@ -39,6 +39,7 @@
 #include <linux/memblock.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/time.h>
 #include <linux/io.h>

@@ -10,6 +10,7 @@
 
 #include "cobalt-driver.h"
 #include "cobalt-i2c.h"
+#include <linux/sprintf.h>
 
 struct cobalt_i2c_regs {
 	/* Clock prescaler register lo-byte */

@@ -8,6 +8,7 @@
 
 #include <linux/module.h>
 #include <linux/isapnp.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 static void pnp_convert_id(char *buf, unsigned short vendor,

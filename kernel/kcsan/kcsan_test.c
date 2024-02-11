@@ -25,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/seqlock.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/torture.h>

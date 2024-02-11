@@ -18,6 +18,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 
 #include <media/v4l2-async.h>
 #include <media/v4l2-device.h>

@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 
 #include "rzn1_a5psw.h"

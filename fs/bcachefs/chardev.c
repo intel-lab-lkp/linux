@@ -16,6 +16,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/ioctl.h>
 #include <linux/major.h>
 #include <linux/sched/task.h>

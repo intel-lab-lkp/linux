@@ -8,6 +8,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_net.h>
 #include <linux/bpf.h>

@@ -18,6 +18,7 @@
 #include <linux/crc32.h>
 #include <linux/module.h>
 #include <net/mac80211.h>
+#include <linux/completion.h>
 
 #include "p54.h"
 #include "lmac.h"

@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <asm/page.h>
+#include <linux/sprintf.h>
 
 #include "smc.h"
 #include "smc_core.h"

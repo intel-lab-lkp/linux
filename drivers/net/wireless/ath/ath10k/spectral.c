@@ -7,6 +7,8 @@
 #include "core.h"
 #include "debug.h"
 #include "wmi-ops.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static void send_fft_sample(struct ath10k *ar,
 			    const struct fft_sample_tlv *fft_sample_tlv)

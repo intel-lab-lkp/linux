@@ -7,6 +7,7 @@
 //
 
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <sound/sof.h>
 #include <sound/sof/ext_manifest4.h>
 #include "sof-priv.h"

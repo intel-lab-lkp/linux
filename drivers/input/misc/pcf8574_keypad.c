@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #define DRV_NAME "pcf8574_keypad"

@@ -5,6 +5,7 @@
  */
 
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "gt/intel_engine.h"
 #include "gt/intel_engine_pm.h"

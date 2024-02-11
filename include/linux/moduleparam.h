@@ -4,7 +4,7 @@
 /* (C) Copyright 2001, 2002 Rusty Russell IBM Corporation */
 #include <linux/init.h>
 #include <linux/stringify.h>
-#include <linux/kernel.h>
+#include <linux/kernel.h> // for VERIFY_OCTAL_PERMISSIONS()
 
 /* You can override this manually, but generally this should match the
    module name. */

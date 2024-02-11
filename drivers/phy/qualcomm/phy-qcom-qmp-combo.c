@@ -18,6 +18,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/typec_mux.h>
 

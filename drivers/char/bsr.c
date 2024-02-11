@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 /*
  This driver exposes a special register which can be used for fast

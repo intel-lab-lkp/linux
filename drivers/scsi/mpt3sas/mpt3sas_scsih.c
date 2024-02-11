@@ -47,7 +47,9 @@
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/pci.h>

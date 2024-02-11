@@ -5,6 +5,8 @@
 
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "i915_drv.h"

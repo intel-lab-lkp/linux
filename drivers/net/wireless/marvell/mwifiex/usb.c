@@ -7,6 +7,7 @@
 
 #include "main.h"
 #include "usb.h"
+#include <linux/completion.h>
 
 #define USB_VERSION	"1.0"
 

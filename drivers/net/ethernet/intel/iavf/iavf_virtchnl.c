@@ -3,6 +3,7 @@
 
 #include "iavf.h"
 #include "iavf_prototype.h"
+#include <linux/sprintf.h>
 
 /**
  * iavf_send_pf_msg

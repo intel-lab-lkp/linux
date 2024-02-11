@@ -21,6 +21,7 @@
 #include <linux/reset.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/usb/ch9.h>

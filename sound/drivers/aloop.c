@@ -17,9 +17,12 @@
 
 #include <linux/init.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/wait.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <sound/core.h>

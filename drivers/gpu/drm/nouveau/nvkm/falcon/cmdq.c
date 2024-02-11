@@ -21,6 +21,7 @@
  *
  */
 #include "qmgr.h"
+#include <linux/completion.h>
 
 static bool
 nvkm_falcon_cmdq_has_room(struct nvkm_falcon_cmdq *cmdq, u32 size, bool *rewind)

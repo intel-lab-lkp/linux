@@ -39,6 +39,8 @@
 
 #include <linux/kernel.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
@@ -50,6 +52,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <asm/page.h>
 #include <asm/xen/hypervisor.h>

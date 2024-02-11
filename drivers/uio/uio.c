@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/idr.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/kobject.h>
 #include <linux/cdev.h>

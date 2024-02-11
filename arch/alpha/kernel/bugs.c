@@ -1,6 +1,7 @@
 
 #include <asm/hwrpb.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 
 #ifdef CONFIG_SYSFS

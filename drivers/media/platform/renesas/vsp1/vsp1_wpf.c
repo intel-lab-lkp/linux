@@ -8,6 +8,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-subdev.h>
 

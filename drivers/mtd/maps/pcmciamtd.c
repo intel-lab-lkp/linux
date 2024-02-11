@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/init.h>
 #include <asm/io.h>

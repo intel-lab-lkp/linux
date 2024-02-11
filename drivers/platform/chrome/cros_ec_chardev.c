@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 

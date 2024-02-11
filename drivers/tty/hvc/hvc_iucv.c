@@ -19,8 +19,10 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/mempool.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/wait.h>
 #include <net/iucv/iucv.h>

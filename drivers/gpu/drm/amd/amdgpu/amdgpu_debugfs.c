@@ -25,8 +25,10 @@
 
 #include <linux/kthread.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "amdgpu.h"
 #include "amdgpu_pm.h"

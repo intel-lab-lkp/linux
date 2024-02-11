@@ -15,6 +15,7 @@
 
 #include <linux/module.h>
 #include <linux/if.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/inetdevice.h>

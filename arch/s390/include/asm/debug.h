@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/spinlock.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/refcount.h>
 #include <linux/fs.h>

@@ -80,6 +80,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include <scsi/fc/fc_gs.h>
 

@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/hwmon.h>
 #include <linux/mutex.h>

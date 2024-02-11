@@ -51,6 +51,7 @@
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>	/* for mdelay */
+#include <linux/completion.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

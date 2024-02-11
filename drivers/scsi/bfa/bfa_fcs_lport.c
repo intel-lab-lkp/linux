@@ -13,6 +13,7 @@
 #include "bfa_fcs.h"
 #include "bfa_fcbuild.h"
 #include "bfa_fc.h"
+#include <linux/completion.h>
 
 BFA_TRC_FILE(FCS, PORT);
 

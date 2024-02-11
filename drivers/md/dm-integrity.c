@@ -8,6 +8,9 @@
  */
 
 #include "dm-bio-record.h"
+#include <linux/completion.h>
+#include <linux/hex.h>
+#include <linux/sprintf.h>
 
 #include <linux/compiler.h>
 #include <linux/module.h>

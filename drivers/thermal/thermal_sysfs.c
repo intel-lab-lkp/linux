@@ -15,7 +15,9 @@
 #include <linux/sysfs.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/jiffies.h>
 

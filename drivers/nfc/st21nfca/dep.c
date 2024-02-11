@@ -4,6 +4,7 @@
  */
 
 #include <net/nfc/hci.h>
+#include <linux/random.h>
 
 #include "st21nfca.h"
 

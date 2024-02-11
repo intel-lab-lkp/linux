@@ -9,6 +9,7 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include <linux/nsproxy.h>
+#include <linux/seqlock.h>
 #include <uapi/linux/mount.h>
 #include "internal.h"
 #include "pnode.h"

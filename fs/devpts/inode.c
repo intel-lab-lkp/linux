@@ -16,6 +16,7 @@
 #include <linux/namei.h>
 #include <linux/slab.h>
 #include <linux/mount.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/mutex.h>
 #include <linux/magic.h>
@@ -24,6 +25,7 @@
 #include <linux/parser.h>
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 #define DEVPTS_DEFAULT_MODE 0600
 /*

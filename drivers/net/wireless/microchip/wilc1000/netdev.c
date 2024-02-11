@@ -9,6 +9,7 @@
 #include <linux/firmware.h>
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
+#include <linux/completion.h>
 
 #include "cfg80211.h"
 #include "wlan_cfg.h"

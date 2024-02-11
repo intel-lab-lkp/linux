@@ -30,6 +30,7 @@
 #include "radeon_asic.h"
 #include "atom.h"
 #include "r520d.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /* This files gather functions specifics to: r520,rv530,rv560,rv570,r580 */
 

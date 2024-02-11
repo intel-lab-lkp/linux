@@ -24,6 +24,7 @@
 #include <linux/platform_device.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>

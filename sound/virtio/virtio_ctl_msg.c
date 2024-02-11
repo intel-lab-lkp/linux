@@ -5,6 +5,7 @@
  */
 #include <linux/moduleparam.h>
 #include <linux/virtio_config.h>
+#include <linux/completion.h>
 
 #include "virtio_card.h"
 

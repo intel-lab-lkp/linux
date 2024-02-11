@@ -5,6 +5,7 @@
 
 #include <linux/fs.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/radix-tree.h>
 #include <linux/writeback.h>
 #include <linux/workqueue.h>

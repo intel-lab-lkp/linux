@@ -21,6 +21,7 @@
 #include "atomisp_cmd.h"
 #include "atomisp_internal.h"
 #include "atomisp-regs.h"
+#include <linux/sprintf.h>
 
 static struct
 v4l2_mbus_framefmt *__csi2_get_format(struct atomisp_mipi_csi2_device *csi2,

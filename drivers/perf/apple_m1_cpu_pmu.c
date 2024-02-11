@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/perf/arm_pmu.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <asm/apple_m1_pmu.h>
 #include <asm/irq_regs.h>

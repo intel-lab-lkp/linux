@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <media/rc-core.h>
 #include "ene_ir.h"
+#include <linux/completion.h>
 
 static int sample_period;
 static bool learning_mode_force;

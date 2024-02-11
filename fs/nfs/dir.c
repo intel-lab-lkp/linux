@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/time.h>
 #include <linux/errno.h>
+#include <linux/shrinker.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/string.h>

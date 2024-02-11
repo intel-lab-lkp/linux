@@ -33,6 +33,7 @@
 #include "gmc/gmc_7_1_d.h"
 #include "gmc/gmc_7_1_sh_mask.h"
 #include "cik_structs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 enum hqd_dequeue_request_type {
 	NO_ACTION = 0,

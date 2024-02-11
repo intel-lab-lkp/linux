@@ -4,6 +4,7 @@
  */
 
 #include "xe_lrc.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "instructions/xe_mi_commands.h"
 #include "instructions/xe_gfxpipe_commands.h"

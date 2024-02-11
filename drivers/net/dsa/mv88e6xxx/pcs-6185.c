@@ -7,6 +7,7 @@
  * Copyright (c) 2017 Andrew Lunn <andrew@lunn.ch>
  */
 #include <linux/phylink.h>
+#include <linux/sprintf.h>
 
 #include "global2.h"
 #include "port.h"

@@ -4,6 +4,7 @@
 #include <core/memory.h>
 #include <core/option.h>
 #include <core/subdev.h>
+#include <linux/sprintf.h>
 
 struct nvkm_firmware {
 	const struct nvkm_firmware_func {

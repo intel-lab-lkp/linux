@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 /*
  * Ricoh has a family of I2C based RTCs, which differ only slightly from

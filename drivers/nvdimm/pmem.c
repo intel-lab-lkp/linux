@@ -8,6 +8,7 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/kstrtox.h>
 #include <linux/pagemap.h>
 #include <linux/hdreg.h>
 #include <linux/init.h>
@@ -18,6 +19,7 @@
 #include <linux/badblocks.h>
 #include <linux/memremap.h>
 #include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/blk-mq.h>
 #include <linux/pfn_t.h>

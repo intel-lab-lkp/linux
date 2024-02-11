@@ -8,11 +8,13 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <video/omapfb_dss.h>
 

@@ -12,6 +12,8 @@
 #include <linux/linkage.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/module.h>
 

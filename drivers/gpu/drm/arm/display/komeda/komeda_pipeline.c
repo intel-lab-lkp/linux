@@ -5,6 +5,7 @@
  *
  */
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_print.h>
 

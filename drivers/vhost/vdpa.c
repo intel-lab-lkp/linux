@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/mm.h>
 #include <linux/slab.h>

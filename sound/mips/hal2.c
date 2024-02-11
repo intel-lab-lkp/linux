@@ -14,6 +14,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/sgi/hpc3.h>
 #include <asm/sgi/ip22.h>

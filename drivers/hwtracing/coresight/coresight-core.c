@@ -6,6 +6,8 @@
 #include <linux/build_bug.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/io.h>

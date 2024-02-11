@@ -8,6 +8,7 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/elf.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>

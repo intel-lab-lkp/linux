@@ -15,6 +15,7 @@
 
 #include <linux/firmware.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 
 #include <net/mac80211.h>
 #ifdef CONFIG_P54_LEDS

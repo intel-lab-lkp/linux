@@ -13,6 +13,7 @@
 #include "cx18-cards.h"
 #include "cx18-gpio.h"
 #include "xc2028.h"
+#include <linux/sprintf.h>
 
 /********************* GPIO stuffs *********************/
 

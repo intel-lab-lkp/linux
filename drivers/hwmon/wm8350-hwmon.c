@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/sprintf.h>
 
 #include <linux/mfd/wm8350/core.h>
 #include <linux/mfd/wm8350/comparator.h>

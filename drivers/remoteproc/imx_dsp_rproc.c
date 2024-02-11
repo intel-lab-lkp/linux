@@ -4,6 +4,7 @@
 #include <dt-bindings/firmware/imx/rsrc.h>
 #include <linux/arm-smccc.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/firmware.h>
 #include <linux/firmware/imx/sci.h>

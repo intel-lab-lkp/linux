@@ -6,6 +6,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/hex.h>
 #include <linux/if.h>
 #include <linux/netdevice.h>
 #include <linux/spinlock.h>
@@ -13,6 +14,7 @@
 #include <linux/ctype.h>
 #include <linux/inet.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include <net/bonding.h>
 

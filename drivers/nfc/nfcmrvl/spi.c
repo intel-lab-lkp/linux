@@ -13,6 +13,7 @@
 #include <net/nfc/nci_core.h>
 #include <linux/spi/spi.h>
 #include "nfcmrvl.h"
+#include <linux/completion.h>
 
 #define SPI_WAIT_HANDSHAKE	1
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // hdac_component.c - routines for sync between HD-A core and DRM driver
 
+#include <linux/completion.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>

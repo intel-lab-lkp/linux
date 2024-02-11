@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include "ubi.h"
+#include <linux/sprintf.h>
 
 static int self_check_volumes(struct ubi_device *ubi);
 

@@ -20,6 +20,7 @@
 #include <linux/of_address.h>
 #include <linux/clocksource.h>
 #include <linux/sched_clock.h>
+#include <linux/sprintf.h>
 
 #define EXYNOS4_MCTREG(x)		(x)
 #define EXYNOS4_MCT_G_CNT_L		EXYNOS4_MCTREG(0x100)

@@ -16,10 +16,12 @@
 #include <linux/memblock.h>
 #include <linux/device.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timex.h>	/* get_tod_clock() */
 
 #include <asm/ccwdev.h>

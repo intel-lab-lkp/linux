@@ -3,7 +3,9 @@
 /* Authors: Bernard Metzler <bmt@zurich.ibm.com> */
 /* Copyright (c) 2008-2019, IBM Corporation */
 
+#include <linux/bvec.h>
 #include <linux/errno.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/types.h>
 #include <linux/net.h>
 #include <linux/scatterlist.h>

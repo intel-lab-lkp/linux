@@ -14,6 +14,7 @@
 #include <linux/phy.h>
 #include <linux/pm_runtime.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 
 #include "cpsw.h"
 #include "cpts.h"

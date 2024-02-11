@@ -20,6 +20,7 @@
 #include <sound/soc.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
+#include <linux/completion.h>
 
 #include "wm8993.h"
 #include "wm_hubs.h"

@@ -11,6 +11,7 @@
 #include <linux/spinlock.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/sprintf.h>
 
 #include <lantiq_soc.h>
 

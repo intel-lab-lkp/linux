@@ -14,6 +14,8 @@
 #include <linux/mm.h>
 #include <linux/debugfs.h>
 #include <asm/chpid.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "cio_inject.h"
 #include "cio_debug.h"

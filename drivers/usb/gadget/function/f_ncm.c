@@ -13,10 +13,12 @@
 
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
+#include <linux/hrtimer.h>
 
 #include <linux/usb/cdc.h>
 

@@ -23,6 +23,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/bitfield.h>
 #include <linux/dmapool.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/regmap.h>
 #include <linux/dmaengine.h>
 #include <linux/dma/amd_xdma.h>

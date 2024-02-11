@@ -34,6 +34,8 @@
 
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/sort.h>
 #include <linux/ctype.h>

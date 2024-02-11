@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include <linux/pnp.h>
 #include <linux/vgaarb.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <drm/drm_managed.h>
 #include <drm/i915_drm.h>

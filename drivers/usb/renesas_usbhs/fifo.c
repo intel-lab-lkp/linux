@@ -11,6 +11,7 @@
 #include <linux/scatterlist.h>
 #include "common.h"
 #include "pipe.h"
+#include <linux/sprintf.h>
 
 #define usbhsf_get_cfifo(p)	(&((p)->fifo_info.cfifo))
 

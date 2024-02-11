@@ -14,6 +14,7 @@
 
 #include <linux/atomic.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/list.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>

@@ -2,6 +2,7 @@
 /* Copyright(c) 2017-2018 Intel Corporation. All rights reserved. */
 #include <linux/memremap.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -9,6 +10,7 @@
 #include <linux/io.h>
 #include "dax-private.h"
 #include "bus.h"
+#include <linux/sprintf.h>
 
 static DEFINE_MUTEX(dax_bus_lock);
 

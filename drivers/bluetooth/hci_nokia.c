@@ -7,6 +7,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>

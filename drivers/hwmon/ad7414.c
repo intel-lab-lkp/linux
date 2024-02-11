@@ -21,7 +21,9 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 

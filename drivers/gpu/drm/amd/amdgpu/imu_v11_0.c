@@ -25,6 +25,7 @@
 #include "amdgpu.h"
 #include "amdgpu_imu.h"
 #include "amdgpu_dpm.h"
+#include <linux/sprintf.h>
 
 #include "imu_v11_0_3.h"
 

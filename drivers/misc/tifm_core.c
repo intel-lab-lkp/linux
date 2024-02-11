@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/idr.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME "tifm_core"
 #define DRIVER_VERSION "0.8"

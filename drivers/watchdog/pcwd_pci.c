@@ -32,6 +32,7 @@
 
 #include <linux/module.h>	/* For module specific items */
 #include <linux/moduleparam.h>	/* For new moduleparam's */
+#include <linux/sprintf.h>
 #include <linux/types.h>	/* For standard types (like size_t) */
 #include <linux/errno.h>	/* For the -ENODEV/... values */
 #include <linux/kernel.h>	/* For printk/panic/... */

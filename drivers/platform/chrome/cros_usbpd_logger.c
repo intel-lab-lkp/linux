@@ -12,6 +12,7 @@
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 
 #define DRV_NAME "cros-usbpd-logger"
 

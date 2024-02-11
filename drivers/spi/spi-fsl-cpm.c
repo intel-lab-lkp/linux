@@ -12,6 +12,7 @@
  * Author: Anton Vorontsov <avorontsov@ru.mvista.com>
  */
 #include <asm/cpm.h>
+#include <linux/completion.h>
 #include <soc/fsl/qe/qe.h>
 #include <linux/dma-mapping.h>
 #include <linux/fsl_devices.h>

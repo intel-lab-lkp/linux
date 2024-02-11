@@ -5,6 +5,7 @@
 #include "i40e_alloc.h"
 #include "i40e_register.h"
 #include "i40e_prototype.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void i40e_resume_aq(struct i40e_hw *hw);
 

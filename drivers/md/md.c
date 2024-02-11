@@ -43,6 +43,8 @@
 #include <linux/blkdev.h>
 #include <linux/blk-integrity.h>
 #include <linux/badblocks.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>

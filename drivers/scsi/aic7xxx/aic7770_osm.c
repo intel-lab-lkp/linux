@@ -40,6 +40,7 @@
  */
 
 #include "aic7xxx_osm.h"
+#include <linux/sprintf.h>
 
 #include <linux/device.h>
 #include <linux/eisa.h>

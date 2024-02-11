@@ -44,6 +44,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 #include "ksz9477.h"
 #include "ksz9477_reg.h"

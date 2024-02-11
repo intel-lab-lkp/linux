@@ -3,6 +3,7 @@
  * Copyright (C) 2020-2021 Intel Corporation.
  */
 #include <linux/vmalloc.h>
+#include <linux/completion.h>
 
 #include "iosm_ipc_chnl_cfg.h"
 #include "iosm_ipc_coredump.h"

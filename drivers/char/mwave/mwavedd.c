@@ -64,6 +64,7 @@
 #include "mwavedd.h"
 #include "3780i.h"
 #include "tp3780i.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("3780i Advanced Communications Processor (Mwave) driver");
 MODULE_AUTHOR("Mike Sullivan and Paul Schroeder");

@@ -9,7 +9,9 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "coresight-cti.h"

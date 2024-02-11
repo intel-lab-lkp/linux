@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>

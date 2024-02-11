@@ -10,6 +10,7 @@
  */
 
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/init.h>

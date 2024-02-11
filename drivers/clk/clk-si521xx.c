@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 /* OE1 and OE2 register */
 #define SI521XX_REG_OE(n)			(((n) & 0x1) + 1)

@@ -10,11 +10,13 @@
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/sizes.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include "intel_th.h"
 #include "pti.h"

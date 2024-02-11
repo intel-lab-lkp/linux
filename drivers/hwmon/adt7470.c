@@ -14,6 +14,7 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/log2.h>
@@ -21,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/util_macros.h>
 
 /* Addresses to scan */

@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/scatterlist.h>
+#include <linux/sprintf.h>
 
 #include "usbip_common.h"
 #include "stub.h"
