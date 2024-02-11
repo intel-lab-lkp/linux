@@ -36,7 +36,6 @@
 #define _SOCK_H
 
 #include <linux/hardirq.h>
-#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/list_nulls.h>
 #include <linux/timer_types.h>

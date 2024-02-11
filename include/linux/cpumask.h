@@ -8,7 +8,6 @@
  * only nr_cpu_ids (<= NR_CPUS) bits are valid.
  */
 #include <linux/cleanup.h>
-#include <linux/kernel.h>
 #include <linux/threads.h>
 #include <linux/bitmap.h>
 #include <linux/atomic.h>

@@ -12,7 +12,6 @@
 #ifndef __CAPILLI_H__
 #define __CAPILLI_H__
 
-#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>

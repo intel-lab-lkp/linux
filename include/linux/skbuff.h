@@ -10,7 +10,6 @@
 #ifndef _LINUX_SKBUFF_H
 #define _LINUX_SKBUFF_H
 
-#include <linux/kernel.h>
 #include <linux/compiler.h>
 #include <linux/time.h>
 #include <linux/bug.h>

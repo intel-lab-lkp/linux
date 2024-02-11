@@ -2,7 +2,6 @@
 #ifndef BTREE_H
 #define BTREE_H
 
-#include <linux/kernel.h>
 #include <linux/mempool.h>
 
 /**

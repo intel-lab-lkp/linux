@@ -6,7 +6,6 @@
 #define __BCM47XX_SPROM_H
 
 #include <linux/types.h>
-#include <linux/kernel.h>
 #include <linux/vmalloc.h>
 
 struct ssb_sprom;

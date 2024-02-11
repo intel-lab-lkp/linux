@@ -8,7 +8,6 @@
 #ifndef __LINUX_MFD_WM8350_CORE_H_
 #define __LINUX_MFD_WM8350_CORE_H_
 
-#include <linux/kernel.h>
 #include <linux/mutex_types.h>
 #include <linux/interrupt.h>
 #include <linux/completion_types.h>

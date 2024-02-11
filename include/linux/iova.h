@@ -10,7 +10,6 @@
 #define _IOVA_H_
 
 #include <linux/types.h>
-#include <linux/kernel.h>
 #include <linux/rbtree_types.h>
 #include <linux/dma-mapping.h>
 

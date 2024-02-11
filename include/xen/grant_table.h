@@ -48,7 +48,6 @@
 #include <xen/page.h>
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
-#include <linux/kernel.h>
 
 /*
  * Technically there's no reliably invalid grant reference or grant handle,

@@ -5,7 +5,6 @@
 #include <linux/completion_types.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
-#include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/mutex_types.h>

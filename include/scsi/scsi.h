@@ -8,7 +8,6 @@
 
 #include <linux/types.h>
 #include <linux/scatterlist.h>
-#include <linux/kernel.h>
 #include <scsi/scsi_common.h>
 #include <scsi/scsi_proto.h>
 #include <scsi/scsi_status.h>

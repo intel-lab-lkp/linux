@@ -12,8 +12,6 @@
 #ifndef __XEN_FRONT_PGDIR_SHBUF_H_
 #define __XEN_FRONT_PGDIR_SHBUF_H_
 
-#include <linux/kernel.h>
-
 #include <xen/grant_table.h>
 
 struct xen_front_pgdir_shbuf_ops;

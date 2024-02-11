@@ -184,7 +184,6 @@ struct gpio_desc *devm_fwnode_gpiod_get_index(struct device *dev,
 #else /* CONFIG_GPIOLIB */
 
 #include <linux/err.h>
-#include <linux/kernel.h>
 
 #include <asm/bug.h>
 
