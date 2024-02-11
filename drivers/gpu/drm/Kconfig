@@ -102,6 +102,13 @@ config DRM_KMS_HELPER
 	help
 	  CRTC helpers for KMS drivers.
 
+config DRM_ACPI_HELPER
+	tristate "ACPI support in DRM"
+	depends on DRM
+	depends on (ACPI_VIDEO || ACPI_VIDEO=n)
+	help
+	  ACPI helpers for DRM drivers.
+
 config DRM_DEBUG_DP_MST_TOPOLOGY_REFS
         bool "Enable refcount backtrace history in the DP MST helpers"
 	depends on STACKTRACE_SUPPORT
