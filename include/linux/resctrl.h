@@ -2,7 +2,6 @@
 #ifndef _RESCTRL_H
 #define _RESCTRL_H
 
-#include <linux/kernel.h>
 #include <linux/list.h>
 
 #ifdef CONFIG_PROC_CPU_RESCTRL

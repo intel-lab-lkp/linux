@@ -15,7 +15,6 @@
 #include <linux/string.h>
 #include <linux/timer_types.h>
 #include <linux/poll.h>
-#include <linux/kernel.h>
 #include <linux/sockptr.h>
 
 #include <net/inet_sock.h>

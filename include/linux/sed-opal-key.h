@@ -9,7 +9,7 @@
  *
  */
 
-#include <linux/kernel.h>
+#include <linux/types.h>
 
 #ifdef CONFIG_PSERIES_PLPKS_SED
 int sed_read_key(char *keyname, char *key, u_int *keylen);

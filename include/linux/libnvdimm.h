@@ -6,7 +6,7 @@
  */
 #ifndef __LIBNVDIMM_H__
 #define __LIBNVDIMM_H__
-#include <linux/kernel.h>
+
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/uuid.h>

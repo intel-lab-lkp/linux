@@ -22,7 +22,6 @@
 
 #include <linux/bug.h>
 #include <linux/jump_label.h>
-#include <linux/kernel.h>
 #include <linux/cpumask.h>
 
 /*

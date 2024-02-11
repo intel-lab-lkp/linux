@@ -1,7 +1,6 @@
 #ifndef __MTK_WED_H
 #define __MTK_WED_H
 
-#include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/regmap.h>
 #include <linux/pci.h>

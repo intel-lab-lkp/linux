@@ -8,7 +8,6 @@
 
 #include <linux/device.h>
 #include <linux/errno.h>
-#include <linux/kernel.h>
 
 struct isa_driver {
 	int (*match)(struct device *, unsigned int);

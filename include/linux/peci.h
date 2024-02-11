@@ -5,7 +5,6 @@
 #define __LINUX_PECI_H
 
 #include <linux/device_types.h>
-#include <linux/kernel.h>
 #include <linux/mutex_types.h>
 #include <linux/types.h>
 

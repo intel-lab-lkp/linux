@@ -50,7 +50,6 @@
 #endif
 
 #include <linux/string.h>
-#include <linux/kernel.h>
 #include <linux/ctype.h>
 #include <linux/sched.h>
 #include <linux/atomic.h>

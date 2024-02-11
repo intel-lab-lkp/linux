@@ -9,7 +9,6 @@
 
 #include <linux/types.h>
 #include <asm/byteorder.h>
-#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>

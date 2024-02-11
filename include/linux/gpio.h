@@ -125,8 +125,6 @@ int devm_gpio_request_one(struct device *dev, unsigned gpio,
 
 #else /* ! CONFIG_GPIOLIB */
 
-#include <linux/kernel.h>
-
 #include <asm/bug.h>
 #include <asm/errno.h>
 

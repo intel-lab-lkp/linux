@@ -13,7 +13,6 @@
 #include <linux/bitops.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
-#include <linux/kernel.h>
 #include <linux/notifier.h>
 #include <uapi/linux/watchdog.h>
 
