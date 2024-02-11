@@ -15,10 +15,10 @@
 
 #include <linux/sysfs_types.h>
 #include <linux/kernfs.h>
-#include <linux/kernel.h> // for VERIFY_OCTAL_PERMISSIONS()
 #include <linux/compiler.h>
 #include <linux/list.h>
 #include <linux/lockdep_types.h>
+#include <linux/octal_permissions.h>
 
 struct kobject;
 struct module;
