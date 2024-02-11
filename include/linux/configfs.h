@@ -23,7 +23,7 @@
 #include <linux/types.h>  /* ssize_t */
 #include <linux/list.h>   /* struct list_head */
 #include <linux/kref.h>   /* struct kref */
-#include <linux/mutex.h>  /* struct mutex */
+#include <linux/mutex_types.h> /* struct mutex */
 
 #define CONFIGFS_ITEM_NAME_LEN	20
 

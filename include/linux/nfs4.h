@@ -14,7 +14,7 @@
 #define _LINUX_NFS4_H
 
 #include <linux/list.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <uapi/linux/nfs4.h>
 #include <linux/sunrpc/msg_prot.h>
 

@@ -8,12 +8,12 @@
 
 #include <linux/device.h>
 #include <linux/dma-direction.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 #define MHI_MAX_OEM_PK_HASH_SEGMENTS 16
 

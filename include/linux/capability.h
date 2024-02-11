@@ -14,7 +14,7 @@
 #define _LINUX_CAPABILITY_H
 
 #include <uapi/linux/capability.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/bits.h>
 
 #define _KERNEL_CAPABILITY_VERSION _LINUX_CAPABILITY_VERSION_3

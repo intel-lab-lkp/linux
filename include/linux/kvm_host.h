@@ -6,8 +6,8 @@
 #include <linux/types.h>
 #include <linux/hardirq.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
+#include <linux/mutex_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/sched/stat.h>

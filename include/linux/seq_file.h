@@ -6,7 +6,7 @@
 #include <linux/string.h>
 #include <linux/string_helpers.h>
 #include <linux/bug.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/cpumask.h>
 #include <linux/fs.h>
 #include <linux/cred.h>

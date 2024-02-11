@@ -23,7 +23,7 @@
 #ifndef _DVB_RINGBUFFER_H_
 #define _DVB_RINGBUFFER_H_
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h>
 
 /**

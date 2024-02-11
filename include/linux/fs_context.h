@@ -9,10 +9,10 @@
 #define _LINUX_FS_CONTEXT_H
 
 #include <linux/kernel.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/errno.h>
 #include <linux/security.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 struct cred;
 struct dentry;

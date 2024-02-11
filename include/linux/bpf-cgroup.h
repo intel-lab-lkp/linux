@@ -7,7 +7,7 @@
 #include <linux/errno.h>
 #include <linux/jump_label.h>
 #include <linux/percpu.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <net/sock.h>
 #include <uapi/linux/bpf.h>
 

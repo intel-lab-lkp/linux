@@ -8,7 +8,7 @@
 #define __NET_SCHED_FQ_H
 
 #include <linux/skbuff.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 
 struct fq_tin;

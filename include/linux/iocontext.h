@@ -4,7 +4,7 @@
 
 #include <linux/radix-tree.h>
 #include <linux/rcupdate.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 enum {
 	ICQ_EXITED		= 1 << 2,

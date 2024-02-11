@@ -6,7 +6,7 @@
 #define _TRACE_WORKQUEUE_H
 
 #include <linux/tracepoint.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct pool_workqueue;
 

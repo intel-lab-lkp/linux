@@ -16,7 +16,7 @@
 #include <linux/rbtree.h>
 #include <linux/init.h>
 #include <linux/bug.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/rwsem.h>
 #include <linux/mm_types.h>
 #include <linux/capability.h>
@@ -25,10 +25,10 @@
 #include <linux/rculist_bl.h>
 #include <linux/atomic.h>
 #include <linux/migrate_mode.h>
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/lockdep.h>
 #include <linux/percpu-rwsem.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/delayed_call.h>
 #include <linux/uuid.h>
 #include <linux/errseq.h>

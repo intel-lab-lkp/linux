@@ -14,7 +14,7 @@
 #include <linux/wait.h>
 #include <linux/writeback.h>
 #include <linux/slab.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 #include <linux/ceph/types.h>
 #include <linux/ceph/messenger.h>

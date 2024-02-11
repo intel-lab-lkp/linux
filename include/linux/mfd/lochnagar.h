@@ -9,7 +9,7 @@
  */
 
 #include <linux/device.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/regmap.h>
 
 #ifndef CIRRUS_LOCHNAGAR_H

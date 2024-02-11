@@ -15,7 +15,6 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
-#include <linux/mutex.h>
 #include <linux/sysrq.h>
 #include <uapi/linux/serial_core.h>
 

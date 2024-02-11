@@ -18,7 +18,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/pci.h>
 #include <linux/uuid.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 enum tb_cfg_pkg_type {
 	TB_CFG_PKG_READ = 1,

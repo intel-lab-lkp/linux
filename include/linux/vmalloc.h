@@ -6,7 +6,7 @@
 #include <linux/list.h>
 #include <linux/llist.h>
 #include <asm/page.h>		/* pgprot_t */
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/overflow.h>
 
 #include <asm/vmalloc.h>

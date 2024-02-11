@@ -4,7 +4,7 @@
 
 #include <linux/list.h>
 #include <linux/stddef.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h> // for ___wait_is_interruptible()
 #include <asm/current.h>
 

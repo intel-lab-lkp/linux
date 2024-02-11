@@ -11,13 +11,13 @@
 #include <asm/types.h>                  /* for __uXX types */
 
 #include <linux/list.h>                 /* for struct list_head */
-#include <linux/spinlock.h>             /* for struct rwlock_t */
+#include <linux/spinlock_types.h>       /* for struct rwlock_t */
 #include <linux/atomic.h>               /* for struct atomic_t */
-#include <linux/refcount.h>             /* for struct refcount_t */
+#include <linux/refcount_types.h>       /* for struct refcount_t */
 #include <linux/workqueue.h>
 
 #include <linux/compiler.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/bug.h>
 
 #include <net/checksum.h>

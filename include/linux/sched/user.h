@@ -2,11 +2,11 @@
 #ifndef _LINUX_SCHED_USER_H
 #define _LINUX_SCHED_USER_H
 
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <linux/atomic.h>
 #include <linux/percpu_counter.h>
 #include <linux/refcount.h>
-#include <linux/ratelimit.h>
+#include <linux/ratelimit_types.h>
 
 /*
  * Some day this will be a full-fledged user tracking system..

@@ -11,11 +11,11 @@
 #define __DRIVERS_FRAMER_H
 
 #include <linux/err.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/device.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 /**
  * enum framer_iface - Framer interface

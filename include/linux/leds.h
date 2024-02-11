@@ -10,10 +10,10 @@
 
 #include <dt-bindings/leds/common.h>
 #include <linux/device.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/rwsem.h>
-#include <linux/spinlock.h>
-#include <linux/timer.h>
+#include <linux/spinlock_types.h>
+#include <linux/timer_types.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 

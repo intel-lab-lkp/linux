@@ -30,7 +30,7 @@
 #include <linux/if.h>
 #include <linux/skbuff.h>
 #include <linux/ieee80211.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 
 struct seq_file;
 

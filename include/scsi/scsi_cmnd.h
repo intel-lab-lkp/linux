@@ -3,7 +3,7 @@
 #define _SCSI_SCSI_CMND_H
 
 #include <linux/dma-mapping.h>
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 #include <linux/t10-pi.h>
 #include <linux/list.h>
 #include <linux/types.h>

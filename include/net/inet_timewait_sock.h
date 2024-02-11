@@ -12,7 +12,7 @@
 #define _INET_TIMEWAIT_SOCK_
 
 #include <linux/list.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/types.h>
 
 #include <net/inet_sock.h>

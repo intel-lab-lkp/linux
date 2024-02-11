@@ -9,7 +9,7 @@
 #ifndef _I915_HDCP_INTERFACE_H_
 #define _I915_HDCP_INTERFACE_H_
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/device.h>
 #include <drm/display/drm_hdcp.h>
 

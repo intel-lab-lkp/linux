@@ -10,7 +10,7 @@
 #define __LINUX_USB_SERIAL_H
 
 #include <linux/kref.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/serial.h>
 #include <linux/kfifo.h>
 

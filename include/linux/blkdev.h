@@ -11,11 +11,11 @@
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/minmax.h>
-#include <linux/timer.h>
-#include <linux/workqueue.h>
+#include <linux/timer_types.h>
+#include <linux/workqueue_types.h>
 #include <linux/wait.h>
 #include <linux/bio.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/kdev_t.h>
 #include <linux/rcupdate.h>
 #include <linux/percpu-refcount.h>

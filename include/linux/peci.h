@@ -6,7 +6,7 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 
 /*

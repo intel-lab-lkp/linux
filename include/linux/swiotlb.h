@@ -7,8 +7,8 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/limits.h>
-#include <linux/spinlock.h>
-#include <linux/workqueue.h>
+#include <linux/spinlock_types.h>
+#include <linux/workqueue_types.h>
 
 struct device;
 struct page;

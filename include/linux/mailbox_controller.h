@@ -4,7 +4,7 @@
 #define __MAILBOX_CONTROLLER_H
 
 #include <linux/types.h>
-#include <linux/hrtimer.h>
+#include <linux/hrtimer_types.h>
 #include <linux/completion.h>
 
 struct device;

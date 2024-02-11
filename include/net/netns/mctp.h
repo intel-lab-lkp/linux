@@ -7,7 +7,7 @@
 #define __NETNS_MCTP_H__
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 
 struct netns_mctp {

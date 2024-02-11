@@ -12,9 +12,9 @@
 
 #include <linux/types.h>
 #include <linux/wait.h>
-#include <linux/mutex.h>
-#include <linux/timer.h>
-#include <linux/workqueue.h>
+#include <linux/mutex_types.h>
+#include <linux/timer_types.h>
+#include <linux/workqueue_types.h>
 #include <linux/kfifo.h>
 #include <linux/refcount.h>
 #include <scsi/iscsi_proto.h>

@@ -9,7 +9,7 @@
 #define __MDIO_XGENE_H__
 
 #include <linux/bits.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 
 #define BLOCK_XG_MDIO_CSR_OFFSET	0x5000

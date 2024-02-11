@@ -4,7 +4,7 @@
 
 #include <linux/kfifo.h>
 #include <linux/kref.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/tty_buffer.h>
 #include <linux/wait.h>
 

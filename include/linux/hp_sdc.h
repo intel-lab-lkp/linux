@@ -41,7 +41,7 @@
 #include <linux/interrupt.h>
 #include <linux/types.h>
 #include <linux/time.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #if defined(__hppa__)
 #include <asm/hardware.h>
 #endif
