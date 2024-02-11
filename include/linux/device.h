@@ -22,8 +22,8 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
-#include <linux/uidgid.h>
-#include <linux/gfp.h>
+#include <linux/uidgid_types.h>
+#include <linux/gfp_types.h>
 #include <linux/overflow.h>
 #include <linux/device/bus.h>
 #include <linux/device/class.h>

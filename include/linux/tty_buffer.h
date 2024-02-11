@@ -4,8 +4,8 @@
 
 #include <linux/atomic.h>
 #include <linux/llist.h>
-#include <linux/mutex.h>
-#include <linux/workqueue.h>
+#include <linux/mutex_types.h>
+#include <linux/workqueue_types.h>
 
 struct tty_buffer {
 	union {

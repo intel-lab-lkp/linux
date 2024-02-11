@@ -9,7 +9,7 @@
 
 #include <linux/bitops.h>
 #include <linux/interrupt.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 

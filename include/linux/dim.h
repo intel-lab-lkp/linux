@@ -8,7 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 /*
  * Number of events between DIM iterations.

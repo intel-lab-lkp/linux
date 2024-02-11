@@ -14,7 +14,7 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/videodev2.h>
 
 #include <media/media-entity.h>

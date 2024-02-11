@@ -10,7 +10,7 @@
 #define _LINUX_MFD_MT6397_RTC_H_
 
 #include <linux/jiffies.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/regmap.h>
 #include <linux/rtc.h>
 

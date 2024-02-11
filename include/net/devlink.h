@@ -8,12 +8,12 @@
 #define _NET_DEVLINK_H_
 
 #include <linux/slab.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/list.h>
 #include <linux/netdevice.h>
-#include <linux/spinlock.h>
-#include <linux/workqueue.h>
-#include <linux/refcount.h>
+#include <linux/spinlock_types.h>
+#include <linux/workqueue_types.h>
+#include <linux/refcount_types.h>
 #include <net/net_namespace.h>
 #include <net/flow_offload.h>
 #include <uapi/linux/devlink.h>

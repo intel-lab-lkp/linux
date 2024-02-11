@@ -6,10 +6,10 @@
 #ifndef __NETNS_IPV4_H__
 #define __NETNS_IPV4_H__
 
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 #include <net/inet_frag.h>
 #include <linux/rcupdate.h>
-#include <linux/seqlock.h>
+#include <linux/seqlock_types.h>
 #include <linux/siphash.h>
 
 struct ctl_table_header;

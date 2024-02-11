@@ -12,7 +12,7 @@
 
 #include <linux/types.h>
 #include <linux/list.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/rcupdate.h>
 #include <linux/sysctl.h>
 #include <linux/rwsem.h>
@@ -22,7 +22,7 @@
 #include <linux/time64.h>
 
 #ifdef __KERNEL__
-#include <linux/uidgid.h>
+#include <linux/uidgid_types.h>
 
 /* key handle serial number */
 typedef int32_t key_serial_t;
@@ -32,6 +32,7 @@ typedef uint32_t key_perm_t;
 
 struct key;
 struct net;
+struct user_namespace;
 
 #ifdef CONFIG_KEYS
 

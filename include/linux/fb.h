@@ -2,14 +2,14 @@
 #ifndef _LINUX_FB_H
 #define _LINUX_FB_H
 
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <uapi/linux/fb.h>
 
 #define FBIO_CURSOR            _IOWR('F', 0x08, struct fb_cursor_user)
 
 #include <linux/fs.h>
 #include <linux/init.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/notifier.h>
 #include <linux/list.h>
 #include <linux/slab.h>

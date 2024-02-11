@@ -3,7 +3,7 @@
 #define _LINUX_MEMORY_TIERS_H
 
 #include <linux/types.h>
-#include <linux/nodemask.h>
+#include <linux/nodemask_types.h>
 #include <linux/kref.h>
 #include <linux/mmzone.h>
 #include <linux/notifier.h>

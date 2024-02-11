@@ -11,7 +11,7 @@
 #define _RSLIB_H_
 
 #include <linux/types.h>	/* for gfp_t */
-#include <linux/gfp.h>		/* for GFP_KERNEL */
+#include <linux/gfp_types.h>	/* for GFP_KERNEL */
 
 /**
  * struct rs_codec - rs codec data

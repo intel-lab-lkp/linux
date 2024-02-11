@@ -5,7 +5,7 @@
 #if !defined(_TRACE_MMC_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_MMC_H
 
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 #include <linux/mmc/core.h>
 #include <linux/mmc/host.h>
 #include <linux/tracepoint.h>

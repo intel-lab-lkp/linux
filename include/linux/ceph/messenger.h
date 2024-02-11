@@ -5,10 +5,10 @@
 #include <linux/bvec.h>
 #include <linux/crypto.h>
 #include <linux/kref.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/net.h>
 #include <linux/uio.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <net/net_namespace.h>
 
 #include <linux/ceph/types.h>

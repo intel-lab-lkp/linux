@@ -4,7 +4,7 @@
 
 #include <linux/transport_class.h>
 #include <linux/types.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <scsi/sas.h>
 #include <linux/bsg-lib.h>
 

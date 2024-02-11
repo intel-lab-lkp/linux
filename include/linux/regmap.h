@@ -15,7 +15,7 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/bug.h>
-#include <linux/lockdep.h>
+#include <linux/lockdep_types.h>
 #include <linux/iopoll.h>
 #include <linux/fwnode.h>
 

@@ -30,7 +30,7 @@ struct irq_domain_ops;
 #include <linux/list.h>
 #include <linux/dynamic_debug.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/fw_table.h>
 
 #include <acpi/acpi_bus.h>

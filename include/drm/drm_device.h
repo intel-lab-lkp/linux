@@ -3,7 +3,7 @@
 
 #include <linux/list.h>
 #include <linux/kref.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/idr.h>
 
 #include <drm/drm_mode_config.h>

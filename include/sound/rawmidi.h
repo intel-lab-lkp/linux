@@ -9,10 +9,10 @@
 
 #include <sound/asound.h>
 #include <linux/interrupt.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/wait.h>
-#include <linux/mutex.h>
-#include <linux/workqueue.h>
+#include <linux/mutex_types.h>
+#include <linux/workqueue_types.h>
 #include <linux/device.h>
 
 #if IS_ENABLED(CONFIG_SND_SEQUENCER)

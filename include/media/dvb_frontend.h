@@ -39,7 +39,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/slab.h>
 #include <linux/bitops.h>
 

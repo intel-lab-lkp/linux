@@ -12,9 +12,9 @@
 #include <linux/list.h>
 #include <linux/idr.h>
 #include <linux/wait.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/rcupdate.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/percpu-refcount.h>
 #include <linux/percpu-rwsem.h>
 #include <linux/u64_stats_sync.h>

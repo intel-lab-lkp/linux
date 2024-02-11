@@ -9,8 +9,8 @@
 
 #include <linux/list.h>
 #include <linux/kref.h>
-#include <linux/spinlock.h>
-#include <linux/mutex.h>
+#include <linux/spinlock_types.h>
+#include <linux/mutex_types.h>
 #include <linux/iio/buffer_impl.h>
 
 struct iio_dma_buffer_queue;

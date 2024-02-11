@@ -12,7 +12,7 @@
 #include <linux/list.h>
 #include <linux/kref.h>
 #include <linux/pgtable.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/userfaultfd_k.h>
 
 struct ctl_table;

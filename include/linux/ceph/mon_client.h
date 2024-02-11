@@ -4,7 +4,7 @@
 
 #include <linux/completion.h>
 #include <linux/kref.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 
 #include <linux/ceph/messenger.h>
 

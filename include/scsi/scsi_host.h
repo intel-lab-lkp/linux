@@ -5,8 +5,8 @@
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
-#include <linux/mutex.h>
+#include <linux/workqueue_types.h>
+#include <linux/mutex_types.h>
 #include <linux/seq_file.h>
 #include <linux/blk-mq.h>
 #include <scsi/scsi.h>

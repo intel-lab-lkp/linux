@@ -45,7 +45,7 @@
 #include <linux/in.h>
 #include <linux/tty.h>
 #include <linux/proc_fs.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/jiffies.h>
 #include <linux/idr.h>
 

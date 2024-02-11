@@ -11,7 +11,7 @@
 #include <linux/hardirq.h>
 #include <linux/irqflags.h>
 #include <linux/kref.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/jump_label.h>
 
 #include <linux/atomic.h>

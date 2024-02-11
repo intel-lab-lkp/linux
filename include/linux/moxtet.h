@@ -11,7 +11,7 @@
 #include <linux/device.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 
 #define TURRIS_MOX_MAX_MODULES	10
 
