@@ -38,7 +38,7 @@
 #include <linux/notifier.h>
 #include <linux/export.h>
 #include <linux/fs.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/semaphore.h>

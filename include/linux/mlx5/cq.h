@@ -35,6 +35,7 @@
 
 #include <linux/mlx5/driver.h>
 #include <linux/refcount.h>
+#include <linux/completion.h>
 
 struct mlx5_core_cq {
 	u32			cqn;

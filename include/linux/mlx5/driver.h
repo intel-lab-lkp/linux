@@ -34,7 +34,7 @@
 #define MLX5_DRIVER_H
 
 #include <linux/kernel.h>
-#include <linux/completion.h>
+#include <linux/completion_types.h>
 #include <linux/pci.h>
 #include <linux/irq.h>
 #include <linux/spinlock_types.h>
