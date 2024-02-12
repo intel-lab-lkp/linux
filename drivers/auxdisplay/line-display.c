@@ -330,8 +330,8 @@ int linedisp_register(struct linedisp *linedisp, struct device *parent,
 	linedisp->dev.parent = parent;
 	linedisp->dev.type = &linedisp_type;
 	linedisp->ops = ops;
-	linedisp->buf = buf;
-	linedisp->num_chars = num_chars;
+	linedisp->buf = buf ? buf : linedisp->curr;
+	linedisp->num_chars = buf ? num_chars : min(num_chars, LINEDISP_DEFAULT_BUF_SZ);
 	linedisp->scroll_rate = DEFAULT_SCROLL_RATE;
 
 	err = ida_alloc(&linedisp_id, GFP_KERNEL);

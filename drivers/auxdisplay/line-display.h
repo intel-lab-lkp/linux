@@ -54,12 +54,15 @@ struct linedisp_ops {
 	void (*update)(struct linedisp *linedisp);
 };
 
+#define LINEDISP_DEFAULT_BUF_SZ		8u
+
 /**
  * struct linedisp - character line display private data structure
  * @dev: the line display device
  * @id: instance id of this display
  * @timer: timer used to implement scrolling
  * @ops: character line display operations
+ * @curr: fallback buffer for the string
  * @buf: pointer to the buffer for the string currently displayed
  * @message: the full message to display or scroll on the display
  * @num_chars: the number of characters that can be displayed
@@ -73,6 +76,7 @@ struct linedisp {
 	struct timer_list timer;
 	const struct linedisp_ops *ops;
 	struct linedisp_map *map;
+	char curr[LINEDISP_DEFAULT_BUF_SZ];
 	char *buf;
 	char *message;
 	unsigned int num_chars;
