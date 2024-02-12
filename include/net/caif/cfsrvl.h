@@ -9,7 +9,6 @@
 #include <linux/list.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
-#include <linux/kref.h>
 #include <linux/rculist.h>
 
 struct cfsrvl {

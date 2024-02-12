@@ -42,7 +42,6 @@
 #include <linux/limits.h>
 #include <linux/mm_types.h>
 #include <linux/list.h>
-#include <linux/spinlock.h>
 #ifdef CONFIG_DRM_DEBUG_MM
 #include <linux/stackdepot.h>
 #endif

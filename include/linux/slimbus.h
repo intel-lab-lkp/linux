@@ -7,8 +7,9 @@
 #define _LINUX_SLIMBUS_H
 #include <linux/device.h>
 #include <linux/module.h>
-#include <linux/completion.h>
 #include <linux/mod_devicetable.h>
+
+struct completion;
 
 extern struct bus_type slimbus_bus;
 

@@ -11,6 +11,7 @@
 #include <linux/termios.h>
 #include <linux/seq_file.h>
 
+struct attribute_group;
 struct tty_struct;
 struct tty_driver;
 struct serial_icounter_struct;

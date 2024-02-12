@@ -12,7 +12,6 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/err.h>
-#include <linux/of.h>
 #include <linux/iova_bitmap.h>
 #include <uapi/linux/iommu.h>
 
@@ -32,6 +31,7 @@
  */
 #define IOMMU_PRIV	(1 << 5)
 
+struct of_phandle_args;
 struct iommu_ops;
 struct iommu_group;
 struct bus_type;

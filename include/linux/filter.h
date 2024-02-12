@@ -12,7 +12,6 @@
 #include <linux/skbuff.h>
 #include <linux/linkage.h>
 #include <linux/printk.h>
-#include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/capability.h>

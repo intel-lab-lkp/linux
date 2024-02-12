@@ -8,10 +8,11 @@
 #ifndef _TRANSPORT_CLASS_H_
 #define _TRANSPORT_CLASS_H_
 
-#include <linux/device.h>
+#include <linux/device/class.h>
 #include <linux/bug.h>
 #include <linux/attribute_container.h>
 
+struct device;
 struct transport_container;
 
 struct transport_class {

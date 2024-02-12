@@ -3,8 +3,11 @@
 #ifndef __LINUX_USB_ROLE_H
 #define __LINUX_USB_ROLE_H
 
-#include <linux/device.h>
+#include <linux/errno.h>
+#include <linux/types.h>
 
+struct device;
+struct fwnode_handle;
 struct usb_role_switch;
 
 enum usb_role {

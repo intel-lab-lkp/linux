@@ -11,8 +11,6 @@
 
 #include <linux/wait.h>
 #include <linux/err.h>
-#include <linux/percpu-defs.h>
-#include <linux/percpu.h>
 #include <linux/sched.h>
 #include <uapi/linux/eventfd.h>
 

@@ -11,12 +11,12 @@
 #ifndef _SMC_H
 #define _SMC_H
 
-#include <linux/device.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 #include "linux/ism.h"
 
+struct device;
 struct sock;
 
 #define SMC_MAX_PNETID_LEN	16	/* Max. length of PNET id */

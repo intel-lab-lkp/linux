@@ -12,7 +12,6 @@
 #include <linux/refcount.h>
 
 #include <linux/list.h>
-#include <linux/workqueue.h>
 
 #include <net/sock.h>
 #include <uapi/linux/connector.h>

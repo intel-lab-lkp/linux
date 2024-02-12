@@ -42,7 +42,6 @@
 #include <linux/ww_mutex.h>
 #include <linux/dma-fence.h>
 #include <linux/slab.h>
-#include <linux/seqlock.h>
 #include <linux/rcupdate.h>
 
 extern struct ww_class reservation_ww_class;

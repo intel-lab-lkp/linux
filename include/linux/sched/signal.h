@@ -8,12 +8,13 @@
 #include <linux/sched/jobctl.h>
 #include <linux/sched/task.h>
 #include <linux/completion.h>
-#include <linux/cred.h>
 #include <linux/refcount.h>
 #include <linux/pid.h>
 #include <linux/posix-timers.h>
 #include <linux/mm_types.h>
 #include <asm/ptrace.h>
+
+struct cred;
 
 /*
  * Types defining task->signal and task->sighand and APIs using them:

@@ -12,10 +12,10 @@
 #ifndef _LINUX_SOC_APPLE_SART_H_
 #define _LINUX_SOC_APPLE_SART_H_
 
-#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/types.h>
 
+struct device;
 struct apple_sart;
 
 /*

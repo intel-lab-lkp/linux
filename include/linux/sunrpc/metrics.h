@@ -26,11 +26,12 @@
 #ifndef _LINUX_SUNRPC_METRICS_H
 #define _LINUX_SUNRPC_METRICS_H
 
-#include <linux/seq_file.h>
 #include <linux/ktime.h>
 #include <linux/spinlock.h>
 
 #define RPC_IOSTATS_VERS	"1.1"
+
+struct seq_file;
 
 struct rpc_iostats {
 	spinlock_t		om_lock;

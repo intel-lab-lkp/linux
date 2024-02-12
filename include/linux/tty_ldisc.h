@@ -5,11 +5,9 @@
 struct tty_struct;
 
 #include <linux/fs.h>
-#include <linux/wait.h>
 #include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
-#include <linux/seq_file.h>
 
 /*
  * the semaphore definition

@@ -13,7 +13,6 @@
 #include <linux/mutex.h>
 #include <linux/pm.h>
 #include <linux/err.h>
-#include <linux/of.h>
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
 #include <linux/cpumask.h>
@@ -348,6 +347,7 @@ static inline void dev_pm_genpd_resume(struct device *dev) {}
 
 /* OF PM domain providers */
 struct of_device_id;
+struct of_phandle_args;
 
 typedef struct generic_pm_domain *(*genpd_xlate_t)(struct of_phandle_args *args,
 						   void *data);

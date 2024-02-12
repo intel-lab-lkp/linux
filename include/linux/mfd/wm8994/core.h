@@ -10,7 +10,6 @@
 #ifndef __MFD_WM8994_CORE_H__
 #define __MFD_WM8994_CORE_H__
 
-#include <linux/mutex.h>
 #include <linux/interrupt.h>
 #include <linux/regmap.h>
 

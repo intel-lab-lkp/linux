@@ -23,7 +23,6 @@
 
 #include <linux/rtc.h>
 #include <linux/platform_device.h>
-#include <linux/workqueue.h>
 
 /**
  * struct ds1685_priv - DS1685 private data structure.

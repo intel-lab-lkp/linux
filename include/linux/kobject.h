@@ -24,8 +24,6 @@
 #include <linux/stdarg.h> // for va_list
 #include <linux/kref.h>
 #include <linux/kobject_ns.h>
-#include <linux/wait.h>
-#include <linux/atomic.h>
 #include <linux/workqueue.h>
 #include <linux/uidgid.h>
 

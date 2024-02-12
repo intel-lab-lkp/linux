@@ -35,6 +35,8 @@
 
 #include <drm/drm.h>
 
+struct seq_file;
+
 /* Do *not* use outside of drm_print.[ch]! */
 extern unsigned long __drm_debug;
 

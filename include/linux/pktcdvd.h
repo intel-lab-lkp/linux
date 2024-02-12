@@ -13,10 +13,7 @@
 #define __PKTCDVD_H
 
 #include <linux/blkdev.h>
-#include <linux/completion.h>
 #include <linux/cdrom.h>
-#include <linux/kobject.h>
-#include <linux/sysfs.h>
 #include <linux/mempool.h>
 #include <uapi/linux/pktcdvd.h>
 

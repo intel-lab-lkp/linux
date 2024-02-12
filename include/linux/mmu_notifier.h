@@ -3,7 +3,6 @@
 #define _LINUX_MMU_NOTIFIER_H
 
 #include <linux/list.h>
-#include <linux/spinlock.h>
 #include <linux/mm_types.h>
 #include <linux/mmap_lock.h>
 #include <linux/srcu.h>

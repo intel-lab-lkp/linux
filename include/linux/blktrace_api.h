@@ -11,8 +11,6 @@
 
 #if defined(CONFIG_BLK_DEV_IO_TRACE)
 
-#include <linux/sysfs.h>
-
 struct blk_trace {
 	int trace_state;
 	struct rchan *rchan;

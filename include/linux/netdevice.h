@@ -32,7 +32,6 @@
 
 #include <linux/percpu.h>
 #include <linux/rculist.h>
-#include <linux/workqueue.h>
 #include <linux/dynamic_queue_limits.h>
 
 #include <net/net_namespace.h>

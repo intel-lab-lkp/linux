@@ -19,7 +19,6 @@
 #include <linux/socket.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
-#include <linux/wait.h>
 
 #include <net/inet_connection_sock.h>
 #include <net/inet_sock.h>
