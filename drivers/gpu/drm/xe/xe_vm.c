@@ -995,9 +995,16 @@ int xe_vm_prepare_vma(struct drm_exec *exec, struct xe_vma *vma,
 	int err;
 
 	XE_WARN_ON(!vm);
-	err = drm_exec_prepare_obj(exec, xe_vm_obj(vm), num_shared);
-	if (!err && bo && !bo->vm)
-		err = drm_exec_prepare_obj(exec, &bo->ttm.base, num_shared);
+	if (num_shared)
+		err = drm_exec_prepare_obj(exec, xe_vm_obj(vm), num_shared);
+	else
+		err = drm_exec_lock_obj(exec, xe_vm_obj(vm));
+	if (!err && bo && !bo->vm) {
+		if (num_shared)
+			err = drm_exec_prepare_obj(exec, &bo->ttm.base, num_shared);
+		else
+			err = drm_exec_lock_obj(exec, &bo->ttm.base);
+	}
 
 	return err;
 }
@@ -1074,7 +1081,7 @@ static struct drm_gpuva_op *xe_vm_op_alloc(void)
 
 static void xe_vm_free(struct drm_gpuvm *gpuvm);
 
-static struct drm_gpuvm_ops gpuvm_ops = {
+static const struct drm_gpuvm_ops gpuvm_ops = {
 	.op_alloc = xe_vm_op_alloc,
 	.vm_bo_validate = xe_gpuvm_validate,
 	.vm_free = xe_vm_free,
