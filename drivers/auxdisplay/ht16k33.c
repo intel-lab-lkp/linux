@@ -448,6 +448,10 @@ static void ht16k33_linedisp_update(struct linedisp *linedisp)
 	schedule_delayed_work(&priv->work, 0);
 }
 
+static const struct linedisp_ops ht16k33_linedisp_ops = {
+	.update = ht16k33_linedisp_update,
+};
+
 static void ht16k33_seg7_update(struct work_struct *work)
 {
 	struct ht16k33_priv *priv = container_of(work, struct ht16k33_priv,
@@ -696,8 +700,7 @@ static int ht16k33_seg_probe(struct device *dev, struct ht16k33_priv *priv,
 	if (err)
 		return err;
 
-	err = linedisp_register(&seg->linedisp, dev, 4, seg->curr,
-				ht16k33_linedisp_update);
+	err = linedisp_register(&seg->linedisp, dev, 4, seg->curr, &ht16k33_linedisp_ops);
 	if (err)
 		goto err_remove_map_file;
 
