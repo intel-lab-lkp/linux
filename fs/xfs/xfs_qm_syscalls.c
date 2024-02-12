@@ -19,6 +19,8 @@
 #include "xfs_qm.h"
 #include "xfs_icache.h"
 
+#include <linux/quota.h>
+
 int
 xfs_qm_scall_quotaoff(
 	xfs_mount_t		*mp,

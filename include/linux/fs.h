@@ -260,7 +260,7 @@ struct iattr {
 /*
  * Includes for diskquotas.
  */
-#include <linux/quota.h>
+#include <linux/quota_types.h>
 
 /*
  * Maximum number of layers of fs stack.  Needs to be limited to
