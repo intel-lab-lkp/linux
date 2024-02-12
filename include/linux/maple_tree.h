@@ -10,7 +10,6 @@
 
 #include <linux/maple_tree_types.h>
 
-#include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/spinlock.h>
 /* #define CONFIG_MAPLE_RCU_DISABLED */

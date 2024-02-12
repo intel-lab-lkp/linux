@@ -5,7 +5,6 @@
 #ifndef _IBA_DEFS_H_
 #define _IBA_DEFS_H_
 
-#include <linux/kernel.h>
 #include <linux/bitfield.h>
 #include <asm/unaligned.h>
 

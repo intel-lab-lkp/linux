@@ -8,7 +8,6 @@
 
 #include <linux/errno.h>
 #include <linux/buildid.h>
-#include <linux/kernel.h>
 #include <linux/stddef.h>
 #include <linux/mm.h>
 #include <linux/module.h>

@@ -10,7 +10,6 @@
 #define __LINUX_CLK_H
 
 #include <linux/err.h>
-#include <linux/kernel.h>
 #include <linux/notifier.h>
 #include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 

@@ -3,7 +3,6 @@
 #define _LINUX_RANDOMIZE_KSTACK_H
 
 #ifdef CONFIG_RANDOMIZE_KSTACK_OFFSET
-#include <linux/kernel.h>
 #include <linux/jump_label.h>
 #include <linux/percpu-defs.h>
 

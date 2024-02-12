@@ -7,7 +7,6 @@
 #define IXP4XX_QMGR_H
 
 #include <linux/io.h>
-#include <linux/kernel.h>
 
 #define DEBUG_QMGR	0
 

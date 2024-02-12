@@ -8,7 +8,6 @@
 #include <linux/dcbnl.h>
 #include <linux/device.h>
 #include <linux/if_ether.h>
-#include <linux/kernel.h>
 #include <linux/netdevice.h>
 
 enum iidc_event_type {

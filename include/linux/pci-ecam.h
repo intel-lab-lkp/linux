@@ -6,7 +6,6 @@
 #define DRIVERS_PCI_ECAM_H
 
 #include <linux/pci.h>
-#include <linux/kernel.h>
 #include <linux/platform_device.h>
 
 /*

@@ -76,7 +76,6 @@ MALLOC_VISIBLE void free(void *where)
 
 /* Code active when compiled standalone for use when loading ramdisk: */
 
-#include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/slab.h>

@@ -5,7 +5,6 @@
 #include <linux/bug.h>
 #include <linux/kasan-enabled.h>
 #include <linux/kasan-tags.h>
-#include <linux/kernel.h>
 #include <linux/static_key.h>
 #include <linux/types.h>
 

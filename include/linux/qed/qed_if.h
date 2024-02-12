@@ -16,7 +16,6 @@
 #include <asm/byteorder.h>
 #include <linux/io.h>
 #include <linux/compiler.h>
-#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/qed/common_hsi.h>

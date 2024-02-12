@@ -9,7 +9,6 @@
 #ifndef _LINUX_CPU_PM_H
 #define _LINUX_CPU_PM_H
 
-#include <linux/kernel.h>
 #include <linux/notifier.h>
 
 /*

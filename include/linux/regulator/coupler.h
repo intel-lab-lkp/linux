@@ -9,7 +9,6 @@
 #define __LINUX_REGULATOR_COUPLER_H_
 
 #include <linux/errno.h>
-#include <linux/kernel.h>
 #include <linux/suspend.h>
 
 struct regulator_coupler;
