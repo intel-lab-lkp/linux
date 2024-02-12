@@ -72,6 +72,8 @@ struct vsc_tp {
 	atomic_t assert_cnt;
 	wait_queue_head_t xfer_wait;
 
+	struct workqueue_struct *event_workqueue;
+	struct work_struct event_work;
 	vsc_tp_event_cb_t event_notify;
 	void *event_notify_context;
 
@@ -416,19 +418,19 @@ static irqreturn_t vsc_tp_isr(int irq, void *data)
 
 	atomic_inc(&tp->assert_cnt);
 
-	wake_up(&tp->xfer_wait);
+	queue_work(tp->event_workqueue, &tp->event_work);
 
-	return IRQ_WAKE_THREAD;
+	return IRQ_HANDLED;
 }
 
-static irqreturn_t vsc_tp_thread_isr(int irq, void *data)
+static void vsc_tp_event_work(struct work_struct *work)
 {
-	struct vsc_tp *tp = data;
+	struct vsc_tp *tp = container_of(work, struct vsc_tp, event_work);;
+
+	wake_up(&tp->xfer_wait);
 
 	if (tp->event_notify)
 		tp->event_notify(tp->event_notify_context);
-
-	return IRQ_HANDLED;
 }
 
 static int vsc_tp_match_any(struct acpi_device *adev, void *data)
@@ -481,13 +483,18 @@ static int vsc_tp_probe(struct spi_device *spi)
 	init_waitqueue_head(&tp->xfer_wait);
 	tp->spi = spi;
 
+	tp->event_workqueue = create_singlethread_workqueue(dev_name(dev));
+	if (!tp->event_workqueue)
+		return -ENOMEM;
+
+	INIT_WORK(&tp->event_work, vsc_tp_event_work);
+
 	irq_set_status_flags(spi->irq, IRQ_DISABLE_UNLAZY);
-	ret = devm_request_threaded_irq(dev, spi->irq, vsc_tp_isr,
-					vsc_tp_thread_isr,
-					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					dev_name(dev), tp);
+	ret = devm_request_irq(dev, spi->irq, vsc_tp_isr,
+			       IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			       dev_name(dev), tp);
 	if (ret)
-		return ret;
+		goto err_destroy_workqueue;
 
 	mutex_init(&tp->mutex);
 
@@ -516,6 +523,10 @@ static int vsc_tp_probe(struct spi_device *spi)
 
 	return 0;
 
+err_destroy_workqueue:
+	destroy_workqueue(tp->event_workqueue);
+	kfree(tp->event_workqueue);
+
 err_destroy_lock:
 	mutex_destroy(&tp->mutex);
 
@@ -528,6 +539,8 @@ static void vsc_tp_remove(struct spi_device *spi)
 
 	platform_device_unregister(tp->pdev);
 
+	destroy_workqueue(tp->event_workqueue);
+	kfree(tp->event_workqueue);
 	mutex_destroy(&tp->mutex);
 }
 
