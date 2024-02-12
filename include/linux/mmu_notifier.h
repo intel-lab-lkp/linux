@@ -5,6 +5,7 @@
 #include <linux/list.h>
 #include <linux/mm_types.h>
 #include <linux/mmap_lock.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 #include <linux/srcu.h>
 #include <linux/interval_tree.h>
 

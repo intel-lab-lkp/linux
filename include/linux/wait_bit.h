@@ -7,7 +7,7 @@
  */
 #include <linux/bitops.h>
 #include <linux/init.h> // for __init
-#include <linux/kernel.h> // for might_sleep()
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 #include <linux/wait_types.h>
 
 struct wait_bit_key {
