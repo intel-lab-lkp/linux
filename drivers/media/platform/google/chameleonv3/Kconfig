@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config VIDEO_CHV3_FB
+	tristate "Google Chameleon v3 framebuffer video driver"
+	depends on V4L_PLATFORM_DRIVERS
+	depends on VIDEO_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_FWNODE
+	help
+	  v4l2 driver for the video interface present on the Google
+	  Chameleon v3. The Chameleon v3 uses the framebuffer IP core
+	  to take the video signal from different sources and directly
+	  write frames into memory.
