@@ -20,8 +20,10 @@
 #define FMC2_BCR(x)			((x) * 0x8 + FMC2_BCR1)
 #define FMC2_BTR(x)			((x) * 0x8 + FMC2_BTR1)
 #define FMC2_PCSCNTR			0x20
+#define FMC2_CFGR			0x20
 #define FMC2_BWTR1			0x104
 #define FMC2_BWTR(x)			((x) * 0x8 + FMC2_BWTR1)
+#define FMC2_VERR			0x3f4
 
 /* Register: FMC2_BCR1 */
 #define FMC2_BCR1_CCLKEN		BIT(20)
@@ -42,6 +44,7 @@
 #define FMC2_BCR_ASYNCWAIT		BIT(15)
 #define FMC2_BCR_CPSIZE			GENMASK(18, 16)
 #define FMC2_BCR_CBURSTRW		BIT(19)
+#define FMC2_BCR_CSCOUNT		GENMASK(21, 20)
 #define FMC2_BCR_NBLSET			GENMASK(23, 22)
 
 /* Register: FMC2_BTRx/FMC2_BWTRx */
@@ -57,6 +60,15 @@
 /* Register: FMC2_PCSCNTR */
 #define FMC2_PCSCNTR_CSCOUNT		GENMASK(15, 0)
 #define FMC2_PCSCNTR_CNTBEN(x)		BIT((x) + 16)
+
+/* Register: FMC2_CFGR */
+#define FMC2_CFGR_CLKDIV		GENMASK(19, 16)
+#define FMC2_CFGR_CCLKEN		BIT(20)
+#define FMC2_CFGR_FMC2EN		BIT(31)
+
+/* Register: FMC2_VERR */
+#define FMC2_VERR_MAJREV		GENMASK(7, 4)
+#define FMC2_VERR_MAJREV_2		2
 
 #define FMC2_MAX_EBI_CE			4
 #define FMC2_MAX_BANKS			5
@@ -74,6 +86,11 @@
 #define FMC2_BCR_MTYP_PSRAM		0x1
 #define FMC2_BCR_MTYP_NOR		0x2
 
+#define FMC2_BCR_CSCOUNT_0		0x0
+#define FMC2_BCR_CSCOUNT_1		0x1
+#define FMC2_BCR_CSCOUNT_64		0x2
+#define FMC2_BCR_CSCOUNT_256		0x3
+
 #define FMC2_BXTR_EXTMOD_A		0x0
 #define FMC2_BXTR_EXTMOD_B		0x1
 #define FMC2_BXTR_EXTMOD_C		0x2
@@ -85,7 +102,7 @@
 #define FMC2_BXTR_DATAST_MAX		0xff
 #define FMC2_BXTR_BUSTURN_MAX		0xf
 #define FMC2_BXTR_DATAHLD_MAX		0x3
-#define FMC2_BTR_CLKDIV_MAX		0xf
+#define FMC2_REG_CLKDIV_MAX		0xf
 #define FMC2_BTR_DATLAT_MAX		0xf
 #define FMC2_PCSCNTR_CSCOUNT_MAX	0xff
 
@@ -101,7 +118,8 @@ enum stm32_fmc2_ebi_register_type {
 	FMC2_REG_BCR = 1,
 	FMC2_REG_BTR,
 	FMC2_REG_BWTR,
-	FMC2_REG_PCSCNTR
+	FMC2_REG_PCSCNTR,
+	FMC2_REG_CFGR,
 };
 
 enum stm32_fmc2_ebi_transaction_type {
@@ -132,6 +150,13 @@ enum stm32_fmc2_ebi_cpsize {
 	FMC2_CPSIZE_1024 = 1024
 };
 
+enum stm32_fmc2_ebi_cscount {
+	FMC2_CSCOUNT_0 = 0,
+	FMC2_CSCOUNT_1 = 1,
+	FMC2_CSCOUNT_64 = 64,
+	FMC2_CSCOUNT_256 = 256
+};
+
 struct stm32_fmc2_ebi_data {
 	bool rnb_for_nand;
 };
@@ -142,11 +167,13 @@ struct stm32_fmc2_ebi {
 	struct regmap *regmap;
 	const struct stm32_fmc2_ebi_data *data;
 	u8 bank_assigned;
+	u8 majrev;
 
 	u32 bcr[FMC2_MAX_EBI_CE];
 	u32 btr[FMC2_MAX_EBI_CE];
 	u32 bwtr[FMC2_MAX_EBI_CE];
 	u32 pcscntr;
+	u32 cfgr;
 };
 
 /*
@@ -274,15 +301,29 @@ static int stm32_fmc2_ebi_check_clk_period(struct stm32_fmc2_ebi *ebi,
 					   const struct stm32_fmc2_prop *prop,
 					   int cs)
 {
-	u32 bcr, bcr1;
+	u32 bcr, cfgr;
 
 	regmap_read(ebi->regmap, FMC2_BCR(cs), &bcr);
-	if (cs)
-		regmap_read(ebi->regmap, FMC2_BCR1, &bcr1);
-	else
-		bcr1 = bcr;
 
-	if (bcr & FMC2_BCR_BURSTEN && (!cs || !(bcr1 & FMC2_BCR1_CCLKEN)))
+	if (ebi->majrev < FMC2_VERR_MAJREV_2) {
+		u32 bcr1;
+
+		if (cs)
+			regmap_read(ebi->regmap, FMC2_BCR1, &bcr1);
+		else
+			bcr1 = bcr;
+
+		if (bcr & FMC2_BCR_BURSTEN &&
+		    (!cs || !(bcr1 & FMC2_BCR1_CCLKEN)))
+			return 0;
+
+		return -EINVAL;
+	}
+
+	regmap_read(ebi->regmap, FMC2_CFGR, &cfgr);
+
+	if (bcr & FMC2_BCR_BURSTEN &&
+	    (!cs || !(cfgr & FMC2_CFGR_CCLKEN)))
 		return 0;
 
 	return -EINVAL;
@@ -311,15 +352,29 @@ static u32 stm32_fmc2_ebi_ns_to_clk_period(struct stm32_fmc2_ebi *ebi,
 					   int cs, u32 setup)
 {
 	u32 nb_clk_cycles = stm32_fmc2_ebi_ns_to_clock_cycles(ebi, cs, setup);
-	u32 bcr, btr, clk_period;
+	u32 btr, clk_period;
 
-	regmap_read(ebi->regmap, FMC2_BCR1, &bcr);
-	if (bcr & FMC2_BCR1_CCLKEN || !cs)
-		regmap_read(ebi->regmap, FMC2_BTR1, &btr);
-	else
-		regmap_read(ebi->regmap, FMC2_BTR(cs), &btr);
+	if (ebi->majrev < FMC2_VERR_MAJREV_2) {
+		u32 bcr;
 
-	clk_period = FIELD_GET(FMC2_BTR_CLKDIV, btr) + 1;
+		regmap_read(ebi->regmap, FMC2_BCR1, &bcr);
+		if (bcr & FMC2_BCR1_CCLKEN || !cs)
+			regmap_read(ebi->regmap, FMC2_BTR1, &btr);
+		else
+			regmap_read(ebi->regmap, FMC2_BTR(cs), &btr);
+
+		clk_period = FIELD_GET(FMC2_BTR_CLKDIV, btr) + 1;
+	} else {
+		u32 cfgr;
+
+		regmap_read(ebi->regmap, FMC2_CFGR, &cfgr);
+		if (cfgr & FMC2_CFGR_CCLKEN) {
+			clk_period = FIELD_GET(FMC2_CFGR_CLKDIV, cfgr) + 1;
+		} else {
+			regmap_read(ebi->regmap, FMC2_BTR(cs), &btr);
+			clk_period = FIELD_GET(FMC2_BTR_CLKDIV, btr) + 1;
+		}
+	}
 
 	return DIV_ROUND_UP(nb_clk_cycles, clk_period);
 }
@@ -338,6 +393,9 @@ static int stm32_fmc2_ebi_get_reg(int reg_type, int cs, u32 *reg)
 		break;
 	case FMC2_REG_PCSCNTR:
 		*reg = FMC2_PCSCNTR;
+		break;
+	case FMC2_REG_CFGR:
+		*reg = FMC2_CFGR;
 		break;
 	default:
 		return -EINVAL;
@@ -672,10 +730,26 @@ static int stm32_fmc2_ebi_set_clk_period(struct stm32_fmc2_ebi *ebi,
 					 int cs, u32 setup)
 {
 	u32 val;
+	u32 reg = FMC2_BTR(cs);
+	u32 mask = FMC2_BTR_CLKDIV;
 
-	val = setup ? clamp_val(setup - 1, 1, FMC2_BTR_CLKDIV_MAX) : 1;
-	val = FIELD_PREP(FMC2_BTR_CLKDIV, val);
-	regmap_update_bits(ebi->regmap, FMC2_BTR(cs), FMC2_BTR_CLKDIV, val);
+	if (ebi->majrev >= FMC2_VERR_MAJREV_2) {
+		u32 cfgr;
+
+		regmap_read(ebi->regmap, FMC2_CFGR, &cfgr);
+
+		if (cfgr & FMC2_CFGR_CCLKEN) {
+			reg = FMC2_CFGR;
+			mask = FMC2_CFGR_CLKDIV;
+		}
+	}
+
+	val = setup ? clamp_val(setup - 1, 1, FMC2_REG_CLKDIV_MAX) : 1;
+	if (reg == FMC2_CFGR)
+		val = FIELD_PREP(FMC2_CFGR_CLKDIV, val);
+	else
+		val = FIELD_PREP(FMC2_BTR_CLKDIV, val);
+	regmap_update_bits(ebi->regmap, reg, mask, val);
 
 	return 0;
 }
@@ -697,27 +771,58 @@ static int stm32_fmc2_ebi_set_max_low_pulse(struct stm32_fmc2_ebi *ebi,
 					    const struct stm32_fmc2_prop *prop,
 					    int cs, u32 setup)
 {
-	u32 old_val, new_val, pcscntr;
+	u32 val;
+	u32 reg = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_PCSCNTR :
+						     FMC2_BCR(cs);
+	u32 mask = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_PCSCNTR_CSCOUNT :
+						      FMC2_BCR_CSCOUNT;
 
-	if (setup < 1)
-		return 0;
+	if (ebi->majrev < FMC2_VERR_MAJREV_2) {
+		u32 old_val, pcscntr;
 
-	regmap_read(ebi->regmap, FMC2_PCSCNTR, &pcscntr);
+		if (setup < 1)
+			return 0;
 
-	/* Enable counter for the bank */
-	regmap_update_bits(ebi->regmap, FMC2_PCSCNTR,
-			   FMC2_PCSCNTR_CNTBEN(cs),
-			   FMC2_PCSCNTR_CNTBEN(cs));
+		regmap_read(ebi->regmap, reg, &pcscntr);
 
-	new_val = min_t(u32, setup - 1, FMC2_PCSCNTR_CSCOUNT_MAX);
-	old_val = FIELD_GET(FMC2_PCSCNTR_CSCOUNT, pcscntr);
-	if (old_val && new_val > old_val)
-		/* Keep current counter value */
-		return 0;
+		/* Enable counter for the bank */
+		regmap_update_bits(ebi->regmap, reg,
+				   FMC2_PCSCNTR_CNTBEN(cs),
+				   FMC2_PCSCNTR_CNTBEN(cs));
 
-	new_val = FIELD_PREP(FMC2_PCSCNTR_CSCOUNT, new_val);
-	regmap_update_bits(ebi->regmap, FMC2_PCSCNTR,
-			   FMC2_PCSCNTR_CSCOUNT, new_val);
+		val = min_t(u32, setup - 1, FMC2_PCSCNTR_CSCOUNT_MAX);
+		old_val = FIELD_GET(FMC2_PCSCNTR_CSCOUNT, pcscntr);
+		if (old_val && val > old_val)
+			/* Keep current counter value */
+			return 0;
+
+		val = FIELD_PREP(FMC2_PCSCNTR_CSCOUNT, val);
+	} else {
+		if (setup == FMC2_CSCOUNT_0)
+			val = FIELD_PREP(FMC2_BCR_CSCOUNT, FMC2_BCR_CSCOUNT_0);
+		else if (setup == FMC2_CSCOUNT_1)
+			val = FIELD_PREP(FMC2_BCR_CSCOUNT, FMC2_BCR_CSCOUNT_1);
+		else if (setup <= FMC2_CSCOUNT_64)
+			val = FIELD_PREP(FMC2_BCR_CSCOUNT, FMC2_BCR_CSCOUNT_64);
+		else
+			val = FIELD_PREP(FMC2_BCR_CSCOUNT,
+					 FMC2_BCR_CSCOUNT_256);
+	}
+
+	regmap_update_bits(ebi->regmap, reg, mask, val);
+
+	return 0;
+}
+
+static int stm32_fmc2_ebi_set_cclk(struct stm32_fmc2_ebi *ebi,
+				   const struct stm32_fmc2_prop *prop,
+				   int cs, u32 setup)
+{
+	u32 reg = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1 : FMC2_CFGR;
+	u32 mask = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1_CCLKEN :
+						      FMC2_CFGR_CCLKEN;
+
+	regmap_update_bits(ebi->regmap, reg, mask, setup ? mask : 0);
 
 	return 0;
 }
@@ -732,10 +837,8 @@ static const struct stm32_fmc2_prop stm32_fmc2_child_props[] = {
 	{
 		.name = "st,fmc2-ebi-cs-cclk-enable",
 		.bprop = true,
-		.reg_type = FMC2_REG_BCR,
-		.reg_mask = FMC2_BCR1_CCLKEN,
 		.check = stm32_fmc2_ebi_check_cclk,
-		.set = stm32_fmc2_ebi_set_bit_field,
+		.set = stm32_fmc2_ebi_set_cclk,
 	},
 	{
 		.name = "st,fmc2-ebi-cs-mux-enable",
@@ -831,7 +934,7 @@ static const struct stm32_fmc2_prop stm32_fmc2_child_props[] = {
 	},
 	{
 		.name = "st,fmc2-ebi-cs-clk-period-ns",
-		.reset_val = FMC2_BTR_CLKDIV_MAX + 1,
+		.reset_val = FMC2_REG_CLKDIV_MAX + 1,
 		.check = stm32_fmc2_ebi_check_clk_period,
 		.calculate = stm32_fmc2_ebi_ns_to_clock_cycles,
 		.set = stm32_fmc2_ebi_set_clk_period,
@@ -959,7 +1062,10 @@ static void stm32_fmc2_ebi_save_setup(struct stm32_fmc2_ebi *ebi)
 		regmap_read(ebi->regmap, FMC2_BWTR(cs), &ebi->bwtr[cs]);
 	}
 
-	regmap_read(ebi->regmap, FMC2_PCSCNTR, &ebi->pcscntr);
+	if (ebi->majrev < FMC2_VERR_MAJREV_2)
+		regmap_read(ebi->regmap, FMC2_PCSCNTR, &ebi->pcscntr);
+	else
+		regmap_read(ebi->regmap, FMC2_CFGR, &ebi->cfgr);
 }
 
 static void stm32_fmc2_ebi_set_setup(struct stm32_fmc2_ebi *ebi)
@@ -972,7 +1078,10 @@ static void stm32_fmc2_ebi_set_setup(struct stm32_fmc2_ebi *ebi)
 		regmap_write(ebi->regmap, FMC2_BWTR(cs), ebi->bwtr[cs]);
 	}
 
-	regmap_write(ebi->regmap, FMC2_PCSCNTR, ebi->pcscntr);
+	if (ebi->majrev < FMC2_VERR_MAJREV_2)
+		regmap_write(ebi->regmap, FMC2_PCSCNTR, ebi->pcscntr);
+	else
+		regmap_write(ebi->regmap, FMC2_CFGR, ebi->cfgr);
 }
 
 static void stm32_fmc2_ebi_disable_banks(struct stm32_fmc2_ebi *ebi)
@@ -1011,13 +1120,20 @@ static bool stm32_fmc2_ebi_nwait_used_by_ctrls(struct stm32_fmc2_ebi *ebi)
 
 static void stm32_fmc2_ebi_enable(struct stm32_fmc2_ebi *ebi)
 {
-	regmap_update_bits(ebi->regmap, FMC2_BCR1,
-			   FMC2_BCR1_FMC2EN, FMC2_BCR1_FMC2EN);
+	u32 reg = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1 : FMC2_CFGR;
+	u32 mask = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1_FMC2EN :
+						      FMC2_CFGR_FMC2EN;
+
+	regmap_update_bits(ebi->regmap, reg, mask, mask);
 }
 
 static void stm32_fmc2_ebi_disable(struct stm32_fmc2_ebi *ebi)
 {
-	regmap_update_bits(ebi->regmap, FMC2_BCR1, FMC2_BCR1_FMC2EN, 0);
+	u32 reg = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1 : FMC2_CFGR;
+	u32 mask = ebi->majrev < FMC2_VERR_MAJREV_2 ? FMC2_BCR1_FMC2EN :
+						      FMC2_CFGR_FMC2EN;
+
+	regmap_update_bits(ebi->regmap, reg, mask, 0);
 }
 
 static int stm32_fmc2_ebi_setup_cs(struct stm32_fmc2_ebi *ebi,
@@ -1108,6 +1224,7 @@ static int stm32_fmc2_ebi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct stm32_fmc2_ebi *ebi;
 	struct reset_control *rstc;
+	u32 verr;
 	int ret;
 
 	ebi = devm_kzalloc(&pdev->dev, sizeof(*ebi), GFP_KERNEL);
@@ -1140,6 +1257,9 @@ static int stm32_fmc2_ebi_probe(struct platform_device *pdev)
 		reset_control_assert(rstc);
 		reset_control_deassert(rstc);
 	}
+
+	regmap_read(ebi->regmap, FMC2_VERR, &verr);
+	ebi->majrev = FIELD_GET(FMC2_VERR_MAJREV, verr);
 
 	ret = stm32_fmc2_ebi_parse_dt(ebi);
 	if (ret)
