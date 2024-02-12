@@ -36,6 +36,7 @@
 #include <linux/skbuff.h>
 #include <linux/list.h>
 #include <linux/errqueue.h>
+#include <linux/kref.h>
 
 #include "rds.h"
 

@@ -22,6 +22,7 @@
 #include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>
+#include <linux/kref.h>
 
 #define DRIVER_VERSION "USBLCD Driver Version 1.05"
 

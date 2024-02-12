@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/kref.h>
 #include <net/dsa_stubs.h>
 #include <net/sch_generic.h>
 

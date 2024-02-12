@@ -24,6 +24,7 @@
 #include <linux/sprintf.h>
 
 #include <subdev/fb.h>
+#include <linux/kref.h>
 
 static void
 nvkm_vmm_pt_del(struct nvkm_vmm_pt **ppgt)

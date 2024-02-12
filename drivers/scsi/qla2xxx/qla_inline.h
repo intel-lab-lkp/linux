@@ -6,6 +6,8 @@
 
 #include "qla_target.h"
 #include <linux/completion.h>
+#include <linux/kref.h>
+
 /**
  * qla24xx_calc_iocbs() - Determine number of Command Type 3 and
  * Continuation Type 1 IOCBs to allocate.

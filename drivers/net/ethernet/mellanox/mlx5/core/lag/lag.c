@@ -36,6 +36,7 @@
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/eswitch.h>
 #include <linux/mlx5/vport.h>
+#include <linux/kref.h>
 #include "lib/devcom.h"
 #include "mlx5_core.h"
 #include "eswitch.h"

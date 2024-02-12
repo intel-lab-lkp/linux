@@ -7,6 +7,8 @@
 #include "ice_fltr.h"
 #include "ice_virtchnl_allowlist.h"
 
+#include <linux/kref.h>
+
 /* Public functions which may be accessed by all driver files */
 
 /**

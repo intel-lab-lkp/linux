@@ -38,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/netdevice.h>
+#include <linux/kref.h>
 #include <net/addrconf.h>
 
 #include <rdma/ib_cache.h>

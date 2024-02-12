@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/err.h>
+#include <linux/kref.h>
 #include "pci.h"
 #include <linux/sprintf.h>
 

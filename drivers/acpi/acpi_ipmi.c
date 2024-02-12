@@ -12,6 +12,7 @@
 #include <linux/completion.h>
 #include <linux/ipmi.h>
 #include <linux/spinlock.h>
+#include <linux/kref.h>
 
 MODULE_AUTHOR("Zhao Yakui");
 MODULE_DESCRIPTION("ACPI IPMI Opregion driver");

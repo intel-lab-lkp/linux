@@ -10,6 +10,8 @@
 #include "ql4_inline.h"
 #include <linux/completion.h>
 
+#include <linux/kref.h>
+
 /**
  * qla4xxx_copy_sense - copy sense data	into cmd sense buffer
  * @ha: Pointer to host adapter structure.

@@ -27,6 +27,7 @@
 #include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/vmalloc.h>
+#include <linux/kref.h>
 #include <asm/unaligned.h>
 
 #include <linux/usb/ccid.h>

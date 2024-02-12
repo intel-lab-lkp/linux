@@ -36,6 +36,7 @@
 
 #include <linux/property.h>
 #include <linux/uaccess.h>
+#include <linux/kref.h>
 
 #include <video/cmdline.h>
 

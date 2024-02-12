@@ -10,6 +10,8 @@
 #include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kstrtox.h>
 
+#include <linux/kref.h>
+
 struct efct_hw_link_stat_cb_arg {
 	void (*cb)(int status, u32 num_counters,
 		   struct efct_hw_link_stat_counts *counters, void *arg);

@@ -7,7 +7,7 @@
 #define __MTD_TRANS_H__
 
 #include <linux/mutex_types.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 
 struct hd_geometry;

@@ -8,7 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/idr.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/list.h>
 #include <linux/mod_devicetable.h>
 #include <linux/tee.h>

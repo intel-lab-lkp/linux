@@ -5,6 +5,7 @@
  */
 
 #include <linux/vmalloc.h>
+#include <linux/kref.h>
 #include "rxe.h"
 #include "rxe_loc.h"
 #include "rxe_queue.h"

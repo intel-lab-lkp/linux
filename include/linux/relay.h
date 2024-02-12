@@ -19,7 +19,7 @@
 #include <linux/bug.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/percpu.h>
 
 /*

@@ -6,6 +6,7 @@
 #include "wacom_wac.h"
 #include "wacom.h"
 #include <linux/input/mt.h>
+#include <linux/kref.h>
 #include <linux/kstrtox.h>
 #include <linux/sprintf.h>
 

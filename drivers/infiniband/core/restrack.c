@@ -11,6 +11,7 @@
 #include <linux/sched/task.h>
 #include <linux/pid_namespace.h>
 #include <linux/completion.h>
+#include <linux/kref.h>
 
 #include "cma_priv.h"
 #include "restrack.h"
