@@ -9,7 +9,7 @@
 #ifndef _LINUX_EVENTFD_H
 #define _LINUX_EVENTFD_H
 
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/err.h>
 #include <linux/sched.h>
 #include <uapi/linux/eventfd.h>

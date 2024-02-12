@@ -5,7 +5,7 @@
 #include <linux/list.h>
 #include <linux/backing-dev.h>
 #include <linux/idr.h>
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/nfs_xdr.h>
 #include <linux/sunrpc/xprt.h>
 

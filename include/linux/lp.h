@@ -9,7 +9,7 @@
 #define _LINUX_LP_H
 
 
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/mutex_types.h>
 #include <uapi/linux/lp.h>
 

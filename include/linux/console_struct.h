@@ -13,7 +13,7 @@
 #ifndef _LINUX_CONSOLE_STRUCT_H
 #define _LINUX_CONSOLE_STRUCT_H
 
-#include <linux/wait.h>
+#include <linux/wait_types.h>
 #include <linux/vt.h>
 #include <linux/workqueue_types.h>
 
