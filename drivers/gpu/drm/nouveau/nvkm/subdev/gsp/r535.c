@@ -26,6 +26,7 @@
 #include <subdev/vfn.h>
 #include <engine/fifo/chan.h>
 #include <engine/sec2.h>
+#include <drm/drm_device.h>
 
 #include <nvfw/fw.h>
 
@@ -1975,6 +1976,196 @@ r535_gsp_rmargs_init(struct nvkm_gsp *gsp, bool resume)
 	return 0;
 }
 
+#define NV_GSP_MSG_EVENT_UCODE_LIBOS_CLASS_PMU		0xf3d722
+
+/**
+ * r535_gsp_msg_libos_print - capture log message from the PMU
+ * @priv: gsp pointer
+ * @fn: function number (ignored)
+ * @repv: pointer to libos print RPC
+ * @repc: message size
+ *
+ * See _kgspRpcUcodeLibosPrint
+ */
+static int r535_gsp_msg_libos_print(void *priv, u32 fn, void *repv, u32 repc)
+{
+	struct nvkm_gsp *gsp = priv;
+	struct nvkm_subdev *subdev = &gsp->subdev;
+	struct {
+		u32 ucodeEngDesc;
+		u32 libosPrintBufSize;
+		u8 libosPrintBuf[];
+	} *rpc = repv;
+	unsigned int class = rpc->ucodeEngDesc >> 8;
+
+	nvkm_debug(subdev, "received libos print from class 0x%x for %u bytes\n",
+		   class, rpc->libosPrintBufSize);
+
+	if (class != NV_GSP_MSG_EVENT_UCODE_LIBOS_CLASS_PMU) {
+		nvkm_warn(subdev,
+			  "received libos print from unknown class 0x%x\n",
+			  class);
+		return -ENOMSG;
+	}
+	if (rpc->libosPrintBufSize > GSP_PAGE_SIZE) {
+		nvkm_error(subdev, "libos print is too large (%u bytes)\n",
+			   rpc->libosPrintBufSize);
+		return -E2BIG;
+
+	}
+	memcpy(gsp->blob_pmu.data, rpc->libosPrintBuf, rpc->libosPrintBufSize);
+
+	return 0;
+}
+
+/*
+ * If GSP-RM load fails, then the GSP nvkm object will be deleted, the
+ * logging debugfs entries will be deleted, and it will not be possible to
+ * debug the load failure.  The keep_gsp_logging parameter tells Nouveau
+ * not to free these resources, even if the driver is unloading.  In this
+ * case, the only recovery is a reboot.
+ */
+static bool keep_gsp_logging;
+module_param_unsafe(keep_gsp_logging, bool, 0444);
+MODULE_PARM_DESC(keep_gsp_logging,
+		 "Do not remove the GSP-RM logging debugfs entries upon exit");
+
+/**
+ * r535_gsp_libos_debugfs_init - create logging debugfs entries
+ * @gsp: gsp pointer
+ *
+ * Create the debugfs entries.  This exposes the log buffers to
+ * userspace so that an external tool can parse it.
+ *
+ * The 'logpmu' contains exception dumps from the PMU. It is written via an
+ * RPC sent from GSP-RM and must be only 4KB.  We create it here because it's
+ * only useful if there is a debugfs entry to expose it.  If we get the PMU
+ * logging RPC and there is no debugfs entry, the RPC is just ignored.
+ *
+ * The blob_init, blob_rm, and blob_pmu objects can't be transient
+ * because debugfs_create_blob doesn't copy them.
+ *
+ * NOTE: OpenRM loads the logging elf image and prints the log messages
+ * in real-time. We may add that capability in the future, but that
+ * requires loading an ELF images that are not distributed with the driver,
+ * and adding the parsing code to Nouveau.
+ *
+ * Ideally, this should be part of nouveau_debugfs_init(), but that function
+ * is called too late.  We really want to create these debugfs entries before
+ * r535_gsp_booter_load() is called, so that if GSP-RM fails to initialize,
+ * there could still be a log to capture.
+ *
+ * If the unsafe command line pararameter 'keep-gsp-logging' is specified,
+ * then the logging buffer and debugfs entries will be retained when the
+ * driver shuts down.  This is necessary to debug initialization failures,
+ * because otherwise the buffers will disappear before the logs can be
+ * captured.
+ */
+static void r535_gsp_libos_debugfs_init(struct nvkm_gsp *gsp)
+{
+	struct dentry *dir_init, *dir_intr, *dir_rm, *dir_pmu;
+	struct dentry *root, *dir;
+	struct device *dev = gsp->subdev.device->dev;
+
+	/*
+	 * Under normal circumstances, we add our debugfs entries to the dentry
+	 * created by the DRM layer when the driver registered.  However, this
+	 * dentry and everything in it is deleted if GSP fails to initialize.
+	 *
+	 * If keep-gsp-logging is specified, then a different top-entry dentry
+	 * is created and that is used.  This dentry is never deleted, even if
+	 * the driver exits.
+	 */
+	if (keep_gsp_logging) {
+		char temp[64];
+
+		/* Find the 'dri' root debugfs entry. Every GPU has a dentry under it */
+		root = debugfs_lookup("dri", NULL);
+		if (IS_ERR(root)) {
+			/* No debugfs, or no root dentry for DRM */
+			return;
+		}
+
+		scnprintf(temp, sizeof(temp), "%s-debug", dev_name(dev));
+		dir = debugfs_create_dir(temp, root);
+		dput(root);
+		if (IS_ERR(dir)) {
+			nvkm_error(&gsp->subdev,
+				"failed to create %s debugfs entry\n", temp);
+			return;
+		}
+
+		gsp->debugfs_logging_dir = dir;
+	} else {
+		/* Each GPU has a subdir based on its device name, so find it */
+		struct drm_device *drm_dev = dev_get_drvdata(dev);
+
+		if (!drm_dev || !drm_dev->debugfs_root) {
+			nvkm_error(&gsp->subdev, "could not find debugfs path\n");
+			return;
+		}
+
+		dir = drm_dev->debugfs_root;
+	}
+
+	gsp->blob_init.data = gsp->loginit.data;
+	gsp->blob_init.size = gsp->loginit.size;
+	gsp->blob_intr.data = gsp->logintr.data;
+	gsp->blob_intr.size = gsp->logintr.size;
+	gsp->blob_rm.data = gsp->logrm.data;
+	gsp->blob_rm.size = gsp->logrm.size;
+
+	/*
+	 * Since the PMU buffer is copied from an RPC, it doesn't need to be
+	 * a DMA buffer.
+	 */
+	gsp->blob_pmu.size = GSP_PAGE_SIZE;
+	gsp->blob_pmu.data = kzalloc(gsp->blob_pmu.size, GFP_KERNEL);
+	if (!gsp->blob_pmu.data)
+		goto error;
+
+	dir_init = debugfs_create_blob("loginit", 0444, dir, &gsp->blob_init);
+	if (IS_ERR(dir_init)) {
+		nvkm_error(&gsp->subdev, "failed to create loginit debugfs entry\n");
+		goto error;
+	}
+
+	dir_intr = debugfs_create_blob("logintr", 0444, dir, &gsp->blob_intr);
+	if (IS_ERR(dir_intr)) {
+		nvkm_error(&gsp->subdev, "failed to create logintr debugfs entry\n");
+		goto error;
+	}
+
+	dir_rm = debugfs_create_blob("logrm", 0444, dir, &gsp->blob_rm);
+	if (IS_ERR(dir_rm)) {
+		nvkm_error(&gsp->subdev, "failed to create logrm debugfs entry\n");
+		goto error;
+	}
+
+	dir_pmu = debugfs_create_blob("logpmu", 0444, dir, &gsp->blob_pmu);
+	if (IS_ERR(dir_pmu)) {
+		nvkm_error(&gsp->subdev, "failed to create logpmu debugfs entry\n");
+		goto error;
+	}
+
+	i_size_write(d_inode(dir_init), gsp->blob_init.size);
+	i_size_write(d_inode(dir_intr), gsp->blob_intr.size);
+	i_size_write(d_inode(dir_rm), gsp->blob_rm.size);
+	i_size_write(d_inode(dir_pmu), gsp->blob_pmu.size);
+
+	r535_gsp_msg_ntfy_add(gsp, 0x0000100C, r535_gsp_msg_libos_print, gsp);
+
+	nvkm_debug(&gsp->subdev, "created debugfs GSP-RM logging entries\n");
+	return;
+
+error:
+	debugfs_remove(gsp->debugfs_logging_dir);
+	gsp->debugfs_logging_dir = NULL;
+
+	kfree(gsp->blob_pmu.data);
+	gsp->blob_pmu.data = NULL;
+}
+
 static inline u64
 r535_gsp_libos_id8(const char *name)
 {
@@ -2024,7 +2215,11 @@ static void create_pte_array(u64 *ptes, dma_addr_t addr, size_t size)
  * written to directly by GSP-RM and can be any multiple of GSP_PAGE_SIZE.
  *
  * The physical address map for the log buffer is stored in the buffer
- * itself, starting with offset 1. Offset 0 contains the "put" pointer.
+ * itself, starting with offset 1. Offset 0 contains the "put" pointer (pp).
+ * Initially, pp is equal to 0.  If the buffer has valid logging data in it,
+ * then pp points to index into the buffer where the next logging entry will
+ * be written.  Therefore, the logging data is valid if:
+ *   1 <= pp < sizeof(buffer)/sizeof(u64)
  *
  * The GSP only understands 4K pages (GSP_PAGE_SIZE), so even if the kernel is
  * configured for a larger page size (e.g. 64K pages), we need to give
@@ -2095,6 +2290,9 @@ r535_gsp_libos_init(struct nvkm_gsp *gsp)
 	args[3].size = gsp->rmargs.size;
 	args[3].kind = LIBOS_MEMORY_REGION_CONTIGUOUS;
 	args[3].loc  = LIBOS_MEMORY_REGION_LOC_SYSMEM;
+
+	r535_gsp_libos_debugfs_init(gsp);
+
 	return 0;
 }
 
@@ -2395,9 +2593,18 @@ r535_gsp_dtor(struct nvkm_gsp *gsp)
 	r535_gsp_dtor_fws(gsp);
 
 	nvkm_gsp_mem_dtor(gsp, &gsp->shm.mem);
-	nvkm_gsp_mem_dtor(gsp, &gsp->loginit);
-	nvkm_gsp_mem_dtor(gsp, &gsp->logintr);
-	nvkm_gsp_mem_dtor(gsp, &gsp->logrm);
+
+	if (keep_gsp_logging && gsp->debugfs_logging_dir)
+		nvkm_warn(&gsp->subdev,
+			"GSP-RM logging buffers retained, reboot required to recover\n");
+	else {
+		kfree(gsp->blob_pmu.data);
+		gsp->blob_pmu.data = NULL;
+
+		nvkm_gsp_mem_dtor(gsp, &gsp->loginit);
+		nvkm_gsp_mem_dtor(gsp, &gsp->logintr);
+		nvkm_gsp_mem_dtor(gsp, &gsp->logrm);
+	}
 }
 
 int
