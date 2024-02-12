@@ -25,12 +25,6 @@ config CHARLCD
 	  This is some character LCD core interface that multiple drivers can
 	  use.
 
-config LINEDISP
-	tristate "Character line display core support" if COMPILE_TEST
-	help
-	  This is the core support for single-line character displays, to be
-	  selected by drivers that use it.
-
 config HD44780_COMMON
 	tristate "Common functions for HD44780 (and compatibles) LCD displays" if COMPILE_TEST
 	select CHARLCD
@@ -51,6 +45,16 @@ config HD44780
 	  This code can either be compiled as a module, or linked into the
 	  kernel and started at boot.
 	  If you don't understand what all this is about, say N.
+
+config LCD2S
+	tristate "lcd2s 20x4 character display over I2C console"
+	depends on I2C
+	select CHARLCD
+	help
+	  This is a driver that lets you use the lcd2s 20x4 character display
+	  from Modtronix engineering as a console output device. The display
+	  is a simple single color character display. You have to connect it
+	  to an I2C bus.
 
 config KS0108
 	tristate "KS0108 LCD Controller"
@@ -153,6 +157,12 @@ config CFAG12864B_RATE
 	  If you compile this as a module, you can still override this
 	  value using the module parameters.
 
+config LINEDISP
+	tristate "Character line display core support" if COMPILE_TEST
+	help
+	  This is the core support for single-line character displays, to be
+	  selected by drivers that use it.
+
 config IMG_ASCII_LCD
 	tristate "Imagination Technologies ASCII LCD Display"
 	depends on HAS_IOMEM
@@ -176,16 +186,6 @@ config HT16K33
 	help
 	  Say yes here to add support for Holtek HT16K33, RAM mapping 16*8
 	  LED controller driver with keyscan.
-
-config LCD2S
-	tristate "lcd2s 20x4 character display over I2C console"
-	depends on I2C
-	select CHARLCD
-	help
-	  This is a driver that lets you use the lcd2s 20x4 character display
-	  from Modtronix engineering as a console output device. The display
-	  is a simple single color character display. You have to connect it
-	  to an I2C bus.
 
 config ARM_CHARLCD
 	bool "ARM Ltd. Character LCD Driver"
