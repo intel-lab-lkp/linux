@@ -524,6 +524,17 @@ config PWM_RZ_MTU3
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-rz-mtu3.
 
+config PWM_RZV2M
+       tristate "Renesas RZ/V2M PWM support"
+       depends on ARCH_R9A09G011 || COMPILE_TEST
+       depends on HAS_IOMEM
+       help
+         This driver exposes the PWM controller found in Renesas
+         RZ/V2M like chips through the PWM API.
+
+         To compile this driver as a module, choose M here: the module
+         will be called pwm-rzv2m.
+
 config PWM_SAMSUNG
 	tristate "Samsung PWM support"
 	depends on PLAT_SAMSUNG || ARCH_S5PV210 || ARCH_EXYNOS || COMPILE_TEST
