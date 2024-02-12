@@ -87,11 +87,6 @@ struct ht16k33_fbdev {
 
 struct ht16k33_seg {
 	struct linedisp linedisp;
-	union {
-		struct seg7_conversion_map seg7;
-		struct seg14_conversion_map seg14;
-	} map;
-	unsigned int map_size;
 	char curr[4];
 };
 
@@ -134,33 +129,6 @@ static const struct fb_var_screeninfo ht16k33_fb_var = {
 	.lower_margin = 0,
 	.vmode = FB_VMODE_NONINTERLACED,
 };
-
-static const SEG7_DEFAULT_MAP(initial_map_seg7);
-static const SEG14_DEFAULT_MAP(initial_map_seg14);
-
-static ssize_t map_seg_show(struct device *dev, struct device_attribute *attr,
-			    char *buf)
-{
-	struct ht16k33_priv *priv = dev_get_drvdata(dev);
-
-	memcpy(buf, &priv->seg.map, priv->seg.map_size);
-	return priv->seg.map_size;
-}
-
-static ssize_t map_seg_store(struct device *dev, struct device_attribute *attr,
-			     const char *buf, size_t cnt)
-{
-	struct ht16k33_priv *priv = dev_get_drvdata(dev);
-
-	if (cnt != priv->seg.map_size)
-		return -EINVAL;
-
-	memcpy(&priv->seg.map, buf, cnt);
-	return cnt;
-}
-
-static DEVICE_ATTR(map_seg7, 0644, map_seg_show, map_seg_store);
-static DEVICE_ATTR(map_seg14, 0644, map_seg_show, map_seg_store);
 
 static int ht16k33_display_on(struct ht16k33_priv *priv)
 {
@@ -445,18 +413,20 @@ static void ht16k33_seg7_update(struct work_struct *work)
 	struct ht16k33_priv *priv = container_of(work, struct ht16k33_priv,
 						 work.work);
 	struct ht16k33_seg *seg = &priv->seg;
+	struct linedisp *linedisp = &seg->linedisp;
+	struct linedisp_map *map = linedisp->map;
 	char *s = seg->curr;
 	uint8_t buf[9];
 
-	buf[0] = map_to_seg7(&seg->map.seg7, *s++);
+	buf[0] = map_to_seg7(&map->map.seg7, *s++);
 	buf[1] = 0;
-	buf[2] = map_to_seg7(&seg->map.seg7, *s++);
+	buf[2] = map_to_seg7(&map->map.seg7, *s++);
 	buf[3] = 0;
 	buf[4] = 0;
 	buf[5] = 0;
-	buf[6] = map_to_seg7(&seg->map.seg7, *s++);
+	buf[6] = map_to_seg7(&map->map.seg7, *s++);
 	buf[7] = 0;
-	buf[8] = map_to_seg7(&seg->map.seg7, *s++);
+	buf[8] = map_to_seg7(&map->map.seg7, *s++);
 
 	i2c_smbus_write_i2c_block_data(priv->client, 0, ARRAY_SIZE(buf), buf);
 }
@@ -466,15 +436,37 @@ static void ht16k33_seg14_update(struct work_struct *work)
 	struct ht16k33_priv *priv = container_of(work, struct ht16k33_priv,
 						 work.work);
 	struct ht16k33_seg *seg = &priv->seg;
+	struct linedisp *linedisp = &seg->linedisp;
+	struct linedisp_map *map = linedisp->map;
 	char *s = seg->curr;
 	uint8_t buf[8];
 
-	put_unaligned_le16(map_to_seg14(&seg->map.seg14, *s++), buf);
-	put_unaligned_le16(map_to_seg14(&seg->map.seg14, *s++), buf + 2);
-	put_unaligned_le16(map_to_seg14(&seg->map.seg14, *s++), buf + 4);
-	put_unaligned_le16(map_to_seg14(&seg->map.seg14, *s++), buf + 6);
+	put_unaligned_le16(map_to_seg14(&map->map.seg14, *s++), buf + 0);
+	put_unaligned_le16(map_to_seg14(&map->map.seg14, *s++), buf + 2);
+	put_unaligned_le16(map_to_seg14(&map->map.seg14, *s++), buf + 4);
+	put_unaligned_le16(map_to_seg14(&map->map.seg14, *s++), buf + 6);
 
 	i2c_smbus_write_i2c_block_data(priv->client, 0, ARRAY_SIZE(buf), buf);
+}
+
+static int ht16k33_linedisp_get_map_type(struct linedisp *linedisp)
+{
+	struct ht16k33_priv *priv = container_of(linedisp, struct ht16k33_priv,
+						 seg.linedisp);
+
+	switch (priv->type) {
+	case DISP_MATRIX:
+		/* not handled here */
+		return -EINVAL;
+
+	case DISP_QUAD_7SEG:
+		INIT_DELAYED_WORK(&priv->work, ht16k33_seg7_update);
+		return LINEDISP_MAP_SEG7;
+
+	case DISP_QUAD_14SEG:
+		INIT_DELAYED_WORK(&priv->work, ht16k33_seg14_update);
+		return LINEDISP_MAP_SEG14;
+	}
 }
 
 static void ht16k33_linedisp_update(struct linedisp *linedisp)
@@ -486,6 +478,7 @@ static void ht16k33_linedisp_update(struct linedisp *linedisp)
 }
 
 static const struct linedisp_ops ht16k33_linedisp_ops = {
+	.get_map_type = ht16k33_linedisp_get_map_type,
 	.update = ht16k33_linedisp_update,
 };
 
@@ -677,39 +670,7 @@ static int ht16k33_seg_probe(struct device *dev, struct ht16k33_priv *priv,
 	if (err)
 		return err;
 
-	switch (priv->type) {
-	case DISP_MATRIX:
-		/* not handled here */
-		err = -EINVAL;
-		break;
-
-	case DISP_QUAD_7SEG:
-		INIT_DELAYED_WORK(&priv->work, ht16k33_seg7_update);
-		seg->map.seg7 = initial_map_seg7;
-		seg->map_size = sizeof(seg->map.seg7);
-		err = device_create_file(dev, &dev_attr_map_seg7);
-		break;
-
-	case DISP_QUAD_14SEG:
-		INIT_DELAYED_WORK(&priv->work, ht16k33_seg14_update);
-		seg->map.seg14 = initial_map_seg14;
-		seg->map_size = sizeof(seg->map.seg14);
-		err = device_create_file(dev, &dev_attr_map_seg14);
-		break;
-	}
-	if (err)
-		return err;
-
-	err = linedisp_register(&seg->linedisp, dev, 4, seg->curr, &ht16k33_linedisp_ops);
-	if (err)
-		goto err_remove_map_file;
-
-	return 0;
-
-err_remove_map_file:
-	device_remove_file(dev, &dev_attr_map_seg7);
-	device_remove_file(dev, &dev_attr_map_seg14);
-	return err;
+	return linedisp_register(&seg->linedisp, dev, 4, seg->curr, &ht16k33_linedisp_ops);
 }
 
 static int ht16k33_probe(struct i2c_client *client)
@@ -794,8 +755,6 @@ static void ht16k33_remove(struct i2c_client *client)
 	case DISP_QUAD_7SEG:
 	case DISP_QUAD_14SEG:
 		linedisp_unregister(&priv->seg.linedisp);
-		device_remove_file(&client->dev, &dev_attr_map_seg7);
-		device_remove_file(&client->dev, &dev_attr_map_seg14);
 		break;
 	}
 }
