@@ -97,7 +97,10 @@ properties:
               - asus,tf701t
               - nvidia,dalmore
               - nvidia,roth
-              - nvidia,tn7
+          - const: nvidia,tegra114
+      - description: NVIDIA Tegra Note 7
+        items:
+          - const: nvidia,tegratab
           - const: nvidia,tegra114
       - items:
           - enum:
