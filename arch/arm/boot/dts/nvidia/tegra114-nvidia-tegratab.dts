@@ -5,8 +5,9 @@
 #include "tegra114.dtsi"
 
 / {
-	model = "Tegra Note 7";
-	compatible = "nvidia,tn7", "nvidia,tegra114";
+	model = "NVIDIA Tegra Note 7";
+	compatible = "nvidia,tegratab", "nvidia,tegra114";
+	chassis-type = "tablet";
 
 	chosen {
 		/* TN7's bootloader's arguments need to be overridden */

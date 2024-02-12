@@ -2,8 +2,8 @@
 dtb-$(CONFIG_ARCH_TEGRA_114_SOC) += \
 	tegra114-asus-tf701t.dtb \
 	tegra114-dalmore.dtb \
-	tegra114-roth.dtb \
-	tegra114-tn7.dtb
+	tegra114-nvidia-tegratab.dtb \
+	tegra114-roth.dtb
 dtb-$(CONFIG_ARCH_TEGRA_124_SOC) += \
 	tegra124-apalis-eval.dtb \
 	tegra124-apalis-v1.2-eval.dtb \
