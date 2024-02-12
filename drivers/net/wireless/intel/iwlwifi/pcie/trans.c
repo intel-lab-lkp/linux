@@ -13,6 +13,7 @@
 #include <linux/gfp.h>
 #include <linux/sprintf.h>
 #include <linux/vmalloc.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/wait.h>
 #include <linux/seq_file.h>

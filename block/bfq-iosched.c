@@ -117,6 +117,7 @@
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <linux/cgroup.h>
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/ktime.h>
 #include <linux/rbtree.h>

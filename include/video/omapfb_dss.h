@@ -7,7 +7,7 @@
 #define __OMAPFB_DSS_H
 
 #include <linux/list.h>
-#include <linux/kobject.h>
+#include <linux/kobject_types.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/platform_data/omapdss.h>

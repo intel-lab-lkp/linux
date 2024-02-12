@@ -13,6 +13,7 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/acpi.h>
 #include <linux/libata.h>
 #include <linux/pci.h>

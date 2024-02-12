@@ -18,6 +18,7 @@
 #include <linux/elf.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/personality.h>
 #include <linux/preempt.h>
 #include <linux/printk.h>

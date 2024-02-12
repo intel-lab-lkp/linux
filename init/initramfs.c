@@ -18,6 +18,7 @@
 #include <linux/namei.h>
 #include <linux/init_syscalls.h>
 #include <linux/umh.h>
+#include <linux/kobject.h> // for firmware_kobj
 
 #include "do_mounts.h"
 

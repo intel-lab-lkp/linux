@@ -13,6 +13,7 @@
 #include <linux/ctype.h>
 #include <linux/device.h>
 #include <linux/gfp.h> // for get_zeroed_page()
+#include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>

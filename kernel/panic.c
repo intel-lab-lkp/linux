@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h> // for bust_spinlocks(), tracing_off()
 #include <linux/kexec.h>
+#include <linux/kobject.h>
 #include <linux/panic_notifier.h>
 #include <linux/sched.h>
 #include <linux/sprintf.h>
