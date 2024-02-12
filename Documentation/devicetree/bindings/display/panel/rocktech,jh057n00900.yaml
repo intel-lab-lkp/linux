@@ -46,6 +46,8 @@ properties:
 
   backlight: true
 
+  rotation: true
+
 required:
   - compatible
   - reg
