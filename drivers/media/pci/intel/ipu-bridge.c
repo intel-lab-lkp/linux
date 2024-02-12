@@ -4,6 +4,7 @@
 #include <linux/acpi.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
+#include <linux/iopoll.h>
 #include <linux/mei_cl_bus.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -138,17 +139,21 @@ static struct device *ipu_bridge_get_ivsc_csi_dev(struct acpi_device *adev)
 	/* IVSC device on platform bus */
 	dev = bus_find_device(&platform_bus_type, NULL, adev,
 			      ipu_bridge_match_ivsc_dev);
-	if (dev) {
-		snprintf(name, sizeof(name), "%s-%pUl", dev_name(dev), &uuid);
+	if (!dev)
+		return NULL;
 
-		csi_dev = device_find_child_by_name(dev, name);
+	snprintf(name, sizeof(name), "%s-%pUl", dev_name(dev), &uuid);
 
-		put_device(dev);
+	/*
+	 * FIXME: instantiate MEI CSI software nodes outside the IPU bridge (or
+	 * call IPU bridge from MEI CSI). Wait up to 60 seconds here.
+	 */
+	read_poll_timeout(device_find_child_by_name, csi_dev, csi_dev,
+			  20000, 60000000, false, dev, name);
 
-		return csi_dev;
-	}
+	put_device(dev);
 
-	return NULL;
+	return csi_dev;
 }
 
 static int ipu_bridge_check_ivsc_dev(struct ipu_sensor *sensor,
