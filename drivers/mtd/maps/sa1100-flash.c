@@ -5,6 +5,7 @@
  * (C) 2000 Nicolas Pitre <nico@fluxnic.net>
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>

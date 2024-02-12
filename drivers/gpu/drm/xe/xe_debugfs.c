@@ -4,6 +4,7 @@
  */
 
 #include "xe_debugfs.h"
+#include <linux/sprintf.h>
 
 #include <linux/string_helpers.h>
 

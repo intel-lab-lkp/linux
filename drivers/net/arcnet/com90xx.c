@@ -27,6 +27,7 @@
 
 #define pr_fmt(fmt) "arcnet:" KBUILD_MODNAME ": " fmt
 
+#include <linux/kernel.h> // for get_options()
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -36,6 +37,7 @@
 #include <linux/netdevice.h>
 #include <linux/slab.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include "arcdevice.h"
 #include "com9026.h"

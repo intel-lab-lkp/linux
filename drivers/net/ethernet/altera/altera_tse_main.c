@@ -39,6 +39,7 @@
 #include <linux/regmap.h>
 #include <linux/skbuff.h>
 #include <asm/cacheflush.h>
+#include <linux/sprintf.h>
 
 #include "altera_utils.h"
 #include "altera_tse.h"

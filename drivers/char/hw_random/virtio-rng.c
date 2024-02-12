@@ -5,10 +5,13 @@
  */
 
 #include <asm/barrier.h>
+#include <linux/completion.h>
 #include <linux/err.h>
+#include <linux/idr.h> // for DEFINE_IDA
 #include <linux/hw_random.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_rng.h>
 #include <linux/module.h>

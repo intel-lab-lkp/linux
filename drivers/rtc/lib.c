@@ -11,6 +11,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/rtc.h>
 
 static const unsigned char rtc_days_in_month[] = {

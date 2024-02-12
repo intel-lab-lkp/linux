@@ -18,6 +18,7 @@
 #include <crypto/engine.h>
 #include <crypto/sha1.h>
 #include <crypto/sha2.h>
+#include <linux/completion.h>
 
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>

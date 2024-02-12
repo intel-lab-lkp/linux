@@ -12,6 +12,7 @@
 
 
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <linux/uaccess.h>
 #include <net/sock.h>

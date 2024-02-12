@@ -2,6 +2,9 @@
 #ifndef _LINUX_SUNRPC_RPC_PIPE_FS_H
 #define _LINUX_SUNRPC_RPC_PIPE_FS_H
 
+#include <linux/list.h>
+#include <linux/spinlock_types.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 
 struct rpc_pipe_dir_head {

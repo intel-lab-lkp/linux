@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include "mgb4_core.h"
 #include "mgb4_sysfs.h"
+#include <linux/sprintf.h>
 
 static ssize_t module_version_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)

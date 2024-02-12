@@ -20,6 +20,7 @@
 #include <linux/preempt.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/sched/clock.h>

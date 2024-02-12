@@ -12,6 +12,7 @@
 #include <linux/regmap.h>
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/phylink.h>
+#include <linux/sprintf.h>
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_lib.h"

@@ -13,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/align.h>
 #include <linux/dma/amd_xdma.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-dma-sg.h>

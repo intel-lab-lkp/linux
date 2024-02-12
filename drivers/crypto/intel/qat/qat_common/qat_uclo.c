@@ -4,6 +4,7 @@
 #include <linux/ctype.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pci_ids.h>
 #include "adf_accel_devices.h"
 #include "adf_common_drv.h"

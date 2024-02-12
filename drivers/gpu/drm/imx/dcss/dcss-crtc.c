@@ -6,6 +6,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_vblank.h>
+#include <linux/completion.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 

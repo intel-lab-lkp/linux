@@ -33,6 +33,7 @@
 #include "imu_v11_0.h"
 #include "soc21.h"
 #include "nvd.h"
+#include <linux/sprintf.h>
 
 #include "gc/gc_11_0_0_offset.h"
 #include "gc/gc_11_0_0_sh_mask.h"

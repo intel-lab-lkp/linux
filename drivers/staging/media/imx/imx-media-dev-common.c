@@ -11,6 +11,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mc.h>
 #include "imx-media.h"
+#include <linux/sprintf.h>
 
 static inline struct imx_media_dev *notifier2dev(struct v4l2_async_notifier *n)
 {

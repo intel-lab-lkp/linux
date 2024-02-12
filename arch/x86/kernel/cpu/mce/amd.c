@@ -8,11 +8,13 @@
  *  All MC4_MISCi registers are shared between cores on a node.
  */
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/kobject.h>
 #include <linux/percpu.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/init.h>

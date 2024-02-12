@@ -15,6 +15,7 @@
 #include <linux/io.h>		/* outb, outb_p			*/
 #include <linux/isa.h>
 #include <linux/pnp.h>
+#include <linux/sprintf.h>
 #include <media/drv-intf/tea575x.h>
 
 MODULE_AUTHOR("Ondrej Zary");

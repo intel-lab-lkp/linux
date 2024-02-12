@@ -6,6 +6,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "bdisp.h"
 #include "bdisp-filter.h"

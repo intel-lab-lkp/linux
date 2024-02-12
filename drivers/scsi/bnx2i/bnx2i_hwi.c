@@ -18,6 +18,7 @@
 #include <scsi/scsi_tcq.h>
 #include <scsi/libiscsi.h>
 #include "bnx2i.h"
+#include <linux/completion.h>
 
 DECLARE_PER_CPU(struct bnx2i_percpu_s, bnx2i_percpu);
 

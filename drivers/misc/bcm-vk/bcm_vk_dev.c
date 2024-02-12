@@ -15,6 +15,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/misc/bcm_vk.h>
 
 #include "bcm_vk.h"

@@ -9,6 +9,7 @@
 
 #include <asm/unaligned.h>
 #include <linux/dma-mapping.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include "ufshcd-priv.h"

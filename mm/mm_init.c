@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/kobject.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/memory.h>
 #include <linux/notifier.h>
 #include <linux/sched.h>
@@ -19,6 +20,7 @@
 #include <linux/padata.h>
 #include <linux/nmi.h>
 #include <linux/buffer_head.h>
+#include <linux/completion.h>
 #include <linux/kmemleak.h>
 #include <linux/kfence.h>
 #include <linux/page_ext.h>

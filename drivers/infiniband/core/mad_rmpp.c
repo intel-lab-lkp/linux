@@ -33,6 +33,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include "mad_priv.h"
 #include "mad_rmpp.h"

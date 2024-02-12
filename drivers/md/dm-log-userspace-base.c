@@ -12,6 +12,7 @@
 #include <linux/device-mapper.h>
 #include <linux/dm-log-userspace.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include "dm-log-userspace-transfer.h"

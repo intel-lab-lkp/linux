@@ -14,6 +14,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 
 /* Registers Address */
 #define CM3232_REG_ADDR_CMD		0x00

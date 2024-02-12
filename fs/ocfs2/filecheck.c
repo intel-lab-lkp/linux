@@ -14,9 +14,12 @@
 #include <linux/kmod.h>
 #include <linux/fs.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/sysctl.h>
 #include <cluster/masklog.h>
+#include <linux/completion.h>
 
 #include "ocfs2.h"
 #include "ocfs2_fs.h"

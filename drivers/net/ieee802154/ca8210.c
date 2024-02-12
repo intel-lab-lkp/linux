@@ -49,6 +49,7 @@
 
 #include <linux/cdev.h>
 #include <linux/clk-provider.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -65,6 +66,7 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/workqueue.h>
 #include <linux/interrupt.h>

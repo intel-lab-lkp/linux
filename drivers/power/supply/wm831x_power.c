@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/usb/phy.h>
 
 #include <linux/mfd/wm831x/core.h>

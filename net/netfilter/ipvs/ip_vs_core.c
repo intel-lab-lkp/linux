@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/sctp.h>
 #include <linux/icmp.h>

@@ -6,6 +6,7 @@
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
 #include "rsnd.h"
+#include <linux/sprintf.h>
 
 #define CLKA	0
 #define CLKB	1

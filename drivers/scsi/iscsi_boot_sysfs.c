@@ -7,8 +7,10 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/capability.h>
 #include <linux/iscsi_boot_sysfs.h>

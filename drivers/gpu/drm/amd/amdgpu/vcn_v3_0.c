@@ -31,6 +31,8 @@
 #include "vcn_v2_0.h"
 #include "mmsch_v3_0.h"
 #include "vcn_sw_ring.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include "vcn/vcn_3_0_0_offset.h"
 #include "vcn/vcn_3_0_0_sh_mask.h"

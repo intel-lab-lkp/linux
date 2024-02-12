@@ -6,6 +6,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 MODULE_AUTHOR("Giuliano Pochini <pochini@shiny.it>");
 MODULE_LICENSE("GPL v2");

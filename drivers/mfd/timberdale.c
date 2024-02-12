@@ -13,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/mfd/core.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/timb_gpio.h>
 

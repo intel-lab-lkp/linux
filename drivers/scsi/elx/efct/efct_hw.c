@@ -7,6 +7,8 @@
 #include "efct_driver.h"
 #include "efct_hw.h"
 #include "efct_unsol.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 
 struct efct_hw_link_stat_cb_arg {
 	void (*cb)(int status, u32 num_counters,

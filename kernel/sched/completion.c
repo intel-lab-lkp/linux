@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/completion.h>
+
 /*
  * Generic wait-for-completion handler;
  *

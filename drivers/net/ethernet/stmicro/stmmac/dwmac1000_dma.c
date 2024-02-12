@@ -15,6 +15,7 @@
 #include <asm/io.h>
 #include "dwmac1000.h"
 #include "dwmac_dma.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void dwmac1000_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi)
 {

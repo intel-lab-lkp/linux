@@ -35,6 +35,7 @@
 #include "cxgb4.h"
 #include "t4_msg.h"
 #include "srq.h"
+#include <linux/completion.h>
 
 struct srq_data *t4_init_srq(int srq_size)
 {

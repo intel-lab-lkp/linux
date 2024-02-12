@@ -15,6 +15,7 @@
 #include <linux/spinlock.h>
 #include <linux/kref.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/atomic.h>

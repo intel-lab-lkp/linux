@@ -15,8 +15,10 @@
 
 #include <linux/ctype.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <asm/debug.h>
 #include <linux/uaccess.h>

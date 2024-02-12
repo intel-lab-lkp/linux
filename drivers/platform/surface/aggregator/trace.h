@@ -12,6 +12,7 @@
 #define _SURFACE_AGGREGATOR_TRACE_H
 
 #include <linux/surface_aggregator/serial_hub.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 #include <linux/tracepoint.h>

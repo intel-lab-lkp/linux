@@ -26,11 +26,13 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/kstrtox.h>
 #include <linux/pm_runtime.h>
 #include <linux/interrupt.h>
 #include <linux/property.h>
 #include <linux/dmapool.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #include "cdns2-gadget.h"
 #include "cdns2-trace.h"

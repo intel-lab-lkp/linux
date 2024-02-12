@@ -7,6 +7,7 @@
  */
 
 #include "oxfw.h"
+#include <linux/sprintf.h>
 
 #define HSS1394_ADDRESS			0xc007dedadadaULL
 #define HSS1394_MAX_PACKET_SIZE		64

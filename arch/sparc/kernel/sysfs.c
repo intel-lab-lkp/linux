@@ -9,6 +9,7 @@
 #include <linux/smp.h>
 #include <linux/percpu.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 
 #include <asm/cpudata.h>
 #include <asm/hypervisor.h>

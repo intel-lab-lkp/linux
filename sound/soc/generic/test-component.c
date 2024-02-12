@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>

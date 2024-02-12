@@ -12,6 +12,7 @@
 #include <linux/isa.h>
 #include <linux/pnp.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include <sound/opl3.h>

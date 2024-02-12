@@ -10,7 +10,9 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_data/wilco-ec.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>

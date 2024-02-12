@@ -6,6 +6,7 @@
  *	Huang Ying <ying.huang@intel.com>
  */
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/export.h>
 #include <linux/slab.h>

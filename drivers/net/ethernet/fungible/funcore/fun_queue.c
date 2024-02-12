@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "fun_dev.h"
 #include "fun_queue.h"

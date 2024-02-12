@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <linux/spi/spi.h>
 #include <linux/delay.h>
+#include <linux/completion.h>
 
 #define DRV_NAME "spi-pci1xxxx"
 

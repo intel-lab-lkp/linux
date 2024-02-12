@@ -11,6 +11,7 @@
 #include <linux/usb/quirks.h>
 #include <linux/usb/hcd.h>
 #include "usb.h"
+#include <linux/kstrtox.h>
 
 struct quirk_entry {
 	u16 vid;

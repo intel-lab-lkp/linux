@@ -6,6 +6,7 @@
  */
 
 #include "check.h"
+#include <linux/sprintf.h>
 
 /*
  *	Volume ID structure: on first 256-bytes sector of disk

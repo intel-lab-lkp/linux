@@ -8,6 +8,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <sound/hda_register.h>
 #include <sound/hdaudio_ext.h>
 #include <sound/pcm_params.h>

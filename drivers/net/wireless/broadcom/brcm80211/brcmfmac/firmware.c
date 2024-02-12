@@ -10,6 +10,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/bcm47xx_nvram.h>
+#include <linux/sprintf.h>
 
 #include "debug.h"
 #include "firmware.h"

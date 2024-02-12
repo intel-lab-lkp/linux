@@ -68,6 +68,7 @@
 #include <linux/blk_types.h>
 #include <linux/backing-dev.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/memcontrol.h>
 #include <linux/sched/loadavg.h>

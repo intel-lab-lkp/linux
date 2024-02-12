@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/sprintf.h>
 
 #define LV0104CS_REGVAL_MEASURE		0xE0
 #define LV0104CS_REGVAL_SLEEP		0x00

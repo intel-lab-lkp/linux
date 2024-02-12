@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/of_mdio.h>
 #include <linux/platform_data/xilinx-ll-temac.h>
+#include <linux/sprintf.h>
 
 #include "ll_temac.h"
 

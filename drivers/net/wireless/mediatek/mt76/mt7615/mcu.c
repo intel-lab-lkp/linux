@@ -10,6 +10,7 @@
 #include "mcu.h"
 #include "mac.h"
 #include "eeprom.h"
+#include <linux/sprintf.h>
 
 static bool prefer_offload_fw = true;
 module_param(prefer_offload_fw, bool, 0644);

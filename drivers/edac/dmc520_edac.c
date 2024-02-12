@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include "edac_mc.h"
+#include <linux/sprintf.h>
 
 /* DMC-520 registers */
 #define REG_OFFSET_FEATURE_CONFIG			0x130

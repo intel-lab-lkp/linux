@@ -7,8 +7,12 @@
 #include <linux/sched/mm.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <linux/completion.h>
 #include <linux/bug.h>
+#include <linux/kernel.h> // for memparse()
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <crypto/hash.h>
 #include "messages.h"

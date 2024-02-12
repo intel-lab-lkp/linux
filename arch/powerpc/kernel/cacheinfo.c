@@ -18,6 +18,8 @@
 #include <linux/of.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <asm/cputhreads.h>
 #include <asm/smp.h>
 

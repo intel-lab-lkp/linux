@@ -24,6 +24,7 @@
 #include "nouveau_gem.h"
 #include "nouveau_mem.h"
 #include "nouveau_uvmm.h"
+#include <linux/completion.h>
 
 #include <nvif/vmm.h>
 #include <nvif/mem.h>

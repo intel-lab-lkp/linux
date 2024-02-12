@@ -10,6 +10,7 @@
  */
 
 #include <linux/module.h> /* for EXPORT_SYMBOL */
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/mm.h>

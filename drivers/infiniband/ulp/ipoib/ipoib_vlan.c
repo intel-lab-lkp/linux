@@ -31,6 +31,7 @@
  */
 
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/seq_file.h>

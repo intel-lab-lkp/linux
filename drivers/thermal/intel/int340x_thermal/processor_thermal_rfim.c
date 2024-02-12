@@ -5,9 +5,11 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include "processor_thermal_device.h"
+#include <linux/sprintf.h>
 
 MODULE_IMPORT_NS(INT340X_THERMAL);
 

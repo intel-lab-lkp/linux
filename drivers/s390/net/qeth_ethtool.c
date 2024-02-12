@@ -8,6 +8,7 @@
 
 #include <linux/ethtool.h>
 #include "qeth_core.h"
+#include <linux/sprintf.h>
 
 
 #define QETH_TXQ_STAT(_name, _stat) { \

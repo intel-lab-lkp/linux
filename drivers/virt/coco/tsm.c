@@ -5,9 +5,11 @@
 
 #include <linux/tsm.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/rwsem.h>
 #include <linux/string.h>
+#include <linux/sysfs.h>
 #include <linux/module.h>
 #include <linux/cleanup.h>
 #include <linux/configfs.h>

@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 static DEFINE_IDA(fpga_region_ida);
 static const struct class fpga_region_class;

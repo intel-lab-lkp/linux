@@ -10,6 +10,7 @@
 
 #include <linux/pci.h>
 #include <asm/pci-bridge.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 extern unsigned long isa_io_base;
 

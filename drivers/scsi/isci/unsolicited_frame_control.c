@@ -56,6 +56,7 @@
 #include "host.h"
 #include "unsolicited_frame_control.h"
 #include "registers.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 void sci_unsolicited_frame_control_construct(struct isci_host *ihost)
 {

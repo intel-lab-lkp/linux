@@ -15,9 +15,11 @@
 
 #include <kvm/iodev.h>
 
+#include <linux/kernel.h> // for system_state
 #include <linux/kvm_host.h>
 #include <linux/kvm.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/percpu.h>
 #include <linux/mm.h>
@@ -51,6 +53,7 @@
 #include <linux/io.h>
 #include <linux/lockdep.h>
 #include <linux/kthread.h>
+#include <linux/kobject.h>
 #include <linux/suspend.h>
 
 #include <asm/processor.h>

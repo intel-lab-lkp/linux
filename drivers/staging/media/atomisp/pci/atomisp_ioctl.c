@@ -20,6 +20,7 @@
 
 #include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>

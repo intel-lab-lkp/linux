@@ -2,6 +2,7 @@
 /* Copyright (c) 2014 The Linux Foundation. All rights reserved.
  */
 #include "a4xx_gpu.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define A4XX_INT0_MASK \
 	(A4XX_INT0_RBBM_AHB_ERROR |        \

@@ -7,6 +7,7 @@
 
 #include <linux/bits.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/firmware.h>
 #include <linux/gcd.h>
 #include <linux/interrupt.h>

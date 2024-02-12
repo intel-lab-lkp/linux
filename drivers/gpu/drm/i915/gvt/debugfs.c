@@ -24,6 +24,7 @@
 #include <linux/list_sort.h>
 #include "i915_drv.h"
 #include "gvt.h"
+#include <linux/sprintf.h>
 
 struct mmio_diff_param {
 	struct intel_vgpu *vgpu;

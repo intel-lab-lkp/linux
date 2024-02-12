@@ -7,8 +7,10 @@
  */
 
 #include <linux/device.h>
+#include <linux/gfp.h> // for free_pages()
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/percpu.h>
 
 #include <asm/sections.h>

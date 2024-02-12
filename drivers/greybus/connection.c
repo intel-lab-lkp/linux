@@ -8,6 +8,7 @@
 
 #include <linux/workqueue.h>
 #include <linux/greybus.h>
+#include <linux/sprintf.h>
 
 #include "greybus_trace.h"
 

@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/iommu.h>
 #include <linux/init.h>
+#include <linux/kobject.h>
 #include <linux/slab.h>
 
 /*

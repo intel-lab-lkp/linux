@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
+#include <linux/sprintf.h>
 
 #include "chip.h"
 #include "global1.h"

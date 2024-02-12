@@ -12,6 +12,7 @@
 #include <linux/adb.h>
 #include <linux/pmu.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 static struct pmu_battery_dev {
 	struct power_supply *bat;

@@ -15,6 +15,7 @@
 #include <linux/mutex.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>

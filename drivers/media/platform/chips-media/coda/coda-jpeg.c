@@ -6,6 +6,7 @@
  */
 
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 #include <linux/irqreturn.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>

@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/acpi.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include "bmc150-accel.h"
 

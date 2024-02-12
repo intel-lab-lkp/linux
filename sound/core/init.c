@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/ctype.h>
 #include <linux/pm.h>

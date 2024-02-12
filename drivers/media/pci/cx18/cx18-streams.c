@@ -19,6 +19,7 @@
 #include "cx18-cards.h"
 #include "cx18-scb.h"
 #include "cx18-dvb.h"
+#include <linux/sprintf.h>
 
 #define CX18_DSP0_INTERRUPT_MASK	0xd0004C
 

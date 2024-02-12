@@ -13,6 +13,7 @@
 //		by Luca Risolia <luca.risolia@studio.unibo.it>
 
 #include "em28xx.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/list.h>

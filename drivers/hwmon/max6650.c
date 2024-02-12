@@ -27,6 +27,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/thermal.h>
 
 /*

@@ -62,6 +62,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 
 /* -------------------- TUNABLE PARAMATERS: */
 

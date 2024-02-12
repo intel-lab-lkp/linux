@@ -21,9 +21,11 @@
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  */
 #include <linux/energy_model.h>
+#include <linux/kstrtox.h>
 #include <linux/mmap_lock.h>
 #include <linux/hugetlb_inline.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/mm_api.h>
 #include <linux/highmem.h>
 #include <linux/spinlock_api.h>
@@ -45,6 +47,7 @@
 #include <linux/mutex_api.h>
 #include <linux/profile.h>
 #include <linux/psi.h>
+#include <linux/random.h>
 #include <linux/ratelimit.h>
 #include <linux/task_work.h>
 #include <linux/rbtree_augmented.h>

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/capability.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME					"dell-wmi-sysman"
 #define MAX_BUFF  512

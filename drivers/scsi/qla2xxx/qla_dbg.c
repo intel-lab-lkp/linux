@@ -62,6 +62,7 @@
  */
 
 #include "qla_def.h"
+#include <linux/sprintf.h>
 
 #include <linux/delay.h>
 #define CREATE_TRACE_POINTS

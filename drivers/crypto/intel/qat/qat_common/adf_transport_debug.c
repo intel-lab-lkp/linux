@@ -6,6 +6,7 @@
 #include "adf_accel_devices.h"
 #include "adf_transport_internal.h"
 #include "adf_transport_access_macros.h"
+#include <linux/sprintf.h>
 
 static DEFINE_MUTEX(ring_read_lock);
 static DEFINE_MUTEX(bank_read_lock);

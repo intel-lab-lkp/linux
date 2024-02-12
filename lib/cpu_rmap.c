@@ -7,6 +7,8 @@
 #include <linux/cpu_rmap.h>
 #include <linux/interrupt.h>
 #include <linux/export.h>
+#include <linux/kref.h>
+#include <linux/topology.h>
 
 /*
  * These functions maintain a mapping from CPUs to some ordered set of

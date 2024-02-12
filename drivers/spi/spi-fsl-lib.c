@@ -21,6 +21,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
+#include <linux/completion.h>
 #ifdef CONFIG_FSL_SOC
 #include <sysdev/fsl_soc.h>
 #endif

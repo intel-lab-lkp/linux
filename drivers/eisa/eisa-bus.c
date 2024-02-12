@@ -8,12 +8,14 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/eisa.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/ioport.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #define SLOT_ADDRESS(r,n) (r->bus_base_addr + (0x1000 * n))
 

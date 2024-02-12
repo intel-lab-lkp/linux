@@ -10,6 +10,7 @@
 #include <asm/cputype.h>
 #include <asm/cpufeature.h>
 #include <asm/fpsimd.h>
+#include <linux/sprintf.h>
 
 #include <linux/bitops.h>
 #include <linux/bug.h>
@@ -23,6 +24,7 @@
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
+#include <linux/sysfs.h> // for __ATTR_RO()
 #include <linux/delay.h>
 
 /*

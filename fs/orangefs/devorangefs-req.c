@@ -13,6 +13,7 @@
 #include "orangefs-dev-proto.h"
 #include "orangefs-bufmap.h"
 #include "orangefs-debugfs.h"
+#include <linux/completion.h>
 
 #include <linux/debugfs.h>
 #include <linux/slab.h>

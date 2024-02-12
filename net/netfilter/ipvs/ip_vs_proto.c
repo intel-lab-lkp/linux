@@ -17,6 +17,7 @@
 #include <linux/gfp.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/sprintf.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/udp.h>

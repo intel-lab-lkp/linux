@@ -14,6 +14,7 @@
 #include <asm/unaligned.h>
 #include <linux/bitops.h>
 #include <linux/proc_fs.h>
+#include <linux/quota.h>
 #include <linux/buffer_head.h>
 
 /* the 32 bit compat definitions with int argument */

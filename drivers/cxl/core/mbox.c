@@ -2,6 +2,7 @@
 /* Copyright(c) 2020 Intel Corporation. All rights reserved. */
 #include <linux/security.h>
 #include <linux/debugfs.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/ktime.h>
 #include <linux/mutex.h>
 #include <asm/unaligned.h>

@@ -17,6 +17,7 @@
 #include <linux/bpf_verifier.h>
 #include <linux/bug.h>
 #include <linux/kdev_t.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/list.h>
 #include <linux/lockdep.h>
 #include <linux/netdevice.h>

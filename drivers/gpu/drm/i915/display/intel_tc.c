@@ -19,6 +19,7 @@
 #include "intel_mg_phy_regs.h"
 #include "intel_modeset_lock.h"
 #include "intel_tc.h"
+#include <linux/sprintf.h>
 
 #define DP_PIN_ASSIGNMENT_C	0x3
 #define DP_PIN_ASSIGNMENT_D	0x4

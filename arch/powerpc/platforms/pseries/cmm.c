@@ -11,11 +11,13 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/oom.h>
 #include <linux/reboot.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/stringify.h>
 #include <linux/swap.h>
 #include <linux/device.h>

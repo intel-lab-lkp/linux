@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <linux/of_irq.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <media/rc-core.h>
 

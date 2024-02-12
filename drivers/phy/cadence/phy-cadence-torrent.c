@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #define REF_CLK_19_2MHZ		19200000
 #define REF_CLK_25MHZ		25000000

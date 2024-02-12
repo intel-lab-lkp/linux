@@ -11,6 +11,7 @@
 
 #include <asm/unaligned.h>
 #include <crypto/internal/hash.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/iopoll.h>

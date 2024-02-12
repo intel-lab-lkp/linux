@@ -15,6 +15,7 @@
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define IO_CURRENT_VAL	0x00
 #define IO_DIVIDER	0x04

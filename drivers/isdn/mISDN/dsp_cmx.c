@@ -130,6 +130,7 @@
 #include <linux/mISDNdsp.h>
 #include "core.h"
 #include "dsp.h"
+#include <linux/sprintf.h>
 /*
  * debugging of multi party conference,
  * by using conference even with two members

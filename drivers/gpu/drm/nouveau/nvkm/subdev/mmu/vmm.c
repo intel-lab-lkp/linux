@@ -21,6 +21,7 @@
  */
 #define NVKM_VMM_LEVELS_MAX 5
 #include "vmm.h"
+#include <linux/sprintf.h>
 
 #include <subdev/fb.h>
 

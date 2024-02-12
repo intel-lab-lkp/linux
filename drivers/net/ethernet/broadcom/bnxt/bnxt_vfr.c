@@ -11,6 +11,7 @@
 #include <linux/etherdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/jhash.h>
+#include <linux/sprintf.h>
 #include <net/pkt_cls.h>
 
 #include "bnxt_hsi.h"

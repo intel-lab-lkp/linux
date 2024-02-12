@@ -22,9 +22,11 @@
 
 #include <linux/acpi.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 
 MODULE_LICENSE("GPL v2");

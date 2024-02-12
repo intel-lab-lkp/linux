@@ -38,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kref.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/mutex.h>
@@ -49,6 +50,7 @@
 #include <linux/ctype.h>
 #include <linux/firmware.h>
 #include <linux/scatterlist.h>
+#include <linux/completion.h>
 
 struct host_controller_info {
 	u8 info_size;

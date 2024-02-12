@@ -22,6 +22,7 @@
 #include <crypto/polyval.h>
 #include <crypto/scatterwalk.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define BLOCKCIPHER_BLOCK_SIZE		16
 

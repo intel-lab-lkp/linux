@@ -16,6 +16,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 
 #include "hts221.h"
 

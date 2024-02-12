@@ -7,6 +7,7 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 
 #include <asm/addrspace.h>

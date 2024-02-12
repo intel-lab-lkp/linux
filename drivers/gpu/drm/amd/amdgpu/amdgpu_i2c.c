@@ -26,6 +26,7 @@
 
 #include <linux/export.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_edid.h>
 #include <drm/amdgpu_drm.h>

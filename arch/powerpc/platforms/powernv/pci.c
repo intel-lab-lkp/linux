@@ -6,6 +6,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/string.h>

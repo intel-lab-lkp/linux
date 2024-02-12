@@ -10,9 +10,12 @@
  */
 
 #include <linux/bcd.h>
+#include <linux/completion.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/completion.h>

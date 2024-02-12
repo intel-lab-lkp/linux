@@ -7,6 +7,7 @@
 
 #include <linux/slab.h>
 #include <linux/if_ether.h>
+#include <linux/completion.h>
 
 #include "htt.h"
 #include "core.h"

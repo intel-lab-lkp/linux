@@ -49,6 +49,8 @@
  */
 
 #include "usbatm.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 #include <linux/crc32.h>

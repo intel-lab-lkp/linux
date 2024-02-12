@@ -7,6 +7,7 @@
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 #include <linux/numa.h>
+#include <linux/sprintf.h>
 
 #include "hfi.h"
 #include "affinity.h"

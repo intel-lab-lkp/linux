@@ -23,6 +23,7 @@
 #include <asm/hvcall.h>
 #include <asm/machdep.h>
 #include <asm/firmware.h>
+#include <linux/sprintf.h>
 
 #include "pseries.h"
 

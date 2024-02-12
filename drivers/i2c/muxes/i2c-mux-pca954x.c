@@ -45,6 +45,7 @@
 #include <linux/i2c-mux.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/property.h>
@@ -52,6 +53,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/mux/mux.h>
+#include <linux/sprintf.h>
 
 #define PCA954X_MAX_NCHANS 8
 

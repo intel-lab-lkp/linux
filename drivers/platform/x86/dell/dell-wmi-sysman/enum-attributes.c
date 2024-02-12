@@ -7,6 +7,9 @@
  */
 
 #include "dell-wmi-sysman.h"
+#include <linux/sprintf.h>
+
+#include <linux/kobject.h>
 
 get_instance_id(enumeration);
 

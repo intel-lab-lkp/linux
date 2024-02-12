@@ -5,6 +5,7 @@
  *
  ******************************************************************************/
 #include <drv_types.h>
+#include <linux/sprintf.h>
 #include <rtw_debug.h>
 
 static void _dynamic_check_timer_handler(struct timer_list *t)

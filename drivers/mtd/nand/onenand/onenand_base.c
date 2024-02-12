@@ -20,6 +20,7 @@
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>

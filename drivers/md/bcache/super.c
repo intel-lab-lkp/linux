@@ -14,8 +14,10 @@
 #include "request.h"
 #include "writeback.h"
 #include "features.h"
+#include <linux/sprintf.h>
 
 #include <linux/blkdev.h>
+#include <linux/file.h> // for fput()
 #include <linux/pagemap.h>
 #include <linux/debugfs.h>
 #include <linux/idr.h>

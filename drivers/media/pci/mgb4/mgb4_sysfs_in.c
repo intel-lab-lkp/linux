@@ -13,6 +13,8 @@
 #include "mgb4_vin.h"
 #include "mgb4_cmt.h"
 #include "mgb4_sysfs.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /* Common for both FPDL3 and GMSL */
 

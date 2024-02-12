@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <linux/nls.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/uuid.h>
 #include "cifsglob.h"

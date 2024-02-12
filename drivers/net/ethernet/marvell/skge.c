@@ -34,6 +34,7 @@
 #include <linux/dmi.h>
 #include <linux/prefetch.h>
 #include <asm/irq.h>
+#include <linux/sprintf.h>
 
 #include "skge.h"
 

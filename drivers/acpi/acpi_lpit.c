@@ -11,6 +11,7 @@
 #include <asm/msr.h>
 #include <asm/tsc.h>
 #include "internal.h"
+#include <linux/sprintf.h>
 
 struct lpit_residency_info {
 	struct acpi_generic_address gaddr;

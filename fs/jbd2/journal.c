@@ -20,10 +20,12 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/fs.h>
 #include <linux/jbd2.h>
 #include <linux/errno.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/mm.h>

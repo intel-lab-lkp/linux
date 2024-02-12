@@ -25,10 +25,12 @@
 
 #include <linux/reboot.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/blkdev.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/semaphore.h>

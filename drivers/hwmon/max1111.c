@@ -18,6 +18,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 enum chips { max1110, max1111, max1112, max1113 };
 

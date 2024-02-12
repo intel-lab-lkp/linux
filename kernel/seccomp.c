@@ -18,6 +18,7 @@
 #include <linux/refcount.h>
 #include <linux/audit.h>
 #include <linux/compat.h>
+#include <linux/completion.h>
 #include <linux/coredump.h>
 #include <linux/kmemleak.h>
 #include <linux/nospec.h>

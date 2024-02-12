@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <sound/initval.h>
 #include <sound/core.h>

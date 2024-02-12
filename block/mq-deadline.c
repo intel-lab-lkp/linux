@@ -9,12 +9,14 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/compiler.h>
 #include <linux/rbtree.h>
 #include <linux/sbitmap.h>
+#include <linux/sysfs.h>
 
 #include <trace/events/block.h>
 

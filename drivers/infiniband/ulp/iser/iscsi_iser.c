@@ -50,15 +50,18 @@
 #include <linux/hardirq.h>
 #include <linux/kfifo.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/init.h>
 #include <linux/ioctl.h>
 #include <linux/cdev.h>
 #include <linux/in.h>
+#include <linux/kstrtox.h>
 #include <linux/net.h>
 #include <linux/scatterlist.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <net/sock.h>
 

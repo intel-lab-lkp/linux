@@ -9,6 +9,7 @@
 #define pr_fmt(fmt) "ACPI FPDT: " fmt
 
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 /*
  * FPDT contains ACPI table header and a number of fpdt_subtable_entries.

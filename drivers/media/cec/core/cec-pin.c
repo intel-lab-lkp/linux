@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/sched/types.h>
+#include <linux/hrtimer.h>
 
 #include <media/cec-pin.h>
 #include "cec-pin-priv.h"

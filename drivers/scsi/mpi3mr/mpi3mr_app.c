@@ -9,6 +9,8 @@
 
 #include "mpi3mr.h"
 #include <linux/bsg-lib.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
 #include <uapi/scsi/scsi_bsg_mpi3mr.h>
 
 /**

@@ -7,6 +7,8 @@
 #include <linux/relay.h>
 #include "core.h"
 #include "debug.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define ATH11K_SPECTRAL_NUM_RESP_PER_EVENT	2
 #define ATH11K_SPECTRAL_EVENT_TIMEOUT_MS	1

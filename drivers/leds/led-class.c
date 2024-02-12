@@ -11,12 +11,14 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <uapi/linux/uleds.h>
 #include <linux/of.h>

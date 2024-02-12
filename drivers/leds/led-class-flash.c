@@ -8,11 +8,13 @@
 
 #include <linux/device.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/led-class-flash.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include "leds.h"
+#include <linux/sprintf.h>
 
 #define has_flash_op(fled_cdev, op)				\
 	(fled_cdev && fled_cdev->ops->op)

@@ -23,6 +23,7 @@
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/idr.h> // for DEFINE_IDA
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
 #include <linux/notifier.h>
@@ -31,6 +32,7 @@
 #include <linux/rcupdate.h>
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/uuid.h>
 #include <linux/nospec.h>

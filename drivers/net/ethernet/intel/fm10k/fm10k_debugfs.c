@@ -2,6 +2,7 @@
 /* Copyright(c) 2013 - 2018 Intel Corporation. */
 
 #include "fm10k.h"
+#include <linux/sprintf.h>
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>

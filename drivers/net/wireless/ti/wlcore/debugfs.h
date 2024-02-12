@@ -11,6 +11,7 @@
 #define __DEBUGFS_H__
 
 #include "wlcore.h"
+#include <linux/sprintf.h>
 
 __printf(4, 5) int wl1271_format_buffer(char __user *userbuf, size_t count,
 					loff_t *ppos, char *fmt, ...);

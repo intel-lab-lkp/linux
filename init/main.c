@@ -21,6 +21,7 @@
 #include <linux/syscalls.h>
 #include <linux/stackprotector.h>
 #include <linux/string.h>
+#include <linux/completion.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
@@ -101,6 +102,7 @@
 #include <linux/stackdepot.h>
 #include <linux/randomize_kstack.h>
 #include <linux/ptdump.h>
+#include <linux/hrtimer.h>
 #include <net/net_namespace.h>
 
 #include <asm/io.h>

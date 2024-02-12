@@ -43,6 +43,7 @@
  * possibly emitted by the platform will be ignored.
  */
 
+#include <linux/kernel.h> // for system_state
 #include <linux/math.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

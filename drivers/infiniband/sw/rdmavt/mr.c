@@ -10,6 +10,7 @@
 #include "vt.h"
 #include "mr.h"
 #include "trace.h"
+#include <linux/completion.h>
 
 /**
  * rvt_driver_mr_init - Init MR resources per driver

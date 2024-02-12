@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 
 #include <media/mipi-csi2.h>
 #include <media/v4l2-subdev.h>

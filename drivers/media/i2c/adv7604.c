@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/of_graph.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/v4l2-dv-timings.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>

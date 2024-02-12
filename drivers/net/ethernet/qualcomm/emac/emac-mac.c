@@ -11,6 +11,7 @@
 #include <linux/crc32.h>
 #include <linux/if_vlan.h>
 #include <linux/jiffies.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <net/ip6_checksum.h>

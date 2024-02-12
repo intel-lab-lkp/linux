@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 static int aead_geniv_setkey(struct crypto_aead *tfm,
 			     const u8 *key, unsigned int keylen)

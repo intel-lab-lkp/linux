@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/fs.h>
 #include <linux/vmalloc.h>

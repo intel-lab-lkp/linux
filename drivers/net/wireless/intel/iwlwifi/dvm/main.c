@@ -20,6 +20,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
+#include <linux/sprintf.h>
 
 #include <net/mac80211.h>
 

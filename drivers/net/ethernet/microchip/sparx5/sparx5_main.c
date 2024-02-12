@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/of_mdio.h>
+#include <linux/sprintf.h>
 #include <net/switchdev.h>
 #include <linux/etherdevice.h>
 #include <linux/io.h>

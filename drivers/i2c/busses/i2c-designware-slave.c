@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 #include "i2c-designware-core.h"
 

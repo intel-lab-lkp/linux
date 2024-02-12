@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <string.h>
 #include <linux/if_tun.h>
 #include <net/if.h>

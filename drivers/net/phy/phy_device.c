@@ -35,6 +35,7 @@
 #include <linux/sfp.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/unistd.h>

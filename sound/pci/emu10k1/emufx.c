@@ -12,6 +12,7 @@
 #include <linux/capability.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 #include <linux/mutex.h>

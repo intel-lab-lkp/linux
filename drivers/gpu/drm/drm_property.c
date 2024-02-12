@@ -21,6 +21,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/uaccess.h>
 
 #include <drm/drm_crtc.h>

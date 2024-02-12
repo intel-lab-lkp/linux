@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/phy.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include <asm/octeon/octeon.h>
 #include <asm/octeon/cvmx-mixx-defs.h>

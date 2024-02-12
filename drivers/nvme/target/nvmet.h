@@ -8,6 +8,7 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/types.h>
+#include <linux/bio.h>
 #include <linux/device.h>
 #include <linux/kref.h>
 #include <linux/percpu-refcount.h>

@@ -2,6 +2,7 @@
 /* Copyright (C) 2021 Gerhard Engleder <gerhard@engleder-embedded.com> */
 
 #include "tsnep.h"
+#include <linux/sprintf.h>
 
 static const char tsnep_stats_strings[][ETH_GSTRING_LEN] = {
 	"rx_packets",

@@ -11,6 +11,7 @@
 #include <linux/of_mdio.h>
 #include <linux/pci.h>
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 
 #include "mdio-cavium.h"
 

@@ -2,6 +2,7 @@
 /* Copyright 2017-2019 NXP */
 
 #include <asm/unaligned.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mdio.h>
 #include <linux/module.h>
 #include <linux/fsl/enetc_mdio.h>
@@ -11,6 +12,7 @@
 #include <linux/pcs-lynx.h>
 #include "enetc_ierb.h"
 #include "enetc_pf.h"
+#include <linux/sprintf.h>
 
 #define ENETC_DRV_NAME_STR "ENETC PF driver"
 

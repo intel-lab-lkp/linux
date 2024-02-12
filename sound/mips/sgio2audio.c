@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include <asm/ip32/ip32_ints.h>
 #include <asm/ip32/mace.h>

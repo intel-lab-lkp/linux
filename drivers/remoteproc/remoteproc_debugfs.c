@@ -18,8 +18,10 @@
 
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/remoteproc.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 
 #include "remoteproc_internal.h"

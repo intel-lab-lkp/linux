@@ -25,6 +25,8 @@
 #include "octeon_nic.h"
 #include "octeon_main.h"
 #include "octeon_network.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 MODULE_AUTHOR("Cavium Networks, <support@cavium.com>");
 MODULE_DESCRIPTION("Cavium LiquidIO Intelligent Server Adapter Core");

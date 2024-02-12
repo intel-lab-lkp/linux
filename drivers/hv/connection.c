@@ -22,6 +22,7 @@
 #include <linux/io.h>
 #include <linux/set_memory.h>
 #include <asm/mshyperv.h>
+#include <linux/completion.h>
 
 #include "hyperv_vmbus.h"
 

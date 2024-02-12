@@ -23,6 +23,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/irq.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #include <asm/unaligned.h>
 

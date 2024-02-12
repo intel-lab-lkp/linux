@@ -91,6 +91,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

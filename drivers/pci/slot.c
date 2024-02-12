@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/err.h>
 #include "pci.h"
+#include <linux/sprintf.h>
 
 struct kset *pci_slots_kset;
 EXPORT_SYMBOL_GPL(pci_slots_kset);

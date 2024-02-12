@@ -5,6 +5,7 @@
 #define __CC_HW_QUEUE_DEFS_H__
 
 #include <linux/types.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "cc_kernel_regs.h"
 #include <linux/bitfield.h>

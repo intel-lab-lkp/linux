@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/mm.h>
 
 #include "sysfs.h"

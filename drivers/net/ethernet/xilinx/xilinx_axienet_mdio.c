@@ -14,6 +14,7 @@
 #include <linux/of_mdio.h>
 #include <linux/jiffies.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #include "xilinx_axienet.h"
 

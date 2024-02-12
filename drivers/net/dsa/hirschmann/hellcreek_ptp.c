@@ -14,6 +14,7 @@
 #include "hellcreek.h"
 #include "hellcreek_ptp.h"
 #include "hellcreek_hwtstamp.h"
+#include <linux/sprintf.h>
 
 u16 hellcreek_ptp_read(struct hellcreek *hellcreek, unsigned int offset)
 {

@@ -7,6 +7,7 @@
  */
 #include <linux/fs.h>
 #include <linux/net.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/signal.h>

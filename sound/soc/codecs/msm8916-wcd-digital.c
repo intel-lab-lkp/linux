@@ -5,6 +5,7 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/clk.h>
 #include <linux/of.h>

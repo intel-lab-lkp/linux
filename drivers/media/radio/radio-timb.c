@@ -5,6 +5,7 @@
  */
 
 #include <linux/io.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>

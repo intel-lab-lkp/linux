@@ -17,6 +17,7 @@
 #include <linux/fs.h>
 #include <linux/filelock.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/vfs.h>
 #include <linux/slab.h>
 #include <linux/posix_acl_xattr.h>

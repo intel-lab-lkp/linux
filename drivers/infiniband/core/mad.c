@@ -41,8 +41,10 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/security.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <rdma/ib_cache.h>
+#include <linux/completion.h>
 
 #include "mad_priv.h"
 #include "core_priv.h"

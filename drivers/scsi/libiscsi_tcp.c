@@ -16,6 +16,7 @@
  */
 
 #include <crypto/hash.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/inet.h>

@@ -16,6 +16,7 @@
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/sync_core.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
@@ -27,6 +28,7 @@
 #include "grukservices.h"
 #include "gru_instructions.h"
 #include <asm/uv/uv_hub.h>
+#include <linux/completion.h>
 
 /*
  * Kernel GRU Usage

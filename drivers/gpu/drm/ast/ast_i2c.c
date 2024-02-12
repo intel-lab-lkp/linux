@@ -23,6 +23,7 @@
 
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
+#include <linux/sprintf.h>
 
 #include "ast_drv.h"
 

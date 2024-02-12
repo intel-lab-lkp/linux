@@ -9,6 +9,7 @@
 #include <linux/firmware.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/greybus.h>
 

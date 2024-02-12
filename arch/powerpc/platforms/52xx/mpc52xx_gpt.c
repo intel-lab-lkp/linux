@@ -62,6 +62,7 @@
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>

@@ -30,6 +30,7 @@
 #include <linux/export.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
+#include <linux/sprintf.h>
 
 #include <drm/display/drm_hdcp_helper.h>
 

@@ -6,6 +6,7 @@
  */
 #include <linux/init.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/ctype.h>
 #include <linux/string.h>

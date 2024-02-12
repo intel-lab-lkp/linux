@@ -2,9 +2,11 @@
 
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <uapi/linux/serial.h>
 

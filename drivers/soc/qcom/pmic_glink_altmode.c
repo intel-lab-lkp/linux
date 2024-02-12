@@ -5,6 +5,7 @@
  */
 #include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>

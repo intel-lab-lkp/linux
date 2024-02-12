@@ -4,6 +4,7 @@
 
 #include <linux/kref.h>
 #include <linux/uaccess.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include "msm_gpu.h"
 

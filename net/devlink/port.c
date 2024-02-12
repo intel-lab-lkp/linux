@@ -5,6 +5,7 @@
  */
 
 #include "devl_internal.h"
+#include <linux/sprintf.h>
 
 #define DEVLINK_PORT_FN_CAPS_VALID_MASK \
 	(_BITUL(__DEVLINK_PORT_FN_ATTR_CAPS_MAX) - 1)

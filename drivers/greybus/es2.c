@@ -7,12 +7,15 @@
  */
 #include <linux/kthread.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/kfifo.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/greybus.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "arpc.h"
 #include "greybus_trace.h"

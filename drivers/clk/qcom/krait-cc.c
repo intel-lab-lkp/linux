@@ -12,6 +12,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "clk-krait.h"
 

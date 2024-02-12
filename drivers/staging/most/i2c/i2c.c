@@ -14,6 +14,8 @@
 #include <linux/interrupt.h>
 #include <linux/err.h>
 #include <linux/most.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 enum { CH_RX, CH_TX, NUM_CHANNELS };
 

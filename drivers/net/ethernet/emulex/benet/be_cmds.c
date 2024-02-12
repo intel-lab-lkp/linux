@@ -14,6 +14,9 @@
 #include <linux/module.h>
 #include "be.h"
 #include "be_cmds.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 const char * const be_misconfig_evt_port_state[] = {
 	"Physical Link is functional",

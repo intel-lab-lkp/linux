@@ -24,6 +24,7 @@
 #define nvkm_udevice(p) container_of((p), struct nvkm_udevice, object)
 #include "priv.h"
 #include "ctrl.h"
+#include <linux/sprintf.h>
 
 #include <core/client.h>
 #include <subdev/fb.h>

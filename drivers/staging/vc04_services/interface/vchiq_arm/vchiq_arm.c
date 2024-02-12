@@ -7,9 +7,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/device/bus.h>

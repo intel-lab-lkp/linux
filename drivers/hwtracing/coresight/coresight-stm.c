@@ -24,10 +24,12 @@
 #include <linux/coresight-stm.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/moduleparam.h>
 #include <linux/of_address.h>
 #include <linux/perf_event.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/stm.h>
 
 #include "coresight-priv.h"

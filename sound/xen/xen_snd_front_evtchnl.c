@@ -12,6 +12,8 @@
 #include <xen/grant_table.h>
 #include <xen/xen.h>
 #include <xen/xenbus.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "xen_snd_front.h"
 #include "xen_snd_front_alsa.h"

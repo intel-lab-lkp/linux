@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/hex.h>
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/usb.h>

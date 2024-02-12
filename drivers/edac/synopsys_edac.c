@@ -7,10 +7,12 @@
  */
 
 #include <linux/edac.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include "edac_module.h"
 

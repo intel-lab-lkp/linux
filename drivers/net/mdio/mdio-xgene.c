@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/prefetch.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 
 u32 xgene_mdio_rd_mac(struct xgene_mdio_pdata *pdata, u32 rd_addr)

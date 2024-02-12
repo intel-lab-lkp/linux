@@ -14,6 +14,7 @@
 #include "be.h"
 #include "be_cmds.h"
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 struct be_ethtool_stat {
 	char desc[ETH_GSTRING_LEN];

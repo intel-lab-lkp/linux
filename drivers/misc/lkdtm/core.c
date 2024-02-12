@@ -19,6 +19,7 @@
  */
 #include "lkdtm.h"
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/buffer_head.h>
 #include <linux/kprobes.h>
@@ -26,6 +27,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 
 #define DEFAULT_COUNT 10

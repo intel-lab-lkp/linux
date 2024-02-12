@@ -31,6 +31,8 @@
 #include "cn66xx_device.h"
 #include "cn23xx_pf_device.h"
 #include "cn23xx_vf_device.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static int lio_reset_queues(struct net_device *netdev, uint32_t num_qs);
 

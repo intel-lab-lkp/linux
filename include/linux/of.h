@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/kobject.h>
 #include <linux/mod_devicetable.h>
+#include <linux/numa.h> // for NUMA_NO_NODE
 #include <linux/property.h>
 #include <linux/list.h>
 

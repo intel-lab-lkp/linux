@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include "amdgpu.h"
 #include "amdgpu_pmu.h"
+#include <linux/sprintf.h>
 
 #define PMU_NAME_SIZE 32
 #define NUM_FORMATS_AMDGPU_PMU		4

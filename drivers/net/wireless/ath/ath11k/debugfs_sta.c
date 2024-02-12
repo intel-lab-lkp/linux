@@ -5,6 +5,8 @@
  */
 
 #include <linux/vmalloc.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include "debugfs_sta.h"
 #include "core.h"

@@ -22,6 +22,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/property.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 #define ADIS16475_REG_DIAG_STAT		0x02
 #define ADIS16475_REG_X_GYRO_L		0x04

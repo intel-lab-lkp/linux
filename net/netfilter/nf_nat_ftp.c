@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/inet.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/netfilter_ipv4.h>
 #include <net/netfilter/nf_nat.h>

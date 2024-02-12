@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: ISC
 
 #include "mt7615.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static int
 mt7615_reg_set(void *data, u64 val)

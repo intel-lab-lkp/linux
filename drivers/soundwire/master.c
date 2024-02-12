@@ -7,6 +7,7 @@
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
 #include "bus.h"
+#include <linux/sprintf.h>
 
 /*
  * The 3s value for autosuspend will only be used if there are no

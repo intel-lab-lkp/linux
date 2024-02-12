@@ -107,6 +107,7 @@
  */
 
 #include <linux/bitmap.h>
+#include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -114,11 +115,13 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/poll.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 
 #include "common.h"

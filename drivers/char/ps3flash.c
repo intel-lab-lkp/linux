@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <asm/lv1call.h>
 #include <asm/ps3stor.h>

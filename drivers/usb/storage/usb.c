@@ -36,11 +36,14 @@
 
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
+#include <linux/completion.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

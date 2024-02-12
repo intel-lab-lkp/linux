@@ -8,6 +8,7 @@
 #include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/completion.h>
 

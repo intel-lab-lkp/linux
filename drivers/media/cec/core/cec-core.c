@@ -12,6 +12,7 @@
 #include <linux/kmod.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/types.h>
 

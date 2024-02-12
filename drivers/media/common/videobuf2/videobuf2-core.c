@@ -25,6 +25,8 @@
 #include <linux/sched.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <media/videobuf2-core.h>
 #include <media/v4l2-mc.h>

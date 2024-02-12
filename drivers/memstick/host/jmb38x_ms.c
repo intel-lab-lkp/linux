@@ -14,6 +14,7 @@
 #include <linux/memstick.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME "jmb38x_ms"
 

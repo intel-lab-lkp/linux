@@ -20,6 +20,7 @@
 
 #include <linux/dmapool.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "mtu3.h"
 #include "mtu3_trace.h"

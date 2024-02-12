@@ -7,9 +7,12 @@
 #include <linux/libnvdimm.h>
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/device/driver.h>
 #include <linux/log2.h>
 #include <linux/node.h>
+#include <linux/idr.h>
 #include <linux/io.h>
+#include <linux/range.h>
 
 /**
  * DOC: cxl objects

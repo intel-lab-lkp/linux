@@ -8,6 +8,7 @@
 #define pr_fmt(fmt)	"trace_uprobe: " fmt
 
 #include <linux/bpf-cgroup.h>
+#include <linux/kstrtox.h>
 #include <linux/security.h>
 #include <linux/ctype.h>
 #include <linux/module.h>

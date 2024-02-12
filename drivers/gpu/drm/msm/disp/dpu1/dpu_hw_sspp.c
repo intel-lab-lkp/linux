@@ -7,6 +7,7 @@
 #include "dpu_hw_lm.h"
 #include "dpu_hw_sspp.h"
 #include "dpu_kms.h"
+#include <linux/sprintf.h>
 
 #include "msm_mdss.h"
 

@@ -15,6 +15,7 @@
 #include <linux/major.h>
 #include <linux/fs.h>
 #include <linux/blkpg.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 

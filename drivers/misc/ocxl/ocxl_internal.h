@@ -5,6 +5,7 @@
 
 #include <linux/pci.h>
 #include <linux/cdev.h>
+#include <linux/idr.h>
 #include <linux/list.h>
 #include <misc/ocxl.h>
 

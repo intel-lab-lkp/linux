@@ -8,10 +8,13 @@
 
 #include <linux/bug.h>
 #include <linux/context_tracking.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/signal.h>
 #include <linux/kallsyms.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kprobes.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
 #include <linux/kdebug.h>

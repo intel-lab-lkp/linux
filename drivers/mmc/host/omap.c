@@ -18,6 +18,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/of.h>
 #include <linux/mmc/host.h>

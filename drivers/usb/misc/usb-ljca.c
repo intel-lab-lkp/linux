@@ -7,6 +7,7 @@
 
 #include <linux/acpi.h>
 #include <linux/auxiliary_bus.h>
+#include <linux/completion.h>
 #include <linux/dev_printk.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
@@ -14,6 +15,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/usb.h>
 #include <linux/usb/ljca.h>

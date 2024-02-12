@@ -9,6 +9,7 @@
  *****************************************************************************/
 #include <linux/ieee80211.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 
 #include "common.h"

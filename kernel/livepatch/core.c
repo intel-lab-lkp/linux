@@ -10,8 +10,12 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 #include <linux/list.h>
 #include <linux/kallsyms.h>
 #include <linux/livepatch.h>

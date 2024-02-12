@@ -6,6 +6,8 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sprintf.h>
+#include <linux/sysfs.h>
 
 #include "audio_manager.h"
 #include "audio_manager_private.h"

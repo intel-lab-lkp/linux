@@ -6,6 +6,7 @@
  ******************************************************************************/
 
 #include <drv_types.h>
+#include <linux/sprintf.h>
 #include <rtw_debug.h>
 #include <hal_com_h2c.h>
 

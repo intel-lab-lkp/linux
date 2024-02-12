@@ -24,6 +24,7 @@
 #include <linux/remoteproc.h>
 #include <linux/slab.h>
 #include "pruss.h"
+#include <linux/sprintf.h>
 
 /**
  * struct pruss_private_data - PRUSS driver private data

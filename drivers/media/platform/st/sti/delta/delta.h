@@ -8,6 +8,7 @@
 #define DELTA_H
 
 #include <linux/rpmsg.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
 

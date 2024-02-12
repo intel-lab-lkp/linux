@@ -32,6 +32,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 static struct max77620_chip *max77620_scratch;
 

@@ -8,10 +8,13 @@
  */
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/kdev_t.h>
+#include <linux/kobject.h>
 #include <linux/pwm.h>
 
 struct pwm_export {

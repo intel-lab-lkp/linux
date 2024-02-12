@@ -9,6 +9,8 @@
 #include "otx2_cptlf.h"
 #include "otx2_cpt_reqmgr.h"
 #include "rvu_reg.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define CSR_DELAY 30
 

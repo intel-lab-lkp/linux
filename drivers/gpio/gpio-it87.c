@@ -20,6 +20,7 @@
 #include <linux/ioport.h>
 #include <linux/slab.h>
 #include <linux/gpio/driver.h>
+#include <linux/sprintf.h>
 
 /* Chip Id numbers */
 #define NO_DEV_ID	0xffff

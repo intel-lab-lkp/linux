@@ -28,6 +28,7 @@
 #include <linux/proc_fs.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/types.h>
 #include <linux/wireless.h>

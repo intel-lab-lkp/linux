@@ -33,12 +33,14 @@
 
 
 #include <linux/kref.h>
+#include <linux/kstrtox.h>
 #include <linux/random.h>
 #include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-resv.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_umem_odp.h>
 #include "dm.h"
 #include "mlx5_ib.h"

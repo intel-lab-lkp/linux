@@ -52,6 +52,7 @@
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
 #include <acpi/video.h>
+#include <linux/sprintf.h>
 
 #define MSI_LCD_LEVEL_MAX 9
 

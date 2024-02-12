@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include "slimbus.h"

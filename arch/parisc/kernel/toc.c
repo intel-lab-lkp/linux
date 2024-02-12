@@ -7,10 +7,15 @@
 #include <linux/delay.h>
 #include <linux/reboot.h>
 
+#ifdef CONFIG_KGDB
+#include <linux/hardirq.h> // for nmi_enter()
+#endif
+
 #include <asm/pdc.h>
 #include <asm/pdc_chassis.h>
 #include <asm/ldcw.h>
 #include <asm/processor.h>
+#include <asm/sections.h> // for dereference_function_descriptor()
 
 static unsigned int __aligned(16) toc_lock = 1;
 DEFINE_PER_CPU_PAGE_ALIGNED(char [16384], toc_stack) __visible;

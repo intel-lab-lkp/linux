@@ -10,6 +10,7 @@
 #include <linux/pfn_t.h>
 #include <linux/memremap.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/virtio.h>
 #include <linux/virtio_fs.h>
 #include <linux/delay.h>
@@ -19,6 +20,7 @@
 #include <linux/cleanup.h>
 #include <linux/uio.h>
 #include "fuse_i.h"
+#include <linux/completion.h>
 
 /* Used to help calculate the FUSE connection's max_pages limit for a request's
  * size. Parts of the struct fuse_req are sliced into scattergather lists in

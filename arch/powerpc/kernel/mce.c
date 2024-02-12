@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) "mce: " fmt
 
 #include <linux/hardirq.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/percpu.h>

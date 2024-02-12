@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 // Copyright 2017 IBM Corp.
 #include <linux/sched/mm.h>
+#include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/mm_types.h>
@@ -10,6 +11,7 @@
 #include <asm/copro.h>
 #include <asm/pnv-ocxl.h>
 #include <asm/xive.h>
+#include <linux/sprintf.h>
 #include <misc/ocxl.h>
 #include "ocxl_internal.h"
 #include "trace.h"

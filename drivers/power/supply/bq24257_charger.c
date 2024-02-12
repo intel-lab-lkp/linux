@@ -12,6 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/types.h>

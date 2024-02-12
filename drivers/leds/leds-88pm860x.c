@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/mfd/88pm860x.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define LED_PWM_MASK		(0x1F)
 #define LED_CURRENT_MASK	(0x07 << 5)

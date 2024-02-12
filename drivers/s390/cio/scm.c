@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <asm/eadm.h>
 #include "chsc.h"
+#include <linux/sprintf.h>
 
 static struct device *scm_root;
 

@@ -4,6 +4,8 @@
  */
 
 #include <drm/drm_fourcc.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
+#include <linux/sprintf.h>
 
 #include "display/intel_display.h"
 #include "gem/i915_gem_ioctls.h"

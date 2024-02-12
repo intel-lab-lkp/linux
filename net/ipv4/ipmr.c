@@ -29,6 +29,7 @@
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/fcntl.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/socket.h>
 #include <linux/in.h>

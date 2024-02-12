@@ -19,6 +19,7 @@
 #include <linux/completion.h>
 #include <linux/regulator/consumer.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>

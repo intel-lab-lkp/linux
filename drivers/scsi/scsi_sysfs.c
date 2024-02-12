@@ -12,8 +12,10 @@
 #include <linux/init.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/pm_runtime.h>
 #include <linux/bsg.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>

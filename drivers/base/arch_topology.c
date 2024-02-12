@@ -19,6 +19,7 @@
 #include <linux/init.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/units.h>
 
 #define CREATE_TRACE_POINTS

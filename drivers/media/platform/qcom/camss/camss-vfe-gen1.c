@@ -10,6 +10,7 @@
 #include "camss.h"
 #include "camss-vfe.h"
 #include "camss-vfe-gen1.h"
+#include <linux/completion.h>
 
 /* Max number of frame drop updates per frame */
 #define VFE_FRAME_DROP_UPDATES 2

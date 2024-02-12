@@ -4,6 +4,7 @@
  */
 
 #include "xe_gt_tlb_invalidation.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "abi/guc_actions_abi.h"
 #include "xe_device.h"

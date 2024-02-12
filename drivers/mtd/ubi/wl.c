@@ -91,6 +91,7 @@
 #include <linux/kthread.h>
 #include "ubi.h"
 #include "wl.h"
+#include <linux/sprintf.h>
 
 /* Number of physical eraseblocks reserved for wear-leveling purposes */
 #define WL_RESERVED_PEBS 1

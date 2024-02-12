@@ -5,6 +5,8 @@
 
 #include <linux/wwan.h>
 #include "iosm_ipc_trace.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /* sub buffer size and number of sub buffer */
 #define IOSM_TRC_SUB_BUFF_SIZE 131072

@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/device.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 
 #include "hinic_hw_if.h"
 #include "hinic_hw_dev.h"

@@ -26,6 +26,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <asm/div64.h>
+#include <linux/sprintf.h>
 #if IS_ENABLED(CONFIG_X86_64)
 #include <asm/intel-family.h>
 #endif

@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_pci.h>
+#include <linux/sprintf.h>
 
 static void its_mask_msi_irq(struct irq_data *d)
 {

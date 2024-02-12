@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/input.h>

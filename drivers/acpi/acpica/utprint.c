@@ -9,6 +9,7 @@
 
 #include <acpi/acpi.h>
 #include "accommon.h"
+#include <linux/sprintf.h>
 
 #define _COMPONENT          ACPI_UTILITIES
 ACPI_MODULE_NAME("utprint")

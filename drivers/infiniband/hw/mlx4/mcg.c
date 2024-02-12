@@ -34,6 +34,7 @@
 #include <rdma/ib_smi.h>
 #include <rdma/ib_cache.h>
 #include <rdma/ib_sa.h>
+#include <linux/sprintf.h>
 
 #include <linux/mlx4/cmd.h>
 #include <linux/rbtree.h>

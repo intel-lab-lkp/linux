@@ -17,6 +17,7 @@
 
 #include <linux/acpi_pmtmr.h>
 #include <linux/clocksource.h>
+#include <linux/kstrtox.h>
 #include <linux/timex.h>
 #include <linux/errno.h>
 #include <linux/init.h>

@@ -16,6 +16,7 @@
 #include <linux/moduleparam.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <linux/firmware/cirrus/cs_dsp.h>

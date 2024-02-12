@@ -11,6 +11,7 @@
 #include "cx18-driver.h"
 #include "cx18-io.h"
 #include "cx18-cards.h"
+#include <linux/sprintf.h>
 
 int cx18_av_write(struct cx18 *cx, u16 addr, u8 value)
 {

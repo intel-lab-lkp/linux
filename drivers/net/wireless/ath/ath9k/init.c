@@ -19,12 +19,14 @@
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/ath9k_platform.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/relay.h>
 #include <linux/dmi.h>
+#include <linux/sprintf.h>
 #include <net/ieee80211_radiotap.h>
 
 #include "ath9k.h"

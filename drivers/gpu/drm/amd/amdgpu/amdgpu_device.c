@@ -29,11 +29,14 @@
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/console.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/iommu.h>
 #include <linux/pci.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/apple-gmux.h>
+#include <linux/ratelimit.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>

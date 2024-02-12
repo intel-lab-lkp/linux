@@ -5,6 +5,7 @@
 
 #include <drm/drm_edid.h>
 #include <drm/drm_eld.h>
+#include <linux/sprintf.h>
 
 #include "i915_drv.h"
 #include "intel_crtc_state_dump.h"

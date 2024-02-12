@@ -5,7 +5,9 @@
 #include <linux/ntb.h>
 #include <linux/pci.h>
 #include <linux/radix-tree.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_VERSION("0.1");

@@ -29,11 +29,13 @@
 #include <linux/pagemap.h>
 #include <linux/file.h>
 #include <linux/fileattr.h>
+#include <linux/kernel.h> // for memparse()
 #include <linux/mm.h>
 #include <linux/random.h>
 #include <linux/sched/signal.h>
 #include <linux/export.h>
 #include <linux/shmem_fs.h>
+#include <linux/shrinker.h>
 #include <linux/swap.h>
 #include <linux/uio.h>
 #include <linux/hugetlb.h>

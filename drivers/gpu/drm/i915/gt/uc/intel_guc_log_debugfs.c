@@ -5,6 +5,7 @@
 
 #include <linux/fs.h>
 #include <drm/drm_print.h>
+#include <linux/kstrtox.h>
 
 #include "gt/intel_gt_debugfs.h"
 #include "intel_guc.h"

@@ -4,6 +4,7 @@
 #include <net/devlink.h>
 #include "i40e.h"
 #include "i40e_devlink.h"
+#include <linux/sprintf.h>
 
 static void i40e_info_get_dsn(struct i40e_pf *pf, char *buf, size_t len)
 {

@@ -9,8 +9,10 @@
  */
 
 #include <linux/device-mapper.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/rbtree.h>
+#include <linux/sprintf.h>
 
 #define DM_MSG_PREFIX "dust"
 

@@ -13,6 +13,7 @@
 #include <linux/poll.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>

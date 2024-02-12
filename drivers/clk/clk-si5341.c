@@ -15,6 +15,7 @@
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/gcd.h>
+#include <linux/kstrtox.h>
 #include <linux/math64.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
@@ -22,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define SI5341_NUM_INPUTS 4
 

@@ -12,6 +12,7 @@
 #include <asm/cpu.h>
 #include <asm/debug.h>
 #include <asm/mipsregs.h>
+#include <linux/sprintf.h>
 
 static void build_segment_config(char *str, unsigned int cfg)
 {

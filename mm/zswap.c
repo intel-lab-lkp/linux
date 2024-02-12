@@ -36,6 +36,8 @@
 #include <linux/pagemap.h>
 #include <linux/workqueue.h>
 #include <linux/list_lru.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kref.h>
 
 #include "swap.h"
 #include "internal.h"

@@ -11,6 +11,7 @@
 
 
 #include <linux/export.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <sound/core.h>
 #include "emux_voice.h"

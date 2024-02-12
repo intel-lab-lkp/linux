@@ -9,6 +9,7 @@
  */
 
 #include <generated/utsrelease.h>
+#include <linux/kstrtox.h>
 
 #include <linux/device.h>
 #include <linux/module.h>

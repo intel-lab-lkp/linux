@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <linux/sprintf.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/wait.h>

@@ -9,6 +9,7 @@
 #include "dm-core.h"
 #include "dm-ima.h"
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/miscdevice.h>
 #include <linux/sched/mm.h>

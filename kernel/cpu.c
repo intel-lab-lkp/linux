@@ -7,12 +7,15 @@
 #include <linux/proc_fs.h>
 #include <linux/smp.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for system_state
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/hotplug.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/task.h>
 #include <linux/sched/smt.h>
+#include <linux/sprintf.h>
 #include <linux/unistd.h>
 #include <linux/cpu.h>
 #include <linux/oom.h>
@@ -20,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/bug.h>
+#include <linux/completion.h>
 #include <linux/kthread.h>
 #include <linux/stop_machine.h>
 #include <linux/mutex.h>
@@ -37,6 +41,7 @@
 #include <linux/cpuset.h>
 #include <linux/random.h>
 #include <linux/cc_platform.h>
+#include <linux/hrtimer.h>
 
 #include <trace/events/power.h>
 #define CREATE_TRACE_POINTS

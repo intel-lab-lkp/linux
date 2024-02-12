@@ -7,6 +7,7 @@
 */
 
 #include "fuse_i.h"
+#include <linux/completion.h>
 
 #include <linux/pagemap.h>
 #include <linux/slab.h>

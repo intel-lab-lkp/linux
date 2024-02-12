@@ -5,6 +5,7 @@
  */
 
 #include "main.h"
+#include <linux/sprintf.h>
 
 #include <linux/array_size.h>
 #include <linux/atomic.h>

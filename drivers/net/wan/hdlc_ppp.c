@@ -18,6 +18,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #define DEBUG_CP		0 /* also bytes# to dump */
 #define DEBUG_STATE		0

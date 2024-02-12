@@ -23,6 +23,7 @@
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/micrel_phy.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 #include <net/pkt_cls.h>
 #include <net/switchdev.h>

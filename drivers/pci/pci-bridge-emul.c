@@ -19,6 +19,7 @@
 
 #include <linux/pci.h>
 #include "pci-bridge-emul.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define PCI_BRIDGE_CONF_END	PCI_STD_HEADER_SIZEOF
 #define PCI_CAP_SSID_SIZEOF	(PCI_SSVID_DEVICE_ID + 2)

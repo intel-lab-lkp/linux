@@ -5,6 +5,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/of.h>
 #include <linux/mtd/mtd.h>
 #include <linux/slab.h>

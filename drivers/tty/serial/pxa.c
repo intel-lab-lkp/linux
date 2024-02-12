@@ -22,6 +22,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/console.h>
+#include <linux/sprintf.h>
 #include <linux/sysrq.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>

@@ -6,6 +6,8 @@
 
 #include <linux/poll.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/io.h>
 #include <linux/sched/mm.h>

@@ -13,6 +13,7 @@
 #include "key.h"
 #include "debugfs.h"
 #include "debugfs_key.h"
+#include <linux/sprintf.h>
 
 #define KEY_READ(name, prop, format_string)				\
 static ssize_t key_##name##_read(struct file *file,			\

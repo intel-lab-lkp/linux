@@ -5,6 +5,7 @@
  */
 
 #include <linux/etherdevice.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/of.h>
@@ -17,6 +18,7 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/ethtool.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #define TX_BD_NUM		64
 #define RX_BD_NUM		128

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/utsname.h>

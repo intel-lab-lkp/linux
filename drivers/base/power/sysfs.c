@@ -2,6 +2,7 @@
 /* sysfs entries for device PM */
 #include <linux/device.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/export.h>
 #include <linux/pm_qos.h>

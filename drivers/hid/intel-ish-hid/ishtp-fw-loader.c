@@ -11,6 +11,7 @@
 #include <linux/intel-ish-client-if.h>
 #include <linux/property.h>
 #include <asm/cacheflush.h>
+#include <linux/sprintf.h>
 
 /* Number of times we attempt to load the firmware before giving up */
 #define MAX_LOAD_ATTEMPTS			3

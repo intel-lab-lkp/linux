@@ -10,6 +10,7 @@
 // Copyright (C) 2012 Frank Schäfer <fschaefer.oss@googlemail.com>
 
 #include "em28xx.h"
+#include <linux/sprintf.h>
 
 #include <linux/init.h>
 #include <linux/module.h>

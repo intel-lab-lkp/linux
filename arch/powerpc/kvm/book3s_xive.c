@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 #include <linux/cpumask.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/irqdomain.h>
 #include <asm/kvm_book3s.h>

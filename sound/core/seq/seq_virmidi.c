@@ -22,6 +22,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/module.h>
 #include <linux/slab.h>

@@ -7,6 +7,7 @@
  */
 
 #include "dice.h"
+#include <linux/completion.h>
 
 static u64 get_subaddr(struct snd_dice *dice, enum snd_dice_addr_type type,
 		       u64 offset)

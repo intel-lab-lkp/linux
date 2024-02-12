@@ -16,7 +16,9 @@
 #include <linux/sched/mm.h>
 #include <linux/module.h>
 #include <linux/gfp.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>

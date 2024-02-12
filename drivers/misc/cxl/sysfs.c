@@ -4,7 +4,9 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/pci_regs.h>
 

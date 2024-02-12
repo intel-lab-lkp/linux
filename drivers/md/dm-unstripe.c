@@ -6,6 +6,8 @@
  */
 
 #include "dm.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 

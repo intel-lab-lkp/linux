@@ -15,6 +15,8 @@
 #include "scrub/scrub.h"
 #include "scrub/stats.h"
 #include "scrub/trace.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 struct xchk_scrub_stats {
 	/* all 32-bit counters here */

@@ -10,6 +10,7 @@
 #include "error.h"
 #include "desc_constr.h"
 #include "key_gen.h"
+#include <linux/completion.h>
 
 void split_key_done(struct device *dev, u32 *desc, u32 err,
 			   void *context)

@@ -24,6 +24,7 @@
 //	SAA7111, SAA7113 and SAA7118 support
 
 #include "saa711x_regs.h"
+#include <linux/sprintf.h>
 
 #include <linux/kernel.h>
 #include <linux/module.h>

@@ -24,6 +24,10 @@
 #include "gf100.h"
 #include "ctxgf100.h"
 #include "fuc/os.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+
+#include <linux/kernel.h> // for lower_32_bits(), upper_32_bits()
+#include <linux/sprintf.h>
 
 #include <core/client.h>
 #include <core/firmware.h>

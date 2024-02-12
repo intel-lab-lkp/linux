@@ -7,6 +7,7 @@
 #include <linux/filter.h>
 #include <linux/bpf_lirc.h>
 #include "rc-core-priv.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #define lirc_rcu_dereference(p)						\
 	rcu_dereference_protected(p, lockdep_is_held(&ir_raw_handler_lock))

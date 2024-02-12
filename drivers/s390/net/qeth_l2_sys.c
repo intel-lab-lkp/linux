@@ -8,6 +8,7 @@
 #include <asm/ebcdic.h>
 #include "qeth_core.h"
 #include "qeth_l2.h"
+#include <linux/kstrtox.h>
 
 static ssize_t qeth_bridge_port_role_state_show(struct device *dev,
 				struct device_attribute *attr, char *buf,

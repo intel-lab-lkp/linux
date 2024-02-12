@@ -3,6 +3,7 @@
 #include <linux/numa.h>
 #include <linux/slab.h>
 #include <linux/rculist.h>
+#include <linux/sprintf.h>
 #include <linux/threads.h>
 #include <linux/preempt.h>
 #include <linux/irqflags.h>

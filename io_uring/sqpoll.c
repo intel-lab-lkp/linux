@@ -4,6 +4,7 @@
  * ring, offloading submissions from the application to a kernel thread.
  */
 #include <linux/kernel.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/mm.h>

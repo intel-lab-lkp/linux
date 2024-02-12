@@ -10,6 +10,7 @@
 
 #include "ax88796c_main.h"
 #include "ax88796c_ioctl.h"
+#include <linux/sprintf.h>
 
 #include <linux/bitmap.h>
 #include <linux/etherdevice.h>

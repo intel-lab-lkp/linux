@@ -23,6 +23,7 @@
 #include <linux/random.h>
 #include <linux/siphash.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/percpu.h>
 #include <linux/moduleparam.h>
 #include <linux/notifier.h>

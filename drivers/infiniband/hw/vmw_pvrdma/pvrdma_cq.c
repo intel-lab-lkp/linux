@@ -44,6 +44,7 @@
  */
 
 #include <asm/page.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/wait.h>
 #include <rdma/ib_addr.h>

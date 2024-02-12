@@ -17,6 +17,7 @@
 #include <sound/tlv.h>
 #include "rt712-sdca.h"
 #include "rt712-sdca-dmic.h"
+#include <linux/completion.h>
 
 static bool rt712_sdca_dmic_readable_register(struct device *dev, unsigned int reg)
 {

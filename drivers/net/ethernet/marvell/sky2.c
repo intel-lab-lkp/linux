@@ -23,6 +23,7 @@
 #include <linux/interrupt.h>
 #include <linux/ip.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/ip.h>
 #include <linux/tcp.h>
 #include <linux/in.h>

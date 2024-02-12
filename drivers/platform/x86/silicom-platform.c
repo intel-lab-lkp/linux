@@ -12,6 +12,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/led-class-multicolor.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

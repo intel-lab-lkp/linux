@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>

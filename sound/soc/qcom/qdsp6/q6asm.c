@@ -3,6 +3,7 @@
 // Copyright (c) 2018, Linaro Limited
 
 #include <dt-bindings/sound/qcom,q6asm.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mutex.h>
 #include <linux/wait.h>
 #include <linux/module.h>

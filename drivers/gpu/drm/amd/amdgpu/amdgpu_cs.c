@@ -26,6 +26,7 @@
  */
 
 #include <linux/file.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/pagemap.h>
 #include <linux/sync_file.h>
 #include <linux/dma-buf.h>

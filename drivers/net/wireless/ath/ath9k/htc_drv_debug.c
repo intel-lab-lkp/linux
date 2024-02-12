@@ -15,6 +15,8 @@
  */
 
 #include "htc.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static ssize_t read_file_tgt_int_stats(struct file *file, char __user *user_buf,
 				       size_t count, loff_t *ppos)

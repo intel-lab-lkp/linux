@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb/hcd.h>

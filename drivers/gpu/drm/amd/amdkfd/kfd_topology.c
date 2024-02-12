@@ -31,6 +31,7 @@
 #include <linux/log2.h>
 #include <linux/dmi.h>
 #include <linux/atomic.h>
+#include <linux/sprintf.h>
 
 #include "kfd_priv.h"
 #include "kfd_crat.h"

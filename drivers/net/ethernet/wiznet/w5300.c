@@ -15,6 +15,7 @@
 #include <linux/platform_data/wiznet.h>
 #include <linux/ethtool.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/delay.h>

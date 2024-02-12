@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 #include <linux/nls.h>
+#include <linux/sprintf.h>
 
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"

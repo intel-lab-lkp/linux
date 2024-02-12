@@ -22,6 +22,8 @@
 #include <linux/sunrpc/msg_prot.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #if IS_ENABLED(CONFIG_IPV6)
 

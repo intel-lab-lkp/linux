@@ -18,6 +18,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/gcd.h>

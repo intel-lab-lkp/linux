@@ -19,6 +19,7 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define MIP4_DEVICE_NAME	"mip4_ts"
 

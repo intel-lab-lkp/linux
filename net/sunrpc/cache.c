@@ -11,6 +11,8 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/file.h>
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -18,6 +20,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/uaccess.h>
 #include <linux/poll.h>
@@ -28,6 +31,7 @@
 #include <linux/mutex.h>
 #include <linux/pagemap.h>
 #include <asm/ioctls.h>
+#include <linux/completion.h>
 #include <linux/sunrpc/types.h>
 #include <linux/sunrpc/cache.h>
 #include <linux/sunrpc/stats.h>

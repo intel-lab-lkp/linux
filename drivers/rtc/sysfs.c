@@ -9,6 +9,7 @@
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 
 #include "rtc-core.h"
 

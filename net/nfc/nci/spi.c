@@ -6,6 +6,7 @@
 #define pr_fmt(fmt) "nci_spi: %s: " fmt, __func__
 
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <linux/export.h>
 #include <linux/spi/spi.h>

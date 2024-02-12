@@ -15,6 +15,7 @@
 #include <linux/ratelimit.h>
 #include <linux/rcupdate.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/kdebug.h>
 #include <linux/kernel.h>

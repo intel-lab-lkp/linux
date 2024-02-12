@@ -14,6 +14,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>

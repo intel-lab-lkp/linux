@@ -26,6 +26,7 @@
 #include "amdgpu_smu.h"
 #include "smu_cmn.h"
 #include "soc15_common.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * DO NOT use these for err/warn/info/debug messages.

@@ -7,6 +7,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/spi/spi.h>
 #include <linux/module.h>
 #include <linux/iio/iio.h>

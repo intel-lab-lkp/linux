@@ -24,12 +24,14 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/capability.h>
+#include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/un.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>

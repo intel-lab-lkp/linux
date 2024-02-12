@@ -13,6 +13,10 @@
 
 #include <linux/errno.h>
 
+#ifdef CONFIG_MIPS_MT_SMP
+#include <asm/cpu-features.h> // for cpu_has_mipsmt
+#endif
+
 #ifdef CONFIG_SMP
 
 #include <linux/cpumask.h>

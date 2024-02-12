@@ -30,6 +30,7 @@
  * SOFTWARE.
  *
  */
+#include <linux/bvec.h>
 #include <linux/kernel.h>
 #include <linux/in.h>
 #include <net/tcp.h>

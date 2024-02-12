@@ -7,6 +7,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/init.h>

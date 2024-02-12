@@ -49,6 +49,8 @@
  */
 
 #include <linux/uaccess.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include <linux/errno.h>
 #include <linux/time.h>

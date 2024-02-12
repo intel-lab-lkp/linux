@@ -5,6 +5,7 @@
 
 #include <linux/irqreturn.h>
 #include <linux/kd.h>
+#include <linux/kstrtox.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
 

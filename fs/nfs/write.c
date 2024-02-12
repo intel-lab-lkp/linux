@@ -15,6 +15,7 @@
 #include <linux/writeback.h>
 #include <linux/swap.h>
 #include <linux/migrate.h>
+#include <linux/completion.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>

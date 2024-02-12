@@ -19,6 +19,7 @@
 #include <linux/pm.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define DALLAS_MAXIM_DS1343	0
 #define DALLAS_MAXIM_DS1344	1

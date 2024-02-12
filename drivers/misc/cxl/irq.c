@@ -5,6 +5,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/wait.h>

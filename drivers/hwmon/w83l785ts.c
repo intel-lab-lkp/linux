@@ -27,6 +27,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 /* How many retries on register read error */
 #define MAX_RETRIES	5

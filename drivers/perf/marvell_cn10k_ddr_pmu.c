@@ -12,6 +12,7 @@
 #include <linux/hrtimer.h>
 #include <linux/acpi.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h> // used by PMU_FORMAT_ATTR()
 
 /* Performance Counters Operating Mode Control Registers */
 #define DDRC_PERF_CNT_OP_MODE_CTRL	0x8020

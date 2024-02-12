@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 
 #include <linux/firmware/xlnx-zynqmp.h>

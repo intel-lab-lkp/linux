@@ -8,6 +8,7 @@
  */
 
 #include "mpi3mr.h"
+#include <linux/completion.h>
 
 /**
  * mpi3mr_post_transport_req - Issue transport requests and wait

@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/sprintf.h>
 
 #include "power.h"
 

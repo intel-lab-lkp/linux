@@ -10,21 +10,25 @@
  * to indicate a major problem.
  */
 #include <linux/debug_locks.h>
+#include <linux/kstrtox.h>
 #include <linux/sched/debug.h>
 #include <linux/interrupt.h>
 #include <linux/kgdb.h>
 #include <linux/kmsg_dump.h>
 #include <linux/kallsyms.h>
 #include <linux/notifier.h>
+#include <linux/sprintf.h>
 #include <linux/vt_kern.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/ftrace.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>
+#include <linux/kernel.h> // for bust_spinlocks(), tracing_off()
 #include <linux/kexec.h>
 #include <linux/panic_notifier.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/sysrq.h>
 #include <linux/init.h>
@@ -34,6 +38,7 @@
 #include <linux/ratelimit.h>
 #include <linux/debugfs.h>
 #include <linux/sysfs.h>
+#include <linux/hrtimer.h> //for sysrq_timer_list_show()
 #include <linux/context_tracking.h>
 #include <trace/events/error_report.h>
 #include <asm/sections.h>

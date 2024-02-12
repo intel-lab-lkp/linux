@@ -23,12 +23,15 @@
 
 #include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/aer.h>
+#include <linux/completion.h>
 #include <linux/gfp.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>

@@ -19,6 +19,7 @@
 #include <linux/property.h>
 #include <linux/reboot.h>
 #include <asm/machdep.h>
+#include <linux/sprintf.h>
 
 /*
  * I don't have specifications for the MCU firmware, I found this register

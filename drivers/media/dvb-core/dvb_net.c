@@ -48,6 +48,7 @@
 #include <linux/nospec.h>
 #include <linux/etherdevice.h>
 #include <linux/dvb/net.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/uaccess.h>
 #include <linux/crc32.h>

@@ -19,6 +19,7 @@
 
 #include <linux/kernel.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/cpu.h>
 #include <linux/suspend.h>

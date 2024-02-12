@@ -2,6 +2,7 @@
 #define pr_fmt(fmt) "xen:" KBUILD_MODNAME ": " fmt
 
 #include <linux/notifier.h>
+#include <linux/sprintf.h>
 
 #include <xen/xen.h>
 #include <xen/xenbus.h>

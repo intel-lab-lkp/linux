@@ -20,6 +20,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
+#include <linux/sprintf.h>
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"

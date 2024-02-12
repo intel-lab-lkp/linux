@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/remoteproc.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "st_fdma.h"
 

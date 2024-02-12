@@ -14,6 +14,8 @@
 
 #include "bfad_drv.h"
 #include "bfad_im.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 /*
  * FC transport template entry, get SCSI target port ID.

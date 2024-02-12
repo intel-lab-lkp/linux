@@ -10,6 +10,7 @@
 #include <linux/seqlock.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/icmp.h>
 #include <net/ip.h>
 #include <net/ip_fib.h>

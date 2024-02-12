@@ -2,6 +2,7 @@
 /* Copyright (c) 2020, Mellanox Technologies inc.  All rights reserved. */
 
 #include <devlink.h>
+#include <linux/completion.h>
 
 #include "fw_reset.h"
 #include "diag/fw_tracer.h"

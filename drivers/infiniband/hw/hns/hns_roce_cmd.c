@@ -34,6 +34,7 @@
 #include "hns_roce_common.h"
 #include "hns_roce_device.h"
 #include "hns_roce_cmd.h"
+#include <linux/completion.h>
 
 #define CMD_POLL_TOKEN 0xffff
 #define CMD_MAX_NUM 32

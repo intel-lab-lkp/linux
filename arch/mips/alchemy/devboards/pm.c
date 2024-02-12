@@ -7,6 +7,8 @@
 
 #include <linux/init.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/sysfs.h>
 #include <asm/mach-au1x00/au1000.h>

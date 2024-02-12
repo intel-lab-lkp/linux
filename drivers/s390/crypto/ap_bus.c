@@ -15,12 +15,14 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/freezer.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/notifier.h>
@@ -30,6 +32,7 @@
 #include <asm/tpi.h>
 #include <linux/atomic.h>
 #include <asm/isc.h>
+#include <linux/completion.h>
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #include <asm/facility.h>

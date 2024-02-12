@@ -18,6 +18,7 @@
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw_type.h>
+#include <linux/completion.h>
 
 #include "cs42l43.h"
 

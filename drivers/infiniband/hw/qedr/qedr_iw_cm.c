@@ -38,6 +38,7 @@
 #include <net/flow.h>
 #include "qedr.h"
 #include "qedr_iw_cm.h"
+#include <linux/completion.h>
 
 static inline void
 qedr_fill_sockaddr4(const struct qed_iwarp_cm_info *cm_info,

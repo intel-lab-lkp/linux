@@ -43,6 +43,7 @@
 #include <linux/tcp.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -57,6 +58,7 @@
 #include <linux/ethtool.h>
 #include <linux/firmware.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/timer.h>
 #include <linux/vmalloc.h>
 #include <linux/crc32.h>

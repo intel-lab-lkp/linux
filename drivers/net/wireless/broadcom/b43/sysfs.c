@@ -12,6 +12,8 @@
 
 #include <linux/capability.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "b43.h"
 #include "sysfs.h"

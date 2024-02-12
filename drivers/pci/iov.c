@@ -10,6 +10,8 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/delay.h>
 #include "pci.h"

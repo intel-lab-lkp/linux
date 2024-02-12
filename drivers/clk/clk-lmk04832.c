@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 /* 0x000 - 0x00d System Functions */
 #define LMK04832_REG_RST3W		0x000

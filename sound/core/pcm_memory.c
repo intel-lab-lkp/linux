@@ -5,6 +5,7 @@
  */
 
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/slab.h>

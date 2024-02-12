@@ -6,6 +6,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <media/cec.h>
 
 #include "vivid-core.h"

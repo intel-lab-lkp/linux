@@ -28,6 +28,7 @@
 #include "kfd_pm4_headers_aldebaran.h"
 #include "kfd_pm4_opcodes.h"
 #include "gc/gc_10_1_0_sh_mask.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static int pm_map_process_v9(struct packet_manager *pm,
 		uint32_t *buffer, struct qcm_process_device *qpd)

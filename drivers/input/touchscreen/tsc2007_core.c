@@ -27,6 +27,7 @@
 #include <linux/property.h>
 #include <linux/platform_data/tsc2007.h>
 #include "tsc2007.h"
+#include <linux/sprintf.h>
 
 int tsc2007_xfer(struct tsc2007 *tsc, u8 cmd)
 {

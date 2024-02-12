@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 #include <linux/utsname.h>
 #include <generated/utsrelease.h>
+#include <linux/completion.h>
 #include <linux/ctype.h>
 
 #include "ionic.h"

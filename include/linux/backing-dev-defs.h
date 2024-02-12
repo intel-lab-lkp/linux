@@ -10,9 +10,14 @@
 #include <linux/percpu-refcount.h>
 #include <linux/flex_proportions.h>
 #include <linux/timer.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 #include <linux/refcount.h>
+
+#ifdef CONFIG_CGROUP_WRITEBACK
+#include <linux/rwsem.h>
+#endif
 
 struct page;
 struct device;

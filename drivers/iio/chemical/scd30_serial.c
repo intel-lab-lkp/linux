@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "scd30.h"
 

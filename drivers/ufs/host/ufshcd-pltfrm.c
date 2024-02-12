@@ -14,6 +14,7 @@
 #include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"

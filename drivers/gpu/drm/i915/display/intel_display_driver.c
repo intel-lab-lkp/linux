@@ -15,6 +15,7 @@
 #include <drm/drm_privacy_screen_consumer.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <linux/sprintf.h>
 
 #include "i915_drv.h"
 #include "i9xx_wm.h"

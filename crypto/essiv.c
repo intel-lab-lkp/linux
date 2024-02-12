@@ -35,6 +35,7 @@
 #include <crypto/internal/skcipher.h>
 #include <crypto/scatterwalk.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "internal.h"
 

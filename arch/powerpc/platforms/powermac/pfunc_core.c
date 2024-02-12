@@ -8,6 +8,7 @@
 
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/module.h>

@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/platform_device.h>
@@ -18,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/io.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define DRVNAME "f71882fg"
 

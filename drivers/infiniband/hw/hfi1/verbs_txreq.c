@@ -7,6 +7,7 @@
 #include "verbs_txreq.h"
 #include "qp.h"
 #include "trace.h"
+#include <linux/sprintf.h>
 
 #define TXREQ_LEN 24
 

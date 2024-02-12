@@ -9,6 +9,7 @@
 #include <linux/irq.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <soc/arc/mcip.h>
 #include <asm/irqflags-arcv2.h>
 #include <asm/setup.h>

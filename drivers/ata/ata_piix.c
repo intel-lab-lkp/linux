@@ -74,6 +74,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi_host.h>
 #include <linux/libata.h>
 #include <linux/dmi.h>

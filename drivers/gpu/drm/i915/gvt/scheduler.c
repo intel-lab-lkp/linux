@@ -34,6 +34,7 @@
  */
 
 #include <linux/kthread.h>
+#include <linux/completion.h>
 
 #include "gem/i915_gem_pm.h"
 #include "gt/intel_context.h"

@@ -30,6 +30,7 @@
 #include <linux/seq_file.h>
 #include <linux/ratelimit.h>
 #include <linux/interval_tree_generic.h>
+#include <linux/sprintf.h>
 
 #include <trace/events/block.h>
 

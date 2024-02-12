@@ -17,6 +17,7 @@
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "dm9051.h"

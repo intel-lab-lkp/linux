@@ -31,6 +31,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>

@@ -29,6 +29,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>

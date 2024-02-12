@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
+#include <linux/shrinker.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/debugfs.h>

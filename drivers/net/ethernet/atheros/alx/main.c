@@ -42,6 +42,7 @@
 #include <linux/bitops.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <net/ip6_checksum.h>
 #include <linux/crc32.h>
 #include "alx.h"

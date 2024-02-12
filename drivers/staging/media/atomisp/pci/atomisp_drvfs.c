@@ -19,6 +19,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 
 #include "atomisp_compat.h"
 #include "atomisp_internal.h"

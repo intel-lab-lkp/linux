@@ -13,8 +13,10 @@
 
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/export.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_eh.h>

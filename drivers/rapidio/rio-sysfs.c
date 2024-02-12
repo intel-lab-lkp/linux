@@ -7,8 +7,10 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/rio.h>
 #include <linux/rio_drv.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/capability.h>
 

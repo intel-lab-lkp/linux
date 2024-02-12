@@ -19,6 +19,7 @@
 #include <linux/compat.h>
 #include <linux/init.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
 

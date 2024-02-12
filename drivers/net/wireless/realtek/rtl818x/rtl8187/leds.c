@@ -15,6 +15,7 @@
 #include <net/mac80211.h>
 #include <linux/usb.h>
 #include <linux/eeprom_93cx6.h>
+#include <linux/sprintf.h>
 
 #include "rtl8187.h"
 #include "leds.h"

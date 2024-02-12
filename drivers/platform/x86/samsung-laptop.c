@@ -9,6 +9,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
@@ -23,6 +24,7 @@
 #include <linux/debugfs.h>
 #include <linux/ctype.h>
 #include <linux/efi.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <acpi/video.h>
 

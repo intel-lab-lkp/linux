@@ -17,6 +17,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/spmi.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/units.h>
 

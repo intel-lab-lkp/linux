@@ -9,6 +9,7 @@
 #include <linux/f2fs_fs.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/sched/mm.h>
 #include <linux/prefetch.h>
 #include <linux/kthread.h>

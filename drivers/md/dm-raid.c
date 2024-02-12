@@ -8,6 +8,7 @@
 
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/kstrtox.h>
 
 #include "md.h"
 #include "raid1.h"

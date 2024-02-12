@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 
 #include "mac.h"
 #include "ani.h"

@@ -9,6 +9,8 @@
 #include "virtio_pmem.h"
 #include "nd.h"
 
+#include <linux/bio.h>
+
  /* The interrupt handler */
 void virtio_pmem_host_ack(struct virtqueue *vq)
 {

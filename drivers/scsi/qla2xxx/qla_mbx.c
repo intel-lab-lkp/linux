@@ -5,6 +5,7 @@
  */
 #include "qla_def.h"
 #include "qla_target.h"
+#include <linux/completion.h>
 
 #include <linux/delay.h>
 #include <linux/gfp.h>

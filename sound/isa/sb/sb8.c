@@ -9,6 +9,7 @@
 #include <linux/isa.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/sb.h>
 #include <sound/opl3.h>

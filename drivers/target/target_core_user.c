@@ -9,6 +9,8 @@
 #include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/parser.h>
 #include <linux/vmalloc.h>
@@ -16,6 +18,7 @@
 #include <linux/xarray.h>
 #include <linux/stringify.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/highmem.h>
 #include <linux/configfs.h>
 #include <linux/mutex.h>

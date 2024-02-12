@@ -46,6 +46,7 @@
 #include "amdgpu_ras.h"
 #include "smu_cmn.h"
 #include "mp/mp_13_0_2_offset.h"
+#include <linux/sprintf.h>
 
 /*
  * DO NOT use these for err/warn/info/debug messages.

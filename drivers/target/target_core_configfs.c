@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <generated/utsrelease.h>
+#include <linux/sprintf.h>
 #include <linux/utsname.h>
 #include <linux/init.h>
 #include <linux/fs.h>

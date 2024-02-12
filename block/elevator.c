@@ -33,6 +33,7 @@
 #include <linux/compiler.h>
 #include <linux/blktrace_api.h>
 #include <linux/hash.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
 

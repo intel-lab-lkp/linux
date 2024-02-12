@@ -2,6 +2,7 @@
 /* Copyright (c) 2019-2020 Marvell International Ltd. All rights reserved */
 
 #include <net/devlink.h>
+#include <linux/sprintf.h>
 
 #include "prestera_devlink.h"
 #include "prestera_hw.h"

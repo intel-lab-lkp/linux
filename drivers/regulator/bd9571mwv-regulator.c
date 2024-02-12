@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
+#include <linux/kstrtox.h>
 
 #include <linux/mfd/bd9571mwv.h>
 

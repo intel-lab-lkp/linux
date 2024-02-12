@@ -11,11 +11,13 @@
 #include <linux/dmi.h>
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/wmi.h>
 #include <acpi/battery.h>

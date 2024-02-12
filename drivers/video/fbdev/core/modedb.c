@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/fb.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 
 #undef DEBUG
 

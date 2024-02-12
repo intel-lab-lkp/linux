@@ -8,6 +8,7 @@
 #include <linux/mlx5/port.h>
 #include "mlx5_core.h"
 #include "hwmon.h"
+#include <linux/sprintf.h>
 
 #define CHANNELS_TYPE_NUM 2 /* chip channel and temp channel */
 #define CHIP_CONFIG_NUM 1

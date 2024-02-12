@@ -15,6 +15,7 @@
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
 #include <linux/io-pgtable.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/list.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>

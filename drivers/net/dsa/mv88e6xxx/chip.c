@@ -30,6 +30,7 @@
 #include <linux/netdevice.h>
 #include <linux/gpio/consumer.h>
 #include <linux/phylink.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 
 #include "chip.h"

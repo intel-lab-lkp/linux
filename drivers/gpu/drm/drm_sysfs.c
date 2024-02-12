@@ -20,6 +20,7 @@
 #include <linux/kdev_t.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_accel.h>
 #include <drm/drm_connector.h>

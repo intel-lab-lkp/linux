@@ -3,6 +3,7 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/peci.h>
 
 #include "internal.h"

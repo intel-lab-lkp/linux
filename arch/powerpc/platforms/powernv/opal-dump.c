@@ -8,6 +8,7 @@
 #include <linux/kobject.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/delay.h>

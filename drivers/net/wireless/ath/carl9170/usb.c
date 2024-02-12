@@ -48,6 +48,7 @@
 #include "cmd.h"
 #include "hw.h"
 #include "fwcmd.h"
+#include <linux/completion.h>
 
 MODULE_AUTHOR("Johannes Berg <johannes@sipsolutions.net>");
 MODULE_AUTHOR("Christian Lamparter <chunkeey@googlemail.com>");

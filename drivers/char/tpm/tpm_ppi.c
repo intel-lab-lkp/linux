@@ -15,6 +15,7 @@
 
 #include <linux/acpi.h>
 #include "tpm.h"
+#include <linux/sprintf.h>
 
 #define TPM_PPI_REVISION_ID_1	1
 #define TPM_PPI_REVISION_ID_2	2

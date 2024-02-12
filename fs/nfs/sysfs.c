@@ -5,6 +5,8 @@
 
 #include <linux/module.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/fs.h>
 #include <linux/slab.h>

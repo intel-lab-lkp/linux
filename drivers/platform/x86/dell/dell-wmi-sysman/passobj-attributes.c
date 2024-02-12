@@ -7,6 +7,10 @@
  */
 
 #include "dell-wmi-sysman.h"
+#include <linux/sprintf.h>
+
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 
 enum po_properties {IS_PASS_SET = 1, MIN_PASS_LEN, MAX_PASS_LEN};
 

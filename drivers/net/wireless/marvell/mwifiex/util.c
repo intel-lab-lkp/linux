@@ -12,6 +12,7 @@
 #include "main.h"
 #include "wmm.h"
 #include "11n.h"
+#include <linux/sprintf.h>
 
 static struct mwifiex_debug_data items[] = {
 	{"debug_mask", item_size(debug_mask),

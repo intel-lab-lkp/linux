@@ -8,6 +8,7 @@
  */
 
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/module.h>

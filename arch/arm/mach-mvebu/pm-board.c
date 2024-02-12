@@ -16,6 +16,7 @@
 #include <linux/of_address.h>
 #include <linux/slab.h>
 #include "common.h"
+#include <linux/sprintf.h>
 
 #define ARMADA_PIC_NR_GPIOS 3
 

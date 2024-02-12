@@ -8,6 +8,9 @@
 
 #include <linux/delay.h>
 #include <linux/greybus.h>
+#include <linux/completion.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "greybus_trace.h"
 

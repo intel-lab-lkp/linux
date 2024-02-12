@@ -11,6 +11,7 @@
 #include <linux/namei.h>
 #include <linux/fsnotify.h>
 #include "internal.h"
+#include <linux/sprintf.h>
 
 static void afs_silly_rename_success(struct afs_operation *op)
 {

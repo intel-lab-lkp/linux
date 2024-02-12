@@ -6,6 +6,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_file.h>
 #include <drm/drm_print.h>
+#include <linux/kstrtox.h>
 
 #include <uapi/drm/ivpu_accel.h>
 

@@ -18,6 +18,7 @@
 #include "xfs_trace.h"
 #include "xfs_log.h"
 #include "xfs_ag.h"
+#include <linux/bio.h>
 
 /*
  * Notes on an efficient, low latency fstrim algorithm

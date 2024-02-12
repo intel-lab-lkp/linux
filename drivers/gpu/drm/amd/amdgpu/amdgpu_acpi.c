@@ -26,6 +26,7 @@
 #include <linux/acpi.h>
 #include <linux/backlight.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <linux/power_supply.h>
 #include <linux/pm_runtime.h>

@@ -20,6 +20,7 @@
 
 
 #include <linux/bits.h>
+#include <linux/completion.h>
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -28,6 +29,7 @@
 #include <linux/async.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/buffer_head.h>
 #include <linux/slab.h>

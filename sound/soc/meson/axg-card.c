@@ -5,6 +5,7 @@
 
 #include <linux/module.h>
 #include <linux/of_platform.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
 

@@ -53,6 +53,7 @@
 #include <linux/kdebug.h>
 #include <linux/kthread.h>
 #include "xpc.h"
+#include <linux/completion.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/traps.h>

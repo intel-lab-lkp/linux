@@ -7,6 +7,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/libfdt.h>
+#include <linux/kref.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pci_hotplug.h>

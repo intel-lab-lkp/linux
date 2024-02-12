@@ -6,6 +6,7 @@
 
 #include <linux/pm_runtime.h>
 #include <linux/scatterlist.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>

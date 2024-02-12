@@ -10,6 +10,7 @@
 #include "hal_rx.h"
 #include "hal_desc.h"
 #include "hif.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static void ath11k_hal_reo_set_desc_hdr(struct hal_desc_header *hdr,
 					u8 owner, u8 buffer_type, u32 magic)

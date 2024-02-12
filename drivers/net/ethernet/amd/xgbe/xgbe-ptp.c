@@ -118,6 +118,7 @@
 #include <linux/clocksource.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/net_tstamp.h>
+#include <linux/sprintf.h>
 
 #include "xgbe.h"
 #include "xgbe-common.h"

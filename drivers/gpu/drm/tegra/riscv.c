@@ -6,6 +6,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of.h>
 
 #include "riscv.h"

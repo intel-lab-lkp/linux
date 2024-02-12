@@ -26,6 +26,7 @@
  */
 
 #include <linux/dma-fence-array.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/kthread.h>
 #include <linux/dma-resv.h>
 #include <linux/shmem_fs.h>

@@ -13,6 +13,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
 #include <linux/mtd/partitions.h>
+#include <linux/sprintf.h>
 #include <mtd/mtd-abi.h>
 
 #define NETUP_SPI_CTRL_IRQ	0x1000

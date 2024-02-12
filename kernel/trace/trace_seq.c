@@ -22,6 +22,7 @@
  */
 #include <linux/uaccess.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/trace_seq.h>
 
 /* How much buffer is left on the trace_seq? */

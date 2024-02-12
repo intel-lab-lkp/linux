@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <asm/smp.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <asm/firmware.h>

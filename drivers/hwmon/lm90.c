@@ -109,6 +109,7 @@
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 /* The maximum number of channels currently supported */

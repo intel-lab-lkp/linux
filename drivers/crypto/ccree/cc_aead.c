@@ -15,6 +15,7 @@
 #include "cc_request_mgr.h"
 #include "cc_hash.h"
 #include "cc_sram_mgr.h"
+#include <linux/sprintf.h>
 
 #define template_aead	template_u.aead
 

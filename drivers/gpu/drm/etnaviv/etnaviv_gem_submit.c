@@ -6,6 +6,7 @@
 #include <drm/drm_file.h>
 #include <linux/dma-fence-array.h>
 #include <linux/file.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/pm_runtime.h>
 #include <linux/dma-resv.h>
 #include <linux/sync_file.h>

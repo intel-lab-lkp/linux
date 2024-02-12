@@ -8,6 +8,8 @@
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>

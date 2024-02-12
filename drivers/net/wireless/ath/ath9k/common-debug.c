@@ -15,6 +15,7 @@
  */
 
 #include "common.h"
+#include <linux/sprintf.h>
 
 static ssize_t read_file_modal_eeprom(struct file *file, char __user *user_buf,
 				      size_t count, loff_t *ppos)

@@ -22,6 +22,8 @@ static int sg_version_num = 30536;	/* 2 digits for each component */
  *
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
 #include <linux/fs.h>
 #include <linux/kernel.h>

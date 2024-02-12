@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/serio.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #define DRIVER_DESC		"FS-iA6B iBus RC receiver"

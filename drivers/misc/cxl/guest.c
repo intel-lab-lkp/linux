@@ -4,6 +4,7 @@
  */
 
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/irqdomain.h>

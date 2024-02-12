@@ -13,6 +13,7 @@
 #include <asm/imc-pmu.h>
 #include <asm/cputhreads.h>
 #include <asm/smp.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
 

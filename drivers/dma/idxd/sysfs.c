@@ -2,10 +2,12 @@
 /* Copyright(c) 2019 Intel Corporation. All rights rsvd. */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/device.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/idxd.h>
 #include "registers.h"
 #include "idxd.h"

@@ -14,6 +14,7 @@
 #include "include/policy_ns.h"
 #include "include/domain.h"
 #include "include/procattr.h"
+#include <linux/kstrtox.h>
 
 
 /**

@@ -9,6 +9,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "amd_iommu.h"
 

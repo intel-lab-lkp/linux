@@ -6,6 +6,7 @@
 #include <linux/bitfield.h>
 #include <linux/firmware.h>
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <drm/drm_cache.h>
 #include <drm/drm_print.h>

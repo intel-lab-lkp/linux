@@ -19,6 +19,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/dln2.h>
 #include <linux/rculist.h>
+#include <linux/completion.h>
 
 struct dln2_header {
 	__le16 size;

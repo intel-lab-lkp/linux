@@ -13,6 +13,7 @@
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include "common.h"
+#include <linux/completion.h>
 
 /*
  *** HARDWARE LIMITATION ***

@@ -48,10 +48,12 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_addr.h>
 #include <rdma/ib_smi.h>
 #include <rdma/ib_user_verbs.h>
 #include <net/addrconf.h>
+#include <linux/completion.h>
 
 #include "pvrdma.h"
 

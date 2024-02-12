@@ -4,6 +4,7 @@
  */
 
 #include "xe_gt_freq.h"
+#include <linux/kstrtox.h>
 
 #include <linux/kobject.h>
 #include <linux/sysfs.h>

@@ -2,6 +2,7 @@
 // Copyright (c) 2021-2021 Hisilicon Limited.
 
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 #include "hnae3.h"
 #include "hclge_comm_cmd.h"

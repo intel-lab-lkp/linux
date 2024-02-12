@@ -43,6 +43,7 @@
 #include <linux/serial.h>
 #include <linux/spi/spi.h>
 #include <linux/freezer.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 

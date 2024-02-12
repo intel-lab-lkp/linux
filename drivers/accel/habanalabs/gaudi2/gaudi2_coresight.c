@@ -5,6 +5,7 @@
  * All Rights Reserved.
  */
 #include "gaudi2_coresight_regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <uapi/drm/habanalabs_accel.h>
 
 #define GAUDI2_PLDM_CORESIGHT_TIMEOUT_USEC	(CORESIGHT_TIMEOUT_USEC * 2000)

@@ -11,6 +11,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
+#include <linux/completion.h>
 #include <linux/cpu.h>
 #include <linux/delay.h>
 #include <linux/err.h>

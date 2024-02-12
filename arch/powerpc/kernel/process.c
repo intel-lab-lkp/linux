@@ -17,6 +17,7 @@
 #include <linux/sched/task_stack.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/random.h>
 #include <linux/smp.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>

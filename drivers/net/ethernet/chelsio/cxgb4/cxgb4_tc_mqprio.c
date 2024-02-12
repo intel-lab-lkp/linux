@@ -4,6 +4,8 @@
 #include "cxgb4.h"
 #include "cxgb4_tc_mqprio.h"
 #include "sched.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static int cxgb4_mqprio_validate(struct net_device *dev,
 				 struct tc_mqprio_qopt_offload *mqprio)

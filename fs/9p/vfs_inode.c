@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/pagemap.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/namei.h>

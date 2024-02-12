@@ -35,6 +35,7 @@
 #include <linux/module.h>
 #include <linux/preempt.h>
 #include <asm/simd.h>
+#include <linux/sprintf.h>
 
 /* skcipher support */
 

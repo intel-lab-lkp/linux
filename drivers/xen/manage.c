@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/sysrq.h>
 #include <linux/stop_machine.h>
 #include <linux/freezer.h>

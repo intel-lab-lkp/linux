@@ -18,9 +18,11 @@
 
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/cfg80211-wext.h>
 #include "ipw2200.h"
 #include "ipw.h"
+#include <linux/kstrtox.h>
 
 
 #ifndef KBUILD_EXTMOD

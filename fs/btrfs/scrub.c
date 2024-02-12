@@ -4,6 +4,7 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/ratelimit.h>
 #include <linux/sched/mm.h>
 #include <crypto/hash.h>

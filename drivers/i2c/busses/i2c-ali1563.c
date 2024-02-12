@@ -20,6 +20,7 @@
 #include <linux/i2c.h>
 #include <linux/pci.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 
 #define ALI1563_MAX_TIMEOUT	500
 #define	ALI1563_SMBBA		0x80

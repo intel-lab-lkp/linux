@@ -9,6 +9,7 @@
 #include <linux/bitmap.h>
 #include <linux/cdev.h>
 #include <linux/hashtable.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/io.h>
 #include <linux/uio.h>

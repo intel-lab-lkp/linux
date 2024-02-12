@@ -24,6 +24,7 @@
  */
 
 #include <trace/events/dma_fence.h>
+#include <linux/sprintf.h>
 
 #include "virtgpu_drv.h"
 

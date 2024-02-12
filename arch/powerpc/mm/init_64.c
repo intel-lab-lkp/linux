@@ -20,6 +20,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/mman.h>
@@ -37,6 +38,7 @@
 #include <linux/memblock.h>
 #include <linux/hugetlb.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/libfdt.h>
 #include <linux/memremap.h>

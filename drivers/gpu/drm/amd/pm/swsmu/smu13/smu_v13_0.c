@@ -21,9 +21,11 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 
 #define SMU_13_0_PARTIAL_PPTABLE
 #define SWSMU_CODE_LAYER_L3

@@ -2,6 +2,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 
 #include "ath5k.h"

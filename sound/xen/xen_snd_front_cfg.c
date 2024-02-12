@@ -9,6 +9,7 @@
  */
 
 #include <xen/xenbus.h>
+#include <linux/sprintf.h>
 
 #include <xen/interface/io/sndif.h>
 

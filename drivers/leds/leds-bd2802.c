@@ -12,10 +12,12 @@
 #include <linux/i2c.h>
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/leds-bd2802.h>
 #include <linux/slab.h>
 #include <linux/pm.h>
+#include <linux/sprintf.h>
 
 #define LED_CTL(rgb2en, rgb1en) ((rgb2en) << 4 | ((rgb1en) << 0))
 

@@ -30,6 +30,7 @@
 #include <linux/mISDNhw.h>
 #include <linux/slab.h>
 #include "ipac.h"
+#include <linux/sprintf.h>
 
 #define INFINEON_REV	"1.0"
 

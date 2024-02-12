@@ -5,6 +5,7 @@
  */
 
 #include "qede_ptp.h"
+#include <linux/sprintf.h>
 #define QEDE_PTP_TX_TIMEOUT (2 * HZ)
 
 struct qede_ptp {

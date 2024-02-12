@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/sched/signal.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/netdevice.h>

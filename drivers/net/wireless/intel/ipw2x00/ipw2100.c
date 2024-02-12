@@ -127,6 +127,7 @@ that only one external action is invoked at a time.
 #include <linux/ip.h>
 #include <linux/kernel.h>
 #include <linux/kmod.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
@@ -134,6 +135,7 @@ that only one external action is invoked at a time.
 #include <linux/dma-mapping.h>
 #include <linux/proc_fs.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include <linux/fs.h>

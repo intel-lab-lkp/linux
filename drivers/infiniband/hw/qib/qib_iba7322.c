@@ -37,11 +37,13 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_smi.h>
 #ifdef CONFIG_INFINIBAND_QIB_DCA

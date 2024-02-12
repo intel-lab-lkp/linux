@@ -14,6 +14,7 @@
  */
 
 #include "debug.h"
+#include <linux/sprintf.h>
 
 #ifndef __INLINE_INPUT_SYSTEM__
 #define __INLINE_INPUT_SYSTEM__

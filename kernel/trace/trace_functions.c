@@ -12,6 +12,8 @@
  */
 #include <linux/ring_buffer.h>
 #include <linux/debugfs.h>
+#include <linux/kernel.h> // for tracing_is_on(), ftrace_dump()
+#include <linux/kstrtox.h>
 #include <linux/uaccess.h>
 #include <linux/ftrace.h>
 #include <linux/slab.h>

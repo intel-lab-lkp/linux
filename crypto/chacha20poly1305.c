@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 struct chachapoly_instance_ctx {
 	struct crypto_skcipher_spawn chacha;

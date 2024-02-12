@@ -11,6 +11,7 @@
  */
 
 #include <linux/eventfd.h>
+#include <linux/sprintf.h>
 #include <linux/vhost.h>
 #include <linux/uio.h>
 #include <linux/mm.h>
@@ -30,6 +31,7 @@
 #include <linux/interval_tree_generic.h>
 #include <linux/nospec.h>
 #include <linux/kcov.h>
+#include <linux/completion.h>
 
 #include "vhost.h"
 

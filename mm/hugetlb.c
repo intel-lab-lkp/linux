@@ -5,10 +5,13 @@
  */
 #include <linux/list.h>
 #include <linux/init.h>
+#include <linux/kernel.h> // for memparse()
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/seq_file.h>
 #include <linux/sysctl.h>
 #include <linux/highmem.h>
+#include <linux/kref.h>
 #include <linux/mmu_notifier.h>
 #include <linux/nodemask.h>
 #include <linux/pagemap.h>

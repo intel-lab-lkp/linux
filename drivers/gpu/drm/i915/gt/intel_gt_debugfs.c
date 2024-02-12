@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "i915_drv.h"
 #include "intel_gt.h"

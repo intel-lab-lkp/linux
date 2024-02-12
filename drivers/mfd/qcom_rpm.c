@@ -10,6 +10,7 @@
 #include <linux/property.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/qcom_rpm.h>

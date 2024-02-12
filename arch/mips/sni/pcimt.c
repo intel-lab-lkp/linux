@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 #include <linux/pci.h>
 #include <linux/serial_8250.h>
+#include <linux/sprintf.h>
 
 #include <asm/sni.h>
 #include <asm/time.h>

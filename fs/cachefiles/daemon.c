@@ -7,6 +7,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/completion.h>
 #include <linux/slab.h>
@@ -15,6 +16,7 @@
 #include <linux/namei.h>
 #include <linux/poll.h>
 #include <linux/mount.h>
+#include <linux/sprintf.h>
 #include <linux/statfs.h>
 #include <linux/ctype.h>
 #include <linux/string.h>

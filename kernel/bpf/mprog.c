@@ -3,6 +3,7 @@
 
 #include <linux/bpf.h>
 #include <linux/bpf_mprog.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 static int bpf_mprog_link(struct bpf_tuple *tuple,
 			  u32 id_or_fd, u32 flags,

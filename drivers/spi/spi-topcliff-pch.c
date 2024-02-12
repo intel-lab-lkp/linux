@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
+#include <linux/completion.h>
 
 #include <linux/dmaengine.h>
 #include <linux/pch_dma.h>

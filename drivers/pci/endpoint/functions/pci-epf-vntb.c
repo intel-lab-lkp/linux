@@ -38,8 +38,11 @@
 
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/pci-epc.h>
 #include <linux/pci-epf.h>

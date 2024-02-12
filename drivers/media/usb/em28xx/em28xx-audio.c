@@ -12,6 +12,7 @@
 // and inherits all the copyrights
 
 #include "em28xx.h"
+#include <linux/sprintf.h>
 
 #include <linux/kernel.h>
 #include <linux/usb.h>

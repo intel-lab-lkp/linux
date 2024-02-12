@@ -10,11 +10,13 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 #include "rmi_driver.h"
+#include <linux/completion.h>
 
 #define F54_NAME		"rmi4_f54"
 

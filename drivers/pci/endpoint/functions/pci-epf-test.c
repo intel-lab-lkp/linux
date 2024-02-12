@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/pci_ids.h>
 #include <linux/random.h>
+#include <linux/completion.h>
 
 #include <linux/pci-epc.h>
 #include <linux/pci-epf.h>

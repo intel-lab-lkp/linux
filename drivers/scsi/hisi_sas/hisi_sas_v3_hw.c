@@ -5,6 +5,10 @@
 
 #include <linux/sched/clock.h>
 #include "hisi_sas.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #define DRV_NAME "hisi_sas_v3_hw"
 
 /* global registers need init */

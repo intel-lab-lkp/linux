@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/file.h>
 #include <linux/interrupt.h>
+#include <linux/kref.h>
 #include <linux/pci.h>
 #include <linux/syscalls.h>
 #include <asm/unaligned.h>

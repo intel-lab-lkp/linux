@@ -5,6 +5,7 @@
 #include <linux/sched.h>
 #include <linux/of.h>
 #include "mt76.h"
+#include <linux/sprintf.h>
 
 #define CHAN2G(_idx, _freq) {			\
 	.band = NL80211_BAND_2GHZ,		\

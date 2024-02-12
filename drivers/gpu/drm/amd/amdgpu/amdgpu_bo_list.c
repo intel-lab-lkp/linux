@@ -28,6 +28,7 @@
  *    Christian König <deathsimple@vodafone.de>
  */
 
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/sort.h>
 #include <linux/uaccess.h>
 

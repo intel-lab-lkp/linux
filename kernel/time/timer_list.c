@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
+#include <linux/timerqueue.h>
 #include <linux/kallsyms.h>
 #include <linux/nmi.h>
 

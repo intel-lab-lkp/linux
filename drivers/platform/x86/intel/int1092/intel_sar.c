@@ -5,6 +5,7 @@
 
 #include <linux/acpi.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
 #include "intel_sar.h"

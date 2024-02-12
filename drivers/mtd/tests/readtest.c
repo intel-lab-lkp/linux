@@ -16,6 +16,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 
 #include "mtd_test.h"
 

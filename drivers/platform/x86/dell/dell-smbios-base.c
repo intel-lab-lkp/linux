@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include "dell-smbios.h"
+#include <linux/sprintf.h>
 
 static u32 da_supported_commands;
 static int da_num_tokens;

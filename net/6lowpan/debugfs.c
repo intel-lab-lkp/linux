@@ -7,6 +7,7 @@
  */
 
 #include <net/6lowpan.h>
+#include <linux/sprintf.h>
 
 #include "6lowpan_i.h"
 

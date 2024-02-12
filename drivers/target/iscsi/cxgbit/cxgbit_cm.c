@@ -13,6 +13,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/if_vlan.h>
+#include <linux/completion.h>
 
 #include <net/neighbour.h>
 #include <net/netevent.h>

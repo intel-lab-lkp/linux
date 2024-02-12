@@ -20,6 +20,7 @@
 #include "ar9003_phy.h"
 #include "ar9003_eeprom.h"
 #include "ar9003_mci.h"
+#include <linux/sprintf.h>
 
 #define COMP_HDR_LEN 4
 #define COMP_CKSUM_LEN 2

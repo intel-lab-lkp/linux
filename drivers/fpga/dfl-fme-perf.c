@@ -19,6 +19,7 @@
 #include <linux/perf_event.h>
 #include "dfl.h"
 #include "dfl-fme.h"
+#include <linux/sprintf.h>
 
 /*
  * Performance Counter Registers for Cache.

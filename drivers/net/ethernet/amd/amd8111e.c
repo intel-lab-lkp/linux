@@ -56,6 +56,7 @@ Revision History:
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/compiler.h>
 #include <linux/delay.h>

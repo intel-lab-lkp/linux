@@ -3,6 +3,7 @@
 
 #include <linux/irqdomain.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_lib.h"

@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/b53.h>
 #include <linux/of.h>
+#include <linux/sprintf.h>
 
 #include "b53_priv.h"
 #include "b53_serdes.h"

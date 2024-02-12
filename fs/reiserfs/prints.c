@@ -5,6 +5,7 @@
 #include <linux/time.h>
 #include <linux/fs.h>
 #include "reiserfs.h"
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/buffer_head.h>
 

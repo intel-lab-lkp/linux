@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk/tegra.h>
+#include <linux/completion.h>
 #include <linux/genalloc.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>

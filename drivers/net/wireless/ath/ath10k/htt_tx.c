@@ -11,6 +11,7 @@
 #include "hif.h"
 #include "txrx.h"
 #include "debug.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static u8 ath10k_htt_tx_txq_calc_size(size_t count)
 {

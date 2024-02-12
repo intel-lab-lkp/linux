@@ -27,6 +27,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pxa168_eth.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/types.h>
 #include <linux/udp.h>

@@ -37,6 +37,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/rwsem.h>
+#include <linux/sprintf.h>
 #include <linux/usb/input.h>
 #include <linux/map_to_7segment.h>
 

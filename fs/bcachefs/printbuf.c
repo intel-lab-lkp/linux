@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 
 #include "printbuf.h"

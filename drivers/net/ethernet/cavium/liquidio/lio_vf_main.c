@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <net/vxlan.h>
 #include "liquidio_common.h"
 #include "octeon_droq.h"
@@ -28,6 +29,7 @@
 #include "octeon_main.h"
 #include "octeon_network.h"
 #include "cn23xx_vf_device.h"
+#include <linux/completion.h>
 
 MODULE_AUTHOR("Cavium Networks, <support@cavium.com>");
 MODULE_DESCRIPTION("Cavium LiquidIO Intelligent Server Adapter Virtual Function Driver");

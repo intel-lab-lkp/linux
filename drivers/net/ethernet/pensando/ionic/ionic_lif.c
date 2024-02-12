@@ -10,8 +10,10 @@
 #include <linux/rtnetlink.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/completion.h>
 #include <linux/cpumask.h>
 #include <linux/crash_dump.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "ionic.h"

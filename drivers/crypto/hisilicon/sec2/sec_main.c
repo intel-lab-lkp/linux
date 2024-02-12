@@ -8,10 +8,12 @@
 #include <linux/io.h>
 #include <linux/iommu.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/topology.h>
 #include <linux/uacce.h>
 

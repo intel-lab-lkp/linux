@@ -4,6 +4,7 @@
  */
 
 #include "xe_vm.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <linux/dma-fence-array.h>
 #include <linux/nospec.h>

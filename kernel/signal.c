@@ -22,6 +22,8 @@
 #include <linux/sched/cputime.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/hrtimer.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/tty.h>

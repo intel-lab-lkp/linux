@@ -17,6 +17,7 @@
 
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
+#include <linux/sprintf.h>
 
 #include "coresight-self-hosted-trace.h"
 #include "coresight-trbe.h"

@@ -21,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include <asm/eeh.h>
 #include <asm/eeh_event.h>

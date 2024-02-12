@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/hrtimer.h>
 #include <linux/objpool.h>
+#include <linux/topology.h> // for cpu_to_node()
 
 #define OT_NR_MAX_BULK (16)
 

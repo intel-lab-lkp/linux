@@ -5,7 +5,9 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/parser.h>
+#include <linux/sprintf.h>
 #include <uapi/scsi/fc/fc_fs.h>
+#include <linux/completion.h>
 
 #include "../host/nvme.h"
 #include "../target/nvmet.h"

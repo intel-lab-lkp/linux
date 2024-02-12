@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <linux/proc_fs.h>

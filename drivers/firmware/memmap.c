@@ -9,6 +9,7 @@
 #include <linux/firmware-map.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/memblock.h>
 #include <linux/slab.h>

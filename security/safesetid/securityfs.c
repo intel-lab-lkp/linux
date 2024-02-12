@@ -16,6 +16,7 @@
 
 #include <linux/security.h>
 #include <linux/cred.h>
+#include <linux/kstrtox.h>
 
 #include "lsm.h"
 

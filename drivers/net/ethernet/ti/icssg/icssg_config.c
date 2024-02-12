@@ -5,6 +5,7 @@
  */
 
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/regmap.h>
 #include <uapi/linux/if_ether.h>
 #include "icssg_config.h"

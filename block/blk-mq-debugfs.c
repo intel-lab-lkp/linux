@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "blk.h"
 #include "blk-mq.h"

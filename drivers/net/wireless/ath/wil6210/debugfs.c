@@ -6,6 +6,7 @@
 
 #include <linux/module.h>
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/pci.h>
 #include <linux/rtnetlink.h>
@@ -14,6 +15,7 @@
 #include "wmi.h"
 #include "txrx.h"
 #include "pmc.h"
+#include <linux/sprintf.h>
 
 /* Nasty hack. Better have per device instances */
 static u32 mem_addr;

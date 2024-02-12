@@ -5,6 +5,7 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/list.h>

@@ -12,6 +12,7 @@
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/v4l2-dv-timings.h>
 #include <linux/videodev2.h>

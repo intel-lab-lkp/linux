@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/tty_flip.h>

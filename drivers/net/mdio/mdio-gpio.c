@@ -26,6 +26,7 @@
 #include <linux/platform_data/mdio-gpio.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct mdio_gpio_info {
 	struct mdiobb_ctrl ctrl;

@@ -9,6 +9,7 @@
  */
 
 #include "efc.h"
+#include <linux/sprintf.h>
 
 int
 efc_domain_cb(void *arg, int event, void *data)

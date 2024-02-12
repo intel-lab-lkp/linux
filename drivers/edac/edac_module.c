@@ -11,6 +11,7 @@
  *
  */
 #include <linux/edac.h>
+#include <linux/kstrtox.h>
 
 #include "edac_mc.h"
 #include "edac_module.h"

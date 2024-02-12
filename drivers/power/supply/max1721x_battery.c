@@ -13,6 +13,7 @@
 
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/w1.h>
 #include <linux/regmap.h>
 #include <linux/power_supply.h>

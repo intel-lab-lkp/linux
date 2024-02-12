@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/kref.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/highmem.h>

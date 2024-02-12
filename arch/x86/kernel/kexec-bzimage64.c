@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/efi.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 
 #include <asm/bootparam.h>
 #include <asm/setup.h>

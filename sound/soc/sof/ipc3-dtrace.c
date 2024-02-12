@@ -11,6 +11,7 @@
 #include "ops.h"
 #include "sof-utils.h"
 #include "ipc3-priv.h"
+#include <linux/sprintf.h>
 
 #define TRACE_FILTER_ELEMENTS_PER_ENTRY 4
 #define TRACE_FILTER_MAX_CONFIG_STRING_LENGTH 1024

@@ -4,6 +4,7 @@
 #include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/net.h>
+#include <linux/bvec.h>
 #include <linux/compat.h>
 #include <net/compat.h>
 #include <linux/io_uring.h>

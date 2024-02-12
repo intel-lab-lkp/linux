@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "edac_module.h"
+#include <linux/sprintf.h>
 
 static struct dentry *edac_debugfs;
 

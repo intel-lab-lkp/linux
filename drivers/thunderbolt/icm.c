@@ -10,6 +10,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mutex.h>
 #include <linux/moduleparam.h>
 #include <linux/pci.h>
@@ -18,6 +19,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 #include "ctl.h"
 #include "nhi_regs.h"

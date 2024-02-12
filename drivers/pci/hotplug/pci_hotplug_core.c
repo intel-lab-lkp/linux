@@ -17,6 +17,7 @@
 #include <linux/module.h>	/* try_module_get & module_put */
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/kobject.h>

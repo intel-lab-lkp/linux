@@ -13,11 +13,13 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/skbuff.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/workqueue.h>
 #include <linux/module.h>
 #include <net/mac80211.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 
 #include "zd_def.h"
 #include "zd_mac.h"

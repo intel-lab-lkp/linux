@@ -17,10 +17,12 @@
 #include <linux/interrupt.h>
 #include <linux/ctype.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/mod_devicetable.h>
 #include <linux/edac.h>
 #include <linux/smp.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 
 #include <linux/of.h>
 #include <linux/of_address.h>

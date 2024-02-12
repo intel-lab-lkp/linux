@@ -17,6 +17,8 @@
 #include "mcp251xfd.h"
 #include "mcp251xfd-ram.h"
 
+#include <linux/hrtimer.h>
+
 static inline u8
 mcp251xfd_cmd_prepare_write_reg(const struct mcp251xfd_priv *priv,
 				union mcp251xfd_write_reg_buf *write_reg_buf,

@@ -18,11 +18,13 @@
 
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/hex.h>
 #include <linux/slab.h>
 #include <linux/namei.h>
 #include <linux/kernel.h>
 #include <linux/iversion.h>
 #include "fat.h"
+#include <linux/sprintf.h>
 
 static inline unsigned long vfat_d_version(struct dentry *dentry)
 {

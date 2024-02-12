@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/kernel_read_file.h>
 #include <linux/fs.h>
@@ -17,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/rculist.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/ima.h>
 
 #include "ima.h"

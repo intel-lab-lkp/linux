@@ -13,6 +13,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 
 #define MDIO_RATE_ADJ_EXT_OFFSET	0x000
 #define MDIO_RATE_ADJ_INT_OFFSET	0x004

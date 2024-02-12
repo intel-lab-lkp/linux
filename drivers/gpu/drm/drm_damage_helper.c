@@ -35,6 +35,8 @@
 #include <drm/drm_device.h>
 #include <drm/drm_framebuffer.h>
 
+#include <linux/slab.h>
+
 static void convert_clip_rect_to_rect(const struct drm_clip_rect *src,
 				      struct drm_mode_rect *dest,
 				      uint32_t num_clips, uint32_t src_inc)

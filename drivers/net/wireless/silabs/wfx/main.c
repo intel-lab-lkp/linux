@@ -18,6 +18,8 @@
 #include <linux/spi/spi.h>
 #include <linux/etherdevice.h>
 #include <linux/firmware.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "main.h"
 #include "wfx.h"

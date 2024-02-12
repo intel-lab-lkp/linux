@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include "internal.h"
+#include <linux/sprintf.h>
 
 static unsigned __read_mostly afs_volume_record_life = 60 * 60;
 

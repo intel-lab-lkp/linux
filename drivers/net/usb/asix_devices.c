@@ -8,6 +8,7 @@
  */
 
 #include "asix.h"
+#include <linux/sprintf.h>
 
 #define PHY_MODE_MARVELL	0x0000
 #define MII_MARVELL_LED_CTRL	0x0018

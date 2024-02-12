@@ -33,6 +33,7 @@
 #include <linux/ptp_classify.h>
 #include <linux/net_tstamp.h>
 #include <linux/gpio/consumer.h>
+#include <linux/sprintf.h>
 
 /* Operation Mode Strap Override */
 #define MII_KSZPHY_OMSO				0x16

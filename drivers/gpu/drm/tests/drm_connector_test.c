@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_connector.h>
+#include <linux/sprintf.h>
 
 #include <kunit/test.h>
 

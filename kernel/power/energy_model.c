@@ -13,9 +13,12 @@
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h>
 #include <linux/debugfs.h>
+#include <linux/device.h>
 #include <linux/energy_model.h>
+#include <linux/kref.h>
 #include <linux/sched/topology.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 /*
  * Mutex serializing the registrations of performance domains and letting

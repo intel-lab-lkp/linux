@@ -2,6 +2,7 @@
 /* SandyBridge-EP/IvyTown uncore support */
 #include "uncore.h"
 #include "uncore_discovery.h"
+#include <linux/sprintf.h>
 
 /* SNB-EP pci bus to socket mapping */
 #define SNBEP_CPUNODEID			0x40

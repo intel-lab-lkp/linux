@@ -4,6 +4,7 @@
  */
 
 #include <linux/bcm47xx_nvram.h>
+#include <linux/kstrtox.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 

@@ -23,6 +23,7 @@
 #include <linux/serial_reg.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/platform_device.h>

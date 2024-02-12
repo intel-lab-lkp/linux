@@ -11,11 +11,13 @@
 
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/rtc.h>
 #include <linux/init.h>
 #include <linux/kstrtox.h>
 #include <linux/errno.h>
 #include <linux/bcd.h>
+#include <linux/sprintf.h>
 
 #define BQ32K_SECONDS		0x00	/* Seconds register address */
 #define BQ32K_SECONDS_MASK	0x7F	/* Mask over seconds value */

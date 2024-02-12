@@ -19,6 +19,8 @@
 #include <linux/input.h>
 #include <linux/serio.h>
 #include <linux/ctype.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"Elo serial touchscreen driver"
 

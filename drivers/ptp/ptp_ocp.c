@@ -4,6 +4,7 @@
 #include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/init.h>
@@ -18,6 +19,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/xilinx_spi.h>
 #include <linux/spi/altera.h>
+#include <linux/sprintf.h>
 #include <net/devlink.h>
 #include <linux/i2c.h>
 #include <linux/mtd/mtd.h>

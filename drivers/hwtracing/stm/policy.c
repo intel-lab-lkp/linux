@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/configfs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/stm.h>
 #include "stm.h"
 

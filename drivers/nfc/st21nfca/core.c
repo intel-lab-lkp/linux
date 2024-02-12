@@ -7,7 +7,9 @@
 
 #include <linux/module.h>
 #include <linux/nfc.h>
+#include <linux/sprintf.h>
 #include <net/nfc/hci.h>
+#include <linux/completion.h>
 
 #include "st21nfca.h"
 

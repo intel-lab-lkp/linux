@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 #include <linux/watchdog.h>
 
 #define ABX8XX_REG_HTH		0x00

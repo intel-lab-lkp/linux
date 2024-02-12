@@ -192,8 +192,11 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/nospec.h>
+#include <linux/ratelimit.h>
 #include <linux/sizes.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 
 #include "gem/i915_gem_context.h"

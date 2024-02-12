@@ -43,6 +43,7 @@
 
 #include <linux/pci.h>
 #include "ath5k.h"
+#include <linux/sprintf.h>
 
 #define ATH_SDEVICE(subv, subd) \
 	.vendor = PCI_ANY_ID, .device = PCI_ANY_ID, \

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/ceph/ceph_debug.h>
+#include <linux/completion.h>
 
 #include <linux/backing-dev.h>
 #include <linux/ctype.h>

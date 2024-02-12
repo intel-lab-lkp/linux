@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <asm/dasd.h>
 #include <asm/ebcdic.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <asm/vtoc.h>
 #include <linux/module.h>

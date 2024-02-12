@@ -13,6 +13,7 @@
 #include <linux/edac.h>
 #include <linux/dmi.h>
 #include "edac_module.h"
+#include <linux/sprintf.h>
 #include <ras/ras_event.h>
 #include <linux/notifier.h>
 

@@ -15,6 +15,7 @@
  */
 
 #include "ath9k.h"
+#include <linux/sprintf.h>
 
 /********************************/
 /*	 LED functions		*/

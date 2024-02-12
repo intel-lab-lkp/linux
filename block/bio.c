@@ -3,9 +3,11 @@
  * Copyright (C) 2001 Jens Axboe <axboe@kernel.dk>
  */
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/swap.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/uio.h>
 #include <linux/iocontext.h>
 #include <linux/slab.h>

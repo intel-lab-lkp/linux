@@ -6,6 +6,7 @@
  */
 
 #include "habanalabs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * hl_mmap_mem_buf_get - increase the buffer refcount and return a pointer to

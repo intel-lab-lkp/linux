@@ -77,6 +77,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/amba/pl080.h>
 
 #include "dmaengine.h"

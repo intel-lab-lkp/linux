@@ -16,8 +16,10 @@
 #include <linux/regulator/consumer.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/util_macros.h>
+#include <linux/completion.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>

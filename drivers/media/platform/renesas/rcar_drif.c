@@ -49,6 +49,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>

@@ -13,6 +13,7 @@
 #include <linux/pci-epc.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "pcie-rcar.h"
 

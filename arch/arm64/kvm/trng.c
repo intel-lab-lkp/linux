@@ -2,6 +2,7 @@
 // Copyright (C) 2020 Arm Ltd.
 
 #include <linux/arm-smccc.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kvm_host.h>
 
 #include <asm/kvm_emulate.h>

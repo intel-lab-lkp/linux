@@ -55,6 +55,7 @@
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/sockios.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include <net/neighbour.h>

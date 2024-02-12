@@ -19,6 +19,7 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "hmc5843.h"
 

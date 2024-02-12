@@ -25,6 +25,7 @@
 
 #include <linux/pci.h>
 #include <linux/uaccess.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include "qxl_drv.h"
 #include "qxl_object.h"

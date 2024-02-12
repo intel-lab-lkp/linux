@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 
 #include <net/cfg802154.h>
 

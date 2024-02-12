@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/backlight.h>
 #include <linux/err.h>
@@ -30,6 +31,7 @@
 #include <acpi/video.h>
 #include "dell-rbtn.h"
 #include "dell-smbios.h"
+#include <linux/sprintf.h>
 
 #include "dell-wmi-privacy.h"
 

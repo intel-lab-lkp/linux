@@ -11,6 +11,7 @@
 #include "tree-checker.h"
 #include "volumes.h"
 #include "raid-stripe-tree.h"
+#include <linux/sprintf.h>
 
 struct root_name_map {
 	u64 id;

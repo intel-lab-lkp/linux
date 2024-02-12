@@ -12,6 +12,7 @@
 #include <linux/dmaengine.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/prefetch.h>
 #include <linux/dca.h>
@@ -19,6 +20,7 @@
 #include "dma.h"
 #include "registers.h"
 #include "hw.h"
+#include <linux/completion.h>
 
 #include "../dmaengine.h"
 

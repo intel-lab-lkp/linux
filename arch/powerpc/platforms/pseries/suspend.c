@@ -5,6 +5,8 @@
 
 #include <linux/cpu.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/stat.h>
 #include <asm/firmware.h>

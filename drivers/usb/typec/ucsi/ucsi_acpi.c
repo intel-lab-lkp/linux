@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/dmi.h>
 
 #include "ucsi.h"

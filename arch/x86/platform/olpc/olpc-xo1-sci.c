@@ -16,6 +16,7 @@
 #include <linux/pm.h>
 #include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/workqueue.h>
 #include <linux/olpc-ec.h>

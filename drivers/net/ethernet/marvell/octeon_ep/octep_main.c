@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/rtnetlink.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include "octep_config.h"

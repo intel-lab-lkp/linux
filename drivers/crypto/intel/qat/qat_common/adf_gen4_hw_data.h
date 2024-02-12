@@ -4,6 +4,7 @@
 #define ADF_GEN4_HW_CSR_DATA_H_
 
 #include <linux/units.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "adf_accel_devices.h"
 #include "adf_cfg_common.h"

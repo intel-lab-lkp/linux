@@ -11,6 +11,7 @@
 #include <linux/sched/signal.h>
 #include <linux/export.h>
 #include <linux/moduleparam.h>
+#include <linux/sprintf.h>
 
 #include "w1_internal.h"
 #include "w1_netlink.h"

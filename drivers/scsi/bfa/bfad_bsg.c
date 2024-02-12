@@ -12,6 +12,7 @@
 #include "bfad_drv.h"
 #include "bfad_im.h"
 #include "bfad_bsg.h"
+#include <linux/completion.h>
 
 BFA_TRC_FILE(LDRV, BSG);
 

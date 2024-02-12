@@ -9,9 +9,12 @@
 #include <scsi/scsi_cmnd.h>
 #include <ufs/ufshcd.h>
 #include "ufshcd-priv.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <ufs/ufshci.h>
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
+
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
 					      struct ufshcd_lrb *lrbp)

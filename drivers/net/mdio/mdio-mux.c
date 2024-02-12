@@ -9,6 +9,7 @@
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #define DRV_DESCRIPTION "MDIO bus multiplexer driver"
 

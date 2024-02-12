@@ -6,6 +6,7 @@
 
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/crash_dump.h>
 #include <linux/qed/qed_iov_if.h>

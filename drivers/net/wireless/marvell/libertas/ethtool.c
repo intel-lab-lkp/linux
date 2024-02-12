@@ -3,6 +3,7 @@
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "decl.h"
 #include "cmd.h"

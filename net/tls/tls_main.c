@@ -35,6 +35,7 @@
 
 #include <net/tcp.h>
 #include <net/inet_common.h>
+#include <linux/bvec.h>
 #include <linux/highmem.h>
 #include <linux/netdevice.h>
 #include <linux/sched/signal.h>

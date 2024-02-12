@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/string.h>
 #include <linux/in.h>

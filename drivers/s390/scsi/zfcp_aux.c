@@ -38,6 +38,8 @@
 #include "zfcp_fc.h"
 #include "zfcp_reqlist.h"
 #include "zfcp_diag.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #define ZFCP_BUS_ID_SIZE	20
 

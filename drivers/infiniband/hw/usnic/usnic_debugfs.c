@@ -32,6 +32,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include "usnic.h"
 #include "usnic_log.h"

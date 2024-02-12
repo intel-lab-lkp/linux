@@ -14,6 +14,7 @@
 #include <asm/firmware.h>
 #include <asm/hvcall.h>
 #include <asm/io.h>
+#include <linux/sprintf.h>
 
 #include "hv-gpci.h"
 #include "hv-common.h"

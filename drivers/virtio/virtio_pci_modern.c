@@ -15,6 +15,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 #define VIRTIO_PCI_NO_LEGACY
 #define VIRTIO_RING_NO_LEGACY
 #include "virtio_pci_common.h"

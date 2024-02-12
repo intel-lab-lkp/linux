@@ -21,6 +21,7 @@
 #include <linux/mtd/rawnand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/iopoll.h>
+#include <linux/sprintf.h>
 
 #include <asm/msr.h>
 

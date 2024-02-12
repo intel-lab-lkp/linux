@@ -21,6 +21,7 @@
 #include <linux/list.h>
 #include <linux/init.h>
 #include "ibmphp.h"
+#include <linux/sprintf.h>
 
 /*
  * POST builds data blocks(in this data block definition, a char-1

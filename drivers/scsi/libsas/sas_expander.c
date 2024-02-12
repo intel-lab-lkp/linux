@@ -10,8 +10,10 @@
 
 #include <linux/scatterlist.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #include "sas_internal.h"
 

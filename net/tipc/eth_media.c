@@ -36,6 +36,7 @@
 
 #include "core.h"
 #include "bearer.h"
+#include <linux/sprintf.h>
 
 /* Convert Ethernet address (media address format) to string */
 static int tipc_eth_addr2str(struct tipc_media_addr *addr,

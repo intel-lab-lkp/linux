@@ -18,6 +18,7 @@
 #include <asm/asm-extable.h>
 #include <asm/ctlreg.h>
 #include <asm/diag.h>
+#include <linux/completion.h>
 
 #include "hmcdrv_ftp.h"
 #include "diag_ftp.h"

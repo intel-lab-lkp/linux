@@ -8,6 +8,7 @@
 #include "pvrusb2-debug.h"
 #include <asm/string.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 struct std_name {
 	const char *name;

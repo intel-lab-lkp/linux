@@ -19,6 +19,7 @@
 #include <linux/jiffies.h>
 #include <asm/sysinfo.h>
 #include <asm/ebcdic.h>
+#include <linux/completion.h>
 
 #include "sclp.h"
 #include "sclp_diag.h"

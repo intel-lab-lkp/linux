@@ -15,6 +15,7 @@
 #include "dns_resolve.h"
 #include "pnfs.h"
 #include "nfs.h"
+#include <linux/sprintf.h>
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 

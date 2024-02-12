@@ -12,6 +12,7 @@
  */
 
 #include "bebob.h"
+#include <linux/sprintf.h>
 
 MODULE_DESCRIPTION("BridgeCo BeBoB driver");
 MODULE_AUTHOR("Takashi Sakamoto <o-takashi@sakamocchi.jp>");

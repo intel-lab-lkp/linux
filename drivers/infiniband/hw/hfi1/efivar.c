@@ -5,6 +5,7 @@
 
 #include <linux/string.h>
 #include <linux/string_helpers.h>
+#include <linux/sprintf.h>
 
 #include "efivar.h"
 

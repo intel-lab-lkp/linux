@@ -5,6 +5,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/leds.h>
 #include "common.h"
+#include <linux/sprintf.h>
 
 static int int3472_pled_set(struct led_classdev *led_cdev,
 				     enum led_brightness brightness)

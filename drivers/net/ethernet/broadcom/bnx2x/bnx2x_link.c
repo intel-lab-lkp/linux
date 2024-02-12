@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/ethtool.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 
 #include "bnx2x.h"
 #include "bnx2x_cmn.h"

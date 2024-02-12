@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/list.h>
 #include <linux/init.h>
 #include <linux/io.h>

@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/device.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -15,6 +16,7 @@
 #include "ishtp-dev.h"
 #include "client.h"
 #include "hbm.h"
+#include <linux/sprintf.h>
 
 static int ishtp_use_dma;
 module_param_named(ishtp_use_dma, ishtp_use_dma, int, 0600);

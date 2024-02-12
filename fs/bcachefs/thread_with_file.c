@@ -3,6 +3,7 @@
 
 #include "bcachefs.h"
 #include "thread_with_file.h"
+#include <linux/sprintf.h>
 
 #include <linux/anon_inodes.h>
 #include <linux/file.h>

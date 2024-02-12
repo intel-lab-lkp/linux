@@ -11,6 +11,8 @@
 #ifndef __LINUX_CDNS2_DEBUG
 #define __LINUX_CDNS2_DEBUG
 
+#include <linux/sprintf.h>
+
 static inline const char *cdns2_decode_usb_irq(char *str, size_t size,
 					       u8 usb_irq, u8 ext_irq)
 {

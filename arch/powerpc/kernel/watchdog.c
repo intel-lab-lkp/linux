@@ -19,6 +19,7 @@
 #include <linux/export.h>
 #include <linux/kprobes.h>
 #include <linux/hardirq.h>
+#include <linux/hrtimer.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/kdebug.h>

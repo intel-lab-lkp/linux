@@ -14,6 +14,7 @@
 #include <linux/ioctl.h>
 #include <linux/media.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/usb.h>

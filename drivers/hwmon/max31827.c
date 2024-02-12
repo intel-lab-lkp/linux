@@ -10,10 +10,12 @@
 #include <linux/delay.h>
 #include <linux/hwmon.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sprintf.h>
 
 #define MAX31827_T_REG			0x0
 #define MAX31827_CONFIGURATION_REG	0x2

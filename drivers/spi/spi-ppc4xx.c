@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/wait.h>
 #include <linux/platform_device.h>

@@ -43,6 +43,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/ioport.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/hwmon.h>
@@ -51,6 +52,7 @@
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/acpi.h>
 #include <linux/io.h>

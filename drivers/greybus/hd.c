@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/greybus.h>
+#include <linux/sprintf.h>
 
 #include "greybus_trace.h"
 

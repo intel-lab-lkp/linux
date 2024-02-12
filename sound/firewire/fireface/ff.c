@@ -6,6 +6,7 @@
  */
 
 #include "ff.h"
+#include <linux/sprintf.h>
 
 #define OUI_RME	0x000a35
 

@@ -16,12 +16,14 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_data/cros_ec_sensorhub.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 /*
  * Hard coded to the first device to support sensor fifo.  The EC has a 2048

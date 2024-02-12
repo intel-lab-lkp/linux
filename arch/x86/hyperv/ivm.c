@@ -8,6 +8,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/hyperv.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <asm/svm.h>

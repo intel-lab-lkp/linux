@@ -54,6 +54,7 @@
 #include <linux/sunrpc/addr.h>
 #include <linux/sunrpc/svc_rdma.h>
 #include <linux/log2.h>
+#include <linux/completion.h>
 
 #include <asm-generic/barrier.h>
 #include <asm/bitops.h>

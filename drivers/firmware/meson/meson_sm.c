@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/sizes.h>
  #include <linux/slab.h>

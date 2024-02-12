@@ -9,6 +9,7 @@
 #include "tc_tun.h"
 #include "rep/tc.h"
 #include "diag/en_tc_tracepoint.h"
+#include <linux/completion.h>
 
 enum {
 	MLX5E_ROUTE_ENTRY_VALID     = BIT(0),

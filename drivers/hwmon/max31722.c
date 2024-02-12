@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 #define MAX31722_REG_CFG				0x00
 #define MAX31722_REG_TEMP_LSB				0x01

@@ -24,6 +24,7 @@
 #include <linux/backing-dev.h>
 #include <linux/buffer_head.h>
 #include <linux/exportfs.h>
+#include <linux/kstrtox.h>
 #include <linux/quotaops.h>
 #include <linux/vfs.h>
 #include <linux/mount.h>

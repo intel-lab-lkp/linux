@@ -11,6 +11,7 @@
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>

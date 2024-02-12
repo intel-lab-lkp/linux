@@ -8,6 +8,7 @@
 
 #include <linux/ctype.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/types.h>
 #include <linux/string.h>
 

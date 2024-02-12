@@ -7,6 +7,7 @@
 #include <linux/vmalloc.h>
 #include "rxe.h"
 #include "rxe_queue.h"
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 int rxe_srq_chk_init(struct rxe_dev *rxe, struct ib_srq_init_attr *init)
 {

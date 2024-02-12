@@ -13,6 +13,7 @@
 #include <linux/idr.h>
 #include <linux/slab.h>
 #include <linux/security.h>
+#include <linux/sprintf.h>
 #include <linux/hash.h>
 
 #include "kernfs-internal.h"

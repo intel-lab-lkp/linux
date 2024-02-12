@@ -7,6 +7,7 @@
 
 #include <linux/stddef.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/pci.h>
 

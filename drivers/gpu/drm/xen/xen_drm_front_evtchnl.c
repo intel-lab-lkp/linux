@@ -10,6 +10,7 @@
 
 #include <linux/errno.h>
 #include <linux/irq.h>
+#include <linux/completion.h>
 
 #include <drm/drm_print.h>
 

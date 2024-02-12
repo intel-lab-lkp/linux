@@ -4,12 +4,14 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/firmware.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/pci.h>
 #include <cxlmem.h>
 #include "trace.h"
 #include "core.h"
+#include <linux/sprintf.h>
 
 static DECLARE_RWSEM(cxl_memdev_rwsem);
 

@@ -3,8 +3,10 @@
 #include <linux/mm_inline.h>
 #include <linux/hugetlb.h>
 #include <linux/huge_mm.h>
+#include <linux/kstrtox.h>
 #include <linux/mount.h>
 #include <linux/ksm.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/highmem.h>
 #include <linux/ptrace.h>

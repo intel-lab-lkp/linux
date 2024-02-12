@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/soc/ti/knav_qmss.h>
 #include <linux/soc/ti/knav_dma.h>
+#include <linux/sprintf.h>
 
 #include "netcp.h"
 

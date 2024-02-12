@@ -11,6 +11,7 @@
 
 #include <linux/hid.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "hid-ids.h"
 

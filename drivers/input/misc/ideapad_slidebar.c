@@ -74,6 +74,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/dmi.h>
+#include <linux/kstrtox.h>
 #include <linux/spinlock.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
@@ -81,6 +82,7 @@
 #include <linux/ioport.h>
 #include <linux/i8042.h>
 #include <linux/serio.h>
+#include <linux/sprintf.h>
 
 #define IDEAPAD_BASE	0xff29
 

@@ -6,6 +6,8 @@
 #include "journal_reclaim.h"
 #include "snapshot.h"
 #include "tests.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include "linux/kthread.h"
 #include "linux/random.h"

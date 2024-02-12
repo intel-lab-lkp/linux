@@ -15,6 +15,7 @@
 /* #define VERBOSE_DEBUG */
 
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/export.h>
 #include <linux/fs_parser.h>
@@ -23,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <linux/uio.h>
 #include <linux/vmalloc.h>
 #include <asm/unaligned.h>

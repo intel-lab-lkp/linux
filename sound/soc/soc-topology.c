@@ -29,6 +29,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/soc-topology.h>
 #include <sound/tlv.h>
+#include <linux/completion.h>
 
 #define SOC_TPLG_MAGIC_BIG_ENDIAN            0x436F5341 /* ASoC in reverse */
 

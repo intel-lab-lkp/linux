@@ -6,11 +6,13 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/key.h>
 #include <linux/nvme-tcp.h>
 #include <linux/nvme-keyring.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/tls.h>

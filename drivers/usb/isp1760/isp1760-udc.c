@@ -16,8 +16,10 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/usb.h>
+#include <linux/completion.h>
 
 #include "isp1760-core.h"
 #include "isp1760-regs.h"

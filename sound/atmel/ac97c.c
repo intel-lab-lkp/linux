@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/io.h>
 

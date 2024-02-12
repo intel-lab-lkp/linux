@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/bitops.h>
+#include <linux/sprintf.h>
 
 /* offsets into CCR area */
 

@@ -31,6 +31,7 @@
 #include <linux/compat.h>
 #include <linux/nospec.h>
 #include <linux/time_namespace.h>
+#include <linux/hrtimer.h>
 
 #include "timekeeping.h"
 #include "posix-timers.h"

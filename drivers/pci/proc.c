@@ -12,6 +12,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/capability.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/security.h>
 #include <asm/byteorder.h>

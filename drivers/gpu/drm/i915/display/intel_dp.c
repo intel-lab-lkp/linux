@@ -25,10 +25,12 @@
  *
  */
 
+#include <linux/completion.h>
 #include <linux/export.h>
 #include <linux/i2c.h>
 #include <linux/notifier.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/timekeeping.h>
 #include <linux/types.h>

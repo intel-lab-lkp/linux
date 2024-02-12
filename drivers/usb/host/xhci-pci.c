@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/acpi.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 
 #include "xhci.h"

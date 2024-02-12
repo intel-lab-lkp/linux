@@ -10,6 +10,7 @@
 #include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/powercap.h>
+#include <linux/sprintf.h>
 
 #define to_powercap_zone(n) container_of(n, struct powercap_zone, dev)
 #define to_powercap_control_type(n) \

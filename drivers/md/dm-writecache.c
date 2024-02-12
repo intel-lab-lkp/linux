@@ -8,6 +8,7 @@
 #include <linux/device-mapper.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <linux/kthread.h>
 #include <linux/dm-io.h>
@@ -17,6 +18,7 @@
 #include <linux/libnvdimm.h>
 #include <linux/delay.h>
 #include "dm-io-tracker.h"
+#include <linux/completion.h>
 
 #define DM_MSG_PREFIX "writecache"
 

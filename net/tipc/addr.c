@@ -37,6 +37,7 @@
 
 #include "addr.h"
 #include "core.h"
+#include <linux/sprintf.h>
 
 bool tipc_in_scope(bool legacy_format, u32 domain, u32 addr)
 {

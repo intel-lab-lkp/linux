@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/sprintf.h>
 
 #include "nic_reg.h"
 #include "nic.h"

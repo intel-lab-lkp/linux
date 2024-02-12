@@ -14,6 +14,7 @@
 #include <linux/fwnode.h>
 #include <linux/module.h>
 #include <linux/soundwire/sdw_intel.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #define SDW_LINK_TYPE		4 /* from Intel ACPI documentation */

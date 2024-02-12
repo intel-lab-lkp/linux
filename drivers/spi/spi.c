@@ -7,6 +7,7 @@
 #include <linux/acpi.h>
 #include <linux/cache.h>
 #include <linux/clk/clk-conf.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dmaengine.h>
@@ -33,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/sched/types.h>
 
 #define CREATE_TRACE_POINTS

@@ -12,6 +12,7 @@
 #include <sound/tlv.h>
 #include <sound/vx_core.h>
 #include "vx_cmd.h"
+#include <linux/sprintf.h>
 
 
 /*

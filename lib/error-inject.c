@@ -3,6 +3,7 @@
 #include <linux/error-injection.h>
 #include <linux/debugfs.h>
 #include <linux/kallsyms.h>
+#include <linux/kernel.h> // for kernel_text_address()
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/mutex.h>

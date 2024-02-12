@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME	"mc13783-adc"
 

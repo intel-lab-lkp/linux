@@ -2,6 +2,7 @@
 #include <linux/cache.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/pid_namespace.h>
 #include "internal.h"
 

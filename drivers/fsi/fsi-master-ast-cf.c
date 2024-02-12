@@ -11,6 +11,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/irqflags.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -21,6 +22,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/of_address.h>
 #include <linux/genalloc.h>
+#include <linux/sprintf.h>
 
 #include "fsi-master.h"
 #include "cf-fsi-fw.h"

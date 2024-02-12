@@ -15,6 +15,8 @@
 #include "debugfs_sta.h"
 #include "sta_info.h"
 #include "driver-ops.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /* sta attributes */
 

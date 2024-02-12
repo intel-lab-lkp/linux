@@ -21,6 +21,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_bridge.h>
 #include <drm/drm_device.h>

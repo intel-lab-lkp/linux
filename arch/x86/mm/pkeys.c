@@ -4,8 +4,10 @@
  * Copyright (c) 2015, Intel Corporation.
  */
 #include <linux/debugfs.h>		/* debugfs_create_u32()		*/
+#include <linux/kstrtox.h>
 #include <linux/mm_types.h>             /* mm_struct, vma, etc...       */
 #include <linux/pkeys.h>                /* PKEY_*                       */
+#include <linux/sprintf.h>
 #include <uapi/asm-generic/mman-common.h>
 
 #include <asm/cpufeature.h>             /* boot_cpu_has, ...            */

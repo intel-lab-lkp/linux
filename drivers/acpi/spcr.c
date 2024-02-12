@@ -11,6 +11,7 @@
 #include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/serial_core.h>
+#include <linux/sprintf.h>
 
 /*
  * Erratum 44 for QDF2432v1 and QDF2400v1 SoCs describes the BUSY bit as

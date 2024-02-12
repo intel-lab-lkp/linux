@@ -12,6 +12,7 @@
 
 #include <linux/bitops.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
@@ -20,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/libps2.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #include "psmouse.h"

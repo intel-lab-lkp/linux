@@ -8,6 +8,7 @@
 
 #include <linux/filter.h>
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/sysctl.h>
 #include <linux/module.h>
 #include <linux/socket.h>

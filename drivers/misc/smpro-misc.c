@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/kstrtox.h>
 
 /* Boot Stage/Progress Registers */
 #define BOOTSTAGE	0xB0

@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/if_vlan.h>
 #include <linux/crash_dump.h>
+#include <linux/sprintf.h>
 #include <net/ipv6.h>
 #include <net/rtnetlink.h>
 #include "hclge_cmd.h"

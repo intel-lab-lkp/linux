@@ -3,6 +3,9 @@
  */
 
 #include <linux/vmalloc.h>
+#include <linux/sprintf.h>
+#include <linux/hex.h>
+#include <linux/kstrtox.h>
 
 #include "coex.h"
 #include "debug.h"

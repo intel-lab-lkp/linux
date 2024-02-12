@@ -5,9 +5,11 @@
 
 #include <linux/bitfield.h>
 #include <linux/irqchip/arm-gic-v3.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/interrupt.h>
+#include <linux/ratelimit.h>
 #include <kvm/iodev.h>
 #include <kvm/arm_vgic.h>
 

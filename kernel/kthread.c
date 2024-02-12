@@ -8,6 +8,7 @@
  * etc.).
  */
 #include <uapi/linux/sched/types.h>
+#include <linux/kernel.h> // for do_exit()
 #include <linux/mm.h>
 #include <linux/mmu_context.h>
 #include <linux/sched.h>

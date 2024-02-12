@@ -7,7 +7,9 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/smem.h>
+#include <linux/sprintf.h>
 #include <media/videobuf2-v4l2.h>
+#include <linux/completion.h>
 
 #include "core.h"
 #include "hfi.h"

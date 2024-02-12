@@ -8,6 +8,7 @@
  */
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "bdc.h"
 #include "bdc_cmd.h"

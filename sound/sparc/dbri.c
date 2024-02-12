@@ -60,6 +60,7 @@
 #include <linux/io.h>
 #include <linux/dma-mapping.h>
 #include <linux/gfp.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

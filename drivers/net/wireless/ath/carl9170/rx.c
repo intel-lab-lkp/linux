@@ -45,6 +45,7 @@
 #include "carl9170.h"
 #include "hw.h"
 #include "cmd.h"
+#include <linux/completion.h>
 
 static void carl9170_dbg_message(struct ar9170 *ar, const char *buf, u32 len)
 {

@@ -20,6 +20,7 @@
 #include <linux/bitops.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>

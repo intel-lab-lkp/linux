@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include "clk.h"
 
 #define CCM_CCDR			0x4

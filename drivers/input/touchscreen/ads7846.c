@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/hwmon.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/input.h>
@@ -31,6 +32,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/module.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 /*
  * This code has been heavily tested on a Nokia 770, and lightly

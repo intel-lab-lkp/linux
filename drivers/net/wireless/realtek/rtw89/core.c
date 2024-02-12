@@ -3,6 +3,7 @@
  */
 #include <linux/ip.h>
 #include <linux/udp.h>
+#include <linux/completion.h>
 
 #include "cam.h"
 #include "chan.h"

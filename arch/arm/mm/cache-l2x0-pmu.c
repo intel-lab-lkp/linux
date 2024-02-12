@@ -4,10 +4,12 @@
  *
  * Copyright (C) 2016 ARM Limited
  */
+#include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/hrtimer.h>
 #include <linux/io.h>
 #include <linux/list.h>
+#include <linux/kobject.h>
 #include <linux/perf_event.h>
 #include <linux/printk.h>
 #include <linux/slab.h>

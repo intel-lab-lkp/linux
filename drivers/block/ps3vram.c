@@ -9,6 +9,7 @@
  * Added support RSX DMA Vivien Chappelier <vivien.chappelier@free.fr>
  */
 
+#include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -18,6 +19,7 @@
 
 #include <asm/cell-regs.h>
 #include <asm/firmware.h>
+#include <asm/io.h> // for iowrite32be()
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
 #include <asm/ps3gpu.h>

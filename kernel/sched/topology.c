@@ -4,6 +4,7 @@
  */
 
 #include <linux/bsearch.h>
+#include <linux/kstrtox.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
 

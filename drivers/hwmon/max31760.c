@@ -6,7 +6,9 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/util_macros.h>
 
 #define REG_CR1		0x00

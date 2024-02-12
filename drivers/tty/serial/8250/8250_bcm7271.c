@@ -16,12 +16,14 @@
 #include <linux/errno.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/of.h>
 #include <linux/dma-mapping.h>
 #include <linux/tty_flip.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
+#include <linux/hrtimer.h>
 
 #include "8250.h"
 

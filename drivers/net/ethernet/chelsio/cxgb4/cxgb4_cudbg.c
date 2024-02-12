@@ -7,6 +7,7 @@
 #include "cxgb4.h"
 #include "cxgb4_cudbg.h"
 #include "cudbg_zlib.h"
+#include <linux/sprintf.h>
 
 static const struct cxgb4_collect_entity cxgb4_collect_mem_dump[] = {
 	{ CUDBG_EDC0, cudbg_collect_edc0_meminfo },

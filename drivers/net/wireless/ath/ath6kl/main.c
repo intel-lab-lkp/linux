@@ -22,6 +22,7 @@
 #include "cfg80211.h"
 #include "target.h"
 #include "debug.h"
+#include <linux/sprintf.h>
 
 struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
 {

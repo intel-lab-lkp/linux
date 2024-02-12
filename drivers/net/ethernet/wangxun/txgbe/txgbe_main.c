@@ -2,9 +2,11 @@
 /* Copyright (c) 2015 - 2022 Beijing WangXun Technology Co., Ltd. */
 
 #include <linux/types.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/etherdevice.h>
 #include <linux/phylink.h>

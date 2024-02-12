@@ -34,8 +34,10 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include "lm75.h"
+#include <linux/sprintf.h>
 
 /* I2C addresses to scan */
 static const unsigned short normal_i2c[] = { 0x2d, I2C_CLIENT_END };

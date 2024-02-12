@@ -11,6 +11,7 @@
  */
 
 #include "cesa.h"
+#include <linux/completion.h>
 
 bool mv_cesa_req_dma_iter_next_transfer(struct mv_cesa_dma_iter *iter,
 					struct mv_cesa_sg_dma_iter *sgiter,

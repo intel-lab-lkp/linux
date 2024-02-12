@@ -3,6 +3,8 @@
 #include "persistent-data/dm-transaction-manager.h"
 #include "persistent-data/dm-bitset.h"
 #include "persistent-data/dm-space-map.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/dm-io.h>
 #include <linux/dm-kcopyd.h>

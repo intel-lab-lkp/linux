@@ -7,6 +7,7 @@
 // Based on em28xx-input.c.
 
 #include "au0828.h"
+#include <linux/sprintf.h>
 
 #include <linux/module.h>
 #include <linux/init.h>

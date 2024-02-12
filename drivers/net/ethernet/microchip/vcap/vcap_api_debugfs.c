@@ -7,6 +7,7 @@
 
 #include "vcap_api_private.h"
 #include "vcap_api_debugfs.h"
+#include <linux/sprintf.h>
 
 struct vcap_admin_debugfs_info {
 	struct vcap_control *vctrl;

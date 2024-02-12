@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>

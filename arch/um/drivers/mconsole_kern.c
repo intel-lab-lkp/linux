@@ -6,6 +6,7 @@
 
 #include <linux/console.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>

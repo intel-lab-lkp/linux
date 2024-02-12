@@ -40,6 +40,7 @@
 #include <sound/initval.h>
 #include <sound/ac97_codec.h>
 #include <sound/pcm_params.h>
+#include <linux/sprintf.h>
 
 #include "usbtv.h"
 

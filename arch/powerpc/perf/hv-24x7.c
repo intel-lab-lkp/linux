@@ -12,6 +12,7 @@
 #include <linux/rbtree.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 
 #include <asm/cputhreads.h>

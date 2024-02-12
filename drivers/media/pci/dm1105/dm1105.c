@@ -14,6 +14,7 @@
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <media/rc-core.h>
 
 #include <media/demux.h>

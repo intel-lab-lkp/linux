@@ -7,6 +7,7 @@
 
 #include "habanalabs.h"
 
+#include <linux/completion.h>
 #include <linux/slab.h>
 
 /*

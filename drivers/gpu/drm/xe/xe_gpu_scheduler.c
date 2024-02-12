@@ -5,6 +5,8 @@
 
 #include "xe_gpu_scheduler.h"
 
+#include <linux/workqueue.h>
+
 static void xe_sched_process_msg_queue(struct xe_gpu_scheduler *sched)
 {
 	if (!READ_ONCE(sched->base.pause_submit))

@@ -14,6 +14,7 @@
 
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/string.h>

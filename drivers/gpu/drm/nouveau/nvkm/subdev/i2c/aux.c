@@ -23,6 +23,7 @@
  */
 
 #include <linux/string_helpers.h>
+#include <linux/sprintf.h>
 
 #include "aux.h"
 #include "pad.h"

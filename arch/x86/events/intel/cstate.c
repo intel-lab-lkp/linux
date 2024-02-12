@@ -113,6 +113,7 @@
 #include <asm/intel-family.h>
 #include "../perf_event.h"
 #include "../probe.h"
+#include <linux/sprintf.h>
 
 MODULE_LICENSE("GPL");
 

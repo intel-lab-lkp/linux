@@ -6,6 +6,7 @@
 #define _TRACE_BCACHEFS_H
 
 #include <linux/tracepoint.h>
+#include <linux/sprintf.h>
 
 #define TRACE_BPOS_entries(name)				\
 	__field(u64,			name##_inode	)	\

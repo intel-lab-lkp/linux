@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/sprintf.h>
+
 /*
  * Auto-group scheduling implementation:
  */

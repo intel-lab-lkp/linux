@@ -13,6 +13,7 @@
 #include <linux/kgdb.h>
 #include <linux/kdb.h>
 #include <linux/ftrace.h>
+#include <linux/kstrtox.h>
 
 #include "trace.h"
 #include "trace_output.h"

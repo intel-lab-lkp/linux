@@ -20,6 +20,7 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/dmar.h>
 #include <linux/bitfield.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <linux/perf_event.h>
 

@@ -6,8 +6,10 @@
 #include <linux/device.h>
 #include <linux/input.h>
 #include <linux/jiffies.h>
+#include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include "input-poller.h"

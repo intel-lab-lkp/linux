@@ -36,6 +36,7 @@
 #include <net/tc_act/tc_pedit.h>
 #include <net/tc_act/tc_gact.h>
 #include <net/tc_act/tc_vlan.h>
+#include <linux/completion.h>
 
 #include "cxgb4.h"
 #include "cxgb4_filter.h"

@@ -16,6 +16,8 @@
 
 #include "rsi_debugfs.h"
 #include "rsi_sdio.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /**
  * rsi_sdio_stats_read() - This function returns the sdio status of the driver.

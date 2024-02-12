@@ -7,6 +7,7 @@
  */
 
 #include "i2c-stm32.h"
+#include <linux/completion.h>
 
 /* Functions for DMA support */
 struct stm32_i2c_dma *stm32_i2c_dma_request(struct device *dev,

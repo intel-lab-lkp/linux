@@ -7,6 +7,7 @@
 #define WIL6210_TXRX_EDMA_H
 
 #include "wil6210.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /* limit status ring size in range [ring size..max ring size] */
 #define WIL_SRING_SIZE_ORDER_MIN	(WIL_RING_SIZE_ORDER_MIN)

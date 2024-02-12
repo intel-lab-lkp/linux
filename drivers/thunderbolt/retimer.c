@@ -8,6 +8,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/pm_runtime.h>
 #include <linux/sched/signal.h>
 

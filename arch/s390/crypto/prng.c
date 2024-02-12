@@ -22,6 +22,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 
 #include <asm/debug.h>
 #include <linux/uaccess.h>

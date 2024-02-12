@@ -30,6 +30,7 @@
 
 #include <linux/bits.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
@@ -39,6 +40,7 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 
 /* Addresses to scan */
 static const unsigned short normal_i2c[] = { 0x2c, 0x2d, 0x2e, 0x2f,

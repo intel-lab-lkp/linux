@@ -15,6 +15,8 @@
 #include "p2p.h"
 #include "testmode.h"
 #include <linux/bitfield.h>
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /***************/
 /* TLV helpers */

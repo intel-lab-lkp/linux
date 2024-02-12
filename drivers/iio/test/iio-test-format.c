@@ -6,6 +6,7 @@
 
 #include <kunit/test.h>
 #include <linux/iio/iio.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define IIO_TEST_FORMAT_EXPECT_EQ(_test, _buf, _ret, _val) do { \
 		KUNIT_EXPECT_EQ(_test, strlen(_buf), _ret); \

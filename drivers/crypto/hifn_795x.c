@@ -5,6 +5,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/mod_devicetable.h>
@@ -19,6 +20,7 @@
 #include <linux/crypto.h>
 #include <linux/hw_random.h>
 #include <linux/ktime.h>
+#include <linux/sprintf.h>
 
 #include <crypto/algapi.h>
 #include <crypto/internal/des.h>

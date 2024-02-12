@@ -14,6 +14,7 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 #include <linux/circ_buf.h>
+#include <linux/sprintf.h>
 
 #define STATION_ADDR_LOW		0x0000
 #define STATION_ADDR_HIGH		0x0004

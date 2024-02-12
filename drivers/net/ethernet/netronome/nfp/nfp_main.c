@@ -10,10 +10,12 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/vmalloc.h>
 #include <net/devlink.h>
 

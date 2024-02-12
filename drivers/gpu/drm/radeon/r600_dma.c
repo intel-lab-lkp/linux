@@ -26,6 +26,7 @@
 #include "radeon_asic.h"
 #include "r600.h"
 #include "r600d.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /*
  * DMA

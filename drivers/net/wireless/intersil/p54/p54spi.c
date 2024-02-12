@@ -17,6 +17,7 @@
 #include <linux/etherdevice.h>
 #include <linux/gpio.h>
 #include <linux/slab.h>
+#include <linux/completion.h>
 
 #include "p54spi.h"
 #include "p54.h"

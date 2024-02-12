@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/pwm.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/regulator/consumer.h>
 

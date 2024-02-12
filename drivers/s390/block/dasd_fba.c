@@ -10,6 +10,7 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <asm/debug.h>
+#include <linux/sprintf.h>
 
 #include <linux/slab.h>
 #include <linux/hdreg.h>	/* HDIO_GETGEO			    */

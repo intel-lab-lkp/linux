@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>

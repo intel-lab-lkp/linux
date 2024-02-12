@@ -9,11 +9,15 @@
 
 #include <linux/atomic.h>
 #include <linux/ctype.h>
+#include <linux/device.h>
 #include <linux/export.h>
+#include <linux/kernel.h>
 #include <linux/kexec.h>
 #include <linux/kmod.h>
 #include <linux/kmsg_dump.h>
+#include <linux/kstrtox.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/suspend.h>
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>

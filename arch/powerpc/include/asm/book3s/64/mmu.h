@@ -2,6 +2,7 @@
 #ifndef _ASM_POWERPC_BOOK3S_64_MMU_H_
 #define _ASM_POWERPC_BOOK3S_64_MMU_H_
 
+#include <linux/cache.h> // for __ro_after_init
 #include <asm/page.h>
 
 #ifndef __ASSEMBLY__

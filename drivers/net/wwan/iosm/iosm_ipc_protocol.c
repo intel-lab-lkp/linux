@@ -8,6 +8,7 @@
 #include "iosm_ipc_protocol_ops.h"
 #include "iosm_ipc_pm.h"
 #include "iosm_ipc_task_queue.h"
+#include <linux/completion.h>
 
 int ipc_protocol_tq_msg_send(struct iosm_protocol *ipc_protocol,
 			     enum ipc_msg_prep_type msg_type,

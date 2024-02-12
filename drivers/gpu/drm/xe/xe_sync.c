@@ -4,8 +4,10 @@
  */
 
 #include "xe_sync.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/dma-fence-array.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/kthread.h>
 #include <linux/sched/mm.h>
 #include <linux/uaccess.h>

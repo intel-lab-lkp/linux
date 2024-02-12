@@ -59,6 +59,7 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/of.h>

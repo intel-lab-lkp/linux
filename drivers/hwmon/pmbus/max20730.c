@@ -17,6 +17,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/pmbus.h>
+#include <linux/sprintf.h>
 #include <linux/util_macros.h>
 #include "pmbus.h"
 

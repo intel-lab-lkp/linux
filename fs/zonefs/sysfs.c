@@ -6,7 +6,9 @@
  */
 #include <linux/fs.h>
 #include <linux/seq_file.h>
+#include <linux/sysfs.h>
 #include <linux/blkdev.h>
+#include <linux/completion.h>
 
 #include "zonefs.h"
 

@@ -6,6 +6,7 @@
 #include <asm/xive.h>
 #include "ocxl_internal.h"
 #include "trace.h"
+#include <linux/sprintf.h>
 
 struct afu_irq {
 	int id;

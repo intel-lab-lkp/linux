@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-ioctl.h>

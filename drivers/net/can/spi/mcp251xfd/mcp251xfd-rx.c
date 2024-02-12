@@ -13,6 +13,7 @@
 //
 
 #include <linux/bitfield.h>
+#include <linux/hrtimer.h>
 
 #include "mcp251xfd.h"
 

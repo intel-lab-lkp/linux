@@ -2,6 +2,7 @@
 /* Copyright(c) 2022 Intel Corporation */
 #include <linux/device.h>
 #include <linux/errno.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include "adf_accel_devices.h"
 #include "adf_cfg.h"

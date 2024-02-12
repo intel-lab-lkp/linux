@@ -30,6 +30,7 @@
 #include <linux/i2c-algo-bit.h>
 #include <linux/i2c.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include "mgag200_drv.h"
 

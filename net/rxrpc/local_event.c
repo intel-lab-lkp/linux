@@ -11,6 +11,7 @@
 #include <linux/net.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <net/af_rxrpc.h>
 #include <generated/utsrelease.h>

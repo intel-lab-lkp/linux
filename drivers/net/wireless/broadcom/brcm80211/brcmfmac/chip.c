@@ -5,6 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/list.h>
+#include <linux/sprintf.h>
 #include <linux/ssb/ssb_regs.h>
 #include <linux/bcma/bcma.h>
 #include <linux/bcma/bcma_regs.h>

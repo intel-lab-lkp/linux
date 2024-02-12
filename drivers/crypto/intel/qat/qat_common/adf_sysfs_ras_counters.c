@@ -3,6 +3,7 @@
 
 #include <linux/sysfs.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include "adf_common_drv.h"

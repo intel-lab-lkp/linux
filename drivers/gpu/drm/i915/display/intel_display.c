@@ -24,6 +24,7 @@
  *	Eric Anholt <eric@anholt.net>
  */
 
+#include <linux/completion.h>
 #include <linux/dma-resv.h>
 #include <linux/i2c.h>
 #include <linux/input.h>

@@ -13,6 +13,7 @@
 #include <linux/io-pgtable.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
+#include <linux/of.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/iommu.h>

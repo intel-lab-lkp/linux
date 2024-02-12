@@ -18,6 +18,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/filter.h>
 #include <linux/net_tstamp.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 
 #include "nic_reg.h"

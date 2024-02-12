@@ -102,6 +102,7 @@
 #include <linux/delay.h>
 #include <asm/byteorder.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/list.h>
 #include <linux/usb.h>
 #include <linux/byteorder/generic.h>

@@ -7,6 +7,7 @@
 
 #ifdef CONFIG_RFS_ACCEL
 #include <linux/cpu_rmap.h>
+#include <linux/sprintf.h>
 #endif /* CONFIG_RFS_ACCEL */
 #include <linux/ethtool.h>
 #include <linux/kernel.h>

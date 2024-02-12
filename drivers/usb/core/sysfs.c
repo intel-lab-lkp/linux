@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>

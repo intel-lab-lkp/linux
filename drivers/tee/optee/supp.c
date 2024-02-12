@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2015, Linaro Limited
  */
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>

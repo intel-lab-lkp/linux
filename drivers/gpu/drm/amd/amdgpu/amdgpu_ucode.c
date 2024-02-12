@@ -24,6 +24,7 @@
 #include <linux/firmware.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #include "amdgpu.h"
 #include "amdgpu_ucode.h"

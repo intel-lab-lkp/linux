@@ -23,6 +23,8 @@
 #include "amdgpu.h"
 #include "soc15.h"
 #include "soc15d.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 #include "gc/gc_9_4_2_offset.h"
 #include "gc/gc_9_4_2_sh_mask.h"

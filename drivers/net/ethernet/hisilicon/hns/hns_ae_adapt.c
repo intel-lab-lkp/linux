@@ -6,6 +6,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 
 #include "hnae.h"
 #include "hns_dsaf_mac.h"

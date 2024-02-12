@@ -17,6 +17,7 @@
 #include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 
 #if defined(CONFIG_IPV6)

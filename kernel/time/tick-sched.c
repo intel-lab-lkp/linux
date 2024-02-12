@@ -12,7 +12,9 @@
 #include <linux/err.h>
 #include <linux/hrtimer.h>
 #include <linux/interrupt.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/percpu.h>
 #include <linux/nmi.h>
 #include <linux/profile.h>

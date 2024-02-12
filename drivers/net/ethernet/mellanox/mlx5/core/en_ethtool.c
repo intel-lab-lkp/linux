@@ -31,6 +31,7 @@
  */
 
 #include <linux/ethtool_netlink.h>
+#include <linux/sprintf.h>
 
 #include "en.h"
 #include "en/port.h"

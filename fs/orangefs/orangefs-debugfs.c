@@ -37,6 +37,7 @@
  */
 #include <linux/debugfs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/uaccess.h>
 

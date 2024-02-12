@@ -27,6 +27,8 @@
 #include "ctype.h"
 #include "cpuflags.h"
 #include "io.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 /* Useful macros */
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))

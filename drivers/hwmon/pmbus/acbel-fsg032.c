@@ -12,6 +12,7 @@
 #include <linux/pmbus.h>
 #include <linux/hwmon-sysfs.h>
 #include "pmbus.h"
+#include <linux/sprintf.h>
 
 #define ACBEL_MFR_FW_REVISION	0xd9
 

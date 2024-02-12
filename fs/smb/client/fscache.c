@@ -11,6 +11,7 @@
 #include "cifs_debug.h"
 #include "cifs_fs_sb.h"
 #include "cifsproto.h"
+#include <linux/sprintf.h>
 
 static void cifs_fscache_fill_volume_coherency(
 	struct cifs_tcon *tcon,

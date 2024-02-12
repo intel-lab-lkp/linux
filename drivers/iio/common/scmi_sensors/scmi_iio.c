@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/scmi_protocol.h>
+#include <linux/sprintf.h>
 #include <linux/time.h>
 #include <linux/types.h>
 #include <linux/units.h>

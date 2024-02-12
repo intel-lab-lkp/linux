@@ -5,6 +5,7 @@
  */
 
 #include <linux/rpmsg.h>
+#include <linux/completion.h>
 
 #include "delta.h"
 #include "delta-ipc.h"

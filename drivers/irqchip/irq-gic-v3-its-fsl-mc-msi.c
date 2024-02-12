@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/fsl/mc.h>
+#include <linux/sprintf.h>
 
 static struct irq_chip its_msi_irq_chip = {
 	.name = "ITS-fMSI",

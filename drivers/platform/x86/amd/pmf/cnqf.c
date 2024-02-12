@@ -11,6 +11,7 @@
 #include <linux/string_choices.h>
 #include <linux/workqueue.h>
 #include "pmf.h"
+#include <linux/kstrtox.h>
 
 static struct cnqf_config config_store;
 

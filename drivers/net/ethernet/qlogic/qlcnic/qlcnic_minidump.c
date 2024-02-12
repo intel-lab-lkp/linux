@@ -5,6 +5,7 @@
  */
 
 #include <net/ip.h>
+#include <linux/sprintf.h>
 
 #include "qlcnic.h"
 #include "qlcnic_hdr.h"

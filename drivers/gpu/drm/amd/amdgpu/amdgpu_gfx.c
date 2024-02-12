@@ -30,6 +30,7 @@
 #include "amdgpu_ras.h"
 #include "amdgpu_xcp.h"
 #include "amdgpu_xgmi.h"
+#include <linux/sprintf.h>
 
 /* delay 0.1 second to enable gfx off feature */
 #define GFX_OFF_DELAY_ENABLE         msecs_to_jiffies(100)

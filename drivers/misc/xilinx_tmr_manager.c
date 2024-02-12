@@ -14,6 +14,7 @@
  */
 
 #include <asm/xilinx_mb_manager.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>

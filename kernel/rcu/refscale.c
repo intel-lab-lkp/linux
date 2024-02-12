@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <linux/smp.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/srcu.h>
 #include <linux/slab.h>

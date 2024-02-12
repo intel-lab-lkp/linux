@@ -9,6 +9,7 @@
 
 #include <linux/timer.h>
 #include <asm/idals.h>
+#include <linux/sprintf.h>
 
 #include "dasd_int.h"
 #include "dasd_eckd.h"

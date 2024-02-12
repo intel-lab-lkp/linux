@@ -8,6 +8,8 @@
 
 #include <linux/greybus.h>
 #include "greybus_trace.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static ssize_t eject_store(struct device *dev,
 			   struct device_attribute *attr,

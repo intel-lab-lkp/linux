@@ -7,6 +7,8 @@
 #include "msm_gpu_trace.h"
 #include "a6xx_gpu.h"
 #include "a6xx_gmu.xml.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <linux/bitfield.h>
 #include <linux/devfreq.h>

@@ -10,6 +10,7 @@
  */
 
 #include <asm/unaligned.h>
+#include <linux/hex.h>
 
 #include <linux/delay.h>
 #include <linux/i2c.h>

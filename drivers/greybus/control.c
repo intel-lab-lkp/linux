@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/greybus.h>
+#include <linux/sprintf.h>
 
 /* Highest control-protocol version supported */
 #define GB_CONTROL_VERSION_MAJOR	0

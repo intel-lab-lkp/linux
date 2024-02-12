@@ -28,6 +28,7 @@
 #include <linux/kernel.h>
 #include <linux/keyctl.h>
 #include <linux/err.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/dns_resolver.h>
 #include <keys/dns_resolver-type.h>

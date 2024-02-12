@@ -5,6 +5,7 @@
  */
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
+#include <linux/completion.h>
 
 #include "debug.h"
 #include "hif.h"

@@ -7,6 +7,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/dma-map-ops.h>

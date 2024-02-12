@@ -11,6 +11,7 @@
 #include <linux/mount.h>
 #include <linux/init.h>
 #include <linux/magic.h>
+#include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/pagemap.h>
 #include <linux/namei.h>

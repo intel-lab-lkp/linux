@@ -19,6 +19,7 @@
 #include <net/udp_tunnel.h>
 #include <net/af_rxrpc.h>
 #include "ar-internal.h"
+#include <linux/completion.h>
 
 static void rxrpc_local_rcu(struct rcu_head *);
 

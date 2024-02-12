@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>

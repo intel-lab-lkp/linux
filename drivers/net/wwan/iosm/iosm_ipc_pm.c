@@ -4,6 +4,7 @@
  */
 
 #include "iosm_ipc_protocol.h"
+#include <linux/completion.h>
 
 /* Timeout value in MS for the PM to wait for device to reach active state */
 #define IPC_PM_ACTIVE_TIMEOUT_MS (500)

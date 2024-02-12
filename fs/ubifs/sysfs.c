@@ -8,7 +8,11 @@
  */
 
 
+#include <linux/completion.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
+#include <linux/sprintf.h>
+
 #include "ubifs.h"
 
 enum attr_id_t {

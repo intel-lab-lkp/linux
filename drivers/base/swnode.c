@@ -7,7 +7,9 @@
  */
 
 #include <linux/device.h>
+#include <linux/idr.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/property.h>
 #include <linux/slab.h>
 

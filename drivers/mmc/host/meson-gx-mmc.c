@@ -27,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/bitfield.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_NAME "meson-gx-mmc"
 

@@ -9,9 +9,11 @@
  */
 
 #include <linux/pci.h>
+#include <linux/completion.h>
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>

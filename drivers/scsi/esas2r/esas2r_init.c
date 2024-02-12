@@ -42,6 +42,8 @@
  */
 
 #include "esas2r.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 
 static bool esas2r_initmem_alloc(struct esas2r_adapter *a,
 				 struct esas2r_mem_desc *mem_desc,

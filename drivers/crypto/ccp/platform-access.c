@@ -14,6 +14,7 @@
 #include <linux/bitfield.h>
 #include <linux/errno.h>
 #include <linux/iopoll.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/mutex.h>
 
 #include "platform-access.h"

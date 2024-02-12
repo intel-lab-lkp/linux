@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/fs.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/ctype.h>
 #include <linux/workqueue.h>

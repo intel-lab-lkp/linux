@@ -22,6 +22,7 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include "ior.h"
+#include <linux/sprintf.h>
 
 static const char *
 nvkm_ior_name[] = {

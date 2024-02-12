@@ -58,6 +58,8 @@
 #include "sysfs.h"
 #include "thread_with_file.h"
 #include "trace.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <linux/backing-dev.h>
 #include <linux/blkdev.h>

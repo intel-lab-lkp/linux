@@ -11,6 +11,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/mii.h>
+#include <linux/sprintf.h>
 #include <linux/usb.h>
 #include <linux/bitrev.h>
 #include <linux/crc16.h>

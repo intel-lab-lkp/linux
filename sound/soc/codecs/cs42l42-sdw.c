@@ -5,6 +5,7 @@
 //                    Cirrus Logic International Semiconductor Ltd.
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/iopoll.h>

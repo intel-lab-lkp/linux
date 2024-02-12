@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/bitops.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/acpi.h>
 #include <linux/pm.h>

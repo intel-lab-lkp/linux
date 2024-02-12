@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
 #include <uapi/linux/input.h>

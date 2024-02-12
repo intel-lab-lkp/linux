@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/sched/jobctl.h>
 #include <linux/sched/task.h>
+#include <linux/completion.h>
 #include <linux/cred.h>
 #include <linux/refcount.h>
 #include <linux/pid.h>

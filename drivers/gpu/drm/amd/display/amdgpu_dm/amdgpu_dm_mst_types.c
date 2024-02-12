@@ -34,6 +34,7 @@
 #include "amdgpu_dm.h"
 #include "amdgpu_dm_mst_types.h"
 #include "amdgpu_dm_hdcp.h"
+#include <linux/sprintf.h>
 
 #include "dc.h"
 #include "dm_helpers.h"

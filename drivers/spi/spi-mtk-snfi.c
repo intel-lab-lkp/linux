@@ -73,6 +73,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/iopoll.h>

@@ -37,6 +37,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/sprintf.h>
 
 #include "arcdevice.h"
 #include "com9026.h"

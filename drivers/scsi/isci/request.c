@@ -60,6 +60,7 @@
 #include "scu_completion_codes.h"
 #include "scu_event_codes.h"
 #include "sas.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #undef C
 #define C(a) (#a)

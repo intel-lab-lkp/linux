@@ -22,6 +22,7 @@
 #include <linux/gpio/machine.h>
 #include <linux/input.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>

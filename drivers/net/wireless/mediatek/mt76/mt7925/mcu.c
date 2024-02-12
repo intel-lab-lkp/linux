@@ -6,6 +6,7 @@
 #include "mt7925.h"
 #include "mcu.h"
 #include "mac.h"
+#include <linux/sprintf.h>
 
 #define MT_STA_BFER			BIT(0)
 #define MT_STA_BFEE			BIT(1)

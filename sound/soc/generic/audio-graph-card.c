@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <sound/graph_card.h>
 

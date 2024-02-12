@@ -20,6 +20,7 @@
 #include <linux/io.h>
 #include <asm/eadm.h>
 #include "scm_blk.h"
+#include <linux/sprintf.h>
 
 debug_info_t *scm_debug;
 static int scm_major;

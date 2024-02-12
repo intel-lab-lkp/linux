@@ -5,6 +5,7 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 #include <linux/mman.h>
 #include <linux/pfn_t.h>
 #include <linux/sizes.h>

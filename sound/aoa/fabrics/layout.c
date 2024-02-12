@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include "../aoa.h"
 #include "../soundbus/soundbus.h"
+#include <linux/sprintf.h>
 
 MODULE_AUTHOR("Johannes Berg <johannes@sipsolutions.net>");
 MODULE_LICENSE("GPL");

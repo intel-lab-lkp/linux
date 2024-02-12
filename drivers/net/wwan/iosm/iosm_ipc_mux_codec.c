@@ -4,6 +4,7 @@
  */
 
 #include <linux/nospec.h>
+#include <linux/completion.h>
 
 #include "iosm_ipc_imem_ops.h"
 #include "iosm_ipc_mux_codec.h"

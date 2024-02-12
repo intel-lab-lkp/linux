@@ -5,6 +5,7 @@
 // Copyright 2023 Arm Ltd
 
 #include <kunit/test.h>
+#include <linux/random.h>
 #include "internal.h"
 
 #define BLOCK_TEST_SIZE 12

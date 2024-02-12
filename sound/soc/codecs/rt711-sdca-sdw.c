@@ -12,6 +12,7 @@
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/completion.h>
 
 #include "rt711-sdca.h"
 #include "rt711-sdca-sdw.h"

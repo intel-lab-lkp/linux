@@ -5,8 +5,10 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/control.h>

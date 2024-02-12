@@ -6,6 +6,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "dsi_phy.h"
 #include "dsi.xml.h"

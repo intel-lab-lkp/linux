@@ -12,6 +12,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 #include <linux/pinctrl/consumer.h>
 

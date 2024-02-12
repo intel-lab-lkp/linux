@@ -43,6 +43,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/sprintf.h>
 
 /* debug macro */
 #if 0

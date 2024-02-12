@@ -7,6 +7,7 @@
 #include "i40e_diag.h"
 #include "i40e_txrx_common.h"
 #include "i40e_virtchnl_pf.h"
+#include <linux/sprintf.h>
 
 /* ethtool statistics helpers */
 

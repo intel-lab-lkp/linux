@@ -41,6 +41,8 @@
 #include <linux/slab.h>
 #include "pm8001_sas.h"
 #include "pm80xx_tracepoints.h"
+#include <linux/completion.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 /**
  * pm8001_find_tag - from sas task to find out  tag that belongs to this task

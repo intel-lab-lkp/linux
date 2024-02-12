@@ -34,6 +34,7 @@
 #include <linux/backlight.h>
 #include <linux/idr.h>
 #include <drm/drm_probe_helper.h>
+#include <linux/sprintf.h>
 
 #include "nouveau_drv.h"
 #include "nouveau_reg.h"

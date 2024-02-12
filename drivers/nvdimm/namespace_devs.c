@@ -13,6 +13,7 @@
 #include "pmem.h"
 #include "pfn.h"
 #include "nd.h"
+#include <linux/sprintf.h>
 
 static void namespace_io_release(struct device *dev)
 {

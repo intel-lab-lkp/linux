@@ -24,6 +24,7 @@
 #include "rsi_coex.h"
 #include "rsi_hal.h"
 #include "rsi_usb.h"
+#include <linux/completion.h>
 
 u32 rsi_zone_enabled = /* INFO_ZONE |
 			INIT_ZONE |

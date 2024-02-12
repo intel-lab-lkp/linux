@@ -20,6 +20,7 @@
 #include <scsi/scsi_netlink.h>
 #include <net/netlink.h>
 #include <scsi/scsi.h>
+#include <linux/sprintf.h>
 
 #include "be_iscsi.h"
 

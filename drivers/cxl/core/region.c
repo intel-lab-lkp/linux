@@ -3,8 +3,10 @@
 #include <linux/memregion.h>
 #include <linux/genalloc.h>
 #include <linux/device.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <linux/sort.h>
 #include <linux/idr.h>

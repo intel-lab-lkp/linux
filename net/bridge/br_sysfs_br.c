@@ -9,11 +9,13 @@
 
 #include <linux/capability.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
 #include <linux/rtnetlink.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/times.h>
 #include <linux/sched/signal.h>
 

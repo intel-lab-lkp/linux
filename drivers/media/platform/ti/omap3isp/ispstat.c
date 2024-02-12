@@ -14,6 +14,7 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/timekeeping.h>
 #include <linux/uaccess.h>
 

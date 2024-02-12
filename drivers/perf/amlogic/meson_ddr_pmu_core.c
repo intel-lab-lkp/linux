@@ -12,6 +12,7 @@
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/printk.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 

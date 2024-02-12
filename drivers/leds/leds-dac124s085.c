@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 struct dac124s085_led {
 	struct led_classdev	ldev;

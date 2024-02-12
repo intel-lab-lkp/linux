@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/sysfs.h>

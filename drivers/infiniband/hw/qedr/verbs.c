@@ -31,10 +31,12 @@
  */
 #include <linux/dma-mapping.h>
 #include <linux/crc32.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/udp.h>
 #include <linux/iommu.h>
+#include <linux/completion.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_user_verbs.h>

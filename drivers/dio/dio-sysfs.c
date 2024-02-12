@@ -13,6 +13,7 @@
 
 #include <linux/kernel.h>
 #include <linux/dio.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 
 /* show configuration fields */

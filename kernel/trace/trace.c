@@ -17,8 +17,11 @@
 #include <linux/stacktrace.h>
 #include <linux/writeback.h>
 #include <linux/kallsyms.h>
+#include <linux/kernel.h> // for DUMP_*
+#include <linux/kstrtox.h>
 #include <linux/security.h>
 #include <linux/seq_file.h>
+#include <linux/sprintf.h>
 #include <linux/irqflags.h>
 #include <linux/debugfs.h>
 #include <linux/tracefs.h>

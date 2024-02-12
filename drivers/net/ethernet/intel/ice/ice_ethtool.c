@@ -9,6 +9,7 @@
 #include "ice_fltr.h"
 #include "ice_lib.h"
 #include "ice_dcb_lib.h"
+#include <linux/sprintf.h>
 #include <net/dcbnl.h>
 
 struct ice_stats {

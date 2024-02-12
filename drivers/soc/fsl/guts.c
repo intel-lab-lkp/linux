@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/of_fdt.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>

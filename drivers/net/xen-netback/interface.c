@@ -29,6 +29,7 @@
  */
 
 #include "common.h"
+#include <linux/sprintf.h>
 
 #include <linux/kthread.h>
 #include <linux/sched/task.h>

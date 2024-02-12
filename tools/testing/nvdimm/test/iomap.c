@@ -4,6 +4,8 @@
  */
 #include <linux/memremap.h>
 #include <linux/rculist.h>
+#include <linux/completion.h>
+#include <linux/device.h>
 #include <linux/export.h>
 #include <linux/ioport.h>
 #include <linux/module.h>

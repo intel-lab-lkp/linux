@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/mdev.h>
+#include <linux/completion.h>
 
 #include <asm/isc.h>
 

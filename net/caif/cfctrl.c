@@ -8,6 +8,7 @@
 
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/slab.h>
 #include <linux/pkt_sched.h>
 #include <net/caif/caif_layer.h>

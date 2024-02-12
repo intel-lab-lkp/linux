@@ -9,6 +9,7 @@
  */
 #include <linux/clk.h>
 #include <linux/clkdev.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/i2c.h>

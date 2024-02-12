@@ -38,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/kthread.h>
 #include <linux/namei.h>
+#include <linux/sprintf.h>
 
 #include <linux/sunrpc/addr.h>
 #include <linux/nfs_ssc.h>

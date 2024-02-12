@@ -8,6 +8,7 @@
 #include <linux/debugfs.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_file.h>
+#include <linux/kstrtox.h>
 
 #include "dp_catalog.h"
 #include "dp_aux.h"

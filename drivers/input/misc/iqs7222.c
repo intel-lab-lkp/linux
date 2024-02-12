@@ -8,6 +8,7 @@
 #include <linux/bits.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/direction.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
@@ -21,6 +22,7 @@
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define IQS7222_PROD_NUM			0x00
 #define IQS7222_PROD_NUM_A			840

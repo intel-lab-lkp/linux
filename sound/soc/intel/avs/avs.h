@@ -12,6 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
+#include <linux/idr.h>
 #include <linux/kfifo.h>
 #include <sound/hda_codec.h>
 #include <sound/hda_register.h>

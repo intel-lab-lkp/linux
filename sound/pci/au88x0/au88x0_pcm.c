@@ -14,6 +14,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include "au88x0.h"
+#include <linux/sprintf.h>
 
 #define VORTEX_PCM_TYPE(x) (x->name[40])
 

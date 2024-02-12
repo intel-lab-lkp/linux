@@ -14,6 +14,7 @@
  */
 
 #include "bnx2fc.h"
+#include <linux/completion.h>
 
 DECLARE_PER_CPU(struct bnx2fc_percpu_s, bnx2fc_percpu);
 

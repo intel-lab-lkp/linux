@@ -23,6 +23,7 @@
 #include "amdgpu.h"
 #include "gfxhub_v1_0.h"
 #include "gfxhub_v1_1.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "gc/gc_9_0_offset.h"
 #include "gc/gc_9_0_sh_mask.h"

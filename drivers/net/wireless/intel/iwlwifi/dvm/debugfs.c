@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/ieee80211.h>
+#include <linux/sprintf.h>
 #include <net/mac80211.h>
 
 #include "iwl-debug.h"

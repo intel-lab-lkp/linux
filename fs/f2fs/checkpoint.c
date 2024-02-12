@@ -7,6 +7,7 @@
  */
 #include <linux/fs.h>
 #include <linux/bio.h>
+#include <linux/completion.h>
 #include <linux/mpage.h>
 #include <linux/writeback.h>
 #include <linux/blkdev.h>

@@ -12,10 +12,12 @@
 #include <linux/err.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/firmware/xlnx-zynqmp.h>
 

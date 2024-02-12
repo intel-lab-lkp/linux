@@ -4,6 +4,7 @@
 #define dev_fmt(fmt) "RateLimiting: " fmt
 
 #include <linux/dev_printk.h>
+#include <linux/kstrtox.h>
 #include <linux/pci.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>

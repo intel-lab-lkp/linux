@@ -29,11 +29,13 @@
 #define DEBUG
 #include <linux/slab.h>
 #include <linux/input.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/serio.h>
 #include <linux/libps2.h>
 #include <linux/delay.h>
 #include <asm/olpc.h>
+#include <linux/sprintf.h>
 
 #include "psmouse.h"
 #include "hgpk.h"

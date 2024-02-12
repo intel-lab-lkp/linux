@@ -12,9 +12,11 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define AD5766_UPPER_WORD_SPI_MASK		GENMASK(31, 16)
 #define AD5766_LOWER_WORD_SPI_MASK		GENMASK(15, 0)

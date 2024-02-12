@@ -4,6 +4,7 @@
 #include <linux/ioport.h>
 #include <linux/clocksource.h>
 #include <linux/clockchips.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/goldfish.h>

@@ -9,6 +9,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define TPLINK_SAFELOADER_DATA_OFFSET		4
 #define TPLINK_SAFELOADER_MAX_PARTS		32

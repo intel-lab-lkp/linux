@@ -20,6 +20,7 @@
 #include <linux/of_address.h>
 #include <linux/of_net.h>
 #include <linux/of_mdio.h>
+#include <linux/sprintf.h>
 #include <net/dsa.h>
 #include <linux/ethtool.h>
 #include <linux/if_bridge.h>

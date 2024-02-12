@@ -5,6 +5,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/parser.h>
+#include <linux/sprintf.h>
 #include <uapi/scsi/fc/fc_fs.h>
 #include <uapi/scsi/fc/fc_els.h>
 #include <linux/delay.h>
@@ -12,11 +13,14 @@
 #include <linux/blk-cgroup.h>
 #include "nvme.h"
 #include "fabrics.h"
+#include <linux/completion.h>
 #include <linux/nvme-fc-driver.h>
 #include <linux/nvme-fc.h>
 #include "fc.h"
 #include <scsi/scsi_transport_fc.h>
 #include <linux/blk-mq-pci.h>
+#include <linux/kobject.h>
+#include <linux/kstrtox.h>
 
 /* *************************** Data Structures/Defines ****************** */
 

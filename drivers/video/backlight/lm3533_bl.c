@@ -9,10 +9,12 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/backlight.h>
 #include <linux/fb.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include <linux/mfd/lm3533.h>
 

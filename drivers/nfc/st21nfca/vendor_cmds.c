@@ -10,6 +10,7 @@
 #include <linux/nfc.h>
 #include <net/nfc/hci.h>
 #include <net/nfc/llc.h>
+#include <linux/completion.h>
 
 #include "st21nfca.h"
 

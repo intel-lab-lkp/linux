@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/dma-direction.h>
 
 #include "gsi.h"

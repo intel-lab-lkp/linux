@@ -62,6 +62,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/kstrtox.h>
 
 #include "rv.h"
 

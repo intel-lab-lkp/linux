@@ -12,6 +12,7 @@
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/poll.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 #include <linux/kobject.h>
 #include <linux/mutex.h>

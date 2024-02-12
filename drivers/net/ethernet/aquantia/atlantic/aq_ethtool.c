@@ -14,6 +14,7 @@
 #include "aq_filters.h"
 #include "aq_macsec.h"
 #include "aq_main.h"
+#include <linux/sprintf.h>
 
 #include <linux/linkmode.h>
 #include <linux/ptp_clock_kernel.h>

@@ -41,6 +41,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/dma/imx-dma.h>
+#include <linux/sprintf.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

@@ -12,9 +12,11 @@
 #include "request.h"
 #include "writeback.h"
 #include "features.h"
+#include <linux/sprintf.h>
 
 #include <linux/blkdev.h>
 #include <linux/seq_buf.h>
+#include <linux/shrinker.h>
 #include <linux/sort.h>
 #include <linux/sched/clock.h>
 

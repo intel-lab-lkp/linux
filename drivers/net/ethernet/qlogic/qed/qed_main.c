@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <asm/byteorder.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>

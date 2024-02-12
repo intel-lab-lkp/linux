@@ -17,6 +17,7 @@
 #include <linux/bio.h>
 #include <linux/sched/signal.h>
 #include <linux/migrate.h>
+#include <linux/blkdev.h>
 #include "trace.h"
 
 #include "../internal.h"

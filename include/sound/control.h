@@ -9,6 +9,7 @@
 
 #include <linux/wait.h>
 #include <linux/nospec.h>
+#include <linux/string.h> // for strscpy()
 #include <sound/asound.h>
 
 #define snd_kcontrol_chip(kcontrol) ((kcontrol)->private_data)

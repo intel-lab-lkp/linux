@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 
 #include <linux/hid.h>
 #include <linux/hid-debug.h>

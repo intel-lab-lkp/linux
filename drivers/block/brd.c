@@ -11,6 +11,7 @@
 
 #include <linux/init.h>
 #include <linux/initrd.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/major.h>
@@ -19,9 +20,11 @@
 #include <linux/highmem.h>
 #include <linux/mutex.h>
 #include <linux/pagemap.h>
+#include <linux/sprintf.h>
 #include <linux/xarray.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/backing-dev.h>
 #include <linux/debugfs.h>
 

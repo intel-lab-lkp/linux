@@ -34,6 +34,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_writeback.h>
 #include <drm/drm_vblank.h>
+#include <linux/kernel.h> // for u64_to_user_ptr()
 
 #include <linux/dma-fence.h>
 #include <linux/uaccess.h>

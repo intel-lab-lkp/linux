@@ -13,8 +13,10 @@
 #include <linux/delay.h>
 #include <linux/if_ether.h>
 #include <linux/iopoll.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include "mlxbf-bootctl.h"
 

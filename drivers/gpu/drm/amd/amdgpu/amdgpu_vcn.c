@@ -25,11 +25,13 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/module.h>
 #include <linux/dmi.h>
 #include <linux/pci.h>
 #include <linux/debugfs.h>
 #include <drm/drm_drv.h>
+#include <linux/sprintf.h>
 
 #include "amdgpu.h"
 #include "amdgpu_pm.h"

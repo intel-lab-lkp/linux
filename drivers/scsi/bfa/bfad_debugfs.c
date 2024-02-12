@@ -10,6 +10,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/export.h>
+#include <linux/sprintf.h>
 
 #include "bfad_drv.h"
 #include "bfad_im.h"

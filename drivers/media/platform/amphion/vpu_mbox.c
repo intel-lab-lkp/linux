@@ -13,6 +13,7 @@
 #include "vpu.h"
 #include "vpu_mbox.h"
 #include "vpu_msgs.h"
+#include <linux/sprintf.h>
 
 static void vpu_mbox_rx_callback(struct mbox_client *cl, void *msg)
 {

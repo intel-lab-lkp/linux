@@ -11,10 +11,12 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/bitmap.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "intel_th.h"
 #include "gth.h"

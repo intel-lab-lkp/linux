@@ -5,6 +5,7 @@
 #define __SOUNDWIRE_H
 
 #include <linux/bug.h>
+#include <linux/device.h>
 #include <linux/lockdep_types.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>

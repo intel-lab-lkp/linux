@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/seq_file.h>
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 
 #include <asm/io.h>
 #include <asm/byteorder.h>

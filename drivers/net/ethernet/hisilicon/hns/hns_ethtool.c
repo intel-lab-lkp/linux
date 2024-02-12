@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include "hns_enet.h"
+#include <linux/sprintf.h>
 
 #define HNS_PHY_PAGE_MDIX	0
 #define HNS_PHY_PAGE_LED	3

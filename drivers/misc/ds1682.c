@@ -30,6 +30,8 @@
 
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/list.h>
 #include <linux/sysfs.h>

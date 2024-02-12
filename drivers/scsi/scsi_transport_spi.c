@@ -7,7 +7,9 @@
  */
 #include <linux/ctype.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <linux/blkdev.h>
 #include <linux/mutex.h>

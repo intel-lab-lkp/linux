@@ -29,6 +29,7 @@
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/async.h>
+#include <linux/completion.h>
 #include <linux/suspend.h>
 #include <trace/events/power.h>
 #include <linux/cpufreq.h>

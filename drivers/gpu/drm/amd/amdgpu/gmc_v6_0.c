@@ -24,6 +24,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <drm/drm_cache.h>
 #include "amdgpu.h"

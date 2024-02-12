@@ -16,6 +16,7 @@
 #include <linux/of_irq.h>
 #include <linux/sched_clock.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/syscore_ops.h>
 
 #include <dt-bindings/clock/ingenic,sysost.h>

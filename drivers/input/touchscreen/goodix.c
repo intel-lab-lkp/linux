@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/dmi.h>
 #include <linux/firmware.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/irq.h>
@@ -21,9 +22,11 @@
 #include <linux/platform_data/x86/soc.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/of.h>
 #include <asm/unaligned.h>
 #include "goodix.h"
+#include <linux/sprintf.h>
 
 #define GOODIX_GPIO_INT_NAME		"irq"
 #define GOODIX_GPIO_RST_NAME		"reset"

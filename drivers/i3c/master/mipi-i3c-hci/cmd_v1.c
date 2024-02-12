@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/completion.h>
 #include <linux/i3c/master.h>
 
 #include "hci.h"

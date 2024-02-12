@@ -7,6 +7,7 @@
 
 #include "gaudi2P.h"
 #include "../include/gaudi2/asic_reg/gaudi2_regs.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #define UNSET_GLBL_SEC_BIT(array, b) ((array)[((b) / 32)] |= (1 << ((b) % 32)))
 

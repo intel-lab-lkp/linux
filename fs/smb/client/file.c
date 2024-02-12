@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/filelock.h>
 #include <linux/backing-dev.h>
+#include <linux/completion.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/pagemap.h>

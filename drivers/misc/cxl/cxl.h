@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/pid.h>
+#include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/pci.h>
 #include <linux/fs.h>

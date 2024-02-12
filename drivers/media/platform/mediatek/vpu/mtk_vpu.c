@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/sizes.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 
 #include "mtk_vpu.h"
 

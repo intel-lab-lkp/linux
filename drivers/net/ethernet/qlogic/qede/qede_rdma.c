@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/qed/qede_rdma.h>
 #include "qede.h"
+#include <linux/completion.h>
 
 static struct qedr_driver *qedr_drv;
 static LIST_HEAD(qedr_dev_list);

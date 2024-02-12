@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
+#include <linux/mod_devicetable.h> // for struct platform_device_id
 #include <linux/thermal.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>

@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/gpio/consumer.h>
 #include "tsc200x-core.h"
+#include <linux/sprintf.h>
 
 /*
  * The touchscreen interface operates as follows:

@@ -10,6 +10,7 @@
 #include <linux/power_supply.h>
 #include <linux/mfd/max14577-private.h>
 #include <linux/mfd/max14577.h>
+#include <linux/kstrtox.h>
 
 struct max14577_charger {
 	struct device		*dev;

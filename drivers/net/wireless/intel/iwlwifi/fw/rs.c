@@ -7,6 +7,7 @@
 #include "fw/api/rs.h"
 #include "iwl-drv.h"
 #include "iwl-config.h"
+#include <linux/sprintf.h>
 
 #define IWL_DECLARE_RATE_INFO(r) \
 	[IWL_RATE_##r##M_INDEX] = IWL_RATE_##r##M_PLCP

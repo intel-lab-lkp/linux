@@ -9,6 +9,7 @@
 #include "emux_voice.h"
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 /* Prototypes for static functions */
 static void free_port(void *private);

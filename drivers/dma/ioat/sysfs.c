@@ -5,12 +5,14 @@
  */
 
 #include <linux/init.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/dmaengine.h>
 #include <linux/pci.h>
 #include "dma.h"
 #include "registers.h"
 #include "hw.h"
+#include <linux/sprintf.h>
 
 #include "../dmaengine.h"
 

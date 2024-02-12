@@ -6,6 +6,8 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 #include "main.h"
 #include "11n.h"

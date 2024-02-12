@@ -13,6 +13,7 @@
 #include <linux/of_fdt.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/sys_soc.h>
 #include <linux/io.h>
 #include <linux/clk-provider.h>

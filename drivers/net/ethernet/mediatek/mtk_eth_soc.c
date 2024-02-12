@@ -17,6 +17,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/if_vlan.h>
 #include <linux/reset.h>
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/interrupt.h>
 #include <linux/pinctrl/devinfo.h>

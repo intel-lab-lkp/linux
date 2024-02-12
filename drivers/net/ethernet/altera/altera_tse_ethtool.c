@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/phy.h>
+#include <linux/sprintf.h>
 
 #include "altera_tse.h"
 

@@ -36,6 +36,7 @@
 #define SA_H
 
 #include <rdma/ib_sa.h>
+#include <linux/completion.h>
 
 static inline void ib_sa_client_get(struct ib_sa_client *client)
 {

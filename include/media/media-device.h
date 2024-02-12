@@ -11,10 +11,12 @@
 #ifndef _MEDIA_DEVICE_H
 #define _MEDIA_DEVICE_H
 
+#include <linux/idr.h> // for struct ida
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/sprintf.h>
 
 #include <media/media-devnode.h>
 #include <media/media-entity.h>

@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
+#include <linux/sprintf.h>
 
 #include <asm/cio.h>
 #include <asm/chpid.h>

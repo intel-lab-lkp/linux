@@ -52,6 +52,7 @@
 #include <linux/of_dma.h>
 #include <linux/mempool.h>
 #include <linux/numa.h>
+#include <linux/sprintf.h>
 
 #include "dmaengine.h"
 

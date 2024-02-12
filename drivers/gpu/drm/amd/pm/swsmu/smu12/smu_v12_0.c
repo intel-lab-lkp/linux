@@ -32,6 +32,7 @@
 #include "soc15_common.h"
 #include "atom.h"
 #include "smu_cmn.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "asic_reg/mp/mp_12_0_0_offset.h"
 #include "asic_reg/mp/mp_12_0_0_sh_mask.h"

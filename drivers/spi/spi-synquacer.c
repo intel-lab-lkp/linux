@@ -7,6 +7,7 @@
 //
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -19,6 +20,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spinlock.h>
 #include <linux/clk.h>
+#include <linux/sprintf.h>
 
 /* HSSPI register address definitions */
 #define SYNQUACER_HSSPI_REG_MCTRL	0x00

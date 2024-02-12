@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/kmod.h>
 #include <linux/pci.h>

@@ -13,6 +13,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
 #include <linux/spinlock.h>

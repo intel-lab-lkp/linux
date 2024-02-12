@@ -4,10 +4,14 @@
  * Shaohua Li <shli@fb.com>
  */
 #include <linux/module.h>
+#include <linux/sprintf.h>
+#include <linux/kstrtox.h>
 
+#include <linux/kstrtox.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include "null_blk.h"
 

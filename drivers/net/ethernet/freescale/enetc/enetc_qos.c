@@ -2,6 +2,7 @@
 /* Copyright 2019 NXP */
 
 #include "enetc.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <net/pkt_sched.h>
 #include <linux/math64.h>

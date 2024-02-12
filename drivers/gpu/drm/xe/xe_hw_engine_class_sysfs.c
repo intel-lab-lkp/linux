@@ -5,6 +5,8 @@
 
 #include <drm/drm_managed.h>
 #include <linux/kobject.h>
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 
 #include "xe_gt.h"

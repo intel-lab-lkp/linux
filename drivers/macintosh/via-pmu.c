@@ -20,6 +20,7 @@
  */
 #include <linux/stdarg.h>
 #include <linux/mutex.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>

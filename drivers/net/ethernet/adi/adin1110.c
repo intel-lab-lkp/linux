@@ -23,6 +23,7 @@
 #include <linux/phy.h>
 #include <linux/property.h>
 #include <linux/spi/spi.h>
+#include <linux/sprintf.h>
 
 #include <net/switchdev.h>
 

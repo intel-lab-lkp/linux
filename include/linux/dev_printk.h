@@ -12,6 +12,7 @@
 #define _DEVICE_PRINTK_H_
 
 #include <linux/compiler.h>
+#include <linux/stdarg.h>
 #include <linux/types.h>
 #include <linux/ratelimit.h>
 
@@ -20,6 +21,7 @@
 #endif
 
 struct device;
+struct va_format;
 
 #define PRINTK_INFO_SUBSYSTEM_LEN	16
 #define PRINTK_INFO_DEVICE_LEN		48

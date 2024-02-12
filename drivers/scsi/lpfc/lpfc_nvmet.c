@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <asm/unaligned.h>
+#include <linux/completion.h>
 #include <linux/crc-t10dif.h>
 #include <net/checksum.h>
 

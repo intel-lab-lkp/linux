@@ -20,6 +20,7 @@
 #include "xfs_sysfs.h"
 #include "xfs_sb.h"
 #include "xfs_health.h"
+#include <linux/bio.h>
 
 struct kmem_cache	*xfs_log_ticket_cache;
 

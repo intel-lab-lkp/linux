@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/platform_data/leds-lp55xx.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "leds-lp55xx-common.h"
 

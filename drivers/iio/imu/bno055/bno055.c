@@ -21,9 +21,11 @@
 #include <linux/device.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <linux/util_macros.h>
 
 #include <linux/iio/buffer.h>

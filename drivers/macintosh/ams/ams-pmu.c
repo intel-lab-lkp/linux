@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/adb.h>
+#include <linux/completion.h>
 #include <linux/pmu.h>
 
 #include "ams.h"

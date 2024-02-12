@@ -16,6 +16,7 @@
 #include <linux/blkdev.h>
 #include <linux/rbtree.h>
 #include <linux/random.h>
+#include <linux/sprintf.h>
 
 #include "gfs2.h"
 #include "incore.h"

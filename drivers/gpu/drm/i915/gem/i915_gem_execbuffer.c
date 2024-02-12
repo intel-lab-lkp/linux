@@ -6,6 +6,7 @@
 
 #include <linux/dma-resv.h>
 #include <linux/highmem.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 #include <linux/sync_file.h>
 #include <linux/uaccess.h>
 

@@ -14,6 +14,7 @@
 #include <linux/bio.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
+#include <linux/sprintf.h>
 
 #include <linux/device-mapper.h>
 

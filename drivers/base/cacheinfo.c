@@ -13,6 +13,7 @@
 #include <linux/compiler.h>
 #include <linux/cpu.h>
 #include <linux/device.h>
+#include <linux/gfp.h> // for setup_pcp_cacheinfo()
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/sched.h>

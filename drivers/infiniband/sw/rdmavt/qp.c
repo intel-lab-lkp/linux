@@ -5,6 +5,7 @@
 
 #include <linux/hash.h>
 #include <linux/bitops.h>
+#include <linux/hrtimer.h>
 #include <linux/lockdep.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>

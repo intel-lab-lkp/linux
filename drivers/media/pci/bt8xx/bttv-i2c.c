@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/sprintf.h>
 
 #include "bttvp.h"
 #include <media/v4l2-common.h>

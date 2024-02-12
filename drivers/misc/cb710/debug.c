@@ -7,6 +7,7 @@
 #include <linux/cb710.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sprintf.h>
 
 #define CB710_REG_COUNT		0x80
 

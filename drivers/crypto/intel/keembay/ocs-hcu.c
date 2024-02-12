@@ -10,6 +10,7 @@
 #include <linux/iopoll.h>
 #include <linux/irq.h>
 #include <linux/module.h>
+#include <linux/completion.h>
 
 #include <crypto/sha2.h>
 

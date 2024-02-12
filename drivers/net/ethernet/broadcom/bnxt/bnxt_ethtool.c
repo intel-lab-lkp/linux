@@ -10,6 +10,7 @@
 
 #include <linux/bitops.h>
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/stringify.h>
 #include <linux/ethtool.h>
 #include <linux/ethtool_netlink.h>

@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 #include <linux/mm.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/dmapool.h>

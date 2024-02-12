@@ -10,6 +10,7 @@
 #include <asm/debug.h>
 #include <asm/qdio.h>
 #include "qdio.h"
+#include <linux/sprintf.h>
 
 /* that gives us 15 characters in the text event views */
 #define QDIO_DBF_LEN	32

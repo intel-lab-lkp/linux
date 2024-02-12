@@ -5,6 +5,7 @@
 #include <linux/errno.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 
 #include "vnic_dev.h"
 #include "vnic_intr.h"

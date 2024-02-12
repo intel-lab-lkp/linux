@@ -15,6 +15,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #define ARC_PS2_PORTS                   2
 

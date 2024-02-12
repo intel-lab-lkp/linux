@@ -132,6 +132,8 @@ static inline bool percpu_counter_initialized(struct percpu_counter *fbc)
 
 #else /* !CONFIG_SMP */
 
+#include <linux/irqflags.h> // for local_irq_save()
+
 struct percpu_counter {
 	s64 count;
 };

@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/ethtool.h>
 #include <linux/etherdevice.h>
+#include <linux/sprintf.h>
 #include <linux/u64_stats_sync.h>
 
 #include <net/rtnetlink.h>

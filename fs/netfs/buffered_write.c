@@ -5,6 +5,7 @@
  * Written by David Howells (dhowells@redhat.com)
  */
 
+#include <linux/bvec.h>
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/mm.h>

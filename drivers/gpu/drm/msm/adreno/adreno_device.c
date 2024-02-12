@@ -7,6 +7,7 @@
  */
 
 #include "adreno_gpu.h"
+#include <linux/sprintf.h>
 
 bool hang_debug = false;
 MODULE_PARM_DESC(hang_debug, "Dump registers when hang is detected (can be slow!)");

@@ -6,6 +6,7 @@
 
 #include "gateway_client.h"
 #include "main.h"
+#include <linux/sprintf.h>
 
 #include <linux/atomic.h>
 #include <linux/byteorder/generic.h>

@@ -36,6 +36,7 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/cpumask.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include "csio_init.h"

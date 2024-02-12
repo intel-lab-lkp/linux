@@ -11,6 +11,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/slab.h>
 #include <linux/pci.h>

@@ -25,6 +25,7 @@
 #include "nouveau_dma.h"
 #include "nouveau_fence.h"
 #include "nouveau_vmm.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "nv50_display.h"
 

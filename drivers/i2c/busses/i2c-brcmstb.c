@@ -2,6 +2,7 @@
 // Copyright (C) 2014 Broadcom Corporation
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/i2c.h>

@@ -2,6 +2,7 @@
 /* Copyright (C) 2018 Microchip Technology Inc. */
 
 #include <linux/netdevice.h>
+#include <linux/sprintf.h>
 
 #include <linux/ptp_clock_kernel.h>
 #include <linux/module.h>

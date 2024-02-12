@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/seq_buf.h>
 #include <linux/nd.h>
+#include <linux/sprintf.h>
 
 #include <asm/plpar_wrappers.h>
 #include <asm/papr_pdsm.h>

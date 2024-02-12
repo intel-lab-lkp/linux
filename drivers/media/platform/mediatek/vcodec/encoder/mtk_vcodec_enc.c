@@ -9,6 +9,7 @@
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 
 #include "mtk_vcodec_enc.h"
 #include "venc_drv_if.h"

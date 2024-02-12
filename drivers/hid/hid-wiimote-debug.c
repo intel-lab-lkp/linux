@@ -8,6 +8,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>

@@ -7,10 +7,13 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
+#include <linux/device.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/sched/signal.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/interrupt.h>
 #include <linux/cpu_pm.h>

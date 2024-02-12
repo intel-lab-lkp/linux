@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "fbtft.h"
 #include "internal.h"
+#include <linux/kstrtox.h>
+#include <linux/sprintf.h>
 
 static int get_next_ulong(char **str_p, unsigned long *val, char *sep, int base)
 {

@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/inet.h>
+#include <linux/sprintf.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
 

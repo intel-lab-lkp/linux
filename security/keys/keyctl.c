@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/sched/task.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/syscalls.h>
 #include <linux/key.h>
 #include <linux/keyctl.h>

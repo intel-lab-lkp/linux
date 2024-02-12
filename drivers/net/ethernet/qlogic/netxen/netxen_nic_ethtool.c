@@ -11,6 +11,7 @@
 #include <asm/io.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
+#include <linux/sprintf.h>
 
 #include "netxen_nic.h"
 #include "netxen_nic_hw.h"

@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/input.h>
 #include <linux/hid.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/hid-roccat.h>

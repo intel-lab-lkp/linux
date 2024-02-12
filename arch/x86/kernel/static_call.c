@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/static_call.h>
+#include <linux/kernel.h> // for system_state
 #include <linux/memory.h>
 #include <linux/bug.h>
 #include <asm/text-patching.h>

@@ -19,6 +19,7 @@
 #include <linux/pci.h>
 #include <linux/dmar.h>
 #include <linux/iova.h>
+#include <linux/sprintf.h>
 #include <linux/timer.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>

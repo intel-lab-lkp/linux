@@ -3,6 +3,8 @@
  * Copyright 2018-2019 NXP
  */
 #include <linux/fsl/enetc_mdio.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 #include <soc/mscc/ocelot_qsys.h>
 #include <soc/mscc/ocelot_vcap.h>
 #include <soc/mscc/ocelot_ana.h>

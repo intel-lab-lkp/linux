@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/acpi.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/jack.h>
 #include <sound/pcm.h>

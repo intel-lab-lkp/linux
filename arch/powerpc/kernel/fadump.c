@@ -17,9 +17,11 @@
 #include <linux/string.h>
 #include <linux/memblock.h>
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/seq_file.h>
 #include <linux/crash_dump.h>
 #include <linux/kobject.h>
+#include <linux/sprintf.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
 #include <linux/cma.h>

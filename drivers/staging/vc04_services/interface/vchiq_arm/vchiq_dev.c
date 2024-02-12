@@ -5,6 +5,7 @@
  */
 
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/slab.h>

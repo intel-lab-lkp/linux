@@ -19,6 +19,7 @@
 #include <linux/of_fdt.h>
 #include <linux/libfdt.h>
 #include <asm/setup.h>
+#include <linux/sprintf.h>
 
 #define SLAVE_CODE_SIZE		256	/* First 0x100 bytes */
 

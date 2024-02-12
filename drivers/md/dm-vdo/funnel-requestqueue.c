@@ -7,6 +7,7 @@
 
 #include <linux/atomic.h>
 #include <linux/compiler.h>
+#include <linux/hrtimer.h>
 #include <linux/wait.h>
 
 #include "funnel-queue.h"

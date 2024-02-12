@@ -35,6 +35,7 @@
 #include <asm/sections.h>
 #include <asm/boot_data.h>
 #include "entry.h"
+#include <linux/sprintf.h>
 
 #define IPL_PARM_BLOCK_VERSION 0
 

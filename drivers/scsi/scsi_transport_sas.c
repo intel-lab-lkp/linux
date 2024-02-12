@@ -28,6 +28,7 @@
 #include <linux/jiffies.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/blkdev.h>
 #include <linux/bsg.h>

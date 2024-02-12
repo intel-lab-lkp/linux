@@ -10,6 +10,7 @@
 //
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <sound/soc.h>
 #include <linux/bitops.h>
 

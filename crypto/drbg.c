@@ -101,6 +101,7 @@
 #include <crypto/internal/cipher.h>
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
+#include <linux/sprintf.h>
 
 /***************************************************************
  * Backend cipher definitions available to DRBG

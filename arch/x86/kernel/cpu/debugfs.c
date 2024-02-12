@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/debugfs.h>
+#include <linux/sprintf.h>
 
 #include <asm/apic.h>
 #include <asm/processor.h>

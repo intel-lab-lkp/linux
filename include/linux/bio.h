@@ -8,6 +8,7 @@
 #include <linux/mempool.h>
 /* struct bio, bio_vec and BIO_* flags are defined in blk_types.h */
 #include <linux/blk_types.h>
+#include <linux/bvec.h>
 #include <linux/uio.h>
 
 #define BIO_MAX_VECS		256U

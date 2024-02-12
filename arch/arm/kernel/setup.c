@@ -7,6 +7,7 @@
 #include <linux/efi.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>

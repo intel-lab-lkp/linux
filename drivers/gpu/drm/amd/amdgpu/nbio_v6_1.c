@@ -23,6 +23,7 @@
 #include "amdgpu.h"
 #include "amdgpu_atombios.h"
 #include "nbio_v6_1.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include "nbio/nbio_6_1_default.h"
 #include "nbio/nbio_6_1_offset.h"

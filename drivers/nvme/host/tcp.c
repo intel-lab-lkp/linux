@@ -11,6 +11,7 @@
 #include <linux/key.h>
 #include <linux/nvme-tcp.h>
 #include <linux/nvme-keyring.h>
+#include <linux/sprintf.h>
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/tls.h>
@@ -18,6 +19,7 @@
 #include <net/handshake.h>
 #include <linux/blk-mq.h>
 #include <crypto/hash.h>
+#include <linux/completion.h>
 #include <net/busy_poll.h>
 #include <trace/events/sock.h>
 

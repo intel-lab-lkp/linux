@@ -36,16 +36,19 @@
  */
 
 #include <linux/blkdev.h>
+#include <linux/kstrtox.h>
 #include <linux/kthread.h>
 #include <linux/raid/pq.h>
 #include <linux/async_tx.h>
 #include <linux/module.h>
 #include <linux/async.h>
 #include <linux/seq_file.h>
+#include <linux/shrinker.h>
 #include <linux/cpu.h>
 #include <linux/slab.h>
 #include <linux/ratelimit.h>
 #include <linux/nodemask.h>
+#include <linux/sprintf.h>
 
 #include <trace/events/block.h>
 #include <linux/list_sort.h>

@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/rtc.h>
+#include <linux/sprintf.h>
 
 #define RV3028_SEC			0x00
 #define RV3028_MIN			0x01

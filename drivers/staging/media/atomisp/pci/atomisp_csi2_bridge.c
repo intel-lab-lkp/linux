@@ -11,9 +11,12 @@
 
 #include <linux/acpi.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dmi.h>
+#include <linux/kstrtox.h>
 #include <linux/property.h>
+#include <linux/sprintf.h>
 
 #include <media/ipu-bridge.h>
 #include <media/v4l2-fwnode.h>

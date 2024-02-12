@@ -26,6 +26,7 @@
 #include <linux/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/adb.h>
+#include <linux/completion.h>
 #include <linux/cuda.h>
 #include <linux/pmu.h>
 #include <linux/notifier.h>

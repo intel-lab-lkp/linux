@@ -17,6 +17,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sprintf.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-event.h>
 #include <media/videobuf2-dma-sg.h>

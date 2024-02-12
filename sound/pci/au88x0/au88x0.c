@@ -22,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
+#include <linux/sprintf.h>
 #include <sound/initval.h>
 
 // module parameters (see "Module Parameters")

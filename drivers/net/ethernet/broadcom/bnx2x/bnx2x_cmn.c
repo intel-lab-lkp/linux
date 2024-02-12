@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/ip.h>
 #include <linux/crash_dump.h>
+#include <linux/sprintf.h>
 #include <net/tcp.h>
 #include <net/gro.h>
 #include <net/ipv6.h>

@@ -12,11 +12,15 @@
 
 #define pr_fmt(fmt) "watchdog: " fmt
 
+#include <linux/completion.h>
 #include <linux/cpu.h>
+#include <linux/hrtimer.h>
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/irqdesc.h>
+#include <linux/kernel.h> // for get_option()
 #include <linux/kernel_stat.h>
+#include <linux/kstrtox.h>
 #include <linux/kvm_para.h>
 #include <linux/math64.h>
 #include <linux/mm.h>

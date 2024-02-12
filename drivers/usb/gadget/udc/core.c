@@ -16,7 +16,9 @@
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
 #include <linux/sched/task_stack.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
+#include <linux/completion.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>

@@ -7,6 +7,7 @@
 //
 
 #include <linux/firmware.h>
+#include <linux/sprintf.h>
 #include <linux/uuid.h>
 #include <sound/soc.h>
 #include <sound/soc-acpi.h>

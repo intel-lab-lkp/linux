@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/gfp.h>
 #include <linux/irqdomain.h>
+#include <linux/sprintf.h>
 
 #include <asm/iommu.h>
 #include <asm/machdep.h>

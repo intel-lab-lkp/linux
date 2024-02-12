@@ -36,6 +36,7 @@
 #include <linux/errno.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
+#include <linux/sprintf.h>
 
 #include <asm/mach-au1x00/au1000.h>
 #include <asm/mach-au1x00/au1000_dma.h>

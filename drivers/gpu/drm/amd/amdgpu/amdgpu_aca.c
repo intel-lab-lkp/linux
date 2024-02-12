@@ -25,6 +25,7 @@
 #include "amdgpu.h"
 #include "amdgpu_aca.h"
 #include "amdgpu_ras.h"
+#include <linux/sprintf.h>
 
 #define ACA_BANK_HWID(type, hwid, mcatype) [ACA_HWIP_TYPE_##type] = {hwid, mcatype}
 

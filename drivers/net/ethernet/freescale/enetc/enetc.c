@@ -3,6 +3,8 @@
 
 #include "enetc.h"
 #include <linux/bpf_trace.h>
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
+#include <linux/sprintf.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/vmalloc.h>

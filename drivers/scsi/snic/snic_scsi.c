@@ -15,6 +15,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_dbg.h>
+#include <linux/completion.h>
 
 #include "snic_io.h"
 #include "snic.h"

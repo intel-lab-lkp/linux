@@ -17,6 +17,7 @@
 #include <linux/input.h>
 #include <linux/serio.h>
 #include <asm/unaligned.h>
+#include <linux/sprintf.h>
 
 #define DRIVER_DESC	"SpaceTec SpaceBall 2003/3003/4000 FLX driver"
 

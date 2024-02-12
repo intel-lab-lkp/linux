@@ -18,6 +18,7 @@
 #include "usbhid/usbhid.h"
 #include "hid-ids.h"
 #include <linux/ctype.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <asm/unaligned.h>
 

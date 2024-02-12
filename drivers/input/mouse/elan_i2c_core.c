@@ -16,6 +16,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
@@ -29,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/input.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/jiffies.h>
 #include <linux/completion.h>

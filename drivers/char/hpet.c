@@ -10,6 +10,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/miscdevice.h>
 #include <linux/major.h>

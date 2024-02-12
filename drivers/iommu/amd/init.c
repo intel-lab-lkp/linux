@@ -13,6 +13,7 @@
 #include <linux/list.h>
 #include <linux/bitmap.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/syscore_ops.h>
 #include <linux/interrupt.h>
 #include <linux/msi.h>

@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/workqueue.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>

@@ -17,6 +17,7 @@
 #include <linux/remoteproc.h>
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
+#include <linux/completion.h>
 
 #define Q6V5_LOAD_STATE_MSG_LEN	64
 #define Q6V5_PANIC_DELAY_MS	200

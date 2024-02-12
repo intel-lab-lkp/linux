@@ -5,11 +5,13 @@
  */
 
 #include <linux/delay.h>
+#include <linux/kstrtox.h>
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/reboot.h>
+#include <linux/sprintf.h>
 #include <linux/stat.h>
 #include <linux/vexpress.h>
 

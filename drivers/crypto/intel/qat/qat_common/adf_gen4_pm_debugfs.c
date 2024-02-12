@@ -2,6 +2,7 @@
 /* Copyright(c) 2023 Intel Corporation */
 #include <linux/dma-mapping.h>
 #include <linux/kernel.h>
+#include <linux/sprintf.h>
 #include <linux/string_helpers.h>
 #include <linux/stringify.h>
 

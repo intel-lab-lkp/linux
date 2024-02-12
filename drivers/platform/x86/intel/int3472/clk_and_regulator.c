@@ -9,6 +9,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/driver.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 
 #include "common.h"
 

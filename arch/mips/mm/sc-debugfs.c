@@ -6,6 +6,7 @@
 
 #include <asm/bcache.h>
 #include <asm/debug.h>
+#include <linux/kstrtox.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <linux/init.h>

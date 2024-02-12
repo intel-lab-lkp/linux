@@ -10,6 +10,7 @@
 #include "../include/gaudi/asic_reg/gaudi_regs.h"
 #include "../include/gaudi/gaudi_masks.h"
 #include "../include/gaudi/gaudi_reg_map.h"
+#include <linux/kernel.h> // for upper_32_bits(), lower_32_bits()
 
 #include <uapi/drm/habanalabs_accel.h>
 

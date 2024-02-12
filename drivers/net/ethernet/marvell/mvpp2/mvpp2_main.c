@@ -32,6 +32,7 @@
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #include <linux/regmap.h>
+#include <linux/sprintf.h>
 #include <uapi/linux/ppp_defs.h>
 #include <net/ip.h>
 #include <net/ipv6.h>

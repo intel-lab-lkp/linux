@@ -18,6 +18,7 @@
 #include <linux/printk.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <media/v4l2-device.h>
 

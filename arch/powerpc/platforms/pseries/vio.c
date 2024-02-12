@@ -23,7 +23,10 @@
 #include <linux/dma-map-ops.h>
 #include <linux/kobject.h>
 #include <linux/kexec.h>
+#include <linux/kref.h>
+#include <linux/kstrtox.h>
 #include <linux/of_irq.h>
+#include <linux/sprintf.h>
 
 #include <asm/iommu.h>
 #include <asm/dma.h>

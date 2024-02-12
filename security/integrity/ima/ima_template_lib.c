@@ -10,6 +10,7 @@
  */
 
 #include "ima_template_lib.h"
+#include <linux/sprintf.h>
 #include <linux/xattr.h>
 #include <linux/evm.h>
 

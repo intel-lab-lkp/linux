@@ -12,6 +12,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/errno.h>
+#include <linux/sprintf.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/sched.h>

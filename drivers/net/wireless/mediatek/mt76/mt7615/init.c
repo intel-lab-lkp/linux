@@ -14,6 +14,7 @@
 #include "mac.h"
 #include "mcu.h"
 #include "eeprom.h"
+#include <linux/sprintf.h>
 
 static ssize_t mt7615_thermal_show_temp(struct device *dev,
 					struct device_attribute *attr,

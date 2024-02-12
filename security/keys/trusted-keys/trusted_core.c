@@ -13,8 +13,10 @@
 #include <keys/trusted_tpm.h>
 #include <linux/capability.h>
 #include <linux/err.h>
+#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/key-type.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/parser.h>
 #include <linux/random.h>

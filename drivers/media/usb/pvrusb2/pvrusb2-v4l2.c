@@ -13,6 +13,7 @@
 #include "pvrusb2-debug.h"
 #include "pvrusb2-v4l2.h"
 #include "pvrusb2-ioread.h"
+#include <linux/sprintf.h>
 #include <linux/videodev2.h>
 #include <linux/module.h>
 #include <media/v4l2-dev.h>

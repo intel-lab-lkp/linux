@@ -16,6 +16,8 @@
 #include <linux/gfp.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 #include <crypto/ctr.h>
 #include <crypto/internal/des.h>

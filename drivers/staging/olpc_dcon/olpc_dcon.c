@@ -14,12 +14,14 @@
 #include <linux/fb.h>
 #include <linux/console.h>
 #include <linux/i2c.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/backlight.h>
 #include <linux/device.h>
+#include <linux/sprintf.h>
 #include <linux/uaccess.h>
 #include <linux/ctype.h>
 #include <linux/panic_notifier.h>

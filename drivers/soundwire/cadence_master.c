@@ -16,11 +16,13 @@
 #include <linux/pm_runtime.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw.h>
+#include <linux/sprintf.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <linux/workqueue.h>
 #include "bus.h"
 #include "cadence_master.h"
+#include <linux/completion.h>
 
 static int interrupt_mask;
 module_param_named(cnds_mcp_int_mask, interrupt_mask, int, 0444);

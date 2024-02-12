@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/sprintf.h>
 #include <sound/core.h>
 #include <sound/jack.h>
 #include <sound/asoundef.h>

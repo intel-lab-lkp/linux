@@ -4,6 +4,7 @@
 #include "mt7603.h"
 #include "mcu.h"
 #include "eeprom.h"
+#include <linux/sprintf.h>
 
 #define MCU_SKB_RESERVE	8
 

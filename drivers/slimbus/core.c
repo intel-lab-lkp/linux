@@ -13,6 +13,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/slimbus.h>
 #include "slimbus.h"
+#include <linux/completion.h>
+#include <linux/sprintf.h>
 
 static DEFINE_IDA(ctrl_ida);
 
