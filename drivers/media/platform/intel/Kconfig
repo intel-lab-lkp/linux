@@ -12,3 +12,15 @@ config VIDEO_PXA27x
 	select V4L2_FWNODE
 	help
 	  This is a v4l2 driver for the PXA27x Quick Capture Interface
+
+config VIDEO_INTEL_DPRX
+	tristate "Intel DisplayPort RX IP driver"
+	depends on V4L_PLATFORM_DRIVERS
+	depends on VIDEO_DEV
+	select V4L2_FWNODE
+	select CRC_DP
+	help
+	  v4l2 subdev driver for Intel Displayport receiver FPGA IP.
+	  It is a part of the DisplayPort Intel FPGA IP Core.
+	  It implements a DisplayPort 1.4 receiver capable of HBR3
+	  video capture and Multi-Stream Transport.
