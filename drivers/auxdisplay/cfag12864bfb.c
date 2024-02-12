@@ -16,7 +16,8 @@
 #include <linux/fb.h>
 #include <linux/mm.h>
 #include <linux/platform_device.h>
-#include <linux/cfag12864b.h>
+
+#include "cfag12864b.h"
 
 #define CFAG12864BFB_NAME "cfag12864bfb"
 

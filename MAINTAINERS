@@ -3382,7 +3382,6 @@ S:	Odd Fixes
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/andy/linux-auxdisplay.git
 F:	Documentation/devicetree/bindings/auxdisplay/
 F:	drivers/auxdisplay/
-F:	include/linux/cfag12864b.h
 
 AVIA HX711 ANALOG DIGITAL CONVERTER IIO DRIVER
 M:	Andreas Klinger <ak@it-klinger.de>
@@ -4868,13 +4867,11 @@ CFAG12864B LCD DRIVER
 M:	Miguel Ojeda <ojeda@kernel.org>
 S:	Maintained
 F:	drivers/auxdisplay/cfag12864b.c
-F:	include/linux/cfag12864b.h
 
 CFAG12864BFB LCD FRAMEBUFFER DRIVER
 M:	Miguel Ojeda <ojeda@kernel.org>
 S:	Maintained
 F:	drivers/auxdisplay/cfag12864bfb.c
-F:	include/linux/cfag12864b.h
 
 CHAR and MISC DRIVERS
 M:	Arnd Bergmann <arnd@arndb.de>
