@@ -40,7 +40,7 @@ static inline time64_t rtc_tm_sub(struct rtc_time *lhs, struct rtc_time *rhs)
 #include <linux/poll.h>
 #include <linux/mutex.h>
 #include <linux/timerqueue.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 extern struct class *rtc_class;
 

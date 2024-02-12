@@ -6,7 +6,7 @@
 #ifndef __LINUX_USB_OTG_FSM_H
 #define __LINUX_USB_OTG_FSM_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/errno.h>
 
 #define PROTO_UNDEF	(0)

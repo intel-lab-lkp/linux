@@ -11,7 +11,7 @@
 #define _COMEDIDEV_H
 
 #include <linux/dma-mapping.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/spinlock_types.h>
 #include <linux/rwsem.h>
 #include <linux/kref.h>

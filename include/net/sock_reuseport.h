@@ -5,7 +5,7 @@
 #include <linux/filter.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <net/sock.h>
 
 extern spinlock_t reuseport_lock;

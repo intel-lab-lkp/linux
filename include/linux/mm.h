@@ -8,7 +8,7 @@
 #include <linux/bug.h>
 #include <linux/list.h>
 #include <linux/mmzone.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/atomic.h>
 #include <linux/debug_locks.h>
 #include <linux/mm_types.h>

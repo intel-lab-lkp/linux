@@ -7,7 +7,7 @@
 
 #include <linux/auxiliary_bus.h>
 #include <linux/list.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/types.h>
 
 #define LJCA_MAX_GPIO_NUM 64

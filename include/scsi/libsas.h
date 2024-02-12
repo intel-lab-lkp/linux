@@ -10,7 +10,7 @@
 #define _LIBSAS_H_
 
 
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/pci.h>
 #include <scsi/sas.h>
 #include <linux/libata.h>

@@ -12,7 +12,7 @@
 #ifndef __PKTCDVD_H
 #define __PKTCDVD_H
 
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 #include <linux/cdrom.h>
 #include <linux/mempool.h>
 #include <uapi/linux/pktcdvd.h>

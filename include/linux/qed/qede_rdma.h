@@ -10,7 +10,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct qedr_dev;
 struct qed_dev;

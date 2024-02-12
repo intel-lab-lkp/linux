@@ -13,9 +13,9 @@
 #define __LINUX_POWER_SUPPLY_H__
 
 #include <linux/device.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/leds.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/notifier.h>
 
 /*

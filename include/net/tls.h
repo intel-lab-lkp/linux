@@ -39,7 +39,7 @@
 #include <linux/crypto.h>
 #include <linux/socket.h>
 #include <linux/tcp.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/netdevice.h>
 #include <linux/rcupdate.h>
 

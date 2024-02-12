@@ -6,7 +6,7 @@
 #ifndef _I915_PXP_TEE_INTERFACE_H_
 #define _I915_PXP_TEE_INTERFACE_H_
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/device.h>
 struct scatterlist;
 

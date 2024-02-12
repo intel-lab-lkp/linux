@@ -41,14 +41,14 @@ struct perf_guest_info_callbacks {
 #endif
 
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
-#include <linux/spinlock.h>
-#include <linux/hrtimer.h>
+#include <linux/spinlock_types.h>
+#include <linux/hrtimer_types.h>
 #include <linux/fs.h>
 #include <linux/pid_namespace.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/ftrace.h>
 #include <linux/cpu.h>
 #include <linux/irq_work.h>
@@ -58,7 +58,7 @@ struct perf_guest_info_callbacks {
 #include <linux/sysfs.h>
 #include <linux/perf_regs.h>
 #include <linux/cgroup.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/security.h>
 #include <linux/static_call.h>
 #include <linux/lockdep.h>

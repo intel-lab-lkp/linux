@@ -12,10 +12,10 @@
 #ifndef PADATA_H
 #define PADATA_H
 
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 #include <linux/compiler_types.h>
-#include <linux/workqueue.h>
-#include <linux/spinlock.h>
+#include <linux/workqueue_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/list.h>
 #include <linux/kobject.h>
 

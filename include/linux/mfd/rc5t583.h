@@ -12,7 +12,7 @@
 #ifndef __LINUX_MFD_RC5T583_H
 #define __LINUX_MFD_RC5T583_H
 
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/types.h>
 #include <linux/regmap.h>
 

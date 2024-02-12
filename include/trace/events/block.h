@@ -6,7 +6,7 @@
 #define _TRACE_BLOCK_H
 
 #include <linux/blktrace_api.h>
-#include <linux/blkdev.h>
+#include <linux/blk_types.h>
 #include <linux/buffer_head.h>
 #include <linux/tracepoint.h>
 

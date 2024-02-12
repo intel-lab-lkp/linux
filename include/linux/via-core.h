@@ -10,7 +10,7 @@
 #define __VIA_CORE_H__
 #include <linux/types.h>
 #include <linux/io.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/pci.h>
 
 /*

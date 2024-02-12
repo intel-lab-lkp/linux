@@ -10,7 +10,7 @@
 #include <linux/sunrpc/xprt.h>
 
 #include <linux/atomic.h>
-#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 struct nfs4_session;
 struct nfs_iostats;

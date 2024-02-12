@@ -54,7 +54,7 @@
 #include <linux/percpu.h>
 #include <linux/rcupdate.h>
 #include <linux/types.h>
-#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 
 struct percpu_ref;
 typedef void (percpu_ref_func_t)(struct percpu_ref *);

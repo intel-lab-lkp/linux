@@ -4,14 +4,14 @@
 
 #include <linux/list.h>
 #include <linux/radix-tree.h>
-#include <linux/rbtree.h>
-#include <linux/spinlock.h>
+#include <linux/rbtree_types.h>
+#include <linux/spinlock_types.h>
 #include <linux/percpu_counter.h>
 #include <linux/percpu-refcount.h>
 #include <linux/flex_proportions.h>
-#include <linux/timer.h>
+#include <linux/timer_types.h>
 #include <linux/wait.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/kref.h>
 
 #ifdef CONFIG_CGROUP_WRITEBACK

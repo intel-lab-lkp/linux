@@ -38,7 +38,7 @@
  * Generic range manager structs
  */
 #include <linux/bug.h>
-#include <linux/rbtree.h>
+#include <linux/rbtree_types.h>
 #include <linux/limits.h>
 #include <linux/mm_types.h>
 #include <linux/list.h>

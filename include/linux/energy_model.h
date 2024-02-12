@@ -3,7 +3,7 @@
 #define _LINUX_ENERGY_MODEL_H
 #include <linux/cpumask.h>
 #include <linux/jump_label.h>
-#include <linux/kref.h>
+#include <linux/kref_types.h>
 #include <linux/rcupdate.h>
 #include <linux/sched/cpufreq.h>
 #include <linux/sched/topology.h>

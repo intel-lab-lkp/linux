@@ -36,7 +36,7 @@
 #define REMOTEPROC_H
 
 #include <linux/types.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/virtio.h>
 #include <linux/cdev.h>
 #include <linux/idr.h>

@@ -3,7 +3,7 @@
 #ifndef __QCOM_APR_H_
 #define __QCOM_APR_H_
 
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
 #include <dt-bindings/soc/qcom,apr.h>

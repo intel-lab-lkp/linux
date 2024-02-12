@@ -3,7 +3,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/rhashtable-types.h>
-#include <linux/spinlock.h>
+#include <linux/spinlock_types.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/fib_notifier.h>

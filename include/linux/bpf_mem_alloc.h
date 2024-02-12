@@ -3,7 +3,7 @@
 #ifndef _BPF_MEM_ALLOC_H
 #define _BPF_MEM_ALLOC_H
 #include <linux/compiler_types.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 
 struct bpf_mem_cache;
 struct bpf_mem_caches;

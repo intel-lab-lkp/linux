@@ -7,7 +7,7 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/configfs.h>
-#include <linux/ratelimit.h>
+#include <linux/ratelimit_types.h>
 #include <linux/atomic.h>
 
 /*

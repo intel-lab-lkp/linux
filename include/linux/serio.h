@@ -10,7 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
 #include <uapi/linux/serio.h>

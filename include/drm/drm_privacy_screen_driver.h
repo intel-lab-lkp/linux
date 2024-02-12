@@ -11,7 +11,7 @@
 
 #include <linux/device.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
+#include <linux/mutex_types.h>
 #include <drm/drm_connector.h>
 
 struct drm_privacy_screen;

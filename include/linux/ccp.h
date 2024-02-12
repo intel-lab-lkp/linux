@@ -12,7 +12,7 @@
 #define __CCP_H__
 
 #include <linux/scatterlist.h>
-#include <linux/workqueue.h>
+#include <linux/workqueue_types.h>
 #include <linux/list.h>
 #include <crypto/aes.h>
 #include <crypto/sha1.h>

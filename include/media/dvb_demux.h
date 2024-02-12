@@ -20,8 +20,8 @@
 #define _DVB_DEMUX_H_
 
 #include <linux/time.h>
-#include <linux/spinlock.h>
-#include <linux/mutex.h>
+#include <linux/spinlock_types.h>
+#include <linux/mutex_types.h>
 
 #include <media/demux.h>
 

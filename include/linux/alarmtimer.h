@@ -3,7 +3,7 @@
 #define _LINUX_ALARMTIMER_H
 
 #include <linux/time.h>
-#include <linux/hrtimer.h>
+#include <linux/hrtimer_types.h>
 #include <linux/timerqueue.h>
 
 struct rtc_device;
