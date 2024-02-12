@@ -5,6 +5,7 @@
  */
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
+#include <linux/device.h>
 #include <linux/kstrtox.h>
 #include <linux/sprintf.h>
 

@@ -2,7 +2,7 @@
 #ifndef __LINUX_EXTCON_INTERNAL_H__
 #define __LINUX_EXTCON_INTERNAL_H__
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/extcon-provider.h>
 
 /**

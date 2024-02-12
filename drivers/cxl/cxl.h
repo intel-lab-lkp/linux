@@ -7,6 +7,7 @@
 #include <linux/libnvdimm.h>
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/device_types.h>
 #include <linux/device/driver.h>
 #include <linux/log2.h>
 #include <linux/node.h>

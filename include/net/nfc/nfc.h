@@ -12,7 +12,7 @@
 #define __NET_NFC_H
 
 #include <linux/nfc.h>
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/skbuff.h>
 
 #define nfc_dbg(dev, fmt, ...) dev_dbg((dev), "NFC: " fmt, ##__VA_ARGS__)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/clk-provider.h>
+#include <linux/device.h> // for devm_kzalloc()
 #include <linux/io.h>
 #include <linux/regulator/consumer.h>
 

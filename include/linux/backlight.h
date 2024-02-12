@@ -9,7 +9,7 @@
 #ifndef _LINUX_BACKLIGHT_H
 #define _LINUX_BACKLIGHT_H
 
-#include <linux/device.h>
+#include <linux/device_types.h>
 #include <linux/fb.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
