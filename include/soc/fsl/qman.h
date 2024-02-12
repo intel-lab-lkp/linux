@@ -33,6 +33,7 @@
 
 #include <linux/bitops.h>
 #include <linux/device.h>
+#include <linux/wordpart.h> // for upper_32_bits()
 
 /* Hardware constants */
 #define QM_CHANNEL_SWPORTAL0 0
