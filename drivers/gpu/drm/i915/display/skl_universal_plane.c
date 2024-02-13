@@ -11,6 +11,7 @@
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_atomic_plane.h"
+#include "intel_color.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
 #include "intel_display_types.h"
@@ -1274,6 +1275,8 @@ icl_plane_update_noarm(struct intel_plane *plane,
 	plane_color_ctl = plane_state->color_ctl |
 		glk_plane_color_ctl_crtc(crtc_state);
 
+	intel_program_pipeline(&plane_state->uapi, &plane_color_ctl);
+
 	/* The scaler will handle the output position */
 	if (plane_state->scaler_id >= 0) {
 		crtc_x = 0;
@@ -2427,6 +2430,8 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 						  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
 						  DRM_COLOR_YCBCR_BT709,
 						  DRM_COLOR_YCBCR_LIMITED_RANGE);
+	else
+		intel_plane_color_init(&plane->base);
 
 	drm_plane_create_alpha_property(&plane->base);
 	drm_plane_create_blend_mode_property(&plane->base,
