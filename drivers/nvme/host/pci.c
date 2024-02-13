@@ -2967,7 +2967,7 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 		dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(48));
 	else
 		dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	dma_set_min_align_mask(&pdev->dev, NVME_CTRL_PAGE_SIZE - 1);
+	dma_set_min_align_mask(&pdev->dev, PAGE_SIZE - 1);
 	dma_set_max_seg_size(&pdev->dev, 0xffffffff);
 
 	/*
