@@ -1045,6 +1045,9 @@ static resched_t resched_opt_translate(struct task_struct *curr,
 	if (!IS_ENABLED(CONFIG_PREEMPT_AUTO))
 		return NR_now;
 
+	if (is_idle_task(curr))
+		return NR_now;
+
 	return NR_lazy;
 }
 
