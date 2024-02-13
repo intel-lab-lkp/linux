@@ -84,6 +84,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_vsi_cfg_params *params);
 void ice_q_vector_set_napi_queues(struct ice_q_vector *q_vector, bool locked);
 
 void ice_vsi_set_napi_queues(struct ice_vsi *vsi, bool locked);
+void ice_napi_add(struct ice_vsi *vsi);
 
 int ice_vsi_release(struct ice_vsi *vsi);
 
