@@ -44,7 +44,7 @@ properties:
     minItems: 1
     maxItems: 2
 
-  qcom,dsb-element-size:
+  qcom,dsb-element-bits:
     description:
       Specifies the DSB(Discrete Single Bit) element size supported by
       the monitor. The associated aggregator will read this size before it
@@ -111,7 +111,7 @@ examples:
       compatible = "qcom,coresight-tpdm", "arm,primecell";
       reg = <0x0684c000 0x1000>;
 
-      qcom,dsb-element-size = /bits/ 8 <32>;
+      qcom,dsb-element-bits = <32>;
       qcom,dsb-msrs-num = <16>;
 
       clocks = <&aoss_qmp>;
