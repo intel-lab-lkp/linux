@@ -1035,8 +1035,9 @@ void wake_up_q(struct wake_q_head *head)
  * For preemption models other than PREEMPT_AUTO: always schedule
  * eagerly.
  *
- * For PREEMPT_AUTO: schedule idle threads eagerly, allow everything
- * else, whether running in user or kernel context, to finish its time
+ * For PREEMPT_AUTO: schedule idle threads eagerly, and under full
+ * preemption all tasks eagerly. Otherwise, allow everything else,
+ * whether running in user or kernel context, to finish its time
  * quanta, and mark for rescheduling at the next exit to user.
  *
  * Note: to avoid the hog problem, where the user does not relinquish
@@ -1050,6 +1051,9 @@ static resched_t resched_opt_translate(struct task_struct *curr,
 		return NR_now;
 
 	if (opt == RESCHED_FORCE)
+		return NR_now;
+
+	if (preempt_model_preemptible())
 		return NR_now;
 
 	if (is_idle_task(curr))
@@ -8982,7 +8986,9 @@ static void __sched_dynamic_update(int mode)
 			pr_warn("%s: preempt=full is not recommended with CONFIG_PREEMPT_RCU=n",
 				PREEMPT_MODE);
 
-		preempt_dynamic_mode = preempt_dynamic_undefined;
+		if (mode != preempt_dynamic_mode)
+			pr_info("%s: full\n", PREEMPT_MODE);
+		preempt_dynamic_mode = mode;
 		break;
 	}
 }
