@@ -11,13 +11,17 @@ config PREEMPT_BUILD
 	select PREEMPTION
 	select UNINLINE_SPIN_UNLOCK if !ARCH_INLINE_SPIN_UNLOCK
 
+config HAVE_PREEMPT_AUTO
+	bool
+
 choice
 	prompt "Preemption Model"
 	default PREEMPT_NONE
 
 config PREEMPT_NONE
 	bool "No Forced Preemption (Server)"
-	select PREEMPT_NONE_BUILD if !PREEMPT_DYNAMIC
+	select PREEMPT_NONE_BUILD if (!PREEMPT_DYNAMIC && !PREEMPT_AUTO)
+
 	help
 	  This is the traditional Linux preemption model, geared towards
 	  throughput. It will still provide good latencies most of the
@@ -32,7 +36,7 @@ config PREEMPT_NONE
 config PREEMPT_VOLUNTARY
 	bool "Voluntary Kernel Preemption (Desktop)"
 	depends on !ARCH_NO_PREEMPT
-	select PREEMPT_VOLUNTARY_BUILD if !PREEMPT_DYNAMIC
+	select PREEMPT_VOLUNTARY_BUILD if (!PREEMPT_DYNAMIC && !PREEMPT_AUTO)
 	help
 	  This option reduces the latency of the kernel by adding more
 	  "explicit preemption points" to the kernel code. These new
@@ -95,7 +99,7 @@ config PREEMPTION
 
 config PREEMPT_DYNAMIC
 	bool "Preemption behaviour defined on boot"
-	depends on HAVE_PREEMPT_DYNAMIC && !PREEMPT_RT
+	depends on HAVE_PREEMPT_DYNAMIC && !PREEMPT_RT && !PREEMPT_AUTO
 	select JUMP_LABEL if HAVE_PREEMPT_DYNAMIC_KEY
 	select PREEMPT_BUILD
 	default y if HAVE_PREEMPT_DYNAMIC_CALL
@@ -114,6 +118,33 @@ config PREEMPT_DYNAMIC
 
 	  Interesting if you want the same pre-built kernel should be used for
 	  both Server and Desktop workloads.
+
+config PREEMPT_AUTO
+	bool "Scheduler controlled preemption model"
+	depends on EXPERT && HAVE_PREEMPT_AUTO && !ARCH_NO_PREEMPT
+	select PREEMPT_BUILD
+	help
+	  This option allows to define the preemption model on the kernel
+	  command line parameter and thus override the default preemption
+	  model selected during compile time.
+
+	  However, note that the compile time choice of preemption model
+	  might impact other kernel options like the specific RCU model.
+
+	  This feature makes the latency of the kernel configurable by
+	  allowing the scheduler to choose when to preempt based on
+	  the preemption policy in effect. It does this without needing
+	  voluntary preemption points.
+
+	  With PREEMPT_NONE: the scheduler allows a task (executing in
+	  user or kernel context) to run to completion, at least until
+	  its current tick expires.
+
+	  With PREEMPT_VOLUNTARY: similar to PREEMPT_NONE, but the scheduler
+	  will also preempt for higher priority class of processes but not
+	  lower.
+
+	  With PREEMPT: the scheduler preempts at the earliest opportunity.
 
 config SCHED_CORE
 	bool "Core Scheduling for SMT"

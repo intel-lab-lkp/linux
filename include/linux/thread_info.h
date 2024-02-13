@@ -59,6 +59,14 @@ enum syscall_work_bit {
 
 #include <asm/thread_info.h>
 
+/*
+ * Fall back to the default behaviour if we don't have CONFIG_PREEMPT_AUTO.
+ */
+#ifndef CONFIG_PREEMPT_AUTO
+#define TIF_NEED_RESCHED_LAZY TIF_NEED_RESCHED
+#define _TIF_NEED_RESCHED_LAZY _TIF_NEED_RESCHED
+#endif
+
 #ifdef __KERNEL__
 
 #ifndef arch_set_restart_data
