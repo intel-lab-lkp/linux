@@ -24,6 +24,14 @@
  * @addr: MAC address used in flow control frames
  * @ops: Structure with hardware-dependent operations
  * @priv: Pointer to the configuration interface structure
+ * @pvid_storage: Storage table with PVID configured for other state of vlan_filtering.
+ *	It have two roles: Keep PVID when PVID is configured but vlan filtering is off
+ *	and keep PVID necessary for tag8021q operations when vlan filtering is enabled.
+ * @untagged_storage: Storage table with eggress untagged VLAN configured for
+ *	other state of vlan_filtering.Keep VID necessary for tag8021q operations when
+ *	vlan filtering is enabled.
+ * @vlans: List of configured vlans. Contain port mask and untagged status of every
+ *	vlan configured in port vlan operation. It doesn't cover tag8021q vlans.
  */
 struct vsc73xx {
 	struct device			*dev;
@@ -34,6 +42,9 @@ struct vsc73xx {
 	u8				addr[ETH_ALEN];
 	const struct vsc73xx_ops	*ops;
 	void				*priv;
+	u16				pvid_storage[VSC73XX_MAX_NUM_PORTS];
+	u16				untagged_storage[VSC73XX_MAX_NUM_PORTS];
+	struct list_head		vlans;
 };
 
 /**
@@ -46,6 +57,20 @@ struct vsc73xx_ops {
 		    u32 *val);
 	int (*write)(struct vsc73xx *vsc, u8 block, u8 subblock, u8 reg,
 		     u32 val);
+};
+
+/**
+ * struct vsc73xx_bridge_vlan - VSC73xx driver structure which keeps vlan database copy
+ * @vid: VLAN number
+ * @portmask: each bit represends one port
+ * @untagged: each bit represends one port configured with @vid untagged
+ * @list: list structure
+ */
+struct vsc73xx_bridge_vlan {
+	u16 vid;
+	u8 portmask;
+	u8 untagged;
+	struct list_head list;
 };
 
 int vsc73xx_is_addr_valid(u8 block, u8 subblock);
