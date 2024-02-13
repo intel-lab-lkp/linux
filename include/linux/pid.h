@@ -55,6 +55,10 @@ struct pid
 	refcount_t count;
 	unsigned int level;
 	spinlock_t lock;
+#ifdef CONFIG_FS_PIDFD
+	atomic_long_t stashed;
+	unsigned long ino;
+#endif
 	/* lists of tasks that use this pid */
 	struct hlist_head tasks[PIDTYPE_MAX];
 	struct hlist_head inodes;

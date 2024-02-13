@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/anon_inodes.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/magic.h>
 #include <linux/mount.h>
 #include <linux/pid.h>
+#include <linux/pidfdfs.h>
 #include <linux/pid_namespace.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
@@ -12,12 +14,25 @@
 #include <linux/seq_file.h>
 #include <uapi/linux/pidfd.h>
 
+struct pid *pidfd_pid(const struct file *file)
+{
+	if (file->f_op != &pidfd_fops)
+		return ERR_PTR(-EBADF);
+#ifdef CONFIG_FS_PIDFD
+	return file_inode(file)->i_private;
+#else
+	return file->private_data;
+#endif
+}
+
 static int pidfd_release(struct inode *inode, struct file *file)
 {
+#ifndef CONFIG_FS_PIDFD
 	struct pid *pid = file->private_data;
 
 	file->private_data = NULL;
 	put_pid(pid);
+#endif
 	return 0;
 }
 
@@ -59,7 +74,7 @@ static int pidfd_release(struct inode *inode, struct file *file)
  */
 static void pidfd_show_fdinfo(struct seq_file *m, struct file *f)
 {
-	struct pid *pid = f->private_data;
+	struct pid *pid = pidfd_pid(f);
 	struct pid_namespace *ns;
 	pid_t nr = -1;
 
@@ -93,7 +108,7 @@ static void pidfd_show_fdinfo(struct seq_file *m, struct file *f)
  */
 static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 {
-	struct pid *pid = file->private_data;
+	struct pid *pid = pidfd_pid(file);
 	bool thread = file->f_flags & PIDFD_THREAD;
 	struct task_struct *task;
 	__poll_t poll_flags = 0;
@@ -121,3 +136,173 @@ const struct file_operations pidfd_fops = {
 	.show_fdinfo	= pidfd_show_fdinfo,
 #endif
 };
+
+#ifdef CONFIG_FS_PIDFD
+static struct vfsmount *pidfdfs_mnt __ro_after_init;
+static struct super_block *pidfdfs_sb __ro_after_init;
+static u64 pidfdfs_ino = 0;
+
+static void pidfdfs_evict_inode(struct inode *inode)
+{
+	struct pid *pid = inode->i_private;
+
+	clear_inode(inode);
+	put_pid(pid);
+}
+
+static const struct super_operations pidfdfs_sops = {
+	.statfs		= simple_statfs,
+	.evict_inode	= pidfdfs_evict_inode,
+};
+
+static void pidfdfs_prune_dentry(struct dentry *dentry)
+{
+	struct inode *inode;
+	struct pid *pid;
+
+	inode = d_inode(dentry);
+	if (!inode)
+		return;
+
+	pid = inode->i_private;
+	atomic_long_set(&pid->stashed, 0);
+}
+
+static char *pidfdfs_dname(struct dentry *dentry, char *buffer, int buflen)
+{
+	return dynamic_dname(buffer, buflen, "pidfd:[%lu]",
+			     d_inode(dentry)->i_ino);
+}
+
+const struct dentry_operations pidfdfs_dentry_operations = {
+	.d_prune	= pidfdfs_prune_dentry,
+	.d_delete	= always_delete_dentry,
+	.d_dname	= pidfdfs_dname,
+};
+
+static int pidfdfs_init_fs_context(struct fs_context *fc)
+{
+	struct pseudo_fs_context *ctx;
+
+	ctx = init_pseudo(fc, PIDFDFS_MAGIC);
+	if (!ctx)
+		return -ENOMEM;
+
+	ctx->ops = &pidfdfs_sops;
+	ctx->dops = &pidfdfs_dentry_operations;
+	return 0;
+}
+
+static struct file_system_type pidfdfs_type = {
+	.name			= "pidfdfs",
+	.init_fs_context	= pidfdfs_init_fs_context,
+	.kill_sb		= kill_anon_super,
+};
+
+static struct dentry *pidfdfs_dentry(struct pid *pid)
+{
+	struct inode *inode;
+	struct dentry *dentry;
+	unsigned long i_ptr;
+
+	inode = new_inode_pseudo(pidfdfs_sb);
+	if (!inode)
+		return ERR_PTR(-ENOMEM);
+
+	inode->i_ino	= pid->ino;
+	inode->i_mode	= S_IFREG | S_IRUGO;
+	inode->i_fop	= &pidfd_fops;
+	inode->i_flags |= S_IMMUTABLE;
+	simple_inode_init_ts(inode);
+	/* grab a reference */
+	inode->i_private = get_pid(pid);
+
+	/* consumes @inode */
+	dentry = d_make_root(inode);
+	if (!dentry)
+		return ERR_PTR(-ENOMEM);
+
+	i_ptr = atomic_long_cmpxchg(&pid->stashed, 0, (unsigned long)dentry);
+	if (i_ptr) {
+		d_delete(dentry); /* make sure ->d_prune() does nothing */
+		dput(dentry);
+		cpu_relax();
+		return ERR_PTR(-EAGAIN);
+	}
+
+	return dentry;
+}
+
+struct file *pidfdfs_alloc_file(struct pid *pid, unsigned int flags)
+{
+
+	struct path path;
+	struct dentry *dentry;
+	struct file *pidfd_file;
+
+	for (;;) {
+		rcu_read_lock();
+		dentry = (struct dentry *)atomic_long_read(&pid->stashed);
+		if (!dentry || !lockref_get_not_dead(&dentry->d_lockref)) {
+			rcu_read_unlock();
+
+			dentry = pidfdfs_dentry(pid);
+			if (!IS_ERR(dentry))
+				break;
+			if (PTR_ERR(dentry) == -EAGAIN)
+				continue;
+		}
+		rcu_read_unlock();
+		break;
+	}
+	if (IS_ERR(dentry))
+		return ERR_CAST(dentry);
+
+	path.mnt = mntget(pidfdfs_mnt);
+	path.dentry = dentry;
+
+	pidfd_file = dentry_open(&path, flags, current_cred());
+	path_put(&path);
+
+	return pidfd_file;
+}
+
+void pid_init_pidfdfs(struct pid *pid)
+{
+	atomic_long_set(&pid->stashed, 0);
+	pid->ino = ++pidfdfs_ino;
+}
+
+void __init pidfdfs_init(void)
+{
+	int err;
+
+	err = register_filesystem(&pidfdfs_type);
+	if (err)
+		panic("Failed to register pidfdfs pseudo filesystem");
+
+	pidfdfs_mnt = kern_mount(&pidfdfs_type);
+	if (IS_ERR(pidfdfs_mnt))
+		panic("Failed to mount pidfdfs pseudo filesystem");
+
+	pidfdfs_sb = pidfdfs_mnt->mnt_sb;
+}
+
+#else /* !CONFIG_FS_PIDFD */
+
+struct file *pidfdfs_alloc_file(struct pid *pid, unsigned int flags)
+{
+	struct file *pidfd_file;
+
+	pidfd_file = anon_inode_getfile("[pidfd]", &pidfd_fops, pid,
+					flags | O_RDWR);
+	if (IS_ERR(pidfd_file))
+		return pidfd_file;
+
+	get_pid(pid);
+	return pidfd_file;
+}
+
+void pid_init_pidfdfs(struct pid *pid) { }
+void __init pidfdfs_init(void) { }
+#endif

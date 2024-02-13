@@ -42,6 +42,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/idr.h>
+#include <linux/pidfdfs.h>
 #include <net/sock.h>
 #include <uapi/linux/pidfd.h>
 
@@ -270,6 +271,7 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 
 	upid = pid->numbers + ns->level;
 	spin_lock_irq(&pidmap_lock);
+	pid_init_pidfdfs(pid);
 	if (!(ns->pid_allocated & PIDNS_ADDING))
 		goto out_unlock;
 	for ( ; upid >= pid->numbers; --upid) {
