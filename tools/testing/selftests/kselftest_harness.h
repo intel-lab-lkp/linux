@@ -142,6 +142,33 @@
 } while (0)
 
 /**
+ * XFAIL()
+ *
+ * @statement: statement to run after reporting XFAIL
+ * @fmt: format string
+ * @...: optional arguments
+ *
+ * .. code-block:: c
+ *
+ *     XFAIL(statement, fmt, ...);
+ *
+ * This forces a "pass" after reporting why something is expected to fail,
+ * and runs "statement", which is usually "return" or "goto skip".
+ */
+#define XFAIL(statement, fmt, ...) do { \
+	snprintf(_metadata->results->reason, \
+		 sizeof(_metadata->results->reason), fmt, ##__VA_ARGS__); \
+	if (TH_LOG_ENABLED) { \
+		fprintf(TH_LOG_STREAM, "#      XFAIL      %s\n", \
+			_metadata->results->reason); \
+	} \
+	_metadata->passed = 1; \
+	_metadata->xfail = 1; \
+	_metadata->trigger = 0; \
+	statement; \
+} while (0)
+
+/**
  * TEST() - Defines the test function and creates the registration
  * stub
  *
@@ -834,6 +861,7 @@ struct __test_metadata {
 	int termsig;
 	int passed;
 	int skip;	/* did SKIP get used? */
+	int xfail;	/* did XFAIL get used? */
 	int trigger; /* extra handler after the evaluation */
 	int timeout;	/* seconds to wait for test timeout */
 	bool timed_out;	/* did this test timeout instead of exiting? */
@@ -941,6 +969,9 @@ void __wait_for_test(struct __test_metadata *t)
 			/* SKIP */
 			t->passed = 1;
 			t->skip = 1;
+		} else if (WEXITSTATUS(status) == KSFT_XFAIL) {
+			t->passed = 1;
+			t->xfail = 1;
 		} else if (t->termsig != -1) {
 			t->passed = 0;
 			fprintf(TH_LOG_STREAM,
@@ -1112,6 +1143,7 @@ void __run_test(struct __fixture_metadata *f,
 	/* reset test struct */
 	t->passed = 1;
 	t->skip = 0;
+	t->xfail = 0;
 	t->trigger = 0;
 	t->no_print = 0;
 	memset(t->results->reason, 0, sizeof(t->results->reason));
@@ -1133,6 +1165,8 @@ void __run_test(struct __fixture_metadata *f,
 		t->fn(t, variant);
 		if (t->skip)
 			_exit(KSFT_SKIP);
+		if (t->xfail)
+			_exit(KSFT_XFAIL);
 		if (t->passed)
 			_exit(KSFT_PASS);
 		/* Something else happened. */
@@ -1146,6 +1180,9 @@ void __run_test(struct __fixture_metadata *f,
 	if (t->skip)
 		ksft_test_result_skip("%s\n", t->results->reason[0] ?
 					t->results->reason : "unknown");
+	else if (t->xfail)
+		ksft_test_result_xfail("%s\n", t->results->reason[0] ?
+				       t->results->reason : "unknown");
 	else
 		ksft_test_result(t->passed, "%s%s%s.%s\n",
 			f->name, variant->name[0] ? "." : "", variant->name, t->name);
