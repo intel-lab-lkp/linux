@@ -8922,6 +8922,10 @@ static void __sched_dynamic_update(int mode)
 		break;
 
 	case preempt_dynamic_full:
+		if (!IS_ENABLED(CONFIG_PREEMPT_RCU))
+			pr_warn("%s: preempt=full is not recommended with CONFIG_PREEMPT_RCU=n",
+				PREEMPT_MODE);
+
 		preempt_dynamic_mode = preempt_dynamic_undefined;
 		break;
 	}
