@@ -755,6 +755,114 @@ static int aqr107_probe(struct phy_device *phydev)
 	return aqr_hwmon_probe(phydev);
 }
 
+static int aqr112_setup_interface_protocols(struct phy_device *phydev)
+{
+	phy_interface_t iface = phydev->interface;
+	u16 startup_rate, global_cfg_val;
+	int i, ret;
+
+	/* Default global cfg are taken from Aquantia UBoot Source and various
+	 * source and all makes use of the following reference values.
+	 */
+	switch (iface) {
+	case PHY_INTERFACE_MODE_SGMII:
+		startup_rate = VEND1_GLOBAL_STARTUP_RATE_1G;
+		global_cfg_val = FIELD_PREP(VEND1_GLOBAL_CFG_SERDES_MODE,
+					    VEND1_GLOBAL_CFG_SERDES_MODE_SGMII) |
+				 VEND1_GLOBAL_CFG_AUTONEG_EN |
+				 VEND1_GLOBAL_CFG_SERDES_SILENCE_EN;
+		break;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		startup_rate = VEND1_GLOBAL_STARTUP_RATE_2_5G;
+		global_cfg_val = FIELD_PREP(VEND1_GLOBAL_CFG_SERDES_MODE,
+					    VEND1_GLOBAL_CFG_SERDES_MODE_OCSGMII) |
+				 VEND1_GLOBAL_CFG_SERDES_SILENCE_EN |
+				 FIELD_PREP(VEND1_GLOBAL_CFG_RATE_ADAPT,
+					    VEND1_GLOBAL_CFG_RATE_ADAPT_PAUSE);
+		break;
+	case PHY_INTERFACE_MODE_5GBASER:
+		startup_rate = VEND1_GLOBAL_STARTUP_RATE_5G;
+		global_cfg_val = FIELD_PREP(VEND1_GLOBAL_CFG_SERDES_MODE,
+					    VEND1_GLOBAL_CFG_SERDES_MODE_XFI5G) |
+				 FIELD_PREP(VEND1_GLOBAL_CFG_RATE_ADAPT,
+					    VEND1_GLOBAL_CFG_RATE_ADAPT_PAUSE);
+		break;
+	case PHY_INTERFACE_MODE_10GBASER:
+	case PHY_INTERFACE_MODE_USXGMII:
+		startup_rate = VEND1_GLOBAL_STARTUP_RATE_10G;
+		global_cfg_val = FIELD_PREP(VEND1_GLOBAL_CFG_SERDES_MODE,
+					    VEND1_GLOBAL_CFG_SERDES_MODE_XFI);
+		if (iface == PHY_INTERFACE_MODE_USXGMII)
+			global_cfg_val |= FIELD_PREP(VEND1_GLOBAL_CFG_RATE_ADAPT,
+						    VEND1_GLOBAL_CFG_RATE_ADAPT_USX);
+		else
+			global_cfg_val |= FIELD_PREP(VEND1_GLOBAL_CFG_RATE_ADAPT,
+						    VEND1_GLOBAL_CFG_RATE_ADAPT_PAUSE);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* set PHY in low power mode so we can configure protocols */
+	ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_SC,
+			       VEND1_GLOBAL_SC_LOW_POWER);
+	if (ret)
+		return ret;
+
+	/* Some dalay is needed to put the chip in low-power */
+	mdelay(10);
+
+	/* Setup the SERDES interface link startup rate */
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_STARTUP_RATE,
+			    FIELD_PREP(VEND1_GLOBAL_STARTUP_RATE_MASK, startup_rate));
+	if (ret)
+		return ret;
+
+	/* Walk the media-speed configuration registers to setup host-side
+	 * serdes modes that may be used by the PHY depending on the
+	 * negotiated media speed.
+	 */
+	for (i = 0; i < ARRAY_SIZE(aqr_global_cfg_regs); i++) {
+		u16 reg = aqr_global_cfg_regs[i];
+		int val;
+
+		val = phy_read_mmd(phydev, MDIO_MMD_VEND1, reg);
+		if (val < 0)
+			return val;
+
+		/* If global_cfg is 0, rate is not supported by FW */
+		if (!val)
+			continue;
+
+		ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, reg,
+				    global_cfg_val);
+		if (ret)
+			return ret;
+	}
+
+	/* set PHY out of low power mode */
+	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_SC,
+				 VEND1_GLOBAL_SC_LOW_POWER);
+	if (ret)
+		return ret;
+
+	/* Some dalay is needed to put the chip out of low-power */
+	mdelay(10);
+
+	return 0;
+}
+
+static int aqr112_config_init(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = aqr112_setup_interface_protocols(phydev);
+	if (ret)
+		return ret;
+
+	return aqr107_fill_interface_modes(phydev);
+}
+
 static struct phy_driver aqr_driver[] = {
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQ1202),
@@ -840,6 +948,7 @@ static struct phy_driver aqr_driver[] = {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR112),
 	.name		= "Aquantia AQR112",
 	.probe		= aqr107_probe,
+	.config_init	= aqr112_config_init,
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
@@ -858,6 +967,7 @@ static struct phy_driver aqr_driver[] = {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR412),
 	.name		= "Aquantia AQR412",
 	.probe		= aqr107_probe,
+	.config_init	= aqr112_config_init,
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
