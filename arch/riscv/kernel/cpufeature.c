@@ -113,23 +113,29 @@ static bool riscv_isa_extension_check(int id)
 	return true;
 }
 
-#define _RISCV_ISA_EXT_DATA(_name, _id, _subset_exts, _subset_exts_size) {	\
+#define _RISCV_ISA_EXT_DATA(_name, _id, _subset_exts, _subset_exts_size, _successor) {	\
 	.name = #_name,								\
 	.property = #_name,							\
 	.id = _id,								\
 	.subset_ext_ids = _subset_exts,						\
-	.subset_ext_size = _subset_exts_size					\
+	.subset_ext_size = _subset_exts_size,					\
+	.successor_id = _successor,						\
 }
 
-#define __RISCV_ISA_EXT_DATA(_name, _id) _RISCV_ISA_EXT_DATA(_name, _id, NULL, 0)
+#define __RISCV_ISA_EXT_DATA(_name, _id) \
+	_RISCV_ISA_EXT_DATA(_name, _id, NULL, 0, RISCV_ISA_EXT_INVALID)
 
 /* Used to declare pure "lasso" extension (Zk for instance) */
 #define __RISCV_ISA_EXT_BUNDLE(_name, _bundled_exts) \
-	_RISCV_ISA_EXT_DATA(_name, RISCV_ISA_EXT_INVALID, _bundled_exts, ARRAY_SIZE(_bundled_exts))
+	_RISCV_ISA_EXT_DATA(_name, RISCV_ISA_EXT_INVALID, \
+			    _bundled_exts, ARRAY_SIZE(_bundled_exts), RISCV_ISA_EXT_INVALID)
 
 /* Used to declare extensions that are a superset of other extensions (Zvbb for instance) */
 #define __RISCV_ISA_EXT_SUPERSET(_name, _id, _sub_exts) \
-	_RISCV_ISA_EXT_DATA(_name, _id, _sub_exts, ARRAY_SIZE(_sub_exts))
+	_RISCV_ISA_EXT_DATA(_name, _id, _sub_exts, ARRAY_SIZE(_sub_exts), RISCV_ISA_EXT_INVALID)
+
+#define __RISCV_ISA_EXT_VERSION(_name, _id, _preds, _preds_size, _successor) \
+	_RISCV_ISA_EXT_DATA(_name, _id, _preds, _preds_size, _successor)
 
 static const unsigned int riscv_zk_bundled_exts[] = {
 	RISCV_ISA_EXT_ZBKB,
@@ -199,6 +205,16 @@ static const unsigned int riscv_zvksg_bundled_exts[] = {
 
 static const unsigned int riscv_zvbb_exts[] = {
 	RISCV_ISA_EXT_ZVKB
+};
+
+static const unsigned int riscv_sm_ext_versions[] = {
+	RISCV_ISA_EXT_SM1p11,
+	RISCV_ISA_EXT_SM1p12,
+};
+
+static const unsigned int riscv_ss_ext_versions[] = {
+	RISCV_ISA_EXT_SS1p11,
+	RISCV_ISA_EXT_SS1p12,
 };
 
 /*
@@ -299,8 +315,16 @@ const struct riscv_isa_ext_data riscv_isa_ext[] = {
 	__RISCV_ISA_EXT_DATA(zvksh, RISCV_ISA_EXT_ZVKSH),
 	__RISCV_ISA_EXT_BUNDLE(zvksg, riscv_zvksg_bundled_exts),
 	__RISCV_ISA_EXT_DATA(zvkt, RISCV_ISA_EXT_ZVKT),
+	__RISCV_ISA_EXT_VERSION(sm1p11, RISCV_ISA_EXT_SM1p11, riscv_sm_ext_versions, 0,
+				RISCV_ISA_EXT_SM1p12),
+	__RISCV_ISA_EXT_VERSION(sm1p12, RISCV_ISA_EXT_SM1p12, riscv_sm_ext_versions, 1,
+				RISCV_ISA_EXT_INVALID),
 	__RISCV_ISA_EXT_DATA(smaia, RISCV_ISA_EXT_SMAIA),
 	__RISCV_ISA_EXT_DATA(smstateen, RISCV_ISA_EXT_SMSTATEEN),
+	__RISCV_ISA_EXT_VERSION(ss1p11, RISCV_ISA_EXT_SS1p11, riscv_ss_ext_versions, 0,
+				RISCV_ISA_EXT_SS1p12),
+	__RISCV_ISA_EXT_VERSION(ss1p12, RISCV_ISA_EXT_SS1p12, riscv_ss_ext_versions, 1,
+				RISCV_ISA_EXT_INVALID),
 	__RISCV_ISA_EXT_DATA(ssaia, RISCV_ISA_EXT_SSAIA),
 	__RISCV_ISA_EXT_DATA(sscofpmf, RISCV_ISA_EXT_SSCOFPMF),
 	__RISCV_ISA_EXT_DATA(sstc, RISCV_ISA_EXT_SSTC),
@@ -414,6 +438,14 @@ static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct risc
 				;
 
 			++ext_end;
+
+			/*
+			 * As a special case for the Sm and Ss extensions, where the version
+			 * number is important, include it in the extension name.
+			 */
+			if (ext_end - ext == 2 && tolower(ext[0]) == 's' &&
+			    (tolower(ext[1]) == 'm' || tolower(ext[1]) == 's'))
+				ext_end = isa;
 			break;
 		default:
 			/*

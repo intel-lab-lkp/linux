@@ -215,6 +215,11 @@ static void print_isa(struct seq_file *f, const unsigned long *isa_bitmap)
 		if (!__riscv_isa_extension_available(isa_bitmap, riscv_isa_ext[i].id))
 			continue;
 
+		/* Only show the newest implemented version of an extension */
+		if (riscv_isa_ext[i].successor_id != RISCV_ISA_EXT_INVALID &&
+		    __riscv_isa_extension_available(isa_bitmap, riscv_isa_ext[i].successor_id))
+			continue;
+
 		/* Only multi-letter extensions are split by underscores */
 		if (strnlen(riscv_isa_ext[i].name, 2) != 1)
 			seq_puts(f, "_");

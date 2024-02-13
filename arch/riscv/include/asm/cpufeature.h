@@ -61,6 +61,7 @@ struct riscv_isa_ext_data {
 	const char *property;
 	const unsigned int *subset_ext_ids;
 	const unsigned int subset_ext_size;
+	const unsigned int successor_id;
 };
 
 extern const struct riscv_isa_ext_data riscv_isa_ext[];
