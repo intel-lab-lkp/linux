@@ -28,6 +28,7 @@
 #include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_dsb.h"
+#include "skl_universal_plane.h"
 
 struct intel_color_funcs {
 	int (*color_check)(struct intel_crtc_state *crtc_state);
@@ -3846,6 +3847,47 @@ struct intel_plane_colorop *intel_plane_colorop_create(enum intel_color_block id
 	colorop->id = id;
 
 	return colorop;
+}
+
+int intel_plane_tf_pipeline_init(struct drm_plane *plane, struct drm_prop_enum_list *list)
+{
+	struct intel_plane *intel_plane = to_intel_plane(plane);
+	struct intel_plane_colorop *colorop;
+	struct drm_device *dev = plane->dev;
+	struct drm_i915_private *i915 = to_i915(dev);
+	int ret;
+	struct drm_colorop *prev_op;
+
+	colorop = intel_plane_colorop_create(CB_PLANE_PRE_CSC_LUT);
+
+	ret = drm_colorop_init(dev, &colorop->base, plane, DRM_COLOROP_1D_LUT);
+	if (ret)
+		return ret;
+
+	list->type = colorop->base.base.id;
+	list->name = kasprintf(GFP_KERNEL, "Color Pipeline %d", colorop->base.base.id);
+
+	/* TODO: handle failures and clean up*/
+	prev_op = &colorop->base;
+
+	if (icl_is_hdr_plane(i915, intel_plane->id)) {
+		colorop = intel_plane_colorop_create(CB_PLANE_CSC);
+		ret = drm_colorop_init(dev, &colorop->base, plane, DRM_COLOROP_CTM_3X3);
+		if (ret)
+			return ret;
+
+		drm_colorop_set_next_property(prev_op, &colorop->base);
+		prev_op = &colorop->base;
+	}
+
+	colorop = intel_plane_colorop_create(CB_PLANE_POST_CSC_LUT);
+	ret = drm_colorop_init(dev, &colorop->base, plane, DRM_COLOROP_1D_LUT);
+	if (ret)
+		return ret;
+
+	drm_colorop_set_next_property(prev_op, &colorop->base);
+
+	return 0;
 }
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
