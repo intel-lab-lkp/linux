@@ -131,4 +131,5 @@ int __devm_of_mdiobus_register(struct device *dev, struct mii_bus *mdio,
 EXPORT_SYMBOL(__devm_of_mdiobus_register);
 #endif /* CONFIG_OF_MDIO */
 
+MODULE_DESCRIPTION("Network PHY MDIO devres helpers");
 MODULE_LICENSE("GPL");
