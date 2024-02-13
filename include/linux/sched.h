@@ -2108,7 +2108,12 @@ static inline bool preempt_model_preemptible(void)
 
 static __always_inline bool need_resched(void)
 {
-	return unlikely(tif_need_resched());
+	return unlikely(tif_need_resched(NR_now));
+}
+
+static __always_inline bool need_resched_lazy(void)
+{
+	return unlikely(tif_need_resched(NR_lazy));
 }
 
 /*

@@ -114,13 +114,13 @@ static inline void __preempt_count_sub(int val)
 
 static inline bool __preempt_count_dec_and_test(void)
 {
-	return !--S390_lowcore.preempt_count && tif_need_resched();
+	return !--S390_lowcore.preempt_count && tif_need_resched(NR_now);
 }
 
 static inline bool should_resched(int preempt_offset)
 {
 	return unlikely(preempt_count() == preempt_offset &&
-			tif_need_resched());
+			tif_need_resched(NR_now));
 }
 
 #endif /* CONFIG_HAVE_MARCH_Z196_FEATURES */

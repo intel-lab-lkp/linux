@@ -66,7 +66,7 @@ static __always_inline bool __preempt_count_dec_and_test(void)
 	 * operations; we cannot use PREEMPT_NEED_RESCHED because it might get
 	 * lost.
 	 */
-	return !--*preempt_count_ptr() && tif_need_resched();
+	return !--*preempt_count_ptr() && tif_need_resched(NR_now);
 }
 
 /*
@@ -75,7 +75,7 @@ static __always_inline bool __preempt_count_dec_and_test(void)
 static __always_inline bool should_resched(int preempt_offset)
 {
 	return unlikely(preempt_count() == preempt_offset &&
-			tif_need_resched());
+			tif_need_resched(NR_now));
 }
 
 #ifdef CONFIG_PREEMPTION
