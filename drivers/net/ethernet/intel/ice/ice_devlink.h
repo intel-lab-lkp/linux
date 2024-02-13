@@ -5,6 +5,9 @@
 #define _ICE_DEVLINK_H_
 
 struct ice_pf *ice_allocate_pf(struct device *dev);
+void *
+ice_devlink_alloc(struct device *dev, size_t priv_size,
+		  const struct devlink_ops *ops);
 
 void ice_devlink_register(struct ice_pf *pf);
 void ice_devlink_unregister(struct ice_pf *pf);
