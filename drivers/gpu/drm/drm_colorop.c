@@ -43,7 +43,6 @@ static const struct drm_prop_enum_list drm_colorop_curve_1d_type_enum_list[] = {
 };
 
 /* Init Helpers */
-__maybe_unused
 static int drm_create_colorop_capability_prop(struct drm_device *dev,
 					      struct drm_colorop *colorop,
 					      struct drm_property_blob *blob)
@@ -64,6 +63,29 @@ static int drm_create_colorop_capability_prop(struct drm_device *dev,
 
 	return 0;
 }
+
+int drm_colorop_lutcaps_init(struct drm_colorop *colorop,
+			     struct drm_plane *plane,
+			     const struct drm_color_lut_range *ranges,
+			     size_t length)
+{
+	struct drm_device *dev = plane->dev;
+	struct drm_property_blob *blob;
+
+	/* Create Color Caps property for 1D LUT */
+	if (colorop->type != DRM_COLOROP_1D_LUT)
+		return -EINVAL;
+
+	if (WARN_ON(length == 0 || length % sizeof(ranges[0]) != 0))
+		return -EINVAL;
+
+	blob = drm_property_create_blob(plane->dev, length, ranges);
+	if (IS_ERR(blob))
+		return PTR_ERR(blob);
+
+	return drm_create_colorop_capability_prop(dev, colorop, blob);
+}
+EXPORT_SYMBOL(drm_colorop_lutcaps_init);
 
 int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 		     struct drm_plane *plane, enum drm_colorop_type type)

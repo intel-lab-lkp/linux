@@ -233,7 +233,9 @@ static inline struct drm_colorop *drm_colorop_find(struct drm_device *dev,
 
 int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 		     struct drm_plane *plane, enum drm_colorop_type type);
-
+int drm_colorop_lutcaps_init(struct drm_colorop *colorop, struct drm_plane *plane,
+			     const struct drm_color_lut_range *ranges,
+			     size_t length);
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
 
