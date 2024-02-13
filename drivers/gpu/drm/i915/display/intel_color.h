@@ -45,5 +45,7 @@ void intel_program_pipeline(const struct drm_plane_state *plane_state,
 			    u32 *plane_color_ctl);
 void intel_color_load_plane_csc_matrix(const struct drm_plane_state *plane_state,
 				       const struct drm_property_blob *blob);
+void intel_color_load_plane_luts(const struct drm_plane_state *plane_state,
+				 const struct drm_property_blob *blob, bool is_pre_csc);
 
 #endif /* __INTEL_COLOR_H__ */

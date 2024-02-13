@@ -85,6 +85,10 @@ struct intel_color_funcs {
 	/* Plane CSC*/
 	void (*load_plane_csc_matrix)(const struct drm_plane_state *plane_state,
 				      const struct drm_property_blob *blob);
+
+	/* Plane Pre/Post CSC */
+	void (*load_plane_luts)(const struct drm_plane_state *plane_state,
+				const struct drm_property_blob *blob, bool is_pre_csc);
 };
 
 #define CTM_COEFF_SIGN	(1ULL << 63)
@@ -3774,6 +3778,20 @@ void intel_color_load_plane_csc_matrix(const struct drm_plane_state *plane_state
 		i915->display.funcs.color->load_plane_csc_matrix(plane_state, blob);
 }
 
+static void xelpd_plane_load_luts(const struct drm_plane_state *plane_state,
+				  const struct drm_property_blob *blob, bool is_pre_csc)
+{
+}
+
+void intel_color_load_plane_luts(const struct drm_plane_state *plane_state,
+				 const struct drm_property_blob *blob, bool is_pre_csc)
+{
+	struct drm_i915_private *i915 = to_i915(plane_state->plane->dev);
+
+	if (i915->display.funcs.color->load_plane_luts)
+		i915->display.funcs.color->load_plane_luts(plane_state, blob, is_pre_csc);
+}
+
 static const struct intel_color_funcs chv_color_funcs = {
 	.color_check = chv_color_check,
 	.color_commit_arm = i9xx_color_commit_arm,
@@ -3822,6 +3840,7 @@ static const struct intel_color_funcs tgl_color_funcs = {
 	.read_csc = icl_read_csc,
 	.get_config = skl_get_config,
 	.load_plane_csc_matrix = xelpd_load_plane_csc_matrix,
+	.load_plane_luts = xelpd_plane_load_luts,
 };
 
 static const struct intel_color_funcs icl_color_funcs = {
@@ -4052,6 +4071,14 @@ static void apply_colorop(const struct drm_plane_state *plane_state,
 		(*plane_color_ctl) |= PLANE_COLOR_PLANE_CSC_ENABLE;
 		if (state->data && intel_colorop->id == CB_PLANE_CSC)
 			intel_color_load_plane_csc_matrix(plane_state, state->data);
+	} else if (colorop->type == DRM_COLOROP_1D_LUT) {
+		if (state->data && intel_colorop->id == CB_PLANE_PRE_CSC_LUT) {
+			(*plane_color_ctl) |= PLANE_COLOR_PRE_CSC_GAMMA_ENABLE;
+			intel_color_load_plane_luts(plane_state, state->data, true);
+		} else if (state->data && intel_colorop->id == CB_PLANE_POST_CSC_LUT) {
+			(*plane_color_ctl) &= ~PLANE_COLOR_PLANE_GAMMA_DISABLE;
+			intel_color_load_plane_luts(plane_state, state->data, false);
+		}
 	}
 }
 
