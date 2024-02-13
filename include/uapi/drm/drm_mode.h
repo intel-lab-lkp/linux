@@ -868,6 +868,7 @@ struct drm_color_lut {
 
 enum drm_colorop_type {
 	DRM_COLOROP_1D_CURVE,
+	DRM_COLOROP_CTM_3X3,
 	DRM_COLOROP_CTM_3X4,
 };
 
