@@ -12621,7 +12621,7 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	}
 
 	if (resched)
-		resched_curr(rq);
+		resched_curr_tick(rq);
 
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);

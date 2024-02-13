@@ -1379,7 +1379,7 @@ throttle:
 		}
 
 		if (!is_leftmost(dl_se, &rq->dl))
-			resched_curr(rq);
+			resched_curr_tick(rq);
 	}
 
 	/*

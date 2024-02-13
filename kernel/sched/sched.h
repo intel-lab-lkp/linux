@@ -2465,6 +2465,7 @@ extern void reweight_task(struct task_struct *p, int prio);
 enum resched_opt {
 	RESCHED_DEFAULT,
 	RESCHED_FORCE,
+	RESCHED_TICK,
 };
 
 extern void __resched_curr(struct rq *rq, enum resched_opt opt);
@@ -2472,6 +2473,11 @@ extern void __resched_curr(struct rq *rq, enum resched_opt opt);
 static inline void resched_curr(struct rq *rq)
 {
 	__resched_curr(rq, RESCHED_DEFAULT);
+}
+
+static inline void resched_curr_tick(struct rq *rq)
+{
+	__resched_curr(rq, RESCHED_TICK);
 }
 
 extern void resched_cpu(int cpu);

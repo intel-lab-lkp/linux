@@ -1038,6 +1038,10 @@ void wake_up_q(struct wake_q_head *head)
  * For PREEMPT_AUTO: schedule idle threads eagerly, allow everything
  * else, whether running in user or kernel context, to finish its time
  * quanta, and mark for rescheduling at the next exit to user.
+ *
+ * Note: to avoid the hog problem, where the user does not relinquish
+ * CPU even after its time quanta has expired, upgrade lazy to eager
+ * on the second tick.
  */
 static resched_t resched_opt_translate(struct task_struct *curr,
 				       enum resched_opt opt)
@@ -1049,6 +1053,10 @@ static resched_t resched_opt_translate(struct task_struct *curr,
 		return NR_now;
 
 	if (is_idle_task(curr))
+		return NR_now;
+
+	if (opt == RESCHED_TICK &&
+	    unlikely(test_tsk_need_resched(curr, NR_lazy)))
 		return NR_now;
 
 	return NR_lazy;
