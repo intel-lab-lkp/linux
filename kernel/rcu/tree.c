@@ -2286,8 +2286,17 @@ void rcu_sched_clock_irq(int user)
 	raw_cpu_inc(rcu_data.ticks_this_gp);
 	/* The load-acquire pairs with the store-release setting to true. */
 	if (smp_load_acquire(this_cpu_ptr(&rcu_data.rcu_urgent_qs))) {
-		/* Idle and userspace execution already are quiescent states. */
-		if (!rcu_is_cpu_rrupt_from_idle() && !user) {
+		/*
+		 * Idle and userspace execution already are quiescent states.
+		 * If, however, we came here from a nested interrupt in the
+		 * kernel, or if we have PREEMPT_RCU=n but are holding a
+		 * preempt_count() (say, with CONFIG_PREEMPT_AUTO=y), then
+		 * force a context switch.
+		 */
+		if ((!rcu_is_cpu_rrupt_from_idle() && !user) ||
+		     ((!IS_ENABLED(CONFIG_PREEMPT_RCU) &&
+		       IS_ENABLED(CONFIG_PREEMPT_COUNT)) &&
+		     (preempt_count() & (PREEMPT_MASK | SOFTIRQ_MASK)))) {
 			set_tsk_need_resched(current, NR_now);
 			set_preempt_need_resched();
 		}
