@@ -6,7 +6,7 @@
 #include "ice_txrx.h"
 #include "ice_fltr.h"
 #include "ice_sf_eth.h"
-#include "ice_devlink.h"
+#include "devlink/ice_devlink.h"
 #include "devlink/ice_devlink_port.h"
 
 static const struct net_device_ops ice_sf_netdev_ops = {

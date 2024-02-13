@@ -3,7 +3,7 @@
 
 #include "ice.h"
 #include "ice_eswitch.h"
-#include "ice_devlink.h"
+#include "devlink/ice_devlink.h"
 #include "devlink/ice_devlink_port.h"
 #include "ice_sriov.h"
 #include "ice_tc_lib.h"

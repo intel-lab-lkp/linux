@@ -13,7 +13,7 @@
 #include "ice_fltr.h"
 #include "ice_dcb_lib.h"
 #include "ice_dcb_nl.h"
-#include "ice_devlink.h"
+#include "devlink/ice_devlink.h"
 #include "ice_hwmon.h"
 #include "devlink/ice_devlink_port.h"
 #include "ice_sf_eth.h"

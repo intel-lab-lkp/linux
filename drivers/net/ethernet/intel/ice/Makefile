@@ -29,7 +29,7 @@ ice-y := ice_main.o	\
 	 ice_flex_pipe.o \
 	 ice_flow.o	\
 	 ice_idc.o	\
-	 ice_devlink.o	\
+	 devlink/ice_devlink.o	\
 	 devlink/ice_devlink_port.o	\
 	 ice_sf_eth.o	\
 	 ice_sf_vsi_vlan_ops.o \
