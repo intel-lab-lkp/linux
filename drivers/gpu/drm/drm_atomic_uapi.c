@@ -570,14 +570,14 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->color_encoding_property) {
 		if (file_priv->plane_color_pipeline) {
 			drm_dbg_atomic(dev,
-				       "Setting COLOR_PIPELINE plane property not permitted when DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE is set\n");
+				       "Setting COLOR_ENCODING plane property not permitted when DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE is set\n");
 			return -EINVAL;
 		}
 		state->color_encoding = val;
 	} else if (property == plane->color_range_property) {
 		if (file_priv->plane_color_pipeline) {
 			drm_dbg_atomic(dev,
-				       "Setting COLOR_PIPELINE plane property not permitted when DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE is set\n");
+				       "Setting COLOR_RANGE plane property not permitted when DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE is set\n");
 			return -EINVAL;
 		}
 		state->color_range = val;
