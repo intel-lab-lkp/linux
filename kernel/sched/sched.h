@@ -2462,7 +2462,17 @@ extern void init_sched_fair_class(void);
 
 extern void reweight_task(struct task_struct *p, int prio);
 
-extern void resched_curr(struct rq *rq);
+enum resched_opt {
+	RESCHED_DEFAULT,
+};
+
+extern void __resched_curr(struct rq *rq, enum resched_opt opt);
+
+static inline void resched_curr(struct rq *rq)
+{
+	__resched_curr(rq, RESCHED_DEFAULT);
+}
+
 extern void resched_cpu(int cpu);
 
 extern struct rt_bandwidth def_rt_bandwidth;

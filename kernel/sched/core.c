@@ -1032,19 +1032,38 @@ void wake_up_q(struct wake_q_head *head)
 }
 
 /*
- * resched_curr - mark rq's current task 'to be rescheduled now'.
+ * For preemption models other than PREEMPT_AUTO: always schedule
+ * eagerly.
  *
- * On UP this means the setting of the need_resched flag, on SMP it
- * might also involve a cross-CPU call to trigger the scheduler on
- * the target CPU.
+ * For PREEMPT_AUTO: allow everything, whether running in user or
+ * kernel context, to finish its time quanta, and mark for
+ * rescheduling at the next exit to user.
  */
-void resched_curr(struct rq *rq)
+static resched_t resched_opt_translate(struct task_struct *curr,
+				       enum resched_opt opt)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_AUTO))
+		return NR_now;
+
+	return NR_lazy;
+}
+
+/*
+ * __resched_curr - mark rq's current task 'to be rescheduled now'.
+ *
+ * On UP this means the setting of the appropriate need_resched flag.
+ * On SMP, in addition it might also involve a cross-CPU call to
+ * trigger the scheduler on the target CPU.
+ */
+void __resched_curr(struct rq *rq, enum resched_opt opt)
 {
 	struct task_struct *curr = rq->curr;
-	resched_t rs = NR_now;
+	resched_t rs;
 	int cpu;
 
 	lockdep_assert_rq_held(rq);
+
+	rs = resched_opt_translate(curr, opt);
 
 	/*
 	 * TIF_NEED_RESCHED is the higher priority bit, so if it is already
