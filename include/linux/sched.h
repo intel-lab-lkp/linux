@@ -1957,19 +1957,36 @@ static inline bool test_tsk_thread_flag(struct task_struct *tsk, int flag)
 	return test_ti_thread_flag(task_thread_info(tsk), flag);
 }
 
-static inline void set_tsk_need_resched(struct task_struct *tsk)
+/*
+ * With !CONFIG_PREEMPT_AUTO, tif_resched(NR_lazy) reduces to
+ * tif_resched(NR_now). Add a check in the helpers below to ensure
+ * we don't touch the tif_reshed(NR_now) bit unnecessarily.
+ */
+static inline void set_tsk_need_resched(struct task_struct *tsk, resched_t rs)
 {
-	set_tsk_thread_flag(tsk,TIF_NEED_RESCHED);
+	if (IS_ENABLED(CONFIG_PREEMPT_AUTO) || rs == NR_now)
+		set_tsk_thread_flag(tsk, tif_resched(rs));
+	else
+		/*
+		 * NR_lazy is only touched under CONFIG_PREEMPT_AUTO.
+		 */
+		BUG();
 }
 
 static inline void clear_tsk_need_resched(struct task_struct *tsk)
 {
-	clear_tsk_thread_flag(tsk,TIF_NEED_RESCHED);
+	clear_tsk_thread_flag(tsk, tif_resched(NR_now));
+
+	if (IS_ENABLED(CONFIG_PREEMPT_AUTO))
+		clear_tsk_thread_flag(tsk, tif_resched(NR_lazy));
 }
 
-static inline bool test_tsk_need_resched(struct task_struct *tsk)
+static inline bool test_tsk_need_resched(struct task_struct *tsk, resched_t rs)
 {
-	return unlikely(test_tsk_thread_flag(tsk,TIF_NEED_RESCHED));
+	if (IS_ENABLED(CONFIG_PREEMPT_AUTO) || rs == NR_now)
+		return unlikely(test_tsk_thread_flag(tsk, tif_resched(rs)));
+	else
+		return false;
 }
 
 /*
@@ -2113,7 +2130,8 @@ static __always_inline bool need_resched(void)
 
 static __always_inline bool need_resched_lazy(void)
 {
-	return unlikely(tif_need_resched(NR_lazy));
+	return IS_ENABLED(CONFIG_PREEMPT_AUTO) &&
+		unlikely(tif_need_resched(NR_lazy));
 }
 
 /*

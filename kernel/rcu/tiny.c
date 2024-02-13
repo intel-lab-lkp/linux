@@ -73,7 +73,7 @@ void rcu_sched_clock_irq(int user)
 	if (user) {
 		rcu_qs();
 	} else if (rcu_ctrlblk.donetail != rcu_ctrlblk.curtail) {
-		set_tsk_need_resched(current);
+		set_tsk_need_resched(current, NR_now);
 		set_preempt_need_resched();
 	}
 }

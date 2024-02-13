@@ -658,7 +658,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 			// Also if no expediting and no possible deboosting,
 			// slow is OK.  Plus nohz_full CPUs eventually get
 			// tick enabled.
-			set_tsk_need_resched(current);
+			set_tsk_need_resched(current, NR_now);
 			set_preempt_need_resched();
 			if (IS_ENABLED(CONFIG_IRQ_WORK) && irqs_were_disabled &&
 			    expboost && !rdp->defer_qs_iw_pending && cpu_online(rdp->cpu)) {
@@ -725,7 +725,7 @@ static void rcu_flavor_sched_clock_irq(int user)
 	    (preempt_count() & (PREEMPT_MASK | SOFTIRQ_MASK))) {
 		/* No QS, force context switch if deferred. */
 		if (rcu_preempt_need_deferred_qs(t)) {
-			set_tsk_need_resched(t);
+			set_tsk_need_resched(t, NR_now);
 			set_preempt_need_resched();
 		}
 	} else if (rcu_preempt_need_deferred_qs(t)) {

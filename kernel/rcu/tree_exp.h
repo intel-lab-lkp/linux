@@ -703,7 +703,7 @@ static void rcu_exp_handler(void *unused)
 			rcu_report_exp_rdp(rdp);
 		} else {
 			WRITE_ONCE(rdp->cpu_no_qs.b.exp, true);
-			set_tsk_need_resched(t);
+			set_tsk_need_resched(t, NR_now);
 			set_preempt_need_resched();
 		}
 		return;
@@ -804,7 +804,7 @@ static void rcu_exp_need_qs(void)
 	__this_cpu_write(rcu_data.cpu_no_qs.b.exp, true);
 	/* Store .exp before .rcu_urgent_qs. */
 	smp_store_release(this_cpu_ptr(&rcu_data.rcu_urgent_qs), true);
-	set_tsk_need_resched(current);
+	set_tsk_need_resched(current, NR_now);
 	set_preempt_need_resched();
 }
 

@@ -933,7 +933,7 @@ static bool set_nr_if_polling(struct task_struct *p)
 #else
 static inline bool set_nr_and_not_polling(struct task_struct *p)
 {
-	set_tsk_need_resched(p);
+	set_tsk_need_resched(p, NR_now);
 	return true;
 }
 
@@ -1045,13 +1045,13 @@ void resched_curr(struct rq *rq)
 
 	lockdep_assert_rq_held(rq);
 
-	if (test_tsk_need_resched(curr))
+	if (test_tsk_need_resched(curr, NR_now))
 		return;
 
 	cpu = cpu_of(rq);
 
 	if (cpu == smp_processor_id()) {
-		set_tsk_need_resched(curr);
+		set_tsk_need_resched(curr, NR_now);
 		set_preempt_need_resched();
 		return;
 	}
@@ -2247,7 +2247,8 @@ void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags)
 	 * A queue event has occurred, and we're going to schedule.  In
 	 * this case, we can save a useless back to back clock update.
 	 */
-	if (task_on_rq_queued(rq->curr) && test_tsk_need_resched(rq->curr))
+	if (task_on_rq_queued(rq->curr) &&
+	    test_tsk_need_resched(rq->curr, NR_now))
 		rq_clock_skip_update(rq);
 }
 
