@@ -102,8 +102,29 @@ void perf_evlist__add(struct perf_evlist *evlist,
 void perf_evlist__remove(struct perf_evlist *evlist,
 			 struct perf_evsel *evsel)
 {
+	struct perf_evsel *leader = evsel->leader;
+
 	list_del_init(&evsel->node);
 	evlist->nr_entries -= 1;
+
+	/* return stand-alone event */
+	if (leader == evsel && leader->nr_members < 2)
+		return;
+
+	if (leader == evsel) {
+		struct perf_evsel *member;
+
+		/* select the next event as a new leader */
+		leader = member = perf_evlist__next(evlist, evsel);
+
+		/* update members to see the new leader */
+		while (member && member->leader == evsel) {
+			member->leader = leader;
+			member = perf_evlist__next(evlist, member);
+		}
+	}
+
+	leader->nr_members = evsel->leader->nr_members - 1;
 }
 
 struct perf_evlist *perf_evlist__new(void)
