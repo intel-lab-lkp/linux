@@ -121,6 +121,16 @@ properties:
             version of the privileged ISA specification.
 
         # multi-letter extensions, sorted alphanumerically
+        - const: sm1p11
+          description:
+            The standard Machine ISA v1.11, as ratified in the 20190608
+            version of the privileged ISA specification.
+
+        - const: sm1p12
+          description:
+            The standard Machine ISA v1.12, as ratified in the 20211203
+            version of the privileged ISA specification.
+
         - const: smaia
           description: |
             The standard Smaia supervisor-level extension for the advanced
@@ -133,6 +143,16 @@ properties:
             The standard Smstateen extension for controlling access to CSRs
             added by other RISC-V extensions in H/S/VS/U/VU modes and as
             ratified at commit a28bfae (Ratified (#7)) of riscv-state-enable.
+
+        - const: ss1p11
+          description:
+            The standard Supervisor ISA v1.11, as ratified in the 20190608
+            version of the privileged ISA specification.
+
+        - const: ss1p12
+          description:
+            The standard Supervisor ISA v1.12, as ratified in the 20211203
+            version of the privileged ISA specification.
 
         - const: ssaia
           description: |
