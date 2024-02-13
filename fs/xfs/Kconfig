@@ -216,3 +216,14 @@ config XFS_ASSERT_FATAL
 	  result in warnings.
 
 	  This behavior can be modified at runtime via sysfs.
+
+config XFS_LBS
+	bool "XFS large block size support (EXPERIMENTAL)"
+	depends on XFS_FS
+	help
+	  Set Y to enable support for filesystem block size > system's
+	  base page size.
+
+	  This feature is considered EXPERIMENTAL.  Use with caution!
+
+	  If unsure, say N.
