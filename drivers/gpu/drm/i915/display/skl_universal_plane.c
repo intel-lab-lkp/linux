@@ -2419,12 +2419,14 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 	if (DISPLAY_VER(dev_priv) >= 10)
 		supported_csc |= BIT(DRM_COLOR_YCBCR_BT2020);
 
-	drm_plane_create_color_properties(&plane->base,
-					  supported_csc,
-					  BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
-					  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
-					  DRM_COLOR_YCBCR_BT709,
-					  DRM_COLOR_YCBCR_LIMITED_RANGE);
+	/* TODO: Make it based on client cap */
+	if (DISPLAY_VER(dev_priv) <= 11)
+		drm_plane_create_color_properties(&plane->base,
+						  supported_csc,
+						  BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
+						  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
+						  DRM_COLOR_YCBCR_BT709,
+						  DRM_COLOR_YCBCR_LIMITED_RANGE);
 
 	drm_plane_create_alpha_property(&plane->base);
 	drm_plane_create_blend_mode_property(&plane->base,
