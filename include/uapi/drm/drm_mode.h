@@ -866,6 +866,23 @@ struct drm_color_lut {
 	__u16 reserved;
 };
 
+/**
+ * struct drm_color_lut_ext - Represents high precision lut values
+ *
+ * Creating 64 bit palette entries for better data
+ * precision. This will be required for HDR and
+ * similar color processing usecases.
+ */
+struct drm_color_lut_ext {
+	/*
+	 * Data is U32.32 fixed point format.
+	 */
+	__u64 red;
+	__u64 green;
+	__u64 blue;
+	__u64 reserved;
+};
+
 enum drm_colorop_type {
 	DRM_COLOROP_1D_CURVE,
 	DRM_COLOROP_CTM_3X3,
