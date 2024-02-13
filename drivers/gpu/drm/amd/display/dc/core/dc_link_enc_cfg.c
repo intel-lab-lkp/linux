@@ -396,8 +396,7 @@ void link_enc_cfg_link_encs_assign(
 				eng_id_req = stream->link->dpia_preferred_eng_id;
 
 			eng_id = find_first_avail_link_enc(stream->ctx, state, eng_id_req);
-		}
-		else
+		} else
 			eng_id =  link_enc->preferred_engine;
 
 		add_link_enc_assignment(state, stream, eng_id);
