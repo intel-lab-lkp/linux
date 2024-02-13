@@ -719,6 +719,9 @@ static int drm_atomic_color_set_data_property(struct drm_colorop *colorop,
 	case DRM_COLOROP_CTM_3X3:
 		size = sizeof(struct drm_color_ctm);
 		break;
+	case DRM_COLOROP_1D_LUT:
+		elem_size = sizeof(struct drm_color_lut_ext);
+		break;
 	default:
 		/* should never get here */
 		return -EINVAL;

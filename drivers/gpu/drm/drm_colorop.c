@@ -107,7 +107,7 @@ int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 				   0);
 
 	/* data */
-	if (type == DRM_COLOROP_CTM_3X4 || type == DRM_COLOROP_CTM_3X3) {
+	if (type == DRM_COLOROP_CTM_3X4 || type == DRM_COLOROP_CTM_3X3 || DRM_COLOROP_1D_LUT) {
 		prop = drm_property_create(dev, DRM_MODE_PROP_ATOMIC | DRM_MODE_PROP_BLOB,
 					   "DATA", 0);
 		if (!prop)
