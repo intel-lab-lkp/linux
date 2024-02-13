@@ -286,7 +286,7 @@ void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_color
 
 	drm_object_property_set_value(&colorop->base,
 				      colorop->next_property,
-				      next->base.id);
+				      next ? next->base.id : 0);
 	colorop->next = next;
 }
 EXPORT_SYMBOL(drm_colorop_set_next_property);
