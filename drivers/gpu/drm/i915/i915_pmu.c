@@ -514,6 +514,61 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 	return HRTIMER_RESTART;
 }
 
+static enum cpuhp_state cpuhp_slot = CPUHP_INVALID;
+
+static int i915_pmu_register_cpuhp_state(struct i915_pmu *pmu)
+{
+	if (cpuhp_slot == CPUHP_INVALID)
+		return -EINVAL;
+
+	return cpuhp_state_add_instance(cpuhp_slot, &pmu->cpuhp.node);
+}
+
+static void i915_pmu_unregister_cpuhp_state(struct i915_pmu *pmu)
+{
+	cpuhp_state_remove_instance(cpuhp_slot, &pmu->cpuhp.node);
+}
+
+static void free_event_attributes(struct i915_pmu *pmu)
+{
+	struct attribute **attr_iter = pmu->events_attr_group.attrs;
+
+	for (; *attr_iter; attr_iter++)
+		kfree((*attr_iter)->name);
+
+	kfree(pmu->events_attr_group.attrs);
+	kfree(pmu->i915_attr);
+	kfree(pmu->pmu_attr);
+
+	pmu->events_attr_group.attrs = NULL;
+	pmu->i915_attr = NULL;
+	pmu->pmu_attr = NULL;
+}
+
+static bool is_igp(struct drm_i915_private *i915)
+{
+	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
+
+	/* IGP is 0000:00:02.0 */
+	return pci_domain_nr(pdev->bus) == 0 &&
+	       pdev->bus->number == 0 &&
+	       PCI_SLOT(pdev->devfn) == 2 &&
+	       PCI_FUNC(pdev->devfn) == 0;
+}
+
+static void pmu_teardown(struct i915_pmu *pmu)
+{
+	struct drm_i915_private *i915 = pmu_to_i915(pmu);
+
+	i915_pmu_unregister_cpuhp_state(pmu);
+	perf_pmu_unregister(&pmu->base);
+	pmu->base.event_init = NULL;
+	kfree(pmu->base.attr_groups);
+	if (!is_igp(i915))
+		kfree(pmu->name);
+	free_event_attributes(pmu);
+}
+
 static void i915_pmu_event_destroy(struct perf_event *event)
 {
 	struct i915_pmu *pmu = event_to_pmu(event);
@@ -1133,22 +1188,6 @@ err_alloc:
 	return NULL;
 }
 
-static void free_event_attributes(struct i915_pmu *pmu)
-{
-	struct attribute **attr_iter = pmu->events_attr_group.attrs;
-
-	for (; *attr_iter; attr_iter++)
-		kfree((*attr_iter)->name);
-
-	kfree(pmu->events_attr_group.attrs);
-	kfree(pmu->i915_attr);
-	kfree(pmu->pmu_attr);
-
-	pmu->events_attr_group.attrs = NULL;
-	pmu->i915_attr = NULL;
-	pmu->pmu_attr = NULL;
-}
-
 static int i915_pmu_cpu_online(unsigned int cpu, struct hlist_node *node)
 {
 	struct i915_pmu *pmu = hlist_entry_safe(node, typeof(*pmu), cpuhp.node);
@@ -1194,8 +1233,6 @@ static int i915_pmu_cpu_offline(unsigned int cpu, struct hlist_node *node)
 	return 0;
 }
 
-static enum cpuhp_state cpuhp_slot = CPUHP_INVALID;
-
 int i915_pmu_init(void)
 {
 	int ret;
@@ -1217,30 +1254,6 @@ void i915_pmu_exit(void)
 {
 	if (cpuhp_slot != CPUHP_INVALID)
 		cpuhp_remove_multi_state(cpuhp_slot);
-}
-
-static int i915_pmu_register_cpuhp_state(struct i915_pmu *pmu)
-{
-	if (cpuhp_slot == CPUHP_INVALID)
-		return -EINVAL;
-
-	return cpuhp_state_add_instance(cpuhp_slot, &pmu->cpuhp.node);
-}
-
-static void i915_pmu_unregister_cpuhp_state(struct i915_pmu *pmu)
-{
-	cpuhp_state_remove_instance(cpuhp_slot, &pmu->cpuhp.node);
-}
-
-static bool is_igp(struct drm_i915_private *i915)
-{
-	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
-
-	/* IGP is 0000:00:02.0 */
-	return pci_domain_nr(pdev->bus) == 0 &&
-	       pdev->bus->number == 0 &&
-	       PCI_SLOT(pdev->devfn) == 2 &&
-	       PCI_FUNC(pdev->devfn) == 0;
 }
 
 void i915_pmu_register(struct drm_i915_private *i915)
@@ -1341,12 +1354,5 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 
 	hrtimer_cancel(&pmu->timer);
 
-	i915_pmu_unregister_cpuhp_state(pmu);
-
-	perf_pmu_unregister(&pmu->base);
-	pmu->base.event_init = NULL;
-	kfree(pmu->base.attr_groups);
-	if (!is_igp(i915))
-		kfree(pmu->name);
-	free_event_attributes(pmu);
+	pmu_teardown(pmu);
 }
