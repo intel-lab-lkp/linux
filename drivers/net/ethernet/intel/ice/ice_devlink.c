@@ -1603,6 +1603,78 @@ enum ice_param_id {
 	ICE_DEVLINK_PARAM_ID_LOOPBACK,
 };
 
+static int
+ice_devlink_msix_max_pf_get(struct devlink *devlink, u32 id,
+			    struct devlink_param_gset_ctx *ctx)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+
+	ctx->val.vu16 = pf->msix.max;
+
+	return 0;
+}
+
+static int
+ice_devlink_msix_max_pf_set(struct devlink *devlink, u32 id,
+			    struct devlink_param_gset_ctx *ctx)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+	u16 max = ctx->val.vu16;
+
+	pf->msix.max = max;
+
+	return 0;
+}
+
+static int
+ice_devlink_msix_max_pf_validate(struct devlink *devlink, u32 id,
+				 union devlink_param_value val,
+				 struct netlink_ext_ack *extack)
+{
+	if (val.vu16 > ICE_MAX_MSIX) {
+		NL_SET_ERR_MSG_MOD(extack, "PF max MSI-X is too high");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int
+ice_devlink_msix_min_pf_get(struct devlink *devlink, u32 id,
+			    struct devlink_param_gset_ctx *ctx)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+
+	ctx->val.vu16 = pf->msix.min;
+
+	return 0;
+}
+
+static int
+ice_devlink_msix_min_pf_set(struct devlink *devlink, u32 id,
+			    struct devlink_param_gset_ctx *ctx)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+	u16 min = ctx->val.vu16;
+
+	pf->msix.min = min;
+
+	return 0;
+}
+
+static int
+ice_devlink_msix_min_pf_validate(struct devlink *devlink, u32 id,
+				 union devlink_param_value val,
+				 struct netlink_ext_ack *extack)
+{
+	if (val.vu16 <= ICE_MIN_MSIX) {
+		NL_SET_ERR_MSG_MOD(extack, "PF min MSI-X is too low");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct devlink_param ice_devlink_params[] = {
 	DEVLINK_PARAM_GENERIC(ENABLE_ROCE, BIT(DEVLINK_PARAM_CMODE_RUNTIME),
 			      ice_devlink_enable_roce_get,
@@ -1618,6 +1690,16 @@ static const struct devlink_param ice_devlink_params[] = {
 			     ice_devlink_loopback_get,
 			     ice_devlink_loopback_set,
 			     ice_devlink_loopback_validate),
+	DEVLINK_PARAM_GENERIC(MSIX_VEC_PER_PF_MAX,
+			      BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			      ice_devlink_msix_max_pf_get,
+			      ice_devlink_msix_max_pf_set,
+			      ice_devlink_msix_max_pf_validate),
+	DEVLINK_PARAM_GENERIC(MSIX_VEC_PER_PF_MIN,
+			      BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			      ice_devlink_msix_min_pf_get,
+			      ice_devlink_msix_min_pf_set,
+			      ice_devlink_msix_min_pf_validate),
 };
 
 static void ice_devlink_free(void *devlink_ptr)
