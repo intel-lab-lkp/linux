@@ -48,15 +48,30 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 	if (evsel__is_group_event(evsel)) {
 		int idx;
 		struct hist_entry *pair;
-		int nr_members = evsel->core.nr_members;
+		int nr_members = evsel->core.nr_members - 1;
 		union {
 			u64 period;
 			double percent;
 		} *val;
+		struct evsel *member;
+		struct evsel **idx_table;
 
 		val = calloc(nr_members, sizeof(*val));
 		if (val == NULL)
-			return 0;
+			goto out;
+
+		idx_table = calloc(nr_members, sizeof(*idx_table));
+		if (idx_table == NULL)
+			goto out;
+
+		/*
+		 * Build an index table for each evsel to the val array.
+		 * It cannot use evsel->core.idx because removed events might
+		 * create a hole so the index is not consecutive anymore.
+		 */
+		idx = 0;
+		for_each_group_member(member, evsel)
+			idx_table[idx++] = member;
 
 		/* collect values in the group members */
 		list_for_each_entry(pair, &he->pairs.head, pairs.node) {
@@ -66,8 +81,15 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 			if (!total)
 				continue;
 
-			evsel = hists_to_evsel(pair->hists);
-			idx = evsel__group_idx(evsel);
+			member = hists_to_evsel(pair->hists);
+			for (idx = 0; idx < nr_members; idx++) {
+				if (idx_table[idx] == member)
+					break;
+			}
+
+			/* this should not happen */
+			if (idx == nr_members)
+				continue;
 
 			if (fmt_percent)
 				val[idx].percent = 100.0 * period / total;
@@ -75,8 +97,7 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 				val[idx].period = period;
 		}
 
-		/* idx starts from 1 to skip the leader event */
-		for (idx = 1; idx < nr_members; idx++) {
+		for (idx = 0; idx < nr_members; idx++) {
 			if (fmt_percent) {
 				ret += hpp__call_print_fn(hpp, print_fn,
 							  fmt, len, val[idx].percent);
@@ -89,6 +110,7 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 		free(val);
 	}
 
+out:
 	/*
 	 * Restore original buf and size as it's where caller expects
 	 * the result will be saved.
