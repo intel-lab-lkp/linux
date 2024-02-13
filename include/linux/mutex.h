@@ -35,18 +35,10 @@
 #ifndef CONFIG_PREEMPT_RT
 
 #ifdef CONFIG_DEBUG_MUTEXES
-
-#define __DEBUG_MUTEX_INITIALIZER(lockname)				\
+# define __DEBUG_MUTEX_INITIALIZER(lockname)				\
 	, .magic = &lockname
-
-extern void mutex_destroy(struct mutex *lock);
-
 #else
-
 # define __DEBUG_MUTEX_INITIALIZER(lockname)
-
-static inline void mutex_destroy(struct mutex *lock) {}
-
 #endif
 
 /**
@@ -101,9 +93,6 @@ extern bool mutex_is_locked(struct mutex *lock);
 
 extern void __mutex_rt_init(struct mutex *lock, const char *name,
 			    struct lock_class_key *key);
-extern int mutex_trylock(struct mutex *lock);
-
-static inline void mutex_destroy(struct mutex *lock) { }
 
 #define mutex_is_locked(l)	rt_mutex_base_is_locked(&(l)->rtmutex)
 
@@ -169,6 +158,16 @@ extern int mutex_trylock(struct mutex *lock);
 extern void mutex_unlock(struct mutex *lock);
 
 extern int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock);
+
+#ifdef CONFIG_DEBUG_MUTEXES
+
+extern void mutex_destroy(struct mutex *lock);
+
+#else
+
+static inline void mutex_destroy(struct mutex *lock) {}
+
+#endif
 
 DEFINE_GUARD(mutex, struct mutex *, mutex_lock(_T), mutex_unlock(_T))
 DEFINE_GUARD_COND(mutex, _try, mutex_trylock(_T))
