@@ -309,10 +309,19 @@ ice_sf_eth_activate(struct ice_dynamic_port *dyn_port,
 		goto aux_dev_uninit;
 	}
 
+	err = ice_eswitch_attach_sf(pf, dyn_port);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Failed to attach device to eswitch");
+		goto aux_dev_remove;
+	}
+
 	dyn_port->sf_dev = sf_dev;
 
 	return 0;
 
+aux_dev_remove:
+	auxiliary_device_delete(&sf_dev->adev);
 aux_dev_uninit:
 	auxiliary_device_uninit(&sf_dev->adev);
 sf_dev_free:
@@ -333,6 +342,8 @@ xa_erase:
 void ice_sf_eth_deactivate(struct ice_dynamic_port *dyn_port)
 {
 	struct ice_sf_dev *sf_dev = dyn_port->sf_dev;
+
+	ice_eswitch_detach_sf(dyn_port->pf, dyn_port);
 
 	if (sf_dev) {
 		auxiliary_device_delete(&sf_dev->adev);
