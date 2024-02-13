@@ -8692,9 +8692,13 @@ int __cond_resched_rwlock_write(rwlock_t *lock)
 }
 EXPORT_SYMBOL(__cond_resched_rwlock_write);
 
-#if defined(CONFIG_PREEMPT_DYNAMIC)
+#if defined(CONFIG_PREEMPT_DYNAMIC) || defined (CONFIG_PREEMPT_AUTO)
 
+#ifdef CONFIG_PREEMPT_DYNAMIC
 #define PREEMPT_MODE "Dynamic Preempt"
+#else
+#define PREEMPT_MODE "Preempt Auto"
+#endif
 
 enum {
 	preempt_dynamic_undefined = -1,
@@ -8769,11 +8773,11 @@ PREEMPT_MODEL_ACCESSOR(none);
 PREEMPT_MODEL_ACCESSOR(voluntary);
 PREEMPT_MODEL_ACCESSOR(full);
 
-#else /* !CONFIG_PREEMPT_DYNAMIC */
+#else /* !CONFIG_PREEMPT_DYNAMIC && !CONFIG_PREEMPT_AUTO */
 
 static inline void preempt_dynamic_init(void) { }
 
-#endif /* !CONFIG_PREEMPT_DYNAMIC */
+#endif /* !CONFIG_PREEMPT_DYNAMIC && !CONFIG_PREEMPT_AUTO */
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 
@@ -8904,7 +8908,26 @@ void sched_dynamic_klp_disable(void)
 
 #endif /* CONFIG_HAVE_PREEMPT_DYNAMIC_CALL */
 
-#endif /* #ifdef CONFIG_PREEMPT_DYNAMIC */
+#elif defined(CONFIG_PREEMPT_AUTO)
+
+static void __sched_dynamic_update(int mode)
+{
+	switch (mode) {
+	case preempt_dynamic_none:
+		preempt_dynamic_mode = preempt_dynamic_undefined;
+		break;
+
+	case preempt_dynamic_voluntary:
+		preempt_dynamic_mode = preempt_dynamic_undefined;
+		break;
+
+	case preempt_dynamic_full:
+		preempt_dynamic_mode = preempt_dynamic_undefined;
+		break;
+	}
+}
+
+#endif /* CONFIG_PREEMPT_AUTO */
 
 /**
  * yield - yield the current processor to other threads.

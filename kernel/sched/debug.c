@@ -216,7 +216,7 @@ static const struct file_operations sched_scaling_fops = {
 
 #endif /* SMP */
 
-#ifdef CONFIG_PREEMPT_DYNAMIC
+#if defined(CONFIG_PREEMPT_DYNAMIC) || defined(CONFIG_PREEMPT_AUTO)
 
 static ssize_t sched_dynamic_write(struct file *filp, const char __user *ubuf,
 				   size_t cnt, loff_t *ppos)
@@ -276,7 +276,7 @@ static const struct file_operations sched_dynamic_fops = {
 	.release	= single_release,
 };
 
-#endif /* CONFIG_PREEMPT_DYNAMIC */
+#endif /* CONFIG_PREEMPT_DYNAMIC || CONFIG_PREEMPT_AUTO */
 
 __read_mostly bool sched_debug_verbose;
 
@@ -343,7 +343,7 @@ static __init int sched_init_debug(void)
 
 	debugfs_create_file("features", 0644, debugfs_sched, NULL, &sched_feat_fops);
 	debugfs_create_file_unsafe("verbose", 0644, debugfs_sched, &sched_debug_verbose, &sched_verbose_fops);
-#ifdef CONFIG_PREEMPT_DYNAMIC
+#if defined(CONFIG_PREEMPT_DYNAMIC) || defined(CONFIG_PREEMPT_AUTO)
 	debugfs_create_file("preempt", 0644, debugfs_sched, NULL, &sched_dynamic_fops);
 #endif
 
