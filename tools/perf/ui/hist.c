@@ -33,6 +33,7 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 	char *buf = hpp->buf;
 	size_t size = hpp->size;
 
+	/* print stand-alone or group leader events separately */
 	if (fmt_percent) {
 		double percent = 0.0;
 		u64 total = hists__total_period(hists);
@@ -45,12 +46,19 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 		ret = hpp__call_print_fn(hpp, print_fn, fmt, len, get_field(he));
 
 	if (evsel__is_group_event(evsel)) {
-		int prev_idx, idx_delta;
+		int idx;
 		struct hist_entry *pair;
 		int nr_members = evsel->core.nr_members;
+		union {
+			u64 period;
+			double percent;
+		} *val;
 
-		prev_idx = evsel__group_idx(evsel);
+		val = calloc(nr_members, sizeof(*val));
+		if (val == NULL)
+			return 0;
 
+		/* collect values in the group members */
 		list_for_each_entry(pair, &he->pairs.head, pairs.node) {
 			u64 period = get_field(pair);
 			u64 total = hists__total_period(pair->hists);
@@ -59,47 +67,26 @@ static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 				continue;
 
 			evsel = hists_to_evsel(pair->hists);
-			idx_delta = evsel__group_idx(evsel) - prev_idx - 1;
+			idx = evsel__group_idx(evsel);
 
-			while (idx_delta--) {
-				/*
-				 * zero-fill group members in the middle which
-				 * have no sample
-				 */
-				if (fmt_percent) {
-					ret += hpp__call_print_fn(hpp, print_fn,
-								  fmt, len, 0.0);
-				} else {
-					ret += hpp__call_print_fn(hpp, print_fn,
-								  fmt, len, 0ULL);
-				}
-			}
-
-			if (fmt_percent) {
-				ret += hpp__call_print_fn(hpp, print_fn, fmt, len,
-							  100.0 * period / total);
-			} else {
-				ret += hpp__call_print_fn(hpp, print_fn, fmt,
-							  len, period);
-			}
-
-			prev_idx = evsel__group_idx(evsel);
+			if (fmt_percent)
+				val[idx].percent = 100.0 * period / total;
+			else
+				val[idx].period = period;
 		}
 
-		idx_delta = nr_members - prev_idx - 1;
-
-		while (idx_delta--) {
-			/*
-			 * zero-fill group members at last which have no sample
-			 */
+		/* idx starts from 1 to skip the leader event */
+		for (idx = 1; idx < nr_members; idx++) {
 			if (fmt_percent) {
 				ret += hpp__call_print_fn(hpp, print_fn,
-							  fmt, len, 0.0);
+							  fmt, len, val[idx].percent);
 			} else {
 				ret += hpp__call_print_fn(hpp, print_fn,
-							  fmt, len, 0ULL);
+							  fmt, len, val[idx].period);
 			}
 		}
+
+		free(val);
 	}
 
 	/*
