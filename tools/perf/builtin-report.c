@@ -752,9 +752,21 @@ static int hists__resort_cb(struct hist_entry *he, void *arg)
 static void report__output_resort(struct report *rep)
 {
 	struct ui_progress prog;
-	struct evsel *pos;
+	struct evsel *pos, *tmp;
 
 	ui_progress__init(&prog, rep->nr_entries, "Sorting events for output...");
+
+	if (rep->skip_empty) {
+		evlist__for_each_entry_safe(rep->session->evlist, tmp, pos) {
+			struct hists *hists = evsel__hists(pos);
+
+			if (hists->nr_entries != 0)
+				continue;
+
+			evlist__remove(rep->session->evlist, pos);
+			evsel__delete(pos);
+		}
+	}
 
 	evlist__for_each_entry(rep->session->evlist, pos) {
 		evsel__output_resort_cb(pos, &prog, hists__resort_cb, rep);
