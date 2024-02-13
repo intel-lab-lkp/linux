@@ -116,10 +116,12 @@ static inline struct ov5645 *to_ov5645(struct v4l2_subdev *sd)
 	return container_of(sd, struct ov5645, sd);
 }
 
-static const struct reg_value ov5645_global_init_setting[] = {
+static const struct reg_value ov5645_global_reset_setting[] = {
 	{ 0x3103, 0x11 },
-	{ 0x3008, 0x82 },
-	{ 0x3008, 0x42 },
+	{ 0x3008, 0x82 }
+};
+
+static const struct reg_value ov5645_global_init_setting[] = {
 	{ 0x3103, 0x03 },
 	{ 0x3503, 0x07 },
 	{ 0x3002, 0x1c },
@@ -670,6 +672,15 @@ static int ov5645_set_power_on(struct device *dev)
 	gpiod_set_value_cansleep(ov5645->rst_gpio, 0);
 
 	msleep(20);
+
+	ret = ov5645_set_register_array(ov5645, ov5645_global_reset_setting,
+					ARRAY_SIZE(ov5645_global_reset_setting));
+	if (ret < 0) {
+		dev_err(ov5645->dev, "could not reset\n");
+		goto exit;
+	}
+
+	usleep_range(1000, 2000);
 
 	ret = ov5645_set_register_array(ov5645, ov5645_global_init_setting,
 					ARRAY_SIZE(ov5645_global_init_setting));
