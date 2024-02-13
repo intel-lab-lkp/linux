@@ -4041,11 +4041,10 @@ intel_dp_mst_detect(struct intel_dp *intel_dp)
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	enum drm_dp_mst_mode sink_mst_mode;
-	enum drm_dp_mst_mode mst_detect;
 
 	sink_mst_mode = drm_dp_read_mst_cap(&intel_dp->aux, intel_dp->dpcd);
 
-	mst_detect = intel_dp_mst_mode_choose(intel_dp, sink_mst_mode);
+	intel_dp->mst_detect = intel_dp_mst_mode_choose(intel_dp, sink_mst_mode);
 
 	drm_dbg_kms(&i915->drm,
 		    "[ENCODER:%d:%s] MST support: port: %s, sink: %s, modparam: %s -> enable: %s\n",
@@ -4053,25 +4052,23 @@ intel_dp_mst_detect(struct intel_dp *intel_dp)
 		    str_yes_no(intel_dp_mst_source_support(intel_dp)),
 		    intel_dp_mst_mode_str(sink_mst_mode),
 		    str_yes_no(i915->display.params.enable_dp_mst),
-		    intel_dp_mst_mode_str(mst_detect));
+		    intel_dp_mst_mode_str(intel_dp->mst_detect));
 
-	return mst_detect != DRM_DP_SST;
+	return intel_dp->mst_detect != DRM_DP_SST;
 }
 
 static void
-intel_dp_configure_mst(struct intel_dp *intel_dp)
+intel_dp_mst_configure(struct intel_dp *intel_dp)
 {
-	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
-	bool sink_can_mst = drm_dp_read_mst_cap(&intel_dp->aux, intel_dp->dpcd) == DRM_DP_MST;
-
 	if (!intel_dp_mst_source_support(intel_dp))
 		return;
 
-	intel_dp->is_mst = sink_can_mst &&
-		i915->display.params.enable_dp_mst;
+	intel_dp->is_mst = intel_dp->mst_detect != DRM_DP_SST;
 
-	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr,
-					intel_dp->is_mst);
+	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr, intel_dp->is_mst);
+
+	/* Avoid stale info on the next detect cycle. */
+	intel_dp->mst_detect = DRM_DP_SST;
 }
 
 static bool
@@ -5741,7 +5738,7 @@ intel_dp_detect(struct drm_connector *connector,
 
 	intel_dp_detect_dsc_caps(intel_dp, intel_connector);
 
-	intel_dp_configure_mst(intel_dp);
+	intel_dp_mst_configure(intel_dp);
 
 	/*
 	 * TODO: Reset link params when switching to MST mode, until MST
