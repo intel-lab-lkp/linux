@@ -352,7 +352,12 @@ struct ice_vsi {
 	u16 vsi_num;			/* HW (absolute) index of this VSI */
 	u16 idx;			/* software index in pf->vsi[] */
 
-	struct ice_vf *vf;		/* VF associated with this VSI */
+	union {
+		/* VF associated with this VSI */
+		struct ice_vf *vf;
+		/* SF associated with this VSI */
+		struct ice_dynamic_port *sf;
+	};
 
 	u16 num_gfltr;
 	u16 num_bfltr;

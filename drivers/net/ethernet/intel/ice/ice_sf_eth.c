@@ -117,6 +117,7 @@ static int ice_sf_dev_probe(struct auxiliary_device *adev,
 		dev_err(dev, "Subfunction vsi config failed");
 		return err;
 	}
+	vsi->sf = dyn_port;
 
 	err = ice_devlink_create_sf_dev_port(sf_dev);
 	if (err)
