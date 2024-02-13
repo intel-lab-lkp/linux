@@ -60,6 +60,12 @@ struct drm_colorop_state {
 	enum drm_colorop_curve_1d_type curve_1d_type;
 
 	/**
+	 * @hw_caps:
+	 *
+	 */
+	struct drm_property_blob *hw_caps;
+
+	/**
 	 * @data:
 	 *
 	 * Data blob for any TYPE that requires such a blob. The
@@ -166,6 +172,13 @@ struct drm_colorop {
 	 * HW constraints.
 	 */
 	struct drm_property *bypass_property;
+
+	/**
+	 * @hwlut_caps_property:
+	 *
+	 * Property to expose hardware lut capbilities.
+	 */
+	struct drm_property *hw_caps_property;
 
 	/**
 	 * @curve_1d_type:
