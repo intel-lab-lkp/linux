@@ -4,6 +4,8 @@
  * Copyright © 2017-2018 Intel Corporation
  */
 
+#include <linux/fdtable.h>
+#include <linux/fs.h>
 #include <linux/pm_runtime.h>
 
 #include "gt/intel_engine.h"
@@ -573,8 +575,20 @@ static void i915_pmu_event_destroy(struct perf_event *event)
 {
 	struct i915_pmu *pmu = event_to_pmu(event);
 	struct drm_i915_private *i915 = pmu_to_i915(pmu);
+	struct i915_event *e = event->pmu_private;
 
 	drm_WARN_ON(&i915->drm, event->parent);
+
+	if (e) {
+		event->pmu_private = NULL;
+		list_del(&e->link);
+		kfree(e);
+	}
+
+	if (i915->pmu.closed && list_empty(&i915->pmu.initialized_events)) {
+		pmu_teardown(&i915->pmu);
+		mod_delayed_work(system_wq, &i915->pmu.work, 50);
+	}
 
 	drm_dev_put(&i915->drm);
 }
@@ -684,6 +698,14 @@ static int i915_pmu_event_init(struct perf_event *event)
 		return ret;
 
 	if (!event->parent) {
+		struct i915_event *e = kzalloc(sizeof(*e), GFP_KERNEL);
+
+		if (!e)
+			return -ENOMEM;
+
+		e->event = event;
+		list_add(&e->link, &pmu->initialized_events);
+		event->pmu_private = e;
 		drm_dev_get(&i915->drm);
 		event->destroy = i915_pmu_event_destroy;
 	}
@@ -1256,6 +1278,14 @@ void i915_pmu_exit(void)
 		cpuhp_remove_multi_state(cpuhp_slot);
 }
 
+static void i915_pmu_release(struct work_struct *work)
+{
+	struct i915_pmu *pmu = container_of(work, typeof(*pmu), work.work);
+	struct drm_i915_private *i915 = container_of(pmu, typeof(*i915), pmu);
+
+	drm_dev_put(&i915->drm);
+}
+
 void i915_pmu_register(struct drm_i915_private *i915)
 {
 	struct i915_pmu *pmu = &i915->pmu;
@@ -1313,6 +1343,9 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	pmu->base.read		= i915_pmu_event_read;
 	pmu->base.event_idx	= i915_pmu_event_event_idx;
 
+	INIT_LIST_HEAD(&pmu->initialized_events);
+	INIT_DELAYED_WORK(&pmu->work, i915_pmu_release);
+
 	ret = perf_pmu_register(&pmu->base, pmu->name, -1);
 	if (ret)
 		goto err_groups;
@@ -1337,6 +1370,64 @@ err:
 	drm_notice(&i915->drm, "Failed to register PMU!\n");
 }
 
+/* Ref: close_fd() */
+static unsigned int __open_files(struct fdtable *fdt)
+{
+	unsigned int size = fdt->max_fds;
+	unsigned int i;
+
+	for (i = size / BITS_PER_LONG; i > 0; ) {
+		if (fdt->open_fds[--i])
+			break;
+	}
+	return (i + 1) * BITS_PER_LONG;
+}
+
+static void close_event_file(struct perf_event *event)
+{
+	unsigned int max_open_fds, fd;
+	struct files_struct *files;
+	struct task_struct *task;
+	struct fdtable *fdt;
+
+	task = event->owner;
+	if (!task)
+		return;
+
+	files = task->files;
+	if (!files)
+		return;
+
+	spin_lock(&files->file_lock);
+	fdt = files_fdtable(files);
+	max_open_fds = __open_files(fdt);
+	for (fd = 0; fd < max_open_fds; fd++) {
+		struct file *file = fdt->fd[fd];
+
+		if (!file || file->private_data != event)
+			continue;
+
+		rcu_assign_pointer(fdt->fd[fd], NULL);
+		__clear_bit(fd, fdt->open_fds);
+		__clear_bit(fd / BITS_PER_LONG, fdt->full_fds_bits);
+		if (fd < files->next_fd)
+			files->next_fd = fd;
+		filp_close(file, files);
+		break;
+	}
+	spin_unlock(&files->file_lock);
+}
+
+static void cleanup_events(struct i915_pmu *pmu)
+{
+	struct drm_i915_private *i915 = container_of(pmu, typeof(*i915), pmu);
+	struct i915_event *e, *tmp;
+
+	drm_dev_get(&i915->drm);
+	list_for_each_entry_safe(e, tmp, &pmu->initialized_events, link)
+		close_event_file(e->event);
+}
+
 void i915_pmu_unregister(struct drm_i915_private *i915)
 {
 	struct i915_pmu *pmu = &i915->pmu;
@@ -1354,5 +1445,8 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 
 	hrtimer_cancel(&pmu->timer);
 
-	pmu_teardown(pmu);
+	if (list_empty(&pmu->initialized_events))
+		pmu_teardown(pmu);
+	else
+		cleanup_events(pmu);
 }

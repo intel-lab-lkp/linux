@@ -55,6 +55,11 @@ struct i915_pmu_sample {
 	u64 cur;
 };
 
+struct i915_event {
+	struct perf_event *event;
+	struct list_head link;
+};
+
 struct i915_pmu {
 	/**
 	 * @cpuhp: Struct used for CPU hotplug handling.
@@ -152,6 +157,16 @@ struct i915_pmu {
 	 * @pmu_attr: Memory block holding device attributes.
 	 */
 	void *pmu_attr;
+
+	/**
+	 * @initialized_events: List of initialized events
+	 */
+	struct list_head initialized_events;
+
+	/**
+	 * @work: worker to delay release of drm device reference 
+	 */
+	struct delayed_work work;
 };
 
 #ifdef CONFIG_PERF_EVENTS
