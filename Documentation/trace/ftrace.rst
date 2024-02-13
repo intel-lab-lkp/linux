@@ -1036,8 +1036,12 @@ explains which is which.
 		be printed here.
 
   need-resched:
-	- 'N' both TIF_NEED_RESCHED and PREEMPT_NEED_RESCHED is set,
+	- 'B' all three, TIF_NEED_RESCHED, TIF_NEED_RESCHED_LAZY and PREEMPT_NEED_RESCHED are set,
+	- 'N' both TIF_NEED_RESCHED and PREEMPT_NEED_RESCHED are set,
+	- 'L' both TIF_NEED_RESCHED_LAZY and PREEMPT_NEED_RESCHED are set,
+	- 'b' both TIF_NEED_RESCHED and TIF_NEED_RESCHED_LAZY are set,
 	- 'n' only TIF_NEED_RESCHED is set,
+	- 'l' only TIF_NEED_RESCHED_LAZY is set,
 	- 'p' only PREEMPT_NEED_RESCHED is set,
 	- '.' otherwise.
 
