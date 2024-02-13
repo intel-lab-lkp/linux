@@ -301,7 +301,15 @@ void raw_irqentry_exit_cond_resched(void)
 		rcu_irq_exit_check_preempt();
 		if (IS_ENABLED(CONFIG_DEBUG_ENTRY))
 			WARN_ON_ONCE(!on_thread_stack());
-		if (need_resched())
+
+		/*
+		 * Check if we need to preempt eagerly.
+		 *
+		 * Note we need an explicit check here because some archs don't
+		 * fold TIF_NEED_RESCHED in the preempt_count. For archs that
+		 * do, this is already covered in the conditinal above.
+		 */
+		if (tif_need_resched(NR_now))
 			preempt_schedule_irq();
 	}
 }
