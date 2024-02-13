@@ -5177,23 +5177,21 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 	if (err)
 		goto err_init;
 
+	err = ice_init_devlink(pf);
+	if (err)
+		goto err_init_devlink;
+
 	devl_lock(priv_to_devlink(pf));
 	err = ice_load(pf);
 	devl_unlock(priv_to_devlink(pf));
 	if (err)
 		goto err_load;
 
-	err = ice_init_devlink(pf);
-	if (err)
-		goto err_init_devlink;
-
 	return 0;
 
-err_init_devlink:
-	devl_lock(priv_to_devlink(pf));
-	ice_unload(pf);
-	devl_unlock(priv_to_devlink(pf));
 err_load:
+	ice_deinit_devlink(pf);
+err_init_devlink:
 	ice_deinit(pf);
 err_init:
 	pci_disable_device(pdev);
@@ -5290,11 +5288,11 @@ static void ice_remove(struct pci_dev *pdev)
 	if (!ice_is_safe_mode(pf))
 		ice_remove_arfs(pf);
 
-	ice_deinit_devlink(pf);
-
 	devl_lock(priv_to_devlink(pf));
 	ice_unload(pf);
 	devl_unlock(priv_to_devlink(pf));
+
+	ice_deinit_devlink(pf);
 
 	ice_deinit(pf);
 	ice_vsi_release_all(pf);
