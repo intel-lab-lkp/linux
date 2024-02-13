@@ -624,11 +624,20 @@ static int ov5645_set_register_array(struct ov5645 *ov5645,
 {
 	unsigned int i;
 	int ret;
+	u8 val;
 
 	for (i = 0; i < num_settings; ++i, ++settings) {
 		ret = ov5645_write_reg(ov5645, settings->reg, settings->val);
 		if (ret < 0)
 			return ret;
+
+		ret = ov5645_read_reg(ov5645, settings->reg, &val);
+		if (ret < 0)
+			return ret;
+
+		if (val != settings->val)
+			dev_dbg(ov5645->dev, "Data mismatch reg=%x val=%x/%x\n",
+				settings->reg, settings->val, val);
 	}
 
 	return 0;
