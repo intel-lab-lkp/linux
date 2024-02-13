@@ -43,5 +43,7 @@ int intel_plane_tf_pipeline_init(struct drm_plane *plane, struct drm_prop_enum_l
 int intel_plane_color_init(struct drm_plane *plane);
 void intel_program_pipeline(const struct drm_plane_state *plane_state,
 			    u32 *plane_color_ctl);
+void intel_color_load_plane_csc_matrix(const struct drm_plane_state *plane_state,
+				       const struct drm_property_blob *blob);
 
 #endif /* __INTEL_COLOR_H__ */
