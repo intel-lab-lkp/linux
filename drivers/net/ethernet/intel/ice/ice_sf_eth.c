@@ -224,6 +224,36 @@ static void ice_sf_dev_release(struct device *device)
 	kfree(sf_dev);
 }
 
+static ssize_t
+sfnum_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct devlink_port_attrs *attrs;
+	struct auxiliary_device *adev;
+	struct ice_sf_dev *sf_dev;
+
+	adev = to_auxiliary_dev(dev);
+	sf_dev = ice_adev_to_sf_dev(adev);
+	attrs = &sf_dev->dyn_port->devlink_port.attrs;
+
+	return sysfs_emit(buf, "%u\n", attrs->pci_sf.sf);
+}
+
+static DEVICE_ATTR_RO(sfnum);
+
+static struct attribute *ice_sf_device_attrs[] = {
+	&dev_attr_sfnum.attr,
+	NULL,
+};
+
+static const struct attribute_group ice_sf_attr_group = {
+	.attrs = ice_sf_device_attrs,
+};
+
+static const struct attribute_group *ice_sf_attr_groups[2] = {
+	&ice_sf_attr_group,
+	NULL
+};
+
 /**
  * ice_sf_eth_activate - Activate Ethernet subfunction port
  * @dyn_port: the dynamic port instance for this subfunction
@@ -262,6 +292,7 @@ ice_sf_eth_activate(struct ice_dynamic_port *dyn_port,
 	sf_dev->dyn_port = dyn_port;
 	sf_dev->adev.id = id;
 	sf_dev->adev.name = "sf";
+	sf_dev->adev.dev.groups = ice_sf_attr_groups;
 	sf_dev->adev.dev.release = ice_sf_dev_release;
 	sf_dev->adev.dev.parent = &pdev->dev;
 
