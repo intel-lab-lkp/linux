@@ -1625,13 +1625,11 @@ xfs_fs_fill_super(
 		goto out_free_sb;
 	}
 
-	/*
-	 * Until this is fixed only page-sized or smaller data blocks work.
-	 */
-	if (mp->m_sb.sb_blocksize > PAGE_SIZE) {
+	if (!IS_ENABLED(CONFIG_XFS_LBS) && mp->m_sb.sb_blocksize > PAGE_SIZE) {
 		xfs_warn(mp,
 		"File system with blocksize %d bytes. "
-		"Only pagesize (%ld) or less will currently work.",
+		"Only pagesize (%ld) or less will currently work. "
+		"Enable Experimental CONFIG_XFS_LBS for this support",
 				mp->m_sb.sb_blocksize, PAGE_SIZE);
 		error = -ENOSYS;
 		goto out_free_sb;
