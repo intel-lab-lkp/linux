@@ -249,7 +249,8 @@ const char *drm_get_color_pipeline_name(struct drm_colorop *colorop);
 
 const char *drm_get_colorop_type_name(enum drm_colorop_type type);
 const char *drm_get_colorop_curve_1d_type_name(enum drm_colorop_curve_1d_type type);
-
+void drm_colorop_destroy_state(struct drm_colorop *colorop,
+			       struct drm_colorop_state *state);
 void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 uint32_t drm_colorop_get_next_property(struct drm_colorop *colorop);
 struct drm_colorop *drm_colorop_get_next(struct drm_colorop *colorop);
