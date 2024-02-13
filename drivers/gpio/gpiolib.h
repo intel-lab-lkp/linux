@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/gpio/consumer.h> /* for enum gpiod_flags */
 #include <linux/gpio/driver.h>
+#include <linux/lockdep.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/srcu.h>
@@ -202,7 +203,8 @@ DEFINE_CLASS(gpio_chip_guard,
 
 		_guard.gdev = desc->gdev;
 		_guard.idx = srcu_read_lock(&_guard.gdev->srcu);
-		_guard.gc = rcu_dereference(_guard.gdev->chip);
+		_guard.gc = rcu_dereference_protected(_guard.gdev->chip,
+					lockdep_is_held(&_guard.gdev->srcu));
 
 		_guard;
 	     }),
