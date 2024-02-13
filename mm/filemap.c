@@ -1922,8 +1922,6 @@ no_page:
 			gfp_t alloc_gfp = gfp;
 
 			err = -ENOMEM;
-			if (order == 1)
-				order = 0;
 			if (order < min_order)
 				order = min_order;
 			if (order > 0)
