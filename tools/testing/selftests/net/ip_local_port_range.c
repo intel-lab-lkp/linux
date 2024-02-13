@@ -362,7 +362,7 @@ TEST_F(ip_local_port_range, late_bind)
 	__u16 port;
 
 	if (variant->so_protocol == IPPROTO_SCTP)
-		SKIP(return, "SCTP doesn't support IP_BIND_ADDRESS_NO_PORT");
+		XFAIL(return, "SCTP doesn't support IP_BIND_ADDRESS_NO_PORT");
 
 	fd = socket(variant->so_domain, variant->so_type, 0);
 	ASSERT_GE(fd, 0) TH_LOG("socket failed");
