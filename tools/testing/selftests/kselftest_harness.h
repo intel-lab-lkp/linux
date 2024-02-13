@@ -101,8 +101,8 @@
  * ASSERT_* number for which the test failed.  This behavior can be enabled by
  * writing `_metadata->no_print = true;` before the check sequence that is
  * unable to print.  When an error occur, instead of printing an error message
- * and calling `abort(3)`, the test process call `_exit(2)` with the assert
- * number as argument, which is then printed by the parent process.
+ * and calling `abort(3)`, the test process call `_exit(2)` and pass the error
+ * to be printed to the parent process via shared memory.
  */
 #define TH_LOG(fmt, ...) do { \
 	if (TH_LOG_ENABLED) \
@@ -695,9 +695,8 @@
 			__bail(_assert, _metadata))
 
 #define __INC_STEP(_metadata) \
-	/* Keep "step" below 255 (which is used for "SKIP" reporting). */	\
-	if (_metadata->passed && _metadata->step < 253) \
-		_metadata->step++;
+	if (_metadata->passed) \
+		_metadata->results->step++;
 
 #define is_signed_type(var)       (!!(((__typeof__(var))(-1)) < (__typeof__(var))1))
 
@@ -784,6 +783,7 @@
 
 struct __test_results {
 	char reason[1024];	/* Reason for test result */
+	unsigned int step;	/* Test step reached without failure */
 };
 
 struct __test_metadata;
@@ -837,7 +837,6 @@ struct __test_metadata {
 	int trigger; /* extra handler after the evaluation */
 	int timeout;	/* seconds to wait for test timeout */
 	bool timed_out;	/* did this test timeout instead of exiting? */
-	__u8 step;
 	bool no_print; /* manual trigger when TH_LOG_STREAM is not available */
 	bool aborted;	/* stopped test due to failed ASSERT */
 	bool setup_completed; /* did setup finish? */
@@ -875,7 +874,7 @@ static inline void __test_check_assert(struct __test_metadata *t)
 {
 	if (t->aborted) {
 		if (t->no_print)
-			_exit(t->step);
+			_exit(1);
 		abort();
 	}
 }
@@ -960,7 +959,7 @@ void __wait_for_test(struct __test_metadata *t)
 				fprintf(TH_LOG_STREAM,
 					"# %s: Test failed at step #%d\n",
 					t->name,
-					WEXITSTATUS(status));
+					t->results->step);
 			}
 		}
 	} else if (WIFSIGNALED(status)) {
@@ -1114,9 +1113,9 @@ void __run_test(struct __fixture_metadata *f,
 	t->passed = 1;
 	t->skip = 0;
 	t->trigger = 0;
-	t->step = 1;
 	t->no_print = 0;
 	memset(t->results->reason, 0, sizeof(t->results->reason));
+	t->results->step = 1;
 
 	ksft_print_msg(" RUN           %s%s%s.%s ...\n",
 	       f->name, variant->name[0] ? "." : "", variant->name, t->name);
@@ -1137,8 +1136,8 @@ void __run_test(struct __fixture_metadata *f,
 		/* Pass is exit 0 */
 		if (t->passed)
 			_exit(0);
-		/* Something else happened, report the step. */
-		_exit(t->step);
+		/* Something else happened. */
+		_exit(1);
 	} else {
 		__wait_for_test(t);
 	}
