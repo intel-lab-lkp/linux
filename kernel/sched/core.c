@@ -8968,7 +8968,9 @@ static void __sched_dynamic_update(int mode)
 {
 	switch (mode) {
 	case preempt_dynamic_none:
-		preempt_dynamic_mode = preempt_dynamic_undefined;
+		if (mode != preempt_dynamic_mode)
+			pr_info("%s: none\n", PREEMPT_MODE);
+		preempt_dynamic_mode = mode;
 		break;
 
 	case preempt_dynamic_voluntary:
