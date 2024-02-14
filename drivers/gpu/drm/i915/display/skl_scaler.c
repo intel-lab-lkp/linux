@@ -925,13 +925,22 @@ void skl_scaler_get_config(struct intel_crtc_state *crtc_state)
 
 	/* find scaler attached to this pipe */
 	for (i = 0; i < crtc->num_scalers; i++) {
-		u32 ctl, pos, size;
+		u32 ctl, pos, size, sharp;
 
 		ctl = intel_de_read(dev_priv, SKL_PS_CTRL(crtc->pipe, i));
 		if ((ctl & (PS_SCALER_EN | PS_BINDING_MASK)) != (PS_SCALER_EN | PS_BINDING_PIPE))
 			continue;
 
 		id = i;
+
+		sharp = intel_de_read(dev_priv, SHARPNESS_CTL(crtc->pipe));
+		if (sharp & FILTER_EN) {
+			crtc_state->hw.casf_params.strength =
+				REG_FIELD_GET(FILTER_STRENGTH_MASK, sharp) - 16;
+			crtc_state->hw.casf_params.need_scaler = true;
+			crtc_state->hw.casf_params.win_size =
+				REG_FIELD_GET(FILTER_SIZE_MASK, sharp);
+		}
 
 		if (!crtc_state->hw.casf_params.need_scaler)
 			crtc_state->pch_pfit.enabled = true;
