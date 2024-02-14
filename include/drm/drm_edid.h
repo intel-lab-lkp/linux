@@ -459,5 +459,6 @@ bool drm_edid_is_digital(const struct drm_edid *drm_edid);
 
 const u8 *drm_find_edid_extension(const struct drm_edid *drm_edid,
 				  int ext_id, int *ext_index);
+const struct drm_edid *drm_edid_read_acpi(struct drm_connector *connector);
 
 #endif /* __DRM_EDID_H__ */

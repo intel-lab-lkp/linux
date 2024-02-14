@@ -1886,6 +1886,12 @@ struct drm_connector {
 
 	/** @hdr_sink_metadata: HDR Metadata Information read from sink */
 	struct hdr_sink_metadata hdr_sink_metadata;
+
+	/**
+	 * @acpi_edid_allowed: Get the EDID from the BIOS, if available.
+	 * This is only applicable to eDP and LVDS displays.
+	 */
+	bool acpi_edid_allowed;
 };
 
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)

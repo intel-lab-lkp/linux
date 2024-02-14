@@ -28,6 +28,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <acpi/video.h>
 #include <linux/bitfield.h>
 #include <linux/cec.h>
 #include <linux/hdmi.h>
@@ -2188,6 +2189,58 @@ drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
 	return ret == xfers ? 0 : -1;
 }
 
+/**
+ * drm_do_probe_acpi_edid() - get EDID information via ACPI _DDC
+ * @data: struct drm_connector
+ * @buf: EDID data buffer to be filled
+ * @block: 128 byte EDID block to start fetching from
+ * @len: EDID data buffer length to fetch
+ *
+ * Try to fetch EDID information by calling acpi_video_get_edid() function.
+ *
+ * Return: 0 on success or error code on failure.
+ */
+static int
+drm_do_probe_acpi_edid(void *data, u8 *buf, unsigned int block, size_t len)
+{
+	struct drm_connector *connector = data;
+	struct drm_device *ddev = connector->dev;
+	struct acpi_device *acpidev = ACPI_COMPANION(ddev->dev);
+	unsigned char start = block * EDID_LENGTH;
+	void *edid;
+	int r;
+
+	if (!acpidev)
+		return -ENODEV;
+
+	switch (connector->connector_type) {
+	case DRM_MODE_CONNECTOR_LVDS:
+	case DRM_MODE_CONNECTOR_eDP:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* fetch the entire edid from BIOS */
+	r = acpi_video_get_edid(acpidev, ACPI_VIDEO_DISPLAY_LCD, -1, &edid);
+	if (r < 0) {
+		DRM_DEBUG_KMS("Failed to get EDID from ACPI: %d\n", r);
+		return r;
+	}
+	if (len > r || start > r || start + len > r) {
+		r = -EINVAL;
+		goto cleanup;
+	}
+
+	memcpy(buf, edid + start, len);
+	r = 0;
+
+cleanup:
+	kfree(edid);
+
+	return r;
+}
+
 static void connector_bad_edid(struct drm_connector *connector,
 			       const struct edid *edid, int num_blocks)
 {
@@ -2621,7 +2674,8 @@ EXPORT_SYMBOL(drm_probe_ddc);
  * @connector: connector we're probing
  * @adapter: I2C adapter to use for DDC
  *
- * Poke the given I2C channel to grab EDID data if possible.  If found,
+ * If the connector allows it, try to fetch EDID data using ACPI. If not found
+ * poke the given I2C channel to grab EDID data if possible.  If found,
  * attach it to the connector.
  *
  * Return: Pointer to valid EDID or NULL if we couldn't find any.
@@ -2629,19 +2683,49 @@ EXPORT_SYMBOL(drm_probe_ddc);
 struct edid *drm_get_edid(struct drm_connector *connector,
 			  struct i2c_adapter *adapter)
 {
-	struct edid *edid;
+	struct edid *edid = NULL;
 
 	if (connector->force == DRM_FORCE_OFF)
 		return NULL;
 
-	if (connector->force == DRM_FORCE_UNSPECIFIED && !drm_probe_ddc(adapter))
-		return NULL;
+	if (connector->acpi_edid_allowed)
+		edid = _drm_do_get_edid(connector, drm_do_probe_acpi_edid, connector, NULL);
 
-	edid = _drm_do_get_edid(connector, drm_do_probe_ddc_edid, adapter, NULL);
+	if (!edid) {
+		if (connector->force == DRM_FORCE_UNSPECIFIED && !drm_probe_ddc(adapter))
+			return NULL;
+		edid = _drm_do_get_edid(connector, drm_do_probe_ddc_edid, adapter, NULL);
+	}
+
 	drm_connector_update_edid_property(connector, edid);
 	return edid;
 }
 EXPORT_SYMBOL(drm_get_edid);
+
+/**
+ * drm_edid_read_acpi - get EDID data, if available
+ * @connector: connector we're probing
+ *
+ * Use the BIOS to attempt to grab EDID data if possible.
+ *
+ * The returned pointer must be freed using drm_edid_free().
+ *
+ * Return: Pointer to valid EDID or NULL if we couldn't find any.
+ */
+const struct drm_edid *drm_edid_read_acpi(struct drm_connector *connector)
+{
+	const struct drm_edid *drm_edid;
+
+	if (connector->force == DRM_FORCE_OFF)
+		return NULL;
+
+	drm_edid = drm_edid_read_custom(connector, drm_do_probe_acpi_edid, connector);
+
+	/* Note: Do *not* call connector updates here. */
+
+	return drm_edid;
+}
+EXPORT_SYMBOL(drm_edid_read_acpi);
 
 /**
  * drm_edid_read_custom - Read EDID data using given EDID block read function
@@ -2727,10 +2811,11 @@ const struct drm_edid *drm_edid_read_ddc(struct drm_connector *connector,
 EXPORT_SYMBOL(drm_edid_read_ddc);
 
 /**
- * drm_edid_read - Read EDID data using connector's I2C adapter
+ * drm_edid_read - Read EDID data using BIOS or connector's I2C adapter
  * @connector: Connector to use
  *
- * Read EDID using the connector's I2C adapter.
+ * Read EDID from BIOS if allowed by connector or by using the connector's
+ * I2C adapter.
  *
  * The EDID may be overridden using debugfs override_edid or firmware EDID
  * (drm_edid_load_firmware() and drm.edid_firmware parameter), in this priority
@@ -2742,10 +2827,18 @@ EXPORT_SYMBOL(drm_edid_read_ddc);
  */
 const struct drm_edid *drm_edid_read(struct drm_connector *connector)
 {
+	const struct drm_edid *drm_edid = NULL;
+
 	if (drm_WARN_ON(connector->dev, !connector->ddc))
 		return NULL;
 
-	return drm_edid_read_ddc(connector, connector->ddc);
+	if (connector->acpi_edid_allowed)
+		drm_edid = drm_edid_read_acpi(connector);
+
+	if (!drm_edid)
+		drm_edid = drm_edid_read_ddc(connector, connector->ddc);
+
+	return drm_edid;
 }
 EXPORT_SYMBOL(drm_edid_read);
 
