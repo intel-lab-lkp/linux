@@ -803,6 +803,7 @@ struct intel_sharpen_filter {
 	bool strength_changed;
 	u8 win_size;
 	bool need_scaler;
+	u8 strength;
 };
 
 struct intel_crtc_scaler_state {
