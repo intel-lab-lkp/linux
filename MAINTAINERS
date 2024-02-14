@@ -5291,6 +5291,7 @@ S:	Maintained
 F:	drivers/cxl/
 F:	include/linux/cxl-event.h
 F:	include/uapi/linux/cxl_mem.h
+F:  include/linux/einj-cxl.h
 F:	tools/testing/cxl/
 
 COMPUTE EXPRESS LINK PMU (CPMU)
