@@ -955,3 +955,20 @@ int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 	return 0;
 }
 EXPORT_SYMBOL(drm_crtc_create_scaling_filter_property);
+
+int drm_crtc_create_sharpening_strength_property(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+
+	struct drm_property *prop =
+		drm_property_create_range(dev, 0, "SHARPENESS_STRENGTH", 0, 255);
+
+	if (!prop)
+		return -ENOMEM;
+
+	crtc->sharpening_strength_prop = prop;
+	drm_object_attach_property(&crtc->base, prop, 0);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_crtc_create_sharpening_strength_property);
