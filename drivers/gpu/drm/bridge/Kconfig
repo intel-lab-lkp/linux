@@ -218,9 +218,9 @@ config DRM_NXP_PTN3460
 config DRM_PARADE_PS8622
 	tristate "Parade eDP/LVDS bridge"
 	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
 	select DRM_PANEL
 	select DRM_KMS_HELPER
-	select BACKLIGHT_CLASS_DEVICE
 	help
 	  Parade eDP-LVDS bridge chip driver.
 

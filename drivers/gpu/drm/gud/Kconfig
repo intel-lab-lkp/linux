@@ -3,10 +3,10 @@
 config DRM_GUD
 	tristate "GUD USB Display"
 	depends on DRM && USB && MMU
+	depends on BACKLIGHT_CLASS_DEVICE
 	select LZ4_COMPRESS
 	select DRM_KMS_HELPER
 	select DRM_GEM_SHMEM_HELPER
-	select BACKLIGHT_CLASS_DEVICE
 	help
 	  This is a DRM display driver for GUD USB Displays or display
 	  adapters.
