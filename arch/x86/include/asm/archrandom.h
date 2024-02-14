@@ -13,22 +13,18 @@
 #include <asm/processor.h>
 #include <asm/cpufeature.h>
 
-#define RDRAND_RETRY_LOOPS	10
-
 /* Unconditional execution of RDRAND and RDSEED */
 
 static inline bool __must_check rdrand_long(unsigned long *v)
 {
 	bool ok;
-	unsigned int retry = RDRAND_RETRY_LOOPS;
-	do {
-		asm volatile("rdrand %[out]"
-			     CC_SET(c)
-			     : CC_OUT(c) (ok), [out] "=r" (*v));
-		if (ok)
-			return true;
-	} while (--retry);
-	return false;
+	asm volatile("rdrand %[out]"
+		     CC_SET(c)
+		     : CC_OUT(c) (ok), [out] "=r" (*v));
+#ifndef KASLR_COMPRESSED_BOOT
+	WARN_ON(!ok);
+#endif
+	return ok;
 }
 
 static inline bool __must_check rdseed_long(unsigned long *v)
