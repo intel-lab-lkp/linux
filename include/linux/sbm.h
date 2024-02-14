@@ -305,4 +305,212 @@ static inline int sbm_exec(struct sbm *sbm, sbm_func func, void *data)
 
 #endif /* CONFIG_SANDBOX_MODE */
 
+/**
+ * __SBM_MAP() - Convert parameters to comma-separated expressions.
+ * @m: Macro used to convert each pair.
+ * @e: Expansion if no arguments are given.
+ */
+#define __SBM_MAP(m, e, ...) \
+	CONCATENATE(__SBM_MAP, COUNT_ARGS(__VA_ARGS__))(m, e, ##__VA_ARGS__)
+#define __SBM_MAP0(m, e)             e
+#define __SBM_MAP2(m, e, t, a)       m(t, a)
+#define __SBM_MAP4(m, e, t, a, ...)  m(t, a), __SBM_MAP2(m, e, __VA_ARGS__)
+#define __SBM_MAP6(m, e, t, a, ...)  m(t, a), __SBM_MAP4(m, e, __VA_ARGS__)
+#define __SBM_MAP8(m, e, t, a, ...)  m(t, a), __SBM_MAP6(m, e, __VA_ARGS__)
+#define __SBM_MAP10(m, e, t, a, ...) m(t, a), __SBM_MAP8(m, e, __VA_ARGS__)
+#define __SBM_MAP12(m, e, t, a, ...) m(t, a), __SBM_MAP10(m, e, __VA_ARGS__)
+
+/**
+ * __SBM_MEMBERS() - Convert parameters to struct declaration body.
+ *
+ * This macro is similar to __SBM_MAP(), but the declarations are delimited by
+ * semicolons, not commas.
+ */
+#define __SBM_MEMBERS(...) \
+	CONCATENATE(__SBM_MEMBERS, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define __SBM_MEMBERS0()
+#define __SBM_MEMBERS2(t, a)       t a;
+#define __SBM_MEMBERS4(t, a, ...)  t a; __SBM_MEMBERS2(__VA_ARGS__)
+#define __SBM_MEMBERS6(t, a, ...)  t a; __SBM_MEMBERS4(__VA_ARGS__)
+#define __SBM_MEMBERS8(t, a, ...)  t a; __SBM_MEMBERS6(__VA_ARGS__)
+#define __SBM_MEMBERS10(t, a, ...) t a; __SBM_MEMBERS8(__VA_ARGS__)
+#define __SBM_MEMBERS12(t, a, ...) t a; __SBM_MEMBERS10(__VA_ARGS__)
+
+/************************* Target function **************************/
+
+/**
+ * __SBM_DECL() - Map a parameter to a declaration.
+ * @type: Parameter type.
+ * @id:   Parameter identifier.
+ *
+ * Use this macro with __SBM_MAP() to get variable or function parameter
+ * declarations.
+ */
+#define __SBM_DECL(type, id)   type id
+
+/**
+ * __SBM_DECLARE_FUNC() - Declare a target function.
+ * @f:   Target function name.
+ * @...: Parameters as type-identifier pairs.
+ *
+ * Target function parameters are specified as type-identifier pairs, somewhat
+ * similar to SYSCALL_DEFINEn(). The function name @f is followed by up to 6
+ * type and identifier pairs, one for each parameter. The number of parameters
+ * is determined automatically.
+ *
+ * For example, if your target function is declared like this:
+ *
+ * .. code-block:: c
+ *   static int foo(struct bar *baz);
+ *
+ * it would be declared with __SBM_DECLARE_FUNC() like this:
+ *
+ * .. code-block:: c
+ *   static __SBM_DECLARE_FUNC(foo, struct bar *, baz);
+ *
+ */
+#define __SBM_DECLARE_FUNC(f, ...) \
+	int f(__SBM_MAP(__SBM_DECL, void, ##__VA_ARGS__))
+
+/*************************** Call helper ****************************/
+
+/**
+ * __SBM_CALL() - Call helper function identifier.
+ * @f: Target function name.
+ */
+#define __SBM_CALL(f)	__sbm_call_##f
+
+/**
+ * __SBM_VAR() - Map a parameter to its identifier.
+ * @type: Parameter type (unused).
+ * @id:   Parameter identifier.
+ *
+ * Use this macro with __SBM_MAP() to get only the identifier from each
+ * type-identifier pair.
+ */
+#define __SBM_VAR(type, id)    id
+
+/**
+ * __SBM_OPT_ARG() - Define an optional macro argument.
+ * @...: Optional parameters.
+ *
+ * Expand to a comma followed by all macro parameters, but if the parameter
+ * list is empty, expand to nothing (not even the comma).
+ */
+#define __SBM_OPT_ARG(...)	__SBM_OPT_ARG_1(__VA_ARGS__)
+#define __SBM_OPT_ARG_1(...)	, ##__VA_ARGS__
+
+/**
+ * SBM_DEFINE_CALL() - Define a call helper.
+ * @f:   Target function name.
+ * @...: Parameters as type-identifier pairs.
+ *
+ * Declare an argument-passing struct and define the corresponding call
+ * helper. The call helper stores its arguments in an automatic variable of
+ * the corresponding type and calls sbm_exec().
+ *
+ * The call helper is an inline function, so it is OK to use this macro in
+ * header files.
+ *
+ * Target function parameters are specified as type-identifier pairs, see
+ * __SBM_DECLARE_FUNC().
+ */
+#define SBM_DEFINE_CALL(f, ...) \
+	int __SBM_THUNK(f)(void *__p);					\
+	struct __SBM_ARG(f) {						\
+		__SBM_MEMBERS(__VA_ARGS__)				\
+	};								\
+	static inline int __SBM_CALL(f)(				\
+		struct sbm *__sbm					\
+		__SBM_OPT_ARG(__SBM_MAP(__SBM_DECL, , ##__VA_ARGS__)))	\
+	{								\
+		struct __SBM_ARG(f) __args = {				\
+			__SBM_MAP(__SBM_VAR, , ##__VA_ARGS__)		\
+		};							\
+		return sbm_exec(__sbm, __SBM_THUNK(f), &__args);	\
+	}
+
+/************************** Thunk function **************************/
+
+/**
+ * __SBM_ARG() - Struct tag for target function arguments.
+ * @f: Target function name.
+ */
+#define __SBM_ARG(f)	__sbm_arg_##f
+
+/**
+ * __SBM_DEREF() - Map a parameter to a struct __SBM_ARG() field.
+ * @type: Parameter type (unused).
+ * @id:   Parameter identifier.
+ *
+ * Use this macro with __SBM_MAP() to dereference a struct __SBM_ARG()
+ * pointer.
+ */
+#define __SBM_DEREF(type, id)  __arg->id
+
+/**
+ * __SBM_THUNK() - Thunk function identifier.
+ * @f: Target function name.
+ *
+ * Use this macro to generate the thunk function identifier for a given target
+ * function.
+ */
+#define __SBM_THUNK(f)	__sbm_thunk_##f
+
+/**
+ * SBM_DEFINE_THUNK() - Define a thunk function.
+ * @f:   Target function name.
+ * @...: Parameters as type-identifier pairs.
+ *
+ * The thunk function casts its parameter back to the argument-passing struct
+ * and calls the target function @f with parameters stored there by the call
+ * helper.
+ *
+ * Target function parameters are specified as type-identifier pairs, see
+ * __SBM_DECLARE_FUNC().
+ */
+#define SBM_DEFINE_THUNK(f, ...) \
+	int __SBM_THUNK(f)(void *__p)					\
+	{								\
+		struct __SBM_ARG(f) *__arg __maybe_unused = __p;	\
+		return (f)(__SBM_MAP(__SBM_DEREF, , ##__VA_ARGS__));	\
+	}
+
+/**************************** Shorthands ****************************/
+
+/**
+ * SBM_DEFINE_FUNC() - Define target function, thunk and call helper.
+ * @f:   Target function name.
+ * @...: Parameters as type-identifier pairs.
+ *
+ * Declare or define a target function and also the corresponding
+ * thunk and call helper. Use this shorthand to avoid repeating the
+ * target function signature.
+ *
+ * The target function is declared twice. The first declaration allows to
+ * precede the macro with storage-class specifiers. The second declaration
+ * allows to follow the macro with the function body. You can also put a
+ * semicolon after the macro to make it only a declaration.
+ *
+ * Target function parameters are specified as type-identifier pairs, see
+ * __SBM_DECLARE_FUNC().
+ */
+#define SBM_DEFINE_FUNC(f, ...) \
+	__SBM_DECLARE_FUNC(f, ##__VA_ARGS__);		\
+	static SBM_DEFINE_CALL(f, ##__VA_ARGS__)	\
+	static SBM_DEFINE_THUNK(f, ##__VA_ARGS__)	\
+	__SBM_DECLARE_FUNC(f, ##__VA_ARGS__)
+
+/**
+ * sbm_call() - Call a function in sandbox mode.
+ * @sbm:    SBM instance.
+ * @func:   Function to be called.
+ * @...:    Target function arguments.
+ *
+ * Call a function using a call helper which was previously defined with
+ * SBM_DEFINE_FUNC().
+ */
+#define sbm_call(sbm, func, ...) \
+	__SBM_CALL(func)(sbm, ##__VA_ARGS__)
+
 #endif /* __LINUX_SBM_H */
