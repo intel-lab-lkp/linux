@@ -35,9 +35,10 @@
 #define BASE_INNER(seg) ctx->dcn_reg_offsets[seg]
 #define CTX dmub
 #define REGS dmub->regs_dcn35
-#define REG_OFFSET_EXP(reg_name) BASE(reg##reg_name##_BASE_IDX) + reg##reg_name
+#define REG_OFFSET_EXP(reg_name) (BASE(reg##reg_name##_BASE_IDX) + reg##reg_name)
 
-void dmub_srv_dcn35_regs_init(struct dmub_srv *dmub, struct dc_context *ctx) {
+void dmub_srv_dcn35_regs_init(struct dmub_srv *dmub, struct dc_context *ctx)
+{
 	struct dmub_srv_dcn35_regs *regs = dmub->regs_dcn35;
 #define REG_STRUCT regs
 
