@@ -9,6 +9,7 @@
 #include <linux/efi.h>
 #include <linux/pci.h>
 #include <linux/stddef.h>
+#include <linux/slr_table.h>
 
 #include <asm/efi.h>
 #include <asm/e820/types.h>
@@ -810,6 +811,57 @@ static efi_status_t efi_decompress_kernel(unsigned long *kernel_entry)
 	return EFI_SUCCESS;
 }
 
+static void efi_secure_launch(struct boot_params *boot_params)
+{
+	struct slr_entry_uefi_config *uefi_config;
+	struct slr_uefi_cfg_entry *uefi_entry;
+	struct slr_entry_dl_info *dlinfo;
+	efi_guid_t guid = SLR_TABLE_GUID;
+	struct slr_table *slrt;
+	u64 memmap_hi;
+	void *table;
+	u8 buf[64] = {0};
+
+	table = get_efi_config_table(guid);
+
+	/*
+	 * The presence of this table indicated a Secure Launch
+	 * is being requested.
+	 */
+	if (!table)
+		return;
+
+	slrt = (struct slr_table *)table;
+
+	if (slrt->magic != SLR_TABLE_MAGIC)
+		return;
+
+	/* Add config information to measure the UEFI memory map */
+	uefi_config = (struct slr_entry_uefi_config *)buf;
+	uefi_config->hdr.tag = SLR_ENTRY_UEFI_CONFIG;
+	uefi_config->hdr.size = sizeof(*uefi_config) + sizeof(*uefi_entry);
+	uefi_config->revision = SLR_UEFI_CONFIG_REVISION;
+	uefi_config->nr_entries = 1;
+	uefi_entry = (struct slr_uefi_cfg_entry *)(buf + sizeof(*uefi_config));
+	uefi_entry->pcr = 18;
+	uefi_entry->cfg = boot_params->efi_info.efi_memmap;
+	memmap_hi = boot_params->efi_info.efi_memmap_hi;
+	uefi_entry->cfg |= memmap_hi << 32;
+	uefi_entry->size = boot_params->efi_info.efi_memmap_size;
+	memcpy(&uefi_entry->evt_info[0], "Measured UEFI memory map",
+		strlen("Measured UEFI memory map"));
+
+	if (slr_add_entry(slrt, (struct slr_entry_hdr *)uefi_config))
+		return;
+
+	/* Jump through DL stub to initiate Secure Launch */
+	dlinfo = (struct slr_entry_dl_info *)
+		slr_next_entry_by_tag(slrt, NULL, SLR_ENTRY_DL_INFO);
+
+	asm volatile ("jmp *%%rax"
+		      : : "a" (dlinfo->dl_handler), "D" (&dlinfo->bl_context));
+}
+
 static void __noreturn enter_kernel(unsigned long kernel_addr,
 				    struct boot_params *boot_params)
 {
@@ -933,6 +985,9 @@ void __noreturn efi_stub_entry(efi_handle_t handle,
 		efi_err("exit_boot() failed!\n");
 		goto fail;
 	}
+
+	/* If a Secure Launch is in progress, this never returns */
+	efi_secure_launch(boot_params);
 
 	/*
 	 * Call the SEV init code while still running with the firmware's
