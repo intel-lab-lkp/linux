@@ -29,3 +29,15 @@ config SANDBOX_MODE
 	  and leaving the sandbox.
 
 	  If unsure, say N.
+
+config SBM_KUNIT_TEST
+	tristate "Unit tests for SandBox Mode" if !KUNIT_ALL_TESTS
+	depends on KUNIT && SANDBOX_MODE
+	default KUNIT_ALL_TESTS
+	help
+	  Build unit tests for SandBox Mode.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
