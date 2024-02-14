@@ -24,6 +24,7 @@
 #include <asm/byteorder.h>
 
 #include "8250.h"
+#include "8250_pcilib.h"
 
 #define PCI_DEVICE_ID_ACCESSIO_COM_2S		0x1052
 #define PCI_DEVICE_ID_ACCESSIO_COM_4S		0x105d
@@ -230,13 +231,12 @@ static int default_setup(struct exar8250 *priv, struct pci_dev *pcidev,
 			 struct uart_8250_port *port)
 {
 	const struct exar8250_board *board = priv->board;
-	unsigned int bar = 0;
 	unsigned char status;
+	int err;
 
-	port->port.iotype = UPIO_MEM;
-	port->port.mapbase = pci_resource_start(pcidev, bar) + offset;
-	port->port.membase = priv->virt + offset;
-	port->port.regshift = board->reg_shift;
+	err = serial8250_pci_setup_port(pcidev, port, 0, offset, board->reg_shift);
+	if (err)
+		return err;
 
 	/*
 	 * XR17V35x UARTs have an extra divisor register, DLD that gets enabled
