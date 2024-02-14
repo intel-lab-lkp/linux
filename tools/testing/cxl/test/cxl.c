@@ -329,14 +329,14 @@ static struct {
 				.length = sizeof(mock_cedt.cfmws8),
 			},
 			.interleave_arithmetic = ACPI_CEDT_CFMWS_ARITHMETIC_XOR,
-			.interleave_ways = 2,
+			.interleave_ways = 8,
 			.granularity = 0,
 			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_TYPE3 |
 					ACPI_CEDT_CFMWS_RESTRICT_PMEM,
 			.qtg_id = 0,
-			.window_size = SZ_256M * 16UL,
+			.window_size = SZ_256M * 12UL,
 		},
-		.target = { 0, 1, 0, 1, },
+		.target = { 0, 1, 2 },
 	},
 	.cxims0 = {
 		.cxims = {
