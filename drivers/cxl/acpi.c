@@ -22,31 +22,6 @@ static const guid_t acpi_cxl_qtg_id_guid =
 	GUID_INIT(0xF365F9A6, 0xA7DE, 0x4071,
 		  0xA6, 0x6A, 0xB4, 0x0C, 0x0B, 0x4F, 0x8E, 0x52);
 
-/*
- * Find a targets entry (n) in the host bridge interleave list.
- * CXL Specification 3.0 Table 9-22
- */
-static int cxl_xor_calc_n(u64 hpa, struct cxl_cxims_data *cximsd, int iw,
-			  int ig)
-{
-	int i = 0, n = 0;
-	u8 eiw;
-
-	/* IW: 2,4,6,8,12,16 begin building 'n' using xormaps */
-	if (iw != 3) {
-		for (i = 0; i < cximsd->nr_maps; i++)
-			n |= (hweight64(hpa & cximsd->xormaps[i]) & 1) << i;
-	}
-	/* IW: 3,6,12 add a modulo calculation to 'n' */
-	if (!is_power_of_2(iw)) {
-		if (ways_to_eiw(iw, &eiw))
-			return -1;
-		hpa &= GENMASK_ULL(51, eiw + ig);
-		n |= do_div(hpa, 3) << i;
-	}
-	return n;
-}
-
 static struct cxl_dport *cxl_hb_xor(struct cxl_root_decoder *cxlrd, int pos)
 {
 	struct cxl_cxims_data *cximsd = cxlrd->platform_data;
@@ -62,11 +37,28 @@ static struct cxl_dport *cxl_hb_xor(struct cxl_root_decoder *cxlrd, int pos)
 			  "misconfigured root decoder\n"))
 		return NULL;
 
-	hpa = cxlrd->res->start + pos * ig;
+	/*
+	 * Find a targets entry in the host bridge interleave
+	 * list as defined in CXL Specification 3.0 Table 9-22
+	 *
+	 * iw: 1 is no interleave, so entry is 0
+	 * iw: 3 uses a modulo calc only
+	 * iw: 2,4,6,8,12,16 use xormaps
+	 * iw: 6,12 apply a modulo calc after xormaps
+	 */
 
-	/* Entry (n) is 0 for no interleave (iw == 1) */
-	if (iw != 1)
-		n = cxl_xor_calc_n(hpa, cximsd, iw, ig);
+	if (iw == 1)
+		return cxlrd->cxlsd.target[0];
+
+	if (iw == 3)
+		return cxlrd->cxlsd.target[pos % iw];
+
+	hpa = cxlrd->res->start + pos * ig;
+	for (int i = 0; i < cximsd->nr_maps; i++)
+		n |= (hweight64(hpa & cximsd->xormaps[i]) & 1) << i;
+
+	if (iw == 6 || iw == 12)
+		n |= pos % iw;
 
 	if (n < 0)
 		return NULL;
@@ -424,8 +416,9 @@ err_xormap:
 		dev_err(dev, "Failed to add decode range: %pr", res);
 		return rc;
 	}
-	dev_dbg(dev, "add: %s node: %d range [%#llx - %#llx]\n",
+	dev_dbg(dev, "add: %s math: %s node: %d range [%#llx - %#llx]\n",
 		dev_name(&cxld->dev),
+		cfmws->interleave_arithmetic ? "xor" : "modulo",
 		phys_to_target_node(cxld->hpa_range.start),
 		cxld->hpa_range.start, cxld->hpa_range.end);
 
