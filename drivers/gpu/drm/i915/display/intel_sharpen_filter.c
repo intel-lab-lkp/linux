@@ -36,6 +36,15 @@ void intel_sharpen_filter_enable(struct intel_crtc_state *crtc_state)
 		intel_de_write_fw(dev_priv, GLK_PS_COEF_DATA_SET(crtc->pipe, id, 1),
 				  crtc_state->hw.casf_params. scaler_coefficient[index]);
 	}
+
+	casf_scaler_enable(crtc_state);
+}
+
+int intel_filter_compute_config(struct intel_crtc_state *crtc_state)
+{
+	crtc_state->hw.casf_params.need_scaler = true;
+
+	return 0;
 }
 
 static void convert_sharpness_coef_binary(struct scaler_filter_coeff *coeff,
