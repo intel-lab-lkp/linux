@@ -339,24 +339,23 @@ static int kvm_check_cpucfg(int id, u64 val)
 		/* CPUCFG2 features checking */
 		if (val & ~mask)
 			/* The unsupported features should not be set */
-			ret = -EINVAL;
-		else if (!(val & CPUCFG2_LLFTP))
+			return -EINVAL;
+		if (!(val & CPUCFG2_LLFTP))
 			/* The LLFTP must be set, as guest must has a constant timer */
-			ret = -EINVAL;
-		else if ((val & CPUCFG2_FP) && (!(val & CPUCFG2_FPSP) || !(val & CPUCFG2_FPDP)))
+			return -EINVAL;
+		if ((val & CPUCFG2_FP) && (!(val & CPUCFG2_FPSP) || !(val & CPUCFG2_FPDP)))
 			/* Single and double float point must both be set when enable FP */
-			ret = -EINVAL;
-		else if ((val & CPUCFG2_LSX) && !(val & CPUCFG2_FP))
+			return -EINVAL;
+		if ((val & CPUCFG2_LSX) && !(val & CPUCFG2_FP))
 			/* FP should be set when enable LSX */
-			ret = -EINVAL;
-		else if ((val & CPUCFG2_LASX) && !(val & CPUCFG2_LSX))
+			return -EINVAL;
+		if ((val & CPUCFG2_LASX) && !(val & CPUCFG2_LSX))
 			/* LSX, FP should be set when enable LASX, and FP has been checked before. */
-			ret = -EINVAL;
-		break;
+			return -EINVAL;
+		return 0;
 	default:
-		break;
+		unreachable();
 	}
-	return ret;
 }
 
 static int kvm_get_one_reg(struct kvm_vcpu *vcpu,
