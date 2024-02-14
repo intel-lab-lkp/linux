@@ -328,12 +328,10 @@ static int _kvm_get_cpucfg(int id, u64 *v)
 static int kvm_check_cpucfg(int id, u64 val)
 {
 	u64 mask;
-	int ret = 0;
+	int ret;
 
-	if (id < 0 && id >= KVM_MAX_CPUCFG_REGS)
-		return -EINVAL;
-
-	if (_kvm_get_cpucfg(id, &mask))
+	ret = _kvm_get_cpucfg(id, &mask);
+	if (ret)
 		return ret;
 
 	switch (id) {
