@@ -2444,6 +2444,9 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 	if (crtc_state->has_pch_encoder)
 		return ilk_fdi_compute_config(crtc, crtc_state);
 
+	if (crtc_state->hw.casf_params.strength_changed)
+		intel_sharpness_scaler_compute_config(crtc_state);
+
 	return 0;
 }
 
