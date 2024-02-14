@@ -34,7 +34,6 @@ struct panfrost_job {
 	struct dma_fence *render_done_fence;
 
 	struct panfrost_engine_usage *engine_usage;
-	bool is_profiled;
 	ktime_t start_time;
 	u64 start_cycles;
 };
