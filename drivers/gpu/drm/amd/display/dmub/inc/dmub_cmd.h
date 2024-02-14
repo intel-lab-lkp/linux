@@ -1483,7 +1483,7 @@ struct dmub_rb_cmd_idle_opt_dcn_restore {
  */
 struct dmub_dcn_notify_idle_cntl_data {
 	uint8_t driver_idle;
-	uint8_t pad[1];
+	uint8_t pad[];
 };
 
 /**
@@ -2316,7 +2316,7 @@ struct dmub_cmd_psr_copy_settings_data {
 	/**
 	 * @ rate_control_caps : Indicate FreeSync PSR Sink Capabilities
 	 */
-	uint8_t rate_control_caps ;
+	uint8_t rate_control_caps;
 	/*
 	 * Force PSRSU always doing full frame update
 	 */
@@ -3816,7 +3816,7 @@ struct dmub_cmd_abm_pause_data {
 	/**
 	 * Explicit padding to 4 byte boundary.
 	 */
-	uint8_t pad[1];
+	uint8_t pad[];
 };
 
 /**
