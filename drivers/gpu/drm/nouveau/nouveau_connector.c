@@ -687,21 +687,12 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);
 	struct nouveau_encoder *nv_encoder = NULL;
-	struct edid *edid = NULL;
+	const struct drm_edid *drm_edid = NULL;
 	enum drm_connector_status status = connector_status_disconnected;
 
 	nv_encoder = find_encoder(connector, DCB_OUTPUT_LVDS);
 	if (!nv_encoder)
 		goto out;
-
-	/* Try retrieving EDID via DDC */
-	if (!drm->vbios.fp_no_ddc) {
-		status = nouveau_connector_detect(connector, force);
-		if (status == connector_status_connected) {
-			edid = nv_connector->edid;
-			goto out;
-		}
-	}
 
 	/* On some laptops (Sony, i'm looking at you) there appears to
 	 * be no direct way of accessing the panel's EDID.  The only
@@ -712,10 +703,14 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	 * the nouveau decides an entry in the VBIOS FP mode table is
 	 * valid - it's not (rh#613284)
 	 */
-	if (nv_encoder->dcb->lvdsconf.use_acpi_for_edid) {
-		edid = nouveau_acpi_edid(dev, connector);
-		if (edid) {
-			status = connector_status_connected;
+	if (nv_encoder->dcb->lvdsconf.use_acpi_for_edid)
+		connector->acpi_edid_allowed = true;
+
+	/* Try retrieving EDID via BIOS or DDC */
+	if (!drm->vbios.fp_no_ddc || nv_encoder->dcb->lvdsconf.use_acpi_for_edid) {
+		status = nouveau_connector_detect(connector, force);
+		if (status == connector_status_connected) {
+			drm_edid = drm_edid_alloc(nv_connector->edid, EDID_LENGTH);
 			goto out;
 		}
 	}
@@ -734,12 +729,9 @@ nouveau_connector_detect_lvds(struct drm_connector *connector, bool force)
 	 * stored for the panel stored in them.
 	 */
 	if (!drm->vbios.fp_no_ddc) {
-		edid = (struct edid *)nouveau_bios_embedded_edid(dev);
-		if (edid) {
-			edid = kmemdup(edid, EDID_LENGTH, GFP_KERNEL);
-			if (edid)
-				status = connector_status_connected;
-		}
+		drm_edid = drm_edid_alloc(nouveau_bios_embedded_edid(dev), EDID_LENGTH);
+		if (drm_edid)
+			status = connector_status_connected;
 	}
 
 out:
@@ -750,7 +742,8 @@ out:
 		status = connector_status_unknown;
 #endif
 
-	nouveau_connector_set_edid(nv_connector, edid);
+	drm_edid_connector_update(connector, drm_edid);
+	drm_edid_free(drm_edid);
 	if (nv_encoder)
 		nouveau_connector_set_encoder(connector, nv_encoder);
 	return status;
