@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2023-2024 Huawei Technologies Duesseldorf GmbH
+#
+# Author: Petr Tesarik <petr.tesarik1@huawei-partners.com>
+#
+# SandBox Mode (SBM) config options.
+#
+
+config HAVE_ARCH_SBM
+       def_bool n
+
+config SANDBOX_MODE
+	bool "SandBox Mode (SBM)"
+	default n
+	help
+	  SandBox Mode provides kernel API to run native kernel functions in a
+	  sandbox, preventing out-of-bounds memory accesses. On targets which
+	  implement SBM arch hooks, the isolation is strong, preventing all
+	  memory accesses outside the sandbox; after a protection violation,
+	  the affected kernel thread can continue running. On all other
+	  targets, the isolation is weak, preventing only buffer overflows
+	  within a guard page; after a violation, the kernel thread usually
+	  terminates.
+
+	  This is an opt-in self-defense mechanism, i.e. kernel source code
+	  must be modified to run in SandBox Mode. For such code, there is
+	  some run-time overhead (CPU time, memory) associated with entering
+	  and leaving the sandbox.
+
+	  If unsure, say N.
