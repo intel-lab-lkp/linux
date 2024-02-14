@@ -910,6 +910,8 @@ enum dc_edid_status dm_helpers_read_local_edid(
 	 * do check sum and retry to make sure read correct edid.
 	 */
 	do {
+		/* prefer ACPI over panel for eDP */
+		connector->acpi_edid_allowed = acpi_edid;
 
 		edid = drm_get_edid(&aconnector->base, ddc);
 
