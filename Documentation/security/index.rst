@@ -14,6 +14,7 @@ Security Documentation
    sak
    SCTP
    self-protection
+   sandbox-mode
    siphash
    tpm/index
    digsig
