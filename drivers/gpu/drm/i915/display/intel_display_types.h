@@ -1721,6 +1721,7 @@ struct intel_psr {
 
 		/* LNL and beyond */
 		u8 check_entry_lines;
+		u8 aux_less_wake_lines;
 	} alpm_parameters;
 
 	ktime_t last_entry_attempt;
