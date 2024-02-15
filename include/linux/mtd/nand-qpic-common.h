@@ -45,6 +45,9 @@
 #define	NAND_DEV_CMD1			0xa4
 #define	NAND_DEV_CMD2			0xa8
 #define	NAND_DEV_CMD_VLD		0xac
+#define NAND_FLASH_SPI_CFG              0xc0
+#define NAND_NUM_ADDR_CYCLES            0xc4
+#define NAND_BUSY_CHECK_WAIT_CNT        0xc8
 #define	SFLASHC_BURST_CFG		0xe0
 #define	NAND_ERASED_CW_DETECT_CFG	0xe8
 #define	NAND_ERASED_CW_DETECT_STATUS	0xec
@@ -61,6 +64,7 @@
 #define	NAND_READ_LOCATION_LAST_CW_1	0xf44
 #define	NAND_READ_LOCATION_LAST_CW_2	0xf48
 #define	NAND_READ_LOCATION_LAST_CW_3	0xf4c
+#define NAND_FLASH_FEATURES             0xf64
 
 /* dummy register offsets, used by write_reg_dma */
 #define	NAND_DEV_CMD1_RESTORE		0xdead
@@ -169,6 +173,7 @@
 #define	OP_CHECK_STATUS			0xc
 #define	OP_FETCH_ID			0xb
 #define	OP_RESET_DEVICE			0xd
+#define ACC_FEATURE                     0xe
 
 /* Default Value for NAND_DEV_CMD_VLD */
 #define NAND_DEV_CMD_VLD_VAL		(READ_START_VLD | WRITE_START_VLD | \
@@ -329,11 +334,53 @@ struct nandc_regs {
 	__le32 read_location_last1;
 	__le32 read_location_last2;
 	__le32 read_location_last3;
+	__le32 spi_cfg;
+	__le32 num_addr_cycle;
+	__le32 busy_wait_cnt;
+	__le32 flash_feature;
 
 	__le32 erased_cw_detect_cfg_clr;
 	__le32 erased_cw_detect_cfg_set;
 };
 
+struct qcom_ecc_stats {
+	u32 corrected;
+	u32 bitflips;
+	u32 failed;
+};
+
+/*
+ * QPIC ECC data struct
+ *
+ */
+struct qpic_ecc {
+	struct device *dev;
+	const struct qpic_ecc_caps *caps;
+	struct completion done;
+	u32 sectors;
+	u8 *eccdata;
+	bool use_ecc;
+	u32 ecc_modes;
+	int ecc_bytes_hw;
+	int spare_bytes;
+	int bbm_size;
+	int ecc_mode;
+	int bytes;
+	int steps;
+	int step_size;
+	int strength;
+	int cw_size;
+	int cw_data;
+	u32 cfg0, cfg1;
+	u32 cfg0_raw, cfg1_raw;
+	u32 ecc_buf_cfg;
+	u32 ecc_bch_cfg;
+	u32 clrflashstatus;
+	u32 clrreadstatus;
+	bool bch_enabled;
+};
+
+struct qpic_ecc;
 /*
  * NAND controller data struct
  *
@@ -352,6 +399,7 @@ struct nandc_regs {
  *				initialized via DT match data
  *
  * @controller:			base controller structure
+ * @ctlr:			spi controller structure
  * @host_list:			list containing all the chips attached to the
  *				controller
  *
@@ -389,6 +437,7 @@ struct qcom_nand_controller {
 
 	struct clk *core_clk;
 	struct clk *aon_clk;
+	struct clk *iomacro_clk;
 
 	struct nandc_regs *regs;
 	struct bam_transaction *bam_txn;
@@ -396,6 +445,7 @@ struct qcom_nand_controller {
 	const struct qcom_nandc_props *props;
 
 	struct nand_controller controller;
+	struct spi_controller *ctlr;
 	struct list_head host_list;
 
 	union {
@@ -432,6 +482,16 @@ struct qcom_nand_controller {
 
 	u32 cmd1, vld;
 	bool exec_opwrite;
+	struct qpic_ecc *ecc;
+	struct qcom_ecc_stats ecc_stats;
+	struct nand_ecc_engine ecc_eng;
+	u8 *wbuf;
+	u32 wlen;
+	u32 addr1;
+	u32 addr2;
+	u32 cmd;
+	bool oob_read;
+	bool raw;
 };
 
 /*
@@ -484,5 +544,5 @@ void clear_bam_transaction(struct qcom_nand_controller *nandc);
 void qcom_nandc_unalloc(struct qcom_nand_controller *nandc);
 int qcom_nandc_alloc(struct qcom_nand_controller *nandc);
 struct qcom_nand_controller *get_qcom_nand_controller(struct nand_chip *chip);
-
+void snandc_set_reg(struct qcom_nand_controller *snandc, int offset, u32 val);
 #endif

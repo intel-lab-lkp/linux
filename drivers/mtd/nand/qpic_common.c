@@ -132,6 +132,14 @@ __le32 *offset_to_nandc_reg(struct nandc_regs *regs, int offset)
 		return &regs->read_location_last2;
 	case NAND_READ_LOCATION_LAST_CW_3:
 		return &regs->read_location_last3;
+	case NAND_FLASH_SPI_CFG:
+		return &regs->spi_cfg;
+	case NAND_NUM_ADDR_CYCLES:
+		return &regs->num_addr_cycle;
+	case NAND_BUSY_CHECK_WAIT_CNT:
+		return &regs->busy_wait_cnt;
+	case NAND_FLASH_FEATURES:
+		return &regs->flash_feature;
 	default:
 		return NULL;
 	}
