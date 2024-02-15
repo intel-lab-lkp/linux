@@ -10,6 +10,7 @@
 
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
+#include <linux/wordpart.h> // for lower_32_bits(), upper_32_bits()
 
 #include <asm/esr.h>
 #include <asm/exception.h>

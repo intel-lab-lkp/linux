@@ -31,6 +31,8 @@
 #ifndef __FSL_BMAN_H
 #define __FSL_BMAN_H
 
+#include <linux/wordpart.h> // for upper_32_bits()
+
 /* wrapper for 48-bit buffers */
 struct bm_buffer {
 	union {

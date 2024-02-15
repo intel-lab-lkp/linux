@@ -29,6 +29,7 @@
 #include <linux/percpu.h>
 #include <linux/slab.h>
 #include <linux/syscore_ops.h>
+#include <linux/wordpart.h> // for lower_32_bits(), upper_32_bits()
 
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic-v3.h>

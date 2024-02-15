@@ -8,6 +8,7 @@
 #include <uapi/linux/audit.h>
 #include <linux/compat.h>
 #include <linux/err.h>
+#include <linux/wordpart.h> // for lower_32_bits()
 
 typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 

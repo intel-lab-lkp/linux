@@ -48,6 +48,7 @@
 #include <linux/fsnotify.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
+#include <linux/wordpart.h> // for lower_32_bits(), upper_32_bits()
 
 #include "ext4.h"
 #include "ext4_extents.h"	/* Needed for trace points definition */

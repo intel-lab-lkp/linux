@@ -20,6 +20,7 @@
 #include <linux/memcontrol.h>
 #include <linux/statfs.h>
 #include <linux/exportfs.h>
+#include <linux/wordpart.h> // for upper_32_bits()
 
 #include <asm/ioctls.h>
 

@@ -11,6 +11,7 @@
 #include <asm/byteorder.h>
 #include <linux/bitops.h>
 #include <linux/slab.h>
+#include <linux/wordpart.h> // for lower_32_bits(), upper_32_bits()
 
 /* dma_addr_t manip */
 #define PTR_LO(x)		((u32)(((uintptr_t)(x)) & 0xffffffff))

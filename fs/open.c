@@ -34,6 +34,7 @@
 #include <linux/compat.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/filelock.h>
+#include <linux/wordpart.h> // for upper_32_bits()
 
 #include "internal.h"
 

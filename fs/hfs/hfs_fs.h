@@ -20,6 +20,7 @@
 #include <linux/mutex.h>
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
+#include <linux/wordpart.h> // for lower_32_bits()
 #include <linux/workqueue.h>
 
 #include <asm/byteorder.h>

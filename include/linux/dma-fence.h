@@ -22,6 +22,7 @@
 #include <linux/printk.h>
 #include <linux/rcupdate.h>
 #include <linux/timekeeping.h>
+#include <linux/wordpart.h> // for lower_32_bits()
 
 struct dma_fence;
 struct dma_fence_ops;

@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/buffer_head.h>
 #include <linux/blkdev.h>
+#include <linux/wordpart.h> // for lower_32_bits()
 #include "hfsplus_raw.h"
 
 #define DBG_BNODE_REFS	0x00000001
