@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/iova_bitmap.h>
+#include <linux/uaccess.h> // for copy_struct_from_user()
 #include <uapi/linux/iommu.h>
 
 #define IOMMU_READ	(1 << 0)
