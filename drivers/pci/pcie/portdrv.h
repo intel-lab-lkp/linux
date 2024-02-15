@@ -129,4 +129,10 @@ static inline void pcie_pme_interrupt_enable(struct pci_dev *dev, bool en) {}
 #endif /* !CONFIG_PCIE_PME */
 
 struct device *pcie_port_find_device(struct pci_dev *dev, u32 service);
+
+#ifdef CONFIG_PCIE_CXL_TIMEOUT
+int pcie_cxl_find_timeout_cap(struct pci_dev *dev, u32 *cap);
+bool pcie_supports_cxl_timeout_interrupts(u32 cap);
+#endif
+
 #endif /* _PORTDRV_H_ */

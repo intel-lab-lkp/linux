@@ -99,7 +99,7 @@ err:
 	return ERR_PTR(rc);
 }
 
-int cxl_find_timeout_cap(struct pci_dev *dev, u32 *cap)
+int pcie_cxl_find_timeout_cap(struct pci_dev *dev, u32 *cap)
 {
 	struct cxl_component_regs regs;
 	struct cxl_register_map map;
@@ -113,6 +113,15 @@ int cxl_find_timeout_cap(struct pci_dev *dev, u32 *cap)
 	cxl_unmap_timeout_regs(dev, &map, &regs);
 
 	return rc;
+}
+
+bool pcie_supports_cxl_timeout_interrupts(u32 cap)
+{
+	if (!(cap & CXL_TIMEOUT_CAP_INTR_SUPP))
+		return false;
+
+	return (cap & CXL_TIMEOUT_CAP_MEM_ISO_SUPP) ||
+		(cap & CXL_TIMEOUT_CAP_MEM_TIMEOUT_SUPP);
 }
 
 static struct pcie_cxlt_data *cxlt_create_pdata(struct pcie_device *dev)

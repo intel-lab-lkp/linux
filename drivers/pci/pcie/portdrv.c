@@ -21,6 +21,7 @@
 
 #include "../pci.h"
 #include "portdrv.h"
+#include "../../cxl/cxlpci.h"
 
 /*
  * The PCIe Capability Interrupt Message Number (PCIe r3.1, sec 7.8.2) must
@@ -55,7 +56,7 @@ static void release_pcie_device(struct device *dev)
  * required to accommodate the largest Message Number.
  */
 static int pcie_message_numbers(struct pci_dev *dev, int mask,
-				u32 *pme, u32 *aer, u32 *dpc)
+				u32 *pme, u32 *aer, u32 *dpc, u32 *cxl)
 {
 	u32 nvec = 0, pos;
 	u16 reg16;
@@ -98,6 +99,19 @@ static int pcie_message_numbers(struct pci_dev *dev, int mask,
 		}
 	}
 
+#ifdef CONFIG_PCIE_CXL_TIMEOUT
+	if (mask & PCIE_PORT_SERVICE_CXLT) {
+		u32 cap;
+
+		if (!pcie_cxl_find_timeout_cap(dev, &cap) &&
+		    pcie_supports_cxl_timeout_interrupts(cap)) {
+			*cxl = FIELD_GET(CXL_TIMEOUT_CAP_INTR_MASK,
+					 pos);
+			nvec = max(nvec, *cxl + 1);
+		}
+	}
+#endif
+
 	return nvec;
 }
 
@@ -113,7 +127,7 @@ static int pcie_message_numbers(struct pci_dev *dev, int mask,
 static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 {
 	int nr_entries, nvec, pcie_irq;
-	u32 pme = 0, aer = 0, dpc = 0;
+	u32 pme = 0, aer = 0, dpc = 0, cxlt = 0;
 
 	/* Allocate the maximum possible number of MSI/MSI-X vectors */
 	nr_entries = pci_alloc_irq_vectors(dev, 1, PCIE_PORT_MAX_MSI_ENTRIES,
@@ -122,7 +136,7 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 		return nr_entries;
 
 	/* See how many and which Interrupt Message Numbers we actually use */
-	nvec = pcie_message_numbers(dev, mask, &pme, &aer, &dpc);
+	nvec = pcie_message_numbers(dev, mask, &pme, &aer, &dpc, &cxlt);
 	if (nvec > nr_entries) {
 		pci_free_irq_vectors(dev);
 		return -EIO;
@@ -162,6 +176,9 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 
 	if (mask & PCIE_PORT_SERVICE_DPC)
 		irqs[PCIE_PORT_SERVICE_DPC_SHIFT] = pci_irq_vector(dev, dpc);
+
+	if (mask & PCIE_PORT_SERVICE_CXLT)
+		irqs[PCIE_PORT_SERVICE_CXLT_SHIFT] = pci_irq_vector(dev, cxlt);
 
 	return 0;
 }
@@ -273,6 +290,18 @@ static int get_port_device_capability(struct pci_dev *dev)
 		if (linkcap & PCI_EXP_LNKCAP_LBNC)
 			services |= PCIE_PORT_SERVICE_BWNOTIF;
 	}
+
+#ifdef CONFIG_PCIE_CXL_TIMEOUT
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT &&
+	    pci_find_dvsec_capability(dev, PCI_DVSEC_VENDOR_ID_CXL,
+				      CXL_DVSEC_PORT_EXTENSIONS)) {
+		u32 cap;
+
+		if (!pcie_cxl_find_timeout_cap(dev, &cap) &&
+		    pcie_supports_cxl_timeout_interrupts(cap))
+			services |= PCIE_PORT_SERVICE_CXLT;
+	}
+#endif
 
 	return services;
 }
