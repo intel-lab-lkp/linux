@@ -4628,6 +4628,31 @@ static int con_font_set(struct vc_data *vc, struct console_font_op *op)
 	return rc;
 }
 
+static int con_font_info(struct vc_data *vc, struct console_font_op *op)
+{
+	struct console_font font;
+	int rc = -EINVAL;
+
+	font.height = max_font_height;
+	font.width = max_font_width;
+	font.charcount = max_font_glyphs;
+
+	console_lock();
+	if (vc->vc_mode != KD_TEXT)
+		rc = -EINVAL;
+	else if (vc->vc_sw->con_font_info)
+		rc = vc->vc_sw->con_font_info(vc, &font);
+	else
+		rc = -ENOSYS;
+	console_unlock();
+
+	op->height = font.height;
+	op->width = font.width;
+	op->charcount = font.charcount;
+
+	return rc;
+}
+
 static int con_font_default(struct vc_data *vc, struct console_font_op *op)
 {
 	struct console_font font = {.width = op->width, .height = op->height};
@@ -4673,6 +4698,8 @@ int con_font_op(struct vc_data *vc, struct console_font_op *op)
 		return con_font_get(vc, op);
 	case KD_FONT_OP_SET_DEFAULT:
 		return con_font_default(vc, op);
+	case KD_FONT_OP_GET_INFO:
+		return con_font_info(vc, op);
 	case KD_FONT_OP_COPY:
 		/* was buggy and never really used */
 		return -EINVAL;

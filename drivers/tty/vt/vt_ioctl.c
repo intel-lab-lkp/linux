@@ -469,7 +469,7 @@ static int vt_k_ioctl(struct tty_struct *tty, unsigned int cmd,
 
 		if (copy_from_user(&op, up, sizeof(op)))
 			return -EFAULT;
-		if (!perm && op.op != KD_FONT_OP_GET)
+		if (!perm && op.op != KD_FONT_OP_GET && op.op != KD_FONT_OP_GET_INFO)
 			return -EPERM;
 		ret = con_font_op(vc, &op);
 		if (ret)

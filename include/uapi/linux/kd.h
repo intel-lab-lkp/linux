@@ -180,6 +180,7 @@ struct console_font {
 #define KD_FONT_OP_COPY		3	/* Obsolete, do not use */
 #define KD_FONT_OP_SET_TALL	4	/* Set font with vpitch = height */
 #define KD_FONT_OP_GET_TALL	5	/* Get font with vpitch = height */
+#define KD_FONT_OP_GET_INFO	6
 
 #define KD_FONT_FLAG_DONT_RECALC 	1	/* Don't recalculate hw charcell size [compat] */
 
