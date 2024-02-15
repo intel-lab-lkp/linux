@@ -207,6 +207,31 @@ static int cxl_enable_timeout(struct pcie_device *dev, struct cxl_timeout *cxlt)
 					cxlt);
 }
 
+static void cxl_disable_isolation(void *data)
+{
+	struct cxl_timeout *cxlt = data;
+	u32 cntrl = readl(cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+
+	cntrl &= ~CXL_TIMEOUT_CONTROL_MEM_ISO_ENABLE;
+	writel(cntrl, cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+}
+
+static int cxl_enable_isolation(struct pcie_device *dev,
+				struct cxl_timeout *cxlt)
+{
+	u32 cntrl;
+
+	if (!cxlt || !FIELD_GET(CXL_TIMEOUT_CAP_MEM_ISO_SUPP, cxlt->cap))
+		return -ENXIO;
+
+	cntrl = readl(cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+	cntrl |= CXL_TIMEOUT_CONTROL_MEM_ISO_ENABLE;
+	writel(cntrl, cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+
+	return devm_add_action_or_reset(&dev->device, cxl_disable_isolation,
+					cxlt);
+}
+
 static ssize_t timeout_range_show(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
@@ -341,7 +366,8 @@ static int cxl_timeout_probe(struct pcie_device *dev)
 	struct pci_dev *port = dev->port;
 	struct pcie_cxlt_data *pdata;
 	struct cxl_timeout *cxlt;
-	int rc = 0;
+	bool timeout_enabled;
+	int rc;
 
 	/* Limit to CXL root ports */
 	if (!pci_find_dvsec_capability(port, PCI_DVSEC_VENDOR_ID_CXL,
@@ -359,6 +385,18 @@ static int cxl_timeout_probe(struct pcie_device *dev)
 	if (rc)
 		pci_dbg(dev->port, "Failed to enable CXL.mem timeout: %d\n",
 			rc);
+
+	timeout_enabled = !rc;
+
+	rc = cxl_enable_isolation(dev, cxlt);
+	if (rc)
+		pci_dbg(dev->port, "Failed to enable CXL.mem isolation: %d\n",
+			rc);
+
+	if (rc && !timeout_enabled) {
+		pci_info(dev->port,
+			 "Failed to enable CXL.mem timeout and isolation.\n");
+	}
 
 	return rc;
 }
