@@ -94,10 +94,14 @@ reset:
 }
 
 /* We put this struct at the head of each page with a context and frame
- * initialised when the page is allocated, so we don't have to do this on each
- * repetition of the test run.
+ * initialised the first time a given page is used, saving the memcpy() of the
+ * data on subsequent repetition of the test run. The cookie value is used to
+ * mark the page data the first time we initialise it so we can skip it the next
+ * time we see that page.
  */
+
 struct xdp_page_head {
+	u64 cookie;
 	struct xdp_buff orig_ctx;
 	struct xdp_buff ctx;
 	union {
@@ -111,10 +115,9 @@ struct xdp_test_data {
 	struct xdp_buff *orig_ctx;
 	struct xdp_rxq_info rxq;
 	struct net_device *dev;
-	struct page_pool *pp;
 	struct xdp_frame **frames;
 	struct sk_buff **skbs;
-	struct xdp_mem_info mem;
+	u64 cookie;
 	u32 batch_size;
 	u32 frame_cnt;
 };
@@ -126,48 +129,9 @@ struct xdp_test_data {
 #define TEST_XDP_FRAME_SIZE (PAGE_SIZE - sizeof(struct xdp_page_head))
 #define TEST_XDP_MAX_BATCH 256
 
-static void xdp_test_run_init_page(struct page *page, void *arg)
-{
-	struct xdp_page_head *head = phys_to_virt(page_to_phys(page));
-	struct xdp_buff *new_ctx, *orig_ctx;
-	u32 headroom = XDP_PACKET_HEADROOM;
-	struct xdp_test_data *xdp = arg;
-	size_t frm_len, meta_len;
-	struct xdp_frame *frm;
-	void *data;
-
-	orig_ctx = xdp->orig_ctx;
-	frm_len = orig_ctx->data_end - orig_ctx->data_meta;
-	meta_len = orig_ctx->data - orig_ctx->data_meta;
-	headroom -= meta_len;
-
-	new_ctx = &head->ctx;
-	frm = head->frame;
-	data = head->data;
-	memcpy(data + headroom, orig_ctx->data_meta, frm_len);
-
-	xdp_init_buff(new_ctx, TEST_XDP_FRAME_SIZE, &xdp->rxq);
-	xdp_prepare_buff(new_ctx, data, headroom, frm_len, true);
-	new_ctx->data = new_ctx->data_meta + meta_len;
-
-	xdp_update_frame_from_buff(new_ctx, frm);
-	frm->mem = new_ctx->rxq->mem;
-
-	memcpy(&head->orig_ctx, new_ctx, sizeof(head->orig_ctx));
-}
-
 static int xdp_test_run_setup(struct xdp_test_data *xdp, struct xdp_buff *orig_ctx)
 {
-	struct page_pool *pp;
 	int err = -ENOMEM;
-	struct page_pool_params pp_params = {
-		.order = 0,
-		.flags = 0,
-		.pool_size = xdp->batch_size,
-		.nid = NUMA_NO_NODE,
-		.init_callback = xdp_test_run_init_page,
-		.init_arg = xdp,
-	};
 
 	xdp->frames = kvmalloc_array(xdp->batch_size, sizeof(void *), GFP_KERNEL);
 	if (!xdp->frames)
@@ -177,34 +141,21 @@ static int xdp_test_run_setup(struct xdp_test_data *xdp, struct xdp_buff *orig_c
 	if (!xdp->skbs)
 		goto err_skbs;
 
-	pp = page_pool_create(&pp_params);
-	if (IS_ERR(pp)) {
-		err = PTR_ERR(pp);
-		goto err_pp;
-	}
-
-	/* will copy 'mem.id' into pp->xdp_mem_id */
-	err = xdp_reg_mem_model(&xdp->mem, MEM_TYPE_PAGE_POOL, pp);
-	if (err)
-		goto err_mmodel;
-
-	xdp->pp = pp;
-
 	/* We create a 'fake' RXQ referencing the original dev, but with an
 	 * xdp_mem_info pointing to our page_pool
 	 */
 	xdp_rxq_info_reg(&xdp->rxq, orig_ctx->rxq->dev, 0, 0);
-	xdp->rxq.mem.type = MEM_TYPE_PAGE_POOL;
-	xdp->rxq.mem.id = pp->xdp_mem_id;
+	xdp->rxq.mem.type = MEM_TYPE_PAGE_POOL; /* mem id is set per-frame below */
 	xdp->dev = orig_ctx->rxq->dev;
 	xdp->orig_ctx = orig_ctx;
 
+	/* We need a random cookie for each run as pages can stick around
+	 * between runs in the system page pool
+	 */
+	get_random_bytes(&xdp->cookie, sizeof(xdp->cookie));
+
 	return 0;
 
-err_mmodel:
-	page_pool_destroy(pp);
-err_pp:
-	kvfree(xdp->skbs);
 err_skbs:
 	kvfree(xdp->frames);
 	return err;
@@ -212,8 +163,6 @@ err_skbs:
 
 static void xdp_test_run_teardown(struct xdp_test_data *xdp)
 {
-	xdp_unreg_mem_model(&xdp->mem);
-	page_pool_destroy(xdp->pp);
 	kfree(xdp->frames);
 	kfree(xdp->skbs);
 }
@@ -235,8 +184,12 @@ static bool ctx_was_changed(struct xdp_page_head *head)
 		head->orig_ctx.data_end != head->ctx.data_end;
 }
 
-static void reset_ctx(struct xdp_page_head *head)
+static void reset_ctx(struct xdp_page_head *head, struct xdp_test_data *xdp)
 {
+	/* mem id can change if we migrate CPUs between batches */
+	if (head->frame->mem.id != xdp->rxq.mem.id)
+		head->frame->mem.id = xdp->rxq.mem.id;
+
 	if (likely(!frame_was_changed(head) && !ctx_was_changed(head)))
 		return;
 
@@ -244,6 +197,48 @@ static void reset_ctx(struct xdp_page_head *head)
 	head->ctx.data_meta = head->orig_ctx.data_meta;
 	head->ctx.data_end = head->orig_ctx.data_end;
 	xdp_update_frame_from_buff(&head->ctx, head->frame);
+}
+
+static struct xdp_page_head *
+xdp_test_run_init_page(struct page *page, struct xdp_test_data *xdp)
+{
+	struct xdp_page_head *head = phys_to_virt(page_to_phys(page));
+	struct xdp_buff *new_ctx, *orig_ctx;
+	u32 headroom = XDP_PACKET_HEADROOM;
+	size_t frm_len, meta_len;
+	struct xdp_frame *frm;
+	void *data;
+
+	/* Optimise for the recycle case, which is the normal case when doing
+	 * high-repetition REDIRECTS to drivers that return frames.
+	 */
+	if (likely(head->cookie == xdp->cookie)) {
+		reset_ctx(head, xdp);
+		return head;
+	}
+
+	head->cookie = xdp->cookie;
+
+	orig_ctx = xdp->orig_ctx;
+	frm_len = orig_ctx->data_end - orig_ctx->data_meta;
+	meta_len = orig_ctx->data - orig_ctx->data_meta;
+	headroom -= meta_len;
+
+	new_ctx = &head->ctx;
+	frm = head->frame;
+	data = head->data;
+	memcpy(data + headroom, orig_ctx->data_meta, frm_len);
+
+	xdp_init_buff(new_ctx, TEST_XDP_FRAME_SIZE, &xdp->rxq);
+	xdp_prepare_buff(new_ctx, data, headroom, frm_len, true);
+	new_ctx->data = new_ctx->data_meta + meta_len;
+
+	xdp_update_frame_from_buff(new_ctx, frm);
+	frm->mem = new_ctx->rxq->mem;
+
+	memcpy(&head->orig_ctx, new_ctx, sizeof(head->orig_ctx));
+
+	return head;
 }
 
 static int xdp_recv_frames(struct xdp_frame **frames, int nframes,
@@ -287,6 +282,7 @@ static int xdp_test_run_batch(struct xdp_test_data *xdp, struct bpf_prog *prog,
 	struct xdp_page_head *head;
 	struct xdp_frame *frm;
 	bool redirect = false;
+	struct page_pool *pp;
 	struct xdp_buff *ctx;
 	struct page *page;
 
@@ -295,15 +291,17 @@ static int xdp_test_run_batch(struct xdp_test_data *xdp, struct bpf_prog *prog,
 	local_bh_disable();
 	xdp_set_return_frame_no_direct();
 
+	pp = this_cpu_read(system_page_pool);
+	xdp->rxq.mem.id = pp->xdp_mem_id;
+
 	for (i = 0; i < batch_sz; i++) {
-		page = page_pool_dev_alloc_pages(xdp->pp);
+		page = page_pool_dev_alloc_pages(pp);
 		if (!page) {
 			err = -ENOMEM;
 			goto out;
 		}
 
-		head = phys_to_virt(page_to_phys(page));
-		reset_ctx(head);
+		head = xdp_test_run_init_page(page, xdp);
 		ctx = &head->ctx;
 		frm = head->frame;
 		xdp->frame_cnt++;
