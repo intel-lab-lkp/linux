@@ -36,6 +36,7 @@
 
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
+#define   CXL_CM_CAP_CAP_ID_TIMEOUT 0x9
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
 
 /* HDM decoders CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure */
@@ -126,6 +127,9 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 	return 0;
 }
 
+/* CXL 3.0 8.2.4.23 CXL Timeout and Isolation Capability Structure */
+#define CXL_TIMEOUT_CAPABILITY_OFFSET 0x0
+#define CXL_TIMEOUT_CAPABILITY_LENGTH 0x10
 /* RAS Registers CXL 2.0 8.2.5.9 CXL RAS Capability Structure */
 #define CXL_RAS_UNCORRECTABLE_STATUS_OFFSET 0x0
 #define   CXL_RAS_UNCORRECTABLE_STATUS_MASK (GENMASK(16, 14) | GENMASK(11, 0))
@@ -208,6 +212,7 @@ struct cxl_regs {
 	struct_group_tagged(cxl_component_regs, component,
 		void __iomem *hdm_decoder;
 		void __iomem *ras;
+		void __iomem *timeout;
 	);
 	/*
 	 * Common set of CXL Device register block base pointers
@@ -242,6 +247,7 @@ struct cxl_reg_map {
 struct cxl_component_reg_map {
 	struct cxl_reg_map hdm_decoder;
 	struct cxl_reg_map ras;
+	struct cxl_reg_map timeout;
 };
 
 struct cxl_device_reg_map {
