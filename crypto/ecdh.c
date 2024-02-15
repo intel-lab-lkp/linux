@@ -15,6 +15,8 @@
 struct ecdh_ctx {
 	unsigned int curve_id;
 	unsigned int ndigits;
+	unsigned int nbytes;
+	u64 msd_mask;
 	u64 private_key[ECC_MAX_DIGITS];
 };
 
@@ -28,7 +30,6 @@ static int ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 {
 	struct ecdh_ctx *ctx = ecdh_get_ctx(tfm);
 	u64 priv[ECC_MAX_DIGITS];
-	unsigned int nbytes;
 	struct ecdh params;
 
 	if (crypto_ecdh_decode_key(buf, len, &params) < 0 ||
@@ -39,10 +40,8 @@ static int ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 		return ecc_gen_privkey(ctx->curve_id, ctx->ndigits,
 				       ctx->private_key);
 
-	nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
-
-	memcpy(ctx->private_key, params.key, nbytes);
-	ecc_swap_digits(ctx->private_key, priv, ctx->ndigits);
+	ecc_digits_from_bytes(params.key, ctx->nbytes, priv, ctx->ndigits);
+	ecc_swap_digits(priv, ctx->private_key, ctx->ndigits);
 
 	if (ecc_is_key_valid(ctx->curve_id, ctx->ndigits,
 			     priv, params.key_size) < 0) {
@@ -56,13 +55,13 @@ static int ecdh_compute_value(struct kpp_request *req)
 {
 	struct crypto_kpp *tfm = crypto_kpp_reqtfm(req);
 	struct ecdh_ctx *ctx = ecdh_get_ctx(tfm);
-	u64 *public_key;
-	u64 *shared_secret = NULL;
+	unsigned int nbytes = ctx->nbytes;
+	u8 *public_key;
+	u8 *shared_secret = NULL;
 	void *buf;
-	size_t copied, nbytes, public_key_sz;
+	size_t copied, public_key_sz;
 	int ret = -ENOMEM;
 
-	nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
 	/* Public part is a point thus it has both coordinates */
 	public_key_sz = 2 * nbytes;
 
@@ -91,12 +90,14 @@ static int ecdh_compute_value(struct kpp_request *req)
 
 		ret = crypto_ecdh_shared_secret(ctx->curve_id, ctx->ndigits,
 						ctx->private_key, public_key,
-						shared_secret);
+						nbytes, shared_secret,
+						ctx->msd_mask);
 
 		buf = shared_secret;
 	} else {
 		ret = ecc_make_pub_key(ctx->curve_id, ctx->ndigits,
-				       ctx->private_key, public_key);
+				       ctx->private_key, public_key,
+				       nbytes);
 		buf = public_key;
 		nbytes = public_key_sz;
 	}
@@ -134,6 +135,7 @@ static int ecdh_nist_p192_init_tfm(struct crypto_kpp *tfm)
 
 	ctx->curve_id = ECC_CURVE_NIST_P192;
 	ctx->ndigits = ECC_CURVE_NIST_P192_DIGITS;
+	ctx->nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
 
 	return 0;
 }
@@ -159,6 +161,7 @@ static int ecdh_nist_p256_init_tfm(struct crypto_kpp *tfm)
 
 	ctx->curve_id = ECC_CURVE_NIST_P256;
 	ctx->ndigits = ECC_CURVE_NIST_P256_DIGITS;
+	ctx->nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
 
 	return 0;
 }
@@ -184,6 +187,7 @@ static int ecdh_nist_p384_init_tfm(struct crypto_kpp *tfm)
 
 	ctx->curve_id = ECC_CURVE_NIST_P384;
 	ctx->ndigits = ECC_CURVE_NIST_P384_DIGITS;
+	ctx->nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
 
 	return 0;
 }
