@@ -1154,24 +1154,44 @@ static int _lnl_compute_aux_less_wake_time(int port_clock)
 			    num_ml_phy_lock * tml_phy_lock, 1000);
 }
 
+/*
+ * 128b/132b Switch to Active = 32 * (ML_PHY_LOCK Length + 3 + 64) / fLink (in MHz)
+ * Switch to Active Latency = CEILING( t128b/132b Switch to Active / tLine )
+ * ML_PHY_LOCK Length = 396
+ * The "+3" term is the trailing zero padding after the POST_LT_SCRAMBLER_RESET
+ * The "+64" term represents the MTP timeslots
+ */
+static int _lnl_compute_switch_to_active_time(int port_clock)
+{
+	return 32 * (396 + 3 + 64) / (port_clock / 1000);
+}
+
 static int _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 					     struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
-	int aux_less_wake_time, aux_less_wake_lines;
+	int aux_less_wake_time, aux_less_wake_lines, switch_to_active_lines;
 
 	aux_less_wake_time =
 		_lnl_compute_aux_less_wake_time(crtc_state->port_clock / 1000);
 	aux_less_wake_lines = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
 						       aux_less_wake_time);
 
-	if (aux_less_wake_lines > 32)
+	switch_to_active_lines =
+		intel_usecs_to_scanlines(
+			&crtc_state->hw.adjusted_mode,
+			_lnl_compute_switch_to_active_time(crtc_state->port_clock / 1000));
+
+	if (aux_less_wake_lines > 32 || switch_to_active_lines > 32)
 		return false;
 
-	if (i915->display.params.psr_safest_params)
+	if (i915->display.params.psr_safest_params) {
 		aux_less_wake_lines = 32;
+		switch_to_active_lines = 32;
+	}
 
 	intel_dp->psr.alpm_parameters.aux_less_wake_lines = aux_less_wake_lines;
+	intel_dp->psr.alpm_parameters.switch_to_active_lines = switch_to_active_lines;
 
 	return true;
 }
