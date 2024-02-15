@@ -104,6 +104,7 @@
 #include "intel_pmdemand.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
+#include "intel_psr_regs.h"
 #include "intel_sdvo.h"
 #include "intel_snps_phy.h"
 #include "intel_tc.h"
@@ -2706,6 +2707,15 @@ static void intel_set_pipe_src_size(const struct intel_crtc_state *crtc_state)
 	 */
 	intel_de_write(dev_priv, PIPESRC(pipe),
 		       PIPESRC_WIDTH(width - 1) | PIPESRC_HEIGHT(height - 1));
+
+	if (!crtc_state->enable_psr2_su_region_et)
+		return;
+
+	width = drm_rect_width(&crtc_state->psr2_su_area);
+	height = drm_rect_height(&crtc_state->psr2_su_area);
+
+	intel_de_write(dev_priv, PIPE_SRCSZ_ERLY_TPT(pipe),
+		       PIPESRC_WIDTH(width - 1) | PIPESRC_HEIGHT(height - 1));
 }
 
 static bool intel_pipe_is_interlaced(const struct intel_crtc_state *crtc_state)
@@ -4764,7 +4774,11 @@ static bool
 intel_compare_dp_vsc_sdp(const struct drm_dp_vsc_sdp *a,
 			 const struct drm_dp_vsc_sdp *b)
 {
-	return memcmp(a, b, sizeof(*a)) == 0;
+	return a->pixelformat == b->pixelformat &&
+		a->colorimetry == b->colorimetry &&
+		a->bpc == b->bpc &&
+		a->dynamic_range == b->dynamic_range &&
+		a->content_type == b->content_type;
 }
 
 static bool
@@ -4837,10 +4851,12 @@ memcmp_diff_len(const u8 *a, const u8 *b, size_t len)
 }
 
 static void
-pipe_config_buffer_mismatch(struct drm_i915_private *dev_priv,
-			    bool fastset, const char *name,
+pipe_config_buffer_mismatch(bool fastset, const struct intel_crtc *crtc,
+			    const char *name,
 			    const u8 *a, const u8 *b, size_t len)
 {
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+
 	if (fastset) {
 		if (!drm_debug_enabled(DRM_UT_KMS))
 			return;
@@ -4849,7 +4865,8 @@ pipe_config_buffer_mismatch(struct drm_i915_private *dev_priv,
 		len = memcmp_diff_len(a, b, len);
 
 		drm_dbg_kms(&dev_priv->drm,
-			    "fastset requirement not met in %s buffer\n", name);
+			    "[CRTC:%d:%s] fastset requirement not met in %s buffer\n",
+			    crtc->base.base.id, crtc->base.name, name);
 		print_hex_dump(KERN_DEBUG, "expected: ", DUMP_PREFIX_NONE,
 			       16, 0, a, len, false);
 		print_hex_dump(KERN_DEBUG, "found: ", DUMP_PREFIX_NONE,
@@ -4858,7 +4875,8 @@ pipe_config_buffer_mismatch(struct drm_i915_private *dev_priv,
 		/* only dump up to the last difference */
 		len = memcmp_diff_len(a, b, len);
 
-		drm_err(&dev_priv->drm, "mismatch in %s buffer\n", name);
+		drm_err(&dev_priv->drm, "[CRTC:%d:%s] mismatch in %s buffer\n",
+			crtc->base.base.id, crtc->base.name, name);
 		print_hex_dump(KERN_ERR, "expected: ", DUMP_PREFIX_NONE,
 			       16, 0, a, len, false);
 		print_hex_dump(KERN_ERR, "found: ", DUMP_PREFIX_NONE,
@@ -4889,18 +4907,34 @@ pipe_config_mismatch(bool fastset, const struct intel_crtc *crtc,
 	va_end(args);
 }
 
-static bool fastboot_enabled(struct drm_i915_private *dev_priv)
+static void
+pipe_config_pll_mismatch(bool fastset,
+			 const struct intel_crtc *crtc,
+			 const char *name,
+			 const struct intel_dpll_hw_state *a,
+			 const struct intel_dpll_hw_state *b)
 {
-	/* Enable fastboot by default on Skylake and newer */
-	if (DISPLAY_VER(dev_priv) >= 9)
-		return true;
+	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 
-	/* Enable fastboot by default on VLV and CHV */
-	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
-		return true;
+	if (fastset) {
+		if (!drm_debug_enabled(DRM_UT_KMS))
+			return;
 
-	/* Disabled by default on all others */
-	return false;
+		drm_dbg_kms(&i915->drm,
+			    "[CRTC:%d:%s] fastset requirement not met in %s\n",
+			    crtc->base.base.id, crtc->base.name, name);
+		drm_dbg_kms(&i915->drm, "expected:\n");
+		intel_dpll_dump_hw_state(i915, a);
+		drm_dbg_kms(&i915->drm, "found:\n");
+		intel_dpll_dump_hw_state(i915, b);
+	} else {
+		drm_err(&i915->drm, "[CRTC:%d:%s] mismatch in %s buffer\n",
+			crtc->base.base.id, crtc->base.name, name);
+		drm_err(&i915->drm, "expected:\n");
+		intel_dpll_dump_hw_state(i915, a);
+		drm_err(&i915->drm, "found:\n");
+		intel_dpll_dump_hw_state(i915, b);
+	}
 }
 
 bool
@@ -4911,14 +4945,6 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	struct drm_i915_private *dev_priv = to_i915(current_config->uapi.crtc->dev);
 	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
 	bool ret = true;
-	bool fixup_inherited = fastset &&
-		current_config->inherited && !pipe_config->inherited;
-
-	if (fixup_inherited && !fastboot_enabled(dev_priv)) {
-		drm_dbg_kms(&dev_priv->drm,
-			    "initial modeset and fastboot not set\n");
-		ret = false;
-	}
 
 #define PIPE_CONF_CHECK_X(name) do { \
 	if (current_config->name != pipe_config->name) { \
@@ -4998,7 +5024,17 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	} \
 } while (0)
 
-#define PIPE_CONF_CHECK_TIMINGS(name) do { \
+#define PIPE_CONF_CHECK_PLL(name) do { \
+	if (!intel_dpll_compare_hw_state(dev_priv, &current_config->name, \
+					 &pipe_config->name)) { \
+		pipe_config_pll_mismatch(fastset, crtc, __stringify(name), \
+					 &current_config->name, \
+					 &pipe_config->name); \
+		ret = false; \
+	} \
+} while (0)
+
+#define PIPE_CONF_CHECK_TIMINGS(name) do {     \
 	PIPE_CONF_CHECK_I(name.crtc_hdisplay); \
 	PIPE_CONF_CHECK_I(name.crtc_htotal); \
 	PIPE_CONF_CHECK_I(name.crtc_hblank_start); \
@@ -5044,8 +5080,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 } while (0)
 
 #define PIPE_CONF_CHECK_DP_VSC_SDP(name) do { \
-	if (!current_config->has_psr && !pipe_config->has_psr && \
-	    !intel_compare_dp_vsc_sdp(&current_config->infoframes.name, \
+	if (!intel_compare_dp_vsc_sdp(&current_config->infoframes.name, \
 				      &pipe_config->infoframes.name)) { \
 		pipe_config_dp_vsc_sdp_mismatch(dev_priv, fastset, __stringify(name), \
 						&current_config->infoframes.name, \
@@ -5058,7 +5093,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	BUILD_BUG_ON(sizeof(current_config->name) != (len)); \
 	BUILD_BUG_ON(sizeof(pipe_config->name) != (len)); \
 	if (!intel_compare_buffer(current_config->name, pipe_config->name, (len))) { \
-		pipe_config_buffer_mismatch(dev_priv, fastset, __stringify(name), \
+		pipe_config_buffer_mismatch(fastset, crtc, __stringify(name), \
 					    current_config->name, \
 					    pipe_config->name, \
 					    (len)); \
@@ -5198,53 +5233,16 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 
 		PIPE_CONF_CHECK_CSC(csc);
 		PIPE_CONF_CHECK_CSC(output_csc);
-
-		if (current_config->active_planes) {
-			PIPE_CONF_CHECK_BOOL(has_psr);
-			PIPE_CONF_CHECK_BOOL(has_psr2);
-			PIPE_CONF_CHECK_BOOL(enable_psr2_sel_fetch);
-			PIPE_CONF_CHECK_I(dc3co_exitline);
-		}
 	}
 
 	PIPE_CONF_CHECK_BOOL(double_wide);
 
-	if (dev_priv->display.dpll.mgr) {
+	if (dev_priv->display.dpll.mgr)
 		PIPE_CONF_CHECK_P(shared_dpll);
 
-		PIPE_CONF_CHECK_X(dpll_hw_state.dpll);
-		PIPE_CONF_CHECK_X(dpll_hw_state.dpll_md);
-		PIPE_CONF_CHECK_X(dpll_hw_state.fp0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.fp1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.wrpll);
-		PIPE_CONF_CHECK_X(dpll_hw_state.spll);
-		PIPE_CONF_CHECK_X(dpll_hw_state.ctrl1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.cfgcr1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.cfgcr2);
-		PIPE_CONF_CHECK_X(dpll_hw_state.cfgcr0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.div0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.ebb0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.ebb4);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll2);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll3);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll6);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll8);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll9);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pll10);
-		PIPE_CONF_CHECK_X(dpll_hw_state.pcsdw12);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_refclkin_ctl);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_clktop2_coreclkctl1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_clktop2_hsclkctl);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_div0);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_div1);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_lf);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_frac_lock);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_ssc);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_bias);
-		PIPE_CONF_CHECK_X(dpll_hw_state.mg_pll_tdc_coldst_bias);
-	}
+	/* FIXME convert everything over the dpll_mgr */
+	if (dev_priv->display.dpll.mgr || HAS_GMCH(dev_priv))
+		PIPE_CONF_CHECK_PLL(dpll_hw_state);
 
 	PIPE_CONF_CHECK_X(dsi_pll.ctrl);
 	PIPE_CONF_CHECK_X(dsi_pll.div);
@@ -6306,6 +6304,9 @@ int intel_atomic_check(struct drm_device *dev,
 	int ret, i;
 	bool any_ms = false;
 
+	if (!intel_display_driver_check_access(dev_priv))
+		return -ENODEV;
+
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
 					    new_crtc_state, i) {
 		/*
@@ -7067,6 +7068,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 	drm_atomic_helper_wait_for_dependencies(&state->base);
 	drm_dp_mst_atomic_wait_for_dependencies(&state->base);
+	intel_atomic_global_state_wait_for_dependencies(state);
 
 	/*
 	 * During full modesets we write a lot of registers, wait
@@ -7243,6 +7245,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	intel_pmdemand_post_plane_update(state);
 
 	drm_atomic_helper_commit_hw_done(&state->base);
+	intel_atomic_global_state_commit_done(state);
 
 	if (state->modeset) {
 		/* As one of the primary mmio accessors, KMS has a high
@@ -7293,6 +7296,38 @@ static void intel_atomic_track_fbs(struct intel_atomic_state *state)
 					plane->frontbuffer_bit);
 }
 
+static int intel_atomic_setup_commit(struct intel_atomic_state *state, bool nonblock)
+{
+	int ret;
+
+	ret = drm_atomic_helper_setup_commit(&state->base, nonblock);
+	if (ret)
+		return ret;
+
+	ret = intel_atomic_global_state_setup_commit(state);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int intel_atomic_swap_state(struct intel_atomic_state *state)
+{
+	int ret;
+
+	ret = drm_atomic_helper_swap_state(&state->base, true);
+	if (ret)
+		return ret;
+
+	intel_atomic_swap_global_state(state);
+
+	intel_shared_dpll_swap_state(state);
+
+	intel_atomic_track_fbs(state);
+
+	return 0;
+}
+
 int intel_atomic_commit(struct drm_device *dev, struct drm_atomic_state *_state,
 			bool nonblock)
 {
@@ -7338,11 +7373,9 @@ int intel_atomic_commit(struct drm_device *dev, struct drm_atomic_state *_state,
 		return ret;
 	}
 
-	ret = drm_atomic_helper_setup_commit(&state->base, nonblock);
+	ret = intel_atomic_setup_commit(state, nonblock);
 	if (!ret)
-		ret = drm_atomic_helper_swap_state(&state->base, true);
-	if (!ret)
-		intel_atomic_swap_global_state(state);
+		ret = intel_atomic_swap_state(state);
 
 	if (ret) {
 		struct intel_crtc_state *new_crtc_state;
@@ -7356,8 +7389,6 @@ int intel_atomic_commit(struct drm_device *dev, struct drm_atomic_state *_state,
 		intel_runtime_pm_put(&dev_priv->runtime_pm, state->wakeref);
 		return ret;
 	}
-	intel_shared_dpll_swap_state(state);
-	intel_atomic_track_fbs(state);
 
 	drm_atomic_state_get(&state->base);
 	INIT_WORK(&state->base.commit_work, intel_atomic_commit_work);
@@ -7810,6 +7841,7 @@ static const struct intel_display_funcs skl_display_funcs = {
 	.crtc_disable = hsw_crtc_disable,
 	.commit_modeset_enables = skl_commit_modeset_enables,
 	.get_initial_plane_config = skl_get_initial_plane_config,
+	.fixup_initial_plane_config = skl_fixup_initial_plane_config,
 };
 
 static const struct intel_display_funcs ddi_display_funcs = {
@@ -7818,6 +7850,7 @@ static const struct intel_display_funcs ddi_display_funcs = {
 	.crtc_disable = hsw_crtc_disable,
 	.commit_modeset_enables = intel_commit_modeset_enables,
 	.get_initial_plane_config = i9xx_get_initial_plane_config,
+	.fixup_initial_plane_config = i9xx_fixup_initial_plane_config,
 };
 
 static const struct intel_display_funcs pch_split_display_funcs = {
@@ -7826,6 +7859,7 @@ static const struct intel_display_funcs pch_split_display_funcs = {
 	.crtc_disable = ilk_crtc_disable,
 	.commit_modeset_enables = intel_commit_modeset_enables,
 	.get_initial_plane_config = i9xx_get_initial_plane_config,
+	.fixup_initial_plane_config = i9xx_fixup_initial_plane_config,
 };
 
 static const struct intel_display_funcs vlv_display_funcs = {
@@ -7834,6 +7868,7 @@ static const struct intel_display_funcs vlv_display_funcs = {
 	.crtc_disable = i9xx_crtc_disable,
 	.commit_modeset_enables = intel_commit_modeset_enables,
 	.get_initial_plane_config = i9xx_get_initial_plane_config,
+	.fixup_initial_plane_config = i9xx_fixup_initial_plane_config,
 };
 
 static const struct intel_display_funcs i9xx_display_funcs = {
@@ -7842,6 +7877,7 @@ static const struct intel_display_funcs i9xx_display_funcs = {
 	.crtc_disable = i9xx_crtc_disable,
 	.commit_modeset_enables = intel_commit_modeset_enables,
 	.get_initial_plane_config = i9xx_get_initial_plane_config,
+	.fixup_initial_plane_config = i9xx_fixup_initial_plane_config,
 };
 
 /**
