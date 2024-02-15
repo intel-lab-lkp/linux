@@ -64,6 +64,11 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	}
 	ctx->count++;
 
+	if (type == PCI_EXP_TYPE_ROOT_PORT && !pcie_cxlt_register_dport(dport))
+		return devm_add_action_or_reset(dport->dport_dev,
+						pcie_cxlt_unregister_dport,
+						dport);
+
 	return 0;
 }
 

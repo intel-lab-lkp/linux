@@ -138,6 +138,10 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define   CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_MASK GENMASK(3, 0)
 #define   CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_ENABLE BIT(4)
 #define   CXL_TIMEOUT_CONTROL_MEM_ISO_ENABLE BIT(16)
+#define   CXL_TIMEOUT_CONTROL_MEM_INTR_ENABLE BIT(26)
+#define CXL_TIMEOUT_STATUS_OFFSET 0xC
+#define   CXL_TIMEOUT_STATUS_MEM_TIMEOUT BIT(0)
+#define   CXL_TIMEOUT_STATUS_MEM_ISO BIT(8)
 #define CXL_TIMEOUT_CAPABILITY_LENGTH 0x10
 
 /* CXL 3.0 8.2.4.23.2 CXL Timeout and Isolation Control Register, bits 3:0 */
@@ -700,7 +704,10 @@ struct cxl_dport {
 	struct access_coordinate sw_coord;
 	struct access_coordinate hb_coord;
 	long link_latency;
+	bool isolated;
 };
+
+bool cxl_port_is_isolated(struct cxl_port *port);
 
 /**
  * struct cxl_ep - track an endpoint's interest in a port
@@ -734,6 +741,9 @@ struct cxl_region_ref {
 	int nr_eps;
 	int nr_targets;
 };
+
+bool cxl_dport_is_in_region(struct cxl_dport *dport, struct cxl_region_ref *ref);
+void cxl_port_kill_regions(struct cxl_port *port);
 
 /*
  * The platform firmware device hosting the root is also the top of the

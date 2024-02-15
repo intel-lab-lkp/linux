@@ -10,6 +10,7 @@
 #define _PORTDRV_H_
 
 #include <linux/compiler.h>
+#include <linux/errno.h>
 
 /* Service Type */
 #define PCIE_PORT_SERVICE_PME_SHIFT	0	/* Power Management Event */

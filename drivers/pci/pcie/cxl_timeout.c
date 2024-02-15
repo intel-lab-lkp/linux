@@ -22,6 +22,8 @@
 
 #define NUM_CXL_TIMEOUT_RANGES 9
 
+static u32 num_cxlt_devs;
+
 struct cxl_timeout {
 	struct pcie_device *dev;
 	void __iomem *regs;
@@ -139,6 +141,141 @@ static struct pcie_cxlt_data *cxlt_create_pdata(struct pcie_device *dev)
 	data->dport = NULL;
 
 	return data;
+}
+
+int pcie_cxlt_register_dport(struct cxl_dport *dport)
+{
+	struct device *dev = dport->dport_dev;
+	struct pcie_device *pcie_dev;
+	struct pcie_cxlt_data *pdata;
+	struct pci_dev *pdev;
+
+	if (!dev_is_pci(dev))
+		return -ENXIO;
+
+	pdev = to_pci_dev(dev);
+
+	dev = pcie_port_find_device(pdev, PCIE_PORT_SERVICE_CXLT);
+	if (!dev) {
+		dev_warn(dev,
+			 "Device is not registered with cxl_timeout driver.\n");
+		return -ENODEV;
+	}
+
+	pcie_dev = to_pcie_device(dev);
+
+	pdata = get_service_data(pcie_dev);
+	pdata->dport = dport;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pcie_cxlt_register_dport);
+
+void pcie_cxlt_unregister_dport(struct cxl_dport *dport)
+{
+	struct device *dev = dport->dport_dev;
+	struct pcie_device *pcie_dev;
+	struct pcie_cxlt_data *pdata;
+	struct pci_dev *pdev;
+
+	if (!dev_is_pci(dev))
+		return;
+
+	pdev = to_pci_dev(dev);
+
+	dev = pcie_port_find_device(pdev, PCIE_PORT_SERVICE_CXLT);
+	if (!dev) {
+		dev_dbg(dev,
+			"Device was not registered with cxl_timeout driver.\n");
+		return;
+	}
+
+	pcie_dev = to_pcie_device(dev);
+	pdata = get_service_data(pcie_dev);
+	pdata->dport = NULL;
+}
+EXPORT_SYMBOL_GPL(pcie_cxlt_unregister_dport);
+
+struct cxl_timeout_wq_data {
+	struct work_struct w;
+	struct cxl_dport *dport;
+};
+
+static struct workqueue_struct *cxl_timeout_wq;
+
+static void cxl_timeout_handler(struct work_struct *w)
+{
+	struct cxl_timeout_wq_data *data =
+		container_of(w, struct cxl_timeout_wq_data, w);
+	struct cxl_dport *dport = data->dport;
+	struct cxl_port *port;
+	struct cxl_region_ref *ref;
+	unsigned long index;
+	bool kill_regions;
+
+	if (!dport || !dport->port)
+		return;
+
+	port = dport->port;
+
+	xa_for_each(&port->regions, index, ref)
+		if (cxl_dport_is_in_region(dport, ref))
+			kill_regions = true;
+
+	if (kill_regions)
+		cxl_port_kill_regions(port);
+
+	kfree(data);
+}
+
+irqreturn_t cxl_timeout_thread(int irq, void *data)
+{
+	struct cxl_timeout_wq_data *wq_data;
+	struct cxl_timeout *cxlt = data;
+	struct pcie_device *pcie_dev = cxlt->dev;
+	struct pcie_cxlt_data *pdata;
+	struct cxl_dport *dport;
+	u32 status;
+
+	/*
+	 * If the CXL core didn't register a cxl_dport with this PCIe device,
+	 * then dport enumeration failed and there's nothing to do CXL-wise.
+	 */
+	pdata = get_service_data(pcie_dev);
+	if (!pdata || !pdata->dport)
+		return IRQ_HANDLED;
+
+	dport = pdata->dport;
+
+	status = readl(cxlt->regs + CXL_TIMEOUT_STATUS_OFFSET);
+	if (!(status & CXL_TIMEOUT_STATUS_MEM_ISO
+	      || status & CXL_TIMEOUT_STATUS_MEM_TIMEOUT))
+		return IRQ_HANDLED;
+
+	dport->isolated = true;
+
+	wq_data = kzalloc(sizeof(struct cxl_timeout_wq_data), GFP_NOWAIT);
+	if (!wq_data)
+		return IRQ_NONE;
+
+	wq_data->dport = dport;
+
+	INIT_WORK(&wq_data->w, cxl_timeout_handler);
+	queue_work(cxl_timeout_wq, &wq_data->w);
+
+	return IRQ_HANDLED;
+}
+
+static int cxl_enable_interrupts(struct pcie_device *dev,
+				 struct cxl_timeout *cxlt)
+{
+	if (!cxlt || !FIELD_GET(CXL_TIMEOUT_CAP_INTR_SUPP, cxlt->cap))
+		return -ENXIO;
+
+	return devm_request_threaded_irq(&dev->device, dev->irq, NULL,
+					 cxl_timeout_thread,
+					 IRQF_SHARED | IRQF_ONESHOT, "cxltdrv",
+					 cxlt);
 }
 
 static bool cxl_validate_timeout_range(struct cxl_timeout *cxlt, u8 range)
@@ -405,9 +542,28 @@ static int cxl_timeout_probe(struct pcie_device *dev)
 	if (rc && !timeout_enabled) {
 		pci_info(dev->port,
 			 "Failed to enable CXL.mem timeout and isolation.\n");
+		return rc;
 	}
 
-	return rc;
+	rc = cxl_enable_interrupts(dev, cxlt);
+	if (rc) {
+		pci_info(dev->port,
+			"Failed to enable CXL.mem timeout & isolation interrupts: %d\n",
+			rc);
+	} else {
+		pci_info(port, "enabled with IRQ %d\n", dev->irq);
+	}
+
+	num_cxlt_devs++;
+	return 0;
+}
+
+static void cxl_timeout_remove(struct pcie_device *dev)
+{
+	num_cxlt_devs--;
+
+	if (!num_cxlt_devs)
+		destroy_workqueue(cxl_timeout_wq);
 }
 
 static struct pcie_port_service_driver cxltdriver = {
@@ -416,6 +572,7 @@ static struct pcie_port_service_driver cxltdriver = {
 	.service	= PCIE_PORT_SERVICE_CXLT,
 
 	.probe		= cxl_timeout_probe,
+	.remove		= cxl_timeout_remove,
 	.driver		= {
 		.dev_groups = cxl_timeout_attribute_groups,
 	},
@@ -423,6 +580,12 @@ static struct pcie_port_service_driver cxltdriver = {
 
 int __init pcie_cxlt_init(void)
 {
+	cxl_timeout_wq = alloc_ordered_workqueue("cxl_timeout", 0);
+	if (!cxl_timeout_wq)
+		return -ENOMEM;
+
+	num_cxlt_devs = 0;
+
 	return pcie_port_service_register(&cxltdriver);
 }
 

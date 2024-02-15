@@ -1699,6 +1699,12 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -ENXIO;
 	}
 
+	if (cxl_port_is_isolated(ep_port)) {
+		dev_err(&cxlr->dev, "%s:%s endpoint is under a dport in error isolation\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev));
+		return -EBUSY;
+	}
+
 	if (cxled->cxld.target_type != cxlr->type) {
 		dev_dbg(&cxlr->dev, "%s:%s type mismatch: %d vs %d\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
@@ -2781,6 +2787,9 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_region *cxlr;
 	struct resource *res;
 	int rc;
+
+	if (cxl_port_is_isolated(cxlmd->endpoint))
+		return ERR_PTR(-EBUSY);
 
 	do {
 		cxlr = __create_region(cxlrd, cxled->mode,

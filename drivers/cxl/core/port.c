@@ -2000,6 +2000,86 @@ int cxl_decoder_autoremove(struct device *host, struct cxl_decoder *cxld)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_decoder_autoremove, CXL);
 
+/* Checks to see if a dport is above an endpoint */
+static bool cxl_dport_is_parent(struct cxl_dport *parent, struct cxl_ep *ep)
+{
+	struct cxl_dport *ep_dport = ep->dport;
+	struct cxl_port *ep_port = ep_dport->port;
+
+	while (!is_cxl_root(ep_port)) {
+		if (ep_dport == parent)
+			return true;
+
+		ep_dport = ep_port->parent_dport;
+		ep_port = ep_dport->port;
+	}
+
+	return false;
+}
+
+bool cxl_dport_is_in_region(struct cxl_dport *dport,
+			   struct cxl_region_ref *rr)
+{
+	struct cxl_region_params *p = &rr->region->params;
+	struct cxl_ep *ep;
+	int i;
+
+	for (i = 0; i < p->nr_targets; i++) {
+		if (!p->targets[i])
+			continue;
+
+		ep = cxl_ep_load(dport->port, cxled_to_memdev(p->targets[i]));
+
+		if (ep && cxl_dport_is_parent(dport, ep))
+			return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dport_is_in_region, CXL);
+
+void cxl_port_kill_regions(struct cxl_port *port)
+{
+	struct cxl_endpoint_decoder *ep_decoder;
+	struct cxl_region_params *p;
+	struct cxl_region_ref *ref;
+	unsigned long index;
+	struct cxl_ep *ep;
+	int i;
+
+	xa_for_each(&port->regions, index, ref) {
+		p = &ref->region->params;
+
+		for (i = 0; i < p->nr_targets; i++) {
+			ep_decoder = p->targets[i];
+			if (!ep_decoder)
+				continue;
+
+			ep = cxl_ep_load(port, cxled_to_memdev(ep_decoder));
+			if (ep)
+				cxl_decoder_kill_region(ep_decoder);
+		}
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_kill_regions, CXL);
+
+bool cxl_port_is_isolated(struct cxl_port *port)
+{
+	struct cxl_dport *dport = port->parent_dport;
+
+	while (!is_cxl_root(port) && dport) {
+		if (dport->isolated || !dport->port)
+			return true;
+
+		dport = dport->port->parent_dport;
+		port = dport->port;
+	}
+
+
+	return false;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_is_isolated, CXL);
+
 /**
  * __cxl_driver_register - register a driver for the cxl bus
  * @cxl_drv: cxl driver structure to attach

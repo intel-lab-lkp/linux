@@ -106,4 +106,13 @@ void read_cdat_data(struct cxl_port *port);
 void cxl_cor_error_detected(struct pci_dev *pdev);
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state);
+
+#ifdef CONFIG_PCIE_CXL_TIMEOUT
+int pcie_cxlt_register_dport(struct cxl_dport *dport);
+void pcie_cxlt_unregister_dport(struct cxl_dport *dport);
+#else
+int pcie_cxlt_register_dport(void *dport) { return -ENXIO; }
+void pcie_cxlt_unregister_dport(void *dport) {}
+#endif
+
 #endif /* __CXL_PCI_H__ */
