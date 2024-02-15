@@ -168,6 +168,7 @@ void phylink_limit_mac_speed(struct phylink_config *config, u32 max_speed);
  * @mac_finish: finish a major reconfiguration of the interface.
  * @mac_link_down: take the link down.
  * @mac_link_up: allow the link to come up.
+ * @mac_get_pcs_neg_mode: Get PCS negotiation mode for interface mode.
  *
  * The individual methods are described more fully below.
  */
@@ -188,6 +189,10 @@ struct phylink_mac_ops {
 			    struct phy_device *phy, unsigned int mode,
 			    phy_interface_t interface, int speed, int duplex,
 			    bool tx_pause, bool rx_pause);
+	unsigned int (*mac_get_pcs_neg_mode)(struct phylink_config *config,
+					     unsigned int mode,
+					     phy_interface_t interface,
+					     const unsigned long *advertising);
 };
 
 #if 0 /* For kernel-doc purposes only. */
