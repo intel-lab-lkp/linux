@@ -58,6 +58,16 @@ config PCIEAER_CXL
 
 	  If unsure, say Y.
 
+config PCIE_CXL_TIMEOUT
+	bool "PCI Express CXL.mem Timeout & Isolation Interrupt support"
+	depends on PCIEPORTBUS
+	depends on CXL_BUS=PCIEPORTBUS && CXL_PORT
+	help
+	  Enables the CXL.mem Timeout & Isolation PCIE port service driver. This
+	  driver, in combination with the CXL driver core, is responsible for
+	  handling CXL capable PCIE root ports that undergo CXL.mem error isolation
+	  due to either a CXL.mem transaction timeout or uncorrectable device error.
+
 #
 # PCI Express ECRC
 #

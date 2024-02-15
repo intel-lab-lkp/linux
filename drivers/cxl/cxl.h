@@ -129,7 +129,11 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 
 /* CXL 3.0 8.2.4.23 CXL Timeout and Isolation Capability Structure */
 #define CXL_TIMEOUT_CAPABILITY_OFFSET 0x0
+#define   CXL_TIMEOUT_CAP_MEM_TIMEOUT_SUPP BIT(4)
+#define CXL_TIMEOUT_CONTROL_OFFSET 0x8
+#define   CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_ENABLE BIT(4)
 #define CXL_TIMEOUT_CAPABILITY_LENGTH 0x10
+
 /* RAS Registers CXL 2.0 8.2.5.9 CXL RAS Capability Structure */
 #define CXL_RAS_UNCORRECTABLE_STATUS_OFFSET 0x0
 #define   CXL_RAS_UNCORRECTABLE_STATUS_MASK (GENMASK(16, 14) | GENMASK(11, 0))
