@@ -364,11 +364,8 @@ static int dw_spi_mmio_probe(struct platform_device *pdev)
 				     &dws->reg_io_width))
 		dws->reg_io_width = 4;
 
-	num_cs = 4;
-
-	device_property_read_u32(&pdev->dev, "num-cs", &num_cs);
-
-	dws->num_cs = num_cs;
+	if (!device_property_read_u32(&pdev->dev, "num-cs", &num_cs))
+		dws->num_cs = num_cs;
 
 	init_func = device_get_match_data(&pdev->dev);
 	if (init_func) {
