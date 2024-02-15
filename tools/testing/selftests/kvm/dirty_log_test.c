@@ -92,6 +92,29 @@ static uint64_t guest_test_phys_mem;
  */
 static uint64_t guest_test_virt_mem = DEFAULT_GUEST_TEST_MEM;
 
+static bool is_forced_emulation_enabled;
+
+static void guest_write_memory(uint64_t *mem, uint64_t val, uint64_t rand)
+{
+#ifdef __x86_64__
+	if (is_forced_emulation_enabled && (rand & 1)) {
+		if (rand & 2) {
+			__asm__ __volatile__(KVM_FEP "movq %1, %0"
+					     : "+m" (*mem)
+					     : "r" (val) : "memory");
+		} else {
+			uint64_t __old = READ_ONCE(*mem);
+
+			__asm__ __volatile__(KVM_FEP LOCK_PREFIX "cmpxchgq %[new], %[ptr]"
+					     : [ptr] "+m" (*mem), [old] "+a" (__old)
+					     : [new]"r" (val) : "memory", "cc");
+		}
+	} else
+#endif
+
+	*mem = val;
+}
+
 /*
  * Continuously write to the first 8 bytes of a random pages within
  * the testing memory region.
@@ -114,11 +137,13 @@ static void guest_code(void)
 
 	while (true) {
 		for (i = 0; i < TEST_PAGES_PER_LOOP; i++) {
+			uint64_t rand = READ_ONCE(random_array[i]);
+
 			addr = guest_test_virt_mem;
-			addr += (READ_ONCE(random_array[i]) % guest_num_pages)
-				* guest_page_size;
+			addr += (rand % guest_num_pages) * guest_page_size;
 			addr = align_down(addr, host_page_size);
-			*(uint64_t *)addr = READ_ONCE(iteration);
+
+			guest_write_memory((void *)addr, READ_ONCE(iteration), rand);
 		}
 
 		/* Tell the host that we need more random numbers */
@@ -772,6 +797,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	sync_global_to_guest(vm, guest_page_size);
 	sync_global_to_guest(vm, guest_test_virt_mem);
 	sync_global_to_guest(vm, guest_num_pages);
+	sync_global_to_guest(vm, is_forced_emulation_enabled);
 
 	/* Start the iterations */
 	iteration = 1;
@@ -874,6 +900,10 @@ int main(int argc, char *argv[])
 	};
 	int opt, i;
 	sigset_t sigset;
+
+#ifdef __x86_64__
+	is_forced_emulation_enabled = kvm_is_forced_emulation_enabled();
+#endif
 
 	sem_init(&sem_vcpu_stop, 0, 0);
 	sem_init(&sem_vcpu_cont, 0, 0);
