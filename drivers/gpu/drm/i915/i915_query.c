@@ -124,6 +124,7 @@ static int query_geometry_subslices(struct drm_i915_private *i915,
 	return fill_topology_info(sseu, query_item, sseu->geometry_subslice_mask);
 }
 
+
 static int
 query_engine_info(struct drm_i915_private *i915,
 		  struct drm_i915_query_item *query_item)
@@ -140,7 +141,7 @@ query_engine_info(struct drm_i915_private *i915,
 	if (query_item->flags)
 		return -EINVAL;
 
-	for_each_uabi_engine(engine, i915)
+	for_each_available_uabi_engine(engine, i915)
 		num_uabi_engines++;
 
 	len = struct_size(query_ptr, engines, num_uabi_engines);
@@ -155,7 +156,7 @@ query_engine_info(struct drm_i915_private *i915,
 
 	info_ptr = &query_ptr->engines[0];
 
-	for_each_uabi_engine(engine, i915) {
+	for_each_available_uabi_engine(engine, i915) {
 		info.engine.engine_class = engine->uabi_class;
 		info.engine.engine_instance = engine->uabi_instance;
 		info.flags = I915_ENGINE_INFO_HAS_LOGICAL_INSTANCE;

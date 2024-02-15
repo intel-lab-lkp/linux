@@ -404,6 +404,23 @@ static inline struct intel_gt *to_gt(const struct drm_i915_private *i915)
 	     (engine__); \
 	     (engine__) = rb_to_uabi_engine(rb_next(&(engine__)->uabi_node)))
 
+/*
+ * Exclude unavailable engines.
+ *
+ * Only the first CCS engine is utilized due to the disabling of CCS auto load
+ * balancing. As a result, all CCS engines operate collectively, functioning
+ * essentially as a single CCS engine, hence the count of active CCS engines is
+ * considered '1'.
+ * Currently, this applies to platforms with more than one CCS engine,
+ * specifically DG2.
+ */
+#define for_each_available_uabi_engine(engine__, i915__) \
+	for_each_uabi_engine(engine__, i915__) \
+		if ((IS_DG2(i915__)) && \
+		    ((engine__)->uabi_class == I915_ENGINE_CLASS_COMPUTE) && \
+		    ((engine__)->uabi_instance)) { } \
+		else
+
 #define INTEL_INFO(i915)	((i915)->__info)
 #define RUNTIME_INFO(i915)	(&(i915)->__runtime)
 #define DRIVER_CAPS(i915)	(&(i915)->caps)
