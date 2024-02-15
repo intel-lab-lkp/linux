@@ -74,6 +74,11 @@ static inline bool tcf_block_non_null_shared(struct tcf_block *block)
 	return block && block->index;
 }
 
+static inline bool tcf_block_has_skip_sw_only(struct tcf_block *block)
+{
+	return block && atomic_read(&block->filtercnt) == atomic_read(&block->skipswcnt);
+}
+
 static inline struct Qdisc *tcf_block_q(struct tcf_block *block)
 {
 	WARN_ON(tcf_block_shared(block));
