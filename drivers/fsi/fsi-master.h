@@ -120,6 +120,8 @@
 
 struct fsi_master {
 	struct device	dev;
+	unsigned long	clock_frequency;
+	int		lbus_divider;
 	int		idx;
 	int		n_links;
 	int		flags;
