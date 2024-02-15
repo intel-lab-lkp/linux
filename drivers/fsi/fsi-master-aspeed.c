@@ -375,11 +375,18 @@ static ssize_t cfam_reset_store(struct device *dev, struct device_attribute *att
 
 	trace_fsi_master_aspeed_cfam_reset(true);
 	spin_lock_irqsave(&aspeed->lock, flags);
+
+	opb_writel(aspeed, ctrl_base + FSI_MMODE,
+		   cpu_to_be32(aspeed->master.mmode & ~(FSI_MMODE_EIP | FSI_MMODE_RELA)));
+
 	gpiod_set_value(aspeed->cfam_reset_gpio, 1);
 	udelay(900);
 	gpiod_set_value(aspeed->cfam_reset_gpio, 0);
 	udelay(900);
+
 	opb_writel(aspeed, ctrl_base + FSI_MRESP0, cpu_to_be32(FSI_MRESP_RST_ALL_MASTER));
+	opb_writel(aspeed, ctrl_base + FSI_MMODE, cpu_to_be32(aspeed->master.mmode));
+
 	spin_unlock_irqrestore(&aspeed->lock, flags);
 	trace_fsi_master_aspeed_cfam_reset(false);
 
