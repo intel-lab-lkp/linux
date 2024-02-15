@@ -8,6 +8,7 @@
 #include <linux/bits.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/direction.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>

@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #include <linux/ndctl.h>
 #include <linux/device.h>
+#include <linux/direction.h>
 #include <linux/badblocks.h>
 #include <linux/perf_event.h>
 
