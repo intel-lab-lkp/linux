@@ -108,12 +108,12 @@ struct xdp_page_head {
 		/* ::data_hard_start starts here */
 		DECLARE_FLEX_ARRAY(struct xdp_frame, frame);
 		DECLARE_FLEX_ARRAY(u8, data);
-	};
+	} ____cacheline_aligned;
 };
 
 struct xdp_test_data {
-	struct xdp_buff *orig_ctx;
 	struct xdp_rxq_info rxq;
+	struct xdp_buff *orig_ctx;
 	struct net_device *dev;
 	struct xdp_frame **frames;
 	struct sk_buff **skbs;
