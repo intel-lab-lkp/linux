@@ -184,7 +184,7 @@ struct gpio_desc *devm_fwnode_gpiod_get_index(struct device *dev,
 #else /* CONFIG_GPIOLIB */
 
 #include <linux/err.h>
-#include <linux/kernel.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 
 #include <asm/bug.h>
 

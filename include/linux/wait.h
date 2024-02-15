@@ -5,6 +5,7 @@
  * Linux wait queue related types and methods
  */
 #include <linux/list.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 

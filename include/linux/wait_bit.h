@@ -6,6 +6,7 @@
  * Linux wait-bit related types and methods:
  */
 #include <linux/wait.h>
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
 
 struct wait_bit_key {
 	void			*flags;

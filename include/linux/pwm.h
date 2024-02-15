@@ -402,6 +402,8 @@ struct pwm_device *devm_fwnode_pwm_get(struct device *dev,
 				       struct fwnode_handle *fwnode,
 				       const char *con_id);
 #else
+#include <linux/sched/debug_atomic_sleep.h> // for might_sleep()
+
 static inline bool pwm_might_sleep(struct pwm_device *pwm)
 {
 	return true;

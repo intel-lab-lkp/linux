@@ -31,6 +31,7 @@
 #include <linux/refcount_types.h>
 #include <linux/resource.h>
 #include <linux/latencytop.h>
+#include <linux/sched/debug_atomic_sleep.h> // for __might_resched()
 #include <linux/sched/prio.h>
 #include <linux/sched/types.h>
 #include <linux/signal_types.h>
