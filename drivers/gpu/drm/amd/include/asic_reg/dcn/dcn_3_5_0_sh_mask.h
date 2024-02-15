@@ -16556,6 +16556,13 @@
 #define CM0_CM_COEF_FORMAT__CM_BIAS_FORMAT_MASK                                                               0x00000001L
 #define CM0_CM_COEF_FORMAT__CM_POST_CSC_COEF_FORMAT_MASK                                                      0x00000010L
 #define CM0_CM_COEF_FORMAT__CM_GAMUT_REMAP_COEF_FORMAT_MASK                                                   0x00000100L
+
+//CM0_CM_TEST_DEBUG_INDEX
+#define CM0_CM_TEST_DEBUG_INDEX__CM_TEST_DEBUG_INDEX__SHIFT                                                   0x0
+#define CM0_CM_TEST_DEBUG_INDEX__CM_TEST_DEBUG_WRITE_EN__SHIFT                                                0x8
+#define CM0_CM_TEST_DEBUG_INDEX__CM_TEST_DEBUG_INDEX_MASK                                                     0x000000FFL
+#define CM0_CM_TEST_DEBUG_INDEX__CM_TEST_DEBUG_WRITE_EN_MASK                                                  0x00000100L
+
 #define DC_PERFMON10_PERFCOUNTER_CNTL__PERFCOUNTER_EVENT_SEL__SHIFT                                           0x0
 #define DC_PERFMON10_PERFCOUNTER_CNTL__PERFCOUNTER_CVALUE_SEL__SHIFT                                          0x9
 #define DC_PERFMON10_PERFCOUNTER_CNTL__PERFCOUNTER_INC_MODE__SHIFT                                            0xc
@@ -27176,6 +27183,23 @@
 #define DIG0_AFMT_CNTL__AFMT_AUDIO_CLOCK_ON__SHIFT                                                            0x8
 #define DIG0_AFMT_CNTL__AFMT_AUDIO_CLOCK_EN_MASK                                                              0x00000001L
 #define DIG0_AFMT_CNTL__AFMT_AUDIO_CLOCK_ON_MASK                                                              0x00000100L
+
+//DIG0_DIG_BE_CLK_CNTL
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_MODE__SHIFT                                                              0x0
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_CLK_EN__SHIFT                                                            0x4
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SOFT_RESET__SHIFT                                                        0x5
+#define DIG0_DIG_BE_CLK_CNTL__HDCP_SOFT_RESET__SHIFT                                                          0x6
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_CLOCK_ON__SHIFT                                                 0xb
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_HDCP_CLOCK_ON__SHIFT                                            0xc
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_TMDS_CLOCK_ON__SHIFT                                            0xd
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_MODE_MASK                                                                0x00000007L
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_CLK_EN_MASK                                                              0x00000010L
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SOFT_RESET_MASK                                                          0x00000020L
+#define DIG0_DIG_BE_CLK_CNTL__HDCP_SOFT_RESET_MASK                                                            0x00000040L
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_CLOCK_ON_MASK                                                   0x00000800L
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_HDCP_CLOCK_ON_MASK                                              0x00001000L
+#define DIG0_DIG_BE_CLK_CNTL__DIG_BE_SYMCLK_G_TMDS_CLOCK_ON_MASK                                              0x00002000L
+
 #define DIG0_DIG_BE_CNTL__DIG_DUAL_LINK_ENABLE__SHIFT                                                         0x0
 #define DIG0_DIG_BE_CNTL__DIG_SWAP__SHIFT                                                                     0x1
 #define DIG0_DIG_BE_CNTL__DIG_RB_SWITCH_EN__SHIFT                                                             0x2
@@ -36716,6 +36740,17 @@
 #define DSCC0_DSCC_RATE_CONTROL_BUFFER2_MAX_FULLNESS_LEVEL__DSCC_RATE_CONTROL_BUFFER2_MAX_FULLNESS_LEVEL_MASK  0x0003FFFFL
 #define DSCC0_DSCC_RATE_CONTROL_BUFFER3_MAX_FULLNESS_LEVEL__DSCC_RATE_CONTROL_BUFFER3_MAX_FULLNESS_LEVEL__SHIFT  0x0
 #define DSCC0_DSCC_RATE_CONTROL_BUFFER3_MAX_FULLNESS_LEVEL__DSCC_RATE_CONTROL_BUFFER3_MAX_FULLNESS_LEVEL_MASK  0x0003FFFFL
+
+//DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS0_ROTATE__SHIFT                                  0x0
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS1_ROTATE__SHIFT                                  0x8
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS2_ROTATE__SHIFT                                  0x10
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS3_ROTATE__SHIFT                                  0x18
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS0_ROTATE_MASK                                    0x0000001FL
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS1_ROTATE_MASK                                    0x00001F00L
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS2_ROTATE_MASK                                    0x001F0000L
+#define DSCC0_DSCC_TEST_DEBUG_BUS_ROTATE__DSCC_TEST_DEBUG_BUS3_ROTATE_MASK                                    0x1F000000L
+
 #define DC_PERFMON17_PERFCOUNTER_CNTL__PERFCOUNTER_EVENT_SEL__SHIFT                                           0x0
 #define DC_PERFMON17_PERFCOUNTER_CNTL__PERFCOUNTER_CVALUE_SEL__SHIFT                                          0x9
 #define DC_PERFMON17_PERFCOUNTER_CNTL__PERFCOUNTER_INC_MODE__SHIFT                                            0xc
@@ -38488,6 +38523,18 @@
 #define DWB_OGAM_LUT_INDEX__DWB_OGAM_LUT_INDEX_MASK                                                           0x000001FFL
 #define DWB_OGAM_LUT_DATA__DWB_OGAM_LUT_DATA__SHIFT                                                           0x0
 #define DWB_OGAM_LUT_DATA__DWB_OGAM_LUT_DATA_MASK                                                             0x0003FFFFL
+//DWB_OGAM_LUT_CONTROL
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_WRITE_COLOR_MASK__SHIFT                                            0x0
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_READ_COLOR_SEL__SHIFT                                              0x4
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_READ_DBG__SHIFT                                                    0x8
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_HOST_SEL__SHIFT                                                    0xc
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_CONFIG_MODE__SHIFT                                                 0x10
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_WRITE_COLOR_MASK_MASK                                              0x00000007L
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_READ_COLOR_SEL_MASK                                                0x00000030L
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_READ_DBG_MASK                                                      0x00000100L
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_HOST_SEL_MASK                                                      0x00001000L
+#define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_CONFIG_MODE_MASK                                                   0x00010000L
+
 #define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_WRITE_COLOR_MASK__SHIFT                                            0x0
 #define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_READ_COLOR_SEL__SHIFT                                              0x4
 #define DWB_OGAM_LUT_CONTROL__DWB_OGAM_LUT_HOST_SEL__SHIFT                                                    0xc
@@ -52008,6 +52055,14 @@
 #define DIO_CLK_CNTL__SYMCLK_R_GATE_DIS__SHIFT                                                                0x10
 #define DIO_CLK_CNTL__SYMCLK_G_GATE_DIS__SHIFT                                                                0x11
 #define DIO_CLK_CNTL__DIO_FGCG_REP_DIS__SHIFT                                                                 0x14
+#define DIO_CLK_CNTL__DISPCLK_G_HDCP_GATE_DIS__SHIFT                                                          0x15
+#define DIO_CLK_CNTL__SYMCLKA_G_HDCP_GATE_DIS__SHIFT                                                          0x16
+#define DIO_CLK_CNTL__SYMCLKB_G_HDCP_GATE_DIS__SHIFT                                                          0x17
+#define DIO_CLK_CNTL__SYMCLKC_G_HDCP_GATE_DIS__SHIFT                                                          0x18
+#define DIO_CLK_CNTL__SYMCLKD_G_HDCP_GATE_DIS__SHIFT                                                          0x19
+#define DIO_CLK_CNTL__SYMCLKE_G_HDCP_GATE_DIS__SHIFT                                                          0x1a
+#define DIO_CLK_CNTL__SYMCLKF_G_HDCP_GATE_DIS__SHIFT                                                          0x1b
+#define DIO_CLK_CNTL__SYMCLKG_G_HDCP_GATE_DIS__SHIFT                                                          0x1c
 #define DIO_CLK_CNTL__DIO_TEST_CLK_SEL_MASK                                                                   0x0000007FL
 #define DIO_CLK_CNTL__DISPCLK_R_GATE_DIS_MASK                                                                 0x00000200L
 #define DIO_CLK_CNTL__DISPCLK_G_GATE_DIS_MASK                                                                 0x00000400L
@@ -52019,6 +52074,16 @@
 #define DIO_CLK_CNTL__SYMCLK_R_GATE_DIS_MASK                                                                  0x00010000L
 #define DIO_CLK_CNTL__SYMCLK_G_GATE_DIS_MASK                                                                  0x00020000L
 #define DIO_CLK_CNTL__DIO_FGCG_REP_DIS_MASK                                                                   0x00100000L
+
+#define DIO_CLK_CNTL__DISPCLK_G_HDCP_GATE_DIS_MASK                                                            0x00200000L
+#define DIO_CLK_CNTL__SYMCLKA_G_HDCP_GATE_DIS_MASK                                                            0x00400000L
+#define DIO_CLK_CNTL__SYMCLKB_G_HDCP_GATE_DIS_MASK                                                            0x00800000L
+#define DIO_CLK_CNTL__SYMCLKC_G_HDCP_GATE_DIS_MASK                                                            0x01000000L
+#define DIO_CLK_CNTL__SYMCLKD_G_HDCP_GATE_DIS_MASK                                                            0x02000000L
+#define DIO_CLK_CNTL__SYMCLKE_G_HDCP_GATE_DIS_MASK                                                            0x04000000L
+#define DIO_CLK_CNTL__SYMCLKF_G_HDCP_GATE_DIS_MASK                                                            0x08000000L
+#define DIO_CLK_CNTL__SYMCLKG_G_HDCP_GATE_DIS_MASK                                                            0x10000000L
+
 #define DIO_PSP_INTERRUPT_STATUS__DIO_PSP_INTERRUPT_STATUS__SHIFT                                             0x0
 #define DIO_PSP_INTERRUPT_STATUS__DIO_PSP_INTERRUPT_MESSAGE__SHIFT                                            0x1
 #define DIO_PSP_INTERRUPT_STATUS__DIO_PSP_INTERRUPT_STATUS_MASK                                               0x00000001L
