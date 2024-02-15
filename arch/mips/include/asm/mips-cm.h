@@ -32,6 +32,7 @@ extern void __iomem *mips_cm_l2sync_base;
  * name mips_cm_phys_base (without underscores).
  */
 extern phys_addr_t __mips_cm_phys_base(void);
+extern phys_addr_t mips_cm_phys_base(void);
 
 /**
  * __mips_cm_l2sync_phys_base - retrieve the physical base address of the CM
@@ -46,6 +47,7 @@ extern phys_addr_t __mips_cm_phys_base(void);
  * underscores).
  */
 extern phys_addr_t __mips_cm_l2sync_phys_base(void);
+extern phys_addr_t mips_cm_l2sync_phys_base(void);
 
 /*
  * mips_cm_is64 - determine CM register width
