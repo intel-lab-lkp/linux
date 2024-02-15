@@ -20,6 +20,8 @@
 #include "../../cxl/cxlpci.h"
 #include "portdrv.h"
 
+#define NUM_CXL_TIMEOUT_RANGES 9
+
 struct cxl_timeout {
 	struct pcie_device *dev;
 	void __iomem *regs;
@@ -130,6 +132,57 @@ static struct pcie_cxlt_data *cxlt_create_pdata(struct pcie_device *dev)
 	return data;
 }
 
+static bool cxl_validate_timeout_range(struct cxl_timeout *cxlt, u8 range)
+{
+	u8 timeout_ranges = FIELD_GET(CXL_TIMEOUT_CAP_MEM_TIMEOUT_MASK,
+				      cxlt->cap);
+
+	if (!timeout_ranges)
+		return false;
+
+	switch (range) {
+	case CXL_TIMEOUT_TIMEOUT_RANGE_DEFAULT:
+		return true;
+	case CXL_TIMEOUT_TIMEOUT_RANGE_A1:
+	case CXL_TIMEOUT_TIMEOUT_RANGE_A2:
+		return timeout_ranges & BIT(0);
+	case CXL_TIMEOUT_TIMEOUT_RANGE_B1:
+	case CXL_TIMEOUT_TIMEOUT_RANGE_B2:
+		return timeout_ranges & BIT(1);
+	case CXL_TIMEOUT_TIMEOUT_RANGE_C1:
+	case CXL_TIMEOUT_TIMEOUT_RANGE_C2:
+		return timeout_ranges & BIT(2);
+	case CXL_TIMEOUT_TIMEOUT_RANGE_D1:
+	case CXL_TIMEOUT_TIMEOUT_RANGE_D2:
+		return timeout_ranges & BIT(3);
+	default:
+		pci_info(cxlt->dev->port, "Invalid timeout range: %d\n",
+			 range);
+		return false;
+	}
+}
+
+static int cxl_set_mem_timeout_range(struct cxl_timeout *cxlt, u8 range)
+{
+	u32 cntrl;
+
+	if (!cxlt)
+		return -ENXIO;
+
+	if (!FIELD_GET(CXL_TIMEOUT_CAP_MEM_TIMEOUT_MASK, cxlt->cap)
+	    || !cxl_validate_timeout_range(cxlt, range))
+		return -ENXIO;
+
+	cntrl = readl(cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+	cntrl &= ~CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_MASK;
+	cntrl |= CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_MASK & range;
+	writel(cntrl, cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+
+	pci_dbg(cxlt->dev->port,
+		 "Timeout & isolation timeout set to range 0x%x\n", range);
+	return 0;
+}
+
 static void cxl_disable_timeout(void *data)
 {
 	struct cxl_timeout *cxlt = data;
@@ -153,6 +206,135 @@ static int cxl_enable_timeout(struct pcie_device *dev, struct cxl_timeout *cxlt)
 	return devm_add_action_or_reset(&dev->device, cxl_disable_timeout,
 					cxlt);
 }
+
+static ssize_t timeout_range_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct pcie_device *pdev = to_pcie_device(dev);
+	struct pcie_cxlt_data *pdata = get_service_data(pdev);
+	u32 cntrl, range;
+
+	if (!pdata || !pdata->cxlt)
+		return -ENXIO;
+
+	cntrl = readl(pdata->cxlt->regs + CXL_TIMEOUT_CONTROL_OFFSET);
+
+	range = FIELD_GET(CXL_TIMEOUT_CONTROL_MEM_TIMEOUT_MASK, cntrl);
+	return sysfs_emit(buf, "%u\n", range);
+}
+
+static ssize_t timeout_range_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct pcie_device *pdev = to_pcie_device(dev);
+	struct pcie_cxlt_data *pdata = get_service_data(pdev);
+	u8 range;
+	int rc;
+
+	if (kstrtou8(buf, 16, &range) < 0)
+		return -EINVAL;
+
+	if (!pdata || !pdata->cxlt)
+		return -ENXIO;
+
+	rc = cxl_set_mem_timeout_range(pdata->cxlt, range);
+	if (rc)
+		return rc;
+
+	return count;
+}
+static DEVICE_ATTR_RW(timeout_range);
+
+const struct cxl_timeout_range {
+	const char *str;
+	u8 range_val;
+} cxl_timeout_ranges[NUM_CXL_TIMEOUT_RANGES] = {
+		{ "Default range (50us-10ms)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_DEFAULT },
+		{ "Range A (50us-100us)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_A1 },
+		{ "Range A (1ms-10ms)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_A2 },
+		{ "Range B (16ms-55ms)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_B1 },
+		{ "Range B (65ms-210ms)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_B2 },
+		{ "Range C (260ms-900ms)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_C1 },
+		{ "Range C (1s-3.5s)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_C2 },
+		{ "Range D (4s-13s)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_D1 },
+		{ "Range D (17s-64s)",
+			CXL_TIMEOUT_TIMEOUT_RANGE_D2 },
+};
+
+static ssize_t available_timeout_ranges_show(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct pcie_device *pdev = to_pcie_device(dev);
+	struct pcie_cxlt_data *pdata = get_service_data(pdev);
+	ssize_t count = 0;
+	u8 range;
+
+	if (!pdata || !pdata->cxlt)
+		return -ENXIO;
+
+	for (int i = 0; i < ARRAY_SIZE(cxl_timeout_ranges); i++) {
+		range = cxl_timeout_ranges[i].range_val;
+
+		if (cxl_validate_timeout_range(pdata->cxlt, range)) {
+			count += sysfs_emit_at(buf, count, "0x%x\t%s\n",
+					       cxl_timeout_ranges[i].range_val,
+					       cxl_timeout_ranges[i].str);
+		}
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RO(available_timeout_ranges);
+
+static umode_t cxl_timeout_is_visible(struct kobject *kobj,
+				       struct attribute *attr, int val)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pcie_device *pdev = to_pcie_device(dev);
+	struct pcie_cxlt_data *pdata = get_service_data(pdev);
+	u32 cap;
+
+	if (!pdata || !pdata->cxlt)
+		return 0;
+
+	cap = pdata->cxlt->cap;
+
+	if ((attr == &dev_attr_timeout_range.attr) &&
+	    cap & CXL_TIMEOUT_CAP_MEM_TIMEOUT_SUPP)
+		return attr->mode;
+
+	if ((attr == &dev_attr_available_timeout_ranges.attr) &&
+	    (FIELD_GET(CXL_TIMEOUT_CAP_MEM_TIMEOUT_MASK, cap)))
+		return attr->mode;
+
+	return 0;
+}
+static struct attribute *cxl_timeout_timeout_attributes[] = {
+	&dev_attr_timeout_range.attr,
+	&dev_attr_available_timeout_ranges.attr,
+	NULL,
+};
+
+static struct attribute_group cxl_timeout_timeout_group = {
+	.attrs = cxl_timeout_timeout_attributes,
+	.is_visible = cxl_timeout_is_visible,
+};
+
+static const struct attribute_group *cxl_timeout_attribute_groups[] = {
+	&cxl_timeout_timeout_group,
+	NULL,
+};
 
 static int cxl_timeout_probe(struct pcie_device *dev)
 {
@@ -187,6 +369,9 @@ static struct pcie_port_service_driver cxltdriver = {
 	.service	= PCIE_PORT_SERVICE_CXLT,
 
 	.probe		= cxl_timeout_probe,
+	.driver		= {
+		.dev_groups = cxl_timeout_attribute_groups,
+	},
 };
 
 int __init pcie_cxlt_init(void)
