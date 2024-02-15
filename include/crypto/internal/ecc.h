@@ -76,6 +76,24 @@ static inline void ecc_digits_from_bytes(const u8 *in, unsigned int nbytes,
 }
 
 /**
+ * ecc_digits_to_bytes() - Copy digits into a byte array of size nbytes
+ * @in:      Input digits array
+ * @ndigits: Number of digits in input digits array
+ * @out:     Output byte array
+ * @nbytes:  Number of bytes to copy into byte array
+ */
+static inline void ecc_digits_to_bytes(const u64 *in, unsigned int ndigits,
+				       u8 *out, unsigned int nbytes)
+{
+	unsigned int sz = ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
+	u8 tmp[ECC_MAX_DIGITS << ECC_DIGITS_TO_BYTES_SHIFT];
+	unsigned int o = sz - nbytes;
+
+	ecc_swap_digits(in, (u64 *)tmp, ndigits);
+	memcpy(out, &tmp[o], nbytes);
+}
+
+/**
  * ecc_is_key_valid() - Validate a given ECDH private key
  *
  * @curve_id:		id representing the curve to use
