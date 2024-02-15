@@ -2,7 +2,7 @@
 #ifndef __LINUX_GOLDFISH_H
 #define __LINUX_GOLDFISH_H
 
-#include <linux/kernel.h>
+#include <linux/wordpart.h> // for lower_32_bits(), upper_32_bits()
 #include <linux/types.h>
 #include <linux/io.h>
 
