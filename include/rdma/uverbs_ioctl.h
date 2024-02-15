@@ -7,6 +7,7 @@
 #define _UVERBS_IOCTL_
 
 #include <rdma/uverbs_types.h>
+#include <linux/ptr_util.h> // for PTR_IF()
 #include <linux/uaccess.h>
 #include <rdma/rdma_user_ioctl.h>
 #include <rdma/ib_user_ioctl_verbs.h>

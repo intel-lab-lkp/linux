@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/ptr_util.h> // for PTR_IF()
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>

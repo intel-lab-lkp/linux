@@ -29,6 +29,7 @@
 #include <linux/notifier.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/ptr_util.h> // for PTR_IF()
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/string.h>

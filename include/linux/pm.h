@@ -9,6 +9,7 @@
 #define _LINUX_PM_H
 
 #include <linux/export.h>
+#include <linux/ptr_util.h> // for PTR_IF()
 #include <linux/list.h>
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
