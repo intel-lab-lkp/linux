@@ -7,7 +7,9 @@
 #include <linux/bug.h>
 #include <linux/cacheflush.h>
 #include <linux/kmsan.h>
-#include <linux/mm.h>
+#include <linux/mm/page_address.h>
+#include <linux/mm/page_size.h>
+#include <linux/mm/page_usage.h> // for folio_put()
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
 
