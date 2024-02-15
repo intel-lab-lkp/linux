@@ -3,6 +3,8 @@ Hisilicon Fast Ethernet MDIO Controller interface
 Required properties:
 - compatible: should be "hisilicon,hisi-femac-mdio".
 - reg: address and length of the register set for the device.
+
+Optional properties:
 - clocks: A phandle to the reference clock for this device.
 
 - PHY subnode: inherits from phy binding [1]
