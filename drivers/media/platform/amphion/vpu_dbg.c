@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/octal_permissions.h>
 #include <linux/types.h>
 #include <linux/pm_runtime.h>
 #include <media/v4l2-device.h>

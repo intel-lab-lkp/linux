@@ -21,6 +21,7 @@
 #include <linux/kobject_ns.h>
 #include <linux/stat.h>
 #include <linux/atomic.h>
+#include <linux/octal_permissions.h>
 
 struct kobject;
 struct module;
