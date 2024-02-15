@@ -58,8 +58,9 @@ TEST_GEN_PROGS := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_PROGS))
 TEST_GEN_PROGS_EXTENDED := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_PROGS_EXTENDED))
 TEST_GEN_FILES := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_FILES))
 
-all: $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) \
-	$(if $(TEST_GEN_MODS_DIR),gen_mods_dir)
+all: $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES)
+	$(if $(TEST_GEN_MODS_DIR), \
+		$(Q)$(MAKE) -C $(TEST_GEN_MODS_DIR))
 
 define RUN_TESTS
 	BASE_DIR="$(selfdir)";			\
@@ -85,11 +86,6 @@ else
 	@$(call RUN_TESTS, $(TEST_GEN_PROGS) $(TEST_CUSTOM_PROGS) $(TEST_PROGS))
 endif
 
-gen_mods_dir:
-	$(Q)$(MAKE) -C $(TEST_GEN_MODS_DIR)
-
-clean_mods_dir:
-	$(Q)$(MAKE) -C $(TEST_GEN_MODS_DIR) clean
 
 define INSTALL_SINGLE_RULE
 	$(if $(INSTALL_LIST),@mkdir -p $(INSTALL_PATH))
@@ -133,9 +129,11 @@ endif
 
 define CLEAN
 	$(RM) -r $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) $(EXTRA_CLEAN)
+	$(if $(TEST_GEN_MODS_DIR), \
+		$(Q)$(MAKE) -C $(TEST_GEN_MODS_DIR) clean)
 endef
 
-clean: $(if $(TEST_GEN_MODS_DIR),clean_mods_dir)
+clean:
 	$(CLEAN)
 
 # Enables to extend CFLAGS and LDFLAGS from command line, e.g.
@@ -166,4 +164,4 @@ $(OUTPUT)/%:%.S
 	$(LINK.S) $^ $(LDLIBS) -o $@
 endif
 
-.PHONY: run_tests all clean install emit_tests gen_mods_dir clean_mods_dir
+.PHONY: run_tests all clean install emit_tests
