@@ -428,7 +428,7 @@ EXPORT_PER_CPU_SYMBOL(softnet_data);
  * PP consumers must pay attention to run APIs in the appropriate context
  * (e.g. NAPI context).
  */
-static DEFINE_PER_CPU_ALIGNED(struct page_pool *, system_page_pool);
+DEFINE_PER_CPU_ALIGNED(struct page_pool *, system_page_pool);
 
 #ifdef CONFIG_LOCKDEP
 /*
@@ -11739,11 +11739,19 @@ static int net_page_pool_create(int cpuid)
 		.pool_size = SYSTEM_PERCPU_PAGE_POOL_SIZE,
 		.nid = NUMA_NO_NODE,
 	};
+	struct xdp_mem_info info;
 	struct page_pool *pp_ptr;
+	int err;
 
 	pp_ptr = page_pool_create_percpu(&page_pool_params, cpuid);
 	if (IS_ERR(pp_ptr))
 		return -ENOMEM;
+
+	err = xdp_reg_mem_model(&info, MEM_TYPE_PAGE_POOL, pp_ptr);
+	if (err) {
+		page_pool_destroy(pp_ptr);
+		return err;
+	}
 
 	per_cpu(system_page_pool, cpuid) = pp_ptr;
 #endif
@@ -11834,12 +11842,15 @@ static int __init net_dev_init(void)
 out:
 	if (rc < 0) {
 		for_each_possible_cpu(i) {
+			struct xdp_mem_info mem = { .type = MEM_TYPE_PAGE_POOL };
 			struct page_pool *pp_ptr;
 
 			pp_ptr = per_cpu(system_page_pool, i);
 			if (!pp_ptr)
 				continue;
 
+			mem.id = pp_ptr->xdp_mem_id;
+			xdp_unreg_mem_model(&mem);
 			page_pool_destroy(pp_ptr);
 			per_cpu(system_page_pool, i) = NULL;
 		}
