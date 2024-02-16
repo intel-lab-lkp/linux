@@ -44,10 +44,15 @@ properties:
           - hisilicon,hi3519-crg
           - hisilicon,hi3798cv200-crg
           - hisilicon,hi3798cv200-sysctrl
+          - hisilicon,hi3798mv200-crg
+          - hisilicon,hi3798mv200-sysctrl
       - const: syscon
       - const: simple-mfd
 
   reg:
+    maxItems: 1
+
+  ranges:
     maxItems: 1
 
   '#clock-cells':
@@ -86,6 +91,12 @@ properties:
     type: object
     description: |
       Reset controller for Hi3798CV200 GMAC module
+
+patternProperties:
+  '.*-dll@[0-9a-f]+':
+    type: object
+    description: |
+      eMMC/SD delay-locked-loop (DLL) register subnode
 
 required:
   - compatible
@@ -135,5 +146,30 @@ examples:
             compatible = "hisilicon,hi3660-crgctrl", "syscon";
             reg = <0x0 0xfff35000 0x0 0x1000>;
             #clock-cells = <1>;
+        };
+    };
+  - |
+    crg: clock-reset-controller@8a22000 {
+        compatible = "hisilicon,hi3798mv200-crg", "syscon", "simple-mfd";
+        reg = <0x8a22000 0x1000>;
+        ranges = <0x0 0x8a22000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        #clock-cells = <1>;
+        #reset-cells = <2>;
+
+        emmc_sap_dll: sap-dll@39c {
+            compatible = "hisilicon,sdmmc-sap-dll", "syscon", "simple-mfd";
+            reg = <0x39c 0x8>;
+        };
+
+        sdio0_sap_dll: sap-dll@3a4 {
+            compatible = "hisilicon,sdmmc-sap-dll", "syscon", "simple-mfd";
+            reg = <0x3a4 0x8>;
+        };
+
+        sdio1_sap_dll: sap-dll@3ac {
+            compatible = "hisilicon,sdmmc-sap-dll", "syscon", "simple-mfd";
+            reg = <0x3ac 0x8>;
         };
     };
