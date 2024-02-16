@@ -90,7 +90,8 @@ ovs_add_if () {
 		python3 $ovs_base/ovs-dpctl.py add-if \
 		    -u "$2" "$3" >$ovs_dir/$3.out 2>$ovs_dir/$3.err &
 		pid=$!
-		on_exit "ovs_sbx $1 kill -TERM $pid 2>/dev/null"
+		on_exit "ovs_sbx $1 kill --timeout 1000 TERM \
+                                        --timeout 1000 KILL $pid 2>/dev/null"
 	fi
 }
 
@@ -107,7 +108,8 @@ ovs_netns_spawn_daemon() {
 	info "spawning cmd: $*"
 	ip netns exec $netns $*  >> $ovs_dir/stdout  2>> $ovs_dir/stderr &
 	pid=$!
-	ovs_sbx "$sbx" on_exit "kill -TERM $pid 2>/dev/null"
+	ovs_sbx "$sbx" on_exit "kill --timeout 1000 TERM \
+                                    --timeout 1000 KILL $pid 2>/dev/null"
 }
 
 ovs_add_netns_and_veths () {
