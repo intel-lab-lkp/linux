@@ -32,6 +32,14 @@
 
 #include <drm/drm_util.h>
 
+/* Detach the cursor's bulk hitch from the LRU list */
+static void
+ttm_resource_cursor_clear_bulk(struct ttm_resource_cursor *cursor)
+{
+	cursor->bulk = NULL;
+	list_del_init(&cursor->bulk_hitch.link);
+}
+
 /**
  * ttm_resource_cursor_fini_locked() - Finalize the LRU list cursor usage
  * @cursor: The struct ttm_resource_cursor to finalize.
@@ -44,6 +52,7 @@ void ttm_resource_cursor_fini_locked(struct ttm_resource_cursor *cursor)
 {
 	lockdep_assert_held(&cursor->man->bdev->lru_lock);
 	list_del_init(&cursor->hitch.link);
+	ttm_resource_cursor_clear_bulk(cursor);
 }
 
 /**
@@ -104,6 +113,7 @@ void ttm_lru_bulk_move_tail(struct ttm_lru_bulk_move *bulk)
 					    &pos->last->lru.link);
 		}
 	}
+	bulk->age++;
 }
 EXPORT_SYMBOL(ttm_lru_bulk_move_tail);
 
@@ -505,6 +515,54 @@ void ttm_resource_manager_debug(struct ttm_resource_manager *man,
 }
 EXPORT_SYMBOL(ttm_resource_manager_debug);
 
+/* Adjust to a bulk sublist being bumped while traversing it.*/
+static bool
+ttm_resource_cursor_check_bulk(struct ttm_resource_cursor *cursor,
+			       struct ttm_lru_item *next_lru)
+{
+	struct ttm_resource *next = ttm_lru_item_to_res(next_lru);
+	struct ttm_lru_bulk_move *bulk = NULL;
+	struct ttm_buffer_object *bo = next->bo;
+
+	lockdep_assert_held(&cursor->man->bdev->lru_lock);
+	if (bo && bo->resource == next)
+		bulk = bo->bulk_move;
+
+	if (!bulk) {
+		ttm_resource_cursor_clear_bulk(cursor);
+		return false;
+	}
+
+	/*
+	 * We encountered a bulk sublist. Record its age and
+	 * set a hitch after the sublist.
+	 */
+	if (cursor->bulk != bulk) {
+		struct ttm_lru_bulk_move_pos *pos =
+			ttm_lru_bulk_move_pos(bulk, next);
+
+		cursor->bulk = bulk;
+		cursor->bulk_age = &bulk->age;
+		list_move(&cursor->bulk_hitch.link, &pos->last->lru.link);
+		return false;
+	}
+
+	/* Continue iterating down the bulk sublist */
+	if (cursor->bulk_age == &bulk->age)
+		return false;
+
+	/*
+	 * The bulk sublist in which we had a hitch has moved and the
+	 * hitch moved with it. Restart iteration from a previously
+	 * set hitch after the bulk_move, and remove that backup
+	 * hitch.
+	 */
+	list_move(&cursor->hitch.link, &cursor->bulk_hitch.link);
+	ttm_resource_cursor_clear_bulk(cursor);
+
+	return true;
+}
+
 /**
  * ttm_resource_manager_next() - Continue iterating over the resource manager
  * resources
@@ -524,6 +582,8 @@ ttm_resource_manager_next(struct ttm_resource_cursor *cursor)
 		lru = &cursor->hitch;
 		list_for_each_entry_continue(lru, &man->lru[cursor->priority], link) {
 			if (ttm_lru_item_is_res(lru)) {
+				if (ttm_resource_cursor_check_bulk(cursor, lru))
+					continue;
 				list_move(&cursor->hitch.link, &lru->link);
 				return ttm_lru_item_to_res(lru);
 			}
@@ -533,9 +593,10 @@ ttm_resource_manager_next(struct ttm_resource_cursor *cursor)
 			break;
 
 		list_move(&cursor->hitch.link, &man->lru[cursor->priority]);
+		ttm_resource_cursor_clear_bulk(cursor);
 	} while (true);
 
-	list_del_init(&cursor->hitch.link);
+	ttm_resource_cursor_fini_locked(cursor);
 
 	return NULL;
 }
@@ -560,6 +621,7 @@ ttm_resource_manager_first(struct ttm_resource_manager *man,
 	cursor->priority = 0;
 	cursor->man = man;
 	ttm_lru_item_init(&cursor->hitch, TTM_LRU_HITCH);
+	ttm_lru_item_init(&cursor->bulk_hitch, TTM_LRU_HITCH);
 	list_move(&cursor->hitch.link, &man->lru[cursor->priority]);
 
 	return ttm_resource_manager_next(cursor);
