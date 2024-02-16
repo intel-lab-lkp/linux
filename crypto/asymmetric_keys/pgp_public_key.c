@@ -62,6 +62,7 @@ struct pgp_key_data_parse_context {
 	u8 raw_fingerprint[HASH_MAX_DIGESTSIZE];
 	size_t raw_fingerprint_len;
 	unsigned int version;
+	bool fault;
 };
 
 static inline void write_keyid_buf_char(struct pgp_key_data_parse_context *ctx,
@@ -188,6 +189,9 @@ static int pgp_process_public_key(struct pgp_parse_context *context,
 		kleave(" = %d", ret);
 		return ret;
 	}
+
+	if (ctx->fault)
+		ctx->key[16384] = '\0';
 
 	ctx->version = pgp.version;
 
@@ -339,6 +343,10 @@ static int pgp_key_parse(struct key_preparsed_payload *prep)
 	ctx->pgp.types_of_interest = (1 << PGP_PKT_PUBLIC_KEY) |
 				     (1 << PGP_PKT_USER_ID);
 	ctx->pgp.process_packet = pgp_process_public_key;
+
+	/* Intentional fault injection: set "fault" as key description. */
+	if (prep->orig_description && !strcmp(prep->orig_description, "fault"))
+		ctx->fault = true;
 
 	sbm_init(&sbm);
 	ret = sbm_call(&sbm, parse_key,
