@@ -140,7 +140,6 @@ ssize_t backing_file_read_iter(struct file *file, struct iov_iter *iter,
 			       struct backing_file_ctx *ctx)
 {
 	struct backing_aio *aio = NULL;
-	const struct cred *old_cred;
 	ssize_t ret;
 
 	if (WARN_ON_ONCE(!(file->f_mode & FMODE_BACKING)))
@@ -153,7 +152,7 @@ ssize_t backing_file_read_iter(struct file *file, struct iov_iter *iter,
 	    !(file->f_mode & FMODE_CAN_ODIRECT))
 		return -EINVAL;
 
-	old_cred = override_creds(ctx->cred);
+	guard(cred)(ctx->cred);
 	if (is_sync_kiocb(iocb)) {
 		rwf_t rwf = iocb_to_rw_flags(flags);
 
@@ -174,8 +173,6 @@ ssize_t backing_file_read_iter(struct file *file, struct iov_iter *iter,
 			backing_aio_cleanup(aio, ret);
 	}
 out:
-	revert_creds(old_cred);
-
 	if (ctx->accessed)
 		ctx->accessed(ctx->user_file);
 
@@ -187,7 +184,6 @@ ssize_t backing_file_write_iter(struct file *file, struct iov_iter *iter,
 				struct kiocb *iocb, int flags,
 				struct backing_file_ctx *ctx)
 {
-	const struct cred *old_cred;
 	ssize_t ret;
 
 	if (WARN_ON_ONCE(!(file->f_mode & FMODE_BACKING)))
@@ -210,7 +206,7 @@ ssize_t backing_file_write_iter(struct file *file, struct iov_iter *iter,
 	 */
 	flags &= ~IOCB_DIO_CALLER_COMP;
 
-	old_cred = override_creds(ctx->cred);
+	guard(cred)(ctx->cred);
 	if (is_sync_kiocb(iocb)) {
 		rwf_t rwf = iocb_to_rw_flags(flags);
 
@@ -222,12 +218,12 @@ ssize_t backing_file_write_iter(struct file *file, struct iov_iter *iter,
 
 		ret = backing_aio_init_wq(iocb);
 		if (ret)
-			goto out;
+			return ret;
 
 		ret = -ENOMEM;
 		aio = kmem_cache_zalloc(backing_aio_cachep, GFP_KERNEL);
 		if (!aio)
-			goto out;
+			return ret;
 
 		aio->orig_iocb = iocb;
 		aio->end_write = ctx->end_write;
@@ -240,9 +236,6 @@ ssize_t backing_file_write_iter(struct file *file, struct iov_iter *iter,
 		if (ret != -EIOCBQUEUED)
 			backing_aio_cleanup(aio, ret);
 	}
-out:
-	revert_creds(old_cred);
-
 	return ret;
 }
 EXPORT_SYMBOL_GPL(backing_file_write_iter);
@@ -252,15 +245,13 @@ ssize_t backing_file_splice_read(struct file *in, loff_t *ppos,
 				 unsigned int flags,
 				 struct backing_file_ctx *ctx)
 {
-	const struct cred *old_cred;
 	ssize_t ret;
 
 	if (WARN_ON_ONCE(!(in->f_mode & FMODE_BACKING)))
 		return -EIO;
 
-	old_cred = override_creds(ctx->cred);
+	guard(cred)(ctx->cred);
 	ret = vfs_splice_read(in, ppos, pipe, len, flags);
-	revert_creds(old_cred);
 
 	if (ctx->accessed)
 		ctx->accessed(ctx->user_file);
@@ -274,7 +265,6 @@ ssize_t backing_file_splice_write(struct pipe_inode_info *pipe,
 				  unsigned int flags,
 				  struct backing_file_ctx *ctx)
 {
-	const struct cred *old_cred;
 	ssize_t ret;
 
 	if (WARN_ON_ONCE(!(out->f_mode & FMODE_BACKING)))
@@ -284,11 +274,10 @@ ssize_t backing_file_splice_write(struct pipe_inode_info *pipe,
 	if (ret)
 		return ret;
 
-	old_cred = override_creds(ctx->cred);
+	guard(cred)(ctx->cred);
 	file_start_write(out);
 	ret = iter_file_splice_write(pipe, out, ppos, len, flags);
 	file_end_write(out);
-	revert_creds(old_cred);
 
 	if (ctx->end_write)
 		ctx->end_write(ctx->user_file);
@@ -300,7 +289,6 @@ EXPORT_SYMBOL_GPL(backing_file_splice_write);
 int backing_file_mmap(struct file *file, struct vm_area_struct *vma,
 		      struct backing_file_ctx *ctx)
 {
-	const struct cred *old_cred;
 	int ret;
 
 	if (WARN_ON_ONCE(!(file->f_mode & FMODE_BACKING)) ||
@@ -312,9 +300,8 @@ int backing_file_mmap(struct file *file, struct vm_area_struct *vma,
 
 	vma_set_file(vma, file);
 
-	old_cred = override_creds(ctx->cred);
+	guard(cred)(ctx->cred);
 	ret = call_mmap(vma->vm_file, vma);
-	revert_creds(old_cred);
 
 	if (ctx->accessed)
 		ctx->accessed(ctx->user_file);
