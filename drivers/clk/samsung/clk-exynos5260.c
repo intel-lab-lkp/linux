@@ -11,7 +11,6 @@
 
 #include "clk-exynos5260.h"
 #include "clk.h"
-#include "clk-pll.h"
 
 #include <dt-bindings/clock/exynos5260-clk.h>
 

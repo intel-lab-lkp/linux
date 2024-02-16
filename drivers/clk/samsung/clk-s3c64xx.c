@@ -14,7 +14,6 @@
 #include <dt-bindings/clock/samsung,s3c64xx-clock.h>
 
 #include "clk.h"
-#include "clk-pll.h"
 
 /* S3C64xx clock controller register offsets. */
 #define APLL_LOCK		0x000

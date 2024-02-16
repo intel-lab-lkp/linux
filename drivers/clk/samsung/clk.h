@@ -11,6 +11,7 @@
 #define __SAMSUNG_CLK_H
 
 #include <linux/clk-provider.h>
+#include "clk-cpu.h"
 #include "clk-pll.h"
 
 /**

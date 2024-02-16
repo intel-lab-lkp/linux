@@ -17,9 +17,7 @@
 #include <dt-bindings/clock/exynos5433.h>
 
 #include "clk.h"
-#include "clk-cpu.h"
 #include "clk-exynos-arm64.h"
-#include "clk-pll.h"
 
 /* NOTE: Must be equal to the last clock ID increased by one */
 #define CLKS_NR_TOP			(CLK_SCLK_HDMI_SPDIF_DISP + 1)

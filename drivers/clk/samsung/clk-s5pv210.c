@@ -13,7 +13,6 @@
 #include <linux/of_address.h>
 
 #include "clk.h"
-#include "clk-pll.h"
 
 #include <dt-bindings/clock/s5pv210.h>
 

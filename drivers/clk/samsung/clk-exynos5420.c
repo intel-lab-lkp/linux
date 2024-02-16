@@ -15,7 +15,6 @@
 #include <linux/clk.h>
 
 #include "clk.h"
-#include "clk-cpu.h"
 #include "clk-exynos5-subcmu.h"
 
 #define APLL_LOCK		0x0

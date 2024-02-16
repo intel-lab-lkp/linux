@@ -16,7 +16,6 @@
 #include <linux/of_address.h>
 
 #include "clk.h"
-#include "clk-cpu.h"
 
 /* Exynos4 clock controller register offsets */
 #define SRC_LEFTBUS		0x4200

@@ -14,8 +14,6 @@
 #include <dt-bindings/clock/exynos3250.h>
 
 #include "clk.h"
-#include "clk-cpu.h"
-#include "clk-pll.h"
 
 #define SRC_LEFTBUS		0x4200
 #define DIV_LEFTBUS		0x4500

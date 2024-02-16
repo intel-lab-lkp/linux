@@ -36,7 +36,6 @@
 #include <linux/clk-provider.h>
 
 #include "clk.h"
-#include "clk-cpu.h"
 
 struct exynos_cpuclk;
 
