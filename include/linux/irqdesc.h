@@ -251,4 +251,13 @@ irq_set_lockdep_class(unsigned int irq, struct lock_class_key *lock_class,
 		__irq_set_lockdep_class(irq, lock_class, request_class);
 }
 
+#define SPURIOUS_DEFERRED (0x1)
+#define SPURIOUS_DEFERRED_SHIFT (1)
+
+static inline void irq_add_handled(struct irq_desc *desc, int i)
+{
+	i <<= SPURIOUS_DEFERRED_SHIFT;
+	atomic_add(i, &desc->threads_handled);
+}
+
 #endif

@@ -1191,7 +1191,7 @@ irq_forced_thread_fn(struct irq_desc *desc, struct irqaction *action)
 		local_irq_disable();
 	ret = action->thread_fn(action->irq, action->dev_id);
 	if (ret == IRQ_HANDLED)
-		atomic_inc(&desc->threads_handled);
+		irq_add_handled(desc, 1);
 
 	irq_finalize_oneshot(desc, action);
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
@@ -1212,7 +1212,7 @@ static irqreturn_t irq_thread_fn(struct irq_desc *desc,
 
 	ret = action->thread_fn(action->irq, action->dev_id);
 	if (ret == IRQ_HANDLED)
-		atomic_inc(&desc->threads_handled);
+		irq_add_handled(desc, 1);
 
 	irq_finalize_oneshot(desc, action);
 	return ret;

@@ -267,8 +267,6 @@ try_misrouted_irq(unsigned int irq, struct irq_desc *desc,
 	return action && (action->flags & IRQF_IRQPOLL);
 }
 
-#define SPURIOUS_DEFERRED	0x80000000
-
 void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 {
 	unsigned int irq;
@@ -312,7 +310,7 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 		if (action_ret == IRQ_WAKE_THREAD) {
 			int handled;
 			/*
-			 * We use bit 31 of thread_handled_last to
+			 * We use bit 0 of thread_handled_last to
 			 * denote the deferred spurious detection
 			 * active. No locking necessary as
 			 * thread_handled_last is only accessed here
@@ -328,7 +326,7 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 			 * returned IRQ_HANDLED since the last
 			 * interrupt happened.
 			 *
-			 * For simplicity we just set bit 31, as it is
+			 * For simplicity we just set bit 0, as it is
 			 * set in threads_handled_last as well. So we
 			 * avoid extra masking. And we really do not
 			 * care about the high bits of the handled
