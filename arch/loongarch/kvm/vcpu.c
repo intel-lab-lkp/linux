@@ -300,11 +300,6 @@ static int _kvm_setcsr(struct kvm_vcpu *vcpu, unsigned int id, u64 val)
 
 static int _kvm_get_cpucfg(int id, u64 *v)
 {
-	int ret = 0;
-
-	if (id < 0 && id >= KVM_MAX_CPUCFG_REGS)
-		return -EINVAL;
-
 	switch (id) {
 	case 2:
 		/* Return CPUCFG2 features which have been supported by KVM */
@@ -324,32 +319,34 @@ static int _kvm_get_cpucfg(int id, u64 *v)
 		if (cpu_has_lasx)
 			*v |= CPUCFG2_LASX;
 
-		break;
+		return 0;
+	case 0 ... 1:
+	case 3 ... KVM_MAX_CPUCFG_REGS - 1:
+		/* no restrictions on other CPUCFG IDs' values */
+		*v = U64_MAX;
+		return 0;
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
-	return ret;
 }
 
 static int kvm_check_cpucfg(int id, u64 val)
 {
-	u64 mask;
-	int ret = 0;
+	u64 mask = 0;
+	int ret;
 
-	if (id < 0 && id >= KVM_MAX_CPUCFG_REGS)
-		return -EINVAL;
-
-	if (_kvm_get_cpucfg(id, &mask))
+	ret = _kvm_get_cpucfg(id, &mask);
+	if (ret)
 		return ret;
+
+	if (val & ~mask)
+		/* Unsupported features should not be set */
+		return -EINVAL;
 
 	switch (id) {
 	case 2:
 		/* CPUCFG2 features checking */
-		if (val & ~mask)
-			/* The unsupported features should not be set */
-			ret = -EINVAL;
-		else if (!(val & CPUCFG2_LLFTP))
+		if (!(val & CPUCFG2_LLFTP))
 			/* The LLFTP must be set, as guest must has a constant timer */
 			ret = -EINVAL;
 		else if ((val & CPUCFG2_FP) && (!(val & CPUCFG2_FPSP) || !(val & CPUCFG2_FPDP)))
