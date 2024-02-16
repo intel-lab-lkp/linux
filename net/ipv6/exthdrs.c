@@ -943,6 +943,14 @@ static bool ipv6_hop_ioam(struct sk_buff *skb, int optoff)
 		if (!skb_valid_dst(skb))
 			ip6_route_input(skb);
 
+		if (skb_cloned(skb)) {
+			if (pskb_expand_head(skb, 0, 0, GFP_ATOMIC))
+				goto drop;
+
+			hdr = (struct ioam6_hdr *)(skb_network_header(skb) + optoff);
+			trace = (struct ioam6_trace_hdr *)((u8 *)hdr + sizeof(*hdr));
+		}
+
 		ioam6_fill_trace_data(skb, ns, trace, true);
 		break;
 	default:
