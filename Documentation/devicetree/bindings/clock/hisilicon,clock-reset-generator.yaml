@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/hisilicon,clock-reset-generator.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Hisilicon SOC Clock and Reset Generator (CRG) module
+
+maintainers:
+  - Yang Xiwen <forbidden405@foxmail.com>
+
+description: |
+  Hisilicon SOC clock control module which supports the clocks, resets and
+  power domains on various SoCs.
+
+properties:
+  compatible:
+    minItems: 1
+    items:
+      - enum:
+          - hisilicon,hi3559av100-clock
+          - hisilicon,hi3559av100-shub-clock
+          - hisilicon,hi3660-crgctrl
+          - hisilicon,hi3660-pctrl
+          - hisilicon,hi3660-pmuctrl
+          - hisilicon,hi3660-sctrl
+          - hisilicon,hi3660-iomcu
+          - hisilicon,hi3660-stub-clk
+          - hisilicon,hi3670-crgctrl
+          - hisilicon,hi3670-pctrl
+          - hisilicon,hi3670-pmuctrl
+          - hisilicon,hi3670-sctrl
+          - hisilicon,hi3670-iomcu
+          - hisilicon,hi3670-media1-crg
+          - hisilicon,hi3670-media2-crg
+          - hisilicon,hi6220-acpu-sctrl
+          - hisilicon,hi6220-aoctrl
+          - hisilicon,hi6220-sysctrl
+          - hisilicon,hi6220-mediactrl
+          - hisilicon,hi6220-pmctrl
+          - hisilicon,hi6220-stub-clk
+          - hisilicon,hi3516cv300-crg
+          - hisilicon,hi3516cv300-sysctrl
+          - hisilicon,hi3519-crg
+          - hisilicon,hi3798cv200-crg
+          - hisilicon,hi3798cv200-sysctrl
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  '#reset-cells':
+    enum: [1, 2]
+    description: |
+      First cell is reset request register offset.
+      Second cell is bit offset in reset request register.
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  mboxes:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      Phandle to the mailbox for sending msg to MCU
+      (See ../mailbox/hisilicon,hi3660-mailbox.txt for more info)
+
+  mbox-names:
+    $ref: /schemas/types.yaml#/definitions/string-array
+    description: |
+      Names of the mailboxes.
+
+  hisilicon,hi6220-clk-sram:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: |
+      Phandle to the syscon managing the SoC internal sram
+      the driver needs using the sram to pass parameters for frequency change.
+
+  reset-controller:
+    type: object
+    description: |
+      Reset controller for Hi3798CV200 GMAC module
+
+required:
+  - compatible
+  - '#clock-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              enum:
+                - hisilicon,hi3798cv200-crg
+    then:
+      properties:
+        reset-controller: false
+  - oneOf:
+      - required:
+          - hisilicon,hi6220-clk-sram
+      - required:
+          - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/hi3559av100-clock.h>
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clock-controller@12010000 {
+            compatible = "hisilicon,hi3559av100-clock";
+            #clock-cells = <1>;
+            #reset-cells = <2>;
+            reg = <0x0 0x12010000 0x0 0x10000>;
+        };
+    };
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/hi3660-clock.h>
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clock-controller@fff35000 {
+            compatible = "hisilicon,hi3660-crgctrl", "syscon";
+            reg = <0x0 0xfff35000 0x0 0x1000>;
+            #clock-cells = <1>;
+        };
+    };
