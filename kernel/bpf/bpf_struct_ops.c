@@ -30,12 +30,11 @@ struct bpf_struct_ops_map {
 	 */
 	struct bpf_link **links;
 	u32 links_cnt;
-	/* image is a page that has all the trampolines
+	u32 image_pages_cnt;
+	/* image_pages is an array of pages that has all the trampolines
 	 * that stores the func args before calling the bpf_prog.
-	 * A PAGE_SIZE "image" is enough to store all trampoline for
-	 * "links[]".
 	 */
-	void *image;
+	void **image_pages;
 	/* The owner moduler's btf. */
 	struct btf *btf;
 	/* uvalue->data stores the kernel struct
@@ -535,7 +534,8 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	void *udata, *kdata;
 	int prog_fd, err;
 	void *image, *image_end;
-	u32 i;
+	void **image_pages;
+	u32 i, next_page = 0;
 
 	if (flags)
 		return -EINVAL;
@@ -573,8 +573,8 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 
 	udata = &uvalue->data;
 	kdata = &kvalue->data;
-	image = st_map->image;
-	image_end = st_map->image + PAGE_SIZE;
+	image = st_map->image_pages[next_page++];
+	image_end = image + PAGE_SIZE;
 
 	module_type = btf_type_by_id(btf_vmlinux, st_ops_ids[IDX_MODULE_ID]);
 	for_each_member(i, t, member) {
@@ -657,6 +657,43 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 							&st_ops->func_models[i],
 							*(void **)(st_ops->cfi_stubs + moff),
 							image, image_end);
+		if (err == -E2BIG) {
+			/* Use an additional page to try again.
+			 *
+			 * It may reuse pages allocated for the previous
+			 * failed calls.
+			 */
+			if (next_page >= st_map->image_pages_cnt) {
+				/* Allocate an additional page */
+				image_pages = krealloc(st_map->image_pages,
+						       (st_map->image_pages_cnt + 1) * sizeof(void *),
+						       GFP_KERNEL);
+				if (!image_pages) {
+					err = -ENOMEM;
+					goto reset_unlock;
+				}
+				st_map->image_pages = image_pages;
+
+				err = bpf_jit_charge_modmem(PAGE_SIZE);
+				if (err)
+					goto reset_unlock;
+
+				image = arch_alloc_bpf_trampoline(PAGE_SIZE);
+				if (!image) {
+					bpf_jit_uncharge_modmem(PAGE_SIZE);
+					err = -ENOMEM;
+					goto reset_unlock;
+				}
+				st_map->image_pages[st_map->image_pages_cnt++] = image;
+			}
+			image = st_map->image_pages[next_page++];
+			image_end = image + PAGE_SIZE;
+
+			err = bpf_struct_ops_prepare_trampoline(tlinks, link,
+								&st_ops->func_models[i],
+								*(void **)(st_ops->cfi_stubs + moff),
+								image, image_end);
+		}
 		if (err < 0)
 			goto reset_unlock;
 
@@ -667,6 +704,18 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 		*(unsigned long *)(udata + moff) = prog->aux->id;
 	}
 
+	while (next_page < st_map->image_pages_cnt) {
+		/* Free unused pages
+		 *
+		 * The value can not be updated anymore if the value is not
+		 * rejected by st_ops->validate() or st_ops->reg().  So,
+		 * there is no reason to keep the unused pages.
+		 */
+		bpf_jit_uncharge_modmem(PAGE_SIZE);
+		image = st_map->image_pages[--st_map->image_pages_cnt];
+		arch_free_bpf_trampoline(image, PAGE_SIZE);
+	}
+
 	if (st_map->map.map_flags & BPF_F_LINK) {
 		err = 0;
 		if (st_ops->validate) {
@@ -674,7 +723,9 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 			if (err)
 				goto reset_unlock;
 		}
-		arch_protect_bpf_trampoline(st_map->image, PAGE_SIZE);
+		for (i = 0; i < next_page; i++)
+			arch_protect_bpf_trampoline(st_map->image_pages[i],
+						    PAGE_SIZE);
 		/* Let bpf_link handle registration & unregistration.
 		 *
 		 * Pair with smp_load_acquire() during lookup_elem().
@@ -683,7 +734,8 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 		goto unlock;
 	}
 
-	arch_protect_bpf_trampoline(st_map->image, PAGE_SIZE);
+	for (i = 0; i < next_page; i++)
+		arch_protect_bpf_trampoline(st_map->image_pages[i], PAGE_SIZE);
 	err = st_ops->reg(kdata);
 	if (likely(!err)) {
 		/* This refcnt increment on the map here after
@@ -706,7 +758,8 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	 * there was a race in registering the struct_ops (under the same name) to
 	 * a sub-system through different struct_ops's maps.
 	 */
-	arch_unprotect_bpf_trampoline(st_map->image, PAGE_SIZE);
+	for (i = 0; i < next_page; i++)
+		arch_unprotect_bpf_trampoline(st_map->image_pages[i], PAGE_SIZE);
 
 reset_unlock:
 	bpf_struct_ops_map_put_progs(st_map);
@@ -771,14 +824,15 @@ static void bpf_struct_ops_map_seq_show_elem(struct bpf_map *map, void *key,
 static void __bpf_struct_ops_map_free(struct bpf_map *map)
 {
 	struct bpf_struct_ops_map *st_map = (struct bpf_struct_ops_map *)map;
+	int i;
 
 	if (st_map->links)
 		bpf_struct_ops_map_put_progs(st_map);
 	bpf_map_area_free(st_map->links);
-	if (st_map->image) {
-		arch_free_bpf_trampoline(st_map->image, PAGE_SIZE);
-		bpf_jit_uncharge_modmem(PAGE_SIZE);
-	}
+	for (i = 0; i < st_map->image_pages_cnt; i++)
+		arch_free_bpf_trampoline(st_map->image_pages[i], PAGE_SIZE);
+	bpf_jit_uncharge_modmem(PAGE_SIZE * st_map->image_pages_cnt);
+	kfree(st_map->image_pages);
 	bpf_map_area_free(st_map->uvalue);
 	bpf_map_area_free(st_map);
 }
@@ -888,20 +942,27 @@ static struct bpf_map *bpf_struct_ops_map_alloc(union bpf_attr *attr)
 	st_map->st_ops_desc = st_ops_desc;
 	map = &st_map->map;
 
+	st_map->image_pages = kcalloc(1, sizeof(void *), GFP_KERNEL);
+	if (!st_map->image_pages) {
+		ret = -ENOMEM;
+		goto errout_free;
+	}
+
 	ret = bpf_jit_charge_modmem(PAGE_SIZE);
 	if (ret)
 		goto errout_free;
 
-	st_map->image = arch_alloc_bpf_trampoline(PAGE_SIZE);
-	if (!st_map->image) {
-		/* __bpf_struct_ops_map_free() uses st_map->image as flag
-		 * for "charged or not". In this case, we need to unchange
-		 * here.
+	st_map->image_pages[0] = arch_alloc_bpf_trampoline(PAGE_SIZE);
+	if (!st_map->image_pages[0]) {
+		/* __bpf_struct_ops_map_free() uses st_map->image_pages_cnt
+		 * to for uncharging a number of pages.  In this case, we
+		 * need to uncharge here.
 		 */
 		bpf_jit_uncharge_modmem(PAGE_SIZE);
 		ret = -ENOMEM;
 		goto errout_free;
 	}
+	st_map->image_pages_cnt = 1;
 	st_map->uvalue = bpf_map_area_alloc(vt->size, NUMA_NO_NODE);
 	st_map->links_cnt = btf_type_vlen(t);
 	st_map->links =
