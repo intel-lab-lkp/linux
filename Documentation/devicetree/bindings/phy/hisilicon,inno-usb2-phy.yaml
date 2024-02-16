@@ -16,6 +16,7 @@ properties:
       - enum:
           - hisilicon,hi3798cv200-usb2-phy
           - hisilicon,hi3798mv100-usb2-phy
+          - hisilicon,hi3798mv200-usb2-phy
       - const: hisilicon,inno-usb2-phy
 
   reg:
@@ -63,6 +64,15 @@ required:
   - '#address-cells'
   - '#size-cells'
   - resets
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: hisilicon,hi3798mv200-inno-usb2-phy
+then:
+  required:
+    - ranges
 
 additionalProperties: false
 
