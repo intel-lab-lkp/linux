@@ -267,6 +267,28 @@ try_misrouted_irq(unsigned int irq, struct irq_desc *desc,
 	return action && (action->flags & IRQF_IRQPOLL);
 }
 
+static inline int get_handled_diff(struct irq_desc *desc)
+{
+	unsigned int handled;
+	int diff;
+
+	handled = (unsigned int)atomic_read(&desc->threads_handled);
+	handled |= SPURIOUS_DEFERRED;
+
+	diff = handled - desc->threads_handled_last;
+	diff >>= SPURIOUS_DEFERRED_SHIFT;
+
+	/*
+	 * Note: We keep the SPURIOUS_DEFERRED bit set. We are handling the
+	 * previous invocation right now. Keep it for the current one, so the
+	 * next hardware interrupt will account for it.
+	 */
+	if (diff != 0)
+		desc->threads_handled_last = handled;
+
+	return diff;
+}
+
 void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 {
 	unsigned int irq;
@@ -308,7 +330,7 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 		 * interrupt.
 		 */
 		if (action_ret == IRQ_WAKE_THREAD) {
-			int handled;
+			int diff;
 			/*
 			 * We use bit 0 of thread_handled_last to
 			 * denote the deferred spurious detection
@@ -325,27 +347,20 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 			 * Check whether one of the threaded handlers
 			 * returned IRQ_HANDLED since the last
 			 * interrupt happened.
-			 *
-			 * For simplicity we just set bit 0, as it is
-			 * set in threads_handled_last as well. So we
-			 * avoid extra masking. And we really do not
-			 * care about the high bits of the handled
-			 * count. We just care about the count being
-			 * different than the one we saw before.
 			 */
-			handled = atomic_read(&desc->threads_handled);
-			handled |= SPURIOUS_DEFERRED;
-			if (handled != desc->threads_handled_last) {
-				action_ret = IRQ_HANDLED;
+			diff = get_handled_diff(desc);
+			if (diff > 0) {
 				/*
-				 * Note: We keep the SPURIOUS_DEFERRED
-				 * bit set. We are handling the
-				 * previous invocation right now.
-				 * Keep it for the current one, so the
-				 * next hardware interrupt will
-				 * account for it.
+				 * Subtract from irqs_unhandled	the number of
+				 * IRQs handled since the last change in
+				 * threads_handled.
 				 */
-				desc->threads_handled_last = handled;
+				if (diff < desc->irqs_unhandled)
+					desc->irqs_unhandled -= diff;
+				else
+					desc->irqs_unhandled = 0;
+
+				action_ret = IRQ_HANDLED;
 			} else {
 				/*
 				 * None of the threaded handlers felt
