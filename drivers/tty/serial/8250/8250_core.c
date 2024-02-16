@@ -110,7 +110,7 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 {
 	struct irq_info *i = dev_id;
 	struct list_head *l, *end = NULL;
-	int pass_counter = 0, handled = 0;
+	int pass_counter = 0, handled_total = 0;
 
 	pr_debug("%s(%d): start\n", __func__, irq);
 
@@ -120,15 +120,18 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 	do {
 		struct uart_8250_port *up;
 		struct uart_port *port;
+		int handled;
 
 		up = list_entry(l, struct uart_8250_port, list);
 		port = &up->port;
 
-		if (port->handle_irq(port)) {
-			handled = 1;
+		handled = port->handle_irq(port);
+		if (handled) {
+			handled_total += handled;
 			end = NULL;
-		} else if (end == NULL)
+		} else if (end == NULL) {
 			end = l;
+		}
 
 		l = l->next;
 
@@ -140,7 +143,7 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 
 	pr_debug("%s(%d): end\n", __func__, irq);
 
-	return IRQ_RETVAL(handled);
+	return IRQ_RETVAL_MANY(handled_total);
 }
 
 /*
