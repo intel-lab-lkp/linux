@@ -482,8 +482,14 @@ void handle_nested_irq(unsigned int irq)
 	raw_spin_unlock_irq(&desc->lock);
 
 	action_ret = IRQ_NONE;
-	for_each_action_of_desc(desc, action)
-		action_ret |= action->thread_fn(action->irq, action->dev_id);
+	for_each_action_of_desc(desc, action) {
+		irqreturn_t ret = action->thread_fn(action->irq, action->dev_id);
+
+		if ((ret & IRQ_RETMASK) == IRQ_HANDLED_MANY)
+			ret = IRQ_HANDLED;
+
+		action_ret |= ret;
+	}
 
 	if (!irq_settings_no_debug(desc))
 		note_interrupt(desc, action_ret);

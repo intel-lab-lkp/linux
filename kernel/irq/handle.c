@@ -162,6 +162,9 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
 			      irq, action->handler))
 			local_irq_disable();
 
+		if ((res & IRQ_RETMASK) == IRQ_HANDLED_MANY)
+			res = IRQ_HANDLED;
+
 		switch (res) {
 		case IRQ_WAKE_THREAD:
 			/*

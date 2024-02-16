@@ -1192,6 +1192,8 @@ irq_forced_thread_fn(struct irq_desc *desc, struct irqaction *action)
 	ret = action->thread_fn(action->irq, action->dev_id);
 	if (ret == IRQ_HANDLED)
 		irq_add_handled(desc, 1);
+	else if ((ret & IRQ_RETMASK) == IRQ_HANDLED_MANY)
+		irq_add_handled(desc, IRQ_HANDLED_MANY_GET(ret));
 
 	irq_finalize_oneshot(desc, action);
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
@@ -1213,6 +1215,8 @@ static irqreturn_t irq_thread_fn(struct irq_desc *desc,
 	ret = action->thread_fn(action->irq, action->dev_id);
 	if (ret == IRQ_HANDLED)
 		irq_add_handled(desc, 1);
+	else if ((ret & IRQ_RETMASK) == IRQ_HANDLED_MANY)
+		irq_add_handled(desc, IRQ_HANDLED_MANY_GET(ret));
 
 	irq_finalize_oneshot(desc, action);
 	return ret;
