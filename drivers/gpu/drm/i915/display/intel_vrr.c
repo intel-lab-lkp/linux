@@ -192,6 +192,9 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc_state->uapi.crtc->dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	bool is_as_sdp_enabled = intel_de_read(dev_priv,
+					       HSW_TVIDEO_DIP_CTL(cpu_transcoder)) &
+					       VIDEO_DIP_ENABLE_ADAPTIVE_SYNC;
 
 	/*
 	 * TRANS_SET_CONTEXT_LATENCY with VRR enabled
@@ -210,6 +213,10 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 	intel_de_write(dev_priv, TRANS_VRR_VMAX(cpu_transcoder), crtc_state->vrr.vmax - 1);
 	intel_de_write(dev_priv, TRANS_VRR_CTL(cpu_transcoder), trans_vrr_ctl(crtc_state));
 	intel_de_write(dev_priv, TRANS_VRR_FLIPLINE(cpu_transcoder), crtc_state->vrr.flipline - 1);
+
+	if (is_as_sdp_enabled)
+		intel_de_write(dev_priv, TRANS_VRR_VSYNC(cpu_transcoder),
+			       crtc_state->vrr.vsync_end << 16 | crtc_state->vrr.vsync_start);
 }
 
 void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
