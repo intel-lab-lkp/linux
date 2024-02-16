@@ -19,7 +19,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
-#include <linux/syscore_ops.h>
+#include <linux/pm.h>
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
@@ -63,8 +63,6 @@ struct stm32_exti_host_data {
 	struct hwspinlock *hwlock;
 	struct device_node *irq_map_node;
 };
-
-static struct stm32_exti_host_data *stm32_host_data;
 
 static const struct stm32_exti_bank stm32f4xx_exti_b1 = {
 	.imr_ofst	= 0x00,
@@ -622,50 +620,32 @@ static int stm32_exti_h_set_affinity(struct irq_data *d,
 	return IRQ_SET_MASK_OK_DONE;
 }
 
-static int __maybe_unused stm32_exti_h_suspend(void)
+static int stm32_exti_h_suspend(struct device *dev)
 {
+	struct stm32_exti_host_data *host_data = dev_get_drvdata(dev);
 	struct stm32_exti_chip_data *chip_data;
 	int i;
 
-	for (i = 0; i < stm32_host_data->drv_data->bank_nr; i++) {
-		chip_data = &stm32_host_data->chips_data[i];
-		raw_spin_lock(&chip_data->rlock);
+	for (i = 0; i < host_data->drv_data->bank_nr; i++) {
+		chip_data = &host_data->chips_data[i];
 		stm32_chip_suspend(chip_data, chip_data->wake_active);
-		raw_spin_unlock(&chip_data->rlock);
 	}
 
 	return 0;
 }
 
-static void __maybe_unused stm32_exti_h_resume(void)
+static int stm32_exti_h_resume(struct device *dev)
 {
+	struct stm32_exti_host_data *host_data = dev_get_drvdata(dev);
 	struct stm32_exti_chip_data *chip_data;
 	int i;
 
-	for (i = 0; i < stm32_host_data->drv_data->bank_nr; i++) {
-		chip_data = &stm32_host_data->chips_data[i];
-		raw_spin_lock(&chip_data->rlock);
+	for (i = 0; i < host_data->drv_data->bank_nr; i++) {
+		chip_data = &host_data->chips_data[i];
 		stm32_chip_resume(chip_data, chip_data->mask_cache);
-		raw_spin_unlock(&chip_data->rlock);
 	}
-}
 
-static struct syscore_ops stm32_exti_h_syscore_ops = {
-#ifdef CONFIG_PM_SLEEP
-	.suspend	= stm32_exti_h_suspend,
-	.resume		= stm32_exti_h_resume,
-#endif
-};
-
-static void stm32_exti_h_syscore_init(struct stm32_exti_host_data *host_data)
-{
-	stm32_host_data = host_data;
-	register_syscore_ops(&stm32_exti_h_syscore_ops);
-}
-
-static void stm32_exti_h_syscore_deinit(void)
-{
-	unregister_syscore_ops(&stm32_exti_h_syscore_ops);
+	return 0;
 }
 
 static int stm32_exti_h_retrigger(struct irq_data *d)
@@ -792,8 +772,6 @@ stm32_exti_host_data *stm32_exti_host_init(const struct stm32_exti_drv_data *dd,
 		goto free_chips_data;
 	}
 
-	stm32_host_data = host_data;
-
 	return host_data;
 
 free_chips_data:
@@ -919,12 +897,6 @@ static void stm32_exti_remove_irq(void *data)
 	irq_domain_remove(domain);
 }
 
-static int stm32_exti_remove(struct platform_device *pdev)
-{
-	stm32_exti_h_syscore_deinit();
-	return 0;
-}
-
 static int stm32_exti_probe(struct platform_device *pdev)
 {
 	int ret, i;
@@ -937,6 +909,8 @@ static int stm32_exti_probe(struct platform_device *pdev)
 	host_data = devm_kzalloc(dev, sizeof(*host_data), GFP_KERNEL);
 	if (!host_data)
 		return -ENOMEM;
+
+	dev_set_drvdata(dev, host_data);
 
 	/* check for optional hwspinlock which may be not available yet */
 	ret = of_hwspin_lock_get_id(np, 0);
@@ -1001,8 +975,6 @@ static int stm32_exti_probe(struct platform_device *pdev)
 	if (child && of_property_read_bool(child, "interrupt-map"))
 		host_data->irq_map_node = child;
 
-	stm32_exti_h_syscore_init(host_data);
-
 	return 0;
 }
 
@@ -1014,12 +986,16 @@ static const struct of_device_id stm32_exti_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, stm32_exti_ids);
 
+static const struct dev_pm_ops stm32_exti_dev_pm_ops = {
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(stm32_exti_h_suspend, stm32_exti_h_resume)
+};
+
 static struct platform_driver stm32_exti_driver = {
 	.probe		= stm32_exti_probe,
-	.remove		= stm32_exti_remove,
 	.driver		= {
 		.name	= "stm32_exti",
 		.of_match_table = stm32_exti_ids,
+		.pm	= &stm32_exti_dev_pm_ops,
 	},
 };
 
