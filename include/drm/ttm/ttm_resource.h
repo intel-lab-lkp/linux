@@ -270,25 +270,6 @@ ttm_lru_item_to_res(struct ttm_lru_item *item)
 }
 
 /**
- * struct ttm_resource_cursor
- * @man: The resource manager currently being iterated over
- * @hitch: A hitch list node inserted before the next resource
- * to iterate over.
- * @priority: the current priority
- *
- * Cursor to iterate over the resources in a manager.
- */
-struct ttm_resource_cursor {
-	struct ttm_resource_manager *man;
-	struct ttm_lru_item hitch;
-	unsigned int priority;
-};
-
-void ttm_resource_cursor_fini_locked(struct ttm_resource_cursor *cursor);
-
-void ttm_resource_cursor_fini(struct ttm_resource_cursor *cursor);
-
-/**
  * struct ttm_lru_bulk_move_pos
  *
  * @first: first res in the bulk move range
@@ -303,15 +284,44 @@ struct ttm_lru_bulk_move_pos {
 
 /**
  * struct ttm_lru_bulk_move
- *
  * @pos: first/last lru entry for resources in the each domain/priority
+ * @age: The number of times the bulk sublists were bumped, (moved to
+ * the LRU list tail). Protected by the lru_lock.
  *
  * Container for the current bulk move state. Should be used with
  * ttm_lru_bulk_move_init() and ttm_bo_set_bulk_move().
  */
 struct ttm_lru_bulk_move {
 	struct ttm_lru_bulk_move_pos pos[TTM_NUM_MEM_TYPES][TTM_MAX_BO_PRIORITY];
+	u64 age;
 };
+
+/**
+ * struct ttm_resource_cursor
+ * @man: The resource manager currently being iterated over
+ * @hitch: A hitch list node inserted before the next resource
+ * to iterate over.
+ * @bulk_hitch: A hitch list node inserted before the next
+ * resource to iterate over if the bulk sublist @hitch was
+ * inserted in is bumped.
+ * @bulk_age: The age of @bulk when @bulk_hitch was inserted.
+ * Used to detect whether @bulk was bumped since last iteration.
+ * @priority: the current priority
+ *
+ * Cursor to iterate over the resources in a manager.
+ */
+struct ttm_resource_cursor {
+	struct ttm_resource_manager *man;
+	struct ttm_lru_item hitch;
+	struct ttm_lru_item bulk_hitch;
+	struct ttm_lru_bulk_move *bulk;
+	u64 bulk_age;
+	unsigned int priority;
+};
+
+void ttm_resource_cursor_fini_locked(struct ttm_resource_cursor *cursor);
+
+void ttm_resource_cursor_fini(struct ttm_resource_cursor *cursor);
 
 /**
  * struct ttm_kmap_iter_iomap - Specialization for a struct io_mapping +
