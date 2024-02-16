@@ -610,12 +610,14 @@ run_test() {
 exitcode=0
 desc=0
 all_skipped=true
+LOAD_MOD=yes
 
 while getopts :pvt o
 do
 	case $o in
 	p) PAUSE_ON_FAIL=yes;;
 	v) VERBOSE=1;;
+	n) LOAD_MOD=no;;
 	t) if which tcpdump > /dev/null 2>&1; then
 		TRACING=1
 	   else
@@ -635,6 +637,10 @@ for arg do
 	command -v > /dev/null "test_${arg}" || { echo "=== Test ${arg} not found"; usage; }
 done
 
+if [ "$LOAD_MOD" == "yes" ]; then
+	modprobe openvswitch
+fi
+
 name=""
 desc=""
 for t in ${tests}; do
@@ -653,5 +659,10 @@ for t in ${tests}; do
 	name=""
 	desc=""
 done
+
+
+if [ "$LOAD_MOD" == "yes" ]; then
+	modprobe -r openvswitch
+fi
 
 exit ${exitcode}
