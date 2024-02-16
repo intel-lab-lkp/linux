@@ -536,7 +536,7 @@ test_upcall_interfaces() {
 
 	sleep 1
 	info "sending arping"
-	ip netns exec upc arping -I l0 172.31.110.20 -c 1 \
+	ip netns exec upc arping -I l0 172.31.110.20 -c 3 \
 	    >$ovs_dir/arping.stdout 2>$ovs_dir/arping.stderr
 
 	grep -E "MISS upcall\[0/yes\]: .*arp\(sip=172.31.110.1,tip=172.31.110.20,op=1,sha=" $ovs_dir/left0.out >/dev/null 2>&1 || return 1
