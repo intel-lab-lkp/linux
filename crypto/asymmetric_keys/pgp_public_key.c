@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/mpi.h>
+#include <linux/sbm.h>
 #include <keys/asymmetric-subtype.h>
 #include <keys/asymmetric-parser.h>
 #include <crypto/hash.h>
@@ -310,6 +311,12 @@ error:
 	return NULL;
 }
 
+static SBM_DEFINE_FUNC(parse_key, const unsigned char *, data, size_t, datalen,
+		       struct pgp_key_data_parse_context *, ctx)
+{
+	return pgp_parse_packets(data, datalen, &ctx->pgp);
+}
+
 /*
  * Attempt to parse the instantiation data blob for a key as a PGP packet
  * message holding a key.
@@ -318,6 +325,7 @@ static int pgp_key_parse(struct key_preparsed_payload *prep)
 {
 	struct pgp_key_data_parse_context *ctx;
 	struct public_key *pub = NULL;
+	struct sbm sbm;
 	int ret;
 
 	kenter("");
@@ -332,7 +340,16 @@ static int pgp_key_parse(struct key_preparsed_payload *prep)
 				     (1 << PGP_PKT_USER_ID);
 	ctx->pgp.process_packet = pgp_process_public_key;
 
-	ret = pgp_parse_packets(prep->data, prep->datalen, &ctx->pgp);
+	sbm_init(&sbm);
+	ret = sbm_call(&sbm, parse_key,
+		       SBM_COPY_IN(&sbm, prep->data, prep->datalen),
+		       prep->datalen, SBM_COPY_INOUT(&sbm, ctx, sizeof(*ctx)));
+	sbm_destroy(&sbm);
+
+	if (ret < 0)
+		goto error;
+
+	ret = sbm_error(&sbm);
 	if (ret < 0)
 		goto error;
 
