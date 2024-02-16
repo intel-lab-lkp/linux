@@ -114,6 +114,10 @@ ovs_netns_spawn_daemon() {
 
 ovs_add_netns_and_veths () {
 	info "Adding netns attached: sbx:$1 dp:$2 {$3, $4, $5}"
+	ntns_e=`ip netns list | grep $3`
+	[ "$ntns_e" != "" ] && ip netns del "$3"
+	if4_e=`ip link show $4 2>/dev/null`
+	[ "$if4_e" != "" ] && ip link del "$4"
 	ovs_sbx "$1" ip netns add "$3" || return 1
 	on_exit "ovs_sbx $1 ip netns del $3"
 	ovs_sbx "$1" ip link add "$4" type veth peer name "$5" || return 1
