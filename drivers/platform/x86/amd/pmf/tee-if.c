@@ -338,25 +338,6 @@ static void amd_pmf_remove_pb(struct amd_pmf_dev *dev) {}
 static void amd_pmf_hex_dump_pb(struct amd_pmf_dev *dev) {}
 #endif
 
-static int amd_pmf_get_bios_buffer(struct amd_pmf_dev *dev)
-{
-	dev->policy_buf = kzalloc(dev->policy_sz, GFP_KERNEL);
-	if (!dev->policy_buf)
-		return -ENOMEM;
-
-	dev->policy_base = devm_ioremap(dev->dev, dev->policy_addr, dev->policy_sz);
-	if (!dev->policy_base)
-		return -ENOMEM;
-
-	memcpy(dev->policy_buf, dev->policy_base, dev->policy_sz);
-
-	amd_pmf_hex_dump_pb(dev);
-	if (pb_side_load)
-		amd_pmf_open_pb(dev, dev->dbgfs_dir);
-
-	return amd_pmf_start_policy_engine(dev);
-}
-
 static int amd_pmf_amdtee_ta_match(struct tee_ioctl_version_data *ver, const void *data)
 {
 	return ver->impl_id == TEE_IMPL_ID_AMDTEE;
@@ -454,14 +435,54 @@ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev)
 	if (ret)
 		return ret;
 
+	ret = amd_pmf_set_dram_addr(dev, true);
+	if (ret)
+		goto out_dram;
+
+	dev->policy_base = devm_ioremap(dev->dev, dev->policy_addr, dev->policy_sz);
+	if (!dev->policy_base) {
+		ret = -ENOMEM;
+		goto out_policy_base;
+	}
+
+	dev->policy_buf = kzalloc(dev->policy_sz, GFP_KERNEL);
+	if (!dev->policy_buf) {
+		ret = -ENOMEM;
+		goto out_policy_buf;
+	}
+
+	memcpy(dev->policy_buf, dev->policy_base, dev->policy_sz);
+
+	amd_pmf_hex_dump_pb(dev);
+	if (pb_side_load)
+		amd_pmf_open_pb(dev, dev->dbgfs_dir);
+
 	INIT_DELAYED_WORK(&dev->pb_work, amd_pmf_invoke_cmd);
-	amd_pmf_set_dram_addr(dev, true);
-	amd_pmf_get_bios_buffer(dev);
+
+	ret = amd_pmf_start_policy_engine(dev);
+	if (ret)
+		goto out_start_engine;
+
 	dev->prev_data = kzalloc(sizeof(*dev->prev_data), GFP_KERNEL);
 	if (!dev->prev_data)
-		return -ENOMEM;
+		goto out_prev_data;
 
-	return dev->smart_pc_enabled;
+	return 0;
+
+out_prev_data:
+	cancel_delayed_work_sync(&dev->pb_work);
+
+out_start_engine:
+	kfree(dev->policy_buf);
+
+out_policy_buf:
+out_policy_base:
+	kfree(dev->buf);
+
+out_dram:
+	amd_pmf_tee_deinit(dev);
+
+	return ret;
 }
 
 void amd_pmf_deinit_smart_pc(struct amd_pmf_dev *dev)
