@@ -94,18 +94,22 @@ static struct phy_driver am79c_drivers[] = {
 		.name		= "AM79C874",
 		.phy_id_mask	= 0xfffffff0,
 		/* PHY_BASIC_FEATURES */
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= am79c_config_init,
 		.config_intr	= am79c_config_intr,
 		.handle_interrupt = am79c_handle_interrupt,
+		},
 	},
 	{
 		.phy_id		= PHY_ID_AC101L,
 		.name		= "AC101L",
 		.phy_id_mask	= 0xfffffff0,
 		/* PHY_BASIC_FEATURES */
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= am79c_config_init,
 		.config_intr	= am79c_config_intr,
 		.handle_interrupt = am79c_handle_interrupt,
+		},
 	},
 };
 

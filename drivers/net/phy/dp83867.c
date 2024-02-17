@@ -1180,6 +1180,7 @@ static struct phy_driver dp83867_driver[] = {
 		.name		= "TI DP83867",
 		/* PHY_GBIT_FEATURES */
 
+		.ops		= &(const struct phy_driver_ops){
 		.probe          = dp83867_probe,
 		.config_init	= dp83867_config_init,
 		.soft_reset	= dp83867_phy_reset,
@@ -1206,6 +1207,7 @@ static struct phy_driver dp83867_driver[] = {
 		.led_hw_control_set = dp83867_led_hw_control_set,
 		.led_hw_control_get = dp83867_led_hw_control_get,
 		.led_polarity_set = dp83867_led_polarity_set,
+		},
 	},
 };
 module_phy_driver(dp83867_driver);

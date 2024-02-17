@@ -200,6 +200,7 @@ static struct phy_driver bcm87xx_driver[] = {
 	.phy_id		= PHY_ID_BCM8706,
 	.phy_id_mask	= 0xffffffff,
 	.name		= "Broadcom BCM8706",
+	.ops		= &(const struct phy_driver_ops){
 	.get_features	= bcm87xx_get_features,
 	.config_init	= bcm87xx_config_init,
 	.config_aneg	= bcm87xx_config_aneg,
@@ -207,10 +208,12 @@ static struct phy_driver bcm87xx_driver[] = {
 	.config_intr	= bcm87xx_config_intr,
 	.handle_interrupt = bcm87xx_handle_interrupt,
 	.match_phy_device = bcm8706_match_phy_device,
+	},
 }, {
 	.phy_id		= PHY_ID_BCM8727,
 	.phy_id_mask	= 0xffffffff,
 	.name		= "Broadcom BCM8727",
+	.ops		= &(const struct phy_driver_ops){
 	.get_features	= bcm87xx_get_features,
 	.config_init	= bcm87xx_config_init,
 	.config_aneg	= bcm87xx_config_aneg,
@@ -218,6 +221,7 @@ static struct phy_driver bcm87xx_driver[] = {
 	.config_intr	= bcm87xx_config_intr,
 	.handle_interrupt = bcm87xx_handle_interrupt,
 	.match_phy_device = bcm8727_match_phy_device,
+	},
 } };
 
 module_phy_driver(bcm87xx_driver);

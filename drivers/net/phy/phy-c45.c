@@ -1591,5 +1591,7 @@ struct phy_driver genphy_c45_driver = {
 	.phy_id         = 0xffffffff,
 	.phy_id_mask    = 0xffffffff,
 	.name           = "Generic Clause 45 PHY",
+	.ops		= &(const struct phy_driver_ops){
 	.read_status    = genphy_c45_read_status,
+	},
 };

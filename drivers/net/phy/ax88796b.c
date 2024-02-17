@@ -99,24 +99,30 @@ static struct phy_driver asix_driver[] = {
 	PHY_ID_MATCH_EXACT(PHY_ID_ASIX_AX88772A),
 	.name		= "Asix Electronics AX88772A",
 	.flags		= PHY_IS_INTERNAL,
+	.ops		= &(const struct phy_driver_ops){
 	.read_status	= asix_ax88772a_read_status,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 	.soft_reset	= asix_soft_reset,
 	.link_change_notify	= asix_ax88772a_link_change_notify,
+	},
 }, {
 	PHY_ID_MATCH_EXACT(PHY_ID_ASIX_AX88772C),
 	.name		= "Asix Electronics AX88772C",
 	.flags		= PHY_IS_INTERNAL,
+	.ops		= &(const struct phy_driver_ops){
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 	.soft_reset	= asix_soft_reset,
+	},
 }, {
 	.phy_id		= PHY_ID_ASIX_AX88796B,
 	.name		= "Asix Electronics AX88796B",
 	.phy_id_mask	= 0xfffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.soft_reset	= asix_soft_reset,
+	},
 } };
 
 module_phy_driver(asix_driver);

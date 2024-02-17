@@ -220,8 +220,9 @@ static struct phy_driver qca83xx_driver[] = {
 	.phy_id_mask		= QCA8K_PHY_ID_MASK,
 	.name			= "Qualcomm Atheros 8337 internal PHY",
 	/* PHY_GBIT_FEATURES */
-	.probe			= qca83xx_probe,
 	.flags			= PHY_IS_INTERNAL,
+	.ops			= &(const struct phy_driver_ops){
+	.probe			= qca83xx_probe,
 	.config_init		= qca83xx_config_init,
 	.soft_reset		= genphy_soft_reset,
 	.get_sset_count		= qca83xx_get_sset_count,
@@ -229,15 +230,17 @@ static struct phy_driver qca83xx_driver[] = {
 	.get_stats		= qca83xx_get_stats,
 	.suspend		= qca8337_suspend,
 	.resume			= qca83xx_resume,
+	},
 }, {
 	/* QCA8327-A from switch QCA8327-AL1A */
 	.phy_id			= QCA8327_A_PHY_ID,
 	.phy_id_mask		= QCA8K_PHY_ID_MASK,
 	.name			= "Qualcomm Atheros 8327-A internal PHY",
 	/* PHY_GBIT_FEATURES */
+	.flags			= PHY_IS_INTERNAL,
+	.ops			= &(const struct phy_driver_ops){
 	.link_change_notify	= qca83xx_link_change_notify,
 	.probe			= qca83xx_probe,
-	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca8327_config_init,
 	.soft_reset		= genphy_soft_reset,
 	.get_sset_count		= qca83xx_get_sset_count,
@@ -245,15 +248,17 @@ static struct phy_driver qca83xx_driver[] = {
 	.get_stats		= qca83xx_get_stats,
 	.suspend		= qca8327_suspend,
 	.resume			= qca83xx_resume,
+	},
 }, {
 	/* QCA8327-B from switch QCA8327-BL1A */
 	.phy_id			= QCA8327_B_PHY_ID,
 	.phy_id_mask		= QCA8K_PHY_ID_MASK,
 	.name			= "Qualcomm Atheros 8327-B internal PHY",
 	/* PHY_GBIT_FEATURES */
+	.flags			= PHY_IS_INTERNAL,
+	.ops			= &(const struct phy_driver_ops){
 	.link_change_notify	= qca83xx_link_change_notify,
 	.probe			= qca83xx_probe,
-	.flags			= PHY_IS_INTERNAL,
 	.config_init		= qca8327_config_init,
 	.soft_reset		= genphy_soft_reset,
 	.get_sset_count		= qca83xx_get_sset_count,
@@ -261,6 +266,7 @@ static struct phy_driver qca83xx_driver[] = {
 	.get_stats		= qca83xx_get_stats,
 	.suspend		= qca8327_suspend,
 	.resume			= qca83xx_resume,
+	},
 }, };
 
 module_phy_driver(qca83xx_driver);

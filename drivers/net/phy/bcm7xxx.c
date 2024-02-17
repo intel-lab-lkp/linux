@@ -847,6 +847,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.name		= _name,					\
 	/* PHY_GBIT_FEATURES */						\
 	.flags		= PHY_IS_INTERNAL,				\
+	.ops		= &(const struct phy_driver_ops){		\
 	.config_init	= bcm7xxx_28nm_config_init,			\
 	.resume		= bcm7xxx_28nm_resume,				\
 	.get_tunable	= bcm7xxx_28nm_get_tunable,			\
@@ -855,6 +856,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.get_strings	= bcm_phy_get_strings,				\
 	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
 	.probe		= bcm7xxx_28nm_probe,				\
+	},								\
 }
 
 #define BCM7XXX_28NM_EPHY(_oui, _name)					\
@@ -864,6 +866,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.name		= _name,					\
 	/* PHY_BASIC_FEATURES */					\
 	.flags		= PHY_IS_INTERNAL,				\
+	.ops		= &(const struct phy_driver_ops){		\
 	.config_init	= bcm7xxx_28nm_ephy_config_init,		\
 	.resume		= bcm7xxx_28nm_ephy_resume,			\
 	.get_sset_count	= bcm_phy_get_sset_count,			\
@@ -872,6 +875,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.probe		= bcm7xxx_28nm_probe,				\
 	.read_mmd	= bcm7xxx_28nm_ephy_read_mmd,			\
 	.write_mmd	= bcm7xxx_28nm_ephy_write_mmd,			\
+	},								\
 }
 
 #define BCM7XXX_40NM_EPHY(_oui, _name)					\
@@ -881,10 +885,12 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.name           = _name,					\
 	/* PHY_BASIC_FEATURES */					\
 	.flags          = PHY_IS_INTERNAL,				\
+	.ops		= &(const struct phy_driver_ops){		\
 	.soft_reset	= genphy_soft_reset,				\
 	.config_init    = bcm7xxx_config_init,				\
 	.suspend        = bcm7xxx_suspend,				\
 	.resume         = bcm7xxx_config_init,				\
+	},								\
 }
 
 #define BCM7XXX_16NM_EPHY(_oui, _name)					\
@@ -894,6 +900,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.name		= _name,					\
 	/* PHY_BASIC_FEATURES */					\
 	.flags		= PHY_IS_INTERNAL,				\
+	.ops		= &(const struct phy_driver_ops){		\
 	.get_sset_count	= bcm_phy_get_sset_count,			\
 	.get_strings	= bcm_phy_get_strings,				\
 	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
@@ -902,6 +909,7 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.config_aneg	= genphy_config_aneg,				\
 	.read_status	= genphy_read_status,				\
 	.resume		= bcm7xxx_16nm_ephy_resume,			\
+	},								\
 }
 
 static struct phy_driver bcm7xxx_driver[] = {

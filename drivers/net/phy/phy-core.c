@@ -576,8 +576,8 @@ int __phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum)
 	if (regnum > (u16)~0 || devad > 32)
 		return -EINVAL;
 
-	if (phydev->drv && phydev->drv->read_mmd)
-		return phydev->drv->read_mmd(phydev, devad, regnum);
+	if (phydev->drv && phydev->drv->ops && phydev->drv->ops->read_mmd)
+		return phydev->drv->ops->read_mmd(phydev, devad, regnum);
 
 	return mmd_phy_read(phydev->mdio.bus, phydev->mdio.addr,
 			    phydev->is_c45, devad, regnum);
@@ -620,8 +620,8 @@ int __phy_write_mmd(struct phy_device *phydev, int devad, u32 regnum, u16 val)
 	if (regnum > (u16)~0 || devad > 32)
 		return -EINVAL;
 
-	if (phydev->drv && phydev->drv->write_mmd)
-		return phydev->drv->write_mmd(phydev, devad, regnum, val);
+	if (phydev->drv && phydev->drv->ops && phydev->drv->ops->write_mmd)
+		return phydev->drv->ops->write_mmd(phydev, devad, regnum, val);
 
 	return mmd_phy_write(phydev->mdio.bus, phydev->mdio.addr,
 			     phydev->is_c45, devad, regnum, val);
@@ -968,18 +968,20 @@ EXPORT_SYMBOL_GPL(phy_modify_mmd);
 
 static int __phy_read_page(struct phy_device *phydev)
 {
-	if (WARN_ONCE(!phydev->drv->read_page, "read_page callback not available, PHY driver not loaded?\n"))
+	if (WARN_ONCE(!phydev->drv->ops || !phydev->drv->ops->read_page,
+		      "read_page callback not available, PHY driver not loaded?\n"))
 		return -EOPNOTSUPP;
 
-	return phydev->drv->read_page(phydev);
+	return phydev->drv->ops->read_page(phydev);
 }
 
 static int __phy_write_page(struct phy_device *phydev, int page)
 {
-	if (WARN_ONCE(!phydev->drv->write_page, "write_page callback not available, PHY driver not loaded?\n"))
+	if (WARN_ONCE(!phydev->drv->ops || !phydev->drv->ops->write_page,
+		      "write_page callback not available, PHY driver not loaded?\n"))
 		return -EOPNOTSUPP;
 
-	return phydev->drv->write_page(phydev, page);
+	return phydev->drv->ops->write_page(phydev, page);
 }
 
 /**

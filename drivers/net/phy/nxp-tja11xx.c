@@ -205,22 +205,22 @@ static int tja11xx_config_aneg_cable_test(struct phy_device *phydev)
 	if (phydev->link)
 		return 0;
 
-	if (!phydev->drv->cable_test_start ||
-	    !phydev->drv->cable_test_get_status)
+	if (!phydev->drv->ops->cable_test_start ||
+	    !phydev->drv->ops->cable_test_get_status)
 		return 0;
 
 	ret = ethnl_cable_test_alloc(phydev, ETHTOOL_MSG_CABLE_TEST_NTF);
 	if (ret)
 		return ret;
 
-	ret = phydev->drv->cable_test_start(phydev);
+	ret = phydev->drv->ops->cable_test_start(phydev);
 	if (ret)
 		return ret;
 
 	/* According to the documentation this test takes 100 usec */
 	usleep_range(100, 200);
 
-	ret = phydev->drv->cable_test_get_status(phydev, &finished);
+	ret = phydev->drv->ops->cable_test_get_status(phydev, &finished);
 	if (ret)
 		return ret;
 
@@ -805,6 +805,7 @@ static struct phy_driver tja11xx_driver[] = {
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA1100),
 		.name		= "NXP TJA1100",
 		.features       = PHY_BASIC_T1_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= tja11xx_probe,
 		.soft_reset	= tja11xx_soft_reset,
 		.config_aneg	= tja11xx_config_aneg,
@@ -819,10 +820,12 @@ static struct phy_driver tja11xx_driver[] = {
 		.get_sset_count = tja11xx_get_sset_count,
 		.get_strings	= tja11xx_get_strings,
 		.get_stats	= tja11xx_get_stats,
+		},
 	}, {
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA1101),
 		.name		= "NXP TJA1101",
 		.features       = PHY_BASIC_T1_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= tja11xx_probe,
 		.soft_reset	= tja11xx_soft_reset,
 		.config_aneg	= tja11xx_config_aneg,
@@ -837,10 +840,12 @@ static struct phy_driver tja11xx_driver[] = {
 		.get_sset_count = tja11xx_get_sset_count,
 		.get_strings	= tja11xx_get_strings,
 		.get_stats	= tja11xx_get_stats,
+		},
 	}, {
 		.name		= "NXP TJA1102 Port 0",
 		.features       = PHY_BASIC_T1_FEATURES,
 		.flags          = PHY_POLL_CABLE_TEST,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= tja1102_p0_probe,
 		.soft_reset	= tja11xx_soft_reset,
 		.config_aneg	= tja11xx_config_aneg,
@@ -860,11 +865,13 @@ static struct phy_driver tja11xx_driver[] = {
 		.handle_interrupt = tja11xx_handle_interrupt,
 		.cable_test_start = tja11xx_cable_test_start,
 		.cable_test_get_status = tja11xx_cable_test_get_status,
+		},
 	}, {
 		.name		= "NXP TJA1102 Port 1",
 		.features       = PHY_BASIC_T1_FEATURES,
 		.flags          = PHY_POLL_CABLE_TEST,
 		/* currently no probe for Port 1 is need */
+		.ops		= &(const struct phy_driver_ops){
 		.soft_reset	= tja11xx_soft_reset,
 		.config_aneg	= tja11xx_config_aneg,
 		.config_init	= tja11xx_config_init,
@@ -883,6 +890,7 @@ static struct phy_driver tja11xx_driver[] = {
 		.handle_interrupt = tja11xx_handle_interrupt,
 		.cable_test_start = tja11xx_cable_test_start,
 		.cable_test_get_status = tja11xx_cable_test_get_status,
+		},
 	}
 };
 

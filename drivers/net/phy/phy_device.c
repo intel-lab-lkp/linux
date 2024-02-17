@@ -285,7 +285,7 @@ static bool mdio_bus_phy_may_suspend(struct phy_device *phydev)
 	struct phy_driver *phydrv = to_phy_driver(drv);
 	struct net_device *netdev = phydev->attached_dev;
 
-	if (!drv || !phydrv->suspend)
+	if (!drv || !phydrv->ops || !phydrv->ops->suspend)
 		return false;
 
 	/* PHY not attached? May suspend if the PHY has not already been
@@ -543,8 +543,8 @@ static int phy_bus_match(struct device *dev, struct device_driver *drv)
 	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
 		return 0;
 
-	if (phydrv->match_phy_device)
-		return phydrv->match_phy_device(phydev);
+	if (phydrv->ops && phydrv->ops->match_phy_device)
+		return phydrv->ops->match_phy_device(phydev);
 
 	if (phydev->is_c45) {
 		for (i = 1; i < num_ids; i++) {
@@ -1246,11 +1246,11 @@ int phy_init_hw(struct phy_device *phydev)
 	/* Deassert the reset signal */
 	phy_device_reset(phydev, 0);
 
-	if (!phydev->drv)
+	if (!phydev->drv || !phydev->drv->ops)
 		return 0;
 
-	if (phydev->drv->soft_reset) {
-		ret = phydev->drv->soft_reset(phydev);
+	if (phydev->drv->ops->soft_reset) {
+		ret = phydev->drv->ops->soft_reset(phydev);
 		if (ret < 0)
 			return ret;
 
@@ -1264,14 +1264,14 @@ int phy_init_hw(struct phy_device *phydev)
 
 	phy_interface_zero(phydev->possible_interfaces);
 
-	if (phydev->drv->config_init) {
-		ret = phydev->drv->config_init(phydev);
+	if (phydev->drv->ops->config_init) {
+		ret = phydev->drv->ops->config_init(phydev);
 		if (ret < 0)
 			return ret;
 	}
 
-	if (phydev->drv->config_intr) {
-		ret = phydev->drv->config_intr(phydev);
+	if (phydev->drv->ops->config_intr) {
+		ret = phydev->drv->ops->config_intr(phydev);
 		if (ret < 0)
 			return ret;
 	}
@@ -1430,7 +1430,7 @@ EXPORT_SYMBOL(phy_sfp_probe);
 
 static bool phy_drv_supports_irq(const struct phy_driver *phydrv)
 {
-	return phydrv->config_intr && phydrv->handle_interrupt;
+	return phydrv->ops && phydrv->ops->config_intr && phydrv->ops->handle_interrupt;
 }
 
 /**
@@ -1989,10 +1989,10 @@ int phy_suspend(struct phy_device *phydev)
 	if (phydev->wol_enabled && !(phydrv->flags & PHY_ALWAYS_CALL_SUSPEND))
 		return -EBUSY;
 
-	if (!phydrv || !phydrv->suspend)
+	if (!phydrv || !phydrv->ops || !phydrv->ops->suspend)
 		return 0;
 
-	ret = phydrv->suspend(phydev);
+	ret = phydrv->ops->suspend(phydev);
 	if (!ret)
 		phydev->suspended = true;
 
@@ -2007,10 +2007,10 @@ int __phy_resume(struct phy_device *phydev)
 
 	lockdep_assert_held(&phydev->lock);
 
-	if (!phydrv || !phydrv->resume)
+	if (!phydrv || !phydrv->ops || !phydrv->ops->resume)
 		return 0;
 
-	ret = phydrv->resume(phydev);
+	ret = phydrv->ops->resume(phydev);
 	if (!ret)
 		phydev->suspended = false;
 
@@ -2049,8 +2049,8 @@ int phy_loopback(struct phy_device *phydev, bool enable)
 		goto out;
 	}
 
-	if (phydev->drv->set_loopback)
-		ret = phydev->drv->set_loopback(phydev, enable);
+	if (phydev->drv->ops && phydev->drv->ops->set_loopback)
+		ret = phydev->drv->ops->set_loopback(phydev, enable);
 	else
 		ret = genphy_loopback(phydev, enable);
 
@@ -3141,7 +3141,7 @@ static int phy_led_set_brightness(struct led_classdev *led_cdev,
 	int err;
 
 	mutex_lock(&phydev->lock);
-	err = phydev->drv->led_brightness_set(phydev, phyled->index, value);
+	err = phydev->drv->ops->led_brightness_set(phydev, phyled->index, value);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -3156,8 +3156,8 @@ static int phy_led_blink_set(struct led_classdev *led_cdev,
 	int err;
 
 	mutex_lock(&phydev->lock);
-	err = phydev->drv->led_blink_set(phydev, phyled->index,
-					 delay_on, delay_off);
+	err = phydev->drv->ops->led_blink_set(phydev, phyled->index,
+					      delay_on, delay_off);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -3183,7 +3183,7 @@ phy_led_hw_control_get(struct led_classdev *led_cdev,
 	int err;
 
 	mutex_lock(&phydev->lock);
-	err = phydev->drv->led_hw_control_get(phydev, phyled->index, rules);
+	err = phydev->drv->ops->led_hw_control_get(phydev, phyled->index, rules);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -3198,7 +3198,7 @@ phy_led_hw_control_set(struct led_classdev *led_cdev,
 	int err;
 
 	mutex_lock(&phydev->lock);
-	err = phydev->drv->led_hw_control_set(phydev, phyled->index, rules);
+	err = phydev->drv->ops->led_hw_control_set(phydev, phyled->index, rules);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -3212,7 +3212,7 @@ static __maybe_unused int phy_led_hw_is_supported(struct led_classdev *led_cdev,
 	int err;
 
 	mutex_lock(&phydev->lock);
-	err = phydev->drv->led_hw_is_supported(phydev, phyled->index, rules);
+	err = phydev->drv->ops->led_hw_is_supported(phydev, phyled->index, rules);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -3258,24 +3258,25 @@ static int of_phy_led(struct phy_device *phydev,
 
 	if (modes) {
 		/* Return error if asked to set polarity modes but not supported */
-		if (!phydev->drv->led_polarity_set)
+		if (phydev->drv->ops && !phydev->drv->ops->led_polarity_set)
 			return -EINVAL;
 
-		err = phydev->drv->led_polarity_set(phydev, index, modes);
+		err = phydev->drv->ops->led_polarity_set(phydev, index, modes);
 		if (err)
 			return err;
 	}
 
 	phyled->index = index;
-	if (phydev->drv->led_brightness_set)
+	if (phydev->drv->ops && phydev->drv->ops->led_brightness_set)
 		cdev->brightness_set_blocking = phy_led_set_brightness;
-	if (phydev->drv->led_blink_set)
+	if (phydev->drv->ops && phydev->drv->ops->led_blink_set)
 		cdev->blink_set = phy_led_blink_set;
 
 #ifdef CONFIG_LEDS_TRIGGERS
-	if (phydev->drv->led_hw_is_supported &&
-	    phydev->drv->led_hw_control_set &&
-	    phydev->drv->led_hw_control_get) {
+	if (phydev->drv->ops &&
+	    phydev->drv->ops->led_hw_is_supported &&
+	    phydev->drv->ops->led_hw_control_set &&
+	    phydev->drv->ops->led_hw_control_get) {
 		cdev->hw_control_is_supported = phy_led_hw_is_supported;
 		cdev->hw_control_set = phy_led_hw_control_set;
 		cdev->hw_control_get = phy_led_hw_control_get;
@@ -3437,8 +3438,8 @@ static int phy_probe(struct device *dev)
 	/* Deassert the reset signal */
 	phy_device_reset(phydev, 0);
 
-	if (phydev->drv->probe) {
-		err = phydev->drv->probe(phydev);
+	if (phydev->drv->ops && phydev->drv->ops->probe) {
+		err = phydev->drv->ops->probe(phydev);
 		if (err)
 			goto out;
 	}
@@ -3452,9 +3453,8 @@ static int phy_probe(struct device *dev)
 	if (phydrv->features) {
 		linkmode_copy(phydev->supported, phydrv->features);
 		genphy_c45_read_eee_abilities(phydev);
-	}
-	else if (phydrv->get_features)
-		err = phydrv->get_features(phydev);
+	} else if (phydev->drv->ops && phydrv->ops->get_features)
+		err = phydrv->ops->get_features(phydev);
 	else if (phydev->is_c45)
 		err = genphy_c45_pma_read_abilities(phydev);
 	else
@@ -3551,8 +3551,9 @@ static int phy_remove(struct device *dev)
 	sfp_bus_del_upstream(phydev->sfp_bus);
 	phydev->sfp_bus = NULL;
 
-	if (phydev->drv && phydev->drv->remove)
-		phydev->drv->remove(phydev);
+	if (phydev->drv && phydev->drv->ops &&
+	    phydev->drv->ops->remove)
+		phydev->drv->ops->remove(phydev);
 
 	/* Assert the reset signal */
 	phy_device_reset(phydev, 1);
@@ -3574,7 +3575,7 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 	/* Either the features are hard coded, or dynamically
 	 * determined. It cannot be both.
 	 */
-	if (WARN_ON(new_driver->features && new_driver->get_features)) {
+	if (WARN_ON(new_driver->features && new_driver->ops && new_driver->ops->get_features)) {
 		pr_err("%s: features and get_features must not both be set\n",
 		       new_driver->name);
 		return -EINVAL;
@@ -3648,10 +3649,12 @@ static struct phy_driver genphy_driver = {
 	.phy_id		= 0xffffffff,
 	.phy_id_mask	= 0xffffffff,
 	.name		= "Generic PHY",
+	.ops		= &(const struct phy_driver_ops){
 	.get_features	= genphy_read_abilities,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 	.set_loopback   = genphy_loopback,
+	},
 };
 
 static const struct ethtool_phy_ops phy_ethtool_phy_ops = {

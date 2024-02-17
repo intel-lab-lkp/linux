@@ -384,6 +384,7 @@ static struct phy_driver microchip_phy_driver[] = {
 	.name		= "Microchip LAN88xx",
 
 	/* PHY_GBIT_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= lan88xx_probe,
 	.remove		= lan88xx_remove,
@@ -400,6 +401,7 @@ static struct phy_driver microchip_phy_driver[] = {
 	.set_wol	= lan88xx_set_wol,
 	.read_page	= lan88xx_read_page,
 	.write_page	= lan88xx_write_page,
+	},
 } };
 
 module_phy_driver(microchip_phy_driver);

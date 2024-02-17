@@ -576,21 +576,26 @@ static struct phy_driver icplus_driver[] = {
 	PHY_ID_MATCH_MODEL(IP175C_PHY_ID),
 	.name		= "ICPlus IP175C",
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= ip175c_config_init,
 	.config_aneg	= ip175c_config_aneg,
 	.read_status	= ip175c_read_status,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	PHY_ID_MATCH_MODEL(IP1001_PHY_ID),
 	.name		= "ICPlus IP1001",
 	/* PHY_GBIT_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= ip1001_config_init,
 	.soft_reset	= genphy_soft_reset,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.name		= "ICPlus IP101A",
+	.ops		= &(const struct phy_driver_ops){
 	.match_phy_device = ip101a_match_phy_device,
 	.probe		= ip101a_g_probe,
 	.read_page	= ip101a_read_page,
@@ -603,8 +608,10 @@ static struct phy_driver icplus_driver[] = {
 	.soft_reset	= genphy_soft_reset,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.name		= "ICPlus IP101G",
+	.ops		= &(const struct phy_driver_ops){
 	.match_phy_device = ip101g_match_phy_device,
 	.probe		= ip101a_g_probe,
 	.read_page	= ip101g_read_page,
@@ -620,6 +627,7 @@ static struct phy_driver icplus_driver[] = {
 	.get_stats	= ip101g_get_stats,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 } };
 
 module_phy_driver(icplus_driver);

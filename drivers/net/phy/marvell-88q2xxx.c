@@ -240,6 +240,7 @@ static struct phy_driver mv88q2xxx_driver[] = {
 		.phy_id			= MARVELL_PHY_ID_88Q2110,
 		.phy_id_mask		= MARVELL_PHY_ID_MASK,
 		.name			= "mv88q2110",
+		.ops			= &(const struct phy_driver_ops){
 		.get_features		= mv88q2xxx_get_features,
 		.config_aneg		= mv88q2xxx_config_aneg,
 		.config_init		= mv88q2xxx_config_init,
@@ -248,6 +249,7 @@ static struct phy_driver mv88q2xxx_driver[] = {
 		.set_loopback		= genphy_c45_loopback,
 		.get_sqi		= mv88q2xxxx_get_sqi,
 		.get_sqi_max		= mv88q2xxxx_get_sqi_max,
+		},
 	},
 };
 

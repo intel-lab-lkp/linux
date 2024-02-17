@@ -3273,6 +3273,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1101",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_config_init,
 		.config_aneg = m88e1101_config_aneg,
@@ -3285,12 +3286,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_sset_count = marvell_get_sset_count,
 		.get_strings = marvell_get_strings,
 		.get_stats = marvell_get_stats,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1112,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1112",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1112_config_init,
 		.config_aneg = marvell_config_aneg,
@@ -3305,12 +3308,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1011_get_tunable,
 		.set_tunable = m88e1011_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1111,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1111",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1111gbe_config_init,
 		.config_aneg = m88e1111_config_aneg,
@@ -3326,12 +3331,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1111_get_tunable,
 		.set_tunable = m88e1111_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1111_FINISAR,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1111 (Finisar)",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1111gbe_config_init,
 		.config_aneg = m88e1111_config_aneg,
@@ -3347,12 +3354,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1111_get_tunable,
 		.set_tunable = m88e1111_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1118,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1118",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1118_config_init,
 		.config_aneg = m88e1118_config_aneg,
@@ -3365,6 +3374,7 @@ static struct phy_driver marvell_drivers[] = {
 		.get_sset_count = marvell_get_sset_count,
 		.get_strings = marvell_get_strings,
 		.get_stats = marvell_get_stats,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1121R,
@@ -3372,6 +3382,7 @@ static struct phy_driver marvell_drivers[] = {
 		.name = "Marvell 88E1121R",
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1121_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1121_config_aneg,
@@ -3387,12 +3398,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1011_get_tunable,
 		.set_tunable = m88e1011_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1318S,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1318S",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1318_config_init,
 		.config_aneg = m88e1318_config_aneg,
@@ -3413,12 +3426,14 @@ static struct phy_driver marvell_drivers[] = {
 		.led_hw_is_supported = m88e1318_led_hw_is_supported,
 		.led_hw_control_set = m88e1318_led_hw_control_set,
 		.led_hw_control_get = m88e1318_led_hw_control_get,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1145,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1145",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1145_config_init,
 		.config_aneg = m88e1101_config_aneg,
@@ -3433,12 +3448,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1111_get_tunable,
 		.set_tunable = m88e1111_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1149R,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1149R",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1149_config_init,
 		.config_aneg = m88e1118_config_aneg,
@@ -3451,12 +3468,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_sset_count = marvell_get_sset_count,
 		.get_strings = marvell_get_strings,
 		.get_stats = marvell_get_stats,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1240,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1240",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1112_config_init,
 		.config_aneg = marvell_config_aneg,
@@ -3471,12 +3490,14 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1011_get_tunable,
 		.set_tunable = m88e1011_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1116R,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1116R",
 		/* PHY_GBIT_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e1116r_config_init,
 		.config_intr = marvell_config_intr,
@@ -3490,6 +3511,7 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1011_get_tunable,
 		.set_tunable = m88e1011_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1510,
@@ -3498,6 +3520,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
 		.features = PHY_GBIT_FIBRE_FEATURES,
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
 		.probe = m88e1510_probe,
 		.config_init = m88e1510_config_init,
 		.config_aneg = m88e1510_config_aneg,
@@ -3524,6 +3547,7 @@ static struct phy_driver marvell_drivers[] = {
 		.led_hw_is_supported = m88e1318_led_hw_is_supported,
 		.led_hw_control_set = m88e1318_led_hw_control_set,
 		.led_hw_control_get = m88e1318_led_hw_control_get,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1540,
@@ -3532,6 +3556,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
@@ -3555,15 +3580,17 @@ static struct phy_driver marvell_drivers[] = {
 		.led_hw_is_supported = m88e1318_led_hw_is_supported,
 		.led_hw_control_set = m88e1318_led_hw_control_set,
 		.led_hw_control_get = m88e1318_led_hw_control_get,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1545,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1545",
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
-		.probe = marvell_probe,
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
+		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
@@ -3586,12 +3613,14 @@ static struct phy_driver marvell_drivers[] = {
 		.led_hw_is_supported = m88e1318_led_hw_is_supported,
 		.led_hw_control_set = m88e1318_led_hw_control_set,
 		.led_hw_control_get = m88e1318_led_hw_control_get,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E3016,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E3016",
 		/* PHY_BASIC_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = m88e3016_config_init,
 		.aneg_done = marvell_aneg_done,
@@ -3605,6 +3634,7 @@ static struct phy_driver marvell_drivers[] = {
 		.get_sset_count = marvell_get_sset_count,
 		.get_strings = marvell_get_strings,
 		.get_stats = marvell_get_stats,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E6341_FAMILY,
@@ -3613,6 +3643,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e6390_config_aneg,
@@ -3631,6 +3662,7 @@ static struct phy_driver marvell_drivers[] = {
 		.cable_test_start = marvell_vct7_cable_test_start,
 		.cable_test_tdr_start = marvell_vct5_cable_test_tdr_start,
 		.cable_test_get_status = marvell_vct7_cable_test_get_status,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E6390_FAMILY,
@@ -3639,6 +3671,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e6390_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e6390_config_aneg,
@@ -3657,6 +3690,7 @@ static struct phy_driver marvell_drivers[] = {
 		.cable_test_start = marvell_vct7_cable_test_start,
 		.cable_test_tdr_start = marvell_vct5_cable_test_tdr_start,
 		.cable_test_get_status = marvell_vct7_cable_test_get_status,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E6393_FAMILY,
@@ -3665,6 +3699,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e6393_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
@@ -3683,12 +3718,14 @@ static struct phy_driver marvell_drivers[] = {
 		.cable_test_start = marvell_vct7_cable_test_start,
 		.cable_test_tdr_start = marvell_vct5_cable_test_tdr_start,
 		.cable_test_get_status = marvell_vct7_cable_test_get_status,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1340S,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1340S",
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
+		.ops = &(const struct phy_driver_ops){
 		.probe = marvell_probe,
 		/* PHY_GBIT_FEATURES */
 		.config_init = marvell_1011gbe_config_init,
@@ -3705,14 +3742,16 @@ static struct phy_driver marvell_drivers[] = {
 		.get_stats = marvell_get_stats,
 		.get_tunable = m88e1540_get_tunable,
 		.set_tunable = m88e1540_set_tunable,
+		},
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1548P,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1548P",
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
-		.probe = marvell_probe,
 		.features = PHY_GBIT_FIBRE_FEATURES,
+		.ops = &(const struct phy_driver_ops){
+		.probe = marvell_probe,
 		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
@@ -3732,6 +3771,7 @@ static struct phy_driver marvell_drivers[] = {
 		.led_hw_is_supported = m88e1318_led_hw_is_supported,
 		.led_hw_control_set = m88e1318_led_hw_control_set,
 		.led_hw_control_get = m88e1318_led_hw_control_get,
+		},
 	},
 };
 

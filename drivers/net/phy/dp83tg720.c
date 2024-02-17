@@ -165,6 +165,7 @@ static struct phy_driver dp83tg720_driver[] = {
 	PHY_ID_MATCH_MODEL(DP83TG720S_PHY_ID),
 	.name		= "TI DP83TG720S",
 
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg	= dp83tg720_config_aneg,
 	.read_status	= dp83tg720_read_status,
 	.get_features	= genphy_c45_pma_read_ext_abilities,
@@ -174,6 +175,7 @@ static struct phy_driver dp83tg720_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 } };
 module_phy_driver(dp83tg720_driver);
 

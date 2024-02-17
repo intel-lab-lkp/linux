@@ -868,6 +868,7 @@ static struct phy_driver bcm54140_drivers[] = {
 		.name           = "Broadcom BCM54140",
 		.flags		= PHY_POLL_CABLE_TEST,
 		.features       = PHY_GBIT_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.config_init    = bcm54140_config_init,
 		.handle_interrupt = bcm54140_handle_interrupt,
 		.config_intr    = bcm54140_config_intr,
@@ -879,6 +880,7 @@ static struct phy_driver bcm54140_drivers[] = {
 		.set_tunable	= bcm54140_set_tunable,
 		.cable_test_start = bcm_phy_cable_test_start_rdb,
 		.cable_test_get_status = bcm_phy_cable_test_get_status_rdb,
+		},
 	},
 };
 module_phy_driver(bcm54140_drivers);

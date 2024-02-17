@@ -148,9 +148,11 @@ static struct phy_driver qs6612_driver[] = { {
 	.name		= "QS6612",
 	.phy_id_mask	= 0xfffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= qs6612_config_init,
 	.config_intr	= qs6612_config_intr,
 	.handle_interrupt = qs6612_handle_interrupt,
+	},
 } };
 
 module_phy_driver(qs6612_driver);

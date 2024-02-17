@@ -273,21 +273,25 @@ static struct phy_driver microchip_t1s_driver[] = {
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN867X_REVB1),
 		.name               = "LAN867X Rev.B1",
 		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
+		.ops                = &(const struct phy_driver_ops){
 		.config_init        = lan867x_revb1_config_init,
 		.read_status        = lan86xx_read_status,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
 		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
+		},
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_LAN865X_REVB0),
 		.name               = "LAN865X Rev.B0 Internal Phy",
 		.features           = PHY_BASIC_T1S_P2MP_FEATURES,
+		.ops                = &(const struct phy_driver_ops){
 		.config_init        = lan865x_revb0_config_init,
 		.read_status        = lan86xx_read_status,
 		.get_plca_cfg	    = genphy_c45_plca_get_cfg,
 		.set_plca_cfg	    = genphy_c45_plca_set_cfg,
 		.get_plca_status    = genphy_c45_plca_get_status,
+		},
 	},
 };
 

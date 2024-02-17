@@ -1502,8 +1502,8 @@ static int ksz9031_read_status(struct phy_device *phydev)
 	if ((regval & 0xFF) == 0xFF) {
 		phy_init_hw(phydev);
 		phydev->link = 0;
-		if (phydev->drv->config_intr && phy_interrupt_is_valid(phydev))
-			phydev->drv->config_intr(phydev);
+		if (phydev->drv->ops->config_intr && phy_interrupt_is_valid(phydev))
+			phydev->drv->ops->config_intr(phydev);
 		return genphy_config_aneg(phydev);
 	}
 
@@ -1940,8 +1940,8 @@ static int kszphy_suspend(struct phy_device *phydev)
 	/* Disable PHY Interrupts */
 	if (phy_interrupt_is_valid(phydev)) {
 		phydev->interrupts = PHY_INTERRUPT_DISABLED;
-		if (phydev->drv->config_intr)
-			phydev->drv->config_intr(phydev);
+		if (phydev->drv->ops->config_intr)
+			phydev->drv->ops->config_intr(phydev);
 	}
 
 	return genphy_suspend(phydev);
@@ -1990,8 +1990,8 @@ static int kszphy_resume(struct phy_device *phydev)
 	/* Enable PHY Interrupts */
 	if (phy_interrupt_is_valid(phydev)) {
 		phydev->interrupts = PHY_INTERRUPT_ENABLED;
-		if (phydev->drv->config_intr)
-			phydev->drv->config_intr(phydev);
+		if (phydev->drv->ops->config_intr)
+			phydev->drv->ops->config_intr(phydev);
 	}
 
 	return 0;
@@ -4633,18 +4633,21 @@ static struct phy_driver ksphy_driver[] = {
 	.name		= "Micrel KS8737",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ks8737_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
 	.handle_interrupt = kszphy_handle_interrupt,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8021,
 	.phy_id_mask	= 0x00ffffff,
 	.name		= "Micrel KSZ8021 or KSZ8031",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8021_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
@@ -4654,12 +4657,14 @@ static struct phy_driver ksphy_driver[] = {
 	.get_stats	= kszphy_get_stats,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8031,
 	.phy_id_mask	= 0x00ffffff,
 	.name		= "Micrel KSZ8031",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8021_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
@@ -4669,12 +4674,14 @@ static struct phy_driver ksphy_driver[] = {
 	.get_stats	= kszphy_get_stats,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8041,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Micrel KSZ8041",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8041_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= ksz8041_config_init,
 	.config_aneg	= ksz8041_config_aneg,
@@ -4686,12 +4693,14 @@ static struct phy_driver ksphy_driver[] = {
 	/* No suspend/resume callbacks because of errata DS80000700A,
 	 * receiver error following software power down.
 	 */
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8041RNLI,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Micrel KSZ8041RNLI",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8041_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
@@ -4701,10 +4710,12 @@ static struct phy_driver ksphy_driver[] = {
 	.get_stats	= kszphy_get_stats,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.name		= "Micrel KSZ8051",
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8051_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
@@ -4715,12 +4726,14 @@ static struct phy_driver ksphy_driver[] = {
 	.match_phy_device = ksz8051_match_phy_device,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8001,
 	.name		= "Micrel KSZ8001 or KS8721",
 	.phy_id_mask	= 0x00fffffc,
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8041_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.config_intr	= kszphy_config_intr,
@@ -4730,6 +4743,7 @@ static struct phy_driver ksphy_driver[] = {
 	.get_stats	= kszphy_get_stats,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8081,
 	.name		= "Micrel KSZ8081 or KSZ8091",
@@ -4737,6 +4751,7 @@ static struct phy_driver ksphy_driver[] = {
 	.flags		= PHY_POLL_CABLE_TEST,
 	/* PHY_BASIC_FEATURES */
 	.driver_data	= &ksz8081_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= ksz8081_config_init,
 	.soft_reset	= genphy_soft_reset,
@@ -4751,23 +4766,27 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= kszphy_resume,
 	.cable_test_start	= ksz886x_cable_test_start,
 	.cable_test_get_status	= ksz886x_cable_test_get_status,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8061,
 	.name		= "Micrel KSZ8061",
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.config_init	= ksz8061_config_init,
 	.config_intr	= kszphy_config_intr,
 	.handle_interrupt = kszphy_handle_interrupt,
 	.suspend	= kszphy_suspend,
 	.resume		= kszphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ9021,
 	.phy_id_mask	= 0x000ffffe,
 	.name		= "Micrel KSZ9021 Gigabit PHY",
 	/* PHY_GBIT_FEATURES */
 	.driver_data	= &ksz9021_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.get_features	= ksz9031_get_features,
 	.config_init	= ksz9021_config_init,
@@ -4780,12 +4799,14 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= kszphy_resume,
 	.read_mmd	= genphy_read_mmd_unsupported,
 	.write_mmd	= genphy_write_mmd_unsupported,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ9031,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Micrel KSZ9031 Gigabit PHY",
 	.flags		= PHY_POLL_CABLE_TEST,
 	.driver_data	= &ksz9021_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.get_features	= ksz9031_get_features,
 	.config_init	= ksz9031_config_init,
@@ -4800,13 +4821,15 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= kszphy_resume,
 	.cable_test_start	= ksz9x31_cable_test_start,
 	.cable_test_get_status	= ksz9x31_cable_test_get_status,
+	},
 }, {
 	.phy_id		= PHY_ID_LAN8814,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Microchip INDY Gigabit Quad PHY",
 	.flags          = PHY_POLL_CABLE_TEST,
-	.config_init	= lan8814_config_init,
 	.driver_data	= &lan8814_type,
+	.ops		= &(const struct phy_driver_ops){
+	.config_init	= lan8814_config_init,
 	.probe		= lan8814_probe,
 	.soft_reset	= genphy_soft_reset,
 	.read_status	= ksz9031_read_status,
@@ -4819,12 +4842,14 @@ static struct phy_driver ksphy_driver[] = {
 	.handle_interrupt = lan8814_handle_interrupt,
 	.cable_test_start	= lan8814_cable_test_start,
 	.cable_test_get_status	= ksz886x_cable_test_get_status,
+	},
 }, {
 	.phy_id		= PHY_ID_LAN8804,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Microchip LAN966X Gigabit PHY",
-	.config_init	= lan8804_config_init,
 	.driver_data	= &ksz9021_type,
+	.ops		= &(const struct phy_driver_ops){
+	.config_init	= lan8804_config_init,
 	.probe		= kszphy_probe,
 	.soft_reset	= genphy_soft_reset,
 	.read_status	= ksz9031_read_status,
@@ -4835,12 +4860,14 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= kszphy_resume,
 	.config_intr	= lan8804_config_intr,
 	.handle_interrupt = lan8804_handle_interrupt,
+	},
 }, {
 	.phy_id		= PHY_ID_LAN8841,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Microchip LAN8841 Gigabit PHY",
 	.flags		= PHY_POLL_CABLE_TEST,
 	.driver_data	= &lan8841_type,
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= lan8841_config_init,
 	.probe		= lan8841_probe,
 	.soft_reset	= genphy_soft_reset,
@@ -4853,6 +4880,7 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= genphy_resume,
 	.cable_test_start	= lan8814_cable_test_start,
 	.cable_test_get_status	= ksz886x_cable_test_get_status,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ9131,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
@@ -4860,6 +4888,7 @@ static struct phy_driver ksphy_driver[] = {
 	/* PHY_GBIT_FEATURES */
 	.flags		= PHY_POLL_CABLE_TEST,
 	.driver_data	= &ksz9131_type,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= kszphy_probe,
 	.soft_reset	= genphy_soft_reset,
 	.config_init	= ksz9131_config_init,
@@ -4875,16 +4904,19 @@ static struct phy_driver ksphy_driver[] = {
 	.cable_test_start	= ksz9x31_cable_test_start,
 	.cable_test_get_status	= ksz9x31_cable_test_get_status,
 	.get_features	= ksz9477_get_features,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ8873MLL,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Micrel KSZ8873MLL Switch",
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= kszphy_config_init,
 	.config_aneg	= ksz8873mll_config_aneg,
 	.read_status	= ksz8873mll_read_status,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ886X,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
@@ -4892,6 +4924,7 @@ static struct phy_driver ksphy_driver[] = {
 	.driver_data	= &ksz886x_type,
 	/* PHY_BASIC_FEATURES */
 	.flags		= PHY_POLL_CABLE_TEST,
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= kszphy_config_init,
 	.config_aneg	= ksz886x_config_aneg,
 	.read_status	= ksz886x_read_status,
@@ -4899,24 +4932,29 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= genphy_resume,
 	.cable_test_start	= ksz886x_cable_test_start,
 	.cable_test_get_status	= ksz886x_cable_test_get_status,
+	},
 }, {
 	.name		= "Micrel KSZ87XX Switch",
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= kszphy_config_init,
 	.match_phy_device = ksz8795_match_phy_device,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= PHY_ID_KSZ9477,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
 	.name		= "Microchip KSZ9477",
 	/* PHY_GBIT_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= ksz9477_config_init,
 	.config_intr	= kszphy_config_intr,
 	.handle_interrupt = kszphy_handle_interrupt,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 	.get_features	= ksz9477_get_features,
+	},
 } };
 
 module_phy_driver(ksphy_driver);

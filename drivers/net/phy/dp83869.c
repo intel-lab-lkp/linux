@@ -893,6 +893,7 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 {								\
 	PHY_ID_MATCH_MODEL(_id),				\
 	.name		= (_name),				\
+	.ops		= &(const struct phy_driver_ops){	\
 	.probe          = dp83869_probe,			\
 	.config_init	= dp83869_config_init,			\
 	.soft_reset	= dp83869_phy_reset,			\
@@ -905,6 +906,7 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	.set_wol	= dp83869_set_wol,			\
 	.suspend	= genphy_suspend,			\
 	.resume		= genphy_resume,			\
+	},							\
 }
 
 static struct phy_driver dp83869_driver[] = {

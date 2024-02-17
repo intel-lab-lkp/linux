@@ -772,40 +772,49 @@ static struct phy_driver aqr_driver[] = {
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQ1202),
 	.name		= "Aquantia AQ1202",
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
 	.read_status	= aqr_read_status,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQ2104),
 	.name		= "Aquantia AQ2104",
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
 	.read_status	= aqr_read_status,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR105),
 	.name		= "Aquantia AQR105",
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
 	.read_status	= aqr_read_status,
 	.suspend	= aqr107_suspend,
 	.resume		= aqr107_resume,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR106),
 	.name		= "Aquantia AQR106",
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
 	.read_status	= aqr_read_status,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR107),
 	.name		= "Aquantia AQR107",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init	= aqr107_config_init,
@@ -821,10 +830,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQCS109),
 	.name		= "Aquantia AQCS109",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init	= aqcs109_config_init,
@@ -840,10 +851,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR111),
 	.name		= "Aquantia AQR111",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init	= aqr111_config_init,
@@ -859,10 +872,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR111B0),
 	.name		= "Aquantia AQR111B0",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init	= aqr111_config_init,
@@ -878,18 +893,22 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR405),
 	.name		= "Aquantia AQR405",
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
 	.read_status	= aqr_read_status,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR112),
 	.name		= "Aquantia AQR112",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
@@ -904,10 +923,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR412),
 	.name		= "Aquantia AQR412",
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= aqr107_probe,
 	.config_aneg    = aqr_config_aneg,
 	.config_intr	= aqr_config_intr,
@@ -922,10 +943,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings	= aqr107_get_strings,
 	.get_stats	= aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR113),
 	.name		= "Aquantia AQR113",
+	.ops		= &(const struct phy_driver_ops){
 	.probe          = aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init    = aqr113c_config_init,
@@ -941,10 +964,12 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings    = aqr107_get_strings,
 	.get_stats      = aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR113C),
 	.name           = "Aquantia AQR113C",
+	.ops		= &(const struct phy_driver_ops){
 	.probe          = aqr107_probe,
 	.get_rate_matching = aqr107_get_rate_matching,
 	.config_init    = aqr113c_config_init,
@@ -960,6 +985,7 @@ static struct phy_driver aqr_driver[] = {
 	.get_strings    = aqr107_get_strings,
 	.get_stats      = aqr107_get_stats,
 	.link_change_notify = aqr107_link_change_notify,
+	},
 },
 };
 

@@ -177,12 +177,14 @@ static struct phy_driver rockchip_phy_driver[] = {
 	.name			= "Rockchip integrated EPHY",
 	/* PHY_BASIC_FEATURES */
 	.flags			= 0,
+	.ops			= &(const struct phy_driver_ops){
 	.link_change_notify	= rockchip_link_change_notify,
 	.soft_reset		= genphy_soft_reset,
 	.config_init		= rockchip_integrated_phy_config_init,
 	.config_aneg		= rockchip_config_aneg,
 	.suspend		= genphy_suspend,
 	.resume			= rockchip_phy_resume,
+	},
 },
 };
 

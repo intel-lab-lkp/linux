@@ -2256,15 +2256,18 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8511),
 		.name		= "YT8511 Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= yt8511_config_init,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.read_page	= yt8511_read_page,
 		.write_page	= yt8511_write_page,
+		},
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8521),
 		.name		= "YT8521 Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= yt8521_get_features,
 		.probe		= yt8521_probe,
 		.read_page	= yt8521_read_page,
@@ -2278,10 +2281,12 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.soft_reset	= yt8521_soft_reset,
 		.suspend	= yt8521_suspend,
 		.resume		= yt8521_resume,
+		},
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8531),
 		.name		= "YT8531 Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= yt8531_probe,
 		.config_init	= yt8531_config_init,
 		.suspend	= genphy_suspend,
@@ -2289,10 +2294,12 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.get_wol	= ytphy_get_wol,
 		.set_wol	= yt8531_set_wol,
 		.link_change_notify = yt8531_link_change_notify,
+		},
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8531S),
 		.name		= "YT8531S Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= yt8521_get_features,
 		.probe		= yt8521_probe,
 		.read_page	= yt8521_read_page,
@@ -2306,6 +2313,7 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.soft_reset	= yt8521_soft_reset,
 		.suspend	= yt8521_suspend,
 		.resume		= yt8521_resume,
+		},
 	},
 };
 

@@ -139,6 +139,7 @@ MODULE_DEVICE_TABLE(mdio, dp83848_tbl);
 		.name		= _name,			\
 		/* PHY_BASIC_FEATURES */			\
 								\
+		.ops		= &(const struct phy_driver_ops){\
 		.soft_reset	= genphy_soft_reset,		\
 		.config_init	= _config_init,			\
 		.suspend	= genphy_suspend,		\
@@ -147,6 +148,7 @@ MODULE_DEVICE_TABLE(mdio, dp83848_tbl);
 		/* IRQ related */				\
 		.config_intr	= dp83848_config_intr,		\
 		.handle_interrupt = dp83848_handle_interrupt,	\
+		},						\
 	}
 
 static struct phy_driver dp83848_driver[] = {

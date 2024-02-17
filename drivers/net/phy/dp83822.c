@@ -544,7 +544,7 @@ static int dp83822_phy_reset(struct phy_device *phydev)
 	if (err < 0)
 		return err;
 
-	return phydev->drv->config_init(phydev);
+	return phydev->drv->ops->config_init(phydev);
 }
 
 #ifdef CONFIG_OF_MDIO
@@ -704,6 +704,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		PHY_ID_MATCH_MODEL(_id),			\
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
+		.ops		= &(const struct phy_driver_ops){\
 		.probe          = dp83822_probe,		\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp83822_config_init,		\
@@ -714,6 +715,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		.handle_interrupt = dp83822_handle_interrupt,	\
 		.suspend = dp83822_suspend,			\
 		.resume = dp83822_resume,			\
+		},						\
 	}
 
 #define DP83826_PHY_DRIVER(_id, _name)				\
@@ -721,6 +723,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		PHY_ID_MATCH_MODEL(_id),			\
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
+		.ops		= &(const struct phy_driver_ops){\
 		.probe          = dp83826_probe,		\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp83826_config_init,		\
@@ -730,6 +733,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		.handle_interrupt = dp83822_handle_interrupt,	\
 		.suspend = dp83822_suspend,			\
 		.resume = dp83822_resume,			\
+		},						\
 	}
 
 #define DP8382X_PHY_DRIVER(_id, _name)				\
@@ -737,6 +741,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		PHY_ID_MATCH_MODEL(_id),			\
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
+		.ops		= &(const struct phy_driver_ops){\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp8382x_config_init,		\
 		.get_wol = dp83822_get_wol,			\
@@ -745,6 +750,7 @@ static int dp83822_resume(struct phy_device *phydev)
 		.handle_interrupt = dp83822_handle_interrupt,	\
 		.suspend = dp83822_suspend,			\
 		.resume = dp83822_resume,			\
+		},						\
 	}
 
 static struct phy_driver dp83822_driver[] = {

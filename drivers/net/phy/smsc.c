@@ -643,6 +643,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	.name		= "SMSC LAN83C185",
 
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -656,12 +657,14 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x0007c0b0, /* OUI=0x00800f, Model#=0x0b */
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "SMSC LAN8187",
 
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -680,6 +683,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	/* This covers internal PHY (phy_id: 0x0007C0C3) for
 	 * LAN9500 (PID: 0x9500), LAN9514 (PID: 0xec00), LAN9505 (PID: 0x9505)
@@ -689,6 +693,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	.name		= "SMSC LAN8700",
 
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -712,12 +717,14 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x0007c0d0, /* OUI=0x00800f, Model#=0x0d */
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "SMSC LAN911x Internal PHY",
 
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -727,6 +734,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	/* This covers internal PHY (phy_id: 0x0007C0F0) for
 	 * LAN9500A (PID: 0x9E00), LAN9505A (PID: 0x9E01)
@@ -736,6 +744,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	.name		= "SMSC LAN8710/LAN8720",
 
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -759,6 +768,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x0007c110,
 	.phy_id_mask	= 0xfffffff0,
@@ -766,6 +776,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	/* PHY_BASIC_FEATURES */
 	.flags		= PHY_RST_AFTER_CLK_EN,
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -792,6 +803,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x0007c130,	/* 0x0007c130 and 0x0007c131 */
 	/* This mask (0xfffffff2) is to differentiate from
@@ -803,6 +815,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	/* PHY_BASIC_FEATURES */
 	.flags		= PHY_RST_AFTER_CLK_EN,
+	.ops		= &(const struct phy_driver_ops){
 
 	.probe		= smsc_phy_probe,
 
@@ -829,6 +842,7 @@ static struct phy_driver smsc_phy_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 } };
 
 module_phy_driver(smsc_phy_driver);

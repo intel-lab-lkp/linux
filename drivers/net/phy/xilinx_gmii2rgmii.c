@@ -24,6 +24,7 @@ struct gmii2rgmii {
 	struct phy_device *phy_dev;
 	const struct phy_driver *phy_drv;
 	struct phy_driver conv_phy_drv;
+	struct phy_driver_ops conv_phy_drv_ops;
 	struct mdio_device *mdio;
 };
 
@@ -51,8 +52,8 @@ static int xgmiitorgmii_read_status(struct phy_device *phydev)
 	struct gmii2rgmii *priv = mdiodev_get_drvdata(&phydev->mdio);
 	int err;
 
-	if (priv->phy_drv->read_status)
-		err = priv->phy_drv->read_status(phydev);
+	if (priv->phy_drv->ops && priv->phy_drv->ops->read_status)
+		err = priv->phy_drv->ops->read_status(phydev);
 	else
 		err = genphy_read_status(phydev);
 	if (err < 0)
@@ -68,8 +69,8 @@ static int xgmiitorgmii_set_loopback(struct phy_device *phydev, bool enable)
 	struct gmii2rgmii *priv = mdiodev_get_drvdata(&phydev->mdio);
 	int err;
 
-	if (priv->phy_drv->set_loopback)
-		err = priv->phy_drv->set_loopback(phydev, enable);
+	if (priv->phy_drv->ops && priv->phy_drv->ops->set_loopback)
+		err = priv->phy_drv->ops->set_loopback(phydev, enable);
 	else
 		err = genphy_loopback(phydev, enable);
 	if (err < 0)
@@ -113,8 +114,11 @@ static int xgmiitorgmii_probe(struct mdio_device *mdiodev)
 	priv->phy_drv = priv->phy_dev->drv;
 	memcpy(&priv->conv_phy_drv, priv->phy_dev->drv,
 	       sizeof(struct phy_driver));
-	priv->conv_phy_drv.read_status = xgmiitorgmii_read_status;
-	priv->conv_phy_drv.set_loopback = xgmiitorgmii_set_loopback;
+	memcpy(&priv->conv_phy_drv_ops, priv->phy_dev->drv->ops,
+	       sizeof(struct phy_driver_ops));
+	priv->conv_phy_drv_ops.read_status = xgmiitorgmii_read_status;
+	priv->conv_phy_drv_ops.set_loopback = xgmiitorgmii_set_loopback;
+	priv->conv_phy_drv.ops = &priv->conv_phy_drv_ops;
 	mdiodev_set_drvdata(&priv->phy_dev->mdio, priv);
 	priv->phy_dev->drv = &priv->conv_phy_drv;
 

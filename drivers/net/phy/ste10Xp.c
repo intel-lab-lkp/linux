@@ -105,21 +105,25 @@ static struct phy_driver ste10xp_pdriver[] = {
 	.phy_id_mask = 0xfffffff0,
 	.name = "STe101p",
 	/* PHY_BASIC_FEATURES */
+	.ops = &(const struct phy_driver_ops){
 	.config_init = ste10Xp_config_init,
 	.config_intr = ste10Xp_config_intr,
 	.handle_interrupt = ste10Xp_handle_interrupt,
 	.suspend = genphy_suspend,
 	.resume = genphy_resume,
+	},
 }, {
 	.phy_id = STE100P_PHY_ID,
 	.phy_id_mask = 0xffffffff,
 	.name = "STe100p",
 	/* PHY_BASIC_FEATURES */
+	.ops = &(const struct phy_driver_ops){
 	.config_init = ste10Xp_config_init,
 	.config_intr = ste10Xp_config_intr,
 	.handle_interrupt = ste10Xp_handle_interrupt,
 	.suspend = genphy_suspend,
 	.resume = genphy_resume,
+	},
 } };
 
 module_phy_driver(ste10xp_pdriver);

@@ -190,6 +190,7 @@ static struct phy_driver meson_gxl_phy[] = {
 		.name		= "Meson GXL Internal PHY",
 		/* PHY_BASIC_FEATURES */
 		.flags		= PHY_IS_INTERNAL,
+		.ops		= &(const struct phy_driver_ops){
 		.soft_reset     = genphy_soft_reset,
 		.config_init	= meson_gxl_config_init,
 		.read_status	= meson_gxl_read_status,
@@ -199,11 +200,13 @@ static struct phy_driver meson_gxl_phy[] = {
 		.resume         = genphy_resume,
 		.read_mmd	= genphy_read_mmd_unsupported,
 		.write_mmd	= genphy_write_mmd_unsupported,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x01803301),
 		.name		= "Meson G12A Internal PHY",
 		/* PHY_BASIC_FEATURES */
 		.flags		= PHY_IS_INTERNAL,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= smsc_phy_probe,
 		.config_init	= smsc_phy_config_init,
 		.soft_reset     = genphy_soft_reset,
@@ -218,6 +221,7 @@ static struct phy_driver meson_gxl_phy[] = {
 		.resume         = genphy_resume,
 		.read_mmd	= genphy_read_mmd_unsupported,
 		.write_mmd	= genphy_write_mmd_unsupported,
+		},
 	},
 };
 

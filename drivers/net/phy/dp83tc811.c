@@ -390,6 +390,7 @@ static struct phy_driver dp83811_driver[] = {
 		.phy_id_mask = 0xfffffff0,
 		.name = "TI DP83TC811",
 		/* PHY_BASIC_FEATURES */
+		.ops = &(const struct phy_driver_ops){
 		.config_init = dp83811_config_init,
 		.config_aneg = dp83811_config_aneg,
 		.soft_reset = dp83811_phy_reset,
@@ -399,6 +400,7 @@ static struct phy_driver dp83811_driver[] = {
 		.handle_interrupt = dp83811_handle_interrupt,
 		.suspend = dp83811_suspend,
 		.resume = dp83811_resume,
+		},
 	 },
 };
 module_phy_driver(dp83811_driver);

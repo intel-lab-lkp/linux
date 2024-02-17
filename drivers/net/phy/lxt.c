@@ -311,39 +311,47 @@ static struct phy_driver lxt97x_driver[] = {
 	.name		= "LXT970",
 	.phy_id_mask	= 0xfffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= lxt970_config_init,
 	.config_intr	= lxt970_config_intr,
 	.handle_interrupt = lxt970_handle_interrupt,
+	},
 }, {
 	.phy_id		= 0x001378e0,
 	.name		= "LXT971",
 	.phy_id_mask	= 0xfffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_intr	= lxt971_config_intr,
 	.handle_interrupt = lxt971_handle_interrupt,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x00137a10,
 	.name		= "LXT973-A2",
 	.phy_id_mask	= 0xffffffff,
 	/* PHY_BASIC_FEATURES */
 	.flags		= 0,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= lxt973_probe,
 	.config_aneg	= lxt973_config_aneg,
 	.read_status	= lxt973a2_read_status,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 }, {
 	.phy_id		= 0x00137a10,
 	.name		= "LXT973",
 	.phy_id_mask	= 0xfffffff0,
 	/* PHY_BASIC_FEATURES */
 	.flags		= 0,
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= lxt973_probe,
 	.config_aneg	= lxt973_config_aneg,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 } };
 
 module_phy_driver(lxt97x_driver);

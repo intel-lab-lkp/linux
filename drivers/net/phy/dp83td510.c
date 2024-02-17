@@ -221,6 +221,7 @@ static struct phy_driver dp83td510_driver[] = {
 	PHY_ID_MATCH_MODEL(DP83TD510E_PHY_ID),
 	.name		= "TI DP83TD510E",
 
+	.ops		= &(const struct phy_driver_ops){
 	.config_aneg	= dp83td510_config_aneg,
 	.read_status	= dp83td510_read_status,
 	.get_features	= dp83td510_get_features,
@@ -231,6 +232,7 @@ static struct phy_driver dp83td510_driver[] = {
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	},
 } };
 module_phy_driver(dp83td510_driver);
 

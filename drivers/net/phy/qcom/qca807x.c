@@ -797,6 +797,7 @@ static struct phy_driver qca807x_drivers[] = {
 		.name           = "Qualcomm QCA8072",
 		.flags		= PHY_POLL_CABLE_TEST,
 		/* PHY_GBIT_FEATURES */
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= qca807x_probe,
 		.config_init	= qca807x_config_init,
 		.read_status	= qca807x_read_status,
@@ -809,12 +810,14 @@ static struct phy_driver qca807x_drivers[] = {
 		.suspend	= genphy_suspend,
 		.cable_test_start	= qca807x_cable_test_start,
 		.cable_test_get_status	= qca808x_cable_test_get_status,
+		},
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_QCA8075),
 		.name           = "Qualcomm QCA8075",
 		.flags		= PHY_POLL_CABLE_TEST,
 		/* PHY_GBIT_FEATURES */
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= qca807x_probe,
 		.config_init	= qca807x_config_init,
 		.read_status	= qca807x_read_status,
@@ -832,6 +835,7 @@ static struct phy_driver qca807x_drivers[] = {
 		.led_hw_is_supported = qca807x_led_hw_is_supported,
 		.led_hw_control_set = qca807x_led_hw_control_set,
 		.led_hw_control_get = qca807x_led_hw_control_get,
+		},
 	},
 };
 module_phy_driver(qca807x_drivers);

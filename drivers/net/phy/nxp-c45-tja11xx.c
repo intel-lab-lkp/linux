@@ -1929,8 +1929,9 @@ static struct phy_driver nxp_c45_driver[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA_1103),
 		.name			= "NXP C45 TJA1103",
-		.get_features		= nxp_c45_get_features,
 		.driver_data		= &tja1103_phy_data,
+		.ops			= &(const struct phy_driver_ops){
+		.get_features		= nxp_c45_get_features,
 		.probe			= nxp_c45_probe,
 		.soft_reset		= nxp_c45_soft_reset,
 		.config_aneg		= genphy_c45_config_aneg,
@@ -1949,12 +1950,14 @@ static struct phy_driver nxp_c45_driver[] = {
 		.get_sqi		= nxp_c45_get_sqi,
 		.get_sqi_max		= nxp_c45_get_sqi_max,
 		.remove			= nxp_c45_remove,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA_1120),
 		.name			= "NXP C45 TJA1120",
-		.get_features		= nxp_c45_get_features,
 		.driver_data		= &tja1120_phy_data,
+		.ops			= &(const struct phy_driver_ops){
+		.get_features		= nxp_c45_get_features,
 		.probe			= nxp_c45_probe,
 		.soft_reset		= nxp_c45_soft_reset,
 		.config_aneg		= genphy_c45_config_aneg,
@@ -1974,6 +1977,7 @@ static struct phy_driver nxp_c45_driver[] = {
 		.get_sqi		= nxp_c45_get_sqi,
 		.get_sqi_max		= nxp_c45_get_sqi_max,
 		.remove			= nxp_c45_remove,
+		},
 	},
 };
 

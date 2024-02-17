@@ -884,19 +884,7 @@ struct phy_led {
 #define to_phy_led(d) container_of(d, struct phy_led, led_cdev)
 
 /**
- * struct phy_driver - Driver structure for a particular PHY type
- *
- * @mdiodrv: Data common to all MDIO devices
- * @phy_id: The result of reading the UID registers of this PHY
- *   type, and ANDing them with the phy_id_mask.  This driver
- *   only works for PHYs with IDs which match this field
- * @name: The friendly name of this PHY type
- * @phy_id_mask: Defines the important bits of the phy_id
- * @features: A mandatory list of features (speed, duplex, etc)
- *   supported by this PHY
- * @flags: A bitfield defining certain other features this PHY
- *   supports (like interrupts)
- * @driver_data: Static driver data
+ * struct phy_driver_ops - Driver structure for all OPs of a particular PHY
  *
  * All functions are optional. If config_aneg or read_status
  * are not implemented, the phy core uses the genphy versions.
@@ -905,16 +893,8 @@ struct phy_led {
  * to be able to block when the bus transaction is happening,
  * and be freed up by an interrupt (The MPC85xx has this ability,
  * though it is not currently supported in the driver).
- */
-struct phy_driver {
-	struct mdio_driver_common mdiodrv;
-	u32 phy_id;
-	char *name;
-	u32 phy_id_mask;
-	const unsigned long * const features;
-	u32 flags;
-	const void *driver_data;
-
+*/
+struct phy_driver_ops {
 	/**
 	 * @soft_reset: Called to issue a PHY software reset
 	 */
@@ -1172,6 +1152,33 @@ struct phy_driver {
 	 */
 	int (*led_polarity_set)(struct phy_device *dev, int index,
 				unsigned long modes);
+};
+
+/**
+ * struct phy_driver - Driver structure for a particular PHY type
+ *
+ * @mdiodrv: Data common to all MDIO devices
+ * @phy_id: The result of reading the UID registers of this PHY
+ *   type, and ANDing them with the phy_id_mask.  This driver
+ *   only works for PHYs with IDs which match this field
+ * @name: The friendly name of this PHY type
+ * @phy_id_mask: Defines the important bits of the phy_id
+ * @features: A mandatory list of features (speed, duplex, etc)
+ *   supported by this PHY
+ * @flags: A bitfield defining certain other features this PHY
+ *   supports (like interrupts)
+ * @driver_data: Static driver data
+ * @ops: Pointer to PHY driver OPs
+ */
+struct phy_driver {
+	struct mdio_driver_common mdiodrv;
+	u32 phy_id;
+	char *name;
+	u32 phy_id_mask;
+	const unsigned long * const features;
+	u32 flags;
+	const void *driver_data;
+	const struct phy_driver_ops *ops;
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -1931,8 +1938,8 @@ static inline int phy_read_status(struct phy_device *phydev)
 	if (!phydev->drv)
 		return -EIO;
 
-	if (phydev->drv->read_status)
-		return phydev->drv->read_status(phydev);
+	if (phydev->drv->ops && phydev->drv->ops->read_status)
+		return phydev->drv->ops->read_status(phydev);
 	else
 		return genphy_read_status(phydev);
 }

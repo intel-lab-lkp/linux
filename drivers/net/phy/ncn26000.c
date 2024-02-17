@@ -145,6 +145,7 @@ static struct phy_driver ncn26000_driver[] = {
 		PHY_ID_MATCH_MODEL(PHY_ID_NCN26000),
 		.name			= "NCN26000",
 		.features		= PHY_BASIC_T1S_P2MP_FEATURES,
+		.ops			= &(const struct phy_driver_ops){
 		.config_init            = ncn26000_config_init,
 		.config_intr            = ncn26000_config_intr,
 		.config_aneg		= ncn26000_config_aneg,
@@ -154,6 +155,7 @@ static struct phy_driver ncn26000_driver[] = {
 		.set_plca_cfg		= genphy_c45_plca_set_cfg,
 		.get_plca_status	= genphy_c45_plca_get_status,
 		.soft_reset             = genphy_soft_reset,
+		},
 	},
 };
 

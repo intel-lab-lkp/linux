@@ -867,37 +867,46 @@ static struct phy_driver realtek_drvs[] = {
 	{
 		PHY_ID_MATCH_EXACT(0x00008201),
 		.name           = "RTL8201CP Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc816),
 		.name		= "RTL8201F Fast Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_intr	= &rtl8201_config_intr,
 		.handle_interrupt = rtl8201_handle_interrupt,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_MODEL(0x001cc880),
 		.name		= "RTL8208 Fast Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.read_mmd	= genphy_read_mmd_unsupported,
 		.write_mmd	= genphy_write_mmd_unsupported,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc910),
 		.name		= "RTL8211 Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_aneg	= rtl8211_config_aneg,
 		.read_mmd	= &genphy_read_mmd_unsupported,
 		.write_mmd	= &genphy_write_mmd_unsupported,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc912),
 		.name		= "RTL8211B Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_intr	= &rtl8211b_config_intr,
 		.handle_interrupt = rtl821x_handle_interrupt,
 		.read_mmd	= &genphy_read_mmd_unsupported,
@@ -906,26 +915,32 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= rtl8211b_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc913),
 		.name		= "RTL8211C Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= rtl8211c_config_init,
 		.read_mmd	= &genphy_read_mmd_unsupported,
 		.write_mmd	= &genphy_write_mmd_unsupported,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc914),
 		.name		= "RTL8211DN Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_intr	= rtl8211e_config_intr,
 		.handle_interrupt = rtl821x_handle_interrupt,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc915),
 		.name		= "RTL8211E Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= &rtl8211e_config_init,
 		.config_intr	= &rtl8211e_config_intr,
 		.handle_interrupt = rtl821x_handle_interrupt,
@@ -933,9 +948,12 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc916),
 		.name		= "RTL8211F Gigabit Ethernet",
+		.flags		= PHY_ALWAYS_CALL_SUSPEND,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= rtl821x_probe,
 		.config_init	= &rtl8211f_config_init,
 		.read_status	= rtlgen_read_status,
@@ -945,10 +963,12 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= rtl821x_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
-		.flags		= PHY_ALWAYS_CALL_SUSPEND,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(RTL_8211FVD_PHYID),
 		.name		= "RTL8211F-VD Gigabit Ethernet",
+		.flags		= PHY_ALWAYS_CALL_SUSPEND,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= rtl821x_probe,
 		.config_init	= &rtl8211f_config_init,
 		.read_status	= rtlgen_read_status,
@@ -958,9 +978,10 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= rtl821x_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
-		.flags		= PHY_ALWAYS_CALL_SUSPEND,
+		},
 	}, {
 		.name		= "Generic FE-GE Realtek PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.match_phy_device = rtlgen_match_phy_device,
 		.read_status	= rtlgen_read_status,
 		.suspend	= genphy_suspend,
@@ -969,8 +990,10 @@ static struct phy_driver realtek_drvs[] = {
 		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtlgen_read_mmd,
 		.write_mmd	= rtlgen_write_mmd,
+		},
 	}, {
 		.name		= "RTL8226 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.match_phy_device = rtl8226_match_phy_device,
 		.get_features	= rtl822x_get_features,
 		.config_aneg	= rtl822x_config_aneg,
@@ -981,9 +1004,11 @@ static struct phy_driver realtek_drvs[] = {
 		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtl822x_read_mmd,
 		.write_mmd	= rtl822x_write_mmd,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc840),
 		.name		= "RTL8226B_RTL8221B 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= rtl822x_get_features,
 		.config_aneg	= rtl822x_config_aneg,
 		.read_status	= rtl822x_read_status,
@@ -993,9 +1018,11 @@ static struct phy_driver realtek_drvs[] = {
 		.write_page	= rtl821x_write_page,
 		.read_mmd	= rtl822x_read_mmd,
 		.write_mmd	= rtl822x_write_mmd,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc838),
 		.name           = "RTL8226-CG 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
@@ -1003,9 +1030,11 @@ static struct phy_driver realtek_drvs[] = {
 		.resume         = rtlgen_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc848),
 		.name           = "RTL8226B-CG_RTL8221B-CG 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
@@ -1013,9 +1042,11 @@ static struct phy_driver realtek_drvs[] = {
 		.resume         = rtlgen_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc849),
 		.name           = "RTL8221B-VB-CG 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
@@ -1023,9 +1054,11 @@ static struct phy_driver realtek_drvs[] = {
 		.resume         = rtlgen_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc84a),
 		.name           = "RTL8221B-VM-CG 2.5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
@@ -1033,9 +1066,11 @@ static struct phy_driver realtek_drvs[] = {
 		.resume         = rtlgen_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc862),
 		.name           = "RTL8251B 5Gbps PHY",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
@@ -1043,9 +1078,11 @@ static struct phy_driver realtek_drvs[] = {
 		.resume         = rtlgen_resume,
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc961),
 		.name		= "RTL8366RB Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= &rtl8366rb_config_init,
 		/* These interrupts are handled by the irq controller
 		 * embedded inside the RTL8366RB, they get unmasked when the
@@ -1056,10 +1093,12 @@ static struct phy_driver realtek_drvs[] = {
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001ccb00),
 		.name		= "RTL9000AA_RTL9000AN Ethernet",
 		.features       = PHY_BASIC_T1_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= rtl9000a_config_init,
 		.config_aneg	= rtl9000a_config_aneg,
 		.read_status	= rtl9000a_read_status,
@@ -1069,14 +1108,17 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		},
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc942),
 		.name		= "RTL8365MB-VC Gigabit Ethernet",
+		.ops		= &(const struct phy_driver_ops){
 		/* Interrupt handling analogous to RTL8366RB */
 		.config_intr	= genphy_no_config_intr,
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
+		},
 	},
 };
 

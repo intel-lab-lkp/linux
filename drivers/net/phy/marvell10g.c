@@ -1403,9 +1403,10 @@ static struct phy_driver mv3310_drivers[] = {
 	{
 		.phy_id		= MARVELL_PHY_ID_88X3310,
 		.phy_id_mask	= MARVELL_PHY_ID_MASK,
-		.match_phy_device = mv3310_match_phy_device,
 		.name		= "mv88x3310",
 		.driver_data	= &mv3310_type,
+		.ops		= &(const struct phy_driver_ops){
+		.match_phy_device = mv3310_match_phy_device,
 		.get_features	= mv3310_get_features,
 		.config_init	= mv3310_config_init,
 		.probe		= mv3310_probe,
@@ -1420,13 +1421,15 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_loopback	= genphy_c45_loopback,
 		.get_wol	= mv3110_get_wol,
 		.set_wol	= mv3110_set_wol,
+		},
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88X3310,
 		.phy_id_mask	= MARVELL_PHY_ID_MASK,
-		.match_phy_device = mv3340_match_phy_device,
 		.name		= "mv88x3340",
 		.driver_data	= &mv3340_type,
+		.ops		= &(const struct phy_driver_ops){
+		.match_phy_device = mv3340_match_phy_device,
 		.get_features	= mv3310_get_features,
 		.config_init	= mv3310_config_init,
 		.probe		= mv3310_probe,
@@ -1439,13 +1442,15 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_tunable	= mv3310_set_tunable,
 		.remove		= mv3310_remove,
 		.set_loopback	= genphy_c45_loopback,
+		},
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88E2110,
 		.phy_id_mask	= MARVELL_PHY_ID_MASK,
-		.match_phy_device = mv2110_match_phy_device,
 		.name		= "mv88e2110",
 		.driver_data	= &mv2110_type,
+		.ops		= &(const struct phy_driver_ops){
+		.match_phy_device = mv2110_match_phy_device,
 		.probe		= mv3310_probe,
 		.suspend	= mv3310_suspend,
 		.resume		= mv3310_resume,
@@ -1459,13 +1464,15 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_loopback	= genphy_c45_loopback,
 		.get_wol	= mv3110_get_wol,
 		.set_wol	= mv3110_set_wol,
+		},
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88E2110,
 		.phy_id_mask	= MARVELL_PHY_ID_MASK,
-		.match_phy_device = mv2111_match_phy_device,
 		.name		= "mv88e2111",
 		.driver_data	= &mv2111_type,
+		.ops		= &(const struct phy_driver_ops){
+		.match_phy_device = mv2111_match_phy_device,
 		.probe		= mv3310_probe,
 		.suspend	= mv3310_suspend,
 		.resume		= mv3310_resume,
@@ -1477,6 +1484,7 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_tunable	= mv3310_set_tunable,
 		.remove		= mv3310_remove,
 		.set_loopback	= genphy_c45_loopback,
+		},
 	},
 };
 

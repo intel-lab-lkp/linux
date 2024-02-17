@@ -988,6 +988,7 @@ static struct phy_driver at803x_driver[] = {
 	PHY_ID_MATCH_EXACT(ATH8035_PHY_ID),
 	.name			= "Qualcomm Atheros AR8035",
 	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= at8035_probe,
 	.config_aneg		= at803x_config_aneg,
 	.config_init		= at803x_config_init,
@@ -1004,11 +1005,13 @@ static struct phy_driver at803x_driver[] = {
 	.set_tunable		= at803x_set_tunable,
 	.cable_test_start	= at8031_cable_test_start,
 	.cable_test_get_status	= at8031_cable_test_get_status,
+	},
 }, {
 	/* Qualcomm Atheros AR8030 */
 	.phy_id			= ATH8030_PHY_ID,
 	.name			= "Qualcomm Atheros AR8030",
 	.phy_id_mask		= AT8030_PHY_ID_MASK,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= at8035_probe,
 	.config_init		= at803x_config_init,
 	.link_change_notify	= at803x_link_change_notify,
@@ -1019,11 +1022,13 @@ static struct phy_driver at803x_driver[] = {
 	/* PHY_BASIC_FEATURES */
 	.config_intr		= at803x_config_intr,
 	.handle_interrupt	= at803x_handle_interrupt,
+	},
 }, {
 	/* Qualcomm Atheros AR8031/AR8033 */
 	PHY_ID_MATCH_EXACT(ATH8031_PHY_ID),
 	.name			= "Qualcomm Atheros AR8031/AR8033",
 	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= at8031_probe,
 	.config_init		= at8031_config_init,
 	.config_aneg		= at803x_config_aneg,
@@ -1042,12 +1047,14 @@ static struct phy_driver at803x_driver[] = {
 	.set_tunable		= at803x_set_tunable,
 	.cable_test_start	= at8031_cable_test_start,
 	.cable_test_get_status	= at8031_cable_test_get_status,
+	},
 }, {
 	/* Qualcomm Atheros AR8032 */
 	PHY_ID_MATCH_EXACT(ATH8032_PHY_ID),
 	.name			= "Qualcomm Atheros AR8032",
-	.probe			= at803x_probe,
 	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
+	.probe			= at803x_probe,
 	.config_init		= at803x_config_init,
 	.link_change_notify	= at803x_link_change_notify,
 	.suspend		= at803x_suspend,
@@ -1057,14 +1064,16 @@ static struct phy_driver at803x_driver[] = {
 	.handle_interrupt	= at803x_handle_interrupt,
 	.cable_test_start	= at803x_cable_test_start,
 	.cable_test_get_status	= at8032_cable_test_get_status,
+	},
 }, {
 	/* ATHEROS AR9331 */
 	PHY_ID_MATCH_EXACT(ATH9331_PHY_ID),
 	.name			= "Qualcomm Atheros AR9331 built-in PHY",
+	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= at803x_probe,
 	.suspend		= at803x_suspend,
 	.resume			= at803x_resume,
-	.flags			= PHY_POLL_CABLE_TEST,
 	/* PHY_BASIC_FEATURES */
 	.config_intr		= at803x_config_intr,
 	.handle_interrupt	= at803x_handle_interrupt,
@@ -1073,14 +1082,16 @@ static struct phy_driver at803x_driver[] = {
 	.read_status		= at803x_read_status,
 	.soft_reset		= genphy_soft_reset,
 	.config_aneg		= at803x_config_aneg,
+	},
 }, {
 	/* Qualcomm Atheros QCA9561 */
 	PHY_ID_MATCH_EXACT(QCA9561_PHY_ID),
 	.name			= "Qualcomm Atheros QCA9561 built-in PHY",
+	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= at803x_probe,
 	.suspend		= at803x_suspend,
 	.resume			= at803x_resume,
-	.flags			= PHY_POLL_CABLE_TEST,
 	/* PHY_BASIC_FEATURES */
 	.config_intr		= at803x_config_intr,
 	.handle_interrupt	= at803x_handle_interrupt,
@@ -1089,6 +1100,7 @@ static struct phy_driver at803x_driver[] = {
 	.read_status		= at803x_read_status,
 	.soft_reset		= genphy_soft_reset,
 	.config_aneg		= at803x_config_aneg,
+	},
 }, };
 
 module_phy_driver(at803x_driver);

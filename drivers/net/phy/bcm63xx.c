@@ -76,9 +76,11 @@ static struct phy_driver bcm63xx_driver[] = {
 	.name		= "Broadcom BCM63XX (1)",
 	/* PHY_BASIC_FEATURES */
 	.flags		= PHY_IS_INTERNAL,
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= bcm63xx_config_init,
 	.config_intr	= bcm63xx_config_intr,
 	.handle_interrupt = bcm_phy_handle_interrupt,
+	},
 }, {
 	/* same phy as above, with just a different OUI */
 	.phy_id		= 0x002bdc00,
@@ -86,9 +88,11 @@ static struct phy_driver bcm63xx_driver[] = {
 	.name		= "Broadcom BCM63XX (2)",
 	/* PHY_BASIC_FEATURES */
 	.flags		= PHY_IS_INTERNAL,
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= bcm63xx_config_init,
 	.config_intr	= bcm63xx_config_intr,
 	.handle_interrupt = bcm_phy_handle_interrupt,
+	},
 } };
 
 module_phy_driver(bcm63xx_driver);

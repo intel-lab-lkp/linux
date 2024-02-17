@@ -130,17 +130,21 @@ static struct phy_driver cis820x_driver[] = {
 	.name		= "Cicada Cis8201",
 	.phy_id_mask	= 0x000ffff0,
 	/* PHY_GBIT_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= &cis820x_config_init,
 	.config_intr	= &cis820x_config_intr,
 	.handle_interrupt = &cis820x_handle_interrupt,
+	},
 }, {
 	.phy_id		= 0x000fc440,
 	.name		= "Cicada Cis8204",
 	.phy_id_mask	= 0x000fffc0,
 	/* PHY_GBIT_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= &cis820x_config_init,
 	.config_intr	= &cis820x_config_intr,
 	.handle_interrupt = &cis820x_handle_interrupt,
+	},
 } };
 
 module_phy_driver(cis820x_driver);

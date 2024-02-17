@@ -866,6 +866,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.name           = "Microchip LAN87xx T1",
 		.flags          = PHY_POLL_CABLE_TEST,
 		.features       = PHY_BASIC_T1_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= lan87xx_config_init,
 		.config_intr    = lan87xx_phy_config_intr,
 		.handle_interrupt = lan87xx_handle_interrupt,
@@ -877,12 +878,14 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.get_sqi_max	= lan87xx_get_sqi_max,
 		.cable_test_start = lan87xx_cable_test_start,
 		.cable_test_get_status = lan87xx_cable_test_get_status,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_LAN937X),
 		.name		= "Microchip LAN937x T1",
 		.flags          = PHY_POLL_CABLE_TEST,
 		.features	= PHY_BASIC_T1_FEATURES,
+		.ops		= &(const struct phy_driver_ops){
 		.config_init	= lan87xx_config_init,
 		.config_intr    = lan87xx_phy_config_intr,
 		.handle_interrupt = lan87xx_handle_interrupt,
@@ -894,6 +897,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.get_sqi_max	= lan87xx_get_sqi_max,
 		.cable_test_start = lan87xx_cable_test_start,
 		.cable_test_get_status = lan87xx_cable_test_get_status,
+		},
 	}
 };
 

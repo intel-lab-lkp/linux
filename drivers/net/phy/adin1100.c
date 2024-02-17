@@ -323,6 +323,7 @@ static struct phy_driver adin_driver[] = {
 		.phy_id			= PHY_ID_ADIN1100,
 		.phy_id_mask		= 0xffffffcf,
 		.name			= "ADIN1100",
+		.ops			= &(const struct phy_driver_ops){
 		.get_features		= adin_get_features,
 		.soft_reset		= adin_soft_reset,
 		.probe			= adin_probe,
@@ -335,6 +336,7 @@ static struct phy_driver adin_driver[] = {
 		.resume			= adin_resume,
 		.get_sqi		= adin_get_sqi,
 		.get_sqi_max		= adin_get_sqi_max,
+		},
 	},
 };
 

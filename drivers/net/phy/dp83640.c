@@ -1520,12 +1520,14 @@ static struct phy_driver dp83640_driver = {
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "NatSemi DP83640",
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.probe		= dp83640_probe,
 	.remove		= dp83640_remove,
 	.soft_reset	= dp83640_soft_reset,
 	.config_init	= dp83640_config_init,
 	.config_intr    = dp83640_config_intr,
 	.handle_interrupt = dp83640_handle_interrupt,
+	},
 };
 
 static int __init dp83640_init(void)

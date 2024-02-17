@@ -176,35 +176,43 @@ static struct phy_driver dm91xx_driver[] = {
 	.name		= "Davicom DM9161E",
 	.phy_id_mask	= 0x0ffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= dm9161_config_init,
 	.config_aneg	= dm9161_config_aneg,
 	.config_intr	= dm9161_config_intr,
 	.handle_interrupt = dm9161_handle_interrupt,
+	},
 }, {
 	.phy_id		= 0x0181b8b0,
 	.name		= "Davicom DM9161B/C",
 	.phy_id_mask	= 0x0ffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= dm9161_config_init,
 	.config_aneg	= dm9161_config_aneg,
 	.config_intr	= dm9161_config_intr,
 	.handle_interrupt = dm9161_handle_interrupt,
+	},
 }, {
 	.phy_id		= 0x0181b8a0,
 	.name		= "Davicom DM9161A",
 	.phy_id_mask	= 0x0ffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_init	= dm9161_config_init,
 	.config_aneg	= dm9161_config_aneg,
 	.config_intr	= dm9161_config_intr,
 	.handle_interrupt = dm9161_handle_interrupt,
+	},
 }, {
 	.phy_id		= 0x00181b80,
 	.name		= "Davicom DM9131",
 	.phy_id_mask	= 0x0ffffff0,
 	/* PHY_BASIC_FEATURES */
+	.ops		= &(const struct phy_driver_ops){
 	.config_intr	= dm9161_config_intr,
 	.handle_interrupt = dm9161_handle_interrupt,
+	},
 } };
 
 module_phy_driver(dm91xx_driver);

@@ -994,6 +994,7 @@ static struct phy_driver adin_driver[] = {
 		PHY_ID_MATCH_MODEL(PHY_ID_ADIN1200),
 		.name		= "ADIN1200",
 		.flags		= PHY_POLL_CABLE_TEST,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= adin_probe,
 		.config_init	= adin_config_init,
 		.soft_reset	= adin_soft_reset,
@@ -1012,11 +1013,13 @@ static struct phy_driver adin_driver[] = {
 		.write_mmd	= adin_write_mmd,
 		.cable_test_start	= adin_cable_test_start,
 		.cable_test_get_status	= adin_cable_test_get_status,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_ADIN1300),
 		.name		= "ADIN1300",
 		.flags		= PHY_POLL_CABLE_TEST,
+		.ops		= &(const struct phy_driver_ops){
 		.probe		= adin_probe,
 		.config_init	= adin_config_init,
 		.soft_reset	= adin_soft_reset,
@@ -1035,6 +1038,7 @@ static struct phy_driver adin_driver[] = {
 		.write_mmd	= adin_write_mmd,
 		.cable_test_start	= adin_cable_test_start,
 		.cable_test_get_status	= adin_cable_test_get_status,
+		},
 	},
 };
 

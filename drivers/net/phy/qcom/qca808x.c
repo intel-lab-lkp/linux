@@ -609,6 +609,7 @@ static struct phy_driver qca808x_driver[] = {
 	PHY_ID_MATCH_EXACT(QCA8081_PHY_ID),
 	.name			= "Qualcomm QCA8081",
 	.flags			= PHY_POLL_CABLE_TEST,
+	.ops			= &(const struct phy_driver_ops){
 	.probe			= qca808x_probe,
 	.config_intr		= at803x_config_intr,
 	.handle_interrupt	= at803x_handle_interrupt,
@@ -632,6 +633,7 @@ static struct phy_driver qca808x_driver[] = {
 	.led_hw_control_set	= qca808x_led_hw_control_set,
 	.led_hw_control_get	= qca808x_led_hw_control_get,
 	.led_polarity_set	= qca808x_led_polarity_set,
+	},
 }, };
 
 module_phy_driver(qca808x_driver);

@@ -199,6 +199,7 @@ static struct phy_driver cbtx_driver[] = {
 		PHY_ID_MATCH_MODEL(PHY_ID_CBTX_SJA1110),
 		.name			= "NXP CBTX (SJA1110)",
 		/* PHY_BASIC_FEATURES */
+		.ops			= &(const struct phy_driver_ops){
 		.soft_reset		= cbtx_soft_reset,
 		.config_init		= cbtx_config_init,
 		.suspend		= genphy_suspend,
@@ -210,6 +211,7 @@ static struct phy_driver cbtx_driver[] = {
 		.get_sset_count		= cbtx_get_sset_count,
 		.get_strings		= cbtx_get_strings,
 		.get_stats		= cbtx_get_stats,
+		},
 	},
 };
 

@@ -813,6 +813,7 @@ static struct phy_driver gpy_drivers[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY2xx),
 		.name		= "Maxlinear Ethernet GPY2xx",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -826,11 +827,13 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		.phy_id		= PHY_ID_GPY115B,
 		.phy_id_mask	= PHY_ID_GPYx15B_MASK,
 		.name		= "Maxlinear Ethernet GPY115B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -844,10 +847,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy115_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY115C),
 		.name		= "Maxlinear Ethernet GPY115C",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -861,11 +866,13 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy115_loopback,
+		},
 	},
 	{
 		.phy_id		= PHY_ID_GPY211B,
 		.phy_id_mask	= PHY_ID_GPY21xB_MASK,
 		.name		= "Maxlinear Ethernet GPY211B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -879,10 +886,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY211C),
 		.name		= "Maxlinear Ethernet GPY211C",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -896,11 +905,13 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		.phy_id		= PHY_ID_GPY212B,
 		.phy_id_mask	= PHY_ID_GPY21xB_MASK,
 		.name		= "Maxlinear Ethernet GPY212B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -914,10 +925,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY212C),
 		.name		= "Maxlinear Ethernet GPY212C",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -931,11 +944,13 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		.phy_id		= PHY_ID_GPY215B,
 		.phy_id_mask	= PHY_ID_GPYx15B_MASK,
 		.name		= "Maxlinear Ethernet GPY215B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -949,10 +964,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY215C),
 		.name		= "Maxlinear Ethernet GPY215C",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -966,10 +983,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY241B),
 		.name		= "Maxlinear Ethernet GPY241B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -983,10 +1002,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY241BM),
 		.name		= "Maxlinear Ethernet GPY241BM",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -1000,10 +1021,12 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_GPY245B),
 		.name		= "Maxlinear Ethernet GPY245B",
+		.ops		= &(const struct phy_driver_ops){
 		.get_features	= genphy_c45_pma_read_abilities,
 		.config_init	= gpy_config_init,
 		.probe		= gpy_probe,
@@ -1017,6 +1040,7 @@ static struct phy_driver gpy_drivers[] = {
 		.set_wol	= gpy_set_wol,
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
+		},
 	},
 };
 module_phy_driver(gpy_drivers);

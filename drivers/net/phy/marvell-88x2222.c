@@ -600,6 +600,7 @@ static struct phy_driver mv2222_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88X2222,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88X2222",
+		.ops = &(const struct phy_driver_ops){
 		.get_features = mv2222_get_features,
 		.soft_reset = mv2222_soft_reset,
 		.config_init = mv2222_config_init,
@@ -609,6 +610,7 @@ static struct phy_driver mv2222_drivers[] = {
 		.suspend = mv2222_suspend,
 		.resume = mv2222_resume,
 		.read_status = mv2222_read_status,
+		},
 	},
 };
 module_phy_driver(mv2222_drivers);
