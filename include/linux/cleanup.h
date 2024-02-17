@@ -134,6 +134,19 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
  *	an anonymous instance of the (guard) class, not recommended for
  *	conditional locks.
  *
+ * cond_guard(name, fail, args...):
+ *	a guard to be used with the conditional variants of locks, like
+ *	down_read_trylock() or mutex_lock_interruptible(). 'fail' is a
+ *	statement or statement-expression that is executed if waiting for a
+ *	lock is interrupted or if a _trylock() fails in case of contention.
+ *
+ *	Example:
+ *
+ *		cond_guard(mutex_intr, return -EINTR, &mutex);
+ *
+ * 	This macro can be called multiple times in the same scope, for it
+ * 	declares unique instances of type 'name'.
+ *
  * scoped_guard (name, args...) { }:
  *	similar to CLASS(name, scope)(args), except the variable (with the
  *	explicit name 'scope') is declard in a for-loop such that its scope is
@@ -164,6 +177,13 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 	CLASS(_name, __UNIQUE_ID(guard))
 
 #define __guard_ptr(_name) class_##_name##_lock_ptr
+
+#define __cond_guard(__unique, _name, _fail, args...) \
+	CLASS(_name, __unique)(args); \
+	if (!__guard_ptr(_name)(&__unique)) _fail; \
+	else { }
+#define cond_guard(_name, _fail, args...) \
+	__cond_guard(__UNIQUE_ID(scope), _name, _fail, args)
 
 #define scoped_guard(_name, args...)					\
 	for (CLASS(_name, scope)(args),					\
