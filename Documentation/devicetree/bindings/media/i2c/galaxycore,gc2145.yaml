@@ -61,9 +61,6 @@ properties:
         properties:
           link-frequencies: true
 
-        required:
-          - link-frequencies
-
     required:
       - endpoint
 
@@ -105,6 +102,36 @@ examples:
                     remote-endpoint = <&mipid02_0>;
                     data-lanes = <1 2>;
                     link-frequencies = /bits/ 64 <120000000 192000000 240000000>;
+                };
+            };
+        };
+    };
+
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        camera@3c {
+            compatible = "galaxycore,gc2145";
+            reg = <0x3c>;
+            clocks = <&clk_ext_camera>;
+            iovdd-supply = <&scmi_v3v3_sw>;
+            avdd-supply = <&scmi_v3v3_sw>;
+            dvdd-supply = <&scmi_v3v3_sw>;
+            powerdown-gpios = <&mcp23017 3 (GPIO_ACTIVE_LOW | GPIO_PUSH_PULL)>;
+            reset-gpios = <&mcp23017 4 (GPIO_ACTIVE_LOW | GPIO_PUSH_PULL)>;
+
+            port {
+                endpoint {
+                    remote-endpoint = <&parallel_from_gc2145>;
+                    bus-width = <8>;
+                    hsync-active = <1>;
+                    vsync-active = <1>;
+                    data-active = <1>;
+                    pclk-sample = <1>;
                 };
             };
         };
