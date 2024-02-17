@@ -959,12 +959,11 @@ void lru_cache_disable(void)
  */
 void folios_put(struct folio_batch *folios)
 {
-	int i;
-	LIST_HEAD(pages_to_free);
+	int i, j;
 	struct lruvec *lruvec = NULL;
 	unsigned long flags = 0;
 
-	for (i = 0; i < folios->nr; i++) {
+	for (i = 0, j = 0; i < folios->nr; i++) {
 		struct folio *folio = folios->folios[i];
 
 		if (is_huge_zero_page(&folio->page))
@@ -1013,14 +1012,18 @@ void folios_put(struct folio_batch *folios)
 			count_vm_event(UNEVICTABLE_PGCLEARED);
 		}
 
-		list_add(&folio->lru, &pages_to_free);
+		if (j != i)
+			folios->folios[j] = folio;
+		j++;
 	}
 	if (lruvec)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
+	folios->nr = j;
+	if (!j)
+		return;
 
-	mem_cgroup_uncharge_list(&pages_to_free);
-	free_unref_page_list(&pages_to_free);
-	folios->nr = 0;
+	mem_cgroup_uncharge_folios(folios);
+	free_unref_folios(folios);
 }
 EXPORT_SYMBOL(folios_put);
 
