@@ -352,6 +352,9 @@ properties:
   no-hpd: true
   hpd-gpios: true
   data-mapping: true
+  height-mm: true
+  width-mm: true
+  panel-timing: true
 
 if:
   not:
