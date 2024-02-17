@@ -25,6 +25,7 @@
 #include <linux/moduleparam.h>
 #include <linux/pm.h>
 #include <linux/property.h>
+#include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
@@ -59,6 +60,7 @@
  * @lock: spin lock protecting dev structure and io access
  * @base: base address of wdt
  * @clk: (optional) clock structure of wdt
+ * @rst: (optional) reset control signal of wdt
  * @rate: (optional) clock rate when provided via properties
  * @adev: amba device structure of wdt
  * @status: current status of wdt
@@ -69,6 +71,7 @@ struct sp805_wdt {
 	spinlock_t			lock;
 	void __iomem			*base;
 	struct clk			*clk;
+	struct reset_control		*rst;
 	u64				rate;
 	struct amba_device		*adev;
 	unsigned int			load_val;
@@ -263,6 +266,12 @@ sp805_wdt_probe(struct amba_device *adev, const struct amba_id *id)
 		dev_err(&adev->dev, "no clock-frequency property\n");
 		return -ENODEV;
 	}
+
+	wdt->rst = devm_reset_control_get_optional(&adev->dev, NULL);
+	if (IS_ERR(wdt->rst))
+		return dev_err_probe(&adev->dev, PTR_ERR(wdt->rst), "Can not get reset\n");
+
+	reset_control_deassert(wdt->rst);
 
 	wdt->adev = adev;
 	wdt->wdd.info = &wdt_info;
