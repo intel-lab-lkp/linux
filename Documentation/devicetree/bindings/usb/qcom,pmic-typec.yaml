@@ -14,8 +14,13 @@ description:
 
 properties:
   compatible:
-    enum:
-      - qcom,pm8150b-typec
+    oneOf:
+      - enum:
+          - qcom,pm8150b-typec
+      - items:
+          - enum:
+              - qcom,pm6150-typec
+          - const: qcom,pm8150b-typec
 
   connector:
     type: object
