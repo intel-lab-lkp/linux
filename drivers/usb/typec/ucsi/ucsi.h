@@ -58,22 +58,20 @@ struct dentry;
  * @poll_cci: Update the cached CCI value from hardware. Required for reset.
  * @read_data: Read MESSAGE_IN data
  * @write_data: Write MESSAGE_OUT data
- * @sync_write: Blocking write operation
- * @async_write: Non-blocking write operation
+ * @sync_cmd: Blocking command execution
+ * @async_cmd: Non-blocking command execution
  * @update_altmodes: Squashes duplicate DP altmodes
  *
- * Read and write routines for UCSI interface. @sync_write must wait for the
- * Command Completion Event from the PPM before returning, and @async_write must
+ * Read and write routines for UCSI interface. @sync_cmd must wait for the
+ * Command Completion Event from the PPM before returning, and @async_cmd must
  * return immediately after sending the data to the PPM.
  */
 struct ucsi_operations {
 	int (*poll_cci)(struct ucsi *ucsi);
 	int (*read_data)(struct ucsi *ucsi, void *val, size_t val_len);
 	int (*write_data)(struct ucsi *ucsi, const void *val, size_t val_len);
-	int (*sync_write)(struct ucsi *ucsi, unsigned int offset,
-			  const void *val, size_t val_len);
-	int (*async_write)(struct ucsi *ucsi, unsigned int offset,
-			   const void *val, size_t val_len);
+	int (*sync_cmd)(struct ucsi *ucsi, u64 cmd);
+	int (*async_cmd)(struct ucsi *ucsi, u64 cmd);
 	bool (*update_altmodes)(struct ucsi *ucsi, struct ucsi_altmode *orig,
 				struct ucsi_altmode *updated);
 };

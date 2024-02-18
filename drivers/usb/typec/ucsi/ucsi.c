@@ -51,22 +51,16 @@ static int ucsi_read_message_in(struct ucsi *ucsi, void *buf,
 
 static int ucsi_acknowledge_command(struct ucsi *ucsi)
 {
-	u64 ctrl;
+	u64 cmd = UCSI_ACK_CC_CI | UCSI_ACK_COMMAND_COMPLETE;
 
-	ctrl = UCSI_ACK_CC_CI;
-	ctrl |= UCSI_ACK_COMMAND_COMPLETE;
-
-	return ucsi->ops->sync_write(ucsi, UCSI_CONTROL, &ctrl, sizeof(ctrl));
+	return ucsi->ops->sync_cmd(ucsi, cmd);
 }
 
 static int ucsi_acknowledge_connector_change(struct ucsi *ucsi)
 {
-	u64 ctrl;
+	u64 cmd = UCSI_ACK_CC_CI | UCSI_ACK_CONNECTOR_CHANGE;
 
-	ctrl = UCSI_ACK_CC_CI;
-	ctrl |= UCSI_ACK_CONNECTOR_CHANGE;
-
-	return ucsi->ops->sync_write(ucsi, UCSI_CONTROL, &ctrl, sizeof(ctrl));
+	return ucsi->ops->sync_cmd(ucsi, cmd);
 }
 
 static int ucsi_exec_command(struct ucsi *ucsi, u64 command);
@@ -137,7 +131,7 @@ static int ucsi_exec_command(struct ucsi *ucsi, u64 cmd)
 	u32 cci;
 	int ret;
 
-	ret = ucsi->ops->sync_write(ucsi, UCSI_CONTROL, &cmd, sizeof(cmd));
+	ret = ucsi->ops->sync_cmd(ucsi, cmd);
 	if (ret)
 		return ret;
 	cci = READ_ONCE(ucsi->cci);
@@ -1014,15 +1008,13 @@ static int ucsi_reset_connector(struct ucsi_connector *con, bool hard)
 
 static int ucsi_reset_ppm(struct ucsi *ucsi)
 {
-	u64 command = UCSI_PPM_RESET;
 	unsigned long tmo;
 	u32 cci;
 	int ret;
 
 	mutex_lock(&ucsi->ppm_lock);
 
-	ret = ucsi->ops->async_write(ucsi, UCSI_CONTROL, &command,
-				     sizeof(command));
+	ret = ucsi->ops->async_cmd(ucsi, UCSI_PPM_RESET);
 	if (ret < 0)
 		goto out;
 
@@ -1041,9 +1033,7 @@ static int ucsi_reset_ppm(struct ucsi *ucsi)
 
 		/* If the PPM is still doing something else, reset it again. */
 		if (cci & ~UCSI_CCI_RESET_COMPLETE) {
-			ret = ucsi->ops->async_write(ucsi, UCSI_CONTROL,
-						     &command,
-						     sizeof(command));
+			ret = ucsi->ops->async_cmd(ucsi, UCSI_PPM_RESET);
 			if (ret < 0)
 				goto out;
 		}
@@ -1549,7 +1539,7 @@ struct ucsi *ucsi_create(struct device *dev, const struct ucsi_operations *ops)
 	struct ucsi *ucsi;
 
 	if (!ops || !ops->poll_cci || !ops->read_data || !ops->write_data ||
-	    !ops->sync_write || !ops->async_write)
+	    !ops->sync_cmd || !ops->async_cmd)
 		return ERR_PTR(-EINVAL);
 
 	ucsi = kzalloc(sizeof(*ucsi), GFP_KERNEL);
@@ -1612,7 +1602,6 @@ EXPORT_SYMBOL_GPL(ucsi_register);
  */
 void ucsi_unregister(struct ucsi *ucsi)
 {
-	u64 cmd = UCSI_SET_NOTIFICATION_ENABLE;
 	int i;
 
 	/* Make sure that we are not in the middle of driver initialization */
@@ -1620,7 +1609,7 @@ void ucsi_unregister(struct ucsi *ucsi)
 	cancel_work_sync(&ucsi->resume_work);
 
 	/* Disable notifications */
-	ucsi->ops->async_write(ucsi, UCSI_CONTROL, &cmd, sizeof(cmd));
+	ucsi->ops->async_cmd(ucsi, UCSI_SET_NOTIFICATION_ENABLE);
 
 	if (!ucsi->connector)
 		return;

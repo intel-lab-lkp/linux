@@ -77,21 +77,20 @@ static int ucsi_acpi_write_data(struct ucsi *ucsi, const void *val,
 	return 0;
 }
 
-static int ucsi_acpi_async_write(struct ucsi *ucsi, unsigned int offset,
-				 const void *val, size_t val_len)
+static int ucsi_acpi_async_cmd(struct ucsi *ucsi, u64 cmd)
 {
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
+	__le64 __cmd = cpu_to_le64(cmd);
 
-	memcpy(ua->base + offset, val, val_len);
+	memcpy(ua->base + UCSI_CONTROL, &__cmd, sizeof(__cmd));
 
 	return ucsi_acpi_dsm(ua, UCSI_DSM_FUNC_WRITE);
 }
 
-static int ucsi_acpi_sync_write(struct ucsi *ucsi, unsigned int offset,
-				const void *val, size_t val_len)
+static int ucsi_acpi_sync_cmd(struct ucsi *ucsi, u64 cmd)
 {
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
-	bool ack = UCSI_COMMAND(*(u64 *)val) == UCSI_ACK_CC_CI;
+	bool ack = UCSI_COMMAND(cmd) == UCSI_ACK_CC_CI;
 	int ret;
 
 	if (ack)
@@ -99,7 +98,7 @@ static int ucsi_acpi_sync_write(struct ucsi *ucsi, unsigned int offset,
 	else
 		set_bit(COMMAND_PENDING, &ua->flags);
 
-	ret = ucsi_acpi_async_write(ucsi, offset, val, val_len);
+	ret = ucsi_acpi_async_cmd(ucsi, cmd);
 	if (ret)
 		goto out_clear_bit;
 
@@ -119,8 +118,8 @@ static const struct ucsi_operations ucsi_acpi_ops = {
 	.poll_cci = ucsi_acpi_poll_cci,
 	.read_data = ucsi_acpi_read_data,
 	.write_data = ucsi_acpi_write_data,
-	.sync_write = ucsi_acpi_sync_write,
-	.async_write = ucsi_acpi_async_write
+	.sync_cmd = ucsi_acpi_sync_cmd,
+	.async_cmd = ucsi_acpi_async_cmd
 };
 
 /*
@@ -131,32 +130,28 @@ static const struct ucsi_operations ucsi_acpi_ops = {
  * subsequent commands will timeout.
  */
 static int
-ucsi_dell_sync_write(struct ucsi *ucsi, unsigned int offset,
-		     const void *val, size_t val_len)
+ucsi_dell_sync_cmd(struct ucsi *ucsi, u64 cmd)
 {
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
-	u64 cmd = *(u64 *)val, ack = 0;
+	u64 ack = 0;
 	int ret;
 
 	if (UCSI_COMMAND(cmd) == UCSI_ACK_CC_CI &&
 	    cmd & UCSI_ACK_CONNECTOR_CHANGE)
 		ack = UCSI_ACK_CC_CI | UCSI_ACK_COMMAND_COMPLETE;
 
-	ret = ucsi_acpi_sync_write(ucsi, offset, val, val_len);
+	ret = ucsi_acpi_sync_cmd(ucsi, cmd);
 	if (ret != 0)
 		return ret;
 	if (ack == 0)
-		return ret;
+		return 0;
 
 	if (!ua->dell_quirk_probed) {
 		ua->dell_quirk_probed = true;
 
-		cmd = UCSI_GET_CAPABILITY;
-		ret = ucsi_acpi_sync_write(ucsi, UCSI_CONTROL, &cmd,
-					   sizeof(cmd));
+		ret = ucsi_acpi_sync_cmd(ucsi, UCSI_GET_CAPABILITY);
 		if (ret == 0)
-			return ucsi_acpi_sync_write(ucsi, UCSI_CONTROL,
-						    &ack, sizeof(ack));
+			return ucsi_acpi_sync_cmd(ucsi, ack);
 		if (ret != -ETIMEDOUT)
 			return ret;
 
@@ -166,17 +161,17 @@ ucsi_dell_sync_write(struct ucsi *ucsi, unsigned int offset,
 	}
 
 	if (!ua->dell_quirk_active)
-		return ret;
+		return 0;
 
-	return ucsi_acpi_sync_write(ucsi, UCSI_CONTROL, &ack, sizeof(ack));
+	return ucsi_acpi_sync_cmd(ucsi, ack);
 }
 
 static const struct ucsi_operations ucsi_dell_ops = {
 	.poll_cci = ucsi_acpi_poll_cci,
 	.read_data = ucsi_acpi_read_data,
 	.write_data = ucsi_acpi_write_data,
-	.sync_write = ucsi_dell_sync_write,
-	.async_write = ucsi_acpi_async_write
+	.sync_cmd = ucsi_dell_sync_cmd,
+	.async_cmd = ucsi_acpi_async_cmd
 };
 
 static const struct dmi_system_id ucsi_acpi_quirks[] = {

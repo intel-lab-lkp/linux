@@ -421,23 +421,23 @@ static int ucsi_stm32g0_write_data(struct ucsi *ucsi,
 	return ucsi_stm32g0_write_to_hw(g0, UCSI_MESSAGE_OUT, val, len);
 }
 
-static int ucsi_stm32g0_async_write(struct ucsi *ucsi, unsigned int offset,
-				    const void *val, size_t len)
+static int ucsi_stm32g0_async_cmd(struct ucsi *ucsi, u64 cmd)
 {
 	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
+	__le64 __cmd = cpu_to_le64(cmd);
 
-	return ucsi_stm32g0_write_to_hw(g0, offset, val, len);
+	return ucsi_stm32g0_write_to_hw(g0, UCSI_CONTROL,
+					&__cmd, sizeof(__cmd));
 }
 
-static int ucsi_stm32g0_sync_write(struct ucsi *ucsi, unsigned int offset, const void *val,
-				   size_t len)
+static int ucsi_stm32g0_sync_cmd(struct ucsi *ucsi, u64 cmd)
 {
 	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
 	int ret;
 
 	set_bit(COMMAND_PENDING, &g0->flags);
 
-	ret = ucsi_stm32g0_async_write(ucsi, offset, val, len);
+	ret = ucsi_stm32g0_async_cmd(ucsi, cmd);
 	if (ret)
 		goto out_clear_bit;
 
@@ -480,8 +480,8 @@ static const struct ucsi_operations ucsi_stm32g0_ops = {
 	.poll_cci = ucsi_stm32g0_poll_cci,
 	.read_data = ucsi_stm32g0_read_data,
 	.write_data = ucsi_stm32g0_write_data,
-	.sync_write = ucsi_stm32g0_sync_write,
-	.async_write = ucsi_stm32g0_async_write,
+	.sync_cmd = ucsi_stm32g0_sync_cmd,
+	.async_cmd = ucsi_stm32g0_async_cmd,
 };
 
 static int ucsi_stm32g0_register(struct ucsi *ucsi)
