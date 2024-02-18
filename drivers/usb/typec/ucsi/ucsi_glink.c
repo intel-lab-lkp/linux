@@ -85,9 +85,9 @@ static int pmic_glink_ucsi_read(struct ucsi *__ucsi, unsigned int offset,
 	unsigned long left;
 	int ret;
 
-	req.hdr.owner = PMIC_GLINK_OWNER_USBC;
-	req.hdr.type = MSG_TYPE_REQ_RESP;
-	req.hdr.opcode = UC_UCSI_READ_BUF_REQ;
+	req.hdr.owner = cpu_to_le32(PMIC_GLINK_OWNER_USBC);
+	req.hdr.type = cpu_to_le32(MSG_TYPE_REQ_RESP);
+	req.hdr.opcode = cpu_to_le32(UC_UCSI_READ_BUF_REQ);
 
 	mutex_lock(&ucsi->lock);
 	memset(ucsi->read_buf, 0, sizeof(ucsi->read_buf));
@@ -122,9 +122,9 @@ static int pmic_glink_ucsi_locked_write(struct pmic_glink_ucsi *ucsi, unsigned i
 	unsigned long left;
 	int ret;
 
-	req.hdr.owner = PMIC_GLINK_OWNER_USBC;
-	req.hdr.type = MSG_TYPE_REQ_RESP;
-	req.hdr.opcode = UC_UCSI_WRITE_BUF_REQ;
+	req.hdr.owner = cpu_to_le32(PMIC_GLINK_OWNER_USBC);
+	req.hdr.type = cpu_to_le32(MSG_TYPE_REQ_RESP);
+	req.hdr.opcode = cpu_to_le32(UC_UCSI_WRITE_BUF_REQ);
 	memcpy(&req.buf[offset], val, val_len);
 
 	reinit_completion(&ucsi->write_ack);
