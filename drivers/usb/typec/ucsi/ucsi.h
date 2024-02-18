@@ -55,6 +55,7 @@ struct dentry;
 
 /**
  * struct ucsi_operations - UCSI I/O operations
+ * @poll_cci: Update the cached CCI value from hardware. Required for reset.
  * @read: Read operation
  * @sync_write: Blocking write operation
  * @async_write: Non-blocking write operation
@@ -65,6 +66,7 @@ struct dentry;
  * return immediately after sending the data to the PPM.
  */
 struct ucsi_operations {
+	int (*poll_cci)(struct ucsi *ucsi);
 	int (*read)(struct ucsi *ucsi, unsigned int offset,
 		    void *val, size_t val_len);
 	int (*sync_write)(struct ucsi *ucsi, unsigned int offset,
@@ -370,6 +372,9 @@ struct ucsi {
 
 	/* The latest "Notification Enable" bits (SET_NOTIFICATION_ENABLE) */
 	u64 ntfy;
+
+	/* The current value of the CCI field. Synced by notifications. */
+	u32 cci;
 
 	/* PPM communication flags */
 	unsigned long flags;

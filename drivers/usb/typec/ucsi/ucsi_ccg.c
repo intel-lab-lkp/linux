@@ -194,7 +194,6 @@ struct ucsi_ccg_altmode {
 
 #define CCGX_MESSAGE_IN_MAX 16
 struct op_region {
-	__le32 cci;
 	u8 message_in[CCGX_MESSAGE_IN_MAX];
 };
 
@@ -338,7 +337,6 @@ static int ccg_op_region_update(struct ucsi_ccg *uc, u32 cci)
 	}
 
 	spin_lock(&uc->op_lock);
-	data->cci = cpu_to_le32(cci);
 	if (UCSI_CCI_LENGTH(cci))
 		memcpy(&data->message_in, buf, size);
 	spin_unlock(&uc->op_lock);
@@ -556,32 +554,24 @@ static void ucsi_ccg_nvidia_altmode(struct ucsi_ccg *uc,
 	}
 }
 
+static int ucsi_ccg_poll_cci(struct ucsi *ucsi)
+{
+	return 0;
+}
+
 static int ucsi_ccg_read(struct ucsi *ucsi, unsigned int offset,
 			 void *val, size_t val_len)
 {
 	struct ucsi_ccg *uc = ucsi_get_drvdata(ucsi);
-	u16 reg = CCGX_RAB_UCSI_DATA_BLOCK(offset);
 	struct ucsi_capability *cap;
 	struct ucsi_altmode *alt;
-	int ret = 0;
-
-	if (offset == UCSI_CCI) {
-		spin_lock(&uc->op_lock);
-		memcpy(val, &(uc->op_data).cci, val_len);
-		spin_unlock(&uc->op_lock);
-	} else if (offset == UCSI_MESSAGE_IN) {
-		spin_lock(&uc->op_lock);
-		memcpy(val, &(uc->op_data).message_in, val_len);
-		spin_unlock(&uc->op_lock);
-	} else {
-		ret = ccg_read(uc, reg, val, val_len);
-	}
-
-	if (ret)
-		return ret;
 
 	if (offset != UCSI_MESSAGE_IN)
-		return ret;
+		return -EINVAL;
+
+	spin_lock(&uc->op_lock);
+	memcpy(val, &uc->op_data.message_in, val_len);
+	spin_unlock(&uc->op_lock);
 
 	switch (UCSI_COMMAND(uc->last_cmd_sent)) {
 	case UCSI_GET_CURRENT_CAM:
@@ -607,7 +597,7 @@ static int ucsi_ccg_read(struct ucsi *ucsi, unsigned int offset,
 	}
 	uc->last_cmd_sent = 0;
 
-	return ret;
+	return 0;
 }
 
 static int ucsi_ccg_async_write(struct ucsi *ucsi, unsigned int offset,
@@ -620,9 +610,7 @@ static int ucsi_ccg_async_write(struct ucsi *ucsi, unsigned int offset,
 	 * UCSI may read CCI instantly after async_write,
 	 * clear CCI to avoid caller getting wrong data before we get CCI from ISR
 	 */
-	spin_lock(&uc->op_lock);
-	uc->op_data.cci = 0;
-	spin_unlock(&uc->op_lock);
+	WRITE_ONCE(ucsi->cci, 0);
 
 	return ccg_write(uc, reg, val, val_len);
 }
@@ -667,6 +655,7 @@ err_clear_bit:
 }
 
 static const struct ucsi_operations ucsi_ccg_ops = {
+	.poll_cci = ucsi_ccg_poll_cci,
 	.read = ucsi_ccg_read,
 	.sync_write = ucsi_ccg_sync_write,
 	.async_write = ucsi_ccg_async_write,
@@ -695,6 +684,7 @@ static irqreturn_t ccg_irq_handler(int irq, void *data)
 	if (ret)
 		goto err_clear_irq;
 	cci = le32_to_cpu(__cci);
+	WRITE_ONCE(uc->ucsi->cci, cci);
 
 	if (UCSI_CCI_CONNECTOR(cci))
 		ucsi_connector_change(uc->ucsi, UCSI_CCI_CONNECTOR(cci));

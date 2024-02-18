@@ -140,10 +140,7 @@ static int ucsi_exec_command(struct ucsi *ucsi, u64 cmd)
 	ret = ucsi->ops->sync_write(ucsi, UCSI_CONTROL, &cmd, sizeof(cmd));
 	if (ret)
 		return ret;
-
-	ret = ucsi->ops->read(ucsi, UCSI_CCI, &cci, sizeof(cci));
-	if (ret)
-		return ret;
+	cci = READ_ONCE(ucsi->cci);
 
 	if (cmd != UCSI_CANCEL && cci & UCSI_CCI_BUSY)
 		return ucsi_exec_command(ucsi, UCSI_CANCEL);
@@ -1037,9 +1034,10 @@ static int ucsi_reset_ppm(struct ucsi *ucsi)
 			goto out;
 		}
 
-		ret = ucsi->ops->read(ucsi, UCSI_CCI, &cci, sizeof(cci));
+		ret = ucsi->ops->poll_cci(ucsi);
 		if (ret)
 			goto out;
+		cci = READ_ONCE(ucsi->cci);
 
 		/* If the PPM is still doing something else, reset it again. */
 		if (cci & ~UCSI_CCI_RESET_COMPLETE) {
@@ -1550,7 +1548,8 @@ struct ucsi *ucsi_create(struct device *dev, const struct ucsi_operations *ops)
 {
 	struct ucsi *ucsi;
 
-	if (!ops || !ops->read || !ops->sync_write || !ops->async_write)
+	if (!ops || !ops->poll_cci || !ops->read || !ops->sync_write ||
+	    !ops->async_write)
 		return ERR_PTR(-EINVAL);
 
 	ucsi = kzalloc(sizeof(*ucsi), GFP_KERNEL);

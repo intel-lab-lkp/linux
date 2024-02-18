@@ -24,7 +24,6 @@ struct ucsi_acpi {
 	struct completion complete;
 	unsigned long flags;
 	guid_t guid;
-	u64 cmd;
 	bool dell_quirk_probed;
 	bool dell_quirk_active;
 };
@@ -45,8 +44,7 @@ static int ucsi_acpi_dsm(struct ucsi_acpi *ua, int func)
 	return 0;
 }
 
-static int ucsi_acpi_read(struct ucsi *ucsi, unsigned int offset,
-			  void *val, size_t val_len)
+static int ucsi_acpi_poll_cci(struct ucsi *ucsi)
 {
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
 	int ret;
@@ -54,6 +52,16 @@ static int ucsi_acpi_read(struct ucsi *ucsi, unsigned int offset,
 	ret = ucsi_acpi_dsm(ua, UCSI_DSM_FUNC_READ);
 	if (ret)
 		return ret;
+
+	WRITE_ONCE(ucsi->cci, le32_to_cpu(*(__le32 *)(ua->base + UCSI_CCI)));
+
+	return 0;
+}
+
+static int ucsi_acpi_read(struct ucsi *ucsi, unsigned int offset,
+			  void *val, size_t val_len)
+{
+	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
 
 	memcpy(val, ua->base + offset, val_len);
 
@@ -66,7 +74,6 @@ static int ucsi_acpi_async_write(struct ucsi *ucsi, unsigned int offset,
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
 
 	memcpy(ua->base + offset, val, val_len);
-	ua->cmd = *(u64 *)val;
 
 	return ucsi_acpi_dsm(ua, UCSI_DSM_FUNC_WRITE);
 }
@@ -100,30 +107,8 @@ out_clear_bit:
 }
 
 static const struct ucsi_operations ucsi_acpi_ops = {
+	.poll_cci = ucsi_acpi_poll_cci,
 	.read = ucsi_acpi_read,
-	.sync_write = ucsi_acpi_sync_write,
-	.async_write = ucsi_acpi_async_write
-};
-
-static int
-ucsi_zenbook_read(struct ucsi *ucsi, unsigned int offset, void *val, size_t val_len)
-{
-	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
-	int ret;
-
-	if (offset == UCSI_VERSION || UCSI_COMMAND(ua->cmd) == UCSI_PPM_RESET) {
-		ret = ucsi_acpi_dsm(ua, UCSI_DSM_FUNC_READ);
-		if (ret)
-			return ret;
-	}
-
-	memcpy(val, ua->base + offset, val_len);
-
-	return 0;
-}
-
-static const struct ucsi_operations ucsi_zenbook_ops = {
-	.read = ucsi_zenbook_read,
 	.sync_write = ucsi_acpi_sync_write,
 	.async_write = ucsi_acpi_async_write
 };
@@ -177,19 +162,13 @@ ucsi_dell_sync_write(struct ucsi *ucsi, unsigned int offset,
 }
 
 static const struct ucsi_operations ucsi_dell_ops = {
+	.poll_cci = ucsi_acpi_poll_cci,
 	.read = ucsi_acpi_read,
 	.sync_write = ucsi_dell_sync_write,
 	.async_write = ucsi_acpi_async_write
 };
 
 static const struct dmi_system_id ucsi_acpi_quirks[] = {
-	{
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "ZenBook UX325UA_UM325UA"),
-		},
-		.driver_data = (void *)&ucsi_zenbook_ops,
-	},
 	{
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
@@ -203,11 +182,9 @@ static void ucsi_acpi_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct ucsi_acpi *ua = data;
 	u32 cci;
-	int ret;
 
-	ret = ua->ucsi->ops->read(ua->ucsi, UCSI_CCI, &cci, sizeof(cci));
-	if (ret)
-		return;
+	cci = le32_to_cpu(*(__le32 *)(ua->base + UCSI_CCI));
+	WRITE_ONCE(ua->ucsi->cci, cci);
 
 	if (UCSI_CCI_CONNECTOR(cci))
 		ucsi_connector_change(ua->ucsi, UCSI_CCI_CONNECTOR(cci));

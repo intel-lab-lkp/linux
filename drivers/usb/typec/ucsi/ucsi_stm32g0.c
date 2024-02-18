@@ -358,6 +358,20 @@ static int ucsi_stm32g0_read_from_hw(struct ucsi_stm32g0 *g0,
 }
 
 /* UCSI ops */
+static int ucsi_stm32g0_poll_cci(struct ucsi *ucsi)
+{
+	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
+	__le32 cci;
+	int ret;
+
+	ret = ucsi_stm32g0_read_from_hw(g0, UCSI_CCI, &cci, sizeof(cci));
+	if (ret)
+		return ret;
+	WRITE_ONCE(ucsi->cci, le32_to_cpu(cci));
+
+	return 0;
+}
+
 static int ucsi_stm32g0_read(struct ucsi *ucsi, unsigned int offset,
 			     void *val, size_t len)
 {
@@ -424,15 +438,18 @@ out_clear_bit:
 static irqreturn_t ucsi_stm32g0_irq_handler(int irq, void *data)
 {
 	struct ucsi_stm32g0 *g0 = data;
+	__le32 __cci;
 	u32 cci;
 	int ret;
 
 	if (g0->suspended)
 		g0->wakeup_event = true;
 
-	ret = ucsi_stm32g0_read(g0->ucsi, UCSI_CCI, &cci, sizeof(cci));
+	ret = ucsi_stm32g0_read_from_hw(g0, UCSI_CCI, &__cci, sizeof(__cci));
 	if (ret)
 		return IRQ_NONE;
+	cci = le32_to_cpu(__cci);
+	WRITE_ONCE(g0->ucsi->cci, cci);
 
 	if (UCSI_CCI_CONNECTOR(cci))
 		ucsi_connector_change(g0->ucsi, UCSI_CCI_CONNECTOR(cci));
@@ -445,6 +462,7 @@ static irqreturn_t ucsi_stm32g0_irq_handler(int irq, void *data)
 }
 
 static const struct ucsi_operations ucsi_stm32g0_ops = {
+	.poll_cci = ucsi_stm32g0_poll_cci,
 	.read = ucsi_stm32g0_read,
 	.sync_write = ucsi_stm32g0_sync_write,
 	.async_write = ucsi_stm32g0_async_write,
@@ -626,7 +644,7 @@ static int ucsi_stm32g0_probe_bootloader(struct ucsi *ucsi)
 	 * Try to guess if the STM32G0 is running a UCSI firmware. First probe the UCSI FW at its
 	 * i2c address. Fallback to bootloader i2c address only if firmware-name is specified.
 	 */
-	ret = ucsi_stm32g0_read(ucsi, UCSI_VERSION, &ucsi_version, sizeof(ucsi_version));
+	ret = ucsi_stm32g0_read_from_hw(g0, UCSI_VERSION, &ucsi_version, sizeof(ucsi_version));
 	if (!ret || !g0->fw_name)
 		return ret;
 
