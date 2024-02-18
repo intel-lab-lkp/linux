@@ -3487,6 +3487,10 @@ static int phy_probe(struct device *dev)
 		phy_dev_id->phy_id_mask = phydrv->phy_id_mask;
 	}
 
+	/* Fill PHY ID with dev_id if empty and PHY is C45 */
+	if (!phydev->phy_id && phydev->is_c45)
+		phydev->phy_id = phy_dev_id->phy_id;
+
 	/* Disable the interrupt if the PHY doesn't support it
 	 * but the interrupt is still a valid one
 	 */
