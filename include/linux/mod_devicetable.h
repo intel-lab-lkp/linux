@@ -630,10 +630,12 @@ struct platform_device_id {
  *     for this PHY type
  * @phy_id_mask: Defines the significant bits of @phy_id.  A value of 0
  *     is used to terminate an array of struct mdio_device_id.
+ * @name: Optional Friendly name that identify the PHY device/family.
  */
 struct mdio_device_id {
 	__u32 phy_id;
 	__u32 phy_id_mask;
+	const char *name;
 };
 
 struct zorro_device_id {
