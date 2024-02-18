@@ -845,16 +845,6 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id		= (_oui),					\
 	.phy_id_mask	= 0xfffffff0,					\
 	.name		= _name,					\
-	/* PHY_GBIT_FEATURES */						\
-	.flags		= PHY_IS_INTERNAL,				\
-	.config_init	= bcm7xxx_28nm_config_init,			\
-	.resume		= bcm7xxx_28nm_resume,				\
-	.get_tunable	= bcm7xxx_28nm_get_tunable,			\
-	.set_tunable	= bcm7xxx_28nm_set_tunable,			\
-	.get_sset_count	= bcm_phy_get_sset_count,			\
-	.get_strings	= bcm_phy_get_strings,				\
-	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
-	.probe		= bcm7xxx_28nm_probe,				\
 }
 
 #define BCM7XXX_28NM_EPHY(_oui, _name)					\
@@ -862,16 +852,6 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id		= (_oui),					\
 	.phy_id_mask	= 0xfffffff0,					\
 	.name		= _name,					\
-	/* PHY_BASIC_FEATURES */					\
-	.flags		= PHY_IS_INTERNAL,				\
-	.config_init	= bcm7xxx_28nm_ephy_config_init,		\
-	.resume		= bcm7xxx_28nm_ephy_resume,			\
-	.get_sset_count	= bcm_phy_get_sset_count,			\
-	.get_strings	= bcm_phy_get_strings,				\
-	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
-	.probe		= bcm7xxx_28nm_probe,				\
-	.read_mmd	= bcm7xxx_28nm_ephy_read_mmd,			\
-	.write_mmd	= bcm7xxx_28nm_ephy_write_mmd,			\
 }
 
 #define BCM7XXX_40NM_EPHY(_oui, _name)					\
@@ -879,12 +859,6 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id         = (_oui),					\
 	.phy_id_mask    = 0xfffffff0,					\
 	.name           = _name,					\
-	/* PHY_BASIC_FEATURES */					\
-	.flags          = PHY_IS_INTERNAL,				\
-	.soft_reset	= genphy_soft_reset,				\
-	.config_init    = bcm7xxx_config_init,				\
-	.suspend        = bcm7xxx_suspend,				\
-	.resume         = bcm7xxx_config_init,				\
 }
 
 #define BCM7XXX_16NM_EPHY(_oui, _name)					\
@@ -892,41 +866,91 @@ static int bcm7xxx_28nm_probe(struct phy_device *phydev)
 	.phy_id		= (_oui),					\
 	.phy_id_mask	= 0xfffffff0,					\
 	.name		= _name,					\
-	/* PHY_BASIC_FEATURES */					\
-	.flags		= PHY_IS_INTERNAL,				\
-	.get_sset_count	= bcm_phy_get_sset_count,			\
-	.get_strings	= bcm_phy_get_strings,				\
-	.get_stats	= bcm7xxx_28nm_get_phy_stats,			\
-	.probe		= bcm7xxx_28nm_probe,				\
-	.config_init	= bcm7xxx_16nm_ephy_config_init,		\
-	.config_aneg	= genphy_config_aneg,				\
-	.read_status	= genphy_read_status,				\
-	.resume		= bcm7xxx_16nm_ephy_resume,			\
 }
 
 static struct phy_driver bcm7xxx_driver[] = {
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM72113, "Broadcom BCM72113"),
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM72116, "Broadcom BCM72116"),
-	BCM7XXX_16NM_EPHY(PHY_ID_BCM72165, "Broadcom BCM72165"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7250, "Broadcom BCM7250"),
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM7255, "Broadcom BCM7255"),
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM7260, "Broadcom BCM7260"),
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM7268, "Broadcom BCM7268"),
-	BCM7XXX_28NM_EPHY(PHY_ID_BCM7271, "Broadcom BCM7271"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7278, "Broadcom BCM7278"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7364, "Broadcom BCM7364"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7366, "Broadcom BCM7366"),
-	BCM7XXX_16NM_EPHY(PHY_ID_BCM74165, "Broadcom BCM74165"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM74371, "Broadcom BCM74371"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7439, "Broadcom BCM7439"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7439_2, "Broadcom BCM7439 (2)"),
-	BCM7XXX_28NM_GPHY(PHY_ID_BCM7445, "Broadcom BCM7445"),
-	BCM7XXX_40NM_EPHY(PHY_ID_BCM7346, "Broadcom BCM7346"),
-	BCM7XXX_40NM_EPHY(PHY_ID_BCM7362, "Broadcom BCM7362"),
-	BCM7XXX_40NM_EPHY(PHY_ID_BCM7425, "Broadcom BCM7425"),
-	BCM7XXX_40NM_EPHY(PHY_ID_BCM7429, "Broadcom BCM7429"),
-	BCM7XXX_40NM_EPHY(PHY_ID_BCM7435, "Broadcom BCM7435"),
-	BCM7XXX_16NM_EPHY(PHY_ID_BCM7712, "Broadcom BCM7712"),
+{
+	.name		= "Broadcom BCM7XXX 16NM EPHY",
+	.ids		= (const struct mdio_device_id []){
+		BCM7XXX_16NM_EPHY(PHY_ID_BCM72165, "Broadcom BCM72165"),
+		BCM7XXX_16NM_EPHY(PHY_ID_BCM74165, "Broadcom BCM74165"),
+		BCM7XXX_16NM_EPHY(PHY_ID_BCM7712, "Broadcom BCM7712"),
+		{ /* sentinel */ },
+	},
+	/* PHY_BASIC_FEATURES */
+	.flags		= PHY_IS_INTERNAL,
+	.get_sset_count	= bcm_phy_get_sset_count,
+	.get_strings	= bcm_phy_get_strings,
+	.get_stats	= bcm7xxx_28nm_get_phy_stats,
+	.probe		= bcm7xxx_28nm_probe,
+	.config_init	= bcm7xxx_16nm_ephy_config_init,
+	.config_aneg	= genphy_config_aneg,
+	.read_status	= genphy_read_status,
+	.resume		= bcm7xxx_16nm_ephy_resume,
+},
+{
+	.name		= "Broadcom BCM7XXX 28NM GPHY",
+	.ids		= (const struct mdio_device_id []){
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7250, "Broadcom BCM7250"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7278, "Broadcom BCM7278"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7364, "Broadcom BCM7364"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7366, "Broadcom BCM7366"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM74371, "Broadcom BCM74371"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7439, "Broadcom BCM7439"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7439_2, "Broadcom BCM7439 (2)"),
+		BCM7XXX_28NM_GPHY(PHY_ID_BCM7445, "Broadcom BCM7445"),
+		{ /* sentinel */ },
+	},
+	/* PHY_GBIT_FEATURES */
+	.flags		= PHY_IS_INTERNAL,
+	.config_init	= bcm7xxx_28nm_config_init,
+	.resume		= bcm7xxx_28nm_resume,
+	.get_tunable	= bcm7xxx_28nm_get_tunable,
+	.set_tunable	= bcm7xxx_28nm_set_tunable,
+	.get_sset_count	= bcm_phy_get_sset_count,
+	.get_strings	= bcm_phy_get_strings,
+	.get_stats	= bcm7xxx_28nm_get_phy_stats,
+	.probe		= bcm7xxx_28nm_probe,
+},
+{
+	.name		= "Broadcom BCM7XXX 28NM EPHY",
+	.ids		= (const struct mdio_device_id []){
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM72113, "Broadcom BCM72113"),
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM72116, "Broadcom BCM72116"),
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM7255, "Broadcom BCM7255"),
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM7260, "Broadcom BCM7260"),
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM7268, "Broadcom BCM7268"),
+		BCM7XXX_28NM_EPHY(PHY_ID_BCM7271, "Broadcom BCM7271"),
+		{ /* sentinel */ },
+	},
+	/* PHY_BASIC_FEATURES */
+	.flags		= PHY_IS_INTERNAL,
+	.config_init	= bcm7xxx_28nm_ephy_config_init,
+	.resume		= bcm7xxx_28nm_ephy_resume,
+	.get_sset_count	= bcm_phy_get_sset_count,
+	.get_strings	= bcm_phy_get_strings,
+	.get_stats	= bcm7xxx_28nm_get_phy_stats,
+	.probe		= bcm7xxx_28nm_probe,
+	.read_mmd	= bcm7xxx_28nm_ephy_read_mmd,
+	.write_mmd	= bcm7xxx_28nm_ephy_write_mmd,
+},
+{
+	.name		= "Broadcom BCM7XXX 40NM EPHY",
+	.ids		= (const struct mdio_device_id []){
+		BCM7XXX_40NM_EPHY(PHY_ID_BCM7346, "Broadcom BCM7346"),
+		BCM7XXX_40NM_EPHY(PHY_ID_BCM7362, "Broadcom BCM7362"),
+		BCM7XXX_40NM_EPHY(PHY_ID_BCM7425, "Broadcom BCM7425"),
+		BCM7XXX_40NM_EPHY(PHY_ID_BCM7429, "Broadcom BCM7429"),
+		BCM7XXX_40NM_EPHY(PHY_ID_BCM7435, "Broadcom BCM7435"),
+		{ /* sentinel */ },
+	},
+	/* PHY_BASIC_FEATURES */
+	.flags          = PHY_IS_INTERNAL,
+	.soft_reset	= genphy_soft_reset,
+	.config_init    = bcm7xxx_config_init,
+	.suspend        = bcm7xxx_suspend,
+	.resume         = bcm7xxx_config_init,
+},
 };
 
 static struct mdio_device_id __maybe_unused bcm7xxx_tbl[] = {
