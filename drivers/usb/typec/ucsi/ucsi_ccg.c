@@ -1356,7 +1356,7 @@ static int ccg_restart(struct ucsi_ccg *uc)
 		return status;
 	}
 
-	status = ucsi_register(uc->ucsi);
+	status = ucsi_register(uc->ucsi, uc->ucsi->version);
 	if (status) {
 		dev_err(uc->dev, "failed to register the interface\n");
 		return status;
@@ -1422,6 +1422,7 @@ static int ucsi_ccg_probe(struct i2c_client *client)
 	struct ucsi_ccg *uc;
 	const char *fw_name;
 	int status;
+	__le16 version;
 
 	uc = devm_kzalloc(dev, sizeof(*uc), GFP_KERNEL);
 	if (!uc)
@@ -1477,7 +1478,14 @@ static int ucsi_ccg_probe(struct i2c_client *client)
 		goto out_ucsi_destroy;
 	}
 
-	status = ucsi_register(uc->ucsi);
+	status = ccg_read(uc, CCGX_RAB_UCSI_DATA_BLOCK(UCSI_VERSION),
+			  (u8 *)&version, sizeof(version));
+	if (status < 0) {
+		dev_err(uc->dev, "cannot read UCSI version - %d\n", status);
+		return status;
+	}
+
+	status = ucsi_register(uc->ucsi, le16_to_cpu(version));
 	if (status)
 		goto out_free_irq;
 

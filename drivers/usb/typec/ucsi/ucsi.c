@@ -1581,18 +1581,13 @@ EXPORT_SYMBOL_GPL(ucsi_destroy);
 /**
  * ucsi_register - Register UCSI interface
  * @ucsi: UCSI instance
+ * @version: The revision of the UCSI spec
  */
-int ucsi_register(struct ucsi *ucsi)
+int ucsi_register(struct ucsi *ucsi, u16 version)
 {
-	int ret;
-
-	ret = ucsi->ops->read(ucsi, UCSI_VERSION, &ucsi->version,
-			      sizeof(ucsi->version));
-	if (ret)
-		return ret;
-
-	if (!ucsi->version)
+	if (!version)
 		return -ENODEV;
+	ucsi->version = version;
 
 	/*
 	 * Version format is JJ.M.N (JJ = Major version, M = Minor version,

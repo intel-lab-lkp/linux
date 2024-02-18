@@ -226,6 +226,7 @@ static int ucsi_acpi_probe(struct platform_device *pdev)
 	const struct dmi_system_id *id;
 	struct ucsi_acpi *ua;
 	struct resource *res;
+	u16 version;
 	acpi_status status;
 	int ret;
 
@@ -272,7 +273,12 @@ static int ucsi_acpi_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	ret = ucsi_register(ua->ucsi);
+	ret = ucsi_acpi_dsm(ua, UCSI_DSM_FUNC_READ);
+	if (ret)
+		return ret;
+	version = le16_to_cpu(*(__le16 *)(ua->base + UCSI_VERSION));
+
+	ret = ucsi_register(ua->ucsi, version);
 	if (ret) {
 		acpi_remove_notify_handler(ACPI_HANDLE(&pdev->dev),
 					   ACPI_DEVICE_NOTIFY,

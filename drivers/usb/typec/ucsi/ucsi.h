@@ -77,7 +77,7 @@ struct ucsi_operations {
 
 struct ucsi *ucsi_create(struct device *dev, const struct ucsi_operations *ops);
 void ucsi_destroy(struct ucsi *ucsi);
-int ucsi_register(struct ucsi *ucsi);
+int ucsi_register(struct ucsi *ucsi, u16 version);
 void ucsi_unregister(struct ucsi *ucsi);
 void *ucsi_get_drvdata(struct ucsi *ucsi);
 void ucsi_set_drvdata(struct ucsi *ucsi, void *data);

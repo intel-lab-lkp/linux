@@ -255,8 +255,17 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 static void pmic_glink_ucsi_register(struct work_struct *work)
 {
 	struct pmic_glink_ucsi *ucsi = container_of(work, struct pmic_glink_ucsi, register_work);
+	__le16 version;
+	int ret;
 
-	ucsi_register(ucsi->ucsi);
+	ret = pmic_glink_ucsi_read(ucsi->ucsi, UCSI_VERSION, &version,
+				   sizeof(version));
+	if (ret < 0) {
+		dev_err(ucsi->dev, "cannot read version: %d\n", ret);
+		return;
+	}
+
+	ucsi_register(ucsi->ucsi, le16_to_cpu(version));
 }
 
 static void pmic_glink_ucsi_callback(const void *data, size_t len, void *priv)

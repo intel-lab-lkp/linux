@@ -325,10 +325,10 @@ static int ucsi_stm32g0_fw_rcv(struct ucsi *ucsi, void *data, size_t len)
 	return ucsi_stm32g0_bl_rcv_woack(ucsi, data, len);
 }
 
-/* UCSI ops */
-static int ucsi_stm32g0_read(struct ucsi *ucsi, unsigned int offset, void *val, size_t len)
+static int ucsi_stm32g0_read_from_hw(struct ucsi_stm32g0 *g0,
+				     unsigned int offset,
+				     void *val, size_t len)
 {
-	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
 	struct i2c_client *client = g0->client;
 	u8 reg = offset;
 	struct i2c_msg msg[] = {
@@ -355,6 +355,15 @@ static int ucsi_stm32g0_read(struct ucsi *ucsi, unsigned int offset, void *val, 
 	}
 
 	return 0;
+}
+
+/* UCSI ops */
+static int ucsi_stm32g0_read(struct ucsi *ucsi, unsigned int offset,
+			     void *val, size_t len)
+{
+	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
+
+	return ucsi_stm32g0_read_from_hw(g0, offset, val, len);
 }
 
 static int ucsi_stm32g0_async_write(struct ucsi *ucsi, unsigned int offset, const void *val,
@@ -445,6 +454,7 @@ static int ucsi_stm32g0_register(struct ucsi *ucsi)
 {
 	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
 	struct i2c_client *client = g0->client;
+	__le16 version;
 	int ret;
 
 	/* Request alert interrupt */
@@ -455,7 +465,15 @@ static int ucsi_stm32g0_register(struct ucsi *ucsi)
 		return ret;
 	}
 
-	ret = ucsi_register(ucsi);
+	ret = ucsi_stm32g0_read_from_hw(g0, UCSI_VERSION, &version,
+					sizeof(version));
+	if (ret) {
+		dev_err(g0->dev, "failed to read version number: %d\n", ret);
+		free_irq(client->irq, g0);
+		return ret;
+	}
+
+	ret = ucsi_register(ucsi, le16_to_cpu(version));
 	if (ret) {
 		dev_err_probe(g0->dev, ret, "ucsi_register failed\n");
 		free_irq(client->irq, g0);
