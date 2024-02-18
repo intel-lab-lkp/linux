@@ -192,10 +192,10 @@ struct ucsi_ccg_altmode {
 	bool checked;
 } __packed;
 
-#define CCGX_MESSAGE_IN_MAX 4
+#define CCGX_MESSAGE_IN_MAX 16
 struct op_region {
 	__le32 cci;
-	__le32 message_in[CCGX_MESSAGE_IN_MAX];
+	u8 message_in[CCGX_MESSAGE_IN_MAX];
 };
 
 struct ucsi_ccg {
@@ -678,6 +678,7 @@ static irqreturn_t ccg_irq_handler(int irq, void *data)
 	u16 reg = CCGX_RAB_UCSI_DATA_BLOCK(UCSI_CCI);
 	struct ucsi_ccg *uc = data;
 	u8 intr_reg;
+	__le32 __cci;
 	u32 cci = 0;
 	int ret = 0;
 
@@ -690,9 +691,10 @@ static irqreturn_t ccg_irq_handler(int irq, void *data)
 	else if (!(intr_reg & UCSI_READ_INT))
 		goto err_clear_irq;
 
-	ret = ccg_read(uc, reg, (void *)&cci, sizeof(cci));
+	ret = ccg_read(uc, reg, (void *)&__cci, sizeof(__cci));
 	if (ret)
 		goto err_clear_irq;
+	cci = le32_to_cpu(__cci);
 
 	if (UCSI_CCI_CONNECTOR(cci))
 		ucsi_connector_change(uc->ucsi, UCSI_CCI_CONNECTOR(cci));
