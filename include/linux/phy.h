@@ -549,6 +549,7 @@ struct macsec_ops;
  * @drv: Pointer to the driver for this PHY instance
  * @devlink: Create a link between phy dev and mac dev, if the external phy
  *           used by current mac interface is managed by another mac interface.
+ * @dev_id: The matched device ID for this PHY instance
  * @phy_id: UID for this device found during discovery
  * @c45_ids: 802.3-c45 Device Identifiers if is_c45.
  * @is_c45:  Set to true if this PHY uses clause 45 addressing.
@@ -647,6 +648,7 @@ struct phy_device {
 
 	struct device_link *devlink;
 
+	const struct mdio_device_id dev_id;
 	u32 phy_id;
 
 	struct phy_c45_device_ids c45_ids;
@@ -887,6 +889,8 @@ struct phy_led {
  * struct phy_driver - Driver structure for a particular PHY type
  *
  * @mdiodrv: Data common to all MDIO devices
+ * @ids: array of mdio device IDs to match this driver (terminated with
+ *   zero phy_id_mask)
  * @phy_id: The result of reading the UID registers of this PHY
  *   type, and ANDing them with the phy_id_mask.  This driver
  *   only works for PHYs with IDs which match this field
@@ -908,6 +912,7 @@ struct phy_led {
  */
 struct phy_driver {
 	struct mdio_driver_common mdiodrv;
+	const struct mdio_device_id *ids;
 	u32 phy_id;
 	char *name;
 	u32 phy_id_mask;
@@ -1208,7 +1213,8 @@ static inline bool phy_id_compare(u32 id1, u32 id2, u32 mask)
  */
 static inline bool phydev_id_compare(struct phy_device *phydev, u32 id)
 {
-	return phy_id_compare(id, phydev->phy_id, phydev->drv->phy_id_mask);
+	return phy_id_compare(id, phydev->dev_id.phy_id,
+			      phydev->dev_id.phy_id_mask);
 }
 
 /* A Structure for boards to register fixups with the PHY Lib */

@@ -533,12 +533,74 @@ static int phy_scan_fixups(struct phy_device *phydev)
 	return 0;
 }
 
+static int phy_driver_match_id(struct phy_driver *phydrv, u32 id,
+			       const struct mdio_device_id **dev_id)
+{
+	const struct mdio_device_id *ids = phydrv->ids;
+
+	/* PHY driver might provide an array of different PHY IDs and
+	 * masks. Walk them if this is the case and compare with ID.
+	 */
+	if (ids) {
+		/* From mdio_device_id struct phy_id_mask MUST
+		 * be used as sentinel.
+		 */
+		while (ids->phy_id_mask) {
+			if (phy_id_compare(id, ids->phy_id, ids->phy_id_mask)) {
+				if (dev_id)
+					*dev_id = ids;
+
+				return 1;
+			}
+
+			ids++;
+		}
+	}
+
+	if (phy_id_compare(id, phydrv->phy_id, phydrv->phy_id_mask))
+		return 1;
+
+	return 0;
+}
+
+/**
+ * phy_driver_match - match a phydriver with a given PHY istance
+ * @phydrv: PHY driver to compare with
+ * @phydev: PHY istance to use for comparison. Either PHY ID will be used or
+ *   with C45 PHY ID is extracted from Package regs.
+ * @dev_id: Pointer where to store pointer to a matchin mdio_device_id.
+ *   mdio_device_id are assumed to be statically allocated for each PHY driver,
+ *   hence the reference to this struct is returned here.
+ *
+ * Returns 1 if matching, 0 otherwise. dev_id can be passed as NULL to skip
+ * referecing a matching mdio_device_id if found.
+ */
+static int phy_driver_match(struct phy_driver *phydrv, struct phy_device *phydev,
+			    const struct mdio_device_id **dev_id)
+{
+	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
+	int i;
+
+	if (!phydev->is_c45)
+		return phy_driver_match_id(phydrv, phydev->phy_id,
+					   dev_id);
+
+	for (i = 1; i < num_ids; i++) {
+		if (phydev->c45_ids.device_ids[i] == 0xffffffff)
+			continue;
+
+		if (phy_driver_match_id(phydrv, phydev->c45_ids.device_ids[i],
+					dev_id))
+			return 1;
+	}
+
+	return 0;
+}
+
 static int phy_bus_match(struct device *dev, struct device_driver *drv)
 {
 	struct phy_device *phydev = to_phy_device(dev);
 	struct phy_driver *phydrv = to_phy_driver(drv);
-	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
-	int i;
 
 	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
 		return 0;
@@ -546,20 +608,7 @@ static int phy_bus_match(struct device *dev, struct device_driver *drv)
 	if (phydrv->match_phy_device)
 		return phydrv->match_phy_device(phydev);
 
-	if (phydev->is_c45) {
-		for (i = 1; i < num_ids; i++) {
-			if (phydev->c45_ids.device_ids[i] == 0xffffffff)
-				continue;
-
-			if (phy_id_compare(phydev->c45_ids.device_ids[i],
-					   phydrv->phy_id, phydrv->phy_id_mask))
-				return 1;
-		}
-		return 0;
-	} else {
-		return phy_id_compare(phydev->phy_id, phydrv->phy_id,
-				      phydrv->phy_id_mask);
-	}
+	return phy_driver_match(phydrv, phydev, NULL);
 }
 
 static ssize_t
@@ -3421,9 +3470,22 @@ static int phy_probe(struct device *dev)
 	struct phy_device *phydev = to_phy_device(dev);
 	struct device_driver *drv = phydev->mdio.dev.driver;
 	struct phy_driver *phydrv = to_phy_driver(drv);
+	const struct mdio_device_id *dev_id = NULL;
+	struct mdio_device_id *phy_dev_id;
 	int err = 0;
 
 	phydev->drv = phydrv;
+	phy_dev_id = (struct mdio_device_id *)&phydev->dev_id;
+	/* Fill the mdio_device_id for the PHY istance.
+	 * If PHY driver provide an array of PHYs, search the right one,
+	 * in the other case fill it with the phy_driver data.
+	 */
+	if (phy_driver_match(phydrv, phydev, &dev_id) && dev_id) {
+		memcpy(phy_dev_id, dev_id, sizeof(*dev_id));
+	} else {
+		phy_dev_id->phy_id = phydrv->phy_id;
+		phy_dev_id->phy_id_mask = phydrv->phy_id_mask;
+	}
 
 	/* Disable the interrupt if the PHY doesn't support it
 	 * but the interrupt is still a valid one
