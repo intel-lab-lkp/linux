@@ -3482,9 +3482,15 @@ static int phy_probe(struct device *dev)
 	 */
 	if (phy_driver_match(phydrv, phydev, &dev_id) && dev_id) {
 		memcpy(phy_dev_id, dev_id, sizeof(*dev_id));
+		/* If defined, overwrite the PHY driver dev name with a
+		 * more specific one from the matching dev_id.
+		 */
+		if (dev_id->name)
+			drv->name = dev_id->name;
 	} else {
 		phy_dev_id->phy_id = phydrv->phy_id;
 		phy_dev_id->phy_id_mask = phydrv->phy_id_mask;
+		phy_dev_id->name = phydrv->name;
 	}
 
 	/* Fill PHY ID with dev_id if empty and PHY is C45 */
