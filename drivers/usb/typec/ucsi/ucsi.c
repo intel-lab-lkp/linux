@@ -46,7 +46,7 @@ static int ucsi_read_message_in(struct ucsi *ucsi, void *buf,
 	if (ucsi->version <= UCSI_VERSION_1_2)
 		buf_size = clamp(buf_size, 0, 16);
 
-	return ucsi->ops->read(ucsi, UCSI_MESSAGE_IN, buf, buf_size);
+	return ucsi->ops->read_data(ucsi, buf, buf_size);
 }
 
 static int ucsi_acknowledge_command(struct ucsi *ucsi)
@@ -1548,8 +1548,8 @@ struct ucsi *ucsi_create(struct device *dev, const struct ucsi_operations *ops)
 {
 	struct ucsi *ucsi;
 
-	if (!ops || !ops->poll_cci || !ops->read || !ops->sync_write ||
-	    !ops->async_write)
+	if (!ops || !ops->poll_cci || !ops->read_data || !ops->write_data ||
+	    !ops->sync_write || !ops->async_write)
 		return ERR_PTR(-EINVAL);
 
 	ucsi = kzalloc(sizeof(*ucsi), GFP_KERNEL);

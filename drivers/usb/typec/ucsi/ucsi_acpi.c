@@ -58,12 +58,21 @@ static int ucsi_acpi_poll_cci(struct ucsi *ucsi)
 	return 0;
 }
 
-static int ucsi_acpi_read(struct ucsi *ucsi, unsigned int offset,
-			  void *val, size_t val_len)
+static int ucsi_acpi_read_data(struct ucsi *ucsi, void *val, size_t val_len)
 {
 	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
 
-	memcpy(val, ua->base + offset, val_len);
+	memcpy(val, ua->base + UCSI_MESSAGE_IN, val_len);
+
+	return 0;
+}
+
+static int ucsi_acpi_write_data(struct ucsi *ucsi, const void *val,
+				size_t val_len)
+{
+	struct ucsi_acpi *ua = ucsi_get_drvdata(ucsi);
+
+	memcpy(ua->base + UCSI_MESSAGE_OUT, val, val_len);
 
 	return 0;
 }
@@ -108,7 +117,8 @@ out_clear_bit:
 
 static const struct ucsi_operations ucsi_acpi_ops = {
 	.poll_cci = ucsi_acpi_poll_cci,
-	.read = ucsi_acpi_read,
+	.read_data = ucsi_acpi_read_data,
+	.write_data = ucsi_acpi_write_data,
 	.sync_write = ucsi_acpi_sync_write,
 	.async_write = ucsi_acpi_async_write
 };
@@ -163,7 +173,8 @@ ucsi_dell_sync_write(struct ucsi *ucsi, unsigned int offset,
 
 static const struct ucsi_operations ucsi_dell_ops = {
 	.poll_cci = ucsi_acpi_poll_cci,
-	.read = ucsi_acpi_read,
+	.read_data = ucsi_acpi_read_data,
+	.write_data = ucsi_acpi_write_data,
 	.sync_write = ucsi_dell_sync_write,
 	.async_write = ucsi_acpi_async_write
 };

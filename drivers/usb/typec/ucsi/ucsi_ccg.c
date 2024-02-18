@@ -559,15 +559,11 @@ static int ucsi_ccg_poll_cci(struct ucsi *ucsi)
 	return 0;
 }
 
-static int ucsi_ccg_read(struct ucsi *ucsi, unsigned int offset,
-			 void *val, size_t val_len)
+static int ucsi_ccg_read_data(struct ucsi *ucsi, void *val, size_t val_len)
 {
 	struct ucsi_ccg *uc = ucsi_get_drvdata(ucsi);
 	struct ucsi_capability *cap;
 	struct ucsi_altmode *alt;
-
-	if (offset != UCSI_MESSAGE_IN)
-		return -EINVAL;
 
 	spin_lock(&uc->op_lock);
 	memcpy(val, &uc->op_data.message_in, val_len);
@@ -598,6 +594,15 @@ static int ucsi_ccg_read(struct ucsi *ucsi, unsigned int offset,
 	uc->last_cmd_sent = 0;
 
 	return 0;
+}
+
+static int ucsi_ccg_write_data(struct ucsi *ucsi, const void *val,
+			       size_t val_len)
+{
+	struct ucsi_ccg *uc = ucsi_get_drvdata(ucsi);
+	u16 reg = CCGX_RAB_UCSI_DATA_BLOCK(UCSI_MESSAGE_OUT);
+
+	return ccg_write(uc, reg, val, val_len);
 }
 
 static int ucsi_ccg_async_write(struct ucsi *ucsi, unsigned int offset,
@@ -656,7 +661,8 @@ err_clear_bit:
 
 static const struct ucsi_operations ucsi_ccg_ops = {
 	.poll_cci = ucsi_ccg_poll_cci,
-	.read = ucsi_ccg_read,
+	.read_data = ucsi_ccg_read_data,
+	.write_data = ucsi_ccg_write_data,
 	.sync_write = ucsi_ccg_sync_write,
 	.async_write = ucsi_ccg_async_write,
 	.update_altmodes = ucsi_ccg_update_altmodes

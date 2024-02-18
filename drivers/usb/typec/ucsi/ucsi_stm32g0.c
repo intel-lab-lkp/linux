@@ -372,18 +372,17 @@ static int ucsi_stm32g0_poll_cci(struct ucsi *ucsi)
 	return 0;
 }
 
-static int ucsi_stm32g0_read(struct ucsi *ucsi, unsigned int offset,
-			     void *val, size_t len)
+static int ucsi_stm32g0_read_data(struct ucsi *ucsi, void *val, size_t len)
 {
 	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
 
-	return ucsi_stm32g0_read_from_hw(g0, offset, val, len);
+	return ucsi_stm32g0_read_from_hw(g0, UCSI_MESSAGE_IN, val, len);
 }
 
-static int ucsi_stm32g0_async_write(struct ucsi *ucsi, unsigned int offset, const void *val,
-				    size_t len)
+static int ucsi_stm32g0_write_to_hw(struct ucsi_stm32g0 *g0,
+				    unsigned int offset,
+				    const void *val, size_t len)
 {
-	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
 	struct i2c_client *client = g0->client;
 	struct i2c_msg msg[] = {
 		{
@@ -412,6 +411,22 @@ static int ucsi_stm32g0_async_write(struct ucsi *ucsi, unsigned int offset, cons
 	}
 
 	return 0;
+}
+
+static int ucsi_stm32g0_write_data(struct ucsi *ucsi,
+				   const void *val, size_t len)
+{
+	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
+
+	return ucsi_stm32g0_write_to_hw(g0, UCSI_MESSAGE_OUT, val, len);
+}
+
+static int ucsi_stm32g0_async_write(struct ucsi *ucsi, unsigned int offset,
+				    const void *val, size_t len)
+{
+	struct ucsi_stm32g0 *g0 = ucsi_get_drvdata(ucsi);
+
+	return ucsi_stm32g0_write_to_hw(g0, offset, val, len);
 }
 
 static int ucsi_stm32g0_sync_write(struct ucsi *ucsi, unsigned int offset, const void *val,
@@ -463,7 +478,8 @@ static irqreturn_t ucsi_stm32g0_irq_handler(int irq, void *data)
 
 static const struct ucsi_operations ucsi_stm32g0_ops = {
 	.poll_cci = ucsi_stm32g0_poll_cci,
-	.read = ucsi_stm32g0_read,
+	.read_data = ucsi_stm32g0_read_data,
+	.write_data = ucsi_stm32g0_write_data,
 	.sync_write = ucsi_stm32g0_sync_write,
 	.async_write = ucsi_stm32g0_async_write,
 };

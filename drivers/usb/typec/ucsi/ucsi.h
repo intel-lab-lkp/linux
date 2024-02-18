@@ -56,7 +56,8 @@ struct dentry;
 /**
  * struct ucsi_operations - UCSI I/O operations
  * @poll_cci: Update the cached CCI value from hardware. Required for reset.
- * @read: Read operation
+ * @read_data: Read MESSAGE_IN data
+ * @write_data: Write MESSAGE_OUT data
  * @sync_write: Blocking write operation
  * @async_write: Non-blocking write operation
  * @update_altmodes: Squashes duplicate DP altmodes
@@ -67,8 +68,8 @@ struct dentry;
  */
 struct ucsi_operations {
 	int (*poll_cci)(struct ucsi *ucsi);
-	int (*read)(struct ucsi *ucsi, unsigned int offset,
-		    void *val, size_t val_len);
+	int (*read_data)(struct ucsi *ucsi, void *val, size_t val_len);
+	int (*write_data)(struct ucsi *ucsi, const void *val, size_t val_len);
 	int (*sync_write)(struct ucsi *ucsi, unsigned int offset,
 			  const void *val, size_t val_len);
 	int (*async_write)(struct ucsi *ucsi, unsigned int offset,

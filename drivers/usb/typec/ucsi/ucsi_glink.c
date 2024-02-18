@@ -75,6 +75,7 @@ struct pmic_glink_ucsi {
 	struct work_struct register_work;
 
 	u8 read_buf[UCSI_BUF_SIZE];
+	u8 write_buf[UCSI_BUF_SIZE];
 };
 
 static int pmic_glink_sync_read_buf(struct pmic_glink_ucsi *ucsi)
@@ -129,14 +130,24 @@ static int pmic_glink_ucsi_poll_cci(struct ucsi *__ucsi)
 	return 0;
 }
 
-static int pmic_glink_ucsi_read(struct ucsi *__ucsi, unsigned int offset,
-				void *val, size_t val_len)
+static int pmic_glink_ucsi_read_data(struct ucsi *__ucsi,
+				     void *val, size_t val_len)
 {
 	struct pmic_glink_ucsi *ucsi = ucsi_get_drvdata(__ucsi);
 
 	mutex_lock(&ucsi->lock);
-	memcpy(val, &ucsi->read_buf[offset], val_len);
+	memcpy(val, &ucsi->read_buf[UCSI_MESSAGE_IN], val_len);
 	mutex_unlock(&ucsi->lock);
+
+	return 0;
+}
+
+static int pmic_glink_ucsi_write_data(struct ucsi *__ucsi,
+				      const void *val, size_t val_len)
+{
+	struct pmic_glink_ucsi *ucsi = ucsi_get_drvdata(__ucsi);
+
+	memcpy(&ucsi->write_buf[UCSI_MESSAGE_OUT], val, val_len);
 
 	return 0;
 }
@@ -148,10 +159,15 @@ static int pmic_glink_ucsi_locked_write(struct pmic_glink_ucsi *ucsi, unsigned i
 	unsigned long left;
 	int ret;
 
+	if (offset != UCSI_CONTROL || val_len != sizeof(u64))
+		return -EINVAL;
+	memcpy(ucsi->write_buf + UCSI_CONTROL, val, val_len);
+
 	req.hdr.owner = cpu_to_le32(PMIC_GLINK_OWNER_USBC);
 	req.hdr.type = cpu_to_le32(MSG_TYPE_REQ_RESP);
 	req.hdr.opcode = cpu_to_le32(UC_UCSI_WRITE_BUF_REQ);
-	memcpy(&req.buf[offset], val, val_len);
+	memcpy(req.buf, ucsi->write_buf, UCSI_BUF_SIZE);
+	memset(ucsi->write_buf, 0, sizeof(ucsi->write_buf));
 
 	reinit_completion(&ucsi->write_ack);
 
@@ -214,7 +230,8 @@ static int pmic_glink_ucsi_sync_write(struct ucsi *__ucsi, unsigned int offset,
 
 static const struct ucsi_operations pmic_glink_ucsi_ops = {
 	.poll_cci = pmic_glink_ucsi_poll_cci,
-	.read = pmic_glink_ucsi_read,
+	.read_data = pmic_glink_ucsi_read_data,
+	.write_data = pmic_glink_ucsi_write_data,
 	.sync_write = pmic_glink_ucsi_sync_write,
 	.async_write = pmic_glink_ucsi_async_write
 };
@@ -286,7 +303,6 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 static void pmic_glink_ucsi_register(struct work_struct *work)
 {
 	struct pmic_glink_ucsi *ucsi = container_of(work, struct pmic_glink_ucsi, register_work);
-	__le16 version;
 	int ret;
 
 	ret = pmic_glink_sync_read_buf(ucsi);
@@ -294,14 +310,9 @@ static void pmic_glink_ucsi_register(struct work_struct *work)
 		dev_err(ucsi->dev, "cannot sync read buf: %d\n", ret);
 		return;
 	}
-	ret = pmic_glink_ucsi_read(ucsi->ucsi, UCSI_VERSION, &version,
-				   sizeof(version));
-	if (ret < 0) {
-		dev_err(ucsi->dev, "cannot read version: %d\n", ret);
-		return;
-	}
 
-	ucsi_register(ucsi->ucsi, le16_to_cpu(version));
+	ucsi_register(ucsi->ucsi,
+		      le16_to_cpu(*(__le16 *)(ucsi->read_buf + UCSI_VERSION)));
 }
 
 static void pmic_glink_ucsi_callback(const void *data, size_t len, void *priv)
