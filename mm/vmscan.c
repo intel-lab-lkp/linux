@@ -144,6 +144,9 @@ struct scan_control {
 	/* if try_lock in rmap_walk */
 	unsigned int rw_try_lock:1;
 
+	/* need kshrinkd to reclaim if rwc trylock contended*/
+	unsigned int need_kshrinkd:1;
+
 	/* Allocation order */
 	s8 order;
 
@@ -194,6 +197,17 @@ struct scan_control {
  * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
  */
 int vm_swappiness = 60;
+
+/*
+ * Wakeup kshrinkd those folios which lock-contended in ramp_walk
+ * during shrink_folio_list, instead of putting back to the head
+ * of LRU, to avoid to break the rules of LRU.
+ */
+static void wakeup_kshrinkd(struct pglist_data *pgdat)
+{
+	if (likely(pgdat->kshrinkd))
+		wake_up_interruptible(&pgdat->kshrinkd_wait);
+}
 
 #ifdef CONFIG_MEMCG
 
@@ -838,6 +852,7 @@ enum folio_references {
 	FOLIOREF_RECLAIM_CLEAN,
 	FOLIOREF_KEEP,
 	FOLIOREF_ACTIVATE,
+	FOLIOREF_LOCK_CONTENDED,
 };
 
 static enum folio_references folio_check_references(struct folio *folio,
@@ -858,8 +873,12 @@ static enum folio_references folio_check_references(struct folio *folio,
 		return FOLIOREF_ACTIVATE;
 
 	/* rmap lock contention: rotate */
-	if (referenced_ptes == -1)
-		return FOLIOREF_KEEP;
+	if (referenced_ptes == -1) {
+		if (sc->need_kshrinkd && folio_pgdat(folio)->kshrinkd)
+			return FOLIOREF_LOCK_CONTENDED;
+		else
+			return FOLIOREF_KEEP;
+	}
 
 	if (referenced_ptes) {
 		/*
@@ -1029,6 +1048,7 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(free_folios);
 	LIST_HEAD(demote_folios);
+	LIST_HEAD(contended_folios);
 	unsigned int nr_reclaimed = 0;
 	unsigned int pgactivate = 0;
 	bool do_demote_pass;
@@ -1045,6 +1065,7 @@ retry:
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
 		unsigned int nr_pages;
+		bool lock_contended = false;
 
 		cond_resched();
 
@@ -1185,6 +1206,9 @@ retry:
 			goto activate_locked;
 		case FOLIOREF_KEEP:
 			stat->nr_ref_keep += nr_pages;
+			goto keep_locked;
+		case FOLIOREF_LOCK_CONTENDED:
+			lock_contended = true;
 			goto keep_locked;
 		case FOLIOREF_RECLAIM:
 		case FOLIOREF_RECLAIM_CLEAN:
@@ -1466,7 +1490,10 @@ activate_locked:
 keep_locked:
 		folio_unlock(folio);
 keep:
-		list_add(&folio->lru, &ret_folios);
+		if (unlikely(lock_contended))
+			list_add(&folio->lru, &contended_folios);
+		else
+			list_add(&folio->lru, &ret_folios);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 				folio_test_unevictable(folio), folio);
 	}
@@ -1508,6 +1535,14 @@ keep:
 	free_unref_page_list(&free_folios);
 
 	list_splice(&ret_folios, folio_list);
+
+	if (!list_empty(&contended_folios)) {
+		spin_lock_irq(&pgdat->kf_lock);
+		list_splice(&contended_folios, &pgdat->kshrinkd_folios);
+		spin_unlock_irq(&pgdat->kf_lock);
+		wakeup_kshrinkd(pgdat);
+	}
+
 	count_vm_events(PGACTIVATE, pgactivate);
 
 	if (plug)
@@ -1522,6 +1557,7 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 		.gfp_mask = GFP_KERNEL,
 		.may_unmap = 1,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 	struct reclaim_stat stat;
 	unsigned int nr_reclaimed;
@@ -2118,6 +2154,7 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 		.may_swap = 1,
 		.no_demotion = 1,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 
 	nr_reclaimed = shrink_folio_list(folio_list, pgdat, &sc, &dummy_stat, false);
@@ -5467,6 +5504,7 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.gfp_mask = GFP_KERNEL,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 
 	buf = kvmalloc(len + 1, GFP_KERNEL);
@@ -6440,6 +6478,7 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 		.may_unmap = 1,
 		.may_swap = 1,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 1,
 	};
 
 	/*
@@ -6486,6 +6525,7 @@ unsigned long mem_cgroup_shrink_node(struct mem_cgroup *memcg,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.may_swap = !noswap,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 
 	WARN_ON_ONCE(!current->reclaim_state);
@@ -6533,6 +6573,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.may_swap = !!(reclaim_options & MEMCG_RECLAIM_MAY_SWAP),
 		.proactive = !!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 	/*
 	 * Traverse the ZONELIST_FALLBACK zonelist of the current node to put
@@ -6795,6 +6836,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 		.order = order,
 		.may_unmap = 1,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 1,
 	};
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
@@ -7255,6 +7297,7 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 		.may_swap = 1,
 		.hibernation_mode = 1,
 		.rw_try_lock = 1,
+		.need_kshrinkd = 0,
 	};
 	struct zonelist *zonelist = node_zonelist(numa_node_id(), sc.gfp_mask);
 	unsigned long nr_reclaimed;
@@ -7324,6 +7367,145 @@ static int __init kswapd_init(void)
 }
 
 module_init(kswapd_init)
+
+static int kshrinkd_should_run(pg_data_t *pgdat)
+{
+	int should_run;
+
+	spin_lock_irq(&pgdat->kf_lock);
+	should_run = !list_empty(&pgdat->kshrinkd_folios);
+	spin_unlock_irq(&pgdat->kf_lock);
+
+	return should_run;
+}
+
+static unsigned long kshrinkd_reclaim_folios(struct list_head *folio_list,
+				struct pglist_data *pgdat)
+{
+	struct reclaim_stat dummy_stat;
+	unsigned int nr_reclaimed = 0;
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+		.no_demotion = 1,
+		.rw_try_lock = 0,
+		.need_kshrinkd = 0,
+	};
+
+	if (list_empty(folio_list))
+		return nr_reclaimed;
+
+	nr_reclaimed = shrink_folio_list(folio_list, pgdat, &sc, &dummy_stat, false);
+
+	return nr_reclaimed;
+}
+
+/*
+ * The background kshrink daemon, started as a kernel thread
+ * from the init process.
+ *
+ * Kshrinkd is to reclaim the contended-folio in rmap_walk when
+ * shrink_folio_list instead of putting back into the head of LRU
+ * directly, to avoid to break the rules of LRU.
+ */
+
+static int kshrinkd(void *p)
+{
+	pg_data_t *pgdat;
+	LIST_HEAD(tmp_contended_folios);
+
+	pgdat = (pg_data_t *)p;
+
+	current->flags |= PF_MEMALLOC | PF_KSWAPD;
+	set_freezable();
+
+	while (!kthread_should_stop()) {
+		unsigned long nr_reclaimed = 0;
+		unsigned long nr_putback = 0;
+
+		wait_event_freezable(pgdat->kshrinkd_wait,
+				kshrinkd_should_run(pgdat));
+
+		/* splice rmap_walk contended folios to tmp-list */
+		spin_lock_irq(&pgdat->kf_lock);
+		list_splice(&pgdat->kshrinkd_folios, &tmp_contended_folios);
+		INIT_LIST_HEAD(&pgdat->kshrinkd_folios);
+		spin_unlock_irq(&pgdat->kf_lock);
+
+		/* reclaim rmap_walk contended folios */
+		nr_reclaimed = kshrinkd_reclaim_folios(&tmp_contended_folios, pgdat);
+		__count_vm_events(PGSTEAL_KSHRINKD, nr_reclaimed);
+
+		/* putback the folios which failed to reclaim to lru */
+		while (!list_empty(&tmp_contended_folios)) {
+			struct folio *folio = lru_to_folio(&tmp_contended_folios);
+
+			nr_putback += folio_nr_pages(folio);
+			list_del(&folio->lru);
+			folio_putback_lru(folio);
+		}
+
+		__count_vm_events(PGSCAN_KSHRINKD, nr_reclaimed + nr_putback);
+	}
+
+	current->flags &= ~(PF_MEMALLOC | PF_KSWAPD);
+
+	return 0;
+}
+
+/*
+ * This kshrinkd start function will be called by init and node-hot-add.
+ */
+void kshrinkd_run(int nid)
+{
+	pg_data_t *pgdat = NODE_DATA(nid);
+
+	if (pgdat->kshrinkd)
+		return;
+
+	pgdat->kshrinkd = kthread_run(kshrinkd, pgdat, "kshrinkd%d", nid);
+	if (IS_ERR(pgdat->kshrinkd)) {
+		/* failure to start kshrinkd */
+		WARN_ON_ONCE(system_state < SYSTEM_RUNNING);
+		pr_err("Failed to start kshrinkd on node %d\n", nid);
+		pgdat->kshrinkd = NULL;
+	}
+}
+
+/*
+ * Called by memory hotplug when all memory in a node is offlined.  Caller must
+ * be holding mem_hotplug_begin/done().
+ */
+void kshrinkd_stop(int nid)
+{
+	struct task_struct *kshrinkd = NODE_DATA(nid)->kshrinkd;
+
+	if (kshrinkd) {
+		kthread_stop(kshrinkd);
+		NODE_DATA(nid)->kshrinkd = NULL;
+	}
+}
+
+static int __init kshrinkd_init(void)
+{
+	int nid;
+
+	for_each_node_state(nid, N_MEMORY) {
+		pg_data_t *pgdat = NODE_DATA(nid);
+
+		spin_lock_init(&pgdat->kf_lock);
+		init_waitqueue_head(&pgdat->kshrinkd_wait);
+		INIT_LIST_HEAD(&pgdat->kshrinkd_folios);
+
+		kshrinkd_run(nid);
+	}
+
+	return 0;
+}
+
+module_init(kshrinkd_init)
 
 #ifdef CONFIG_NUMA
 /*
@@ -7414,6 +7596,7 @@ static int __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned in
 		.may_swap = 1,
 		.reclaim_idx = gfp_zone(gfp_mask),
 		.rw_try_lock = 1,
+		.need_kshrinkd = 1,
 	};
 	unsigned long pflags;
 

@@ -1329,6 +1329,12 @@ typedef struct pglist_data {
 
 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
 
+	struct list_head kshrinkd_folios; /* rmap_walk contended folios list*/
+	spinlock_t kf_lock; /* Protect kshrinkd_folios list*/
+
+	struct task_struct *kshrinkd; /* reclaim kshrinkd_folios*/
+	wait_queue_head_t kshrinkd_wait;
+
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;
 	enum zone_type kcompactd_highest_zoneidx;

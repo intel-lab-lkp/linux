@@ -1218,6 +1218,7 @@ int __ref online_pages(unsigned long pfn, unsigned long nr_pages,
 
 	kswapd_run(nid);
 	kcompactd_run(nid);
+	kshrinkd_run(nid);
 
 	writeback_set_ratelimit();
 
@@ -2098,6 +2099,7 @@ int __ref offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	}
 
 	if (arg.status_change_nid >= 0) {
+		kshrinkd_stop(node);
 		kcompactd_stop(node);
 		kswapd_stop(node);
 	}

@@ -438,6 +438,9 @@ void check_move_unevictable_folios(struct folio_batch *fbatch);
 extern void __meminit kswapd_run(int nid);
 extern void __meminit kswapd_stop(int nid);
 
+extern void kshrinkd_run(int nid);
+extern void kshrinkd_stop(int nid);
+
 #ifdef CONFIG_SWAP
 
 int add_swap_extent(struct swap_info_struct *sis, unsigned long start_page,
