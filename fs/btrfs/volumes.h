@@ -590,7 +590,7 @@ struct btrfs_chunk_map {
 
 static inline void btrfs_free_chunk_map(struct btrfs_chunk_map *map)
 {
-	if (map && refcount_dec_and_test(&map->refs)) {
+	if (refcount_dec_and_test(&map->refs)) {
 		ASSERT(RB_EMPTY_NODE(&map->rb_node));
 		kfree(map);
 	}

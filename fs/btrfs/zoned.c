@@ -1564,7 +1564,7 @@ int btrfs_load_block_group_zone_info(struct btrfs_block_group *cache, bool new)
 	cache->physical_map = btrfs_clone_chunk_map(map, GFP_NOFS);
 	if (!cache->physical_map) {
 		ret = -ENOMEM;
-		goto out;
+		goto out_free_map;
 	}
 
 	zone_info = kcalloc(map->num_stripes, sizeof(*zone_info), GFP_NOFS);
@@ -1668,6 +1668,7 @@ out:
 	}
 	bitmap_free(active);
 	kfree(zone_info);
+out_free_map:
 	btrfs_free_chunk_map(map);
 
 	return ret;

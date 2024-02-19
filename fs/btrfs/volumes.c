@@ -7979,8 +7979,7 @@ static int verify_one_dev_extent(struct btrfs_fs_info *fs_info,
 		btrfs_err(fs_info,
 "dev extent physical offset %llu on devid %llu doesn't have corresponding chunk",
 			  physical_offset, devid);
-		ret = -EUCLEAN;
-		goto out;
+		return -EUCLEAN;
 	}
 
 	stripe_len = btrfs_calc_stripe_length(map);
