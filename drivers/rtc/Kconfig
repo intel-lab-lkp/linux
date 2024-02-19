@@ -381,7 +381,7 @@ config RTC_DRV_MAX31335
 	select REGMAP_I2C
 	help
 	  If you say yes here you get support for the Analog Devices
-	  MAX31335.
+	  MAX31335/31328/31329/31331/31334/31341/31342/31343.
 
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-max31335.
