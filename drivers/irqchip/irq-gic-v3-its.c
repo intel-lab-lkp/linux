@@ -2835,7 +2835,8 @@ static int allocate_vpe_l1_table(void)
 	u64 val, gpsz, npg, pa;
 	unsigned int psz = SZ_64K;
 	unsigned int np, epp, esz;
-	struct page *page;
+	struct page *page = NULL;
+	bool from_its = false;
 
 	if (!gic_rdists->has_rvpeid)
 		return 0;
@@ -2865,8 +2866,10 @@ static int allocate_vpe_l1_table(void)
 		return -ENOMEM;
 
 	val = inherit_vpe_l1_table_from_its();
-	if (val & GICR_VPROPBASER_4_1_VALID)
+	if (val & GICR_VPROPBASER_4_1_VALID) {
+		from_its = true;
 		goto out;
+	}
 
 	/* First probe the page size */
 	val = FIELD_PREP(GICR_VPROPBASER_4_1_PAGE_SIZE, GIC_PAGE_SIZE_64K);
@@ -2945,9 +2948,12 @@ out:
 	gicr_write_vpropbaser(val, vlpi_base + GICR_VPROPBASER);
 	cpumask_set_cpu(smp_processor_id(), gic_data_rdist()->vpe_table_mask);
 
-	pr_debug("CPU%d: VPROPBASER = %llx %*pbl\n",
-		 smp_processor_id(), val,
-		 cpumask_pr_args(gic_data_rdist()->vpe_table_mask));
+	pr_info("CPU%d: Using %s vPE table @%llx (%s)\n",
+		smp_processor_id(),
+		(val & GICR_VPROPBASER_4_1_INDIRECT) ? "indirect" : "direct",
+		val & GICR_VPROPBASER_4_1_ADDR,
+		(page) ? "allocated" :
+			 ((from_its) ? "inherited from ITS" : "inherited from RD"));
 
 	return 0;
 }
