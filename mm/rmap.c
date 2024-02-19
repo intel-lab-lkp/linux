@@ -952,6 +952,7 @@ static bool invalid_folio_referenced_vma(struct vm_area_struct *vma, void *arg)
  * @is_locked: Caller holds lock on the folio.
  * @memcg: target memory cgroup
  * @vm_flags: A combination of all the vma->vm_flags which referenced the folio.
+ * @rw_try_lock: if try_lock in rmap_walk
  *
  * Quick test_and_clear_referenced for all mappings of a folio,
  *
@@ -959,7 +960,7 @@ static bool invalid_folio_referenced_vma(struct vm_area_struct *vma, void *arg)
  * the function bailed out due to rmap lock contention.
  */
 int folio_referenced(struct folio *folio, int is_locked,
-		     struct mem_cgroup *memcg, unsigned long *vm_flags)
+		     struct mem_cgroup *memcg, unsigned long *vm_flags, unsigned int rw_try_lock)
 {
 	int we_locked = 0;
 	struct folio_referenced_arg pra = {
@@ -970,7 +971,7 @@ int folio_referenced(struct folio *folio, int is_locked,
 		.rmap_one = folio_referenced_one,
 		.arg = (void *)&pra,
 		.anon_lock = folio_lock_anon_vma_read,
-		.try_lock = true,
+		.try_lock = rw_try_lock ? true : false,
 		.invalid_vma = invalid_folio_referenced_vma,
 	};
 
