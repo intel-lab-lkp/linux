@@ -3173,8 +3173,25 @@ static void its_cpu_init_lpis(void)
 	writel_relaxed(val, rbase + GICR_CTLR);
 
 out:
-	if (gic_rdists->has_vlpis && !gic_rdists->has_rvpeid) {
+	/* Make sure the GIC has seen the above */
+	dsb(sy);
+	gic_data_rdist()->flags |= RD_LOCAL_LPI_ENABLED;
+	pr_info("GICv3: CPU%d: using %s LPI pending table @%pa\n",
+		smp_processor_id(),
+		gic_data_rdist()->flags & RD_LOCAL_PENDTABLE_PREALLOCATED ?
+		"reserved" : "allocated",
+		&paddr);
+}
+
+static void its_cpu_init_vlpis(void)
+{
+	/* No vLPIs? No problem. */
+	if (!gic_rdists->has_vlpis)
+		return;
+
+	if (!gic_rdists->has_rvpeid) {
 		void __iomem *vlpi_base = gic_data_rdist_vlpi_base();
+		u64 val;
 
 		/*
 		 * It's possible for CPU to receive VLPIs before it is
@@ -3193,7 +3210,8 @@ out:
 		 * ancient programming gets left in and has possibility of
 		 * corrupting memory.
 		 */
-		val = its_clear_vpend_valid(vlpi_base, 0, 0);
+		its_clear_vpend_valid(vlpi_base, 0, 0);
+		return;
 	}
 
 	if (allocate_vpe_l1_table()) {
@@ -3205,15 +3223,6 @@ out:
 		gic_rdists->has_rvpeid = false;
 		gic_rdists->has_vlpis = false;
 	}
-
-	/* Make sure the GIC has seen the above */
-	dsb(sy);
-	gic_data_rdist()->flags |= RD_LOCAL_LPI_ENABLED;
-	pr_info("GICv3: CPU%d: using %s LPI pending table @%pa\n",
-		smp_processor_id(),
-		gic_data_rdist()->flags & RD_LOCAL_PENDTABLE_PREALLOCATED ?
-		"reserved" : "allocated",
-		&paddr);
 }
 
 static void its_cpu_init_collection(struct its_node *its)
@@ -5265,6 +5274,7 @@ int its_cpu_init(void)
 			return ret;
 
 		its_cpu_init_lpis();
+		its_cpu_init_vlpis();
 		its_cpu_init_collections();
 	}
 
