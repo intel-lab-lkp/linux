@@ -79,6 +79,10 @@ static inline unsigned int kstat_cpu_softirqs_sum(int cpu)
 	return sum;
 }
 
+extern void kstat_snapshot_irqs(void);
+
+extern unsigned int kstat_get_irq_since_snapshot(unsigned int irq);
+
 /*
  * Number of interrupts per specific IRQ source, since bootup
  */
