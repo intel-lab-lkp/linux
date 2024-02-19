@@ -162,7 +162,7 @@ int icl_pcode_restrict_qgv_points(struct drm_i915_private *dev_priv,
 				1);
 
 	if (ret < 0) {
-		drm_err(&dev_priv->drm, "Failed to disable qgv points (%d) points: 0x%x\n", ret, points_mask);
+		drm_err(&dev_priv->drm, "Failed to disable qgv points (%x) points: 0x%x\n", ret, points_mask);
 		return ret;
 	}
 
@@ -662,7 +662,7 @@ static unsigned int adl_psf_bw(struct drm_i915_private *i915,
 }
 
 static unsigned int adl_qgv_bw(struct drm_i915_private *i915,
-			       int qgv_point, int num_active_planes)
+			       int num_active_planes, int qgv_point)
 {
 	unsigned int idx;
 
@@ -833,7 +833,7 @@ static unsigned int icl_max_bw_qgv_point(struct drm_i915_private *i915,
 	for (i = 0; i < num_qgv_points; i++) {
 		unsigned int max_data_rate;
 
-		max_data_rate = adl_qgv_bw(i915, i, num_active_planes);
+		max_data_rate = adl_qgv_bw(i915, num_active_planes, i);
 
 		/*
 		 * We need to know which qgv point gives us
@@ -850,6 +850,58 @@ static unsigned int icl_max_bw_qgv_point(struct drm_i915_private *i915,
 	}
 
 	return max_bw_point;
+}
+
+/*
+ * Due to some strange reason, we have to use a mask of PSF GV
+ * points, instead of finding the one which provides the highest bandwidth,
+ * this is because PCode rejects the request, if 2 PSF GV points, which have
+ * same bandwidth are not set/cleared same time.
+ */
+static unsigned int icl_max_bw_psf_gv_point_mask(struct drm_i915_private *i915)
+{
+	unsigned int num_psf_gv_points = i915->display.bw.max[0].num_psf_gv_points;
+	unsigned int max_bw = 0;
+	unsigned int max_bw_point_mask = 0;
+	int i;
+
+	for (i = 0; i < num_psf_gv_points; i++) {
+		unsigned int max_data_rate = adl_psf_bw(i915, i);
+
+		if (max_data_rate > max_bw) {
+			max_bw_point_mask = BIT(i);
+			max_bw = max_data_rate;
+		} else if (max_data_rate == max_bw)
+			max_bw_point_mask |= BIT(i);
+	}
+
+	return max_bw_point_mask;
+}
+
+static void icl_force_disable_sagv(struct drm_i915_private *i915, struct intel_bw_state *bw_state)
+{
+	unsigned int max_bw_qgv_point = icl_max_bw_qgv_point(i915, 0);
+	unsigned int max_bw_psf_gv_point_mask = icl_max_bw_psf_gv_point_mask(i915);
+	unsigned int qgv_points;
+	unsigned int psf_points;
+	int ret;
+
+	qgv_points = BIT(max_bw_qgv_point);
+	psf_points = max_bw_psf_gv_point_mask;
+
+	bw_state->qgv_points_mask = ~(ICL_PCODE_REQ_QGV_PT(qgv_points)|
+				      ADLS_PCODE_REQ_PSF_PT(psf_points)) &
+				      icl_qgv_points_mask(i915);
+
+	drm_dbg_kms(&i915->drm, "Forcing SAGV disable: mask %x\n", bw_state->qgv_points_mask);
+
+	ret = icl_pcode_restrict_qgv_points(i915, bw_state->qgv_points_mask);
+
+	if (ret)
+		drm_dbg_kms(&i915->drm, "Restricting GV points failed: %x\n", ret);
+	else
+		drm_dbg_kms(&i915->drm, "Restricting GV points succeeded\n");
+
 }
 
 static int mtl_find_qgv_points(struct drm_i915_private *i915,
@@ -943,7 +995,7 @@ static int icl_find_qgv_points(struct drm_i915_private *i915,
 	for (i = 0; i < num_qgv_points; i++) {
 		unsigned int max_data_rate;
 
-		max_data_rate = adl_qgv_bw(i915, i, num_active_planes);
+		max_data_rate = adl_qgv_bw(i915, num_active_planes, i);
 
 		if (max_data_rate >= data_rate)
 			qgv_points |= BIT(i);
@@ -1350,6 +1402,9 @@ int intel_bw_init(struct drm_i915_private *dev_priv)
 
 	intel_atomic_global_obj_init(dev_priv, &dev_priv->display.bw.obj,
 				     &state->base, &intel_bw_funcs);
+
+	if (DISPLAY_VER(dev_priv) < 14)
+		icl_force_disable_sagv(dev_priv, state);
 
 	return 0;
 }
