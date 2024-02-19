@@ -59,6 +59,20 @@ config LCD2S
 	  is a simple single color character display. You have to connect it
 	  to an I2C bus.
 
+config MAX6959
+	tristate "Maxim MAX6958/6959 7-segment LED controller"
+	depends on I2C
+	select REGMAP_I2C
+	select LINEDISP
+	help
+	  If you say yes here you get support for the following Maxim chips
+	  (I2C 7-segment LED display controller):
+	  - MAX6958
+	  - MAX6959 (input support)
+
+	  This driver can also be built as a module. If so, the module
+	  will be called max6959.
+
 menuconfig PARPORT_PANEL
 	tristate "Parallel port LCD/Keypad Panel support"
 	depends on PARPORT

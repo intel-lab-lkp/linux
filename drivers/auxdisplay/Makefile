@@ -15,5 +15,6 @@ obj-$(CONFIG_CFAG12864B)	+= cfag12864b.o cfag12864bfb.o
 obj-$(CONFIG_LINEDISP)		+= line-display.o
 obj-$(CONFIG_IMG_ASCII_LCD)	+= img-ascii-lcd.o
 obj-$(CONFIG_HT16K33)		+= ht16k33.o
+obj-$(CONFIG_MAX6959)		+= max6959.o
 
 obj-$(CONFIG_ARM_CHARLCD)	+= arm-charlcd.o
