@@ -21613,6 +21613,7 @@ M:	Kamel Bouhara <kamel.bouhara@bootlin.com>
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/input/touchscreen/touchnetix,ax54a.yaml
+F:	drivers/input/touchscreen/touchnetix_axiom.c
 
 TPM DEVICE DRIVER
 M:	Peter Huewe <peterhuewe@gmx.de>
