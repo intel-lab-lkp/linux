@@ -1103,6 +1103,7 @@ static void of_link_to_phandle(struct device_node *con_np,
 			      struct device_node *sup_np)
 {
 	struct device_node *tmp_np = of_node_get(sup_np);
+	struct fwnode_handle *sup_fwnode;
 
 	/* Check that sup_np and its ancestors are available. */
 	while (tmp_np) {
@@ -1119,7 +1120,20 @@ static void of_link_to_phandle(struct device_node *con_np,
 		tmp_np = of_get_next_parent(tmp_np);
 	}
 
-	fwnode_link_add(of_fwnode_handle(con_np), of_fwnode_handle(sup_np));
+	/*
+	 * In case of overlays, the fwnode are added with FWNODE_FLAG_NOT_DEVICE
+	 * flag set. A node can have a phandle that references an other node
+	 * added by the overlay.
+	 * Clear the supplier's FWNODE_FLAG_NOT_DEVICE so that fw_devlink links
+	 * to this supplier instead of linking to its parent.
+	 */
+	sup_fwnode = of_fwnode_handle(sup_np);
+	if (sup_fwnode->flags & FWNODE_FLAG_NOT_DEVICE) {
+		if (of_property_present(sup_np, "compatible") &&
+		    of_device_is_available(sup_np))
+			sup_fwnode->flags &= ~FWNODE_FLAG_NOT_DEVICE;
+	}
+	fwnode_link_add(of_fwnode_handle(con_np), sup_fwnode);
 }
 
 /**
