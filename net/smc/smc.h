@@ -38,9 +38,6 @@ extern struct proto smc_proto6;
 #define KERNEL_HAS_ATOMIC64
 #endif
 
-#define smc_sk_state(sk)		((sk)->sk_state)
-#define smc_sk_set_state(sk, state)	(smc_sk_state(sk) = (state))
-
 enum smc_state {		/* possible states of an SMC socket */
 	SMC_ACTIVE	= 1,
 	SMC_INIT	= 2,
@@ -254,6 +251,7 @@ struct smc_sock {				/* smc sock container */
 		struct sock sk;
 	};
 	struct socket		*clcsock;	/* internal tcp socket */
+	unsigned char		smc_state;	/* smc state used in smc via inet_sk */
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */
 	void			(*clcsk_data_ready)(struct sock *sk);
@@ -395,6 +393,20 @@ static inline void smc_sock_set_flag(struct sock *sk, enum sock_flags flag)
 static __always_inline bool smc_sock_is_inet_sock(const struct sock *sk)
 {
 	return inet_test_bit(IS_ICSK, sk);
+}
+
+#define smc_sk_state(sk)	({				\
+	struct sock *__sk = (sk);				\
+	smc_sock_is_inet_sock(__sk) ?				\
+		smc_sk(__sk)->smc_state : (__sk)->sk_state;	\
+})
+
+static __always_inline void smc_sk_set_state(struct sock *sk, unsigned char state)
+{
+	if (smc_sock_is_inet_sock(sk))
+		smc_sk(sk)->smc_state = state;
+	else
+		sk->sk_state = state;
 }
 
 #define smc_sock_flag(sk, flag)	sock_flag(sk, flag)
