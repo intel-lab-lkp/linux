@@ -37,6 +37,12 @@
 #define MEM_ERROR_MASK		(ACPI_EINJ_MEMORY_CORRECTABLE | \
 				ACPI_EINJ_MEMORY_UNCORRECTABLE | \
 				ACPI_EINJ_MEMORY_FATAL)
+#define CXL_ERROR_MASK		(ACPI_EINJ_CXL_CACHE_CORRECTABLE | \
+				ACPI_EINJ_CXL_CACHE_UNCORRECTABLE | \
+				ACPI_EINJ_CXL_CACHE_FATAL | \
+				ACPI_EINJ_CXL_MEM_CORRECTABLE | \
+				ACPI_EINJ_CXL_MEM_UNCORRECTABLE | \
+				ACPI_EINJ_CXL_MEM_FATAL)
 
 /*
  * ACPI version 5 provides a SET_ERROR_TYPE_WITH_ADDRESS action.
@@ -166,7 +172,7 @@ static int __einj_get_available_error_type(u32 *type)
 }
 
 /* Get error injection capabilities of the platform */
-static int einj_get_available_error_type(u32 *type)
+int einj_get_available_error_type(u32 *type)
 {
 	int rc;
 
@@ -176,6 +182,7 @@ static int einj_get_available_error_type(u32 *type)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(einj_get_available_error_type);
 
 static int einj_timedout(u64 *t)
 {
@@ -536,8 +543,8 @@ static int __einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 }
 
 /* Inject the specified hardware error */
-static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
-			     u64 param3, u64 param4)
+int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2, u64 param3,
+		      u64 param4)
 {
 	int rc;
 	u64 base_addr, size;
@@ -560,8 +567,11 @@ static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 	if (type & ACPI5_VENDOR_BIT) {
 		if (vendor_flags != SETWA_FLAGS_MEM)
 			goto inject;
-	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM))
+	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM)) {
 		goto inject;
+	} else if ((type & CXL_ERROR_MASK) && (flags & SETWA_FLAGS_MEM)) {
+		goto inject;
+	}
 
 	/*
 	 * Disallow crazy address masks that give BIOS leeway to pick
@@ -592,6 +602,7 @@ inject:
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(einj_error_inject);
 
 static u32 error_type;
 static u32 error_flags;
@@ -613,12 +624,6 @@ static struct { u32 mask; const char *str; } const einj_error_type_string[] = {
 	{ BIT(9), "Platform Correctable" },
 	{ BIT(10), "Platform Uncorrectable non-fatal" },
 	{ BIT(11), "Platform Uncorrectable fatal"},
-	{ BIT(12), "CXL.cache Protocol Correctable" },
-	{ BIT(13), "CXL.cache Protocol Uncorrectable non-fatal" },
-	{ BIT(14), "CXL.cache Protocol Uncorrectable fatal" },
-	{ BIT(15), "CXL.mem Protocol Correctable" },
-	{ BIT(16), "CXL.mem Protocol Uncorrectable non-fatal" },
-	{ BIT(17), "CXL.mem Protocol Uncorrectable fatal" },
 	{ BIT(31), "Vendor Defined Error Types" },
 };
 
@@ -640,6 +645,43 @@ static int available_error_type_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(available_error_type);
 
+int einj_validate_error_type(u64 type)
+{
+	u32 tval, vendor, available_error_type = 0;
+	int rc;
+
+	/* Only low 32 bits for error type are valid */
+	if (type & GENMASK_ULL(63, 32))
+		return -EINVAL;
+
+	/*
+	 * Vendor defined types have 0x80000000 bit set, and
+	 * are not enumerated by ACPI_EINJ_GET_ERROR_TYPE
+	 */
+	vendor = type & ACPI5_VENDOR_BIT;
+	tval = type & GENMASK(30, 0);
+
+	/* Only one error type can be specified */
+	if (tval & (tval - 1))
+		return -EINVAL;
+	if (!vendor) {
+		rc = einj_get_available_error_type(&available_error_type);
+		if (rc)
+			return rc;
+		if (!(type & available_error_type))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(einj_validate_error_type);
+
+bool einj_is_cxl_error_type(u64 type)
+{
+	return (type & CXL_ERROR_MASK) && (!(type & ACPI5_VENDOR_BIT));
+}
+EXPORT_SYMBOL_GPL(einj_is_cxl_error_type);
+
 static int error_type_get(void *data, u64 *val)
 {
 	*val = error_type;
@@ -650,30 +692,15 @@ static int error_type_get(void *data, u64 *val)
 static int error_type_set(void *data, u64 val)
 {
 	int rc;
-	u32 available_error_type = 0;
-	u32 tval, vendor;
 
-	/* Only low 32 bits for error type are valid */
-	if (val & GENMASK_ULL(63, 32))
+	/* CXL error types have to be injected from cxl debugfs */
+	if (einj_is_cxl_error_type(val))
 		return -EINVAL;
 
-	/*
-	 * Vendor defined types have 0x80000000 bit set, and
-	 * are not enumerated by ACPI_EINJ_GET_ERROR_TYPE
-	 */
-	vendor = val & ACPI5_VENDOR_BIT;
-	tval = val & 0x7fffffff;
+	rc = einj_validate_error_type(val);
+	if (rc)
+		return rc;
 
-	/* Only one error type can be specified */
-	if (tval & (tval - 1))
-		return -EINVAL;
-	if (!vendor) {
-		rc = einj_get_available_error_type(&available_error_type);
-		if (rc)
-			return rc;
-		if (!(val & available_error_type))
-			return -EINVAL;
-	}
 	error_type = val;
 
 	return 0;
@@ -708,6 +735,12 @@ static int einj_check_table(struct acpi_table_einj *einj_tab)
 
 	return 0;
 }
+
+bool einj_is_initialized(void)
+{
+	return einj_initialized;
+}
+EXPORT_SYMBOL_GPL(einj_is_initialized);
 
 static int __init einj_probe(struct platform_device *pdev)
 {
