@@ -9,3 +9,6 @@
 /* Variables containing VO__text, VO___bss_start, VO__end */
 extern const unsigned long vo__text, vo___bss_start, vo__end;
 extern const unsigned long kernel_total_size;
+
+extern const char build_str[];
+extern unsigned long build_str_len;

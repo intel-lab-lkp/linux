@@ -23,24 +23,18 @@
 #include "error.h"
 #include "../string.h"
 #include "efi.h"
+#include "dynamic_vars.h"
 
-#include <generated/compile.h>
 #include <linux/module.h>
 #include <linux/uts.h>
 #include <linux/utsname.h>
 #include <linux/ctype.h>
-#include <generated/utsversion.h>
-#include <generated/utsrelease.h>
 
 #define _SETUP
 #include <asm/setup.h>	/* For COMMAND_LINE_SIZE */
 #undef _SETUP
 
 extern unsigned long get_cmd_line_ptr(void);
-
-/* Simplified build-specific string for starting entropy. */
-static const char build_str[] = UTS_RELEASE " (" LINUX_COMPILE_BY "@"
-		LINUX_COMPILE_HOST ") (" LINUX_COMPILER ") " UTS_VERSION;
 
 static unsigned long rotate_xor_one(unsigned long hash, unsigned long val)
 {
@@ -75,7 +69,7 @@ static unsigned long get_boot_seed(void)
 {
 	unsigned long hash = 0;
 
-	hash = rotate_xor(hash, build_str, sizeof(build_str));
+	hash = rotate_xor(hash, build_str, build_str_len);
 	hash = rotate_xor(hash, boot_params_ptr, sizeof(*boot_params_ptr));
 
 	return hash;
