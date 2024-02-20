@@ -27,9 +27,15 @@ properties:
       - description: Board XO Active-Only source
       - description: Sleep clock source
 
+  power-domains:
+    maxItems: 1
+    description:
+      CX power domain.
+
 required:
   - compatible
   - clocks
+  - power-domains
 
 allOf:
   - $ref: qcom,gcc.yaml#
@@ -39,12 +45,14 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/clock/qcom,rpmh.h>
+    #include <dt-bindings/power/qcom,rpmhpd.h>
     clock-controller@100000 {
       compatible = "qcom,sm7150-gcc";
       reg = <0x00100000 0x001f0000>;
       clocks = <&rpmhcc RPMH_CXO_CLK>,
                <&rpmhcc RPMH_CXO_CLK_A>,
                <&sleep_clk>;
+      power-domains = <&rpmhpd RPMHPD_CX>;
       #clock-cells = <1>;
       #reset-cells = <1>;
       #power-domain-cells = <1>;
