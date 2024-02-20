@@ -15,6 +15,7 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/limits.h>
 #include <linux/math64.h>
 #include <linux/mei_cl_bus.h>
 #include <linux/module.h>
@@ -31,8 +32,6 @@
 #include <media/v4l2-subdev.h>
 
 #define MEI_CSI_ENTITY_NAME "Intel IVSC CSI"
-
-#define MEI_CSI_LINK_FREQ_400MHZ 400000000ULL
 
 /* the 5s used here is based on experiment */
 #define CSI_CMD_TIMEOUT (5 * HZ)
@@ -144,10 +143,6 @@ static const struct v4l2_mbus_framefmt mei_csi_format_mbus_default = {
 	.height = 1,
 	.code = MEDIA_BUS_FMT_Y8_1X8,
 	.field = V4L2_FIELD_NONE,
-};
-
-static s64 link_freq_menu_items[] = {
-	MEI_CSI_LINK_FREQ_400MHZ
 };
 
 static inline struct mei_csi *notifier_to_csi(struct v4l2_async_notifier *n)
@@ -536,8 +531,7 @@ static int mei_csi_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 
-		link_freq_menu_items[0] = freq;
-		ctrl->val = 0;
+		ctrl->p_new.p_s64[0] = csi->link_freq = freq;
 
 		return 0;
 	}
@@ -606,9 +600,18 @@ static const struct v4l2_async_notifier_operations mei_csi_notify_ops = {
 	.unbind = mei_csi_notify_unbind,
 };
 
+static const struct v4l2_ctrl_config mei_csi_link_freq_ctrl = {
+	.ops = &mei_csi_ctrl_ops,
+	.type = V4L2_CTRL_TYPE_INTEGER64,
+	.id = V4L2_CID_LINK_FREQ,
+	.name = "Link Frequency",
+	.max = S64_MAX,
+	.step = 1,
+	.flags = V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY,
+};
+
 static int mei_csi_init_controls(struct mei_csi *csi)
 {
-	u32 max;
 	int ret;
 
 	ret = v4l2_ctrl_handler_init(&csi->ctrl_handler, 2);
@@ -617,13 +620,8 @@ static int mei_csi_init_controls(struct mei_csi *csi)
 
 	csi->ctrl_handler.lock = &csi->lock;
 
-	max = ARRAY_SIZE(link_freq_menu_items) - 1;
-	csi->freq_ctrl = v4l2_ctrl_new_int_menu(&csi->ctrl_handler,
-						&mei_csi_ctrl_ops,
-						V4L2_CID_LINK_FREQ,
-						max,
-						0,
-						link_freq_menu_items);
+	csi->freq_ctrl = v4l2_ctrl_new_custom(&csi->ctrl_handler,
+					      &mei_csi_link_freq_ctrl, NULL);
 	if (csi->freq_ctrl)
 		csi->freq_ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY |
 					 V4L2_CTRL_FLAG_VOLATILE;
