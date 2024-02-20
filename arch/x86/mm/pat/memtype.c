@@ -950,8 +950,7 @@ static void free_pfn_range(u64 paddr, unsigned long size)
 		memtype_free(paddr, paddr + size);
 }
 
-static int follow_phys(struct vm_area_struct *vma,
-		unsigned long address, unsigned int flags,
+static int follow_phys(struct vm_area_struct *vma, unsigned long address,
 		unsigned long *prot, resource_size_t *phys)
 {
 	int ret = -EINVAL;
@@ -965,14 +964,10 @@ static int follow_phys(struct vm_area_struct *vma,
 		goto out;
 	pte = ptep_get(ptep);
 
-	if ((flags & FOLL_WRITE) && !pte_write(pte))
-		goto unlock;
-
 	*prot = pgprot_val(pte_pgprot(pte));
 	*phys = (resource_size_t)pte_pfn(pte) << PAGE_SHIFT;
 
 	ret = 0;
-unlock:
 	pte_unmap_unlock(ptep, ptl);
 out:
 	return ret;
@@ -997,7 +992,7 @@ int track_pfn_copy(struct vm_area_struct *vma)
 		 * reserve the whole chunk covered by vma. We need the
 		 * starting address and protection from pte.
 		 */
-		if (follow_phys(vma, vma->vm_start, 0, &prot, &paddr)) {
+		if (follow_phys(vma, vma->vm_start, &prot, &paddr)) {
 			WARN_ON_ONCE(1);
 			return -EINVAL;
 		}
@@ -1084,7 +1079,7 @@ void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
 	/* free the chunk starting from pfn or the whole chunk */
 	paddr = (resource_size_t)pfn << PAGE_SHIFT;
 	if (!paddr && !size) {
-		if (follow_phys(vma, vma->vm_start, 0, &prot, &paddr)) {
+		if (follow_phys(vma, vma->vm_start, &prot, &paddr)) {
 			WARN_ON_ONCE(1);
 			return;
 		}
