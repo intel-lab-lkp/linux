@@ -473,6 +473,9 @@ s64 v4l2_get_link_freq(struct v4l2_ctrl_handler *handler, unsigned int mul,
 		struct v4l2_querymenu qm = { .id = V4L2_CID_LINK_FREQ };
 		int ret;
 
+		if (ctrl->type == V4L2_CTRL_TYPE_INTEGER64)
+			return v4l2_ctrl_g_ctrl_int64(ctrl);
+
 		qm.index = v4l2_ctrl_g_ctrl(ctrl);
 
 		ret = v4l2_querymenu(handler, &qm);
