@@ -3054,6 +3054,28 @@ static inline bool smc_is_unsupport_tcp_sockopt(int optname)
 	return false;
 }
 
+/* Return true if smc might modify the semantics of
+ * the imcoming TCP options. Specifically, it includes
+ * unsupported TCP options.
+ */
+static inline bool smc_need_override_tcp_sockopt(struct sock *sk, int optname)
+{
+	switch (optname) {
+	case TCP_NODELAY:
+	case TCP_CORK:
+		if (smc_sk_state(sk) == SMC_INIT ||
+		    smc_sk_state(sk) == SMC_LISTEN ||
+		    smc_sk_state(sk) == SMC_CLOSED)
+			return false;
+		fallthrough;
+	case TCP_DEFER_ACCEPT:
+		return true;
+	default:
+		break;
+	}
+	return smc_is_unsupport_tcp_sockopt(optname);
+}
+
 static int smc_setsockopt_common(struct socket *sock, int level, int optname,
 				 sockptr_t optval, unsigned int optlen)
 {
@@ -3062,6 +3084,10 @@ static int smc_setsockopt_common(struct socket *sock, int level, int optname,
 	int val, rc = 0;
 
 	smc = smc_sk(sk);
+
+	/* Fast path, just go away if no extra action needed */
+	if (!smc_need_override_tcp_sockopt(sk, optname))
+		return 0;
 
 	if (optlen < sizeof(int))
 		return -EINVAL;
