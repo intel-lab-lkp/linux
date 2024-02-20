@@ -26,7 +26,7 @@ int smc_stats_init(struct net *net)
 	net->smc.smc_stats = alloc_percpu(struct smc_stats);
 	if (!net->smc.smc_stats)
 		goto err_stats;
-	mutex_init(&net->smc.mutex_fback_rsn);
+	spin_lock_init(&net->smc.mutex_fback_rsn);
 	return 0;
 
 err_stats:
@@ -387,7 +387,7 @@ int smc_nl_get_fback_stats(struct sk_buff *skb, struct netlink_callback *cb)
 	int snum = cb_ctx->pos[0];
 	bool is_srv = true;
 
-	mutex_lock(&net->smc.mutex_fback_rsn);
+	spin_lock_bh(&net->smc.mutex_fback_rsn);
 	for (k = 0; k < SMC_MAX_FBACK_RSN_CNT; k++) {
 		if (k < snum)
 			continue;
@@ -406,7 +406,7 @@ int smc_nl_get_fback_stats(struct sk_buff *skb, struct netlink_callback *cb)
 		if (rc_clnt == -ENODATA && rc_srv == -ENODATA)
 			break;
 	}
-	mutex_unlock(&net->smc.mutex_fback_rsn);
+	spin_unlock_bh(&net->smc.mutex_fback_rsn);
 	cb_ctx->pos[1] = skip_serv;
 	cb_ctx->pos[0] = k;
 	return skb->len;

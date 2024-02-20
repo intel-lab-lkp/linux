@@ -769,7 +769,7 @@ static void smc_stat_fallback(struct smc_sock *smc)
 {
 	struct net *net = sock_net(&smc->sk);
 
-	mutex_lock(&net->smc.mutex_fback_rsn);
+	spin_lock_bh(&net->smc.mutex_fback_rsn);
 	if (smc->listen_smc) {
 		smc_stat_inc_fback_rsn_cnt(smc, net->smc.fback_rsn->srv);
 		net->smc.fback_rsn->srv_fback_cnt++;
@@ -777,7 +777,7 @@ static void smc_stat_fallback(struct smc_sock *smc)
 		smc_stat_inc_fback_rsn_cnt(smc, net->smc.fback_rsn->clnt);
 		net->smc.fback_rsn->clnt_fback_cnt++;
 	}
-	mutex_unlock(&net->smc.mutex_fback_rsn);
+	spin_unlock_bh(&net->smc.mutex_fback_rsn);
 }
 
 /* must be called under rcu read lock */
