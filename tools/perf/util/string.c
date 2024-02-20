@@ -349,3 +349,21 @@ char *strreplace_chars(char needle, const char *haystack, const char *replace)
 
 	return new_s;
 }
+
+/*
+ * Returns a pointer to the first character of the suffix in str if the string
+ * ends with suffix, otherwise returns NULL.
+ */
+const char *ends_with(const char *str, const char *suffix)
+{
+	size_t suffix_len = strlen(suffix);
+	const char *p = str;
+
+	if (strlen(str) > suffix_len) {
+		p = str + strlen(str) - suffix_len;
+		if (!strncmp(p, suffix, suffix_len))
+			return p;
+	}
+
+	return NULL;
+}

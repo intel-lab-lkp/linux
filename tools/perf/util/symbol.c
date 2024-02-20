@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <string2.h>
 #include <linux/capability.h>
 #include <linux/kernel.h>
 #include <linux/mman.h>
@@ -1775,7 +1776,9 @@ int dso__load(struct dso *dso, struct map *map)
 	const char *map_path = dso->long_name;
 
 	mutex_lock(&dso->lock);
-	perfmap = strncmp(dso->name, "/tmp/perf-", 10) == 0;
+	perfmap = strncmp(dso->name, "/tmp/perf-", 10) == 0 &&
+		  ends_with(dso->name, ".map") != NULL;
+
 	if (perfmap) {
 		if (dso->nsinfo && (dso__find_perf_map(newmapname,
 		    sizeof(newmapname), &dso->nsinfo) == 0)) {

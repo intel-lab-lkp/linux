@@ -48,6 +48,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <string2.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -3250,20 +3251,6 @@ static struct script_desc *script_desc__findnew(const char *name)
 	script_desc__add(s);
 
 	return s;
-}
-
-static const char *ends_with(const char *str, const char *suffix)
-{
-	size_t suffix_len = strlen(suffix);
-	const char *p = str;
-
-	if (strlen(str) > suffix_len) {
-		p = str + strlen(str) - suffix_len;
-		if (!strncmp(p, suffix, suffix_len))
-			return p;
-	}
-
-	return NULL;
 }
 
 static int read_script_info(struct script_desc *desc, const char *filename)

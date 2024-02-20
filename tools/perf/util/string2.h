@@ -40,5 +40,6 @@ char *strdup_esc(const char *str);
 
 unsigned int hex(char c);
 char *strreplace_chars(char needle, const char *haystack, const char *replace);
+const char *ends_with(const char *str, const char *suffix);
 
 #endif /* PERF_STRING_H */
