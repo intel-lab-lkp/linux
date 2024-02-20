@@ -36,6 +36,9 @@
 
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
+#include <net/protocol.h>
+#include <net/inet_common.h>
+#include <net/transp_v6.h>
 #include "smc_netns.h"
 
 #include "smc.h"
@@ -53,6 +56,7 @@
 #include "smc_stats.h"
 #include "smc_tracepoint.h"
 #include "smc_sysctl.h"
+#include "smc_inet.h"
 
 static DEFINE_MUTEX(smc_server_lgr_pending);	/* serialize link group
 						 * creation on server
@@ -3658,9 +3662,36 @@ static int __init smc_init(void)
 		goto out_ib;
 	}
 
+	/* init smc inet sock related proto and proto_ops */
+	rc = smc_inet_sock_init();
+	if (!rc) {
+		/* registe smc inet proto */
+		rc = proto_register(&smc_inet_prot, 1);
+		if (rc) {
+			pr_err("%s: proto_register smc_inet_prot fails with %d\n", __func__, rc);
+			goto out_ulp;
+		}
+		/* no return value */
+		inet_register_protosw(&smc_inet_protosw);
+#if IS_ENABLED(CONFIG_IPV6)
+		/* register smc inet6 proto */
+		rc = proto_register(&smc_inet6_prot, 1);
+		if (rc) {
+			pr_err("%s: proto_register smc_inet6_prot fails with %d\n", __func__, rc);
+			goto out_proto_register;
+		}
+		/* no return value */
+		inet6_register_protosw(&smc_inet6_protosw);
+#endif
+	}
+
 	static_branch_enable(&tcp_have_smc);
 	return 0;
-
+out_proto_register:
+	inet_unregister_protosw(&smc_inet_protosw);
+	proto_unregister(&smc_inet_prot);
+out_ulp:
+	tcp_unregister_ulp(&smc_ulp_ops);
 out_ib:
 	smc_ib_unregister_client();
 out_sock:
@@ -3695,6 +3726,10 @@ out_pernet_subsys:
 static void __exit smc_exit(void)
 {
 	static_branch_disable(&tcp_have_smc);
+	inet_unregister_protosw(&smc_inet_protosw);
+#if IS_ENABLED(CONFIG_IPV6)
+	inet6_unregister_protosw(&smc_inet6_protosw);
+#endif
 	tcp_unregister_ulp(&smc_ulp_ops);
 	sock_unregister(PF_SMC);
 	smc_core_exit();
@@ -3705,6 +3740,10 @@ static void __exit smc_exit(void)
 	destroy_workqueue(smc_hs_wq);
 	proto_unregister(&smc_proto6);
 	proto_unregister(&smc_proto);
+	proto_unregister(&smc_inet_prot);
+#if IS_ENABLED(CONFIG_IPV6)
+	proto_unregister(&smc_inet6_prot);
+#endif
 	smc_pnet_exit();
 	smc_nl_exit();
 	smc_clc_exit();
@@ -3720,5 +3759,10 @@ MODULE_AUTHOR("Ursula Braun <ubraun@linux.vnet.ibm.com>");
 MODULE_DESCRIPTION("smc socket address family");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_NETPROTO(PF_SMC);
+/* It seems that this macro has different
+ * understanding of enum type(IPPROTO_SMC or SOCK_STREAM)
+ */
+MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_INET, 263, 1);
+MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_INET6, 263, 1);
 MODULE_ALIAS_TCP_ULP("smc");
 MODULE_ALIAS_GENL_FAMILY(SMC_GENL_FAMILY_NAME);
