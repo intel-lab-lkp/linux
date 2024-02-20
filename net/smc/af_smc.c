@@ -2684,17 +2684,16 @@ out:
 	return rc;
 }
 
-static int smc_accept(struct socket *sock, struct socket *new_sock,
-		      int flags, bool kern)
+static struct sock *__smc_accept(struct sock *sk, struct socket *new_sock,
+				 int flags, int *err, bool kern)
 {
-	struct sock *sk = sock->sk, *nsk;
 	DECLARE_WAITQUEUE(wait, current);
+	struct sock *nsk = NULL;
 	struct smc_sock *lsmc;
 	long timeo;
 	int rc = 0;
 
 	lsmc = smc_sk(sk);
-	sock_hold(sk); /* sock_put below */
 	lock_sock(sk);
 
 	if (smc_sk_state(&lsmc->sk) != SMC_LISTEN) {
@@ -2750,8 +2749,21 @@ static int smc_accept(struct socket *sock, struct socket *new_sock,
 	}
 
 out:
-	sock_put(sk); /* sock_hold above */
-	return rc;
+	*err = rc;
+	return nsk;
+}
+
+static int smc_accept(struct socket *sock, struct socket *new_sock,
+		      int flags, bool kern)
+{
+	struct sock *sk = sock->sk;
+	int error;
+
+	sock_hold(sk);
+	__smc_accept(sk, new_sock, flags, &error, kern);
+	sock_put(sk);
+
+	return error;
 }
 
 static int smc_getname(struct socket *sock, struct sockaddr *addr,
