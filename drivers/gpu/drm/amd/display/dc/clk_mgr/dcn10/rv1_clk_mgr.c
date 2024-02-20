@@ -312,7 +312,7 @@ static struct clk_mgr_funcs rv1_clk_funcs = {
 };
 
 static struct clk_mgr_internal_funcs rv1_clk_internal_funcs = {
-	.set_dispclk = rv1_vbios_smu_set_dispclk,
+	.set_dispclk = rv1_clk_mgr_vbios_smu_set_dispclk,
 	.set_dprefclk = dce112_set_dprefclk
 };
 
