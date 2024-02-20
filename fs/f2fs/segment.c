@@ -2667,7 +2667,11 @@ find_other_zone:
 	if (secno >= MAIN_SECS(sbi)) {
 		secno = find_first_zero_bit(free_i->free_secmap,
 							MAIN_SECS(sbi));
-		f2fs_bug_on(sbi, secno >= MAIN_SECS(sbi));
+		if (secno >= MAIN_SECS(sbi)) {
+			f2fs_stop_checkpoint(sbi, false,
+				STOP_CP_REASON_NO_SEGMENT);
+			f2fs_bug_on(sbi, 1);
+		}
 	}
 	segno = GET_SEG_FROM_SEC(sbi, secno);
 	zoneno = GET_ZONE_FROM_SEC(sbi, secno);
