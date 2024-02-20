@@ -252,6 +252,7 @@ struct smc_sock {				/* smc sock container */
 	};
 	struct socket		*clcsock;	/* internal tcp socket */
 	unsigned char		smc_state;	/* smc state used in smc via inet_sk */
+	unsigned long		smc_sk_flags;	/* smc sock flags used for inet sock */
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */
 	void			(*clcsk_data_ready)(struct sock *sk);
@@ -385,10 +386,6 @@ int smc_nl_dump_hs_limitation(struct sk_buff *skb, struct netlink_callback *cb);
 int smc_nl_enable_hs_limitation(struct sk_buff *skb, struct genl_info *info);
 int smc_nl_disable_hs_limitation(struct sk_buff *skb, struct genl_info *info);
 
-static inline void smc_sock_set_flag(struct sock *sk, enum sock_flags flag)
-{
-	set_bit(flag, &sk->sk_flags);
-}
 
 static __always_inline bool smc_sock_is_inet_sock(const struct sock *sk)
 {
@@ -409,6 +406,33 @@ static __always_inline void smc_sk_set_state(struct sock *sk, unsigned char stat
 		sk->sk_state = state;
 }
 
-#define smc_sock_flag(sk, flag)	sock_flag(sk, flag)
+static __always_inline bool smc_sock_flag(const struct sock *sk, enum sock_flags flag)
+{
+	if (smc_sock_is_inet_sock(sk)) {
+		switch (flag) {
+		case SOCK_DEAD:
+		case SOCK_DONE:
+			return test_bit(flag, &smc_sk(sk)->smc_sk_flags);
+		default:
+			break;
+		}
+	}
+	return sock_flag(sk, flag);
+}
+
+static __always_inline void smc_sock_set_flag(struct sock *sk, enum sock_flags flag)
+{
+	if (smc_sock_is_inet_sock(sk)) {
+		switch (flag) {
+		case SOCK_DEAD:
+		case SOCK_DONE:
+			__set_bit(flag, &smc_sk(sk)->smc_sk_flags);
+			return;
+		default:
+			break;
+		}
+	}
+	set_bit(flag, &sk->sk_flags);
+}
 
 #endif	/* __SMC_H */
