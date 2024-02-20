@@ -272,6 +272,7 @@ void hugetlb_vma_unlock_write(struct vm_area_struct *vma);
 int hugetlb_vma_trylock_write(struct vm_area_struct *vma);
 void hugetlb_vma_assert_locked(struct vm_area_struct *vma);
 void hugetlb_vma_lock_release(struct kref *kref);
+vm_fault_t vmf_anon_prepare(struct vm_fault *vmf);
 
 int pmd_huge(pmd_t pmd);
 int pud_huge(pud_t pud);
