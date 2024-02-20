@@ -4259,6 +4259,38 @@ static struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 }
 
 /**
+ * gpiod_device_add_link - Add a link between a GPIO consumer and a GPIO.
+ * @consumer: GPIO consumer.
+ * @desc: GPIO consumed.
+ * @flags: Link flags, see device_link_add().
+ *
+ * This function can be used for drivers that need to add an additional
+ * consumer/supplier device link to a GPIO.
+ *
+ * Returns:
+ * On successful, the link created.
+ * NULL if the link was not created due to a missing GPIO parent.
+ *
+ * In case of error an ERR_PTR() is returned.
+ */
+struct device_link *gpiod_device_add_link(struct device *consumer,
+					  struct gpio_desc *desc,
+					  u32 flags)
+{
+	struct device_link *link;
+
+	if (!desc->gdev->dev.parent)
+		return NULL;
+
+	link = device_link_add(consumer, desc->gdev->dev.parent, flags);
+	if (!link)
+		return ERR_PTR(-EINVAL);
+
+	return link;
+}
+EXPORT_SYMBOL_GPL(gpiod_device_add_link);
+
+/**
  * fwnode_gpiod_get_index - obtain a GPIO from firmware node
  * @fwnode:	handle of the firmware node
  * @con_id:	function within the GPIO consumer
