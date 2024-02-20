@@ -15,8 +15,8 @@
 #include "misc.h"
 #include "error.h"
 #include "pgtable.h"
+#include "dynamic_vars.h"
 #include "../string.h"
-#include "../voffset.h"
 #include <asm/bootparam_utils.h>
 
 /*
@@ -188,7 +188,7 @@ static void handle_relocations(void *output, unsigned long output_len,
 	int *reloc;
 	unsigned long delta, map, ptr;
 	unsigned long min_addr = (unsigned long)output;
-	unsigned long max_addr = min_addr + (VO___bss_start - VO__text);
+	unsigned long max_addr = min_addr + (vo___bss_start - vo__text);
 
 	/*
 	 * Calculate the delta between where vmlinux was linked to load
@@ -329,8 +329,6 @@ static size_t parse_elf(void *output)
 
 	return ehdr.e_entry - LOAD_PHYSICAL_ADDR;
 }
-
-const unsigned long kernel_total_size = VO__end - VO__text;
 
 static u8 boot_heap[BOOT_HEAP_SIZE] __aligned(4);
 

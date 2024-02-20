@@ -94,11 +94,11 @@ targets += ../voffset.h
 $(obj)/../voffset.h: vmlinux FORCE
 	$(call if_changed,voffset)
 
-$(obj)/misc.o: $(obj)/../voffset.h
+$(obj)/dynamic_vars.o: $(obj)/../voffset.h
 
 vmlinux-objs-y := $(obj)/vmlinux.lds $(obj)/kernel_info.o $(obj)/head_$(BITS).o \
 	$(obj)/misc.o $(obj)/string.o $(obj)/cmdline.o $(obj)/error.o \
-	$(obj)/piggy.o $(obj)/cpuflags.o
+	$(obj)/piggy.o $(obj)/cpuflags.o $(obj)/dynamic_vars.o
 
 vmlinux-objs-$(CONFIG_EARLY_PRINTK) += $(obj)/early_serial_console.o
 vmlinux-objs-$(CONFIG_RANDOMIZE_BASE) += $(obj)/kaslr.o
