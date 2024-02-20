@@ -992,10 +992,9 @@ int track_pfn_copy(struct vm_area_struct *vma)
 		 * reserve the whole chunk covered by vma. We need the
 		 * starting address and protection from pte.
 		 */
-		if (follow_phys(vma, vma->vm_start, &prot, &paddr)) {
-			WARN_ON_ONCE(1);
+		if (follow_phys(vma, vma->vm_start, &prot, &paddr))
 			return -EINVAL;
-		}
+
 		pgprot = __pgprot(prot);
 		return reserve_pfn_range(paddr, vma_size, &pgprot, 1);
 	}
@@ -1079,10 +1078,8 @@ void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
 	/* free the chunk starting from pfn or the whole chunk */
 	paddr = (resource_size_t)pfn << PAGE_SHIFT;
 	if (!paddr && !size) {
-		if (follow_phys(vma, vma->vm_start, &prot, &paddr)) {
-			WARN_ON_ONCE(1);
+		if (follow_phys(vma, vma->vm_start, &prot, &paddr))
 			return;
-		}
 
 		size = vma->vm_end - vma->vm_start;
 	}
