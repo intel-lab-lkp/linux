@@ -7,6 +7,7 @@
 
 struct acpi_device;
 struct device;
+struct device_link;
 struct fwnode_handle;
 
 struct gpio_array;
@@ -105,6 +106,10 @@ devm_gpiod_get_array_optional(struct device *dev, const char *con_id,
 void devm_gpiod_put(struct device *dev, struct gpio_desc *desc);
 void devm_gpiod_unhinge(struct device *dev, struct gpio_desc *desc);
 void devm_gpiod_put_array(struct device *dev, struct gpio_descs *descs);
+
+struct device_link *gpiod_device_add_link(struct device *consumer,
+					  struct gpio_desc *desc,
+					  u32 flags);
 
 int gpiod_get_direction(struct gpio_desc *desc);
 int gpiod_direction_input(struct gpio_desc *desc);
