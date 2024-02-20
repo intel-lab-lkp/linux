@@ -1051,6 +1051,13 @@ void gpiochip_remove(struct gpio_chip *gc)
 
 	/* FIXME: should the legacy sysfs handling be moved to gpio_device? */
 	gpiochip_sysfs_unregister(gdev);
+
+	/*
+	 * Tell gcdev that the device is removing. If any gpio resources are in
+	 * use (irqs for instance), it's time for gcdev to release them.
+	 */
+	gcdev_unregister(gdev);
+
 	gpiochip_free_hogs(gc);
 	/* Numb the device, cancelling all outstanding operations */
 	gdev->chip = NULL;
@@ -1085,7 +1092,6 @@ void gpiochip_remove(struct gpio_chip *gc)
 	 * be removed, else it will be dangling until the last user is
 	 * gone.
 	 */
-	gcdev_unregister(gdev);
 	up_write(&gdev->sem);
 	gpio_device_put(gdev);
 }
