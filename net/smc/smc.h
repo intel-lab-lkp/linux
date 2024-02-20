@@ -388,4 +388,6 @@ static inline void smc_sock_set_flag(struct sock *sk, enum sock_flags flag)
 	set_bit(flag, &sk->sk_flags);
 }
 
+#define smc_sock_flag(sk, flag)	sock_flag(sk, flag)
+
 #endif	/* __SMC_H */

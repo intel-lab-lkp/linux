@@ -202,7 +202,7 @@ int smc_close_active(struct smc_sock *smc)
 	int rc1 = 0;
 
 	timeout = current->flags & PF_EXITING ?
-		  0 : sock_flag(sk, SOCK_LINGER) ?
+		  0 : smc_sock_flag(sk, SOCK_LINGER) ?
 		      sk->sk_lingertime : SMC_MAX_STREAM_WAIT_TIMEOUT;
 
 	old_state = smc_sk_state(sk);
@@ -395,7 +395,7 @@ static void smc_close_passive_work(struct work_struct *work)
 	case SMC_PEERCLOSEWAIT2:
 		if (!smc_cdc_rxed_any_close(conn))
 			break;
-		if (sock_flag(sk, SOCK_DEAD) &&
+		if (smc_sock_flag(sk, SOCK_DEAD) &&
 		    smc_close_sent_any_close(conn)) {
 			/* smc_release has already been called locally */
 			smc_sk_set_state(sk, SMC_CLOSED);
@@ -432,7 +432,7 @@ wakeup:
 	if (old_state != smc_sk_state(sk)) {
 		sk->sk_state_change(sk);
 		if ((smc_sk_state(sk) == SMC_CLOSED) &&
-		    (sock_flag(sk, SOCK_DEAD) || !sk->sk_socket)) {
+		    (smc_sock_flag(sk, SOCK_DEAD) || !sk->sk_socket)) {
 			smc_conn_free(conn);
 			if (smc->clcsock)
 				release_clcsock = true;
@@ -453,7 +453,7 @@ int smc_close_shutdown_write(struct smc_sock *smc)
 	int rc = 0;
 
 	timeout = current->flags & PF_EXITING ?
-		  0 : sock_flag(sk, SOCK_LINGER) ?
+		  0 : smc_sock_flag(sk, SOCK_LINGER) ?
 		      sk->sk_lingertime : SMC_MAX_STREAM_WAIT_TIMEOUT;
 
 	old_state = smc_sk_state(sk);

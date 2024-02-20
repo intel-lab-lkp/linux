@@ -358,7 +358,7 @@ static void smc_destruct(struct sock *sk)
 {
 	if (smc_sk_state(sk) != SMC_CLOSED)
 		return;
-	if (!sock_flag(sk, SOCK_DEAD))
+	if (!smc_sock_flag(sk, SOCK_DEAD))
 		return;
 }
 
@@ -1623,7 +1623,7 @@ static void smc_connect_work(struct work_struct *work)
 		smc->sk.sk_err = -rc;
 
 out:
-	if (!sock_flag(&smc->sk, SOCK_DEAD)) {
+	if (!smc_sock_flag(&smc->sk, SOCK_DEAD)) {
 		if (smc->sk.sk_err) {
 			smc->sk.sk_state_change(&smc->sk);
 		} else { /* allow polling before and after fallback decision */

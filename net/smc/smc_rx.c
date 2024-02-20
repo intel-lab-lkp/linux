@@ -70,7 +70,7 @@ static int smc_rx_update_consumer(struct smc_sock *smc,
 	if (conn->urg_state == SMC_URG_VALID || conn->urg_rx_skip_pend) {
 		diff = smc_curs_comp(conn->rmb_desc->len, &cons,
 				     &conn->urg_curs);
-		if (sock_flag(sk, SOCK_URGINLINE)) {
+		if (smc_sock_flag(sk, SOCK_URGINLINE)) {
 			if (diff == 0) {
 				force = true;
 				rc = 1;
@@ -286,7 +286,7 @@ static int smc_rx_recv_urg(struct smc_sock *smc, struct msghdr *msg, int len,
 	struct sock *sk = &smc->sk;
 	int rc = 0;
 
-	if (sock_flag(sk, SOCK_URGINLINE) ||
+	if (smc_sock_flag(sk, SOCK_URGINLINE) ||
 	    !(conn->urg_state == SMC_URG_VALID) ||
 	    conn->urg_state == SMC_URG_READ)
 		return -EINVAL;
@@ -408,7 +408,7 @@ int smc_rx_recvmsg(struct smc_sock *smc, struct msghdr *msg,
 				break;
 			}
 			if (smc_sk_state(sk) == SMC_CLOSED) {
-				if (!sock_flag(sk, SOCK_DONE)) {
+				if (!smc_sock_flag(sk, SOCK_DONE)) {
 					/* This occurs when user tries to read
 					 * from never connected socket.
 					 */
@@ -449,7 +449,7 @@ copy:
 		if (splbytes)
 			smc_curs_add(conn->rmb_desc->len, &cons, splbytes);
 		if (conn->urg_state == SMC_URG_VALID &&
-		    sock_flag(&smc->sk, SOCK_URGINLINE) &&
+		    smc_sock_flag(&smc->sk, SOCK_URGINLINE) &&
 		    readable > 1)
 			readable--;	/* always stop at urgent Byte */
 		/* not more than what user space asked for */
