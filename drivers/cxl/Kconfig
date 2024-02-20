@@ -2,6 +2,7 @@
 menuconfig CXL_BUS
 	tristate "CXL (Compute Express Link) Devices Support"
 	depends on PCI
+	depends on ACPI_APEI_EINJ_CXL || !ACPI_APEI_EINJ_CXL
 	select FW_LOADER
 	select FW_UPLOAD
 	select PCI_DOE
