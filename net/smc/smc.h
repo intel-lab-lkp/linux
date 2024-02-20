@@ -252,6 +252,7 @@ struct smc_sock {				/* smc sock container */
 	};
 	struct socket		*clcsock;	/* internal tcp socket */
 	unsigned char		smc_state;	/* smc state used in smc via inet_sk */
+	unsigned int		isck_smc_negotiation;
 	unsigned long		smc_sk_flags;	/* smc sock flags used for inet sock */
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */

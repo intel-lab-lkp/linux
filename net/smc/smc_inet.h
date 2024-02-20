@@ -18,6 +18,9 @@
 /* MUST after net/tcp.h or warning */
 #include <net/transp_v6.h>
 
+#include <net/smc.h>
+#include "smc.h"
+
 extern struct proto smc_inet_prot;
 extern struct proto smc_inet6_prot;
 
@@ -26,6 +29,99 @@ extern const struct proto_ops smc_inet6_stream_ops;
 
 extern struct inet_protosw smc_inet_protosw;
 extern struct inet_protosw smc_inet6_protosw;
+
+enum smc_inet_sock_negotiation_state {
+	/* When creating an AF_SMC sock, the state field will be initialized to 0 by default,
+	 * which is only for logical compatibility with that situation
+	 * and will never be used.
+	 */
+	SMC_NEGOTIATION_COMPATIBLE_WITH_AF_SMC = 0,
+
+	/* This connection is still uncertain whether it is an SMC connection or not,
+	 * It always appears when actively open SMC connection, because it's unclear
+	 * whether the server supports the SMC protocol and has willing to use SMC.
+	 */
+	SMC_NEGOTIATION_TBD = 0x10,
+
+	/* This state indicates that this connection is definitely not an SMC connection.
+	 * and it is absolutely impossible to become an SMC connection again. A fina
+	 * state.
+	 */
+	SMC_NEGOTIATION_NO_SMC = 0x20,
+
+	/* This state indicates that this connection is an SMC connection. and it is
+	 * absolutely impossible to become an not-SMC connection again. A final state.
+	 */
+	SMC_NEGOTIATION_SMC = 0x40,
+
+	/* This state indicates that this connection is in the process of SMC handshake.
+	 * It is mainly used to eliminate the ambiguity of syn_smc, because when syn_smc is 1,
+	 * It may represent remote has support for SMC, or it may just indicate that itself has
+	 * supports for SMC.
+	 */
+	SMC_NEGOTIATION_PREPARE_SMC = 0x80,
+
+	/* flags */
+	SMC_NEGOTIATION_LISTEN_FLAG = 0x01,
+	SMC_NEGOTIATION_ABORT_FLAG = 0x02,
+};
+
+static __always_inline void isck_smc_negotiation_store(struct smc_sock *smc,
+						       enum smc_inet_sock_negotiation_state state)
+{
+	WRITE_ONCE(smc->isck_smc_negotiation,
+		   state | (READ_ONCE(smc->isck_smc_negotiation) & 0x0f));
+}
+
+static __always_inline int isck_smc_negotiation_load(struct smc_sock *smc)
+{
+	return READ_ONCE(smc->isck_smc_negotiation) & 0xf0;
+}
+
+static __always_inline void isck_smc_negotiation_set_flags(struct smc_sock *smc, int flags)
+{
+	smc->isck_smc_negotiation = (smc->isck_smc_negotiation | (flags & 0x0f));
+}
+
+static __always_inline int isck_smc_negotiation_get_flags(struct smc_sock *smc)
+{
+	return smc->isck_smc_negotiation & 0x0f;
+}
+
+static __always_inline bool smc_inet_sock_check_fallback_fast(struct sock *sk)
+{
+	return !tcp_sk(sk)->syn_smc;
+}
+
+static __always_inline bool smc_inet_sock_check_fallback(struct sock *sk)
+{
+	return isck_smc_negotiation_load(smc_sk(sk)) == SMC_NEGOTIATION_NO_SMC;
+}
+
+static __always_inline bool smc_inet_sock_check_smc(struct sock *sk)
+{
+	if (smc_inet_sock_check_fallback_fast(sk))
+		return false;
+
+	return isck_smc_negotiation_load(smc_sk(sk)) == SMC_NEGOTIATION_SMC;
+}
+
+static __always_inline bool smc_inet_sock_is_active_open(struct sock *sk)
+{
+	return !(isck_smc_negotiation_get_flags(smc_sk(sk)) & SMC_NEGOTIATION_LISTEN_FLAG);
+}
+
+static inline void smc_inet_sock_abort(struct sock *sk)
+{
+	write_lock_bh(&sk->sk_callback_lock);
+	if (isck_smc_negotiation_get_flags(smc_sk(sk)) & SMC_NEGOTIATION_ABORT_FLAG) {
+		write_unlock_bh(&sk->sk_callback_lock);
+		return;
+	}
+	isck_smc_negotiation_set_flags(smc_sk(sk), SMC_NEGOTIATION_ABORT_FLAG);
+	write_unlock_bh(&sk->sk_callback_lock);
+	sk->sk_error_report(sk);
+}
 
 /* obtain TCP proto via sock family */
 static __always_inline struct proto *smc_inet_get_tcp_prot(int family)
