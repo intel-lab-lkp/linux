@@ -231,15 +231,42 @@ this documentation.
    For further information on these methods, please see the inline
    documentation in :c:type:`struct phylink_mac_ops <phylink_mac_ops>`.
 
-9. Remove calls to of_parse_phandle() for the PHY,
-   of_phy_register_fixed_link() for fixed links etc. from the probe
-   function, and replace with:
+9. Fill-in the :c:type:`struct phylink_config <phylink_config>` fields with
+   a reference to the :c:type:`struct device <device>` associated to your
+   :c:type:`struct net_device <net_device>`:
 
    .. code-block:: c
 
-	struct phylink *phylink;
 	priv->phylink_config.dev = &dev.dev;
 	priv->phylink_config.type = PHYLINK_NETDEV;
+
+   Fill-in the various speeds, pause and duplex modes your MAC can handle:
+
+   .. code-block:: c
+
+        priv->phylink_config.mac_capabilities = MAC_SYM_PAUSE | MAC_10 | MAC_100 | MAC_1000FD;
+
+   Fill-in all the :c:type:`phy_interface_t <phy_interface_t>` (i.e. all MAC to
+   PHY link modes) that your MAC can output. The following example shows a
+   configuration for a MAC that can handle all RGMII modes, SGMII and 1000BaseX.
+   You must adjust these according to what your MAC is capable of, and not just
+   the interface you wish to use:
+
+   .. code-block:: c
+
+       phy_interface_set_rgmii(priv->phylink_config.supported_interfaces);
+        __set_bit(PHY_INTERFACE_MODE_SGMII,
+                  priv->phylink_config.supported_interfaces);
+        __set_bit(PHY_INTERFACE_MODE_1000BASEX,
+                  priv->phylink_config.supported_interfaces);
+
+10. Remove calls to of_parse_phandle() for the PHY,
+    of_phy_register_fixed_link() for fixed links etc. from the probe
+    function, and replace with:
+
+    .. code-block:: c
+
+	struct phylink *phylink;
 
 	phylink = phylink_create(&priv->phylink_config, node, phy_mode, &phylink_ops);
 	if (IS_ERR(phylink)) {
@@ -249,14 +276,14 @@ this documentation.
 
 	priv->phylink = phylink;
 
-   and arrange to destroy the phylink in the probe failure path as
-   appropriate and the removal path too by calling:
+    and arrange to destroy the phylink in the probe failure path as
+    appropriate and the removal path too by calling:
 
-   .. code-block:: c
+    .. code-block:: c
 
 	phylink_destroy(priv->phylink);
 
-10. Arrange for MAC link state interrupts to be forwarded into
+11. Arrange for MAC link state interrupts to be forwarded into
     phylink, via:
 
     .. code-block:: c
@@ -266,7 +293,7 @@ this documentation.
     where ``link_is_up`` is true if the link is currently up or false
     otherwise.
 
-11. Verify that the driver does not call::
+12. Verify that the driver does not call::
 
 	netif_carrier_on()
 	netif_carrier_off()
