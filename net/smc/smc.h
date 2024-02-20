@@ -248,7 +248,11 @@ struct smc_connection {
 };
 
 struct smc_sock {				/* smc sock container */
-	struct sock		sk;
+	union {
+		struct tcp6_sock tp6sk;
+		struct tcp_sock tpsk;
+		struct sock sk;
+	};
 	struct socket		*clcsock;	/* internal tcp socket */
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */
@@ -386,6 +390,11 @@ int smc_nl_disable_hs_limitation(struct sk_buff *skb, struct genl_info *info);
 static inline void smc_sock_set_flag(struct sock *sk, enum sock_flags flag)
 {
 	set_bit(flag, &sk->sk_flags);
+}
+
+static __always_inline bool smc_sock_is_inet_sock(const struct sock *sk)
+{
+	return inet_test_bit(IS_ICSK, sk);
 }
 
 #define smc_sock_flag(sk, flag)	sock_flag(sk, flag)
