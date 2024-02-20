@@ -2610,6 +2610,34 @@ out:
 	read_unlock_bh(&listen_clcsock->sk_callback_lock);
 }
 
+static inline void smc_init_listen(struct smc_sock *smc)
+{
+	struct sock *clcsk;
+
+	clcsk = smc_sock_is_inet_sock(&smc->sk) ? &smc->sk : smc->clcsock->sk;
+
+	/* save original sk_data_ready function and establish
+	 * smc-specific sk_data_ready function
+	 */
+	write_lock_bh(&clcsk->sk_callback_lock);
+	clcsk->sk_user_data =
+		(void *)((uintptr_t)smc | SK_USER_DATA_NOCOPY);
+	smc_clcsock_replace_cb(&clcsk->sk_data_ready,
+			       smc_clcsock_data_ready, &smc->clcsk_data_ready);
+	write_unlock_bh(&clcsk->sk_callback_lock);
+
+	/* save original ops */
+	smc->ori_af_ops = inet_csk(clcsk)->icsk_af_ops;
+
+	smc->af_ops = *smc->ori_af_ops;
+	smc->af_ops.syn_recv_sock = smc_tcp_syn_recv_sock;
+
+	inet_csk(clcsk)->icsk_af_ops = &smc->af_ops;
+
+	if (smc->limit_smc_hs)
+		tcp_sk(clcsk)->smc_hs_congested = smc_hs_congested;
+}
+
 static int smc_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
@@ -2636,26 +2664,7 @@ static int smc_listen(struct socket *sock, int backlog)
 	if (!smc->use_fallback)
 		tcp_sk(smc->clcsock->sk)->syn_smc = 1;
 
-	/* save original sk_data_ready function and establish
-	 * smc-specific sk_data_ready function
-	 */
-	write_lock_bh(&smc->clcsock->sk->sk_callback_lock);
-	smc->clcsock->sk->sk_user_data =
-		(void *)((uintptr_t)smc | SK_USER_DATA_NOCOPY);
-	smc_clcsock_replace_cb(&smc->clcsock->sk->sk_data_ready,
-			       smc_clcsock_data_ready, &smc->clcsk_data_ready);
-	write_unlock_bh(&smc->clcsock->sk->sk_callback_lock);
-
-	/* save original ops */
-	smc->ori_af_ops = inet_csk(smc->clcsock->sk)->icsk_af_ops;
-
-	smc->af_ops = *smc->ori_af_ops;
-	smc->af_ops.syn_recv_sock = smc_tcp_syn_recv_sock;
-
-	inet_csk(smc->clcsock->sk)->icsk_af_ops = &smc->af_ops;
-
-	if (smc->limit_smc_hs)
-		tcp_sk(smc->clcsock->sk)->smc_hs_congested = smc_hs_congested;
+	smc_init_listen(smc);
 
 	rc = kernel_listen(smc->clcsock, backlog);
 	if (rc) {
