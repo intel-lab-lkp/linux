@@ -3008,38 +3008,39 @@ err_not_found:
 	return NULL;
 }
 
-static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915)
+static struct vbt_header *oprom_get_vbt(struct drm_i915_private *i915,
+					size_t *size)
 {
 	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
 	void __iomem *p = NULL, *oprom;
 	struct vbt_header *vbt;
 	u16 vbt_size;
-	size_t i, size;
+	size_t i;
 
-	oprom = pci_map_rom(pdev, &size);
+	oprom = pci_map_rom(pdev, size);
 	if (!oprom)
 		return NULL;
 
 	/* Scour memory looking for the VBT signature. */
-	for (i = 0; i + 4 < size; i += 4) {
+	for (i = 0; i + 4 < *size; i += 4) {
 		if (ioread32(oprom + i) != *((const u32 *)"$VBT"))
 			continue;
 
 		p = oprom + i;
-		size -= i;
+		*size -= i;
 		break;
 	}
 
 	if (!p)
 		goto err_unmap_oprom;
 
-	if (sizeof(struct vbt_header) > size) {
+	if (sizeof(struct vbt_header) > *size) {
 		drm_dbg(&i915->drm, "VBT header incomplete\n");
 		goto err_unmap_oprom;
 	}
 
 	vbt_size = ioread16(p + offsetof(struct vbt_header, vbt_size));
-	if (vbt_size > size) {
+	if (vbt_size > *size) {
 		drm_dbg(&i915->drm,
 			"VBT incomplete (vbt_size overflows)\n");
 		goto err_unmap_oprom;
@@ -3082,6 +3083,7 @@ void intel_bios_init(struct drm_i915_private *i915)
 	const struct vbt_header *vbt;
 	struct vbt_header *oprom_vbt = NULL;
 	const struct bdb_header *bdb;
+	size_t size;
 
 	INIT_LIST_HEAD(&i915->display.vbt.display_devices);
 	INIT_LIST_HEAD(&i915->display.vbt.bdb_blocks);
@@ -3106,7 +3108,7 @@ void intel_bios_init(struct drm_i915_private *i915)
 	}
 
 	if (!vbt) {
-		oprom_vbt = oprom_get_vbt(i915);
+		oprom_vbt = oprom_get_vbt(i915, &size);
 		vbt = oprom_vbt;
 	}
 
