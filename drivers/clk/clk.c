@@ -988,7 +988,8 @@ static void clk_core_unprepare_lock(struct clk_core *core)
  * if the operation may sleep.  One example is a clk which is accessed over
  * I2c.  In the complex case a clk gate operation may require a fast and a slow
  * part.  It is this reason that clk_unprepare and clk_disable are not mutually
- * exclusive.  In fact clk_disable must be called before clk_unprepare.
+ * exclusive.  In fact clk_disable must be called before clk_unprepare.  The
+ * synchronous or asynchronous clock gating operation is driver dependent.
  */
 void clk_unprepare(struct clk *clk)
 {

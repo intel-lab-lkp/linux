@@ -113,7 +113,8 @@ struct clk_duty {
  *		sleep.
  *
  * @disable:	Disable the clock atomically. Called with enable_lock held.
- *		This function must not sleep.
+ *		This function must not sleep. The synchronous or asynchronous
+ *		disabling of the clock is driver dependent.
  *
  * @is_enabled:	Queries the hardware to determine if the clock is enabled.
  *		This function must not sleep. Optional, if this op is not
