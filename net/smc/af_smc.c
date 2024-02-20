@@ -909,16 +909,18 @@ static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
 {
 	int rc = 0;
 
+	/* no need protected by clcsock_release_lock, move head */
+	smc->use_fallback = true;
+	smc->fallback_rsn = reason_code;
+	smc_stat_fallback(smc);
+	trace_smc_switch_to_fallback(smc, reason_code);
+
 	mutex_lock(&smc->clcsock_release_lock);
 	if (!smc->clcsock) {
 		rc = -EBADF;
 		goto out;
 	}
 
-	smc->use_fallback = true;
-	smc->fallback_rsn = reason_code;
-	smc_stat_fallback(smc);
-	trace_smc_switch_to_fallback(smc, reason_code);
 	if (smc->sk.sk_socket && smc->sk.sk_socket->file) {
 		smc->clcsock->file = smc->sk.sk_socket->file;
 		smc->clcsock->file->private_data = smc->clcsock;
