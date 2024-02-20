@@ -3723,14 +3723,30 @@ static int intel_bios_vbt_show(struct seq_file *m, void *unused)
 	struct drm_i915_private *i915 = m->private;
 	const void *vbt;
 	size_t vbt_size;
+	bool need_cleanup = false;
 
-	/*
-	 * FIXME: VBT might originate from other places than opregion, and then
-	 * this would be incorrect.
-	 */
-	vbt = intel_opregion_get_vbt(i915, &vbt_size);
-	if (vbt)
-		seq_write(m, vbt, vbt_size);
+	vbt = firmware_get_vbt(i915, &vbt_size);
+
+	if (!vbt)
+		vbt = intel_opregion_get_vbt(i915, &vbt_size);
+
+	if (!vbt && IS_DGFX(i915)) {
+		vbt = spi_oprom_get_vbt(i915, &vbt_size);
+		need_cleanup = true;
+	}
+
+	if (!vbt) {
+		vbt = oprom_get_vbt(i915, &vbt_size);
+		need_cleanup = true;
+	}
+
+	if (!vbt)
+		return 0;
+
+	seq_write(m, vbt, vbt_size);
+
+	if (need_cleanup)
+		kfree(vbt);
 
 	return 0;
 }
