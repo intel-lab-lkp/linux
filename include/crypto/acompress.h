@@ -160,6 +160,11 @@ static inline void acomp_request_set_tfm(struct acomp_req *req,
 	req->base.tfm = crypto_acomp_tfm(tfm);
 }
 
+static inline u32 crypto_acomp_get_alg_flags(struct crypto_acomp *tfm)
+{
+	return crypto_tfm_alg_flags(crypto_acomp_tfm(tfm));
+}
+
 static inline struct crypto_acomp *crypto_acomp_reqtfm(struct acomp_req *req)
 {
 	return __crypto_acomp_tfm(req->base.tfm);
