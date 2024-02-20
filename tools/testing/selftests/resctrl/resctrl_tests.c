@@ -142,6 +142,8 @@ static void run_single_test(const struct resctrl_test *test, const struct user_p
 	}
 
 	ret = test->run_test(test, uparams);
+	if (test->cleanup)
+		test->cleanup();
 	ksft_test_result(!ret, "%s: test\n", test->name);
 
 cleanup:

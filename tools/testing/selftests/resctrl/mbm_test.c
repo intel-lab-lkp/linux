@@ -105,7 +105,7 @@ static int mbm_setup(const struct resctrl_test *test,
 	return ret;
 }
 
-void mbm_test_cleanup(void)
+static void mbm_test_cleanup(void)
 {
 	remove(RESULT_FILE_NAME);
 }
@@ -133,8 +133,6 @@ static int mbm_run_test(const struct resctrl_test *test, const struct user_param
 		ksft_print_msg("Intel MBM may be inaccurate when Sub-NUMA Clustering is enabled. Check BIOS configuration.\n");
 
 out:
-	mbm_test_cleanup();
-
 	return ret;
 }
 

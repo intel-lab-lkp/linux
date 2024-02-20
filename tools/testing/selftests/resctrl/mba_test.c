@@ -137,7 +137,7 @@ static int check_results(void)
 	return show_mba_info(bw_imc, bw_resc);
 }
 
-void mba_test_cleanup(void)
+static void mba_test_cleanup(void)
 {
 	remove(RESULT_FILE_NAME);
 }
@@ -163,8 +163,6 @@ static int mba_run_test(const struct resctrl_test *test, const struct user_param
 	ret = check_results();
 
 out:
-	mba_test_cleanup();
-
 	return ret;
 }
 
