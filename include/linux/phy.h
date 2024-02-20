@@ -539,6 +539,7 @@ struct phy_c45_device_ids {
 	u32 device_ids[MDIO_MMD_NUM];
 };
 
+struct phy_driver_id;
 struct macsec_context;
 struct macsec_ops;
 
@@ -546,6 +547,7 @@ struct macsec_ops;
  * struct phy_device - An instance of a PHY
  *
  * @mdio: MDIO bus this PHY is on
+ * @drv_id: Pointer to the driver ID for this PHY instance
  * @drv: Pointer to the driver for this PHY instance
  * @devlink: Create a link between phy dev and mac dev, if the external phy
  *           used by current mac interface is managed by another mac interface.
@@ -643,6 +645,7 @@ struct phy_device {
 
 	/* Information about the PHY type */
 	/* And management functions */
+	const struct phy_driver_id *drv_id;
 	const struct phy_driver *drv;
 
 	struct device_link *devlink;
@@ -884,8 +887,31 @@ struct phy_led {
 #define to_phy_led(d) container_of(d, struct phy_led, led_cdev)
 
 /**
+ * struct phy_driver_id - Driver structure id for a particular PHY type
+ * @mdiodrv: Data common to all MDIO devices
+ * @phy_id: The result of reading the UID registers of this PHY
+ *   type, and ANDing them with the phy_id_mask.  This driver
+ *   only works for PHYs with IDs which match this field
+ * @name: The friendly name of this PHY type
+ * @phy_id_mask: Defines the important bits of the phy_id
+ *
+ * @driver: Pointer to the associated PHY driver
+ */
+struct phy_driver_id {
+	struct mdio_driver_common mdiodrv;
+	u32 phy_id;
+	char *name;
+	u32 phy_id_mask;
+
+	struct phy_driver *driver;
+};
+
+/**
  * struct phy_driver - Driver structure for a particular PHY type
  *
+ * @ids: array of mdio device IDs to match this driver (terminated with
+ *   zero phy_id_mask)
+ * @ids_count: count of mdio device IDs (not counting the sentinel)
  * @mdiodrv: Data common to all MDIO devices
  * @phy_id: The result of reading the UID registers of this PHY
  *   type, and ANDing them with the phy_id_mask.  This driver
@@ -907,7 +933,8 @@ struct phy_led {
  * though it is not currently supported in the driver).
  */
 struct phy_driver {
-	struct mdio_driver_common mdiodrv;
+	struct phy_driver_id *ids;
+	u32 ids_count;
 	u32 phy_id;
 	char *name;
 	u32 phy_id_mask;
@@ -1173,8 +1200,10 @@ struct phy_driver {
 	int (*led_polarity_set)(struct phy_device *dev, int index,
 				unsigned long modes);
 };
-#define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
-				      struct phy_driver, mdiodrv)
+
+#define to_phy_driver_id(d) container_of(to_mdio_common_driver(d),		\
+					 struct phy_driver_id, mdiodrv)
+#define to_phy_driver(d) to_phy_driver_id(d)->driver
 
 #define PHY_ANY_ID "MATCH ANY PHY"
 #define PHY_ANY_UID 0xffffffff
@@ -1208,7 +1237,8 @@ static inline bool phy_id_compare(u32 id1, u32 id2, u32 mask)
  */
 static inline bool phydev_id_compare(struct phy_device *phydev, u32 id)
 {
-	return phy_id_compare(id, phydev->phy_id, phydev->drv->phy_id_mask);
+	return phy_id_compare(id, phydev->phy_id,
+			      phydev->drv_id->phy_id_mask);
 }
 
 /* A Structure for boards to register fixups with the PHY Lib */

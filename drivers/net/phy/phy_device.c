@@ -535,12 +535,13 @@ static int phy_scan_fixups(struct phy_device *phydev)
 
 static int phy_bus_match(struct device *dev, struct device_driver *drv)
 {
+	struct phy_driver_id *phydrv_id = to_phy_driver_id(drv);
 	struct phy_device *phydev = to_phy_device(dev);
-	struct phy_driver *phydrv = to_phy_driver(drv);
+	struct phy_driver *phydrv = phydrv_id->driver;
 	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
 	int i;
 
-	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
+	if (!(phydrv_id->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
 		return 0;
 
 	if (phydrv->match_phy_device)
@@ -552,13 +553,14 @@ static int phy_bus_match(struct device *dev, struct device_driver *drv)
 				continue;
 
 			if (phy_id_compare(phydev->c45_ids.device_ids[i],
-					   phydrv->phy_id, phydrv->phy_id_mask))
+					   phydrv_id->phy_id, phydrv_id->phy_id_mask))
 				return 1;
 		}
+
 		return 0;
 	} else {
-		return phy_id_compare(phydev->phy_id, phydrv->phy_id,
-				      phydrv->phy_id_mask);
+		return phy_id_compare(phydev->phy_id, phydrv_id->phy_id,
+				      phydrv_id->phy_id_mask);
 	}
 }
 
@@ -1476,9 +1478,9 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 */
 	if (!d->driver) {
 		if (phydev->is_c45)
-			d->driver = &genphy_c45_driver.mdiodrv.driver;
+			d->driver = &genphy_c45_driver.ids->mdiodrv.driver;
 		else
-			d->driver = &genphy_driver.mdiodrv.driver;
+			d->driver = &genphy_driver.ids->mdiodrv.driver;
 
 		using_genphy = true;
 	}
@@ -1660,14 +1662,14 @@ static bool phy_driver_is_genphy_kind(struct phy_device *phydev,
 bool phy_driver_is_genphy(struct phy_device *phydev)
 {
 	return phy_driver_is_genphy_kind(phydev,
-					 &genphy_driver.mdiodrv.driver);
+					 &genphy_driver.ids->mdiodrv.driver);
 }
 EXPORT_SYMBOL_GPL(phy_driver_is_genphy);
 
 bool phy_driver_is_genphy_10g(struct phy_device *phydev)
 {
 	return phy_driver_is_genphy_kind(phydev,
-					 &genphy_c45_driver.mdiodrv.driver);
+					 &genphy_c45_driver.ids->mdiodrv.driver);
 }
 EXPORT_SYMBOL_GPL(phy_driver_is_genphy_10g);
 
@@ -3420,9 +3422,11 @@ static int phy_probe(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
 	struct device_driver *drv = phydev->mdio.dev.driver;
-	struct phy_driver *phydrv = to_phy_driver(drv);
+	struct phy_driver_id *id = to_phy_driver_id(drv);
+	struct phy_driver *phydrv = id->driver;
 	int err = 0;
 
+	phydev->drv_id = id;
 	phydev->drv = phydrv;
 
 	/* Disable the interrupt if the PHY doesn't support it
@@ -3562,6 +3566,42 @@ static int phy_remove(struct device *dev)
 	return 0;
 }
 
+static int phy_driver_mdiodrv_register(struct mdio_driver_common *mdiodrv, char *name,
+				       struct module *owner)
+{
+	int retval;
+
+	/* PHYLIB device drivers must not match using a DT compatible table
+	 * as this bypasses our checks that the mdiodev that is being matched
+	 * is backed by a struct phy_device. If such a case happens, we will
+	 * make out-of-bounds accesses and lockup in phydev->lock.
+	 */
+	if (WARN(mdiodrv->driver.of_match_table,
+		 "%s: driver must not provide a DT match table\n",
+		 name))
+		return -EINVAL;
+
+	mdiodrv->flags |= MDIO_DEVICE_IS_PHY;
+	mdiodrv->driver.name = name;
+	mdiodrv->driver.bus = &mdio_bus_type;
+	mdiodrv->driver.probe = phy_probe;
+	mdiodrv->driver.remove = phy_remove;
+	mdiodrv->driver.owner = owner;
+	mdiodrv->driver.probe_type = PROBE_FORCE_SYNCHRONOUS;
+
+	retval = driver_register(&mdiodrv->driver);
+	if (retval) {
+		pr_err("%s: Error %d in registering driver\n",
+		       name, retval);
+
+		return retval;
+	}
+
+	pr_debug("%s: Registered new driver\n", name);
+
+	return 0;
+}
+
 /**
  * phy_driver_register - register a phy_driver with the PHY layer
  * @new_driver: new phy_driver to register
@@ -3569,7 +3609,7 @@ static int phy_remove(struct device *dev)
  */
 int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 {
-	int retval;
+	int i, retval;
 
 	/* Either the features are hard coded, or dynamically
 	 * determined. It cannot be both.
@@ -3580,33 +3620,47 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 		return -EINVAL;
 	}
 
-	/* PHYLIB device drivers must not match using a DT compatible table
-	 * as this bypasses our checks that the mdiodev that is being matched
-	 * is backed by a struct phy_device. If such a case happens, we will
-	 * make out-of-bounds accesses and lockup in phydev->lock.
+	/* Either PHY driver define multiple PHY IDs, or a single one.
+	 * It cannot be both.
 	 */
-	if (WARN(new_driver->mdiodrv.driver.of_match_table,
-		 "%s: driver must not provide a DT match table\n",
-		 new_driver->name))
+	if (WARN_ON((new_driver->phy_id || new_driver->phy_id_mask) &&
+		    new_driver->ids)) {
+		pr_err("%s: phy_id or phy_id_mask and ids table must not both be set\n",
+		       new_driver->name);
 		return -EINVAL;
-
-	new_driver->mdiodrv.flags |= MDIO_DEVICE_IS_PHY;
-	new_driver->mdiodrv.driver.name = new_driver->name;
-	new_driver->mdiodrv.driver.bus = &mdio_bus_type;
-	new_driver->mdiodrv.driver.probe = phy_probe;
-	new_driver->mdiodrv.driver.remove = phy_remove;
-	new_driver->mdiodrv.driver.owner = owner;
-	new_driver->mdiodrv.driver.probe_type = PROBE_FORCE_SYNCHRONOUS;
-
-	retval = driver_register(&new_driver->mdiodrv.driver);
-	if (retval) {
-		pr_err("%s: Error %d in registering driver\n",
-		       new_driver->name, retval);
-
-		return retval;
 	}
 
-	pr_debug("%s: Registered new driver\n", new_driver->name);
+	/* Dynamically allocate ids table for PHY driver that define
+	 * a single PHY ID.
+	 */
+	if (!new_driver->ids) {
+		struct phy_driver_id *id;
+
+		id = kzalloc(sizeof(*new_driver->ids), GFP_KERNEL);
+		if (!id)
+			return -ENOMEM;
+
+		id->name = new_driver->name;
+		id->phy_id = new_driver->phy_id;
+		id->phy_id_mask = new_driver->phy_id_mask;
+		new_driver->ids = id;
+		new_driver->ids_count = 1;
+	}
+
+	for (i = 0; i < new_driver->ids_count; i++) {
+		struct phy_driver_id *ids = new_driver->ids;
+
+		/* Attach the phy_driver to the phy_driver_id */
+		ids[i].driver = new_driver;
+		retval = phy_driver_mdiodrv_register(&ids[i].mdiodrv,
+						     ids[i].name, owner);
+		if (retval) {
+			while (i-- > 0)
+				driver_unregister(&ids[i].mdiodrv.driver);
+
+			return retval;
+		}
+	}
 
 	return 0;
 }
@@ -3631,7 +3685,16 @@ EXPORT_SYMBOL(phy_drivers_register);
 
 void phy_driver_unregister(struct phy_driver *drv)
 {
-	driver_unregister(&drv->mdiodrv.driver);
+	int i;
+
+	for (i = 0; i < drv->ids_count; i++)
+		driver_unregister(&drv->ids[i].mdiodrv.driver);
+
+	/* With phy_id or phy_id_mask set in phy_driver, assume
+	 * dynamically allocated ids table.
+	 */
+	if (drv->phy_id || drv->phy_id_mask)
+		kfree(drv->ids);
 }
 EXPORT_SYMBOL(phy_driver_unregister);
 
