@@ -198,7 +198,7 @@ int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 		goto out_err;
 	}
 
-	if (sk->sk_state == SMC_INIT)
+	if (smc_sk_state(sk) == SMC_INIT)
 		return -ENOTCONN;
 
 	if (len > conn->sndbuf_desc->len)

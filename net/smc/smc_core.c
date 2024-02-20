@@ -1010,8 +1010,8 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 	/* recalculate, value is used by tx_rdma_writes() */
 	atomic_set(&smc->conn.peer_rmbe_space, smc_write_space(conn));
 
-	if (smc->sk.sk_state != SMC_INIT &&
-	    smc->sk.sk_state != SMC_CLOSED) {
+	if (smc_sk_state(&smc->sk) != SMC_INIT &&
+	    smc_sk_state(&smc->sk) != SMC_CLOSED) {
 		rc = smcr_cdc_msg_send_validation(conn, pend, wr_buf);
 		if (!rc) {
 			queue_delayed_work(conn->lgr->tx_wq, &conn->tx_work, 0);
@@ -1072,17 +1072,17 @@ again:
 			continue;
 		smc = container_of(conn, struct smc_sock, conn);
 		/* conn->lnk not yet set in SMC_INIT state */
-		if (smc->sk.sk_state == SMC_INIT)
+		if (smc_sk_state(&smc->sk) == SMC_INIT)
 			continue;
-		if (smc->sk.sk_state == SMC_CLOSED ||
-		    smc->sk.sk_state == SMC_PEERCLOSEWAIT1 ||
-		    smc->sk.sk_state == SMC_PEERCLOSEWAIT2 ||
-		    smc->sk.sk_state == SMC_APPFINCLOSEWAIT ||
-		    smc->sk.sk_state == SMC_APPCLOSEWAIT1 ||
-		    smc->sk.sk_state == SMC_APPCLOSEWAIT2 ||
-		    smc->sk.sk_state == SMC_PEERFINCLOSEWAIT ||
-		    smc->sk.sk_state == SMC_PEERABORTWAIT ||
-		    smc->sk.sk_state == SMC_PROCESSABORT) {
+		if (smc_sk_state(&smc->sk) == SMC_CLOSED ||
+		    smc_sk_state(&smc->sk) == SMC_PEERCLOSEWAIT1 ||
+		    smc_sk_state(&smc->sk) == SMC_PEERCLOSEWAIT2 ||
+		    smc_sk_state(&smc->sk) == SMC_APPFINCLOSEWAIT ||
+		    smc_sk_state(&smc->sk) == SMC_APPCLOSEWAIT1 ||
+		    smc_sk_state(&smc->sk) == SMC_APPCLOSEWAIT2 ||
+		    smc_sk_state(&smc->sk) == SMC_PEERFINCLOSEWAIT ||
+		    smc_sk_state(&smc->sk) == SMC_PEERABORTWAIT ||
+		    smc_sk_state(&smc->sk) == SMC_PROCESSABORT) {
 			spin_lock_bh(&conn->send_lock);
 			smc_switch_link_and_count(conn, to_lnk);
 			spin_unlock_bh(&conn->send_lock);

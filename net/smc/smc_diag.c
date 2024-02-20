@@ -87,7 +87,7 @@ static int __smc_diag_dump(struct sock *sk, struct sk_buff *skb,
 
 	r = nlmsg_data(nlh);
 	smc_diag_msg_common_fill(r, sk);
-	r->diag_state = sk->sk_state;
+	r->diag_state = smc_sk_state(sk);
 	if (smc->use_fallback)
 		r->diag_mode = SMC_DIAG_MODE_FALLBACK_TCP;
 	else if (smc_conn_lgr_valid(&smc->conn) && smc->conn.lgr->is_smcd)

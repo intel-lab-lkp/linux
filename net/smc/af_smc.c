@@ -278,16 +278,16 @@ static int __smc_release(struct smc_sock *smc)
 		smc_sock_set_flag(sk, SOCK_DEAD);
 		sk->sk_shutdown |= SHUTDOWN_MASK;
 	} else {
-		if (sk->sk_state != SMC_CLOSED) {
-			if (sk->sk_state != SMC_LISTEN &&
-			    sk->sk_state != SMC_INIT)
+		if (smc_sk_state(sk) != SMC_CLOSED) {
+			if (smc_sk_state(sk) != SMC_LISTEN &&
+			    smc_sk_state(sk) != SMC_INIT)
 				sock_put(sk); /* passive closing */
-			if (sk->sk_state == SMC_LISTEN) {
+			if (smc_sk_state(sk) == SMC_LISTEN) {
 				/* wake up clcsock accept */
 				rc = kernel_sock_shutdown(smc->clcsock,
 							  SHUT_RDWR);
 			}
-			sk->sk_state = SMC_CLOSED;
+			smc_sk_set_state(sk, SMC_CLOSED);
 			sk->sk_state_change(sk);
 		}
 		smc_restore_fallback_changes(smc);
@@ -295,7 +295,7 @@ static int __smc_release(struct smc_sock *smc)
 
 	sk->sk_prot->unhash(sk);
 
-	if (sk->sk_state == SMC_CLOSED) {
+	if (smc_sk_state(sk) == SMC_CLOSED) {
 		if (smc->clcsock) {
 			release_sock(sk);
 			smc_clcsock_release(smc);
@@ -320,7 +320,7 @@ static int smc_release(struct socket *sock)
 	sock_hold(sk); /* sock_put below */
 	smc = smc_sk(sk);
 
-	old_state = sk->sk_state;
+	old_state = smc_sk_state(sk);
 
 	/* cleanup for a dangling non-blocking connect */
 	if (smc->connect_nonblock && old_state == SMC_INIT)
@@ -329,7 +329,7 @@ static int smc_release(struct socket *sock)
 	if (cancel_work_sync(&smc->connect_work))
 		sock_put(&smc->sk); /* sock_hold in smc_connect for passive closing */
 
-	if (sk->sk_state == SMC_LISTEN)
+	if (smc_sk_state(sk) == SMC_LISTEN)
 		/* smc_close_non_accepted() is called and acquires
 		 * sock lock for child sockets again
 		 */
@@ -337,7 +337,7 @@ static int smc_release(struct socket *sock)
 	else
 		lock_sock(sk);
 
-	if (old_state == SMC_INIT && sk->sk_state == SMC_ACTIVE &&
+	if (old_state == SMC_INIT && smc_sk_state(sk) == SMC_ACTIVE &&
 	    !smc->use_fallback)
 		smc_close_active_abort(smc);
 
@@ -356,7 +356,7 @@ out:
 
 static void smc_destruct(struct sock *sk)
 {
-	if (sk->sk_state != SMC_CLOSED)
+	if (smc_sk_state(sk) != SMC_CLOSED)
 		return;
 	if (!sock_flag(sk, SOCK_DEAD))
 		return;
@@ -375,7 +375,7 @@ static struct sock *smc_sock_alloc(struct net *net, struct socket *sock,
 		return NULL;
 
 	sock_init_data(sock, sk); /* sets sk_refcnt to 1 */
-	sk->sk_state = SMC_INIT;
+	smc_sk_set_state(sk, SMC_INIT);
 	sk->sk_destruct = smc_destruct;
 	sk->sk_protocol = protocol;
 	WRITE_ONCE(sk->sk_sndbuf, 2 * READ_ONCE(net->smc.sysctl_wmem));
@@ -423,7 +423,7 @@ static int smc_bind(struct socket *sock, struct sockaddr *uaddr,
 
 	/* Check if socket is already active */
 	rc = -EINVAL;
-	if (sk->sk_state != SMC_INIT || smc->connect_nonblock)
+	if (smc_sk_state(sk) != SMC_INIT || smc->connect_nonblock)
 		goto out_rel;
 
 	smc->clcsock->sk->sk_reuse = sk->sk_reuse;
@@ -946,14 +946,14 @@ static int smc_connect_fallback(struct smc_sock *smc, int reason_code)
 	rc = smc_switch_to_fallback(smc, reason_code);
 	if (rc) { /* fallback fails */
 		this_cpu_inc(net->smc.smc_stats->clnt_hshake_err_cnt);
-		if (smc->sk.sk_state == SMC_INIT)
+		if (smc_sk_state(&smc->sk) == SMC_INIT)
 			sock_put(&smc->sk); /* passive closing */
 		return rc;
 	}
 	smc_copy_sock_settings_to_clc(smc);
 	smc->connect_nonblock = 0;
-	if (smc->sk.sk_state == SMC_INIT)
-		smc->sk.sk_state = SMC_ACTIVE;
+	if (smc_sk_state(&smc->sk) == SMC_INIT)
+		smc_sk_set_state(&smc->sk, SMC_ACTIVE);
 	return 0;
 }
 
@@ -966,7 +966,7 @@ static int smc_connect_decline_fallback(struct smc_sock *smc, int reason_code,
 
 	if (reason_code < 0) { /* error, fallback is not possible */
 		this_cpu_inc(net->smc.smc_stats->clnt_hshake_err_cnt);
-		if (smc->sk.sk_state == SMC_INIT)
+		if (smc_sk_state(&smc->sk) == SMC_INIT)
 			sock_put(&smc->sk); /* passive closing */
 		return reason_code;
 	}
@@ -974,7 +974,7 @@ static int smc_connect_decline_fallback(struct smc_sock *smc, int reason_code,
 		rc = smc_clc_send_decline(smc, reason_code, version);
 		if (rc < 0) {
 			this_cpu_inc(net->smc.smc_stats->clnt_hshake_err_cnt);
-			if (smc->sk.sk_state == SMC_INIT)
+			if (smc_sk_state(&smc->sk) == SMC_INIT)
 				sock_put(&smc->sk); /* passive closing */
 			return rc;
 		}
@@ -1357,8 +1357,8 @@ static int smc_connect_rdma(struct smc_sock *smc,
 
 	smc_copy_sock_settings_to_clc(smc);
 	smc->connect_nonblock = 0;
-	if (smc->sk.sk_state == SMC_INIT)
-		smc->sk.sk_state = SMC_ACTIVE;
+	if (smc_sk_state(&smc->sk) == SMC_INIT)
+		smc_sk_set_state(&smc->sk, SMC_ACTIVE);
 
 	return 0;
 connect_abort:
@@ -1452,8 +1452,8 @@ static int smc_connect_ism(struct smc_sock *smc,
 
 	smc_copy_sock_settings_to_clc(smc);
 	smc->connect_nonblock = 0;
-	if (smc->sk.sk_state == SMC_INIT)
-		smc->sk.sk_state = SMC_ACTIVE;
+	if (smc_sk_state(&smc->sk) == SMC_INIT)
+		smc_sk_set_state(&smc->sk, SMC_ACTIVE);
 
 	return 0;
 connect_abort:
@@ -1607,7 +1607,7 @@ static void smc_connect_work(struct work_struct *work)
 	release_sock(smc->clcsock->sk);
 	lock_sock(&smc->sk);
 	if (rc != 0 || smc->sk.sk_err) {
-		smc->sk.sk_state = SMC_CLOSED;
+		smc_sk_set_state(&smc->sk, SMC_CLOSED);
 		if (rc == -EPIPE || rc == -EAGAIN)
 			smc->sk.sk_err = EPIPE;
 		else if (rc == -ECONNREFUSED)
@@ -1655,10 +1655,10 @@ static int smc_connect(struct socket *sock, struct sockaddr *addr,
 		rc = -EINVAL;
 		goto out;
 	case SS_CONNECTED:
-		rc = sk->sk_state == SMC_ACTIVE ? -EISCONN : -EINVAL;
+		rc = smc_sk_state(sk) == SMC_ACTIVE ? -EISCONN : -EINVAL;
 		goto out;
 	case SS_CONNECTING:
-		if (sk->sk_state == SMC_ACTIVE)
+		if (smc_sk_state(sk) == SMC_ACTIVE)
 			goto connected;
 		break;
 	case SS_UNCONNECTED:
@@ -1666,7 +1666,7 @@ static int smc_connect(struct socket *sock, struct sockaddr *addr,
 		break;
 	}
 
-	switch (sk->sk_state) {
+	switch (smc_sk_state(sk)) {
 	default:
 		goto out;
 	case SMC_CLOSED:
@@ -1740,11 +1740,11 @@ static int smc_clcsock_accept(struct smc_sock *lsmc, struct smc_sock **new_smc)
 	lock_sock(lsk);
 	if  (rc < 0 && rc != -EAGAIN)
 		lsk->sk_err = -rc;
-	if (rc < 0 || lsk->sk_state == SMC_CLOSED) {
+	if (rc < 0 || smc_sk_state(lsk) == SMC_CLOSED) {
 		new_sk->sk_prot->unhash(new_sk);
 		if (new_clcsock)
 			sock_release(new_clcsock);
-		new_sk->sk_state = SMC_CLOSED;
+		smc_sk_set_state(new_sk, SMC_CLOSED);
 		smc_sock_set_flag(new_sk, SOCK_DEAD);
 		sock_put(new_sk); /* final */
 		*new_smc = NULL;
@@ -1812,7 +1812,7 @@ struct sock *smc_accept_dequeue(struct sock *parent,
 		new_sk = (struct sock *)isk;
 
 		smc_accept_unlink(new_sk);
-		if (new_sk->sk_state == SMC_CLOSED) {
+		if (smc_sk_state(new_sk) == SMC_CLOSED) {
 			new_sk->sk_prot->unhash(new_sk);
 			if (isk->clcsock) {
 				sock_release(isk->clcsock);
@@ -1911,7 +1911,7 @@ static void smc_listen_out(struct smc_sock *new_smc)
 	if (tcp_sk(new_smc->clcsock->sk)->syn_smc)
 		atomic_dec(&lsmc->queued_smc_hs);
 
-	if (lsmc->sk.sk_state == SMC_LISTEN) {
+	if (smc_sk_state(&lsmc->sk) == SMC_LISTEN) {
 		lock_sock_nested(&lsmc->sk, SINGLE_DEPTH_NESTING);
 		smc_accept_enqueue(&lsmc->sk, newsmcsk);
 		release_sock(&lsmc->sk);
@@ -1929,8 +1929,8 @@ static void smc_listen_out_connected(struct smc_sock *new_smc)
 {
 	struct sock *newsmcsk = &new_smc->sk;
 
-	if (newsmcsk->sk_state == SMC_INIT)
-		newsmcsk->sk_state = SMC_ACTIVE;
+	if (smc_sk_state(newsmcsk) == SMC_INIT)
+		smc_sk_set_state(newsmcsk, SMC_ACTIVE);
 
 	smc_listen_out(new_smc);
 }
@@ -1942,9 +1942,9 @@ static void smc_listen_out_err(struct smc_sock *new_smc)
 	struct net *net = sock_net(newsmcsk);
 
 	this_cpu_inc(net->smc.smc_stats->srv_hshake_err_cnt);
-	if (newsmcsk->sk_state == SMC_INIT)
+	if (smc_sk_state(newsmcsk) == SMC_INIT)
 		sock_put(&new_smc->sk); /* passive closing */
-	newsmcsk->sk_state = SMC_CLOSED;
+	smc_sk_set_state(newsmcsk, SMC_CLOSED);
 
 	smc_listen_out(new_smc);
 }
@@ -2432,7 +2432,7 @@ static void smc_listen_work(struct work_struct *work)
 	u8 accept_version;
 	int rc = 0;
 
-	if (new_smc->listen_smc->sk.sk_state != SMC_LISTEN)
+	if (smc_sk_state(&new_smc->listen_smc->sk) != SMC_LISTEN)
 		return smc_listen_out_err(new_smc);
 
 	if (new_smc->use_fallback) {
@@ -2564,7 +2564,7 @@ static void smc_tcp_listen_work(struct work_struct *work)
 	int rc = 0;
 
 	lock_sock(lsk);
-	while (lsk->sk_state == SMC_LISTEN) {
+	while (smc_sk_state(lsk) == SMC_LISTEN) {
 		rc = smc_clcsock_accept(lsmc, &new_smc);
 		if (rc) /* clcsock accept queue empty or error */
 			goto out;
@@ -2599,7 +2599,7 @@ static void smc_clcsock_data_ready(struct sock *listen_clcsock)
 	if (!lsmc)
 		goto out;
 	lsmc->clcsk_data_ready(listen_clcsock);
-	if (lsmc->sk.sk_state == SMC_LISTEN) {
+	if (smc_sk_state(&lsmc->sk) == SMC_LISTEN) {
 		sock_hold(&lsmc->sk); /* sock_put in smc_tcp_listen_work() */
 		if (!queue_work(smc_tcp_ls_wq, &lsmc->tcp_listen_work))
 			sock_put(&lsmc->sk);
@@ -2618,12 +2618,12 @@ static int smc_listen(struct socket *sock, int backlog)
 	lock_sock(sk);
 
 	rc = -EINVAL;
-	if ((sk->sk_state != SMC_INIT && sk->sk_state != SMC_LISTEN) ||
+	if ((smc_sk_state(sk) != SMC_INIT && smc_sk_state(sk) != SMC_LISTEN) ||
 	    smc->connect_nonblock || sock->state != SS_UNCONNECTED)
 		goto out;
 
 	rc = 0;
-	if (sk->sk_state == SMC_LISTEN) {
+	if (smc_sk_state(sk) == SMC_LISTEN) {
 		sk->sk_max_ack_backlog = backlog;
 		goto out;
 	}
@@ -2666,7 +2666,7 @@ static int smc_listen(struct socket *sock, int backlog)
 	}
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_ack_backlog = 0;
-	sk->sk_state = SMC_LISTEN;
+	smc_sk_set_state(sk, SMC_LISTEN);
 
 out:
 	release_sock(sk);
@@ -2686,7 +2686,7 @@ static int smc_accept(struct socket *sock, struct socket *new_sock,
 	sock_hold(sk); /* sock_put below */
 	lock_sock(sk);
 
-	if (lsmc->sk.sk_state != SMC_LISTEN) {
+	if (smc_sk_state(&lsmc->sk) != SMC_LISTEN) {
 		rc = -EINVAL;
 		release_sock(sk);
 		goto out;
@@ -2748,8 +2748,8 @@ static int smc_getname(struct socket *sock, struct sockaddr *addr,
 {
 	struct smc_sock *smc;
 
-	if (peer && (sock->sk->sk_state != SMC_ACTIVE) &&
-	    (sock->sk->sk_state != SMC_APPCLOSEWAIT1))
+	if (peer && (smc_sk_state(sock->sk) != SMC_ACTIVE) &&
+	    (smc_sk_state(sock->sk) != SMC_APPCLOSEWAIT1))
 		return -ENOTCONN;
 
 	smc = smc_sk(sock->sk);
@@ -2769,7 +2769,7 @@ static int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	/* SMC does not support connect with fastopen */
 	if (msg->msg_flags & MSG_FASTOPEN) {
 		/* not connected yet, fallback */
-		if (sk->sk_state == SMC_INIT && !smc->connect_nonblock) {
+		if (smc_sk_state(sk) == SMC_INIT && !smc->connect_nonblock) {
 			rc = smc_switch_to_fallback(smc, SMC_CLC_DECL_OPTUNSUPP);
 			if (rc)
 				goto out;
@@ -2777,9 +2777,9 @@ static int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 			rc = -EINVAL;
 			goto out;
 		}
-	} else if ((sk->sk_state != SMC_ACTIVE) &&
-		   (sk->sk_state != SMC_APPCLOSEWAIT1) &&
-		   (sk->sk_state != SMC_INIT)) {
+	} else if ((smc_sk_state(sk) != SMC_ACTIVE) &&
+		   (smc_sk_state(sk) != SMC_APPCLOSEWAIT1) &&
+		   (smc_sk_state(sk) != SMC_INIT)) {
 		rc = -EPIPE;
 		goto out;
 	}
@@ -2804,17 +2804,17 @@ static int smc_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	smc = smc_sk(sk);
 	lock_sock(sk);
-	if (sk->sk_state == SMC_CLOSED && (sk->sk_shutdown & RCV_SHUTDOWN)) {
+	if (smc_sk_state(sk) == SMC_CLOSED && (sk->sk_shutdown & RCV_SHUTDOWN)) {
 		/* socket was connected before, no more data to read */
 		rc = 0;
 		goto out;
 	}
-	if ((sk->sk_state == SMC_INIT) ||
-	    (sk->sk_state == SMC_LISTEN) ||
-	    (sk->sk_state == SMC_CLOSED))
+	if ((smc_sk_state(sk) == SMC_INIT) ||
+	    (smc_sk_state(sk) == SMC_LISTEN) ||
+	    (smc_sk_state(sk) == SMC_CLOSED))
 		goto out;
 
-	if (sk->sk_state == SMC_PEERFINCLOSEWAIT) {
+	if (smc_sk_state(sk) == SMC_PEERFINCLOSEWAIT) {
 		rc = 0;
 		goto out;
 	}
@@ -2861,14 +2861,14 @@ static __poll_t smc_poll(struct file *file, struct socket *sock,
 		mask = smc->clcsock->ops->poll(file, smc->clcsock, wait);
 		sk->sk_err = smc->clcsock->sk->sk_err;
 	} else {
-		if (sk->sk_state != SMC_CLOSED)
+		if (smc_sk_state(sk) != SMC_CLOSED)
 			sock_poll_wait(file, sock, wait);
 		if (sk->sk_err)
 			mask |= EPOLLERR;
 		if ((sk->sk_shutdown == SHUTDOWN_MASK) ||
-		    (sk->sk_state == SMC_CLOSED))
+		    (smc_sk_state(sk) == SMC_CLOSED))
 			mask |= EPOLLHUP;
-		if (sk->sk_state == SMC_LISTEN) {
+		if (smc_sk_state(sk) == SMC_LISTEN) {
 			/* woken up by sk_data_ready in smc_listen_work() */
 			mask |= smc_accept_poll(sk);
 		} else if (smc->use_fallback) { /* as result of connect_work()*/
@@ -2876,7 +2876,7 @@ static __poll_t smc_poll(struct file *file, struct socket *sock,
 							   wait);
 			sk->sk_err = smc->clcsock->sk->sk_err;
 		} else {
-			if ((sk->sk_state != SMC_INIT &&
+			if ((smc_sk_state(sk) != SMC_INIT &&
 			     atomic_read(&smc->conn.sndbuf_space)) ||
 			    sk->sk_shutdown & SEND_SHUTDOWN) {
 				mask |= EPOLLOUT | EPOLLWRNORM;
@@ -2888,7 +2888,7 @@ static __poll_t smc_poll(struct file *file, struct socket *sock,
 				mask |= EPOLLIN | EPOLLRDNORM;
 			if (sk->sk_shutdown & RCV_SHUTDOWN)
 				mask |= EPOLLIN | EPOLLRDNORM | EPOLLRDHUP;
-			if (sk->sk_state == SMC_APPCLOSEWAIT1)
+			if (smc_sk_state(sk) == SMC_APPCLOSEWAIT1)
 				mask |= EPOLLIN;
 			if (smc->conn.urg_state == SMC_URG_VALID)
 				mask |= EPOLLPRI;
@@ -2915,29 +2915,29 @@ static int smc_shutdown(struct socket *sock, int how)
 	lock_sock(sk);
 
 	if (sock->state == SS_CONNECTING) {
-		if (sk->sk_state == SMC_ACTIVE)
+		if (smc_sk_state(sk) == SMC_ACTIVE)
 			sock->state = SS_CONNECTED;
-		else if (sk->sk_state == SMC_PEERCLOSEWAIT1 ||
-			 sk->sk_state == SMC_PEERCLOSEWAIT2 ||
-			 sk->sk_state == SMC_APPCLOSEWAIT1 ||
-			 sk->sk_state == SMC_APPCLOSEWAIT2 ||
-			 sk->sk_state == SMC_APPFINCLOSEWAIT)
+		else if (smc_sk_state(sk) == SMC_PEERCLOSEWAIT1 ||
+			 smc_sk_state(sk) == SMC_PEERCLOSEWAIT2 ||
+			 smc_sk_state(sk) == SMC_APPCLOSEWAIT1 ||
+			 smc_sk_state(sk) == SMC_APPCLOSEWAIT2 ||
+			 smc_sk_state(sk) == SMC_APPFINCLOSEWAIT)
 			sock->state = SS_DISCONNECTING;
 	}
 
 	rc = -ENOTCONN;
-	if ((sk->sk_state != SMC_ACTIVE) &&
-	    (sk->sk_state != SMC_PEERCLOSEWAIT1) &&
-	    (sk->sk_state != SMC_PEERCLOSEWAIT2) &&
-	    (sk->sk_state != SMC_APPCLOSEWAIT1) &&
-	    (sk->sk_state != SMC_APPCLOSEWAIT2) &&
-	    (sk->sk_state != SMC_APPFINCLOSEWAIT))
+	if ((smc_sk_state(sk) != SMC_ACTIVE) &&
+	    (smc_sk_state(sk) != SMC_PEERCLOSEWAIT1) &&
+	    (smc_sk_state(sk) != SMC_PEERCLOSEWAIT2) &&
+	    (smc_sk_state(sk) != SMC_APPCLOSEWAIT1) &&
+	    (smc_sk_state(sk) != SMC_APPCLOSEWAIT2) &&
+	    (smc_sk_state(sk) != SMC_APPFINCLOSEWAIT))
 		goto out;
 	if (smc->use_fallback) {
 		rc = kernel_sock_shutdown(smc->clcsock, how);
 		sk->sk_shutdown = smc->clcsock->sk->sk_shutdown;
 		if (sk->sk_shutdown == SHUTDOWN_MASK) {
-			sk->sk_state = SMC_CLOSED;
+			smc_sk_set_state(sk, SMC_CLOSED);
 			sk->sk_socket->state = SS_UNCONNECTED;
 			sock_put(sk);
 		}
@@ -2945,10 +2945,10 @@ static int smc_shutdown(struct socket *sock, int how)
 	}
 	switch (how) {
 	case SHUT_RDWR:		/* shutdown in both directions */
-		old_state = sk->sk_state;
+		old_state = smc_sk_state(sk);
 		rc = smc_close_active(smc);
 		if (old_state == SMC_ACTIVE &&
-		    sk->sk_state == SMC_PEERCLOSEWAIT1)
+		    smc_sk_state(sk) == SMC_PEERCLOSEWAIT1)
 			do_shutdown = false;
 		break;
 	case SHUT_WR:
@@ -2964,7 +2964,7 @@ static int smc_shutdown(struct socket *sock, int how)
 	/* map sock_shutdown_cmd constants to sk_shutdown value range */
 	sk->sk_shutdown |= how + 1;
 
-	if (sk->sk_state == SMC_CLOSED)
+	if (smc_sk_state(sk) == SMC_CLOSED)
 		sock->state = SS_UNCONNECTED;
 	else
 		sock->state = SS_DISCONNECTING;
@@ -3085,16 +3085,15 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	case TCP_FASTOPEN_KEY:
 	case TCP_FASTOPEN_NO_COOKIE:
 		/* option not supported by SMC */
-		if (sk->sk_state == SMC_INIT && !smc->connect_nonblock) {
+		if (smc_sk_state(sk) == SMC_INIT && !smc->connect_nonblock)
 			rc = smc_switch_to_fallback(smc, SMC_CLC_DECL_OPTUNSUPP);
-		} else {
+		else
 			rc = -EINVAL;
-		}
 		break;
 	case TCP_NODELAY:
-		if (sk->sk_state != SMC_INIT &&
-		    sk->sk_state != SMC_LISTEN &&
-		    sk->sk_state != SMC_CLOSED) {
+		if (smc_sk_state(sk) != SMC_INIT &&
+		    smc_sk_state(sk) != SMC_LISTEN &&
+		    smc_sk_state(sk) != SMC_CLOSED) {
 			if (val) {
 				SMC_STAT_INC(smc, ndly_cnt);
 				smc_tx_pending(&smc->conn);
@@ -3103,9 +3102,9 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 		}
 		break;
 	case TCP_CORK:
-		if (sk->sk_state != SMC_INIT &&
-		    sk->sk_state != SMC_LISTEN &&
-		    sk->sk_state != SMC_CLOSED) {
+		if (smc_sk_state(sk) != SMC_INIT &&
+		    smc_sk_state(sk) != SMC_LISTEN &&
+		    smc_sk_state(sk) != SMC_CLOSED) {
 			if (!val) {
 				SMC_STAT_INC(smc, cork_cnt);
 				smc_tx_pending(&smc->conn);
@@ -3173,24 +3172,24 @@ static int smc_ioctl(struct socket *sock, unsigned int cmd,
 	}
 	switch (cmd) {
 	case SIOCINQ: /* same as FIONREAD */
-		if (smc->sk.sk_state == SMC_LISTEN) {
+		if (smc_sk_state(&smc->sk) == SMC_LISTEN) {
 			release_sock(&smc->sk);
 			return -EINVAL;
 		}
-		if (smc->sk.sk_state == SMC_INIT ||
-		    smc->sk.sk_state == SMC_CLOSED)
+		if (smc_sk_state(&smc->sk) == SMC_INIT ||
+		    smc_sk_state(&smc->sk) == SMC_CLOSED)
 			answ = 0;
 		else
 			answ = atomic_read(&smc->conn.bytes_to_rcv);
 		break;
 	case SIOCOUTQ:
 		/* output queue size (not send + not acked) */
-		if (smc->sk.sk_state == SMC_LISTEN) {
+		if (smc_sk_state(&smc->sk) == SMC_LISTEN) {
 			release_sock(&smc->sk);
 			return -EINVAL;
 		}
-		if (smc->sk.sk_state == SMC_INIT ||
-		    smc->sk.sk_state == SMC_CLOSED)
+		if (smc_sk_state(&smc->sk) == SMC_INIT ||
+		    smc_sk_state(&smc->sk) == SMC_CLOSED)
 			answ = 0;
 		else
 			answ = smc->conn.sndbuf_desc->len -
@@ -3198,23 +3197,23 @@ static int smc_ioctl(struct socket *sock, unsigned int cmd,
 		break;
 	case SIOCOUTQNSD:
 		/* output queue size (not send only) */
-		if (smc->sk.sk_state == SMC_LISTEN) {
+		if (smc_sk_state(&smc->sk) == SMC_LISTEN) {
 			release_sock(&smc->sk);
 			return -EINVAL;
 		}
-		if (smc->sk.sk_state == SMC_INIT ||
-		    smc->sk.sk_state == SMC_CLOSED)
+		if (smc_sk_state(&smc->sk) == SMC_INIT ||
+		    smc_sk_state(&smc->sk) == SMC_CLOSED)
 			answ = 0;
 		else
 			answ = smc_tx_prepared_sends(&smc->conn);
 		break;
 	case SIOCATMARK:
-		if (smc->sk.sk_state == SMC_LISTEN) {
+		if (smc_sk_state(&smc->sk) == SMC_LISTEN) {
 			release_sock(&smc->sk);
 			return -EINVAL;
 		}
-		if (smc->sk.sk_state == SMC_INIT ||
-		    smc->sk.sk_state == SMC_CLOSED) {
+		if (smc_sk_state(&smc->sk) == SMC_INIT ||
+		    smc_sk_state(&smc->sk) == SMC_CLOSED) {
 			answ = 0;
 		} else {
 			smc_curs_copy(&cons, &conn->local_tx_ctrl.cons, conn);
@@ -3248,17 +3247,17 @@ static ssize_t smc_splice_read(struct socket *sock, loff_t *ppos,
 
 	smc = smc_sk(sk);
 	lock_sock(sk);
-	if (sk->sk_state == SMC_CLOSED && (sk->sk_shutdown & RCV_SHUTDOWN)) {
+	if (smc_sk_state(sk) == SMC_CLOSED && (sk->sk_shutdown & RCV_SHUTDOWN)) {
 		/* socket was connected before, no more data to read */
 		rc = 0;
 		goto out;
 	}
-	if (sk->sk_state == SMC_INIT ||
-	    sk->sk_state == SMC_LISTEN ||
-	    sk->sk_state == SMC_CLOSED)
+	if (smc_sk_state(sk) == SMC_INIT ||
+	    smc_sk_state(sk) == SMC_LISTEN ||
+	    smc_sk_state(sk) == SMC_CLOSED)
 		goto out;
 
-	if (sk->sk_state == SMC_PEERFINCLOSEWAIT) {
+	if (smc_sk_state(sk) == SMC_PEERFINCLOSEWAIT) {
 		rc = 0;
 		goto out;
 	}
