@@ -660,6 +660,7 @@ int inet6_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	return INDIRECT_CALL_2(prot->sendmsg, tcp_sendmsg, udpv6_sendmsg,
 			       sk, msg, size);
 }
+EXPORT_SYMBOL_GPL(inet6_sendmsg);
 
 INDIRECT_CALLABLE_DECLARE(int udpv6_recvmsg(struct sock *, struct msghdr *,
 					    size_t, int, int *));
@@ -682,6 +683,7 @@ int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 		msg->msg_namelen = addr_len;
 	return err;
 }
+EXPORT_SYMBOL_GPL(inet6_recvmsg);
 
 const struct proto_ops inet6_stream_ops = {
 	.family		   = PF_INET6,
