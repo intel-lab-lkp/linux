@@ -168,6 +168,14 @@ static void init_unused_rings(struct intel_gt *gt)
 	}
 }
 
+static void intel_gt_apply_ccs_mode(struct intel_gt *gt)
+{
+	if (!IS_DG2(gt->i915))
+		return;
+
+	intel_uncore_write(gt->uncore, XEHP_CCS_MODE, 0);
+}
+
 int intel_gt_init_hw(struct intel_gt *gt)
 {
 	struct drm_i915_private *i915 = gt->i915;
@@ -194,6 +202,9 @@ int intel_gt_init_hw(struct intel_gt *gt)
 	intel_gt_verify_workarounds(gt, "init");
 
 	intel_gt_init_swizzling(gt);
+
+	/* Configure CCS mode */
+	intel_gt_apply_ccs_mode(gt);
 
 	/*
 	 * At least 830 can leave some of the unused rings

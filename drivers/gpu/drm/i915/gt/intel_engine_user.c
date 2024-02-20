@@ -243,6 +243,15 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		if (engine->uabi_class == I915_NO_UABI_CLASS)
 			continue;
 
+		/*
+		 * Do not list and do not count CCS engines other than the first
+		 */
+		if (engine->uabi_class == I915_ENGINE_CLASS_COMPUTE &&
+		    engine->uabi_instance > 0) {
+			i915->engine_uabi_class_count[engine->uabi_class]--;
+			continue;
+		}
+
 		rb_link_node(&engine->uabi_node, prev, p);
 		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
 
