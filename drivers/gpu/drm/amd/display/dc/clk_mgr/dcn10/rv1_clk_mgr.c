@@ -34,12 +34,12 @@
 #include "rv1_clk_mgr_vbios_smu.h"
 #include "rv1_clk_mgr_clk.h"
 
-static void rv1_init_clocks(struct clk_mgr *clk_mgr)
+static void rv1_clk_mgr_init_clocks(struct clk_mgr *clk_mgr)
 {
 	memset(&(clk_mgr->clks), 0, sizeof(struct dc_clocks));
 }
 
-static int rv1_determine_dppclk_threshold(struct clk_mgr_internal *clk_mgr, struct dc_clocks *new_clocks)
+static int rv1_clk_mgr_determine_dppclk_threshold(struct clk_mgr_internal *clk_mgr, struct dc_clocks *new_clocks)
 {
 	bool request_dpp_div = new_clocks->dispclk_khz > new_clocks->dppclk_khz;
 	bool dispclk_increase = new_clocks->dispclk_khz > clk_mgr->base.clks.dispclk_khz;
@@ -85,18 +85,18 @@ static int rv1_determine_dppclk_threshold(struct clk_mgr_internal *clk_mgr, stru
 	return disp_clk_threshold;
 }
 
-static void ramp_up_dispclk_with_dpp(
+static void rv1_clk_mgr_ramp_up_dispclk_with_dpp(
 		struct clk_mgr_internal *clk_mgr,
 		struct dc *dc,
 		struct dc_clocks *new_clocks,
 		bool safe_to_lower)
 {
 	int i;
-	int dispclk_to_dpp_threshold = rv1_determine_dppclk_threshold(clk_mgr, new_clocks);
+	int dispclk_to_dpp_threshold = rv1_clk_mgr_determine_dppclk_threshold(clk_mgr, new_clocks);
 	bool request_dpp_div = new_clocks->dispclk_khz > new_clocks->dppclk_khz;
 
 	/* this function is to change dispclk, dppclk and dprefclk according to
-	 * bandwidth requirement. Its call stack is rv1_update_clocks -->
+	 * bandwidth requirement. Its call stack is rv1_clk_mgr_update_clocks -->
 	 * update_clocks --> dcn10_prepare_bandwidth / dcn10_optimize_bandwidth
 	 * --> prepare_bandwidth / optimize_bandwidth. before change dcn hw,
 	 * prepare_bandwidth will be called first to allow enough clock,
@@ -187,7 +187,7 @@ static void ramp_up_dispclk_with_dpp(
 	clk_mgr->base.clks.max_supported_dppclk_khz = new_clocks->max_supported_dppclk_khz;
 }
 
-static void rv1_update_clocks(struct clk_mgr *clk_mgr_base,
+static void rv1_clk_mgr_update_clocks(struct clk_mgr *clk_mgr_base,
 			struct dc_state *context,
 			bool safe_to_lower)
 {
@@ -274,7 +274,7 @@ static void rv1_update_clocks(struct clk_mgr *clk_mgr_base,
 	/* program dispclk on = as a w/a for sleep resume clock ramping issues */
 	if (should_set_clock(safe_to_lower, new_clocks->dispclk_khz, clk_mgr_base->clks.dispclk_khz)
 			|| new_clocks->dispclk_khz == clk_mgr_base->clks.dispclk_khz) {
-		ramp_up_dispclk_with_dpp(clk_mgr, dc, new_clocks, safe_to_lower);
+		rv1_clk_mgr_ramp_up_dispclk_with_dpp(clk_mgr, dc, new_clocks, safe_to_lower);
 		clk_mgr_base->clks.dispclk_khz = new_clocks->dispclk_khz;
 		send_request_to_lower = true;
 	}
@@ -291,7 +291,7 @@ static void rv1_update_clocks(struct clk_mgr *clk_mgr_base,
 	}
 }
 
-static void rv1_enable_pme_wa(struct clk_mgr *clk_mgr_base)
+static void rv1_clk_mgr_enable_pme_wa(struct clk_mgr *clk_mgr_base)
 {
 	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
 	struct pp_smu_funcs_rv *pp_smu = NULL;
@@ -305,10 +305,10 @@ static void rv1_enable_pme_wa(struct clk_mgr *clk_mgr_base)
 }
 
 static struct clk_mgr_funcs rv1_clk_funcs = {
-	.init_clocks = rv1_init_clocks,
+	.init_clocks = rv1_clk_mgr_init_clocks,
 	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
-	.update_clocks = rv1_update_clocks,
-	.enable_pme_wa = rv1_enable_pme_wa,
+	.update_clocks = rv1_clk_mgr_update_clocks,
+	.enable_pme_wa = rv1_clk_mgr_enable_pme_wa,
 };
 
 static struct clk_mgr_internal_funcs rv1_clk_internal_funcs = {
