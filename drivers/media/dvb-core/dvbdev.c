@@ -1064,6 +1064,8 @@ static int dvb_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	const struct dvb_device *dvbdev = dev_get_drvdata(dev);
 
+	add_uevent_var(env, "DVB_ADAPTER_NAME=%s", dvbdev->adapter->name);
+	add_uevent_var(env, "DVB_ADAPTER_PDEV=%s", dev_name(dev->parent));
 	add_uevent_var(env, "DVB_ADAPTER_NUM=%d", dvbdev->adapter->num);
 	add_uevent_var(env, "DVB_DEVICE_TYPE=%s", dnames[dvbdev->type]);
 	add_uevent_var(env, "DVB_DEVICE_NUM=%d", dvbdev->id);
