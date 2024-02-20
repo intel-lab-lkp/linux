@@ -35,6 +35,7 @@
 #define SMC_CLC_DECL_TIMEOUT_AL	0x02020000  /* timeout w4 QP add link	      */
 #define SMC_CLC_DECL_CNFERR	0x03000000  /* configuration error            */
 #define SMC_CLC_DECL_PEERNOSMC	0x03010000  /* peer did not indicate SMC      */
+#define SMC_CLC_DECL_ACTIVE		0x03010001	/* local active fallback */
 #define SMC_CLC_DECL_IPSEC	0x03020000  /* IPsec usage		      */
 #define SMC_CLC_DECL_NOSMCDEV	0x03030000  /* no SMC device found (R or D)   */
 #define SMC_CLC_DECL_NOSMCDDEV	0x03030001  /* no SMC-D device found	      */

@@ -269,7 +269,7 @@ int smc_rx_wait(struct smc_sock *smc, long *timeo,
 	rc = sk_wait_event(sk, timeo,
 			   READ_ONCE(sk->sk_err) ||
 			   cflags->peer_conn_abort ||
-			   READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN ||
+			   smc_has_rcv_shutdown(sk) ||
 			   conn->killed ||
 			   fcrit(conn),
 			   &wait);
@@ -316,7 +316,7 @@ static int smc_rx_recv_urg(struct smc_sock *smc, struct msghdr *msg, int len,
 		return rc ? -EFAULT : len;
 	}
 
-	if (smc_sk_state(sk) == SMC_CLOSED || sk->sk_shutdown & RCV_SHUTDOWN)
+	if (smc_sk_state(sk) == SMC_CLOSED || smc_has_rcv_shutdown(sk))
 		return 0;
 
 	return -EAGAIN;
@@ -387,7 +387,7 @@ int smc_rx_recvmsg(struct smc_sock *smc, struct msghdr *msg,
 		if (smc_rx_recvmsg_data_available(smc))
 			goto copy;
 
-		if (sk->sk_shutdown & RCV_SHUTDOWN) {
+		if (smc_has_rcv_shutdown(sk)) {
 			/* smc_cdc_msg_recv_action() could have run after
 			 * above smc_rx_recvmsg_data_available()
 			 */

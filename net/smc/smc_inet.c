@@ -36,7 +36,7 @@ struct proto smc_inet_prot = {
 	.name			= "SMC",
 	.owner			= THIS_MODULE,
 	.close			= tcp_close,
-	.pre_connect		= NULL,
+	.pre_connect	= NULL,
 	.connect		= tcp_v4_connect,
 	.disconnect		= tcp_disconnect,
 	.accept			= smc_inet_csk_accept,
@@ -121,7 +121,7 @@ struct proto smc_inet6_prot = {
 	.name			= "SMCv6",
 	.owner			= THIS_MODULE,
 	.close			= tcp_close,
-	.pre_connect		= NULL,
+	.pre_connect	= NULL,
 	.connect		= NULL,
 	.disconnect		= tcp_disconnect,
 	.accept			= smc_inet_csk_accept,
@@ -145,6 +145,7 @@ struct proto smc_inet6_prot = {
 	.stream_memory_free	= tcp_stream_memory_free,
 	.sockets_allocated	= &tcp_sockets_allocated,
 	.memory_allocated	= &tcp_memory_allocated,
+	.per_cpu_fw_alloc       = &tcp_memory_per_cpu_fw_alloc,
 	.memory_pressure	= &tcp_memory_pressure,
 	.orphan_count		= &tcp_orphan_count,
 	.sysctl_mem		= sysctl_tcp_mem,
@@ -203,6 +204,54 @@ struct inet_protosw smc_inet6_protosw = {
 };
 #endif
 
+int smc_inet_sock_move_state(struct sock *sk, int except, int target)
+{
+	int rc;
+
+	write_lock_bh(&sk->sk_callback_lock);
+	rc = smc_inet_sock_move_state_locked(sk, except, target);
+	write_unlock_bh(&sk->sk_callback_lock);
+	return rc;
+}
+
+int smc_inet_sock_move_state_locked(struct sock *sk, int except, int target)
+{
+	struct smc_sock *smc = smc_sk(sk);
+	int cur;
+
+	cur = isck_smc_negotiation_load(smc);
+	if (cur != except)
+		return cur;
+
+	switch (cur) {
+	case SMC_NEGOTIATION_TBD:
+		switch (target) {
+		case SMC_NEGOTIATION_PREPARE_SMC:
+		case SMC_NEGOTIATION_NO_SMC:
+			isck_smc_negotiation_store(smc, target);
+			sock_hold(sk);	/* sock hold for passive closing */
+			return target;
+		default:
+			break;
+		}
+		break;
+	case SMC_NEGOTIATION_PREPARE_SMC:
+		switch (target) {
+		case SMC_NEGOTIATION_NO_SMC:
+		case SMC_NEGOTIATION_SMC:
+			isck_smc_negotiation_store(smc, target);
+			return target;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return cur;
+}
+
 int smc_inet_sock_init(void)
 {
 	struct proto *tcp_v4prot;
@@ -231,6 +280,7 @@ int smc_inet_sock_init(void)
 	 * ensure consistency with TCP. Some symbols here have not been exported,
 	 * so that we have to assign it here.
 	 */
+
 	smc_inet_prot.pre_connect = tcp_v4prot->pre_connect;
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -243,73 +293,158 @@ int smc_inet_sock_init(void)
 	return 0;
 }
 
-int smc_inet_init_sock(struct sock *sk) { return  0; }
-
-void smc_inet_sock_proto_release_cb(struct sock *sk) {}
-
-int smc_inet_connect(struct socket *sock, struct sockaddr *addr,
-		     int alen, int flags)
+static int smc_inet_clcsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
+	struct sock *sk = sock->sk;
+	struct smc_sock *smc;
+
+	smc = smc_sk(sock->sk);
+
+	if (current_work() == &smc->smc_listen_work)
+		return tcp_sendmsg(sk, msg, len);
+
+	/* smc_inet_clcsock_sendmsg only works for smc handshaking
+	 * fallback sendmsg should process by smc_inet_sendmsg.
+	 * see more details in smc_inet_sendmsg().
+	 */
+	if (smc->use_fallback)
+		return -EOPNOTSUPP;
+
+	/* It is difficult for us to determine whether the current sk is locked.
+	 * Therefore, we rely on the implementation of conenct_work() implementation, which
+	 * is locked always.
+	 */
+	return tcp_sendmsg_locked(sk, msg, len);
+}
+
+int smc_sk_wait_tcp_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
+{
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	int rc;
+
+	lock_sock(sk);
+	add_wait_queue(sk_sleep(sk), &wait);
+	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb ||
+			   isck_smc_negotiation_get_flags(smc_sk(sk)) & SMC_NEGOTIATION_ABORT_FLAG,
+			   &wait);
+	sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	remove_wait_queue(sk_sleep(sk), &wait);
+	release_sock(sk);
+	return rc;
+}
+
+static int smc_inet_clcsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
+				    int flags)
+{
+	struct sock *sk = sock->sk;
+	struct smc_sock *smc;
+	int addr_len, err;
+	long timeo;
+
+	smc = smc_sk(sock->sk);
+
+	/* smc_inet_clcsock_recvmsg only works for smc handshaking
+	 * fallback recvmsg should process by smc_inet_recvmsg.
+	 */
+	if (smc->use_fallback)
+		return -EOPNOTSUPP;
+
+	if (likely(!(flags & MSG_ERRQUEUE)))
+		sock_rps_record_flow(sk);
+
+	timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
+
+	/* Locked, see more details in smc_inet_clcsock_sendmsg() */
+	if (current_work() != &smc->smc_listen_work)
+		release_sock(sock->sk);
+again:
+	/* recv nonblock */
+	err = tcp_recvmsg(sk, msg, len, flags | MSG_DONTWAIT, &addr_len);
+	if (err != -EAGAIN || !timeo)
+		goto out;
+
+	smc_sk_wait_tcp_data(sk, &timeo, NULL);
+	if (isck_smc_negotiation_get_flags(smc_sk(sk)) & SMC_NEGOTIATION_ABORT_FLAG) {
+		err = -ECONNABORTED;
+		goto out;
+	}
+	goto again;
+out:
+	if (current_work() != &smc->smc_listen_work) {
+		lock_sock(sock->sk);
+		/* since we release sock before, there might be state changed */
+		if (err >= 0 && smc_sk_state(&smc->sk) != SMC_INIT)
+			err = -EPIPE;
+	}
+	if (err >= 0)
+		msg->msg_namelen = addr_len;
+	return err;
+}
+
+static ssize_t smc_inet_clcsock_splice_read(struct socket *sock, loff_t *ppos,
+					    struct pipe_inode_info *pipe, size_t len,
+					    unsigned int flags)
+{
+	/* fallback splice_read should process by smc_inet_splice_read.  */
 	return -EOPNOTSUPP;
 }
 
-int smc_inet_setsockopt(struct socket *sock, int level, int optname,
-			sockptr_t optval, unsigned int optlen)
+static int smc_inet_clcsock_connect(struct socket *sock, struct sockaddr *addr,
+				    int alen, int flags)
 {
-	return -EOPNOTSUPP;
+	/* smc_connect will lock the sock->sk */
+	return __inet_stream_connect(sock, addr, alen, flags, 0);
 }
 
-int smc_inet_getsockopt(struct socket *sock, int level, int optname,
-			char __user *optval, int __user *optlen)
+static int smc_inet_clcsock_shutdown(struct socket *sock, int how)
 {
-	return -EOPNOTSUPP;
+	/* shutdown could call from smc_close_active, we should
+	 * not fail it.
+	 */
+	return 0;
 }
 
-int smc_inet_ioctl(struct socket *sock, unsigned int cmd,
-		   unsigned long arg)
+static int smc_inet_clcsock_release(struct socket *sock)
 {
-	return -EOPNOTSUPP;
+	/* shutdown could call from smc_close_active, we should
+	 * not fail it.
+	 */
+	return 0;
 }
 
-int smc_inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
+static int smc_inet_clcsock_getname(struct socket *sock, struct sockaddr *addr,
+				    int peer)
 {
-	return -EOPNOTSUPP;
+	int rc;
+
+	release_sock(sock->sk);
+	rc = sock->sk->sk_family == PF_INET ? inet_getname(sock, addr, peer) :
+#if IS_ENABLED(CONFIG_IPV6)
+		inet6_getname(sock, addr, peer);
+#else
+		-EINVAL;
+#endif
+	lock_sock(sock->sk);
+	return rc;
 }
 
-int smc_inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
-		     int flags)
-{
-	return -EOPNOTSUPP;
-}
-
-ssize_t smc_inet_splice_read(struct socket *sock, loff_t *ppos,
-			     struct pipe_inode_info *pipe, size_t len,
-			     unsigned int flags)
-{
-	return -EOPNOTSUPP;
-}
-
-__poll_t smc_inet_poll(struct file *file, struct socket *sock, poll_table *wait)
+static __poll_t smc_inet_clcsock_poll(struct file *file, struct socket *sock,
+				      poll_table *wait)
 {
 	return 0;
 }
 
-struct sock *smc_inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
-{
-	return NULL;
-}
-
-int smc_inet_listen(struct socket *sock, int backlog)
-{
-	return -EOPNOTSUPP;
-}
-
-int smc_inet_shutdown(struct socket *sock, int how)
-{
-	return -EOPNOTSUPP;
-}
-
-int smc_inet_release(struct socket *sock)
-{
-	return -EOPNOTSUPP;
-}
+const struct proto_ops smc_inet_clcsock_ops = {
+	.family			= PF_UNSPEC,
+	/* It is not a real ops, its lifecycle is bound to the SMC module. */
+	.owner			= NULL,
+	.release		= smc_inet_clcsock_release,
+	.getname		= smc_inet_clcsock_getname,
+	.connect		= smc_inet_clcsock_connect,
+	.shutdown		= smc_inet_clcsock_shutdown,
+	.sendmsg		= smc_inet_clcsock_sendmsg,
+	.recvmsg		= smc_inet_clcsock_recvmsg,
+	.splice_read	= smc_inet_clcsock_splice_read,
+	.poll			= smc_inet_clcsock_poll,
+};

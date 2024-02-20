@@ -302,4 +302,12 @@ int smcr_cdc_msg_send_validation(struct smc_connection *conn,
 int smc_cdc_init(void) __init;
 void smcd_cdc_rx_init(struct smc_connection *conn);
 
+static inline bool smc_has_rcv_shutdown(struct sock *sk)
+{
+	if (smc_sock_is_inet_sock(sk))
+		return smc_cdc_rxed_any_close_or_senddone(&smc_sk(sk)->conn);
+	else
+		return sk->sk_shutdown & RCV_SHUTDOWN;
+}
+
 #endif /* SMC_CDC_H */

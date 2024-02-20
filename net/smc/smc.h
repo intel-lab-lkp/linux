@@ -251,9 +251,14 @@ struct smc_sock {				/* smc sock container */
 		struct sock sk;
 	};
 	struct socket		*clcsock;	/* internal tcp socket */
+	struct socket		accompany_socket;
 	unsigned char		smc_state;	/* smc state used in smc via inet_sk */
 	unsigned int		isck_smc_negotiation;
 	unsigned long		smc_sk_flags;	/* smc sock flags used for inet sock */
+	unsigned int	queued_cnt;
+	struct request_sock	*tail_0;
+	struct request_sock	*tail_1;
+	struct request_sock	*reqsk;
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */
 	void			(*clcsk_data_ready)(struct sock *sk);
@@ -262,6 +267,7 @@ struct smc_sock {				/* smc sock container */
 						/* original write_space fct. */
 	void			(*clcsk_error_report)(struct sock *sk);
 						/* original error_report fct. */
+	void			(*original_sk_destruct)(struct sock *sk);
 	struct smc_connection	conn;		/* smc connection */
 	struct smc_sock		*listen_smc;	/* listen parent */
 	struct work_struct	connect_work;	/* handle non-blocking connect*/
@@ -290,6 +296,7 @@ struct smc_sock {				/* smc sock container */
 						/* non-blocking connect in
 						 * flight
 						 */
+	u8			ordered : 1;
 	struct mutex            clcsock_release_lock;
 						/* protects clcsock of a listen
 						 * socket

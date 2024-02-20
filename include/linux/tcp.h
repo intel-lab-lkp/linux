@@ -479,6 +479,7 @@ struct tcp_sock {
 #if IS_ENABLED(CONFIG_SMC)
 	bool	(*smc_hs_congested)(const struct sock *sk);
 	bool	syn_smc;	/* SYN includes SMC */
+	bool	is_smc;		/* is this sock also a smc sock */
 #endif
 
 #if defined(CONFIG_TCP_MD5SIG) || defined(CONFIG_TCP_AO)
