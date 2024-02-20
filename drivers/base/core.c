@@ -3619,6 +3619,7 @@ int device_add(struct device *dev)
 	 */
 	if (dev->fwnode && !dev->fwnode->dev) {
 		dev->fwnode->dev = dev;
+		dev->fwnode->flags &= ~FWNODE_FLAG_NOT_DEVICE;
 		fw_devlink_link_device(dev);
 	}
 
