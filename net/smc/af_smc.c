@@ -3048,6 +3048,7 @@ static inline bool smc_is_unsupport_tcp_sockopt(int optname)
 	case TCP_FASTOPEN_CONNECT:
 	case TCP_FASTOPEN_KEY:
 	case TCP_FASTOPEN_NO_COOKIE:
+	case TCP_ULP:
 		return true;
 	}
 	return false;
@@ -3119,9 +3120,7 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	struct smc_sock *smc;
 	int rc;
 
-	if (level == SOL_TCP && optname == TCP_ULP)
-		return -EOPNOTSUPP;
-	else if (level == SOL_SMC)
+	if (level == SOL_SMC)
 		return __smc_setsockopt(sock, level, optname, optval, optlen);
 
 	smc = smc_sk(sk);
