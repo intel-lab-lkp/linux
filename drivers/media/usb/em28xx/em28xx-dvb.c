@@ -980,7 +980,7 @@ static int em28xx_register_dvb(struct em28xx_dvb *dvb, struct module *module,
 
 	/* register adapter */
 	result = dvb_register_adapter(&dvb->adapter,
-				      dev_name(&dev->intf->dev), module,
+				      em28xx_boards[dev->model].name, module,
 				      device, adapter_nr);
 	if (result < 0) {
 		dev_warn(&dev->intf->dev,
