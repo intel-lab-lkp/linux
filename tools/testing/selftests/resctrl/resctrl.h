@@ -128,6 +128,8 @@ extern pid_t bm_pid, ppid;
 
 extern char llc_occup_path[1024];
 
+extern struct resctrl_test current_test;
+
 int get_vendor(void);
 bool check_resctrlfs_support(void);
 int filter_dmesg(void);

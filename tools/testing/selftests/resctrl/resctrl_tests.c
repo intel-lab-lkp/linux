@@ -14,6 +14,12 @@
 static volatile int sink_target;
 volatile int *value_sink = &sink_target;
 
+/*
+ * Set during test preparation for the cleanup function pointer used in
+ * ctrl-c sa_sigaction
+ */
+struct resctrl_test current_test;
+
 static struct resctrl_test *resctrl_tests[] = {
 	&mbm_test,
 	&mba_test,
@@ -75,17 +81,11 @@ static void cmd_help(void)
 	printf("\t-h: help\n");
 }
 
-void tests_cleanup(void)
-{
-	mbm_test_cleanup();
-	mba_test_cleanup();
-	cmt_test_cleanup();
-	cat_test_cleanup();
-}
-
-static int test_prepare(void)
+static int test_prepare(const struct resctrl_test *test)
 {
 	int res;
+
+	current_test = *test;
 
 	res = signal_handler_register();
 	if (res) {
@@ -130,7 +130,7 @@ static void run_single_test(const struct resctrl_test *test, const struct user_p
 
 	ksft_print_msg("Starting %s test ...\n", test->name);
 
-	if (test_prepare()) {
+	if (test_prepare(test)) {
 		ksft_exit_fail_msg("Abnormal failure when preparing for the test\n");
 		return;
 	}
