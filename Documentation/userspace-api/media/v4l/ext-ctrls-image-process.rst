@@ -22,7 +22,7 @@ Image Process Control IDs
 
 .. _v4l2-cid-link-freq:
 
-``V4L2_CID_LINK_FREQ (integer menu)``
+``V4L2_CID_LINK_FREQ (integer menu or 64-bit integer)``
     The frequency of the data bus (e.g. parallel or CSI-2).
 
 .. _v4l2-cid-pixel-rate:
