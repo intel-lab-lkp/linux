@@ -109,6 +109,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/gcd.h>
 
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
@@ -139,29 +140,112 @@ static struct mempolicy default_policy = {
 static struct mempolicy preferred_node_policy[MAX_NUMNODES];
 
 /*
- * iw_table is the sysfs-set interleave weight table, a value of 0 denotes
- * system-default value should be used. A NULL iw_table also denotes that
- * system-default values should be used. Until the system-default table
- * is implemented, the system-default is always 1.
+ * The interleave weight tables denote what weights should be used with
+ * the weighted interleave policy.  There are two tables:
+ *    - iw_table : the sysfs-set interleave weight table
+ *    - default_iw_table : the system default interleave weight table.
  *
- * iw_table is RCU protected
+ * If the iw_table is NULL, default_iw_table values are used.
+ * If both tables are NULL, a minimum weight of 1 is always used.
+ * A value of 0 in the iw_table means the system default value will be used.
+ *
+ * iw_table, and default_iw_table are RCU protected
+ * node_bw_table is protected by default_iwt_lock
+ *
+ * system startup and hotplug code may register node performance information
+ * via mempolicy_set_node_attributes()
  */
+static unsigned long *node_bw_table;
+static u8 __rcu *default_iw_table;
+static DEFINE_MUTEX(default_iwt_lock);
+
 static u8 __rcu *iw_table;
 static DEFINE_MUTEX(iw_table_lock);
 
 static u8 get_il_weight(int node)
 {
-	u8 *table;
+	u8 *table, *default_table;
 	u8 weight;
 
 	rcu_read_lock();
 	table = rcu_dereference(iw_table);
-	/* if no iw_table, use system default */
-	weight = table ? table[node] : 1;
-	/* if value in iw_table is 0, use system default */
-	weight = weight ? weight : 1;
+	default_table = rcu_dereference(default_iw_table);
+	/* if no table pointers or value is 0, use system default or 1 */
+	weight = table ? table[node] : 0;
+	weight = weight ? weight : (default_table ? default_table[node] : 1);
 	rcu_read_unlock();
 	return weight;
+}
+
+int mempolicy_set_node_perf(unsigned int node, struct access_coordinate *coords)
+{
+	unsigned long *old_bw, *new_bw;
+	unsigned long gcd_val;
+	u8 *old_iw, *new_iw;
+	uint64_t ttl_bw = 0;
+	int i;
+
+	new_bw = kcalloc(nr_node_ids, sizeof(unsigned long), GFP_KERNEL);
+	if (!new_bw)
+		return -ENOMEM;
+
+	new_iw = kzalloc(nr_node_ids, GFP_KERNEL);
+	if (!new_iw) {
+		kfree(new_bw);
+		return -ENOMEM;
+	}
+
+	mutex_lock(&default_iwt_lock);
+	old_bw = node_bw_table;
+	old_iw = rcu_dereference_protected(default_iw_table,
+					   lockdep_is_held(&default_iwt_lock));
+
+	if (old_bw)
+		memcpy(new_bw, old_bw, nr_node_ids*sizeof(unsigned long));
+	new_bw[node] = min(coords->read_bandwidth, coords->write_bandwidth);
+
+	/* New recalculate the bandwidth distribution given the new info */
+	for (i = 0; i < nr_node_ids; i++)
+		ttl_bw += new_bw[i];
+
+	/* If node is not set or has < 1% of total bw, use minimum value of 1 */
+	for (i = 0; i < nr_node_ids; i++) {
+		if (new_bw[i])
+			new_iw[i] = max((100 * new_bw[i] / ttl_bw), 1);
+		else
+			new_iw[i] = 1;
+	}
+	/*
+	 * Now attempt to aggressively reduce the interleave weights by GCD
+	 * We want smaller interleave intervals to have a better distribution
+	 * of memory, even on smaller memory regions. If weights are divisible
+	 * by each other, we can do some quick math to aggresively squash them.
+	 */
+reduce:
+	gcd_val = new_iw[i];
+	for (i = 0; i < nr_node_ids; i++) {
+		/* Skip nodes that haven't been set */
+		if (!new_bw[i])
+			continue;
+		gcd_val = gcd(gcd_val, new_iw[i]);
+		if (gcd_val == 1)
+			goto leave;
+	}
+	for (i = 0; i < nr_node_ids; i++) {
+		if (!new_bw[i])
+			continue;
+		new_iw[i] /= gcd_val;
+	}
+	/* repeat until we get a gcd of 1 */
+	goto reduce;
+leave:
+	node_bw_table = new_bw;
+	rcu_assign_pointer(default_iw_table, new_iw);
+	mutex_unlock(&default_iwt_lock);
+	synchronize_rcu();
+	kfree(old_bw);
+	kfree(old_iw);
+	return 0;
 }
 
 /**
@@ -1980,7 +2064,7 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	nodemask_t nodemask;
 	unsigned int target, nr_nodes;
-	u8 *table;
+	u8 *table, *default_table;
 	unsigned int weight_total = 0;
 	u8 weight;
 	int nid;
@@ -1991,11 +2075,13 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 
 	rcu_read_lock();
 	table = rcu_dereference(iw_table);
+	default_table = rcu_dereference(default_iw_table);
 	/* calculate the total weight */
 	for_each_node_mask(nid, nodemask) {
 		/* detect system default usage */
-		weight = table ? table[nid] : 1;
-		weight = weight ? weight : 1;
+		weight = table ? table[nid] : 0;
+		weight = weight ? weight :
+				  (default_table ? default_table[nid] : 1);
 		weight_total += weight;
 	}
 
@@ -2004,8 +2090,9 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 	nid = first_node(nodemask);
 	while (target) {
 		/* detect system default usage */
-		weight = table ? table[nid] : 1;
-		weight = weight ? weight : 1;
+		weight = table ? table[nid] : 0;
+		weight = weight ? weight :
+				  (default_table ? default_table[nid] : 1);
 		if (target < weight)
 			break;
 		target -= weight;
@@ -2388,7 +2475,7 @@ static unsigned long alloc_pages_bulk_array_weighted_interleave(gfp_t gfp,
 	unsigned long nr_allocated = 0;
 	unsigned long rounds;
 	unsigned long node_pages, delta;
-	u8 *table, *weights, weight;
+	u8 *weights, weight;
 	unsigned int weight_total = 0;
 	unsigned long rem_pages = nr_pages;
 	nodemask_t nodes;
@@ -2437,16 +2524,8 @@ static unsigned long alloc_pages_bulk_array_weighted_interleave(gfp_t gfp,
 	if (!weights)
 		return total_allocated;
 
-	rcu_read_lock();
-	table = rcu_dereference(iw_table);
-	if (table)
-		memcpy(weights, table, nr_node_ids);
-	rcu_read_unlock();
-
-	/* calculate total, detect system default usage */
 	for_each_node_mask(node, nodes) {
-		if (!weights[node])
-			weights[node] = 1;
+		weights[node] = get_il_weight(node);
 		weight_total += weights[node];
 	}
 
