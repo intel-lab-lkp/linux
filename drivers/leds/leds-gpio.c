@@ -150,6 +150,7 @@ static struct gpio_leds_priv *gpio_leds_create(struct device *dev)
 {
 	struct fwnode_handle *child;
 	struct gpio_leds_priv *priv;
+	struct device_link *link;
 	int count, ret;
 
 	count = device_get_child_node_count(dev);
@@ -197,6 +198,20 @@ static struct gpio_leds_priv *gpio_leds_create(struct device *dev)
 		/* Set gpiod label to match the corresponding LED name. */
 		gpiod_set_consumer_name(led_dat->gpiod,
 					led_dat->cdev.dev->kobj.name);
+
+		/*
+		 * Create a link between the GPIO and the gpio-leds device.
+		 * This allow to have a relationship between the gpio used and
+		 * the gpio-leds device in order to automatically remove the
+		 * gpio-leds device (consumer) when a GPIO (supplier) is removed.
+		 */
+		link = gpiod_device_add_link(dev, led_dat->gpiod,
+					     DL_FLAG_AUTOREMOVE_CONSUMER);
+		if (IS_ERR(link)) {
+			fwnode_handle_put(child);
+			return ERR_CAST(link);
+		}
+
 		priv->num_leds++;
 	}
 
