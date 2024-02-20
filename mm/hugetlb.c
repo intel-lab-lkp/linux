@@ -5939,9 +5939,15 @@ static vm_fault_t hugetlb_wp(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct folio *old_folio;
 	struct folio *new_folio;
 	int outside_reserve = 0;
-	vm_fault_t ret = 0;
+	vm_fault_t ret = 0, anon_ret = 0;
 	unsigned long haddr = address & huge_page_mask(h);
 	struct mmu_notifier_range range;
+	struct vm_fault vmf = {
+				.vma = vma,
+				.address = haddr,
+				.real_address = address,
+				.flags = flags,
+	};
 
 	/*
 	 * Never handle CoW for uffd-wp protected pages.  It should be only
@@ -6065,8 +6071,9 @@ retry_avoidcopy:
 	 * When the original hugepage is shared one, it does not have
 	 * anon_vma prepared.
 	 */
-	if (unlikely(anon_vma_prepare(vma))) {
-		ret = VM_FAULT_OOM;
+	anon_ret = vmf_anon_prepare(&vmf);
+	if (unlikely(anon_ret)) {
+		ret = anon_ret;
 		goto out_release_all;
 	}
 
@@ -6224,7 +6231,7 @@ static vm_fault_t hugetlb_no_page(struct mm_struct *mm,
 			pte_t old_pte, unsigned int flags)
 {
 	struct hstate *h = hstate_vma(vma);
-	vm_fault_t ret = VM_FAULT_SIGBUS;
+	vm_fault_t ret = VM_FAULT_SIGBUS, anon_ret = 0;
 	int anon_rmap = 0;
 	unsigned long size;
 	struct folio *folio;
@@ -6233,6 +6240,12 @@ static vm_fault_t hugetlb_no_page(struct mm_struct *mm,
 	unsigned long haddr = address & huge_page_mask(h);
 	bool new_folio, new_pagecache_folio = false;
 	u32 hash = hugetlb_fault_mutex_hash(mapping, idx);
+	struct vm_fault vmf = {
+				.vma = vma,
+				.address = haddr,
+				.real_address = address,
+				.flags = flags,
+	};
 
 	/*
 	 * Currently, we are forced to kill the process in the event the
@@ -6326,8 +6339,10 @@ static vm_fault_t hugetlb_no_page(struct mm_struct *mm,
 			new_pagecache_folio = true;
 		} else {
 			folio_lock(folio);
-			if (unlikely(anon_vma_prepare(vma))) {
-				ret = VM_FAULT_OOM;
+
+			anon_ret = vmf_anon_prepare(&vmf);
+			if (unlikely(anon_ret)) {
+				ret = anon_ret;
 				goto backout_unlocked;
 			}
 			anon_rmap = 1;
