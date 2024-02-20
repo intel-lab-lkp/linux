@@ -42,17 +42,30 @@ extern unsigned long get_cmd_line_ptr(void);
 static const char build_str[] = UTS_RELEASE " (" LINUX_COMPILE_BY "@"
 		LINUX_COMPILE_HOST ") (" LINUX_COMPILER ") " UTS_VERSION;
 
+static unsigned long rotate_xor_one(unsigned long hash, unsigned long val)
+{
+	/* Rotate by odd number of bits and XOR. */
+	hash = (hash << ((sizeof(hash) * 8) - 7)) | (hash >> 7);
+	hash ^= val;
+	return hash;
+}
+
 static unsigned long rotate_xor(unsigned long hash, const void *area,
 				size_t size)
 {
 	size_t i;
 	unsigned long *ptr = (unsigned long *)area;
+	unsigned long rest = 0;
 
-	for (i = 0; i < size / sizeof(hash); i++) {
-		/* Rotate by odd number of bits and XOR. */
-		hash = (hash << ((sizeof(hash) * 8) - 7)) | (hash >> 7);
-		hash ^= ptr[i];
+	for (i = 0; i < size / sizeof(hash); i++)
+		hash = rotate_xor_one(hash, ptr[i]);
+
+	i = i * sizeof(hash);
+	for (; i < size; i++) {
+		rest <<= 8;
+		rest |= ((unsigned char *)area)[i];
 	}
+	hash = rotate_xor_one(hash, rest);
 
 	return hash;
 }
