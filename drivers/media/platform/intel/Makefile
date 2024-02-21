@@ -1,2 +1,3 @@
 # SPDX-License-Identifier: GPL-2.0-only
 obj-$(CONFIG_VIDEO_PXA27x) += pxa_camera.o
+obj-$(CONFIG_VIDEO_INTEL_DPRX) += intel-dprx.o
