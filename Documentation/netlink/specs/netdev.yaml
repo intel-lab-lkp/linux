@@ -240,6 +240,10 @@ attribute-sets:
              threaded mode. If NAPI is not in threaded mode (i.e. uses normal
              softirq context), the attribute will be absent.
         type: u32
+      -
+        name: ifname
+        doc: name of the netdevice to which NAPI instance belongs.
+        type: string
   -
     name: queue
     attributes:
@@ -264,6 +268,10 @@ attribute-sets:
         name: napi-id
         doc: ID of the NAPI instance which services this queue.
         type: u32
+      -
+        name: ifname
+        doc: name of the netdevice to which the queue belongs.
+        type: string
 
 operations:
   list:
@@ -381,6 +389,7 @@ operations:
             - type
             - napi-id
             - ifindex
+            - ifname
       dump:
         request:
           attributes:
@@ -400,6 +409,7 @@ operations:
             - ifindex
             - irq
             - pid
+            - ifname
       dump:
         request:
           attributes:
