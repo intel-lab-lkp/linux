@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/intel,dprx.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Intel DisplayPort RX IP
+
+maintainers:
+  - Paweł Anikiel <panikiel@google.com>
+
+description: |
+  The Intel Displayport RX IP is a part of the DisplayPort Intel FPGA IP
+  Core. It implements a DisplayPort 1.4 receiver capable of HBR3 video
+  capture and Multi-Stream Transport.
+
+  The IP features a large number of configuration parameters, found at:
+  https://www.intel.com/content/www/us/en/docs/programmable/683273/23-3-20-0-1/sink-parameters.html
+
+  The following parameters have to be enabled:
+    - Support DisplayPort sink
+    - Enable GPU control
+  The following parameters' values have to be set in the devicetree:
+    - RX maximum link rate
+    - Maximum lane count
+    - Support MST
+    - Max stream count (only if Support MST is enabled)
+
+properties:
+  compatible:
+    const: intel,dprx-20.0.1
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  intel,max-link-rate:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Max link rate configuration parameter
+
+  intel,max-lane-count:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Max lane count configuration parameter
+
+  intel,multi-stream-support:
+    type: boolean
+    description: Multi-Stream Transport support configuration parameter
+
+  intel,max-stream-count:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Max stream count configuration parameter
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description: SST main link
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: MST virtual channel 0 or SST main link
+
+      port@1:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: MST virtual channel 1
+
+      port@2:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: MST virtual channel 2
+
+      port@3:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: MST virtual channel 3
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+allOf:
+  - if:
+      required:
+        - intel,multi-stream-support
+    then:
+      required:
+        - intel,max-stream-count
+        - ports
+    else:
+      required:
+        - port
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    dp-receiver@c0062000 {
+        compatible = "intel,dprx-20.0.1";
+        reg = <0xc0062000 0x800>;
+        interrupt-parent = <&dprx_mst_irq>;
+        interrupts = <0 IRQ_TYPE_EDGE_RISING>;
+        intel,max-link-rate = <0x1e>;
+        intel,max-lane-count = <4>;
+        intel,multi-stream-support;
+        intel,max-stream-count = <4>;
+
+        ports {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            port@0 {
+                reg = <0>;
+                dprx_mst_0: endpoint {
+                    remote-endpoint = <&fb_mst0_0>;
+                };
+            };
+
+            port@1 {
+                reg = <1>;
+                dprx_mst_1: endpoint {
+                    remote-endpoint = <&fb_mst1_0>;
+                };
+            };
+
+            port@2 {
+                reg = <2>;
+                dprx_mst_2: endpoint {
+                    remote-endpoint = <&fb_mst2_0>;
+                };
+            };
+
+            port@3 {
+                reg = <3>;
+                dprx_mst_3: endpoint {
+                    remote-endpoint = <&fb_mst3_0>;
+                };
+            };
+        };
+    };
+
+  - |
+    dp-receiver@c0064000 {
+        compatible = "intel,dprx-20.0.1";
+        reg = <0xc0064000 0x800>;
+        interrupt-parent = <&dprx_sst_irq>;
+        interrupts = <0 IRQ_TYPE_EDGE_RISING>;
+        intel,max-link-rate = <0x1e>;
+        intel,max-lane-count = <4>;
+
+        port {
+            dprx_sst_0: endpoint {
+                remote-endpoint = <&fb_sst_0>;
+            };
+        };
+    };
