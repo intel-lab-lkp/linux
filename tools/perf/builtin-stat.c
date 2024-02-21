@@ -777,7 +777,6 @@ static int process_sample_event(struct perf_tool *tool,
 	const char *evname;
 	struct tpebs_retire_lat *t;
 
-	pr_debug("entering function %s\n ", __func__);
 	evname = evsel__name(evsel);
 
 	pr_debug("[%03d] ", sample->cpu);
@@ -808,9 +807,9 @@ static int process_feature_event(struct perf_session *session,
 	return 0;
 }
 
-static int __cmd_script(struct child_process *cmd __maybe_unused)
+static void *__cmd_script(void *arg __maybe_unused)
 {
-	int err = 0;
+	struct child_process *cmd = arg;
 	struct perf_session *session;
 	struct perf_data data = {
 		.mode = PERF_DATA_MODE_READ,
@@ -826,29 +825,15 @@ static int __cmd_script(struct child_process *cmd __maybe_unused)
 		.attr		 = perf_event__process_attr,
 		},
 	};
-	struct tpebs_event *e;
 
-	list_for_each_entry(e, &stat_config.tpebs_events, nd) {
-		struct tpebs_retire_lat *new = malloc(sizeof(struct tpebs_retire_lat));
-
-		if (!new)
-			return -1;
-		new->name = strdup(e->name);
-		new->tpebs_name = strdup(e->tpebs_name);
-		new->count = 0;
-		new->sum = 0;
-		list_add_tail(&new->nd, &stat_config.tpebs_results);
-	}
-
-	kill(cmd->pid, SIGTERM);
 	session = perf_session__new(&data, &script.tool);
 	if (IS_ERR(session))
-		return PTR_ERR(session);
+		return NULL;
 	script.session = session;
-	err = perf_session__process_events(session);
+	perf_session__process_events(session);
 	perf_session__delete(session);
 
-	return err;
+	return NULL;
 }
 
 static int __run_perf_stat(int argc, const char **argv, int run_idx)
@@ -868,15 +853,37 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 	int err;
 	bool second_pass = false;
 	struct child_process cmd;
+	pthread_t thread_script;
 
 	//Prepare perf record for sampling event retire_latency before fork and prepare workload
 	if (stat_config.tpebs_event_size > 0) {
 		int ret;
 
+		struct tpebs_event *e;
 		pr_debug("perf stat pid = %d\n", getpid());
 		ret = prepare_perf_record(&cmd);
 		if (ret)
 			return ret;
+
+		list_for_each_entry(e, &stat_config.tpebs_events, nd) {
+			struct tpebs_retire_lat *new = malloc(sizeof(struct tpebs_retire_lat));
+
+			if (!new)
+				return -1;
+			new->name = strdup(e->name);
+			new->tpebs_name = strdup(e->tpebs_name);
+			new->count = 0;
+			new->sum = 0;
+			list_add_tail(&new->nd, &stat_config.tpebs_results);
+		}
+
+		if (pthread_create(&thread_script, NULL, __cmd_script, &cmd)) {
+			kill(cmd.pid, SIGTERM);
+			close(cmd.out);
+			pr_err("Could not create thread to process sample data.\n");
+			return -1;
+		}
+		sleep(2);
 	}
 
 	if (forks) {
@@ -1087,12 +1094,15 @@ try_again_reset:
 	if (stat_config.tpebs_event_size > 0) {
 		int ret;
 
-		pr_debug("pid = %d\n", getpid());
-		pr_debug("cmd.pid = %d\n", cmd.pid);
+		pr_debug("Workload finished, finishing record\n");
+		pr_debug("Perf stat pid = %d, Perf record pid = %d\n", getpid(), cmd.pid);
 
-		ret = __cmd_script(&cmd);
+		kill(cmd.pid, SIGTERM);
+		pthread_join(thread_script, NULL);
 		close(cmd.out);
-		pr_debug("%d\n", ret);
+		ret = finish_command(&cmd);
+		if (ret != -ERR_RUN_COMMAND_WAITPID_SIGNAL)
+			return ret;
 	}
 
 	if (stat_config.walltime_run_table)
