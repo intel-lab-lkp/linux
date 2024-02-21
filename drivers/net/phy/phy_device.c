@@ -2911,6 +2911,24 @@ void phy_advertise_eee_all(struct phy_device *phydev)
 EXPORT_SYMBOL_GPL(phy_advertise_eee_all);
 
 /**
+ * phy_support_eee - Enable support of EEE
+ * @phydev: target phy_device struct
+ *
+ * Description: Called by the MAC to indicate is supports Energy
+ * Efficient Ethernet. This should be called before phy_start() in
+ * order that EEE is negotiated when the link comes up as part of
+ * phy_start(). EEE is enabled by default when the hardware supports
+ * it.
+ */
+void phy_support_eee(struct phy_device *phydev)
+{
+	linkmode_copy(phydev->advertising_eee, phydev->supported_eee);
+	phydev->eee_cfg.tx_lpi_enabled = true;
+	phydev->eee_cfg.eee_enabled = true;
+}
+EXPORT_SYMBOL(phy_support_eee);
+
+/**
  * phy_support_sym_pause - Enable support of symmetrical pause
  * @phydev: target phy_device struct
  *
