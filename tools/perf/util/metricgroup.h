@@ -77,6 +77,7 @@ struct tpebs_retire_lat {
 	const char *tpebs_name;
 	size_t count;
 	int sum;
+	double val;
 };
 
 struct metric_event *metricgroup__lookup(struct rblist *metric_events,

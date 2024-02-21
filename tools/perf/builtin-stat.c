@@ -792,6 +792,7 @@ static int process_sample_event(struct perf_tool *tool,
 		if (!strcmp(evname, t->name)) {
 			t->count += 1;
 			t->sum += sample->retire_lat;
+			t->val = t->count > 0 ? t->sum/t->count : 0;
 			break;
 		}
 	}
