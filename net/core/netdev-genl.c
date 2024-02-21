@@ -181,6 +181,9 @@ netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 	if (nla_put_u32(rsp, NETDEV_A_NAPI_IFINDEX, napi->dev->ifindex))
 		goto nla_put_failure;
 
+	if (nla_put_string(rsp, NETDEV_A_NAPI_IFNAME, napi->dev->name))
+		goto nla_put_failure;
+
 	if (napi->irq >= 0 && nla_put_u32(rsp, NETDEV_A_NAPI_IRQ, napi->irq))
 		goto nla_put_failure;
 
@@ -307,7 +310,8 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 
 	if (nla_put_u32(rsp, NETDEV_A_QUEUE_ID, q_idx) ||
 	    nla_put_u32(rsp, NETDEV_A_QUEUE_TYPE, q_type) ||
-	    nla_put_u32(rsp, NETDEV_A_QUEUE_IFINDEX, netdev->ifindex))
+	    nla_put_u32(rsp, NETDEV_A_QUEUE_IFINDEX, netdev->ifindex) ||
+	    nla_put_string(rsp, NETDEV_A_QUEUE_IFNAME, netdev->name))
 		goto nla_put_failure;
 
 	switch (q_type) {
@@ -369,16 +373,19 @@ int netdev_nl_queue_get_doit(struct sk_buff *skb, struct genl_info *info)
 	u32 q_id, q_type, ifindex;
 	struct net_device *netdev;
 	struct sk_buff *rsp;
+	char *ifname;
 	int err;
 
 	if (GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_ID) ||
 	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_TYPE) ||
-	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_IFINDEX))
+	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_IFINDEX) ||
+	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_IFNAME))
 		return -EINVAL;
 
 	q_id = nla_get_u32(info->attrs[NETDEV_A_QUEUE_ID]);
 	q_type = nla_get_u32(info->attrs[NETDEV_A_QUEUE_TYPE]);
 	ifindex = nla_get_u32(info->attrs[NETDEV_A_QUEUE_IFINDEX]);
+	nla_strscpy(ifname, info->attrs[NETDEV_A_QUEUE_IFNAME], IFNAMSIZ);
 
 	rsp = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!rsp)
@@ -387,10 +394,15 @@ int netdev_nl_queue_get_doit(struct sk_buff *skb, struct genl_info *info)
 	rtnl_lock();
 
 	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
-	if (netdev)
-		err = netdev_nl_queue_fill(rsp, netdev, q_id, q_type, info);
-	else
+
+	if (strcmp(netdev->name, ifname)) {
 		err = -ENODEV;
+	} else {
+		if (netdev)
+			err = netdev_nl_queue_fill(rsp, netdev, q_id, q_type, info);
+		else
+			err = -ENODEV;
+	}
 
 	rtnl_unlock();
 
