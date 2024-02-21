@@ -219,6 +219,35 @@ static const struct drm_prop_enum_list force_audio_names[] = {
 	{ HDMI_AUDIO_ON, "on" },
 };
 
+int intel_connector_apply_border(struct intel_crtc_state *crtc_state,
+				 void *border_data)
+{
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	int width = adjusted_mode->crtc_hdisplay;
+	int height = adjusted_mode->crtc_vdisplay;
+	struct drm_rect *border = border_data;
+	int left = border->x1;
+	int top = border->y1;
+	int right = border->x2;
+	int bottom = border->y2;
+
+	if (left < 0 || top < 0 || right < 0 || bottom < 0)
+		return -EINVAL;
+
+	if (left + right >= width || top + bottom >= height)
+		return -EINVAL;
+
+	width -= (left + right);
+	height -= (top + bottom);
+
+	drm_rect_init(&crtc_state->border.dst,
+		      left, top, width, height);
+	crtc_state->border.enabled = true;
+
+	return 0;
+}
+
 void
 intel_attach_force_audio_property(struct drm_connector *connector)
 {

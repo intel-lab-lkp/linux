@@ -1422,6 +1422,11 @@ struct intel_crtc_state {
 		u8 pixel_overlap;
 	} splitter;
 
+	struct {
+		struct drm_rect dst;
+		bool enabled;
+	} border;
+
 	/* for loading single buffered registers during vblank */
 	struct drm_vblank_work vblank_work;
 };

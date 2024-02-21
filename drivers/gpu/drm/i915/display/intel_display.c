@@ -1679,9 +1679,12 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 		glk_pipe_scaler_clock_gating_wa(dev_priv, pipe, true);
 
 	if (DISPLAY_VER(dev_priv) >= 9) {
-		const struct drm_rect *dst = &new_crtc_state->pch_pfit.dst;
+		const struct drm_rect *dst = new_crtc_state->pch_pfit.enabled ?
+					     &new_crtc_state->pch_pfit.dst :
+					     &new_crtc_state->border.dst;
 
-		if (new_crtc_state->pch_pfit.enabled)
+		if (new_crtc_state->pch_pfit.enabled ||
+		    new_crtc_state->border.enabled)
 			skl_program_crtc_scaler(new_crtc_state, dst);
 	} else {
 		ilk_pfit_enable(new_crtc_state);
@@ -5218,6 +5221,9 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 		PIPE_CONF_CHECK_BOOL(pch_pfit.enabled);
 		PIPE_CONF_CHECK_RECT(pch_pfit.dst);
 
+		PIPE_CONF_CHECK_BOOL(border.enabled);
+		PIPE_CONF_CHECK_RECT(border.dst);
+
 		PIPE_CONF_CHECK_I(scaler_state.scaler_id);
 		PIPE_CONF_CHECK_I(pixel_rate);
 
@@ -6549,9 +6555,12 @@ static void intel_pipe_fastset(const struct intel_crtc_state *old_crtc_state,
 
 	/* on skylake this is done by detaching scalers */
 	if (DISPLAY_VER(dev_priv) >= 9) {
-		const struct drm_rect *dst = &new_crtc_state->pch_pfit.dst;
+		const struct drm_rect *dst = new_crtc_state->pch_pfit.enabled ?
+					     &new_crtc_state->pch_pfit.dst :
+					     &new_crtc_state->border.dst;
 
-		if (new_crtc_state->pch_pfit.enabled)
+		if (new_crtc_state->pch_pfit.enabled ||
+		    new_crtc_state->border.enabled)
 			skl_program_crtc_scaler(new_crtc_state, dst);
 	} else if (HAS_PCH_SPLIT(dev_priv)) {
 		if (new_crtc_state->pch_pfit.enabled)
