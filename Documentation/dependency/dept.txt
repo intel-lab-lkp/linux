@@ -1,0 +1,283 @@
+DEPT(DEPendency Tracker)
+========================
+
+Started by Byungchul Park <max.byungchul.park@sk.com>
+
+How lockdep works
+-----------------
+
+Lockdep tries to detect a deadlock by checking lock acquisition order.
+For example, consider a graph built by lockdep like:
+
+   A -> B -
+           \
+            -> E
+           /
+   C -> D -
+
+   where 'A -> B' means that acquisition A is prior to acquisition B
+   with A still held.
+
+Lockdep keeps adding each new acquisition order into the graph in
+runtime. For example, 'E -> C' will be added when it's recognized that
+the two locks have been acquired in that order like:
+
+       A -> B -
+               \
+                -> E -
+               /      \
+    -> C -> D -        \
+   /                   /
+   \                  /
+    ------------------
+
+   where 'A -> B' means that acquisition A is prior to acquisition B
+   with A still held.
+
+This graph contains a subgraph that demonstrates a loop like:
+
+                -> E -
+               /      \
+    -> C -> D -        \
+   /                   /
+   \                  /
+    ------------------
+
+   where 'A -> B' means that acquisition A is prior to acquisition B
+   with A still held.
+
+Lockdep reports it as a deadlock on detection of a loop.
+
+CONCLUSION
+
+Lockdep detects a deadlock by checking if a loop has been created after
+expanding the graph.
+
+
+Limitation of lockdep
+---------------------
+
+Lockdep works on typical lock e.g. spinlock and mutex, that are supposed
+to be released within the acquisition context. However, a deadlock by
+folio lock or other synchronization mechanisms cannot be detected by
+lockdep that basically tracks lock acquisition order.
+
+Can we detect the following deadlock?
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+		   mutex_lock A
+   folio_lock B
+		   folio_lock B
+				   mutex_lock A /* DEADLOCK */
+				   folio_unlock B
+		   folio_unlock B
+		   mutex_unlock A
+				   mutex_unlock A
+
+No, we can't. What about the following?
+
+   CONTEXT X		   CONTEXT Y
+
+			   mutex_lock A
+   mutex_lock A
+			   wait_for_complete B /* DEADLOCK */
+   complete B
+			   mutex_unlock A
+   mutex_unlock A
+
+No, we can't.
+
+CONCLUSION
+
+Given the limitation, lockdep cannot detect a deadlock by folio lock or
+other synchronization mechanisms.
+
+
+What leads a deadlock
+---------------------
+
+A deadlock occurs when one or multi contexts are waiting for events that
+will never happen. For example:
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+   |		   |		   |
+   v		   |		   |
+   (1) wait for A  v		   |
+   .		   (2) wait for C  v
+   event C	   .		   (3) wait for B
+		   event B	   .
+				   event A
+
+Event C cannot be triggered because context X is stuck at (1), event B
+cannot be triggered because context Y is stuck at (2), and event A
+cannot be triggered because context Z is stuck at (3). All the contexts
+are stuck. We call the situation a *deadlock*.
+
+If an event occurrence is a prerequisite to reaching another event, we
+call it *dependency*. In the example above:
+
+   Event A occurrence is a prerequisite to reaching event C.
+   Event C occurrence is a prerequisite to reaching event B.
+   Event B occurrence is a prerequisite to reaching event A.
+
+In terms of dependency:
+
+   Event C depends on event A.
+   Event B depends on event C.
+   Event A depends on event B.
+
+Dependencies in a graph look like:
+
+    -> C -> A -> B -
+   /                \
+   \                /
+    ----------------
+
+   where 'A -> B' means that event A depends on event B.
+
+A circular dependency exists. Such a circular dependency leads a
+deadlock since no waiters can have desired events triggered.
+
+CONCLUSION
+
+A circular dependency leads a deadlock.
+
+
+Introduce DEPT
+--------------
+
+DEPT(DEPendency Tracker) tracks wait and event instead of lock
+acquisition order so as to recognize the following situation:
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+   |		   |		   |
+   v		   |		   |
+   wait for A	   v		   |
+   .		   wait for C	   v
+   event C	   .		   wait for B
+		   event B	   .
+				   event A
+
+and builds up a dependency graph in runtime, similar to lockdep. The
+graph would look like:
+
+    -> C -> A -> B -
+   /                \
+   \                /
+    ----------------
+
+   where 'A -> B' means that event A depends on event B.
+
+DEPT keeps adding each new dependency into the graph in runtime. For
+example, 'B -> D' will be added when it's recognized that event D
+occurrence is a prerequisite to reaching event B, in other words, event
+B depends on event D like:
+
+   |
+   v
+   wait for D
+   .
+   event B
+
+After adding 'B -> D' dependency into the graph, the graph would look
+like:
+
+                     -> D
+                    /
+    -> C -> A -> B -
+   /                \
+   \                /
+    ----------------
+
+   where 'A -> B' means that event A depends on event B.
+
+DEPT is going to report a deadlock on detection of a new loop.
+
+CONCLUSION
+
+DEPT works on wait and event so as to theoretically detect all the
+potential deadlocks.
+
+
+How DEPT works
+--------------
+
+Let's take a look how DEPT works with an example that was mentioned in
+the section 'Limitation of lockdep'.
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+		   mutex_lock A
+   folio_lock B
+		   folio_lock B
+				   mutex_lock A /* DEADLOCK */
+				   folio_unlock B
+		   folio_unlock B
+		   mutex_unlock A
+				   mutex_unlock A
+
+Add comments to describe DEPT's view using terms of wait and event.
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+		   mutex_lock A
+		   /* start to take into account event A context */
+   folio_lock B
+   /* start to take into account event B context */
+
+		   folio_lock B
+		   /* wait for B */
+		   (1)
+				   mutex_lock A /* DEADLOCK */
+				   /* wait for A */
+				   (2)
+
+				   folio_unlock B
+				   /* event B */
+		   folio_unlock B
+		   /* not interest until reaching (1) */
+
+		   mutex_unlock A
+		   /* event A */
+				   mutex_unlock A
+				   /* not interest until reaching (2) */
+
+Focusing on wait and event, the example can be simplified like:
+
+   CONTEXT X	   CONTEXT Y	   CONTEXT Z
+
+		   |		   |
+		   |		   |
+		   v		   |
+		   wait for B	   v
+		   .		   wait for A
+		   .		   .
+		   .		   event B
+		   event A
+
+Event A occurrence is a prerequisite to reaching event B, and event B
+occurrence is a prerequisite to reaching event A.
+
+In terms of dependency:
+
+   Event B depends on event A.
+   Event A depends on event B.
+
+Dependencies in the dependency graph look like:
+
+    -> A -> B -
+   /           \
+   \           /
+    -----------
+
+   where 'A -> B' means that event A depends on event B.
+
+A loop has been created. So DEPT can report it as a deadlock.
+
+CONCLUSION
+
+DEPT works well with any synchronization mechanisms by focusing on wait
+and event.
