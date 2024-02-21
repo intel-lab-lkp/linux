@@ -10,6 +10,7 @@
 #include <sound/soc.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
 #include <linux/firmware/cirrus/wmfw.h>
+#include <sound/cs-amp-lib.h>
 #include "hda_cs_dsp_ctl.h"
 
 #define ADSP_MAX_STD_CTRL_SIZE               512
@@ -246,6 +247,52 @@ int hda_cs_dsp_read_ctl(struct cs_dsp *dsp, const char *name, int type,
 
 }
 EXPORT_SYMBOL_NS_GPL(hda_cs_dsp_read_ctl, SND_HDA_CS_DSP_CONTROLS);
+
+static int hda_cs_dsp_write_cal_coeff(struct cs_dsp *cs_dsp,
+				      const struct cirrus_amp_cal_controls *controls,
+				      const char *ctl_name, unsigned int val)
+{
+	__be32 beval = cpu_to_be32(val);
+	int ret;
+
+	ret = hda_cs_dsp_write_ctl(cs_dsp, ctl_name, controls->mem_region,
+				   controls->alg_id, &beval, 4);
+	if (ret) {
+		dev_err(cs_dsp->dev, "Failed to write control %s: %d\n", ctl_name, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+int hda_cs_dsp_write_cal_coeffs(struct cs_dsp *cs_dsp,
+				const struct cirrus_amp_cal_controls *controls,
+				const struct cirrus_amp_cal_data *data)
+{
+	int ret;
+
+	dev_dbg(cs_dsp->dev, "Calibration: Ambient=%#x, Status=%#x, R0=%d\n",
+		data->calAmbient, data->calStatus, data->calR);
+
+	ret = hda_cs_dsp_write_cal_coeff(cs_dsp, controls, controls->ambient, data->calAmbient);
+	if (ret)
+		return ret;
+
+	ret = hda_cs_dsp_write_cal_coeff(cs_dsp, controls, controls->calr, data->calR);
+	if (ret)
+		return ret;
+
+	ret = hda_cs_dsp_write_cal_coeff(cs_dsp, controls, controls->status, data->calStatus);
+	if (ret)
+		return ret;
+
+	ret = hda_cs_dsp_write_cal_coeff(cs_dsp, controls, controls->checksum, data->calR + 1);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(hda_cs_dsp_write_cal_coeffs, SND_HDA_CS_DSP_CONTROLS);
 
 MODULE_DESCRIPTION("CS_DSP ALSA Control HDA Library");
 MODULE_AUTHOR("Stefan Binding, <sbinding@opensource.cirrus.com>");

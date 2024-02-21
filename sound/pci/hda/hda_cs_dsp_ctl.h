@@ -10,6 +10,7 @@
 #ifndef __HDA_CS_DSP_CTL_H__
 #define __HDA_CS_DSP_CTL_H__
 
+#include <sound/cs-amp-lib.h>
 #include <sound/soc.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
 
@@ -35,5 +36,8 @@ int hda_cs_dsp_write_ctl(struct cs_dsp *dsp, const char *name, int type,
 			 unsigned int alg, const void *buf, size_t len);
 int hda_cs_dsp_read_ctl(struct cs_dsp *dsp, const char *name, int type,
 			unsigned int alg, void *buf, size_t len);
+int hda_cs_dsp_write_cal_coeffs(struct cs_dsp *cs_dsp,
+				const struct cirrus_amp_cal_controls *controls,
+				const struct cirrus_amp_cal_data *data);
 
 #endif /*__HDA_CS_DSP_CTL_H__*/
