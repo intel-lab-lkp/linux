@@ -184,7 +184,7 @@ and three directories (``monitoring_attrs``, ``targets``, and ``schemes``)
 exist.
 
 DAMON supports multiple types of :ref:`monitoring operations
-<damon_design_confiurable_operations_set>`, including those for virtual address
+<damon_design_configurable_operations_set>`, including those for virtual address
 space and the physical address space.  You can get the list of available
 monitoring operations set on the currently running kernel by reading
 ``avail_operations`` file.  Based on the kernel configuration, the file will
