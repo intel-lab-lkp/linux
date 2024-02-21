@@ -22,6 +22,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/delay.h>
+#include <linux/crc-dp.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
@@ -195,73 +196,6 @@ drm_dp_mst_rad_to_str(const u8 rad[8], u8 lct, char *out, size_t len)
 }
 
 /* sideband msg handling */
-static u8 drm_dp_msg_header_crc4(const uint8_t *data, size_t num_nibbles)
-{
-	u8 bitmask = 0x80;
-	u8 bitshift = 7;
-	u8 array_index = 0;
-	int number_of_bits = num_nibbles * 4;
-	u8 remainder = 0;
-
-	while (number_of_bits != 0) {
-		number_of_bits--;
-		remainder <<= 1;
-		remainder |= (data[array_index] & bitmask) >> bitshift;
-		bitmask >>= 1;
-		bitshift--;
-		if (bitmask == 0) {
-			bitmask = 0x80;
-			bitshift = 7;
-			array_index++;
-		}
-		if ((remainder & 0x10) == 0x10)
-			remainder ^= 0x13;
-	}
-
-	number_of_bits = 4;
-	while (number_of_bits != 0) {
-		number_of_bits--;
-		remainder <<= 1;
-		if ((remainder & 0x10) != 0)
-			remainder ^= 0x13;
-	}
-
-	return remainder;
-}
-
-static u8 drm_dp_msg_data_crc4(const uint8_t *data, u8 number_of_bytes)
-{
-	u8 bitmask = 0x80;
-	u8 bitshift = 7;
-	u8 array_index = 0;
-	int number_of_bits = number_of_bytes * 8;
-	u16 remainder = 0;
-
-	while (number_of_bits != 0) {
-		number_of_bits--;
-		remainder <<= 1;
-		remainder |= (data[array_index] & bitmask) >> bitshift;
-		bitmask >>= 1;
-		bitshift--;
-		if (bitmask == 0) {
-			bitmask = 0x80;
-			bitshift = 7;
-			array_index++;
-		}
-		if ((remainder & 0x100) == 0x100)
-			remainder ^= 0xd5;
-	}
-
-	number_of_bits = 8;
-	while (number_of_bits != 0) {
-		number_of_bits--;
-		remainder <<= 1;
-		if ((remainder & 0x100) != 0)
-			remainder ^= 0xd5;
-	}
-
-	return remainder & 0xff;
-}
 static inline u8 drm_dp_calc_sb_hdr_size(struct drm_dp_sideband_msg_hdr *hdr)
 {
 	u8 size = 3;
@@ -284,7 +218,7 @@ static void drm_dp_encode_sideband_msg_hdr(struct drm_dp_sideband_msg_hdr *hdr,
 		(hdr->msg_len & 0x3f);
 	buf[idx++] = (hdr->somt << 7) | (hdr->eomt << 6) | (hdr->seqno << 4);
 
-	crc4 = drm_dp_msg_header_crc4(buf, (idx * 2) - 1);
+	crc4 = crc_dp_msg_header(buf, (idx * 2) - 1);
 	buf[idx - 1] |= (crc4 & 0xf);
 
 	*len = idx;
@@ -305,7 +239,7 @@ static bool drm_dp_decode_sideband_msg_hdr(const struct drm_dp_mst_topology_mgr 
 	len += ((buf[0] & 0xf0) >> 4) / 2;
 	if (len > buflen)
 		return false;
-	crc4 = drm_dp_msg_header_crc4(buf, (len * 2) - 1);
+	crc4 = crc_dp_msg_header(buf, (len * 2) - 1);
 
 	if ((crc4 & 0xf) != (buf[len - 1] & 0xf)) {
 		drm_dbg_kms(mgr->dev, "crc4 mismatch 0x%x 0x%x\n", crc4, buf[len - 1]);
@@ -725,7 +659,7 @@ static void drm_dp_crc_sideband_chunk_req(u8 *msg, u8 len)
 {
 	u8 crc4;
 
-	crc4 = drm_dp_msg_data_crc4(msg, len);
+	crc4 = crc_dp_msg_data(msg, len);
 	msg[len] = crc4;
 }
 
@@ -782,7 +716,7 @@ static bool drm_dp_sideband_append_payload(struct drm_dp_sideband_msg_rx *msg,
 
 	if (msg->curchunk_idx >= msg->curchunk_len) {
 		/* do CRC */
-		crc4 = drm_dp_msg_data_crc4(msg->chunk, msg->curchunk_len - 1);
+		crc4 = crc_dp_msg_data(msg->chunk, msg->curchunk_len - 1);
 		if (crc4 != msg->chunk[msg->curchunk_len - 1])
 			print_hex_dump(KERN_DEBUG, "wrong crc",
 				       DUMP_PREFIX_NONE, 16, 1,
