@@ -145,7 +145,7 @@ static int intel_dp_aux_sync_len(void)
 
 static u8 intel_dp_aux_fw_sync_len(void)
 {
-	u8 precharge = 10; /* 10-16 */
+	u8 precharge = 12; /* 10-16 */
 	u8 preamble = 8;
 
 	return precharge + preamble;
