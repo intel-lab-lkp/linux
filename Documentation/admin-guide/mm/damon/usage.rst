@@ -369,7 +369,7 @@ Among the multiple feedback, the best one is used.
 Each goal directory contains three files, namely ``target_metric``,
 ``target_value`` and ``current_value``.  Users can set and get the three
 parameters for the quota auto-tuning goals that specified on the :ref:`design
-doc <damon_design_damos_quota_auto_tuning>` by writing to and reading from each
+doc <damon_design_damos_quotas_auto_tuning>` by writing to and reading from each
 of the files.  Note that users should further write
 ``commit_schemes_quota_goals`` to the ``state`` file of the :ref:`kdamond
 directory <sysfs_kdamond>` to pass the feedback to DAMON.
