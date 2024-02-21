@@ -132,6 +132,7 @@ struct intel_context {
 #define CONTEXT_PERMA_PIN		11
 #define CONTEXT_IS_PARKING		12
 #define CONTEXT_EXITING			13
+#define CONTEXT_OWN_STATE		14
 
 	struct {
 		u64 timeout_us;
