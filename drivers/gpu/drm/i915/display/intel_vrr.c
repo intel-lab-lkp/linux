@@ -150,6 +150,13 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 
 	crtc_state->vrr.flipline = crtc_state->vrr.vmin + 1;
 
+	crtc_state->vrr.vsync_start =
+			(crtc_state->hw.adjusted_mode.crtc_vtotal -
+			VRR_VSYNC_START(crtc_state->hw.adjusted_mode.vsync_start));
+	crtc_state->vrr.vsync_end =
+			(crtc_state->hw.adjusted_mode.crtc_vtotal -
+			(VRR_VSYNC_END(crtc_state->hw.adjusted_mode.vsync_end) >> 16));
+
 	/*
 	 * For XE_LPD+, we use guardband and pipeline override
 	 * is deprecated.
@@ -273,8 +280,13 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 	u32 trans_vrr_ctl;
 
 	trans_vrr_ctl = intel_de_read(dev_priv, TRANS_VRR_CTL(cpu_transcoder));
+	bool as_sdp_enabled =
+			intel_de_read(dev_priv,
+				      HSW_TVIDEO_DIP_CTL(cpu_transcoder));
 
 	crtc_state->vrr.enable = trans_vrr_ctl & VRR_CTL_VRR_ENABLE;
+	crtc_state->vrr.as_sdp_enable =
+			as_sdp_enabled & VIDEO_DIP_ENABLE_ADAPTIVE_SYNC;
 
 	if (DISPLAY_VER(dev_priv) >= 13)
 		crtc_state->vrr.guardband =

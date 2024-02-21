@@ -1414,6 +1414,7 @@ struct intel_crtc_state {
 		u16 flipline, vmin, vmax, guardband;
 		u8 as_sdp_mode;
 		bool as_sdp_enable;
+		u32 vsync_end, vsync_start;
 	} vrr;
 
 	/* Stream Splitter for eDP MSO */
