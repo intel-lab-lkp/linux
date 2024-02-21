@@ -909,6 +909,201 @@ codegen_progs_skeleton(struct bpf_object *obj, size_t prog_cnt, bool populate_li
 	}
 }
 
+static int walk_st_ops_shadow_vars(struct btf *btf,
+				   const char *ident,
+				   const struct bpf_map *map)
+{
+	DECLARE_LIBBPF_OPTS(btf_dump_emit_type_decl_opts, opts,
+			    .indent_level = 3,
+			    );
+	const struct btf_type *map_type, *member_type;
+	__u32 map_type_id, member_type_id;
+	__u32 offset, next_offset = 0;
+	const struct btf_member *m;
+	const char *member_name;
+	struct btf_dump *d = NULL;
+	int i, err = 0;
+	int size, map_size;
+
+	map_type_id = bpf_map__btf_value_type_id(map);
+	if (map_type_id == 0)
+		return -EINVAL;
+	map_type = btf__type_by_id(btf, map_type_id);
+	if (!map_type)
+		return -EINVAL;
+
+	d = btf_dump__new(btf, codegen_btf_dump_printf, NULL, NULL);
+	if (!d)
+		return -errno;
+
+	for (i = 0, m = btf_members(map_type);
+	     i < btf_vlen(map_type);
+	     i++, m++) {
+		member_type = skip_mods_and_typedefs(btf, m->type,
+						     &member_type_id);
+		if (!member_type) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		member_name = btf__name_by_offset(btf, m->name_off);
+		if (!member_name) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		offset = m->offset / 8;
+		if (next_offset != offset) {
+			printf("\t\t\tchar __padding_%d[%d];\n",
+			       i - 1, offset - next_offset);
+		}
+
+		switch (btf_kind(member_type)) {
+		case BTF_KIND_INT:
+		case BTF_KIND_FLOAT:
+		case BTF_KIND_ENUM:
+		case BTF_KIND_ENUM64:
+			/* scalar type */
+			printf("\t\t\t");
+			opts.field_name = member_name;
+			err = btf_dump__emit_type_decl(d, member_type_id,
+						       &opts);
+			if (err)
+				goto out;
+			printf(";\n");
+
+			size = btf__resolve_size(btf, member_type_id);
+			if (size < 0) {
+				err = size;
+				goto out;
+			}
+
+			next_offset = offset + size;
+			break;
+
+		case BTF_KIND_PTR:
+			if (resolve_func_ptr(btf, m->type, NULL)) {
+				/* Function pointer */
+				printf("\t\t\tconst struct bpf_program *%s;\n",
+				       member_name);
+
+				next_offset = offset + sizeof(void *);
+				break;
+			}
+			fallthrough;
+
+		default:
+			/* Unsupported types
+			 *
+			 * For unsupported types, we have to generate
+			 * definitions for them in order to support
+			 * them. For example, we need to generate a
+			 * definition for a struct type or a union type. It
+			 * may cause type conflicts without renaming since
+			 * the same type may be defined for several
+			 * skeletons, and the user may include these
+			 * skeletons in the same compile unit.
+			 */
+			if (i == btf_vlen(map_type) - 1) {
+				map_size = btf__resolve_size(btf, map_type_id);
+				if (map_size < 0)
+					return -EINVAL;
+				size = map_size - offset;
+			} else {
+				size = (m[1].offset - m->offset) / 8;
+			}
+
+			printf("\t\t\tchar __padding_%d[%d];\n", i, size);
+
+			next_offset = offset + size;
+			break;
+		}
+	}
+
+out:
+	btf_dump__free(d);
+
+	return err;
+}
+
+/* Generate the pointer of the shadow type for a struct_ops map.
+ *
+ * This function adds a pointer of the shadow type for a struct_ops map.
+ * The members of a struct_ops map can be exported through a pointer to a
+ * shadow type. The user can access these members through the pointer.
+ *
+ * A shadow type includes not all members, only members of some types.
+ * They are scalar types and function pointers. The function pointers are
+ * translated to the pointer of the struct bpf_program. The scalar types
+ * are translated to the original type without any modifiers.
+ *
+ * Unsupported types will be translated to a char array to take the same
+ * space of the original field. However, due to handling padding and
+ * alignments, the user should not access them directly.
+ */
+static int gen_st_ops_shadow_type(struct btf *btf, const char *ident,
+				  const struct bpf_map *map)
+{
+	int err;
+
+	printf("\t\tstruct {\n");
+
+	err = walk_st_ops_shadow_vars(btf, ident, map);
+	if (err)
+		return err;
+
+	printf("\t\t} *%s;\n", ident);
+
+	return 0;
+}
+
+static int gen_st_ops_shadow(struct btf *btf, struct bpf_object *obj)
+{
+	struct bpf_map *map;
+	char ident[256];
+	int err;
+
+	/* Generate the pointers to shadow types of
+	 * struct_ops maps.
+	 */
+	printf("\tstruct {\n");
+	bpf_object__for_each_map(map, obj) {
+		if (bpf_map__type(map) != BPF_MAP_TYPE_STRUCT_OPS)
+			continue;
+		if (!get_map_ident(map, ident, sizeof(ident)))
+			continue;
+		err = gen_st_ops_shadow_type(btf, ident, map);
+		if (err)
+			return err;
+	}
+	printf("\t} struct_ops;\n");
+
+	return 0;
+}
+
+/* Generate the code to initialize the pointers of shadow types. */
+static void gen_st_ops_shadow_init(struct btf *btf, struct bpf_object *obj)
+{
+	struct bpf_map *map;
+	char ident[256];
+
+	/* Initialize the pointers to_ops shadow types of
+	 * struct_ops maps.
+	 */
+	bpf_object__for_each_map(map, obj) {
+		if (bpf_map__type(map) != BPF_MAP_TYPE_STRUCT_OPS)
+			continue;
+		if (!get_map_ident(map, ident, sizeof(ident)))
+			continue;
+		codegen("\
+			\n\
+				obj->struct_ops.%1$s =			    \n\
+					bpf_map__initial_value(obj->maps.%1$s, NULL);\n\
+			\n\
+			", ident);
+	}
+}
+
 static int do_skeleton(int argc, char **argv)
 {
 	char header_guard[MAX_OBJ_NAME_LEN + sizeof("__SKEL_H__")];
@@ -923,6 +1118,7 @@ static int do_skeleton(int argc, char **argv)
 	struct bpf_map *map;
 	struct btf *btf;
 	struct stat st;
+	int st_ops_cnt = 0;
 
 	if (!REQ_ARGS(1)) {
 		usage();
@@ -1039,6 +1235,8 @@ static int do_skeleton(int argc, char **argv)
 		);
 	}
 
+	btf = bpf_object__btf(obj);
+
 	if (map_cnt) {
 		printf("\tstruct {\n");
 		bpf_object__for_each_map(map, obj) {
@@ -1048,8 +1246,15 @@ static int do_skeleton(int argc, char **argv)
 				printf("\t\tstruct bpf_map_desc %s;\n", ident);
 			else
 				printf("\t\tstruct bpf_map *%s;\n", ident);
+			if (bpf_map__type(map) == BPF_MAP_TYPE_STRUCT_OPS)
+				st_ops_cnt++;
 		}
 		printf("\t} maps;\n");
+		if (st_ops_cnt && btf) {
+			err = gen_st_ops_shadow(btf, obj);
+			if (err)
+				goto out;
+		}
 	}
 
 	if (prog_cnt) {
@@ -1075,7 +1280,6 @@ static int do_skeleton(int argc, char **argv)
 		printf("\t} links;\n");
 	}
 
-	btf = bpf_object__btf(obj);
 	if (btf) {
 		err = codegen_datasecs(obj, obj_name);
 		if (err)
@@ -1133,6 +1337,13 @@ static int do_skeleton(int argc, char **argv)
 			if (err)					    \n\
 				goto err_out;				    \n\
 									    \n\
+		", obj_name);
+
+	if (st_ops_cnt && btf)
+		gen_st_ops_shadow_init(btf, obj);
+
+	codegen("\
+		\n\
 			return obj;					    \n\
 		err_out:						    \n\
 			%1$s__destroy(obj);				    \n\
@@ -1296,6 +1507,7 @@ static int do_subskeleton(int argc, char **argv)
 	struct btf *btf;
 	const struct btf_type *map_type, *var_type;
 	const struct btf_var_secinfo *var;
+	int st_ops_cnt = 0;
 	struct stat st;
 
 	if (!REQ_ARGS(1)) {
@@ -1438,8 +1650,16 @@ static int do_subskeleton(int argc, char **argv)
 			if (!get_map_ident(map, ident, sizeof(ident)))
 				continue;
 			printf("\t\tstruct bpf_map *%s;\n", ident);
+			if (bpf_map__type(map) == BPF_MAP_TYPE_STRUCT_OPS)
+				st_ops_cnt++;
 		}
 		printf("\t} maps;\n");
+	}
+
+	if (st_ops_cnt && btf) {
+		err = gen_st_ops_shadow(btf, obj);
+		if (err)
+			goto out;
 	}
 
 	if (prog_cnt) {
@@ -1553,6 +1773,13 @@ static int do_subskeleton(int argc, char **argv)
 			if (err)					    \n\
 				goto err;				    \n\
 									    \n\
+		");
+
+	if (st_ops_cnt && btf)
+		gen_st_ops_shadow_init(btf, obj);
+
+	codegen("\
+		\n\
 			return obj;					    \n\
 		err:							    \n\
 			%1$s__destroy(obj);				    \n\
