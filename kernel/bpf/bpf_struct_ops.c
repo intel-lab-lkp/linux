@@ -18,6 +18,8 @@ struct bpf_struct_ops_value {
 	char data[] ____cacheline_aligned_in_smp;
 };
 
+#define MAX_TRAMP_IMAGE_PAGES 8
+
 struct bpf_struct_ops_map {
 	struct bpf_map map;
 	struct rcu_head rcu;
@@ -30,12 +32,11 @@ struct bpf_struct_ops_map {
 	 */
 	struct bpf_link **links;
 	u32 links_cnt;
-	/* image is a page that has all the trampolines
+	u32 image_pages_cnt;
+	/* image_pages is an array of pages that has all the trampolines
 	 * that stores the func args before calling the bpf_prog.
-	 * A PAGE_SIZE "image" is enough to store all trampoline for
-	 * "links[]".
 	 */
-	void *image;
+	void *image_pages[MAX_TRAMP_IMAGE_PAGES];
 	/* The owner moduler's btf. */
 	struct btf *btf;
 	/* uvalue->data stores the kernel struct
@@ -456,6 +457,41 @@ static void bpf_struct_ops_map_put_progs(struct bpf_struct_ops_map *st_map)
 	}
 }
 
+static void bpf_struct_ops_map_free_image(struct bpf_struct_ops_map *st_map)
+{
+	int i;
+	void *image;
+
+	bpf_jit_uncharge_modmem(PAGE_SIZE * st_map->image_pages_cnt);
+	for (i = 0; i < st_map->image_pages_cnt; i++) {
+		image = st_map->image_pages[i];
+		arch_free_bpf_trampoline(image, PAGE_SIZE);
+	}
+	st_map->image_pages_cnt = 0;
+}
+
+static void *bpf_struct_ops_map_inc_image(struct bpf_struct_ops_map *st_map)
+{
+	void *image;
+	int err;
+
+	if (st_map->image_pages_cnt >= MAX_TRAMP_IMAGE_PAGES)
+		return ERR_PTR(-E2BIG);
+
+	err = bpf_jit_charge_modmem(PAGE_SIZE);
+	if (err)
+		return ERR_PTR(err);
+
+	image = arch_alloc_bpf_trampoline(PAGE_SIZE);
+	if (!image) {
+		bpf_jit_uncharge_modmem(PAGE_SIZE);
+		return ERR_PTR(-ENOMEM);
+	}
+	st_map->image_pages[st_map->image_pages_cnt++] = image;
+
+	return image;
+}
+
 static int check_zero_holes(const struct btf *btf, const struct btf_type *t, void *data)
 {
 	const struct btf_member *member;
@@ -531,10 +567,10 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	const struct btf_type *module_type;
 	const struct btf_member *member;
 	const struct btf_type *t = st_ops_desc->type;
+	void *image = NULL, *image_end = NULL;
 	struct bpf_tramp_links *tlinks;
 	void *udata, *kdata;
 	int prog_fd, err;
-	void *image, *image_end;
 	u32 i;
 
 	if (flags)
@@ -573,15 +609,14 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 
 	udata = &uvalue->data;
 	kdata = &kvalue->data;
-	image = st_map->image;
-	image_end = st_map->image + PAGE_SIZE;
 
 	module_type = btf_type_by_id(btf_vmlinux, st_ops_ids[IDX_MODULE_ID]);
 	for_each_member(i, t, member) {
 		const struct btf_type *mtype, *ptype;
 		struct bpf_prog *prog;
 		struct bpf_tramp_link *link;
-		u32 moff;
+		u32 moff, tflags;
+		int tsize;
 
 		moff = __btf_member_bit_offset(t, member) / 8;
 		ptype = btf_type_resolve_ptr(st_map->btf, member->type, NULL);
@@ -653,10 +688,38 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 			      &bpf_struct_ops_link_lops, prog);
 		st_map->links[i] = &link->link;
 
-		err = bpf_struct_ops_prepare_trampoline(tlinks, link,
-							&st_ops->func_models[i],
-							*(void **)(st_ops->cfi_stubs + moff),
-							image, image_end);
+		tflags = BPF_TRAMP_F_INDIRECT;
+		if (st_ops->func_models[i].ret_size > 0)
+			tflags |= BPF_TRAMP_F_RET_FENTRY_RET;
+
+		/* Compute the size of the trampoline */
+		tlinks[BPF_TRAMP_FENTRY].links[0] = link;
+		tlinks[BPF_TRAMP_FENTRY].nr_links = 1;
+		tsize = arch_bpf_trampoline_size(&st_ops->func_models[i],
+						 tflags, tlinks, NULL);
+		if (tsize < 0) {
+			err = tsize;
+			goto reset_unlock;
+		}
+
+		/* Allocate pages */
+		if (tsize > (unsigned long)image_end - (unsigned long)image) {
+			if (tsize > PAGE_SIZE) {
+				err = -E2BIG;
+				goto reset_unlock;
+			}
+			image = bpf_struct_ops_map_inc_image(st_map);
+			if (IS_ERR(image)) {
+				err = PTR_ERR(image);
+				goto reset_unlock;
+			}
+			image_end = image + PAGE_SIZE;
+		}
+
+		err = arch_prepare_bpf_trampoline(NULL, image, image_end,
+						  &st_ops->func_models[i],
+						  tflags, tlinks,
+						  *(void **)(st_ops->cfi_stubs + moff));
 		if (err < 0)
 			goto reset_unlock;
 
@@ -672,10 +735,11 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 		if (err)
 			goto reset_unlock;
 	}
+	for (i = 0; i < st_map->image_pages_cnt; i++)
+		arch_protect_bpf_trampoline(st_map->image_pages[i], PAGE_SIZE);
 
 	if (st_map->map.map_flags & BPF_F_LINK) {
 		err = 0;
-		arch_protect_bpf_trampoline(st_map->image, PAGE_SIZE);
 		/* Let bpf_link handle registration & unregistration.
 		 *
 		 * Pair with smp_load_acquire() during lookup_elem().
@@ -684,7 +748,6 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 		goto unlock;
 	}
 
-	arch_protect_bpf_trampoline(st_map->image, PAGE_SIZE);
 	err = st_ops->reg(kdata);
 	if (likely(!err)) {
 		/* This refcnt increment on the map here after
@@ -707,9 +770,9 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	 * there was a race in registering the struct_ops (under the same name) to
 	 * a sub-system through different struct_ops's maps.
 	 */
-	arch_unprotect_bpf_trampoline(st_map->image, PAGE_SIZE);
 
 reset_unlock:
+	bpf_struct_ops_map_free_image(st_map);
 	bpf_struct_ops_map_put_progs(st_map);
 	memset(uvalue, 0, map->value_size);
 	memset(kvalue, 0, map->value_size);
@@ -776,10 +839,7 @@ static void __bpf_struct_ops_map_free(struct bpf_map *map)
 	if (st_map->links)
 		bpf_struct_ops_map_put_progs(st_map);
 	bpf_map_area_free(st_map->links);
-	if (st_map->image) {
-		arch_free_bpf_trampoline(st_map->image, PAGE_SIZE);
-		bpf_jit_uncharge_modmem(PAGE_SIZE);
-	}
+	bpf_struct_ops_map_free_image(st_map);
 	bpf_map_area_free(st_map->uvalue);
 	bpf_map_area_free(st_map);
 }
@@ -889,20 +949,6 @@ static struct bpf_map *bpf_struct_ops_map_alloc(union bpf_attr *attr)
 	st_map->st_ops_desc = st_ops_desc;
 	map = &st_map->map;
 
-	ret = bpf_jit_charge_modmem(PAGE_SIZE);
-	if (ret)
-		goto errout_free;
-
-	st_map->image = arch_alloc_bpf_trampoline(PAGE_SIZE);
-	if (!st_map->image) {
-		/* __bpf_struct_ops_map_free() uses st_map->image as flag
-		 * for "charged or not". In this case, we need to unchange
-		 * here.
-		 */
-		bpf_jit_uncharge_modmem(PAGE_SIZE);
-		ret = -ENOMEM;
-		goto errout_free;
-	}
 	st_map->uvalue = bpf_map_area_alloc(vt->size, NUMA_NO_NODE);
 	st_map->links_cnt = btf_type_vlen(t);
 	st_map->links =
