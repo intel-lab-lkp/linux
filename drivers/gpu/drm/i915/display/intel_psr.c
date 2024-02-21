@@ -1150,6 +1150,28 @@ static bool _lnl_compute_alpm_params(struct intel_dp *intel_dp,
 	return true;
 }
 
+/*
+ * From Bspec:
+ *
+ * For Xe2 and beyond
+ * RBR 15us, HBR1 11us, higher rates 10us
+ *
+ * For pre-Xe2
+ * 10 us
+ */
+static int get_io_wake_time(struct intel_dp *intel_dp,
+			struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	if (DISPLAY_VER(i915) < 20 || crtc_state->port_clock > 270000)
+		return 10;
+	else if (crtc_state->port_clock > 162000)
+		return 11;
+	else
+		return 15;
+}
+
 static bool _compute_alpm_params(struct intel_dp *intel_dp,
 				 struct intel_crtc_state *crtc_state)
 {
@@ -1157,13 +1179,17 @@ static bool _compute_alpm_params(struct intel_dp *intel_dp,
 	int io_wake_lines, io_wake_time, fast_wake_lines, fast_wake_time;
 	u8 max_wake_lines;
 
-	if (DISPLAY_VER(i915) >= 12) {
-		io_wake_time = 42;
-		/*
-		 * According to Bspec it's 42us, but based on testing
-		 * it is not enough -> use 45 us.
-		 */
-		fast_wake_time = 45;
+	if (intel_dp->get_aux_fw_sync_len) {
+		int io_wake_time = get_io_wake_time(intel_dp, crtc_state);
+		int tfw_exit_latency = 20; /* eDP spec */
+		int phy_wake = 4;	   /* eDP spec */
+		int preamble = 8;	   /* eDP spec */
+		int precharge = intel_dp->get_aux_fw_sync_len() - preamble;
+
+		io_wake_time = max(precharge, io_wake_time) + preamble +
+			phy_wake + tfw_exit_latency;
+		fast_wake_time = precharge + preamble + phy_wake +
+			tfw_exit_latency;
 
 		/* TODO: Check how we can use ALPM_CTL fast wake extended field */
 		max_wake_lines = 12;
