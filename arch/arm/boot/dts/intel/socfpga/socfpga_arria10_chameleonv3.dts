@@ -10,6 +10,158 @@
 	compatible = "google,chameleon-v3", "enclustra,mercury-aa1",
 		     "altr,socfpga-arria10", "altr,socfpga";
 
+	soc {
+		fb0: video@c0060500 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060500 0x100>,
+			      <0xc0060f20 0x10>;
+			interrupts = <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+			google,legacy-format;
+		};
+
+		fb_mst0: video@c0060600 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060600 0x100>,
+			      <0xc0060f30 0x10>;
+			interrupts = <GIC_SPI 22 IRQ_TYPE_LEVEL_HIGH>;
+
+			port {
+				fb_mst0_0: endpoint {
+					remote-endpoint = <&dprx_mst_0>;
+				};
+			};
+		};
+
+		fb_mst1: video@c0060700 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060700 0x100>,
+			      <0xc0060f40 0x10>;
+			interrupts = <GIC_SPI 23 IRQ_TYPE_LEVEL_HIGH>;
+
+			port {
+				fb_mst1_0: endpoint {
+					remote-endpoint = <&dprx_mst_1>;
+				};
+			};
+		};
+
+		fb_mst2: video@c0060800 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060800 0x100>,
+			      <0xc0060f50 0x10>;
+			interrupts = <GIC_SPI 24 IRQ_TYPE_LEVEL_HIGH>;
+
+			port {
+				fb_mst2_0: endpoint {
+					remote-endpoint = <&dprx_mst_2>;
+				};
+			};
+		};
+
+		fb_mst3: video@c0060900 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060900 0x100>,
+			      <0xc0060f60 0x10>;
+			interrupts = <GIC_SPI 25 IRQ_TYPE_LEVEL_HIGH>;
+
+			port {
+				fb_mst3_0: endpoint {
+					remote-endpoint = <&dprx_mst_3>;
+				};
+			};
+		};
+
+		fb_sst: video@c0060a00 {
+			compatible = "google,chv3-fb";
+			reg = <0xc0060a00 0x100>,
+			      <0xc0060f70 0x10>;
+			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+
+			port {
+				fb_sst_0: endpoint {
+					remote-endpoint = <&dprx_sst_0>;
+				};
+			};
+		};
+
+		dprx_mst_irq: intc@c0060f80 {
+			compatible = "altr,pio-1.0";
+			reg = <0xc0060f80 0x10>;
+			interrupts = <GIC_SPI 27 IRQ_TYPE_LEVEL_HIGH>;
+			altr,interrupt-type = <IRQ_TYPE_EDGE_RISING>;
+			#interrupt-cells = <2>;
+			interrupt-controller;
+		};
+
+		dprx_sst_irq: intc@c0060fe0 {
+			compatible = "altr,pio-1.0";
+			reg = <0xc0060fe0 0x10>;
+			interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
+			altr,interrupt-type = <IRQ_TYPE_EDGE_RISING>;
+			#interrupt-cells = <2>;
+			interrupt-controller;
+		};
+
+		dprx_mst: dp-receiver@c0062000 {
+			compatible = "intel,dprx-20.0.1";
+			reg = <0xc0062000 0x800>;
+			interrupt-parent = <&dprx_mst_irq>;
+			interrupts = <0 IRQ_TYPE_EDGE_RISING>;
+			intel,max-link-rate = <0x1e>;
+			intel,max-lane-count = <4>;
+			intel,multi-stream-support;
+			intel,max-stream-count = <4>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					dprx_mst_0: endpoint {
+						remote-endpoint = <&fb_mst0_0>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					dprx_mst_1: endpoint {
+						remote-endpoint = <&fb_mst1_0>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+					dprx_mst_2: endpoint {
+						remote-endpoint = <&fb_mst2_0>;
+					};
+				};
+
+				port@3 {
+					reg = <3>;
+					dprx_mst_3: endpoint {
+						remote-endpoint = <&fb_mst3_0>;
+					};
+				};
+			};
+		};
+
+		dprx_sst: dp-receiver@c0064000 {
+			compatible = "intel,dprx-20.0.1";
+			reg = <0xc0064000 0x800>;
+			interrupt-parent = <&dprx_sst_irq>;
+			interrupts = <0 IRQ_TYPE_EDGE_RISING>;
+			intel,max-link-rate = <0x1e>;
+			intel,max-lane-count = <4>;
+
+			port {
+				dprx_sst_0: endpoint {
+					remote-endpoint = <&fb_sst_0>;
+				};
+			};
+		};
+	};
+
 	aliases {
 		serial0 = &uart0;
 		i2c0 = &i2c0;
