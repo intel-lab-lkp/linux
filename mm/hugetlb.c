@@ -2621,8 +2621,10 @@ struct folio *alloc_buddy_hugetlb_folio_with_mpol(struct hstate *h,
 
 /* folio migration callback function */
 struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
-		nodemask_t *nmask, gfp_t gfp_mask)
+		nodemask_t *nmask, gfp_t gfp_mask, int reason)
 {
+	bool allowed_fallback = false;
+
 	spin_lock_irq(&hugetlb_lock);
 	if (available_huge_pages(h)) {
 		struct folio *folio;
@@ -2636,6 +2638,28 @@ struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 	}
 	spin_unlock_irq(&hugetlb_lock);
 
+	if (gfp_mask & __GFP_THISNODE)
+		goto alloc_new;
+
+	/*
+	 * Note: the memory offline, memory failure and migration syscalls can break
+	 * the per-node hugetlb pool. Other cases can not allocate new hugetlb on
+	 * other nodes.
+	 */
+	switch (reason) {
+	case MR_MEMORY_HOTPLUG:
+	case MR_MEMORY_FAILURE:
+	case MR_SYSCALL:
+	case MR_MEMPOLICY_MBIND:
+		allowed_fallback = true;
+		break;
+	default:
+		break;
+	}
+
+	if (!allowed_fallback)
+		gfp_mask |= __GFP_THISNODE;
+alloc_new:
 	return alloc_migrate_hugetlb_folio(h, gfp_mask, preferred_nid, nmask);
 }
 
@@ -6666,7 +6690,7 @@ static struct folio *alloc_hugetlb_folio_vma(struct hstate *h,
 
 	gfp_mask = htlb_alloc_mask(h);
 	node = huge_node(vma, address, gfp_mask, &mpol, &nodemask);
-	folio = alloc_hugetlb_folio_nodemask(h, node, nodemask, gfp_mask);
+	folio = alloc_hugetlb_folio_nodemask(h, node, nodemask, gfp_mask, -1);
 	mpol_cond_put(mpol);
 
 	return folio;
