@@ -35,6 +35,19 @@ TRACE_EVENT(pseudo_lock_l3,
 	    TP_printk("hits=%llu miss=%llu",
 		      __entry->l3_hits, __entry->l3_miss));
 
+TRACE_EVENT(mon_llc_occupancy_limbo,
+	    TP_PROTO(u32 mon_hw_id, int id, u64 occupancy),
+	    TP_ARGS(mon_hw_id, id, occupancy),
+	    TP_STRUCT__entry(__field(u32, mon_hw_id)
+			     __field(int, id)
+			     __field(u64, occupancy)),
+	    TP_fast_assign(__entry->mon_hw_id = mon_hw_id;
+			   __entry->id = id;
+			   __entry->occupancy = occupancy;),
+	    TP_printk("mon_hw_id=%u domain=%d llc_occupancy=%llu",
+		      __entry->mon_hw_id, __entry->id, __entry->occupancy)
+	   );
+
 #endif /* _TRACE_RESCTRL_H */
 
 #undef TRACE_INCLUDE_PATH

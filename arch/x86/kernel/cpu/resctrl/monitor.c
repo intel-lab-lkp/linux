@@ -23,6 +23,7 @@
 #include <asm/resctrl.h>
 
 #include "internal.h"
+#include "trace.h"
 
 struct rmid_entry {
 	u32				rmid;
@@ -302,6 +303,7 @@ void __check_limbo(struct rdt_domain *d, bool force_free)
 			}
 		}
 		crmid = nrmid + 1;
+		trace_mon_llc_occupancy_limbo(nrmid, d->id, val);
 	}
 }
 
