@@ -111,7 +111,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 
 	if (!bd->ops)
 		goto out;
-	else if (bd->ops->check_fb && !bd->ops->check_fb(bd, info))
+	else if (bd->ops->controls_device && !bd->ops->controls_device(bd, info->device))
 		goto out;
 #if IS_ENABLED(CONFIG_FB_BACKLIGHT)
 	else if (info->bl_dev && info->bl_dev != bd)
