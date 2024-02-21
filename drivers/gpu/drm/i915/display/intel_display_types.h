@@ -1797,6 +1797,12 @@ struct intel_dp {
 	u32 (*get_aux_send_ctl)(struct intel_dp *dp, int send_bytes,
 				u32 aux_clock_divider);
 
+	/*
+	 * This function returns the number of fast wake sync pulses. It is
+	 * needed by PSR code to calculate needed fast wake and io wake lines.
+	 */
+	u8 (*get_aux_fw_sync_len)(void);
+
 	i915_reg_t (*aux_ch_ctl_reg)(struct intel_dp *dp);
 	i915_reg_t (*aux_ch_data_reg)(struct intel_dp *dp, int index);
 

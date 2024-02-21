@@ -143,10 +143,10 @@ static int intel_dp_aux_sync_len(void)
 	return precharge + preamble;
 }
 
-static int intel_dp_aux_fw_sync_len(void)
+static u8 intel_dp_aux_fw_sync_len(void)
 {
-	int precharge = 10; /* 10-16 */
-	int preamble = 8;
+	u8 precharge = 10; /* 10-16 */
+	u8 preamble = 8;
 
 	return precharge + preamble;
 }
@@ -793,10 +793,12 @@ void intel_dp_aux_init(struct intel_dp *intel_dp)
 	else
 		intel_dp->get_aux_clock_divider = g4x_get_aux_clock_divider;
 
-	if (DISPLAY_VER(i915) >= 9)
+	if (DISPLAY_VER(i915) >= 9) {
 		intel_dp->get_aux_send_ctl = skl_get_aux_send_ctl;
-	else
+		intel_dp->get_aux_fw_sync_len = intel_dp_aux_fw_sync_len;
+	} else {
 		intel_dp->get_aux_send_ctl = g4x_get_aux_send_ctl;
+	}
 
 	intel_dp->aux.drm_dev = &i915->drm;
 	drm_dp_aux_init(&intel_dp->aux);
