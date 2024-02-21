@@ -167,9 +167,11 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 		crtc_state->vrr.enable = true;
 		crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
 
-		if (drm_dp_as_sdp_supported(&intel_dp->aux, intel_dp->dpcd))
+		if (drm_dp_as_sdp_supported(&intel_dp->aux, intel_dp->dpcd)) {
+			crtc_state->vrr.as_sdp_enable = true;
 			crtc_state->vrr.as_sdp_mode =
 						DP_AS_SDP_AVT_DYNAMIC_VTOTAL;
+		}
 	}
 }
 
