@@ -98,7 +98,8 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct backlight_device *bd;
 	struct fb_event *evdata = data;
-	int node = evdata->info->node;
+	struct fb_info *info = evdata->info;
+	int node = info->node;
 	int fb_blank = 0;
 
 	/* If we aren't interested in this event, skip it immediately ... */
@@ -110,8 +111,12 @@ static int fb_notifier_callback(struct notifier_block *self,
 
 	if (!bd->ops)
 		goto out;
-	if (bd->ops->check_fb && !bd->ops->check_fb(bd, evdata->info))
+	else if (bd->ops->check_fb && !bd->ops->check_fb(bd, info))
 		goto out;
+#if IS_ENABLED(CONFIG_FB_BACKLIGHT)
+	else if (info->bl_dev && info->bl_dev != bd)
+		goto out;
+#endif
 
 	fb_blank = *(int *)evdata->data;
 	if (fb_blank == FB_BLANK_UNBLANK && !bd->fb_bl_on[node]) {
