@@ -63,7 +63,7 @@ properties:
 
   interrupt-names:
     minItems: 1
-    maxItems: 8
+    maxItems: 9
 
   iommu-map:
     minItems: 1
@@ -873,8 +873,30 @@ allOf:
         compatible:
           contains:
             enum:
-              - qcom,pcie-msm8996
               - qcom,pcie-sa8775p
+    then:
+      oneOf:
+        - properties:
+            interrupts:
+              minItems: 9
+            interrupt-names:
+              items:
+                - const: msi0
+                - const: msi1
+                - const: msi2
+                - const: msi3
+                - const: msi4
+                - const: msi5
+                - const: msi6
+                - const: msi7
+                - const: global
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,pcie-msm8996
               - qcom,pcie-sc7280
               - qcom,pcie-sc8180x
               - qcom,pcie-sdm845
