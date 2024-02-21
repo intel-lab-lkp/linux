@@ -1102,6 +1102,9 @@ static int bpf_map__init_kern_struct_ops(struct bpf_map *map)
 		if (btf_is_ptr(mtype)) {
 			struct bpf_program *prog;
 
+			/* Update the value from the shadow type */
+			st_ops->progs[i] = *(struct bpf_program **)mdata;
+
 			prog = st_ops->progs[i];
 			if (!prog)
 				continue;
@@ -1170,6 +1173,36 @@ static int bpf_object__init_kern_struct_ops_maps(struct bpf_object *obj)
 	}
 
 	return 0;
+}
+
+/* Convert the data of a struct_ops map to shadow type.
+ *
+ * The function pointers are replaced with the pointers of bpf_program in
+ * st_ops->progs[].
+ */
+static void struct_ops_convert_shadow(struct bpf_map *map,
+				      const struct btf_type *t)
+{
+	struct btf *btf = map->obj->btf;
+	struct bpf_struct_ops *st_ops = map->st_ops;
+	const struct btf_member *m;
+	const struct btf_type *mtype;
+	char *data;
+	int i;
+
+	data = st_ops->data;
+
+	for (i = 0, m = btf_members(t); i < btf_vlen(t); i++, m++) {
+		mtype = skip_mods_and_typedefs(btf, m->type, NULL);
+
+		if (btf_kind(mtype) != BTF_KIND_PTR)
+			continue;
+		if (!resolve_func_ptr(btf, m->type, NULL))
+			continue;
+
+		*((struct bpf_program **)(data + m->offset / 8)) =
+			st_ops->progs[i];
+	}
 }
 
 static int init_struct_ops_maps(struct bpf_object *obj, const char *sec_name,
@@ -7531,6 +7564,19 @@ static int bpf_object_init_progs(struct bpf_object *obj, const struct bpf_object
 	return 0;
 }
 
+/* Convert the data to the shadow type for each struct_ops map. */
+static void bpf_object__init_shadow(struct bpf_object *obj)
+{
+	struct bpf_map *map;
+
+	bpf_object__for_each_map(map, obj) {
+		if (!bpf_map__is_struct_ops(map))
+			continue;
+
+		struct_ops_convert_shadow(map, map->st_ops->type);
+	}
+}
+
 static struct bpf_object *bpf_object_open(const char *path, const void *obj_buf, size_t obj_buf_sz,
 					  const struct bpf_object_open_opts *opts)
 {
@@ -7631,6 +7677,7 @@ static struct bpf_object *bpf_object_open(const char *path, const void *obj_buf,
 		goto out;
 
 	bpf_object__elf_finish(obj);
+	bpf_object__init_shadow(obj);
 
 	return obj;
 out:
@@ -9880,6 +9927,12 @@ int bpf_map__set_initial_value(struct bpf_map *map,
 
 void *bpf_map__initial_value(struct bpf_map *map, size_t *psize)
 {
+	if (bpf_map__is_struct_ops(map)) {
+		if (psize)
+			*psize = map->def.value_size;
+		return map->st_ops->data;
+	}
+
 	if (!map->mmaped)
 		return NULL;
 	*psize = map->def.value_size;
