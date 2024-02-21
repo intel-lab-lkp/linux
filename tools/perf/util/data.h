@@ -28,6 +28,7 @@ struct perf_data_file {
 
 struct perf_data {
 	const char		*path;
+	int			 fd;
 	struct perf_data_file	 file;
 	bool			 is_pipe;
 	bool			 is_dir;

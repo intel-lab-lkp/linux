@@ -71,6 +71,13 @@ struct tpebs_event {
 	const char *name;
 	const char *tpebs_name;
 };
+struct tpebs_retire_lat {
+	struct list_head nd;
+	const char *name;
+	const char *tpebs_name;
+	size_t count;
+	int sum;
+};
 
 struct metric_event *metricgroup__lookup(struct rblist *metric_events,
 					 struct evsel *evsel,

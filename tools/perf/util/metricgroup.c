@@ -691,8 +691,17 @@ static int metricgroup__build_event_string(struct strbuf *events,
 
 		if (p) {
 			struct tpebs_event *new_event = malloc(sizeof(struct tpebs_event));
-			*p = '\0';
+			char *name;
+
 			new_event->tpebs_name = strdup(id);
+			*p = '\0';
+			name = malloc(strlen(id) + 2);
+			if (!name)
+				return -ENOMEM;
+
+			strcpy(name, id);
+			strcat(name, ":p");
+			new_event->name = name;
 			*tpebs_event_size += 1;
 			pr_debug("retire_latency required, tpebs_event_size=%lu, new_event=%s\n",
 			*tpebs_event_size, new_event->name);
