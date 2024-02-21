@@ -16,7 +16,7 @@
 #include <linux/backlight.h>
 #include <linux/slab.h>
 
-#include <asm/fb.h>
+#include <asm/video.h>
 
 struct vm_area_struct;
 struct fb_info;
