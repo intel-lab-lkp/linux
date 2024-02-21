@@ -289,39 +289,6 @@ atmel_hlcdc_layer_to_plane(struct atmel_hlcdc_layer *layer)
 }
 
 /**
- * Atmel HLCDC Display Controller description structure.
- *
- * This structure describes the HLCDC IP capabilities and depends on the
- * HLCDC IP version (or Atmel SoC family).
- *
- * @min_width: minimum width supported by the Display Controller
- * @min_height: minimum height supported by the Display Controller
- * @max_width: maximum width supported by the Display Controller
- * @max_height: maximum height supported by the Display Controller
- * @max_spw: maximum vertical/horizontal pulse width
- * @max_vpw: maximum vertical back/front porch width
- * @max_hpw: maximum horizontal back/front porch width
- * @conflicting_output_formats: true if RGBXXX output formats conflict with
- *				each other.
- * @fixed_clksrc: true if clock source is fixed
- * @layers: a layer description table describing available layers
- * @nlayers: layer description table size
- */
-struct atmel_hlcdc_dc_desc {
-	int min_width;
-	int min_height;
-	int max_width;
-	int max_height;
-	int max_spw;
-	int max_vpw;
-	int max_hpw;
-	bool conflicting_output_formats;
-	bool fixed_clksrc;
-	const struct atmel_hlcdc_layer_desc *layers;
-	int nlayers;
-};
-
-/**
  * Atmel HLCDC Display Controller.
  *
  * @desc: HLCDC Display Controller description
@@ -343,6 +310,75 @@ struct atmel_hlcdc_dc {
 		u32 imr;
 		struct drm_atomic_state *state;
 	} suspend;
+};
+
+struct atmel_hlcdc_plane_state;
+
+/**
+ * struct atmel_lcdc_dc_ops - describes atmel_lcdc ops group
+ * to differentiate HLCDC and XLCDC IP code support
+ * @plane_setup_scaler: update the vertical and horizontal scaling factors
+ * @update_lcdc_buffers: update the each LCDC layers DMA registers
+ * @lcdc_atomic_disable: disable LCDC interrupts and layers
+ * @lcdc_update_general_settings: update each LCDC layers general
+ * confiugration register
+ * @lcdc_atomic_update: enable the LCDC layers and interrupts
+ * @lcdc_csc_init: update the color space conversion co-efficient of
+ * High-end overlay register
+ * @lcdc_irq_dbg: to raise alert incase of interrupt overrun in any LCDC layer
+ */
+struct atmel_lcdc_dc_ops {
+	void (*plane_setup_scaler)(struct atmel_hlcdc_plane *plane,
+				   struct atmel_hlcdc_plane_state *state);
+	void (*update_lcdc_buffers)(struct atmel_hlcdc_plane *plane,
+				    struct atmel_hlcdc_plane_state *state,
+				    u32 sr, int i);
+	void (*lcdc_atomic_disable)(struct atmel_hlcdc_plane *plane);
+	void (*lcdc_update_general_settings)(struct atmel_hlcdc_plane *plane,
+					     struct atmel_hlcdc_plane_state *state);
+	void (*lcdc_atomic_update)(struct atmel_hlcdc_plane *plane,
+				   struct atmel_hlcdc_dc *dc);
+	void (*lcdc_csc_init)(struct atmel_hlcdc_plane *plane,
+			      const struct atmel_hlcdc_layer_desc *desc);
+	void (*lcdc_irq_dbg)(struct atmel_hlcdc_plane *plane,
+			     const struct atmel_hlcdc_layer_desc *desc);
+};
+
+extern const struct atmel_lcdc_dc_ops atmel_hlcdc_ops;
+
+/**
+ * Atmel HLCDC Display Controller description structure.
+ *
+ * This structure describes the HLCDC IP capabilities and depends on the
+ * HLCDC IP version (or Atmel SoC family).
+ *
+ * @min_width: minimum width supported by the Display Controller
+ * @min_height: minimum height supported by the Display Controller
+ * @max_width: maximum width supported by the Display Controller
+ * @max_height: maximum height supported by the Display Controller
+ * @max_spw: maximum vertical/horizontal pulse width
+ * @max_vpw: maximum vertical back/front porch width
+ * @max_hpw: maximum horizontal back/front porch width
+ * @conflicting_output_formats: true if RGBXXX output formats conflict with
+ *				each other.
+ * @fixed_clksrc: true if clock source is fixed
+ * @layers: a layer description table describing available layers
+ * @nlayers: layer description table size
+ * @ops: atmel lcdc dc ops
+ */
+struct atmel_hlcdc_dc_desc {
+	int min_width;
+	int min_height;
+	int max_width;
+	int max_height;
+	int max_spw;
+	int max_vpw;
+	int max_hpw;
+	bool conflicting_output_formats;
+	bool fixed_clksrc;
+	const struct atmel_hlcdc_layer_desc *layers;
+	int nlayers;
+	const struct atmel_lcdc_dc_ops *ops;
 };
 
 extern struct atmel_hlcdc_formats atmel_hlcdc_plane_rgb_formats;
