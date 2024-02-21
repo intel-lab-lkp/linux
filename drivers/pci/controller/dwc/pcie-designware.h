@@ -223,6 +223,32 @@
 
 #define PCIE_RAS_DES_EVENT_COUNTER_DATA		0xc
 
+
+/*
+ * Error Reporting DBI register
+ */
+#define DBI_DEVICE_CONTROL_DEVICE_STATUS	0x78
+#define DBI_ROOT_CONTROL_ROOT_CAPABILITIES_REG	0x8c
+#define DBI_INTERFACE_TIMER_STATUS		0x938
+#define DBI_SAFETY_MASK_OFF			0x960
+#define DBI_SAFETY_STATUS			0x964
+
+#define DBI_ADV_ERR_CAP_CTRL_OFF		0x18
+#define DBI_ROOT_ERR_CMD_OFF			0x2c
+
+/*
+ * RAS-DP register
+ */
+#define PCIE_RASDP_ERROR_MODE_EN_REG		0x28
+#define RASDP_ERROR_MODE_EN			BIT(0)
+
+/*
+ * Interface Timer register
+ */
+#define PCIE_INTERFACE_TIMER_CONTROL		0x930
+#define INTERFACE_TIMER_EN			BIT(0)
+#define INTERFACE_TIMER_AER_EN			BIT(1)
+
 /*
  * The default address offset between dbi_base and atu_base. Root controller
  * drivers are not required to initialize atu_base if the offset matches this

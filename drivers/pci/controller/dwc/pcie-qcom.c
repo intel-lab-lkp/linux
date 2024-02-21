@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/of.h>
+#include <linux/device.h>
 #include <linux/of_gpio.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
@@ -67,6 +68,73 @@
 #define PARF_DEBUG_CNT_PM_LINKST_IN_L0S		0xc10
 #define PARF_DEBUG_CNT_AUX_CLK_IN_L1SUB_L1	0xc84
 #define PARF_DEBUG_CNT_AUX_CLK_IN_L1SUB_L2	0xc88
+
+/* Error Reporting Parf Registers */
+#define PARF_INT_ALL_STATUS			0x224
+#define PARF_INT_ALL_CLEAR			0x228
+#define PARF_INT_CLEAR				0x21c
+#define PARF_INT_STATUS			0x220
+#define PARF_INT_ALL_MASK			0x22c
+#define PARF_INT_ALL_2_CLEAR			0x504
+#define PARF_INT_ALL_2_STATUS			0x500
+#define PARF_INT_ALL_3_CLEAR			0x2e14
+#define PARF_INT_ALL_3_STATUS			0x2e10
+#define PARF_INT_ALL_4_CLEAR			0x2dd8
+#define PARF_INT_ALL_4_STATUS			0x2dd0
+#define PARF_INT_ALL_5_CLEAR			0x2ddc
+#define PARF_INT_ALL_5_STATUS			0x2dd4
+#define PARF_CFG_SAFETY_INT_MASK_CTRL		0x2c60
+
+
+#define PCIE_AER_EXT_CAP_ID			0x01
+#define PCI_EXT_CAP_RASDP_ID			0x0b
+
+/* Interrupt Masks */
+#define CFGPCIE_INT_ALL_STATUS_MASK		0x3ff3e
+#define CFGPCIE_PARF_INT_STATUS_MASK		0x1b
+#define CFGPCIE_INTERFACE_TIMER_STATUS_MASK	0xe7b
+#define CFGPCIE_INT_ALL_2_STATUS_MASK		GENMASK(24, 0)
+#define CFGPCIE_INT_ALL_3_STATUS_MASK		GENMASK(31, 0)
+#define CFGPCIE_INT_ALL_4_STATUS_MASK		GENMASK(31, 0)
+#define CFGPCIE_INT_ALL_5_STATUS_MASK		GENMASK(31, 0)
+
+/* PCI_INTERRUPT_LINE register field */
+#define SERR_EN					BIT(17)
+
+/* DBI_ROOT_CONTROL_ROOT_CAPABILITIES_REG register fields */
+#define PCIE_CAP_SYS_ERR_ON_CORR_ERR_EN		BIT(0)
+#define PCIE_CAP_SYS_ERR_ON_NON_FATAL_ERR_EN	BIT(1)
+#define PCIE_CAP_SYS_ERR_ON_FATAL_ERR_EN	BIT(2)
+
+/* DBI_DEVICE_CONTROL_DEVICE_STATUS register fields */
+#define PCIE_CAP_UNSUPPORT_REQ_REP_EN		BIT(3)
+#define PCIE_CAP_FATAL_ERR_REPORT_EN		BIT(2)
+#define PCIE_CAP_NON_FATAL_ERR_REPORT_EN	BIT(1)
+#define PCIE_CAP_CORR_ERR_REPORT_EN		BIT(0)
+
+/* PARF_CFG_SAFETY_INT_MASK_CTRL register fields */
+#define CFG_SAFETY_UNCORR_INT_MASK		BIT(0)
+#define CFG_SAFETY_CORR_INT_MASK		BIT(1)
+
+/* DBI_ADV_ERR_CAP_CTRL_OFF register fields */
+#define ECRC_GEN_EN				BIT(6)
+#define ECRC_CHECK_EN				BIT(8)
+
+/* DBI_ROOT_ERR_CMD_OFF register fields */
+#define CORR_ERR_REPORTING_EN			BIT(0)
+#define NON_FATAL_ERR_REPORTING_EN		BIT(1)
+#define FATAL_ERR_REPORTING_EN			BIT(2)
+
+/* DBI_SAFETY_MASK_OFF register fields */
+#define SAFETY_INT_MASK			GENMASK(5, 0)
+
+/* DBI_SAFETY_STATUS register fields */
+#define PCIE_RASDP_UNCORR_ERR			BIT(0)
+#define PCIE_IFACE_TMR_ERR			BIT(1)
+#define PCIE_CDM_CHK_ERR			BIT(2)
+#define PCIE_AER_UNCORR_ERR			BIT(3)
+#define PCIE_AER_CORR_ERR			BIT(4)
+#define PCIE_RASDP_CORR_ERR			BIT(5)
 
 /* PARF_SYS_CTRL register fields */
 #define MAC_PHY_POWERDOWN_IN_P2_D_MUX_EN	BIT(29)
@@ -231,6 +299,24 @@ struct qcom_pcie_cfg {
 	const struct qcom_pcie_ops *ops;
 };
 
+enum qcom_pcie_fault_code {
+	RASDP_UNCORR_ERROR,	/* RASDP uncorrectable error */
+	RASDP_CORR_ERROR,	/* RASDP correctable error */
+	CDM_REG_CHK_ERROR,	/* CDM register check error */
+	INTERFACE_TIMER_ERROR,	/* PCIe local bus interface timer error */
+	PCIE_SPURIOUS_INT,	/* Spurious Interrupt received */
+	MAX_PCIE_SAFETY_FAULT	/* Maximum PCIe fault source code supported */
+};
+
+static const char * const pcie_fault_string[] = {
+	"RASDP_Uncorr_Error",
+	"RASDP_Corr_Error",
+	"CDM_Reg_Chk_Error",
+	"Interface_Timer_Error",
+	"PCIe_Spurious_Interrupt",
+	"TOTAL_PCIE_FAULTS",
+};
+
 struct qcom_pcie {
 	struct dw_pcie *pci;
 	void __iomem *parf;			/* DT parf */
@@ -243,6 +329,10 @@ struct qcom_pcie {
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
 	bool suspended;
+	int global_irq;
+	spinlock_t safety_lock;
+	u32 pcie_fault[MAX_PCIE_SAFETY_FAULT];
+	u32 pcie_fault_total;
 };
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
@@ -959,9 +1049,94 @@ err_disable_regulators:
 	return ret;
 }
 
+static void qcom_pcie_enable_error_reporting_2_7_0(struct qcom_pcie *pcie)
+{
+	struct dw_pcie *pci = pcie->pci;
+	u32 val, offset;
+
+	/* Clear all the interrupts before we enable it */
+	writel(0, pci->dbi_base + DBI_SAFETY_STATUS);
+	writel(0, pci->dbi_base + DBI_INTERFACE_TIMER_STATUS);
+
+	/* Enable interrupts which are aggregated using GLOBAL_INT */
+	writel(CFGPCIE_INT_ALL_STATUS_MASK, pcie->parf + PARF_INT_ALL_CLEAR);
+	writel(CFGPCIE_PARF_INT_STATUS_MASK, pcie->parf + PARF_INT_CLEAR);
+	writel(CFGPCIE_INT_ALL_2_STATUS_MASK, pcie->parf + PARF_INT_ALL_2_CLEAR);
+	writel(CFGPCIE_INT_ALL_3_STATUS_MASK, pcie->parf + PARF_INT_ALL_3_CLEAR);
+	writel(CFGPCIE_INT_ALL_4_STATUS_MASK, pcie->parf + PARF_INT_ALL_4_CLEAR);
+	writel(CFGPCIE_INT_ALL_5_STATUS_MASK, pcie->parf + PARF_INT_ALL_5_CLEAR);
+
+	dw_pcie_dbi_ro_wr_en(pci);
+
+	val = readl(pci->dbi_base + PCI_INTERRUPT_LINE);
+	val |= SERR_EN;
+	writel(val, pci->dbi_base + PCI_INTERRUPT_LINE);
+
+	val = readl(pci->dbi_base + DBI_DEVICE_CONTROL_DEVICE_STATUS);
+	val |= (PCIE_CAP_CORR_ERR_REPORT_EN | PCIE_CAP_NON_FATAL_ERR_REPORT_EN |
+			PCIE_CAP_FATAL_ERR_REPORT_EN | PCIE_CAP_UNSUPPORT_REQ_REP_EN);
+	writel(val, pci->dbi_base + DBI_DEVICE_CONTROL_DEVICE_STATUS);
+
+	val = readl(pci->dbi_base + DBI_ROOT_CONTROL_ROOT_CAPABILITIES_REG);
+	val |= (PCIE_CAP_SYS_ERR_ON_CORR_ERR_EN | PCIE_CAP_SYS_ERR_ON_NON_FATAL_ERR_EN |
+			PCIE_CAP_SYS_ERR_ON_FATAL_ERR_EN);
+	writel(val, pci->dbi_base + DBI_ROOT_CONTROL_ROOT_CAPABILITIES_REG);
+
+	dw_pcie_dbi_ro_wr_dis(pci);
+
+	/* Enable RAS-DP Interrupts */
+	offset = dw_pcie_find_ext_capability(pci, PCI_EXT_CAP_RASDP_ID);
+	val = readl(pci->dbi_base + offset + PCIE_RASDP_ERROR_MODE_EN_REG);
+	val |= RASDP_ERROR_MODE_EN;
+	writel(val, pci->dbi_base + PCIE_RASDP_ERROR_MODE_EN_REG);
+
+	/* Enable CDM Check */
+	val = readl(pci->dbi_base + PCIE_PL_CHK_REG_CONTROL_STATUS);
+	/* Enable continuous CMD register check mode */
+	val |= PCIE_PL_CHK_REG_CHK_REG_CONTINUOUS;
+	/* Start the CDM register check */
+	val |= PCIE_PL_CHK_REG_CHK_REG_START;
+	/* Enable comparison CDM register check mode */
+	val |= PCIE_PL_CHK_REG_CHK_REG_COMPARISON_ERROR;
+	/* Enable logic CDM register check mode */
+	val |= PCIE_PL_CHK_REG_CHK_REG_LOGIC_ERROR;
+	writel(val, pci->dbi_base + PCIE_PL_CHK_REG_CONTROL_STATUS);
+
+	/* Interface Timer Enable */
+	val = readl(pci->dbi_base + PCIE_INTERFACE_TIMER_CONTROL);
+	val |=  (INTERFACE_TIMER_EN | INTERFACE_TIMER_AER_EN);
+	writel(val, pci->dbi_base + PCIE_INTERFACE_TIMER_CONTROL);
+
+	/* Enable safety correctable and uncorrectable error reporting */
+	val = readl(pcie->parf + PARF_CFG_SAFETY_INT_MASK_CTRL);
+	val |= (CFG_SAFETY_UNCORR_INT_MASK | CFG_SAFETY_CORR_INT_MASK);
+	writel(val, pcie->parf + PARF_CFG_SAFETY_INT_MASK_CTRL);
+
+	/* Enable CRC check and generation */
+	offset = dw_pcie_find_ext_capability(pci, PCIE_AER_EXT_CAP_ID);
+	val = readl(pci->dbi_base + offset + DBI_ADV_ERR_CAP_CTRL_OFF);
+	val |= (ECRC_GEN_EN | ECRC_CHECK_EN);
+	writel(val, pci->dbi_base + offset + DBI_ADV_ERR_CAP_CTRL_OFF);
+
+	/* Enable AER */
+	val = readl(pci->dbi_base + offset + DBI_ROOT_ERR_CMD_OFF);
+	val |= (CORR_ERR_REPORTING_EN | NON_FATAL_ERR_REPORTING_EN
+		| FATAL_ERR_REPORTING_EN);
+	writel(val, pci->dbi_base + offset + DBI_ROOT_ERR_CMD_OFF);
+
+	/* Enable interrupts */
+	val = readl(pci->dbi_base + DBI_SAFETY_MASK_OFF);
+	val &= ~(SAFETY_INT_MASK);
+	writel(val, pci->dbi_base + DBI_SAFETY_MASK_OFF);
+
+	/* Disable Legacy Interrupts */
+	writel(0, pcie->parf + PARF_INT_ALL_MASK);
+}
+
 static int qcom_pcie_post_init_2_7_0(struct qcom_pcie *pcie)
 {
 	qcom_pcie_clear_hpc(pcie->pci);
+	qcom_pcie_enable_error_reporting_2_7_0(pcie);
 
 	return 0;
 }
@@ -1416,6 +1591,130 @@ static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
 	}
 }
 
+static void qcom_pcie_check_spurious_int(struct qcom_pcie *pcie)
+{
+	struct dw_pcie *pci = pcie->pci;
+	u32 *pcie_fault = pcie->pcie_fault;
+	struct device *dev = pci->dev;
+	struct kobject *kobj_ref = &dev->kobj;
+	u32 val;
+
+	val = readl(pci->dbi_base + DBI_INTERFACE_TIMER_STATUS);
+	if (val & CFGPCIE_INTERFACE_TIMER_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_ALL_STATUS);
+	if (val & CFGPCIE_INT_ALL_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_STATUS);
+	if (val & CFGPCIE_PARF_INT_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_ALL_2_STATUS);
+	if (val & CFGPCIE_INT_ALL_2_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_ALL_3_STATUS);
+	if (val & CFGPCIE_INT_ALL_3_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_ALL_4_STATUS);
+	if (val & CFGPCIE_INT_ALL_4_STATUS_MASK)
+		return;
+
+	val = readl(pcie->parf + PARF_INT_ALL_5_STATUS);
+	if (val & CFGPCIE_INT_ALL_5_STATUS_MASK)
+		return;
+
+	dev_err(pci->dev, "PCIe Spurious Interrupt");
+	pcie_fault[PCIE_SPURIOUS_INT]++;
+	pcie->pcie_fault_total++;
+	sysfs_notify(kobj_ref, NULL, "qcom_pcie_error_report");
+}
+
+static irqreturn_t qcom_pcie_global_irq_thread(int irq, void *data)
+{
+	struct qcom_pcie *pcie = data;
+	struct dw_pcie *pci = pcie->pci;
+	u32 *pcie_fault = pcie->pcie_fault;
+	struct device *dev = pci->dev;
+	struct kobject *kobj_ref = &dev->kobj;
+	unsigned long irqsave_flags;
+	u32 val, int_status;
+
+	spin_lock_irqsave(&pcie->safety_lock, irqsave_flags);
+
+	int_status = readl(pci->dbi_base + DBI_SAFETY_STATUS);
+	writel(0, pci->dbi_base + DBI_SAFETY_STATUS);
+
+	if (int_status) {
+		dev_err(pci->dev, "global interrupt fired status: %u", int_status);
+
+		if (int_status & PCIE_RASDP_UNCORR_ERR) {
+			dev_err(pci->dev, "RASDP uncorrectable error triggered");
+			pcie_fault[RASDP_UNCORR_ERROR]++;
+			pcie->pcie_fault_total++;
+			sysfs_notify(kobj_ref, NULL, "qcom_pcie_error_report");
+
+			/*
+			 * rasdp_uncorr_err ends up triggering a
+			 * pcie_uncorr error continuously. So masking
+			 * pcie_uncorr interrupts .
+			 */
+			val = readl(pci->dbi_base + DBI_SAFETY_MASK_OFF);
+			val |= PCIE_AER_UNCORR_ERR;
+			writel(val, pci->dbi_base + DBI_SAFETY_MASK_OFF);
+		}
+
+		if (int_status & PCIE_CDM_CHK_ERR) {
+			dev_err(pci->dev, "CDM error triggered");
+			val = readl(pci->dbi_base + PCIE_PL_CHK_REG_CONTROL_STATUS);
+
+			if (val & PCIE_PL_CHK_REG_CHK_REG_COMPARISON_ERROR) {
+				pcie_fault[CDM_REG_CHK_ERROR]++;
+				pcie->pcie_fault_total++;
+				sysfs_notify(kobj_ref, NULL, "qcom_pcie_error_report");
+
+				/*
+				 * cdm_chk_err injection results in a continuous
+				 * interrupt storm on certain targets, so masking it.
+				 */
+				val = readl(pci->dbi_base + DBI_SAFETY_MASK_OFF);
+				val |= (PCIE_CDM_CHK_ERR | PCIE_AER_UNCORR_ERR);
+				writel(val, pci->dbi_base + DBI_SAFETY_MASK_OFF);
+			}
+		}
+
+		if (int_status & PCIE_IFACE_TMR_ERR) {
+			dev_err(pci->dev, "Iface Timeout error triggered");
+			pcie_fault[INTERFACE_TIMER_ERROR]++;
+			pcie->pcie_fault_total++;
+			sysfs_notify(kobj_ref, NULL, "qcom_pcie_error_report");
+
+			/*
+			 * interface_timer_err injection results in a continuous
+			 * interrupt storm on certain targets, so masking it.
+			 */
+			val = readl(pci->dbi_base + DBI_SAFETY_MASK_OFF);
+			val |= (PCIE_IFACE_TMR_ERR | PCIE_AER_UNCORR_ERR);
+			writel(val, pci->dbi_base + DBI_SAFETY_MASK_OFF);
+		}
+
+		if (int_status & PCIE_RASDP_CORR_ERR) {
+			dev_err(pci->dev, "RASDP correctable error triggered");
+			pcie_fault[RASDP_CORR_ERROR]++;
+			pcie->pcie_fault_total++;
+			sysfs_notify(kobj_ref, NULL, "qcom_pcie_error_report");
+		}
+	} else {
+		qcom_pcie_check_spurious_int(pcie);
+	}
+
+	spin_unlock_irqrestore(&pcie->safety_lock, irqsave_flags);
+	return IRQ_HANDLED;
+}
+
 static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
 {
 	struct qcom_pcie *pcie = (struct qcom_pcie *)dev_get_drvdata(s->private);
@@ -1437,6 +1736,40 @@ static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
 
 	return 0;
 }
+
+static ssize_t qcom_pcie_error_report_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	unsigned int i;
+	struct qcom_pcie *pcie = (struct qcom_pcie *)dev_get_drvdata(dev);
+	u32 *pcie_fault = pcie->pcie_fault;
+	size_t len = 0;
+
+	for (i = 0; i < MAX_PCIE_SAFETY_FAULT; i++) {
+		if (pcie_fault_string[i])
+			len += sysfs_emit_at(buf, len, "%s: %lu\n",
+					pcie_fault_string[i],
+					pcie_fault[i]);
+	}
+
+	len += sysfs_emit_at(buf, len, "%s: %lu\n",
+					pcie_fault_string[i],
+					pcie->pcie_fault_total);
+
+	return len;
+}
+static DEVICE_ATTR_RO(qcom_pcie_error_report);
+
+static struct attribute *qcom_pcie_attrs[] = {
+	&dev_attr_qcom_pcie_error_report.attr,
+	NULL,
+};
+
+static const struct attribute_group qcom_pcie_attribute_group = {
+	.attrs = qcom_pcie_attrs,
+	.name = "qcom_pcie"
+};
 
 static void qcom_pcie_init_debugfs(struct qcom_pcie *pcie)
 {
@@ -1496,6 +1829,21 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_pm_runtime_put;
 	}
 
+	pcie->global_irq = platform_get_irq_byname(pdev, "global");
+	if (pcie->global_irq < 0) {
+		ret = pcie->global_irq;
+		goto err_pm_runtime_put;
+	}
+
+	ret = devm_request_threaded_irq(dev, pcie->global_irq, NULL,
+				qcom_pcie_global_irq_thread,
+				IRQF_ONESHOT,
+				"global_irq", pcie);
+	if (ret) {
+		dev_err(dev, "Failed to request Global IRQ\n");
+		goto err_pm_runtime_put;
+	}
+
 	pcie->parf = devm_platform_ioremap_resource_byname(pdev, "parf");
 	if (IS_ERR(pcie->parf)) {
 		ret = PTR_ERR(pcie->parf);
@@ -1550,6 +1898,8 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	if (pcie->mhi)
 		qcom_pcie_init_debugfs(pcie);
+
+	sysfs_create_group(&pdev->dev.kobj, &qcom_pcie_attribute_group);
 
 	return 0;
 
