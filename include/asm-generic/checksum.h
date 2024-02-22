@@ -4,6 +4,7 @@
 
 #include <linux/bitops.h>
 
+#ifndef csum_partial
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -17,6 +18,7 @@
  * it's best to have buff aligned on a 32-bit boundary
  */
 extern __wsum csum_partial(const void *buff, int len, __wsum sum);
+#endif
 
 #ifndef ip_fast_csum
 /*
