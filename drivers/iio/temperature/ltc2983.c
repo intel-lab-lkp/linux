@@ -209,6 +209,7 @@ enum {
 		container_of(_sensor, struct ltc2983_temp, sensor)
 
 struct ltc2983_chip_info {
+	const char *name;
 	unsigned int max_channels_nr;
 	bool has_temp;
 	bool has_eeprom;
@@ -1613,7 +1614,6 @@ static int ltc2983_probe(struct spi_device *spi)
 	struct ltc2983_data *st;
 	struct iio_dev *indio_dev;
 	struct gpio_desc *gpio;
-	const char *name = spi_get_device_id(spi)->name;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -1662,7 +1662,7 @@ static int ltc2983_probe(struct spi_device *spi)
 		return ret;
 
 	ret = devm_request_irq(dev, spi->irq, ltc2983_irq_handler,
-			       IRQF_TRIGGER_RISING, name, st);
+			       IRQF_TRIGGER_RISING, st->info->name, st);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to request an irq, %d",
 				     ret);
@@ -1676,7 +1676,7 @@ static int ltc2983_probe(struct spi_device *spi)
 			return ret;
 	}
 
-	indio_dev->name = name;
+	indio_dev->name = st->info->name;
 	indio_dev->num_channels = st->iio_channels;
 	indio_dev->channels = st->iio_chan;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -1707,15 +1707,25 @@ static DEFINE_SIMPLE_DEV_PM_OPS(ltc2983_pm_ops, ltc2983_suspend,
 				ltc2983_resume);
 
 static const struct ltc2983_chip_info ltc2983_chip_info_data = {
+	.name = "ltc2983",
 	.max_channels_nr = 20,
 };
 
 static const struct ltc2983_chip_info ltc2984_chip_info_data = {
+	.name = "ltc2984",
 	.max_channels_nr = 20,
 	.has_eeprom = true,
 };
 
 static const struct ltc2983_chip_info ltc2986_chip_info_data = {
+	.name = "ltc2986",
+	.max_channels_nr = 10,
+	.has_temp = true,
+	.has_eeprom = true,
+};
+
+static const struct ltc2983_chip_info ltm2985_chip_info_data = {
+	.name = "ltm2985",
 	.max_channels_nr = 10,
 	.has_temp = true,
 	.has_eeprom = true,
@@ -1725,7 +1735,7 @@ static const struct spi_device_id ltc2983_id_table[] = {
 	{ "ltc2983", (kernel_ulong_t)&ltc2983_chip_info_data },
 	{ "ltc2984", (kernel_ulong_t)&ltc2984_chip_info_data },
 	{ "ltc2986", (kernel_ulong_t)&ltc2986_chip_info_data },
-	{ "ltm2985", (kernel_ulong_t)&ltc2986_chip_info_data },
+	{ "ltm2985", (kernel_ulong_t)&ltm2985_chip_info_data },
 	{},
 };
 MODULE_DEVICE_TABLE(spi, ltc2983_id_table);
@@ -1734,7 +1744,7 @@ static const struct of_device_id ltc2983_of_match[] = {
 	{ .compatible = "adi,ltc2983", .data = &ltc2983_chip_info_data },
 	{ .compatible = "adi,ltc2984", .data = &ltc2984_chip_info_data },
 	{ .compatible = "adi,ltc2986", .data = &ltc2986_chip_info_data },
-	{ .compatible = "adi,ltm2985", .data = &ltc2986_chip_info_data },
+	{ .compatible = "adi,ltm2985", .data = &ltm2985_chip_info_data },
 	{},
 };
 MODULE_DEVICE_TABLE(of, ltc2983_of_match);
