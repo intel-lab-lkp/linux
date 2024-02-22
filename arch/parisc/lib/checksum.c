@@ -95,14 +95,11 @@ out:
 /*
  * computes a partial checksum, e.g. for TCP/UDP fragments
  */
-/*
- * why bother folding?
- */
 __wsum csum_partial(const void *buff, int len, __wsum sum)
 {
 	unsigned int result = do_csum(buff, len);
 	addc(result, sum);
-	return (__force __wsum)from32to16(result);
+	return (__force __wsum)result;
 }
 
 EXPORT_SYMBOL(csum_partial);
