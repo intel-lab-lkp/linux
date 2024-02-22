@@ -27,11 +27,8 @@
 
 static inline unsigned short from32to16(unsigned int x)
 {
-	/* 32 bits --> 16 bits + carry */
-	x = (x & 0xffff) + (x >> 16);
-	/* 16 bits + carry --> 16 bits including carry */
-	x = (x & 0xffff) + (x >> 16);
-	return (unsigned short)x;
+	x += ror32(x, 16);
+	return (unsigned short)(x >> 16);
 }
 
 unsigned int do_csum(const unsigned char *buff, int len)
