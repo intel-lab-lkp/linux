@@ -368,6 +368,7 @@ void __init platform_init(void)
 	pr_info("The BIOS Version: %s\n", b_info.bios_version);
 
 	efi_runtime_init();
+	pv_ipi_init();
 }
 
 static void __init check_kernel_sections_mem(void)
