@@ -68,6 +68,11 @@ static const struct nla_policy netdev_napi_get_dump_nl_policy[NETDEV_A_NAPI_IFIN
 	[NETDEV_A_NAPI_IFINDEX] = NLA_POLICY_MIN(NLA_U32, 1),
 };
 
+/* NETDEV_CMD_STATS_GET - dump */
+static const struct nla_policy netdev_stats_get_nl_policy[NETDEV_A_STATS_PROJECTION + 1] = {
+	[NETDEV_A_STATS_PROJECTION] = NLA_POLICY_MAX(NLA_UINT, 1),
+};
+
 /* Ops table for netdev */
 static const struct genl_split_ops netdev_nl_ops[] = {
 	{
@@ -136,6 +141,13 @@ static const struct genl_split_ops netdev_nl_ops[] = {
 		.dumpit		= netdev_nl_napi_get_dumpit,
 		.policy		= netdev_napi_get_dump_nl_policy,
 		.maxattr	= NETDEV_A_NAPI_IFINDEX,
+		.flags		= GENL_CMD_CAP_DUMP,
+	},
+	{
+		.cmd		= NETDEV_CMD_STATS_GET,
+		.dumpit		= netdev_nl_stats_get_dumpit,
+		.policy		= netdev_stats_get_nl_policy,
+		.maxattr	= NETDEV_A_STATS_PROJECTION,
 		.flags		= GENL_CMD_CAP_DUMP,
 	},
 };
