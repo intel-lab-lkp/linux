@@ -1642,7 +1642,7 @@ void ntfs_unmap_meta(struct super_block *sb, CLST lcn, CLST len)
 		limit >>= 1;
 
 	while (blocks--) {
-		clean_bdev_aliases(bdev, devblock++, 1);
+		clean_bdev_aliases(sb->s_bdev_file, devblock++, 1);
 		if (cnt++ >= limit) {
 			sync_blockdev(bdev);
 			cnt = 0;

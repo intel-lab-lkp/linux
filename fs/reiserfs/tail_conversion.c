@@ -187,7 +187,7 @@ void reiserfs_unmap_buffer(struct buffer_head *bh)
 	clear_buffer_mapped(bh);
 	clear_buffer_req(bh);
 	clear_buffer_new(bh);
-	bh->b_bdev = NULL;
+	bh->b_bdev_file = NULL;
 	unlock_buffer(bh);
 }
 

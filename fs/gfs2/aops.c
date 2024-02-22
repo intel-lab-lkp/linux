@@ -622,7 +622,7 @@ static void gfs2_discard(struct gfs2_sbd *sdp, struct buffer_head *bh)
 			spin_unlock(&sdp->sd_ail_lock);
 		}
 	}
-	bh->b_bdev = NULL;
+	bh->b_bdev_file = NULL;
 	clear_buffer_mapped(bh);
 	clear_buffer_req(bh);
 	clear_buffer_new(bh);

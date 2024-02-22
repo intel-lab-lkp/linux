@@ -609,7 +609,7 @@ static noinline int ntfs_get_block_vbo(struct inode *inode, u64 vbo,
 	lbo = ((u64)lcn << cluster_bits) + off;
 
 	set_buffer_mapped(bh);
-	bh->b_bdev = sb->s_bdev;
+	bh->b_bdev_file = sb->s_bdev_file;
 	bh->b_blocknr = lbo >> sb->s_blocksize_bits;
 
 	valid = ni->i_valid;

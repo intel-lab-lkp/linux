@@ -929,7 +929,7 @@ static void warn_dirty_buffer(struct buffer_head *bh)
 	       "JBD2: Spotted dirty metadata buffer (dev = %pg, blocknr = %llu). "
 	       "There's a risk of filesystem corruption in case of system "
 	       "crash.\n",
-	       bh->b_bdev, (unsigned long long)bh->b_blocknr);
+	       bh_bdev(bh), (unsigned long long)bh->b_blocknr);
 }
 
 /* Call t_frozen trigger and copy buffer data into jh->b_frozen_data. */
@@ -990,7 +990,7 @@ repeat:
 	/* If it takes too long to lock the buffer, trace it */
 	time_lock = jbd2_time_diff(start_lock, jiffies);
 	if (time_lock > HZ/10)
-		trace_jbd2_lock_buffer_stall(bh->b_bdev->bd_dev,
+		trace_jbd2_lock_buffer_stall(bh_bdev(bh)->bd_dev,
 			jiffies_to_msecs(time_lock));
 
 	/* We now hold the buffer lock so it is safe to query the buffer
@@ -2374,7 +2374,7 @@ static int journal_unmap_buffer(journal_t *journal, struct buffer_head *bh,
 			write_unlock(&journal->j_state_lock);
 			jbd2_journal_put_journal_head(jh);
 			/* Already zapped buffer? Nothing to do... */
-			if (!bh->b_bdev)
+			if (!bh_bdev(bh))
 				return 0;
 			return -EBUSY;
 		}
@@ -2428,7 +2428,7 @@ zap_buffer_unlocked:
 	clear_buffer_new(bh);
 	clear_buffer_delay(bh);
 	clear_buffer_unwritten(bh);
-	bh->b_bdev = NULL;
+	bh->b_bdev_file = NULL;
 	return may_free;
 }
 

@@ -126,7 +126,12 @@ static void map_buffer_to_folio(struct folio *folio, struct buffer_head *bh,
 	do {
 		if (block == page_block) {
 			page_bh->b_state = bh->b_state;
-			page_bh->b_bdev = bh->b_bdev;
+			if (buffer_bdev(bh)) {
+				page_bh->b_bdev = bh->b_bdev;
+				set_buffer_bdev(page_bh);
+			} else {
+				page_bh->b_bdev_file = bh->b_bdev_file;
+			}
 			page_bh->b_blocknr = bh->b_blocknr;
 			break;
 		}
@@ -216,7 +221,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			page_block++;
 			block_in_file++;
 		}
-		bdev = map_bh->b_bdev;
+		bdev = bh_bdev(map_bh);
 	}
 
 	/*
@@ -272,7 +277,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			page_block++;
 			block_in_file++;
 		}
-		bdev = map_bh->b_bdev;
+		bdev = bh_bdev(map_bh);
 	}
 
 	if (first_hole != blocks_per_page) {
@@ -472,7 +477,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 	struct block_device *bdev = NULL;
 	int boundary = 0;
 	sector_t boundary_block = 0;
-	struct block_device *boundary_bdev = NULL;
+	struct file *boundary_bdev_file = NULL;
 	size_t length;
 	struct buffer_head map_bh;
 	loff_t i_size = i_size_read(inode);
@@ -513,9 +518,9 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 			boundary = buffer_boundary(bh);
 			if (boundary) {
 				boundary_block = bh->b_blocknr;
-				boundary_bdev = bh->b_bdev;
+				boundary_bdev_file = bh->b_bdev_file;
 			}
-			bdev = bh->b_bdev;
+			bdev = bh_bdev(bh);
 		} while ((bh = bh->b_this_page) != head);
 
 		if (first_unmapped)
@@ -549,13 +554,16 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 		map_bh.b_size = 1 << blkbits;
 		if (mpd->get_block(inode, block_in_file, &map_bh, 1))
 			goto confused;
+		/* This helper cannot be used from the block layer directly. */
+		if (WARN_ON_ONCE(buffer_bdev(&map_bh)))
+			goto confused;
 		if (!buffer_mapped(&map_bh))
 			goto confused;
 		if (buffer_new(&map_bh))
 			clean_bdev_bh_alias(&map_bh);
 		if (buffer_boundary(&map_bh)) {
 			boundary_block = map_bh.b_blocknr;
-			boundary_bdev = map_bh.b_bdev;
+			boundary_bdev_file = map_bh.b_bdev_file;
 		}
 		if (page_block) {
 			if (map_bh.b_blocknr != first_block + page_block)
@@ -565,7 +573,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 		}
 		page_block++;
 		boundary = buffer_boundary(&map_bh);
-		bdev = map_bh.b_bdev;
+		bdev = bh_bdev(&map_bh);
 		if (block_in_file == last_block)
 			break;
 		block_in_file++;
@@ -627,7 +635,7 @@ alloc_new:
 	if (boundary || (first_unmapped != blocks_per_page)) {
 		bio = mpage_bio_submit_write(bio);
 		if (boundary_block) {
-			write_boundary_block(boundary_bdev,
+			write_boundary_block(boundary_bdev_file,
 					boundary_block, 1 << blkbits);
 		}
 	} else {

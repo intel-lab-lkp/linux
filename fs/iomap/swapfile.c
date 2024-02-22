@@ -116,7 +116,7 @@ static loff_t iomap_swapfile_iter(const struct iomap_iter *iter,
 		return iomap_swapfile_fail(isi, "has shared extents");
 
 	/* Only one bdev per swap file. */
-	if (iomap->bdev != isi->sis->bdev)
+	if (iomap_bdev(iomap) != isi->sis->bdev)
 		return iomap_swapfile_fail(isi, "outside the main device");
 
 	if (isi->iomap.length == 0) {

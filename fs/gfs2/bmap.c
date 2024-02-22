@@ -926,7 +926,7 @@ unstuff:
 		iomap->flags |= IOMAP_F_GFS2_BOUNDARY;
 
 out:
-	iomap->bdev = inode->i_sb->s_bdev;
+	iomap->bdev_file = inode->i_sb->s_bdev_file;
 unlock:
 	up_read(&ip->i_rw_mutex);
 	return ret;

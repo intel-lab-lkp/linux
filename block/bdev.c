@@ -412,7 +412,6 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 	spin_lock_init(&bdev->bd_size_lock);
 	mutex_init(&bdev->bd_holder_lock);
 	bdev->bd_partno = partno;
-	bdev->bd_inode = inode;
 	bdev->bd_queue = disk->queue;
 	if (partno)
 		bdev->bd_has_submit_bio = disk->part0->bd_has_submit_bio;
@@ -1229,6 +1228,13 @@ struct folio *bdev_read_folio(struct block_device *bdev, loff_t pos)
 				      pos >> PAGE_SHIFT, GFP_KERNEL);
 }
 EXPORT_SYMBOL_GPL(bdev_read_folio);
+
+void clean_bdev_aliases2(struct block_device *bdev, sector_t block,
+			 sector_t len)
+{
+	return __clean_bdev_aliases(bdev_inode(bdev), block, len);
+}
+EXPORT_SYMBOL_GPL(clean_bdev_aliases2);
 
 static int __init setup_bdev_allow_write_mounted(char *str)
 {

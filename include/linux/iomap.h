@@ -77,6 +77,7 @@ struct vm_fault;
  */
 #define IOMAP_F_SIZE_CHANGED	(1U << 8)
 #define IOMAP_F_STALE		(1U << 9)
+#define IOMAP_F_BDEV		(1U << 10)
 
 /*
  * Flags from 0x1000 up are for file system specific usage:
@@ -97,13 +98,24 @@ struct iomap {
 	u64			length;	/* length of mapping, bytes */
 	u16			type;	/* type of mapping */
 	u16			flags;	/* flags for mapping */
-	struct block_device	*bdev;	/* block device for I/O */
+	union {
+		/* block device for I/O */
+		struct block_device	*bdev;
+		struct file		*bdev_file;
+	};
 	struct dax_device	*dax_dev; /* dax_dev for dax operations */
 	void			*inline_data;
 	void			*private; /* filesystem private */
 	const struct iomap_folio_ops *folio_ops;
 	u64			validity_cookie; /* used with .iomap_valid() */
 };
+
+static inline struct block_device *iomap_bdev(const struct iomap *iomap)
+{
+	if (iomap->flags & IOMAP_F_BDEV)
+		return iomap->bdev;
+	return file_bdev(iomap->bdev_file);
+}
 
 static inline sector_t iomap_sector(const struct iomap *iomap, loff_t pos)
 {

@@ -671,7 +671,7 @@ static inline int dio_new_bio(struct dio *dio, struct dio_submit *sdio,
 	sector = start_sector << (sdio->blkbits - 9);
 	nr_pages = bio_max_segs(sdio->pages_in_io);
 	BUG_ON(nr_pages <= 0);
-	dio_bio_alloc(dio, sdio, map_bh->b_bdev, sector, nr_pages);
+	dio_bio_alloc(dio, sdio, bh_bdev(map_bh), sector, nr_pages);
 	sdio->boundary = 0;
 out:
 	return ret;
@@ -946,7 +946,7 @@ static int do_direct_IO(struct dio *dio, struct dio_submit *sdio,
 					map_bh->b_blocknr << sdio->blkfactor;
 				if (buffer_new(map_bh)) {
 					clean_bdev_aliases(
-						map_bh->b_bdev,
+						map_bh->b_bdev_file,
 						map_bh->b_blocknr,
 						map_bh->b_size >> i_blkbits);
 				}

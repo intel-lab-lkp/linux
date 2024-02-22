@@ -84,7 +84,7 @@ int nilfs_gccache_submit_read_data(struct inode *inode, sector_t blkoff,
 	}
 
 	if (!buffer_mapped(bh)) {
-		bh->b_bdev = inode->i_sb->s_bdev;
+		bh->b_bdev_file = inode->i_sb->s_bdev_file;
 		set_buffer_mapped(bh);
 	}
 	bh->b_blocknr = pbn;

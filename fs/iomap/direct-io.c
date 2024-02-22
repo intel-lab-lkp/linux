@@ -56,9 +56,9 @@ static struct bio *iomap_dio_alloc_bio(const struct iomap_iter *iter,
 		struct iomap_dio *dio, unsigned short nr_vecs, blk_opf_t opf)
 {
 	if (dio->dops && dio->dops->bio_set)
-		return bio_alloc_bioset(iter->iomap.bdev, nr_vecs, opf,
+		return bio_alloc_bioset(iomap_bdev(&iter->iomap), nr_vecs, opf,
 					GFP_KERNEL, dio->dops->bio_set);
-	return bio_alloc(iter->iomap.bdev, nr_vecs, opf, GFP_KERNEL);
+	return bio_alloc(iomap_bdev(&iter->iomap), nr_vecs, opf, GFP_KERNEL);
 }
 
 static void iomap_dio_submit_bio(const struct iomap_iter *iter,
@@ -288,8 +288,8 @@ static loff_t iomap_dio_bio_iter(const struct iomap_iter *iter,
 	size_t copied = 0;
 	size_t orig_count;
 
-	if ((pos | length) & (bdev_logical_block_size(iomap->bdev) - 1) ||
-	    !bdev_iter_is_aligned(iomap->bdev, dio->submit.iter))
+	if ((pos | length) & (bdev_logical_block_size(iomap_bdev(iomap)) - 1) ||
+	    !bdev_iter_is_aligned(iomap_bdev(iomap), dio->submit.iter))
 		return -EINVAL;
 
 	if (iomap->type == IOMAP_UNWRITTEN) {
@@ -316,7 +316,8 @@ static loff_t iomap_dio_bio_iter(const struct iomap_iter *iter,
 		 */
 		if (!(iomap->flags & (IOMAP_F_SHARED|IOMAP_F_DIRTY)) &&
 		    (dio->flags & IOMAP_DIO_WRITE_THROUGH) &&
-		    (bdev_fua(iomap->bdev) || !bdev_write_cache(iomap->bdev)))
+		    (bdev_fua(iomap_bdev(iomap)) ||
+			      !bdev_write_cache(iomap_bdev(iomap))))
 			use_fua = true;
 		else if (dio->flags & IOMAP_DIO_NEED_SYNC)
 			dio->flags &= ~IOMAP_DIO_CALLER_COMP;

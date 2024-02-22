@@ -156,7 +156,7 @@ static int scnprintf_buffer_head(char *buf, size_t size, struct buffer_head *bh)
 {
 	return scnprintf(buf, size,
 			 "dev %pg, size %zd, blocknr %llu, count %d, state 0x%lx, page %p, (%s, %s, %s)",
-			 bh->b_bdev, bh->b_size,
+			 bh_bdev(bh), bh->b_size,
 			 (unsigned long long)bh->b_blocknr,
 			 atomic_read(&(bh->b_count)),
 			 bh->b_state, bh->b_page,
@@ -561,7 +561,7 @@ static int print_super_block(struct buffer_head *bh)
 		return 1;
 	}
 
-	printk("%pg\'s super block is in block %llu\n", bh->b_bdev,
+	printk("%pg\'s super block is in block %llu\n", bh_bdev(bh),
 	       (unsigned long long)bh->b_blocknr);
 	printk("Reiserfs version %s\n", version);
 	printk("Block count %u\n", sb_block_count(rs));

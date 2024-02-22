@@ -204,6 +204,7 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 	int id;
 
 	map->m_bdev = sb->s_bdev;
+	map->m_bdev_file = sb->s_bdev_file;
 	map->m_daxdev = EROFS_SB(sb)->dax_dev;
 	map->m_dax_part_off = EROFS_SB(sb)->dax_part_off;
 	map->m_fscache = EROFS_SB(sb)->s_fscache;
@@ -278,7 +279,7 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	if (flags & IOMAP_DAX)
 		iomap->dax_dev = mdev.m_daxdev;
 	else
-		iomap->bdev = mdev.m_bdev;
+		iomap->bdev_file = mdev.m_bdev_file;
 	iomap->length = map.m_llen;
 	iomap->flags = 0;
 	iomap->private = NULL;

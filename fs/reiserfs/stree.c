@@ -331,7 +331,7 @@ static inline int key_in_buffer(
 	       || chk_path->path_length > MAX_HEIGHT,
 	       "PAP-5050: pointer to the key(%p) is NULL or invalid path length(%d)",
 	       key, chk_path->path_length);
-	RFALSE(!PATH_PLAST_BUFFER(chk_path)->b_bdev,
+	RFALSE(!bh_bdev(PATH_PLAST_BUFFER(chk_path)),
 	       "PAP-5060: device must not be NODEV");
 
 	if (comp_keys(get_lkey(chk_path, sb), key) == 1)

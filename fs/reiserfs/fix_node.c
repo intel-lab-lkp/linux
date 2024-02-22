@@ -2332,7 +2332,7 @@ static void tb_buffer_sanity_check(struct super_block *sb,
 				       "in tree %s[%d] (%b)",
 				       descr, level, bh);
 
-		if (bh->b_bdev != sb->s_bdev)
+		if (bh_bdev(bh) != sb->s_bdev)
 			reiserfs_panic(sb, "jmacd-4", "buffer has wrong "
 				       "device %s[%d] (%b)",
 				       descr, level, bh);

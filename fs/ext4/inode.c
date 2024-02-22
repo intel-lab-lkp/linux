@@ -1791,11 +1791,11 @@ add_delayed:
  * reserve space for a single block.
  *
  * For delayed buffer_head we have BH_Mapped, BH_New, BH_Delay set.
- * We also have b_blocknr = -1 and b_bdev initialized properly
+ * We also have b_blocknr = -1 and b_bdev_file initialized properly
  *
  * For unwritten buffer_head we have BH_Mapped, BH_New, BH_Unwritten set.
- * We also have b_blocknr = physicalblock mapping unwritten extent and b_bdev
- * initialized properly.
+ * We also have b_blocknr = physicalblock mapping unwritten extent and
+ * b_bdev_file initialized properly.
  */
 int ext4_da_get_block_prep(struct inode *inode, sector_t iblock,
 			   struct buffer_head *bh, int create)
@@ -3235,7 +3235,7 @@ static void ext4_set_iomap(struct inode *inode, struct iomap *iomap,
 	if (flags & IOMAP_DAX)
 		iomap->dax_dev = EXT4_SB(inode->i_sb)->s_daxdev;
 	else
-		iomap->bdev = inode->i_sb->s_bdev;
+		iomap->bdev_file = inode->i_sb->s_bdev_file;
 	iomap->offset = (u64) map->m_lblk << blkbits;
 	iomap->length = (u64) map->m_len << blkbits;
 

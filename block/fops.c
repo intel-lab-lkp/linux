@@ -386,6 +386,7 @@ static int blkdev_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	loff_t isize = i_size_read(inode);
 
 	iomap->bdev = bdev;
+	iomap->flags |= IOMAP_F_BDEV;
 	iomap->offset = ALIGN_DOWN(offset, bdev_logical_block_size(bdev));
 	if (iomap->offset >= isize)
 		return -EIO;
@@ -407,6 +408,7 @@ static int blkdev_get_block(struct inode *inode, sector_t iblock,
 	bh->b_bdev = I_BDEV(inode);
 	bh->b_blocknr = iblock;
 	set_buffer_mapped(bh);
+	set_buffer_bdev(bh);
 	return 0;
 }
 

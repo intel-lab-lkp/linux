@@ -1528,6 +1528,8 @@ struct block_device *I_BDEV(struct inode *inode);
 struct block_device *file_bdev(struct file *bdev_file);
 bool disk_live(struct gendisk *disk);
 unsigned int block_size(struct block_device *bdev);
+void clean_bdev_aliases2(struct block_device *bdev, sector_t block,
+			 sector_t len);
 
 #ifdef CONFIG_BLOCK
 void invalidate_bdev(struct block_device *bdev);

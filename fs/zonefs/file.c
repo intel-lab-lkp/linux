@@ -38,7 +38,7 @@ static int zonefs_read_iomap_begin(struct inode *inode, loff_t offset,
 	 * act as if there is a hole up to the file maximum size.
 	 */
 	mutex_lock(&zi->i_truncate_mutex);
-	iomap->bdev = inode->i_sb->s_bdev;
+	iomap->bdev_file = inode->i_sb->s_bdev_file;
 	iomap->offset = ALIGN_DOWN(offset, sb->s_blocksize);
 	isize = i_size_read(inode);
 	if (iomap->offset >= isize) {
@@ -88,7 +88,7 @@ static int zonefs_write_iomap_begin(struct inode *inode, loff_t offset,
 	 * write pointer) and unwriten beyond.
 	 */
 	mutex_lock(&zi->i_truncate_mutex);
-	iomap->bdev = inode->i_sb->s_bdev;
+	iomap->bdev_file = inode->i_sb->s_bdev_file;
 	iomap->offset = ALIGN_DOWN(offset, sb->s_blocksize);
 	iomap->addr = (z->z_sector << SECTOR_SHIFT) + iomap->offset;
 	isize = i_size_read(inode);

@@ -618,7 +618,7 @@ static void reiserfs_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 	if (buffer_journaled(bh)) {
 		reiserfs_warning(NULL, "clm-2084",
 				 "pinned buffer %lu:%pg sent to disk",
-				 bh->b_blocknr, bh->b_bdev);
+				 bh->b_blocknr, bh_bdev(bh));
 	}
 	if (uptodate)
 		set_buffer_uptodate(bh);
@@ -2315,7 +2315,7 @@ abort_replay:
  * from other places.
  * Note: Do not use journal_getblk/sb_getblk functions here!
  */
-static struct buffer_head *reiserfs_breada(struct block_device *dev,
+static struct buffer_head *reiserfs_breada(struct file *bdev_file,
 					   b_blocknr_t block, int bufsize,
 					   b_blocknr_t max_block)
 {
@@ -2324,7 +2324,7 @@ static struct buffer_head *reiserfs_breada(struct block_device *dev,
 	struct buffer_head *bh;
 	int i, j;
 
-	bh = __getblk(dev, block, bufsize);
+	bh = __getblk(bdev_file, block, bufsize);
 	if (!bh || buffer_uptodate(bh))
 		return (bh);
 
@@ -2334,7 +2334,7 @@ static struct buffer_head *reiserfs_breada(struct block_device *dev,
 	bhlist[0] = bh;
 	j = 1;
 	for (i = 1; i < blocks; i++) {
-		bh = __getblk(dev, block + i, bufsize);
+		bh = __getblk(bdev_file, block + i, bufsize);
 		if (!bh)
 			break;
 		if (buffer_uptodate(bh)) {
@@ -2447,7 +2447,7 @@ static int journal_read(struct super_block *sb)
 		 * device and journal device to be the same
 		 */
 		d_bh =
-		    reiserfs_breada(file_bdev(journal->j_bdev_file), cur_dblock,
+		    reiserfs_breada(journal->j_bdev_file, cur_dblock,
 				    sb->s_blocksize,
 				    SB_ONDISK_JOURNAL_1st_BLOCK(sb) +
 				    SB_ONDISK_JOURNAL_SIZE(sb));
