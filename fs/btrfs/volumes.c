@@ -2033,14 +2033,14 @@ static u64 btrfs_num_devices(struct btrfs_fs_info *fs_info)
 }
 
 static void btrfs_scratch_superblock(struct btrfs_fs_info *fs_info,
-				     struct block_device *bdev, int copy_num)
+				     struct file *bdev_file, int copy_num)
 {
 	struct btrfs_super_block *disk_super;
 	const size_t len = sizeof(disk_super->magic);
 	const u64 bytenr = btrfs_sb_offset(copy_num);
 	int ret;
 
-	disk_super = btrfs_read_disk_super(bdev, bytenr, bytenr);
+	disk_super = btrfs_read_disk_super(file_bdev(bdev_file), bytenr, bytenr);
 	if (IS_ERR(disk_super))
 		return;
 
@@ -2048,26 +2048,29 @@ static void btrfs_scratch_superblock(struct btrfs_fs_info *fs_info,
 	folio_mark_dirty(virt_to_folio(disk_super));
 	btrfs_release_disk_super(disk_super);
 
-	ret = sync_blockdev_range(bdev, bytenr, bytenr + len - 1);
+	ret = filemap_write_and_wait_range(bdev_file->f_mapping,
+					   bytenr, bytenr + len - 1);
 	if (ret)
 		btrfs_warn(fs_info, "error clearing superblock number %d (%d)",
 			copy_num, ret);
 }
 
 void btrfs_scratch_superblocks(struct btrfs_fs_info *fs_info,
-			       struct block_device *bdev,
+			       struct file *bdev_file,
 			       const char *device_path)
 {
+	struct block_device *bdev;
 	int copy_num;
 
-	if (!bdev)
+	if (!bdev_file)
 		return;
 
+	bdev = file_bdev(bdev_file);
 	for (copy_num = 0; copy_num < BTRFS_SUPER_MIRROR_MAX; copy_num++) {
 		if (bdev_is_zoned(bdev))
 			btrfs_reset_sb_log_zones(bdev, copy_num);
 		else
-			btrfs_scratch_superblock(fs_info, bdev, copy_num);
+			btrfs_scratch_superblock(fs_info, bdev_file, copy_num);
 	}
 
 	/* Notify udev that device has changed */
@@ -2209,7 +2212,7 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info,
 	 *  just flush the device and let the caller do the final bdev_release.
 	 */
 	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
-		btrfs_scratch_superblocks(fs_info, device->bdev,
+		btrfs_scratch_superblocks(fs_info, device->bdev_file,
 					  device->name->str);
 		if (device->bdev) {
 			sync_blockdev(device->bdev);
@@ -2323,7 +2326,7 @@ void btrfs_destroy_dev_replace_tgtdev(struct btrfs_device *tgtdev)
 
 	mutex_unlock(&fs_devices->device_list_mutex);
 
-	btrfs_scratch_superblocks(tgtdev->fs_info, tgtdev->bdev,
+	btrfs_scratch_superblocks(tgtdev->fs_info, tgtdev->bdev_file,
 				  tgtdev->name->str);
 
 	btrfs_close_bdev(tgtdev);
