@@ -34,7 +34,7 @@ static inline unsigned short from32to16(unsigned int x)
 	return (unsigned short)x;
 }
 
-static inline unsigned int do_csum(const unsigned char * buff, int len)
+unsigned int do_csum(const unsigned char *buff, int len)
 {
 	int odd, count;
 	unsigned int result = 0;
