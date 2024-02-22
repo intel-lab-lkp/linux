@@ -43,6 +43,7 @@
 #include <asm/efi.h>
 #include <asm/loongson.h>
 #include <asm/numa.h>
+#include <asm/paravirt.h>
 #include <asm/pgalloc.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
