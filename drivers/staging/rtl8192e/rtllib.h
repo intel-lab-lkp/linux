@@ -1048,9 +1048,9 @@ struct rx_reorder_entry {
 };
 
 enum fsync_state {
-	Default_Fsync,
-	HW_Fsync,
-	SW_Fsync
+	DEFAULT_FSYNC,
+	HW_FSYNC,
+	SW_FSYNC
 };
 
 enum ips_callback_function {
