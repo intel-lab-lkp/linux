@@ -1334,9 +1334,9 @@ int uds_save_index(struct uds_index *index)
 	return result;
 }
 
-int uds_replace_index_storage(struct uds_index *index, struct block_device *bdev)
+int uds_replace_index_storage(struct uds_index *index, struct file *bdev_file)
 {
-	return uds_replace_volume_storage(index->volume, index->layout, bdev);
+	return uds_replace_volume_storage(index->volume, index->layout, bdev_file);
 }
 
 /* Accessing statistics should be safe from any thread. */

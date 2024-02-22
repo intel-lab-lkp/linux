@@ -28,6 +28,9 @@ struct uds_configuration {
 	/* Storage device for the index */
 	struct block_device *bdev;
 
+	/* Opened device fot the index */
+	struct file *bdev_file;
+
 	/* The maximum allowable size of the index */
 	size_t size;
 

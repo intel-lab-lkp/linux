@@ -130,6 +130,8 @@ struct uds_volume_record {
 struct uds_parameters {
 	/* The block_device used for storage */
 	struct block_device *bdev;
+	/* Then opened block_device */
+	struct file *bdev_file;
 	/* The maximum allowable size of the index on storage */
 	size_t size;
 	/* The offset where the index should start */
@@ -314,7 +316,7 @@ int __must_check uds_suspend_index_session(struct uds_index_session *session, bo
  * start using the new backing store instead.
  */
 int __must_check uds_resume_index_session(struct uds_index_session *session,
-					  struct block_device *bdev);
+					  struct file *bdev_file);
 
 /* Wait until all outstanding index operations are complete. */
 int __must_check uds_flush_index_session(struct uds_index_session *session);

@@ -883,7 +883,7 @@ static int parse_device_config(int argc, char **argv, struct dm_target *ti,
 	}
 
 	if (config->version == 0) {
-		u64 device_size = i_size_read(config->owned_device->bdev->bd_inode);
+		u64 device_size = i_size_read(file_inode(config->owned_device->bdev_file));
 
 		config->physical_blocks = device_size / VDO_BLOCK_SIZE;
 	}
@@ -1018,7 +1018,8 @@ static void vdo_status(struct dm_target *ti, status_type_t status_type,
 
 static block_count_t __must_check get_underlying_device_block_count(const struct vdo *vdo)
 {
-	return i_size_read(vdo_get_backing_device(vdo)->bd_inode) / VDO_BLOCK_SIZE;
+	return i_size_read(file_inode(vdo->device_config->owned_device->bdev_file)) /
+		VDO_BLOCK_SIZE;
 }
 
 static int __must_check process_vdo_message_locked(struct vdo *vdo, unsigned int argc,

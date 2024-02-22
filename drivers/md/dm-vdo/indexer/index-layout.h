@@ -24,7 +24,7 @@ int __must_check uds_make_index_layout(struct uds_configuration *config, bool ne
 void vdo_free_index_layout(struct index_layout *layout);
 
 int __must_check uds_replace_index_layout_storage(struct index_layout *layout,
-						  struct block_device *bdev);
+						  struct file *bdev_file);
 
 int __must_check uds_load_index_state(struct index_layout *layout,
 				      struct uds_index *index);

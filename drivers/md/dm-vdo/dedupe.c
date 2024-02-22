@@ -2592,7 +2592,8 @@ static void resume_index(void *context, struct vdo_completion *parent)
 	int result;
 
 	zones->parameters.bdev = config->owned_device->bdev;
-	result = uds_resume_index_session(zones->index_session, zones->parameters.bdev);
+	zones->parameters.bdev_file = config->owned_device->bdev_file;
+	result = uds_resume_index_session(zones->index_session, zones->parameters.bdev_file);
 	if (result != UDS_SUCCESS)
 		vdo_log_error_strerror(result, "Error resuming dedupe index");
 
