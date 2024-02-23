@@ -14,8 +14,9 @@ description: |
   driver, as it's typically initialized by the boot loader.
 
   However, its bus controller is part of a PM domain, or under the control
-  of a functional clock.  Hence, the bus controller's PM domain and/or
-  clock must be enabled for child devices connected to the bus (either
+  of a functional clock, and it might have a reset control signal.  Hence,
+  the bus controller's PM domain and/or clock must be enabled, reset control
+  signal must be deasserted for child devices connected to the bus (either
   on-SoC or externally) to function.
 
   While "simple-pm-bus" follows the "simple-bus" set of properties, as
@@ -48,6 +49,8 @@ properties:
   power-domains:
     # Required if clocks is absent, optional otherwise
     minItems: 1
+
+  resets: true
 
 required:
   - compatible
