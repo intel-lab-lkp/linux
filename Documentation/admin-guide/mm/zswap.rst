@@ -90,7 +90,7 @@ controlled policy:
 * max_pool_percent - The maximum percentage of memory that the compressed
   pool can occupy.
 
-The default compressor is selected in ``CONFIG_ZSWAP_COMPRESSOR_DEFAULT``
+The default compressor is selected in ``CONFIG_COMPRESSOR_DEFAULT``
 Kconfig option, but it can be overridden at boot time by setting the
 ``compressor`` attribute, e.g. ``zswap.compressor=lzo``.
 It can also be changed at runtime using the sysfs "compressor"

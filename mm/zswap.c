@@ -96,7 +96,7 @@ static const struct kernel_param_ops zswap_enabled_param_ops = {
 module_param_cb(enabled, &zswap_enabled_param_ops, &zswap_enabled, 0644);
 
 /* Crypto compressor to use */
-static char *zswap_compressor = CONFIG_ZSWAP_COMPRESSOR_DEFAULT;
+static char *zswap_compressor = CONFIG_COMPRESSOR_DEFAULT;
 static int zswap_compressor_param_set(const char *,
 				      const struct kernel_param *);
 static const struct kernel_param_ops zswap_compressor_param_ops = {
@@ -386,11 +386,11 @@ static struct zswap_pool *__zswap_pool_create_fallback(void)
 
 	has_comp = crypto_has_acomp(zswap_compressor, 0, 0);
 	if (!has_comp && strcmp(zswap_compressor,
-				CONFIG_ZSWAP_COMPRESSOR_DEFAULT)) {
+				CONFIG_COMPRESSOR_DEFAULT)) {
 		pr_err("compressor %s not available, using default %s\n",
-		       zswap_compressor, CONFIG_ZSWAP_COMPRESSOR_DEFAULT);
+		       zswap_compressor, CONFIG_COMPRESSOR_DEFAULT);
 		param_free_charp(&zswap_compressor);
-		zswap_compressor = CONFIG_ZSWAP_COMPRESSOR_DEFAULT;
+		zswap_compressor = CONFIG_COMPRESSOR_DEFAULT;
 		has_comp = crypto_has_acomp(zswap_compressor, 0, 0);
 	}
 	if (!has_comp) {
