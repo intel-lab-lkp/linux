@@ -62,7 +62,7 @@ config ZSWAP_SHRINKER_DEFAULT_ON
 choice
 	prompt "Default compressor"
 	depends on ZSWAP
-	default ZSWAP_COMPRESSOR_DEFAULT_LZO
+	default ZSWAP_COMPRESSOR_DEFAULT_LZORLE
 	help
 	  Selects the default compression algorithm for the compressed cache
 	  for swap pages.
@@ -72,7 +72,7 @@ choice
 	  available at the following LWN page:
 	  https://lwn.net/Articles/751795/
 
-	  If in doubt, select 'LZO'.
+	  If in doubt, select 'LZO-RLE'.
 
 	  The selection made here can be overridden by using the kernel
 	  command line 'zswap.compressor=' option.
@@ -82,6 +82,12 @@ config ZSWAP_COMPRESSOR_DEFAULT_DEFLATE
 	select CRYPTO_DEFLATE
 	help
 	  Use the Deflate algorithm as the default compression algorithm.
+
+config ZSWAP_COMPRESSOR_DEFAULT_LZORLE
+	bool "LZO-RLE"
+	select CRYPTO_LZO
+	help
+	  Use the LZO algorithm as the default compression algorithm.
 
 config ZSWAP_COMPRESSOR_DEFAULT_LZO
 	bool "LZO"
@@ -118,6 +124,7 @@ config ZSWAP_COMPRESSOR_DEFAULT
        string
        depends on ZSWAP
        default "deflate" if ZSWAP_COMPRESSOR_DEFAULT_DEFLATE
+       default "lzo-rle" if ZSWAP_COMPRESSOR_DEFAULT_LZORLE
        default "lzo" if ZSWAP_COMPRESSOR_DEFAULT_LZO
        default "842" if ZSWAP_COMPRESSOR_DEFAULT_842
        default "lz4" if ZSWAP_COMPRESSOR_DEFAULT_LZ4
