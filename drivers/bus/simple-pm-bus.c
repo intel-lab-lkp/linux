@@ -16,9 +16,11 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 
 struct simple_pm_bus {
 	struct clk_bulk_data *clks;
+	struct reset_control *rsts;
 	int num_clks;
 };
 
@@ -62,6 +64,10 @@ static int simple_pm_bus_probe(struct platform_device *pdev)
 	if (bus->num_clks < 0)
 		return dev_err_probe(&pdev->dev, bus->num_clks, "failed to get clocks\n");
 
+	bus->rsts = devm_reset_control_array_get(dev, false, true);
+	if (IS_ERR(bus->rsts))
+		return dev_err_probe(&pdev->dev, PTR_ERR(bus->rsts), "failed to get resets\n");
+
 	dev_set_drvdata(&pdev->dev, bus);
 
 	dev_dbg(&pdev->dev, "%s\n", __func__);
@@ -92,7 +98,7 @@ static int simple_pm_bus_runtime_suspend(struct device *dev)
 
 	clk_bulk_disable_unprepare(bus->num_clks, bus->clks);
 
-	return 0;
+	return reset_control_assert(bus->rsts);
 }
 
 static int simple_pm_bus_runtime_resume(struct device *dev)
@@ -103,6 +109,12 @@ static int simple_pm_bus_runtime_resume(struct device *dev)
 	ret = clk_bulk_prepare_enable(bus->num_clks, bus->clks);
 	if (ret) {
 		dev_err(dev, "failed to enable clocks: %d\n", ret);
+		return ret;
+	}
+
+	ret = reset_control_deassert(bus->rsts);
+	if (ret) {
+		dev_err(dev, "failed to deassert resets: %d\n", ret);
 		return ret;
 	}
 
