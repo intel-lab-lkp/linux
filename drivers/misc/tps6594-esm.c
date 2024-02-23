@@ -15,6 +15,19 @@
 
 #define TPS6594_DEV_REV_1 0x08
 
+#define ESM_MODE_CFG_SET  0xff
+#define ESM_START_SET     0xff
+#define ESM_MODE_CFG_CLR  0x0
+#define ESM_START_CLR     0x0
+
+static struct reg_field tps6594_esm_mode_cfg  = REG_FIELD(TPS6594_REG_ESM_SOC_MODE_CFG,  5, 6);
+static struct reg_field tps6594_esm_start     = REG_FIELD(TPS6594_REG_ESM_SOC_START_REG, 0, 0);
+
+struct tps6594_esm {
+	struct regmap_field *esm_mode_cfg;
+	struct regmap_field *esm_start;
+};
+
 static irqreturn_t tps6594_esm_isr(int irq, void *dev_id)
 {
 	struct platform_device *pdev = dev_id;
@@ -34,6 +47,7 @@ static int tps6594_esm_probe(struct platform_device *pdev)
 {
 	struct tps6594 *tps = dev_get_drvdata(pdev->dev.parent);
 	struct device *dev = &pdev->dev;
+	struct tps6594_esm *esm;
 	unsigned int rev;
 	int irq;
 	int ret;
@@ -69,13 +83,30 @@ static int tps6594_esm_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, ret, "Failed to request irq\n");
 	}
 
-	ret = regmap_set_bits(tps->regmap, TPS6594_REG_ESM_SOC_MODE_CFG,
-			      TPS6594_BIT_ESM_SOC_EN | TPS6594_BIT_ESM_SOC_ENDRV);
+	esm = devm_kzalloc(dev, sizeof(struct tps6594_esm), GFP_KERNEL);
+	if (!esm)
+		return -ENOMEM;
+
+	esm->esm_mode_cfg = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_mode_cfg);
+	esm->esm_start = devm_regmap_field_alloc(dev, tps->regmap, tps6594_esm_start);
+
+	if (IS_ERR(esm->esm_mode_cfg)) {
+		dev_err(dev, "esm_mode_cfg reg field init failed\n");
+		return PTR_ERR(esm->esm_mode_cfg);
+	}
+
+	if (IS_ERR(esm->esm_start)) {
+		dev_err(dev, "esm_start reg field init failed\n");
+		return PTR_ERR(esm->esm_start);
+	}
+
+	platform_set_drvdata(pdev, esm);
+
+	ret = regmap_field_write(esm->esm_mode_cfg, ESM_MODE_CFG_SET);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to configure ESM\n");
 
-	ret = regmap_set_bits(tps->regmap, TPS6594_REG_ESM_SOC_START_REG,
-			      TPS6594_BIT_ESM_SOC_START);
+	ret = regmap_field_write(esm->esm_start, ESM_START_SET);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to start ESM\n");
 
@@ -87,19 +118,17 @@ static int tps6594_esm_probe(struct platform_device *pdev)
 
 static void tps6594_esm_remove(struct platform_device *pdev)
 {
-	struct tps6594 *tps = dev_get_drvdata(pdev->dev.parent);
 	struct device *dev = &pdev->dev;
+	struct tps6594_esm *esm = platform_get_drvdata(pdev);
 	int ret;
 
-	ret = regmap_clear_bits(tps->regmap, TPS6594_REG_ESM_SOC_START_REG,
-				TPS6594_BIT_ESM_SOC_START);
+	ret = regmap_field_write(esm->esm_start, ESM_START_CLR);
 	if (ret) {
 		dev_err(dev, "Failed to stop ESM\n");
 		goto out;
 	}
 
-	ret = regmap_clear_bits(tps->regmap, TPS6594_REG_ESM_SOC_MODE_CFG,
-				TPS6594_BIT_ESM_SOC_EN | TPS6594_BIT_ESM_SOC_ENDRV);
+	ret = regmap_field_write(esm->esm_mode_cfg, ESM_MODE_CFG_CLR);
 	if (ret)
 		dev_err(dev, "Failed to unconfigure ESM\n");
 
@@ -110,11 +139,12 @@ out:
 
 static int tps6594_esm_suspend(struct device *dev)
 {
-	struct tps6594 *tps = dev_get_drvdata(dev->parent);
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct tps6594_esm *esm = platform_get_drvdata(pdev);
+
 	int ret;
 
-	ret = regmap_clear_bits(tps->regmap, TPS6594_REG_ESM_SOC_START_REG,
-				TPS6594_BIT_ESM_SOC_START);
+	ret = regmap_field_write(esm->esm_start, ESM_START_CLR);
 
 	pm_runtime_put_sync(dev);
 
@@ -123,12 +153,12 @@ static int tps6594_esm_suspend(struct device *dev)
 
 static int tps6594_esm_resume(struct device *dev)
 {
-	struct tps6594 *tps = dev_get_drvdata(dev->parent);
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct tps6594_esm *esm = platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(dev);
 
-	return regmap_set_bits(tps->regmap, TPS6594_REG_ESM_SOC_START_REG,
-			       TPS6594_BIT_ESM_SOC_START);
+	return regmap_field_write(esm->esm_start, ESM_START_SET);
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(tps6594_esm_pm_ops, tps6594_esm_suspend, tps6594_esm_resume);
