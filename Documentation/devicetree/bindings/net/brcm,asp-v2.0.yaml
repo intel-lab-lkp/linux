@@ -18,6 +18,10 @@ properties:
       - items:
           - enum:
               - brcm,bcm74165-asp
+          - const: brcm,asp-v2.2
+      - items:
+          - enum:
+              - brcm,bcm74165-asp
           - const: brcm,asp-v2.1
       - items:
           - enum:
