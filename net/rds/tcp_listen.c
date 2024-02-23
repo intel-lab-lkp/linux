@@ -282,6 +282,11 @@ struct socket *rds_tcp_listen_init(struct net *net, bool isv6)
 		goto out;
 	}
 
+	__netns_tracker_free(net, &sock->sk->ns_tracker, false);
+	sock->sk->sk_net_refcnt = 1;
+	get_net_track(net, &sock->sk->ns_tracker, GFP_KERNEL);
+	sock_inuse_add(net, 1);
+
 	sock->sk->sk_reuse = SK_CAN_REUSE;
 	tcp_sock_set_nodelay(sock->sk);
 
