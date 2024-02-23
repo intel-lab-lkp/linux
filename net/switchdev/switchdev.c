@@ -19,6 +19,9 @@
 #include <linux/rtnetlink.h>
 #include <net/switchdev.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/switchdev.h>
+
 static bool switchdev_obj_eq(const struct switchdev_obj *a,
 			     const struct switchdev_obj *b)
 {
@@ -180,8 +183,20 @@ static void switchdev_port_attr_set_deferred(struct net_device *dev,
 static int switchdev_port_attr_set_defer(struct net_device *dev,
 					 const struct switchdev_attr *attr)
 {
-	return switchdev_deferred_enqueue(dev, attr, sizeof(*attr),
-					  switchdev_port_attr_set_deferred);
+	int err;
+
+	err = switchdev_deferred_enqueue(dev, attr, sizeof(*attr),
+					 switchdev_port_attr_set_deferred);
+
+	if (trace_switchdev_defer_enabled()) {
+		struct switchdev_notifier_port_attr_info attr_info = {
+			.info.dev = dev,
+			.attr = attr,
+		};
+
+		trace_switchdev_defer(SWITCHDEV_PORT_ATTR_SET, &attr_info.info, err);
+	}
+	return err;
 }
 
 /**
@@ -263,8 +278,20 @@ static void switchdev_port_obj_add_deferred(struct net_device *dev,
 static int switchdev_port_obj_add_defer(struct net_device *dev,
 					const struct switchdev_obj *obj)
 {
-	return switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
-					  switchdev_port_obj_add_deferred);
+	int err;
+
+	err = switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
+					 switchdev_port_obj_add_deferred);
+
+	if (trace_switchdev_defer_enabled()) {
+		struct switchdev_notifier_port_obj_info obj_info = {
+			.info.dev = dev,
+			.obj = obj,
+		};
+
+		trace_switchdev_defer(SWITCHDEV_PORT_OBJ_ADD, &obj_info.info, err);
+	}
+	return err;
 }
 
 /**
@@ -313,8 +340,20 @@ static void switchdev_port_obj_del_deferred(struct net_device *dev,
 static int switchdev_port_obj_del_defer(struct net_device *dev,
 					const struct switchdev_obj *obj)
 {
-	return switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
-					  switchdev_port_obj_del_deferred);
+	int err;
+
+	err = switchdev_deferred_enqueue(dev, obj, switchdev_obj_size(obj),
+					 switchdev_port_obj_del_deferred);
+
+	if (trace_switchdev_defer_enabled()) {
+		struct switchdev_notifier_port_obj_info obj_info = {
+			.info.dev = dev,
+			.obj = obj,
+		};
+
+		trace_switchdev_defer(SWITCHDEV_PORT_OBJ_DEL, &obj_info.info, err);
+	}
+	return err;
 }
 
 /**
@@ -394,7 +433,11 @@ EXPORT_SYMBOL_GPL(switchdev_port_obj_act_is_deferred);
 int switchdev_call_replay(struct notifier_block *nb, unsigned long type,
 			  struct switchdev_notifier_info *info)
 {
-	return nb->notifier_call(nb, type, info);
+	int ret;
+
+	ret = nb->notifier_call(nb, type, info);
+	trace_switchdev_call_replay(type, info, notifier_to_errno(ret));
+	return ret;
 }
 EXPORT_SYMBOL_GPL(switchdev_call_replay);
 
@@ -437,9 +480,13 @@ int call_switchdev_notifiers(unsigned long val, struct net_device *dev,
 			     struct switchdev_notifier_info *info,
 			     struct netlink_ext_ack *extack)
 {
+	int ret;
+
 	info->dev = dev;
 	info->extack = extack;
-	return atomic_notifier_call_chain(&switchdev_notif_chain, val, info);
+	ret = atomic_notifier_call_chain(&switchdev_notif_chain, val, info);
+	trace_switchdev_call_atomic(val, info, notifier_to_errno(ret));
+	return ret;
 }
 EXPORT_SYMBOL_GPL(call_switchdev_notifiers);
 
@@ -463,10 +510,14 @@ int call_switchdev_blocking_notifiers(unsigned long val, struct net_device *dev,
 				      struct switchdev_notifier_info *info,
 				      struct netlink_ext_ack *extack)
 {
+	int ret;
+
 	info->dev = dev;
 	info->extack = extack;
-	return blocking_notifier_call_chain(&switchdev_blocking_notif_chain,
-					    val, info);
+	ret = blocking_notifier_call_chain(&switchdev_blocking_notif_chain,
+					   val, info);
+	trace_switchdev_call_blocking(val, info, notifier_to_errno(ret));
+	return ret;
 }
 EXPORT_SYMBOL_GPL(call_switchdev_blocking_notifiers);
 
