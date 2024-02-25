@@ -8,13 +8,10 @@
 #include <linux/types.h>
 
 /*
- * min()/max()/clamp() macros must accomplish three things:
+ * min()/max()/clamp() macros must accomplish several things:
  *
  * - Avoid multiple evaluations of the arguments (so side-effects like
  *   "x++" happen only once) when non-constant.
- * - Retain result as a constant expressions when called with only
- *   constant expressions (to avoid tripping VLA warnings in stack
- *   allocation usage).
  * - Perform signed v unsigned type-checking (to generate compile
  *   errors instead of nasty runtime surprises).
  * - Unsigned char/short are always promoted to signed int and can be
@@ -22,13 +19,19 @@
  * - Unsigned arguments can be compared against non-negative signed constants.
  * - Comparison of a signed argument against an unsigned constant fails
  *   even if the constant is below __INT_MAX__ and could be cast to int.
+ *
+ * The return value of min()/max() is not a constant expression for
+ * constant parameters - so will trigger a VLA warging if used to size
+ * an on-stack array.
+ * Instead use min_const() or max_const() which do generate constant
+ * expressions and are also valid for static initialisers.
  */
 #define __typecheck(x, y) \
 	(!!(sizeof((typeof(x) *)1 == (typeof(y) *)1)))
 
 /* Allow unsigned compares against non-negative signed constants. */
 #define __is_ok_unsigned(x) \
-	(is_unsigned_type(typeof(x)) || (__is_constexpr(x) ? (x) + 0 >= 0 : 0))
+	(is_unsigned_type(typeof(x)) || (__is_constexpr(x) ? (x) >= 0 : 0))
 
 /* Check for signed after promoting unsigned char/short to int */
 #define __is_ok_signed(x) is_signed_type(typeof((x) + 0))
@@ -53,12 +56,10 @@
 	typeof(y) __y_##uniq = (y);		\
 	__cmp(op, __x_##uniq, __y_##uniq); })
 
-#define __careful_cmp(op, x, y, uniq)				\
-	__builtin_choose_expr(__is_constexpr((x) - (y)),	\
-		__cmp(op, x, y),				\
-		({ _Static_assert(__types_ok(x, y),		\
-			#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
-		__cmp_once(op, x, y, uniq); }))
+#define __careful_cmp(op, x, y, uniq) ({	\
+	_Static_assert(__types_ok(x, y),	\
+		#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
+	__cmp_once(op, x, y, uniq); })
 
 #define __careful_cmp_const(op, x, y)				\
 	(BUILD_BUG_ON_ZERO(!__is_constexpr((x) - (y))) +	\
