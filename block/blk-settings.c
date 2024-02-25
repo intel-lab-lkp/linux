@@ -688,7 +688,7 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 						   b->max_secure_erase_sectors);
 	t->zone_write_granularity = max(t->zone_write_granularity,
 					b->zone_write_granularity);
-	t->zoned = max(t->zoned, b->zoned);
+	t->zoned = t->zoned | b->zoned;
 	return ret;
 }
 EXPORT_SYMBOL(blk_stack_limits);
