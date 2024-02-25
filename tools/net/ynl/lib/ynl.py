@@ -841,6 +841,12 @@ class YnlFamily(SpecFamily):
         msg = _genl_msg_finalize(msg)
         return msg
 
+    def _encode_batch_message(self, name, nl_flags, req_seq):
+        msg = self.yaml.get('operations').get(name)
+        op = self.ops[msg['operation']]
+        params = msg['parameters']
+        return self._encode_message(op, params, nl_flags, req_seq)
+
     def _op(self, method, vals, flags=None, dump=False):
         op = self.ops[method]
 
@@ -851,7 +857,16 @@ class YnlFamily(SpecFamily):
             nl_flags |= Netlink.NLM_F_DUMP
 
         req_seq = random.randint(1024, 65535)
-        msg = self._encode_message(op, vals, nl_flags, req_seq)
+        msg = b''
+
+        is_batch = op['do']['request'].get('is-batch', False)
+        if is_batch:
+            msg += self._encode_batch_message('begin-batch', nl_flags, req_seq)
+
+        msg += self._encode_message(op, vals, nl_flags, req_seq)
+
+        if is_batch:
+            msg += self._encode_batch_message('end-batch', nl_flags, req_seq)
 
         self.sock.send(msg, 0)
 
