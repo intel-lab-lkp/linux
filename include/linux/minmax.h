@@ -141,12 +141,10 @@
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
 	__clamp(__val_##uniq, __lo_##uniq, __hi_##uniq); })
 
-#define __careful_clamp(val, lo, hi, uniq)				\
-	__builtin_choose_expr(__is_constexpr((val) - (lo) + (hi)),	\
-		__clamp(val, lo, hi),					\
-		({ _Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
-		_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
-		__clamp_once(val, lo, hi, uniq); }))
+#define __careful_clamp(val, lo, hi, uniq) ({					\
+	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
+	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
+	__clamp_once(val, lo, hi, uniq); })
 
 /**
  * clamp - return a value clamped to a given range with strict typechecking
@@ -168,7 +166,9 @@
  * This macro does no typechecking and uses temporary variables of type
  * @type to make all the comparisons.
  */
-#define clamp_t(type, val, lo, hi) clamp((type)(val), (type)(lo), (type)(hi))
+#define __clamp_t(type, val, lo, hi, uniq) \
+	__clamp_once((type)(val), (type)(lo), (type)(hi), uniq)
+#define clamp_t(type, val, lo, hi) __clamp_t(type, val, lo, hi, __COUNTER__)
 
 /**
  * clamp_val - return a value clamped to a given range using val's type
