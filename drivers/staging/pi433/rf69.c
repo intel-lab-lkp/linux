@@ -12,7 +12,7 @@
 #include "rf69.h"
 #include "rf69_registers.h"
 
-#define F_OSC	  32000000 /* in Hz */
+#define F_OSC	  32000000 /* Hz */
 #define FIFO_SIZE 66	   /* in byte */
 
 /*-------------------------------------------------------------------------*/
