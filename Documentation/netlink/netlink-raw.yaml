@@ -446,6 +446,11 @@ properties:
                         i.e. requests and responses have different message enums.
                       $ref: '#/$defs/uint'
                     # End genetlink-legacy
+                    # Start netlink-raw
+                    is-batch:
+                      description: Must be part of a message batch
+                      type: boolean
+                    # End netlink-raw
                 reply: *subop-attr-list
                 pre:
                   description: Hook for a function to run before the main callback (pre_doit or start).
@@ -469,6 +474,22 @@ properties:
             mcgrp:
               description: Name of the multicast group generating given notification.
               type: string
+      # Start netlink-raw
+      begin-batch: &batch-params
+        description: Definition of a message call for a batch message
+        type: object
+        additionalProperties: False
+        properties:
+          operation:
+            description: Name of the operation
+            type: string
+          parameters:
+            description: Parameters for the operation
+            type: object
+            items:
+              type: object
+      end-batch: *batch-params
+      # End netlink-raw
   mcast-groups:
     description: List of multicast groups.
     type: object
