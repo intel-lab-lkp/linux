@@ -831,6 +831,16 @@ class YnlFamily(SpecFamily):
 
       return op['do']['request']['attributes'].copy()
 
+    def _encode_message(self, op, vals, nl_flags, req_seq):
+        msg = self.nlproto.message(nl_flags, op.req_value, 1, req_seq)
+        if op.fixed_header:
+            msg += self._encode_struct(op.fixed_header, vals)
+        search_attrs = SpaceAttrs(op.attr_set, vals)
+        for name, value in vals.items():
+            msg += self._add_attr(op.attr_set.name, name, value, search_attrs)
+        msg = _genl_msg_finalize(msg)
+        return msg
+
     def _op(self, method, vals, flags=None, dump=False):
         op = self.ops[method]
 
@@ -841,13 +851,7 @@ class YnlFamily(SpecFamily):
             nl_flags |= Netlink.NLM_F_DUMP
 
         req_seq = random.randint(1024, 65535)
-        msg = self.nlproto.message(nl_flags, op.req_value, 1, req_seq)
-        if op.fixed_header:
-            msg += self._encode_struct(op.fixed_header, vals)
-        search_attrs = SpaceAttrs(op.attr_set, vals)
-        for name, value in vals.items():
-            msg += self._add_attr(op.attr_set.name, name, value, search_attrs)
-        msg = _genl_msg_finalize(msg)
+        msg = self._encode_message(op, vals, nl_flags, req_seq)
 
         self.sock.send(msg, 0)
 
