@@ -8,7 +8,7 @@
 #include <linux/types.h>
 
 /*
- * min()/max()/clamp() macros must accomplish several things:
+ * min()/max()/clamp() macros must accomplish three things:
  *
  * - Avoid multiple evaluations of the arguments (so side-effects like
  *   "x++" happen only once) when non-constant.
@@ -43,31 +43,31 @@
 
 #define __cmp(op, x, y)	((x) __cmp_op_##op (y) ? (x) : (y))
 
-#define __cmp_once(op, x, y, unique_x, unique_y) ({	\
-	typeof(x) unique_x = (x);			\
-	typeof(y) unique_y = (y);			\
-	_Static_assert(__types_ok(x, y),			\
+#define __cmp_once(op, x, y, uniq) ({		\
+	typeof(x) __x_##uniq = (x);		\
+	typeof(y) __y_##uniq = (y);		\
+	_Static_assert(__types_ok(x, y),	\
 		#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
-	__cmp(op, unique_x, unique_y); })
+	__cmp(op, __x_##uniq, __y_##uniq); })
 
-#define __careful_cmp(op, x, y)					\
+#define __careful_cmp(op, x, y, uniq)				\
 	__builtin_choose_expr(__is_constexpr((x) - (y)),	\
 		__cmp(op, x, y),				\
-		__cmp_once(op, x, y, __UNIQUE_ID(__x), __UNIQUE_ID(__y)))
+		__cmp_once(op, x, y, uniq))
 
 /**
  * min - return minimum of two values of the same or compatible types
  * @x: first value
  * @y: second value
  */
-#define min(x, y)	__careful_cmp(min, x, y)
+#define min(x, y)	__careful_cmp(min, x, y, __COUNTER__)
 
 /**
  * max - return maximum of two values of the same or compatible types
  * @x: first value
  * @y: second value
  */
-#define max(x, y)	__careful_cmp(max, x, y)
+#define max(x, y)	__careful_cmp(max, x, y, __COUNTER__)
 
 /**
  * umin - return minimum of two non-negative values
@@ -75,8 +75,9 @@
  * @x: first value
  * @y: second value
  */
+#define __zero_extend(x) ((x) + 0u + 0ul + 0ull)
 #define umin(x, y)	\
-	__careful_cmp(min, (x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull)
+	__careful_cmp(min, __zero_extend(x), _zero_extend(y), __COUNTER__)
 
 /**
  * umax - return maximum of two non-negative values
@@ -84,7 +85,7 @@
  * @y: second value
  */
 #define umax(x, y)	\
-	__careful_cmp(max, (x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull)
+	__careful_cmp(max, __zero_extend(x), _zero_extend(y), __COUNTER__)
 
 /**
  * min3 - return minimum of three values
@@ -108,7 +109,7 @@
  * @x: first value
  * @y: second value
  */
-#define min_t(type, x, y)	__careful_cmp(min, (type)(x), (type)(y))
+#define min_t(type, x, y)	__careful_cmp(min, (type)(x), (type)(y), __COUNTER__)
 
 /**
  * max_t - return maximum of two values, using the specified type
@@ -116,7 +117,7 @@
  * @x: first value
  * @y: second value
  */
-#define max_t(type, x, y)	__careful_cmp(max, (type)(x), (type)(y))
+#define max_t(type, x, y)	__careful_cmp(max, (type)(x), (type)(y), __COUNTER__)
 
 /**
  * min_not_zero - return the minimum that is _not_ zero, unless both are zero
@@ -131,22 +132,21 @@
 #define __clamp(val, lo, hi)	\
 	((val) >= (hi) ? (hi) : ((val) <= (lo) ? (lo) : (val)))
 
-#define __clamp_once(val, lo, hi, unique_val, unique_lo, unique_hi) ({		\
-	typeof(val) unique_val = (val);						\
-	typeof(lo) unique_lo = (lo);						\
-	typeof(hi) unique_hi = (hi);						\
+#define __clamp_once(val, lo, hi, uniq) ({					\
+	typeof(val) __val_##uniq = (val);					\
+	typeof(lo) __lo_##uniq = (lo);						\
+	typeof(hi) __hi_##uniq = (hi);						\
 	_Static_assert(__builtin_choose_expr(__is_constexpr((lo) > (hi)),	\
 			(lo) <= (hi), true),					\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
 	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
 	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
-	__clamp(unique_val, unique_lo, unique_hi); })
+	__clamp(__val_##uniq, __lo_##uniq, __hi_##uniq); })
 
-#define __careful_clamp(val, lo, hi) ({					\
+#define __careful_clamp(val, lo, hi, uniq) ({				\
 	__builtin_choose_expr(__is_constexpr((val) - (lo) + (hi)),	\
 		__clamp(val, lo, hi),					\
-		__clamp_once(val, lo, hi, __UNIQUE_ID(__val),		\
-			     __UNIQUE_ID(__lo), __UNIQUE_ID(__hi))); })
+		__clamp_once(val, lo, hi, uniq)); })
 
 /**
  * clamp - return a value clamped to a given range with strict typechecking
@@ -156,7 +156,7 @@
  *
  * This macro checks that @val, @lo and @hi have the same signedness.
  */
-#define clamp(val, lo, hi) __careful_clamp(val, lo, hi)
+#define clamp(val, lo, hi) __careful_clamp(val, lo, hi, __COUNTER__)
 
 /**
  * clamp_t - return a value clamped to a given range using a given type
@@ -168,7 +168,7 @@
  * This macro does no typechecking and uses temporary variables of type
  * @type to make all the comparisons.
  */
-#define clamp_t(type, val, lo, hi) __careful_clamp((type)(val), (type)(lo), (type)(hi))
+#define clamp_t(type, val, lo, hi) clamp((type)(val), (type)(lo), (type)(hi))
 
 /**
  * clamp_val - return a value clamped to a given range using val's type
