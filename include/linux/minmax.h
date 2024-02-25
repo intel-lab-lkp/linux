@@ -46,14 +46,14 @@
 #define __cmp_once(op, x, y, uniq) ({		\
 	typeof(x) __x_##uniq = (x);		\
 	typeof(y) __y_##uniq = (y);		\
-	_Static_assert(__types_ok(x, y),	\
-		#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
 	__cmp(op, __x_##uniq, __y_##uniq); })
 
 #define __careful_cmp(op, x, y, uniq)				\
 	__builtin_choose_expr(__is_constexpr((x) - (y)),	\
 		__cmp(op, x, y),				\
-		__cmp_once(op, x, y, uniq))
+		({ _Static_assert(__types_ok(x, y),		\
+			#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
+		__cmp_once(op, x, y, uniq); }))
 
 /**
  * min - return minimum of two values of the same or compatible types
@@ -139,14 +139,14 @@
 	_Static_assert(__builtin_choose_expr(__is_constexpr((lo) > (hi)),	\
 			(lo) <= (hi), true),					\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
-	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
-	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
 	__clamp(__val_##uniq, __lo_##uniq, __hi_##uniq); })
 
-#define __careful_clamp(val, lo, hi, uniq) ({				\
+#define __careful_clamp(val, lo, hi, uniq)				\
 	__builtin_choose_expr(__is_constexpr((val) - (lo) + (hi)),	\
 		__clamp(val, lo, hi),					\
-		__clamp_once(val, lo, hi, uniq)); })
+		({ _Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
+		_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
+		__clamp_once(val, lo, hi, uniq); }))
 
 /**
  * clamp - return a value clamped to a given range with strict typechecking
