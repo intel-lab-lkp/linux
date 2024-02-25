@@ -60,19 +60,34 @@
 			#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
 		__cmp_once(op, x, y, uniq); }))
 
+#define __careful_cmp_const(op, x, y)				\
+	(BUILD_BUG_ON_ZERO(!__is_constexpr((x) - (y))) +	\
+		BUILD_BUG_ON_ZERO(!__types_ok(x, y)) +		\
+		__cmp(op, (x) + 0, (y) + 0))
+
 /**
  * min - return minimum of two values of the same or compatible types
  * @x: first value
  * @y: second value
+ *
+ * If @x and @y are constants the return value is constant, but not 'constant
+ * enough' for things like static initialisers.
+ * min_const(@x, @y) is a constant expression for constant inputs.
  */
 #define min(x, y)	__careful_cmp(min, x, y, __COUNTER__)
+#define min_const(x, y)	__careful_cmp_const(min, x, y)
 
 /**
  * max - return maximum of two values of the same or compatible types
  * @x: first value
  * @y: second value
+ *
+ * If @x and @y are constants the return value is constant, but not 'constant
+ * enough' for things like static initialisers.
+ * max_const(@x, @y) is a constant expression for constant inputs.
  */
 #define max(x, y)	__careful_cmp(max, x, y, __COUNTER__)
+#define max_const(x, y)	__careful_cmp_const(max, x, y)
 
 /**
  * umin - return minimum of two non-negative values
