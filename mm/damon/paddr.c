@@ -240,9 +240,9 @@ enum migration_mode {
  */
 static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 				       struct pglist_data *pgdat,
-				       enum migration_mode mm)
+				       enum migration_mode mm,
+				       int target_nid)
 {
-	int target_nid;
 	unsigned int nr_succeeded;
 	nodemask_t allowed_mask;
 	int reason;
@@ -250,12 +250,14 @@ static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 
 	switch (mm) {
 	case MIG_PROMOTE:
-		target_nid = next_promotion_node(pgdat->node_id);
+		if (target_nid == NUMA_NO_NODE)
+			target_nid = next_promotion_node(pgdat->node_id);
 		reason = MR_PROMOTION;
 		vm_event = PGPROMOTE;
 		break;
 	case MIG_DEMOTE:
-		target_nid = next_demotion_node(pgdat->node_id);
+		if (target_nid == NUMA_NO_NODE)
+			target_nid = next_demotion_node(pgdat->node_id);
 		reason = MR_DEMOTION;
 		vm_event = PGDEMOTE_DIRECT;
 		break;
@@ -358,7 +360,8 @@ static enum folio_references folio_check_references(struct folio *folio)
  */
 static unsigned int damon_pa_migrate_folio_list(struct list_head *folio_list,
 						struct pglist_data *pgdat,
-						enum migration_mode mm)
+						enum migration_mode mm,
+						int target_nid)
 {
 	unsigned int nr_migrated = 0;
 	struct folio *folio;
@@ -399,7 +402,7 @@ keep:
 	/* 'folio_list' is always empty here */
 
 	/* Migrate folios selected for migration */
-	nr_migrated += migrate_folio_list(&migrate_folios, pgdat, mm);
+	nr_migrated += migrate_folio_list(&migrate_folios, pgdat, mm, target_nid);
 	/* Folios that could not be migrated are still in @migrate_folios */
 	if (!list_empty(&migrate_folios)) {
 		/* Folios which weren't migrated go back on @folio_list */
@@ -426,7 +429,8 @@ keep:
  *      common function for both cases.
  */
 static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
-					    enum migration_mode mm)
+					    enum migration_mode mm,
+					    int target_nid)
 {
 	int nid;
 	unsigned int nr_migrated = 0;
@@ -449,12 +453,14 @@ static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
 		}
 
 		nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
-							   NODE_DATA(nid), mm);
+							   NODE_DATA(nid), mm,
+							   target_nid);
 		nid = folio_nid(lru_to_folio(folio_list));
 	} while (!list_empty(folio_list));
 
 	nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
-						   NODE_DATA(nid), mm);
+						   NODE_DATA(nid), mm,
+						   target_nid);
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
@@ -499,7 +505,8 @@ put_folio:
 		break;
 	case MIG_PROMOTE:
 	case MIG_DEMOTE:
-		applied = damon_pa_migrate_pages(&folio_list, mm);
+		applied = damon_pa_migrate_pages(&folio_list, mm,
+						 s->target_nid);
 		break;
 	default:
 		/* Unexpected migration mode. */
