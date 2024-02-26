@@ -5,6 +5,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/xarray.h>
 #include "ice_adapter.h"
 
@@ -38,6 +39,7 @@ struct ice_adapter *ice_adapter_get(const struct pci_dev *pdev)
 	if (!a)
 		return NULL;
 
+	spin_lock_init(&a->ptp_gltsyn_time_lock);
 	refcount_set(&a->refcount, 1);
 
 	if (xa_is_err(xa_store(&ice_adapters, index, a, GFP_KERNEL))) {
