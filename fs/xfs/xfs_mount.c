@@ -133,9 +133,15 @@ xfs_sb_validate_fsb_count(
 {
 	ASSERT(PAGE_SHIFT >= sbp->sb_blocklog);
 	ASSERT(sbp->sb_blocklog >= BBSHIFT);
+	uint64_t mapping_count;
+	uint64_t bytes;
 
+	if (check_mul_overflow(nblocks, (1 << sbp->sb_blocklog), &bytes))
+		return -EFBIG;
+
+	mapping_count = bytes >> PAGE_SHIFT;
 	/* Limited by ULONG_MAX of page cache index */
-	if (nblocks >> (PAGE_SHIFT - sbp->sb_blocklog) > ULONG_MAX)
+	if (mapping_count > ULONG_MAX)
 		return -EFBIG;
 	return 0;
 }
