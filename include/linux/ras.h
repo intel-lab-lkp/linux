@@ -24,15 +24,19 @@ int __init parse_cec_param(char *str);
 void log_non_standard_event(const guid_t *sec_type,
 			    const guid_t *fru_id, const char *fru_text,
 			    const u8 sev, const u8 *err, const u32 len);
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 void log_arm_hw_error(struct cper_sec_proc_arm *err);
+#endif
 #else
 static inline void
 log_non_standard_event(const guid_t *sec_type,
 		       const guid_t *fru_id, const char *fru_text,
 		       const u8 sev, const u8 *err, const u32 len)
 { return; }
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 static inline void
 log_arm_hw_error(struct cper_sec_proc_arm *err) { return; }
+#endif
 #endif
 
 #endif /* __RAS_H__ */

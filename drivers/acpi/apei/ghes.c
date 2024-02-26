@@ -526,6 +526,7 @@ static bool ghes_handle_memory_failure(struct acpi_hest_generic_data *gdata,
 	return false;
 }
 
+#if defined(CONFIG_ARM) || defined (CONFIG_ARM64)
 static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 				       int sev, bool sync)
 {
@@ -571,6 +572,7 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 
 	return queued;
 }
+#endif
 
 /*
  * PCIe AER errors need to be sent to the AER driver for reporting and
@@ -751,9 +753,11 @@ static bool ghes_do_proc(struct ghes *ghes,
 		}
 		else if (guid_equal(sec_type, &CPER_SEC_PCIE)) {
 			ghes_handle_aer(gdata);
+#if defined(CONFIG_ARM) || defined (CONFIG_ARM64)
 		}
 		else if (guid_equal(sec_type, &CPER_SEC_PROC_ARM)) {
 			queued = ghes_handle_arm_hw_error(gdata, sev, sync);
+#endif
 		} else if (guid_equal(sec_type, &CPER_SEC_CXL_GEN_MEDIA_GUID)) {
 			struct cxl_cper_event_rec *rec =
 				acpi_hest_get_payload(gdata);
