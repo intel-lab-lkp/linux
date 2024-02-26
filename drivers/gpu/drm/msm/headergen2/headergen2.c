@@ -417,30 +417,41 @@ static void printhead(struct fout f, struct rnndb *db) {
 
 int main(int argc, char **argv) {
 	char *file;
+	char *out_dir;
 	struct rnndb *db;
 	int i, j;
 
-	if (argc < 2) {
-		fprintf(stderr, "Usage:\n\theadergen database-file\n");
+	if (argv[1] && !strcmp(argv[1], "--no-asserts")) {
+		no_asserts = true;
+		argv++;
+		argc--;
+	}
+
+	if (argc != 3) {
+		fprintf(stderr, "Usage:\n\theadergen database-file out-dir\n");
 		exit(1);
 	}
 
-	if ((argc >= 3) && !strcmp(argv[1], "--no-asserts")) {
-		no_asserts = true;
-		file = argv[2];
-	} else {
-		file = argv[1];
-	}
+	file = argv[1];
+	out_dir = argv[2];
 
 	rnn_init();
 	db = rnn_newdb();
 	rnn_parsefile (db, file);
 	rnn_prepdb (db);
 	for(i = 0; i < db->filesnum; ++i) {
-		char *dstname = malloc(strlen(db->files[i]) + 3);
+		char *curfile = basename(db->files[i]);
+		char *dstname;
 		char *pretty;
-		strcpy(dstname, db->files[i]);
-		strcat(dstname, ".h");
+		int ret;
+
+		ret = asprintf(&dstname, "%s/%s.h_shipped",
+			       out_dir, curfile);
+		if (ret < 0) {
+			perror("asprintf");
+			exit(1);
+		}
+
 		struct fout f = { db->files[i], fopen(dstname, "w") };
 		if (!f.file) {
 			perror(dstname);
