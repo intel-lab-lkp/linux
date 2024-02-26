@@ -111,6 +111,9 @@ struct fru_rec {
  */
 static struct fru_rec **fru_records;
 
+#define INVALID_SPA	~0ULL
+static u64 *sys_addrs;
+
 #define CPER_CREATOR_FMP						\
 	GUID_INIT(0xcd5c2993, 0xf4b2, 0x41b2, 0xb5, 0xd4, 0xf9, 0xc3,	\
 		  0xa0, 0x33, 0x08, 0x75)
@@ -139,6 +142,9 @@ static unsigned int max_nr_fru;
 
 /* Total length of record including headers and list of descriptor entries. */
 static size_t max_rec_len;
+
+/* Total number of entries for the entire system. */
+static unsigned int sys_nr_entries;
 
 /*
  * Protect the local records cache in fru_records and prevent concurrent
@@ -269,6 +275,40 @@ static bool rec_has_fpd(struct fru_rec *rec, struct cper_fru_poison_desc *fpd)
 	return false;
 }
 
+static void save_spa(struct fru_rec *rec, unsigned int entry,
+		     u64 addr, u64 id, unsigned int cpu)
+{
+	unsigned int i, fru_idx, sys_entry;
+	unsigned long sys_addr;
+	struct atl_err a_err;
+
+	memset(&a_err, 0, sizeof(struct atl_err));
+
+	a_err.addr = addr;
+	a_err.ipid = id;
+	a_err.cpu  = cpu;
+
+	sys_addr = amd_convert_umc_mca_addr_to_sys_addr(&a_err);
+	if (IS_ERR_VALUE(sys_addr)) {
+		pr_debug("Failed to get system address\n");
+		return;
+	}
+
+	for (i = 0; i < sys_nr_entries; i += max_nr_entries) {
+		fru_idx = i / max_nr_entries;
+		if (fru_records[fru_idx] != rec)
+			continue;
+
+		sys_entry = i + entry;
+		if (sys_entry < sys_nr_entries) {
+			sys_addrs[sys_entry] = sys_addr;
+			pr_debug("fru_idx: %u, entry: %u, sys_entry: %u, sys_addr: 0x%016llx\n",
+				 fru_idx, entry, sys_entry, sys_addrs[sys_entry]);
+			break;
+		}
+	}
+}
+
 static void update_fru_record(struct fru_rec *rec, struct mce *m)
 {
 	struct cper_sec_fru_mem_poison *fmp = &rec->fmp;
@@ -301,6 +341,7 @@ static void update_fru_record(struct fru_rec *rec, struct mce *m)
 	entry  = fmp->nr_entries;
 
 save_fpd:
+	save_spa(rec, entry, m->addr, m->ipid, m->extcpu);
 	fpd_dest  = &rec->entries[entry];
 	memcpy(fpd_dest, &fpd, sizeof(struct cper_fru_poison_desc));
 
@@ -385,6 +426,7 @@ static void retire_mem_fmp(struct fru_rec *rec)
 			continue;
 
 		retire_dram_row(fpd->addr, fpd->hw_id, err_cpu);
+		save_spa(rec, i, fpd->addr, fpd->hw_id, err_cpu);
 	}
 }
 
@@ -696,6 +738,8 @@ static int get_system_info(void)
 	if (!max_nr_entries)
 		max_nr_entries = FMPM_DEFAULT_MAX_NR_ENTRIES;
 
+	sys_nr_entries = max_nr_fru * max_nr_entries;
+
 	max_rec_len  = sizeof(struct fru_rec);
 	max_rec_len += sizeof(struct cper_fru_poison_desc) * max_nr_entries;
 
@@ -714,6 +758,7 @@ static void free_records(void)
 		kfree(rec);
 
 	kfree(fru_records);
+	kfree(sys_addrs);
 }
 
 static int allocate_records(void)
@@ -733,6 +778,15 @@ static int allocate_records(void)
 			goto out_free;
 		}
 	}
+
+	sys_addrs = kcalloc(sys_nr_entries, sizeof(u64), GFP_KERNEL);
+	if (!sys_addrs) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	for (i = 0; i < sys_nr_entries; i++)
+		sys_addrs[i] = INVALID_SPA;
 
 	return ret;
 
