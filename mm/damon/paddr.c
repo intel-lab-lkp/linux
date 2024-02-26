@@ -229,6 +229,7 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 
 enum migration_mode {
 	MIG_PAGEOUT,
+	MIG_PROMOTE,
 	MIG_DEMOTE,
 };
 
@@ -241,9 +242,26 @@ static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 				       struct pglist_data *pgdat,
 				       enum migration_mode mm)
 {
-	int target_nid = next_demotion_node(pgdat->node_id);
+	int target_nid;
 	unsigned int nr_succeeded;
 	nodemask_t allowed_mask;
+	int reason;
+	enum vm_event_item vm_event;
+
+	switch (mm) {
+	case MIG_PROMOTE:
+		target_nid = next_promotion_node(pgdat->node_id);
+		reason = MR_PROMOTION;
+		vm_event = PGPROMOTE;
+		break;
+	case MIG_DEMOTE:
+		target_nid = next_demotion_node(pgdat->node_id);
+		reason = MR_DEMOTION;
+		vm_event = PGDEMOTE_DIRECT;
+		break;
+	default:
+		return 0;
+	}
 
 	struct migration_target_control mtc = {
 		/*
@@ -263,14 +281,19 @@ static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 	if (list_empty(migrate_folios))
 		return 0;
 
-	node_get_allowed_targets(pgdat, &allowed_mask);
+	if (mm == MIG_DEMOTE) {
+		node_get_allowed_targets(pgdat, &allowed_mask);
+	} else if (mm == MIG_PROMOTE) {
+		/* TODO: Need to add upper_tier_mask at struct memory_tier. */
+		allowed_mask = NODE_MASK_NONE;
+	}
 
 	/* Migration ignores all cpuset and mempolicy settings */
 	migrate_pages(migrate_folios, alloc_migrate_folio, NULL,
-		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
+		      (unsigned long)&mtc, MIGRATE_ASYNC, reason,
 		      &nr_succeeded);
 
-	__count_vm_events(PGDEMOTE_DIRECT, nr_succeeded);
+	__count_vm_events(vm_event, nr_succeeded);
 
 	return nr_succeeded;
 }
@@ -359,7 +382,8 @@ static unsigned int damon_pa_migrate_folio_list(struct list_head *folio_list,
 		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
 
 		references = folio_check_references(folio);
-		if (references == FOLIOREF_KEEP)
+		if (references == FOLIOREF_KEEP ||
+		    (references == FOLIOREF_RECLAIM && mm == MIG_PROMOTE))
 			goto keep_locked;
 
 		/* Relocate its contents to another node. */
@@ -452,8 +476,10 @@ static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 		if (damos_pa_filter_out(s, folio))
 			goto put_folio;
 
-		folio_clear_referenced(folio);
-		folio_test_clear_young(folio);
+		if (mm != MIG_PROMOTE) {
+			folio_clear_referenced(folio);
+			folio_test_clear_young(folio);
+		}
 		if (!folio_isolate_lru(folio))
 			goto put_folio;
 		/*
@@ -471,6 +497,7 @@ put_folio:
 	case MIG_PAGEOUT:
 		applied = reclaim_pages(&folio_list);
 		break;
+	case MIG_PROMOTE:
 	case MIG_DEMOTE:
 		applied = damon_pa_migrate_pages(&folio_list, mm);
 		break;
@@ -530,6 +557,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		return damon_pa_mark_accessed(r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_pa_deactivate_pages(r, scheme);
+	case DAMOS_PROMOTE:
+		return damon_pa_migrate(r, scheme, MIG_PROMOTE);
 	case DAMOS_DEMOTE:
 		return damon_pa_migrate(r, scheme, MIG_DEMOTE);
 	case DAMOS_STAT:
@@ -552,6 +581,8 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 		return damon_hot_score(context, r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_cold_score(context, r, scheme);
+	case DAMOS_PROMOTE:
+		return damon_hot_score(context, r, scheme);
 	case DAMOS_DEMOTE:
 		return damon_cold_score(context, r, scheme);
 	default:
