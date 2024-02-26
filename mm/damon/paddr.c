@@ -224,7 +224,12 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 	return false;
 }
 
-static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s)
+enum migration_mode {
+	MIG_PAGEOUT,
+};
+
+static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
+				      enum migration_mode mm)
 {
 	unsigned long addr, applied;
 	LIST_HEAD(folio_list);
@@ -249,7 +254,14 @@ static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s)
 put_folio:
 		folio_put(folio);
 	}
-	applied = reclaim_pages(&folio_list);
+	switch (mm) {
+	case MIG_PAGEOUT:
+		applied = reclaim_pages(&folio_list);
+		break;
+	default:
+		/* Unexpected migration mode. */
+		return 0;
+	}
 	cond_resched();
 	return applied * PAGE_SIZE;
 }
@@ -297,7 +309,7 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 {
 	switch (scheme->action) {
 	case DAMOS_PAGEOUT:
-		return damon_pa_pageout(r, scheme);
+		return damon_pa_migrate(r, scheme, MIG_PAGEOUT);
 	case DAMOS_LRU_PRIO:
 		return damon_pa_mark_accessed(r, scheme);
 	case DAMOS_LRU_DEPRIO:
