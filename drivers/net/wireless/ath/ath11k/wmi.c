@@ -2317,6 +2317,9 @@ int ath11k_wmi_send_scan_start_cmd(struct ath11k *ar,
 	ether_addr_copy(cmd->mac_addr.addr, params->mac_addr.addr);
 	ether_addr_copy(cmd->mac_mask.addr, params->mac_mask.addr);
 
+	if (ar->ab->hw_params.single_pdev_only)
+		cmd->scan_ctrl_flags ^=  WMI_SCAN_FILTER_PROBE_REQ;
+
 	ptr += sizeof(*cmd);
 
 	len = params->num_chan * sizeof(u32);
