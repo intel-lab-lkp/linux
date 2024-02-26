@@ -1493,7 +1493,7 @@ struct rtllib_device {
 					   u8 Operation);
 	void (*set_hw_reg_handler)(struct net_device *dev, u8 variable, u8 *val);
 
-	void (*AllowAllDestAddrHandler)(struct net_device *dev,
+	void (*allow_all_dest_addr_handler)(struct net_device *dev,
 					bool bAllowAllDA, bool WriteIntoReg);
 
 	void (*rtllib_ips_leave_wq)(struct net_device *dev);
