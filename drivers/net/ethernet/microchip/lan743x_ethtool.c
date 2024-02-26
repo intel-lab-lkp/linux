@@ -1165,6 +1165,16 @@ static int lan743x_ethtool_set_wol(struct net_device *netdev,
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
 	int ret;
 
+	if (wol->wolopts && wol->wolopts != adapter->wolopts &&
+	    adapter->wolopts & WAKE_MAGICSECURE) {
+		wol->wolopts |= WAKE_MAGICSECURE;
+		netif_warn(adapter, drv, adapter->netdev,
+			   "Ensure secure-on magic packet remains enabled if not explicitly disabled\n");
+	}
+
+	if ((wol->wolopts & WAKE_MAGICSECURE) && !(wol->wolopts & WAKE_MAGIC))
+		return -EINVAL;
+
 	if (netdev->phydev) {
 		ret = phy_ethtool_set_wol(netdev->phydev, wol);
 		if (ret != -EOPNOTSUPP && ret != 0)
