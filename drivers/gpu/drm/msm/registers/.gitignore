@@ -1,0 +1,5 @@
+# ignore empty files
+msm.xml.h_shipped
+freedreno_copyright.xml.h_shipped
+# unused files
+edp.xml.h_shipped

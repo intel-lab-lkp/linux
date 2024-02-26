@@ -180,3 +180,30 @@ msm-$(CONFIG_DRM_MSM_DSI) += $(msm-dsi) $(msm-dsi-y)
 $(addprefix $(obj)/,$(msm-dsi) $(msm-dsi-y)): $(obj)/registers/dsi.xml.h
 
 obj-$(CONFIG_DRM_MSM)	+= msm.o
+
+ifdef DRM_MSM_GENERATE_HEADERS
+
+hostprogs += hg2
+
+hg2-objs = \
+	headergen2/colors.o \
+	headergen2/path.o \
+	headergen2/rnn.o \
+	headergen2/rnndec.o \
+	headergen2/headergen2.o
+
+HOST_EXTRACFLAGS += -D_GNU_SOURCE $(shell pkg-config --cflags libxml-2.0) -DRNN_DEF_PATH='"$(srctree)/$(src)/registers/xml"'
+HOSTLDLIBS_hg2 = $(shell pkg-config --libs libxml-2.0)
+
+HEADERGEN = $(objtree)/$(obj)/hg2
+
+quiet_cmd_headergen = HG2     $@
+      cmd_headergen = $(HEADERGEN) $(shell basename $<) $(srctree)/$(src)/registers/
+
+$(src)/registers/%.xml.h_shipped: msm.xml.h
+	$(Q):
+
+msm.xml.h: $(src)/registers/xml/msm.xml $(HEADERGEN) FORCE
+	$(call cmd,headergen)
+
+endif
