@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/thermal/st,stih407-thermal.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics STi digital thermal sensor (DTS)
+
+maintainers:
+  - Patrice Chotard <patrice.chotard@foss.st.com>
+  - Lee Jones <lee@kernel.org>
+
+description:
+  Binding for Thermal Sensor device for STMicroelectronics STi SoCs series.
+
+allOf:
+  - $ref: thermal-sensor.yaml
+
+properties:
+  compatible:
+    const: st,stih407-thermal
+
+  clocks:
+    maxItems: 1
+    description: Phandle of the clock used by the thermal sensor.
+
+  clock-names:
+    items:
+      - const: thermal
+
+  reg:
+    description:
+      For non-sysconf based sensors, this should be the physical base
+      address and length of the sensor's registers.
+
+  interrupts:
+    description: |
+      Standard way to define interrupt number.
+      For thermal sensor's for which no interrupt has been
+      defined, a polling delay of 1000ms will be used to read the
+      temperature from device.
+
+required:
+  - compatible
+  - clocks
+  - clock-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    temp0@91a0000 {
+        compatible = "st,stih407-thermal";
+        reg = <0x91a0000 0x28>;
+        clock-names = "thermal";
+        clocks = <&CLK_SYSIN>;
+        interrupts = <GIC_SPI 205 IRQ_TYPE_EDGE_RISING>;
+        #thermal-sensor-cells = <0>;
+    };
+...
