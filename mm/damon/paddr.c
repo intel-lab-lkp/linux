@@ -12,6 +12,9 @@
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>
+#include <linux/memory-tiers.h>
+#include <linux/migrate.h>
+#include <linux/mm_inline.h>
 
 #include "../internal.h"
 #include "ops-common.h"
@@ -226,7 +229,213 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 
 enum migration_mode {
 	MIG_PAGEOUT,
+	MIG_DEMOTE,
 };
+
+/*
+ * XXX: This is copied from demote_folio_list as renamed as migrate_folio_list.
+ * Take folios on @migrate_folios and attempt to migrate them to another node.
+ * Folios which are not migrated are left on @migrate_folios.
+ */
+static unsigned int migrate_folio_list(struct list_head *migrate_folios,
+				       struct pglist_data *pgdat,
+				       enum migration_mode mm)
+{
+	int target_nid = next_demotion_node(pgdat->node_id);
+	unsigned int nr_succeeded;
+	nodemask_t allowed_mask;
+
+	struct migration_target_control mtc = {
+		/*
+		 * Allocate from 'node', or fail quickly and quietly.
+		 * When this happens, 'page' will likely just be discarded
+		 * instead of migrated.
+		 */
+		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) | __GFP_NOWARN |
+			__GFP_NOMEMALLOC | GFP_NOWAIT,
+		.nid = target_nid,
+		.nmask = &allowed_mask
+	};
+
+	if (pgdat->node_id == target_nid || target_nid == NUMA_NO_NODE)
+		return 0;
+
+	if (list_empty(migrate_folios))
+		return 0;
+
+	node_get_allowed_targets(pgdat, &allowed_mask);
+
+	/* Migration ignores all cpuset and mempolicy settings */
+	migrate_pages(migrate_folios, alloc_migrate_folio, NULL,
+		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
+		      &nr_succeeded);
+
+	__count_vm_events(PGDEMOTE_DIRECT, nr_succeeded);
+
+	return nr_succeeded;
+}
+
+enum folio_references {
+	FOLIOREF_RECLAIM,
+	FOLIOREF_KEEP,
+	FOLIOREF_ACTIVATE,
+};
+
+/*
+ * XXX: This is just copied and simplified from folio_check_references at
+ *      mm/vmscan.c but without having scan_control.
+ */
+static enum folio_references folio_check_references(struct folio *folio)
+{
+	int referenced_ptes, referenced_folio;
+	unsigned long vm_flags;
+
+	referenced_ptes = folio_referenced(folio, 1, NULL, &vm_flags);
+	referenced_folio = folio_test_clear_referenced(folio);
+
+	/* rmap lock contention: rotate */
+	if (referenced_ptes == -1)
+		return FOLIOREF_KEEP;
+
+	if (referenced_ptes) {
+		/*
+		 * All mapped folios start out with page table
+		 * references from the instantiating fault, so we need
+		 * to look twice if a mapped file/anon folio is used more
+		 * than once.
+		 *
+		 * Mark it and spare it for another trip around the
+		 * inactive list.  Another page table reference will
+		 * lead to its activation.
+		 *
+		 * Note: the mark is set for activated folios as well
+		 * so that recently deactivated but used folios are
+		 * quickly recovered.
+		 */
+		folio_set_referenced(folio);
+
+		if (referenced_folio || referenced_ptes > 1)
+			return FOLIOREF_ACTIVATE;
+
+		/*
+		 * Activate file-backed executable folios after first usage.
+		 */
+		if ((vm_flags & VM_EXEC) && folio_is_file_lru(folio))
+			return FOLIOREF_ACTIVATE;
+
+		return FOLIOREF_KEEP;
+	}
+
+	return FOLIOREF_RECLAIM;
+}
+
+/*
+ * XXX: This is minimized implmentation based on shrink_folio_list only for
+ *      the demotion calling demote_folio_list.
+ */
+static unsigned int damon_pa_migrate_folio_list(struct list_head *folio_list,
+						struct pglist_data *pgdat,
+						enum migration_mode mm)
+{
+	unsigned int nr_migrated = 0;
+	struct folio *folio;
+	LIST_HEAD(ret_folios);
+	LIST_HEAD(migrate_folios);
+
+	cond_resched();
+
+	while (!list_empty(folio_list)) {
+		struct folio *folio;
+		enum folio_references references;
+
+		cond_resched();
+
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+
+		if (!folio_trylock(folio))
+			goto keep;
+
+		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
+
+		references = folio_check_references(folio);
+		if (references == FOLIOREF_KEEP)
+			goto keep_locked;
+
+		/* Relocate its contents to another node. */
+		list_add(&folio->lru, &migrate_folios);
+		folio_unlock(folio);
+		continue;
+keep_locked:
+		folio_unlock(folio);
+keep:
+		list_add(&folio->lru, &ret_folios);
+		VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
+	}
+	/* 'folio_list' is always empty here */
+
+	/* Migrate folios selected for migration */
+	nr_migrated += migrate_folio_list(&migrate_folios, pgdat, mm);
+	/* Folios that could not be migrated are still in @migrate_folios */
+	if (!list_empty(&migrate_folios)) {
+		/* Folios which weren't migrated go back on @folio_list */
+		list_splice_init(&migrate_folios, folio_list);
+	}
+
+	try_to_unmap_flush();
+
+	list_splice(&ret_folios, folio_list);
+
+	while (!list_empty(folio_list)) {
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+		folio_putback_lru(folio);
+	}
+
+	return nr_migrated;
+}
+
+/*
+ * XXX: This is almost identical to reclaim_pages() in mm/vmscan.c, but it
+ *      internally calls damon_pa_migrate_folio_list() instead of
+ *      reclaim_folio_list().  We might be better to think if we can have a
+ *      common function for both cases.
+ */
+static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
+					    enum migration_mode mm)
+{
+	int nid;
+	unsigned int nr_migrated = 0;
+	LIST_HEAD(node_folio_list);
+	unsigned int noreclaim_flag;
+
+	if (list_empty(folio_list))
+		return nr_migrated;
+
+	noreclaim_flag = memalloc_noreclaim_save();
+
+	nid = folio_nid(lru_to_folio(folio_list));
+	do {
+		struct folio *folio = lru_to_folio(folio_list);
+
+		if (nid == folio_nid(folio)) {
+			folio_clear_active(folio);
+			list_move(&folio->lru, &node_folio_list);
+			continue;
+		}
+
+		nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
+							   NODE_DATA(nid), mm);
+		nid = folio_nid(lru_to_folio(folio_list));
+	} while (!list_empty(folio_list));
+
+	nr_migrated += damon_pa_migrate_folio_list(&node_folio_list,
+						   NODE_DATA(nid), mm);
+
+	memalloc_noreclaim_restore(noreclaim_flag);
+
+	return nr_migrated;
+}
 
 static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 				      enum migration_mode mm)
@@ -247,7 +456,11 @@ static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 		folio_test_clear_young(folio);
 		if (!folio_isolate_lru(folio))
 			goto put_folio;
-		if (folio_test_unevictable(folio))
+		/*
+		 * Since unevictable folios can be demoted or promoted,
+		 * unevictable test is needed only for pageout.
+		 */
+		if (mm == MIG_PAGEOUT && folio_test_unevictable(folio))
 			folio_putback_lru(folio);
 		else
 			list_add(&folio->lru, &folio_list);
@@ -257,6 +470,9 @@ put_folio:
 	switch (mm) {
 	case MIG_PAGEOUT:
 		applied = reclaim_pages(&folio_list);
+		break;
+	case MIG_DEMOTE:
+		applied = damon_pa_migrate_pages(&folio_list, mm);
 		break;
 	default:
 		/* Unexpected migration mode. */
@@ -314,6 +530,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		return damon_pa_mark_accessed(r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_pa_deactivate_pages(r, scheme);
+	case DAMOS_DEMOTE:
+		return damon_pa_migrate(r, scheme, MIG_DEMOTE);
 	case DAMOS_STAT:
 		break;
 	default:
@@ -333,6 +551,8 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 	case DAMOS_LRU_PRIO:
 		return damon_hot_score(context, r, scheme);
 	case DAMOS_LRU_DEPRIO:
+		return damon_cold_score(context, r, scheme);
+	case DAMOS_DEMOTE:
 		return damon_cold_score(context, r, scheme);
 	default:
 		break;
