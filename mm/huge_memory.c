@@ -3030,6 +3030,19 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 			goto out;
 		}
 
+		/*
+		 * Do not split if mapping has minimum folio order
+		 * requirement.
+		 *
+		 * XXX: Once we have support for splitting to any lower
+		 * folio order, then it could be split based on the
+		 * min_folio_order.
+		 */
+		if (mapping_min_folio_order(mapping)) {
+			ret = -EAGAIN;
+			goto out;
+		}
+
 		gfp = current_gfp_context(mapping_gfp_mask(mapping) &
 							GFP_RECLAIM_MASK);
 
