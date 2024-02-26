@@ -297,7 +297,7 @@ endef
 # the copy would be read-only as well, leading to an error when executing the
 # rule next time. Use 'cat' instead in order to generate a writable file.
 quiet_cmd_copy = COPY    $@
-      cmd_copy = cat $< > $@
+      cmd_copy = mkdir -p $(shell dirname $@) && cat $< > $@
 
 $(obj)/%: $(src)/%_shipped
 	$(call cmd,copy)
