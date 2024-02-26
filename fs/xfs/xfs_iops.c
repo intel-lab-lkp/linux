@@ -543,7 +543,7 @@ xfs_stat_blksize(
 			return 1U << mp->m_allocsize_log;
 	}
 
-	return PAGE_SIZE;
+	return max_t(unsigned long, PAGE_SIZE, mp->m_sb.sb_blocksize);
 }
 
 STATIC int
