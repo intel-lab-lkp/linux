@@ -398,3 +398,50 @@ void drm_panic_unregister(struct drm_plane *plane)
 }
 EXPORT_SYMBOL(drm_panic_unregister);
 
+
+/*
+ * DEBUG, This is currently unsafe.
+ * Also it will call all panic_notifier, since there is no way to filter and
+ * only call the drm_panic notifier.
+ */
+#ifdef CONFIG_DRM_PANIC_DEBUG
+#include <linux/debugfs.h>
+
+static struct dentry *debug_dir;
+static struct dentry *debug_trigger;
+
+static ssize_t dbgfs_trigger_write(struct file *file, const char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	bool run;
+
+	if (kstrtobool_from_user(user_buf, count, &run) == 0 && run)
+		atomic_notifier_call_chain(&panic_notifier_list, 0, "Test drm panic from debugfs");
+	return count;
+}
+
+static const struct file_operations dbg_drm_panic_ops = {
+	.owner = THIS_MODULE,
+	.write = dbgfs_trigger_write,
+};
+
+static int __init debugfs_start(void)
+{
+	debug_dir = debugfs_create_dir("drm_panic", NULL);
+
+	if (IS_ERR(debug_dir))
+		return PTR_ERR(debug_dir);
+	debug_trigger = debugfs_create_file("trigger", 0200, debug_dir,
+					    NULL, &dbg_drm_panic_ops);
+	return 0;
+}
+
+static void __exit debugfs_end(void)
+{
+	debugfs_remove_recursive(debug_dir);
+}
+
+module_init(debugfs_start);
+module_exit(debugfs_end);
+
+#endif
