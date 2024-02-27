@@ -55,6 +55,22 @@
 #define IMX95_PE0_GEN_CTRL_3			0x1058
 #define IMX95_PCIE_LTSSM_EN			BIT(0)
 
+#define IMX95_PE0_LUT_ACSCTRL			0x1008
+#define IMX95_PEO_LUT_RWA			BIT(16)
+#define IMX95_PE0_LUT_ENLOC			GENMASK(4, 0)
+
+#define IMX95_PE0_LUT_DATA1			0x100c
+#define IMX95_PE0_LUT_VLD			BIT(31)
+#define IMX95_PE0_LUT_DAC_ID			GENMASK(10, 8)
+#define IMX95_PE0_LUT_STREAM_ID			GENMASK(5, 0)
+
+#define IMX95_PE0_LUT_DATA2			0x1010
+#define IMX95_PE0_LUT_REQID			GENMASK(31, 16)
+#define IMX95_PE0_LUT_MASK			GENMASK(15, 0)
+
+#define IMX95_SID_MASK				GENMASK(5, 0)
+#define IMX95_MAX_LUT				32
+
 #define to_imx_pcie(x)	dev_get_drvdata((x)->dev)
 
 enum imx_pcie_variants {
@@ -213,6 +229,159 @@ static int imx95_pcie_init_phy(struct imx_pcie *imx_pcie)
 			   IMX95_PCIE_SS_RW_REG_0,
 			   IMX95_PCIE_REF_CLKEN,
 			   IMX95_PCIE_REF_CLKEN);
+
+	return 0;
+}
+
+static int imx_pcie_update_lut(struct imx_pcie *imx_pcie, int index, u16 reqid, u16 mask, u8 sid)
+{
+	struct dw_pcie *pci = imx_pcie->pci;
+	struct device *dev = pci->dev;
+	u32 data1, data2;
+
+	if (sid >= 64) {
+		dev_err(dev, "Too big stream id: %d\n", sid);
+		return -EINVAL;
+	}
+
+	data1 = FIELD_PREP(IMX95_PE0_LUT_DAC_ID, 0);
+	data1 |= FIELD_PREP(IMX95_PE0_LUT_STREAM_ID, sid);
+	data1 |= IMX95_PE0_LUT_VLD;
+
+	regmap_write(imx_pcie->iomuxc_gpr, IMX95_PE0_LUT_DATA1, data1);
+
+	data2 = mask;
+	data2 |= FIELD_PREP(IMX95_PE0_LUT_REQID, reqid);
+
+	regmap_write(imx_pcie->iomuxc_gpr, IMX95_PE0_LUT_DATA2, data2);
+
+	regmap_write(imx_pcie->iomuxc_gpr, IMX95_PE0_LUT_ACSCTRL, index);
+
+	return 0;
+}
+
+struct imx_of_map {
+	u32 bdf;
+	u32 phandle;
+	u32 sid;
+	u32 sid_len;
+};
+
+static int imx_check_msi_and_smmmu(struct imx_pcie *imx_pcie,
+				   struct imx_of_map *msi_map, u32 msi_size, u32 msi_map_mask,
+				   struct imx_of_map *smmu_map, u32 smmu_size, u32 smmu_map_mask)
+{
+	struct dw_pcie *pci = imx_pcie->pci;
+	struct device *dev = pci->dev;
+	int i;
+
+	if (msi_map && smmu_map) {
+		if (msi_size != smmu_size)
+			return -EINVAL;
+		if (msi_map_mask != smmu_map_mask)
+			return -EINVAL;
+
+		for (i = 0; i < msi_size / sizeof(*msi_map); i++) {
+			if (msi_map->bdf != smmu_map->bdf) {
+				dev_err(dev, "bdf setting is not match\n");
+				return -EINVAL;
+			}
+			if ((msi_map->sid & IMX95_SID_MASK) != smmu_map->sid) {
+				dev_err(dev, "sid setting is not match\n");
+				return -EINVAL;
+			}
+			if ((msi_map->sid_len & IMX95_SID_MASK) != smmu_map->sid_len) {
+				dev_err(dev, "sid_len setting is not match\n");
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Simple static config lut according to dts settings DAC index and stream ID used as a match result
+ * of LUT pre-allocated and used by PCIes.
+ *
+ * Currently stream ID from 32-64 for PCIe.
+ * 32-40: first PCI bus.
+ * 40-48: second PCI bus.
+ *
+ * DAC_ID is index of TRDC.DAC index, start from 2 at iMX95.
+ * ITS [pci(2bit): streamid(6bits)]
+ *	pci 0 is 0
+ *	pci 1 is 3
+ */
+static int imx_pcie_config_sid(struct imx_pcie *imx_pcie)
+{
+	struct imx_of_map *msi_map = NULL, *smmu_map = NULL, *cur;
+	int i, j, lut_index, nr_map, msi_size = 0, smmu_size = 0;
+	u32 msi_map_mask = 0xffff, smmu_map_mask = 0xffff;
+	struct dw_pcie *pci = imx_pcie->pci;
+	struct device *dev = pci->dev;
+	u32 mask;
+	int size;
+
+	of_get_property(dev->of_node, "msi-map", &msi_size);
+	if (msi_size) {
+		msi_map = devm_kzalloc(dev, msi_size, GFP_KERNEL);
+		if (!msi_map)
+			return -ENOMEM;
+
+		if (of_property_read_u32_array(dev->of_node, "msi-map", (u32 *)msi_map,
+					       msi_size / sizeof(u32)))
+			return -EINVAL;
+
+		of_property_read_u32(dev->of_node, "msi-map-mask", &msi_map_mask);
+	}
+
+	cur = msi_map;
+	size = msi_size;
+	mask = msi_map_mask;
+
+	of_get_property(dev->of_node, "iommu-map", &smmu_size);
+	if (smmu_size) {
+		smmu_map = devm_kzalloc(dev, smmu_size, GFP_KERNEL);
+		if (!smmu_map)
+			return -ENOMEM;
+
+		if (of_property_read_u32_array(dev->of_node, "iommu-map", (u32 *)smmu_map,
+					       smmu_size / sizeof(u32)))
+			return -EINVAL;
+
+		of_property_read_u32(dev->of_node, "smmu_map_mask", &smmu_map_mask);
+	}
+
+	if (imx_check_msi_and_smmmu(imx_pcie, msi_map, msi_size, msi_map_mask,
+				     smmu_map, smmu_size, smmu_map_mask))
+		return -EINVAL;
+
+	if (!cur) {
+		cur = smmu_map;
+		size = smmu_size;
+		mask = smmu_map_mask;
+	}
+
+	nr_map = size / (sizeof(*cur));
+
+	lut_index = 0;
+	for (i = 0; i < nr_map; i++) {
+		for (j = 0; j < cur->sid_len; j++) {
+			imx_pcie_update_lut(imx_pcie, lut_index, cur->bdf + j, mask,
+					    (cur->sid + j) & IMX95_SID_MASK);
+			lut_index++;
+		}
+		cur++;
+
+		if (lut_index >= IMX95_MAX_LUT) {
+			dev_err(dev, "its-map/iommu-map exceed HW limiation\n");
+			return -EINVAL;
+		}
+	}
+
+	devm_kfree(dev, smmu_map);
+	devm_kfree(dev, msi_map);
 
 	return 0;
 }
@@ -947,6 +1116,12 @@ static int imx_pcie_host_init(struct dw_pcie_rp *pp)
 	ret = imx_pcie_deassert_core_reset(imx_pcie);
 	if (ret < 0) {
 		dev_err(dev, "pcie deassert core reset failed: %d\n", ret);
+		goto err_phy_off;
+	}
+
+	ret = imx_pcie_config_sid(imx_pcie);
+	if (ret < 0) {
+		dev_err(dev, "failed to config sid:%d\n", ret);
 		goto err_phy_off;
 	}
 
