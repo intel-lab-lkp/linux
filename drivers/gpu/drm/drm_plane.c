@@ -31,6 +31,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_vblank.h>
 
 #include "drm_crtc_internal.h"
@@ -643,6 +644,8 @@ void drm_plane_cleanup(struct drm_plane *plane)
 	kfree(plane->format_types);
 	kfree(plane->modifiers);
 	drm_mode_object_unregister(dev, &plane->base);
+
+	drm_panic_unregister(plane);
 
 	BUG_ON(list_empty(&plane->head));
 

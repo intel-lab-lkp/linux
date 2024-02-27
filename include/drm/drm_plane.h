@@ -34,6 +34,7 @@
 struct drm_crtc;
 struct drm_printer;
 struct drm_modeset_acquire_ctx;
+struct drm_scanout_buffer;
 
 enum drm_scaling_filter {
 	DRM_SCALING_FILTER_DEFAULT,
@@ -779,6 +780,22 @@ struct drm_plane {
 	 * @hotspot_y_property: property to set mouse hotspot y offset.
 	 */
 	struct drm_property *hotspot_y_property;
+
+	/**
+	 * @panic_notifier: Used to register a panic notifier for this plane
+	 */
+	struct notifier_block panic_notifier;
+
+	/**
+	 * @panic_scanout:
+	 *
+	 * Optional Panic scanout data, it is allocated when calling
+	 * drm_panic_register() for this plane.
+	 * This will be used by drm panic when a panic occurs.
+	 * Don't access it directly, only use drm_panic_set_buffer() and
+	 * drm_panic_unset_buffer() if there is no scanout buffer available.
+	 */
+	struct drm_scanout_buffer *panic_scanout;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)

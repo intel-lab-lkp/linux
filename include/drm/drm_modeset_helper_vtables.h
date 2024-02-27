@@ -1442,6 +1442,17 @@ struct drm_plane_helper_funcs {
 	 */
 	void (*atomic_async_update)(struct drm_plane *plane,
 				    struct drm_atomic_state *state);
+	/**
+	 * @panic_flush:
+	 *
+	 * It is used by drm_panic, and is called after the panic screen is
+	 * drawn to the scanout buffer. In this function, the driver
+	 * can send additional commands to the hardware, to make the scanout
+	 * buffer visible.
+	 * It is called from panic context, so this function should follow the
+	 * panic restrictions, and not allocate or lock.
+	 */
+	void (*panic_flush)(struct drm_plane *plane);
 };
 
 /**
