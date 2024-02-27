@@ -43,6 +43,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -656,9 +657,13 @@ static void ast_primary_plane_helper_atomic_update(struct drm_plane *plane,
 		struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 		struct ast_crtc_state *ast_crtc_state = to_ast_crtc_state(crtc_state);
 		struct ast_vbios_mode_info *vbios_mode_info = &ast_crtc_state->vbios_mode_info;
+		struct iosys_map map;
 
 		ast_set_color_reg(ast, fb->format);
 		ast_set_vbios_color_reg(ast, fb->format, vbios_mode_info);
+
+		iosys_map_set_vaddr_iomem(&map, ast_plane->vaddr);
+		drm_panic_set_buffer(plane->panic_scanout, fb, &map);
 	}
 
 	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
@@ -736,6 +741,7 @@ static int ast_primary_plane_init(struct ast_device *ast)
 	}
 	drm_plane_helper_add(primary_plane, &ast_primary_plane_helper_funcs);
 	drm_plane_enable_fb_damage_clips(primary_plane);
+	drm_panic_register(primary_plane);
 
 	return 0;
 }
