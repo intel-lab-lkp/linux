@@ -25,6 +25,7 @@
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_modeset_helper_vtables.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 
 #define DRIVER_NAME	"simpledrm"
@@ -735,6 +736,20 @@ static const struct drm_connector_funcs simpledrm_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
+static void simpledrm_init_panic_buffer(struct drm_plane *plane)
+{
+	struct simpledrm_device *sdev = simpledrm_device_of_dev(plane->dev);
+	struct drm_framebuffer fb;
+
+	/* Fake framebuffer struct for drm_panic_set_buffer */
+	fb.width = sdev->mode.hdisplay;
+	fb.height = sdev->mode.vdisplay;
+	fb.format = sdev->format;
+	fb.pitches[0] = sdev->pitch;
+
+	drm_panic_set_buffer(plane->panic_scanout, &fb, &sdev->screen_base);
+}
+
 static const struct drm_mode_config_funcs simpledrm_mode_config_funcs = {
 	.fb_create = drm_gem_fb_create_with_dirty,
 	.atomic_check = drm_atomic_helper_check,
@@ -945,6 +960,8 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 		return ERR_PTR(ret);
 	drm_plane_helper_add(primary_plane, &simpledrm_primary_plane_helper_funcs);
 	drm_plane_enable_fb_damage_clips(primary_plane);
+	drm_panic_register(primary_plane);
+	simpledrm_init_panic_buffer(primary_plane);
 
 	/* CRTC */
 
