@@ -15,6 +15,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_plane.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
@@ -148,3 +149,39 @@ void drm_fb_dma_sync_non_coherent(struct drm_device *drm,
 	}
 }
 EXPORT_SYMBOL_GPL(drm_fb_dma_sync_non_coherent);
+
+#if defined(CONFIG_DRM_PANIC)
+/**
+ * drm_panic_gem_set_scanout_buffer - helper around drm_panic_set_buffer()
+ *
+ * @plane: primary plane registered to drm_panic
+ * @fb: framebuffer attached to the plane state
+ *
+ * Update plane->panic_scanout with the new framebuffer.
+ */
+void drm_panic_gem_set_scanout_buffer(struct drm_plane *plane,
+				      struct drm_framebuffer *fb)
+{
+	struct drm_gem_dma_object *dma_obj;
+	struct iosys_map map;
+
+	if (!plane->panic_scanout)
+		return;
+
+	if (fb->modifier == DRM_FORMAT_MOD_LINEAR) {
+		dma_obj = drm_fb_dma_get_gem_obj(fb, 0);
+		if (dma_obj && dma_obj->vaddr) {
+			iosys_map_set_vaddr(&map, dma_obj->vaddr);
+			drm_panic_set_buffer(plane->panic_scanout, fb, &map);
+			return;
+		}
+	}
+	drm_panic_unset_buffer(plane->panic_scanout);
+}
+#else
+void drm_panic_gem_set_scanout_buffer(struct drm_plane *plane,
+				      struct drm_framebuffer *fb)
+{
+}
+#endif
+EXPORT_SYMBOL(drm_panic_gem_set_scanout_buffer);
