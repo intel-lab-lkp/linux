@@ -27,6 +27,10 @@
 struct device;
 struct drm_format_info;
 struct drm_plane_state;
+struct drm_bridge;
+struct drm_bridge_state;
+struct drm_connector_state;
+struct drm_crtc_state;
 struct platform_device;
 struct zynqmp_disp;
 struct zynqmp_disp_layer;
@@ -52,6 +56,12 @@ void zynqmp_disp_blend_set_global_alpha(struct zynqmp_disp *disp,
 
 u32 *zynqmp_disp_layer_drm_formats(struct zynqmp_disp_layer *layer,
 				   unsigned int *num_formats);
+u32 *zynqmp_disp_get_input_bus_fmts(struct drm_bridge *bridge,
+				    struct drm_bridge_state *bridge_state,
+				    struct drm_crtc_state *crtc_state,
+				    struct drm_connector_state *conn_state,
+				    u32 output_fmt,
+				    unsigned int *num_input_fmts);
 void zynqmp_disp_layer_enable(struct zynqmp_disp_layer *layer);
 void zynqmp_disp_layer_disable(struct zynqmp_disp_layer *layer);
 void zynqmp_disp_layer_set_format(struct zynqmp_disp_layer *layer,

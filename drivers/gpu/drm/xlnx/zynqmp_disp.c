@@ -18,6 +18,7 @@
 #include <linux/dma/xilinx_dpdma.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
+#include <linux/media-bus-format.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -77,12 +78,14 @@ enum zynqmp_dpsub_layer_mode {
 /**
  * struct zynqmp_disp_format - Display subsystem format information
  * @drm_fmt: DRM format (4CC)
+ * @bus_fmt: Media bus format
  * @buf_fmt: AV buffer format
  * @swap: Flag to swap R & B for RGB formats, and U & V for YUV formats
  * @sf: Scaling factors for color components
  */
 struct zynqmp_disp_format {
 	u32 drm_fmt;
+	u32 bus_fmt;
 	u32 buf_fmt;
 	bool swap;
 	const u32 *sf;
@@ -363,6 +366,40 @@ static const struct zynqmp_disp_format avbuf_gfx_fmts[] = {
 		.sf		= scaling_factors_565,
 	},
 };
+
+/* List of live video layer formats */
+static const struct zynqmp_disp_format avbuf_live_fmts[] = {
+	{
+		.drm_fmt	= DRM_FORMAT_VYUY,
+		.bus_fmt	= MEDIA_BUS_FMT_VYUY8_1X16,
+		.buf_fmt	= ZYNQMP_DISP_AV_BUF_LIVE_CONFIG_BPC_8 |
+				  ZYNQMP_DISP_AV_BUF_LIVE_CONFIG_FMT_YUV422,
+		.sf		= scaling_factors_888,
+	},
+};
+
+u32 *zynqmp_disp_get_input_bus_fmts(struct drm_bridge *bridge,
+				    struct drm_bridge_state *bridge_state,
+				    struct drm_crtc_state *crtc_state,
+				    struct drm_connector_state *conn_state,
+				    u32 output_fmt,
+				    unsigned int *num_input_fmts)
+{
+	int i;
+	u32 *input_fmts;
+
+	input_fmts = kcalloc(ARRAY_SIZE(avbuf_live_fmts), sizeof(*input_fmts), GFP_KERNEL);
+	if (!input_fmts) {
+		*num_input_fmts = 0;
+		return input_fmts;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(avbuf_live_fmts); ++i)
+		input_fmts[i] =  avbuf_live_fmts[i].bus_fmt;
+	*num_input_fmts = ARRAY_SIZE(avbuf_live_fmts);
+
+	return input_fmts;
+}
 
 static u32 zynqmp_disp_avbuf_read(struct zynqmp_disp *disp, int reg)
 {
