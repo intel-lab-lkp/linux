@@ -23,6 +23,7 @@ properties:
           - fsl,imx7ulp-edma
           - fsl,imx8qm-adma
           - fsl,imx8qm-edma
+          - fsl,imx8ulp-edma
           - fsl,imx93-edma3
           - fsl,imx93-edma4
           - fsl,imx95-edma5
@@ -53,11 +54,11 @@ properties:
 
   clocks:
     minItems: 1
-    maxItems: 2
+    maxItems: 33
 
   clock-names:
     minItems: 1
-    maxItems: 2
+    maxItems: 33
 
   big-endian:
     description: |
@@ -150,6 +151,25 @@ allOf:
           const: 2
         dma-channels:
           const: 32
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx8ulp-edma
+    then:
+      properties:
+        clock:
+          maxItems: 33
+        clock-names:
+          items:
+            - const: dma
+            - pattern: "^CH[0-31]-clk$"
+        interrupt-names: false
+        interrupts:
+          maxItems: 32
+        "#dma-cells":
+          const: 3
 
 unevaluatedProperties: false
 
