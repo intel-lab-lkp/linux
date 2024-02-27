@@ -77,6 +77,28 @@ const volatile void * __must_check_fn(const volatile void *val)
 
 #define return_ptr(p)	return no_free_ptr(p)
 
+#define __cond_no_free_ptrs(p) ({__auto_type __always_unused __ptr = no_free_ptr(p);})
+#define __cond_no_free_ptrs1(p, ...) __cond_no_free_ptrs(p)
+#define __cond_no_free_ptrs2(p, ...) \
+	__cond_no_free_ptrs(p), __cond_no_free_ptrs1(__VA_ARGS__)
+#define __cond_no_free_ptrs3(p, ...) \
+	__cond_no_free_ptrs(p), __cond_no_free_ptrs2(__VA_ARGS__)
+
+/*
+ * When an object is built up by an amalgamation of multiple allocations
+ * each of those need to be cleaned up on error, but there are occasions
+ * where once the object is registered all of those cleanups can be
+ * cancelled.  cond_no_free_ptr() arranges to call no_free_ptr() on all
+ * its arguments (up to 3) if @condition is true and runs @_fail
+ * otherwise (typically to return and trigger auto-cleanup).
+ */
+#define cond_no_free_ptr(condition, _fail, ...)                           \
+	if (condition) {                                                  \
+		CONCATENATE(__cond_no_free_ptrs, COUNT_ARGS(__VA_ARGS__)) \
+		(__VA_ARGS__);                                            \
+	} else {                                                          \
+		_fail;                                                    \
+	}
 
 /*
  * DEFINE_CLASS(name, type, exit, init, init_args...):
