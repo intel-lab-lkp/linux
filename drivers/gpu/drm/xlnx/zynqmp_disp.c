@@ -417,6 +417,34 @@ static bool zynqmp_disp_layer_is_video(const struct zynqmp_disp_layer *layer)
 }
 
 /**
+ * zynqmp_disp_avbuf_set_live_format - Set live input format for a layer
+ * @disp: Display controller
+ * @layer: The layer
+ * @fmt: The format information
+ *
+ * Set the live video input format for @layer to @fmt.
+ */
+static void zynqmp_disp_avbuf_set_live_format(struct zynqmp_disp *disp,
+					      struct zynqmp_disp_layer *layer,
+					      const struct zynqmp_disp_format *fmt)
+{
+	u32 reg, i;
+
+	reg = zynqmp_disp_layer_is_video(layer)
+	    ? ZYNQMP_DISP_AV_BUF_LIVE_VID_CONFIG
+	    : ZYNQMP_DISP_AV_BUF_LIVE_GFX_CONFIG;
+	zynqmp_disp_avbuf_write(disp, reg, fmt->buf_fmt);
+
+	for (i = 0; i < ZYNQMP_DISP_AV_BUF_NUM_SF; ++i) {
+		reg = zynqmp_disp_layer_is_video(layer)
+		    ? ZYNQMP_DISP_AV_BUF_LIVD_VID_COMP_SF(i)
+		    : ZYNQMP_DISP_AV_BUF_LIVD_GFX_COMP_SF(i);
+		zynqmp_disp_avbuf_write(disp, reg, fmt->sf[i]);
+	}
+	layer->disp_fmt = fmt;
+}
+
+/**
  * zynqmp_disp_avbuf_set_format - Set the input format for a layer
  * @disp: Display controller
  * @layer: The layer
@@ -977,6 +1005,30 @@ void zynqmp_disp_layer_disable(struct zynqmp_disp_layer *layer)
 
 	zynqmp_disp_avbuf_disable_video(layer->disp, layer);
 	zynqmp_disp_blend_layer_disable(layer->disp, layer);
+}
+
+/**
+ * zynqmp_disp_layer_set_live_format - Set live layer input format
+ * @layer: The layer
+ * @info: Input media bus format
+ *
+ * Set the live @layer input bus format. The layer must be disabled.
+ */
+void zynqmp_disp_layer_set_live_format(struct zynqmp_disp_layer *layer,
+				       u32 bus_format)
+{
+	int i;
+	const struct zynqmp_disp_format *fmt;
+
+	for (i = 0; i < ARRAY_SIZE(avbuf_live_fmts); ++i) {
+		fmt = &avbuf_live_fmts[i];
+		if (fmt->bus_fmt == bus_format) {
+			layer->disp_fmt = fmt;
+			layer->drm_fmt = drm_format_info(fmt->drm_fmt);
+			zynqmp_disp_avbuf_set_live_format(layer->disp, layer, fmt);
+			return;
+		}
+	}
 }
 
 /**
