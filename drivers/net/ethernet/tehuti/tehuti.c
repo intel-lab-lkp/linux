@@ -1965,7 +1965,7 @@ bdx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		ndev = alloc_etherdev(sizeof(struct bdx_priv));
 		if (!ndev) {
 			err = -ENOMEM;
-			goto err_out_disable_msi;
+			goto err_out_free;
 		}
 
 		ndev->netdev_ops = &bdx_netdev_ops;
@@ -2031,13 +2031,13 @@ bdx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (bdx_read_mac(priv)) {
 			pr_err("load MAC address failed\n");
 			err = -EFAULT;
-			goto err_out_disable_msi;
+			goto err_out_free_current;
 		}
 		SET_NETDEV_DEV(ndev, &pdev->dev);
 		err = register_netdev(ndev);
 		if (err) {
 			pr_err("register_netdev failed\n");
-			goto err_out_free;
+			goto err_out_free_current;
 		}
 		netif_carrier_off(ndev);
 		netif_stop_queue(ndev);
@@ -2046,9 +2046,14 @@ bdx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	RET(0);
 
-err_out_free:
+err_out_free_current:
 	free_netdev(ndev);
-err_out_disable_msi:
+err_out_free:
+	while (--port >= 0) {
+		ndev = nic->priv[port]->ndev;
+		unregister_netdev(ndev);
+		free_netdev(ndev);
+	}
 #ifdef BDX_MSI
 	if (nic->irq_type == IRQ_MSI)
 		pci_disable_msi(pdev);
