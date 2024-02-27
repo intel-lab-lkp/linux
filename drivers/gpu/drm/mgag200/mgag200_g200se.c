@@ -7,6 +7,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_gem_atomic_helper.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 
 #include "mgag200_drv.h"
@@ -391,6 +392,7 @@ static int mgag200_g200se_pipeline_init(struct mga_device *mdev)
 	}
 	drm_plane_helper_add(primary_plane, &mgag200_g200se_primary_plane_helper_funcs);
 	drm_plane_enable_fb_damage_clips(primary_plane);
+	drm_panic_register(primary_plane);
 
 	ret = drm_crtc_init_with_planes(dev, crtc, primary_plane, NULL,
 					&mgag200_g200se_crtc_funcs, NULL);
