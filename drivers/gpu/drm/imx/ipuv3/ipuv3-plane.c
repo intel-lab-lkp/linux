@@ -14,6 +14,7 @@
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_panic.h>
 
 #include <video/imx-ipu-v3.h>
 
@@ -765,6 +766,8 @@ static void ipu_plane_atomic_update(struct drm_plane *plane,
 	ipu_cpmem_set_buffer(ipu_plane->ipu_ch, 1, eba);
 	ipu_idmac_lock_enable(ipu_plane->ipu_ch, num_bursts);
 	ipu_plane_enable(ipu_plane);
+
+	drm_panic_gem_set_scanout_buffer(plane, fb);
 }
 
 static const struct drm_plane_helper_funcs ipu_plane_helper_funcs = {
@@ -942,6 +945,8 @@ struct ipu_plane *ipu_plane_init(struct drm_device *dev, struct ipu_soc *ipu,
 			  zpos ? "overlay" : "primary", &ret);
 		return ERR_PTR(ret);
 	}
+	if (type == DRM_PLANE_TYPE_PRIMARY)
+		drm_panic_register(&ipu_plane->base);
 
 	return ipu_plane;
 }
