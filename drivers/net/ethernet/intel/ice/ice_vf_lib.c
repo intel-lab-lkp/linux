@@ -577,6 +577,165 @@ void ice_ena_all_vfs_rx_lldp(struct ice_pf *pf)
 	}
 }
 
+static bool ice_is_transmit_lldp_enabled(struct ice_pf *pf)
+{
+	struct ice_vf *vf;
+	unsigned int bkt;
+
+	ice_for_each_vf(pf, bkt, vf) {
+		if (vf->transmit_lldp)
+			return true;
+	}
+
+	return false;
+}
+
+/**
+ * ice_handle_vf_tx_lldp - enable/disable LLDP TX on VF
+ * @vf: VF to configure Tx LLDP for
+ * @ena: Enable or disable Tx LLDP switch rule
+ *
+ * Configure Tx filters for VF to transmit LLDP
+ */
+int ice_handle_vf_tx_lldp(struct ice_vf *vf, bool ena)
+{
+	void (*allow_override)(struct ice_vsi_ctx *ctx);
+	struct ice_vsi *vsi, *main_vsi;
+	struct ice_pf *pf = vf->pf;
+	struct device *dev;
+	bool prev_ena;
+
+	dev = ice_pf_to_dev(pf);
+	vsi = ice_get_vf_vsi(vf);
+	main_vsi = ice_get_main_vsi(pf);
+	if (!vsi || !main_vsi)
+		return -ENOENT;
+
+	if (ena && test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags)) {
+		dev_err(dev, "Transmit LLDP VF is only allowed when FW LLDP Agent is disabled");
+		return -EPERM;
+	}
+
+	if (ena && ice_is_transmit_lldp_enabled(pf)) {
+		dev_err(dev, "Only a single VF per port is allowed to transmit LLDP packets, ignoring the settings");
+		return -EPERM;
+	}
+
+	allow_override = ena ? ice_vsi_ctx_set_allow_override
+			     : ice_vsi_ctx_clear_allow_override;
+	prev_ena = vsi->info.sec_flags & ICE_AQ_VSI_SEC_FLAG_ALLOW_DEST_OVRD;
+
+	if (ice_vsi_update_security(vsi, allow_override))
+		return -ENOENT;
+
+	/* If VF can transmit LLDP, then PF cannot and vice versa */
+	allow_override = ena ? ice_vsi_ctx_clear_allow_override
+			     : ice_vsi_ctx_set_allow_override;
+
+	if (ice_vsi_update_security(main_vsi, allow_override)) {
+		allow_override = prev_ena  ? ice_vsi_ctx_set_allow_override
+					   : ice_vsi_ctx_clear_allow_override;
+		ice_vsi_update_security(vsi, allow_override);
+		return -ENOENT;
+	}
+
+	vf->transmit_lldp = ena;
+	return 0;
+}
+
+static ssize_t ice_transmit_lldp_vf_attr_show(struct device *dev,
+					      struct device_attribute *attr,
+					      char *buf)
+{
+	struct ice_vf *vf = ice_get_vf_by_dev(dev);
+
+	if (!vf)
+		return -ENOENT;
+
+	return sysfs_emit(buf, "%u\n", vf->transmit_lldp);
+}
+
+static ssize_t ice_transmit_lldp_vf_attr_store(struct device *dev,
+					       struct device_attribute *attr,
+					       const char *buf, size_t count)
+{
+	struct pci_dev *vfdev = container_of(dev, struct pci_dev, dev);
+	struct ice_vf *vf = ice_get_vf_by_dev(dev);
+	struct pci_dev *pdev = vfdev->physfn;
+	struct ice_pf *pf;
+	bool ena;
+	int err;
+
+	if (!vf)
+		return -ENOENT;
+
+	pf = pci_get_drvdata(pdev);
+	if (!pf)
+		return -ENOENT;
+
+	err = kstrtobool(buf, &ena);
+	if (err)
+		return -EINVAL;
+
+	if (ena == vf->transmit_lldp) {
+		dev_dbg(dev, "Transmit LLDP value already set for VF %d",
+			vf->vf_id);
+		return count;
+	}
+
+	err = ice_handle_vf_tx_lldp(vf, ena);
+	if (err)
+		return err;
+
+	return count;
+}
+
+static int ice_init_vf_transmit_lldp_sysfs(struct ice_vf *vf)
+{
+	struct device_attribute tmp = __ATTR(transmit_lldp, 0644,
+					     ice_transmit_lldp_vf_attr_show,
+					     ice_transmit_lldp_vf_attr_store);
+
+	vf->transmit_lldp_attr = tmp;
+
+	return device_create_file(&vf->vfdev->dev, &vf->transmit_lldp_attr);
+}
+
+/**
+ * ice_init_vf_sysfs - Initialize sysfs entries for a VF
+ * @vf: VF to init sysfs for
+ *
+ * Initialize sysfs entries (accessible from the host) for a VF
+ */
+int ice_init_vf_sysfs(struct ice_vf *vf)
+{
+	struct device *dev = ice_pf_to_dev(vf->pf);
+	int err = 0;
+
+	if (!vf->vfdev) {
+		dev_err(dev, "%s: no vfdev", __func__);
+		return -ENOENT;
+	}
+
+	err = ice_init_vf_transmit_lldp_sysfs(vf);
+	if (err)
+		dev_err(dev, "could not init transmit_lldp sysfs entry, err: %d",
+			err);
+
+	return err;
+}
+
+static int ice_vf_apply_tx_lldp(struct ice_vf *vf)
+{
+	if (!vf->transmit_lldp)
+		return 0;
+
+	/* Disable it so it can be applied again. */
+	vf->transmit_lldp = false;
+
+	return ice_handle_vf_tx_lldp(vf, true);
+}
+
 /**
  * ice_vf_rebuild_host_cfg - host admin configuration is persistent across reset
  * @vf: VF to rebuild host configuration on
@@ -605,6 +764,10 @@ static void ice_vf_rebuild_host_cfg(struct ice_vf *vf)
 
 	if (ice_vsi_apply_spoofchk(vsi, vf->spoofchk))
 		dev_err(dev, "failed to rebuild spoofchk configuration for VF %d\n",
+			vf->vf_id);
+
+	if (ice_vf_apply_tx_lldp(vf))
+		dev_err(dev, "failed to rebuild transmit LLDP configuration for VF %d\n",
 			vf->vf_id);
 
 	/* rebuild aggregator node config for main VF VSI */

@@ -104,9 +104,11 @@ struct ice_vf {
 	struct ice_vlan port_vlan_info;	/* Port VLAN ID, QoS, and TPID */
 	struct virtchnl_vlan_caps vlan_v2_caps;
 	struct ice_mbx_vf_info mbx_info;
+	struct device_attribute transmit_lldp_attr;
 	u8 pf_set_mac:1;		/* VF MAC address set by VMM admin */
 	u8 trusted:1;
 	u8 spoofchk:1;
+	u8 transmit_lldp:1;
 	u8 link_forced:1;
 	u8 link_up:1;			/* only valid if VF link is forced */
 	/* VSI indices - actual VSI pointers are maintained in the PF structure
@@ -234,6 +236,8 @@ void ice_reset_all_vfs(struct ice_pf *pf);
 struct ice_vsi *ice_get_vf_ctrl_vsi(struct ice_pf *pf, struct ice_vsi *vsi);
 void ice_ena_all_vfs_rx_lldp(struct ice_pf *pf);
 int ice_ena_vf_rx_lldp(struct ice_vf *vf);
+int ice_init_vf_sysfs(struct ice_vf *vf);
+int ice_handle_vf_tx_lldp(struct ice_vf *vf, bool ena);
 #else /* CONFIG_PCI_IOV */
 static inline struct ice_vf *ice_get_vf_by_id(struct ice_pf *pf, u16 vf_id)
 {
@@ -312,6 +316,16 @@ ice_get_vf_ctrl_vsi(struct ice_pf *pf, struct ice_vsi *vsi)
 
 static inline void ice_ena_all_vfs_rx_lldp(struct ice_pf *pf)
 {
+}
+
+static inline int ice_handle_vf_tx_lldp(struct ice_vf *vf, bool ena)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ice_init_vf_sysfs(struct ice_vf *vf)
+{
+	return 0;
 }
 #endif /* !CONFIG_PCI_IOV */
 

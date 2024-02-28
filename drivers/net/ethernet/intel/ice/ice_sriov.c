@@ -832,6 +832,10 @@ static int ice_create_vf_entries(struct ice_pf *pf, u16 num_vfs)
 		vf->vfdev = vfdev;
 		vf->vf_sw_id = pf->first_sw;
 
+		err = ice_init_vf_sysfs(vf);
+		if (err)
+			goto err_free_entries;
+
 		pci_dev_get(vfdev);
 
 		/* set default number of MSI-X */

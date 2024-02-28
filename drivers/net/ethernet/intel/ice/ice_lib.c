@@ -2191,6 +2191,9 @@ void ice_dis_sw_lldp(struct ice_pf *pf)
 
 		if (vsi && vsi->rx_lldp_ena)
 			ice_cfg_sw_lldp(vsi, false, false);
+
+		if (vf->transmit_lldp)
+			ice_handle_vf_tx_lldp(vf, false);
 	}
 }
 
