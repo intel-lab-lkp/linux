@@ -2169,6 +2169,27 @@ static void ice_vsi_set_tc_cfg(struct ice_vsi *vsi)
 }
 
 /**
+ * ice_lldp_fltr_remove_from_port - Remove a LLDP Rx filter from the port
+ * @hw: port
+ *
+ * Remove a LLDP Rx switch filter from the port. For some NVMs,
+ * such leftover filter can prevent us from configuring another one.
+ */
+static void ice_lldp_fltr_remove_from_port(struct ice_hw *hw)
+{
+	struct ice_aqc_lldp_filter_ctrl *cmd;
+	struct ice_aq_desc desc;
+
+	cmd = &desc.params.lldp_filter_ctrl;
+
+	ice_fill_dflt_direct_cmd_desc(&desc, ice_aqc_opc_lldp_filter_ctrl);
+
+	cmd->cmd_flags = ICE_AQC_LLDP_FILTER_ACTION_DELETE;
+
+	ice_aq_send_cmd(hw, &desc, NULL, 0, NULL);
+}
+
+/**
  * ice_cfg_sw_lldp - Config switch rules for LLDP packet handling
  * @vsi: the VSI being configured
  * @tx: bool to determine Tx or Rx rule
@@ -2189,13 +2210,11 @@ void ice_cfg_sw_lldp(struct ice_vsi *vsi, bool tx, bool create)
 		status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_TX,
 				  ICE_DROP_PACKET);
 	} else {
-		if (ice_fw_supports_lldp_fltr_ctrl(&pf->hw)) {
-			status = ice_lldp_fltr_add_remove(&pf->hw, vsi->vsi_num,
-							  create);
-		} else {
-			status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_RX,
-					  ICE_FWD_TO_VSI);
-		}
+		if (create && ice_fw_supports_lldp_fltr_ctrl(&pf->hw))
+			ice_lldp_fltr_remove_from_port(&vsi->back->hw);
+
+		status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_RX,
+				  ICE_FWD_TO_VSI);
 	}
 
 	if (status)

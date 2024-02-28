@@ -1884,7 +1884,6 @@ struct ice_aqc_lldp_stop_start_specific_agent {
 /* LLDP Filter Control (direct 0x0A0A) */
 struct ice_aqc_lldp_filter_ctrl {
 	u8 cmd_flags;
-#define ICE_AQC_LLDP_FILTER_ACTION_ADD		0x0
 #define ICE_AQC_LLDP_FILTER_ACTION_DELETE	0x1
 	u8 reserved1;
 	__le16 vsi_num;
