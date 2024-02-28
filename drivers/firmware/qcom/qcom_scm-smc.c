@@ -103,7 +103,12 @@ static int __scm_smc_do_quirk_handle_waitq(struct device *dev, struct arm_smccc_
 			wq_ctx = res->a1;
 			smc_call_ctx = res->a2;
 
-			ret = qcom_scm_wait_for_wq_completion(wq_ctx);
+			if (!dev) {
+				/* Protect the dev_get_drvdata() call that follows */
+				return -EPROBE_DEFER;
+			}
+
+			ret = qcom_scm_wait_for_wq_completion(dev_get_drvdata(dev), wq_ctx);
 			if (ret)
 				return ret;
 
