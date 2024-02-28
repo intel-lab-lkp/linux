@@ -605,6 +605,8 @@ enum devlink_param_generic_id {
 #define DEVLINK_INFO_VERSION_GENERIC_BOARD_REV	"board.rev"
 /* Maker of the board */
 #define DEVLINK_INFO_VERSION_GENERIC_BOARD_MANUFACTURE	"board.manufacture"
+/* Model of the board */
+#define DEVLINK_INFO_VERSION_GENERIC_BOARD_MODEL       "board.model"
 
 /* Part number, identifier of asic design */
 #define DEVLINK_INFO_VERSION_GENERIC_ASIC_ID	"asic.id"
@@ -631,6 +633,9 @@ enum devlink_param_generic_id {
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
 /* Bootloader */
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BOOTLOADER	"fw.bootloader"
+
+/* Part number for entire product */
+#define DEVLINK_INFO_VERSION_GENERIC_PART_NUMBER       "part_number"
 
 /**
  * struct devlink_flash_update_params - Flash Update parameters

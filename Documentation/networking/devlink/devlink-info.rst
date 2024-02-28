@@ -146,6 +146,11 @@ board.manufacture
 
 An identifier of the company or the facility which produced the part.
 
+board.model
+-----------
+
+Board design model.
+
 fw
 --
 
@@ -202,6 +207,11 @@ fw.bootloader
 -------------
 
 Version of the bootloader.
+
+part_number
+-----------
+
+Part number of the entire product.
 
 Future work
 ===========
