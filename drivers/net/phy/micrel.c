@@ -117,6 +117,10 @@
 #define LAN8814_EEE_STATE			0x38
 #define LAN8814_EEE_STATE_MASK2P5P		BIT(10)
 
+#define LAN8814_PD_CONTROLS			0x9d
+#define LAN8814_PD_CONTROLS_PD_MEAS_TIME_MASK_	GENMASK(3, 0)
+#define LAN8814_PD_CONTROLS_PD_MEAS_TIME_VAL_	0xb
+
 /* Represents 1ppm adjustment in 2^32 format with
  * each nsec contains 4 clock cycles.
  * The value is calculated as following: (1/1000000)/((2^-32)/4)
@@ -3302,6 +3306,12 @@ static void lan8814_errata_fixes(struct phy_device *phydev)
 	val = lanphy_read_page_reg(phydev, 2, LAN8814_EEE_STATE);
 	val &= ~LAN8814_EEE_STATE_MASK2P5P;
 	lanphy_write_page_reg(phydev, 2, LAN8814_EEE_STATE, val);
+
+	/* Improve cable reach beyond 100m */
+	val = lanphy_read_page_reg(phydev, 1, LAN8814_PD_CONTROLS);
+	val &= ~LAN8814_PD_CONTROLS_PD_MEAS_TIME_MASK_;
+	val |= LAN8814_PD_CONTROLS_PD_MEAS_TIME_VAL_;
+	lanphy_write_page_reg(phydev, 1, LAN8814_PD_CONTROLS, val);
 }
 
 static int lan8814_probe(struct phy_device *phydev)
