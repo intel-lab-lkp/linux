@@ -46,6 +46,36 @@ struct ice_vf *ice_get_vf_by_id(struct ice_pf *pf, u16 vf_id)
 }
 
 /**
+ * ice_get_vf_by_dev - Get pointer to VF by device
+ * @dev: the device structure
+ *
+ * Locate and return a pointer to the VF structure associated with a given
+ * device.
+ * Return: valid VF structure associated with the device, NULL if none exists
+ */
+struct ice_vf *ice_get_vf_by_dev(struct device *dev)
+{
+	struct pci_dev *vfdev;
+	struct pci_dev *pdev;
+	struct ice_pf *pf;
+	struct ice_vf *vf;
+	unsigned int bkt;
+
+	vfdev = container_of(dev, struct pci_dev, dev);
+	pdev = vfdev->physfn;
+	pf = pci_get_drvdata(pdev);
+
+	rcu_read_lock();
+	ice_for_each_vf_rcu(pf, bkt, vf) {
+		if (vf->vfdev == vfdev)
+			break;
+	}
+	rcu_read_unlock();
+
+	return vf;
+}
+
+/**
  * ice_release_vf - Release VF associated with a refcount
  * @ref: the kref decremented to zero
  *
