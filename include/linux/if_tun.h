@@ -6,10 +6,12 @@
 #ifndef __IF_TUN_H
 #define __IF_TUN_H
 
+#include <uapi/linux/if_xdp.h>
 #include <uapi/linux/if_tun.h>
 #include <uapi/linux/virtio_net.h>
 
 #define TUN_XDP_FLAG 0x1UL
+#define TUN_XDP_DESC_FLAG 0x2UL
 
 #define TUN_MSG_UBUF 1
 #define TUN_MSG_PTR  2
@@ -43,6 +45,21 @@ static inline struct xdp_frame *tun_ptr_to_xdp(void *ptr)
 	return (void *)((unsigned long)ptr & ~TUN_XDP_FLAG);
 }
 
+static inline bool tun_is_xdp_desc_frame(void *ptr)
+{
+	return (unsigned long)ptr & TUN_XDP_DESC_FLAG;
+}
+
+static inline void *tun_xdp_desc_to_ptr(struct xdp_desc *desc)
+{
+	return (void *)((unsigned long)desc | TUN_XDP_DESC_FLAG);
+}
+
+static inline struct xdp_desc *tun_ptr_to_xdp_desc(void *ptr)
+{
+	return (void *)((unsigned long)ptr & ~TUN_XDP_DESC_FLAG);
+}
+
 void tun_ptr_free(void *ptr);
 #else
 #include <linux/err.h>
@@ -71,6 +88,21 @@ static inline void *tun_xdp_to_ptr(struct xdp_frame *xdp)
 }
 
 static inline struct xdp_frame *tun_ptr_to_xdp(void *ptr)
+{
+	return NULL;
+}
+
+static inline bool tun_is_xdp_desc_frame(void *ptr)
+{
+	return false;
+}
+
+static inline void *tun_xdp_desc_to_ptr(struct xdp_desc *desc)
+{
+	return NULL;
+}
+
+static inline struct xdp_frame *tun_ptr_to_xdp_desc(void *ptr)
 {
 	return NULL;
 }

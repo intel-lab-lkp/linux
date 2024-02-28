@@ -63,6 +63,7 @@
 #include <net/rtnetlink.h>
 #include <net/sock.h>
 #include <net/xdp.h>
+#include <net/xdp_sock_drv.h>
 #include <net/ip_tunnels.h>
 #include <linux/seq_file.h>
 #include <linux/uio.h>
@@ -86,6 +87,7 @@ static void tun_default_link_ksettings(struct net_device *dev,
 				       struct ethtool_link_ksettings *cmd);
 
 #define TUN_RX_PAD (NET_IP_ALIGN + NET_SKB_PAD)
+#define TUN_XDP_BATCH 64
 
 /* TUN device flags */
 
@@ -146,6 +148,9 @@ struct tun_file {
 	struct tun_struct *detached;
 	struct ptr_ring tx_ring;
 	struct xdp_rxq_info xdp_rxq;
+	struct xsk_buff_pool *xsk_pool;
+	spinlock_t pool_lock;	/* Protects xsk pool enable/disable */
+	u32 nb_descs;
 };
 
 struct tun_page {
@@ -614,6 +619,8 @@ void tun_ptr_free(void *ptr)
 		struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
 		xdp_return_frame(xdpf);
+	} else if (tun_is_xdp_desc_frame(ptr)) {
+		return;
 	} else {
 		__skb_array_destroy_skb(ptr);
 	}
@@ -629,6 +636,37 @@ static void tun_queue_purge(struct tun_file *tfile)
 
 	skb_queue_purge(&tfile->sk.sk_write_queue);
 	skb_queue_purge(&tfile->sk.sk_error_queue);
+}
+
+static void tun_set_xsk_pool(struct tun_file *tfile, struct xsk_buff_pool *pool)
+{
+	if (!pool)
+		return;
+
+	spin_lock(&tfile->pool_lock);
+	xsk_pool_set_rxq_info(pool, &tfile->xdp_rxq);
+	tfile->xsk_pool = pool;
+	spin_unlock(&tfile->pool_lock);
+}
+
+static void tun_clean_xsk_pool(struct tun_file *tfile)
+{
+	spin_lock(&tfile->pool_lock);
+	if (tfile->xsk_pool) {
+		void *ptr;
+
+		while ((ptr = ptr_ring_consume(&tfile->tx_ring)) != NULL)
+			tun_ptr_free(ptr);
+
+		if (tfile->nb_descs) {
+			xsk_tx_completed(tfile->xsk_pool, tfile->nb_descs);
+			if (xsk_uses_need_wakeup(tfile->xsk_pool))
+				xsk_set_tx_need_wakeup(tfile->xsk_pool);
+			tfile->nb_descs = 0;
+		}
+		tfile->xsk_pool = NULL;
+	}
+	spin_unlock(&tfile->pool_lock);
 }
 
 static void __tun_detach(struct tun_file *tfile, bool clean)
@@ -647,6 +685,11 @@ static void __tun_detach(struct tun_file *tfile, bool clean)
 	if (tun && !tfile->detached) {
 		u16 index = tfile->queue_index;
 		BUG_ON(index >= tun->numqueues);
+
+		ntfile = rtnl_dereference(tun->tfiles[tun->numqueues - 1]);
+		/* Stop xsk zc xmit */
+		tun_clean_xsk_pool(tfile);
+		tun_clean_xsk_pool(ntfile);
 
 		rcu_assign_pointer(tun->tfiles[index],
 				   tun->tfiles[tun->numqueues - 1]);
@@ -668,6 +711,7 @@ static void __tun_detach(struct tun_file *tfile, bool clean)
 		tun_flow_delete_by_queue(tun, tun->numqueues + 1);
 		/* Drop read queue */
 		tun_queue_purge(tfile);
+		tun_set_xsk_pool(ntfile, xsk_get_pool_from_qid(tun->dev, index));
 		tun_set_real_num_queues(tun);
 	} else if (tfile->detached && clean) {
 		tun = tun_enable_queue(tfile);
@@ -801,6 +845,7 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 
 		if (tfile->xdp_rxq.queue_index    != tfile->queue_index)
 			tfile->xdp_rxq.queue_index = tfile->queue_index;
+		tun_set_xsk_pool(tfile, xsk_get_pool_from_qid(dev, tfile->queue_index));
 	} else {
 		/* Setup XDP RX-queue info, for new tfile getting attached */
 		err = xdp_rxq_info_reg(&tfile->xdp_rxq,
@@ -1221,11 +1266,50 @@ static int tun_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 	return 0;
 }
 
+static int tun_xsk_pool_enable(struct net_device *netdev,
+			       struct xsk_buff_pool *pool,
+			       u16 qid)
+{
+	struct tun_struct *tun = netdev_priv(netdev);
+	struct tun_file *tfile;
+
+	if (qid >= tun->numqueues)
+		return -EINVAL;
+
+	tfile = rtnl_dereference(tun->tfiles[qid]);
+	tun_set_xsk_pool(tfile, pool);
+
+	return 0;
+}
+
+static int tun_xsk_pool_disable(struct net_device *netdev, u16 qid)
+{
+	struct tun_struct *tun = netdev_priv(netdev);
+	struct tun_file *tfile;
+
+	if (qid >= MAX_TAP_QUEUES)
+		return -EINVAL;
+
+	tfile = rtnl_dereference(tun->tfiles[qid]);
+	if (tfile)
+		tun_clean_xsk_pool(tfile);
+	return 0;
+}
+
+static int tun_xsk_pool_setup(struct net_device *dev, struct xsk_buff_pool *pool,
+			      u16 qid)
+{
+	return pool ? tun_xsk_pool_enable(dev, pool, qid) :
+		tun_xsk_pool_disable(dev, qid);
+}
+
 static int tun_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
 		return tun_xdp_set(dev, xdp->prog, xdp->extack);
+	case XDP_SETUP_XSK_POOL:
+		return tun_xsk_pool_setup(dev, xdp->xsk.pool, xdp->xsk.queue_id);
 	default:
 		return -EINVAL;
 	}
@@ -1330,6 +1414,19 @@ static int tun_xdp_tx(struct net_device *dev, struct xdp_buff *xdp)
 	return nxmit;
 }
 
+static int tun_xsk_wakeup(struct net_device *dev, u32 qid, u32 flags)
+{
+	struct tun_struct *tun = netdev_priv(dev);
+	struct tun_file *tfile;
+
+	rcu_read_lock();
+	tfile = rcu_dereference(tun->tfiles[qid]);
+	if (tfile)
+		__tun_xdp_flush_tfile(tfile);
+	rcu_read_unlock();
+	return 0;
+}
+
 static const struct net_device_ops tap_netdev_ops = {
 	.ndo_init		= tun_net_init,
 	.ndo_uninit		= tun_net_uninit,
@@ -1346,6 +1443,7 @@ static const struct net_device_ops tap_netdev_ops = {
 	.ndo_get_stats64	= dev_get_tstats64,
 	.ndo_bpf		= tun_xdp,
 	.ndo_xdp_xmit		= tun_xdp_xmit,
+	.ndo_xsk_wakeup		= tun_xsk_wakeup,
 	.ndo_change_carrier	= tun_net_change_carrier,
 };
 
@@ -1403,7 +1501,8 @@ static void tun_net_initialize(struct net_device *dev)
 		/* Currently tun does not support XDP, only tap does. */
 		dev->xdp_features = NETDEV_XDP_ACT_BASIC |
 				    NETDEV_XDP_ACT_REDIRECT |
-				    NETDEV_XDP_ACT_NDO_XMIT;
+				    NETDEV_XDP_ACT_NDO_XMIT |
+				    NETDEV_XDP_ACT_XSK_ZEROCOPY;
 
 		break;
 	}
@@ -2058,11 +2157,11 @@ static ssize_t tun_chr_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 static ssize_t tun_put_user_xdp(struct tun_struct *tun,
 				struct tun_file *tfile,
-				struct xdp_frame *xdp_frame,
+				void *addr,
+				size_t size,
 				struct iov_iter *iter)
 {
 	int vnet_hdr_sz = 0;
-	size_t size = xdp_frame->len;
 	size_t ret;
 
 	if (tun->flags & IFF_VNET_HDR) {
@@ -2077,7 +2176,7 @@ static ssize_t tun_put_user_xdp(struct tun_struct *tun,
 		iov_iter_advance(iter, vnet_hdr_sz - sizeof(gso));
 	}
 
-	ret = copy_to_iter(xdp_frame->data, size, iter) + vnet_hdr_sz;
+	ret = copy_to_iter(addr, size, iter) + vnet_hdr_sz;
 
 	preempt_disable();
 	dev_sw_netstats_tx_add(tun->dev, 1, ret);
@@ -2240,8 +2339,20 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 	if (tun_is_xdp_frame(ptr)) {
 		struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
-		ret = tun_put_user_xdp(tun, tfile, xdpf, to);
+		ret = tun_put_user_xdp(tun, tfile, xdpf->data, xdpf->len, to);
 		xdp_return_frame(xdpf);
+	} else if (tun_is_xdp_desc_frame(ptr)) {
+		struct xdp_desc *desc = tun_ptr_to_xdp_desc(ptr);
+		void *data;
+
+		spin_lock(&tfile->pool_lock);
+		if (tfile->xsk_pool) {
+			data = xsk_buff_raw_get_data(tfile->xsk_pool, desc->addr);
+			ret = tun_put_user_xdp(tun, tfile, data, desc->len, to);
+		} else {
+			ret = 0;
+		}
+		spin_unlock(&tfile->pool_lock);
 	} else {
 		struct sk_buff *skb = ptr;
 
@@ -2654,11 +2765,63 @@ static int tun_ptr_peek_len(void *ptr)
 			struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
 			return xdpf->len;
+		} else if (tun_is_xdp_desc_frame(ptr)) {
+			struct xdp_desc *desc = tun_ptr_to_xdp_desc(ptr);
+
+			return desc->len;
 		}
 		return __skb_array_len_with_tag(ptr);
 	} else {
 		return 0;
 	}
+}
+
+static void tun_peek_xsk(struct tun_file *tfile)
+{
+	struct xsk_buff_pool *pool;
+	u32 i, batch, budget;
+	void *frame;
+
+	if (!ptr_ring_empty(&tfile->tx_ring))
+		return;
+
+	spin_lock(&tfile->pool_lock);
+	pool = tfile->xsk_pool;
+	if (!pool) {
+		spin_unlock(&tfile->pool_lock);
+		return;
+	}
+
+	if (tfile->nb_descs) {
+		xsk_tx_completed(pool, tfile->nb_descs);
+		if (xsk_uses_need_wakeup(pool))
+			xsk_set_tx_need_wakeup(pool);
+	}
+
+	spin_lock(&tfile->tx_ring.producer_lock);
+	budget = min_t(u32, tfile->tx_ring.size, TUN_XDP_BATCH);
+
+	batch = xsk_tx_peek_release_desc_batch(pool, budget);
+	if (!batch) {
+		tfile->nb_descs = 0;
+		spin_unlock(&tfile->tx_ring.producer_lock);
+		spin_unlock(&tfile->pool_lock);
+		return;
+	}
+
+	tfile->nb_descs = batch;
+	for (i = 0; i < batch; i++) {
+		/* Encode the XDP DESC flag into lowest bit for consumer to differ
+		 * XDP desc from XDP buffer and sk_buff.
+		 */
+		frame = tun_xdp_desc_to_ptr(&pool->tx_descs[i]);
+		/* The budget must be less than or equal to tx_ring.size,
+		 * so enqueuing will not fail.
+		 */
+		__ptr_ring_produce(&tfile->tx_ring, frame);
+	}
+	spin_unlock(&tfile->tx_ring.producer_lock);
+	spin_unlock(&tfile->pool_lock);
 }
 
 static int tun_peek_len(struct socket *sock)
@@ -2670,6 +2833,9 @@ static int tun_peek_len(struct socket *sock)
 	tun = tun_get(tfile);
 	if (!tun)
 		return 0;
+
+	if (sock_flag(&tfile->sk, SOCK_XDP))
+		tun_peek_xsk(tfile);
 
 	ret = PTR_RING_PEEK_CALL(&tfile->tx_ring, tun_ptr_peek_len);
 	tun_put(tun);
@@ -3473,6 +3639,7 @@ static int tun_chr_open(struct inode *inode, struct file * file)
 	}
 
 	mutex_init(&tfile->napi_mutex);
+	spin_lock_init(&tfile->pool_lock);
 	RCU_INIT_POINTER(tfile->tun, NULL);
 	tfile->flags = 0;
 	tfile->ifindex = 0;

@@ -202,6 +202,10 @@ static int vhost_net_buf_peek_len(void *ptr)
 		struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
 		return xdpf->len;
+	} else if (tun_is_xdp_desc_frame(ptr)) {
+		struct xdp_desc *desc = tun_ptr_to_xdp_desc(ptr);
+
+		return desc->len;
 	}
 
 	return __skb_array_len_with_tag(ptr);
