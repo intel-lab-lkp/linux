@@ -5866,7 +5866,8 @@ int noinline kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 err
 		error_code |= PFERR_PRIVATE_ACCESS;
 
 	r = RET_PF_INVALID;
-	if (unlikely(error_code & PFERR_RSVD_MASK)) {
+	if (unlikely((error_code & PFERR_RSVD_MASK) &&
+		     !WARN_ON_ONCE(error_code & PFERR_PRIVATE_ACCESS))) {
 		r = handle_mmio_page_fault(vcpu, cr2_or_gpa, direct);
 		if (r == RET_PF_EMULATE)
 			goto emulate;
