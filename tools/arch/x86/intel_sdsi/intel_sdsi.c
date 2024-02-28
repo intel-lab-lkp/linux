@@ -407,11 +407,10 @@ static int sdsi_meter_cert_show(struct sdsi_dev *s)
 
 	printf("Number of Feature Counters:   %d\n", mc->bundle_length / 8);
 	while (count < mc->bundle_length / 8) {
-		char feature[5];
+		char feature[4];
 
-		feature[4] = '\0';
 		get_feature(bec[count].encoding, feature);
-		printf("    %s:          %d\n", feature, bec[count].counter);
+		printf("    %.4s:          %d\n", feature, bec[count].counter);
 		++count;
 	}
 
@@ -492,7 +491,7 @@ static int sdsi_state_cert_show(struct sdsi_dev *s)
 			sizeof(*lki) +			// size of the license key info
 			offset;				// offset to this blob content
 		struct bundle_encoding *bundle = (void *)(lbc) + sizeof(*lbc);
-		char feature[5];
+		char feature[4];
 		uint32_t i;
 
 		printf("     Blob %d:\n", count - 1);
@@ -505,11 +504,9 @@ static int sdsi_state_cert_show(struct sdsi_dev *s)
 		printf("        Blob revision ID:           %u\n", lbc->rev_id);
 		printf("        Number of Features:         %u\n", lbc->num_bundles);
 
-		feature[4] = '\0';
-
 		for (i = 0; i < min(lbc->num_bundles, STATE_MAX_NUM_IN_BUNDLE); i++) {
 			get_feature(bundle[i].encoding, feature);
-			printf("                 Feature %d:         %s\n", i, feature);
+			printf("                 Feature %d:         %.4s\n", i, feature);
 		}
 
 		if (lbc->num_bundles > STATE_MAX_NUM_IN_BUNDLE)
