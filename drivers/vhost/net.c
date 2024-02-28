@@ -207,12 +207,24 @@ static int vhost_net_buf_peek_len(void *ptr)
 	return __skb_array_len_with_tag(ptr);
 }
 
+static bool vhost_sock_xdp(struct socket *sock)
+{
+	return sock_flag(sock->sk, SOCK_XDP);
+}
+
 static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq)
 {
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	if (!vhost_net_buf_is_empty(rxq))
 		goto out;
+
+	if (ptr_ring_empty(nvq->rx_ring)) {
+		struct socket *sock = vhost_vq_get_backend(&nvq->vq);
+		/* Call peek_len to consume XSK descriptors, when using xdp */
+		if (vhost_sock_xdp(sock) && sock->ops->peek_len)
+			sock->ops->peek_len(sock);
+	}
 
 	if (!vhost_net_buf_produce(nvq))
 		return 0;
@@ -344,11 +356,6 @@ static bool vhost_sock_zcopy(struct socket *sock)
 {
 	return unlikely(experimental_zcopytx) &&
 		sock_flag(sock->sk, SOCK_ZEROCOPY);
-}
-
-static bool vhost_sock_xdp(struct socket *sock)
-{
-	return sock_flag(sock->sk, SOCK_XDP);
 }
 
 /* In case of DMA done not in order in lower device driver for some reason.
