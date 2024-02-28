@@ -4340,8 +4340,58 @@ static int kvm_faultin_pfn_private(struct kvm_vcpu *vcpu,
 
 static int __kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 {
-	struct kvm_memory_slot *slot = fault->slot;
 	bool async;
+
+	if (fault->is_private)
+		return kvm_faultin_pfn_private(vcpu, fault);
+
+	async = false;
+	fault->pfn = __gfn_to_pfn_memslot(fault->slot, fault->gfn, false, false,
+					  &async, fault->write,
+					  &fault->map_writable, &fault->hva);
+	if (!async)
+		return RET_PF_CONTINUE; /* *pfn has correct page already */
+
+	if (!fault->prefetch && kvm_can_do_async_pf(vcpu)) {
+		trace_kvm_try_async_get_page(fault->addr, fault->gfn);
+		if (kvm_find_async_pf_gfn(vcpu, fault->gfn)) {
+			trace_kvm_async_pf_repeated_fault(fault->addr, fault->gfn);
+			kvm_make_request(KVM_REQ_APF_HALT, vcpu);
+			return RET_PF_RETRY;
+		} else if (kvm_arch_setup_async_pf(vcpu, fault->addr, fault->gfn)) {
+			return RET_PF_RETRY;
+		}
+	}
+
+	/*
+	 * Allow gup to bail on pending non-fatal signals when it's also allowed
+	 * to wait for IO.  Note, gup always bails if it is unable to quickly
+	 * get a page and a fatal signal, i.e. SIGKILL, is pending.
+	 */
+	fault->pfn = __gfn_to_pfn_memslot(fault->slot, fault->gfn, false, true,
+					  NULL, fault->write,
+					  &fault->map_writable, &fault->hva);
+	return RET_PF_CONTINUE;
+}
+
+static int kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
+			   unsigned int access)
+{
+	struct kvm_memory_slot *slot = fault->slot;
+	int ret;
+
+	fault->mmu_seq = vcpu->kvm->mmu_invalidate_seq;
+	smp_rmb();
+
+	/*
+	 * Check for a private vs. shared mismatch *after* taking a snapshot of
+	 * mmu_invalidate_seq, as changes to gfn attributes are guarded by the
+	 * invalidation notifier.
+	 */
+	if (fault->is_private != kvm_mem_is_private(vcpu->kvm, fault->gfn)) {
+		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		return -EFAULT;
+	}
 
 	/*
 	 * Retry the page fault if the gfn hit a memslot that is being deleted
@@ -4367,7 +4417,7 @@ static int __kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 			fault->slot = NULL;
 			fault->pfn = KVM_PFN_NOSLOT;
 			fault->map_writable = false;
-			return RET_PF_CONTINUE;
+			goto faultin_done;
 		}
 		/*
 		 * If the APIC access page exists but is disabled, go directly
@@ -4377,56 +4427,6 @@ static int __kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 		 */
 		if (!kvm_apicv_activated(vcpu->kvm))
 			return RET_PF_EMULATE;
-	}
-
-	if (fault->is_private)
-		return kvm_faultin_pfn_private(vcpu, fault);
-
-	async = false;
-	fault->pfn = __gfn_to_pfn_memslot(slot, fault->gfn, false, false, &async,
-					  fault->write, &fault->map_writable,
-					  &fault->hva);
-	if (!async)
-		return RET_PF_CONTINUE; /* *pfn has correct page already */
-
-	if (!fault->prefetch && kvm_can_do_async_pf(vcpu)) {
-		trace_kvm_try_async_get_page(fault->addr, fault->gfn);
-		if (kvm_find_async_pf_gfn(vcpu, fault->gfn)) {
-			trace_kvm_async_pf_repeated_fault(fault->addr, fault->gfn);
-			kvm_make_request(KVM_REQ_APF_HALT, vcpu);
-			return RET_PF_RETRY;
-		} else if (kvm_arch_setup_async_pf(vcpu, fault->addr, fault->gfn)) {
-			return RET_PF_RETRY;
-		}
-	}
-
-	/*
-	 * Allow gup to bail on pending non-fatal signals when it's also allowed
-	 * to wait for IO.  Note, gup always bails if it is unable to quickly
-	 * get a page and a fatal signal, i.e. SIGKILL, is pending.
-	 */
-	fault->pfn = __gfn_to_pfn_memslot(slot, fault->gfn, false, true, NULL,
-					  fault->write, &fault->map_writable,
-					  &fault->hva);
-	return RET_PF_CONTINUE;
-}
-
-static int kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
-			   unsigned int access)
-{
-	int ret;
-
-	fault->mmu_seq = vcpu->kvm->mmu_invalidate_seq;
-	smp_rmb();
-
-	/*
-	 * Check for a private vs. shared mismatch *after* taking a snapshot of
-	 * mmu_invalidate_seq, as changes to gfn attributes are guarded by the
-	 * invalidation notifier.
-	 */
-	if (fault->is_private != kvm_mem_is_private(vcpu->kvm, fault->gfn)) {
-		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
-		return -EFAULT;
 	}
 
 	/*
@@ -4458,6 +4458,7 @@ static int kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
 	if (ret != RET_PF_CONTINUE)
 		return ret;
 
+faultin_done:
 	if (unlikely(is_error_pfn(fault->pfn)))
 		return kvm_handle_error_pfn(vcpu, fault);
 
