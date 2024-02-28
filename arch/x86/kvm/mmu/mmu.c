@@ -4561,6 +4561,9 @@ int kvm_handle_page_fault(struct kvm_vcpu *vcpu, u64 error_code,
 	if (WARN_ON_ONCE(error_code >> 32))
 		error_code = lower_32_bits(error_code);
 
+	/* Ensure the above sanity check also covers KVM-defined flags. */
+	BUILD_BUG_ON(lower_32_bits(PFERR_SYNTHETIC_MASK));
+
 	vcpu->arch.l1tf_flush_l1d = true;
 	if (!flags) {
 		trace_kvm_page_fault(vcpu, fault_address, error_code);
@@ -5844,15 +5847,6 @@ int noinline kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 err
 {
 	int r, emulation_type = EMULTYPE_PF;
 	bool direct = vcpu->arch.mmu->root_role.direct;
-
-	/*
-	 * WARN if hardware generates a fault with an error code that collides
-	 * with KVM-defined sythentic flags.  Clear the flags and continue on,
-	 * i.e. don't terminate the VM, as KVM can't possibly be relying on a
-	 * flag that KVM doesn't know about.
-	 */
-	if (WARN_ON_ONCE(error_code & PFERR_SYNTHETIC_MASK))
-		error_code &= ~PFERR_SYNTHETIC_MASK;
 
 	if (WARN_ON_ONCE(!VALID_PAGE(vcpu->arch.mmu->root.hpa)))
 		return RET_PF_RETRY;
