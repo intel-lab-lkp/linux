@@ -1854,10 +1854,10 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	init_completion(&scm->waitq_comp);
+
 	__scm = scm;
 	__scm->dev = &pdev->dev;
-
-	init_completion(&__scm->waitq_comp);
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq < 0) {
