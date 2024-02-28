@@ -159,7 +159,8 @@ static const struct nfp_devlink_versions_simple {
 	{ DEVLINK_INFO_VERSION_GENERIC_BOARD_ID,	"assembly.partno", },
 	{ DEVLINK_INFO_VERSION_GENERIC_BOARD_REV,	"assembly.revision", },
 	{ DEVLINK_INFO_VERSION_GENERIC_BOARD_MANUFACTURE, "assembly.vendor", },
-	{ "board.model", /* code name */		"assembly.model", },
+	{ DEVLINK_INFO_VERSION_GENERIC_BOARD_MODEL,	"assembly.model", },
+	{ DEVLINK_INFO_VERSION_GENERIC_PART_NUMBER,     "pn", },
 };
 
 static int

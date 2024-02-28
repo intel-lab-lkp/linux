@@ -42,6 +42,9 @@ The ``nfp`` driver reports the following versions
    * - ``board.model``
      - fixed
      - Model name of the board design
+   * - ``part_number``
+     - fixed
+     - Part number of the entire product
    * - ``fw.bundle_id``
      - stored, running
      - Firmware bundle id
