@@ -78,6 +78,10 @@ int ice_vsi_stop_xdp_tx_rings(struct ice_vsi *vsi);
 
 void ice_cfg_sw_lldp(struct ice_vsi *vsi, bool tx, bool create);
 
+void ice_dis_sw_lldp(struct ice_pf *pf);
+
+bool ice_is_mc_lldp_eth_addr(const u8 *mac);
+
 int ice_set_link(struct ice_vsi *vsi, bool ena);
 
 void ice_vsi_delete(struct ice_vsi *vsi);

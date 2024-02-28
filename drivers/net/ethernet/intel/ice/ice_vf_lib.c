@@ -519,6 +519,65 @@ static void ice_vf_rebuild_aggregator_node_cfg(struct ice_vsi *vsi)
 }
 
 /**
+ * ice_ena_vf_rx_lldp
+ * @vf: VF to configure Rx LLDP for
+ *
+ * Configure Rx filters for VF to receive LLDP
+ */
+int ice_ena_vf_rx_lldp(struct ice_vf *vf)
+{
+	struct ice_pf *pf = vf->pf;
+	struct ice_vsi *vsi;
+
+	if (test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags)) {
+		dev_err(ice_pf_to_dev(pf), "FW LLDP agent is enabled, cannot enable Rx LLDP on VF %d\n",
+			vf->vf_id);
+		return -EPERM;
+	}
+
+	if (!vf->trusted) {
+		dev_dbg(ice_pf_to_dev(pf), "VF %d is not trusted - cannot configure Rx LLDP filter.\n",
+			vf->vf_id);
+		return -EPERM;
+	}
+
+	vsi = ice_get_vf_vsi(vf);
+	if (!vsi)
+		return -ENOENT;
+
+	if (vsi->rx_lldp_ena)
+		return 0;
+
+	ice_cfg_sw_lldp(vsi, false, true);
+
+	return 0;
+}
+
+/**
+ * ice_ena_all_vfs_rx_lldp - Re-add RX LLDP filter on applicable VFs.
+ * @pf: ptr to PF
+ *
+ * That is in case when fw-lldp-agent is toggled and LLDP multicast addresses
+ * are added to the interface.
+ * RX LLDP filter will be added for trusted VFs only.
+ */
+void ice_ena_all_vfs_rx_lldp(struct ice_pf *pf)
+{
+	struct ice_vf *vf;
+	unsigned int bkt;
+
+	if (!test_bit(ICE_FLAG_SRIOV_ENA, pf->flags))
+		return;
+
+	ice_for_each_vf(pf, bkt, vf) {
+		struct ice_vsi *vsi = ice_get_vf_vsi(vf);
+
+		if (vsi && vsi->lldp_macs > 0 && !vsi->rx_lldp_ena)
+			ice_ena_vf_rx_lldp(vf);
+	}
+}
+
+/**
  * ice_vf_rebuild_host_cfg - host admin configuration is persistent across reset
  * @vf: VF to rebuild host configuration on
  */

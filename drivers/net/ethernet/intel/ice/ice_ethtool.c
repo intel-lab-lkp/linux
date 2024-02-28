@@ -1479,6 +1479,8 @@ static int ice_set_priv_flags(struct net_device *netdev, u32 flags)
 			if (status)
 				dev_warn(dev, "Fail to init DCB\n");
 
+			ice_ena_all_vfs_rx_lldp(pf);
+
 			pf->dcbx_cap &= ~DCB_CAP_DCBX_LLD_MANAGED;
 			pf->dcbx_cap |= DCB_CAP_DCBX_HOST;
 		} else {
@@ -1492,10 +1494,10 @@ static int ice_set_priv_flags(struct net_device *netdev, u32 flags)
 				goto ethtool_exit;
 			}
 
-			/* Remove rule to direct LLDP packets to default VSI.
+			/* Remove rules to direct LLDP packets to PF/VF VSIs.
 			 * The FW LLDP engine will now be consuming them.
 			 */
-			ice_cfg_sw_lldp(vsi, false, false);
+			ice_dis_sw_lldp(pf);
 
 			/* AQ command to start FW LLDP agent will return an
 			 * error if the agent is already started

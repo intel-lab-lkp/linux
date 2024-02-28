@@ -1951,6 +1951,11 @@ ice_vc_add_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi,
 		return ret;
 	} else {
 		vf->num_mac++;
+
+		if (ice_is_mc_lldp_eth_addr(mac_addr)) {
+			vsi->lldp_macs++;
+			ice_ena_vf_rx_lldp(vf);
+		}
 	}
 
 	ice_vfhw_mac_add(vf, vc_ether_addr);
@@ -2041,6 +2046,12 @@ ice_vc_del_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi,
 			mac_addr, vf->vf_id, status);
 		return -EIO;
 	}
+
+	if (ice_is_mc_lldp_eth_addr(mac_addr))
+		vsi->lldp_macs--;
+
+	if (vsi->rx_lldp_ena && !vsi->lldp_macs)
+		ice_cfg_sw_lldp(vsi, false, false);
 
 	ice_vfhw_mac_del(vf, vc_ether_addr);
 

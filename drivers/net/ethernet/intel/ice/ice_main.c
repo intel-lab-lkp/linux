@@ -4786,9 +4786,60 @@ static void ice_deinit_dev(struct ice_pf *pf)
 	ice_clear_interrupt_scheme(pf);
 }
 
+static ssize_t rx_lldp_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct ice_pf *pf = dev_get_drvdata(dev);
+	struct ice_vsi *vsi = ice_get_main_vsi(pf);
+
+	return sysfs_emit(buf, "%u\n", vsi->rx_lldp_ena);
+}
+
+static ssize_t rx_lldp_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ice_pf *pf = dev_get_drvdata(dev);
+	struct ice_vsi *vsi;
+	bool ena;
+	int err;
+
+	if (test_bit(ICE_FLAG_FW_LLDP_AGENT, pf->flags)) {
+		dev_err(dev, "Toggling Rx LLDP for PF is only allowed when FW LLDP Agent is disabled");
+		return -EPERM;
+	}
+
+	err = kstrtobool(buf, &ena);
+	if (err)
+		return -EINVAL;
+
+	vsi = ice_get_main_vsi(pf);
+
+	if (ena == vsi->rx_lldp_ena) {
+		dev_dbg(dev, "Rx LLDP already %sabled", ena ? "en" : "dis");
+		return count;
+	}
+
+	ice_cfg_sw_lldp(vsi, false, ena);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(rx_lldp);
+
+static int ice_init_rx_lldp_sysfs(struct ice_pf *pf)
+{
+	return device_create_file(ice_pf_to_dev(pf), &dev_attr_rx_lldp);
+}
+
+static void ice_deinit_rx_lldp_sysfs(struct ice_pf *pf)
+{
+	device_remove_file(ice_pf_to_dev(pf), &dev_attr_rx_lldp);
+}
+
 static void ice_init_features(struct ice_pf *pf)
 {
 	struct device *dev = ice_pf_to_dev(pf);
+	int err;
 
 	if (ice_is_safe_mode(pf))
 		return;
@@ -4816,6 +4867,11 @@ static void ice_init_features(struct ice_pf *pf)
 		ice_cfg_lldp_mib_change(&pf->hw, true);
 	}
 
+	err = ice_init_rx_lldp_sysfs(pf);
+	if (err)
+		dev_err(dev, "could not init rx_lldp sysfs entry, err: %d",
+			err);
+
 	if (ice_init_lag(pf))
 		dev_warn(dev, "Failed to init link aggregation support\n");
 
@@ -4839,6 +4895,8 @@ static void ice_deinit_features(struct ice_pf *pf)
 		ice_dpll_deinit(pf);
 	if (pf->eswitch_mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
 		xa_destroy(&pf->eswitch.reprs);
+
+	ice_deinit_rx_lldp_sysfs(pf);
 }
 
 static void ice_init_wakeup(struct ice_pf *pf)

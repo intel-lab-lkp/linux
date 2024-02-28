@@ -2169,6 +2169,50 @@ static void ice_vsi_set_tc_cfg(struct ice_vsi *vsi)
 }
 
 /**
+ * ice_dis_sw_lldp - Disable SW LLDP on PFs and VFs
+ * @pf: pointer to PF structure
+ *
+ * Disable SW LLDP settings on each entity that can have it
+ */
+void ice_dis_sw_lldp(struct ice_pf *pf)
+{
+	struct ice_vsi *vsi;
+	struct ice_vf *vf;
+	unsigned int bkt;
+
+	vsi = ice_get_main_vsi(pf);
+	ice_cfg_sw_lldp(vsi, false, false);
+
+	if (!test_bit(ICE_FLAG_SRIOV_ENA, pf->flags))
+		return;
+
+	ice_for_each_vf(pf, bkt, vf) {
+		vsi = ice_get_vf_vsi(vf);
+
+		if (vsi && vsi->rx_lldp_ena)
+			ice_cfg_sw_lldp(vsi, false, false);
+	}
+}
+
+/**
+ * ice_is_mc_lldp_eth_addr - Check if given MAC is an LLDP multicast address
+ * @mac: MAC address
+ *
+ * Check if given MAC is one of three possible LLDP multicast addresses.
+ */
+bool ice_is_mc_lldp_eth_addr(const u8 *mac)
+{
+	u8 lldp_mac_base[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
+
+	/* Compare the first 5 octets of given and multicast LLDP address */
+	if (memcmp(mac, lldp_mac_base, (ETH_ALEN - 1) * sizeof(*mac)))
+		return false;
+
+	/* Compare the possible last octets of LLDP address and the given one */
+	return (mac[5] == 0x0e || mac[5] == 0x03 || mac[5] == 0x00);
+}
+
+/**
  * ice_lldp_fltr_remove_from_port - Remove a LLDP Rx filter from the port
  * @hw: port
  *
@@ -2215,6 +2259,9 @@ void ice_cfg_sw_lldp(struct ice_vsi *vsi, bool tx, bool create)
 
 		status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_RX,
 				  ICE_FWD_TO_VSI);
+
+		if (!status)
+			vsi->rx_lldp_ena = create;
 	}
 
 	if (status)

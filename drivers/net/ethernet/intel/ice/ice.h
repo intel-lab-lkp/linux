@@ -344,6 +344,8 @@ struct ice_vsi {
 	u32 tx_busy;
 	u32 rx_buf_failed;
 	u32 rx_page_failed;
+	u8 lldp_macs;			/* counter for LLDP MACs added to VSI */
+	u8 rx_lldp_ena : 1;		/* Rx LLDP filter enabled */
 	u16 num_q_vectors;
 	/* tell if only dynamic irq allocation is allowed */
 	bool irq_dyn_alloc;
