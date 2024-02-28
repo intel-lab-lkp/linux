@@ -403,15 +403,16 @@ static int sdsi_meter_cert_show(struct sdsi_dev *s)
 		return -1;
 	}
 
-	bec = (void *)(mc) + sizeof(mc);
+	bec = (void *)(mc) + sizeof(*mc);
 
 	printf("Number of Feature Counters:   %d\n", mc->bundle_length / 8);
-	while (count++ < mc->bundle_length / 8) {
+	while (count < mc->bundle_length / 8) {
 		char feature[5];
 
 		feature[4] = '\0';
 		get_feature(bec[count].encoding, feature);
 		printf("    %s:          %d\n", feature, bec[count].counter);
+		++count;
 	}
 
 	return 0;
