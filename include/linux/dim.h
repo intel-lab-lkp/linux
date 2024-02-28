@@ -119,11 +119,13 @@ struct dim {
  *
  * @DIM_CQ_PERIOD_MODE_START_FROM_EQE: Start counting from EQE
  * @DIM_CQ_PERIOD_MODE_START_FROM_CQE: Start counting from CQE (implies timer reset)
+ * @DIM_CQ_PERIOD_MODE_SPECIFIC_0: Specific mode to improve latency
  * @DIM_CQ_PERIOD_NUM_MODES: Number of modes
  */
 enum dim_cq_period_mode {
 	DIM_CQ_PERIOD_MODE_START_FROM_EQE = 0x0,
 	DIM_CQ_PERIOD_MODE_START_FROM_CQE = 0x1,
+	DIM_CQ_PERIOD_MODE_SPECIFIC_0 = 0x2,
 	DIM_CQ_PERIOD_NUM_MODES
 };
 
