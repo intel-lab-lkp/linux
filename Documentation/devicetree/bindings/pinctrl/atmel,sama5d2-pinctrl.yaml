@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/atmel,sama5d2-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip PIO4 Controller
+
+maintainers:
+  - Balakrishnan Sambath <balakrishnan.s@microchip.com>
+
+description:
+  The Microchip PIO4 controller is used to select the function of a pin and to
+  configure it.
+
+
+properties:
+  compatible:
+    enum:
+      - microchip,sama7g5-pinctrl
+      - atmel,sama5d2-pinctrl
+
+  reg:
+    minItems: 1
+    maxItems: 2
+
+  interrupts:
+    description:
+      Interrupt outputs from the controller, one for each bank.
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  clocks:
+    maxItems: 1
+if:
+  properties:
+    compatible:
+      contains:
+        const: microchip,sama7g5-pinctrl
+then:
+  patternProperties:
+    '^.*([-_]default)?$':
+      anyOf:
+        - $ref: "#/$defs/mchp-pio4-pincfg-node-1"
+        - patternProperties:
+            '^[a-z_-][a-z_-]*$':
+              $ref: "#/$defs/mchp-pio4-pincfg-node-1"
+else:
+  patternProperties:
+    '^.*([-_]default)?$':
+      anyOf:
+        - $ref: "#/$defs/mchp-pio4-pincfg-node-2"
+        - patternProperties:
+            '^[a-z_-][a-z_-]*$':
+              $ref: "#/$defs/mchp-pio4-pincfg-node-2"
+
+$defs:
+  mchp-pio4-pincfg-node-1:
+    $ref: pincfg-node.yaml#properties
+    properties:
+      pinmux:
+        $ref: pinmux-node.yaml#/properties/pinmux
+      atmel,drive-strength:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2, 3]
+        default: 0
+    required:
+      - pinmux
+
+  mchp-pio4-pincfg-node-2:
+    $ref: pincfg-node.yaml#properties
+    properties:
+      pinmux:
+        $ref: pinmux-node.yaml#/properties/pinmux
+    required:
+      - pinmux
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-controller
+  - '#interrupt-cells'
+  - gpio-controller
+  - '#gpio-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/pinctrl/sama5d2-pinfunc.h>
+
+    pinctrl@fc038000 {
+        compatible = "atmel,sama5d2-pinctrl";
+        reg = <0xfc038000 0x600>;
+        interrupts = <18 IRQ_TYPE_LEVEL_HIGH 7>,
+                     <68 IRQ_TYPE_LEVEL_HIGH 7>,
+                     <69 IRQ_TYPE_LEVEL_HIGH 7>,
+                     <70 IRQ_TYPE_LEVEL_HIGH 7>;
+        interrupt-controller;
+        #interrupt-cells = <2>;
+        gpio-controller;
+        #gpio-cells = <2>;
+        clocks = <&pioA_clk>;
+
+        pinctrl_i2c0_default: i2c0_default {
+            pinmux = <PIN_PD21__TWD0>,
+                     <PIN_PD22__TWCK0>;
+            bias-disable;
+        };
+
+        pinctrl_sdmmc1_default: sdmmc1_default {
+            cmd_data {
+                pinmux = <PIN_PA28__SDMMC1_CMD>,
+                         <PIN_PA18__SDMMC1_DAT0>,
+                         <PIN_PA19__SDMMC1_DAT1>,
+                         <PIN_PA20__SDMMC1_DAT2>,
+                         <PIN_PA21__SDMMC1_DAT3>;
+                bias-pull-up;
+            };
+
+            ck_cd {
+                pinmux = <PIN_PA22__SDMMC1_CK>,
+                         <PIN_PA30__SDMMC1_CD>;
+                bias-disable;
+            };
+        };
+    };
+...
