@@ -24,7 +24,7 @@
 
 #define BNXT_PTP_DFLT_TX_TMO	1000 /* ms */
 #define BNXT_PTP_MAX_TX_TMO	5000 /* ms */
-#define BNXT_PTP_QTS_TIMEOUT	1000
+#define BNXT_PTP_QTS_MAX_TMO_US	65535
 #define BNXT_PTP_QTS_TX_ENABLES	(PORT_TS_QUERY_REQ_ENABLES_PTP_SEQ_ID |	\
 				 PORT_TS_QUERY_REQ_ENABLES_TS_REQ_TIMEOUT | \
 				 PORT_TS_QUERY_REQ_ENABLES_PTP_HDR_OFFSET)
@@ -117,12 +117,14 @@ struct bnxt_ptp_cfg {
 					 BNXT_PTP_MSG_PDELAY_REQ |	\
 					 BNXT_PTP_MSG_PDELAY_RESP)
 	u8			tx_tstamp_en:1;
+	u8			txts_pending:1;
 	int			rx_filter;
 	u32			tstamp_filters;
 
 	u32			refclk_regs[2];
 	u32			refclk_mapped_regs[2];
 	u32			txts_tmo;
+	unsigned long		abs_txts_tmo;
 };
 
 #if BITS_PER_LONG == 32

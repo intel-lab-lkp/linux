@@ -41,6 +41,13 @@ parameters.
      - Generic Routing Encapsulation (GRE) version check will be enabled in
        the device. If disabled, the device will skip the version check for
        incoming packets.
+   * - ``ptp_tx_timeout``
+     - u32
+     - Runtime
+     - PTP Transmit timestamp timeout value in milliseconds. The default
+       value is 1000 and the maximum value is 5000. Use a higher value
+       on a busy network to prevent timeout retrieving the PTP Transmit
+       timestamp.
 
 Info versions
 =============
