@@ -7,7 +7,7 @@
  *                2017 Claudiu Beznea <claudiu.beznea@microchip.com>
  */
 #include "sama5d2.dtsi"
-#include "sama5d2-pinfunc.h"
+#include <dt-bindings/pinctrl/sama5d2-pinfunc.h>
 #include <dt-bindings/gpio/gpio.h>
 
 / {

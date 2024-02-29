@@ -8,7 +8,7 @@
  * Author: Eugen Hristev <eugen.hristev@microcihp.com>
  */
 #include "sama5d2.dtsi"
-#include "sama5d2-pinfunc.h"
+#include <dt-bindings/pinctrl/sama5d2-pinfunc.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/mfd/atmel-flexcom.h>
 #include <dt-bindings/pinctrl/at91.h>
