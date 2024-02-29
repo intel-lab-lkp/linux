@@ -802,7 +802,7 @@ looped_back:
 
 	ip6_route_input(skb);
 	if (skb_dst(skb)->error) {
-		skb_push(skb, skb->data - skb_network_header(skb));
+		skb_push(skb, -skb_network_offset(skb));
 		dst_input(skb);
 		return -1;
 	}
@@ -819,7 +819,7 @@ looped_back:
 		goto looped_back;
 	}
 
-	skb_push(skb, skb->data - skb_network_header(skb));
+	skb_push(skb, -skb_network_offset(skb));
 	dst_input(skb);
 	return -1;
 
