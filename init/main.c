@@ -1463,6 +1463,8 @@ static int __ref kernel_init(void *unused)
 
 	do_sysctl_args();
 
+	kunit_run_all_tests();
+
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
@@ -1549,8 +1551,6 @@ static noinline void __init kernel_init_freeable(void)
 	page_alloc_init_late();
 
 	do_basic_setup();
-
-	kunit_run_all_tests();
 
 	wait_for_initramfs();
 	console_on_rootfs();

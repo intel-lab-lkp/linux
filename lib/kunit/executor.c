@@ -15,6 +15,8 @@ extern struct kunit_suite * const __kunit_suites_end[];
 extern struct kunit_suite * const __kunit_init_suites_start[];
 extern struct kunit_suite * const __kunit_init_suites_end[];
 
+static struct kunit_suite_set final_suite_set = {};
+
 static char *action_param;
 
 module_param_named(action, action_param, charp, 0400);
@@ -233,6 +235,21 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 		if (!filtered_suite)
 			continue;
 
+		if (filtered_suite == suite_set->start[i]) {
+			/*
+			 * To make memory allocation consistent whatever
+			 * filters are used or not, and to keep
+			 * kunit_free_suite_set() simple, always copy static
+			 * data.
+			 */
+			filtered_suite = kmemdup(filtered_suite, sizeof(*filtered_suite),
+					GFP_KERNEL);
+			if (!filtered_suite) {
+				*err = -ENOMEM;
+				goto free_parsed_filters;
+			}
+		}
+
 		*copy++ = filtered_suite;
 	}
 	filtered.start = copy_start;
@@ -348,7 +365,7 @@ static void kunit_handle_shutdown(void)
 
 }
 
-int kunit_run_all_tests(void)
+static int kunit_init_suites(void)
 {
 	struct kunit_suite_set suite_set = {NULL, NULL};
 	struct kunit_suite_set filtered_suite_set = {NULL, NULL};
@@ -361,6 +378,9 @@ int kunit_run_all_tests(void)
 	size_t init_num_suites = init_suite_set.end - init_suite_set.start;
 	int err = 0;
 
+	if (!kunit_enabled())
+		return 0;
+
 	if (init_num_suites > 0) {
 		suite_set = kunit_merge_suite_sets(init_suite_set, normal_suite_set);
 		if (!suite_set.start)
@@ -368,41 +388,56 @@ int kunit_run_all_tests(void)
 	} else
 		suite_set = normal_suite_set;
 
-	if (!kunit_enabled()) {
-		pr_info("kunit: disabled\n");
+	filtered_suite_set = kunit_filter_suites(&suite_set, filter_glob_param,
+			filter_param, filter_action_param, &err);
+
+	/* Free original suite set before using filtered suite set */
+	if (init_num_suites > 0)
+		kfree(suite_set.start);
+	suite_set = filtered_suite_set;
+
+	if (err) {
+		pr_err("kunit executor: error filtering suites: %d\n", err);
 		goto free_out;
 	}
 
-	if (filter_glob_param || filter_param) {
-		filtered_suite_set = kunit_filter_suites(&suite_set, filter_glob_param,
-				filter_param, filter_action_param, &err);
+	final_suite_set = suite_set;
+	return 0;
 
-		/* Free original suite set before using filtered suite set */
-		if (init_num_suites > 0)
-			kfree(suite_set.start);
-		suite_set = filtered_suite_set;
+free_out:
+	kunit_free_suite_set(suite_set);
 
-		if (err) {
-			pr_err("kunit executor: error filtering suites: %d\n", err);
-			goto free_out;
-		}
+out:
+	kunit_handle_shutdown();
+	return err;
+}
+
+late_initcall(kunit_init_suites);
+
+int kunit_run_all_tests(void)
+{
+	int err = 0;
+
+	if (!kunit_enabled()) {
+		pr_info("kunit: disabled\n");
+		goto out;
 	}
 
+	if (!final_suite_set.start)
+		goto out;
+
 	if (!action_param)
-		kunit_exec_run_tests(&suite_set, true);
+		kunit_exec_run_tests(&final_suite_set, true);
 	else if (strcmp(action_param, "list") == 0)
-		kunit_exec_list_tests(&suite_set, false);
+		kunit_exec_list_tests(&final_suite_set, false);
 	else if (strcmp(action_param, "list_attr") == 0)
-		kunit_exec_list_tests(&suite_set, true);
+		kunit_exec_list_tests(&final_suite_set, true);
 	else
 		pr_err("kunit executor: unknown action '%s'\n", action_param);
 
-free_out:
-	if (filter_glob_param || filter_param)
-		kunit_free_suite_set(suite_set);
-	else if (init_num_suites > 0)
-		/* Don't use kunit_free_suite_set because suites aren't individually allocated */
-		kfree(suite_set.start);
+	kunit_free_suite_set(final_suite_set);
+	final_suite_set.start = NULL;
+	final_suite_set.end = NULL;
 
 out:
 	kunit_handle_shutdown();

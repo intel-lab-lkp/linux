@@ -620,7 +620,7 @@ static void test_csum_ipv6_magic(struct kunit *test)
 #endif /* !CONFIG_NET */
 }
 
-static struct kunit_case __refdata checksum_test_cases[] = {
+static struct kunit_case checksum_test_cases[] = {
 	KUNIT_CASE(test_csum_fixed_random_inputs),
 	KUNIT_CASE(test_csum_all_carry_inputs),
 	KUNIT_CASE(test_csum_no_carry_inputs),

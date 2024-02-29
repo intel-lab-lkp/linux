@@ -44,9 +44,8 @@ static void iov_kunit_unmap(void *data)
 	vunmap(data);
 }
 
-static void *__init iov_kunit_create_buffer(struct kunit *test,
-					    struct page ***ppages,
-					    size_t npages)
+static void *iov_kunit_create_buffer(struct kunit *test, struct page ***ppages,
+				     size_t npages)
 {
 	struct page **pages;
 	unsigned long got;
@@ -69,11 +68,10 @@ static void *__init iov_kunit_create_buffer(struct kunit *test,
 	return buffer;
 }
 
-static void __init iov_kunit_load_kvec(struct kunit *test,
-				       struct iov_iter *iter, int dir,
-				       struct kvec *kvec, unsigned int kvmax,
-				       void *buffer, size_t bufsize,
-				       const struct kvec_test_range *pr)
+static void iov_kunit_load_kvec(struct kunit *test, struct iov_iter *iter,
+				int dir, struct kvec *kvec, unsigned int kvmax,
+				void *buffer, size_t bufsize,
+				const struct kvec_test_range *pr)
 {
 	size_t size = 0;
 	int i;
@@ -95,7 +93,7 @@ static void __init iov_kunit_load_kvec(struct kunit *test,
 /*
  * Test copying to a ITER_KVEC-type iterator.
  */
-static void __init iov_kunit_copy_to_kvec(struct kunit *test)
+static void iov_kunit_copy_to_kvec(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -145,7 +143,7 @@ static void __init iov_kunit_copy_to_kvec(struct kunit *test)
 /*
  * Test copying from a ITER_KVEC-type iterator.
  */
-static void __init iov_kunit_copy_from_kvec(struct kunit *test)
+static void iov_kunit_copy_from_kvec(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -213,12 +211,11 @@ static const struct bvec_test_range bvec_test_ranges[] = {
 	{ -1, -1, -1 }
 };
 
-static void __init iov_kunit_load_bvec(struct kunit *test,
-				       struct iov_iter *iter, int dir,
-				       struct bio_vec *bvec, unsigned int bvmax,
-				       struct page **pages, size_t npages,
-				       size_t bufsize,
-				       const struct bvec_test_range *pr)
+static void iov_kunit_load_bvec(struct kunit *test, struct iov_iter *iter,
+				int dir, struct bio_vec *bvec,
+				unsigned int bvmax, struct page **pages,
+				size_t npages, size_t bufsize,
+				const struct bvec_test_range *pr)
 {
 	struct page *can_merge = NULL, *page;
 	size_t size = 0;
@@ -254,7 +251,7 @@ static void __init iov_kunit_load_bvec(struct kunit *test,
 /*
  * Test copying to a ITER_BVEC-type iterator.
  */
-static void __init iov_kunit_copy_to_bvec(struct kunit *test)
+static void iov_kunit_copy_to_bvec(struct kunit *test)
 {
 	const struct bvec_test_range *pr;
 	struct iov_iter iter;
@@ -308,7 +305,7 @@ static void __init iov_kunit_copy_to_bvec(struct kunit *test)
 /*
  * Test copying from a ITER_BVEC-type iterator.
  */
-static void __init iov_kunit_copy_from_bvec(struct kunit *test)
+static void iov_kunit_copy_from_bvec(struct kunit *test)
 {
 	const struct bvec_test_range *pr;
 	struct iov_iter iter;
@@ -370,10 +367,9 @@ static void iov_kunit_destroy_xarray(void *data)
 	kfree(xarray);
 }
 
-static void __init iov_kunit_load_xarray(struct kunit *test,
-					 struct iov_iter *iter, int dir,
-					 struct xarray *xarray,
-					 struct page **pages, size_t npages)
+static void iov_kunit_load_xarray(struct kunit *test, struct iov_iter *iter,
+				  int dir, struct xarray *xarray,
+				  struct page **pages, size_t npages)
 {
 	size_t size = 0;
 	int i;
@@ -401,7 +397,7 @@ static struct xarray *iov_kunit_create_xarray(struct kunit *test)
 /*
  * Test copying to a ITER_XARRAY-type iterator.
  */
-static void __init iov_kunit_copy_to_xarray(struct kunit *test)
+static void iov_kunit_copy_to_xarray(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -459,7 +455,7 @@ static void __init iov_kunit_copy_to_xarray(struct kunit *test)
 /*
  * Test copying from a ITER_XARRAY-type iterator.
  */
-static void __init iov_kunit_copy_from_xarray(struct kunit *test)
+static void iov_kunit_copy_from_xarray(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -522,7 +518,7 @@ stop:
 /*
  * Test the extraction of ITER_KVEC-type iterators.
  */
-static void __init iov_kunit_extract_pages_kvec(struct kunit *test)
+static void iov_kunit_extract_pages_kvec(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -602,7 +598,7 @@ stop:
 /*
  * Test the extraction of ITER_BVEC-type iterators.
  */
-static void __init iov_kunit_extract_pages_bvec(struct kunit *test)
+static void iov_kunit_extract_pages_bvec(struct kunit *test)
 {
 	const struct bvec_test_range *pr;
 	struct iov_iter iter;
@@ -680,7 +676,7 @@ stop:
 /*
  * Test the extraction of ITER_XARRAY-type iterators.
  */
-static void __init iov_kunit_extract_pages_xarray(struct kunit *test)
+static void iov_kunit_extract_pages_xarray(struct kunit *test)
 {
 	const struct kvec_test_range *pr;
 	struct iov_iter iter;
@@ -756,7 +752,7 @@ stop:
 	KUNIT_SUCCEED();
 }
 
-static struct kunit_case __refdata iov_kunit_cases[] = {
+static struct kunit_case iov_kunit_cases[] = {
 	KUNIT_CASE(iov_kunit_copy_to_kvec),
 	KUNIT_CASE(iov_kunit_copy_from_kvec),
 	KUNIT_CASE(iov_kunit_copy_to_bvec),

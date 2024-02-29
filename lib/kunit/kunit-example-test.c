@@ -337,7 +337,7 @@ static struct kunit_suite example_test_suite = {
  */
 kunit_test_suites(&example_test_suite);
 
-static int __init init_add(int x, int y)
+static int init_add(int x, int y)
 {
 	return (x + y);
 }
@@ -345,7 +345,7 @@ static int __init init_add(int x, int y)
 /*
  * This test should always pass. Can be used to test init suites.
  */
-static void __init example_init_test(struct kunit *test)
+static void example_init_test(struct kunit *test)
 {
 	KUNIT_EXPECT_EQ(test, init_add(1, 1), 2);
 }
@@ -354,7 +354,7 @@ static void __init example_init_test(struct kunit *test)
  * The kunit_case struct cannot be marked as __initdata as this will be
  * used in debugfs to retrieve results after test has run
  */
-static struct kunit_case __refdata example_init_test_cases[] = {
+static struct kunit_case example_init_test_cases[] = {
 	KUNIT_CASE(example_init_test),
 	{}
 };

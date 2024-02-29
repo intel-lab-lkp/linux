@@ -57,7 +57,7 @@
 		CHECK_ENC_GET_BE(tp, v, field, res);			\
 	} while (0)
 
-static void __init test_bitfields_constants(struct kunit *context)
+static void test_bitfields_constants(struct kunit *context)
 {
 	/*
 	 * NOTE
@@ -100,7 +100,7 @@ static void __init test_bitfields_constants(struct kunit *context)
 				tp##_encode_bits(v, mask) != v << __ffs64(mask));\
 	} while (0)
 
-static void __init test_bitfields_variables(struct kunit *context)
+static void test_bitfields_variables(struct kunit *context)
 {
 	CHECK(u8, 0x0f);
 	CHECK(u8, 0xf0);
@@ -126,7 +126,7 @@ static void __init test_bitfields_variables(struct kunit *context)
 }
 
 #ifdef TEST_BITFIELD_COMPILE
-static void __init test_bitfields_compile(struct kunit *context)
+static void test_bitfields_compile(struct kunit *context)
 {
 	/* these should fail compilation */
 	CHECK_ENC_GET(16, 16, 0x0f00, 0x1000);
@@ -137,7 +137,7 @@ static void __init test_bitfields_compile(struct kunit *context)
 }
 #endif
 
-static struct kunit_case __refdata bitfields_test_cases[] = {
+static struct kunit_case bitfields_test_cases[] = {
 	KUNIT_CASE(test_bitfields_constants),
 	KUNIT_CASE(test_bitfields_variables),
 	{}

@@ -104,12 +104,13 @@ class LinuxSourceTreeOperationsQemu(LinuxSourceTreeOperations):
 		self._kconfig = qemu_arch_params.kconfig
 		self._qemu_arch = qemu_arch_params.qemu_arch
 		self._kernel_path = qemu_arch_params.kernel_path
-		self._kernel_command_line = qemu_arch_params.kernel_command_line + ' kunit_shutdown=reboot'
+		self._kernel_command_line = qemu_arch_params.kernel_command_line + ' kunit_shutdown=reboot rootfstype=tmpfs'
 		self._extra_qemu_params = qemu_arch_params.extra_qemu_params
 		self._serial = qemu_arch_params.serial
 
 	def make_arch_config(self, base_kunitconfig: kunit_config.Kconfig) -> kunit_config.Kconfig:
 		kconfig = kunit_config.parse_from_string(self._kconfig)
+		kconfig.add_entry('TMPFS', 'y')
 		kconfig.merge_in_entries(base_kunitconfig)
 		return kconfig
 
@@ -139,13 +140,14 @@ class LinuxSourceTreeOperationsUml(LinuxSourceTreeOperations):
 
 	def make_arch_config(self, base_kunitconfig: kunit_config.Kconfig) -> kunit_config.Kconfig:
 		kconfig = kunit_config.parse_file(UML_KCONFIG_PATH)
+		kconfig.add_entry('TMPFS', 'y')
 		kconfig.merge_in_entries(base_kunitconfig)
 		return kconfig
 
 	def start(self, params: List[str], build_dir: str) -> subprocess.Popen:
 		"""Runs the Linux UML binary. Must be named 'linux'."""
 		linux_bin = os.path.join(build_dir, 'linux')
-		params.extend(['mem=1G', 'console=tty', 'kunit_shutdown=halt'])
+		params.extend(['mem=1G', 'console=tty', 'kunit_shutdown=halt', 'rootfstype=tmpfs'])
 		return subprocess.Popen([linux_bin] + params,
 					   stdin=subprocess.PIPE,
 					   stdout=subprocess.PIPE,
