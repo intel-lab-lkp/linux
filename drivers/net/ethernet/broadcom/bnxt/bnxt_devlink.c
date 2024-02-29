@@ -652,6 +652,7 @@ static const struct devlink_ops bnxt_vf_dl_ops;
 enum bnxt_dl_param_id {
 	BNXT_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
 	BNXT_DEVLINK_PARAM_ID_GRE_VER_CHECK,
+	BNXT_DEVLINK_PARAM_ID_PTP_TXTS_TMO,
 };
 
 static const struct bnxt_dl_nvm_param nvm_params[] = {
@@ -1077,6 +1078,42 @@ static int bnxt_hwrm_nvm_req(struct bnxt *bp, u32 param_id, void *msg,
 	return rc;
 }
 
+static int bnxt_dl_ptp_param_get(struct devlink *dl, u32 id,
+				 struct devlink_param_gset_ctx *ctx)
+{
+	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
+
+	if (!bp->ptp_cfg)
+		return -EOPNOTSUPP;
+
+	ctx->val.vu32 = bp->ptp_cfg->txts_tmo;
+	return 0;
+}
+
+static int bnxt_dl_ptp_param_set(struct devlink *dl, u32 id,
+				 struct devlink_param_gset_ctx *ctx)
+{
+	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
+
+	if (!bp->ptp_cfg)
+		return -EOPNOTSUPP;
+
+	bp->ptp_cfg->txts_tmo = ctx->val.vu32;
+	return 0;
+}
+
+static int bnxt_dl_ptp_param_validate(struct devlink *dl, u32 id,
+				      union devlink_param_value val,
+				      struct netlink_ext_ack *extack)
+{
+	if (val.vu32 > BNXT_PTP_MAX_TX_TMO) {
+		NL_SET_ERR_MSG_FMT_MOD(extack, "TX timeout value exceeds the maximum (%d ms)",
+				       BNXT_PTP_MAX_TX_TMO);
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int bnxt_dl_nvm_param_get(struct devlink *dl, u32 id,
 				 struct devlink_param_gset_ctx *ctx)
 {
@@ -1180,6 +1217,11 @@ static const struct devlink_param bnxt_dl_params[] = {
 			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
 			     bnxt_dl_nvm_param_get, bnxt_dl_nvm_param_set,
 			     NULL),
+	DEVLINK_PARAM_DRIVER(BNXT_DEVLINK_PARAM_ID_PTP_TXTS_TMO,
+			     "ptp_tx_timeout", DEVLINK_PARAM_TYPE_U32,
+			     BIT(DEVLINK_PARAM_CMODE_RUNTIME),
+			     bnxt_dl_ptp_param_get, bnxt_dl_ptp_param_set,
+			     bnxt_dl_ptp_param_validate),
 	/* keep REMOTE_DEV_RESET last, it is excluded based on caps */
 	DEVLINK_PARAM_GENERIC(ENABLE_REMOTE_DEV_RESET,
 			      BIT(DEVLINK_PARAM_CMODE_RUNTIME),

@@ -22,6 +22,8 @@
 #define BNXT_LO_TIMER_MASK	0x0000ffffffffUL
 #define BNXT_HI_TIMER_MASK	0xffff00000000UL
 
+#define BNXT_PTP_DFLT_TX_TMO	1000 /* ms */
+#define BNXT_PTP_MAX_TX_TMO	5000 /* ms */
 #define BNXT_PTP_QTS_TIMEOUT	1000
 #define BNXT_PTP_QTS_TX_ENABLES	(PORT_TS_QUERY_REQ_ENABLES_PTP_SEQ_ID |	\
 				 PORT_TS_QUERY_REQ_ENABLES_TS_REQ_TIMEOUT | \
@@ -120,6 +122,7 @@ struct bnxt_ptp_cfg {
 
 	u32			refclk_regs[2];
 	u32			refclk_mapped_regs[2];
+	u32			txts_tmo;
 };
 
 #if BITS_PER_LONG == 32

@@ -965,6 +965,7 @@ int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
 		spin_unlock_bh(&ptp->ptp_lock);
 		ptp_schedule_worker(ptp->ptp_clock, 0);
 	}
+	ptp->txts_tmo = BNXT_PTP_DFLT_TX_TMO;
 	return 0;
 
 out:
