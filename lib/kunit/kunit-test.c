@@ -10,6 +10,7 @@
 #include <kunit/test-bug.h>
 
 #include <linux/device.h>
+#include <linux/init.h>
 #include <kunit/device.h>
 
 #include "string-stream.h"
@@ -107,6 +108,117 @@ static struct kunit_suite kunit_try_catch_test_suite = {
 	.name = "kunit-try-catch-test",
 	.init = kunit_try_catch_test_init,
 	.test_cases = kunit_try_catch_test_cases,
+};
+
+#ifdef CONFIG_X86
+
+static void kunit_test_null_dereference(void *data)
+{
+	struct kunit *test = data;
+	int *null = NULL;
+
+	*null = 0;
+
+	KUNIT_FAIL(test, "This line should never be reached\n");
+}
+
+static void kunit_test_fault_null_dereference(struct kunit *test)
+{
+	struct kunit_try_catch_test_context *ctx = test->priv;
+	struct kunit_try_catch *try_catch = ctx->try_catch;
+
+	kunit_try_catch_init(try_catch,
+			     test,
+			     kunit_test_null_dereference,
+			     kunit_test_catch);
+	kunit_try_catch_run(try_catch, test);
+
+	KUNIT_EXPECT_EQ(test, try_catch->try_result, -EINTR);
+	KUNIT_EXPECT_TRUE(test, ctx->function_called);
+}
+
+#if defined(CONFIG_STRICT_KERNEL_RWX) || defined(CONFIG_STRICT_MODULE_RWX)
+
+const int test_const = 1;
+
+static void kunit_test_const(void *data)
+{
+	struct kunit *test = data;
+	/* Bypasses compiler check. */
+	int *ptr = (int *)&test_const;
+
+	KUNIT_EXPECT_EQ(test, test_const, 1);
+	*ptr = 2;
+
+	KUNIT_FAIL(test, "This line should never be reached\n");
+}
+
+static void kunit_test_fault_const(struct kunit *test)
+{
+	struct kunit_try_catch_test_context *ctx = test->priv;
+	struct kunit_try_catch *try_catch = ctx->try_catch;
+
+	kunit_try_catch_init(try_catch, test, kunit_test_const,
+			     kunit_test_catch);
+	kunit_try_catch_run(try_catch, test);
+
+	KUNIT_EXPECT_EQ(test, test_const, 1);
+	KUNIT_EXPECT_EQ(test, try_catch->try_result, -EINTR);
+	KUNIT_EXPECT_TRUE(test, ctx->function_called);
+}
+
+static int test_rodata __ro_after_init = 1;
+
+static void kunit_test_rodata(void *data)
+{
+	struct kunit *test = data;
+
+	KUNIT_EXPECT_EQ(test, test_rodata, 1);
+	test_rodata = 2;
+
+	KUNIT_FAIL(test, "This line should never be reached\n");
+}
+
+static void kunit_test_fault_rodata(struct kunit *test)
+{
+	struct kunit_try_catch_test_context *ctx = test->priv;
+	struct kunit_try_catch *try_catch = ctx->try_catch;
+
+	if (!rodata_enabled)
+		kunit_skip(test, "Strict RWX is not enabled");
+
+	kunit_try_catch_init(try_catch, test, kunit_test_rodata,
+			     kunit_test_catch);
+	kunit_try_catch_run(try_catch, test);
+
+	KUNIT_EXPECT_EQ(test, test_rodata, 1);
+	KUNIT_EXPECT_EQ(test, try_catch->try_result, -EINTR);
+	KUNIT_EXPECT_TRUE(test, ctx->function_called);
+}
+
+#else /* defined(CONFIG_STRICT_KERNEL_RWX) || defined(CONFIG_STRICT_MODULE_RWX) */
+
+static void kunit_test_fault_rodata(struct kunit *test)
+{
+	kunit_skip(test, "Strict RWX is not supported");
+}
+
+#endif /* defined(CONFIG_STRICT_KERNEL_RWX) || defined(CONFIG_STRICT_MODULE_RWX) */
+#endif /* CONFIG_X86 */
+
+static struct kunit_case kunit_x86_fault_test_cases[] = {
+#ifdef CONFIG_X86
+	KUNIT_CASE(kunit_test_fault_null_dereference),
+	KUNIT_CASE(kunit_test_fault_const),
+	KUNIT_CASE(kunit_test_fault_rodata),
+#endif /* CONFIG_X86 */
+	{}
+};
+
+static struct kunit_suite kunit_x86_fault_test_suite = {
+	.name = "kunit_x86_fault",
+	.init = kunit_try_catch_test_init,
+	.test_cases = kunit_x86_fault_test_cases,
 };
 
 /*
@@ -826,6 +938,7 @@ static struct kunit_suite kunit_current_test_suite = {
 
 kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
 		  &kunit_log_test_suite, &kunit_status_test_suite,
-		  &kunit_current_test_suite, &kunit_device_test_suite);
+		  &kunit_current_test_suite, &kunit_device_test_suite,
+		  &kunit_x86_fault_test_suite);
 
 MODULE_LICENSE("GPL v2");
