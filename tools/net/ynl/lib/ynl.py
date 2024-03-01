@@ -84,6 +84,10 @@ class NlError(Exception):
     return f"Netlink error: {os.strerror(-self.nl_msg.error)}\n{self.nl_msg}"
 
 
+class ConfigError(Exception):
+    pass
+
+
 class NlAttr:
     ScalarFormat = namedtuple('ScalarFormat', ['native', 'big', 'little'])
     type_formats = {
@@ -400,7 +404,8 @@ class SpaceAttrs:
 
 
 class YnlFamily(SpecFamily):
-    def __init__(self, def_path, schema=None, process_unknown=False):
+    def __init__(self, def_path, schema=None, process_unknown=False,
+                 recv_size=131072):
         super().__init__(def_path, schema)
 
         self.include_raw = False
@@ -422,6 +427,16 @@ class YnlFamily(SpecFamily):
 
         self.async_msg_ids = set()
         self.async_msg_queue = []
+
+        # Note that netlink will use conservative (min) message size for
+        # the first dump recv() on the socket, our setting will only matter
+        # from the second recv() on.
+        self._recv_size = recv_size
+        # Netlink will always allocate at least PAGE_SIZE - sizeof(skb_shinfo)
+        # for a message, so smaller receive sizes will lead to truncation.
+        # Note that the min size for other families may be larger than 4k!
+        if self._recv_size < 4000:
+            raise ConfigError()
 
         for msg in self.msgs.values():
             if msg.is_async:
@@ -799,7 +814,7 @@ class YnlFamily(SpecFamily):
     def check_ntf(self):
         while True:
             try:
-                reply = self.sock.recv(128 * 1024, socket.MSG_DONTWAIT)
+                reply = self.sock.recv(self._recv_size, socket.MSG_DONTWAIT)
             except BlockingIOError:
                 return
 
@@ -854,7 +869,7 @@ class YnlFamily(SpecFamily):
         done = False
         rsp = []
         while not done:
-            reply = self.sock.recv(128 * 1024)
+            reply = self.sock.recv(self._recv_size)
             nms = NlMsgs(reply, attr_space=op.attr_set)
             for nl_msg in nms:
                 if nl_msg.extack:
