@@ -1764,6 +1764,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/interrupt-controller/arm,vic.yaml
 F:	drivers/irqchip/irq-vic.c
 
+ARM REMOTEPROC DRIVER
+M:	Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
+L:	linux-remoteproc@vger.kernel.org
+S:	Maintained
+F:	drivers/remoteproc/arm_rproc.c
+
 ARM SMC WATCHDOG DRIVER
 M:	Julius Werner <jwerner@chromium.org>
 R:	Evan Benn <evanbenn@chromium.org>
