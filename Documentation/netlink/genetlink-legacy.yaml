@@ -261,6 +261,9 @@ properties:
               struct:
                 description: Name of the struct type used for the attribute.
                 type: string
+              nest-depth:
+                description: Depth of nesting for an array-nest, defaults to 1.
+                type: integer
               # End genetlink-legacy
 
       # Make sure name-prefix does not appear in subsets (subsets inherit naming)

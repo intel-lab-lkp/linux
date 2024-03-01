@@ -556,14 +556,17 @@ class YnlFamily(SpecFamily):
                 decoded = self._formatted_string(decoded, attr_spec.display_hint)
         return decoded
 
-    def _decode_array_nest(self, attr, attr_spec):
+    def _decode_array_nest(self, attr, attr_spec, depth):
         decoded = []
         offset = 0
         while offset < len(attr.raw):
             item = NlAttr(attr.raw, offset)
             offset += item.full_len
 
-            subattrs = self._decode(NlAttrs(item.raw), attr_spec['nested-attributes'])
+            if depth > 1:
+                subattrs = self._decode_array_nest(item, attr_spec, depth - 1)
+            else:
+                subattrs = self._decode(NlAttrs(item.raw), attr_spec['nested-attributes'])
             decoded.append({ item.type: subattrs })
         return decoded
 
@@ -649,7 +652,7 @@ class YnlFamily(SpecFamily):
                 if 'enum' in attr_spec:
                     decoded = self._decode_enum(decoded, attr_spec)
             elif attr_spec["type"] == 'array-nest':
-                decoded = self._decode_array_nest(attr, attr_spec)
+                decoded = self._decode_array_nest(attr, attr_spec, attr_spec.nest_depth)
             elif attr_spec["type"] == 'bitfield32':
                 value, selector = struct.unpack("II", attr.raw)
                 if 'enum' in attr_spec:

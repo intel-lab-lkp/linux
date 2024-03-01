@@ -161,6 +161,7 @@ class SpecAttr(SpecElement):
         sub_message   string, name of sub message type
         selector      string, name of attribute used to select
                       sub-message type
+        nest_depth    integer, depth of array nesting
 
         is_auto_scalar bool, attr is a variable-size scalar
     """
@@ -178,6 +179,7 @@ class SpecAttr(SpecElement):
         self.display_hint = yaml.get('display-hint')
         self.sub_message = yaml.get('sub-message')
         self.selector = yaml.get('selector')
+        self.nest_depth = yaml.get('nest-depth', 1)
 
         self.is_auto_scalar = self.type == "sint" or self.type == "uint"
 
