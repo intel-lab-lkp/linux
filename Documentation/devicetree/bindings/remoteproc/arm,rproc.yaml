@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/arm,rproc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Arm Remoteproc Devices
+
+maintainers:
+  - Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
+
+description: |
+  Some Arm heterogeneous System-On-Chips feature remote processors that can
+  be controlled with a reset control register and a reset status register to
+  start or stop the processor.
+
+  This document defines the bindings for these remote processors.
+
+properties:
+  compatible:
+    enum:
+      - arm,corstone1000-extsys
+
+  reg:
+    minItems: 2
+    maxItems: 2
+    description: |
+      Address and size in bytes of the reset control register
+      and the reset status register.
+      Expects the registers to be in the order as above.
+      Should contain an entry for each value in 'reg-names'.
+
+  reg-names:
+    description: |
+      Required names for each of the reset registers defined in
+      the 'reg' property. Expects the names from the following
+      list, in the specified order, each representing the corresponding
+      reset register.
+    items:
+      - const: reset-control
+      - const: reset-status
+
+  firmware-name:
+    description: |
+      Default name of the firmware to load to the remote processor.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - firmware-name
+
+additionalProperties: false
+
+examples:
+  - |
+    extsys0: remoteproc@1a010310 {
+            compatible = "arm,corstone1000-extsys";
+            reg = <0x1a010310 0x4>, <0x1a010314 0x4>;
+            reg-names = "reset-control", "reset-status";
+            firmware-name = "es0_flashfw.elf";
+    };
+
+    extsys1: remoteproc@1a010318 {
+            compatible = "arm,corstone1000-extsys";
+            reg = <0x1a010318 0x4>, <0x1a01031c 0x4>;
+            reg-names = "reset-control", "reset-status";
+            firmware-name = "es1_flashfw.elf";
+    };

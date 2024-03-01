@@ -1768,6 +1768,7 @@ ARM REMOTEPROC DRIVER
 M:	Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
 L:	linux-remoteproc@vger.kernel.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/remoteproc/arm,rproc.yaml
 F:	drivers/remoteproc/arm_rproc.c
 
 ARM SMC WATCHDOG DRIVER
