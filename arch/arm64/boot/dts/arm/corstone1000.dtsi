@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR MIT
 /*
- * Copyright (c) 2022, Arm Limited. All rights reserved.
+ * Copyright 2022, 2024, Arm Limited and/or its affiliates <open-source-office@arm.com>
  * Copyright (c) 2022, Linaro Limited. All rights reserved.
  *
  */
@@ -156,6 +156,14 @@
 			arm,mhuv2-protocols = <0 0>;
 			secure-status = "okay";     /* secure-world-only */
 			status = "disabled";
+		};
+
+		extsys0: remoteproc@1a010310 {
+			compatible = "arm,corstone1000-extsys";
+			reg = <0x1a010310 0x4>,
+				<0x1a010314 0X4>;
+			reg-names = "reset-control", "reset-status";
+			firmware-name = "es_flashfw.elf";
 		};
 	};
 };
