@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/qcom,qrc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Robotics Communication Driver
+
+maintainers:
+  - Srinivas Kandagatla <srinivas.kandagatla@linaro.org>
+
+description: |
+  The QRC (Qualcomm Robotics Communication) driver is used for information interaction
+  between the robot control board and the main board when using a uart port connection.
+  This Driver will support uart read & write and robot control board
+  reset function.
+
+properties:
+  compatible:
+    const: qcom,qrc-uart
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    qrc: qcom,qrc_uart {
+        compatible = "qcom,qrc-uart";
+    };
+
