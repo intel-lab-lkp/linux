@@ -248,7 +248,8 @@ static int sp8870_set_frontend_parameters(struct dvb_frontend *fe)
 	// set tuner parameters
 	if (fe->ops.tuner_ops.set_params) {
 		fe->ops.tuner_ops.set_params(fe);
-		if (fe->ops.i2c_gate_ctrl) fe->ops.i2c_gate_ctrl(fe, 0);
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 0);
 	}
 
 	// sample rate correction bit [23..17]
@@ -296,7 +297,8 @@ static int sp8870_init (struct dvb_frontend* fe)
 	const struct firmware *fw = NULL;
 
 	sp8870_wake_up(state);
-	if (state->initialised) return 0;
+	if (state->initialised)
+		return 0;
 	state->initialised = 1;
 
 	dprintk ("%s\n", __func__);
@@ -549,7 +551,8 @@ struct dvb_frontend* sp8870_attach(const struct sp8870_config* config,
 
 	/* allocate memory for the internal state */
 	state = kzalloc(sizeof(struct sp8870_state), GFP_KERNEL);
-	if (state == NULL) goto error;
+	if (state == NULL)
+		goto error;
 
 	/* setup the state */
 	state->config = config;
@@ -557,7 +560,8 @@ struct dvb_frontend* sp8870_attach(const struct sp8870_config* config,
 	state->initialised = 0;
 
 	/* check if the demod is there */
-	if (sp8870_readreg(state, 0x0200) < 0) goto error;
+	if (sp8870_readreg(state, 0x0200) < 0)
+		goto error;
 
 	/* create dvb_frontend */
 	memcpy(&state->frontend.ops, &sp8870_ops, sizeof(struct dvb_frontend_ops));
