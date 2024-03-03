@@ -107,7 +107,7 @@ static int sp8870_firmware_upload(struct sp8870_state *state, const struct firmw
 
 	// do firmware upload
 	fw_pos = SP8870_FIRMWARE_OFFSET;
-	while (fw_pos < SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET){
+	while (fw_pos < SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET) {
 		tx_len = (fw_pos <= SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET - 252) ? 252 : SP8870_FIRMWARE_SIZE + SP8870_FIRMWARE_OFFSET - fw_pos;
 		// write register 0xCF0A
 		tx_buf[0] = 0xCF;
