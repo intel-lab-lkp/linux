@@ -538,6 +538,7 @@ static int sp8870_i2c_gate_ctrl(struct dvb_frontend *fe, int enable)
 static void sp8870_release(struct dvb_frontend *fe)
 {
 	struct sp8870_state *state = fe->demodulator_priv;
+
 	kfree(state);
 }
 
