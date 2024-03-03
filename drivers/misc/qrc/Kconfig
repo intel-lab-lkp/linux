@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# QRC device driver configuration
+#
+
+menu "QCOM QRC device driver"
+
+config QCOM_QRC
+	tristate "QCOM QRC device driver for Robotic SDK MCU"
+	help
+	  This kernel configuration is used to enable robotic controller
+	  device driver. Say M here if you want to enable robotic
+	  controller device driver.
+	  When in doubt, say N.
+
+endmenu
