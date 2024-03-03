@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
-    Driver for Spase SP8870 demodulator
-
-    Copyright (C) 1999 Juergen Peitz
-
-
-*/
+ *  Driver for Spase SP8870 demodulator
+ *
+ *  Copyright (C) 1999 Juergen Peitz
+ *
+ *
+ */
 /*
  * This driver needs external firmware. Please use the command
  * "<kerneldir>/scripts/get_dvb_firmware alps_tdlb7" to
@@ -456,11 +456,11 @@ static int sp8870_set_frontend(struct dvb_frontend *fe)
 	struct sp8870_state *state = fe->demodulator_priv;
 
 	/*
-	    The firmware of the sp8870 sometimes locks up after setting frontend parameters.
-	    We try to detect this by checking the data valid signal.
-	    If it is not set after MAXCHECKS we try to recover the lockup by setting
-	    the frontend parameters again.
-	*/
+	 *  The firmware of the sp8870 sometimes locks up after setting frontend parameters.
+	 *  We try to detect this by checking the data valid signal.
+	 *  If it is not set after MAXCHECKS we try to recover the lockup by setting
+	 *  the frontend parameters again.
+	 */
 
 	int err = 0;
 	int valid = 0;
