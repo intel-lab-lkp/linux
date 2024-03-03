@@ -529,11 +529,10 @@ static int sp8870_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
 {
 	struct sp8870_state* state = fe->demodulator_priv;
 
-	if (enable) {
+	if (enable)
 		return sp8870_writereg(state, 0x206, 0x001);
-	} else {
+	else
 		return sp8870_writereg(state, 0x206, 0x000);
-	}
 }
 
 static void sp8870_release(struct dvb_frontend* fe)
