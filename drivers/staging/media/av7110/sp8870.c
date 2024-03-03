@@ -52,7 +52,7 @@ static int debug;
 
 static int sp8870_writereg(struct sp8870_state *state, u16 reg, u16 data)
 {
-	u8 buf [] = { reg >> 8, reg & 0xff, data >> 8, data & 0xff };
+	u8 buf[] = { reg >> 8, reg & 0xff, data >> 8, data & 0xff };
 	struct i2c_msg msg = { .addr = state->config->demod_address, .flags = 0, .buf = buf, .len = 4 };
 	int err;
 
@@ -67,9 +67,9 @@ static int sp8870_writereg(struct sp8870_state *state, u16 reg, u16 data)
 static int sp8870_readreg(struct sp8870_state *state, u16 reg)
 {
 	int ret;
-	u8 b0 [] = { reg >> 8 , reg & 0xff };
-	u8 b1 [] = { 0, 0 };
-	struct i2c_msg msg [] = { { .addr = state->config->demod_address, .flags = 0, .buf = b0, .len = 2 },
+	u8 b0[] = { reg >> 8 , reg & 0xff };
+	u8 b1[] = { 0, 0 };
+	struct i2c_msg msg[] = { { .addr = state->config->demod_address, .flags = 0, .buf = b0, .len = 2 },
 			   { .addr = state->config->demod_address, .flags = I2C_M_RD, .buf = b1, .len = 2 } };
 
 	ret = i2c_transfer(state->i2c, msg, 2);
