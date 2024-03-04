@@ -821,6 +821,16 @@ SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
 	return error;
 }
 
+static struct kmem_buckets *xattr_buckets;
+static int __init init_xattr_buckets(void)
+{
+	xattr_buckets = kmem_buckets_create("xattr", 0, 0, 0,
+					    XATTR_LIST_MAX, NULL);
+
+	return 0;
+}
+subsys_initcall(init_xattr_buckets);
+
 /*
  * Extended attribute LIST operations
  */
@@ -833,7 +843,7 @@ listxattr(struct dentry *d, char __user *list, size_t size)
 	if (size) {
 		if (size > XATTR_LIST_MAX)
 			size = XATTR_LIST_MAX;
-		klist = kvmalloc(size, GFP_KERNEL);
+		klist = kmem_buckets_alloc(xattr_buckets, size, GFP_KERNEL);
 		if (!klist)
 			return -ENOMEM;
 	}
