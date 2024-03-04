@@ -8,10 +8,36 @@
  */
 
 #include "io.h"
+#include "ovpnstruct.h"
+#include "netlink.h"
 
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 
+
+int ovpn_struct_init(struct net_device *dev)
+{
+	struct ovpn_struct *ovpn = netdev_priv(dev);
+	int err;
+
+	memset(ovpn, 0, sizeof(*ovpn));
+
+	ovpn->dev = dev;
+
+	err = ovpn_nl_init(ovpn);
+	if (err < 0)
+		return err;
+
+	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
+	if (!dev->tstats)
+		return -ENOMEM;
+
+	err = security_tun_dev_alloc_security(&ovpn->security);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
 
 /* Send user data to the network
  */

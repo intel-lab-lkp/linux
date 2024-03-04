@@ -10,15 +10,20 @@
 #include "main.h"
 #include "netlink.h"
 #include "io.h"
+#include "ovpnstruct.h"
+#include "packet.h"
 
 #include <linux/genetlink.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/types.h>
+#include <linux/lockdep.h>
 #include <linux/net.h>
 #include <linux/inetdevice.h>
 #include <linux/netdevice.h>
 #include <linux/version.h>
+#include <net/ip.h>
+#include <uapi/linux/if_arp.h>
 #include <uapi/linux/ovpn.h>
 
 
@@ -27,6 +32,16 @@
 #define DRV_VERSION	OVPN_VERSION
 #define DRV_DESCRIPTION	"OpenVPN data channel offload (ovpn)"
 #define DRV_COPYRIGHT	"(C) 2020-2024 OpenVPN, Inc."
+
+static LIST_HEAD(dev_list);
+
+static void ovpn_struct_free(struct net_device *net)
+{
+	struct ovpn_struct *ovpn = netdev_priv(net);
+
+	security_tun_dev_free_security(ovpn->security);
+	free_percpu(net->tstats);
+}
 
 /* Net device open */
 static int ovpn_net_open(struct net_device *dev)
@@ -62,28 +77,120 @@ static const struct net_device_ops ovpn_netdev_ops = {
 	.ndo_get_stats64        = dev_get_tstats64,
 };
 
+static void ovpn_setup(struct net_device *dev)
+{
+	/* compute the overhead considering AEAD encryption */
+	const int overhead = sizeof(u32) + NONCE_WIRE_SIZE + 16 + sizeof(struct udphdr) +
+			     max(sizeof(struct ipv6hdr), sizeof(struct iphdr));
+
+	netdev_features_t feat = NETIF_F_SG | NETIF_F_LLTX |
+				 NETIF_F_HW_CSUM | NETIF_F_RXCSUM | NETIF_F_GSO |
+				 NETIF_F_GSO_SOFTWARE | NETIF_F_HIGHDMA;
+
+	dev->needs_free_netdev = true;
+
+	dev->netdev_ops = &ovpn_netdev_ops;
+
+	dev->priv_destructor = ovpn_struct_free;
+
+	dev->hard_header_len = 0;
+	dev->addr_len = 0;
+	dev->mtu = ETH_DATA_LEN - overhead;
+	dev->min_mtu = IPV4_MIN_MTU;
+	dev->max_mtu = IP_MAX_MTU - overhead;
+
+	dev->type = ARPHRD_NONE;
+	dev->flags = IFF_POINTOPOINT | IFF_NOARP;
+
+	dev->features |= feat;
+	dev->hw_features |= feat;
+	dev->hw_enc_features |= feat;
+
+	dev->needed_headroom = OVPN_HEAD_ROOM;
+	dev->needed_tailroom = OVPN_MAX_PADDING;
+}
+
+int ovpn_iface_create(const char *name, enum ovpn_mode mode, struct net *net)
+{
+	struct net_device *dev;
+	struct ovpn_struct *ovpn;
+	int ret;
+
+	dev = alloc_netdev(sizeof(struct ovpn_struct), name, NET_NAME_USER, ovpn_setup);
+
+	dev_net_set(dev, net);
+
+	ret = ovpn_struct_init(dev);
+	if (ret < 0)
+		goto err;
+
+	ovpn = netdev_priv(dev);
+	ovpn->mode = mode;
+
+	rtnl_lock();
+
+	ret = register_netdevice(dev);
+	if (ret < 0) {
+		netdev_dbg(dev, "cannot register interface %s: %d\n", dev->name, ret);
+		rtnl_unlock();
+		goto err;
+	}
+	rtnl_unlock();
+
+	return ret;
+
+err:
+	free_netdev(dev);
+	return ret;
+}
+
+void ovpn_iface_destruct(struct ovpn_struct *ovpn, bool unregister_netdev)
+{
+	ASSERT_RTNL();
+
+	netif_carrier_off(ovpn->dev);
+
+	list_del(&ovpn->dev_list);
+	ovpn->registered = false;
+
+	if (unregister_netdev)
+		unregister_netdevice(ovpn->dev);
+
+	synchronize_net();
+}
+
 static int ovpn_netdev_notifier_call(struct notifier_block *nb,
 				     unsigned long state, void *ptr)
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct ovpn_struct *ovpn;
 
 	if (!ovpn_dev_is_valid(dev))
 		return NOTIFY_DONE;
 
+	ovpn = netdev_priv(dev);
+
 	switch (state) {
 	case NETDEV_REGISTER:
 		/* add device to internal list for later destruction upon unregistration */
+		list_add(&ovpn->dev_list, &dev_list);
+		ovpn->registered = true;
 		break;
 	case NETDEV_UNREGISTER:
 		/* can be delivered multiple times, so check registered flag, then
 		 * destroy the interface
 		 */
+		if (!ovpn->registered)
+			return NOTIFY_DONE;
+
+		ovpn_iface_destruct(ovpn, false);
 		break;
 	case NETDEV_POST_INIT:
 	case NETDEV_GOING_DOWN:
 	case NETDEV_DOWN:
 	case NETDEV_UP:
 	case NETDEV_PRE_UP:
+		break;
 	default:
 		return NOTIFY_DONE;
 	}

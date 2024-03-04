@@ -14,6 +14,7 @@
 
 struct sk_buff;
 
+int ovpn_struct_init(struct net_device *dev);
 netdev_tx_t ovpn_net_xmit(struct sk_buff *skb, struct net_device *dev);
 
 #endif /* _NET_OVPN_OVPN_H_ */
