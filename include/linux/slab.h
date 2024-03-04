@@ -492,6 +492,16 @@ void *kmem_cache_alloc_lru(struct kmem_cache *s, struct list_lru *lru,
 			   gfp_t gfpflags) __assume_slab_alignment __malloc;
 void kmem_cache_free(struct kmem_cache *s, void *objp);
 
+struct kmem_buckets {
+	struct kmem_cache *caches[ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL])];
+};
+
+struct kmem_buckets *
+kmem_buckets_create(const char *name, unsigned int align, slab_flags_t flags,
+		    unsigned int useroffset, unsigned int usersize,
+		    void (*ctor)(void *));
+
+
 /*
  * Bulk allocation and freeing operations. These are accelerated in an
  * allocator specific way to avoid taking locks repeatedly or building
@@ -592,6 +602,22 @@ static __always_inline __alloc_size(1) void *kmalloc(size_t size, gfp_t flags)
 				flags, size);
 	}
 	return __kmalloc(size, flags);
+}
+
+static __always_inline __alloc_size(2)
+void *kmem_buckets_alloc(struct kmem_buckets *b, size_t size, gfp_t flags)
+{
+	unsigned int index;
+
+	if (size > KMALLOC_MAX_CACHE_SIZE)
+		return kmalloc_large(size, flags);
+	if (WARN_ON_ONCE(!b))
+		return NULL;
+	index = kmalloc_index(size);
+	if (WARN_ONCE(!b->caches[index],
+		      "missing cache for size %zu (index %d)\n", size, index))
+		return kmalloc(size, flags);
+	return kmalloc_trace(b->caches[index], flags, size);
 }
 
 static __always_inline __alloc_size(1) void *kmalloc_node(size_t size, gfp_t flags, int node)
