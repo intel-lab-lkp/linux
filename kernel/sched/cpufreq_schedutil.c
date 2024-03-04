@@ -198,7 +198,13 @@ unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
 static void sugov_get_util(struct sugov_cpu *sg_cpu, unsigned long boost)
 {
 	unsigned long min, max, util = cpu_util_cfs_boost(sg_cpu->cpu);
+	unsigned long io_boost = cpu_util_io_boost(sg_cpu->cpu);
 
+	/*
+	 * XXX: This already includes io boost now, makes little sense with
+	 * sugov iowait boost on top
+	 */
+	util = max(util, io_boost);
 	util = effective_cpu_util(sg_cpu->cpu, util, &min, &max);
 	util = max(util, boost);
 	sg_cpu->bw_min = min;

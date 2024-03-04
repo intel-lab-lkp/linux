@@ -1547,6 +1547,21 @@ struct task_struct {
 	struct user_event_mm		*user_event_mm;
 #endif
 
+	/* IO boost tracking */
+	u64		io_boost_timeout;
+	u64		io_boost_interval_start;
+#define IO_BOOST_INTERVAL_MSEC	25
+/* Require 1000 iowait wakeups per second to start the boosting */
+#define IO_BOOST_IOWAITS_MIN	(IO_BOOST_INTERVAL_MSEC)
+#define IO_BOOST_LEVELS		8
+/* The util boost given to the task per io boost level, account for headroom */
+#define IO_BOOST_UTIL_STEP		((unsigned long)((SCHED_CAPACITY_SCALE / 1.25) / IO_BOOST_LEVELS))
+#define IO_BOOST_IOWAITS_STEP		5
+	/* Minimum number of iowaits per interval to maintain current boost */
+	unsigned int	io_boost_threshold_down;
+	unsigned int	io_boost_level;
+	unsigned int	io_boost_curr_ios;
+
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.

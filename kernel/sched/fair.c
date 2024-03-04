@@ -4959,6 +4959,11 @@ done:
 	trace_sched_util_est_se_tp(&p->se);
 }
 
+static inline unsigned int io_boost_util(struct task_struct *p)
+{
+	return p->io_boost_level * IO_BOOST_UTIL_STEP;
+}
+
 static inline int util_fits_cpu(unsigned long util,
 				unsigned long uclamp_min,
 				unsigned long uclamp_max,
@@ -6695,6 +6700,137 @@ static int sched_idle_cpu(int cpu)
 }
 #endif
 
+static unsigned long io_boost_rq(struct cfs_rq *cfs_rq)
+{
+	int i;
+
+	for (i = IO_BOOST_LEVELS; i > 0; i--)
+		if (atomic_read(&cfs_rq->io_boost_tasks[i - 1]))
+			return i * IO_BOOST_UTIL_STEP;
+	return 0;
+}
+
+static inline unsigned long io_boost_interval_nsec(unsigned int io_boost_level)
+{
+	/*
+	 * We require 5 iowaits per interval increase to consider the boost
+	 * worth having, that leads to:
+	 * level 0->1:   25ms -> 200 iowaits per second increase
+	 * level 1->2:   50ms -> 125 iowaits per second increase
+	 * level 2->3:   75ms ->  66 iowaits per second increase
+	 * level 3->4:  100ms ->  50 iowaits per second increase
+	 * level 4->5:  125ms ->  40 iowaits per second increase
+	 * level 5->6:  150ms ->  33 iowaits per second increase
+	 * level 6->7:  175ms ->  28 iowaits per second increase
+	 * level 7->8:  200ms ->  25 iowaits per second increase
+	 * => level 8 can be maintained with >=1567 iowaits per second.
+	 */
+	return (io_boost_level + 1) * IO_BOOST_INTERVAL_MSEC * NSEC_PER_MSEC;
+}
+
+static inline void io_boost_scale_interval(struct task_struct *p, bool inc)
+{
+	unsigned int level = p->io_boost_level + (inc ? 1 : -1);
+
+	p->io_boost_level = level;
+	/* We change interval length, scale iowaits per interval accordingly. */
+	if (inc)
+		p->io_boost_threshold_down = (p->io_boost_curr_ios *
+			(level + 1) / level) + IO_BOOST_IOWAITS_STEP;
+	else
+		p->io_boost_threshold_down = (p->io_boost_curr_ios *
+			level / (level + 1)) - IO_BOOST_IOWAITS_STEP;
+}
+
+static void enqueue_io_boost(struct cfs_rq *cfs_rq, struct task_struct *p)
+{
+	u64 now = sched_clock();
+
+	/* Only what's necessary here because this is the critical path */
+	if (now > p->io_boost_timeout) {
+		/* Last iowait took too long, reset boost */
+		p->io_boost_interval_start = 0;
+		p->io_boost_level = 0;
+	}
+	if (p->io_boost_level)
+		atomic_inc(&cfs_rq->io_boost_tasks[p->io_boost_level - 1]);
+}
+
+static inline void io_boost_start_interval(struct task_struct *p, u64 now)
+{
+	p->io_boost_interval_start = now;
+	p->io_boost_curr_ios = 1;
+}
+
+static void dequeue_io_boost(struct cfs_rq *cfs_rq, struct task_struct *p)
+{
+	u64 now;
+
+	if (p->io_boost_level)
+		atomic_dec(&cfs_rq->io_boost_tasks[p->io_boost_level - 1]);
+
+	/*
+	 * Doing all this at dequeue instead of at enqueue might seem wrong,
+	 * but it really doesn't matter as the task won't be enqueued anywhere
+	 * anyway. At enqueue we then only need to check if the in_iowait
+	 * wasn't too long. We can then act as if the current in_iowait has
+	 * already completed 'in time'.
+	 * Doing all this at dequeue has a performance benefit as at this time
+	 * the io is issued and we aren't in the io critical path.
+	 */
+
+	if (!p->in_iowait) {
+		/* Even if no boost is active, we reset the interval */
+		p->io_boost_interval_start = 0;
+		p->io_boost_level = 0;
+		return;
+	}
+
+	/* The maximum in_iowait time we allow to continue boosting */
+	now = sched_clock();
+	p->io_boost_timeout = now + 10 * NSEC_PER_MSEC;
+
+	if (!p->io_boost_interval_start) {
+		io_boost_start_interval(p, now);
+		return;
+	}
+	p->io_boost_curr_ios++;
+
+	if (now < p->io_boost_interval_start +
+			io_boost_interval_nsec(p->io_boost_level))
+		return;
+
+	if (!p->io_boost_level) {
+		if (likely(p->io_boost_curr_ios < IO_BOOST_IOWAITS_MIN)) {
+			io_boost_start_interval(p, now);
+			return;
+		}
+		io_boost_scale_interval(p, true);
+	} else if (p->io_boost_curr_ios < IO_BOOST_IOWAITS_MIN) {
+		p->io_boost_level = 0;
+	} else if (p->io_boost_curr_ios > p->io_boost_threshold_down + IO_BOOST_IOWAITS_STEP) {
+		/* Increase boost */
+		if (p->io_boost_level < IO_BOOST_LEVELS)
+			io_boost_scale_interval(p, true);
+		else
+			p->io_boost_threshold_down =
+				p->io_boost_curr_ios - IO_BOOST_IOWAITS_STEP;
+	} else if (p->io_boost_curr_ios < p->io_boost_threshold_down) {
+		/* Reduce boost */
+		if (p->io_boost_level > 1)
+			io_boost_scale_interval(p, true);
+		else
+			p->io_boost_level = 0;
+	} else if (p->io_boost_level == IO_BOOST_LEVELS) {
+		/* Allow for reducing boost on max when conditions changed. */
+		p->io_boost_threshold_down = max(p->io_boost_threshold_down,
+				p->io_boost_curr_ios - IO_BOOST_IOWAITS_STEP);
+	}
+	/* On maintaining boost we just start a new interval. */
+
+	io_boost_start_interval(p, now);
+}
+
 /*
  * The enqueue_task method is called before nr_running is
  * increased. Here we update the fair scheduling stats and
@@ -6716,11 +6852,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
-	/*
-	 * If in_iowait is set, the code below may not trigger any cpufreq
-	 * utilization updates, so do it here explicitly with the IOWAIT flag
-	 * passed.
-	 */
+	if (p->in_iowait || p->io_boost_interval_start)
+		enqueue_io_boost(&rq->cfs, p);
+	/* Ensure new io boost can be applied. */
 	if (p->in_iowait)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
@@ -6803,6 +6937,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	bool was_sched_idle = sched_idle_rq(rq);
 
 	util_est_dequeue(&rq->cfs, p);
+
+	dequeue_io_boost(&rq->cfs, p);
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -7435,11 +7571,13 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 	int fits, best_fits = 0;
 	int cpu, best_cpu = -1;
 	struct cpumask *cpus;
+	unsigned long io_boost = io_boost_util(p);
 
 	cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
 
 	task_util = task_util_est(p);
+	task_util = max(task_util, io_boost);
 	util_min = uclamp_eff_value(p, UCLAMP_MIN);
 	util_max = uclamp_eff_value(p, UCLAMP_MAX);
 
@@ -7507,7 +7645,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	 */
 	if (sched_asym_cpucap_active()) {
 		sync_entity_load_avg(&p->se);
-		task_util = task_util_est(p);
+		task_util = max(task_util_est(p), io_boost_util(p));
 		util_min = uclamp_eff_value(p, UCLAMP_MIN);
 		util_max = uclamp_eff_value(p, UCLAMP_MAX);
 	}
@@ -7621,12 +7759,17 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	return target;
 }
 
+unsigned long cpu_util_io_boost(int cpu)
+{
+	return io_boost_rq(&cpu_rq(cpu)->cfs);
+}
+
 /**
  * cpu_util() - Estimates the amount of CPU capacity used by CFS tasks.
  * @cpu: the CPU to get the utilization for
  * @p: task for which the CPU utilization should be predicted or NULL
  * @dst_cpu: CPU @p migrates to, -1 if @p moves from @cpu or @p == NULL
- * @boost: 1 to enable boosting, otherwise 0
+ * @boost: 1 to enable runnable boosting, otherwise 0
  *
  * The unit of the return value must be the same as the one of CPU capacity
  * so that CPU utilization can be compared with CPU capacity.
@@ -7849,8 +7992,10 @@ eenv_pd_max_util(struct energy_env *eenv, struct cpumask *pd_cpus,
 	for_each_cpu(cpu, pd_cpus) {
 		struct task_struct *tsk = (cpu == dst_cpu) ? p : NULL;
 		unsigned long util = cpu_util(cpu, p, dst_cpu, 1);
+		unsigned long io_boost = max(io_boost_util(p), cpu_util_io_boost(cpu));
 		unsigned long eff_util, min, max;
 
+		util = max(util, io_boost);
 		/*
 		 * Performance domain frequency: utilization clamping
 		 * must be considered since it affects the selection
@@ -7976,7 +8121,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 	target = prev_cpu;
 
 	sync_entity_load_avg(&p->se);
-	if (!task_util_est(p) && p_util_min == 0)
+	if (!task_util_est(p) && p_util_min == 0 && io_boost_util(p) == 0)
 		goto unlock;
 
 	eenv_task_busy_time(&eenv, p, prev_cpu);
@@ -7989,6 +8134,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 		unsigned long cur_delta, base_energy;
 		int max_spare_cap_cpu = -1;
 		int fits, max_fits = -1;
+		unsigned long p_io_boost = io_boost_util(p);
 
 		cpumask_and(cpus, perf_domain_span(pd), cpu_online_mask);
 
@@ -8005,6 +8151,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 
 		for_each_cpu(cpu, cpus) {
 			struct rq *rq = cpu_rq(cpu);
+			unsigned long io_boost;
 
 			eenv.pd_cap += cpu_thermal_cap;
 
@@ -8015,6 +8162,8 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 				continue;
 
 			util = cpu_util(cpu, p, cpu, 0);
+			io_boost = max(p_io_boost, cpu_util_io_boost(cpu));
+			util = max(util, io_boost);
 			cpu_cap = capacity_of(cpu);
 
 			/*
