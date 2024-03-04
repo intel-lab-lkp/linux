@@ -478,6 +478,14 @@ if non-contiguous 1s value is supported. On a system with a 20-bit mask
 each bit represents 5% of the capacity of the cache. You could partition
 the cache into four equal parts with masks: 0x1f, 0x3e0, 0x7c00, 0xf8000.
 
+Tracepoint - mon_llc_occupancy_limbo
+------------------------------------
+This tracepoint gives you the precise occupancy values for a subset of RMID
+that are not immediately available for allocation. This can't be relied on
+to produce output every second, it may be necessary to attempt to create an
+empty monitor group to force an update. Output may only be produced if creation
+of a control or monitor group fails.
+
 Memory bandwidth Allocation and monitoring
 ==========================================
 
