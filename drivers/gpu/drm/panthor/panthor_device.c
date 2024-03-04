@@ -3,6 +3,8 @@
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
 /* Copyright 2023 Collabora ltd. */
 
+#include <asm/page.h>
+
 #include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
