@@ -77,6 +77,20 @@ struct ovpn_peer {
 	/* our binding to peer, protected by spinlock */
 	struct ovpn_bind __rcu *bind;
 
+	/* timer used to send periodic ping messages to the other peer, if no
+	 * other data was sent within the past keepalive_interval seconds
+	 */
+	struct timer_list keepalive_xmit;
+	/* keepalive interval in seconds */
+	unsigned long keepalive_interval;
+
+	/* timer used to mark a peer as expired when no data is received for
+	 * keepalive_timeout seconds
+	 */
+	struct timer_list keepalive_recv;
+	/* keepalive timeout in seconds */
+	unsigned long keepalive_timeout;
+
 	/* true if ovpn_peer_mark_delete was called */
 	bool halt;
 
@@ -117,7 +131,29 @@ static inline void ovpn_peer_put(struct ovpn_peer *peer)
 	kref_put(&peer->refcount, ovpn_peer_release_kref);
 }
 
+static inline void ovpn_peer_keepalive_recv_reset(struct ovpn_peer *peer)
+{
+	u32 delta = msecs_to_jiffies(peer->keepalive_timeout * MSEC_PER_SEC);
+
+	if (unlikely(!delta))
+		return;
+
+	mod_timer(&peer->keepalive_recv, jiffies + delta);
+}
+
+static inline void ovpn_peer_keepalive_xmit_reset(struct ovpn_peer *peer)
+{
+	u32 delta = msecs_to_jiffies(peer->keepalive_interval * MSEC_PER_SEC);
+
+	if (unlikely(!delta))
+		return;
+
+	mod_timer(&peer->keepalive_xmit, jiffies + delta);
+}
+
 struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id);
+
+void ovpn_peer_keepalive_set(struct ovpn_peer *peer, u32 interval, u32 timeout);
 
 int ovpn_peer_add(struct ovpn_struct *ovpn, struct ovpn_peer *peer);
 int ovpn_peer_del(struct ovpn_peer *peer, enum ovpn_del_peer_reason reason);

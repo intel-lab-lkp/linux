@@ -22,6 +22,26 @@
 #include <net/gso.h>
 
 
+static const unsigned char ovpn_keepalive_message[] = {
+	0x2a, 0x18, 0x7b, 0xf3, 0x64, 0x1e, 0xb4, 0xcb,
+	0x07, 0xed, 0x2d, 0x0a, 0x98, 0x1f, 0xc7, 0x48
+};
+
+/* Is keepalive message?
+ * Assumes that the first byte of skb->data is defined.
+ */
+static bool ovpn_is_keepalive(struct sk_buff *skb)
+{
+	if (*skb->data != OVPN_KEEPALIVE_FIRST_BYTE)
+		return false;
+
+	if (!pskb_may_pull(skb, sizeof(ovpn_keepalive_message)))
+		return false;
+
+	return !memcmp(skb->data, ovpn_keepalive_message,
+		       sizeof(ovpn_keepalive_message));
+}
+
 int ovpn_struct_init(struct net_device *dev)
 {
 	struct ovpn_struct *ovpn = netdev_priv(dev);
@@ -186,6 +206,9 @@ static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 		goto drop;
 	}
 
+	/* note event of authenticated packet received for keepalive */
+	ovpn_peer_keepalive_recv_reset(peer);
+
 	/* increment RX stats */
 	ovpn_peer_stats_increment_rx(&peer->vpn_stats, skb->len);
 
@@ -201,6 +224,17 @@ static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 				   peer->id);
 			ret = -EINVAL;
 			goto drop;
+		}
+
+		/* check if special OpenVPN message */
+		if (ovpn_is_keepalive(skb)) {
+			netdev_dbg(peer->ovpn->dev, "ping received from peero %u\n", peer->id);
+			/* not an error */
+			consume_skb(skb);
+			/* inform the caller that NAPI should not be scheduled
+			 * for this packet
+			 */
+			return -1;
 		}
 
 		netdev_dbg(peer->ovpn->dev, "unsupported protocol received from peer %u\n",
@@ -338,6 +372,9 @@ void ovpn_encrypt_work(struct work_struct *work)
 					break;
 				}
 			}
+
+			/* note event of authenticated packet xmit for keepalive */
+			ovpn_peer_keepalive_xmit_reset(peer);
 		}
 
 		/* give a chance to be rescheduled if needed */
@@ -436,4 +473,43 @@ drop:
 	skb_tx_error(skb);
 	kfree_skb_list(skb);
 	return NET_XMIT_DROP;
+}
+
+/* Encrypt and transmit a special message to peer, such as keepalive
+ * or explicit-exit-notify.  Called from softirq context.
+ * Assumes that caller holds a reference to peer.
+ */
+static void ovpn_xmit_special(struct ovpn_peer *peer, const void *data,
+			      const unsigned int len)
+{
+	struct ovpn_struct *ovpn;
+	struct sk_buff *skb;
+
+	ovpn = peer->ovpn;
+	if (unlikely(!ovpn))
+		return;
+
+	skb = alloc_skb(256 + len, GFP_ATOMIC);
+	if (unlikely(!skb))
+		return;
+
+	skb_reserve(skb, 128);
+	skb->priority = TC_PRIO_BESTEFFORT;
+	memcpy(__skb_put(skb, len), data, len);
+
+	/* increase reference counter when passing peer to sending queue */
+	if (!ovpn_peer_hold(peer)) {
+		netdev_dbg(ovpn->dev, "%s: cannot hold peer reference for sending special packet\n",
+			   __func__);
+		kfree_skb(skb);
+		return;
+	}
+
+	ovpn_queue_skb(ovpn, skb, peer);
+}
+
+void ovpn_keepalive_xmit(struct ovpn_peer *peer)
+{
+	ovpn_xmit_special(peer, ovpn_keepalive_message,
+			  sizeof(ovpn_keepalive_message));
 }

@@ -23,6 +23,48 @@
 #include <linux/workqueue.h>
 
 
+static void ovpn_peer_ping(struct timer_list *t)
+{
+	struct ovpn_peer *peer = from_timer(peer, t, keepalive_xmit);
+
+	netdev_dbg(peer->ovpn->dev, "%s: sending ping to peer %u\n", __func__, peer->id);
+	ovpn_keepalive_xmit(peer);
+}
+
+static void ovpn_peer_expire(struct timer_list *t)
+{
+	struct ovpn_peer *peer = from_timer(peer, t, keepalive_recv);
+
+	netdev_dbg(peer->ovpn->dev, "%s: peer %u expired\n", __func__, peer->id);
+	ovpn_peer_del(peer, OVPN_DEL_PEER_REASON_EXPIRED);
+}
+
+/* Configure keepalive parameters */
+void ovpn_peer_keepalive_set(struct ovpn_peer *peer, u32 interval, u32 timeout)
+{
+	u32 delta;
+
+	netdev_dbg(peer->ovpn->dev,
+		   "%s: scheduling keepalive for peer %u: interval=%u timeout=%u\n", __func__,
+		   peer->id, interval, timeout);
+
+	peer->keepalive_interval = interval;
+	if (interval > 0) {
+		delta = msecs_to_jiffies(interval * MSEC_PER_SEC);
+		mod_timer(&peer->keepalive_xmit, jiffies + delta);
+	} else {
+		del_timer(&peer->keepalive_xmit);
+	}
+
+	peer->keepalive_timeout = timeout;
+	if (timeout) {
+		delta = msecs_to_jiffies(timeout * MSEC_PER_SEC);
+		mod_timer(&peer->keepalive_recv, jiffies + delta);
+	} else {
+		del_timer(&peer->keepalive_recv);
+	}
+}
+
 /* Construct a new peer */
 struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 {
@@ -82,6 +124,9 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 
 	dev_hold(ovpn->dev);
 
+	timer_setup(&peer->keepalive_xmit, ovpn_peer_ping, 0);
+	timer_setup(&peer->keepalive_recv, ovpn_peer_expire, 0);
+
 	return peer;
 err_rx_ring:
 	ptr_ring_cleanup(&peer->rx_ring, NULL);
@@ -97,9 +142,16 @@ err:
 #define ovpn_peer_index(_tbl, _key, _key_len)		\
 	(jhash(_key, _key_len, 0) % HASH_SIZE(_tbl))	\
 
+static void ovpn_peer_timer_delete_all(struct ovpn_peer *peer)
+{
+	del_timer_sync(&peer->keepalive_xmit);
+	del_timer_sync(&peer->keepalive_recv);
+}
+
 static void ovpn_peer_free(struct ovpn_peer *peer)
 {
 	ovpn_bind_reset(peer, NULL);
+	ovpn_peer_timer_delete_all(peer);
 
 	WARN_ON(!__ptr_ring_empty(&peer->tx_ring));
 	ptr_ring_cleanup(&peer->tx_ring, NULL);
