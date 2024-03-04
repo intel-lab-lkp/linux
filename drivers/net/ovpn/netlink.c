@@ -611,6 +611,185 @@ static int ovpn_nl_del_peer(struct sk_buff *skb, struct genl_info *info)
 	return ret;
 }
 
+static int ovpn_nl_get_key_dir(struct genl_info *info, struct nlattr *key,
+				    enum ovpn_cipher_alg cipher,
+				    struct ovpn_key_direction *dir)
+{
+	struct nlattr *attr, *attrs[NUM_OVPN_A_KEYDIR];
+	int ret;
+
+	ret = nla_parse_nested(attrs, NUM_OVPN_A_KEYDIR - 1, key, NULL, info->extack);
+	if (ret)
+		return ret;
+
+	switch (cipher) {
+	case OVPN_CIPHER_ALG_AES_GCM:
+	case OVPN_CIPHER_ALG_CHACHA20_POLY1305:
+		attr = attrs[OVPN_A_KEYDIR_CIPHER_KEY];
+		if (!attr)
+			return -EINVAL;
+
+		dir->cipher_key = nla_data(attr);
+		dir->cipher_key_size = nla_len(attr);
+
+		attr = attrs[OVPN_A_KEYDIR_NONCE_TAIL];
+		/* These algorithms require a 96bit nonce,
+		 * Construct it by combining 4-bytes packet id and
+		 * 8-bytes nonce-tail from userspace
+		 */
+		if (!attr)
+			return -EINVAL;
+
+		dir->nonce_tail = nla_data(attr);
+		dir->nonce_tail_size = nla_len(attr);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int ovpn_nl_set_key(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nlattr *p_attrs[NUM_OVPN_A_PEER];
+	struct nlattr *attrs[NUM_OVPN_A_KEYCONF];
+	struct ovpn_struct *ovpn = info->user_ptr[0];
+	struct ovpn_peer_key_reset pkr;
+	struct ovpn_peer *peer;
+	u32 peer_id;
+	int ret;
+
+	if (!info->attrs[OVPN_A_PEER])
+		return -EINVAL;
+
+	ret = nla_parse_nested(p_attrs, NUM_OVPN_A_PEER - 1, info->attrs[OVPN_A_PEER],
+			       NULL, info->extack);
+	if (ret)
+		return ret;
+
+	if (!p_attrs[OVPN_A_PEER_ID] || !p_attrs[OVPN_A_PEER_KEYCONF])
+		return -EINVAL;
+
+	ret = nla_parse_nested(attrs, NUM_OVPN_A_KEYCONF - 1, p_attrs[OVPN_A_PEER_KEYCONF],
+			       NULL, info->extack);
+	if (ret)
+		return ret;
+
+	if (!attrs[OVPN_A_KEYCONF_SLOT] ||
+	    !attrs[OVPN_A_KEYCONF_KEY_ID] ||
+	    !attrs[OVPN_A_KEYCONF_CIPHER_ALG] ||
+	    !attrs[OVPN_A_KEYCONF_ENCRYPT_DIR] ||
+	    !attrs[OVPN_A_KEYCONF_DECRYPT_DIR])
+		return -EINVAL;
+
+	peer_id = nla_get_u32(p_attrs[OVPN_A_PEER_ID]);
+	pkr.slot = nla_get_u8(attrs[OVPN_A_KEYCONF_SLOT]);
+	pkr.key.key_id = nla_get_u16(attrs[OVPN_A_KEYCONF_KEY_ID]);
+	pkr.key.cipher_alg = nla_get_u16(attrs[OVPN_A_KEYCONF_CIPHER_ALG]);
+
+	ret = ovpn_nl_get_key_dir(info, attrs[OVPN_A_KEYCONF_ENCRYPT_DIR],
+				  pkr.key.cipher_alg, &pkr.key.encrypt);
+	if (ret < 0)
+		return ret;
+
+	ret = ovpn_nl_get_key_dir(info, attrs[OVPN_A_KEYCONF_DECRYPT_DIR],
+				  pkr.key.cipher_alg, &pkr.key.decrypt);
+	if (ret < 0)
+		return ret;
+
+	peer = ovpn_peer_lookup_id(ovpn, peer_id);
+	if (!peer) {
+		netdev_dbg(ovpn->dev, "%s: no peer with id %u to set key for\n", __func__, peer_id);
+		return -ENOENT;
+	}
+
+	mutex_lock(&peer->crypto.mutex);
+	ret = ovpn_crypto_state_reset(&peer->crypto, &pkr);
+	if (ret < 0) {
+		netdev_dbg(ovpn->dev, "%s: cannot install new key for peer %u\n", __func__,
+			   peer_id);
+		goto unlock;
+	}
+
+	netdev_dbg(ovpn->dev, "%s: new key installed (id=%u) for peer %u\n", __func__,
+		   pkr.key.key_id, peer_id);
+unlock:
+	mutex_unlock(&peer->crypto.mutex);
+	ovpn_peer_put(peer);
+	return ret;
+}
+
+static int ovpn_nl_del_key(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nlattr *p_attrs[NUM_OVPN_A_PEER];
+	struct nlattr *attrs[NUM_OVPN_A_KEYCONF];
+	struct ovpn_struct *ovpn = info->user_ptr[0];
+	enum ovpn_key_slot slot;
+	struct ovpn_peer *peer;
+	u32 peer_id;
+	int ret;
+
+	if (!info->attrs[OVPN_A_PEER])
+		return -EINVAL;
+
+	ret = nla_parse_nested(p_attrs, NUM_OVPN_A_PEER - 1, info->attrs[OVPN_A_PEER],
+			       NULL, info->extack);
+
+	if (!p_attrs[OVPN_A_PEER_ID] || !p_attrs[OVPN_A_PEER_KEYCONF])
+		return -EINVAL;
+
+	ret = nla_parse_nested(attrs, NUM_OVPN_A_KEYCONF - 1, p_attrs[OVPN_A_PEER_KEYCONF],
+			       NULL, info->extack);
+	if (ret)
+		return ret;
+
+	if (!attrs[OVPN_A_KEYCONF_SLOT])
+		return -EINVAL;
+
+	peer_id = nla_get_u32(p_attrs[OVPN_A_PEER_ID]);
+	slot = nla_get_u8(attrs[OVPN_A_KEYCONF_SLOT]);
+
+	peer = ovpn_peer_lookup_id(ovpn, peer_id);
+	if (!peer)
+		return -ENOENT;
+
+	ovpn_crypto_key_slot_delete(&peer->crypto, slot);
+	ovpn_peer_put(peer);
+
+	return 0;
+}
+
+static int ovpn_nl_swap_keys(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nlattr *attrs[NUM_OVPN_A_PEER];
+	struct ovpn_struct *ovpn = info->user_ptr[0];
+	struct ovpn_peer *peer;
+	u32 peer_id;
+	int ret;
+
+	if (!info->attrs[OVPN_A_PEER])
+		return -EINVAL;
+
+	ret = nla_parse_nested(attrs, NUM_OVPN_A_PEER - 1, info->attrs[OVPN_A_PEER],
+			       NULL, info->extack);
+	if (ret)
+		return ret;
+
+	if (!attrs[OVPN_A_PEER_ID])
+		return -EINVAL;
+
+	peer_id = nla_get_u32(attrs[OVPN_A_PEER_ID]);
+
+	peer = ovpn_peer_lookup_id(ovpn, peer_id);
+	if (!peer)
+		return -ENOENT;
+
+	ovpn_crypto_key_slots_swap(&peer->crypto);
+	ovpn_peer_put(peer);
+
+	return 0;
+}
 
 static int ovpn_nl_new_iface(struct sk_buff *skb, struct genl_info *info)
 {
@@ -678,6 +857,21 @@ static const struct genl_small_ops ovpn_nl_ops[] = {
 		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO | GENL_CMD_CAP_DUMP,
 		.doit = ovpn_nl_get_peer,
 		.dumpit = ovpn_nl_dump_peers,
+	},
+	{
+		.cmd = OVPN_CMD_SET_KEY,
+		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+		.doit = ovpn_nl_set_key,
+	},
+	{
+		.cmd = OVPN_CMD_DEL_KEY,
+		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+		.doit = ovpn_nl_del_key,
+	},
+	{
+		.cmd = OVPN_CMD_SWAP_KEYS,
+		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+		.doit = ovpn_nl_swap_keys,
 	},
 };
 
