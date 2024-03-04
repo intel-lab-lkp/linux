@@ -154,7 +154,57 @@ static void ovpn_post_doit(const struct genl_split_ops *ops, struct sk_buff *skb
 		dev_put(ovpn->dev);
 }
 
+static int ovpn_nl_new_iface(struct sk_buff *skb, struct genl_info *info)
+{
+	enum ovpn_mode mode = OVPN_MODE_P2P;
+	struct net_device *dev;
+	char *ifname;
+	int ret;
+
+	if (!info->attrs[OVPN_A_IFNAME])
+		return -EINVAL;
+
+	ifname = nla_data(info->attrs[OVPN_A_IFNAME]);
+
+	if (info->attrs[OVPN_A_MODE]) {
+		mode = nla_get_u8(info->attrs[OVPN_A_MODE]);
+		netdev_dbg(dev, "%s: setting device (%s) mode: %u\n", __func__, ifname,
+			   mode);
+	}
+
+	ret = ovpn_iface_create(ifname, mode, genl_info_net(info));
+	if (ret < 0)
+		netdev_dbg(dev, "error while creating interface %s: %d\n", ifname, ret);
+
+	return ret;
+}
+
+static int ovpn_nl_del_iface(struct sk_buff *skb, struct genl_info *info)
+{
+	struct ovpn_struct *ovpn = info->user_ptr[0];
+
+	rtnl_lock();
+	ovpn_iface_destruct(ovpn, true);
+	dev_put(ovpn->dev);
+	rtnl_unlock();
+
+	/* we set the user_ptr to NULL to prevent post_doit from releasing it again */
+	info->user_ptr[0] = NULL;
+
+	return 0;
+}
+
 static const struct genl_small_ops ovpn_nl_ops[] = {
+	{
+		.cmd = OVPN_CMD_NEW_IFACE,
+		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+		.doit = ovpn_nl_new_iface,
+	},
+	{
+		.cmd = OVPN_CMD_DEL_IFACE,
+		.flags = GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+		.doit = ovpn_nl_del_iface,
+	},
 };
 
 static struct genl_family ovpn_nl_family __ro_after_init = {
