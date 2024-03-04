@@ -12,6 +12,7 @@
 
 #include <uapi/linux/ovpn.h>
 #include <linux/netdevice.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 
 /* Our state per ovpn interface */
@@ -24,7 +25,16 @@ struct ovpn_struct {
 	/* device operation mode (i.e. P2P, MP) */
 	enum ovpn_mode mode;
 
-	unsigned int max_tun_queue_len;
+	/* protect writing to the ovpn_struct object */
+	spinlock_t lock;
+
+	/* workqueue used to schedule generic event that may sleep or that need
+	 * to be performed out of softirq context
+	 */
+	struct workqueue_struct *events_wq;
+
+	/* for p2p mode */
+	struct ovpn_peer __rcu *peer;
 
 	netdev_features_t set_features;
 

@@ -21,6 +21,7 @@
 #include <linux/net.h>
 #include <linux/inetdevice.h>
 #include <linux/netdevice.h>
+#include <linux/rcupdate.h>
 #include <linux/version.h>
 #include <net/ip.h>
 #include <uapi/linux/if_arp.h>
@@ -41,6 +42,9 @@ static void ovpn_struct_free(struct net_device *net)
 
 	security_tun_dev_free_security(ovpn->security);
 	free_percpu(net->tstats);
+	flush_workqueue(ovpn->events_wq);
+	destroy_workqueue(ovpn->events_wq);
+	rcu_barrier();
 }
 
 /* Net device open */
@@ -228,6 +232,8 @@ static __exit void ovpn_cleanup(void)
 {
 	unregister_netdevice_notifier(&ovpn_netdev_notifier);
 	ovpn_nl_unregister();
+
+	rcu_barrier();
 }
 
 module_init(ovpn_init);

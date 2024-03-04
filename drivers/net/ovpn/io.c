@@ -10,6 +10,7 @@
 #include "io.h"
 #include "ovpnstruct.h"
 #include "netlink.h"
+#include "peer.h"
 
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
@@ -27,6 +28,12 @@ int ovpn_struct_init(struct net_device *dev)
 	err = ovpn_nl_init(ovpn);
 	if (err < 0)
 		return err;
+
+	spin_lock_init(&ovpn->lock);
+
+	ovpn->events_wq = alloc_workqueue("ovpn-events-wq-%s", WQ_MEM_RECLAIM, 0, dev->name);
+	if (!ovpn->events_wq)
+		return -ENOMEM;
 
 	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!dev->tstats)
