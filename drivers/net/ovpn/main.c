@@ -8,8 +8,10 @@
  */
 
 #include "main.h"
+#include "netlink.h"
 #include "io.h"
 
+#include <linux/genetlink.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/types.h>
@@ -17,6 +19,7 @@
 #include <linux/inetdevice.h>
 #include <linux/netdevice.h>
 #include <linux/version.h>
+#include <uapi/linux/ovpn.h>
 
 
 /* Driver info */
@@ -101,12 +104,23 @@ static int __init ovpn_init(void)
 		return err;
 	}
 
+	err = ovpn_nl_register();
+	if (err) {
+		pr_err("ovpn: can't register netlink family: %d\n", err);
+		goto unreg_netdev;
+	}
+
 	return 0;
+
+unreg_netdev:
+	unregister_netdevice_notifier(&ovpn_netdev_notifier);
+	return err;
 }
 
 static __exit void ovpn_cleanup(void)
 {
 	unregister_netdevice_notifier(&ovpn_netdev_notifier);
+	ovpn_nl_unregister();
 }
 
 module_init(ovpn_init);
@@ -116,3 +130,4 @@ MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_COPYRIGHT);
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
+MODULE_ALIAS_GENL_FAMILY(OVPN_NL_NAME);
