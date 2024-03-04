@@ -5,8 +5,7 @@
 #include <linux/sched.h>
 
 enum cpu_idle_type {
-	CPU_IDLE,
-	CPU_NOT_IDLE,
+	CPU_IDLE = 1,
 	CPU_NEWLY_IDLE,
 	CPU_MAX_IDLE_TYPES
 };
