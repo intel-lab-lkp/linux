@@ -1876,6 +1876,21 @@ static bool cdclk_pll_is_unknown(unsigned int vco)
 	return vco == ~0;
 }
 
+static u32 xe2lpd_mdclk_source_sel(struct drm_i915_private *i915)
+{
+	if (DISPLAY_VER(i915) >= 20)
+		return MDCLK_SOURCE_SEL_CDCLK_PLL;
+
+	/*
+	 * Earlier display IPs do not provide means of selecting the
+	 * MDCLK source, but MDCLK_SOURCE_SEL_CD2XCLK is a nice default,
+	 * since it reflects the source used for those and allows
+	 * xe2lpd_mdclk_source_sel() to be used in logic that depends on
+	 * it.
+	 */
+	return MDCLK_SOURCE_SEL_CD2XCLK;
+}
+
 static bool cdclk_compute_crawl_and_squash_midpoint(struct drm_i915_private *i915,
 						    const struct intel_cdclk_config *old_cdclk_config,
 						    const struct intel_cdclk_config *new_cdclk_config,
@@ -1980,7 +1995,7 @@ static u32 bxt_cdclk_ctl(struct drm_i915_private *i915,
 		val |= BXT_CDCLK_SSA_PRECHARGE_ENABLE;
 
 	if (DISPLAY_VER(i915) >= 20)
-		val |= MDCLK_SOURCE_SEL_CDCLK_PLL;
+		val |= xe2lpd_mdclk_source_sel(i915);
 	else
 		val |= skl_cdclk_decimal(cdclk);
 
