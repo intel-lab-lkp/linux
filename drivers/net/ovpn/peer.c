@@ -45,6 +45,8 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 	ovpn_crypto_state_init(&peer->crypto);
 	spin_lock_init(&peer->lock);
 	kref_init(&peer->refcount);
+	ovpn_peer_stats_init(&peer->vpn_stats);
+	ovpn_peer_stats_init(&peer->link_stats);
 
 	INIT_WORK(&peer->encrypt_work, ovpn_encrypt_work);
 	INIT_WORK(&peer->decrypt_work, ovpn_decrypt_work);

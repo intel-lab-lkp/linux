@@ -13,6 +13,7 @@
 #include "bind.h"
 #include "crypto.h"
 #include "socket.h"
+#include "stats.h"
 
 #include <linux/ptr_ring.h>
 #include <net/dst_cache.h>
@@ -52,6 +53,12 @@ struct ovpn_peer {
 
 	/* true if ovpn_peer_mark_delete was called */
 	bool halt;
+
+	/* per-peer in-VPN rx/tx stats */
+	struct ovpn_peer_stats vpn_stats;
+
+	/* per-peer link/transport rx/tx stats */
+	struct ovpn_peer_stats link_stats;
 
 	/* why peer was deleted - keepalive timeout, module removed etc */
 	enum ovpn_del_peer_reason delete_reason;

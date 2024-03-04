@@ -162,6 +162,8 @@ static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 	int ret = -1;
 	u8 key_id;
 
+	ovpn_peer_stats_increment_rx(&peer->link_stats, skb->len);
+
 	/* get the key slot matching the key Id in the received packet */
 	key_id = ovpn_key_id_from_skb(skb);
 	ks = ovpn_crypto_key_id_to_slot(&peer->crypto, key_id);
@@ -181,6 +183,9 @@ static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 				    peer->ovpn->dev->name, peer->id, key_id, ret);
 		goto drop;
 	}
+
+	/* increment RX stats */
+	ovpn_peer_stats_increment_rx(&peer->vpn_stats, skb->len);
 
 	/* check if this is a valid datapacket that has to be delivered to the
 	 * tun interface
@@ -268,6 +273,8 @@ static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 		goto err;
 	}
 
+	ovpn_peer_stats_increment_tx(&peer->vpn_stats, skb->len);
+
 	/* encrypt */
 	ret = ovpn_aead_encrypt(ks, skb, peer->id);
 	if (unlikely(ret < 0)) {
@@ -278,6 +285,7 @@ static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 
 	success = true;
 
+	ovpn_peer_stats_increment_tx(&peer->link_stats, skb->len);
 err:
 	ovpn_crypto_key_slot_put(ks);
 	return success;
