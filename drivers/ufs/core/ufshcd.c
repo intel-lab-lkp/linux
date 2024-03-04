@@ -2840,6 +2840,17 @@ static inline void ufshcd_prepare_utp_nop_upiu(struct ufshcd_lrb *lrbp)
 	memset(lrbp->ucd_rsp_ptr, 0, sizeof(struct utp_upiu_rsp));
 }
 
+static void __compose_devman_upiu(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
+				  u8 *upiu_flags, int ehs_length)
+{
+	if (hba->ufs_version <= ufshci_version(1, 1))
+		lrbp->command_type = UTP_CMD_TYPE_DEV_MANAGE;
+	else
+		lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
+
+	ufshcd_prepare_req_desc_hdr(lrbp, upiu_flags, DMA_NONE, ehs_length);
+}
+
 /**
  * ufshcd_compose_devman_upiu - UFS Protocol Information Unit(UPIU)
  *			     for Device Management Purposes
@@ -2854,12 +2865,8 @@ static int ufshcd_compose_devman_upiu(struct ufs_hba *hba,
 	u8 upiu_flags;
 	int ret = 0;
 
-	if (hba->ufs_version <= ufshci_version(1, 1))
-		lrbp->command_type = UTP_CMD_TYPE_DEV_MANAGE;
-	else
-		lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
+	__compose_devman_upiu(hba, lrbp, &upiu_flags, 0);
 
-	ufshcd_prepare_req_desc_hdr(lrbp, &upiu_flags, DMA_NONE, 0);
 	if (hba->dev_cmd.type == DEV_CMD_TYPE_QUERY)
 		ufshcd_prepare_utp_query_req_upiu(hba, lrbp, upiu_flags);
 	else if (hba->dev_cmd.type == DEV_CMD_TYPE_NOP)
@@ -7220,16 +7227,10 @@ static int ufshcd_issue_devman_upiu_cmd(struct ufs_hba *hba,
 	u8 upiu_flags;
 
 	__compose_dev_cmd(hba, lrbp, cmd_type, 0, tag);
-
-	if (hba->ufs_version <= ufshci_version(1, 1))
-		lrbp->command_type = UTP_CMD_TYPE_DEV_MANAGE;
-	else
-		lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
+	__compose_devman_upiu(hba, lrbp, &upiu_flags, 0);
 
 	/* update the task tag in the request upiu */
 	req_upiu->header.task_tag = tag;
-
-	ufshcd_prepare_req_desc_hdr(lrbp, &upiu_flags, DMA_NONE, 0);
 
 	/* just copy the upiu request as it is */
 	memcpy(lrbp->ucd_req_ptr, req_upiu, sizeof(*lrbp->ucd_req_ptr));
@@ -7371,24 +7372,13 @@ int ufshcd_advanced_rpmb_req_handler(struct ufs_hba *hba, struct utp_upiu_req *r
 	u8 upiu_flags;
 	u8 *ehs_data;
 	u16 ehs_len;
+	int ehs = (hba->capabilities & MASK_EHSLUTRD_SUPPORTED) ? 2 : 0;
 
 	/* Protects use of hba->reserved_slot. */
 	ufshcd_dev_man_lock(hba);
 
 	__compose_dev_cmd(hba, lrbp, DEV_CMD_TYPE_RPMB, UFS_UPIU_RPMB_WLUN, tag);
-
-	/* Advanced RPMB starts from UFS 4.0, so its command type is UTP_CMD_TYPE_UFS_STORAGE */
-	lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
-
-	/*
-	 * According to UFSHCI 4.0 specification page 24, if EHSLUTRDS is 0, host controller takes
-	 * EHS length from CMD UPIU, and SW driver use EHS Length field in CMD UPIU. if it is 1,
-	 * HW controller takes EHS length from UTRD.
-	 */
-	if (hba->capabilities & MASK_EHSLUTRD_SUPPORTED)
-		ufshcd_prepare_req_desc_hdr(lrbp, &upiu_flags, dir, 2);
-	else
-		ufshcd_prepare_req_desc_hdr(lrbp, &upiu_flags, dir, 0);
+	__compose_devman_upiu(hba, lrbp, &upiu_flags, ehs);
 
 	/* update the task tag */
 	req_upiu->header.task_tag = tag;
