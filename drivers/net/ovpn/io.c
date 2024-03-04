@@ -318,6 +318,20 @@ static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 	/* encrypt */
 	ret = ovpn_aead_encrypt(ks, skb, peer->id);
 	if (unlikely(ret < 0)) {
+		/* if we ran out of IVs we must kill the key as it can't be used anymore */
+		if (ret == -ERANGE) {
+			netdev_warn(peer->ovpn->dev,
+				    "killing primary key as we ran out of IVs for peer %u\n",
+				    peer->id);
+			ovpn_crypto_kill_primary(&peer->crypto);
+			ret = ovpn_nl_notify_swap_keys(peer);
+			if (ret < 0)
+				netdev_warn(peer->ovpn->dev,
+					    "couldn't send key killing notification to userspace for peer %u\n",
+					    peer->id);
+			goto err;
+		}
+
 		net_err_ratelimited("%s: error during encryption for peer %u, key-id %u: %d\n",
 				    peer->ovpn->dev->name, peer->id, ks->key_id, ret);
 		goto err;
