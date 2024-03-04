@@ -3286,6 +3286,24 @@ static void ufshcd_dev_man_unlock(struct ufs_hba *hba)
 	ufshcd_release(hba);
 }
 
+static int __exec_dev_cmd(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
+			  const u32 tag, int timeout)
+{
+	DECLARE_COMPLETION_ONSTACK(wait);
+	int err;
+
+	hba->dev_cmd.complete = &wait;
+
+	ufshcd_add_query_upiu_trace(hba, UFS_QUERY_SEND, lrbp->ucd_req_ptr);
+
+	ufshcd_send_command(hba, tag, hba->dev_cmd_queue);
+	err = ufshcd_wait_for_dev_cmd(hba, lrbp, timeout);
+
+	ufshcd_add_query_upiu_trace(hba, err ? UFS_QUERY_ERR : UFS_QUERY_COMP,
+				    (struct utp_upiu_req *)lrbp->ucd_rsp_ptr);
+
+	return err;
+}
 /**
  * ufshcd_exec_dev_cmd - API for sending device management requests
  * @hba: UFS hba
@@ -3300,28 +3318,15 @@ static void ufshcd_dev_man_unlock(struct ufs_hba *hba)
 static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
 		enum dev_cmd_type cmd_type, int timeout)
 {
-	DECLARE_COMPLETION_ONSTACK(wait);
 	const u32 tag = hba->reserved_slot;
-	struct ufshcd_lrb *lrbp;
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	int err;
 
-	lrbp = &hba->lrb[tag];
-	lrbp->cmd = NULL;
 	err = ufshcd_compose_dev_cmd(hba, lrbp, cmd_type, tag);
 	if (unlikely(err))
-		goto out;
+		return err;
 
-	hba->dev_cmd.complete = &wait;
-
-	ufshcd_add_query_upiu_trace(hba, UFS_QUERY_SEND, lrbp->ucd_req_ptr);
-
-	ufshcd_send_command(hba, tag, hba->dev_cmd_queue);
-	err = ufshcd_wait_for_dev_cmd(hba, lrbp, timeout);
-	ufshcd_add_query_upiu_trace(hba, err ? UFS_QUERY_ERR : UFS_QUERY_COMP,
-				    (struct utp_upiu_req *)lrbp->ucd_rsp_ptr);
-
-out:
-	return err;
+	return __exec_dev_cmd(hba, lrbp, tag, timeout);
 }
 
 /**
@@ -7203,7 +7208,6 @@ static int ufshcd_issue_devman_upiu_cmd(struct ufs_hba *hba,
 					enum dev_cmd_type cmd_type,
 					enum query_opcode desc_op)
 {
-	DECLARE_COMPLETION_ONSTACK(wait);
 	const u32 tag = hba->reserved_slot;
 	struct ufshcd_lrb *lrbp;
 	int err = 0;
@@ -7240,17 +7244,12 @@ static int ufshcd_issue_devman_upiu_cmd(struct ufs_hba *hba,
 
 	memset(lrbp->ucd_rsp_ptr, 0, sizeof(struct utp_upiu_rsp));
 
-	hba->dev_cmd.complete = &wait;
-
-	ufshcd_add_query_upiu_trace(hba, UFS_QUERY_SEND, lrbp->ucd_req_ptr);
-
-	ufshcd_send_command(hba, tag, hba->dev_cmd_queue);
 	/*
 	 * ignore the returning value here - ufshcd_check_query_response is
 	 * bound to fail since dev_cmd.query and dev_cmd.type were left empty.
 	 * read the response directly ignoring all errors.
 	 */
-	ufshcd_wait_for_dev_cmd(hba, lrbp, QUERY_REQ_TIMEOUT);
+	__exec_dev_cmd(hba, lrbp, tag, QUERY_REQ_TIMEOUT);
 
 	/* just copy the upiu response as it is */
 	memcpy(rsp_upiu, lrbp->ucd_rsp_ptr, sizeof(*rsp_upiu));
@@ -7365,7 +7364,6 @@ int ufshcd_advanced_rpmb_req_handler(struct ufs_hba *hba, struct utp_upiu_req *r
 			 struct ufs_ehs *rsp_ehs, int sg_cnt, struct scatterlist *sg_list,
 			 enum dma_data_direction dir)
 {
-	DECLARE_COMPLETION_ONSTACK(wait);
 	const u32 tag = hba->reserved_slot;
 	struct ufshcd_lrb *lrbp;
 	int err = 0;
@@ -7412,11 +7410,7 @@ int ufshcd_advanced_rpmb_req_handler(struct ufs_hba *hba, struct utp_upiu_req *r
 
 	memset(lrbp->ucd_rsp_ptr, 0, sizeof(struct utp_upiu_rsp));
 
-	hba->dev_cmd.complete = &wait;
-
-	ufshcd_send_command(hba, tag, hba->dev_cmd_queue);
-
-	err = ufshcd_wait_for_dev_cmd(hba, lrbp, ADVANCED_RPMB_REQ_TIMEOUT);
+	err = __exec_dev_cmd(hba, lrbp, tag, ADVANCED_RPMB_REQ_TIMEOUT);
 
 	if (!err) {
 		/* Just copy the upiu response as it is */
