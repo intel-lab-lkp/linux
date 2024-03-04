@@ -45,6 +45,7 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 	kref_init(&peer->refcount);
 
 	INIT_WORK(&peer->encrypt_work, ovpn_encrypt_work);
+	INIT_WORK(&peer->decrypt_work, ovpn_decrypt_work);
 
 	ret = dst_cache_init(&peer->dst_cache, GFP_KERNEL);
 	if (ret < 0) {
@@ -69,6 +70,11 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 		netdev_err(ovpn->dev, "%s: cannot allocate NETIF RX ring\n", __func__);
 		goto err_rx_ring;
 	}
+
+	/* configure and start NAPI */
+	netif_napi_add_tx_weight(ovpn->dev, &peer->napi, ovpn_napi_poll,
+				 NAPI_POLL_WEIGHT);
+	napi_enable(&peer->napi);
 
 	dev_hold(ovpn->dev);
 
@@ -114,6 +120,9 @@ static void ovpn_peer_release_rcu(struct rcu_head *head)
 
 void ovpn_peer_release(struct ovpn_peer *peer)
 {
+	napi_disable(&peer->napi);
+	netif_napi_del(&peer->napi);
+
 	if (peer->sock)
 		ovpn_socket_put(peer->sock);
 

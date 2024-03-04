@@ -53,6 +53,113 @@ int ovpn_struct_init(struct net_device *dev)
 	return 0;
 }
 
+/* Called after decrypt to write IP packet to tun netdev.
+ * This method is expected to manage/free skb.
+ */
+static void ovpn_netdev_write(struct ovpn_peer *peer, struct sk_buff *skb)
+{
+	/* packet integrity was verified on the VPN layer - no need to perform
+	 * any additional check along the stack
+	 */
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->csum_level = ~0;
+
+	/* skb hash for transport packet no longer valid after decapsulation */
+	skb_clear_hash(skb);
+
+	/* post-decrypt scrub -- prepare to inject encapsulated packet onto tun
+	 * interface, based on __skb_tunnel_rx() in dst.h
+	 */
+	skb->dev = peer->ovpn->dev;
+	skb_set_queue_mapping(skb, 0);
+	skb_scrub_packet(skb, true);
+
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+	skb_probe_transport_header(skb);
+	skb_reset_inner_headers(skb);
+
+	/* update per-cpu RX stats with the stored size of encrypted packet */
+
+	/* we are in softirq context - hence no locking nor disable preemption needed */
+	dev_sw_netstats_rx_add(peer->ovpn->dev, skb->len);
+
+	/* cause packet to be "received" by tun interface */
+	napi_gro_receive(&peer->napi, skb);
+}
+
+int ovpn_napi_poll(struct napi_struct *napi, int budget)
+{
+	struct ovpn_peer *peer = container_of(napi, struct ovpn_peer, napi);
+	struct sk_buff *skb;
+	int work_done = 0;
+
+	if (unlikely(budget <= 0))
+		return 0;
+	/* this function should schedule at most 'budget' number of
+	 * packets for delivery to the tun interface.
+	 * If in the queue we have more packets than what allowed by the
+	 * budget, the next polling will take care of those
+	 */
+	while ((work_done < budget) &&
+	       (skb = ptr_ring_consume_bh(&peer->netif_rx_ring))) {
+		ovpn_netdev_write(peer, skb);
+		work_done++;
+	}
+
+	if (work_done < budget)
+		napi_complete_done(napi, work_done);
+
+	return work_done;
+}
+
+/* Entry point for processing an incoming packet (in skb form)
+ *
+ * Enqueue the packet and schedule RX consumer.
+ * Reference to peer is dropped only in case of success.
+ *
+ * Return 0  if the packet was handled (and consumed)
+ * Return <0 in case of error (return value is error code)
+ */
+int ovpn_recv(struct ovpn_struct *ovpn, struct ovpn_peer *peer, struct sk_buff *skb)
+{
+	if (unlikely(ptr_ring_produce_bh(&peer->rx_ring, skb) < 0))
+		return -ENOSPC;
+
+	if (!queue_work(ovpn->crypto_wq, &peer->decrypt_work))
+		ovpn_peer_put(peer);
+
+	return 0;
+}
+
+static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
+{
+	return true;
+}
+
+/* pick packet from RX queue, decrypt and forward it to the tun device */
+void ovpn_decrypt_work(struct work_struct *work)
+{
+	struct ovpn_peer *peer;
+	struct sk_buff *skb;
+
+	peer = container_of(work, struct ovpn_peer, decrypt_work);
+	while ((skb = ptr_ring_consume_bh(&peer->rx_ring))) {
+		if (likely(ovpn_decrypt_one(peer, skb) == 0)) {
+			/* if a packet has been enqueued for NAPI, signal
+			 * availability to the networking stack
+			 */
+			local_bh_disable();
+			napi_schedule(&peer->napi);
+			local_bh_enable();
+		}
+
+		/* give a chance to be rescheduled if needed */
+		cond_resched();
+	}
+	ovpn_peer_put(peer);
+}
+
 static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 {
 	return true;
