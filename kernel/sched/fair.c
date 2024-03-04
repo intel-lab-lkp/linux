@@ -12409,8 +12409,13 @@ out:
 }
 
 /*
- * run_rebalance_domains is triggered when needed from the scheduler tick.
- * Also triggered for NOHZ idle balancing (with NOHZ_BALANCE_KICK set).
+ * The run_rebalance_domains() softirq handler is triggered via SCHED_SOFTIRQ
+ * from two places:
+ *
+ *  - the scheduler_tick(),
+ *
+ *  - from the SMP cross-call function nohz_csd_func(),
+ *    used by NOHZ idle balancing (with NOHZ_BALANCE_KICK set).
  */
 static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 {
