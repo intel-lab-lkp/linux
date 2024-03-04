@@ -42,7 +42,9 @@ static void ovpn_struct_free(struct net_device *net)
 
 	security_tun_dev_free_security(ovpn->security);
 	free_percpu(net->tstats);
+	flush_workqueue(ovpn->crypto_wq);
 	flush_workqueue(ovpn->events_wq);
+	destroy_workqueue(ovpn->crypto_wq);
 	destroy_workqueue(ovpn->events_wq);
 	rcu_barrier();
 }

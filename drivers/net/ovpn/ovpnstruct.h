@@ -28,6 +28,9 @@ struct ovpn_struct {
 	/* protect writing to the ovpn_struct object */
 	spinlock_t lock;
 
+	/* workqueue used to schedule crypto work that may sleep during TX/RX */
+	struct workqueue_struct *crypto_wq;
+
 	/* workqueue used to schedule generic event that may sleep or that need
 	 * to be performed out of softirq context
 	 */

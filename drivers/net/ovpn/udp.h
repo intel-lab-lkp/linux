@@ -9,10 +9,14 @@
 #ifndef _NET_OVPN_UDP_H_
 #define _NET_OVPN_UDP_H_
 
+#include <linux/skbuff.h>
 #include <net/sock.h>
 
+struct ovpn_peer;
 struct ovpn_struct;
 
 int ovpn_udp_socket_attach(struct socket *sock, struct ovpn_struct *ovpn);
+void ovpn_udp_send_skb(struct ovpn_struct *ovpn, struct ovpn_peer *peer,
+		       struct sk_buff *skb);
 
 #endif /* _NET_OVPN_UDP_H_ */

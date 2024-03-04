@@ -44,6 +44,8 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 	spin_lock_init(&peer->lock);
 	kref_init(&peer->refcount);
 
+	INIT_WORK(&peer->encrypt_work, ovpn_encrypt_work);
+
 	ret = dst_cache_init(&peer->dst_cache, GFP_KERNEL);
 	if (ret < 0) {
 		netdev_err(ovpn->dev, "%s: cannot initialize dst cache\n", __func__);
@@ -112,6 +114,9 @@ static void ovpn_peer_release_rcu(struct rcu_head *head)
 
 void ovpn_peer_release(struct ovpn_peer *peer)
 {
+	if (peer->sock)
+		ovpn_socket_put(peer->sock);
+
 	call_rcu(&peer->rcu, ovpn_peer_release_rcu);
 }
 

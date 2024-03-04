@@ -11,6 +11,7 @@
 #define _NET_OVPN_OVPNPEER_H_
 
 #include "bind.h"
+#include "socket.h"
 
 #include <linux/ptr_ring.h>
 #include <net/dst_cache.h>
@@ -27,9 +28,17 @@ struct ovpn_peer {
 		struct in6_addr ipv6;
 	} vpn_addrs;
 
+	/* work objects to handle encryption/decryption of packets.
+	 * these works are queued on the ovpn->crypt_wq workqueue.
+	 */
+	struct work_struct encrypt_work;
+	struct work_struct decrypt_work;
+
 	struct ptr_ring tx_ring;
 	struct ptr_ring rx_ring;
 	struct ptr_ring netif_rx_ring;
+
+	struct ovpn_socket *sock;
 
 	struct dst_cache dst_cache;
 

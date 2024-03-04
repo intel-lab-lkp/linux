@@ -17,4 +17,6 @@ struct sk_buff;
 int ovpn_struct_init(struct net_device *dev);
 netdev_tx_t ovpn_net_xmit(struct sk_buff *skb, struct net_device *dev);
 
+void ovpn_encrypt_work(struct work_struct *work);
+
 #endif /* _NET_OVPN_OVPN_H_ */
