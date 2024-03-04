@@ -7,10 +7,13 @@
  *		Antonio Quartulli <antonio@openvpn.net>
  */
 
+#include "crypto.h"
+#include "crypto_aead.h"
 #include "io.h"
 #include "ovpnstruct.h"
 #include "netlink.h"
 #include "peer.h"
+#include "proto.h"
 #include "udp.h"
 
 #include <linux/netdevice.h>
@@ -113,6 +116,25 @@ int ovpn_napi_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
+/* Return IP protocol version from skb header.
+ * Return 0 if protocol is not IPv4/IPv6 or cannot be read.
+ */
+static __be16 ovpn_ip_check_protocol(struct sk_buff *skb)
+{
+	__be16 proto = 0;
+
+	/* skb could be non-linear, make sure IP header is in non-fragmented part */
+	if (!pskb_network_may_pull(skb, sizeof(struct iphdr)))
+		return 0;
+
+	if (ip_hdr(skb)->version == 4)
+		proto = htons(ETH_P_IP);
+	else if (ip_hdr(skb)->version == 6)
+		proto = htons(ETH_P_IPV6);
+
+	return proto;
+}
+
 /* Entry point for processing an incoming packet (in skb form)
  *
  * Enqueue the packet and schedule RX consumer.
@@ -134,7 +156,72 @@ int ovpn_recv(struct ovpn_struct *ovpn, struct ovpn_peer *peer, struct sk_buff *
 
 static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 {
-	return true;
+	struct ovpn_peer *allowed_peer = NULL;
+	struct ovpn_crypto_key_slot *ks;
+	__be16 proto;
+	int ret = -1;
+	u8 key_id;
+
+	/* get the key slot matching the key Id in the received packet */
+	key_id = ovpn_key_id_from_skb(skb);
+	ks = ovpn_crypto_key_id_to_slot(&peer->crypto, key_id);
+	if (unlikely(!ks)) {
+		net_info_ratelimited("%s: no available key for peer %u, key-id: %u\n",
+				     peer->ovpn->dev->name, peer->id, key_id);
+		goto drop;
+	}
+
+	/* decrypt */
+	ret = ovpn_aead_decrypt(ks, skb);
+
+	ovpn_crypto_key_slot_put(ks);
+
+	if (unlikely(ret < 0)) {
+		net_err_ratelimited("%s: error during decryption for peer %u, key-id %u: %d\n",
+				    peer->ovpn->dev->name, peer->id, key_id, ret);
+		goto drop;
+	}
+
+	/* check if this is a valid datapacket that has to be delivered to the
+	 * tun interface
+	 */
+	skb_reset_network_header(skb);
+	proto = ovpn_ip_check_protocol(skb);
+	if (unlikely(!proto)) {
+		/* check if null packet */
+		if (unlikely(!pskb_may_pull(skb, 1))) {
+			netdev_dbg(peer->ovpn->dev, "NULL packet received from peer %u\n",
+				   peer->id);
+			ret = -EINVAL;
+			goto drop;
+		}
+
+		netdev_dbg(peer->ovpn->dev, "unsupported protocol received from peer %u\n",
+			   peer->id);
+
+		ret = -EPROTONOSUPPORT;
+		goto drop;
+	}
+	skb->protocol = proto;
+
+	/* perform Reverse Path Filtering (RPF) */
+	allowed_peer = ovpn_peer_lookup_by_src(peer->ovpn, skb);
+	if (unlikely(allowed_peer != peer)) {
+		net_dbg_ratelimited("%s: RPF dropped packet from peer %u\n",
+				    peer->ovpn->dev->name, peer->id);
+		ret = -EPERM;
+		goto drop;
+	}
+
+	ret = ptr_ring_produce_bh(&peer->netif_rx_ring, skb);
+drop:
+	if (likely(allowed_peer))
+		ovpn_peer_put(allowed_peer);
+
+	if (unlikely(ret < 0))
+		kfree_skb(skb);
+
+	return ret;
 }
 
 /* pick packet from RX queue, decrypt and forward it to the tun device */
@@ -162,7 +249,38 @@ void ovpn_decrypt_work(struct work_struct *work)
 
 static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 {
-	return true;
+	struct ovpn_crypto_key_slot *ks;
+	bool success = false;
+	int ret;
+
+	/* get primary key to be used for encrypting data */
+	ks = ovpn_crypto_key_slot_primary(&peer->crypto);
+	if (unlikely(!ks)) {
+		net_warn_ratelimited("%s: error while retrieving primary key slot for peer %u\n",
+				     peer->ovpn->dev->name, peer->id);
+		return false;
+	}
+
+	if (unlikely(skb->ip_summed == CHECKSUM_PARTIAL &&
+		     skb_checksum_help(skb))) {
+		net_err_ratelimited("%s: cannot compute checksum for outgoing packet\n",
+				    peer->ovpn->dev->name);
+		goto err;
+	}
+
+	/* encrypt */
+	ret = ovpn_aead_encrypt(ks, skb, peer->id);
+	if (unlikely(ret < 0)) {
+		net_err_ratelimited("%s: error during encryption for peer %u, key-id %u: %d\n",
+				    peer->ovpn->dev->name, peer->id, ks->key_id, ret);
+		goto err;
+	}
+
+	success = true;
+
+err:
+	ovpn_crypto_key_slot_put(ks);
+	return success;
 }
 
 /* Process packets in TX queue in a transport-specific way.
@@ -241,25 +359,6 @@ drop:
 	if (peer)
 		ovpn_peer_put(peer);
 	kfree_skb_list(skb);
-}
-
-/* Return IP protocol version from skb header.
- * Return 0 if protocol is not IPv4/IPv6 or cannot be read.
- */
-static __be16 ovpn_ip_check_protocol(struct sk_buff *skb)
-{
-	__be16 proto = 0;
-
-	/* skb could be non-linear, make sure IP header is in non-fragmented part */
-	if (!pskb_network_may_pull(skb, sizeof(struct iphdr)))
-		return 0;
-
-	if (ip_hdr(skb)->version == 4)
-		proto = htons(ETH_P_IP);
-	else if (ip_hdr(skb)->version == 6)
-		proto = htons(ETH_P_IPV6);
-
-	return proto;
 }
 
 /* Send user data to the network

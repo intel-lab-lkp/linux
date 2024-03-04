@@ -11,6 +11,7 @@
 #define _NET_OVPN_OVPNPEER_H_
 
 #include "bind.h"
+#include "crypto.h"
 #include "socket.h"
 
 #include <linux/ptr_ring.h>
@@ -41,6 +42,8 @@ struct ovpn_peer {
 	struct napi_struct napi;
 
 	struct ovpn_socket *sock;
+
+	struct ovpn_crypto_state crypto;
 
 	struct dst_cache dst_cache;
 

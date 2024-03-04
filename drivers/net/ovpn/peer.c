@@ -8,6 +8,7 @@
  */
 
 #include "bind.h"
+#include "crypto.h"
 #include "io.h"
 #include "main.h"
 #include "netlink.h"
@@ -41,6 +42,7 @@ struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, u32 id)
 	peer->vpn_addrs.ipv6 = in6addr_any;
 
 	RCU_INIT_POINTER(peer->bind, NULL);
+	ovpn_crypto_state_init(&peer->crypto);
 	spin_lock_init(&peer->lock);
 	kref_init(&peer->refcount);
 
@@ -115,6 +117,7 @@ static void ovpn_peer_release_rcu(struct rcu_head *head)
 {
 	struct ovpn_peer *peer = container_of(head, struct ovpn_peer, rcu);
 
+	ovpn_crypto_state_release(&peer->crypto);
 	ovpn_peer_free(peer);
 }
 
@@ -163,6 +166,24 @@ void ovpn_peer_release_kref(struct kref *kref)
  * Return the peer if found or NULL otherwise.
  */
 struct ovpn_peer *ovpn_peer_lookup_by_dst(struct ovpn_struct *ovpn, struct sk_buff *skb)
+{
+	struct ovpn_peer *tmp, *peer = NULL;
+
+	/* in P2P mode, no matter the destination, packets are always sent to the single peer
+	 * listening on the other side
+	 */
+	if (ovpn->mode == OVPN_MODE_P2P) {
+		rcu_read_lock();
+		tmp = rcu_dereference(ovpn->peer);
+		if (likely(tmp && ovpn_peer_hold(tmp)))
+			peer = tmp;
+		rcu_read_unlock();
+	}
+
+	return peer;
+}
+
+struct ovpn_peer *ovpn_peer_lookup_by_src(struct ovpn_struct *ovpn, struct sk_buff *skb)
 {
 	struct ovpn_peer *tmp, *peer = NULL;
 
