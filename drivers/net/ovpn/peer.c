@@ -153,6 +153,69 @@ void ovpn_peer_release_kref(struct kref *kref)
 	queue_work(peer->ovpn->events_wq, &peer->delete_work);
 }
 
+static __be32 ovpn_nexthop_from_rt4(struct sk_buff *skb)
+{
+	struct rtable *rt = skb_rtable(skb);
+
+	if (rt && rt->rt_uses_gateway)
+		return rt->rt_gw4;
+
+	return ip_hdr(skb)->daddr;
+}
+
+static struct in6_addr ovpn_nexthop_from_rt6(struct sk_buff *skb)
+{
+	struct rt6_info *rt = (struct rt6_info *)skb_rtable(skb);
+
+	if (!rt || !(rt->rt6i_flags & RTF_GATEWAY))
+		return ipv6_hdr(skb)->daddr;
+
+	return rt->rt6i_gateway;
+}
+
+static struct ovpn_peer *ovpn_peer_lookup_vpn_addr4(struct hlist_head *head, __be32 *addr)
+{
+	struct ovpn_peer *tmp, *peer = NULL;
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(tmp, head, hash_entry_addr4) {
+		if (*addr != tmp->vpn_addrs.ipv4.s_addr)
+			continue;
+
+		if (!ovpn_peer_hold(tmp))
+			continue;
+
+		peer = tmp;
+		break;
+	}
+	rcu_read_unlock();
+
+	return peer;
+}
+
+static struct ovpn_peer *ovpn_peer_lookup_vpn_addr6(struct hlist_head *head, struct in6_addr *addr)
+{
+	struct ovpn_peer *tmp, *peer = NULL;
+	int i;
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(tmp, head, hash_entry_addr6) {
+		for (i = 0; i < 4; i++) {
+			if (addr->s6_addr32[i] != tmp->vpn_addrs.ipv6.s6_addr32[i])
+				continue;
+		}
+
+		if (!ovpn_peer_hold(tmp))
+			continue;
+
+		peer = tmp;
+		break;
+	}
+	rcu_read_unlock();
+
+	return peer;
+}
+
 /**
  * ovpn_peer_lookup_by_dst() - Lookup peer to send skb to
  *
@@ -170,6 +233,11 @@ void ovpn_peer_release_kref(struct kref *kref)
 struct ovpn_peer *ovpn_peer_lookup_by_dst(struct ovpn_struct *ovpn, struct sk_buff *skb)
 {
 	struct ovpn_peer *tmp, *peer = NULL;
+	struct hlist_head *head;
+	sa_family_t sa_fam;
+	struct in6_addr addr6;
+	__be32 addr4;
+	u32 index;
 
 	/* in P2P mode, no matter the destination, packets are always sent to the single peer
 	 * listening on the other side
@@ -180,14 +248,111 @@ struct ovpn_peer *ovpn_peer_lookup_by_dst(struct ovpn_struct *ovpn, struct sk_bu
 		if (likely(tmp && ovpn_peer_hold(tmp)))
 			peer = tmp;
 		rcu_read_unlock();
+		return peer;
+	}
+
+	sa_fam = skb_protocol_to_family(skb);
+
+	switch (sa_fam) {
+	case AF_INET:
+		addr4 = ovpn_nexthop_from_rt4(skb);
+		index = ovpn_peer_index(ovpn->peers.by_vpn_addr, &addr4, sizeof(addr4));
+		head = &ovpn->peers.by_vpn_addr[index];
+
+		peer = ovpn_peer_lookup_vpn_addr4(head, &addr4);
+		break;
+	case AF_INET6:
+		addr6 = ovpn_nexthop_from_rt6(skb);
+		index = ovpn_peer_index(ovpn->peers.by_vpn_addr, &addr6, sizeof(addr6));
+		head = &ovpn->peers.by_vpn_addr[index];
+
+		peer = ovpn_peer_lookup_vpn_addr6(head, &addr6);
+		break;
 	}
 
 	return peer;
+}
+
+/**
+ * ovpn_nexthop_lookup4() - looks up the IP of the nexthop for the given destination
+ *
+ * Looks up in the IPv4 system routing table the IP of the nexthop to be used
+ * to reach the destination passed as argument. If no nexthop can be found, the
+ * destination itself is returned as it probably has to be used as nexthop.
+ *
+ * @ovpn: the private data representing the current VPN session
+ * @dst: the destination to be looked up
+ *
+ * Return the IP of the next hop if found or the dst itself otherwise
+ */
+static __be32 ovpn_nexthop_lookup4(struct ovpn_struct *ovpn, __be32 src)
+{
+	struct rtable *rt;
+	struct flowi4 fl = {
+		.daddr = src
+	};
+
+	rt = ip_route_output_flow(dev_net(ovpn->dev), &fl, NULL);
+	if (IS_ERR(rt)) {
+		net_dbg_ratelimited("%s: no nexthop found for %pI4\n", ovpn->dev->name, &src);
+		/* if we end up here this packet is probably going to be
+		 * thrown away later
+		 */
+		return src;
+	}
+
+	if (!rt->rt_uses_gateway)
+		goto out;
+
+	src = rt->rt_gw4;
+out:
+	return src;
+}
+
+/**
+ * ovpn_nexthop_lookup6() - looks up the IPv6 of the nexthop for the given destination
+ *
+ * Looks up in the IPv6 system routing table the IP of the nexthop to be used
+ * to reach the destination passed as argument. If no nexthop can be found, the
+ * destination itself is returned as it probably has to be used as nexthop.
+ *
+ * @ovpn: the private data representing the current VPN session
+ * @dst: the destination to be looked up
+ *
+ * Return the IP of the next hop if found or the dst itself otherwise
+ */
+static struct in6_addr ovpn_nexthop_lookup6(struct ovpn_struct *ovpn, struct in6_addr addr)
+{
+#if IS_ENABLED(CONFIG_IPV6)
+	struct rt6_info *rt;
+	struct flowi6 fl = {
+		.daddr = addr,
+	};
+
+	rt = (struct rt6_info *)ipv6_stub->ipv6_dst_lookup_flow(dev_net(ovpn->dev), NULL, &fl,
+								NULL);
+	if (IS_ERR(rt)) {
+		net_dbg_ratelimited("%s: no nexthop found for %pI6\n", ovpn->dev->name, &addr);
+		/* if we end up here this packet is probably going to be thrown away later */
+		return addr;
+	}
+
+	if (rt->rt6i_flags & RTF_GATEWAY)
+		addr = rt->rt6i_gateway;
+
+	dst_release((struct dst_entry *)rt);
+#endif
+	return addr;
 }
 
 struct ovpn_peer *ovpn_peer_lookup_by_src(struct ovpn_struct *ovpn, struct sk_buff *skb)
 {
 	struct ovpn_peer *tmp, *peer = NULL;
+	struct hlist_head *head;
+	sa_family_t sa_fam;
+	struct in6_addr addr6;
+	__be32 addr4;
+	u32 index;
 
 	/* in P2P mode, no matter the destination, packets are always sent to the single peer
 	 * listening on the other side
@@ -198,35 +363,29 @@ struct ovpn_peer *ovpn_peer_lookup_by_src(struct ovpn_struct *ovpn, struct sk_bu
 		if (likely(tmp && ovpn_peer_hold(tmp)))
 			peer = tmp;
 		rcu_read_unlock();
+		return peer;
+	}
+
+	sa_fam = skb_protocol_to_family(skb);
+
+	switch (sa_fam) {
+	case AF_INET:
+		addr4 = ovpn_nexthop_lookup4(ovpn, ip_hdr(skb)->saddr);
+		index = ovpn_peer_index(ovpn->peers.by_vpn_addr, &addr4, sizeof(addr4));
+		head = &ovpn->peers.by_vpn_addr[index];
+
+		peer = ovpn_peer_lookup_vpn_addr4(head, &addr4);
+		break;
+	case AF_INET6:
+		addr6 = ovpn_nexthop_lookup6(ovpn, ipv6_hdr(skb)->saddr);
+		index = ovpn_peer_index(ovpn->peers.by_vpn_addr, &addr6, sizeof(addr6));
+		head = &ovpn->peers.by_vpn_addr[index];
+
+		peer = ovpn_peer_lookup_vpn_addr6(head, &addr6);
+		break;
 	}
 
 	return peer;
-}
-
-static bool ovpn_peer_skb_to_sockaddr(struct sk_buff *skb, struct sockaddr_storage *ss)
-{
-	struct sockaddr_in6 *sa6;
-	struct sockaddr_in *sa4;
-
-	ss->ss_family = skb_protocol_to_family(skb);
-	switch (ss->ss_family) {
-	case AF_INET:
-		sa4 = (struct sockaddr_in *)ss;
-		sa4->sin_family = AF_INET;
-		sa4->sin_addr.s_addr = ip_hdr(skb)->saddr;
-		sa4->sin_port = udp_hdr(skb)->source;
-		break;
-	case AF_INET6:
-		sa6 = (struct sockaddr_in6 *)ss;
-		sa6->sin6_family = AF_INET6;
-		sa6->sin6_addr = ipv6_hdr(skb)->saddr;
-		sa6->sin6_port = udp_hdr(skb)->source;
-		break;
-	default:
-		return false;
-	}
-
-	return true;
 }
 
 static bool ovpn_peer_transp_match(struct ovpn_peer *peer, struct sockaddr_storage *ss)
@@ -277,16 +436,74 @@ static struct ovpn_peer *ovpn_peer_lookup_transp_addr_p2p(struct ovpn_struct *ov
 	return peer;
 }
 
+static bool ovpn_peer_skb_to_sockaddr(struct sk_buff *skb, struct sockaddr_storage *ss)
+{
+	struct sockaddr_in6 *sa6;
+	struct sockaddr_in *sa4;
+
+	ss->ss_family = skb_protocol_to_family(skb);
+	switch (ss->ss_family) {
+	case AF_INET:
+		sa4 = (struct sockaddr_in *)ss;
+		sa4->sin_family = AF_INET;
+		sa4->sin_addr.s_addr = ip_hdr(skb)->saddr;
+		sa4->sin_port = udp_hdr(skb)->source;
+		break;
+	case AF_INET6:
+		sa6 = (struct sockaddr_in6 *)ss;
+		sa6->sin6_family = AF_INET6;
+		sa6->sin6_addr = ipv6_hdr(skb)->saddr;
+		sa6->sin6_port = udp_hdr(skb)->source;
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
 struct ovpn_peer *ovpn_peer_lookup_transp_addr(struct ovpn_struct *ovpn, struct sk_buff *skb)
 {
-	struct ovpn_peer *peer = NULL;
+	struct ovpn_peer *tmp, *peer = NULL;
 	struct sockaddr_storage ss = { 0 };
+	struct hlist_head *head;
+	size_t sa_len;
+	bool found;
+	u32 index;
 
 	if (unlikely(!ovpn_peer_skb_to_sockaddr(skb, &ss)))
 		return NULL;
 
 	if (ovpn->mode == OVPN_MODE_P2P)
-		peer = ovpn_peer_lookup_transp_addr_p2p(ovpn, &ss);
+		return ovpn_peer_lookup_transp_addr_p2p(ovpn, &ss);
+
+	switch (ss.ss_family) {
+	case AF_INET:
+		sa_len = sizeof(struct sockaddr_in);
+		break;
+	case AF_INET6:
+		sa_len = sizeof(struct sockaddr_in6);
+		break;
+	default:
+		return NULL;
+	}
+
+	index = ovpn_peer_index(ovpn->peers.by_transp_addr, &ss, sa_len);
+	head = &ovpn->peers.by_transp_addr[index];
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(tmp, head, hash_entry_transp_addr) {
+		found = ovpn_peer_transp_match(tmp, &ss);
+		if (!found)
+			continue;
+
+		if (!ovpn_peer_hold(tmp))
+			continue;
+
+		peer = tmp;
+		break;
+	}
+	rcu_read_unlock();
 
 	return peer;
 }
@@ -306,10 +523,28 @@ static struct ovpn_peer *ovpn_peer_lookup_id_p2p(struct ovpn_struct *ovpn, u32 p
 
 struct ovpn_peer *ovpn_peer_lookup_id(struct ovpn_struct *ovpn, u32 peer_id)
 {
-	struct ovpn_peer *peer = NULL;
+	struct ovpn_peer *tmp, *peer = NULL;
+	struct hlist_head *head;
+	u32 index;
 
 	if (ovpn->mode == OVPN_MODE_P2P)
-		peer = ovpn_peer_lookup_id_p2p(ovpn, peer_id);
+		return ovpn_peer_lookup_id_p2p(ovpn, peer_id);
+
+	index = ovpn_peer_index(ovpn->peers.by_id, &peer_id, sizeof(peer_id));
+	head = &ovpn->peers.by_id[index];
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(tmp, head, hash_entry_id) {
+		if (tmp->id != peer_id)
+			continue;
+
+		if (!ovpn_peer_hold(tmp))
+			continue;
+
+		peer = tmp;
+		break;
+	}
+	rcu_read_unlock();
 
 	return peer;
 }
