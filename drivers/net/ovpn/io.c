@@ -14,6 +14,7 @@
 #include "netlink.h"
 #include "peer.h"
 #include "proto.h"
+#include "tcp.h"
 #include "udp.h"
 
 #include <linux/netdevice.h>
@@ -294,6 +295,7 @@ err:
 /* Process packets in TX queue in a transport-specific way.
  *
  * UDP transport - encrypt and send across the tunnel.
+ * TCP transport - encrypt and put into TCP TX queue.
  */
 void ovpn_encrypt_work(struct work_struct *work)
 {
@@ -325,6 +327,9 @@ void ovpn_encrypt_work(struct work_struct *work)
 				switch (peer->sock->sock->sk->sk_protocol) {
 				case IPPROTO_UDP:
 					ovpn_udp_send_skb(peer->ovpn, peer, curr);
+					break;
+				case IPPROTO_TCP:
+					ovpn_tcp_send_skb(peer, curr);
 					break;
 				default:
 					/* no transport configured yet */

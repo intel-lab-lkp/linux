@@ -23,8 +23,18 @@ struct ovpn_peer;
  * struct ovpn_socket - a kernel socket referenced in the ovpn code
  */
 struct ovpn_socket {
-	/* the VPN session object owning this socket (UDP only) */
-	struct ovpn_struct *ovpn;
+	union {
+		/* the VPN session object owning this socket (UDP only) */
+		struct ovpn_struct *ovpn;
+
+		/* TCP only */
+		struct {
+			/** @peer: the unique peer transmitting over this socket (TCP only) */
+			struct ovpn_peer *peer;
+			struct ptr_ring recv_ring;
+		};
+	};
+
 	/* the kernel socket */
 	struct socket *sock;
 	/* amount of contexts currently referencing this object */

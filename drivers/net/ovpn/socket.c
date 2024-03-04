@@ -9,8 +9,10 @@
 
 #include "main.h"
 #include "io.h"
+#include "ovpnstruct.h"
 #include "peer.h"
 #include "socket.h"
+#include "tcp.h"
 #include "udp.h"
 
 /* Finalize release of socket, called after RCU grace period */
@@ -21,6 +23,8 @@ static void ovpn_socket_detach(struct socket *sock)
 
 	if (sock->sk->sk_protocol == IPPROTO_UDP)
 		ovpn_udp_socket_detach(sock);
+	else if (sock->sk->sk_protocol == IPPROTO_TCP)
+		ovpn_tcp_socket_detach(sock);
 
 	sockfd_put(sock);
 }
@@ -63,6 +67,8 @@ static int ovpn_socket_attach(struct socket *sock, struct ovpn_peer *peer)
 
 	if (sock->sk->sk_protocol == IPPROTO_UDP)
 		ret = ovpn_udp_socket_attach(sock, peer->ovpn);
+	else if (sock->sk->sk_protocol == IPPROTO_TCP)
+		ret = ovpn_tcp_socket_attach(sock, peer);
 
 	return ret;
 }
@@ -115,6 +121,18 @@ struct ovpn_socket *ovpn_socket_new(struct socket *sock, struct ovpn_peer *peer)
 	ovpn_sock->ovpn = peer->ovpn;
 	ovpn_sock->sock = sock;
 	kref_init(&ovpn_sock->refcount);
+
+	/* TCP sockets are per-peer, therefore they are linked to their unique peer */
+	if (sock->sk->sk_protocol == IPPROTO_TCP) {
+		ovpn_sock->peer = peer;
+		ret = ptr_ring_init(&ovpn_sock->recv_ring, OVPN_QUEUE_LEN, GFP_KERNEL);
+		if (ret < 0) {
+			netdev_err(peer->ovpn->dev, "%s: cannot allocate TCP recv ring\n",
+				   __func__);
+			kfree(ovpn_sock);
+			return ERR_PTR(ret);
+		}
+	}
 
 	rcu_assign_sk_user_data(sock->sk, ovpn_sock);
 
