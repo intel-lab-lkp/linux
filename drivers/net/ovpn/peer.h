@@ -30,6 +30,11 @@ struct ovpn_peer {
 		struct in6_addr ipv6;
 	} vpn_addrs;
 
+	struct hlist_node hash_entry_id;
+	struct hlist_node hash_entry_addr4;
+	struct hlist_node hash_entry_addr6;
+	struct hlist_node hash_entry_transp_addr;
+
 	/* work objects to handle encryption/decryption of packets.
 	 * these works are queued on the ovpn->crypt_wq workqueue.
 	 */
@@ -126,5 +131,7 @@ struct ovpn_peer *ovpn_peer_lookup_id(struct ovpn_struct *ovpn, u32 peer_id);
 
 int ovpn_peer_reset_sockaddr(struct ovpn_peer *peer, const struct sockaddr_storage *ss,
 			     const u8 *local_ip);
+
+void ovpn_peers_free(struct ovpn_struct *ovpn);
 
 #endif /* _NET_OVPN_OVPNPEER_H_ */

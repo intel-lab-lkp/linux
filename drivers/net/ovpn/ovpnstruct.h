@@ -36,6 +36,15 @@ struct ovpn_struct {
 	 */
 	struct workqueue_struct *events_wq;
 
+	/* list of known peers */
+	struct {
+		DECLARE_HASHTABLE(by_id, 12);
+		DECLARE_HASHTABLE(by_transp_addr, 12);
+		DECLARE_HASHTABLE(by_vpn_addr, 12);
+		/* protects write access to any of the hashtables above */
+		spinlock_t lock;
+	} peers;
+
 	/* for p2p mode */
 	struct ovpn_peer __rcu *peer;
 
