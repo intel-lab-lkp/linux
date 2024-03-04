@@ -16,6 +16,7 @@ int ovpn_nl_init(struct ovpn_struct *ovpn);
 int ovpn_nl_register(void);
 void ovpn_nl_unregister(void);
 
+int ovpn_nl_notify_del_peer(struct ovpn_peer *peer);
 int ovpn_nl_notify_swap_keys(struct ovpn_peer *peer);
 
 #endif /* _NET_OVPN_NETLINK_H_ */
