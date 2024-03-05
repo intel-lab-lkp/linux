@@ -1095,7 +1095,10 @@ static int iso_listen_bis(struct sock *sk)
 	if (!hdev)
 		return -EHOSTUNREACH;
 
-	hci_dev_lock(hdev);
+	/* To avoid circular locking dependency warnings,
+	 * use nested lock for hdev.
+	 */
+	mutex_lock_nested(&hdev->lock, SINGLE_DEPTH_NESTING);
 
 	/* Fail if user set invalid QoS */
 	if (iso_pi(sk)->qos_user_set && !check_bcast_qos(&iso_pi(sk)->qos)) {
