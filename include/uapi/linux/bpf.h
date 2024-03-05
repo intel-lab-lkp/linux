@@ -42,6 +42,7 @@
 #define BPF_JSGE	0x70	/* SGE is signed '>=', GE in x86 */
 #define BPF_JSLT	0xc0	/* SLT is signed, '<' */
 #define BPF_JSLE	0xd0	/* SLE is signed, '<=' */
+#define BPF_JMA		0xe0	/* may_goto */
 #define BPF_CALL	0x80	/* function call */
 #define BPF_EXIT	0x90	/* function return */
 
