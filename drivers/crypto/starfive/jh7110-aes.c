@@ -413,6 +413,9 @@ static void starfive_aes_dma_done(void *param)
 
 static void starfive_aes_dma_init(struct starfive_cryp_dev *cryp)
 {
+	memset(&cryp->cfg_in, 0, sizeof(struct dma_slave_config));
+	memset(&cryp->cfg_out, 0, sizeof(struct dma_slave_config));
+
 	cryp->cfg_in.direction = DMA_MEM_TO_DEV;
 	cryp->cfg_in.src_addr_width = DMA_SLAVE_BUSWIDTH_16_BYTES;
 	cryp->cfg_in.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;

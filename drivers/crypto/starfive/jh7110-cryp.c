@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
@@ -99,6 +100,8 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 	if (!cryp)
 		return -ENOMEM;
 
+	cryp->type = (uintptr_t)of_device_get_match_data(&pdev->dev);
+
 	platform_set_drvdata(pdev, cryp);
 	cryp->dev = &pdev->dev;
 
@@ -153,7 +156,7 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_algs_aes;
 
-	ret = starfive_hash_register_algs();
+	ret = starfive_hash_register_algs(cryp);
 	if (ret)
 		goto err_algs_hash;
 
@@ -161,10 +164,18 @@ static int starfive_cryp_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_algs_rsa;
 
+	if (cryp->type == STARFIVE_CRYPTO_JH8100) {
+		ret = starfive_sm3_register_algs();
+		if (ret)
+			goto err_algs_sm3;
+	}
+
 	return 0;
 
+err_algs_sm3:
+	starfive_rsa_unregister_algs();
 err_algs_rsa:
-	starfive_hash_unregister_algs();
+	starfive_hash_unregister_algs(cryp);
 err_algs_hash:
 	starfive_aes_unregister_algs();
 err_algs_aes:
@@ -190,8 +201,11 @@ static void starfive_cryp_remove(struct platform_device *pdev)
 	struct starfive_cryp_dev *cryp = platform_get_drvdata(pdev);
 
 	starfive_aes_unregister_algs();
-	starfive_hash_unregister_algs();
+	starfive_hash_unregister_algs(cryp);
 	starfive_rsa_unregister_algs();
+
+	if (cryp->type == STARFIVE_CRYPTO_JH8100)
+		starfive_sm3_unregister_algs();
 
 	crypto_engine_stop(cryp->engine);
 	crypto_engine_exit(cryp->engine);
@@ -208,7 +222,13 @@ static void starfive_cryp_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id starfive_dt_ids[] __maybe_unused = {
-	{ .compatible = "starfive,jh7110-crypto", .data = NULL},
+	{
+		.compatible = "starfive,jh7110-crypto",
+		.data = (const void *)STARFIVE_CRYPTO_JH7110,
+	}, {
+		.compatible = "starfive,jh8100-crypto",
+		.data = (const void *)STARFIVE_CRYPTO_JH8100,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, starfive_dt_ids);
