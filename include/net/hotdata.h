@@ -16,7 +16,9 @@ struct net_hotdata {
 #if IS_ENABLED(CONFIG_IPV6)
 	struct packet_offload	ipv6_packet_offload;
 	struct net_offload	tcpv6_offload;
+	struct inet6_protocol	tcpv6_protocol;
 	struct net_offload	udpv6_offload;
+	struct inet6_protocol	udpv6_protocol;
 #endif
 	struct list_head	offload_base;
 	struct list_head	ptype_all;
