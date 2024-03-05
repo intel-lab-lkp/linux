@@ -9,6 +9,8 @@
 
 #include "sfdp.h"
 
+#include <linux/sizes.h> // for SZ_*
+
 #define SPI_NOR_MAX_ID_LEN	6
 /*
  * 256 bytes is a sane default for most older flashes. Newer flashes will

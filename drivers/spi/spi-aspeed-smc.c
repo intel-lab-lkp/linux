@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/sizes.h> // for SZ_*
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
 

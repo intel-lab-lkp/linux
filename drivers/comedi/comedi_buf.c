@@ -10,6 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/comedi/comedidev.h>
+#include <asm/pgtable.h> // for PAGE_KERNEL*
 #include "comedi_internal.h"
 
 #ifdef PAGE_KERNEL_NOCACHE
