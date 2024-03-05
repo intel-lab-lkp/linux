@@ -285,6 +285,7 @@ static inline void ttm_set_driver_manager(struct ttm_device *bdev, int type,
 {
 	BUILD_BUG_ON(__builtin_constant_p(type) && type >= TTM_NUM_MEM_TYPES);
 	bdev->man_drv[type] = manager;
+	manager->mem_type = type;
 }
 
 int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *funcs,
