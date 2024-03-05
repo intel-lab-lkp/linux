@@ -1128,10 +1128,10 @@ static int iso_listen_bis(struct sock *sk)
 		goto unlock;
 	}
 
-	hci_dev_put(hdev);
-
 unlock:
 	hci_dev_unlock(hdev);
+	hci_dev_put(hdev);
+
 	return err;
 }
 
