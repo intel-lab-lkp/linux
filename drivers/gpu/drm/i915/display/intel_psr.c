@@ -1160,6 +1160,9 @@ static bool _lnl_compute_alpm_params(struct intel_dp *intel_dp,
  * This is not directly mentioned in Bspec. There are 50 us io wake time and 32
  * us fast wake time. Clearly preharge pulses are not (improperly) included in
  * 32 us fast wake time. 50 us - 32 us = 18 us.
+ *
+ * For DISPLAY_VER >= 20
+ * RBR 15us, HBR1 11us, higher rates 10us
  */
 static int get_io_buffer_wake_time(const struct intel_crtc_state *crtc_state)
 {
@@ -1167,8 +1170,12 @@ static int get_io_buffer_wake_time(const struct intel_crtc_state *crtc_state)
 
 	if (DISPLAY_VER(i915) < 12)
 		return 18;
-	else
+	else if (DISPLAY_VER(i915) < 20 || crtc_state->port_clock > 270000)
 		return 10;
+	else if (crtc_state->port_clock > 162000)
+		return 11;
+	else
+		return 15;
 }
 
 static bool _compute_alpm_params(struct intel_dp *intel_dp,
