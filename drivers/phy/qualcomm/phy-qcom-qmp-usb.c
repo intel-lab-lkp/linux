@@ -21,6 +21,9 @@
 
 #include "phy-qcom-qmp-common.h"
 
+#include <linux/pm_opp.h>
+#include <linux/pm_domain.h>
+
 #include "phy-qcom-qmp.h"
 #include "phy-qcom-qmp-pcs-misc-v3.h"
 #include "phy-qcom-qmp-pcs-misc-v4.h"
@@ -1212,6 +1215,9 @@ struct qmp_phy_cfg {
 	unsigned int pcs_usb_offset;
 };
 
+#define DOMAIN_GENPD_TRANSFER			0
+#define DOMAIN_GENPD_CORE			1
+
 struct qmp_usb {
 	struct device *dev;
 
@@ -1236,6 +1242,19 @@ struct qmp_usb {
 	struct phy *phy;
 
 	struct clk_fixed_rate pipe_clk_fixed;
+
+	struct dev_pm_domain_list *pd_list;
+	struct device *genpd_core;
+	struct device *genpd_transfer;
+
+	bool fw_managed;
+	/* separate resource management for fw_managed vs locally managed devices */
+	struct qmp_usb_device_ops {
+		int (*bus_resume_resource)(struct qmp_usb *qmp);
+		int (*runtime_resume_resource)(struct qmp_usb *qmp);
+		int (*bus_suspend_resource)(struct qmp_usb *qmp);
+		int (*runtime_suspend_resource)(struct qmp_usb *qmp);
+	} qmp_usb_device_ops;
 };
 
 static inline void qphy_setbits(void __iomem *base, u32 offset, u32 val)
@@ -1598,6 +1617,41 @@ static const struct qmp_phy_cfg x1e80100_usb3_uniphy_cfg = {
 	.regs			= qmp_v7_usb3phy_regs_layout,
 };
 
+static void qmp_fw_managed_domain_remove(struct qmp_usb *qmp)
+{
+	dev_pm_domain_detach_list(qmp->pd_list);
+}
+
+static int qmp_fw_managed_domain_init(struct qmp_usb *qmp)
+{
+	struct device *dev = qmp->dev;
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags	= PD_FLAG_NO_DEV_LINK,
+		.pd_names	= (const char*[]) { "usb_transfer", "usb_core" },
+		.num_pd_names	= 2,
+	};
+	int ret = 0;
+
+	if (!dev->pm_domain) {
+		ret = dev_pm_domain_attach_list(dev, &pd_data, &qmp->pd_list);
+		if (ret < 0) {
+			dev_err(dev, "domain attach failed %d)\n", ret);
+			return ret;
+		}
+
+		qmp->genpd_transfer = qmp->pd_list->pd_devs[DOMAIN_GENPD_TRANSFER];
+		qmp->genpd_core = qmp->pd_list->pd_devs[DOMAIN_GENPD_CORE];
+
+
+		dev_dbg(dev, "domains attached successfully\n");
+	} else {
+		dev_dbg(dev, "domain attach fail\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 static int qmp_usb_serdes_init(struct qmp_usb *qmp)
 {
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
@@ -1610,11 +1664,20 @@ static int qmp_usb_serdes_init(struct qmp_usb *qmp)
 	return 0;
 }
 
-static int qmp_usb_init(struct phy *phy)
+static int fw_managed_ssphy_bus_init(struct qmp_usb *qmp)
 {
-	struct qmp_usb *qmp = phy_get_drvdata(phy);
+	int ret = 0;
+
+	ret = pm_runtime_get_sync(qmp->genpd_core);
+	if (ret < 0)
+		dev_err(qmp->dev, "Failed to enable fw managed resources");
+
+	return ret;
+}
+
+static int locally_managed_ssphy_bus_init(struct qmp_usb *qmp)
+{
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
-	void __iomem *pcs = qmp->pcs;
 	int ret;
 
 	ret = regulator_bulk_enable(cfg->num_vregs, qmp->vregs);
@@ -1639,8 +1702,11 @@ static int qmp_usb_init(struct phy *phy)
 	if (ret)
 		goto err_assert_reset;
 
-	qphy_setbits(pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL], SW_PWRDN);
-
+	ret = clk_prepare_enable(qmp->pipe_clk);
+	if (ret) {
+		dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
+		return ret;
+	}
 	return 0;
 
 err_assert_reset:
@@ -1651,11 +1717,22 @@ err_disable_regulators:
 	return ret;
 }
 
-static int qmp_usb_exit(struct phy *phy)
+static int fw_managed_ssphy_bus_exit(struct qmp_usb *qmp)
 {
-	struct qmp_usb *qmp = phy_get_drvdata(phy);
+	int ret = 0;
+
+	ret = pm_runtime_put_sync(qmp->genpd_core);
+	if (ret < 0)
+		dev_err(qmp->dev, "Failed to disable fw managed resources");
+
+	return 0;
+}
+
+static int locally_managed_ssphy_bus_exit(struct qmp_usb *qmp)
+{
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 
+	clk_disable_unprepare(qmp->pipe_clk);
 	reset_control_bulk_assert(qmp->num_resets, qmp->resets);
 
 	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
@@ -1677,13 +1754,9 @@ static int qmp_usb_power_on(struct phy *phy)
 	unsigned int val;
 	int ret;
 
-	qmp_usb_serdes_init(qmp);
+	qphy_setbits(pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL], SW_PWRDN);
 
-	ret = clk_prepare_enable(qmp->pipe_clk);
-	if (ret) {
-		dev_err(qmp->dev, "pipe_clk enable failed err=%d\n", ret);
-		return ret;
-	}
+	qmp_usb_serdes_init(qmp);
 
 	/* Tx, Rx, and PCS configurations */
 	qmp_configure_lane(tx, cfg->tx_tbl, cfg->tx_tbl_num, 1);
@@ -1708,23 +1781,16 @@ static int qmp_usb_power_on(struct phy *phy)
 				 PHY_INIT_COMPLETE_TIMEOUT);
 	if (ret) {
 		dev_err(qmp->dev, "phy initialization timed-out\n");
-		goto err_disable_pipe_clk;
+		return ret;
 	}
 
 	return 0;
-
-err_disable_pipe_clk:
-	clk_disable_unprepare(qmp->pipe_clk);
-
-	return ret;
 }
 
 static int qmp_usb_power_off(struct phy *phy)
 {
 	struct qmp_usb *qmp = phy_get_drvdata(phy);
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
-
-	clk_disable_unprepare(qmp->pipe_clk);
 
 	/* PHY reset */
 	qphy_setbits(qmp->pcs, cfg->regs[QPHY_SW_RESET], SW_RESET);
@@ -1742,27 +1808,30 @@ static int qmp_usb_power_off(struct phy *phy)
 
 static int qmp_usb_enable(struct phy *phy)
 {
+	struct qmp_usb *qmp = phy_get_drvdata(phy);
 	int ret;
 
-	ret = qmp_usb_init(phy);
+	ret = qmp->qmp_usb_device_ops.bus_resume_resource(qmp);
 	if (ret)
 		return ret;
 
 	ret = qmp_usb_power_on(phy);
 	if (ret)
-		qmp_usb_exit(phy);
+		qmp->qmp_usb_device_ops.bus_suspend_resource(qmp);
 
 	return ret;
 }
 
 static int qmp_usb_disable(struct phy *phy)
 {
+	struct qmp_usb *qmp = phy_get_drvdata(phy);
 	int ret;
 
 	ret = qmp_usb_power_off(phy);
 	if (ret)
 		return ret;
-	return qmp_usb_exit(phy);
+
+	return qmp->qmp_usb_device_ops.bus_suspend_resource(qmp);
 }
 
 static int qmp_usb_set_mode(struct phy *phy, enum phy_mode mode, int submode)
@@ -1828,6 +1897,25 @@ static void qmp_usb_disable_autonomous_mode(struct qmp_usb *qmp)
 	qphy_clrbits(pcs_usb, cfg->regs[QPHY_PCS_LFPS_RXTERM_IRQ_CLEAR], IRQ_CLEAR);
 }
 
+static int locally_managed_ssphy_runtime_exit(struct qmp_usb *qmp)
+{
+	clk_disable_unprepare(qmp->pipe_clk);
+	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+
+	return 0;
+}
+
+static int fw_managed_ssphy_runtime_exit(struct qmp_usb *qmp)
+{
+	int ret = 0;
+
+	ret = pm_runtime_put_sync(qmp->genpd_transfer);
+	if (ret < 0)
+		dev_err(qmp->dev, "Failed to disable fw managed resources");
+
+	return 0;
+}
+
 static int __maybe_unused qmp_usb_runtime_suspend(struct device *dev)
 {
 	struct qmp_usb *qmp = dev_get_drvdata(dev);
@@ -1841,16 +1929,44 @@ static int __maybe_unused qmp_usb_runtime_suspend(struct device *dev)
 
 	qmp_usb_enable_autonomous_mode(qmp);
 
-	clk_disable_unprepare(qmp->pipe_clk);
-	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+	qmp->qmp_usb_device_ops.runtime_suspend_resource(qmp);
 
 	return 0;
 }
 
+static int locally_managed_ssphy_runtime_init(struct qmp_usb *qmp)
+{
+	int ret = 0;
+
+	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(qmp->pipe_clk);
+	if (ret) {
+		dev_err(qmp->dev, "pipe_clk enable failed, err=%d\n", ret);
+		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int fw_managed_ssphy_runtime_init(struct qmp_usb *qmp)
+{
+	int ret = 0;
+
+	ret = pm_runtime_get_sync(qmp->genpd_transfer);
+	if (ret < 0)
+		dev_err(qmp->dev, "Failed to enable fw managed resources");
+
+	return ret;
+}
+
 static int __maybe_unused qmp_usb_runtime_resume(struct device *dev)
 {
+	int ret;
 	struct qmp_usb *qmp = dev_get_drvdata(dev);
-	int ret = 0;
 
 	dev_vdbg(dev, "Resuming QMP phy, mode:%d\n", qmp->mode);
 
@@ -1859,16 +1975,9 @@ static int __maybe_unused qmp_usb_runtime_resume(struct device *dev)
 		return 0;
 	}
 
-	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+	ret = qmp->qmp_usb_device_ops.runtime_resume_resource(qmp);
 	if (ret)
 		return ret;
-
-	ret = clk_prepare_enable(qmp->pipe_clk);
-	if (ret) {
-		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
-		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
-		return ret;
-	}
 
 	qmp_usb_disable_autonomous_mode(qmp);
 
@@ -2059,22 +2168,24 @@ static int qmp_usb_parse_dt_legacy(struct qmp_usb *qmp, struct device_node *np)
 		qmp->pcs_misc = NULL;
 	}
 
-	qmp->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
-				     "failed to get pipe clock\n");
+	if (!qmp->fw_managed) {
+		qmp->pipe_clk = devm_get_clk_from_child(dev, np, NULL);
+		if (IS_ERR(qmp->pipe_clk)) {
+			return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+					     "failed to get pipe clock\n");
+		}
+
+		ret = devm_clk_bulk_get_all(qmp->dev, &qmp->clks);
+		if (ret < 0)
+			return ret;
+
+		qmp->num_clks = ret;
+
+		ret = qmp_usb_reset_init(qmp, usb3phy_legacy_reset_l,
+					 ARRAY_SIZE(usb3phy_legacy_reset_l));
+		if (ret)
+			return ret;
 	}
-
-	ret = devm_clk_bulk_get_all(qmp->dev, &qmp->clks);
-	if (ret < 0)
-		return ret;
-
-	qmp->num_clks = ret;
-
-	ret = qmp_usb_reset_init(qmp, usb3phy_legacy_reset_l,
-				 ARRAY_SIZE(usb3phy_legacy_reset_l));
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -2104,20 +2215,22 @@ static int qmp_usb_parse_dt(struct qmp_usb *qmp)
 	qmp->tx = base + offs->tx;
 	qmp->rx = base + offs->rx;
 
-	ret = qmp_usb_clk_init(qmp);
-	if (ret)
-		return ret;
+	if (!qmp->fw_managed) {
+		ret = qmp_usb_clk_init(qmp);
+		if (ret)
+			return ret;
 
-	qmp->pipe_clk = devm_clk_get(dev, "pipe");
-	if (IS_ERR(qmp->pipe_clk)) {
-		return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
-				     "failed to get pipe clock\n");
+		qmp->pipe_clk = devm_clk_get(dev, "pipe");
+		if (IS_ERR(qmp->pipe_clk)) {
+			return dev_err_probe(dev, PTR_ERR(qmp->pipe_clk),
+					     "failed to get pipe clock\n");
+		}
+
+		ret = qmp_usb_reset_init(qmp, usb3phy_reset_l,
+					 ARRAY_SIZE(usb3phy_reset_l));
+		if (ret)
+			return ret;
 	}
-
-	ret = qmp_usb_reset_init(qmp, usb3phy_reset_l,
-				 ARRAY_SIZE(usb3phy_reset_l));
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -2140,9 +2253,36 @@ static int qmp_usb_probe(struct platform_device *pdev)
 	if (!qmp->cfg)
 		return -EINVAL;
 
-	ret = qmp_usb_vreg_init(qmp);
-	if (ret)
-		return ret;
+	qmp->fw_managed  = device_property_read_bool(dev, "qmp,fw-managed");
+	if (qmp->fw_managed) {
+		ret = qmp_fw_managed_domain_init(qmp);
+		if (ret) {
+			dev_err(dev, "Failed to init domains. Bail out");
+			return ret;
+		}
+
+		qmp->qmp_usb_device_ops.bus_resume_resource =
+						fw_managed_ssphy_bus_init;
+		qmp->qmp_usb_device_ops.runtime_resume_resource =
+						fw_managed_ssphy_runtime_init;
+		qmp->qmp_usb_device_ops.bus_suspend_resource =
+						fw_managed_ssphy_bus_exit;
+		qmp->qmp_usb_device_ops.runtime_suspend_resource =
+						fw_managed_ssphy_runtime_exit;
+	} else {
+		ret = qmp_usb_vreg_init(qmp);
+		if (ret)
+			return ret;
+
+		qmp->qmp_usb_device_ops.bus_resume_resource =
+						locally_managed_ssphy_bus_init;
+		qmp->qmp_usb_device_ops.runtime_resume_resource =
+						locally_managed_ssphy_runtime_init;
+		qmp->qmp_usb_device_ops.bus_suspend_resource =
+						locally_managed_ssphy_bus_exit;
+		qmp->qmp_usb_device_ops.runtime_suspend_resource =
+						locally_managed_ssphy_runtime_exit;
+	}
 
 	/* Check for legacy binding with child node. */
 	np = of_get_next_available_child(dev->of_node, NULL);
@@ -2165,9 +2305,11 @@ static int qmp_usb_probe(struct platform_device *pdev)
 	 */
 	pm_runtime_forbid(dev);
 
-	ret = phy_pipe_clk_register(qmp, np);
-	if (ret)
-		goto err_node_put;
+	if (!qmp->fw_managed) {
+		ret = phy_pipe_clk_register(qmp, np);
+		if (ret)
+			goto err_node_put;
+	}
 
 	qmp->phy = devm_phy_create(dev, np, &qmp_usb_phy_ops);
 	if (IS_ERR(qmp->phy)) {
@@ -2186,8 +2328,21 @@ static int qmp_usb_probe(struct platform_device *pdev)
 
 err_node_put:
 	of_node_put(np);
+	if (qmp->fw_managed)
+		qmp_fw_managed_domain_remove(qmp);
 	return ret;
 }
+
+static void qmp_usb_remove(struct platform_device *pdev)
+{
+	struct qmp_usb *qmp = platform_get_drvdata(pdev);
+
+	if (qmp->fw_managed) {
+		pm_runtime_put_sync(qmp->genpd_core);
+		qmp_fw_managed_domain_remove(qmp);
+	}
+}
+
 
 static const struct of_device_id qmp_usb_of_match_table[] = {
 	{
@@ -2239,6 +2394,7 @@ MODULE_DEVICE_TABLE(of, qmp_usb_of_match_table);
 
 static struct platform_driver qmp_usb_driver = {
 	.probe		= qmp_usb_probe,
+	.remove_new	= qmp_usb_remove,
 	.driver = {
 		.name	= "qcom-qmp-usb-phy",
 		.pm	= &qmp_usb_pm_ops,
