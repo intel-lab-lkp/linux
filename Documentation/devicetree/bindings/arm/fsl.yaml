@@ -1071,6 +1071,12 @@ properties:
           - const: avnet,sm2s-imx8mp              # SM2S-IMX8PLUS SoM
           - const: fsl,imx8mp
 
+      - description: Compulab reference carrier board based on the UCM-iMX8MPLUS SoM
+        items:
+          - const: compulab,sb-ucm-imx8mp
+          - const: compulab,ucm-imx8mp
+          - const: fsl,imx8mp
+
       - description: i.MX8MP DHCOM based Boards
         items:
           - enum:
