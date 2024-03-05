@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/abracon,abx80x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Abracon ABX80X I2C ultra low power RTC/alarm chip
+
+maintainers:
+  - Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+
+description:
+  The Abracon ABX80X family consists of the ab0801, ab0803, ab0804, ab0805,
+  ab1801, ab1803, ab1804 and ab1805. The ab0805 is the superset of ab080x and
+  the ab1805 is the superset of ab180x.
+
+properties:
+  compatible:
+    enum:
+      - abracon,abx80x    # Enables chip auto-detection
+      - abracon,ab0801
+      - abracon,ab0803
+      - abracon,ab0804
+      - abracon,ab0805
+      - abracon,ab1801
+      - abracon,ab1803
+      - abracon,ab1804
+      - abracon,ab1805
+      - microcrystal,rv1805
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  abracon,tc-diode:
+    description:
+      Select the series diode configuration for the trickle charger, between a
+      standard diode (0.6V) and a Schottky diode (0.3V).
+    enum: [standard, schottky]
+
+  abracon,tc-resistor:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Select the series output resistor value for the tricker charger, in kOhm.
+    enum: [0, 3, 6, 11]
+
+dependentRequired:
+  abracon,tc-diode: ["abracon,tc-resistor"]
+  abracon,tc-resistor: ["abracon,tc-diode"]
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: rtc.yaml#
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              enum:
+                - abracon,ab0804
+                - abracon,ab1804
+                - abracon,ab0805
+                - abracon,ab1805
+    then:
+      properties:
+        abracon,tc-diode: false
+        abracon,tc-resistor: false
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        rtc@69 {
+            compatible = "abracon,ab1805";
+            reg = <0x69>;
+            abracon,tc-diode = "schottky";
+            abracon,tc-resistor = <3>;
+        };
+    };
+...
