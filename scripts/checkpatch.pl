@@ -6599,6 +6599,16 @@ sub process {
 			}
 		}
 
+# warn about msleep() calls with durations that should use ssleep()
+if ($line =~ /\bmsleep\s*\((\d+)\);/) {
+    my $ms_duration = $1;
+    if ($ms_duration >= 1000 && ($ms_duration % 1000) == 0) {
+        my $ss_duration = $ms_duration / 1000;
+        WARN("SSLEEP",
+             "Prefer ssleep($ss_duration) over msleep($ms_duration);\n" . $herecurr);
+    }
+}
+
 # check for comparisons of jiffies
 		if ($line =~ /\bjiffies\s*$Compare|$Compare\s*jiffies\b/) {
 			WARN("JIFFIES_COMPARISON",
