@@ -647,6 +647,7 @@ static void set_desc_dest_master(struct axi_dma_hw_desc *hw_desc,
 
 static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 				  struct axi_dma_hw_desc *hw_desc,
+				  struct axi_dma_desc *desc,
 				  dma_addr_t mem_addr, size_t len)
 {
 	unsigned int data_width = BIT(chan->chip->dw->hdata->m_data_width);
@@ -655,6 +656,8 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 	dma_addr_t device_addr;
 	size_t axi_block_ts;
 	size_t block_ts;
+	bool hw_quirks = chan->quirks & DWAXIDMAC_STARFIVE_SM_ALGO;
+	u32 val;
 	u32 ctllo, ctlhi;
 	u32 burst_len;
 
@@ -675,7 +678,8 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 		device_addr = chan->config.dst_addr;
 		ctllo = reg_width << CH_CTL_L_DST_WIDTH_POS |
 			mem_width << CH_CTL_L_SRC_WIDTH_POS |
-			DWAXIDMAC_CH_CTL_L_NOINC << CH_CTL_L_DST_INC_POS |
+			(hw_quirks ? DWAXIDMAC_CH_CTL_L_INC << CH_CTL_L_DST_INC_POS :
+				     DWAXIDMAC_CH_CTL_L_NOINC << CH_CTL_L_DST_INC_POS) |
 			DWAXIDMAC_CH_CTL_L_INC << CH_CTL_L_SRC_INC_POS;
 		block_ts = len >> mem_width;
 		break;
@@ -685,7 +689,8 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 		ctllo = reg_width << CH_CTL_L_SRC_WIDTH_POS |
 			mem_width << CH_CTL_L_DST_WIDTH_POS |
 			DWAXIDMAC_CH_CTL_L_INC << CH_CTL_L_DST_INC_POS |
-			DWAXIDMAC_CH_CTL_L_NOINC << CH_CTL_L_SRC_INC_POS;
+			(hw_quirks ? DWAXIDMAC_CH_CTL_L_INC << CH_CTL_L_SRC_INC_POS :
+				     DWAXIDMAC_CH_CTL_L_NOINC << CH_CTL_L_SRC_INC_POS);
 		block_ts = len >> reg_width;
 		break;
 	default:
@@ -725,6 +730,17 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 	hw_desc->lli->ctl_lo = cpu_to_le32(ctllo);
 
 	set_desc_src_master(hw_desc);
+
+	if (hw_quirks) {
+		if (chan->direction == DMA_MEM_TO_DEV) {
+			set_desc_dest_master(hw_desc, desc);
+		} else {
+			/* Select AXI1 for src master */
+			val = le32_to_cpu(hw_desc->lli->ctl_lo);
+			val |= CH_CTL_L_SRC_MAST;
+			hw_desc->lli->ctl_lo = cpu_to_le32(val);
+		}
+	}
 
 	hw_desc->len = len;
 	return 0;
@@ -802,8 +818,8 @@ dw_axi_dma_chan_prep_cyclic(struct dma_chan *dchan, dma_addr_t dma_addr,
 	for (i = 0; i < total_segments; i++) {
 		hw_desc = &desc->hw_desc[i];
 
-		status = dw_axi_dma_set_hw_desc(chan, hw_desc, src_addr,
-						segment_len);
+		status = dw_axi_dma_set_hw_desc(chan, hw_desc, NULL,
+						src_addr, segment_len);
 		if (status < 0)
 			goto err_desc_get;
 
@@ -885,7 +901,8 @@ dw_axi_dma_chan_prep_slave_sg(struct dma_chan *dchan, struct scatterlist *sgl,
 
 		do {
 			hw_desc = &desc->hw_desc[loop++];
-			status = dw_axi_dma_set_hw_desc(chan, hw_desc, mem, segment_len);
+			status = dw_axi_dma_set_hw_desc(chan, hw_desc, desc,
+							mem, segment_len);
 			if (status < 0)
 				goto err_desc_get;
 
@@ -1023,8 +1040,13 @@ static int dw_axi_dma_chan_slave_config(struct dma_chan *dchan,
 					struct dma_slave_config *config)
 {
 	struct axi_dma_chan *chan = dchan_to_axi_dma_chan(dchan);
+	struct dw_axi_peripheral_config *periph = config->peripheral_config;
 
 	memcpy(&chan->config, config, sizeof(*config));
+	if (config->peripheral_size == sizeof(*periph))
+		chan->quirks = periph->quirks;
+	else
+		chan->quirks = 0;
 
 	return 0;
 }

@@ -14,6 +14,7 @@
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/dmaengine.h>
+#include <linux/dma/dw_axi.h>
 #include <linux/types.h>
 
 #include "../virt-dma.h"
@@ -50,6 +51,7 @@ struct axi_dma_chan {
 	struct dma_slave_config		config;
 	enum dma_transfer_direction	direction;
 	bool				cyclic;
+	u32				quirks;
 	/* these other elements are all protected by vc.lock */
 	bool				is_paused;
 };
