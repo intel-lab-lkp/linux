@@ -5,6 +5,7 @@
 #include <linux/errno.h>
 #include <linux/nospec.h>
 #include <linux/ptrace.h>
+#include <linux/prandom.h>
 #include <linux/randomize_kstack.h>
 #include <linux/syscalls.h>
 
@@ -33,6 +34,45 @@ static long __invoke_syscall(struct pt_regs *regs, syscall_fn_t syscall_fn)
 {
 	return syscall_fn(regs);
 }
+
+#ifdef CONFIG_RANDOMIZE_KSTACK_OFFSET
+DEFINE_PER_CPU(struct rnd_state, kstackrng);
+
+static u16 kstack_rng(void)
+{
+	u32 rng = prandom_u32_state(this_cpu_ptr(&kstackrng));
+
+	return rng & 0x1ff;
+}
+
+/* Should we reseed? */
+static int kstack_rng_setup(unsigned int cpu)
+{
+	u32 rng_seed;
+
+	/* zero should be avoided as a seed */
+	do {
+		rng_seed = get_random_u32();
+	} while (!rng_seed);
+	prandom_seed_state(this_cpu_ptr(&kstackrng), rng_seed);
+	return 0;
+}
+
+static int kstack_init(void)
+{
+	int ret;
+
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "arm64/cpuinfo:kstackrandomize",
+				kstack_rng_setup, NULL);
+	if (ret < 0)
+		pr_err("kstack: failed to register rng callbacks.\n");
+	return 0;
+}
+
+arch_initcall(kstack_init);
+#else
+static u16 kstack_rng(void) { return 0; }
+#endif /* CONFIG_RANDOMIZE_KSTACK_OFFSET */
 
 static void invoke_syscall(struct pt_regs *regs, unsigned int scno,
 			   unsigned int sc_nr,
@@ -63,7 +103,7 @@ static void invoke_syscall(struct pt_regs *regs, unsigned int scno,
 	 *
 	 * The resulting 5 bits of entropy is seen in SP[8:4].
 	 */
-	choose_random_kstack_offset(get_random_u16() & 0x1FF);
+	choose_random_kstack_offset(kstack_rng());
 }
 
 static inline bool has_syscall_work(unsigned long flags)
