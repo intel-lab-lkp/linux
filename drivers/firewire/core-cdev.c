@@ -1126,9 +1126,11 @@ static int ioctl_queue_iso(struct client *client, union ioctl_arg *arg)
 	u32 control;
 	int count;
 	struct {
-		struct fw_iso_packet packet;
+		struct fw_iso_packet_hdr packet;
 		u8 header[256];
 	} u;
+	struct fw_iso_packet *packet =
+			container_of(&u.packet, struct fw_iso_packet, hdr);
 
 	if (ctx == NULL || a->handle != 0)
 		return -EINVAL;
@@ -1192,7 +1194,7 @@ static int ioctl_queue_iso(struct client *client, union ioctl_arg *arg)
 		if (next > end)
 			return -EINVAL;
 		if (copy_from_user
-		    (u.packet.header, p->header, transmit_header_bytes))
+		    (packet->header, p->header, transmit_header_bytes))
 			return -EFAULT;
 		if (u.packet.skip && ctx->type == FW_ISO_CONTEXT_TRANSMIT &&
 		    u.packet.header_length + u.packet.payload_length > 0)
@@ -1200,8 +1202,7 @@ static int ioctl_queue_iso(struct client *client, union ioctl_arg *arg)
 		if (payload + u.packet.payload_length > buffer_end)
 			return -EINVAL;
 
-		if (fw_iso_context_queue(ctx, &u.packet,
-					 &client->buffer, payload))
+		if (fw_iso_context_queue(ctx, packet, &client->buffer, payload))
 			break;
 
 		p = next;

@@ -456,13 +456,15 @@ void fw_core_remove_descriptor(struct fw_descriptor *desc);
  * scatter-gather streaming (e.g. assembling video frame automatically).
  */
 struct fw_iso_packet {
-	u16 payload_length;	/* Length of indirect payload		*/
-	u32 interrupt:1;	/* Generate interrupt on this packet	*/
-	u32 skip:1;		/* tx: Set to not send packet at all	*/
-				/* rx: Sync bit, wait for matching sy	*/
-	u32 tag:2;		/* tx: Tag in packet header		*/
-	u32 sy:4;		/* tx: Sy in packet header		*/
-	u32 header_length:8;	/* Length of immediate header		*/
+	struct_group_tagged(fw_iso_packet_hdr, hdr,
+		u16 payload_length;	/* Length of indirect payload		*/
+		u32 interrupt:1;	/* Generate interrupt on this packet	*/
+		u32 skip:1;		/* tx: Set to not send packet at all	*/
+		/* rx: Sync bit, wait for matching sy	*/
+		u32 tag:2;		/* tx: Tag in packet header		*/
+		u32 sy:4;		/* tx: Sy in packet header		*/
+		u32 header_length:8;	/* Length of immediate header		*/
+	);
 	u32 header[];		/* tx: Top of 1394 isoch. data_block	*/
 };
 
