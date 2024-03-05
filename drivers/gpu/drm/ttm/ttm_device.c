@@ -270,17 +270,22 @@ EXPORT_SYMBOL(ttm_device_fini);
 static void ttm_device_clear_lru_dma_mappings(struct ttm_device *bdev,
 					      struct list_head *list)
 {
-	struct ttm_resource *res;
+	struct ttm_lru_item *lru;
 
 	spin_lock(&bdev->lru_lock);
-	while ((res = list_first_entry_or_null(list, typeof(*res), lru))) {
-		struct ttm_buffer_object *bo = res->bo;
+	while ((lru = list_first_entry_or_null(list, typeof(*lru), link))) {
+		struct ttm_buffer_object *bo;
+
+		if (!ttm_lru_item_is_res(lru))
+			continue;
+
+		bo = ttm_lru_item_to_res(lru)->bo;
 
 		/* Take ref against racing releases once lru_lock is unlocked */
 		if (!ttm_bo_get_unless_zero(bo))
 			continue;
 
-		list_del_init(&res->lru);
+		list_del_init(&bo->resource->lru.link);
 		spin_unlock(&bdev->lru_lock);
 
 		if (bo->ttm)
