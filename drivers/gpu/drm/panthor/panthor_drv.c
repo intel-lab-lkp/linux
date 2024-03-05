@@ -1363,6 +1363,7 @@ static void panthor_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 
 	panthor_gpu_show_fdinfo(ptdev, file->driver_priv, p);
 
+	drm_show_memory_stats(p, file);
 }
 
 static const struct file_operations panthor_drm_driver_fops = {
