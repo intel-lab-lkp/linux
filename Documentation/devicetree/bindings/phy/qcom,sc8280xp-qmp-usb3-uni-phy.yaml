@@ -44,7 +44,32 @@ properties:
     maxItems: 5
 
   power-domains:
-    maxItems: 1
+    description: specifies a phandle to PM domain provider node
+    minItems: 1
+    maxItems: 2
+
+  power-domain-names:
+    description:
+      A list of power domain name strings sorted in the same order as the
+      power-domains property.
+
+      For platforms where some resource are firmware managed, the name
+      corresponding to the index of an SCMI domain provider can be
+      "usb_core" or "usb_transfer".
+    items:
+      - const: usb_core
+      - const: usb_transfer
+
+  qmp,fw-managed:
+    description:
+      Some targets allow multiple resources to be managed by firmware.
+      On these targets, tasks related to clocks, regulators, resets, and
+      interconnects can be delegated to the firmware, while the remaining
+      responsibilities are handled by Linux.
+
+      Decide if the target resources will be managed by firmware or High level
+      OS.
+    type: boolean
 
   resets:
     maxItems: 2
@@ -70,17 +95,36 @@ properties:
 required:
   - compatible
   - reg
-  - clocks
-  - clock-names
-  - resets
-  - reset-names
-  - vdda-phy-supply
-  - vdda-pll-supply
-  - "#clock-cells"
-  - clock-output-names
   - "#phy-cells"
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sa8775p-qmp-usb3-uni-phy
+              - qcom,sc8280xp-qmp-usb3-uni-phy
+              - qcom,x1e80100-qmp-usb3-uni-phy
+    then:
+      required:
+        - power-domains
+
+  - if:
+      not:
+        required:
+          - qmp,fw-managed
+    then:
+      required:
+        - clocks
+        - clock-names
+        - resets
+        - reset-names
+        - vdda-phy-supply
+        - vdda-pll-supply
+        - clock-output-names
+        - "#clock-cells"
+
   - if:
       properties:
         compatible:
@@ -143,18 +187,6 @@ allOf:
             - const: ref
             - const: com_aux
             - const: pipe
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - qcom,sa8775p-qmp-usb3-uni-phy
-              - qcom,sc8280xp-qmp-usb3-uni-phy
-              - qcom,x1e80100-qmp-usb3-uni-phy
-    then:
-      required:
-        - power-domains
 
 additionalProperties: false
 
