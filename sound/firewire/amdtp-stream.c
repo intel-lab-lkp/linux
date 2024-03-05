@@ -1177,12 +1177,14 @@ static void process_rx_packets(struct fw_iso_context *context, u32 tstamp, size_
 
 	for (i = 0; i < packets; ++i) {
 		struct {
-			struct fw_iso_packet params;
+			struct fw_iso_packet_hdr params;
 			__be32 header[CIP_HEADER_QUADLETS];
 		} template = { {0}, {0} };
+		struct fw_iso_packet *params =
+			container_of(&template.params, struct fw_iso_packet, hdr);
 		bool sched_irq = false;
 
-		build_it_pkt_header(s, desc->cycle, &template.params, pkt_header_length,
+		build_it_pkt_header(s, desc->cycle, params, pkt_header_length,
 				    desc->data_blocks, desc->data_block_counter,
 				    desc->syt, i, curr_cycle_time);
 
@@ -1194,7 +1196,7 @@ static void process_rx_packets(struct fw_iso_context *context, u32 tstamp, size_
 			}
 		}
 
-		if (queue_out_packet(s, &template.params, sched_irq) < 0) {
+		if (queue_out_packet(s, params, sched_irq) < 0) {
 			cancel_stream(s);
 			return;
 		}
