@@ -764,8 +764,18 @@
 };
 
 &usb_0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb0_en_state>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ assigned-clocks;
+	/delete-property/ assigned-clock-rates;
+	/delete-property/ required-opps;
+	/delete-property/ resets;
+	/delete-property/ interconnects;
+	/delete-property/ interconnect-names;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	qcom,fw-managed;
 
 	status = "okay";
 };
@@ -775,23 +785,45 @@
 };
 
 &usb_0_hsphy {
-	vdda-pll-supply = <&vreg_l7a>;
-	vdda18-supply = <&vreg_l6c>;
-	vdda33-supply = <&vreg_l9a>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ resets;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	hsphy,fw-managed;
 
 	status = "okay";
 };
 
 &usb_0_qmpphy {
-	vdda-phy-supply = <&vreg_l1c>;
-	vdda-pll-supply = <&vreg_l7a>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ resets;
+	/delete-property/ reset-names;
+	/delete-property/ #clock-cells;
+	/delete-property/ clock-output-names;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	qmp,fw-managed;
 
 	status = "okay";
 };
 
 &usb_1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb1_en_state>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ assigned-clocks;
+	/delete-property/ assigned-clock-rates;
+	/delete-property/ required-opps;
+	/delete-property/ resets;
+	/delete-property/ interconnects;
+	/delete-property/ interconnect-names;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	qcom,fw-managed;
 
 	status = "okay";
 };
@@ -801,23 +833,45 @@
 };
 
 &usb_1_hsphy {
-	vdda-pll-supply = <&vreg_l7a>;
-	vdda18-supply = <&vreg_l6c>;
-	vdda33-supply = <&vreg_l9a>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ resets;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	hsphy,fw-managed;
 
 	status = "okay";
 };
 
 &usb_1_qmpphy {
-	vdda-phy-supply = <&vreg_l1c>;
-	vdda-pll-supply = <&vreg_l7a>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ resets;
+	/delete-property/ reset-names;
+	/delete-property/ #clock-cells;
+	/delete-property/ clock-output-names;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	qmp,fw-managed;
 
 	status = "okay";
 };
 
 &usb_2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb2_en_state>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ assigned-clocks;
+	/delete-property/ assigned-clock-rates;
+	/delete-property/ required-opps;
+	/delete-property/ resets;
+	/delete-property/ interconnects;
+	/delete-property/ interconnect-names;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	qcom,fw-managed;
 
 	status = "okay";
 };
@@ -827,9 +881,13 @@
 };
 
 &usb_2_hsphy {
-	vdda-pll-supply = <&vreg_l7a>;
-	vdda18-supply = <&vreg_l6c>;
-	vdda33-supply = <&vreg_l9a>;
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+	/delete-property/ resets;
+
+	power-domains = <TODO>, <TODO>;
+	power-domain-names = "usb_transfer", "usb_core";
+	hsphy,fw-managed;
 
 	status = "okay";
 };
