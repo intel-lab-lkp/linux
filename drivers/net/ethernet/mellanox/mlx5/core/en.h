@@ -753,6 +753,12 @@ enum mlx5e_channel_state {
 	MLX5E_CHANNEL_NUM_STATES
 };
 
+struct mlx5e_moder {
+	struct dim_cq_moder dim;
+	/* Consumed when dim is not enabled */
+	struct ethtool_coalesce coal_params;
+};
+
 struct mlx5e_channel {
 	/* data path */
 	struct mlx5e_rq            rq;
@@ -794,6 +800,10 @@ struct mlx5e_channel {
 	int                        cpu;
 	/* Sync between icosq recovery and XSK enable/disable. */
 	struct mutex               icosq_recovery_lock;
+
+	/* coalescing configuration */
+	struct mlx5e_moder         rx_moder;
+	struct mlx5e_moder         tx_moder;
 };
 
 struct mlx5e_ptp;
