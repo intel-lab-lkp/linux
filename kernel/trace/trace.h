@@ -338,6 +338,9 @@ struct trace_array {
 	unsigned int		snapshot;
 	unsigned int		mapped;
 	unsigned long		max_latency;
+	/* The below is for memory mapped ring buffer */
+	unsigned long		range_addr_start;
+	unsigned long		range_addr_size;
 #ifdef CONFIG_FSNOTIFY
 	struct dentry		*d_max_latency;
 	struct work_struct	fsnotify_work;

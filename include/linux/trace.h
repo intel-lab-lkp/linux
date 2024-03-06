@@ -33,6 +33,13 @@ struct trace_array;
 int register_ftrace_export(struct trace_export *export);
 int unregister_ftrace_export(struct trace_export *export);
 
+/*
+ * If the below are set, then a "boot_mapped" tracing instance will
+ * be created using this memory for its ring buffer.
+ */
+extern unsigned long trace_buffer_start;
+extern unsigned long trace_buffer_size;
+
 /**
  * trace_array_puts - write a constant string into the trace buffer.
  * @tr:    The trace array to write to
