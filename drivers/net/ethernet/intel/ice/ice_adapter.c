@@ -5,6 +5,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/xarray.h>
 #include "ice_adapter.h"
 
@@ -28,6 +29,7 @@ static struct ice_adapter *ice_adapter_new(void)
 	if (!a)
 		return NULL;
 
+	spin_lock_init(&a->ptp_gltsyn_time_lock);
 	refcount_set(&a->refcount, 1);
 
 	return a;
