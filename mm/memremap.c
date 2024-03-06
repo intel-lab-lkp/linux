@@ -157,7 +157,17 @@ EXPORT_SYMBOL_GPL(memunmap_pages);
 
 static void devm_memremap_pages_release(void *data)
 {
-	memunmap_pages(data);
+	struct dev_pagemap *pgmap = data;
+
+	if (pgmap->flags & PGMAP_ALTMAP_VALID && pgmap->altmap.res) {
+		resource_size_t start = pgmap->altmap.res->start;
+		resource_size_t size = pgmap->altmap.res->end -
+				       pgmap->altmap.res->start + 1;
+
+		__release_region(pgmap->altmap.parent, start, size);
+	}
+
+	memunmap_pages(pgmap);
 }
 
 static void dev_pagemap_percpu_release(struct percpu_ref *ref)
@@ -404,11 +414,22 @@ void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap)
 {
 	int error;
 	void *ret;
+	struct vmem_altmap *altmap = &pgmap->altmap;
 
 	ret = memremap_pages(pgmap, dev_to_node(dev));
 	if (IS_ERR(ret))
 		return ret;
 
+	if (pgmap->flags & PGMAP_ALTMAP_VALID && altmap->parent) {
+		unsigned long start = altmap->base_pfn << PAGE_SHIFT;
+		unsigned long size = vmem_altmap_offset(altmap) << PAGE_SHIFT;
+		int flags = IORESOURCE_DEVICE_BACKED_VMEMMAP | IORESOURCE_BUSY;
+
+		altmap->res = __request_region(altmap->parent, start, size,
+					      "Device Backed Vmemmap", flags);
+		pr_debug("Insert a separate resource for altmap, %lx-%lx\n",
+			 start, start + size);
+	}
 	error = devm_add_action_or_reset(dev, devm_memremap_pages_release,
 			pgmap);
 	if (error)

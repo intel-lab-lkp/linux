@@ -17,6 +17,8 @@ struct device;
  * @free: free pages set aside in the mapping for memmap storage
  * @align: pages reserved to meet allocation alignments
  * @alloc: track pages consumed, private to vmemmap_populate()
+ * @parent: the parent resource that altmap region belongs to
+ * @res: altmap region resource
  */
 struct vmem_altmap {
 	unsigned long base_pfn;
@@ -25,6 +27,7 @@ struct vmem_altmap {
 	unsigned long free;
 	unsigned long align;
 	unsigned long alloc;
+	struct resource *parent, *res;
 };
 
 /*
