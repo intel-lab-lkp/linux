@@ -452,7 +452,7 @@ static int pmem_attach_disk(struct device *dev,
 	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 	int nid = dev_to_node(dev), fua;
-	struct resource *res = &nsio->res;
+	struct resource *res = &nsio->res, *parent;
 	struct range bb_range;
 	struct nd_pfn *nd_pfn = NULL;
 	struct dax_device *dax_dev;
@@ -491,11 +491,14 @@ static int pmem_attach_disk(struct device *dev,
 		fua = 0;
 	}
 
-	if (!devm_request_mem_region(dev, res->start, resource_size(res),
-				dev_name(&ndns->dev))) {
+	parent = devm_request_mem_region(dev, res->start, resource_size(res),
+				dev_name(&ndns->dev));
+	if (!res) {
 		dev_warn(dev, "could not reserve region %pR\n", res);
 		return -EBUSY;
 	}
+
+	pgmap_parent_resource(&pmem->pgmap, parent);
 
 	disk = blk_alloc_disk(nid);
 	if (!disk)
