@@ -54,6 +54,7 @@ struct drm_mode_object;
 struct drm_mode_set;
 struct drm_plane;
 struct drm_plane_state;
+struct drm_printer;
 struct drm_property;
 struct edid;
 struct fwnode_handle;
