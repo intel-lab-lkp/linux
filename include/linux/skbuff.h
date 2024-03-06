@@ -3479,17 +3479,6 @@ static inline struct page *skb_frag_page(const skb_frag_t *frag)
 
 bool napi_pp_get_page(struct page *page);
 
-static inline void napi_frag_ref(skb_frag_t *frag, bool recycle)
-{
-#ifdef CONFIG_PAGE_POOL
-	struct page *page = skb_frag_page(frag);
-
-	if (recycle && napi_pp_get_page(page))
-		return;
-#endif
-	get_page(page);
-}
-
 /**
  * __skb_frag_ref - take an addition reference on a paged fragment.
  * @frag: the paged fragment
@@ -3501,7 +3490,13 @@ static inline void napi_frag_ref(skb_frag_t *frag, bool recycle)
  */
 static inline void __skb_frag_ref(skb_frag_t *frag, bool recycle)
 {
-	napi_frag_ref(frag, recycle);
+#ifdef CONFIG_PAGE_POOL
+	struct page *page = skb_frag_page(frag);
+
+	if (recycle && napi_pp_get_page(page))
+		return;
+#endif
+	get_page(page);
 }
 
 /**
@@ -3522,8 +3517,17 @@ int skb_cow_data_for_xdp(struct page_pool *pool, struct sk_buff **pskb,
 			 struct bpf_prog *prog);
 bool napi_pp_put_page(struct page *page, bool napi_safe);
 
-static inline void
-napi_frag_unref(skb_frag_t *frag, bool recycle, bool napi_safe)
+/**
+ * __skb_frag_unref - release a reference on a paged fragment.
+ * @frag: the paged fragment
+ * @recycle: recycle the page if allocated via page_pool
+ * @napi_safe: set to true if running in the same napi context as where the
+ * consumer would run.
+ *
+ * Releases a reference on the paged fragment @frag
+ * or recycles the page via the page_pool API.
+ */
+static inline void __skb_frag_unref(skb_frag_t *frag, bool recycle, bool napi_safe)
 {
 	struct page *page = skb_frag_page(frag);
 
@@ -3532,19 +3536,6 @@ napi_frag_unref(skb_frag_t *frag, bool recycle, bool napi_safe)
 		return;
 #endif
 	put_page(page);
-}
-
-/**
- * __skb_frag_unref - release a reference on a paged fragment.
- * @frag: the paged fragment
- * @recycle: recycle the page if allocated via page_pool
- *
- * Releases a reference on the paged fragment @frag
- * or recycles the page via the page_pool API.
- */
-static inline void __skb_frag_unref(skb_frag_t *frag, bool recycle)
-{
-	napi_frag_unref(frag, recycle, false);
 }
 
 /**
@@ -3559,7 +3550,7 @@ static inline void skb_frag_unref(struct sk_buff *skb, int f)
 	struct skb_shared_info *shinfo = skb_shinfo(skb);
 
 	if (!skb_zcopy_managed(skb))
-		__skb_frag_unref(&shinfo->frags[f], skb->pp_recycle);
+		__skb_frag_unref(&shinfo->frags[f], skb->pp_recycle, false);
 }
 
 /**
