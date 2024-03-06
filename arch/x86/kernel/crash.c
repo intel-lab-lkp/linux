@@ -146,6 +146,8 @@ static struct crash_mem *fill_up_crash_elf_data(void)
 	if (!nr_ranges)
 		return NULL;
 
+	walk_device_backed_vmemmap_res(0, -1, &nr_ranges,
+				       get_nr_ram_ranges_callback);
 	/*
 	 * Exclusion of crash region and/or crashk_low_res may cause
 	 * another range split. So add extra two slots here.
@@ -211,6 +213,9 @@ static int prepare_elf_headers(void **addr, unsigned long *sz,
 	ret = walk_system_ram_res(0, -1, cmem, prepare_elf64_ram_headers_callback);
 	if (ret)
 		goto out;
+
+	walk_device_backed_vmemmap_res(0, -1, cmem,
+				       prepare_elf64_ram_headers_callback);
 
 	/* Exclude unwanted mem ranges */
 	ret = elf_header_exclude_ranges(cmem);
