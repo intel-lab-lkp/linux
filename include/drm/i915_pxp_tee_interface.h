@@ -14,12 +14,10 @@ struct scatterlist;
  * struct i915_pxp_component_ops - ops for PXP services.
  * @owner: Module providing the ops
  * @send: sends data to PXP
- * @receive: receives data from PXP
+ * @recv: receives data from PXP
+ * @gsc_command: send gsc command
  */
 struct i915_pxp_component_ops {
-	/**
-	 * @owner: owner of the module provding the ops
-	 */
 	struct module *owner;
 
 	int (*send)(struct device *dev, const void *message, size_t size,
@@ -35,14 +33,21 @@ struct i915_pxp_component_ops {
 /**
  * struct i915_pxp_component - Used for communication between i915 and TEE
  * drivers for the PXP services
- * @tee_dev: device that provide the PXP service from TEE Bus.
- * @pxp_ops: Ops implemented by TEE driver, used by i915 driver.
  */
 struct i915_pxp_component {
+	/**
+	 * @tee_dev: device that provide the PXP service from TEE Bus.
+	 */
 	struct device *tee_dev;
+
+	/**
+	 * @ops: Ops implemented by TEE driver, used by i915 driver.
+	 */
 	const struct i915_pxp_component_ops *ops;
 
-	/* To protect the above members. */
+	/**
+	 * @mutex: To protect the above members.
+	 */
 	struct mutex mutex;
 };
 
