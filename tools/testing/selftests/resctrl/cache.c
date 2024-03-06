@@ -161,16 +161,21 @@ int perf_event_measure(int pe_fd, struct perf_event_read *pe_read,
  *
  * Return: =0 on success. <0 on failure.
  */
-int measure_llc_resctrl(const char *filename, int bm_pid)
+int measure_llc_resctrl(const char *filename, int bm_pid, const char *ctrlgrp,
+			const char *mongrp, int res_id)
 {
-	unsigned long llc_occu_resc = 0;
+	unsigned long sum = 0, llc_occu_resc = 0;
 	int ret;
 
-	ret = get_llc_occu_resctrl(&llc_occu_resc);
-	if (ret < 0)
-		return ret;
+	for (int i = 0 ; i < snc_ways() ; i++) {
+		set_cmt_path(ctrlgrp, mongrp, res_id + i);
+		ret = get_llc_occu_resctrl(&llc_occu_resc);
+		if (ret < 0)
+			return ret;
+		sum += llc_occu_resc;
+	}
 
-	return print_results_cache(filename, bm_pid, llc_occu_resc);
+	return print_results_cache(filename, bm_pid, sum);
 }
 
 /*

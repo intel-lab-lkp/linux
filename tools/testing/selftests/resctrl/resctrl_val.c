@@ -557,7 +557,7 @@ static int print_results_bw(char *filename,  int bm_pid, float bw_imc,
 	return 0;
 }
 
-static void set_cmt_path(const char *ctrlgrp, const char *mongrp, char sock_num)
+void set_cmt_path(const char *ctrlgrp, const char *mongrp, char sock_num)
 {
 	if (strlen(ctrlgrp) && strlen(mongrp))
 		sprintf(llc_occup_path,	CON_MON_LCC_OCCUP_PATH,	RESCTRL_PATH,
@@ -698,8 +698,8 @@ int resctrl_val(const struct resctrl_test *test,
 {
 	char *resctrl_val = param->resctrl_val;
 	unsigned long bw_resc_start = 0;
+	int res_id, ret = 0, pipefd[2];
 	struct sigaction sigact;
-	int ret = 0, pipefd[2];
 	char pipe_message = 0;
 	union sigval value;
 
@@ -828,6 +828,8 @@ int resctrl_val(const struct resctrl_test *test,
 	sleep(1);
 
 	/* Test runs until the callback setup() tells the test to stop. */
+	get_domain_id("L3", uparams->cpu, &res_id);
+	res_id *= snc_ways();
 	while (1) {
 		ret = param->setup(test, uparams, param);
 		if (ret == END_OF_TESTS) {
@@ -844,7 +846,8 @@ int resctrl_val(const struct resctrl_test *test,
 				break;
 		} else if (!strncmp(resctrl_val, CMT_STR, sizeof(CMT_STR))) {
 			sleep(1);
-			ret = measure_llc_resctrl(param->filename, bm_pid);
+			ret = measure_llc_resctrl(param->filename, bm_pid, param->ctrlgrp,
+						  param->mongrp, res_id);
 			if (ret)
 				break;
 		}
