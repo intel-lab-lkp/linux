@@ -1203,6 +1203,10 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 			       struct ethtool_coalesce *coal,
 			       struct kernel_ethtool_coalesce *kernel_coal,
 			       struct netlink_ext_ack *extack);
+int mlx5e_get_per_queue_coalesce(struct net_device *dev, u32 queue,
+				 struct ethtool_coalesce *coal);
+int mlx5e_set_per_queue_coalesce(struct net_device *dev, u32 queue,
+				 struct ethtool_coalesce *coal);
 int mlx5e_ethtool_get_link_ksettings(struct mlx5e_priv *priv,
 				     struct ethtool_link_ksettings *link_ksettings);
 int mlx5e_ethtool_set_link_ksettings(struct mlx5e_priv *priv,
