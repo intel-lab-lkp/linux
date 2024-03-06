@@ -26,6 +26,8 @@
 #include <linux/swiotlb.h>
 #include <linux/random.h>
 
+#include <linux/trace.h>
+
 #include <uapi/linux/mount.h>
 
 #include <xen/xen.h>
@@ -1105,6 +1107,24 @@ void __init setup_arch(char **cmdline_p)
 	 * won't consume hotpluggable memory.
 	 */
 	arch_reserve_crashkernel();
+
+	trace_buffer_size = 12582912;
+	{
+		phys_addr_t ftrace_addr;
+		unsigned long phys_start = 0x285400000;
+		unsigned long phys_end = phys_start + trace_buffer_size + 1024*1024;
+
+		ftrace_addr = memblock_phys_alloc_range(trace_buffer_size, 4096,
+							phys_start, phys_end);
+		if (ftrace_addr) {
+			printk("MEMORY ALLOC %lx-%lx\n", (long)ftrace_addr,
+			       (long)ftrace_addr + trace_buffer_size);
+			trace_buffer_start = (unsigned long)__va(ftrace_addr);
+			printk("MEMORY ADDR %lx-%lx\n", trace_buffer_start,
+			       trace_buffer_start + trace_buffer_size);
+		} else
+			printk("MEMORY FAILED\n");
+	}
 
 	memblock_find_dma_reserve();
 
