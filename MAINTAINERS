@@ -18864,6 +18864,12 @@ L:	linux-riscv@lists.infradead.org
 S:	Maintained
 F:	arch/riscv/boot/dts/thead/
 
+HX ARM-NI-700 PMU DRIVERS
+M:	Jialong Yang <jialong.yang@shingroup.cn>
+S:	Supported
+F:	Documentation/devicetree/bindings/perf/hexin,c2000-arm-ni.yaml
+F:	drivers/perf/hx_arm_ni.c
+
 RNBD BLOCK DRIVERS
 M:	Md. Haris Iqbal <haris.iqbal@ionos.com>
 M:	Jack Wang <jinpu.wang@ionos.com>

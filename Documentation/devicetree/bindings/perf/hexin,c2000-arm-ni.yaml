@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/perf/hexin,c2000-arm-ni.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: HX-C2000 NI (Network-on-chip Interconnect) Performance Monitors
+
+maintainers:
+  - Jialong Yang <jialong.yang@shingroup.cn>
+
+properties:
+  compatible:
+    enum:
+      - hexin,c2000-arm-ni
+
+  reg:
+    items:
+      - description: Physical address of the base (PERIPHBASE) and
+          size of the whole NI configuration address space.
+
+  interrupts:
+    minItems: 1
+    items:
+      - description: Overflow interrupt for clock domain 0
+      - description: Overflow interrupt for clock domain 1
+      - description: Overflow interrupt for clock domain 2
+      - description: Generally, one interrupt line for one PMU. But this also
+          support one interrupt line for a NI if merged.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    aliases {
+        ni-pmu0 = &nipmu0;
+    };
+
+    nipmu0: pmu@23ff0000 {
+        compatible = "hexin,c2000-arm-ni";
+        reg = <0x2b420000 0x10000>;
+        interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>;
+    };
