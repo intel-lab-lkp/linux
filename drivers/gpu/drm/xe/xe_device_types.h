@@ -210,8 +210,19 @@ struct xe_tile {
  * struct xe_device - Top level struct of XE device
  */
 struct xe_device {
-	/** @drm: drm device */
-	struct drm_device drm;
+	struct {
+		/** @drm: drm device */
+		struct drm_device drm;
+
+#if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
+		/**
+		 * @__intel_display_private: Display private data. Do *not*
+		 * access directly. Must be placed right after drm_device to
+		 * facilitate getting to it given a drm device pointer.
+		 */
+		struct intel_display *__intel_display_private;
+#endif
+	} __packed;
 
 	/** @devcoredump: device coredump */
 	struct xe_devcoredump devcoredump;
