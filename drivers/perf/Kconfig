@@ -241,4 +241,15 @@ config CXL_PMU
 
 	  If unsure say 'm'.
 
+source "drivers/perf/hisilicon/Kconfig"
+
+config HX_ARM_NI_PMU
+        tristate "Enable HX NI-700 Performance Monitoring Unit"
+        help
+          Support for NI-700(Network-on-chip Interconnect) PMUs, which
+          provide monitoring of transactions passing through between
+          CMN and other buses or periapherals.
+
+	  Say 'y/m' to enable this.
+
 endmenu
