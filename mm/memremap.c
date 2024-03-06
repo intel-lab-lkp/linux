@@ -390,6 +390,13 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 }
 EXPORT_SYMBOL_GPL(memremap_pages);
 
+void pgmap_parent_resource(struct dev_pagemap *pgmap, struct resource *res)
+{
+	if (pgmap && res)
+		pgmap->altmap.parent = res;
+}
+EXPORT_SYMBOL_GPL(pgmap_parent_resource);
+
 /**
  * devm_memremap_pages - remap and provide memmap backing for the given resource
  * @dev: hosting device for @res
