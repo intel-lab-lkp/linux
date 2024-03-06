@@ -21,6 +21,7 @@ static struct dev_dax *__dax_pmem_probe(struct device *dev)
 	struct nd_dax *nd_dax = to_nd_dax(dev);
 	struct nd_pfn *nd_pfn = &nd_dax->nd_pfn;
 	struct nd_region *nd_region = to_nd_region(dev->parent);
+	struct resource *parent;
 
 	ndns = nvdimm_namespace_common_probe(dev);
 	if (IS_ERR(ndns))
@@ -39,8 +40,9 @@ static struct dev_dax *__dax_pmem_probe(struct device *dev)
 	pfn_sb = nd_pfn->pfn_sb;
 	offset = le64_to_cpu(pfn_sb->dataoff);
 	nsio = to_nd_namespace_io(&ndns->dev);
-	if (!devm_request_mem_region(dev, nsio->res.start, offset,
-				dev_name(&ndns->dev))) {
+	parent = devm_request_mem_region(dev, nsio->res.start, offset,
+				dev_name(&ndns->dev));
+	if (!parent) {
 		dev_warn(dev, "could not reserve metadata\n");
 		return ERR_PTR(-EBUSY);
 	}
@@ -65,6 +67,8 @@ static struct dev_dax *__dax_pmem_probe(struct device *dev)
 		.size = range_len(&range),
 		.memmap_on_memory = false,
 	};
+
+	pgmap_parent_resource(&pgmap, parent);
 
 	return devm_create_dev_dax(&data);
 }
