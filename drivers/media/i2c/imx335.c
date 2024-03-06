@@ -21,6 +21,11 @@
 #define IMX335_MODE_STANDBY	0x01
 #define IMX335_MODE_STREAMING	0x00
 
+/* Data Lanes */
+#define IMX335_LANEMODE		0x3a01
+#define IMX335_2LANE		1
+#define IMX335_4LANE		3
+
 /* Lines per frame */
 #define IMX335_REG_LPFR		0x3030
 
@@ -66,8 +71,6 @@
 /* CSI2 HW configuration */
 #define IMX335_LINK_FREQ_594MHz		594000000LL
 #define IMX335_LINK_FREQ_445MHz		445500000LL
-
-#define IMX335_NUM_DATA_LANES	4
 
 #define IMX335_REG_MIN		0x00
 #define IMX335_REG_MAX		0xfffff
@@ -115,7 +118,6 @@ static const char * const imx335_supply_name[] = {
  * @vblank: Vertical blanking in lines
  * @vblank_min: Minimum vertical blanking in lines
  * @vblank_max: Maximum vertical blanking in lines
- * @pclk: Sensor pixel clock
  * @reg_list: Register list for sensor mode
  */
 struct imx335_mode {
@@ -126,7 +128,6 @@ struct imx335_mode {
 	u32 vblank;
 	u32 vblank_min;
 	u32 vblank_max;
-	u64 pclk;
 	struct imx335_reg_list reg_list;
 };
 
@@ -147,6 +148,7 @@ struct imx335_mode {
  * @exp_ctrl: Pointer to exposure control
  * @again_ctrl: Pointer to analog gain control
  * @vblank: Vertical blanking in lines
+ * @lane_mode Mode for number of connected data lanes
  * @cur_mode: Pointer to current selected sensor mode
  * @mutex: Mutex for serializing sensor controls
  * @link_freq_bitmap: Menu bitmap for link_freq_ctrl
@@ -171,6 +173,7 @@ struct imx335 {
 		struct v4l2_ctrl *again_ctrl;
 	};
 	u32 vblank;
+	u32 lane_mode;
 	const struct imx335_mode *cur_mode;
 	struct mutex mutex;
 	unsigned long link_freq_bitmap;
@@ -377,7 +380,6 @@ static const struct imx335_mode supported_mode = {
 	.vblank = 2560,
 	.vblank_min = 2560,
 	.vblank_max = 133060,
-	.pclk = 396000000,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_2592x1940_regs),
 		.regs = mode_2592x1940_regs,
@@ -936,6 +938,11 @@ static int imx335_start_streaming(struct imx335 *imx335)
 		return ret;
 	}
 
+	/* Configure lanes */
+	ret = imx335_write_reg(imx335, IMX335_LANEMODE, 1, imx335->lane_mode);
+	if (ret)
+		return ret;
+
 	/* Setup handler will write actual exposure and gain */
 	ret =  __v4l2_ctrl_handler_setup(imx335->sd.ctrl_handler);
 	if (ret) {
@@ -1096,7 +1103,14 @@ static int imx335_parse_hw_config(struct imx335 *imx335)
 	if (ret)
 		return ret;
 
-	if (bus_cfg.bus.mipi_csi2.num_data_lanes != IMX335_NUM_DATA_LANES) {
+	switch (bus_cfg.bus.mipi_csi2.num_data_lanes) {
+	case 2:
+		imx335->lane_mode = IMX335_2LANE;
+		break;
+	case 4:
+		imx335->lane_mode = IMX335_4LANE;
+		break;
+	default:
 		dev_err(imx335->dev,
 			"number of CSI2 data lanes %d is not supported\n",
 			bus_cfg.bus.mipi_csi2.num_data_lanes);
@@ -1209,6 +1223,9 @@ static int imx335_init_controls(struct imx335 *imx335)
 	struct v4l2_ctrl_handler *ctrl_hdlr = &imx335->ctrl_handler;
 	const struct imx335_mode *mode = imx335->cur_mode;
 	u32 lpfr;
+	u64 pclk;
+	s64 link_freq_in_use;
+	u8 bpp;
 	int ret;
 
 	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 7);
@@ -1252,11 +1269,24 @@ static int imx335_init_controls(struct imx335 *imx335)
 				     0, 0, imx335_tpg_menu);
 
 	/* Read only controls */
+
+	/* pixel rate = link frequency * lanes * 2 / bits_per_pixel */
+	switch (imx335->cur_mbus_code) {
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+		bpp = 10;
+		break;
+	case MEDIA_BUS_FMT_SRGGB12_1X12:
+		bpp = 12;
+		break;
+	}
+
+	link_freq_in_use = link_freq[__ffs(imx335->link_freq_bitmap)];
+	pclk = link_freq_in_use * (imx335->lane_mode + 1) * 2 / bpp;
 	imx335->pclk_ctrl = v4l2_ctrl_new_std(ctrl_hdlr,
 					      &imx335_ctrl_ops,
 					      V4L2_CID_PIXEL_RATE,
-					      mode->pclk, mode->pclk,
-					      1, mode->pclk);
+					      pclk, pclk,
+					      1, pclk);
 
 	imx335->link_freq_ctrl = v4l2_ctrl_new_int_menu(ctrl_hdlr,
 							&imx335_ctrl_ops,
