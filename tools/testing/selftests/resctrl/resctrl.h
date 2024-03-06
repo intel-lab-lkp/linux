@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <dirent.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -42,6 +43,8 @@
 #define BENCHMARK_ARGS		64
 
 #define DEFAULT_SPAN		(250 * MB)
+
+#define MAX_SNC		4
 
 #define PARENT_EXIT()				\
 	do {					\
@@ -129,6 +132,7 @@ extern pid_t bm_pid, ppid;
 
 extern char llc_occup_path[1024];
 
+int snc_ways(void);
 int get_vendor(void);
 bool check_resctrlfs_support(void);
 int filter_dmesg(void);
