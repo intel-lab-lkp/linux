@@ -168,6 +168,26 @@ static void init_unused_rings(struct intel_gt *gt)
 	}
 }
 
+static void intel_gt_apply_ccs_mode(struct intel_gt *gt)
+{
+	u32 mode;
+	int cslice;
+
+	if (!IS_DG2(gt->i915))
+		return;
+
+	/* Set '0' as a default CCS id to all the cslices */
+	mode = 0;
+
+	for (cslice = 0; cslice < hweight32(CCS_MASK(gt)); cslice++)
+		/* Write 0x7 if no CCS context dispatches to this cslice */
+		if (!(CCS_MASK(gt) & BIT(cslice)))
+			mode |= XEHP_CCS_MODE_CSLICE(cslice,
+						     XEHP_CCS_MODE_CSLICE_MASK);
+
+	intel_uncore_write(gt->uncore, XEHP_CCS_MODE, mode);
+}
+
 int intel_gt_init_hw(struct intel_gt *gt)
 {
 	struct drm_i915_private *i915 = gt->i915;
@@ -194,6 +214,9 @@ int intel_gt_init_hw(struct intel_gt *gt)
 	intel_gt_verify_workarounds(gt, "init");
 
 	intel_gt_init_swizzling(gt);
+
+	/* Configure CCS mode */
+	intel_gt_apply_ccs_mode(gt);
 
 	/*
 	 * At least 830 can leave some of the unused rings
