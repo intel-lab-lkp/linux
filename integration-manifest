@@ -1,0 +1,28 @@
+drm drm-fixes d6a209dd76e5ceb5d536e0a1a707ffcf64f95cef
+	Merge tag 'drm-intel-fixes-2024-03-01' of https://anongit.freedesktop.org/git/drm/drm-intel into drm-fixes
+drm-misc drm-misc-fixes 317f86dc1b8e219e799271042a17d56a95a935bc
+	Revert "drm/udl: Add ARGB8888 as a format"
+drm-intel drm-intel-fixes 984318aaf7b6516d03a2971a4a37bab4ea648461
+	drm/i915/panelreplay: Move out psr_init_dpcd() from init_connector()
+drm-xe drm-xe-fixes 8188cae3cc3d8018ec97ca9ab8caa3acc69a056d
+	drm/xe/xe_trace: Add move_lacks_source detail to xe_bo_move trace
+drm drm-next c6d6a82d8a9f8f9326b760accaa532b839b80140
+	Merge tag 'drm-misc-next-fixes-2024-02-29' of https://anongit.freedesktop.org/git/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 4a0e7b3c37531aabddf6f144b83ae9b65ec809fd
+	drm/i915: fix applying placement flag
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes e62d2e00780b4a465c77d2229837495fcbc480d3
+	drm/xe: Replace 'grouped target' in Makefile with pattern rule
+drm-misc drm-misc-next f89632a9e5fa6c4787c14458cd42a9ef42025434
+	drm: Add CONFIG_DRM_WERROR
+drm-intel drm-intel-next b7232a730fbf043f54fb46fbf4a6e92936770e79
+	drm/i915/display: Disable AuxCCS framebuffers if built for Xe
+drm-intel drm-intel-gt-next 4ae86a7f8dea764adda6b78d208fffe4ba9f14c0
+	drm/i915/guc: Simplify/extend platform check for Wa_14018913170
+drm-xe drm-xe-next 79f944eeddc9fcb4479844c57c495b621970c932
+	drm/xe: Remove unused 'create' parameter from queue property logic
+drm-intel topic/core-for-CI 240b5555409fc55205d50279f585e4e9929cc7be
+	mei: gsc_proxy: match component when GSC is on different bus
+drm-xe topic/xe-for-CI 4f933fae1dc702fb75f63ea54372b93094d8990a
+	drm/xe/guc: define PVC FW
