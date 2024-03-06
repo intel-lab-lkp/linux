@@ -628,6 +628,8 @@ patternProperties:
     description: HwaCom Systems Inc.
   "^hxt,.*":
     description: HXT Semiconductor
+  "^hexin,.*":
+    description: HEXIN Technologies Co., Ltd.
   "^hycon,.*":
     description: Hycon Technology Corp.
   "^hydis,.*":
