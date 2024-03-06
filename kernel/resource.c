@@ -432,6 +432,19 @@ int walk_system_ram_res(u64 start, u64 end, void *arg,
 }
 
 /*
+ * This function calls the @func callback against all memory ranges, which
+ * are ranges marked as (IORESOURCE_DEVICE_BACKED_VMEMMAP | IORESOURCE_BUSY)
+ * and IORES_DESC_PERSISTENT_MEMORY.
+ */
+int walk_device_backed_vmemmap_res(u64 start, u64 end, void *arg,
+			int (*func)(struct resource *, void *))
+{
+	return __walk_iomem_res_desc(start, end,
+			IORESOURCE_DEVICE_BACKED_VMEMMAP | IORESOURCE_BUSY,
+			IORES_DESC_PERSISTENT_MEMORY, arg, func);
+}
+
+/*
  * This function, being a variant of walk_system_ram_res(), calls the @func
  * callback against all memory ranges of type System RAM which are marked as
  * IORESOURCE_SYSTEM_RAM and IORESOUCE_BUSY in reversed order, i.e., from
