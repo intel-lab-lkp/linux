@@ -253,7 +253,7 @@ static int cat_run_test(const struct resctrl_test *test, const struct user_param
 		return ret;
 
 	/* Get L3/L2 cache size */
-	ret = get_cache_size(uparams->cpu, test->resource, &cache_total_size);
+	ret = get_sys_cache_size(uparams->cpu, test->resource, &cache_total_size);
 	if (ret)
 		return ret;
 	ksft_print_msg("Cache size :%lu\n", cache_total_size);

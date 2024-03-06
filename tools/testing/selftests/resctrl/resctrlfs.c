@@ -214,14 +214,14 @@ int snc_ways(void)
 }
 
 /*
- * get_cache_size - Get cache size for a specified CPU
+ * get_sys_cache_size - Get cache size for a specified CPU
  * @cpu_no:	CPU number
  * @cache_type:	Cache level L2/L3
  * @cache_size:	pointer to cache_size
  *
  * Return: = 0 on success, < 0 on failure.
  */
-int get_cache_size(int cpu_no, const char *cache_type, unsigned long *cache_size)
+int get_sys_cache_size(int cpu_no, const char *cache_type, unsigned long *cache_size)
 {
 	char cache_path[1024], cache_str[64];
 	int length, i, cache_num;
@@ -270,6 +270,44 @@ int get_cache_size(int cpu_no, const char *cache_type, unsigned long *cache_size
 
 	if (cache_num == 3)
 		*cache_size /= snc_ways();
+	return 0;
+}
+
+/*
+ * get_resctrl_cache_size - Get cache size as reported by resctrl
+ * @cache_type:	Cache level L2/L3
+ * @cache_size:	pointer to cache_size
+ *
+ * Return: = 0 on success, < 0 on failure.
+ */
+int get_resctrl_cache_size(const char *cache_type, unsigned long *cache_size)
+{
+	char line[256], cache_prefix[16], *stripped_line, *token;
+	size_t len;
+	FILE *fp;
+
+	strcpy(cache_prefix, cache_type);
+	strncat(cache_prefix, ":", 1);
+
+	fp = fopen(SIZE_PATH, "r");
+	if (!fp) {
+		ksft_print_msg("Failed to open %s : '%s'\n",
+			       SIZE_PATH, strerror(errno));
+		return -1;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		stripped_line = strstr(line, cache_prefix);
+
+		if (stripped_line) {
+			len = strlen(cache_prefix);
+			stripped_line += len;
+			token = strtok(stripped_line, ";");
+			if (sscanf(token, "0=%lu", cache_size) <= 0)
+				return -1;
+		}
+	}
+	fclose(fp);
 	return 0;
 }
 
@@ -934,4 +972,31 @@ unsigned int count_bits(unsigned long n)
 	}
 
 	return count;
+}
+
+/**
+ * snc_kernel_support - Compare system reported cache size and resctrl
+ * reported cache size to get an idea if SNC is supported on the kernel side.
+ * If SNC is enabled and the kernel does support it the value should be equal.
+ * If the kernel doesn't support SNC the.
+ *
+ * Return: 0 if not supported, 1 if supported, < 0 on failure.
+ */
+int snc_kernel_support(void)
+{
+	unsigned long resctrl_cache_size, node_cache_size;
+	int ret;
+
+	ret = get_sys_cache_size(0, "L3", &node_cache_size);
+	if (ret < 0)
+		return ret;
+
+	ret = get_resctrl_cache_size("L3", &resctrl_cache_size);
+	if (ret < 0)
+		return ret;
+
+	if (resctrl_cache_size == node_cache_size)
+		return 1;
+
+	return 0;
 }

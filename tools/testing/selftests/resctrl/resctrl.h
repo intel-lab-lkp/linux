@@ -28,6 +28,7 @@
 #define RESCTRL_PATH		"/sys/fs/resctrl"
 #define PHYS_ID_PATH		"/sys/devices/system/cpu/cpu"
 #define INFO_PATH		"/sys/fs/resctrl/info"
+#define SIZE_PATH		"/sys/fs/resctrl/size"
 
 /*
  * CPU vendor IDs
@@ -168,14 +169,16 @@ unsigned long create_bit_mask(unsigned int start, unsigned int len);
 unsigned int count_contiguous_bits(unsigned long val, unsigned int *start);
 int get_full_cbm(const char *cache_type, unsigned long *mask);
 int get_mask_no_shareable(const char *cache_type, unsigned long *mask);
-int get_cache_size(int cpu_no, const char *cache_type, unsigned long *cache_size);
 int resource_info_unsigned_get(const char *resource, const char *filename, unsigned int *val);
+int get_sys_cache_size(int cpu_no, const char *cache_type, unsigned long *cache_size);
+int get_resctrl_cache_size(const char *cache_type, unsigned long *cache_size);
 void ctrlc_handler(int signum, siginfo_t *info, void *ptr);
 int signal_handler_register(void);
 void signal_handler_unregister(void);
 void cat_test_cleanup(void);
 unsigned int count_bits(unsigned long n);
 void cmt_test_cleanup(void);
+int snc_kernel_support(void);
 
 void perf_event_attr_initialize(struct perf_event_attr *pea, __u64 config);
 void perf_event_initialize_read_format(struct perf_event_read *pe_read);

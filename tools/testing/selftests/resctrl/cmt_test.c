@@ -112,7 +112,7 @@ static int cmt_run_test(const struct resctrl_test *test, const struct user_param
 	if (ret)
 		return ret;
 
-	ret = get_cache_size(uparams->cpu, "L3", &cache_total_size);
+	ret = get_sys_cache_size(uparams->cpu, "L3", &cache_total_size);
 	if (ret)
 		return ret;
 	ksft_print_msg("Cache size :%lu\n", cache_total_size);
@@ -157,8 +157,8 @@ static int cmt_run_test(const struct resctrl_test *test, const struct user_param
 		goto out;
 
 	ret = check_results(&param, span, n);
-	if (ret && (get_vendor() == ARCH_INTEL))
-		ksft_print_msg("Intel CMT may be inaccurate when Sub-NUMA Clustering is enabled. Check BIOS configuration.\n");
+	if (ret && (get_vendor() == ARCH_INTEL) && snc_ways() > 1 && !snc_kernel_support())
+		ksft_print_msg("Kernel doesn't support Sub-NUMA Clustering but it is enabled. Check BIOS configuration.\n");
 
 out:
 	cmt_test_cleanup();
