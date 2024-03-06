@@ -426,12 +426,12 @@ int intel_dp_max_link_data_rate(struct intel_dp *intel_dp,
 
 bool intel_dp_can_bigjoiner(struct intel_dp *intel_dp)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct intel_encoder *encoder = &intel_dig_port->base;
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 
-	return DISPLAY_VER(dev_priv) >= 12 ||
-		(DISPLAY_VER(dev_priv) == 11 &&
+	return DISPLAY_VER(display) >= 12 ||
+		(DISPLAY_VER(display) == 11 &&
 		 encoder->port != PORT_A);
 }
 

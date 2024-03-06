@@ -1242,16 +1242,16 @@ static void hsw_set_infoframes(struct intel_encoder *encoder,
 
 void intel_dp_dual_mode_set_tmds_output(struct intel_hdmi *hdmi, bool enable)
 {
-	struct drm_i915_private *dev_priv = intel_hdmi_to_i915(hdmi);
+	struct intel_display *display = to_intel_display(hdmi);
 	struct i2c_adapter *ddc = hdmi->attached_connector->base.ddc;
 
 	if (hdmi->dp_dual_mode.type < DRM_DP_DUAL_MODE_TYPE2_DVI)
 		return;
 
-	drm_dbg_kms(&dev_priv->drm, "%s DP dual mode adaptor TMDS output\n",
+	drm_dbg_kms(display->drm, "%s DP dual mode adaptor TMDS output\n",
 		    enable ? "Enabling" : "Disabling");
 
-	drm_dp_dual_mode_set_tmds_output(&dev_priv->drm,
+	drm_dp_dual_mode_set_tmds_output(display->drm,
 					 hdmi->dp_dual_mode.type, ddc, enable);
 }
 
@@ -2058,6 +2058,7 @@ static bool hdmi_bpc_possible(const struct intel_crtc_state *crtc_state, int bpc
 {
 	struct drm_i915_private *dev_priv =
 		to_i915(crtc_state->uapi.crtc->dev);
+	struct intel_display *display = to_intel_display(crtc_state);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 
@@ -2066,7 +2067,7 @@ static bool hdmi_bpc_possible(const struct intel_crtc_state *crtc_state, int bpc
 
 	/* Display Wa_1405510057:icl,ehl */
 	if (intel_hdmi_is_ycbcr420(crtc_state) &&
-	    bpc == 10 && DISPLAY_VER(dev_priv) == 11 &&
+	    bpc == 10 && DISPLAY_VER(display) == 11 &&
 	    (adjusted_mode->crtc_hblank_end -
 	     adjusted_mode->crtc_hblank_start) % 8 == 2)
 		return false;
@@ -2591,9 +2592,9 @@ static const struct drm_connector_funcs intel_hdmi_connector_funcs = {
 static int intel_hdmi_connector_atomic_check(struct drm_connector *connector,
 					     struct drm_atomic_state *state)
 {
-	struct drm_i915_private *i915 = to_i915(state->dev);
+	struct intel_display *display = to_intel_display(state->dev);
 
-	if (HAS_DDI(i915))
+	if (HAS_DDI(display))
 		return intel_digital_connector_atomic_check(connector, state);
 	else
 		return g4x_hdmi_connector_atomic_check(connector, state);
