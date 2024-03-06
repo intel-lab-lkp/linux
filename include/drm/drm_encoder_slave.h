@@ -51,6 +51,7 @@ struct drm_encoder_slave_funcs {
 	void (*set_config)(struct drm_encoder *encoder,
 			   void *params);
 
+	/* private: FIXME: document the hooks */
 	void (*destroy)(struct drm_encoder *encoder);
 	void (*dpms)(struct drm_encoder *encoder, int mode);
 	void (*save)(struct drm_encoder *encoder);
@@ -120,6 +121,7 @@ int drm_i2c_encoder_init(struct drm_device *dev,
  * @slave_priv members of @encoder.
  */
 struct drm_i2c_encoder_driver {
+	/* private: FIXME: document the members */
 	struct i2c_driver i2c_driver;
 
 	int (*encoder_init)(struct i2c_client *client,
@@ -133,6 +135,7 @@ struct drm_i2c_encoder_driver {
 
 /**
  * drm_i2c_encoder_get_client - Get the I2C client corresponding to an encoder
+ * @encoder: The encoder
  */
 static inline struct i2c_client *drm_i2c_encoder_get_client(struct drm_encoder *encoder)
 {
