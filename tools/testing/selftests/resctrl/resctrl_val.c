@@ -595,9 +595,10 @@ static void initialize_llc_occu_resctrl(const char *ctrlgrp, const char *mongrp,
 
 static int measure_vals(const struct user_params *uparams,
 			struct resctrl_val_param *param,
-			unsigned long *bw_resc_start)
+			unsigned long *bw_resc_start,
+			int res_id)
 {
-	unsigned long bw_resc, bw_resc_end;
+	unsigned long bw_resc = 0, bw_resc_sum = 0, bw_resc_end;
 	float bw_imc;
 	int ret;
 
@@ -612,16 +613,18 @@ static int measure_vals(const struct user_params *uparams,
 	if (ret < 0)
 		return ret;
 
-	ret = get_mem_bw_resctrl(&bw_resc_end);
-	if (ret < 0)
-		return ret;
+	for (int i = 0 ; i < snc_ways() ; i++) {
+		set_mbm_path(param->ctrlgrp, strlen(param->mongrp) > 0 ? param->mongrp : NULL,
+			     res_id + i);
+		ret = get_mem_bw_resctrl(&bw_resc_end);
+		bw_resc = (bw_resc_end - bw_resc_start[i]) / MB;
+		bw_resc_sum += bw_resc;
+		bw_resc_start[i] = bw_resc_end;
+	}
 
-	bw_resc = (bw_resc_end - *bw_resc_start) / MB;
-	ret = print_results_bw(param->filename, bm_pid, bw_imc, bw_resc);
+	ret = print_results_bw(param->filename, bm_pid, bw_imc, bw_resc_sum);
 	if (ret)
 		return ret;
-
-	*bw_resc_start = bw_resc_end;
 
 	return 0;
 }
@@ -697,11 +700,15 @@ int resctrl_val(const struct resctrl_test *test,
 		struct resctrl_val_param *param)
 {
 	char *resctrl_val = param->resctrl_val;
-	unsigned long bw_resc_start = 0;
 	int res_id, ret = 0, pipefd[2];
+	unsigned long *bw_resc_start;
 	struct sigaction sigact;
 	char pipe_message = 0;
 	union sigval value;
+
+	bw_resc_start = calloc(snc_ways(), sizeof(unsigned long));
+	if (!bw_resc_start)
+		return -1;
 
 	if (strcmp(param->filename, "") == 0)
 		sprintf(param->filename, "stdio");
@@ -710,7 +717,7 @@ int resctrl_val(const struct resctrl_test *test,
 	    !strncmp(resctrl_val, MBM_STR, sizeof(MBM_STR))) {
 		ret = validate_bw_report_request(param->bw_report);
 		if (ret)
-			return ret;
+			goto out_free;
 	}
 
 	/*
@@ -721,7 +728,7 @@ int resctrl_val(const struct resctrl_test *test,
 
 	if (pipe(pipefd)) {
 		ksft_perror("Unable to create pipe");
-
+		free(bw_resc_start);
 		return -1;
 	}
 
@@ -733,7 +740,7 @@ int resctrl_val(const struct resctrl_test *test,
 	bm_pid = fork();
 	if (bm_pid == -1) {
 		ksft_perror("Unable to fork");
-
+		free(bw_resc_start);
 		return -1;
 	}
 
@@ -841,7 +848,7 @@ int resctrl_val(const struct resctrl_test *test,
 
 		if (!strncmp(resctrl_val, MBM_STR, sizeof(MBM_STR)) ||
 		    !strncmp(resctrl_val, MBA_STR, sizeof(MBA_STR))) {
-			ret = measure_vals(uparams, param, &bw_resc_start);
+			ret = measure_vals(uparams, param, bw_resc_start, res_id);
 			if (ret)
 				break;
 		} else if (!strncmp(resctrl_val, CMT_STR, sizeof(CMT_STR))) {
@@ -855,6 +862,8 @@ int resctrl_val(const struct resctrl_test *test,
 
 out:
 	kill(bm_pid, SIGKILL);
+out_free:
+	free(bw_resc_start);
 
 	return ret;
 }
