@@ -20,7 +20,7 @@
 #include <asm/nospec-branch.h>
 #include <xen/interface/elfnote.h>
 
-	__HEAD
+	__REF
 
 /*
  * Entry point for PVH guests.
