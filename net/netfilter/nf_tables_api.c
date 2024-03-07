@@ -5276,6 +5276,9 @@ static void nft_set_destroy(const struct nft_ctx *ctx, struct nft_set *set)
 	for (i = 0; i < set->num_exprs; i++)
 		nft_expr_destroy(ctx, set->exprs[i]);
 
+	if (WARN_ON_ONCE(!set->dead))
+		set->dead = 1;
+
 	set->ops->destroy(ctx, set);
 	nft_set_catchall_destroy(ctx, set);
 	nft_set_put(set);

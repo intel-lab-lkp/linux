@@ -451,6 +451,8 @@ static void nft_rhash_destroy(const struct nft_ctx *ctx,
 		.set	= set,
 	};
 
+	WARN_ON_ONCE(!set->dead);
+
 	cancel_delayed_work_sync(&priv->gc_work);
 	rhashtable_free_and_destroy(&priv->ht, nft_rhash_elem_destroy,
 				    (void *)&rhash_ctx);
