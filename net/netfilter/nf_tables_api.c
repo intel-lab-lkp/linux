@@ -9693,6 +9693,52 @@ static void nft_trans_gc_trans_free(struct rcu_head *rcu)
 	nft_trans_gc_destroy(trans);
 }
 
+static int nft_trans_gc_space(struct nft_trans_gc *trans)
+{
+	return NFT_TRANS_GC_BATCHCOUNT - trans->count;
+}
+
+static void nft_trans_gc_catchall(struct nft_ctx *ctx, struct nft_set *set)
+{
+	struct nft_set_elem_catchall *catchall, *next;
+	struct nft_trans_gc *gc = NULL;
+	struct nft_set_ext *ext;
+
+	WARN_ON_ONCE(!lockdep_commit_lock_is_held(ctx->net));
+
+	list_for_each_entry(catchall, &set->catchall_list, list) {
+		ext = nft_set_elem_ext(set, catchall->elem);
+
+		if (!nft_set_elem_expired(ext))
+			continue;
+
+		gc = nft_trans_gc_alloc(set, 0, GFP_KERNEL);
+		break;
+	}
+
+	if (!gc)
+		return;
+
+	list_for_each_entry_safe(catchall, next, &set->catchall_list, list) {
+		struct nft_elem_priv *elem_priv;
+
+		ext = nft_set_elem_ext(set, catchall->elem);
+
+		if (!nft_set_elem_expired(ext))
+			continue;
+
+		if (!nft_trans_gc_space(gc))
+			break;
+
+		elem_priv = catchall->elem;
+		nft_setelem_data_deactivate(ctx->net, set, elem_priv);
+		nft_setelem_catchall_destroy(catchall);
+		nft_trans_gc_elem_add(gc, elem_priv);
+	}
+
+	call_rcu(&gc->rcu, nft_trans_gc_trans_free);
+}
+
 static bool nft_trans_gc_work_done(struct nft_trans_gc *trans)
 {
 	struct nftables_pernet *nft_net;
@@ -9716,6 +9762,7 @@ static bool nft_trans_gc_work_done(struct nft_trans_gc *trans)
 	ctx.table = trans->set->table;
 
 	nft_trans_gc_setelem_remove(&ctx, trans);
+	nft_trans_gc_catchall(&ctx, trans->set);
 	mutex_unlock(&nft_net->commit_mutex);
 
 	return true;
@@ -9777,11 +9824,6 @@ static void nft_trans_gc_queue_work(struct nft_trans_gc *trans)
 	schedule_work(&trans_gc_work);
 }
 
-static int nft_trans_gc_space(struct nft_trans_gc *trans)
-{
-	return NFT_TRANS_GC_BATCHCOUNT - trans->count;
-}
-
 struct nft_trans_gc *nft_trans_gc_queue_async(struct nft_trans_gc *gc,
 					      unsigned int gc_seq, gfp_t gfp)
 {
@@ -9832,33 +9874,6 @@ void nft_trans_gc_queue_sync_done(struct nft_trans_gc *trans)
 	}
 
 	call_rcu(&trans->rcu, nft_trans_gc_trans_free);
-}
-
-struct nft_trans_gc *nft_trans_gc_catchall_async(struct nft_trans_gc *gc,
-						 unsigned int gc_seq)
-{
-	struct nft_set_elem_catchall *catchall;
-	const struct nft_set *set = gc->set;
-	struct nft_set_ext *ext;
-
-	list_for_each_entry_rcu(catchall, &set->catchall_list, list) {
-		ext = nft_set_elem_ext(set, catchall->elem);
-
-		if (!nft_set_elem_expired(ext))
-			continue;
-		if (nft_set_elem_is_dead(ext))
-			goto dead_elem;
-
-		nft_set_elem_dead(ext);
-dead_elem:
-		gc = nft_trans_gc_queue_async(gc, gc_seq, GFP_ATOMIC);
-		if (!gc)
-			return NULL;
-
-		nft_trans_gc_elem_add(gc, catchall->elem);
-	}
-
-	return gc;
 }
 
 struct nft_trans_gc *nft_trans_gc_catchall_sync(struct nft_trans_gc *gc)
