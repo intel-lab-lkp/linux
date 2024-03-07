@@ -108,10 +108,9 @@ static int imx_rpmsg_late_probe(struct snd_soc_card *card)
 static int imx_rpmsg_probe(struct platform_device *pdev)
 {
 	struct snd_soc_dai_link_component *dlc;
-	struct device *dev = pdev->dev.parent;
 	/* rpmsg_pdev is the platform device for the rpmsg node that probed us */
-	struct platform_device *rpmsg_pdev = to_platform_device(dev);
-	struct device_node *np = rpmsg_pdev->dev.of_node;
+	struct platform_device *rpmsg_pdev = NULL;
+	struct device_node *np = NULL;
 	struct of_phandle_args args;
 	const char *platform_name;
 	struct imx_rpmsg *data;
@@ -124,6 +123,22 @@ static int imx_rpmsg_probe(struct platform_device *pdev)
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data) {
 		ret = -ENOMEM;
+		goto fail;
+	}
+
+	if (!strcmp(pdev->dev.platform_data, "rpmsg-micfil-channel"))
+		np = of_find_node_by_name(NULL, "rpmsg_micfil");
+	else
+		np = of_find_node_by_name(NULL, "rpmsg_audio");
+	if (!np) {
+		dev_err(&pdev->dev, "failed to parse node\n");
+		ret = -EINVAL;
+		goto fail;
+	}
+	rpmsg_pdev = of_find_device_by_node(np);
+	if (!rpmsg_pdev) {
+		dev_err(&pdev->dev, "failed to parse platform device\n");
+		ret = -EINVAL;
 		goto fail;
 	}
 
