@@ -8,18 +8,18 @@ struct spi_board_info;
 
 /**
  * struct xspi_platform_data - Platform data of the Xilinx SPI driver
+ * @force_irq:		If set, forces QSPI transaction requirements.
  * @num_chipselect:	Number of chip select by the IP.
  * @bits_per_word:	Number of bits per word.
- * @devices:		Devices to add when the driver is probed.
  * @num_devices:	Number of devices in the devices array.
- * @force_irq:		If set, forces QSPI transaction requirements.
+ * @devices:		Devices to add when the driver is probed.
  */
 struct xspi_platform_data {
-	u16 num_chipselect;
-	u8 bits_per_word;
-	struct spi_board_info *devices;
-	u8 num_devices;
 	bool force_irq;
+	u8 num_chipselect;
+	u8 bits_per_word;
+	u8 num_devices;
+	struct spi_board_info *devices;
 };
 
 #endif /* __LINUX_SPI_XILINX_SPI_H */
