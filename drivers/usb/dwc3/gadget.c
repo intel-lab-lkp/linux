@@ -3563,6 +3563,21 @@ static void dwc3_gadget_endpoint_frame_from_event(struct dwc3_ep *dep,
 	dep->frame_number = event->parameters;
 }
 
+static int dwc3_gadget_ep_check_missed_requests(struct dwc3_ep *dep)
+{
+	struct dwc3_request	*req;
+	struct dwc3_request	*tmp;
+
+	list_for_each_entry_safe(req, tmp, &dep->started_list, list) {
+		struct dwc3_trb *trb = req->trb;
+
+		if (DWC3_TRB_SIZE_TRBSTS(trb->size) == DWC3_TRBSTS_MISSED_ISOC)
+			return -EXDEV;
+	}
+
+	return 0;
+}
+
 static bool dwc3_gadget_endpoint_trbs_complete(struct dwc3_ep *dep,
 		const struct dwc3_event_depevt *event, int status)
 {
@@ -3584,7 +3599,7 @@ static bool dwc3_gadget_endpoint_trbs_complete(struct dwc3_ep *dep,
 		transfer_in_flight = trb->ctrl & DWC3_TRB_CTRL_HWO;
 	}
 
-	if (status == -EXDEV || !transfer_in_flight)
+	if (status == -EXDEV || !transfer_in_flight || dwc3_gadget_ep_check_missed_requests(dep))
 		dwc3_stop_active_transfer(dep, true, true);
 
 	dwc3_gadget_ep_cleanup_completed_requests(dep, event, status);
