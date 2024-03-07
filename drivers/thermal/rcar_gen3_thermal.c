@@ -81,10 +81,10 @@ struct rcar_thermal_info {
 };
 
 struct rcar_gen3_thermal_tsc {
+	struct rcar_gen3_thermal_priv *priv;
 	void __iomem *base;
 	struct thermal_zone_device *zone;
 	struct equation_coefs coef;
-	int tj_t;
 	int thcode[3];
 };
 
@@ -92,6 +92,7 @@ struct rcar_gen3_thermal_priv {
 	struct rcar_gen3_thermal_tsc *tscs[TSC_MAX_NUM];
 	struct thermal_zone_device_ops ops;
 	unsigned int num_tscs;
+	int tj_t;
 	int ptat[3];
 	const struct rcar_thermal_info *info;
 };
@@ -146,15 +147,15 @@ static void rcar_gen3_thermal_calc_coefs(struct rcar_gen3_thermal_priv *priv,
 	 * Division is not scaled in BSP and if scaled it might overflow
 	 * the dividend (4095 * 4095 << 14 > INT_MAX) so keep it unscaled
 	 */
-	tsc->tj_t = (FIXPT_INT((priv->ptat[1] - priv->ptat[2]) * (ths_tj_1 - TJ_3))
-		     / (priv->ptat[0] - priv->ptat[2])) + FIXPT_INT(TJ_3);
+	priv->tj_t = (FIXPT_INT((priv->ptat[1] - priv->ptat[2]) * (ths_tj_1 - TJ_3))
+		      / (priv->ptat[0] - priv->ptat[2])) + FIXPT_INT(TJ_3);
 
 	tsc->coef.a1 = FIXPT_DIV(FIXPT_INT(tsc->thcode[1] - tsc->thcode[2]),
-				 tsc->tj_t - FIXPT_INT(TJ_3));
+				 priv->tj_t - FIXPT_INT(TJ_3));
 	tsc->coef.b1 = FIXPT_INT(tsc->thcode[2]) - tsc->coef.a1 * TJ_3;
 
 	tsc->coef.a2 = FIXPT_DIV(FIXPT_INT(tsc->thcode[1] - tsc->thcode[0]),
-				 tsc->tj_t - FIXPT_INT(ths_tj_1));
+				 priv->tj_t - FIXPT_INT(ths_tj_1));
 	tsc->coef.b2 = FIXPT_INT(tsc->thcode[0]) - tsc->coef.a2 * ths_tj_1;
 }
 
@@ -196,10 +197,11 @@ static int rcar_gen3_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
 static int rcar_gen3_thermal_mcelsius_to_temp(struct rcar_gen3_thermal_tsc *tsc,
 					      int mcelsius)
 {
+	struct rcar_gen3_thermal_priv *priv = tsc->priv;
 	int celsius, val;
 
 	celsius = DIV_ROUND_CLOSEST(mcelsius, 1000);
-	if (celsius <= INT_FIXPT(tsc->tj_t))
+	if (celsius <= INT_FIXPT(priv->tj_t))
 		val = celsius * tsc->coef.a1 + tsc->coef.b1;
 	else
 		val = celsius * tsc->coef.a2 + tsc->coef.b2;
@@ -512,6 +514,7 @@ static int rcar_gen3_thermal_probe(struct platform_device *pdev)
 			goto error_unregister;
 		}
 
+		tsc->priv = priv;
 		tsc->base = devm_ioremap_resource(dev, res);
 		if (IS_ERR(tsc->base)) {
 			ret = PTR_ERR(tsc->base);
