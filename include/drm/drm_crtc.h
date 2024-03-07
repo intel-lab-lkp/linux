@@ -318,6 +318,16 @@ struct drm_crtc_state {
 	enum drm_scaling_filter scaling_filter;
 
 	/**
+	 * @sharpness_strength
+	 *
+	 * Used by the user to set the sharpness intensity.
+	 * The value ranges from 0-255.
+	 * Any value greater than 0 means enabling the featuring
+	 * along with setting the value for sharpness.
+	 */
+	u8 sharpeness_strength;
+
+	/**
 	 * @event:
 	 *
 	 * Optional pointer to a DRM event to signal upon completion of the
@@ -1089,6 +1099,12 @@ struct drm_crtc {
 	struct drm_property *scaling_filter_property;
 
 	/**
+	 * @sharpening_strength_prop: property to apply
+	 * the intensity of the sharpness requested.
+	 */
+	struct drm_property *sharpening_strength_prop;
+
+	/**
 	 * @state:
 	 *
 	 * Current atomic state for this CRTC.
@@ -1324,4 +1340,5 @@ static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
 int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 					    unsigned int supported_filters);
 
+int drm_crtc_create_sharpening_strength_property(struct drm_crtc *crtc);
 #endif /* __DRM_CRTC_H__ */
