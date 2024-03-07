@@ -135,7 +135,7 @@ static inline void rcar_gen3_thermal_write(struct rcar_gen3_thermal_tsc *tsc,
  * of values. The values for each model is stored in the device match data.
  */
 
-#define RCAR3_THERMAL_GRAN 500 /* mili Celsius */
+#define RCAR3_THERMAL_GRAN 100 /* millidegree Celsius */
 
 static void rcar_gen3_thermal_calc_coefs(struct rcar_gen3_thermal_priv *priv,
 					 struct rcar_gen3_thermal_tsc *tsc)
