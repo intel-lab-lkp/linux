@@ -6404,7 +6404,19 @@ static void nft_set_elem_expr_destroy(const struct nft_ctx *ctx,
 		__nft_set_elem_expr_destroy(ctx, expr);
 }
 
-/* Drop references and destroy. Called from gc, dynset and abort path. */
+/**
+ * nft_set_elem_destroy - free a set element instantly
+ * @set: the set the element was supposed to be added to
+ * @elem: the private element pointer to be free'd
+ * @destroy_expr: true if embedded expression was initialised before
+ *
+ * Immediately releases an element without going through any synchronization.
+ * This function can only be used for error unwinding BEFORE the element was
+ * added to the set, else concurrent data path access may result in
+ * use-after-free.
+ * For datapath error unwinding, jumps-to-chain or objref are
+ * not supported.
+ */
 void nft_set_elem_destroy(const struct nft_set *set,
 			  const struct nft_elem_priv *elem_priv,
 			  bool destroy_expr)
@@ -6414,6 +6426,13 @@ void nft_set_elem_destroy(const struct nft_set *set,
 		.net	= read_pnet(&set->net),
 		.family	= set->table->family,
 	};
+
+	/* We can only do error unwind for vmaps or objref types
+	 * if the caller is holding the transaction mutex.
+	 */
+	if (set->dtype == NFT_DATA_VERDICT ||
+	    nft_set_ext_exists(ext, NFT_SET_EXT_OBJREF))
+		WARN_ON_ONCE(!lockdep_commit_lock_is_held(read_pnet(&set->net)));
 
 	nft_data_release(nft_set_ext_key(ext), NFT_DATA_VALUE);
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_DATA))
