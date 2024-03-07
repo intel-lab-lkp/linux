@@ -1647,6 +1647,13 @@ static bool lockdep_commit_lock_is_held(const struct net *net)
 #endif
 }
 
+static void nft_commit_lock_not_held(const struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+
+	lockdep_assert_not_held(&nft_net->commit_mutex);
+}
+
 static struct nft_chain *nft_chain_lookup(struct net *net,
 					  struct nft_table *table,
 					  const struct nlattr *nla, u8 genmask)
@@ -9663,13 +9670,34 @@ void nft_chain_del(struct nft_chain *chain)
 static void nft_trans_gc_setelem_remove(struct nft_ctx *ctx,
 					struct nft_trans_gc *trans)
 {
-	struct nft_elem_priv **priv = trans->priv;
 	unsigned int i;
 
+	rcu_read_lock();
+
 	for (i = 0; i < trans->count; i++) {
-		nft_setelem_data_deactivate(ctx->net, trans->set, priv[i]);
-		nft_setelem_remove(ctx->net, trans->set, priv[i]);
+		struct nft_trans_gc_key *key = &trans->keys[i];
+		const struct nft_set_ext *ext;
+		struct nft_set_elem elem;
+		int err;
+
+		memset(&elem, 0, sizeof(elem));
+
+		BUILD_BUG_ON(sizeof(elem.key) != sizeof(key->key));
+		memcpy(&elem.key, key->key, sizeof(elem.key));
+
+		err = nft_setelem_get(ctx, trans->set, &elem, NFT_SET_ELEM_GET_DEAD);
+		WARN_ON(err < 0);
+		WARN_ON(key->priv != elem.priv);
+
+		ext = nft_set_elem_ext(trans->set, elem.priv);
+		/* nft_dynset can mark non-expired as DEAD, remove those too */
+		if (nft_set_elem_expired(ext) || nft_set_elem_is_dead(ext)) {
+			nft_setelem_data_deactivate(ctx->net, trans->set, elem.priv);
+			nft_setelem_remove(ctx->net, trans->set, elem.priv);
+		}
 	}
+
+	rcu_read_unlock();
 }
 
 void nft_trans_gc_destroy(struct nft_trans_gc *trans)
@@ -9690,7 +9718,7 @@ static void nft_trans_gc_trans_free(struct rcu_head *rcu)
 	ctx.net	= read_pnet(&trans->set->net);
 
 	for (i = 0; i < trans->count; i++) {
-		elem_priv = trans->priv[i];
+		elem_priv = trans->keys[i].priv;
 		if (!nft_setelem_is_catchall(trans->set, elem_priv))
 			atomic_dec(&trans->set->nelems);
 
@@ -9818,9 +9846,27 @@ struct nft_trans_gc *nft_trans_gc_alloc(struct nft_set *set,
 	return trans;
 }
 
-void nft_trans_gc_elem_add(struct nft_trans_gc *trans, void *priv)
+void nft_trans_gc_elem_add(struct nft_trans_gc *gc, void *priv)
 {
-	trans->priv[trans->count++] = priv;
+	WARN_ON_ONCE(!lockdep_commit_lock_is_held(gc->net));
+	gc->keys[gc->count].to_free = priv;
+	gc->count++;
+}
+
+void nft_async_gc_key_add(struct nft_trans_gc *gc, struct nft_elem_priv *priv)
+{
+	const struct nft_set *set = gc->set;
+	const struct nft_set_ext *ext;
+
+	nft_commit_lock_not_held(gc->net);
+
+	memset(&gc->keys[gc->count], 0, sizeof(gc->keys[0]));
+
+	ext = nft_set_elem_ext(set, priv);
+	memcpy(gc->keys[gc->count].key, nft_set_ext_key(ext), set->klen);
+
+	gc->keys[gc->count].priv = priv;
+	gc->count++;
 }
 
 static void nft_trans_gc_queue_work(struct nft_trans_gc *trans)

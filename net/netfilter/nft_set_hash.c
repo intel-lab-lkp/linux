@@ -378,7 +378,7 @@ dead_elem:
 		if (!gc)
 			goto try_later;
 
-		nft_trans_gc_elem_add(gc, he);
+		nft_async_gc_key_add(gc, &he->priv);
 	}
 
 try_later:
