@@ -709,6 +709,7 @@ static void nft_rbtree_destroy(const struct nft_ctx *ctx,
 			       const struct nft_set *set)
 {
 	struct nft_rbtree *priv = nft_set_priv(set);
+	struct nft_set *mset = (void *)set;
 	struct nft_rbtree_elem *rbe;
 	struct rb_node *node;
 
@@ -716,6 +717,7 @@ static void nft_rbtree_destroy(const struct nft_ctx *ctx,
 		rb_erase(node, &priv->root);
 		rbe = rb_entry(node, struct nft_rbtree_elem, node);
 		nf_tables_set_elem_destroy(ctx, set, &rbe->priv);
+		atomic_dec(&mset->nelems);
 	}
 }
 

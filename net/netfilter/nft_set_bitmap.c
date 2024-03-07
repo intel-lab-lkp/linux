@@ -275,9 +275,12 @@ static void nft_bitmap_destroy(const struct nft_ctx *ctx,
 {
 	struct nft_bitmap *priv = nft_set_priv(set);
 	struct nft_bitmap_elem *be, *n;
+	struct nft_set *mset = (void *)set;
 
-	list_for_each_entry_safe(be, n, &priv->list, head)
+	list_for_each_entry_safe(be, n, &priv->list, head) {
 		nf_tables_set_elem_destroy(ctx, set, &be->priv);
+		atomic_dec(&mset->nelems);
+	}
 }
 
 static bool nft_bitmap_estimate(const struct nft_set_desc *desc, u32 features,

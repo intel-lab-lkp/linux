@@ -2295,6 +2295,7 @@ static void nft_set_pipapo_match_destroy(const struct nft_ctx *ctx,
 					 const struct nft_set *set,
 					 struct nft_pipapo_match *m)
 {
+	struct nft_set *mset = (void *)set;
 	struct nft_pipapo_field *f;
 	unsigned int i, r;
 
@@ -2310,6 +2311,7 @@ static void nft_set_pipapo_match_destroy(const struct nft_ctx *ctx,
 		e = f->mt[r].e;
 
 		nf_tables_set_elem_destroy(ctx, set, &e->priv);
+		atomic_dec(&mset->nelems);
 	}
 }
 
