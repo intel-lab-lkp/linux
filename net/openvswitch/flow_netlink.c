@@ -3043,6 +3043,8 @@ static int validate_userspace(const struct nlattr *attr)
 		[OVS_USERSPACE_ATTR_PID] = {.type = NLA_U32 },
 		[OVS_USERSPACE_ATTR_USERDATA] = {.type = NLA_UNSPEC },
 		[OVS_USERSPACE_ATTR_EGRESS_TUN_PORT] = {.type = NLA_U32 },
+		[OVS_USERSPACE_ATTR_ACTIONS] = {.type = NLA_FLAG },
+		[OVS_USERSPACE_ATTR_MCAST] = {.type = NLA_FLAG },
 	};
 	struct nlattr *a[OVS_USERSPACE_ATTR_MAX + 1];
 	int error;
@@ -3052,8 +3054,8 @@ static int validate_userspace(const struct nlattr *attr)
 	if (error)
 		return error;
 
-	if (!a[OVS_USERSPACE_ATTR_PID] ||
-	    !nla_get_u32(a[OVS_USERSPACE_ATTR_PID]))
+	if (!a[OVS_USERSPACE_ATTR_MCAST] && (!a[OVS_USERSPACE_ATTR_PID] ||
+	    !nla_get_u32(a[OVS_USERSPACE_ATTR_PID])))
 		return -EINVAL;
 
 	return 0;

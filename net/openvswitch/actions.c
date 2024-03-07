@@ -1004,6 +1004,11 @@ static int output_userspace(struct datapath *dp, struct sk_buff *skb,
 			break;
 		}
 
+		case OVS_USERSPACE_ATTR_MCAST: {
+			upcall.portid = MCAST_PID;
+			break;
+		}
+
 		} /* End of switch. */
 	}
 

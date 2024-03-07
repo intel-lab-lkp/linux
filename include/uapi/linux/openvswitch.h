@@ -144,6 +144,7 @@ struct ovs_vport_stats {
 /* Packet transfer. */
 
 #define OVS_PACKET_FAMILY "ovs_packet"
+#define OVS_PACKET_MCGROUP "ovs_packet"
 #define OVS_PACKET_VERSION 0x1
 
 enum ovs_packet_cmd {
@@ -678,7 +679,8 @@ struct sample_arg {
 /**
  * enum ovs_userspace_attr - Attributes for %OVS_ACTION_ATTR_USERSPACE action.
  * @OVS_USERSPACE_ATTR_PID: u32 Netlink PID to which the %OVS_PACKET_CMD_ACTION
- * message should be sent.  Required.
+ * message should be sent. If the PID is 0, the message will be sent to the
+ * "ovs_packet" netlink multicast group. Required.
  * @OVS_USERSPACE_ATTR_USERDATA: If present, its variable-length argument is
  * copied to the %OVS_PACKET_CMD_ACTION message as %OVS_PACKET_ATTR_USERDATA.
  * @OVS_USERSPACE_ATTR_EGRESS_TUN_PORT: If present, u32 output port to get
@@ -692,6 +694,8 @@ enum ovs_userspace_attr {
 	OVS_USERSPACE_ATTR_EGRESS_TUN_PORT,  /* Optional, u32 output port
 					      * to get tunnel info. */
 	OVS_USERSPACE_ATTR_ACTIONS,   /* Optional flag to get actions. */
+	OVS_USERSPACE_ATTR_MCAST,     /* Optional flag to send the packet to
+					 the "ovs_packet" multicast group. */
 	__OVS_USERSPACE_ATTR_MAX
 };
 

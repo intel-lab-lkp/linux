@@ -70,6 +70,10 @@ static const struct genl_multicast_group ovs_dp_vport_multicast_group = {
 	.name = OVS_VPORT_MCGROUP,
 };
 
+static const struct genl_multicast_group ovs_dp_packet_multicast_group = {
+	.name = OVS_PACKET_MCGROUP,
+};
+
 /* Check if need to build a reply message.
  * OVS userspace sets the NLM_F_ECHO flag if it needs the reply. */
 static bool ovs_must_notify(struct genl_family *family, struct genl_info *info,
@@ -577,7 +581,13 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 
 	((struct nlmsghdr *) user_skb->data)->nlmsg_len = user_skb->len;
 
-	err = genlmsg_unicast(ovs_dp_get_net(dp), user_skb, upcall_info->portid);
+	if (upcall_info->portid == MCAST_PID)
+		err = genlmsg_multicast_netns(&dp_packet_genl_family,
+			ovs_dp_get_net(dp), user_skb, 0, 0, GFP_KERNEL);
+	else
+		err = genlmsg_unicast(ovs_dp_get_net(dp),
+				      user_skb, upcall_info->portid);
+
 	user_skb = NULL;
 out:
 	if (err)
@@ -717,6 +727,8 @@ static struct genl_family dp_packet_genl_family __ro_after_init = {
 	.small_ops = dp_packet_genl_ops,
 	.n_small_ops = ARRAY_SIZE(dp_packet_genl_ops),
 	.resv_start_op = OVS_PACKET_CMD_EXECUTE + 1,
+	.mcgrps = &ovs_dp_packet_multicast_group,
+	.n_mcgrps = 1,
 	.module = THIS_MODULE,
 };
 
