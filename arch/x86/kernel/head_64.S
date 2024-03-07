@@ -107,6 +107,8 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 */
 	leaq	_text(%rip), %rdi
 	movq	%r15, %rsi
+	leaq	common_startup_64(%rip), %rdx
+	subq	0f(%rip), %rdx
 	call	__startup_64
 
 	/* Form the CR3 value being sure to include the CR3 modifier */
