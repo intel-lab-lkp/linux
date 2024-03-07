@@ -316,11 +316,15 @@ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
 		  const struct dp_upcall_info *upcall_info,
 		  uint32_t cutlen)
 {
+	const bool mcast = upcall_info->portid == MCAST_PID;
 	struct dp_stats_percpu *stats;
 	int err;
 
-	if (trace_ovs_dp_upcall_enabled())
+	if (!mcast && trace_ovs_dp_upcall_enabled())
 		trace_ovs_dp_upcall(dp, skb, key, upcall_info);
+
+	if (mcast && trace_ovs_dp_monitor_enabled())
+		trace_ovs_dp_monitor(dp, skb, key, upcall_info);
 
 	if (upcall_info->portid == 0) {
 		err = -ENOTCONN;

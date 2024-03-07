@@ -148,6 +148,77 @@ TRACE_EVENT(ovs_dp_upcall,
 		  __entry->upcall_mru)
 );
 
+TRACE_EVENT(ovs_dp_monitor,
+
+	TP_PROTO(struct datapath *dp, struct sk_buff *skb,
+		 const struct sw_flow_key *key,
+		 const struct dp_upcall_info *upcall_info),
+
+	TP_ARGS(dp, skb, key, upcall_info),
+
+	TP_STRUCT__entry(
+		__field(	void *,		dpaddr			)
+		__string(	dp_name,	ovs_dp_name(dp)		)
+		__string(	dev_name,	skb->dev->name		)
+		__field(	void *,		skbaddr			)
+		__field(	unsigned int,	len			)
+		__field(	unsigned int,	data_len		)
+		__field(	unsigned int,	truesize		)
+		__field(	u8,		nr_frags		)
+		__field(	u16,		gso_size		)
+		__field(	u16,		gso_type		)
+		__field(	u32,		ovs_flow_hash		)
+		__field(	u32,		recirc_id		)
+		__field(	const void *,	keyaddr			)
+		__field(	u16,		key_eth_type		)
+		__field(	u8,		key_ct_state		)
+		__field(	u8,		key_ct_orig_proto	)
+		__field(	u16,		key_ct_zone		)
+		__field(	unsigned int,	flow_key_valid		)
+		__field(	u32,		upcall_port		)
+		__field(	void *,		upcall_udata		)
+		__field(	u16,		upcall_ulen		)
+	),
+
+	TP_fast_assign(
+		__entry->dpaddr = dp;
+		__assign_str(dp_name, ovs_dp_name(dp));
+		__assign_str(dev_name, skb->dev->name);
+		__entry->skbaddr = skb;
+		__entry->len = skb->len;
+		__entry->data_len = skb->data_len;
+		__entry->truesize = skb->truesize;
+		__entry->nr_frags = skb_shinfo(skb)->nr_frags;
+		__entry->gso_size = skb_shinfo(skb)->gso_size;
+		__entry->gso_type = skb_shinfo(skb)->gso_type;
+		__entry->ovs_flow_hash = key->ovs_flow_hash;
+		__entry->recirc_id = key->recirc_id;
+		__entry->keyaddr = key;
+		__entry->key_eth_type = key->eth.type;
+		__entry->key_ct_state = key->ct_state;
+		__entry->key_ct_orig_proto = key->ct_orig_proto;
+		__entry->key_ct_zone = key->ct_zone;
+		__entry->flow_key_valid =  !(key->mac_proto & SW_FLOW_KEY_INVALID);
+		__entry->upcall_port = upcall_info->portid;
+		__entry->upcall_udata = upcall_info->userdata ?
+			nla_data(upcall_info->userdata): NULL;
+		__entry->upcall_ulen = upcall_info->userdata ?
+			nla_len(upcall_info->userdata): 0;
+	),
+
+	TP_printk("dpaddr=%p dp_name=%s dev=%s skbaddr=%p len=%u data_len=%u truesize=%u nr_frags=%d gso_size=%d gso_type=%#x ovs_flow_hash=0x%08x recirc_id=0x%08x keyaddr=%p eth_type=0x%04x ct_state=%02x ct_orig_proto=%02x ct_zone=%04x flow_key_valid=%d upcall_port=%u upcall_udata=%p upcall_ulen=%d",
+		  __entry->dpaddr, __get_str(dp_name), __get_str(dev_name),
+		  __entry->skbaddr, __entry->len, __entry->data_len,
+		  __entry->truesize, __entry->nr_frags, __entry->gso_size,
+		  __entry->gso_type, __entry->ovs_flow_hash,
+		  __entry->recirc_id, __entry->keyaddr, __entry->key_eth_type,
+		  __entry->key_ct_state, __entry->key_ct_orig_proto,
+		  __entry->key_ct_zone,
+		  __entry->flow_key_valid,
+		  __entry->upcall_port,
+		  __entry->upcall_udata, __entry->upcall_ulen)
+);
+
 #endif /* _TRACE_OPENVSWITCH_H */
 
 /* This part must be outside protection */
