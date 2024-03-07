@@ -34,8 +34,8 @@ ATTRIBUTE_GROUPS(mgb4_fpdl3_in);
 ATTRIBUTE_GROUPS(mgb4_gmsl_in);
 
 static const struct mgb4_vin_config vin_cfg[] = {
-	{0, 0, 0, 6, {0x10, 0x00, 0x04, 0x08, 0x1C, 0x14, 0x18, 0x20, 0x24, 0x28}},
-	{1, 1, 1, 7, {0x40, 0x30, 0x34, 0x38, 0x4C, 0x44, 0x48, 0x50, 0x54, 0x58}}
+	{0, 0, 0, 6, {0x10, 0x00, 0x04, 0x08, 0x1C, 0x14, 0x18, 0x20, 0x24, 0x28, 0xE8}},
+	{1, 1, 1, 7, {0x40, 0x30, 0x34, 0x38, 0x4C, 0x44, 0x48, 0x50, 0x54, 0x58, 0xEC}}
 };
 
 static const struct i2c_board_info fpdl3_deser_info[] = {
@@ -387,6 +387,7 @@ static int vidioc_enum_frameintervals(struct file *file, void *priv,
 {
 	struct mgb4_vin_dev *vindev = video_drvdata(file);
 	struct mgb4_regs *video = &vindev->mgbdev->video;
+	struct v4l2_dv_timings timings;
 
 	if (ival->index != 0)
 		return -EINVAL;
@@ -397,12 +398,15 @@ static int vidioc_enum_frameintervals(struct file *file, void *priv,
 	    ival->height != vindev->timings.bt.height)
 		return -EINVAL;
 
-	ival->type = V4L2_FRMIVAL_TYPE_CONTINUOUS;
-	ival->stepwise.min.denominator = 60;
-	ival->stepwise.min.numerator = 1;
-	ival->stepwise.max.denominator = 1;
-	ival->stepwise.max.numerator = 1;
-	ival->stepwise.step = ival->stepwise.max;
+	get_timings(vindev, &timings);
+
+	ival->type = V4L2_FRMIVAL_TYPE_STEPWISE;
+	ival->stepwise.max.denominator = MGB4_HW_FREQ;
+	ival->stepwise.max.numerator = 0xFFFFFFFF;
+	ival->stepwise.min.denominator = timings.bt.pixelclock;
+	ival->stepwise.min.numerator = pixel_size(&timings);
+	ival->stepwise.step.denominator = MGB4_HW_FREQ;
+	ival->stepwise.step.numerator = 1;
 
 	return 0;
 }
@@ -570,25 +574,64 @@ static int vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 	return 0;
 }
 
-static int vidioc_parm(struct file *file, void *priv,
-		       struct v4l2_streamparm *parm)
+static int vidioc_g_parm(struct file *file, void *priv,
+			 struct v4l2_streamparm *parm)
 {
 	struct mgb4_vin_dev *vindev = video_drvdata(file);
 	struct mgb4_regs *video = &vindev->mgbdev->video;
-	const struct mgb4_vin_regs *regs = &vindev->config->regs;
-	struct v4l2_fract timeperframe = {
-		.numerator = mgb4_read_reg(video, regs->frame_period),
-		.denominator = 125000000,
-	};
+	struct v4l2_fract *tpf = &parm->parm.output.timeperframe;
+	struct v4l2_dv_timings timings;
+	u32 timer;
 
 	if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
 	parm->parm.capture.readbuffers = 2;
-	parm->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	parm->parm.capture.timeperframe = timeperframe;
+
+	if (has_timeperframe(video)) {
+		timer = mgb4_read_reg(video, vindev->config->regs.timer);
+		if (timer < 0xFFFF) {
+			get_timings(vindev, &timings);
+			tpf->numerator = pixel_size(&timings);
+			tpf->denominator = timings.bt.pixelclock;
+		} else {
+			tpf->numerator = timer;
+			tpf->denominator = MGB4_HW_FREQ;
+		}
+
+		parm->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
+	}
 
 	return 0;
+}
+
+static int vidioc_s_parm(struct file *file, void *priv,
+			 struct v4l2_streamparm *parm)
+{
+	struct mgb4_vin_dev *vindev = video_drvdata(file);
+	struct mgb4_regs *video = &vindev->mgbdev->video;
+	struct v4l2_fract *tpf = &parm->parm.output.timeperframe;
+	struct v4l2_dv_timings timings;
+	u32 period, timer;
+
+	if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+
+	if (has_timeperframe(video)) {
+		timer = tpf->denominator ?
+			MGB4_PERIOD(tpf->numerator, tpf->denominator) : 0;
+		if (timer) {
+			get_timings(vindev, &timings);
+			period = MGB4_PERIOD(pixel_size(&timings),
+					     timings.bt.pixelclock);
+			if (timer < period)
+				timer = 0;
+		}
+
+		mgb4_write_reg(video, vindev->config->regs.timer, timer);
+	}
+
+	return vidioc_g_parm(file, priv, parm);
 }
 
 static int vidioc_s_dv_timings(struct file *file, void *fh,
@@ -674,8 +717,8 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 	.vidioc_expbuf = vb2_ioctl_expbuf,
 	.vidioc_streamon = vb2_ioctl_streamon,
 	.vidioc_streamoff = vb2_ioctl_streamoff,
-	.vidioc_g_parm = vidioc_parm,
-	.vidioc_s_parm = vidioc_parm,
+	.vidioc_g_parm = vidioc_g_parm,
+	.vidioc_s_parm = vidioc_s_parm,
 	.vidioc_dv_timings_cap = vidioc_dv_timings_cap,
 	.vidioc_enum_dv_timings = vidioc_enum_dv_timings,
 	.vidioc_g_dv_timings = vidioc_g_dv_timings,
@@ -858,10 +901,16 @@ static void debugfs_init(struct mgb4_vin_dev *vindev)
 	vindev->regs[7].offset = vindev->config->regs.signal2;
 	vindev->regs[8].name = "PADDING_PIXELS";
 	vindev->regs[8].offset = vindev->config->regs.padding;
+	if (has_timeperframe(video)) {
+		vindev->regs[9].name = "TIMER";
+		vindev->regs[9].offset = vindev->config->regs.timer;
+		vindev->regset.nregs = 10;
+	} else {
+		vindev->regset.nregs = 9;
+	}
 
 	vindev->regset.base = video->membase;
 	vindev->regset.regs = vindev->regs;
-	vindev->regset.nregs = ARRAY_SIZE(vindev->regs);
 
 	debugfs_create_regset32("registers", 0444, vindev->debugfs,
 				&vindev->regset);
