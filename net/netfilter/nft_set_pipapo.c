@@ -1716,8 +1716,8 @@ static void pipapo_gc(struct nft_set *set, struct nft_pipapo_match *m)
 		}
 	}
 
-	gc = nft_trans_gc_catchall_sync(gc);
 	if (gc) {
+		nft_trans_gc_catchall_sync(gc);
 		nft_trans_gc_queue_sync_done(gc);
 		priv->last_gc = jiffies;
 	}

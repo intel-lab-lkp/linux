@@ -9876,33 +9876,14 @@ void nft_trans_gc_queue_sync_done(struct nft_trans_gc *trans)
 	call_rcu(&trans->rcu, nft_trans_gc_trans_free);
 }
 
-struct nft_trans_gc *nft_trans_gc_catchall_sync(struct nft_trans_gc *gc)
+void nft_trans_gc_catchall_sync(const struct nft_trans_gc *gc)
 {
-	struct nft_set_elem_catchall *catchall, *next;
-	u64 tstamp = nft_net_tstamp(gc->net);
-	const struct nft_set *set = gc->set;
-	struct nft_elem_priv *elem_priv;
-	struct nft_set_ext *ext;
+	struct nft_ctx ctx = {
+		.table = gc->set->table,
+		.net = gc->net,
+	};
 
-	WARN_ON_ONCE(!lockdep_commit_lock_is_held(gc->net));
-
-	list_for_each_entry_safe(catchall, next, &set->catchall_list, list) {
-		ext = nft_set_elem_ext(set, catchall->elem);
-
-		if (!__nft_set_elem_expired(ext, tstamp))
-			continue;
-
-		gc = nft_trans_gc_queue_sync(gc, GFP_KERNEL);
-		if (!gc)
-			return NULL;
-
-		elem_priv = catchall->elem;
-		nft_setelem_data_deactivate(gc->net, gc->set, elem_priv);
-		nft_setelem_catchall_destroy(catchall);
-		nft_trans_gc_elem_add(gc, elem_priv);
-	}
-
-	return gc;
+	nft_trans_gc_catchall(&ctx, gc->set);
 }
 
 static void nf_tables_module_autoload_cleanup(struct net *net)

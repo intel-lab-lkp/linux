@@ -678,7 +678,7 @@ static void nft_rbtree_gc(struct nft_set *set)
 try_later:
 
 	if (gc) {
-		gc = nft_trans_gc_catchall_sync(gc);
+		nft_trans_gc_catchall_sync(gc);
 		nft_trans_gc_queue_sync_done(gc);
 		priv->last_gc = jiffies;
 	}
