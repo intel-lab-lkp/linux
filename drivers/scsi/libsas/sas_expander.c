@@ -120,17 +120,6 @@ static int smp_execute_task_sg(struct domain_device *dev,
 	return res;
 }
 
-static int smp_execute_task(struct domain_device *dev, void *req, int req_size,
-			    void *resp, int resp_size)
-{
-	struct scatterlist req_sg;
-	struct scatterlist resp_sg;
-
-	sg_init_one(&req_sg, req, req_size);
-	sg_init_one(&resp_sg, resp, resp_size);
-	return smp_execute_task_sg(dev, &req_sg, &resp_sg);
-}
-
 /* ---------- Allocations ---------- */
 
 static inline void *alloc_smp_req(int size)
@@ -144,6 +133,27 @@ static inline void *alloc_smp_req(int size)
 static inline void *alloc_smp_resp(int size)
 {
 	return kzalloc(size, GFP_KERNEL);
+}
+
+static int smp_execute_task(struct domain_device *dev, void *req, int req_size,
+			    void *resp, int resp_size)
+{
+	struct scatterlist req_sg;
+	struct scatterlist resp_sg;
+	void *_req = kmemdup(req, req_size, GFP_KERNEL);
+	void *_resp = alloc_smp_resp(resp_size);
+	int ret;
+
+	if (!_req || !resp)
+		return -ENOMEM;
+
+	sg_init_one(&req_sg, _req, req_size);
+	sg_init_one(&resp_sg, _resp, resp_size);
+	ret = smp_execute_task_sg(dev, &req_sg, &resp_sg);
+	memcpy(resp, _resp, resp_size);
+	kfree(_req);
+	kfree(_resp);
+	return ret;
 }
 
 static char sas_route_char(struct domain_device *dev, struct ex_phy *phy)
