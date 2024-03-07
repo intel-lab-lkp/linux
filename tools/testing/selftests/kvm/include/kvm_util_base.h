@@ -512,6 +512,17 @@ void read_stat_data(int stats_fd, struct kvm_stats_header *header,
 		    struct kvm_stats_desc *desc, uint64_t *data,
 		    size_t max_elements);
 
+void __vcpu_get_stat(struct kvm_vcpu *vcpu, const char *stat_name, uint64_t *data,
+		   size_t max_elements);
+
+static inline uint64_t vcpu_get_stat(struct kvm_vcpu *vcpu, const char *stat_name)
+{
+	uint64_t data;
+
+	__vcpu_get_stat(vcpu, stat_name, &data, 1);
+	return data;
+}
+
 void __vm_get_stat(struct kvm_vm *vm, const char *stat_name, uint64_t *data,
 		   size_t max_elements);
 
