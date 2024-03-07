@@ -6007,7 +6007,8 @@ static int nft_setelem_parse_data(struct nft_ctx *ctx, struct nft_set *set,
 }
 
 static void *nft_setelem_catchall_get(const struct net *net,
-				      const struct nft_set *set)
+				      const struct nft_set *set,
+				      u32 flags)
 {
 	struct nft_set_elem_catchall *catchall;
 	u8 genmask = nft_genmask_cur(net);
@@ -6016,6 +6017,13 @@ static void *nft_setelem_catchall_get(const struct net *net,
 
 	list_for_each_entry_rcu(catchall, &set->catchall_list, list) {
 		ext = nft_set_elem_ext(set, catchall->elem);
+
+		if ((flags & NFT_SET_ELEM_GET_DEAD) &&
+		    nft_set_elem_expired(ext)) {
+			priv = catchall->elem;
+			break;
+		}
+
 		if (!nft_set_elem_active(ext, genmask) ||
 		    nft_set_elem_expired(ext))
 			continue;
@@ -6037,7 +6045,7 @@ static int nft_setelem_get(struct nft_ctx *ctx, const struct nft_set *set,
 		if (IS_ERR(priv))
 			return PTR_ERR(priv);
 	} else {
-		priv = nft_setelem_catchall_get(ctx->net, set);
+		priv = nft_setelem_catchall_get(ctx->net, set, flags & NFT_SET_ELEM_GET_DEAD);
 		if (!priv)
 			return -ENOENT;
 	}

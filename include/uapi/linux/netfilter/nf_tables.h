@@ -428,6 +428,11 @@ enum nft_set_attributes {
 enum nft_set_elem_flags {
 	NFT_SET_ELEM_INTERVAL_END	= 0x1,
 	NFT_SET_ELEM_CATCHALL		= 0x2,
+
+#ifdef __KERNEL__
+	/* not visisble to userspace, should be rejected if seen */
+	NFT_SET_ELEM_GET_DEAD		= 0x80000000,
+#endif
 };
 
 /**

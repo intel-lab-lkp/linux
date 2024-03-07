@@ -35,6 +35,7 @@ struct nft_rhash_elem {
 struct nft_rhash_cmp_arg {
 	const struct nft_set		*set;
 	const u32			*key;
+	bool				dead;
 	u8				genmask;
 	u64				tstamp;
 };
@@ -61,13 +62,16 @@ static inline int nft_rhash_cmp(struct rhashtable_compare_arg *arg,
 
 	if (memcmp(nft_set_ext_key(&he->ext), x->key, x->set->klen))
 		return 1;
+
 	if (nft_set_elem_is_dead(&he->ext))
 		return 1;
 	if (__nft_set_elem_expired(&he->ext, x->tstamp))
-		return 1;
+		return x->dead ? 0 : 1;
 	if (!nft_set_elem_active(&he->ext, x->genmask))
 		return 1;
-	return 0;
+
+	/* don't want valid element to shadow expired one */
+	return x->dead ? 1 : 0;
 }
 
 static const struct rhashtable_params nft_rhash_params = {
@@ -109,6 +113,7 @@ nft_rhash_get(const struct net *net, const struct nft_set *set,
 		.set	 = set,
 		.key	 = elem->key.val.data,
 		.tstamp  = get_jiffies_64(),
+		.dead	 = flags & NFT_SET_ELEM_GET_DEAD,
 	};
 
 	he = rhashtable_lookup(&priv->ht, &arg, nft_rhash_params);
