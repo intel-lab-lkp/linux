@@ -309,6 +309,7 @@ struct cgroup_base_stat {
 
 #ifdef CONFIG_SCHED_CORE
 	u64 forceidle_sum;
+	u64 forceidle_task_sum;
 #endif
 };
 

@@ -1170,6 +1170,7 @@ struct rq {
 	unsigned int		core_forceidle_seq;
 	unsigned int		core_forceidle_occupation;
 	u64			core_forceidle_start;
+	u64			core_forceidle_start_task;
 #endif
 
 	/* Scratch cpumask to be temporarily used under rq_lock */

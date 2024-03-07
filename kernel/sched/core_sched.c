@@ -241,6 +241,7 @@ void __sched_core_account_forceidle(struct rq *rq)
 {
 	const struct cpumask *smt_mask = cpu_smt_mask(cpu_of(rq));
 	u64 delta, now = rq_clock(rq->core);
+	u64 delta_task, now_task = rq_clock_task(rq->core);
 	struct rq *rq_i;
 	struct task_struct *p;
 	int i;
@@ -253,10 +254,12 @@ void __sched_core_account_forceidle(struct rq *rq)
 		return;
 
 	delta = now - rq->core->core_forceidle_start;
+	delta_task = now_task - rq->core->core_forceidle_start_task;
 	if (unlikely((s64)delta <= 0))
 		return;
 
 	rq->core->core_forceidle_start = now;
+	rq->core->core_forceidle_start_task = now_task;
 
 	if (WARN_ON_ONCE(!rq->core->core_forceidle_occupation)) {
 		/* can't be forced idle without a running task */
@@ -282,7 +285,7 @@ void __sched_core_account_forceidle(struct rq *rq)
 		 * Note: this will account forceidle to the current cpu, even
 		 * if it comes from our SMT sibling.
 		 */
-		__account_forceidle_time(p, delta);
+		__account_forceidle_time(p, delta, delta_task);
 	}
 }
 

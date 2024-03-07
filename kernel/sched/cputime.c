@@ -237,11 +237,13 @@ void account_idle_time(u64 cputime)
  *
  * REQUIRES: schedstat is enabled.
  */
-void __account_forceidle_time(struct task_struct *p, u64 delta)
+void __account_forceidle_time(struct task_struct *p, u64 delta, u64 delta_task)
 {
 	__schedstat_add(p->stats.core_forceidle_sum, delta);
+	__schedstat_add(p->stats.core_forceidle_task_sum, delta_task);
 
 	task_group_account_field(p, CPUTIME_FORCEIDLE, delta);
+	task_group_account_field(p, CPUTIME_FORCEIDLE_TASK, delta_task);
 }
 #endif
 

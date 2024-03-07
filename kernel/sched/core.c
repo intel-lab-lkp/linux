@@ -370,6 +370,7 @@ static void __sched_core_flip(bool enabled)
 			cpu_rq(t)->core_enabled = enabled;
 
 		cpu_rq(cpu)->core->core_forceidle_start = 0;
+		cpu_rq(cpu)->core->core_forceidle_start_task = 0;
 
 		sched_core_unlock(cpu, &flags);
 
@@ -6160,6 +6161,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		sched_core_account_forceidle(rq);
 		/* reset after accounting force idle */
 		rq->core->core_forceidle_start = 0;
+		rq->core->core_forceidle_start_task = 0;
 		rq->core->core_forceidle_count = 0;
 		rq->core->core_forceidle_occupation = 0;
 		need_sync = true;
@@ -6251,6 +6253,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 	if (schedstat_enabled() && rq->core->core_forceidle_count) {
 		rq->core->core_forceidle_start = rq_clock(rq->core);
+		rq->core->core_forceidle_start_task = rq_clock_task(rq->core);
 		rq->core->core_forceidle_occupation = occ;
 	}
 
@@ -6515,6 +6518,7 @@ static void sched_core_cpu_deactivate(unsigned int cpu)
 	 * have a cookie.
 	 */
 	core_rq->core_forceidle_start = 0;
+	core_rq->core_forceidle_start_task = 0;
 
 	/* install new leader */
 	for_each_cpu(t, smt_mask) {
@@ -10037,6 +10041,7 @@ void __init sched_init(void)
 		rq->core_forceidle_count = 0;
 		rq->core_forceidle_occupation = 0;
 		rq->core_forceidle_start = 0;
+		rq->core_forceidle_start_task = 0;
 
 		rq->core_cookie = 0UL;
 #endif

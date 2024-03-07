@@ -529,6 +529,7 @@ struct sched_statistics {
 
 #ifdef CONFIG_SCHED_CORE
 	u64				core_forceidle_sum;
+	u64				core_forceidle_task_sum;
 #endif
 #endif /* CONFIG_SCHEDSTATS */
 } ____cacheline_aligned;
