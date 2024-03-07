@@ -227,7 +227,7 @@ with SMT enabled. There are other use cases where this feature could be used:
 
 Statictics
 ----------
-A task's forceidle statistics are exported via 1 field in procfs.
+A task's forceidle statistics are exported via 2 field in procfs.
 
 /proc/$pid/sched:
 
@@ -235,6 +235,9 @@ A task's forceidle statistics are exported via 1 field in procfs.
    unit: ms. It is worth noting that, if this task is running on cpux whose SMT
    siblings are forced idle, the irq time of cpux during this period will be
    accounted to this task's force idle time.
+
+ - se.statistics.core_forceidle_task_sum: The time that this task is actually
+   running on cpu whose SMT siblings are forced idle, unit: ms.
 
 This interface is read-only.
 
@@ -246,5 +249,8 @@ cpu.stat:
    unit: us. It is worth nothing that, if this cgroup's task is running on cpux
    whose SMT siblings are forced idle, the irq time of cpux during this period
    will be accounted to this cgroup's force idle time.
+
+ - core_sched.force_idle_task_usec: The time that this cgroup's tasks are
+   actually running on cpu whose SMT siblings are forced idle, unit: us.
 
 This interface is read-only.
