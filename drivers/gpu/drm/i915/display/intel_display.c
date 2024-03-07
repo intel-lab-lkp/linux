@@ -1724,6 +1724,9 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 		intel_crtc_wait_for_next_vblank(wa_crtc);
 		intel_crtc_wait_for_next_vblank(wa_crtc);
 	}
+
+	if (new_crtc_state->hw.casf_params.strength_changed)
+		intel_filter_lut_load(crtc, new_crtc_state);
 }
 
 void ilk_pfit_disable(const struct intel_crtc_state *old_crtc_state)
@@ -2446,8 +2449,12 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 	if (crtc_state->has_pch_encoder)
 		return ilk_fdi_compute_config(crtc, crtc_state);
 
-	if (crtc_state->hw.casf_params.strength_changed)
+	intel_sharpen_strength_changed(state);
+
+	if (crtc_state->hw.casf_params.strength_changed) {
 		intel_sharpness_scaler_compute_config(crtc_state);
+		intel_filter_compute_config(crtc_state);
+	}
 
 	return 0;
 }
@@ -6345,6 +6352,8 @@ int intel_atomic_check(struct drm_device *dev,
 
 	intel_vrr_check_modeset(state);
 
+	intel_sharpen_strength_changed(state);
+
 	ret = drm_atomic_helper_check_modeset(dev, &state->base);
 	if (ret)
 		goto fail;
@@ -6699,6 +6708,9 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 		if (vrr_params_changed(old_crtc_state, new_crtc_state))
 			intel_vrr_set_transcoder_timings(new_crtc_state);
 	}
+
+	if (new_crtc_state->hw.casf_params.strength_changed)
+		intel_sharpen_filter_enable(new_crtc_state);
 
 	intel_fbc_update(state, crtc);
 
