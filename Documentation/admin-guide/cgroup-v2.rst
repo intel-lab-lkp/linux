@@ -1081,8 +1081,9 @@ All time durations are in microseconds.
 	- user_usec
 	- system_usec
 
-	and the following five when the controller is enabled:
+	and the following six when the controller is enabled:
 
+	- core_sched.force_idle_usec
 	- nr_periods
 	- nr_throttled
 	- throttled_usec

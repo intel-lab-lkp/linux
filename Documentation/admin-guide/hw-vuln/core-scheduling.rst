@@ -224,3 +224,27 @@ with SMT enabled. There are other use cases where this feature could be used:
 - Gang scheduling: Requirements for a group of tasks that needs to be scheduled
   together could also be realized using core scheduling. One example is vCPUs of
   a VM.
+
+Statictics
+----------
+A task's forceidle statistics are exported via 1 field in procfs.
+
+/proc/$pid/sched:
+
+ - se.statistics.core_forceidle_sum: Force idle time caused by this task,
+   unit: ms. It is worth noting that, if this task is running on cpux whose SMT
+   siblings are forced idle, the irq time of cpux during this period will be
+   accounted to this task's force idle time.
+
+This interface is read-only.
+
+A group's forceidle statistics are exported via 1 filed in cpu.stat.
+
+cpu.stat:
+
+ - core_sched.force_idle_usec: Force idle time caused by this cgroup' tasks,
+   unit: us. It is worth nothing that, if this cgroup's task is running on cpux
+   whose SMT siblings are forced idle, the irq time of cpux during this period
+   will be accounted to this cgroup's force idle time.
+
+This interface is read-only.
