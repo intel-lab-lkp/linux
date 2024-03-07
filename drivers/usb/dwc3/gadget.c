@@ -3568,8 +3568,23 @@ static bool dwc3_gadget_endpoint_trbs_complete(struct dwc3_ep *dep,
 {
 	struct dwc3		*dwc = dep->dwc;
 	bool			no_started_trb = true;
+	unsigned int		transfer_in_flight = 0;
 
-	if (status == -EXDEV)
+	/* It is possible that the interrupt thread was delayed by
+	 * scheduling in the system, and therefor the HW has already
+	 * run dry. In that case the last trb in the queue is already
+	 * handled by the hw. By checking the HWO bit we know to restart
+	 * the whole transfer. The condition to appear is more likely
+	 * if not every req has the IOC bit set and therefor does not
+	 * trigger the interrupt thread frequently.
+	 */
+	if (dep->number && usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
+		struct dwc3_trb *trb = dwc3_ep_prev_trb(dep, dep->trb_enqueue);
+
+		transfer_in_flight = trb->ctrl & DWC3_TRB_CTRL_HWO;
+	}
+
+	if (status == -EXDEV || !transfer_in_flight)
 		dwc3_stop_active_transfer(dep, true, true);
 
 	dwc3_gadget_ep_cleanup_completed_requests(dep, event, status);
