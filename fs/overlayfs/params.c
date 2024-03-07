@@ -139,12 +139,8 @@ static int ovl_verity_mode_def(void)
 	return OVL_VERITY_OFF;
 }
 
-#define fsparam_string_empty(NAME, OPT) \
-	__fsparam(fs_param_is_string, NAME, OPT, fs_param_can_be_empty, NULL)
-
-
 const struct fs_parameter_spec ovl_parameter_spec[] = {
-	fsparam_string_empty("lowerdir",    Opt_lowerdir),
+	fsparam_string_or_flag("lowerdir",    Opt_lowerdir),
 	fsparam_string("lowerdir+",         Opt_lowerdir_add),
 	fsparam_string("datadir+",          Opt_datadir_add),
 	fsparam_string("upperdir",          Opt_upperdir),
@@ -424,12 +420,13 @@ static void ovl_reset_lowerdirs(struct ovl_fs_context *ctx)
  *     "/data1" and "/data2" as data lower layers. Any existing lower
  *     layers are replaced.
  */
-static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
+static int ovl_parse_param_lowerdir(struct fs_context *fc, struct fs_parameter *param)
 {
 	int err;
 	struct ovl_fs_context *ctx = fc->fs_private;
 	struct ovl_fs_context_layer *l;
 	char *dup = NULL, *iter;
+	const char *name = param->string;
 	ssize_t nr_lower, nr;
 	bool data_layer = false;
 
@@ -441,7 +438,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	/* drop all existing lower layers */
 	ovl_reset_lowerdirs(ctx);
 
-	if (!*name)
+	if ((param->type == fs_value_is_flag) || (!*name))
 		return 0;
 
 	if (*name == ':') {
@@ -572,7 +569,7 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 	switch (opt) {
 	case Opt_lowerdir:
-		err = ovl_parse_param_lowerdir(param->string, fc);
+		err = ovl_parse_param_lowerdir(fc, param);
 		break;
 	case Opt_lowerdir_add:
 	case Opt_datadir_add:
