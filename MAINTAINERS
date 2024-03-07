@@ -20939,6 +20939,13 @@ F:	Documentation/devicetree/bindings/power/starfive*
 F:	drivers/pmdomain/starfive/
 F:	include/dt-bindings/power/starfive,jh7110-pmu.h
 
+STARFIVE JH8100 PDM DRIVER
+M:	Xingyu Wu <xingyu.wu@starfivetech.com>
+M:	Walker Chen <walker.chen@starfivetech.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/sound/starfive,jh8100-pdm.yaml
+F:	sound/soc/starfive/jh8100_pdm.c
+
 STARFIVE SOC DRIVERS
 M:	Conor Dooley <conor@kernel.org>
 S:	Maintained

@@ -22,3 +22,10 @@ config SND_SOC_JH7110_TDM
 	select SND_SOC_GENERIC_DMAENGINE_PCM
 	help
 	  Say Y or M if you want to add support for StarFive TDM driver.
+
+config SND_SOC_JH8100_PDM
+	tristate "JH8100 PDM controller device driver"
+	select SND_CADENCE_I2S_MC
+	select REGMAP_MMIO
+	help
+	  Say Y or M if you want to add support for StarFive PDM driver.
