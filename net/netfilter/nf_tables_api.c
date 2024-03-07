@@ -9686,14 +9686,22 @@ static void nft_trans_gc_setelem_remove(struct nft_ctx *ctx,
 		memcpy(&elem.key, key->key, sizeof(elem.key));
 
 		err = nft_setelem_get(ctx, trans->set, &elem, NFT_SET_ELEM_GET_DEAD);
-		WARN_ON(err < 0);
-		WARN_ON(key->priv != elem.priv);
+		if (err < 0) {
+			trans->keys[i].to_free = NULL;
+			continue;
+		}
 
 		ext = nft_set_elem_ext(trans->set, elem.priv);
+
+		WARN_ON(nft_setelem_is_catchall(trans->set, elem.priv));
+
 		/* nft_dynset can mark non-expired as DEAD, remove those too */
 		if (nft_set_elem_expired(ext) || nft_set_elem_is_dead(ext)) {
+			key->to_free = elem.priv;
 			nft_setelem_data_deactivate(ctx->net, trans->set, elem.priv);
 			nft_setelem_remove(ctx->net, trans->set, elem.priv);
+		} else {
+			trans->keys[i].to_free = NULL;
 		}
 	}
 
@@ -9718,7 +9726,11 @@ static void nft_trans_gc_trans_free(struct rcu_head *rcu)
 	ctx.net	= read_pnet(&trans->set->net);
 
 	for (i = 0; i < trans->count; i++) {
-		elem_priv = trans->keys[i].priv;
+		elem_priv = trans->keys[i].to_free;
+
+		if (!elem_priv)
+			continue;
+
 		if (!nft_setelem_is_catchall(trans->set, elem_priv))
 			atomic_dec(&trans->set->nelems);
 
@@ -9732,6 +9744,13 @@ static void nft_trans_gc_trans_free(struct rcu_head *rcu)
 static int nft_trans_gc_space(struct nft_trans_gc *trans)
 {
 	return NFT_TRANS_GC_BATCHCOUNT - trans->count;
+}
+
+static void nft_trans_gc_catchall_elem_add(struct nft_trans_gc *trans,
+					   struct nft_elem_priv *to_free)
+{
+	trans->keys[trans->count].to_free = to_free;
+	trans->count++;
 }
 
 static void nft_trans_gc_catchall(struct nft_ctx *ctx, struct nft_set *set)
@@ -9769,7 +9788,7 @@ static void nft_trans_gc_catchall(struct nft_ctx *ctx, struct nft_set *set)
 		elem_priv = catchall->elem;
 		nft_setelem_data_deactivate(ctx->net, set, elem_priv);
 		nft_setelem_catchall_destroy(catchall);
-		nft_trans_gc_elem_add(gc, elem_priv);
+		nft_trans_gc_catchall_elem_add(gc, elem_priv);
 	}
 
 	call_rcu(&gc->rcu, nft_trans_gc_trans_free);
@@ -9865,7 +9884,6 @@ void nft_async_gc_key_add(struct nft_trans_gc *gc, struct nft_elem_priv *priv)
 	ext = nft_set_elem_ext(set, priv);
 	memcpy(gc->keys[gc->count].key, nft_set_ext_key(ext), set->klen);
 
-	gc->keys[gc->count].priv = priv;
 	gc->count++;
 }
 

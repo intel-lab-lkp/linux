@@ -1737,7 +1737,7 @@ struct nft_trans_flowtable {
 
 struct nft_trans_gc_key {
 	u32 key[NFT_DATA_VALUE_MAXLEN / sizeof(u32)];
-	struct nft_elem_priv	*priv;
+	struct nft_elem_priv	*to_free;
 };
 
 struct nft_trans_gc {
