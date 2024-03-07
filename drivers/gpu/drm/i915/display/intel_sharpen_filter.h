@@ -24,4 +24,8 @@ struct scaler_filter_coeff {
 void intel_sharpen_filter_enable(struct intel_crtc_state *crtc_state);
 void intel_sharpness_scaler_compute_config(struct intel_crtc_state *crtc_state);
 int intel_filter_compute_config(struct intel_crtc_state *crtc_state);
+void intel_filter_lut_load(struct intel_crtc *crtc,
+			   const struct intel_crtc_state *crtc_state);
+void intel_sharpen_strength_changed(struct intel_atomic_state *state);
+
 #endif /* __INTEL_SHARPEN_FLITER_H__ */
