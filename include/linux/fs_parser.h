@@ -131,5 +131,13 @@ static inline bool fs_validate_description(const char *name,
 #define fsparam_bdev(NAME, OPT)	__fsparam(fs_param_is_blockdev, NAME, OPT, 0, NULL)
 #define fsparam_path(NAME, OPT)	__fsparam(fs_param_is_path, NAME, OPT, 0, NULL)
 #define fsparam_fd(NAME, OPT)	__fsparam(fs_param_is_fd, NAME, OPT, 0, NULL)
+/*
+ * Define two parameters with the same name, with types string and flag.  The
+ * string parameter can be empty, and thus it effectively allows the parameter
+ * to have a value or to be empty.
+ */
+#define fsparam_string_or_flag(NAME, OPT)				\
+	__fsparam(fs_param_is_string, NAME, OPT, fs_param_can_be_empty, NULL), \
+	fsparam_flag(NAME, OPT)
 
 #endif /* _LINUX_FS_PARSER_H */
