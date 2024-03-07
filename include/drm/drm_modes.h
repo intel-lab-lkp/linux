@@ -32,6 +32,7 @@
 #include <drm/drm_mode_object.h>
 #include <drm/drm_connector.h>
 
+struct drm_printer;
 struct videomode;
 
 /*
@@ -460,6 +461,7 @@ int drm_mode_convert_umode(struct drm_device *dev,
 			   struct drm_display_mode *out,
 			   const struct drm_mode_modeinfo *in);
 void drm_mode_probed_add(struct drm_connector *connector, struct drm_display_mode *mode);
+void drm_mode_print(struct drm_printer *p, const struct drm_display_mode *mode);
 void drm_mode_debug_printmodeline(const struct drm_display_mode *mode);
 bool drm_mode_is_420_only(const struct drm_display_info *display,
 			  const struct drm_display_mode *mode);

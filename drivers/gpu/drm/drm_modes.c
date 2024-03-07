@@ -50,6 +50,19 @@
 #include "drm_crtc_internal.h"
 
 /**
+ * drm_mode_print - print a mode to drm printer
+ * @p: drm printer
+ * @mode: mode to print
+ *
+ * Write @mode description to struct drm_printer @p.
+ */
+void drm_mode_print(struct drm_printer *p, const struct drm_display_mode *mode)
+{
+	drm_printf(p, DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
+}
+EXPORT_SYMBOL(drm_mode_print);
+
+/**
  * drm_mode_debug_printmodeline - print a mode to dmesg
  * @mode: mode to print
  *
