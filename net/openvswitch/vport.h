@@ -151,6 +151,7 @@ struct vport_upcall_stats_percpu {
 	struct u64_stats_sync syncp;
 	u64_stats_t n_success;
 	u64_stats_t n_fail;
+	u64_stats_t n_mcast;
 };
 
 struct vport *ovs_vport_alloc(int priv_size, const struct vport_ops *,

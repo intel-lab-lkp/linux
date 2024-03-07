@@ -315,6 +315,7 @@ int ovs_vport_get_upcall_stats(struct vport *vport, struct sk_buff *skb)
 
 	__u64 tx_success = 0;
 	__u64 tx_fail = 0;
+	__u64 mcast = 0;
 
 	for_each_possible_cpu(i) {
 		const struct vport_upcall_stats_percpu *stats;
@@ -325,6 +326,7 @@ int ovs_vport_get_upcall_stats(struct vport *vport, struct sk_buff *skb)
 			start = u64_stats_fetch_begin(&stats->syncp);
 			tx_success += u64_stats_read(&stats->n_success);
 			tx_fail += u64_stats_read(&stats->n_fail);
+			mcast  += u64_stats_read(&stats->n_mcast);
 		} while (u64_stats_fetch_retry(&stats->syncp, start));
 	}
 
@@ -339,6 +341,12 @@ int ovs_vport_get_upcall_stats(struct vport *vport, struct sk_buff *skb)
 	}
 
 	if (nla_put_u64_64bit(skb, OVS_VPORT_UPCALL_ATTR_FAIL, tx_fail,
+			      OVS_VPORT_ATTR_PAD)) {
+		nla_nest_cancel(skb, nla);
+		return -EMSGSIZE;
+	}
+
+	if (nla_put_u64_64bit(skb, OVS_VPORT_UPCALL_ATTR_MCAST, mcast,
 			      OVS_VPORT_ATTR_PAD)) {
 		nla_nest_cancel(skb, nla);
 		return -EMSGSIZE;

@@ -288,10 +288,12 @@ enum ovs_vport_attr {
  * enum ovs_vport_upcall_attr - attributes for %OVS_VPORT_UPCALL* commands
  * @OVS_VPORT_UPCALL_SUCCESS: 64-bit upcall success packets.
  * @OVS_VPORT_UPCALL_FAIL: 64-bit upcall fail packets.
+ * @OVS_VPORT_UPCALL_MCAST: 64-bit multicasted upcall packets.
  */
 enum ovs_vport_upcall_attr {
 	OVS_VPORT_UPCALL_ATTR_SUCCESS,
 	OVS_VPORT_UPCALL_ATTR_FAIL,
+	OVS_VPORT_UPCALL_ATTR_MCAST,
 	__OVS_VPORT_UPCALL_ATTR_MAX
 };
 

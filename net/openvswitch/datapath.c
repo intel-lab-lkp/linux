@@ -217,7 +217,7 @@ static struct vport *new_vport(const struct vport_parms *parms)
 
 static void ovs_vport_update_upcall_stats(struct sk_buff *skb,
 					  const struct dp_upcall_info *upcall_info,
-					  bool upcall_result)
+					  bool mcast, bool upcall_result)
 {
 	struct vport *p = OVS_CB(skb)->input_vport;
 	struct vport_upcall_stats_percpu *stats;
@@ -229,7 +229,10 @@ static void ovs_vport_update_upcall_stats(struct sk_buff *skb,
 	stats = this_cpu_ptr(p->upcall_stats);
 	u64_stats_update_begin(&stats->syncp);
 	if (upcall_result)
-		u64_stats_inc(&stats->n_success);
+		if (mcast)
+			u64_stats_inc(&stats->n_mcast);
+		else
+			u64_stats_inc(&stats->n_success);
 	else
 		u64_stats_inc(&stats->n_fail);
 	u64_stats_update_end(&stats->syncp);
@@ -336,7 +339,7 @@ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
 	else
 		err = queue_gso_packets(dp, skb, key, upcall_info, cutlen);
 
-	ovs_vport_update_upcall_stats(skb, upcall_info, !err);
+	ovs_vport_update_upcall_stats(skb, upcall_info, mcast, !err);
 	if (err)
 		goto err;
 
