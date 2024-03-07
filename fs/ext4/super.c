@@ -1724,10 +1724,6 @@ static const struct constant_table ext4_param_dax[] = {
 	{}
 };
 
-/* String parameter that allows empty argument */
-#define fsparam_string_empty(NAME, OPT) \
-	__fsparam(fs_param_is_string, NAME, OPT, fs_param_can_be_empty, NULL)
-
 /*
  * Mount option specification
  * We don't use fsparam_flag_no because of the way we set the
@@ -1768,9 +1764,9 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_enum	("data",		Opt_data, ext4_param_data),
 	fsparam_enum	("data_err",		Opt_data_err,
 						ext4_param_data_err),
-	fsparam_string_empty
+	fsparam_string_or_flag
 			("usrjquota",		Opt_usrjquota),
-	fsparam_string_empty
+	fsparam_string_or_flag
 			("grpjquota",		Opt_grpjquota),
 	fsparam_enum	("jqfmt",		Opt_jqfmt, ext4_param_jqfmt),
 	fsparam_flag	("grpquota",		Opt_grpquota),
@@ -1814,9 +1810,8 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_u32	("fc_debug_max_replay",	Opt_fc_debug_max_replay),
 #endif
 	fsparam_u32	("max_dir_size_kb",	Opt_max_dir_size_kb),
-	fsparam_flag	("test_dummy_encryption",
-						Opt_test_dummy_encryption),
-	fsparam_string	("test_dummy_encryption",
+	fsparam_string_or_flag
+			("test_dummy_encryption",
 						Opt_test_dummy_encryption),
 	fsparam_flag	("inlinecrypt",		Opt_inlinecrypt),
 	fsparam_flag	("nombcache",		Opt_nombcache),
@@ -2183,15 +2178,15 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	switch (token) {
 #ifdef CONFIG_QUOTA
 	case Opt_usrjquota:
-		if (!*param->string)
-			return unnote_qf_name(fc, USRQUOTA);
-		else
+		if ((param->type == fs_value_is_string) &&
+		    (*param->string))
 			return note_qf_name(fc, USRQUOTA, param);
+		return unnote_qf_name(fc, USRQUOTA);
 	case Opt_grpjquota:
-		if (!*param->string)
-			return unnote_qf_name(fc, GRPQUOTA);
-		else
+		if ((param->type == fs_value_is_string) &&
+		    (*param->string))
 			return note_qf_name(fc, GRPQUOTA, param);
+		return unnote_qf_name(fc, GRPQUOTA);
 #endif
 	case Opt_sb:
 		if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
