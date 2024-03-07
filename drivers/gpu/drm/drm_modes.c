@@ -1825,10 +1825,13 @@ void drm_mode_prune_invalid(struct drm_device *dev,
 					 DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
 			}
 			if (verbose) {
-				drm_mode_debug_printmodeline(mode);
-				DRM_DEBUG_KMS("Not using %s mode: %s\n",
-					      mode->name,
-					      drm_get_mode_status_name(mode->status));
+				struct drm_printer p;
+
+				p = drm_dbg_printer(dev, DRM_UT_KMS, "Rejected mode:");
+
+				drm_mode_print(&p, mode);
+				drm_printf(&p, "\"%s\": %s\n", mode->name,
+					   drm_get_mode_status_name(mode->status));
 			}
 			drm_mode_destroy(dev, mode);
 		}
