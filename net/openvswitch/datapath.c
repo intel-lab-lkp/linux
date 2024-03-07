@@ -455,6 +455,10 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	if (!dp_ifindex)
 		return -ENODEV;
 
+	if (upcall_info->portid == MCAST_PID &&
+	    !genl_has_listeners(&dp_packet_genl_family, ovs_dp_get_net(dp), 0))
+		return 0;
+
 	if (skb_vlan_tag_present(skb)) {
 		nskb = skb_clone(skb, GFP_ATOMIC);
 		if (!nskb)
