@@ -1667,7 +1667,7 @@ static void pipapo_gc(struct nft_set *set, struct nft_pipapo_match *m)
 	struct nft_pipapo_elem *e;
 	struct nft_trans_gc *gc;
 
-	gc = nft_trans_gc_alloc(set, 0, GFP_KERNEL);
+	gc = nft_trans_gc_alloc(set, GFP_KERNEL);
 	if (!gc)
 		return;
 

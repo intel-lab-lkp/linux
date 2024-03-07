@@ -9767,7 +9767,7 @@ static void nft_trans_gc_catchall(struct nft_ctx *ctx, struct nft_set *set)
 		if (!nft_set_elem_expired(ext))
 			continue;
 
-		gc = nft_trans_gc_alloc(set, 0, GFP_KERNEL);
+		gc = nft_trans_gc_alloc(set, GFP_KERNEL);
 		break;
 	}
 
@@ -9803,12 +9803,10 @@ static bool nft_trans_gc_work_done(struct nft_trans_gc *trans)
 
 	mutex_lock(&nft_net->commit_mutex);
 
-	/* Check for race with transaction, otherwise this batch refers to
-	 * stale objects that might not be there anymore. Skip transaction if
-	 * set has been destroyed from control plane transaction in case gc
-	 * worker loses race.
+	/* Check for race with transaction.
+	 * Set could have been destroyed from control plane.
 	 */
-	if (READ_ONCE(nft_net->gc_seq) != trans->seq || trans->set->dead) {
+	if (trans->set->dead) {
 		mutex_unlock(&nft_net->commit_mutex);
 		return false;
 	}
@@ -9842,8 +9840,7 @@ static void nft_trans_gc_work(struct work_struct *work)
 	}
 }
 
-struct nft_trans_gc *nft_trans_gc_alloc(struct nft_set *set,
-					unsigned int gc_seq, gfp_t gfp)
+struct nft_trans_gc *nft_trans_gc_alloc(struct nft_set *set, gfp_t gfp)
 {
 	struct net *net = read_pnet(&set->net);
 	struct nft_trans_gc *trans;
@@ -9860,7 +9857,6 @@ struct nft_trans_gc *nft_trans_gc_alloc(struct nft_set *set,
 
 	refcount_inc(&set->refs);
 	trans->set = set;
-	trans->seq = gc_seq;
 
 	return trans;
 }
@@ -9896,8 +9892,7 @@ static void nft_trans_gc_queue_work(struct nft_trans_gc *trans)
 	schedule_work(&trans_gc_work);
 }
 
-struct nft_trans_gc *nft_trans_gc_queue_async(struct nft_trans_gc *gc,
-					      unsigned int gc_seq, gfp_t gfp)
+struct nft_trans_gc *nft_trans_gc_queue_async(struct nft_trans_gc *gc, gfp_t gfp)
 {
 	struct nft_set *set;
 
@@ -9907,7 +9902,7 @@ struct nft_trans_gc *nft_trans_gc_queue_async(struct nft_trans_gc *gc,
 	set = gc->set;
 	nft_trans_gc_queue_work(gc);
 
-	return nft_trans_gc_alloc(set, gc_seq, gfp);
+	return nft_trans_gc_alloc(set, gfp);
 }
 
 void nft_trans_gc_queue_async_done(struct nft_trans_gc *trans)
@@ -9933,7 +9928,7 @@ struct nft_trans_gc *nft_trans_gc_queue_sync(struct nft_trans_gc *gc, gfp_t gfp)
 	set = gc->set;
 	call_rcu(&gc->rcu, nft_trans_gc_trans_free);
 
-	return nft_trans_gc_alloc(set, 0, gfp);
+	return nft_trans_gc_alloc(set, gfp);
 }
 
 void nft_trans_gc_queue_sync_done(struct nft_trans_gc *trans)
@@ -10116,31 +10111,15 @@ static void nft_set_commit_update(struct list_head *set_update_list)
 	}
 }
 
-static unsigned int nft_gc_seq_begin(struct nftables_pernet *nft_net)
-{
-	unsigned int gc_seq;
-
-	/* Bump gc counter, it becomes odd, this is the busy mark. */
-	gc_seq = READ_ONCE(nft_net->gc_seq);
-	WRITE_ONCE(nft_net->gc_seq, ++gc_seq);
-
-	return gc_seq;
-}
-
-static void nft_gc_seq_end(struct nftables_pernet *nft_net, unsigned int gc_seq)
-{
-	WRITE_ONCE(nft_net->gc_seq, ++gc_seq);
-}
-
 static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
 	struct nft_trans *trans, *next;
-	unsigned int base_seq, gc_seq;
 	LIST_HEAD(set_update_list);
 	struct nft_trans_elem *te;
 	struct nft_chain *chain;
 	struct nft_table *table;
+	unsigned int base_seq;
 	LIST_HEAD(adl);
 	int err;
 
@@ -10218,8 +10197,6 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 		;
 
 	WRITE_ONCE(nft_net->base_seq, base_seq);
-
-	gc_seq = nft_gc_seq_begin(nft_net);
 
 	/* step 3. Start new generation, rules_gen_X now in use. */
 	net->nft.gencursor = nft_gencursor_next(net);
@@ -10432,7 +10409,6 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 	nf_tables_gen_notify(net, skb, NFT_MSG_NEWGEN);
 	nf_tables_commit_audit_log(&adl, nft_net->base_seq);
 
-	nft_gc_seq_end(nft_net, gc_seq);
 	nft_net->validate_state = NFT_VALIDATE_SKIP;
 	nf_tables_commit_release(net);
 
@@ -10715,12 +10691,9 @@ static int nf_tables_abort(struct net *net, struct sk_buff *skb,
 			   enum nfnl_abort_action action)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
-	unsigned int gc_seq;
 	int ret;
 
-	gc_seq = nft_gc_seq_begin(nft_net);
 	ret = __nf_tables_abort(net, action);
-	nft_gc_seq_end(nft_net, gc_seq);
 	mutex_unlock(&nft_net->commit_mutex);
 
 	return ret;
@@ -11443,7 +11416,6 @@ static int nft_rcv_nl_event(struct notifier_block *this, unsigned long event,
 	struct net *net = n->net;
 	unsigned int deleted;
 	bool restart = false;
-	unsigned int gc_seq;
 
 	if (event != NETLINK_URELEASE || n->protocol != NETLINK_NETFILTER)
 		return NOTIFY_DONE;
@@ -11451,8 +11423,6 @@ static int nft_rcv_nl_event(struct notifier_block *this, unsigned long event,
 	nft_net = nft_pernet(net);
 	deleted = 0;
 	mutex_lock(&nft_net->commit_mutex);
-
-	gc_seq = nft_gc_seq_begin(nft_net);
 
 	if (!list_empty(&nf_tables_destroy_list))
 		nf_tables_trans_destroy_flush_work();
@@ -11480,7 +11450,6 @@ again:
 		if (restart)
 			goto again;
 	}
-	nft_gc_seq_end(nft_net, gc_seq);
 
 	mutex_unlock(&nft_net->commit_mutex);
 
@@ -11502,7 +11471,6 @@ static int __net_init nf_tables_init_net(struct net *net)
 	INIT_LIST_HEAD(&nft_net->notify_list);
 	mutex_init(&nft_net->commit_mutex);
 	nft_net->base_seq = 1;
-	nft_net->gc_seq = 0;
 	nft_net->validate_state = NFT_VALIDATE_SKIP;
 
 	return 0;
@@ -11520,19 +11488,14 @@ static void __net_exit nf_tables_pre_exit_net(struct net *net)
 static void __net_exit nf_tables_exit_net(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
-	unsigned int gc_seq;
 
 	mutex_lock(&nft_net->commit_mutex);
-
-	gc_seq = nft_gc_seq_begin(nft_net);
 
 	if (!list_empty(&nft_net->commit_list) ||
 	    !list_empty(&nft_net->module_list))
 		__nf_tables_abort(net, NFNL_ABORT_NONE);
 
 	__nft_release_tables(net);
-
-	nft_gc_seq_end(nft_net, gc_seq);
 
 	mutex_unlock(&nft_net->commit_mutex);
 	WARN_ON_ONCE(!list_empty(&nft_net->tables));

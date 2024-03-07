@@ -323,25 +323,18 @@ static bool nft_rhash_expr_needs_gc_run(const struct nft_set *set,
 
 static void nft_rhash_gc(struct work_struct *work)
 {
-	struct nftables_pernet *nft_net;
 	struct nft_set *set;
 	struct nft_rhash_elem *he;
 	struct nft_rhash *priv;
 	struct rhashtable_iter hti;
 	struct nft_trans_gc *gc;
 	struct net *net;
-	u32 gc_seq;
 
 	priv = container_of(work, struct nft_rhash, gc_work.work);
 	set  = nft_set_container_of(priv);
 	net  = read_pnet(&set->net);
-	nft_net = nft_pernet(net);
-	gc_seq = READ_ONCE(nft_net->gc_seq);
 
-	if (nft_set_gc_is_pending(set))
-		goto done;
-
-	gc = nft_trans_gc_alloc(set, gc_seq, GFP_KERNEL);
+	gc = nft_trans_gc_alloc(set, GFP_KERNEL);
 	if (!gc)
 		goto done;
 
@@ -350,13 +343,6 @@ static void nft_rhash_gc(struct work_struct *work)
 
 	while ((he = rhashtable_walk_next(&hti))) {
 		if (IS_ERR(he)) {
-			nft_trans_gc_destroy(gc);
-			gc = NULL;
-			goto try_later;
-		}
-
-		/* Ruleset has been updated, try later. */
-		if (READ_ONCE(nft_net->gc_seq) != gc_seq) {
 			nft_trans_gc_destroy(gc);
 			gc = NULL;
 			goto try_later;
@@ -374,7 +360,7 @@ static void nft_rhash_gc(struct work_struct *work)
 needs_gc_run:
 		nft_set_elem_dead(&he->ext);
 dead_elem:
-		gc = nft_trans_gc_queue_async(gc, gc_seq, GFP_ATOMIC);
+		gc = nft_trans_gc_queue_async(gc, GFP_ATOMIC);
 		if (!gc)
 			goto try_later;
 
