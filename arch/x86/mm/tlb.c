@@ -503,11 +503,12 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 {
 	struct mm_struct *prev = this_cpu_read(cpu_tlbstate.loaded_mm);
 	u16 prev_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+	u64 cpu_tlb_gen = this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen);
 	bool was_lazy = this_cpu_read(cpu_tlbstate_shared.is_lazy);
+	bool need_flush = false, need_lam_update = false;
 	unsigned cpu = smp_processor_id();
 	unsigned long new_lam;
 	u64 next_tlb_gen;
-	bool need_flush;
 	u16 new_asid;
 
 	/* We don't want flush_tlb_func() to run concurrently with us. */
@@ -571,31 +572,40 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 			cpumask_set_cpu(cpu, mm_cpumask(next));
 
 		/*
+		 * tlbstate_lam_cr3_mask() may be outdated if a different thread
+		 * has enabled LAM while we were borrowing its mm on this CPU.
+		 * Make sure we update CR3 in case we are switching to another
+		 * thread in that process.
+		 */
+		if (tlbstate_lam_cr3_mask() != mm_lam_cr3_mask(next))
+			need_lam_update = true;
+
+		/*
 		 * If the CPU is not in lazy TLB mode, we are just switching
 		 * from one thread in a process to another thread in the same
 		 * process. No TLB flush required.
 		 */
-		if (!was_lazy)
-			return;
+		if (was_lazy) {
+			/*
+			 * Read the tlb_gen to check whether a flush is needed.
+			 * If the TLB is up to date, just use it.  The barrier
+			 * synchronizes with the tlb_gen increment in the TLB
+			 * shootdown code.
+			 */
+			smp_mb();
+			next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+			if (cpu_tlb_gen < next_tlb_gen) {
+				/*
+				 * TLB contents went out of date while we were
+				 * in lazy mode.
+				 */
+				new_asid = prev_asid;
+				need_flush = true;
+			}
+		}
 
-		/*
-		 * Read the tlb_gen to check whether a flush is needed.
-		 * If the TLB is up to date, just use it.
-		 * The barrier synchronizes with the tlb_gen increment in
-		 * the TLB shootdown code.
-		 */
-		smp_mb();
-		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
-		if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
-				next_tlb_gen)
+		if (!need_flush && !need_lam_update)
 			return;
-
-		/*
-		 * TLB contents went out of date while we were in lazy
-		 * mode. Fall through to the TLB switching code below.
-		 */
-		new_asid = prev_asid;
-		need_flush = true;
 	} else {
 		/*
 		 * Apply process to process speculation vulnerability
