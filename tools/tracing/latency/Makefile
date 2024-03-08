@@ -1,24 +1,38 @@
 # SPDX-License-Identifier: GPL-2.0
-# Makefile for vm tools
-#
-VAR_CFLAGS := $(shell pkg-config --cflags libtracefs 2>/dev/null)
-VAR_LDLIBS := $(shell pkg-config --libs libtracefs 2>/dev/null)
+export srctree := $(abspath ../../..)
+export CC      := gcc
+export LD      := ld
+export AR      := ar
+export PKG_CONFIG := pkg-config
 
-TARGETS = latency-collector
-CFLAGS = -Wall -Wextra -g -O2 $(VAR_CFLAGS)
-LDFLAGS = -lpthread $(VAR_LDLIBS)
+FEATURE_TESTS := libtraceevent
+FEATURE_TESTS += libtracefs
+FEATURE_DISPLAY := libtraceevent
+FEATURE_DISPLAY += libtracefs
 
-all: $(TARGETS)
+latency-collector:
 
-%: %.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+include $(srctree)/tools/build/Makefile.include
+include $(srctree)/tools/build/Makefile.feature
+include $(srctree)/tools/scripts/Makefile.include
+include Makefile.config
+
+CFLAGS += $(INCLUDES) $(LIB_INCLUDES)
+
+export CFLAGS := $(CFLAGS)
+
+latency-collector: latency-collector-in.o
+	$(QUIET_LINK)$(CC) $(LDFLAGS) -o $@ $^ $(EXTLIBS)
+
+latency-collector.%: fixdep FORCE
+	make -f $(srctree)/tools/build/Makefile.build dir=. $@
+
+latency-collector-in.o: fixdep FORCE
+	make $(build)=latency-collector
 
 clean:
-	$(RM) latency-collector
+	$(call QUIET_CLEAN, latency-collector)
+	@find . -name '*.o' -delete -o -name '\.*.cmd' -delete -o -name '\.*.d' -delete
+	@rm -f latency-collector FEATURE-DUMP
 
-prefix ?= /usr/local
-sbindir ?= ${prefix}/sbin
-
-install: all
-	install -d $(DESTDIR)$(sbindir)
-	install -m 755 -p $(TARGETS) $(DESTDIR)$(sbindir)
+.PHONY: FORCE clean
