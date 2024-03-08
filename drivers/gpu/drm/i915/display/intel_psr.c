@@ -1165,11 +1165,23 @@ static int tgl_io_buffer_wake_time(void)
 	return 10;
 }
 
+static int lnl_io_buffer_wake_time(int port_clock)
+{
+	if (port_clock > 270000)
+		return 10;
+	else if (port_clock > 162000)
+		return 11;
+	else
+		return 15;
+}
+
 static int io_buffer_wake_time(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 
-	if (DISPLAY_VER(i915) >= 12)
+	if (DISPLAY_VER(i915) >= 20)
+		return lnl_io_buffer_wake_time(crtc_state->port_clock);
+	else if (DISPLAY_VER(i915) >= 12)
 		return tgl_io_buffer_wake_time();
 	else
 		return skl_io_buffer_wake_time();
