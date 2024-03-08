@@ -857,7 +857,7 @@ static int scmi_dvfs_device_opps_add(const struct scmi_protocol_handle *ph,
 				     struct device *dev, u32 domain)
 {
 	int idx, ret;
-	unsigned long freq;
+	unsigned long freq, sustained_freq;
 	struct dev_pm_opp_data data = {};
 	struct perf_dom_info *dom;
 
@@ -865,11 +865,17 @@ static int scmi_dvfs_device_opps_add(const struct scmi_protocol_handle *ph,
 	if (IS_ERR(dom))
 		return PTR_ERR(dom);
 
+	sustained_freq = dom->sustained_freq_khz * 1000UL;
+
 	for (idx = 0; idx < dom->opp_count; idx++) {
 		if (!dom->level_indexing_mode)
 			freq = dom->opp[idx].perf * dom->mult_factor;
 		else
 			freq = dom->opp[idx].indicative_freq * dom->mult_factor;
+
+		/* All opps above the sustained level/frequency are treated as boost */
+		if (freq > sustained_freq)
+			data.turbo = true;
 
 		data.level = dom->opp[idx].perf;
 		data.freq = freq;
