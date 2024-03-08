@@ -13,7 +13,11 @@
 static __always_inline
 u64 vdso_calc_delta(u64 cycles, u64 last, u64 mask, u32 mult)
 {
+#ifdef VDSO_DELTA_NOMASK
+	return (cycles - last) * mult;
+#else
 	return ((cycles - last) & mask) * mult;
+#endif
 }
 #endif
 
