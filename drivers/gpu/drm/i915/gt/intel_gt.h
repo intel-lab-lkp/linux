@@ -183,6 +183,19 @@ void intel_gt_release_all(struct drm_i915_private *i915);
 	     (id__)++) \
 		for_each_if ((engine__) = (gt__)->engine[(id__)])
 
+/*
+ * Simple iterator over all initialised engines that
+ * takes into account CCS fixed mode load balancing
+ */
+#define for_each_available_engine(engine__, gt__, id__) \
+	for ((id__) = 0; \
+	     (id__) < I915_NUM_ENGINES; \
+	     (id__)++) \
+		for_each_if \
+			(((engine__) = (gt__)->engine[(id__)]) && \
+			 !(engine__->class == COMPUTE_CLASS && \
+			   engine__->instance))
+
 /* Iterator over subset of engines selected by mask */
 #define for_each_engine_masked(engine__, gt__, mask__, tmp__) \
 	for ((tmp__) = (mask__) & (gt__)->info.engine_mask; \
