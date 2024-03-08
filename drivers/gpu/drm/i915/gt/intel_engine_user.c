@@ -208,6 +208,7 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 	struct list_head *it, *next;
 	struct rb_node **p, *prev;
 	LIST_HEAD(engines);
+	u16 uabi_ccs = 0;
 
 	sort_engines(i915, &engines);
 
@@ -242,6 +243,16 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 			      engine->uabi_instance);
 
 		if (uabi_class > I915_LAST_UABI_ENGINE_CLASS)
+			continue;
+
+		/*
+		 * The load is balanced among all the available compute
+		 * slices. Expose only the first instance of the compute
+		 * engine.
+		 */
+		if (IS_DG2(i915) &&
+		    uabi_class == I915_ENGINE_CLASS_COMPUTE &&
+		    uabi_ccs++)
 			continue;
 
 		GEM_BUG_ON(uabi_class >=
