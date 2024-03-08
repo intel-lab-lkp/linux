@@ -145,13 +145,15 @@ struct workqueue_attrs {
 	int nice;
 
 	/**
-	 * @cpumask: allowed CPUs
+	 * @affn_strict: affinity scope is strict
 	 *
-	 * Work items in this workqueue are affine to these CPUs and not allowed
-	 * to execute on other CPUs. A pool serving a workqueue must have the
-	 * same @cpumask.
+	 * If clear, workqueue will make a best-effort attempt at starting the
+	 * worker inside @__pod_cpumask but the scheduler is free to migrate it
+	 * outside.
+	 *
+	 * If set, workers are only allowed to run inside @__pod_cpumask.
 	 */
-	cpumask_var_t cpumask;
+	bool affn_strict;
 
 	/**
 	 * @__pod_cpumask: internal attribute used to create per-pod pools
@@ -166,15 +168,13 @@ struct workqueue_attrs {
 	cpumask_var_t __pod_cpumask;
 
 	/**
-	 * @affn_strict: affinity scope is strict
+	 * @cpumask: allowed CPUs
 	 *
-	 * If clear, workqueue will make a best-effort attempt at starting the
-	 * worker inside @__pod_cpumask but the scheduler is free to migrate it
-	 * outside.
-	 *
-	 * If set, workers are only allowed to run inside @__pod_cpumask.
+	 * Work items in this workqueue are affine to these CPUs and not allowed
+	 * to execute on other CPUs. A pool serving a workqueue must have the
+	 * same @cpumask.
 	 */
-	bool affn_strict;
+	cpumask_var_t cpumask;
 
 	/*
 	 * Below fields aren't properties of a worker_pool. They only modify how
