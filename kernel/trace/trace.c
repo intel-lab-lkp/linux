@@ -1955,6 +1955,65 @@ update_max_tr_single(struct trace_array *tr, struct task_struct *tsk, int cpu)
 
 #endif /* CONFIG_TRACER_MAX_TRACE */
 
+/*
+ * In order to wake up readers and have them return back to user space,
+ * the iterator has two counters:
+ *
+ *  wait_index - always increases every time a waker wakes up the readers.
+ *  waking - Set by the waker when waking and cleared afterward.
+ *
+ * Both are protected together with the wait_mutex.
+ * When waking, the lock is taken and both indexes are incremented.
+ * The reader will first prepare the wait by taking the lock,
+ * if waking is set, it will sleep regardless of what wait_index is.
+ * Then after it sleeps it checks if wait_index has been updated
+ * and if it has, it will not sleep again.
+ *
+ * Note, if wait_woken_clear() is not called, then all new readers
+ * will not sleep (this happens in closing the file).
+ */
+static DEFINE_MUTEX(wait_mutex);
+
+static bool wait_woken_prepare(struct trace_iterator *iter, int *wait_index)
+{
+	bool woken = false;
+
+	mutex_lock(&wait_mutex);
+	if (iter->waking)
+		woken = true;
+	*wait_index = iter->wait_index;
+	mutex_unlock(&wait_mutex);
+
+	return woken;
+}
+
+static bool wait_woken_check(struct trace_iterator *iter, int *wait_index)
+{
+	bool woken = false;
+
+	mutex_lock(&wait_mutex);
+	if (iter->waking || *wait_index != iter->wait_index)
+		woken = true;
+	mutex_unlock(&wait_mutex);
+
+	return woken;
+}
+
+static void wait_woken_set(struct trace_iterator *iter)
+{
+	mutex_lock(&wait_mutex);
+	iter->waking++;
+	iter->wait_index++;
+	mutex_unlock(&wait_mutex);
+}
+
+static void wait_woken_clear(struct trace_iterator *iter)
+{
+	mutex_lock(&wait_mutex);
+	iter->waking--;
+	mutex_unlock(&wait_mutex);
+}
+
 static int wait_on_pipe(struct trace_iterator *iter, int full)
 {
 	int ret;
@@ -8312,9 +8371,11 @@ tracing_buffers_read(struct file *filp, char __user *ubuf,
 	struct ftrace_buffer_info *info = filp->private_data;
 	struct trace_iterator *iter = &info->iter;
 	void *trace_data;
+	int wait_index;
 	int page_size;
 	ssize_t ret = 0;
 	ssize_t size;
+	bool woken;
 
 	if (!count)
 		return 0;
@@ -8353,6 +8414,7 @@ tracing_buffers_read(struct file *filp, char __user *ubuf,
 	if (info->read < page_size)
 		goto read;
 
+	woken = wait_woken_prepare(iter, &wait_index);
  again:
 	trace_access_lock(iter->cpu_file);
 	ret = ring_buffer_read_page(iter->array_buffer->buffer,
@@ -8362,13 +8424,15 @@ tracing_buffers_read(struct file *filp, char __user *ubuf,
 	trace_access_unlock(iter->cpu_file);
 
 	if (ret < 0) {
-		if (trace_empty(iter)) {
+		if (trace_empty(iter) && !woken) {
 			if ((filp->f_flags & O_NONBLOCK))
 				return -EAGAIN;
 
 			ret = wait_on_pipe(iter, 0);
 			if (ret)
 				return ret;
+
+			woken = wait_woken_check(iter, &wait_index);
 
 			goto again;
 		}
@@ -8398,12 +8462,14 @@ static int tracing_buffers_flush(struct file *file, fl_owner_t id)
 	struct ftrace_buffer_info *info = file->private_data;
 	struct trace_iterator *iter = &info->iter;
 
-	iter->wait_index++;
-	/* Make sure the waiters see the new wait_index */
-	smp_wmb();
+	wait_woken_set(iter);
 
 	ring_buffer_wake_waiters(iter->array_buffer->buffer, iter->cpu_file);
 
+	/*
+	 * Do not call wait_woken_clear(), as the file is being closed.
+	 * this will prevent any new readers from sleeping.
+	 */
 	return 0;
 }
 
@@ -8500,9 +8566,11 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 		.spd_release	= buffer_spd_release,
 	};
 	struct buffer_ref *ref;
+	int wait_index;
 	int page_size;
 	int entries, i;
 	ssize_t ret = 0;
+	bool woken = false;
 
 #ifdef CONFIG_TRACER_MAX_TRACE
 	if (iter->snapshot && iter->tr->current_trace->use_max_tr)
@@ -8522,6 +8590,7 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 	if (splice_grow_spd(pipe, &spd))
 		return -ENOMEM;
 
+	woken = wait_woken_prepare(iter, &wait_index);
  again:
 	trace_access_lock(iter->cpu_file);
 	entries = ring_buffer_entries_cpu(iter->array_buffer->buffer, iter->cpu_file);
@@ -8573,16 +8642,16 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 
 	/* did we read anything? */
 	if (!spd.nr_pages) {
-		long wait_index;
 
 		if (ret)
+			goto out;
+
+		if (woken)
 			goto out;
 
 		ret = -EAGAIN;
 		if ((file->f_flags & O_NONBLOCK) || (flags & SPLICE_F_NONBLOCK))
 			goto out;
-
-		wait_index = READ_ONCE(iter->wait_index);
 
 		ret = wait_on_pipe(iter, iter->snapshot ? 0 : iter->tr->buffer_percent);
 		if (ret)
@@ -8592,10 +8661,7 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 		if (!tracer_tracing_is_on(iter->tr))
 			goto out;
 
-		/* Make sure we see the new wait_index */
-		smp_rmb();
-		if (wait_index != iter->wait_index)
-			goto out;
+		woken = wait_woken_check(iter, &wait_index);
 
 		goto again;
 	}
@@ -8616,15 +8682,16 @@ static long tracing_buffers_ioctl(struct file *file, unsigned int cmd, unsigned 
 	if (cmd)
 		return -ENOIOCTLCMD;
 
-	mutex_lock(&trace_types_lock);
-
-	iter->wait_index++;
-	/* Make sure the waiters see the new wait_index */
-	smp_wmb();
+	wait_woken_set(iter);
 
 	ring_buffer_wake_waiters(iter->array_buffer->buffer, iter->cpu_file);
 
-	mutex_unlock(&trace_types_lock);
+	/*
+	 * This just kicks existing readers, a new reader coming in may
+	 * still sleep.
+	 */
+	wait_woken_clear(iter);
+
 	return 0;
 }
 
