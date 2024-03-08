@@ -868,29 +868,29 @@ rb_get_work_queue(struct trace_buffer *buffer, int cpu, int *full)
 }
 
 /**
- * ring_buffer_wait - wait for input to the ring buffer
+ * ring_buffer_prepare_to_wait - Prepare to wait for data on the ring buffer
  * @buffer: buffer to wait on
  * @cpu: the cpu buffer to wait on
- * @full: wait until the percentage of pages are available, if @cpu != RING_BUFFER_ALL_CPUS
+ * @full: wait until the percentage of pages are available,
+ *         if @cpu != RING_BUFFER_ALL_CPUS. It may be updated via this function.
+ * @wait: The wait queue entry.
  *
- * If @cpu == RING_BUFFER_ALL_CPUS then the task will wake up as soon
- * as data is added to any of the @buffer's cpu buffers. Otherwise
- * it will wait for data to be added to a specific cpu buffer.
+ * This must be called before ring_buffer_wait(). It calls the prepare_to_wait()
+ * on @wait for the necessary wait queue defined by @buffer, @cpu, and @full.
  */
-int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
+int ring_buffer_prepare_to_wait(struct trace_buffer *buffer, int cpu, int *full,
+				 struct wait_queue_entry *wait)
 {
 	struct rb_irq_work *rbwork;
-	DEFINE_WAIT(wait);
-	int ret = 0;
 
-	rbwork = rb_get_work_queue(buffer, cpu, &full);
+	rbwork = rb_get_work_queue(buffer, cpu, full);
 	if (IS_ERR(rbwork))
 		return PTR_ERR(rbwork);
 
-	if (full)
-		prepare_to_wait(&rbwork->full_waiters, &wait, TASK_INTERRUPTIBLE);
+	if (*full)
+		prepare_to_wait(&rbwork->full_waiters, wait, TASK_INTERRUPTIBLE);
 	else
-		prepare_to_wait(&rbwork->waiters, &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait(&rbwork->waiters, wait, TASK_INTERRUPTIBLE);
 
 	/*
 	 * The events can happen in critical sections where
@@ -912,30 +912,66 @@ int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
 	 * that is necessary is that the wake up happens after
 	 * a task has been queued. It's OK for spurious wake ups.
 	 */
-	if (full)
+	if (*full)
 		rbwork->full_waiters_pending = true;
 	else
 		rbwork->waiters_pending = true;
 
-	if (rb_watermark_hit(buffer, cpu, full))
-		goto out;
+	return 0;
+}
 
-	if (signal_pending(current)) {
-		ret = -EINTR;
-		goto out;
-	}
+/**
+ * ring_buffer_finish_wait - clean up of ring_buffer_prepare_to_wait()
+ * @buffer: buffer to wait on
+ * @cpu: the cpu buffer to wait on
+ * @full: wait until the percentage of pages are available, if @cpu != RING_BUFFER_ALL_CPUS
+ * @wait: The wait queue entry.
+ *
+ * This must be called after ring_buffer_prepare_to_wait(). It cleans up
+ * the @wait for the queue defined by @buffer, @cpu, and @full.
+ */
+void ring_buffer_finish_wait(struct trace_buffer *buffer, int cpu, int full,
+				 struct wait_queue_entry *wait)
+{
+	struct rb_irq_work *rbwork;
+
+	rbwork = rb_get_work_queue(buffer, cpu, &full);
+	if (WARN_ON_ONCE(IS_ERR(rbwork)))
+		return;
+
+	if (full)
+		finish_wait(&rbwork->full_waiters, wait);
+	else
+		finish_wait(&rbwork->waiters, wait);
+}
+
+/**
+ * ring_buffer_wait - wait for input to the ring buffer
+ * @buffer: buffer to wait on
+ * @cpu: the cpu buffer to wait on
+ * @full: wait until the percentage of pages are available, if @cpu != RING_BUFFER_ALL_CPUS
+ *
+ * If @cpu == RING_BUFFER_ALL_CPUS then the task will wake up as soon
+ * as data is added to any of the @buffer's cpu buffers. Otherwise
+ * it will wait for data to be added to a specific cpu buffer.
+ *
+ * ring_buffer_prepare_to_wait() must be called before this function
+ * and ring_buffer_finish_wait() must be called after.
+ */
+int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
+{
+	if (rb_watermark_hit(buffer, cpu, full))
+		return 0;
+
+	if (signal_pending(current))
+		return -EINTR;
 
 	schedule();
- out:
-	if (full)
-		finish_wait(&rbwork->full_waiters, &wait);
-	else
-		finish_wait(&rbwork->waiters, &wait);
 
-	if (!ret && !rb_watermark_hit(buffer, cpu, full) && signal_pending(current))
-		ret = -EINTR;
+	if (!rb_watermark_hit(buffer, cpu, full) && signal_pending(current))
+		return -EINTR;
 
-	return ret;
+	return 0;
 }
 
 /**

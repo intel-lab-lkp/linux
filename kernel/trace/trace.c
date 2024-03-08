@@ -1981,7 +1981,8 @@ static bool wait_woken_prepare(struct trace_iterator *iter, int *wait_index)
 	mutex_lock(&wait_mutex);
 	if (iter->waking)
 		woken = true;
-	*wait_index = iter->wait_index;
+	if (wait_index)
+		*wait_index = iter->wait_index;
 	mutex_unlock(&wait_mutex);
 
 	return woken;
@@ -2016,13 +2017,22 @@ static void wait_woken_clear(struct trace_iterator *iter)
 
 static int wait_on_pipe(struct trace_iterator *iter, int full)
 {
+	struct trace_buffer *buffer;
+	DEFINE_WAIT(wait);
 	int ret;
 
 	/* Iterators are static, they should be filled or empty */
 	if (trace_buffer_iter(iter, iter->cpu_file))
 		return 0;
 
-	ret = ring_buffer_wait(iter->array_buffer->buffer, iter->cpu_file, full);
+	buffer = iter->array_buffer->buffer;
+
+	ret = ring_buffer_prepare_to_wait(buffer, iter->cpu_file, &full, &wait);
+	if (ret < 0)
+		return ret;
+	if (!wait_woken_prepare(iter, NULL))
+		ret = ring_buffer_wait(buffer, iter->cpu_file, full);
+	ring_buffer_finish_wait(buffer, iter->cpu_file, full, &wait);
 
 #ifdef CONFIG_TRACER_MAX_TRACE
 	/*

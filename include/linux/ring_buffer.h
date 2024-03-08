@@ -98,7 +98,11 @@ __ring_buffer_alloc(unsigned long size, unsigned flags, struct lock_class_key *k
 	__ring_buffer_alloc((size), (flags), &__key);	\
 })
 
+int ring_buffer_prepare_to_wait(struct trace_buffer *buffer, int cpu, int *full,
+				struct wait_queue_entry *wait);
 int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full);
+void ring_buffer_finish_wait(struct trace_buffer *buffer, int cpu, int full,
+				 struct wait_queue_entry *wait);
 __poll_t ring_buffer_poll_wait(struct trace_buffer *buffer, int cpu,
 			  struct file *filp, poll_table *poll_table, int full);
 void ring_buffer_wake_waiters(struct trace_buffer *buffer, int cpu);
