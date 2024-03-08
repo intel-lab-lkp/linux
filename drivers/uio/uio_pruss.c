@@ -229,17 +229,16 @@ err_clk_disable:
 	return ret;
 }
 
-static int pruss_remove(struct platform_device *dev)
+static void pruss_remove(struct platform_device *dev)
 {
 	struct uio_pruss_dev *gdev = platform_get_drvdata(dev);
 
 	pruss_cleanup(&dev->dev, gdev);
-	return 0;
 }
 
 static struct platform_driver pruss_driver = {
 	.probe = pruss_probe,
-	.remove = pruss_remove,
+	.remove_new = pruss_remove,
 	.driver = {
 		   .name = DRV_NAME,
 		   },
