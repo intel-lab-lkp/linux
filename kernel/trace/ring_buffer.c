@@ -842,6 +842,31 @@ static bool rb_watermark_hit(struct trace_buffer *buffer, int cpu, int full)
 	return ret;
 }
 
+static struct rb_irq_work *
+rb_get_work_queue(struct trace_buffer *buffer, int cpu, int *full)
+{
+	struct ring_buffer_per_cpu *cpu_buffer;
+	struct rb_irq_work *rbwork;
+
+	/*
+	 * Depending on what the caller is waiting for, either any
+	 * data in any cpu buffer, or a specific buffer, put the
+	 * caller on the appropriate wait queue.
+	 */
+	if (cpu == RING_BUFFER_ALL_CPUS) {
+		rbwork = &buffer->irq_work;
+		/* Full only makes sense on per cpu reads */
+		*full = 0;
+	} else {
+		if (!cpumask_test_cpu(cpu, buffer->cpumask))
+			return ERR_PTR(-ENODEV);
+		cpu_buffer = buffer->buffers[cpu];
+		rbwork = &cpu_buffer->irq_work;
+	}
+
+	return rbwork;
+}
+
 /**
  * ring_buffer_wait - wait for input to the ring buffer
  * @buffer: buffer to wait on
@@ -854,31 +879,18 @@ static bool rb_watermark_hit(struct trace_buffer *buffer, int cpu, int full)
  */
 int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
 {
-	struct ring_buffer_per_cpu *cpu_buffer;
+	struct rb_irq_work *rbwork;
 	DEFINE_WAIT(wait);
-	struct rb_irq_work *work;
 	int ret = 0;
 
-	/*
-	 * Depending on what the caller is waiting for, either any
-	 * data in any cpu buffer, or a specific buffer, put the
-	 * caller on the appropriate wait queue.
-	 */
-	if (cpu == RING_BUFFER_ALL_CPUS) {
-		work = &buffer->irq_work;
-		/* Full only makes sense on per cpu reads */
-		full = 0;
-	} else {
-		if (!cpumask_test_cpu(cpu, buffer->cpumask))
-			return -ENODEV;
-		cpu_buffer = buffer->buffers[cpu];
-		work = &cpu_buffer->irq_work;
-	}
+	rbwork = rb_get_work_queue(buffer, cpu, &full);
+	if (IS_ERR(rbwork))
+		return PTR_ERR(rbwork);
 
 	if (full)
-		prepare_to_wait(&work->full_waiters, &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait(&rbwork->full_waiters, &wait, TASK_INTERRUPTIBLE);
 	else
-		prepare_to_wait(&work->waiters, &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait(&rbwork->waiters, &wait, TASK_INTERRUPTIBLE);
 
 	/*
 	 * The events can happen in critical sections where
@@ -901,9 +913,9 @@ int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
 	 * a task has been queued. It's OK for spurious wake ups.
 	 */
 	if (full)
-		work->full_waiters_pending = true;
+		rbwork->full_waiters_pending = true;
 	else
-		work->waiters_pending = true;
+		rbwork->waiters_pending = true;
 
 	if (rb_watermark_hit(buffer, cpu, full))
 		goto out;
@@ -916,9 +928,9 @@ int ring_buffer_wait(struct trace_buffer *buffer, int cpu, int full)
 	schedule();
  out:
 	if (full)
-		finish_wait(&work->full_waiters, &wait);
+		finish_wait(&rbwork->full_waiters, &wait);
 	else
-		finish_wait(&work->waiters, &wait);
+		finish_wait(&rbwork->waiters, &wait);
 
 	if (!ret && !rb_watermark_hit(buffer, cpu, full) && signal_pending(current))
 		ret = -EINTR;
