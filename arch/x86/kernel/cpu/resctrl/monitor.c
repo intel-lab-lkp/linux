@@ -24,6 +24,7 @@
 #include <asm/resctrl.h>
 
 #include "internal.h"
+#include "trace.h"
 
 /**
  * struct rmid_entry - dirty tracking for all RMID.
@@ -354,6 +355,14 @@ void __check_limbo(struct rdt_domain *d, bool force_free)
 			rmid_dirty = true;
 		} else {
 			rmid_dirty = (val >= resctrl_rmid_realloc_threshold);
+
+			/* x86's CLOSID and RMID are independent numbers, so the entry's
+			 * closid is a invalid CLOSID. But on arm64, the RMID value isn't
+			 * a unique number for each CLOSID. It's necessary to track both
+			 * CLOSID and RMID because there may be dependencies between each
+			 * other on some architectures.
+			 */
+			trace_mon_llc_occupancy_limbo(entry->closid, entry->rmid, d->id, val);
 		}
 
 		if (force_free || !rmid_dirty) {
