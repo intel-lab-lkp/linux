@@ -25,7 +25,6 @@
 #include <asm/winmacro.h>
 #include <asm/signal.h>
 #include <asm/obio.h>
-#include <asm/mxcc.h>
 #include <asm/thread_info.h>
 #include <asm/param.h>
 #include <asm/unistd.h>

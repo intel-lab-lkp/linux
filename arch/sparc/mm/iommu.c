@@ -18,7 +18,6 @@
 #include <linux/platform_device.h>
 
 #include <asm/io.h>
-#include <asm/mxcc.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/bitext.h>
@@ -36,11 +35,6 @@
 #define IOMMU_WINSIZE	(256*1024*1024U)
 #define IOMMU_NPTES	(IOMMU_WINSIZE/PAGE_SIZE)	/* 64K PTEs, 256KB */
 #define IOMMU_ORDER	6				/* 4096 * (1<<6) */
-
-static int viking_flush;
-/* viking.S */
-extern void viking_flush_page(unsigned long page);
-extern void viking_mxcc_flush_page(unsigned long page);
 
 /*
  * Values precomputed according to CPU type.
@@ -156,21 +150,9 @@ static void iommu_flush_iotlb(iopte_t *iopte, unsigned int niopte)
 	start = (unsigned long)iopte;
 	end = PAGE_ALIGN(start + niopte*sizeof(iopte_t));
 	start &= PAGE_MASK;
-	if (viking_mxcc_present) {
-		while(start < end) {
-			viking_mxcc_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	} else if (viking_flush) {
-		while(start < end) {
-			viking_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	} else {
-		while(start < end) {
-			__flush_page_to_ram(start);
-			start += PAGE_SIZE;
-		}
+	while(start < end) {
+		__flush_page_to_ram(start);
+		start += PAGE_SIZE;
 	}
 }
 
@@ -344,12 +326,7 @@ static void *sbus_iommu_alloc(struct device *dev, size_t len,
 			pmd_t *pmdp;
 			pte_t *ptep;
 
-			if (viking_mxcc_present)
-				viking_mxcc_flush_page(page);
-			else if (viking_flush)
-				viking_flush_page(page);
-			else
-				__flush_page_to_ram(page);
+			__flush_page_to_ram(page);
 
 			pmdp = pmd_off_k(addr);
 			ptep = pte_offset_kernel(pmdp, addr);
