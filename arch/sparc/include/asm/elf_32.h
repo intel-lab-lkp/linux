@@ -91,8 +91,6 @@ typedef struct {
 	unsigned int	pr_q[64];
 } elf_fpregset_t;
 
-#include <asm/mbus.h>
-
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
