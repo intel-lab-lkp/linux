@@ -2564,6 +2564,7 @@ static int ravb_mdio_init(struct ravb_private *priv)
 {
 	struct platform_device *pdev = priv->pdev;
 	struct device *dev = &pdev->dev;
+	struct device_node *mdio_node;
 	struct phy_device *phydev;
 	struct device_node *pn;
 	int error;
@@ -2582,8 +2583,20 @@ static int ravb_mdio_init(struct ravb_private *priv)
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		 pdev->name, pdev->id);
 
-	/* Register MDIO bus */
-	error = of_mdiobus_register(priv->mii_bus, dev->of_node);
+	/* Register MDIO bus
+	 *
+	 * Look for a mdio child node, if it exist use it when registering the
+	 * MDIO bus. If no node is found fallback to old behavior and use the
+	 * device OF node. This is used to be able to describe MDIO bus
+	 * properties that are consumed when registering the MDIO bus.
+	 */
+	mdio_node = of_get_child_by_name(dev->of_node, "mdio");
+	if (mdio_node) {
+		error = of_mdiobus_register(priv->mii_bus, mdio_node);
+		of_node_put(mdio_node);
+	} else {
+		error = of_mdiobus_register(priv->mii_bus, dev->of_node);
+	}
 	if (error)
 		goto out_free_bus;
 
