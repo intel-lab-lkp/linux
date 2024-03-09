@@ -23,15 +23,6 @@
 #define glob_tmp  g4
 #define curptr    g6
 
-	/* 7 WINDOW SPARC PATCH INSTRUCTIONS */
-	.globl	rtrap_7win_patch1, rtrap_7win_patch2, rtrap_7win_patch3
-	.globl	rtrap_7win_patch4, rtrap_7win_patch5
-rtrap_7win_patch1:	srl	%t_wim, 0x6, %glob_tmp
-rtrap_7win_patch2:	and	%glob_tmp, 0x7f, %glob_tmp
-rtrap_7win_patch3:	srl	%g1, 7, %g2
-rtrap_7win_patch4:	srl	%g2, 6, %g2
-rtrap_7win_patch5:	and	%g1, 0x7f, %g1
-	/* END OF PATCH INSTRUCTIONS */
 
 	/* We need to check for a few things which are:
 	 * 1) The need to call schedule() because this
@@ -117,17 +108,17 @@ ret_trap_nobufwins:
 	bne	ret_trap_userwins_ok
 	 nop
 
-		/* Calculate new %wim, we have to pull a register
-		 * window from the users stack.
-		 */
+	/* Calculate new %wim, we have to pull a register
+	 * window from the users stack.
+	 */
 ret_trap_pull_one_window:
-		rd	%wim, %t_wim
-		sll	%t_wim, 0x1, %twin_tmp1
-rtrap_patch1:	srl	%t_wim, 0x7, %glob_tmp
-		or	%glob_tmp, %twin_tmp1, %glob_tmp
-rtrap_patch2:	and	%glob_tmp, 0xff, %glob_tmp
+	rd	%wim, %t_wim
+	sll	%t_wim, 0x1, %twin_tmp1
+	srl	%t_wim, 0x7, %glob_tmp
+	or	%glob_tmp, %twin_tmp1, %glob_tmp
+	and	%glob_tmp, 0xff, %glob_tmp
 
-		wr	%glob_tmp, 0x0, %wim
+	wr	%glob_tmp, 0x0, %wim
 
 	/* Here comes the architecture specific
 	 * branch to the user stack checking routine
@@ -174,20 +165,20 @@ ret_trap_unaligned_pc:
 	 ld	[%curptr + TI_FLAGS], %g2
 
 ret_trap_kernel:
-		/* Will the rett land us in the invalid window? */
-		mov	2, %g1
-		sll	%g1, %t_psr, %g1
-rtrap_patch3:	srl	%g1, 8, %g2
-		or	%g1, %g2, %g1
-		rd	%wim, %g2
-		andcc	%g2, %g1, %g0
-		be	1f		! Nope, just return from the trap
-		 sll	%g2, 0x1, %g1
+	/* Will the rett land us in the invalid window? */
+	mov	2, %g1
+	sll	%g1, %t_psr, %g1
+	srl	%g1, 8, %g2
+	or	%g1, %g2, %g1
+	rd	%wim, %g2
+	andcc	%g2, %g1, %g0
+	be	1f		! Nope, just return from the trap
+	 sll	%g2, 0x1, %g1
 
-		/* We have to grab a window before returning. */
-rtrap_patch4:	srl	%g2, 7,  %g2
-		or	%g1, %g2, %g1
-rtrap_patch5:	and	%g1, 0xff, %g1
+	/* We have to grab a window before returning. */
+	srl	%g2, 7,  %g2
+	or	%g1, %g2, %g1
+	and	%g1, 0xff, %g1
 
 	wr	%g1, 0x0, %wim
 

@@ -384,11 +384,8 @@ do_flush_windows:
 
 	RESTORE_ALL
 
-	.globl	flush_patch_one
-
 	/* We get these for debugging routines using __builtin_return_address() */
 dfw_kernel:
-flush_patch_one:
 	FLUSH_ALL_KERNEL_WINDOWS
 
 	/* Advance over the trap instruction. */
@@ -558,10 +555,9 @@ sys_rt_sigreturn:
 	 * XXX code just like on sparc64... -DaveM
 	 */
 	.align	4
-	.globl	sys_fork, flush_patch_two
+	.globl	sys_fork
 sys_fork:
 	mov	%o7, %l5
-flush_patch_two:
 	FLUSH_ALL_KERNEL_WINDOWS;
 	ld	[%curptr + TI_TASK], %o4
 	rd	%psr, %g4
@@ -574,10 +570,9 @@ flush_patch_two:
 	 mov	%l5, %o7
 
 	/* Whee, kernel threads! */
-	.globl	sys_clone, flush_patch_three
+	.globl	sys_clone
 sys_clone:
 	mov	%o7, %l5
-flush_patch_three:
 	FLUSH_ALL_KERNEL_WINDOWS;
 	ld	[%curptr + TI_TASK], %o4
 	rd	%psr, %g4
@@ -590,9 +585,8 @@ flush_patch_three:
 	 mov	%l5, %o7
 
 	/* Whee, real vfork! */
-	.globl	sys_vfork, flush_patch_four
+	.globl	sys_vfork
 sys_vfork:
-flush_patch_four:
 	FLUSH_ALL_KERNEL_WINDOWS;
 	ld	[%curptr + TI_TASK], %o4
 	rd	%psr, %g4
@@ -909,17 +903,7 @@ breakpoint_trap:
 #endif
 
 	.align	4
-	.globl	flush_patch_exception
-flush_patch_exception:
-	FLUSH_ALL_KERNEL_WINDOWS;
-	ldd	[%o0], %o6
-	jmpl	%o7 + 0xc, %g0			! see asm-sparc/processor.h
-	 mov	1, %g1				! signal EFAULT condition
-
-	.align	4
-	.globl	kill_user_windows, kuw_patch1_7win
-	.globl	kuw_patch1
-kuw_patch1_7win:	sll	%o3, 6, %o3
+	.globl	kill_user_windows
 
 	/* No matter how much overhead this routine has in the worst
 	 * case scenario, it is several times better than taking the
@@ -939,11 +923,11 @@ kill_user_windows:
 	be	4f				! yep, we are done
 	 rd	%wim, %o3			! get current wim
 	srl	%o3, 1, %o4			! simulate a save
-kuw_patch1:
+kuw_next:
 	sll	%o3, 7, %o3			! compute next wim
 	or	%o4, %o3, %o3			! result
 	andncc	%o0, %o3, %o0			! clean this bit in umask
-	bne	kuw_patch1			! not done yet
+	bne	kuw_next			! not done yet
 	 srl	%o3, 1, %o4			! begin another save simulation
 	wr	%o3, 0x0, %wim			! set the new wim
 	st	%g0, [%g6 + TI_UWINMASK]	! clear uwinmask

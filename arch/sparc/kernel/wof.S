@@ -43,18 +43,6 @@
 #define twin_tmp    l4 /* Temp reg, only usable in trap window  T */
 #define glob_tmp    g5 /* Global temporary reg, usable anywhere G */
 
-	.text
-	.align	4
-	/* BEGINNING OF PATCH INSTRUCTIONS */
-	/* On a 7-window Sparc the boot code patches spnwin_*
-	 * instructions with the following ones.
-	 */
-	.globl	spnwin_patch1_7win, spnwin_patch2_7win, spnwin_patch3_7win
-spnwin_patch1_7win:	sll	%t_wim, 6, %glob_tmp
-spnwin_patch2_7win:	and	%glob_tmp, 0x7f, %glob_tmp
-spnwin_patch3_7win:	and	%twin_tmp, 0x7f, %twin_tmp
-	/* END OF PATCH INSTRUCTIONS */
-
 	/* The trap entry point has done the following:
 	 *
 	 * rd    %psr, %l0
@@ -69,7 +57,6 @@ spnwin_patch3_7win:	and	%twin_tmp, 0x7f, %twin_tmp
 	 * will be all zeroes.
 	 */
 	.globl	spill_window_entry 
-	.globl	spnwin_patch1, spnwin_patch2, spnwin_patch3
 spill_window_entry:
 	/* LOCATION: Trap Window */
 
@@ -81,10 +68,10 @@ spill_window_entry:
 	 *
 	 * newwim = ((%wim>>1) | (%wim<<(nwindows - 1)));
 	 */
-		srl	%t_wim, 0x1, %twin_tmp
-spnwin_patch1:	sll	%t_wim, 7, %glob_tmp
-		or	%glob_tmp, %twin_tmp, %glob_tmp
-spnwin_patch2:	and	%glob_tmp, 0xff, %glob_tmp
+	srl	%t_wim, 0x1, %twin_tmp
+	sll	%t_wim, 7, %glob_tmp
+	or	%glob_tmp, %twin_tmp, %glob_tmp
+	and	%glob_tmp, 0xff, %glob_tmp
 
 	/* The trap entry point has set the condition codes
 	 * up for us to see if this is from user or kernel.
@@ -222,17 +209,17 @@ spwin_user_stack_is_bolixed:
 	mov	1, %twin_tmp
 	st	%twin_tmp, [%curptr + TI_W_SAVED]
 
-		/* Compute new user window mask.  What we are basically
-		 * doing is taking two windows, the invalid one at trap
-		 * time and the one we attempted to throw onto the users
-		 * stack, and saying that everything else is an ok user
-		 * window.  umask = ((~(%t_wim | %wim)) & valid_wim_bits)
-		 */
-		rd	%wim, %twin_tmp
-		or	%twin_tmp, %t_wim, %twin_tmp
-		not	%twin_tmp
-spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
-		st	%twin_tmp, [%curptr + TI_UWINMASK]
+	/* Compute new user window mask.  What we are basically
+	 * doing is taking two windows, the invalid one at trap
+	 * time and the one we attempted to throw onto the users
+	 * stack, and saying that everything else is an ok user
+	 * window.  umask = ((~(%t_wim | %wim)) & valid_wim_bits)
+	 */
+	rd	%wim, %twin_tmp
+	or	%twin_tmp, %t_wim, %twin_tmp
+	not	%twin_tmp
+	and	%twin_tmp, 0xff, %twin_tmp
+	st	%twin_tmp, [%curptr + TI_UWINMASK]
 
 #define STACK_OFFSET (THREAD_SIZE - TRACEREG_SZ - STACKFRAME_SZ)
 
