@@ -26,7 +26,6 @@
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
-#include <asm/io-unit.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/bitext.h>
