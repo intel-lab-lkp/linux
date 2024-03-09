@@ -235,36 +235,8 @@ void handler_irq(unsigned int pil, struct pt_regs *regs)
 	set_irq_regs(old_regs);
 }
 
-/* djhr
- * This could probably be made indirect too and assigned in the CPU
- * bits of the code. That would be much nicer I think and would also
- * fit in with the idea of being able to tune your kernel for your machine
- * by removing unrequired machine and device support.
- *
- */
-
 void __init init_IRQ(void)
 {
-	switch (sparc_cpu_model) {
-	case sun4m:
-		pcic_probe();
-		if (pcic_present())
-			sun4m_pci_init_IRQ();
-		else
-			sun4m_init_IRQ();
-		break;
-
-	case sun4d:
-		sun4d_init_IRQ();
-		break;
-
-	case sparc_leon:
-		leon_init_IRQ();
-		break;
-
-	default:
-		prom_printf("Cannot initialize IRQs on this Sun machine...");
-		break;
-	}
+	leon_init_IRQ();
 }
 
