@@ -67,8 +67,6 @@ void __init prom_init(struct linux_romvec *rp)
 
 	prom_meminit();
 
-	prom_ranges_init();
-
 	printk("PROMLIB: Sun Boot Prom Version %d Revision %d\n",
 	       romvec->pv_romvers, prom_rev);
 
