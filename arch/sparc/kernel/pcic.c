@@ -354,17 +354,6 @@ int __init pcic_probe(void)
 	prom_getstring(node, "name", namebuf, 63);  namebuf[63] = 0;
 	strcpy(pbm->prom_name, namebuf);
 
-	{
-		extern int pcic_nmi_trap_patch[4];
-
-		t_nmi[0] = pcic_nmi_trap_patch[0];
-		t_nmi[1] = pcic_nmi_trap_patch[1];
-		t_nmi[2] = pcic_nmi_trap_patch[2];
-		t_nmi[3] = pcic_nmi_trap_patch[3];
-		swift_flush_dcache();
-		pcic_regs = pcic->pcic_regs;
-	}
-
 	prom_getstring(prom_root_node, "name", namebuf, 63);  namebuf[63] = 0;
 	{
 		struct pcic_sn2list *p;
