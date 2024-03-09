@@ -48,7 +48,6 @@
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/dma.h>
-#include <asm/iommu.h>
 #include <asm/leon.h>
 
 static void __iomem *_sparc_ioremap(struct resource *res, u32 bus, u32 pa, int sz);
