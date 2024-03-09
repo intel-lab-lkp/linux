@@ -111,7 +111,7 @@ static struct irq_bucket irq_table[NR_IRQS];
 static DEFINE_SPINLOCK(irq_table_lock);
 
 /* Map between the irq identifier used in hw to the irq_bucket. */
-struct irq_bucket *irq_map[SUN4D_MAX_IRQ];
+struct irq_bucket *irq_map[MAX_IRQ];
 /* Protect access to irq_map */
 static DEFINE_SPINLOCK(irq_map_lock);
 
@@ -162,7 +162,7 @@ void irq_link(unsigned int irq)
 
 	p = &irq_table[irq];
 	pil = p->pil;
-	BUG_ON(pil >= SUN4D_MAX_IRQ);
+	BUG_ON(pil >= MAX_IRQ);
 	p->next = irq_map[pil];
 	irq_map[pil] = p;
 
@@ -179,7 +179,7 @@ void irq_unlink(unsigned int irq)
 	spin_lock_irqsave(&irq_map_lock, flags);
 
 	p = &irq_table[irq];
-	BUG_ON(p->pil >= SUN4D_MAX_IRQ);
+	BUG_ON(p->pil >= MAX_IRQ);
 	pnext = &irq_map[p->pil];
 	while (*pnext != p)
 		pnext = &(*pnext)->next;

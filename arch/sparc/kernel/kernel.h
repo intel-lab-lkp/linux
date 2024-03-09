@@ -92,10 +92,6 @@ extern spinlock_t irq_action_lock;
 
 void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs);
 
-/* sun4m_irq.c */
-void sun4m_unmask_profile_irq(void);
-void sun4m_clear_profile_irq(int cpu);
-
 /* leon_smp.c */
 void leon_cpu_pre_starting(void *arg);
 void leon_cpu_pre_online(void *arg);

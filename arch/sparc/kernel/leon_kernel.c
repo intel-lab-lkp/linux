@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
+#include <linux/sched/debug.h>
 #include <linux/clocksource.h>
 #include <linux/clockchips.h>
 
@@ -269,8 +270,15 @@ u32 leon_cycles_offset(void)
 	return off;
 }
 
-#ifdef CONFIG_SMP
+/* NMI interrupt (15) */
+void leon_nmi(struct pt_regs *regs)
+{
+	printk(KERN_ERR "Aieee: NMI received!\n");
+	show_regs(regs);
+	prom_halt();
+}
 
+#ifdef CONFIG_SMP
 /* smp clockevent irq */
 static irqreturn_t leon_percpu_timer_ce_interrupt(int irq, void *unused)
 {
