@@ -96,11 +96,6 @@ static unsigned long of_bus_pci_get_flags(const u32 *addr, unsigned long flags)
 	return flags;
 }
 
-static unsigned long of_bus_sbus_get_flags(const u32 *addr, unsigned long flags)
-{
-	return IORESOURCE_MEM;
-}
-
  /*
  * AMBAPP bus specific translator
  */
@@ -144,15 +139,6 @@ static struct of_bus of_busses[] = {
 		.count_cells = of_bus_pci_count_cells,
 		.map = of_bus_pci_map,
 		.get_flags = of_bus_pci_get_flags,
-	},
-	/* SBUS */
-	{
-		.name = "sbus",
-		.addr_prop_name = "reg",
-		.match = of_bus_sbus_match,
-		.count_cells = of_bus_sbus_count_cells,
-		.map = of_bus_default_map,
-		.get_flags = of_bus_sbus_get_flags,
 	},
 	/* AMBA */
 	{

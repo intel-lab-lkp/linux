@@ -8,6 +8,9 @@
 
 struct fb_info;
 
+int fb_is_primary_device(struct fb_info *info);
+#define fb_is_primary_device fb_is_primary_device
+
 #ifdef CONFIG_SPARC32
 static inline pgprot_t pgprot_framebuffer(pgprot_t prot,
 					  unsigned long vm_start, unsigned long vm_end,
@@ -18,9 +21,7 @@ static inline pgprot_t pgprot_framebuffer(pgprot_t prot,
 #define pgprot_framebuffer pgprot_framebuffer
 #endif
 
-int fb_is_primary_device(struct fb_info *info);
-#define fb_is_primary_device fb_is_primary_device
-
+#ifdef CONFIG_SPARC64
 static inline void fb_memcpy_fromio(void *to, const volatile void __iomem *from, size_t n)
 {
 	sbus_memcpy_fromio(to, from, n);
@@ -38,6 +39,7 @@ static inline void fb_memset_io(volatile void __iomem *addr, int c, size_t n)
 	sbus_memset_io(addr, c, n);
 }
 #define fb_memset fb_memset_io
+#endif
 
 #include <asm-generic/fb.h>
 
