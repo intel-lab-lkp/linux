@@ -87,29 +87,7 @@ void __init smp_cpus_done(unsigned int max_cpus)
 		num, bogosum/(500000/HZ),
 		(bogosum/(5000/HZ))%100);
 
-	switch(sparc_cpu_model) {
-	case sun4m:
-		smp4m_smp_done();
-		break;
-	case sun4d:
-		smp4d_smp_done();
-		break;
-	case sparc_leon:
-		leon_smp_done();
-		break;
-	case sun4e:
-		printk("SUN4E\n");
-		BUG();
-		break;
-	case sun4u:
-		printk("SUN4U\n");
-		BUG();
-		break;
-	default:
-		printk("UNKNOWN!\n");
-		BUG();
-		break;
-	}
+	leon_smp_done();
 }
 
 void cpu_panic(void)
@@ -191,29 +169,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 
 	smp_store_cpu_info(boot_cpu_id);
 
-	switch(sparc_cpu_model) {
-	case sun4m:
-		smp4m_boot_cpus();
-		break;
-	case sun4d:
-		smp4d_boot_cpus();
-		break;
-	case sparc_leon:
-		leon_boot_cpus();
-		break;
-	case sun4e:
-		printk("SUN4E\n");
-		BUG();
-		break;
-	case sun4u:
-		printk("SUN4U\n");
-		BUG();
-		break;
-	default:
-		printk("UNKNOWN!\n");
-		BUG();
-		break;
-	}
+	leon_boot_cpus();
 }
 
 /* Set this up early so that things like the scheduler can init
@@ -252,31 +208,7 @@ void __init smp_prepare_boot_cpu(void)
 
 int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 {
-	int ret=0;
-
-	switch(sparc_cpu_model) {
-	case sun4m:
-		ret = smp4m_boot_one_cpu(cpu, tidle);
-		break;
-	case sun4d:
-		ret = smp4d_boot_one_cpu(cpu, tidle);
-		break;
-	case sparc_leon:
-		ret = leon_boot_one_cpu(cpu, tidle);
-		break;
-	case sun4e:
-		printk("SUN4E\n");
-		BUG();
-		break;
-	case sun4u:
-		printk("SUN4U\n");
-		BUG();
-		break;
-	default:
-		printk("UNKNOWN!\n");
-		BUG();
-		break;
-	}
+	int ret = leon_boot_one_cpu(cpu, tidle);
 
 	if (!ret) {
 		cpumask_set_cpu(cpu, &smp_commenced_mask);
@@ -291,19 +223,7 @@ static void arch_cpu_pre_starting(void *arg)
 	local_ops->cache_all();
 	local_ops->tlb_all();
 
-	switch(sparc_cpu_model) {
-	case sun4m:
-		sun4m_cpu_pre_starting(arg);
-		break;
-	case sun4d:
-		sun4d_cpu_pre_starting(arg);
-		break;
-	case sparc_leon:
-		leon_cpu_pre_starting(arg);
-		break;
-	default:
-		BUG();
-	}
+	leon_cpu_pre_starting(arg);
 }
 
 static void arch_cpu_pre_online(void *arg)
@@ -318,19 +238,7 @@ static void arch_cpu_pre_online(void *arg)
 	local_ops->cache_all();
 	local_ops->tlb_all();
 
-	switch(sparc_cpu_model) {
-	case sun4m:
-		sun4m_cpu_pre_online(arg);
-		break;
-	case sun4d:
-		sun4d_cpu_pre_online(arg);
-		break;
-	case sparc_leon:
-		leon_cpu_pre_online(arg);
-		break;
-	default:
-		BUG();
-	}
+	leon_cpu_pre_online(arg);
 }
 
 static void sparc_start_secondary(void *arg)
