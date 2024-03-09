@@ -26,8 +26,6 @@
 
 static char *cpu_mid_prop(void)
 {
-	if (sparc_cpu_model == sun4d)
-		return "cpu-id";
 	return "mid";
 }
 
@@ -40,8 +38,6 @@ static int check_cpu_node(phandle nd, int *cur_inst,
 			*prom_node = nd;
 		if (mid) {
 			*mid = prom_getintdefault(nd, cpu_mid_prop(), 0);
-			if (sparc_cpu_model == sun4m)
-				*mid &= 3;
 		}
 		return 0;
 	}
@@ -92,8 +88,7 @@ static int cpu_mid_compare(phandle nd, int instance, void *_arg)
 	int this_mid;
 
 	this_mid = prom_getintdefault(nd, cpu_mid_prop(), 0);
-	if (this_mid == desired_mid
-	    || (sparc_cpu_model == sun4m && (this_mid & 3) == desired_mid))
+	if (this_mid == desired_mid)
 		return 0;
 	return -ENODEV;
 }

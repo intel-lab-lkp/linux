@@ -189,30 +189,12 @@ static void __init per_cpu_patch(void)
 {
 	struct cpuid_patch_entry *p;
 
-	if (sparc_cpu_model == sun4m) {
-		/* Nothing to do, this is what the unpatched code
-		 * targets.
-		 */
-		return;
-	}
-
 	p = &__cpuid_patch;
 	while (p < &__cpuid_patch_end) {
 		unsigned long addr = p->addr;
 		unsigned int *insns;
 
-		switch (sparc_cpu_model) {
-		case sun4d:
-			insns = &p->sun4d[0];
-			break;
-
-		case sparc_leon:
-			insns = &p->leon[0];
-			break;
-		default:
-			prom_printf("Unknown cpu type, halting.\n");
-			prom_halt();
-		}
+		insns = &p->leon[0];
 		*(unsigned int *) (addr + 0) = insns[0];
 		flushi(addr + 0);
 		*(unsigned int *) (addr + 4) = insns[1];
@@ -224,31 +206,9 @@ static void __init per_cpu_patch(void)
 	}
 }
 
-struct leon_1insn_patch_entry {
-	unsigned int addr;
-	unsigned int insn;
-};
-
-enum sparc_cpu sparc_cpu_model;
-EXPORT_SYMBOL(sparc_cpu_model);
-
 static __init void leon_patch(void)
 {
-	struct leon_1insn_patch_entry *start = (void *)__leon_1insn_patch;
-	struct leon_1insn_patch_entry *end = (void *)__leon_1insn_patch_end;
-
 	/* Default instruction is leon - no patching */
-	if (sparc_cpu_model == sparc_leon)
-		return;
-
-	while (start < end) {
-		unsigned long addr = start->addr;
-
-		*(unsigned int *)(addr) = start->insn;
-		flushi(addr);
-
-		start++;
-	}
 }
 
 struct tt_entry *sparc_ttable;
@@ -259,22 +219,6 @@ struct tt_entry *sparc_ttable;
 void __init sparc32_start_kernel(struct linux_romvec *rp)
 {
 	prom_init(rp);
-
-	/* Set sparc_cpu_model */
-	sparc_cpu_model = sun_unknown;
-	if (!strcmp(&cputypval[0], "sun4m"))
-		sparc_cpu_model = sun4m;
-	if (!strcmp(&cputypval[0], "sun4s"))
-		sparc_cpu_model = sun4m; /* CP-1200 with PROM 2.30 -E */
-	if (!strcmp(&cputypval[0], "sun4d"))
-		sparc_cpu_model = sun4d;
-	if (!strcmp(&cputypval[0], "sun4e"))
-		sparc_cpu_model = sun4e;
-	if (!strcmp(&cputypval[0], "sun4u"))
-		sparc_cpu_model = sun4u;
-	if (!strncmp(&cputypval[0], "leon" , 4))
-		sparc_cpu_model = sparc_leon;
-
 	leon_patch();
 	start_kernel();
 }
@@ -294,27 +238,6 @@ void __init setup_arch(char **cmdline_p)
 	boot_flags_init(*cmdline_p);
 
 	register_console(&prom_early_console);
-
-	switch(sparc_cpu_model) {
-	case sun4m:
-		pr_info("ARCH: SUN4M\n");
-		break;
-	case sun4d:
-		pr_info("ARCH: SUN4D\n");
-		break;
-	case sun4e:
-		pr_info("ARCH: SUN4E\n");
-		break;
-	case sun4u:
-		pr_info("ARCH: SUN4U\n");
-		break;
-	case sparc_leon:
-		pr_info("ARCH: LEON\n");
-		break;
-	default:
-		pr_info("ARCH: UNKNOWN!\n");
-		break;
-	}
 
 	idprom_init();
 	load_mmu();
