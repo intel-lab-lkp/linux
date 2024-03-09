@@ -17,6 +17,7 @@
 #include <asm/cpu_type.h>  /* For SUN4M_NCPUS */
 
 #define SBUS_CLOCK_RATE   2000000 /* 2MHz */
+#define LEON_CLOCK_RATE   1000000
 #define TIMER_VALUE_SHIFT 9
 #define TIMER_VALUE_MASK  0x3fffff
 #define TIMER_LIMIT_BIT   (1 << 31)  /* Bit 31 in Counter-Timer register */

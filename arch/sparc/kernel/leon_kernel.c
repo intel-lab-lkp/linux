@@ -237,12 +237,6 @@ out:
 	return irq;
 }
 
-static unsigned int _leon_build_device_irq(struct platform_device *op,
-					   unsigned int real_irq)
-{
-	return leon_build_device_irq(real_irq, handle_simple_irq, "edge", 0);
-}
-
 void leon_update_virq_handling(unsigned int virq,
 			      irq_flow_handler_t flow_handler,
 			      const char *name, int do_ack)
@@ -258,7 +252,7 @@ void leon_update_virq_handling(unsigned int virq,
 	irq_set_chip_data(virq, (void *)mask);
 }
 
-static u32 leon_cycles_offset(void)
+u32 leon_cycles_offset(void)
 {
 	u32 rld, val, ctrl, off;
 
@@ -311,14 +305,6 @@ void __init leon_init_timers(void)
 	int err;
 	u32 config;
 	u32 ctrl;
-
-	sparc_config.get_cycles_offset = leon_cycles_offset;
-	sparc_config.cs_period = 1000000 / HZ;
-	sparc_config.features |= FEAT_L10_CLOCKSOURCE;
-
-#ifndef CONFIG_SMP
-	sparc_config.features |= FEAT_L10_CLOCKEVENT;
-#endif
 
 	leondebug_irq_disable = 0;
 	leon_debug_irqout = 0;
@@ -434,7 +420,7 @@ retry:
 	err = request_irq(irq, leon_percpu_timer_ce_interrupt,
 			  IRQF_PERCPU | IRQF_TIMER, "timer", NULL);
 #else
-	irq = _leon_build_device_irq(NULL, leon3_gptimer_irq);
+	irq = leon_build_device_irq(leon3_gptimer_irq, handle_simple_irq, "edge", 0);
 	err = request_irq(irq, timer_interrupt, IRQF_TIMER, "timer", NULL);
 #endif
 	if (err) {
@@ -453,7 +439,7 @@ bad:
 	return;
 }
 
-static void leon_clear_clock_irq(void)
+void leon_clear_clock_irq(void)
 {
 	u32 ctrl;
 
@@ -462,7 +448,7 @@ static void leon_clear_clock_irq(void)
 			      ctrl & leon3_gptimer_ackmask);
 }
 
-static void leon_load_profile_irq(int cpu, unsigned int limit)
+void leon_load_profile_irq(int cpu, unsigned int limit)
 {
 }
 
@@ -485,9 +471,4 @@ void leon_enable_irq_cpu(unsigned int irq_nr, unsigned int cpu)
 
 void __init leon_init_IRQ(void)
 {
-	sparc_config.init_timers      = leon_init_timers;
-	sparc_config.build_device_irq = _leon_build_device_irq;
-	sparc_config.clock_rate       = 1000000;
-	sparc_config.clear_clock_irq  = leon_clear_clock_irq;
-	sparc_config.load_profile_irq = leon_load_profile_irq;
 }
