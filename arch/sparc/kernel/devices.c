@@ -132,7 +132,4 @@ void __init device_scan(void)
 							    0);
 	}
 #endif /* !CONFIG_SMP */
-
-	auxio_probe();
-	auxio_power_probe();
 }

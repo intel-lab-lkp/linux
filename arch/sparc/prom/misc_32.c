@@ -13,7 +13,6 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
-#include <asm/auxio.h>
 
 extern void restore_current(void);
 
@@ -60,7 +59,6 @@ prom_cmdline(void)
 	(*(romvec->pv_abort))();
 	restore_current();
 	spin_unlock_irqrestore(&prom_lock, flags);
-	set_auxio(AUXIO_LED, 0);
 }
 
 /* Drop into the prom, but completely terminate the program.
