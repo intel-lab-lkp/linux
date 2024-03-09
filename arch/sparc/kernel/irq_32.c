@@ -19,7 +19,6 @@
 #include <asm/cacheflush.h>
 #include <asm/cpudata.h>
 #include <asm/setup.h>
-#include <asm/pcic.h>
 #include <asm/leon.h>
 
 #include "kernel.h"

@@ -43,7 +43,6 @@
 #include <asm/io.h>
 #include <asm/idprom.h>
 #include <asm/page.h>
-#include <asm/pcic.h>
 #include <asm/irq_regs.h>
 #include <asm/setup.h>
 
@@ -347,9 +346,6 @@ void __init time_init(void)
 	sparc_config.features = 0;
 	late_time_init = sparc32_late_time_init;
 
-	if (pcic_present())
-		pci_time_init();
-	else
-		sbus_time_init();
+	sbus_time_init();
 }
 

@@ -965,54 +965,6 @@ restore_current:
 	retl
 	 nop
 
-#ifdef CONFIG_PCIC_PCI
-#include <asm/pcic.h>
-
-	.align	4
-	.globl	linux_trap_ipi15_pcic
-linux_trap_ipi15_pcic:
-	rd	%wim, %l3
-	SAVE_ALL
-
-	/*
-	 * First deactivate NMI
-	 * or we cannot drop ET, cannot get window spill traps.
-	 * The busy loop is necessary because the PIO error
-	 * sometimes does not go away quickly and we trap again.
-	 */
-	sethi	%hi(pcic_regs), %o1
-	ld	[%o1 + %lo(pcic_regs)], %o2
-
-	! Get pending status for printouts later.
-	ld	[%o2 + PCI_SYS_INT_PENDING], %o0
-
-	mov	PCI_SYS_INT_PENDING_CLEAR_ALL, %o1
-	stb	%o1, [%o2 + PCI_SYS_INT_PENDING_CLEAR]
-1:
-	ld	[%o2 + PCI_SYS_INT_PENDING], %o1
-	andcc	%o1, ((PCI_SYS_INT_PENDING_PIO|PCI_SYS_INT_PENDING_PCI)>>24), %g0
-	bne	1b
-	 nop
-
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-
-	call	pcic_nmi
-	 add	%sp, STACKFRAME_SZ, %o1	! struct pt_regs *regs
-	RESTORE_ALL
-
-	.globl	pcic_nmi_trap_patch
-pcic_nmi_trap_patch:
-	sethi	%hi(linux_trap_ipi15_pcic), %l3
-	jmpl	%l3 + %lo(linux_trap_ipi15_pcic), %g0
-	 rd	%psr, %l0
-	.word	0
-
-#endif /* CONFIG_PCIC_PCI */
-
 	.globl	flushw_all
 flushw_all:
 	save	%sp, -0x40, %sp
