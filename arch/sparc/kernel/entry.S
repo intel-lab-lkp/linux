@@ -984,21 +984,8 @@ flushw_all:
 
 #ifdef CONFIG_SMP
 ENTRY(hard_smp_processor_id)
-661:	rd		%tbr, %g1
-	srl		%g1, 12, %o0
-	and		%o0, 3, %o0
-	.section	.cpuid_patch, "ax"
-	/* Instruction location. */
-	.word		661b
-	/* SUN4D implementation. */
-	lda		[%g0] ASI_M_VIKING_TMP1, %o0
-	nop
-	nop
-	/* LEON implementation. */
 	rd		%asr17, %o0
 	srl		%o0, 0x1c, %o0
-	nop
-	.previous
 	retl
 	 nop
 ENDPROC(hard_smp_processor_id)
