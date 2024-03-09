@@ -112,8 +112,7 @@ extern unsigned int real_irq_entry[];
 extern unsigned int smp4d_ticker[];
 
 /* trampoline_32.S */
-extern unsigned long sun4m_cpu_startup;
-extern unsigned long sun4d_cpu_startup;
+void leon_smp_cpu_startup(int boot_cpu);
 
 /* signal_32.c */
 asmlinkage void do_sigreturn(struct pt_regs *regs);
