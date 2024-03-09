@@ -25,18 +25,6 @@ static inline int con_is_present(void)
 	return serial_console ? 0 : 1;
 }
 
-/* from irq_32.c */
-extern volatile unsigned char *fdc_status;
-extern char *pdma_vaddr;
-extern unsigned long pdma_size;
-extern volatile int doing_pdma;
-
-/* This is software state */
-extern char *pdma_base;
-extern unsigned long pdma_areasize;
-
-int sparc_floppy_request_irq(unsigned int irq, irq_handler_t irq_handler);
-
 /* setup_32.c */
 extern unsigned long cmdline_memory_size;
 
