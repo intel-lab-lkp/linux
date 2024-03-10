@@ -3,7 +3,7 @@
 #define __LIBPERF_INTERNAL_XYARRAY_H
 
 #include <linux/compiler.h>
-#include <sys/types.h>
+#include <stddef.h>
 
 struct xyarray {
 	size_t row_size;
