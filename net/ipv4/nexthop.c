@@ -3253,8 +3253,9 @@ static int rtm_del_nexthop(struct sk_buff *skb, struct nlmsghdr *nlh,
 	int err;
 	u32 id;
 
-	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb, NHA_MAX,
-			  rtm_nh_policy_del, extack);
+	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb,
+			  ARRAY_SIZE(rtm_nh_policy_del) - 1, rtm_nh_policy_del,
+			  extack);
 	if (err < 0)
 		return err;
 
@@ -3283,8 +3284,9 @@ static int rtm_get_nexthop(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	int err;
 	u32 id;
 
-	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb, NHA_MAX,
-			  rtm_nh_policy_get, extack);
+	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb,
+			  ARRAY_SIZE(rtm_nh_policy_get) - 1, rtm_nh_policy_get,
+			  extack);
 	if (err < 0)
 		return err;
 
@@ -3411,7 +3413,8 @@ static int nh_valid_dump_req(const struct nlmsghdr *nlh,
 	struct nlattr *tb[NHA_MAX + 1];
 	int err;
 
-	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb, NHA_MAX,
+	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb,
+			  ARRAY_SIZE(rtm_nh_policy_dump) - 1,
 			  rtm_nh_policy_dump, cb->extack);
 	if (err < 0)
 		return err;
@@ -3549,7 +3552,8 @@ static int nh_valid_dump_bucket_req(const struct nlmsghdr *nlh,
 	struct nlattr *tb[NHA_MAX + 1];
 	int err;
 
-	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb, NHA_MAX,
+	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb,
+			  ARRAY_SIZE(rtm_nh_policy_dump_bucket) - 1,
 			  rtm_nh_policy_dump_bucket, NULL);
 	if (err < 0)
 		return err;
@@ -3718,7 +3722,8 @@ static int nh_valid_get_bucket_req(const struct nlmsghdr *nlh,
 	u32 op_flags;
 	int err;
 
-	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb, NHA_MAX,
+	err = nlmsg_parse(nlh, sizeof(struct nhmsg), tb,
+			  ARRAY_SIZE(rtm_nh_policy_get_bucket) - 1,
 			  rtm_nh_policy_get_bucket, extack);
 	if (err < 0)
 		return err;
