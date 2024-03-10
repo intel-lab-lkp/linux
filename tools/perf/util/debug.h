@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <linux/compiler.h>
+#include <linux/types.h>
 
 extern int verbose;
 extern int debug_kmaps;
