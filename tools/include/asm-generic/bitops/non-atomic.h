@@ -3,6 +3,7 @@
 #define _ASM_GENERIC_BITOPS_NON_ATOMIC_H_
 
 #include <linux/bits.h>
+#include <linux/types.h> /* for bool */
 
 /**
  * ___set_bit - Set a bit in memory

@@ -55,7 +55,7 @@ typedef __s8  s8;
 #ifndef __user
 #define __user
 #endif
-#define __must_check
+
 #define __cold
 
 typedef __u16 __bitwise __le16;
