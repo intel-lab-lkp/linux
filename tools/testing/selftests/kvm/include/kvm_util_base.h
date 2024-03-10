@@ -9,6 +9,7 @@
 
 #include "test_util.h"
 
+#include <linux/atomic.h>
 #include <linux/compiler.h>
 #include "linux/hashtable.h"
 #include "linux/list.h"
@@ -16,8 +17,6 @@
 #include <linux/kvm.h>
 #include "linux/rbtree.h"
 #include <linux/types.h>
-
-#include <asm/atomic.h>
 
 #include <sys/ioctl.h>
 

@@ -74,13 +74,16 @@ typedef u64 phys_addr_t;
 typedef u32 phys_addr_t;
 #endif
 
-typedef struct {
-	int counter;
-} atomic_t;
+#ifndef __cplusplus
+/* C++17 doesn't support stdatomic.h but C++23 does. */
+#include <stdatomic.h>
 
-typedef struct {
-	long counter;
-} atomic_long_t;
+typedef atomic_int atomic_t;
+
+#define ATOMIC_INIT(i) (i)
+
+typedef atomic_long atomic_long_t;
+#endif
 
 #ifndef __aligned_u64
 # define __aligned_u64 __u64 __attribute__((aligned(8)))
