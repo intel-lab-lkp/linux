@@ -2,6 +2,8 @@
 #ifndef __ASM_GENERIC_UNALIGNED_H
 #define __ASM_GENERIC_UNALIGNED_H
 
+#include <linux/types.h>
+
 /*
  * This is the most generic implementation of unaligned accesses
  * and should work almost anywhere.
