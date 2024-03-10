@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <linux/types.h>
 
 #include "arm-spe-pkt-decoder.h"
 

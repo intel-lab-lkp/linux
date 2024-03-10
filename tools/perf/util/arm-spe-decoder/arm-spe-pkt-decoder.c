@@ -292,7 +292,7 @@ static int arm_spe_pkt_out_string(int *err, char **buf_p, size_t *blen,
 static int arm_spe_pkt_desc_event(const struct arm_spe_pkt *packet,
 				  char *buf, size_t buf_len)
 {
-	u64 payload = packet->payload;
+	uint64_t payload = packet->payload;
 	int err = 0;
 
 	arm_spe_pkt_out_string(&err, &buf, &buf_len, "EV");
@@ -332,7 +332,7 @@ static int arm_spe_pkt_desc_event(const struct arm_spe_pkt *packet,
 static int arm_spe_pkt_desc_op_type(const struct arm_spe_pkt *packet,
 				    char *buf, size_t buf_len)
 {
-	u64 payload = packet->payload;
+	uint64_t payload = packet->payload;
 	int err = 0;
 
 	switch (packet->index) {
@@ -429,7 +429,7 @@ static int arm_spe_pkt_desc_addr(const struct arm_spe_pkt *packet,
 {
 	int ns, el, idx = packet->index;
 	int ch, pat;
-	u64 payload = packet->payload;
+	uint64_t payload = packet->payload;
 	int err = 0;
 	static const char *idx_name[] = {"PC", "TGT", "VA", "PA", "PBT"};
 
@@ -469,7 +469,7 @@ static int arm_spe_pkt_desc_addr(const struct arm_spe_pkt *packet,
 static int arm_spe_pkt_desc_counter(const struct arm_spe_pkt *packet,
 				    char *buf, size_t buf_len)
 {
-	u64 payload = packet->payload;
+	uint64_t payload = packet->payload;
 	const char *name = arm_spe_pkt_name(packet->type);
 	int err = 0;
 
