@@ -6,6 +6,9 @@ NC='\033[0m' # No Color
 
 declare -a FILES
 FILES=(
+  "include/uapi/linux/bpf.h"
+  "include/uapi/linux/bpf_common.h"
+  "include/uapi/linux/bpf_perf_event.h"
   "include/uapi/linux/const.h"
   "include/uapi/drm/drm.h"
   "include/uapi/drm/i915_drm.h"
