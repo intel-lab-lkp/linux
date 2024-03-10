@@ -34,7 +34,7 @@
 
 static volatile long the_var;
 
-static noinline int test_function(void)
+static __noinline int test_function(void)
 {
 	return 0;
 }

@@ -15,13 +15,13 @@
 #include "tests/tests.h"
 #include "arch-tests.h"
 
-static noinline int bp_1(void)
+static __noinline int bp_1(void)
 {
 	pr_debug("in %s\n", __func__);
 	return 0;
 }
 
-static noinline int bp_2(void)
+static __noinline int bp_2(void)
 {
 	pr_debug("in %s\n", __func__);
 	return 0;

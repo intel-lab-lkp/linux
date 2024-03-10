@@ -267,12 +267,12 @@
 # define __flatten			__attribute__((flatten))
 
 /*
- * Note the missing underscores.
+ * Note, the kernel version is missing the underscores.
  *
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-noinline-function-attribute
  * clang: mentioned
  */
-#define   noinline                      __attribute__((__noinline__))
+#define   __noinline                      __attribute__((__noinline__))
 
 /*
  * Optional: only supported since gcc >= 8
