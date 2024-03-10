@@ -2,6 +2,8 @@
 #ifndef PARSE_CTX_H
 #define PARSE_CTX_H 1
 
+#include <stdbool.h>
+
 struct hashmap;
 struct metric_ref;
 
