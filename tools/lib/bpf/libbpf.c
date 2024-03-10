@@ -66,7 +66,9 @@
  */
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 
-#define __printf(a, b)	__attribute__((format(printf, a, b)))
+#ifndef __printf
+# define __printf(a, b)	__attribute__((format(printf, a, b)))
+#endif
 
 static struct bpf_map *bpf_object__add_map(struct bpf_object *obj);
 static bool prog_is_subprog(const struct bpf_object *obj, const struct bpf_program *prog);
