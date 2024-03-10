@@ -3,6 +3,7 @@
 #define PERF_CACHELINE_H
 
 #include <linux/compiler.h>
+#include <linux/types.h>
 
 int __pure cacheline_size(void);
 
