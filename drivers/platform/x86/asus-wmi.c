@@ -297,6 +297,7 @@ struct asus_wmi {
 
 	bool panel_overdrive_available;
 	bool mini_led_mode_available;
+	u32 mini_led_dev_id;
 
 	struct hotplug_slot hotplug_slot;
 	struct mutex hotplug_lock;
@@ -2109,10 +2110,17 @@ static ssize_t mini_led_mode_show(struct device *dev,
 	struct asus_wmi *asus = dev_get_drvdata(dev);
 	int result;
 
-	result = asus_wmi_get_devstate_simple(asus, ASUS_WMI_DEVID_MINI_LED_MODE);
-	if (result < 0)
-		return result;
+	result = asus_wmi_get_devstate_simple(asus, asus->mini_led_dev_id);
 
+	// Remap the mode values to match previous generation mini-led including
+	// if errored -19 since some of these bios return a bad result if set to "2"
+	// which is mini-led off
+	if (asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE2) {
+		if (result >= 0 || result == -19)
+			result = result == 1 ? 2 : result == 0 ? 1 : 0;
+	} else if (result < 0) {
+		return result;
+	}
 	return sysfs_emit(buf, "%d\n", result);
 }
 
@@ -2129,10 +2137,15 @@ static ssize_t mini_led_mode_store(struct device *dev,
 	if (result)
 		return result;
 
-	if (mode > 1)
+	if (mode > 1 && asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE)
 		return -EINVAL;
+	if (mode > 2 && asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE2)
+		return -EINVAL;
+	// Remap the mode values to match previous generation mini-led
+	if (asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE2)
+		mode = mode == 2 ? 1 : mode == 0 ? 2 : 0;
 
-	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_MINI_LED_MODE, mode, &result);
+	err = asus_wmi_set_devstate(asus->mini_led_dev_id, mode, &result);
 
 	if (err) {
 		pr_warn("Failed to set mini-LED: %d\n", err);
@@ -2149,6 +2162,21 @@ static ssize_t mini_led_mode_store(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR_RW(mini_led_mode);
+
+static ssize_t available_mini_led_mode_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+
+	if (asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE)
+		return sysfs_emit(buf, "0 1\n");
+	if (asus->mini_led_dev_id == ASUS_WMI_DEVID_MINI_LED_MODE2)
+		return sysfs_emit(buf, "0 1 2\n");
+
+	return sysfs_emit(buf, "0\n");
+}
+
+static DEVICE_ATTR_RO(available_mini_led_mode);
 
 /* Quirks *********************************************************************/
 
@@ -4174,6 +4202,7 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_nv_temp_target.attr,
 	&dev_attr_panel_od.attr,
 	&dev_attr_mini_led_mode.attr,
+	&dev_attr_available_mini_led_mode.attr,
 	NULL
 };
 
@@ -4496,9 +4525,16 @@ static int asus_wmi_add(struct platform_device *pdev)
 	asus->nv_dyn_boost_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_NV_DYN_BOOST);
 	asus->nv_temp_tgt_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_NV_THERM_TARGET);
 	asus->panel_overdrive_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_PANEL_OD);
-	asus->mini_led_mode_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_MINI_LED_MODE);
 	asus->ally_mcu_usb_switch = acpi_has_method(NULL, ASUS_USB0_PWR_EC0_CSEE)
 						&& dmi_match(DMI_BOARD_NAME, "RC71L");
+
+	if (asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_MINI_LED_MODE)) {
+		asus->mini_led_mode_available = true;
+		asus->mini_led_dev_id = ASUS_WMI_DEVID_MINI_LED_MODE;
+	} else if (asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_MINI_LED_MODE2)) {
+		asus->mini_led_mode_available = true;
+		asus->mini_led_dev_id = ASUS_WMI_DEVID_MINI_LED_MODE2;
+	}
 
 	err = fan_boost_mode_check_present(asus);
 	if (err)
