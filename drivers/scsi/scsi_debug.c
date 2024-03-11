@@ -7234,10 +7234,39 @@ ATTRIBUTE_GROUPS(sdebug_drv);
 
 static struct device *pseudo_primary;
 
+/*
+ * Calculate size related parameters from sdebug_dev_zize_mb and
+ * sdebug_sector_size.
+ */
+static void scsi_debug_init_size_parameters(void)
+{
+	unsigned long sz;
+
+	sz = (unsigned long)sdebug_dev_size_mb * 1048576;
+	sdebug_store_sectors = sz / sdebug_sector_size;
+	sdebug_capacity = get_sdebug_capacity();
+
+	/* play around with geometry, don't waste too much on track 0 */
+	sdebug_heads = 8;
+	sdebug_sectors_per = 32;
+	if (sdebug_dev_size_mb >= 256)
+		sdebug_heads = 64;
+	else if (sdebug_dev_size_mb >= 16)
+		sdebug_heads = 32;
+	sdebug_cylinders_per = (unsigned long)sdebug_capacity /
+		(sdebug_sectors_per * sdebug_heads);
+	if (sdebug_cylinders_per >= 1024) {
+		/* other LLDs do this; implies >= 1GB ram disk ... */
+		sdebug_heads = 255;
+		sdebug_sectors_per = 63;
+		sdebug_cylinders_per = (unsigned long)sdebug_capacity /
+			(sdebug_sectors_per * sdebug_heads);
+	}
+}
+
 static int __init scsi_debug_init(void)
 {
 	bool want_store = (sdebug_fake_rw == 0);
-	unsigned long sz;
 	int k, ret, hosts_to_add;
 	int idx = -1;
 
@@ -7369,26 +7398,9 @@ static int __init scsi_debug_init(void)
 		sdebug_dev_size_mb = DEF_DEV_SIZE_MB;
 	if (sdebug_dev_size_mb < 1)
 		sdebug_dev_size_mb = 1;  /* force minimum 1 MB ramdisk */
-	sz = (unsigned long)sdebug_dev_size_mb * 1048576;
-	sdebug_store_sectors = sz / sdebug_sector_size;
-	sdebug_capacity = get_sdebug_capacity();
 
-	/* play around with geometry, don't waste too much on track 0 */
-	sdebug_heads = 8;
-	sdebug_sectors_per = 32;
-	if (sdebug_dev_size_mb >= 256)
-		sdebug_heads = 64;
-	else if (sdebug_dev_size_mb >= 16)
-		sdebug_heads = 32;
-	sdebug_cylinders_per = (unsigned long)sdebug_capacity /
-			       (sdebug_sectors_per * sdebug_heads);
-	if (sdebug_cylinders_per >= 1024) {
-		/* other LLDs do this; implies >= 1GB ram disk ... */
-		sdebug_heads = 255;
-		sdebug_sectors_per = 63;
-		sdebug_cylinders_per = (unsigned long)sdebug_capacity /
-			       (sdebug_sectors_per * sdebug_heads);
-	}
+	scsi_debug_init_size_parameters();
+
 	if (scsi_debug_lbp()) {
 		sdebug_unmap_max_blocks =
 			clamp(sdebug_unmap_max_blocks, 0U, 0xffffffffU);
