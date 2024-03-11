@@ -343,6 +343,9 @@ void dynamic_stack_refill_pages(void)
 
 		mod_lruvec_page_state(page, NR_KERNEL_STACK_KB,
 				      PAGE_SIZE / 1024);
+		mod_lruvec_page_state(page,
+				      NR_DYNAMIC_STACKS_FAULTS_KB,
+				      PAGE_SIZE / 1024);
 
 		page = alloc_pages(THREADINFO_GFP & ~__GFP_ACCOUNT, 0);
 		if (unlikely(!page))
@@ -771,9 +774,17 @@ static void account_kernel_stack(struct task_struct *tsk, int account)
 		int i, nr_pages;
 
 		nr_pages = vm->nr_pages;
-		for (i = 0; i < nr_pages; i++)
+		for (i = 0; i < nr_pages; i++) {
 			mod_lruvec_page_state(vm->pages[i], NR_KERNEL_STACK_KB,
 					      account * (PAGE_SIZE / 1024));
+#ifdef CONFIG_DYNAMIC_STACK
+			if (i >= THREAD_PREALLOC_PAGES) {
+				mod_lruvec_page_state(vm->pages[i],
+						      NR_DYNAMIC_STACKS_FAULTS_KB,
+						      account * (PAGE_SIZE / 1024));
+			}
+#endif
+		}
 	} else {
 		void *stack = task_stack_page(tsk);
 
