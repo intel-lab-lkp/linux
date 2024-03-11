@@ -628,12 +628,14 @@ EXPORT_SYMBOL(v4l2_async_nf_register);
 static void
 __v4l2_async_nf_unregister(struct v4l2_async_notifier *notifier)
 {
-	if (!notifier || (!notifier->v4l2_dev && !notifier->sd))
+	/* Return here if the notifier is never initialised or registered. */
+	if (!notifier->notifier_entry.next ||
+	    list_empty(&notifier->notifier_entry))
 		return;
 
 	v4l2_async_nf_unbind_all_subdevs(notifier);
 
-	list_del(&notifier->notifier_entry);
+	list_del_init(&notifier->notifier_entry);
 }
 
 void v4l2_async_nf_unregister(struct v4l2_async_notifier *notifier)
