@@ -204,6 +204,232 @@ static bool try_release_thread_stack_to_cache(struct vm_struct *vm_area)
 	return false;
 }
 
+#ifdef CONFIG_DYNAMIC_STACK
+
+static DEFINE_PER_CPU(struct page *, dynamic_stack_pages[THREAD_DYNAMIC_PAGES]);
+
+static struct vm_struct *alloc_vmap_stack(int node)
+{
+	gfp_t gfp = THREADINFO_GFP & ~__GFP_ACCOUNT;
+	unsigned long addr, end;
+	struct vm_struct *vm_area;
+	int err, i;
+
+	vm_area = get_vm_area_node(THREAD_SIZE, THREAD_ALIGN, VM_MAP, node,
+				   gfp, __builtin_return_address(0));
+	if (!vm_area)
+		return NULL;
+
+	vm_area->pages = kmalloc_node(sizeof(void *) *
+				      (THREAD_SIZE >> PAGE_SHIFT), gfp, node);
+	if (!vm_area->pages)
+		goto cleanup_err;
+
+	for (i = 0; i < THREAD_PREALLOC_PAGES; i++) {
+		vm_area->pages[i] = alloc_pages(gfp, 0);
+		if (!vm_area->pages[i])
+			goto cleanup_err;
+		vm_area->nr_pages++;
+	}
+
+	addr = (unsigned long)vm_area->addr +
+					(THREAD_DYNAMIC_PAGES << PAGE_SHIFT);
+	end = (unsigned long)vm_area->addr + THREAD_SIZE;
+	err = vmap_pages_range_noflush(addr, end, PAGE_KERNEL, vm_area->pages,
+				       PAGE_SHIFT);
+	if (err)
+		goto cleanup_err;
+
+	return vm_area;
+cleanup_err:
+	for (i = 0; i < vm_area->nr_pages; i++)
+		__free_page(vm_area->pages[i]);
+	kfree(vm_area->pages);
+	kfree(vm_area);
+
+	return NULL;
+}
+
+static void free_vmap_stack(struct vm_struct *vm_area)
+{
+	int i, nr_pages;
+
+	remove_vm_area(vm_area->addr);
+
+	nr_pages = vm_area->nr_pages;
+	for (i = 0; i < nr_pages; i++)
+		__free_page(vm_area->pages[i]);
+
+	kfree(vm_area->pages);
+	kfree(vm_area);
+}
+
+/*
+ * This flag is used to pass information from fault handler to refill about
+ * which pages were allocated, and should be charged to memcg.
+ */
+#define DYNAMIC_STACK_PAGE_AQUIRED_FLAG	0x1
+
+static struct page *dynamic_stack_get_page(void)
+{
+	struct page **pages = this_cpu_ptr(dynamic_stack_pages);
+	int i;
+
+	for (i = 0; i < THREAD_DYNAMIC_PAGES; i++) {
+		struct page *page = pages[i];
+
+		if (page && !((uintptr_t)page & DYNAMIC_STACK_PAGE_AQUIRED_FLAG)) {
+			pages[i] = (void *)((uintptr_t)pages[i] | DYNAMIC_STACK_PAGE_AQUIRED_FLAG);
+			return page;
+		}
+	}
+
+	return NULL;
+}
+
+static int dynamic_stack_refill_pages_cpu(unsigned int cpu)
+{
+	struct page **pages = per_cpu_ptr(dynamic_stack_pages, cpu);
+	int i;
+
+	for (i = 0; i < THREAD_DYNAMIC_PAGES; i++) {
+		if (pages[i])
+			break;
+		pages[i] = alloc_pages(THREADINFO_GFP & ~__GFP_ACCOUNT, 0);
+		if (unlikely(!pages[i])) {
+			pr_err("failed to allocate dynamic stack page for cpu[%d]\n",
+			       cpu);
+		}
+	}
+
+	return 0;
+}
+
+static int dynamic_stack_free_pages_cpu(unsigned int cpu)
+{
+	struct page **pages = per_cpu_ptr(dynamic_stack_pages, cpu);
+	int i;
+
+	for (i = 0; i < THREAD_DYNAMIC_PAGES; i++) {
+		if (!pages[i])
+			continue;
+		__free_page(pages[i]);
+		pages[i] = NULL;
+	}
+
+	return 0;
+}
+
+void dynamic_stack_refill_pages(void)
+{
+	struct page **pages = this_cpu_ptr(dynamic_stack_pages);
+	int i, ret;
+
+	for (i = 0; i < THREAD_DYNAMIC_PAGES; i++) {
+		struct page *page = pages[i];
+
+		if (!((uintptr_t)page & DYNAMIC_STACK_PAGE_AQUIRED_FLAG))
+			break;
+
+		page = (void *)((uintptr_t)page & ~DYNAMIC_STACK_PAGE_AQUIRED_FLAG);
+		ret = memcg_kmem_charge_page(page, GFP_KERNEL, 0);
+		/*
+		 * XXX Since stack pages were already allocated, we should never
+		 * fail charging. Therefore, we should probably induce force
+		 * charge and oom killing if charge fails.
+		 */
+		if (unlikely(ret))
+			pr_warn_ratelimited("dynamic stack: charge for allocated page failed\n");
+
+		mod_lruvec_page_state(page, NR_KERNEL_STACK_KB,
+				      PAGE_SIZE / 1024);
+
+		page = alloc_pages(THREADINFO_GFP & ~__GFP_ACCOUNT, 0);
+		if (unlikely(!page))
+			pr_err_ratelimited("failed to refill per-cpu dynamic stack\n");
+		pages[i] = page;
+	}
+}
+
+bool noinstr dynamic_stack_fault(struct task_struct *tsk, unsigned long address)
+{
+	unsigned long stack, hole_end, addr;
+	struct vm_struct *vm_area;
+	struct page *page;
+	int nr_pages;
+	pte_t *pte;
+
+	/* check if address is inside the kernel stack area */
+	stack = (unsigned long)tsk->stack;
+	if (address < stack || address >= stack + THREAD_SIZE)
+		return false;
+
+	vm_area = tsk->stack_vm_area;
+	if (!vm_area)
+		return false;
+
+	/*
+	 * check if this stack can still grow, otherwise fault will be reported
+	 * as guard page access.
+	 */
+	nr_pages = vm_area->nr_pages;
+	if (nr_pages >= (THREAD_SIZE >> PAGE_SHIFT))
+		return false;
+
+	/* Check if fault address is within the stack hole */
+	hole_end = stack + THREAD_SIZE - (nr_pages << PAGE_SHIFT);
+	if (address >= hole_end)
+		return false;
+
+	/*
+	 * Most likely we faulted in the page right next to the last mapped
+	 * page in the stack, however, it is possible (but very unlikely) that
+	 * the faulted page is actually skips some pages in the stack. Make sure
+	 * we do not create  more than one holes in the stack, and map every
+	 * page between the current fault  address and the last page that is
+	 * mapped in the stack.
+	 */
+	address = PAGE_ALIGN_DOWN(address);
+	for (addr = hole_end - PAGE_SIZE; addr >= address; addr -= PAGE_SIZE) {
+		/* Take the next page from the per-cpu list */
+		page = dynamic_stack_get_page();
+		if (!page) {
+			instrumentation_begin();
+			pr_emerg("Failed to allocate a page during kernel_stack_fault\n");
+			instrumentation_end();
+			return false;
+		}
+
+		/* Store the new page in the stack's vm_area */
+		vm_area->pages[nr_pages] = page;
+		vm_area->nr_pages = nr_pages + 1;
+
+		/* Add the new page entry to the page table */
+		pte = virt_to_kpte(addr);
+		if (!pte) {
+			instrumentation_begin();
+			pr_emerg("The PTE page table for a kernel stack is not found\n");
+			instrumentation_end();
+			return false;
+		}
+
+		/* Make sure there are no existing mappings at this address */
+		if (pte_present(*pte)) {
+			instrumentation_begin();
+			pr_emerg("The PTE contains a mapping\n");
+			instrumentation_end();
+			return false;
+		}
+		set_pte_at(&init_mm, addr, pte, mk_pte(page, PAGE_KERNEL));
+	}
+
+	/* Refill the pcp stack pages during context switch */
+	tsk->flags |= PF_DYNAMIC_STACK;
+
+	return true;
+}
+
+#else /* !CONFIG_DYNAMIC_STACK */
 static inline struct vm_struct *alloc_vmap_stack(int node)
 {
 	void *stack;
@@ -226,6 +452,7 @@ static inline void free_vmap_stack(struct vm_struct *vm_area)
 {
 	vfree(vm_area->addr);
 }
+#endif /* CONFIG_DYNAMIC_STACK */
 
 static void thread_stack_free_rcu(struct rcu_head *rh)
 {
@@ -1083,6 +1310,16 @@ void __init fork_init(void)
 			  NULL, free_vm_stack_cache);
 #endif
 
+#ifdef CONFIG_DYNAMIC_STACK
+	cpuhp_setup_state(CPUHP_BP_PREPARE_DYN, "fork:dynamic_stack",
+			  dynamic_stack_refill_pages_cpu,
+			  dynamic_stack_free_pages_cpu);
+	/*
+	 * Fill the dynamic stack pages for the boot CPU, others will be filled
+	 * as CPUs are onlined.
+	 */
+	dynamic_stack_refill_pages_cpu(smp_processor_id());
+#endif
 	scs_init();
 
 	lockdep_init_task(&init_task);
@@ -1096,6 +1333,7 @@ int __weak arch_dup_task_struct(struct task_struct *dst,
 	return 0;
 }
 
+#ifndef CONFIG_DYNAMIC_STACK
 void set_task_stack_end_magic(struct task_struct *tsk)
 {
 	unsigned long *stackend;
@@ -1103,6 +1341,7 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 	stackend = end_of_stack(tsk);
 	*stackend = STACK_END_MAGIC;	/* for overflow detection */
 }
+#endif
 
 static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 {

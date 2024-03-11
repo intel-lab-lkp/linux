@@ -82,8 +82,48 @@ static inline void put_task_stack(struct task_struct *tsk) {}
 
 void exit_task_stack_account(struct task_struct *tsk);
 
+#ifdef CONFIG_DYNAMIC_STACK
+
+#define task_stack_end_corrupted(task)	0
+
+#ifndef THREAD_PREALLOC_PAGES
+#define THREAD_PREALLOC_PAGES		1
+#endif
+
+#define THREAD_DYNAMIC_PAGES						\
+	((THREAD_SIZE >> PAGE_SHIFT) - THREAD_PREALLOC_PAGES)
+
+void dynamic_stack_refill_pages(void);
+bool dynamic_stack_fault(struct task_struct *tsk, unsigned long address);
+
+/*
+ * Refill and charge for the used pages.
+ */
+static inline void dynamic_stack(struct task_struct *tsk)
+{
+	if (unlikely(tsk->flags & PF_DYNAMIC_STACK)) {
+		dynamic_stack_refill_pages();
+		tsk->flags &= ~PF_DYNAMIC_STACK;
+	}
+}
+
+static inline void set_task_stack_end_magic(struct task_struct *tsk) {}
+
+#else /* !CONFIG_DYNAMIC_STACK */
+
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
+
+void set_task_stack_end_magic(struct task_struct *tsk);
+static inline void dynamic_stack(struct task_struct *tsk) {}
+
+static inline bool dynamic_stack_fault(struct task_struct *tsk,
+				       unsigned long address)
+{
+	return false;
+}
+
+#endif /* CONFIG_DYNAMIC_STACK */
 
 static inline int object_is_on_stack(const void *obj)
 {
@@ -114,7 +154,6 @@ static inline unsigned long stack_not_used(struct task_struct *p)
 # endif
 }
 #endif
-extern void set_task_stack_end_magic(struct task_struct *tsk);
 
 static inline int kstack_end(void *addr)
 {

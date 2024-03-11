@@ -1241,6 +1241,40 @@ config VMAP_STACK
 	  backing virtual mappings with real shadow memory, and KASAN_VMALLOC
 	  must be enabled.
 
+config HAVE_ARCH_DYNAMIC_STACK
+	def_bool n
+	help
+	  An arch should select this symbol if it can support kernel stacks
+	  dynamic growth.
+
+	  - Arch must have support for HAVE_ARCH_VMAP_STACK, in order to handle
+	    stack related page faults
+
+	  - Arch must be able to faults from interrupt context.
+	  - Arch must allows the kernel to handle stack faults gracefully, even
+	    during interrupt handling.
+
+	  - Exceptions such as no pages available should be handled the same
+	    in the consitent and predictable way. I.e. the exception should be
+	    handled the same as when stack overflow occurs when guard pages are
+	    touched with extra information about the allocation error.
+
+config DYNAMIC_STACK
+	default y
+	bool "Dynamically grow kernel stacks"
+	depends on THREAD_INFO_IN_TASK
+	depends on HAVE_ARCH_DYNAMIC_STACK
+	depends on VMAP_STACK
+	depends on !KASAN
+	depends on !DEBUG_STACK_USAGE
+	depends on !STACK_GROWSUP
+	help
+	  Dynamic kernel stacks allow to save memory on machines with a lot of
+	  threads by starting with small stacks, and grow them only when needed.
+	  On workloads where most of the stack depth do not reach over one page
+	  the memory saving can be subsentantial. The feature requires virtually
+	  mapped kernel stacks in order to handle page faults.
+
 config HAVE_ARCH_RANDOMIZE_KSTACK_OFFSET
 	def_bool n
 	help
