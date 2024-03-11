@@ -150,6 +150,7 @@ struct prestera_neigh_info;
 
 /* Switch API */
 int prestera_hw_switch_init(struct prestera_switch *sw);
+int prestera_hw_switch_reset(struct prestera_switch *sw);
 void prestera_hw_switch_fini(struct prestera_switch *sw);
 int prestera_hw_switch_ageing_set(struct prestera_switch *sw, u32 ageing_ms);
 int prestera_hw_switch_mac_set(struct prestera_switch *sw, const char *mac);

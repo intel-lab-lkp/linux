@@ -24,6 +24,11 @@
 #define PRESTERA_FW_ARM64_PATH_FMT "mrvl/prestera/mvsw_prestera_fw_arm64-v%u.%u.img"
 
 #define PRESTERA_FW_HDR_MAGIC		0x351D9D06
+/* Timeout waiting for prestera firmware CPU to reboot and
+ * restart the firmware loading software layer, hence becoming
+ * ready for the next firmware downloading phase:
+ */
+#define PRESTERA_FW_READY_TIMEOUT_SECS	30
 #define PRESTERA_FW_DL_TIMEOUT_MS	50000
 #define PRESTERA_FW_BLK_SZ		1024
 
@@ -765,7 +770,7 @@ static int prestera_fw_load(struct prestera_fw *fw)
 
 	err = prestera_ldr_wait_reg32(fw, PRESTERA_LDR_READY_REG,
 				      PRESTERA_LDR_READY_MAGIC,
-				      5 * MSEC_PER_SEC);
+				      PRESTERA_FW_READY_TIMEOUT_SECS * MSEC_PER_SEC);
 	if (err) {
 		dev_err(fw->dev.dev, "waiting for FW loader is timed out");
 		return err;

@@ -21,6 +21,7 @@
 enum prestera_cmd_type_t {
 	PRESTERA_CMD_TYPE_SWITCH_INIT = 0x1,
 	PRESTERA_CMD_TYPE_SWITCH_ATTR_SET = 0x2,
+	PRESTERA_CMD_TYPE_SWITCH_RESET = 0x4,
 
 	PRESTERA_CMD_TYPE_PORT_ATTR_SET = 0x100,
 	PRESTERA_CMD_TYPE_PORT_ATTR_GET = 0x101,
@@ -1085,6 +1086,13 @@ int prestera_hw_switch_init(struct prestera_switch *sw)
 void prestera_hw_switch_fini(struct prestera_switch *sw)
 {
 	WARN_ON(!list_empty(&sw->event_handlers));
+}
+
+int prestera_hw_switch_reset(struct prestera_switch *sw)
+{
+	struct prestera_msg_common_req req;
+
+	return prestera_cmd(sw, PRESTERA_CMD_TYPE_SWITCH_RESET, &req.cmd, sizeof(req));
 }
 
 int prestera_hw_switch_ageing_set(struct prestera_switch *sw, u32 ageing_ms)

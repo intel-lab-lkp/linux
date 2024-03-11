@@ -1444,7 +1444,7 @@ err_swdev_register:
 err_router_init:
 	prestera_netdev_event_handler_unregister(sw);
 	prestera_hw_switch_fini(sw);
-
+	prestera_hw_switch_reset(sw);
 	return err;
 }
 
@@ -1463,6 +1463,7 @@ static void prestera_switch_fini(struct prestera_switch *sw)
 	prestera_router_fini(sw);
 	prestera_netdev_event_handler_unregister(sw);
 	prestera_hw_switch_fini(sw);
+	prestera_hw_switch_reset(sw);
 	of_node_put(sw->np);
 }
 
