@@ -30,6 +30,11 @@ properties:
       size of reserved memory allocated for firmware event log
     $ref: /schemas/types.yaml#/definitions/uint32
 
+  linux,sml-log:
+    description:
+      Content of firmware event log
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+
   memory-region:
     description: reserved memory allocated for firmware event log
     maxItems: 1
@@ -53,15 +58,22 @@ dependentRequired:
   linux,sml-base: ['linux,sml-size']
   linux,sml-size: ['linux,sml-base']
 
-# must only have either memory-region or linux,sml-base
+# must only have either memory-region or linux,sml-base/size or linux,sml-log
 # as well as either resets or reset-gpios
 dependentSchemas:
   memory-region:
     properties:
       linux,sml-base: false
+      linux,sml-log: false
   linux,sml-base:
     properties:
       memory-region: false
+      linux,sml-log: false
+  linux,sml-log:
+    properties:
+      memory-region: false
+      linux,sml-base: false
+      linux,sml-size: false
   resets:
     properties:
       reset-gpios: false

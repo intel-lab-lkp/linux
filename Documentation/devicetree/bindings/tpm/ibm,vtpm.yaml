@@ -74,8 +74,6 @@ required:
   - ibm,my-dma-window
   - ibm,my-drc-index
   - ibm,loc-code
-  - linux,sml-base
-  - linux,sml-size
 
 allOf:
   - $ref: tpm-common.yaml#
@@ -100,5 +98,23 @@ examples:
             ibm,loc-code = "U8286.41A.10082DV-V3-C3";
             linux,sml-base = <0xc60e 0x0>;
             linux,sml-size = <0xbce10200>;
+        };
+    };
+  - |
+    soc {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        tpm@30000003 {
+            compatible = "IBM,vtpm20";
+            device_type = "IBM,vtpm";
+            reg = <0x30000003>;
+            interrupts = <0xa0003 0x0>;
+            ibm,#dma-address-cells = <0x2>;
+            ibm,#dma-size-cells = <0x2>;
+            ibm,my-dma-window = <0x10000003 0x0 0x0 0x0 0x10000000>;
+            ibm,my-drc-index = <0x30000003>;
+            ibm,loc-code = "U9080.HEX.134CA08-V7-C3";
+            linux,sml-log = <00 00 00 00 03 00 00>;
         };
     };
