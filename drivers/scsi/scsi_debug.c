@@ -558,6 +558,8 @@ static void sdebug_erase_all_stores(bool apart_from_first);
 
 static void sdebug_free_queued_cmd(struct sdebug_queued_cmd *sqcp);
 
+static void scsi_debug_init_size_parameters(void);
+
 /*
  * The following are overflow arrays for cdbs that "hit" the same index in
  * the opcode_info_arr array. The most time sensitive (or commonly used) cdb
@@ -6660,7 +6662,42 @@ static ssize_t dev_size_mb_show(struct device_driver *ddp, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", sdebug_dev_size_mb);
 }
-static DRIVER_ATTR_RO(dev_size_mb);
+
+static ssize_t dev_size_mb_store(struct device_driver *ddp, const char *buf,
+				 size_t count)
+{
+	bool want_store = sdebug_fake_rw == 0;
+	int n, ret;
+
+	if (sdebug_num_hosts) {
+		pr_err("scsi_debug: Can not change dev_size_mb due to existing hosts\n");
+		return -EINVAL;
+	}
+
+	if ((count > 0) && (1 == sscanf(buf, "%d", &n)) && (n >= 1)) {
+		sdebug_dev_size_mb = n;
+
+		/* Propagate dev_size_mb change to other parameters */
+		scsi_debug_init_size_parameters();
+
+		/*
+		 * Erase all stores which may have different size. Initialize
+		 * global variables for the stores and recreate the store.
+		 */
+		sdebug_erase_all_stores(false);
+		sdeb_first_idx = -1;
+		sdeb_most_recent_idx = -1;
+		if (want_store) {
+			ret = sdebug_add_store();
+			if (ret < 0)
+				return ret;
+		}
+		return count;
+	}
+
+	return -EINVAL;
+}
+static DRIVER_ATTR_RW(dev_size_mb);
 
 static ssize_t per_host_store_show(struct device_driver *ddp, char *buf)
 {
