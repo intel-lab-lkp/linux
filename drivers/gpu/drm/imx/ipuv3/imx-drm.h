@@ -3,6 +3,7 @@
 #define _IMX_DRM_H_
 
 struct device_node;
+struct drm_bridge;
 struct drm_connector;
 struct drm_device;
 struct drm_encoder;
@@ -29,5 +30,9 @@ void imx_drm_connector_destroy(struct drm_connector *connector);
 
 int ipu_planes_assign_pre(struct drm_device *dev,
 			  struct drm_atomic_state *state);
+
+struct drm_bridge *devm_imx_drm_legacy_bridge(struct device *dev,
+					      struct device_node *np,
+					      int type);
 
 #endif /* _IMX_DRM_H_ */
