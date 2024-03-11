@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 /* MAX31790 registers */
@@ -506,9 +507,12 @@ static int max31790_probe(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	struct device *dev = &client->dev;
+	u8 pwmout_to_tach[NR_CHANNEL];
 	struct max31790_data *data;
 	struct device *hwmon_dev;
 	int err;
+	u8 tmp;
+	int i;
 
 	if (!i2c_check_functionality(adapter,
 			I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA))
@@ -527,6 +531,33 @@ static int max31790_probe(struct i2c_client *client)
 	err = max31790_init_client(client, data);
 	if (err)
 		return err;
+
+	if (device_property_present(dev, "pwmout-pin-as-tach-input")) {
+		err = device_property_read_u8_array(dev, "pwmout-pin-as-tach-input",
+						    pwmout_to_tach, NR_CHANNEL);
+		if (err) {
+			/* The pwmout-pin-as-tach-input is an array of six values */
+			dev_warn(dev, "The pwmout-pin-as-tach-input property exist but malform");
+		} else {
+			for (i = 0; i < NR_CHANNEL; i++) {
+				tmp = data->fan_config[i];
+				if (pwmout_to_tach[i])
+					data->fan_config[i] |= MAX31790_FAN_CFG_TACH_INPUT;
+				else
+					data->fan_config[i] &= ~(MAX31790_FAN_CFG_TACH_INPUT);
+
+				if (tmp != data->fan_config[i]) {
+					err = i2c_smbus_write_byte_data(client,
+									MAX31790_REG_FAN_CONFIG(i),
+									data->fan_config[i]);
+					if (err < 0)
+						dev_warn(dev,
+							 "Fail to apply fan configuration at channel %d",
+							 i);
+				}
+			}
+		}
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name,
 							 data,
