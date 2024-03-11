@@ -1266,7 +1266,6 @@ config DYNAMIC_STACK
 	depends on HAVE_ARCH_DYNAMIC_STACK
 	depends on VMAP_STACK
 	depends on !KASAN
-	depends on !DEBUG_STACK_USAGE
 	depends on !STACK_GROWSUP
 	help
 	  Dynamic kernel stacks allow to save memory on machines with a lot of
