@@ -211,7 +211,8 @@ typedef void (*v4l2_ctrl_notify_fnc)(struct v4l2_ctrl *ctrl, void *priv);
  *		except for dynamic arrays. In that case it is in the range of
  *		1 to @p_array_alloc_elems.
  * @dims:	The size of each dimension.
- * @nr_of_dims:The number of dimensions in @dims.
+ * @nr_of_dims: The number of dimensions in @dims.
+ * @fraction_bits: The number of fraction bits for fixed point values.
  * @menu_skip_mask: The control's skip mask for menu controls. This makes it
  *		easy to skip menu items that are not valid. If bit X is set,
  *		then menu item X is skipped. Of course, this only works for
@@ -228,6 +229,7 @@ typedef void (*v4l2_ctrl_notify_fnc)(struct v4l2_ctrl *ctrl, void *priv);
  *		:math:`ceil(\frac{maximum - minimum}{step}) + 1`.
  *		Used only if the @type is %V4L2_CTRL_TYPE_INTEGER_MENU.
  * @flags:	The control's flags.
+ * @fraction_bits: The number of fraction bits for fixed point values.
  * @priv:	The control's private pointer. For use by the driver. It is
  *		untouched by the control framework. Note that this pointer is
  *		not freed when the control is deleted. Should this be needed
@@ -286,6 +288,7 @@ struct v4l2_ctrl {
 	u32 new_elems;
 	u32 dims[V4L2_CTRL_MAX_DIMS];
 	u32 nr_of_dims;
+	u32 fraction_bits;
 	union {
 		u64 step;
 		u64 menu_skip_mask;
@@ -426,6 +429,7 @@ struct v4l2_ctrl_handler {
  * @dims:	The size of each dimension.
  * @elem_size:	The size in bytes of the control.
  * @flags:	The control's flags.
+ * @fraction_bits: The number of fraction bits for fixed point values.
  * @menu_skip_mask: The control's skip mask for menu controls. This makes it
  *		easy to skip menu items that are not valid. If bit X is set,
  *		then menu item X is skipped. Of course, this only works for
@@ -455,6 +459,7 @@ struct v4l2_ctrl_config {
 	u32 dims[V4L2_CTRL_MAX_DIMS];
 	u32 elem_size;
 	u32 flags;
+	u32 fraction_bits;
 	u64 menu_skip_mask;
 	const char * const *qmenu;
 	const s64 *qmenu_int;
