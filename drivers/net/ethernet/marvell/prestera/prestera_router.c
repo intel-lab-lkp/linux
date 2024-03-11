@@ -1638,7 +1638,6 @@ void prestera_router_fini(struct prestera_switch *sw)
 	prestera_k_arb_abort(sw);
 
 	kfree(sw->router->nhgrp_hw_state_cache);
-	rhashtable_destroy(&sw->router->kern_fib_cache_ht);
 	prestera_router_hw_fini(sw);
 	kfree(sw->router);
 	sw->router = NULL;
