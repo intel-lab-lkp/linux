@@ -210,6 +210,9 @@ extern struct vm_struct *__get_vm_area_caller(unsigned long size,
 					unsigned long flags,
 					unsigned long start, unsigned long end,
 					const void *caller);
+struct vm_struct *get_vm_area_node(unsigned long size, unsigned long align,
+				   unsigned long flags, int node, gfp_t gfp,
+				   const void *caller);
 void free_vm_area(struct vm_struct *area);
 extern struct vm_struct *remove_vm_area(const void *addr);
 extern struct vm_struct *find_vm_area(const void *addr);
@@ -241,9 +244,21 @@ static inline void set_vm_flush_reset_perms(void *addr)
 		vm->flags |= VM_FLUSH_RESET_PERMS;
 }
 
+int __must_check vmap_pages_range_noflush(unsigned long addr, unsigned long end,
+					  pgprot_t prot, struct page **pages,
+					  unsigned int page_shift);
+
 #else
 static inline void set_vm_flush_reset_perms(void *addr)
 {
+}
+
+static inline
+int __must_check vmap_pages_range_noflush(unsigned long addr, unsigned long end,
+					  pgprot_t prot, struct page **pages,
+					  unsigned int page_shift)
+{
+	return -EINVAL;
 }
 #endif
 

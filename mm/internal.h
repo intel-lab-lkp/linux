@@ -969,18 +969,9 @@ size_t splice_folio_into_pipe(struct pipe_inode_info *pipe,
  */
 #ifdef CONFIG_MMU
 void __init vmalloc_init(void);
-int __must_check vmap_pages_range_noflush(unsigned long addr, unsigned long end,
-                pgprot_t prot, struct page **pages, unsigned int page_shift);
 #else
 static inline void vmalloc_init(void)
 {
-}
-
-static inline
-int __must_check vmap_pages_range_noflush(unsigned long addr, unsigned long end,
-                pgprot_t prot, struct page **pages, unsigned int page_shift)
-{
-	return -EINVAL;
 }
 #endif
 
