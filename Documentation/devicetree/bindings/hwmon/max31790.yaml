@@ -25,6 +25,16 @@ properties:
   reg:
     maxItems: 1
 
+  pwmout-pin-as-tach-input:
+    description: |
+      An array of six integers responds to six PWM channels for
+      configuring the pwm to tach mode.
+      When set to 0, the associated PWMOUT produces a PWM waveform for
+      control of fan speed. When set to 1, PWMOUT becomes a TACH input
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    maxItems: 6
+    minItems: 6
+
 required:
   - compatible
   - reg
@@ -40,5 +50,6 @@ examples:
       max31790@20 {
         compatible = "maxim,max31790";
         reg = <0x20>;
+        pwmout-pin-as-tach-input = /bits/ 8 <0 0 0 0 1 1>;
       };
     };
