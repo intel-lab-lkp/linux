@@ -183,6 +183,8 @@ efi_status_t efi_stub_common(efi_handle_t handle,
 
 	install_memreserve_table();
 
+	efi_setup_clavis();
+
 	status = efi_boot_kernel(handle, image, image_addr, cmdline_ptr);
 
 	free_screen_info(si);

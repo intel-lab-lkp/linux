@@ -186,6 +186,18 @@ config RESET_ATTACK_MITIGATION
 	  have been evicted, since otherwise it will trigger even on clean
 	  reboots.
 
+config EARLY_CLAVIS
+	bool "Early clavis"
+	depends on EFI_STUB
+	help
+	  Allow the clavis boot param to persist across kexec. This will create a
+	  variable called Clavis with a 193ccef6-348b-4f1f-a81b-0ea4b899dbf2 GUID.
+	  This variable does not have NVRAM set, signifying it was created during
+	  the Boot Services phase.  This variable will persist across a kexec,
+	  however it will not persist across a power on reset. During kexec, if
+	  a different clavis boot param is used, the one stored in the RT variable
+	  will be used instead.
+
 config EFI_RCI2_TABLE
 	bool "EFI Runtime Configuration Interface Table Version 2 Support"
 	depends on X86 || COMPILE_TEST
