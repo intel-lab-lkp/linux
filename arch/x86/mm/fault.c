@@ -1207,6 +1207,9 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 	if (is_f00f_bug(regs, hw_error_code, address))
 		return;
 
+	if (dynamic_stack_fault(current, address))
+		return;
+
 	/* Was the fault spurious, caused by lazy TLB invalidation? */
 	if (spurious_kernel_fault(hw_error_code, address))
 		return;

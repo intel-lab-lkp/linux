@@ -413,6 +413,9 @@ DEFINE_IDTENTRY_DF(exc_double_fault)
 	}
 #endif
 
+	if (dynamic_stack_fault(current, address))
+		return;
+
 	irqentry_nmi_enter(regs);
 	instrumentation_begin();
 	notify_die(DIE_TRAP, str, regs, error_code, X86_TRAP_DF, SIGSEGV);
