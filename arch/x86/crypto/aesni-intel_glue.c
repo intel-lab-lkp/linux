@@ -87,8 +87,8 @@ static inline void *aes_align_addr(void *addr)
 	return PTR_ALIGN(addr, AESNI_ALIGN);
 }
 
-asmlinkage int aesni_set_key(struct crypto_aes_ctx *ctx, const u8 *in_key,
-			     unsigned int key_len);
+asmlinkage void aesni_set_key(struct crypto_aes_ctx *ctx, const u8 *in_key,
+			      unsigned int key_len);
 asmlinkage void aesni_enc(const void *ctx, u8 *out, const u8 *in);
 asmlinkage void aesni_dec(const void *ctx, u8 *out, const u8 *in);
 asmlinkage void aesni_ecb_enc(struct crypto_aes_ctx *ctx, u8 *out,
@@ -241,7 +241,7 @@ static int aes_set_key_common(struct crypto_aes_ctx *ctx,
 		err = aes_expandkey(ctx, in_key, key_len);
 	else {
 		kernel_fpu_begin();
-		err = aesni_set_key(ctx, in_key, key_len);
+		aesni_set_key(ctx, in_key, key_len);
 		kernel_fpu_end();
 	}
 
