@@ -508,6 +508,7 @@ int security_inode_getsecctx(struct inode *inode, void **ctx, u32 *ctxlen);
 int security_locked_down(enum lockdown_reason what);
 int lsm_fill_user_ctx(struct lsm_ctx __user *uctx, size_t *uctx_len,
 		      void *val, size_t val_len, u64 id, u64 flags);
+void late_init_clavis_setup(void);
 #else /* CONFIG_SECURITY */
 
 static inline int call_blocking_lsm_notifier(enum lsm_event event, void *data)
@@ -2222,6 +2223,9 @@ static inline int security_uring_sqpoll(void)
 static inline int security_uring_cmd(struct io_uring_cmd *ioucmd)
 {
 	return 0;
+}
+static inline void late_init_clavis_setup(void)
+{
 }
 #endif /* CONFIG_SECURITY */
 #endif /* CONFIG_IO_URING */
