@@ -951,6 +951,38 @@ struct defrag_target_range {
 };
 
 /*
+ * Special entry for extents that do not have any adjacent extents.
+ *
+ * This is for cases like the only and truncated extent of a file.
+ * Normally they won't be defraged at all (as they won't be merged with
+ * any adjacent ones), but we may still want to defrag them, to free up
+ * some space if possible.
+ */
+static bool should_defrag_under_utilized(struct extent_map *em)
+{
+	/*
+	 * Ratio based check.
+	 *
+	 * If the current extent is only utilizing 1/16 of its on-disk size,
+	 * it's definitely under-utilized, and defragging it may free up
+	 * the whole extent.
+	 */
+	if (em->len < em->orig_block_len / 16)
+		return true;
+
+	/*
+	 * Wasted space based check.
+	 *
+	 * If we can free up at least 16MiB, then it may be a good idea
+	 * to defrag.
+	 */
+	if (em->len < em->orig_block_len &&
+	    em->orig_block_len - em->len > SZ_16M)
+		return true;
+	return false;
+}
+
+/*
  * Collect all valid target extents.
  *
  * @start:	   file offset to lookup
@@ -1069,6 +1101,16 @@ static int defrag_collect_targets(struct btrfs_inode *inode,
 						extent_thresh, newer_than, locked);
 		if (!next_mergeable) {
 			struct defrag_target_range *last;
+
+			/*
+			 * This is a single extent without any chance to merge
+			 * with any adjacent extent.
+			 *
+			 * But if we may free up some space, it is still worth
+			 * defragging.
+			 */
+			if (should_defrag_under_utilized(em))
+				goto add;
 
 			/* Empty target list, no way to merge with last entry */
 			if (list_empty(target_list))
