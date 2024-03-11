@@ -217,9 +217,10 @@ static void thread_stack_free_rcu(struct rcu_head *rh)
 
 static void thread_stack_delayed_free(struct task_struct *tsk)
 {
-	struct vm_stack *vm_stack = tsk->stack;
+	struct vm_struct *vm_area = tsk->stack_vm_area;
+	struct vm_stack *vm_stack = page_address(vm_area->pages[0]);
 
-	vm_stack->stack_vm_area = tsk->stack_vm_area;
+	vm_stack->stack_vm_area = vm_area;
 	call_rcu(&vm_stack->rcu, thread_stack_free_rcu);
 }
 
