@@ -62,7 +62,7 @@ struct drm_gem_object *nouveau_gem_prime_import_sg_table(struct drm_device *dev,
 
 	/* Initialize the embedded gem-object. We return a single gem-reference
 	 * to the caller, instead of a normal nouveau_bo ttm reference. */
-	ret = drm_gem_object_init(dev, &nvbo->bo.base, size);
+	ret = drm_gem_object_init(dev, &nvbo->bo.base, size, NULL);
 	if (ret) {
 		nouveau_bo_ref(NULL, &nvbo);
 		obj = ERR_PTR(-ENOMEM);

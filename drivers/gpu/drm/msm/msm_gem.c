@@ -1222,7 +1222,7 @@ struct drm_gem_object *msm_gem_new(struct drm_device *dev, uint32_t size, uint32
 
 		vma->iova = physaddr(obj);
 	} else {
-		ret = drm_gem_object_init(dev, obj, size);
+		ret = drm_gem_object_init(dev, obj, size, NULL);
 		if (ret)
 			goto fail;
 		/*

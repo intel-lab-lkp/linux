@@ -226,7 +226,7 @@ static struct armada_gem_object *armada_gem_alloc_object(struct drm_device *dev,
 
 	obj->obj.funcs = &armada_gem_object_funcs;
 
-	if (drm_gem_object_init(dev, &obj->obj, size)) {
+	if (drm_gem_object_init(dev, &obj->obj, size, NULL)) {
 		kfree(obj);
 		return NULL;
 	}

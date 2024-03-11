@@ -44,7 +44,7 @@ static struct mtk_drm_gem_obj *mtk_drm_gem_init(struct drm_device *dev,
 
 	mtk_gem_obj->base.funcs = &mtk_drm_gem_object_funcs;
 
-	ret = drm_gem_object_init(dev, &mtk_gem_obj->base, size);
+	ret = drm_gem_object_init(dev, &mtk_gem_obj->base, size, NULL);
 	if (ret < 0) {
 		DRM_ERROR("failed to initialize gem object\n");
 		kfree(mtk_gem_obj);

@@ -160,7 +160,7 @@ static struct exynos_drm_gem *exynos_drm_gem_init(struct drm_device *dev,
 
 	obj->funcs = &exynos_drm_gem_object_funcs;
 
-	ret = drm_gem_object_init(dev, obj, size);
+	ret = drm_gem_object_init(dev, obj, size, NULL);
 	if (ret < 0) {
 		DRM_DEV_ERROR(dev->dev, "failed to initialize gem object\n");
 		kfree(exynos_gem);

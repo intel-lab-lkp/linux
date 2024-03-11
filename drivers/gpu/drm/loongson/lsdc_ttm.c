@@ -458,7 +458,7 @@ struct lsdc_bo *lsdc_bo_create(struct drm_device *ddev,
 
 	size = ALIGN(size, PAGE_SIZE);
 
-	ret = drm_gem_object_init(ddev, &tbo->base, size);
+	ret = drm_gem_object_init(ddev, &tbo->base, size, NULL);
 	if (ret) {
 		kfree(lbo);
 		return ERR_PTR(ret);

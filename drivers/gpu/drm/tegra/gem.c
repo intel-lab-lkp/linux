@@ -311,7 +311,7 @@ static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 	host1x_bo_init(&bo->base, &tegra_bo_ops);
 	size = round_up(size, PAGE_SIZE);
 
-	err = drm_gem_object_init(drm, &bo->gem, size);
+	err = drm_gem_object_init(drm, &bo->gem, size, NULL);
 	if (err < 0)
 		goto free;
 

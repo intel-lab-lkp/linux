@@ -122,7 +122,7 @@ static struct xen_gem_object *gem_create_obj(struct drm_device *dev,
 
 	xen_obj->base.funcs = &xen_drm_front_gem_object_funcs;
 
-	ret = drm_gem_object_init(dev, &xen_obj->base, size);
+	ret = drm_gem_object_init(dev, &xen_obj->base, size, NULL);
 	if (ret < 0) {
 		kfree(xen_obj);
 		return ERR_PTR(ret);

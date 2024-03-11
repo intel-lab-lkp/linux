@@ -61,7 +61,7 @@ struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 	KUNIT_ASSERT_NOT_NULL(test, bo);
 
 	bo->base = gem_obj;
-	err = drm_gem_object_init(devs->drm, &bo->base, size);
+	err = drm_gem_object_init(devs->drm, &bo->base, size, NULL);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	bo->bdev = devs->ttm_dev;

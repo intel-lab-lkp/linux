@@ -295,7 +295,7 @@ static struct rockchip_gem_object *
 
 	obj->funcs = &rockchip_gem_object_funcs;
 
-	drm_gem_object_init(drm, obj, size);
+	drm_gem_object_init(drm, obj, size, NULL);
 
 	return rk_obj;
 }
