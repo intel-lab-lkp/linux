@@ -89,6 +89,9 @@ void v3d_mmu_insert_ptes(struct v3d_bo *bo)
 	u32 page = bo->node.start;
 	u32 page_prot = V3D_PTE_WRITEABLE | V3D_PTE_VALID;
 	struct sg_dma_page_iter dma_iter;
+	int ctg_size = drm_prime_get_contiguous_size(shmem_obj->sgt);
+	u32 page_size = 0;
+	u32 npages = 0;
 
 	for_each_sgtable_dma_page(shmem_obj->sgt, &dma_iter, 0) {
 		dma_addr_t dma_addr = sg_page_iter_dma_address(&dma_iter);
@@ -96,10 +99,27 @@ void v3d_mmu_insert_ptes(struct v3d_bo *bo)
 		u32 pte = page_prot | page_address;
 		u32 i;
 
-		BUG_ON(page_address + (PAGE_SIZE >> V3D_MMU_PAGE_SHIFT) >=
+		if (npages == 0) {
+			if (ctg_size >= SZ_1M && bo->huge_pages) {
+				page_size = SZ_1M;
+				npages = 256;
+			} else {
+				page_size = SZ_4K;
+				npages = V3D_PAGE_FACTOR;
+			}
+
+			ctg_size -= npages * SZ_4K;
+		}
+
+		if (page_size == SZ_1M)
+			pte |= V3D_PTE_SUPERPAGE;
+
+		BUG_ON(page_address + V3D_PAGE_FACTOR >=
 		       BIT(24));
-		for (i = 0; i < PAGE_SIZE >> V3D_MMU_PAGE_SHIFT; i++)
+		for (i = 0; i < V3D_PAGE_FACTOR; i++)
 			v3d->pt[page++] = pte + i;
+
+		npages -= V3D_PAGE_FACTOR;
 	}
 
 	WARN_ON_ONCE(page - bo->node.start !=

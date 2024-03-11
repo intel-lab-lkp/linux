@@ -36,6 +36,11 @@
 #define DRIVER_MINOR 0
 #define DRIVER_PATCHLEVEL 0
 
+static bool super_pages = true;
+module_param_named(super_pages, super_pages, bool, 0400);
+MODULE_PARM_DESC(super_pages, "Enable/Disable Super Pages support. Note: \
+			       To enable Super Pages, you need support to THP.");
+
 static int v3d_get_param_ioctl(struct drm_device *dev, void *data,
 			       struct drm_file *file_priv)
 {
@@ -307,6 +312,8 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to allocate MMU scratch page\n");
 		return -ENOMEM;
 	}
+
+	v3d->super_pages = super_pages;
 
 	ret = v3d_gem_init(drm);
 	if (ret)

@@ -12,6 +12,10 @@ void v3d_gemfs_init(struct v3d_dev *v3d)
 	struct file_system_type *type;
 	struct vfsmount *gemfs;
 
+	/* The user doesn't want support for Super Pages */
+	if (!v3d->super_pages)
+		goto err;
+
 	/*
 	 * By creating our own shmemfs mountpoint, we can pass in
 	 * mount flags that better match our usecase. However, we
@@ -35,6 +39,8 @@ void v3d_gemfs_init(struct v3d_dev *v3d)
 
 err:
 	v3d->gemfs = NULL;
+	v3d->super_pages = false;
+
 	drm_notice(&v3d->drm,
 		   "Transparent Hugepage support is recommended for optimal performance on this platform!\n");
 }
