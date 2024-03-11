@@ -965,6 +965,7 @@ xfs_buffered_write_iomap_begin(
 	struct xfs_mount	*mp = ip->i_mount;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, count);
+	xfs_fileoff_t		eof_fsb = XFS_B_TO_FSBT(mp, XFS_ISIZE(ip));
 	struct xfs_bmbt_irec	imap, cmap;
 	struct xfs_iext_cursor	icur, ccur;
 	xfs_fsblock_t		prealloc_blocks = 0;
@@ -1044,6 +1045,22 @@ xfs_buffered_write_iomap_begin(
 	}
 
 	if (imap.br_startoff <= offset_fsb) {
+		/*
+		 * For zeroing out delayed allocation extent, we trim it if
+		 * it's partial beyonds EOF block, or convert it to unwritten
+		 * extent if it's all beyonds EOF block.
+		 */
+		if ((flags & IOMAP_ZERO) &&
+		    isnullstartblock(imap.br_startblock)) {
+			if (offset_fsb > eof_fsb)
+				goto convert_delay;
+			if (end_fsb > eof_fsb) {
+				end_fsb = eof_fsb + 1;
+				xfs_trim_extent(&imap, offset_fsb,
+						end_fsb - offset_fsb);
+			}
+		}
+
 		/*
 		 * For reflink files we may need a delalloc reservation when
 		 * overwriting shared extents.   This includes zeroing of
@@ -1166,6 +1183,18 @@ found_imap:
 	seq = xfs_iomap_inode_sequence(ip, 0);
 	xfs_iunlock(ip, lockmode);
 	return xfs_bmbt_to_iomap(ip, iomap, &imap, flags, 0, seq);
+
+convert_delay:
+	end_fsb = min(end_fsb, imap.br_startoff + imap.br_blockcount);
+	xfs_iunlock(ip, lockmode);
+	truncate_pagecache_range(inode, offset, XFS_FSB_TO_B(mp, end_fsb));
+	error = xfs_iomap_write_direct(ip, offset_fsb, end_fsb - offset_fsb,
+				       flags, &imap, &seq);
+	if (error)
+		return error;
+
+	trace_xfs_iomap_alloc(ip, offset, count, XFS_DATA_FORK, &imap);
+	return xfs_bmbt_to_iomap(ip, iomap, &imap, flags, IOMAP_F_NEW, seq);
 
 found_cow:
 	seq = xfs_iomap_inode_sequence(ip, 0);
