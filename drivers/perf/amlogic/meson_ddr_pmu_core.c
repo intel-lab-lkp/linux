@@ -121,9 +121,6 @@ static int meson_ddr_perf_event_init(struct perf_event *event)
 	u64 config1 = event->attr.config1;
 	u64 config2 = event->attr.config2;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 
@@ -492,7 +489,8 @@ int meson_ddr_pmu_create(struct platform_device *pdev)
 	*pmu = (struct ddr_pmu) {
 		.pmu = {
 			.module		= THIS_MODULE,
-			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+					  PERF_PMU_CAP_NO_COMMON_EVENTS,
 			.task_ctx_nr	= perf_invalid_context,
 			.attr_groups	= attr_groups,
 			.event_init	= meson_ddr_perf_event_init,

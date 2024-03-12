@@ -186,9 +186,6 @@ int hisi_uncore_pmu_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct hisi_pmu *hisi_pmu;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/*
 	 * We do not support sampling as the counters are all
 	 * shared by all CPU cores in a CPU die(SCCL). Also we
@@ -548,7 +545,8 @@ void hisi_pmu_init(struct hisi_pmu *hisi_pmu, struct module *module)
 	pmu->stop               = hisi_uncore_pmu_stop;
 	pmu->read               = hisi_uncore_pmu_read;
 	pmu->attr_groups        = hisi_pmu->pmu_events.attr_groups;
-	pmu->capabilities       = PERF_PMU_CAP_NO_EXCLUDE;
+	pmu->capabilities       = PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS;
 }
 EXPORT_SYMBOL_GPL(hisi_pmu_init);
 

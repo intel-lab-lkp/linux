@@ -140,9 +140,6 @@ static int tad_pmu_event_init(struct perf_event *event)
 {
 	struct tad_pmu *tad_pmu = to_tad_pmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (!event->attr.disabled)
 		return -EINVAL;
 
@@ -321,7 +318,8 @@ static int tad_pmu_probe(struct platform_device *pdev)
 		.module		= THIS_MODULE,
 		.attr_groups	= tad_pmu_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_INTERRUPT,
+				  PERF_PMU_CAP_NO_INTERRUPT |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr	= perf_invalid_context,
 
 		.event_init	= tad_pmu_event_init,

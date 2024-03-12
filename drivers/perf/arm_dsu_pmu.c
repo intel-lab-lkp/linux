@@ -544,9 +544,6 @@ static int dsu_pmu_event_init(struct perf_event *event)
 {
 	struct dsu_pmu *dsu_pmu = to_dsu_pmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* We don't support sampling */
 	if (is_sampling_event(event)) {
 		dev_dbg(dsu_pmu->pmu.dev, "Can't support sampling events\n");
@@ -762,7 +759,8 @@ static int dsu_pmu_device_probe(struct platform_device *pdev)
 		.read		= dsu_pmu_read,
 
 		.attr_groups	= dsu_pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	rc = perf_pmu_register(&dsu_pmu->pmu, name, -1);

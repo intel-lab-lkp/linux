@@ -440,12 +440,7 @@ static int l2_cache_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct cluster_pmu *cluster;
 	struct perf_event *sibling;
-	struct l2cache_pmu *l2cache_pmu;
-
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	l2cache_pmu = to_l2cache_pmu(event->pmu);
+	struct l2cache_pmu *l2cache_pmu = to_l2cache_pmu(event->pmu);
 
 	if (hwc->sample_period) {
 		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
@@ -914,7 +909,8 @@ static int l2_cache_pmu_probe(struct platform_device *pdev)
 		.stop		= l2_cache_event_stop,
 		.read		= l2_cache_event_read,
 		.attr_groups	= l2_cache_pmu_attr_grps,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	l2cache_pmu->num_counters = get_num_counters();

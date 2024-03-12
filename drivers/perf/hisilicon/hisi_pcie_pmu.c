@@ -353,10 +353,6 @@ static int hisi_pcie_pmu_event_init(struct perf_event *event)
 	struct hisi_pcie_pmu *pcie_pmu = to_pcie_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	/* Check the type first before going on, otherwise it's not our event */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (EXT_COUNTER_IS_USED(hisi_pcie_get_event(event)))
 		hwc->event_base = HISI_PCIE_EXT_CNT;
 	else
@@ -813,7 +809,8 @@ static int hisi_pcie_alloc_pmu(struct pci_dev *pdev, struct hisi_pcie_pmu *pcie_
 		.read		= hisi_pcie_pmu_read,
 		.task_ctx_nr	= perf_invalid_context,
 		.attr_groups	= hisi_pcie_pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	return 0;

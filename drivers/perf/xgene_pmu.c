@@ -888,10 +888,6 @@ static int xgene_perf_event_init(struct perf_event *event)
 	struct hw_perf_event *hw = &event->hw;
 	struct perf_event *sibling;
 
-	/* Test the event attr type check for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/*
 	 * SOC PMU counters are shared across all cores.
 	 * Therefore, it does not support per-process mode.
@@ -1112,7 +1108,8 @@ static int xgene_init_perf(struct xgene_pmu_dev *pmu_dev, char *name)
 		.start		= xgene_perf_start,
 		.stop		= xgene_perf_stop,
 		.read		= xgene_perf_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	/* Hardware counter init */

@@ -676,9 +676,6 @@ static int arm_cspmu_event_init(struct perf_event *event)
 
 	cspmu = to_arm_cspmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/*
 	 * Following other "uncore" PMUs, we do not support sampling mode or
 	 * attach to a task (per-process mode).
@@ -1186,7 +1183,8 @@ static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 	if (ret)
 		return ret;
 
-	capabilities = PERF_PMU_CAP_NO_EXCLUDE;
+	capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+		       PERF_PMU_CAP_NO_COMMON_EVENTS;
 	if (cspmu->irq == 0)
 		capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 

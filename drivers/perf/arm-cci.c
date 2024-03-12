@@ -815,10 +815,6 @@ static int pmu_map_event(struct perf_event *event)
 {
 	struct cci_pmu *cci_pmu = to_cci_pmu(event->pmu);
 
-	if (event->attr.type < PERF_TYPE_MAX ||
-			!cci_pmu->model->validate_hw_event)
-		return -ENOENT;
-
 	return	cci_pmu->model->validate_hw_event(cci_pmu, event->attr.config);
 }
 
@@ -1316,9 +1312,6 @@ static int cci_pmu_event_init(struct perf_event *event)
 	atomic_t *active_events = &cci_pmu->active_events;
 	int err = 0;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* Shared by all CPUs, no meaningful state to sample */
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
@@ -1420,7 +1413,8 @@ static int cci_pmu_init(struct cci_pmu *cci_pmu, struct platform_device *pdev)
 		.stop		= cci_pmu_stop,
 		.read		= pmu_read,
 		.attr_groups	= pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	cci_pmu->plat_device = pdev;

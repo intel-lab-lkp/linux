@@ -398,9 +398,6 @@ static int ddr_perf_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct perf_event *sibling;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 
@@ -651,7 +648,8 @@ static int ddr_perf_init(struct ddr_pmu *pmu, void __iomem *base,
 	*pmu = (struct ddr_pmu) {
 		.pmu = (struct pmu) {
 			.module	      = THIS_MODULE,
-			.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
+			.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+					PERF_PMU_CAP_NO_COMMON_EVENTS,
 			.task_ctx_nr = perf_invalid_context,
 			.attr_groups = attr_groups,
 			.event_init  = ddr_perf_event_init,

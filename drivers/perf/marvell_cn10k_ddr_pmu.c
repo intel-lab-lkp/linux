@@ -325,9 +325,6 @@ static int cn10k_ddr_perf_event_init(struct perf_event *event)
 	struct cn10k_ddr_pmu *pmu = to_cn10k_ddr_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (is_sampling_event(event)) {
 		dev_info(pmu->dev, "Sampling not supported!\n");
 		return -EOPNOTSUPP;
@@ -656,7 +653,8 @@ static int cn10k_ddr_perf_probe(struct platform_device *pdev)
 
 	ddr_pmu->pmu = (struct pmu) {
 		.module	      = THIS_MODULE,
-		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr = perf_invalid_context,
 		.attr_groups = cn10k_attr_groups,
 		.event_init  = cn10k_ddr_perf_event_init,

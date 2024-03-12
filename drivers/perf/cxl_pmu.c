@@ -571,10 +571,6 @@ static int cxl_pmu_event_init(struct perf_event *event)
 	struct cxl_pmu_info *info = pmu_to_cxl_pmu_info(event->pmu);
 	int rc;
 
-	/* Top level type sanity check - is this a Hardware Event being requested */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 	/* TODO: Validation of any filter */
@@ -870,7 +866,8 @@ static int cxl_pmu_probe(struct device *dev)
 		.read = cxl_pmu_read,
 		.task_ctx_nr = perf_invalid_context,
 		.attr_groups = cxl_pmu_attr_groups,
-		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	if (info->irq <= 0)

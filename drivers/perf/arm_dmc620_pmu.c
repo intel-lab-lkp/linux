@@ -515,9 +515,6 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct perf_event *sibling;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/*
 	 * DMC 620 PMUs are shared across all cpus and cannot
 	 * support task bound and sampling events.
@@ -673,7 +670,8 @@ static int dmc620_pmu_device_probe(struct platform_device *pdev)
 
 	dmc620_pmu->pmu = (struct pmu) {
 		.module = THIS_MODULE,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr	= perf_invalid_context,
 		.event_init	= dmc620_pmu_event_init,
 		.add		= dmc620_pmu_add,

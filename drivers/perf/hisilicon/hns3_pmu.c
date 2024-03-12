@@ -1236,9 +1236,6 @@ static int hns3_pmu_event_init(struct perf_event *event)
 	int idx;
 	int ret;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* Sampling is not supported */
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
@@ -1429,7 +1426,8 @@ static int hns3_pmu_alloc_pmu(struct pci_dev *pdev, struct hns3_pmu *hns3_pmu)
 		.read		= hns3_pmu_read,
 		.task_ctx_nr	= perf_invalid_context,
 		.attr_groups	= hns3_pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	return 0;

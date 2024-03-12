@@ -481,12 +481,6 @@ static int qcom_l3_cache__event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 
 	/*
-	 * Is the event for this PMU?
-	 */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
 	 * Sampling not supported since these events are not core-attributable.
 	 */
 	if (hwc->sample_period)
@@ -760,7 +754,8 @@ static int qcom_l3_cache_pmu_probe(struct platform_device *pdev)
 		.read		= qcom_l3_cache__event_read,
 
 		.attr_groups	= qcom_l3_cache_pmu_attr_grps,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	l3pmu->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &memrc);

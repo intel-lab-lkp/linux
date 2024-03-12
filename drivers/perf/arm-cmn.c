@@ -1696,9 +1696,6 @@ static int arm_cmn_event_init(struct perf_event *event)
 	bool bynodeid;
 	u16 nodeid, eventid;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
@@ -2471,7 +2468,8 @@ static int arm_cmn_probe(struct platform_device *pdev)
 	cmn->pmu = (struct pmu) {
 		.module = THIS_MODULE,
 		.attr_groups = arm_cmn_attr_groups,
-		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr = perf_invalid_context,
 		.pmu_enable = arm_cmn_pmu_enable,
 		.pmu_disable = arm_cmn_pmu_disable,

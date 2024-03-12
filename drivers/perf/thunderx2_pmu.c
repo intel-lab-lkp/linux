@@ -574,10 +574,6 @@ static int tx2_uncore_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct tx2_uncore_pmu *tx2_pmu;
 
-	/* Test the event attr type check for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/*
 	 * SOC PMU counters are shared across all cores.
 	 * Therefore, it does not support per-process mode.
@@ -737,7 +733,8 @@ static int tx2_uncore_pmu_register(
 		.start		= tx2_uncore_event_start,
 		.stop		= tx2_uncore_event_stop,
 		.read		= tx2_uncore_event_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 
 	tx2_pmu->pmu.name = devm_kasprintf(dev, GFP_KERNEL,
