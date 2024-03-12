@@ -57,8 +57,18 @@ The following files belong to it:
   0x00000800        Platform Uncorrectable fatal
   ================  ===================================
 
+  ================  ===================================
+  Error Type Value      Error Description
+  ================  ===================================
+  0x00000001        EINJV2 Processor Error
+  0x00000002        EINJV2 Memory Error
+  0x00000004        EINJV2 PCI Express Error
+  ================  ===================================
+
   The format of the file contents are as above, except present are only
-  the available error types.
+  the available error types. The available Error types are discovered by
+  calling GET_ERROR_TYPE command, and if bit 30 is set in the returned
+  value, then EINJv2 is supported by the system.
 
 - error_type
 
@@ -81,9 +91,11 @@ The following files belong to it:
     Bit 0
       Processor APIC field valid (see param3 below).
     Bit 1
-      Memory address and mask valid (param1 and param2).
+      Memory address and range valid (param1 and param2).
     Bit 2
       PCIe (seg,bus,dev,fn) valid (see param4 below).
+    Bit 3
+      EINJv2 extension structure is valid
 
   If set to zero, legacy behavior is mimicked where the type of
   injection specifies just one bit set, and param1 is multiplexed.
@@ -117,6 +129,17 @@ The following files belong to it:
   location, or device that is the target of the error injection. Whether
   this actually works depends on what operations the BIOS actually
   includes in the trigger phase.
+
+- einjv2_component_count
+
+  The value from this file is used to set the "Component Array Count"
+  field of EINJv2 Extension Structure.
+
+- einjv2_component_array
+  The contents of this file are used to set the "Component Array" field
+  of the EINJv2 Extension Structure. The expected format is hex values
+  for component id and syndrom seperated by space, and multiple
+  components are seperated by new line.
 
 BIOS versions based on the ACPI 4.0 specification have limited options
 in controlling where the errors are injected. Your BIOS may support an
@@ -171,6 +194,23 @@ An error injection example::
   # echo 0xfffffffffffff000 > param2		# Mask - anywhere in this page
   # echo 0x8 > error_type			# Choose correctable memory error
   # echo 1 > error_inject			# Inject now
+
+An EINJv2 error injection example::
+
+  # cd /sys/kernel/debug/apei/einj
+  # cat available_error_type            # See which errors can be injected
+  0x00000002    Processor Uncorrectable non-fatal
+  0x00000008    Memory Correctable
+  0x00000010    Memory Uncorrectable non-fatal
+  ==================
+  0x00000001        EINJV2 Processor Error
+  0x00000002        EINJV2 Memory Error
+
+  # echo 0x12345000 > param1            # Set memory address for injection
+  # echo 0xfffffffffffff000 > param2            # Range - anywhere in this page
+  # echo 0x2 > error_type                       # Choose EINJv2 memory error
+  # echo 0x8 > flags				# set flags to indicate EINJv2
+  # echo 1 > error_inject                       # Inject now
 
 You should see something like this in dmesg::
 
