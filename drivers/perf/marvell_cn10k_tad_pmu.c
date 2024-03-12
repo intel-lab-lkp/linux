@@ -317,9 +317,7 @@ static int tad_pmu_probe(struct platform_device *pdev)
 
 		.module		= THIS_MODULE,
 		.attr_groups	= tad_pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_SAMPLING |
-				  PERF_PMU_CAP_NO_COMMON_EVENTS,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 		.task_ctx_nr	= perf_invalid_context,
 
 		.event_init	= tad_pmu_event_init,

@@ -696,9 +696,7 @@ static int ali_drw_pmu_probe(struct platform_device *pdev)
 		.stop		= ali_drw_pmu_stop,
 		.read		= ali_drw_pmu_read,
 		.attr_groups	= ali_drw_pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_SAMPLING |
-				  PERF_PMU_CAP_NO_COMMON_EVENTS,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 	};
 
 	ret = perf_pmu_register(&drw_pmu->pmu, name, -1);

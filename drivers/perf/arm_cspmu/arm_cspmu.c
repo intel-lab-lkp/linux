@@ -1179,9 +1179,7 @@ static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 		.stop		= arm_cspmu_stop,
 		.read		= arm_cspmu_read,
 		.attr_groups	= (const struct attribute_group **)attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_SAMPLING |
-				  PERF_PMU_CAP_NO_COMMON_EVENTS,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 	};
 
 	/* Hardware counter init */

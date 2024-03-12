@@ -2463,9 +2463,7 @@ static int arm_cmn_probe(struct platform_device *pdev)
 	cmn->pmu = (struct pmu) {
 		.module = THIS_MODULE,
 		.attr_groups = arm_cmn_attr_groups,
-		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
-				PERF_PMU_CAP_NO_SAMPLING |
-				PERF_PMU_CAP_NO_COMMON_EVENTS,
+		.capabilities = PERF_PMU_UNCORE_CAPS,
 		.task_ctx_nr = perf_invalid_context,
 		.pmu_enable = arm_cmn_pmu_enable,
 		.pmu_disable = arm_cmn_pmu_disable,

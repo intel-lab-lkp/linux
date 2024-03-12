@@ -1407,9 +1407,7 @@ static int cci_pmu_init(struct cci_pmu *cci_pmu, struct platform_device *pdev)
 		.stop		= cci_pmu_stop,
 		.read		= pmu_read,
 		.attr_groups	= pmu_attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_SAMPLING |
-				  PERF_PMU_CAP_NO_COMMON_EVENTS,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 	};
 
 	cci_pmu->plat_device = pdev;

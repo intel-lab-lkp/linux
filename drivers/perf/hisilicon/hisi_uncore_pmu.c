@@ -530,9 +530,7 @@ void hisi_pmu_init(struct hisi_pmu *hisi_pmu, struct module *module)
 	pmu->stop               = hisi_uncore_pmu_stop;
 	pmu->read               = hisi_uncore_pmu_read;
 	pmu->attr_groups        = hisi_pmu->pmu_events.attr_groups;
-	pmu->capabilities       = PERF_PMU_CAP_NO_EXCLUDE |
-				  PERF_PMU_CAP_NO_SAMPLING |
-				  PERF_PMU_CAP_NO_COMMON_EVENTS;
+	pmu->capabilities       = PERF_PMU_UNCORE_CAPS;
 }
 EXPORT_SYMBOL_GPL(hisi_pmu_init);
 
