@@ -16,6 +16,8 @@
 
 #include <linux/types.h> // for sector_t
 
+struct block_device;
+
 int scsicam_bios_param(struct block_device *bdev, sector_t capacity, int *ip);
 bool scsi_partsize(struct block_device *bdev, sector_t capacity, int geom[3]);
 unsigned char *scsi_bios_ptable(struct block_device *bdev);
