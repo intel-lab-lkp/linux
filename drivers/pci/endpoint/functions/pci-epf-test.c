@@ -865,6 +865,12 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 			dev_err(dev, "Failed to allocate space for BAR%d\n",
 				bar);
 		epf_test->reg[bar] = base;
+
+		/*
+		 * pci_epf_alloc_space() might have given us a 64-bit BAR,
+		 * if we requested a size larger than 4 GB.
+		 */
+		add = (epf_bar->flags & PCI_BASE_ADDRESS_MEM_TYPE_64) ? 2 : 1;
 	}
 
 	return 0;
