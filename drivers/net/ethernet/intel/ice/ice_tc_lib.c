@@ -165,7 +165,7 @@ ice_sw_type_from_tunnel(enum ice_tunnel_type type)
 	case TNL_PFCP:
 		return ICE_SW_TUN_PFCP;
 	default:
-		return ICE_NON_TUN;
+		return ICE_SW_TUN_AND_NON_TUN;
 	}
 }
 
