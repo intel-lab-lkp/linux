@@ -93,9 +93,44 @@ cleanup:
 	struct_ops_module__destroy(skel);
 }
 
+static void test_struct_ops_not_zeroed(void)
+{
+	struct struct_ops_module *skel;
+	int err;
+
+	skel = struct_ops_module__open();
+	if (!ASSERT_OK_PTR(skel, "struct_ops_module_open"))
+		return;
+
+	bpf_program__set_autoload(skel->progs.test_3, false);
+
+	err = struct_ops_module__load(skel);
+	struct_ops_module__destroy(skel);
+
+	if (!ASSERT_OK(err, "struct_ops_module_load"))
+		return;
+
+	skel = struct_ops_module__open();
+	if (!ASSERT_OK_PTR(skel, "struct_ops_module_open_not_zeroed"))
+		return;
+
+	bpf_program__set_autoload(skel->progs.test_3, false);
+
+	/* libbpf should reject the testmod_zeroed since the value of its
+	 * "zeroed" is non-zero.
+	 */
+	skel->struct_ops.testmod_zeroed->zeroed = 0xdeadbeef;
+	err = struct_ops_module__load(skel);
+	ASSERT_ERR(err, "struct_ops_module_load_not_zeroed");
+
+	struct_ops_module__destroy(skel);
+}
+
 void serial_test_struct_ops_module(void)
 {
 	if (test__start_subtest("test_struct_ops_load"))
 		test_struct_ops_load();
+	if (test__start_subtest("test_struct_ops_not_zeroed"))
+		test_struct_ops_not_zeroed();
 }
 

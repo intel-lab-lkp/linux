@@ -54,3 +54,16 @@ struct bpf_testmod_ops___v2 testmod_2 = {
 	.test_1 = (void *)test_1,
 	.test_2 = (void *)test_2_v2,
 };
+
+struct bpf_testmod_ops___zeroed {
+	int (*test_1)(void);
+	void (*test_2)(int a, int b);
+	int (*test_maybe_null)(int dummy, struct task_struct *task);
+	int zeroed;
+};
+
+SEC(".struct_ops.link")
+struct bpf_testmod_ops___zeroed testmod_zeroed = {
+	.test_1 = (void *)test_1,
+	.test_2 = (void *)test_2_v2,
+};
