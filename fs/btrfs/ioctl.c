@@ -2635,10 +2635,23 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 				range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
 				range.extent_thresh = (u32)-1;
 			}
+
+			if (range.flags & BTRFS_DEFRAG_RANGE_USAGE_RATIO &&
+			    range.usage_ratio > 100) {
+				ret = -EINVAL;
+				goto out;
+			}
 		} else {
 			/* the rest are all set to zero by kzalloc */
 			range.len = (u64)-1;
 		}
+
+		/* Disable the extra options if not enabled through flags. */
+		if (!(range.flags & BTRFS_DEFRAG_RANGE_USAGE_RATIO))
+			range.usage_ratio = 0;
+		if (!(range.flags & BTRFS_DEFRAG_RANGE_WASTED_BYTES))
+			range.wasted_bytes = U32_MAX;
+
 		ret = btrfs_defrag_file(file_inode(file), &file->f_ra,
 					&range, BTRFS_OLDEST_GENERATION, 0);
 		if (ret > 0)
