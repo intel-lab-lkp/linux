@@ -613,10 +613,14 @@ struct btrfs_ioctl_clone_range_args {
  * Used by:
  * struct btrfs_ioctl_defrag_range_args.flags
  */
-#define BTRFS_DEFRAG_RANGE_COMPRESS 1
-#define BTRFS_DEFRAG_RANGE_START_IO 2
-#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |		\
-					 BTRFS_DEFRAG_RANGE_START_IO)
+#define BTRFS_DEFRAG_RANGE_COMPRESS		(1ULL << 0)
+#define BTRFS_DEFRAG_RANGE_START_IO		(1ULL << 1)
+#define BTRFS_DEFRAG_RANGE_LONE_RATIO		(1ULL << 2)
+#define BTRFS_DEFRAG_RANGE_LONE_WASTED_BYTES	(1ULL << 3)
+#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |	\
+					 BTRFS_DEFRAG_RANGE_START_IO |	\
+					 BTRFS_DEFRAG_RANGE_LONE_RATIO |\
+					 BTRFS_DEFRAG_RANGE_LONE_WASTED_BYTES)
 
 struct btrfs_ioctl_defrag_range_args {
 	/* start of the defrag operation */
@@ -645,8 +649,34 @@ struct btrfs_ioctl_defrag_range_args {
 	 */
 	__u32 compress_type;
 
+	/*
+	 * File extents which has lower usage ratio than this would be defragged.
+	 *
+	 * Valid values are [0, 100].
+	 *
+	 * 0 means no check based on usage ratio.
+	 * 1 means one file extent would be defragged if its referred size
+	 * (file extent num bytes) is smaller than 1% of its on-disk extent size.
+	 * 100 means one file extent would be defragged if its referred size
+	 * (file extent num bytes) is smaller than 100% of its on-disk extent size.
+	 */
+	__u32 usage_ratio;
+
+	/*
+	 * File extents which has more "wasted" bytes than this would be
+	 * defragged.
+	 *
+	 * "Wasted" bytes just means the difference between the file extent size
+	 * (file extent num bytes) against the on-disk extent size
+	 * (file extent disk num bytes).
+	 *
+	 * Valid values are [0, U32_MAX], but values larger than
+	 * BTRFS_MAX_EXTENT_SIZE would not make much sense.
+	 */
+	__u32 wasted_bytes;
+
 	/* spare for later */
-	__u32 unused[4];
+	__u32 unused[2];
 };
 
 
