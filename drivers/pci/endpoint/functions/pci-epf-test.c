@@ -868,7 +868,8 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 
 		/*
 		 * pci_epf_alloc_space() might have given us a 64-bit BAR,
-		 * if we requested a size larger than 4 GB.
+		 * either because the BAR can only be a 64-bit BAR, or if
+		 * we requested a size larger than 4 GB.
 		 */
 		add = (epf_bar->flags & PCI_BASE_ADDRESS_MEM_TYPE_64) ? 2 : 1;
 	}
