@@ -110,6 +110,7 @@ struct iommu_table {
 	unsigned long  it_page_shift;/* table iommu page size */
 	struct list_head it_group_list;/* List of iommu_table_group_link */
 	__be64 *it_userspace; /* userspace view of the table */
+	bool reset_ddw;
 	struct iommu_table_ops *it_ops;
 	struct kref    it_kref;
 	int it_nid;
@@ -169,6 +170,8 @@ struct iommu_table_group_ops {
 			__u32 page_shift,
 			__u64 window_size,
 			__u32 levels);
+	void (*init_group)(struct iommu_table_group *table_group,
+			struct device *dev);
 	long (*create_table)(struct iommu_table_group *table_group,
 			int num,
 			__u32 page_shift,

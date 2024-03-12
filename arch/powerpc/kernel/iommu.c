@@ -740,6 +740,7 @@ struct iommu_table *iommu_init_table(struct iommu_table *tbl, int nid,
 		return NULL;
 	}
 
+	tbl->it_nid = nid;
 	iommu_table_reserve_pages(tbl, res_start, res_end);
 
 	/* We only split the IOMMU table if we have 1GB or more of space */
@@ -1141,7 +1142,10 @@ spapr_tce_platform_iommu_attach_dev(struct iommu_domain *platform_domain,
 {
 	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
 	struct iommu_group *grp = iommu_group_get(dev);
-	struct iommu_table_group *table_group;
+	struct iommu_table_group *table_group = iommu_group_get_iommudata(grp);
+
+	/* This should have been in spapr_tce_iommu_probe_device() ?*/
+	table_group->ops->init_group(table_group, dev);
 
 	/* At first attach the ownership is already set */
 	if (!domain) {
@@ -1149,7 +1153,6 @@ spapr_tce_platform_iommu_attach_dev(struct iommu_domain *platform_domain,
 		return 0;
 	}
 
-	table_group = iommu_group_get_iommudata(grp);
 	/*
 	 * The domain being set to PLATFORM from earlier
 	 * BLOCKED. The table_group ownership has to be released.
