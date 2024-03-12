@@ -1030,6 +1030,7 @@ enum acpi_einj_actions {
 	ACPI_EINJ_SET_ERROR_TYPE_WITH_ADDRESS = 8,
 	ACPI_EINJ_GET_EXECUTE_TIMINGS = 9,
 	ACPI_EINJ_ACTION_RESERVED = 10,	/* 10 and greater are reserved */
+	ACPI_EINJV2_GET_ERROR_TYPE = 0x11,
 	ACPI_EINJ_TRIGGER_ERROR = 0xFF	/* Except for this value */
 };
 

@@ -32,6 +32,7 @@
 #define SLEEP_UNIT_MAX		5000			/* 5ms */
 /* Firmware should respond within 1 seconds */
 #define FIRMWARE_TIMEOUT	(1 * USEC_PER_SEC)
+#define ACPI65_EINJV2_SUPP	BIT(30)
 #define ACPI5_VENDOR_BIT	BIT(31)
 #define MEM_ERROR_MASK		(ACPI_EINJ_MEMORY_CORRECTABLE | \
 				ACPI_EINJ_MEMORY_UNCORRECTABLE | \
@@ -145,13 +146,13 @@ static void einj_exec_ctx_init(struct apei_exec_context *ctx)
 			   EINJ_TAB_ENTRY(einj_tab), einj_tab->entries);
 }
 
-static int __einj_get_available_error_type(u32 *type)
+static int __einj_get_available_error_type(u32 *type, int version)
 {
 	struct apei_exec_context ctx;
 	int rc;
 
 	einj_exec_ctx_init(&ctx);
-	rc = apei_exec_run(&ctx, ACPI_EINJ_GET_ERROR_TYPE);
+	rc = apei_exec_run(&ctx, version);
 	if (rc)
 		return rc;
 	*type = apei_exec_ctx_get_output(&ctx);
@@ -160,12 +161,12 @@ static int __einj_get_available_error_type(u32 *type)
 }
 
 /* Get error injection capabilities of the platform */
-static int einj_get_available_error_type(u32 *type)
+static int einj_get_available_error_type(u32 *type, int version)
 {
 	int rc;
 
 	mutex_lock(&einj_mutex);
-	rc = __einj_get_available_error_type(type);
+	rc = __einj_get_available_error_type(type, version);
 	mutex_unlock(&einj_mutex);
 
 	return rc;
@@ -221,9 +222,14 @@ static void check_vendor_extension(u64 paddr,
 
 static void *einj_get_parameter_address(void)
 {
-	int i;
+	int i, rc;
 	u64 pa_v4 = 0, pa_v5 = 0;
 	struct acpi_whea_header *entry;
+	u32 error_type = 0;
+
+	rc = einj_get_available_error_type(&error_type, ACPI_EINJ_GET_ERROR_TYPE);
+	if (rc)
+		return NULL;
 
 	entry = EINJ_TAB_ENTRY(einj_tab);
 	for (i = 0; i < einj_tab->entries; i++) {
@@ -615,19 +621,35 @@ static struct { u32 mask; const char *str; } const einj_error_type_string[] = {
 	{ BIT(17), "CXL.mem Protocol Uncorrectable fatal" },
 	{ BIT(31), "Vendor Defined Error Types" },
 };
+static struct { u32 mask; const char *str; } const einjv2_error_type_string[] = {
+	{ BIT(0), "EINJV2 Processor Error" },
+	{ BIT(1), "EINJV2 Memory Error" },
+	{ BIT(2), "EINJV2 PCI Express Error" },
+};
 
 static int available_error_type_show(struct seq_file *m, void *v)
 {
 	int rc;
 	u32 error_type = 0;
 
-	rc = einj_get_available_error_type(&error_type);
+	rc = einj_get_available_error_type(&error_type, ACPI_EINJ_GET_ERROR_TYPE);
 	if (rc)
 		return rc;
 	for (int pos = 0; pos < ARRAY_SIZE(einj_error_type_string); pos++)
 		if (error_type & einj_error_type_string[pos].mask)
 			seq_printf(m, "0x%08x\t%s\n", einj_error_type_string[pos].mask,
 				   einj_error_type_string[pos].str);
+	if (error_type & ACPI65_EINJV2_SUPP) {
+		rc = einj_get_available_error_type(&error_type, ACPI_EINJV2_GET_ERROR_TYPE);
+		if (rc)
+			return rc;
+		seq_printf(m, "====================\n");
+		for (int pos = 0; pos < ARRAY_SIZE(einjv2_error_type_string); pos++)
+			if (error_type & einjv2_error_type_string[pos].mask)
+				seq_printf(m, "0x%08x\t%s\n", einjv2_error_type_string[pos].mask,
+					einjv2_error_type_string[pos].str);
+
+	}
 
 	return 0;
 }
@@ -662,7 +684,8 @@ static int error_type_set(void *data, u64 val)
 	if (tval & (tval - 1))
 		return -EINVAL;
 	if (!vendor) {
-		rc = einj_get_available_error_type(&available_error_type);
+		rc = einj_get_available_error_type(&available_error_type,
+				ACPI_EINJ_GET_ERROR_TYPE);
 		if (rc)
 			return rc;
 		if (!(val & available_error_type))
