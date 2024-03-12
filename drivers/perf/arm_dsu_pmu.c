@@ -544,12 +544,6 @@ static int dsu_pmu_event_init(struct perf_event *event)
 {
 	struct dsu_pmu *dsu_pmu = to_dsu_pmu(event->pmu);
 
-	/* We cannot support task bound events */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK) {
-		dev_dbg(dsu_pmu->pmu.dev, "Can't support per-task counters\n");
-		return -EINVAL;
-	}
-
 	if (!cpumask_test_cpu(event->cpu, &dsu_pmu->associated_cpus)) {
 		dev_dbg(dsu_pmu->pmu.dev,
 			 "Requested cpu is not associated with the DSU\n");

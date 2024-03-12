@@ -325,11 +325,6 @@ static int cn10k_ddr_perf_event_init(struct perf_event *event)
 	struct cn10k_ddr_pmu *pmu = to_cn10k_ddr_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->cpu < 0) {
-		dev_warn(pmu->dev, "Can't provide per-task data!\n");
-		return -EOPNOTSUPP;
-	}
-
 	/*  We must NOT create groups containing mixed PMUs */
 	if (event->group_leader->pmu != event->pmu &&
 	    !is_software_event(event->group_leader))

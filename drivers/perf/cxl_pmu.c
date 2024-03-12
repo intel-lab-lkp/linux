@@ -571,8 +571,6 @@ static int cxl_pmu_event_init(struct perf_event *event)
 	struct cxl_pmu_info *info = pmu_to_cxl_pmu_info(event->pmu);
 	int rc;
 
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
 	/* TODO: Validation of any filter */
 
 	/*

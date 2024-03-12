@@ -574,16 +574,6 @@ static int tx2_uncore_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct tx2_uncore_pmu *tx2_pmu;
 
-	/*
-	 * SOC PMU counters are shared across all cores.
-	 * Therefore, it does not support per-process mode.
-	 */
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	tx2_pmu = pmu_to_tx2_pmu(event->pmu);
 	if (tx2_pmu->cpu >= nr_cpu_ids)
 		return -EINVAL;

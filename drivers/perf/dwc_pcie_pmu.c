@@ -366,10 +366,6 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 	u32 lane;
 
-	/* We cannot support task bound events */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
 	if (event->group_leader != event &&
 	    !is_software_event(event->group_leader))
 		return -EINVAL;

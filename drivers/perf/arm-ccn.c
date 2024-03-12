@@ -720,10 +720,6 @@ static int arm_ccn_pmu_event_init(struct perf_event *event)
 
 	ccn = pmu_to_arm_ccn(event->pmu);
 
-	if (event->cpu < 0) {
-		dev_dbg(ccn->dev, "Can't provide per-task data!\n");
-		return -EOPNOTSUPP;
-	}
 	/*
 	 * Many perf core operations (eg. events rotation) operate on a
 	 * single CPU context. This is obvious for CPU PMUs, where one

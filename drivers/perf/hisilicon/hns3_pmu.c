@@ -1236,9 +1236,6 @@ static int hns3_pmu_event_init(struct perf_event *event)
 	int idx;
 	int ret;
 
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
 	event->cpu = hns3_pmu->on_cpu;
 
 	idx = hns3_pmu_get_event_idx(hns3_pmu);

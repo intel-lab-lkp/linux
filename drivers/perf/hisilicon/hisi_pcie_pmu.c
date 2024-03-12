@@ -358,9 +358,6 @@ static int hisi_pcie_pmu_event_init(struct perf_event *event)
 	else
 		hwc->event_base = HISI_PCIE_CNT;
 
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
 	if (!hisi_pcie_pmu_valid_filter(event, pcie_pmu))
 		return -EINVAL;
 

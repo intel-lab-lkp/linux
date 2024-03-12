@@ -442,12 +442,6 @@ static int l2_cache_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 	struct l2cache_pmu *l2cache_pmu = to_l2cache_pmu(event->pmu);
 
-	if (event->cpu < 0) {
-		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-				    "Per-task mode not supported\n");
-		return -EOPNOTSUPP;
-	}
-
 	if (((L2_EVT_GROUP(event->attr.config) > L2_EVT_GROUP_MAX) ||
 	     ((event->attr.config & ~L2_EVT_MASK) != 0)) &&
 	    (event->attr.config != L2CYCLE_CTR_RAW_CODE)) {

@@ -889,15 +889,6 @@ static int xgene_perf_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 
 	/*
-	 * SOC PMU counters are shared across all cores.
-	 * Therefore, it does not support per-process mode.
-	 */
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-	/*
 	 * Many perf core operations (eg. events rotation) operate on a
 	 * single CPU context. This is obvious for CPU PMUs, where one
 	 * expects the same sets of events being observed on all CPUs,

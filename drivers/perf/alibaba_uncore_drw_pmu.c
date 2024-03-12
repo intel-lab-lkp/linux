@@ -535,11 +535,6 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 	struct device *dev = drw_pmu->pmu.dev;
 
-	if (event->attach_state & PERF_ATTACH_TASK) {
-		dev_err(dev, "Per-task counter cannot allocate!\n");
-		return -EOPNOTSUPP;
-	}
-
 	event->cpu = drw_pmu->irq->cpu;
 
 	if (event->group_leader != event &&
