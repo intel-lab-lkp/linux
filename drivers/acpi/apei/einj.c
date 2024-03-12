@@ -101,6 +101,10 @@ static struct debugfs_blob_wrapper vendor_blob;
 static struct debugfs_blob_wrapper vendor_errors;
 static char vendor_dev[64];
 
+static struct debugfs_blob_wrapper einjv2_component_arr;
+static u64 component_count;
+static void *user_input;
+
 /*
  * Some BIOSes allow parameters to the SET_ERROR_TYPE entries in the
  * EINJ table through an unpublished extension. Use with caution as
@@ -810,6 +814,8 @@ static int __init einj_init(void)
 
 	einj_param = einj_get_parameter_address();
 	if ((param_extension || acpi5) && einj_param) {
+		u32 error_type;
+
 		debugfs_create_x32("flags", S_IRUSR | S_IWUSR, einj_debug_dir,
 				   &error_flags);
 		debugfs_create_x64("param1", S_IRUSR | S_IWUSR, einj_debug_dir,
@@ -820,6 +826,25 @@ static int __init einj_init(void)
 				   &error_param3);
 		debugfs_create_x64("param4", S_IRUSR | S_IWUSR, einj_debug_dir,
 				   &error_param4);
+
+		rc = einj_get_available_error_type(&error_type, ACPI_EINJ_GET_ERROR_TYPE);
+		if (rc)
+			return rc;
+
+		if (error_type & ACPI65_EINJV2_SUPP) {
+			debugfs_create_x64("einjv2_component_count", S_IRUSR | S_IWUSR,
+					einj_debug_dir,	&component_count);
+			user_input = kzalloc(PAGE_SIZE, GFP_KERNEL);
+			if (!user_input) {
+				rc = -ENOMEM;
+				goto err_release;
+			}
+			einjv2_component_arr.data = user_input;
+			einjv2_component_arr.size = PAGE_SIZE;
+			debugfs_create_blob("einjv2_component_array", S_IRUSR | S_IWUSR,
+					einj_debug_dir, &einjv2_component_arr);
+		}
+
 		debugfs_create_x32("notrigger", S_IRUSR | S_IWUSR,
 				   einj_debug_dir, &notrigger);
 	}
@@ -871,6 +896,7 @@ static void __exit einj_exit(void)
 	apei_resources_fini(&einj_resources);
 	debugfs_remove_recursive(einj_debug_dir);
 	acpi_put_table((struct acpi_table_header *)einj_tab);
+	kfree(user_input);
 }
 
 module_init(einj_init);
