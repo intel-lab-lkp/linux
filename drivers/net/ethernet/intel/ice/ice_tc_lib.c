@@ -158,7 +158,7 @@ ice_sw_type_from_tunnel(enum ice_tunnel_type type)
 	case TNL_GTPC:
 		return ICE_SW_TUN_GTPC;
 	default:
-		return ICE_NON_TUN;
+		return ICE_SW_TUN_AND_NON_TUN;
 	}
 }
 
