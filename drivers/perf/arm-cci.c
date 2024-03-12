@@ -1313,7 +1313,7 @@ static int cci_pmu_event_init(struct perf_event *event)
 	int err = 0;
 
 	/* Shared by all CPUs, no meaningful state to sample */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 
 	/*
@@ -1414,6 +1414,7 @@ static int cci_pmu_init(struct cci_pmu *cci_pmu, struct platform_device *pdev)
 		.read		= pmu_read,
 		.attr_groups	= pmu_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

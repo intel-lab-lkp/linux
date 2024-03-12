@@ -571,7 +571,7 @@ static int cxl_pmu_event_init(struct perf_event *event)
 	struct cxl_pmu_info *info = pmu_to_cxl_pmu_info(event->pmu);
 	int rc;
 
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 	/* TODO: Validation of any filter */
 
@@ -867,6 +867,7 @@ static int cxl_pmu_probe(struct device *dev)
 		.task_ctx_nr = perf_invalid_context,
 		.attr_groups = cxl_pmu_attr_groups,
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_SAMPLING |
 				PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

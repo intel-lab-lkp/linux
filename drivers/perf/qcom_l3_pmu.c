@@ -481,12 +481,6 @@ static int qcom_l3_cache__event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 
 	/*
-	 * Sampling not supported since these events are not core-attributable.
-	 */
-	if (hwc->sample_period)
-		return -EINVAL;
-
-	/*
 	 * Task mode not available, we run the counters as socket counters,
 	 * not attributable to any CPU and therefore cannot attribute per-task.
 	 */
@@ -755,6 +749,7 @@ static int qcom_l3_cache_pmu_probe(struct platform_device *pdev)
 
 		.attr_groups	= qcom_l3_cache_pmu_attr_grps,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

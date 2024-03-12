@@ -366,10 +366,6 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 	u32 lane;
 
-	/* We don't support sampling */
-	if (is_sampling_event(event))
-		return -EINVAL;
-
 	/* We cannot support task bound events */
 	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
@@ -634,6 +630,7 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 		.module		= THIS_MODULE,
 		.attr_groups	= dwc_pcie_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr	= perf_invalid_context,
 		.event_init	= dwc_pcie_pmu_event_init,

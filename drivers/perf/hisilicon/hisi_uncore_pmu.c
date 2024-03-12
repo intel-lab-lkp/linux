@@ -191,7 +191,7 @@ int hisi_uncore_pmu_event_init(struct perf_event *event)
 	 * shared by all CPU cores in a CPU die(SCCL). Also we
 	 * do not support attach to a task(per-process mode)
 	 */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 
 	/*
@@ -546,6 +546,7 @@ void hisi_pmu_init(struct hisi_pmu *hisi_pmu, struct module *module)
 	pmu->read               = hisi_uncore_pmu_read;
 	pmu->attr_groups        = hisi_pmu->pmu_events.attr_groups;
 	pmu->capabilities       = PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS;
 }
 EXPORT_SYMBOL_GPL(hisi_pmu_init);

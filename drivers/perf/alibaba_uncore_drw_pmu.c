@@ -535,11 +535,6 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 	struct perf_event *sibling;
 	struct device *dev = drw_pmu->pmu.dev;
 
-	if (is_sampling_event(event)) {
-		dev_err(dev, "Sampling not supported!\n");
-		return -EOPNOTSUPP;
-	}
-
 	if (event->attach_state & PERF_ATTACH_TASK) {
 		dev_err(dev, "Per-task counter cannot allocate!\n");
 		return -EOPNOTSUPP;
@@ -707,6 +702,7 @@ static int ali_drw_pmu_probe(struct platform_device *pdev)
 		.read		= ali_drw_pmu_read,
 		.attr_groups	= ali_drw_pmu_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

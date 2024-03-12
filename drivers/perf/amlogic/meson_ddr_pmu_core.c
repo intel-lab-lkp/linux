@@ -121,7 +121,7 @@ static int meson_ddr_perf_event_init(struct perf_event *event)
 	u64 config1 = event->attr.config1;
 	u64 config2 = event->attr.config2;
 
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 
 	if (event->cpu < 0)
@@ -490,6 +490,7 @@ int meson_ddr_pmu_create(struct platform_device *pdev)
 		.pmu = {
 			.module		= THIS_MODULE,
 			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+					  PERF_PMU_CAP_NO_SAMPLING |
 					  PERF_PMU_CAP_NO_COMMON_EVENTS,
 			.task_ctx_nr	= perf_invalid_context,
 			.attr_groups	= attr_groups,

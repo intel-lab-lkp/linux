@@ -891,9 +891,8 @@ static int xgene_perf_event_init(struct perf_event *event)
 	/*
 	 * SOC PMU counters are shared across all cores.
 	 * Therefore, it does not support per-process mode.
-	 * Also, it does not support event sampling mode.
 	 */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
 	if (event->cpu < 0)
@@ -1109,6 +1108,7 @@ static int xgene_init_perf(struct xgene_pmu_dev *pmu_dev, char *name)
 		.stop		= xgene_perf_stop,
 		.read		= xgene_perf_read,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

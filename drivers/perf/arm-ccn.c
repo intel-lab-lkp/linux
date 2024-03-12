@@ -713,23 +713,12 @@ static void arm_ccn_pmu_event_release(struct perf_event *event)
 static int arm_ccn_pmu_event_init(struct perf_event *event)
 {
 	struct arm_ccn *ccn;
-	struct hw_perf_event *hw = &event->hw;
 	u32 node_xp, type, event_id;
 	int valid;
 	int i;
 	struct perf_event *sibling;
 
 	ccn = pmu_to_arm_ccn(event->pmu);
-
-	if (hw->sample_period) {
-		dev_dbg(ccn->dev, "Sampling not supported!\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (has_branch_stack(event)) {
-		dev_dbg(ccn->dev, "Can't exclude execution levels!\n");
-		return -EINVAL;
-	}
 
 	if (event->cpu < 0) {
 		dev_dbg(ccn->dev, "Can't provide per-task data!\n");
@@ -1273,6 +1262,7 @@ static int arm_ccn_pmu_init(struct arm_ccn *ccn)
 		.pmu_enable = arm_ccn_pmu_enable,
 		.pmu_disable = arm_ccn_pmu_disable,
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_SAMPLING |
 				PERF_PMU_CAP_NO_COMMON_EVENTS,
 	};
 

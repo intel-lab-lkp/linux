@@ -1696,7 +1696,7 @@ static int arm_cmn_event_init(struct perf_event *event)
 	bool bynodeid;
 	u16 nodeid, eventid;
 
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
 	event->cpu = cmn->cpu;
@@ -2469,6 +2469,7 @@ static int arm_cmn_probe(struct platform_device *pdev)
 		.module = THIS_MODULE,
 		.attr_groups = arm_cmn_attr_groups,
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE |
+				PERF_PMU_CAP_NO_SAMPLING |
 				PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr = perf_invalid_context,
 		.pmu_enable = arm_cmn_pmu_enable,

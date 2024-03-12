@@ -519,8 +519,7 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 	 * DMC 620 PMUs are shared across all cpus and cannot
 	 * support task bound and sampling events.
 	 */
-	if (is_sampling_event(event) ||
-		event->attach_state & PERF_ATTACH_TASK) {
+	if (event->attach_state & PERF_ATTACH_TASK) {
 		dev_dbg(dmc620_pmu->pmu.dev,
 			"Can't support per-task counters\n");
 		return -EOPNOTSUPP;
@@ -671,6 +670,7 @@ static int dmc620_pmu_device_probe(struct platform_device *pdev)
 	dmc620_pmu->pmu = (struct pmu) {
 		.module = THIS_MODULE,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE |
+				  PERF_PMU_CAP_NO_SAMPLING |
 				  PERF_PMU_CAP_NO_COMMON_EVENTS,
 		.task_ctx_nr	= perf_invalid_context,
 		.event_init	= dmc620_pmu_event_init,
