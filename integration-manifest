@@ -1,0 +1,30 @@
+drm drm-fixes b7cc4ff787a572edf2c55caeffaa88cd801eb135
+	nouveau: lock the client object tree.
+drm-misc drm-misc-fixes 16e87fe23d4af6df920406494ced5c0f4354567b
+	nouveau/dmem: handle kcalloc() allocation failure
+drm-intel drm-intel-fixes e8f897f4afef0031fe618a8e94127a0934896aba
+	Linux 6.8
+drm-xe drm-xe-fixes a4e7596e209783a7be2727d6b947cbd863c2bbcb
+	drm/xe: Return immediately on tile_init failure
+drm drm-next 119b225f01e4d3ce974cd3b4d982c76a380c796d
+	Merge tag 'amd-drm-next-6.9-2024-03-08-1' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes dea185b71bae61808c70263da5f9251e149f1e9e
+	drm/nouveau: fix kerneldoc warnings
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes e62d2e00780b4a465c77d2229837495fcbc480d3
+	drm/xe: Replace 'grouped target' in Makefile with pattern rule
+drm-misc drm-misc-next 5fbdadc622a8239d2cc9d12864bcae3ce5503ffc
+	drm/shmem-helper: Remove duplicate include
+drm-intel drm-intel-next 7a51a2aa2384ea8bee76698ae586a2bea5b8ddb5
+	drm/i915/dp: Fix DSC state HW readout for SST connectors
+drm-intel drm-intel-gt-next af7c4a648e3ba969c7d3a301b86af5a8541966cd
+	drm/i915: Drop WA 16015675438
+drm-xe drm-xe-next 8e61e3192a77e1006c1c54c022173026f7afae2c
+	drm/xe/uapi: Add IP version and stepping to GT list query
+drm-intel topic/core-for-CI 4c80ceebd3f0b5006bb99fe6be85081207ea67d2
+	platform/x86/intel/pmc/lnl: Remove SSRAM support
+drm-xe topic/xe-for-CI acec3bca46a221c35922c40b10405500e17309c5
+	drm/xe/guc: define PVC FW
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
