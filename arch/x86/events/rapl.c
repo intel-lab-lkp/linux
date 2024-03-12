@@ -328,15 +328,8 @@ static int rapl_pmu_event_init(struct perf_event *event)
 	int bit, ret = 0;
 	struct rapl_pmu *pmu;
 
-	/* only look at RAPL events */
-	if (event->attr.type != rapl_pmus->pmu.type)
-		return -ENOENT;
-
 	/* check only supported bits are set */
 	if (event->attr.config & ~RAPL_EVENT_MASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
 		return -EINVAL;
 
 	event->event_caps |= PERF_EV_CAP_READ_ACTIVE_PKG;
@@ -693,7 +686,7 @@ static int __init init_rapl_pmus(void)
 	rapl_pmus->pmu.stop		= rapl_pmu_event_stop;
 	rapl_pmus->pmu.read		= rapl_pmu_event_read;
 	rapl_pmus->pmu.module		= THIS_MODULE;
-	rapl_pmus->pmu.capabilities	= PERF_PMU_CAP_NO_EXCLUDE;
+	rapl_pmus->pmu.capabilities	= PERF_PMU_UNCORE_CAPS;
 	return 0;
 }
 

@@ -876,33 +876,19 @@ static int snb_uncore_imc_event_init(struct perf_event *event)
 	u64 cfg = event->attr.config & SNB_UNCORE_PCI_IMC_EVENT_MASK;
 	int idx, base;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	pmu = uncore_event_to_pmu(event);
 	/* no device found for this pmu */
 	if (pmu->func_id < 0)
 		return -ENOENT;
 
-	/* Sampling not supported yet */
-	if (hwc->sample_period)
-		return -EINVAL;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
+	/* check only supported bits are set */
+	if (event->attr.config & ~SNB_UNCORE_PCI_IMC_EVENT_MASK)
 		return -EINVAL;
 
 	/*
 	 * Place all uncore events for a particular physical package
 	 * onto a single cpu
 	 */
-	if (event->cpu < 0)
-		return -EINVAL;
-
-	/* check only supported bits are set */
-	if (event->attr.config & ~SNB_UNCORE_PCI_IMC_EVENT_MASK)
-		return -EINVAL;
-
 	box = uncore_pmu_to_box(pmu, event->cpu);
 	if (!box || box->cpu < 0)
 		return -EINVAL;
@@ -1013,7 +999,7 @@ static struct pmu snb_uncore_imc_pmu = {
 	.start		= uncore_pmu_event_start,
 	.stop		= uncore_pmu_event_stop,
 	.read		= uncore_pmu_event_read,
-	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 };
 
 static struct intel_uncore_ops snb_uncore_imc_ops = {

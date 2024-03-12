@@ -204,13 +204,6 @@ static int msr_event_init(struct perf_event *event)
 {
 	u64 cfg = event->attr.config;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
 	if (cfg >= PERF_MSR_EVENT_MAX)
 		return -EINVAL;
 
@@ -296,7 +289,7 @@ static struct pmu pmu_msr = {
 	.start		= msr_event_start,
 	.stop		= msr_event_stop,
 	.read		= msr_event_update,
-	.capabilities	= PERF_PMU_CAP_NO_SAMPLING | PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 	.attr_update	= attr_update,
 };
 

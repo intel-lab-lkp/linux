@@ -209,12 +209,6 @@ static int amd_uncore_event_init(struct perf_event *event)
 	struct amd_uncore_ctx *ctx;
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	pmu = event_to_amd_uncore_pmu(event);
 	ctx = *per_cpu_ptr(pmu->ctx, event->cpu);
 	if (!ctx)
@@ -700,7 +694,7 @@ int amd_uncore_df_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		.start		= amd_uncore_start,
 		.stop		= amd_uncore_stop,
 		.read		= amd_uncore_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 		.module		= THIS_MODULE,
 	};
 
@@ -833,7 +827,7 @@ int amd_uncore_l3_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		.start		= amd_uncore_start,
 		.stop		= amd_uncore_stop,
 		.read		= amd_uncore_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
+		.capabilities	= PERF_PMU_UNCORE_CAPS,
 		.module		= THIS_MODULE,
 	};
 
@@ -958,7 +952,7 @@ int amd_uncore_umc_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 				.start		= amd_uncore_umc_start,
 				.stop		= amd_uncore_stop,
 				.read		= amd_uncore_read,
-				.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
+				.capabilities	= PERF_PMU_UNCORE_CAPS,
 				.module		= THIS_MODULE,
 			};
 

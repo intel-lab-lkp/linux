@@ -124,14 +124,6 @@ static int pmu_event_init(struct perf_event *event)
 {
 	u64 cfg = event->attr.config & AMD_POWER_EVENT_MASK;
 
-	/* Only look at AMD power events. */
-	if (event->attr.type != pmu_class.type)
-		return -ENOENT;
-
-	/* Unsupported modes and filters. */
-	if (event->attr.sample_period)
-		return -EINVAL;
-
 	if (cfg != AMD_POWER_EVENTSEL_PKG)
 		return -EINVAL;
 
@@ -212,7 +204,7 @@ static struct pmu pmu_class = {
 	.start		= pmu_event_start,
 	.stop		= pmu_event_stop,
 	.read		= pmu_event_read,
-	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 	.module		= THIS_MODULE,
 };
 

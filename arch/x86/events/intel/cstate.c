@@ -319,16 +319,6 @@ static int cstate_pmu_event_init(struct perf_event *event)
 	u64 cfg = event->attr.config;
 	int cpu;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (event->pmu == &cstate_core_pmu) {
 		if (cfg >= PERF_CSTATE_CORE_EVENT_MAX)
 			return -EINVAL;
@@ -530,7 +520,7 @@ static struct pmu cstate_core_pmu = {
 	.start		= cstate_pmu_event_start,
 	.stop		= cstate_pmu_event_stop,
 	.read		= cstate_pmu_event_update,
-	.capabilities	= PERF_PMU_CAP_NO_SAMPLING| PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 	.module		= THIS_MODULE,
 };
 
@@ -545,7 +535,7 @@ static struct pmu cstate_pkg_pmu = {
 	.start		= cstate_pmu_event_start,
 	.stop		= cstate_pmu_event_stop,
 	.read		= cstate_pmu_event_update,
-	.capabilities	= PERF_PMU_CAP_NO_SAMPLING| PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 	.module		= THIS_MODULE,
 };
 
@@ -560,7 +550,7 @@ static struct pmu cstate_module_pmu = {
 	.start		= cstate_pmu_event_start,
 	.stop		= cstate_pmu_event_stop,
 	.read		= cstate_pmu_event_update,
-	.capabilities	= PERF_PMU_CAP_NO_SAMPLING | PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_UNCORE_CAPS,
 	.module		= THIS_MODULE,
 };
 
