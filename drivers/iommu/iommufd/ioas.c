@@ -5,6 +5,8 @@
 #include <linux/interval_tree.h>
 #include <linux/iommufd.h>
 #include <linux/iommu.h>
+#include <linux/capability.h>
+#include <linux/slab.h>
 #include <uapi/linux/iommufd.h>
 
 #include "io_pagetable.h"

@@ -31,6 +31,7 @@
 #include <linux/spinlock.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>
+#include <asm/pgtable.h> // for ZERO_PAGE()
 
 #include "virt-dma.h"
 

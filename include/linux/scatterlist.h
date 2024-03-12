@@ -8,6 +8,12 @@
 #include <linux/mm.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_UML
+#include <asm/pgtable.h> // for virt_to_page(), page_to_phys()
+#else
+#include <asm/page.h> // for virt_to_page(), page_to_phys()
+#endif
+
 struct scatterlist {
 	unsigned long	page_link;
 	unsigned int	offset;

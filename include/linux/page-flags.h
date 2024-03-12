@@ -12,6 +12,9 @@
 #ifndef __GENERATING_BOUNDS_H
 #include <linux/mm_types.h>
 #include <generated/bounds.h>
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+#include <linux/jump_label.h> // for DECLARE_STATIC_KEY_FALSE
+#endif
 #endif /* !__GENERATING_BOUNDS_H */
 
 /*

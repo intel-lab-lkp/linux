@@ -7,6 +7,8 @@
 
 #include <linux/fs.h> /* only for vma_is_dax() */
 
+#include <asm/page.h> // for pmd_t
+
 vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf);
 int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		  pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long addr,
