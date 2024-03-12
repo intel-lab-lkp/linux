@@ -96,8 +96,6 @@ struct ali_drw_pmu {
 
 	struct list_head pmus_node;
 	struct ali_drw_pmu_irq *irq;
-	int irq_num;
-	int cpu;
 	DECLARE_BITMAP(used_mask, ALI_DRW_PMU_COMMON_MAX_COUNTERS);
 	struct perf_event *events[ALI_DRW_PMU_COMMON_MAX_COUNTERS];
 	int evtids[ALI_DRW_PMU_COMMON_MAX_COUNTERS];
@@ -221,7 +219,7 @@ static ssize_t ali_drw_pmu_cpumask_show(struct device *dev,
 {
 	struct ali_drw_pmu *drw_pmu = to_ali_drw_pmu(dev_get_drvdata(dev));
 
-	return cpumap_print_to_pagebuf(true, buf, cpumask_of(drw_pmu->cpu));
+	return cpumap_print_to_pagebuf(true, buf, cpumask_of(drw_pmu->irq->cpu));
 }
 
 static struct device_attribute ali_drw_pmu_cpumask_attr =
@@ -550,11 +548,7 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 		return -EOPNOTSUPP;
 	}
 
-	event->cpu = drw_pmu->cpu;
-	if (event->cpu < 0) {
-		dev_err(dev, "Per-task mode not supported!\n");
-		return -EOPNOTSUPP;
-	}
+	event->cpu = drw_pmu->irq->cpu;
 
 	if (event->group_leader != event &&
 	    !is_software_event(event->group_leader)) {
@@ -700,8 +694,6 @@ static int ali_drw_pmu_probe(struct platform_device *pdev)
 
 	/* clearing interrupt status */
 	writel(0xffffff, drw_pmu->cfg_base + ALI_DRW_PMU_OV_INTR_CLR);
-
-	drw_pmu->cpu = smp_processor_id();
 
 	ret = ali_drw_pmu_init_irq(drw_pmu, pdev);
 	if (ret)
