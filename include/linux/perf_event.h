@@ -293,6 +293,9 @@ struct perf_event_pmu_context;
 #define PERF_PMU_CAP_EXTENDED_HW_TYPE		0x0100
 #define PERF_PMU_CAP_NO_COMMON_EVENTS		0x0200
 
+#define PERF_PMU_UNCORE_CAPS \
+(PERF_PMU_CAP_NO_SAMPLING| PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_COMMON_EVENTS)
+
 struct perf_output_handle;
 
 #define PMU_NULL_DEV	((void *)(~0UL))
