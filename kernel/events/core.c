@@ -11649,6 +11649,11 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 	struct perf_event_context *ctx = NULL;
 	int ret;
 
+	/* Short-circuit if we know the PMU won't want this event */
+	if (pmu->capabilities & PERF_PMU_CAP_NO_COMMON_EVENTS &&
+	    event->attr.type != pmu->type)
+		return -ENOENT;
+
 	if (!try_module_get(pmu->module))
 		return -ENODEV;
 
