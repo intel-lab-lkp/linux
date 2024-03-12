@@ -6,6 +6,7 @@
 #include <linux/mm/folio_size.h>
 #include <linux/mm/folio_usage.h>
 #include <linux/mm/folio_zone.h>
+#include <linux/mm/high_memory.h>
 #include <linux/mm/page_address.h>
 #include <linux/mm/page_section.h>
 #include <linux/mm/pfmemalloc.h>
@@ -82,7 +83,6 @@ static inline void totalram_pages_add(long count)
 	atomic_long_add(count, &_totalram_pages);
 }
 
-extern void * high_memory;
 extern int page_cluster;
 extern const int page_cluster_max;
 
