@@ -282,7 +282,7 @@ struct perf_event_pmu_context;
 /**
  * pmu::capabilities flags
  */
-#define PERF_PMU_CAP_NO_INTERRUPT		0x0001
+#define PERF_PMU_CAP_NO_SAMPLING		0x0001
 #define PERF_PMU_CAP_NO_NMI			0x0002
 #define PERF_PMU_CAP_AUX_NO_SG			0x0004
 #define PERF_PMU_CAP_EXTENDED_REGS		0x0008

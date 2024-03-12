@@ -501,7 +501,7 @@ static void papr_scm_pmu_register(struct papr_scm_priv *p)
 	nd_pmu->pmu.add = papr_scm_pmu_add;
 	nd_pmu->pmu.del = papr_scm_pmu_del;
 
-	nd_pmu->pmu.capabilities = PERF_PMU_CAP_NO_INTERRUPT |
+	nd_pmu->pmu.capabilities = PERF_PMU_CAP_NO_SAMPLING |
 				PERF_PMU_CAP_NO_EXCLUDE;
 
 	/*updating the cpumask variable */

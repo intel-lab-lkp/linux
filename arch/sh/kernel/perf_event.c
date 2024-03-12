@@ -352,7 +352,7 @@ int register_sh_pmu(struct sh_pmu *_pmu)
 	 * no interrupts, and are therefore unable to do sampling without
 	 * further work and timer assistance.
 	 */
-	pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
+	pmu.capabilities |= PERF_PMU_CAP_NO_SAMPLING
 
 	WARN_ON(_pmu->num_events > MAX_HWEVENTS);
 

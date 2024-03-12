@@ -984,7 +984,7 @@ static int hv_gpci_init(void)
 		return r;
 
 	/* sampling not supported */
-	h_gpci_pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
+	h_gpci_pmu.capabilities |= PERF_PMU_CAP_NO_SAMPLING
 
 	arg = (void *)get_cpu_var(hv_gpci_reqb);
 	memset(arg, 0, HGPCI_REQ_BUFFER_SIZE);

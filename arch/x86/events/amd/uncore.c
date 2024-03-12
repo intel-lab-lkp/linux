@@ -700,7 +700,7 @@ int amd_uncore_df_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		.start		= amd_uncore_start,
 		.stop		= amd_uncore_stop,
 		.read		= amd_uncore_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
 		.module		= THIS_MODULE,
 	};
 
@@ -833,7 +833,7 @@ int amd_uncore_l3_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 		.start		= amd_uncore_start,
 		.stop		= amd_uncore_stop,
 		.read		= amd_uncore_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
 		.module		= THIS_MODULE,
 	};
 
@@ -958,7 +958,7 @@ int amd_uncore_umc_ctx_init(struct amd_uncore *uncore, unsigned int cpu)
 				.start		= amd_uncore_umc_start,
 				.stop		= amd_uncore_stop,
 				.read		= amd_uncore_read,
-				.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
+				.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_SAMPLING,
 				.module		= THIS_MODULE,
 			};
 

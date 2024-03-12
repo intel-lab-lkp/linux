@@ -819,7 +819,7 @@ static int arc_pmu_device_probe(struct platform_device *pdev)
 	}
 
 	if (irq == -1)
-		arc_pmu->pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
+		arc_pmu->pmu.capabilities |= PERF_PMU_CAP_NO_SAMPLING;
 
 	/*
 	 * perf parser doesn't really like '-' symbol in events name, so let's

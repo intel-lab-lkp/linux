@@ -1737,7 +1737,7 @@ static int hv_24x7_init(void)
 		return -ENOMEM;
 
 	/* sampling not supported */
-	h_24x7_pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
+	h_24x7_pmu.capabilities |= PERF_PMU_CAP_NO_SAMPLING
 
 	r = create_events_from_catalog(&event_group.attrs,
 				   &event_desc_group.attrs,

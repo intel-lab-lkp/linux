@@ -1186,7 +1186,7 @@ static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 	capabilities = PERF_PMU_CAP_NO_EXCLUDE |
 		       PERF_PMU_CAP_NO_COMMON_EVENTS;
 	if (cspmu->irq == 0)
-		capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
+		capabilities |= PERF_PMU_CAP_NO_SAMPLING;
 
 	cspmu->pmu = (struct pmu){
 		.task_ctx_nr	= perf_invalid_context,

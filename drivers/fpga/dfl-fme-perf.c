@@ -921,7 +921,7 @@ static int fme_perf_pmu_register(struct platform_device *pdev,
 	pmu->start =		fme_perf_event_start;
 	pmu->stop =		fme_perf_event_stop;
 	pmu->read =		fme_perf_event_read;
-	pmu->capabilities =	PERF_PMU_CAP_NO_INTERRUPT |
+	pmu->capabilities =	PERF_PMU_CAP_NO_SAMPLING |
 				PERF_PMU_CAP_NO_EXCLUDE;
 
 	name = devm_kasprintf(priv->dev, GFP_KERNEL, "dfl_fme%d", pdev->id);
