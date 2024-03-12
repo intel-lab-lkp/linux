@@ -80,6 +80,13 @@ enum {
 	SETWA_FLAGS_APICID = 1,
 	SETWA_FLAGS_MEM = 2,
 	SETWA_FLAGS_PCIE_SBDF = 4,
+	SETWA_FLAGS_EINJV2 = 8,
+};
+
+enum {
+	EINJV2_PROCESSOR_ERROR = 0x1,
+	EINJV2_MEMORY_ERROR = 0x2,
+	EINJV2_PCIE_ERROR = 0x4,
 };
 
 /*
@@ -104,6 +111,7 @@ static char vendor_dev[64];
 static struct debugfs_blob_wrapper einjv2_component_arr;
 static u64 component_count;
 static void *user_input;
+static int nr_components;
 
 /*
  * Some BIOSes allow parameters to the SET_ERROR_TYPE entries in the
@@ -275,11 +283,20 @@ static void *einj_get_parameter_address(void)
 	}
 	if (pa_v5) {
 		struct set_error_type_with_address *v5param;
-
 		v5param = acpi_os_map_iomem(pa_v5, sizeof(*v5param));
 		if (v5param) {
+			int offset, len;
+
 			acpi5 = 1;
 			check_vendor_extension(pa_v5, v5param);
+			if (error_type & ACPI65_EINJV2_SUPP) {
+				len = v5param->einjv2_struct.length;
+				offset = offsetof(struct einjv2_extension_struct, component_arr);
+				nr_components = (len-offset)/32;
+				acpi_os_unmap_iomem(v5param, sizeof(*v5param));
+				v5param = acpi_os_map_iomem(pa_v5, sizeof(*v5param) + (
+					(nr_components) * sizeof(struct syndrome_array)));
+			}
 			return v5param;
 		}
 	}
@@ -485,10 +502,47 @@ static int __einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 			v5param->flags = vendor_flags;
 		} else if (flags) {
 			v5param->flags = flags;
-			v5param->memory_address = param1;
-			v5param->memory_address_range = param2;
-			v5param->apicid = param3;
-			v5param->pcie_sbdf = param4;
+			if (flags & SETWA_FLAGS_MEM) {
+				v5param->memory_address = param1;
+				v5param->memory_address_range = param2;
+			}
+			if (flags & SETWA_FLAGS_EINJV2) {
+				if (component_count > nr_components)
+					return -EINVAL;
+
+				v5param->einjv2_struct.component_arr_count = component_count;
+				int count = 0, bytes_read, pos = 0;
+				unsigned int comp, synd;
+				struct syndrome_array *component_arr;
+
+				component_arr = v5param->einjv2_struct.component_arr;
+				while (sscanf(user_input+pos, "%x %x\n%n", &comp, &synd,
+							&bytes_read) == 2) {
+					count++;
+					pos += bytes_read;
+					if (count > component_count)
+						return -EINVAL;
+
+					switch (type) {
+					case EINJV2_PROCESSOR_ERROR:
+						component_arr[count-1].comp_id.acpi_id = comp;
+						component_arr[count-1].comp_synd.proc_synd = synd;
+						break;
+					case EINJV2_MEMORY_ERROR:
+						component_arr[count-1].comp_id.device_id = comp;
+						component_arr[count-1].comp_synd.mem_synd = synd;
+						break;
+					case EINJV2_PCIE_ERROR:
+						component_arr[count-1].comp_id.pcie_sbdf = comp;
+						component_arr[count-1].comp_synd.pcie_synd = synd;
+						break;
+					}
+				}
+
+			} else {
+				v5param->apicid = param3;
+				v5param->pcie_sbdf = param4;
+			}
 		} else {
 			switch (type) {
 			case ACPI_EINJ_PROCESSOR_CORRECTABLE:
@@ -572,9 +626,19 @@ static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 
 	/* If user manually set "flags", make sure it is legal */
 	if (flags && (flags &
-		~(SETWA_FLAGS_APICID|SETWA_FLAGS_MEM|SETWA_FLAGS_PCIE_SBDF)))
+		~(SETWA_FLAGS_APICID|SETWA_FLAGS_MEM|SETWA_FLAGS_PCIE_SBDF|SETWA_FLAGS_EINJV2)))
 		return -EINVAL;
 
+	/*check if type is a valid EINJv2 error type*/
+	if (flags & SETWA_FLAGS_EINJV2) {
+		u32 error_type;
+
+		rc = einj_get_available_error_type(&error_type, ACPI_EINJV2_GET_ERROR_TYPE);
+		if (rc)
+			return rc;
+		if (!(type & error_type))
+			return -EINVAL;
+	}
 	/*
 	 * We need extra sanity checks for memory errors.
 	 * Other types leap directly to injection.
@@ -694,7 +758,7 @@ static int error_type_get(void *data, u64 *val)
 static int error_type_set(void *data, u64 val)
 {
 	int rc;
-	u32 available_error_type = 0;
+	u32 available_error_type = 0, available_error_type_v2 = 0;
 	u32 tval, vendor;
 
 	/* Only low 32 bits for error type are valid */
@@ -716,7 +780,13 @@ static int error_type_set(void *data, u64 val)
 				ACPI_EINJ_GET_ERROR_TYPE);
 		if (rc)
 			return rc;
-		if (!(val & available_error_type))
+		if (available_error_type & ACPI65_EINJV2_SUPP) {
+			rc = einj_get_available_error_type(&available_error_type_v2,
+					ACPI_EINJV2_GET_ERROR_TYPE);
+			if (rc)
+				return rc;
+		}
+		if (!(val & (available_error_type | available_error_type_v2)))
 			return -EINVAL;
 	}
 	error_type = val;
@@ -886,7 +956,8 @@ static void __exit einj_exit(void)
 			sizeof(struct set_error_type_with_address) :
 			sizeof(struct einj_parameter);
 
-		acpi_os_unmap_iomem(einj_param, size);
+		acpi_os_unmap_iomem(einj_param,
+				size+((nr_components) * sizeof(struct syndrome_array)));
 		if (vendor_errors.size)
 			acpi_os_unmap_memory(vendor_errors.data, vendor_errors.size);
 	}
