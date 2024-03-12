@@ -280,20 +280,6 @@ static int mmdc_pmu_event_init(struct perf_event *event)
 	struct mmdc_pmu *pmu_mmdc = to_mmdc_pmu(event->pmu);
 	int cfg = event->attr.config;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
-	if (event->cpu < 0) {
-		dev_warn(pmu_mmdc->dev, "Can't provide per-task data!\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (event->attr.sample_period)
-		return -EINVAL;
-
 	if (cfg < 0 || cfg >= MMDC_NUM_COUNTERS)
 		return -EINVAL;
 
@@ -445,7 +431,7 @@ static int mmdc_pmu_init(struct mmdc_pmu *pmu_mmdc,
 			.start          = mmdc_pmu_event_start,
 			.stop           = mmdc_pmu_event_stop,
 			.read           = mmdc_pmu_event_update,
-			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+			.capabilities	= PERF_PMU_UNCORE_CAPS,
 		},
 		.mmdc_base = mmdc_base,
 		.dev = dev,
