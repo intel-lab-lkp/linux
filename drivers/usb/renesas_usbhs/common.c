@@ -566,6 +566,18 @@ static const struct of_device_id usbhs_of_match[] = {
 		.data = &usbhs_rcar_gen3_with_pll_plat_info,
 	},
 	{
+		.compatible = "renesas,usbhs-r9a07g043",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
+		.compatible = "renesas,usbhs-r9a07g044",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
+		.compatible = "renesas,usbhs-r9a07g054",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
 		.compatible = "renesas,rcar-gen2-usbhs",
 		.data = &usbhs_rcar_gen2_plat_info,
 	},
@@ -580,6 +592,10 @@ static const struct of_device_id usbhs_of_match[] = {
 	{
 		.compatible = "renesas,rza2-usbhs",
 		.data = &usbhs_rza2_plat_info,
+	},
+	{
+		.compatible = "renesas,rzg2l-usbhs",
+		.data = &usbhs_rzg2l_plat_info,
 	},
 	{ },
 };
@@ -640,8 +656,13 @@ static int usbhs_probe(struct platform_device *pdev)
 
 	/* set default param if platform doesn't have */
 	if (usbhs_get_dparam(priv, has_new_pipe_configs)) {
-		priv->dparam.pipe_configs = usbhsc_new_pipe;
-		priv->dparam.pipe_size = ARRAY_SIZE(usbhsc_new_pipe);
+		if (info->driver_param.pipe_configs) {
+			priv->dparam.pipe_configs = info->driver_param.pipe_configs;
+			priv->dparam.pipe_size = info->driver_param.pipe_size;
+		} else {
+			priv->dparam.pipe_configs = usbhsc_new_pipe;
+			priv->dparam.pipe_size = ARRAY_SIZE(usbhsc_new_pipe);
+		}
 	} else if (!priv->dparam.pipe_configs) {
 		priv->dparam.pipe_configs = usbhsc_default_pipe;
 		priv->dparam.pipe_size = ARRAY_SIZE(usbhsc_default_pipe);

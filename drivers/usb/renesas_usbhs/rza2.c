@@ -58,6 +58,36 @@ static int usbhs_rza2_power_ctrl(struct platform_device *pdev,
 	return retval;
 }
 
+/* commonly used on RZ/G2L family */
+static struct renesas_usbhs_driver_pipe_config usbhsc_rzg2l_pipe[] = {
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_CONTROL, 64, 0x00, false),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_ISOC, 1024, 0x08, true),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_ISOC, 1024, 0x28, true),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_BULK, 512, 0x48, true),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_BULK, 512, 0x58, true),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_BULK, 512, 0x68, true),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_INT, 64, 0x04, false),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_INT, 64, 0x05, false),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_INT, 64, 0x06, false),
+	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_INT, 64, 0x07, false),
+};
+
+const struct renesas_usbhs_platform_info usbhs_rzg2l_plat_info = {
+	.platform_callback = {
+		.hardware_init = usbhs_rza2_hardware_init,
+		.hardware_exit = usbhs_rza2_hardware_exit,
+		.power_ctrl = usbhs_rza2_power_ctrl,
+		.get_id = usbhs_get_id_as_gadget,
+	},
+	.driver_param = {
+		.pipe_configs = usbhsc_rzg2l_pipe,
+		.pipe_size = ARRAY_SIZE(usbhsc_rzg2l_pipe),
+		.has_cnen = 1,
+		.cfifo_byte_addr = 1,
+		.has_new_pipe_configs = 1,
+	},
+};
+
 const struct renesas_usbhs_platform_info usbhs_rza2_plat_info = {
 	.platform_callback = {
 		.hardware_init = usbhs_rza2_hardware_init,
