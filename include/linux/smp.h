@@ -166,6 +166,16 @@ void smp_call_function_many(const struct cpumask *mask,
 int smp_call_function_any(const struct cpumask *mask,
 			  smp_call_func_t func, void *info, int wait);
 
+int smp_call_function_single_serialize(int cpuid, smp_call_func_t func,
+				       void *info, int wait);
+
+void smp_call_function_many_serialize(const struct cpumask *mask,
+				      smp_call_func_t func,
+				      void *info, bool wait);
+
+void on_each_cpu_cond_mask_serialize(smp_cond_func_t cond_func, smp_call_func_t func,
+			   void *info, bool wait, const struct cpumask *mask);
+
 void kick_all_cpus_sync(void);
 void wake_up_all_idle_cpus(void);
 
@@ -212,6 +222,28 @@ smp_call_function_any(const struct cpumask *mask, smp_call_func_t func,
 		      void *info, int wait)
 {
 	return smp_call_function_single(0, func, info, wait);
+}
+
+static inline
+int smp_call_function_single_serialize(int cpuid, smp_call_func_t func,
+				       void *info, int wait)
+{
+	return smp_call_function_single(cpuid, func, info, wait);
+}
+
+static inline
+void smp_call_function_many_serialize(const struct cpumask *mask,
+				      smp_call_func_t func,
+				      void *info, bool wait)
+{
+	return smp_call_function_many(mask, func, info, wait);
+}
+
+static inline
+void on_each_cpu_cond_mask_serialize(smp_cond_func_t cond_func, smp_call_func_t func,
+			   void *info, bool wait, const struct cpumask *mask)
+{
+	return on_each_cpu_cond_mask(cond_func, func, info, wait, mask);
 }
 
 static inline void kick_all_cpus_sync(void) {  }
@@ -288,6 +320,14 @@ void smp_setup_processor_id(void);
 
 int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par,
 		    bool phys);
+
+static inline
+void on_each_cpu_mask_serialize(const struct cpumask *mask,
+				smp_call_func_t func,
+				void *info, bool wait)
+{
+	on_each_cpu_cond_mask_serialize(NULL, func, info, wait, mask);
+}
 
 /* SMP core functions */
 int smpcfd_prepare_cpu(unsigned int cpu);

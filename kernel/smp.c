@@ -48,6 +48,10 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(struct llist_head, call_single_queue);
 
 static DEFINE_PER_CPU(atomic_t, trigger_backtrace) = ATOMIC_INIT(1);
 
+static DEFINE_PER_CPU(struct mutex, serialize_ipi_lock);
+
+static DEFINE_MUTEX(serialize_ipi_broadcast_lock);
+
 static void __flush_smp_call_function_queue(bool warn_cpu_offline);
 
 int smpcfd_prepare_cpu(unsigned int cpu)
@@ -102,9 +106,10 @@ void __init call_function_init(void)
 {
 	int i;
 
-	for_each_possible_cpu(i)
+	for_each_possible_cpu(i) {
 		init_llist_head(&per_cpu(call_single_queue, i));
-
+		mutex_init(&per_cpu(serialize_ipi_lock, i));
+	}
 	smpcfd_prepare_cpu(smp_processor_id());
 }
 
@@ -590,16 +595,9 @@ void flush_smp_call_function_queue(void)
 	local_irq_restore(flags);
 }
 
-/*
- * smp_call_function_single - Run a function on a specific CPU
- * @func: The function to run. This must be fast and non-blocking.
- * @info: An arbitrary pointer to pass to the function.
- * @wait: If true, wait until function has completed on other CPUs.
- *
- * Returns 0 on success, else a negative status code.
- */
-int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
-			     int wait)
+static
+int _smp_call_function_single(int cpu, smp_call_func_t func, void *info,
+			     int wait, bool serialize)
 {
 	call_single_data_t *csd;
 	call_single_data_t csd_stack = {
@@ -607,6 +605,9 @@ int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 	};
 	int this_cpu;
 	int err;
+
+	if (serialize)
+		mutex_lock(&per_cpu(serialize_ipi_lock, cpu));
 
 	/*
 	 * prevent preemption and reschedule on another processor,
@@ -651,9 +652,37 @@ int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 
 	put_cpu();
 
+	if (serialize)
+		mutex_unlock(&per_cpu(serialize_ipi_lock, cpu));
+
 	return err;
 }
+
+/*
+ * smp_call_function_single - Run a function on a specific CPU
+ * @func: The function to run. This must be fast and non-blocking.
+ * @info: An arbitrary pointer to pass to the function.
+ * @wait: If true, wait until function has completed on other CPUs.
+ *
+ * Returns 0 on success, else a negative status code.
+ */
+int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
+			     int wait)
+{
+	return _smp_call_function_single(cpu, func, info, wait, false);
+}
 EXPORT_SYMBOL(smp_call_function_single);
+
+/*
+ * Run a function on a specific CPU. Serialize the IPI to that CPU with
+ * a mutex.
+ */
+int smp_call_function_single_serialize(int cpu, smp_call_func_t func, void *info,
+			     int wait)
+{
+	return _smp_call_function_single(cpu, func, info, wait, true);
+}
+EXPORT_SYMBOL(smp_call_function_single_serialize);
 
 /**
  * smp_call_function_single_async() - Run an asynchronous function on a
@@ -880,6 +909,30 @@ void smp_call_function_many(const struct cpumask *mask,
 }
 EXPORT_SYMBOL(smp_call_function_many);
 
+/* Call with preemption *enabled*. */
+void smp_call_function_many_serialize(const struct cpumask *mask,
+			    smp_call_func_t func, void *info, bool wait)
+{
+	unsigned int weight = cpumask_weight(mask);
+	int ret;
+
+	if (!weight)
+		return;
+
+	if (weight == 1) {
+		ret = smp_call_function_single_serialize(cpumask_first(mask), func, info, wait);
+		WARN_ON_ONCE(ret);
+		return;
+	}
+
+	mutex_lock(&serialize_ipi_broadcast_lock);
+	preempt_disable();
+	smp_call_function_many_cond(mask, func, info, wait * SCF_WAIT, NULL);
+	preempt_enable();
+	mutex_unlock(&serialize_ipi_broadcast_lock);
+}
+EXPORT_SYMBOL(smp_call_function_many_serialize);
+
 /**
  * smp_call_function(): Run a function on all other CPUs.
  * @func: The function to run. This must be fast and non-blocking.
@@ -1024,6 +1077,35 @@ void on_each_cpu_cond_mask(smp_cond_func_t cond_func, smp_call_func_t func,
 	preempt_enable();
 }
 EXPORT_SYMBOL(on_each_cpu_cond_mask);
+
+/* Call with preemption enabled. */
+void on_each_cpu_cond_mask_serialize(smp_cond_func_t cond_func, smp_call_func_t func,
+			   void *info, bool wait, const struct cpumask *mask)
+{
+	int cpu, ret;
+	unsigned int scf_flags = SCF_RUN_LOCAL, weight = cpumask_weight(mask);
+
+	if (!weight)
+		return;
+
+	if (weight == 1) {
+		cpu = cpumask_first(mask);
+		if (cond_func && !cond_func(cpu, info))
+			return;
+		ret = smp_call_function_single_serialize(cpu, func, info, wait);
+		WARN_ON_ONCE(ret);
+	}
+
+	if (wait)
+		scf_flags |= SCF_WAIT;
+
+	mutex_lock(&serialize_ipi_broadcast_lock);
+	preempt_disable();
+	smp_call_function_many_cond(mask, func, info, scf_flags, cond_func);
+	preempt_enable();
+	mutex_unlock(&serialize_ipi_broadcast_lock);
+}
+EXPORT_SYMBOL(on_each_cpu_cond_mask_serialize);
 
 static void do_nothing(void *unused)
 {
