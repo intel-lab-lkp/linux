@@ -19,6 +19,7 @@ Contents:
    caif/index
    ethtool-netlink
    ieee802154
+   isotp
    j1939
    kapi
    msg_zerocopy
