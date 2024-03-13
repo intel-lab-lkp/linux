@@ -129,7 +129,7 @@ config PINCTRL_AXP209
 
 config PINCTRL_AW9523
 	tristate "Awinic AW9523/AW9523B I2C GPIO expander pinctrl driver"
-	depends on OF && I2C
+	depends on I2C
 	select PINMUX
 	select PINCONF
 	select GENERIC_PINCONF
