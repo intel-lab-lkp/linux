@@ -20,6 +20,10 @@
 #include "gdsc.h"
 
 enum {
+	DT_BI_TCXO,
+};
+
+enum {
 	P_BI_TCXO,
 	P_VIDEO_PLL0_OUT_MAIN,
 };
@@ -49,7 +53,7 @@ static struct clk_alpha_pll video_pll0 = {
 		.hw.init = &(struct clk_init_data){
 			.name = "video_pll0",
 			.parent_data = &(const struct clk_parent_data){
-				.fw_name = "bi_tcxo",
+				.index = DT_BI_TCXO,
 			},
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_trion_ops,
@@ -63,7 +67,7 @@ static const struct parent_map video_cc_parent_map_0[] = {
 };
 
 static const struct clk_parent_data video_cc_parent_data_0[] = {
-	{ .fw_name = "bi_tcxo" },
+	{ .index = DT_BI_TCXO },
 	{ .hw = &video_pll0.clkr.hw },
 };
 
