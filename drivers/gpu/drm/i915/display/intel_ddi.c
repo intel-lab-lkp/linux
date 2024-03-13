@@ -3366,6 +3366,30 @@ static void intel_enable_ddi_hdmi(struct intel_atomic_state *state,
 	intel_wait_ddi_buf_active(dev_priv, port);
 }
 
+static void intel_ddi_enable_hdmi_or_sst(struct intel_atomic_state *state,
+					 struct intel_encoder *encoder,
+					 const struct intel_crtc_state *crtc_state,
+					 const struct drm_connector_state *conn_state)
+{
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	u8 pipe_mask = intel_crtc_joined_pipe_mask(crtc_state);
+	struct intel_crtc *crtc;
+
+	for_each_intel_crtc_in_pipe_mask_reverse(&i915->drm, crtc, pipe_mask) {
+		const struct intel_crtc_state *new_crtc_state =
+			intel_atomic_get_new_crtc_state(state, crtc);
+
+		intel_dsc_enable(new_crtc_state);
+
+		if (DISPLAY_VER(i915) >= 9)
+			skl_pfit_enable(new_crtc_state);
+		else
+			ilk_pfit_enable(new_crtc_state);
+
+		intel_crtc_vblank_on(new_crtc_state);
+	}
+}
+
 static void intel_enable_ddi(struct intel_atomic_state *state,
 			     struct intel_encoder *encoder,
 			     const struct intel_crtc_state *crtc_state,
@@ -3373,8 +3397,7 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 {
 	drm_WARN_ON(state->base.dev, crtc_state->has_pch_encoder);
 
-	if (!intel_crtc_is_bigjoiner_slave(crtc_state))
-		intel_ddi_enable_transcoder_func(encoder, crtc_state);
+	intel_ddi_enable_transcoder_func(encoder, crtc_state);
 
 	/* Enable/Disable DP2.0 SDP split config before transcoder */
 	intel_audio_sdp_split_update(crtc_state);
@@ -3383,7 +3406,8 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 
 	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
 
-	intel_crtc_vblank_on(crtc_state);
+	if (!intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST))
+		intel_ddi_enable_hdmi_or_sst(state, encoder, crtc_state, conn_state);
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
 		intel_enable_ddi_hdmi(state, encoder, crtc_state, conn_state);
