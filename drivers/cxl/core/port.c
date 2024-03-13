@@ -1671,6 +1671,15 @@ struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, CXL);
 
+void put_cxl_port(struct cxl_port *port)
+{
+	if (!port)
+		return;
+
+	put_device(&port->dev);
+}
+EXPORT_SYMBOL_NS_GPL(put_cxl_port, CXL);
+
 static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 				    struct cxl_port *port, int *target_map)
 {
