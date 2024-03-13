@@ -145,7 +145,12 @@ static int intel_dp_aux_sync_len(void)
 
 int intel_dp_aux_fw_sync_len(void)
 {
-	int precharge = 10; /* 10-16 */
+	/*
+	 * We faced some glitches on MTL with one PSR2 panel when using HW
+	 * default 18. Using 20 is fixing these problems with the panel. It is
+	 * still within range mentioned in eDP specification.
+	 */
+	int precharge = 12; /* 10-16 */
 	int preamble = 8;
 
 	return precharge + preamble;
