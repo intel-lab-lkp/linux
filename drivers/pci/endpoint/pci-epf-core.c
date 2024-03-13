@@ -309,6 +309,9 @@ void *pci_epf_alloc_space(struct pci_epf *epf, size_t size, enum pci_barno bar,
 	else
 		epf_bar[bar].flags |= PCI_BASE_ADDRESS_MEM_TYPE_32;
 
+	if (epf_bar[bar].flags & PCI_BASE_ADDRESS_MEM_TYPE_64)
+		epf_bar[bar].flags |= PCI_BASE_ADDRESS_MEM_PREFETCH;
+
 	return space;
 }
 EXPORT_SYMBOL_GPL(pci_epf_alloc_space);
