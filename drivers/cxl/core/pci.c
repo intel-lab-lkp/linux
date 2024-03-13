@@ -837,18 +837,6 @@ void cxl_setup_parent_dport(struct device *host, struct cxl_dport *dport)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_setup_parent_dport, CXL);
 
-static void cxl_handle_rdport_cor_ras(struct cxl_dev_state *cxlds,
-					  struct cxl_dport *dport)
-{
-	return __cxl_handle_cor_ras(cxlds, dport->regs.ras);
-}
-
-static bool cxl_handle_rdport_ras(struct cxl_dev_state *cxlds,
-				       struct cxl_dport *dport)
-{
-	return __cxl_handle_ras(cxlds, dport->regs.ras);
-}
-
 /*
  * Copy the AER capability registers using 32 bit read accesses.
  * This is necessary because RCRB AER capability is MMIO mapped. Clear the
@@ -897,10 +885,45 @@ static bool cxl_rch_get_aer_severity(struct aer_capability_regs *aer_regs,
 	return false;
 }
 
-static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
+/* Get AER severity from CXL RAS Capability */
+static bool cxl_ras_get_aer_severity(void __iomem *ras_base, int *severity)
+{
+	void __iomem *addr;
+	u32 ue_severity;
+	u32 status;
+
+	if (!ras_base)
+		return false;
+
+	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
+	status = readl(addr);
+	addr = ras_base + CXL_RAS_UNCORRECTABLE_SEVERITY_OFFSET;
+	ue_severity = readl(addr);
+	status &= CXL_RAS_UNCORRECTABLE_STATUS_MASK;
+	if (status) {
+		if (status & ue_severity)
+			*severity = AER_FATAL;
+		else
+			*severity = AER_NONFATAL;
+
+		return true;
+	}
+
+	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
+	status = readl(addr);
+	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
+		*severity = AER_CORRECTABLE;
+		return true;
+	}
+
+	return false;
+}
+
+static void cxl_handle_dport_errors(struct cxl_dev_state *cxlds)
 {
 	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	struct aer_capability_regs aer_regs;
+	struct pci_dev *dport_pdev;
 	struct cxl_dport *dport;
 	int severity;
 	struct cxl_port *port __free(put_cxl_port) =
@@ -909,31 +932,38 @@ static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	if (!port)
 		return;
 
-	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
-		return;
+	if (cxlds->rcd) {
+		if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
+			return;
 
-	if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
-		return;
-
-	pci_print_aer(pdev, severity, &aer_regs);
+		if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
+			return;
+		pci_print_aer(pdev, severity, &aer_regs);
+	} else {
+		dport_pdev = to_pci_dev(dport->dport_dev);
+		/* TODO: add support for switch downstream port error handling */
+		if (pci_pcie_type(dport_pdev) != PCI_EXP_TYPE_ROOT_PORT)
+			return;
+		if (!cxl_ras_get_aer_severity(dport->regs.ras, &severity))
+			return;
+	}
 
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_rdport_cor_ras(cxlds, dport);
+		__cxl_handle_cor_ras(cxlds, dport->regs.ras);
 	else
-		cxl_handle_rdport_ras(cxlds, dport);
+		__cxl_handle_ras(cxlds, dport->regs.ras);
+
 }
 
 #else
-static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds) { }
+static void cxl_handle_dport_errors(struct cxl_dev_state *cxlds) { }
 #endif
 
 void cxl_cor_error_detected(struct pci_dev *pdev)
 {
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
 
-	if (cxlds->rcd)
-		cxl_handle_rdport_errors(cxlds);
-
+	cxl_handle_dport_errors(cxlds);
 	cxl_handle_endpoint_cor_ras(cxlds);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, CXL);
@@ -946,8 +976,7 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	struct device *dev = &cxlmd->dev;
 	bool ue;
 
-	if (cxlds->rcd)
-		cxl_handle_rdport_errors(cxlds);
+	cxl_handle_dport_errors(cxlds);
 
 	/*
 	 * A frozen channel indicates an impending reset which is fatal to
