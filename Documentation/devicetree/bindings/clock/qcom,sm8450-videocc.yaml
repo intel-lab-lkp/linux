@@ -20,6 +20,7 @@ properties:
     enum:
       - qcom,sm8450-videocc
       - qcom,sm8550-videocc
+      - qcom,sm8150-videocc
 
   reg:
     maxItems: 1
