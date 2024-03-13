@@ -966,6 +966,7 @@ int intel_engines_init_mmio(struct intel_gt *gt)
 	const unsigned int engine_mask = init_engine_mask(gt);
 	unsigned int mask = 0;
 	unsigned int i, class;
+	u8 ccs_instance = 0;
 	u8 logical_ids[MAX_ENGINE_INSTANCE + 1];
 	int err;
 
@@ -986,6 +987,19 @@ int intel_engines_init_mmio(struct intel_gt *gt)
 			    !HAS_ENGINE(gt, i))
 				continue;
 
+			/*
+			 * Do not create the command streamer for CCS slices
+			 * beyond the first. All the workload submitted to the
+			 * first engine will be shared among all the slices.
+			 *
+			 * Once the user will be allowed to customize the CCS
+			 * mode, then this check needs to be removed.
+			 */
+			if (IS_DG2(i915) &&
+			    class == COMPUTE_CLASS &&
+			    ccs_instance++)
+				continue;
+
 			err = intel_engine_setup(gt, i,
 						 logical_ids[instance]);
 			if (err)
@@ -996,11 +1010,9 @@ int intel_engines_init_mmio(struct intel_gt *gt)
 	}
 
 	/*
-	 * Catch failures to update intel_engines table when the new engines
-	 * are added to the driver by a warning and disabling the forgotten
-	 * engines.
+	 * Update the intel_engines table.
 	 */
-	if (drm_WARN_ON(&i915->drm, mask != engine_mask))
+	if (mask != engine_mask)
 		gt->info.engine_mask = mask;
 
 	gt->info.num_engines = hweight32(mask);
