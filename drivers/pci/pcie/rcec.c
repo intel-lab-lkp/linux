@@ -65,6 +65,15 @@ static int walk_rcec_helper(struct pci_dev *dev, void *data)
 	return 0;
 }
 
+static int walk_rcec_all_helper(struct pci_dev *dev, void *data)
+{
+	struct walk_rcec_data *rcec_data = data;
+
+	rcec_data->user_callback(dev, rcec_data->user_data);
+
+	return 0;
+}
+
 static void walk_rcec(int (*cb)(struct pci_dev *dev, void *data),
 		      void *userdata)
 {
@@ -83,7 +92,7 @@ static void walk_rcec(int (*cb)(struct pci_dev *dev, void *data),
 	nextbusn = rcec->rcec_ea->nextbusn;
 	lastbusn = rcec->rcec_ea->lastbusn;
 
-	/* All RCiEP devices are on the same bus as the RCEC */
+	/* All devices are on the same bus as the RCEC */
 	if (nextbusn == 0xff && lastbusn == 0x00)
 		return;
 
@@ -96,7 +105,7 @@ static void walk_rcec(int (*cb)(struct pci_dev *dev, void *data),
 		if (!bus)
 			continue;
 
-		/* Find RCiEP devices on the given bus ranges */
+		/* Find devices on the given bus ranges */
 		pci_walk_bus(bus, cb, rcec_data);
 	}
 }
@@ -144,6 +153,37 @@ void pcie_walk_rcec(struct pci_dev *rcec, int (*cb)(struct pci_dev *, void *),
 	rcec_data.user_data = userdata;
 
 	walk_rcec(walk_rcec_helper, &rcec_data);
+}
+
+/**
+ * pcie_walk_rcec_all - Walk all devices in RCEC's bus range.
+ * @rcec:	RCEC whose devices should be walked
+ * @cb:		Callback to be called for each device found
+ * @userdata:	Arbitrary pointer to be passed to callback
+ *
+ * It is implemented only for CXL cases.
+ * Per CXL r3.1 section 12.2.2, CXL protocol errors detected by
+ * CXL root port could be logged in an RCEC's AER Extended Capability.
+ * And per CXL r3.1 section 9.18.1.5, the recommendation is that probing
+ * all CXL root ports to determine whether they have logged an error.
+ * So provide this function for CXL to walk the given RCEC, CXL driver
+ * will figure out which CXL root ports detected errors.
+ *
+ * If @cb returns anything other than 0, break out.
+ */
+void pcie_walk_rcec_all(struct pci_dev *rcec, int (*cb)(struct pci_dev *, void *),
+			void *userdata)
+{
+	struct walk_rcec_data rcec_data;
+
+	if (!rcec->rcec_ea)
+		return;
+
+	rcec_data.rcec = rcec;
+	rcec_data.user_callback = cb;
+	rcec_data.user_data = userdata;
+
+	walk_rcec(walk_rcec_all_helper, &rcec_data);
 }
 
 void pci_rcec_init(struct pci_dev *dev)
