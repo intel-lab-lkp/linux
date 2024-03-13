@@ -162,9 +162,6 @@
 	| MEMBARRIER_PRIVATE_EXPEDITED_RSEQ_BITMASK			\
 	| MEMBARRIER_CMD_GET_REGISTRATIONS)
 
-static DEFINE_MUTEX(membarrier_ipi_mutex);
-#define SERIALIZE_IPI() guard(mutex)(&membarrier_ipi_mutex)
-
 static void ipi_mb(void *info)
 {
 	smp_mb();	/* IPIs should be serializing but paranoid. */
@@ -262,7 +259,6 @@ static int membarrier_global_expedited(void)
 	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
 		return -ENOMEM;
 
-	SERIALIZE_IPI();
 	cpus_read_lock();
 	rcu_read_lock();
 	for_each_online_cpu(cpu) {
@@ -295,9 +291,7 @@ static int membarrier_global_expedited(void)
 	}
 	rcu_read_unlock();
 
-	preempt_disable();
-	smp_call_function_many(tmpmask, ipi_mb, NULL, 1);
-	preempt_enable();
+	smp_call_function_many_serialize(tmpmask, ipi_mb, NULL, 1);
 
 	free_cpumask_var(tmpmask);
 	cpus_read_unlock();
@@ -351,7 +345,6 @@ static int membarrier_private_expedited(int flags, int cpu_id)
 	if (cpu_id < 0 && !zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
 		return -ENOMEM;
 
-	SERIALIZE_IPI();
 	cpus_read_lock();
 
 	if (cpu_id >= 0) {
@@ -382,10 +375,10 @@ static int membarrier_private_expedited(int flags, int cpu_id)
 
 	if (cpu_id >= 0) {
 		/*
-		 * smp_call_function_single() will call ipi_func() if cpu_id
-		 * is the calling CPU.
+		 * smp_call_function_single_serialize() will call
+		 * ipi_func() if cpu_id is the calling CPU.
 		 */
-		smp_call_function_single(cpu_id, ipi_func, NULL, 1);
+		smp_call_function_single_serialize(cpu_id, ipi_func, NULL, 1);
 	} else {
 		/*
 		 * For regular membarrier, we can save a few cycles by
@@ -405,11 +398,9 @@ static int membarrier_private_expedited(int flags, int cpu_id)
 		 * rseq critical section.
 		 */
 		if (flags != MEMBARRIER_FLAG_SYNC_CORE) {
-			preempt_disable();
-			smp_call_function_many(tmpmask, ipi_func, NULL, true);
-			preempt_enable();
+			smp_call_function_many_serialize(tmpmask, ipi_func, NULL, true);
 		} else {
-			on_each_cpu_mask(tmpmask, ipi_func, NULL, true);
+			on_each_cpu_mask_serialize(tmpmask, ipi_func, NULL, true);
 		}
 	}
 
@@ -465,7 +456,6 @@ static int sync_runqueues_membarrier_state(struct mm_struct *mm)
 	 * between threads which are users of @mm has its membarrier state
 	 * updated.
 	 */
-	SERIALIZE_IPI();
 	cpus_read_lock();
 	rcu_read_lock();
 	for_each_online_cpu(cpu) {
@@ -478,7 +468,7 @@ static int sync_runqueues_membarrier_state(struct mm_struct *mm)
 	}
 	rcu_read_unlock();
 
-	on_each_cpu_mask(tmpmask, ipi_sync_rq_state, mm, true);
+	on_each_cpu_mask_serialize(tmpmask, ipi_sync_rq_state, mm, true);
 
 	free_cpumask_var(tmpmask);
 	cpus_read_unlock();
