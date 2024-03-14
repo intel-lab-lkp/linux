@@ -49,6 +49,7 @@
 #include <uapi/linux/netdev.h>
 #include <linux/hashtable.h>
 #include <linux/rbtree.h>
+#include <linux/dim.h>
 #include <net/net_trackers.h>
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
@@ -998,6 +999,27 @@ struct netdev_net_notifier {
 	struct notifier_block *nb;
 };
 
+enum dim_direction {
+	DIM_RX_DIRECTION = 0x0,
+	DIM_TX_DIRECTION = 0x1,
+	DIM_NUM_DIRECTIONS
+};
+/**
+ * struct dim_profs_list - Structure for dim sysfs configuration.
+ * Used to exchange profile list between the sysfs and the driver.
+ *
+ * @direction: RX or TX dim information
+ * @mode: CQ period count mode (from CQE/EQE)
+ * @num: the number of profs array
+ * @profs: dim profile list
+ */
+struct dim_profs_list {
+	u8 direction;
+	u8 mode;
+	u8 num;
+	struct dim_cq_moder profs[];
+};
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -1351,6 +1373,14 @@ struct netdev_net_notifier {
  *			   struct kernel_hwtstamp_config *kernel_config,
  *			   struct netlink_ext_ack *extack);
  *	Change the hardware timestamping parameters for NIC device.
+ *
+ * int (*ndo_dim_moder_get)(struct net_device *dev,
+ *			    struct dim_profs_list *list);
+ *	Get dim profiles list from the NIC device.
+ *
+ * int (*ndo_dim_moder_set)(struct net_device *dev,
+ *			    struct dim_profs_list *list);
+ *	Configure dim profiles list for the NIC device.
  */
 struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
@@ -1595,6 +1625,11 @@ struct net_device_ops {
 	int			(*ndo_hwtstamp_set)(struct net_device *dev,
 						    struct kernel_hwtstamp_config *kernel_config,
 						    struct netlink_ext_ack *extack);
+	int			(*ndo_dim_moder_get)(struct net_device *dev,
+						     struct dim_profs_list *list);
+
+	int			(*ndo_dim_moder_set)(struct net_device *dev,
+						     struct dim_profs_list *list);
 };
 
 /**

@@ -23,6 +23,7 @@
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/cpu.h>
+#include <linux/dim.h>
 #include <net/netdev_rx_queue.h>
 #include <net/rps.h>
 
@@ -638,6 +639,176 @@ static ssize_t threaded_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(threaded);
 
+static struct dim_profs_list *parse_dim_profs(const char *buf, ssize_t len)
+{
+	int i, ret, size, totlen = 0, retlen = 0;
+	char direction[3], period_mode[4];
+	struct dim_profs_list *list;
+
+	size = sizeof(*list) + NET_DIM_PARAMS_NUM_PROFILES * sizeof(struct dim_cq_moder);
+	list = kzalloc(size, GFP_KERNEL);
+	if (!list)
+		goto err_list;
+
+	list->num = NET_DIM_PARAMS_NUM_PROFILES;
+
+	ret = sscanf(buf, "%2s %3s%n", direction, period_mode, &retlen);
+	if (ret != 2)
+		goto err_parse;
+
+	if (!strcasecmp(direction, "RX"))
+		list->direction = DIM_RX_DIRECTION;
+	else if (!strcasecmp(direction, "TX"))
+		list->direction = DIM_TX_DIRECTION;
+	else
+		goto err_parse;
+
+	if (!strcasecmp(period_mode, "EQE"))
+		list->mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+	else if (!strcasecmp(period_mode, "CQE"))
+		list->mode = DIM_CQ_PERIOD_MODE_START_FROM_CQE;
+	else
+		goto err_parse;
+
+	totlen += retlen;
+	if (totlen > len)
+		goto err_parse;
+
+	buf += retlen;
+	if (!buf)
+		goto err_parse;
+
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		ret = sscanf(buf, "%hu,%hu,%hu%n", &list->profs[i].usec,
+			     &list->profs[i].pkts, &list->profs[i].comps, &retlen);
+		if (ret != 3)
+			goto err_parse;
+
+		totlen += retlen;
+		if (totlen > len)
+			goto err_parse;
+
+		buf += retlen;
+		if (i == NET_DIM_PARAMS_NUM_PROFILES - 1)
+			break;
+	}
+
+	return list;
+
+err_parse:
+	kfree(list);
+err_list:
+	return NULL;
+}
+
+static ssize_t dim_profs_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t len)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	const struct net_device_ops *ops = netdev->netdev_ops;
+	struct net *net = dev_net(netdev);
+	struct dim_profs_list *list;
+	int ret = 0;
+
+	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
+
+	list = parse_dim_profs(buf, len);
+	if (!list)
+		return -EINVAL;
+
+	if (!rtnl_trylock())
+		return restart_syscall();
+
+	if (dev_isalive(netdev)) {
+		if (!ops->ndo_dim_moder_set)
+			ret = -EINVAL;
+		else
+			ret = ops->ndo_dim_moder_set(netdev, list) ? : len;
+	}
+
+	kfree(list);
+	rtnl_unlock();
+
+	return ret;
+}
+
+static ssize_t dim_profs_show_one(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf, u8 direct, u8 mode,
+				  size_t *len_)
+{
+	static const char fmt_body[] = "{.usec = %3hu, .pkts = %3hu, .comps = %3hu,}%s";
+	static const char fmt_hdr[] = "The profiles of (%2s, %3s):\n";
+	const char *direction[2] = {"RX", "TX"}, *period_mode[2] = {"EQE", "CQE"};
+	struct net_device *netdev = to_net_dev(dev);
+	const struct net_device_ops *ops = netdev->netdev_ops;
+	struct dim_profs_list *list;
+	size_t size, len = *len_;
+	ssize_t i;
+
+	size = sizeof(*list) + NET_DIM_PARAMS_NUM_PROFILES * sizeof(struct dim_cq_moder);
+	list = kzalloc(size, GFP_KERNEL);
+	if (!list)
+		return -ENOMEM;
+
+	list->num = NET_DIM_PARAMS_NUM_PROFILES;
+	list->direction = direct;
+	list->mode = mode;
+	if (ops->ndo_dim_moder_get(netdev, list))
+		goto ret_;
+
+	len += scnprintf(buf + len, PAGE_SIZE - len,
+			 fmt_hdr, direction[direct], period_mode[mode]);
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		len += scnprintf(buf + len, PAGE_SIZE - len, fmt_body,
+				list->profs[i].usec, list->profs[i].pkts,
+				list->profs[i].comps,
+				(i == NET_DIM_PARAMS_NUM_PROFILES - 1) ? "\n" : ",\n");
+	}
+	*len_ = len;
+ret_:
+	kfree(list);
+	return 0;
+}
+
+static ssize_t dim_profs_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	static const char out[] = "profile is default and not customized by the device.";
+	struct net_device *netdev = to_net_dev(dev);
+	const struct net_device_ops *ops = netdev->netdev_ops;
+	ssize_t i, j, ret = 0;
+	size_t len = 0;
+
+	if (!rtnl_trylock())
+		return restart_syscall();
+
+	if (!ops->ndo_dim_moder_get) {
+		ret = sysfs_emit(buf, "%s\n", out);
+		goto ret_;
+	}
+
+	for (i = 0; i < DIM_NUM_DIRECTIONS; i++) {
+		for (j = 0; j < DIM_CQ_PERIOD_NUM_MODES; j++) {
+			ret = dim_profs_show_one(dev, attr, buf, i, j, &len);
+			if (ret)
+				goto ret_;
+		}
+	}
+
+	rtnl_unlock();
+	return len;
+
+ret_:
+	rtnl_unlock();
+	return ret;
+}
+
+static DEVICE_ATTR_RW(dim_profs);
+
 static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_netdev_group.attr,
 	&dev_attr_type.attr,
@@ -671,6 +842,7 @@ static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_carrier_up_count.attr,
 	&dev_attr_carrier_down_count.attr,
 	&dev_attr_threaded.attr,
+	&dev_attr_dim_profs.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(net_class);
