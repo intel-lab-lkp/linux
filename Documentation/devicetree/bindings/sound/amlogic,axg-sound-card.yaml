@@ -14,7 +14,11 @@ allOf:
 
 properties:
   compatible:
-    const: amlogic,axg-sound-card
+    oneOf:
+      - const: amlogic,axg-sound-card
+      - items:
+          - const: amlogic,a1-sound-card
+          - const: amlogic,axg-sound-card
 
   audio-aux-devs:
     $ref: /schemas/types.yaml#/definitions/phandle-array
