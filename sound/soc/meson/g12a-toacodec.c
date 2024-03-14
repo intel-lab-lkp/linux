@@ -50,6 +50,23 @@
 #define CTRL0_BCLK_SEL_SM1_MSB		6
 #define CTRL0_BCLK_SEL_SM1_LSB		4
 
+/* A1 bits */
+#define CTRL0_DAT_CAPTURE_SEL_A1_MSB	23
+#define CTRL0_DAT_CAPTURE_SEL_A1_LSB	23
+#define CTRL0_LANE_CAPTURE_SEL_A1_MSB	22
+#define CTRL0_LANE_CAPTURE_SEL_A1_LSB	20
+#define CTRL0_DAT_SEL_A1_MSB		19
+#define CTRL0_DAT_SEL_A1_LSB		19
+#define CTRL0_LANE_SEL_A1_MSB		18
+#define CTRL0_LANE_SEL_A1_LSB		16
+#define CTRL0_LRCLK_SEL_A1_MSB		14
+#define CTRL0_LRCLK_SEL_A1_LSB		12
+#define CTRL0_LRCLK_INV_A1		BIT(10)
+#define CTRL0_BLK_CAP_INV_A1		BIT(9)
+#define CTRL0_BCLK_O_INV_A1		BIT(8)
+#define CTRL0_BCLK_SEL_A1_MSB		6
+#define CTRL0_BCLK_SEL_A1_LSB		4
+
 #define TOACODEC_OUT_CHMAX		2
 
 struct g12a_toacodec {
@@ -60,6 +77,8 @@ struct g12a_toacodec {
 
 struct g12a_toacodec_match_data {
 	const struct snd_soc_component_driver *component_drv;
+	struct snd_soc_dai_driver *dai_drv;
+	int num_dai_drv;
 	struct reg_field field_dat_sel;
 	struct reg_field field_lrclk_sel;
 	struct reg_field field_bclk_sel;
@@ -67,6 +86,10 @@ struct g12a_toacodec_match_data {
 
 static const char * const g12a_toacodec_mux_texts[] = {
 	"I2S A", "I2S B", "I2S C",
+};
+
+static const char * const a1_toacodec_mux_texts[] = {
+	"I2S A", "I2S B",
 };
 
 static int g12a_toacodec_mux_put_enum(struct snd_kcontrol *kcontrol,
@@ -124,8 +147,12 @@ static SOC_ENUM_SINGLE_DECL(sm1_toacodec_mux_enum, TOACODEC_CTRL0,
 			    CTRL0_DAT_SEL_SM1_LSB,
 			    g12a_toacodec_mux_texts);
 
-static const struct snd_kcontrol_new g12a_toacodec_mux =
-	SOC_DAPM_ENUM_EXT("Source", g12a_toacodec_mux_enum,
+static SOC_ENUM_SINGLE_DECL(a1_toacodec_mux_enum, TOACODEC_CTRL0,
+			    CTRL0_DAT_SEL_A1_LSB,
+			    a1_toacodec_mux_texts);
+
+static const struct snd_kcontrol_new a1_toacodec_mux =
+	SOC_DAPM_ENUM_EXT("Source", a1_toacodec_mux_enum,
 			  snd_soc_dapm_get_enum_double,
 			  g12a_toacodec_mux_put_enum);
 
@@ -134,9 +161,20 @@ static const struct snd_kcontrol_new sm1_toacodec_mux =
 			  snd_soc_dapm_get_enum_double,
 			  g12a_toacodec_mux_put_enum);
 
+static const struct snd_kcontrol_new g12a_toacodec_mux =
+	SOC_DAPM_ENUM_EXT("Source", g12a_toacodec_mux_enum,
+			  snd_soc_dapm_get_enum_double,
+			  g12a_toacodec_mux_put_enum);
+
 static const struct snd_kcontrol_new g12a_toacodec_out_enable =
 	SOC_DAPM_SINGLE_AUTODISABLE("Switch", TOACODEC_CTRL0,
 				    CTRL0_ENABLE_SHIFT, 1, 0);
+
+/* Don't use AUTODISABLE unlike G12A. On A1 it causes noise after playback
+ * is stopped.
+ */
+static const struct snd_kcontrol_new a1_toacodec_enable =
+	SOC_DAPM_SINGLE("Switch", TOACODEC_CTRL0, CTRL0_ENABLE_SHIFT, 1, 0);
 
 static const struct snd_soc_dapm_widget g12a_toacodec_widgets[] = {
 	SND_SOC_DAPM_MUX("SRC", SND_SOC_NOPM, 0, 0,
@@ -152,25 +190,55 @@ static const struct snd_soc_dapm_widget sm1_toacodec_widgets[] = {
 			    &g12a_toacodec_out_enable),
 };
 
-static int g12a_toacodec_input_hw_params(struct snd_pcm_substream *substream,
-					 struct snd_pcm_hw_params *params,
-					 struct snd_soc_dai *dai)
+static const struct snd_soc_dapm_widget a1_toacodec_widgets[] = {
+	SND_SOC_DAPM_SWITCH("EN", SND_SOC_NOPM, 0, 0,
+			    &a1_toacodec_enable),
+	SND_SOC_DAPM_MUX("Playback SRC", SND_SOC_NOPM, 0, 0,
+			 &a1_toacodec_mux),
+	SND_SOC_DAPM_MUX("Capture SRC A", SND_SOC_NOPM, 0, 0,
+			 &a1_toacodec_mux),
+	SND_SOC_DAPM_MUX("Capture SRC B", SND_SOC_NOPM, 0, 0,
+			 &a1_toacodec_mux),
+};
+
+static int g12a_toacodec_hw_params(struct snd_pcm_substream *substream,
+				   struct snd_pcm_hw_params *params,
+				   struct snd_soc_dai *dai,
+				   bool playback)
 {
 	struct meson_codec_glue_input *data;
 	int ret;
 
-	ret = meson_codec_glue_input_hw_params(substream, params, dai);
+	ret = playback ? meson_codec_glue_input_hw_params(substream, params, dai)
+		       : meson_codec_glue_capture_output_hw_params(substream,
+								   params, dai);
 	if (ret)
 		return ret;
 
 	/* The glue will provide 1 lane out of the 4 to the output */
-	data = meson_codec_glue_input_get_data(dai);
+	data = playback ? meson_codec_glue_input_get_data(dai)
+			: meson_codec_glue_capture_output_get_data(dai);
 	data->params.channels_min = min_t(unsigned int, TOACODEC_OUT_CHMAX,
 					data->params.channels_min);
 	data->params.channels_max = min_t(unsigned int, TOACODEC_OUT_CHMAX,
 					data->params.channels_max);
 
 	return 0;
+}
+
+static int g12a_toacodec_input_hw_params(struct snd_pcm_substream *substream,
+					 struct snd_pcm_hw_params *params,
+					 struct snd_soc_dai *dai)
+{
+	return g12a_toacodec_hw_params(substream, params, dai, true);
+}
+
+static int
+g12a_toacodec_capture_output_hw_params(struct snd_pcm_substream *substream,
+				       struct snd_pcm_hw_params *params,
+				       struct snd_soc_dai *dai)
+{
+	return g12a_toacodec_hw_params(substream, params, dai, false);
 }
 
 static const struct snd_soc_dai_ops g12a_toacodec_input_ops = {
@@ -182,6 +250,17 @@ static const struct snd_soc_dai_ops g12a_toacodec_input_ops = {
 
 static const struct snd_soc_dai_ops g12a_toacodec_output_ops = {
 	.startup	= meson_codec_glue_output_startup,
+};
+
+static const struct snd_soc_dai_ops g12a_toacodec_capture_output_ops = {
+	.probe		= meson_codec_glue_capture_output_dai_probe,
+	.remove		= meson_codec_glue_capture_output_dai_remove,
+	.hw_params	= g12a_toacodec_capture_output_hw_params,
+	.set_fmt	= meson_codec_glue_capture_output_set_fmt,
+};
+
+static const struct snd_soc_dai_ops g12a_toacodec_capture_input_ops = {
+	.startup	= meson_codec_glue_capture_input_startup,
 };
 
 #define TOACODEC_STREAM(xname, xsuffix, xchmax)			\
@@ -208,11 +287,35 @@ static const struct snd_soc_dai_ops g12a_toacodec_output_ops = {
 	.ops = &g12a_toacodec_output_ops,				\
 }
 
+#define TOACODEC_CAPTURE_INPUT(xname, xid) {				\
+	.name = xname,							\
+	.id = (xid),							\
+	.playback = TOACODEC_STREAM(xname, "Playback", 2),		\
+	.ops = &g12a_toacodec_capture_input_ops,			\
+}
+
+#define TOACODEC_CAPTURE_OUTPUT(xname, xid) {				\
+	.name = xname,							\
+	.id = (xid),							\
+	.capture = TOACODEC_STREAM(xname, "Capture", 2),		\
+	.ops = &g12a_toacodec_capture_output_ops,			\
+}
+
 static struct snd_soc_dai_driver g12a_toacodec_dai_drv[] = {
 	TOACODEC_INPUT("IN A", TOACODEC_IN_A),
 	TOACODEC_INPUT("IN B", TOACODEC_IN_B),
 	TOACODEC_INPUT("IN C", TOACODEC_IN_C),
 	TOACODEC_OUTPUT("OUT", TOACODEC_OUT),
+};
+
+static struct snd_soc_dai_driver a1_toacodec_dai_drv[] = {
+	TOACODEC_INPUT("IN A", TOACODEC_IN_A),
+	TOACODEC_INPUT("IN B", TOACODEC_IN_B),
+	TOACODEC_OUTPUT("OUT", TOACODEC_OUT),
+
+	TOACODEC_CAPTURE_OUTPUT("OUT A", TOACODEC_CAPTURE_OUT_A),
+	TOACODEC_CAPTURE_OUTPUT("OUT B", TOACODEC_CAPTURE_OUT_B),
+	TOACODEC_CAPTURE_INPUT("IN", TOACODEC_CAPTURE_IN),
 };
 
 static int g12a_toacodec_component_probe(struct snd_soc_component *c)
@@ -229,12 +332,51 @@ static int sm1_toacodec_component_probe(struct snd_soc_component *c)
 				       CTRL0_BLK_CAP_INV_SM1);
 }
 
+static int a1_toacodec_component_probe(struct snd_soc_component *c)
+{
+	/* Initialize the static clock parameters */
+	return snd_soc_component_write(c, TOACODEC_CTRL0,
+				       CTRL0_BLK_CAP_INV_A1);
+}
+
+static int a1_toacodec_of_xlate_dai_name(struct snd_soc_component *component,
+					 const struct of_phandle_args *args,
+					 const char **dai_name)
+{
+	struct snd_soc_dai *dai;
+
+	if (args->args_count != 1)
+		return -EINVAL;
+
+	for_each_component_dais(component, dai) {
+		if (dai->id == args->args[0]) {
+			*dai_name = dai->driver->name;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static const struct snd_soc_dapm_route g12a_toacodec_routes[] = {
 	{ "SRC", "I2S A", "IN A Playback" },
 	{ "SRC", "I2S B", "IN B Playback" },
 	{ "SRC", "I2S C", "IN C Playback" },
 	{ "OUT EN", "Switch", "SRC" },
 	{ "OUT Capture", NULL, "OUT EN" },
+};
+
+static const struct snd_soc_dapm_route a1_toacodec_routes[] = {
+	{ "Playback SRC", "I2S A", "IN A Playback" },
+	{ "Playback SRC", "I2S B", "IN B Playback" },
+	{ "EN", "Switch", "Playback SRC" },
+	{ "OUT Capture", NULL, "Playback SRC" },
+
+	{ "EN", "Switch", "IN Playback" },
+	{ "Capture SRC A", "I2S A", "EN" },
+	{ "Capture SRC B", "I2S B", "EN" },
+	{ "OUT A Capture", NULL, "Capture SRC A" },
+	{ "OUT B Capture", NULL, "Capture SRC B" },
 };
 
 static const struct snd_kcontrol_new g12a_toacodec_controls[] = {
@@ -245,6 +387,11 @@ static const struct snd_kcontrol_new g12a_toacodec_controls[] = {
 static const struct snd_kcontrol_new sm1_toacodec_controls[] = {
 	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, CTRL0_LANE_SEL_SM1_LSB,
 		   CTRL0_LANE_SEL_SM1_MSB - CTRL0_LANE_SEL_SM1_LSB + 1, 0),
+};
+
+static const struct snd_kcontrol_new a1_toacodec_controls[] = {
+	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, CTRL0_LANE_SEL_A1_LSB,
+		   CTRL0_LANE_SEL_A1_MSB - CTRL0_LANE_SEL_A1_LSB + 1, 0),
 };
 
 static const struct snd_soc_component_driver g12a_toacodec_component_drv = {
@@ -269,14 +416,44 @@ static const struct snd_soc_component_driver sm1_toacodec_component_drv = {
 	.endianness		= 1,
 };
 
+static const struct snd_soc_component_driver a1_toacodec_component_drv = {
+	.probe			= a1_toacodec_component_probe,
+	.of_xlate_dai_name	= a1_toacodec_of_xlate_dai_name,
+	.controls		= a1_toacodec_controls,
+	.num_controls		= ARRAY_SIZE(a1_toacodec_controls),
+	.dapm_widgets		= a1_toacodec_widgets,
+	.num_dapm_widgets	= ARRAY_SIZE(a1_toacodec_widgets),
+	.dapm_routes		= a1_toacodec_routes,
+	.num_dapm_routes	= ARRAY_SIZE(a1_toacodec_routes),
+	.endianness		= 1,
+};
+
+static const struct reg_default g12a_toacodec_reg_default[] = {
+	{ TOACODEC_CTRL0, 0x0 },
+};
+
+static bool g12_toacodec_readable_reg(struct device *dev, unsigned int reg)
+{
+	/* There are no readable registers */
+	return false;
+}
+
 static const struct regmap_config g12a_toacodec_regmap_cfg = {
-	.reg_bits	= 32,
-	.val_bits	= 32,
-	.reg_stride	= 4,
+	.reg_bits		= 32,
+	.val_bits		= 32,
+	.reg_stride		= 4,
+	.max_register		= TOACODEC_CTRL0,
+	.max_register_is_0	= true,
+	.cache_type		= REGCACHE_FLAT,
+	.reg_defaults		= g12a_toacodec_reg_default,
+	.num_reg_defaults	= ARRAY_SIZE(g12a_toacodec_reg_default),
+	.readable_reg		= g12_toacodec_readable_reg,
 };
 
 static const struct g12a_toacodec_match_data g12a_toacodec_match_data = {
 	.component_drv	= &g12a_toacodec_component_drv,
+	.dai_drv	= g12a_toacodec_dai_drv,
+	.num_dai_drv	= ARRAY_SIZE(g12a_toacodec_dai_drv),
 	.field_dat_sel	= REG_FIELD(TOACODEC_CTRL0, CTRL0_DAT_SEL_G12A_LSB,
 				    CTRL0_DAT_SEL_G12A_MSB),
 	.field_lrclk_sel = REG_FIELD(TOACODEC_CTRL0, CTRL0_LRCLK_SEL_G12A_LSB,
@@ -287,12 +464,26 @@ static const struct g12a_toacodec_match_data g12a_toacodec_match_data = {
 
 static const struct g12a_toacodec_match_data sm1_toacodec_match_data = {
 	.component_drv	= &sm1_toacodec_component_drv,
+	.dai_drv	= g12a_toacodec_dai_drv,
+	.num_dai_drv	= ARRAY_SIZE(g12a_toacodec_dai_drv),
 	.field_dat_sel	= REG_FIELD(TOACODEC_CTRL0, CTRL0_DAT_SEL_SM1_LSB,
 				    CTRL0_DAT_SEL_SM1_MSB),
 	.field_lrclk_sel = REG_FIELD(TOACODEC_CTRL0, CTRL0_LRCLK_SEL_SM1_LSB,
 				     CTRL0_LRCLK_SEL_SM1_MSB),
 	.field_bclk_sel	= REG_FIELD(TOACODEC_CTRL0, CTRL0_BCLK_SEL_SM1_LSB,
 				    CTRL0_BCLK_SEL_SM1_MSB),
+};
+
+static const struct g12a_toacodec_match_data a1_toacodec_match_data = {
+	.component_drv	= &a1_toacodec_component_drv,
+	.dai_drv	= a1_toacodec_dai_drv,
+	.num_dai_drv	= ARRAY_SIZE(a1_toacodec_dai_drv),
+	.field_dat_sel	= REG_FIELD(TOACODEC_CTRL0, CTRL0_DAT_SEL_A1_LSB,
+				    CTRL0_DAT_SEL_A1_MSB),
+	.field_lrclk_sel = REG_FIELD(TOACODEC_CTRL0, CTRL0_LRCLK_SEL_A1_LSB,
+				     CTRL0_LRCLK_SEL_A1_MSB),
+	.field_bclk_sel	= REG_FIELD(TOACODEC_CTRL0, CTRL0_BCLK_SEL_A1_LSB,
+				    CTRL0_BCLK_SEL_A1_MSB),
 };
 
 static const struct of_device_id g12a_toacodec_of_match[] = {
@@ -303,6 +494,10 @@ static const struct of_device_id g12a_toacodec_of_match[] = {
 	{
 		.compatible = "amlogic,sm1-toacodec",
 		.data = &sm1_toacodec_match_data,
+	},
+	{
+		.compatible = "amlogic,a1-toacodec",
+		.data = &a1_toacodec_match_data,
 	},
 	{}
 };
@@ -356,9 +551,9 @@ static int g12a_toacodec_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->field_bclk_sel))
 		return PTR_ERR(priv->field_bclk_sel);
 
-	return devm_snd_soc_register_component(dev,
-			data->component_drv, g12a_toacodec_dai_drv,
-			ARRAY_SIZE(g12a_toacodec_dai_drv));
+	return devm_snd_soc_register_component(dev, data->component_drv,
+					       data->dai_drv,
+					       data->num_dai_drv);
 }
 
 static struct platform_driver g12a_toacodec_pdrv = {
