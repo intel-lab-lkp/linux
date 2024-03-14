@@ -13,6 +13,7 @@
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
+#include <linux/coredump.h>
 
 #include <asm/fpu/api.h>
 #include <asm/fpu/regset.h>
@@ -1836,3 +1837,103 @@ int proc_pid_arch_status(struct seq_file *m, struct pid_namespace *ns,
 	return 0;
 }
 #endif /* CONFIG_PROC_PID_ARCH_STATUS */
+
+/*
+ * Dump type, size, offset and flag values for every xfeature that is present.
+ */
+static int dump_xsave_layout_desc(struct coredump_params *cprm)
+{
+
+	struct xfeat_component xc;
+	int num_records = 0;
+	int i;
+
+	/* XFEATURE_FPU and XFEATURE_SSE, both are fixed legacy states. */
+	for (i = 0; i < FIRST_EXTENDED_XFEATURE; i++) {
+		xc.xfeat_type = i;
+		xc.xfeat_sz = xstate_sizes[i];
+		xc.xfeat_off = xstate_offsets[i];
+		xc.xfeat_flags = xstate_flags[i];
+
+		if (!dump_emit(cprm, &xc, sizeof(struct xfeat_component)))
+			return 0;
+		num_records++;
+	}
+
+	for_each_extended_xfeature(i, fpu_user_cfg.max_features) {
+		xc.xfeat_type = i;
+		xc.xfeat_sz = xstate_sizes[i];
+		xc.xfeat_off = xstate_offsets[i];
+		xc.xfeat_flags = xstate_flags[i];
+
+		if (!dump_emit(cprm, &xc, sizeof(struct xfeat_component)))
+			return 0;
+		num_records++;
+	}
+
+	return num_records;
+}
+
+static int get_xsave_desc_size(void)
+{
+	/* XFEATURE_FP and XFEATURE_SSE, both are fixed legacy states */
+	int xfeatures_count = 2;
+	int i;
+
+	for_each_extended_xfeature(i, fpu_user_cfg.max_features)
+		xfeatures_count++;
+
+	return xfeatures_count * (sizeof(struct xfeat_component));
+}
+
+int elf_coredump_extra_notes_write(struct coredump_params *cprm)
+{
+	const char *owner_name = "LINUX";
+	int num_records = 0;
+	struct elf_note en;
+
+	en.n_namesz = strlen(owner_name) + 1;
+	en.n_descsz = get_xsave_desc_size();
+	en.n_type = NT_X86_XSAVE_LAYOUT;
+
+	if (!dump_emit(cprm, &en, sizeof(en)))
+		return 1;
+	if (!dump_emit(cprm, owner_name, en.n_namesz))
+		return 1;
+	if (!dump_align(cprm, 4))
+		return 1;
+
+	num_records = dump_xsave_layout_desc(cprm);
+	if (!num_records) {
+		pr_warn("Error adding XSTATE layout ELF note. XSTATE buffer in the core file will be unparseable.");
+		return 1;
+	}
+
+	/* Total size should be equal to the number of records */
+	if ((sizeof(struct xfeat_component) * num_records) != en.n_descsz) {
+		pr_warn("Error adding XSTATE layout ELF note. The size of the .note section does not match with the total size of the records.");
+		return 1;
+	}
+
+	if (!dump_align(cprm, 4))
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Return the size of new note.
+ */
+int elf_coredump_extra_notes_size(void)
+{
+	const char *fullname = "LINUX";
+	int size = 0;
+
+	/* NOTE Header */
+	size += sizeof(struct elf_note);
+	/* name + align */
+	size += roundup(strlen(fullname) + 1, 4);
+	size += get_xsave_desc_size();
+
+	return size;
+}

@@ -13,6 +13,13 @@
 #include <asm/auxvec.h>
 #include <asm/fsgsbase.h>
 
+struct xfeat_component {
+	u32 xfeat_type;
+	u32 xfeat_sz;
+	u32 xfeat_off;
+	u32 xfeat_flags;
+} __packed;
+
 typedef unsigned long elf_greg_t;
 
 #define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t))
