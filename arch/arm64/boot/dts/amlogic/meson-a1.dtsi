@@ -5,11 +5,15 @@
 
 #include <dt-bindings/clock/amlogic,a1-pll-clkc.h>
 #include <dt-bindings/clock/amlogic,a1-peripherals-clkc.h>
+#include <dt-bindings/clock/amlogic,a1-audio-clkc.h>
 #include <dt-bindings/gpio/meson-a1-gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/power/meson-a1-power.h>
 #include <dt-bindings/reset/amlogic,meson-a1-reset.h>
+#include <dt-bindings/reset/amlogic,meson-a1-audio-reset.h>
+#include <dt-bindings/reset/amlogic,meson-axg-audio-arb.h>
+#include <dt-bindings/sound/meson-g12a-toacodec.h>
 
 / {
 	compatible = "amlogic,a1";
@@ -280,6 +284,250 @@
 						function = "spif";
 					};
 				};
+
+				tdm_a_din0_pins: tdm-a-din0 {
+					mux {
+						groups = "tdm_a_din0";
+						function = "tdm_a";
+						bias-disable;
+					};
+				};
+
+				tdm_a_din1_pins: tdm-a-din1 {
+					mux {
+						groups = "tdm_a_din1";
+						function = "tdm_a";
+						bias-disable;
+					};
+				};
+
+				tdm_a_dout0_pins: tdm-a-dout0 {
+					mux {
+						groups = "tdm_a_dout0";
+						function = "tdm_a";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_a_dout1_pins: tdm-a-dout1 {
+					mux {
+						groups = "tdm_a_dout1";
+						function = "tdm_a";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_a_fs_pins: tdm-a-fs {
+					mux {
+						groups = "tdm_a_fs";
+						function = "tdm_a";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_a_sclk_pins: tdm-a-sclk {
+					mux {
+						groups = "tdm_a_sclk";
+						function = "tdm_a";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_a_slv_fs_pins: tdm-a-slv-fs {
+					mux {
+						groups = "tdm_a_slv_fs";
+						function = "tdm_a";
+						bias-disable;
+					};
+				};
+
+				tdm_a_slv_sclk_pins: tdm-a-slv-sclk {
+					mux {
+						groups = "tdm_a_slv_sclk";
+						function = "tdm_a";
+						bias-disable;
+					};
+				};
+
+				tdm_b_din0_pins: tdm-b-din0 {
+					mux {
+						groups = "tdm_b_din0";
+						function = "tdm_b";
+						bias-disable;
+					};
+				};
+
+				tdm_b_din1_pins: tdm-b-din1 {
+					mux {
+						groups = "tdm_b_din1";
+						function = "tdm_b";
+						bias-disable;
+					};
+				};
+
+				tdm_b_din2_pins: tdm-b-din2 {
+					mux {
+						groups = "tdm_b_din2";
+						function = "tdm_b";
+						bias-disable;
+					};
+				};
+
+				tdm_b_dout0_pins: tdm-b-dout0 {
+					mux {
+						groups = "tdm_b_dout0";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_dout1_pins: tdm-b-dout1 {
+					mux {
+						groups = "tdm_b_dout1";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_dout2_pins: tdm-b-dout2 {
+					mux {
+						groups = "tdm_b_dout2";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_dout3_pins: tdm-b-dout3 {
+					mux {
+						groups = "tdm_b_dout3";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_dout4_pins: tdm-b-dout4 {
+					mux {
+						groups = "tdm_b_dout4";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_dout5_pins: tdm-b-dout5 {
+					mux {
+						groups = "tdm_b_dout5";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_fs_pins: tdm-b-fs {
+					mux {
+						groups = "tdm_b_fs";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_sclk_pins: tdm-b-sclk {
+					mux {
+						groups = "tdm_b_sclk";
+						function = "tdm_b";
+						bias-disable;
+						drive-strength-microamp = <3000>;
+					};
+				};
+
+				tdm_b_slv_fs_pins: tdm-b-slv-fs {
+					mux {
+						groups = "tdm_b_slv_fs";
+						function = "tdm_b";
+						bias-disable;
+					};
+				};
+
+				tdm_b_slv_sclk_pins: tdm-b-slv-sclk {
+					mux {
+						groups = "tdm_b_slv_sclk";
+						function = "tdm_b";
+						bias-disable;
+					};
+				};
+
+				pdm_din0_a_pins: pdm-din0-a {
+					mux {
+						groups = "pdm_din0_a";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_din0_x_pins: pdm-din0-x {
+					mux {
+						groups = "pdm_din0_x";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_din1_a_pins: pdm-din1-a {
+					mux {
+						groups = "pdm_din1_a";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_din1_x_pins: pdm-din1-x {
+					mux {
+						groups = "pdm_din1_x";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_din2_a_pins: pdm-din2-a {
+					mux {
+						groups = "pdm_din2_a";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_din2_x_pins: pdm-din2-x {
+					mux {
+						groups = "pdm_din2_x";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_dclk_a_pins: pdm-dclk-a {
+					mux {
+						groups = "pdm_dclk_a";
+						function = "pdm";
+						bias-disable;
+					};
+				};
+
+				pdm_dclk_x_pins: pdm-dclk-x {
+					mux {
+						groups = "pdm_dclk_x";
+						function = "pdm";
+						bias-disable;
+					};
+				};
 			};
 
 			gpio_intc: interrupt-controller@440 {
@@ -435,6 +683,207 @@
 				power-domains = <&pwrc PWRC_SD_EMMC_ID>;
 				status = "disabled";
 			};
+
+			acodec: audio-controller@4800 {
+				compatible = "amlogic,t9015-a1";
+				reg = <0x0 0x4800 0x0 0x14>;
+				#sound-dai-cells = <0>;
+				sound-name-prefix = "ACODEC";
+				clocks = <&clkc_periphs CLKID_AUDIO>;
+				clock-names = "pclk";
+				resets = <&reset RESET_ACODEC>;
+				power-domains = <&pwrc PWRC_ACODEC_ID>;
+			};
+
+			audio: bus@50000 {
+				compatible = "simple-bus";
+				#address-cells = <2>;
+				#size-cells = <2>;
+				ranges = <0x0 0x0 0x0 0x50000 0 0x4980>;
+				power-domains = <&pwrc PWRC_AUDIO_ID>;
+
+				clkc_audio: audio-clock-controller@0 {
+					compatible = "amlogic,a1-audio-clkc";
+					reg = <0x0 0x0 0x0 0xb0>,
+					      <0x0 0x4800 0x0 0x20>;
+					#clock-cells = <1>;
+					#reset-cells = <1>;
+					clocks = <&clkc_periphs CLKID_AUDIO>,
+						 <&clkc_periphs CLKID_DDS_IN>,
+						 <&clkc_pll CLKID_FCLK_DIV2>,
+						 <&clkc_pll CLKID_FCLK_DIV3>,
+						 <&clkc_pll CLKID_HIFI_PLL>,
+						 <&xtal>;
+					clock-names = "pclk", "dds_in",
+						      "fclk_div2", "fclk_div3",
+						      "hifi_pll", "xtal";
+				};
+
+				toddr_a: audio-controller@100 {
+					compatible = "amlogic,a1-toddr",
+						     "amlogic,sm1-toddr",
+						     "amlogic,axg-toddr";
+					reg = <0x0 0x100 0x0 0x2c>;
+					#sound-dai-cells = <0>;
+					sound-name-prefix = "TODDR_A";
+					interrupts = <GIC_SPI 37 IRQ_TYPE_EDGE_RISING>;
+					clocks = <&clkc_audio AUD_CLKID_TODDR_A>;
+					resets = <&arb AXG_ARB_TODDR_A>,
+						 <&clkc_audio AUD_RESET_TODDR_A>;
+					reset-names = "arb", "rst";
+					amlogic,fifo-depth = <128>;
+				};
+
+				toddr_b: audio-controller@140 {
+					compatible = "amlogic,a1-toddr",
+						     "amlogic,sm1-toddr",
+						     "amlogic,axg-toddr";
+					reg = <0x0 0x140 0x0 0x2c>;
+					#sound-dai-cells = <0>;
+					sound-name-prefix = "TODDR_B";
+					interrupts = <GIC_SPI 38 IRQ_TYPE_EDGE_RISING>;
+					clocks = <&clkc_audio AUD_CLKID_TODDR_B>;
+					resets = <&arb AXG_ARB_TODDR_B>,
+						 <&clkc_audio AUD_RESET_TODDR_B>;
+					reset-names = "arb", "rst";
+					amlogic,fifo-depth = <128>;
+				};
+
+				frddr_a: audio-controller@1c0 {
+					compatible = "amlogic,a1-frddr",
+						     "amlogic,sm1-frddr",
+						     "amlogic,axg-frddr";
+					reg = <0x0 0x1c0 0x0 0x2c>;
+					#sound-dai-cells = <0>;
+					sound-name-prefix = "FRDDR_A";
+					interrupts = <GIC_SPI 40 IRQ_TYPE_EDGE_RISING>;
+					clocks = <&clkc_audio AUD_CLKID_FRDDR_A>;
+					resets = <&arb AXG_ARB_FRDDR_A>,
+						 <&clkc_audio AUD_RESET_FRDDR_A>;
+					reset-names = "arb", "rst";
+					amlogic,fifo-depth = <128>;
+				};
+
+				frddr_b: audio-controller@200 {
+					compatible = "amlogic,a1-frddr",
+						     "amlogic,sm1-frddr",
+						     "amlogic,axg-frddr";
+					reg = <0x0 0x200 0x0 0x2c>;
+					#sound-dai-cells = <0>;
+					sound-name-prefix = "FRDDR_B";
+					interrupts = <GIC_SPI 41 IRQ_TYPE_EDGE_RISING>;
+					clocks = <&clkc_audio AUD_CLKID_FRDDR_B>;
+					resets = <&arb AXG_ARB_FRDDR_B>,
+						 <&clkc_audio AUD_RESET_FRDDR_B>;
+					reset-names = "arb", "rst";
+					amlogic,fifo-depth = <128>;
+				};
+
+				arb: reset-controller@280 {
+					compatible = "amlogic,meson-a1-audio-arb",
+						     "amlogic,meson-sm1-audio-arb";
+					reg = <0x0 0x280 0x0 0x4>;
+					#reset-cells = <1>;
+					clocks = <&clkc_audio AUD_CLKID_DDR_ARB>;
+				};
+
+				tdmin_a: audio-controller@300 {
+					compatible = "amlogic,a1-tdmin",
+						     "amlogic,sm1-tdmin";
+					reg = <0x0 0x300 0x0 0x40>;
+					sound-name-prefix = "TDMIN_A";
+					clocks = <&clkc_audio AUD_CLKID_TDMIN_A>,
+						 <&clkc_audio AUD_CLKID_TDMIN_A_SCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_A_SCLK_SEL>,
+						 <&clkc_audio AUD_CLKID_TDMIN_A_LRCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_A_LRCLK>;
+					clock-names = "pclk", "sclk", "sclk_sel",
+						      "lrclk", "lrclk_sel";
+					resets = <&clkc_audio AUD_RESET_TDMIN_A>;
+				};
+
+				tdmin_b: audio-controller@340 {
+					compatible = "amlogic,a1-tdmin",
+						     "amlogic,sm1-tdmin";
+					reg = <0x0 0x340 0x0 0x40>;
+					sound-name-prefix = "TDMIN_B";
+					clocks = <&clkc_audio AUD_CLKID_TDMIN_B>,
+						 <&clkc_audio AUD_CLKID_TDMIN_B_SCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_B_SCLK_SEL>,
+						 <&clkc_audio AUD_CLKID_TDMIN_B_LRCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_B_LRCLK>;
+					clock-names = "pclk", "sclk", "sclk_sel",
+						      "lrclk", "lrclk_sel";
+					resets = <&clkc_audio AUD_RESET_TDMIN_B>;
+				};
+
+				tdmin_lb: audio-controller@3c0 {
+					compatible = "amlogic,a1-tdmin",
+						     "amlogic,sm1-tdmin";
+					reg = <0x0 0x3c0 0x0 0x40>;
+					sound-name-prefix = "TDMIN_LB";
+					clocks = <&clkc_audio AUD_CLKID_TDMIN_LB>,
+						 <&clkc_audio AUD_CLKID_TDMIN_LB_SCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_LB_SCLK_SEL>,
+						 <&clkc_audio AUD_CLKID_TDMIN_LB_LRCLK>,
+						 <&clkc_audio AUD_CLKID_TDMIN_LB_LRCLK>;
+					clock-names = "pclk", "sclk", "sclk_sel",
+						      "lrclk", "lrclk_sel";
+					resets = <&clkc_audio AUD_RESET_TDMIN_LB>;
+				};
+
+				tdmout_a: audio-controller@500 {
+					compatible = "amlogic,a1-tdmout",
+						     "amlogic,sm1-tdmout";
+					reg = <0x0 0x500 0x0 0x40>;
+					sound-name-prefix = "TDMOUT_A";
+					clocks = <&clkc_audio AUD_CLKID_TDMOUT_A>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_A_SCLK>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_A_SCLK_SEL>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_A_LRCLK>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_A_LRCLK>;
+					clock-names = "pclk", "sclk", "sclk_sel",
+						      "lrclk", "lrclk_sel";
+					resets = <&clkc_audio AUD_RESET_TDMOUT_A>;
+				};
+
+				tdmout_b: audio-controller@540 {
+					compatible = "amlogic,a1-tdmout",
+						     "amlogic,sm1-tdmout";
+					reg = <0x0 0x540 0x0 0x40>;
+					sound-name-prefix = "TDMOUT_B";
+					clocks = <&clkc_audio AUD_CLKID_TDMOUT_B>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_B_SCLK>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_B_SCLK_SEL>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_B_LRCLK>,
+						 <&clkc_audio AUD_CLKID_TDMOUT_B_LRCLK>;
+					clock-names = "pclk", "sclk", "sclk_sel",
+						      "lrclk", "lrclk_sel";
+					resets = <&clkc_audio AUD_RESET_TDMOUT_B>;
+				};
+
+				toacodec: audio-controller@740 {
+					compatible = "amlogic,a1-toacodec",
+						     "amlogic,g12a-toacodec";
+					reg = <0x0 0x740 0x0 0x4>;
+					#sound-dai-cells = <1>;
+					sound-name-prefix = "TOACODEC";
+					resets = <&clkc_audio AUD_RESET_TOACODEC>;
+				};
+
+				pdm: audio-controller@1000 {
+					compatible = "amlogic,a1-pdm",
+						     "amlogic,axg-pdm";
+					reg = <0x0 0x1000 0x0 0x34>;
+					#sound-dai-cells = <0>;
+					sound-name-prefix = "PDM";
+					clocks = <&clkc_audio AUD2_CLKID_PDM>,
+						 <&clkc_audio AUD2_CLKID_PDM_DCLK>,
+						 <&clkc_audio AUD2_CLKID_PDM_SYSCLK>;
+					clock-names = "pclk", "dclk", "sysclk";
+					power-domains = <&pwrc PWRC_PDMIN_ID>;
+				};
+			};
 		};
 
 		usb: usb@fe004400 {
@@ -514,5 +963,27 @@
 		clock-frequency = <24000000>;
 		clock-output-names = "xtal";
 		#clock-cells = <0>;
+	};
+
+	tdmif_a: audio-controller-0 {
+		compatible = "amlogic,a1-tdm-iface",
+			     "amlogic,axg-tdm-iface";
+		#sound-dai-cells = <0>;
+		sound-name-prefix = "TDM_A";
+		clocks = <&clkc_audio AUD_CLKID_MST_A_SCLK>,
+			 <&clkc_audio AUD_CLKID_MST_A_LRCLK>,
+			 <&clkc_audio AUD_CLKID_MST_A_MCLK>;
+		clock-names = "sclk", "lrclk", "mclk";
+	};
+
+	tdmif_b: audio-controller-1 {
+		compatible = "amlogic,a1-tdm-iface",
+			     "amlogic,axg-tdm-iface";
+		#sound-dai-cells = <0>;
+		sound-name-prefix = "TDM_B";
+		clocks = <&clkc_audio AUD_CLKID_MST_B_SCLK>,
+			 <&clkc_audio AUD_CLKID_MST_B_LRCLK>,
+			 <&clkc_audio AUD_CLKID_MST_B_MCLK>;
+		clock-names = "sclk", "lrclk", "mclk";
 	};
 };
