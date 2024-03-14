@@ -183,7 +183,7 @@ SYM_FUNC_END(__host_hvc)
 .endif
 .endm
 
-.macro invalid_host_el2_vect
+.macro host_el2_sync_vect
 	.align 7
 
 	/*
@@ -221,6 +221,11 @@ SYM_FUNC_END(__host_hvc)
 	b	__hyp_do_panic
 .endm
 
+.macro invalid_host_el2_vect
+	.align 7
+	b	__hyp_panic
+.endm
+
 /*
  * The host vector does not use an ESB instruction in order to avoid consuming
  * SErrors that should only be consumed by the host. Guest entry is deferred by
@@ -233,12 +238,12 @@ SYM_FUNC_END(__host_hvc)
  */
 	.align 11
 SYM_CODE_START(__kvm_hyp_host_vector)
-	invalid_host_el2_vect			// Synchronous EL2t
+	host_el2_sync_vect			// Synchronous EL2t
 	invalid_host_el2_vect			// IRQ EL2t
 	invalid_host_el2_vect			// FIQ EL2t
 	invalid_host_el2_vect			// Error EL2t
 
-	invalid_host_el2_vect			// Synchronous EL2h
+	host_el2_sync_vect			// Synchronous EL2h
 	invalid_host_el2_vect			// IRQ EL2h
 	invalid_host_el2_vect			// FIQ EL2h
 	invalid_host_el2_vect			// Error EL2h
