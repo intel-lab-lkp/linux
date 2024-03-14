@@ -18,6 +18,7 @@
 #include "test_util.h"
 #include "kvm_util.h"
 #include "kselftest.h"
+#include "ucall_common.h"
 
 #define MAIN_PAGE_COUNT 512
 

@@ -19,6 +19,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "test_util.h"
+#include "ucall_common.h"
 
 #include "../rseq/rseq.c"
 

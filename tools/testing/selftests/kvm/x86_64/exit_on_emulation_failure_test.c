@@ -8,8 +8,8 @@
 #define _GNU_SOURCE /* for program_invocation_short_name */
 
 #include "flds_emulation.h"
-
 #include "test_util.h"
+#include "ucall_common.h"
 
 #define MMIO_GPA	0x700000000
 #define MMIO_GVA	MMIO_GPA
