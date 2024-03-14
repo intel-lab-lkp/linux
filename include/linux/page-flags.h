@@ -1017,9 +1017,12 @@ static inline bool PageHuge(struct page *page)
  */
 static inline bool is_page_hwpoison(struct page *page)
 {
+	struct folio *folio;
+
 	if (PageHWPoison(page))
 		return true;
-	return PageHuge(page) && PageHWPoison(compound_head(page));
+	folio = page_folio(page);
+	return folio_test_hugetlb(folio) && PageHWPoison(&folio->page);
 }
 
 extern bool is_free_buddy_page(struct page *page);
