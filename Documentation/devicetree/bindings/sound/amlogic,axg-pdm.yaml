@@ -16,6 +16,7 @@ properties:
           - enum:
               - amlogic,g12a-pdm
               - amlogic,sm1-pdm
+              - amlogic,a1-pdm
           - const: amlogic,axg-pdm
       - const: amlogic,axg-pdm
 
