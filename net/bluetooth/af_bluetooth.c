@@ -500,6 +500,12 @@ static inline __poll_t bt_accept_poll(struct sock *parent)
 	return 0;
 }
 
+static bool bt_sock_error_queue_poll(struct sock *sk)
+{
+	return !test_bit(BT_SK_NO_ERRQUEUE_POLL, &bt_sk(sk)->flags) &&
+		!skb_queue_empty_lockless(&sk->sk_error_queue);
+}
+
 __poll_t bt_sock_poll(struct file *file, struct socket *sock,
 		      poll_table *wait)
 {
@@ -511,7 +517,7 @@ __poll_t bt_sock_poll(struct file *file, struct socket *sock,
 	if (sk->sk_state == BT_LISTEN)
 		return bt_accept_poll(sk);
 
-	if (sk->sk_err || !skb_queue_empty_lockless(&sk->sk_error_queue))
+	if (sk->sk_err || bt_sock_error_queue_poll(sk))
 		mask |= EPOLLERR |
 			(sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? EPOLLPRI : 0);
 
@@ -581,6 +587,70 @@ int bt_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return err;
 }
 EXPORT_SYMBOL(bt_sock_ioctl);
+
+int bt_sock_setsockopt(struct socket *sock, int level, int optname,
+		       sockptr_t optval, unsigned int optlen)
+{
+	struct sock *sk = sock->sk;
+	int err = 0;
+	u32 opt;
+
+	if (level != SOL_BLUETOOTH)
+		return -ENOPROTOOPT;
+
+	lock_sock(sk);
+
+	switch (optname) {
+	case BT_NO_ERRQUEUE_POLL:
+		if (copy_from_sockptr(&opt, optval, sizeof(opt))) {
+			err = -EFAULT;
+			break;
+		}
+
+		if (opt)
+			set_bit(BT_SK_NO_ERRQUEUE_POLL, &bt_sk(sk)->flags);
+		else
+			clear_bit(BT_SK_NO_ERRQUEUE_POLL, &bt_sk(sk)->flags);
+		break;
+
+	default:
+		err = -ENOPROTOOPT;
+		break;
+	}
+
+	release_sock(sk);
+	return err;
+}
+EXPORT_SYMBOL(bt_sock_setsockopt);
+
+int bt_sock_getsockopt(struct socket *sock, int level, int optname,
+		       char __user *optval, int __user *optlen)
+{
+	struct sock *sk = sock->sk;
+	int err = 0;
+	u32 opt;
+
+	if (level != SOL_BLUETOOTH)
+		return -ENOPROTOOPT;
+
+	lock_sock(sk);
+
+	switch (optname) {
+	case BT_NO_ERRQUEUE_POLL:
+		opt = test_bit(BT_SK_NO_ERRQUEUE_POLL, &bt_sk(sk)->flags);
+		if (put_user(opt, (u32 __user *)optval))
+			err = -EFAULT;
+		break;
+
+	default:
+		err = -ENOPROTOOPT;
+		break;
+	}
+
+	release_sock(sk);
+	return err;
+}
+EXPORT_SYMBOL(bt_sock_getsockopt);
 
 /* This function expects the sk lock to be held when called */
 int bt_sock_wait_state(struct sock *sk, int state, unsigned long timeo)
