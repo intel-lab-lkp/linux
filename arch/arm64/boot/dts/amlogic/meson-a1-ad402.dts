@@ -8,6 +8,8 @@
 
 #include "meson-a1.dtsi"
 
+#include <dt-bindings/gpio/gpio.h>
+
 / {
 	compatible = "amlogic,ad402", "amlogic,a1";
 	model = "Amlogic Meson A1 AD402 Development Board";
@@ -83,6 +85,100 @@
 		vin-supply = <&vddao_3v3>;
 		regulator-always-on;
 	};
+
+	amplifier: amplifier {
+		compatible = "simple-audio-amplifier";
+		sound-name-prefix = "AMPLIFIER";
+		enable-gpios = <&gpio GPIOF_4 GPIO_ACTIVE_HIGH>;
+		VCC-supply = <&battery_4v2>;
+	};
+
+	dmics: dmics {
+		compatible = "dmic-codec";
+		#sound-dai-cells = <0>;
+		sound-name-prefix = "MIC";
+		num-channels = <4>;
+		wakeup-delay-ms = <50>;
+	};
+
+	sound {
+		compatible = "amlogic,a1-sound-card",
+			     "amlogic,axg-sound-card";
+		model = "AD402";
+		audio-aux-devs = <&tdmout_a>,
+				 <&amplifier>,
+				 <&tdmin_lb>,
+				 <&tdmin_a>;
+		audio-routing = "TDMOUT_A IN 0", "FRDDR_A OUT 0",
+				"TDM_A Playback", "TDMOUT_A OUT",
+				"AMPLIFIER INL", "ACODEC LOLP",
+				"AMPLIFIER INR", "ACODEC LORP",
+
+				"TODDR_A IN 4", "PDM Capture",
+
+				"TDMIN_A IN 3", "TDM_A Capture",
+				"TODDR_B IN 0", "TDMIN_A OUT",
+
+				"TDMIN_LB IN 0", "TDM_A Loopback",
+				"TODDR_A IN 6", "TDMIN_LB OUT",
+				"TDMIN_LB IN 0", "TDM_A Loopback",
+				"TODDR_B IN 6", "TDMIN_LB OUT";
+
+		dai-link-0 {
+			link-name = "speaker";
+			sound-dai = <&frddr_a>;
+		};
+
+		dai-link-1 {
+			link-name = "dmics";
+			sound-dai = <&toddr_a>;
+		};
+
+		dai-link-2 {
+			link-name = "amics";
+			sound-dai = <&toddr_b>;
+		};
+
+		dai-link-3 {
+			sound-dai = <&tdmif_a>;
+			dai-format = "i2s";
+			dai-tdm-slot-tx-mask-0 = <1 1>;
+			dai-tdm-slot-rx-mask-0 = <1 1>;
+			mclk-fs = <256>;
+
+			codec-0 {
+				sound-dai = <&toacodec TOACODEC_IN_A>;
+			};
+
+			codec-1 {
+				sound-dai = <&toacodec TOACODEC_CAPTURE_OUT_A>;
+			};
+		};
+
+		dai-link-4 {
+			sound-dai = <&toacodec TOACODEC_OUT>;
+
+			codec {
+				sound-dai = <&acodec>;
+			};
+		};
+
+		dai-link-5 {
+			sound-dai = <&toacodec TOACODEC_CAPTURE_IN>;
+
+			codec {
+				sound-dai = <&acodec>;
+			};
+		};
+
+		dai-link-6 {
+			sound-dai = <&pdm>;
+
+			codec {
+				sound-dai = <&dmics>;
+			};
+		};
+	};
 };
 
 /* Bluetooth HCI H4 */
@@ -144,4 +240,34 @@
 
 	vmmc-supply = <&vddao_3v3>;
 	vqmmc-supply = <&vddio_1v8>;
+};
+
+&clkc_audio {
+	assigned-clocks = <&clkc_pll CLKID_HIFI_PLL>,
+			  <&clkc_audio AUD_CLKID_MST_A_MCLK_SEL>,
+			  <&clkc_audio AUD_CLKID_MST_A_MCLK>,
+			  <&clkc_audio AUD2_CLKID_PDM_SYSCLK_SEL>,
+			  <&clkc_audio AUD2_CLKID_PDM_DCLK_SEL>;
+	assigned-clock-parents = <0>,
+				 <&clkc_pll CLKID_HIFI_PLL>,
+				 <0>,
+				 <&clkc_pll CLKID_FCLK_DIV3>,
+				 <&clkc_pll CLKID_FCLK_DIV2>;
+	assigned-clock-rates = <614400000>,
+			       <0>,
+			       <12288000>,
+			       <512000000>,
+			       <768000000>;
+};
+
+&acodec {
+	AVDD-supply = <&vddio_1v8>;
+};
+
+&pdm {
+	sysrate = <256000000>;
+	pinctrl-0 = <&pdm_din0_a_pins>,
+		    <&pdm_din1_a_pins>,
+		    <&pdm_dclk_a_pins>;
+	pinctrl-names = "default";
 };
