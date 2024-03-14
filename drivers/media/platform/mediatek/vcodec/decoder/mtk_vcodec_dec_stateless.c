@@ -328,7 +328,7 @@ static void mtk_vdec_worker(struct work_struct *work)
 	bool res_chg = false;
 	int ret;
 
-	vb2_v4l2_src = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
+	vb2_v4l2_src = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 	if (!vb2_v4l2_src) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		mtk_v4l2_vdec_dbg(1, ctx, "[%d] no available source buffer", ctx->id);
@@ -363,7 +363,7 @@ static void mtk_vdec_worker(struct work_struct *work)
 		mtk_v4l2_vdec_err(ctx, "vb2 buffer media request is NULL");
 
 	ret = vdec_if_decode(ctx, bs_src, NULL, &res_chg);
-	if (ret && ret != -EAGAIN) {
+	if (ret) {
 		mtk_v4l2_vdec_err(ctx,
 				  "[%d] decode src_buf[%d] sz=0x%zx pts=%llu ret=%d res_chg=%d",
 				  ctx->id, vb2_src->index, bs_src->size,
@@ -380,11 +380,21 @@ static void mtk_vdec_worker(struct work_struct *work)
 	    ctx->current_codec == V4L2_PIX_FMT_VP8_FRAME) {
 		if (src_buf_req)
 			v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
-		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx, state);
-	} else {
-		if (ret != -EAGAIN)
-			v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		if (vb2_v4l2_src)
+			v4l2_m2m_buf_done(vb2_v4l2_src, state);
+
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
+	} else {
+		if (!ret) {
+			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
+		} else {
+			if (src_buf_req)
+				v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+			if (vb2_v4l2_src)
+				v4l2_m2m_buf_done(vb2_v4l2_src, state);
+
+			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
+		}
 	}
 }
 
