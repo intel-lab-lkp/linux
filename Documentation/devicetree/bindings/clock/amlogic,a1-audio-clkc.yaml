@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/amlogic,a1-audio-clkc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic A1 Audio Clock Control Unit and Reset Controller
+
+maintainers:
+  - Neil Armstrong <neil.armstrong@linaro.org>
+  - Jerome Brunet <jbrunet@baylibre.com>
+  - Jan Dakinevich <jan.dakinevich@salutedevices.com>
+
+properties:
+  compatible:
+    const: amlogic,a1-audio-clkc
+
+  '#clock-cells':
+    const: 1
+
+  '#reset-cells':
+    const: 1
+
+  reg:
+    minItems: 2
+    maxItems: 2
+
+  clocks:
+    items:
+      - description: input main peripheral bus clock
+      - description: input dds_in
+      - description: input fixed pll div2
+      - description: input fixed pll div3
+      - description: input hifi_pll
+      - description: input oscillator (usually at 24MHz)
+
+  clock-names:
+    items:
+      - const: pclk
+      - const: dds_in
+      - const: fclk_div2
+      - const: fclk_div3
+      - const: hifi_pll
+      - const: xtal
+
+required:
+  - compatible
+  - '#clock-cells'
+  - '#reset-cells'
+  - reg
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/amlogic,a1-pll-clkc.h>
+    #include <dt-bindings/clock/amlogic,a1-peripherals-clkc.h>
+    audio {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clkc_audio: audio-clock-controller@0 {
+                compatible = "amlogic,a1-audio-clkc";
+                reg = <0x0 0xfe050000 0x0 0xb0>,
+                      <0x0 0xfe054800 0x0 0x20>;
+                #clock-cells = <1>;
+                #reset-cells = <1>;
+                clocks = <&clkc_periphs CLKID_AUDIO>,
+                         <&clkc_periphs CLKID_DDS_IN>,
+                         <&clkc_pll CLKID_FCLK_DIV2>,
+                         <&clkc_pll CLKID_FCLK_DIV3>,
+                         <&clkc_pll CLKID_HIFI_PLL>,
+                         <&xtal>;
+                clock-names = "pclk",
+                              "dds_in",
+                              "fclk_div2",
+                              "fclk_div3",
+                              "hifi_pll",
+                              "xtal";
+        };
+    };
