@@ -40,6 +40,10 @@ properties:
   resets:
     maxItems: 1
 
+  sysrate:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: redefine rate of DSP system clock
+
 required:
   - compatible
   - reg
