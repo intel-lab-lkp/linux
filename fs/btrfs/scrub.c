@@ -226,6 +226,7 @@ struct scrub_warning {
 	u64			physical;
 	u64			logical;
 	struct btrfs_device	*dev;
+	int			mirror_num;
 };
 
 static void release_scrub_stripe(struct scrub_stripe *stripe)
@@ -427,12 +428,12 @@ static int scrub_print_warning_inode(u64 inum, u64 offset, u64 num_bytes,
 	 */
 	for (i = 0; i < ipath->fspath->elem_cnt; ++i)
 		btrfs_warn_in_rcu(fs_info,
-"%s at logical %llu on dev %s, physical %llu, root %llu, inode %llu, offset %llu, path: %s",
-				  swarn->errstr, swarn->logical,
-				  btrfs_dev_name(swarn->dev),
-				  swarn->physical,
-				  root, inum, offset,
-				  (char *)(unsigned long)ipath->fspath->val[i]);
+"%s at inode %lld/%llu(%s) fileoff %llu, logical %llu(%u) physical %llu(%s)%llu",
+				  swarn->errstr, root, inum,
+				  (char *)ipath->fspath->val[i], offset,
+				  swarn->logical, swarn->mirror_num,
+				  swarn->dev->devid, btrfs_dev_name(swarn->dev),
+				  swarn->physical);
 
 	btrfs_put_root(local_root);
 	free_ipath(ipath);
@@ -440,18 +441,17 @@ static int scrub_print_warning_inode(u64 inum, u64 offset, u64 num_bytes,
 
 err:
 	btrfs_warn_in_rcu(fs_info,
-			  "%s at logical %llu on dev %s, physical %llu, root %llu, inode %llu, offset %llu: path resolving failed with ret=%d",
-			  swarn->errstr, swarn->logical,
-			  btrfs_dev_name(swarn->dev),
-			  swarn->physical,
-			  root, inum, offset, ret);
-
+	"%s at inode %lld/%llu fileoff %llu, logical %llu(%u) physical %llu(%s)%llu",
+			  swarn->errstr, root, inum, offset,
+			  swarn->logical, swarn->mirror_num,
+			  swarn->dev->devid, btrfs_dev_name(swarn->dev),
+			  swarn->physical);
 	free_ipath(ipath);
 	return 0;
 }
 
 static void scrub_print_common_warning(const char *errstr, struct btrfs_device *dev,
-				       u64 logical, u64 physical)
+				       u64 logical, u64 physical, int mirror_num)
 {
 	struct btrfs_fs_info *fs_info = dev->fs_info;
 	struct btrfs_path *path;
@@ -471,6 +471,7 @@ static void scrub_print_common_warning(const char *errstr, struct btrfs_device *
 	swarn.logical = logical;
 	swarn.errstr = errstr;
 	swarn.dev = NULL;
+	swarn.mirror_num = mirror_num;
 
 	ret = extent_from_logical(fs_info, swarn.logical, path, &found_key,
 				  &flags);
@@ -501,10 +502,11 @@ static void scrub_print_common_warning(const char *errstr, struct btrfs_device *
 			if (ret > 0)
 				break;
 			btrfs_warn_in_rcu(fs_info,
-"%s at logical %llu on dev %s, physical %llu: metadata %s (level %d) in tree %llu",
-				errstr, swarn.logical, btrfs_dev_name(dev),
-				swarn.physical, (ref_level ? "node" : "leaf"),
-				ref_level, ref_root);
+"%s at metadata in tree %llu(%u), logical %llu(%u) physical %llu(%s)%llu",
+				errstr, ref_root, ref_level,
+				swarn.logical, swarn.mirror_num,
+				dev->devid, btrfs_dev_name(dev),
+				swarn.physical);
 		}
 		btrfs_release_path(path);
 	} else {
@@ -879,27 +881,32 @@ static void scrub_stripe_report_errors(struct scrub_ctx *sctx,
 		 */
 		if (repaired) {
 			btrfs_err_rl_in_rcu(fs_info,
-			"fixed up error at logical %llu on dev %s physical %llu",
-					    logical, btrfs_dev_name(dev),
+			"fixed up error at logical %llu(%u) physical %llu(%s)%llu",
+					    logical, stripe->mirror_num,
+					    dev->devid, btrfs_dev_name(dev),
 					    physical);
 			continue;
 		}
 
 		/* The remaining are all for unrepaired. */
 		btrfs_err_rl_in_rcu(fs_info,
-	"unable to fixup (regular) error at logical %llu on dev %s physical %llu",
-					    logical, btrfs_dev_name(dev),
+	"unable to fixup (regular) error at logical %llu(%u) physical %llu(%s)%llu",
+					    logical, stripe->mirror_num,
+					    dev->devid, btrfs_dev_name(dev),
 					    physical);
 
 		if (test_bit(sector_nr, &stripe->io_error_bitmap))
 			scrub_print_common_warning("i/o error", dev,
-						     logical, physical);
+						     logical, physical,
+						     stripe->mirror_num);
 		if (test_bit(sector_nr, &stripe->csum_error_bitmap))
 			scrub_print_common_warning("checksum error", dev,
-						     logical, physical);
+						     logical, physical,
+						     stripe->mirror_num);
 		if (test_bit(sector_nr, &stripe->meta_error_bitmap))
 			scrub_print_common_warning("header error", dev,
-						     logical, physical);
+						     logical, physical,
+						     stripe->mirror_num);
 	}
 
 	spin_lock(&sctx->stat_lock);
