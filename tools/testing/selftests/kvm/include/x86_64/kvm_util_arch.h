@@ -5,7 +5,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "kvm_util_types.h"
+
 struct kvm_vm_arch {
+	vm_vaddr_t gdt;
+	vm_vaddr_t tss;
+	vm_vaddr_t idt;
+
 	uint64_t c_bit;
 	uint64_t s_bit;
 	int sev_fd;
