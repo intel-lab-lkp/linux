@@ -94,6 +94,7 @@ struct axg_pdm {
 	struct clk *dclk;
 	struct clk *sysclk;
 	struct clk *pclk;
+	u32 sys_rate;
 };
 
 static void axg_pdm_enable(struct regmap *map)
@@ -172,10 +173,10 @@ static int axg_pdm_set_sysclk(struct axg_pdm *priv, unsigned int os,
 	 * the requested sample rate. In this case, the sample pointer
 	 * counter could overflow so set a lower system clock rate
 	 */
-	if (sys_rate < priv->cfg->sys_rate)
+	if (sys_rate < priv->sys_rate)
 		return clk_set_rate(priv->sysclk, sys_rate);
 
-	return clk_set_rate(priv->sysclk, priv->cfg->sys_rate);
+	return clk_set_rate(priv->sysclk, priv->sys_rate);
 }
 
 static int axg_pdm_set_sample_pointer(struct axg_pdm *priv)
@@ -386,7 +387,7 @@ static int axg_pdm_dai_probe(struct snd_soc_dai *dai)
 	 * sysclk must be set and enabled as well to access the pdm registers
 	 * Accessing the register w/o it will give a bus error.
 	 */
-	ret = clk_set_rate(priv->sysclk, priv->cfg->sys_rate);
+	ret = clk_set_rate(priv->sysclk, priv->sys_rate);
 	if (ret) {
 		dev_err(dai->dev, "setting sysclk failed\n");
 		goto err_pclk;
@@ -622,6 +623,9 @@ static int axg_pdm_probe(struct platform_device *pdev)
 	priv->sysclk = devm_clk_get(dev, "sysclk");
 	if (IS_ERR(priv->sysclk))
 		return dev_err_probe(dev, PTR_ERR(priv->sysclk), "failed to get dclk\n");
+
+	if (device_property_read_u32(dev, "sysrate", &priv->sys_rate))
+		priv->sys_rate = priv->cfg->sys_rate;
 
 	return devm_snd_soc_register_component(dev, &axg_pdm_component_drv,
 					       &axg_pdm_dai_drv, 1);
