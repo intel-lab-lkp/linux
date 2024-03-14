@@ -202,7 +202,7 @@ SYM_FUNC_END(__host_hvc)
 	 * context has been saved by __host_exit or after the hyp context has
 	 * been partially clobbered by __host_enter.
 	 */
-	b	__hyp_panic
+	b	__hyp_panic_with_context
 
 .L__hyp_sp_overflow\@:
 	/* Switch to the overflow stack */
