@@ -227,6 +227,7 @@ struct scrub_warning {
 	u64			logical;
 	struct btrfs_device	*dev;
 	int			mirror_num;
+	bool			message_printed;
 };
 
 static void release_scrub_stripe(struct scrub_stripe *stripe)
@@ -426,26 +427,29 @@ static int scrub_print_warning_inode(u64 inum, u64 offset, u64 num_bytes,
 	 * we deliberately ignore the bit ipath might have been too small to
 	 * hold all of the paths here
 	 */
-	for (i = 0; i < ipath->fspath->elem_cnt; ++i)
-		btrfs_warn_in_rcu(fs_info,
+	for (i = 0; i < ipath->fspath->elem_cnt; ++i) {
+		btrfs_warn_rl_in_rcu(fs_info,
 "%s at inode %lld/%llu(%s) fileoff %llu, logical %llu(%u) physical %llu(%s)%llu",
 				  swarn->errstr, root, inum,
 				  (char *)ipath->fspath->val[i], offset,
 				  swarn->logical, swarn->mirror_num,
 				  swarn->dev->devid, btrfs_dev_name(swarn->dev),
 				  swarn->physical);
+		swarn->message_printed = true;
+	}
 
 	btrfs_put_root(local_root);
 	free_ipath(ipath);
 	return 0;
 
 err:
-	btrfs_warn_in_rcu(fs_info,
+	btrfs_warn_rl_in_rcu(fs_info,
 	"%s at inode %lld/%llu fileoff %llu, logical %llu(%u) physical %llu(%s)%llu",
 			  swarn->errstr, root, inum, offset,
 			  swarn->logical, swarn->mirror_num,
 			  swarn->dev->devid, btrfs_dev_name(swarn->dev),
 			  swarn->physical);
+	swarn->message_printed = true;
 	free_ipath(ipath);
 	return 0;
 }
@@ -472,6 +476,7 @@ static void scrub_print_common_warning(const char *errstr, struct btrfs_device *
 	swarn.errstr = errstr;
 	swarn.dev = NULL;
 	swarn.mirror_num = mirror_num;
+	swarn.message_printed = false;
 
 	ret = extent_from_logical(fs_info, swarn.logical, path, &found_key,
 				  &flags);
@@ -488,26 +493,31 @@ static void scrub_print_common_warning(const char *errstr, struct btrfs_device *
 		unsigned long ptr = 0;
 		u8 ref_level;
 		u64 ref_root;
+		bool message_printed = false;
 
 		while (true) {
 			ret = tree_backref_for_extent(&ptr, eb, &found_key, ei,
 						      item_size, &ref_root,
 						      &ref_level);
-			if (ret < 0) {
-				btrfs_warn(fs_info,
-				"failed to resolve tree backref for logical %llu: %d",
-						  swarn.logical, ret);
+			if (ret < 0)
 				break;
-			}
 			if (ret > 0)
 				break;
-			btrfs_warn_in_rcu(fs_info,
+			btrfs_warn_rl_in_rcu(fs_info,
 "%s at metadata in tree %llu(%u), logical %llu(%u) physical %llu(%s)%llu",
 				errstr, ref_root, ref_level,
 				swarn.logical, swarn.mirror_num,
 				dev->devid, btrfs_dev_name(dev),
 				swarn.physical);
+			message_printed = true;
 		}
+		if (!message_printed)
+			btrfs_warn_rl_in_rcu(fs_info,
+"%s at metadata, logical %llu(%u) physical %llu(%s)%llu",
+				errstr, swarn.logical, swarn.mirror_num,
+				dev->devid, btrfs_dev_name(dev),
+				swarn.physical);
+
 		btrfs_release_path(path);
 	} else {
 		struct btrfs_backref_walk_ctx ctx = { 0 };
@@ -522,8 +532,14 @@ static void scrub_print_common_warning(const char *errstr, struct btrfs_device *
 		swarn.dev = dev;
 
 		iterate_extent_inodes(&ctx, true, scrub_print_warning_inode, &swarn);
+		if (!swarn.message_printed) {
+			btrfs_warn_rl_in_rcu(fs_info,
+"%s at data, unresolved path name, logical %llu(%u) physical %llu(%s)%llu",
+				errstr, swarn.logical, swarn.mirror_num,
+				dev->devid, btrfs_dev_name(dev),
+				swarn.physical);
+		}
 	}
-
 out:
 	btrfs_free_path(path);
 }
@@ -889,12 +905,6 @@ static void scrub_stripe_report_errors(struct scrub_ctx *sctx,
 		}
 
 		/* The remaining are all for unrepaired. */
-		btrfs_err_rl_in_rcu(fs_info,
-	"unable to fixup (regular) error at logical %llu(%u) physical %llu(%s)%llu",
-					    logical, stripe->mirror_num,
-					    dev->devid, btrfs_dev_name(dev),
-					    physical);
-
 		if (test_bit(sector_nr, &stripe->io_error_bitmap))
 			scrub_print_common_warning("i/o error", dev,
 						     logical, physical,
