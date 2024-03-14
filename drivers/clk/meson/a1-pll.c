@@ -74,9 +74,9 @@ static struct clk_regmap fixed_pll = {
 	},
 };
 
-static const struct pll_mult_range hifi_pll_mult_range = {
-	.min = 32,
-	.max = 64,
+static const struct pll_params_table hifi_pll_params_table[] = {
+	PLL_PARAMS(128, 5),
+	{ },
 };
 
 static const struct reg_sequence hifi_init_regs[] = {
@@ -124,7 +124,7 @@ static struct clk_regmap hifi_pll = {
 			.shift   = 6,
 			.width   = 1,
 		},
-		.range = &hifi_pll_mult_range,
+		.table = hifi_pll_params_table,
 		.init_regs = hifi_init_regs,
 		.init_count = ARRAY_SIZE(hifi_init_regs),
 	},
