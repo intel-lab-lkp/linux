@@ -133,6 +133,19 @@ config COMMON_CLK_A1_PERIPHERALS
 	  device, A1 SoC Family. Say Y if you want A1 Peripherals clock
 	  controller to work.
 
+config COMMON_CLK_A1_AUDIO
+	tristate "Amlogic A1 SoC Audio clock controller support"
+	depends on ARM64
+	select COMMON_CLK_MESON_REGMAP
+	select COMMON_CLK_MESON_CLKC_UTILS
+	select COMMON_CLK_MESON_PHASE
+	select COMMON_CLK_MESON_SCLK_DIV
+	select COMMON_CLK_MESON_AUDIO_RSTC
+	help
+	  Support for the Audio clock controller on Amlogic A113L based
+	  device, A1 SoC Family. Say Y if you want A1 Audio clock controller
+	  to work.
+
 config COMMON_CLK_G12A
 	tristate "G12 and SM1 SoC clock controllers support"
 	depends on ARM64
