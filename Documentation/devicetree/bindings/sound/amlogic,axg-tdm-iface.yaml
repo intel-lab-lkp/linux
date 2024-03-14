@@ -14,7 +14,11 @@ allOf:
 
 properties:
   compatible:
-    const: amlogic,axg-tdm-iface
+    oneOf:
+      - const: amlogic,axg-tdm-iface
+      - items:
+          - const: amlogic,a1-tdm-iface
+          - const: amlogic,axg-tdm-iface
 
   "#sound-dai-cells":
     const: 0
