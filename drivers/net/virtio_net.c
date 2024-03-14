@@ -57,6 +57,16 @@ DECLARE_EWMA(pkt_len, 0, 64)
 
 #define VIRTNET_DRIVER_VERSION "1.0.0"
 
+/* This is copied from NET_DIM_RX_EQE_PROFILES in DIM library */
+#define VIRTNET_DIM_RX_PKTS 256
+static struct dim_cq_moder rx_itr_conf[] = {
+	{.usec = 1,   .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 8,   .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 64,  .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 128, .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 256, .pkts = VIRTNET_DIM_RX_PKTS,}
+};
+
 static const unsigned long guest_offloads[] = {
 	VIRTIO_NET_F_GUEST_TSO4,
 	VIRTIO_NET_F_GUEST_TSO6,
@@ -3541,7 +3551,10 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 		if (!rq->dim_enabled)
 			continue;
 
-		update_moder = net_dim_get_rx_moderation(dim->mode, dim->profile_ix);
+		if (dim->profile_ix >= ARRAY_SIZE(rx_itr_conf))
+			dim->profile_ix = ARRAY_SIZE(rx_itr_conf) - 1;
+
+		update_moder = rx_itr_conf[dim->profile_ix];
 		if (update_moder.usec != rq->intr_coal.max_usecs ||
 		    update_moder.pkts != rq->intr_coal.max_packets) {
 			err = virtnet_send_rx_ctrl_coal_vq_cmd(vi, qnum,
@@ -4124,6 +4137,53 @@ static void virtnet_tx_timeout(struct net_device *dev, unsigned int txqueue)
 		   jiffies_to_usecs(jiffies - READ_ONCE(txq->trans_start)));
 }
 
+static int virtnet_dim_moder_valid(struct net_device *dev, struct dim_profs_list *list)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+
+	if (!virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL))
+		return -EOPNOTSUPP;
+
+	if (!list || list->direction != DIM_RX_DIRECTION ||
+	    list->num != NET_DIM_PARAMS_NUM_PROFILES ||
+	    list->mode != DIM_CQ_PERIOD_MODE_START_FROM_EQE) {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int virtnet_dim_moder_get(struct net_device *dev, struct dim_profs_list *list)
+{
+	int ret;
+
+	ret = virtnet_dim_moder_valid(dev, list);
+	if (ret)
+		return ret;
+
+	memcpy(list->profs, rx_itr_conf, sizeof(*list->profs) * list->num);
+
+	return 0;
+}
+
+static int virtnet_dim_moder_set(struct net_device *dev, struct dim_profs_list *list)
+{
+	int i, ret;
+
+	ret = virtnet_dim_moder_valid(dev, list);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < list->num; i++) {
+		rx_itr_conf[i].usec = list->profs[i].usec;
+		rx_itr_conf[i].pkts = list->profs[i].pkts;
+		if (list->profs[i].comps)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
@@ -4140,6 +4200,8 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_get_phys_port_name	= virtnet_get_phys_port_name,
 	.ndo_set_features	= virtnet_set_features,
 	.ndo_tx_timeout		= virtnet_tx_timeout,
+	.ndo_dim_moder_get      = virtnet_dim_moder_get,
+	.ndo_dim_moder_set      = virtnet_dim_moder_set,
 };
 
 static void virtnet_config_changed_work(struct work_struct *work)
