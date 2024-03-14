@@ -1212,6 +1212,9 @@ static inline int page_mapcount(struct page *page)
 {
 	int mapcount = atomic_read(&page->_mapcount) + 1;
 
+	/* Head page repurposes mapcount; tail page leaves at -1 */
+	if (PageHeadHuge(page))
+		mapcount = 0;
 	if (unlikely(PageCompound(page)))
 		mapcount += folio_entire_mapcount(page_folio(page));
 
