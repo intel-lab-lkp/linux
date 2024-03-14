@@ -2248,16 +2248,11 @@ static unsigned int fragmentation_score_zone_weighted(struct zone *zone)
 static unsigned int fragmentation_score_node(pg_data_t *pgdat)
 {
 	unsigned int score = 0;
+	struct zone *zone;
 	int zoneid;
 
-	for (zoneid = 0; zoneid < MAX_NR_ZONES; zoneid++) {
-		struct zone *zone;
-
-		zone = &pgdat->node_zones[zoneid];
-		if (!populated_zone(zone))
-			continue;
+	for_each_populated_zone_pgdat(zone, pgdat)
 		score += fragmentation_score_zone_weighted(zone);
-	}
 
 	return score;
 }
