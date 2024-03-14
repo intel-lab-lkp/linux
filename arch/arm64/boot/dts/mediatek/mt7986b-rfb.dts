@@ -61,9 +61,9 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		switch@0 {
+		switch@1f {
 			compatible = "mediatek,mt7531";
-			reg = <31>;
+			reg = <0x1f>;
 			reset-gpios = <&pio 5 0>;
 
 			ports {
