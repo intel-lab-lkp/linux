@@ -1129,7 +1129,10 @@ unsigned int extfrag_for_order(struct zone *zone, unsigned int order)
 			info.free_pages);
 }
 
-/* Same as __fragmentation index but allocs contig_page_info on stack */
+/*
+ * Same as __fragmentation index but allocs contig_page_info on stack,
+ * useful when walking a zone as interrupts are disabled.
+ */
 int fragmentation_index(struct zone *zone, unsigned int order)
 {
 	struct contig_page_info info;
@@ -2227,15 +2230,11 @@ static void extfrag_show_print(struct seq_file *m,
 	unsigned int order;
 	int index;
 
-	/* Alloc on stack as interrupts are disabled for zone walk */
-	struct contig_page_info info;
-
 	seq_printf(m, "Node %d, zone %8s ",
 				pgdat->node_id,
 				zone->name);
 	for (order = 0; order < NR_PAGE_ORDERS; ++order) {
-		fill_contig_page_info(zone, order, &info);
-		index = __fragmentation_index(order, &info);
+		index = fragmentation_index(zone, order);
 		seq_printf(m, "%2d.%03d ", index / 1000, index % 1000);
 	}
 
