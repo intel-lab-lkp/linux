@@ -108,12 +108,9 @@ void si_meminfo_node(struct sysinfo *val, int nid)
 			free_highpages += zone_page_state(zone, NR_FREE_PAGES);
 		}
 	}
-	val->totalhigh = managed_highpages;
-	val->freehigh = free_highpages;
-#else
-	val->totalhigh = managed_highpages;
-	val->freehigh = free_highpages;
 #endif
+	val->totalhigh = managed_highpages;
+	val->freehigh = free_highpages;
 	val->mem_unit = PAGE_SIZE;
 }
 #endif
