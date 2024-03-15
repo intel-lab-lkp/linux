@@ -163,6 +163,8 @@ struct davinci_mcbsp_dev {
 
 	int tdm_slots;
 	int slot_width;
+
+	bool sync_err;
 };
 
 static inline void davinci_mcbsp_write_reg(struct davinci_mcbsp_dev *dev,
@@ -432,8 +434,10 @@ static int davinci_i2s_hw_params(struct snd_pcm_substream *substream,
 	struct davinci_mcbsp_dev *dev = snd_soc_dai_get_drvdata(dai);
 	struct snd_interval *i = NULL;
 	int mcbsp_word_length, master;
-	unsigned int rcr, xcr, clk_div, freq, framesize;
+	unsigned int clk_div, freq, framesize;
 	unsigned int srgr = 0;
+	unsigned int rcr = 0;
+	unsigned int xcr = 0;
 	u32 spcr;
 	snd_pcm_format_t fmt;
 	unsigned element_cnt = 1;
@@ -530,8 +534,10 @@ static int davinci_i2s_hw_params(struct snd_pcm_substream *substream,
 	}
 	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SRGR_REG, srgr);
 
-	rcr = DAVINCI_MCBSP_RCR_RFIG;
-	xcr = DAVINCI_MCBSP_XCR_XFIG;
+	if (!dev->sync_err) {
+		rcr |= DAVINCI_MCBSP_RCR_RFIG;
+		xcr |= DAVINCI_MCBSP_XCR_XFIG;
+	}
 	if (dev->mode == MOD_DSP_B) {
 		rcr |= DAVINCI_MCBSP_RCR_RDATDLY(0);
 		xcr |= DAVINCI_MCBSP_XCR_XDATDLY(0);
@@ -759,6 +765,8 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dev->base = io_base;
+
+	dev->sync_err = of_property_read_bool(pdev->dev.of_node, "ti,enable-sync-err");
 
 	/* setup DMA, first TX, then RX */
 	dma_data = &dev->dma_data[SNDRV_PCM_STREAM_PLAYBACK];
