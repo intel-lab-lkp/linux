@@ -881,7 +881,7 @@ static int cxl_clear_event_record(struct cxl_memdev_state *mds,
 	struct cxl_mbox_cmd mbox_cmd;
 	u16 cnt;
 	int rc = 0;
-	int i;
+	int clear_cnt;
 
 	/* Payload size may limit the max handles */
 	if (pl_size > mds->payload_size) {
@@ -908,28 +908,29 @@ static int cxl_clear_event_record(struct cxl_memdev_state *mds,
 	 * Clear Event Records uses u8 for the handle cnt while Get Event
 	 * Record can return up to 0xffff records.
 	 */
-	i = 0;
+	clear_cnt = 0;
 	for (cnt = 0; cnt < total; cnt++) {
 		struct cxl_event_record_raw *raw = &get_pl->records[cnt];
 		struct cxl_event_generic *gen = &raw->event.generic;
 
-		payload->handles[i++] = gen->hdr.handle;
+		payload->handles[clear_cnt] = gen->hdr.handle;
 		dev_dbg(mds->cxlds.dev, "Event log '%d': Clearing %u\n", log,
-			le16_to_cpu(payload->handles[i]));
+			le16_to_cpu(payload->handles[clear_cnt]));
 
-		if (i == max_handles) {
-			payload->nr_recs = i;
+		clear_cnt++;
+		if (clear_cnt == max_handles) {
+			payload->nr_recs = clear_cnt;
 			rc = cxl_internal_send_cmd(mds, &mbox_cmd);
 			if (rc)
 				goto free_pl;
-			i = 0;
+			clear_cnt = 0;
 		}
 	}
 
 	/* Clear what is left if any */
-	if (i) {
-		payload->nr_recs = i;
-		mbox_cmd.size_in = struct_size(payload, handles, i);
+	if (clear_cnt) {
+		payload->nr_recs = clear_cnt;
+		mbox_cmd.size_in = struct_size(payload, handles, clear_cnt);
 		rc = cxl_internal_send_cmd(mds, &mbox_cmd);
 		if (rc)
 			goto free_pl;
