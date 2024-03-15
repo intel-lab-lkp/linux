@@ -127,4 +127,12 @@ void __drmm_mutex_release(struct drm_device *dev, void *res);
 	drmm_add_action_or_reset(dev, __drmm_mutex_release, lock);	     \
 })									     \
 
+struct workqueue_struct *drmm_alloc_workqueue(struct drm_device *dev,
+					      const char *fmt, unsigned int flags,
+					      int max_active, ...);
+
+struct workqueue_struct *drmm_alloc_ordered_workqueue(struct drm_device *dev,
+						      const char *fmt,
+						      unsigned int flags, ...);
+
 #endif
