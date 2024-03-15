@@ -101,6 +101,9 @@
 #define DAVINCI_MCBSP_PCR_FSRM		(1 << 10)
 #define DAVINCI_MCBSP_PCR_FSXM		(1 << 11)
 
+#define PLAYBACK_CLOCK			1
+#define CAPTURE_CLOCK			0
+
 enum {
 	DAVINCI_MCBSP_WORD_8 = 0,
 	DAVINCI_MCBSP_WORD_12,
@@ -164,6 +167,8 @@ struct davinci_mcbsp_dev {
 
 	bool sync_err;
 	bool free_run;
+	bool drive_dx;
+	u32 dx_val;
 };
 
 static inline void davinci_mcbsp_write_reg(struct davinci_mcbsp_dev *dev,
@@ -187,12 +192,28 @@ static void toggle_clock(struct davinci_mcbsp_dev *dev, int playback)
 	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_PCR_REG, dev->pcr);
 }
 
+static int davinci_drive_dx(struct davinci_mcbsp_dev *dev)
+{
+	unsigned int spcr;
+
+	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_DXR_REG, dev->dx_val);
+
+	spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
+	spcr |= DAVINCI_MCBSP_SPCR_XRST;
+	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
+
+	return 0;
+}
+
 static void davinci_mcbsp_start(struct davinci_mcbsp_dev *dev,
 		struct snd_pcm_substream *substream)
 {
 	int playback = (substream->stream == SNDRV_PCM_STREAM_PLAYBACK);
 	u32 spcr;
 	u32 mask = playback ? DAVINCI_MCBSP_SPCR_XRST : DAVINCI_MCBSP_SPCR_RRST;
+
+	if (!playback && dev->drive_dx)
+		davinci_drive_dx(dev);
 
 	/* Enable transmitter or receiver */
 	spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
@@ -212,9 +233,17 @@ static void davinci_mcbsp_stop(struct davinci_mcbsp_dev *dev, int playback)
 	/* Reset transmitter/receiver and sample rate/frame sync generators */
 	spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
 	spcr &= ~(DAVINCI_MCBSP_SPCR_GRST | DAVINCI_MCBSP_SPCR_FRST);
-	spcr &= playback ? ~DAVINCI_MCBSP_SPCR_XRST : ~DAVINCI_MCBSP_SPCR_RRST;
-	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
-	toggle_clock(dev, playback);
+
+	if (!playback) {
+		spcr &= ~DAVINCI_MCBSP_SPCR_RRST;
+		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
+		toggle_clock(dev, CAPTURE_CLOCK);
+	}
+	if (playback || dev->drive_dx) {
+		spcr &= ~DAVINCI_MCBSP_SPCR_XRST;
+		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
+		toggle_clock(dev, PLAYBACK_CLOCK);
+	}
 }
 
 static int davinci_i2s_tdm_word_length(int tdm_slot_width)
@@ -408,6 +437,10 @@ static int davinci_i2s_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 	}
 	if (inv_fs == true)
 		pcr ^= (DAVINCI_MCBSP_PCR_FSXP | DAVINCI_MCBSP_PCR_FSRP);
+
+	if (dev->drive_dx)
+		pcr |= DAVINCI_MCBSP_PCR_CLKRP;
+
 	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SRGR_REG, srgr);
 	dev->pcr = pcr;
 	davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_PCR_REG, pcr);
@@ -562,6 +595,9 @@ static int davinci_i2s_hw_params(struct snd_pcm_substream *substream,
 		xcr |= DAVINCI_MCBSP_XCR_XDATDLY(1);
 	}
 
+	if (dev->drive_dx)
+		xcr |= DAVINCI_MCBSP_XCR_XDATDLY(2);
+
 	if (params_channels(params) == 2) {
 		element_cnt = 2;
 		if (double_fmt[fmt] && dev->enable_channel_combine) {
@@ -611,9 +647,9 @@ static int davinci_i2s_hw_params(struct snd_pcm_substream *substream,
 	xcr |= DAVINCI_MCBSP_XCR_XWDLEN1(mcbsp_word_length) |
 		DAVINCI_MCBSP_XCR_XWDLEN2(mcbsp_word_length);
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK || dev->drive_dx)
 		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_XCR_REG, xcr);
-	else
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_RCR_REG, rcr);
 
 	pr_debug("%s - %d  srgr=%X\n", __func__, __LINE__, srgr);
@@ -628,16 +664,21 @@ static int davinci_i2s_prepare(struct snd_pcm_substream *substream,
 	struct davinci_mcbsp_dev *dev = snd_soc_dai_get_drvdata(dai);
 	int playback = (substream->stream == SNDRV_PCM_STREAM_PLAYBACK);
 	u32 spcr;
-	u32 mask = playback ? DAVINCI_MCBSP_SPCR_XRST : DAVINCI_MCBSP_SPCR_RRST;
 
 	davinci_mcbsp_stop(dev, playback);
 
 	spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
-	if (spcr & mask) {
+	if (spcr & DAVINCI_MCBSP_SPCR_XRST) {
 		/* start off disabled */
 		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG,
-					spcr & ~mask);
-		toggle_clock(dev, playback);
+					spcr & ~DAVINCI_MCBSP_SPCR_XRST);
+		toggle_clock(dev, PLAYBACK_CLOCK);
+	}
+	if (spcr & DAVINCI_MCBSP_SPCR_RRST) {
+		/* start off disabled */
+		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG,
+					spcr & ~DAVINCI_MCBSP_SPCR_RRST);
+		toggle_clock(dev, CAPTURE_CLOCK);
 	}
 	if (dev->pcr & (DAVINCI_MCBSP_PCR_FSXM | DAVINCI_MCBSP_PCR_FSRM |
 			DAVINCI_MCBSP_PCR_CLKXM | DAVINCI_MCBSP_PCR_CLKRM)) {
@@ -646,7 +687,7 @@ static int davinci_i2s_prepare(struct snd_pcm_substream *substream,
 		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
 	}
 
-	if (playback) {
+	if (playback || dev->drive_dx) {
 		/* Enable the transmitter */
 		spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
 		spcr |= DAVINCI_MCBSP_SPCR_XRST;
@@ -659,7 +700,7 @@ static int davinci_i2s_prepare(struct snd_pcm_substream *substream,
 		spcr = davinci_mcbsp_read_reg(dev, DAVINCI_MCBSP_SPCR_REG);
 		spcr &= ~DAVINCI_MCBSP_SPCR_XRST;
 		davinci_mcbsp_write_reg(dev, DAVINCI_MCBSP_SPCR_REG, spcr);
-		toggle_clock(dev, playback);
+		toggle_clock(dev, PLAYBACK_CLOCK);
 	}
 
 	return 0;
@@ -671,6 +712,11 @@ static int davinci_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	struct davinci_mcbsp_dev *dev = snd_soc_dai_get_drvdata(dai);
 	int ret = 0;
 	int playback = (substream->stream == SNDRV_PCM_STREAM_PLAYBACK);
+
+	if (playback && dev->drive_dx) {
+		dev_err(dev->dev, "Playback is not allowed when drive-cs flag is set\n");
+		return -EINVAL;
+	}
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -779,6 +825,12 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 
 	dev->free_run = !of_property_read_bool(pdev->dev.of_node, "ti,disable-free-run");
 	dev->sync_err = of_property_read_bool(pdev->dev.of_node, "ti,enable-sync-err");
+	dev->drive_dx = false;
+	ret = of_property_read_u32(pdev->dev.of_node, "ti,drive-dx", &dev->dx_val);
+	if (ret && ret != -EINVAL)
+		return ret;
+	if (!ret)
+		dev->drive_dx = true;
 
 	/* setup DMA, first TX, then RX */
 	dma_data = &dev->dma_data[SNDRV_PCM_STREAM_PLAYBACK];
