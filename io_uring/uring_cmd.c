@@ -56,7 +56,11 @@ EXPORT_SYMBOL_GPL(io_uring_cmd_mark_cancelable);
 static void io_uring_cmd_work(struct io_kiocb *req, struct io_tw_state *ts)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
-	unsigned issue_flags = ts->locked ? 0 : IO_URING_F_UNLOCKED;
+	unsigned issue_flags = IO_URING_F_UNLOCKED;
+
+	/* locked task_work executor checks the deffered list completion */
+	if (ts->locked)
+		issue_flags = IO_URING_F_COMPLETE_DEFER;
 
 	ioucmd->task_work_cb(ioucmd, issue_flags);
 }
@@ -100,7 +104,9 @@ void io_uring_cmd_done(struct io_uring_cmd *ioucmd, ssize_t ret, ssize_t res2,
 	if (req->ctx->flags & IORING_SETUP_IOPOLL) {
 		/* order with io_iopoll_req_issued() checking ->iopoll_complete */
 		smp_store_release(&req->iopoll_completed, 1);
-	} else if (!(issue_flags & IO_URING_F_UNLOCKED)) {
+	} else if (issue_flags & IO_URING_F_COMPLETE_DEFER) {
+		if (WARN_ON_ONCE(issue_flags & IO_URING_F_UNLOCKED))
+			return;
 		io_req_complete_defer(req);
 	} else {
 		req->io_task_work.func = io_req_task_complete;
