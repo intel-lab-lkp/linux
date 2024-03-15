@@ -248,7 +248,6 @@ xfs_convert_blocks(
 	int			whichfork,
 	loff_t			offset)
 {
-	int			error;
 	unsigned		*seq;
 
 	if (whichfork == XFS_COW_FORK)
@@ -256,20 +255,8 @@ xfs_convert_blocks(
 	else
 		seq = &XFS_WPC(wpc)->data_seq;
 
-	/*
-	 * Attempt to allocate whatever delalloc extent currently backs offset
-	 * and put the result into wpc->iomap.  Allocate in a loop because it
-	 * may take several attempts to allocate real blocks for a contiguous
-	 * delalloc extent if free space is sufficiently fragmented.
-	 */
-	do {
-		error = xfs_bmapi_convert_delalloc(ip, whichfork, offset,
+	return xfs_bmapi_convert_delalloc(ip, whichfork, offset,
 				&wpc->iomap, seq);
-		if (error)
-			return error;
-	} while (wpc->iomap.offset + wpc->iomap.length <= offset);
-
-	return 0;
 }
 
 static int
