@@ -26,12 +26,25 @@ static inline const void *io_uring_sqe_cmd(const struct io_uring_sqe *sqe)
 #if defined(CONFIG_IO_URING)
 int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd);
+
+/*
+ * Completes the request, i.e. posts an io_uring CQE and deallocates @ioucmd
+ * and a corresponding io_uring request.
+ *
+ * Note: the caller must never invent the  @issue_flags mask, it's only allowed
+ * to pass what has been provided by the core io_uring code.
+ */
 void io_uring_cmd_done(struct io_uring_cmd *cmd, ssize_t ret, ssize_t res2,
 			unsigned issue_flags);
+
 void __io_uring_cmd_do_in_task(struct io_uring_cmd *ioucmd,
 			    void (*task_work_cb)(struct io_uring_cmd *, unsigned),
 			    unsigned flags);
 
+/*
+ * The caller must never invent the @issue_flags mask, it's only allowed
+ * to pass what has been provided by the core io_uring code.
+ */
 void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 		unsigned int issue_flags);
 
@@ -55,6 +68,17 @@ static inline void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 {
 }
 #endif
+
+/*
+ * Completes the request, i.e. posts an io_uring CQE and deallocates @ioucmd
+ * and a corresponding io_uring request. Similar to io_uring_cmd_done() but
+ * without issue_flags argument.
+ */
+static inline void io_uring_cmd_complete(struct io_uring_cmd *ioucmd,
+					 ssize_t ret, ssize_t res2)
+{
+	io_uring_cmd_done(ioucmd, ret, res2, IO_URING_F_UNLOCKED);
+}
 
 /* users must follow the IOU_F_TWQ_LAZY_WAKE semantics */
 static inline void io_uring_cmd_do_in_task_lazy(struct io_uring_cmd *ioucmd,
