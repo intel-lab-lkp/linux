@@ -44,28 +44,6 @@ MODULE_PARM_DESC(datapath_polling, "Operate the datapath in polling mode");
 static bool link_up;
 static DEFINE_IDA(qaic_usrs);
 
-static void qaicm_wq_release(struct drm_device *dev, void *res)
-{
-	struct workqueue_struct *wq = res;
-
-	destroy_workqueue(wq);
-}
-
-static struct workqueue_struct *qaicm_wq_init(struct drm_device *dev, const char *fmt)
-{
-	struct workqueue_struct *wq;
-	int ret;
-
-	wq = alloc_workqueue(fmt, WQ_UNBOUND, 0);
-	if (!wq)
-		return ERR_PTR(-ENOMEM);
-	ret = drmm_add_action_or_reset(dev, qaicm_wq_release, wq);
-	if (ret)
-		return ERR_PTR(ret);
-
-	return wq;
-}
-
 static void qaicm_srcu_release(struct drm_device *dev, void *res)
 {
 	struct srcu_struct *lock = res;
@@ -383,11 +361,11 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev, const struct pci_de
 	if (ret)
 		return NULL;
 
-	qdev->cntl_wq = qaicm_wq_init(drm, "qaic_cntl");
-	if (IS_ERR(qdev->cntl_wq))
+	qdev->cntl_wq = drmm_alloc_workqueue(drm, "qaic_cntl", WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
+	if (!qdev->cntl_wq)
 		return NULL;
-	qdev->qts_wq = qaicm_wq_init(drm, "qaic_ts");
-	if (IS_ERR(qdev->qts_wq))
+	qdev->qts_wq = drmm_alloc_workqueue(drm, "qaic_ts", WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
+	if (!qdev->qts_wq)
 		return NULL;
 
 	ret = qaicm_srcu_init(drm, &qdev->dev_lock);
