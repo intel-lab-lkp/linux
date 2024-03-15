@@ -14772,6 +14772,7 @@ M:	Ayush Singh <ayushdevel1325@gmail.com>
 M:	Vaishnav M A <vaishnav@beagleboard.org>
 S:	Maintained
 F:	Documentation/devicetree/bindings/misc/mikrobus-connector.yaml
+F:	drivers/misc/mikrobus/*
 
 MIKROTIK CRS3XX 98DX3236 BOARD SUPPORT
 M:	Luka Kovacic <luka.kovacic@sartura.hr>
