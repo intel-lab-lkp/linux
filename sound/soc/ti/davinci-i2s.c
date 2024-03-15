@@ -644,8 +644,7 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 			 "\"mpu\" mem resource not found, using index 0\n");
 		mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 		if (!mem) {
-			dev_err(&pdev->dev, "no mem resource?\n");
-			return -ENODEV;
+			return dev_err_probe(&pdev->dev, -ENODEV, "no mem resource?\n");
 		}
 	}
 
@@ -672,8 +671,7 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 	} else if (IS_ENABLED(CONFIG_OF) && pdev->dev.of_node) {
 		dma_data->filter_data = "tx";
 	} else {
-		dev_err(&pdev->dev, "Missing DMA tx resource\n");
-		return -ENODEV;
+		return dev_err_probe(&pdev->dev, -ENODEV, "Missing DMA tx resource\n");
 	}
 
 	dma_data = &dev->dma_data[SNDRV_PCM_STREAM_CAPTURE];
@@ -687,8 +685,7 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 	} else if (IS_ENABLED(CONFIG_OF) && pdev->dev.of_node) {
 		dma_data->filter_data = "rx";
 	} else {
-		dev_err(&pdev->dev, "Missing DMA rx resource\n");
-		return -ENODEV;
+		return dev_err_probe(&pdev->dev, -ENODEV, "Missing DMA rx resource\n");
 	}
 
 	dev->clk = clk_get(&pdev->dev, NULL);
@@ -708,7 +705,7 @@ static int davinci_i2s_probe(struct platform_device *pdev)
 
 	ret = edma_pcm_platform_register(&pdev->dev);
 	if (ret) {
-		dev_err(&pdev->dev, "register PCM failed: %d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "register PCM failed\n");
 		goto err_unregister_component;
 	}
 
