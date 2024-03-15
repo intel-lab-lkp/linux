@@ -628,6 +628,7 @@ static void zynqmp_dp_adjust_train(struct zynqmp_dp *dp,
  * zynqmp_dp_update_vs_emph - Update the training values
  * @dp: DisplayPort IP core structure
  * @train_set: A set of training values
+ * @ignore_dpcd: Ignore DPCD errors
  *
  * Update the training values based on the request from sink. The mapped values
  * are predefined, and values(vs, pe, pc) are from the device manual.
@@ -635,15 +636,19 @@ static void zynqmp_dp_adjust_train(struct zynqmp_dp *dp,
  * Return: 0 if vs and emph are updated successfully, or the error code returned
  * by drm_dp_dpcd_write().
  */
-static int zynqmp_dp_update_vs_emph(struct zynqmp_dp *dp, u8 *train_set)
+static int zynqmp_dp_update_vs_emph(struct zynqmp_dp *dp, u8 *train_set,
+				    bool ignore_dpcd)
 {
 	unsigned int i;
 	int ret;
 
 	ret = drm_dp_dpcd_write(&dp->aux, DP_TRAINING_LANE0_SET, train_set,
 				dp->mode.lane_cnt);
-	if (ret < 0)
-		return ret;
+	if (ret < 0) {
+		if (!ignore_dpcd)
+			return ret;
+		dev_warn(dp->dev, "failed to update vs/emph\n");
+	}
 
 	for (i = 0; i < dp->mode.lane_cnt; i++) {
 		u32 reg = ZYNQMP_DP_SUB_TX_PHY_PRECURSOR_LANE_0 + i * 4;
@@ -692,7 +697,7 @@ static int zynqmp_dp_link_train_cr(struct zynqmp_dp *dp)
 	 * So, This loop should exit before 512 iterations
 	 */
 	for (max_tries = 0; max_tries < 512; max_tries++) {
-		ret = zynqmp_dp_update_vs_emph(dp, dp->train_set);
+		ret = zynqmp_dp_update_vs_emph(dp, dp->train_set, false);
 		if (ret)
 			return ret;
 
@@ -757,7 +762,7 @@ static int zynqmp_dp_link_train_ce(struct zynqmp_dp *dp)
 		return ret;
 
 	for (tries = 0; tries < DP_MAX_TRAINING_TRIES; tries++) {
-		ret = zynqmp_dp_update_vs_emph(dp, dp->train_set);
+		ret = zynqmp_dp_update_vs_emph(dp, dp->train_set, false);
 		if (ret)
 			return ret;
 
@@ -785,11 +790,12 @@ static int zynqmp_dp_link_train_ce(struct zynqmp_dp *dp)
  * @lane_cnt: The number of lanes to use
  * @enhanced: Use enhanced framing
  * @downspread: Enable spread-spectrum clocking
+ * @ignore_dpcd: Ignore DPCD errors; useful for testing
  *
  * Return: 0 on success, or -errno on failure
  */
 static int zynqmp_dp_setup(struct zynqmp_dp *dp, u8 bw_code, u8 lane_cnt,
-			   bool enhanced, bool downspread)
+			   bool enhanced, bool downspread, bool ignore_dpcd)
 {
 	u32 reg;
 	u8 aux_lane_cnt = lane_cnt;
@@ -812,21 +818,24 @@ static int zynqmp_dp_setup(struct zynqmp_dp *dp, u8 bw_code, u8 lane_cnt,
 
 	ret = drm_dp_dpcd_writeb(&dp->aux, DP_LANE_COUNT_SET, aux_lane_cnt);
 	if (ret < 0) {
-		dev_err(dp->dev, "failed to set lane count\n");
-		return ret;
+		dev_warn(dp->dev, "failed to set lane count\n");
+		if (!ignore_dpcd)
+			return ret;
 	}
 
 	ret = drm_dp_dpcd_writeb(&dp->aux, DP_MAIN_LINK_CHANNEL_CODING_SET,
 				 DP_SET_ANSI_8B10B);
 	if (ret < 0) {
-		dev_err(dp->dev, "failed to set ANSI 8B/10B encoding\n");
-		return ret;
+		dev_warn(dp->dev, "failed to set ANSI 8B/10B encoding\n");
+		if (!ignore_dpcd)
+			return ret;
 	}
 
 	ret = drm_dp_dpcd_writeb(&dp->aux, DP_LINK_BW_SET, bw_code);
 	if (ret < 0) {
-		dev_err(dp->dev, "failed to set DP bandwidth\n");
-		return ret;
+		dev_warn(dp->dev, "failed to set DP bandwidth\n");
+		if (!ignore_dpcd)
+			return ret;
 	}
 
 	zynqmp_dp_write(dp, ZYNQMP_DP_LINK_BW_SET, bw_code);
@@ -860,7 +869,7 @@ static int zynqmp_dp_train(struct zynqmp_dp *dp)
 
 	ret = zynqmp_dp_setup(dp, dp->mode.bw_code, dp->mode.lane_cnt,
 			      drm_dp_enhanced_frame_cap(dp->dpcd),
-			      dp->dpcd[3] & 0x1);
+			      dp->dpcd[3] & 0x1, false);
 	if (ret)
 		return ret;
 
@@ -877,7 +886,7 @@ static int zynqmp_dp_train(struct zynqmp_dp *dp)
 	ret = drm_dp_dpcd_writeb(&dp->aux, DP_TRAINING_PATTERN_SET,
 				 DP_TRAINING_PATTERN_DISABLE);
 	if (ret < 0) {
-		dev_err(dp->dev, "failed to disable training pattern\n");
+		dev_warn(dp->dev, "failed to disable training pattern\n");
 		return ret;
 	}
 	zynqmp_dp_write(dp, ZYNQMP_DP_TRAINING_PATTERN_SET,
