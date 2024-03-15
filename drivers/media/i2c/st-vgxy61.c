@@ -420,7 +420,7 @@ struct vgxy61_dev {
 	struct v4l2_ctrl *vblank_ctrl;
 	struct v4l2_ctrl *vflip_ctrl;
 	struct v4l2_ctrl *hflip_ctrl;
-	bool streaming;
+	u8 streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vgxy61_mode_info *sensor_modes;
 	unsigned int sensor_modes_nb;
@@ -1188,20 +1188,35 @@ err_str_dis:
 	return ret;
 }
 
-static int vgxy61_s_stream(struct v4l2_subdev *sd, int enable)
+static int vgxy61_enable_streams(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *state, u32 pad,
+				 u64 streams_mask)
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
-	struct v4l2_subdev_state *sd_state;
 	int ret = 0;
 
-	sd_state = v4l2_subdev_lock_and_get_active_state(&sensor->sd);
-
-	ret = enable ? vgxy61_stream_enable(sensor) :
-	      vgxy61_stream_disable(sensor);
+	if (!sensor->streaming)
+		ret = vgxy61_stream_enable(sensor);
 	if (!ret)
-		sensor->streaming = enable;
+		sensor->streaming |= streams_mask;
 
-	v4l2_subdev_unlock_state(sd_state);
+	return ret;
+}
+
+static int vgxy61_disable_streams(struct v4l2_subdev *sd,
+				  struct v4l2_subdev_state *state, u32 pad,
+				  u64 streams_mask)
+{
+	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
+	int ret;
+
+	sensor->streaming &= ~streams_mask;
+	if (sensor->streaming)
+		return 0;
+
+	ret = vgxy61_stream_disable(sensor);
+	if (!ret)
+		sensor->streaming = false;
 
 	return ret;
 }
@@ -1496,7 +1511,7 @@ static const struct v4l2_subdev_core_ops vgxy61_core_ops = {
 };
 
 static const struct v4l2_subdev_video_ops vgxy61_video_ops = {
-	.s_stream = vgxy61_s_stream,
+	.s_stream = v4l2_subdev_s_stream_helper,
 };
 
 static const struct v4l2_subdev_pad_ops vgxy61_pad_ops = {
@@ -1506,6 +1521,8 @@ static const struct v4l2_subdev_pad_ops vgxy61_pad_ops = {
 	.get_frame_desc = vgxy61_get_frame_desc,
 	.get_selection = vgxy61_get_selection,
 	.enum_frame_size = vgxy61_enum_frame_size,
+	.enable_streams = vgxy61_enable_streams,
+	.disable_streams = vgxy61_disable_streams,
 };
 
 static const struct v4l2_subdev_ops vgxy61_subdev_ops = {
