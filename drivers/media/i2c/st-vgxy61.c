@@ -397,8 +397,6 @@ struct vgxy61_dev {
 	u16 line_length;
 	u16 rot_term;
 	bool gpios_polarity;
-	/* Lock to protect all members below */
-	struct mutex lock;
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct v4l2_ctrl *pixel_rate_ctrl;
 	struct v4l2_ctrl *expo_ctrl;
@@ -682,27 +680,6 @@ static int vgxy61_enum_mbus_code(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	code->code = vgxy61_supported_codes[code->index].code;
-
-	return 0;
-}
-
-static int vgxy61_get_fmt(struct v4l2_subdev *sd,
-			  struct v4l2_subdev_state *sd_state,
-			  struct v4l2_subdev_format *format)
-{
-	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
-	struct v4l2_mbus_framefmt *fmt;
-
-	mutex_lock(&sensor->lock);
-
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-		fmt = v4l2_subdev_state_get_format(sd_state, format->pad);
-	else
-		fmt = &sensor->fmt;
-
-	format->format = *fmt;
-
-	mutex_unlock(&sensor->lock);
 
 	return 0;
 }
@@ -1167,16 +1144,17 @@ err_str_dis:
 static int vgxy61_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
+	struct v4l2_subdev_state *sd_state;
 	int ret = 0;
 
-	mutex_lock(&sensor->lock);
+	sd_state = v4l2_subdev_lock_and_get_active_state(&sensor->sd);
 
 	ret = enable ? vgxy61_stream_enable(sensor) :
 	      vgxy61_stream_disable(sensor);
 	if (!ret)
 		sensor->streaming = enable;
 
-	mutex_unlock(&sensor->lock);
+	v4l2_subdev_unlock_state(sd_state);
 
 	return ret;
 }
@@ -1187,51 +1165,39 @@ static int vgxy61_set_fmt(struct v4l2_subdev *sd,
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
 	const struct vgxy61_mode_info *new_mode;
-	struct v4l2_mbus_framefmt *fmt;
 	int ret;
 
-	mutex_lock(&sensor->lock);
-
-	if (sensor->streaming) {
-		ret = -EBUSY;
-		goto out;
-	}
+	if (sensor->streaming)
+		return -EBUSY;
 
 	ret = vgxy61_try_fmt_internal(sd, &format->format, &new_mode);
 	if (ret)
-		goto out;
+		return ret;
 
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-		fmt = v4l2_subdev_state_get_format(sd_state, 0);
-		*fmt = format->format;
-	} else if (sensor->current_mode != new_mode ||
-		   sensor->fmt.code != format->format.code) {
-		fmt = &sensor->fmt;
-		*fmt = format->format;
+	*v4l2_subdev_state_get_format(sd_state, format->pad) = format->format;
 
-		sensor->current_mode = new_mode;
+	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+		return 0;
 
-		/* Reset vblank and framelength to default */
-		ret = vgxy61_update_vblank(sensor,
-					   VGXY61_FRAME_LENGTH_DEF -
-					   new_mode->crop.height,
-					   sensor->hdr);
+	sensor->current_mode = new_mode;
 
-		/* Update controls to reflect new mode */
-		__v4l2_ctrl_s_ctrl_int64(sensor->pixel_rate_ctrl,
-					 get_pixel_rate(sensor));
-		__v4l2_ctrl_modify_range(sensor->vblank_ctrl,
-					 sensor->vblank_min,
-					 0xffff - new_mode->crop.height,
-					 1, sensor->vblank);
-		__v4l2_ctrl_s_ctrl(sensor->vblank_ctrl, sensor->vblank);
-		__v4l2_ctrl_modify_range(sensor->expo_ctrl, sensor->expo_min,
-					 sensor->expo_max, 1,
-					 sensor->expo_long);
-	}
+	/* Reset vblank and framelength to default */
+	ret = vgxy61_update_vblank(sensor,
+				   VGXY61_FRAME_LENGTH_DEF -
+				   new_mode->crop.height,
+				   sensor->hdr);
 
-out:
-	mutex_unlock(&sensor->lock);
+	/* Update controls to reflect new mode */
+	__v4l2_ctrl_s_ctrl_int64(sensor->pixel_rate_ctrl,
+				 get_pixel_rate(sensor));
+	__v4l2_ctrl_modify_range(sensor->vblank_ctrl,
+				 sensor->vblank_min,
+				 0xffff - new_mode->crop.height,
+				 1, sensor->vblank);
+	__v4l2_ctrl_s_ctrl(sensor->vblank_ctrl, sensor->vblank);
+	__v4l2_ctrl_modify_range(sensor->expo_ctrl, sensor->expo_min,
+				 sensor->expo_max, 1,
+				 sensor->expo_long);
 
 	return ret;
 }
@@ -1321,8 +1287,6 @@ static int vgxy61_init_controls(struct vgxy61_dev *sensor)
 	int ret;
 
 	v4l2_ctrl_handler_init(hdl, 16);
-	/* We can use our own mutex for the ctrl lock */
-	hdl->lock = &sensor->lock;
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN, 0, 0x1c, 1,
 			  sensor->analog_gain);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 0, 0xfff, 1,
@@ -1398,7 +1362,7 @@ static const struct v4l2_subdev_video_ops vgxy61_video_ops = {
 
 static const struct v4l2_subdev_pad_ops vgxy61_pad_ops = {
 	.enum_mbus_code = vgxy61_enum_mbus_code,
-	.get_fmt = vgxy61_get_fmt,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = vgxy61_set_fmt,
 	.get_selection = vgxy61_get_selection,
 	.enum_frame_size = vgxy61_enum_frame_size,
@@ -1801,7 +1765,7 @@ static int vgxy61_probe(struct i2c_client *client)
 	vgxy61_fill_framefmt(sensor, sensor->current_mode, &sensor->fmt,
 			     VGXY61_MEDIA_BUS_FMT_DEF);
 
-	mutex_init(&sensor->lock);
+	sensor->sd.state_lock = sensor->ctrl_handler.lock;
 
 	ret = vgxy61_update_hdr(sensor, sensor->hdr);
 	if (ret)
@@ -1819,6 +1783,10 @@ static int vgxy61_probe(struct i2c_client *client)
 		dev_err(&client->dev, "pads init failed %d\n", ret);
 		goto error_handler_free;
 	}
+
+	ret = v4l2_subdev_init_finalize(&sensor->sd);
+	if (ret)
+		goto error_media_entity_cleanup;
 
 	/* Enable runtime PM and turn off the device */
 	pm_runtime_set_active(dev);
@@ -1841,11 +1809,12 @@ static int vgxy61_probe(struct i2c_client *client)
 error_pm_runtime:
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
+	v4l2_subdev_cleanup(&sensor->sd);
+error_media_entity_cleanup:
 	media_entity_cleanup(&sensor->sd.entity);
 error_handler_free:
 	v4l2_ctrl_handler_free(sensor->sd.ctrl_handler);
 error_power_off:
-	mutex_destroy(&sensor->lock);
 	vgxy61_power_off(dev);
 
 	return ret;
@@ -1857,7 +1826,7 @@ static void vgxy61_remove(struct i2c_client *client)
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
 
 	v4l2_async_unregister_subdev(&sensor->sd);
-	mutex_destroy(&sensor->lock);
+	v4l2_subdev_cleanup(&sensor->sd);
 	media_entity_cleanup(&sensor->sd.entity);
 
 	pm_runtime_disable(&client->dev);
