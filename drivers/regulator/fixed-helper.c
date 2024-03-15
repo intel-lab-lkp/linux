@@ -59,3 +59,4 @@ struct platform_device *regulator_register_always_on(int id, const char *name,
 
 	return &data->pdev;
 }
+EXPORT_SYMBOL_GPL(regulator_register_always_on);
