@@ -1221,6 +1221,46 @@ static int vgxy61_disable_streams(struct v4l2_subdev *sd,
 	return ret;
 }
 
+static int vgxy61_set_routing(struct v4l2_subdev *sd,
+			      struct v4l2_subdev_state *state,
+			      enum v4l2_subdev_format_whence which,
+			      struct v4l2_subdev_krouting *routing)
+{
+	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
+	struct device *dev = &sensor->i2c_client->dev;
+	unsigned int isl_bypass = VGXY61_ISL_BYPASS;
+	struct v4l2_subdev_route *route;
+	int ret;
+
+	if (sensor->streaming)
+		return -EBUSY;
+
+	if (routing->num_routes != 1 && routing->num_routes != 2)
+		return -EINVAL;
+
+	route = &routing->routes[0];
+	if (route->sink_pad != VGXY61_PAD_PIXEL ||
+	    route->source_stream != VGXY61_STREAM_PIXEL) {
+		dev_warn(dev, "Can't disable pixel route\n");
+		return -EINVAL;
+	}
+
+	if (routing->num_routes == 2) {
+		route = &routing->routes[1];
+		if (route->sink_pad != VGXY61_PAD_META  ||
+		    route->source_stream != VGXY61_STREAM_META)
+			return -EINVAL;
+		isl_bypass = 0;
+	}
+
+	ret = cci_update_bits(sensor->regmap, VGXY61_REG_BYPASS_CTRL,
+			      VGXY61_ISL_BYPASS, isl_bypass, NULL);
+	if (ret)
+		return ret;
+
+	return v4l2_subdev_set_routing(sd, state, routing);
+}
+
 static int __vgxy61_set_fmt(struct v4l2_subdev *sd,
 			    struct v4l2_subdev_state *sd_state,
 			    struct v4l2_mbus_framefmt *format,
@@ -1518,6 +1558,7 @@ static const struct v4l2_subdev_pad_ops vgxy61_pad_ops = {
 	.enum_mbus_code = vgxy61_enum_mbus_code,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = vgxy61_set_fmt,
+	.set_routing = vgxy61_set_routing,
 	.get_frame_desc = vgxy61_get_frame_desc,
 	.get_selection = vgxy61_get_selection,
 	.enum_frame_size = vgxy61_enum_frame_size,
