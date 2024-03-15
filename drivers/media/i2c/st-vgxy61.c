@@ -88,11 +88,16 @@
 #define VGXY61_REG_PATGEN_SHORT_DATA_B			CCI_REG16_LE(0x0954)
 #define VGXY61_REG_PATGEN_SHORT_DATA_GB			CCI_REG16_LE(0x0956)
 #define VGXY61_REG_BYPASS_CTRL				CCI_REG8(0x0a60)
+#define VGXY61_ISL_BYPASS				BIT(3)
+#define VGXY61_ASIL_BYPASS				BIT(2)
 
 #define VGX661_WIDTH					1464
 #define VGX661_HEIGHT					1104
 #define VGX761_WIDTH					1944
 #define VGX761_HEIGHT					1204
+/* two status lines (ISL), of 256 bytes each */
+#define VGXY61_META_WIDTH				256
+#define VGXY61_META_HEIGHT				2
 #define VGX661_DEFAULT_MODE				1
 #define VGX761_DEFAULT_MODE				1
 #define VGX661_SHORT_ROT_TERM				93
@@ -111,6 +116,18 @@
 #define VGXY61_FWPATCH_REVISION_MAJOR			2
 #define VGXY61_FWPATCH_REVISION_MINOR			0
 #define VGXY61_FWPATCH_REVISION_MICRO			5
+
+enum {
+	VGXY61_PAD_SOURCE,
+	VGXY61_PAD_PIXEL,
+	VGXY61_PAD_META,
+	VGXY61_NUM_PADS,
+};
+
+enum {
+	VGXY61_STREAM_PIXEL,
+	VGXY61_STREAM_META,
+};
 
 static const u8 patch_array[] = {
 	0xbf, 0x00, 0x05, 0x20, 0x06, 0x01, 0xe0, 0xe0, 0x04, 0x80, 0xe6, 0x45,
@@ -382,7 +399,7 @@ struct vgxy61_dev {
 	struct i2c_client *i2c_client;
 	struct regmap *regmap;
 	struct v4l2_subdev sd;
-	struct media_pad pad;
+	struct media_pad pads[VGXY61_NUM_PADS];
 	struct regulator_bulk_data supplies[ARRAY_SIZE(vgxy61_supply_name)];
 	struct gpio_desc *reset_gpio;
 	struct clk *xclk;
@@ -655,6 +672,13 @@ static int vgxy61_get_selection(struct v4l2_subdev *sd,
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
 
+	/*
+	 * The embedded data stream doesn't support selection rectangles,
+	 * neither on the embedded data pad nor on the source pad.
+	 */
+	if (sel->pad == VGXY61_PAD_META)
+		return -EINVAL;
+
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
 		sel->r = sensor->current_mode->crop;
@@ -676,6 +700,16 @@ static int vgxy61_enum_mbus_code(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_mbus_code_enum *code)
 {
+	if (code->pad == VGXY61_PAD_META ||
+	    (code->pad == VGXY61_PAD_SOURCE &&
+	     code->stream == VGXY61_STREAM_META)) {
+		if (code->index > 0)
+			return -EINVAL;
+
+		code->code = MEDIA_BUS_FMT_META_8;
+		return 0;
+	}
+
 	if (code->index >= ARRAY_SIZE(vgxy61_supported_codes))
 		return -EINVAL;
 
@@ -702,6 +736,19 @@ static int vgxy61_enum_frame_size(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
+
+	if (fse->pad == VGXY61_PAD_META ||
+	    (fse->pad == VGXY61_PAD_SOURCE &&
+	     fse->stream == VGXY61_STREAM_META)) {
+		if (fse->index > 0)
+			return -EINVAL;
+
+		fse->min_width = VGXY61_META_WIDTH;
+		fse->max_width = VGXY61_META_WIDTH;
+		fse->min_height = VGXY61_META_HEIGHT;
+		fse->max_height = VGXY61_META_HEIGHT;
+		return 0;
+	}
 
 	if (fse->index >= sensor->sensor_modes_nb)
 		return -EINVAL;
@@ -1159,24 +1206,54 @@ static int vgxy61_s_stream(struct v4l2_subdev *sd, int enable)
 	return ret;
 }
 
-static int vgxy61_set_fmt(struct v4l2_subdev *sd,
-			  struct v4l2_subdev_state *sd_state,
-			  struct v4l2_subdev_format *format)
+static int __vgxy61_set_fmt(struct v4l2_subdev *sd,
+			    struct v4l2_subdev_state *sd_state,
+			    struct v4l2_mbus_framefmt *format,
+			    enum v4l2_subdev_format_whence which,
+			    unsigned int pad, unsigned int stream)
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
+	struct v4l2_mbus_framefmt *src_pix_fmt, *src_meta_fmt, *pix_fmt,
+		*meta_fmt;
 	const struct vgxy61_mode_info *new_mode;
 	int ret;
 
 	if (sensor->streaming)
 		return -EBUSY;
 
-	ret = vgxy61_try_fmt_internal(sd, &format->format, &new_mode);
+	/*
+	 * Allow setting format on internal pixel pad as well as the source
+	 * pad's pixel stream (for compatibility).
+	 */
+	if ((pad == VGXY61_PAD_SOURCE && stream == VGXY61_STREAM_META) ||
+	    pad == VGXY61_PAD_META) {
+		*format = *v4l2_subdev_state_get_format(sd_state, pad, stream);
+		return 0;
+	}
+
+	pix_fmt = v4l2_subdev_state_get_format(sd_state, VGXY61_PAD_PIXEL, 0);
+	meta_fmt = v4l2_subdev_state_get_format(sd_state, VGXY61_PAD_META, 0);
+	src_pix_fmt = v4l2_subdev_state_get_format(sd_state, VGXY61_PAD_SOURCE,
+						   VGXY61_STREAM_PIXEL);
+	src_meta_fmt = v4l2_subdev_state_get_format(sd_state, VGXY61_PAD_SOURCE,
+						    VGXY61_STREAM_META);
+
+	ret = vgxy61_try_fmt_internal(sd, format, &new_mode);
 	if (ret)
 		return ret;
 
-	*v4l2_subdev_state_get_format(sd_state, format->pad) = format->format;
+	pix_fmt->width = format->width;
+	pix_fmt->height = format->height;
+	pix_fmt->code = format->code;
+	pix_fmt->field = V4L2_FIELD_NONE;
 
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+	*format = *src_pix_fmt = *pix_fmt;
+	meta_fmt->code = MEDIA_BUS_FMT_META_8;
+	meta_fmt->width = VGXY61_META_WIDTH;
+	meta_fmt->height = VGXY61_META_HEIGHT;
+	*src_meta_fmt = *meta_fmt;
+
+	if (which == V4L2_SUBDEV_FORMAT_TRY)
 		return 0;
 
 	sensor->current_mode = new_mode;
@@ -1202,16 +1279,78 @@ static int vgxy61_set_fmt(struct v4l2_subdev *sd,
 	return ret;
 }
 
+static int vgxy61_set_fmt(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_format *fmt)
+{
+	return __vgxy61_set_fmt(sd, sd_state, &fmt->format, fmt->which,
+				fmt->pad, fmt->stream);
+}
+
+static int vgxy61_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+				 struct v4l2_mbus_frame_desc *desc)
+{
+	struct v4l2_subdev_state *sd_state;
+	struct v4l2_mbus_framefmt *fmt;
+
+	desc->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+	desc->num_entries = 2;
+
+	sd_state = v4l2_subdev_lock_and_get_active_state(sd);
+	fmt = v4l2_subdev_state_get_format(sd_state, VGXY61_PAD_SOURCE,
+					   VGXY61_STREAM_PIXEL);
+	v4l2_subdev_unlock_state(sd_state);
+
+	desc->entry[0].stream = VGXY61_STREAM_PIXEL;
+	desc->entry[0].pixelcode = fmt->code;
+	desc->entry[0].bus.csi2.dt = get_data_type_by_code(fmt->code);
+
+	desc->entry[1].stream = VGXY61_STREAM_META;
+	desc->entry[1].pixelcode = MEDIA_BUS_FMT_META_8;
+	desc->entry[1].bus.csi2.dt = MIPI_CSI2_DT_EMBEDDED_8B;
+
+	return 0;
+}
+
 static int vgxy61_init_state(struct v4l2_subdev *sd,
 			     struct v4l2_subdev_state *sd_state)
 {
 	struct vgxy61_dev *sensor = to_vgxy61_dev(sd);
 	struct v4l2_subdev_format fmt = { 0 };
+	struct v4l2_subdev_route routes[] = {
+		{
+			.sink_pad = VGXY61_PAD_PIXEL,
+			.source_pad = VGXY61_PAD_SOURCE,
+			.source_stream = VGXY61_STREAM_PIXEL,
+			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE |
+				 V4L2_SUBDEV_ROUTE_FL_IMMUTABLE,
+		}, {
+			.sink_pad = VGXY61_PAD_META,
+			.source_pad = VGXY61_PAD_SOURCE,
+			.source_stream = VGXY61_STREAM_META,
+			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE,
+		},
+	};
+	struct v4l2_subdev_krouting routing = {
+		.routes = routes,
+		.num_routes = ARRAY_SIZE(routes),
+	};
+	struct v4l2_subdev_state *active_state;
+	int ret;
+
+	ret = v4l2_subdev_set_routing(sd, sd_state, &routing);
+	if (ret)
+		return ret;
+
+	active_state = v4l2_subdev_get_locked_active_state(sd);
 
 	vgxy61_fill_framefmt(sensor, sensor->current_mode, &fmt.format,
 			     VGXY61_MEDIA_BUS_FMT_DEF);
 
-	return vgxy61_set_fmt(sd, sd_state, &fmt);
+	return __vgxy61_set_fmt(sd, sd_state, &fmt.format,
+				active_state == sd_state ?
+				V4L2_SUBDEV_FORMAT_ACTIVE :
+				V4L2_SUBDEV_FORMAT_TRY, VGXY61_PAD_PIXEL, 0);
 }
 
 static int vgxy61_s_ctrl(struct v4l2_ctrl *ctrl)
@@ -1364,6 +1503,7 @@ static const struct v4l2_subdev_pad_ops vgxy61_pad_ops = {
 	.enum_mbus_code = vgxy61_enum_mbus_code,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = vgxy61_set_fmt,
+	.get_frame_desc = vgxy61_get_frame_desc,
 	.get_selection = vgxy61_get_selection,
 	.enum_frame_size = vgxy61_enum_frame_size,
 };
@@ -1478,7 +1618,8 @@ static int vgxy61_configure(struct vgxy61_dev *sensor)
 	cci_write(sensor->regmap, VGXY61_REG_CLK_SYS_PLL_MULT, mult, &ret);
 	cci_write(sensor->regmap, VGXY61_REG_OIF_CTRL, sensor->oif_ctrl, &ret);
 	cci_write(sensor->regmap, VGXY61_REG_FRAME_CONTENT_CTRL, 0, &ret);
-	cci_write(sensor->regmap, VGXY61_REG_BYPASS_CTRL, 4, &ret);
+	cci_write(sensor->regmap, VGXY61_REG_BYPASS_CTRL, VGXY61_ASIL_BYPASS,
+		  &ret);
 	if (ret)
 		return ret;
 	vgxy61_update_gpios_strobe_polarity(sensor, sensor->gpios_polarity);
@@ -1743,8 +1884,14 @@ static int vgxy61_probe(struct i2c_client *client)
 	v4l2_i2c_subdev_init(&sensor->sd, client, &vgxy61_subdev_ops);
 	sensor->sd.internal_ops = &vgxy61_internal_ops;
 	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE |
-			    V4L2_SUBDEV_FL_HAS_EVENTS;
-	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
+			    V4L2_SUBDEV_FL_HAS_EVENTS |
+			    V4L2_SUBDEV_FL_STREAMS;
+	sensor->pads[VGXY61_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
+	sensor->pads[VGXY61_PAD_PIXEL].flags =
+		MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_INTERNAL;
+	sensor->pads[VGXY61_PAD_META].flags =
+		MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_INTERNAL;
+
 	sensor->sd.entity.ops = &vgxy61_subdev_entity_ops;
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 
@@ -1778,7 +1925,8 @@ static int vgxy61_probe(struct i2c_client *client)
 		goto error_power_off;
 	}
 
-	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
+	ret = media_entity_pads_init(&sensor->sd.entity,
+				     ARRAY_SIZE(sensor->pads), sensor->pads);
 	if (ret) {
 		dev_err(&client->dev, "pads init failed %d\n", ret);
 		goto error_handler_free;
