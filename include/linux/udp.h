@@ -150,6 +150,9 @@ static inline void udp_cmsg_recv(struct msghdr *msg, struct sock *sk,
 	}
 }
 
+DECLARE_STATIC_KEY_FALSE(udp_encap_needed_key);
+DECLARE_STATIC_KEY_FALSE(udpv6_encap_needed_key);
+
 static inline bool udp_unexpected_gso(struct sock *sk, struct sk_buff *skb)
 {
 	if (!skb_is_gso(skb))
@@ -161,6 +164,17 @@ static inline bool udp_unexpected_gso(struct sock *sk, struct sk_buff *skb)
 
 	if (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST &&
 	    !udp_test_bit(ACCEPT_FRAGLIST, sk))
+		return true;
+
+	/* GSO packets lacking the SKB_GSO_UDP_TUNNEL/_CUSM bits might still
+	 * land in a tunnel as the socket check in udp_gro_receive cannot be
+	 * foolproof.
+	 */
+	if ((static_branch_unlikely(&udp_encap_needed_key) ||
+	     static_branch_unlikely(&udpv6_encap_needed_key)) &&
+	    READ_ONCE(udp_sk(sk)->encap_rcv) &&
+	    !(skb_shinfo(skb)->gso_type &
+	      (SKB_GSO_UDP_TUNNEL | SKB_GSO_UDP_TUNNEL_CSUM)))
 		return true;
 
 	return false;
