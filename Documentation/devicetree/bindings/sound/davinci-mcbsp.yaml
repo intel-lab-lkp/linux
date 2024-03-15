@@ -80,6 +80,13 @@ properties:
       Enable synchronisation error detections when an unexpected frame pulse is
       received. If not present, unexpected frame pulses are ignored.
 
+  ti,drive-dx:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      If the property is present, McBSP will repeatedly output the selected
+      value on DX pin during capture streams. For instance, if set to 0, this
+      can be used to drive an active-low signal.
+
 required:
   - "#sound-dai-cells"
   - compatible
