@@ -80,6 +80,7 @@
 #include <linux/firmware.h>
 #include <linux/component.h>
 #include <linux/dmi.h>
+#include <linux/sort.h>
 
 #include <drm/display/drm_dp_mst_helper.h>
 #include <drm/display/drm_hdmi_helper.h>
@@ -369,6 +370,20 @@ static inline void reverse_planes_order(struct dc_surface_update *array_of_surfa
 		swap(array_of_surface_update[i], array_of_surface_update[j]);
 }
 
+/*
+ * DC will program planes with their z-order determined by their ordering
+ * in the dc_surface_updates array. This comparator is used to sort them
+ * by descending zpos.
+ */
+static int dm_plane_layer_index_cmp(const void *a, const void *b)
+{
+	const struct dc_surface_update *sa = (struct dc_surface_update *)a;
+	const struct dc_surface_update *sb = (struct dc_surface_update *)b;
+
+	/* Sort by descending dc_plane layer_index (i.e. normalized_zpos) */
+	return sb->surface->layer_index - sa->surface->layer_index;
+}
+
 /**
  * update_planes_and_stream_adapter() - Send planes to be updated in DC
  *
@@ -393,7 +408,8 @@ static inline bool update_planes_and_stream_adapter(struct dc *dc,
 						    struct dc_stream_update *stream_update,
 						    struct dc_surface_update *array_of_surface_update)
 {
-	reverse_planes_order(array_of_surface_update, planes_count);
+	sort(array_of_surface_update, planes_count,
+	     sizeof(*array_of_surface_update), dm_plane_layer_index_cmp, NULL);
 
 	/*
 	 * Previous frame finished and HW is ready for optimization.
@@ -9350,6 +9366,8 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		for (j = 0; j < status->plane_count; j++)
 			dummy_updates[j].surface = status->plane_states[0];
 
+		sort(dummy_updates, status->plane_count,
+		     sizeof(*dummy_updates), dm_plane_layer_index_cmp, NULL);
 
 		mutex_lock(&dm->dc_lock);
 		dc_update_planes_and_stream(dm->dc,
@@ -10084,6 +10102,17 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 	if (new_crtc_state->color_mgmt_changed)
 		return true;
 
+	/*
+	 * On zpos change, planes need to be reordered by removing and re-adding
+	 * them one by one to the dc state, in order of descending zpos.
+	 *
+	 * TODO: We can likely skip bandwidth validation if the only thing that
+	 * changed about the plane was it'z z-ordering.
+	 */
+	if (new_crtc_state->zpos_changed) {
+		return true;
+	}
+
 	if (drm_atomic_crtc_needs_modeset(new_crtc_state))
 		return true;
 
@@ -10496,6 +10525,65 @@ dm_get_plane_scale(struct drm_plane_state *plane_state,
 	*out_plane_scale_h = plane_state->crtc_h * 1000 / plane_src_h;
 }
 
+/*
+ * The normalized_zpos value cannot be used by this iterator directly. It's only
+ * calculated for enabled planes, potentially causing normalized_zpos collisions
+ * between enabled/disabled planes in the atomic state. We need a unique value
+ * so that the iterator will not generate the same object twice, or loop
+ * indefinitely.
+ */
+static inline struct __drm_planes_state *__get_next_zpos(
+	struct drm_atomic_state *state,
+	struct __drm_planes_state *prev)
+{
+	unsigned int highest_zpos = 0, prev_zpos = 256;
+	uint32_t highest_id = 0, prev_id = UINT_MAX;
+	struct drm_plane_state *new_plane_state;
+	struct drm_plane *plane;
+	int i, highest_i = -1;
+
+	if (prev != NULL) {
+		prev_zpos = prev->new_state->zpos;
+		prev_id = prev->ptr->base.id;
+	}
+
+	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
+		/* Skip planes with higher zpos than the previously returned */
+		if (new_plane_state->zpos > prev_zpos ||
+		    (new_plane_state->zpos == prev_zpos &&
+		     plane->base.id >= prev_id))
+			continue;
+
+		/* Save the index of the plane with highest zpos */
+		if (new_plane_state->zpos > highest_zpos ||
+		    (new_plane_state->zpos == highest_zpos &&
+		     plane->base.id > highest_id)) {
+			highest_zpos = new_plane_state->zpos;
+			highest_id = plane->base.id;
+			highest_i = i;
+		}
+	}
+
+	if (highest_i < 0)
+		return NULL;
+
+	return &state->planes[highest_i];
+}
+
+/*
+ * Use the uniqueness of the plane's (zpos, drm obj ID) combination to iterate
+ * by descending zpos, as read from the new plane state. This is the same
+ * ordering as defined by drm_atomic_normalize_zpos().
+ */
+#define for_each_oldnew_plane_in_decending_zpos(__state, plane, old_plane_state, new_plane_state) \
+	for (struct __drm_planes_state *__i = __get_next_zpos((__state), NULL); \
+	     __i != NULL; __i = __get_next_zpos((__state), __i))		\
+		for_each_if (((plane) = __i->ptr,			\
+			      (void)(plane) /* Only to avoid unused-but-set-variable warning */, \
+			      (old_plane_state) = __i->old_state,	\
+			      (new_plane_state) = __i->new_state, 1))
+
+
 static int dm_check_crtc_cursor(struct drm_atomic_state *state,
 				struct drm_crtc *crtc,
 				struct drm_crtc_state *new_crtc_state)
@@ -10558,7 +10646,7 @@ static int dm_check_crtc_cursor(struct drm_atomic_state *state,
 	if (i)
 		return i;
 
-	for_each_new_plane_in_state_reverse(state, underlying, new_underlying_state, i) {
+	for_each_oldnew_plane_in_decending_zpos(state, underlying, old_plane_state, new_underlying_state) {
 		/* Narrow down to non-cursor planes on the same CRTC as the cursor */
 		if (new_underlying_state->crtc != crtc || underlying == crtc->cursor)
 			continue;
@@ -10923,7 +11011,7 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 	}
 
 	/* Remove exiting planes if they are modified */
-	for_each_oldnew_plane_in_state_reverse(state, plane, old_plane_state, new_plane_state, i) {
+	for_each_oldnew_plane_in_decending_zpos(state, plane, old_plane_state, new_plane_state) {
 		if (old_plane_state->fb && new_plane_state->fb &&
 		    get_mem_type(old_plane_state->fb) !=
 		    get_mem_type(new_plane_state->fb))
@@ -10968,7 +11056,7 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 	}
 
 	/* Add new/modified planes */
-	for_each_oldnew_plane_in_state_reverse(state, plane, old_plane_state, new_plane_state, i) {
+	for_each_oldnew_plane_in_decending_zpos(state, plane, old_plane_state, new_plane_state) {
 		ret = dm_update_plane_state(dc, state, plane,
 					    old_plane_state,
 					    new_plane_state,
