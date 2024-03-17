@@ -520,6 +520,9 @@ static int dsa_port_setup(struct dsa_port *dp)
 		break;
 	}
 
+	if (ds->ops->port_setup)
+		err = ds->ops->port_setup(ds, dp->index);
+
 	if (err && dsa_port_enabled)
 		dsa_port_disable(dp);
 	if (err && dsa_port_link_registered)
