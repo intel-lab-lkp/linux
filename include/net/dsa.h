@@ -1359,6 +1359,23 @@ int dsa_register_switch(struct dsa_switch *ds);
 void dsa_switch_shutdown(struct dsa_switch *ds);
 struct dsa_switch *dsa_switch_find(int tree_index, int sw_index);
 void dsa_flush_workqueue(void);
+
+struct dsa_port *dsa_user_to_port(const struct net_device *dev);
+
+static inline struct dsa_switch *dsa_user_to_ds(const struct net_device *ndev)
+{
+	struct dsa_port *dp = dsa_user_to_port(ndev);
+
+	return dp->ds;
+}
+
+static inline unsigned int dsa_user_to_index(const struct net_device *ndev)
+{
+	struct dsa_port *dp = dsa_user_to_port(ndev);
+
+	return dp->index;
+}
+
 #ifdef CONFIG_PM_SLEEP
 int dsa_switch_suspend(struct dsa_switch *ds);
 int dsa_switch_resume(struct dsa_switch *ds);

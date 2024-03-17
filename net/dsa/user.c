@@ -3699,3 +3699,11 @@ void dsa_user_unregister_notifier(void)
 	if (err)
 		pr_err("DSA: failed to unregister user notifier (%d)\n", err);
 }
+
+struct dsa_port *dsa_user_to_port(const struct net_device *dev)
+{
+	struct dsa_user_priv *p = netdev_priv(dev);
+
+	return p->dp;
+}
+EXPORT_SYMBOL_GPL(dsa_user_to_port);

@@ -51,13 +51,6 @@ int dsa_user_change_conduit(struct net_device *dev, struct net_device *conduit,
 int dsa_user_manage_vlan_filtering(struct net_device *dev,
 				   bool vlan_filtering);
 
-static inline struct dsa_port *dsa_user_to_port(const struct net_device *dev)
-{
-	struct dsa_user_priv *p = netdev_priv(dev);
-
-	return p->dp;
-}
-
 static inline struct net_device *
 dsa_user_to_conduit(const struct net_device *dev)
 {
