@@ -432,6 +432,9 @@ struct mv88e6xxx_chip {
 
 	/* Bridge MST to SID mappings */
 	struct list_head msts;
+
+	/* LEDs associated to the ports */
+	struct list_head leds;
 };
 
 struct mv88e6xxx_bus_ops {
@@ -668,6 +671,15 @@ struct mv88e6xxx_ops {
 	int (*led_blink_set)(struct mv88e6xxx_chip *chip, int port, u8 led,
 			     unsigned long *delay_on,
 			     unsigned long *delay_off);
+	int (*led_hw_control_is_supported)(struct mv88e6xxx_chip *chip,
+					   int port, u8 led,
+					   unsigned long flags);
+	int (*led_hw_control_set)(struct mv88e6xxx_chip *chip,
+				  int port, u8 led,
+				  unsigned long flags);
+	int (*led_hw_control_get)(struct mv88e6xxx_chip *chip,
+				  int port, u8 led,
+				  unsigned long *flags);
 };
 
 struct mv88e6xxx_irq_ops {

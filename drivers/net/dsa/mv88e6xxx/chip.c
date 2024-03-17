@@ -31,6 +31,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/phylink.h>
 #include <net/dsa.h>
+#include <net/netdev_leds.h>
 
 #include "chip.h"
 #include "devlink.h"
@@ -3129,6 +3130,105 @@ static int mv88e6xxx_switch_reset(struct mv88e6xxx_chip *chip)
 	return mv88e6xxx_software_reset(chip);
 }
 
+static int mv88e6xxx_led_brightness_set(struct net_device *ndev,
+					u8 led, enum led_brightness value)
+{
+	struct dsa_switch *ds = dsa_user_to_ds(ndev);
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int port = dsa_user_to_index(ndev);
+	int err;
+
+	if (chip->info->ops->led_brightness_set) {
+		mv88e6xxx_reg_lock(chip);
+		err = chip->info->ops->led_brightness_set(chip, port, led,
+							  value);
+		mv88e6xxx_reg_unlock(chip);
+		return err;
+	}
+	return -EOPNOTSUPP;
+}
+
+static int mv88e6xxx_led_blink_set(struct net_device *ndev, u8 led,
+				   unsigned long *delay_on,
+				   unsigned long *delay_off)
+{
+	struct dsa_switch *ds = dsa_user_to_ds(ndev);
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int port = dsa_user_to_index(ndev);
+	int err;
+
+	if (chip->info->ops->led_blink_set) {
+		mv88e6xxx_reg_lock(chip);
+		err = chip->info->ops->led_blink_set(chip, port, led,
+						     delay_on, delay_off);
+		mv88e6xxx_reg_unlock(chip);
+		return err;
+	}
+	return -EOPNOTSUPP;
+}
+
+static int mv88e6xxx_led_hw_control_is_supported(struct net_device *ndev,
+						 u8 led, unsigned long flags)
+{
+	struct dsa_switch *ds = dsa_user_to_ds(ndev);
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int port = dsa_user_to_index(ndev);
+	int err;
+
+	if (chip->info->ops->led_hw_control_is_supported) {
+		mv88e6xxx_reg_lock(chip);
+		err = chip->info->ops->led_hw_control_is_supported(chip, port,
+								   led, flags);
+		mv88e6xxx_reg_unlock(chip);
+		return err;
+	}
+	return -EOPNOTSUPP;
+}
+
+static int mv88e6xxx_led_hw_control_set(struct net_device *ndev, u8 led,
+					unsigned long flags)
+{
+	struct dsa_switch *ds = dsa_user_to_ds(ndev);
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int port = dsa_user_to_index(ndev);
+	int err;
+
+	if (chip->info->ops->led_hw_control_set) {
+		mv88e6xxx_reg_lock(chip);
+		err = chip->info->ops->led_hw_control_set(chip, port,
+							  led, flags);
+		mv88e6xxx_reg_unlock(chip);
+		return err;
+	}
+	return -EOPNOTSUPP;
+}
+
+static int mv88e6xxx_led_hw_control_get(struct net_device *ndev,
+					u8 led, unsigned long *flags)
+{
+	struct dsa_switch *ds = dsa_user_to_ds(ndev);
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int port = dsa_user_to_index(ndev);
+	int err;
+
+	if (chip->info->ops->led_hw_control_get) {
+		mv88e6xxx_reg_lock(chip);
+		err = chip->info->ops->led_hw_control_get(chip, port,
+							  led, flags);
+		mv88e6xxx_reg_unlock(chip);
+		return err;
+	}
+	return -EOPNOTSUPP;
+}
+
+static struct netdev_leds_ops mv88e6xxx_netdev_leds_ops = {
+	.brightness_set = mv88e6xxx_led_brightness_set,
+	.blink_set = mv88e6xxx_led_blink_set,
+	.hw_control_is_supported = mv88e6xxx_led_hw_control_is_supported,
+	.hw_control_set = mv88e6xxx_led_hw_control_set,
+	.hw_control_get = mv88e6xxx_led_hw_control_get,
+};
+
 static int mv88e6xxx_set_port_mode(struct mv88e6xxx_chip *chip, int port,
 				   enum mv88e6xxx_frame_mode frame,
 				   enum mv88e6xxx_egress_mode egress, u16 etype)
@@ -4006,6 +4106,7 @@ out_mdios:
 
 static int mv88e6xxx_port_setup(struct dsa_switch *ds, int port)
 {
+	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct mv88e6xxx_chip *chip = ds->priv;
 	int err;
 
@@ -4016,12 +4117,25 @@ static int mv88e6xxx_port_setup(struct dsa_switch *ds, int port)
 			return err;
 	}
 
-	return mv88e6xxx_setup_devlink_regions_port(ds, port);
+	err  = mv88e6xxx_setup_devlink_regions_port(ds, port);
+	if (err)
+		return err;
+
+	if (dp->dn) {
+		err = netdev_leds_setup(dp->user, dp->dn, &chip->leds,
+					&mv88e6xxx_netdev_leds_ops);
+		if (err)
+			mv88e6xxx_teardown_devlink_regions_port(ds, port);
+	}
+	return err;
 }
 
 static void mv88e6xxx_port_teardown(struct dsa_switch *ds, int port)
 {
+	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct mv88e6xxx_chip *chip = ds->priv;
+
+	netdev_leds_teardown(&chip->leds, dp->user);
 
 	mv88e6xxx_teardown_devlink_regions_port(ds, port);
 
@@ -6397,6 +6511,7 @@ static struct mv88e6xxx_chip *mv88e6xxx_alloc_chip(struct device *dev)
 	INIT_LIST_HEAD(&chip->mdios);
 	idr_init(&chip->policies);
 	INIT_LIST_HEAD(&chip->msts);
+	INIT_LIST_HEAD(&chip->leds);
 
 	return chip;
 }
