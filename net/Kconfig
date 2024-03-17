@@ -516,4 +516,14 @@ config NET_TEST
 
 	  If unsure, say N.
 
+config NETDEV_LEDS
+	bool "NETDEV helper code for MAC LEDs"
+	depends on LEDS_CLASS
+	select LEDS_TRIGGER_NETDEV
+	help
+	  NICs and Switches often contain LED controllers. When the LEDs
+	  are part of the MAC, the MAC driver, aka netdev driver, should
+	  make the LEDs available. NETDEV_LEDS offers a small library
+	  of code to help MAC drivers do this.
+
 endif   # if NET
