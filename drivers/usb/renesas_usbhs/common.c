@@ -363,7 +363,7 @@ static void usbhsc_clk_disable_unprepare(struct usbhs_priv *priv)
  *		platform default param
  */
 
-/* commonly used on old SH-Mobile SoCs */
+/* commonly used on old SH-Mobile and RZ/G2L family SoCs */
 static struct renesas_usbhs_driver_pipe_config usbhsc_default_pipe[] = {
 	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_CONTROL, 64, 0x00, false),
 	RENESAS_USBHS_PIPE(USB_ENDPOINT_XFER_ISOC, 1024, 0x08, true),
@@ -566,6 +566,18 @@ static const struct of_device_id usbhs_of_match[] = {
 		.data = &usbhs_rcar_gen3_with_pll_plat_info,
 	},
 	{
+		.compatible = "renesas,usbhs-r9a07g043",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
+		.compatible = "renesas,usbhs-r9a07g044",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
+		.compatible = "renesas,usbhs-r9a07g054",
+		.data = &usbhs_rzg2l_plat_info,
+	},
+	{
 		.compatible = "renesas,rcar-gen2-usbhs",
 		.data = &usbhs_rcar_gen2_plat_info,
 	},
@@ -580,6 +592,10 @@ static const struct of_device_id usbhs_of_match[] = {
 	{
 		.compatible = "renesas,rza2-usbhs",
 		.data = &usbhs_rza2_plat_info,
+	},
+	{
+		.compatible = "renesas,rzg2l-usbhs",
+		.data = &usbhs_rzg2l_plat_info,
 	},
 	{ },
 };
@@ -642,7 +658,7 @@ static int usbhs_probe(struct platform_device *pdev)
 	if (usbhs_get_dparam(priv, has_new_pipe_configs)) {
 		priv->dparam.pipe_configs = usbhsc_new_pipe;
 		priv->dparam.pipe_size = ARRAY_SIZE(usbhsc_new_pipe);
-	} else if (!priv->dparam.pipe_configs) {
+	} else {
 		priv->dparam.pipe_configs = usbhsc_default_pipe;
 		priv->dparam.pipe_size = ARRAY_SIZE(usbhsc_default_pipe);
 	}
