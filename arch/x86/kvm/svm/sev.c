@@ -23,6 +23,7 @@
 #include <asm/pkru.h>
 #include <asm/trapnr.h>
 #include <asm/fpu/xcr.h>
+#include <asm/fpu/xstate.h>
 #include <asm/debugreg.h>
 
 #include "mmu.h"
@@ -577,6 +578,10 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 	struct kvm_sev_info *sev = &to_kvm_svm(vcpu->kvm)->sev_info;
 	struct sev_es_save_area *save = svm->sev_es.vmsa;
+	struct xregs_state *xsave;
+	const u8 *s;
+	u8 *d;
+	int i;
 
 	/* Check some debug related fields before encrypting the VMSA */
 	if (svm->vcpu.guest_debug || (svm->vmcb->save.dr7 & ~DR7_FIXED_1))
@@ -619,6 +624,30 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 
 	save->sev_features = sev->vmsa_features;
 
+	xsave = &vcpu->arch.guest_fpu.fpstate->regs.xsave;
+	save->x87_dp = xsave->i387.rdp;
+	save->mxcsr = xsave->i387.mxcsr;
+	save->x87_ftw = xsave->i387.twd;
+	save->x87_fsw = xsave->i387.swd;
+	save->x87_fcw = xsave->i387.cwd;
+	save->x87_fop = xsave->i387.fop;
+	save->x87_ds = 0;
+	save->x87_cs = 0;
+	save->x87_rip = xsave->i387.rip;
+
+	for (i = 0; i < 8; i++) {
+		d = save->fpreg_x87 + i * 10;
+		s = ((u8 *)xsave->i387.st_space) + i * 16;
+		memcpy(d, s, 10);
+	}
+	memcpy(save->fpreg_xmm, xsave->i387.xmm_space, 256);
+
+	s = get_xsave_addr(xsave, XFEATURE_YMM);
+	if (s)
+		memcpy(save->fpreg_ymm, s, 256);
+	else
+		memset(save->fpreg_ymm, 0, 256);
+
 	pr_debug("Virtual Machine Save Area (VMSA):\n");
 	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, save, sizeof(*save), false);
 
@@ -657,6 +686,13 @@ static int __sev_launch_update_vmsa(struct kvm *kvm, struct kvm_vcpu *vcpu,
 	if (ret)
 	  return ret;
 
+	/*
+	 * SEV-ES guests maintain an encrypted version of their FPU
+	 * state which is restored and saved on VMRUN and VMEXIT.
+	 * Mark vcpu->arch.guest_fpu->fpstate as scratch so it won't
+	 * do xsave/xrstor on it.
+	 */
+	fpstate_set_confidential(&vcpu->arch.guest_fpu);
 	vcpu->arch.guest_state_protected = true;
 	return 0;
 }
