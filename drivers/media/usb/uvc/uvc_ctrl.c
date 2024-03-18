@@ -2434,6 +2434,14 @@ err_nomem:
 	return -ENOMEM;
 }
 
+static int __uvc_ctrl_add_custom_mapping(struct uvc_video_chain *chain,
+	struct uvc_control *ctrl, const struct uvc_control_mapping *mapping)
+{
+	if (mapping && mapping->add_mapping)
+		return mapping->add_mapping(chain, ctrl, mapping);
+	return __uvc_ctrl_add_mapping(chain, ctrl, mapping);
+}
+
 int uvc_ctrl_add_mapping(struct uvc_video_chain *chain,
 	const struct uvc_control_mapping *mapping)
 {
@@ -2637,7 +2645,8 @@ static void uvc_ctrl_init_ctrl(struct uvc_video_chain *chain,
 
 			if (uvc_entity_match_guid(ctrl->entity, mapping->entity) &&
 			    ctrl->info.selector == mapping->selector) {
-				__uvc_ctrl_add_mapping(chain, ctrl, mapping);
+				__uvc_ctrl_add_custom_mapping(chain, ctrl,
+							      mapping);
 				custom = true;
 			}
 		}
@@ -2652,7 +2661,7 @@ static void uvc_ctrl_init_ctrl(struct uvc_video_chain *chain,
 
 		if (uvc_entity_match_guid(ctrl->entity, mapping->entity) &&
 		    ctrl->info.selector == mapping->selector)
-			__uvc_ctrl_add_mapping(chain, ctrl, mapping);
+			__uvc_ctrl_add_custom_mapping(chain, ctrl, mapping);
 	}
 
 	/* Finally process version-specific mappings. */
@@ -2664,7 +2673,7 @@ static void uvc_ctrl_init_ctrl(struct uvc_video_chain *chain,
 
 		if (uvc_entity_match_guid(ctrl->entity, mapping->entity) &&
 		    ctrl->info.selector == mapping->selector)
-			__uvc_ctrl_add_mapping(chain, ctrl, mapping);
+			__uvc_ctrl_add_custom_mapping(chain, ctrl, mapping);
 	}
 }
 

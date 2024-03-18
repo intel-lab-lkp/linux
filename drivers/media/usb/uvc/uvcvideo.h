@@ -101,34 +101,6 @@ struct uvc_control_info {
 	u32 flags;
 };
 
-struct uvc_control_mapping {
-	struct list_head list;
-	struct list_head ev_subs;
-
-	u32 id;
-	char *name;
-	u8 entity[16];
-	u8 selector;
-
-	u8 size;
-	u8 offset;
-	enum v4l2_ctrl_type v4l2_type;
-	u32 data_type;
-
-	const u32 *menu_mapping;
-	const char (*menu_names)[UVC_MENU_NAME_LEN];
-	unsigned long menu_mask;
-
-	u32 master_id;
-	s32 master_manual;
-	u32 slave_ids[2];
-
-	s32 (*get)(struct uvc_control_mapping *mapping, u8 query,
-		   const u8 *data);
-	void (*set)(struct uvc_control_mapping *mapping, s32 value,
-		    u8 *data);
-};
-
 struct uvc_control {
 	struct uvc_entity *entity;
 	struct uvc_control_info info;
@@ -334,6 +306,37 @@ struct uvc_video_chain {
 	struct v4l2_prio_state prio;		/* V4L2 priority state */
 	u32 caps;				/* V4L2 chain-wide caps */
 	u8 ctrl_class_bitmap;			/* Bitmap of valid classes */
+};
+
+struct uvc_control_mapping {
+	struct list_head list;
+	struct list_head ev_subs;
+
+	u32 id;
+	char *name;
+	u8 entity[16];
+	u8 selector;
+
+	u8 size;
+	u8 offset;
+	enum v4l2_ctrl_type v4l2_type;
+	u32 data_type;
+
+	const u32 *menu_mapping;
+	const char (*menu_names)[UVC_MENU_NAME_LEN];
+	unsigned long menu_mask;
+
+	u32 master_id;
+	s32 master_manual;
+	u32 slave_ids[2];
+
+	int (*add_mapping)(struct uvc_video_chain *chain,
+			   struct uvc_control *ctrl,
+			   const struct uvc_control_mapping *mapping);
+	s32 (*get)(struct uvc_control_mapping *mapping, u8 query,
+		   const u8 *data);
+	void (*set)(struct uvc_control_mapping *mapping, s32 value,
+		    u8 *data);
 };
 
 struct uvc_stats_frame {
