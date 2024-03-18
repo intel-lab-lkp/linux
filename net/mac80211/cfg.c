@@ -3606,6 +3606,7 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif, unsigned int link_id)
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_link_data *link_data;
+	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
 
 	if (WARN_ON(link_id >= IEEE80211_MLD_MAX_NUM_LINKS))
 		return;
@@ -3617,7 +3618,10 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif, unsigned int link_id)
 		rcu_read_unlock();
 		return;
 	}
-
+	if (wdev->valid_links && wdev->links[link_id].ap.switch_count != 0) {
+		wdev->links[link_id].ap.switch_count = 0;
+		wdev->critical_update = true;
+	}
 	/* TODO: MBSSID with MLO changes */
 	if (vif->mbssid_tx_vif == vif) {
 		/* Trigger ieee80211_csa_finish() on the non-transmitting
@@ -3642,6 +3646,35 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif, unsigned int link_id)
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL(ieee80211_csa_finish);
+
+/**
+ * ieee80211_critical_update - update critical params for each link
+ * @vif: the specified virtual interface
+ * @link_id: the link ID for MLO, otherwise 0
+ * @critical_flag: critical update information
+ * @bpcc: Bss parameter change count value
+ *
+ * The function is called when event received from firmware to update
+ * critical parameters to user space during probe or assoc or reassoc request
+ * frame receive and needed only on beacon offload case.
+ */
+void ieee80211_critical_update(struct ieee80211_vif *vif, unsigned int link_id,
+			       bool critical_flag, u8 bpcc)
+{
+	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
+
+	if (!wdev->valid_links)
+		return;
+	if (WARN_ON(link_id > IEEE80211_MLD_MAX_NUM_LINKS))
+		return;
+	if (wdev->links[link_id].ap.critical_flag != critical_flag ||
+	    wdev->links[link_id].ap.bpcc != bpcc) {
+		wdev->critical_update = true;
+		wdev->links[link_id].ap.critical_flag = critical_flag;
+		wdev->links[link_id].ap.bpcc = bpcc;
+	}
+}
+EXPORT_SYMBOL(ieee80211_critical_update);
 
 void ieee80211_channel_switch_disconnect(struct ieee80211_vif *vif, bool block_tx)
 {
