@@ -25,6 +25,7 @@
 #include <linux/debugfs.h>
 #include <linux/hwmon.h>
 #include <linux/jiffies.h>
+#include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/nls.h>
 #include <linux/units.h>
@@ -2072,6 +2073,7 @@ static const struct wmi_device_id hp_wmi_sensors_id_table[] = {
 	{ HP_WMI_NUMERIC_SENSOR_GUID, NULL },
 	{},
 };
+MODULE_DEVICE_TABLE(wmi, hp_wmi_sensors_id_table);
 
 static struct wmi_driver hp_wmi_sensors_driver = {
 	.driver   = { .name = "hp-wmi-sensors" },
