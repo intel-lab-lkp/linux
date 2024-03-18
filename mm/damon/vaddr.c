@@ -52,6 +52,53 @@ static struct mm_struct *damon_get_mm(struct damon_target *t)
 	return mm;
 }
 
+/* Pick the highest possible page table profiling level for addr
+ * in the region defined by start and end
+ */
+static int pick_profile_level(unsigned long start, unsigned long end,
+		unsigned long addr)
+{
+	/* Start with PTE and check if higher levels can be picked */
+	int level = 0;
+
+	if (!arch_has_hw_nonleaf_pmd_young())
+		return level;
+
+	/* Check if PMD or higher can be picked, else use PTE */
+	if (pmd_addr_start(addr, (start) - 1) < start
+			|| pmd_addr_end(addr, (end) + 1) > end)
+		return level;
+
+	level++;
+	/* Check if PUD or higher can be picked, else use PMD */
+	if (pud_addr_start(addr, (start) - 1) < start
+			|| pud_addr_end(addr, (end) + 1) > end)
+		return level;
+
+	if (pgtable_l5_enabled()) {
+		level++;
+		/* Check if P4D or higher can be picked, else use PUD */
+		if (p4d_addr_start(addr, (start) - 1) < start
+				|| p4d_addr_end(addr, (end) + 1) > end)
+			return level;
+	}
+
+	level++;
+	/* Check if PGD can be picked, else return PUD level */
+	if (pgd_addr_start(addr, (start) - 1) < start
+			|| pgd_addr_end(addr, (end) + 1) > end)
+		return level;
+
+#ifdef CONFIG_PAGE_TABLE_ISOLATION
+	/* Do not pick PGD level if PTI is enabled */
+	if (static_cpu_has(X86_FEATURE_PTI))
+		return level;
+#endif
+
+	/* Return PGD level */
+	return ++level;
+}
+
 /*
  * Functions for the initial monitoring target regions construction
  */
@@ -387,16 +434,90 @@ out:
 #define damon_mkold_hugetlb_entry NULL
 #endif /* CONFIG_HUGETLB_PAGE */
 
-static const struct mm_walk_ops damon_mkold_ops = {
-	.pmd_entry = damon_mkold_pmd_entry,
+
+#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
+static int damon_mkold_pmd(pmd_t *pmd, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+
+	if (!pmd_present(*pmd))
+		return 0;
+
+	ptl = pmd_lock(walk->mm, pmd);
+	pmdp_clear_young_notify(walk->vma, addr, pmd);
+	spin_unlock(ptl);
+
+	return 0;
+}
+
+static int damon_mkold_pud(pud_t *pud, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+
+	if (!pud_present(*pud))
+		return 0;
+
+	ptl = pud_lock(walk->mm, pud);
+	pudp_clear_young_notify(walk->vma, addr, pud);
+	spin_unlock(ptl);
+
+	return 0;
+}
+
+static int damon_mkold_p4d(p4d_t *p4d, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	struct mm_struct *mm = walk->mm;
+
+	if (!p4d_present(*p4d))
+		return 0;
+
+	spin_lock(&mm->page_table_lock);
+	p4dp_clear_young_notify(walk->vma, addr, p4d);
+	spin_unlock(&mm->page_table_lock);
+
+	return 0;
+}
+
+static int damon_mkold_pgd(pgd_t *pgd, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	struct mm_struct *mm = walk->mm;
+
+	if (!pgd_present(*pgd))
+		return 0;
+
+	spin_lock(&mm->page_table_lock);
+	pgdp_clear_young_notify(walk->vma, addr, pgd);
+	spin_unlock(&mm->page_table_lock);
+
+	return 0;
+}
+#endif
+
+static const struct mm_walk_ops damon_mkold_ops[] = {
+	{.pmd_entry = damon_mkold_pmd_entry,
 	.hugetlb_entry = damon_mkold_hugetlb_entry,
-	.walk_lock = PGWALK_RDLOCK,
+	.walk_lock = PGWALK_RDLOCK},
+#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
+	{.pmd_entry = damon_mkold_pmd},
+	{.pud_entry = damon_mkold_pud},
+	{.p4d_entry = damon_mkold_p4d},
+	{.pgd_entry = damon_mkold_pgd},
+#endif
 };
 
-static void damon_va_mkold(struct mm_struct *mm, unsigned long addr)
+static void damon_va_mkold(struct mm_struct *mm, struct damon_region *r)
 {
+	unsigned long addr = r->sampling_addr;
+	int profile_level;
+
+	profile_level = pick_profile_level(r->ar.start, r->ar.end, addr);
+
 	mmap_read_lock(mm);
-	walk_page_range(mm, addr, addr + 1, &damon_mkold_ops, NULL);
+	walk_page_range(mm, addr, addr + 1, &damon_mkold_ops[profile_level], NULL);
 	mmap_read_unlock(mm);
 }
 
@@ -409,7 +530,7 @@ static void __damon_va_prepare_access_check(struct mm_struct *mm,
 {
 	r->sampling_addr = damon_rand(r->ar.start, r->ar.end);
 
-	damon_va_mkold(mm, r->sampling_addr);
+	damon_va_mkold(mm, r);
 }
 
 static void damon_va_prepare_access_checks(struct damon_ctx *ctx)
@@ -531,22 +652,110 @@ out:
 #define damon_young_hugetlb_entry NULL
 #endif /* CONFIG_HUGETLB_PAGE */
 
-static const struct mm_walk_ops damon_young_ops = {
-	.pmd_entry = damon_young_pmd_entry,
+
+#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
+static int damon_young_pmd(pmd_t *pmd, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+	struct damon_young_walk_private *priv = walk->private;
+
+	if (!pmd_present(*pmd))
+		return 0;
+
+	ptl = pmd_lock(walk->mm, pmd);
+	if (pmd_young(*pmd) || mmu_notifier_test_young(walk->mm, addr))
+		priv->young = true;
+
+	*priv->folio_sz = (1UL << PMD_SHIFT);
+	spin_unlock(ptl);
+
+	return 0;
+}
+
+static int damon_young_pud(pud_t *pud, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+	struct damon_young_walk_private *priv = walk->private;
+
+	if (!pud_present(*pud))
+		return 0;
+
+	ptl = pud_lock(walk->mm, pud);
+	if (pud_young(*pud) || mmu_notifier_test_young(walk->mm, addr))
+		priv->young = true;
+
+	*priv->folio_sz = (1UL << PUD_SHIFT);
+	spin_unlock(ptl);
+
+	return 0;
+}
+
+static int damon_young_p4d(p4d_t *p4d, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	struct mm_struct *mm = walk->mm;
+	struct damon_young_walk_private *priv = walk->private;
+
+	if (!p4d_present(*p4d))
+		return 0;
+
+	spin_lock(&mm->page_table_lock);
+	if (p4d_young(*p4d) || mmu_notifier_test_young(walk->mm, addr))
+		priv->young = true;
+
+	*priv->folio_sz = (1UL << P4D_SHIFT);
+	spin_unlock(&mm->page_table_lock);
+
+	return 0;
+}
+
+static int damon_young_pgd(pgd_t *pgd, unsigned long addr,
+		unsigned long next, struct mm_walk *walk)
+{
+	struct damon_young_walk_private *priv = walk->private;
+
+	if (!pgd_present(*pgd))
+		return 0;
+
+	spin_lock(&pgd_lock);
+	if (pgd_young(*pgd) || mmu_notifier_test_young(walk->mm, addr))
+		priv->young = true;
+
+	*priv->folio_sz = (1UL << PGDIR_SHIFT);
+	spin_unlock(&pgd_lock);
+
+	return 0;
+}
+#endif
+
+static const struct mm_walk_ops damon_young_ops[] = {
+	{.pmd_entry = damon_young_pmd_entry,
 	.hugetlb_entry = damon_young_hugetlb_entry,
-	.walk_lock = PGWALK_RDLOCK,
+	.walk_lock = PGWALK_RDLOCK},
+#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
+	{.pmd_entry = damon_young_pmd},
+	{.pud_entry = damon_young_pud},
+	{.p4d_entry = damon_young_p4d},
+	{.pgd_entry = damon_young_pgd},
+#endif
 };
 
-static bool damon_va_young(struct mm_struct *mm, unsigned long addr,
+static bool damon_va_young(struct mm_struct *mm, struct damon_region *r,
 		unsigned long *folio_sz)
 {
+	unsigned long addr = r->sampling_addr;
+	int profile_level;
 	struct damon_young_walk_private arg = {
 		.folio_sz = folio_sz,
 		.young = false,
 	};
 
+	profile_level = pick_profile_level(r->ar.start, r->ar.end, addr);
+
 	mmap_read_lock(mm);
-	walk_page_range(mm, addr, addr + 1, &damon_young_ops, &arg);
+	walk_page_range(mm, addr, addr + 1, &damon_young_ops[profile_level], &arg);
 	mmap_read_unlock(mm);
 	return arg.young;
 }
@@ -577,7 +786,7 @@ static void __damon_va_check_access(struct mm_struct *mm,
 		return;
 	}
 
-	last_accessed = damon_va_young(mm, r->sampling_addr, &last_folio_sz);
+	last_accessed = damon_va_young(mm, r, &last_folio_sz);
 	damon_update_region_access_rate(r, last_accessed, attrs);
 
 	last_addr = r->sampling_addr;
