@@ -34,7 +34,8 @@ properties:
     maxItems: 1
 
   resets:
-    maxItems: 1
+    items:
+      - description: Optional reset lines
 
   sram:
     $ref: /schemas/types.yaml#/definitions/phandle
