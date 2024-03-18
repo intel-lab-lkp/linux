@@ -139,6 +139,48 @@ the interference is the responsibility of sysadmins.  However, it solves the
 conflict with the reclaim logic using ``PG_idle`` and ``PG_young`` page flags,
 as Idle page tracking does.
 
+Profiling enhancement for virtual address space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For virtual address space tracking, relying on checking Accessed bit(s) only
+at the leaf level of the page table is inefficient. Hardware architectures
+have supported Accessed bit(s) at all levels of the page table tree by
+updating them during the page table walk. Hence, DAMON dynamically
+profiles different levels (PMD/PUD/P4D) of a multi-level page table tree.
+
+DAMON leverages the following key insight: a data page that is accessed
+should also have the Accessed bit set at PMD, PUD, P4D, and PGD entry.
+Similarly, if the Accessed bit in a PGD entry (or a PUD/PMD entry) is
+not set, then none of the data pages under the PGD entry (or PUD/PMD
+entry) subtree are accessed. DAMON profiles Accessed bits at the highest
+possible level of the page table tree to identify the regions that are
+accessed.
+
+For example, consider a region and the sampling address (SA) in the below
+figure. The address range of a PUD entry corresponding to SA is within
+region bounds and hence PUD is picked for checking and setting the
+Accessed bits. However, this not true if P4D is picked for profiling.
+Hence in this case PUD is the highest possible level that can be picked
+for profiling.
+                         .......
+                         + P4D +
+                         .......
+                        /       \
+                       /         \
+                      /           \
+                     /             \
+                    /               \
+                   /  .......        \
+                  /   + PUD +         \
+                 /    .......          \
+                /    /       \          \
+- - - - - +-----*---*--+====+-*------+- -*- - -
+          +            # SA #        +
+          +            #    #        +
+- - - - - +------------+====+--------+- - - - -
+
+          | ----- DAMON region ------|
+
 
 Core Logics
 ===========
