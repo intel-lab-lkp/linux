@@ -26,8 +26,6 @@
 #include "xfs_log_priv.h"
 #include "xfs_health.h"
 
-#include <linux/iversion.h>
-
 /* Radix tree tags for incore inode tree. */
 
 /* inode is to be reclaimed */
@@ -309,7 +307,6 @@ xfs_reinit_inode(
 	int			error;
 	uint32_t		nlink = inode->i_nlink;
 	uint32_t		generation = inode->i_generation;
-	uint64_t		version = inode_peek_iversion(inode);
 	umode_t			mode = inode->i_mode;
 	dev_t			dev = inode->i_rdev;
 	kuid_t			uid = inode->i_uid;
@@ -319,7 +316,6 @@ xfs_reinit_inode(
 
 	set_nlink(inode, nlink);
 	inode->i_generation = generation;
-	inode_set_iversion_queried(inode, version);
 	inode->i_mode = mode;
 	inode->i_rdev = dev;
 	inode->i_uid = uid;

@@ -21,8 +21,6 @@
 #include "xfs_error.h"
 #include "xfs_rtbitmap.h"
 
-#include <linux/iversion.h>
-
 struct kmem_cache	*xfs_ili_cache;		/* inode log item */
 
 static inline struct xfs_inode_log_item *INODE_ITEM(struct xfs_log_item *lip)
@@ -546,7 +544,7 @@ xfs_inode_to_log_dinode(
 
 	if (xfs_has_v3inodes(ip->i_mount)) {
 		to->di_version = 3;
-		to->di_changecount = inode_peek_iversion(inode);
+		to->di_changecount = ip->i_changecount;
 		to->di_crtime = xfs_inode_to_log_dinode_ts(ip, ip->i_crtime);
 		to->di_flags2 = ip->i_diflags2;
 		to->di_cowextsize = ip->i_cowextsize;

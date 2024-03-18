@@ -15,8 +15,6 @@
 #include "xfs_trans_priv.h"
 #include "xfs_inode_item.h"
 
-#include <linux/iversion.h>
-
 /*
  * Add a locked inode to the transaction.
  *
@@ -87,7 +85,6 @@ xfs_trans_log_inode(
 	uint			flags)
 {
 	struct xfs_inode_log_item *iip = ip->i_itemp;
-	struct inode		*inode = VFS_I(ip);
 
 	ASSERT(iip);
 	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
@@ -101,7 +98,7 @@ xfs_trans_log_inode(
 	 */
 	if (!test_and_set_bit(XFS_LI_DIRTY, &iip->ili_item.li_flags) &&
 	    xfs_has_crc(ip->i_mount)) {
-		atomic64_inc(&inode->i_version);
+		ip->i_changecount++;
 		flags |= XFS_ILOG_IVERSION;
 	}
 

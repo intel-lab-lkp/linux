@@ -3,8 +3,6 @@
  * Copyright (c) 2000-2006 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
-#include <linux/iversion.h>
-
 #include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -828,7 +826,7 @@ xfs_init_new_inode(
 	ip->i_diflags = 0;
 
 	if (xfs_has_v3inodes(mp)) {
-		inode_set_iversion(inode, 1);
+		ip->i_changecount = 1;
 		ip->i_cowextsize = 0;
 		ip->i_crtime = tv;
 	}

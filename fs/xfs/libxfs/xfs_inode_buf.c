@@ -20,8 +20,6 @@
 #include "xfs_dir2.h"
 #include "xfs_health.h"
 
-#include <linux/iversion.h>
-
 /*
  * If we are doing readahead on an inode buffer, we might be in log recovery
  * reading an inode allocation buffer that hasn't yet been replayed, and hence
@@ -244,8 +242,7 @@ xfs_inode_from_disk(
 		xfs_iflags_set(ip, XFS_IPRESERVE_DM_FIELDS);
 
 	if (xfs_has_v3inodes(ip->i_mount)) {
-		inode_set_iversion_queried(inode,
-					   be64_to_cpu(from->di_changecount));
+		ip->i_changecount = be64_to_cpu(from->di_changecount);
 		ip->i_crtime = xfs_inode_from_disk_ts(from, from->di_crtime);
 		ip->i_diflags2 = be64_to_cpu(from->di_flags2);
 		ip->i_cowextsize = be32_to_cpu(from->di_cowextsize);
@@ -339,7 +336,7 @@ xfs_inode_to_disk(
 
 	if (xfs_has_v3inodes(ip->i_mount)) {
 		to->di_version = 3;
-		to->di_changecount = cpu_to_be64(inode_peek_iversion(inode));
+		to->di_changecount = cpu_to_be64(ip->i_changecount);
 		to->di_crtime = xfs_inode_to_disk_ts(ip, ip->i_crtime);
 		to->di_flags2 = cpu_to_be64(ip->i_diflags2);
 		to->di_cowextsize = cpu_to_be32(ip->i_cowextsize);

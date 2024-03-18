@@ -42,6 +42,7 @@ typedef struct xfs_inode {
 	struct rw_semaphore	i_lock;		/* inode lock */
 	atomic_t		i_pincount;	/* inode pin count */
 	struct llist_node	i_gclist;	/* deferred inactivation list */
+	uint64_t		i_changecount;	/* # of attribute changes */
 
 	/*
 	 * Bitsets of inode metadata that have been checked and/or are sick.
