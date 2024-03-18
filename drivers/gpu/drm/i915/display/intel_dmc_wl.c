@@ -120,7 +120,8 @@ void intel_dmc_wl_enable(struct drm_i915_private *i915)
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
 
-	if (DISPLAY_VER(i915) < 20)
+	if (!i915->display.params.enable_dmc_wl ||
+	    DISPLAY_VER(i915) < 20)
 		return;
 
 	spin_lock_irqsave(&wl->lock, flags);
@@ -146,7 +147,8 @@ void intel_dmc_wl_disable(struct drm_i915_private *i915)
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
 
-	if (DISPLAY_VER(i915) < 20)
+	if (!i915->display.params.enable_dmc_wl ||
+	    DISPLAY_VER(i915) < 20)
 		return;
 
 	flush_delayed_work(&wl->work);
@@ -177,7 +179,8 @@ void intel_dmc_wl_get(struct drm_i915_private *i915, i915_reg_t reg)
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
 
-	if (DISPLAY_VER(i915) < 20)
+	if (!i915->display.params.enable_dmc_wl ||
+	    DISPLAY_VER(i915) < 20)
 		return;
 
 	if (!intel_dmc_wl_check_range(reg.reg))
@@ -212,7 +215,8 @@ void intel_dmc_wl_put(struct drm_i915_private *i915, i915_reg_t reg)
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
 
-	if (DISPLAY_VER(i915) < 20)
+	if (!i915->display.params.enable_dmc_wl ||
+	    DISPLAY_VER(i915) < 20)
 		return;
 
 	if (!intel_dmc_wl_check_range(reg.reg))
