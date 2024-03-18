@@ -79,6 +79,8 @@ properties:
               - renesas,scif-r9a08g045      # RZ/G3S
           - const: renesas,scif-r9a07g044   # RZ/G2{L,LC} fallback
 
+      - const: renesas,scif-r9a09g057       # RZ/V2H(P)
+
   reg:
     maxItems: 1
 
@@ -203,6 +205,37 @@ allOf:
             - const: bri
             - const: dri
             - const: tei
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: renesas,scif-r9a09g057
+    then:
+      properties:
+        interrupts:
+          items:
+            - description: Error interrupt
+            - description: Receive buffer full interrupt
+            - description: Transmit buffer empty interrupt
+            - description: Break interrupt
+            - description: Data Ready interrupt
+            - description: Transmit End interrupt
+            - description: Transmit End/Data Ready interrupt
+            - description: Receive buffer full interrupt (EDGE trigger)
+            - description: Transmit buffer empty interrupt (EDGE trigger)
+
+        interrupt-names:
+          items:
+            - const: eri
+            - const: rxi
+            - const: txi
+            - const: bri
+            - const: dri
+            - const: tei
+            - const: tei-dri
+            - const: rxi-edge
+            - const: txi-edge
 
 unevaluatedProperties: false
 
