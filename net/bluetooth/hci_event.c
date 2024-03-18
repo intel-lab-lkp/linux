@@ -6067,7 +6067,7 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
 	}
 
 	conn = hci_connect_le(hdev, addr, addr_type, addr_resolved,
-			      BT_SECURITY_LOW, hdev->def_le_autoconnect_timeout,
+			      BT_SECURITY_LOW, HCI_LE_CONN_TIMEOUT,
 			      HCI_ROLE_MASTER);
 	if (!IS_ERR(conn)) {
 		/* If HCI_AUTO_CONN_EXPLICIT is set, conn is already owned
