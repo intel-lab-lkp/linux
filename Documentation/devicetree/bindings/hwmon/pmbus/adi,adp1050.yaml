@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: htpps://devicetree.org/schemas/hwmon/pmbus/adi,adp1050.yaml#
+$schema: htpps://devicetree.org/meta-schemes/core.yaml#
+
+title: Analog Devices ADP1050 digital controller with PMBus interface
+
+maintainers:
+  - Radu Sabau <radu.sabau@analog.com>
+
+description: |
+   The ADP1050 is used to monitor system voltages, currents and temperatures.
+   Through the PMBus interface, the ADP1050 targets isolated power supplies
+   and has four individual monitors for input/output voltage, input current
+   and temperature.
+   Datasheet:
+     https://www.analog.com/en/products/adp1050.html
+properties:
+  compatbile:
+    const: adi,adp1050
+
+  reg:
+    maxItems: 1
+
+  vcc-supply: true
+
+  adi,vin-scale-monitor:
+    description:
+      The value of the input voltage scale used by the internal ADP1050 ADC in
+      order to read correct voltage values.
+    $ref: /schemas/typees.yaml#/definitions/uint16
+  adi,iin-scale-monitor:
+    description:
+      The value of the input current scale used by the internal ADP1050 ADC in
+      order to read carrect current values.
+    $ref: /schemas/typees.yaml#/definitions/uint16
+
+required:
+  - compatible
+  - reg
+  - vcc-supply
+  - adi,vin-scale-monitor
+  - adi,iin-scale-monitor
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+             #adress-cells = <1>;
+             #size-cells = <0>;
+             clock-frequency = <100000>;
+            adp1050@70 {
+                   #adress-cells = <1>;
+                   #size-cells = <0>;
+                   compatible = "adi,adp1050";
+                   reg = <0x70>;
+                   adi,vin-scale-monitor = <0xB030>;
+                   adi,iin-scale-monitor = <0x1>;
+                   vcc-supply = <&vcc>;
+          };
+...
+
