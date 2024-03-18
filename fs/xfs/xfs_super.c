@@ -1691,10 +1691,6 @@ xfs_fs_fill_super(
 
 	set_posix_acl_flag(sb);
 
-	/* version 5 superblocks support inode version counters. */
-	if (xfs_has_crc(mp))
-		sb->s_flags |= SB_I_VERSION;
-
 	if (xfs_has_dax_always(mp)) {
 		error = xfs_setup_dax_always(mp);
 		if (error)
@@ -1915,10 +1911,6 @@ xfs_fs_reconfigure(
 	struct xfs_mount        *new_mp = fc->s_fs_info;
 	int			flags = fc->sb_flags;
 	int			error;
-
-	/* version 5 superblocks always support version counters. */
-	if (xfs_has_crc(mp))
-		fc->sb_flags |= SB_I_VERSION;
 
 	error = xfs_fs_validate_params(new_mp);
 	if (error)

@@ -97,17 +97,12 @@ xfs_trans_log_inode(
 
 	/*
 	 * First time we log the inode in a transaction, bump the inode change
-	 * counter if it is configured for this to occur. While we have the
-	 * inode locked exclusively for metadata modification, we can usually
-	 * avoid setting XFS_ILOG_CORE if no one has queried the value since
-	 * the last time it was incremented. If we have XFS_ILOG_CORE already
-	 * set however, then go ahead and bump the i_version counter
-	 * unconditionally.
+	 * counter if it is configured for this to occur.
 	 */
-	if (!test_and_set_bit(XFS_LI_DIRTY, &iip->ili_item.li_flags)) {
-		if (IS_I_VERSION(inode) &&
-		    inode_maybe_inc_iversion(inode, flags & XFS_ILOG_CORE))
-			flags |= XFS_ILOG_IVERSION;
+	if (!test_and_set_bit(XFS_LI_DIRTY, &iip->ili_item.li_flags) &&
+	    xfs_has_crc(ip->i_mount)) {
+		atomic64_inc(&inode->i_version);
+		flags |= XFS_ILOG_IVERSION;
 	}
 
 	iip->ili_dirty_flags |= flags;

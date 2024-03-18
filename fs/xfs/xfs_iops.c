@@ -584,11 +584,6 @@ xfs_vn_getattr(
 		}
 	}
 
-	if ((request_mask & STATX_CHANGE_COOKIE) && IS_I_VERSION(inode)) {
-		stat->change_cookie = inode_query_iversion(inode);
-		stat->result_mask |= STATX_CHANGE_COOKIE;
-	}
-
 	/*
 	 * Note: If you add another clause to set an attribute flag, please
 	 * update attributes_mask below.
@@ -1043,16 +1038,11 @@ xfs_vn_update_time(
 	struct timespec64	now;
 
 	trace_xfs_update_time(ip);
+	ASSERT(!(flags & S_VERSION));
 
 	if (inode->i_sb->s_flags & SB_LAZYTIME) {
-		if (!((flags & S_VERSION) &&
-		      inode_maybe_inc_iversion(inode, false))) {
-			generic_update_time(inode, flags);
-			return 0;
-		}
-
-		/* Capture the iversion update that just occurred */
-		log_flags |= XFS_ILOG_CORE;
+		generic_update_time(inode, flags);
+		return 0;
 	}
 
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_fsyncts, 0, 0, 0, &tp);
