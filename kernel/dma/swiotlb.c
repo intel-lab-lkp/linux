@@ -285,6 +285,8 @@ static void swiotlb_init_io_tlb_pool(struct io_tlb_pool *mem, phys_addr_t start,
 		mem->areas[i].used = 0;
 	}
 
+	ASSERT_VAR_CAN_HOLD(mem->slots[0].list, IO_TLB_SEGSIZE);
+	ASSERT_VAR_CAN_HOLD(mem->slots[0].pad_slots, IO_TLB_SEGSIZE);
 	for (i = 0; i < mem->nslabs; i++) {
 		mem->slots[i].list = min(IO_TLB_SEGSIZE - io_tlb_offset(i),
 					 mem->nslabs - i);
