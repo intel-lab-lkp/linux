@@ -5,6 +5,8 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/power/amlogic,t7-pwrc.h>
+#include <dt-bindings/clock/amlogic,t7-pll-clkc.h>
+#include <dt-bindings/clock/amlogic,t7-peripherals-clkc.h>
 
 / {
 	interrupt-parent = <&gic>;
@@ -148,11 +150,82 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			ranges = <0x0 0x0 0x0 0xfe000000 0x0 0x480000>;
+			
+			clkc_periphs: clock-controller@0 {
+				compatible = "amlogic,t7-peripherals-clkc";
+				reg = <0x0 0x0 0x0 0x49c>;
+				clocks = <&clkc_pll CLKID_FCLK_DIV2>,
+					 <&clkc_pll CLKID_FCLK_DIV2P5>,
+					 <&clkc_pll CLKID_FCLK_DIV3>,
+					 <&clkc_pll CLKID_FCLK_DIV4>,
+					 <&clkc_pll CLKID_FCLK_DIV5>,
+					 <&clkc_pll CLKID_FCLK_DIV7>,
+					 <&clkc_pll CLKID_HIFI_PLL>,
+					 <&clkc_pll CLKID_GP0_PLL>,
+					 <&clkc_pll CLKID_GP1_PLL>,
+					 <&clkc_pll CLKID_MPLL0>,
+					 <&clkc_pll CLKID_MPLL1>,
+					 <&clkc_pll CLKID_MPLL2>,
+					 <&clkc_pll CLKID_MPLL3>,
+					 <&clkc_pll CLKID_MPLL_50M_DIV>,
+					 <&clkc_pll CLKID_HDMI_PLL>,
+					 <&xtal>;
+				clock-names = "fclk_div2", "fclk_div2p5", "fclk_div3",
+					      "fclk_div4", "fclk_div5", "fclk_div7",
+					      "hifi_pll", "gp0_pll", "gp1_pll",
+					      "mpll0", "mpll1", "mpll2", "mpll3",
+					      "mpll_50m_div", "hdmi_pll", "xtal";
+				#clock-cells = <1>;
+			};
+
+			clkc_pll: clock-controller {
+				compatible = "amlogic,t7-pll-clkc";
+				#clock-cells = <1>;
+				reg = <0x0 0x8000 0x0 0x320>;
+				clocks = <&xtal>;
+				clock-names = "xtal";
+				status = "okay";
+			};
 
 			watchdog@2100 {
 				compatible = "amlogic,t7-wdt";
 				reg = <0x0 0x2100 0x0 0x10>;
 				clocks = <&xtal>;
+			};
+
+			eth_phy: mdio-multiplexer@28000 {
+				compatible = "amlogic,g12a-mdio-mux";
+				reg = <0x0 0x28000 0x0 0xa4>;
+
+				clocks = <&clkc_periphs CLKID_ETHPHY>,
+					 <&xtal>,
+					 <&clkc_pll CLKID_MPLL_50M>;
+				clock-names = "pclk", "clkin0", "clkin1";
+				mdio-parent-bus = <&mdio0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				enet_type = <5>;
+				tx_amp_src = <0xFE010330>;
+
+				ext_mdio: mdio@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+				};
+
+				int_mdio: mdio@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					internal_ephy: ethernet_phy@8 {
+						compatible = "ethernet-phy-id0180.3301",
+							     "ethernet-phy-ieee802.3-c22";
+						interrupts = <GIC_SPI 340 IRQ_TYPE_LEVEL_HIGH>;
+						reg = <8>;
+						max-speed = <100>;
+					};
+				};
 			};
 
 			periphs_pinctrl: pinctrl@4000 {
@@ -177,7 +250,123 @@
 				interrupts = <GIC_SPI 168 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
 			};
+
+			sd_emmc_b: sd@8a000 {
+				compatible = "amlogic,meson-axg-mmc";
+				reg = <0x0 0x8a000 0x0 0x800>;
+				interrupts = <GIC_SPI 177 IRQ_TYPE_EDGE_RISING>;
+				status = "disabled";
+				clocks = <&clkc_periphs CLKID_SD_EMMC_B>,
+					 <&clkc_periphs CLKID_SD_EMMC_B_CLK_MUX>,
+					 <&clkc_periphs CLKID_SD_EMMC_B_CLK>,
+					 <&xtal>,
+					 <&clkc_pll CLKID_FCLK_DIV2>;
+				clock-names = "core", "mux0", "mux1", "clkin0", "clkin1";
+				card_type = <5>;
+				use_intf3_tuning;
+				mmc_debug_flag;
+			};
+
 		};
 
+		ethmac: ethernet@fdc00000 {
+			compatible = "amlogic,meson-axg-dwmac", "snps,dwmac-4.00";
+			reg = <0x0 0xfdc00000 0x0 0x10000>,
+			      <0x0 0xfe024000 0x0 0x8>;
+			interrupts = <GIC_SPI 74 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "macirq";
+			power-domains = <&pwrc PWRC_T7_ETH_ID>;
+			clocks = <&clkc_periphs CLKID_ETH>,
+				 <&clkc_pll CLKID_FCLK_DIV2>,
+				 <&clkc_pll CLKID_MPLL2>;
+			clock-names = "stmmaceth", "clkin0", "clkin1";
+			rx-fifo-depth = <4096>;
+			tx-fifo-depth = <2048>;
+
+			internal_phy = <1>;
+			status = "disabled";
+
+			mdio0: mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "snps,dwmac-mdio";
+			};
+		};
+	};
+};
+
+&periphs_pinctrl {
+	sd_all_pins:sd_all_pins {
+		mux {
+			groups = "sdcard_d0",
+				   "sdcard_d1",
+				   "sdcard_d2",
+				   "sdcard_d3",
+				   "sdcard_cmd";
+			function = "sdcard";
+			bias-pull-up;
+			drive-strength-microamp = <4000>;
+		};
+		mux1 {
+			groups = "sdcard_clk";
+			function = "sdcard";
+			bias-pull-up;
+			drive-strength-microamp = <4000>;
+		};
+	};
+	
+	sd_1bit_pins:sd_1bit_pins {
+		mux {
+			groups = "sdcard_d0",
+					"sdcard_cmd";
+			function = "sdcard";
+			bias-pull-up;
+			drive-strength-microamp = <4000>;
+		};
+		mux1 {
+			groups = "sdcard_clk";
+			function = "sdcard";
+			bias-pull-up;
+			drive-strength-microamp = <4000>;
+		};
+	};
+	
+	sd_clk_gate_pins: sd_clk_gate {
+		mux {
+			groups = "GPIOC_4";
+			function = "gpio_periphs";
+			bias-pull-down; 
+			drive-strength-microamp = <4000>;
+		};
+	};
+
+	eth_pins: eth {
+		mux {
+			groups = "eth_mdio",
+				 "eth_mdc",
+				 "eth_rgmii_rx_clk",
+				 "eth_rx_dv",
+				 "eth_rxd0",
+				 "eth_rxd1",
+				 "eth_txen",
+				 "eth_txd0",
+				 "eth_txd1";
+			function = "eth";
+			drive-strength-microamp = <4000>;
+			bias-disable;
+		};
+	};
+
+	eth_rgmii_pins: eth-rgmii {
+		mux {
+			groups = "eth_rxd2_rgmii",
+				 "eth_rxd3_rgmii",
+				 "eth_rgmii_tx_clk",
+				 "eth_txd2_rgmii",
+				 "eth_txd3_rgmii";
+			function = "eth";
+			drive-strength-microamp = <4000>;
+			bias-disable;
+		};
 	};
 };
