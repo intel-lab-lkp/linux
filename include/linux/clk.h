@@ -653,7 +653,8 @@ int __must_check clk_bulk_enable(int num_clks,
  * @clk: clock source
  *
  * Inform the system that a clock source is no longer required by
- * a driver and may be shut down.
+ * a driver and may be shut down. It is not guaranteed to ever actually
+ * be stopped, that will be driver dependent.
  *
  * May be called from atomic contexts.
  *
