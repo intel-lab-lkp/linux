@@ -1854,8 +1854,6 @@ static int wave5_vpu_open_dec(struct file *filp)
 		goto cleanup_inst;
 	}
 
-	wave5_vdi_allocate_sram(inst->dev);
-
 	return 0;
 
 cleanup_inst:

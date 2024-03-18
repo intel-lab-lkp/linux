@@ -749,7 +749,6 @@ struct vpu_device {
 	struct vpu_attr attr;
 	struct vpu_buf common_mem;
 	u32 last_performance_cycles;
-	u32 sram_size;
 	struct gen_pool *sram_pool;
 	struct vpu_buf sram_buf;
 	void __iomem *vdb_register;

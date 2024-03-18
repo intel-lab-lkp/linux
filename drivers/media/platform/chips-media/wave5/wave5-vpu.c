@@ -178,16 +178,11 @@ static int wave5_vpu_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = of_property_read_u32(pdev->dev.of_node, "sram-size",
-				   &dev->sram_size);
-	if (ret) {
-		dev_warn(&pdev->dev, "sram-size not found\n");
-		dev->sram_size = 0;
-	}
-
 	dev->sram_pool = of_gen_pool_get(pdev->dev.of_node, "sram", 0);
 	if (!dev->sram_pool)
 		dev_warn(&pdev->dev, "sram node not found\n");
+	else
+		wave5_vdi_allocate_sram(dev);
 
 	dev->product_code = wave5_vdi_read_register(dev, VPU_PRODUCT_CODE_REGISTER);
 	ret = wave5_vdi_init(&pdev->dev);
@@ -259,6 +254,8 @@ err_vdi_release:
 err_clk_dis:
 	clk_bulk_disable_unprepare(dev->num_clks, dev->clks);
 
+	wave5_vdi_free_sram(dev);
+
 	return ret;
 }
 
@@ -275,6 +272,7 @@ static void wave5_vpu_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&dev->v4l2_dev);
 	wave5_vdi_release(&pdev->dev);
 	ida_destroy(&dev->inst_ida);
+	wave5_vdi_free_sram(dev);
 }
 
 static const struct wave5_match_data ti_wave521c_data = {
