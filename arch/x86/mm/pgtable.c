@@ -578,9 +578,7 @@ int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 
 	return ret;
 }
-#endif
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 int pudp_test_and_clear_young(struct vm_area_struct *vma,
 			      unsigned long addr, pud_t *pudp)
 {
@@ -589,6 +587,32 @@ int pudp_test_and_clear_young(struct vm_area_struct *vma,
 	if (pud_young(*pudp))
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
 					 (unsigned long *)pudp);
+
+	return ret;
+}
+#endif
+
+#ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
+int p4dp_test_and_clear_young(struct vm_area_struct *vma,
+			      unsigned long addr, p4d_t *p4dp)
+{
+	int ret = 0;
+
+	if (p4d_young(*p4dp))
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)p4dp);
+
+	return ret;
+}
+
+int pgdp_test_and_clear_young(struct vm_area_struct *vma,
+			      unsigned long addr, pgd_t *pgdp)
+{
+	int ret = 0;
+
+	if (pgd_young(*pgdp))
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)pgdp);
 
 	return ret;
 }

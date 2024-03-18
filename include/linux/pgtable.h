@@ -184,6 +184,27 @@ static inline int pmd_young(pmd_t pmd)
 }
 #endif
 
+#ifndef pud_young
+static inline int pud_young(pud_t pud)
+{
+	return 0;
+}
+#endif
+
+#ifndef p4d_young
+static inline int p4d_young(p4d_t p4d)
+{
+	return 0;
+}
+#endif
+
+#ifndef pgd_young
+static inline int pgd_young(pgd_t pgd)
+{
+	return 0;
+}
+#endif
+
 #ifndef pmd_dirty
 static inline int pmd_dirty(pmd_t pmd)
 {
@@ -384,6 +405,33 @@ static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 	return 0;
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE || CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG */
+#endif
+
+#ifndef pudp_test_and_clear_young
+static inline int pudp_test_and_clear_young(struct vm_area_struct *vma,
+					    unsigned long address,
+					    pud_t *pudp)
+{
+	return 0;
+}
+#endif
+
+#ifndef p4dp_test_and_clear_young
+static inline int p4dp_test_and_clear_young(struct vm_area_struct *vma,
+					    unsigned long address,
+					    p4d_t *p4dp)
+{
+	return 0;
+}
+#endif
+
+#ifndef pgdp_test_and_clear_young
+static inline int pgdp_test_and_clear_young(struct vm_area_struct *vma,
+					    unsigned long address,
+					    pgd_t *pgdp)
+{
+	return 0;
+}
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
@@ -1088,6 +1136,37 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 
 #ifndef flush_tlb_fix_spurious_fault
 #define flush_tlb_fix_spurious_fault(vma, address, ptep) flush_tlb_page(vma, address)
+#endif
+
+/*
+ * When walking page tables, get the address of the current boundary,
+ * or the start address of the range if that comes earlier.
+ */
+
+#define pgd_addr_start(addr, start)			\
+({	unsigned long __boundary = (addr) & PGDIR_MASK;	\
+	(__boundary > start) ? __boundary : (start);	\
+})
+
+#ifndef p4d_addr_start
+#define p4d_addr_start(addr, start)			\
+({	unsigned long __boundary = (addr) & P4D_MASK;	\
+	(__boundary > start) ? __boundary : (start);	\
+})
+#endif
+
+#ifndef pud_addr_start
+#define pud_addr_start(addr, start)			\
+({	unsigned long __boundary = (addr) & PUD_MASK;	\
+	(__boundary > start) ? __boundary : (start);	\
+})
+#endif
+
+#ifndef pmd_addr_start
+#define pmd_addr_start(addr, start)			\
+({	unsigned long __boundary = (addr) & PMD_MASK;	\
+	(__boundary > start) ? __boundary : (start);	\
+})
 #endif
 
 /*
