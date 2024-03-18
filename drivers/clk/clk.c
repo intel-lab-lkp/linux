@@ -13,6 +13,7 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/err.h>
+#include <linux/iopoll.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/of.h>
@@ -1137,6 +1138,34 @@ void clk_disable(struct clk *clk)
 	clk_core_disable_lock(clk->core);
 }
 EXPORT_SYMBOL_GPL(clk_disable);
+
+/**
+ * clk_poll_disabled - poll for clock gating.
+ * @clk: the clk that is going to stop
+ * @sleep_us: Maximum time to sleep between reads in us (0
+ *            tight-loops).  Should be less than ~20ms since usleep_range
+ *            is used (see Documentation/timers/timers-howto.rst).
+ * @timeout_us: Timeout in us, 0 means never timeout
+ *
+ * It polls for a clk to be stopped.
+ */
+int clk_poll_disabled(struct clk *clk, unsigned long sleep_us, u64 timeout_us)
+{
+	bool status;
+
+	if (IS_ERR_OR_NULL(clk))
+		return 0;
+
+	if (!clk->core->ops->is_enabled)
+		return -EOPNOTSUPP;
+
+	if (WARN(__clk_get_enable_count(clk), "clk is in use\n"))
+		return -EBUSY;
+
+	return read_poll_timeout(__clk_is_enabled, status, !status, sleep_us,
+				 timeout_us, false, clk);
+}
+EXPORT_SYMBOL_GPL(clk_poll_disabled);
 
 static int clk_core_enable(struct clk_core *core)
 {

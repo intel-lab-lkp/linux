@@ -666,6 +666,20 @@ int __must_check clk_bulk_enable(int num_clks,
 void clk_disable(struct clk *clk);
 
 /**
+ * clk_poll_disabled - inform the system whether the clock source is stopped.
+ * @clk: clock source
+ * @sleep_us: Maximum time to sleep between reads in us (0
+ *            tight-loops).  Should be less than ~20ms since usleep_range
+ *            is used (see Documentation/timers/timers-howto.rst).
+ * @timeout_us: Timeout in us, 0 means never timeout
+ *
+ * Poll for clock gating and Inform the system about it's status.
+ *
+ * Context: May sleep.
+ */
+int clk_poll_disabled(struct clk *clk, unsigned long sleep_us, u64 timeout_us);
+
+/**
  * clk_bulk_disable - inform the system when the set of clks is no
  *		      longer required.
  * @num_clks: the number of clk_bulk_data
@@ -996,6 +1010,11 @@ static inline int __must_check clk_bulk_enable(int num_clks,
 
 static inline void clk_disable(struct clk *clk) {}
 
+static inline int clk_poll_disabled(struct clk *clk, unsigned long sleep_us,
+				    u64 timeout_us)
+{
+	return 0;
+}
 
 static inline void clk_bulk_disable(int num_clks,
 				    const struct clk_bulk_data *clks) {}
@@ -1085,6 +1104,33 @@ static inline void clk_disable_unprepare(struct clk *clk)
 {
 	clk_disable(clk);
 	clk_unprepare(clk);
+}
+
+/**
+ * clk_poll_disable_unprepare - Poll clk_disable_unprepare
+ * @clk: clock source
+ * @sleep_us: Maximum time to sleep between reads in us (0
+ *            tight-loops).  Should be less than ~20ms since usleep_range
+ *            is used (see Documentation/timers/timers-howto.rst).
+ * @timeout_us: Timeout in us, 0 means never timeout
+ *
+ * Context: May sleep.
+ *
+ * This function polls until the clock has stopped.
+ *
+ * Returns success (0) or negative errno.
+ */
+static inline int clk_poll_disable_unprepare(struct clk *clk,
+					     unsigned long sleep_us,
+					     u64 timeout_us)
+{
+	int ret;
+
+	clk_disable(clk);
+	ret = clk_poll_disabled(clk, sleep_us, timeout_us);
+	clk_unprepare(clk);
+
+	return ret;
 }
 
 static inline int __must_check
