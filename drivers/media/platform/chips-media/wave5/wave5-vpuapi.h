@@ -757,6 +757,7 @@ struct vpu_device {
 	struct ida inst_ida;
 	struct clk_bulk_data *clks;
 	int num_clks;
+	struct reset_control *resets;
 };
 
 struct vpu_instance;
