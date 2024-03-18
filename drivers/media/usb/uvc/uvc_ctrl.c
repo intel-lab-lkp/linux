@@ -501,12 +501,58 @@ static int __uvc_ctrl_add_mapping(struct uvc_video_chain *chain,
 static int uvc_ctrl_add_plf_mapping(struct uvc_video_chain *chain,
 	struct uvc_control *ctrl, const struct uvc_control_mapping *mapping)
 {
-	if (chain->dev->uvc_version < 0x150)
-		return __uvc_ctrl_add_mapping(chain, ctrl,
-					      &uvc_ctrl_power_line_mapping_uvc11);
+	const struct uvc_control_mapping *out_mapping =
+					&uvc_ctrl_power_line_mapping_uvc11;
+	u8 init_val;
+	u8 *buf;
+	int ret;
 
-	return __uvc_ctrl_add_mapping(chain, ctrl,
-				      &uvc_ctrl_power_line_mapping_uvc15);
+	buf = kmalloc(sizeof(*buf), GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	/* Save the default PLF value, so we can restore it. */
+	ret = uvc_query_ctrl(chain->dev, UVC_GET_CUR, ctrl->entity->id,
+			     chain->dev->intfnum, ctrl->info.selector,
+			     buf, sizeof(*buf));
+	/* If we cannot read the control skip it. */
+	if (ret) {
+		kfree(buf);
+		return ret;
+	}
+	init_val = *buf;
+
+	/* If PLF value cannot be set to off, it is limited. */
+	*buf = V4L2_CID_POWER_LINE_FREQUENCY_DISABLED;
+	ret = uvc_query_ctrl(chain->dev, UVC_SET_CUR, ctrl->entity->id,
+			     chain->dev->intfnum, ctrl->info.selector,
+			     buf, sizeof(*buf));
+	if (ret) {
+		out_mapping = &uvc_ctrl_power_line_mapping_limited;
+		goto end;
+	}
+
+	/* UVC 1.1 does not define auto, we can exit. */
+	if (chain->dev->uvc_version < 0x150)
+		goto end;
+
+	/* Check if the device supports auto. */
+	*buf = V4L2_CID_POWER_LINE_FREQUENCY_AUTO;
+	ret = uvc_query_ctrl(chain->dev, UVC_SET_CUR, ctrl->entity->id,
+			     chain->dev->intfnum, ctrl->info.selector,
+			     buf, sizeof(*buf));
+	if (!ret)
+		out_mapping = &uvc_ctrl_power_line_mapping_uvc15;
+
+end:
+	/* Restore initial value and add mapping. */
+	*buf = init_val;
+	uvc_query_ctrl(chain->dev, UVC_SET_CUR, ctrl->entity->id,
+		       chain->dev->intfnum, ctrl->info.selector,
+		       buf, sizeof(*buf));
+
+	kfree(buf);
+	return __uvc_ctrl_add_mapping(chain, ctrl, out_mapping);
 }
 
 static const struct uvc_control_mapping uvc_ctrl_mappings[] = {
