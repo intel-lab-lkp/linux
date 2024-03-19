@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2022 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  *
- * The "Virtual Machine Generation ID" is exposed via ACPI and changes when a
+ * The "Virtual Machine Generation ID" is exposed via ACPI or DT and changes when a
  * virtual machine forks or is cloned. This driver exists for shepherding that
  * information to random.c.
  */
@@ -12,6 +12,12 @@
 #include <linux/acpi.h>
 #include <linux/random.h>
 #include <acpi/actypes.h>
+#include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/io.h>
+#include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 
 ACPI_MODULE_NAME("vmgenid");
@@ -21,6 +27,7 @@ enum { VMGENID_SIZE = 16 };
 struct vmgenid_state {
 	u8 *next_id;
 	u8 this_id[VMGENID_SIZE];
+	unsigned int irq;
 };
 
 static void vmgenid_notify(struct device *device)
@@ -40,6 +47,13 @@ static void vmgenid_notify(struct device *device)
 static void vmgenid_acpi_handler(acpi_handle handle, u32 event, void *dev)
 {
 	vmgenid_notify(dev);
+}
+
+static irqreturn_t vmgenid_of_irq_handler(int irq, void *dev)
+{
+	vmgenid_notify(dev);
+
+	return IRQ_HANDLED;
 }
 
 static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
@@ -98,6 +112,43 @@ out:
 	return ret;
 }
 
+static int vmgenid_add_of(struct device *dev, struct vmgenid_state *state)
+{
+	struct resource res;
+	int ret = 0;
+
+	if (of_address_to_resource(dev->of_node, 0, &res)) {
+		dev_err(dev, "Failed to get resources from device tree");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!__request_mem_region(res.start, resource_size(&res),
+				  "vmgenid", IORESOURCE_EXCLUSIVE)) {
+		dev_err(dev, "Failed to request mem region");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = setup_vmgenid_state(state, of_iomap(dev->of_node, 0));
+	if (ret)
+		goto out;
+
+	state->irq = irq_of_parse_and_map(dev->of_node, 0);
+	dev->driver_data = state;
+
+	if (request_irq(state->irq, vmgenid_of_irq_handler,
+			IRQF_SHARED, "vmgenid", dev) < 0) {
+		dev_err(dev, "request_irq failed");
+		dev->driver_data = NULL;
+		ret = -EINVAL;
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
 static int vmgenid_add(struct platform_device *pdev)
 {
 	struct vmgenid_state *state;
@@ -108,7 +159,10 @@ static int vmgenid_add(struct platform_device *pdev)
 	if (!state)
 		return -ENOMEM;
 
-	ret = vmgenid_add_acpi(dev, state);
+	if (dev->of_node)
+		ret = vmgenid_add_of(dev, state);
+	else
+		ret = vmgenid_add_acpi(dev, state);
 
 	if (ret)
 		devm_kfree(dev, state);
@@ -116,7 +170,30 @@ static int vmgenid_add(struct platform_device *pdev)
 	return ret;
 }
 
-static const struct acpi_device_id vmgenid_ids[] = {
+static int vmgenid_remove(struct platform_device *pdev)
+{
+	struct vmgenid_state *state = NULL;
+
+	if (!pdev)
+		return -EINVAL;
+
+	state = pdev->dev.driver_data;
+
+	if (state && pdev->dev.of_node)
+		free_irq(state->irq, &pdev->dev);
+
+	if (state)
+		devm_kfree(&pdev->dev, state);
+
+	return 0;
+}
+
+static const struct of_device_id vmgenid_of_ids[] = {
+	{ .compatible = "linux,vmgenctr", },
+	{},
+};
+
+static const struct acpi_device_id vmgenid_acpi_ids[] = {
 	{ "VMGENCTR", 0 },
 	{ "VM_GEN_COUNTER", 0 },
 	{ }
@@ -124,9 +201,11 @@ static const struct acpi_device_id vmgenid_ids[] = {
 
 static struct platform_driver vmgenid_plaform_driver = {
 	.probe      = vmgenid_add,
+	.remove     = vmgenid_remove,
 	.driver     = {
 		.name   = "vmgenid",
-		.acpi_match_table = ACPI_PTR(vmgenid_ids),
+		.acpi_match_table = ACPI_PTR(vmgenid_acpi_ids),
+		.of_match_table = vmgenid_of_ids,
 		.owner = THIS_MODULE,
 	},
 };
@@ -144,7 +223,8 @@ static void vmgenid_platform_device_exit(void)
 module_init(vmgenid_platform_device_init)
 module_exit(vmgenid_platform_device_exit)
 
-MODULE_DEVICE_TABLE(acpi, vmgenid_ids);
+MODULE_DEVICE_TABLE(acpi, vmgenid_acpi_ids);
+MODULE_DEVICE_TABLE(of, vmgenid_of_ids);
 MODULE_DESCRIPTION("Virtual Machine Generation ID");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Jason A. Donenfeld <Jason@zx2c4.com>");
