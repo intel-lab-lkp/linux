@@ -3639,8 +3639,14 @@ static void lan743x_pm_set_wol(struct lan743x_adapter *adapter)
 		lan743x_csr_write(adapter, MAC_MP_SO_LO, sopass);
 		sopass = *(u16 *)&adapter->sopass[4];
 		lan743x_csr_write(adapter, MAC_MP_SO_HI, sopass);
-		wucsr |= MAC_MP_SO_EN_;
+		wucsr |= MAC_MP_SO_EN_ | MAC_WUCSR_MPEN_;
+		macrx |= MAC_RX_RXEN_;
+		pmtctl |= PMT_CTL_WOL_EN_ | PMT_CTL_MAC_D3_RX_CLK_OVR_;
 	}
+
+	if (adapter->wolopts & WAKE_MAGICSECURE &&
+	    adapter->wolopts & WAKE_MAGIC)
+		wucsr &= ~MAC_MP_SO_EN_;
 
 	lan743x_csr_write(adapter, MAC_WUCSR, wucsr);
 	lan743x_csr_write(adapter, PMT_CTL, pmtctl);

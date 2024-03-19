@@ -1188,8 +1188,7 @@ static int lan743x_ethtool_set_wol(struct net_device *netdev,
 		adapter->wolopts |= WAKE_PHY;
 	if (wol->wolopts & WAKE_ARP)
 		adapter->wolopts |= WAKE_ARP;
-	if (wol->wolopts & WAKE_MAGICSECURE &&
-	    wol->wolopts & WAKE_MAGIC) {
+	if (wol->wolopts & WAKE_MAGICSECURE) {
 		memcpy(adapter->sopass, wol->sopass, sizeof(wol->sopass));
 		adapter->wolopts |= WAKE_MAGICSECURE;
 	} else {
