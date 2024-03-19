@@ -2276,6 +2276,16 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
 	dev->driver->pm = &vfio_pci_core_pm_ops;
+
+	/*
+	 * If the device was previously associated with a driver, the
+	 * driver might have invoked pm_runtime_disable in its remove()
+	 * callback. We must re-enable runtime PM here to ensure the
+	 * device can be managed.
+	 */
+	if (!pm_runtime_enabled(dev))
+		pm_runtime_enable(dev);
+
 	pm_runtime_allow(dev);
 	if (!disable_idle_d3)
 		pm_runtime_put(dev);
