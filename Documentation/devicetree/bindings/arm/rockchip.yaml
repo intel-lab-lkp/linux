@@ -571,6 +571,11 @@ properties:
           - const: hugsun,x99
           - const: rockchip,rk3399
 
+      - description: iesy RPX30 Evaluation board with RPX30 OSM SF SoM
+        items:
+          - const: iesy,rpx30-eva-mi-v2
+          - const: rockchip,px30
+
       - description: Indiedroid Nova SBC
         items:
           - const: indiedroid,nova
