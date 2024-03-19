@@ -10,9 +10,6 @@
 / {
 	thermal-zones {
 		pmi632-thermal {
-			polling-delay-passive = <100>;
-			polling-delay = <0>;
-
 			thermal-sensors = <&pmi632_temp>;
 
 			trips {
