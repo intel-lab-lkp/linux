@@ -629,7 +629,7 @@ static int _dpu_format_get_media_color_ubwc(const struct dpu_format *fmt)
 	return color_fmt;
 }
 
-static int _dpu_format_get_plane_sizes_ubwc(
+static int _dpu_format_populate_plane_sizes_ubwc(
 		const struct dpu_format *fmt,
 		const uint32_t width,
 		const uint32_t height,
@@ -708,7 +708,7 @@ done:
 	return 0;
 }
 
-static int _dpu_format_get_plane_sizes_linear(
+static int _dpu_format_populate_plane_sizes_linear(
 		const struct dpu_format *fmt,
 		const uint32_t width,
 		const uint32_t height,
@@ -780,27 +780,37 @@ static int _dpu_format_get_plane_sizes_linear(
 	return 0;
 }
 
-static int dpu_format_get_plane_sizes(
-		const struct dpu_format *fmt,
-		const uint32_t w,
-		const uint32_t h,
-		struct dpu_hw_fmt_layout *layout,
-		const uint32_t *pitches)
+/*
+ * dpu_format_populate_addrs - populate non-address part of the layout based on
+ *                     fb, and format found in the fb
+ * @fb:                framebuffer pointer
+ * @layout:              format layout structure to populate
+ *
+ * Return: error code on failure or 0 if new addresses were populated
+ */
+int dpu_format_populate_plane_sizes(
+		struct drm_framebuffer *fb,
+		struct dpu_hw_fmt_layout *layout)
 {
-	if (!layout || !fmt) {
+	struct dpu_format *fmt;
+
+	if (!layout || !fb) {
 		DRM_ERROR("invalid pointer\n");
 		return -EINVAL;
 	}
 
-	if ((w > DPU_MAX_IMG_WIDTH) || (h > DPU_MAX_IMG_HEIGHT)) {
+	if ((fb->width > DPU_MAX_IMG_WIDTH) || (fb->height > DPU_MAX_IMG_HEIGHT)) {
 		DRM_ERROR("image dimensions outside max range\n");
 		return -ERANGE;
 	}
 
-	if (DPU_FORMAT_IS_UBWC(fmt) || DPU_FORMAT_IS_TILE(fmt))
-		return _dpu_format_get_plane_sizes_ubwc(fmt, w, h, layout);
+	fmt = to_dpu_format(msm_framebuffer_format(fb));
 
-	return _dpu_format_get_plane_sizes_linear(fmt, w, h, layout, pitches);
+	if (DPU_FORMAT_IS_UBWC(fmt) || DPU_FORMAT_IS_TILE(fmt))
+		return _dpu_format_populate_plane_sizes_ubwc(fmt, fb->width, fb->height, layout);
+
+	return _dpu_format_populate_plane_sizes_linear(fmt, fb->width, fb->height,
+						       layout, fb->pitches);
 }
 
 static int _dpu_format_populate_addrs_ubwc(
@@ -924,7 +934,7 @@ static int _dpu_format_populate_addrs_linear(
 	return 0;
 }
 
-int dpu_format_populate_layout(
+int dpu_format_populate_addrs(
 		struct msm_gem_address_space *aspace,
 		struct drm_framebuffer *fb,
 		struct dpu_hw_fmt_layout *layout)
@@ -941,14 +951,6 @@ int dpu_format_populate_layout(
 		DRM_ERROR("image dimensions outside max range\n");
 		return -ERANGE;
 	}
-
-	layout->format = to_dpu_format(msm_framebuffer_format(fb));
-
-	/* Populate the plane sizes etc via get_format */
-	ret = dpu_format_get_plane_sizes(layout->format, fb->width, fb->height,
-			layout, fb->pitches);
-	if (ret)
-		return ret;
 
 	/* Populate the addresses given the fb */
 	if (DPU_FORMAT_IS_UBWC(layout->format) ||
