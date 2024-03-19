@@ -5748,10 +5748,10 @@ static int send_extent_data(struct send_ctx *sctx, struct btrfs_path *path,
 
 		sctx->cur_inode = btrfs_iget(root->fs_info->sb, sctx->cur_ino, root);
 		if (IS_ERR(sctx->cur_inode)) {
-			int err = PTR_ERR(sctx->cur_inode);
+			int ret = PTR_ERR(sctx->cur_inode);
 
 			sctx->cur_inode = NULL;
-			return err;
+			return ret;
 		}
 		memset(&sctx->ra, 0, sizeof(struct file_ra_state));
 		file_ra_state_init(&sctx->ra, sctx->cur_inode->i_mapping);
