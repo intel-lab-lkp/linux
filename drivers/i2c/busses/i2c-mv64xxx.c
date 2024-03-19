@@ -115,9 +115,9 @@ enum mv64xxx_i2c_action {
 	MV64XXX_I2C_ACTION_SEND_ADDR_1,
 	MV64XXX_I2C_ACTION_SEND_ADDR_2,
 	MV64XXX_I2C_ACTION_SEND_DATA,
-	MV64XXX_I2C_ACTION_RCV_DATA,
-	MV64XXX_I2C_ACTION_RCV_DATA_STOP,
 	MV64XXX_I2C_ACTION_SEND_STOP,
+
+	MV64XXX_I2C_ACTION_RECEIVE = 0x80,
 };
 
 struct mv64xxx_i2c_regs {
@@ -394,16 +394,15 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 
 	case MV64XXX_I2C_STATE_READ:
 		if (drv_data->bytes_left == 0) {
-			if (prev_state == MV64XXX_I2C_STATE_READ)
-				drv_data->action = MV64XXX_I2C_ACTION_RCV_DATA_STOP;
-			else
+			if (drv_data->send_stop || drv_data->aborting) {
 				drv_data->action = MV64XXX_I2C_ACTION_SEND_STOP;
-			drv_data->state = MV64XXX_I2C_STATE_IDLE;
+				drv_data->state = MV64XXX_I2C_STATE_IDLE;
+			} else {
+				drv_data->action = MV64XXX_I2C_ACTION_SEND_RESTART;
+				drv_data->state = MV64XXX_I2C_STATE_RESTART;
+			}
 		} else {
-			if (prev_state == MV64XXX_I2C_STATE_READ)
-				drv_data->action = MV64XXX_I2C_ACTION_RCV_DATA;
-			else
-				drv_data->action = MV64XXX_I2C_ACTION_CONTINUE;
+			drv_data->action = MV64XXX_I2C_ACTION_CONTINUE;
 
 			/*
 			 * bytes_left counts the remaining read actions to send
@@ -418,6 +417,8 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 			if (drv_data->bytes_left == 0)
 				drv_data->cntl_bits &= ~MV64XXX_I2C_REG_CONTROL_ACK;
 		}
+		if (prev_state == MV64XXX_I2C_STATE_READ)
+			drv_data->action |= MV64XXX_I2C_ACTION_RECEIVE;
 		break;
 
 	case MV64XXX_I2C_STATE_WRITE:
@@ -456,6 +457,11 @@ static void mv64xxx_i2c_send_start(struct mv64xxx_i2c_data *drv_data)
 static void
 mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 {
+	if (drv_data->action & MV64XXX_I2C_ACTION_RECEIVE)
+		drv_data->msg->buf[drv_data->byte_posn++] =
+			readl(drv_data->reg_base + drv_data->reg_offsets.data);
+	drv_data->action &= ~MV64XXX_I2C_ACTION_RECEIVE;
+
 	switch(drv_data->action) {
 	case MV64XXX_I2C_ACTION_SEND_RESTART:
 		/* We should only get here if we have further messages */
@@ -500,27 +506,6 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 			drv_data->reg_base + drv_data->reg_offsets.data);
 		writel(drv_data->cntl_bits,
 			drv_data->reg_base + drv_data->reg_offsets.control);
-		break;
-
-	case MV64XXX_I2C_ACTION_RCV_DATA:
-		drv_data->msg->buf[drv_data->byte_posn++] =
-			readl(drv_data->reg_base + drv_data->reg_offsets.data);
-		writel(drv_data->cntl_bits,
-			drv_data->reg_base + drv_data->reg_offsets.control);
-		break;
-
-	case MV64XXX_I2C_ACTION_RCV_DATA_STOP:
-		drv_data->msg->buf[drv_data->byte_posn++] =
-			readl(drv_data->reg_base + drv_data->reg_offsets.data);
-		if (!drv_data->atomic)
-			drv_data->cntl_bits &= ~MV64XXX_I2C_REG_CONTROL_INTEN;
-		writel(drv_data->cntl_bits | MV64XXX_I2C_REG_CONTROL_STOP,
-			drv_data->reg_base + drv_data->reg_offsets.control);
-		drv_data->block = 0;
-		if (drv_data->errata_delay)
-			udelay(5);
-
-		wake_up(&drv_data->waitq);
 		break;
 
 	case MV64XXX_I2C_ACTION_INVALID:
