@@ -3698,19 +3698,20 @@ static void swap_ptr(void *l, void *r)
 	swap(*lp, *rp);
 }
 
+MIN_HEAP(struct perf_event *, perf_event_min_heap);
+
 static const struct min_heap_callbacks perf_min_heap = {
-	.elem_size = sizeof(struct perf_event *),
 	.less = perf_less_group_idx,
 	.swp = swap_ptr,
 };
 
-static void __heap_add(struct min_heap *heap, struct perf_event *event)
+static void __heap_add(struct perf_event_min_heap *heap, struct perf_event *event)
 {
-	struct perf_event **itrs = heap->data;
+	struct perf_event **itrs = heap->heap.data;
 
 	if (event) {
-		itrs[heap->nr] = event;
-		heap->nr++;
+		itrs[heap->heap.nr] = event;
+		heap->heap.nr++;
 	}
 }
 
@@ -3738,7 +3739,7 @@ static noinline int visit_groups_merge(struct perf_event_context *ctx,
 	struct perf_cpu_context *cpuctx = NULL;
 	/* Space for per CPU and/or any CPU event iterators. */
 	struct perf_event *itrs[2];
-	struct min_heap event_heap;
+	struct perf_event_min_heap event_heap;
 	struct perf_event **evt;
 	int ret;
 
@@ -3747,11 +3748,9 @@ static noinline int visit_groups_merge(struct perf_event_context *ctx,
 
 	if (!ctx->task) {
 		cpuctx = this_cpu_ptr(&perf_cpu_context);
-		event_heap = (struct min_heap){
-			.data = cpuctx->heap,
-			.nr = 0,
-			.size = cpuctx->heap_size,
-		};
+		event_heap.heap.data = cpuctx->heap;
+		event_heap.heap.nr = 0;
+		event_heap.heap.size = cpuctx->heap_size;
 
 		lockdep_assert_held(&cpuctx->ctx.lock);
 
@@ -3760,15 +3759,13 @@ static noinline int visit_groups_merge(struct perf_event_context *ctx,
 			css = &cpuctx->cgrp->css;
 #endif
 	} else {
-		event_heap = (struct min_heap){
-			.data = itrs,
-			.nr = 0,
-			.size = ARRAY_SIZE(itrs),
-		};
+		event_heap.heap.data = itrs;
+		event_heap.heap.nr = 0;
+		event_heap.heap.size = ARRAY_SIZE(itrs);
 		/* Events not within a CPU context may be on any CPU. */
 		__heap_add(&event_heap, perf_event_groups_first(groups, -1, pmu, NULL));
 	}
-	evt = event_heap.data;
+	evt = event_heap.heap.data;
 
 	__heap_add(&event_heap, perf_event_groups_first(groups, cpu, pmu, NULL));
 
@@ -3777,14 +3774,14 @@ static noinline int visit_groups_merge(struct perf_event_context *ctx,
 		__heap_add(&event_heap, perf_event_groups_first(groups, cpu, pmu, css->cgroup));
 #endif
 
-	if (event_heap.nr) {
+	if (event_heap.heap.nr) {
 		__link_epc((*evt)->pmu_ctx);
 		perf_assert_pmu_disabled((*evt)->pmu_ctx->pmu);
 	}
 
 	min_heapify_all(&event_heap, &perf_min_heap);
 
-	while (event_heap.nr) {
+	while (event_heap.heap.nr) {
 		ret = func(*evt, data);
 		if (ret)
 			return ret;
