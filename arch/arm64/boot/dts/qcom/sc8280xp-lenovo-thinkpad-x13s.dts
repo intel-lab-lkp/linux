@@ -296,8 +296,6 @@
 
 	thermal-zones {
 		skin-temp-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <0>;
 			thermal-sensors = <&pmk8280_adc_tm 5>;
 
 			trips {
