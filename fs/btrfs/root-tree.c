@@ -221,8 +221,8 @@ int btrfs_find_orphan_roots(struct btrfs_fs_info *fs_info)
 	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct btrfs_root *root;
-	int err = 0;
-	int ret;
+	int ret = 0;
+	int ret2;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -235,18 +235,18 @@ int btrfs_find_orphan_roots(struct btrfs_fs_info *fs_info)
 	while (1) {
 		u64 root_objectid;
 
-		ret = btrfs_search_slot(NULL, tree_root, &key, path, 0, 0);
-		if (ret < 0) {
-			err = ret;
+		ret2 = btrfs_search_slot(NULL, tree_root, &key, path, 0, 0);
+		if (ret2 < 0) {
+			ret = ret2;
 			break;
 		}
 
 		leaf = path->nodes[0];
 		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(tree_root, path);
-			if (ret < 0)
-				err = ret;
-			if (ret != 0)
+			ret2 = btrfs_next_leaf(tree_root, path);
+			if (ret2 < 0)
+				ret = ret2;
+			if (ret2 != 0)
 				break;
 			leaf = path->nodes[0];
 		}
@@ -262,26 +262,26 @@ int btrfs_find_orphan_roots(struct btrfs_fs_info *fs_info)
 		key.offset++;
 
 		root = btrfs_get_fs_root(fs_info, root_objectid, false);
-		err = PTR_ERR_OR_ZERO(root);
-		if (err && err != -ENOENT) {
+		ret = PTR_ERR_OR_ZERO(root);
+		if (ret && ret != -ENOENT) {
 			break;
-		} else if (err == -ENOENT) {
+		} else if (ret == -ENOENT) {
 			struct btrfs_trans_handle *trans;
 
 			btrfs_release_path(path);
 
 			trans = btrfs_join_transaction(tree_root);
 			if (IS_ERR(trans)) {
-				err = PTR_ERR(trans);
-				btrfs_handle_fs_error(fs_info, err,
+				ret = PTR_ERR(trans);
+				btrfs_handle_fs_error(fs_info, ret,
 					    "Failed to start trans to delete orphan item");
 				break;
 			}
-			err = btrfs_del_orphan_item(trans, tree_root,
+			ret = btrfs_del_orphan_item(trans, tree_root,
 						    root_objectid);
 			btrfs_end_transaction(trans);
-			if (err) {
-				btrfs_handle_fs_error(fs_info, err,
+			if (ret) {
+				btrfs_handle_fs_error(fs_info, ret,
 					    "Failed to delete root orphan item");
 				break;
 			}
@@ -312,7 +312,7 @@ int btrfs_find_orphan_roots(struct btrfs_fs_info *fs_info)
 	}
 
 	btrfs_free_path(path);
-	return err;
+	return ret;
 }
 
 /* drop the root item for 'key' from the tree root */
