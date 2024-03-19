@@ -646,6 +646,8 @@ patternProperties:
     description: International Business Machines (IBM)
   "^icplus,.*":
     description: IC Plus Corp.
+  "^iesy,.*":
+    description: iesy GmbH
   "^idt,.*":
     description: Integrated Device Technologies, Inc.
   "^iei,.*":
