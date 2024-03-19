@@ -1947,7 +1947,8 @@ struct v4l2_query_ext_ctrl {
 	__u32                elems;
 	__u32                nr_of_dims;
 	__u32                dims[V4L2_CTRL_MAX_DIMS];
-	__u32		     reserved[32];
+	__u32                fraction_bits;
+	__u32		     reserved[31];
 };
 
 /*  Used in the VIDIOC_QUERYMENU ioctl for querying menu items */

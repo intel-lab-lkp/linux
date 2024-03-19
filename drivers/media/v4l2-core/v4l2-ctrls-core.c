@@ -252,12 +252,61 @@ void v4l2_ctrl_type_op_init(const struct v4l2_ctrl *ctrl, u32 from_idx,
 }
 EXPORT_SYMBOL(v4l2_ctrl_type_op_init);
 
+static void v4l2_ctrl_log_fp(s64 v, unsigned int fraction_bits)
+{
+	s64 i, f, mask;
+
+	if (!fraction_bits) {
+		pr_cont("%lld", v);
+		return;
+	}
+
+	mask = (1ULL << fraction_bits) - 1;
+
+	/*
+	 * Note: this function does not support fixed point u64 with
+	 * fraction_bits set to 64. At the moment there is no U64
+	 * control type, but if that is added, then this code will have
+	 * to add support for it.
+	 */
+	if (fraction_bits >= 63)
+		i = v < 0 ? -1 : 0;
+	else
+		i = div64_s64(v, 1LL << fraction_bits);
+
+	f = v < 0 ? -((-v) & mask) : (v & mask);
+
+	if (!f) {
+		pr_cont("%lld", i);
+	} else if (fraction_bits < 20) {
+		u64 div = 1ULL << fraction_bits;
+
+		if (!i && f < 0)
+			pr_cont("-%lld/%llu", -f, div);
+		else if (!i)
+			pr_cont("%lld/%llu", f, div);
+		else if (i < 0 || f < 0)
+			pr_cont("-%lld-%llu/%llu", -i, -f, div);
+		else
+			pr_cont("%lld+%llu/%llu", i, f, div);
+	} else {
+		if (!i && f < 0)
+			pr_cont("-%lld/(2^%u)", -f, fraction_bits);
+		else if (!i)
+			pr_cont("%lld/(2^%u)", f, fraction_bits);
+		else if (i < 0 || f < 0)
+			pr_cont("-%lld-%llu/(2^%u)", -i, -f, fraction_bits);
+		else
+			pr_cont("%lld+%llu/(2^%u)", i, f, fraction_bits);
+	}
+}
+
 void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 {
 	union v4l2_ctrl_ptr ptr = ctrl->p_cur;
 
 	if (ctrl->is_array) {
-		unsigned i;
+		unsigned int i;
 
 		for (i = 0; i < ctrl->nr_of_dims; i++)
 			pr_cont("[%u]", ctrl->dims[i]);
@@ -266,7 +315,7 @@ void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->type) {
 	case V4L2_CTRL_TYPE_INTEGER:
-		pr_cont("%d", *ptr.p_s32);
+		v4l2_ctrl_log_fp(*ptr.p_s32, ctrl->fraction_bits);
 		break;
 	case V4L2_CTRL_TYPE_BOOLEAN:
 		pr_cont("%s", *ptr.p_s32 ? "true" : "false");
@@ -281,19 +330,19 @@ void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 		pr_cont("0x%08x", *ptr.p_s32);
 		break;
 	case V4L2_CTRL_TYPE_INTEGER64:
-		pr_cont("%lld", *ptr.p_s64);
+		v4l2_ctrl_log_fp(*ptr.p_s64, ctrl->fraction_bits);
 		break;
 	case V4L2_CTRL_TYPE_STRING:
 		pr_cont("%s", ptr.p_char);
 		break;
 	case V4L2_CTRL_TYPE_U8:
-		pr_cont("%u", (unsigned)*ptr.p_u8);
+		v4l2_ctrl_log_fp(*ptr.p_u8, ctrl->fraction_bits);
 		break;
 	case V4L2_CTRL_TYPE_U16:
-		pr_cont("%u", (unsigned)*ptr.p_u16);
+		v4l2_ctrl_log_fp(*ptr.p_u16, ctrl->fraction_bits);
 		break;
 	case V4L2_CTRL_TYPE_U32:
-		pr_cont("%u", (unsigned)*ptr.p_u32);
+		v4l2_ctrl_log_fp(*ptr.p_u32, ctrl->fraction_bits);
 		break;
 	case V4L2_CTRL_TYPE_H264_SPS:
 		pr_cont("H264_SPS");
@@ -1753,11 +1802,12 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 			u32 id, const char *name, enum v4l2_ctrl_type type,
 			s64 min, s64 max, u64 step, s64 def,
 			const u32 dims[V4L2_CTRL_MAX_DIMS], u32 elem_size,
-			u32 flags, const char * const *qmenu,
+			u32 fraction_bits, u32 flags, const char * const *qmenu,
 			const s64 *qmenu_int, const union v4l2_ctrl_ptr p_def,
 			void *priv)
 {
 	struct v4l2_ctrl *ctrl;
+	unsigned int max_fraction_bits = 0;
 	unsigned sz_extra;
 	unsigned nr_of_dims = 0;
 	unsigned elems = 1;
@@ -1779,20 +1829,28 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 
 	/* Prefill elem_size for all types handled by std_type_ops */
 	switch ((u32)type) {
+	case V4L2_CTRL_TYPE_INTEGER:
+		elem_size = sizeof(s32);
+		max_fraction_bits = 31;
+		break;
 	case V4L2_CTRL_TYPE_INTEGER64:
 		elem_size = sizeof(s64);
+		max_fraction_bits = 63;
 		break;
 	case V4L2_CTRL_TYPE_STRING:
 		elem_size = max + 1;
 		break;
 	case V4L2_CTRL_TYPE_U8:
 		elem_size = sizeof(u8);
+		max_fraction_bits = 8;
 		break;
 	case V4L2_CTRL_TYPE_U16:
 		elem_size = sizeof(u16);
+		max_fraction_bits = 16;
 		break;
 	case V4L2_CTRL_TYPE_U32:
 		elem_size = sizeof(u32);
+		max_fraction_bits = 32;
 		break;
 	case V4L2_CTRL_TYPE_MPEG2_SEQUENCE:
 		elem_size = sizeof(struct v4l2_ctrl_mpeg2_sequence);
@@ -1876,10 +1934,10 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 	}
 
 	/* Sanity checks */
-	if (id == 0 || name == NULL || !elem_size ||
-	    id >= V4L2_CID_PRIVATE_BASE ||
-	    (type == V4L2_CTRL_TYPE_MENU && qmenu == NULL) ||
-	    (type == V4L2_CTRL_TYPE_INTEGER_MENU && qmenu_int == NULL)) {
+	if (id == 0 || !name || !elem_size ||
+	    fraction_bits > max_fraction_bits || id >= V4L2_CID_PRIVATE_BASE ||
+	    (type == V4L2_CTRL_TYPE_MENU && !qmenu) ||
+	    (type == V4L2_CTRL_TYPE_INTEGER_MENU && !qmenu_int)) {
 		handler_set_err(hdl, -ERANGE);
 		return NULL;
 	}
@@ -1940,6 +1998,7 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 	ctrl->name = name;
 	ctrl->type = type;
 	ctrl->flags = flags;
+	ctrl->fraction_bits = fraction_bits;
 	ctrl->minimum = min;
 	ctrl->maximum = max;
 	ctrl->step = step;
@@ -2038,7 +2097,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_custom(struct v4l2_ctrl_handler *hdl,
 	ctrl = v4l2_ctrl_new(hdl, cfg->ops, cfg->type_ops, cfg->id, name,
 			type, min, max,
 			is_menu ? cfg->menu_skip_mask : step, def,
-			cfg->dims, cfg->elem_size,
+			cfg->dims, cfg->elem_size, cfg->fraction_bits,
 			flags, qmenu, qmenu_int, cfg->p_def, priv);
 	if (ctrl)
 		ctrl->is_private = cfg->is_private;
@@ -2063,7 +2122,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_std(struct v4l2_ctrl_handler *hdl,
 		return NULL;
 	}
 	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
-			     min, max, step, def, NULL, 0,
+			     min, max, step, def, NULL, 0, 0,
 			     flags, NULL, NULL, ptr_null, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_std);
@@ -2096,7 +2155,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_std_menu(struct v4l2_ctrl_handler *hdl,
 		return NULL;
 	}
 	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
-			     0, max, mask, def, NULL, 0,
+			     0, max, mask, def, NULL, 0, 0,
 			     flags, qmenu, qmenu_int, ptr_null, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_std_menu);
@@ -2128,7 +2187,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_std_menu_items(struct v4l2_ctrl_handler *hdl,
 		return NULL;
 	}
 	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
-			     0, max, mask, def, NULL, 0,
+			     0, max, mask, def, NULL, 0, 0,
 			     flags, qmenu, NULL, ptr_null, NULL);
 
 }
@@ -2150,7 +2209,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_std_compound(struct v4l2_ctrl_handler *hdl,
 		return NULL;
 	}
 	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
-			     min, max, step, def, NULL, 0,
+			     min, max, step, def, NULL, 0, 0,
 			     flags, NULL, NULL, p_def, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_std_compound);
@@ -2174,7 +2233,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_int_menu(struct v4l2_ctrl_handler *hdl,
 		return NULL;
 	}
 	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
-			     0, max, 0, def, NULL, 0,
+			     0, max, 0, def, NULL, 0, 0,
 			     flags, NULL, qmenu_int, ptr_null, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_int_menu);
