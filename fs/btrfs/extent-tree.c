@@ -6125,7 +6125,7 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 	int level;
 	int parent_level;
 	int ret = 0;
-	int wret;
+	int ret2;
 
 	BUG_ON(root->root_key.objectid != BTRFS_TREE_RELOC_OBJECTID);
 
@@ -6161,16 +6161,16 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 	wc->reada_count = BTRFS_NODEPTRS_PER_BLOCK(fs_info);
 
 	while (1) {
-		wret = walk_down_tree(trans, root, path, wc);
-		if (wret < 0) {
-			ret = wret;
+		ret2 = walk_down_tree(trans, root, path, wc);
+		if (ret2 < 0) {
+			ret = ret2;
 			break;
 		}
 
-		wret = walk_up_tree(trans, root, path, wc, parent_level);
-		if (wret < 0)
-			ret = wret;
-		if (wret != 0)
+		ret2 = walk_up_tree(trans, root, path, wc, parent_level);
+		if (ret2 < 0)
+			ret = ret2;
+		if (ret2 != 0)
 			break;
 	}
 
