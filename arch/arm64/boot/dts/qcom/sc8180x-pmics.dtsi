@@ -12,9 +12,6 @@
 / {
 	thermal-zones {
 		pmc8180-thermal {
-			polling-delay-passive = <100>;
-			polling-delay = <0>;
-
 			thermal-sensors = <&pmc8180_temp>;
 
 			trips {
@@ -39,9 +36,6 @@
 		};
 
 		pmc8180c-thermal {
-			polling-delay-passive = <100>;
-			polling-delay = <0>;
-
 			thermal-sensors = <&pmc8180c_temp>;
 
 			trips {
