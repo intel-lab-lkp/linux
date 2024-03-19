@@ -5443,29 +5443,29 @@ static int fixup_tree_root_location(struct btrfs_fs_info *fs_info,
 	struct btrfs_root_ref *ref;
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
-	int ret;
-	int err = 0;
+	int ret2;
+	int ret = 0;
 	struct fscrypt_name fname;
 
-	ret = fscrypt_setup_filename(&dir->vfs_inode, &dentry->d_name, 0, &fname);
-	if (ret)
-		return ret;
+	ret2 = fscrypt_setup_filename(&dir->vfs_inode, &dentry->d_name, 0, &fname);
+	if (ret2)
+		return ret2;
 
 	path = btrfs_alloc_path();
 	if (!path) {
-		err = -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
-	err = -ENOENT;
+	ret = -ENOENT;
 	key.objectid = dir->root->root_key.objectid;
 	key.type = BTRFS_ROOT_REF_KEY;
 	key.offset = location->objectid;
 
-	ret = btrfs_search_slot(NULL, fs_info->tree_root, &key, path, 0, 0);
-	if (ret) {
-		if (ret < 0)
-			err = ret;
+	ret2 = btrfs_search_slot(NULL, fs_info->tree_root, &key, path, 0, 0);
+	if (ret2) {
+		if (ret2 < 0)
+			ret = ret2;
 		goto out;
 	}
 
@@ -5475,16 +5475,16 @@ static int fixup_tree_root_location(struct btrfs_fs_info *fs_info,
 	    btrfs_root_ref_name_len(leaf, ref) != fname.disk_name.len)
 		goto out;
 
-	ret = memcmp_extent_buffer(leaf, fname.disk_name.name,
+	ret2 = memcmp_extent_buffer(leaf, fname.disk_name.name,
 				   (unsigned long)(ref + 1), fname.disk_name.len);
-	if (ret)
+	if (ret2)
 		goto out;
 
 	btrfs_release_path(path);
 
 	new_root = btrfs_get_fs_root(fs_info, location->objectid, true);
 	if (IS_ERR(new_root)) {
-		err = PTR_ERR(new_root);
+		ret = PTR_ERR(new_root);
 		goto out;
 	}
 
@@ -5492,11 +5492,11 @@ static int fixup_tree_root_location(struct btrfs_fs_info *fs_info,
 	location->objectid = btrfs_root_dirid(&new_root->root_item);
 	location->type = BTRFS_INODE_ITEM_KEY;
 	location->offset = 0;
-	err = 0;
+	ret = 0;
 out:
 	btrfs_free_path(path);
 	fscrypt_free_filename(&fname);
-	return err;
+	return ret;
 }
 
 static void inode_tree_add(struct btrfs_inode *inode)
