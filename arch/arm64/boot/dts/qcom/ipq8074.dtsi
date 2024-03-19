@@ -942,9 +942,6 @@
 
 	thermal-zones {
 		nss-top-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 4>;
 
 			trips {
@@ -957,9 +954,6 @@
 		};
 
 		nss0-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 5>;
 
 			trips {
@@ -972,9 +966,6 @@
 		};
 
 		nss1-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 6>;
 
 			trips {
@@ -987,9 +978,6 @@
 		};
 
 		wcss-phya0-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 7>;
 
 			trips {
@@ -1002,9 +990,6 @@
 		};
 
 		wcss-phya1-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 8>;
 
 			trips {
@@ -1017,9 +1002,6 @@
 		};
 
 		cpu0_thermal: cpu0-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 9>;
 
 			trips {
@@ -1032,9 +1014,6 @@
 		};
 
 		cpu1_thermal: cpu1-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 10>;
 
 			trips {
@@ -1047,9 +1026,6 @@
 		};
 
 		cpu2_thermal: cpu2-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 11>;
 
 			trips {
@@ -1062,9 +1038,6 @@
 		};
 
 		cpu3_thermal: cpu3-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 12>;
 
 			trips {
@@ -1077,9 +1050,6 @@
 		};
 
 		cluster_thermal: cluster-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 13>;
 
 			trips {
@@ -1092,9 +1062,6 @@
 		};
 
 		wcss-phyb0-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 14>;
 
 			trips {
@@ -1107,9 +1074,6 @@
 		};
 
 		wcss-phyb1-thermal {
-			polling-delay-passive = <250>;
-			polling-delay = <1000>;
-
 			thermal-sensors = <&tsens 15>;
 
 			trips {
