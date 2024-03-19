@@ -3191,6 +3191,9 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 	if (!ieee80211_frame_allowed(rx, fc))
 		return RX_DROP_MONITOR;
 
+	if (ieee80211_has_retry(hdr->frame_control) && rx->sta)
+		rx->link_sta->rx_stats.rx_retries++;
+
 	/* directly handle TDLS channel switch requests/responses */
 	if (unlikely(((struct ethhdr *)rx->skb->data)->h_proto ==
 						cpu_to_be16(ETH_P_TDLS))) {
@@ -4975,6 +4978,9 @@ static bool ieee80211_invoke_fast_rx(struct ieee80211_rx_data *rx,
 	default:
 		goto drop;
 	}
+
+	if (ieee80211_has_retry(hdr->frame_control) && rx->sta)
+		rx->link_sta->rx_stats.rx_retries++;
 
 	ieee80211_rx_8023(rx, fast_rx, orig_len);
 

@@ -2049,6 +2049,7 @@ struct cfg80211_tid_stats {
  * @rxrate: current unicast bitrate to this station
  * @rx_packets: packets (MSDUs & MMPDUs) received from this station
  * @tx_packets: packets (MSDUs & MMPDUs) transmitted to this station
+ * @rx_retries: number of rx packets(MPDUs) from this station with retry bit set.
  * @tx_retries: cumulative retry counts (MPDUs)
  * @tx_failed: number of failed transmissions (MPDUs) (retries exceeded, no ACK)
  * @rx_dropped_misc:  Dropped for un-specified reason.
@@ -2129,6 +2130,7 @@ struct station_info {
 	struct rate_info rxrate;
 	u32 rx_packets;
 	u32 tx_packets;
+	u32 rx_retries;
 	u32 tx_retries;
 	u32 tx_failed;
 	u32 rx_dropped_misc;
