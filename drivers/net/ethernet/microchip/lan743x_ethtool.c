@@ -1163,6 +1163,17 @@ static int lan743x_ethtool_set_wol(struct net_device *netdev,
 				   struct ethtool_wolinfo *wol)
 {
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
+	int ret;
+
+	if (netdev->phydev) {
+		ret = phy_ethtool_set_wol(netdev->phydev, wol);
+		if (ret != -EOPNOTSUPP && ret != 0)
+			return ret;
+
+		if (ret == -EOPNOTSUPP)
+			netif_dbg(adapter, drv, adapter->netdev,
+				  "phy does not support WOL\n");
+	}
 
 	adapter->wolopts = 0;
 	if (wol->wolopts & WAKE_UCAST)
@@ -1187,8 +1198,7 @@ static int lan743x_ethtool_set_wol(struct net_device *netdev,
 
 	device_set_wakeup_enable(&adapter->pdev->dev, (bool)wol->wolopts);
 
-	return netdev->phydev ? phy_ethtool_set_wol(netdev->phydev, wol)
-			: -ENETDOWN;
+	return 0;
 }
 #endif /* CONFIG_PM */
 
