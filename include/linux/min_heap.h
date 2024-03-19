@@ -66,6 +66,16 @@ void *__min_heap_peek(struct __min_heap *heap)
 #define min_heap_peek(_heap)	\
 	(__minheap_cast(_heap) __min_heap_peek(&(_heap)->heap))
 
+/* Check if the heap is full. */
+static __always_inline
+bool __min_heap_full(struct __min_heap *heap)
+{
+	return heap->nr == heap->size;
+}
+
+#define min_heap_full(_heap)	\
+	__min_heap_full(&(_heap)->heap)
+
 /* Sift the element at pos down the heap. */
 static __always_inline
 void __min_heapify(struct __min_heap *heap, int pos, size_t elem_size,
