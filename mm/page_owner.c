@@ -27,6 +27,7 @@ struct page_owner {
 	gfp_t gfp_mask;
 	depot_stack_handle_t handle;
 	depot_stack_handle_t free_handle;
+	depot_stack_handle_t migrate_handle;
 	u64 ts_nsec;
 	u64 free_ts_nsec;
 	char comm[TASK_COMM_LEN];
@@ -227,7 +228,15 @@ void __reset_page_owner(struct page *page, unsigned short order)
 		return;
 
 	page_owner = get_page_owner(page_ext);
-	alloc_handle = page_owner->handle;
+	/*
+	 * If this page was allocated for migration purposes, its handle doesn't
+	 * reference the stack it was allocated from, so make sure to use the
+	 * migrate_handle in order to subtract it from the right stack.
+	 */
+	if (!page_owner->migrate_handle)
+		alloc_handle = page_owner->handle;
+	else
+		alloc_handle = page_owner->migrate_handle;
 
 	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
 	for (i = 0; i < (1 << order); i++) {
@@ -264,6 +273,7 @@ static inline void __set_page_owner_handle(struct page_ext *page_ext,
 		page_owner->handle = handle;
 		page_owner->order = order;
 		page_owner->gfp_mask = gfp_mask;
+		page_owner->migrate_handle = 0;
 		page_owner->last_migrate_reason = -1;
 		page_owner->pid = current->pid;
 		page_owner->tgid = current->tgid;
@@ -345,6 +355,7 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	new_page_owner->gfp_mask = old_page_owner->gfp_mask;
 	new_page_owner->last_migrate_reason =
 		old_page_owner->last_migrate_reason;
+	new_page_owner->migrate_handle = new_page_owner->handle;
 	new_page_owner->handle = old_page_owner->handle;
 	new_page_owner->pid = old_page_owner->pid;
 	new_page_owner->tgid = old_page_owner->tgid;
