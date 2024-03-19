@@ -122,6 +122,12 @@ static int ice_vsi_alloc_q_vector(struct ice_vsi *vsi, u16 v_idx)
 
 	if (vsi->type == ICE_VSI_VF) {
 		q_vector->reg_idx = ice_calc_vf_reg_idx(vsi->vf, q_vector);
+		/* The index value is used to configure the hardware when
+		 * programming the Tx and Rx queues. It is relative to each VF
+		 * but must account for the non-queue vectors associated with
+		 * that VF.
+		 */
+		q_vector->irq.index = v_idx + ICE_NONQ_VECS_VF;
 		goto out;
 	} else if (vsi->type == ICE_VSI_CTRL && vsi->vf) {
 		struct ice_vsi *ctrl_vsi = ice_get_vf_ctrl_vsi(pf, vsi);
