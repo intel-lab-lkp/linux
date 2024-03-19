@@ -23399,6 +23399,15 @@ L:	linux-fsdevel@vger.kernel.org
 S:	Maintained
 F:	fs/vboxsf/*
 
+VIRTUAL MEM2MEM DRIVER FOR AUDIO
+M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Shengjiu Wang <shengjiu.wang@gmail.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+W:	https://linuxtv.org
+T:	git git://linuxtv.org/media_tree.git
+F:	drivers/media/test-drivers/vim2m-audio.c
+
 VIRTUAL PCM TEST DRIVER
 M:	Ivan Orlov <ivan.orlov0322@gmail.com>
 L:	linux-sound@vger.kernel.org
