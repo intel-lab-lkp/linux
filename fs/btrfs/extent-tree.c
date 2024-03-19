@@ -5858,8 +5858,8 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 	struct btrfs_root_item *root_item = &root->root_item;
 	struct walk_control *wc;
 	struct btrfs_key key;
-	int err = 0;
-	int ret;
+	int ret = 0;
+	int ret2;
 	int level;
 	bool root_dropped = false;
 	bool unfinished_drop = false;
@@ -5868,14 +5868,14 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 
 	path = btrfs_alloc_path();
 	if (!path) {
-		err = -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
 	wc = kzalloc(sizeof(*wc), GFP_NOFS);
 	if (!wc) {
 		btrfs_free_path(path);
-		err = -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -5888,12 +5888,12 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 	else
 		trans = btrfs_start_transaction(tree_root, 0);
 	if (IS_ERR(trans)) {
-		err = PTR_ERR(trans);
+		ret = PTR_ERR(trans);
 		goto out_free;
 	}
 
-	err = btrfs_run_delayed_items(trans);
-	if (err)
+	ret = btrfs_run_delayed_items(trans);
+	if (ret)
 		goto out_end_trans;
 
 	/*
@@ -5922,13 +5922,13 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 		level = btrfs_root_drop_level(root_item);
 		BUG_ON(level == 0);
 		path->lowest_level = level;
-		ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+		ret2 = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 		path->lowest_level = 0;
-		if (ret < 0) {
-			err = ret;
+		if (ret2 < 0) {
+			ret = ret2;
 			goto out_end_trans;
 		}
-		WARN_ON(ret > 0);
+		WARN_ON(ret2 > 0);
 
 		/*
 		 * unlock our path, this is safe because only this
@@ -5941,12 +5941,12 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 			btrfs_tree_lock(path->nodes[level]);
 			path->locks[level] = BTRFS_WRITE_LOCK;
 
-			ret = btrfs_lookup_extent_info(trans, fs_info,
+			ret2 = btrfs_lookup_extent_info(trans, fs_info,
 						path->nodes[level]->start,
 						level, 1, &wc->refs[level],
 						&wc->flags[level], NULL);
-			if (ret < 0) {
-				err = ret;
+			if (ret2 < 0) {
+				ret = ret2;
 				goto out_end_trans;
 			}
 			BUG_ON(wc->refs[level] == 0);
@@ -5971,21 +5971,21 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 
 	while (1) {
 
-		ret = walk_down_tree(trans, root, path, wc);
-		if (ret < 0) {
-			btrfs_abort_transaction(trans, ret);
-			err = ret;
+		ret2 = walk_down_tree(trans, root, path, wc);
+		if (ret2 < 0) {
+			btrfs_abort_transaction(trans, ret2);
+			ret = ret2;
 			break;
 		}
 
-		ret = walk_up_tree(trans, root, path, wc, BTRFS_MAX_LEVEL);
-		if (ret < 0) {
-			btrfs_abort_transaction(trans, ret);
-			err = ret;
+		ret2 = walk_up_tree(trans, root, path, wc, BTRFS_MAX_LEVEL);
+		if (ret2 < 0) {
+			btrfs_abort_transaction(trans, ret2);
+			ret = ret2;
 			break;
 		}
 
-		if (ret > 0) {
+		if (ret2 > 0) {
 			BUG_ON(wc->stage != DROP_REFERENCE);
 			break;
 		}
@@ -6003,12 +6003,12 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 		BUG_ON(wc->level == 0);
 		if (btrfs_should_end_transaction(trans) ||
 		    (!for_reloc && btrfs_need_cleaner_sleep(fs_info))) {
-			ret = btrfs_update_root(trans, tree_root,
+			ret2 = btrfs_update_root(trans, tree_root,
 						&root->root_key,
 						root_item);
-			if (ret) {
-				btrfs_abort_transaction(trans, ret);
-				err = ret;
+			if (ret2) {
+				btrfs_abort_transaction(trans, ret2);
+				ret = ret2;
 				goto out_end_trans;
 			}
 
@@ -6019,7 +6019,7 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 			if (!for_reloc && btrfs_need_cleaner_sleep(fs_info)) {
 				btrfs_debug(fs_info,
 					    "drop snapshot early exit");
-				err = -EAGAIN;
+				ret = -EAGAIN;
 				goto out_free;
 			}
 
@@ -6033,30 +6033,30 @@ int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref, int for_reloc)
 			else
 				trans = btrfs_start_transaction(tree_root, 0);
 			if (IS_ERR(trans)) {
-				err = PTR_ERR(trans);
+				ret = PTR_ERR(trans);
 				goto out_free;
 			}
 		}
 	}
 	btrfs_release_path(path);
-	if (err)
+	if (ret)
 		goto out_end_trans;
 
-	ret = btrfs_del_root(trans, &root->root_key);
-	if (ret) {
-		btrfs_abort_transaction(trans, ret);
-		err = ret;
+	ret2 = btrfs_del_root(trans, &root->root_key);
+	if (ret2) {
+		btrfs_abort_transaction(trans, ret2);
+		ret = ret2;
 		goto out_end_trans;
 	}
 
 	if (!is_reloc_root) {
-		ret = btrfs_find_root(tree_root, &root->root_key, path,
+		ret2 = btrfs_find_root(tree_root, &root->root_key, path,
 				      NULL, NULL);
-		if (ret < 0) {
-			btrfs_abort_transaction(trans, ret);
-			err = ret;
+		if (ret2 < 0) {
+			btrfs_abort_transaction(trans, ret2);
+			ret = ret2;
 			goto out_end_trans;
-		} else if (ret > 0) {
+		} else if (ret2 > 0) {
 			/* if we fail to delete the orphan item this time
 			 * around, it'll get picked up the next time.
 			 *
@@ -6093,7 +6093,7 @@ out:
 	 * We were an unfinished drop root, check to see if there are any
 	 * pending, and if not clear and wake up any waiters.
 	 */
-	if (!err && unfinished_drop)
+	if (!ret && unfinished_drop)
 		btrfs_maybe_wake_unfinished_drop(fs_info);
 
 	/*
@@ -6105,7 +6105,7 @@ out:
 	 */
 	if (!for_reloc && !root_dropped)
 		btrfs_add_dead_root(root);
-	return err;
+	return ret;
 }
 
 /*
