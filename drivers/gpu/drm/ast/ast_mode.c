@@ -1344,8 +1344,24 @@ static int ast_crtc_init(struct drm_device *dev)
  * VGA Connector
  */
 
+static int ast_vga_connector_helper_detect_ctx(struct drm_connector *connector,
+					       struct drm_modeset_acquire_ctx *ctx,
+					       bool force)
+{
+	enum drm_connector_status status = connector_status_disconnected;
+	const struct drm_edid *edid;
+
+	edid = drm_edid_read(connector);
+	if (edid)
+		status = connector_status_connected;
+	drm_edid_free(edid);
+
+	return status;
+}
+
 static const struct drm_connector_helper_funcs ast_vga_connector_helper_funcs = {
 	.get_modes = drm_connector_helper_get_modes,
+	.detect_ctx = ast_vga_connector_helper_detect_ctx,
 };
 
 static const struct drm_connector_funcs ast_vga_connector_funcs = {
@@ -1379,7 +1395,7 @@ static int ast_vga_connector_init(struct drm_device *dev, struct drm_connector *
 	connector->interlace_allowed = 0;
 	connector->doublescan_allowed = 0;
 
-	connector->polled = DRM_CONNECTOR_POLL_CONNECT;
+	connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
 
 	return 0;
 }
@@ -1412,8 +1428,24 @@ static int ast_vga_output_init(struct ast_device *ast)
  * SIL164 Connector
  */
 
+static int ast_sil164_connector_helper_detect_ctx(struct drm_connector *connector,
+						  struct drm_modeset_acquire_ctx *ctx,
+						  bool force)
+{
+	enum drm_connector_status status = connector_status_disconnected;
+	const struct drm_edid *edid;
+
+	edid = drm_edid_read(connector);
+	if (edid)
+		status = connector_status_connected;
+	drm_edid_free(edid);
+
+	return status;
+}
+
 static const struct drm_connector_helper_funcs ast_sil164_connector_helper_funcs = {
 	.get_modes = drm_connector_helper_get_modes,
+	.detect_ctx = ast_sil164_connector_helper_detect_ctx,
 };
 
 static const struct drm_connector_funcs ast_sil164_connector_funcs = {
@@ -1447,7 +1479,7 @@ static int ast_sil164_connector_init(struct drm_device *dev, struct drm_connecto
 	connector->interlace_allowed = 0;
 	connector->doublescan_allowed = 0;
 
-	connector->polled = DRM_CONNECTOR_POLL_CONNECT;
+	connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
 
 	return 0;
 }
