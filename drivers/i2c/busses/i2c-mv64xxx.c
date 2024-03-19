@@ -99,6 +99,7 @@ enum mv64xxx_i2c_state {
 enum mv64xxx_i2c_event {
 	MV64XXX_I2C_EVENT_INVALID,
 	MV64XXX_I2C_EVENT_STARTED,
+	MV64XXX_I2C_EVENT_NOSTART,
 	MV64XXX_I2C_EVENT_ADDR_ACK,
 	MV64XXX_I2C_EVENT_ADDR_NO_ACK,
 	MV64XXX_I2C_EVENT_WR_ACK,
@@ -111,7 +112,7 @@ enum mv64xxx_i2c_event {
 enum mv64xxx_i2c_action {
 	MV64XXX_I2C_ACTION_INVALID,
 	MV64XXX_I2C_ACTION_CONTINUE,
-	MV64XXX_I2C_ACTION_SEND_RESTART,
+	MV64XXX_I2C_ACTION_NEXT_MESSAGE,
 	MV64XXX_I2C_ACTION_SEND_ADDR_1,
 	MV64XXX_I2C_ACTION_SEND_ADDR_2,
 	MV64XXX_I2C_ACTION_SEND_DATA,
@@ -128,6 +129,7 @@ struct mv64xxx_i2c_regs {
 	u8	status;
 	u8	clock;
 	u8	soft_reset;
+	u8	enh_feat;
 };
 
 struct mv64xxx_i2c_data {
@@ -184,6 +186,7 @@ static struct mv64xxx_i2c_regs mv64xxx_i2c_regs_sun4i = {
 	.status		= 0x10,
 	.clock		= 0x14,
 	.soft_reset	= 0x18,
+	.enh_feat	= 0x1c,
 };
 
 static void
@@ -305,9 +308,9 @@ mv64xxx_i2c_decode_status(struct mv64xxx_i2c_data *drv_data, u32 status)
 }
 
 static void
-mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
+mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data,
+		enum mv64xxx_i2c_event event, u32 status)
 {
-	enum mv64xxx_i2c_event event;
 	enum mv64xxx_i2c_state prev_state = drv_data->state;
 
 	drv_data->action = MV64XXX_I2C_ACTION_INVALID;
@@ -328,7 +331,6 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 	 * 2) Handle hardware event driven state transitions
 	 * 3) Perform internal state transitions and action emission
 	 */
-	event = mv64xxx_i2c_decode_status(drv_data, status);
 
 	/* Handle event; determine state transition */
 	switch (event) {
@@ -336,6 +338,7 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 		drv_data->state = MV64XXX_I2C_STATE_SEND_ADDR_1;
 		break;
 
+	case MV64XXX_I2C_EVENT_NOSTART:
 	case MV64XXX_I2C_EVENT_ADDR_ACK:
 		if ((drv_data->state == MV64XXX_I2C_STATE_SEND_ADDR_1)
 		    && (drv_data->msg->flags & I2C_M_TEN))
@@ -398,7 +401,7 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 				drv_data->action = MV64XXX_I2C_ACTION_SEND_STOP;
 				drv_data->state = MV64XXX_I2C_STATE_IDLE;
 			} else {
-				drv_data->action = MV64XXX_I2C_ACTION_SEND_RESTART;
+				drv_data->action = MV64XXX_I2C_ACTION_NEXT_MESSAGE;
 				drv_data->state = MV64XXX_I2C_STATE_RESTART;
 			}
 		} else {
@@ -428,7 +431,7 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 				drv_data->action = MV64XXX_I2C_ACTION_SEND_STOP;
 				drv_data->state = MV64XXX_I2C_STATE_IDLE;
 			} else {
-				drv_data->action = MV64XXX_I2C_ACTION_SEND_RESTART;
+				drv_data->action = MV64XXX_I2C_ACTION_NEXT_MESSAGE;
 				drv_data->state = MV64XXX_I2C_STATE_RESTART;
 			}
 		} else {
@@ -443,18 +446,38 @@ mv64xxx_i2c_fsm(struct mv64xxx_i2c_data *drv_data, u32 status)
 
 static void mv64xxx_i2c_send_start(struct mv64xxx_i2c_data *drv_data)
 {
+	u8 extra_bytes;
+
 	drv_data->msg = drv_data->msgs;
 	drv_data->byte_posn = 0;
 	drv_data->bytes_left = drv_data->msg->len;
 	drv_data->aborting = 0;
 	drv_data->rc = 0;
 
+	if (drv_data->msg->flags & I2C_M_NOSTART)
+		return;
+
+	/*
+	 * If this is a zero-length read, and the next message is a NOSTART
+	 * write, the client driver is trying to insert extra bytes after the
+	 * address but before the read proper.
+	 */
+	if ((drv_data->msg->len == 0) && (drv_data->msg->flags & I2C_M_RD) &&
+	    (drv_data->num_msgs > 1) && (drv_data->msgs[1].flags == I2C_M_NOSTART))
+		extra_bytes = drv_data->msgs[1].len;
+	else
+		extra_bytes = 0;
+
+	if (drv_data->reg_offsets.enh_feat != 0)
+		writel(extra_bytes,
+		       drv_data->reg_base + drv_data->reg_offsets.enh_feat);
+
 	mv64xxx_i2c_prepare_for_io(drv_data, drv_data->msgs);
 	writel(drv_data->cntl_bits | MV64XXX_I2C_REG_CONTROL_START,
 	       drv_data->reg_base + drv_data->reg_offsets.control);
 }
 
-static void
+static enum mv64xxx_i2c_event
 mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 {
 	if (drv_data->action & MV64XXX_I2C_ACTION_RECEIVE)
@@ -463,7 +486,7 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 	drv_data->action &= ~MV64XXX_I2C_ACTION_RECEIVE;
 
 	switch(drv_data->action) {
-	case MV64XXX_I2C_ACTION_SEND_RESTART:
+	case MV64XXX_I2C_ACTION_NEXT_MESSAGE:
 		/* We should only get here if we have further messages */
 		BUG_ON(drv_data->num_msgs == 0);
 
@@ -480,6 +503,10 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 		 * Thankfully, do not advertise support for that feature.
 		 */
 		drv_data->send_stop = drv_data->num_msgs == 1;
+
+		if (drv_data->msg->flags & I2C_M_NOSTART)
+			return MV64XXX_I2C_EVENT_NOSTART;
+
 		break;
 
 	case MV64XXX_I2C_ACTION_CONTINUE:
@@ -524,6 +551,8 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 		wake_up(&drv_data->waitq);
 		break;
 	}
+
+	return MV64XXX_I2C_EVENT_INVALID;
 }
 
 static void
@@ -594,6 +623,7 @@ static irqreturn_t
 mv64xxx_i2c_intr(int irq, void *dev_id)
 {
 	struct mv64xxx_i2c_data	*drv_data = dev_id;
+	enum mv64xxx_i2c_event event;
 	u32		status;
 	irqreturn_t	rc = IRQ_NONE;
 
@@ -616,8 +646,11 @@ mv64xxx_i2c_intr(int irq, void *dev_id)
 			ndelay(100);
 
 		status = readl(drv_data->reg_base + drv_data->reg_offsets.status);
-		mv64xxx_i2c_fsm(drv_data, status);
-		mv64xxx_i2c_do_action(drv_data);
+		event = mv64xxx_i2c_decode_status(drv_data, status);
+		do {
+			mv64xxx_i2c_fsm(drv_data, event, status);
+			event = mv64xxx_i2c_do_action(drv_data);
+		} while (event != MV64XXX_I2C_EVENT_INVALID);
 
 		if (drv_data->irq_clear_inverted)
 			writel(drv_data->cntl_bits | MV64XXX_I2C_REG_CONTROL_IFLG,
@@ -829,7 +862,54 @@ mv64xxx_i2c_can_offload(struct mv64xxx_i2c_data *drv_data)
 static u32
 mv64xxx_i2c_functionality(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_10BIT_ADDR | I2C_FUNC_SMBUS_EMUL;
+	struct mv64xxx_i2c_data *drv_data = i2c_get_adapdata(adap);
+	u32 func = I2C_FUNC_I2C | I2C_FUNC_10BIT_ADDR | I2C_FUNC_SMBUS_EMUL;
+
+	if (drv_data->reg_offsets.enh_feat != 0)
+		func |= I2C_FUNC_NOSTART;
+
+	return func;
+}
+
+static bool
+mv64xxx_i2c_check_msgs(struct i2c_msg msgs[], int num)
+{
+	int i;
+	bool is_write, prev_is_write;
+
+	/*
+	 * The I2C hardware is pretty strict about ensuring that the protocol
+	 * is followed properly, and doesn't allow a lot of "creativity" how
+	 * transfers are composed. This driver advertises I2C_FUNC_NOSTART, but
+	 * can only support the two most common patterns for use of NOSTART:
+	 * 1) Continuing a write message with further write bytes, as a sort of
+	 *    "gather" operation.
+	 * 2) Inserting extra parameter bytes after the address of a read
+	 *    operation, using a zero-byte read, a small (<= 3 bytes) NOSTART
+	 *    write, and then a NOSTART read.
+	 */
+
+	for (i = 0; i < num; i++) {
+		/* Check for case 1 */
+		if (msgs[i].flags & I2C_M_NOSTART) {
+			if (i == 0)
+				return false;
+			is_write = !(msgs[i].flags & I2C_M_RD);
+			prev_is_write = !(msgs[i-1].flags & I2C_M_RD);
+			if (!is_write || !prev_is_write)
+				return false;
+		}
+
+		/* Check for case 2 */
+		if (i + 2 < num) {
+			if ((msgs[i].flags == I2C_M_RD) && (msgs[i].len == 0) &&
+			    (msgs[i+1].flags == I2C_M_NOSTART) && (msgs[i+1].len <= 3) &&
+			    (msgs[i+2].flags == (I2C_M_NOSTART|I2C_M_RD)))
+				i += 2;
+		}
+	}
+
+	return true;
 }
 
 static int
@@ -838,6 +918,9 @@ mv64xxx_i2c_xfer_core(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	struct mv64xxx_i2c_data *drv_data = i2c_get_adapdata(adap);
 	int rc, ret = num;
 	u32 status;
+
+	if (!mv64xxx_i2c_check_msgs(msgs, num))
+		return -ENOTSUPP;
 
 	rc = pm_runtime_resume_and_get(&adap->dev);
 	if (rc)
