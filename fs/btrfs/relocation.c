@@ -4223,7 +4223,8 @@ static noinline_for_stack int mark_garbage_root(struct btrfs_root *root)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_trans_handle *trans;
-	int ret, err;
+	int ret;
+	int ret2;
 
 	trans = btrfs_start_transaction(fs_info->tree_root, 0);
 	if (IS_ERR(trans))
@@ -4236,9 +4237,10 @@ static noinline_for_stack int mark_garbage_root(struct btrfs_root *root)
 	ret = btrfs_update_root(trans, fs_info->tree_root,
 				&root->root_key, &root->root_item);
 
-	err = btrfs_end_transaction(trans);
-	if (err)
-		return err;
+	ret2 = btrfs_end_transaction(trans);
+	if (ret2)
+		return ret2;
+
 	return ret;
 }
 
