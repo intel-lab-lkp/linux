@@ -2070,6 +2070,46 @@ static int do_move_pages_to_node(struct list_head *pagelist, int node)
 }
 
 /*
+ * Isolates the page from the LRU and puts it into the given pagelist
+ * Returns:
+ *     errno - if the page cannot be isolated
+ *     0 - when it doesn't have to be migrated because it is already on the
+ *         target node
+ *     1 - when it has been queued
+ */
+static int add_page_for_migration(struct page *page,
+				  struct folio *folio,
+				  int node,
+				  struct list_head *pagelist,
+				  bool migrate_all)
+{
+	if (folio_is_zone_device(folio))
+		return -ENOENT;
+
+	if (folio_nid(folio) == node)
+		return 0;
+
+	if (page_mapcount(page) > 1 && !migrate_all)
+		return -EACCES;
+
+	if (folio_test_hugetlb(folio)) {
+		if (isolate_hugetlb(folio, pagelist))
+			return 1;
+		return -EBUSY;
+	}
+
+	if (!folio_isolate_lru(folio))
+		return -EBUSY;
+
+	list_add_tail(&folio->lru, pagelist);
+	node_stat_mod_folio(folio,
+		NR_ISOLATED_ANON + folio_is_file_lru(folio),
+		folio_nr_pages(folio));
+
+	return 1;
+}
+
+/*
  * Resolves the given address to a struct page, isolates it from the LRU and
  * puts it to the given pagelist.
  * Returns:
@@ -2078,19 +2118,19 @@ static int do_move_pages_to_node(struct list_head *pagelist, int node)
  *         target node
  *     1 - when it has been queued
  */
-static int add_page_for_migration(struct mm_struct *mm, const void __user *p,
-		int node, struct list_head *pagelist, bool migrate_all)
+static int add_virt_page_for_migration(struct mm_struct *mm,
+		const void __user *p, int node, struct list_head *pagelist,
+		bool migrate_all)
 {
 	struct vm_area_struct *vma;
 	unsigned long addr;
 	struct page *page;
 	struct folio *folio;
-	int err;
+	int err = -EFAULT;
 
 	mmap_read_lock(mm);
 	addr = (unsigned long)untagged_addr_remote(mm, p);
 
-	err = -EFAULT;
 	vma = vma_lookup(mm, addr);
 	if (!vma || !vma_migratable(vma))
 		goto out;
@@ -2098,41 +2138,17 @@ static int add_page_for_migration(struct mm_struct *mm, const void __user *p,
 	/* FOLL_DUMP to ignore special (like zero) pages */
 	page = follow_page(vma, addr, FOLL_GET | FOLL_DUMP);
 
-	err = PTR_ERR(page);
-	if (IS_ERR(page))
-		goto out;
-
 	err = -ENOENT;
 	if (!page)
 		goto out;
 
+	err = PTR_ERR(page);
+	if (IS_ERR(page))
+		goto out;
+
 	folio = page_folio(page);
-	if (folio_is_zone_device(folio))
-		goto out_putfolio;
+	err = add_page_for_migration(page, folio, node, pagelist, migrate_all);
 
-	err = 0;
-	if (folio_nid(folio) == node)
-		goto out_putfolio;
-
-	err = -EACCES;
-	if (page_mapcount(page) > 1 && !migrate_all)
-		goto out_putfolio;
-
-	err = -EBUSY;
-	if (folio_test_hugetlb(folio)) {
-		if (isolate_hugetlb(folio, pagelist))
-			err = 1;
-	} else {
-		if (!folio_isolate_lru(folio))
-			goto out_putfolio;
-
-		err = 1;
-		list_add_tail(&folio->lru, pagelist);
-		node_stat_mod_folio(folio,
-			NR_ISOLATED_ANON + folio_is_file_lru(folio),
-			folio_nr_pages(folio));
-	}
-out_putfolio:
 	/*
 	 * Either remove the duplicate refcount from folio_isolate_lru()
 	 * or drop the folio ref if it was not isolated.
@@ -2232,7 +2248,7 @@ static int do_pages_move(struct mm_struct *mm, nodemask_t task_nodes,
 		 * Errors in the page lookup or isolation are not fatal and we simply
 		 * report them via status
 		 */
-		err = add_page_for_migration(mm, p, current_node, &pagelist,
+		err = add_virt_page_for_migration(mm, p, current_node, &pagelist,
 					     flags & MPOL_MF_MOVE_ALL);
 
 		if (err > 0) {
