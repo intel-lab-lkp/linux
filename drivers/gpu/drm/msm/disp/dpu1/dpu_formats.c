@@ -20,9 +20,6 @@
 #define DPU_TILE_HEIGHT_UBWC	4
 #define DPU_TILE_HEIGHT_NV12	8
 
-#define DPU_MAX_IMG_WIDTH		0x3FFF
-#define DPU_MAX_IMG_HEIGHT		0x3FFF
-
 /*
  * DPU supported format packing, bpp, and other format
  * information.
