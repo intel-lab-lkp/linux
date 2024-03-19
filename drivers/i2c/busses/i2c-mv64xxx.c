@@ -752,6 +752,7 @@ mv64xxx_i2c_xfer_core(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
 	struct mv64xxx_i2c_data *drv_data = i2c_get_adapdata(adap);
 	int rc, ret = num;
+	u32 status;
 
 	rc = pm_runtime_resume_and_get(&adap->dev);
 	if (rc)
@@ -760,6 +761,11 @@ mv64xxx_i2c_xfer_core(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	BUG_ON(drv_data->msgs != NULL);
 	drv_data->msgs = msgs;
 	drv_data->num_msgs = num;
+
+	/* Calm down the hardware if it was upset by a bus glitch while idle */
+	status = readl(drv_data->reg_base + drv_data->reg_offsets.status);
+	if (status == MV64XXX_I2C_STATUS_BUS_ERR)
+		mv64xxx_i2c_hw_init(drv_data);
 
 	if (mv64xxx_i2c_can_offload(drv_data) && !drv_data->atomic)
 		rc = mv64xxx_i2c_offload_xfer(drv_data);
