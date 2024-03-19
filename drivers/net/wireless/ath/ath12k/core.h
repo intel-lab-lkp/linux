@@ -425,6 +425,7 @@ struct ath12k_sta {
 	struct ath12k_rx_peer_stats *rx_stats;
 	struct ath12k_wbm_tx_stats *wbm_tx_stats;
 	u32 bw_prev;
+	u32 rx_retries;
 };
 
 #define ATH12K_MIN_5G_FREQ 4150

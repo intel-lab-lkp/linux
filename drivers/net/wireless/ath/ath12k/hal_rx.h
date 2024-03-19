@@ -143,6 +143,7 @@ struct hal_rx_user_status {
 	u32 mpdu_fcs_ok_bitmap[HAL_RX_NUM_WORDS_PER_PPDU_BITMAP];
 	u32 mpdu_ok_byte_count;
 	u32 mpdu_err_byte_count;
+	bool mpdu_retry;
 };
 
 #define HAL_MAX_UL_MU_USERS	37
@@ -230,6 +231,7 @@ struct hal_rx_mon_ppdu_info {
 	bool first_msdu_in_mpdu;
 	bool is_ampdu;
 	u8 medium_prot_type;
+	bool mpdu_retry;
 };
 
 #define HAL_RX_PPDU_START_INFO0_PPDU_ID		GENMASK(15, 0)
@@ -447,10 +449,13 @@ struct hal_rx_phyrx_rssi_legacy_info {
 #define HAL_RX_MPDU_START_INFO0_PPDU_ID	GENMASK(31, 16)
 #define HAL_RX_MPDU_START_INFO1_PEERID	GENMASK(31, 16)
 #define HAL_RX_MPDU_START_INFO2_MPDU_LEN GENMASK(13, 0)
+#define HAL_RX_MPDU_START_INFO3_MPDU_RETRY	BIT(19)
 struct hal_rx_mpdu_start {
 	__le32 info0;
 	__le32 info1;
-	__le32 rsvd1[11];
+	__le32 rsvd1[8];
+	__le32 info3;
+	__le32 rsvd3[2];
 	__le32 info2;
 	__le32 rsvd2[9];
 } __packed;

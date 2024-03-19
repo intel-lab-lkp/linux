@@ -774,9 +774,11 @@ ath12k_dp_mon_rx_parse_status_tlv(struct ath12k_base *ab,
 		u16 peer_id;
 
 		info[1] = __le32_to_cpu(mpdu_start->info1);
+		info[3] = __le32_to_cpu(mpdu_start->info3);
 		peer_id = u32_get_bits(info[1], HAL_RX_MPDU_START_INFO1_PEERID);
 		if (peer_id)
 			ppdu_info->peer_id = peer_id;
+		ppdu_info->mpdu_retry = info[3] & HAL_RX_MPDU_START_INFO3_MPDU_RETRY;
 
 		ppdu_info->mpdu_len += u32_get_bits(info[1],
 						    HAL_RX_MPDU_START_INFO2_MPDU_LEN);
@@ -785,6 +787,9 @@ ath12k_dp_mon_rx_parse_status_tlv(struct ath12k_base *ab,
 			ppdu_info->userid = userid;
 			ppdu_info->ampdu_id[userid] =
 				u32_get_bits(info[0], HAL_RX_MPDU_START_INFO1_PEERID);
+			ppdu_info->userstats[userid].mpdu_retry =
+				info[3] & HAL_RX_MPDU_START_INFO3_MPDU_RETRY;
+
 		}
 
 		mon_mpdu = kzalloc(sizeof(*mon_mpdu), GFP_ATOMIC);
@@ -2209,6 +2214,8 @@ static void ath12k_dp_mon_rx_update_peer_su_stats(struct ath12k *ar,
 	struct ath12k_rx_peer_stats *rx_stats = arsta->rx_stats;
 	u32 num_msdu;
 
+	arsta->rx_retries  += ppdu_info->mpdu_retry;
+
 	if (!rx_stats)
 		return;
 
@@ -2378,6 +2385,7 @@ ath12k_dp_mon_rx_update_user_stats(struct ath12k *ar,
 
 	arsta = ath12k_sta_to_arsta(peer->sta);
 	rx_stats = arsta->rx_stats;
+	arsta->rx_retries = user_stats->mpdu_retry;
 
 	if (!rx_stats)
 		return;
