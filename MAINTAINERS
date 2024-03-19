@@ -15672,6 +15672,14 @@ F:	drivers/nvmem/
 F:	include/linux/nvmem-consumer.h
 F:	include/linux/nvmem-provider.h
 
+NXP ASRC V4L2 MEM2MEM DRIVERS
+M:	Shengjiu Wang <shengjiu.wang@gmail.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+W:	https://linuxtv.org
+T:	git git://linuxtv.org/media_tree.git
+F:	drivers/media/platform/nxp/imx-asrc.c
+
 NXP BLUETOOTH WIRELESS DRIVERS
 M:	Amitkumar Karwar <amitkumar.karwar@nxp.com>
 M:	Neeraj Kale <neeraj.sanjaykale@nxp.com>

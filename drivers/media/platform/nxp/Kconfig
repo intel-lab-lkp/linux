@@ -67,3 +67,16 @@ config VIDEO_MX2_EMMAPRP
 
 source "drivers/media/platform/nxp/dw100/Kconfig"
 source "drivers/media/platform/nxp/imx-jpeg/Kconfig"
+
+config VIDEO_IMX_ASRC
+	tristate "NXP i.MX ASRC M2M support"
+	depends on V4L_MEM2MEM_DRIVERS
+	depends on MEDIA_SUPPORT
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	select MEDIA_CONTROLLER
+	help
+	    Say Y if you want to add ASRC M2M support for NXP CPUs.
+	    It is a complement for ASRC M2P and ASRC P2M features.
+	    This option is only useful for out-of-tree drivers since
+	    in-tree drivers select it automatically.
