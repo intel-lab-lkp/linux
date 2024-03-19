@@ -50,7 +50,6 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	 * %rsi page_list
 	 * %rdx start address
 	 * %rcx preserve_context
-	 * %r8  host_mem_enc_active
 	 */
 
 	/* Save the CPU context, used for jumping back */
@@ -77,9 +76,6 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	/* zero out flags, and disable interrupts */
 	pushq $0
 	popfq
-
-	/* Save SME active flag */
-	movq	%r8, %r12
 
 	/*
 	 * get physical address of control page now
@@ -160,14 +156,11 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	movq	%r9, %cr3
 
 	/*
-	 * If SME is active, there could be old encrypted cache line
-	 * entries that will conflict with the now unencrypted memory
-	 * used by kexec. Flush the caches before copying the kernel.
+	 * The kernel could leave caches in incoherent state on SME/TDX
+	 * capable platforms.  Just do unconditional cache flush to avoid
+	 * silent memory corruption to the new kernel for these platforms.
 	 */
-	testq	%r12, %r12
-	jz 1f
 	wbinvd
-1:
 
 	movq	%rcx, %r11
 	call	swap_pages
