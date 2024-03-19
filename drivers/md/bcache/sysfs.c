@@ -661,6 +661,9 @@ static unsigned int bch_root_usage(struct cache_set *c)
 	struct bkey *k;
 	struct btree *b;
 	struct btree_iter iter;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	goto lock_root;
 

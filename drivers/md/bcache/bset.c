@@ -56,7 +56,9 @@ int __bch_count_data(struct btree_keys *b)
 	unsigned int ret = 0;
 	struct btree_iter iter;
 	struct bkey *k;
+	struct btree_iter_set data[MAX_BSETS];
 
+	iter.heap.heap.data = data;
 	if (b->ops->is_extents)
 		for_each_key(b, k, &iter)
 			ret += KEY_SIZE(k);
@@ -69,6 +71,9 @@ void __bch_check_keys(struct btree_keys *b, const char *fmt, ...)
 	struct bkey *k, *p = NULL;
 	struct btree_iter iter;
 	const char *err;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	for_each_key(b, k, &iter) {
 		if (b->ops->is_extents) {
@@ -110,9 +115,9 @@ bug:
 
 static void bch_btree_iter_next_check(struct btree_iter *iter)
 {
-	struct bkey *k = iter->data->k, *next = bkey_next(k);
+	struct bkey *k = min_heap_peek(&iter->heap)->k, *next = bkey_next(k);
 
-	if (next < iter->data->end &&
+	if (next < min_heap_peek(&iter->heap)->end &&
 	    bkey_cmp(k, iter->b->ops->is_extents ?
 		     &START_KEY(next) : next) > 0) {
 		bch_dump_bucket(iter->b);
@@ -882,6 +887,9 @@ unsigned int bch_btree_insert_key(struct btree_keys *b, struct bkey *k,
 	struct btree_iter iter;
 	struct bkey preceding_key_on_stack = ZERO_KEY;
 	struct bkey *preceding_key_p = &preceding_key_on_stack;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	BUG_ON(b->ops->is_extents && !KEY_SIZE(k));
 
@@ -1077,27 +1085,34 @@ struct bkey *__bch_bset_search(struct btree_keys *b, struct bset_tree *t,
 
 /* Btree iterator */
 
-typedef bool (btree_iter_cmp_fn)(struct btree_iter_set,
-				 struct btree_iter_set);
+typedef bool (btree_iter_cmp_fn)(const void *, const void *, void *);
 
-static inline bool btree_iter_cmp(struct btree_iter_set l,
-				  struct btree_iter_set r)
+static inline bool btree_iter_cmp(const void *l, const void *r, void *args)
 {
-	return bkey_cmp(l.k, r.k) > 0;
+	const struct btree_iter_set *_l = l;
+	const struct btree_iter_set *_r = r;
+
+	return bkey_cmp(_l->k, _r->k) <= 0;
 }
 
 static inline bool btree_iter_end(struct btree_iter *iter)
 {
-	return !iter->used;
+	return !iter->heap.heap.nr;
 }
 
 void bch_btree_iter_push(struct btree_iter *iter, struct bkey *k,
 			 struct bkey *end)
 {
+	const struct min_heap_callbacks callbacks = {
+		.less = btree_iter_cmp,
+		.swp = btree_iter_swap,
+	};
+
 	if (k != end)
-		BUG_ON(!heap_add(iter,
-				 ((struct btree_iter_set) { k, end }),
-				 btree_iter_cmp));
+		BUG_ON(!min_heap_push(&iter->heap,
+				 &((struct btree_iter_set){ k, end }),
+				 &callbacks,
+				 NULL));
 }
 
 static struct bkey *__bch_btree_iter_init(struct btree_keys *b,
@@ -1107,8 +1122,8 @@ static struct bkey *__bch_btree_iter_init(struct btree_keys *b,
 {
 	struct bkey *ret = NULL;
 
-	iter->size = ARRAY_SIZE(iter->data);
-	iter->used = 0;
+	iter->heap.heap.size = MAX_BSETS;
+	iter->heap.heap.nr = 0;
 
 #ifdef CONFIG_BCACHE_DEBUG
 	iter->b = b;
@@ -1134,22 +1149,28 @@ static inline struct bkey *__bch_btree_iter_next(struct btree_iter *iter,
 {
 	struct btree_iter_set b __maybe_unused;
 	struct bkey *ret = NULL;
+	const struct min_heap_callbacks callbacks = {
+		.less = cmp,
+		.swp = btree_iter_swap,
+	};
 
 	if (!btree_iter_end(iter)) {
 		bch_btree_iter_next_check(iter);
 
-		ret = iter->data->k;
-		iter->data->k = bkey_next(iter->data->k);
+		ret = min_heap_peek(&iter->heap)->k;
+		min_heap_peek(&iter->heap)->k = bkey_next(min_heap_peek(&iter->heap)->k);
 
-		if (iter->data->k > iter->data->end) {
+		if (min_heap_peek(&iter->heap)->k > min_heap_peek(&iter->heap)->end) {
 			WARN_ONCE(1, "bset was corrupt!\n");
-			iter->data->k = iter->data->end;
+			min_heap_peek(&iter->heap)->k = min_heap_peek(&iter->heap)->end;
 		}
 
-		if (iter->data->k == iter->data->end)
-			heap_pop(iter, b, cmp);
+		if (min_heap_peek(&iter->heap)->k == min_heap_peek(&iter->heap)->end) {
+			b = *min_heap_peek(&iter->heap);
+			min_heap_pop(&iter->heap, &callbacks, NULL);
+		}
 		else
-			heap_sift(iter, 0, cmp);
+			min_heapify(&iter->heap, 0, &callbacks, NULL);
 	}
 
 	return ret;
@@ -1195,16 +1216,18 @@ static void btree_mergesort(struct btree_keys *b, struct bset *out,
 			    struct btree_iter *iter,
 			    bool fixup, bool remove_stale)
 {
-	int i;
 	struct bkey *k, *last = NULL;
 	BKEY_PADDED(k) tmp;
 	bool (*bad)(struct btree_keys *, const struct bkey *) = remove_stale
 		? bch_ptr_bad
 		: bch_ptr_invalid;
+	const struct min_heap_callbacks callbacks = {
+		.less = b->ops->sort_cmp,
+		.swp = btree_iter_swap,
+	};
 
 	/* Heapify the iterator, using our comparison function */
-	for (i = iter->used / 2 - 1; i >= 0; --i)
-		heap_sift(iter, i, b->ops->sort_cmp);
+	min_heapify_all(&iter->heap, &callbacks, NULL);
 
 	while (!btree_iter_end(iter)) {
 		if (b->ops->sort_fixup && fixup)
@@ -1295,7 +1318,9 @@ void bch_btree_sort_partial(struct btree_keys *b, unsigned int start,
 	size_t order = b->page_order, keys = 0;
 	struct btree_iter iter;
 	int oldsize = bch_count_data(b);
+	struct btree_iter_set data[MAX_BSETS];
 
+	iter.heap.heap.data = data;
 	__bch_btree_iter_init(b, &iter, NULL, &b->set[start]);
 
 	if (start) {
@@ -1324,7 +1349,9 @@ void bch_btree_sort_into(struct btree_keys *b, struct btree_keys *new,
 {
 	uint64_t start_time = local_clock();
 	struct btree_iter iter;
+	struct btree_iter_set data[MAX_BSETS];
 
+	iter.heap.heap.data = data;
 	bch_btree_iter_init(b, &iter, NULL);
 
 	btree_mergesort(b, new->set->data, &iter, false, true);

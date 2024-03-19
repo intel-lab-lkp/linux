@@ -157,8 +157,8 @@ void bch_btree_node_read_done(struct btree *b)
 	 * See the comment arount cache_set->fill_iter.
 	 */
 	iter = mempool_alloc(&b->c->fill_iter, GFP_NOIO);
-	iter->size = b->c->cache->sb.bucket_size / b->c->cache->sb.block_size;
-	iter->used = 0;
+	iter->heap.heap.size = b->c->cache->sb.bucket_size / b->c->cache->sb.block_size;
+	iter->heap.heap.nr = 0;
 
 #ifdef CONFIG_BCACHE_DEBUG
 	iter->b = &b->keys;
@@ -1311,6 +1311,9 @@ static bool btree_gc_mark_node(struct btree *b, struct gc_stat *gc)
 	struct bkey *k;
 	struct btree_iter iter;
 	struct bset_tree *t;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	gc->nodes++;
 
@@ -1572,6 +1575,9 @@ static unsigned int btree_gc_count_keys(struct btree *b)
 	struct bkey *k;
 	struct btree_iter iter;
 	unsigned int ret = 0;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	for_each_key_filter(&b->keys, k, &iter, bch_ptr_bad)
 		ret += bkey_u64s(k);
@@ -1614,6 +1620,9 @@ static int btree_gc_recurse(struct btree *b, struct btree_op *op,
 	struct btree_iter iter;
 	struct gc_merge_info r[GC_MERGE_NODES];
 	struct gc_merge_info *i, *last = r + ARRAY_SIZE(r) - 1;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	bch_btree_iter_init(&b->keys, &iter, &b->c->gc_done);
 
@@ -1912,6 +1921,9 @@ static int bch_btree_check_recurse(struct btree *b, struct btree_op *op)
 	int ret = 0;
 	struct bkey *k, *p = NULL;
 	struct btree_iter iter;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	for_each_key_filter(&b->keys, k, &iter, bch_ptr_invalid)
 		bch_initial_mark_key(b->c, b->level, k);
@@ -1953,7 +1965,9 @@ static int bch_btree_check_thread(void *arg)
 	struct btree_iter iter;
 	struct bkey *k, *p;
 	int cur_idx, prev_idx, skip_nr;
+	struct btree_iter_set data[MAX_BSETS];
 
+	iter.heap.heap.data = data;
 	k = p = NULL;
 	cur_idx = prev_idx = 0;
 	ret = 0;
@@ -2053,6 +2067,9 @@ int bch_btree_check(struct cache_set *c)
 	struct bkey *k = NULL;
 	struct btree_iter iter;
 	struct btree_check_state check_state;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	/* check and mark root node keys */
 	for_each_key_filter(&c->root->keys, k, &iter, bch_ptr_invalid)
@@ -2548,6 +2565,9 @@ static int bch_btree_map_nodes_recurse(struct btree *b, struct btree_op *op,
 	if (b->level) {
 		struct bkey *k;
 		struct btree_iter iter;
+		struct btree_iter_set data[MAX_BSETS];
+
+		iter.heap.heap.data = data;
 
 		bch_btree_iter_init(&b->keys, &iter, from);
 
@@ -2581,6 +2601,9 @@ int bch_btree_map_keys_recurse(struct btree *b, struct btree_op *op,
 	int ret = MAP_CONTINUE;
 	struct bkey *k;
 	struct btree_iter iter;
+	struct btree_iter_set data[MAX_BSETS];
+
+	iter.heap.heap.data = data;
 
 	bch_btree_iter_init(&b->keys, &iter, from);
 

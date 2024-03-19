@@ -2193,6 +2193,22 @@ err:
 	return err;
 }
 
+static inline bool init_heap(struct heap *heap, size_t size, gfp_t gfp)
+{
+	size_t bytes = size * sizeof(struct bucket *);
+	void *data = kvmalloc(bytes, (gfp) & GFP_KERNEL);
+
+	min_heap_init(heap, data, size);
+
+	return data;
+}
+
+static inline void free_heap(struct heap *heap)
+{
+	kvfree(heap->heap.data);
+	heap->heap.data = NULL;
+}
+
 /* Cache device */
 
 /* When ca->kobj released */

@@ -152,6 +152,19 @@ struct btree_iter;
 struct btree_iter_set;
 struct bkey_float;
 
+/* Btree key iteration */
+
+struct btree_iter_set {
+	struct bkey *k, *end;
+};
+
+struct btree_iter {
+#ifdef CONFIG_BCACHE_DEBUG
+	struct btree_keys *b;
+#endif
+	MIN_HEAP(struct btree_iter_set, btree_iter_heap) heap;
+};
+
 #define MAX_BSETS		4U
 
 struct bset_tree {
@@ -187,8 +200,9 @@ struct bset_tree {
 };
 
 struct btree_keys_ops {
-	bool		(*sort_cmp)(struct btree_iter_set l,
-				    struct btree_iter_set r);
+	bool		(*sort_cmp)(const void *l,
+				    const void *r,
+					void *args);
 	struct bkey	*(*sort_fixup)(struct btree_iter *iter,
 				       struct bkey *tmp);
 	bool		(*insert_fixup)(struct btree_keys *b,
@@ -258,6 +272,14 @@ static inline unsigned int bset_sector_offset(struct btree_keys *b,
 	return bset_byte_offset(b, i) >> 9;
 }
 
+static inline void btree_iter_swap(void *iter1, void *iter2, void *args)
+{
+	struct btree_iter_set *_iter1 = iter1;
+	struct btree_iter_set *_iter2 = iter2;
+
+	swap(*_iter1, *_iter2);
+}
+
 #define __set_bytes(i, k)	(sizeof(*(i)) + (k) * sizeof(uint64_t))
 #define set_bytes(i)		__set_bytes(i, i->keys)
 
@@ -310,18 +332,6 @@ enum {
 	BTREE_INSERT_STATUS_BACK_MERGE,
 	BTREE_INSERT_STATUS_OVERWROTE,
 	BTREE_INSERT_STATUS_FRONT_MERGE,
-};
-
-/* Btree key iteration */
-
-struct btree_iter {
-	size_t size, used;
-#ifdef CONFIG_BCACHE_DEBUG
-	struct btree_keys *b;
-#endif
-	struct btree_iter_set {
-		struct bkey *k, *end;
-	} data[MAX_BSETS];
 };
 
 typedef bool (*ptr_filter_fn)(struct btree_keys *b, const struct bkey *k);
