@@ -56,6 +56,16 @@ void __min_heap_init(struct __min_heap *heap, void *data, int size)
 #define min_heap_init(_heap, _data, _size)	\
 	__min_heap_init(&(_heap)->heap, _data, _size)
 
+/* Get the minimum element from the heap. */
+static __always_inline
+void *__min_heap_peek(struct __min_heap *heap)
+{
+	return heap->nr ? heap->data : NULL;
+}
+
+#define min_heap_peek(_heap)	\
+	(__minheap_cast(_heap) __min_heap_peek(&(_heap)->heap))
+
 /* Sift the element at pos down the heap. */
 static __always_inline
 void __min_heapify(struct __min_heap *heap, int pos, size_t elem_size,
