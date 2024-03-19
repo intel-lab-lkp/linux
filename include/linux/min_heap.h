@@ -44,6 +44,18 @@ struct min_heap_callbacks {
 	void (*swp)(void *lhs, void *rhs);
 };
 
+/* Initialize a min-heap. */
+static __always_inline
+void __min_heap_init(struct __min_heap *heap, void *data, int size)
+{
+	heap->data = data;
+	heap->nr = 0;
+	heap->size = size;
+}
+
+#define min_heap_init(_heap, _data, _size)	\
+	__min_heap_init(&(_heap)->heap, _data, _size)
+
 /* Sift the element at pos down the heap. */
 static __always_inline
 void __min_heapify(struct __min_heap *heap, int pos, size_t elem_size,
