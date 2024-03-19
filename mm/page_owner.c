@@ -183,9 +183,11 @@ static void add_stack_record_to_list(struct stack_record *stack_record,
 	spin_unlock_irqrestore(&stack_list_lock, flags);
 }
 
-static void inc_stack_record_count(depot_stack_handle_t handle, gfp_t gfp_mask)
+static void inc_stack_record_count(depot_stack_handle_t handle, gfp_t gfp_mask,
+				   int nr_base_pages)
 {
 	struct stack_record *stack_record = __stack_depot_get_stack_record(handle);
+	int old = REFCOUNT_SATURATED;
 
 	if (!stack_record)
 		return;
@@ -197,22 +199,18 @@ static void inc_stack_record_count(depot_stack_handle_t handle, gfp_t gfp_mask)
 	 * Since we do not use STACK_DEPOT_FLAG_GET API, let us
 	 * set a refcount of 1 ourselves.
 	 */
-	if (refcount_read(&stack_record->count) == REFCOUNT_SATURATED) {
-		int old = REFCOUNT_SATURATED;
-
-		if (atomic_try_cmpxchg_relaxed(&stack_record->count.refs, &old, 1))
-			/* Add the new stack_record to our list */
-			add_stack_record_to_list(stack_record, gfp_mask);
-	}
-	refcount_inc(&stack_record->count);
+	if (atomic_try_cmpxchg_relaxed(&stack_record->count.refs, &old, 1))
+		add_stack_record_to_list(stack_record, gfp_mask);
+	refcount_add(nr_base_pages, &stack_record->count);
 }
 
-static void dec_stack_record_count(depot_stack_handle_t handle)
+static void dec_stack_record_count(depot_stack_handle_t handle,
+				   int nr_base_pages)
 {
 	struct stack_record *stack_record = __stack_depot_get_stack_record(handle);
 
 	if (stack_record)
-		refcount_dec(&stack_record->count);
+		refcount_sub_and_test(nr_base_pages, &stack_record->count);
 }
 
 void __reset_page_owner(struct page *page, unsigned short order)
@@ -250,7 +248,7 @@ void __reset_page_owner(struct page *page, unsigned short order)
 		 * the machinery is not ready yet, we cannot decrement
 		 * their refcount either.
 		 */
-		dec_stack_record_count(alloc_handle);
+		dec_stack_record_count(alloc_handle, 1 << order);
 }
 
 static inline void __set_page_owner_handle(struct page_ext *page_ext,
@@ -292,7 +290,7 @@ noinline void __set_page_owner(struct page *page, unsigned short order,
 		return;
 	__set_page_owner_handle(page_ext, handle, order, gfp_mask);
 	page_ext_put(page_ext);
-	inc_stack_record_count(handle, gfp_mask);
+	inc_stack_record_count(handle, gfp_mask, 1 << order);
 }
 
 void __set_page_owner_migrate_reason(struct page *page, int reason)
@@ -848,11 +846,11 @@ static void *stack_next(struct seq_file *m, void *v, loff_t *ppos)
 	return stack;
 }
 
-static unsigned long page_owner_stack_threshold;
+static unsigned long page_owner_pages_threshold;
 
 static int stack_print(struct seq_file *m, void *v)
 {
-	int i, stack_count;
+	int i, nr_base_pages;
 	struct stack *stack = v;
 	unsigned long *entries;
 	unsigned long nr_entries;
@@ -863,14 +861,14 @@ static int stack_print(struct seq_file *m, void *v)
 
 	nr_entries = stack_record->size;
 	entries = stack_record->entries;
-	stack_count = refcount_read(&stack_record->count) - 1;
+	nr_base_pages = refcount_read(&stack_record->count) - 1;
 
-	if (stack_count < 1 || stack_count < page_owner_stack_threshold)
+	if (nr_base_pages < 1 || nr_base_pages < page_owner_pages_threshold)
 		return 0;
 
 	for (i = 0; i < nr_entries; i++)
 		seq_printf(m, " %pS\n", (void *)entries[i]);
-	seq_printf(m, "stack_count: %d\n\n", stack_count);
+	seq_printf(m, "nr_base_pages: %d\n\n", nr_base_pages);
 
 	return 0;
 }
@@ -900,13 +898,13 @@ static const struct file_operations page_owner_stack_operations = {
 
 static int page_owner_threshold_get(void *data, u64 *val)
 {
-	*val = READ_ONCE(page_owner_stack_threshold);
+	*val = READ_ONCE(page_owner_pages_threshold);
 	return 0;
 }
 
 static int page_owner_threshold_set(void *data, u64 val)
 {
-	WRITE_ONCE(page_owner_stack_threshold, val);
+	WRITE_ONCE(page_owner_pages_threshold, val);
 	return 0;
 }
 
