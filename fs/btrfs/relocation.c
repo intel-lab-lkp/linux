@@ -3683,8 +3683,8 @@ static noinline_for_stack int relocate_block_group(struct reloc_control *rc)
 	struct btrfs_path *path;
 	struct btrfs_extent_item *ei;
 	u64 flags;
-	int ret;
-	int err = 0;
+	int ret2;
+	int ret = 0;
 	int progress = 0;
 
 	path = btrfs_alloc_path();
@@ -3692,25 +3692,25 @@ static noinline_for_stack int relocate_block_group(struct reloc_control *rc)
 		return -ENOMEM;
 	path->reada = READA_FORWARD;
 
-	ret = prepare_to_relocate(rc);
-	if (ret) {
-		err = ret;
+	ret2 = prepare_to_relocate(rc);
+	if (ret2) {
+		ret = ret2;
 		goto out_free;
 	}
 
 	while (1) {
 		rc->reserved_bytes = 0;
-		ret = btrfs_block_rsv_refill(fs_info, rc->block_rsv,
+		ret2 = btrfs_block_rsv_refill(fs_info, rc->block_rsv,
 					     rc->block_rsv->size,
 					     BTRFS_RESERVE_FLUSH_ALL);
-		if (ret) {
-			err = ret;
+		if (ret2) {
+			ret = ret2;
 			break;
 		}
 		progress++;
 		trans = btrfs_start_transaction(rc->extent_root, 0);
 		if (IS_ERR(trans)) {
-			err = PTR_ERR(trans);
+			ret = PTR_ERR(trans);
 			trans = NULL;
 			break;
 		}
@@ -3721,10 +3721,10 @@ restart:
 			continue;
 		}
 
-		ret = find_next_extent(rc, path, &key);
-		if (ret < 0)
-			err = ret;
-		if (ret != 0)
+		ret2 = find_next_extent(rc, path, &key);
+		if (ret2 < 0)
+			ret = ret2;
+		if (ret2 != 0)
 			break;
 
 		rc->extents_found++;
@@ -3749,24 +3749,24 @@ restart:
 		}
 
 		if (flags & BTRFS_EXTENT_FLAG_TREE_BLOCK) {
-			ret = add_tree_block(rc, &key, path, &blocks);
+			ret2 = add_tree_block(rc, &key, path, &blocks);
 		} else if (rc->stage == UPDATE_DATA_PTRS &&
 			   (flags & BTRFS_EXTENT_FLAG_DATA)) {
-			ret = add_data_references(rc, &key, path, &blocks);
+			ret2 = add_data_references(rc, &key, path, &blocks);
 		} else {
 			btrfs_release_path(path);
-			ret = 0;
+			ret2 = 0;
 		}
-		if (ret < 0) {
-			err = ret;
+		if (ret2 < 0) {
+			ret = ret2;
 			break;
 		}
 
 		if (!RB_EMPTY_ROOT(&blocks)) {
-			ret = relocate_tree_blocks(trans, rc, &blocks);
-			if (ret < 0) {
-				if (ret != -EAGAIN) {
-					err = ret;
+			ret2 = relocate_tree_blocks(trans, rc, &blocks);
+			if (ret2 < 0) {
+				if (ret2 != -EAGAIN) {
+					ret = ret2;
 					break;
 				}
 				rc->extents_found--;
@@ -3781,22 +3781,22 @@ restart:
 		if (rc->stage == MOVE_DATA_EXTENTS &&
 		    (flags & BTRFS_EXTENT_FLAG_DATA)) {
 			rc->found_file_extent = true;
-			ret = relocate_data_extent(rc->data_inode,
+			ret2 = relocate_data_extent(rc->data_inode,
 						   &key, &rc->cluster);
-			if (ret < 0) {
-				err = ret;
+			if (ret2 < 0) {
+				ret = ret2;
 				break;
 			}
 		}
 		if (btrfs_should_cancel_balance(fs_info)) {
-			err = -ECANCELED;
+			ret = -ECANCELED;
 			break;
 		}
 	}
-	if (trans && progress && err == -ENOSPC) {
-		ret = btrfs_force_chunk_alloc(trans, rc->block_group->flags);
-		if (ret == 1) {
-			err = 0;
+	if (trans && progress && ret == -ENOSPC) {
+		ret2 = btrfs_force_chunk_alloc(trans, rc->block_group->flags);
+		if (ret2 == 1) {
+			ret = 0;
 			progress = 0;
 			goto restart;
 		}
@@ -3810,11 +3810,11 @@ restart:
 		btrfs_btree_balance_dirty(fs_info);
 	}
 
-	if (!err) {
-		ret = relocate_file_extent_cluster(rc->data_inode,
+	if (!ret) {
+		ret2 = relocate_file_extent_cluster(rc->data_inode,
 						   &rc->cluster);
-		if (ret < 0)
-			err = ret;
+		if (ret2 < 0)
+			ret = ret2;
 	}
 
 	rc->create_reloc_tree = false;
@@ -3831,7 +3831,7 @@ restart:
 	 * mark all reloc trees orphan, then queue them for cleanup in
 	 * merge_reloc_roots()
 	 */
-	err = prepare_to_merge(rc, err);
+	ret = prepare_to_merge(rc, ret);
 
 	merge_reloc_roots(rc);
 
@@ -3842,19 +3842,19 @@ restart:
 	/* get rid of pinned extents */
 	trans = btrfs_join_transaction(rc->extent_root);
 	if (IS_ERR(trans)) {
-		err = PTR_ERR(trans);
+		ret = PTR_ERR(trans);
 		goto out_free;
 	}
-	ret = btrfs_commit_transaction(trans);
-	if (ret && !err)
-		err = ret;
+	ret2 = btrfs_commit_transaction(trans);
+	if (ret2 && !ret)
+		ret = ret2;
 out_free:
-	ret = clean_dirty_subvols(rc);
-	if (ret < 0 && !err)
-		err = ret;
+	ret2 = clean_dirty_subvols(rc);
+	if (ret2 < 0 && !ret)
+		ret = ret2;
 	btrfs_free_block_rsv(fs_info, rc->block_rsv);
 	btrfs_free_path(path);
-	return err;
+	return ret;
 }
 
 static int __insert_orphan_inode(struct btrfs_trans_handle *trans,
