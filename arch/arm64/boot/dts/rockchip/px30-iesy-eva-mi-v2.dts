@@ -1,0 +1,624 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree for iesy RPX30 EVA-MI V2.xx (Eval Kit)
+ *
+ * Copyright (c) 2022 iesy GmbH
+ */
+
+/dts-v1/;
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/net/mscc-phy-vsc8531.h>
+#include "px30-iesy-osm-sf.dtsi"
+
+/ {
+	model = "iesy RPX30 EVA-MI V2.xx (Eval Kit)";
+	compatible = "iesy,rpx30-eva-mi-v2", "rockchip,px30";
+
+	leds {
+		compatible = "gpio-leds";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_leds_bb138>;
+
+		/* BB138a: green user led (LD4) */
+		led@0 {
+			label = "USER_LED_00";
+			gpios = <&gpio3 RK_PA0 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		/* BB138a: yellow user led (LD9)) */
+		led@1 {
+			label = "USER_LED_01";
+			gpios = <&gpio3 RK_PA1 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+
+	/* BB138a: MAX9867ETJ+ audio codec */
+	max9867-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "rockchip,max9867-codec";
+		simple-audio-card,format = "i2s";
+
+		simple-audio-card,widgets =
+			"Speaker", "Jack",
+			"Microphone", "Mic";
+		simple-audio-card,routing =
+			"Jack", "LOUT",
+			"Jack", "ROUT",
+			"Mic", "DMICL",
+			"Mic", "DMICR";
+
+		simple-audio-card,frame-master = <&cpudai>;
+		simple-audio-card,bitclock-master = <&cpudai>;
+
+		status = "okay";
+
+		cpudai: simple-audio-card,cpu {
+			sound-dai = <&i2s1_2ch>;
+			dai-tdm-slot-num = <1>;
+			dai-tdm-slot-width = <16>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&max9867>;
+			clocks = <&cru SCLK_I2S1_OUT>;
+		};
+	};
+
+	/* regulator for USB OTG port */
+	usb_a_vbus_regulator: regulator@1 {
+		compatible = "regulator-fixed";
+		regulator-name = "usb_a_vbus_regulator";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio3 RK_PC0 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	/* regulator for USB host port */
+	usb_b_vbus_regulator: regulator@2 {
+		compatible = "regulator-fixed";
+		regulator-name = "usb_b_vbus_regulator";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio3 RK_PC3 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	user-buttons {
+		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		autorepeat;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_buttons>;
+
+		/* BB138a: User-Button 1 */
+		user-button-1 {
+			label = "User Button 1";
+			gpios = <&gpio3 RK_PA2 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_X>;
+		};
+
+		/* BB138a: User-Button 2 */
+		user-button-2 {
+			label = "User Button 2";
+			gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_Z>;
+		};
+	};
+
+	/* regulator for SD Card on BB138 */
+	vdd3v3_bb138: regulator@4 {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd3v3_bb138";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&display_subsystem {
+	status = "okay";
+};
+
+/* Display Serial Interface */
+&dsi {
+	status = "okay";
+	rockchip,lane-rate = <891>;
+
+	panel@0 {
+		compatible = "simple-panel-dsi";
+		reg = <0>;
+		power-supply = <&vcc3v3_lcd>;
+		prepare-delay-ms = <2>;
+		reset-delay-ms = <1>;
+		init-delay-ms = <20>;
+		enable-delay-ms = <120>;
+		disable-delay-ms = <50>;
+		unprepare-delay-ms = <20>;
+
+		width-mm = <68>;
+		height-mm = <121>;
+		dsi,lanes = <2>;
+
+		display-timings {
+			native-mode = <&timing2>;
+
+			timing1: timing1 {
+				clock-frequency = <74250000>;
+				hactive = <1280>;
+				vactive = <720>;
+				hfront-porch = <110>;
+				hsync-len = <40>;
+				hback-porch = <220>;
+				vfront-porch = <5>;
+				vsync-len = <5>;
+				vback-porch = <20>;
+				hsync-active = <0>;
+				vsync-active = <0>;
+				de-active = <0>;
+				pixelclk-active = <0>;
+			};
+
+			timing2: timing2 {
+				clock-frequency = <74250000>;
+				hactive = <1920>;
+				vactive = <1080>;
+				hfront-porch = <88>;
+				hsync-len = <44>;
+				hback-porch = <148>;
+				vfront-porch = <4>;
+				vsync-len = <5>;
+				vback-porch = <36>;
+				hsync-active = <0>;
+				vsync-active = <0>;
+				de-active = <0>;
+				pixelclk-active = <0>;
+			};
+		};
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in_dsi: endpoint {
+					remote-endpoint = <&dsi_out_panel>;
+				};
+			};
+		};
+
+		/* should be defined to avoid kernel log errors */
+		/* vsp-supply is positive voltage supply, vsn-supply is negative voltage supply */
+		/* will not be critical: is not even used in simple-panel devicetree example */
+		/* vsp-supply = <???>; */
+		/* vsn-supply = <???>; */
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+			dsi_out_panel: endpoint {
+				remote-endpoint = <&panel_in_dsi>;
+			};
+		};
+	};
+};
+
+&dsi_in_vopb {
+	status = "okay";
+};
+
+&dsi_in_vopl {
+	status = "disabled";
+};
+
+/* ARM Mali GPU */
+&gpu {
+	mali-supply = <&vdd_logic>;
+	shadercores-supply = <&vdd_logic>;
+	status = "okay";
+};
+
+&gmac {
+	phy-supply = <&vcc_phy>;
+	phy-handle = <&gmac0_phy>;
+	clock_in_out = "input";
+	assigned-clocks = <&cru SCLK_GMAC>;
+	assigned-clock-parents = <&cru SCLK_GMAC>;
+	status = "okay";
+
+	gmdio0: gmac0_mdio {
+		compatible = "snps,dwmac-mdio";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* BB138a: Ethernet PHY */
+		gmac0_phy: ethernet-phy@0 {
+			compatible = "ethernet-phy-id0007.0570";
+			reg = <0x0>;
+			max-speed = <100>;
+			vsc8531,vddmac = <1800>;
+			vsc8531,edge-slowdown = <76>;
+			vsc8531,led-0-mode = <VSC8531_LINK_100_ACTIVITY>;
+			vsc8531,led-1-mode = <VSC8531_LINK_100_ACTIVITY>;
+		};
+	};
+};
+
+&i2c0 {
+	/* BB138a: LM75 sensor */
+	sensor@4e {
+		status = "okay";
+		compatible = "lm75";
+		reg = <0x4e>;
+	};
+
+	/* BB138a: PFC85263 RTC */
+	rtc@51 {
+		status = "okay";
+		compatible = "nxp,pcf85263";
+		reg = <0x51>;
+	};
+
+	/* BB138a: AT24C64D EEPROM */
+	eeprom@53 {
+		status = "okay";
+		compatible = "atmel,24c64";
+		reg = <0x53>;
+		pagesize = <32>;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+
+	/* BB138a: HDMI to MIPI converter */
+	lt8912@48 {
+		compatible = "lontium,lt8912";
+		reg = <0x48>;
+		ddc-i2c-bus = <&i2c1>;
+		/* driver needs a valid reset gpio to function */
+		/* use not connected pin as dummy */
+		reset-gpios = <&gpio3 RK_PD3 GPIO_ACTIVE_LOW>; /* n.c. */
+		status = "okay";
+	};
+
+	/* BB138a: MAX9867ETJ+ audio codec */
+	max9867: audio_codec@18 {
+		#sound-dai-cells = <0>;
+		compatible = "maxim,max9867";
+		reg = <0x18>;
+		status = "okay";
+		assigned-clocks = <&cru SCLK_I2S1_OUT>;
+		assigned-clock-parents = <&cru SCLK_I2S1_OUT>;
+		assigned-clock-rates = <50000000>;
+	};
+};
+
+&i2s1_2ch {
+	pinctrl-0 = <&i2s1_2ch_mclk &i2s1_2ch_sclk &i2s1_2ch_lrck
+				 &i2s1_2ch_sdi &i2s1_2ch_sdo>;
+	status = "okay";
+};
+
+&io_domains {
+	status = "okay";
+
+	vccio1-supply = <&vcc1v8_dvp>;
+	vccio2-supply = <&vccio_sd>;
+	vccio3-supply = <&vcc1v8_dvp>;
+	vccio4-supply = <&vcc1v8_dvp>;
+	vccio5-supply = <&vcc1v8_dvp>;
+	vccio6-supply = <&vcc1v8_soc>;
+	pmuio1-supply = <&vcc3v0_pmu>;
+	pmuio2-supply = <&vcc1v8_soc>;
+};
+
+&pinctrl {
+	headphone {
+		hp_det: hp-det {
+			rockchip,pins = <2 RK_PB0 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+	};
+
+	leds {
+		pinctrl_leds_bb138: pinctrl-leds-bb138 {
+			rockchip,pins = <3 RK_PA0 RK_FUNC_GPIO &pcfg_pull_none
+							 3 RK_PA1 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	i2c0 {
+		i2c0_xfer: i2c0-xfer {
+			rockchip,pins =
+				<0 RK_PB0 1 &pcfg_pull_none_8ma>,
+				<0 RK_PB1 1 &pcfg_pull_none_8ma>;
+		};
+	};
+
+	i2c1 {
+		i2c1_xfer: i2c1-xfer {
+			rockchip,pins =
+				<0 RK_PC2 1 &pcfg_pull_none_8ma>,
+				<0 RK_PC3 1 &pcfg_pull_none_8ma>;
+		};
+	};
+
+	i2c2 {
+		i2c2_xfer: i2c2-xfer {
+			rockchip,pins =
+				<2 RK_PB7 2 &pcfg_pull_none_8ma>,
+				<2 RK_PC0 2 &pcfg_pull_none_8ma>;
+		};
+	};
+
+	gpiokeys {
+		pinctrl_buttons: buttongrp {
+			rockchip,pins = <3 RK_PA2 RK_FUNC_GPIO &pcfg_pull_up>,
+							<3 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	uart0 {
+		uart0_xfer: uart0-xfer {
+			rockchip,pins =
+				<0 RK_PB2 1 &pcfg_pull_none_2ma>,
+				<0 RK_PB3 1 &pcfg_pull_up>;
+		};
+
+		uart0_rts: uart0-rts {
+			rockchip,pins =
+				<0 RK_PB5 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	uart1 {
+		uart1_xfer: uart1-xfer {
+			rockchip,pins =
+				<1 RK_PC1 1 &pcfg_pull_none_2ma>,
+				<1 RK_PC0 1 &pcfg_pull_up>;
+		};
+
+		uart1_rts: uart1-rts {
+			rockchip,pins =
+				<1 RK_PC3 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	pwm0 {
+		pwm0_pin: pwm0-pin {
+			rockchip,pins =
+				<0 RK_PB7 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	pwm1 {
+		pwm1_pin: pwm1-pin {
+			rockchip,pins =
+				<0 RK_PC0 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	pwm2 {
+		pwm2_pin: pwm2-pin {
+			rockchip,pins =
+				<2 RK_PB5 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	pwm3 {
+		pwm3_pin: pwm3-pin {
+			rockchip,pins =
+				<0 RK_PC1 1 &pcfg_pull_none_2ma>;
+		};
+	};
+
+	spi0 {
+		spi0_clk: spi0-clk {
+			rockchip,pins =
+				<1 RK_PB7 3 &pcfg_pull_up_4ma>;
+		};
+
+		spi0_csn: spi0-csn {
+			rockchip,pins =
+				<1 RK_PB6 3 &pcfg_pull_up_4ma>;
+		};
+
+		spi0_mosi: spi0-mosi {
+			rockchip,pins =
+				<1 RK_PB4 3 &pcfg_pull_up_4ma>;
+		};
+	};
+
+	spi1 {
+		/* spi1.sdo */
+		spi1_mosi: spi1-mosi {
+			rockchip,pins =
+				<3 RK_PB4 4 &pcfg_pull_none>;
+		};
+
+		/* spi1.csn PIN E17 used! */
+		spi1_csn: spi1-csn {
+			rockchip,pins =
+				<3 RK_PB0 4 &pcfg_pull_none>;
+		};
+
+		spi1_clk: spi1-clk {
+			rockchip,pins =
+				<3 RK_PB7 4 &pcfg_pull_none>;
+		};
+	};
+
+	u2phy {
+		u2phy_host_pin: host-port {
+			rockchip,pins =
+				<3 RK_PC3 1 &pcfg_pull_none_4ma>;
+		};
+
+		u2phy_otg_pin: otg-port {
+			rockchip,pins =
+				<3 RK_PC0 1 &pcfg_pull_none_4ma>;
+		};
+	};
+};
+
+&pmu_io_domains {
+	status = "okay";
+
+	pmuio1-supply = <&vcc3v0_pmu>;
+	pmuio2-supply = <&vcc1v8_soc>;
+};
+
+&power {
+	pd_vi-supply = <&vdd_logic>;
+	pd_vpu-supply = <&vdd_logic>;
+	pd_gpu-supply = <&vdd_logic>;
+	pd_usb-supply = <&vdd_logic>;
+	pd_mmc_nand-supply = <&vdd_logic>;
+	pd_vo-supply = <&vdd_logic>;
+};
+
+/* BB138a: PWM outputs on Pin Header */
+&pwm0 {
+	status = "okay";
+};
+
+&pwm1 {
+	status = "okay";
+};
+
+&pwm2 {
+	status = "okay";
+};
+
+&pwm3 {
+	status = "okay";
+};
+
+/* BB138a: SAR ADC inputs */
+&saradc {
+	status = "okay";
+	vref-supply = <&vcc1v8_soc>;
+};
+
+/* BB138a: SD card connector */
+&sdmmc {
+	bus-width = <4>;
+	cap-mmc-highspeed;
+	cap-sd-highspeed;
+	supports-sd;
+	card-detect-delay = <800>;
+	ignore-pm-notify;
+	sd-uhs-sdr12;
+	sd-uhs-sdr25;
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
+	max-frequency = <135000000>;
+	vqmmc-supply = <&vccio_sd>;
+	vmmc-supply = <&vdd3v3_bb138>;
+	status = "okay";
+};
+
+&spi0 {
+	status = "okay";
+
+	spidev@0 {
+	   compatible = "memsic,mc3630";
+	   spi-max-frequency = <10000000>;
+	   reg = <0>;
+	};
+};
+
+&spi1 {
+	status = "okay";
+	cs-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_LOW>;
+
+	spidev@0 {
+	   compatible = "jedec,spi-nor";
+	   spi-max-frequency = <10000000>;
+	   reg = <0>;
+	};
+};
+
+&u2phy {
+	status = "okay";
+
+	/* BB138a: USB2.0 Host PHY */
+	u2phy_host: host-port {
+		phy-supply = <&vcc3v0_pmu>;
+		vbus-supply = <&usb_b_vbus_regulator>;
+		status = "okay";
+		pinctrl-0 = <&u2phy_host_pin>;
+	};
+
+	/* BB138a: USB2.0 OTG PHY */
+	u2phy_otg: otg-port {
+		phy-supply = <&vcc3v0_pmu>;
+		vbus-supply = <&usb_a_vbus_regulator>;
+		status = "okay";
+		pinctrl-0 = <&u2phy_otg_pin>;
+	};
+};
+
+/* BB138a: UART_A on MicroBus and Pin Header */
+&uart0 {
+	status = "okay";
+};
+
+/* BB138a: UART_B M.2 socket (not used) */
+&uart1 {
+	status = "okay";
+};
+
+&usb20_otg {
+	dr_mode = "otg";
+	status = "okay";
+
+	/* should be defined to avoid kernel log error */
+	/* vusb_d: digital usb supply, 1.2V */
+	/* vusb_q: analog usb supply, 1.1V */
+	/* no further info available */
+	/* vusb_d-supply = <???>; */
+	/* vusb_a-supply = <???>; */
+};
+
+&usb_host0_ehci {
+	/*vbus-supply = <&usb_b_vbus_regulator>;*/
+	status = "okay";
+};
+
+&usb_host0_ohci {
+	/*vbus-supply = <&usb_b_vbus_regulator>;*/
+	status = "okay";
+};
+
+/* Big Video Output Processor (VOPB) */
+&vopb {
+	status = "okay";
+};
+
+&vopb_mmu {
+	status = "okay";
+};
+
+/* Little Video Output Processor (VOPL) */
+&vopl {
+	status = "disabled";
+};
+
+&vopl_mmu {
+	status = "disabled";
+};
