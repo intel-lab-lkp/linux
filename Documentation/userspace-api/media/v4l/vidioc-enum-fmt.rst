@@ -96,6 +96,8 @@ the ``mbus_code`` field is handled differently:
 	``V4L2_BUF_TYPE_VIDEO_OVERLAY``,
 	``V4L2_BUF_TYPE_SDR_CAPTURE``,
 	``V4L2_BUF_TYPE_SDR_OUTPUT``,
+	``V4L2_BUF_TYPE_AUDIO_CAPTURE``,
+	``V4L2_BUF_TYPE_AUDIO_OUTPUT``,
 	``V4L2_BUF_TYPE_META_CAPTURE`` and
 	``V4L2_BUF_TYPE_META_OUTPUT``.
 	See :c:type:`v4l2_buf_type`.
