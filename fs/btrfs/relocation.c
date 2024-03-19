@@ -4070,18 +4070,18 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 	struct reloc_control *rc;
 	struct inode *inode;
 	struct btrfs_path *path;
-	int ret;
+	int ret2;
 	int rw = 0;
-	int err = 0;
+	int ret = 0;
 
 	/*
 	 * This only gets set if we had a half-deleted snapshot on mount.  We
 	 * cannot allow relocation to start while we're still trying to clean up
 	 * these pending deletions.
 	 */
-	ret = wait_on_bit(&fs_info->flags, BTRFS_FS_UNFINISHED_DROPS, TASK_INTERRUPTIBLE);
-	if (ret)
-		return ret;
+	ret2 = wait_on_bit(&fs_info->flags, BTRFS_FS_UNFINISHED_DROPS, TASK_INTERRUPTIBLE);
+	if (ret2)
+		return ret2;
 
 	/* We may have been woken up by close_ctree, so bail if we're closing. */
 	if (btrfs_fs_closing(fs_info))
@@ -4113,25 +4113,25 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 		return -ENOMEM;
 	}
 
-	ret = reloc_chunk_start(fs_info);
-	if (ret < 0) {
-		err = ret;
+	ret2 = reloc_chunk_start(fs_info);
+	if (ret2 < 0) {
+		ret = ret2;
 		goto out_put_bg;
 	}
 
 	rc->extent_root = extent_root;
 	rc->block_group = bg;
 
-	ret = btrfs_inc_block_group_ro(rc->block_group, true);
-	if (ret) {
-		err = ret;
+	ret2 = btrfs_inc_block_group_ro(rc->block_group, true);
+	if (ret2) {
+		ret = ret2;
 		goto out;
 	}
 	rw = 1;
 
 	path = btrfs_alloc_path();
 	if (!path) {
-		err = -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -4139,18 +4139,18 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 	btrfs_free_path(path);
 
 	if (!IS_ERR(inode))
-		ret = delete_block_group_cache(fs_info, rc->block_group, inode, 0);
+		ret2 = delete_block_group_cache(fs_info, rc->block_group, inode, 0);
 	else
-		ret = PTR_ERR(inode);
+		ret2 = PTR_ERR(inode);
 
-	if (ret && ret != -ENOENT) {
-		err = ret;
+	if (ret2 && ret2 != -ENOENT) {
+		ret = ret2;
 		goto out;
 	}
 
 	rc->data_inode = create_reloc_inode(fs_info, rc->block_group);
 	if (IS_ERR(rc->data_inode)) {
-		err = PTR_ERR(rc->data_inode);
+		ret = PTR_ERR(rc->data_inode);
 		rc->data_inode = NULL;
 		goto out;
 	}
@@ -4163,17 +4163,17 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 				 rc->block_group->start,
 				 rc->block_group->length);
 
-	ret = btrfs_zone_finish(rc->block_group);
-	WARN_ON(ret && ret != -EAGAIN);
+	ret2 = btrfs_zone_finish(rc->block_group);
+	WARN_ON(ret2 && ret2 != -EAGAIN);
 
 	while (1) {
 		enum reloc_stage finishes_stage;
 
 		mutex_lock(&fs_info->cleaner_mutex);
-		ret = relocate_block_group(rc);
+		ret2 = relocate_block_group(rc);
 		mutex_unlock(&fs_info->cleaner_mutex);
-		if (ret < 0)
-			err = ret;
+		if (ret2 < 0)
+			ret = ret2;
 
 		finishes_stage = rc->stage;
 		/*
@@ -4186,16 +4186,16 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 		 * out of the loop if we hit an error.
 		 */
 		if (rc->stage == MOVE_DATA_EXTENTS && rc->found_file_extent) {
-			ret = btrfs_wait_ordered_range(rc->data_inode, 0,
+			ret2 = btrfs_wait_ordered_range(rc->data_inode, 0,
 						       (u64)-1);
-			if (ret)
-				err = ret;
+			if (ret2)
+				ret = ret2;
 			invalidate_mapping_pages(rc->data_inode->i_mapping,
 						 0, -1);
 			rc->stage = UPDATE_DATA_PTRS;
 		}
 
-		if (err < 0)
+		if (ret < 0)
 			goto out;
 
 		if (rc->extents_found == 0)
@@ -4209,14 +4209,14 @@ int btrfs_relocate_block_group(struct btrfs_fs_info *fs_info, u64 group_start)
 	WARN_ON(rc->block_group->reserved > 0);
 	WARN_ON(rc->block_group->used > 0);
 out:
-	if (err && rw)
+	if (ret && rw)
 		btrfs_dec_block_group_ro(rc->block_group);
 	iput(rc->data_inode);
 out_put_bg:
 	btrfs_put_block_group(bg);
 	reloc_chunk_end(fs_info);
 	free_reloc_control(rc);
-	return err;
+	return ret;
 }
 
 static noinline_for_stack int mark_garbage_root(struct btrfs_root *root)
