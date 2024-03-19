@@ -82,7 +82,7 @@
 #define	MV64XXX_I2C_BRIDGE_STATUS_ERROR			BIT(0)
 
 /* Driver states */
-enum {
+enum mv64xxx_i2c_state {
 	MV64XXX_I2C_STATE_INVALID,
 	MV64XXX_I2C_STATE_IDLE,
 	MV64XXX_I2C_STATE_WAITING_FOR_START_COND,
@@ -94,7 +94,7 @@ enum {
 };
 
 /* Driver actions */
-enum {
+enum mv64xxx_i2c_action {
 	MV64XXX_I2C_ACTION_INVALID,
 	MV64XXX_I2C_ACTION_CONTINUE,
 	MV64XXX_I2C_ACTION_SEND_RESTART,
@@ -120,21 +120,21 @@ struct mv64xxx_i2c_data {
 	struct i2c_msg		*msgs;
 	int			num_msgs;
 	int			irq;
-	u32			state;
-	u32			action;
-	u32			aborting;
+	enum mv64xxx_i2c_state	state;
+	enum mv64xxx_i2c_action	action;
+	bool			aborting;
 	u32			cntl_bits;
 	void __iomem		*reg_base;
 	struct mv64xxx_i2c_regs	reg_offsets;
-	u32			addr1;
-	u32			addr2;
-	u32			bytes_left;
-	u32			byte_posn;
-	u32			send_stop;
-	u32			block;
+	u8			addr1;
+	u8			addr2;
+	size_t			bytes_left;
+	size_t			byte_posn;
+	bool			send_stop;
+	bool			block;
 	int			rc;
-	u32			freq_m;
-	u32			freq_n;
+	u8			freq_m;
+	u8			freq_n;
 	struct clk              *clk;
 	struct clk              *reg_clk;
 	wait_queue_head_t	waitq;
