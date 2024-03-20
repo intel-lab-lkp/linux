@@ -45,6 +45,21 @@ properties:
   "#io-channel-cells":
     const: 1
 
+  nxp,calib-avg-en:
+    description:
+      Enable or disable averaging of calibration time.
+    enum: [ 0, 1 ]
+
+  nxp,calib-nr-samples:
+    description:
+      Selects the number of averaging samples to be used during calibration.
+    enum: [ 16, 32, 128, 512 ]
+
+  nxp,calib-t-samples:
+    description:
+      Specifies the sample time of calibration conversions.
+    enum: [ 8, 16, 22, 32 ]
+
 required:
   - compatible
   - reg
