@@ -102,7 +102,6 @@ void prestera_router_hw_fini(struct prestera_switch *sw)
 				    prestera_fib_node_destroy_ht_cb, sw);
 	WARN_ON(!list_empty(&sw->router->vr_list));
 	WARN_ON(!list_empty(&sw->router->rif_entry_list));
-	rhashtable_destroy(&sw->router->fib_ht);
 	rhashtable_destroy(&sw->router->nexthop_group_ht);
 	rhashtable_destroy(&sw->router->nh_neigh_ht);
 }
