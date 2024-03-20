@@ -238,12 +238,17 @@ static void qca_dmp_hdr(struct hci_dev *hdev, struct sk_buff *skb);
 
 static enum qca_btsoc_type qca_soc_type(struct hci_uart *hu)
 {
+	/* For Non-serdev device, hu->proto_data records soc_type
+	 * set by ioctl HCIUARTSETPROTODATA.
+	 */
+	int proto_data = (int)hu->proto_data;
 	enum qca_btsoc_type soc_type;
 
 	if (hu->serdev) {
 		struct qca_serdev *qsd = serdev_device_get_drvdata(hu->serdev);
-
 		soc_type = qsd->btsoc_type;
+	} else if ((proto_data > 0) && (proto_data < QCA_MAX)) {
+		soc_type = (enum qca_btsoc_type)proto_data;
 	} else {
 		soc_type = QCA_ROME;
 	}
@@ -2286,6 +2291,7 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 		return -ENOMEM;
 
 	qcadev->serdev_hu.serdev = serdev;
+	qcadev->serdev_hu.proto_data = 0;
 	data = device_get_match_data(&serdev->dev);
 	serdev_device_set_drvdata(serdev, qcadev);
 	device_property_read_string(&serdev->dev, "firmware-name",
