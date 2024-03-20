@@ -204,7 +204,7 @@ static void fpu_init_guest_permissions(struct fpu_guest *gfpu)
 		return;
 
 	spin_lock_irq(&current->sighand->siglock);
-	fpuperm = &current->group_leader->thread.fpu.guest_perm;
+	fpuperm = &current->group_leader->thread.fpu->guest_perm;
 	perm = fpuperm->__state_perm;
 
 	/* First fpstate allocation locks down permissions. */
@@ -316,7 +316,7 @@ EXPORT_SYMBOL_GPL(fpu_update_guest_xfd);
  */
 void fpu_sync_guest_vmexit_xfd_state(void)
 {
-	struct fpstate *fps = current->thread.fpu.fpstate;
+	struct fpstate *fps = current->thread.fpu->fpstate;
 
 	lockdep_assert_irqs_disabled();
 	if (fpu_state_size_dynamic()) {
@@ -330,7 +330,7 @@ EXPORT_SYMBOL_GPL(fpu_sync_guest_vmexit_xfd_state);
 int fpu_swap_kvm_fpstate(struct fpu_guest *guest_fpu, bool enter_guest)
 {
 	struct fpstate *guest_fps = guest_fpu->fpstate;
-	struct fpu *fpu = &current->thread.fpu;
+	struct fpu *fpu = current->thread.fpu;
 	struct fpstate *cur_fps = fpu->fpstate;
 
 	fpregs_lock();
@@ -430,7 +430,7 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 	if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
 	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
 		set_thread_flag(TIF_NEED_FPU_LOAD);
-		save_fpregs_to_fpstate(&current->thread.fpu);
+		save_fpregs_to_fpstate(current->thread.fpu);
 	}
 	__cpu_invalidate_fpregs_state();
 
@@ -458,7 +458,7 @@ EXPORT_SYMBOL_GPL(kernel_fpu_end);
  */
 void fpu_sync_fpstate(struct fpu *fpu)
 {
-	WARN_ON_FPU(fpu != &current->thread.fpu);
+	WARN_ON_FPU(fpu != current->thread.fpu);
 
 	fpregs_lock();
 	trace_x86_fpu_before_save(fpu);
@@ -543,7 +543,7 @@ void fpstate_reset(struct fpu *fpu)
 static inline void fpu_inherit_perms(struct fpu *dst_fpu)
 {
 	if (fpu_state_size_dynamic()) {
-		struct fpu *src_fpu = &current->group_leader->thread.fpu;
+		struct fpu *src_fpu = current->group_leader->thread.fpu;
 
 		spin_lock_irq(&current->sighand->siglock);
 		/* Fork also inherits the permissions of the parent */
@@ -563,7 +563,7 @@ static int update_fpu_shstk(struct task_struct *dst, unsigned long ssp)
 	if (!ssp)
 		return 0;
 
-	xstate = get_xsave_addr(&dst->thread.fpu.fpstate->regs.xsave,
+	xstate = get_xsave_addr(&dst->thread.fpu->fpstate->regs.xsave,
 				XFEATURE_CET_USER);
 
 	/*
@@ -584,8 +584,19 @@ static int update_fpu_shstk(struct task_struct *dst, unsigned long ssp)
 int fpu_clone(struct task_struct *dst, unsigned long clone_flags, bool minimal,
 	      unsigned long ssp)
 {
-	struct fpu *src_fpu = &current->thread.fpu;
-	struct fpu *dst_fpu = &dst->thread.fpu;
+	/*
+	 * We allocate the new FPU structure right after the end of the task struct.
+	 * task allocation size already took this into account.
+	 *
+	 * This is safe because task_struct size is a multiple of cacheline size.
+	 */
+	struct fpu *dst_fpu = (void *)dst + sizeof(*dst);
+	struct fpu *src_fpu = current->thread.fpu;
+
+	BUILD_BUG_ON(sizeof(*dst) % SMP_CACHE_BYTES != 0);
+	BUG_ON(!src_fpu);
+
+	dst->thread.fpu = dst_fpu;
 
 	/* The new task's FPU state cannot be valid in the hardware. */
 	dst_fpu->last_cpu = -1;
@@ -655,16 +666,6 @@ int fpu_clone(struct task_struct *dst, unsigned long clone_flags, bool minimal,
 }
 
 /*
- * Whitelist the FPU register state embedded into task_struct for hardened
- * usercopy.
- */
-void fpu_thread_struct_whitelist(unsigned long *offset, unsigned long *size)
-{
-	*offset = offsetof(struct thread_struct, fpu.__fpstate.regs);
-	*size = fpu_kernel_cfg.default_size;
-}
-
-/*
  * Drops current FPU state: deactivates the fpregs and
  * the fpstate. NOTE: it still leaves previous contents
  * in the fpregs in the eager-FPU case.
@@ -677,7 +678,7 @@ void fpu__drop(struct fpu *fpu)
 {
 	preempt_disable();
 
-	if (fpu == &current->thread.fpu) {
+	if (fpu == current->thread.fpu) {
 		/* Ignore delayed exceptions from user space */
 		asm volatile("1: fwait\n"
 			     "2:\n"
@@ -711,7 +712,7 @@ static inline void restore_fpregs_from_init_fpstate(u64 features_mask)
  */
 static void fpu_reset_fpregs(void)
 {
-	struct fpu *fpu = &current->thread.fpu;
+	struct fpu *fpu = current->thread.fpu;
 
 	fpregs_lock();
 	__fpu_invalidate_fpregs_state(fpu);
@@ -740,7 +741,7 @@ static void fpu_reset_fpregs(void)
  */
 void fpu__clear_user_states(struct fpu *fpu)
 {
-	WARN_ON_FPU(fpu != &current->thread.fpu);
+	WARN_ON_FPU(fpu != current->thread.fpu);
 
 	fpregs_lock();
 	if (!cpu_feature_enabled(X86_FEATURE_FPU)) {
@@ -773,7 +774,7 @@ void fpu__clear_user_states(struct fpu *fpu)
 
 void fpu_flush_thread(void)
 {
-	fpstate_reset(&current->thread.fpu);
+	fpstate_reset(current->thread.fpu);
 	fpu_reset_fpregs();
 }
 /*
@@ -814,7 +815,7 @@ void fpregs_lock_and_load(void)
  */
 void fpregs_assert_state_consistent(void)
 {
-	struct fpu *fpu = &current->thread.fpu;
+	struct fpu *fpu = current->thread.fpu;
 
 	if (test_thread_flag(TIF_NEED_FPU_LOAD))
 		return;
@@ -826,7 +827,7 @@ EXPORT_SYMBOL_GPL(fpregs_assert_state_consistent);
 
 void fpregs_mark_activate(void)
 {
-	struct fpu *fpu = &current->thread.fpu;
+	struct fpu *fpu = current->thread.fpu;
 
 	fpregs_activate(fpu);
 	fpu->last_cpu = smp_processor_id();
