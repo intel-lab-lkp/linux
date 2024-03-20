@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/property.h>
 
 #define IMX93_ADC_DRIVER_NAME	"imx93-adc"
 
@@ -43,6 +44,9 @@
 #define IMX93_ADC_MCR_MODE_MASK			BIT(29)
 #define IMX93_ADC_MCR_NSTART_MASK		BIT(24)
 #define IMX93_ADC_MCR_CALSTART_MASK		BIT(14)
+#define IMX93_ADC_MCR_AVGEN_MASK		BIT(13)
+#define IMX93_ADC_MCR_NRSMPL_MASK		GENMASK(12, 11)
+#define IMX93_ADC_MCR_TSAMP_MASK		GENMASK(10, 9)
 #define IMX93_ADC_MCR_ADCLKSE_MASK		BIT(8)
 #define IMX93_ADC_MCR_PWDN_MASK			BIT(0)
 #define IMX93_ADC_MSR_CALFAIL_MASK		BIT(30)
@@ -145,7 +149,7 @@ static void imx93_adc_config_ad_clk(struct imx93_adc *adc)
 
 static int imx93_adc_calibration(struct imx93_adc *adc)
 {
-	u32 mcr, msr;
+	u32 mcr, msr, value;
 	int ret;
 
 	/* make sure ADC in power down mode */
@@ -156,12 +160,64 @@ static int imx93_adc_calibration(struct imx93_adc *adc)
 	mcr &= ~FIELD_PREP(IMX93_ADC_MCR_ADCLKSE_MASK, 1);
 	writel(mcr, adc->regs + IMX93_ADC_MCR);
 
-	imx93_adc_power_up(adc);
-
 	/*
-	 * TODO: we use the default TSAMP/NRSMPL/AVGEN in MCR,
-	 * can add the setting of these bit if need in future.
+	 * Set calibration settings:
+	 * - AVGEN: allow averaging of calibration time,
+	 * - NRSMPL: select the number of averaging samples during calibration,
+	 * - TSAMP: specifies the sample time of calibration conversions.
 	 */
+	if (!device_property_read_u32(adc->dev, "nxp,calib-avg-en", &value)) {
+		mcr &= ~IMX93_ADC_MCR_AVGEN_MASK;
+		mcr |= FIELD_PREP(IMX93_ADC_MCR_AVGEN_MASK, value);
+	}
+
+	if (!device_property_read_u32(adc->dev, "nxp,calib-nr-samples", &value)) {
+		switch (value) {
+		case 16:
+			value = 0x0;
+			break;
+		case 32:
+			value = 0x1;
+			break;
+		case 128:
+			value = 0x2;
+			break;
+		case 512:
+			value = 0x3;
+			break;
+		default:
+			dev_warn(adc->dev, "NRSMPL: wrong value, using default: 512\n");
+			value = 0x3;
+		}
+		mcr &= ~IMX93_ADC_MCR_NRSMPL_MASK;
+		mcr |= FIELD_PREP(IMX93_ADC_MCR_NRSMPL_MASK, value);
+	}
+
+	if (!device_property_read_u32(adc->dev, "nxp,calib-t-samples", &value)) {
+		switch (value) {
+		case 8:
+			value = 0x1;
+			break;
+		case 16:
+			value = 0x2;
+			break;
+		case 22:
+			value = 0x0;
+			break;
+		case 32:
+			value = 0x3;
+			break;
+		default:
+			dev_warn(adc->dev, "TSAMP: wrong value, using default: 22\n");
+			value = 0x0;
+		}
+		mcr &= ~IMX93_ADC_MCR_TSAMP_MASK;
+		mcr |= FIELD_PREP(IMX93_ADC_MCR_TSAMP_MASK, value);
+	}
+
+	writel(mcr, adc->regs + IMX93_ADC_MCR);
+
+	imx93_adc_power_up(adc);
 
 	/* run calibration */
 	mcr = readl(adc->regs + IMX93_ADC_MCR);
