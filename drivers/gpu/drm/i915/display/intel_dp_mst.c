@@ -59,11 +59,14 @@ static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp
 	if (intel_dp_is_uhbr(crtc_state) && DISPLAY_VER(i915) < 14 && dsc) {
 		int output_bpp = bpp;
 		int symbol_clock = intel_dp_link_symbol_clock(crtc_state->port_clock);
+		int available_bw = mul_u32_u32(symbol_clock * 72,
+					       drm_dp_bw_channel_coding_efficiency(true)) /
+				   1000000;
 
 		if (output_bpp * adjusted_mode->crtc_clock >
-		    symbol_clock * 72) {
+		    available_bw) {
 			drm_dbg_kms(&i915->drm, "UHBR check failed(required bw %d available %d)\n",
-				    output_bpp * adjusted_mode->crtc_clock, symbol_clock * 72);
+				    output_bpp * adjusted_mode->crtc_clock, available_bw);
 			return -EINVAL;
 		}
 	}
