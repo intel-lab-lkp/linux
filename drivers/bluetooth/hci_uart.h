@@ -18,6 +18,8 @@
 #define HCIUARTGETDEVICE	_IOR('U', 202, int)
 #define HCIUARTSETFLAGS		_IOW('U', 203, int)
 #define HCIUARTGETFLAGS		_IOR('U', 204, int)
+/* Used prior to HCIUARTSETPROTO */
+#define HCIUARTSETPROTODATA	_IOW('U', 205, unsigned long)
 
 /* UART protocols */
 #define HCI_UART_MAX_PROTO	12
@@ -71,6 +73,7 @@ struct hci_uart {
 	struct work_struct	init_ready;
 	struct work_struct	write_work;
 
+	unsigned long proto_data;
 	const struct hci_uart_proto *proto;
 	struct percpu_rw_semaphore proto_lock;	/* Stop work for proto close */
 	void			*priv;
