@@ -629,6 +629,26 @@ static int do_gt_restart(struct xe_gt *gt)
 	return 0;
 }
 
+/* Idle the GT */
+int xe_idle_gt(struct xe_gt *gt)
+{
+	int err;
+
+	xe_gt_sanitize(gt);
+
+	xe_uc_gucrc_disable(&gt->uc);
+	xe_uc_stop_prepare(&gt->uc);
+	xe_gt_pagefault_reset(gt);
+
+	err = xe_uc_stop(&gt->uc);
+	if (err)
+		return err;
+
+	xe_gt_tlb_invalidation_reset(gt);
+
+	return err;
+}
+
 static int gt_reset(struct xe_gt *gt)
 {
 	int err;
@@ -645,21 +665,12 @@ static int gt_reset(struct xe_gt *gt)
 	}
 
 	xe_pm_runtime_get(gt_to_xe(gt));
-	xe_gt_sanitize(gt);
 
 	err = xe_force_wake_get(gt_to_fw(gt), XE_FORCEWAKE_ALL);
 	if (err)
 		goto err_msg;
 
-	xe_uc_gucrc_disable(&gt->uc);
-	xe_uc_stop_prepare(&gt->uc);
-	xe_gt_pagefault_reset(gt);
-
-	err = xe_uc_stop(&gt->uc);
-	if (err)
-		goto err_out;
-
-	xe_gt_tlb_invalidation_reset(gt);
+	xe_idle_gt(gt);
 
 	err = do_gt_reset(gt);
 	if (err)
