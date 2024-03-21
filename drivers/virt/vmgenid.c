@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2022 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  *
- * The "Virtual Machine Generation ID" is exposed via ACPI and changes when a
+ * The "Virtual Machine Generation ID" is exposed via ACPI or DT and changes when a
  * virtual machine forks or is cloned. This driver exists for shepherding that
  * information to random.c.
  */
@@ -13,14 +13,27 @@
 #include <linux/random.h>
 #include <acpi/actypes.h>
 #include <linux/platform_device.h>
+#ifdef CONFIG_OF
+#include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/io.h>
+#include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/of_irq.h>
+#endif
 
+#ifdef CONFIG_ACPI
 ACPI_MODULE_NAME("vmgenid");
+#endif
 
 enum { VMGENID_SIZE = 16 };
 
 struct vmgenid_state {
 	u8 *next_id;
 	u8 this_id[VMGENID_SIZE];
+#ifdef CONFIG_OF
+	unsigned int irq;
+#endif
 };
 
 static void vmgenid_notify(struct device *device)
@@ -37,10 +50,24 @@ static void vmgenid_notify(struct device *device)
 	kobject_uevent_env(&device->kobj, KOBJ_CHANGE, envp);
 }
 
+#ifdef	CONFIG_ACPI
 static void vmgenid_acpi_handler(acpi_handle handle, u32 event, void *dev)
 {
+	(void)handle;
+	(void)event;
 	vmgenid_notify(dev);
 }
+#endif
+
+#ifdef	CONFIG_OF
+static irqreturn_t vmgenid_of_irq_handler(int irq, void *dev)
+{
+	(void)irq;
+	vmgenid_notify(dev);
+
+	return IRQ_HANDLED;
+}
+#endif
 
 static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 {
@@ -55,6 +82,7 @@ static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 
 static int vmgenid_add_acpi(struct device *dev, struct vmgenid_state *state)
 {
+#ifdef	CONFIG_ACPI
 	struct acpi_device *device = ACPI_COMPANION(dev);
 	struct acpi_buffer parsed = { ACPI_ALLOCATE_BUFFER };
 	union acpi_object *obj;
@@ -96,6 +124,54 @@ static int vmgenid_add_acpi(struct device *dev, struct vmgenid_state *state)
 out:
 	ACPI_FREE(parsed.pointer);
 	return ret;
+#else
+	(void)dev;
+	(void)state;
+	return -EINVAL;
+#endif
+}
+
+static int vmgenid_add_of(struct device *dev, struct vmgenid_state *state)
+{
+#ifdef	CONFIG_OF
+	struct resource res;
+	int ret = 0;
+
+	if (of_address_to_resource(dev->of_node, 0, &res)) {
+		dev_err(dev, "Failed to get resources from device tree");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!__request_mem_region(res.start, resource_size(&res),
+				  "vmgenid", IORESOURCE_EXCLUSIVE)) {
+		dev_err(dev, "Failed to request mem region");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = setup_vmgenid_state(state, (u8 *)of_iomap(dev->of_node, 0));
+	if (ret)
+		goto out;
+
+	state->irq = irq_of_parse_and_map(dev->of_node, 0);
+	dev->driver_data = state;
+
+	if (request_irq(state->irq, vmgenid_of_irq_handler,
+			IRQF_SHARED, "vmgenid", dev) < 0) {
+		dev_err(dev, "request_irq failed");
+		dev->driver_data = NULL;
+		ret = -EINVAL;
+		goto out;
+	}
+
+out:
+	return ret;
+#else
+	(void)dev;
+	(void)state;
+	return -EINVAL;
+#endif
 }
 
 static int vmgenid_add(struct platform_device *pdev)
@@ -108,7 +184,10 @@ static int vmgenid_add(struct platform_device *pdev)
 	if (!state)
 		return -ENOMEM;
 
-	ret = vmgenid_add_acpi(dev, state);
+	if (dev->of_node)
+		ret = vmgenid_add_of(dev, state);
+	else
+		ret = vmgenid_add_acpi(dev, state);
 
 	if (ret)
 		devm_kfree(dev, state);
@@ -116,18 +195,33 @@ static int vmgenid_add(struct platform_device *pdev)
 	return ret;
 }
 
-static const struct acpi_device_id vmgenid_ids[] = {
+#ifdef	CONFIG_OF
+static const struct of_device_id vmgenid_of_ids[] = {
+	{ .compatible = "linux,vmgenctr", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, vmgenid_of_ids);
+#endif
+
+#ifdef	CONFIG_ACPI
+static const struct acpi_device_id vmgenid_acpi_ids[] = {
 	{ "VMGENCTR", 0 },
 	{ "VM_GEN_COUNTER", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, vmgenid_ids);
+MODULE_DEVICE_TABLE(acpi, vmgenid_acpi_ids);
+#endif
 
 static struct platform_driver vmgenid_plaform_driver = {
 	.probe      = vmgenid_add,
 	.driver     = {
 		.name   = "vmgenid",
-		.acpi_match_table = ACPI_PTR(vmgenid_ids),
+#ifdef	CONFIG_ACPI
+		.acpi_match_table = ACPI_PTR(vmgenid_acpi_ids),
+#endif
+#ifdef	CONFIG_OF
+		.of_match_table = vmgenid_of_ids,
+#endif
 		.owner = THIS_MODULE,
 	},
 };
