@@ -1096,6 +1096,9 @@ static int scp_add_multi_core(struct platform_device *pdev,
 	cluster_of_data = (const struct mtk_scp_of_data **)of_device_get_match_data(dev);
 
 	for_each_available_child_of_node(np, child) {
+		if (!of_device_is_compatible(child, "mediatek,scp-core"))
+			continue;
+
 		if (!cluster_of_data[core_id]) {
 			ret = -EINVAL;
 			dev_err(dev, "Not support core %d\n", core_id);
