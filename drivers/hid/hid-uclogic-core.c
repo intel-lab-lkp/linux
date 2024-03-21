@@ -50,6 +50,17 @@ static void uclogic_inrange_timeout(struct timer_list *t)
 	input_sync(input);
 }
 
+static ssize_t fw_name_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct uclogic_drvdata *drvdata = hid_get_drvdata(hdev);
+
+	return sysfs_emit(buf, "%s\n", drvdata->params.fw_name);
+}
+
+static DEVICE_ATTR_RO(fw_name);
+
 static __u8 *uclogic_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 					unsigned int *rsize)
 {
@@ -216,6 +227,10 @@ static int uclogic_probe(struct hid_device *hdev,
 		hid_err(hdev, "hw start failed\n");
 		goto failure;
 	}
+
+	rc = device_create_file(&hdev->dev, &dev_attr_fw_name);
+	if (rc)
+		hid_warn(hdev, "Unable to create sysfs attribute \"fw_name\", errno %d\n", rc);
 
 	return 0;
 failure:
@@ -477,6 +492,7 @@ static void uclogic_remove(struct hid_device *hdev)
 	del_timer_sync(&drvdata->inrange_timer);
 	hid_hw_stop(hdev);
 	kfree(drvdata->desc_ptr);
+	device_remove_file(&hdev->dev, &dev_attr_fw_name);
 	uclogic_params_cleanup(&drvdata->params);
 }
 
