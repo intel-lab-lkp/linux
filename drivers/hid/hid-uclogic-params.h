@@ -232,6 +232,11 @@ struct uclogic_params {
 	 * List of event hooks.
 	 */
 	struct uclogic_raw_event_hook *event_hooks;
+	/*
+	 * Firmware name, exposed to userspace via sysfs as it is used to
+	 * identify the tablet.
+	 */
+	char *fw_name;
 };
 
 /* Driver data */

@@ -121,6 +121,7 @@ void uclogic_params_hid_dbg(const struct hid_device *hdev,
 		params->invalid ? "true" : "false");
 	hid_dbg(hdev, ".desc_ptr = %p\n", params->desc_ptr);
 	hid_dbg(hdev, ".desc_size = %u\n", params->desc_size);
+	hid_dbg(hdev, ".fw_name = %s\n", params->fw_name);
 	hid_dbg(hdev, ".pen = {\n");
 	uclogic_params_pen_hid_dbg(hdev, &params->pen);
 	hid_dbg(hdev, "\t}\n");
@@ -652,6 +653,7 @@ void uclogic_params_cleanup(struct uclogic_params *params)
 	if (!params->invalid) {
 		size_t i;
 		kfree(params->desc_ptr);
+		kfree(params->fw_name);
 		uclogic_params_pen_cleanup(&params->pen);
 		for (i = 0; i < ARRAY_SIZE(params->frame_list); i++)
 			uclogic_params_frame_cleanup(&params->frame_list[i]);
@@ -837,7 +839,6 @@ static int uclogic_params_huion_init(struct uclogic_params *params,
 	/* The resulting parameters (noop) */
 	struct uclogic_params p = {0, };
 	static const char transition_ver[] = "HUION_T153_160607";
-	char *ver_ptr = NULL;
 	const size_t ver_len = sizeof(transition_ver) + 1;
 	__u8 *params_ptr = NULL;
 	size_t params_len = 0;
@@ -870,14 +871,14 @@ static int uclogic_params_huion_init(struct uclogic_params *params,
 	}
 
 	/* Try to get firmware version */
-	ver_ptr = kzalloc(ver_len, GFP_KERNEL);
-	if (ver_ptr == NULL) {
+	p.fw_name = kzalloc(ver_len, GFP_KERNEL);
+	if (!p.fw_name) {
 		rc = -ENOMEM;
 		goto cleanup;
 	}
-	rc = usb_string(udev, 201, ver_ptr, ver_len);
+	rc = usb_string(udev, 201, p.fw_name, ver_len);
 	if (rc == -EPIPE) {
-		*ver_ptr = '\0';
+		*p.fw_name = '\0';
 	} else if (rc < 0) {
 		hid_err(hdev,
 			"failed retrieving Huion firmware version: %d\n", rc);
@@ -885,7 +886,7 @@ static int uclogic_params_huion_init(struct uclogic_params *params,
 	}
 
 	/* If this is a transition firmware */
-	if (strcmp(ver_ptr, transition_ver) == 0) {
+	if (strcmp(p.fw_name, transition_ver) == 0) {
 		hid_dbg(hdev,
 			"transition firmware detected, not probing pen v2 parameters\n");
 	} else {
@@ -1028,7 +1029,6 @@ output:
 	rc = 0;
 cleanup:
 	kfree(params_ptr);
-	kfree(ver_ptr);
 	uclogic_params_cleanup(&p);
 	return rc;
 }
