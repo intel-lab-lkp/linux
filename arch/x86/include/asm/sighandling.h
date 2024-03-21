@@ -17,11 +17,11 @@ void signal_fault(struct pt_regs *regs, void __user *frame, char *where);
 
 void __user *
 get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
-	     void __user **fpstate);
+	     void __user **fpstate, u32 pkru);
 
-int ia32_setup_frame(struct ksignal *ksig, struct pt_regs *regs);
-int ia32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs);
-int x64_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs);
-int x32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs);
+int ia32_setup_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru);
+int ia32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru);
+int x64_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru);
+int x32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru);
 
 #endif /* _ASM_X86_SIGHANDLING_H */

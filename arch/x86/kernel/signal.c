@@ -74,7 +74,7 @@ static inline int is_x32_frame(struct ksignal *ksig)
  */
 void __user *
 get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
-	     void __user **fpstate)
+	     void __user **fpstate, u32 pkru)
 {
 	struct k_sigaction *ka = &ksig->ka;
 	int ia32_frame = is_ia32_frame(ksig);
@@ -139,7 +139,8 @@ get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
 	}
 
 	/* save i387 and extended state */
-	if (!copy_fpstate_to_sigframe(*fpstate, (void __user *)buf_fx, math_size))
+	if (!copy_fpstate_to_sigframe(*fpstate, (void __user *)buf_fx,
+				      math_size, pkru))
 		return (void __user *)-1L;
 
 	return (void __user *)sp;
@@ -206,7 +207,7 @@ unsigned long get_sigframe_size(void)
 }
 
 static int
-setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
+setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru)
 {
 	/* Perform fixup for the pre-signal frame. */
 	rseq_signal_deliver(ksig, regs);
@@ -214,14 +215,33 @@ setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
 	/* Set up the stack frame */
 	if (is_ia32_frame(ksig)) {
 		if (ksig->ka.sa.sa_flags & SA_SIGINFO)
-			return ia32_setup_rt_frame(ksig, regs);
+			return ia32_setup_rt_frame(ksig, regs, pkru);
 		else
-			return ia32_setup_frame(ksig, regs);
+			return ia32_setup_frame(ksig, regs, pkru);
 	} else if (is_x32_frame(ksig)) {
-		return x32_setup_rt_frame(ksig, regs);
+		return x32_setup_rt_frame(ksig, regs, pkru);
 	} else {
-		return x64_setup_rt_frame(ksig, regs);
+		return x64_setup_rt_frame(ksig, regs, pkru);
 	}
+}
+
+/*
+ * Ensure that the both the current stack and the alternate signal
+ * stack is writeable. The alternate stack must be accessible by the
+ * init PKRU value.
+ */
+static inline u32 sig_prepare_pkru(void)
+{
+	u32 current_pkru = read_pkru();
+	u32 init_pkru_snapshot = pkru_get_init_value();
+
+	write_pkru(current_pkru & init_pkru_snapshot);
+	return current_pkru;
+}
+
+static inline void sig_restore_pkru(u32 pkru)
+{
+	write_pkru(pkru);
 }
 
 static void
@@ -229,6 +249,7 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 {
 	bool stepping, failed;
 	struct fpu *fpu = &current->thread.fpu;
+	u32 pkru;
 
 	if (v8086_mode(regs))
 		save_v86_state((struct kernel_vm86_regs *) regs, VM86_SIGNAL);
@@ -264,7 +285,8 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	if (stepping)
 		user_disable_single_step(current);
 
-	failed = (setup_rt_frame(ksig, regs) < 0);
+	pkru = sig_prepare_pkru();
+	failed = (setup_rt_frame(ksig, regs, pkru) < 0);
 	if (!failed) {
 		/*
 		 * Clear the direction flag as per the ABI for function entry.
@@ -281,6 +303,8 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 		 * Ensure the signal handler starts with the new fpu state.
 		 */
 		fpu__clear_user_states(fpu);
+	} else {
+		sig_restore_pkru(pkru);
 	}
 	signal_setup_done(failed, ksig, stepping);
 }
