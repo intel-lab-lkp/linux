@@ -82,4 +82,16 @@ properties:
           - const: marvell,armada-ap807-quad
           - const: marvell,armada-ap807
 
+      - description:
+          SolidRun CN9130 clearfog family single-board computers
+        items:
+          - enum:
+              - solidrun,clearfog-base-a1
+              - solidrun,clearfog-pro-a1
+          - const: solidrun,clearfog-a1
+          - const: solidrun,cn9130-sr-som
+          - const: marvell,cn9130
+          - const: marvell,armada-ap807-quad
+          - const: marvell,armada-ap807
+
 additionalProperties: true
