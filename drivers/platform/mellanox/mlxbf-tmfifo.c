@@ -1005,10 +1005,6 @@ static int mlxbf_tmfifo_virtio_find_vqs(struct virtio_device *vdev,
 		return -EINVAL;
 
 	for (i = 0; i < nvqs; ++i) {
-		if (!names[i]) {
-			ret = -EINVAL;
-			goto error;
-		}
 		vring = &tm_vdev->vrings[i];
 
 		/* zero vring */
