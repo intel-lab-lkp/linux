@@ -25,6 +25,9 @@ properties:
       - items:
           - const: nxp,s32g2-linflexuart
           - const: fsl,s32v234-linflexuart
+      - items:
+          - const: nxp,s32g3-linflexuart
+          - const: fsl,s32v234-linflexuart
 
   reg:
     maxItems: 1
