@@ -9,9 +9,16 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#if IS_ENABLED(CONFIG_INTERCONNECT)
+#include <linux/interconnect-clk.h>
+#include <linux/interconnect-provider.h>
+#endif
 
 #include <dt-bindings/clock/qcom,ipq9574-gcc.h>
 #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
+#if IS_ENABLED(CONFIG_INTERCONNECT)
+#include <dt-bindings/interconnect/qcom,ipq9574.h>
+#endif
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
@@ -4300,6 +4307,35 @@ static const struct qcom_reset_map gcc_ipq9574_resets[] = {
 	[GCC_WCSS_Q6_TBU_BCR] = { 0x12054, 0 },
 };
 
+
+#if IS_ENABLED(CONFIG_INTERCONNECT)
+static struct icc_clk_data *icc_ipq9574;
+
+static int noc_clks[] = {
+	GCC_ANOC_PCIE0_1LANE_M_CLK,
+	GCC_SNOC_PCIE0_1LANE_S_CLK,
+	GCC_ANOC_PCIE1_1LANE_M_CLK,
+	GCC_SNOC_PCIE1_1LANE_S_CLK,
+	GCC_ANOC_PCIE2_2LANE_M_CLK,
+	GCC_SNOC_PCIE2_2LANE_S_CLK,
+	GCC_ANOC_PCIE3_2LANE_M_CLK,
+	GCC_SNOC_PCIE3_2LANE_S_CLK,
+	GCC_SNOC_USB_CLK,
+	GCC_ANOC_USB_AXI_CLK,
+	GCC_NSSNOC_NSSCC_CLK,
+	GCC_NSSNOC_SNOC_CLK,
+	GCC_NSSNOC_SNOC_1_CLK,
+	GCC_NSSNOC_PCNOC_1_CLK,
+	GCC_NSSNOC_QOSGEN_REF_CLK,
+	GCC_NSSNOC_TIMEOUT_REF_CLK,
+	GCC_NSSNOC_XO_DCD_CLK,
+	GCC_NSSNOC_ATB_CLK,
+	GCC_MEM_NOC_NSSNOC_CLK,
+	GCC_NSSNOC_MEMNOC_CLK,
+	GCC_NSSNOC_MEM_NOC_1_CLK,
+};
+#endif
+
 static const struct of_device_id gcc_ipq9574_match_table[] = {
 	{ .compatible = "qcom,ipq9574-gcc" },
 	{ }
@@ -4326,7 +4362,44 @@ static const struct qcom_cc_desc gcc_ipq9574_desc = {
 
 static int gcc_ipq9574_probe(struct platform_device *pdev)
 {
-	return qcom_cc_probe(pdev, &gcc_ipq9574_desc);
+	int ret = qcom_cc_probe(pdev, &gcc_ipq9574_desc);
+#if IS_ENABLED(CONFIG_INTERCONNECT)
+	struct icc_provider *provider;
+	struct icc_clk_data *icd;
+	int i;
+#endif
+
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "%s failed\n", __func__);
+
+#if IS_ENABLED(CONFIG_INTERCONNECT)
+	icd = devm_kmalloc(&pdev->dev, ARRAY_SIZE(noc_clks) * sizeof(*icd),
+			   GFP_KERNEL);
+
+	if (IS_ERR_OR_NULL(icd))
+		return dev_err_probe(&pdev->dev, PTR_ERR(icd),
+				     "%s malloc failed\n", __func__);
+
+	icc_ipq9574 = icd;
+
+	for (i = 0; i < ARRAY_SIZE(noc_clks); i++, icd++) {
+		icd->clk = gcc_ipq9574_clks[noc_clks[i]]->hw.clk;
+		if (IS_ERR_OR_NULL(icd->clk)) {
+			dev_err(&pdev->dev, "%s: %d clock not found\n",
+				__func__, noc_clks[i]);
+			return -ENOENT;
+		}
+		icd->name = clk_hw_get_name(&gcc_ipq9574_clks[noc_clks[i]]->hw);
+	}
+
+	provider = icc_clk_register(&pdev->dev, IPQ_APPS_ID,
+				    ARRAY_SIZE(noc_clks), icc_ipq9574);
+	if (IS_ERR_OR_NULL(provider))
+		return dev_err_probe(&pdev->dev, PTR_ERR(provider),
+				     "%s: icc_clk_register failed\n", __func__);
+#endif
+
+	return 0;
 }
 
 static struct platform_driver gcc_ipq9574_driver = {
