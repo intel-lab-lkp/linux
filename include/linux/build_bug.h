@@ -86,4 +86,14 @@
 		"Offset of " #field " in " #type " has changed.")
 
 
+/*
+ * Compile time check that a variable can hold the given value
+ */
+#define ASSERT_VAR_CAN_HOLD(var, value) ({		\
+	typeof(value) __val = (value);			\
+	typeof(var) __tmp = __val;			\
+	BUILD_BUG_ON_MSG(__tmp != __val,		\
+		#var " cannot hold " #value ".");	\
+})
+
 #endif	/* _LINUX_BUILD_BUG_H */
