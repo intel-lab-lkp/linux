@@ -146,6 +146,54 @@ static int ksm_unmerge(void)
 	return 0;
 }
 
+static int child_test_merge(void)
+{
+	const unsigned int size = 2 * MiB;
+	char *map;
+	int ret = -1;
+
+	/* Stabilize accounting by disabling KSM completely. */
+	if (ksm_unmerge()) {
+		ksft_print_msg("Disabling (unmerging) KSM failed\n");
+		return ret;
+	}
+
+	if (get_my_merging_pages() > 0) {
+		ksft_print_msg("Still pages merged\n");
+		return ret;
+	}
+
+	map = mmap(NULL, size, PROT_READ|PROT_WRITE,
+		   MAP_PRIVATE|MAP_ANON, -1, 0);
+	if (map == MAP_FAILED) {
+		ksft_print_msg("mmap() failed\n");
+		return ret;
+	}
+
+	/* Don't use THP. Ignore if THP are not around on a kernel. */
+	if (madvise(map, size, MADV_NOHUGEPAGE) && errno != EINVAL) {
+		ksft_print_msg("MADV_NOHUGEPAGE failed\n");
+		goto unmap;
+	}
+
+	memset(map, 0x1c, size);
+
+	if (ksm_merge()) {
+		ksft_print_msg("Running KSM failed\n");
+		goto unmap;
+	}
+
+	if (get_my_merging_pages() <= 0) {
+		ksft_print_msg("Fail to merge\n");
+		goto unmap;
+	}
+
+	ret = 0;
+unmap:
+	munmap(map, size);
+	return ret;
+}
+
 static char *mmap_and_merge_range(char val, unsigned long size, int prot,
 				  bool use_prctl)
 {
@@ -458,7 +506,11 @@ static void test_prctl_fork(void)
 
 	child_pid = fork();
 	if (!child_pid) {
-		exit(prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0));
+		if (prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) != 1)
+			exit(-1);
+		if (child_test_merge() != 0)
+			exit(-2);
+		exit(0);
 	} else if (child_pid < 0) {
 		ksft_test_result_fail("fork() failed\n");
 		return;
@@ -467,8 +519,14 @@ static void test_prctl_fork(void)
 	if (waitpid(child_pid, &status, 0) < 0) {
 		ksft_test_result_fail("waitpid() failed\n");
 		return;
-	} else if (WEXITSTATUS(status) != 1) {
-		ksft_test_result_fail("unexpected PR_GET_MEMORY_MERGE result in child\n");
+	}
+
+	status = WEXITSTATUS(status);
+	if (status != 0) {
+		if (status == -1)
+			ksft_test_result_fail("unexpected PR_GET_MEMORY_MERGE result in child\n");
+		else
+			ksft_test_result_fail("fail to merge in child\n");
 		return;
 	}
 
@@ -483,7 +541,13 @@ static void test_prctl_fork(void)
 static int ksm_fork_exec_child(void)
 {
 	/* Test if KSM is enabled for the process. */
-	return prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) == 1;
+	if (prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) != 1)
+		return -1;
+
+	if (child_test_merge() != 0)
+		return -2;
+
+	return 0;
 }
 
 static void test_prctl_fork_exec(void)
@@ -517,8 +581,11 @@ static void test_prctl_fork_exec(void)
 	if (waitpid(child_pid, &status, 0) > 0) {
 		if (WIFEXITED(status)) {
 			status = WEXITSTATUS(status);
-			if (status) {
+			if (status == -1) {
 				ksft_test_result_fail("KSM not enabled\n");
+				return;
+			} else if (status == -2) {
+				ksft_test_result_fail("fail to merge in child\n");
 				return;
 			}
 		} else {
@@ -599,7 +666,7 @@ int main(int argc, char **argv)
 	int err;
 
 	if (argc > 1 && !strcmp(argv[1], FORK_EXEC_CHILD_PRG_NAME)) {
-		exit(ksm_fork_exec_child() == 1 ? 0 : 1);
+		exit(ksm_fork_exec_child());
 	}
 
 #ifdef __NR_userfaultfd
