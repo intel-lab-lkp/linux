@@ -339,6 +339,9 @@ static void ttm_bo_unreserve_bulk(struct kunit *test)
 	bo1 = ttm_bo_kunit_init(test, test->priv, BO_SIZE);
 	bo2 = ttm_bo_kunit_init(test, test->priv, BO_SIZE);
 
+	/* Share the reservation object in the same bulk move */
+	bo1->base.resv = bo2->base.resv;
+
 	dma_resv_lock(bo1->base.resv, NULL);
 	ttm_bo_set_bulk_move(bo1, &lru_bulk_move);
 	dma_resv_unlock(bo1->base.resv);
