@@ -687,9 +687,9 @@ dump_kernel_offset(struct notifier_block *self, unsigned long v, void *p)
 	return 0;
 }
 
-void x86_configure_nx(void)
+void x86_configure_nx(bool nx_supported)
 {
-	if (boot_cpu_has(X86_FEATURE_NX))
+	if (nx_supported)
 		__supported_pte_mask |= _PAGE_NX;
 	else
 		__supported_pte_mask &= ~_PAGE_NX;
@@ -853,7 +853,7 @@ void __init setup_arch(char **cmdline_p)
 	 * whether hardware doesn't support NX (so that the early EHCI debug
 	 * console setup can safely call set_fixmap()).
 	 */
-	x86_configure_nx();
+	x86_configure_nx(boot_cpu_has(X86_FEATURE_NX));
 
 	parse_early_param();
 

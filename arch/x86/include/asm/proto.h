@@ -37,7 +37,7 @@ void entry_SYSRETL_compat_end(void);
 #define entry_SYSENTER_compat NULL
 #endif
 
-void x86_configure_nx(void);
+void x86_configure_nx(bool nx_supported);
 
 extern int reboot_force;
 
