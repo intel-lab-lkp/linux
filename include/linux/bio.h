@@ -723,6 +723,7 @@ static inline bool bioset_initialized(struct bio_set *bs)
 	for_each_bio(_bio)						\
 		bip_for_each_vec(_bvl, _bio->bi_integrity, _iter)
 
+int bio_integrity_map_iter(struct bio *bio, struct iov_iter *iter);
 int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter, u32 seed);
 extern struct bio_integrity_payload *bio_integrity_alloc(struct bio *, gfp_t, unsigned int);
 extern int bio_integrity_add_page(struct bio *, struct page *, unsigned int, unsigned int);
@@ -798,6 +799,11 @@ static inline int bio_integrity_add_page(struct bio *bio, struct page *page,
 static inline int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter,
 					u32 seed)
 
+{
+	return -EINVAL;
+}
+
+static inline int bio_integrity_map_iter(struct bio *bio, struct iov_iter *iter)
 {
 	return -EINVAL;
 }

@@ -308,6 +308,19 @@ static unsigned int bvec_from_pages(struct bio_vec *bvec, struct page **pages,
 	return nr_bvecs;
 }
 
+int bio_integrity_map_iter(struct bio *bio, struct iov_iter *iter)
+{
+	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
+
+	if (!bi)
+		return -EINVAL;
+
+	if (iter->count < bio_integrity_bytes(bi, bio_sectors(bio)))
+		return -EINVAL;
+
+	return bio_integrity_map_user(bio, iter, 0);
+}
+
 int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter,
 			  u32 seed)
 {
