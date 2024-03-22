@@ -9,6 +9,7 @@
  */
 
 #include <linux/i2c.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 
@@ -21,41 +22,36 @@ static const struct regmap_config adxl345_i2c_regmap_config = {
 
 static int adxl345_i2c_probe(struct i2c_client *client)
 {
+	const struct adxl345_chip_info *chip_data;
 	struct regmap *regmap;
+
+	/* Retrieve device data, i.e. the name, to pass it to the core */
+	chip_data = i2c_get_match_data(client);
 
 	regmap = devm_regmap_init_i2c(client, &adxl345_i2c_regmap_config);
 	if (IS_ERR(regmap))
-		return dev_err_probe(&client->dev, PTR_ERR(regmap), "Error initializing regmap\n");
+		return dev_err_probe(&client->dev, PTR_ERR(regmap),
+				     "Error initializing regmap\n");
 
-	return adxl345_core_probe(&client->dev, regmap);
+	return adxl345_core_probe(&client->dev, regmap, chip_data, NULL);
 }
 
-static const struct adxl345_chip_info adxl345_i2c_info = {
-	.name = "adxl345",
-	.uscale = ADXL345_USCALE,
-};
-
-static const struct adxl345_chip_info adxl375_i2c_info = {
-	.name = "adxl375",
-	.uscale = ADXL375_USCALE,
-};
-
 static const struct i2c_device_id adxl345_i2c_id[] = {
-	{ "adxl345", (kernel_ulong_t)&adxl345_i2c_info },
-	{ "adxl375", (kernel_ulong_t)&adxl375_i2c_info },
+	{ "adxl345", (kernel_ulong_t)&adxl3x5_chip_info[ADXL345] },
+	{ "adxl375", (kernel_ulong_t)&adxl3x5_chip_info[ADXL375] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adxl345_i2c_id);
 
 static const struct of_device_id adxl345_of_match[] = {
-	{ .compatible = "adi,adxl345", .data = &adxl345_i2c_info },
-	{ .compatible = "adi,adxl375", .data = &adxl375_i2c_info },
+	{ .compatible = "adi,adxl345", .data = &adxl3x5_chip_info[ADXL345] },
+	{ .compatible = "adi,adxl375", .data = &adxl3x5_chip_info[ADXL375] },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, adxl345_of_match);
 
 static const struct acpi_device_id adxl345_acpi_match[] = {
-	{ "ADS0345", (kernel_ulong_t)&adxl345_i2c_info },
+	{ "ADS0345", (kernel_ulong_t)&adxl3x5_chip_info[ADXL345] },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, adxl345_acpi_match);
