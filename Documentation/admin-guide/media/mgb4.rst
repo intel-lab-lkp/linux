@@ -228,8 +228,12 @@ Common FPDL3/GMSL output parameters
     open.*
 
 **frame_rate** (RW):
-    Output video frame rate in frames per second. The default frame rate is
-    60Hz.
+    Output video signal frame rate limit in frames per second. Due to
+    the limited output pixel clock steps, the card can not always generate
+    a frame rate perfectly matching the value required by the connected display.
+    Using this parameter one can limit the frame rate by "crippling" the signal
+    so that the lines are not equal but the signal appears like having the exact
+    frame rate to the connected display. The default frame rate limit is 60Hz.
 
 **hsync_polarity** (RW):
     HSYNC signal polarity.
