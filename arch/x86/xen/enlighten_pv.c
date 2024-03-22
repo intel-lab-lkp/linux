@@ -1306,6 +1306,21 @@ static void __init xen_domu_set_legacy_features(void)
 
 extern void early_xen_iret_patch(void);
 
+/*
+ * It is too early for boot_cpu_has() and friends to work.
+ * Use CPUID to directly enumerate NX support.
+ */
+static inline void xen_configure_nx(void)
+{
+	bool nx_supported;
+	u32 eax = 0;
+
+	get_cpuid_region_leaf(0x80000001, CPUID_EDX, &eax);
+
+	nx_supported = eax & (X86_FEATURE_NX & 31);
+	x86_configure_nx(nx_supported);
+}
+
 /* First C function to be called on Xen boot */
 asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
 {
@@ -1369,9 +1384,7 @@ asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
 	/* Get mfn list */
 	xen_build_dynamic_phys_to_machine();
 
-	/* Work out if we support NX */
-	get_cpu_cap(&boot_cpu_data);
-	x86_configure_nx(boot_cpu_has(X86_FEATURE_NX));
+	xen_configure_nx();
 
 	/*
 	 * Set up kernel GDT and segment registers, mainly so that
