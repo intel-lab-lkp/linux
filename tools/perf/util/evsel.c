@@ -1097,6 +1097,64 @@ static bool evsel__is_offcpu_event(struct evsel *evsel)
 	return evsel__is_bpf_output(evsel) && evsel__name_is(evsel, OFFCPU_EVENT);
 }
 
+static bool evsel__has_term_type(struct evsel *evsel, enum evsel_term_type type)
+{
+	return __evsel__get_config_term(evsel, type) != NULL;
+}
+
+/*
+ * Determine whether or not an evsel can support inherit+inherit_stat+PERF_SAMPLE_READ.
+ *
+ * In order not to break existing command line behaviour, this configuration
+ * will only be enabled if certain specific requirements are met:
+ *
+ * 1) When making a system-wide capture, there is no need to support this
+ *    configuration. Likewise, if the user disables inherit, or does not request
+ *    inherit_stat, then the configuration is not supported.
+ * 2) If the user explicitly specifies 'freq' as a config term, then do not
+ *    support this feature, as frequency counters are not compatible.
+ * 3) If the user explicitly specifies 'period' as a config term, then the
+ *    feature is compatible with that event.
+ * 4) If neither was explicitly set, and the event is part of a group, then
+ *    base the decision on the leader.
+ * 5) Otherwise base the decision on whether or not the user specified a period
+ *    or frequency on the command line (which includes the default frequency
+ *    setting).
+ */
+static bool evsel__compat_with_inherit_sample_read(struct record_opts *opts,
+						   struct evsel *leader,
+						   struct evsel *evsel)
+{
+	struct perf_event_attr *attr = &evsel->core.attr;
+
+	if (opts->target.system_wide)
+		return false;
+
+	if (opts->no_inherit_set || !opts->inherit_stat)
+		return false;
+
+	if (evsel__has_term_type(evsel, EVSEL__CONFIG_TERM_FREQ))
+		return false;
+
+	if (evsel__has_term_type(evsel, EVSEL__CONFIG_TERM_PERIOD))
+		return true;
+
+	if (leader && (leader != evsel)) {
+		struct perf_event_attr *ldr_att = &leader->core.attr;
+
+		if (evsel__has_term_type(leader, EVSEL__CONFIG_TERM_FREQ))
+			return false;
+
+		if (evsel__has_term_type(leader, EVSEL__CONFIG_TERM_PERIOD))
+			return true;
+
+		if (ldr_att->freq)
+			return false;
+	}
+
+	return (!attr->freq && !opts->freq);
+}
+
 /*
  * The enable_on_exec/disabled value strategy:
  *
@@ -1133,6 +1191,9 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 	int track = evsel->tracking;
 	bool per_cpu = opts->target.default_per_cpu && !opts->target.per_thread;
 
+	bool allow_inherit_stat_sample_read = evsel__compat_with_inherit_sample_read(
+		opts, leader, evsel);
+
 	attr->sample_id_all = perf_missing_features.sample_id_all ? 0 : 1;
 	attr->inherit	    = !opts->no_inherit;
 	attr->write_backward = opts->overwrite ? 1 : 0;
@@ -1156,7 +1217,17 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 		 */
 		if (leader->core.nr_members > 1) {
 			attr->read_format |= PERF_FORMAT_GROUP;
-			attr->inherit = 0;
+			if (!allow_inherit_stat_sample_read)
+				attr->inherit = 0;
+		}
+
+		/*
+		 * Inherit + READ requires inherit_stat, but only if freq is
+		 * not set as the two are incompatible
+		 */
+		if (attr->inherit && allow_inherit_stat_sample_read) {
+			attr->inherit_stat = 1;
+			evsel__set_sample_bit(evsel, TID);
 		}
 	}
 
@@ -1832,6 +1903,8 @@ static int __evsel__prepare_open(struct evsel *evsel, struct perf_cpu_map *cpus,
 
 static void evsel__disable_missing_features(struct evsel *evsel)
 {
+	if (perf_missing_features.inherit_sample_read)
+		evsel->core.attr.inherit = 0;
 	if (perf_missing_features.branch_counters)
 		evsel->core.attr.branch_sample_type &= ~PERF_SAMPLE_BRANCH_COUNTERS;
 	if (perf_missing_features.read_lost)
@@ -1887,7 +1960,12 @@ bool evsel__detect_missing_features(struct evsel *evsel)
 	 * Must probe features in the order they were added to the
 	 * perf_event_attr interface.
 	 */
-	if (!perf_missing_features.branch_counters &&
+	if (!perf_missing_features.inherit_sample_read &&
+	    evsel->core.attr.inherit && (evsel->core.attr.sample_type & PERF_SAMPLE_READ)) {
+		perf_missing_features.inherit_sample_read = true;
+		pr_debug2("Using PERF_SAMPLE_READ / :S modifier is not compatible with inherit, falling back to no-inherit.\n");
+		return true;
+	} else if (!perf_missing_features.branch_counters &&
 	    (evsel->core.attr.branch_sample_type & PERF_SAMPLE_BRANCH_COUNTERS)) {
 		perf_missing_features.branch_counters = true;
 		pr_debug2("switching off branch counters support\n");
