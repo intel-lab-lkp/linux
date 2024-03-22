@@ -1777,7 +1777,7 @@ static struct ksm_stable_node *stable_node_dup_any(struct ksm_stable_node *stabl
  * function and will be overwritten in all cases, the caller doesn't
  * need to initialize it.
  */
-static struct page *__stable_node_chain(struct ksm_stable_node **_stable_node_dup,
+static void *__stable_node_chain(struct ksm_stable_node **_stable_node_dup,
 					struct ksm_stable_node **_stable_node,
 					struct rb_root *root,
 					bool prune_stale_stable_nodes)
@@ -1799,24 +1799,24 @@ static struct page *__stable_node_chain(struct ksm_stable_node **_stable_node_du
 			       prune_stale_stable_nodes);
 }
 
-static __always_inline struct page *chain_prune(struct ksm_stable_node **s_n_d,
+static __always_inline void *chain_prune(struct ksm_stable_node **s_n_d,
 						struct ksm_stable_node **s_n,
 						struct rb_root *root)
 {
 	return __stable_node_chain(s_n_d, s_n, root, true);
 }
 
-static __always_inline struct page *chain(struct ksm_stable_node **s_n_d,
+static __always_inline void *chain(struct ksm_stable_node **s_n_d,
 					  struct ksm_stable_node *s_n,
 					  struct rb_root *root)
 {
 	struct ksm_stable_node *old_stable_node = s_n;
-	struct page *tree_page;
+	struct folio *tree_folio;
 
-	tree_page = __stable_node_chain(s_n_d, &s_n, root, false);
+	tree_folio = __stable_node_chain(s_n_d, &s_n, root, false);
 	/* not pruning dups so s_n cannot have changed */
 	VM_BUG_ON(s_n != old_stable_node);
-	return tree_page;
+	return tree_folio;
 }
 
 /*
