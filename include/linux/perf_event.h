@@ -932,6 +932,7 @@ struct perf_event_context {
 
 	int				nr_task_data;
 	int				nr_stat;
+	int				nr_stat_read;
 	int				nr_freq;
 	int				rotate_disable;
 
