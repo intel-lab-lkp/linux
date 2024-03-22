@@ -277,7 +277,7 @@ struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *se
 	for_offset_range(o, offset, offset + len) {
 		elf_hash_for_each_possible(reloc, reloc, hash,
 					   sec_offset_hash(rsec, o)) {
-			if (reloc->sec != rsec)
+			if (reloc->block->sec != rsec)
 				continue;
 
 			if (reloc_offset(reloc) >= offset &&
@@ -333,6 +333,7 @@ static int read_sections(struct elf *elf)
 		sec = &elf->section_data[i];
 
 		INIT_LIST_HEAD(&sec->symbol_list);
+		INIT_LIST_HEAD(&sec->reloc_list);
 
 		s = elf_getscn(elf->elf, i);
 		if (!s) {
@@ -850,7 +851,7 @@ static struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 				    unsigned long offset, struct symbol *sym,
 				    s64 addend, unsigned int type)
 {
-	struct reloc *reloc, empty = { 0 };
+	struct reloc *reloc;
 
 	if (reloc_idx >= sec_num_entries(rsec)) {
 		WARN("%s: bad reloc_idx %u for %s with %d relocs",
@@ -858,15 +859,18 @@ static struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 		return NULL;
 	}
 
-	reloc = &rsec->relocs[reloc_idx];
-
-	if (memcmp(reloc, &empty, sizeof(empty))) {
-		WARN("%s: %s: reloc %d already initialized!",
+	reloc = get_reloc_by_index(rsec, reloc_idx);
+	if (!reloc) {
+		WARN("%s: %s: reloc %d out of range!",
 		     __func__, rsec->name, reloc_idx);
 		return NULL;
 	}
 
-	reloc->sec = rsec;
+	if (reloc->sym) {
+		WARN("%s: %s: reloc %d already initialized!",
+		     __func__, rsec->name, reloc_idx);
+		return NULL;
+	}
 	reloc->sym = sym;
 
 	set_reloc_offset(elf, reloc, offset);
@@ -930,19 +934,45 @@ struct reloc *elf_init_reloc_data_sym(struct elf *elf, struct section *sec,
 			      elf_data_rela_type(elf));
 }
 
+static struct reloc_block *alloc_reloc_block(struct section *rsec, size_t num_relocs)
+{
+	struct reloc_block *block;
+	size_t block_size = sizeof(struct reloc_block) + sec_num_entries(rsec) * sizeof(struct reloc);
+	int i;
+
+	block = malloc(block_size);
+	if (!block) {
+		perror("malloc");
+		return NULL;
+	}
+
+	memset(block, 0, block_size);
+	INIT_LIST_HEAD(&block->list);
+	block->sec = rsec;
+	block->start_idx = rsec->num_relocs;
+	block->len = num_relocs;
+
+	for (i = 0; i < num_relocs; i++)
+		block->relocs[i].block = block;
+
+	rsec->num_relocs += num_relocs;
+	list_add_tail(&block->list, &rsec->reloc_list);
+
+	return block;
+}
+
 static int read_relocs(struct elf *elf)
 {
 	unsigned long nr_reloc, max_reloc = 0;
 	struct section *rsec;
-	struct reloc *reloc;
-	unsigned int symndx;
-	struct symbol *sym;
 	int i;
 
 	if (!elf_alloc_hash(reloc, elf->num_relocs))
 		return -1;
 
 	list_for_each_entry(rsec, &elf->sections, list) {
+		struct reloc_block *block;
+
 		if (!is_reloc_sec(rsec))
 			continue;
 
@@ -956,15 +986,15 @@ static int read_relocs(struct elf *elf)
 		rsec->base->rsec = rsec;
 
 		nr_reloc = 0;
-		rsec->relocs = calloc(sec_num_entries(rsec), sizeof(*reloc));
-		if (!rsec->relocs) {
-			perror("calloc");
+		block = alloc_reloc_block(rsec, sec_num_entries(rsec));
+		if (!block)
 			return -1;
-		}
-		for (i = 0; i < sec_num_entries(rsec); i++) {
-			reloc = &rsec->relocs[i];
 
-			reloc->sec = rsec;
+		for (i = 0; i < sec_num_entries(rsec); i++) {
+			struct reloc *reloc = &block->relocs[i];
+			struct symbol *sym;
+			unsigned int symndx;
+
 			symndx = reloc_sym(reloc);
 			reloc->sym = sym = find_symbol_by_index(elf, symndx);
 			if (!reloc->sym) {
@@ -1100,6 +1130,7 @@ struct section *elf_create_section(struct elf *elf, const char *name,
 	memset(sec, 0, sizeof(*sec));
 
 	INIT_LIST_HEAD(&sec->symbol_list);
+	INIT_LIST_HEAD(&sec->reloc_list);
 
 	s = elf_newscn(elf->elf);
 	if (!s) {
@@ -1170,6 +1201,7 @@ static struct section *elf_create_rela_section(struct elf *elf,
 					       unsigned int reloc_nr)
 {
 	struct section *rsec;
+	struct reloc_block *block;
 	char *rsec_name;
 
 	rsec_name = malloc(strlen(sec->name) + strlen(".rela") + 1);
@@ -1192,16 +1224,45 @@ static struct section *elf_create_rela_section(struct elf *elf,
 	rsec->sh.sh_info = sec->idx;
 	rsec->sh.sh_flags = SHF_INFO_LINK;
 
-	rsec->relocs = calloc(sec_num_entries(rsec), sizeof(struct reloc));
-	if (!rsec->relocs) {
-		perror("calloc");
+	block = alloc_reloc_block(rsec, sec_num_entries(rsec));
+	if (!block)
 		return NULL;
-	}
 
 	sec->rsec = rsec;
 	rsec->base = sec;
 
 	return rsec;
+}
+
+int elf_extend_rela_section(struct elf *elf,
+			    struct section *rsec,
+			    int add_relocs)
+{
+	int newnr = sec_num_entries(rsec) + add_relocs;
+	size_t oldsize = rsec->sh.sh_size;
+	size_t newsize = newnr * rsec->sh.sh_entsize;
+	void *buf;
+	struct reloc_block *block;
+
+	buf = realloc(rsec->data->d_buf, newnr * rsec->sh.sh_entsize);
+	if (!buf) {
+		perror("realloc");
+		return -1;
+	}
+
+	memset(buf + oldsize, 0, newsize - oldsize);
+
+	rsec->data->d_size = newsize;
+	rsec->data->d_buf = buf;
+	rsec->sh.sh_size = newsize;
+
+	mark_sec_changed(elf, rsec, true);
+
+	block = alloc_reloc_block(rsec, add_relocs);
+	if (!block)
+		return -1;
+
+	return 0;
 }
 
 struct section *elf_create_section_pair(struct elf *elf, const char *name,
