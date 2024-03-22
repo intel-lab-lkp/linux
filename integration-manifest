@@ -1,0 +1,32 @@
+drm drm-fixes e8f897f4afef0031fe618a8e94127a0934896aba
+	Linux 6.8
+drm-misc drm-misc-fixes 2295bd846765c766701e666ed2e4b35396be25e6
+	dma-buf: Fix NULL pointer dereference in sanitycheck()
+drm-intel drm-intel-fixes e8f897f4afef0031fe618a8e94127a0934896aba
+	Linux 6.8
+drm-xe drm-xe-fixes a4e7596e209783a7be2727d6b947cbd863c2bbcb
+	drm/xe: Return immediately on tile_init failure
+drm drm-next cafd86cbdc607eadc28a008cddacd78f0894c628
+	Merge tag 'amd-drm-fixes-6.9-2024-03-21' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 5d4e8ae6e57b025802aadf55a4775c55cceb75f1
+	nouveau/gsp: don't check devinit disable on GSP.
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes 11b2f624e902eee33387164ea95f0f0ed559b736
+	drm/xe/guc_submit: use jiffies for job timeout
+drm-misc drm-misc-next 5e842d55bad7794823a50f24fd645b58f2ef93ab
+	drm/panel: atna33xc20: Fix unbalanced regulator in the case HPD doesn't assert
+drm-intel drm-intel-next d437099ab21cd4c6ce5d578b765df642d759c929
+	drm/i915: Do not print 'pxp init failed with 0' when it succeed
+drm-intel drm-intel-gt-next b4985cce8136d1cd91fafac1ec9a6d90b774fd01
+	drm/i915/xelpg: Add Wa_14020495402
+drm-xe drm-xe-next cdf287ce7bd308c51e97080ebe7e9b12c8256f26
+	drm/xe: Add debug messages for MMU notifier and VMA invalidate
+drm-intel topic/core-for-CI 4c80ceebd3f0b5006bb99fe6be85081207ea67d2
+	platform/x86/intel/pmc/lnl: Remove SSRAM support
+drm-xe topic/xe-for-CI acec3bca46a221c35922c40b10405500e17309c5
+	drm/xe/guc: define PVC FW
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
+drm-misc topic/rust-drm 42abbd1bc1f3362a9adee3d05e54518de90f2205
+	rust: Remove mutability requirement for drm's Registration::register()
