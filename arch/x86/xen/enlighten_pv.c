@@ -141,16 +141,13 @@ static void __init xen_set_mtrr_data(void)
 	};
 	unsigned int reg;
 	unsigned long mask;
-	uint32_t eax, width;
+	uint32_t width;
 	static struct mtrr_var_range var[MTRR_MAX_VAR_RANGES] __initdata;
 
 	/* Get physical address width (only 64-bit cpus supported). */
 	width = 36;
-	eax = cpuid_eax(0x80000000);
-	if ((eax >> 16) == 0x8000 && eax >= 0x80000008) {
-		eax = cpuid_eax(0x80000008);
-		width = eax & 0xff;
-	}
+	/* Will overwrite 'width' if available in CPUID: */
+	get_cpuid_region_leaf(0x80000008, CPUID_EAX, &width);
 
 	for (reg = 0; reg < MTRR_MAX_VAR_RANGES; reg++) {
 		op.u.read_memtype.reg = reg;

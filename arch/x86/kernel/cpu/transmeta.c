@@ -9,14 +9,9 @@
 
 static void early_init_transmeta(struct cpuinfo_x86 *c)
 {
-	u32 xlvl;
-
 	/* Transmeta-defined flags: level 0x80860001 */
-	xlvl = cpuid_eax(0x80860000);
-	if ((xlvl & 0xffff0000) == 0x80860000) {
-		if (xlvl >= 0x80860001)
-			c->x86_capability[CPUID_8086_0001_EDX] = cpuid_edx(0x80860001);
-	}
+	get_cpuid_region_leaf(0x80860001, CPUID_EDX,
+			  &c->x86_capability[CPUID_8086_0001_EDX]);
 }
 
 static void init_transmeta(struct cpuinfo_x86 *c)
