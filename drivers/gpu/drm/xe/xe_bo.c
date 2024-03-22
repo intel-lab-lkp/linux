@@ -794,7 +794,6 @@ out:
  * @bo: The buffer object to move.
  *
  * On successful completion, the object memory will be moved to sytem memory.
- * This function blocks until the object has been fully moved.
  *
  * This is needed to for special handling of pinned VRAM object during
  * suspend-resume.
@@ -851,9 +850,6 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
 	if (ret)
 		goto err_res_free;
 
-	dma_resv_wait_timeout(bo->ttm.base.resv, DMA_RESV_USAGE_KERNEL,
-			      false, MAX_SCHEDULE_TIMEOUT);
-
 	return 0;
 
 err_res_free:
@@ -866,7 +862,6 @@ err_res_free:
  * @bo: The buffer object to move.
  *
  * On successful completion, the object memory will be moved back to VRAM.
- * This function blocks until the object has been fully moved.
  *
  * This is needed to for special handling of pinned VRAM object during
  * suspend-resume.
@@ -907,9 +902,6 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
 	ret = xe_bo_move(&bo->ttm, false, &ctx, new_mem, NULL);
 	if (ret)
 		goto err_res_free;
-
-	dma_resv_wait_timeout(bo->ttm.base.resv, DMA_RESV_USAGE_KERNEL,
-			      false, MAX_SCHEDULE_TIMEOUT);
 
 	return 0;
 
@@ -1225,7 +1217,8 @@ struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 
 	if (flags & (XE_BO_CREATE_VRAM_MASK | XE_BO_CREATE_STOLEN_BIT) &&
 	    !(flags & XE_BO_CREATE_IGNORE_MIN_PAGE_SIZE_BIT) &&
-	    xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K) {
+	    ((xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K) ||
+	     (flags & XE_BO_NEEDS_64K))) {
 		aligned_size = ALIGN(size, SZ_64K);
 		if (type != ttm_bo_type_device)
 			size = ALIGN(size, SZ_64K);
@@ -1587,13 +1580,15 @@ struct xe_bo *xe_managed_bo_create_from_data(struct xe_device *xe, struct xe_til
 int xe_managed_bo_reinit_in_vram(struct xe_device *xe, struct xe_tile *tile, struct xe_bo **src)
 {
 	struct xe_bo *bo;
+	u32 dst_flags = XE_BO_CREATE_VRAM_IF_DGFX(tile) | XE_BO_CREATE_GGTT_BIT;
+
+	dst_flags |= (*src)->flags & XE_BO_GGTT_INVALIDATE;
 
 	xe_assert(xe, IS_DGFX(xe));
 	xe_assert(xe, !(*src)->vmap.is_iomem);
 
-	bo = xe_managed_bo_create_from_data(xe, tile, (*src)->vmap.vaddr, (*src)->size,
-					    XE_BO_CREATE_VRAM_IF_DGFX(tile) |
-					    XE_BO_CREATE_GGTT_BIT);
+	bo = xe_managed_bo_create_from_data(xe, tile, (*src)->vmap.vaddr,
+					    (*src)->size, dst_flags);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
