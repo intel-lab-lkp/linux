@@ -3574,7 +3574,7 @@ void intel_dbuf_mdclk_cdclk_ratio_update(struct drm_i915_private *i915, u8 ratio
  * Configure MBUS_CTL and all DBUF_CTL_S of each slice to join_mbus state before
  * update the request state of all DBUS slices.
  */
-static void update_mbus_pre_enable(struct intel_atomic_state *state)
+static void intel_dbuf_mbus_update(struct intel_atomic_state *state)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	u32 mbus_ctl;
@@ -3632,7 +3632,9 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 
 	WARN_ON(!new_dbuf_state->base.changed);
 
-	update_mbus_pre_enable(state);
+	if (!old_dbuf_state->joined_mbus && new_dbuf_state->joined_mbus)
+		intel_dbuf_mbus_update(state);
+
 	gen9_dbuf_slices_update(i915,
 				old_dbuf_state->enabled_slices |
 				new_dbuf_state->enabled_slices);
@@ -3652,6 +3654,9 @@ void intel_dbuf_post_plane_update(struct intel_atomic_state *state)
 		return;
 
 	WARN_ON(!new_dbuf_state->base.changed);
+
+	if (old_dbuf_state->joined_mbus && !new_dbuf_state->joined_mbus)
+		intel_dbuf_mbus_update(state);
 
 	gen9_dbuf_slices_update(i915,
 				new_dbuf_state->enabled_slices);
