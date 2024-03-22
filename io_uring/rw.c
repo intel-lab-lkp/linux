@@ -27,7 +27,6 @@ struct io_rw {
 	struct kiocb			kiocb;
 	u64				addr;
 	u32				len;
-	rwf_t				flags;
 };
 
 static inline bool io_file_supports_nowait(struct io_kiocb *req)
@@ -78,10 +77,16 @@ static int io_iov_buffer_select_prep(struct io_kiocb *req)
 int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+	struct kiocb *kiocb = &rw->kiocb;
 	unsigned ioprio;
 	int ret;
 
-	rw->kiocb.ki_pos = READ_ONCE(sqe->off);
+	kiocb->ki_flags = 0;
+	ret = kiocb_set_rw_flags(kiocb, READ_ONCE(sqe->rw_flags));
+	if (unlikely(ret))
+		return ret;
+
+	kiocb->ki_pos = READ_ONCE(sqe->off);
 	/* used for fixed read/write too - just read unconditionally */
 	req->buf_index = READ_ONCE(sqe->buf_index);
 
@@ -91,15 +96,14 @@ int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		if (ret)
 			return ret;
 
-		rw->kiocb.ki_ioprio = ioprio;
+		kiocb->ki_ioprio = ioprio;
 	} else {
-		rw->kiocb.ki_ioprio = get_current_ioprio();
+		kiocb->ki_ioprio = get_current_ioprio();
 	}
-	rw->kiocb.dio_complete = NULL;
+	kiocb->dio_complete = NULL;
 
 	rw->addr = READ_ONCE(sqe->addr);
 	rw->len = READ_ONCE(sqe->len);
-	rw->flags = READ_ONCE(sqe->rw_flags);
 	return 0;
 }
 
@@ -720,7 +724,6 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 	struct kiocb *kiocb = &rw->kiocb;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct file *file = req->file;
-	int ret;
 
 	if (unlikely(!(file->f_mode & mode)))
 		return -EBADF;
@@ -728,10 +731,7 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 	if (!(req->flags & REQ_F_FIXED_FILE))
 		req->flags |= io_file_get_flags(file);
 
-	kiocb->ki_flags = file->f_iocb_flags;
-	ret = kiocb_set_rw_flags(kiocb, rw->flags);
-	if (unlikely(ret))
-		return ret;
+	kiocb->ki_flags |= file->f_iocb_flags;
 	kiocb->ki_flags |= IOCB_ALLOC_CACHE;
 
 	/*
