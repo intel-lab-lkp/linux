@@ -39,4 +39,27 @@ impl AtomicI32 {
     pub fn fetch_add_relaxed(&self, i: i32) -> i32 {
         arch::i32_fetch_add_relaxed(&self.0, i)
     }
+
+    /// Subs `i` to the atomic variable with RELEASE ordering.
+    ///
+    /// Returns the old value before the sub.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use kernel::sync::atomic::AtomicI32;
+    ///
+    /// let a = AtomicI32::new(1);
+    /// let b = a.fetch_sub_release(1);
+    /// let c = a.fetch_sub_release(2);
+    /// let d = a.fetch_sub_release(3);
+    /// let e = a.fetch_sub_release(core::i32::MIN);
+    ///
+    /// assert_eq!(b, 1);
+    /// assert_eq!(c, 0);
+    /// assert_eq!(d, -2);
+    /// ```
+    pub fn fetch_sub_release(&self, i: i32) -> i32 {
+        arch::i32_fetch_sub_release(&self.0, i)
+    }
 }

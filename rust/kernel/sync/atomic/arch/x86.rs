@@ -41,3 +41,8 @@ pub(crate) fn i32_fetch_add_relaxed(v: &UnsafeCell<i32>, i: i32) -> i32 {
     // SAFETY: `v.get()` points to a valid `i32`.
     unsafe { i32_xadd(v.get(), i) }
 }
+
+pub(crate) fn i32_fetch_sub_release(v: &UnsafeCell<i32>, i: i32) -> i32 {
+    // SAFETY: `v.get()` points to a valid `i32`.
+    unsafe { i32_xadd(v.get(), i.wrapping_neg()) }
+}
