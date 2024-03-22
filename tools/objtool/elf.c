@@ -846,6 +846,32 @@ elf_create_prefix_symbol(struct elf *elf, struct symbol *orig, long size)
 	return sym;
 }
 
+struct symbol *
+elf_create_undef_symbol(struct elf *elf, const char *sym_name)
+{
+	struct symbol *sym = calloc(1, sizeof(*sym));
+	char *name = strdup(sym_name);
+
+	if (!sym || !name) {
+		perror("malloc");
+		return NULL;
+	}
+
+	sym->name = name;
+	sym->sec = find_section_by_index(elf, 0);
+
+	sym->sym.st_name = elf_add_string(elf, NULL, name);
+	sym->sym.st_info = GELF_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+	sym->sym.st_value = 0;
+	sym->sym.st_size = 0;
+
+	sym = __elf_create_symbol(elf, sym);
+	if (sym)
+		elf_add_symbol(elf, sym);
+
+	return sym;
+}
+
 static struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 				    unsigned int reloc_idx,
 				    unsigned long offset, struct symbol *sym,
@@ -924,7 +950,7 @@ struct reloc *elf_init_reloc_data_sym(struct elf *elf, struct section *sec,
 				      struct symbol *sym,
 				      s64 addend)
 {
-	if (sym->sec && (sec->sh.sh_flags & SHF_EXECINSTR)) {
+	if (sym->sec && (sym->sec->sh.sh_flags & SHF_EXECINSTR)) {
 		WARN("bad call to %s() for text symbol %s",
 		     __func__, sym->name);
 		return NULL;
@@ -1196,9 +1222,9 @@ struct section *elf_create_section(struct elf *elf, const char *name,
 	return sec;
 }
 
-static struct section *elf_create_rela_section(struct elf *elf,
-					       struct section *sec,
-					       unsigned int reloc_nr)
+struct section *elf_create_rela_section(struct elf *elf,
+					struct section *sec,
+					unsigned int reloc_nr)
 {
 	struct section *rsec;
 	struct reloc_block *block;

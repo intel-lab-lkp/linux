@@ -3,6 +3,9 @@
 
 #include <objtool/special.h>
 #include <objtool/builtin.h>
+#include <objtool/warn.h>
+#include <objtool/check.h>
+#include <objtool/elf.h>
 
 #define X86_FEATURE_POPCNT (4 * 32 + 23)
 #define X86_FEATURE_SMAP   (9 * 32 + 20)
@@ -136,4 +139,92 @@ struct reloc *arch_find_switch_table(struct objtool_file *file,
 		file->ignore_unreachables = true;
 
 	return rodata_reloc;
+}
+
+/*
+ * Convert op %gs:0x28, reg -> op __stack_chk_guard(%rip), reg
+ * op is MOV, SUB, or CMP.
+ *
+ * This can be removed when the minimum supported GCC version is raised
+ * to 8.1 or later.
+ */
+int arch_hack_stackprotector(struct objtool_file *file)
+{
+	struct section *sec;
+	struct symbol *__stack_chk_guard;
+	struct instruction *insn;
+
+	int i;
+
+	__stack_chk_guard = find_symbol_by_name(file->elf, "__stack_chk_guard");
+
+	for_each_sec(file, sec) {
+		int count = 0;
+		int idx;
+		struct section *rsec = sec->rsec;
+
+		sec_for_each_insn(file, sec, insn) {
+			if (insn->type == INSN_STACKPROTECTOR)
+				count++;
+		}
+
+		if (!count)
+			continue;
+
+		if (!__stack_chk_guard)
+			__stack_chk_guard = elf_create_undef_symbol(file->elf, "__stack_chk_guard");
+
+		if (!rsec) {
+			idx = 0;
+			rsec = sec->rsec = elf_create_rela_section(file->elf, sec, count);
+		} else {
+			idx = sec_num_entries(rsec);
+			if (elf_extend_rela_section(file->elf, rsec, count))
+				return -1;
+		}
+
+		sec_for_each_insn(file, sec, insn) {
+			unsigned char *data = sec->data->d_buf + insn->offset;
+
+			if (insn->type != INSN_STACKPROTECTOR)
+				continue;
+
+			if (insn->len != 9)
+				goto invalid;
+
+			/* Convert GS prefix to DS if !SMP */
+			if (data[0] != 0x65)
+				goto invalid;
+			if (!opts.smp)
+				data[0] = 0x3e;
+
+			/* Set Mod=00, R/M=101.  Preserve Reg */
+			data[3] = (data[3] & 0x38) | 5;
+
+			/* Displacement 0 */
+			data[4] = 0;
+			data[5] = 0;
+			data[6] = 0;
+			data[7] = 0;
+
+			/* Pad with NOP */
+			data[8] = 0x90;
+
+			if (!elf_init_reloc_data_sym(file->elf, sec, insn->offset + 4, idx++, __stack_chk_guard, -4))
+				return -1;
+
+			continue;
+
+invalid:
+			fprintf(stderr, "Invalid stackprotector instruction at %s+0x%lx: ", sec->name, insn->offset);
+			for (i = 0; i < insn->len; i++)
+				fprintf(stderr, "%02x ", data[i]);
+			fprintf(stderr, "\n");
+			return -1;
+		}
+
+		mark_sec_changed(file->elf, sec, true);
+	}
+
+	return 0;
 }
