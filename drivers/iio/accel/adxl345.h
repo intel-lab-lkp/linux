@@ -26,10 +26,17 @@
  */
 #define ADXL375_USCALE	480000
 
+enum adxl345_device_type {
+	ADXL345,
+	ADXL375,
+};
+
 struct adxl345_chip_info {
 	const char *name;
 	int uscale;
 };
+
+extern const struct adxl345_chip_info adxl3x5_chip_info[];
 
 int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		       int (*setup)(struct device*, struct regmap*));

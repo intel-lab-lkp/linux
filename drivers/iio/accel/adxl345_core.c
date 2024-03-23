@@ -62,6 +62,18 @@ struct adxl345_data {
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
 }
 
+const struct adxl345_chip_info adxl3x5_chip_info[] = {
+	[ADXL345] = {
+		.name = "adxl345",
+		.uscale = ADXL345_USCALE,
+	},
+	[ADXL375] = {
+		.name = "adxl375",
+		.uscale = ADXL375_USCALE,
+	},
+};
+EXPORT_SYMBOL_NS_GPL(adxl3x5_chip_info, IIO_ADXL345);
+
 static const struct iio_chan_spec adxl345_channels[] = {
 	ADXL345_CHANNEL(0, X),
 	ADXL345_CHANNEL(1, Y),
