@@ -8,6 +8,9 @@
 #ifndef _ADXL345_H_
 #define _ADXL345_H_
 
+#define ADXL345_REG_DATA_FORMAT		0x31
+#define ADXL345_DATA_FORMAT_SPI         BIT(6) /* spi-3wire */
+
 /*
  * In full-resolution mode, scale factor is maintained at ~4 mg/LSB
  * in all g ranges.
