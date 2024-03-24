@@ -232,6 +232,7 @@ enum tpacpi_hkey_event_t {
 
 	/* Misc */
 	TP_HKEY_EV_RFKILL_CHANGED	= 0x7000, /* rfkill switch changed */
+	TP_HKEY_EV_TRACKPOINT_DOUBLETAP = 0x8036, /* doubletap on Trackpoint*/
 };
 
 /****************************************************************************
@@ -4078,6 +4079,22 @@ static void hotkey_notify(struct ibm_struct *ibm, u32 event)
 				tpacpi_send_radiosw_update();
 				send_acpi_ev = 0;
 				known_ev = true;
+				break;
+			}
+			fallthrough;	/* to default */
+		case 8:
+			/* 0x8036: Trackpoint doubletaps */
+			if (hkey == TP_HKEY_EV_TRACKPOINT_DOUBLETAP) {
+				send_acpi_ev = true;
+				ignore_acpi_ev = false;
+				known_ev = true;
+				/* Send to user space */
+				mutex_lock(&tpacpi_inputdev_send_mutex);
+				input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 1);
+				input_sync(tpacpi_inputdev);
+				input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 0);
+				input_sync(tpacpi_inputdev);
+				mutex_unlock(&tpacpi_inputdev_send_mutex);
 				break;
 			}
 			fallthrough;	/* to default */
