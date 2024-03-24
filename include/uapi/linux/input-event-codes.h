@@ -686,6 +686,8 @@
 #define KEY_SIDEVU_SONAR               0x287
 #define KEY_NAV_INFO                   0x288
 #define KEY_BRIGHTNESS_MENU            0x289
+#define KEY_DOUBLECLICK                0x28a
+#define KEY_SYS_DEBUG_INFO             0x28b
 
 /*
  * Some keyboards have keys which do not have a defined meaning, these keys
