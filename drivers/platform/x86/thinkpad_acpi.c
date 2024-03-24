@@ -167,6 +167,7 @@ enum tpacpi_hkey_event_t {
 	TP_HKEY_EV_VOL_MUTE		= 0x1017, /* Mixer output mute */
 	TP_HKEY_EV_PRIVACYGUARD_TOGGLE	= 0x130f, /* Toggle priv.guard on/off */
 	TP_HKEY_EV_AMT_TOGGLE		= 0x131a, /* Toggle AMT on/off */
+	TP_HKEY_EV_DOUBLETAP_TOGGLE	= 0x131c, /* Toggle trackpoint doubletap on/off */
 	TP_HKEY_EV_PROFILE_TOGGLE	= 0x131f, /* Toggle platform profile */
 
 	/* Reasons for waking up from S3/S4 */
@@ -354,6 +355,7 @@ static struct {
 	u32 hotkey_poll_active:1;
 	u32 has_adaptive_kbd:1;
 	u32 kbd_lang:1;
+	u32 trackpoint_doubletap:1;
 	struct quirk_entry *quirks;
 } tp_features;
 
@@ -3598,6 +3600,9 @@ static int __init hotkey_init(struct ibm_init_struct *iibm)
 
 	hotkey_poll_setup_safe(true);
 
+	/* Enable doubletap by default */
+	tp_features.trackpoint_doubletap = 1;
+
 	return 0;
 }
 
@@ -3739,6 +3744,7 @@ static bool hotkey_notify_extended_hotkey(const u32 hkey)
 	case TP_HKEY_EV_PRIVACYGUARD_TOGGLE:
 	case TP_HKEY_EV_AMT_TOGGLE:
 	case TP_HKEY_EV_PROFILE_TOGGLE:
+	case TP_HKEY_EV_DOUBLETAP_TOGGLE:
 		tpacpi_driver_event(hkey);
 		return true;
 	}
@@ -4092,13 +4098,15 @@ static void hotkey_notify(struct ibm_struct *ibm, u32 event)
 				send_acpi_ev = true;
 				ignore_acpi_ev = false;
 				known_ev = true;
-				/* Send to user space */
-				mutex_lock(&tpacpi_inputdev_send_mutex);
-				input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 1);
-				input_sync(tpacpi_inputdev);
-				input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 0);
-				input_sync(tpacpi_inputdev);
-				mutex_unlock(&tpacpi_inputdev_send_mutex);
+				if (tp_features.trackpoint_doubletap) {
+					/* Send to user space */
+					mutex_lock(&tpacpi_inputdev_send_mutex);
+					input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 1);
+					input_sync(tpacpi_inputdev);
+					input_report_key(tpacpi_inputdev, KEY_DOUBLECLICK, 0);
+					input_sync(tpacpi_inputdev);
+					mutex_unlock(&tpacpi_inputdev_send_mutex);
+				}
 				break;
 			}
 			fallthrough;	/* to default */
@@ -11228,6 +11236,8 @@ static void tpacpi_driver_event(const unsigned int hkey_event)
 		/* Notify user space the profile changed */
 		platform_profile_notify();
 	}
+	if (hkey_event == TP_HKEY_EV_DOUBLETAP_TOGGLE)
+		tp_features.trackpoint_doubletap = !tp_features.trackpoint_doubletap;
 }
 
 static void hotkey_driver_event(const unsigned int scancode)
