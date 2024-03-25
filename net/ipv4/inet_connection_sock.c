@@ -203,7 +203,8 @@ static bool __inet_bhash2_conflict(const struct sock *sk, struct sock *sk2,
 				   kuid_t sk_uid, bool relax,
 				   bool reuseport_cb_ok, bool reuseport_ok)
 {
-	if (sk->sk_family == AF_INET && ipv6_only_sock(sk2))
+	if (ipv6_only_sock(sk2) &&
+	    (sk->sk_family == AF_INET || ipv6_addr_v4mapped(&sk->sk_v6_rcv_saddr)))
 		return false;
 
 	return inet_bind_conflict(sk, sk2, sk_uid, relax,
