@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hsi/ti,omap-ssi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SSI Controller on OMAP SoCs
+
+description:
+  OMAP3's Synchronous Serial Interface (SSI) controller implements a
+  legacy variant of MIPI's High Speed Synchronous Serial Interface (HSI),
+  while the controller found inside OMAP4 is supposed to be fully compliant
+  with the HSI standard.
+
+maintainers:
+  - Sebastian Reichel <sre@kernel.org>
+
+properties:
+  compatible:
+    enum:
+      - ti,omap3-ssi
+      - ti,omap4-hsi
+
+  reg:
+    items:
+      - description: registers for sys
+      - description: registers for gdd
+
+  reg-names:
+    items:
+      - const: sys
+      - const: gdd
+
+  ranges: true
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 3
+
+  clock-names:
+    minItems: 1
+    maxItems: 3
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-names:
+    const: gdd_mpu
+
+  ti,hwmods:
+    const: ssi
+    deprecated: true
+
+patternProperties:
+  "[hs]si-port@[0-9a-f]+":
+    type: object
+
+    additionalProperties: false
+
+    properties:
+      compatible:
+        enum:
+          - ti,omap3-ssi-port
+          - ti,omap4-hsi-port
+
+      reg:
+        items:
+          - description: TX registers
+          - description: RX registers
+
+      reg-names:
+        items:
+          - const: tx
+          - const: rx
+
+      interrupts:
+        items:
+          - description: MPU interrupt 0
+          - description: MPU interrupt 1
+        minItems: 1
+
+      ti,ssi-cawake-gpio:
+        description: GPIO signifying CAWAKE events
+        maxItems: 1
+
+      hsi-client:
+        type: object
+        $ref: /schemas/hsi/hsi-client.yaml#
+
+    required:
+      - compatible
+      - reg
+      - reg-names
+      - interrupts
+
+    allOf:
+      - if:
+          properties:
+            compatible:
+              contains:
+                const: ti,omap3-ssi-port
+        then:
+          properties:
+            $nodename:
+              pattern: "^ssi-port@(.*)?$"
+            interrupts:
+              minItems: 2
+        else:
+          properties:
+            $nodename:
+              pattern: "^hsi-port@(.*)?$"
+            interrupts:
+              maxItems: 1
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - ranges
+  - "#address-cells"
+  - "#size-cells"
+  - clocks
+  - clock-names
+  - interrupts
+  - interrupt-names
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,omap3-ssi
+    then:
+      properties:
+        clocks:
+          minItems: 3
+        clock-names:
+          items:
+            - const: ssi_ssr_fck
+            - const: ssi_sst_fck
+            - const: ssi_ick
+    else:
+      properties:
+        clocks:
+          maxItems: 1
+        clock-names:
+          items:
+            - const: hsi_fck
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    ssi-controller@48058000 {
+        compatible = "ti,omap3-ssi";
+        reg = <0x48058000 0x1000>,
+              <0x48059000 0x1000>;
+        reg-names = "sys", "gdd";
+        ranges;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        clocks = <&ssi_ssr_fck>,
+                 <&ssi_sst_fck>,
+                 <&ssi_ick>;
+        clock-names = "ssi_ssr_fck",
+                      "ssi_sst_fck",
+                      "ssi_ick";
+        interrupts = <55>;
+        interrupt-names = "gdd_mpu";
+
+        ssi-port@4805a000 {
+                compatible = "ti,omap3-ssi-port";
+                reg = <0x4805a000 0x800>,
+                      <0x4805a800 0x800>;
+                reg-names = "tx", "rx";
+                interrupt-parent = <&intc>;
+                interrupts = <67>, <68>;
+                ti,ssi-cawake-gpio = <&gpio5 23 GPIO_ACTIVE_HIGH>;
+        };
+
+        ssi-port@4805b000 {
+                compatible = "ti,omap3-ssi-port";
+                reg = <0x4805b000 0x800>,
+                      <0x4805b800 0x800>;
+                reg-names = "tx", "rx";
+                interrupt-parent = <&intc>;
+                interrupts = <69>, <70>;
+        };
+    };
