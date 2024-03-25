@@ -828,6 +828,30 @@ static void zswap_entry_free(struct zswap_entry *entry)
 }
 
 /*********************************
+* zswap tree functions
+**********************************/
+static int zswap_tree_store(struct xarray *tree, pgoff_t offset, void *new)
+{
+	void *old;
+	int err;
+
+	old = xa_store(tree, offset, new, GFP_KERNEL);
+	err = xa_is_err(old);
+	if (err) {
+		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
+		zswap_reject_alloc_fail++;
+	} else if (old) {
+		/*
+		 * We may have had an existing entry that became stale when
+		 * the folio was redirtied and now the new version is being
+		 * swapped out. Get rid of the old.
+		 */
+		zswap_entry_free(old);
+	}
+	return err;
+}
+
+/*********************************
 * compressed storage functions
 **********************************/
 static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
@@ -1396,10 +1420,10 @@ bool zswap_store(struct folio *folio)
 	swp_entry_t swp = folio->swap;
 	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
-	struct zswap_entry *entry, *old;
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
 	unsigned long max_pages, cur_pages;
+	struct zswap_entry *entry;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1485,22 +1509,8 @@ insert_entry:
 	entry->swpentry = swp;
 	entry->objcg = objcg;
 
-	old = xa_store(tree, offset, entry, GFP_KERNEL);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
-
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
+	if (zswap_tree_store(tree, offset, entry))
 		goto store_failed;
-	}
-
-	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
-	 */
-	if (old)
-		zswap_entry_free(old);
 
 	if (objcg) {
 		obj_cgroup_charge_zswap(objcg, entry->length);
