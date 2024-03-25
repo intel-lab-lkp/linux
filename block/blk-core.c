@@ -1245,6 +1245,8 @@ int __init blk_dev_init(void)
 
 	blk_requestq_cachep = KMEM_CACHE(request_queue, SLAB_PANIC);
 
+	blk_zone_dev_init();
+
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
 
 	return 0;
