@@ -1367,9 +1367,8 @@ EXPORT_SYMBOL(__netdev_notify_peers);
  */
 void netdev_notify_peers(struct net_device *dev)
 {
-	rtnl_lock();
+	guard(rtnl)();
 	__netdev_notify_peers(dev);
-	rtnl_unlock();
 }
 EXPORT_SYMBOL(netdev_notify_peers);
 
@@ -1722,30 +1721,27 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	int err;
 
 	/* Close race with setup_net() and cleanup_net() */
-	down_write(&pernet_ops_rwsem);
-	rtnl_lock();
+	guard(rwsem_write)(&pernet_ops_rwsem);
+	guard(rtnl)();
 	err = raw_notifier_chain_register(&netdev_chain, nb);
 	if (err)
-		goto unlock;
+		return err;
 	if (dev_boot_phase)
-		goto unlock;
+		return 0;
 	for_each_net(net) {
 		err = call_netdevice_register_net_notifiers(nb, net);
 		if (err)
 			goto rollback;
 	}
 
-unlock:
-	rtnl_unlock();
-	up_write(&pernet_ops_rwsem);
-	return err;
+	return 0;
 
 rollback:
 	for_each_net_continue_reverse(net)
 		call_netdevice_unregister_net_notifiers(nb, net);
 
 	raw_notifier_chain_unregister(&netdev_chain, nb);
-	goto unlock;
+	return err;
 }
 EXPORT_SYMBOL(register_netdevice_notifier);
 
@@ -1769,19 +1765,16 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 	int err;
 
 	/* Close race with setup_net() and cleanup_net() */
-	down_write(&pernet_ops_rwsem);
-	rtnl_lock();
+	guard(rwsem_write)(&pernet_ops_rwsem);
+	guard(rtnl)();
 	err = raw_notifier_chain_unregister(&netdev_chain, nb);
 	if (err)
-		goto unlock;
+		return err;
 
 	for_each_net(net)
 		call_netdevice_unregister_net_notifiers(nb, net);
 
-unlock:
-	rtnl_unlock();
-	up_write(&pernet_ops_rwsem);
-	return err;
+	return 0;
 }
 EXPORT_SYMBOL(unregister_netdevice_notifier);
 
@@ -1838,12 +1831,9 @@ static int __unregister_netdevice_notifier_net(struct net *net,
 
 int register_netdevice_notifier_net(struct net *net, struct notifier_block *nb)
 {
-	int err;
+	guard(rtnl)();
 
-	rtnl_lock();
-	err = __register_netdevice_notifier_net(net, nb, false);
-	rtnl_unlock();
-	return err;
+	return __register_netdevice_notifier_net(net, nb, false);
 }
 EXPORT_SYMBOL(register_netdevice_notifier_net);
 
@@ -1866,12 +1856,9 @@ EXPORT_SYMBOL(register_netdevice_notifier_net);
 int unregister_netdevice_notifier_net(struct net *net,
 				      struct notifier_block *nb)
 {
-	int err;
+	guard(rtnl)();
 
-	rtnl_lock();
-	err = __unregister_netdevice_notifier_net(net, nb);
-	rtnl_unlock();
-	return err;
+	return __unregister_netdevice_notifier_net(net, nb);
 }
 EXPORT_SYMBOL(unregister_netdevice_notifier_net);
 
@@ -1889,14 +1876,14 @@ int register_netdevice_notifier_dev_net(struct net_device *dev,
 {
 	int err;
 
-	rtnl_lock();
+	guard(rtnl)();
 	err = __register_netdevice_notifier_net(dev_net(dev), nb, false);
-	if (!err) {
-		nn->nb = nb;
-		list_add(&nn->list, &dev->net_notifier_list);
-	}
-	rtnl_unlock();
-	return err;
+	if (err)
+		return err;
+
+	nn->nb = nb;
+	list_add(&nn->list, &dev->net_notifier_list);
+	return 0;
 }
 EXPORT_SYMBOL(register_netdevice_notifier_dev_net);
 
@@ -1904,13 +1891,10 @@ int unregister_netdevice_notifier_dev_net(struct net_device *dev,
 					  struct notifier_block *nb,
 					  struct netdev_net_notifier *nn)
 {
-	int err;
+	guard(rtnl)();
 
-	rtnl_lock();
 	list_del(&nn->list);
-	err = __unregister_netdevice_notifier_net(dev_net(dev), nb);
-	rtnl_unlock();
-	return err;
+	return __unregister_netdevice_notifier_net(dev_net(dev), nb);
 }
 EXPORT_SYMBOL(unregister_netdevice_notifier_dev_net);
 
@@ -9453,7 +9437,7 @@ static void bpf_xdp_link_release(struct bpf_link *link)
 {
 	struct bpf_xdp_link *xdp_link = container_of(link, struct bpf_xdp_link, link);
 
-	rtnl_lock();
+	guard(rtnl)();
 
 	/* if racing with net_device's tear down, xdp_link->dev might be
 	 * already NULL, in which case link was already auto-detached
@@ -9462,8 +9446,6 @@ static void bpf_xdp_link_release(struct bpf_link *link)
 		WARN_ON(dev_xdp_detach_link(xdp_link->dev, NULL, xdp_link));
 		xdp_link->dev = NULL;
 	}
-
-	rtnl_unlock();
 }
 
 static int bpf_xdp_link_detach(struct bpf_link *link)
@@ -9485,10 +9467,10 @@ static void bpf_xdp_link_show_fdinfo(const struct bpf_link *link,
 	struct bpf_xdp_link *xdp_link = container_of(link, struct bpf_xdp_link, link);
 	u32 ifindex = 0;
 
-	rtnl_lock();
-	if (xdp_link->dev)
-		ifindex = xdp_link->dev->ifindex;
-	rtnl_unlock();
+	scoped_guard(rtnl) {
+		if (xdp_link->dev)
+			ifindex = xdp_link->dev->ifindex;
+	}
 
 	seq_printf(seq, "ifindex:\t%u\n", ifindex);
 }
@@ -9499,10 +9481,10 @@ static int bpf_xdp_link_fill_link_info(const struct bpf_link *link,
 	struct bpf_xdp_link *xdp_link = container_of(link, struct bpf_xdp_link, link);
 	u32 ifindex = 0;
 
-	rtnl_lock();
-	if (xdp_link->dev)
-		ifindex = xdp_link->dev->ifindex;
-	rtnl_unlock();
+	scoped_guard(rtnl) {
+		if (xdp_link->dev)
+			ifindex = xdp_link->dev->ifindex;
+	}
 
 	info->xdp.ifindex = ifindex;
 	return 0;
@@ -9514,31 +9496,26 @@ static int bpf_xdp_link_update(struct bpf_link *link, struct bpf_prog *new_prog,
 	struct bpf_xdp_link *xdp_link = container_of(link, struct bpf_xdp_link, link);
 	enum bpf_xdp_mode mode;
 	bpf_op_t bpf_op;
-	int err = 0;
+	int err;
 
-	rtnl_lock();
+	guard(rtnl)();
 
 	/* link might have been auto-released already, so fail */
-	if (!xdp_link->dev) {
-		err = -ENOLINK;
-		goto out_unlock;
-	}
+	if (!xdp_link->dev)
+		return -ENOLINK;
 
-	if (old_prog && link->prog != old_prog) {
-		err = -EPERM;
-		goto out_unlock;
-	}
+	if (old_prog && link->prog != old_prog)
+		return -EPERM;
+
 	old_prog = link->prog;
 	if (old_prog->type != new_prog->type ||
-	    old_prog->expected_attach_type != new_prog->expected_attach_type) {
-		err = -EINVAL;
-		goto out_unlock;
-	}
+	    old_prog->expected_attach_type != new_prog->expected_attach_type)
+		return -EINVAL;
 
 	if (old_prog == new_prog) {
 		/* no-op, don't disturb drivers */
 		bpf_prog_put(new_prog);
-		goto out_unlock;
+		return 0;
 	}
 
 	mode = dev_xdp_mode(xdp_link->dev, xdp_link->flags);
@@ -9546,14 +9523,11 @@ static int bpf_xdp_link_update(struct bpf_link *link, struct bpf_prog *new_prog,
 	err = dev_xdp_install(xdp_link->dev, mode, bpf_op, NULL,
 			      xdp_link->flags, new_prog);
 	if (err)
-		goto out_unlock;
+		return err;
 
 	old_prog = xchg(&link->prog, new_prog);
 	bpf_prog_put(old_prog);
-
-out_unlock:
-	rtnl_unlock();
-	return err;
+	return 0;
 }
 
 static const struct bpf_link_ops bpf_xdp_link_lops = {
@@ -9567,57 +9541,47 @@ static const struct bpf_link_ops bpf_xdp_link_lops = {
 
 int bpf_xdp_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 {
+	/* link itself doesn't hold dev's refcnt to not complicate shutdown */
+	struct net_device *dev __free(dev_put) = NULL;
 	struct net *net = current->nsproxy->net_ns;
 	struct bpf_link_primer link_primer;
 	struct netlink_ext_ack extack = {};
 	struct bpf_xdp_link *link;
-	struct net_device *dev;
-	int err, fd;
+	int err;
 
-	rtnl_lock();
-	dev = dev_get_by_index(net, attr->link_create.target_ifindex);
-	if (!dev) {
-		rtnl_unlock();
-		return -EINVAL;
+	scoped_guard(rtnl) {
+		dev = dev_get_by_index(net,
+				       attr->link_create.target_ifindex);
+		if (!dev)
+			return -EINVAL;
+
+		link = kzalloc(sizeof(*link), GFP_USER);
+		if (!link)
+			return -ENOMEM;
+
+		bpf_link_init(&link->link, BPF_LINK_TYPE_XDP,
+			      &bpf_xdp_link_lops, prog);
+
+		link->dev = dev;
+		link->flags = attr->link_create.flags;
+
+		err = bpf_link_prime(&link->link, &link_primer);
+		if (err) {
+			kfree(link);
+			return err;
+		}
+
+		err = dev_xdp_attach_link(dev, &extack, link);
 	}
-
-	link = kzalloc(sizeof(*link), GFP_USER);
-	if (!link) {
-		err = -ENOMEM;
-		goto unlock;
-	}
-
-	bpf_link_init(&link->link, BPF_LINK_TYPE_XDP, &bpf_xdp_link_lops, prog);
-	link->dev = dev;
-	link->flags = attr->link_create.flags;
-
-	err = bpf_link_prime(&link->link, &link_primer);
-	if (err) {
-		kfree(link);
-		goto unlock;
-	}
-
-	err = dev_xdp_attach_link(dev, &extack, link);
-	rtnl_unlock();
 
 	if (err) {
 		link->dev = NULL;
 		bpf_link_cleanup(&link_primer);
 		trace_bpf_xdp_link_attach_failed(extack._msg);
-		goto out_put_dev;
+		return err;
 	}
 
-	fd = bpf_link_settle(&link_primer);
-	/* link itself doesn't hold dev's refcnt to not complicate shutdown */
-	dev_put(dev);
-	return fd;
-
-unlock:
-	rtnl_unlock();
-
-out_put_dev:
-	dev_put(dev);
-	return err;
+	return bpf_link_settle(&link_primer);
 }
 
 /**
@@ -11171,9 +11135,8 @@ EXPORT_SYMBOL(unregister_netdevice_many);
  */
 void unregister_netdev(struct net_device *dev)
 {
-	rtnl_lock();
+	guard(rtnl)();
 	unregister_netdevice(dev);
-	rtnl_unlock();
 }
 EXPORT_SYMBOL(unregister_netdev);
 
@@ -11617,7 +11580,7 @@ static void __net_exit default_device_exit_batch(struct list_head *net_list)
 	struct net *net;
 	LIST_HEAD(dev_kill_list);
 
-	rtnl_lock();
+	guard(rtnl)();
 	list_for_each_entry(net, net_list, exit_list) {
 		default_device_exit_net(net);
 		cond_resched();
@@ -11632,7 +11595,6 @@ static void __net_exit default_device_exit_batch(struct list_head *net_list)
 		}
 	}
 	unregister_netdevice_many(&dev_kill_list);
-	rtnl_unlock();
 }
 
 static struct pernet_operations __net_initdata default_device_ops = {
