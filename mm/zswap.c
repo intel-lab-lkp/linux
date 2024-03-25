@@ -44,8 +44,8 @@
 **********************************/
 /* The number of compressed pages currently stored in zswap */
 atomic_t zswap_stored_pages = ATOMIC_INIT(0);
-/* The number of same-value filled pages currently stored in zswap */
-static atomic_t zswap_same_filled_pages = ATOMIC_INIT(0);
+/* The number of zero-filled pages currently stored in zswap */
+static atomic_t zswap_zero_filled_pages = ATOMIC_INIT(0);
 
 /*
  * The statistics below are not protected from concurrent access for
@@ -123,9 +123,9 @@ static unsigned int zswap_accept_thr_percent = 90; /* of max pool size */
 module_param_named(accept_threshold_percent, zswap_accept_thr_percent,
 		   uint, 0644);
 
-/* Enable/disable handling non-same-value filled pages (enabled by default) */
-static bool zswap_non_same_filled_pages_enabled = true;
-module_param_named(non_same_filled_pages_enabled, zswap_non_same_filled_pages_enabled,
+/* Enable/disable handling non-zero-filled pages (enabled by default) */
+static bool zswap_non_zero_filled_pages_enabled = true;
+module_param_named(non_same_filled_pages_enabled, zswap_non_zero_filled_pages_enabled,
 		   bool, 0644);
 
 /* Number of zpools in zswap_pool (empirically determined for scalability) */
@@ -187,11 +187,10 @@ static struct shrinker *zswap_shrinker;
  *
  * swpentry - associated swap entry, the offset indexes into the red-black tree
  * length - the length in bytes of the compressed page data.  Needed during
- *          decompression. For a same value filled page length is 0, and both
+ *          decompression. For a zero-filled page length is 0, and both
  *          pool and lru are invalid and must be ignored.
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
- * value - value of the same-value filled pages which have same content
  * objcg - the obj_cgroup that the compressed memory is charged to
  * lru - handle to the pool's lru used to evict pages.
  */
@@ -199,10 +198,7 @@ struct zswap_entry {
 	swp_entry_t swpentry;
 	unsigned int length;
 	struct zswap_pool *pool;
-	union {
-		unsigned long handle;
-		unsigned long value;
-	};
+	unsigned long handle;
 	struct obj_cgroup *objcg;
 	struct list_head lru;
 };
@@ -805,7 +801,7 @@ static struct zpool *zswap_find_zpool(struct zswap_entry *entry)
 static void zswap_entry_free(struct zswap_entry *entry)
 {
 	if (!entry->length)
-		atomic_dec(&zswap_same_filled_pages);
+		atomic_dec(&zswap_zero_filled_pages);
 	else {
 		zswap_lru_del(&zswap_list_lru, entry);
 		zpool_free(zswap_find_zpool(entry), entry->handle);
@@ -1377,41 +1373,15 @@ resched:
 	} while (zswap_total_pages() > thr);
 }
 
-static bool zswap_is_folio_same_filled(struct folio *folio, unsigned long *value)
+static bool zswap_is_folio_zero_filled(struct folio *folio)
 {
-	unsigned long *page;
-	unsigned long val;
-	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*page) - 1;
+	unsigned long *kaddr;
 	bool ret;
 
-	page = kmap_local_folio(folio, 0);
-	val = page[0];
-
-	if (val != page[last_pos]) {
-		ret = false;
-		goto out;
-	}
-
-	for (pos = 1; pos < last_pos; pos++) {
-		if (val != page[pos]) {
-			ret = false;
-			goto out;
-		}
-	}
-
-	*value = val;
-	ret = true;
-out:
-	kunmap_local(page);
+	kaddr = kmap_local_folio(folio, 0);
+	ret = !memchr_inv(kaddr, 0, PAGE_SIZE);
+	kunmap_local(kaddr);
 	return ret;
-}
-
-static void zswap_fill_page(void *ptr, unsigned long value)
-{
-	unsigned long *page;
-
-	page = (unsigned long *)ptr;
-	memset_l(page, value, PAGE_SIZE / sizeof(unsigned long));
 }
 
 static bool zswap_check_limit(void)
@@ -1437,7 +1407,6 @@ bool zswap_store(struct folio *folio)
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_entry *entry;
-	unsigned long value;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1470,14 +1439,13 @@ bool zswap_store(struct folio *folio)
 		goto reject;
 	}
 
-	if (zswap_is_folio_same_filled(folio, &value)) {
+	if (zswap_is_folio_zero_filled(folio)) {
 		entry->length = 0;
-		entry->value = value;
-		atomic_inc(&zswap_same_filled_pages);
+		atomic_inc(&zswap_zero_filled_pages);
 		goto insert_entry;
 	}
 
-	if (!zswap_non_same_filled_pages_enabled)
+	if (!zswap_non_zero_filled_pages_enabled)
 		goto freepage;
 
 	/* if entry is successfully added, it keeps the reference */
@@ -1532,7 +1500,7 @@ insert_entry:
 
 store_failed:
 	if (!entry->length)
-		atomic_dec(&zswap_same_filled_pages);
+		atomic_dec(&zswap_zero_filled_pages);
 	else {
 		zpool_free(zswap_find_zpool(entry), entry->handle);
 put_pool:
@@ -1563,7 +1531,6 @@ bool zswap_load(struct folio *folio)
 	struct page *page = &folio->page;
 	struct xarray *tree = swap_zswap_tree(swp);
 	struct zswap_entry *entry;
-	u8 *dst;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 
@@ -1573,11 +1540,8 @@ bool zswap_load(struct folio *folio)
 
 	if (entry->length)
 		zswap_decompress(entry, page);
-	else {
-		dst = kmap_local_page(page);
-		zswap_fill_page(dst, entry->value);
-		kunmap_local(dst);
-	}
+	else
+		clear_highpage(page);
 
 	count_vm_event(ZSWPIN);
 	if (entry->objcg)
@@ -1679,7 +1643,7 @@ static int zswap_debugfs_init(void)
 	debugfs_create_atomic_t("stored_pages", 0444,
 				zswap_debugfs_root, &zswap_stored_pages);
 	debugfs_create_atomic_t("same_filled_pages", 0444,
-				zswap_debugfs_root, &zswap_same_filled_pages);
+				zswap_debugfs_root, &zswap_zero_filled_pages);
 
 	return 0;
 }
