@@ -123,14 +123,6 @@ static unsigned int zswap_accept_thr_percent = 90; /* of max pool size */
 module_param_named(accept_threshold_percent, zswap_accept_thr_percent,
 		   uint, 0644);
 
-/*
- * Enable/disable handling same-value filled pages (enabled by default).
- * If disabled every page is considered non-same-value filled.
- */
-static bool zswap_same_filled_pages_enabled = true;
-module_param_named(same_filled_pages_enabled, zswap_same_filled_pages_enabled,
-		   bool, 0644);
-
 /* Enable/disable handling non-same-value filled pages (enabled by default) */
 static bool zswap_non_same_filled_pages_enabled = true;
 module_param_named(non_same_filled_pages_enabled, zswap_non_same_filled_pages_enabled,
@@ -1391,9 +1383,6 @@ static bool zswap_is_folio_same_filled(struct folio *folio, unsigned long *value
 	unsigned long val;
 	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*page) - 1;
 	bool ret;
-
-	if (!zswap_same_filled_pages_enabled)
-		return false;
 
 	page = kmap_local_folio(folio, 0);
 	val = page[0];
