@@ -1482,6 +1482,14 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 	int ret;
 
 	/*
+	 * For devices using a BIO-based driver, we need zone resources only
+	 * if zone append emulation is required.
+	 */
+	if (!queue_is_mq(disk->queue) &&
+	    !queue_emulates_zone_append(disk->queue))
+		return 0;
+
+	/*
 	 * If the device has no limit on the maximum number of open and active
 	 * zones, set the max_open_zones queue limit to indicate the size of
 	 * the zone write plug memory pool and hash table size so that the user
@@ -1571,6 +1579,13 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 	/* Check zone type */
 	switch (zone->type) {
 	case BLK_ZONE_TYPE_CONVENTIONAL:
+		/*
+		 * For devices using a BIO-based driver, we need zone resources
+		 * only if zone append emulation is required.
+		 */
+		if (!queue_is_mq(disk->queue) &&
+		    !queue_emulates_zone_append(disk->queue))
+			break;
 		if (!args->conv_zones_bitmap) {
 			args->conv_zones_bitmap =
 				blk_alloc_zone_bitmap(q->node, args->nr_zones);
@@ -1602,10 +1617,11 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 		/*
 		 * We need to track the write pointer of all zones that are not
 		 * empty nor full. So make sure we have a zone write plug for
-		 * such zone.
+		 * such zone if the device has a zone write plug hash table.
 		 */
 		wp_offset = blk_zone_wp_offset(zone);
-		if (wp_offset && wp_offset < zone_sectors) {
+		if (disk->zone_wplugs_hash &&
+		    wp_offset && wp_offset < zone_sectors) {
 			zwplug = disk_get_zone_wplug_locked(disk, zone->start,
 							    GFP_NOIO, &flags);
 			if (!zwplug)
@@ -1636,8 +1652,8 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
  * be called within the disk ->revalidate method for blk-mq based drivers.
  * Before calling this function, the device driver must already have set the
  * device zone size (chunk_sector limit) and the max zone append limit.
- * For BIO based drivers, this function cannot be used. BIO based device drivers
- * only need to set disk->nr_zones so that the sysfs exposed value is correct.
+ * BIO based drivers can also use this function as long as the device queue
+ * can be safely frozen.
  * If the @update_driver_data callback function is not NULL, the callback is
  * executed with the device request queue frozen after all zones have been
  * checked.
@@ -1653,8 +1669,6 @@ int blk_revalidate_disk_zones(struct gendisk *disk,
 	int ret = -ENOMEM;
 
 	if (WARN_ON_ONCE(!blk_queue_is_zoned(q)))
-		return -EIO;
-	if (WARN_ON_ONCE(!queue_is_mq(q)))
 		return -EIO;
 
 	if (!capacity)
