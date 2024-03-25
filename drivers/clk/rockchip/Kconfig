@@ -107,4 +107,10 @@ config CLK_RK3588
 	help
 	  Build the driver for RK3588 Clock Driver.
 
+config ROCKCHIP_CLK_OUT
+	tristate "Rockchip Clk Out / Input Switch"
+	default y
+	help
+	  Say y here to enable clk out / input switch.
+
 endif
