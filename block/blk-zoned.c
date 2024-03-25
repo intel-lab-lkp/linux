@@ -1428,6 +1428,9 @@ void disk_free_zone_resources(struct gendisk *disk)
 
 	disk->zone_capacity = 0;
 	disk->nr_zones = 0;
+
+	if (!disk->zone_hw_limits)
+		disk_set_max_open_zones(disk, 0);
 }
 
 static int disk_revalidate_zone_resources(struct gendisk *disk,
@@ -1437,10 +1440,23 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 	unsigned int hash_size;
 	int ret;
 
-	hash_size = max(lim->max_open_zones, lim->max_active_zones);
-	if (!hash_size)
+	/*
+	 * If the device has no limit on the maximum number of open and active
+	 * zones, set the max_open_zones queue limit to indicate the size of
+	 * the zone write plug memory pool and hash table size so that the user
+	 * is aware of the potential performance penalty for simultaneously
+	 * writing to too many zones.
+	 */
+	disk->zone_hw_limits =
+		max(lim->max_active_zones, lim->max_open_zones);
+	if (!disk->zone_hw_limits)
 		hash_size = BLK_ZONE_DEFAULT_WPLUG_HASH_SIZE;
+	else
+		hash_size = disk->zone_hw_limits;
 	hash_size = min(hash_size, nr_zones);
+
+	if (!disk->zone_hw_limits && hash_size < nr_zones)
+		disk_set_max_open_zones(disk, hash_size);
 
 	if (!disk->zone_wplugs_hash)
 		return disk_alloc_zone_resources(disk, hash_size);
@@ -1451,6 +1467,8 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 		if (ret)
 			return ret;
 		disk->zone_wplugs_pool_size = hash_size;
+		if (!disk->zone_hw_limits && hash_size < nr_zones)
+			disk_set_max_open_zones(disk, hash_size);
 	}
 
 	return 0;
