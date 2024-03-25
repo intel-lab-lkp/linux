@@ -2611,9 +2611,19 @@ intel_set_cdclk_pre_plane_update(struct intel_atomic_state *state)
 
 	if (pipe == INVALID_PIPE ||
 	    old_cdclk_state->actual.cdclk <= new_cdclk_state->actual.cdclk) {
+		struct intel_cdclk_config cdclk_config;
+
 		drm_WARN_ON(&i915->drm, !new_cdclk_state->base.changed);
 
-		intel_set_cdclk(i915, &new_cdclk_state->actual, pipe);
+		/*
+		 * By this hack we want to prevent mbus_join to be changed
+		 * beforehand - we will take care of this later in
+		 * intel_dbuf_mbus_post_ddb_update
+		 */
+		cdclk_config = new_cdclk_state->actual;
+		cdclk_config.joined_mbus = old_cdclk_state->actual.joined_mbus;
+
+		intel_set_cdclk(i915, &cdclk_config, pipe);
 	}
 }
 
