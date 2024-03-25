@@ -54,6 +54,30 @@
 			regulator-off-in-suspend;
 		};
 	};
+
+	/*
+	 * Some RGB30 devices use a different CPU regulator. These
+	 * devices have no external markings to denote a different
+	 * model revision.
+	 */
+	vdd_cpu_alt: regulator@40 {
+		compatible = "tcs,tcs4525";
+		reg = <0x40>;
+		fcs,suspend-voltage-selector = <1>;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <712500>;
+		regulator-max-microvolt = <1390000>;
+		regulator-name = "vdd_cpu_alt";
+		regulator-ramp-delay = <2300>;
+		vin-supply = <&vcc_sys>;
+
+		status = "disabled";
+
+		regulator-state-mem {
+			regulator-off-in-suspend;
+		};
+	};
 };
 
 &sdmmc2 {
