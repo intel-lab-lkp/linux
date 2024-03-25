@@ -835,9 +835,12 @@
 	cap-sdio-irq;
 	keep-power-in-suspend;
 	mmc-pwrseq = <&sdio_pwrseq>;
+	no-mmc;
+	no-sd;
 	non-removable;
 	pinctrl-0 = <&sdmmc1_bus4>, <&sdmmc1_cmd>, <&sdmmc1_clk>;
 	pinctrl-names = "default";
+	sd-uhs-sdr50;
 	vmmc-supply = <&vcc_wifi>;
 	status = "okay";
 };
