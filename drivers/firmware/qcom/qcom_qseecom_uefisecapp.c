@@ -14,11 +14,14 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/ucs2_string.h>
 
 #include <linux/firmware/qcom/qcom_qseecom.h>
+#include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_tzmem.h>
 
 /* -- Qualcomm "uefisecapp" interface definitions. -------------------------- */
 
@@ -254,6 +257,7 @@ struct qsee_rsp_uefi_query_variable_info {
 struct qcuefi_client {
 	struct qseecom_client *client;
 	struct efivars efivars;
+	struct qcom_tzmem_pool *mempool;
 };
 
 static struct device *qcuefi_dev(struct qcuefi_client *qcuefi)
@@ -273,8 +277,8 @@ static efi_status_t qsee_uefi_get_variable(struct qcuefi_client *qcuefi, const e
 					   const efi_guid_t *guid, u32 *attributes,
 					   unsigned long *data_size, void *data)
 {
-	struct qsee_req_uefi_get_variable *req_data __free(kfree) = NULL;
-	struct qsee_rsp_uefi_get_variable *rsp_data __free(kfree) = NULL;
+	struct qsee_req_uefi_get_variable *req_data __free(qcom_tzmem) = NULL;
+	struct qsee_rsp_uefi_get_variable *rsp_data __free(qcom_tzmem) = NULL;
 	unsigned long buffer_size = *data_size;
 	unsigned long name_length;
 	efi_status_t efi_status;
@@ -305,11 +309,11 @@ static efi_status_t qsee_uefi_get_variable(struct qcuefi_client *qcuefi, const e
 		__array(u8, buffer_size)
 	);
 
-	req_data = kzalloc(req_size, GFP_KERNEL);
+	req_data = qcom_tzmem_alloc(qcuefi->mempool, req_size, GFP_KERNEL);
 	if (!req_data)
 		return EFI_OUT_OF_RESOURCES;
 
-	rsp_data = kzalloc(rsp_size, GFP_KERNEL);
+	rsp_data = qcom_tzmem_alloc(qcuefi->mempool, rsp_size, GFP_KERNEL);
 	if (!rsp_data)
 		return EFI_OUT_OF_RESOURCES;
 
@@ -394,8 +398,8 @@ static efi_status_t qsee_uefi_set_variable(struct qcuefi_client *qcuefi, const e
 					   const efi_guid_t *guid, u32 attributes,
 					   unsigned long data_size, const void *data)
 {
-	struct qsee_req_uefi_set_variable *req_data __free(kfree) = NULL;
-	struct qsee_rsp_uefi_set_variable *rsp_data __free(kfree) = NULL;
+	struct qsee_req_uefi_set_variable *req_data __free(qcom_tzmem) = NULL;
+	struct qsee_rsp_uefi_set_variable *rsp_data __free(qcom_tzmem) = NULL;
 	unsigned long name_length;
 	size_t name_offs;
 	size_t guid_offs;
@@ -425,11 +429,11 @@ static efi_status_t qsee_uefi_set_variable(struct qcuefi_client *qcuefi, const e
 		__array_offs(u8, data_size, &data_offs)
 	);
 
-	req_data = kzalloc(req_size, GFP_KERNEL);
+	req_data = qcom_tzmem_alloc(qcuefi->mempool, req_size, GFP_KERNEL);
 	if (!req_data)
 		return EFI_OUT_OF_RESOURCES;
 
-	rsp_data = kzalloc(sizeof(*rsp_data), GFP_KERNEL);
+	rsp_data = qcom_tzmem_alloc(qcuefi->mempool, sizeof(*rsp_data), GFP_KERNEL);
 	if (!rsp_data)
 		return EFI_OUT_OF_RESOURCES;
 
@@ -476,8 +480,8 @@ static efi_status_t qsee_uefi_get_next_variable(struct qcuefi_client *qcuefi,
 						unsigned long *name_size, efi_char16_t *name,
 						efi_guid_t *guid)
 {
-	struct qsee_req_uefi_get_next_variable *req_data __free(kfree) = NULL;
-	struct qsee_rsp_uefi_get_next_variable *rsp_data __free(kfree) = NULL;
+	struct qsee_req_uefi_get_next_variable *req_data __free(qcom_tzmem) = NULL;
+	struct qsee_rsp_uefi_get_next_variable *rsp_data __free(qcom_tzmem) = NULL;
 	efi_status_t efi_status;
 	size_t guid_offs;
 	size_t name_offs;
@@ -503,11 +507,11 @@ static efi_status_t qsee_uefi_get_next_variable(struct qcuefi_client *qcuefi,
 		__array(*name, *name_size / sizeof(*name))
 	);
 
-	req_data = kzalloc(req_size, GFP_KERNEL);
+	req_data = qcom_tzmem_alloc(qcuefi->mempool, req_size, GFP_KERNEL);
 	if (!req_data)
 		return EFI_OUT_OF_RESOURCES;
 
-	rsp_data = kzalloc(rsp_size, GFP_KERNEL);
+	rsp_data = qcom_tzmem_alloc(qcuefi->mempool, rsp_size, GFP_KERNEL);
 	if (!rsp_data)
 		return EFI_OUT_OF_RESOURCES;
 
@@ -587,15 +591,15 @@ static efi_status_t qsee_uefi_query_variable_info(struct qcuefi_client *qcuefi, 
 						  u64 *storage_space, u64 *remaining_space,
 						  u64 *max_variable_size)
 {
-	struct qsee_req_uefi_query_variable_info *req_data __free(kfree) = NULL;
-	struct qsee_rsp_uefi_query_variable_info *rsp_data __free(kfree) = NULL;
+	struct qsee_req_uefi_query_variable_info *req_data __free(qcom_tzmem) = NULL;
+	struct qsee_rsp_uefi_query_variable_info *rsp_data __free(qcom_tzmem) = NULL;
 	int status;
 
-	req_data = kzalloc(sizeof(*req_data), GFP_KERNEL);
+	req_data = qcom_tzmem_alloc(qcuefi->mempool, sizeof(*req_data), GFP_KERNEL);
 	if (!req_data)
 		return EFI_OUT_OF_RESOURCES;
 
-	rsp_data = kzalloc(sizeof(*rsp_data), GFP_KERNEL);
+	rsp_data = qcom_tzmem_alloc(qcuefi->mempool, sizeof(*rsp_data), GFP_KERNEL);
 	if (!rsp_data)
 		return EFI_OUT_OF_RESOURCES;
 
@@ -740,6 +744,7 @@ static const struct efivar_operations qcom_efivar_ops = {
 static int qcom_uefisecapp_probe(struct auxiliary_device *aux_dev,
 				 const struct auxiliary_device_id *aux_dev_id)
 {
+	struct qcom_tzmem_pool_config pool_config;
 	struct qcuefi_client *qcuefi;
 	int status;
 
@@ -757,6 +762,16 @@ static int qcom_uefisecapp_probe(struct auxiliary_device *aux_dev,
 	status = efivars_register(&qcuefi->efivars, &qcom_efivar_ops);
 	if (status)
 		qcuefi_set_reference(NULL);
+
+	memset(&pool_config, 0, sizeof(pool_config));
+	pool_config.initial_size = SZ_4K;
+	pool_config.policy = QCOM_TZMEM_POLICY_MULTIPLIER;
+	pool_config.increment = 2;
+	pool_config.max_size = SZ_256K;
+
+	qcuefi->mempool = devm_qcom_tzmem_pool_new(&aux_dev->dev, &pool_config);
+	if (IS_ERR(qcuefi->mempool))
+		return PTR_ERR(qcuefi->mempool);
 
 	return status;
 }
