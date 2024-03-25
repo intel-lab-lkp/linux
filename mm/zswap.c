@@ -1460,9 +1460,6 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	if (!zswap_check_limit())
-		goto reject;
-
 	if (zswap_is_folio_zero_filled(folio)) {
 		if (zswap_store_zero_filled(tree, offset, objcg))
 			goto reject;
@@ -1470,6 +1467,9 @@ bool zswap_store(struct folio *folio)
 	}
 
 	if (!zswap_non_zero_filled_pages_enabled)
+		goto reject;
+
+	if (!zswap_check_limit())
 		goto reject;
 
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
