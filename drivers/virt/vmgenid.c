@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2022 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  *
- * The "Virtual Machine Generation ID" is exposed via ACPI and changes when a
+ * The "Virtual Machine Generation ID" is exposed via ACPI or DT and changes when a
  * virtual machine forks or is cloned. This driver exists for shepherding that
  * information to random.c.
  */
@@ -21,6 +21,7 @@ enum { VMGENID_SIZE = 16 };
 struct vmgenid_state {
 	u8 *next_id;
 	u8 this_id[VMGENID_SIZE];
+	unsigned int irq;
 };
 
 static void vmgenid_notify(struct device *device)
@@ -37,10 +38,24 @@ static void vmgenid_notify(struct device *device)
 	kobject_uevent_env(&device->kobj, KOBJ_CHANGE, envp);
 }
 
+#if IS_ENABLED(CONFIG_ACPI)
 static void vmgenid_acpi_handler(acpi_handle handle, u32 event, void *dev)
 {
+	(void)handle;
+	(void)event;
 	vmgenid_notify(dev);
 }
+#endif
+
+#if IS_ENABLED(CONFIG_OF)
+static irqreturn_t vmgenid_of_irq_handler(int irq, void *dev)
+{
+	(void)irq;
+	vmgenid_notify(dev);
+
+	return IRQ_HANDLED;
+}
+#endif
 
 static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 {
@@ -55,6 +70,7 @@ static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 
 static int vmgenid_add_acpi(struct device *dev, struct vmgenid_state *state)
 {
+#if IS_ENABLED(CONFIG_ACPI)
 	struct acpi_device *device = ACPI_COMPANION(dev);
 	struct acpi_buffer parsed = { ACPI_ALLOCATE_BUFFER };
 	union acpi_object *obj;
@@ -96,6 +112,49 @@ static int vmgenid_add_acpi(struct device *dev, struct vmgenid_state *state)
 out:
 	ACPI_FREE(parsed.pointer);
 	return ret;
+#else
+	(void)dev;
+	(void)state;
+	return -EINVAL;
+#endif
+}
+
+static int vmgenid_add_of(struct platform_device *pdev, struct vmgenid_state *state)
+{
+#if IS_ENABLED(CONFIG_OF)
+	void __iomem *remapped_ptr;
+	int ret = 0;
+
+	remapped_ptr = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
+	if (IS_ERR(remapped_ptr)) {
+		ret = PTR_ERR(remapped_ptr);
+		goto out;
+	}
+
+	ret = setup_vmgenid_state(state, remapped_ptr);
+	if (ret)
+		goto out;
+
+	state->irq = platform_get_irq(pdev, 0);
+	if (state->irq < 0) {
+		ret = state->irq;
+		goto out;
+	}
+	pdev->dev.driver_data = state;
+
+	ret =  devm_request_irq(&pdev->dev, state->irq,
+				vmgenid_of_irq_handler,
+				IRQF_SHARED, "vmgenid", &pdev->dev);
+	if (ret)
+		pdev->dev.driver_data = NULL;
+
+out:
+	return ret;
+#else
+	(void)dev;
+	(void)state;
+	return -EINVAL;
+#endif
 }
 
 static int vmgenid_add(struct platform_device *pdev)
@@ -108,7 +167,10 @@ static int vmgenid_add(struct platform_device *pdev)
 	if (!state)
 		return -ENOMEM;
 
-	ret = vmgenid_add_acpi(dev, state);
+	if (dev->of_node)
+		ret = vmgenid_add_of(pdev, state);
+	else
+		ret = vmgenid_add_acpi(dev, state);
 
 	if (ret)
 		devm_kfree(dev, state);
@@ -116,18 +178,31 @@ static int vmgenid_add(struct platform_device *pdev)
 	return ret;
 }
 
-static const struct acpi_device_id vmgenid_ids[] = {
+#if IS_ENABLED(CONFIG_OF)
+static const struct of_device_id vmgenid_of_ids[] = {
+	{ .compatible = "linux,vmgenctr", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, vmgenid_of_ids);
+#endif
+
+#if IS_ENABLED(CONFIG_ACPI)
+static const struct acpi_device_id vmgenid_acpi_ids[] = {
 	{ "VMGENCTR", 0 },
 	{ "VM_GEN_COUNTER", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, vmgenid_ids);
+MODULE_DEVICE_TABLE(acpi, vmgenid_acpi_ids);
+#endif
 
 static struct platform_driver vmgenid_plaform_driver = {
 	.probe      = vmgenid_add,
 	.driver     = {
 		.name   = "vmgenid",
-		.acpi_match_table = ACPI_PTR(vmgenid_ids),
+		.acpi_match_table = ACPI_PTR(vmgenid_acpi_ids),
+#if IS_ENABLED(CONFIG_OF)
+		.of_match_table = vmgenid_of_ids,
+#endif
 		.owner = THIS_MODULE,
 	},
 };
