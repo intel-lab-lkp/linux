@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: GPL-2.0+ OR MIT
+/*
+ * Copyright 2021 Au-Zone Technologies
+ * Copyright 2024 Ideas on Board
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/leds/common.h>
+
+#include "imx8mp-verdin.dtsi"
+#include "imx8mp-verdin-nonwifi.dtsi"
+
+/ {
+	model = "Au-Zone Maivin AI Vision Starter Kit";
+	compatible = "au-zone,maivin-starter-kit",
+		     "toradex,verdin-imx8mp-nonwifi",
+		     "toradex,verdin-imx8mp",
+		     "fsl,imx8mp";
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&pinctrl_sw1>;
+
+		button-0 {
+			label = "SW1";
+			linux,code = <BTN_MISC>;
+			interrupts-extended = <&gpio3 16 IRQ_TYPE_LEVEL_LOW>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-0 = <&pinctrl_led>;
+
+		led-0 {
+			color = <LED_COLOR_ID_BLUE>;
+			function = LED_FUNCTION_STATUS;
+			linux,default-trigger = "heartbeat";
+			gpios = <&gpio3 14 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	csi_3v3: regulator-csi-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "CSI_3V3";
+		pinctrl-0 = <&pinctrl_csi_3v3>;
+		gpio = <&gpio3 7 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <50000>;	/* TODO: Determine the right value */
+	};
+
+	m2_3v3: regulator-m2-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "M2_3V3";
+		regulator-max-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;
+		pinctrl-0 = <&pinctrl_m2_3v3>;
+		gpio = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	/* Carrier Board Supply 3V3_SW */
+	reg_3v3: regulator-3v3-sw {
+		compatible = "regulator-fixed";
+		regulator-max-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;
+		regulator-name = "3V3_SW";
+	};
+};
+
+&eqos {
+	status = "okay";
+};
+
+/* Verdin CAN_1 */
+&flexcan1 {
+	status = "okay";
+};
+
+/* Verdin CAN_2 */
+&flexcan2 {
+	status = "okay";
+};
+
+/* Verdin I2C_2_DSI */
+&i2c2 {
+	status = "okay";
+
+	clock-frequency = <400000>;
+	scl-gpios = <&gpio5 16 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio5 17 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+	dac@d {
+		compatible = "ti,dac081c081";
+		reg = <0x0d>;
+		vref-supply = <&csi_3v3>;
+	};
+};
+
+/* Verdin I2C_4_CSI */
+&i2c3 {
+	status = "okay";
+
+	dac@d {
+		compatible = "ti,dac081c081";
+		reg = <0x0d>;
+		vref-supply = <&csi_3v3>;
+	};
+};
+
+/* Verdin I2C_1 */
+&i2c4 {
+	status = "okay";
+
+	temp-sensor@4b {
+		compatible = "ti,tmp102";
+		reg = <0x4b>;
+	};
+
+	/* EEPROM on the rear connector interface */
+	eeprom@54 {
+		compatible = "st,24c02", "atmel,24c02";
+		pagesize = <16>;
+		reg = <0x54>;
+	};
+};
+
+/* EEPROM on the carrier board */
+&eeprom_carrier_board {
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl_csi_3v3: csi-3v3-grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_NAND_DATA01__GPIO3_IO07		0x184	/* SODIMM 58 */
+		>;
+	};
+
+	gpio7grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI1_RXD1__GPIO4_IO03		0x82	/* SODIMM 220 */
+		>;
+	};
+
+	gpio8grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI1_RXC__GPIO4_IO01		0x82	/* SODIMM 222 */
+		>;
+	};
+
+	pinctrl_led: ledgrp {
+		fsl,pins = <
+			MX8MP_IOMUXC_NAND_DQS__GPIO3_IO14		0x82	/* SODIMM 66 */
+		>;
+	};
+
+	/* M.2 power off and reset */
+	pinctrl_m2: m2grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_NAND_DATA00__GPIO3_IO06		0x82	/* SODIMM 56 */
+			MX8MP_IOMUXC_NAND_DATA03__GPIO3_IO09		0x82	/* SODIMM 62 */
+		>;
+	};
+
+	pinctrl_m2_3v3: m2-3v3-grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_NAND_CE0_B__GPIO3_IO01		0x82	/* SODIMM 54 */
+		>;
+	};
+
+	pinctrl_sw1: sw1grp {
+		fsl,pins = <
+			/*
+			 * SW1 shortens the pin to ground when pressed, enable
+			 * the internal pull-up.
+			 */
+			MX8MP_IOMUXC_NAND_READY_B__GPIO3_IO16		0x1c0	/* SODIMM 64 */
+		>;
+	};
+};
+
+&reg_usdhc2_vmmc {
+	vin-supply = <&reg_3v3>;
+};
+
+/* Verdin UART_1 */
+/* Enabling RS-485 operation */
+&uart1 {
+	fsl,uart-has-rtscts;
+	linux,rs485-enabled-at-boot-time;
+};
+
+/* Verdin UART_2, for M.2 card slot */
+&uart2 {
+	status = "okay";
+};
+
+/* Verdin UART_3, used as the Linux Console */
+&uart3 {
+	status = "okay";
+};
+
+/* Verdin USB_1, USB recovery */
+&usb3_phy0 {
+	status = "okay";
+};
+
+&usb3_0 {
+	status = "okay";
+};
+
+&usb_dwc3_0 {
+	status = "okay";
+};
+
+/* Verdin USB_2, for M.2 card slot */
+&usb3_phy1 {
+	status = "okay";
+};
+
+&usb3_1 {
+	status = "okay";
+};
+
+&usb_dwc3_1 {
+	status = "okay";
+};
+
+/* Verdin SD_1, for SD card slot */
+&usdhc2 {
+	status = "okay";
+};
