@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hsi/nokia-modem.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nokia modem
+
+maintainers:
+  - Sebastian Reichel <sre@kernel.org>
+
+properties:
+  compatible:
+    enum:
+      - nokia,n900-modem
+      - nokia,n950-modem
+      - nokia,n9-modem
+
+  hsi-channel-names:
+    items:
+      - const: mcsaab-control
+      - const: speech-control
+      - const: speech-data
+      - const: mcsaab-data
+
+  interrupts:
+    items:
+      - description: modem reset indication
+
+  gpios:
+    minItems: 3
+    maxItems: 5
+
+  gpio-names:
+    items:
+      - const: cmt_apeslpx
+      - const: cmt_rst_rq
+      - const: cmt_en
+      - const: cmt_rst
+      - const: cmt_bsi
+    minItems: 3
+
+required:
+  - gpios
+  - gpio-names
+  - interrupts
+
+allOf:
+  - $ref: hsi-client.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - nokia,n950-modem
+              - nokia,n9-modem
+    then:
+      properties:
+        gpios:
+          maxItems: 3
+        gpio-names:
+          maxItems: 3
+    else:
+      properties:
+        gpios:
+          minItems: 5
+        gpio-names:
+          minItems: 5
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    hsi-client {
+        compatible = "nokia,n900-modem";
+
+        hsi-channel-ids = <0>, <1>, <2>, <3>;
+        hsi-channel-names = "mcsaab-control",
+                            "speech-control",
+                            "speech-data",
+                            "mcsaab-data";
+        hsi-speed-kbps = <55000>;
+        hsi-mode = "frame";
+        hsi-flow = "synchronized";
+        hsi-arb-mode = "round-robin";
+
+        interrupts-extended = <&gpio3 8 IRQ_TYPE_EDGE_FALLING>;
+
+        gpios = <&gpio3  6 GPIO_ACTIVE_HIGH>,
+                <&gpio3  9 GPIO_ACTIVE_HIGH>,
+                <&gpio3 10 GPIO_ACTIVE_HIGH>,
+                <&gpio3 11 GPIO_ACTIVE_HIGH>,
+                <&gpio5 29 GPIO_ACTIVE_HIGH>;
+        gpio-names = "cmt_apeslpx",
+                     "cmt_rst_rq",
+                     "cmt_en",
+                     "cmt_rst",
+                     "cmt_bsi";
+    };
