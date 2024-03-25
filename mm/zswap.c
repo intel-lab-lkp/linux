@@ -183,12 +183,11 @@ static struct shrinker *zswap_shrinker;
  * struct zswap_entry
  *
  * This structure contains the metadata for tracking a single compressed
- * page within zswap.
+ * page within zswap, it does not track zero-filled pages.
  *
  * swpentry - associated swap entry, the offset indexes into the red-black tree
  * length - the length in bytes of the compressed page data.  Needed during
- *          decompression. For a zero-filled page length is 0, and both
- *          pool and lru are invalid and must be ignored.
+ *          decompression.
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
  * objcg - the obj_cgroup that the compressed memory is charged to
@@ -794,30 +793,35 @@ static struct zpool *zswap_find_zpool(struct zswap_entry *entry)
 	return entry->pool->zpools[hash_ptr(entry, ilog2(ZSWAP_NR_ZPOOLS))];
 }
 
-/*
- * Carries out the common pattern of freeing and entry's zpool allocation,
- * freeing the entry itself, and decrementing the number of stored pages.
- */
 static void zswap_entry_free(struct zswap_entry *entry)
 {
-	if (!entry->length)
-		atomic_dec(&zswap_zero_filled_pages);
-	else {
-		zswap_lru_del(&zswap_list_lru, entry);
-		zpool_free(zswap_find_zpool(entry), entry->handle);
-		zswap_pool_put(entry->pool);
-	}
+	zswap_lru_del(&zswap_list_lru, entry);
+	zpool_free(zswap_find_zpool(entry), entry->handle);
+	zswap_pool_put(entry->pool);
 	if (entry->objcg) {
 		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
 		obj_cgroup_put(entry->objcg);
 	}
 	zswap_entry_cache_free(entry);
-	atomic_dec(&zswap_stored_pages);
 }
 
 /*********************************
 * zswap tree functions
 **********************************/
+static void zswap_tree_free_element(void *elem)
+{
+	if (!elem)
+		return;
+
+	if (xa_pointer_tag(elem)) {
+		obj_cgroup_put(xa_untag_pointer(elem));
+		atomic_dec(&zswap_zero_filled_pages);
+	} else {
+		zswap_entry_free((struct zswap_entry *)elem);
+	}
+	atomic_dec(&zswap_stored_pages);
+}
+
 static int zswap_tree_store(struct xarray *tree, pgoff_t offset, void *new)
 {
 	void *old;
@@ -834,7 +838,7 @@ static int zswap_tree_store(struct xarray *tree, pgoff_t offset, void *new)
 		 * the folio was redirtied and now the new version is being
 		 * swapped out. Get rid of the old.
 		 */
-		zswap_entry_free(old);
+		zswap_tree_free_element(old);
 	}
 	return err;
 }
@@ -1089,7 +1093,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	if (entry->objcg)
 		count_objcg_event(entry->objcg, ZSWPWB);
 
-	zswap_entry_free(entry);
+	zswap_tree_free_element(entry);
 
 	/* folio is up to date */
 	folio_mark_uptodate(folio);
@@ -1373,6 +1377,33 @@ resched:
 	} while (zswap_total_pages() > thr);
 }
 
+/*********************************
+* zero-filled functions
+**********************************/
+#define ZSWAP_ZERO_FILLED_TAG 1UL
+
+static int zswap_store_zero_filled(struct xarray *tree, pgoff_t offset,
+				   struct obj_cgroup *objcg)
+{
+	int err = zswap_tree_store(tree, offset,
+			xa_tag_pointer(objcg, ZSWAP_ZERO_FILLED_TAG));
+
+	if (!err)
+		atomic_inc(&zswap_zero_filled_pages);
+	return err;
+}
+
+static bool zswap_load_zero_filled(void *elem, struct page *page,
+				   struct obj_cgroup **objcg)
+{
+	if (!xa_pointer_tag(elem))
+		return false;
+
+	clear_highpage(page);
+	*objcg = xa_untag_pointer(elem);
+	return true;
+}
+
 static bool zswap_is_folio_zero_filled(struct folio *folio)
 {
 	unsigned long *kaddr;
@@ -1432,21 +1463,20 @@ bool zswap_store(struct folio *folio)
 	if (!zswap_check_limit())
 		goto reject;
 
-	/* allocate entry */
+	if (zswap_is_folio_zero_filled(folio)) {
+		if (zswap_store_zero_filled(tree, offset, objcg))
+			goto reject;
+		goto stored;
+	}
+
+	if (!zswap_non_zero_filled_pages_enabled)
+		goto reject;
+
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
 	if (!entry) {
 		zswap_reject_kmemcache_fail++;
 		goto reject;
 	}
-
-	if (zswap_is_folio_zero_filled(folio)) {
-		entry->length = 0;
-		atomic_inc(&zswap_zero_filled_pages);
-		goto insert_entry;
-	}
-
-	if (!zswap_non_zero_filled_pages_enabled)
-		goto freepage;
 
 	/* if entry is successfully added, it keeps the reference */
 	entry->pool = zswap_pool_current_get();
@@ -1465,17 +1495,14 @@ bool zswap_store(struct folio *folio)
 	if (!zswap_compress(folio, entry))
 		goto put_pool;
 
-insert_entry:
 	entry->swpentry = swp;
 	entry->objcg = objcg;
 
 	if (zswap_tree_store(tree, offset, entry))
 		goto store_failed;
 
-	if (objcg) {
+	if (objcg)
 		obj_cgroup_charge_zswap(objcg, entry->length);
-		count_objcg_event(objcg, ZSWPOUT);
-	}
 
 	/*
 	 * We finish initializing the entry while it's already in xarray.
@@ -1487,25 +1514,21 @@ insert_entry:
 	 *    The publishing order matters to prevent writeback from seeing
 	 *    an incoherent entry.
 	 */
-	if (entry->length) {
-		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
-	}
+	INIT_LIST_HEAD(&entry->lru);
+	zswap_lru_add(&zswap_list_lru, entry);
 
-	/* update stats */
+stored:
+	if (objcg)
+		count_objcg_event(objcg, ZSWPOUT);
 	atomic_inc(&zswap_stored_pages);
 	count_vm_event(ZSWPOUT);
 
 	return true;
 
 store_failed:
-	if (!entry->length)
-		atomic_dec(&zswap_zero_filled_pages);
-	else {
-		zpool_free(zswap_find_zpool(entry), entry->handle);
+	zpool_free(zswap_find_zpool(entry), entry->handle);
 put_pool:
-		zswap_pool_put(entry->pool);
-	}
+	zswap_pool_put(entry->pool);
 freepage:
 	zswap_entry_cache_free(entry);
 reject:
@@ -1518,9 +1541,7 @@ check_old:
 	 * possibly stale entry which was previously stored at this offset.
 	 * Otherwise, writeback could overwrite the new data in the swapfile.
 	 */
-	entry = xa_erase(tree, offset);
-	if (entry)
-		zswap_entry_free(entry);
+	zswap_tree_free_element(xa_erase(tree, offset));
 	return false;
 }
 
@@ -1531,26 +1552,27 @@ bool zswap_load(struct folio *folio)
 	struct page *page = &folio->page;
 	struct xarray *tree = swap_zswap_tree(swp);
 	struct zswap_entry *entry;
+	struct obj_cgroup *objcg;
+	void *elem;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 
-	entry = xa_erase(tree, offset);
-	if (!entry)
+	elem = xa_erase(tree, offset);
+	if (!elem)
 		return false;
 
-	if (entry->length)
+	if (!zswap_load_zero_filled(elem, page, &objcg)) {
+		entry = elem;
+		objcg = entry->objcg;
 		zswap_decompress(entry, page);
-	else
-		clear_highpage(page);
+	}
 
 	count_vm_event(ZSWPIN);
-	if (entry->objcg)
-		count_objcg_event(entry->objcg, ZSWPIN);
+	if (objcg)
+		count_objcg_event(objcg, ZSWPIN);
 
-	zswap_entry_free(entry);
-
+	zswap_tree_free_element(elem);
 	folio_mark_dirty(folio);
-
 	return true;
 }
 
@@ -1558,11 +1580,8 @@ void zswap_invalidate(swp_entry_t swp)
 {
 	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
-	struct zswap_entry *entry;
 
-	entry = xa_erase(tree, offset);
-	if (entry)
-		zswap_entry_free(entry);
+	zswap_tree_free_element(xa_erase(tree, offset));
 }
 
 int zswap_swapon(int type, unsigned long nr_pages)
