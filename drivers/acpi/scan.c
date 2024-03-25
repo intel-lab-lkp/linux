@@ -530,15 +530,10 @@ static DEFINE_MUTEX(acpi_device_del_lock);
 
 static void acpi_device_del_work_fn(struct work_struct *work_not_used)
 {
-	for (;;) {
-		struct acpi_device *adev;
+	struct acpi_device *adev;
 
-		mutex_lock(&acpi_device_del_lock);
-
-		if (list_empty(&acpi_device_del_list)) {
-			mutex_unlock(&acpi_device_del_lock);
-			break;
-		}
+	mutex_lock(&acpi_device_del_lock);
+	while (!list_empty(&acpi_device_del_list)) {
 		adev = list_first_entry(&acpi_device_del_list,
 					struct acpi_device, del_list);
 		list_del(&adev->del_list);
@@ -555,7 +550,10 @@ static void acpi_device_del_work_fn(struct work_struct *work_not_used)
 		 */
 		acpi_power_transition(adev, ACPI_STATE_D3_COLD);
 		acpi_dev_put(adev);
+
+		mutex_lock(&acpi_device_del_lock);
 	}
+	mutex_unlock(&acpi_device_del_lock);
 }
 
 /**
