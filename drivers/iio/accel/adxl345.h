@@ -36,6 +36,7 @@
 #define ADXL345_DATA_FORMAT_8G		2
 #define ADXL345_DATA_FORMAT_16G		3
 #define ADXL345_DATA_FORMAT_MSK		~((u8) BIT(6)) /* ignore spi-3wire */
+#define ADXL345_DATA_FORMAT_SPI_3WIRE	BIT(6)
 
 #define ADXL345_DEVID			0xE5
 
