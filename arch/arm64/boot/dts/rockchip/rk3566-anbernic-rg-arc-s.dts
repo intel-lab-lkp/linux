@@ -10,10 +10,4 @@
 / {
 	model = "Anbernic RG ARC-S";
 	compatible = "anbernic,rg-arc-s", "rockchip,rk3566";
-
-	aliases {
-		mmc1 = &sdmmc0;
-		mmc2 = &sdmmc1;
-		mmc3 = &sdmmc2;
-	};
 };

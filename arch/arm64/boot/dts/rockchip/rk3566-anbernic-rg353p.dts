@@ -11,13 +11,6 @@
 	model = "RG353P";
 	compatible = "anbernic,rg353p", "rockchip,rk3566";
 
-	aliases {
-		mmc0 = &sdhci;
-		mmc1 = &sdmmc0;
-		mmc2 = &sdmmc1;
-		mmc3 = &sdmmc2;
-	};
-
 	battery: battery {
 		compatible = "simple-battery";
 		charge-full-design-microamp-hours = <3472000>;

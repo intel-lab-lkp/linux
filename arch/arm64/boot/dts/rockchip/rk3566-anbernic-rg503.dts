@@ -11,12 +11,6 @@
 	model = "RG503";
 	compatible = "anbernic,rg503", "rockchip,rk3566";
 
-	aliases {
-		mmc0 = &sdmmc0;
-		mmc1 = &sdmmc1;
-		mmc2 = &sdmmc2;
-	};
-
 	adc-joystick {
 		compatible = "adc-joystick";
 		io-channels = <&adc_mux 0>,
