@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hsi/hsi-client.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: HSI bus peripheral
+
+description:
+  Each HSI port is supposed to have one child node, which
+  symbols the remote device connected to the HSI port.
+
+maintainers:
+  - Sebastian Reichel <sre@kernel.org>
+
+properties:
+  $nodename:
+    const: hsi-client
+
+  hsi-channel-ids:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 8
+
+  hsi-channel-names:
+    minItems: 1
+    maxItems: 8
+
+  hsi-rx-mode:
+    enum: [stream, frame]
+    description: Receiver Bit transmission mode
+
+  hsi-tx-mode:
+    enum: [stream, frame]
+    description: Transmitter Bit transmission mode
+
+  hsi-mode:
+    enum: [stream, frame]
+    description:
+      May be used instead hsi-rx-mode and hsi-tx-mode if the
+      transmission mode is the same for receiver and transmitter.
+
+  hsi-speed-kbps:
+    description: Max bit transmission speed in kbit/s
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  hsi-flow:
+    enum: [synchronized, pipeline]
+    description: RX flow type
+
+  hsi-arb-mode:
+    enum: [round-robin, priority]
+    description: Arbitration mode for TX frame
+
+additionalProperties: true
+
+required:
+  - compatible
+  - hsi-channel-ids
+  - hsi-speed-kbps
+  - hsi-flow
+  - hsi-arb-mode
+
+anyOf:
+  - required:
+      - hsi-mode
+  - required:
+      - hsi-rx-mode
+      - hsi-tx-mode
+
+allOf:
+  - if:
+      required:
+        - hsi-mode
+    then:
+      properties:
+        hsi-rx-mode: false
+        hsi-tx-mode: false
+  - if:
+      required:
+        - hsi-rx-mode
+    then:
+      properties:
+        hsi-mode: false
