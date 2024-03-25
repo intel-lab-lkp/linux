@@ -214,8 +214,19 @@ static int cxl_port_perf_data_calculate(struct cxl_port *port,
 static void update_perf_entry(struct device *dev, struct dsmas_entry *dent,
 			      struct cxl_dpa_perf *dpa_perf)
 {
-	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++)
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
 		dpa_perf->coord[i] = dent->coord[i];
+		/*
+		 * Convert latency to nanosec from picosec to be consistent
+		 * with the resulting latency coordinates computed by the
+		 * HMAT_REPORTING code.
+		 */
+		dpa_perf->coord[i].read_latency =
+			DIV_ROUND_UP(dpa_perf->coord[i].read_latency, 1000);
+		dpa_perf->coord[i].write_latency =
+			DIV_ROUND_UP(dpa_perf->coord[i].write_latency, 1000);
+	}
+
 	dpa_perf->dpa_range = dent->dpa_range;
 	dpa_perf->qos_class = dent->qos_class;
 	dev_dbg(dev,
@@ -559,16 +570,6 @@ void cxl_region_perf_data_calculate(struct cxl_region *cxlr,
 						     perf->coord[i].write_latency);
 		cxlr->coord[i].read_bandwidth += perf->coord[i].read_bandwidth;
 		cxlr->coord[i].write_bandwidth += perf->coord[i].write_bandwidth;
-
-		/*
-		 * Convert latency to nanosec from picosec to be consistent
-		 * with the resulting latency coordinates computed by the
-		 * HMAT_REPORTING code.
-		 */
-		cxlr->coord[i].read_latency =
-			DIV_ROUND_UP(cxlr->coord[i].read_latency, 1000);
-		cxlr->coord[i].write_latency =
-			DIV_ROUND_UP(cxlr->coord[i].write_latency, 1000);
 	}
 }
 
