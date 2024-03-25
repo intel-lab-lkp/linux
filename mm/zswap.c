@@ -774,12 +774,13 @@ void zswap_memcg_offline_cleanup(struct mem_cgroup *memcg)
 **********************************/
 static struct kmem_cache *zswap_entry_cache;
 
-static struct zswap_entry *zswap_entry_cache_alloc(gfp_t gfp, int nid)
+static struct zswap_entry *zswap_entry_cache_alloc(int nid)
 {
 	struct zswap_entry *entry;
-	entry = kmem_cache_alloc_node(zswap_entry_cache, gfp, nid);
-	if (!entry)
-		return NULL;
+	entry = kmem_cache_alloc_node(zswap_entry_cache,
+				      GFP_KERNEL | __GFP_ZERO, nid);
+	if (entry)
+		INIT_LIST_HEAD(&entry->lru);
 	return entry;
 }
 
@@ -795,9 +796,12 @@ static struct zpool *zswap_find_zpool(struct zswap_entry *entry)
 
 static void zswap_entry_free(struct zswap_entry *entry)
 {
-	zswap_lru_del(&zswap_list_lru, entry);
-	zpool_free(zswap_find_zpool(entry), entry->handle);
-	zswap_pool_put(entry->pool);
+	if (!list_empty(&entry->lru))
+		zswap_lru_del(&zswap_list_lru, entry);
+	if (entry->length)
+		zpool_free(zswap_find_zpool(entry), entry->handle);
+	if (entry->pool)
+		zswap_pool_put(entry->pool);
 	if (entry->objcg) {
 		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
 		obj_cgroup_put(entry->objcg);
@@ -1447,7 +1451,7 @@ bool zswap_store(struct folio *folio)
 		return false;
 
 	if (!zswap_enabled)
-		goto check_old;
+		goto erase_old;
 
 	/* Check cgroup limits */
 	objcg = get_obj_cgroup_from_folio(folio);
@@ -1455,54 +1459,52 @@ bool zswap_store(struct folio *folio)
 		memcg = get_mem_cgroup_from_objcg(objcg);
 		if (shrink_memcg(memcg)) {
 			mem_cgroup_put(memcg);
-			goto reject;
+			goto put_objcg;
 		}
 		mem_cgroup_put(memcg);
 	}
 
 	if (zswap_is_folio_zero_filled(folio)) {
 		if (zswap_store_zero_filled(tree, offset, objcg))
-			goto reject;
+			goto put_objcg;
 		goto stored;
 	}
 
 	if (!zswap_non_zero_filled_pages_enabled)
-		goto reject;
+		goto put_objcg;
 
 	if (!zswap_check_limit())
-		goto reject;
+		goto put_objcg;
 
-	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
+	entry = zswap_entry_cache_alloc(folio_nid(folio));
 	if (!entry) {
 		zswap_reject_kmemcache_fail++;
-		goto reject;
+		goto put_objcg;
 	}
 
-	/* if entry is successfully added, it keeps the reference */
 	entry->pool = zswap_pool_current_get();
 	if (!entry->pool)
-		goto freepage;
+		goto free_entry;
 
 	if (objcg) {
 		memcg = get_mem_cgroup_from_objcg(objcg);
 		if (memcg_list_lru_alloc(memcg, &zswap_list_lru, GFP_KERNEL)) {
 			mem_cgroup_put(memcg);
-			goto put_pool;
+			goto free_entry;
 		}
 		mem_cgroup_put(memcg);
 	}
 
 	if (!zswap_compress(folio, entry))
-		goto put_pool;
-
-	entry->swpentry = swp;
-	entry->objcg = objcg;
+		goto free_entry;
 
 	if (zswap_tree_store(tree, offset, entry))
-		goto store_failed;
+		goto free_entry;
 
-	if (objcg)
+	if (objcg) {
 		obj_cgroup_charge_zswap(objcg, entry->length);
+		entry->objcg = objcg;
+	}
 
 	/*
 	 * We finish initializing the entry while it's already in xarray.
@@ -1514,7 +1516,7 @@ bool zswap_store(struct folio *folio)
 	 *    The publishing order matters to prevent writeback from seeing
 	 *    an incoherent entry.
 	 */
-	INIT_LIST_HEAD(&entry->lru);
+	entry->swpentry = swp;
 	zswap_lru_add(&zswap_list_lru, entry);
 
 stored:
@@ -1525,17 +1527,13 @@ stored:
 
 	return true;
 
-store_failed:
-	zpool_free(zswap_find_zpool(entry), entry->handle);
-put_pool:
-	zswap_pool_put(entry->pool);
-freepage:
-	zswap_entry_cache_free(entry);
-reject:
+free_entry:
+	zswap_entry_free(entry);
+put_objcg:
 	obj_cgroup_put(objcg);
 	if (zswap_pool_reached_full)
 		queue_work(shrink_wq, &zswap_shrink_work);
-check_old:
+erase_old:
 	/*
 	 * If the zswap store fails or zswap is disabled, we must invalidate the
 	 * possibly stale entry which was previously stored at this offset.
