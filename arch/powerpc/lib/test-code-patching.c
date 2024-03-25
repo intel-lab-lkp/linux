@@ -347,6 +347,41 @@ static void __init test_prefixed_patching(void)
 	check(!memcmp(iptr, expected, sizeof(expected)));
 }
 
+static void __init test_data_patching(void)
+{
+	void *buf;
+	u32 *addr32;
+
+	buf = vzalloc(PAGE_SIZE);
+	check(buf);
+	if (!buf)
+		return;
+
+	addr32 = buf + 128;
+
+	addr32[1] = 0xA0A1A2A3;
+	addr32[2] = 0xB0B1B2B3;
+
+	patch_uint(&addr32[1], 0xC0C1C2C3);
+
+	check(addr32[0] == 0);
+	check(addr32[1] == 0xC0C1C2C3);
+	check(addr32[2] == 0xB0B1B2B3);
+	check(addr32[3] == 0);
+
+	patch_ulong(&addr32[1], 0xD0D1D2D3);
+
+	check(addr32[0] == 0);
+	*(unsigned long *)(&addr32[1]) = 0xD0D1D2D3;
+
+	if (!IS_ENABLED(CONFIG_PPC64))
+		check(addr32[2] == 0xB0B1B2B3);
+
+	check(addr32[3] == 0);
+
+	vfree(buf);
+}
+
 static int __init test_code_patching(void)
 {
 	pr_info("Running code patching self-tests ...\n");
@@ -356,6 +391,7 @@ static int __init test_code_patching(void)
 	test_create_function_call();
 	test_translate_branch();
 	test_prefixed_patching();
+	test_data_patching();
 
 	return 0;
 }
