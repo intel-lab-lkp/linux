@@ -17,6 +17,7 @@ enum rq_qos_id {
 	RQ_QOS_WBT,
 	RQ_QOS_LATENCY,
 	RQ_QOS_COST,
+	RQ_QOS_NLAT,
 };
 
 struct rq_wait {
@@ -77,6 +78,11 @@ static inline struct rq_qos *wbt_rq_qos(struct request_queue *q)
 static inline struct rq_qos *iolat_rq_qos(struct request_queue *q)
 {
 	return rq_qos_id(q, RQ_QOS_LATENCY);
+}
+
+static inline struct rq_qos *nlat_rq_qos(struct request_queue *q)
+{
+	return rq_qos_id(q, RQ_QOS_NLAT);
 }
 
 static inline void rq_wait_init(struct rq_wait *rq_wait)

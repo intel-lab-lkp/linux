@@ -186,6 +186,13 @@ config BLK_CGROUP_IOPRIO
 	scheduler and block devices process requests. Only some I/O schedulers
 	and some block devices support I/O priorities.
 
+config BLK_NODE_LATENCY
+       bool "Track per-node I/O latency"
+       help
+       Enable the .nlat interface for tracking per-node I/O latency.
+       This can be used by I/O schedulers to determine the queue with the
+       least latency.
+
 config BLK_DEBUG_FS
 	bool "Block layer debugging information in debugfs"
 	default y
