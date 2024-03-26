@@ -1076,31 +1076,6 @@ static inline int should_optimize_scan(struct ext4_allocation_context *ac)
 }
 
 /*
- * Return next linear group for allocation. If linear traversal should not be
- * performed, this function just returns the same group
- */
-static ext4_group_t
-next_linear_group(struct ext4_allocation_context *ac, ext4_group_t group,
-		  ext4_group_t ngroups)
-{
-	if (!should_optimize_scan(ac))
-		goto inc_and_return;
-
-	if (ac->ac_groups_linear_remaining) {
-		ac->ac_groups_linear_remaining--;
-		goto inc_and_return;
-	}
-
-	return group;
-inc_and_return:
-	/*
-	 * Artificially restricted ngroups for non-extent
-	 * files makes group > ngroups possible on first loop.
-	 */
-	return group + 1 >= ngroups ? 0 : group + 1;
-}
-
-/*
  * ext4_mb_choose_next_group: choose next group for allocation.
  *
  * @ac        Allocation Context
@@ -1118,12 +1093,12 @@ static void ext4_mb_choose_next_group(struct ext4_allocation_context *ac,
 {
 	*new_cr = ac->ac_criteria;
 
-	if (!should_optimize_scan(ac) || ac->ac_groups_linear_remaining) {
-		*group = next_linear_group(ac, *group, ngroups);
-		return;
-	}
-
-	if (*new_cr == CR_POWER2_ALIGNED) {
+	if (!should_optimize_scan(ac))
+		*group = *group + 1 >= ngroups ? 0 : *group + 1;
+	else if (ac->ac_groups_linear_remaining) {
+		ac->ac_groups_linear_remaining--;
+		*group = *group + 1 >= ngroups ? 0 : *group + 1;
+	} else if (*new_cr == CR_POWER2_ALIGNED) {
 		ext4_mb_choose_next_group_p2_aligned(ac, new_cr, group);
 	} else if (*new_cr == CR_GOAL_LEN_FAST) {
 		ext4_mb_choose_next_group_goal_fast(ac, new_cr, group);
