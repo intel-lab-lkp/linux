@@ -9277,8 +9277,10 @@ static bool rdev_removeable(struct md_rdev *rdev)
 		return false;
 
 	/* Fautly rdev is not used, it's safe to remove it. */
-	if (test_bit(Faulty, &rdev->flags))
+	if (test_bit(Faulty, &rdev->flags)) {
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 		return true;
+	}
 
 	/* Journal disk can only be removed if it's faulty. */
 	if (test_bit(Journal, &rdev->flags))
