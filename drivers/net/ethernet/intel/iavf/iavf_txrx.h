@@ -359,6 +359,8 @@ struct iavf_ring {
 	bool arm_wb;		/* do something to arm write back */
 	u8 packet_stride;
 
+	u8 rxdid;		/* Rx descriptor format */
+
 	u16 flags;
 #define IAVF_TXR_FLAGS_WB_ON_ITR		BIT(0)
 #define IAVF_RXR_FLAGS_BUILD_SKB_ENABLED	BIT(1)
