@@ -7405,7 +7405,8 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 	return max_stripes - min_stripes;
 }
 
-static struct r5conf *setup_conf(struct mddev *mddev)
+
+static struct r5conf *setup_conf(struct mddev *mddev, bool quiesce)
 {
 	struct r5conf *conf;
 	int raid_disk, memory, max_disks;
@@ -7416,6 +7417,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	int group_cnt;
 	struct r5worker_group *new_group;
 	int ret = -ENOMEM;
+	unsigned int percpu_ref_init_flags;
 
 	if (mddev->new_level != 5
 	    && mddev->new_level != 4
@@ -7486,6 +7488,10 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	init_llist_head(&conf->released_stripes);
 	atomic_set(&conf->active_stripes, 0);
 	atomic_set(&conf->preread_active_stripes, 0);
+	if (quiesce)
+		percpu_ref_init_flags = PERCPU_REF_ALLOW_REINIT | PERCPU_REF_INIT_DEAD;
+	else
+		percpu_ref_init_flags = PERCPU_REF_ALLOW_REINIT;
 	atomic_set(&conf->active_aligned_reads, 0);
 	spin_lock_init(&conf->pending_bios_lock);
 	conf->batch_bio_dispatch = true;
@@ -7664,6 +7670,23 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	if (conf)
 		free_conf(conf);
 	return ERR_PTR(ret);
+}
+
+static struct r5conf *setup_conf_for_run(struct mddev *mddev)
+{
+	return setup_conf(mddev, false);
+}
+
+static struct r5conf *setup_conf_for_takeover(struct mddev *mddev)
+{
+	struct r5conf *conf;
+	bool quiesce = false;
+
+	if (mddev->level == 4 || mddev->level == 5 || mddev->level == 6) {
+		conf = mddev->private;
+		quiesce = false;
+	}
+	return setup_conf(mddev, quiesce);
 }
 
 static int only_parity(int raid_disk, int algo, int raid_disks, int max_degraded)
@@ -7893,7 +7916,7 @@ static int raid5_run(struct mddev *mddev)
 	}
 
 	if (mddev->private == NULL)
-		conf = setup_conf(mddev);
+		conf = setup_conf_for_run(mddev);
 	else
 		conf = mddev->private;
 
@@ -8661,7 +8684,7 @@ static void *raid45_takeover_raid0(struct mddev *mddev, int level)
 	/* make sure it will be not marked as dirty */
 	mddev->recovery_cp = MaxSector;
 
-	return setup_conf(mddev);
+	return setup_conf_for_takeover(mddev);
 }
 
 static void *raid5_takeover_raid1(struct mddev *mddev)
@@ -8689,7 +8712,7 @@ static void *raid5_takeover_raid1(struct mddev *mddev)
 	mddev->new_layout = ALGORITHM_LEFT_SYMMETRIC;
 	mddev->new_chunk_sectors = chunksect;
 
-	ret = setup_conf(mddev);
+	ret = setup_conf_for_takeover(mddev);
 	if (!IS_ERR(ret))
 		mddev_clear_unsupported_flags(mddev,
 			UNSUPPORTED_MDDEV_FLAGS);
@@ -8726,7 +8749,7 @@ static void *raid5_takeover_raid6(struct mddev *mddev)
 	mddev->new_layout = new_layout;
 	mddev->delta_disks = -1;
 	mddev->raid_disks -= 1;
-	return setup_conf(mddev);
+	return setup_conf_for_takeover(mddev);
 }
 
 static int raid5_check_reshape(struct mddev *mddev)
@@ -8804,7 +8827,7 @@ static void *raid5_takeover(struct mddev *mddev)
 	if (mddev->level == 4) {
 		mddev->new_layout = ALGORITHM_PARITY_N;
 		mddev->new_level = 5;
-		return setup_conf(mddev);
+		return setup_conf_for_takeover(mddev);
 	}
 	if (mddev->level == 6)
 		return raid5_takeover_raid6(mddev);
@@ -8824,7 +8847,7 @@ static void *raid4_takeover(struct mddev *mddev)
 	    mddev->layout == ALGORITHM_PARITY_N) {
 		mddev->new_layout = 0;
 		mddev->new_level = 4;
-		return setup_conf(mddev);
+		return setup_conf_for_takeover(mddev);
 	}
 	return ERR_PTR(-EINVAL);
 }
@@ -8874,7 +8897,7 @@ static void *raid6_takeover(struct mddev *mddev)
 	mddev->new_layout = new_layout;
 	mddev->delta_disks = 1;
 	mddev->raid_disks += 1;
-	return setup_conf(mddev);
+	return setup_conf_for_takeover(mddev);
 }
 
 static int raid5_change_consistency_policy(struct mddev *mddev, const char *buf)
