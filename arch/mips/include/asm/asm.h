@@ -94,7 +94,7 @@ symbol:		.insn
 symbol		=	value
 
 #define TEXT(msg)					\
-		.pushsection .data;			\
+		.pushsection .rodata.str;			\
 8:		.asciiz msg;				\
 		.popsection;
 
