@@ -236,11 +236,6 @@ static inline unsigned int nr_pending_read(struct md_rdev *rdev)
 	return atomic_read(&rdev->nr_pending);
 }
 
-static inline bool nr_pending_dec_and_test(struct md_rdev *rdev)
-{
-	return atomic_dec_and_test(&rdev->nr_pending);
-}
-
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,
 			      sector_t *first_bad, int *bad_sectors)
 {
@@ -875,9 +870,12 @@ static inline bool is_rdev_broken(struct md_rdev *rdev)
 static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 {
 	int faulty = test_bit(Faulty, &rdev->flags);
-	if (nr_pending_dec_and_test(rdev) && faulty) {
-		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
+	nr_pending_dec(rdev);
+	if (faulty) {
+		if (nr_pending_is_zero(rdev)) {
+			set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
+			md_wakeup_thread(mddev->thread);
+		}
 	}
 }
 
