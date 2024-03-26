@@ -41,9 +41,42 @@
 #include <asm/pgalloc.h>
 #include <asm/kfence.h>
 
+enum pgtable_type {
+	TYPE_P4D = 0,
+	TYPE_PUD = 1,
+	TYPE_PMD = 2,
+	TYPE_PTE = 3,
+};
+
+/**
+ * struct pgtable_ops - Ops to allocate and access pgtable memory. Calls must be
+ * serialized by the caller.
+ * @alloc:      Allocates 1 page of memory for use as pgtable `type` and maps it
+ *              into va space. Returned memory is zeroed. Puts physical address
+ *              of page in *pa, and returns virtual address of the mapping. User
+ *              must explicitly unmap() before doing another alloc() or map() of
+ *              the same `type`.
+ * @map:        Determines the physical address of the pgtable of `type` by
+ *              interpretting `parent` as the pgtable entry for the next level
+ *              up. Maps the page and returns virtual address of the pgtable
+ *              entry within the table that corresponds to `addr`. User must
+ *              explicitly unmap() before doing another alloc() or map() of the
+ *              same `type`.
+ * @unmap:      Unmap the currently mapped page of `type`, which will have been
+ *              mapped either as a result of a previous call to alloc() or
+ *              map(). The page's virtual address must be considered invalid
+ *              after this call returns.
+ */
+struct pgtable_ops {
+	void *(*alloc)(int type, phys_addr_t *pa);
+	void *(*map)(int type, void *parent, unsigned long addr);
+	void (*unmap)(int type);
+};
+
 #define NO_BLOCK_MAPPINGS	BIT(0)
 #define NO_CONT_MAPPINGS	BIT(1)
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
+#define NO_ALLOC		BIT(3)
 
 u64 kimage_voffset __ro_after_init;
 EXPORT_SYMBOL(kimage_voffset);
@@ -106,33 +139,88 @@ pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 }
 EXPORT_SYMBOL(phys_mem_access_prot);
 
-static phys_addr_t __init early_pgtable_alloc(int shift)
+static void __init early_pgtable_unmap(int type)
 {
-	phys_addr_t phys;
-	void *ptr;
+	switch (type) {
+	case TYPE_P4D:
+		p4d_clear_fixmap();
+		break;
+	case TYPE_PUD:
+		pud_clear_fixmap();
+		break;
+	case TYPE_PMD:
+		pmd_clear_fixmap();
+		break;
+	case TYPE_PTE:
+		pte_clear_fixmap();
+		break;
+	default:
+		BUG();
+	}
+}
 
-	phys = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
-					 MEMBLOCK_ALLOC_NOLEAKTRACE);
-	if (!phys)
+static void *__init early_pgtable_map(int type, void *parent, unsigned long addr)
+{
+	void *entry;
+
+	switch (type) {
+	case TYPE_P4D:
+		entry = p4d_set_fixmap_offset((pgd_t *)parent, addr);
+		break;
+	case TYPE_PUD:
+		entry = pud_set_fixmap_offset((p4d_t *)parent, addr);
+		break;
+	case TYPE_PMD:
+		entry = pmd_set_fixmap_offset((pud_t *)parent, addr);
+		break;
+	case TYPE_PTE:
+		entry = pte_set_fixmap_offset((pmd_t *)parent, addr);
+		break;
+	default:
+		BUG();
+	}
+
+	return entry;
+}
+
+static void *__init early_pgtable_alloc(int type, phys_addr_t *pa)
+{
+	void *va;
+
+	*pa = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
+					MEMBLOCK_ALLOC_NOLEAKTRACE);
+	if (!*pa)
 		panic("Failed to allocate page table page\n");
 
-	/*
-	 * The FIX_{PGD,PUD,PMD} slots may be in active use, but the FIX_PTE
-	 * slot will be free, so we can (ab)use the FIX_PTE slot to initialise
-	 * any level of table.
-	 */
-	ptr = pte_set_fixmap(phys);
+	switch (type) {
+	case TYPE_P4D:
+		va = p4d_set_fixmap(*pa);
+		break;
+	case TYPE_PUD:
+		va = pud_set_fixmap(*pa);
+		break;
+	case TYPE_PMD:
+		va = pmd_set_fixmap(*pa);
+		break;
+	case TYPE_PTE:
+		va = pte_set_fixmap(*pa);
+		break;
+	default:
+		BUG();
+	}
+	memset(va, 0, PAGE_SIZE);
 
-	memset(ptr, 0, PAGE_SIZE);
+	/* Ensure the zeroed page is visible to the page table walker */
+	dsb(ishst);
 
-	/*
-	 * Implicit barriers also ensure the zeroed page is visible to the page
-	 * table walker
-	 */
-	pte_clear_fixmap();
-
-	return phys;
+	return va;
 }
+
+static struct pgtable_ops early_pgtable_ops = {
+	.alloc = early_pgtable_alloc,
+	.map = early_pgtable_map,
+	.unmap = early_pgtable_unmap,
+};
 
 bool pgattr_change_is_safe(u64 old, u64 new)
 {
@@ -196,7 +284,7 @@ static pte_t *init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
 static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 				unsigned long end, phys_addr_t phys,
 				pgprot_t prot,
-				phys_addr_t (*pgtable_alloc)(int),
+				struct pgtable_ops *ops,
 				int flags)
 {
 	unsigned long next;
@@ -210,14 +298,15 @@ static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 
 		if (flags & NO_EXEC_MAPPINGS)
 			pmdval |= PMD_TABLE_PXN;
-		BUG_ON(!pgtable_alloc);
-		pte_phys = pgtable_alloc(PAGE_SHIFT);
+		BUG_ON(flags & NO_ALLOC);
+		ptep = ops->alloc(TYPE_PTE, &pte_phys);
+		ptep += pte_index(addr);
 		__pmd_populate(pmdp, pte_phys, pmdval);
-		pmd = READ_ONCE(*pmdp);
+	} else {
+		BUG_ON(pmd_bad(pmd));
+		ptep = ops->map(TYPE_PTE, pmdp, addr);
 	}
-	BUG_ON(pmd_bad(pmd));
 
-	ptep = pte_set_fixmap_offset(pmdp, addr);
 	do {
 		pgprot_t __prot = prot;
 
@@ -233,12 +322,12 @@ static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		phys += next - addr;
 	} while (addr = next, addr != end);
 
-	pte_clear_fixmap();
+	ops->unmap(TYPE_PTE);
 }
 
 static pmd_t *init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		       phys_addr_t phys, pgprot_t prot,
-		       phys_addr_t (*pgtable_alloc)(int), int flags)
+		       struct pgtable_ops *ops, int flags)
 {
 	unsigned long next;
 
@@ -260,7 +349,7 @@ static pmd_t *init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 						      READ_ONCE(pmd_val(*pmdp))));
 		} else {
 			alloc_init_cont_pte(pmdp, addr, next, phys, prot,
-					    pgtable_alloc, flags);
+					    ops, flags);
 
 			BUG_ON(pmd_val(old_pmd) != 0 &&
 			       pmd_val(old_pmd) != READ_ONCE(pmd_val(*pmdp)));
@@ -274,7 +363,7 @@ static pmd_t *init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 				unsigned long end, phys_addr_t phys,
 				pgprot_t prot,
-				phys_addr_t (*pgtable_alloc)(int), int flags)
+				struct pgtable_ops *ops, int flags)
 {
 	unsigned long next;
 	pud_t pud = READ_ONCE(*pudp);
@@ -290,14 +379,15 @@ static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 
 		if (flags & NO_EXEC_MAPPINGS)
 			pudval |= PUD_TABLE_PXN;
-		BUG_ON(!pgtable_alloc);
-		pmd_phys = pgtable_alloc(PMD_SHIFT);
+		BUG_ON(flags & NO_ALLOC);
+		pmdp = ops->alloc(TYPE_PMD, &pmd_phys);
+		pmdp += pmd_index(addr);
 		__pud_populate(pudp, pmd_phys, pudval);
-		pud = READ_ONCE(*pudp);
+	} else {
+		BUG_ON(pud_bad(pud));
+		pmdp = ops->map(TYPE_PMD, pudp, addr);
 	}
-	BUG_ON(pud_bad(pud));
 
-	pmdp = pmd_set_fixmap_offset(pudp, addr);
 	do {
 		pgprot_t __prot = prot;
 
@@ -308,18 +398,17 @@ static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		    (flags & NO_CONT_MAPPINGS) == 0)
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		pmdp = init_pmd(pmdp, addr, next, phys, __prot, pgtable_alloc,
-				flags);
+		pmdp = init_pmd(pmdp, addr, next, phys, __prot, ops, flags);
 
 		phys += next - addr;
 	} while (addr = next, addr != end);
 
-	pmd_clear_fixmap();
+	ops->unmap(TYPE_PMD);
 }
 
 static void alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 			   phys_addr_t phys, pgprot_t prot,
-			   phys_addr_t (*pgtable_alloc)(int),
+			   struct pgtable_ops *ops,
 			   int flags)
 {
 	unsigned long next;
@@ -332,14 +421,15 @@ static void alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 
 		if (flags & NO_EXEC_MAPPINGS)
 			p4dval |= P4D_TABLE_PXN;
-		BUG_ON(!pgtable_alloc);
-		pud_phys = pgtable_alloc(PUD_SHIFT);
+		BUG_ON(flags & NO_ALLOC);
+		pudp = ops->alloc(TYPE_PUD, &pud_phys);
+		pudp += pud_index(addr);
 		__p4d_populate(p4dp, pud_phys, p4dval);
-		p4d = READ_ONCE(*p4dp);
+	} else {
+		BUG_ON(p4d_bad(p4d));
+		pudp = ops->map(TYPE_PUD, p4dp, addr);
 	}
-	BUG_ON(p4d_bad(p4d));
 
-	pudp = pud_set_fixmap_offset(p4dp, addr);
 	do {
 		pud_t old_pud = READ_ONCE(*pudp);
 
@@ -361,7 +451,7 @@ static void alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 						      READ_ONCE(pud_val(*pudp))));
 		} else {
 			alloc_init_cont_pmd(pudp, addr, next, phys, prot,
-					    pgtable_alloc, flags);
+					    ops, flags);
 
 			BUG_ON(pud_val(old_pud) != 0 &&
 			       pud_val(old_pud) != READ_ONCE(pud_val(*pudp)));
@@ -369,12 +459,12 @@ static void alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		phys += next - addr;
 	} while (pudp++, addr = next, addr != end);
 
-	pud_clear_fixmap();
+	ops->unmap(TYPE_PUD);
 }
 
 static void alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 			   phys_addr_t phys, pgprot_t prot,
-			   phys_addr_t (*pgtable_alloc)(int),
+			   struct pgtable_ops *ops,
 			   int flags)
 {
 	unsigned long next;
@@ -387,21 +477,21 @@ static void alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 
 		if (flags & NO_EXEC_MAPPINGS)
 			pgdval |= PGD_TABLE_PXN;
-		BUG_ON(!pgtable_alloc);
-		p4d_phys = pgtable_alloc(P4D_SHIFT);
+		BUG_ON(flags & NO_ALLOC);
+		p4dp = ops->alloc(TYPE_P4D, &p4d_phys);
+		p4dp += p4d_index(addr);
 		__pgd_populate(pgdp, p4d_phys, pgdval);
-		pgd = READ_ONCE(*pgdp);
+	} else {
+		BUG_ON(pgd_bad(pgd));
+		p4dp = ops->map(TYPE_P4D, pgdp, addr);
 	}
-	BUG_ON(pgd_bad(pgd));
 
-	p4dp = p4d_set_fixmap_offset(pgdp, addr);
 	do {
 		p4d_t old_p4d = READ_ONCE(*p4dp);
 
 		next = p4d_addr_end(addr, end);
 
-		alloc_init_pud(p4dp, addr, next, phys, prot,
-			       pgtable_alloc, flags);
+		alloc_init_pud(p4dp, addr, next, phys, prot, ops, flags);
 
 		BUG_ON(p4d_val(old_p4d) != 0 &&
 		       p4d_val(old_p4d) != READ_ONCE(p4d_val(*p4dp)));
@@ -409,13 +499,13 @@ static void alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		phys += next - addr;
 	} while (p4dp++, addr = next, addr != end);
 
-	p4d_clear_fixmap();
+	ops->unmap(TYPE_P4D);
 }
 
 static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 					unsigned long virt, phys_addr_t size,
 					pgprot_t prot,
-					phys_addr_t (*pgtable_alloc)(int),
+					struct pgtable_ops *ops,
 					int flags)
 {
 	unsigned long addr, end, next;
@@ -434,8 +524,7 @@ static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 
 	do {
 		next = pgd_addr_end(addr, end);
-		alloc_init_p4d(pgdp, addr, next, phys, prot, pgtable_alloc,
-			       flags);
+		alloc_init_p4d(pgdp, addr, next, phys, prot, ops, flags);
 		phys += next - addr;
 	} while (pgdp++, addr = next, addr != end);
 }
@@ -443,36 +532,59 @@ static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 static void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				 unsigned long virt, phys_addr_t size,
 				 pgprot_t prot,
-				 phys_addr_t (*pgtable_alloc)(int),
+				 struct pgtable_ops *ops,
 				 int flags)
 {
 	mutex_lock(&fixmap_lock);
 	__create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
-				    pgtable_alloc, flags);
+				    ops, flags);
 	mutex_unlock(&fixmap_lock);
 }
 
-#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-extern __alias(__create_pgd_mapping_locked)
-void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
-			     phys_addr_t size, pgprot_t prot,
-			     phys_addr_t (*pgtable_alloc)(int), int flags);
-#endif
-
-static phys_addr_t __pgd_pgtable_alloc(int shift)
+static void pgd_pgtable_unmap(int type)
 {
-	void *ptr = (void *)__get_free_page(GFP_PGTABLE_KERNEL);
-	BUG_ON(!ptr);
+}
+
+static void *pgd_pgtable_map(int type, void *parent, unsigned long addr)
+{
+	void *entry;
+
+	switch (type) {
+	case TYPE_P4D:
+		entry = p4d_offset((pgd_t *)parent, addr);
+		break;
+	case TYPE_PUD:
+		entry = pud_offset((p4d_t *)parent, addr);
+		break;
+	case TYPE_PMD:
+		entry = pmd_offset((pud_t *)parent, addr);
+		break;
+	case TYPE_PTE:
+		entry = pte_offset_kernel((pmd_t *)parent, addr);
+		break;
+	default:
+		BUG();
+	}
+
+	return entry;
+}
+
+static void *__pgd_pgtable_alloc(int type, phys_addr_t *pa)
+{
+	void *va = (void *)__get_free_page(GFP_PGTABLE_KERNEL);
+
+	BUG_ON(!va);
 
 	/* Ensure the zeroed page is visible to the page table walker */
 	dsb(ishst);
-	return __pa(ptr);
+	*pa = __pa(va);
+	return va;
 }
 
-static phys_addr_t pgd_pgtable_alloc(int shift)
+static void *pgd_pgtable_alloc(int type, phys_addr_t *pa)
 {
-	phys_addr_t pa = __pgd_pgtable_alloc(shift);
-	struct ptdesc *ptdesc = page_ptdesc(phys_to_page(pa));
+	void *va = __pgd_pgtable_alloc(type, pa);
+	struct ptdesc *ptdesc = page_ptdesc(phys_to_page(*pa));
 
 	/*
 	 * Call proper page table ctor in case later we need to
@@ -482,13 +594,41 @@ static phys_addr_t pgd_pgtable_alloc(int shift)
 	 * We don't select ARCH_ENABLE_SPLIT_PMD_PTLOCK if pmd is
 	 * folded, and if so pagetable_pte_ctor() becomes nop.
 	 */
-	if (shift == PAGE_SHIFT)
+	if (type == TYPE_PTE)
 		BUG_ON(!pagetable_pte_ctor(ptdesc));
-	else if (shift == PMD_SHIFT)
+	else if (type == TYPE_PMD)
 		BUG_ON(!pagetable_pmd_ctor(ptdesc));
 
-	return pa;
+	return va;
 }
+
+static struct pgtable_ops pgd_pgtable_ops = {
+	.alloc = pgd_pgtable_alloc,
+	.map = pgd_pgtable_map,
+	.unmap = pgd_pgtable_unmap,
+};
+
+static struct pgtable_ops __pgd_pgtable_ops = {
+	.alloc = __pgd_pgtable_alloc,
+	.map = pgd_pgtable_map,
+	.unmap = pgd_pgtable_unmap,
+};
+
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
+			     phys_addr_t size, pgprot_t prot,
+			     void *(*pgtable_alloc)(int, phys_addr_t *),
+			     int flags)
+{
+	struct pgtable_ops ops = {
+		.alloc = pgtable_alloc,
+		.map = pgd_pgtable_map,
+		.unmap = pgd_pgtable_unmap,
+	};
+
+	__create_pgd_mapping_locked(pgdir, phys, virt, size, prot, &ops, flags);
+}
+#endif
 
 /*
  * This function can only be used to modify existing table entries,
@@ -503,8 +643,8 @@ void __init create_mapping_noalloc(phys_addr_t phys, unsigned long virt,
 			&phys, virt);
 		return;
 	}
-	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot, NULL,
-			     NO_CONT_MAPPINGS);
+	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot,
+			     &early_pgtable_ops, NO_CONT_MAPPINGS | NO_ALLOC);
 }
 
 void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
@@ -519,7 +659,7 @@ void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 		flags = NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(mm->pgd, phys, virt, size, prot,
-			     pgd_pgtable_alloc, flags);
+			     &pgd_pgtable_ops, flags);
 }
 
 static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
@@ -531,8 +671,8 @@ static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
 		return;
 	}
 
-	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot, NULL,
-			     NO_CONT_MAPPINGS);
+	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot,
+			     &pgd_pgtable_ops, NO_CONT_MAPPINGS | NO_ALLOC);
 
 	/* flush the TLBs after updating live kernel mappings */
 	flush_tlb_kernel_range(virt, virt + size);
@@ -542,7 +682,7 @@ static void __init __map_memblock(pgd_t *pgdp, phys_addr_t start,
 				  phys_addr_t end, pgprot_t prot, int flags)
 {
 	__create_pgd_mapping(pgdp, start, __phys_to_virt(start), end - start,
-			     prot, early_pgtable_alloc, flags);
+			     prot, &early_pgtable_ops, flags);
 }
 
 void __init mark_linear_text_alias_ro(void)
@@ -733,7 +873,7 @@ static int __init map_entry_trampoline(void)
 	memset(tramp_pg_dir, 0, PGD_SIZE);
 	__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS,
 			     entry_tramp_text_size(), prot,
-			     __pgd_pgtable_alloc, NO_BLOCK_MAPPINGS);
+			     &__pgd_pgtable_ops, NO_BLOCK_MAPPINGS);
 
 	/* Map both the text and data into the kernel page table */
 	for (i = 0; i < DIV_ROUND_UP(entry_tramp_text_size(), PAGE_SIZE); i++)
@@ -1335,7 +1475,7 @@ int arch_add_memory(int nid, u64 start, u64 size,
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
-			     size, params->pgprot, __pgd_pgtable_alloc,
+			     size, params->pgprot, &__pgd_pgtable_ops,
 			     flags);
 
 	memblock_clear_nomap(start, size);

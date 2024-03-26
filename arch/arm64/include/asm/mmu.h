@@ -109,6 +109,14 @@ static inline bool kaslr_requires_kpti(void)
 	return true;
 }
 
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+extern
+void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
+			     phys_addr_t size, pgprot_t prot,
+			     void *(*pgtable_alloc)(int, phys_addr_t *),
+			     int flags);
+#endif
+
 #define INIT_MM_CONTEXT(name)	\
 	.pgd = swapper_pg_dir,
 
