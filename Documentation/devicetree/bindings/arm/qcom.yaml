@@ -204,6 +204,7 @@ properties:
               - samsung,a5u-eur
               - samsung,e5
               - samsung,e7
+              - samsung,fortuna
               - samsung,fortuna3g
               - samsung,gprimeltecan
               - samsung,grandmax
