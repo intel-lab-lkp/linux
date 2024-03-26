@@ -847,6 +847,8 @@ static unsigned int icl_max_bw_qgv_point_mask(struct drm_i915_private *i915,
 		if (max_data_rate > max_bw) {
 			max_bw_point_mask = BIT(i);
 			max_bw = max_data_rate;
+		} else if (max_data_rate == max_bw) {
+			max_bw_point_mask |= BIT(i);
 		}
 	}
 
@@ -874,6 +876,8 @@ static unsigned int icl_max_bw_psf_gv_point_mask(struct drm_i915_private *i915)
 		if (max_data_rate > max_bw) {
 			max_bw_point_mask = BIT(i);
 			max_bw = max_data_rate;
+		} else if (max_data_rate == max_bw) {
+			max_bw_point_mask |= BIT(i);
 		}
 	}
 
