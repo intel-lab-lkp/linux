@@ -689,4 +689,9 @@
 		ti,esm-pins = <95>;
 		bootph-pre-ram;
 	};
+
+	wkup_esm: esm@42080000 {
+		compatible = "ti,j721e-esm";
+		reg = <0x00 0x42080000 0x00 0x1000>;
+	};
 };
