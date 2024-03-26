@@ -595,6 +595,21 @@ class YnlFamily(SpecFamily):
             decoded.append({ item.type: subattrs })
         return decoded
 
+    def _decode_index_array(self, attr, attr_spec):
+        decoded = []
+        offset = 0
+        index = 0
+        while offset < len(attr.raw):
+            index = index + 1
+            item = NlAttr(attr.raw, offset)
+            offset += item.full_len
+
+            subattrs = item.as_bin()
+            if attr_spec.display_hint:
+                subattrs = self._formatted_string(subattrs, attr_spec.display_hint)
+            decoded.append({ index: subattrs })
+        return decoded
+
     def _decode_nest_type_value(self, attr, attr_spec):
         decoded = {}
         value = attr
@@ -689,6 +704,8 @@ class YnlFamily(SpecFamily):
             elif attr_spec["type"] == 'indexed-array' and 'sub-type' in attr_spec:
                 if attr_spec["sub-type"] == 'nest':
                     decoded = self._decode_array_nest(attr, attr_spec)
+                else:
+                    decoded = self._decode_index_array(attr, attr_spec)
             elif attr_spec["type"] == 'bitfield32':
                 value, selector = struct.unpack("II", attr.raw)
                 if 'enum' in attr_spec:
