@@ -59,7 +59,7 @@ static int udelay_test_single(struct seq_file *s, int usecs, uint32_t iters)
 			(usecs * 1000) - allowed_error_ns, min, avg, max);
 	if (fail_count)
 		seq_printf(s, " FAIL=%d", fail_count);
-	seq_puts(s, "\n");
+	seq_putc(s, '\n');
 
 	return 0;
 }
