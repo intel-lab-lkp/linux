@@ -62,7 +62,7 @@ static int sched_feat_show(struct seq_file *m, void *v)
 			seq_puts(m, "NO_");
 		seq_printf(m, "%s ", sched_feat_names[i]);
 	}
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 
 	return 0;
 }
@@ -251,15 +251,15 @@ static int sched_dynamic_show(struct seq_file *m, void *v)
 
 	for (i = 0; i < ARRAY_SIZE(preempt_modes); i++) {
 		if (preempt_dynamic_mode == i)
-			seq_puts(m, "(");
+			seq_putc(m, '(');
 		seq_puts(m, preempt_modes[i]);
 		if (preempt_dynamic_mode == i)
-			seq_puts(m, ")");
+			seq_putc(m, ')');
 
-		seq_puts(m, " ");
+		seq_putc(m, ' ');
 	}
 
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 	return 0;
 }
 
@@ -389,9 +389,9 @@ static int sd_flags_show(struct seq_file *m, void *v)
 
 	for_each_set_bit(idx, &flags, __SD_FLAG_CNT) {
 		seq_puts(m, sd_flag_debug[idx].name);
-		seq_puts(m, " ");
+		seq_putc(m, ' ');
 	}
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 
 	return 0;
 }
