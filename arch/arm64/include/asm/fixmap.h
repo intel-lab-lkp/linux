@@ -84,7 +84,9 @@ enum fixed_addresses {
 	 * Used for kernel page table creation, so unmapped memory may be used
 	 * for tables.
 	 */
-	FIX_PTE,
+#define NR_PTE_SLOTS		16
+	FIX_PTE_END,
+	FIX_PTE_BEGIN = FIX_PTE_END + NR_PTE_SLOTS - 1,
 	FIX_PMD,
 	FIX_PUD,
 	FIX_P4D,
@@ -108,6 +110,7 @@ void __init early_fixmap_init(void);
 #define __late_clear_fixmap(idx) __set_fixmap((idx), 0, FIXMAP_PAGE_CLEAR)
 
 extern void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot);
+void __init clear_fixmap_nosync(enum fixed_addresses idx);
 
 #include <asm-generic/fixmap.h>
 

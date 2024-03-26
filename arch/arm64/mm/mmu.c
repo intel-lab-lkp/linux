@@ -66,11 +66,14 @@ enum pgtable_type {
  *              mapped either as a result of a previous call to alloc() or
  *              map(). The page's virtual address must be considered invalid
  *              after this call returns.
+ * @cleanup:    (Optional) Called at the end of a set of operations to cleanup
+ *              any lazy state.
  */
 struct pgtable_ops {
 	void *(*alloc)(int type, phys_addr_t *pa);
 	void *(*map)(int type, void *parent, unsigned long addr);
 	void (*unmap)(int type);
+	void (*cleanup)(void);
 };
 
 #define NO_BLOCK_MAPPINGS	BIT(0)
@@ -139,6 +142,29 @@ pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 }
 EXPORT_SYMBOL(phys_mem_access_prot);
 
+static int pte_slot_next __initdata = FIX_PTE_BEGIN;
+
+static void __init clear_pte_fixmap_slots(void)
+{
+	unsigned long start = __fix_to_virt(FIX_PTE_BEGIN);
+	unsigned long end = __fix_to_virt(pte_slot_next);
+	int i;
+
+	for (i = FIX_PTE_BEGIN; i > pte_slot_next; i--)
+		clear_fixmap_nosync(i);
+
+	flush_tlb_kernel_range(start, end);
+	pte_slot_next = FIX_PTE_BEGIN;
+}
+
+static int __init pte_fixmap_slot(void)
+{
+	if (pte_slot_next < FIX_PTE_END)
+		clear_pte_fixmap_slots();
+
+	return pte_slot_next--;
+}
+
 static void __init early_pgtable_unmap(int type)
 {
 	switch (type) {
@@ -152,7 +178,7 @@ static void __init early_pgtable_unmap(int type)
 		pmd_clear_fixmap();
 		break;
 	case TYPE_PTE:
-		pte_clear_fixmap();
+		// Unmap lazily: see clear_pte_fixmap_slots().
 		break;
 	default:
 		BUG();
@@ -161,7 +187,9 @@ static void __init early_pgtable_unmap(int type)
 
 static void *__init early_pgtable_map(int type, void *parent, unsigned long addr)
 {
+	phys_addr_t pa;
 	void *entry;
+	int slot;
 
 	switch (type) {
 	case TYPE_P4D:
@@ -174,7 +202,10 @@ static void *__init early_pgtable_map(int type, void *parent, unsigned long addr
 		entry = pmd_set_fixmap_offset((pud_t *)parent, addr);
 		break;
 	case TYPE_PTE:
-		entry = pte_set_fixmap_offset((pmd_t *)parent, addr);
+		slot = pte_fixmap_slot();
+		pa = pte_offset_phys((pmd_t *)parent, addr);
+		set_fixmap(slot, pa);
+		entry = (pte_t *)(__fix_to_virt(slot) + (pa & (PAGE_SIZE - 1)));
 		break;
 	default:
 		BUG();
@@ -186,6 +217,7 @@ static void *__init early_pgtable_map(int type, void *parent, unsigned long addr
 static void *__init early_pgtable_alloc(int type, phys_addr_t *pa)
 {
 	void *va;
+	int slot;
 
 	*pa = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
 					MEMBLOCK_ALLOC_NOLEAKTRACE);
@@ -203,7 +235,9 @@ static void *__init early_pgtable_alloc(int type, phys_addr_t *pa)
 		va = pmd_set_fixmap(*pa);
 		break;
 	case TYPE_PTE:
-		va = pte_set_fixmap(*pa);
+		slot = pte_fixmap_slot();
+		set_fixmap(slot, *pa);
+		va = (pte_t *)__fix_to_virt(slot);
 		break;
 	default:
 		BUG();
@@ -220,6 +254,7 @@ static struct pgtable_ops early_pgtable_ops = {
 	.alloc = early_pgtable_alloc,
 	.map = early_pgtable_map,
 	.unmap = early_pgtable_unmap,
+	.cleanup = clear_pte_fixmap_slots,
 };
 
 bool pgattr_change_is_safe(u64 old, u64 new)
@@ -527,6 +562,9 @@ static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 		alloc_init_p4d(pgdp, addr, next, phys, prot, ops, flags);
 		phys += next - addr;
 	} while (pgdp++, addr = next, addr != end);
+
+	if (ops->cleanup)
+		ops->cleanup();
 }
 
 static void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
