@@ -6300,7 +6300,7 @@ int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
 
 			seq_puts(m, buf);
 		} else {
-			seq_puts(m, "/");
+			seq_putc(m, '/');
 		}
 
 		if (cgroup_on_dfl(cgrp) && cgroup_is_dead(cgrp))

@@ -55,7 +55,7 @@ static int current_css_set_read(struct seq_file *seq, void *v)
 	seq_printf(seq, "css_set %pK %d", cset, refcnt);
 	if (refcnt > cset->nr_tasks)
 		seq_printf(seq, " +%d", refcnt - cset->nr_tasks);
-	seq_puts(seq, "\n");
+	seq_putc(seq, '\n');
 
 	/*
 	 * Print the css'es stored in the current css_set.
@@ -159,7 +159,7 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 				extra_refs += extra;
 			}
 		}
-		seq_puts(seq, "\n");
+		seq_putc(seq, '\n');
 
 		list_for_each_entry(task, &cset->tasks, cg_list) {
 			if (count++ <= MAX_TASKS_SHOWN_PER_CSS)
@@ -189,7 +189,7 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 	if (!dead_cnt && !extra_refs && !threaded_csets)
 		return 0;
 
-	seq_puts(seq, "\n");
+	seq_putc(seq, '\n');
 	if (threaded_csets)
 		seq_printf(seq, "threaded css_sets = %d\n", threaded_csets);
 	if (extra_refs)
