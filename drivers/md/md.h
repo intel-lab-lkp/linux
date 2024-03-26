@@ -236,6 +236,20 @@ static inline unsigned long nr_pending_read(struct md_rdev *rdev)
 	return atomic_long_read(&rdev->nr_pending.data->count);
 }
 
+static inline bool nr_pending_is_percpu_mode(struct md_rdev *rdev)
+{
+	unsigned long __percpu *percpu_count;
+
+	return __ref_is_percpu(&rdev->nr_pending, &percpu_count);
+}
+
+static inline bool nr_pending_is_atomic_mode(struct md_rdev *rdev)
+{
+	unsigned long __percpu *percpu_count;
+
+	return !__ref_is_percpu(&rdev->nr_pending, &percpu_count);
+}
+
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,
 			      sector_t *first_bad, int *bad_sectors)
 {

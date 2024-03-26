@@ -808,6 +808,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 
 		nonrot = bdev_nonrot(rdev->bdev);
 		has_nonrot_disk |= nonrot;
+		WARN_ON_ONCE(nr_pending_is_percpu_mode(rdev));
 		pending = nr_pending_read(rdev);
 		if (min_pending > pending && nonrot) {
 			min_pending = pending;
@@ -2113,6 +2114,7 @@ static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		p->recovery_disabled = mddev->recovery_disabled - 1;
 		rdev->raid_disk = mirror;
 		err = 0;
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 		if (rdev->saved_raid_disk != mirror)
 			conf->fullsync = 1;
 		WRITE_ONCE(p->rdev, rdev);
@@ -2127,6 +2129,7 @@ static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		err = mddev_stack_new_rdev(mddev, rdev);
 		if (err)
 			return err;
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 		conf->fullsync = 1;
 		WRITE_ONCE(p->replacement, rdev);
 	}
@@ -4028,6 +4031,7 @@ static int raid10_run(struct mddev *mddev)
 	rdev_for_each(rdev, mddev) {
 		long long diff;
 
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 		disk_idx = rdev->raid_disk;
 		if (disk_idx < 0)
 			continue;
