@@ -54,7 +54,8 @@ static_assert(IS_ALIGNED(sizeof(struct gpio_v2_line_info_changed), 8));
 static_assert(IS_ALIGNED(sizeof(struct gpio_v2_line_event), 8));
 static_assert(IS_ALIGNED(sizeof(struct gpio_v2_line_values), 8));
 
-/* Character device interface to GPIO.
+/*
+ * Character device interface to GPIO.
  *
  * The GPIO character device, /dev/gpiochipN, provides userspace an
  * interface to gpiolib GPIOs via ioctl()s.
@@ -531,7 +532,7 @@ static DEFINE_SPINLOCK(supinfo_lock);
  * @event_buffer_size: the number of elements allocated in @events
  * @events: KFIFO for the GPIO events
  * @seqno: the sequence number for edge events generated on all lines in
- * this line request.  Note that this is not used when @num_lines is 1, as
+ * this line request.  NOTE: This is not used when @num_lines is 1, as
  * the line_seqno is then the same and is cheaper to calculate.
  * @config_mutex: mutex for serializing ioctl() calls to ensure consistency
  * of configuration, particularly multi-step accesses to desc flags and
@@ -2684,7 +2685,9 @@ static ssize_t lineinfo_watch_read(struct file *file, char __user *buf,
  * gpio_chrdev_open() - open the chardev for ioctl operations
  * @inode: inode for this chardev
  * @file: file struct for storing private data
- * Returns 0 on success
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 static int gpio_chrdev_open(struct inode *inode, struct file *file)
 {
@@ -2695,7 +2698,7 @@ static int gpio_chrdev_open(struct inode *inode, struct file *file)
 
 	guard(srcu)(&gdev->srcu);
 
-	/* Fail on open if the backing gpiochip is gone */
+	/* Fail on open if the backing GPIO chip is gone */
 	if (!rcu_access_pointer(gdev->chip))
 		return -ENODEV;
 
@@ -2750,7 +2753,9 @@ out_free_cdev:
  * gpio_chrdev_release() - close chardev after ioctl operations
  * @inode: inode for this chardev
  * @file: file struct for storing private data
- * Returns 0 on success
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 static int gpio_chrdev_release(struct inode *inode, struct file *file)
 {

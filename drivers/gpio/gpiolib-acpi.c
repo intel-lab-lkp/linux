@@ -136,8 +136,12 @@ static int acpi_gpiochip_find(struct gpio_chip *gc, const void *data)
  * @path:	ACPI GPIO controller full path name, (e.g. "\\_SB.GPO1")
  * @pin:	ACPI GPIO pin number (0-based, controller-relative)
  *
- * Return: GPIO descriptor to use with Linux generic GPIO API, or ERR_PTR
- * error value. Specifically returns %-EPROBE_DEFER if the referenced GPIO
+ * Returns:
+ * GPIO descriptor to use with Linux generic GPIO API.
+ * If the GPIO cannot be translated or there is an error an ERR_PTR is
+ * returned.
+ *
+ * Specifically returns -EPROBE_DEFER if the referenced GPIO
  * controller does not have GPIO chip registered at the moment. This is to
  * support probe deferral.
  */
@@ -156,7 +160,7 @@ static struct gpio_desc *acpi_get_gpiod(char *path, unsigned int pin)
 		return ERR_PTR(-EPROBE_DEFER);
 
 	/*
-	 * FIXME: keep track of the reference to the GPIO device somehow
+	 * FIXME: Keep track of the reference to the GPIO device somehow
 	 * instead of putting it here.
 	 */
 	return gpio_device_get_desc(gdev, pin);
@@ -203,10 +207,12 @@ bool acpi_gpio_get_irq_resource(struct acpi_resource *ares,
 EXPORT_SYMBOL_GPL(acpi_gpio_get_irq_resource);
 
 /**
- * acpi_gpio_get_io_resource - Fetch details of an ACPI resource if it is a GPIO
- *			       I/O resource or return False if not.
+ * acpi_gpio_get_io_resource - Fetch details of an ACPI resource if it is a GpioIo resource
  * @ares:	Pointer to the ACPI resource to fetch
  * @agpio:	Pointer to a &struct acpi_resource_gpio to store the output pointer
+ *
+ * Returns:
+ * true if GpioIo resource is found, false otherwise.
  */
 bool acpi_gpio_get_io_resource(struct acpi_resource *ares,
 			       struct acpi_resource_gpio **agpio)
@@ -487,7 +493,7 @@ fail_free_desc:
 }
 
 /**
- * acpi_gpiochip_request_interrupts() - Register isr for gpio chip ACPI events
+ * acpi_gpiochip_request_interrupts() - Register isr for GPIO chip ACPI events
  * @chip:      GPIO chip
  *
  * ACPI5 platforms can use GPIO signaled ACPI events. These GPIO interrupts are
@@ -664,7 +670,7 @@ __acpi_gpio_update_gpiod_flags(enum gpiod_flags *flags, enum gpiod_flags update)
 		 * Check if caller supplied incompatible GPIO initialization
 		 * flags.
 		 *
-		 * Return %-EINVAL to notify that firmware has different
+		 * Return -EINVAL to notify that firmware has different
 		 * settings and we are going to use them.
 		 */
 		if (((*flags & GPIOD_FLAGS_BIT_DIR_SET) && (diff & GPIOD_FLAGS_BIT_DIR_OUT)) ||
@@ -764,7 +770,7 @@ static int acpi_populate_gpio_lookup(struct acpi_resource *ares, void *data)
 		/*
 		 * Polarity and triggering are only specified for GpioInt
 		 * resource.
-		 * Note: we expect here:
+		 * NOTE: We expect here:
 		 * - ACPI_ACTIVE_LOW == GPIO_ACTIVE_LOW
 		 * - ACPI_ACTIVE_HIGH == GPIO_ACTIVE_HIGH
 		 */
@@ -847,22 +853,24 @@ static int acpi_gpio_property_lookup(struct fwnode_handle *fwnode,
  * acpi_get_gpiod_by_index() - get a GPIO descriptor from device resources
  * @adev: pointer to a ACPI device to get GPIO from
  * @propname: Property name of the GPIO (optional)
- * @index: index of GpioIo/GpioInt resource (starting from %0)
+ * @index: index of GpioIo/GpioInt resource (starting from 0)
  * @info: info pointer to fill in (optional)
  *
  * Function goes through ACPI resources for @adev and based on @index looks
  * up a GpioIo/GpioInt resource, translates it to the Linux GPIO descriptor,
  * and returns it. @index matches GpioIo/GpioInt resources only so if there
- * are total %3 GPIO resources, the index goes from %0 to %2.
+ * are total 3 GPIO resources, the index goes from 0 to 2.
  *
  * If @propname is specified the GPIO is looked using device property. In
  * that case @index is used to select the GPIO entry in the property value
  * (in case of multiple).
  *
- * If the GPIO cannot be translated or there is an error, an ERR_PTR is
+ * Returns:
+ * GPIO descriptor to use with Linux generic GPIO API.
+ * If the GPIO cannot be translated or there is an error an ERR_PTR is
  * returned.
  *
- * Note: if the GPIO resource has multiple entries in the pin list, this
+ * NOTE: If the GPIO resource has multiple entries in the pin list, this
  * function only returns the first.
  */
 static struct gpio_desc *acpi_get_gpiod_by_index(struct acpi_device *adev,
@@ -903,13 +911,15 @@ static struct gpio_desc *acpi_get_gpiod_by_index(struct acpi_device *adev,
  * acpi_get_gpiod_from_data() - get a GPIO descriptor from ACPI data node
  * @fwnode: pointer to an ACPI firmware node to get the GPIO information from
  * @propname: Property name of the GPIO
- * @index: index of GpioIo/GpioInt resource (starting from %0)
+ * @index: index of GpioIo/GpioInt resource (starting from 0)
  * @info: info pointer to fill in (optional)
  *
  * This function uses the property-based GPIO lookup to get to the GPIO
  * resource with the relevant information from a data-only ACPI firmware node
  * and uses that to obtain the GPIO descriptor to return.
  *
+ * Returns:
+ * GPIO descriptor to use with Linux generic GPIO API.
  * If the GPIO cannot be translated or there is an error an ERR_PTR is
  * returned.
  */
@@ -1007,7 +1017,7 @@ struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
  * acpi_dev_gpio_irq_wake_get_by() - Find GpioInt and translate it to Linux IRQ number
  * @adev: pointer to a ACPI device to get IRQ from
  * @name: optional name of GpioInt resource
- * @index: index of GpioInt resource (starting from %0)
+ * @index: index of GpioInt resource (starting from 0)
  * @wake_capable: Set to true if the IRQ is wake capable
  *
  * If the device has one or more GpioInt resources, this function can be
@@ -1023,7 +1033,8 @@ struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
  * The GPIO is considered wake capable if the GpioInt resource specifies
  * SharedAndWake or ExclusiveAndWake.
  *
- * Return: Linux IRQ number (> %0) on success, negative errno on failure.
+ * Returns:
+ * Linux IRQ number (> 0) on success, negative errno on failure.
  */
 int acpi_dev_gpio_irq_wake_get_by(struct acpi_device *adev, const char *name, int index,
 				  bool *wake_capable)
@@ -1406,8 +1417,8 @@ static int acpi_find_gpio_count(struct acpi_resource *ares, void *data)
  * @fwnode:	firmware node of the GPIO consumer
  * @con_id:	function within the GPIO consumer
  *
- * Return:
- * The number of GPIOs associated with a firmware node / function or %-ENOENT,
+ * Returns:
+ * The number of GPIOs associated with a firmware node / function or -ENOENT,
  * if no GPIO has been assigned to the requested function.
  */
 int acpi_gpio_count(const struct fwnode_handle *fwnode, const char *con_id)

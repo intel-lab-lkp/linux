@@ -28,7 +28,7 @@
  * @mockdev: class device used by the deprecated sysfs interface (may be
  * NULL)
  * @owner: helps prevent removal of modules exporting active GPIOs
- * @chip: pointer to the corresponding gpiochip, holding static
+ * @chip: pointer to the corresponding struct gpio_chip, holding static
  * data for this device
  * @descs: array of ngpio descriptors.
  * @ngpio: the number of GPIO lines on this GPIO device, equal to the size
@@ -73,10 +73,10 @@ struct gpio_device {
 
 #ifdef CONFIG_PINCTRL
 	/*
-	 * If CONFIG_PINCTRL is enabled, then gpio controllers can optionally
+	 * If CONFIG_PINCTRL is enabled, then GPIO chips can optionally
 	 * describe the actual pin range which they serve in an SoC. This
 	 * information would be used by pinctrl subsystem to configure
-	 * corresponding pins for gpio usage.
+	 * corresponding pins for GPIO usage.
 	 */
 	struct list_head pin_ranges;
 #endif
@@ -240,7 +240,7 @@ int gpiochip_get_ngpios(struct gpio_chip *gc, struct device *dev);
 const char *gpiod_get_label(struct gpio_desc *desc);
 
 /*
- * Return the GPIO number of the passed descriptor relative to its chip
+ * Return the GPIO number of the passed descriptor relative to its chip.
  */
 static inline int gpio_chip_hwgpio(const struct gpio_desc *desc)
 {

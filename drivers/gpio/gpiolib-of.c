@@ -43,22 +43,25 @@ enum of_gpio_flags {
 /**
  * of_gpio_named_count() - Count GPIOs for a device
  * @np:		device node to count GPIOs for
- * @propname:	property name containing gpio specifier(s)
+ * @propname:	property name containing GPIO specifier(s)
  *
  * The function returns the count of GPIOs specified for a node.
- * Note that the empty GPIO specifiers count too. Returns either
- *   Number of gpios defined in property,
- *   -EINVAL for an incorrectly formed gpios property, or
- *   -ENOENT for a missing gpios property
+ * NOTE: The empty GPIO specifiers count too.
  *
- * Example:
- * gpios = <0
- *          &gpio1 1 2
- *          0
- *          &gpio2 3 4>;
+ * Returns:
+ * Either number of GPIOs defined in the property, or
+ * *  -EINVAL for an incorrectly formed "gpios" property, or
+ * *  -ENOENT for a missing "gpios" property.
+ *
+ * Example::
+ *
+ *     gpios = <0
+ *              &gpio1 1 2
+ *              0
+ *              &gpio2 3 4>;
  *
  * The above example defines four GPIOs, two of which are not specified.
- * This function will return '4'
+ * This function will return '4'.
  */
 static int of_gpio_named_count(const struct device_node *np,
 			       const char *propname)
@@ -77,6 +80,11 @@ static int of_gpio_named_count(const struct device_node *np,
  * "gpios" for the chip select lines. If we detect this, we redirect
  * the counting of "cs-gpios" to count "gpios" transparent to the
  * driver.
+ *
+ * Returns:
+ * Either number of GPIOs defined in the property, or
+ * *  -EINVAL for an incorrectly formed "gpios" property, or
+ * *  -ENOENT for a missing "gpios" property.
  */
 static int of_gpio_spi_cs_get_count(const struct device_node *np,
 				    const char *con_id)
@@ -151,7 +159,7 @@ static struct gpio_desc *of_xlate_and_get_gpiod_flags(struct gpio_chip *chip,
 }
 
 /*
- * Overrides stated polarity of a gpio line and warns when there is a
+ * Overrides stated polarity of a GPIO line and warns when there is a
  * discrepancy.
  */
 static void of_gpio_quirk_polarity(const struct device_node *np,
@@ -174,7 +182,7 @@ static void of_gpio_quirk_polarity(const struct device_node *np,
 
 /*
  * This quirk does static polarity overrides in cases where existing
- * DTS specified incorrect polarity.
+ * device tree specified incorrect polarity.
  */
 static void of_gpio_try_fixup_polarity(const struct device_node *np,
 				       const char *propname,
@@ -275,7 +283,7 @@ static void of_gpio_set_polarity_by_property(const struct device_node *np,
 #if IS_ENABLED(CONFIG_MMC_ATMELMCI)
 	/*
 	 * The Atmel HSMCI has compatible property in the parent node and
-	 * gpio property in a child node
+	 * GPIO property in a child node.
 	 */
 	if (of_device_is_compatible(np->parent, "atmel,hsmci")) {
 		np_compat = np->parent;
@@ -361,11 +369,12 @@ static void of_gpio_flags_quirks(const struct device_node *np,
 /**
  * of_get_named_gpiod_flags() - Get a GPIO descriptor and flags for GPIO API
  * @np:		device node to get GPIO from
- * @propname:	property name containing gpio specifier(s)
+ * @propname:	property name containing GPIO specifier(s)
  * @index:	index of the GPIO
  * @flags:	a flags pointer to fill in
  *
- * Returns GPIO descriptor to use with Linux GPIO API, or one of the errno
+ * Returns:
+ * GPIO descriptor to use with Linux GPIO API, or one of the errno
  * value on the error condition. If @flags is not NULL the function also fills
  * in flags for the GPIO.
  */
@@ -412,12 +421,13 @@ out:
 /**
  * of_get_named_gpio() - Get a GPIO number to use with GPIO API
  * @np:		device node to get GPIO from
- * @propname:	Name of property containing gpio specifier(s)
+ * @propname:	Name of property containing GPIO specifier(s)
  * @index:	index of the GPIO
  *
  * **DEPRECATED** This function is deprecated and must not be used in new code.
  *
- * Returns GPIO number to use with Linux generic GPIO API, or one of the errno
+ * Returns:
+ * GPIO number to use with Linux generic GPIO API, or one of the errno
  * value on the error condition.
  */
 int of_get_named_gpio(const struct device_node *np, const char *propname,
@@ -475,7 +485,7 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 		/*
 		 * Compatible string can be set to NULL in case where
 		 * matching to a particular compatible is not practical,
-		 * but it should only be done for gpio names that have
+		 * but it should only be done for GPIO names that have
 		 * vendor prefix to reduce risk of false positives.
 		 * Addition of such entries is strongly discouraged.
 		 */
@@ -587,7 +597,7 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 		legacy_id = gpios[i].legacy_id ?: gpios[i].con_id;
 		desc = of_get_named_gpiod_flags(np, legacy_id, idx, of_flags);
 		if (!gpiod_not_found(desc)) {
-			pr_info("%s uses legacy gpio name '%s' instead of '%s-gpios'\n",
+			pr_info("%s uses legacy GPIO name '%s' instead of '%s-gpios'\n",
 				of_node_full_name(np), legacy_id, con_id);
 			return desc;
 		}
@@ -622,7 +632,7 @@ static struct gpio_desc *of_find_mt2701_gpio(struct device_node *np,
 
 	desc = of_get_named_gpiod_flags(np, legacy_id, 0, of_flags);
 	if (!gpiod_not_found(desc))
-		pr_info("%s is using legacy gpio name '%s' instead of '%s-gpios'\n",
+		pr_info("%s is using legacy GPIO name '%s' instead of '%s-gpios'\n",
 			of_node_full_name(np), legacy_id, con_id);
 
 	return desc;
@@ -653,7 +663,6 @@ static struct gpio_desc *of_find_trigger_gpio(struct device_node *np,
 
 	return desc;
 }
-
 
 typedef struct gpio_desc *(*of_find_gpio_quirk)(struct device_node *np,
 						const char *con_id,
@@ -708,11 +717,11 @@ struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
  * @chip:	GPIO chip whose hog is parsed
  * @idx:	Index of the GPIO to parse
  * @name:	GPIO line name
- * @lflags:	bitmask of gpio_lookup_flags GPIO_* values - returned from
- *		of_find_gpio() or of_parse_own_gpio()
+ * @lflags:	bitmask of gpio_lookup_flags GPIO_* values - returned from *_find_gpio()
  * @dflags:	gpiod_flags - optional GPIO initialization flags
  *
- * Returns GPIO descriptor to use with Linux GPIO API, or one of the errno
+ * Returns:
+ * GPIO descriptor to use with Linux GPIO API, or one of the errno
  * value on the error condition.
  */
 static struct gpio_desc *of_parse_own_gpio(struct device_node *np,
@@ -777,10 +786,11 @@ static struct gpio_desc *of_parse_own_gpio(struct device_node *np,
 
 /**
  * of_gpiochip_add_hog - Add all hogs in a hog device node
- * @chip:	gpio chip to act on
+ * @chip:	GPIO chip to act on
  * @hog:	device node describing the hogs
  *
- * Returns error if it fails otherwise 0 on success.
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 static int of_gpiochip_add_hog(struct gpio_chip *chip, struct device_node *hog)
 {
@@ -809,12 +819,14 @@ static int of_gpiochip_add_hog(struct gpio_chip *chip, struct device_node *hog)
 }
 
 /**
- * of_gpiochip_scan_gpios - Scan gpio-controller for gpio definitions
- * @chip:	gpio chip to act on
+ * of_gpiochip_scan_gpios - Scan gpio-controller for GPIO definitions
+ * @chip:	GPIO chip to act on
  *
- * This is only used by of_gpiochip_add to request/set GPIO initial
+ * This is only used by of_gpiochip_add() to request/set GPIO initial
  * configuration.
- * It returns error if it fails otherwise 0 on success.
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 static int of_gpiochip_scan_gpios(struct gpio_chip *chip)
 {
@@ -840,7 +852,7 @@ static int of_gpiochip_scan_gpios(struct gpio_chip *chip)
 #ifdef CONFIG_OF_DYNAMIC
 /**
  * of_gpiochip_remove_hog - Remove all hogs in a hog device node
- * @chip:	gpio chip to act on
+ * @chip:	GPIO chip to act on
  * @hog:	device node describing the hogs
  */
 static void of_gpiochip_remove_hog(struct gpio_chip *chip,
@@ -920,13 +932,16 @@ struct notifier_block gpio_of_notifier = {
 
 /**
  * of_gpio_simple_xlate - translate gpiospec to the GPIO number and flags
- * @gc:		pointer to the gpio_chip structure
+ * @gc:		pointer to the struct gpio_chip
  * @gpiospec:	GPIO specifier as found in the device tree
  * @flags:	a flags pointer to fill in
  *
  * This is simple translation function, suitable for the most 1:1 mapped
  * GPIO chips. This function performs only one sanity check: whether GPIO
- * is less than ngpios (that is specified in the gpio_chip).
+ * is less than ngpios (that is specified in the @gc).
+ *
+ * Returns:
+ * GPIO number (>= 0) on success, negative errno on failure.
  */
 static int of_gpio_simple_xlate(struct gpio_chip *gc,
 				const struct of_phandle_args *gpiospec,
@@ -934,7 +949,7 @@ static int of_gpio_simple_xlate(struct gpio_chip *gc,
 {
 	/*
 	 * We're discouraging gpio_cells < 2, since that way you'll have to
-	 * write your own xlate function (that will have to retrieve the GPIO
+	 * write your own .xlate function (that will have to retrieve the GPIO
 	 * number and the flags from a single gpio cell -- this is possible,
 	 * but not recommended).
 	 */
@@ -960,22 +975,27 @@ static int of_gpio_simple_xlate(struct gpio_chip *gc,
 /**
  * of_mm_gpiochip_add_data - Add memory mapped GPIO chip (bank)
  * @np:		device node of the GPIO chip
- * @mm_gc:	pointer to the of_mm_gpio_chip allocated structure
+ * @mm_gc:	pointer to the allocated struct of_mm_gpio_chip
  * @data:	driver data to store in the struct gpio_chip
  *
- * To use this function you should allocate and fill mm_gc with:
+ * **DEPRECATED** This function is deprecated and must not be used in new code.
  *
- * 1) In the gpio_chip structure:
+ * To use this function you should allocate and fill @mm_gc with:
+ *
+ * 1) In the struct gpio_chip:
  *    - all the callbacks
  *    - of_gpio_n_cells
  *    - of_xlate callback (optional)
  *
- * 3) In the of_mm_gpio_chip structure:
+ * 3) In the struct of_mm_gpio_chip:
  *    - save_regs callback (optional)
  *
  * If succeeded, this function will map bank's memory and will
  * do all necessary work for you. Then you'll able to use .regs
  * to manage GPIOs from the callbacks.
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 int of_mm_gpiochip_add_data(struct device_node *np,
 			    struct of_mm_gpio_chip *mm_gc,
@@ -1018,7 +1038,9 @@ EXPORT_SYMBOL_GPL(of_mm_gpiochip_add_data);
 
 /**
  * of_mm_gpiochip_remove - Remove memory mapped GPIO chip (bank)
- * @mm_gc:	pointer to the of_mm_gpio_chip allocated structure
+ * @mm_gc:	pointer to the allocated struct of_mm_gpio_chip
+ *
+ * **DEPRECATED** This function is deprecated and must not be used in new code.
  */
 void of_mm_gpiochip_remove(struct of_mm_gpio_chip *mm_gc)
 {

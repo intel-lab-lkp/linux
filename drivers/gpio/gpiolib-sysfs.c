@@ -44,8 +44,8 @@ struct gpiod_data {
 };
 
 /*
- * Lock to serialise gpiod export and unexport, and prevent re-export of
- * gpiod whose chip is being unregistered.
+ * Lock to serialise GPIO export and unexport, and prevent re-export of
+ * GPIO whose chip is being unregistered.
  */
 static DEFINE_MUTEX(sysfs_lock);
 
@@ -193,12 +193,12 @@ static int gpio_sysfs_request_irq(struct device *dev, unsigned char flags)
 			IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING;
 
 	/*
-	 * FIXME: This should be done in the irq_request_resources callback
-	 *        when the irq is requested, but a few drivers currently fail
-	 *        to do so.
+	 * FIXME: This should be done in the .irq_request_resources callback
+	 * when the IRQ is requested, but a few drivers currently fail
+	 * to do so.
 	 *
-	 *        Remove this redundant call (along with the corresponding
-	 *        unlock) when those drivers have been fixed.
+	 * Remove this redundant call (along with the corresponding
+	 * unlock) when those drivers have been fixed.
 	 */
 	ret = gpiochip_lock_as_irq(guard.gc, gpio_chip_hwgpio(desc));
 	if (ret < 0)
@@ -222,7 +222,7 @@ err_put_kn:
 }
 
 /*
- * Caller holds gpiod-data mutex (unless called after class-device
+ * Caller holds gpiod_data mutex (unless called after class-device
  * deregistration).
  */
 static void gpio_sysfs_free_irq(struct device *dev)
@@ -299,7 +299,7 @@ out_unlock:
 }
 static DEVICE_ATTR_RW(edge);
 
-/* Caller holds gpiod-data mutex. */
+/* Caller holds gpiod_data mutex. */
 static int gpio_sysfs_set_active_low(struct device *dev, int value)
 {
 	struct gpiod_data *data = dev_get_drvdata(dev);
@@ -477,7 +477,8 @@ static ssize_t export_store(const struct class *class,
 		return -EINVAL;
 	}
 
-	/* No extra locking here; FLAG_SYSFS just signifies that the
+	/*
+	 * No extra locking here; FLAG_SYSFS just signifies that the
 	 * request and export were done by on behalf of userspace, so
 	 * they may be undone on its behalf too.
 	 */
@@ -526,7 +527,8 @@ static ssize_t unexport_store(const struct class *class,
 
 	status = -EINVAL;
 
-	/* No extra locking here; FLAG_SYSFS just signifies that the
+	/*
+	 * No extra locking here; FLAG_SYSFS just signifies that the
 	 * request and export were done by on behalf of userspace, so
 	 * they may be undone on its behalf too.
 	 */
@@ -568,7 +570,8 @@ static struct class gpio_class = {
  * will see "direction" sysfs attribute which may be used to change
  * the gpio's direction.  A "value" attribute will always be provided.
  *
- * Returns zero on success, else an error.
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 int gpiod_export(struct gpio_desc *desc, bool direction_may_change)
 {
@@ -667,7 +670,8 @@ static int match_export(struct device *dev, const void *desc)
  * Set up a symlink from /sys/.../dev/name to /sys/class/gpio/gpioN
  * node. Caller is responsible for unlinking.
  *
- * Returns zero on success, else an error.
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 int gpiod_export_link(struct device *dev, const char *name,
 		      struct gpio_desc *desc)
@@ -723,7 +727,7 @@ void gpiod_unexport(struct gpio_desc *desc)
 	device_unregister(dev);
 
 	/*
-	 * Release irq after deregistration to prevent race with edge_store.
+	 * Release IRQ after deregistration to prevent race with edge_store.
 	 */
 	if (data->irq_flags)
 		gpio_sysfs_free_irq(dev);
@@ -747,7 +751,7 @@ int gpiochip_sysfs_register(struct gpio_device *gdev)
 	struct device *dev;
 
 	/*
-	 * Many systems add gpio chips for SOC support very early,
+	 * Many systems add GPIO chips for SoC support very early,
 	 * before driver model support is available.  In those cases we
 	 * register later, in gpiolib_sysfs_init() ... here we just
 	 * verify that _some_ field of gpio_class got initialized.
@@ -795,7 +799,7 @@ void gpiochip_sysfs_unregister(struct gpio_device *gdev)
 
 		device_unregister(gdev->mockdev);
 
-		/* prevent further gpiod exports */
+		/* prevent further GPIO exports */
 		gdev->mockdev = NULL;
 	}
 
@@ -805,7 +809,7 @@ void gpiochip_sysfs_unregister(struct gpio_device *gdev)
 	if (!chip)
 		return;
 
-	/* unregister gpiod class devices owned by sysfs */
+	/* unregister GPIO class devices owned by sysfs */
 	for_each_gpio_desc_with_flag(chip, desc, FLAG_SYSFS) {
 		gpiod_unexport(desc);
 		gpiod_free(desc);
@@ -840,7 +844,8 @@ static int __init gpiolib_sysfs_init(void)
 	if (status < 0)
 		return status;
 
-	/* Scan and register the gpio_chips which registered very
+	/*
+	 * Scan and register the gpio_chips which registered very
 	 * early (e.g. before the class_register above was called).
 	 *
 	 * We run before arch_initcall() so chip->dev nodes can have

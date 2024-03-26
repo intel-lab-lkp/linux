@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * devres.c - managed gpio resources
+ * Managed GPIO resources.
  * This file is based on kernel/irq/devres.c
  *
  * Copyright (c) 2011 John Crispin <john@phrozen.org>
@@ -52,6 +52,11 @@ static int devm_gpiod_match_array(struct device *dev, void *res, void *data)
  * Managed gpiod_get(). GPIO descriptors returned from this function are
  * automatically disposed on driver detach. See gpiod_get() for detailed
  * information about behavior and return values.
+ *
+ * Returns:
+ * The GPIO descriptor corresponding to the function @con_id of device
+ * dev, -ENOENT if no GPIO has been assigned to the requested function, or
+ * another IS_ERR() code if an error occurred while trying to acquire the GPIO.
  */
 struct gpio_desc *__must_check devm_gpiod_get(struct device *dev,
 					      const char *con_id,
@@ -70,6 +75,11 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get);
  * Managed gpiod_get_optional(). GPIO descriptors returned from this function
  * are automatically disposed on driver detach. See gpiod_get_optional() for
  * detailed information about behavior and return values.
+ *
+ * Returns:
+ * The GPIO descriptor corresponding to the function @con_id of device
+ * dev, NULL if no GPIO has been assigned to the requested function, or
+ * another IS_ERR() code if an error occurred while trying to acquire the GPIO.
  */
 struct gpio_desc *__must_check devm_gpiod_get_optional(struct device *dev,
 						       const char *con_id,
@@ -89,6 +99,11 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get_optional);
  * Managed gpiod_get_index(). GPIO descriptors returned from this function are
  * automatically disposed on driver detach. See gpiod_get_index() for detailed
  * information about behavior and return values.
+ *
+ * Returns:
+ * The GPIO descriptor corresponding to the function @con_id of device
+ * dev, -ENOENT if no GPIO has been assigned to the requested function, or
+ * another IS_ERR() code if an error occurred while trying to acquire the GPIO.
  */
 struct gpio_desc *__must_check devm_gpiod_get_index(struct device *dev,
 						    const char *con_id,
@@ -141,8 +156,10 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get_index);
  * GPIO descriptors returned from this function are automatically disposed on
  * driver detach.
  *
- * On successful request the GPIO pin is configured in accordance with
- * provided @flags.
+ * Returns:
+ * The GPIO descriptor corresponding to the function @con_id of device
+ * dev, -ENOENT if no GPIO has been assigned to the requested function, or
+ * another IS_ERR() code if an error occurred while trying to acquire the GPIO.
  */
 struct gpio_desc *devm_fwnode_gpiod_get_index(struct device *dev,
 					      struct fwnode_handle *fwnode,
@@ -182,6 +199,11 @@ EXPORT_SYMBOL_GPL(devm_fwnode_gpiod_get_index);
  * function are automatically disposed on driver detach. See
  * gpiod_get_index_optional() for detailed information about behavior and
  * return values.
+ *
+ * Returns:
+ * The GPIO descriptor corresponding to the function @con_id of device
+ * dev, NULL if no GPIO has been assigned to the requested function, or
+ * another IS_ERR() code if an error occurred while trying to acquire the GPIO.
  */
 struct gpio_desc *__must_check devm_gpiod_get_index_optional(struct device *dev,
 							     const char *con_id,
@@ -207,6 +229,12 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get_index_optional);
  * Managed gpiod_get_array(). GPIO descriptors returned from this function are
  * automatically disposed on driver detach. See gpiod_get_array() for detailed
  * information about behavior and return values.
+ *
+ * Returns:
+ * The GPIO descriptors corresponding to the function @con_id of device
+ * dev, -ENOENT if no GPIO has been assigned to the requested function,
+ * or another IS_ERR() code if an error occurred while trying to acquire
+ * the GPIOs.
  */
 struct gpio_descs *__must_check devm_gpiod_get_array(struct device *dev,
 						     const char *con_id,
@@ -243,6 +271,12 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get_array);
  * function are automatically disposed on driver detach.
  * See gpiod_get_array_optional() for detailed information about behavior and
  * return values.
+ *
+ * Returns:
+ * The GPIO descriptors corresponding to the function @con_id of device
+ * dev, NULL if no GPIO has been assigned to the requested function,
+ * or another IS_ERR() code if an error occurred while trying to acquire
+ * the GPIOs.
  */
 struct gpio_descs *__must_check
 devm_gpiod_get_array_optional(struct device *dev, const char *con_id,
@@ -275,7 +309,7 @@ void devm_gpiod_put(struct device *dev, struct gpio_desc *desc)
 EXPORT_SYMBOL_GPL(devm_gpiod_put);
 
 /**
- * devm_gpiod_unhinge - Remove resource management from a gpio descriptor
+ * devm_gpiod_unhinge - Remove resource management from a GPIO descriptor
  * @dev:	GPIO consumer
  * @desc:	GPIO descriptor to remove resource management from
  *
@@ -283,7 +317,6 @@ EXPORT_SYMBOL_GPL(devm_gpiod_put);
  * you want to hand over lifecycle management of a descriptor to another
  * mechanism.
  */
-
 void devm_gpiod_unhinge(struct device *dev, struct gpio_desc *desc)
 {
 	int ret;
@@ -328,15 +361,20 @@ static void devm_gpio_release(struct device *dev, void *res)
 }
 
 /**
- *      devm_gpio_request - request a GPIO for a managed device
- *      @dev: device to request the GPIO for
- *      @gpio: GPIO to allocate
- *      @label: the name of the requested GPIO
+ * devm_gpio_request - request a GPIO for a managed device
+ * @dev: device to request the GPIO for
+ * @gpio: GPIO to allocate
+ * @label: the name of the requested GPIO
  *
- *      Except for the extra @dev argument, this function takes the
- *      same arguments and performs the same function as
- *      gpio_request().  GPIOs requested with this function will be
- *      automatically freed on driver detach.
+ * Except for the extra @dev argument, this function takes the
+ * same arguments and performs the same function as gpio_request().
+ * GPIOs requested with this function will be automatically freed
+ * on driver detach.
+ *
+ * **DEPRECATED** This function is deprecated and must not be used in new code.
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 int devm_gpio_request(struct device *dev, unsigned gpio, const char *label)
 {
@@ -361,11 +399,16 @@ int devm_gpio_request(struct device *dev, unsigned gpio, const char *label)
 EXPORT_SYMBOL_GPL(devm_gpio_request);
 
 /**
- *	devm_gpio_request_one - request a single GPIO with initial setup
- *	@dev:   device to request for
- *	@gpio:	the GPIO number
- *	@flags:	GPIO configuration as specified by GPIOF_*
- *	@label:	a literal description string of this GPIO
+ * devm_gpio_request_one - request a single GPIO with initial setup
+ * @dev: device to request for
+ * @gpio: the GPIO number
+ * @flags: GPIO configuration as specified by GPIOF_*
+ * @label: a literal description string of this GPIO
+ *
+ * **DEPRECATED** This function is deprecated and must not be used in new code.
+ *
+ * Returns:
+ * 0 on success, or negative errno on failure.
  */
 int devm_gpio_request_one(struct device *dev, unsigned gpio,
 			  unsigned long flags, const char *label)
@@ -399,15 +442,15 @@ static void devm_gpio_chip_release(void *data)
 
 /**
  * devm_gpiochip_add_data_with_key() - Resource managed gpiochip_add_data_with_key()
- * @dev: pointer to the device that gpio_chip belongs to.
+ * @dev: pointer to the device that GPIO chip belongs to.
  * @gc: the GPIO chip to register
  * @data: driver-private data associated with this chip
  * @lock_key: lockdep class for IRQ lock
  * @request_key: lockdep class for IRQ request
  *
- * Context: potentially before irqs will work
+ * Context: potentially before IRQs will work
  *
- * The gpio chip automatically be released when the device is unbound.
+ * The GPIO chip automatically be released when the device is unbound.
  *
  * Returns:
  * A negative errno if the chip can't be registered, such as because the

@@ -21,7 +21,7 @@ static void swnode_format_propname(const char *con_id, char *propname,
 				   size_t max_size)
 {
 	/*
-	 * Note we do not need to try both -gpios and -gpio suffixes,
+	 * NOTE: We do not need to try both -gpios and -gpio suffixes,
 	 * as, unlike OF and ACPI, we can fix software nodes to conform
 	 * to the proper binding.
 	 */
@@ -92,12 +92,12 @@ struct gpio_desc *swnode_find_gpio(struct fwnode_handle *fwnode,
 
 /**
  * swnode_gpio_count - count the GPIOs associated with a device / function
- * @fwnode:	firmware node of the GPIO consumer, can be %NULL for
+ * @fwnode:	firmware node of the GPIO consumer, can be NULL for
  *		system-global GPIOs
  * @con_id:	function within the GPIO consumer
  *
- * Return:
- * The number of GPIOs associated with a device / function or %-ENOENT,
+ * Returns:
+ * The number of GPIOs associated with a device / function or -ENOENT,
  * if no GPIO has been assigned to the requested function.
  */
 int swnode_gpio_count(const struct fwnode_handle *fwnode, const char *con_id)
