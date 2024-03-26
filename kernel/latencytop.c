@@ -261,7 +261,7 @@ static int lstats_show(struct seq_file *m, void *v)
 
 				seq_printf(m, " %ps", (void *)bt);
 			}
-			seq_puts(m, "\n");
+			seq_putc(m, '\n');
 		}
 	}
 	return 0;
