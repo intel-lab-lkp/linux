@@ -209,6 +209,54 @@ choice
 		  selecting one of the platform specific options below if
 		  you know the parameters for the port.
 
+	config DEBUG_BOSTON_UART
+		bool "Kernel low-level debugging messages via Boston UART"
+		depends on MIPS_GENERIC_KERNEL
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on IMG Boston board.
+
+	config DEBUG_MALTA_UART
+		bool "Kernel low-level debugging messages via malta UART"
+		depends on MIPS_MALTA
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on MTI malta board.
+
+	config DEBUG_AR71XX_UART
+		bool "Kernel low-level debugging messages via AR71XX UART"
+		depends on ATH79
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on AR71xx based platforms.
+
+	config DEBUG_LOONGSON3_UART
+		bool "Kernel low-level debugging messages via Loongson-3 UART"
+		depends on MACH_LOONGSON64
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on Loongson-3 systems.
+
+	config DEBUG_LOONGSON2K_UART
+		bool "Kernel low-level debugging messages via Loongson 2K UART"
+		depends on MACH_LOONGSON64
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on Loongson-2K SoCs.
+
+	config DEBUG_INGENIC_UART
+		bool "Kernel low-level debugging messages via Ingenic UART"
+		depends on MACH_INGENIC_SOC
+		select DEBUG_UART_8250
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on uart0 of Ingenic SoCs.
+
 endchoice
 
 config DEBUG_LL_INCLUDE
@@ -239,6 +287,12 @@ config DEBUG_UART_FLOW_CONTROL
 config DEBUG_UART_PHYS
 	hex "Physical base address of debug UART"
 	depends on DEBUG_LL_UART
+	default 0x17ffe000 if DEBUG_BOSTON_UART
+	default 0x1fd003f8 if DEBUG_MALTA_UART
+	default 0x18020000 if DEBUG_AR71XX_UART
+	default 0x1fd003f8 if DEBUG_LOONGSON3_UART
+	default 0x1fe00000 if DEBUG_LOONGSON2K_UART
+	default 0x10030000 if DEBUG_INGENIC_UART
 	help
 	  This is the physical base address of the debug UART. It must be
 	  accessible from unmapped kernel space (i.e. KSEG1 for 32bit kernels
@@ -247,6 +301,8 @@ config DEBUG_UART_PHYS
 config DEBUG_UART_8250_SHIFT
 	int "Register offset shift for the 8250 debug UART"
 	depends on DEBUG_LL_UART_8250 || DEBUG_UART_8250
+	default 1 if DEBUG_MALTA_UART || DEBUG_LOONGSON3_UART || \
+		DEBUG_LOONGSON2K_UART
 	default 2
 
 config DEBUG_UART_8250_WIDTH
