@@ -246,6 +246,8 @@ struct rzg2l_variable_pin_cfg {
 	u32 pin:3;
 };
 
+struct rzg2l_pinctrl;
+
 struct rzg2l_pinctrl_data {
 	const char * const *port_pins;
 	const u64 *port_pin_configs;
@@ -256,6 +258,8 @@ struct rzg2l_pinctrl_data {
 	const struct rzg2l_hwcfg *hwcfg;
 	const struct rzg2l_variable_pin_cfg *variable_pin_cfg;
 	unsigned int n_variable_pin_cfg;
+	void (*set_pfc_mode)(struct rzg2l_pinctrl *pctrl, u8 pin, u8 off, u8 func);
+	void (*pm_set_pfc)(struct rzg2l_pinctrl *pctrl);
 };
 
 /**
@@ -526,7 +530,7 @@ static int rzg2l_pinctrl_set_mux(struct pinctrl_dev *pctldev,
 		dev_dbg(pctrl->dev, "port:%u pin: %u off:%x PSEL:%u\n",
 			RZG2L_PIN_ID_TO_PORT(pins[i]), pin, off, psel_val[i] - hwcfg->func_base);
 
-		rzg2l_pinctrl_set_pfc_mode(pctrl, pin, off, psel_val[i] - hwcfg->func_base);
+		pctrl->data->set_pfc_mode(pctrl, pin, off, psel_val[i] - hwcfg->func_base);
 	}
 
 	return 0;
@@ -2616,7 +2620,7 @@ static int rzg2l_pinctrl_resume_noirq(struct device *dev)
 			writeb(cache->eth_poc[i], pctrl->base + ETH_POC(regs->eth_poc, i));
 	}
 
-	rzg2l_pinctrl_pm_setup_pfc(pctrl);
+	pctrl->data->pm_set_pfc(pctrl);
 	rzg2l_pinctrl_pm_setup_regs(pctrl, false);
 	rzg2l_pinctrl_pm_setup_dedicated_regs(pctrl, false);
 	rzg2l_gpio_irq_restore(pctrl);
@@ -2681,6 +2685,8 @@ static struct rzg2l_pinctrl_data r9a07g043_data = {
 	.variable_pin_cfg = r9a07g043f_variable_pin_cfg,
 	.n_variable_pin_cfg = ARRAY_SIZE(r9a07g043f_variable_pin_cfg),
 #endif
+	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
+	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 };
 
 static struct rzg2l_pinctrl_data r9a07g044_data = {
@@ -2692,6 +2698,8 @@ static struct rzg2l_pinctrl_data r9a07g044_data = {
 	.n_dedicated_pins = ARRAY_SIZE(rzg2l_dedicated_pins.common) +
 		ARRAY_SIZE(rzg2l_dedicated_pins.rzg2l_pins),
 	.hwcfg = &rzg2l_hwcfg,
+	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
+	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 };
 
 static struct rzg2l_pinctrl_data r9a08g045_data = {
@@ -2702,6 +2710,8 @@ static struct rzg2l_pinctrl_data r9a08g045_data = {
 	.n_port_pins = ARRAY_SIZE(r9a08g045_gpio_configs) * RZG2L_PINS_PER_PORT,
 	.n_dedicated_pins = ARRAY_SIZE(rzg3s_dedicated_pins),
 	.hwcfg = &rzg3s_hwcfg,
+	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
+	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 };
 
 static const struct of_device_id rzg2l_pinctrl_of_table[] = {
