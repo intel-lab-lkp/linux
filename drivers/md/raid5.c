@@ -5436,8 +5436,7 @@ static void raid5_align_endio(struct bio *bi)
 
 	if (!error) {
 		bio_endio(raid_bi);
-		if (active_aligned_reads_dec_and_test(conf))
-			wake_up(&conf->wait_for_quiescent);
+		active_aligned_reads_dec(conf);
 		return;
 	}
 
@@ -5508,8 +5507,8 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 		/* quiesce is in progress, so we need to undo io activation and wait
 		 * for it to finish
 		 */
-		if (did_inc && active_aligned_reads_dec_and_test(conf))
-			wake_up(&conf->wait_for_quiescent);
+		if (did_inc)
+			active_aligned_reads_dec(conf);
 		spin_lock_irq(&conf->device_lock);
 		wait_event_lock_irq(conf->wait_for_quiescent, conf->quiesce == 0,
 				    conf->device_lock);
@@ -6609,8 +6608,7 @@ static int  retry_aligned_read(struct r5conf *conf, struct bio *raid_bio,
 
 	bio_endio(raid_bio);
 
-	if (active_aligned_reads_dec_and_test(conf))
-		wake_up(&conf->wait_for_quiescent);
+	active_aligned_reads_dec(conf);
 	return handled;
 }
 
@@ -7324,6 +7322,7 @@ static void free_conf(struct r5conf *conf)
 {
 	int i;
 
+	percpu_ref_exit(&conf->active_aligned_reads);
 	log_exit(conf);
 
 	shrinker_free(conf->shrinker);
@@ -7405,6 +7404,12 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 	return max_stripes - min_stripes;
 }
 
+static void percpu_wakeup_handle_req_active(struct percpu_ref *r)
+{
+	struct r5conf *conf = container_of(r, struct r5conf, active_aligned_reads);
+
+	wake_up(&conf->wait_for_quiescent);
+}
 
 static struct r5conf *setup_conf(struct mddev *mddev, bool quiesce)
 {
@@ -7492,7 +7497,10 @@ static struct r5conf *setup_conf(struct mddev *mddev, bool quiesce)
 		percpu_ref_init_flags = PERCPU_REF_ALLOW_REINIT | PERCPU_REF_INIT_DEAD;
 	else
 		percpu_ref_init_flags = PERCPU_REF_ALLOW_REINIT;
-	atomic_set(&conf->active_aligned_reads, 0);
+	ret = percpu_ref_init(&conf->active_aligned_reads, percpu_wakeup_handle_req_active,
+		percpu_ref_init_flags, GFP_KERNEL);
+	if (ret)
+		goto abort;
 	spin_lock_init(&conf->pending_bios_lock);
 	conf->batch_bio_dispatch = true;
 	rdev_for_each(rdev, mddev) {
@@ -7684,7 +7692,7 @@ static struct r5conf *setup_conf_for_takeover(struct mddev *mddev)
 
 	if (mddev->level == 4 || mddev->level == 5 || mddev->level == 6) {
 		conf = mddev->private;
-		quiesce = false;
+		quiesce = percpu_ref_is_dying(&conf->active_aligned_reads);
 	}
 	return setup_conf(mddev, quiesce);
 }
@@ -8641,6 +8649,7 @@ static void raid5_quiesce(struct mddev *mddev, int quiesce)
 		 * quiesce started and reverts to slow (locked) path.
 		 */
 		smp_store_release(&conf->quiesce, 2);
+		percpu_ref_kill(&conf->active_aligned_reads);
 		wait_event_cmd(conf->wait_for_quiescent,
 				    atomic_read(&conf->active_stripes) == 0 &&
 				    active_aligned_reads_is_zero(conf),
@@ -8653,6 +8662,7 @@ static void raid5_quiesce(struct mddev *mddev, int quiesce)
 	} else {
 		/* re-enable writes */
 		lock_all_device_hash_locks_irq(conf);
+		percpu_ref_reinit(&conf->active_aligned_reads);
 		conf->quiesce = 0;
 		wake_up(&conf->wait_for_quiescent);
 		wake_up(&conf->wait_for_overlap);
