@@ -95,7 +95,7 @@ static int unloaded_tainted_modules_seq_show(struct seq_file *m, void *p)
 	buf[l++] = '\0';
 
 	seq_printf(m, "%s (%s) %llu", mod_taint->name, buf, mod_taint->count);
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 
 	return 0;
 }

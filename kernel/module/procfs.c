@@ -35,7 +35,7 @@ static inline void print_unload_info(struct seq_file *m, struct module *mod)
 	}
 
 	if (!printed_something)
-		seq_puts(m, "-");
+		seq_putc(m, '-');
 }
 #else /* !CONFIG_MODULE_UNLOAD */
 static inline void print_unload_info(struct seq_file *m, struct module *mod)
@@ -99,7 +99,7 @@ static int m_show(struct seq_file *m, void *p)
 	if (mod->taints)
 		seq_printf(m, " %s", module_flags(mod, buf, true));
 
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 	return 0;
 }
 
