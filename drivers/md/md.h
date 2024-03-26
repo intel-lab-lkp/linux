@@ -211,6 +211,36 @@ enum flag_bits {
 	Nonrot,			/* non-rotational device (SSD) */
 };
 
+static inline void nr_pending_inc(struct md_rdev *rdev)
+{
+	atomic_inc(&rdev->nr_pending);
+}
+
+static inline void nr_pending_dec(struct md_rdev *rdev)
+{
+	atomic_dec(&rdev->nr_pending);
+}
+
+static inline bool nr_pending_is_zero(struct md_rdev *rdev)
+{
+	return atomic_read(&rdev->nr_pending) == 0;
+}
+
+static inline bool nr_pending_is_not_zero(struct md_rdev *rdev)
+{
+	return atomic_read(&rdev->nr_pending) != 0;
+}
+
+static inline unsigned int nr_pending_read(struct md_rdev *rdev)
+{
+	return atomic_read(&rdev->nr_pending);
+}
+
+static inline bool nr_pending_dec_and_test(struct md_rdev *rdev)
+{
+	return atomic_dec_and_test(&rdev->nr_pending);
+}
+
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,
 			      sector_t *first_bad, int *bad_sectors)
 {
@@ -845,7 +875,7 @@ static inline bool is_rdev_broken(struct md_rdev *rdev)
 static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 {
 	int faulty = test_bit(Faulty, &rdev->flags);
-	if (atomic_dec_and_test(&rdev->nr_pending) && faulty) {
+	if (nr_pending_dec_and_test(rdev) && faulty) {
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 		md_wakeup_thread(mddev->thread);
 	}

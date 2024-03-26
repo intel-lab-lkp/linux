@@ -808,7 +808,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 
 		nonrot = bdev_nonrot(rdev->bdev);
 		has_nonrot_disk |= nonrot;
-		pending = atomic_read(&rdev->nr_pending);
+		pending = nr_pending_read(rdev);
 		if (min_pending > pending && nonrot) {
 			min_pending = pending;
 			best_pending_slot = slot;
@@ -849,7 +849,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 	}
 
 	if (slot >= 0) {
-		atomic_inc(&rdev->nr_pending);
+		nr_pending_inc(rdev);
 		r10_bio->read_slot = slot;
 	} else
 		rdev = NULL;
@@ -1296,12 +1296,12 @@ retry_wait:
 		rdev = conf->mirrors[i].rdev;
 		rrdev = conf->mirrors[i].replacement;
 		if (rdev && unlikely(test_bit(Blocked, &rdev->flags))) {
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			blocked_rdev = rdev;
 			break;
 		}
 		if (rrdev && unlikely(test_bit(Blocked, &rrdev->flags))) {
-			atomic_inc(&rrdev->nr_pending);
+			nr_pending_inc(rrdev);
 			blocked_rdev = rrdev;
 			break;
 		}
@@ -1322,7 +1322,7 @@ retry_wait:
 				 * Mustn't write here until the bad block
 				 * is acknowledged
 				 */
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				set_bit(BlockedBadBlocks, &rdev->flags);
 				blocked_rdev = rdev;
 				break;
@@ -1467,11 +1467,11 @@ static void raid10_write_request(struct mddev *mddev, struct bio *bio,
 		}
 		if (rdev) {
 			r10_bio->devs[i].bio = bio;
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 		}
 		if (rrdev) {
 			r10_bio->devs[i].repl_bio = bio;
-			atomic_inc(&rrdev->nr_pending);
+			nr_pending_inc(rrdev);
 		}
 	}
 
@@ -1731,11 +1731,11 @@ retry_discard:
 
 		if (rdev) {
 			r10_bio->devs[disk].bio = bio;
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 		}
 		if (rrdev) {
 			r10_bio->devs[disk].repl_bio = bio;
-			atomic_inc(&rrdev->nr_pending);
+			nr_pending_inc(rrdev);
 		}
 	}
 
@@ -2155,7 +2155,7 @@ static int raid10_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 		return 0;
 
 	if (test_bit(In_sync, &rdev->flags) ||
-	    atomic_read(&rdev->nr_pending)) {
+	    nr_pending_is_not_zero(rdev)) {
 		err = -EBUSY;
 		goto abort;
 	}
@@ -2394,7 +2394,7 @@ static void sync_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 
 		bio_copy_data(tbio, fbio);
 
-		atomic_inc(&conf->mirrors[d].rdev->nr_pending);
+		nr_pending_inc(conf->mirrors[d].rdev);
 		atomic_inc(&r10_bio->remaining);
 		md_sync_acct(conf->mirrors[d].rdev->bdev, bio_sectors(tbio));
 
@@ -2552,12 +2552,12 @@ static void recovery_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 	 */
 	d = r10_bio->devs[1].devnum;
 	if (wbio->bi_end_io) {
-		atomic_inc(&conf->mirrors[d].rdev->nr_pending);
+		nr_pending_inc(conf->mirrors[d].rdev);
 		md_sync_acct(conf->mirrors[d].rdev->bdev, bio_sectors(wbio));
 		submit_bio_noacct(wbio);
 	}
 	if (wbio2) {
-		atomic_inc(&conf->mirrors[d].replacement->nr_pending);
+		nr_pending_inc(conf->mirrors[d].replacement);
 		md_sync_acct(conf->mirrors[d].replacement->bdev,
 			     bio_sectors(wbio2));
 		submit_bio_noacct(wbio2);
@@ -2633,7 +2633,7 @@ static void fix_read_error(struct r10conf *conf, struct mddev *mddev, struct r10
 			    rdev_has_badblock(rdev,
 					      r10_bio->devs[sl].addr + sect,
 					      s) == 0) {
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				success = sync_page_io(rdev,
 						       r10_bio->devs[sl].addr +
 						       sect,
@@ -2682,7 +2682,7 @@ static void fix_read_error(struct r10conf *conf, struct mddev *mddev, struct r10
 			    !test_bit(In_sync, &rdev->flags))
 				continue;
 
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			if (r10_sync_page_io(rdev,
 					     r10_bio->devs[sl].addr +
 					     sect,
@@ -2714,7 +2714,7 @@ static void fix_read_error(struct r10conf *conf, struct mddev *mddev, struct r10
 			    !test_bit(In_sync, &rdev->flags))
 				continue;
 
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			switch (r10_sync_page_io(rdev,
 					     r10_bio->devs[sl].addr +
 					     sect,
@@ -3342,9 +3342,9 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 				continue;
 			}
 			if (mrdev)
-				atomic_inc(&mrdev->nr_pending);
+				nr_pending_inc(mrdev);
 			if (mreplace)
-				atomic_inc(&mreplace->nr_pending);
+				nr_pending_inc(mreplace);
 
 			r10_bio = raid10_alloc_init_r10buf(conf);
 			r10_bio->state = 0;
@@ -3413,7 +3413,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 				bio->bi_iter.bi_sector = from_addr +
 					rdev->data_offset;
 				bio_set_dev(bio, rdev->bdev);
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				/* and we write to 'i' (if not in_sync) */
 
 				for (k=0; k<conf->copies; k++)
@@ -3601,7 +3601,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 					continue;
 				}
 			}
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			atomic_inc(&r10_bio->remaining);
 			bio->bi_next = biolist;
 			biolist = bio;
@@ -3617,7 +3617,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 			if (rdev == NULL || test_bit(Faulty, &rdev->flags))
 				continue;
 
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 
 			/* Need to set up for writing to the replacement */
 			bio = r10_bio->devs[i].repl_bio;
@@ -4918,7 +4918,7 @@ static void reshape_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 		if (!rdev || test_bit(Faulty, &rdev->flags))
 			continue;
 
-		atomic_inc(&rdev->nr_pending);
+		nr_pending_inc(rdev);
 		md_sync_acct_bio(b, r10_bio->sectors);
 		atomic_inc(&r10_bio->remaining);
 		b->bi_next = NULL;
@@ -4998,7 +4998,7 @@ static int handle_reshape_read_error(struct mddev *mddev,
 				goto failed;
 
 			addr = r10b->devs[slot].addr + idx * PAGE_SIZE;
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			success = sync_page_io(rdev,
 					       addr,
 					       s << 9,

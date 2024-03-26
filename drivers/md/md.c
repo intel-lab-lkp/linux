@@ -575,7 +575,7 @@ static void submit_flushes(struct work_struct *ws)
 		    !test_bit(Faulty, &rdev->flags)) {
 			struct bio *bi;
 
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			rcu_read_unlock();
 			bi = bio_alloc_bioset(rdev->bdev, 0,
 					      REQ_OP_WRITE | REQ_PREFLUSH,
@@ -1050,7 +1050,7 @@ void md_super_write(struct mddev *mddev, struct md_rdev *rdev,
 				  | REQ_PREFLUSH | REQ_FUA,
 			      GFP_NOIO, &mddev->sync_set);
 
-	atomic_inc(&rdev->nr_pending);
+	nr_pending_inc(rdev);
 
 	bio->bi_iter.bi_sector = sector;
 	__bio_add_page(bio, page, size, 0);
@@ -9255,7 +9255,7 @@ static bool rdev_removeable(struct md_rdev *rdev)
 		return false;
 
 	/* There are still inflight io, don't remove this rdev. */
-	if (atomic_read(&rdev->nr_pending))
+	if (nr_pending_is_not_zero(rdev))
 		return false;
 
 	/*

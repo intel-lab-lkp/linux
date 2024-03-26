@@ -1200,11 +1200,11 @@ again:
 		if (rdev && test_bit(Faulty, &rdev->flags))
 			rdev = NULL;
 		if (rdev)
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 		if (rrdev && test_bit(Faulty, &rrdev->flags))
 			rrdev = NULL;
 		if (rrdev)
-			atomic_inc(&rrdev->nr_pending);
+			nr_pending_inc(rrdev);
 
 		/* We have already checked bad blocks for reads.  Now
 		 * need to check for writes.  We never accept write errors
@@ -1232,7 +1232,7 @@ again:
 				 * will dec nr_pending, we must
 				 * increment it first.
 				 */
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				md_wait_for_blocked_rdev(rdev, conf->mddev);
 			} else {
 				/* Acknowledged bad block - skip the write */
@@ -3629,7 +3629,7 @@ handle_failed_stripe(struct r5conf *conf, struct stripe_head *sh,
 
 			if (rdev && test_bit(In_sync, &rdev->flags) &&
 			    !test_bit(Faulty, &rdev->flags))
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 			else
 				rdev = NULL;
 			if (rdev) {
@@ -4730,7 +4730,7 @@ static void analyse_stripe(struct stripe_head *sh, struct stripe_head_state *s)
 					set_bit(BlockedBadBlocks,
 						&rdev->flags);
 				s->blocked_rdev = rdev;
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 			}
 		}
 		clear_bit(R5_Insync, &dev->flags);
@@ -4768,7 +4768,7 @@ static void analyse_stripe(struct stripe_head *sh, struct stripe_head_state *s)
 				clear_bit(R5_Insync, &dev->flags);
 			if (rdev2 && !test_bit(Faulty, &rdev2->flags)) {
 				s->handle_bad_blocks = 1;
-				atomic_inc(&rdev2->nr_pending);
+				nr_pending_inc(rdev2);
 			} else
 				clear_bit(R5_WriteError, &dev->flags);
 		}
@@ -4779,7 +4779,7 @@ static void analyse_stripe(struct stripe_head *sh, struct stripe_head_state *s)
 
 			if (rdev2 && !test_bit(Faulty, &rdev2->flags)) {
 				s->handle_bad_blocks = 1;
-				atomic_inc(&rdev2->nr_pending);
+				nr_pending_inc(rdev2);
 			} else
 				clear_bit(R5_MadeGood, &dev->flags);
 		}
@@ -4788,7 +4788,7 @@ static void analyse_stripe(struct stripe_head *sh, struct stripe_head_state *s)
 
 			if (rdev2 && !test_bit(Faulty, &rdev2->flags)) {
 				s->handle_bad_blocks = 1;
-				atomic_inc(&rdev2->nr_pending);
+				nr_pending_inc(rdev2);
 			} else
 				clear_bit(R5_MadeGoodRepl, &dev->flags);
 		}
@@ -5479,7 +5479,7 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 			return 0;
 	}
 
-	atomic_inc(&rdev->nr_pending);
+	nr_pending_inc(rdev);
 
 	if (rdev_has_badblock(rdev, sector, bio_sectors(raid_bio))) {
 		rdev_dec_pending(rdev, mddev);
@@ -8170,7 +8170,7 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 		clear_bit(In_sync, &rdev->flags);
 
 	if (test_bit(In_sync, &rdev->flags) ||
-	    atomic_read(&rdev->nr_pending)) {
+	    nr_pending_is_not_zero(rdev)) {
 		err = -EBUSY;
 		goto abort;
 	}
