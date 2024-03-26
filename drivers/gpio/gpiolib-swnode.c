@@ -17,6 +17,11 @@
 #include "gpiolib.h"
 #include "gpiolib-swnode.h"
 
+const struct software_node swnode_gpio_undefined = {
+	.name = "gpio-internal-undefined",
+};
+EXPORT_SYMBOL_GPL(swnode_gpio_undefined);
+
 static void swnode_format_propname(const char *con_id, char *propname,
 				   size_t max_size)
 {
@@ -39,6 +44,9 @@ static struct gpio_device *swnode_get_gpio_device(struct fwnode_handle *fwnode)
 	gdev_node = to_software_node(fwnode);
 	if (!gdev_node || !gdev_node->name)
 		return ERR_PTR(-EINVAL);
+
+	if (!strcmp(gdev_node->name, "gpio-internal-undefined"))
+		return ERR_PTR(-ENOENT);
 
 	gdev = gpio_device_find_by_label(gdev_node->name);
 	return gdev ?: ERR_PTR(-EPROBE_DEFER);
