@@ -421,6 +421,8 @@ void stf_isp_init_cfg(struct stf_isp_dev *isp_dev);
 void stf_isp_settings(struct stf_isp_dev *isp_dev,
 		      struct v4l2_rect *crop, u32 mcode);
 void stf_isp_stream_set(struct stf_isp_dev *isp_dev);
+void stf_isp_stream_on(struct stf_isp_dev *isp_dev,
+		       struct v4l2_subdev_state *sd_state);
 int stf_isp_init(struct stfcamss *stfcamss);
 int stf_isp_register(struct stf_isp_dev *isp_dev, struct v4l2_device *v4l2_dev);
 int stf_isp_unregister(struct stf_isp_dev *isp_dev);
