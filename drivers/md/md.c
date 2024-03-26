@@ -9566,6 +9566,7 @@ void md_check_recovery(struct mddev *mddev)
 		return;
 	if ( ! (
 		(mddev->sb_flags & ~ (1<<MD_SB_CHANGE_PENDING)) ||
+		test_bit(MD_RECOVERY_PERCPU, &mddev->recovery) ||
 		test_bit(MD_RECOVERY_NEEDED, &mddev->recovery) ||
 		test_bit(MD_RECOVERY_DONE, &mddev->recovery) ||
 		(mddev->external == 0 && mddev->safemode == 1) ||
@@ -9576,6 +9577,21 @@ void md_check_recovery(struct mddev *mddev)
 
 	if (mddev_trylock(mddev)) {
 		bool try_set_sync = mddev->safemode != 0;
+		struct md_rdev *fault_rdev;
+		bool faulty_some = false;
+
+		rdev_for_each(fault_rdev, mddev) {
+			if (fault_rdev->raid_disk >= 0 &&
+			    test_bit(Faulty, &fault_rdev->flags) &&
+			    nr_pending_is_percpu_mode(fault_rdev)) {
+				percpu_ref_switch_to_atomic_sync(&fault_rdev->nr_pending);
+				faulty_some = true;
+			}
+		}
+		if (faulty_some) {
+			clear_bit(MD_RECOVERY_PERCPU, &mddev->recovery);
+			goto unlock;
+		}
 
 		if (!mddev->external && mddev->safemode == 1)
 			mddev->safemode = 0;

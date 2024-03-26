@@ -605,6 +605,7 @@ enum recovery_flags {
 	MD_RECOVERY_FROZEN,	/* User request to abort, and not restart, any action */
 	MD_RECOVERY_ERROR,	/* sync-action interrupted because io-error */
 	MD_RECOVERY_WAIT,	/* waiting for pers->start() to finish */
+	MD_RECOVERY_PERCPU,	/* nr_pending when faulty needs to be switched to atomic */
 	MD_RESYNCING_REMOTE,	/* remote node is running resync thread */
 };
 
@@ -886,6 +887,11 @@ static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 	int faulty = test_bit(Faulty, &rdev->flags);
 	nr_pending_dec(rdev);
 	if (faulty) {
+		if (nr_pending_is_percpu_mode(rdev)) {
+			set_bit(MD_RECOVERY_PERCPU, &mddev->recovery);
+			md_wakeup_thread(mddev->thread);
+			return;
+		}
 		if (nr_pending_is_zero(rdev)) {
 			set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 			md_wakeup_thread(mddev->thread);
