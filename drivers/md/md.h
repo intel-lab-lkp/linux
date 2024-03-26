@@ -231,9 +231,9 @@ static inline bool nr_pending_is_not_zero(struct md_rdev *rdev)
 	return atomic_read(&rdev->nr_pending) != 0;
 }
 
-static inline unsigned int nr_pending_read(struct md_rdev *rdev)
+static inline unsigned long nr_pending_read(struct md_rdev *rdev)
 {
-	return atomic_read(&rdev->nr_pending);
+	return (unsigned long)atomic_read(&rdev->nr_pending);
 }
 
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,

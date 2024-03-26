@@ -751,7 +751,7 @@ static bool rdev_readable(struct md_rdev *rdev, struct r1bio *r1_bio)
 struct read_balance_ctl {
 	sector_t closest_dist;
 	int closest_dist_disk;
-	int min_pending;
+	long min_pending;
 	int min_pending_disk;
 	int sequential_disk;
 	int readable_disks;
@@ -771,7 +771,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	for (disk = 0 ; disk < conf->raid_disks * 2 ; disk++) {
 		struct md_rdev *rdev;
 		sector_t dist;
-		unsigned int pending;
+		unsigned long pending;
 
 		if (r1_bio->bios[disk] == IO_BLOCKED)
 			continue;
