@@ -12,6 +12,7 @@
 
 #include <dt-bindings/clock/qcom,ipq9574-gcc.h>
 #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
+#include <dt-bindings/interconnect/qcom,ipq9574.h>
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
@@ -4301,6 +4302,56 @@ static const struct qcom_reset_map gcc_ipq9574_resets[] = {
 	[GCC_WCSS_Q6_TBU_BCR] = { 0x12054, 0 },
 };
 
+#define IPQ_APPS_ID			9574	/* some unique value */
+
+enum {
+	ICC_ANOC_PCIE0,
+	ICC_SNOC_PCIE0,
+	ICC_ANOC_PCIE1,
+	ICC_SNOC_PCIE1,
+	ICC_ANOC_PCIE2,
+	ICC_SNOC_PCIE2,
+	ICC_ANOC_PCIE3,
+	ICC_SNOC_PCIE3,
+	ICC_SNOC_USB,
+	ICC_ANOC_USB_AXI,
+	ICC_NSSNOC_NSSCC,
+	ICC_NSSNOC_SNOC_0,
+	ICC_NSSNOC_SNOC_1,
+	ICC_NSSNOC_PCNOC_1,
+	ICC_NSSNOC_QOSGEN_REF,
+	ICC_NSSNOC_TIMEOUT_REF,
+	ICC_NSSNOC_XO_DCD,
+	ICC_NSSNOC_ATB,
+	ICC_MEM_NOC_NSSNOC,
+	ICC_NSSNOC_MEMNOC,
+	ICC_NSSNOC_MEM_NOC_1,
+};
+
+static int noc_clks[] = {
+	[ICC_ANOC_PCIE0] = GCC_ANOC_PCIE0_1LANE_M_CLK,
+	[ICC_SNOC_PCIE0] = GCC_SNOC_PCIE0_1LANE_S_CLK,
+	[ICC_ANOC_PCIE1] = GCC_ANOC_PCIE1_1LANE_M_CLK,
+	[ICC_SNOC_PCIE1] = GCC_SNOC_PCIE1_1LANE_S_CLK,
+	[ICC_ANOC_PCIE2] = GCC_ANOC_PCIE2_2LANE_M_CLK,
+	[ICC_SNOC_PCIE2] = GCC_SNOC_PCIE2_2LANE_S_CLK,
+	[ICC_ANOC_PCIE3] = GCC_ANOC_PCIE3_2LANE_M_CLK,
+	[ICC_SNOC_PCIE3] = GCC_SNOC_PCIE3_2LANE_S_CLK,
+	[ICC_SNOC_USB] = GCC_SNOC_USB_CLK,
+	[ICC_ANOC_USB_AXI] = GCC_ANOC_USB_AXI_CLK,
+	[ICC_NSSNOC_NSSCC] = GCC_NSSNOC_NSSCC_CLK,
+	[ICC_NSSNOC_SNOC_0] = GCC_NSSNOC_SNOC_CLK,
+	[ICC_NSSNOC_SNOC_1] = GCC_NSSNOC_SNOC_1_CLK,
+	[ICC_NSSNOC_PCNOC_1] = GCC_NSSNOC_PCNOC_1_CLK,
+	[ICC_NSSNOC_QOSGEN_REF] = GCC_NSSNOC_QOSGEN_REF_CLK,
+	[ICC_NSSNOC_TIMEOUT_REF] = GCC_NSSNOC_TIMEOUT_REF_CLK,
+	[ICC_NSSNOC_XO_DCD] = GCC_NSSNOC_XO_DCD_CLK,
+	[ICC_NSSNOC_ATB] = GCC_NSSNOC_ATB_CLK,
+	[ICC_MEM_NOC_NSSNOC] = GCC_MEM_NOC_NSSNOC_CLK,
+	[ICC_NSSNOC_MEMNOC] = GCC_NSSNOC_MEMNOC_CLK,
+	[ICC_NSSNOC_MEM_NOC_1] = GCC_NSSNOC_MEM_NOC_1_CLK,
+};
+
 static const struct of_device_id gcc_ipq9574_match_table[] = {
 	{ .compatible = "qcom,ipq9574-gcc" },
 	{ }
@@ -4327,7 +4378,18 @@ static const struct qcom_cc_desc gcc_ipq9574_desc = {
 
 static int gcc_ipq9574_probe(struct platform_device *pdev)
 {
-	return qcom_cc_probe(pdev, &gcc_ipq9574_desc);
+	int ret;
+
+	ret = qcom_cc_probe(pdev, &gcc_ipq9574_desc);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "clock probe failed\n");
+
+	ret = qcom_cc_icc_register(&pdev->dev, gcc_ipq9574_clks, noc_clks,
+				   ARRAY_SIZE(noc_clks), IPQ_APPS_ID);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "interconnect register failed\n");
+
+	return 0;
 }
 
 static struct platform_driver gcc_ipq9574_driver = {

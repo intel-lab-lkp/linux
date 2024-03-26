@@ -8,6 +8,8 @@
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
 #include <linux/clk-provider.h>
+#include <linux/interconnect-clk.h>
+#include <linux/interconnect-provider.h>
 #include <linux/reset-controller.h>
 #include <linux/of.h>
 
@@ -336,5 +338,33 @@ int qcom_cc_probe_by_index(struct platform_device *pdev, int index,
 	return qcom_cc_really_probe(pdev, desc, regmap);
 }
 EXPORT_SYMBOL_GPL(qcom_cc_probe_by_index);
+
+int qcom_cc_icc_register(struct device *dev, struct clk_regmap *clks[],
+			 int *noc_clks, int count, unsigned int first_id)
+{
+	struct icc_provider *provider;
+	struct icc_clk_data *icd;
+	int i;
+
+	icd = devm_kcalloc(dev, count, sizeof(*icd), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(icd))
+		return dev_err_probe(dev, PTR_ERR(icd),
+				     "malloc for clock data failed\n");
+
+	for (i = 0; i < count; i++) {
+		icd[i].clk = clks[noc_clks[i]]->hw.clk;
+		if (IS_ERR_OR_NULL(icd[i].clk))
+			return dev_err_probe(dev, -ENOENT,
+					     "%d clock not found\n", noc_clks[i]);
+		icd[i].name = clk_hw_get_name(&clks[noc_clks[i]]->hw);
+	}
+
+	provider = icc_clk_register(dev, first_id, count, icd);
+	if (IS_ERR_OR_NULL(provider))
+		return dev_err_probe(dev, PTR_ERR(provider),
+				     "icc_clk_register failed\n");
+
+	return 0;
+}
 
 MODULE_LICENSE("GPL v2");

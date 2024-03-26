@@ -65,5 +65,7 @@ extern int qcom_cc_probe(struct platform_device *pdev,
 			 const struct qcom_cc_desc *desc);
 extern int qcom_cc_probe_by_index(struct platform_device *pdev, int index,
 				  const struct qcom_cc_desc *desc);
+int qcom_cc_icc_register(struct device *dev, struct clk_regmap *clks[],
+			 int *noc_clks, int count, unsigned int first_id);
 
 #endif
