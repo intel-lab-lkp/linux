@@ -21640,6 +21640,7 @@ F:	drivers/net/team/
 F:	include/linux/if_team.h
 F:	include/uapi/linux/if_team.h
 F:	tools/testing/selftests/drivers/net/team/
+F:	Documentation/netlink/specs/team.yaml
 
 TECHNICAL ADVISORY BOARD PROCESS DOCS
 M:	"Theodore Ts'o" <tytso@mit.edu>
