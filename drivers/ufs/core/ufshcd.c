@@ -741,22 +741,6 @@ static int ufshcd_wait_for_register(struct ufs_hba *hba, u32 reg, u32 mask,
 }
 
 /**
- * ufshcd_get_intr_mask - Get the interrupt bit mask
- * @hba: Pointer to adapter instance
- *
- * Return: interrupt bit mask per version
- */
-static inline u32 ufshcd_get_intr_mask(struct ufs_hba *hba)
-{
-	if (hba->ufs_version == ufshci_version(1, 0))
-		return INTERRUPT_MASK_ALL_VER_10;
-	if (hba->ufs_version <= ufshci_version(2, 0))
-		return INTERRUPT_MASK_ALL_VER_11;
-
-	return INTERRUPT_MASK_ALL_VER_21;
-}
-
-/**
  * ufshcd_get_ufs_version - Get the UFS version supported by the HBA
  * @hba: Pointer to adapter instance
  *
@@ -992,10 +976,6 @@ EXPORT_SYMBOL_GPL(ufshcd_is_hba_active);
 
 u32 ufshcd_get_local_unipro_ver(struct ufs_hba *hba)
 {
-	/* HCI version 1.0 and 1.1 supports UniPro 1.41 */
-	if (hba->ufs_version <= ufshci_version(1, 1))
-		return UFS_UNIPRO_VER_1_41;
-	else
 		return UFS_UNIPRO_VER_1_6;
 }
 EXPORT_SYMBOL(ufshcd_get_local_unipro_ver);
@@ -2674,14 +2654,7 @@ static void ufshcd_enable_intr(struct ufs_hba *hba, u32 intrs)
 {
 	u32 set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
 
-	if (hba->ufs_version == ufshci_version(1, 0)) {
-		u32 rw;
-		rw = set & INTERRUPT_MASK_RW_VER_10;
-		set = rw | ((set ^ intrs) & intrs);
-	} else {
-		set |= intrs;
-	}
-
+	set |= intrs;
 	ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
 }
 
@@ -2694,16 +2667,7 @@ static void ufshcd_disable_intr(struct ufs_hba *hba, u32 intrs)
 {
 	u32 set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
 
-	if (hba->ufs_version == ufshci_version(1, 0)) {
-		u32 rw;
-		rw = (set & INTERRUPT_MASK_RW_VER_10) &
-			~(intrs & INTERRUPT_MASK_RW_VER_10);
-		set = rw | ((set & intrs) & ~INTERRUPT_MASK_RW_VER_10);
-
-	} else {
-		set &= ~intrs;
-	}
-
+	set &= ~intrs;
 	ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
 }
 
@@ -2715,21 +2679,17 @@ static void ufshcd_disable_intr(struct ufs_hba *hba, u32 intrs)
  * @upiu_flags: flags required in the header
  * @cmd_dir: requests data direction
  * @ehs_length: Total EHS Length (in 32‐bytes units of all Extra Header Segments)
- * @legacy_type: UTP_CMD_TYPE_SCSI or UTP_CMD_TYPE_DEV_MANAGE
  */
 static void
 ufshcd_prepare_req_desc_hdr(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 			    u8 *upiu_flags, enum dma_data_direction cmd_dir,
-			    int ehs_length, enum utp_cmd_type legacy_type)
+			    int ehs_length)
 {
 	struct utp_transfer_req_desc *req_desc = lrbp->utr_descriptor_ptr;
 	struct request_desc_header *h = &req_desc->header;
 	enum utp_data_direction data_direction;
 
-	if (hba->ufs_version <= ufshci_version(1, 1))
-		lrbp->command_type = legacy_type;
-	else
-		lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
+	lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
 
 	*h = (typeof(*h)){ };
 
@@ -2863,7 +2823,7 @@ static int ufshcd_compose_devman_upiu(struct ufs_hba *hba,
 	u8 upiu_flags;
 	int ret = 0;
 
-	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, 0, UTP_CMD_TYPE_DEV_MANAGE);
+	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, 0);
 
 	if (hba->dev_cmd.type == DEV_CMD_TYPE_QUERY)
 		ufshcd_prepare_utp_query_req_upiu(hba, lrbp, upiu_flags);
@@ -2887,8 +2847,7 @@ static void ufshcd_comp_scsi_upiu(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	unsigned int ioprio_class = IOPRIO_PRIO_CLASS(req_get_ioprio(rq));
 	u8 upiu_flags;
 
-	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags,
-				    lrbp->cmd->sc_data_direction, 0, UTP_CMD_TYPE_SCSI);
+	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, lrbp->cmd->sc_data_direction, 0);
 	if (ioprio_class == IOPRIO_CLASS_RT)
 		upiu_flags |= UPIU_CMD_FLAGS_CP;
 	ufshcd_prepare_utp_scsi_cmd_upiu(lrbp, upiu_flags);
@@ -5565,15 +5524,13 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 		ufshcd_release_scsi_cmd(hba, lrbp);
 		/* Do not touch lrbp after scsi done */
 		scsi_done(cmd);
-	} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE ||
-		   lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE) {
-		if (hba->dev_cmd.complete) {
-			if (cqe) {
-				ocs = le32_to_cpu(cqe->status) & MASK_OCS;
-				lrbp->utr_descriptor_ptr->header.ocs = ocs;
-			}
-			complete(hba->dev_cmd.complete);
+	} else {
+		WARN_ON(!hba->dev_cmd.complete);
+		if (cqe) {
+			ocs = le32_to_cpu(cqe->status) & MASK_OCS;
+			lrbp->utr_descriptor_ptr->header.ocs = ocs;
 		}
+		complete(hba->dev_cmd.complete);
 	}
 }
 
@@ -7229,7 +7186,7 @@ static int ufshcd_issue_devman_upiu_cmd(struct ufs_hba *hba,
 
 	ufshcd_setup_dev_cmd(hba, lrbp, cmd_type, 0, tag);
 
-	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, 0, UTP_CMD_TYPE_DEV_MANAGE);
+	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, 0);
 
 	/* update the task tag in the request upiu */
 	req_upiu->header.task_tag = tag;
@@ -7381,7 +7338,7 @@ int ufshcd_advanced_rpmb_req_handler(struct ufs_hba *hba, struct utp_upiu_req *r
 
 	ufshcd_setup_dev_cmd(hba, lrbp, DEV_CMD_TYPE_RPMB, UFS_UPIU_RPMB_WLUN, tag);
 
-	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, ehs, UTP_CMD_TYPE_DEV_MANAGE);
+	ufshcd_prepare_req_desc_hdr(hba, lrbp, &upiu_flags, DMA_NONE, ehs);
 
 	/* update the task tag */
 	req_upiu->header.task_tag = tag;
@@ -10508,7 +10465,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	hba->ufs_version = ufshcd_get_ufs_version(hba);
 
 	/* Get Interrupt bit mask per version */
-	hba->intr_mask = ufshcd_get_intr_mask(hba);
+	hba->intr_mask = INTERRUPT_MASK_ALL_VER_21;
 
 	err = ufshcd_set_dma_mask(hba);
 	if (err) {

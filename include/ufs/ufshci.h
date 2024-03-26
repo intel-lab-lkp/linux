@@ -425,13 +425,6 @@ union ufs_crypto_cfg_entry {
  * Request Descriptor Definitions
  */
 
-/* Transfer request command type */
-enum utp_cmd_type {
-	UTP_CMD_TYPE_SCSI		= 0x0,
-	UTP_CMD_TYPE_UFS		= 0x1,
-	UTP_CMD_TYPE_DEV_MANAGE		= 0x2,
-};
-
 /* To accommodate UFS2.0 required Command type */
 enum {
 	UTP_CMD_TYPE_UFS_STORAGE	= 0x1,
