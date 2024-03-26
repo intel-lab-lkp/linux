@@ -25,6 +25,14 @@ properties:
       - const: raspberrypi,bcm2835-firmware
       - const: simple-mfd
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+  dma-ranges: true
+
   mboxes:
     maxItems: 1
 
@@ -81,6 +89,9 @@ properties:
 
 required:
   - compatible
+  - "#address-cells"
+  - "#size-cells"
+  - dma-ranges
   - mboxes
 
 additionalProperties: false
@@ -89,6 +100,11 @@ examples:
   - |
     firmware {
         compatible = "raspberrypi,bcm2835-firmware", "simple-mfd";
+
+        #address-cells = <1>;
+        #size-cells = <1>;
+        dma-ranges;
+
         mboxes = <&mailbox>;
 
         firmware_clocks: clocks {
