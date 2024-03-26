@@ -261,6 +261,8 @@ struct rzg2l_pinctrl_data {
 	void (*set_pfc_mode)(struct rzg2l_pinctrl *pctrl, u8 pin, u8 off, u8 func);
 	void (*pm_set_pfc)(struct rzg2l_pinctrl *pctrl);
 	void (*pmc_writeb)(struct rzg2l_pinctrl *pctrl, u8 val, void __iomem *addr);
+	u32 (*read_oen)(struct rzg2l_pinctrl *pctrl, u32 caps, u32 offset, u8 pin);
+	int (*write_oen)(struct rzg2l_pinctrl *pctrl, u32 caps, u32 offset, u8 pin, u8 oen);
 };
 
 /**
@@ -1120,7 +1122,7 @@ static int rzg2l_pinctrl_pinconf_get(struct pinctrl_dev *pctldev,
 		break;
 
 	case PIN_CONFIG_OUTPUT_ENABLE:
-		arg = rzg2l_read_oen(pctrl, cfg, _pin, bit);
+		arg = pctrl->data->read_oen(pctrl, cfg, _pin, bit);
 		if (!arg)
 			return -EINVAL;
 		break;
@@ -1228,7 +1230,7 @@ static int rzg2l_pinctrl_pinconf_set(struct pinctrl_dev *pctldev,
 
 		case PIN_CONFIG_OUTPUT_ENABLE:
 			arg = pinconf_to_config_argument(_configs[i]);
-			ret = rzg2l_write_oen(pctrl, cfg, _pin, bit, !!arg);
+			ret = pctrl->data->write_oen(pctrl, cfg, _pin, bit, !!arg);
 			if (ret)
 				return ret;
 			break;
@@ -2694,6 +2696,8 @@ static struct rzg2l_pinctrl_data r9a07g043_data = {
 	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
 	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 	.pmc_writeb = &rzg2l_pmc_writeb,
+	.read_oen = &rzg2l_read_oen,
+	.write_oen = &rzg2l_write_oen,
 };
 
 static struct rzg2l_pinctrl_data r9a07g044_data = {
@@ -2708,6 +2712,8 @@ static struct rzg2l_pinctrl_data r9a07g044_data = {
 	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
 	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 	.pmc_writeb = &rzg2l_pmc_writeb,
+	.read_oen = &rzg2l_read_oen,
+	.write_oen = &rzg2l_write_oen,
 };
 
 static struct rzg2l_pinctrl_data r9a08g045_data = {
@@ -2721,6 +2727,8 @@ static struct rzg2l_pinctrl_data r9a08g045_data = {
 	.set_pfc_mode = &rzg2l_pinctrl_set_pfc_mode,
 	.pm_set_pfc = &rzg2l_pinctrl_pm_setup_pfc,
 	.pmc_writeb = &rzg2l_pmc_writeb,
+	.read_oen = &rzg2l_read_oen,
+	.write_oen = &rzg2l_write_oen,
 };
 
 static const struct of_device_id rzg2l_pinctrl_of_table[] = {
