@@ -756,3 +756,12 @@
 	vmovdqu		%xmm0, (DST)
 	jmp		.Ldone\@
 .endm
+
+.set	VL, 16
+.set	USE_AVX10, 0
+SYM_TYPED_FUNC_START(aes_xts_encrypt_aesni_avx)
+	aes_xts_crypt	1
+SYM_FUNC_END(aes_xts_encrypt_aesni_avx)
+SYM_TYPED_FUNC_START(aes_xts_decrypt_aesni_avx)
+	aes_xts_crypt	0
+SYM_FUNC_END(aes_xts_decrypt_aesni_avx)
