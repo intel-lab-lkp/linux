@@ -241,7 +241,7 @@ struct rzg2l_dedicated_configs {
  * @pin: port pin
  */
 struct rzg2l_variable_pin_cfg {
-	u32 cfg:20;
+	u64 cfg:46;
 	u32 port:5;
 	u32 pin:3;
 };
