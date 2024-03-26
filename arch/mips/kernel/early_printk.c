@@ -14,6 +14,24 @@
 
 #include <asm/setup.h>
 
+#ifdef CONFIG_DEBUG_LL
+extern void printascii(const char *);
+
+static void early_console_write(struct console *con, const char *s, unsigned n)
+{
+	char buf[128];
+
+	while (n) {
+		unsigned int l = min(n, sizeof(buf)-1);
+
+		memcpy(buf, s, l);
+		buf[l] = 0;
+		s += l;
+		n -= l;
+		printascii(buf);
+	}
+}
+#else
 static void early_console_write(struct console *con, const char *s, unsigned n)
 {
 	while (n-- && *s) {
@@ -23,6 +41,7 @@ static void early_console_write(struct console *con, const char *s, unsigned n)
 		s++;
 	}
 }
+#endif
 
 static struct console early_console_prom = {
 	.name	= "early",
