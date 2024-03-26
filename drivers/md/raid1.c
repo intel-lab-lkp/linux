@@ -2006,6 +2006,7 @@ static int raid1_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 			conf->mirrors[conf->raid_disks + number].rdev = NULL;
 			unfreeze_array(conf);
 		}
+		percpu_ref_switch_to_percpu(&rdev->nr_pending);
 
 		clear_bit(WantReplacement, &rdev->flags);
 		err = md_integrity_register(mddev);
@@ -3298,6 +3299,11 @@ abort:
 static void raid1_free(struct mddev *mddev, void *priv)
 {
 	struct r1conf *conf = priv;
+	struct md_rdev *rdev;
+
+	rdev_for_each(rdev, mddev) {
+		percpu_ref_switch_to_percpu(&rdev->nr_pending);
+	}
 
 	mempool_exit(&conf->r1bio_pool);
 	kfree(conf->mirrors);

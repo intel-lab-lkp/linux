@@ -3742,7 +3742,6 @@ int md_rdev_init(struct md_rdev *rdev)
 	ret = percpu_ref_init(&rdev->nr_pending, percpu_wakeup_handle_req_pending,
 		PERCPU_REF_ALLOW_REINIT, GFP_KERNEL);
 	WARN_ON(ret);
-	percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 	nr_pending_dec(rdev);
 	atomic_set(&rdev->read_errors, 0);
 	atomic_set(&rdev->corrected_errors, 0);
@@ -9266,7 +9265,7 @@ static bool rdev_removeable(struct md_rdev *rdev)
 		return false;
 
 	/* There are still inflight io, don't remove this rdev. */
-	if (nr_pending_is_not_zero(rdev))
+	if (nr_pending_is_atomic_mode(rdev) && nr_pending_is_not_zero(rdev))
 		return false;
 
 	/*
@@ -9364,6 +9363,8 @@ static int remove_and_add_spares(struct mddev *mddev,
 			rdev->raid_disk = -1;
 			removed++;
 		}
+		if (mddev->pers->level != 1 && mddev->pers->level != 10)
+			percpu_ref_switch_to_percpu(&rdev->nr_pending);
 	}
 
 	if (removed && mddev->kobj.sd)

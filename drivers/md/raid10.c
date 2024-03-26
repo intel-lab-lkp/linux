@@ -2180,6 +2180,7 @@ static int raid10_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 		clear_bit(Replacement, &p->replacement->flags);
 		WRITE_ONCE(p->replacement, NULL);
 	}
+	percpu_ref_switch_to_percpu(&rdev->nr_pending);
 
 	clear_bit(WantReplacement, &rdev->flags);
 	err = md_integrity_register(mddev);
@@ -4172,6 +4173,11 @@ out:
 
 static void raid10_free(struct mddev *mddev, void *priv)
 {
+	struct md_rdev *rdev;
+
+	rdev_for_each(rdev, mddev) {
+		percpu_ref_switch_to_percpu(&rdev->nr_pending);
+	}
 	raid10_free_conf(priv);
 }
 
