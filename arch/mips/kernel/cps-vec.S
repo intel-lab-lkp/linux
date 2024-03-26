@@ -33,15 +33,15 @@
 # define STATUS_BITDEPS		0
 #endif
 
-#ifdef CONFIG_MIPS_CPS_NS16550
+#ifdef CONFIG_DEBUG_CPS_EXCEPT
 
 #define DUMP_EXCEP(name)		\
 	PTR_LA	a0, 8f;			\
-	jal	mips_cps_bev_dump;	\
+	jal	debug_ll_exception;	\
 	 nop;				\
 	TEXT(name)
 
-#else /* !CONFIG_MIPS_CPS_NS16550 */
+#else /* !CONFIG_DEBUG_CPS_EXCEPT */
 
 #define DUMP_EXCEP(name)
 
@@ -154,31 +154,31 @@ LEAF(mips_cps_core_boot)
 
 	__INIT
 LEAF(excep_tlbfill)
-	DUMP_EXCEP("TLB Fill")
+	DUMP_EXCEP("CPS - TLB Fill")
 	b	.
 	 nop
 	END(excep_tlbfill)
 
 LEAF(excep_xtlbfill)
-	DUMP_EXCEP("XTLB Fill")
+	DUMP_EXCEP("CPS - XTLB Fill")
 	b	.
 	 nop
 	END(excep_xtlbfill)
 
 LEAF(excep_cache)
-	DUMP_EXCEP("Cache")
+	DUMP_EXCEP("CPS - Cache")
 	b	.
 	 nop
 	END(excep_cache)
 
 LEAF(excep_genex)
-	DUMP_EXCEP("General")
+	DUMP_EXCEP("CPS - General")
 	b	.
 	 nop
 	END(excep_genex)
 
 LEAF(excep_intex)
-	DUMP_EXCEP("Interrupt")
+	DUMP_EXCEP("CPS - Interrupt")
 	b	.
 	 nop
 	END(excep_intex)

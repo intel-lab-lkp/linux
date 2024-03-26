@@ -96,48 +96,6 @@ config SCACHE_DEBUGFS
 
 	  If unsure, say N.
 
-menuconfig MIPS_CPS_NS16550_BOOL
-	bool "CPS SMP NS16550 UART output"
-	depends on MIPS_CPS
-	help
-	  Output debug information via an ns16550 compatible UART if exceptions
-	  occur early in the boot process of a secondary core.
-
-if MIPS_CPS_NS16550_BOOL
-
-config MIPS_CPS_NS16550
-	def_bool MIPS_CPS_NS16550_BASE != 0
-
-config MIPS_CPS_NS16550_BASE
-	hex "UART Base Address"
-	default 0x1b0003f8 if MIPS_MALTA
-	default 0
-	help
-	  The base address of the ns16550 compatible UART on which to output
-	  debug information from the early stages of core startup.
-
-	  This is only used if non-zero.
-
-config MIPS_CPS_NS16550_SHIFT
-	int "UART Register Shift"
-	default 0
-	help
-	  The number of bits to shift ns16550 register indices by in order to
-	  form their addresses. That is, log base 2 of the span between
-	  adjacent ns16550 registers in the system.
-
-config MIPS_CPS_NS16550_WIDTH
-	int "UART Register Width"
-	default 1
-	help
-	  ns16550 registers width. UART registers IO access methods will be
-	  selected in accordance with this parameter. By setting it to 1, 2 or
-	  4 UART registers will be accessed by means of lb/sb, lh/sh or lw/sw
-	  instructions respectively. Any value not from that set activates
-	  lb/sb instructions.
-
-endif # MIPS_CPS_NS16550_BOOL
-
 # These options are only for real kernel hackers who want to get their hands dirty.
 config DEBUG_LL
 	bool "Kernel low-level debugging functions (read help!)"
@@ -318,5 +276,15 @@ config DEBUG_ZBOOT_EXCEPT
 	help
 	  Say Y here if you want to enable debugging of exceptions happen
 	  during decompression of a compressed kernel via the DEBUG_LL output.
+
+	  If unsure, say N.
+
+config DEBUG_CPS_EXCEPT
+	bool "Enable kernel debugging of Coherent Processing System exceptions"
+	depends on MIPS_CPS && DEBUG_LL_EXCEPT
+	help
+	  Say Y here if you want to enable debugging of exceptions happen
+	  during SMP bring-up stages on processors witn MIPS Coherent Processing
+	  System support.
 
 	  If unsure, say N.
