@@ -44,7 +44,9 @@ void loongarch_common_resume(void)
 {
 	sync_counter();
 	local_flush_tlb_all();
+#ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
 	csr_write64(per_cpu_offset(0), PERCPU_BASE_KS);
+#endif
 	csr_write64(eentry, LOONGARCH_CSR_EENTRY);
 	csr_write64(eentry, LOONGARCH_CSR_MERRENTRY);
 	csr_write64(tlbrentry, LOONGARCH_CSR_TLBRENTRY);
