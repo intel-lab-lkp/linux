@@ -998,6 +998,7 @@ void md_rdev_clear(struct md_rdev *rdev)
 		put_page(rdev->bb_page);
 		rdev->bb_page = NULL;
 	}
+	percpu_ref_exit(&rdev->nr_pending);
 	badblocks_exit(&rdev->badblocks);
 }
 EXPORT_SYMBOL_GPL(md_rdev_clear);
@@ -3720,8 +3721,14 @@ static const struct kobj_type rdev_ktype = {
 	.default_groups	= rdev_default_groups,
 };
 
+static void percpu_wakeup_handle_req_pending(struct percpu_ref *ref)
+{
+}
+
 int md_rdev_init(struct md_rdev *rdev)
 {
+	int ret;
+
 	rdev->desc_nr = -1;
 	rdev->saved_raid_disk = -1;
 	rdev->raid_disk = -1;
@@ -3732,7 +3739,11 @@ int md_rdev_init(struct md_rdev *rdev)
 	rdev->last_read_error = 0;
 	rdev->sb_loaded = 0;
 	rdev->bb_page = NULL;
-	atomic_set(&rdev->nr_pending, 0);
+	ret = percpu_ref_init(&rdev->nr_pending, percpu_wakeup_handle_req_pending,
+		PERCPU_REF_ALLOW_REINIT, GFP_KERNEL);
+	WARN_ON(ret);
+	percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
+	nr_pending_dec(rdev);
 	atomic_set(&rdev->read_errors, 0);
 	atomic_set(&rdev->corrected_errors, 0);
 
