@@ -980,20 +980,6 @@ u32 ufshcd_get_local_unipro_ver(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_get_local_unipro_ver);
 
-static bool ufshcd_is_unipro_pa_params_tuning_req(struct ufs_hba *hba)
-{
-	/*
-	 * If both host and device support UniPro ver1.6 or later, PA layer
-	 * parameters tuning happens during link startup itself.
-	 *
-	 * We can manually tune PA layer parameters if either host or device
-	 * doesn't support UniPro ver 1.6 or later. But to keep manual tuning
-	 * logic simple, we will only do manual tuning if local unipro version
-	 * doesn't support ver1.6 or later.
-	 */
-	return ufshcd_get_local_unipro_ver(hba) < UFS_UNIPRO_VER_1_6;
-}
-
 /**
  * ufshcd_pm_qos_init - initialize PM QoS request
  * @hba: per adapter instance
@@ -8326,83 +8312,6 @@ static void ufs_put_device_desc(struct ufs_hba *hba)
 }
 
 /**
- * ufshcd_tune_pa_tactivate - Tunes PA_TActivate of local UniPro
- * @hba: per-adapter instance
- *
- * PA_TActivate parameter can be tuned manually if UniPro version is less than
- * 1.61. PA_TActivate needs to be greater than or equal to peerM-PHY's
- * RX_MIN_ACTIVATETIME_CAPABILITY attribute. This optimal value can help reduce
- * the hibern8 exit latency.
- *
- * Return: zero on success, non-zero error value on failure.
- */
-static int ufshcd_tune_pa_tactivate(struct ufs_hba *hba)
-{
-	int ret = 0;
-	u32 peer_rx_min_activatetime = 0, tuned_pa_tactivate;
-
-	ret = ufshcd_dme_peer_get(hba,
-				  UIC_ARG_MIB_SEL(
-					RX_MIN_ACTIVATETIME_CAPABILITY,
-					UIC_ARG_MPHY_RX_GEN_SEL_INDEX(0)),
-				  &peer_rx_min_activatetime);
-	if (ret)
-		goto out;
-
-	/* make sure proper unit conversion is applied */
-	tuned_pa_tactivate =
-		((peer_rx_min_activatetime * RX_MIN_ACTIVATETIME_UNIT_US)
-		 / PA_TACTIVATE_TIME_UNIT_US);
-	ret = ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TACTIVATE),
-			     tuned_pa_tactivate);
-
-out:
-	return ret;
-}
-
-/**
- * ufshcd_tune_pa_hibern8time - Tunes PA_Hibern8Time of local UniPro
- * @hba: per-adapter instance
- *
- * PA_Hibern8Time parameter can be tuned manually if UniPro version is less than
- * 1.61. PA_Hibern8Time needs to be maximum of local M-PHY's
- * TX_HIBERN8TIME_CAPABILITY & peer M-PHY's RX_HIBERN8TIME_CAPABILITY.
- * This optimal value can help reduce the hibern8 exit latency.
- *
- * Return: zero on success, non-zero error value on failure.
- */
-static int ufshcd_tune_pa_hibern8time(struct ufs_hba *hba)
-{
-	int ret = 0;
-	u32 local_tx_hibern8_time_cap = 0, peer_rx_hibern8_time_cap = 0;
-	u32 max_hibern8_time, tuned_pa_hibern8time;
-
-	ret = ufshcd_dme_get(hba,
-			     UIC_ARG_MIB_SEL(TX_HIBERN8TIME_CAPABILITY,
-					UIC_ARG_MPHY_TX_GEN_SEL_INDEX(0)),
-				  &local_tx_hibern8_time_cap);
-	if (ret)
-		goto out;
-
-	ret = ufshcd_dme_peer_get(hba,
-				  UIC_ARG_MIB_SEL(RX_HIBERN8TIME_CAPABILITY,
-					UIC_ARG_MPHY_RX_GEN_SEL_INDEX(0)),
-				  &peer_rx_hibern8_time_cap);
-	if (ret)
-		goto out;
-
-	max_hibern8_time = max(local_tx_hibern8_time_cap,
-			       peer_rx_hibern8_time_cap);
-	/* make sure proper unit conversion is applied */
-	tuned_pa_hibern8time = ((max_hibern8_time * HIBERN8TIME_UNIT_US)
-				/ PA_HIBERN8_TIME_UNIT_US);
-	ret = ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HIBERN8TIME),
-			     tuned_pa_hibern8time);
-out:
-	return ret;
-}
-
-/**
  * ufshcd_quirk_tune_host_pa_tactivate - Ensures that host PA_TACTIVATE is
  * less than device PA_TACTIVATE time.
  * @hba: per-adapter instance
@@ -8474,11 +8383,6 @@ out:
 
 static void ufshcd_tune_unipro_params(struct ufs_hba *hba)
 {
-	if (ufshcd_is_unipro_pa_params_tuning_req(hba)) {
-		ufshcd_tune_pa_tactivate(hba);
-		ufshcd_tune_pa_hibern8time(hba);
-	}
-
 	ufshcd_vops_apply_dev_quirks(hba);
 
 	if (hba->dev_quirks & UFS_DEVICE_QUIRK_PA_TACTIVATE)
