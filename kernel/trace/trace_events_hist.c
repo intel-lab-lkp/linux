@@ -4898,14 +4898,14 @@ static void print_action_spec(struct seq_file *m,
 		for (i = 0; i < hist_data->n_save_vars; i++) {
 			seq_printf(m, "%s", hist_data->save_vars[i]->var->var.name);
 			if (i < hist_data->n_save_vars - 1)
-				seq_puts(m, ",");
+				seq_putc(m, ',');
 		}
 	} else if (data->action == ACTION_TRACE) {
 		if (data->use_trace_keyword)
 			seq_printf(m, "%s", data->synth_event_name);
 		for (i = 0; i < data->n_params; i++) {
 			if (i || data->use_trace_keyword)
-				seq_puts(m, ",");
+				seq_putc(m, ',');
 			seq_printf(m, "%s", data->params[i]);
 		}
 	}
@@ -4924,7 +4924,7 @@ static void print_track_data_spec(struct seq_file *m,
 
 	print_action_spec(m, hist_data, data);
 
-	seq_puts(m, ")");
+	seq_putc(m, ')');
 }
 
 static void print_onmatch_spec(struct seq_file *m,
@@ -4938,7 +4938,7 @@ static void print_onmatch_spec(struct seq_file *m,
 
 	print_action_spec(m, hist_data, data);
 
-	seq_puts(m, ")");
+	seq_putc(m, ')');
 }
 
 static bool actions_match(struct hist_trigger_data *hist_data,
@@ -5413,9 +5413,9 @@ static void hist_trigger_print_key(struct seq_file *m,
 	}
 
 	if (!multiline)
-		seq_puts(m, " ");
+		seq_putc(m, ' ');
 
-	seq_puts(m, "}");
+	seq_putc(m, '}');
 }
 
 /* Get the 100 times of the percentage of @val in @total */
@@ -5511,13 +5511,13 @@ static void hist_trigger_entry_print(struct seq_file *m,
 		if (flags & HIST_FIELD_FL_VAR || flags & HIST_FIELD_FL_EXPR)
 			continue;
 
-		seq_puts(m, " ");
+		seq_putc(m, ' ');
 		hist_trigger_print_val(m, i, field_name, flags, stats, elt);
 	}
 
 	print_actions(m, hist_data, elt);
 
-	seq_puts(m, "\n");
+	seq_putc(m, '\n');
 }
 
 static int print_entries(struct seq_file *m,
@@ -5971,7 +5971,7 @@ static int event_hist_trigger_print(struct seq_file *m,
 		field = hist_data->fields[i];
 
 		if (i > hist_data->n_vals)
-			seq_puts(m, ",");
+			seq_putc(m, ',');
 
 		if (field->flags & HIST_FIELD_FL_STACKTRACE) {
 			if (field->field)
@@ -5997,7 +5997,7 @@ static int event_hist_trigger_print(struct seq_file *m,
 			seq_puts(m, "hitcount");
 		} else {
 			if (show_val)
-				seq_puts(m, ",");
+				seq_putc(m, ',');
 			hist_field_print(m, field);
 		}
 		show_val = true;
@@ -6006,14 +6006,14 @@ static int event_hist_trigger_print(struct seq_file *m,
 	if (have_var) {
 		unsigned int n = 0;
 
-		seq_puts(m, ":");
+		seq_putc(m, ':');
 
 		for_each_hist_val_field(i, hist_data) {
 			field = hist_data->fields[i];
 
 			if (field->flags & HIST_FIELD_FL_VAR) {
 				if (n++)
-					seq_puts(m, ",");
+					seq_putc(m, ',');
 				hist_field_print(m, field);
 			}
 		}
@@ -6035,7 +6035,7 @@ static int event_hist_trigger_print(struct seq_file *m,
 			return -EINVAL;
 
 		if (i > 0)
-			seq_puts(m, ",");
+			seq_putc(m, ',');
 
 		if (idx == HITCOUNT_IDX)
 			seq_puts(m, "hitcount");

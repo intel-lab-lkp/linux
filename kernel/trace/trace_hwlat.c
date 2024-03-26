@@ -636,14 +636,14 @@ static int s_mode_show(struct seq_file *s, void *v)
 		seq_printf(s, "%s", thread_mode_str[mode]);
 
 	if (mode < MODE_MAX - 1) /* if mode is any but last */
-		seq_puts(s, " ");
+		seq_putc(s, ' ');
 
 	return 0;
 }
 
 static void s_mode_stop(struct seq_file *s, void *v)
 {
-	seq_puts(s, "\n");
+	seq_putc(s, '\n');
 	mutex_unlock(&hwlat_data.lock);
 }
 
