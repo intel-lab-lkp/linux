@@ -5436,7 +5436,7 @@ static void raid5_align_endio(struct bio *bi)
 
 	if (!error) {
 		bio_endio(raid_bi);
-		if (atomic_dec_and_test(&conf->active_aligned_reads))
+		if (active_aligned_reads_dec_and_test(conf))
 			wake_up(&conf->wait_for_quiescent);
 		return;
 	}
@@ -5500,7 +5500,7 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 
 	did_inc = false;
 	if (conf->quiesce == 0) {
-		atomic_inc(&conf->active_aligned_reads);
+		active_aligned_reads_inc(conf);
 		did_inc = true;
 	}
 	/* need a memory barrier to detect the race with raid5_quiesce() */
@@ -5508,12 +5508,12 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 		/* quiesce is in progress, so we need to undo io activation and wait
 		 * for it to finish
 		 */
-		if (did_inc && atomic_dec_and_test(&conf->active_aligned_reads))
+		if (did_inc && active_aligned_reads_dec_and_test(conf))
 			wake_up(&conf->wait_for_quiescent);
 		spin_lock_irq(&conf->device_lock);
 		wait_event_lock_irq(conf->wait_for_quiescent, conf->quiesce == 0,
 				    conf->device_lock);
-		atomic_inc(&conf->active_aligned_reads);
+		active_aligned_reads_inc(conf);
 		spin_unlock_irq(&conf->device_lock);
 	}
 
@@ -6609,7 +6609,7 @@ static int  retry_aligned_read(struct r5conf *conf, struct bio *raid_bio,
 
 	bio_endio(raid_bio);
 
-	if (atomic_dec_and_test(&conf->active_aligned_reads))
+	if (active_aligned_reads_dec_and_test(conf))
 		wake_up(&conf->wait_for_quiescent);
 	return handled;
 }
@@ -8620,7 +8620,7 @@ static void raid5_quiesce(struct mddev *mddev, int quiesce)
 		smp_store_release(&conf->quiesce, 2);
 		wait_event_cmd(conf->wait_for_quiescent,
 				    atomic_read(&conf->active_stripes) == 0 &&
-				    atomic_read(&conf->active_aligned_reads) == 0,
+				    active_aligned_reads_is_zero(conf),
 				    unlock_all_device_hash_locks_irq(conf),
 				    lock_all_device_hash_locks_irq(conf));
 		conf->quiesce = 1;
