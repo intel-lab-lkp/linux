@@ -2799,9 +2799,18 @@ bool vhost_vq_avail_empty(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 	r = vhost_get_avail_idx(vq, &avail_idx);
 	if (unlikely(r))
 		return false;
-	vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
 
-	return vq->avail_idx == vq->last_avail_idx;
+	vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
+	if (vq->avail_idx != vq->last_avail_idx) {
+		/* Similar to what's done in vhost_get_vq_desc(), we need
+		 * to ensure the available ring entries have been exposed
+		 * by guest.
+		 */
+		smp_rmb();
+		return false;
+	}
+
+	return true;
 }
 EXPORT_SYMBOL_GPL(vhost_vq_avail_empty);
 
