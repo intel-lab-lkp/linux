@@ -180,6 +180,15 @@ config DEBUG_LL
 	  this option should not be enabled for kernels that are intended to
 	  be portable.
 
+config DEBUG_LL_EXCEPT
+	bool "Kernel low-level debugging of exceptions"
+	depends on DEBUG_LL
+	help
+	  Say Y here to enable debugging prints for low-level exceptions.
+	  This is helpful if you are debugging a early boot crash when
+	  exceptions happens before trap_init(), or if you are debugging
+	  SMP bringup code.
+
 choice
 	prompt "Kernel low-level debugging port"
 	depends on DEBUG_LL
