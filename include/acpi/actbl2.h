@@ -116,15 +116,14 @@ struct acpi_aest_hdr {
 
 /* 0: Processor Error */
 
-typedef struct acpi_aest_processor {
+struct acpi_aest_processor {
 	u32 processor_id;
 	u8 resource_type;
 	u8 reserved;
 	u8 flags;
 	u8 revision;
 	u64 processor_affinity;
-
-} acpi_aest_processor;
+};
 
 /* Values for resource_type above, related structs below */
 
@@ -135,11 +134,10 @@ typedef struct acpi_aest_processor {
 
 /* 0R: Processor Cache Resource Substructure */
 
-typedef struct acpi_aest_processor_cache {
+struct acpi_aest_processor_cache {
 	u32 cache_reference;
 	u32 reserved;
-
-} acpi_aest_processor_cache;
+};
 
 /* Values for cache_type above */
 
@@ -150,50 +148,44 @@ typedef struct acpi_aest_processor_cache {
 
 /* 1R: Processor TLB Resource Substructure */
 
-typedef struct acpi_aest_processor_tlb {
+struct acpi_aest_processor_tlb {
 	u32 tlb_level;
 	u32 reserved;
-
-} acpi_aest_processor_tlb;
+};
 
 /* 2R: Processor Generic Resource Substructure */
 
-typedef struct acpi_aest_processor_generic {
+struct acpi_aest_processor_generic {
 	u32 resource;
-
-} acpi_aest_processor_generic;
+};
 
 /* 1: Memory Error */
 
-typedef struct acpi_aest_memory {
+struct acpi_aest_memory {
 	u32 srat_proximity_domain;
-
-} acpi_aest_memory;
+};
 
 /* 2: Smmu Error */
 
-typedef struct acpi_aest_smmu {
+struct acpi_aest_smmu {
 	u32 iort_node_reference;
 	u32 subcomponent_reference;
-
-} acpi_aest_smmu;
+};
 
 /* 3: Vendor Defined */
 
-typedef struct acpi_aest_vendor {
+struct acpi_aest_vendor {
 	u32 acpi_hid;
 	u32 acpi_uid;
 	u8 vendor_specific_data[16];
-
-} acpi_aest_vendor;
+};
 
 /* 4: Gic Error */
 
-typedef struct acpi_aest_gic {
+struct acpi_aest_gic {
 	u32 interface_type;
 	u32 instance_id;
-
-} acpi_aest_gic;
+};
 
 /* Values for interface_type above */
 
@@ -205,7 +197,7 @@ typedef struct acpi_aest_gic {
 
 /* Node Interface Structure */
 
-typedef struct acpi_aest_node_interface {
+struct acpi_aest_node_interface {
 	u8 type;
 	u8 reserved[3];
 	u32 flags;
@@ -215,8 +207,7 @@ typedef struct acpi_aest_node_interface {
 	u64 error_record_implemented;
 	u64 error_status_reporting;
 	u64 addressing_mode;
-
-} acpi_aest_node_interface;
+};
 
 /* Values for Type field above */
 
@@ -226,15 +217,14 @@ typedef struct acpi_aest_node_interface {
 
 /* Node Interrupt Structure */
 
-typedef struct acpi_aest_node_interrupt {
+struct acpi_aest_node_interrupt {
 	u8 type;
 	u8 reserved[2];
 	u8 flags;
 	u32 gsiv;
 	u8 iort_id;
 	u8 reserved1[3];
-
-} acpi_aest_node_interrupt;
+};
 
 /* Values for Type field above */
 
