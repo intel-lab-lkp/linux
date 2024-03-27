@@ -191,7 +191,7 @@
 			reg = <0x5b>;
 
 			regulators {
-				vdd_3v3: VDD_IO {
+				vdd_3v3: BUCK1 {
 					regulator-name = "VDD_IO";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
@@ -211,7 +211,7 @@
 					};
 				};
 
-				vddioddr: VDD_DDR {
+				vddioddr: BUCK2 {
 					regulator-name = "VDD_DDR";
 					regulator-min-microvolt = <1350000>;
 					regulator-max-microvolt = <1350000>;
@@ -232,7 +232,7 @@
 					};
 				};
 
-				vddcore: VDD_CORE {
+				vddcore: BUCK3 {
 					regulator-name = "VDD_CORE";
 					regulator-min-microvolt = <1150000>;
 					regulator-max-microvolt = <1150000>;
@@ -252,7 +252,7 @@
 					};
 				};
 
-				vddcpu: VDD_OTHER {
+				vddcpu: BUCK4 {
 					regulator-name = "VDD_OTHER";
 					regulator-min-microvolt = <1050000>;
 					regulator-max-microvolt = <1250000>;
