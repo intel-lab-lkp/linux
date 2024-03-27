@@ -874,6 +874,21 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 		info->engine_mask &= ~BIT(GSC0);
 	}
 
+	/*
+	 * Do not create the command streamer for CCS slices beyond the first.
+	 * All the workload submitted to the first engine will be shared among
+	 * all the slices.
+	 *
+	 * Once the user will be allowed to customize the CCS mode, then this
+	 * check needs to be removed.
+	 */
+	if (IS_DG2(gt->i915)) {
+		intel_engine_mask_t first_ccs = BIT((CCS0 + __ffs(CCS_MASK(gt))));
+		intel_engine_mask_t all_ccs = CCS_MASK(gt) << CCS0;
+
+		info->engine_mask &= ~(all_ccs &= ~first_ccs);
+	}
+
 	return info->engine_mask;
 }
 
