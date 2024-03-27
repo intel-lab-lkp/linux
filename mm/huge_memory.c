@@ -1897,9 +1897,6 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		if (is_huge_zero_pmd(*pmd))
 			goto unlock;
 
-		if (pmd_protnone(*pmd))
-			goto unlock;
-
 		folio = page_folio(pmd_page(*pmd));
 		toptier = node_is_toptier(folio_nid(folio));
 		/*
@@ -1913,6 +1910,10 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
 		    !toptier)
 			folio_xchg_fault_count(folio, atomic_read(&mm->hint_faults));
+
+		if (pmd_protnone(*pmd))
+			goto unlock;
+
 	}
 	/*
 	 * In case prot_numa, we are under mmap_read_lock(mm). It's critical

@@ -118,10 +118,6 @@ static long change_pte_range(struct mmu_gather *tlb,
 				int nid;
 				bool toptier;
 
-				/* Avoid TLB flush if possible */
-				if (pte_protnone(oldpte))
-					continue;
-
 				folio = vm_normal_folio(vma, addr, oldpte);
 				if (!folio || folio_is_zone_device(folio) ||
 				    folio_test_ksm(folio))
@@ -161,6 +157,11 @@ static long change_pte_range(struct mmu_gather *tlb,
 				    !toptier)
 					folio_xchg_fault_count(folio,
 							atomic_read(&vma->vm_mm->hint_faults));
+
+				/* Avoid TLB flush if possible */
+				if (pte_protnone(oldpte))
+					continue;
+
 
 			}
 
