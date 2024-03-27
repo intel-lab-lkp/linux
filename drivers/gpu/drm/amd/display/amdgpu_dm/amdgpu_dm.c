@@ -3277,11 +3277,11 @@ void amdgpu_dm_update_connector_after_detect(
 		} else {
 			const struct edid *edid = (const struct edid *)sink->dc_edid.raw_edid;
 			aconnector->edid = drm_edid_alloc(edid, sink->dc_edid.length);
+			drm_edid_connector_update(connector, aconnector->edid);
 
-			/* FIXME: Get rid of drm_edid_raw() */
 			if (aconnector->dc_link->aux_mode)
-				drm_dp_cec_set_edid(&aconnector->dm_dp_aux.aux,
-						    drm_edid_raw(aconnector->edid));
+				drm_dp_cec_attach(&aconnector->dm_dp_aux.aux,
+						  connector->display_info.source_physical_address);
 		}
 
 		if (!aconnector->timing_requested) {
