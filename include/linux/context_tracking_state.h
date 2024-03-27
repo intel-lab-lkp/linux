@@ -19,7 +19,7 @@ enum ctx_state {
 };
 
 /* Even value for idle, else odd. */
-#define RCU_DYNTICKS_IDX CT_STATE_MAX
+#define CT_DYNTICKS_IDX CT_STATE_MAX
 
 #define CT_STATE_MASK (CT_STATE_MAX - 1)
 #define CT_DYNTICKS_MASK (~CT_STATE_MASK)

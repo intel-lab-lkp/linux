@@ -259,9 +259,9 @@ void rcu_softirq_qs(void)
  */
 static void rcu_dynticks_eqs_online(void)
 {
-	if (ct_dynticks() & RCU_DYNTICKS_IDX)
+	if (ct_dynticks() & CT_DYNTICKS_IDX)
 		return;
-	ct_state_inc(RCU_DYNTICKS_IDX);
+	ct_state_inc(CT_DYNTICKS_IDX);
 }
 
 /*
@@ -280,7 +280,7 @@ static int rcu_dynticks_snap(int cpu)
  */
 static bool rcu_dynticks_in_eqs(int snap)
 {
-	return !(snap & RCU_DYNTICKS_IDX);
+	return !(snap & CT_DYNTICKS_IDX);
 }
 
 /*
@@ -302,7 +302,7 @@ bool rcu_dynticks_zero_in_eqs(int cpu, int *vp)
 	int snap;
 
 	// If not quiescent, force back to earlier extended quiescent state.
-	snap = ct_dynticks_cpu(cpu) & ~RCU_DYNTICKS_IDX;
+	snap = ct_dynticks_cpu(cpu) & ~CT_DYNTICKS_IDX;
 	smp_rmb(); // Order ->dynticks and *vp reads.
 	if (READ_ONCE(*vp))
 		return false;  // Non-zero, so report failure;
@@ -328,9 +328,9 @@ notrace void rcu_momentary_dyntick_idle(void)
 	int seq;
 
 	raw_cpu_write(rcu_data.rcu_need_heavy_qs, false);
-	seq = ct_state_inc(2 * RCU_DYNTICKS_IDX);
+	seq = ct_state_inc(2 * CT_DYNTICKS_IDX);
 	/* It is illegal to call this from idle state. */
-	WARN_ON_ONCE(!(seq & RCU_DYNTICKS_IDX));
+	WARN_ON_ONCE(!(seq & CT_DYNTICKS_IDX));
 	rcu_preempt_deferred_qs(current);
 }
 EXPORT_SYMBOL_GPL(rcu_momentary_dyntick_idle);
