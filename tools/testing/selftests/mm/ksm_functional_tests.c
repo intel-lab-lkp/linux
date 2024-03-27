@@ -491,7 +491,20 @@ static void test_prctl_fork(void)
 
 	child_pid = fork();
 	if (!child_pid) {
-		exit(prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0));
+		const unsigned int size = 2 * MiB;
+		char *map;
+
+		if (prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) != 1)
+			exit(-1);
+
+		map = mmap_and_merge_range(0xcf, size, PROT_READ | PROT_WRITE, KSM_MERGE_NONE);
+		if (map == MAP_MERGE_FAIL)
+			exit(-2);
+		else if (map == MAP_MERGE_SKIP)
+			exit(-3);
+
+		munmap(map, size);
+		exit(0);
 	} else if (child_pid < 0) {
 		ksft_test_result_fail("fork() failed\n");
 		return;
@@ -500,8 +513,16 @@ static void test_prctl_fork(void)
 	if (waitpid(child_pid, &status, 0) < 0) {
 		ksft_test_result_fail("waitpid() failed\n");
 		return;
-	} else if (WEXITSTATUS(status) != 1) {
-		ksft_test_result_fail("unexpected PR_GET_MEMORY_MERGE result in child\n");
+	}
+
+	status = WEXITSTATUS(status);
+	if (status != 0) {
+		if (status == -1)
+			ksft_test_result_fail("unexpected PR_GET_MEMORY_MERGE result in child\n");
+		else if (status == -2)
+			ksft_test_result_fail("Merge in child failed\n");
+		else if (status == -3)
+			ksft_test_result_skip("Merge in child skiped\n");
 		return;
 	}
 
@@ -515,8 +536,21 @@ static void test_prctl_fork(void)
 
 static int ksm_fork_exec_child(void)
 {
+	const unsigned int size = 2 * MiB;
+	char *map;
+
 	/* Test if KSM is enabled for the process. */
-	return prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) == 1;
+	if (prctl(PR_GET_MEMORY_MERGE, 0, 0, 0, 0) != 1)
+		return -1;
+
+	map = mmap_and_merge_range(0xcf, size, PROT_READ | PROT_WRITE, KSM_MERGE_NONE);
+	if (map == MAP_MERGE_FAIL)
+		return -2;
+	else if (map == MAP_MERGE_SKIP)
+		return -3;
+
+	munmap(map, size);
+	return 0;
 }
 
 static void test_prctl_fork_exec(void)
@@ -550,8 +584,14 @@ static void test_prctl_fork_exec(void)
 	if (waitpid(child_pid, &status, 0) > 0) {
 		if (WIFEXITED(status)) {
 			status = WEXITSTATUS(status);
-			if (status) {
+			if (status == -1) {
 				ksft_test_result_fail("KSM not enabled\n");
+				return;
+			} else if (status == -2) {
+				ksft_test_result_fail("Merge in child failed\n");
+				return;
+			} else if (status == -3) {
+				ksft_test_result_skip("Merge in child skiped\n");
 				return;
 			}
 		} else {
@@ -632,7 +672,7 @@ int main(int argc, char **argv)
 	int err;
 
 	if (argc > 1 && !strcmp(argv[1], FORK_EXEC_CHILD_PRG_NAME)) {
-		exit(ksm_fork_exec_child() == 1 ? 0 : 1);
+		exit(ksm_fork_exec_child());
 	}
 
 #ifdef __NR_userfaultfd
