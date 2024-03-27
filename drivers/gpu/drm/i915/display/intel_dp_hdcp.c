@@ -688,7 +688,7 @@ int intel_dp_hdcp_get_remote_capability(struct intel_connector *connector,
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	struct drm_dp_aux *aux = &connector->port->aux;
-	u8 bcaps;
+	u8 bcaps = 0;
 	int ret;
 
 	if (!intel_encoder_is_mst(connector->encoder))
@@ -696,15 +696,14 @@ int intel_dp_hdcp_get_remote_capability(struct intel_connector *connector,
 
 	ret =  _intel_dp_hdcp2_get_capability(aux, hdcp2_capable);
 	if (ret)
-		return ret;
+		drm_dbg_kms(&i915->drm,
+			    "HDCP2 DPCD capability read failed err: %d\n", ret);
 
 	ret = intel_dp_hdcp_read_bcaps(aux, i915, &bcaps);
-	if (ret)
-		return ret;
 
 	*hdcp_capable = bcaps & DP_BCAPS_HDCP_CAPABLE;
 
-	return 0;
+	return ret;
 }
 
 static const struct intel_hdcp_shim intel_dp_hdcp_shim = {
