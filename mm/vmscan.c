@@ -3637,6 +3637,7 @@ static void walk_mm(struct lruvec *lruvec, struct mm_struct *mm, struct lru_gen_
 		mem_cgroup_unlock_pages();
 
 		if (walk->batched) {
+			lru_gen_report_reaccess(lruvec, walk);
 			spin_lock_irq(&lruvec->lru_lock);
 			reset_batch_size(lruvec, walk);
 			spin_unlock_irq(&lruvec->lru_lock);
@@ -3709,6 +3710,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, bool can_swap)
 	}
 done:
 	reset_ctrl_pos(lruvec, type, true);
+	report_lru_gen_eviction(lruvec, type, lrugen->min_seq[type] + 1);
 	WRITE_ONCE(lrugen->min_seq[type], lrugen->min_seq[type] + 1);
 
 	return true;
@@ -3750,6 +3752,7 @@ next:
 			continue;
 
 		reset_ctrl_pos(lruvec, type, true);
+		report_lru_gen_eviction(lruvec, type, min_seq[type]);
 		WRITE_ONCE(lrugen->min_seq[type], min_seq[type]);
 		success = true;
 	}
@@ -4565,11 +4568,14 @@ retry:
 		sc->nr_scanned -= folio_nr_pages(folio);
 	}
 
+	walk = current->reclaim_state->mm_walk;
+	if (walk && walk->batched)
+		lru_gen_report_reaccess(lruvec, walk);
+
 	spin_lock_irq(&lruvec->lru_lock);
 
 	move_folios_to_lru(lruvec, &list);
 
-	walk = current->reclaim_state->mm_walk;
 	if (walk && walk->batched)
 		reset_batch_size(lruvec, walk);
 

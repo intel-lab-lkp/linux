@@ -17,6 +17,8 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 
+#include "internal.h"
+
 /*
  *		Double CLOCK lists
  *
@@ -179,12 +181,6 @@
  * refault distance will immediately activate the refaulting page.
  */
 
-#define WORKINGSET_SHIFT 1
-#define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) +	\
-			 WORKINGSET_SHIFT + NODES_SHIFT + \
-			 MEM_CGROUP_ID_SHIFT)
-#define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
-
 /*
  * Eviction timestamps need to be able to cover the full range of
  * actionable refaults. However, bits are tight in the xarray
@@ -294,6 +290,7 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 		goto unlock;
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
+	report_reaccess_refault(lruvec, token, type, delta);
 
 	if (!recent)
 		goto unlock;

@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/mutex.h>
+#include <linux/rcutree.h>
 
 struct mem_cgroup;
 struct pglist_data;
@@ -18,6 +19,12 @@ struct cgroup_file;
 
 #define WORKINGSET_INTERVAL_MAX ((unsigned long)-1)
 #define ANON_AND_FILE 2
+
+/*
+ * MAX_NR_EVICTED_GENS is set to 4 so we can track the same number of
+ * generations as MGLRU has resident.
+ */
+#define MAX_NR_EVICTED_GENS 4
 
 struct wsr_report_bin {
 	unsigned long idle_age;
@@ -35,6 +42,18 @@ struct wsr_page_age_histo {
 	struct wsr_report_bins bins;
 };
 
+struct wsr_evicted_gen {
+	unsigned long timestamp;
+	int seq;
+};
+
+struct wsr_reaccess_histo {
+	struct rcu_head rcu;
+	/* evicted gens start from min_seq[LRU_GEN_ANON] - 1 */
+	struct wsr_evicted_gen gens[MAX_NR_EVICTED_GENS];
+	struct wsr_report_bins bins;
+};
+
 struct wsr_state {
 	unsigned long report_threshold;
 	unsigned long refresh_interval;
@@ -47,6 +66,7 @@ struct wsr_state {
 	/* breakdown of workingset by page age */
 	struct mutex page_age_lock;
 	struct wsr_page_age_histo *page_age;
+	struct wsr_reaccess_histo __rcu *reaccess;
 };
 
 void wsr_init(struct lruvec *lruvec);

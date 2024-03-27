@@ -7108,6 +7108,71 @@ failed:
 	return err;
 }
 
+static int memory_ws_reaccess_intervals_show(struct seq_file *m, void *v)
+{
+	int nid;
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	for_each_node_state(nid, N_MEMORY) {
+		struct wsr_state *wsr;
+		struct wsr_reaccess_histo *reaccess;
+		int i, nr_bins;
+
+		wsr = &mem_cgroup_lruvec(memcg, NODE_DATA(nid))->wsr;
+		rcu_read_lock();
+		reaccess = rcu_dereference(wsr->reaccess);
+		if (!reaccess)
+			goto unlock;
+		seq_printf(m, "N%d=", nid);
+		nr_bins = reaccess->bins.nr_bins;
+		for (i = 0; i < nr_bins; ++i) {
+			struct wsr_report_bin *bin = &reaccess->bins.bins[i];
+
+			seq_printf(m, "%u", jiffies_to_msecs(bin->idle_age));
+			if (i + 1 < nr_bins)
+				seq_putc(m, ',');
+		}
+		seq_putc(m, ' ');
+unlock:
+		rcu_read_unlock();
+	}
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static ssize_t memory_ws_reaccess_intervals_write(struct kernfs_open_file *of,
+						  char *buf, size_t nbytes,
+						  loff_t off)
+{
+	unsigned int nid;
+	int err;
+	struct wsr_state *wsr;
+	struct wsr_reaccess_histo *reaccess = NULL, *old;
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	reaccess = kzalloc(sizeof(struct wsr_reaccess_histo), GFP_KERNEL);
+	if (!reaccess)
+		return -ENOMEM;
+
+	err = memory_wsr_interval_parse(of, buf, nbytes, &nid, &reaccess->bins);
+	if (err < 0)
+		goto failed;
+
+	if (err == 0) {
+		kfree(reaccess);
+		reaccess = NULL;
+	}
+
+	wsr = &mem_cgroup_lruvec(memcg, NODE_DATA(nid))->wsr;
+	old = xchg(&wsr->reaccess, reaccess);
+	kfree_rcu(old, rcu);
+	return nbytes;
+failed:
+	kfree(reaccess);
+	return err;
+}
+
 static int memory_ws_refresh_interval_show(struct seq_file *m, void *v)
 {
 	int nid;
@@ -7242,6 +7307,42 @@ unlock:
 
 	return 0;
 }
+
+static int memory_ws_reaccess_histogram_show(struct seq_file *m, void *v)
+{
+	int nid;
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	for_each_node_state(nid, N_MEMORY) {
+		struct wsr_state *wsr =
+			&mem_cgroup_lruvec(memcg, NODE_DATA(nid))->wsr;
+		struct wsr_reaccess_histo *reaccess;
+		struct wsr_report_bin *bin;
+
+		rcu_read_lock();
+		reaccess = rcu_dereference(wsr->reaccess);
+
+		if (!reaccess)
+			goto unlock;
+
+		wsr_refresh_report(wsr, memcg, NODE_DATA(nid));
+
+		seq_printf(m, "N%d\n", nid);
+		for (bin = reaccess->bins.bins;
+		     bin->idle_age != WORKINGSET_INTERVAL_MAX; bin++)
+			seq_printf(m, "%u anon=%lu file=%lu\n",
+				   jiffies_to_msecs(bin->idle_age),
+				   bin->nr_pages[0], bin->nr_pages[1]);
+
+		seq_printf(m, "%lu anon=%lu file=%lu\n", WORKINGSET_INTERVAL_MAX,
+			   bin->nr_pages[0], bin->nr_pages[1]);
+
+unlock:
+		rcu_read_unlock();
+	}
+
+	return 0;
+}
 #endif
 
 static struct cftype memory_files[] = {
@@ -7336,6 +7437,17 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
 		.file_offset = offsetof(struct mem_cgroup, workingset_page_age_file),
 		.seq_show = memory_ws_page_age_show,
+	},
+	{
+		.name = "workingset.reaccess_intervals",
+		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
+		.seq_show = memory_ws_reaccess_intervals_show,
+		.write = memory_ws_reaccess_intervals_write,
+	},
+	{
+		.name = "workingset.reaccess",
+		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
+		.seq_show = memory_ws_reaccess_histogram_show,
 	},
 #endif
 	{} /* terminate */

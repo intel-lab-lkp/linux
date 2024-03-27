@@ -34,6 +34,7 @@ void wsr_destroy(struct lruvec *lruvec)
 
 	mutex_destroy(&wsr->page_age_lock);
 	kfree(wsr->page_age);
+	kfree_rcu(wsr->reaccess, rcu);
 	memset(wsr, 0, sizeof(*wsr));
 }
 
@@ -258,6 +259,254 @@ unlock:
 	return !!page_age;
 }
 EXPORT_SYMBOL_GPL(wsr_refresh_report);
+
+static void lru_gen_collect_reaccess_refault(struct wsr_report_bins *bins,
+					     unsigned long timestamp, int type,
+					     int nr_pages)
+{
+	unsigned long curr_timestamp = jiffies;
+	struct wsr_report_bin *bin = &bins->bins[0];
+
+	while (bin->idle_age != WORKINGSET_INTERVAL_MAX &&
+	       time_before(timestamp + bin->idle_age, curr_timestamp))
+		bin++;
+
+	bin->nr_pages[type] += nr_pages;
+}
+
+static void collect_reaccess_type(struct lru_gen_mm_walk *walk,
+				  const struct lru_gen_folio *lrugen,
+				  struct wsr_report_bin *bin,
+				  unsigned long max_seq, unsigned long min_seq,
+				  unsigned long curr_timestamp, int type)
+{
+	unsigned long seq;
+
+	/* Skip max_seq because a reaccess moves a page from another seq
+	 * to max_seq. We use the negative change in page count from
+	 * other seqs to track the number of reaccesses.
+	 */
+	for (seq = max_seq - 1; seq + 1 > min_seq; seq--) {
+		int younger_gen, gen, zone;
+		unsigned long gen_end, gen_start;
+		long delta = 0;
+
+		gen = lru_gen_from_seq(seq);
+
+		for (zone = 0; zone < MAX_NR_ZONES; zone++) {
+			long nr_pages = walk->nr_pages[gen][type][zone];
+
+			if (nr_pages < 0)
+				delta += -nr_pages;
+		}
+
+		gen_end = READ_ONCE(lrugen->timestamps[gen]);
+		younger_gen = lru_gen_from_seq(seq + 1);
+		gen_start = READ_ONCE(lrugen->timestamps[younger_gen]);
+
+		/* ensure gen_start is within idle_age of bin */
+		while (bin->idle_age != WORKINGSET_INTERVAL_MAX &&
+		       time_before(gen_start + bin->idle_age, curr_timestamp))
+			bin++;
+
+		while (bin->idle_age != WORKINGSET_INTERVAL_MAX &&
+		       time_before(gen_end + bin->idle_age, curr_timestamp)) {
+			unsigned long proportion = (long)gen_start -
+						   (long)curr_timestamp +
+						   (long)bin->idle_age;
+			unsigned long gen_len = (long)gen_start - (long)gen_end;
+
+			if (!gen_len)
+				break;
+			if (proportion) {
+				unsigned long split_bin =
+					delta / gen_len * proportion;
+				bin->nr_pages[type] += split_bin;
+				delta -= split_bin;
+			}
+			gen_start = curr_timestamp - bin->idle_age;
+			bin++;
+		}
+		bin->nr_pages[type] += delta;
+	}
+}
+
+/*
+ * Reaccesses are propagated up the memcg hierarchy during scanning/refault.
+ * Collect the reaccess information from a multi-gen LRU walk.
+ */
+static void lru_gen_collect_reaccess(struct wsr_report_bins *bins,
+				     struct lru_gen_folio *lrugen,
+				     struct lru_gen_mm_walk *walk)
+{
+	int type;
+	unsigned long curr_timestamp = jiffies;
+	unsigned long max_seq = READ_ONCE(walk->max_seq);
+	unsigned long min_seq[ANON_AND_FILE] = {
+		READ_ONCE(lrugen->min_seq[LRU_GEN_ANON]),
+		READ_ONCE(lrugen->min_seq[LRU_GEN_FILE]),
+	};
+
+	for (type = 0; type < ANON_AND_FILE; type++) {
+		struct wsr_report_bin *bin = &bins->bins[0];
+
+		collect_reaccess_type(walk, lrugen, bin, max_seq,
+				      min_seq[type], curr_timestamp, type);
+	}
+}
+
+void lru_gen_report_reaccess(struct lruvec *lruvec, struct lru_gen_mm_walk *walk)
+{
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+
+	for (memcg = lruvec_memcg(lruvec); memcg;
+	     memcg = parent_mem_cgroup(memcg)) {
+		struct lruvec *memcg_lruvec =
+			mem_cgroup_lruvec(memcg, lruvec_pgdat(lruvec));
+		struct wsr_state *wsr = &memcg_lruvec->wsr;
+		struct wsr_reaccess_histo *reaccess;
+
+		rcu_read_lock();
+		reaccess = rcu_dereference(wsr->reaccess);
+		if (!reaccess) {
+			rcu_read_unlock();
+			continue;
+		}
+		lru_gen_collect_reaccess(&reaccess->bins, lrugen, walk);
+		rcu_read_unlock();
+	}
+}
+
+static inline int evicted_gen_from_seq(unsigned long seq)
+{
+	return seq % MAX_NR_EVICTED_GENS;
+}
+
+void report_lru_gen_eviction(struct lruvec *lruvec, int type, int min_seq)
+{
+	int seq;
+	struct wsr_reaccess_histo *reaccess = NULL;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct wsr_state *wsr = &lruvec->wsr;
+
+	/*
+	 * Since file can go ahead of anon, min_seq[file] >= min_seq[anon]
+	 * only record evictions when anon moves forward.
+	 */
+	if (type != LRU_GEN_ANON)
+		return;
+
+	/*
+	 * lru_lock is held during eviction, so reaccess accounting
+	 * can be serialized.
+	 */
+	lockdep_assert_held(&lruvec->lru_lock);
+
+	rcu_read_lock();
+	reaccess = rcu_dereference(wsr->reaccess);
+	if (!reaccess)
+		goto unlock;
+
+	for (seq = READ_ONCE(lrugen->min_seq[LRU_GEN_ANON]); seq < min_seq;
+	     ++seq) {
+		int evicted_gen = evicted_gen_from_seq(seq);
+		int gen = lru_gen_from_seq(seq);
+
+		WRITE_ONCE(reaccess->gens[evicted_gen].seq, seq);
+		WRITE_ONCE(reaccess->gens[evicted_gen].timestamp,
+			   READ_ONCE(lrugen->timestamps[gen]));
+	}
+
+unlock:
+	rcu_read_unlock();
+}
+
+/*
+ * May yield an incorrect timestamp if the token collides with
+ * a recently evicted generation.
+ */
+static int timestamp_from_workingset_token(struct lruvec *lruvec,
+					   unsigned long token,
+					   unsigned long *timestamp)
+{
+	int type, err = -EEXIST;
+	unsigned long seq, evicted_min_seq;
+	struct wsr_reaccess_histo *reaccess = NULL;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	struct wsr_state *wsr = &lruvec->wsr;
+	unsigned long min_seq[ANON_AND_FILE] = {
+		READ_ONCE(lrugen->min_seq[LRU_GEN_ANON]),
+		READ_ONCE(lrugen->min_seq[LRU_GEN_FILE])
+	};
+
+	token >>= LRU_REFS_WIDTH;
+
+	/* recent eviction */
+	for (type = 0; type < ANON_AND_FILE; ++type) {
+		if (token ==
+		    (min_seq[type] & (EVICTION_MASK >> LRU_REFS_WIDTH))) {
+			int gen = lru_gen_from_seq(min_seq[type]);
+
+			*timestamp = READ_ONCE(lrugen->timestamps[gen]);
+			return 0;
+		}
+	}
+
+	rcu_read_lock();
+	reaccess = rcu_dereference(wsr->reaccess);
+	if (!reaccess)
+		goto unlock;
+
+	/* look up in evicted gen buffer */
+	evicted_min_seq = min_seq[LRU_GEN_ANON] - MAX_NR_EVICTED_GENS;
+	if (min_seq[LRU_GEN_ANON] < MAX_NR_EVICTED_GENS)
+		evicted_min_seq = 0;
+	for (seq = min_seq[LRU_GEN_ANON]; seq > evicted_min_seq; --seq) {
+		int gen = evicted_gen_from_seq(seq - 1);
+
+		if (token == (reaccess->gens[gen].seq &
+			      (EVICTION_MASK >> LRU_REFS_WIDTH))) {
+			*timestamp = reaccess->gens[gen].timestamp;
+
+			goto unlock;
+		}
+	}
+
+unlock:
+	rcu_read_unlock();
+	return err;
+}
+
+void report_reaccess_refault(struct lruvec *lruvec, unsigned long token,
+			     int type, int nr_pages)
+{
+	unsigned long timestamp;
+	int err;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+
+	err = timestamp_from_workingset_token(lruvec, token, &timestamp);
+	if (err)
+		return;
+
+	for (memcg = lruvec_memcg(lruvec); memcg;
+	     memcg = parent_mem_cgroup(memcg)) {
+		struct lruvec *memcg_lruvec =
+			mem_cgroup_lruvec(memcg, lruvec_pgdat(lruvec));
+		struct wsr_state *wsr = &memcg_lruvec->wsr;
+		struct wsr_reaccess_histo *reaccess = NULL;
+
+		rcu_read_lock();
+		reaccess = rcu_dereference(wsr->reaccess);
+		if (!reaccess) {
+			rcu_read_unlock();
+			continue;
+		}
+		lru_gen_collect_reaccess_refault(&reaccess->bins, timestamp,
+						 type, nr_pages);
+		rcu_read_unlock();
+	}
+}
 
 static struct pglist_data *kobj_to_pgdat(struct kobject *kobj)
 {

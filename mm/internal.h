@@ -205,16 +205,44 @@ void putback_lru_page(struct page *page);
 void folio_putback_lru(struct folio *folio);
 extern void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason);
 
+/*
+ * in mm/workingset.c
+ */
+#define WORKINGSET_SHIFT 1
+#define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) +	\
+			 WORKINGSET_SHIFT + NODES_SHIFT + \
+			 MEM_CGROUP_ID_SHIFT)
+#define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
+
 #ifdef CONFIG_WORKINGSET_REPORT
 /*
  * in mm/wsr.c
  */
+void report_lru_gen_eviction(struct lruvec *lruvec, int type, int min_seq);
+void lru_gen_report_reaccess(struct lruvec *lruvec,
+			     struct lru_gen_mm_walk *walk);
+void report_reaccess_refault(struct lruvec *lruvec, unsigned long token,
+			     int type, int nr_pages);
 void notify_workingset(struct mem_cgroup *memcg, struct pglist_data *pgdat);
 /* Requires wsr->page_age_lock held */
 void wsr_refresh_scan(struct lruvec *lruvec, unsigned long refresh_interval);
 int workingset_report_intervals_parse(char *src,
 				      struct wsr_report_bins *bins);
 #else
+struct lru_gen_mm_walk;
+static inline void report_lru_gen_eviction(struct lruvec *lruvec, int type,
+					   int min_seq)
+{
+}
+static inline void lru_gen_report_reaccess(struct lruvec *lruvec,
+					   struct lru_gen_mm_walk *walk)
+{
+}
+static inline void report_reaccess_refault(struct lruvec *lruvec,
+					   unsigned long token, int type,
+					   int nr_pages)
+{
+}
 static inline void notify_workingset(struct mem_cgroup *memcg,
 				     struct pglist_data *pgdat)
 {
