@@ -34,7 +34,7 @@ properties:
     description: List of regulators and its properties.
 
     patternProperties:
-      "^(VDD_(IO|CORE|DDR|OTHER)|LDO[1-2])$":
+      "^(BUCK[1-4]|LDO[1-2])$":
         type: object
         $ref: regulator.yaml#
         unevaluatedProperties: false
@@ -70,7 +70,7 @@ examples:
             reg = <0x5b>;
 
             regulators {
-                VDD_IO {
+                BUCK1 {
                     regulator-name = "VDD_IO";
                     regulator-min-microvolt = <3300000>;
                     regulator-max-microvolt = <3300000>;
@@ -89,7 +89,7 @@ examples:
                     };
                 };
 
-                VDD_DDR {
+                BUCK2 {
                     regulator-name = "VDD_DDR";
                     regulator-min-microvolt = <1350000>;
                     regulator-max-microvolt = <1350000>;
@@ -108,7 +108,7 @@ examples:
                     };
                 };
 
-                VDD_CORE {
+                BUCK3 {
                     regulator-name = "VDD_CORE";
                     regulator-min-microvolt = <1150000>;
                     regulator-max-microvolt = <1150000>;
@@ -127,7 +127,7 @@ examples:
                     };
                 };
 
-                VDD_OTHER {
+                BUCK4 {
                     regulator-name = "VDD_OTHER";
                     regulator-min-microvolt = <1050000>;
                     regulator-max-microvolt = <1250000>;
