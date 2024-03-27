@@ -51,6 +51,10 @@ __CHECK_SUPPORTED_OFFSET(COALESCE_RX_MAX_FRAMES_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_TX_USECS_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_TX_MAX_FRAMES_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_RATE_SAMPLE_INTERVAL);
+__CHECK_SUPPORTED_OFFSET(COALESCE_RX_EQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_RX_CQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_TX_EQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_TX_CQE_PROFILE);
 
 const struct nla_policy ethnl_coalesce_get_policy[] = {
 	[ETHTOOL_A_COALESCE_HEADER]		=
@@ -108,7 +112,9 @@ static int coalesce_reply_size(const struct ethnl_req_info *req_base,
 	       nla_total_size(sizeof(u8)) +	/* _USE_CQE_MODE_RX */
 	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_MAX_BYTES */
 	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_MAX_FRAMES */
-	       nla_total_size(sizeof(u32));	/* _TX_AGGR_TIME_USECS */
+	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_TIME_USECS */
+	       nla_total_size(sizeof(struct dim_cq_moder) *
+			      NET_DIM_PARAMS_NUM_PROFILES) * 4; /* _{R,T}X_{E,C}QE_PROFILE */
 }
 
 static bool coalesce_put_u32(struct sk_buff *skb, u16 attr_type, u32 val,
@@ -125,6 +131,27 @@ static bool coalesce_put_bool(struct sk_buff *skb, u16 attr_type, u32 val,
 	if (!val && !(supported_params & attr_to_mask(attr_type)))
 		return false;
 	return nla_put_u8(skb, attr_type, !!val);
+}
+
+static bool coalesce_put_dim_profs(struct sk_buff *skb, u16 attr_type,
+				   const struct dim_cq_moder *profs,
+				   u32 supported_params)
+{
+	bool valid = false;
+	int i;
+
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		if (profs[i].usec || profs[i].pkts || profs[i].comps) {
+			valid = true;
+			break;
+		}
+	}
+
+	if (!valid || !(supported_params & attr_to_mask(attr_type)))
+		return false;
+
+	return nla_put(skb, attr_type, sizeof(struct dim_cq_moder) *
+		       NET_DIM_PARAMS_NUM_PROFILES, profs);
 }
 
 static int coalesce_fill_reply(struct sk_buff *skb,
@@ -189,7 +216,15 @@ static int coalesce_fill_reply(struct sk_buff *skb,
 	    coalesce_put_u32(skb, ETHTOOL_A_COALESCE_TX_AGGR_MAX_FRAMES,
 			     kcoal->tx_aggr_max_frames, supported) ||
 	    coalesce_put_u32(skb, ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS,
-			     kcoal->tx_aggr_time_usecs, supported))
+			     kcoal->tx_aggr_time_usecs, supported) ||
+	    coalesce_put_dim_profs(skb, ETHTOOL_A_COALESCE_RX_EQE_PROFILE,
+				   kcoal->rx_eqe_profs, supported) ||
+	    coalesce_put_dim_profs(skb, ETHTOOL_A_COALESCE_RX_CQE_PROFILE,
+				   kcoal->rx_cqe_profs, supported) ||
+	    coalesce_put_dim_profs(skb, ETHTOOL_A_COALESCE_TX_EQE_PROFILE,
+				   kcoal->tx_eqe_profs, supported) ||
+	    coalesce_put_dim_profs(skb, ETHTOOL_A_COALESCE_TX_CQE_PROFILE,
+				   kcoal->tx_cqe_profs, supported))
 		return -EMSGSIZE;
 
 	return 0;
@@ -227,6 +262,10 @@ const struct nla_policy ethnl_coalesce_set_policy[] = {
 	[ETHTOOL_A_COALESCE_TX_AGGR_MAX_BYTES] = { .type = NLA_U32 },
 	[ETHTOOL_A_COALESCE_TX_AGGR_MAX_FRAMES] = { .type = NLA_U32 },
 	[ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS] = { .type = NLA_U32 },
+	[ETHTOOL_A_COALESCE_RX_EQE_PROFILE]     = { .type = NLA_NUL_STRING },
+	[ETHTOOL_A_COALESCE_RX_CQE_PROFILE]     = { .type = NLA_NUL_STRING },
+	[ETHTOOL_A_COALESCE_TX_EQE_PROFILE]     = { .type = NLA_NUL_STRING },
+	[ETHTOOL_A_COALESCE_TX_CQE_PROFILE]     = { .type = NLA_NUL_STRING },
 };
 
 static int
@@ -316,6 +355,14 @@ __ethnl_set_coalesce(struct ethnl_req_info *req_info, struct genl_info *info,
 			 tb[ETHTOOL_A_COALESCE_TX_AGGR_MAX_FRAMES], &mod);
 	ethnl_update_u32(&kernel_coalesce.tx_aggr_time_usecs,
 			 tb[ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS], &mod);
+	ethnl_update_profs(kernel_coalesce.rx_eqe_profs,
+			   tb[ETHTOOL_A_COALESCE_RX_EQE_PROFILE], &mod);
+	ethnl_update_profs(kernel_coalesce.rx_cqe_profs,
+			   tb[ETHTOOL_A_COALESCE_RX_CQE_PROFILE], &mod);
+	ethnl_update_profs(kernel_coalesce.tx_eqe_profs,
+			   tb[ETHTOOL_A_COALESCE_TX_EQE_PROFILE], &mod);
+	ethnl_update_profs(kernel_coalesce.tx_cqe_profs,
+			   tb[ETHTOOL_A_COALESCE_TX_CQE_PROFILE], &mod);
 
 	/* Update operation modes */
 	ethnl_update_bool32(&coalesce.use_adaptive_rx_coalesce,

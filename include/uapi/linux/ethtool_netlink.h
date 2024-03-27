@@ -416,6 +416,10 @@ enum {
 	ETHTOOL_A_COALESCE_TX_AGGR_MAX_BYTES,		/* u32 */
 	ETHTOOL_A_COALESCE_TX_AGGR_MAX_FRAMES,		/* u32 */
 	ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS,		/* u32 */
+	ETHTOOL_A_COALESCE_RX_EQE_PROFILE,              /* string */
+	ETHTOOL_A_COALESCE_RX_CQE_PROFILE,              /* string */
+	ETHTOOL_A_COALESCE_TX_EQE_PROFILE,              /* string */
+	ETHTOOL_A_COALESCE_TX_CQE_PROFILE,              /* string */
 
 	/* add new constants above here */
 	__ETHTOOL_A_COALESCE_CNT,

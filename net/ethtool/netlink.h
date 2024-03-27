@@ -85,6 +85,41 @@ static inline void ethnl_update_u32(u32 *dst, const struct nlattr *attr,
 	*mod = true;
 }
 
+static inline void ethnl_update_profs(struct dim_cq_moder *dst,
+				      const struct nlattr *attr,
+				      bool *mod)
+{
+	struct dim_cq_moder profs[NET_DIM_PARAMS_NUM_PROFILES];
+	int ret, i, totlen = 0, retlen;
+	char *buf;
+	u16 len;
+
+	if (!attr)
+		return;
+
+	buf = nla_data(attr);
+	len = nla_len(attr);
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		ret = sscanf(buf, "%hu,%hu,%hu_%n", &profs[i].usec,
+			     &profs[i].pkts, &profs[i].comps, &retlen);
+		if (ret != 3)
+			return;
+
+		totlen += retlen;
+		if (totlen > len)
+			return;
+
+		if (dst[i].usec  != profs[i].usec ||
+		    dst[i].pkts  != profs[i].pkts ||
+		    dst[i].comps != profs[i].comps)
+			*mod = true;
+
+		buf += retlen;
+	}
+
+	memcpy(dst, profs, sizeof(profs));
+}
+
 /**
  * ethnl_update_u8() - update u8 value from NLA_U8 attribute
  * @dst:  value to update
