@@ -124,6 +124,10 @@ testconfig: $(obj)/conf
 	$(if $(findstring 1,$(KBUILD_VERBOSE)),--capture=no)
 clean-files += tests/.cache
 
+PHONY += fzfconfig
+fzfconfig:
+	$(srctree)/scripts/fzfconfig
+
 # Help text used by make help
 help:
 	@echo  'Configuration targets:'
