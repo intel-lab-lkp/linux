@@ -2628,8 +2628,8 @@ static bool mf_isolate_folio(struct folio *folio, struct list_head *pagelist)
 		if (lru)
 			isolated = folio_isolate_lru(folio);
 		else
-			isolated = isolate_movable_page(&folio->page,
-							ISOLATE_UNEVICTABLE);
+			isolated = isolate_movable_folio(folio,
+							 ISOLATE_UNEVICTABLE);
 
 		if (isolated) {
 			list_add(&folio->lru, pagelist);
