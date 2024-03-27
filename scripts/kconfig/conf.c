@@ -32,6 +32,7 @@ enum input_mode {
 	defconfig,
 	savedefconfig,
 	listnewconfig,
+	helpallconfig,
 	helpnewconfig,
 	olddefconfig,
 	yes2modconfig,
@@ -633,13 +634,14 @@ static void check_conf(struct menu *menu)
 	struct symbol *sym;
 	struct menu *child;
 
-	if (!menu_is_visible(menu))
+	if (input_mode != helpallconfig && !menu_is_visible(menu))
 		return;
 
 	sym = menu->sym;
-	if (sym && !sym_has_value(sym) &&
-	    (sym_is_changeable(sym) ||
-	     (sym_is_choice(sym) && sym_get_tristate_value(sym) == yes))) {
+	if (input_mode == helpallconfig ||
+	    (sym && !sym_has_value(sym) &&
+	     (sym_is_changeable(sym) ||
+	      (sym_is_choice(sym) && sym_get_tristate_value(sym) == yes)))) {
 
 		switch (input_mode) {
 		case listnewconfig:
@@ -647,6 +649,7 @@ static void check_conf(struct menu *menu)
 				print_symbol_for_listconfig(sym);
 			break;
 		case helpnewconfig:
+		case helpallconfig:
 			printf("-----\n");
 			print_help(menu);
 			printf("-----\n");
@@ -678,6 +681,7 @@ static const struct option long_opts[] = {
 	{"alldefconfig",  no_argument,       &input_mode_opt, alldefconfig},
 	{"randconfig",    no_argument,       &input_mode_opt, randconfig},
 	{"listnewconfig", no_argument,       &input_mode_opt, listnewconfig},
+	{"helpallconfig", no_argument,       &input_mode_opt, helpallconfig},
 	{"helpnewconfig", no_argument,       &input_mode_opt, helpnewconfig},
 	{"olddefconfig",  no_argument,       &input_mode_opt, olddefconfig},
 	{"yes2modconfig", no_argument,       &input_mode_opt, yes2modconfig},
@@ -696,6 +700,7 @@ static void conf_usage(const char *progname)
 	printf("\n");
 	printf("Mode options:\n");
 	printf("  --listnewconfig         List new options\n");
+	printf("  --helpallconfig         List all options and help text\n");
 	printf("  --helpnewconfig         List new options and help text\n");
 	printf("  --oldaskconfig          Start a new configuration using a line-oriented program\n");
 	printf("  --oldconfig             Update a configuration using a provided .config as base\n");
@@ -783,6 +788,7 @@ int main(int ac, char **av)
 	case oldaskconfig:
 	case oldconfig:
 	case listnewconfig:
+	case helpallconfig:
 	case helpnewconfig:
 	case olddefconfig:
 	case yes2modconfig:
@@ -887,6 +893,9 @@ int main(int ac, char **av)
 			conf_cnt = 0;
 			check_conf(&rootmenu);
 		} while (conf_cnt);
+		break;
+	case helpallconfig:
+		check_conf(&rootmenu);
 		break;
 	case olddefconfig:
 	default:
