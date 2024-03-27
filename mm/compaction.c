@@ -1098,32 +1098,6 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		}
 
 		/*
-		 * Check may be lockless but that's ok as we recheck later.
-		 * It's possible to migrate LRU and non-lru movable pages.
-		 * Skip any other type of page
-		 */
-		if (!PageLRU(page)) {
-			/*
-			 * __PageMovable can return false positive so we need
-			 * to verify it under page_lock.
-			 */
-			if (unlikely(__PageMovable(page)) &&
-					!PageIsolated(page)) {
-				if (locked) {
-					unlock_page_lruvec_irqrestore(locked, flags);
-					locked = NULL;
-				}
-
-				if (isolate_movable_page(page, mode)) {
-					folio = page_folio(page);
-					goto isolate_success;
-				}
-			}
-
-			goto isolate_fail;
-		}
-
-		/*
 		 * Be careful not to clear PageLRU until after we're
 		 * sure the page is not being freed elsewhere -- the
 		 * page release code relies on it.
@@ -1131,6 +1105,32 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		folio = folio_get_nontail_page(page);
 		if (unlikely(!folio))
 			goto isolate_fail;
+
+		/*
+		 * Check may be lockless but that's ok as we recheck later.
+		 * It's possible to migrate LRU and non-lru movable pages.
+		 * Skip any other type of page
+		 */
+		if (!folio_test_lru(folio)) {
+			/*
+			 * __PageMovable can return false positive so we need
+			 * to verify it under page_lock.
+			 */
+			if (unlikely(__folio_test_movable(folio)) &&
+					!folio_test_isolated(folio)) {
+				if (locked) {
+					unlock_page_lruvec_irqrestore(locked, flags);
+					locked = NULL;
+				}
+
+				if (isolate_movable_folio(folio, mode)) {
+					folio_put(folio);
+					goto isolate_success;
+				}
+			}
+
+			goto isolate_fail_put;
+		}
 
 		/*
 		 * Migration will fail if an anonymous page is pinned in memory,
