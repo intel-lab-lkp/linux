@@ -30,6 +30,8 @@
 #define ADXL345_POWER_CTL_MEASURE	BIT(3)
 #define ADXL345_POWER_CTL_STANDBY	0x00
 
+#define ADXL345_DATA_FORMAT_SPI_3WIRE	BIT(6) /* 3-wire SPI mode */
+
 #define ADXL345_DATA_FORMAT_RANGE	GENMASK(1, 0) /* Set the g range */
 #define ADXL345_DATA_FORMAT_JUSTIFY	BIT(2) /* Left-justified (MSB) mode */
 #define ADXL345_DATA_FORMAT_FULL_RES	BIT(3) /* Up to 13-bits resolution */
