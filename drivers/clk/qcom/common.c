@@ -8,6 +8,8 @@
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
 #include <linux/clk-provider.h>
+#include <linux/interconnect-clk.h>
+#include <linux/interconnect-provider.h>
 #include <linux/reset-controller.h>
 #include <linux/of.h>
 
@@ -234,6 +236,36 @@ static struct clk_hw *qcom_cc_clk_hw_get(struct of_phandle_args *clkspec,
 	return cc->rclks[idx] ? &cc->rclks[idx]->hw : NULL;
 }
 
+static int qcom_cc_icc_register(struct device *dev,
+				const struct qcom_cc_desc *desc)
+{
+#if IS_ENABLED(CONFIG_INTERCONNECT_CLK)
+	struct icc_provider *provider;
+	struct icc_clk_data *icd;
+	int i;
+
+	if (!desc->icc_hws)
+		return 0;
+
+	icd = devm_kcalloc(dev, desc->num_icc_hws, sizeof(*icd), GFP_KERNEL);
+	if (!icd)
+		return dev_err_probe(dev, -ENOMEM, "malloc for icc clock data failed\n");
+
+	for (i = 0; i < desc->num_icc_hws; i++) {
+		icd[i].clk = devm_clk_hw_get_clk(dev, desc->icc_hws[i], "");
+		if (IS_ERR_OR_NULL(icd[i].clk))
+			return dev_err_probe(dev, -ENOENT, "icc clock not found\n");
+		icd[i].name = clk_hw_get_name(desc->icc_hws[i]);
+	}
+
+	provider = icc_clk_register(dev, desc->first_id, desc->num_icc_hws, icd);
+	if (IS_ERR_OR_NULL(provider))
+		return dev_err_probe(dev, PTR_ERR(provider),
+				     "icc_clk_register failed\n");
+#endif
+	return 0;
+}
+
 int qcom_cc_really_probe(struct platform_device *pdev,
 			 const struct qcom_cc_desc *desc, struct regmap *regmap)
 {
@@ -303,7 +335,7 @@ int qcom_cc_really_probe(struct platform_device *pdev,
 	if (ret)
 		return ret;
 
-	return 0;
+	return qcom_cc_icc_register(dev, desc);
 }
 EXPORT_SYMBOL_GPL(qcom_cc_really_probe);
 
