@@ -5620,7 +5620,7 @@ late_initcall(init_lru_gen);
  *                          workingset reporting
  ******************************************************************************/
 #ifdef CONFIG_WORKINGSET_REPORT
-void wsr_refresh_scan(struct lruvec *lruvec)
+void wsr_refresh_scan(struct lruvec *lruvec, unsigned long refresh_interval)
 {
 	DEFINE_MAX_SEQ(lruvec);
 	struct scan_control sc = {
@@ -5633,15 +5633,22 @@ void wsr_refresh_scan(struct lruvec *lruvec)
 	};
 	unsigned int flags;
 
-	set_task_reclaim_state(current, &sc.reclaim_state);
-	flags = memalloc_noreclaim_save();
-	/*
-	 * setting can_swap=true and force_scan=true ensures
-	 * proper workingset stats when the system cannot swap.
-	 */
-	try_to_inc_max_seq(lruvec, max_seq, &sc, true, true);
-	memalloc_noreclaim_restore(flags);
-	set_task_reclaim_state(current, NULL);
+	if (refresh_interval) {
+		int gen = lru_gen_from_seq(max_seq);
+		unsigned long birth = READ_ONCE(lruvec->lrugen.timestamps[gen]);
+
+		if (time_is_before_jiffies(birth + refresh_interval)) {
+			set_task_reclaim_state(current, &sc.reclaim_state);
+			flags = memalloc_noreclaim_save();
+			/*
+			 * setting can_swap=true and force_scan=true ensures
+			 * proper workingset stats when the system cannot swap.
+			 */
+			try_to_inc_max_seq(lruvec, max_seq, &sc, true, true);
+			memalloc_noreclaim_restore(flags);
+			set_task_reclaim_state(current, NULL);
+		}
+	}
 }
 #endif /* CONFIG_WORKINGSET_REPORT */
 
