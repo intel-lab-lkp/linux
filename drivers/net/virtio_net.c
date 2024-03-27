@@ -57,6 +57,16 @@ DECLARE_EWMA(pkt_len, 0, 64)
 
 #define VIRTNET_DRIVER_VERSION "1.0.0"
 
+/* This is copied from NET_DIM_RX_EQE_PROFILES in DIM library */
+#define VIRTNET_DIM_RX_PKTS 256
+static struct dim_cq_moder rx_eqe_conf[] = {
+	{.usec = 1,   .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 8,   .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 64,  .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 128, .pkts = VIRTNET_DIM_RX_PKTS,},
+	{.usec = 256, .pkts = VIRTNET_DIM_RX_PKTS,}
+};
+
 static const unsigned long guest_offloads[] = {
 	VIRTIO_NET_F_GUEST_TSO4,
 	VIRTIO_NET_F_GUEST_TSO6,
@@ -3580,7 +3590,10 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 		if (!rq->dim_enabled)
 			continue;
 
-		update_moder = net_dim_get_rx_moderation(dim->mode, dim->profile_ix);
+		if (dim->profile_ix >= ARRAY_SIZE(rx_eqe_conf))
+			dim->profile_ix = ARRAY_SIZE(rx_eqe_conf) - 1;
+
+		update_moder = rx_eqe_conf[dim->profile_ix];
 		if (update_moder.usec != rq->intr_coal.max_usecs ||
 		    update_moder.pkts != rq->intr_coal.max_packets) {
 			err = virtnet_send_rx_ctrl_coal_vq_cmd(vi, qnum,
@@ -3623,6 +3636,34 @@ static int virtnet_should_update_vq_weight(int dev_flags, int weight,
 	return 0;
 }
 
+static int virtnet_update_profile(struct virtnet_info *vi,
+				  struct kernel_ethtool_coalesce *kc)
+{
+	int i;
+
+	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL)) {
+		for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++)
+			if (kc->rx_eqe_profs[i].comps)
+				return -EINVAL;
+	} else {
+		for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+			if (kc->rx_eqe_profs[i].usec != rx_eqe_conf[i].usec ||
+			    kc->rx_eqe_profs[i].pkts != rx_eqe_conf[i].pkts ||
+			    kc->rx_eqe_profs[i].comps)
+				return -EINVAL;
+		}
+
+		return 0;
+	}
+
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		rx_eqe_conf[i].usec = kc->rx_eqe_profs[i].usec;
+		rx_eqe_conf[i].pkts = kc->rx_eqe_profs[i].pkts;
+	}
+
+	return 0;
+}
+
 static int virtnet_set_coalesce(struct net_device *dev,
 				struct ethtool_coalesce *ec,
 				struct kernel_ethtool_coalesce *kernel_coal,
@@ -3648,6 +3689,10 @@ static int virtnet_set_coalesce(struct net_device *dev,
 			break;
 		}
 	}
+
+	ret = virtnet_update_profile(vi, kernel_coal);
+	if (ret)
+		return ret;
 
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_NOTF_COAL))
 		ret = virtnet_send_notf_coal_cmds(vi, ec);
@@ -3684,6 +3729,10 @@ static int virtnet_get_coalesce(struct net_device *dev,
 		if (vi->sq[0].napi.weight)
 			ec->tx_max_coalesced_frames = 1;
 	}
+
+	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL))
+		memcpy(kernel_coal->rx_eqe_profs, rx_eqe_conf,
+		       sizeof(rx_eqe_conf));
 
 	return 0;
 }
@@ -3864,7 +3913,8 @@ static int virtnet_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info)
 
 static const struct ethtool_ops virtnet_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_MAX_FRAMES |
-		ETHTOOL_COALESCE_USECS | ETHTOOL_COALESCE_USE_ADAPTIVE_RX,
+		ETHTOOL_COALESCE_USECS | ETHTOOL_COALESCE_USE_ADAPTIVE_RX |
+		ETHTOOL_COALESCE_RX_EQE_PROFILE,
 	.get_drvinfo = virtnet_get_drvinfo,
 	.get_link = ethtool_op_get_link,
 	.get_ringparam = virtnet_get_ringparam,
