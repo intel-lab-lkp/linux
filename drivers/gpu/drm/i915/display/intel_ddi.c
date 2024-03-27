@@ -4244,6 +4244,7 @@ static bool crtcs_port_sync_compatible(const struct intel_crtc_state *crtc_state
 				       const struct intel_crtc_state *crtc_state2)
 {
 	return crtc_state1->hw.active && crtc_state2->hw.active &&
+		!crtc_state1->bigjoiner_pipes && !crtc_state2->bigjoiner_pipes &&
 		crtc_state1->output_types == crtc_state2->output_types &&
 		crtc_state1->output_format == crtc_state2->output_format &&
 		crtc_state1->lane_count == crtc_state2->lane_count &&
