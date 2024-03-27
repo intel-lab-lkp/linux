@@ -344,6 +344,34 @@ void pcim_iounmap(struct pci_dev *pdev, void __iomem *addr)
 EXPORT_SYMBOL(pcim_iounmap);
 
 /**
+ * pcim_iomap_region - Request and iomap a PCI BAR
+ * @pdev: PCI device to map IO resources for
+ * @bar: BAR to request and iomap
+ * @name: Name used when requesting regions
+ *
+ * Request and iomap a region specified by @bar.
+ */
+void __iomem *pcim_iomap_region(struct pci_dev *pdev, int bar, const char *name)
+{
+	void __iomem *addr;
+	int rc;
+
+	if (bar >= DEVICE_COUNT_RESOURCE)
+		return NULL;
+
+	rc = pci_request_region(pdev, bar, name);
+	if (rc)
+		return NULL;
+
+	addr = pcim_iomap(pdev, bar, 0);
+	if (!addr)
+		pci_release_region(pdev, bar);
+
+	return addr;
+}
+EXPORT_SYMBOL_GPL(pcim_iomap_region);
+
+/**
  * pcim_iomap_regions - Request and iomap PCI BARs
  * @pdev: PCI device to map IO resources for
  * @mask: Mask of BARs to request and iomap
