@@ -148,7 +148,7 @@
 		lpm-gpios = <&pioBU 0 GPIO_ACTIVE_LOW>;
 
 		regulators {
-			vdd_3v3: VDD_IO {
+			vdd_3v3: BUCK1 {
 				regulator-name = "VDD_IO";
 				regulator-min-microvolt = <3300000>;
 				regulator-max-microvolt = <3300000>;
@@ -167,7 +167,7 @@
 				};
 			};
 
-			vddio_ddr: VDD_DDR {
+			vddio_ddr: BUCK2 {
 				regulator-name = "VDD_DDR";
 				regulator-min-microvolt = <1200000>;
 				regulator-max-microvolt = <1200000>;
@@ -190,7 +190,7 @@
 				};
 			};
 
-			vdd_core: VDD_CORE {
+			vdd_core: BUCK3 {
 				regulator-name = "VDD_CORE";
 				regulator-min-microvolt = <1250000>;
 				regulator-max-microvolt = <1250000>;
@@ -209,7 +209,7 @@
 				};
 			};
 
-			vdd_ddr: VDD_OTHER {
+			vdd_ddr: BUCK4 {
 				regulator-name = "VDD_OTHER";
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
