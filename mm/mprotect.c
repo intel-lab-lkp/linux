@@ -159,8 +159,9 @@ static long change_pte_range(struct mmu_gather *tlb,
 					continue;
 				if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
 				    !toptier)
-					folio_xchg_access_time(folio,
-						jiffies_to_msecs(jiffies));
+					folio_xchg_fault_count(folio,
+							atomic_read(&vma->vm_mm->hint_faults));
+
 			}
 
 			oldpte = ptep_modify_prot_start(vma, addr, pte);

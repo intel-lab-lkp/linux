@@ -921,6 +921,9 @@ struct mm_struct {
 
 		/* numa_scan_seq prevents two threads remapping PTEs. */
 		int numa_scan_seq;
+
+		/* Accummulated number of hint faults */
+		atomic_t hint_faults;
 #endif
 		/*
 		 * An operation with batched TLB flushing is going on. Anything

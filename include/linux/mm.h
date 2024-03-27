@@ -1645,17 +1645,7 @@ static inline int folio_nid(const struct folio *folio)
 }
 
 #ifdef CONFIG_NUMA_BALANCING
-/* page access time bits needs to hold at least 4 seconds */
-#define PAGE_ACCESS_TIME_MIN_BITS	12
-#if LAST_CPUPID_SHIFT < PAGE_ACCESS_TIME_MIN_BITS
-#define PAGE_ACCESS_TIME_BUCKETS				\
-	(PAGE_ACCESS_TIME_MIN_BITS - LAST_CPUPID_SHIFT)
-#else
-#define PAGE_ACCESS_TIME_BUCKETS	0
-#endif
-
-#define PAGE_ACCESS_TIME_MASK				\
-	(LAST_CPUPID_MASK << PAGE_ACCESS_TIME_BUCKETS)
+#define PAGE_FAULT_COUNT_BUCKETS	16
 
 static inline int cpu_pid_to_cpupid(int cpu, int pid)
 {
@@ -1721,13 +1711,12 @@ static inline void page_cpupid_reset_last(struct page *page)
 }
 #endif /* LAST_CPUPID_NOT_IN_PAGE_FLAGS */
 
-static inline int folio_xchg_access_time(struct folio *folio, int time)
+static inline int folio_xchg_fault_count(struct folio *folio, int count)
 {
-	int last_time;
+	int last_count;
 
-	last_time = folio_xchg_last_cpupid(folio,
-					   time >> PAGE_ACCESS_TIME_BUCKETS);
-	return last_time << PAGE_ACCESS_TIME_BUCKETS;
+	last_count = folio_xchg_last_cpupid(folio, count >> PAGE_FAULT_COUNT_BUCKETS);
+	return last_count << PAGE_FAULT_COUNT_BUCKETS;
 }
 
 static inline void vma_set_access_pid_bit(struct vm_area_struct *vma)
@@ -1745,7 +1734,7 @@ static inline int folio_xchg_last_cpupid(struct folio *folio, int cpupid)
 	return folio_nid(folio); /* XXX */
 }
 
-static inline int folio_xchg_access_time(struct folio *folio, int time)
+static inline int folio_xchg_fault_count(struct folio *folio, int time)
 {
 	return 0;
 }

@@ -1364,8 +1364,11 @@ unsigned int sysctl_numa_balancing_scan_size = 256;
 /* Scan @scan_size MB every @scan_period after an initial @scan_delay in ms */
 unsigned int sysctl_numa_balancing_scan_delay = 1000;
 
-/* The page with hint page fault latency < threshold in ms is considered hot */
-unsigned int sysctl_numa_balancing_hot_threshold = MSEC_PER_SEC;
+/*
+ * Page is considered hot if the number of hint faults between scan time and
+ * the page's fault time is less than this threshold.
+ */
+unsigned int sysctl_numa_balancing_fault_count_threshold = 1000000;
 
 struct numa_group {
 	refcount_t refcount;
@@ -1750,25 +1753,20 @@ static bool pgdat_free_space_enough(struct pglist_data *pgdat)
 }
 
 /*
- * For memory tiering mode, when page tables are scanned, the scan
- * time will be recorded in struct page in addition to make page
- * PROT_NONE for slow memory page.  So when the page is accessed, in
- * hint page fault handler, the hint page fault latency is calculated
- * via,
+ * For memory tiering mode, when page tables are scanned, the current
+ * hint fault count will be recorded in struct page in addition to
+ * make page PROT_NONE for slow memory page.  So when the page is
+ * accessed, in hint page fault handler, the hint page fault latency is
+ * calculated via,
  *
- *	hint page fault latency = hint page fault time - scan time
+ * hint page fault latency = current hint fault count - fault count at scan time
  *
  * The smaller the hint page fault latency, the higher the possibility
  * for the page to be hot.
  */
-static int numa_hint_fault_latency(struct folio *folio)
+static inline int numa_hint_fault_latency(struct folio *folio, int count)
 {
-	int last_time, time;
-
-	time = jiffies_to_msecs(jiffies);
-	last_time = folio_xchg_access_time(folio, time);
-
-	return (time - last_time) & PAGE_ACCESS_TIME_MASK;
+	return count - folio_xchg_fault_count(folio, count);
 }
 
 /*
@@ -1794,35 +1792,6 @@ static bool numa_promotion_rate_limit(struct pglist_data *pgdat,
 	return false;
 }
 
-#define NUMA_MIGRATION_ADJUST_STEPS	16
-
-static void numa_promotion_adjust_threshold(struct pglist_data *pgdat,
-					    unsigned long rate_limit,
-					    unsigned int ref_th)
-{
-	unsigned int now, start, th_period, unit_th, th;
-	unsigned long nr_cand, ref_cand, diff_cand;
-
-	now = jiffies_to_msecs(jiffies);
-	th_period = sysctl_numa_balancing_scan_period_max;
-	start = pgdat->nbp_th_start;
-	if (now - start > th_period &&
-	    cmpxchg(&pgdat->nbp_th_start, start, now) == start) {
-		ref_cand = rate_limit *
-			sysctl_numa_balancing_scan_period_max / MSEC_PER_SEC;
-		nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
-		diff_cand = nr_cand - pgdat->nbp_th_nr_cand;
-		unit_th = ref_th * 2 / NUMA_MIGRATION_ADJUST_STEPS;
-		th = pgdat->nbp_threshold ? : ref_th;
-		if (diff_cand > ref_cand * 11 / 10)
-			th = max(th - unit_th, unit_th);
-		else if (diff_cand < ref_cand * 9 / 10)
-			th = min(th + unit_th, ref_th * 2);
-		pgdat->nbp_th_nr_cand = nr_cand;
-		pgdat->nbp_threshold = th;
-	}
-}
-
 bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 				int src_nid, int dst_cpu)
 {
@@ -1838,7 +1807,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 	    !node_is_toptier(src_nid)) {
 		struct pglist_data *pgdat;
 		unsigned long rate_limit;
-		unsigned int latency, th, def_th;
+		unsigned int latency;
 
 		pgdat = NODE_DATA(dst_nid);
 		if (pgdat_free_space_enough(pgdat)) {
@@ -1847,16 +1816,13 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 			return true;
 		}
 
-		def_th = sysctl_numa_balancing_hot_threshold;
-		rate_limit = sysctl_numa_balancing_promote_rate_limit << \
-			(20 - PAGE_SHIFT);
-		numa_promotion_adjust_threshold(pgdat, rate_limit, def_th);
-
-		th = pgdat->nbp_threshold ? : def_th;
-		latency = numa_hint_fault_latency(folio);
-		if (latency >= th)
+		latency = numa_hint_fault_latency(folio,
+						  atomic_read(&p->mm->hint_faults));
+		if (latency >= sysctl_numa_balancing_fault_count_threshold)
 			return false;
 
+		rate_limit = sysctl_numa_balancing_promote_rate_limit << \
+			(20 - PAGE_SHIFT);
 		return !numa_promotion_rate_limit(pgdat, rate_limit,
 						  folio_nr_pages(folio));
 	}
@@ -3444,6 +3410,7 @@ void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 			mm->numa_next_scan = jiffies + msecs_to_jiffies(sysctl_numa_balancing_scan_delay);
 			mm->numa_scan_seq = 0;
 		}
+		atomic_set(&mm->hint_faults, 0);
 	}
 	p->node_stamp			= 0;
 	p->numa_scan_seq		= mm ? mm->numa_scan_seq : 0;
