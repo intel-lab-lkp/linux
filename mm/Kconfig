@@ -1261,6 +1261,15 @@ config LOCK_MM_AND_FIND_VMA
 config IOMMU_MM_DATA
 	bool
 
+config WORKINGSET_REPORT
+	bool "Working set reporting"
+	depends on LRU_GEN && SYSFS
+	help
+	  Report system and per-memcg working set to userspace.
+
+	  This option exports stats and events giving the user more insight
+	  into its memory working set.
+
 source "mm/damon/Kconfig"
 
 endmenu

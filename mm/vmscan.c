@@ -56,6 +56,7 @@
 #include <linux/khugepaged.h>
 #include <linux/rculist_nulls.h>
 #include <linux/random.h>
+#include <linux/workingset_report.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -3815,7 +3816,7 @@ unlock:
 	return success;
 }
 
-static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
+bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 			       struct scan_control *sc, bool can_swap, bool force_scan)
 {
 	bool success;
@@ -5606,12 +5607,43 @@ static int __init init_lru_gen(void)
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
 
+	wsr_register_node(NULL);
+
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);
 
 	return 0;
 };
 late_initcall(init_lru_gen);
+
+/******************************************************************************
+ *                          workingset reporting
+ ******************************************************************************/
+#ifdef CONFIG_WORKINGSET_REPORT
+void wsr_refresh_scan(struct lruvec *lruvec)
+{
+	DEFINE_MAX_SEQ(lruvec);
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.proactive = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+	unsigned int flags;
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+	flags = memalloc_noreclaim_save();
+	/*
+	 * setting can_swap=true and force_scan=true ensures
+	 * proper workingset stats when the system cannot swap.
+	 */
+	try_to_inc_max_seq(lruvec, max_seq, &sc, true, true);
+	memalloc_noreclaim_restore(flags);
+	set_task_reclaim_state(current, NULL);
+}
+#endif /* CONFIG_WORKINGSET_REPORT */
 
 #else /* !CONFIG_LRU_GEN */
 
