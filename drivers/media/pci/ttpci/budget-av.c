@@ -211,7 +211,7 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 	saa7146_setgpio(saa, 2, SAA7146_GPIO_OUTHI); /* disable card */
 
 	saa7146_setgpio(saa, 0, SAA7146_GPIO_OUTHI); /* Vcc off */
-	msleep(2);
+	msleep(20); // Was 2, but msleep would have slept up to 20ms nevertheless.
 	saa7146_setgpio(saa, 0, SAA7146_GPIO_OUTLO); /* Vcc on */
 	msleep(20); /* 20 ms Vcc settling time */
 
@@ -637,7 +637,7 @@ static int philips_cu1216_tuner_set_params(struct dvb_frontend *fe)
 			fe->ops.i2c_gate_ctrl(fe, 1);
 		if (i2c_transfer(&budget->i2c_adap, &msg, 1) == 1 && (buf[0] & 0x40))
 			break;
-		msleep(10);
+		msleep(20); // Was 10, but msleep would have slept up to 20ms nevertheless.
 	}
 
 	/* switch the charge pump to the lower current */
@@ -679,7 +679,7 @@ static int philips_tu1216_tuner_init(struct dvb_frontend *fe)
 		fe->ops.i2c_gate_ctrl(fe, 1);
 	if (i2c_transfer(&budget->i2c_adap, &tuner_msg, 1) != 1)
 		return -EIO;
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 
 	return 0;
 }
@@ -764,7 +764,7 @@ static int philips_tu1216_tuner_set_params(struct dvb_frontend *fe)
 	if (i2c_transfer(&budget->i2c_adap, &tuner_msg, 1) != 1)
 		return -EIO;
 
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 	return 0;
 }
 

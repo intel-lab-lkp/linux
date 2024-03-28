@@ -630,9 +630,9 @@ static void frontend_init(struct budget *budget)
 
 		// gpio2 is connected to CLB - reset it + leave it high
 		saa7146_setgpio(budget->dev, 2, SAA7146_GPIO_OUTLO);
-		msleep(1);
+		msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 		saa7146_setgpio(budget->dev, 2, SAA7146_GPIO_OUTHI);
-		msleep(1);
+		msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 
 		fe = dvb_attach(tda10086_attach, &tda10086_config, &budget->i2c_adap);
 		if (fe) {

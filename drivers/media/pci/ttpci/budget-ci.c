@@ -308,7 +308,7 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 	}
 	budget_ci->slot_status = SLOTSTATUS_RESET;
 	ttpci_budget_debiwrite(&budget_ci->budget, DEBICICTL, DEBIADDR_CICONTROL, 1, 0, 1, 0);
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 	ttpci_budget_debiwrite(&budget_ci->budget, DEBICICTL, DEBIADDR_CICONTROL, 1,
 			       CICONTROL_RESET, 1, 0);
 
@@ -534,7 +534,7 @@ static void ciintf_deinit(struct budget_ci *budget_ci)
 
 	// reset interface
 	ttpci_budget_debiwrite(&budget_ci->budget, DEBICICTL, DEBIADDR_CICONTROL, 1, 0, 1, 0);
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 	ttpci_budget_debiwrite(&budget_ci->budget, DEBICICTL, DEBIADDR_CICONTROL, 1,
 			       CICONTROL_RESET, 1, 0);
 
@@ -706,7 +706,7 @@ static int philips_tdm1316l_tuner_init(struct dvb_frontend *fe)
 		fe->ops.i2c_gate_ctrl(fe, 1);
 	if (i2c_transfer(&budget_ci->budget.i2c_adap, &tuner_msg, 1) != 1)
 		return -EIO;
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 
 	// disable the mc44BC374c (do not check for errors)
 	tuner_msg.addr = 0x65;
@@ -805,7 +805,7 @@ static int philips_tdm1316l_tuner_set_params(struct dvb_frontend *fe)
 	if (i2c_transfer(&budget_ci->budget.i2c_adap, &tuner_msg, 1) != 1)
 		return -EIO;
 
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 	return 0;
 }
 
@@ -910,7 +910,7 @@ static int dvbc_philips_tdm1316l_tuner_set_params(struct dvb_frontend *fe)
 	if (i2c_transfer(&budget_ci->budget.i2c_adap, &tuner_msg, 1) != 1)
 		return -EIO;
 
-	msleep(1);
+	msleep(20); // Was 1, but msleep would have slept up to 20ms nevertheless.
 
 	return 0;
 }
