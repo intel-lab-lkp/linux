@@ -600,10 +600,69 @@ use_default_name:
 }
 EXPORT_SYMBOL(wiphy_new_nm);
 
+static int
+wiphy_verify_comb_limit(struct wiphy *wiphy,
+			const struct ieee80211_iface_limit *limits,
+			u8 n_limits, u32 bcn_int_min_gcd, u32 *iface_cnt,
+			u16 *all_iftypes)
+{
+	int i;
+
+	for (i = 0; i < n_limits; i++) {
+		u16 types = limits[i].types;
+
+		/* Don't advertise an unsupported type
+		 * in a combination.
+		 */
+		if (WARN_ON((wiphy->interface_modes & types) != types))
+			return -EINVAL;
+
+		if (WARN_ON(!limits[i].max))
+			return -EINVAL;
+
+		/* interface types shouldn't overlap */
+		if (WARN_ON(types & *all_iftypes))
+			return -EINVAL;
+
+		*all_iftypes |= types;
+
+		/* Shouldn't list software iftypes in combinations! */
+		if (WARN_ON(wiphy->software_iftypes & types))
+			return -EINVAL;
+
+		/* Only a single P2P_DEVICE can be allowed */
+		if (WARN_ON(types & BIT(NL80211_IFTYPE_P2P_DEVICE) &&
+			    limits[i].max > 1))
+			return -EINVAL;
+
+		/* Only a single NAN can be allowed */
+		if (WARN_ON(types & BIT(NL80211_IFTYPE_NAN) &&
+			    limits[i].max > 1))
+			return -EINVAL;
+
+		/* This isn't well-defined right now. If you have an
+		 * IBSS interface, then its beacon interval may change
+		 * by joining other networks, and nothing prevents it
+		 * from doing that.
+		 * So technically we probably shouldn't even allow AP
+		 * and IBSS in the same interface, but it seems that
+		 * some drivers support that, possibly only with fixed
+		 * beacon intervals for IBSS.
+		 */
+		if (WARN_ON(types & BIT(NL80211_IFTYPE_ADHOC) &&
+			    bcn_int_min_gcd))
+			return -EINVAL;
+
+		*iface_cnt += limits[i].max;
+	}
+
+	return 0;
+}
+
 static int wiphy_verify_combinations(struct wiphy *wiphy)
 {
 	const struct ieee80211_iface_combination *c;
-	int i, j;
+	int i, ret;
 
 	for (i = 0; i < wiphy->n_iface_combinations; i++) {
 		u32 cnt = 0;
@@ -630,54 +689,11 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 		if (WARN_ON(!c->n_limits))
 			return -EINVAL;
 
-		for (j = 0; j < c->n_limits; j++) {
-			u16 types = c->limits[j].types;
-
-			/* interface types shouldn't overlap */
-			if (WARN_ON(types & all_iftypes))
-				return -EINVAL;
-			all_iftypes |= types;
-
-			if (WARN_ON(!c->limits[j].max))
-				return -EINVAL;
-
-			/* Shouldn't list software iftypes in combinations! */
-			if (WARN_ON(wiphy->software_iftypes & types))
-				return -EINVAL;
-
-			/* Only a single P2P_DEVICE can be allowed */
-			if (WARN_ON(types & BIT(NL80211_IFTYPE_P2P_DEVICE) &&
-				    c->limits[j].max > 1))
-				return -EINVAL;
-
-			/* Only a single NAN can be allowed */
-			if (WARN_ON(types & BIT(NL80211_IFTYPE_NAN) &&
-				    c->limits[j].max > 1))
-				return -EINVAL;
-
-			/*
-			 * This isn't well-defined right now. If you have an
-			 * IBSS interface, then its beacon interval may change
-			 * by joining other networks, and nothing prevents it
-			 * from doing that.
-			 * So technically we probably shouldn't even allow AP
-			 * and IBSS in the same interface, but it seems that
-			 * some drivers support that, possibly only with fixed
-			 * beacon intervals for IBSS.
-			 */
-			if (WARN_ON(types & BIT(NL80211_IFTYPE_ADHOC) &&
-				    c->beacon_int_min_gcd)) {
-				return -EINVAL;
-			}
-
-			cnt += c->limits[j].max;
-			/*
-			 * Don't advertise an unsupported type
-			 * in a combination.
-			 */
-			if (WARN_ON((wiphy->interface_modes & types) != types))
-				return -EINVAL;
-		}
+		ret = wiphy_verify_comb_limit(wiphy, c->limits, c->n_limits,
+					      c->beacon_int_min_gcd,
+					      &cnt, &all_iftypes);
+		if (ret)
+			return ret;
 
 		if (WARN_ON(all_iftypes & BIT(NL80211_IFTYPE_WDS)))
 			return -EINVAL;
