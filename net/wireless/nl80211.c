@@ -1622,12 +1622,43 @@ nla_put_failure:
 	return -ENOBUFS;
 }
 
+static int
+nl80211_put_iface_limits(struct sk_buff *msg,
+			 const struct ieee80211_iface_limit *limits,
+			 u8 n_limits)
+{
+	int i;
+
+	for (i = 0; i < n_limits; i++) {
+		struct nlattr *nl_limit;
+
+		nl_limit = nla_nest_start_noflag(msg, i + 1);
+		if (!nl_limit)
+			goto nla_put_failure;
+
+		if (nla_put_u32(msg, NL80211_IFACE_LIMIT_MAX,
+				limits[i].max))
+			goto nla_put_failure;
+
+		if (nl80211_put_iftypes(msg, NL80211_IFACE_LIMIT_TYPES,
+					limits[i].types))
+			goto nla_put_failure;
+
+		nla_nest_end(msg, nl_limit);
+	}
+
+	return 0;
+
+nla_put_failure:
+	return -ENOBUFS;
+}
+
 static int nl80211_put_iface_combinations(struct wiphy *wiphy,
 					  struct sk_buff *msg,
 					  bool large)
 {
 	struct nlattr *nl_combis;
-	int i, j;
+	int i;
 
 	nl_combis = nla_nest_start_noflag(msg,
 					  NL80211_ATTR_INTERFACE_COMBINATIONS);
@@ -1649,20 +1680,8 @@ static int nl80211_put_iface_combinations(struct wiphy *wiphy,
 		if (!nl_limits)
 			goto nla_put_failure;
 
-		for (j = 0; j < c->n_limits; j++) {
-			struct nlattr *nl_limit;
-
-			nl_limit = nla_nest_start_noflag(msg, j + 1);
-			if (!nl_limit)
-				goto nla_put_failure;
-			if (nla_put_u32(msg, NL80211_IFACE_LIMIT_MAX,
-					c->limits[j].max))
-				goto nla_put_failure;
-			if (nl80211_put_iftypes(msg, NL80211_IFACE_LIMIT_TYPES,
-						c->limits[j].types))
-				goto nla_put_failure;
-			nla_nest_end(msg, nl_limit);
-		}
+		if (nl80211_put_iface_limits(msg, c->limits, c->n_limits))
+			goto nla_put_failure;
 
 		nla_nest_end(msg, nl_limits);
 
