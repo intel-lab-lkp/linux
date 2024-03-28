@@ -5,6 +5,8 @@
 // Copyright (C) 2022-2023 Cirrus Logic, Inc. and
 //                         Cirrus Logic International Semiconductor Ltd.
 
+#include <dt-bindings/gpio/gpio.h>
+#include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/bitfield.h>
 #include <linux/device.h>
@@ -37,6 +39,59 @@ struct cs42l43_spi {
 
 static const unsigned int cs42l43_clock_divs[] = {
 	2, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
+};
+
+static const struct software_node ampl = {
+	.name			= "cs35l56-left",
+};
+
+static const struct software_node ampr = {
+	.name			= "cs35l56-right",
+};
+
+static struct spi_board_info ampl_info = {
+	.modalias		= "cs35l56",
+	.max_speed_hz		= 2000000,
+	.chip_select		= 0,
+	.mode			= SPI_MODE_0,
+	.swnode			= &ampl,
+	.use_fwnode_name	= true,
+};
+
+static struct spi_board_info ampr_info = {
+	.modalias		= "cs35l56",
+	.max_speed_hz		= 2000000,
+	.chip_select		= 1,
+	.mode			= SPI_MODE_0,
+	.swnode			= &ampr,
+	.use_fwnode_name	= true,
+};
+
+static const struct software_node cs42l43_gpiochip_swnode = {
+	.name			= "cs42l43-pinctrl",
+};
+
+static const struct software_node_ref_args cs42l43_cs_refs[] = {
+	{
+		.node		= &cs42l43_gpiochip_swnode,
+		.nargs		= 2,
+		.args		= { 0, GPIO_ACTIVE_LOW },
+	},
+	{
+		.node		= &swnode_gpio_undefined,
+		.nargs		= 0,
+	},
+};
+
+static const struct property_entry cs42l43_cs_props[] = {
+	{
+		.name		= "cs-gpios",
+		.length		= ARRAY_SIZE(cs42l43_cs_refs) *
+				  sizeof(struct software_node_ref_args),
+		.type		= DEV_PROP_REF,
+		.pointer	= cs42l43_cs_refs,
+	},
+	{}
 };
 
 static int cs42l43_spi_tx(struct regmap *regmap, const u8 *buf, unsigned int len)
@@ -203,6 +258,51 @@ static size_t cs42l43_spi_max_length(struct spi_device *spi)
 	return CS42L43_SPI_MAX_LENGTH;
 }
 
+#if IS_ENABLED(CONFIG_ACPI)
+static bool cs42l43_has_sidecar(struct fwnode_handle *fwnode)
+{
+	static const int func_smart_amp = 0x1;
+	struct fwnode_handle *child_fwnode, *ext_fwnode;
+	unsigned long long function;
+	unsigned int val;
+	int ret;
+
+	if (!is_acpi_node(fwnode))
+		return false;
+
+	fwnode_for_each_child_node(fwnode, child_fwnode) {
+		struct acpi_device *adev = to_acpi_device_node(child_fwnode);
+
+		ret = acpi_evaluate_integer(adev->handle, "_ADR", NULL, &function);
+		if (ACPI_FAILURE(ret))
+			continue;
+
+		if (function != func_smart_amp)
+			continue;
+
+		ext_fwnode = fwnode_get_named_child_node(child_fwnode,
+				"mipi-sdca-function-expansion-subproperties");
+		if (!ext_fwnode)
+			continue;
+
+		ret = fwnode_property_read_u32(ext_fwnode,
+					       "01fa-cirrus-sidecar-instances",
+					       &val);
+		if (ret)
+			continue;
+
+		return !!val;
+	}
+
+	return false;
+}
+#else
+static bool cs42l43_has_sidecar(struct fwnode_handle *fwnode)
+{
+	return false;
+}
+#endif
+
 static void cs42l43_release_of_node(void *data)
 {
 	fwnode_handle_put(data);
@@ -213,6 +313,7 @@ static int cs42l43_spi_probe(struct platform_device *pdev)
 	struct cs42l43 *cs42l43 = dev_get_drvdata(pdev->dev.parent);
 	struct cs42l43_spi *priv;
 	struct fwnode_handle *fwnode = dev_fwnode(cs42l43->dev);
+	bool has_sidecar = cs42l43_has_sidecar(fwnode);
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -266,15 +367,63 @@ static int cs42l43_spi_probe(struct platform_device *pdev)
 		}
 	}
 
-	device_set_node(&priv->ctlr->dev, fwnode);
+	if (has_sidecar) {
+		ret = software_node_register(&cs42l43_gpiochip_swnode);
+		if (ret) {
+			dev_err(priv->dev, "Failed to register gpio swnode: %d\n", ret);
+			return ret;
+		}
+
+		ret = device_create_managed_software_node(&priv->ctlr->dev, cs42l43_cs_props, NULL);
+		if (ret) {
+			dev_err(priv->dev, "Failed to add swnode: %d\n", ret);
+			goto err;
+		}
+
+	} else {
+		device_set_node(&priv->ctlr->dev, fwnode);
+	}
 
 	ret = devm_spi_register_controller(priv->dev, priv->ctlr);
 	if (ret) {
 		dev_err(priv->dev, "Failed to register SPI controller: %d\n", ret);
+		goto err;
 	}
+
+	if (has_sidecar) {
+		if (!spi_new_device(priv->ctlr, &ampl_info)) {
+			ret = -ENODEV;
+			dev_err(priv->dev, "Failed to create left amp slave\n");
+			goto err;
+		}
+
+		if (!spi_new_device(priv->ctlr, &ampr_info)) {
+			ret = -ENODEV;
+			dev_err(priv->dev, "Failed to create right amp slave\n");
+			goto err;
+		}
+	}
+
+	return 0;
+
+err:
+	if (has_sidecar)
+		software_node_unregister(&cs42l43_gpiochip_swnode);
 
 	return ret;
 }
+
+static int cs42l43_spi_remove(struct platform_device *pdev)
+{
+	struct cs42l43 *cs42l43 = dev_get_drvdata(pdev->dev.parent);
+	struct fwnode_handle *fwnode = dev_fwnode(cs42l43->dev);
+	bool has_sidecar = cs42l43_has_sidecar(fwnode);
+
+	if (has_sidecar)
+		software_node_unregister(&cs42l43_gpiochip_swnode);
+
+	return 0;
+};
 
 static const struct platform_device_id cs42l43_spi_id_table[] = {
 	{ "cs42l43-spi", },
@@ -288,6 +437,7 @@ static struct platform_driver cs42l43_spi_driver = {
 	},
 	.probe		= cs42l43_spi_probe,
 	.id_table	= cs42l43_spi_id_table,
+	.remove		= cs42l43_spi_remove,
 };
 module_platform_driver(cs42l43_spi_driver);
 
