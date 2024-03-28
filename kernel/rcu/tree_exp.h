@@ -725,7 +725,7 @@ static void rcu_exp_handler(void *unused)
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		if (rnp->expmask & rdp->grpmask) {
 			WRITE_ONCE(rdp->cpu_no_qs.b.exp, true);
-			t->rcu_read_unlock_special.b.exp_hint = true;
+			set_rcu_preempt_special(exp_hint);
 		}
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;

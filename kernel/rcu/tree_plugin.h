@@ -106,6 +106,14 @@ static void rcu_report_exp_rnp(struct rcu_node *rnp, bool wake);
 static bool sync_rcu_exp_done(struct rcu_node *rnp);
 static void rcu_read_unlock_special(struct task_struct *t);
 
+#define set_rcu_preempt_special(reason)	do {				\
+	WRITE_ONCE(current->rcu_read_unlock_special.b.reason, true);	\
+	} while (0)
+
+#define clear_rcu_preempt_special(reason)	do {			\
+	WRITE_ONCE(current->rcu_read_unlock_special.b.reason, false);	\
+	} while (0)
+
 /*
  * Tell them what RCU they are running.
  */
@@ -293,7 +301,7 @@ static void rcu_qs(void)
 				       TPS("cpuqs"));
 		__this_cpu_write(rcu_data.cpu_no_qs.b.norm, false);
 		barrier(); /* Coordinate with rcu_flavor_sched_clock_irq(). */
-		WRITE_ONCE(current->rcu_read_unlock_special.b.need_qs, false);
+		clear_rcu_preempt_special(need_qs);
 	}
 }
 
@@ -325,7 +333,7 @@ void rcu_note_context_switch(bool preempt)
 		/* Possibly blocking in an RCU read-side critical section. */
 		rnp = rdp->mynode;
 		raw_spin_lock_rcu_node(rnp);
-		t->rcu_read_unlock_special.b.blocked = true;
+		set_rcu_preempt_special(blocked);
 		t->rcu_blocked_node = rnp;
 
 		/*
@@ -399,7 +407,7 @@ void __rcu_read_lock(void)
 	if (IS_ENABLED(CONFIG_PROVE_LOCKING))
 		WARN_ON_ONCE(rcu_preempt_depth() > RCU_NEST_PMAX);
 	if (IS_ENABLED(CONFIG_RCU_STRICT_GRACE_PERIOD) && rcu_state.gp_kthread)
-		WRITE_ONCE(current->rcu_read_unlock_special.b.need_qs, true);
+		set_rcu_preempt_special(need_qs);
 	barrier();  /* critical section after entry code. */
 }
 EXPORT_SYMBOL_GPL(__rcu_read_lock);
@@ -738,7 +746,7 @@ static void rcu_flavor_sched_clock_irq(int user)
 	    __this_cpu_read(rcu_data.cpu_no_qs.b.norm) &&
 	    !t->rcu_read_unlock_special.b.need_qs &&
 	    time_after(jiffies, rcu_state.gp_start + HZ))
-		t->rcu_read_unlock_special.b.need_qs = true;
+		set_rcu_preempt_special(need_qs);
 }
 
 /*
@@ -751,12 +759,10 @@ static void rcu_flavor_sched_clock_irq(int user)
  */
 void exit_rcu(void)
 {
-	struct task_struct *t = current;
-
 	if (unlikely(!list_empty(&current->rcu_node_entry))) {
 		rcu_preempt_depth_set(1);
 		barrier();
-		WRITE_ONCE(t->rcu_read_unlock_special.b.blocked, true);
+		set_rcu_preempt_special(blocked);
 	} else if (unlikely(rcu_preempt_depth())) {
 		rcu_preempt_depth_set(1);
 	} else {
