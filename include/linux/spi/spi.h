@@ -222,6 +222,7 @@ struct spi_device {
 	struct spi_delay	cs_setup;
 	struct spi_delay	cs_hold;
 	struct spi_delay	cs_inactive;
+	bool			use_fwnode_name;
 
 	/* The statistics */
 	struct spi_statistics __percpu	*pcpu_statistics;
@@ -1603,6 +1604,7 @@ struct spi_board_info {
 	char		modalias[SPI_NAME_SIZE];
 	const void	*platform_data;
 	const struct software_node *swnode;
+	bool		use_fwnode_name;
 	void		*controller_data;
 	int		irq;
 
