@@ -750,6 +750,29 @@ static void loop_sysfs_exit(struct loop_device *lo)
 				   &loop_attribute_group);
 }
 
+static loff_t lo_seek_hole_data(struct block_device *bdev, loff_t offset,
+		int whence)
+{
+	/* TODO need to activate cgroups or use worker? */
+	/* TODO locking? */
+	struct loop_device *lo = bdev->bd_disk->private_data;
+	struct file *file = lo->lo_backing_file;
+
+	if (lo->lo_offset > 0)
+		offset += lo->lo_offset; /* TODO underflow/overflow? */
+
+	/* TODO backing file offset is modified! */
+	offset = vfs_llseek(file, offset, whence);
+	if (offset < 0)
+		return offset;
+
+	if (lo->lo_offset > 0)
+		offset -= lo->lo_offset; /* TODO underflow/overflow? */
+	if (lo->lo_sizelimit > 0 && offset > lo->lo_sizelimit)
+		offset = lo->lo_sizelimit;
+	return offset;
+}
+
 static void loop_config_discard(struct loop_device *lo,
 		struct queue_limits *lim)
 {
@@ -1751,13 +1774,14 @@ static void lo_free_disk(struct gendisk *disk)
 }
 
 static const struct block_device_operations lo_fops = {
-	.owner =	THIS_MODULE,
-	.release =	lo_release,
-	.ioctl =	lo_ioctl,
+	.owner =		THIS_MODULE,
+	.release =		lo_release,
+	.ioctl =		lo_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl =	lo_compat_ioctl,
+	.compat_ioctl =		lo_compat_ioctl,
 #endif
-	.free_disk =	lo_free_disk,
+	.free_disk =		lo_free_disk,
+	.seek_hole_data =	lo_seek_hole_data,
 };
 
 /*
@@ -2140,7 +2164,7 @@ static int loop_control_remove(int idx)
 		pr_warn_once("deleting an unspecified loop device is not supported.\n");
 		return -EINVAL;
 	}
-		
+
 	/* Hide this loop device for serialization. */
 	ret = mutex_lock_killable(&loop_ctl_mutex);
 	if (ret)
