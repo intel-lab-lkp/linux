@@ -1834,7 +1834,8 @@ static int f2fs_xattr_fiemap(struct inode *inode,
 		if (!xnid)
 			flags |= FIEMAP_EXTENT_LAST;
 
-		err = fiemap_fill_next_extent(fieinfo, 0, phys, len, flags);
+		err = fiemap_fill_next_extent(
+				fieinfo, 0, phys, len, 0, flags);
 		trace_f2fs_fiemap(inode, 0, phys, len, flags, err);
 		if (err)
 			return err;
@@ -1860,7 +1861,8 @@ static int f2fs_xattr_fiemap(struct inode *inode,
 	}
 
 	if (phys) {
-		err = fiemap_fill_next_extent(fieinfo, 0, phys, len, flags);
+		err = fiemap_fill_next_extent(
+				fieinfo, 0, phys, len, 0, flags);
 		trace_f2fs_fiemap(inode, 0, phys, len, flags, err);
 	}
 
@@ -1979,7 +1981,7 @@ next:
 			flags |= FIEMAP_EXTENT_DATA_ENCRYPTED;
 
 		ret = fiemap_fill_next_extent(fieinfo, logical,
-				phys, size, flags);
+				phys, size, 0, flags);
 		trace_f2fs_fiemap(inode, logical, phys, size, flags, ret);
 		if (ret)
 			goto out;
