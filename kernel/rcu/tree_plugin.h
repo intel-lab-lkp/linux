@@ -12,6 +12,7 @@
  */
 
 #include "../locking/rtmutex_common.h"
+#include "linux/kvm_host.h"
 
 static bool rcu_rdp_is_offloaded(struct rcu_data *rdp)
 {
@@ -1266,4 +1267,17 @@ static void rcu_bind_gp_kthread(void)
 	if (!tick_nohz_full_enabled())
 		return;
 	housekeeping_affine(current, HK_TYPE_RCU);
+}
+
+/*
+ * true if for this cpu guest exit is at most over a second ago,
+ * false otherwise
+ */
+static bool rcu_recent_guest_exit(void)
+{
+#ifdef CONFIG_KVM
+	return time_before(jiffies, guest_exit_last_time() + HZ);
+#else
+	return false;
+#endif
 }

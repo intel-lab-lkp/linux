@@ -155,6 +155,7 @@ static bool rcu_rdp_cpu_online(struct rcu_data *rdp);
 static bool rcu_init_invoked(void);
 static void rcu_cleanup_dead_rnp(struct rcu_node *rnp_leaf);
 static void rcu_init_new_rnp(struct rcu_node *rnp_leaf);
+static bool rcu_recent_guest_exit(void);
 
 /*
  * rcuc/rcub/rcuop kthread realtime priority. The "rcuop"
@@ -3938,7 +3939,8 @@ static int rcu_pending(int user)
 		return 1;
 
 	/* Is this a nohz_full CPU in userspace or idle?  (Ignore RCU if so.) */
-	if ((user || rcu_is_cpu_rrupt_from_idle()) && rcu_nohz_full_cpu())
+	if ((user || rcu_is_cpu_rrupt_from_idle() || rcu_recent_guest_exit()) &&
+	    rcu_nohz_full_cpu())
 		return 0;
 
 	/* Is the RCU core waiting for a quiescent state from this CPU? */
