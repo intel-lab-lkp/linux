@@ -4501,6 +4501,82 @@ static void thin_io_hints(struct dm_target *ti, struct queue_limits *limits)
 	}
 }
 
+static dm_block_t loff_to_block(struct pool *pool, loff_t offset)
+{
+	sector_t offset_sectors = offset >> SECTOR_SHIFT;
+	dm_block_t ret;
+
+	if (block_size_is_power_of_two(pool))
+		ret = offset_sectors >> pool->sectors_per_block_shift;
+	else {
+		ret = offset_sectors;
+		(void) sector_div(ret, pool->sectors_per_block);
+	}
+
+	return ret;
+}
+
+static loff_t block_to_loff(struct pool *pool, dm_block_t block)
+{
+	return block_to_sectors(pool, block) << SECTOR_SHIFT;
+}
+
+static loff_t thin_seek_hole_data(struct dm_target *ti, loff_t offset,
+		int whence)
+{
+	struct thin_c *tc = ti->private;
+	struct dm_thin_device *td = tc->td;
+	struct pool *pool = tc->pool;
+	dm_block_t begin;
+	dm_block_t end;
+	dm_block_t mapped_begin;
+	dm_block_t mapped_end;
+	dm_block_t pool_begin;
+	bool maybe_shared;
+	int ret;
+
+	/* TODO locking? */
+
+	if (block_size_is_power_of_two(pool))
+		end = ti->len >> pool->sectors_per_block_shift;
+	else {
+		end = ti->len;
+		(void) sector_div(end, pool->sectors_per_block);
+	}
+
+	offset -= ti->begin << SECTOR_SHIFT;
+
+	while (true) {
+		begin = loff_to_block(pool, offset);
+		ret = dm_thin_find_mapped_range(td, begin, end,
+						&mapped_begin, &mapped_end,
+						&pool_begin, &maybe_shared);
+		if (ret == -ENODATA) {
+			if (whence == SEEK_DATA)
+				return -ENXIO;
+			break;
+		} else if (ret < 0) {
+			/* TODO handle EWOULDBLOCK? */
+			return -ENXIO;
+		}
+
+		/* SEEK_DATA finishes here... */
+		if (whence == SEEK_DATA) {
+			if (mapped_begin != begin)
+				offset = block_to_loff(pool, mapped_begin);
+			break;
+		}
+
+		/* ...while SEEK_HOLE may need to look further */
+		if (mapped_begin != begin)
+			break; /* offset is in a hole */
+
+		offset = block_to_loff(pool, mapped_end);
+	}
+
+	return offset + (ti->begin << SECTOR_SHIFT);
+}
+
 static struct target_type thin_target = {
 	.name = "thin",
 	.version = {1, 23, 0},
@@ -4515,6 +4591,7 @@ static struct target_type thin_target = {
 	.status = thin_status,
 	.iterate_devices = thin_iterate_devices,
 	.io_hints = thin_io_hints,
+	.seek_hole_data = thin_seek_hole_data,
 };
 
 /*----------------------------------------------------------------*/
