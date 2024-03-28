@@ -1570,17 +1570,24 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 {
 	struct queue_limits *lim = &disk->queue->limits;
 	unsigned int max_nr_zwplugs;
+	bool set_max_open = false;
 	int ret;
 
 	/*
 	 * If the device has no limit on the maximum number of open and active
 	 * zones, use BLK_ZONE_DEFAULT_MAX_NR_WPLUGS for the maximum number
-	 * of zone write plugs to hash.
+	 * of zone write plugs to hash and set the max_open_zones queue limit
+	 * of the device to indicate to the user the number of pre-allocated
+	 * zone write plugsso that the user is aware of the potential
+	 * performance penalty for simultaneously writing to more zones than
+	 * this limit.
 	 */
 	max_nr_zwplugs = max(lim->max_open_zones, lim->max_active_zones);
-	if (!max_nr_zwplugs)
+	if (!max_nr_zwplugs) {
 		max_nr_zwplugs =
 			min(BLK_ZONE_DEFAULT_MAX_NR_WPLUGS, nr_zones);
+		set_max_open = true;
+	}
 
 	if (!disk->zone_wplugs_hash) {
 		ret = disk_alloc_zone_resources(disk, max_nr_zwplugs);
@@ -1595,6 +1602,9 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 		if (ret)
 			return ret;
 	}
+
+	if (set_max_open)
+		disk_set_max_open_zones(disk, max_nr_zwplugs);
 
 	return 0;
 }
