@@ -501,3 +501,43 @@ void ieee80211_set_active_links_async(struct ieee80211_vif *vif,
 	wiphy_work_queue(sdata->local->hw.wiphy, &sdata->activate_links_work);
 }
 EXPORT_SYMBOL_GPL(ieee80211_set_active_links_async);
+
+int __ieee80211_link_reconfig_remove(struct ieee80211_local *local,
+				     struct ieee80211_sub_if_data *sdata,
+				     const struct cfg80211_link_reconfig_removal_params *params)
+{
+	struct ieee80211_link_data *link;
+	int ret;
+
+	if (!ieee80211_sdata_running(sdata))
+		return -ENETDOWN;
+
+	if (sdata->vif.type != NL80211_IFTYPE_AP)
+		return -EINVAL;
+
+	link = sdata_dereference(sdata->link[params->link_id], sdata);
+	if (!link)
+		return -ENOLINK;
+
+	ret = drv_link_reconfig_remove(local, sdata, params);
+
+	return ret;
+}
+
+int ieee80211_update_link_reconfig_remove_status(struct ieee80211_vif *vif,
+						 unsigned int link_id,
+						 u8 tbtt_count, u64 tsf,
+						 enum ieee80211_link_reconfig_remove_state status)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+
+	if (vif->type != NL80211_IFTYPE_AP) {
+		sdata_err(sdata, "Discarding link reconfig status for unsupported vif type\n");
+		return -EINVAL;
+	}
+
+	return cfg80211_update_link_reconfig_remove_status(sdata->dev, link_id,
+							   tbtt_count, tsf,
+							   status);
+}
+EXPORT_SYMBOL(ieee80211_update_link_reconfig_remove_status);
