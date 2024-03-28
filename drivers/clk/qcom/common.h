@@ -29,6 +29,9 @@ struct qcom_cc_desc {
 	size_t num_gdscs;
 	struct clk_hw **clk_hws;
 	size_t num_clk_hws;
+	struct clk_hw **icc_hws;
+	size_t num_icc_hws;
+	unsigned int first_id;
 };
 
 /**
