@@ -7,8 +7,8 @@
  * Author: Paul E. McKenney <paulmck@linux.ibm.com>
  */
 
-#ifndef __LINUX_RCU_H
-#define __LINUX_RCU_H
+#ifndef __KERNEL_RCU_H
+#define __KERNEL_RCU_H
 
 #include <linux/slab.h>
 #include <trace/events/rcu.h>
@@ -668,4 +668,4 @@ int rcu_stall_notifier_call_chain(unsigned long val, void *v);
 static inline int rcu_stall_notifier_call_chain(unsigned long val, void *v) { return NOTIFY_DONE; }
 #endif // #else // #if defined(CONFIG_RCU_STALL_COMMON) && defined(CONFIG_RCU_CPU_STALL_NOTIFIER)
 
-#endif /* __LINUX_RCU_H */
+#endif /* __KERNEL_RCU_H */
