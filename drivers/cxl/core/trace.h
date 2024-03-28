@@ -681,23 +681,23 @@ TRACE_EVENT(cxl_memory_module,
 
 TRACE_EVENT(cxl_poison,
 
-	TP_PROTO(struct cxl_memdev *cxlmd, struct cxl_region *cxlr,
+	TP_PROTO(const struct cxl_memdev *cxlmd,
 		 const struct cxl_poison_record *record, u8 flags,
 		 __le64 overflow_ts, enum cxl_poison_trace_type trace_type),
 
-	TP_ARGS(cxlmd, cxlr, record, flags, overflow_ts, trace_type),
+	TP_ARGS(cxlmd, record, flags, overflow_ts, trace_type),
 
 	TP_STRUCT__entry(
 		__string(memdev, dev_name(&cxlmd->dev))
 		__string(host, dev_name(cxlmd->dev.parent))
 		__field(u64, serial)
 		__field(u8, trace_type)
-		__string(region, cxlr ? dev_name(&cxlr->dev) : "")
+		__string(region, to_region_name(cxlmd, cxl_poison_record_dpa(record)))
 		__field(u64, overflow_ts)
 		__field(u64, hpa)
 		__field(u64, dpa)
 		__field(u32, dpa_length)
-		__array(char, uuid, 16)
+		__field_struct(uuid_t, uuid)
 		__field(u8, source)
 		__field(u8, flags)
 	    ),
@@ -712,27 +712,20 @@ TRACE_EVENT(cxl_poison,
 		__entry->source = cxl_poison_record_source(record);
 		__entry->trace_type = trace_type;
 		__entry->flags = flags;
-		if (cxlr) {
-			__assign_str(region, dev_name(&cxlr->dev));
-			memcpy(__entry->uuid, &cxlr->params.uuid, 16);
-			__entry->hpa = cxl_trace_hpa(cxlr, cxlmd,
-						     __entry->dpa);
-		} else {
-			__assign_str(region, "");
-			memset(__entry->uuid, 0, 16);
-			__entry->hpa = ULLONG_MAX;
-		}
+		__assign_str(region, to_region_name(cxlmd, cxl_poison_record_dpa(record)));
+		store_region_info(cxlmd, __entry->dpa, __entry->uuid,
+				  __entry->hpa);
 	    ),
 
-	TP_printk("memdev=%s host=%s serial=%lld trace_type=%s region=%s "  \
-		"region_uuid=%pU hpa=0x%llx dpa=0x%llx dpa_length=0x%x "    \
+	TP_printk("memdev=%s host=%s serial=%lld trace_type=%s region=%s"  \
+		"region_uuid=%pUb hpa=0x%llx dpa=0x%llx dpa_length=0x%x "    \
 		"source=%s flags=%s overflow_time=%llu",
 		__get_str(memdev),
 		__get_str(host),
 		__entry->serial,
 		show_poison_trace_type(__entry->trace_type),
 		__get_str(region),
-		__entry->uuid,
+		&__entry->uuid,
 		__entry->hpa,
 		__entry->dpa,
 		__entry->dpa_length,

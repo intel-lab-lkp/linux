@@ -1299,8 +1299,7 @@ int cxl_set_timestamp(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_set_timestamp, CXL);
 
-int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
-		       struct cxl_region *cxlr)
+int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len)
 {
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 	struct cxl_mbox_poison_out *po;
@@ -1332,7 +1331,7 @@ int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 			break;
 
 		for (int i = 0; i < le16_to_cpu(po->count); i++)
-			trace_cxl_poison(cxlmd, cxlr, &po->record[i],
+			trace_cxl_poison(cxlmd, &po->record[i],
 					 po->flags, po->overflow_ts,
 					 CXL_POISON_TRACE_LIST);
 
