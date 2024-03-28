@@ -2,6 +2,7 @@
 TARGETS += alsa
 TARGETS += amd-pstate
 TARGETS += arm64
+TARGETS += block_seek_hole
 TARGETS += bpf
 TARGETS += breakpoints
 TARGETS += cachestat
