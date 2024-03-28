@@ -3,7 +3,7 @@ PY3 = $(shell which python3 2>/dev/null)
 
 ifneq ($(PY3),)
 
-TEST_PROGS := test.py
+TEST_PROGS := test.py dm_zero.sh
 
 include ../lib.mk
 
