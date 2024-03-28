@@ -1040,6 +1040,7 @@ int btrfs_reset_sb_log_zones(struct block_device *bdev, int mirror)
 u64 btrfs_find_allocatable_zones(struct btrfs_device *device, u64 hole_start,
 				 u64 hole_end, u64 num_bytes)
 {
+	struct btrfs_fs_info *fs_info = device->fs_info;
 	struct btrfs_zoned_device_info *zinfo = device->zone_info;
 	const u8 shift = zinfo->zone_size_shift;
 	u64 nzones = num_bytes >> shift;
@@ -1050,6 +1051,11 @@ u64 btrfs_find_allocatable_zones(struct btrfs_device *device, u64 hole_start,
 
 	ASSERT(IS_ALIGNED(hole_start, zinfo->zone_size));
 	ASSERT(IS_ALIGNED(num_bytes, zinfo->zone_size));
+
+	if (!test_bit(BTRFS_FS_CLEANER_RUNNING, &fs_info->flags) &&
+	    btrfs_zoned_should_reclaim(fs_info)) {
+		wake_up_process(fs_info->cleaner_kthread);
+	}
 
 	while (pos < hole_end) {
 		begin = pos >> shift;
