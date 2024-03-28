@@ -17,6 +17,10 @@ struct icc_provider *icc_clk_register(struct device *dev,
 				      unsigned int first_id,
 				      unsigned int num_clocks,
 				      const struct icc_clk_data *data);
+struct icc_provider *devm_icc_clk_register(struct device *dev,
+					   unsigned int first_id,
+					   unsigned int num_clocks,
+					   const struct icc_clk_data *data);
 void icc_clk_unregister(struct icc_provider *provider);
 
 #endif

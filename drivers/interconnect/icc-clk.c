@@ -148,6 +148,35 @@ err:
 }
 EXPORT_SYMBOL_GPL(icc_clk_register);
 
+static void devm_icc_release(struct device *dev, void *res)
+{
+	icc_clk_unregister(res);
+}
+
+struct icc_provider *devm_icc_clk_register(struct device *dev,
+				      unsigned int first_id,
+				      unsigned int num_clocks,
+				      const struct icc_clk_data *data)
+{
+	struct icc_provider *prov, **provp;
+
+	provp = devres_alloc(devm_icc_release, sizeof(*provp), GFP_KERNEL);
+	if (!provp)
+		return ERR_PTR(-ENOMEM);
+
+	prov = icc_clk_register(dev, first_id, num_clocks, data);
+
+	if (!IS_ERR(prov)) {
+		*provp = prov;
+		devres_add(dev, provp);
+	} else {
+		devres_free(provp);
+	}
+
+	return prov;
+}
+EXPORT_SYMBOL_GPL(devm_icc_clk_register);
+
 /**
  * icc_clk_unregister() - unregister a previously registered clk interconnect provider
  * @provider: provider returned by icc_clk_register()
