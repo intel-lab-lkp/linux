@@ -67,7 +67,7 @@ static bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local)
 	return ieee80211_num_chanctx(local) < ieee80211_max_num_channels(local);
 }
 
-static struct ieee80211_chanctx *
+struct ieee80211_chanctx *
 ieee80211_link_get_chanctx(struct ieee80211_link_data *link)
 {
 	struct ieee80211_local *local __maybe_unused = link->sdata->local;

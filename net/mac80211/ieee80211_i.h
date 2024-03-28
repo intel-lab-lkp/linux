@@ -2577,6 +2577,8 @@ void ieee80211_link_copy_chanctx_to_vlans(struct ieee80211_link_data *link,
 					  bool clear);
 int ieee80211_chanctx_refcount(struct ieee80211_local *local,
 			       struct ieee80211_chanctx *ctx);
+struct ieee80211_chanctx *
+ieee80211_link_get_chanctx(struct ieee80211_link_data *link);
 
 void ieee80211_recalc_smps_chanctx(struct ieee80211_local *local,
 				   struct ieee80211_chanctx *chanctx);
