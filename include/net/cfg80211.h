@@ -5031,6 +5031,32 @@ struct ieee80211_iface_limit {
 };
 
 /**
+ * struct ieee80211_iface_per_hw - hardware specific interface combination
+ *
+ * Drivers registering multiple radios under a single wiphy can advertise
+ * radio specific interface combinations through this structure. Please note
+ * that to maintain the compatibility with the user space which is not aware
+ * of this extension of per-hardware interface combination signaling,
+ * the driver should still advertise it's interface combination (mostly
+ * common minimum capability) using the existing interface combination signaling
+ * method.
+ *
+ * @limits: limits for the given interface type
+ * @num_different_channels: number of different channels which can be active
+ *	concurrently in this hardware
+ * @max_interfaces: maximum number of total interfaces allowed in this group
+ * @n_limits: number of limitations
+ * @hw_chans_idx: index of hardware specific channel list as per wiphy @hw_chans
+ */
+struct ieee80211_iface_per_hw {
+	const struct ieee80211_iface_limit *limits;
+	u32 num_different_channels;
+	u16 max_interfaces;
+	u8 n_limits;
+	u8 hw_chans_idx;
+};
+
+/**
  * struct ieee80211_iface_combination - possible interface combination
  *
  * With this structure the driver can describe which interface
@@ -5086,6 +5112,62 @@ struct ieee80211_iface_limit {
  *		.n_limits = ARRAY_SIZE(limits3),
  *		.max_interfaces = 4,
  *		.num_different_channels = 2,
+ *	};
+ *
+ *
+ * 4. Hardware specific interface combination with driver supporting two
+ *    physical HW, first underlying HW supporting 2 GHz band and the other
+ *    supporting 5 GHz band.
+ *
+ *    Allow #STA <= 1, #AP <= 1, channels = 1, total 2 in 2 GHz radio and
+ *
+ *    Allow #STA <= 1, #AP <= 2, channels = 1, total 3 in 5 GHz radio
+ *
+ *    Drivers advertising per-hardware interface combination should also
+ *    advertise a sub-set of capabilities using existing interface mainly for
+ *    maintaining compatibility with the user space which is not aware of the
+ *    new per-hardware advertisement.
+ *
+ *    Sub-set interface combination advertised in the existing infrastructure:
+ *    Allow #STA <= 1, #AP <= 1, channels = 1, total 2
+ *
+ *    .. code-block:: c
+ *
+ *	struct ieee80211_iface_limit limits_overall[] = {
+ *		{ .max = 1, .types = BIT(NL80211_IFTYPE_STATION), },
+ *		{ .max = 1, .types = BIT(NL80211_IFTYPE_AP), },
+ *	};
+ *	struct ieee80211_iface_limit limits_2ghz[] = {
+ *		{ .max = 1, .types = BIT(NL80211_IFTYPE_STATION), },
+ *		{ .max = 1, .types = BIT(NL80211_IFTYPE_AP), },
+ *	};
+ *	struct ieee80211_iface_limit limits_5ghz[] = {
+ *		{ .max = 1, .types = BIT(NL80211_IFTYPE_STATION), },
+ *		{ .max = 2, .types = BIT(NL80211_IFTYPE_AP), },
+ *	};
+ *	struct ieee80211_iface_per_hw hw_combinations[] = {
+ *		{
+ *			.hw_chans_idx = 0,
+ *			.limits = limits_2ghz,
+ *			.num_different_channels = 1,
+ *			.max_interfaces = 2,
+ *			.n_limits = ARRAY_SIZE(limits_2ghz),
+ *		 },
+ *		{
+ *			.hw_chans_idx = 1,
+ *			.limits = limits_5ghz,
+ *			.num_different_channels = 1,
+ *			.max_interfaces = 3,
+ *			.n_limits = ARRAY_SIZE(limits_5ghz),
+ *		 },
+ *	};
+ *	struct ieee80211_iface_combination combination4 = {
+ *		.limits = limits_overall,
+ *		.n_limits = ARRAY_SIZE(limits_overall),
+ *		.max_interfaces = 2,
+ *		.num_different_channels = 1,
+ *		.iface_hw_list = hw_combinations,
+ *		.n_hw_list = ARRAY_SIZE(hw_combinations),
  *	};
  *
  */
@@ -5145,6 +5227,20 @@ struct ieee80211_iface_combination {
 	 *   combination must be greater or equal to this value.
 	 */
 	u32 beacon_int_min_gcd;
+
+	/**
+	 * @iface_hw_list:
+	 * This wiphy has multiple underlying radios, describe interface
+	 * combination for each of them, valid only when the driver advertises
+	 * multi-radio presence in wiphy @hw_chans.
+	 */
+	const struct ieee80211_iface_per_hw *iface_hw_list;
+
+	/**
+	 * @n_hw_list:
+	 * number of hardware in @iface_hw_List
+	 */
+	u32 n_hw_list;
 };
 
 struct ieee80211_txrx_stypes {

@@ -1083,6 +1083,46 @@ static int ieee80211_init_cipher_suites(struct ieee80211_local *local)
 	return 0;
 }
 
+static int
+ieee80211_check_per_hw_iface_comb(struct ieee80211_local *local,
+				  const struct ieee80211_iface_combination *c)
+{
+	int hw_idx, lmt_idx;
+	u32 hw_idx_bm = 0;
+
+	if (!local->hw.wiphy->num_hw)
+		return -EINVAL;
+
+	if (local->emulate_chanctx)
+		return -EINVAL;
+
+	for (hw_idx = 0; hw_idx < c->n_hw_list; hw_idx++) {
+		const struct ieee80211_iface_per_hw *hl;
+
+		hl = &c->iface_hw_list[hw_idx];
+
+		if (hl->hw_chans_idx >= local->hw.wiphy->num_hw)
+			return -EINVAL;
+
+		/* mac80211 doesn't support more than one IBSS interface right now */
+		for (lmt_idx = 0; lmt_idx < hl->n_limits; lmt_idx++) {
+			const struct ieee80211_iface_limit *limits;
+
+			limits = &hl->limits[lmt_idx];
+			if ((limits->types & BIT(NL80211_IFTYPE_ADHOC)) &&
+			    limits->max > 1)
+				return -EINVAL;
+		}
+
+		if (hw_idx_bm & BIT(hw_idx))
+			return -EINVAL;
+
+		hw_idx_bm |= BIT(hw_idx);
+	}
+
+	return 0;
+}
+
 int ieee80211_register_hw(struct ieee80211_hw *hw)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
@@ -1323,6 +1363,12 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			if ((c->limits[j].types & BIT(NL80211_IFTYPE_ADHOC)) &&
 			    c->limits[j].max > 1)
 				return -EINVAL;
+
+		if (!c->n_hw_list)
+			continue;
+
+		if (ieee80211_check_per_hw_iface_comb(local, c))
+			return -EINVAL;
 	}
 
 	local->int_scan_req = kzalloc(sizeof(*local->int_scan_req) +

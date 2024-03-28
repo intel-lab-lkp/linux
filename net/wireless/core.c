@@ -600,6 +600,34 @@ use_default_name:
 }
 EXPORT_SYMBOL(wiphy_new_nm);
 
+/**
+ * cfg80211_hw_chans_includes_dfs - check if per-hardware channel includes DFS
+ * @chans: hardware channel list
+ *
+ * Check if the given per-hardware list include channels in DFS range.
+ * Please note the channel is checked against the entire range of DFS
+ * freq in 5 GHz irrespective of regulatory configurations.
+ *
+ * This helper helps for the sanity checks on the channel advertisement from
+ * driver during the hw registration.
+ */
+static bool
+cfg80211_hw_chans_includes_dfs(const struct ieee80211_chans_per_hw *chans)
+{
+	int i;
+
+	for (i = 0; i < chans->n_chans; i++) {
+		if (chans->chans[i].band == NL80211_BAND_5GHZ &&
+		    ((chans->chans[i].center_freq >= 5250 &&
+		     chans->chans[i].center_freq <= 5340) ||
+		    (chans->chans[i].center_freq >= 5480 &&
+		     chans->chans[i].center_freq <= 5720)))
+			return true;
+	}
+
+	return false;
+}
+
 static int
 wiphy_verify_comb_limit(struct wiphy *wiphy,
 			const struct ieee80211_iface_limit *limits,
@@ -659,6 +687,63 @@ wiphy_verify_comb_limit(struct wiphy *wiphy,
 	return 0;
 }
 
+static int
+wiphy_verify_comb_per_hw(struct wiphy *wiphy,
+			 const struct ieee80211_iface_combination *comb)
+{
+	int i;
+	u32 hw_idx_bitmap = 0;
+	int ret;
+
+	for (i = 0; i < comb->n_hw_list; i++) {
+		const struct ieee80211_iface_per_hw *hl;
+		const struct ieee80211_chans_per_hw *chans;
+		u32 iface_cnt = 0;
+		u16 all_iftypes = 0;
+
+		hl = &comb->iface_hw_list[i];
+
+		if (hl->hw_chans_idx >= wiphy->num_hw)
+			return -EINVAL;
+
+		if (hw_idx_bitmap & BIT(hl->hw_chans_idx))
+			return -EINVAL;
+
+		hw_idx_bitmap |= BIT(hl->hw_chans_idx);
+		chans = wiphy->hw_chans[hl->hw_chans_idx];
+
+		if (WARN_ON(hl->max_interfaces < 2 &&
+			    (!comb->radar_detect_widths ||
+			     !(cfg80211_hw_chans_includes_dfs(chans)))))
+			return -EINVAL;
+
+		if (WARN_ON(!hl->num_different_channels))
+			return -EINVAL;
+
+		if (WARN_ON(comb->radar_detect_widths &&
+			    cfg80211_hw_chans_includes_dfs(chans) &&
+			    hl->num_different_channels > 1))
+			return -EINVAL;
+
+		if (WARN_ON(!hl->n_limits))
+			return -EINVAL;
+
+		ret = wiphy_verify_comb_limit(wiphy, hl->limits, hl->n_limits,
+					      comb->beacon_int_min_gcd,
+					      &iface_cnt, &all_iftypes);
+		if (ret)
+			return ret;
+
+		if (WARN_ON(all_iftypes & BIT(NL80211_IFTYPE_WDS)))
+			return -EINVAL;
+
+		if (WARN_ON(iface_cnt < comb->max_interfaces))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int wiphy_verify_combinations(struct wiphy *wiphy)
 {
 	const struct ieee80211_iface_combination *c;
@@ -700,6 +785,13 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 
 		/* You can't even choose that many! */
 		if (WARN_ON(cnt < c->max_interfaces))
+			return -EINVAL;
+
+		/* Do similar validations on the freq range specific interface
+		 * combinations when advertised.
+		 */
+		if (WARN_ON(c->n_hw_list &&
+			    wiphy_verify_comb_per_hw(wiphy, c)))
 			return -EINVAL;
 	}
 
