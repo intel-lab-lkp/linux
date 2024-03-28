@@ -10896,7 +10896,6 @@ static void ufshcd_check_header_layout(void)
 static struct scsi_driver ufs_dev_wlun_template = {
 	.gendrv = {
 		.name = "ufs_device_wlun",
-		.owner = THIS_MODULE,
 		.probe = ufshcd_wl_probe,
 		.remove = ufshcd_wl_remove,
 		.pm = &ufshcd_wl_pm_ops,
