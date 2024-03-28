@@ -3,6 +3,12 @@
 #ifndef __BUDGET_DVB__
 #define __BUDGET_DVB__
 
+#ifdef pr_fmt
+#undef pr_fmt
+#endif
+
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <media/dvb_frontend.h>
 #include <media/dvbdev.h>
 #include <media/demux.h>
@@ -23,8 +29,7 @@ extern int budget_debug;
 
 #define dprintk(level, fmt, arg...) do {				\
 	if (level & budget_debug)					\
-		printk(KERN_DEBUG KBUILD_MODNAME ": %s(): " fmt,	\
-		       __func__, ##arg);				\
+		pr_info("%s(): " fmt, __func__, ##arg);			\
 } while (0)
 
 #define TS_SIZE        188
