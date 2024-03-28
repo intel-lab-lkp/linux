@@ -387,11 +387,6 @@ static int rcu_preempt_read_exit(void)
 	return ret;
 }
 
-static void rcu_preempt_depth_set(int val)
-{
-	WRITE_ONCE(current->rcu_read_lock_nesting, val);
-}
-
 /*
  * Preemptible RCU implementation for rcu_read_lock().
  * Just increment ->rcu_read_lock_nesting, shared state will be updated
