@@ -2363,13 +2363,13 @@ int cfg80211_validate_beacon_int(struct cfg80211_registered_device *rdev,
 int cfg80211_iter_combinations(struct wiphy *wiphy,
 			       struct iface_combination_params *params,
 			       void (*iter)(const struct ieee80211_iface_combination *c,
-					    void *data),
+					    int hw_chan_idx, void *data),
 			       void *data)
 {
 	const struct ieee80211_regdomain *regdom;
 	enum nl80211_dfs_regions region = 0;
 	int i, j, iftype;
-	int num_interfaces = 0;
+	int num_interfaces = 0, hw_chan_idx = -1;
 	u32 used_iftypes = 0;
 	u32 beacon_int_gcd;
 	bool beacon_int_different;
@@ -2460,7 +2460,7 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		 * supported the requested numbers, so we're good.
 		 */
 
-		(*iter)(c, data);
+		(*iter)(c, hw_chan_idx, data);
  cont:
 		kfree(limits);
 	}
@@ -2471,7 +2471,7 @@ EXPORT_SYMBOL(cfg80211_iter_combinations);
 
 static void
 cfg80211_iter_sum_ifcombs(const struct ieee80211_iface_combination *c,
-			  void *data)
+			  int hw_chan_idx, void *data)
 {
 	int *num = data;
 	(*num)++;

@@ -4014,7 +4014,7 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 
 static void
 ieee80211_iter_max_chans(const struct ieee80211_iface_combination *c,
-			 void *data)
+			 int hw_chan_idx, void *data)
 {
 	u32 *max_num_different_channels = data;
 

@@ -9233,7 +9233,7 @@ int cfg80211_check_combinations(struct wiphy *wiphy,
 int cfg80211_iter_combinations(struct wiphy *wiphy,
 			       struct iface_combination_params *params,
 			       void (*iter)(const struct ieee80211_iface_combination *c,
-					    void *data),
+					    int hw_chan_idx, void *data),
 			       void *data);
 
 /*
