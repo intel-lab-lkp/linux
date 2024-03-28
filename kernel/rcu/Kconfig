@@ -349,4 +349,12 @@ config RCU_DOUBLE_CHECK_CB_TIME
 	  Say Y here if you need tighter callback-limit enforcement.
 	  Say N here if you are unsure.
 
+config HAVE_PCPU_RCU_PREEMPT_COUNT
+	bool
+
+config PCPU_RCU_PREEMPT_COUNT
+	def_bool y
+	depends on PREEMPT_RCU && HAVE_PCPU_RCU_PREEMPT_COUNT
+	depends on !PROVE_LOCKING && !RCU_STRICT_GRACE_PERIOD
+
 endmenu # "RCU Subsystem"

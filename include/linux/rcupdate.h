@@ -70,6 +70,8 @@ static inline bool same_state_synchronize_rcu(unsigned long oldstate1, unsigned 
 
 void rcu_read_unlock_special(void);
 
+#ifndef CONFIG_PCPU_RCU_PREEMPT_COUNT
+
 void __rcu_read_lock(void);
 void __rcu_read_unlock(void);
 
@@ -81,6 +83,37 @@ void __rcu_read_unlock(void);
  */
 #define rcu_preempt_depth() READ_ONCE(current->rcu_read_lock_nesting)
 #define rcu_preempt_depth_set(val) WRITE_ONCE(current->rcu_read_lock_nesting, (val))
+#define pcpu_rcu_preempt_special_set() do { } while (0)
+#define pcpu_rcu_preempt_special_clear() do { } while (0)
+
+#else /* #ifndef CONFIG_PCPU_RCU_PREEMPT_COUNT */
+
+#include <asm/rcu_preempt.h>
+
+static __always_inline void __rcu_read_lock(void)
+{
+	pcpu_rcu_preempt_count_add(1);
+	barrier();
+}
+
+static __always_inline void __rcu_read_unlock(void)
+{
+	barrier();
+	if (unlikely(pcpu_rcu_preempt_count_dec_and_test()))
+		pcpu_rcu_read_unlock_special();
+}
+
+static inline int rcu_preempt_depth(void)
+{
+	return pcpu_rcu_preempt_count();
+}
+
+static inline void rcu_preempt_depth_set(int val)
+{
+	pcpu_rcu_preempt_count_set(val);
+}
+
+#endif /* #else #ifndef CONFIG_PCPU_RCU_PREEMPT_COUNT */
 
 #else /* #ifdef CONFIG_PREEMPT_RCU */
 
