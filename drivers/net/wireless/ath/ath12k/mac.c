@@ -7781,9 +7781,125 @@ static bool ath12k_mac_is_iface_mode_enable(struct ath12k_hw *ah,
 	return is_enable;
 }
 
+static
+struct ieee80211_chans_per_hw *ath12k_setup_per_hw_chan(struct ath12k *ar)
+{
+	struct ieee80211_chans_per_hw *chans;
+	struct ieee80211_supported_band *band;
+
+	if (ar->pdev->cap.supported_bands & WMI_HOST_WLAN_2G_CAP)
+		band = &ar->mac.sbands[NL80211_BAND_2GHZ];
+	else if (ar->pdev->cap.supported_bands & WMI_HOST_WLAN_5G_CAP &&
+		 !ar->supports_6ghz)
+		band = &ar->mac.sbands[NL80211_BAND_5GHZ];
+	else if (ar->pdev->cap.supported_bands & WMI_HOST_WLAN_5G_CAP &&
+		 ar->supports_6ghz)
+		band = &ar->mac.sbands[NL80211_BAND_6GHZ];
+
+	chans = kzalloc(struct_size(chans, chans, band->n_channels),
+			GFP_KERNEL);
+	if (!chans)
+		return NULL;
+
+	memcpy(chans->chans, band->channels,
+	       sizeof(*band->channels) * band->n_channels);
+	chans->n_chans = band->n_channels;
+
+	return chans;
+}
+
+static void ath12k_mac_cleanup_hw_channels(struct ath12k_hw *ah)
+{
+	struct wiphy *wiphy = ah->hw->wiphy;
+	int i;
+
+	for (i = 0; i < ah->num_radio; i++)
+		kfree(wiphy->hw_chans[i]);
+
+	kfree(wiphy->hw_chans);
+}
+
+static int
+ath12k_mac_setup_hw_channels(struct ath12k_hw *ah)
+{
+	struct wiphy *wiphy = ah->hw->wiphy;
+	int i, ret;
+
+	wiphy->hw_chans = kcalloc(ah->num_radio, sizeof(*wiphy->hw_chans),
+				  GFP_KERNEL);
+	if (!wiphy->hw_chans)
+		return -ENOMEM;
+
+	for (i = 0; i < ah->num_radio; i++) {
+		wiphy->hw_chans[i] = ath12k_setup_per_hw_chan(&ah->radio[i]);
+		if (!wiphy->hw_chans[i]) {
+			ret = -ENOMEM;
+			goto cleanup_hw_chan;
+		}
+	}
+
+	wiphy->num_hw = ah->num_radio;
+
+	return 0;
+
+cleanup_hw_chan:
+	for (i = i - 1; i >= 0; i--)
+		kfree(wiphy->hw_chans[i]);
+
+	kfree(wiphy->hw_chans);
+
+	return ret;
+}
+
+static void
+ath12k_mac_cleanup_per_hw_iface_comb(struct ath12k_hw *ah)
+{
+	struct wiphy *wiphy = ah->hw->wiphy;
+
+	ath12k_mac_cleanup_hw_channels(ah);
+
+	kfree(wiphy->iface_combinations[0].iface_hw_list);
+}
+
+static int
+ath12k_mac_setup_per_hw_iface_comb(struct ath12k_hw *ah,
+				   struct ieee80211_iface_combination *comb)
+{
+	struct ieee80211_iface_per_hw *iface_hw;
+	struct ieee80211_hw *hw = ah->hw;
+	int i, ret;
+
+	ret = ath12k_mac_setup_hw_channels(ah);
+	if (ret)
+		return ret;
+
+	iface_hw  = kcalloc(ah->num_radio, sizeof(*iface_hw), GFP_KERNEL);
+	if (!iface_hw) {
+		ath12k_mac_cleanup_hw_channels(ah);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < ah->num_radio; i++) {
+		iface_hw[i].hw_chans_idx = i;
+		iface_hw[i].num_different_channels =
+					comb->num_different_channels;
+		iface_hw[i].max_interfaces = comb->max_interfaces;
+		iface_hw[i].limits = comb->limits;
+		iface_hw[i].n_limits = comb->n_limits;
+	}
+
+	comb->iface_hw_list = iface_hw;
+	comb->n_hw_list = hw->wiphy->num_hw;
+
+	return 0;
+}
+
 static void ath12k_mac_cleanup_iface_combinations(struct ath12k_hw *ah)
 {
 	struct wiphy *wiphy = ah->hw->wiphy;
+
+	if (ah->num_radio > 1)
+		ath12k_mac_cleanup_per_hw_iface_comb(ah);
 
 	kfree(wiphy->iface_combinations[0].limits);
 	kfree(wiphy->iface_combinations);
@@ -7794,7 +7910,7 @@ static int ath12k_mac_setup_iface_combinations(struct ath12k_hw *ah)
 	struct wiphy *wiphy = ah->hw->wiphy;
 	struct ieee80211_iface_combination *combinations;
 	struct ieee80211_iface_limit *limits;
-	int n_limits, max_interfaces;
+	int n_limits, max_interfaces, ret;
 	bool ap, mesh, p2p;
 
 	ap = ath12k_mac_is_iface_mode_enable(ah, NL80211_IFTYPE_AP);
@@ -7856,6 +7972,16 @@ static int ath12k_mac_setup_iface_combinations(struct ath12k_hw *ah)
 						BIT(NL80211_CHAN_WIDTH_20) |
 						BIT(NL80211_CHAN_WIDTH_40) |
 						BIT(NL80211_CHAN_WIDTH_80);
+
+	if (ah->num_radio > 1) {
+		ret = ath12k_mac_setup_per_hw_iface_comb(ah, combinations);
+		if (ret) {
+			kfree(limits);
+			kfree(combinations);
+
+			return ret;
+		}
+	}
 
 	wiphy->iface_combinations = combinations;
 	wiphy->n_iface_combinations = 1;
