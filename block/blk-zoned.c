@@ -39,7 +39,8 @@ static const char *const zone_cond_name[] = {
 /*
  * Per-zone write plug.
  * @node: hlist_node structure for managing the plug using a hash table.
- * @link: To list the plug in the zone write plug error list of the disk.
+ * @link: To list the plug in the zone write plug free list or error list of
+ *        the disk.
  * @ref: Zone write plug reference counter. A zone write plug reference is
  *       always at least 1 when the plug is hashed in the disk plug hash table.
  *       The reference is incremented whenever a new BIO needing plugging is
@@ -57,6 +58,7 @@ static const char *const zone_cond_name[] = {
  * @bio_list: The list of BIOs that are currently plugged.
  * @bio_work: Work struct to handle issuing of plugged BIOs
  * @rcu_head: RCU head to free zone write plugs with an RCU grace period.
+ * @disk: The gendisk the plug belongs to.
  */
 struct blk_zone_wplug {
 	struct hlist_node	node;
@@ -69,6 +71,7 @@ struct blk_zone_wplug {
 	struct bio_list		bio_list;
 	struct work_struct	bio_work;
 	struct rcu_head		rcu_head;
+	struct gendisk		*disk;
 };
 
 /*
@@ -85,10 +88,14 @@ struct blk_zone_wplug {
  *    to prevent new references to the zone write plug to be taken for
  *    newly incoming BIOs. A zone write plug flagged with this flag will be
  *    freed once all remaining references from BIOs or functions are dropped.
+ *  - BLK_ZONE_WPLUG_NEEDS_FREE: Indicates that the zone write plug was
+ *    dynamically allocated and needs to be freed instead of returned to the
+ *    free list of zone write plugs of the disk.
  */
 #define BLK_ZONE_WPLUG_PLUGGED		(1U << 0)
 #define BLK_ZONE_WPLUG_ERROR		(1U << 1)
 #define BLK_ZONE_WPLUG_UNHASHED		(1U << 2)
+#define BLK_ZONE_WPLUG_NEEDS_FREE	(1U << 3)
 
 #define BLK_ZONE_WPLUG_BUSY	(BLK_ZONE_WPLUG_PLUGGED | BLK_ZONE_WPLUG_ERROR)
 
@@ -519,21 +526,49 @@ static void disk_init_zone_wplug(struct gendisk *disk,
 	zwplug->wp_offset = sector & (disk->queue->limits.chunk_sectors - 1);
 	bio_list_init(&zwplug->bio_list);
 	INIT_WORK(&zwplug->bio_work, blk_zone_wplug_bio_work);
+	zwplug->disk = disk;
 }
 
 static struct blk_zone_wplug *disk_alloc_zone_wplug(struct gendisk *disk,
 						sector_t sector, gfp_t gfp_mask)
 {
-	struct blk_zone_wplug *zwplug;
+	struct blk_zone_wplug *zwplug = NULL;
+	unsigned int zwp_flags = 0;
+	unsigned long flags;
 
-	/* Allocate a new zone write plug. */
-	zwplug = kmalloc(sizeof(struct blk_zone_wplug), gfp_mask);
-	if (!zwplug)
-		return NULL;
+	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
+	zwplug = list_first_entry_or_null(&disk->zone_wplugs_free_list,
+					  struct blk_zone_wplug, link);
+	if (zwplug)
+		list_del_init(&zwplug->link);
+	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 
-	disk_init_zone_wplug(disk, zwplug, 0, sector);
+	if (!zwplug) {
+		/* Allocate a new zone write plug. */
+		zwplug = kmalloc(sizeof(struct blk_zone_wplug), gfp_mask);
+		if (!zwplug)
+			return NULL;
+		zwp_flags = BLK_ZONE_WPLUG_NEEDS_FREE;
+	}
+
+	disk_init_zone_wplug(disk, zwplug, zwp_flags, sector);
 
 	return zwplug;
+}
+
+static void disk_free_zone_wplug(struct blk_zone_wplug *zwplug)
+{
+	struct gendisk *disk = zwplug->disk;
+	unsigned long flags;
+
+	if (zwplug->flags & BLK_ZONE_WPLUG_NEEDS_FREE) {
+		kfree(zwplug);
+		return;
+	}
+
+	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
+	list_add_tail(&zwplug->link, &disk->zone_wplugs_free_list);
+	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 }
 
 static bool disk_insert_zone_wplug(struct gendisk *disk,
@@ -630,17 +665,23 @@ static struct blk_zone_wplug *disk_get_zone_wplug(struct gendisk *disk,
 	return zwplug;
 }
 
+static void disk_free_zone_wplug_rcu(struct rcu_head *rcu_head)
+{
+	struct blk_zone_wplug *zwplug =
+		container_of(rcu_head, struct blk_zone_wplug, rcu_head);
+
+	disk_free_zone_wplug(zwplug);
+}
+
 static inline void disk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 {
 	if (atomic_dec_and_test(&zwplug->ref)) {
 		WARN_ON_ONCE(!bio_list_empty(&zwplug->bio_list));
 		WARN_ON_ONCE(!list_empty(&zwplug->link));
 
-		kfree_rcu(zwplug, rcu_head);
+		call_rcu(&zwplug->rcu_head, disk_free_zone_wplug_rcu);
 	}
 }
-
-static void blk_zone_wplug_bio_work(struct work_struct *work);
 
 /*
  * Get a reference on the write plug for the zone containing @sector.
@@ -684,7 +725,7 @@ again:
 	 */
 	if (!disk_insert_zone_wplug(disk, zwplug)) {
 		spin_unlock_irqrestore(&zwplug->lock, *flags);
-		kfree(zwplug);
+		disk_free_zone_wplug(zwplug);
 		goto again;
 	}
 
@@ -1401,6 +1442,30 @@ static inline unsigned int disk_zone_wplugs_hash_size(struct gendisk *disk)
 	return 1U << disk->zone_wplugs_hash_bits;
 }
 
+static int disk_alloc_zone_wplugs(struct gendisk *disk,
+				  unsigned int max_nr_zwplugs)
+{
+	struct blk_zone_wplug *zwplug;
+	unsigned int i;
+
+	if (!disk->zone_wplugs_hash)
+		return 0;
+
+	/* Pre-allocate zone write plugs */
+	for (i = 0; i < max_nr_zwplugs; i++) {
+		zwplug = kmalloc(sizeof(struct blk_zone_wplug), GFP_KERNEL);
+		if (!zwplug)
+			return -ENOMEM;
+		disk_init_zone_wplug(disk, zwplug, 0, 0);
+
+		list_add_tail(&zwplug->link, &disk->zone_wplugs_free_list);
+	}
+
+	disk->zone_wplugs_max_nr += max_nr_zwplugs;
+
+	return 0;
+}
+
 static void disk_free_zone_wplugs(struct gendisk *disk)
 {
 	struct blk_zone_wplug *zwplug;
@@ -1422,11 +1487,22 @@ static void disk_free_zone_wplugs(struct gendisk *disk)
 
 	/* Wait for the zone write plugs to be RCU-freed. */
 	rcu_barrier();
+
+	while (!list_empty(&disk->zone_wplugs_free_list)) {
+		zwplug = list_first_entry(&disk->zone_wplugs_free_list,
+					  struct blk_zone_wplug, link);
+		list_del_init(&zwplug->link);
+
+		kfree(zwplug);
+	}
+
+	disk->zone_wplugs_max_nr = 0;
 }
 
 void disk_init_zone_resources(struct gendisk *disk)
 {
 	spin_lock_init(&disk->zone_wplugs_lock);
+	INIT_LIST_HEAD(&disk->zone_wplugs_free_list);
 	INIT_LIST_HEAD(&disk->zone_wplugs_err_list);
 	INIT_WORK(&disk->zone_wplugs_work, disk_zone_wplugs_work);
 }
@@ -1444,6 +1520,7 @@ static int disk_alloc_zone_resources(struct gendisk *disk,
 				     unsigned int max_nr_zwplugs)
 {
 	unsigned int i;
+	int ret;
 
 	disk->zone_wplugs_hash_bits =
 		min(ilog2(max_nr_zwplugs) + 1, BLK_ZONE_MAX_WPLUG_HASH_BITS);
@@ -1456,6 +1533,15 @@ static int disk_alloc_zone_resources(struct gendisk *disk,
 
 	for (i = 0; i < disk_zone_wplugs_hash_size(disk); i++)
 		INIT_HLIST_HEAD(&disk->zone_wplugs_hash[i]);
+
+	ret = disk_alloc_zone_wplugs(disk, max_nr_zwplugs);
+	if (ret) {
+		disk_free_zone_wplugs(disk);
+		kfree(disk->zone_wplugs_hash);
+		disk->zone_wplugs_hash = NULL;
+		disk->zone_wplugs_hash_bits = 0;
+		return ret;
+	}
 
 	return 0;
 }
@@ -1484,6 +1570,7 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 {
 	struct queue_limits *lim = &disk->queue->limits;
 	unsigned int max_nr_zwplugs;
+	int ret;
 
 	/*
 	 * If the device has no limit on the maximum number of open and active
@@ -1495,8 +1582,19 @@ static int disk_revalidate_zone_resources(struct gendisk *disk,
 		max_nr_zwplugs =
 			min(BLK_ZONE_DEFAULT_MAX_NR_WPLUGS, nr_zones);
 
-	if (!disk->zone_wplugs_hash)
-		return disk_alloc_zone_resources(disk, max_nr_zwplugs);
+	if (!disk->zone_wplugs_hash) {
+		ret = disk_alloc_zone_resources(disk, max_nr_zwplugs);
+		if (ret)
+			return ret;
+	}
+
+	/* Grow the free list of zone write plugs if needed. */
+	if (disk->zone_wplugs_max_nr < max_nr_zwplugs) {
+		ret = disk_alloc_zone_wplugs(disk,
+				max_nr_zwplugs - disk->zone_wplugs_max_nr);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }

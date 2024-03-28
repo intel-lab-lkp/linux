@@ -194,9 +194,11 @@ struct gendisk {
 	unsigned int		zone_capacity;
 	unsigned long		*conv_zones_bitmap;
 	unsigned long		*seq_zones_wlock;
+	unsigned int		zone_wplugs_max_nr;
 	unsigned int            zone_wplugs_hash_bits;
 	spinlock_t              zone_wplugs_lock;
 	struct hlist_head       *zone_wplugs_hash;
+	struct list_head        zone_wplugs_free_list;
 	struct list_head        zone_wplugs_err_list;
 	struct work_struct	zone_wplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */
