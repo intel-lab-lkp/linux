@@ -12,6 +12,7 @@
 
 #include <dt-bindings/clock/qcom,ipq9574-gcc.h>
 #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
+#include <dt-bindings/interconnect/qcom,ipq9574.h>
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
@@ -4301,6 +4302,56 @@ static const struct qcom_reset_map gcc_ipq9574_resets[] = {
 	[GCC_WCSS_Q6_TBU_BCR] = { 0x12054, 0 },
 };
 
+#define IPQ_APPS_ID			9574	/* some unique value */
+
+enum {
+	ICC_ANOC_PCIE0,
+	ICC_SNOC_PCIE0,
+	ICC_ANOC_PCIE1,
+	ICC_SNOC_PCIE1,
+	ICC_ANOC_PCIE2,
+	ICC_SNOC_PCIE2,
+	ICC_ANOC_PCIE3,
+	ICC_SNOC_PCIE3,
+	ICC_SNOC_USB,
+	ICC_ANOC_USB_AXI,
+	ICC_NSSNOC_NSSCC,
+	ICC_NSSNOC_SNOC_0,
+	ICC_NSSNOC_SNOC_1,
+	ICC_NSSNOC_PCNOC_1,
+	ICC_NSSNOC_QOSGEN_REF,
+	ICC_NSSNOC_TIMEOUT_REF,
+	ICC_NSSNOC_XO_DCD,
+	ICC_NSSNOC_ATB,
+	ICC_MEM_NOC_NSSNOC,
+	ICC_NSSNOC_MEMNOC,
+	ICC_NSSNOC_MEM_NOC_1,
+};
+
+static struct clk_hw *icc_ipq9574_hws[] = {
+	[ICC_ANOC_PCIE0] = &gcc_anoc_pcie0_1lane_m_clk.clkr.hw,
+	[ICC_SNOC_PCIE0] = &gcc_anoc_pcie1_1lane_m_clk.clkr.hw,
+	[ICC_ANOC_PCIE1] = &gcc_anoc_pcie2_2lane_m_clk.clkr.hw,
+	[ICC_SNOC_PCIE1] = &gcc_anoc_pcie3_2lane_m_clk.clkr.hw,
+	[ICC_ANOC_PCIE2] = &gcc_snoc_pcie0_1lane_s_clk.clkr.hw,
+	[ICC_SNOC_PCIE2] = &gcc_snoc_pcie1_1lane_s_clk.clkr.hw,
+	[ICC_ANOC_PCIE3] = &gcc_snoc_pcie2_2lane_s_clk.clkr.hw,
+	[ICC_SNOC_PCIE3] = &gcc_snoc_pcie3_2lane_s_clk.clkr.hw,
+	[ICC_SNOC_USB] = &gcc_snoc_usb_clk.clkr.hw,
+	[ICC_ANOC_USB_AXI] = &gcc_anoc_usb_axi_clk.clkr.hw,
+	[ICC_NSSNOC_NSSCC] = &gcc_nssnoc_nsscc_clk.clkr.hw,
+	[ICC_NSSNOC_SNOC_0] = &gcc_nssnoc_snoc_clk.clkr.hw,
+	[ICC_NSSNOC_SNOC_1] = &gcc_nssnoc_snoc_1_clk.clkr.hw,
+	[ICC_NSSNOC_PCNOC_1] = &gcc_nssnoc_pcnoc_1_clk.clkr.hw,
+	[ICC_NSSNOC_QOSGEN_REF] = &gcc_nssnoc_qosgen_ref_clk.clkr.hw,
+	[ICC_NSSNOC_TIMEOUT_REF] = &gcc_nssnoc_timeout_ref_clk.clkr.hw,
+	[ICC_NSSNOC_XO_DCD] = &gcc_nssnoc_xo_dcd_clk.clkr.hw,
+	[ICC_NSSNOC_ATB] = &gcc_nssnoc_atb_clk.clkr.hw,
+	[ICC_MEM_NOC_NSSNOC] = &gcc_mem_noc_nssnoc_clk.clkr.hw,
+	[ICC_NSSNOC_MEMNOC] = &gcc_nssnoc_memnoc_clk.clkr.hw,
+	[ICC_NSSNOC_MEM_NOC_1] = &gcc_nssnoc_mem_noc_1_clk.clkr.hw,
+};
+
 static const struct of_device_id gcc_ipq9574_match_table[] = {
 	{ .compatible = "qcom,ipq9574-gcc" },
 	{ }
@@ -4323,6 +4374,9 @@ static const struct qcom_cc_desc gcc_ipq9574_desc = {
 	.num_resets = ARRAY_SIZE(gcc_ipq9574_resets),
 	.clk_hws = gcc_ipq9574_hws,
 	.num_clk_hws = ARRAY_SIZE(gcc_ipq9574_hws),
+	.icc_hws = icc_ipq9574_hws,
+	.num_icc_hws = ARRAY_SIZE(icc_ipq9574_hws),
+	.first_id = IPQ_APPS_ID,
 };
 
 static int gcc_ipq9574_probe(struct platform_device *pdev)
