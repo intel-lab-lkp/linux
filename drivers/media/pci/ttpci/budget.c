@@ -229,8 +229,7 @@ static int alps_bsrv2_tuner_set_params(struct dvb_frontend *fe)
 	return 0;
 }
 
-static struct ves1x93_config alps_bsrv2_config =
-{
+static struct ves1x93_config alps_bsrv2_config = {
 	.demod_address = 0x08,
 	.xin = 90100000UL,
 	.invert_pwm = 0,
@@ -678,8 +677,7 @@ static void frontend_init(struct budget *budget)
 					tt1600_stv090x_config.tuner_set_refclk	  = ctl->tuner_set_refclk;
 					tt1600_stv090x_config.tuner_get_status	  = ctl->tuner_get_status;
 
-					/*
-					 * call the init function once to initialize
+					/* call the init function once to initialize
 					 * tuner's clock output divider and demod's
 					 * master clock
 					 */
@@ -786,9 +784,8 @@ static int budget_attach(struct saa7146_dev *dev, struct saa7146_pci_extension_d
 	int err;
 
 	budget = kmalloc(sizeof(struct budget), GFP_KERNEL);
-	if (NULL == budget) {
+	if (NULL == budget)
 		return -ENOMEM;
-	}
 
 	dprintk(2, "dev:%p, info:%p, budget:%p\n", dev, info, budget);
 

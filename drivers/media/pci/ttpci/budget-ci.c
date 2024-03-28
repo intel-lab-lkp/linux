@@ -412,24 +412,20 @@ static int ciintf_poll_slot_status(struct dvb_ca_en50221 *ca, int slot, int open
 	flags = ttpci_budget_debiread(&budget_ci->budget, DEBICICTL, DEBIADDR_CICONTROL, 1, 1, 0);
 	if (flags & CICONTROL_CAMDETECT) {
 		// mark it as present if it wasn't before
-		if (budget_ci->slot_status & SLOTSTATUS_NONE) {
+		if (budget_ci->slot_status & SLOTSTATUS_NONE)
 			budget_ci->slot_status = SLOTSTATUS_PRESENT;
-		}
 
 		// during a RESET, we check if we can read from IO memory to see when CAM is ready
 		if (budget_ci->slot_status & SLOTSTATUS_RESET) {
-			if (ciintf_read_attribute_mem(ca, slot, 0) == 0x1d) {
+			if (ciintf_read_attribute_mem(ca, slot, 0) == 0x1d)
 				budget_ci->slot_status = SLOTSTATUS_READY;
-			}
 		}
-	} else {
+	} else
 		budget_ci->slot_status = SLOTSTATUS_NONE;
-	}
 
 	if (budget_ci->slot_status != SLOTSTATUS_NONE) {
-		if (budget_ci->slot_status & SLOTSTATUS_READY) {
+		if (budget_ci->slot_status & SLOTSTATUS_READY)
 			return DVB_CA_EN50221_POLL_CAM_PRESENT | DVB_CA_EN50221_POLL_CAM_READY;
-		}
 		return DVB_CA_EN50221_POLL_CAM_PRESENT;
 	}
 
@@ -494,11 +490,10 @@ static int ciintf_init(struct budget_ci *budget_ci)
 	// Setup CI slot IRQ
 	if (budget_ci->ci_irq) {
 		tasklet_setup(&budget_ci->ciintf_irq_tasklet, ciintf_interrupt);
-		if (budget_ci->slot_status != SLOTSTATUS_NONE) {
+		if (budget_ci->slot_status != SLOTSTATUS_NONE)
 			saa7146_setgpio(saa, 0, SAA7146_GPIO_IRQLO);
-		} else {
+		else
 			saa7146_setgpio(saa, 0, SAA7146_GPIO_IRQHI);
-		}
 		SAA7146_IER_ENABLE(saa, MASK_03);
 	}
 
