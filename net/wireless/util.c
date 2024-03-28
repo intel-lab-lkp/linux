@@ -2390,6 +2390,78 @@ cfg80211_validate_iface_limits(struct wiphy *wiphy,
 	return 0;
 }
 
+static const struct ieee80211_iface_per_hw *
+cfg80211_get_hw_iface_comb_by_idx(struct wiphy *wiphy,
+				  const struct ieee80211_iface_combination *c,
+				  int idx)
+{
+	int i;
+
+	for (i = 0; i < c->n_hw_list; i++)
+		if (c->iface_hw_list[i].hw_chans_idx == idx)
+			break;
+
+	if (i == c->n_hw_list)
+		return NULL;
+
+	return &c->iface_hw_list[i];
+}
+
+static int
+cfg80211_validate_iface_comb_per_hw_limits(struct wiphy *wiphy,
+					   struct iface_combination_params *params,
+					   const struct ieee80211_iface_combination *c,
+					   u16 *num_ifaces, u32 *all_iftypes)
+{
+	struct ieee80211_iface_limit *limits;
+	const struct iface_comb_per_hw_params *per_hw;
+	const struct ieee80211_iface_per_hw *per_hw_comb;
+	int i, ret = 0;
+
+	for (i = 0; i < params->n_per_hw; i++) {
+		per_hw = &params->per_hw[i];
+
+		per_hw_comb = cfg80211_get_hw_iface_comb_by_idx(wiphy, c, i);
+		if (!per_hw_comb) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (num_ifaces[i] > per_hw_comb->max_interfaces) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (per_hw->num_different_channels >
+		    per_hw_comb->num_different_channels) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		limits = kmemdup(per_hw_comb->limits,
+				 sizeof(limits[0]) * per_hw_comb->n_limits,
+				 GFP_KERNEL);
+		if (!limits) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		ret = cfg80211_validate_iface_limits(wiphy,
+						     per_hw->iftype_num,
+						     limits,
+						     per_hw_comb->n_limits,
+						     all_iftypes);
+
+		kfree(limits);
+
+		if (ret)
+			goto out;
+	}
+
+out:
+	return ret;
+}
+
 static int
 cfg80211_validate_iface_comb_limits(struct wiphy *wiphy,
 				    struct iface_combination_params *params,
@@ -2421,6 +2493,23 @@ cfg80211_validate_iface_comb_limits(struct wiphy *wiphy,
 	return ret;
 }
 
+bool cfg80211_per_hw_iface_comb_advertised(struct wiphy *wiphy)
+{
+	int i;
+
+	for (i = 0; i < wiphy->n_iface_combinations; i++)
+		if (wiphy->iface_combinations[i].n_hw_list)
+			return true;
+
+	return false;
+}
+EXPORT_SYMBOL(cfg80211_per_hw_iface_comb_advertised);
+
+static void cfg80211_put_iface_comb_iftypes(u16 *num_ifaces)
+{
+	kfree(num_ifaces);
+}
+
 static u16 cfg80211_get_iftype_info(struct wiphy *wiphy,
 				    const int iftype_num[NUM_NL80211_IFTYPES],
 				    u32 *used_iftypes)
@@ -2438,6 +2527,69 @@ static u16 cfg80211_get_iftype_info(struct wiphy *wiphy,
 	return num_interfaces;
 }
 
+static u16*
+cfg80211_get_iface_comb_iftypes(struct wiphy *wiphy,
+				struct iface_combination_params *params,
+				u32 *used_iftypes)
+{
+	const struct iface_comb_per_hw_params *per_hw;
+	u16 *num_ifaces;
+	int i;
+	u8 num_hw;
+
+	num_hw = params->n_per_hw ? params->n_per_hw : 1;
+
+	num_ifaces = kcalloc(num_hw, sizeof(*num_ifaces), GFP_KERNEL);
+	if (!num_ifaces)
+		return NULL;
+
+	if (!params->n_per_hw) {
+		num_ifaces[0] = cfg80211_get_iftype_info(wiphy,
+							 params->iftype_num,
+							 used_iftypes);
+	} else {
+		/* account per_hw interfaces, if advertised */
+		for (i = 0; i < params->n_per_hw; i++) {
+			per_hw = &params->per_hw[i];
+			num_ifaces[i] = cfg80211_get_iftype_info(wiphy,
+								 per_hw->iftype_num,
+								 used_iftypes);
+		}
+	}
+
+	return num_ifaces;
+}
+
+static bool
+cfg80211_chan_supported_by_sub_hw(const struct ieee80211_chans_per_hw *hw_chans,
+				  const struct ieee80211_channel *chan)
+{
+	int i;
+
+	for (i = 0; i < hw_chans->n_chans; i++)
+		if (chan->center_freq == hw_chans->chans[i].center_freq)
+			return true;
+
+	return false;
+}
+
+int
+cfg80211_get_hw_idx_by_chan(struct wiphy *wiphy,
+			    const struct ieee80211_channel *chan)
+{
+	int i;
+
+	if (!chan)
+		return -1;
+
+	for (i = 0; i < wiphy->num_hw; i++)
+		if (cfg80211_chan_supported_by_sub_hw(wiphy->hw_chans[i], chan))
+			return i;
+
+	return -1;
+}
+EXPORT_SYMBOL(cfg80211_get_hw_idx_by_chan);
+
 int cfg80211_iter_combinations(struct wiphy *wiphy,
 			       struct iface_combination_params *params,
 			       void (*iter)(const struct ieee80211_iface_combination *c,
@@ -2450,8 +2602,8 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 	int hw_chan_idx = -1;
 	u32 used_iftypes = 0;
 	u32 beacon_int_gcd;
-	u16 num_interfaces = 0;
-	bool beacon_int_different;
+	u16 *num_ifaces = NULL;
+	bool beacon_int_different, is_per_hw;
 	int ret = 0;
 
 	/*
@@ -2475,9 +2627,26 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		rcu_read_unlock();
 	}
 
-	num_interfaces = cfg80211_get_iftype_info(wiphy,
-						  params->iftype_num,
-						  &used_iftypes);
+	is_per_hw = cfg80211_per_hw_iface_comb_advertised(wiphy);
+	/* check per HW validation */
+	if (params->n_per_hw) {
+		if (!is_per_hw)
+			return -EINVAL;
+
+		if (params->n_per_hw > wiphy->num_hw)
+			return -EINVAL;
+	}
+
+	if (is_per_hw && params->chandef &&
+	    cfg80211_chandef_valid(params->chandef))
+		hw_chan_idx = cfg80211_get_hw_idx_by_chan(wiphy,
+							  params->chandef->chan);
+
+	num_ifaces = cfg80211_get_iface_comb_iftypes(wiphy,
+						     params,
+						     &used_iftypes);
+	if (!num_ifaces)
+		return -ENOMEM;
 
 	for (i = 0; i < wiphy->n_iface_combinations; i++) {
 		const struct ieee80211_iface_combination *c;
@@ -2485,9 +2654,18 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 
 		c = &wiphy->iface_combinations[i];
 
-		ret = cfg80211_validate_iface_comb_limits(wiphy, params,
-							  c, num_interfaces,
-							  &all_iftypes);
+		if (params->n_per_hw)
+			ret = cfg80211_validate_iface_comb_per_hw_limits(wiphy,
+									 params,
+									 c,
+									 num_ifaces,
+									 &all_iftypes);
+		else
+			ret = cfg80211_validate_iface_comb_limits(wiphy,
+								  params,
+								  c,
+								  num_ifaces[0],
+								  &all_iftypes);
 		if (ret == -ENOMEM) {
 			break;
 		} else if (ret) {
@@ -2525,6 +2703,8 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 
 		(*iter)(c, hw_chan_idx, data);
 	}
+
+	cfg80211_put_iface_comb_iftypes(num_ifaces);
 
 	return ret;
 }

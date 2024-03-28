@@ -1586,6 +1586,23 @@ struct cfg80211_color_change_settings {
 };
 
 /**
+ * struct iface_comb_per_hw_params - HW specific interface combinations input
+ *
+ * Used to pass per-hw interface combination parameters
+ *
+ * @num_different_channels: the number of different channels we want to use
+ *	with in the per-hw supported channels.
+ * @iftype_num: array with the number of interfaces of each interface
+ *	type. The index is the interface type as specified in &enum
+ *	nl80211_iftype.
+ */
+
+struct iface_comb_per_hw_params {
+	int num_different_channels;
+	int iftype_num[NUM_NL80211_IFTYPES];
+};
+
+/**
  * struct iface_combination_params - input parameters for interface combinations
  *
  * Used to pass interface combination parameters
@@ -1601,12 +1618,27 @@ struct cfg80211_color_change_settings {
  * @new_beacon_int: set this to the beacon interval of a new interface
  *	that's not operating yet, if such is to be checked as part of
  *	the verification
+ * @chandef: Channel definition for which the interface combination is to be
+ *	checked, when checking during interface preparation on a new channel,
+ *	for example. This will be used when the driver advertises underlying
+ *	hw specific interface combination in a multi physical hardware device.
+ *	This will be NULL when the interface combination check is not due to
+ *	channel or the interface combination does not include per-hw
+ *	advertisement.
+ * @n_per_hw: number of Per-HW interface combinations.
+ * @per_hw: @n_per_hw of hw specific interface combinations. Per-hw channel
+ *	list index as advertised in wiphy @hw_chans is used as index
+ *	in @per_hw to maintain the interface combination of the corresponding
+ *	hw.
  */
 struct iface_combination_params {
 	int num_different_channels;
 	u8 radar_detect;
 	int iftype_num[NUM_NL80211_IFTYPES];
 	u32 new_beacon_int;
+	const struct cfg80211_chan_def *chandef;
+	u8 n_per_hw;
+	const struct iface_comb_per_hw_params *per_hw;
 };
 
 /**
@@ -9235,6 +9267,27 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 			       void (*iter)(const struct ieee80211_iface_combination *c,
 					    int hw_chan_idx, void *data),
 			       void *data);
+
+/**
+ * cfg80211_per_hw_iface_comb_advertised - if per-hw iface combination supported
+ *
+ * @wiphy: the wiphy
+ *
+ * This function is used to check underlying per-hw interface combination is
+ * advertised by the driver.
+ */
+bool cfg80211_per_hw_iface_comb_advertised(struct wiphy *wiphy);
+
+/**
+ * cfg80211_get_hw_idx_by_chan - get the hw index by the channel
+ *
+ * @wiphy: the wiphy
+ * @chan: channel for which the supported hw index is required
+ *
+ * returns -1 in case the channel is not supported by any of the constituent hw
+ */
+int cfg80211_get_hw_idx_by_chan(struct wiphy *wiphy,
+				const struct ieee80211_channel *chan);
 
 /*
  * cfg80211_stop_iface - trigger interface disconnection
