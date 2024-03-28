@@ -2360,6 +2360,84 @@ int cfg80211_validate_beacon_int(struct cfg80211_registered_device *rdev,
 	return 0;
 }
 
+static int
+cfg80211_validate_iface_limits(struct wiphy *wiphy,
+			       const int iftype_num[NUM_NL80211_IFTYPES],
+			       struct ieee80211_iface_limit *limits,
+			       u8 n_limits,
+			       u32 *all_iftypes)
+{
+	enum nl80211_iftype iftype;
+	int i;
+
+	for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
+		if (cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
+			continue;
+
+		for (i = 0; i < n_limits; i++) {
+			*all_iftypes |= limits[i].types;
+
+			if (!(limits[i].types & BIT(iftype)))
+				continue;
+
+			if (limits[i].max < iftype_num[iftype])
+				return -EINVAL;
+
+			limits[i].max -= iftype_num[iftype];
+		}
+	}
+
+	return 0;
+}
+
+static int
+cfg80211_validate_iface_comb_limits(struct wiphy *wiphy,
+				    struct iface_combination_params *params,
+				    const struct ieee80211_iface_combination *c,
+				    u16 num_interfaces, u32 *all_iftypes)
+{
+	struct ieee80211_iface_limit *limits;
+	int ret = 0;
+
+	if (num_interfaces > c->max_interfaces)
+		return -EINVAL;
+
+	if (params->num_different_channels > c->num_different_channels)
+		return -EINVAL;
+
+	limits = kmemdup(c->limits, sizeof(limits[0]) * c->n_limits,
+			 GFP_KERNEL);
+	if (!limits)
+		return -ENOMEM;
+
+	ret = cfg80211_validate_iface_limits(wiphy,
+					     params->iftype_num,
+					     limits,
+					     c->n_limits,
+					     all_iftypes);
+
+	kfree(limits);
+
+	return ret;
+}
+
+static u16 cfg80211_get_iftype_info(struct wiphy *wiphy,
+				    const int iftype_num[NUM_NL80211_IFTYPES],
+				    u32 *used_iftypes)
+{
+	enum nl80211_iftype iftype;
+	u16 num_interfaces = 0;
+
+	for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
+		num_interfaces += iftype_num[iftype];
+		if (iftype_num[iftype] > 0 &&
+		    !cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
+			*used_iftypes |= BIT(iftype);
+	}
+
+	return num_interfaces;
+}
+
 int cfg80211_iter_combinations(struct wiphy *wiphy,
 			       struct iface_combination_params *params,
 			       void (*iter)(const struct ieee80211_iface_combination *c,
@@ -2368,11 +2446,13 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 {
 	const struct ieee80211_regdomain *regdom;
 	enum nl80211_dfs_regions region = 0;
-	int i, j, iftype;
-	int num_interfaces = 0, hw_chan_idx = -1;
+	int i;
+	int hw_chan_idx = -1;
 	u32 used_iftypes = 0;
 	u32 beacon_int_gcd;
+	u16 num_interfaces = 0;
 	bool beacon_int_different;
+	int ret = 0;
 
 	/*
 	 * This is a bit strange, since the iteration used to rely only on
@@ -2395,50 +2475,33 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		rcu_read_unlock();
 	}
 
-	for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
-		num_interfaces += params->iftype_num[iftype];
-		if (params->iftype_num[iftype] > 0 &&
-		    !cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
-			used_iftypes |= BIT(iftype);
-	}
+	num_interfaces = cfg80211_get_iftype_info(wiphy,
+						  params->iftype_num,
+						  &used_iftypes);
 
 	for (i = 0; i < wiphy->n_iface_combinations; i++) {
 		const struct ieee80211_iface_combination *c;
-		struct ieee80211_iface_limit *limits;
 		u32 all_iftypes = 0;
 
 		c = &wiphy->iface_combinations[i];
 
-		if (num_interfaces > c->max_interfaces)
+		ret = cfg80211_validate_iface_comb_limits(wiphy, params,
+							  c, num_interfaces,
+							  &all_iftypes);
+		if (ret == -ENOMEM) {
+			break;
+		} else if (ret) {
+			ret = 0;
 			continue;
-		if (params->num_different_channels > c->num_different_channels)
-			continue;
-
-		limits = kmemdup(c->limits, sizeof(limits[0]) * c->n_limits,
-				 GFP_KERNEL);
-		if (!limits)
-			return -ENOMEM;
-
-		for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
-			if (cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
-				continue;
-			for (j = 0; j < c->n_limits; j++) {
-				all_iftypes |= limits[j].types;
-				if (!(limits[j].types & BIT(iftype)))
-					continue;
-				if (limits[j].max < params->iftype_num[iftype])
-					goto cont;
-				limits[j].max -= params->iftype_num[iftype];
-			}
 		}
 
 		if (params->radar_detect !=
 			(c->radar_detect_widths & params->radar_detect))
-			goto cont;
+			continue;
 
 		if (params->radar_detect && c->radar_detect_regions &&
 		    !(c->radar_detect_regions & BIT(region)))
-			goto cont;
+			continue;
 
 		/* Finally check that all iftypes that we're currently
 		 * using are actually part of this combination. If they
@@ -2446,14 +2509,14 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		 * to continue to the next.
 		 */
 		if ((all_iftypes & used_iftypes) != used_iftypes)
-			goto cont;
+			continue;
 
 		if (beacon_int_gcd) {
 			if (c->beacon_int_min_gcd &&
 			    beacon_int_gcd < c->beacon_int_min_gcd)
-				goto cont;
+				continue;
 			if (!c->beacon_int_min_gcd && beacon_int_different)
-				goto cont;
+				continue;
 		}
 
 		/* This combination covered all interface types and
@@ -2461,11 +2524,9 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		 */
 
 		(*iter)(c, hw_chan_idx, data);
- cont:
-		kfree(limits);
 	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(cfg80211_iter_combinations);
 
