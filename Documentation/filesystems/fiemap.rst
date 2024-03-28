@@ -162,6 +162,10 @@ FIEMAP_EXTENT_DATA_ENCRYPTED
   This will also set FIEMAP_EXTENT_ENCODED
   The data in this extent has been encrypted by the file system.
 
+FIEMAP_EXTENT_DATA_COMPRESSED
+  This will also set FIEMAP_EXTENT_ENCODED
+  The data in this extent is compressed by the file system.
+
 FIEMAP_EXTENT_NOT_ALIGNED
   Extent offsets and length are not guaranteed to be block aligned.
 
