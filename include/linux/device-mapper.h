@@ -161,6 +161,10 @@ typedef int (*dm_dax_zero_page_range_fn)(struct dm_target *ti, pgoff_t pgoff,
 typedef size_t (*dm_dax_recovery_write_fn)(struct dm_target *ti, pgoff_t pgoff,
 		void *addr, size_t bytes, struct iov_iter *i);
 
+/* Like llseek(SEEK_HOLE/SEEK_DATA) */
+typedef loff_t (*dm_seek_hole_data)(struct dm_target *ti, loff_t offset,
+		int whence);
+
 void dm_error(const char *message);
 
 struct dm_dev {
@@ -210,6 +214,7 @@ struct target_type {
 	dm_dax_direct_access_fn direct_access;
 	dm_dax_zero_page_range_fn dax_zero_page_range;
 	dm_dax_recovery_write_fn dax_recovery_write;
+	dm_seek_hole_data seek_hole_data;
 
 	/* For internal device-mapper use. */
 	struct list_head list;

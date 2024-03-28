@@ -3167,6 +3167,72 @@ void dm_free_md_mempools(struct dm_md_mempools *pools)
 	kfree(pools);
 }
 
+/* Default implementation for targets that do not implement the callback */
+static loff_t dm_blk_seek_hole_data_default(loff_t offset, int whence,
+		loff_t size)
+{
+	switch (whence) {
+	case SEEK_DATA:
+		if ((unsigned long long)offset >= size)
+			return -ENXIO;
+		return offset;
+	case SEEK_HOLE:
+		if ((unsigned long long)offset >= size)
+			return -ENXIO;
+		return size;
+	default:
+		return -EINVAL;
+	}
+}
+
+static loff_t dm_blk_do_seek_hole_data(struct dm_table *table, loff_t offset,
+		int whence)
+{
+	struct dm_target *ti;
+	loff_t end;
+
+	/* Loop when the end of a target is reached */
+	do {
+		ti = dm_table_find_target(table, offset >> SECTOR_SHIFT);
+		if (!ti)
+			return whence == SEEK_DATA ? -ENXIO : offset;
+
+		end = (ti->begin + ti->len) << SECTOR_SHIFT;
+
+		if (ti->type->seek_hole_data)
+			offset = ti->type->seek_hole_data(ti, offset, whence);
+		else
+			offset = dm_blk_seek_hole_data_default(offset, whence, end);
+
+		if (whence == SEEK_DATA && offset == -ENXIO)
+			offset = end;
+	} while (offset == end);
+
+	return offset;
+}
+
+static loff_t dm_blk_seek_hole_data(struct block_device *bdev, loff_t offset,
+		int whence)
+{
+	struct mapped_device *md = bdev->bd_disk->private_data;
+	struct dm_table *table;
+	int srcu_idx;
+	loff_t ret;
+
+	if (dm_suspended_md(md))
+		return -EAGAIN;
+
+	table = dm_get_live_table(md, &srcu_idx);
+	if (!table)
+		return -EIO;
+
+	ret = dm_blk_do_seek_hole_data(table, offset, whence);
+
+	dm_put_live_table(md, srcu_idx);
+
+	return ret;
+}
+
 struct dm_pr {
 	u64	old_key;
 	u64	new_key;
@@ -3493,6 +3559,7 @@ static const struct block_device_operations dm_blk_dops = {
 	.getgeo = dm_blk_getgeo,
 	.report_zones = dm_blk_report_zones,
 	.pr_ops = &dm_pr_ops,
+	.seek_hole_data = dm_blk_seek_hole_data,
 	.owner = THIS_MODULE
 };
 
@@ -3502,6 +3569,7 @@ static const struct block_device_operations dm_rq_blk_dops = {
 	.ioctl = dm_blk_ioctl,
 	.getgeo = dm_blk_getgeo,
 	.pr_ops = &dm_pr_ops,
+	.seek_hole_data = dm_blk_seek_hole_data,
 	.owner = THIS_MODULE
 };
 
