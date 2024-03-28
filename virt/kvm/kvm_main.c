@@ -110,6 +110,9 @@ static struct kmem_cache *kvm_vcpu_cache;
 static __read_mostly struct preempt_ops kvm_preempt_ops;
 static DEFINE_PER_CPU(struct kvm_vcpu *, kvm_running_vcpu);
 
+DEFINE_PER_CPU(unsigned long, kvm_last_guest_exit);
+EXPORT_SYMBOL_GPL(kvm_last_guest_exit);
+
 struct dentry *kvm_debugfs_dir;
 EXPORT_SYMBOL_GPL(kvm_debugfs_dir);
 

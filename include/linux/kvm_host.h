@@ -477,6 +477,16 @@ static __always_inline void guest_state_enter_irqoff(void)
 	lockdep_hardirqs_on(CALLER_ADDR0);
 }
 
+DECLARE_PER_CPU(unsigned long, kvm_last_guest_exit);
+
+/*
+ * Returns time (jiffies) for the last guest exit in current cpu
+ */
+static inline unsigned long guest_exit_last_time(void)
+{
+	return this_cpu_read(kvm_last_guest_exit);
+}
+
 /*
  * Exit guest context and exit an RCU extended quiescent state.
  *
@@ -488,6 +498,9 @@ static __always_inline void guest_state_enter_irqoff(void)
 static __always_inline void guest_context_exit_irqoff(void)
 {
 	context_tracking_guest_exit();
+
+	/* Keeps track of last guest exit */
+	this_cpu_write(kvm_last_guest_exit, jiffies);
 }
 
 /*
