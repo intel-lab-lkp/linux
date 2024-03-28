@@ -3926,6 +3926,44 @@ static u8 ieee80211_chanctx_radar_detect(struct ieee80211_local *local,
 	return radar_detect;
 }
 
+static void
+ieee80211_get_per_hw_sdata_active_iface(struct ieee80211_sub_if_data *sdata,
+					struct iface_comb_per_hw_params *per_hw,
+					int iftype_num[NUM_NL80211_IFTYPES],
+					int *total)
+{
+	struct ieee80211_local *local = sdata->local;
+	unsigned int link_id;
+	int hw_idx;
+
+	for (link_id = 0; link_id < ARRAY_SIZE(sdata->link); link_id++) {
+		struct ieee80211_link_data *link;
+		struct ieee80211_chanctx *ctx;
+
+		link = sdata_dereference(sdata->link[link_id], sdata);
+		if (!link)
+			continue;
+
+		ctx = ieee80211_link_get_chanctx(link);
+		if (ctx &&
+		    ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+			ctx = ctx->replace_ctx;
+
+		hw_idx = -1;
+		if (ctx && cfg80211_chandef_valid(&ctx->conf.def))
+			hw_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+							     ctx->conf.def.chan);
+
+		if (hw_idx >= 0)
+			per_hw[hw_idx].iftype_num[sdata->wdev.iftype]++;
+		else
+			iftype_num[sdata->wdev.iftype]++;
+
+		if (total)
+			(*total)++;
+	}
+}
+
 int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 				 const struct cfg80211_chan_def *chandef,
 				 enum ieee80211_chanctx_mode chanmode,
@@ -3936,9 +3974,12 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 	enum nl80211_iftype iftype = sdata->wdev.iftype;
 	struct ieee80211_chanctx *ctx;
 	int total = 1;
+	struct iface_comb_per_hw_params *per_hw __free(kfree) = NULL;
 	struct iface_combination_params params = {
 		.radar_detect = radar_detect,
 	};
+	bool is_per_hw;
+	int hchan_idx = -1;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -3969,26 +4010,68 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 		return 0;
 	}
 
-	if (chandef)
-		params.num_different_channels = 1;
+	is_per_hw = cfg80211_per_hw_iface_comb_advertised(local->hw.wiphy);
+	if (is_per_hw) {
+		per_hw = kcalloc(local->hw.wiphy->num_hw, sizeof(*per_hw),
+				 GFP_KERNEL);
+		if (!per_hw)
+			return -ENOMEM;
 
-	if (iftype != NL80211_IFTYPE_UNSPECIFIED)
-		params.iftype_num[iftype] = 1;
+		if (chandef && cfg80211_chandef_valid(chandef)) {
+			hchan_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+								chandef->chan);
+			if (hchan_idx < 0)
+				goto skip;
 
+			per_hw[hchan_idx].num_different_channels = 1;
+
+			if (iftype != NL80211_IFTYPE_UNSPECIFIED)
+				per_hw[hchan_idx].iftype_num[iftype] = 1;
+		}
+	} else {
+		if (chandef)
+			params.num_different_channels = 1;
+
+		if (iftype != NL80211_IFTYPE_UNSPECIFIED)
+			params.iftype_num[iftype] = 1;
+	}
+
+skip:
 	list_for_each_entry(ctx, &local->chanctx_list, list) {
 		if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
 			continue;
+
+		if (is_per_hw) {
+			if (WARN_ON(!cfg80211_chandef_valid(&ctx->conf.def)))
+				continue;
+
+			hchan_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+								ctx->conf.def.chan);
+			if (WARN_ON(hchan_idx < 0))
+				continue;
+		}
+
 		params.radar_detect |=
 			ieee80211_chanctx_radar_detect(local, ctx);
+
 		if (ctx->mode == IEEE80211_CHANCTX_EXCLUSIVE) {
-			params.num_different_channels++;
+			if (is_per_hw)
+				per_hw[hchan_idx].num_different_channels++;
+			else
+				params.num_different_channels++;
+
 			continue;
 		}
+
 		if (chandef && chanmode == IEEE80211_CHANCTX_SHARED &&
 		    cfg80211_chandef_compatible(chandef,
 						&ctx->conf.def))
 			continue;
-		params.num_different_channels++;
+
+		if (is_per_hw)
+			per_hw[hchan_idx].num_different_channels++;
+		else
+			params.num_different_channels++;
 	}
 
 	list_for_each_entry_rcu(sdata_iter, &local->interfaces, list) {
@@ -4002,12 +4085,24 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 					    wdev_iter->iftype, 0, 1))
 			continue;
 
-		params.iftype_num[wdev_iter->iftype]++;
-		total++;
+		if (is_per_hw) {
+			ieee80211_get_per_hw_sdata_active_iface(sdata_iter,
+								per_hw,
+								params.iftype_num,
+								&total);
+		} else {
+			params.iftype_num[wdev_iter->iftype]++;
+			total++;
+		}
 	}
 
 	if (total == 1 && !params.radar_detect)
 		return 0;
+
+	if (is_per_hw) {
+		params.n_per_hw = local->hw.wiphy->num_hw;
+		params.per_hw = per_hw;
+	}
 
 	return cfg80211_check_combinations(local->hw.wiphy, &params);
 }
@@ -4022,31 +4117,100 @@ ieee80211_iter_max_chans(const struct ieee80211_iface_combination *c,
 					  c->num_different_channels);
 }
 
-int ieee80211_max_num_channels(struct ieee80211_local *local)
+static void
+ieee80211_iter_per_hw_max_chans(const struct ieee80211_iface_combination *c,
+				int hw_chan_idx, void *data)
+{
+	u32 *max_num_diff_chans = data;
+	u32 max_supp_diff_chans = 0;
+	int i;
+
+	for (i = 0; i < c->n_hw_list; i++) {
+		const struct ieee80211_iface_per_hw *h;
+
+		h = &c->iface_hw_list[i];
+		if (hw_chan_idx != -1) {
+			if (h->hw_chans_idx == hw_chan_idx) {
+				max_supp_diff_chans = h->num_different_channels;
+				break;
+			}
+			continue;
+		}
+		max_supp_diff_chans += h->num_different_channels;
+	}
+
+	*max_num_diff_chans = max(*max_num_diff_chans, max_supp_diff_chans);
+}
+
+int ieee80211_max_num_channels(struct ieee80211_local *local,
+			       const struct cfg80211_chan_def *chandef)
 {
 	struct ieee80211_sub_if_data *sdata;
 	struct ieee80211_chanctx *ctx;
-	u32 max_num_different_channels = 1;
-	int err;
+	struct iface_comb_per_hw_params *per_hw __free(kfree) = NULL;
 	struct iface_combination_params params = {0};
+	void (*iter)(const struct ieee80211_iface_combination *c,
+		     int hw_chan_idx, void *data) = ieee80211_iter_max_chans;
+	u32 max_num_different_channels = 1;
+	bool is_per_hw;
+	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
+	is_per_hw = cfg80211_per_hw_iface_comb_advertised(local->hw.wiphy);
+	if (is_per_hw) {
+		per_hw = kcalloc(local->hw.wiphy->num_hw,
+				 sizeof(*params.per_hw),
+				 GFP_KERNEL);
+		if (!per_hw)
+			return -ENOMEM;
+
+		params.chandef = chandef;
+		iter = ieee80211_iter_per_hw_max_chans;
+	}
+
 	list_for_each_entry(ctx, &local->chanctx_list, list) {
-		if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+		if (ctx->replace_state ==
+		    IEEE80211_CHANCTX_WILL_BE_REPLACED)
 			continue;
 
-		params.num_different_channels++;
+		if (is_per_hw) {
+			int hw_idx;
+
+			if (WARN_ON(!cfg80211_chandef_valid(&ctx->conf.def)))
+				continue;
+
+			hw_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+							     ctx->conf.def.chan);
+			if (WARN_ON(hw_idx < 0))
+				continue;
+
+			per_hw[hw_idx].num_different_channels++;
+		} else {
+			params.num_different_channels++;
+		}
 
 		params.radar_detect |=
 			ieee80211_chanctx_radar_detect(local, ctx);
 	}
 
-	list_for_each_entry_rcu(sdata, &local->interfaces, list)
-		params.iftype_num[sdata->wdev.iftype]++;
+	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+		if (is_per_hw && ieee80211_sdata_running(sdata))
+			ieee80211_get_per_hw_sdata_active_iface(sdata,
+								per_hw,
+								params.iftype_num,
+								NULL);
+		else
+			params.iftype_num[sdata->wdev.iftype]++;
+	}
+
+	if (is_per_hw) {
+		params.n_per_hw = local->hw.wiphy->num_hw;
+		params.per_hw = per_hw;
+	}
 
 	err = cfg80211_iter_combinations(local->hw.wiphy, &params,
-					 ieee80211_iter_max_chans,
+					 iter,
 					 &max_num_different_channels);
 	if (err < 0)
 		return err;

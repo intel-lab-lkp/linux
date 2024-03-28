@@ -47,24 +47,43 @@ int ieee80211_chanctx_refcount(struct ieee80211_local *local,
 	       ieee80211_chanctx_num_reserved(local, ctx);
 }
 
-static int ieee80211_num_chanctx(struct ieee80211_local *local)
+static int ieee80211_num_chanctx(struct ieee80211_local *local,
+				 const struct cfg80211_chan_def *chandef)
 {
 	struct ieee80211_chanctx *ctx;
-	int num = 0;
+	int num = 0, hw_idx = -1, ctx_idx;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	list_for_each_entry(ctx, &local->chanctx_list, list)
-		num++;
+	if (chandef && cfg80211_chandef_valid(chandef))
+		hw_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+						     chandef->chan);
+
+	if (hw_idx < 0) {
+		list_for_each_entry(ctx, &local->chanctx_list, list)
+			num++;
+	} else {
+		list_for_each_entry(ctx, &local->chanctx_list, list) {
+			ctx_idx = cfg80211_get_hw_idx_by_chan(local->hw.wiphy,
+							      ctx->conf.def.chan);
+			if (ctx_idx != hw_idx)
+				continue;
+
+			num++;
+		}
+	}
 
 	return num;
 }
 
-static bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local)
+static
+bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local,
+				      const struct cfg80211_chan_def *chandef)
 {
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	return ieee80211_num_chanctx(local) < ieee80211_max_num_channels(local);
+	return ieee80211_num_chanctx(local, chandef) <
+	       ieee80211_max_num_channels(local, chandef);
 }
 
 struct ieee80211_chanctx *
@@ -1029,7 +1048,7 @@ int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 
 	new_ctx = ieee80211_find_reservation_chanctx(local, chanreq, mode);
 	if (!new_ctx) {
-		if (ieee80211_can_create_new_chanctx(local)) {
+		if (ieee80211_can_create_new_chanctx(local, &chanreq->oper)) {
 			new_ctx = ieee80211_new_chanctx(local, chanreq, mode);
 			if (IS_ERR(new_ctx))
 				return PTR_ERR(new_ctx);

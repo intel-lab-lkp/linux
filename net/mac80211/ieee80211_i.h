@@ -2600,7 +2600,8 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 				 const struct cfg80211_chan_def *chandef,
 				 enum ieee80211_chanctx_mode chanmode,
 				 u8 radar_detect);
-int ieee80211_max_num_channels(struct ieee80211_local *local);
+int ieee80211_max_num_channels(struct ieee80211_local *local,
+			       const struct cfg80211_chan_def *chandef);
 void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 				       struct ieee80211_chanctx *ctx);
 
