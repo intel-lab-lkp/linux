@@ -523,6 +523,43 @@ const struct address_space_operations def_blk_aops = {
 };
 #endif /* CONFIG_BUFFER_HEAD */
 
+/* Like llseek(SEEK_HOLE/SEEK_DATA) */
+loff_t blkdev_seek_hole_data(struct block_device *bdev, loff_t offset,
+		int whence)
+{
+	const struct block_device_operations *fops = bdev->bd_disk->fops;
+	loff_t size;
+
+	if (fops->seek_hole_data)
+		return fops->seek_hole_data(bdev, offset, whence);
+
+	size = bdev_nr_bytes(bdev);
+
+	switch (whence) {
+	case SEEK_DATA:
+		if ((unsigned long long)offset >= size)
+			return -ENXIO;
+		return offset;
+	case SEEK_HOLE:
+		if ((unsigned long long)offset >= size)
+			return -ENXIO;
+		return size;
+	default:
+		return -EINVAL;
+	}
+}
+
+static loff_t blkdev_llseek_hole_data(struct file *file, loff_t offset,
+		int whence)
+{
+	struct block_device *bdev = file_bdev(file);
+
+	offset = blkdev_seek_hole_data(bdev, offset, whence);
+	if (offset >= 0)
+		offset = vfs_setpos(file, offset, bdev_nr_bytes(bdev));
+	return offset;
+}
+
 /*
  * for a block special file file_inode(file)->i_size is zero
  * so we compute the size by hand (just as in block_read/write above)
@@ -533,7 +570,11 @@ static loff_t blkdev_llseek(struct file *file, loff_t offset, int whence)
 	loff_t retval;
 
 	inode_lock(bd_inode);
-	retval = fixed_size_llseek(file, offset, whence, i_size_read(bd_inode));
+	if (whence == SEEK_HOLE || whence == SEEK_DATA)
+		retval = blkdev_llseek_hole_data(file, offset, whence);
+	else
+		retval = fixed_size_llseek(file, offset, whence,
+					   i_size_read(bd_inode));
 	inode_unlock(bd_inode);
 	return retval;
 }

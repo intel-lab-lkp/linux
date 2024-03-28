@@ -332,6 +332,9 @@ int blkdev_zone_mgmt(struct block_device *bdev, enum req_op op,
 int blk_revalidate_disk_zones(struct gendisk *disk,
 		void (*update_driver_data)(struct gendisk *disk));
 
+loff_t blkdev_seek_hole_data(struct block_device *bdev, loff_t offset,
+		int whence);
+
 /*
  * Independent access ranges: struct blk_independent_access_range describes
  * a range of contiguous sectors that can be accessed using device command
@@ -1432,6 +1435,10 @@ struct block_device_operations {
 	 * driver.
 	 */
 	int (*alternative_gpt_sector)(struct gendisk *disk, sector_t *sector);
+
+	/* Like llseek(SEEK_HOLE/SEEK_DATA). This callback may be NULL. */
+	loff_t (*seek_hole_data)(struct block_device *bdev, loff_t offset,
+			int whence);
 };
 
 #ifdef CONFIG_COMPAT
