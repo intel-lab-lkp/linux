@@ -6004,6 +6004,10 @@ enum nl80211_iface_limit_attrs {
  * @NL80211_IFACE_COMB_BI_MIN_GCD: u32 attribute specifying the minimum GCD of
  *	different beacon intervals supported by all the interface combinations
  *	in this group (if not present, all beacon intervals be identical).
+ * @NL80211_IFACE_COMB_PER_HW_COMB: nested attribute specifying the interface
+ *	combination for each underlying hardware when multiple hardware are
+ *	registered under one wiphy,
+ *	see &enum nl80211_if_comb_per_hw_comb_attrs.
  * @NUM_NL80211_IFACE_COMB: number of attributes
  * @MAX_NL80211_IFACE_COMB: highest attribute number
  *
@@ -6020,7 +6024,19 @@ enum nl80211_iface_limit_attrs {
  *	numbers = [ #{STA} <= 1, #{P2P-client,P2P-GO} <= 3 ], max = 4
  *	=> allows a STA plus three P2P interfaces
  *
- * The list of these four possibilities could completely be contained
+ *	When describing per-hardware combinations in multi-hardware in
+ *	one wiphy model, the first possibility can further include the finer
+ *	capabilities like below
+ *	hw_chan_idx = 0, numbers = [ #{STA} <= 1, #{AP} <= 1 ],
+ *	channels = 1, max = 2
+ *	=> allows a STA plus an AP interface on the underlying hardware mac
+ *	   advertised at index 0 in wiphy @hw_chans array.
+ *	hw_chan_idx = 1, numbers = [ #{STA} <= 1, #{AP} <= 2 ],
+ *	channels = 1, max = 3
+ *	=> allows a STA plus two AP interfaces on the underlying hardware mac
+ *	   advertised at index 1 in wiphy @hw_chans array.
+ *
+ * The list of these five possibilities could completely be contained
  * within the %NL80211_ATTR_INTERFACE_COMBINATIONS attribute to indicate
  * that any of these groups must match.
  *
@@ -6039,12 +6055,44 @@ enum nl80211_if_combination_attrs {
 	NL80211_IFACE_COMB_RADAR_DETECT_WIDTHS,
 	NL80211_IFACE_COMB_RADAR_DETECT_REGIONS,
 	NL80211_IFACE_COMB_BI_MIN_GCD,
+	NL80211_IFACE_COMB_PER_HW_COMB,
 
 	/* keep last */
 	NUM_NL80211_IFACE_COMB,
 	MAX_NL80211_IFACE_COMB = NUM_NL80211_IFACE_COMB - 1
 };
 
+/**
+ * enum nl80211_if_comb_per_hw_comb_attrs - per-hardware iface combination
+ * attributes with multi-hw radios in one wiphy model
+ *
+ * @NL80211_IFACE_COMB_PER_HW_COMB_UNSPEC: (reserved)
+ * @NL80211_IFACE_COMB_PER_HW_COMB_HW_IDX: u8 attribute specifying the index
+ *	to the wiphy @hw_chans list for which the iface combination is being
+ *	described.
+ * @NL80211_IFACE_COMB_PER_HW_COMB_LIMITS: nested attribute containing the
+ *	limits for the given interface types, see
+ *	&enum nl80211_iface_limit_attrs.
+ * @NL80211_IFACE_COMB_PER_HW_COMB_MAXIMUM: u32 attribute giving the maximum
+ *	number of interfaces that can be created in this group. This number
+ *	does not apply to the interfaces purely managed in software.
+ * @NL80211_IFACE_COMB_PER_HW_COMB_NUM_CHANNELS: u32 attribute specifying the
+ *	number of different channels that can be used in this group.
+ * @NUM_NL80211_IFACE_COMB_PER_HW_COMB: number of attributes
+ * @MAX_NL80211_IFACE_COMB_PER_HW_COMB: highest attribute number
+ */
+enum nl80211_if_comb_per_hw_comb_attrs {
+	NL80211_IFACE_COMB_PER_HW_COMB_UNSPEC,
+	NL80211_IFACE_COMB_PER_HW_COMB_HW_IDX,
+	NL80211_IFACE_COMB_PER_HW_COMB_LIMITS,
+	NL80211_IFACE_COMB_PER_HW_COMB_MAXIMUM,
+	NL80211_IFACE_COMB_PER_HW_COMB_NUM_CHANNELS,
+
+	/* keep last */
+	NUM_NL80211_IFACE_COMB_PER_HW_COMB,
+	MAX_NL80211_IFACE_COMB_PER_HW_COMB =
+			NUM_NL80211_IFACE_COMB_PER_HW_COMB - 1
+};
 
 /**
  * enum nl80211_plink_state - state of a mesh peer link finite state machine

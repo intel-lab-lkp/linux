@@ -1653,6 +1653,61 @@ nla_put_failure:
 	return -ENOBUFS;
 }
 
+static int
+nl80211_put_per_hw_iface_combinations(struct wiphy *wiphy, struct sk_buff *msg,
+				      const struct ieee80211_iface_combination *c)
+{
+	struct nlattr *hw_combis;
+	int i;
+
+	if (!wiphy->num_hw)
+		return 0;
+
+	hw_combis = nla_nest_start(msg, NL80211_IFACE_COMB_PER_HW_COMB);
+	if (!hw_combis)
+		return -ENOBUFS;
+
+	for (i = 0; i < c->n_hw_list; i++) {
+		struct nlattr *hw_combi, *limits;
+
+		hw_combi = nla_nest_start(msg, i + 1);
+		if (!hw_combi)
+			return -ENOBUFS;
+
+		if (nla_put_u8(msg, NL80211_IFACE_COMB_PER_HW_COMB_HW_IDX,
+			       c->iface_hw_list[i].hw_chans_idx))
+			return -ENOBUFS;
+
+		limits = nla_nest_start(msg,
+					NL80211_IFACE_COMB_PER_HW_COMB_LIMITS);
+		if (!limits)
+			return -ENOBUFS;
+
+		if (nl80211_put_iface_limits(msg,
+					     c->iface_hw_list[i].limits,
+					     c->iface_hw_list[i].n_limits))
+			return -ENOBUFS;
+
+		nla_nest_end(msg, limits);
+
+		if (nla_put_u32(msg,
+				NL80211_IFACE_COMB_PER_HW_COMB_NUM_CHANNELS,
+				c->iface_hw_list[i].num_different_channels))
+			return -ENOBUFS;
+
+		if (nla_put_u16(msg,
+				NL80211_IFACE_COMB_PER_HW_COMB_MAXIMUM,
+				c->iface_hw_list[i].max_interfaces))
+			return -ENOBUFS;
+
+		nla_nest_end(msg, hw_combi);
+	}
+
+	nla_nest_end(msg, hw_combis);
+
+	return 0;
+}
+
 static int nl80211_put_iface_combinations(struct wiphy *wiphy,
 					  struct sk_buff *msg,
 					  bool large)
@@ -1702,6 +1757,9 @@ static int nl80211_put_iface_combinations(struct wiphy *wiphy,
 		if (c->beacon_int_min_gcd &&
 		    nla_put_u32(msg, NL80211_IFACE_COMB_BI_MIN_GCD,
 				c->beacon_int_min_gcd))
+			goto nla_put_failure;
+
+		if (large && nl80211_put_per_hw_iface_combinations(wiphy, msg, c))
 			goto nla_put_failure;
 
 		nla_nest_end(msg, nl_combi);
