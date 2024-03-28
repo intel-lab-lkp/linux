@@ -45,6 +45,20 @@ def loop_device(file_path):
     finally:
         run(['losetup', '-d', loop_path])
 
+@contextmanager
+def dm_linear(file_path):
+    file_size = os.path.getsize(file_path)
+
+    with loop_device(file_path) as loop_path:
+        dm_name = f'test-{os.getpid()}'
+        run(['dmsetup', 'create', dm_name, '--table',
+             f'0 {file_size // 512} linear {loop_path} 0'])
+
+        try:
+            yield f'/dev/mapper/{dm_name}'
+        finally:
+            run(['dmsetup', 'remove', dm_name])
+
 def test(layout, dev_context_manager):
     with test_file(layout) as file_path, dev_context_manager(file_path) as dev_path:
         cmd = run(['./map_holes.py', file_path])
@@ -99,5 +113,5 @@ if __name__ == '__main__':
                holes_at_beginning_and_end,
                no_holes,
                empty_file]
-    dev_context_managers = [loop_device]
+    dev_context_managers = [loop_device, dm_linear]
     test_all(layouts, dev_context_managers)
