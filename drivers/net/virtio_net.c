@@ -190,6 +190,7 @@ struct receive_queue {
 	u32 packets_in_napi;
 
 	struct virtnet_interrupt_coalesce intr_coal;
+	spinlock_t intr_coal_lock;
 
 	/* Chain pages by the private ptr. */
 	struct page *pages;
@@ -3087,11 +3088,13 @@ static int virtnet_set_ringparam(struct net_device *dev,
 				return err;
 
 			/* The reason is same as the transmit virtqueue reset */
-			err = virtnet_send_rx_ctrl_coal_vq_cmd(vi, i,
-							       vi->intr_coal_rx.max_usecs,
-							       vi->intr_coal_rx.max_packets);
-			if (err)
-				return err;
+			scoped_guard(spinlock, &vi->rq[i].intr_coal_lock) {
+				err = virtnet_send_rx_ctrl_coal_vq_cmd(vi, i,
+								       vi->intr_coal_rx.max_usecs,
+								       vi->intr_coal_rx.max_packets);
+				if (err)
+					return err;
+			}
 		}
 	}
 
@@ -3510,8 +3513,10 @@ static int virtnet_send_rx_notf_coal_cmds(struct virtnet_info *vi,
 	vi->intr_coal_rx.max_usecs = ec->rx_coalesce_usecs;
 	vi->intr_coal_rx.max_packets = ec->rx_max_coalesced_frames;
 	for (i = 0; i < vi->max_queue_pairs; i++) {
-		vi->rq[i].intr_coal.max_usecs = ec->rx_coalesce_usecs;
-		vi->rq[i].intr_coal.max_packets = ec->rx_max_coalesced_frames;
+		scoped_guard(spinlock, &vi->rq[i].intr_coal_lock) {
+			vi->rq[i].intr_coal.max_usecs = ec->rx_coalesce_usecs;
+			vi->rq[i].intr_coal.max_packets = ec->rx_max_coalesced_frames;
+		}
 	}
 
 	return 0;
@@ -3542,6 +3547,7 @@ static int virtnet_send_rx_notf_coal_vq_cmds(struct virtnet_info *vi,
 	u32 max_usecs, max_packets;
 	int err;
 
+	guard(spinlock)(&vi->rq[queue].intr_coal_lock);
 	max_usecs = vi->rq[queue].intr_coal.max_usecs;
 	max_packets = vi->rq[queue].intr_coal.max_packets;
 
@@ -3604,8 +3610,9 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 	qnum = rq - vi->rq;
 
 	if (!rq->dim_enabled)
-		continue;
+		goto out;
 
+	guard(spinlock)(&rq->intr_coal_lock);
 	update_moder = net_dim_get_rx_moderation(dim->mode, dim->profile_ix);
 	if (update_moder.usec != rq->intr_coal.max_usecs ||
 	    update_moder.pkts != rq->intr_coal.max_packets) {
@@ -3617,7 +3624,7 @@ static void virtnet_rx_dim_work(struct work_struct *work)
 				 dev->name, qnum);
 		dim->state = DIM_START_MEASURE;
 	}
-
+out:
 	rtnl_unlock();
 }
 
@@ -3756,6 +3763,7 @@ static int virtnet_get_per_queue_coalesce(struct net_device *dev,
 		return -EINVAL;
 
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL)) {
+		guard(spinlock)(&vi->rq[queue].intr_coal_lock);
 		ec->rx_coalesce_usecs = vi->rq[queue].intr_coal.max_usecs;
 		ec->tx_coalesce_usecs = vi->sq[queue].intr_coal.max_usecs;
 		ec->tx_max_coalesced_frames = vi->sq[queue].intr_coal.max_packets;
@@ -4485,6 +4493,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 
 		u64_stats_init(&vi->rq[i].stats.syncp);
 		u64_stats_init(&vi->sq[i].stats.syncp);
+		spin_lock_init(&vi->rq[i].intr_coal_lock);
 	}
 
 	return 0;
