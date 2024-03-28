@@ -103,6 +103,7 @@ static void __init rcu_bootup_announce_oddness(void)
 #ifdef CONFIG_PREEMPT_RCU
 
 static void rcu_report_exp_rnp(struct rcu_node *rnp, bool wake);
+static bool sync_rcu_exp_done(struct rcu_node *rnp);
 static void rcu_read_unlock_special(struct task_struct *t);
 
 /*
