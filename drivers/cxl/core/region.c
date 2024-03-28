@@ -2723,6 +2723,14 @@ struct cxl_region *cxl_dpa_to_region(const struct cxl_memdev *cxlmd, u64 dpa)
 	return ctx.cxlr;
 }
 
+const char *cxl_trace_to_region_name(const struct cxl_memdev *cxlmd, u64 dpa)
+{
+	struct cxl_region *cxlr = cxl_dpa_to_region(cxlmd, dpa);
+
+	/* trace __string() assignment requires "", not NULL */
+	return cxlr ? dev_name(&cxlr->dev) : "";
+}
+
 static bool cxl_is_hpa_in_range(u64 hpa, struct cxl_region *cxlr, int pos)
 {
 	struct cxl_region_params *p = &cxlr->params;

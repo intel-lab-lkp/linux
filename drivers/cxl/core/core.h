@@ -30,8 +30,14 @@ int cxl_get_poison_by_endpoint(struct cxl_port *port);
 struct cxl_region *cxl_dpa_to_region(const struct cxl_memdev *cxlmd, u64 dpa);
 u64 cxl_trace_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 		  u64 dpa);
+const char *cxl_trace_to_region_name(const struct cxl_memdev *cxlmd, u64 dpa);
 
 #else
+static inline
+const char *cxl_trace_to_region_name(const struct cxl_memdev *cxlmd, u64 dpa)
+{
+	return NULL;
+}
 static inline u64
 cxl_trace_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd, u64 dpa)
 {
