@@ -68,6 +68,8 @@ static inline bool same_state_synchronize_rcu(unsigned long oldstate1, unsigned 
 
 #ifdef CONFIG_PREEMPT_RCU
 
+void rcu_read_unlock_special(void);
+
 void __rcu_read_lock(void);
 void __rcu_read_unlock(void);
 
