@@ -2856,6 +2856,11 @@ enum nl80211_commands {
  *	%NL80211_CMD_ASSOCIATE indicating the SPP A-MSDUs
  *	are used on this connection
  *
+ * @NL80211_ATTR_MULTI_HW: nested attribute to send the hardware specific
+ *	channel capabilities to user space. Drivers registering multiple
+ *	physical hardware under a wiphy can use this attribute,
+ *	see &enum nl80211_multi_hw_mac_attrs.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3400,6 +3405,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_MLO_TTLM_ULINK,
 
 	NL80211_ATTR_ASSOC_SPP_AMSDU,
+
+	NL80211_ATTR_MULTI_HW,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -7999,4 +8006,25 @@ enum nl80211_ap_settings_flags {
 	NL80211_AP_SETTINGS_SA_QUERY_OFFLOAD_SUPPORT	= 1 << 1,
 };
 
+/**
+ * nl80211_multi_hw_attrs - multi-hw attributes
+ *
+ * @NL80211_MULTI_HW_ATTR_INVALID: invalid
+ * @NL80211_MULTI_HW_ATTR_IDX: (u8) multi-HW index to refer the underlying HW
+ *	for which the supported channel list is advertised. Internally refer
+ *	the index of the wiphy's @hw_chans array.
+ * @NL80211_MULTI_HW_ATTR_FREQS: array of supported center frequencies
+ * @__NL80211_MULTI_HW_ATTR_LAST: internal use
+ * @NL80211_MULTI_HW_ATTR_MAX: maximum multi-hw mac attribute
+ */
+enum nl80211_multi_hw_attrs {
+	__NL80211_MULTI_HW_ATTR_INVALID,
+
+	NL80211_MULTI_HW_ATTR_IDX,
+	NL80211_MULTI_HW_ATTR_FREQS,
+
+	/* keep last */
+	__NL80211_MULTI_HW_ATTR_LAST,
+	NL80211_MULTI_HW_ATTR_MAX = __NL80211_MULTI_HW_ATTR_LAST - 1
+};
 #endif /* __LINUX_NL80211_H */

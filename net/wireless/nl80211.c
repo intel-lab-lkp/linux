@@ -2392,6 +2392,47 @@ fail:
 	return -ENOBUFS;
 }
 
+static int nl80211_put_multi_hw_support(struct wiphy *wiphy,
+					struct sk_buff *msg)
+{
+	struct nlattr *hw_macs, *hw_mac;
+	struct nlattr *freqs;
+	int i, c;
+
+	if (!wiphy->num_hw)
+		return 0;
+
+	hw_macs = nla_nest_start(msg, NL80211_ATTR_MULTI_HW);
+	if (!hw_macs)
+		return -ENOBUFS;
+
+	for (i = 0; i < wiphy->num_hw; i++) {
+		hw_mac = nla_nest_start(msg, i + 1);
+		if (!hw_mac)
+			return -ENOBUFS;
+
+		if (nla_put_u8(msg, NL80211_MULTI_HW_ATTR_IDX, i))
+			return -ENOBUFS;
+
+		freqs = nla_nest_start(msg,
+				       NL80211_MULTI_HW_ATTR_FREQS);
+		if (!freqs)
+			return -ENOBUFS;
+
+		for (c = 0; c < wiphy->hw_chans[i]->n_chans; c++)
+			if (nla_put_u32(msg, c + 1,
+					wiphy->hw_chans[i]->chans[c].center_freq))
+				return -ENOBUFS;
+
+		nla_nest_end(msg, freqs);
+
+		nla_nest_end(msg, hw_mac);
+	}
+
+	nla_nest_end(msg, hw_macs);
+	return 0;
+}
+
 struct nl80211_dump_wiphy_state {
 	s64 filter_wiphy;
 	long start;
@@ -2999,6 +3040,12 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		if (rdev->wiphy.hw_timestamp_max_peers &&
 		    nla_put_u16(msg, NL80211_ATTR_MAX_HW_TIMESTAMP_PEERS,
 				rdev->wiphy.hw_timestamp_max_peers))
+			goto nla_put_failure;
+
+		state->split_start++;
+		break;
+	case 17:
+		if (nl80211_put_multi_hw_support(&rdev->wiphy, msg))
 			goto nla_put_failure;
 
 		/* done */
