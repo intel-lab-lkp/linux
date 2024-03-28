@@ -13,3 +13,8 @@ THUNK preempt_schedule_thunk, preempt_schedule
 THUNK preempt_schedule_notrace_thunk, preempt_schedule_notrace
 EXPORT_SYMBOL(preempt_schedule_thunk)
 EXPORT_SYMBOL(preempt_schedule_notrace_thunk)
+
+#ifdef CONFIG_PCPU_RCU_PREEMPT_COUNT
+THUNK rcu_read_unlock_special_thunk, rcu_read_unlock_special
+EXPORT_SYMBOL_GPL(rcu_read_unlock_special_thunk)
+#endif /* #ifdef CONFIG_PCPU_RCU_PREEMPT_COUNT */
