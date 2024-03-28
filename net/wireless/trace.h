@@ -4005,6 +4005,62 @@ TRACE_EVENT(rdev_set_ttlm,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG)
 );
 
+TRACE_EVENT(rdev_link_reconfig_remove,
+	    TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		     const struct cfg80211_link_reconfig_removal_params *params),
+
+	TP_ARGS(wiphy, netdev, params),
+
+	TP_STRUCT__entry(WIPHY_ENTRY
+			 NETDEV_ENTRY
+			 __field(u32, link_id)
+			 __field(u16, count)
+			 __dynamic_array(u8, frame, params->ie_len)
+	),
+
+	TP_fast_assign(WIPHY_ASSIGN;
+		       NETDEV_ASSIGN;
+		       __entry->link_id = params->link_id;
+		       __entry->count = params->link_removal_cntdown;
+		       memcpy(__get_dynamic_array(frame), params->ie,
+			      params->ie_len);
+	),
+
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", link_id: %u frame:0x%.2x count:%d",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->link_id,
+		  le16_to_cpup((__le16 *)__get_dynamic_array(frame)),
+		  __entry->count)
+);
+
+TRACE_EVENT(cfg80211_update_link_reconfig_remove_status,
+	    TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		     unsigned int link_id, u8 tbtt_count, u64 tsf,
+		     enum ieee80211_link_reconfig_remove_state action),
+
+	TP_ARGS(wiphy, netdev, link_id, tbtt_count, tsf, action),
+
+	TP_STRUCT__entry(WIPHY_ENTRY
+			 NETDEV_ENTRY
+			 __field(u32, link_id)
+			 __field(u8, tbtt_count)
+			 __field(u64, tsf)
+			 __field(enum ieee80211_link_reconfig_remove_state, action)
+	),
+
+	TP_fast_assign(WIPHY_ASSIGN;
+		       NETDEV_ASSIGN;
+		       __entry->link_id = link_id;
+		       __entry->tbtt_count = tbtt_count;
+		       __entry->tsf = tsf;
+		       __entry->action = action;
+	),
+
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", link_id: %u tbtt:%u tsf: %lld, action: %d",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG,
+		  __entry->link_id, __entry->tbtt_count,
+		  __entry->tsf, __entry->action)
+);
+
 #endif /* !__RDEV_OPS_TRACE || TRACE_HEADER_MULTI_READ */
 
 #undef TRACE_INCLUDE_PATH
