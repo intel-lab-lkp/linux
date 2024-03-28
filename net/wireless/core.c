@@ -690,6 +690,103 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 	return 0;
 }
 
+static int cfg80211_check_hw_chans(const struct ieee80211_chans_per_hw *chans1,
+				   const struct ieee80211_chans_per_hw *chans2)
+{
+	int i, j;
+
+	if (!chans1 || !chans2)
+		return -EINVAL;
+
+	if (!chans1->n_chans || !chans2->n_chans)
+		return -EINVAL;
+
+	/* for now same channel is not allowed in more than one
+	 * physical hardware.
+	 */
+	for (i = 0; i < chans1->n_chans; i++)
+		for (j = 0; j < chans2->n_chans; j++)
+			if (chans1->chans[i].center_freq ==
+			    chans2->chans[j].center_freq)
+				return -EINVAL;
+	return 0;
+}
+
+static bool
+cfg80211_hw_chans_in_supported_list(struct wiphy *wiphy,
+				    const struct ieee80211_chans_per_hw *chans)
+{
+	enum nl80211_band band;
+	struct ieee80211_supported_band *sband;
+	int i, j;
+
+	for (i = 0; i < chans->n_chans; i++) {
+		bool found = false;
+
+		for (band = 0; band < NUM_NL80211_BANDS; band++) {
+			sband = wiphy->bands[band];
+			if (!sband)
+				continue;
+			for (j = 0; j < sband->n_channels; j++) {
+				if (chans->chans[i].center_freq ==
+				    sband->channels[j].center_freq) {
+					found = true;
+					break;
+				}
+			}
+
+			if (found)
+				break;
+		}
+
+		if (!found)
+			return false;
+	}
+
+	return true;
+}
+
+static int cfg80211_validate_per_hw_chans(struct wiphy *wiphy)
+{
+	int i, j;
+	int ret;
+
+	if (!wiphy->num_hw)
+		return 0;
+
+	if (!wiphy->hw_chans)
+		return -EINVAL;
+
+	/* advertisement of supported channels in wiphy->bands should be
+	 * sufficient when physical hardware is one.
+	 */
+	if (wiphy->num_hw < 2)
+		return -EINVAL;
+
+	for (i = 0; i < wiphy->num_hw; i++) {
+		for (j = i + 1; j < wiphy->num_hw; j++) {
+			const struct ieee80211_chans_per_hw *hw_chans1;
+			const struct ieee80211_chans_per_hw *hw_chans2;
+
+			hw_chans1 = wiphy->hw_chans[i];
+			hw_chans2 = wiphy->hw_chans[j];
+			ret = cfg80211_check_hw_chans(hw_chans1, hw_chans2);
+			if (ret)
+				return ret;
+		}
+	}
+
+	for (i = 0; i < wiphy->num_hw; i++) {
+		const struct ieee80211_chans_per_hw *hw_chans;
+
+		hw_chans = wiphy->hw_chans[i];
+		if (!cfg80211_hw_chans_in_supported_list(wiphy, hw_chans))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 int wiphy_register(struct wiphy *wiphy)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
@@ -926,6 +1023,9 @@ int wiphy_register(struct wiphy *wiphy)
 		WARN_ON(1);
 		return -EINVAL;
 	}
+
+	if (WARN_ON(cfg80211_validate_per_hw_chans(&rdev->wiphy)))
+		return -EINVAL;
 
 	for (i = 0; i < rdev->wiphy.n_vendor_commands; i++) {
 		/*

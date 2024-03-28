@@ -5395,6 +5395,18 @@ struct wiphy_iftype_akm_suites {
 #define CFG80211_HW_TIMESTAMP_ALL_PEERS	0xffff
 
 /**
+ * struct ieee80211_chans_per_hw - supported channels as per the
+ * underlying physical hardware configuration
+ *
+ * @n_chans: number of channels in @chans
+ * @chans: list of channels supported by the constituent hardware
+ */
+struct ieee80211_chans_per_hw {
+	u32 n_chans;
+	struct ieee80211_channel chans[];
+};
+
+/**
  * struct wiphy - wireless hardware description
  * @mtx: mutex for the data (structures) of this device
  * @reg_notifier: the driver's regulatory notification callback,
@@ -5610,6 +5622,15 @@ struct wiphy_iftype_akm_suites {
  *	A value of %CFG80211_HW_TIMESTAMP_ALL_PEERS indicates the driver
  *	supports enabling HW timestamping for all peers (i.e. no need to
  *	specify a mac address).
+ *
+ * @hw_chans: list of the channels supported by every constituent underlying
+ *	hardware. Drivers abstracting multiple discrete hardware (radio) under
+ *	one wiphy can advertise the list of channels supported by each physical
+ *	hardware in this list. Underlying hardware specific channel list can be
+ *	used while describing interface combination for each of them.
+ * @num_hw: number of underlying hardware for which the channels list are
+ *	advertised in @hw_chans, 0 if multi hardware is not support. Expect >2
+ *	if multi hardware is support.
  */
 struct wiphy {
 	struct mutex mtx;
@@ -5759,6 +5780,9 @@ struct wiphy {
 	u16 max_num_akm_suites;
 
 	u16 hw_timestamp_max_peers;
+
+	struct ieee80211_chans_per_hw **hw_chans;
+	u8 num_hw;
 
 	char priv[] __aligned(NETDEV_ALIGN);
 };
