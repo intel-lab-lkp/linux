@@ -122,6 +122,13 @@ properties:
       Whether to skip executing an SCM call that reassigns the memory
       region ownership.
 
+  qcom,no-msa-ready-indicator:
+    type: boolean
+    description:
+      The driver waits for an MSA_READY indicator to complete init.
+      If the indicator is not received, interface remains unusable.
+      Pretending we received the indicator works around the issue.
+
   qcom,smem-states:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     description: State bits used by the AP to signal the WLAN Q6.
