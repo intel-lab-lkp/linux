@@ -147,6 +147,30 @@ static int linear_report_zones(struct dm_target *ti,
 #define linear_report_zones NULL
 #endif
 
+static loff_t linear_seek_hole_data(struct dm_target *ti, loff_t offset,
+		int whence)
+{
+	struct linear_c *lc = ti->private;
+	loff_t ti_begin = ti->begin << SECTOR_SHIFT;
+	loff_t ti_len = ti->len << SECTOR_SHIFT;
+	loff_t bdev_start = lc->start << SECTOR_SHIFT;
+	loff_t bdev_offset;
+
+	/* TODO underflow/overflow? */
+	bdev_offset = offset - ti_begin + bdev_start;
+
+	bdev_offset = blkdev_seek_hole_data(lc->dev->bdev, bdev_offset,
+					    whence);
+	if (bdev_offset < 0)
+		return bdev_offset;
+
+	offset = bdev_offset - bdev_start;
+	if (offset >= ti_len)
+		return whence == SEEK_DATA ? -ENXIO : ti_begin + ti_len;
+
+	return offset + ti_begin;
+}
+
 static int linear_iterate_devices(struct dm_target *ti,
 				  iterate_devices_callout_fn fn, void *data)
 {
@@ -212,6 +236,7 @@ static struct target_type linear_target = {
 	.direct_access = linear_dax_direct_access,
 	.dax_zero_page_range = linear_dax_zero_page_range,
 	.dax_recovery_write = linear_dax_recovery_write,
+	.seek_hole_data = linear_seek_hole_data,
 };
 
 int __init dm_linear_init(void)
