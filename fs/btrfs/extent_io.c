@@ -2656,7 +2656,7 @@ static int emit_fiemap_extent(struct fiemap_extent_info *fieinfo,
 			if (range_end <= cache_end)
 				return 0;
 
-			if (!(flags & (FIEMAP_EXTENT_ENCODED | FIEMAP_EXTENT_DELALLOC)))
+			if (!(flags & (FIEMAP_EXTENT_DATA_COMPRESSED | FIEMAP_EXTENT_DELALLOC)))
 				phys += cache_end - offset;
 
 			offset = cache_end;
@@ -3186,7 +3186,7 @@ restart:
 		}
 
 		if (compression != BTRFS_COMPRESS_NONE)
-			flags |= FIEMAP_EXTENT_ENCODED;
+			flags |= FIEMAP_EXTENT_DATA_COMPRESSED;
 
 		if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
 			flags |= FIEMAP_EXTENT_DATA_INLINE;
