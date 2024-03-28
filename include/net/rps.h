@@ -51,11 +51,16 @@ static inline void rps_input_queue_tail_save(u32 *dest, u32 tail)
 #endif
 }
 
-static inline void rps_input_queue_head_incr(struct softnet_data *sd)
+static inline void rps_input_queue_head_add(struct softnet_data *sd, int val)
 {
 #ifdef CONFIG_RPS
-	sd->input_queue_head++;
+	WRITE_ONCE(sd->input_queue_head, sd->input_queue_head + val);
 #endif
+}
+
+static inline void rps_input_queue_head_incr(struct softnet_data *sd)
+{
+	rps_input_queue_head_add(sd, 1);
 }
 
 /*
