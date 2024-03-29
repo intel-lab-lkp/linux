@@ -837,25 +837,99 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_enumerate_cmds, CXL);
 
-void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
-			    enum cxl_event_log_type type,
-			    enum cxl_event_type event_type,
-			    const uuid_t *uuid, union cxl_event *evt)
+struct cxl_event_poison_context {
+	u64 dpa;
+	u64 length;
+};
+
+static int __cxl_report_poison(struct device *dev, void *arg)
 {
-	if (event_type == CXL_CPER_EVENT_GEN_MEDIA)
+	struct cxl_event_poison_context *ctx = arg;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_memdev *cxlmd;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	if (!cxled || !cxled->dpa_res || !resource_size(cxled->dpa_res))
+		return 0;
+
+	if (cxled->mode == CXL_DECODER_MIXED) {
+		dev_dbg(dev, "poison list read unsupported in mixed mode\n");
+		return 0;
+	}
+
+	if (ctx->dpa > cxled->dpa_res->end || ctx->dpa < cxled->dpa_res->start)
+		return 0;
+
+	cxlmd = cxled_to_memdev(cxled);
+	cxl_mem_get_poison(cxlmd, ctx->dpa, ctx->length, cxled->cxld.region,
+			   true);
+
+	return 1;
+}
+
+static void cxl_event_handle_poison(struct cxl_memdev *cxlmd,
+				    struct cxl_event_gen_media *rec)
+{
+	struct cxl_port *port = cxlmd->endpoint;
+	u64 phys_addr = le64_to_cpu(rec->phys_addr);
+	struct cxl_event_poison_context ctx = {
+		.dpa = phys_addr & CXL_DPA_MASK,
+	};
+
+	/* No regions mapped to this memdev, that is to say no HPA is mapped */
+	if (!port || !is_cxl_endpoint(port) ||
+	    cxl_num_decoders_committed(port) == 0)
+		return;
+
+	/*
+	 * Host Inject Poison may have a range of DPA, but the GMER only has
+	 * "Physical Address" field, no such one indicates length.  So it's
+	 * better to call cxl_mem_get_poison() to find this poison record.
+	 */
+	ctx.length = phys_addr & CXL_DPA_VOLATILE ?
+			resource_size(&cxlmd->cxlds->ram_res) :
+			resource_size(&cxlmd->cxlds->pmem_res) - ctx.dpa;
+
+	device_for_each_child(&port->dev, &ctx, __cxl_report_poison);
+}
+
+static void cxl_event_handle_general_media(struct cxl_memdev *cxlmd,
+					   enum cxl_event_log_type type,
+					   struct cxl_event_gen_media *rec)
+{
+	if (type == CXL_EVENT_TYPE_FAIL) {
+		switch (rec->transaction_type) {
+		case CXL_EVENT_TRANSACTION_READ:
+		case CXL_EVENT_TRANSACTION_WRITE:
+		case CXL_EVENT_TRANSACTION_INJECT_POISON:
+			cxl_event_handle_poison(cxlmd, rec);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+void cxl_event_handle_record(struct cxl_memdev *cxlmd,
+			     enum cxl_event_log_type type,
+			     enum cxl_event_type event_type,
+			     const uuid_t *uuid, union cxl_event *evt)
+{
+	if (event_type == CXL_CPER_EVENT_GEN_MEDIA) {
 		trace_cxl_general_media(cxlmd, type, &evt->gen_media);
-	else if (event_type == CXL_CPER_EVENT_DRAM)
+		cxl_event_handle_general_media(cxlmd, type, &evt->gen_media);
+	} else if (event_type == CXL_CPER_EVENT_DRAM)
 		trace_cxl_dram(cxlmd, type, &evt->dram);
 	else if (event_type == CXL_CPER_EVENT_MEM_MODULE)
 		trace_cxl_memory_module(cxlmd, type, &evt->mem_module);
 	else
 		trace_cxl_generic_event(cxlmd, type, uuid, &evt->generic);
 }
-EXPORT_SYMBOL_NS_GPL(cxl_event_trace_record, CXL);
+EXPORT_SYMBOL_NS_GPL(cxl_event_handle_record, CXL);
 
-static void __cxl_event_trace_record(const struct cxl_memdev *cxlmd,
-				     enum cxl_event_log_type type,
-				     struct cxl_event_record_raw *record)
+static void __cxl_event_handle_record(struct cxl_memdev *cxlmd,
+				      enum cxl_event_log_type type,
+				      struct cxl_event_record_raw *record)
 {
 	enum cxl_event_type ev_type = CXL_CPER_EVENT_GENERIC;
 	const uuid_t *uuid = &record->id;
@@ -867,7 +941,7 @@ static void __cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 	else if (uuid_equal(uuid, &CXL_EVENT_MEM_MODULE_UUID))
 		ev_type = CXL_CPER_EVENT_MEM_MODULE;
 
-	cxl_event_trace_record(cxlmd, type, ev_type, uuid, &record->event);
+	cxl_event_handle_record(cxlmd, type, ev_type, uuid, &record->event);
 }
 
 static int cxl_clear_event_record(struct cxl_memdev_state *mds,
@@ -978,8 +1052,8 @@ static void cxl_mem_get_records_log(struct cxl_memdev_state *mds,
 			break;
 
 		for (i = 0; i < nr_rec; i++)
-			__cxl_event_trace_record(cxlmd, type,
-						 &payload->records[i]);
+			__cxl_event_handle_record(cxlmd, type,
+						  &payload->records[i]);
 
 		if (payload->flags & CXL_GET_EVENT_FLAG_OVERFLOW)
 			trace_cxl_overflow(cxlmd, type, payload);
