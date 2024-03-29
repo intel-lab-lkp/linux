@@ -226,6 +226,12 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap)
 	if (!data->info)
 		return -ENODEV;
 
+	indio_dev->name = data->info->name;
+	indio_dev->info = &adxl345_info;
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = adxl345_channels;
+	indio_dev->num_channels = ARRAY_SIZE(adxl345_channels);
+
 	/*
 	 * Only allow updates of bus independent bits to the data_format
 	 * register. Keep the bus specific pre-configuration.
@@ -240,12 +246,6 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap)
 			data_format_mask, ADXL345_DATA_FORMAT_FULL_RES);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to set data range\n");
-
-	indio_dev->name = data->info->name;
-	indio_dev->info = &adxl345_info;
-	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = adxl345_channels;
-	indio_dev->num_channels = ARRAY_SIZE(adxl345_channels);
 
 	/* Enable measurement mode */
 	ret = adxl345_powerup(data->regmap);
