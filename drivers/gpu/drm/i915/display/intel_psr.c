@@ -1150,28 +1150,52 @@ static bool _lnl_compute_alpm_params(struct intel_dp *intel_dp,
 	return true;
 }
 
+/*
+ * IO wake time for DISPLAY_VER < 12 is not directly mentioned in Bspec. There
+ * are 50 us io wake time and 32 us fast wake time. Clearly preharge pulses are
+ * not (improperly) included in 32 us fast wake time. 50 us - 32 us = 18 us.
+ */
+static int skl_io_buffer_wake_time(void)
+{
+	return 18;
+}
+
+static int tgl_io_buffer_wake_time(void)
+{
+	return 10;
+}
+
+static int io_buffer_wake_time(const struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+
+	if (DISPLAY_VER(i915) >= 12)
+		return tgl_io_buffer_wake_time();
+	else
+		return skl_io_buffer_wake_time();
+}
+
 static bool _compute_alpm_params(struct intel_dp *intel_dp,
 				 struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	int io_wake_lines, io_wake_time, fast_wake_lines, fast_wake_time;
+	int tfw_exit_latency = 20; /* eDP spec */
+	int phy_wake = 4;	   /* eDP spec */
+	int preamble = 8;	   /* eDP spec */
+	int precharge = intel_dp_aux_fw_sync_len() - preamble;
 	u8 max_wake_lines;
 
-	if (DISPLAY_VER(i915) >= 12) {
-		io_wake_time = 42;
-		/*
-		 * According to Bspec it's 42us, but based on testing
-		 * it is not enough -> use 45 us.
-		 */
-		fast_wake_time = 45;
+	io_wake_time = max(precharge, io_buffer_wake_time(crtc_state)) +
+		preamble + phy_wake + tfw_exit_latency;
+	fast_wake_time = precharge + preamble + phy_wake +
+		tfw_exit_latency;
 
+	if (DISPLAY_VER(i915) >= 12)
 		/* TODO: Check how we can use ALPM_CTL fast wake extended field */
 		max_wake_lines = 12;
-	} else {
-		io_wake_time = 50;
-		fast_wake_time = 32;
+	else
 		max_wake_lines = 8;
-	}
 
 	io_wake_lines = intel_usecs_to_scanlines(
 		&crtc_state->hw.adjusted_mode, io_wake_time);
@@ -1700,7 +1724,6 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 {
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
-	enum phy phy = intel_port_to_phy(dev_priv, dig_port->base.port);
 	u32 val;
 
 	drm_WARN_ON(&dev_priv->drm, intel_dp->psr.enabled);
@@ -1728,7 +1751,7 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 		drm_dbg_kms(&dev_priv->drm, "Enabling PSR%s\n",
 			    intel_dp->psr.psr2_enabled ? "2" : "1");
 
-	intel_snps_phy_update_psr_power_state(dev_priv, phy, true);
+	intel_snps_phy_update_psr_power_state(&dig_port->base, true);
 	intel_psr_enable_sink(intel_dp);
 	intel_psr_enable_source(intel_dp, crtc_state);
 	intel_dp->psr.enabled = true;
@@ -1799,8 +1822,6 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
-	enum phy phy = intel_port_to_phy(dev_priv,
-					 dp_to_dig_port(intel_dp)->base.port);
 
 	lockdep_assert_held(&intel_dp->psr.lock);
 
@@ -1835,7 +1856,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 				     CLKGATE_DIS_MISC_DMASC_GATING_DIS, 0);
 	}
 
-	intel_snps_phy_update_psr_power_state(dev_priv, phy, false);
+	intel_snps_phy_update_psr_power_state(&dp_to_dig_port(intel_dp)->base, false);
 
 	/* Disable PSR on Sink */
 	drm_dp_dpcd_writeb(&intel_dp->aux, DP_PSR_EN_CFG, 0);
@@ -1994,6 +2015,7 @@ static void psr_force_hw_tracking_exit(struct intel_dp *intel_dp)
 
 void intel_psr2_program_trans_man_trk_ctl(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc_state->uapi.crtc->dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	struct intel_encoder *encoder;
@@ -2013,6 +2035,12 @@ void intel_psr2_program_trans_man_trk_ctl(const struct intel_crtc_state *crtc_st
 
 	intel_de_write(dev_priv, PSR2_MAN_TRK_CTL(cpu_transcoder),
 		       crtc_state->psr2_man_track_ctl);
+
+	if (!crtc_state->enable_psr2_su_region_et)
+		return;
+
+	intel_de_write(dev_priv, PIPE_SRCSZ_ERLY_TPT(crtc->pipe),
+		       crtc_state->pipe_srcsz_early_tpt);
 }
 
 static void psr2_man_trk_ctl_calc(struct intel_crtc_state *crtc_state,
@@ -2049,6 +2077,25 @@ static void psr2_man_trk_ctl_calc(struct intel_crtc_state *crtc_state,
 	}
 exit:
 	crtc_state->psr2_man_track_ctl = val;
+}
+
+static u32
+psr2_pipe_srcsz_early_tpt_calc(struct intel_crtc_state *crtc_state,
+			       bool full_update, bool cursor_in_su_area)
+{
+	int width, height;
+
+	if (!crtc_state->enable_psr2_su_region_et || full_update)
+		return 0;
+
+	if (!cursor_in_su_area)
+		return PIPESRC_WIDTH(0) |
+			PIPESRC_HEIGHT(drm_rect_height(&crtc_state->pipe_src));
+
+	width = drm_rect_width(&crtc_state->psr2_su_area);
+	height = drm_rect_height(&crtc_state->psr2_su_area);
+
+	return PIPESRC_WIDTH(width - 1) | PIPESRC_HEIGHT(height - 1);
 }
 
 static void clip_area_update(struct drm_rect *overlap_damage_area,
@@ -2095,21 +2142,38 @@ static void intel_psr2_sel_fetch_pipe_alignment(struct intel_crtc_state *crtc_st
  * cursor fully when cursor is in SU area.
  */
 static void
-intel_psr2_sel_fetch_et_alignment(struct intel_crtc_state *crtc_state,
-				  struct intel_plane_state *cursor_state)
+intel_psr2_sel_fetch_et_alignment(struct intel_atomic_state *state,
+				  struct intel_crtc *crtc,
+				  bool *cursor_in_su_area)
 {
-	struct drm_rect inter;
+	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
+	struct intel_plane_state *new_plane_state;
+	struct intel_plane *plane;
+	int i;
 
-	if (!crtc_state->enable_psr2_su_region_et ||
-	    !cursor_state->uapi.visible)
+	if (!crtc_state->enable_psr2_su_region_et)
 		return;
 
-	inter = crtc_state->psr2_su_area;
-	if (!drm_rect_intersect(&inter, &cursor_state->uapi.dst))
-		return;
+	for_each_new_intel_plane_in_state(state, plane, new_plane_state, i) {
+		struct drm_rect inter;
 
-	clip_area_update(&crtc_state->psr2_su_area, &cursor_state->uapi.dst,
-			 &crtc_state->pipe_src);
+		if (new_plane_state->uapi.crtc != crtc_state->uapi.crtc)
+			continue;
+
+		if (plane->id != PLANE_CURSOR)
+			continue;
+
+		if (!new_plane_state->uapi.visible)
+			continue;
+
+		inter = crtc_state->psr2_su_area;
+		if (!drm_rect_intersect(&inter, &new_plane_state->uapi.dst))
+			continue;
+
+		clip_area_update(&crtc_state->psr2_su_area, &new_plane_state->uapi.dst,
+				 &crtc_state->pipe_src);
+		*cursor_in_su_area = true;
+	}
 }
 
 /*
@@ -2152,10 +2216,9 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
-	struct intel_plane_state *new_plane_state, *old_plane_state,
-		*cursor_plane_state = NULL;
+	struct intel_plane_state *new_plane_state, *old_plane_state;
 	struct intel_plane *plane;
-	bool full_update = false;
+	bool full_update = false, cursor_in_su_area = false;
 	int i, ret;
 
 	if (!crtc_state->enable_psr2_sel_fetch)
@@ -2238,13 +2301,6 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		damaged_area.x2 += new_plane_state->uapi.dst.x1 - src.x1;
 
 		clip_area_update(&crtc_state->psr2_su_area, &damaged_area, &crtc_state->pipe_src);
-
-		/*
-		 * Cursor plane new state is stored to adjust su area to cover
-		 * cursor are fully.
-		 */
-		if (plane->id == PLANE_CURSOR)
-			cursor_plane_state = new_plane_state;
 	}
 
 	/*
@@ -2273,9 +2329,13 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
-	/* Adjust su area to cover cursor fully as necessary */
-	if (cursor_plane_state)
-		intel_psr2_sel_fetch_et_alignment(crtc_state, cursor_plane_state);
+	/*
+	 * Adjust su area to cover cursor fully as necessary (early
+	 * transport). This needs to be done after
+	 * drm_atomic_add_affected_planes to ensure visible cursor is added into
+	 * affected planes even when cursor is not updated by itself.
+	 */
+	intel_psr2_sel_fetch_et_alignment(state, crtc, &cursor_in_su_area);
 
 	intel_psr2_sel_fetch_pipe_alignment(crtc_state);
 
@@ -2338,6 +2398,9 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 
 skip_sel_fetch_set_loop:
 	psr2_man_trk_ctl_calc(crtc_state, full_update);
+	crtc_state->pipe_srcsz_early_tpt =
+		psr2_pipe_srcsz_early_tpt_calc(crtc_state, full_update,
+					       cursor_in_su_area);
 	return 0;
 }
 
