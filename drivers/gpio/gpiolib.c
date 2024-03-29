@@ -4892,8 +4892,17 @@ DEFINE_SEQ_ATTRIBUTE(gpiolib);
 
 static int __init gpiolib_debugfs_init(void)
 {
+	int ret;
+
+	ret = software_node_register(&swnode_gpio_undefined);
+	if (ret < 0) {
+		pr_err("gpiolib: failed to register swnode: %d\n", ret);
+		return ret;
+	}
+
 	/* /sys/kernel/debug/gpio */
 	debugfs_create_file("gpio", 0444, NULL, NULL, &gpiolib_fops);
+
 	return 0;
 }
 subsys_initcall(gpiolib_debugfs_init);
