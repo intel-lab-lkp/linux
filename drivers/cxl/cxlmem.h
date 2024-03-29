@@ -832,7 +832,7 @@ void cxl_mem_report_poison(struct cxl_memdev *cxlmd,
 			   struct cxl_region *cxlr,
 			   struct cxl_poison_record *poison);
 int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
-		       struct cxl_region *cxlr);
+		       struct cxl_region *cxlr, bool report);
 int cxl_trigger_poison_list(struct cxl_memdev *cxlmd);
 int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa);
 int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa);
