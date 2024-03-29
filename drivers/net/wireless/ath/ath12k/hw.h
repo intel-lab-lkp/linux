@@ -211,6 +211,7 @@ struct ath12k_hw_params {
 	u32 otp_board_id_register;
 
 	bool supports_sta_ps;
+	bool supports_dynamic_smps_6ghz;
 };
 
 struct ath12k_hw_ops {
