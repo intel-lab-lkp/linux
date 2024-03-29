@@ -119,13 +119,11 @@ int rockchip_pcie_parse_dt(struct rockchip_pcie *rockchip)
 		return PTR_ERR(rockchip->aclk_rst);
 	}
 
-	if (rockchip->is_rc) {
-		rockchip->ep_gpio = devm_gpiod_get_optional(dev, "ep",
-							    GPIOD_OUT_HIGH);
-		if (IS_ERR(rockchip->ep_gpio))
-			return dev_err_probe(dev, PTR_ERR(rockchip->ep_gpio),
-					     "failed to get ep GPIO\n");
-	}
+	rockchip->ep_gpio = devm_gpiod_get_optional(dev, "ep",
+				rockchip->is_rc ? GPIOD_OUT_HIGH : GPIOD_IN);
+	if (IS_ERR(rockchip->ep_gpio))
+		return dev_err_probe(dev, PTR_ERR(rockchip->ep_gpio),
+				     "failed to get ep GPIO\n");
 
 	rockchip->aclk_pcie = devm_clk_get(dev, "aclk");
 	if (IS_ERR(rockchip->aclk_pcie)) {
