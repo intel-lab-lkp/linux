@@ -510,10 +510,18 @@ struct ethtool_module_eeprom {
  * @policy: The power mode policy enforced by the host for the plug-in module.
  * @mode: The operational power mode of the plug-in module. Should be filled by
  *	device drivers on get operations.
+ * @min_pwr_allowed: minimum power allowed in the cage reported by device
+ * @max_pwr_allowed: maximum power allowed in the cage reported by device
+ * @max_pwr_set: maximum power currently set in the cage
+ * @max_pwr_reset: restore default minimum power
  */
 struct ethtool_module_power_params {
 	enum ethtool_module_power_mode_policy policy;
 	enum ethtool_module_power_mode mode;
+	u32 min_pwr_allowed;
+	u32 max_pwr_allowed;
+	u32 max_pwr_set;
+	u8 max_pwr_reset;
 };
 
 /**
@@ -804,11 +812,12 @@ struct ethtool_rxfh_param {
  * @get_eth_ctrl_stats: Query some of the IEEE 802.3 MAC Ctrl statistics.
  * @get_rmon_stats: Query some of the RMON (RFC 2819) statistics.
  *	Set %ranges to a pointer to zero-terminated array of byte ranges.
- * @get_module_power_cfg: Get the power mode policy for the plug-in module
- *	used by the network device and its operational power mode, if
- *	plugged-in.
+ * @get_module_power_cfg: Get the power configuration for the plug-in module
+ *	used by the network device which includes: its power mode policy and
+ *	operational power mode, if plugged-in; maximum power settings
+ *	(min and max allowed power and max power currently set)
  * @set_module_power_cfg: Set the power mode policy for the plug-in module
- *	used by the network device.
+ *	used by the network device and its maximum power.
  * @get_mm: Query the 802.3 MAC Merge layer state.
  * @set_mm: Set the 802.3 MAC Merge layer parameters.
  * @get_mm_stats: Query the 802.3 MAC Merge layer statistics.
