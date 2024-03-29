@@ -3203,6 +3203,7 @@ struct softnet_data {
 	struct softnet_data	*rps_ipi_list;
 #endif
 
+	unsigned int		received_rps;
 	bool			in_net_rx_action;
 	bool			in_napi_threaded_poll;
 
@@ -3235,7 +3236,6 @@ struct softnet_data {
 	unsigned int		cpu;
 	unsigned int		input_queue_tail;
 #endif
-	unsigned int		received_rps;
 	struct sk_buff_head	input_pkt_queue;
 	struct napi_struct	backlog;
 
