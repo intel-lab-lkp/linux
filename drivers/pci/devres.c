@@ -150,13 +150,6 @@ EXPORT_SYMBOL(devm_pci_remap_cfg_resource);
  */
 int pcim_set_mwi(struct pci_dev *dev)
 {
-	struct pci_devres *dr;
-
-	dr = find_pci_dr(dev);
-	if (!dr)
-		return -ENOMEM;
-
-	dr->mwi = 1;
 	return pci_set_mwi(dev);
 }
 EXPORT_SYMBOL(pcim_set_mwi);
