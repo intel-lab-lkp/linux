@@ -1,0 +1,30 @@
+drm drm-fixes 2f73503e95b2e3369061c8c70d8e92907cd91b0d
+	Merge tag 'drm-misc-fixes-2024-03-28' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-fixes
+drm-misc drm-misc-fixes a4ec240f6b7c21cf846d10017c3ce423a0eae92c
+	drm/prime: Unbreak virtgpu dma-buf export
+drm-intel drm-intel-fixes 32e39bab59934bfd3f37097d4dd85ac5eb0fd549
+	drm/i915/bios: Tolerate devdata==NULL in intel_bios_encoder_supports_dp_dual_mode()
+drm-xe drm-xe-fixes 0d8cf0c924732a045273c6aca6900a340ac88529
+	drm/xe: Fix END redefinition
+drm drm-next 4cece764965020c22cff7665b18a012006359095
+	Linux 6.9-rc1
+drm-misc drm-misc-next-fixes 5d4e8ae6e57b025802aadf55a4775c55cceb75f1
+	nouveau/gsp: don't check devinit disable on GSP.
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes 4cece764965020c22cff7665b18a012006359095
+	Linux 6.9-rc1
+drm-misc drm-misc-next 0716e348d13fea9f5798e9cf8b5c08f6d593cff9
+	drm/vmwgfx: Remove unused code
+drm-intel drm-intel-next 29cdef8539c36f4bee0e9af01df9406c32dfd4d4
+	drm/i915/display: Implement Wa_16021440873
+drm-intel drm-intel-gt-next fc58c693bc1341e6cd926e8bf1b57f0d241ae580
+	drm/i915/gem: Replace dev_priv with i915
+drm-xe drm-xe-next c54eb24f713dfe19229bc0dec55f50b96058db43
+	drm/xe: Refactor GT debugfs
+drm-intel topic/core-for-CI 44909e5ed2f8e95a9a8576f44d570c68c76c44d6
+	ASoC: SOF: Core: Add remove_late() to  sof_init_environment failure path
+drm-xe topic/xe-for-CI ddb9be6feae2523fd4069482e44729e211f34219
+	drm/xe/huc: Define LNL HuC
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
