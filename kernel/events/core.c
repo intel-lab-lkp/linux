@@ -2289,10 +2289,11 @@ event_sched_out(struct perf_event *event, struct perf_event_context *ctx)
 		event->pending_sigtrap = 0;
 		if (state != PERF_EVENT_STATE_OFF &&
 		    !event->pending_work) {
-			event->pending_work = 1;
-			dec = false;
-			WARN_ON_ONCE(!atomic_long_inc_not_zero(&event->refcount));
-			task_work_add(current, &event->pending_task, TWA_RESUME);
+			if (task_work_add(current, &event->pending_task, TWA_RESUME) >= 0) {
+				WARN_ON_ONCE(!atomic_long_inc_not_zero(&event->refcount));
+				dec = false;
+				event->pending_work = 1;
+			}
 		}
 		if (dec)
 			local_dec(&event->ctx->nr_pending);
