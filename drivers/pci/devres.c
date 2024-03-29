@@ -172,14 +172,10 @@ static void pcim_release(struct device *gendev, void *res)
 		if (this->region_mask & (1 << i))
 			pci_release_region(dev, i);
 
-	if (this->mwi)
-		pci_clear_mwi(dev);
-
-	if (this->restore_intx)
-		pci_intx(dev, this->orig_intx);
-
 	if (this->enabled && !this->pinned)
 		pci_disable_device(dev);
+
+	pci_write_config_word(dev, PCI_COMMAND, dev->pci_command);
 }
 
 /*

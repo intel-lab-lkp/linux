@@ -2558,6 +2558,9 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 
 	pci_init_capabilities(dev);
 
+	/* Store original register value */
+	pci_read_config_word(dev, PCI_COMMAND, &dev->pci_command);
+
 	/*
 	 * Add the device to our list of discovered devices
 	 * and the bus list for fixup functions, etc.
