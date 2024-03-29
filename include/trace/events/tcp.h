@@ -273,15 +273,15 @@ TRACE_EVENT(tcp_probe,
 		  __entry->skbaddr, __entry->skaddr)
 );
 
-#define TP_STORE_ADDR_PORTS_SKB_V4(__entry, skb)			\
+#define TP_STORE_ADDR_PORTS_SKB_V4(skb, entry_saddr, entry_daddr)	\
 	do {								\
 		const struct tcphdr *th = (const struct tcphdr *)skb->data; \
-		struct sockaddr_in *v4 = (void *)__entry->saddr;	\
+		struct sockaddr_in *v4 = (void *)entry_saddr;		\
 									\
 		v4->sin_family = AF_INET;				\
 		v4->sin_port = th->source;				\
 		v4->sin_addr.s_addr = ip_hdr(skb)->saddr;		\
-		v4 = (void *)__entry->daddr;				\
+		v4 = (void *)entry_daddr;				\
 		v4->sin_family = AF_INET;				\
 		v4->sin_port = th->dest;				\
 		v4->sin_addr.s_addr = ip_hdr(skb)->daddr;		\
@@ -289,29 +289,30 @@ TRACE_EVENT(tcp_probe,
 
 #if IS_ENABLED(CONFIG_IPV6)
 
-#define TP_STORE_ADDR_PORTS_SKB(__entry, skb)				\
+#define TP_STORE_ADDR_PORTS_SKB(skb, entry_saddr, entry_daddr)		\
 	do {								\
 		const struct iphdr *iph = ip_hdr(skb);			\
 									\
 		if (iph->version == 6) {				\
 			const struct tcphdr *th = (const struct tcphdr *)skb->data; \
-			struct sockaddr_in6 *v6 = (void *)__entry->saddr; \
+			struct sockaddr_in6 *v6 = (void *)entry_saddr;	\
 									\
 			v6->sin6_family = AF_INET6;			\
 			v6->sin6_port = th->source;			\
 			v6->sin6_addr = ipv6_hdr(skb)->saddr;		\
-			v6 = (void *)__entry->daddr;			\
+			v6 = (void *)entry_daddr;			\
 			v6->sin6_family = AF_INET6;			\
 			v6->sin6_port = th->dest;			\
 			v6->sin6_addr = ipv6_hdr(skb)->daddr;		\
 		} else							\
-			TP_STORE_ADDR_PORTS_SKB_V4(__entry, skb);	\
+			TP_STORE_ADDR_PORTS_SKB_V4(skb, entry_saddr,	\
+						   entry_daddr); \
 	} while (0)
 
 #else
 
-#define TP_STORE_ADDR_PORTS_SKB(__entry, skb)		\
-	TP_STORE_ADDR_PORTS_SKB_V4(__entry, skb)
+#define TP_STORE_ADDR_PORTS_SKB(skb, entry_saddr, entry_daddr)		\
+	TP_STORE_ADDR_PORTS_SKB_V4(skb, entry_saddr, entry_daddr)
 
 #endif
 
@@ -336,7 +337,7 @@ DECLARE_EVENT_CLASS(tcp_event_skb,
 		memset(__entry->saddr, 0, sizeof(struct sockaddr_in6));
 		memset(__entry->daddr, 0, sizeof(struct sockaddr_in6));
 
-		TP_STORE_ADDR_PORTS_SKB(__entry, skb);
+		TP_STORE_ADDR_PORTS_SKB(skb, __entry->saddr, __entry->daddr);
 	),
 
 	TP_printk("skbaddr=%p src=%pISpc dest=%pISpc",
