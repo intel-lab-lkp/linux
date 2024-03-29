@@ -344,6 +344,7 @@ __diag_pop();
 static const struct gmdid_map graphics_ip_map[] = {
 	{ 1270, &graphics_xelpg },
 	{ 1271, &graphics_xelpg },
+	{ 1274, &graphics_xelpg },	/* Xe_LPG+ */
 	{ 2004, &graphics_xe2 },
 };
 
@@ -737,8 +738,6 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = xe_info_init_early(xe, desc, subplatform_desc);
 	if (err)
 		return err;
-
-	xe_sriov_probe_early(xe, desc->has_sriov);
 
 	err = xe_device_probe_early(xe);
 	if (err)

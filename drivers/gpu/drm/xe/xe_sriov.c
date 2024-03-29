@@ -5,7 +5,11 @@
 
 #include <drm/drm_managed.h>
 
+#include "regs/xe_sriov_regs.h"
+
 #include "xe_assert.h"
+#include "xe_device.h"
+#include "xe_mmio.h"
 #include "xe_sriov.h"
 
 /**
@@ -28,10 +32,16 @@ const char *xe_sriov_mode_to_string(enum xe_sriov_mode mode)
 	}
 }
 
+static bool test_is_vf(struct xe_device *xe)
+{
+	u32 value = xe_mmio_read32(xe_root_mmio_gt(xe), VF_CAP_REG);
+
+	return value & VF_CAP;
+}
+
 /**
  * xe_sriov_probe_early - Probe a SR-IOV mode.
  * @xe: the &xe_device to probe mode on
- * @has_sriov: flag indicating hardware support for SR-IOV
  *
  * This function should be called only once and as soon as possible during
  * driver probe to detect whether we are running a SR-IOV Physical Function
@@ -40,12 +50,15 @@ const char *xe_sriov_mode_to_string(enum xe_sriov_mode mode)
  * SR-IOV PF mode detection is based on PCI @dev_is_pf() function.
  * SR-IOV VF mode detection is based on dedicated MMIO register read.
  */
-void xe_sriov_probe_early(struct xe_device *xe, bool has_sriov)
+void xe_sriov_probe_early(struct xe_device *xe)
 {
 	enum xe_sriov_mode mode = XE_SRIOV_MODE_NONE;
+	bool has_sriov = xe->info.has_sriov;
 
-	/* TODO: replace with proper mode detection */
-	xe_assert(xe, !has_sriov);
+	if (has_sriov) {
+		if (test_is_vf(xe))
+			mode = XE_SRIOV_MODE_VF;
+	}
 
 	xe_assert(xe, !xe->sriov.__mode);
 	xe->sriov.__mode = mode;

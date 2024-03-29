@@ -5,6 +5,7 @@
 
 #include "xe_sched_job.h"
 
+#include <drm/xe_drm.h>
 #include <linux/dma-fence-array.h>
 #include <linux/slab.h>
 
@@ -15,6 +16,7 @@
 #include "xe_hw_fence.h"
 #include "xe_lrc.h"
 #include "xe_macros.h"
+#include "xe_sync_types.h"
 #include "xe_trace.h"
 #include "xe_vm.h"
 
@@ -250,6 +252,16 @@ bool xe_sched_job_completed(struct xe_sched_job *job)
 
 void xe_sched_job_arm(struct xe_sched_job *job)
 {
+	struct xe_exec_queue *q = job->q;
+	struct xe_vm *vm = q->vm;
+
+	if (vm && !xe_sched_job_is_migration(q) && !xe_vm_in_lr_mode(vm) &&
+	    (vm->batch_invalidate_tlb || vm->tlb_flush_seqno != q->tlb_flush_seqno)) {
+		xe_vm_assert_held(vm);
+		q->tlb_flush_seqno = vm->tlb_flush_seqno;
+		job->ring_ops_flush_tlb = true;
+	}
+
 	drm_sched_job_arm(&job->drm);
 }
 
@@ -276,6 +288,22 @@ int xe_sched_job_last_fence_add_dep(struct xe_sched_job *job, struct xe_vm *vm)
 	fence = xe_exec_queue_last_fence_get(job->q, vm);
 
 	return drm_sched_job_add_dependency(&job->drm, fence);
+}
+
+/**
+ * xe_sched_job_init_user_fence - Initialize user_fence for the job
+ * @job: job whose user_fence needs an init
+ * @sync: sync to be use to init user_fence
+ */
+void xe_sched_job_init_user_fence(struct xe_sched_job *job,
+				  struct xe_sync_entry *sync)
+{
+	if (sync->type != DRM_XE_SYNC_TYPE_USER_FENCE)
+		return;
+
+	job->user_fence.used = true;
+	job->user_fence.addr = sync->addr;
+	job->user_fence.value = sync->timeline_value;
 }
 
 struct xe_sched_job_snapshot *
