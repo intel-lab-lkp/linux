@@ -1495,6 +1495,10 @@ struct ice_aqc_link_topo_addr {
 struct ice_aqc_get_link_topo {
 	struct ice_aqc_link_topo_addr addr;
 	u8 node_part_num;
+#define ICE_AQC_GET_LINK_TOPO_NODE_NR_SFP_PLUS		0x11
+#define ICE_AQC_GET_LINK_TOPO_NODE_NR_SFP28		0x12
+#define ICE_AQC_GET_LINK_TOPO_NODE_NR_QSFP_PLUS		0x13
+#define ICE_AQC_GET_LINK_TOPO_NODE_NR_QSFP28		0x14
 #define ICE_AQC_GET_LINK_TOPO_NODE_NR_PCA9575		0x21
 #define ICE_AQC_GET_LINK_TOPO_NODE_NR_ZL30632_80032	0x24
 #define ICE_AQC_GET_LINK_TOPO_NODE_NR_SI5383_5384	0x25
@@ -1660,6 +1664,23 @@ struct ice_aqc_nvm {
 #define ICE_AQC_NVM_ERASE_LEN	0xFFFF
 	__le32 addr_high;
 	__le32 addr_low;
+};
+
+#define ICE_AQC_NVM_CMPO_MOD_ID			0x153
+#define ICE_AQC_NVM_EMP_SETTINGS_MOD_ID		0x0F
+#define ICE_AQC_NVM_MAX_PWR_LIMIT_OFFSET	0x1A
+#define ICE_AQC_NVM_DFLT_MAX_PWR_MASK		GENMASK(7, 0)
+#define ICE_AQC_NVM_BOARD_MAX_PWR_MASK		GENMASK(15, 8)
+
+#define ICE_NUM_OF_CAGES 8
+
+#define ICE_AQC_NVM_CMPO_ENABLE		BIT(8)
+#define ICE_AQC_NVM_CMPO_POWER_MASK	GENMASK(7, 0)
+
+/* Cage Max Power override NVM module */
+struct ice_aqc_nvm_cmpo {
+	__le16 length;
+	__le16 cages_cfg[ICE_NUM_OF_CAGES];
 };
 
 #define ICE_AQC_NVM_START_POINT			0

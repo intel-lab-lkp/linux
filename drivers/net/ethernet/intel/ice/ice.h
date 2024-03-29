@@ -655,6 +655,8 @@ struct ice_pf {
 	struct ice_agg_node vf_agg_node[ICE_MAX_VF_AGG_NODES];
 	struct ice_dplls dplls;
 	struct device *hwmon_dev;
+
+	int split_cnt;
 };
 
 extern struct workqueue_struct *ice_lag_wq;

@@ -4297,6 +4297,465 @@ ice_get_module_eeprom(struct net_device *netdev,
 	return 0;
 }
 
+/**
+ * ice_get_min_pwr_allowed - Get min power allowed
+ * @hw: pointer to the hardware structure
+ * @extack: extended ACK from the Netlink message
+ *
+ * Values are constant based on the cage type.
+ * Return value in mW.
+ */
+static int ice_get_min_pwr_allowed(struct ice_hw *hw,
+				   struct netlink_ext_ack *extack)
+{
+	u8 node_part_number;
+	u16 node_handle;
+	int err;
+
+	err = ice_get_port_cage_node(hw, 0, &node_handle, &node_part_number);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Failed to get cage node handle");
+		return err;
+	}
+
+	switch (node_part_number) {
+	case ICE_AQC_GET_LINK_TOPO_NODE_NR_SFP_PLUS:
+	case ICE_AQC_GET_LINK_TOPO_NODE_NR_SFP28:
+		return 1000;
+	case ICE_AQC_GET_LINK_TOPO_NODE_NR_QSFP_PLUS:
+	case ICE_AQC_GET_LINK_TOPO_NODE_NR_QSFP28:
+		return 1500;
+	default:
+		return -EINVAL;
+	}
+}
+
+/**
+ * ice_pwr_nvm_to_ethtool - Convert NVM values to ethtool
+ * @pwr: power from NVM
+ */
+static u32 ice_pwr_nvm_to_ethtool(u32 pwr)
+{
+	/* ethtool takes power values in mW */
+	pwr *= 1000;
+	/* 0.5 W resolution */
+	pwr /= 2;
+
+	return pwr;
+}
+
+/**
+ * ice_pwr_ethtool_to_nvm - Convert ethtool values to NVM
+ * @pwr: power from ethtool, in mW
+ */
+static u32 ice_pwr_ethtool_to_nvm(u32 pwr)
+{
+	/* 0.5 W resolution */
+	pwr *= 2;
+	/* ethtool takes power values in mW */
+	pwr /= 1000;
+
+	return pwr;
+}
+
+/**
+ * ice_get_num_of_cages - Get number of cages in the board
+ * @hw: pointer to the hardware structure
+ *
+ * We have as many cages as netlist nodes of cage type.
+ */
+static int ice_get_num_of_cages(struct ice_hw *hw)
+{
+	int i, err, cage_count = 0;
+	u8 node_part_number;
+	u16 node_handle;
+
+	for (i = 0; i < ICE_NUM_OF_CAGES; i++) {
+		err = ice_get_port_cage_node(hw, i, &node_handle,
+					     &node_part_number);
+		if (!err && node_handle)
+			cage_count++;
+	}
+
+	return cage_count;
+}
+
+/**
+ * ice_get_board_max_pwr - Get max power allowed per board
+ * @hw: pointer to the hardware structure
+ *
+ * Board maximum power is stored in EMP settings NVM module
+ */
+static int ice_get_board_max_pwr(struct ice_hw *hw)
+{
+	u16 board_max_pwr;
+	__le16 data;
+	int err;
+
+	err = ice_acquire_nvm(hw, ICE_RES_READ);
+	if (err)
+		return err;
+
+	err = ice_aq_read_nvm(hw, ICE_AQC_NVM_EMP_SETTINGS_MOD_ID,
+			      ICE_AQC_NVM_MAX_PWR_LIMIT_OFFSET,
+			      sizeof(data), &data,
+			      true, false, NULL);
+	if (err) {
+		ice_release_nvm(hw);
+		return err;
+	}
+
+	ice_release_nvm(hw);
+
+	board_max_pwr = __le16_to_cpu(data);
+	board_max_pwr = FIELD_GET(ICE_AQC_NVM_BOARD_MAX_PWR_MASK,
+				  board_max_pwr);
+
+	return ice_pwr_nvm_to_ethtool(board_max_pwr);
+}
+
+/**
+ * ice_get_max_pwr_allowed - Get max power allowed per cage
+ * @hw: pointer to the hardware structure
+ * @min_pwr_allowed: min allowed power
+ * @cage_count: number of cages in the board
+ */
+static int ice_get_max_pwr_allowed(struct ice_hw *hw, u32 min_pwr_allowed,
+				   int cage_count)
+{
+	int board_max_pwr;
+
+	board_max_pwr = ice_get_board_max_pwr(hw);
+	if (board_max_pwr < 0)
+		return board_max_pwr;
+
+	return board_max_pwr - (cage_count - 1) * min_pwr_allowed;
+}
+
+/**
+ * ice_get_cage_idx - Get index to the cage
+ * @pf: pointer to the PF structure
+ * @cage_count: number of cages in the board
+ * @extack: extended ACK from the Netlink message
+ *
+ * Get index to the cage and validate if the given PF
+ * is associated with the cage.
+ */
+static int ice_get_cage_idx(struct ice_pf *pf, int cage_count,
+			    struct netlink_ext_ack *extack)
+{
+	/* if there is only on cage, PF 0 is responsoble for it */
+	if (cage_count == 1) {
+		if (pf->hw.pf_id == 0)
+			return 0;
+		goto err;
+	} else if (cage_count == 4) {
+		/* if there are 4 cages, than port split is not supported
+		 * so each PF is responsoble for its cage
+		 */
+		return pf->hw.pf_id;
+	} else if (cage_count == 2) {
+		/* We have 2 cages, PF 0 always takes care of the first one.
+		 * If the split_cnt is 2 than PF 1 takes care of the second cage.
+		 * If the split_cnt is 4 than PF 2 takes care of the second cage.
+		 * If the split_cnt is 8 than PF 4 takes care of the second cage.
+		 * So, the formula for the second cage is pf_id * 2 == split_cnt
+		 */
+		if (pf->hw.pf_id == 0 || pf->hw.pf_id * 2 == pf->split_cnt)
+			return pf->hw.pf_id;
+	}
+
+err:
+	NL_SET_ERR_MSG_MOD(extack, "Cage maximum power cannot be requested for selected port");
+
+	return -EPERM;
+}
+
+/**
+ * ice_get_dflt_max_pwr - Get dflt max power
+ * @hw: pointer to the hardware structure
+ *
+ * Default max power is stored in EMP settings NVM module
+ */
+static int ice_get_dflt_max_pwr(struct ice_hw *hw)
+{
+	__le16 data;
+	u16 pwr;
+	int ret;
+
+	ret = ice_acquire_nvm(hw, ICE_RES_READ);
+	if (ret)
+		return ret;
+
+	ret = ice_aq_read_nvm(hw, ICE_AQC_NVM_EMP_SETTINGS_MOD_ID,
+			      ICE_AQC_NVM_MAX_PWR_LIMIT_OFFSET, sizeof(data),
+			      &data, true, false, NULL);
+	if (ret) {
+		ice_release_nvm(hw);
+		return ret;
+	}
+
+	ice_release_nvm(hw);
+
+	pwr = __le16_to_cpu(data);
+	pwr = FIELD_GET(ICE_AQC_NVM_DFLT_MAX_PWR_MASK, pwr);
+
+	return ice_pwr_nvm_to_ethtool(pwr);
+}
+
+/**
+ * ice_get_max_pwr_set - Get currently set max power
+ * @hw: pointer to the hardware structure
+ * @idx: index of the cage
+ *
+ * If cmpo enable bit is set, use the value from
+ * CMPO module otherwise use default value.
+ */
+static int ice_get_max_pwr_set(struct ice_hw *hw, int idx)
+{
+	struct ice_aqc_nvm_cmpo data;
+	int max_pwr_set;
+	u16 temp;
+	int ret;
+
+	ret = ice_acquire_nvm(hw, ICE_RES_READ);
+	if (ret)
+		return ret;
+
+	ret = ice_aq_read_nvm(hw, ICE_AQC_NVM_CMPO_MOD_ID, 0, sizeof(data),
+			      &data, true, false, NULL);
+	if (ret) {
+		ice_release_nvm(hw);
+		return ret;
+	}
+
+	ice_release_nvm(hw);
+
+	temp = le16_to_cpu(data.cages_cfg[idx]);
+
+	if (FIELD_GET(ICE_AQC_NVM_CMPO_ENABLE, temp)) {
+		max_pwr_set = FIELD_GET(ICE_AQC_NVM_CMPO_POWER_MASK, temp);
+		return ice_pwr_nvm_to_ethtool(max_pwr_set);
+	} else {
+		return ice_get_dflt_max_pwr(hw);
+	}
+}
+
+/**
+ * ice_get_module_power_cfg - Get device's power setting
+ * @dev: network device
+ * @params: output parameters
+ * @extack: extended ACK from the Netlink message
+ *
+ * We care only about min_pwr_allowed, max_pwr_allowed and max_pwr_set params.
+ */
+static int
+ice_get_module_power_cfg(struct net_device *dev,
+			 struct ethtool_module_power_params *params,
+			 struct netlink_ext_ack *extack)
+{
+	int min_pwr_allowed, max_pwr_allowed, max_pwr_set, cage_count;
+	struct ice_netdev_priv *np = netdev_priv(dev);
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	struct ice_hw *hw = &pf->hw;
+	int idx;
+
+	if (!ice_fw_supports_cmpo(hw)) {
+		NL_SET_ERR_MSG_MOD(extack, "Cage maximum power request is unsupported by the current firmware");
+		return -EOPNOTSUPP;
+	}
+
+	cage_count = ice_get_num_of_cages(hw);
+
+	idx = ice_get_cage_idx(pf, cage_count, extack);
+	if (idx < 0)
+		return idx;
+
+	min_pwr_allowed = ice_get_min_pwr_allowed(hw, extack);
+	if (min_pwr_allowed < 0) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to get min power limit");
+		return min_pwr_allowed;
+	}
+
+	max_pwr_allowed = ice_get_max_pwr_allowed(hw, min_pwr_allowed,
+						  cage_count);
+	if (max_pwr_allowed < 0) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to get max power limit");
+		return max_pwr_allowed;
+	}
+
+	max_pwr_set = ice_get_max_pwr_set(hw, idx);
+	if (max_pwr_set < 0) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to get max power currently set");
+		return max_pwr_set;
+	}
+
+	params->min_pwr_allowed = min_pwr_allowed;
+	params->max_pwr_allowed = max_pwr_allowed;
+	params->max_pwr_set = max_pwr_set;
+
+	return 0;
+}
+
+/**
+ * ice_check_board_pwr_sum - Check if the new sum exceeds the board maximum.
+ * @hw: pointer to the hardware structure
+ * @data: current power config from NVM
+ * @idx: index of the cage we want to update
+ * @power: new power value from ethtool
+ * @cage_count: number of cages in the board
+ * @extack: extended ACK from the Netlink message
+ *
+ * Get number of cages, board maximum and default power value.
+ * Add up all values. If cmpo enable bit is set, use the value from
+ * CMPO module otherwise use default value.
+ */
+static int
+ice_check_board_pwr_sum(struct ice_hw *hw, struct ice_aqc_nvm_cmpo *data,
+			int idx, u32 power, int cage_count,
+			struct netlink_ext_ack *extack)
+{
+	int board_max_pwr, dflt_pwr, max_pwr_set, sum = 0;
+	u16 temp;
+	int i;
+
+	board_max_pwr = ice_get_board_max_pwr(hw);
+	if (board_max_pwr < 0)
+		return board_max_pwr;
+
+	dflt_pwr = ice_get_dflt_max_pwr(hw);
+	if (dflt_pwr < 0)
+		return dflt_pwr;
+
+	for (i = 0; i < cage_count; i++) {
+		temp = le16_to_cpu(data->cages_cfg[i]);
+
+		/* skipping the cage we want to update with the new value, we
+		 * want to add the new power, not the value from NVM
+		 */
+		if (i == idx)
+			continue;
+
+		if (FIELD_GET(ICE_AQC_NVM_CMPO_ENABLE, temp)) {
+			max_pwr_set = FIELD_GET(ICE_AQC_NVM_CMPO_POWER_MASK,
+						temp);
+			sum += ice_pwr_nvm_to_ethtool(max_pwr_set);
+		} else {
+			sum += dflt_pwr;
+		}
+	}
+
+	sum += power;
+
+	if (sum > board_max_pwr) {
+		NL_SET_ERR_MSG_MOD(extack, "Sum of power values is out of range: overbudgeting board level.");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * ice_set_module_power_cfg - Update device's power setting
+ * @dev: network device
+ * @params: new power config
+ * @extack: extended ACK from the Netlink message
+ *
+ * We care only about max_pwr_set and max_pwr_reset params.
+ */
+static int
+ice_set_module_power_cfg(struct net_device *dev,
+			 const struct ethtool_module_power_params *params,
+			 struct netlink_ext_ack *extack)
+{
+	struct ice_netdev_priv *np = netdev_priv(dev);
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	struct ice_aqc_nvm_cmpo data;
+	struct ice_hw *hw = &pf->hw;
+	int idx, ret, cage_count;
+	u16 power;
+
+	if (params->policy) {
+		NL_SET_ERR_MSG_MOD(extack, "Unsupported power parameter.");
+		return -EOPNOTSUPP;
+	}
+
+	if (!ice_fw_supports_cmpo(hw)) {
+		NL_SET_ERR_MSG_MOD(extack, "Cage maximum power request is unsupported by the current firmware.");
+		return -EOPNOTSUPP;
+	}
+
+	if (params->max_pwr_set % 500) {
+		NL_SET_ERR_MSG_MOD(extack, "Unsupported power resolution, use 500 mW resolution.");
+		return -EOPNOTSUPP;
+	}
+
+	cage_count = ice_get_num_of_cages(hw);
+
+	idx = ice_get_cage_idx(pf, cage_count, extack);
+	if (idx < 0)
+		return idx;
+
+	ret = ice_acquire_nvm(hw, ICE_RES_READ);
+	if (ret)
+		return ret;
+
+	ret = ice_aq_read_nvm(hw, ICE_AQC_NVM_CMPO_MOD_ID, 0, sizeof(data),
+			      &data, true, false, NULL);
+	if (ret) {
+		ice_release_nvm(hw);
+		NL_SET_ERR_MSG_MOD(extack, "Failed to read NVM power config.");
+		return ret;
+	}
+
+	ice_release_nvm(hw);
+
+	power = ice_pwr_ethtool_to_nvm(params->max_pwr_set);
+
+	if (power) {
+		ret = ice_check_board_pwr_sum(hw, &data, idx,
+					      params->max_pwr_set, cage_count,
+					      extack);
+		if (ret)
+			return ret;
+
+		data.cages_cfg[idx] =
+			cpu_to_le16(power & ICE_AQC_NVM_CMPO_POWER_MASK);
+		data.cages_cfg[idx] |= cpu_to_le16(ICE_AQC_NVM_CMPO_ENABLE);
+	} else {
+		data.cages_cfg[idx] &= ~cpu_to_le16(ICE_AQC_NVM_CMPO_ENABLE);
+	}
+
+	ret = ice_acquire_nvm(hw, ICE_RES_WRITE);
+	if (ret)
+		return ret;
+
+	ret = ice_aq_update_nvm(hw, ICE_AQC_NVM_CMPO_MOD_ID, 2,
+				sizeof(data.cages_cfg), data.cages_cfg,
+				false, 0, NULL);
+	if (ret) {
+		ice_release_nvm(hw);
+		NL_SET_ERR_MSG_MOD(extack, "Failed to update NVM power config.");
+		return ret;
+	}
+
+	ret = ice_nvm_write_activate(&pf->hw, ICE_AQC_NVM_ACTIV_REQ_EMPR,
+				     NULL);
+	if (ret) {
+		ice_release_nvm(hw);
+		NL_SET_ERR_MSG_MOD(extack, "Failed to save NVM power config.");
+		return ret;
+	}
+
+	ice_release_nvm(hw);
+
+	dev_info(ice_pf_to_dev(pf), "Reboot is required to complete power change.");
+
+	return 0;
+}
+
 static const struct ethtool_ops ice_ethtool_ops = {
 	.cap_rss_ctx_supported  = true,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
@@ -4344,6 +4803,8 @@ static const struct ethtool_ops ice_ethtool_ops = {
 	.set_fecparam		= ice_set_fecparam,
 	.get_module_info	= ice_get_module_info,
 	.get_module_eeprom	= ice_get_module_eeprom,
+	.get_module_power_cfg	= ice_get_module_power_cfg,
+	.set_module_power_cfg	= ice_set_module_power_cfg,
 };
 
 static const struct ethtool_ops ice_ethtool_safe_mode_ops = {

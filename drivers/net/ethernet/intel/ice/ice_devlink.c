@@ -1604,6 +1604,14 @@ ice_devlink_set_port_split_options(struct ice_pf *pf,
 		return;
 	}
 
+	pf->split_cnt = options[active_idx].pmd;
+
+	/* As FW supports only port split options for whole device,
+	 * set port split options only for first PF.
+	 */
+	if (pf->hw.pf_id != 0)
+		return;
+
 	/* find the biggest available port split count */
 	for (i = 0; i < option_count; i++)
 		attrs->lanes = max_t(int, attrs->lanes, options[i].pmd);
@@ -1648,11 +1656,7 @@ int ice_devlink_create_pf_port(struct ice_pf *pf)
 	attrs.flavour = DEVLINK_PORT_FLAVOUR_PHYSICAL;
 	attrs.phys.port_number = pf->hw.bus.func;
 
-	/* As FW supports only port split options for whole device,
-	 * set port split options only for first PF.
-	 */
-	if (pf->hw.pf_id == 0)
-		ice_devlink_set_port_split_options(pf, &attrs);
+	ice_devlink_set_port_split_options(pf, &attrs);
 
 	ice_devlink_set_switch_id(pf, &attrs.switch_id);
 

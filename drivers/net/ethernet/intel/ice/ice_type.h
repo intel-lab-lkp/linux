@@ -1150,6 +1150,10 @@ struct ice_aq_get_set_rss_lut_params {
 #define ICE_FW_API_LINK_OVERRIDE_MIN		5
 #define ICE_FW_API_LINK_OVERRIDE_PATCH		2
 
+#define ICE_FW_CMPO_MAJ				7
+#define ICE_FW_CMPO_MIN				4
+#define ICE_FW_CMPO_PATCH			1
+
 #define ICE_SR_WORDS_IN_1KB		512
 
 /* AQ API version for LLDP_FILTER_CONTROL */

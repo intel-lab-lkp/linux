@@ -571,6 +571,23 @@ static bool ice_is_media_cage_present(struct ice_port_info *pi)
 					    NULL);
 }
 
+int ice_get_port_cage_node(struct ice_hw *hw, u8 index,
+			   u16 *node_handle, u8 *node_part_number)
+{
+	struct ice_aqc_get_link_topo cmd = {};
+
+	cmd.addr.topo_params.node_type_ctx =
+		FIELD_PREP(ICE_AQC_LINK_TOPO_NODE_TYPE_M,
+			   ICE_AQC_LINK_TOPO_NODE_TYPE_CAGE);
+	cmd.addr.topo_params.node_type_ctx |=
+		FIELD_PREP(ICE_AQC_LINK_TOPO_NODE_CTX_M,
+			   ICE_AQC_LINK_TOPO_NODE_CTX_GLOBAL);
+	cmd.addr.topo_params.index = index;
+
+	return ice_aq_get_netlist_node(hw, &cmd, node_part_number,
+				       node_handle);
+}
+
 /**
  * ice_get_media_type - Gets media type
  * @pi: port information structure
@@ -5722,6 +5739,29 @@ static bool ice_is_fw_api_min_ver(struct ice_hw *hw, u8 maj, u8 min, u8 patch)
 }
 
 /**
+ * ice_is_fw_min_ver
+ * @hw: pointer to the hardware structure
+ * @maj: major version
+ * @min: minor version
+ * @patch: patch version
+ *
+ * Checks if the firmware is minimum version
+ */
+static bool ice_is_fw_min_ver(struct ice_hw *hw, u8 maj, u8 min, u8 patch)
+{
+	if (hw->fw_maj_ver > maj)
+		return true;
+	if (hw->fw_maj_ver == maj) {
+		if (hw->fw_min_ver > min)
+			return true;
+		if (hw->fw_min_ver == min && hw->fw_patch >= patch)
+			return true;
+	}
+
+	return false;
+}
+
+/**
  * ice_fw_supports_link_override
  * @hw: pointer to the hardware structure
  *
@@ -5732,6 +5772,12 @@ bool ice_fw_supports_link_override(struct ice_hw *hw)
 	return ice_is_fw_api_min_ver(hw, ICE_FW_API_LINK_OVERRIDE_MAJ,
 				     ICE_FW_API_LINK_OVERRIDE_MIN,
 				     ICE_FW_API_LINK_OVERRIDE_PATCH);
+}
+
+bool ice_fw_supports_cmpo(struct ice_hw *hw)
+{
+	return ice_is_fw_min_ver(hw, ICE_FW_CMPO_MAJ, ICE_FW_CMPO_MIN,
+				 ICE_FW_CMPO_PATCH);
 }
 
 /**
