@@ -366,6 +366,7 @@ int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa)
 		.length = cpu_to_le32(1),
 	};
 	trace_cxl_poison(cxlmd, cxlr, &record, 0, 0, CXL_POISON_TRACE_INJECT);
+	cxl_mem_report_poison(cxlmd, cxlr, &record);
 out:
 	up_read(&cxl_dpa_rwsem);
 	up_read(&cxl_region_rwsem);
