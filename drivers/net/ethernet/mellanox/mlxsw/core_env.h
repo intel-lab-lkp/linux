@@ -35,7 +35,7 @@ int mlxsw_env_reset_module(struct net_device *netdev,
 int
 mlxsw_env_get_module_power_mode(struct mlxsw_core *mlxsw_core, u8 slot_index,
 				u8 module,
-				struct ethtool_module_power_mode_params *params,
+				struct ethtool_module_power_params *params,
 				struct netlink_ext_ack *extack);
 
 int

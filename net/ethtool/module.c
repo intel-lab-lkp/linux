@@ -12,7 +12,7 @@ struct module_req_info {
 
 struct module_reply_data {
 	struct ethnl_reply_data	base;
-	struct ethtool_module_power_mode_params power;
+	struct ethtool_module_power_params power;
 };
 
 #define MODULE_REPDATA(__reply_base) \
@@ -24,16 +24,16 @@ const struct nla_policy ethnl_module_get_policy[ETHTOOL_A_MODULE_HEADER + 1] = {
 	[ETHTOOL_A_MODULE_HEADER] = NLA_POLICY_NESTED(ethnl_header_policy),
 };
 
-static int module_get_power_mode(struct net_device *dev,
-				 struct module_reply_data *data,
-				 struct netlink_ext_ack *extack)
+static int module_get_power_cfg(struct net_device *dev,
+				struct module_reply_data *data,
+				struct netlink_ext_ack *extack)
 {
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 
-	if (!ops->get_module_power_mode)
+	if (!ops->get_module_power_cfg)
 		return 0;
 
-	return ops->get_module_power_mode(dev, &data->power, extack);
+	return ops->get_module_power_cfg(dev, &data->power, extack);
 }
 
 static int module_prepare_data(const struct ethnl_req_info *req_base,
@@ -48,7 +48,7 @@ static int module_prepare_data(const struct ethnl_req_info *req_base,
 	if (ret < 0)
 		return ret;
 
-	ret = module_get_power_mode(dev, data, info->extack);
+	ret = module_get_power_cfg(dev, data, info->extack);
 	if (ret < 0)
 		goto out_complete;
 
@@ -109,10 +109,8 @@ ethnl_set_module_validate(struct ethnl_req_info *req_info,
 	if (!tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY])
 		return 0;
 
-	if (!ops->get_module_power_mode || !ops->set_module_power_mode) {
-		NL_SET_ERR_MSG_ATTR(info->extack,
-				    tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY],
-				    "Setting power mode policy is not supported by this device");
+	if (!ops->get_module_power_cfg || !ops->set_module_power_cfg) {
+		NL_SET_ERR_MSG(info->extack, "Setting power config is not supported by this device");
 		return -EOPNOTSUPP;
 	}
 
@@ -122,8 +120,8 @@ ethnl_set_module_validate(struct ethnl_req_info *req_info,
 static int
 ethnl_set_module(struct ethnl_req_info *req_info, struct genl_info *info)
 {
-	struct ethtool_module_power_mode_params power = {};
-	struct ethtool_module_power_mode_params power_new;
+	struct ethtool_module_power_params power = {};
+	struct ethtool_module_power_params power_new;
 	const struct ethtool_ops *ops;
 	struct net_device *dev = req_info->dev;
 	struct nlattr **tb = info->attrs;
@@ -132,14 +130,14 @@ ethnl_set_module(struct ethnl_req_info *req_info, struct genl_info *info)
 	ops = dev->ethtool_ops;
 
 	power_new.policy = nla_get_u8(tb[ETHTOOL_A_MODULE_POWER_MODE_POLICY]);
-	ret = ops->get_module_power_mode(dev, &power, info->extack);
+	ret = ops->get_module_power_cfg(dev, &power, info->extack);
 	if (ret < 0)
 		return ret;
 
 	if (power_new.policy == power.policy)
 		return 0;
 
-	ret = ops->set_module_power_mode(dev, &power_new, info->extack);
+	ret = ops->set_module_power_cfg(dev, &power_new, info->extack);
 	return ret < 0 ? ret : 1;
 }
 

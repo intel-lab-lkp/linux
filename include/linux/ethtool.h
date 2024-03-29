@@ -506,12 +506,12 @@ struct ethtool_module_eeprom {
 };
 
 /**
- * struct ethtool_module_power_mode_params - module power mode parameters
+ * struct ethtool_module_power_params - module power parameters
  * @policy: The power mode policy enforced by the host for the plug-in module.
  * @mode: The operational power mode of the plug-in module. Should be filled by
  *	device drivers on get operations.
  */
-struct ethtool_module_power_mode_params {
+struct ethtool_module_power_params {
 	enum ethtool_module_power_mode_policy policy;
 	enum ethtool_module_power_mode mode;
 };
@@ -804,10 +804,10 @@ struct ethtool_rxfh_param {
  * @get_eth_ctrl_stats: Query some of the IEEE 802.3 MAC Ctrl statistics.
  * @get_rmon_stats: Query some of the RMON (RFC 2819) statistics.
  *	Set %ranges to a pointer to zero-terminated array of byte ranges.
- * @get_module_power_mode: Get the power mode policy for the plug-in module
+ * @get_module_power_cfg: Get the power mode policy for the plug-in module
  *	used by the network device and its operational power mode, if
  *	plugged-in.
- * @set_module_power_mode: Set the power mode policy for the plug-in module
+ * @set_module_power_cfg: Set the power mode policy for the plug-in module
  *	used by the network device.
  * @get_mm: Query the 802.3 MAC Merge layer state.
  * @set_mm: Set the 802.3 MAC Merge layer parameters.
@@ -940,12 +940,12 @@ struct ethtool_ops {
 	void	(*get_rmon_stats)(struct net_device *dev,
 				  struct ethtool_rmon_stats *rmon_stats,
 				  const struct ethtool_rmon_hist_range **ranges);
-	int	(*get_module_power_mode)(struct net_device *dev,
-					 struct ethtool_module_power_mode_params *params,
-					 struct netlink_ext_ack *extack);
-	int	(*set_module_power_mode)(struct net_device *dev,
-					 const struct ethtool_module_power_mode_params *params,
-					 struct netlink_ext_ack *extack);
+	int	(*get_module_power_cfg)(struct net_device *dev,
+					struct ethtool_module_power_params *params,
+					struct netlink_ext_ack *extack);
+	int	(*set_module_power_cfg)(struct net_device *dev,
+					const struct ethtool_module_power_params *params,
+					struct netlink_ext_ack *extack);
 	int	(*get_mm)(struct net_device *dev, struct ethtool_mm_state *state);
 	int	(*set_mm)(struct net_device *dev, struct ethtool_mm_cfg *cfg,
 			  struct netlink_ext_ack *extack);

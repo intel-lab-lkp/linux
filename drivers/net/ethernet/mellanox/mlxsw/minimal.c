@@ -152,7 +152,7 @@ static int mlxsw_m_reset(struct net_device *netdev, u32 *flags)
 
 static int
 mlxsw_m_get_module_power_mode(struct net_device *netdev,
-			      struct ethtool_module_power_mode_params *params,
+			      struct ethtool_module_power_params *params,
 			      struct netlink_ext_ack *extack)
 {
 	struct mlxsw_m_port *mlxsw_m_port = netdev_priv(netdev);
@@ -165,7 +165,7 @@ mlxsw_m_get_module_power_mode(struct net_device *netdev,
 
 static int
 mlxsw_m_set_module_power_mode(struct net_device *netdev,
-			      const struct ethtool_module_power_mode_params *params,
+			      const struct ethtool_module_power_params *params,
 			      struct netlink_ext_ack *extack)
 {
 	struct mlxsw_m_port *mlxsw_m_port = netdev_priv(netdev);
@@ -182,8 +182,8 @@ static const struct ethtool_ops mlxsw_m_port_ethtool_ops = {
 	.get_module_eeprom	= mlxsw_m_get_module_eeprom,
 	.get_module_eeprom_by_page = mlxsw_m_get_module_eeprom_by_page,
 	.reset			= mlxsw_m_reset,
-	.get_module_power_mode	= mlxsw_m_get_module_power_mode,
-	.set_module_power_mode	= mlxsw_m_set_module_power_mode,
+	.get_module_power_cfg	= mlxsw_m_get_module_power_mode,
+	.set_module_power_cfg	= mlxsw_m_set_module_power_mode,
 };
 
 static int

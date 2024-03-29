@@ -581,7 +581,7 @@ EXPORT_SYMBOL(mlxsw_env_reset_module);
 int
 mlxsw_env_get_module_power_mode(struct mlxsw_core *mlxsw_core, u8 slot_index,
 				u8 module,
-				struct ethtool_module_power_mode_params *params,
+				struct ethtool_module_power_params *params,
 				struct netlink_ext_ack *extack)
 {
 	struct mlxsw_env *mlxsw_env = mlxsw_core_env(mlxsw_core);
