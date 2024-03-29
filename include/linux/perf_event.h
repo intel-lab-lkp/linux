@@ -786,6 +786,7 @@ struct perf_event {
 	struct irq_work			pending_irq;
 	struct callback_head		pending_task;
 	unsigned int			pending_work;
+	wait_queue_head_t 		pending_work_wq;
 
 	atomic_t			event_limit;
 
