@@ -39,6 +39,7 @@
 #include <drm/drm_cache.h>
 #include <drm/drm_device.h>
 #include <drm/drm_util.h>
+#include <drm/ttm/ttm_backup.h>
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_tt.h>
 
@@ -157,6 +158,7 @@ static void ttm_tt_init_fields(struct ttm_tt *ttm,
 	ttm->swap_storage = NULL;
 	ttm->sg = bo->sg;
 	ttm->caching = caching;
+	ttm->restore = NULL;
 }
 
 int ttm_tt_init(struct ttm_tt *ttm, struct ttm_buffer_object *bo,
@@ -180,6 +182,12 @@ void ttm_tt_fini(struct ttm_tt *ttm)
 	if (ttm->swap_storage)
 		fput(ttm->swap_storage);
 	ttm->swap_storage = NULL;
+
+	ttm_pool_release_backed_up(ttm);
+	if (ttm->backup) {
+		ttm->backup->ops->fini(ttm->backup);
+		ttm->backup = NULL;
+	}
 
 	if (ttm->pages)
 		kvfree(ttm->pages);
@@ -250,6 +258,32 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 out_err:
 	return ret;
 }
+
+/**
+ * ttm_tt_back_up() - Helper to back up a struct ttm_tt.
+ * @bdev: The TTM device.
+ * @tt: The struct ttm_tt.
+ * @purge: Don't back up but release pages directly to system,
+ * bypassing any pooling.
+ *
+ * Helper for a TTM driver to use from the bo_shrink() method to shrink
+ * a struct ttm_tt, after it has done the necessary unbinding. This function
+ * will update the page accounting and call ttm_pool_shrink_tt to free pages
+ * or move them to the swap cache.
+ *
+ * Return: Number of pages freed or swapped out, or negative error code on
+ * error.
+ */
+long ttm_tt_back_up(struct ttm_device *bdev, struct ttm_tt *tt, bool purge)
+{
+	long ret = ttm_pool_back_up_tt(&bdev->pool, tt, purge);
+
+	if (ret > 0)
+		tt->page_flags &= ~TTM_TT_FLAG_PRIV_POPULATED;
+
+	return ret;
+}
+EXPORT_SYMBOL(ttm_tt_back_up);
 
 /**
  * ttm_tt_swapout - swap out tt object

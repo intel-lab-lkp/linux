@@ -89,6 +89,10 @@ void ttm_pool_fini(struct ttm_pool *pool);
 
 int ttm_pool_debugfs(struct ttm_pool *pool, struct seq_file *m);
 
+void ttm_pool_release_backed_up(struct ttm_tt *tt);
+
+long ttm_pool_back_up_tt(struct ttm_pool *pool, struct ttm_tt *ttm, bool purge);
+
 int ttm_pool_mgr_init(unsigned long num_pages);
 void ttm_pool_mgr_fini(void);
 
