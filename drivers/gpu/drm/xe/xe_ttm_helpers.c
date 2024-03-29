@@ -9,6 +9,80 @@
 
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_device.h>
+#include <drm/ttm/ttm_placement.h>
+#include <drm/ttm/ttm_tt.h>
+
+/**
+ * xe_ttm_bo_try_shrink - LRU walk helper to shrink a ttm buffer object.
+ * @walk: The struct xe_ttm_lru_walk that describes the walk.
+ * @bo: The buffer object.
+ * @purge: Whether to attempt to purge the bo content since it's no
+ * longer needed.
+ *
+ * The function uses the ttm_tt_back_up functionality to back up or
+ * purge a struct ttm_tt. If the bo is not in system, it's first
+ * moved there.
+ *
+ * Return: The number of pages shrunken or purged, or
+ * negative error code on failure.
+ */
+long xe_ttm_bo_try_shrink(struct xe_ttm_lru_walk *walk, struct ttm_buffer_object *bo,
+			  bool purge)
+{
+	static const struct ttm_place sys_placement_flags = {
+		.fpfn = 0,
+		.lpfn = 0,
+		.mem_type = TTM_PL_SYSTEM,
+		.flags = 0,
+	};
+	static struct ttm_placement sys_placement = {
+		.num_placement = 1,
+		.placement = &sys_placement_flags,
+	};
+	struct ttm_operation_ctx *ctx = walk->ctx;
+	struct ttm_tt *tt = bo->ttm;
+	long lret;
+
+	dma_resv_assert_held(bo->base.resv);
+
+	if (tt || !ttm_tt_is_populated(tt))
+		return 0;
+
+	if (bo->resource->mem_type != TTM_PL_SYSTEM) {
+		int ret = ttm_bo_validate(bo, &sys_placement, ctx);
+
+		if (ret) {
+			if (ret == -EINTR || ret == -EDEADLK ||
+			    ret == -ERESTARTSYS)
+				return ret;
+			return 0;
+		}
+	}
+
+	if (ctx->no_wait_gpu &&
+	    !dma_resv_test_signaled(bo->base.resv,
+				    DMA_RESV_USAGE_BOOKKEEP))
+		return 0;
+
+	lret = dma_resv_wait_timeout(bo->base.resv,
+				     DMA_RESV_USAGE_BOOKKEEP,
+				     walk->ctx->interruptible,
+				     MAX_SCHEDULE_TIMEOUT);
+	if (lret < 0) {
+		if (lret == -ERESTARTSYS)
+			return lret;
+		return 0;
+	}
+
+	if (bo->deleted)
+		lret = ttm_tt_back_up(bo->bdev, tt, true);
+	else
+		lret = ttm_tt_back_up(bo->bdev, tt, purge);
+	if (lret < 0 && lret != -EINTR)
+		return 0;
+
+	return lret;
+}
 
 static bool xe_ttm_lru_walk_trylock(struct xe_ttm_lru_walk *walk,
 				    struct ttm_buffer_object *bo,

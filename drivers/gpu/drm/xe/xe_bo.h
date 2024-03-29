@@ -93,6 +93,7 @@
 #define XE_BO_PROPS_INVALID	(-1)
 
 struct sg_table;
+struct xe_ttm_lru_walk;
 
 struct xe_bo *xe_bo_alloc(void);
 void xe_bo_free(struct xe_bo *bo);
@@ -343,6 +344,8 @@ static inline unsigned int xe_sg_segment_size(struct device *dev)
 }
 
 #define i915_gem_object_flush_if_display(obj)		((void)(obj))
+
+long xe_bo_shrinker_process(struct xe_ttm_lru_walk *walk, struct ttm_buffer_object *bo);
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
 /**
