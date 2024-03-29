@@ -202,5 +202,3 @@ operations:
           attributes:
             - team-ifindex
             - list-port
-            - item-port
-            - attr-port
