@@ -30,6 +30,9 @@ properties:
     maximum: 32
     default: 32
 
+  ep-gpios:
+    description: Input GPIO configured for the PERST signal.
+
 required:
   - rockchip,max-outbound-regions
 
