@@ -106,6 +106,7 @@ void ttm_resource_cursor_fini(struct ttm_resource_cursor *cursor)
 	ttm_resource_cursor_fini_locked(cursor);
 	spin_unlock(lru_lock);
 }
+EXPORT_SYMBOL(ttm_resource_cursor_fini);
 
 /**
  * ttm_lru_bulk_move_init - initialize a bulk move structure
@@ -635,6 +636,7 @@ ttm_resource_manager_next(struct ttm_resource_cursor *cursor)
 
 	return NULL;
 }
+EXPORT_SYMBOL(ttm_resource_manager_next);
 
 /**
  * ttm_resource_manager_first() - Start iterating over the resources
@@ -661,6 +663,7 @@ ttm_resource_manager_first(struct ttm_resource_manager *man,
 
 	return ttm_resource_manager_next(cursor);
 }
+EXPORT_SYMBOL(ttm_resource_manager_first);
 
 static void ttm_kmap_iter_iomap_map_local(struct ttm_kmap_iter *iter,
 					  struct iosys_map *dmap,
