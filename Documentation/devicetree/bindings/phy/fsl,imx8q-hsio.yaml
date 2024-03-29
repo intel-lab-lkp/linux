@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/fsl,imx8q-hsio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Freescale i.MX8Q SoC series HSIO SERDES PHY
+
+maintainers:
+  - Richard Zhu <hongxing.zhu@nxp.com>
+
+properties:
+  compatible:
+    enum:
+      - fsl,imx8qxp-serdes
+      - fsl,imx8qm-serdes
+  reg:
+    minItems: 4
+    maxItems: 4
+
+  "#phy-cells":
+    const: 3
+    description: |
+      The first number defines the ID of the PHY contained in the HSIO macro.
+      The second defines controller ID binded to the PHY. The third defines the
+      HSIO configuratons refer to the different use cases. They are defined in
+      dt-bindings/phy/phy-imx8-pcie.h
+
+  reg-names:
+    items:
+      - const: reg
+      - const: phy
+      - const: ctrl
+      - const: misc
+
+  clocks:
+    minItems: 5
+    maxItems: 14
+
+  clock-names:
+    minItems: 5
+    maxItems: 14
+
+  fsl,refclk-pad-mode:
+    description: |
+      Specifies the mode of the refclk pad used. It can be UNUSED(PHY
+      refclock is derived from SoC internal source), INPUT(PHY refclock
+      is provided externally via the refclk pad) or OUTPUT(PHY refclock
+      is derived from SoC internal source and provided on the refclk pad).
+      Refer include/dt-bindings/phy/phy-imx8-pcie.h for the constants
+      to be used.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [ 0, 1, 2 ]
+
+  power-domains:
+    description: |
+      i.MX8Q HSIO SerDes power domains. i.MX8QXP has one SerDes power domains.
+      And i.MX8QM has two.
+    minItems: 1
+    maxItems: 2
+
+required:
+  - compatible
+  - reg
+  - "#phy-cells"
+  - clocks
+  - clock-names
+  - fsl,refclk-pad-mode
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8qxp-serdes
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: apb_pclk0
+            - const: pclk0
+            - const: phy0_crr
+            - const: ctl0_crr
+            - const: misc_crr
+        power-domains:
+          minItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8qm-serdes
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: pclk0
+            - const: pclk1
+            - const: apb_pclk0
+            - const: apb_pclk1
+            - const: pclk2
+            - const: epcs_tx
+            - const: epcs_rx
+            - const: apb_pclk2
+            - const: phy0_crr
+            - const: phy1_crr
+            - const: ctl0_crr
+            - const: ctl1_crr
+            - const: ctl2_crr
+            - const: misc_crr
+        power-domains:
+          minItems: 2
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/imx8-clock.h>
+    #include <dt-bindings/clock/imx8-lpcg.h>
+    #include <dt-bindings/firmware/imx/rsrc.h>
+    #include <dt-bindings/phy/phy-imx8-pcie.h>
+
+    serdes: phy@5f1a0000 {
+            compatible = "fsl,imx8qxp-serdes";
+            reg = <0x5f1a0000 0x10000>,
+                  <0x5f120000 0x10000>,
+                  <0x5f140000 0x10000>,
+                  <0x5f160000 0x10000>;
+            reg-names = "reg", "phy", "ctrl", "misc";
+            clocks = <&phyx1_lpcg IMX_LPCG_CLK_0>,
+                     <&phyx1_lpcg IMX_LPCG_CLK_4>,
+                     <&phyx1_crr1_lpcg IMX_LPCG_CLK_4>,
+                     <&pcieb_crr3_lpcg IMX_LPCG_CLK_4>,
+                     <&misc_crr5_lpcg IMX_LPCG_CLK_4>;
+            clock-names = "apb_pclk0", "pclk0", "phy0_crr", "ctl0_crr",
+                          "misc_crr";
+            power-domains = <&pd IMX_SC_R_SERDES_1>;
+            #phy-cells = <3>;
+            status = "disabled";
+    };
+...
