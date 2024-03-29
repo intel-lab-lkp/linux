@@ -1290,6 +1290,24 @@ int cxl_set_timestamp(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_set_timestamp, CXL);
 
+void cxl_mem_report_poison(struct cxl_memdev *cxlmd,
+			   struct cxl_region *cxlr,
+			   struct cxl_poison_record *poison)
+{
+	u64 dpa = le64_to_cpu(poison->address) & CXL_POISON_START_MASK;
+	u64 len = PAGE_ALIGN(le32_to_cpu(poison->length) * CXL_POISON_LEN_MULT);
+	u64 hpa = cxl_trace_hpa(cxlr, cxlmd, dpa);
+	unsigned long pfn = PHYS_PFN(hpa);
+	unsigned long pfn_end = pfn + len / PAGE_SIZE - 1;
+
+	if (!IS_ENABLED(CONFIG_MEMORY_FAILURE))
+		return;
+
+	for (; pfn <= pfn_end; pfn++)
+		memory_failure_queue(pfn, MF_ACTION_REQUIRED);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_mem_report_poison, CXL);
+
 int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 		       struct cxl_region *cxlr)
 {
