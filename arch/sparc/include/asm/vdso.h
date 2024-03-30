@@ -5,6 +5,16 @@
 #ifndef _ASM_SPARC_VDSO_H
 #define _ASM_SPARC_VDSO_H
 
+#include <linux/linkage.h>
+#include <linux/time.h>
+#include <linux/time_types.h>
+#include <linux/types.h>
+
+notrace int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts);
+notrace int __vdso_clock_gettime_stick(clockid_t clock, struct __kernel_old_timespec *ts);
+notrace int __vdso_gettimeofday(struct __kernel_old_timeval *tv, struct timezone *tz);
+notrace int __vdso_gettimeofday_stick(struct __kernel_old_timeval *tv, struct timezone *tz);
+
 struct vdso_image {
 	void *data;
 	unsigned long size;   /* Always a multiple of PAGE_SIZE */

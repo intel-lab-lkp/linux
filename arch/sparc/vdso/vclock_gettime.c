@@ -19,6 +19,7 @@
 #include <asm/unistd.h>
 #include <asm/timex.h>
 #include <asm/clocksource.h>
+#include <asm/vdso.h>
 #include <asm/vvar.h>
 
 #ifdef	CONFIG_SPARC64
