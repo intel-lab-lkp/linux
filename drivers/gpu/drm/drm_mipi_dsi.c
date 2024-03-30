@@ -645,6 +645,31 @@ int mipi_dsi_set_maximum_return_packet_size(struct mipi_dsi_device *dsi,
 EXPORT_SYMBOL(mipi_dsi_set_maximum_return_packet_size);
 
 /**
+ * mipi_dsi_compression_mode_raw() - control DSC on the peripheral
+ * @dsi: DSI peripheral device
+ * @data: data to be sent to the device
+ * @len: size of the data buffer
+ *
+ * Control the Display Stream Compression on the peripheral using the
+ * default Picture Parameter Set and VESA DSC 1.1 algorithm.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+ssize_t mipi_dsi_compression_mode_raw(struct mipi_dsi_device *dsi, void *data, size_t len)
+{
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.type = MIPI_DSI_COMPRESSION_MODE,
+		.tx_len = len,
+		.tx_buf = data,
+	};
+	int ret = mipi_dsi_device_transfer(dsi, &msg);
+
+	return (ret < 0) ? ret : 0;
+}
+EXPORT_SYMBOL(mipi_dsi_compression_mode_raw);
+
+/**
  * mipi_dsi_compression_mode() - enable/disable DSC on the peripheral
  * @dsi: DSI peripheral device
  * @enable: Whether to enable or disable the DSC
@@ -658,15 +683,8 @@ ssize_t mipi_dsi_compression_mode(struct mipi_dsi_device *dsi, bool enable)
 {
 	/* Note: Needs updating for non-default PPS or algorithm */
 	u8 tx[2] = { enable << 0, 0 };
-	struct mipi_dsi_msg msg = {
-		.channel = dsi->channel,
-		.type = MIPI_DSI_COMPRESSION_MODE,
-		.tx_len = sizeof(tx),
-		.tx_buf = tx,
-	};
-	int ret = mipi_dsi_device_transfer(dsi, &msg);
 
-	return (ret < 0) ? ret : 0;
+	return mipi_dsi_compression_mode_raw(dsi, tx, sizeof(tx));
 }
 EXPORT_SYMBOL(mipi_dsi_compression_mode);
 
