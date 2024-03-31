@@ -3040,7 +3040,7 @@ static void put_cpu_partial(struct kmem_cache *s, struct slab *slab, int drain)
 	oldslab = this_cpu_read(s->cpu_slab->partial);
 
 	if (oldslab) {
-		if (drain && oldslab->slabs >= s->cpu_partial_slabs) {
+		if (drain && oldslab->slabs >= slub_get_cpu_partial(s)) {
 			/*
 			 * Partial array is full. Move the existing set to the
 			 * per node partial list. Postpone the actual unfreezing
