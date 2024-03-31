@@ -2688,18 +2688,20 @@ static struct slab *get_partial_node(struct kmem_cache *s,
 		if (!partial) {
 			partial = slab;
 			stat(s, ALLOC_FROM_PARTIAL);
-		} else {
-			put_cpu_partial(s, slab, 0);
-			stat(s, CPU_PARTIAL_NODE);
-			partial_slabs++;
-		}
-#ifdef CONFIG_SLUB_CPU_PARTIAL
-		if (partial_slabs > s->cpu_partial_slabs / 2)
-			break;
-#else
-		break;
-#endif
 
+			/* Fill cpu partial if needed from next iteration, or break */
+			if (kmem_cache_has_cpu_partial(s))
+				continue;
+			else
+				break;
+		}
+
+		put_cpu_partial(s, slab, 0);
+		stat(s, CPU_PARTIAL_NODE);
+		partial_slabs++;
+
+		if (partial_slabs > slub_get_cpu_partial(s) / 2)
+			break;
 	}
 	spin_unlock_irqrestore(&n->list_lock, flags);
 	return partial;
