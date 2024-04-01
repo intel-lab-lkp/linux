@@ -5,12 +5,16 @@
 #ifndef __ASSEMBLY__
 #include <linux/types.h>
 
-typedef u64	pteval_t;
-typedef u64	pmdval_t;
-typedef u64	pudval_t;
-typedef u64	p4dval_t;
-typedef u64	pgdval_t;
-typedef u64	pgprotval_t;
+/*
+ * Variables of these types are subject to atomic compare-and-exchange
+ * operations, so they have to be properly aligned to avoid split locks.
+ */
+typedef u64	pteval_t	__aligned(8);
+typedef u64	pmdval_t	__aligned(8);
+typedef u64	pudval_t	__aligned(8);
+typedef u64	p4dval_t	__aligned(8);
+typedef u64	pgdval_t	__aligned(8);
+typedef u64	pgprotval_t	__aligned(8);
 
 typedef union {
 	struct {
