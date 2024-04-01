@@ -19,62 +19,79 @@
 /* Protects attachments of new symlinks */
 DEFINE_MUTEX(configfs_symlink_mutex);
 
-static int item_depth(struct config_item * item)
-{
-	struct config_item * p = item;
-	int depth = 0;
-	do { depth++; } while ((p = p->ci_parent) && !configfs_is_root(p));
-	return depth;
-}
-
-static int item_path_length(struct config_item * item)
+static int item_path_length(struct config_item *item, int depth)
 {
 	struct config_item * p = item;
 	int length = 1;
+
+	if (!depth)
+		return length;
+
 	do {
 		length += strlen(config_item_name(p)) + 1;
 		p = p->ci_parent;
-	} while (p && !configfs_is_root(p));
+		depth--;
+	} while (depth && p && !configfs_is_root(p));
 	return length;
 }
 
-static void fill_item_path(struct config_item * item, char * buffer, int length)
+
+static void fill_item_path(struct config_item *item, int depth, char *buffer, int length)
 {
 	struct config_item * p;
 
 	--length;
-	for (p = item; p && !configfs_is_root(p); p = p->ci_parent) {
+	for (p = item; depth && p && !configfs_is_root(p); p = p->ci_parent, depth--) {
 		int cur = strlen(config_item_name(p));
 
 		/* back up enough to print this bus id with '/' */
 		length -= cur;
 		memcpy(buffer + length, config_item_name(p), cur);
-		*(buffer + --length) = '/';
+		if (depth > 1)
+			*(buffer + --length) = '/';
 	}
 }
 
 static int configfs_get_target_path(struct config_item *item,
 		struct config_item *target, char **path)
 {
-	int depth, size;
+	struct config_item *pdest, *ptarget;
+	int target_depth = 0, item_depth = 0;
+	int size;
 	char *s;
 
-	depth = item_depth(item);
-	size = item_path_length(target) + depth * 3 - 1;
+	/* find closest common parent to make a minimal path */
+	for (ptarget = target;
+	     ptarget && !configfs_is_root(ptarget);
+	     ptarget = ptarget->ci_parent) {
+		item_depth = 0;
+		for (pdest = item;
+		     pdest && !configfs_is_root(pdest);
+		     pdest = pdest->ci_parent) {
+			if (pdest == ptarget)
+				goto out;
+
+			item_depth++;
+		}
+
+		target_depth++;
+	}
+out:
+	size = 3 * item_depth + item_path_length(target, target_depth) - 1;
 	if (size > PATH_MAX)
 		return -ENAMETOOLONG;
 
-	pr_debug("%s: depth = %d, size = %d\n", __func__, depth, size);
+	pr_debug("%s: item_depth = %d, target_depth = %d, size = %d\n",
+		 __func__, item_depth, target_depth, size);
 
 	*path = kzalloc(size, GFP_KERNEL);
 	if (!*path)
 		return -ENOMEM;
 
+	for (s = *path; item_depth--; s += 3)
+		strcpy(s, "../");
 
-	for (s = *path; depth--; s += 3)
-		strcpy(s,"../");
-
-	fill_item_path(target, *path, size);
+	fill_item_path(target, target_depth, *path, size);
 	pr_debug("%s: path = '%s'\n", __func__, *path);
 	return 0;
 }
