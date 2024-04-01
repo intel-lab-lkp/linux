@@ -2133,36 +2133,27 @@ bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd)
 }
 EXPORT_SYMBOL_NS_GPL(schedule_cxl_memdev_detach, CXL);
 
-/**
- * cxl_hb_get_perf_coordinates - Retrieve performance numbers between initiator
- *				 and host bridge
- *
- * @port: endpoint cxl_port
- * @coord: output access coordinates
- *
- * Return: errno on failure, 0 on success.
- */
-int cxl_hb_get_perf_coordinates(struct cxl_port *port,
-				struct access_coordinate *coord)
+static void add_latency(struct access_coordinate *c, long latency)
 {
-	struct cxl_port *iter = port;
-	struct cxl_dport *dport;
-
-	if (!is_cxl_endpoint(port))
-		return -EINVAL;
-
-	dport = iter->parent_dport;
-	while (iter && !is_cxl_root(to_cxl_port(iter->dev.parent))) {
-		iter = to_cxl_port(iter->dev.parent);
-		dport = iter->parent_dport;
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
+		c[i].write_latency += latency;
+		c[i].read_latency += latency;
 	}
+}
 
-	coord[ACCESS_COORDINATE_LOCAL] =
-		dport->hb_coord[ACCESS_COORDINATE_LOCAL];
-	coord[ACCESS_COORDINATE_CPU] =
-		dport->hb_coord[ACCESS_COORDINATE_CPU];
+static void set_min_bandwidth(struct access_coordinate *c, unsigned int bw)
+{
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
+		c[i].write_bandwidth = min(c[i].write_bandwidth, bw);
+		c[i].read_bandwidth = min(c[i].read_bandwidth, bw);
+	}
+}
 
-	return 0;
+static void set_access_coordinates(struct access_coordinate *out,
+				   struct access_coordinate *in)
+{
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++)
+		out[i] = in[i];
 }
 
 /**
@@ -2176,9 +2167,15 @@ int cxl_hb_get_perf_coordinates(struct cxl_port *port,
 int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 				      struct access_coordinate *coord)
 {
-	struct access_coordinate c = {
-		.read_bandwidth = UINT_MAX,
-		.write_bandwidth = UINT_MAX,
+	struct access_coordinate c[] = {
+		{
+			.read_bandwidth = UINT_MAX,
+			.write_bandwidth = UINT_MAX,
+		},
+		{
+			.read_bandwidth = UINT_MAX,
+			.write_bandwidth = UINT_MAX,
+		},
 	};
 	struct cxl_port *iter = port;
 	struct cxl_dport *dport;
@@ -2198,11 +2195,9 @@ int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 	 * nothing to gather.
 	 */
 	while (!is_cxl_root(to_cxl_port(iter->dev.parent))) {
-		cxl_coordinates_combine(&c, &c, &dport->sw_coord);
-		c.write_latency += dport->link_latency;
-		c.read_latency += dport->link_latency;
-
 		iter = to_cxl_port(iter->dev.parent);
+		cxl_coordinates_combine(c, c, dport->coord);
+		add_latency(c, dport->link_latency);
 		dport = iter->parent_dport;
 	}
 
@@ -2213,10 +2208,8 @@ int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 		return -ENXIO;
 	bw /= BITS_PER_BYTE;
 
-	c.write_bandwidth = min(c.write_bandwidth, bw);
-	c.read_bandwidth = min(c.read_bandwidth, bw);
-
-	*coord = c;
+	set_min_bandwidth(c, bw);
+	set_access_coordinates(coord, c);
 
 	return 0;
 }
