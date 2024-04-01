@@ -20,6 +20,37 @@ struct dsmas_entry {
 	int qos_class;
 };
 
+static u32 cdat_normalize(u16 entry, u64 base, u8 type)
+{
+	u32 value;
+
+	/*
+	 * Check for invalid and overflow values
+	 */
+	if (entry == 0xffff || !entry)
+		return 0;
+	else if (base > (UINT_MAX / (entry)))
+		return 0;
+
+	value = entry * base;
+	switch (type) {
+	case ACPI_HMAT_ACCESS_LATENCY:
+	case ACPI_HMAT_READ_LATENCY:
+	case ACPI_HMAT_WRITE_LATENCY:
+		value = DIV_ROUND_UP(value, 1000);
+		/*
+		 * With latency being converted from picoseconds to nanoseconds,
+		 * ensure that latency is at least 1 for sub-nanosecond latency
+		 * values.
+		 */
+		value = min_not_zero((u32)1, value);
+		break;
+	default:
+		break;
+	}
+	return value;
+}
+
 static int cdat_dsmas_handler(union acpi_subtable_headers *header, void *arg,
 			      const unsigned long end)
 {
@@ -104,7 +135,6 @@ static int cdat_dslbis_handler(union acpi_subtable_headers *header, void *arg,
 	__le16 le_val;
 	u64 val;
 	u16 len;
-	int rc;
 
 	len = le16_to_cpu((__force __le16)hdr->length);
 	if (len != size || (unsigned long)hdr + len > end) {
@@ -131,10 +161,8 @@ static int cdat_dslbis_handler(union acpi_subtable_headers *header, void *arg,
 
 	le_base = (__force __le64)dslbis->entry_base_unit;
 	le_val = (__force __le16)dslbis->entry[0];
-	rc = check_mul_overflow(le64_to_cpu(le_base),
-				le16_to_cpu(le_val), &val);
-	if (rc)
-		pr_warn("DSLBIS value overflowed.\n");
+	val = cdat_normalize(le16_to_cpu(le_val), le64_to_cpu(le_base),
+			     dslbis->data_type);
 
 	cxl_access_coordinate_set(dent->coord, dslbis->data_type, val);
 
@@ -456,10 +484,8 @@ static int cdat_sslbis_handler(union acpi_subtable_headers *header, void *arg,
 
 		le_base = (__force __le64)tbl->sslbis_header.entry_base_unit;
 		le_val = (__force __le16)tbl->entries[i].latency_or_bandwidth;
-
-		if (check_mul_overflow(le64_to_cpu(le_base),
-				       le16_to_cpu(le_val), &val))
-			dev_warn(dev, "SSLBIS value overflowed!\n");
+		val = cdat_normalize(le16_to_cpu(le_val), le64_to_cpu(le_base),
+				     sslbis->data_type);
 
 		xa_for_each(&port->dports, index, dport) {
 			if (dsp_id == ACPI_CDAT_SSLBIS_ANY_PORT ||
@@ -559,16 +585,6 @@ void cxl_region_perf_data_calculate(struct cxl_region *cxlr,
 						     perf->coord[i].write_latency);
 		cxlr->coord[i].read_bandwidth += perf->coord[i].read_bandwidth;
 		cxlr->coord[i].write_bandwidth += perf->coord[i].write_bandwidth;
-
-		/*
-		 * Convert latency to nanosec from picosec to be consistent
-		 * with the resulting latency coordinates computed by the
-		 * HMAT_REPORTING code.
-		 */
-		cxlr->coord[i].read_latency =
-			DIV_ROUND_UP(cxlr->coord[i].read_latency, 1000);
-		cxlr->coord[i].write_latency =
-			DIV_ROUND_UP(cxlr->coord[i].write_latency, 1000);
 	}
 }
 
