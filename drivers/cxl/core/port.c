@@ -2141,6 +2141,18 @@ static void add_latency(struct access_coordinate *c, long latency)
 	}
 }
 
+static bool coordinates_valid(struct access_coordinate *c)
+{
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
+		if (c[i].read_bandwidth && c[i].write_bandwidth &&
+		    c[i].read_latency && c[i].write_latency)
+			continue;
+		return false;
+	}
+
+	return true;
+}
+
 static void set_min_bandwidth(struct access_coordinate *c, unsigned int bw)
 {
 	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
@@ -2154,6 +2166,11 @@ static void set_access_coordinates(struct access_coordinate *out,
 {
 	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++)
 		out[i] = in[i];
+}
+
+static bool parent_port_is_cxl_root(struct cxl_port *port)
+{
+	return is_cxl_root(to_cxl_port(port->dev.parent));
 }
 
 /**
@@ -2185,21 +2202,20 @@ int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 	if (!is_cxl_endpoint(port))
 		return -EINVAL;
 
-	dport = iter->parent_dport;
-
 	/*
-	 * Exit the loop when the parent port of the current port is cxl root.
-	 * The iterative loop starts at the endpoint and gathers the
-	 * latency of the CXL link from the current iter to the next downstream
-	 * port each iteration. If the parent is cxl root then there is
-	 * nothing to gather.
+	 * Exit the loop when the parent port of the current iter port is cxl
+	 * root. The iterative loop starts at the endpoint and gathers the
+	 * latency of the CXL link from the current device/port to the connected
+	 * downstream port each iteration.
 	 */
-	while (!is_cxl_root(to_cxl_port(iter->dev.parent))) {
-		iter = to_cxl_port(iter->dev.parent);
+	do {
+		dport = iter->parent_dport;
+		if (!coordinates_valid(dport->coord))
+			return -EINVAL;
 		cxl_coordinates_combine(c, c, dport->coord);
 		add_latency(c, dport->link_latency);
-		dport = iter->parent_dport;
-	}
+		iter = to_cxl_port(iter->dev.parent);
+	} while (!parent_port_is_cxl_root(iter));
 
 	/* Get the calculated PCI paths bandwidth */
 	pdev = to_pci_dev(port->uport_dev->parent);
