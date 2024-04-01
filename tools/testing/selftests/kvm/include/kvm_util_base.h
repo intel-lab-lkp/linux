@@ -130,6 +130,7 @@ struct kvm_vm {
 	 * memslot.
 	 */
 	uint32_t memslots[NR_MEM_REGIONS];
+	uint8_t flags;
 };
 
 struct vcpu_reg_sublist {
@@ -197,11 +198,14 @@ enum vm_guest_mode {
 	NUM_VM_MODES,
 };
 
+#define NO_IRQCHIP  0x01
+
 struct vm_shape {
 	uint32_t type;
 	uint8_t  mode;
 	uint8_t  subtype;
-	uint16_t padding;
+	uint8_t  flags;
+	uint8_t padding;
 };
 
 kvm_static_assert(sizeof(struct vm_shape) == sizeof(uint64_t));
@@ -213,6 +217,17 @@ kvm_static_assert(sizeof(struct vm_shape) == sizeof(uint64_t));
 	struct vm_shape shape = {		\
 		.mode = (__mode),		\
 		.type = VM_TYPE_DEFAULT		\
+	};					\
+						\
+	shape;					\
+})
+
+#define VM_SHAPE_FLAGS(__FLAGS)			\
+({						\
+	struct vm_shape shape = {		\
+		.mode = VM_MODE_DEFAULT,	\
+		.type = VM_TYPE_DEFAULT,	\
+		.flags = __FLAGS		\
 	};					\
 						\
 	shape;					\

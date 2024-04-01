@@ -574,7 +574,9 @@ static void vcpu_setup(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
 
 void kvm_arch_vm_post_create(struct kvm_vm *vm)
 {
-	vm_create_irqchip(vm);
+	if (!(vm->flags & NO_IRQCHIP))
+		vm_create_irqchip(vm);
+
 	sync_global_to_guest(vm, host_cpu_is_intel);
 	sync_global_to_guest(vm, host_cpu_is_amd);
 
