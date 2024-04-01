@@ -54,7 +54,7 @@ static void fill_item_path(struct config_item * item, char * buffer, int length)
 }
 
 static int configfs_get_target_path(struct config_item *item,
-		struct config_item *target, char *path)
+		struct config_item *target, char **path)
 {
 	int depth, size;
 	char *s;
@@ -66,11 +66,16 @@ static int configfs_get_target_path(struct config_item *item,
 
 	pr_debug("%s: depth = %d, size = %d\n", __func__, depth, size);
 
-	for (s = path; depth--; s += 3)
+	*path = kzalloc(size, GFP_KERNEL);
+	if (!*path)
+		return -ENOMEM;
+
+
+	for (s = *path; depth--; s += 3)
 		strcpy(s,"../");
 
-	fill_item_path(target, path, size);
-	pr_debug("%s: path = '%s'\n", __func__, path);
+	fill_item_path(target, *path, size);
+	pr_debug("%s: path = '%s'\n", __func__, *path);
 	return 0;
 }
 
@@ -79,27 +84,22 @@ static int create_link(struct config_item *parent_item,
 		       struct dentry *dentry)
 {
 	struct configfs_dirent *target_sd = item->ci_dentry->d_fsdata;
-	char *body;
+	char *body = NULL;
 	int ret;
 
 	if (!configfs_dirent_is_ready(target_sd))
 		return -ENOENT;
-
-	body = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!body)
-		return -ENOMEM;
 
 	configfs_get(target_sd);
 	spin_lock(&configfs_dirent_lock);
 	if (target_sd->s_type & CONFIGFS_USET_DROPPING) {
 		spin_unlock(&configfs_dirent_lock);
 		configfs_put(target_sd);
-		kfree(body);
 		return -ENOENT;
 	}
 	target_sd->s_links++;
 	spin_unlock(&configfs_dirent_lock);
-	ret = configfs_get_target_path(parent_item, item, body);
+	ret = configfs_get_target_path(parent_item, item, &body);
 	if (!ret)
 		ret = configfs_create_link(target_sd, parent_item->ci_dentry,
 					   dentry, body);
