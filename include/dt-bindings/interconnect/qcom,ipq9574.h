@@ -1,0 +1,36 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+#ifndef INTERCONNECT_QCOM_IPQ9574_H
+#define INTERCONNECT_QCOM_IPQ9574_H
+
+#define ICC_ANOC_PCIE0		0
+#define ICC_SNOC_PCIE0		1
+#define ICC_ANOC_PCIE1		2
+#define ICC_SNOC_PCIE1		3
+#define ICC_ANOC_PCIE2		4
+#define ICC_SNOC_PCIE2		5
+#define ICC_ANOC_PCIE3		6
+#define ICC_SNOC_PCIE3		7
+#define ICC_SNOC_USB		8
+#define ICC_ANOC_USB_AXI	9
+#define ICC_NSSNOC_NSSCC	10
+#define ICC_NSSNOC_SNOC_0	11
+#define ICC_NSSNOC_SNOC_1	12
+#define ICC_NSSNOC_PCNOC_1	13
+#define ICC_NSSNOC_QOSGEN_REF	14
+#define ICC_NSSNOC_TIMEOUT_REF	15
+#define ICC_NSSNOC_XO_DCD	16
+#define ICC_NSSNOC_ATB		17
+#define ICC_MEM_NOC_NSSNOC	18
+#define ICC_NSSNOC_MEMNOC	19
+#define ICC_NSSNOC_MEM_NOC_1	20
+
+#define ICC_NSSNOC_PPE		0
+#define ICC_NSSNOC_PPE_CFG	1
+#define ICC_NSSNOC_NSS_CSR	2
+#define ICC_NSSNOC_IMEM_QSB	3
+#define ICC_NSSNOC_IMEM_AHB	4
+
+#define MASTER(x)	((ICC_ ## x) * 2)
+#define SLAVE(x)	(MASTER(x) + 1)
+
+#endif /* INTERCONNECT_QCOM_IPQ9574_H */
