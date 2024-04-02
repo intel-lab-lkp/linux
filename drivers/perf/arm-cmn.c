@@ -1948,21 +1948,26 @@ static int arm_cmn_pmu_offline_cpu(unsigned int cpu, struct hlist_node *cpuhp_no
 {
 	struct arm_cmn *cmn;
 	unsigned int target;
+	cpumask_var_t mask;
 	int node;
-	cpumask_t mask;
 
 	cmn = hlist_entry_safe(cpuhp_node, struct arm_cmn, cpuhp_node);
 	if (cpu != cmn->cpu)
 		return 0;
 
+	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
+		return 0;
+
 	node = dev_to_node(cmn->dev);
-	if (cpumask_and(&mask, cpumask_of_node(node), cpu_online_mask) &&
-	    cpumask_andnot(&mask, &mask, cpumask_of(cpu)))
-		target = cpumask_any(&mask);
+	if (cpumask_and(mask, cpumask_of_node(node), cpu_online_mask) &&
+	    cpumask_andnot(mask, mask, cpumask_of(cpu)))
+		target = cpumask_any(mask);
 	else
 		target = cpumask_any_but(cpu_online_mask, cpu);
 	if (target < nr_cpu_ids)
 		arm_cmn_migrate(cmn, target);
+
+	free_cpumask_var(mask);
 	return 0;
 }
 
