@@ -537,61 +537,67 @@ static int ov4689_setup_blc_anchors(struct ov4689 *ov4689,
 	return ret;
 }
 
+static int ov4689_stream_on(struct ov4689 *ov4689,
+			    struct v4l2_subdev_state *sd_state)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(ov4689->dev);
+	if (ret < 0)
+		return ret;
+
+	ret = cci_multi_reg_write(ov4689->regmap, ov4689_common_regs,
+				  ARRAY_SIZE(ov4689_common_regs), NULL);
+	if (ret)
+		goto error;
+
+	ret = ov4689_setup_timings(ov4689, sd_state);
+	if (ret)
+		goto error;
+
+	ret = ov4689_setup_blc_anchors(ov4689, sd_state);
+	if (ret)
+		goto error;
+
+	ret = __v4l2_ctrl_handler_setup(&ov4689->ctrl_handler);
+	if (ret)
+		goto error;
+
+	ret = cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
+			OV4689_MODE_STREAMING, NULL);
+	if (ret)
+		goto error;
+
+	return 0;
+
+error:
+	pm_runtime_put(ov4689->dev);
+	return ret;
+}
+
+static int ov4689_stream_off(struct ov4689 *ov4689)
+{
+	cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE, OV4689_MODE_SW_STANDBY,
+		  NULL);
+	pm_runtime_mark_last_busy(ov4689->dev);
+	pm_runtime_put_autosuspend(ov4689->dev);
+
+	return 0;
+}
+
 static int ov4689_s_stream(struct v4l2_subdev *sd, int on)
 {
 	struct ov4689 *ov4689 = to_ov4689(sd);
 	struct v4l2_subdev_state *sd_state;
-	struct device *dev = ov4689->dev;
-	int ret = 0;
+	int ret;
 
 	sd_state = v4l2_subdev_lock_and_get_active_state(&ov4689->subdev);
 
-	if (on) {
-		ret = pm_runtime_resume_and_get(dev);
-		if (ret < 0)
-			goto unlock_and_return;
+	if (on)
+		ret = ov4689_stream_on(ov4689, sd_state);
+	else
+		ret = ov4689_stream_off(ov4689);
 
-		ret = cci_multi_reg_write(ov4689->regmap,
-					  ov4689_common_regs,
-					  ARRAY_SIZE(ov4689_common_regs),
-					  NULL);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
-
-		ret = ov4689_setup_timings(ov4689, sd_state);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
-
-		ret = ov4689_setup_blc_anchors(ov4689, sd_state);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
-
-		ret = __v4l2_ctrl_handler_setup(&ov4689->ctrl_handler);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
-
-		ret = cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
-				OV4689_MODE_STREAMING, NULL);
-		if (ret) {
-			pm_runtime_put(dev);
-			goto unlock_and_return;
-		}
-	} else {
-		cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
-			  OV4689_MODE_SW_STANDBY, NULL);
-		pm_runtime_mark_last_busy(dev);
-		pm_runtime_put_autosuspend(dev);
-	}
-
-unlock_and_return:
 	v4l2_subdev_unlock_state(sd_state);
 
 	return ret;
