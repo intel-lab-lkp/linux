@@ -690,33 +690,38 @@ static int dwc_pcie_pmu_offline_cpu(unsigned int cpu, struct hlist_node *cpuhp_n
 {
 	struct dwc_pcie_pmu *pcie_pmu;
 	struct pci_dev *pdev;
-	int node;
-	cpumask_t mask;
 	unsigned int target;
+	cpumask_var_t mask;
+	int node;
 
 	pcie_pmu = hlist_entry_safe(cpuhp_node, struct dwc_pcie_pmu, cpuhp_node);
 	/* Nothing to do if this CPU doesn't own the PMU */
 	if (cpu != pcie_pmu->on_cpu)
 		return 0;
 
+	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
+		return 0;
+
 	pcie_pmu->on_cpu = -1;
 	pdev = pcie_pmu->pdev;
 	node = dev_to_node(&pdev->dev);
-	if (cpumask_and(&mask, cpumask_of_node(node), cpu_online_mask) &&
-	    cpumask_andnot(&mask, &mask, cpumask_of(cpu)))
-		target = cpumask_any(&mask);
+	if (cpumask_and(mask, cpumask_of_node(node), cpu_online_mask) &&
+	    cpumask_andnot(mask, mask, cpumask_of(cpu)))
+		target = cpumask_any(mask);
 	else
 		target = cpumask_any_but(cpu_online_mask, cpu);
 
 	if (target >= nr_cpu_ids) {
 		pci_err(pdev, "There is no CPU to set\n");
-		return 0;
+		goto __free_cpumask;
 	}
 
 	/* This PMU does NOT support interrupt, just migrate context. */
 	perf_pmu_migrate_context(&pcie_pmu->pmu, cpu, target);
 	pcie_pmu->on_cpu = target;
 
+__free_cpumask:
+	free_cpumask_var(mask);
 	return 0;
 }
 
