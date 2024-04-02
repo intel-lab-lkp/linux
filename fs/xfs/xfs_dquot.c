@@ -356,6 +356,23 @@ xfs_dquot_disk_alloc(
 	if (error)
 		goto err_cancel;
 
+	if (nmaps == 0) {
+		/*
+		 * Unexpected ENOSPC - the transaction reservation should have
+		 * guaranteed that this allocation will succeed. We don't know
+		 * why this happened, so just back out gracefully.
+		 *
+		 * We commit the transaction instead of cancelling it as it may
+		 * be dirty due to extent count upgrade. This avoids a potential
+		 * filesystem shutdown when this happens. We ignore any error
+		 * from the transaction commit - we always return -ENOSPC to the
+		 * caller here so we really don't care if the commit fails for
+		 * some unknown reason...
+		 */
+		xfs_trans_commit(tp);
+		return -ENOSPC;
+	}
+
 	ASSERT(map.br_blockcount == XFS_DQUOT_CLUSTER_SIZE_FSB);
 	ASSERT(nmaps == 1);
 	ASSERT((map.br_startblock != DELAYSTARTBLOCK) &&
