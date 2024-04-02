@@ -1892,6 +1892,9 @@ xfs_ioctl_getset_resblocks(
 		if (copy_from_user(&fsop, arg, sizeof(fsop)))
 			return -EFAULT;
 
+		if (fsop.resblks >= mp->m_sb.sb_dblocks)
+			return -EINVAL;
+
 		error = mnt_want_write_file(filp);
 		if (error)
 			return error;
