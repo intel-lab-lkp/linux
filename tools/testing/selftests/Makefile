@@ -116,6 +116,13 @@ TARGETS += zram
 TARGETS_HOTPLUG = cpu-hotplug
 TARGETS_HOTPLUG += memory-hotplug
 
+# Networking tests want the net/lib target, include it automatically
+ifneq ($(filter net ,$(TARGETS)),)
+ifeq ($(filter net/lib,$(TARGETS)),)
+	override TARGETS := $(TARGETS) net/lib
+endif
+endif
+
 # User can optionally provide a TARGETS skiplist.  By default we skip
 # BPF since it has cutting edge build time dependencies which require
 # more effort to install.
