@@ -12,6 +12,7 @@
 
 #include <asm/vmalloc.h>
 
+struct kmem_cache;
 struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
 struct notifier_block;		/* in notifier.h */
 struct iov_iter;		/* in uio.h */
@@ -125,6 +126,21 @@ static inline pgprot_t arch_vmap_pgprot_tagged(pgprot_t prot)
 }
 #endif
 
+#ifndef arch_skip_va
+static inline bool arch_skip_va(struct vmap_area *va, unsigned long vstart)
+{
+	return false;
+}
+#endif
+
+#ifndef arch_refine_vmap_space
+static inline void arch_refine_vmap_space(struct rb_root *root,
+					  struct list_head *head,
+					  struct kmem_cache *cachep)
+{
+}
+#endif
+
 /*
  *	Highlevel APIs for driver use
  */
@@ -214,6 +230,14 @@ extern struct vm_struct *__get_vm_area_caller(unsigned long size,
 void free_vm_area(struct vm_struct *area);
 extern struct vm_struct *remove_vm_area(const void *addr);
 extern struct vm_struct *find_vm_area(const void *addr);
+extern void insert_vmap_area_augment(struct vmap_area *va, struct rb_node *from,
+				     struct rb_root *root,
+				     struct list_head *head);
+extern int va_clip(struct rb_root *root, struct list_head *head,
+		   struct vmap_area *va, unsigned long nva_start_addr,
+		   unsigned long size);
+extern struct vmap_area *__find_vmap_area(unsigned long addr,
+					  struct rb_root *root);
 struct vmap_area *find_vmap_area(unsigned long addr);
 
 static inline bool is_vm_area_hugepages(const void *addr)

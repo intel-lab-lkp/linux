@@ -989,7 +989,7 @@ unsigned long vmalloc_nr_pages(void)
 	return atomic_long_read(&nr_vmalloc_pages);
 }
 
-static struct vmap_area *__find_vmap_area(unsigned long addr, struct rb_root *root)
+struct vmap_area *__find_vmap_area(unsigned long addr, struct rb_root *root)
 {
 	struct rb_node *n = root->rb_node;
 
@@ -1322,7 +1322,7 @@ insert_vmap_area(struct vmap_area *va,
 		link_va(va, root, parent, link, head);
 }
 
-static void
+void
 insert_vmap_area_augment(struct vmap_area *va,
 	struct rb_node *from, struct rb_root *root,
 	struct list_head *head)
@@ -1501,7 +1501,7 @@ find_vmap_lowest_match(struct rb_root *root, unsigned long size,
 				vstart < va->va_start) {
 			node = node->rb_left;
 		} else {
-			if (is_within_this_va(va, size, align, vstart))
+			if (!arch_skip_va(va, vstart) && is_within_this_va(va, size, align, vstart))
 				return va;
 
 			/*
@@ -1522,7 +1522,8 @@ find_vmap_lowest_match(struct rb_root *root, unsigned long size,
 			 */
 			while ((node = rb_parent(node))) {
 				va = rb_entry(node, struct vmap_area, rb_node);
-				if (is_within_this_va(va, size, align, vstart))
+				if (!arch_skip_va(va, vstart) &&
+				    is_within_this_va(va, size, align, vstart))
 					return va;
 
 				if (get_subtree_max_size(node->rb_right) >= length &&
@@ -1554,7 +1555,7 @@ find_vmap_lowest_linear_match(struct list_head *head, unsigned long size,
 	struct vmap_area *va;
 
 	list_for_each_entry(va, head, list) {
-		if (!is_within_this_va(va, size, align, vstart))
+		if (arch_skip_va(va, vstart) || !is_within_this_va(va, size, align, vstart))
 			continue;
 
 		return va;
@@ -1617,7 +1618,7 @@ classify_va_fit_type(struct vmap_area *va,
 	return type;
 }
 
-static __always_inline int
+__always_inline int
 va_clip(struct rb_root *root, struct list_head *head,
 		struct vmap_area *va, unsigned long nva_start_addr,
 		unsigned long size)
@@ -5129,4 +5130,7 @@ void __init vmalloc_init(void)
 	vmap_node_shrinker->count_objects = vmap_node_shrink_count;
 	vmap_node_shrinker->scan_objects = vmap_node_shrink_scan;
 	shrinker_register(vmap_node_shrinker);
+
+	arch_refine_vmap_space(&free_vmap_area_root, &free_vmap_area_list,
+			       vmap_area_cachep);
 }
