@@ -1305,8 +1305,8 @@ static int arm_cspmu_cpu_online(unsigned int cpu, struct hlist_node *node)
 
 static int arm_cspmu_cpu_teardown(unsigned int cpu, struct hlist_node *node)
 {
+	cpumask_var_t online_supported;
 	int dst;
-	struct cpumask online_supported;
 
 	struct arm_cspmu *cspmu =
 		hlist_entry_safe(node, struct arm_cspmu, cpuhp_node);
@@ -1315,17 +1315,22 @@ static int arm_cspmu_cpu_teardown(unsigned int cpu, struct hlist_node *node)
 	if (!cpumask_test_and_clear_cpu(cpu, &cspmu->active_cpu))
 		return 0;
 
-	/* Choose a new CPU to migrate ownership of the PMU to */
-	cpumask_and(&online_supported, &cspmu->associated_cpus,
-		    cpu_online_mask);
-	dst = cpumask_any_but(&online_supported, cpu);
-	if (dst >= nr_cpu_ids)
+	if (!alloc_cpumask_var(&online_supported, GFP_KERNEL))
 		return 0;
+
+	/* Choose a new CPU to migrate ownership of the PMU to */
+	cpumask_and(online_supported, &cspmu->associated_cpus,
+		    cpu_online_mask);
+	dst = cpumask_any_but(online_supported, cpu);
+	if (dst >= nr_cpu_ids)
+		goto __free_cpumask;
 
 	/* Use this CPU for event counting */
 	perf_pmu_migrate_context(&cspmu->pmu, cpu, dst);
 	arm_cspmu_set_active_cpu(dst, cspmu);
 
+__free_cpumask:
+	free_cpumask_var(online_supported);
 	return 0;
 }
 
