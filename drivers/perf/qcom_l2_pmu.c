@@ -801,9 +801,9 @@ static int l2cache_pmu_online_cpu(unsigned int cpu, struct hlist_node *node)
 
 static int l2cache_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 {
-	struct cluster_pmu *cluster;
+	cpumask_var_t cluster_online_cpus;
 	struct l2cache_pmu *l2cache_pmu;
-	cpumask_t cluster_online_cpus;
+	struct cluster_pmu *cluster;
 	unsigned int target;
 
 	l2cache_pmu = hlist_entry_safe(node, struct l2cache_pmu, node);
@@ -815,17 +815,20 @@ static int l2cache_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	if (cluster->on_cpu != cpu)
 		return 0;
 
+	if (!alloc_cpumask_var(&cluster_online_cpus, GFP_KERNEL))
+		return 0;
+
 	/* Give up ownership of cluster */
 	cpumask_clear_cpu(cpu, &l2cache_pmu->cpumask);
 	cluster->on_cpu = -1;
 
 	/* Any other CPU for this cluster which is still online */
-	cpumask_and(&cluster_online_cpus, &cluster->cluster_cpus,
+	cpumask_and(cluster_online_cpus, &cluster->cluster_cpus,
 		    cpu_online_mask);
-	target = cpumask_any_but(&cluster_online_cpus, cpu);
+	target = cpumask_any_but(cluster_online_cpus, cpu);
 	if (target >= nr_cpu_ids) {
 		disable_irq(cluster->irq);
-		return 0;
+		goto __free_cpumask;
 	}
 
 	perf_pmu_migrate_context(&l2cache_pmu->pmu, cpu, target);
@@ -833,6 +836,8 @@ static int l2cache_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	cpumask_set_cpu(target, &l2cache_pmu->cpumask);
 	WARN_ON(irq_set_affinity(cluster->irq, cpumask_of(target)));
 
+__free_cpumask:
+	free_cpumask_var(cluster_online_cpus);
 	return 0;
 }
 
