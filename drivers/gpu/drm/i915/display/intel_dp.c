@@ -5812,6 +5812,8 @@ intel_dp_detect(struct drm_connector *connector,
 
 	intel_dp_mst_configure(intel_dp);
 
+	intel_psr_init_dpcd(intel_dp);
+
 	/*
 	 * TODO: Reset link params when switching to MST mode, until MST
 	 * supports link training fallback params.
