@@ -185,8 +185,19 @@ struct console_font {
 
 #define KD_FONT_FLAG_DONT_RECALC 	1	/* Don't recalculate hw charcell size [compat] */
 
+#define KDFONTINFO	_IO(KD_IOCTL_BASE, 0x73)	/* font information */
+
+#define KD_FONT_INFO_FLAG_LOW_SIZE	_BITUL(0) /* 256 */
+#define KD_FONT_INFO_FLAG_HIGH_SIZE	_BITUL(1) /* 512 */
+
+struct console_font_info {
+	unsigned int min_width, min_height;	/* minimal font size */
+	unsigned int max_width, max_height;	/* maximum font size */
+	unsigned int flags;			/* KD_FONT_INFO_FLAG_* */
+};
+
 /* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */
-/* note: 0x4B60-0x4B6D, 0x4B70-0x4B72 used above */
+/* note: 0x4B60-0x4B6D, 0x4B70-0x4B73 used above */
 
 #endif /* _UAPI_LINUX_KD_H */
