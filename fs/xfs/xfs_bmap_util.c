@@ -735,19 +735,13 @@ xfs_alloc_file_space(
 		if (error)
 			break;
 
-		/*
-		 * If the allocator cannot find a single free extent large
-		 * enough to cover the start block of the requested range,
-		 * xfs_bmapi_write will return 0 but leave *nimaps set to 0.
-		 *
-		 * In that case we simply need to keep looping with the same
-		 * startoffset_fsb so that one of the following allocations
-		 * will eventually reach the requested range.
-		 */
-		if (nimaps) {
-			startoffset_fsb += imapp->br_blockcount;
-			allocatesize_fsb -= imapp->br_blockcount;
+		if (nimaps == 0) {
+			error = ENOSPC;
+			break;
 		}
+
+		startoffset_fsb += imapp->br_blockcount;
+		allocatesize_fsb -= imapp->br_blockcount;
 	}
 
 	return error;
