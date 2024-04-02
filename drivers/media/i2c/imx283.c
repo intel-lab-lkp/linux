@@ -450,12 +450,12 @@ static const struct imx283_mode supported_modes_12bit[] = {
 		.bpp = 12,
 		.width = 2736,
 		.height = 1824,
-		.min_hmax = 1870, /* Pixels (362 * 360/72 + padding) */
+		.min_hmax = 2414, /* Pixels (362 * 480MHz/72MHz + padding) */
 		.min_vmax = 3840, /* Lines */
 
 		/* 50.00 FPS */
-		.default_hmax = 1870, /* 362 @ 360MHz/72MHz */
-		.default_vmax = 3960,
+		.default_hmax = 2500, /* 375 @ 480MHz/72Mhz */
+		.default_vmax = 3840,
 
 		.veff = 1824,
 		.vst = 0,
@@ -483,7 +483,7 @@ static const struct imx283_mode supported_modes_10bit[] = {
 		.min_vmax = 3793,
 
 		/* 25.00 FPS */
-		.default_hmax = 1500, /* 750 @ 576MHz / 72MHz */
+		.default_hmax = 6000, /* 750 @ 576MHz / 72MHz */
 		.default_vmax = 3840,
 
 		.min_shr = 10,
@@ -568,12 +568,15 @@ static inline void get_mode_table(unsigned int code,
 static u64 imx283_pixel_rate(struct imx283 *imx283,
 			     const struct imx283_mode *mode)
 {
+	u64 link_frequency = link_frequencies[__ffs(imx283->link_freq_bitmap)];
 	unsigned int bpp = mode->bpp;
 	const unsigned int ddr = 2; /* Double Data Rate */
 	const unsigned int lanes = 4; /* Only 4 lane support */
-	u64 link_frequency = link_frequencies[__ffs(imx283->link_freq_bitmap)];
+	u64 numerator = link_frequency * ddr * lanes;
 
-	return link_frequency * ddr * lanes / bpp;
+	do_div(numerator, bpp);
+
+	return numerator;
 }
 
 /* Convert from a variable pixel_rate to 72 MHz clock cycles */
@@ -588,8 +591,11 @@ static u64 imx283_internal_clock(unsigned int pixel_rate, unsigned int pixels)
 	 */
 	const u32 iclk_pre = 72;
 	const u32 pclk_pre = pixel_rate / HZ_PER_MHZ;
+	u64 numerator = pixels * iclk_pre;
 
-	return pixels * iclk_pre / pclk_pre;
+	do_div(numerator, pclk_pre);
+
+	return numerator;
 }
 
 /* Internal clock (72MHz) to Pixel Rate clock (Variable) */
@@ -604,8 +610,11 @@ static u64 imx283_iclk_to_pix(unsigned int pixel_rate, unsigned int cycles)
 	 */
 	const u32 iclk_pre = 72;
 	const u32 pclk_pre = pixel_rate / HZ_PER_MHZ;
+	u64 numerator = cycles * pclk_pre;
 
-	return cycles * pclk_pre / iclk_pre;
+	do_div(numerator, iclk_pre);
+
+	return numerator;
 }
 
 /* Determine the exposure based on current hmax, vmax and a given SHR */
