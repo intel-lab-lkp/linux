@@ -37,21 +37,81 @@ enum {
 };
 
 /*
+ * This extent_map structure is an in-memory representation of file extents,
+ * it would represent all file extents (including holes, no matter if we have
+ * hole file extents).
+ *
  * Keep this structure as compact as possible, as we can have really large
  * amounts of allocated extent maps at any time.
  */
 struct extent_map {
 	struct rb_node rb_node;
 
-	/* all of these are in bytes */
+	/* All of these are in bytes */
+
+	/*
+	 * File offset of the file extent. matching key.offset of
+	 * (INO EXTENT_DATA FILEPOS) key.
+	 */
 	u64 start;
+
+	/*
+	 * Length of the file extent.
+	 * For non-inlined file extents it's btrfs_file_extent_item::num_bytes.
+	 * For inlined file extents it's sectorsize. (as there is no reliable
+	 * btrfs_file_extent::num_bytes).
+	 */
 	u64 len;
+
+	/*
+	 * The modified range start/length, these are in-memory-only
+	 * members for fsync/logtree optimization.
+	 */
 	u64 mod_start;
 	u64 mod_len;
+
+	/*
+	 * The file offset of the original file extent before splitting.
+	 *
+	 * This is an in-memory-only member, mathcing
+	 * em::start - btrfs_file_extent_item::offset for regular/preallocated
+	 * extents. EXTENT_MAP_HOLE otherwise.
+	 */
 	u64 orig_start;
+
+	/*
+	 * The full on-disk extent length, matching
+	 * btrfs_file_extent_item::disk_num_bytes.
+	 */
 	u64 orig_block_len;
+
+	/*
+	 * The decompressed size of the whole on-disk extent, matching
+	 * btrfs_file_extent_item::ram_bytes.
+	 *
+	 * For non-compressed extents, this matches orig_block_len.
+	 */
 	u64 ram_bytes;
+
+	/*
+	 * The on-disk logical bytenr for the file extent.
+	 *
+	 * For compressed extents it matches btrfs_file_extent_item::disk_bytenr.
+	 * For uncompressed extents it matches
+	 * btrfs_file_extent_item::disk_bytenr + btrfs_file_extent_item::offset
+	 *
+	 * For hole extents it is EXTENT_MAP_HOLE and for inline extents it is
+	 * EXTENT_MAP_INLINE.
+	 */
 	u64 block_start;
+
+	/*
+	 * The on-disk length for the file extent.
+	 *
+	 * For compressed extents it matches btrfs_file_extent_item::disk_num_bytes.
+	 * For uncompressed extents it matches em::len.
+	 * Otherwise -1 (aka doesn't make much sense).
+	 */
 	u64 block_len;
 
 	/*
