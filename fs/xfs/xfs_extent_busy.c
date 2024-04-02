@@ -534,12 +534,24 @@ xfs_extent_busy_clear_one(
 	kfree(busyp);
 }
 
+/*
+ * Sparse has real trouble with the structure of xfs_extent_busy_clear() and it
+ * is impossible to annotate it correctly if we leave the 'if (pag)' conditional
+ * in xfs_extent_busy_clear(). Hence we always "release" the lock in
+ * xfs_extent_busy_put_pag() so sparse only ever sees one possible path to
+ * drop the lock.
+ */
 static void
 xfs_extent_busy_put_pag(
 	struct xfs_perag	*pag,
 	bool			wakeup)
 		__releases(pag->pagb_lock)
 {
+	if (!pag) {
+		__release(pag->pagb_lock);
+		return;
+	}
+
 	if (wakeup) {
 		pag->pagb_gen++;
 		wake_up_all(&pag->pagb_wait);
@@ -565,10 +577,18 @@ xfs_extent_busy_clear(
 	xfs_agnumber_t		agno = NULLAGNUMBER;
 	bool			wakeup = false;
 
+	/*
+	 * Sparse thinks the locking in the loop below is balanced (one unlock,
+	 * one lock per loop iteration) and doesn't understand that we enter
+	 * with no lock held and exit with a lock held. Hence we need to
+	 * "acquire" the lock to create the correct initial condition for the
+	 * cleanup after loop termination to avoid an unexpected unlock warning.
+	 */
+	__acquire(pag->pagb_lock);
+
 	list_for_each_entry_safe(busyp, n, list, list) {
 		if (busyp->agno != agno) {
-			if (pag)
-				xfs_extent_busy_put_pag(pag, wakeup);
+			xfs_extent_busy_put_pag(pag, wakeup);
 			agno = busyp->agno;
 			pag = xfs_perag_get(mp, agno);
 			spin_lock(&pag->pagb_lock);
@@ -584,8 +604,7 @@ xfs_extent_busy_clear(
 		}
 	}
 
-	if (pag)
-		xfs_extent_busy_put_pag(pag, wakeup);
+	xfs_extent_busy_put_pag(pag, wakeup);
 }
 
 /*
