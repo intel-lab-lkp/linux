@@ -230,13 +230,21 @@ static const struct attribute_group *dsu_pmu_attr_groups[] = {
 	NULL,
 };
 
-static int dsu_pmu_get_online_cpu_any_but(struct dsu_pmu *dsu_pmu, int cpu)
+static unsigned int dsu_pmu_get_online_cpu_any_but(struct dsu_pmu *dsu_pmu, int cpu)
 {
-	struct cpumask online_supported;
+	cpumask_var_t online_supported;
+	unsigned int ret;
 
-	cpumask_and(&online_supported,
-			 &dsu_pmu->associated_cpus, cpu_online_mask);
-	return cpumask_any_but(&online_supported, cpu);
+	if (!alloc_cpumask_var(&online_supported, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_and(online_supported,
+		    &dsu_pmu->associated_cpus, cpu_online_mask);
+	ret = cpumask_any_but(&online_supported, cpu);
+
+	free_cpumask_var(online_supported);
+
+	return ret;
 }
 
 static inline bool dsu_pmu_counter_valid(struct dsu_pmu *dsu_pmu, u32 idx)
