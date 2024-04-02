@@ -504,7 +504,7 @@ int hisi_uncore_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 {
 	struct hisi_pmu *hisi_pmu = hlist_entry_safe(node, struct hisi_pmu,
 						     node);
-	cpumask_t pmu_online_cpus;
+	cpumask_var_t pmu_online_cpus;
 	unsigned int target;
 
 	if (!cpumask_test_and_clear_cpu(cpu, &hisi_pmu->associated_cpus))
@@ -514,21 +514,26 @@ int hisi_uncore_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	if (hisi_pmu->on_cpu != cpu)
 		return 0;
 
+	if (!alloc_cpumask_var(&pmu_online_cpus, GFP_KERNEL))
+		return 0;
+
 	/* Give up ownership of the PMU */
 	hisi_pmu->on_cpu = -1;
 
 	/* Choose a new CPU to migrate ownership of the PMU to */
-	cpumask_and(&pmu_online_cpus, &hisi_pmu->associated_cpus,
+	cpumask_and(pmu_online_cpus, &hisi_pmu->associated_cpus,
 		    cpu_online_mask);
-	target = cpumask_any_but(&pmu_online_cpus, cpu);
+	target = cpumask_any_but(pmu_online_cpus, cpu);
 	if (target >= nr_cpu_ids)
-		return 0;
+		goto __free_cpumask;
 
 	perf_pmu_migrate_context(&hisi_pmu->pmu, cpu, target);
 	/* Use this CPU for event counting */
 	hisi_pmu->on_cpu = target;
 	WARN_ON(irq_set_affinity(hisi_pmu->irq, cpumask_of(target)));
 
+__free_cpumask:
+	free_cpumask_var(pmu_online_cpus);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(hisi_uncore_pmu_offline_cpu);
