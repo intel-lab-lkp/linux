@@ -745,25 +745,28 @@ static int ali_drw_pmu_remove(struct platform_device *pdev)
 
 static int ali_drw_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 {
+	cpumask_var_t node_online_cpus;
 	struct ali_drw_pmu_irq *irq;
 	struct ali_drw_pmu *drw_pmu;
 	unsigned int target;
 	int ret;
-	cpumask_t node_online_cpus;
 
 	irq = hlist_entry_safe(node, struct ali_drw_pmu_irq, node);
 	if (cpu != irq->cpu)
 		return 0;
 
-	ret = cpumask_and(&node_online_cpus,
+	if (!alloc_cpumask_var(&node_online_cpus, GFP_KERNEL))
+		return 0;
+
+	ret = cpumask_and(node_online_cpus,
 			  cpumask_of_node(cpu_to_node(cpu)), cpu_online_mask);
 	if (ret)
-		target = cpumask_any_but(&node_online_cpus, cpu);
+		target = cpumask_any_but(node_online_cpus, cpu);
 	else
 		target = cpumask_any_but(cpu_online_mask, cpu);
 
 	if (target >= nr_cpu_ids)
-		return 0;
+		goto __free_cpumask;
 
 	/* We're only reading, but this isn't the place to be involving RCU */
 	mutex_lock(&ali_drw_pmu_irqs_lock);
@@ -774,6 +777,8 @@ static int ali_drw_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	WARN_ON(irq_set_affinity_hint(irq->irq_num, cpumask_of(target)));
 	irq->cpu = target;
 
+__free_cpumask:
+	free_cpumask_var(node_online_cpus);
 	return 0;
 }
 
