@@ -767,7 +767,7 @@ enum UART_TX_FLAGS {
 	struct circ_buf *xmit = &__port->state->xmit;			      \
 	unsigned int pending;						      \
 									      \
-	for (; (for_test) && (tx_ready); (for_post), __port->icount.tx++) {   \
+	for (; (for_test) && (tx_ready); (for_post)) {			      \
 		if (__port->x_char) {					      \
 			(ch) = __port->x_char;				      \
 			(put_char);					      \
@@ -780,7 +780,7 @@ enum UART_TX_FLAGS {
 									      \
 		(ch) = xmit->buf[xmit->tail];				      \
 		(put_char);						      \
-		xmit->tail = (xmit->tail + 1) % UART_XMIT_SIZE;		      \
+		uart_xmit_advance(__port, 1);				      \
 	}								      \
 									      \
 	(tx_done);							      \
