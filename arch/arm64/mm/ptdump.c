@@ -261,9 +261,7 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 		}
 		pt_dump_seq_printf(st->seq, "%9lu%c %s", delta, *unit,
 				   pg_level[st->level].name);
-		if (st->current_prot && pg_level[st->level].bits)
-			dump_prot(st, pg_level[st->level].bits,
-				  pg_level[st->level].num);
+		dump_prot(st, pg_level[st->level].bits, pg_level[st->level].num);
 		pt_dump_seq_puts(st->seq, "\n");
 
 		if (addr >= st->marker[1].start_address) {

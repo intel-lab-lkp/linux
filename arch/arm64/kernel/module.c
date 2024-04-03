@@ -26,8 +26,8 @@
 #include <asm/scs.h>
 #include <asm/sections.h>
 
-static u64 module_direct_base __ro_after_init = 0;
-static u64 module_plt_base __ro_after_init = 0;
+u64 module_direct_base __ro_after_init;
+u64 module_plt_base __ro_after_init;
 
 /*
  * Choose a random page-aligned base address for a window of 'size' bytes which
@@ -66,7 +66,7 @@ static u64 __init random_bounding_box(u64 size, u64 start, u64 end)
  * we may fall back to PLTs where they could have been avoided, but this keeps
  * the logic significantly simpler.
  */
-static int __init module_init_limits(void)
+int __init module_init_limits(void)
 {
 	u64 kernel_end = (u64)_end;
 	u64 kernel_start = (u64)_text;
@@ -108,7 +108,6 @@ static int __init module_init_limits(void)
 
 	return 0;
 }
-subsys_initcall(module_init_limits);
 
 void *module_alloc(unsigned long size)
 {

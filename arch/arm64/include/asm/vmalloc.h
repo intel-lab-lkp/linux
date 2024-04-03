@@ -4,6 +4,9 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
+struct vmap_area;
+struct kmem_cache;
+
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMAP
 
 #define arch_vmap_pud_supported arch_vmap_pud_supported
@@ -23,12 +26,24 @@ static inline bool arch_vmap_pmd_supported(pgprot_t prot)
 	return !IS_ENABLED(CONFIG_PTDUMP_DEBUGFS);
 }
 
-#endif
+#endif /* CONFIG_HAVE_ARCH_HUGE_VMAP */
 
 #define arch_vmap_pgprot_tagged arch_vmap_pgprot_tagged
 static inline pgprot_t arch_vmap_pgprot_tagged(pgprot_t prot)
 {
 	return pgprot_tagged(prot);
 }
+
+#ifdef CONFIG_RANDOMIZE_BASE
+
+#define arch_skip_va arch_skip_va
+inline bool arch_skip_va(struct vmap_area *va, unsigned long vstart);
+
+#define arch_refine_vmap_space arch_refine_vmap_space
+inline void arch_refine_vmap_space(struct rb_root *root,
+					  struct list_head *head,
+					  struct kmem_cache *cachep);
+
+#endif /* CONFIG_RANDOMIZE_BASE */
 
 #endif /* _ASM_ARM64_VMALLOC_H */
