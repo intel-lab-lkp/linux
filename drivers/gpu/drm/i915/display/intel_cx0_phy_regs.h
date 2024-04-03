@@ -254,23 +254,43 @@
 #define PHY_C20_VDR_CUSTOM_WIDTH	0xD02
 #define   PHY_C20_CUSTOM_WIDTH_MASK	REG_GENMASK(1, 0)
 #define   PHY_C20_CUSTOM_WIDTH(val)	REG_FIELD_PREP8(PHY_C20_CUSTOM_WIDTH_MASK, val)
-#define PHY_C20_A_TX_CNTX_CFG(idx)	(0xCF2E - (idx))
-#define PHY_C20_B_TX_CNTX_CFG(idx)	(0xCF2A - (idx))
+#define PHY_C20_A_TX_CNTX_CFG(reg, idx)		((reg)->tx_cnt_a - (idx))
+#define PHY_C20_B_TX_CNTX_CFG(reg, idx)		((reg)->tx_cnt_b - (idx))
 #define   C20_PHY_TX_RATE		REG_GENMASK(2, 0)
-#define PHY_C20_A_CMN_CNTX_CFG(idx)	(0xCDAA - (idx))
-#define PHY_C20_B_CMN_CNTX_CFG(idx)	(0xCDA5 - (idx))
-#define PHY_C20_A_MPLLA_CNTX_CFG(idx)	(0xCCF0 - (idx))
-#define PHY_C20_B_MPLLA_CNTX_CFG(idx)	(0xCCE5 - (idx))
+#define PHY_C20_A_CMN_CNTX_CFG(reg, idx)	((reg)->cmn_cnt_a - (idx))
+#define PHY_C20_B_CMN_CNTX_CFG(reg, idx)	((reg)->cmn_cnt_b - (idx))
+#define PHY_C20_A_MPLLA_CNTX_CFG(reg, idx)	((reg)->mplla_a - (idx))
+#define PHY_C20_B_MPLLA_CNTX_CFG(reg, idx)	((reg)->mplla_b - (idx))
 #define   C20_MPLLA_FRACEN		REG_BIT(14)
 #define   C20_FB_CLK_DIV4_EN		REG_BIT(13)
 #define   C20_MPLLA_TX_CLK_DIV_MASK	REG_GENMASK(10, 8)
-#define PHY_C20_A_MPLLB_CNTX_CFG(idx)	(0xCB5A - (idx))
-#define PHY_C20_B_MPLLB_CNTX_CFG(idx)	(0xCB4E - (idx))
+#define PHY_C20_A_MPLLB_CNTX_CFG(reg, idx)	((reg)->mpllb_a - (idx))
+#define PHY_C20_B_MPLLB_CNTX_CFG(reg, idx)	((reg)->mpllb_b - (idx))
 #define   C20_MPLLB_TX_CLK_DIV_MASK	REG_GENMASK(15, 13)
 #define   C20_MPLLB_FRACEN		REG_BIT(13)
 #define   C20_REF_CLK_MPLLB_DIV_MASK	REG_GENMASK(12, 10)
 #define   C20_MULTIPLIER_MASK		REG_GENMASK(11, 0)
 #define   C20_PHY_USE_MPLLB		REG_BIT(7)
+
+struct intel_c20pll_reg {
+	u16 tx_cnt_a;
+	u16 tx_cnt_b;
+	u16 cmn_cnt_a;
+	u16 cmn_cnt_b;
+	u16 mplla_a;
+	u16 mplla_b;
+	u16 mpllb_a;
+	u16 mpllb_b;
+};
+
+#define MTL_C20_A_TX_CNTX_CFG_ADDR	0xCF2E
+#define MTL_C20_B_TX_CNTX_CFG_ADDR	0xCF2A
+#define MTL_C20_A_CMN_CNTX_CFG_ADDR	0xCDAA
+#define MTL_C20_B_CMN_CNTX_CFG_ADDR	0xCDA5
+#define MTL_C20_A_MPLLA_CFG_ADDR	0xCCF0
+#define MTL_C20_B_MPLLA_CFG_ADDR	0xCCE5
+#define MTL_C20_A_MPLLB_CFG_ADDR	0xCB5A
+#define MTL_C20_B_MPLLB_CFG_ADDR	0xCB4E
 
 /* C20 Phy VSwing Masks */
 #define C20_PHY_VSWING_PREEMPH_MASK	REG_GENMASK8(5, 0)
