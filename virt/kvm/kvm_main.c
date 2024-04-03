@@ -1223,6 +1223,79 @@ static void kvm_destroy_vm_debugfs(struct kvm *kvm)
 	}
 }
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+static int pvsched_vcpu_ops_show(struct seq_file *m, void *data)
+{
+	char ops_name[PVSCHED_NAME_MAX];
+	struct pvsched_vcpu_ops *ops;
+	struct kvm *kvm = (struct kvm *) m->private;
+
+	rcu_read_lock();
+	ops = rcu_dereference(kvm->pvsched_ops);
+	if (ops)
+		strncpy(ops_name, ops->name, PVSCHED_NAME_MAX);
+	rcu_read_unlock();
+
+	seq_printf(m, "%s\n", ops_name);
+
+	return 0;
+}
+
+static ssize_t
+pvsched_vcpu_ops_write(struct file *filp, const char __user *ubuf,
+		size_t cnt, loff_t *ppos)
+{
+	int ret;
+	char *cmp;
+	char buf[PVSCHED_NAME_MAX];
+	struct inode *inode;
+	struct kvm *kvm;
+
+	if (cnt > PVSCHED_NAME_MAX)
+		return -EINVAL;
+
+	if (copy_from_user(&buf, ubuf, cnt))
+		return -EFAULT;
+
+	cmp = strstrip(buf);
+
+	inode = file_inode(filp);
+	inode_lock(inode);
+	kvm = (struct kvm *)inode->i_private;
+	ret = kvm_replace_pvsched_ops(kvm, cmp);
+	inode_unlock(inode);
+
+	if (ret)
+		return ret;
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int pvsched_vcpu_ops_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, pvsched_vcpu_ops_show, inode->i_private);
+}
+
+static const struct file_operations pvsched_vcpu_ops_fops = {
+	.open		= pvsched_vcpu_ops_open,
+	.write		= pvsched_vcpu_ops_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static void kvm_create_vm_pvsched_debugfs(struct kvm *kvm)
+{
+	debugfs_create_file("pvsched_vcpu_ops", 0644, kvm->debugfs_dentry, kvm,
+			    &pvsched_vcpu_ops_fops);
+}
+#else
+static void kvm_create_vm_pvsched_debugfs(struct kvm *kvm)
+{
+}
+#endif
+
 static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 {
 	static DEFINE_MUTEX(kvm_debugfs_lock);
@@ -1287,6 +1360,8 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 				    kvm->debugfs_dentry, stat_data,
 				    &stat_fops_per_vm);
 	}
+
+	kvm_create_vm_pvsched_debugfs(kvm);
 
 	ret = kvm_arch_create_vm_debugfs(kvm);
 	if (ret)
@@ -5468,6 +5543,48 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = kvm_gmem_create(kvm, &guest_memfd);
 		break;
 	}
+#endif
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case KVM_REPLACE_PVSCHED_OPS:
+		struct pvsched_vcpu_ops *ops;
+		struct kvm_pvsched_ops in_ops, out_ops;
+
+		r = -EFAULT;
+		if (copy_from_user(&in_ops, argp, sizeof(in_ops)))
+			goto out;
+
+		out_ops.ops_name[0] = 0;
+
+		rcu_read_lock();
+		ops = rcu_dereference(kvm->pvsched_ops);
+		if (ops)
+			strncpy(out_ops.ops_name, ops->name, PVSCHED_NAME_MAX);
+		rcu_read_unlock();
+
+		r = kvm_replace_pvsched_ops(kvm, (char *)in_ops.ops_name);
+		if (r)
+			goto out;
+
+		r = -EFAULT;
+		if (copy_to_user(argp, &out_ops, sizeof(out_ops)))
+			goto out;
+
+		r = 0;
+		break;
+	case KVM_GET_PVSCHED_OPS:
+		out_ops.ops_name[0] = 0;
+		rcu_read_lock();
+		ops = rcu_dereference(kvm->pvsched_ops);
+		if (ops)
+			strncpy(out_ops.ops_name, ops->name, PVSCHED_NAME_MAX);
+		rcu_read_unlock();
+
+		r = -EFAULT;
+		if (copy_to_user(argp, &out_ops, sizeof(out_ops)))
+			goto out;
+
+		r = 0;
+		break;
 #endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
