@@ -1351,7 +1351,8 @@ static int adis16475_config_sync_mode(struct adis16475 *st)
 	 * in chip_info.
 	 */
 	ret = __adis_update_bits(&st->adis, ADIS16475_REG_MSG_CTRL,
-				 ADIS16475_SYNC_MODE_MASK, sync->sync_mode);
+				 ADIS16475_SYNC_MODE_MASK,
+				 ADIS16475_SYNC_MODE(sync->sync_mode));
 	if (ret)
 		return ret;
 
