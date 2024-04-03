@@ -10,6 +10,7 @@
 #include "fbnic_csr.h"
 #include "fbnic_fw.h"
 #include "fbnic_mac.h"
+#include "fbnic_rpc.h"
 
 struct fbnic_dev {
 	struct device *dev;
@@ -37,6 +38,10 @@ struct fbnic_dev {
 	u64 dsn;
 	u32 mps;
 	u32 readrq;
+
+	/* Local copy of the devices TCAM */
+	struct fbnic_mac_addr mac_addr[FBNIC_RPC_TCAM_MACDA_NUM_ENTRIES];
+	u8 mac_addr_boundary;
 
 	/* Tri-state value indicating state of link.
 	 *  0 - Up
@@ -101,6 +106,11 @@ void fbnic_fw_wr32(struct fbnic_dev *fbd, u32 reg, u32 val);
 static inline bool fbnic_bmc_present(struct fbnic_dev *fbd)
 {
 	return fbd->fw_cap.bmc_present;
+}
+
+static inline void fbnic_bmc_set_present(struct fbnic_dev *fbd, bool present)
+{
+	fbd->fw_cap.bmc_present = present;
 }
 
 static inline bool fbnic_init_failure(struct fbnic_dev *fbd)

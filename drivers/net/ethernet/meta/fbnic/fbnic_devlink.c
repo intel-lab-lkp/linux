@@ -66,6 +66,8 @@ struct fbnic_dev *fbnic_devlink_alloc(struct pci_dev *pdev)
 
 	fbd->dsn = pci_get_dsn(pdev);
 
+	fbd->mac_addr_boundary = FBNIC_RPC_TCAM_MACDA_DEFAULT_BOUNDARY;
+
 	return fbd;
 }
 
