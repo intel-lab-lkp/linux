@@ -436,6 +436,7 @@ __blk_mq_alloc_requests_batch(struct blk_mq_alloc_data *data)
 
 static struct request *__blk_mq_alloc_requests(struct blk_mq_alloc_data *data)
 {
+	void (*limit_depth)(blk_opf_t, struct blk_mq_alloc_data *) = NULL;
 	struct request_queue *q = data->q;
 	u64 alloc_time_ns = 0;
 	struct request *rq;
@@ -461,13 +462,11 @@ static struct request *__blk_mq_alloc_requests(struct blk_mq_alloc_data *data)
 		 */
 		if ((data->cmd_flags & REQ_OP_MASK) != REQ_OP_FLUSH &&
 		    !blk_op_is_passthrough(data->cmd_flags)) {
-			struct elevator_mq_ops *ops = &q->elevator->type->ops;
+			limit_depth = q->elevator->type->ops.limit_depth;
 
 			WARN_ON_ONCE(data->flags & BLK_MQ_REQ_RESERVED);
 
 			data->rq_flags |= RQF_USE_SCHED;
-			if (ops->limit_depth)
-				ops->limit_depth(data->cmd_flags, data);
 		}
 	}
 
@@ -479,6 +478,9 @@ retry:
 
 	if (data->flags & BLK_MQ_REQ_RESERVED)
 		data->rq_flags |= RQF_RESV;
+
+	if (limit_depth)
+		limit_depth(data->cmd_flags, data);
 
 	/*
 	 * Try batched alloc if we want more than 1 tag.
