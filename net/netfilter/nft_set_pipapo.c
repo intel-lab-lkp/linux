@@ -2161,21 +2161,34 @@ static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
 	struct net *net = read_pnet(&set->net);
 	const struct nft_pipapo_match *m;
 
-	rcu_read_lock();
-	if (iter->genmask == nft_genmask_cur(net)) {
-		m = rcu_dereference(priv->match);
-	} else {
+	switch (iter->type) {
+	case NFT_ITER_FLUSH:
 		m = priv->clone;
-		if (!m) /* no pending updates */
-			m = rcu_dereference(priv->match);
-	}
+		if (!m) {
+			iter->err = -ENOMEM;
+			return;
+		}
 
-	if (m)
 		__nft_pipapo_walk(ctx, set, m, iter);
-	else
-		WARN_ON_ONCE(1);
+		break;
+	default:
+		rcu_read_lock();
+		if (iter->genmask == nft_genmask_cur(net)) {
+			m = rcu_dereference(priv->match);
+		} else {
+			m = priv->clone;
+			if (!m) /* no pending updates */
+				m = rcu_dereference(priv->match);
+		}
 
-	rcu_read_unlock();
+		if (m)
+			__nft_pipapo_walk(ctx, set, m, iter);
+		else
+			WARN_ON_ONCE(1);
+
+		rcu_read_unlock();
+		break;
+	}
 }
 
 /**

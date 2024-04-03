@@ -307,9 +307,21 @@ static inline void *nft_elem_priv_cast(const struct nft_elem_priv *priv)
 	return (void *)priv;
 }
 
+
+/**
+ * enum nft_iter_type - nftables set iterator type
+ *
+ * @NFT_ITER_FLUSH: destructive iteration, transaction mutex must be held
+ */
+enum nft_iter_type {
+	/* undef == 0 */
+	NFT_ITER_FLUSH = 1,
+};
+
 struct nft_set;
 struct nft_set_iter {
 	u8		genmask;
+	enum nft_iter_type type:8;
 	unsigned int	count;
 	unsigned int	skip;
 	int		err;

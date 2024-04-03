@@ -7369,6 +7369,7 @@ static int nft_set_flush(struct nft_ctx *ctx, struct nft_set *set, u8 genmask)
 	struct nft_set_iter iter = {
 		.genmask	= genmask,
 		.fn		= nft_setelem_flush,
+		.type		= NFT_ITER_FLUSH,
 	};
 
 	set->ops->walk(ctx, set, &iter);
