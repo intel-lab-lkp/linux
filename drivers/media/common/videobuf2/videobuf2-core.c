@@ -1341,11 +1341,13 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 	for (plane = 0; plane < vb->num_planes; ++plane) {
 		struct dma_buf *dbuf = dma_buf_get(planes[plane].m.fd);
 
+		planes[plane].dbuf = dbuf;
+
 		if (IS_ERR_OR_NULL(dbuf)) {
 			dprintk(q, 1, "invalid dmabuf fd for plane %d\n",
 				plane);
 			ret = -EINVAL;
-			goto err;
+			goto err_put_dbuf;
 		}
 
 		/* use DMABUF size if length is not provided */
@@ -1356,17 +1358,14 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 			dprintk(q, 1, "invalid dmabuf length %u for plane %d, minimum length %u\n",
 				planes[plane].length, plane,
 				vb->planes[plane].min_length);
-			dma_buf_put(dbuf);
 			ret = -EINVAL;
-			goto err;
+			goto err_put_dbuf;
 		}
 
 		/* Skip the plane if already verified */
 		if (dbuf == vb->planes[plane].dbuf &&
-			vb->planes[plane].length == planes[plane].length) {
-			dma_buf_put(dbuf);
+		    vb->planes[plane].length == planes[plane].length)
 			continue;
-		}
 
 		dprintk(q, 3, "buffer for plane %d changed\n", plane);
 
@@ -1375,29 +1374,30 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 			vb->copied_timestamp = 0;
 			call_void_vb_qop(vb, buf_cleanup, vb);
 		}
+	}
 
-		/* Release previously acquired memory if present */
-		__vb2_plane_dmabuf_put(vb, &vb->planes[plane]);
-		vb->planes[plane].bytesused = 0;
-		vb->planes[plane].length = 0;
-		vb->planes[plane].m.fd = 0;
-		vb->planes[plane].data_offset = 0;
+	if (reacquired) {
+		__vb2_buf_dmabuf_put(vb);
 
-		/* Acquire each plane's memory */
-		mem_priv = call_ptr_memop(attach_dmabuf,
-					  vb,
-					  q->alloc_devs[plane] ? : q->dev,
-					  dbuf,
-					  planes[plane].length);
-		if (IS_ERR(mem_priv)) {
-			dprintk(q, 1, "failed to attach dmabuf\n");
-			ret = PTR_ERR(mem_priv);
-			dma_buf_put(dbuf);
-			goto err;
+		for (plane = 0; plane < vb->num_planes; ++plane) {
+			/* Acquire each plane's memory */
+			mem_priv = call_ptr_memop(attach_dmabuf,
+						  vb,
+						  q->alloc_devs[plane] ? : q->dev,
+						  planes[plane].dbuf,
+						  planes[plane].length);
+			if (IS_ERR(mem_priv)) {
+				dprintk(q, 1, "failed to attach dmabuf\n");
+				ret = PTR_ERR(mem_priv);
+				goto err_put_dbuf;
+			}
+
+			vb->planes[plane].dbuf = planes[plane].dbuf;
+			vb->planes[plane].mem_priv = mem_priv;
 		}
-
-		vb->planes[plane].dbuf = dbuf;
-		vb->planes[plane].mem_priv = mem_priv;
+	} else {
+		for (plane = 0; plane < vb->num_planes; ++plane)
+			dma_buf_put(planes[plane].dbuf);
 	}
 
 	/*
@@ -1413,7 +1413,7 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 		if (ret) {
 			dprintk(q, 1, "failed to map dmabuf for plane %d\n",
 				plane);
-			goto err;
+			goto err_put_vb2_buf;
 		}
 		vb->planes[plane].dbuf_mapped = 1;
 	}
@@ -1437,7 +1437,7 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 		ret = call_vb_qop(vb, buf_init, vb);
 		if (ret) {
 			dprintk(q, 1, "buffer initialization failed\n");
-			goto err;
+			goto err_put_vb2_buf;
 		}
 	}
 
@@ -1445,11 +1445,15 @@ static int __prepare_dmabuf(struct vb2_buffer *vb)
 	if (ret) {
 		dprintk(q, 1, "buffer preparation failed\n");
 		call_void_vb_qop(vb, buf_cleanup, vb);
-		goto err;
+		goto err_put_vb2_buf;
 	}
 
 	return 0;
-err:
+
+err_put_dbuf:
+	for (plane = 0; plane < vb->num_planes; ++plane)
+		dma_buf_put(planes[plane].dbuf);
+err_put_vb2_buf:
 	/* In case of errors, release planes that were already acquired */
 	__vb2_buf_dmabuf_put(vb);
 
