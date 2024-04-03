@@ -1232,12 +1232,12 @@ static void nfp_net_open_stack(struct nfp_net *nn)
 
 		if (r_vec->rx_ring) {
 			INIT_WORK(&r_vec->rx_dim.work, nfp_net_rx_dim_work);
-			r_vec->rx_dim.mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+			r_vec->rx_dim.mode = DIM_CQ_PERIOD_MODE_SPECIFIC_0;
 		}
 
 		if (r_vec->tx_ring) {
 			INIT_WORK(&r_vec->tx_dim.work, nfp_net_tx_dim_work);
-			r_vec->tx_dim.mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+			r_vec->tx_dim.mode = DIM_CQ_PERIOD_MODE_SPECIFIC_0;
 		}
 
 		napi_enable(&r_vec->napi);
