@@ -1576,6 +1576,12 @@ again:
 	if (!bio_integrity_endio(bio))
 		return;
 
+	/*
+	 * For write BIOs to zoned devices, signal the completion of the BIO so
+	 * that the next write BIO can be submitted by zone write plugging.
+	 */
+	blk_zone_write_bio_endio(bio);
+
 	rq_qos_done_bio(bio);
 
 	if (bio->bi_bdev && bio_flagged(bio, BIO_TRACE_COMPLETION)) {
