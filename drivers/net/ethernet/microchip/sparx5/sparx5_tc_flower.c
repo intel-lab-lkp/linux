@@ -1042,6 +1042,34 @@ static int sparx5_tc_action_mirred(struct vcap_admin *admin,
 	return 0;
 }
 
+static int sparx5_tc_action_redirect(struct vcap_admin *admin,
+				     struct vcap_rule *vrule,
+				     struct flow_cls_offload *fco,
+				     struct flow_action_entry *act)
+{
+	struct vcap_u72_action ports = {0};
+	int err;
+
+	if (admin->vtype != VCAP_TYPE_IS0 && admin->vtype != VCAP_TYPE_IS2) {
+		NL_SET_ERR_MSG_MOD(fco->common.extack,
+				   "Redirect action not supported in this VCAP");
+		return -EOPNOTSUPP;
+	}
+
+	err = vcap_rule_add_action_u32(vrule, VCAP_AF_MASK_MODE,
+				       SPX5_PMM_REPLACE_ALL);
+	if (err)
+		return err;
+
+	sparx5_tc_flower_set_port_mask(&ports, act->dev);
+
+	err = vcap_rule_add_action_u72(vrule, VCAP_AF_PORT_MASK, &ports);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 /* Remove rule keys that may prevent templates from matching a keyset */
 static void sparx5_tc_flower_simplify_rule(struct vcap_admin *admin,
 					   struct vcap_rule *vrule,
@@ -1190,6 +1218,11 @@ static int sparx5_tc_flower_replace(struct net_device *ndev,
 			break;
 		case FLOW_ACTION_MIRRED:
 			err = sparx5_tc_action_mirred(admin, vrule, fco, act);
+			if (err)
+				goto out;
+			break;
+		case FLOW_ACTION_REDIRECT:
+			err = sparx5_tc_action_redirect(admin, vrule, fco, act);
 			if (err)
 				goto out;
 			break;
