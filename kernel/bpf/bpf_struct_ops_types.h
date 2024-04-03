@@ -9,4 +9,8 @@ BPF_STRUCT_OPS_TYPE(bpf_dummy_ops)
 #include <net/tcp.h>
 BPF_STRUCT_OPS_TYPE(tcp_congestion_ops)
 #endif
+#ifdef CONFIG_PARAVIRT_SCHED_HOST
+#include <linux/pvsched.h>
+BPF_STRUCT_OPS_TYPE(pvsched_vcpu_ops)
+#endif
 #endif
