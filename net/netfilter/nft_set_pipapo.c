@@ -1296,7 +1296,6 @@ static int nft_pipapo_insert(const struct net *net, const struct nft_set *set,
 	union nft_pipapo_map_bucket rulemap[NFT_PIPAPO_MAX_FIELDS];
 	const u8 *start = (const u8 *)elem->key.val.data, *end;
 	struct nft_pipapo_match *m = pipapo_maybe_clone(set);
-	struct nft_pipapo *priv = nft_set_priv(set);
 	u8 genmask = nft_genmask_next(net);
 	struct nft_pipapo_elem *e, *dup;
 	u64 tstamp = nft_net_tstamp(net);
@@ -1367,8 +1366,6 @@ static int nft_pipapo_insert(const struct net *net, const struct nft_set *set,
 	}
 
 	/* Insert */
-	priv->dirty = true;
-
 	bsize_max = m->bsize_max;
 
 	nft_pipapo_for_each_field(f, i, m) {
@@ -1733,8 +1730,6 @@ static void pipapo_gc(struct nft_set *set, struct nft_pipapo_match *m)
 		 * NFT_SET_ELEM_DEAD_BIT.
 		 */
 		if (__nft_set_elem_expired(&e->ext, tstamp)) {
-			priv->dirty = true;
-
 			gc = nft_trans_gc_queue_sync(gc, GFP_KERNEL);
 			if (!gc)
 				return;
@@ -1820,13 +1815,9 @@ static void nft_pipapo_commit(struct nft_set *set)
 	if (time_after_eq(jiffies, priv->last_gc + nft_set_gc_interval(set)))
 		pipapo_gc(set, priv->clone);
 
-	if (!priv->dirty)
-		return;
-
 	old = rcu_replace_pointer(priv->match, priv->clone,
 				  nft_pipapo_transaction_mutex_held(set));
 	priv->clone = NULL;
-	priv->dirty = false;
 
 	if (old)
 		call_rcu(&old->rcu, pipapo_reclaim_match);
@@ -1836,12 +1827,8 @@ static void nft_pipapo_abort(const struct nft_set *set)
 {
 	struct nft_pipapo *priv = nft_set_priv(set);
 
-	if (!priv->dirty)
-		return;
-
 	if (!priv->clone)
 		return;
-	priv->dirty = false;
 	pipapo_free_match(priv->clone);
 	priv->clone = NULL;
 }
@@ -2094,7 +2081,6 @@ static void nft_pipapo_remove(const struct net *net, const struct nft_set *set,
 		}
 
 		if (i == m->field_count) {
-			priv->dirty = true;
 			pipapo_drop(m, rulemap);
 			return;
 		}
@@ -2299,21 +2285,10 @@ static int nft_pipapo_init(const struct nft_set *set,
 		f->mt = NULL;
 	}
 
-	/* Create an initial clone of matching data for next insertion */
-	priv->clone = pipapo_clone(m);
-	if (!priv->clone) {
-		err = -ENOMEM;
-		goto out_free;
-	}
-
-	priv->dirty = false;
-
 	rcu_assign_pointer(priv->match, m);
 
 	return 0;
 
-out_free:
-	free_percpu(m->scratch);
 out_scratch:
 	kfree(m);
 
