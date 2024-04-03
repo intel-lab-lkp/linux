@@ -320,10 +320,10 @@ static void __vb2_plane_dmabuf_put(struct vb2_buffer *vb, struct vb2_plane *p)
  */
 static void __vb2_buf_dmabuf_put(struct vb2_buffer *vb)
 {
-	unsigned int plane;
+	unsigned int i;
 
-	for (plane = 0; plane < vb->num_planes; ++plane)
-		__vb2_plane_dmabuf_put(vb, &vb->planes[plane]);
+	for (i = 0; i < vb->num_planes; ++i)
+		__vb2_plane_dmabuf_put(vb, &vb->planes[vb->num_planes - 1 - i]);
 }
 
 /*
