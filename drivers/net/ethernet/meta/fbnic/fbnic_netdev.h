@@ -6,6 +6,8 @@
 
 #include <linux/types.h>
 
+#include "fbnic_csr.h"
+#include "fbnic_rpc.h"
 #include "fbnic_txrx.h"
 
 struct fbnic_net {
@@ -31,7 +33,12 @@ struct fbnic_net {
 	u16 num_tx_queues;
 	u16 num_rx_queues;
 
+	u8 indir_tbl[FBNIC_RPC_RSS_TBL_COUNT][FBNIC_RPC_RSS_TBL_SIZE];
+	u32 rss_key[FBNIC_RPC_RSS_KEY_DWORD_LEN];
+	u32 rss_flow_hash[FBNIC_NUM_HASH_OPT];
+
 	u64 link_down_events;
+
 	struct list_head napis;
 };
 
