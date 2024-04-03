@@ -1322,6 +1322,10 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 		break;
 	}
 
+	if (ctrl->info.flags & UVC_CTRL_FLAG_GET_MAX)
+		v4l2_ctrl->maximum = mapping->get(mapping, UVC_GET_MAX,
+				     uvc_ctrl_data(ctrl, UVC_CTRL_DATA_MAX));
+
 	if (ctrl->info.flags & UVC_CTRL_FLAG_GET_MIN) {
 		switch (v4l2_ctrl->id) {
 		case V4L2_CID_ZOOM_CONTINUOUS:
@@ -1332,8 +1336,7 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 			 * value cannot be probed so it becomes the additive
 			 * inverse of maximum.
 			 */
-			v4l2_ctrl->minimum = -1 * mapping->get(mapping, UVC_GET_MAX,
-						uvc_ctrl_data(ctrl, UVC_CTRL_DATA_MAX));
+			v4l2_ctrl->minimum = -v4l2_ctrl->maximum;
 			break;
 		default:
 			v4l2_ctrl->minimum = mapping->get(mapping, UVC_GET_MIN,
@@ -1341,10 +1344,6 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 			break;
 		}
 	}
-
-	if (ctrl->info.flags & UVC_CTRL_FLAG_GET_MAX)
-		v4l2_ctrl->maximum = mapping->get(mapping, UVC_GET_MAX,
-				     uvc_ctrl_data(ctrl, UVC_CTRL_DATA_MAX));
 
 	if (ctrl->info.flags & UVC_CTRL_FLAG_GET_RES)
 		v4l2_ctrl->step = mapping->get(mapping, UVC_GET_RES,
@@ -1940,7 +1939,7 @@ int uvc_ctrl_set(struct uvc_fh *handle,
 		case V4L2_CID_ZOOM_CONTINUOUS:
 		case V4L2_CID_PAN_SPEED:
 		case V4L2_CID_TILT_SPEED:
-			min = max * -1;
+			min = -max;
 		default:
 			break;
 		}
