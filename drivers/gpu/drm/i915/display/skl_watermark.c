@@ -3733,7 +3733,7 @@ void intel_mbus_dbox_update(struct intel_atomic_state *state)
 		if (!new_crtc_state->hw.active)
 			continue;
 
-		if (DISPLAY_VER(i915) >= 14) {
+		if (DISPLAY_VER(i915) >= 14 && !IS_BATTLEMAGE(i915)) {
 			if (xelpdp_is_only_pipe_per_dbuf_bank(crtc->pipe,
 							      new_dbuf_state->active_pipes))
 				pipe_val |= MBUS_DBOX_BW_8CREDITS_MTL;
