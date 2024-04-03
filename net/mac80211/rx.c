@@ -3825,14 +3825,26 @@ static ieee80211_rx_result debug_noinline
 ieee80211_rx_h_userspace_mgmt(struct ieee80211_rx_data *rx)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(rx->skb);
+	struct ieee80211_mgmt *mgmt = (void *)rx->skb->data;
+	__le16 stype;
+	struct wireless_dev *wdev = &rx->sdata->wdev;
+
 	struct cfg80211_rx_info info = {
 		.freq = ieee80211_rx_status_to_khz(status),
 		.buf = rx->skb->data,
 		.len = rx->skb->len,
 		.link_id = rx->link_id,
 		.have_link_id = rx->link_id >= 0,
+		.critical_update = false,
 	};
 
+	stype = mgmt->frame_control & cpu_to_le16(IEEE80211_FCTL_STYPE);
+	if (stype ==  cpu_to_le16(IEEE80211_STYPE_PROBE_REQ) ||
+	    stype ==  cpu_to_le16(IEEE80211_STYPE_ASSOC_REQ) ||
+	    stype ==  cpu_to_le16(IEEE80211_STYPE_REASSOC_REQ)) {
+		if (wdev->critical_update)
+			info.critical_update = true;
+	}
 	/* skip known-bad action frames and return them in the next handler */
 	if (status->rx_flags & IEEE80211_RX_MALFORMED_ACTION_FRM)
 		return RX_CONTINUE;

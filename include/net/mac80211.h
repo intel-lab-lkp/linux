@@ -7613,4 +7613,17 @@ int ieee80211_emulate_switch_vif_chanctx(struct ieee80211_hw *hw,
 					 int n_vifs,
 					 enum ieee80211_chanctx_switch_mode mode);
 
+/**
+ * ieee80211_critical_update - update critical params for each link
+ * @vif: the specified virtual interface
+ * @link_id: the link ID for MLO, otherwise 0
+ * @critical_flag: critical update information
+ * @bpcc: Bss parameter change count value
+ *
+ * The function is called when event received from firmware to update
+ * critical parameters to user space during probe or assoc or reassoc request
+ * frame receive and needed only on beacon offload case.
+ */
+void ieee80211_critical_update(struct ieee80211_vif *vif, unsigned int link_id,
+			       bool critical_flag, u8 bpcc);
 #endif /* MAC80211_H */

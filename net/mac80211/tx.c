@@ -5041,6 +5041,8 @@ u8 ieee80211_beacon_update_cntdwn(struct ieee80211_vif *vif, unsigned int link_i
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct ieee80211_link_data *link;
 	struct beacon_data *beacon = NULL;
+	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
+	struct ieee80211_local *local = sdata->local;
 	u8 count = 0;
 
 	if (WARN_ON(link_id >= IEEE80211_MLD_MAX_NUM_LINKS))
@@ -5063,6 +5065,13 @@ u8 ieee80211_beacon_update_cntdwn(struct ieee80211_vif *vif, unsigned int link_i
 		goto unlock;
 
 	count = __ieee80211_beacon_update_cntdwn(beacon);
+	if (wiphy_ext_feature_isset(
+		    local->hw.wiphy,
+		    NL80211_EXT_FEATURE_CRITICAL_UPDATE_OFFLOAD) &&
+	    wdev->valid_links && wdev->links[link_id].ap.switch_count != count) {
+		wdev->links[link_id].ap.switch_count = count;
+		wdev->critical_update = true;
+	}
 
 unlock:
 	rcu_read_unlock();
