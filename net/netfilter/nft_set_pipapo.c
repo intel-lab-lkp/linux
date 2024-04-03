@@ -2102,32 +2102,22 @@ static void nft_pipapo_remove(const struct net *net, const struct nft_set *set,
 }
 
 /**
- * nft_pipapo_walk() - Walk over elements
+ * __nft_pipapo_walk() - Walk over elements in m
  * @ctx:	nftables API context
  * @set:	nftables API set representation
+ * @m:		matching data pointing to key mapping array
  * @iter:	Iterator
  *
  * As elements are referenced in the mapping array for the last field, directly
  * scan that array: there's no need to follow rule mappings from the first
  * field.
  */
-static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
-			    struct nft_set_iter *iter)
+static void __nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
+			      const struct nft_pipapo_match *m,
+			      struct nft_set_iter *iter)
 {
-	struct nft_pipapo *priv = nft_set_priv(set);
-	struct net *net = read_pnet(&set->net);
-	const struct nft_pipapo_match *m;
 	const struct nft_pipapo_field *f;
 	unsigned int i, r;
-
-	rcu_read_lock();
-	if (iter->genmask == nft_genmask_cur(net))
-		m = rcu_dereference(priv->match);
-	else
-		m = priv->clone;
-
-	if (unlikely(!m))
-		goto out;
 
 	for (i = 0, f = m->f; i < m->field_count - 1; i++, f++)
 		;
@@ -2148,13 +2138,43 @@ static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
 
 		iter->err = iter->fn(ctx, set, iter, &e->priv);
 		if (iter->err < 0)
-			goto out;
+			return;
 
 cont:
 		iter->count++;
 	}
+}
 
-out:
+/**
+ * nft_pipapo_walk() - Walk over elements
+ * @ctx:	nftables API context
+ * @set:	nftables API set representation
+ * @iter:	Iterator
+ *
+ * Test if destructive action is needed or not, clone active backend if needed
+ * and call the real function to work on the data.
+ */
+static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
+			    struct nft_set_iter *iter)
+{
+	struct nft_pipapo *priv = nft_set_priv(set);
+	struct net *net = read_pnet(&set->net);
+	const struct nft_pipapo_match *m;
+
+	rcu_read_lock();
+	if (iter->genmask == nft_genmask_cur(net)) {
+		m = rcu_dereference(priv->match);
+	} else {
+		m = priv->clone;
+		if (!m) /* no pending updates */
+			m = rcu_dereference(priv->match);
+	}
+
+	if (m)
+		__nft_pipapo_walk(ctx, set, m, iter);
+	else
+		WARN_ON_ONCE(1);
+
 	rcu_read_unlock();
 }
 
