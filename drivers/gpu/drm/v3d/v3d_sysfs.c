@@ -15,18 +15,20 @@ gpu_stats_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct v3d_dev *v3d = to_v3d_dev(drm);
 	enum v3d_queue queue;
 	u64 timestamp = local_clock();
-	u64 active_runtime;
 	ssize_t len = 0;
+	unsigned long flags;
 
 	len += sysfs_emit(buf, "queue\ttimestamp\tjobs\truntime\n");
 
 	for (queue = 0; queue < V3D_MAX_QUEUES; queue++) {
 		struct v3d_stats *stats = &v3d->queue[queue].stats;
+		u64 active_runtime, jobs_sent;
 
-		if (stats->start_ns)
-			active_runtime = timestamp - stats->start_ns;
-		else
-			active_runtime = 0;
+		read_lock_irqsave(&stats->rw_lock, flags);
+		active_runtime = stats->start_ns ? stats->enabled_ns + timestamp - stats->start_ns
+						 : stats->enabled_ns;
+		jobs_sent = stats->jobs_sent;
+		read_unlock_irqrestore(&stats->rw_lock, flags);
 
 		/* Each line will display the queue name, timestamp, the number
 		 * of jobs sent to that queue and the runtime, as can be seem here:
@@ -40,9 +42,7 @@ gpu_stats_show(struct device *dev, struct device_attribute *attr, char *buf)
 		 */
 		len += sysfs_emit_at(buf, len, "%s\t%llu\t%llu\t%llu\n",
 				     v3d_queue_to_string(queue),
-				     timestamp,
-				     stats->jobs_sent,
-				     stats->enabled_ns + active_runtime);
+				     timestamp, jobs_sent, active_runtime);
 	}
 
 	return len;

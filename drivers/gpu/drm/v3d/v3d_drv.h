@@ -40,6 +40,13 @@ struct v3d_stats {
 	u64 start_ns;
 	u64 enabled_ns;
 	u64 jobs_sent;
+
+	/*
+	 * This lock is used to protect the access to the GPU stats variables.
+	 * It must be used as, while we are reading the stats, IRQs can happen
+	 * and the stats would be updated.
+	 */
+	rwlock_t rw_lock;
 };
 
 struct v3d_queue_state {

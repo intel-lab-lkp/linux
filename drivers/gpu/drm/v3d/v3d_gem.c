@@ -247,8 +247,11 @@ v3d_gem_init(struct drm_device *dev)
 	int ret, i;
 
 	for (i = 0; i < V3D_MAX_QUEUES; i++) {
-		v3d->queue[i].fence_context = dma_fence_context_alloc(1);
-		memset(&v3d->queue[i].stats, 0, sizeof(v3d->queue[i].stats));
+		struct v3d_queue_state *queue = &v3d->queue[i];
+
+		queue->fence_context = dma_fence_context_alloc(1);
+		memset(&queue->stats, 0, sizeof(queue->stats));
+		rwlock_init(&queue->stats.rw_lock);
 	}
 
 	spin_lock_init(&v3d->mm_lock);

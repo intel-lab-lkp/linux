@@ -113,19 +113,28 @@ v3d_job_start_stats(struct v3d_job *job, enum v3d_queue queue)
 	struct v3d_stats *global_stats = &v3d->queue[queue].stats;
 	struct v3d_stats *local_stats = &file->stats[queue];
 	u64 now = local_clock();
+	unsigned long flags;
 
+	write_lock_irqsave(&local_stats->rw_lock, flags);
 	local_stats->start_ns = now;
+	write_unlock_irqrestore(&local_stats->rw_lock, flags);
+
+	write_lock_irqsave(&global_stats->rw_lock, flags);
 	global_stats->start_ns = now;
+	write_unlock_irqrestore(&global_stats->rw_lock, flags);
 }
 
 static void
 v3d_stats_update(struct v3d_stats *stats)
 {
 	u64 now = local_clock();
+	unsigned long flags;
 
+	write_lock_irqsave(&stats->rw_lock, flags);
 	stats->enabled_ns += now - stats->start_ns;
 	stats->jobs_sent++;
 	stats->start_ns = 0;
+	write_unlock_irqrestore(&stats->rw_lock, flags);
 }
 
 void
