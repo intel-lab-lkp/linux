@@ -770,6 +770,17 @@ static struct intel_c20pll_reg mtl_c20_reg = {
 	.mpllb_b = MTL_C20_B_MPLLB_CFG_ADDR
 };
 
+static struct intel_c20pll_reg xe2hpd_c20_reg = {
+	.tx_cnt_a = XE2HPD_C20_A_TX_CNTX_CFG_ADDR,
+	.tx_cnt_b = XE2HPD_C20_B_TX_CNTX_CFG_ADDR,
+	.cmn_cnt_a = XE2HPD_C20_A_CMN_CNTX_CFG_ADDR,
+	.cmn_cnt_b = XE2HPD_C20_B_CMN_CNTX_CFG_ADDR,
+	.mplla_a = XE2HPD_C20_A_MPLLA_CFG_ADDR,
+	.mplla_b = XE2HPD_C20_B_MPLLA_CFG_ADDR,
+	.mpllb_a = XE2HPD_C20_A_MPLLB_CFG_ADDR,
+	.mpllb_b = XE2HPD_C20_B_MPLLB_CFG_ADDR,
+};
+
 /* C20 basic DP 1.4 tables */
 static const struct intel_c20pll_state mtl_c20_dp_rbr = {
 	.clock = 162000,
@@ -2166,18 +2177,28 @@ static int intel_c20pll_calc_port_clock(struct intel_encoder *encoder,
 	return vco << tx_rate_mult >> tx_clk_div >> tx_rate;
 }
 
+static struct intel_c20pll_reg *intel_c20_get_pll_reg(struct drm_i915_private *i915)
+{
+	if (DISPLAY_VER_FULL(i915) == IP_VER(14, 1))
+		return &xe2hpd_c20_reg;
+	else
+		return &mtl_c20_reg;
+}
+
 static void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
 					  struct intel_c20pll_state *pll_state)
 {
 	bool cntx;
 	intel_wakeref_t wakeref;
 	int i;
-	struct intel_c20pll_reg *pll_reg = &mtl_c20_reg;
+	struct intel_c20pll_reg *pll_reg;
 
 	wakeref = intel_cx0_phy_transaction_begin(encoder);
 
 	/* 1. Read current context selection */
 	cntx = intel_cx0_read(encoder, INTEL_CX0_LANE0, PHY_C20_VDR_CUSTOM_SERDES_RATE) & PHY_C20_CONTEXT_TOGGLE;
+
+	pll_reg = intel_c20_get_pll_reg(to_i915(encoder->base.dev));
 
 	/* Read Tx configuration */
 	for (i = 0; i < ARRAY_SIZE(pll_state->tx); i++) {
@@ -2353,7 +2374,7 @@ static void intel_c20_pll_program(struct drm_i915_private *i915,
 	u32 clock = crtc_state->port_clock;
 	bool cntx;
 	int i;
-	const struct intel_c20pll_reg *pll_reg = &mtl_c20_reg;
+	const struct intel_c20pll_reg *pll_reg;
 
 	if (intel_crtc_has_dp_encoder(crtc_state))
 		dp = true;
@@ -2371,6 +2392,8 @@ static void intel_c20_pll_program(struct drm_i915_private *i915,
 			intel_c20_sram_write(encoder, INTEL_CX0_LANE0, RAWLANEAONX_DIG_TX_MPLLB_CAL_DONE_BANK(i), 0);
 		usleep_range(4000, 4100);
 	}
+
+	pll_reg = intel_c20_get_pll_reg(i915);
 
 	/* 3. Write SRAM configuration context. If A in use, write configuration to B context */
 	/* 3.1 Tx configuration */
