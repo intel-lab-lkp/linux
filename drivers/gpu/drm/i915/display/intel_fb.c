@@ -431,9 +431,17 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 	 * Separate AuxCCS and Flat CCS modifiers to be run only on platforms
 	 * where supported.
 	 */
-	if (intel_fb_is_ccs_modifier(md->modifier) &&
-	    HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
-		return false;
+	if (intel_fb_is_ccs_modifier(md->modifier)) {
+		/*
+		 * No CCS modifiers available on Xe2 platforms as they don't
+		 * support Aux CCS and the Flat CCS is enabled via PAT
+		 */
+		if ((DISPLAY_VER(i915) >= 20) || IS_BATTLEMAGE(i915))
+			return false;
+
+		if (HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
+			return false;
+	}
 
 	return true;
 }
