@@ -323,7 +323,6 @@ static void sprd_start_tx_dma(struct uart_port *port)
 
 	if (port->x_char) {
 		serial_out(port, SPRD_TXD, port->x_char);
-		port->icount.tx++;
 		port->x_char = 0;
 		return;
 	}
