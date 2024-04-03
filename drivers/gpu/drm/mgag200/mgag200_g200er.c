@@ -297,6 +297,9 @@ static int mgag200_g200er_pipeline_init(struct mga_device *mdev)
 	}
 	drm_connector_helper_add(connector, &mgag200_g200er_vga_connector_helper_funcs);
 
+	connector->polled = DRM_CONNECTOR_POLL_CONNECT |
+			    DRM_CONNECTOR_POLL_DISCONNECT;
+
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret) {
 		drm_err(dev, "drm_connector_attach_encoder() failed: %d\n", ret);
@@ -354,6 +357,7 @@ struct mga_device *mgag200_g200er_device_create(struct pci_dev *pdev, const stru
 		return ERR_PTR(ret);
 
 	drm_mode_config_reset(dev);
+	drm_kms_helper_poll_init(dev);
 
 	return mdev;
 }

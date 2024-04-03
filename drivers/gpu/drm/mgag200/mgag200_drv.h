@@ -416,7 +416,8 @@ void mgag200_crtc_atomic_destroy_state(struct drm_crtc *crtc, struct drm_crtc_st
 	.destroy = drm_encoder_cleanup
 
 #define MGAG200_VGA_CONNECTOR_HELPER_FUNCS \
-	.get_modes = drm_connector_helper_get_modes
+	.get_modes = drm_connector_helper_get_modes, \
+	.detect_ctx = drm_connector_helper_detect_from_ddc
 
 #define MGAG200_VGA_CONNECTOR_FUNCS \
 	.reset                  = drm_atomic_helper_connector_reset, \
