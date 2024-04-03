@@ -45,6 +45,8 @@
 #include <asm/kvm_host.h>
 #include <linux/kvm_dirty_ring.h>
 
+#include <linux/pvsched.h>
+
 #ifndef KVM_MAX_VCPU_IDS
 #define KVM_MAX_VCPU_IDS KVM_MAX_VCPUS
 #endif
@@ -831,6 +833,11 @@ struct kvm {
 	bool dirty_ring_with_bitmap;
 	bool vm_bugged;
 	bool vm_dead;
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	spinlock_t pvsched_ops_lock;
+	struct pvsched_vcpu_ops __rcu *pvsched_ops;
+#endif
 
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
 	struct notifier_block pm_notifier;
@@ -2386,5 +2393,30 @@ static inline int kvm_gmem_get_pfn(struct kvm *kvm,
 	return -EIO;
 }
 #endif /* CONFIG_KVM_PRIVATE_MEM */
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+int kvm_vcpu_pvsched_notify(struct kvm_vcpu *vcpu, u32 events);
+int kvm_vcpu_pvsched_register(struct kvm_vcpu *vcpu);
+void kvm_vcpu_pvsched_unregister(struct kvm_vcpu *vcpu);
+
+int kvm_replace_pvsched_ops(struct kvm *kvm, char *name);
+#else
+static inline int kvm_vcpu_pvsched_notify(struct kvm_vcpu *vcpu, u32 events)
+{
+	return 0;
+}
+static inline int kvm_vcpu_pvsched_register(struct kvm_vcpu *vcpu)
+{
+	return 0;
+}
+static inline void kvm_vcpu_pvsched_unregister(struct kvm_vcpu *vcpu)
+{
+}
+
+static inline int kvm_replace_pvsched_ops(struct kvm *kvm, char *name)
+{
+	return 0;
+}
+#endif
 
 #endif

@@ -10880,6 +10880,8 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 
 	preempt_disable();
 
+	kvm_vcpu_pvsched_notify(vcpu, PVSCHED_VCPU_VMENTER);
+
 	static_call(kvm_x86_prepare_switch_to_guest)(vcpu);
 
 	/*
@@ -11043,6 +11045,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	guest_timing_exit_irqoff();
 
 	local_irq_enable();
+	kvm_vcpu_pvsched_notify(vcpu, PVSCHED_VCPU_VMEXIT);
 	preempt_enable();
 
 	kvm_vcpu_srcu_read_lock(vcpu);

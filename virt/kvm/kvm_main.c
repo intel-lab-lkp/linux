@@ -170,6 +170,142 @@ bool kvm_is_zone_device_page(struct page *page)
 	return is_zone_device_page(page);
 }
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+typedef enum {
+	PVSCHED_CB_REGISTER = 1,
+	PVSCHED_CB_UNREGISTER = 2,
+	PVSCHED_CB_NOTIFY = 3
+} pvsched_vcpu_callback_t;
+
+/*
+ * Helper function to invoke the pvsched driver callback.
+ */
+static int __vcpu_pvsched_callback(struct kvm_vcpu *vcpu, u32 events,
+		pvsched_vcpu_callback_t action)
+{
+	int ret = 0;
+	struct pid *pid;
+	struct pvsched_vcpu_ops *ops;
+
+	rcu_read_lock();
+	ops = rcu_dereference(vcpu->kvm->pvsched_ops);
+	if (!ops) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	pid = rcu_dereference(vcpu->pid);
+	if (WARN_ON_ONCE(!pid)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	get_pid(pid);
+	switch(action) {
+		case PVSCHED_CB_REGISTER:
+			ops->pvsched_vcpu_register(pid);
+			break;
+		case PVSCHED_CB_UNREGISTER:
+			ops->pvsched_vcpu_unregister(pid);
+			break;
+		case PVSCHED_CB_NOTIFY:
+			if (ops->events & events) {
+				ops->pvsched_vcpu_notify_event(
+					NULL, /* TODO: Pass guest allocated sharedmem addr */
+					pid,
+					ops->events & events);
+			}
+			break;
+		default:
+			WARN_ON_ONCE(1);
+	}
+	put_pid(pid);
+
+out:
+	rcu_read_unlock();
+	return ret;
+}
+
+int kvm_vcpu_pvsched_notify(struct kvm_vcpu *vcpu, u32 events)
+{
+	return __vcpu_pvsched_callback(vcpu, events, PVSCHED_CB_NOTIFY);
+}
+
+int kvm_vcpu_pvsched_register(struct kvm_vcpu *vcpu)
+{
+	return __vcpu_pvsched_callback(vcpu, 0, PVSCHED_CB_REGISTER);
+	/*
+	 * TODO: Action if the registration fails?
+	 */
+}
+
+void kvm_vcpu_pvsched_unregister(struct kvm_vcpu *vcpu)
+{
+	__vcpu_pvsched_callback(vcpu, 0, PVSCHED_CB_UNREGISTER);
+}
+
+/*
+ * Replaces the VM's current pvsched driver.
+ * if name is NULL or empty string, unassign the
+ * current driver.
+ */
+int kvm_replace_pvsched_ops(struct kvm *kvm, char *name)
+{
+	int ret = 0;
+	unsigned long i;
+	struct kvm_vcpu *vcpu = NULL;
+	struct pvsched_vcpu_ops *ops = NULL, *prev_ops;
+
+
+	spin_lock(&kvm->pvsched_ops_lock);
+
+	prev_ops = rcu_dereference(kvm->pvsched_ops);
+
+	/*
+	 * Unassign operation if the passed in value is
+	 * NULL or an empty string.
+	 */
+	if (name && *name) {
+		ops = pvsched_get_vcpu_ops(name);
+		if (!ops) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	if (prev_ops) {
+		/*
+		 * Unregister current pvsched driver.
+		 */
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			kvm_vcpu_pvsched_unregister(vcpu);
+		}
+
+		pvsched_put_vcpu_ops(prev_ops);
+	}
+
+
+	rcu_assign_pointer(kvm->pvsched_ops, ops);
+	if (ops) {
+		/*
+		 * Register new pvsched driver.
+		 */
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			WARN_ON_ONCE(kvm_vcpu_pvsched_register(vcpu));
+		}
+	}
+
+out:
+	spin_unlock(&kvm->pvsched_ops_lock);
+
+	if (ret)
+		return ret;
+
+	synchronize_rcu();
+
+	return 0;
+}
+#endif
+
 /*
  * Returns a 'struct page' if the pfn is "valid" and backed by a refcounted
  * page, NULL otherwise.  Note, the list of refcounted PG_reserved page types
@@ -507,6 +643,8 @@ static void kvm_vcpu_destroy(struct kvm_vcpu *vcpu)
 {
 	kvm_arch_vcpu_destroy(vcpu);
 	kvm_dirty_ring_free(&vcpu->dirty_ring);
+
+	kvm_vcpu_pvsched_unregister(vcpu);
 
 	/*
 	 * No need for rcu_read_lock as VCPU_RUN is the only place that changes
@@ -1221,6 +1359,10 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 
 	BUILD_BUG_ON(KVM_MEM_SLOTS_NUM > SHRT_MAX);
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	spin_lock_init(&kvm->pvsched_ops_lock);
+#endif
+
 	/*
 	 * Force subsequent debugfs file creations to fail if the VM directory
 	 * is not created (by kvm_create_vm_debugfs()).
@@ -1342,6 +1484,8 @@ static void kvm_destroy_vm(struct kvm *kvm)
 {
 	int i;
 	struct mm_struct *mm = kvm->mm;
+
+	kvm_replace_pvsched_ops(kvm, NULL);
 
 	kvm_destroy_pm_notifier(kvm);
 	kvm_uevent_notify_change(KVM_EVENT_DESTROY_VM, kvm);
@@ -3773,6 +3917,8 @@ bool kvm_vcpu_block(struct kvm_vcpu *vcpu)
 		if (kvm_vcpu_check_block(vcpu) < 0)
 			break;
 
+		kvm_vcpu_pvsched_notify(vcpu, PVSCHED_VCPU_HALT);
+
 		waited = true;
 		schedule();
 	}
@@ -4428,6 +4574,7 @@ static long kvm_vcpu_ioctl(struct file *filp,
 			/* The thread running this VCPU changed. */
 			struct pid *newpid;
 
+			kvm_vcpu_pvsched_unregister(vcpu);
 			r = kvm_arch_vcpu_run_pid_change(vcpu);
 			if (r)
 				break;
@@ -4436,6 +4583,7 @@ static long kvm_vcpu_ioctl(struct file *filp,
 			rcu_assign_pointer(vcpu->pid, newpid);
 			if (oldpid)
 				synchronize_rcu();
+			kvm_vcpu_pvsched_register(vcpu);
 			put_pid(oldpid);
 		}
 		r = kvm_arch_vcpu_ioctl_run(vcpu);
