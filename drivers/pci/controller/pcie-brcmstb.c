@@ -182,6 +182,20 @@
 #define DATA_ADDR(pcie)			(pcie->reg_offsets[EXT_CFG_DATA])
 #define PCIE_RGR1_SW_INIT_1(pcie)	(pcie->reg_offsets[RGR1_SW_INIT_1])
 
+/*
+ * What we call "LTR_FMT" is the 16 bit latency field format:
+ *     [15:15] Requirement bit
+ *     [12:10] Latency scale
+ *     [09:00] Latency value
+ */
+#define LTR_FMT_TO_NS(p)		(FIELD_GET(GENMASK(15, 15), (p)) \
+					 * ((unsigned long long)FIELD_GET(GENMASK(9, 0), (p)) \
+					    << (FIELD_GET(GENMASK(12, 10), (p)) * 5)))
+#define BRCM_LTR_MAX_SCALE		4 /* Scale==4 => Each unit is 1,048,576ns  */
+#define BRCM_LTR_MAX_VALUE		9 /* Using the above scale, roughly 9.4 ms */
+#define BRCM_LTR_MAX_NS			((unsigned long long)(BRCM_LTR_MAX_VALUE \
+					 << (5 * BRCM_LTR_MAX_SCALE)))
+
 /* Rescal registers */
 #define PCIE_DVT_PMU_PCIE_PHY_CTRL				0xc700
 #define  PCIE_DVT_PMU_PCIE_PHY_CTRL_DAST_NFLDS			0x3
@@ -679,6 +693,49 @@ static void brcm_extend_internal_bus_timeout(struct brcm_pcie *pcie, u32 nsec)
 	writel(216 * timeout_us, pcie->base + REG_OFFSET);
 }
 
+/* Sets downstream device latency tolerance registers to max we can handle */
+static int brcm_set_dev_ltr_max(struct pci_dev *dev, void *data)
+{
+	u16 ltr_cap_offset = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_LTR);
+	u16 ltr_fmt_cur, ltr_fmt = *(u16 *)data;
+	unsigned long long cur_nsec;
+	static const u16 reg_offsets[2] = {
+		PCI_LTR_MAX_SNOOP_LAT,
+		PCI_LTR_MAX_NOSNOOP_LAT,
+	};
+	unsigned int i;
+
+	if (!ltr_cap_offset || !dev->ltr_path)
+		return 0;
+
+	/*
+	 * FW may have already written a value so we want to respect that
+	 * value if it is lower than ltr_fmt.  Update the current value if
+	 * it is 0 or if the new value is less than the current.
+	 */
+	for (i = 0; i < ARRAY_SIZE(reg_offsets); i++) {
+		pci_read_config_word(dev, ltr_cap_offset + reg_offsets[i],
+			&ltr_fmt_cur);
+		cur_nsec = LTR_FMT_TO_NS(ltr_fmt_cur);
+		if (cur_nsec == 0 || cur_nsec > BRCM_LTR_MAX_NS)
+			pci_write_config_word(dev, ltr_cap_offset
+					      + reg_offsets[i], ltr_fmt);
+	}
+
+	return 0;
+}
+
+void brcm_set_downstream_devs_ltr_max(struct brcm_pcie *pcie)
+{
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(pcie);
+	u16 ltr_fmt = FIELD_PREP(GENMASK(9, 0), BRCM_LTR_MAX_VALUE)
+		| FIELD_PREP(GENMASK(12, 10), BRCM_LTR_MAX_SCALE)
+		| GENMASK(15, 15);
+
+	if (bridge->native_ltr)
+		pci_walk_bus(bridge->bus, brcm_set_dev_ltr_max, &ltr_fmt);
+}
+
 /* The controller is capable of serving in both RC and EP roles */
 static bool brcm_pcie_rc_mode(struct brcm_pcie *pcie)
 {
@@ -1074,8 +1131,12 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 		return -ENODEV;
 	}
 
-	/* Extend internal bus timeout to 8ms or so */
-	brcm_extend_internal_bus_timeout(pcie, SZ_8M);
+	/*
+	 * Extend internal bus timeout to 8-10ms, specifically to a value
+	 * that is slightly larger than what we are using for the max
+	 * {no-}snoop latency we will set in downstream devices.
+	 */
+	brcm_extend_internal_bus_timeout(pcie, BRCM_LTR_MAX_NS + 1000);
 
 	if (pcie->gen)
 		brcm_pcie_set_gen(pcie, pcie->gen);
@@ -1615,6 +1676,9 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 		brcm_pcie_remove(pdev);
 		return ret;
 	}
+
+	if (IS_ENABLED(CONFIG_PCIEASPM))
+		brcm_set_downstream_devs_ltr_max(pcie);
 
 	return 0;
 
