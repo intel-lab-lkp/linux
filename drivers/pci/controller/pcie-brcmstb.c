@@ -664,6 +664,21 @@ static int brcm_pcie_enable_msi(struct brcm_pcie *pcie)
 	return 0;
 }
 
+/*
+ * An internal HW bus timer value is set to a small value for debugging
+ * convenience.  Set this to something reasonable, i.e. somewhere around
+ * 10ms.
+ */
+static void brcm_extend_internal_bus_timeout(struct brcm_pcie *pcie, u32 nsec)
+{
+	/* TIMEOUT register is two registers before RGR1_SW_INIT_1 */
+	const unsigned int REG_OFFSET = PCIE_RGR1_SW_INIT_1(pcie) - 8;
+	u32 timeout_us = nsec / 1000;
+
+	/* Each unit in timeout register is 1/216,000,000 seconds */
+	writel(216 * timeout_us, pcie->base + REG_OFFSET);
+}
+
 /* The controller is capable of serving in both RC and EP roles */
 static bool brcm_pcie_rc_mode(struct brcm_pcie *pcie)
 {
@@ -1058,6 +1073,9 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 		dev_err(dev, "link down\n");
 		return -ENODEV;
 	}
+
+	/* Extend internal bus timeout to 8ms or so */
+	brcm_extend_internal_bus_timeout(pcie, SZ_8M);
 
 	if (pcie->gen)
 		brcm_pcie_set_gen(pcie, pcie->gen);
