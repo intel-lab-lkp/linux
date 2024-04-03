@@ -1031,9 +1031,14 @@ write_ctl:
 static void fbnic_config_drop_mode_rcq(struct fbnic_napi_vector *nv,
 				       struct fbnic_ring *rcq)
 {
+	struct fbnic_net *fbn = netdev_priv(nv->napi.dev);
 	u32 drop_mode, rcq_ctl;
 
-	drop_mode = FBNIC_QUEUE_RDE_CTL0_DROP_IMMEDIATE;
+	/* Drop mode is only supported on when flow control is disabled */
+	if (!fbn->tx_pause)
+		drop_mode = FBNIC_QUEUE_RDE_CTL0_DROP_IMMEDIATE;
+	else
+		drop_mode = FBNIC_QUEUE_RDE_CTL0_DROP_NEVER;
 
 	/* Specify packet layout */
 	rcq_ctl = FIELD_PREP(FBNIC_QUEUE_RDE_CTL0_DROP_MODE_MASK, drop_mode) |
@@ -1041,6 +1046,20 @@ static void fbnic_config_drop_mode_rcq(struct fbnic_napi_vector *nv,
 	    FIELD_PREP(FBNIC_QUEUE_RDE_CTL0_MIN_TROOM_MASK, FBNIC_RX_TROOM);
 
 	fbnic_ring_wr32(rcq, FBNIC_QUEUE_RDE_CTL0, rcq_ctl);
+}
+
+void fbnic_config_drop_mode(struct fbnic_net *fbn)
+{
+	struct fbnic_napi_vector *nv;
+	int i;
+
+	list_for_each_entry(nv, &fbn->napis, napis) {
+		for (i = 0; i < nv->rxt_count; i++) {
+			struct fbnic_q_triad *qt = &nv->qt[nv->txt_count + i];
+
+			fbnic_config_drop_mode_rcq(nv, &qt->cmpl);
+		}
+	}
 }
 
 static void fbnic_enable_rcq(struct fbnic_napi_vector *nv,

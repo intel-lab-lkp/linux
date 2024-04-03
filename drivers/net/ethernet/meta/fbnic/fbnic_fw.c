@@ -643,6 +643,63 @@ void fbnic_fw_check_heartbeat(struct fbnic_dev *fbd)
 		dev_warn(fbd->dev, "Failed to send heartbeat message\n");
 }
 
+/**
+ * fbnic_fw_xmit_comphy_set_msg - Create and transmit a comphy set request
+ *
+ * @fbd: FBNIC device structure
+ * @speed: Indicates link speed, composed of modulation and number of lanes
+ *
+ * Returns 0 on success, negative value on failure
+ *
+ * Asks the firmware to reconfigure the comphy for this slice to the target
+ * speed.
+ */
+int fbnic_fw_xmit_comphy_set_msg(struct fbnic_dev *fbd, u32 speed)
+{
+	struct fbnic_tlv_msg *msg;
+	int err = 0;
+
+	if (!fbnic_fw_present(fbd))
+		return -ENODEV;
+
+	msg = fbnic_tlv_msg_alloc(FBNIC_TLV_MSG_ID_COMPHY_SET_REQ);
+	if (!msg)
+		return -ENOMEM;
+
+	err = fbnic_tlv_attr_put_int(msg, FBNIC_COMPHY_SET_PAM4,
+				     !!(speed & FBNIC_LINK_MODE_PAM4));
+	if (err)
+		goto free_message;
+
+	err = fbnic_mbx_map_tlv_msg(fbd, msg);
+	if (err)
+		goto free_message;
+
+	return 0;
+
+free_message:
+	free_page((unsigned long)msg);
+	return err;
+}
+
+static const struct fbnic_tlv_index fbnic_comphy_set_resp_index[] = {
+	FBNIC_TLV_ATTR_S32(FBNIC_COMPHY_SET_ERROR),
+	FBNIC_TLV_ATTR_LAST
+};
+
+static int fbnic_fw_parse_comphy_set_resp(void *opaque,
+					  struct fbnic_tlv_msg **results)
+{
+	struct fbnic_dev *fbd = (struct fbnic_dev *)opaque;
+	int err_resp = 0;
+
+	get_signed_result(FBNIC_COMPHY_SET_ERROR, err_resp);
+	if (err_resp)
+		dev_err(fbd->dev, "COMPHY_SET returned %d\n", err_resp);
+
+	return 0;
+}
+
 static const struct fbnic_tlv_parser fbnic_fw_tlv_parser[] = {
 	FBNIC_TLV_PARSER(FW_CAP_RESP, fbnic_fw_cap_resp_index,
 			 fbnic_fw_parse_cap_resp),
@@ -650,6 +707,9 @@ static const struct fbnic_tlv_parser fbnic_fw_tlv_parser[] = {
 			 fbnic_fw_parse_ownership_resp),
 	FBNIC_TLV_PARSER(HEARTBEAT_RESP, fbnic_heartbeat_resp_index,
 			 fbnic_fw_parse_heartbeat_resp),
+	FBNIC_TLV_PARSER(COMPHY_SET_RESP,
+			 fbnic_comphy_set_resp_index,
+			 fbnic_fw_parse_comphy_set_resp),
 	FBNIC_TLV_MSG_ERROR
 };
 

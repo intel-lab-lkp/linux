@@ -52,6 +52,7 @@ void fbnic_mbx_flush_tx(struct fbnic_dev *fbd);
 int fbnic_fw_xmit_ownership_msg(struct fbnic_dev *fbd, bool take_ownership);
 int fbnic_fw_init_heartbeat(struct fbnic_dev *fbd, bool poll);
 void fbnic_fw_check_heartbeat(struct fbnic_dev *fbd);
+int fbnic_fw_xmit_comphy_set_msg(struct fbnic_dev *fbd, u32 speed);
 
 #define fbnic_mk_full_fw_ver_str(_rev_id, _delim, _commit, _str)	\
 do {									\
@@ -76,6 +77,8 @@ enum {
 	FBNIC_TLV_MSG_ID_OWNERSHIP_RESP			= 0x13,
 	FBNIC_TLV_MSG_ID_HEARTBEAT_REQ			= 0x14,
 	FBNIC_TLV_MSG_ID_HEARTBEAT_RESP			= 0x15,
+	FBNIC_TLV_MSG_ID_COMPHY_SET_REQ			= 0x3E,
+	FBNIC_TLV_MSG_ID_COMPHY_SET_RESP		= 0x3F,
 };
 
 #define FBNIC_FW_CAP_RESP_VERSION_MAJOR		CSR_GENMASK(31, 24)
@@ -105,7 +108,26 @@ enum {
 };
 
 enum {
+	FBNIC_FW_LINK_SPEED_25R1		= 1,
+	FBNIC_FW_LINK_SPEED_50R2		= 2,
+	FBNIC_FW_LINK_SPEED_50R1		= 3,
+	FBNIC_FW_LINK_SPEED_100R2		= 4,
+};
+
+enum {
+	FBNIC_FW_LINK_FEC_NONE			= 1,
+	FBNIC_FW_LINK_FEC_RS			= 2,
+	FBNIC_FW_LINK_FEC_BASER			= 3,
+};
+
+enum {
 	FBNIC_FW_OWNERSHIP_FLAG			= 0x0,
 	FBNIC_FW_OWNERSHIP_MSG_MAX
+};
+
+enum {
+	FBNIC_COMPHY_SET_PAM4			= 0x0,
+	FBNIC_COMPHY_SET_ERROR			= 0x1,
+	FBNIC_COMPHY_SET_MSG_MAX
 };
 #endif /* _FBNIC_FW_H_ */

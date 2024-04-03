@@ -84,11 +84,127 @@ void fbnic_fw_disable_mbx(struct fbnic_dev *fbd)
 	fbnic_mbx_clean(fbd);
 }
 
+static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
+{
+	struct fbnic_dev *fbd = data;
+
+	if (fbd->mac->get_link_event(fbd))
+		fbd->link_state = FBNIC_LINK_EVENT;
+	else
+		wr32(FBNIC_INTR_MASK_CLEAR(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+
+	return IRQ_HANDLED;
+}
+
+/**
+ * fbnic_mac_get_link - Retrieve the current link state of the MAC
+ * @fbd: Device to retrieve the link state of
+ * @link: pointer to boolean value that will store link state
+ *
+ * This function will query the hardware to determine the state of the
+ * hardware to determine the link status of the device. If it is unable to
+ * communicate with the device it will return ENODEV and return false
+ * indicating the link is down.
+ **/
+int fbnic_mac_get_link(struct fbnic_dev *fbd, bool *link)
+{
+	const struct fbnic_mac *mac = fbd->mac;
+
+	*link = true;
+
+	/* In an interrupt driven setup we can just skip the check if
+	 * the link is up as the interrupt should toggle it to the EVENT
+	 * state if the link has changed state at any time since the last
+	 * check.
+	 */
+	if (fbd->link_state == FBNIC_LINK_UP)
+		goto skip_check;
+
+	*link = mac->get_link(fbd);
+
+	wr32(FBNIC_INTR_MASK_CLEAR(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+skip_check:
+	if (!fbnic_present(fbd)) {
+		*link = false;
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+/**
+ * fbnic_mac_enable - Configure the MAC to enable it to advertise link
+ * @fbd: Pointer to device to initialize
+ *
+ * This function provides basic bringup for the CMAC and sets the link
+ * state to FBNIC_LINK_EVENT which tells the link state check that the
+ * current state is unknown and that interrupts must be enabled after the
+ * check is completed.
+ **/
+int fbnic_mac_enable(struct fbnic_dev *fbd)
+{
+	const struct fbnic_mac *mac = fbd->mac;
+	u32 vector = fbd->mac_msix_vector;
+	int err;
+
+	/* Request the IRQ for MAC link vector.
+	 * Map MAC cause to it, and unmask it
+	 */
+	err = request_irq(vector, &fbnic_mac_msix_intr, 0,
+			  fbd->netdev->name, fbd);
+	if (err)
+		return err;
+
+	wr32(FBNIC_INTR_MSIX_CTRL(FBNIC_INTR_MSIX_CTRL_PCS_IDX),
+	     FBNIC_MAC_MSIX_ENTRY | FBNIC_INTR_MSIX_CTRL_ENABLE);
+
+	err = mac->enable(fbd);
+	if (err) {
+		/* Disable interrupt */
+		wr32(FBNIC_INTR_MSIX_CTRL(FBNIC_INTR_MSIX_CTRL_PCS_IDX),
+		     FBNIC_MAC_MSIX_ENTRY);
+		wr32(FBNIC_INTR_MASK_SET(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+
+		/* Free the vector */
+		free_irq(fbd->mac_msix_vector, fbd);
+	}
+
+	return err;
+}
+
+/**
+ * fbnic_mac_disable - Teardown the MAC to prepare for stopping
+ * @fbd: Pointer to device that is stopping
+ *
+ * This function undoes the work done in fbnic_mac_enable and prepares the
+ * device to no longer receive traffic on the host interface.
+ **/
+void fbnic_mac_disable(struct fbnic_dev *fbd)
+{
+	const struct fbnic_mac *mac = fbd->mac;
+
+	/* Nothing to do if link is already disabled */
+	if (fbd->link_state == FBNIC_LINK_DISABLED)
+		return;
+
+	mac->disable(fbd);
+
+	/* Disable interrupt */
+	wr32(FBNIC_INTR_MSIX_CTRL(FBNIC_INTR_MSIX_CTRL_PCS_IDX),
+	     FBNIC_MAC_MSIX_ENTRY);
+	wr32(FBNIC_INTR_MASK_SET(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+
+	/* Free the vector */
+	free_irq(fbd->mac_msix_vector, fbd);
+}
+
 void fbnic_free_irqs(struct fbnic_dev *fbd)
 {
 	struct pci_dev *pdev = to_pci_dev(fbd->dev);
 
+	fbd->mac_msix_vector = 0;
 	fbd->fw_msix_vector = 0;
+
 	fbd->num_irqs = 0;
 
 	pci_disable_msix(pdev);
@@ -128,6 +244,8 @@ int fbnic_alloc_irqs(struct fbnic_dev *fbd)
 	fbd->msix_entries = msix_entries;
 	fbd->num_irqs = num_irqs;
 
+	fbd->mac_msix_vector = msix_entries[FBNIC_MAC_MSIX_ENTRY].vector;
 	fbd->fw_msix_vector = msix_entries[FBNIC_FW_MSIX_ENTRY].vector;
+
 	return 0;
 }

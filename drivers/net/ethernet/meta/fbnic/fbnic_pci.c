@@ -160,6 +160,78 @@ void fbnic_down(struct fbnic_net *fbn)
 	fbnic_flush(fbn);
 }
 
+static char *fbnic_report_fec(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+
+	if (fbn->link_mode & FBNIC_LINK_MODE_PAM4)
+		return "Clause 91 RS(544,514)";
+
+	switch (fbn->fec & FBNIC_FEC_MODE_MASK) {
+	case FBNIC_FEC_OFF:
+		return "Off";
+	case FBNIC_FEC_BASER:
+		return "Clause 74 BaseR";
+	case FBNIC_FEC_RS:
+		return "Clause 91 RS(528,514)";
+	}
+
+	return "Unknown";
+}
+
+static void fbnic_link_check(struct fbnic_dev *fbd)
+{
+	struct net_device *netdev = fbd->netdev;
+	bool link_found = false;
+	int err;
+
+	err = fbnic_mac_get_link(fbd, &link_found);
+	if (err) {
+		/* TBD: For now we do nothing. In the future we should have
+		 * the link_check function request a reset.
+		 *
+		 * We would do this here as the reset will likely involve
+		 * us having to tear down the interface which will require
+		 * us taking the RTNL lock in order to coordinate the
+		 * teardown and bringup before and after the reset.
+		 */
+		return;
+	}
+
+	if (!link_found) {
+		if (netif_carrier_ok(netdev)) {
+			struct fbnic_net *fbn = netdev_priv(netdev);
+
+			netdev_err(netdev, "NIC Link is Down\n");
+			fbn->link_down_events++;
+		}
+		netif_carrier_off(netdev);
+		return;
+	}
+
+	if (!netif_carrier_ok(netdev)) {
+		struct fbnic_net *fbn = netdev_priv(netdev);
+
+		netdev_info(netdev,
+			    "NIC Link is Up, %d Mbps (%s), Flow control: %s\n",
+			    ((fbn->link_mode & FBNIC_LINK_MODE_PAM4) ?
+			     50000 : 25000) *
+			    ((fbn->link_mode & FBNIC_LINK_MODE_R2) ?
+			     2 : 1),
+			    (fbn->link_mode & FBNIC_LINK_MODE_PAM4) ?
+			    "PAM4" : "NRZ",
+			    (fbn->rx_pause ?
+			     (fbn->tx_pause ? "ON - Tx/Rx" : "ON - Rx") :
+			     (fbn->tx_pause ? "ON - Tx" : "OFF")));
+		netdev_info(netdev, "FEC autoselect %s encoding: %s\n",
+			    (fbn->fec & FBNIC_FEC_AUTO) ?
+			    "enabled" : "disabled",
+			    fbnic_report_fec(fbd));
+		fbnic_config_drop_mode(fbn);
+	}
+	netif_carrier_on(netdev);
+}
+
 static void fbnic_health_check(struct fbnic_dev *fbd)
 {
 	struct fbnic_fw_mbx *tx_mbx = &fbd->mbx[FBNIC_IPC_MBX_TX_IDX];
@@ -192,6 +264,7 @@ static void fbnic_service_task(struct work_struct *work)
 	rtnl_lock();
 
 	fbnic_fw_check_heartbeat(fbd);
+	fbnic_link_check(fbd);
 
 	fbnic_health_check(fbd);
 

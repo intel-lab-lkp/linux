@@ -22,9 +22,16 @@ struct fbnic_net {
 
 	u16 num_napi;
 
+	u8 autoneg_pause;
+	u8 tx_pause;
+	u8 rx_pause;
+	u8 fec;
+	u8 link_mode;
+
 	u16 num_tx_queues;
 	u16 num_rx_queues;
 
+	u64 link_down_events;
 	struct list_head napis;
 };
 

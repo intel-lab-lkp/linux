@@ -2,10 +2,12 @@
 /* Copyright (c) Meta Platforms, Inc. and affiliates. */
 
 #include <linux/bitfield.h>
+#include <linux/iopoll.h>
 #include <net/tcp.h>
 
 #include "fbnic.h"
 #include "fbnic_mac.h"
+#include "fbnic_netdev.h"
 
 static void fbnic_init_readrq(struct fbnic_dev *fbd, unsigned int offset,
 			      unsigned int cls, unsigned int readrq)
@@ -415,8 +417,593 @@ static void fbnic_mac_init_regs(struct fbnic_dev *fbd)
 	fbnic_mac_init_txb(fbd);
 }
 
+static int fbnic_mac_get_link_event_asic(struct fbnic_dev *fbd)
+{
+	u32 pcs_intr_mask = rd32(FBNIC_MAC_PCS_INTR_STS);
+
+	if (pcs_intr_mask & FBNIC_MAC_PCS_INTR_LINK_DOWN)
+		return -1;
+
+	return (pcs_intr_mask & FBNIC_MAC_PCS_INTR_LINK_UP) ? 1 : 0;
+}
+
+static u32 __fbnic_mac_config_asic(struct fbnic_dev *fbd)
+{
+	/* Enable MAC Promiscuous mode and Tx padding */
+	u32 command_config = FBNIC_MAC_COMMAND_CONFIG_TX_PAD_EN |
+			     FBNIC_MAC_COMMAND_CONFIG_PROMISC_EN;
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u32 rxb_pause_ctrl;
+
+	/* Set class 0 Quanta and refresh */
+	wr32(FBNIC_MAC_CL01_PAUSE_QUANTA, 0xffff);
+	wr32(FBNIC_MAC_CL01_QUANTA_THRESH, 0x7fff);
+
+	/* Enable generation of pause frames if enabled */
+	rxb_pause_ctrl = rd32(FBNIC_RXB_PAUSE_DROP_CTRL);
+	rxb_pause_ctrl &= ~FBNIC_RXB_PAUSE_DROP_CTRL_PAUSE_ENABLE;
+	if (!fbn->tx_pause)
+		command_config |= FBNIC_MAC_COMMAND_CONFIG_TX_PAUSE_DIS;
+	else
+		rxb_pause_ctrl |=
+			FIELD_PREP(FBNIC_RXB_PAUSE_DROP_CTRL_PAUSE_ENABLE,
+				   FBNIC_PAUSE_EN_MASK);
+	wr32(FBNIC_RXB_PAUSE_DROP_CTRL, rxb_pause_ctrl);
+
+	if (!fbn->rx_pause)
+		command_config |= FBNIC_MAC_COMMAND_CONFIG_RX_PAUSE_DIS;
+
+	/* Disable fault handling if no FEC is requested */
+	if ((fbn->fec & FBNIC_FEC_MODE_MASK) == FBNIC_FEC_OFF)
+		command_config |= FBNIC_MAC_COMMAND_CONFIG_FLT_HDL_DIS;
+
+	return command_config;
+}
+
+static bool fbnic_mac_get_pcs_link_status(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u32 pcs_status, lane_mask = ~0;
+
+	pcs_status = rd32(FBNIC_MAC_PCS_STS0);
+	if (!(pcs_status & FBNIC_MAC_PCS_STS0_LINK))
+		return false;
+
+	/* Define the expected lane mask for the status bits we need to check */
+	switch (fbn->link_mode & FBNIC_LINK_MODE_MASK) {
+	case FBNIC_LINK_100R2:
+		lane_mask = 0xf;
+		break;
+	case FBNIC_LINK_50R1:
+		lane_mask = 3;
+		break;
+	case FBNIC_LINK_50R2:
+		switch (fbn->fec & FBNIC_FEC_MODE_MASK) {
+		case FBNIC_FEC_OFF:
+			lane_mask = 0x63;
+			break;
+		case FBNIC_FEC_RS:
+			lane_mask = 5;
+			break;
+		case FBNIC_FEC_BASER:
+			lane_mask = 0xf;
+			break;
+		}
+		break;
+	case FBNIC_LINK_25R1:
+		lane_mask = 1;
+		break;
+	}
+
+	/* Use an XOR to remove the bits we expect to see set */
+	switch (fbn->fec & FBNIC_FEC_MODE_MASK) {
+	case FBNIC_FEC_OFF:
+		lane_mask ^= FIELD_GET(FBNIC_MAC_PCS_STS0_BLOCK_LOCK,
+				       pcs_status);
+		break;
+	case FBNIC_FEC_RS:
+		lane_mask ^= FIELD_GET(FBNIC_MAC_PCS_STS0_AMPS_LOCK,
+				       pcs_status);
+		break;
+	case FBNIC_FEC_BASER:
+		lane_mask ^= FIELD_GET(FBNIC_MAC_PCS_STS1_FCFEC_LOCK,
+				       rd32(FBNIC_MAC_PCS_STS1));
+		break;
+	}
+
+	/* If all lanes cancelled then we have a lock on all lanes */
+	return !lane_mask;
+}
+
+#define FBNIC_MAC_ENET_LED_DEFAULT				\
+	(FIELD_PREP(FBNIC_MAC_ENET_LED_AMBER_MASK,		\
+		    FBNIC_MAC_ENET_LED_AMBER_50G |		\
+		    FBNIC_MAC_ENET_LED_AMBER_25G) |		\
+	 FIELD_PREP(FBNIC_MAC_ENET_LED_BLUE_MASK,		\
+		    FBNIC_MAC_ENET_LED_BLUE_100G |		\
+		    FBNIC_MAC_ENET_LED_BLUE_50G))
+#define FBNIC_MAC_ENET_LED_ACTIVITY_DEFAULT			\
+	FIELD_PREP(FBNIC_MAC_ENET_LED_BLINK_RATE_MASK,		\
+		   FBNIC_MAC_ENET_LED_BLINK_RATE_5HZ)
+#define FBNIC_MAC_ENET_LED_ACTIVITY_ON				\
+	FIELD_PREP(FBNIC_MAC_ENET_LED_OVERRIDE_EN,		\
+		   FBNIC_MAC_ENET_LED_OVERRIDE_ACTIVITY)
+#define FBNIC_MAC_ENET_LED_AMBER				\
+	(FIELD_PREP(FBNIC_MAC_ENET_LED_OVERRIDE_EN,		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_BLUE |		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_AMBER) |	\
+	 FIELD_PREP(FBNIC_MAC_ENET_LED_OVERRIDE_VAL,		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_AMBER))
+#define FBNIC_MAC_ENET_LED_BLUE					\
+	(FIELD_PREP(FBNIC_MAC_ENET_LED_OVERRIDE_EN,		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_BLUE |		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_AMBER) |	\
+	 FIELD_PREP(FBNIC_MAC_ENET_LED_OVERRIDE_VAL,		\
+		    FBNIC_MAC_ENET_LED_OVERRIDE_BLUE))
+
+static void fbnic_set_led_state_asic(struct fbnic_dev *fbd, int state)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u32 led_csr = FBNIC_MAC_ENET_LED_DEFAULT;
+
+	switch (state) {
+	case FBNIC_LED_OFF:
+		led_csr |= FBNIC_MAC_ENET_LED_AMBER |
+			   FBNIC_MAC_ENET_LED_ACTIVITY_ON;
+		break;
+	case FBNIC_LED_ON:
+		led_csr |= FBNIC_MAC_ENET_LED_BLUE |
+			   FBNIC_MAC_ENET_LED_ACTIVITY_ON;
+		break;
+	case FBNIC_LED_RESTORE:
+		led_csr |= FBNIC_MAC_ENET_LED_ACTIVITY_DEFAULT;
+
+		/* Don't set LEDs on if link isn't up */
+		if (fbd->link_state != FBNIC_LINK_UP)
+			break;
+		/* Don't set LEDs for supported autoneg modes */
+		if ((fbn->link_mode & FBNIC_LINK_AUTO) &&
+		    (fbn->link_mode & FBNIC_LINK_MODE_MASK) != FBNIC_LINK_50R2)
+			break;
+
+		/* Set LEDs based on link speed
+		 * 100G	Blue,
+		 * 50G	Blue & Amber
+		 * 25G	Amber
+		 */
+		switch (fbn->link_mode & FBNIC_LINK_MODE_MASK) {
+		case FBNIC_LINK_100R2:
+			led_csr |= FBNIC_MAC_ENET_LED_BLUE;
+			break;
+		case FBNIC_LINK_50R1:
+		case FBNIC_LINK_50R2:
+			led_csr |= FBNIC_MAC_ENET_LED_BLUE;
+			fallthrough;
+		case FBNIC_LINK_25R1:
+			led_csr |= FBNIC_MAC_ENET_LED_AMBER;
+			break;
+		}
+		break;
+	default:
+		return;
+	}
+
+	wr32(FBNIC_MAC_ENET_LED, led_csr);
+}
+
+static bool fbnic_mac_get_link_asic(struct fbnic_dev *fbd)
+{
+	u32 cmd_cfg, mac_ctrl;
+	int link_direction;
+	bool link;
+
+	/* If disabled do not update link_state nor change settings */
+	if (fbd->link_state == FBNIC_LINK_DISABLED)
+		return false;
+
+	link_direction = fbnic_mac_get_link_event_asic(fbd);
+
+	/* Clear interrupt state due to recent changes. */
+	wr32(FBNIC_MAC_PCS_INTR_STS,
+	     FBNIC_MAC_PCS_INTR_LINK_DOWN | FBNIC_MAC_PCS_INTR_LINK_UP);
+
+	/* If link bounced down clear the PCS_STS bit related to link */
+	if (link_direction < 0) {
+		wr32(FBNIC_MAC_PCS_STS0, FBNIC_MAC_PCS_STS0_LINK |
+					 FBNIC_MAC_PCS_STS0_BLOCK_LOCK |
+					 FBNIC_MAC_PCS_STS0_AMPS_LOCK);
+		wr32(FBNIC_MAC_PCS_STS1, FBNIC_MAC_PCS_STS1_FCFEC_LOCK);
+	}
+
+	link = fbnic_mac_get_pcs_link_status(fbd);
+	cmd_cfg = __fbnic_mac_config_asic(fbd);
+	mac_ctrl = rd32(FBNIC_MAC_CTRL);
+
+	/* Depending on the event we will unmask the cause that will force a
+	 * transition, and update the Tx to reflect our status to the remote
+	 * link partner.
+	 */
+	if (link) {
+		mac_ctrl &= ~(FBNIC_MAC_CTRL_RESET_FF_TX_CLK |
+			      FBNIC_MAC_CTRL_RESET_TX_CLK |
+			      FBNIC_MAC_CTRL_RESET_FF_RX_CLK |
+			      FBNIC_MAC_CTRL_RESET_RX_CLK);
+		cmd_cfg |= FBNIC_MAC_COMMAND_CONFIG_RX_ENA |
+			   FBNIC_MAC_COMMAND_CONFIG_TX_ENA;
+		fbd->link_state = FBNIC_LINK_UP;
+	} else {
+		mac_ctrl |= FBNIC_MAC_CTRL_RESET_FF_TX_CLK |
+			    FBNIC_MAC_CTRL_RESET_TX_CLK |
+			    FBNIC_MAC_CTRL_RESET_FF_RX_CLK |
+			    FBNIC_MAC_CTRL_RESET_RX_CLK;
+		fbd->link_state = FBNIC_LINK_DOWN;
+	}
+
+	wr32(FBNIC_MAC_CTRL, mac_ctrl);
+	wr32(FBNIC_MAC_COMMAND_CONFIG, cmd_cfg);
+
+	/* Toggle LED settings to enable LEDs manually if necessary */
+	fbnic_set_led_state_asic(fbd, FBNIC_LED_RESTORE);
+
+	if (link_direction)
+		wr32(FBNIC_MAC_PCS_INTR_MASK,
+		     link ?  ~FBNIC_MAC_PCS_INTR_LINK_DOWN :
+			     ~FBNIC_MAC_PCS_INTR_LINK_UP);
+
+	return link;
+}
+
+static void fbnic_mac_pre_config(struct fbnic_dev *fbd)
+{
+	u32 serdes_ctrl, mac_ctrl, xif_mode, enet_fec_ctrl = 0;
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+
+	/* set reset bits and enable appending of Tx CRC */
+	mac_ctrl = FBNIC_MAC_CTRL_RESET_FF_TX_CLK |
+		   FBNIC_MAC_CTRL_RESET_FF_RX_CLK |
+		   FBNIC_MAC_CTRL_RESET_TX_CLK |
+		   FBNIC_MAC_CTRL_RESET_RX_CLK |
+		   FBNIC_MAC_CTRL_TX_CRC;
+	serdes_ctrl = FBNIC_MAC_SERDES_CTRL_RESET_PCS_REF_CLK |
+		      FBNIC_MAC_SERDES_CTRL_RESET_F91_REF_CLK |
+		      FBNIC_MAC_SERDES_CTRL_RESET_SD_TX_CLK |
+		      FBNIC_MAC_SERDES_CTRL_RESET_SD_RX_CLK;
+	xif_mode = FBNIC_MAC_XIF_MODE_TX_MAC_RS_ERR;
+
+	switch (fbn->link_mode & FBNIC_LINK_MODE_MASK) {
+	case FBNIC_LINK_25R1:
+		/* Enable XGMII to run w/ 10G pacer */
+		xif_mode |= FBNIC_MAC_XIF_MODE_XGMII;
+		serdes_ctrl |= FBNIC_MAC_SERDES_CTRL_PACER_10G_MASK;
+		if (fbn->fec & FBNIC_FEC_RS)
+			serdes_ctrl |= FBNIC_MAC_SERDES_CTRL_F91_1LANE_IN0;
+		break;
+	case FBNIC_LINK_50R2:
+		if (!(fbn->fec & FBNIC_FEC_RS))
+			serdes_ctrl |= FBNIC_MAC_SERDES_CTRL_RXLAUI_ENA_IN0;
+		break;
+	case FBNIC_LINK_100R2:
+		mac_ctrl |= FBNIC_MAC_CTRL_CFG_MODE128;
+		serdes_ctrl |= FBNIC_MAC_SERDES_CTRL_PCS100_ENA_IN0;
+		enet_fec_ctrl |= FBNIC_MAC_ENET_FEC_CTRL_KP_MODE_ENA;
+		fallthrough;
+	case FBNIC_LINK_50R1:
+		serdes_ctrl |= FBNIC_MAC_SERDES_CTRL_SD_8X;
+		if (fbn->fec & FBNIC_FEC_AUTO)
+			fbn->fec = FBNIC_FEC_AUTO | FBNIC_FEC_RS;
+		break;
+	}
+
+	switch (fbn->fec & FBNIC_FEC_MODE_MASK) {
+	case FBNIC_FEC_RS:
+		enet_fec_ctrl |= FBNIC_MAC_ENET_FEC_CTRL_F91_ENA;
+		break;
+	case FBNIC_FEC_BASER:
+		enet_fec_ctrl |= FBNIC_MAC_ENET_FEC_CTRL_FEC_ENA;
+		break;
+	case FBNIC_FEC_OFF:
+		break;
+	default:
+		dev_err(fbd->dev, "Unsupported FEC mode detected");
+	}
+
+	/* Store updated config to MAC */
+	wr32(FBNIC_MAC_CTRL, mac_ctrl);
+	wr32(FBNIC_MAC_SERDES_CTRL, serdes_ctrl);
+	wr32(FBNIC_MAC_XIF_MODE, xif_mode);
+	wr32(FBNIC_MAC_ENET_FEC_CTRL, enet_fec_ctrl);
+
+	/* flush writes to allow time for MAC to go into resets */
+	wrfl();
+
+	/* Set signal detect for all lanes */
+	wr32(FBNIC_MAC_ENET_SIG_DETECT, FBNIC_MAC_ENET_SIG_DETECT_PCS_MASK);
+}
+
+static void fbnic_mac_pcs_config(struct fbnic_dev *fbd)
+{
+	u32 pcs_mode = 0, rsfec_ctrl = 0, vl_intvl = 0;
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	int i;
+
+	/* Set link mode specific lane and FEC values */
+	switch (fbn->link_mode & FBNIC_LINK_MODE_MASK) {
+	case FBNIC_LINK_25R1:
+		if (fbn->fec & FBNIC_FEC_RS)
+			vl_intvl = 20479;
+		else
+			pcs_mode |= FBNIC_PCS_MODE_DISABLE_MLD;
+		pcs_mode |= FBNIC_PCS_MODE_HI_BER25 |
+			    FBNIC_PCS_MODE_ENA_CLAUSE49;
+		break;
+	case FBNIC_LINK_50R1:
+		rsfec_ctrl |= FBNIC_RSFEC_CONTROL_KP_ENABLE;
+		fallthrough;
+	case FBNIC_LINK_50R2:
+		rsfec_ctrl |= FBNIC_RSFEC_CONTROL_TC_PAD_ALTER;
+		vl_intvl = 20479;
+		break;
+	case FBNIC_LINK_100R2:
+		rsfec_ctrl |= FBNIC_RSFEC_CONTROL_AM16_COPY_DIS |
+			      FBNIC_RSFEC_CONTROL_KP_ENABLE;
+		pcs_mode |= FBNIC_PCS_MODE_DISABLE_MLD;
+		vl_intvl = 16383;
+		break;
+	}
+
+	for (i = 0; i < 4; i++)
+		wr32(FBNIC_RSFEC_CONTROL(i), rsfec_ctrl);
+
+	wr32(FBNIC_PCS_MODE_VL_CHAN_0, pcs_mode);
+	wr32(FBNIC_PCS_MODE_VL_CHAN_1, pcs_mode);
+
+	wr32(FBNIC_PCS_VENDOR_VL_INTVL_0, vl_intvl);
+	wr32(FBNIC_PCS_VENDOR_VL_INTVL_1, vl_intvl);
+
+	/* Update IPG to account for vl_intvl */
+	wr32(FBNIC_MAC_TX_IPG_LENGTH,
+	     FIELD_PREP(FBNIC_MAC_TX_IPG_LENGTH_COMP, vl_intvl) | 0xc);
+
+	/* Program lane markers indicating which lanes are in use
+	 * and what speeds we are transmitting at.
+	 */
+	switch (fbn->link_mode & FBNIC_LINK_MODE_MASK) {
+	case FBNIC_LINK_100R2:
+		wr32(FBNIC_PCS_VL0_0_CHAN_0, 0x68c1);
+		wr32(FBNIC_PCS_VL0_1_CHAN_0, 0x21);
+		wr32(FBNIC_PCS_VL1_0_CHAN_0, 0x719d);
+		wr32(FBNIC_PCS_VL1_1_CHAN_0, 0x8e);
+		wr32(FBNIC_PCS_VL2_0_CHAN_0, 0x4b59);
+		wr32(FBNIC_PCS_VL2_1_CHAN_0, 0xe8);
+		wr32(FBNIC_PCS_VL3_0_CHAN_0, 0x954d);
+		wr32(FBNIC_PCS_VL3_1_CHAN_0, 0x7b);
+		wr32(FBNIC_PCS_VL0_0_CHAN_1, 0x68c1);
+		wr32(FBNIC_PCS_VL0_1_CHAN_1, 0x21);
+		wr32(FBNIC_PCS_VL1_0_CHAN_1, 0x719d);
+		wr32(FBNIC_PCS_VL1_1_CHAN_1, 0x8e);
+		wr32(FBNIC_PCS_VL2_0_CHAN_1, 0x4b59);
+		wr32(FBNIC_PCS_VL2_1_CHAN_1, 0xe8);
+		wr32(FBNIC_PCS_VL3_0_CHAN_1, 0x954d);
+		wr32(FBNIC_PCS_VL3_1_CHAN_1, 0x7b);
+		break;
+	case FBNIC_LINK_50R2:
+		wr32(FBNIC_PCS_VL0_0_CHAN_1, 0x7690);
+		wr32(FBNIC_PCS_VL0_1_CHAN_1, 0x47);
+		wr32(FBNIC_PCS_VL1_0_CHAN_1, 0xc4f0);
+		wr32(FBNIC_PCS_VL1_1_CHAN_1, 0xe6);
+		wr32(FBNIC_PCS_VL2_0_CHAN_1, 0x65c5);
+		wr32(FBNIC_PCS_VL2_1_CHAN_1, 0x9b);
+		wr32(FBNIC_PCS_VL3_0_CHAN_1, 0x79a2);
+		wr32(FBNIC_PCS_VL3_1_CHAN_1, 0x3d);
+		fallthrough;
+	case FBNIC_LINK_50R1:
+		wr32(FBNIC_PCS_VL0_0_CHAN_0, 0x7690);
+		wr32(FBNIC_PCS_VL0_1_CHAN_0, 0x47);
+		wr32(FBNIC_PCS_VL1_0_CHAN_0, 0xc4f0);
+		wr32(FBNIC_PCS_VL1_1_CHAN_0, 0xe6);
+		wr32(FBNIC_PCS_VL2_0_CHAN_0, 0x65c5);
+		wr32(FBNIC_PCS_VL2_1_CHAN_0, 0x9b);
+		wr32(FBNIC_PCS_VL3_0_CHAN_0, 0x79a2);
+		wr32(FBNIC_PCS_VL3_1_CHAN_0, 0x3d);
+		break;
+	case FBNIC_LINK_25R1:
+		wr32(FBNIC_PCS_VL0_0_CHAN_0, 0x68c1);
+		wr32(FBNIC_PCS_VL0_1_CHAN_0, 0x21);
+		wr32(FBNIC_PCS_VL1_0_CHAN_0, 0xc4f0);
+		wr32(FBNIC_PCS_VL1_1_CHAN_0, 0xe6);
+		wr32(FBNIC_PCS_VL2_0_CHAN_0, 0x65c5);
+		wr32(FBNIC_PCS_VL2_1_CHAN_0, 0x9b);
+		wr32(FBNIC_PCS_VL3_0_CHAN_0, 0x79a2);
+		wr32(FBNIC_PCS_VL3_1_CHAN_0, 0x3d);
+		break;
+	}
+}
+
+static bool fbnic_mac_pcs_reset_complete(struct fbnic_dev *fbd)
+{
+	return !(rd32(FBNIC_PCS_CONTROL1_0) & FBNIC_PCS_CONTROL1_RESET) &&
+	       !(rd32(FBNIC_PCS_CONTROL1_1) & FBNIC_PCS_CONTROL1_RESET);
+}
+
+static int fbnic_mac_post_config(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u32 serdes_ctrl, reset_complete, lane_mask;
+	int err;
+
+	/* Clear resets for XPCS and F91 reference clocks */
+	serdes_ctrl = rd32(FBNIC_MAC_SERDES_CTRL);
+	serdes_ctrl &= ~FBNIC_MAC_SERDES_CTRL_RESET_PCS_REF_CLK;
+	if (fbn->fec & FBNIC_FEC_RS)
+		serdes_ctrl &= ~FBNIC_MAC_SERDES_CTRL_RESET_F91_REF_CLK;
+	wr32(FBNIC_MAC_SERDES_CTRL, serdes_ctrl);
+
+	/* Reset PCS and flush reset value */
+	wr32(FBNIC_PCS_CONTROL1_0,
+	     FBNIC_PCS_CONTROL1_RESET |
+	     FBNIC_PCS_CONTROL1_SPEED_SELECT_ALWAYS |
+	     FBNIC_PCS_CONTROL1_SPEED_ALWAYS);
+	wr32(FBNIC_PCS_CONTROL1_1,
+	     FBNIC_PCS_CONTROL1_RESET |
+	     FBNIC_PCS_CONTROL1_SPEED_SELECT_ALWAYS |
+	     FBNIC_PCS_CONTROL1_SPEED_ALWAYS);
+
+	/* poll for completion of reset */
+	err = readx_poll_timeout(fbnic_mac_pcs_reset_complete, fbd,
+				 reset_complete, reset_complete,
+				 1000, 150000);
+	if (err)
+		return err;
+
+	/* Flush any stale link status info */
+	wr32(FBNIC_MAC_PCS_STS0, FBNIC_MAC_PCS_STS0_LINK |
+				 FBNIC_MAC_PCS_STS0_BLOCK_LOCK |
+				 FBNIC_MAC_PCS_STS0_AMPS_LOCK);
+
+	/* Report starting state as "Link Event" to force detection of link */
+	fbd->link_state = FBNIC_LINK_EVENT;
+
+	/* Force link down to allow for link detection */
+	netif_carrier_off(fbn->netdev);
+
+	/* create simple bitmask for 2 or 1 lane setups */
+	lane_mask = (fbn->link_mode & FBNIC_LINK_MODE_R2) ? 3 : 1;
+
+	/* release the brakes and allow Tx/Rx to come out of reset */
+	serdes_ctrl &=
+	     ~(FIELD_PREP(FBNIC_MAC_SERDES_CTRL_RESET_SD_TX_CLK, lane_mask) |
+	       FIELD_PREP(FBNIC_MAC_SERDES_CTRL_RESET_SD_RX_CLK, lane_mask));
+	wr32(FBNIC_MAC_SERDES_CTRL, serdes_ctrl);
+
+	fbn->link_mode &= ~FBNIC_LINK_AUTO;
+
+	/* Ask firmware to configure the PHY for the correct encoding mode */
+	return fbnic_fw_xmit_comphy_set_msg(fbd,
+					    fbn->link_mode &
+					    FBNIC_LINK_MODE_MASK);
+}
+
+static void fbnic_mac_get_fw_settings(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u8 fec = fbn->fec;
+	u8 link_mode;
+
+	/* Update FEC first to reflect FW current mode */
+	if (fbn->fec & FBNIC_FEC_AUTO) {
+		switch (fbd->fw_cap.link_fec) {
+		case FBNIC_FW_LINK_FEC_NONE:
+			fec = FBNIC_FEC_OFF;
+			break;
+		case FBNIC_FW_LINK_FEC_RS:
+			fec = FBNIC_FEC_RS;
+			break;
+		case FBNIC_FW_LINK_FEC_BASER:
+			fec = FBNIC_FEC_BASER;
+			break;
+		default:
+			return;
+		}
+	}
+
+	/* Do nothing if AUTO mode is not engaged */
+	if (fbn->link_mode & FBNIC_LINK_AUTO) {
+		switch (fbd->fw_cap.link_speed) {
+		case FBNIC_FW_LINK_SPEED_25R1:
+			link_mode = FBNIC_LINK_25R1;
+			break;
+		case FBNIC_FW_LINK_SPEED_50R2:
+			link_mode = FBNIC_LINK_50R2;
+			break;
+		case FBNIC_FW_LINK_SPEED_50R1:
+			link_mode = FBNIC_LINK_50R1;
+			fec = FBNIC_FEC_RS;
+			break;
+		case FBNIC_FW_LINK_SPEED_100R2:
+			link_mode = FBNIC_LINK_100R2;
+			fec = FBNIC_FEC_RS;
+			break;
+		default:
+			return;
+		}
+
+		fbn->link_mode = link_mode;
+		fbn->fec = fec;
+	}
+}
+
+static int fbnic_mac_enable_asic(struct fbnic_dev *fbd)
+{
+	/* Mask and clear the PCS interrupt, will be enabled by link handler */
+	wr32(FBNIC_MAC_PCS_INTR_MASK, ~0);
+	wr32(FBNIC_MAC_PCS_INTR_STS, ~0);
+
+	/* Pull in settings from FW */
+	fbnic_mac_get_fw_settings(fbd);
+
+	/* Configure MAC registers */
+	fbnic_mac_pre_config(fbd);
+
+	/* Configure PCS block */
+	fbnic_mac_pcs_config(fbd);
+
+	/* Configure flow control and error correction */
+	wr32(FBNIC_MAC_COMMAND_CONFIG, __fbnic_mac_config_asic(fbd));
+
+	/* Configure maximum frame size */
+	wr32(FBNIC_MAC_FRM_LENGTH, FBNIC_MAX_JUMBO_FRAME_SIZE);
+
+	/* Configure LED defaults */
+	fbnic_set_led_state_asic(fbd, FBNIC_LED_RESTORE);
+
+	return fbnic_mac_post_config(fbd);
+}
+
+static void fbnic_mac_disable_asic(struct fbnic_dev *fbd)
+{
+	u32 mask = FBNIC_MAC_COMMAND_CONFIG_LOOPBACK_EN;
+	u32 cmd_cfg = rd32(FBNIC_MAC_COMMAND_CONFIG);
+	u32 mac_ctrl = rd32(FBNIC_MAC_CTRL);
+
+	/* Clear link state to disable any further transitions */
+	fbd->link_state = FBNIC_LINK_DISABLED;
+
+	/* Clear Tx and Rx enable bits to disable MAC, ignore other values */
+	if (!fbnic_bmc_present(fbd)) {
+		mask |= FBNIC_MAC_COMMAND_CONFIG_RX_ENA |
+			FBNIC_MAC_COMMAND_CONFIG_TX_ENA;
+		mac_ctrl |= FBNIC_MAC_CTRL_RESET_FF_TX_CLK |
+			    FBNIC_MAC_CTRL_RESET_TX_CLK |
+			    FBNIC_MAC_CTRL_RESET_FF_RX_CLK |
+			    FBNIC_MAC_CTRL_RESET_RX_CLK;
+
+		/* Restore LED defaults */
+		fbnic_set_led_state_asic(fbd, FBNIC_LED_RESTORE);
+	}
+
+	/* Check mask for enabled bits, if any set clear and write back */
+	if (mask & cmd_cfg) {
+		wr32(FBNIC_MAC_COMMAND_CONFIG, cmd_cfg & ~mask);
+		wr32(FBNIC_MAC_CTRL, mac_ctrl);
+	}
+
+	/* Disable loopback, and flush write */
+	wr32(FBNIC_PCS_CONTROL1_0,
+	     FBNIC_PCS_CONTROL1_RESET |
+	     FBNIC_PCS_CONTROL1_SPEED_SELECT_ALWAYS |
+	     FBNIC_PCS_CONTROL1_SPEED_ALWAYS);
+	wr32(FBNIC_PCS_CONTROL1_1,
+	     FBNIC_PCS_CONTROL1_RESET |
+	     FBNIC_PCS_CONTROL1_SPEED_SELECT_ALWAYS |
+	     FBNIC_PCS_CONTROL1_SPEED_ALWAYS);
+}
+
 static const struct fbnic_mac fbnic_mac_asic = {
+	.enable = fbnic_mac_enable_asic,
+	.disable = fbnic_mac_disable_asic,
 	.init_regs = fbnic_mac_init_regs,
+	.get_link = fbnic_mac_get_link_asic,
+	.get_link_event = fbnic_mac_get_link_event_asic,
 };
 
 /**
