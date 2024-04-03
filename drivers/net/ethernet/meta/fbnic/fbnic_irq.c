@@ -5,6 +5,7 @@
 #include <linux/types.h>
 
 #include "fbnic.h"
+#include "fbnic_txrx.h"
 
 static irqreturn_t fbnic_fw_msix_intr(int __always_unused irq, void *data)
 {
@@ -103,6 +104,7 @@ int fbnic_alloc_irqs(struct fbnic_dev *fbd)
 	struct msix_entry *msix_entries;
 	int i, num_irqs;
 
+	wanted_irqs += min_t(unsigned int, num_online_cpus(), FBNIC_MAX_RXQS);
 	msix_entries = kcalloc(wanted_irqs, sizeof(*msix_entries), GFP_KERNEL);
 	if (!msix_entries)
 		return -ENOMEM;
