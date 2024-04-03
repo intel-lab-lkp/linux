@@ -761,7 +761,6 @@ static inline void lpuart32_transmit_buffer(struct lpuart_port *sport)
 
 	if (sport->port.x_char) {
 		lpuart32_write(&sport->port, sport->port.x_char, UARTDATA);
-		sport->port.icount.tx++;
 		sport->port.x_char = 0;
 		return;
 	}
