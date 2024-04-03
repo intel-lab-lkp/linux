@@ -23,6 +23,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_print.h>
 
+#include "mgag200_ddc.h"
 #include "mgag200_drv.h"
 
 /*
