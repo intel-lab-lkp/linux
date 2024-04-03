@@ -468,6 +468,25 @@ static const struct netlink_range_validation nl80211_punct_bitmap_range = {
 	.max = 0xffff,
 };
 
+static const struct nla_policy
+link_policy[NL80211_CU_MLD_LINK_ATTR_MAX + 1] = {
+	[NL80211_CU_MLD_LINK_ATTR_ID] = { .type = NLA_U8 },
+	[NL80211_CU_MLD_LINK_ATTR_CRITICAL_FLAG] = { .type = NLA_FLAG },
+	[NL80211_CU_MLD_LINK_ATTR_BPCC] = { .type = NLA_U8 },
+	[NL80211_CU_MLD_LINK_ATTR_SWITCH_COUNT] = { .type = NLA_U8 },
+};
+
+static const struct nla_policy
+mld_policy[NL80211_CU_MLD_ATTR_MAX + 1] = {
+	[NL80211_CU_MLD_ATTR_IFINDEX] = { .type = NLA_U32 },
+	[NL80211_CU_MLD_ATTR_LINKS] = NLA_POLICY_NESTED(link_policy),
+};
+
+static const struct nla_policy
+cu_policy[NL80211_CU_ATTR_MAX + 1] = {
+	[NL80211_CU_ATTR_MLDS] = NLA_POLICY_NESTED(mld_policy),
+};
+
 static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[0] = { .strict_start_type = NL80211_ATTR_HE_OBSS_PD },
 	[NL80211_ATTR_WIPHY] = { .type = NLA_U32 },
@@ -826,6 +845,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_MLO_TTLM_DLINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
 	[NL80211_ATTR_MLO_TTLM_ULINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
 	[NL80211_ATTR_ASSOC_SPP_AMSDU] = { .type = NLA_FLAG },
+	[NL80211_ATTR_RXMGMT_CRITICAL_UPDATE] = NLA_POLICY_NESTED(cu_policy),
 };
 
 /* policy for the key attributes */
@@ -18843,6 +18863,91 @@ bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
 }
 EXPORT_SYMBOL(cfg80211_rx_unexpected_4addr_frame);
 
+static int nl80211_send_mgmt_critical_update_len(struct wireless_dev *wdev)
+{
+	struct wiphy *wiphy = wdev->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct wireless_dev *tmp_wdev;
+	int link_id;
+	int cu_len = 0;
+
+	cu_len += NL80211_CU_ATTR_MLDS_LEN;
+	list_for_each_entry(tmp_wdev, &rdev->wiphy.wdev_list, list) {
+		cu_len += NL80211_CU_ATTR_MLD_LEN;
+		for_each_valid_link(tmp_wdev, link_id) {
+			cu_len += NL80211_CU_ATTR_LINK_LEN;
+		}
+	}
+	return cu_len;
+}
+
+/* Add critical update attribute when sending management frame
+ * to user space.
+ */
+static int nl80211_send_mgmt_critical_update(struct sk_buff *msg,
+					     struct wireless_dev *wdev)
+{
+	struct wiphy *wiphy = wdev->wiphy;
+	struct wireless_dev *tmp_wdev;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct nlattr *critical_update;
+	struct nlattr *mld_list, *mld;
+	struct nlattr *link_list, *link;
+	struct net_device *tmp_netdev;
+	int link_id;
+	int i = 0, j = 0;
+
+	critical_update = nla_nest_start(msg, NL80211_ATTR_RXMGMT_CRITICAL_UPDATE);
+	if (!critical_update)
+		return -ENOBUFS;
+
+	mld_list = nla_nest_start(msg, NL80211_CU_ATTR_MLDS);
+	if (!mld_list)
+		return -ENOBUFS;
+
+	list_for_each_entry(tmp_wdev, &rdev->wiphy.wdev_list, list) {
+		if (!tmp_wdev->valid_links)
+			continue;
+		if (!tmp_wdev->critical_update)
+			continue;
+		mld = nla_nest_start(msg, i + 1);
+		if (!mld)
+			return -ENOBUFS;
+		tmp_netdev = tmp_wdev->netdev;
+		if (tmp_netdev &&
+		    nla_put_u32(msg, NL80211_CU_MLD_ATTR_IFINDEX, tmp_netdev->ifindex))
+			return -ENOBUFS;
+		link_list = nla_nest_start(msg, NL80211_CU_MLD_ATTR_LINKS);
+		if (!link_list)
+			return -ENOBUFS;
+
+		for_each_valid_link(tmp_wdev, link_id) {
+			link = nla_nest_start(msg, j + 1);
+			if (!link)
+				return -ENOBUFS;
+			if (nla_put_u8(msg, NL80211_CU_MLD_LINK_ATTR_ID, link_id))
+				return -ENOBUFS;
+			if (tmp_wdev->links[link_id].ap.critical_flag &&
+			    nla_put_flag(msg, NL80211_CU_MLD_LINK_ATTR_CRITICAL_FLAG))
+				return -ENOBUFS;
+			if (nla_put_u8(msg, NL80211_CU_MLD_LINK_ATTR_BPCC,
+				       tmp_wdev->links[link_id].ap.bpcc))
+				return -ENOBUFS;
+			if (nla_put_u8(msg, NL80211_CU_MLD_LINK_ATTR_SWITCH_COUNT,
+				       tmp_wdev->links[link_id].ap.switch_count))
+				return -ENOBUFS;
+			nla_nest_end(msg, link);
+			j++;
+		}
+		nla_nest_end(msg, link_list);
+		nla_nest_end(msg, mld);
+		i++;
+	}
+	nla_nest_end(msg, mld_list);
+	nla_nest_end(msg, critical_update);
+	return 0;
+}
+
 int nl80211_send_mgmt(struct cfg80211_registered_device *rdev,
 		      struct wireless_dev *wdev, u32 nlportid,
 		      struct cfg80211_rx_info *info, gfp_t gfp)
@@ -18850,8 +18955,15 @@ int nl80211_send_mgmt(struct cfg80211_registered_device *rdev,
 	struct net_device *netdev = wdev->netdev;
 	struct sk_buff *msg;
 	void *hdr;
+	int cu_len = 0;
 
-	msg = nlmsg_new(100 + info->len, gfp);
+	if (wiphy_ext_feature_isset(
+		    wdev->wiphy,
+		    NL80211_EXT_FEATURE_CRITICAL_UPDATE_OFFLOAD) &&
+	    info->critical_update)
+		cu_len = nl80211_send_mgmt_critical_update_len(wdev);
+
+	msg = nlmsg_new(100 + info->len + cu_len, gfp);
 	if (!msg)
 		return -ENOMEM;
 
@@ -18885,6 +18997,15 @@ int nl80211_send_mgmt(struct cfg80211_registered_device *rdev,
 						   NL80211_ATTR_PAD)))
 		goto nla_put_failure;
 
+	if (wiphy_ext_feature_isset(
+		    wdev->wiphy,
+		    NL80211_EXT_FEATURE_CRITICAL_UPDATE_OFFLOAD) &&
+	    info->critical_update) {
+		if (nl80211_send_mgmt_critical_update(msg, wdev))
+			goto nla_put_failure;
+		/* Reset the flag after adding the critical update attribute*/
+		wdev->critical_update = false;
+	}
 	genlmsg_end(msg, hdr);
 
 	return genlmsg_unicast(wiphy_net(&rdev->wiphy), msg, nlportid);

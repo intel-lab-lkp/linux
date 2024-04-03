@@ -2856,6 +2856,15 @@ enum nl80211_commands {
  *	%NL80211_CMD_ASSOCIATE indicating the SPP A-MSDUs
  *	are used on this connection
  *
+ * @NL80211_ATTR_RXMGMT_CRITICAL_UPDATE: This is a nested attribute for driver
+ *	supporting critical update feature for AP MLD. When used with
+ *	%NL80211_CMD_FRAME it contains attribute defined in &enum nl80211_cu_attrs
+ *	to send critical update params for list of MLDs. Driver adds this attribute
+ *	only for probe, assoc and reassoc request frame. User-space can use these
+ *	params to update CU fields on corresponding response frame. This attribute
+ *	is needed only on beacon offload case and it is not needed on beacon
+ *	non-offload case since user space itself has these data.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3401,6 +3410,7 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_ASSOC_SPP_AMSDU,
 
+	NL80211_ATTR_RXMGMT_CRITICAL_UPDATE,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -6545,6 +6555,11 @@ enum nl80211_feature_flags {
  *	(signaling and payload protected) A-MSDUs and this shall be advertised
  *	in the RSNXE.
  *
+ * @NL80211_EXT_FEATURE_CRITICAL_UPDATE_OFFLOAD: User space sets critical
+ *	information only on impacted link through @NL80211_CMD_SET_BEACON.
+ *	Driver/Device handles synchronization among all the links and update
+ *	critical information on partner link beacon in case of MLD.
+ *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
  */
@@ -6620,6 +6635,7 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_OWE_OFFLOAD_AP,
 	NL80211_EXT_FEATURE_DFS_CONCURRENT,
 	NL80211_EXT_FEATURE_SPP_AMSDU_SUPPORT,
+	NL80211_EXT_FEATURE_CRITICAL_UPDATE_OFFLOAD,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
@@ -7999,4 +8015,92 @@ enum nl80211_ap_settings_flags {
 	NL80211_AP_SETTINGS_SA_QUERY_OFFLOAD_SUPPORT	= 1 << 1,
 };
 
+/*
+ * Critical update attribute length for a MLD list with two nested
+ * attributes. Each nla_nest_start() reserves four bytes.
+ */
+#define NL80211_CU_ATTR_MLDS_LEN	8
+
+/*
+ * Critical update attribute length for a particular MLD with two nested attributes.
+ * Each nla_nest_start() reserves four bytes and
+ * nla_put_u32(NL80211_CU_MLD_ATTR_IFINDEX) reserves eight bytes.
+ */
+
+#define NL80211_CU_ATTR_MLD_LEN		16
+
+/*
+ * Critical update attribute length for a particular link.
+ * Each nla_nest_start() reserves four bytes,
+ * nla_put_u8(NL80211_CU_MLD_LINK_ATTR_ID) reserves eight bytes,
+ * nla_put_flag(NL80211_CU_MLD_LINK_ATTR_CRITICAL_FLAG) reserves four bytes,
+ * nla_put_u8(NL80211_CU_MLD_LINK_ATTR_BPCC) reserves eight bytes and
+ * nla_put_u8(NL80211_CU_MLD_LINK_ATTR_SWITCH_COUNT) reserves eight bytes,
+ */
+#define NL80211_CU_ATTR_LINK_LEN	32
+
+/**
+ * nl80211_cu_attrs - critical update attributes
+ *
+ *
+ * @__NL80211_CU_ATTR_INVALID: invalid
+ * @NL80211_CU_ATTR_MLDS: nested attribute specifying list of MLDs,
+ * see &enum nl80211_cu_mld_attrs
+ * @__NL80211_CU_ATTR_LAST: internal use
+ * @NL80211_CU_ATTR_MAX: maximum critical update attribute
+ */
+enum nl80211_cu_attrs {
+	__NL80211_CU_ATTR_INVALID,
+
+	NL80211_CU_ATTR_MLDS,
+
+	/* keep last */
+	__NL80211_CU_ATTR_LAST,
+	NL80211_CU_ATTR_MAX = __NL80211_CU_ATTR_LAST - 1
+};
+
+/**
+ * nl80211_cu_mld_attrs - per mld critical update attributes
+ *
+ * @__NL80211_CU_MLD_ATTR_INVALID: invalid
+ * @NL80211_CU_MLD_ATTR_IFINDEX: network interface index (u32)
+ * @NL80211_CU_MLD_ATTR_LINKS: nested attribute specifying list of links
+ * on each mld, see &enum nl80211_cu_mld_link_attrs
+ * @__NL80211_CU_MLD_ATTR_LAST: internal use
+ * @NL80211_CU_MLD_ATTR_MAX: maximum per mld critical update attribute
+ */
+enum nl80211_cu_mld_attrs {
+	__NL80211_CU_MLD_ATTR_INVALID,
+
+	NL80211_CU_MLD_ATTR_IFINDEX,
+	NL80211_CU_MLD_ATTR_LINKS,
+
+	/* keep last */
+	__NL80211_CU_MLD_ATTR_LAST,
+	NL80211_CU_MLD_ATTR_MAX = __NL80211_CU_MLD_ATTR_LAST - 1
+};
+
+/**
+ * nl80211_cu_mld_link_attrs - per link critical update attributes
+ *
+ * @__NL80211_CU_MLD_LINK_ATTR_INVALID: invalid
+ * @NL80211_CU_MLD_LINK_ATTR_ID: link ID (u8) for the AP MLD
+ * @NL80211_CU_MLD_LINK_ATTR_CRITICAL_FLAG: critical update flag for the link
+ * @NL80211_CU_MLD_LINK_ATTR_BPCC: BSS parameter change count (u8) for the link
+ * @NL80211_CU_MLD_LINK_ATTR_SWITCH_COUNT: CSA / BCCA switch count (u8) for the link
+ * @__NL80211_CU_MLD_LINK_ATTR_LAST: internal use
+ * @NL80211_CU_MLD_LINK ATTR_MAX: maximum per link critical update attribute
+ */
+enum nl80211_cu_mld_link_attrs {
+	__NL80211_CU_MLD_LINK_ATTR_INVALID,
+
+	NL80211_CU_MLD_LINK_ATTR_ID,
+	NL80211_CU_MLD_LINK_ATTR_CRITICAL_FLAG,
+	NL80211_CU_MLD_LINK_ATTR_BPCC,
+	NL80211_CU_MLD_LINK_ATTR_SWITCH_COUNT,
+
+	/* keep last */
+	__NL80211_CU_MLD_LINK_ATTR_LAST,
+	NL80211_CU_MLD_LINK_ATTR_MAX = __NL80211_CU_MLD_LINK_ATTR_LAST - 1
+};
 #endif /* __LINUX_NL80211_H */

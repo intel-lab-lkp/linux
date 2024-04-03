@@ -6142,7 +6142,11 @@ void wiphy_delayed_work_flush(struct wiphy *wiphy,
  *	unprotected beacon report
  * @links: array of %IEEE80211_MLD_MAX_NUM_LINKS elements containing @addr
  *	@ap and @client for each link
+ * @links.ap.bpcc: Bss param change count value for each link
+ * @links.ap.switch_count: CSA/BCCA count for each link
+ * @links.ap.critical_flag: Critical update flag for each link
  * @valid_links: bitmap describing what elements of @links are valid
+ * @critical_update: critical params updated on any wdev link
  */
 struct wireless_dev {
 	struct wiphy *wiphy;
@@ -6247,6 +6251,9 @@ struct wireless_dev {
 		u8 addr[ETH_ALEN] __aligned(2);
 		union {
 			struct {
+				u8 bpcc;
+				u8 switch_count;
+				bool critical_flag;
 				unsigned int beacon_interval;
 				struct cfg80211_chan_def chandef;
 			} ap;
@@ -6256,6 +6263,7 @@ struct wireless_dev {
 		};
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
 	u16 valid_links;
+	bool critical_update;
 };
 
 static inline const u8 *wdev_address(struct wireless_dev *wdev)
@@ -8340,6 +8348,7 @@ void cfg80211_conn_failed(struct net_device *dev, const u8 *mac_addr,
  * @flags: flags, as defined in &enum nl80211_rxmgmt_flags
  * @rx_tstamp: Hardware timestamp of frame RX in nanoseconds
  * @ack_tstamp: Hardware timestamp of ack TX in nanoseconds
+ * @critical_update: critical params updated for the received frame
  */
 struct cfg80211_rx_info {
 	int freq;
@@ -8351,6 +8360,7 @@ struct cfg80211_rx_info {
 	u32 flags;
 	u64 rx_tstamp;
 	u64 ack_tstamp;
+	bool critical_update;
 };
 
 /**
