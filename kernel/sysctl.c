@@ -63,6 +63,7 @@
 #include <linux/mount.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/pid.h>
+#include <linux/pvsched.h>
 
 #include "../lib/kstrtox.h"
 
@@ -1615,6 +1616,24 @@ int proc_do_static_key(struct ctl_table *table, int write,
 	return ret;
 }
 
+#ifdef CONFIG_PARAVIRT_SCHED_HOST
+static int proc_pvsched_available_drivers(struct ctl_table *ctl,
+						 int write, void *buffer,
+						 size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table tbl = { .maxlen = PVSCHED_DRV_BUF_MAX, };
+	int ret;
+
+	tbl.data = kmalloc(tbl.maxlen, GFP_USER);
+	if (!tbl.data)
+		return -ENOMEM;
+	pvsched_get_available_drivers(tbl.data, PVSCHED_DRV_BUF_MAX);
+	ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+	kfree(tbl.data);
+	return ret;
+}
+#endif
+
 static struct ctl_table kern_table[] = {
 	{
 		.procname	= "panic",
@@ -2032,6 +2051,14 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 		.extra2		= SYSCTL_INT_MAX,
+	},
+#endif
+#ifdef CONFIG_PARAVIRT_SCHED_HOST
+	{
+		.procname	= "pvsched_available_drivers",
+		.maxlen		= PVSCHED_DRV_BUF_MAX,
+		.mode		= 0444,
+		.proc_handler   = proc_pvsched_available_drivers,
 	},
 #endif
 	{ }

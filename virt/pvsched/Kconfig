@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config PARAVIRT_SCHED_HOST
+	bool "Paravirt scheduling framework in the host kernel"
+	default n
+	help
+	  Paravirtualized scheduling facilitates the exchange of scheduling
+	  related information between the host and guest through shared memory,
+	  enhancing the efficiency of vCPU thread scheduling by the hypervisor.
+	  An illustrative use case involves dynamically boosting the priority of
+	  a vCPU thread when the guest is executing a latency-sensitive workload
+	  on that specific vCPU.
+	  This config enables paravirt scheduling framework in the host kernel.
