@@ -1371,7 +1371,7 @@ asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
 
 	/* Work out if we support NX */
 	get_cpu_cap(&boot_cpu_data);
-	x86_configure_nx();
+	x86_configure_nx(boot_cpu_has(X86_FEATURE_NX));
 
 	/*
 	 * Set up kernel GDT and segment registers, mainly so that
