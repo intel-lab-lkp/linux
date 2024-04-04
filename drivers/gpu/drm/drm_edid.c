@@ -1758,6 +1758,18 @@ static void edid_header_fix(void *edid)
 	memcpy(edid, edid_header, sizeof(edid_header));
 }
 
+static int edid_header_score(const u8 *header)
+{
+	int i, score = 0;
+
+	for (i = 0; i < sizeof(edid_header); i++) {
+		if (header[i] == edid_header[i])
+			score++;
+	}
+
+	return score;
+}
+
 /**
  * drm_edid_header_is_valid - sanity check the header of the base EDID block
  * @_edid: pointer to raw base EDID block
@@ -1769,14 +1781,8 @@ static void edid_header_fix(void *edid)
 int drm_edid_header_is_valid(const void *_edid)
 {
 	const struct edid *edid = _edid;
-	int i, score = 0;
 
-	for (i = 0; i < sizeof(edid_header); i++) {
-		if (edid->header[i] == edid_header[i])
-			score++;
-	}
-
-	return score;
+	return edid_header_score(edid->header);
 }
 EXPORT_SYMBOL(drm_edid_header_is_valid);
 
@@ -2612,17 +2618,37 @@ EXPORT_SYMBOL(drm_edid_free);
  * drm_edid_probe_custom() - probe DDC presence
  * @read_block: EDID block read function
  * @context: Private data passed to the block read function
+ * @validate: True to validate the EDID header
  *
  * Probes for EDID data. Only reads enough data to detect the presence
- * of the EDID channel.
+ * of the EDID channel. Some EDID block read functions do not fail,
+ * but return invalid data if no EDID data is available. If @validate
+ * has been specified, drm_edid_probe_custom() validates the retrieved
+ * EDID header before signalling success.
  *
  * Return: True on success, false on failure.
  */
-bool drm_edid_probe_custom(read_block_fn read_block, void *context)
+bool drm_edid_probe_custom(read_block_fn read_block, void *context, bool validate)
 {
-	unsigned char out;
+	u8 header[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+	int ret;
+	size_t len = 1;
 
-	return (read_block(context, &out, 0, 1) == 0);
+	if (validate)
+		len = sizeof(header); // read full header
+
+	ret = read_block(context, header, 0, len);
+	if (ret)
+		return false;
+
+	if (validate) {
+		int score = edid_header_score(header);
+
+		if (score < clamp(edid_fixup, 0, 8))
+			return false;
+	}
+
+	return true;
 }
 EXPORT_SYMBOL(drm_edid_probe_custom);
 
@@ -2635,7 +2661,7 @@ EXPORT_SYMBOL(drm_edid_probe_custom);
 bool
 drm_probe_ddc(struct i2c_adapter *adapter)
 {
-	return drm_edid_probe_custom(drm_do_probe_ddc_edid, adapter);
+	return drm_edid_probe_custom(drm_do_probe_ddc_edid, adapter, false);
 }
 EXPORT_SYMBOL(drm_probe_ddc);
 

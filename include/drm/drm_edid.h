@@ -412,7 +412,7 @@ static inline void drm_edid_decode_panel_id(u32 panel_id, char vend[4], u16 *pro
 
 bool
 drm_edid_probe_custom(int (*read_block)(void *context, u8 *buf, unsigned int block, size_t len),
-		      void *context);
+		      void *context, bool validate);
 bool drm_probe_ddc(struct i2c_adapter *adapter);
 struct edid *drm_do_get_edid(struct drm_connector *connector,
 	int (*get_edid_block)(void *data, u8 *buf, unsigned int block,
