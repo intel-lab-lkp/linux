@@ -690,16 +690,6 @@ retry:
 		/* last resort: use current mode */
 		if (!modes[i]) {
 			/*
-			 * IMPORTANT: We want to use the adjusted mode (i.e.
-			 * after the panel fitter upscaling) as the initial
-			 * config, not the input mode, which is what crtc->mode
-			 * usually contains. But since our current
-			 * code puts a mode derived from the post-pfit timings
-			 * into crtc->mode this works out correctly.
-			 *
-			 * This is crtc->mode and not crtc->state->mode for the
-			 * fastboot check to work correctly.
-			 *
 			 * FIXME using legacy crtc->mode with atomic drivers
 			 * is dodgy. Switch to crtc->state->mode, after taking
 			 * care of the resulting locking/lifetime issues.
