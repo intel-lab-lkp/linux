@@ -2609,6 +2609,24 @@ void drm_edid_free(const struct drm_edid *drm_edid)
 EXPORT_SYMBOL(drm_edid_free);
 
 /**
+ * drm_edid_probe_custom() - probe DDC presence
+ * @read_block: EDID block read function
+ * @context: Private data passed to the block read function
+ *
+ * Probes for EDID data. Only reads enough data to detect the presence
+ * of the EDID channel.
+ *
+ * Return: True on success, false on failure.
+ */
+bool drm_edid_probe_custom(read_block_fn read_block, void *context)
+{
+	unsigned char out;
+
+	return (read_block(context, &out, 0, 1) == 0);
+}
+EXPORT_SYMBOL(drm_edid_probe_custom);
+
+/**
  * drm_probe_ddc() - probe DDC presence
  * @adapter: I2C adapter to probe
  *
@@ -2617,9 +2635,7 @@ EXPORT_SYMBOL(drm_edid_free);
 bool
 drm_probe_ddc(struct i2c_adapter *adapter)
 {
-	unsigned char out;
-
-	return (drm_do_probe_ddc_edid(adapter, &out, 0, 1) == 0);
+	return drm_edid_probe_custom(drm_do_probe_ddc_edid, adapter);
 }
 EXPORT_SYMBOL(drm_probe_ddc);
 
