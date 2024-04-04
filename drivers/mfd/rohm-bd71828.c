@@ -552,6 +552,10 @@ static const struct of_device_id bd71828_of_match[] = {
 		.compatible = "rohm,bd71828",
 		.data = (void *)ROHM_CHIP_TYPE_BD71828,
 	}, {
+		.compatible = "rohm,bd71879",
+		/* equivalent from a software point of view */
+		.data = (void *)ROHM_CHIP_TYPE_BD71828,
+	}, {
 		.compatible = "rohm,bd71815",
 		.data = (void *)ROHM_CHIP_TYPE_BD71815,
 	 },
