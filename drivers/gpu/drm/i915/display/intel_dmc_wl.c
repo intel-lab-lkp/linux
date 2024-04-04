@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 
 #include "intel_de.h"
+#include "intel_dmc.h"
 #include "intel_dmc_regs.h"
 #include "intel_dmc_wl.h"
 
@@ -110,9 +111,22 @@ static bool intel_dmc_wl_check_range(u32 address)
 	return wl_needed;
 }
 
+static bool __intel_dmc_wl_supported(struct drm_i915_private *i915)
+{
+	if (DISPLAY_VER(i915) < 20 ||
+	    !intel_dmc_has_payload(i915))
+		return false;
+
+	return true;
+}
+
 void intel_dmc_wl_init(struct drm_i915_private *i915)
 {
 	struct intel_dmc_wl *wl = &i915->display.wl;
+
+	/* don't call __intel_dmc_wl_supported(), DMC is not loaded yet */
+	if (DISPLAY_VER(i915) < 20)
+		return;
 
 	INIT_DELAYED_WORK(&wl->work, intel_dmc_wl_work);
 	spin_lock_init(&wl->lock);
@@ -123,6 +137,9 @@ void intel_dmc_wl_enable(struct drm_i915_private *i915)
 {
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
+
+	if (!__intel_dmc_wl_supported(i915))
+		return;
 
 	spin_lock_irqsave(&wl->lock, flags);
 
@@ -148,6 +165,9 @@ void intel_dmc_wl_disable(struct drm_i915_private *i915)
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
 
+	if (!__intel_dmc_wl_supported(i915))
+		return;
+
 	flush_delayed_work(&wl->work);
 
 	spin_lock_irqsave(&wl->lock, flags);
@@ -170,6 +190,9 @@ void intel_dmc_wl_get(struct drm_i915_private *i915, i915_reg_t reg)
 {
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
+
+	if (!__intel_dmc_wl_supported(i915))
+		return;
 
 	if (!intel_dmc_wl_check_range(reg.reg))
 		return;
@@ -214,6 +237,9 @@ void intel_dmc_wl_put(struct drm_i915_private *i915, i915_reg_t reg)
 {
 	struct intel_dmc_wl *wl = &i915->display.wl;
 	unsigned long flags;
+
+	if (!__intel_dmc_wl_supported(i915))
+		return;
 
 	if (!intel_dmc_wl_check_range(reg.reg))
 		return;
