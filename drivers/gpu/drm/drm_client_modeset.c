@@ -145,7 +145,7 @@ drm_connector_fallback_non_tiled_mode(struct drm_connector *connector)
 }
 
 static struct drm_display_mode *
-drm_connector_has_preferred_mode(struct drm_connector *connector, int width, int height)
+drm_connector_preferred_mode(struct drm_connector *connector, int width, int height)
 {
 	struct drm_display_mode *mode;
 
@@ -434,7 +434,7 @@ retry:
 		if (!modes[i]) {
 			DRM_DEBUG_KMS("looking for preferred mode on connector %d %d\n",
 				      connector->base.id, connector->tile_group ? connector->tile_group->id : 0);
-			modes[i] = drm_connector_has_preferred_mode(connector, width, height);
+			modes[i] = drm_connector_preferred_mode(connector, width, height);
 		}
 		/* No preferred modes, pick one off the list */
 		if (!modes[i] && !list_empty(&connector->modes)) {
@@ -522,7 +522,7 @@ static int drm_client_pick_crtcs(struct drm_client_dev *client,
 		my_score++;
 	if (connector->cmdline_mode.specified)
 		my_score++;
-	if (drm_connector_has_preferred_mode(connector, width, height))
+	if (drm_connector_preferred_mode(connector, width, height))
 		my_score++;
 
 	/*
@@ -675,7 +675,7 @@ retry:
 		if (!modes[i]) {
 			DRM_DEBUG_KMS("looking for preferred mode on connector %s %d\n",
 				      connector->name, connector->has_tile);
-			modes[i] = drm_connector_has_preferred_mode(connector, width, height);
+			modes[i] = drm_connector_preferred_mode(connector, width, height);
 		}
 
 		/* No preferred mode marked by the EDID? Are there any modes? */
