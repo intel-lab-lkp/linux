@@ -11,11 +11,13 @@
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 
 bool sev_snp_enabled(void);
+bool sev_es_enabled(void);
 void snp_accept_memory(phys_addr_t start, phys_addr_t end);
 
 #else
 
 static inline bool sev_snp_enabled(void) { return false; }
+static inline bool sev_es_enabled(void) { return false; }
 static inline void snp_accept_memory(phys_addr_t start, phys_addr_t end) { }
 
 #endif
