@@ -20,6 +20,7 @@ struct stats_reply_data {
 		struct ethtool_eth_mac_stats	mac_stats;
 		struct ethtool_eth_ctrl_stats	ctrl_stats;
 		struct ethtool_rmon_stats	rmon_stats;
+		struct ethtool_rep_port_stats	rep_port_stats;
 	);
 	const struct ethtool_rmon_hist_range	*rmon_ranges;
 };
@@ -32,6 +33,7 @@ const char stats_std_names[__ETHTOOL_STATS_CNT][ETH_GSTRING_LEN] = {
 	[ETHTOOL_STATS_ETH_MAC]			= "eth-mac",
 	[ETHTOOL_STATS_ETH_CTRL]		= "eth-ctrl",
 	[ETHTOOL_STATS_RMON]			= "rmon",
+	[ETHTOOL_STATS_REP_PORT]		= "rep-port",
 };
 
 const char stats_eth_phy_names[__ETHTOOL_A_STATS_ETH_PHY_CNT][ETH_GSTRING_LEN] = {
@@ -74,6 +76,10 @@ const char stats_rmon_names[__ETHTOOL_A_STATS_RMON_CNT][ETH_GSTRING_LEN] = {
 	[ETHTOOL_A_STATS_RMON_OVERSIZE]		= "etherStatsOversizePkts",
 	[ETHTOOL_A_STATS_RMON_FRAG]		= "etherStatsFragments",
 	[ETHTOOL_A_STATS_RMON_JABBER]		= "etherStatsJabbers",
+};
+
+const char stats_rep_port_names[__ETHTOOL_A_STATS_REP_PORT_CNT][ETH_GSTRING_LEN] = {
+	[ETHTOOL_A_STATS_REP_PORT_OUT_OF_BUF]	= "out_of_buf",
 };
 
 const struct nla_policy ethnl_stats_get_policy[ETHTOOL_A_STATS_SRC + 1] = {
@@ -158,6 +164,15 @@ static int stats_prepare_data(const struct ethnl_req_info *req_base,
 	    dev->ethtool_ops->get_rmon_stats)
 		dev->ethtool_ops->get_rmon_stats(dev, &data->rmon_stats,
 						 &data->rmon_ranges);
+	if (test_bit(ETHTOOL_STATS_REP_PORT, req_info->stat_mask) &&
+	    dev->ethtool_ops->get_rep_port_stats) {
+		ret = dev->ethtool_ops->get_rep_port_stats(dev, &data->rep_port_stats,
+							   info->extack);
+		if (ret) {
+			ethnl_ops_complete(dev);
+			return ret;
+		}
+	}
 
 	ethnl_ops_complete(dev);
 	return 0;
@@ -193,6 +208,10 @@ static int stats_reply_size(const struct ethnl_req_info *req_base,
 			nla_total_size(4) +	/* _A_STATS_GRP_HIST_BKT_LOW */
 			nla_total_size(4)) *	/* _A_STATS_GRP_HIST_BKT_HI */
 			ETHTOOL_RMON_HIST_MAX * 2;
+	}
+	if (test_bit(ETHTOOL_STATS_REP_PORT, req_info->stat_mask)) {
+		n_stats += sizeof(struct ethtool_rep_port_stats) / sizeof(u64);
+		n_grps++;
 	}
 
 	len += n_grps * (nla_total_size(0) + /* _A_STATS_GRP */
@@ -370,6 +389,15 @@ static int stats_put_rmon_stats(struct sk_buff *skb,
 	return 0;
 }
 
+static int stats_put_rep_port_stats(struct sk_buff *skb,
+				    const struct stats_reply_data *data)
+{
+	if (stat_put(skb, ETHTOOL_A_STATS_REP_PORT_OUT_OF_BUF, data->rep_port_stats.out_of_buf))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
 static int stats_put_stats(struct sk_buff *skb,
 			   const struct stats_reply_data *data,
 			   u32 id, u32 ss_id,
@@ -423,6 +451,9 @@ static int stats_fill_reply(struct sk_buff *skb,
 	if (!ret && test_bit(ETHTOOL_STATS_RMON, req_info->stat_mask))
 		ret = stats_put_stats(skb, data, ETHTOOL_STATS_RMON,
 				      ETH_SS_STATS_RMON, stats_put_rmon_stats);
+	if (!ret && test_bit(ETHTOOL_STATS_REP_PORT, req_info->stat_mask))
+		ret = stats_put_stats(skb, data, ETHTOOL_STATS_REP_PORT,
+				      ETH_SS_STATS_REP_PORT, stats_put_rep_port_stats);
 
 	return ret;
 }

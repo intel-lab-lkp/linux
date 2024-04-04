@@ -480,6 +480,17 @@ struct ethtool_rmon_stats {
 	);
 };
 
+/**
+ * struct ethtool_rep_port_stats - representor port statistics
+ * @rep_port_stats: struct group for representor port
+ *	@out_of_buf: Number of packets were dropped due to buffer exhaustion.
+ */
+struct ethtool_rep_port_stats {
+	struct_group(rep_port_stats,
+		u64 out_of_buf;
+	);
+};
+
 #define ETH_MODULE_EEPROM_PAGE_LEN	128
 #define ETH_MODULE_MAX_I2C_ADDRESS	0x7f
 
@@ -804,6 +815,8 @@ struct ethtool_rxfh_param {
  * @get_eth_ctrl_stats: Query some of the IEEE 802.3 MAC Ctrl statistics.
  * @get_rmon_stats: Query some of the RMON (RFC 2819) statistics.
  *	Set %ranges to a pointer to zero-terminated array of byte ranges.
+ * @get_rep_port_stats: Query the representor port statistics.
+ *	Returns zero on success.
  * @get_module_power_mode: Get the power mode policy for the plug-in module
  *	used by the network device and its operational power mode, if
  *	plugged-in.
@@ -940,6 +953,9 @@ struct ethtool_ops {
 	void	(*get_rmon_stats)(struct net_device *dev,
 				  struct ethtool_rmon_stats *rmon_stats,
 				  const struct ethtool_rmon_hist_range **ranges);
+	int    (*get_rep_port_stats)(struct net_device *dev,
+				     struct ethtool_rep_port_stats *rep_port_stats,
+				     struct netlink_ext_ack *extack);
 	int	(*get_module_power_mode)(struct net_device *dev,
 					 struct ethtool_module_power_mode_params *params,
 					 struct netlink_ext_ack *extack);

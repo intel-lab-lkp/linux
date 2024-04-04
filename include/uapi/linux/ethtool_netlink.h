@@ -764,6 +764,7 @@ enum {
 	ETHTOOL_STATS_ETH_MAC,
 	ETHTOOL_STATS_ETH_CTRL,
 	ETHTOOL_STATS_RMON,
+	ETHTOOL_STATS_REP_PORT,
 
 	/* add new constants above here */
 	__ETHTOOL_STATS_CNT
@@ -877,6 +878,15 @@ enum {
 	/* add new constants above here */
 	__ETHTOOL_A_STATS_RMON_CNT,
 	ETHTOOL_A_STATS_RMON_MAX = (__ETHTOOL_A_STATS_RMON_CNT - 1)
+};
+
+enum {
+	/* out_of_buf */
+	ETHTOOL_A_STATS_REP_PORT_OUT_OF_BUF,
+
+	/* add new constants above here */
+	__ETHTOOL_A_STATS_REP_PORT_CNT,
+	ETHTOOL_A_STATS_REP_PORT_MAX = (__ETHTOOL_A_STATS_REP_PORT_CNT - 1)
 };
 
 /* MODULE */
