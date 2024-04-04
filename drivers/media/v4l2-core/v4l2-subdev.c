@@ -2158,21 +2158,32 @@ int v4l2_subdev_enable_streams(struct v4l2_subdev *sd, u32 pad,
 	 * Verify that the requested streams exist and that they are not
 	 * already enabled.
 	 */
-	for (i = 0; i < state->stream_configs.num_configs; ++i) {
-		struct v4l2_subdev_stream_config *cfg =
-			&state->stream_configs.configs[i];
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS) {
+		for (i = 0; i < state->stream_configs.num_configs; ++i) {
+			struct v4l2_subdev_stream_config *cfg =
+				&state->stream_configs.configs[i];
 
-		if (cfg->pad != pad || !(streams_mask & BIT_ULL(cfg->stream)))
-			continue;
+			if (cfg->pad != pad || !(streams_mask & BIT_ULL(cfg->stream)))
+				continue;
 
-		found_streams |= BIT_ULL(cfg->stream);
+			found_streams |= BIT_ULL(cfg->stream);
 
-		if (cfg->enabled) {
-			dev_dbg(dev, "stream %u already enabled on %s:%u\n",
-				cfg->stream, sd->entity.name, pad);
+			if (cfg->enabled) {
+				dev_dbg(dev, "stream %u already enabled on %s:%u\n",
+					cfg->stream, sd->entity.name, pad);
+				ret = -EALREADY;
+				goto done;
+			}
+		}
+	} else {
+		if (sd->enabled_pads & BIT_ULL(pad)) {
+			dev_dbg(dev, "stream 0 already enabled on %s:%u\n",
+				sd->entity.name, pad);
 			ret = -EALREADY;
 			goto done;
 		}
+
+		found_streams = BIT_ULL(0);
 	}
 
 	if (found_streams != streams_mask) {
@@ -2194,12 +2205,16 @@ int v4l2_subdev_enable_streams(struct v4l2_subdev *sd, u32 pad,
 	}
 
 	/* Mark the streams as enabled. */
-	for (i = 0; i < state->stream_configs.num_configs; ++i) {
-		struct v4l2_subdev_stream_config *cfg =
-			&state->stream_configs.configs[i];
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS) {
+		for (i = 0; i < state->stream_configs.num_configs; ++i) {
+			struct v4l2_subdev_stream_config *cfg =
+				&state->stream_configs.configs[i];
 
-		if (cfg->pad == pad && (streams_mask & BIT_ULL(cfg->stream)))
-			cfg->enabled = true;
+			if (cfg->pad == pad && (streams_mask & BIT_ULL(cfg->stream)))
+				cfg->enabled = true;
+		}
+	} else {
+		sd->enabled_pads |= BIT_ULL(pad);
 	}
 
 done:
@@ -2281,21 +2296,32 @@ int v4l2_subdev_disable_streams(struct v4l2_subdev *sd, u32 pad,
 	 * Verify that the requested streams exist and that they are not
 	 * already disabled.
 	 */
-	for (i = 0; i < state->stream_configs.num_configs; ++i) {
-		struct v4l2_subdev_stream_config *cfg =
-			&state->stream_configs.configs[i];
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS) {
+		for (i = 0; i < state->stream_configs.num_configs; ++i) {
+			struct v4l2_subdev_stream_config *cfg =
+				&state->stream_configs.configs[i];
 
-		if (cfg->pad != pad || !(streams_mask & BIT_ULL(cfg->stream)))
-			continue;
+			if (cfg->pad != pad || !(streams_mask & BIT_ULL(cfg->stream)))
+				continue;
 
-		found_streams |= BIT_ULL(cfg->stream);
+			found_streams |= BIT_ULL(cfg->stream);
 
-		if (!cfg->enabled) {
-			dev_dbg(dev, "stream %u already disabled on %s:%u\n",
-				cfg->stream, sd->entity.name, pad);
+			if (!cfg->enabled) {
+				dev_dbg(dev, "stream %u already disabled on %s:%u\n",
+					cfg->stream, sd->entity.name, pad);
+				ret = -EALREADY;
+				goto done;
+			}
+		}
+	} else {
+		if (!(sd->enabled_pads & BIT_ULL(pad))) {
+			dev_dbg(dev, "stream 0 already disabled on %s:%u\n",
+				sd->entity.name, pad);
 			ret = -EALREADY;
 			goto done;
 		}
+
+		found_streams = BIT_ULL(0);
 	}
 
 	if (found_streams != streams_mask) {
@@ -2317,12 +2343,16 @@ int v4l2_subdev_disable_streams(struct v4l2_subdev *sd, u32 pad,
 	}
 
 	/* Mark the streams as disabled. */
-	for (i = 0; i < state->stream_configs.num_configs; ++i) {
-		struct v4l2_subdev_stream_config *cfg =
-			&state->stream_configs.configs[i];
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS) {
+		for (i = 0; i < state->stream_configs.num_configs; ++i) {
+			struct v4l2_subdev_stream_config *cfg =
+				&state->stream_configs.configs[i];
 
-		if (cfg->pad == pad && (streams_mask & BIT_ULL(cfg->stream)))
-			cfg->enabled = false;
+			if (cfg->pad == pad && (streams_mask & BIT_ULL(cfg->stream)))
+				cfg->enabled = false;
+		}
+	} else {
+		sd->enabled_pads &= ~BIT_ULL(pad);
 	}
 
 done:
