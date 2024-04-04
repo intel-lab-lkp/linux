@@ -160,6 +160,13 @@ drm_connector_preferred_mode(struct drm_connector *connector, int width, int hei
 }
 
 static const struct drm_display_mode *
+drm_connector_first_mode(struct drm_connector *connector)
+{
+	return list_first_entry_or_null(&connector->modes,
+					struct drm_display_mode, head);
+}
+
+static const struct drm_display_mode *
 drm_connector_pick_cmdline_mode(struct drm_connector *connector)
 {
 	const struct drm_cmdline_mode *cmdline_mode;
@@ -439,10 +446,8 @@ retry:
 			modes[i] = drm_connector_preferred_mode(connector, width, height);
 		}
 		/* No preferred modes, pick one off the list */
-		if (!modes[i] && !list_empty(&connector->modes)) {
-			list_for_each_entry(modes[i], &connector->modes, head)
-				break;
-		}
+		if (!modes[i])
+			modes[i] = drm_connector_first_mode(connector);
 		/*
 		 * In case of tiled mode if all tiles not present fallback to
 		 * first available non tiled mode.
@@ -684,9 +689,7 @@ retry:
 		if (!modes[i] && !list_empty(&connector->modes)) {
 			DRM_DEBUG_KMS("using first mode listed on connector %s\n",
 				      connector->name);
-			modes[i] = list_first_entry(&connector->modes,
-						    struct drm_display_mode,
-						    head);
+			modes[i] = drm_connector_first_mode(connector);
 		}
 
 		/* last resort: use current mode */
