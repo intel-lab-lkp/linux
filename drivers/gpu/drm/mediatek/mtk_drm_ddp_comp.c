@@ -576,6 +576,29 @@ unsigned int mtk_drm_find_possible_crtc_by_comp(struct drm_device *drm,
 	return ret;
 }
 
+static bool mtk_ddp_is_simple_comp(enum mtk_ddp_comp_type type)
+{
+	switch (type) {
+	case MTK_DISP_AAL:
+	case MTK_DISP_BLS:
+	case MTK_DISP_CCORR:
+	case MTK_DISP_COLOR:
+	case MTK_DISP_GAMMA:
+	case MTK_DISP_MERGE:
+	case MTK_DISP_OVL:
+	case MTK_DISP_OVL_2L:
+	case MTK_DISP_OVL_ADAPTOR:
+	case MTK_DISP_PWM:
+	case MTK_DISP_RDMA:
+	case MTK_DP_INTF:
+	case MTK_DPI:
+	case MTK_DSI:
+		return false;
+	default:
+		return true;
+	}
+}
+
 int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 		      unsigned int comp_id)
 {
@@ -606,19 +629,13 @@ int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 	}
 	comp->dev = &comp_pdev->dev;
 
-	if (type == MTK_DISP_AAL ||
-	    type == MTK_DISP_BLS ||
-	    type == MTK_DISP_CCORR ||
-	    type == MTK_DISP_COLOR ||
-	    type == MTK_DISP_GAMMA ||
-	    type == MTK_DISP_MERGE ||
-	    type == MTK_DISP_OVL ||
-	    type == MTK_DISP_OVL_2L ||
-	    type == MTK_DISP_PWM ||
-	    type == MTK_DISP_RDMA ||
-	    type == MTK_DPI ||
-	    type == MTK_DP_INTF ||
-	    type == MTK_DSI)
+	/*
+	 * Resources for simple components are retrieved here as those are
+	 * managed in here without the need of more complex drivers; for
+	 * the latter, their respective probe function will do the job, so
+	 * we must avoid getting their resources here.
+	 */
+	if (!mtk_ddp_is_simple_comp(type))
 		return 0;
 
 	priv = devm_kzalloc(comp->dev, sizeof(*priv), GFP_KERNEL);
@@ -652,19 +669,7 @@ void mtk_ddp_comp_destroy(struct mtk_ddp_comp *comp)
 		return;
 
 	/* Complex components are destroyed with their own remove callback */
-	if (mtk_ddp_matches[comp->id].type == MTK_DISP_AAL ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_BLS ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_CCORR ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_COLOR ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_GAMMA ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_MERGE ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_OVL ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_OVL_2L ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_PWM ||
-	    mtk_ddp_matches[comp->id].type == MTK_DISP_RDMA ||
-	    mtk_ddp_matches[comp->id].type == MTK_DPI ||
-	    mtk_ddp_matches[comp->id].type == MTK_DP_INTF ||
-	    mtk_ddp_matches[comp->id].type == MTK_DSI)
+	if (!mtk_ddp_is_simple_comp(mtk_ddp_matches[comp->id].type))
 		return;
 
 	priv = dev_get_drvdata(comp->dev);
