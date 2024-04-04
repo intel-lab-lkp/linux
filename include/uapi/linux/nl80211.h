@@ -1304,6 +1304,10 @@
  * @NL80211_CMD_REMOVE_LINK: Remove a link from an interface. This may come
  *	without %NL80211_ATTR_MLO_LINK_ID as an easy way to remove all links
  *	in preparation for e.g. roaming to a regular (non-MLO) AP.
+ *	To initiate link removal procedure, set below attributes,
+ *	%NL80211_ATTR_AP_REMOVAL_COUNT - AP removal timer count(TBTT)
+ *	%NL80211_ATTR_IE - ML reconfigure Information element
+ *	Can be extended to update multiple TBTT & element(s).
  *
  * @NL80211_CMD_ADD_LINK_STA: Add a link to an MLD station
  * @NL80211_CMD_MODIFY_LINK_STA: Modify a link of an MLD station
@@ -1328,6 +1332,14 @@
  *      non-AP MLD station. The %NL80211_ATTR_MLO_TTLM_DLINK and
  *      %NL80211_ATTR_MLO_TTLM_ULINK attributes are used to specify the
  *      TID to Link mapping for downlink/uplink traffic.
+ *
+ * @NL80211_CMD_LINK_REMOVAL_STARTED: Once first beacon with reconfiguration MLE
+ *	is sent, userspace is notified with the TBTT and TSF value to indicate
+ *	timestamp of that beacon using %NL80211_ATTR_AP_REMOVAL_COUNT and
+ *	%NL80211_ATTR_TSF respectively.
+ *
+ * @NL80211_CMD_LINK_REMOVAL_COMPLETED: Once last beacon with reconfiguration
+ *	MLE is sent, userspace is notified with completion.
  *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
@@ -1585,6 +1597,10 @@ enum nl80211_commands {
 	NL80211_CMD_LINKS_REMOVED,
 
 	NL80211_CMD_SET_TID_TO_LINK_MAPPING,
+
+	NL80211_CMD_LINK_REMOVAL_STARTED,
+
+	NL80211_CMD_LINK_REMOVAL_COMPLETED,
 
 	/* add new commands above here */
 
@@ -2856,6 +2872,13 @@ enum nl80211_commands {
  *	%NL80211_CMD_ASSOCIATE indicating the SPP A-MSDUs
  *	are used on this connection
  *
+ * @NL80211_ATTR_AP_REMOVAL_COUNT: (u16) TBTT count up-to which reconfiguration
+ *	MLE is sent. Also, userspace will be notified with this count once the
+ *	first beacon with reconfiguration MLE is sent.
+ *
+ * @NL80211_ATTR_TSF: (u64) TSF value when the first beacon with reconfiguration
+ *	MLE is sent.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3400,6 +3423,9 @@ enum nl80211_attrs {
 	NL80211_ATTR_MLO_TTLM_ULINK,
 
 	NL80211_ATTR_ASSOC_SPP_AMSDU,
+
+	NL80211_ATTR_AP_REMOVAL_COUNT,
+	NL80211_ATTR_TSF,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -6545,6 +6571,9 @@ enum nl80211_feature_flags {
  *	(signaling and payload protected) A-MSDUs and this shall be advertised
  *	in the RSNXE.
  *
+ * @NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD: Driver/device which supports
+ *	ML reconfig link removal offload.
+ *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
  */
@@ -6620,6 +6649,7 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_OWE_OFFLOAD_AP,
 	NL80211_EXT_FEATURE_DFS_CONCURRENT,
 	NL80211_EXT_FEATURE_SPP_AMSDU_SUPPORT,
+	NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
