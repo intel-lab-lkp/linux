@@ -128,6 +128,9 @@ void mlx5e_stats_eth_ctrl_get(struct mlx5e_priv *priv,
 void mlx5e_stats_rmon_get(struct mlx5e_priv *priv,
 			  struct ethtool_rmon_stats *rmon,
 			  const struct ethtool_rmon_hist_range **ranges);
+int mlx5e_stats_rep_port_get(struct mlx5e_priv *priv,
+			     struct ethtool_rep_port_stats *rep_port_stats,
+			     struct netlink_ext_ack *extack);
 void mlx5e_get_link_ext_stats(struct net_device *dev,
 			      struct ethtool_link_ext_stats *stats);
 

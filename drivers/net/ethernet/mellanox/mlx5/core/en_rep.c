@@ -273,6 +273,44 @@ out:
 	kvfree(out);
 }
 
+static int mlx5e_rep_query_q_counter(struct mlx5_core_dev *mdev, int vport, void *out)
+{
+	u32 in[MLX5_ST_SZ_DW(query_q_counter_in)] = {};
+
+	MLX5_SET(query_q_counter_in, in, opcode, MLX5_CMD_OP_QUERY_Q_COUNTER);
+	MLX5_SET(query_q_counter_in, in, other_vport, 1);
+	MLX5_SET(query_q_counter_in, in, vport_number, vport);
+	MLX5_SET(query_q_counter_in, in, aggregate, 1);
+
+	return mlx5_cmd_exec_inout(mdev, query_q_counter, in, out);
+}
+
+int mlx5e_stats_rep_port_get(struct mlx5e_priv *priv,
+			     struct ethtool_rep_port_stats *rep_port_stats,
+			     struct netlink_ext_ack *extack)
+{
+	u32 out[MLX5_ST_SZ_DW(query_q_counter_out)] = {};
+	struct mlx5e_rep_priv *rpriv = priv->ppriv;
+	struct mlx5_eswitch_rep *rep = rpriv->rep;
+	int err;
+
+	if (!MLX5_CAP_GEN(priv->mdev, q_counter_other_vport) ||
+	    !MLX5_CAP_GEN(priv->mdev, q_counter_aggregation)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Representor port stats is not supported on this device");
+		return -EOPNOTSUPP;
+	}
+
+	err = mlx5e_rep_query_q_counter(priv->mdev, rep->vport, out);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Failed reading stats on vport");
+		return err;
+	}
+	rep_port_stats->out_of_buf = MLX5_GET(query_q_counter_out, out, out_of_buffer);
+
+	return 0;
+}
+
 static void mlx5e_rep_get_strings(struct net_device *dev,
 				  u32 stringset, u8 *data)
 {
@@ -377,6 +415,15 @@ static u32 mlx5e_rep_get_rxfh_indir_size(struct net_device *netdev)
 	return mlx5e_ethtool_get_rxfh_indir_size(priv);
 }
 
+static int mlx5e_rep_get_port_stats(struct net_device *netdev,
+				    struct ethtool_rep_port_stats *rep_port_stats,
+				    struct netlink_ext_ack *extack)
+{
+	struct mlx5e_priv *priv = netdev_priv(netdev);
+
+	return mlx5e_stats_rep_port_get(priv, rep_port_stats, extack);
+}
+
 static const struct ethtool_ops mlx5e_rep_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES |
@@ -394,6 +441,7 @@ static const struct ethtool_ops mlx5e_rep_ethtool_ops = {
 	.set_coalesce      = mlx5e_rep_set_coalesce,
 	.get_rxfh_key_size   = mlx5e_rep_get_rxfh_key_size,
 	.get_rxfh_indir_size = mlx5e_rep_get_rxfh_indir_size,
+	.get_rep_port_stats = mlx5e_rep_get_port_stats,
 };
 
 static void mlx5e_sqs2vport_stop(struct mlx5_eswitch *esw,
