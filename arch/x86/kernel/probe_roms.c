@@ -177,6 +177,22 @@ size_t pci_biosrom_size(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL(pci_biosrom_size);
 
+void snp_kexec_unprep_rom_memory(void)
+{
+	unsigned long vaddr, npages, sz;
+
+	/*
+	 * Switch back ROM regions to shared so that their validation
+	 * does not fail during kexec kernel boot.
+	 */
+	vaddr = (unsigned long)__va(video_rom_resource.start);
+	sz = (system_rom_resource.end + 1) - video_rom_resource.start;
+	npages = PAGE_ALIGN(sz) >> PAGE_SHIFT;
+
+	snp_set_memory_shared(vaddr, npages);
+}
+EXPORT_SYMBOL(snp_kexec_unprep_rom_memory);
+
 #define ROMSIGNATURE 0xaa55
 
 static int __init romsignature(const unsigned char *rom)
