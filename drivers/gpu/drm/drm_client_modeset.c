@@ -699,6 +699,10 @@ retry:
 			 *
 			 * This is crtc->mode and not crtc->state->mode for the
 			 * fastboot check to work correctly.
+			 *
+			 * FIXME using legacy crtc->mode with atomic drivers
+			 * is dodgy. Switch to crtc->state->mode, after taking
+			 * care of the resulting locking/lifetime issues.
 			 */
 			DRM_DEBUG_KMS("looking for current mode on connector %s\n",
 				      connector->name);
