@@ -40,15 +40,12 @@
  */
 bool of_graph_is_present(const struct device_node *node)
 {
-	struct device_node *ports, *port;
+	struct device_node *ports __free(device_node) = of_get_child_by_name(node, "ports");
 
-	ports = of_get_child_by_name(node, "ports");
 	if (ports)
 		node = ports;
 
-	port = of_get_child_by_name(node, "port");
-	of_node_put(ports);
-	of_node_put(port);
+	struct device_node *port __free(device_node) = of_get_child_by_name(node, "port");
 
 	return !!port;
 }
@@ -610,9 +607,9 @@ EXPORT_SYMBOL(of_graph_parse_endpoint);
  */
 struct device_node *of_graph_get_port_by_id(struct device_node *parent, u32 id)
 {
-	struct device_node *node, *port;
+	struct device_node *port;
+	struct device_node *node __free(device_node) = of_get_child_by_name(parent, "ports");
 
-	node = of_get_child_by_name(parent, "ports");
 	if (node)
 		parent = node;
 
@@ -625,8 +622,6 @@ struct device_node *of_graph_get_port_by_id(struct device_node *parent, u32 id)
 		if (id == port_id)
 			break;
 	}
-
-	of_node_put(node);
 
 	return port;
 }
@@ -655,14 +650,13 @@ struct device_node *of_graph_get_next_endpoint(const struct device_node *parent,
 	 * parent port node.
 	 */
 	if (!prev) {
-		struct device_node *node;
+		struct device_node *node __free(device_node) =
+			of_get_child_by_name(parent, "ports");
 
-		node = of_get_child_by_name(parent, "ports");
 		if (node)
 			parent = node;
 
 		port = of_get_child_by_name(parent, "port");
-		of_node_put(node);
 
 		if (!port) {
 			pr_debug("graph: no port node found in %pOF\n", parent);
@@ -1052,14 +1046,12 @@ static int of_fwnode_graph_parse_endpoint(const struct fwnode_handle *fwnode,
 					  struct fwnode_endpoint *endpoint)
 {
 	const struct device_node *node = to_of_node(fwnode);
-	struct device_node *port_node = of_get_parent(node);
+	struct device_node *port_node __free(device_node) = of_get_parent(node);
 
 	endpoint->local_fwnode = fwnode;
 
 	of_property_read_u32(port_node, "reg", &endpoint->port);
 	of_property_read_u32(node, "reg", &endpoint->id);
-
-	of_node_put(port_node);
 
 	return 0;
 }
