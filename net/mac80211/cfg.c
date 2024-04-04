@@ -4923,6 +4923,17 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 	ieee80211_vif_set_links(sdata, wdev->valid_links, 0);
 }
 
+static int
+ieee80211_link_reconfig_remove(struct wiphy *wiphy,
+			       struct net_device *dev,
+			       const struct cfg80211_link_reconfig_removal_params *params)
+{
+	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_local *local = wiphy_priv(wiphy);
+
+	return __ieee80211_link_reconfig_remove(local, sdata, params);
+}
+
 static int sta_add_link_station(struct ieee80211_local *local,
 				struct ieee80211_sub_if_data *sdata,
 				struct link_station_parameters *params)
@@ -5166,4 +5177,5 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.del_link_station = ieee80211_del_link_station,
 	.set_hw_timestamp = ieee80211_set_hw_timestamp,
 	.set_ttlm = ieee80211_set_ttlm,
+	.link_reconfig_remove = ieee80211_link_reconfig_remove,
 };
