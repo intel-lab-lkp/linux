@@ -408,6 +408,8 @@ static bool drm_client_target_preferred(struct drm_device *dev,
 
 retry:
 	for (i = 0; i < connector_count; i++) {
+		const char *mode_type;
+
 		connector = connectors[i];
 
 		if (conn_configured & BIT_ULL(i))
@@ -440,20 +442,20 @@ retry:
 			drm_client_get_tile_offsets(dev, connectors, connector_count, modes, offsets, i,
 						    connector->tile_h_loc, connector->tile_v_loc);
 		}
-		drm_dbg_kms(dev, "looking for cmdline mode on [CONNECTOR:%d:%s]\n",
-			    connector->base.id, connector->name);
 
-		/* got for command line mode first */
+		mode_type = "cmdline";
 		modes[i] = drm_connector_pick_cmdline_mode(connector);
+
 		if (!modes[i]) {
-			drm_dbg_kms(dev, "looking for preferred mode on [CONNECTOR:%d:%s] (tile group: %d)\n",
-				    connector->base.id, connector->name,
-				    connector->tile_group ? connector->tile_group->id : 0);
+			mode_type = "preferred";
 			modes[i] = drm_connector_preferred_mode(connector, width, height);
 		}
-		/* No preferred modes, pick one off the list */
-		if (!modes[i])
+
+		if (!modes[i]) {
+			mode_type = "first";
 			modes[i] = drm_connector_first_mode(connector);
+		}
+
 		/*
 		 * In case of tiled mode if all tiles not present fallback to
 		 * first available non tiled mode.
@@ -468,16 +470,20 @@ retry:
 			    (connector->tile_h_loc == 0 &&
 			     connector->tile_v_loc == 0 &&
 			     !drm_connector_get_tiled_mode(connector))) {
-				drm_dbg_kms(dev, "Falling back to non tiled mode on [CONNECTOR:%d:%s]\n",
-					    connector->base.id, connector->name);
+				mode_type = "non tiled";
 				modes[i] = drm_connector_fallback_non_tiled_mode(connector);
 			} else {
+				mode_type = "tiled";
 				modes[i] = drm_connector_get_tiled_mode(connector);
 			}
 		}
 
-		drm_dbg_kms(dev, "found mode %s\n",
-			    modes[i] ? modes[i]->name : "none");
+		if (!modes[i])
+			mode_type = "no";
+
+		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] found %s mode: %s\n",
+			    connector->base.id, connector->name,
+			    mode_type, modes[i] ? modes[i]->name : "none");
 		conn_configured |= BIT_ULL(i);
 	}
 
@@ -624,6 +630,7 @@ retry:
 		struct drm_connector *connector;
 		struct drm_encoder *encoder;
 		struct drm_crtc *new_crtc;
+		const char *mode_type;
 
 		connector = connectors[i];
 
@@ -673,29 +680,22 @@ retry:
 		 */
 		for (j = 0; j < count; j++) {
 			if (crtcs[j] == new_crtc) {
-				drm_dbg_kms(dev, "fallback: cloned configuration\n");
+				drm_dbg_kms(dev, "[CONNECTOR:%d:%s] fallback: cloned configuration\n",
+					    connector->base.id, connector->name);
 				goto bail;
 			}
 		}
 
-		drm_dbg_kms(dev, "looking for cmdline mode on [CONNECTOR:%d:%s]\n",
-			    connector->base.id, connector->name);
-
-		/* go for command line mode first */
+		mode_type = "cmdline";
 		modes[i] = drm_connector_pick_cmdline_mode(connector);
 
-		/* try for preferred next */
 		if (!modes[i]) {
-			drm_dbg_kms(dev, "looking for preferred mode on [CONNECTOR:%d:%s] (tiled? %s)\n",
-				    connector->base.id, connector->name,
-				    str_yes_no(connector->has_tile));
+			mode_type = "preferred";
 			modes[i] = drm_connector_preferred_mode(connector, width, height);
 		}
 
-		/* No preferred mode marked by the EDID? Are there any modes? */
-		if (!modes[i] && !list_empty(&connector->modes)) {
-			drm_dbg_kms(dev, "using first mode listed on [CONNECTOR:%d:%s]\n",
-				    connector->base.id, connector->name);
+		if (!modes[i]) {
+			mode_type = "first";
 			modes[i] = drm_connector_first_mode(connector);
 		}
 
@@ -706,28 +706,25 @@ retry:
 			 * is dodgy. Switch to crtc->state->mode, after taking
 			 * care of the resulting locking/lifetime issues.
 			 */
-			drm_dbg_kms(dev, "looking for current mode on [CONNECTOR:%d:%s]\n",
-				    connector->base.id, connector->name);
+			mode_type = "current";
 			modes[i] = &connector->state->crtc->mode;
 		}
+
 		/*
 		 * In case of tiled modes, if all tiles are not present
 		 * then fallback to a non tiled mode.
 		 */
 		if (connector->has_tile &&
 		    num_tiled_conns < connector->num_h_tile * connector->num_v_tile) {
-			drm_dbg_kms(dev, "Falling back to non tiled mode on [CONNECTOR:%d:%s]\n",
-				    connector->base.id, connector->name);
+			mode_type = "non tiled";
 			modes[i] = drm_connector_fallback_non_tiled_mode(connector);
 		}
 		crtcs[i] = new_crtc;
 
-		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] on [CRTC:%d:%s]: %dx%d%s\n",
+		drm_dbg_kms(dev, "[CONNECTOR::%d:%s] on [CRTC:%d:%s] using %s mode: %s\n",
 			    connector->base.id, connector->name,
-			    connector->state->crtc->base.id,
-			    connector->state->crtc->name,
-			    modes[i]->hdisplay, modes[i]->vdisplay,
-			    modes[i]->flags & DRM_MODE_FLAG_INTERLACE ? "i" : "");
+			    new_crtc->base.id, new_crtc->name,
+			    mode_type, modes[i]->name);
 
 		fallback = false;
 		conn_configured |= BIT(i);
