@@ -211,6 +211,9 @@ intel_dp_aux_hdr_set_aux_backlight(const struct drm_connector_state *conn_state,
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
 	u8 buf[4] = {};
 
+	if (level < 20)
+		level = 20;
+
 	buf[0] = level & 0xFF;
 	buf[1] = (level & 0xFF00) >> 8;
 
