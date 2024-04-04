@@ -1459,13 +1459,15 @@ u64 cs_etm__convert_sample_time(struct cs_etm_queue *etmq, u64 cs_timestamp)
 }
 
 static inline u64 cs_etm__resolve_sample_time(struct cs_etm_queue *etmq,
-					       struct cs_etm_traceid_queue *tidq)
+					       struct cs_etm_traceid_queue *tidq,
+					       bool instruction_sample)
 {
 	struct cs_etm_auxtrace *etm = etmq->etm;
 	struct cs_etm_packet_queue *packet_queue = &tidq->packet_queue;
 
 	if (!etm->timeless_decoding && etm->has_virtual_ts)
-		return packet_queue->cs_timestamp;
+		return instruction_sample ? packet_queue->prev_cs_timestamp :
+					    packet_queue->cs_timestamp;
 	else
 		return etm->latest_kernel_timestamp;
 }
@@ -1484,7 +1486,7 @@ static int cs_etm__synth_instruction_sample(struct cs_etm_queue *etmq,
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
-	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
+	sample.time = cs_etm__resolve_sample_time(etmq, tidq, true);
 
 	sample.ip = addr;
 	sample.pid = thread__pid(tidq->thread);
@@ -1560,7 +1562,7 @@ static int cs_etm__synth_branch_sample(struct cs_etm_queue *etmq,
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
-	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
+	sample.time = cs_etm__resolve_sample_time(etmq, tidq, false);
 
 	sample.ip = ip;
 	sample.pid = thread__pid(tidq->prev_packet_thread);
@@ -1848,6 +1850,13 @@ static int cs_etm__sample(struct cs_etm_queue *etmq,
 				return ret;
 		}
 	}
+
+	/*
+	 * Since we synthesize the prev_packet, store the current timestamp
+	 * here in prev_cs_timestamp so that when we *actually* synthesize
+	 * the prev_packet, we use this timestamp and not the future one.
+	 */
+	tidq->packet_queue.prev_cs_timestamp = tidq->packet_queue.cs_timestamp;
 
 	cs_etm__packet_swap(etm, tidq);
 
