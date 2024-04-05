@@ -33,9 +33,9 @@
 /* NXP HW err codes */
 #define BTNXPUART_IR_HW_ERR		0xb0
 
-#define FIRMWARE_W8987		"nxp/uartuart8987_bt.bin"
-#define FIRMWARE_W8997		"nxp/uartuart8997_bt_v4.bin"
-#define FIRMWARE_W9098		"nxp/uartuart9098_bt_v1.bin"
+#define FIRMWARE_W8987		"nxp/uart8987_bt_v0.bin"
+#define FIRMWARE_W8997		"nxp/uart8997_bt_v4.bin"
+#define FIRMWARE_W9098		"nxp/uart9098_bt_v1.bin"
 #define FIRMWARE_IW416		"nxp/uartiw416_bt_v0.bin"
 #define FIRMWARE_IW612		"nxp/uartspi_n61x_v1.bin.se"
 #define FIRMWARE_IW624		"nxp/uartiw624_bt.bin"
@@ -685,12 +685,18 @@ static bool process_boot_signature(struct btnxpuart_dev *nxpdev)
 static int nxp_request_firmware(struct hci_dev *hdev, const char *fw_name)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	const char *fw_name_dt;
 	int err = 0;
 
 	if (!fw_name)
 		return -ENOENT;
 
 	if (!strlen(nxpdev->fw_name)) {
+		if (strcmp(fw_name, FIRMWARE_HELPER) &&
+		    !device_property_read_string(&nxpdev->serdev->dev,
+						 "firmware-name",
+						 &fw_name_dt))
+			fw_name = fw_name_dt;
 		snprintf(nxpdev->fw_name, MAX_FW_FILE_NAME_LEN, "%s", fw_name);
 
 		bt_dev_dbg(hdev, "Request Firmware: %s", nxpdev->fw_name);
