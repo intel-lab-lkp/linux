@@ -255,7 +255,7 @@ void __init topology_register_boot_apic(u32 apic_id)
 	WARN_ON_ONCE(topo_info.boot_cpu_apic_id != BAD_APICID);
 
 	topo_info.boot_cpu_apic_id = apic_id;
-	topo_register_apic(apic_id, CPU_ACPIID_INVALID, true);
+	topology_register_apic(apic_id, CPU_ACPIID_INVALID, true);
 }
 
 /**
