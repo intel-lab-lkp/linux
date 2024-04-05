@@ -119,7 +119,12 @@ enum {
 	/*
 	 * Enable hugetlb accounting for the memory controller.
 	 */
-	 CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING = (1 << 19),
+	CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING = (1 << 19),
+
+	/*
+	 * Enforce pids limit upon task migration
+	 */
+	CGRP_ROOT_PIDS_MIGRATION_LIMIT = (1 << 20),
 };
 
 /* cftype->flags */

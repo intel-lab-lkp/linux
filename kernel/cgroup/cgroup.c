@@ -1922,6 +1922,7 @@ enum cgroup2_param {
 	Opt_memory_localevents,
 	Opt_memory_recursiveprot,
 	Opt_memory_hugetlb_accounting,
+	Opt_pids_miglimit,
 	nr__cgroup2_params
 };
 
@@ -1931,6 +1932,7 @@ static const struct fs_parameter_spec cgroup2_fs_parameters[] = {
 	fsparam_flag("memory_localevents",	Opt_memory_localevents),
 	fsparam_flag("memory_recursiveprot",	Opt_memory_recursiveprot),
 	fsparam_flag("memory_hugetlb_accounting", Opt_memory_hugetlb_accounting),
+	fsparam_flag("pids_miglimit",           Opt_pids_miglimit),
 	{}
 };
 
@@ -1959,6 +1961,9 @@ static int cgroup2_parse_param(struct fs_context *fc, struct fs_parameter *param
 		return 0;
 	case Opt_memory_hugetlb_accounting:
 		ctx->flags |= CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
+		return 0;
+	case Opt_pids_miglimit:
+		ctx->flags |= CGRP_ROOT_PIDS_MIGRATION_LIMIT;
 		return 0;
 	}
 	return -EINVAL;
@@ -1989,6 +1994,12 @@ static void apply_cgroup_root_flags(unsigned int root_flags)
 			cgrp_dfl_root.flags |= CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
 		else
 			cgrp_dfl_root.flags &= ~CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
+
+		if (root_flags & CGRP_ROOT_PIDS_MIGRATION_LIMIT)
+			cgrp_dfl_root.flags |= CGRP_ROOT_PIDS_MIGRATION_LIMIT;
+		else
+			cgrp_dfl_root.flags &= ~CGRP_ROOT_PIDS_MIGRATION_LIMIT;
+
 	}
 }
 
@@ -2004,6 +2015,8 @@ static int cgroup_show_options(struct seq_file *seq, struct kernfs_root *kf_root
 		seq_puts(seq, ",memory_recursiveprot");
 	if (cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING)
 		seq_puts(seq, ",memory_hugetlb_accounting");
+	if (cgrp_dfl_root.flags & CGRP_ROOT_PIDS_MIGRATION_LIMIT)
+		seq_puts(seq, ",pids_miglimit");
 	return 0;
 }
 
@@ -7061,7 +7074,8 @@ static ssize_t features_show(struct kobject *kobj, struct kobj_attribute *attr,
 			"favordynmods\n"
 			"memory_localevents\n"
 			"memory_recursiveprot\n"
-			"memory_hugetlb_accounting\n");
+			"memory_hugetlb_accounting\n"
+			"pids_miglimit\n");
 }
 static struct kobj_attribute cgroup_features_attr = __ATTR_RO(features);
 

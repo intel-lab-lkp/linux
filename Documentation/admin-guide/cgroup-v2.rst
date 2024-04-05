@@ -239,6 +239,11 @@ cgroup v2 currently supports the following mount options.
           will not be tracked by the memory controller (even if cgroup
           v2 is remounted later on).
 
+  pids_miglimit
+        Apply pids.max limit also when migrating tasks between cgroups. Only
+        new destination limit are taken into account, i.e. if subtree has
+        pids.current > pids.max, migration within that subtree is allowed.
+
 
 Organizing Processes and Threads
 --------------------------------
@@ -2204,7 +2209,8 @@ Organisational operations are not blocked by cgroup policies, so it is
 possible to have pids.current > pids.max.  This can be done by either
 setting the limit to be smaller than pids.current, or attaching enough
 processes to the cgroup such that pids.current is larger than
-pids.max.  However, it is not possible to violate a cgroup PID policy
+pids.max (unless pids_miglimit mount options is given).
+However, it is not possible to violate a cgroup PID policy
 through fork() or clone(). These will return -EAGAIN if the creation
 of a new process would cause a cgroup policy to be violated.
 
