@@ -2189,7 +2189,9 @@ PID Interface Files
   pids.events
 	A read-only flat-keyed file which exists on non-root cgroups.  Unless
 	specified otherwise, a value change in this file generates a file modified
-	event. The following entries are defined.
+	event. Fields in this file are hierarchical and the file modified event
+	can be generated due to an event down the hierarchy. The following
+	entries are defined.
 
 	  max
 		The number of times the limit of the cgroup was hit.
