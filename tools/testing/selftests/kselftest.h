@@ -362,7 +362,7 @@ static inline __printf(1, 2) int ksft_exit_fail_msg(const char *msg, ...)
 	va_list args;
 
 	va_start(args, msg);
-	printf("Bail out! ");
+	printf("Error: ");
 	errno = saved_errno;
 	vprintf(msg, args);
 	va_end(args);
