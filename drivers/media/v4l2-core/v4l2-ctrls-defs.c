@@ -1162,6 +1162,8 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_CFA_PATTERN_FLIP:		return "CFA Pattern Flip";
 	case V4L2_CID_METADATA_LAYOUT:		return "Metadata Layout";
 	case V4L2_CID_BINNING_FACTORS:		return "Binning Factors";
+	case V4L2_CID_SUBSAMPLING_HORIZONTAL:	return "Sub-Sampling Factor, Horizontal";
+	case V4L2_CID_SUBSAMPLING_VERTICAL:	return "Sub-Sampling Factor, Vertical";
 
 	/* Image processing controls */
 	/* Keep the order of the 'case's the same as in v4l2-controls.h! */

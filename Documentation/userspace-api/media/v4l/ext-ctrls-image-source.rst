@@ -193,3 +193,14 @@ Image Source Control IDs
 
 For instance, a value of ``0x0003000100030002`` indicates binning by 3
 (horizontally) * 3/2 (vertically).
+
+.. _image_source_control_subsampling:
+
+``V4L2_CID_SUBSAMPLING_HORIZONTAL`` and ``V4L2_CID_SUBSAMPLING_VERTICAL``
+(integer)
+
+    Horizontal and vertical subsampling factors.
+
+    Sub-sampling is used to downscale an image, horizontally and vertically, by
+    discarding a part of the image data. Typically sub-sampling produces lower
+    quality images than binning.
