@@ -134,40 +134,22 @@ static void pids_uncharge(struct pids_cgroup *pids, int num)
 }
 
 /**
- * pids_charge - hierarchically charge the pid count
- * @pids: the pid cgroup state
- * @num: the number of pids to charge
- *
- * This function does *not* follow the pid limit set. It cannot fail and the new
- * pid count may exceed the limit. This is only used for reverting failed
- * attaches, where there is no other way out than violating the limit.
- */
-static void pids_charge(struct pids_cgroup *pids, int num)
-{
-	struct pids_cgroup *p;
-
-	for (p = pids; parent_pids(p); p = parent_pids(p)) {
-		int64_t new = atomic64_add_return(num, &p->counter);
-
-		pids_update_watermark(p, new);
-	}
-}
-
-/**
  * pids_try_charge - hierarchically try to charge the pid count
  * @pids: the pid cgroup state
  * @num: the number of pids to charge
+ * @root: charge only under this root (NULL is global root)
  * @fail: storage of pid cgroup causing the fail
  *
  * This function follows the set limit. It will fail if the charge would cause
- * the new value to exceed the hierarchical limit. Returns 0 if the charge
- * succeeded, otherwise -EAGAIN.
+ * the new value to exceed the hierarchical limit and fail is set. Returns 0 if
+ * no limit was hit, otherwise -EAGAIN.
  */
-static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup **fail)
+static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup *root, struct pids_cgroup **fail)
 {
 	struct pids_cgroup *p, *q;
+	int ret = 0;
 
-	for (p = pids; parent_pids(p); p = parent_pids(p)) {
+	for (p = pids; parent_pids(p) && p != root; p = parent_pids(p)) {
 		int64_t new = atomic64_add_return(num, &p->counter);
 		int64_t limit = atomic64_read(&p->limit);
 
@@ -177,8 +159,11 @@ static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup
 		 * fail.
 		 */
 		if (new > limit) {
-			*fail = p;
-			goto revert;
+			ret = -EAGAIN;
+			if (fail) {
+				*fail = p;
+				goto revert;
+			}
 		}
 		/*
 		 * Not technically accurate if we go over limit somewhere up
@@ -187,14 +172,45 @@ static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup
 		pids_update_watermark(p, new);
 	}
 
-	return 0;
+	return ret;
 
 revert:
 	for (q = pids; q != p; q = parent_pids(q))
 		pids_cancel(q, num);
 	pids_cancel(p, num);
 
-	return -EAGAIN;
+	return ret;
+}
+
+/**
+ * pids_tranfer_charge - charge/uncharge in subtree betwee src and dst
+ * @src: pid cgroup state to uncharge
+ * @dst: pid cgroup state to charge
+ * @num: the number of pids to transfer
+ *
+ * The function updates charged pids in subtree whose root is the closest
+ * common ancestor of @src and @dst. This root and its ancestors are not
+ * modified (their limits are not enacted).
+ *
+ * Returns 0 if no limit was hit, -EAGAIN if a limit on path [@dst, @comm) was
+ * hit (charges are transferred despite the limit).
+ */
+static int pids_tranfer_charge(struct pids_cgroup *src, struct pids_cgroup *dst, int num)
+{
+	struct pids_cgroup *p, *comm = src;
+	int ret;
+
+	/* for stable cgroup tree */
+	lockdep_assert_held(&cgroup_mutex);
+
+	while (!cgroup_is_descendant(dst->css.cgroup, comm->css.cgroup))
+		comm = parent_pids(comm);
+
+	ret = pids_try_charge(dst, num, comm, NULL);
+
+	for (p = src; p != comm; p = parent_pids(p))
+		pids_cancel(p, num);
+	return ret;
 }
 
 static int pids_can_attach(struct cgroup_taskset *tset)
@@ -215,8 +231,7 @@ static int pids_can_attach(struct cgroup_taskset *tset)
 		old_css = task_css(task, pids_cgrp_id);
 		old_pids = css_pids(old_css);
 
-		pids_charge(pids, 1);
-		pids_uncharge(old_pids, 1);
+		(void) pids_tranfer_charge(old_pids, pids, 1);
 	}
 
 	return 0;
@@ -235,8 +250,7 @@ static void pids_cancel_attach(struct cgroup_taskset *tset)
 		old_css = task_css(task, pids_cgrp_id);
 		old_pids = css_pids(old_css);
 
-		pids_charge(old_pids, 1);
-		pids_uncharge(pids, 1);
+		(void) pids_tranfer_charge(pids, old_pids, 1);
 	}
 }
 
@@ -287,7 +301,7 @@ static int pids_can_fork(struct task_struct *task, struct css_set *cset)
 	else
 		css = task_css_check(current, pids_cgrp_id, true);
 	pids = css_pids(css);
-	err = pids_try_charge(pids, 1, &pids_over_limit);
+	err = pids_try_charge(pids, 1, NULL, &pids_over_limit);
 	if (err)
 		pids_event(pids, pids_over_limit);
 
