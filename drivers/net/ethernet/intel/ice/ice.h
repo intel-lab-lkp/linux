@@ -1011,4 +1011,16 @@ static inline void ice_clear_rdma_cap(struct ice_pf *pf)
 
 extern const struct xdp_metadata_ops ice_xdp_md_ops;
 void ice_init_moderation(struct ice_q_vector *q_vector);
+void
+ice_irq_affinity_notify(struct irq_affinity_notify *notify,
+			const cpumask_t *mask);
+/**
+ * ice_irq_affinity_release - Callback for affinity notifier release
+ * @ref: internal core kernel usage
+ *
+ * This is a callback function used by the irq_set_affinity_notifier function
+ * to inform the current notification subscriber that they will no longer
+ * receive notifications.
+ */
+static inline void ice_irq_affinity_release(struct kref __always_unused *ref) {}
 #endif /* _ICE_H_ */

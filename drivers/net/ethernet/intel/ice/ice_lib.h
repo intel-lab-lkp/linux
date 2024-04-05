@@ -164,4 +164,10 @@ void ice_qvec_ena_irq(struct ice_vsi *vsi, struct ice_q_vector *q_vector);
 void
 ice_qvec_toggle_napi(struct ice_vsi *vsi, struct ice_q_vector *q_vector,
 		     bool enable);
+static inline bool
+ice_is_q_vector_unused(struct ice_q_vector *q_vector)
+{
+	return (!q_vector->num_ring_tx && !q_vector->num_ring_rx);
+}
+
 #endif /* !_ICE_LIB_H_ */

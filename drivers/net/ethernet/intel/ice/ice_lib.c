@@ -4248,3 +4248,120 @@ ice_q_vector_ena(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 
 	return 0;
 }
+
+static void
+ice_qvec_release_msix(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_hw *hw = &vsi->back->hw;
+	struct ice_rx_ring *rx_ring;
+	struct ice_tx_ring *tx_ring;
+
+	ice_write_intrl(q_vector, 0);
+
+	ice_for_each_rx_ring(rx_ring, q_vector->rx) {
+		ice_write_itr(&q_vector->rx, 0);
+		wr32(hw, QINT_RQCTL(vsi->rxq_map[rx_ring->q_index]), 0);
+	}
+
+	ice_for_each_tx_ring(tx_ring, q_vector->tx) {
+		ice_write_itr(&q_vector->tx, 0);
+		wr32(hw, QINT_TQCTL(vsi->txq_map[tx_ring->q_index]), 0);
+	}
+
+	/* Disable the interrupt by writing to the register */
+	wr32(hw, GLINT_DYN_CTL(q_vector->reg_idx), 0);
+	ice_flush(hw);
+}
+
+/**
+ * ice_qvec_free - Free the MSI_X vector
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+static void __maybe_unused
+ice_qvec_free(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	int irq_num = q_vector->irq.virq;
+	struct ice_pf *pf = vsi->back;
+
+	ice_qvec_release_msix(vsi, q_vector);
+
+#ifdef CONFIG_RFS_ACCEL
+	struct net_device *netdev = vsi->netdev;
+
+	if (netdev && netdev->rx_cpu_rmap)
+		irq_cpu_rmap_remove(netdev->rx_cpu_rmap, irq_num);
+#endif
+
+	/* clear the affinity notifier in the IRQ descriptor */
+	if (!IS_ENABLED(CONFIG_RFS_ACCEL))
+		irq_set_affinity_notifier(irq_num, NULL);
+
+	/* clear the affinity_mask in the IRQ descriptor */
+	irq_set_affinity_hint(irq_num, NULL);
+
+	synchronize_irq(irq_num);
+	devm_free_irq(ice_pf_to_dev(pf), irq_num, q_vector);
+}
+
+/**
+ * ice_qvec_prep - Request and prepare a new MSI_X vector
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+static int __maybe_unused
+ice_qvec_prep(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_pf *pf = vsi->back;
+	struct device *dev;
+	int err, irq_num;
+
+	dev = ice_pf_to_dev(pf);
+	irq_num = q_vector->irq.virq;
+
+	err = devm_request_irq(dev, irq_num, vsi->irq_handler, 0,
+			       q_vector->name, q_vector);
+	if (err) {
+		netdev_err(vsi->netdev, "MSIX request_irq failed, error: %d\n",
+			   err);
+		goto free_q_irqs;
+	}
+
+	/* register for affinity change notifications */
+	if (!IS_ENABLED(CONFIG_RFS_ACCEL)) {
+		struct irq_affinity_notify *affinity_notify;
+
+		affinity_notify = &q_vector->affinity_notify;
+		affinity_notify->notify = ice_irq_affinity_notify;
+		affinity_notify->release = ice_irq_affinity_release;
+		irq_set_affinity_notifier(irq_num, affinity_notify);
+	}
+
+	/* assign the mask for this irq */
+	irq_set_affinity_hint(irq_num, &q_vector->affinity_mask);
+
+#ifdef CONFIG_RFS_ACCEL
+	struct net_device *netdev = vsi->netdev;
+
+	if (!netdev) {
+		err = -EINVAL;
+		goto free_q_irqs;
+	}
+
+	if (irq_cpu_rmap_add(netdev->rx_cpu_rmap, irq_num)) {
+		err = -EINVAL;
+		netdev_err(vsi->netdev, "Failed to setup CPU RMAP on irq %u: %pe\n",
+			   irq_num, ERR_PTR(err));
+		goto free_q_irqs;
+	}
+#endif
+	return 0;
+
+free_q_irqs:
+	if (!IS_ENABLED(CONFIG_RFS_ACCEL))
+		irq_set_affinity_notifier(irq_num, NULL);
+	irq_set_affinity_hint(irq_num, NULL);
+	devm_free_irq(dev, irq_num, &q_vector);
+
+	return err;
+}

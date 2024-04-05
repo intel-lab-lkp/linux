@@ -2476,7 +2476,7 @@ int ice_schedule_reset(struct ice_pf *pf, enum ice_reset_req reset)
  * This is a callback function used by the irq_set_affinity_notifier function
  * so that we may register to receive changes to the irq affinity masks.
  */
-static void
+void
 ice_irq_affinity_notify(struct irq_affinity_notify *notify,
 			const cpumask_t *mask)
 {
@@ -2485,16 +2485,6 @@ ice_irq_affinity_notify(struct irq_affinity_notify *notify,
 
 	cpumask_copy(&q_vector->affinity_mask, mask);
 }
-
-/**
- * ice_irq_affinity_release - Callback for affinity notifier release
- * @ref: internal core kernel usage
- *
- * This is a callback function used by the irq_set_affinity_notifier function
- * to inform the current notification subscriber that they will no longer
- * receive notifications.
- */
-static void ice_irq_affinity_release(struct kref __always_unused *ref) {}
 
 /**
  * ice_vsi_ena_irq - Enable IRQ for the given VSI
