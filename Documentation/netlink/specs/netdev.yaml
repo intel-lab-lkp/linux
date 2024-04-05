@@ -458,6 +458,26 @@ operations:
             - ifindex
         reply: *queue-get-op
     -
+      name: queue-set
+      doc: User configuration of queue attributes.
+           The id, type and ifindex forms the queue header/identifier. Example,
+           to configure the NAPI instance associated with the queue, the napi-id
+           is the configurable attribute.
+      attribute-set: queue
+      do:
+        request:
+          attributes:
+            - ifindex
+            - type
+            - id
+            - napi-id
+        reply: &queue-set-op
+          attributes:
+            - id
+            - type
+            - napi-id
+            - ifindex
+    -
       name: napi-get
       doc: Get information about NAPI instances configured on the system.
       attribute-set: napi
