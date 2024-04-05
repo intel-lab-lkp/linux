@@ -1351,6 +1351,10 @@ struct netdev_net_notifier {
  *			   struct kernel_hwtstamp_config *kernel_config,
  *			   struct netlink_ext_ack *extack);
  *	Change the hardware timestamping parameters for NIC device.
+ *
+ * int (*ndo_queue_set_napi)(struct net_device *dev, u32 q_idx, u32 q_type,
+ *			     struct napi_struct *napi);
+ *	Change the NAPI instance associated with the queue.
  */
 struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
@@ -1596,6 +1600,9 @@ struct net_device_ops {
 	int			(*ndo_hwtstamp_set)(struct net_device *dev,
 						    struct kernel_hwtstamp_config *kernel_config,
 						    struct netlink_ext_ack *extack);
+	int			(*ndo_queue_set_napi)(struct net_device *dev,
+						      u32 q_idx, u32 q_type,
+						      struct napi_struct *napi);
 };
 
 /**

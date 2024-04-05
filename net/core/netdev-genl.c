@@ -288,12 +288,29 @@ int netdev_nl_napi_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	return err;
 }
 
+/* must be called under rtnl_lock() */
+static struct napi_struct *
+napi_get_by_queue(struct net_device *netdev, u32 q_idx, u32 q_type)
+{
+	struct netdev_rx_queue *rxq;
+	struct netdev_queue *txq;
+
+	switch (q_type) {
+	case NETDEV_QUEUE_TYPE_RX:
+		rxq = __netif_get_rx_queue(netdev, q_idx);
+		return rxq->napi;
+	case NETDEV_QUEUE_TYPE_TX:
+		txq = netdev_get_tx_queue(netdev, q_idx);
+		return txq->napi;
+	}
+	return NULL;
+}
+
 static int
 netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 			 u32 q_idx, u32 q_type, const struct genl_info *info)
 {
-	struct netdev_rx_queue *rxq;
-	struct netdev_queue *txq;
+	struct napi_struct *napi;
 	void *hdr;
 
 	hdr = genlmsg_iput(rsp, info);
@@ -305,19 +322,9 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 	    nla_put_u32(rsp, NETDEV_A_QUEUE_IFINDEX, netdev->ifindex))
 		goto nla_put_failure;
 
-	switch (q_type) {
-	case NETDEV_QUEUE_TYPE_RX:
-		rxq = __netif_get_rx_queue(netdev, q_idx);
-		if (rxq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
-					     rxq->napi->napi_id))
-			goto nla_put_failure;
-		break;
-	case NETDEV_QUEUE_TYPE_TX:
-		txq = netdev_get_tx_queue(netdev, q_idx);
-		if (txq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
-					     txq->napi->napi_id))
-			goto nla_put_failure;
-	}
+	napi = napi_get_by_queue(netdev, q_idx, q_type);
+	if (napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID, napi->napi_id))
+		goto nla_put_failure;
 
 	genlmsg_end(rsp, hdr);
 
@@ -674,9 +681,87 @@ int netdev_nl_qstats_get_dumpit(struct sk_buff *skb,
 	return err;
 }
 
+static int
+netdev_nl_queue_set_napi(struct sk_buff *rsp, struct net_device *netdev,
+			 u32 q_idx, u32 q_type, u32 napi_id,
+			 const struct genl_info *info)
+{
+	struct napi_struct *napi, *old_napi;
+	int err;
+
+	if (!(netdev->flags & IFF_UP))
+		return 0;
+
+	err = netdev_nl_queue_validate(netdev, q_idx, q_type);
+	if (err)
+		return err;
+
+	old_napi = napi_get_by_queue(netdev, q_idx, q_type);
+	if (old_napi && old_napi->napi_id == napi_id)
+		return 0;
+
+	napi = napi_by_id(napi_id);
+	if (!napi)
+		return -EINVAL;
+
+	err = netdev->netdev_ops->ndo_queue_set_napi(netdev, q_idx, q_type, napi);
+
+	return err;
+}
+
 int netdev_nl_queue_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	return -EOPNOTSUPP;
+	u32 q_id, q_type, ifindex;
+	struct net_device *netdev;
+	struct sk_buff *rsp;
+	u32 napi_id = 0;
+	int err = 0;
+
+	if (GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_ID) ||
+	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_TYPE) ||
+	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_QUEUE_IFINDEX))
+		return -EINVAL;
+
+	q_id = nla_get_u32(info->attrs[NETDEV_A_QUEUE_ID]);
+	q_type = nla_get_u32(info->attrs[NETDEV_A_QUEUE_TYPE]);
+	ifindex = nla_get_u32(info->attrs[NETDEV_A_QUEUE_IFINDEX]);
+
+	if (info->attrs[NETDEV_A_QUEUE_NAPI_ID]) {
+		napi_id = nla_get_u32(info->attrs[NETDEV_A_QUEUE_NAPI_ID]);
+		if (napi_id < MIN_NAPI_ID)
+			return -EINVAL;
+	}
+
+	rsp = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!rsp)
+		return -ENOMEM;
+
+	rtnl_lock();
+
+	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
+	if (netdev) {
+		if (!napi_id)
+			GENL_SET_ERR_MSG(info, "No queue parameters changed\n");
+		else
+			err = netdev_nl_queue_set_napi(rsp, netdev, q_id,
+						       q_type, napi_id, info);
+		if (!err)
+			err = netdev_nl_queue_fill_one(rsp, netdev, q_id,
+						       q_type, info);
+	} else {
+		err = -ENODEV;
+	}
+
+	rtnl_unlock();
+
+	if (err)
+		goto err_free_msg;
+
+	return genlmsg_reply(rsp, info);
+
+err_free_msg:
+	nlmsg_free(rsp);
+	return err;
 }
 
 static int netdev_genl_netdevice_event(struct notifier_block *nb,
