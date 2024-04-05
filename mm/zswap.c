@@ -116,12 +116,29 @@ module_param_cb(zpool, &zswap_zpool_param_ops, &zswap_zpool_type, 0644);
 
 /* The maximum percentage of memory that the compressed pool can occupy */
 static unsigned int zswap_max_pool_percent = 20;
-module_param_named(max_pool_percent, zswap_max_pool_percent, uint, 0644);
+static unsigned long zswap_max_pages;
+
+static int zswap_max_pool_param_set(const char *,
+				       const struct kernel_param *);
+static const struct kernel_param_ops zswap_max_pool_param_ops = {
+	.set =		zswap_max_pool_param_set,
+	.get =		param_get_uint,
+};
+module_param_cb(max_pool_percent, &zswap_max_pool_param_ops,
+		&zswap_max_pool_percent, 0644);
 
 /* The threshold for accepting new pages after the max_pool_percent was hit */
 static unsigned int zswap_accept_thr_percent = 90; /* of max pool size */
-module_param_named(accept_threshold_percent, zswap_accept_thr_percent,
-		   uint, 0644);
+unsigned long zswap_accept_thr_pages;
+
+static int zswap_accept_thr_param_set(const char *,
+				      const struct kernel_param *);
+static const struct kernel_param_ops zswap_accept_thr_param_ops = {
+	.set =		zswap_accept_thr_param_set,
+	.get =		param_get_uint,
+};
+module_param_cb(accept_threshold_percent, &zswap_accept_thr_param_ops,
+		&zswap_accept_thr_percent, 0644);
 
 /*
  * Enable/disable handling same-value filled pages (enabled by default).
@@ -490,14 +507,16 @@ static struct zswap_pool *zswap_pool_find_get(char *type, char *compressor)
 	return NULL;
 }
 
-static unsigned long zswap_max_pages(void)
+static void zswap_update_max_pages(void)
 {
-	return totalram_pages() * zswap_max_pool_percent / 100;
+	WRITE_ONCE(zswap_max_pages,
+		   totalram_pages() * zswap_max_pool_percent / 100);
 }
 
-static unsigned long zswap_accept_thr_pages(void)
+static void zswap_update_accept_thr_pages(void)
 {
-	return zswap_max_pages() * zswap_accept_thr_percent / 100;
+	WRITE_ONCE(zswap_accept_thr_pages,
+		   READ_ONCE(zswap_max_pages) * zswap_accept_thr_percent / 100);
 }
 
 unsigned long zswap_total_pages(void)
@@ -682,6 +701,43 @@ static int zswap_enabled_param_set(const char *val,
 	mutex_unlock(&zswap_init_lock);
 
 	return ret;
+}
+
+static int __zswap_percent_param_set(const char *val,
+				     const struct kernel_param *kp)
+{
+	unsigned int n;
+	int ret;
+
+	ret = kstrtouint(val, 10, &n);
+	if (ret || n > 100)
+		return -EINVAL;
+
+	return param_set_uint(val, kp);
+}
+
+static int zswap_max_pool_param_set(const char *val,
+				    const struct kernel_param *kp)
+{
+	int err = __zswap_percent_param_set(val, kp);
+
+	if (!err) {
+		zswap_update_max_pages();
+		zswap_update_accept_thr_pages();
+	}
+
+	return err;
+}
+
+static int zswap_accept_thr_param_set(const char *val,
+				      const struct kernel_param *kp)
+{
+	int err = __zswap_percent_param_set(val, kp);
+
+	if (!err)
+		zswap_update_accept_thr_pages();
+
+	return err;
 }
 
 /*********************************
@@ -1305,10 +1361,6 @@ static void shrink_worker(struct work_struct *w)
 {
 	struct mem_cgroup *memcg;
 	int ret, failures = 0;
-	unsigned long thr;
-
-	/* Reclaim down to the accept threshold */
-	thr = zswap_accept_thr_pages();
 
 	/* global reclaim will select cgroup in a round-robin fashion. */
 	do {
@@ -1358,7 +1410,8 @@ static void shrink_worker(struct work_struct *w)
 			break;
 resched:
 		cond_resched();
-	} while (zswap_total_pages() > thr);
+		/* Reclaim down to the accept threshold */
+	} while (zswap_total_pages() > READ_ONCE(zswap_accept_thr_pages));
 }
 
 static int zswap_is_page_same_filled(void *ptr, unsigned long *value)
@@ -1424,16 +1477,14 @@ bool zswap_store(struct folio *folio)
 
 	/* Check global limits */
 	cur_pages = zswap_total_pages();
-	max_pages = zswap_max_pages();
-
-	if (cur_pages >= max_pages) {
+	if (cur_pages >= READ_ONCE(zswap_max_pages)) {
 		zswap_pool_limit_hit++;
 		zswap_pool_reached_full = true;
 		goto reject;
 	}
 
 	if (zswap_pool_reached_full) {
-		if (cur_pages > zswap_accept_thr_pages())
+		if (cur_pages > READ_ONCE(zswap_accept_thr_pages))
 			goto reject;
 		else
 			zswap_pool_reached_full = false;
@@ -1751,6 +1802,9 @@ static int zswap_setup(void)
 		pr_err("pool creation failed\n");
 		zswap_enabled = false;
 	}
+
+	zswap_update_max_pages();
+	zswap_update_accept_thr_pages();
 
 	if (zswap_debugfs_init())
 		pr_warn("debugfs initialization failed\n");
