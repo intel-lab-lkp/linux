@@ -1542,6 +1542,40 @@ TRACE_EVENT(nfsd_cb_seq_status,
 	)
 );
 
+TRACE_EVENT(check_slot_seqid,
+	TP_PROTO(
+		const struct nfs4_client *clp,
+		u32 seqid,
+		u32 slot_seqid,
+		bool inuse
+	),
+	TP_ARGS(clp, seqid, slot_seqid, inuse),
+	TP_STRUCT__entry(
+		__field(u32, seqid)
+		__field(u32, slot_seqid)
+		__field(u32, cl_boot)
+		__field(u32, cl_id)
+		__sockaddr(addr, clp->cl_cb_conn.cb_addrlen)
+		__field(bool, conf)
+		__field(bool, inuse)
+	),
+	TP_fast_assign(
+		__entry->cl_boot = clp->cl_clientid.cl_boot;
+		__entry->cl_id = clp->cl_clientid.cl_id;
+		__assign_sockaddr(addr, &clp->cl_cb_conn.cb_addr,
+				  clp->cl_cb_conn.cb_addrlen);
+		__entry->seqid = seqid;
+		__entry->slot_seqid = slot_seqid;
+		__entry->conf = test_bit(NFSD4_CLIENT_CONFIRMED, &clp->cl_flags);
+		__entry->inuse = inuse;
+	),
+	TP_printk("addr=%pISpc %s client %08x:%08x seqid=%u slot_seqid=%u inuse=%d",
+		__get_sockaddr(addr), __entry->conf ? "conf" : "unconf",
+		__entry->cl_boot, __entry->cl_id,
+		__entry->seqid, __entry->slot_seqid, __entry->inuse
+	)
+);
+
 TRACE_EVENT(nfsd_cb_free_slot,
 	TP_PROTO(
 		const struct rpc_task *task,

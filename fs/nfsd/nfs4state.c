@@ -3642,10 +3642,9 @@ out_nolock:
 }
 
 static __be32
-check_slot_seqid(u32 seqid, u32 slot_seqid, int slot_inuse)
+check_slot_seqid(struct nfs4_client *clp, u32 seqid, u32 slot_seqid, bool slot_inuse)
 {
-	dprintk("%s enter. seqid %d slot_seqid %d\n", __func__, seqid,
-		slot_seqid);
+	trace_check_slot_seqid(clp, seqid, slot_seqid, slot_inuse);
 
 	/* The slot is in use, and no response has been sent. */
 	if (slot_inuse) {
@@ -3827,7 +3826,8 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 		cs_slot = &conf->cl_cs_slot;
 	else
 		cs_slot = &unconf->cl_cs_slot;
-	status = check_slot_seqid(cr_ses->seqid, cs_slot->sl_seqid, 0);
+	status = check_slot_seqid(conf ? conf : unconf, cr_ses->seqid,
+				  cs_slot->sl_seqid, false);
 	switch (status) {
 	case nfs_ok:
 		cs_slot->sl_seqid++;
@@ -4221,8 +4221,8 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * sr_highest_slotid and the sr_target_slot id to maxslots */
 	seq->maxslots = session->se_fchannel.maxreqs;
 
-	status = check_slot_seqid(seq->seqid, slot->sl_seqid,
-					slot->sl_flags & NFSD4_SLOT_INUSE);
+	status = check_slot_seqid(clp, seq->seqid, slot->sl_seqid,
+				  slot->sl_flags & NFSD4_SLOT_INUSE);
 	if (status == nfserr_replay_cache) {
 		status = nfserr_seq_misordered;
 		if (!(slot->sl_flags & NFSD4_SLOT_INITIALIZED))
