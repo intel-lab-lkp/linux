@@ -31,7 +31,7 @@ static void dump_maps(void)
 	do {									\
 		if (condition) {						\
 			dump_maps();						\
-			ksft_exit_fail_msg("[FAIL]\t%s:%d\t%s:%s\n",		\
+			ksft_exit_fail_msg("%s:%d\t%s:%s\n",			\
 					   __func__, __LINE__, (description),	\
 					   strerror(errno));			\
 		}								\

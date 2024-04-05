@@ -47,16 +47,16 @@ int main(int argc, char **argv)
 
 	ret = dl_iterate_phdr(ExtractStatistics, &extracted);
 	if (ret != 1)
-		ksft_exit_fail_msg("FAILED: dl_iterate_phdr\n");
+		ksft_exit_fail_msg("dl_iterate_phdr\n");
 
 	if (extracted.alignment == 0)
-		ksft_exit_fail_msg("FAILED: No alignment found\n");
+		ksft_exit_fail_msg("No alignment found\n");
 	else if (extracted.alignment & (extracted.alignment - 1))
-		ksft_exit_fail_msg("FAILED: Alignment is not a power of 2\n");
+		ksft_exit_fail_msg("Alignment is not a power of 2\n");
 
 	misalign = extracted.load_address & (extracted.alignment - 1);
 	if (misalign)
-		ksft_exit_fail_msg("FAILED: alignment = %llu, load_address = %llu\n",
+		ksft_exit_fail_msg("alignment = %llu, load_address = %llu\n",
 				   extracted.alignment, extracted.load_address);
 
 	ksft_test_result_pass("Completed\n");

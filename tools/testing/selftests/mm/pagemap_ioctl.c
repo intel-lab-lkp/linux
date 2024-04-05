@@ -153,7 +153,7 @@ int wp_addr_range(void *lpBaseAddress, int dwRegionSize)
 	if (pagemap_ioctl(lpBaseAddress, dwRegionSize, NULL, 0,
 			  PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN) < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", 1, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", 1, errno, strerror(errno));
 
 	return 0;
 }
@@ -190,7 +190,7 @@ int userfaultfd_tests(void)
 	mem_size = num_pages * page_size;
 	mem = mmap(NULL, mem_size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 
@@ -213,7 +213,7 @@ int userfaultfd_tests(void)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				vec_size - 2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 0, "%s all new pages must not be written (dirty)\n", __func__);
 
@@ -246,15 +246,15 @@ int sanity_tests_sd(void)
 
 	vec = malloc(sizeof(struct page_region) * vec_size);
 	if (!vec)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	vec2 = malloc(sizeof(struct page_region) * vec_size);
 	if (!vec2)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
@@ -321,7 +321,7 @@ int sanity_tests_sd(void)
 	ret = pagemap_ioctl(mem, mem_size, vec, vec_size, 0, 0, PAGE_IS_WRITTEN, 0,
 			    0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ksft_test_result(ret == mem_size/(page_size * 2),
 			 "%s Repeated pattern of written and non-written pages\n", __func__);
@@ -331,18 +331,18 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    num_pages/2 - 2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ret2 = pagemap_ioctl(mem, mem_size, vec, 2, 0, 0, PAGE_IS_WRITTEN, 0, 0,
 			     PAGE_IS_WRITTEN);
 	if (ret2 < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret2, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret2, errno, strerror(errno));
 
 	ret3 = pagemap_ioctl(mem, mem_size, vec, vec_size,
 			     PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			     0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret3 < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret3, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret3, errno, strerror(errno));
 
 	ksft_test_result((ret + ret3) == num_pages/2 && ret2 == 2,
 			 "%s Repeated pattern of written and non-written pages in parts %d %d %d\n",
@@ -357,13 +357,13 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    num_pages/2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ret2 = pagemap_ioctl(mem, mem_size, vec, vec_size,
 			     PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			     0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret2 < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret2, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret2, errno, strerror(errno));
 
 	ksft_test_result(ret == num_pages/2 && ret2 == 1,
 			 "%s Repeated pattern of written and non-written pages max_pages\n",
@@ -378,12 +378,12 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ret2 = pagemap_ioctl(mem, mem_size, vec2, vec_size, 0, 0,
 			      PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret2 < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret2, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret2, errno, strerror(errno));
 
 	ksft_test_result(ret == 1 && LEN(vec[0]) == 2 &&
 			 vec[0].start == (uintptr_t)(mem + page_size) &&
@@ -398,10 +398,10 @@ int sanity_tests_sd(void)
 	/* 7. Two regions */
 	m[0] = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (m[0] == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	m[1] = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (m[1] == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(m[0], mem_size);
 	wp_init(m[1], mem_size);
@@ -416,7 +416,7 @@ int sanity_tests_sd(void)
 	ret = pagemap_ioctl(m[1], mem_size, vec, 1, 0, 0, PAGE_IS_WRITTEN, 0, 0,
 			    PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ksft_test_result(ret == 1 && LEN(vec[0]) == mem_size/page_size,
 			 "%s Two regions\n", __func__);
@@ -435,11 +435,11 @@ int sanity_tests_sd(void)
 
 	vec = malloc(sizeof(struct page_region) * vec_size);
 	if (!vec)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
@@ -448,7 +448,7 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC, 0,
 			    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	for (i = 0; i < mem_size/page_size; i += 2)
 		mem[i * page_size]++;
@@ -457,7 +457,7 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    mem_size/(page_size*5), PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	total_pages += ret;
 
@@ -465,7 +465,7 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    mem_size/(page_size*5), PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	total_pages += ret;
 
@@ -473,7 +473,7 @@ int sanity_tests_sd(void)
 			    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			    mem_size/(page_size*5), PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	total_pages += ret;
 
@@ -490,11 +490,11 @@ int sanity_tests_sd(void)
 
 	vec = malloc(sizeof(struct page_region) * vec_size);
 	if (!vec)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
@@ -515,7 +515,7 @@ int sanity_tests_sd(void)
 					  vec_size, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 					  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 			if (ret < 0)
-				ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+				ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 			if (ret > vec_size)
 				break;
@@ -540,11 +540,11 @@ int sanity_tests_sd(void)
 
 	vec = malloc(sizeof(struct page_region) * vec_size);
 	if (!vec)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
@@ -554,63 +554,63 @@ int sanity_tests_sd(void)
 	ret = pagemap_ioc(mem, 0, vec, vec_size, 0,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 0 && walk_end == (long)mem,
 			 "Walk_end: Same start and end address\n");
 
 	ret = pagemap_ioc(mem, 0, vec, vec_size, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 0 && walk_end == (long)mem,
 			 "Walk_end: Same start and end with WP\n");
 
 	ret = pagemap_ioc(mem, 0, vec, 0, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 0 && walk_end == (long)mem,
 			 "Walk_end: Same start and end with 0 output buffer\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + mem_size),
 			 "Walk_end: Big vec\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, 1, 0,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + mem_size),
 			 "Walk_end: vec of minimum length\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, 1, 0,
 			  vec_size, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + mem_size),
 			 "Walk_end: Max pages specified\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  vec_size/2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + mem_size/2),
 			 "Walk_end: Half max pages\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  1, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + page_size),
 			 "Walk_end: 1 max page\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  -1, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + mem_size),
 			 "Walk_end: max pages\n");
 
@@ -621,49 +621,49 @@ int sanity_tests_sd(void)
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == vec_size/2 && walk_end == (long)(mem + mem_size),
 			 "Walk_end sparse: Big vec\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, 1, 0,
 			  0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + page_size * 2),
 			 "Walk_end sparse: vec of minimum length\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, 1, 0,
 			  vec_size, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + page_size * 2),
 			 "Walk_end sparse: Max pages specified\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size/2, 0,
 			  vec_size, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == vec_size/2 && walk_end == (long)(mem + mem_size),
 			 "Walk_end sparse: Max pages specified\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  vec_size, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == vec_size/2 && walk_end == (long)(mem + mem_size),
 			 "Walk_end sparse: Max pages specified\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  vec_size/2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == vec_size/2 && walk_end == (long)(mem + mem_size),
 			 "Walk_endsparse : Half max pages\n");
 
 	ret = pagemap_ioc(mem, mem_size, vec, vec_size, 0,
 			  1, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN, &walk_end);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 	ksft_test_result(ret == 1 && walk_end == (long)(mem + page_size * 2),
 			 "Walk_end: 1 max page\n");
 
@@ -698,7 +698,7 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				vec_size - 2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 0, "%s all new pages must not be written (dirty)\n", prefix);
 
@@ -708,7 +708,7 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, 0, 0, PAGE_IS_WRITTEN, 0, 0,
 			      PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 1 && LEN(vec[0]) == mem_size/page_size,
 			 "%s all pages must be written (dirty)\n", prefix);
@@ -717,14 +717,14 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	memset(mem + page_size, 0, mem_size - (2 * page_size));
 
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 1 && LEN(vec[0]) >= vec_size - 2 && LEN(vec[0]) <= vec_size,
 			 "%s all pages dirty other than first and the last one\n", prefix);
@@ -732,7 +732,7 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, 0, 0,
 				PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 0,
 			 "%s PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC\n", prefix);
@@ -741,14 +741,14 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	mem[vec_size/2 * page_size]++;
 
 	written = pagemap_ioctl(mem, mem_size, vec, vec_size, 0, 0, PAGE_IS_WRITTEN,
 				0, 0, PAGE_IS_WRITTEN);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 1 && LEN(vec[0]) >= 1,
 			 "%s only middle page dirty\n", prefix);
@@ -757,7 +757,7 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(mem, mem_size, vec, 1, PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN | PAGE_IS_HUGE);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	mem[vec_size/2 * page_size]++;
 	mem[(vec_size/2 + 1) * page_size]++;
@@ -765,7 +765,7 @@ int base_tests(char *prefix, char *mem, int mem_size, int skip)
 	written = pagemap_ioctl(&mem[vec_size/2 * page_size], 2 * page_size, vec, 1, 0,
 				0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN | PAGE_IS_HUGE);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written == 1 && vec[0].start == (uintptr_t)(&mem[vec_size/2 * page_size])
 			 && LEN(vec[0]) == 2,
@@ -818,7 +818,7 @@ int hpage_unit_tests(void)
 				    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 0, "%s all new huge page must not be written (dirty)\n",
 				 __func__);
@@ -827,7 +827,7 @@ int hpage_unit_tests(void)
 		ret = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 0, "%s all the huge page must not be written\n", __func__);
 
@@ -837,7 +837,7 @@ int hpage_unit_tests(void)
 				    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				    0, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && vec[0].start == (uintptr_t)map &&
 				 LEN(vec[0]) == vec_size && vec[0].categories == PAGE_IS_WRITTEN,
@@ -854,7 +854,7 @@ int hpage_unit_tests(void)
 		ret = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && LEN(vec[0]) > 0,
 				 "%s only middle page written\n", __func__);
@@ -881,7 +881,7 @@ int hpage_unit_tests(void)
 		ret = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && LEN(vec[0]) == vec_size/2 &&
 				 vec[0].start == (uintptr_t)(map + map_size/2),
@@ -904,12 +904,12 @@ int hpage_unit_tests(void)
 				    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC,
 				    vec_size/2, PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ret = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && LEN(vec[0]) == vec_size/2 &&
 				 vec[0].start == (uintptr_t)(map + map_size/2),
@@ -934,12 +934,12 @@ int hpage_unit_tests(void)
 				    PM_SCAN_WP_MATCHING | PM_SCAN_CHECK_WPASYNC, vec_size/2,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ret = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && LEN(vec[0]) == vec_size/2,
 				 "%s clear second half huge page\n", __func__);
@@ -963,7 +963,7 @@ int hpage_unit_tests(void)
 				    hpage_size/(2*page_size), PAGE_IS_WRITTEN, 0, 0,
 				    PAGE_IS_WRITTEN);
 		if (ret < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 		ksft_test_result(ret == 1 && LEN(vec[0]) == hpage_size/(2*page_size),
 				 "%s get half huge page\n", __func__);
@@ -971,7 +971,7 @@ int hpage_unit_tests(void)
 		ret2 = pagemap_ioctl(map, map_size, vec, vec_size, 0, 0,
 				    PAGE_IS_WRITTEN, 0, 0, PAGE_IS_WRITTEN);
 		if (ret2 < 0)
-			ksft_exit_fail_msg("error %d %d %s\n", ret2, errno, strerror(errno));
+			ksft_exit_fail_msg("%d %d %s\n", ret2, errno, strerror(errno));
 
 		ksft_test_result(ret2 == 1 && LEN(vec[0]) == (map_size - hpage_size/2)/page_size,
 				 "%s get half huge page\n", __func__);
@@ -999,7 +999,7 @@ int unmapped_region_tests(void)
 	written = pagemap_ioctl(start, len, vec, vec_size, 0, 0,
 				PAGEMAP_NON_WRITTEN_BITS, 0, 0, PAGEMAP_NON_WRITTEN_BITS);
 	if (written < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", written, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", written, errno, strerror(errno));
 
 	ksft_test_result(written >= 0, "%s Get status of pages\n", __func__);
 
@@ -1060,7 +1060,7 @@ int sanity_tests(void)
 	vec = malloc(sizeof(struct page_region) * vec_size);
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED || vec == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
@@ -1088,7 +1088,7 @@ int sanity_tests(void)
 	/* 2. Get sd and present pages with anyof_mask */
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
 
@@ -1134,7 +1134,7 @@ int sanity_tests(void)
 	/* 8. Find written present pages with return mask */
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
 
@@ -1156,11 +1156,11 @@ int sanity_tests(void)
 
 	ret = stat(progname, &sbuf);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	fmem = mmap(NULL, sbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("nomem %d %s\n", errno, strerror(errno));
 
 	tmp_buf = malloc(sbuf.st_size);
 	memcpy(tmp_buf, fmem, sbuf.st_size);
@@ -1190,7 +1190,7 @@ int sanity_tests(void)
 
 	fmem = mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, buf_size);
 	wp_addr_range(fmem, buf_size);
@@ -1232,7 +1232,7 @@ int mprotect_tests(void)
 	/* 1. Map two pages */
 	mem = mmap(0, 2 * page_size, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem, 2 * page_size);
 	wp_addr_range(mem, 2 * page_size);
 
@@ -1242,7 +1242,7 @@ int mprotect_tests(void)
 	ret = pagemap_ioctl(mem, 2 * page_size, &vec, 1, 0, 0, PAGE_IS_WRITTEN,
 			    0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ksft_test_result(ret == 1 && LEN(vec) == 2, "%s Both pages written\n", __func__);
 
@@ -1257,7 +1257,7 @@ int mprotect_tests(void)
 	mem2 = mmap(mem + page_size, page_size, PROT_READ|PROT_WRITE,
 		    MAP_PRIVATE|MAP_ANON|MAP_FIXED, -1, 0);
 	if (mem2 == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem2, page_size);
 	wp_addr_range(mem2, page_size);
 
@@ -1277,7 +1277,7 @@ int mprotect_tests(void)
 	ret = pagemap_ioctl(mem, 2 * page_size, &vec, 1, 0, 0, PAGE_IS_WRITTEN,
 			    0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ksft_test_result(ret == 1 && LEN(vec) == 2,
 			 "%s Both pages written after remap and mprotect\n", __func__);
@@ -1290,7 +1290,7 @@ int mprotect_tests(void)
 	ret = pagemap_ioctl(mem, 2 * page_size, &vec, 1, 0, 0, PAGE_IS_WRITTEN,
 			    0, 0, PAGE_IS_WRITTEN);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	ksft_test_result(ret == 1 && LEN(vec) == 2,
 			 "%s Clear and make the pages written\n", __func__);
@@ -1397,7 +1397,7 @@ static void transact_test(int page_size)
 	mem = mmap(NULL, 0x1000 * nthreads * pages_per_thread, PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("Error mmap %s.\n", strerror(errno));
+		ksft_exit_fail_msg("mmap %s.\n", strerror(errno));
 
 	wp_init(mem, 0x1000 * nthreads * pages_per_thread);
 	wp_addr_range(mem, 0x1000 * nthreads * pages_per_thread);
@@ -1502,7 +1502,7 @@ int main(int argc, char *argv[])
 	mem_size = 10 * page_size;
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
 
@@ -1515,7 +1515,7 @@ int main(int argc, char *argv[])
 	mem_size = 512 * 10 * page_size;
 	mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 	if (mem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem\n");
+		ksft_exit_fail_msg("nomem\n");
 	wp_init(mem, mem_size);
 	wp_addr_range(mem, mem_size);
 
@@ -1595,11 +1595,11 @@ int main(int argc, char *argv[])
 
 	ret = stat(__FILE__".tmp0", &sbuf);
 	if (ret < 0)
-		ksft_exit_fail_msg("error %d %d %s\n", ret, errno, strerror(errno));
+		ksft_exit_fail_msg("%d %d %s\n", ret, errno, strerror(errno));
 
 	fmem = mmap(NULL, sbuf.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, sbuf.st_size);
 	wp_addr_range(fmem, sbuf.st_size);
@@ -1619,7 +1619,7 @@ int main(int argc, char *argv[])
 				   strerror(errno));
 
 	if (ftruncate(fd, buf_size))
-		ksft_exit_fail_msg("Error ftruncate\n");
+		ksft_exit_fail_msg("ftruncate\n");
 
 	for (i = 0; i < buf_size; i++)
 		if (write(fd, "c", 1) < 0)
@@ -1627,7 +1627,7 @@ int main(int argc, char *argv[])
 
 	fmem = mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (fmem == MAP_FAILED)
-		ksft_exit_fail_msg("error nomem %d %s\n", errno, strerror(errno));
+		ksft_exit_fail_msg("nomem %d %s\n", errno, strerror(errno));
 
 	wp_init(fmem, buf_size);
 	wp_addr_range(fmem, buf_size);

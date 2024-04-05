@@ -264,7 +264,7 @@ void split_file_backed_thp(void)
 cleanup:
 	umount(tmpfs_loc);
 	rmdir(tmpfs_loc);
-	ksft_exit_fail_msg("Error occurred\n");
+	ksft_exit_fail_msg("occurred\n");
 }
 
 bool prepare_thp_fs(const char *xfs_path, char *thp_fs_template,

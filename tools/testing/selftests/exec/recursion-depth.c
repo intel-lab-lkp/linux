@@ -37,25 +37,25 @@ int main(void)
 			ksft_test_result_skip("error: unshare, errno %d\n", errno);
 			ksft_finished();
 		}
-		ksft_exit_fail_perror("error: unshare");
+		ksft_exit_fail_perror("unshare");
 	}
 
 	if (mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) == -1)
-		ksft_exit_fail_perror("error: mount '/'");
+		ksft_exit_fail_perror("mount '/'");
 
 	/* Require "exec" filesystem. */
 	if (mount(NULL, "/tmp", "ramfs", 0, NULL) == -1)
-		ksft_exit_fail_perror("error: mount ramfs");
+		ksft_exit_fail_perror("mount ramfs");
 
 #define FILENAME "/tmp/1"
 
 	fd = creat(FILENAME, 0700);
 	if (fd == -1)
-		ksft_exit_fail_perror("error: creat");
+		ksft_exit_fail_perror("creat");
 
 #define S "#!" FILENAME "\n"
 	if (write(fd, S, strlen(S)) != strlen(S))
-		ksft_exit_fail_perror("error: write");
+		ksft_exit_fail_perror("write");
 
 	close(fd);
 

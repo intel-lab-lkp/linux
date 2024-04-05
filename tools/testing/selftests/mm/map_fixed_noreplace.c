@@ -30,10 +30,10 @@ static unsigned long find_base_addr(unsigned long size)
 	flags = MAP_PRIVATE | MAP_ANONYMOUS;
 	addr = mmap(NULL, size, PROT_NONE, flags, -1, 0);
 	if (addr == MAP_FAILED)
-		ksft_exit_fail_msg("Error: couldn't map the space we need for the test\n");
+		ksft_exit_fail_msg("couldn't map the space we need for the test\n");
 
 	if (munmap(addr, size) != 0)
-		ksft_exit_fail_msg("Error: munmap failed\n");
+		ksft_exit_fail_msg("munmap failed\n");
 
 	return (unsigned long)addr;
 }
@@ -61,11 +61,11 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p == MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error: couldn't map the space we need for the test\n");
+		ksft_exit_fail_msg("couldn't map the space we need for the test\n");
 	}
 	if (munmap((void *)addr, 5 * page_size) != 0) {
 		dump_maps();
-		ksft_exit_fail_msg("Error: munmap failed!?\n");
+		ksft_exit_fail_msg("munmap failed!?\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -74,7 +74,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p == MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error: first mmap() failed unexpectedly\n");
+		ksft_exit_fail_msg("first mmap() failed unexpectedly\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -91,7 +91,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p != MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:1: mmap() succeeded when it shouldn't have\n");
+		ksft_exit_fail_msg("1: mmap() succeeded when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -109,7 +109,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p != MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:2: mmap() succeeded when it shouldn't have\n");
+		ksft_exit_fail_msg("2: mmap() succeeded when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -126,7 +126,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p != MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:3: mmap() succeeded when it shouldn't have\n");
+		ksft_exit_fail_msg("3: mmap() succeeded when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -143,7 +143,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p != MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:4: mmap() succeeded when it shouldn't have\n");
+		ksft_exit_fail_msg("4: mmap() succeeded when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -160,7 +160,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p == MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:5: mmap() failed when it shouldn't have\n");
+		ksft_exit_fail_msg("5: mmap() failed when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -177,7 +177,7 @@ int main(void)
 	p = mmap((void *)addr, size, PROT_NONE, flags, -1, 0);
 	if (p == MAP_FAILED) {
 		dump_maps();
-		ksft_exit_fail_msg("Error:6: mmap() failed when it shouldn't have\n");
+		ksft_exit_fail_msg("6: mmap() failed when it shouldn't have\n");
 	}
 	ksft_test_result_pass("mmap() @ 0x%lx-0x%lx p=%p result=%m\n", addr, addr + size, p);
 
@@ -185,7 +185,7 @@ int main(void)
 	size = 5 * page_size;
 	if (munmap((void *)addr, size) != 0) {
 		dump_maps();
-		ksft_exit_fail_msg("Error: munmap failed!?\n");
+		ksft_exit_fail_msg("munmap failed!?\n");
 	}
 	ksft_test_result_pass("Base Address unmap() successful\n");
 
