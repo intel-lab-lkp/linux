@@ -170,4 +170,6 @@ ice_is_q_vector_unused(struct ice_q_vector *q_vector)
 	return (!q_vector->num_ring_tx && !q_vector->num_ring_rx);
 }
 
+int ice_queue_change_napi(struct net_device *dev, u32 q_idx, u32 q_type,
+			  struct napi_struct *napi);
 #endif /* !_ICE_LIB_H_ */

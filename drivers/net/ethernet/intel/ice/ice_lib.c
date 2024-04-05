@@ -4186,7 +4186,7 @@ static void ice_qvec_configure(struct ice_vsi *vsi, struct ice_q_vector *q_vecto
  * @vsi: the VSI that contains queue vector
  * @q_vector: queue vector
  */
-static int __maybe_unused
+static int
 ice_q_vector_dis(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 {
 	struct ice_hw *hw = &vsi->back->hw;
@@ -4221,7 +4221,7 @@ ice_q_vector_dis(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
  * @vsi: the VSI that contains queue vector
  * @q_vector: queue vector
  */
-static int __maybe_unused
+static int
 ice_q_vector_ena(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 {
 	struct ice_rx_ring *rx_ring;
@@ -4278,7 +4278,7 @@ ice_qvec_release_msix(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
  * @vsi: the VSI that contains queue vector
  * @q_vector: queue vector
  */
-static void __maybe_unused
+static void
 ice_qvec_free(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 {
 	int irq_num = q_vector->irq.virq;
@@ -4309,7 +4309,7 @@ ice_qvec_free(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
  * @vsi: the VSI that contains queue vector
  * @q_vector: queue vector
  */
-static int __maybe_unused
+static int
 ice_qvec_prep(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 {
 	struct ice_pf *pf = vsi->back;
@@ -4364,4 +4364,307 @@ free_q_irqs:
 	devm_free_irq(dev, irq_num, &q_vector);
 
 	return err;
+}
+
+/**
+ * ice_vsi_rename_irq_msix
+ * @vsi: VSI being configured
+ * @basename: name for the vector
+ *
+ * Rename the vector. The default vector names assumed a 1:1 mapping between
+ * queues and vectors in a serial fashion. When the NAPI association for the
+ * queue is changed, it is possible to have multiple queues sharing a vector
+ * in a non-serial way.
+ */
+static void ice_vsi_rename_irq_msix(struct ice_vsi *vsi, char *basename)
+{
+	int q_vectors = vsi->num_q_vectors;
+	int vector, err;
+
+	for (vector = 0; vector < q_vectors; vector++) {
+		struct ice_q_vector *q_vector = vsi->q_vectors[vector];
+
+		if (q_vector->tx.tx_ring && q_vector->rx.rx_ring) {
+			err = snprintf(q_vector->name, sizeof(q_vector->name) - 1,
+				       "%s-%s", basename, "TxRx");
+		} else if (q_vector->rx.rx_ring) {
+			err = snprintf(q_vector->name, sizeof(q_vector->name) - 1,
+				       "%s-%s", basename, "rx");
+		} else if (q_vector->tx.tx_ring) {
+			err = snprintf(q_vector->name, sizeof(q_vector->name) - 1,
+				       "%s-%s", basename, "tx");
+		} else {
+			err = snprintf(q_vector->name, sizeof(q_vector->name) - 1,
+				       "%s", basename);
+		}
+		/* Catching the return quiets a Wformat-truncation complaint */
+		if (err > sizeof(q_vector->name) - 1)
+			netdev_dbg(vsi->netdev, "vector name truncated, ignore\n");
+	}
+}
+
+/**
+ * ice_tx_ring_unmap_qvec - Unmap tx ring from its current q_vector
+ * @tx_ring: rx ring to be removed
+ *
+ * Unmap tx ring from its current vector association in SW
+ */
+static void
+ice_tx_ring_unmap_qvec(struct ice_tx_ring *tx_ring)
+{
+	struct ice_q_vector *q_vector = tx_ring->q_vector;
+	struct ice_tx_ring *prev, *ring;
+
+	/* Remove a tx ring from its corresponding vector's ring container */
+	ring = q_vector->tx.tx_ring;
+	if (!ring)
+		return;
+
+	if (tx_ring == ring) {
+		q_vector->tx.tx_ring = tx_ring->next;
+		q_vector->num_ring_tx--;
+		return;
+	}
+
+	while (ring && ring != tx_ring) {
+		prev = ring;
+		ring = ring->next;
+	}
+	if (!ring)
+		return;
+	prev->next = ring->next;
+	q_vector->num_ring_tx--;
+}
+
+/**
+ * ice_rx_ring_unmap_qvec - Unmap rx ring from its current q_vector
+ * @rx_ring: rx ring to be removed
+ *
+ * Unmap rx ring from its current vector association in SW
+ */
+static void
+ice_rx_ring_unmap_qvec(struct ice_rx_ring *rx_ring)
+{
+	struct ice_q_vector *q_vector = rx_ring->q_vector;
+	struct ice_rx_ring *prev, *ring;
+
+	/* Remove a rx ring from its corresponding vector's ring container */
+	ring = q_vector->rx.rx_ring;
+	if (!ring)
+		return;
+
+	if (rx_ring == ring) {
+		q_vector->rx.rx_ring = rx_ring->next;
+		q_vector->num_ring_rx--;
+		return;
+	}
+
+	while (ring && ring != rx_ring) {
+		prev = ring;
+		ring = ring->next;
+	}
+	if (!ring)
+		return;
+	prev->next = ring->next;
+	q_vector->num_ring_rx--;
+}
+
+static int
+ice_tx_queue_update_q_vector(struct ice_vsi *vsi, u32 q_idx,
+			     struct ice_q_vector *new_qvec)
+{
+	struct ice_q_vector *old_qvec;
+	struct ice_tx_ring *tx_ring;
+	int timeout = 50;
+	int err;
+
+	if (q_idx >= vsi->num_txq)
+		return -EINVAL;
+	tx_ring = vsi->tx_rings[q_idx];
+	if (!tx_ring)
+		return -EINVAL;
+	old_qvec = tx_ring->q_vector;
+
+	if (old_qvec->irq.virq == new_qvec->irq.virq)
+		return 0;
+
+	while (test_and_set_bit(ICE_CFG_BUSY, vsi->state)) {
+		timeout--;
+		if (!timeout)
+			return -EBUSY;
+		usleep_range(1000, 2000);
+	}
+
+	err = ice_q_vector_dis(vsi, old_qvec);
+	if (err)
+		return err;
+
+	ice_tx_ring_unmap_qvec(tx_ring);
+
+	/* free vector if it has no queues as all of its queues are now moved */
+	if (ice_is_q_vector_unused(old_qvec))
+		ice_qvec_free(vsi, old_qvec);
+
+	/* Prepare new q_vector if it was previously unused */
+	if (ice_is_q_vector_unused(new_qvec)) {
+		err = ice_qvec_prep(vsi, new_qvec);
+		if (err)
+			return err;
+	} else {
+		err = ice_q_vector_dis(vsi, new_qvec);
+		if (err)
+			return err;
+	}
+
+	tx_ring->q_vector = new_qvec;
+	tx_ring->next = new_qvec->tx.tx_ring;
+	new_qvec->tx.tx_ring = tx_ring;
+	new_qvec->num_ring_tx++;
+
+	err = ice_q_vector_ena(vsi, new_qvec);
+	if (err)
+		return err;
+
+	if (!ice_is_q_vector_unused(old_qvec)) {
+		err = ice_q_vector_ena(vsi, old_qvec);
+		if (err)
+			return err;
+	}
+
+	clear_bit(ICE_CFG_BUSY, vsi->state);
+
+	return 0;
+}
+
+static int
+ice_rx_queue_update_q_vector(struct ice_vsi *vsi, u32 q_idx,
+			     struct ice_q_vector *new_qvec)
+{
+	struct ice_q_vector *old_qvec;
+	struct ice_rx_ring *rx_ring;
+	int timeout = 50;
+	int err;
+
+	if (q_idx >= vsi->num_rxq)
+		return -EINVAL;
+	rx_ring = vsi->rx_rings[q_idx];
+	if (!rx_ring)
+		return -EINVAL;
+
+	old_qvec = rx_ring->q_vector;
+
+	if (old_qvec->irq.virq == new_qvec->irq.virq)
+		return 0;
+
+	while (test_and_set_bit(ICE_CFG_BUSY, vsi->state)) {
+		timeout--;
+		if (!timeout)
+			return -EBUSY;
+		usleep_range(1000, 2000);
+	}
+
+	err = ice_q_vector_dis(vsi, old_qvec);
+	if (err)
+		return err;
+
+	ice_rx_ring_unmap_qvec(rx_ring);
+
+	/* free vector if it has no queues as all of its queues are now moved */
+	if (ice_is_q_vector_unused(old_qvec))
+		ice_qvec_free(vsi, old_qvec);
+
+	/* Prepare new q_vector if it was previously unused */
+	if (ice_is_q_vector_unused(new_qvec)) {
+		err = ice_qvec_prep(vsi, new_qvec);
+		if (err)
+			return err;
+	} else {
+		err = ice_q_vector_dis(vsi, new_qvec);
+		if (err)
+			return err;
+	}
+
+	rx_ring->q_vector = new_qvec;
+	rx_ring->next = new_qvec->rx.rx_ring;
+	new_qvec->rx.rx_ring = rx_ring;
+	new_qvec->num_ring_rx++;
+
+	err = ice_q_vector_ena(vsi, new_qvec);
+	if (err)
+		return err;
+
+	if (!ice_is_q_vector_unused(old_qvec)) {
+		err = ice_q_vector_ena(vsi, old_qvec);
+		if (err)
+			return err;
+	}
+
+	clear_bit(ICE_CFG_BUSY, vsi->state);
+
+	return 0;
+}
+
+/**
+ * ice_vsi_get_vector_from_irq
+ * @vsi: the VSI being configured
+ * @irq_num: Interrupt vector number
+ *
+ * Get the q_vector from the Linux interrupt vector number
+ */
+static struct ice_q_vector *
+ice_vsi_get_vector_from_irq(struct ice_vsi *vsi, int irq_num)
+{
+	int i;
+
+	ice_for_each_q_vector(vsi, i) {
+		if (vsi->q_vectors[i]->irq.virq == irq_num)
+			return vsi->q_vectors[i];
+	}
+	return NULL;
+}
+
+/**
+ * ice_queue_change_napi - Change the NAPI instance for the queue
+ * @dev: device to which NAPI and queue belong
+ * @q_idx: Index of queue
+ * @q_type: queue type as RX or TX
+ * @napi: NAPI context for the queue
+ */
+int ice_queue_change_napi(struct net_device *dev, u32 q_idx, u32 q_type,
+			  struct napi_struct *napi)
+{
+	struct ice_netdev_priv *np = netdev_priv(dev);
+	char int_name[ICE_INT_NAME_STR_LEN];
+	struct ice_q_vector *q_vector;
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	int err;
+
+	q_vector = ice_vsi_get_vector_from_irq(vsi, napi->irq);
+	if (!q_vector)
+		return -EINVAL;
+
+	switch (q_type) {
+	case NETDEV_QUEUE_TYPE_RX:
+		err = ice_rx_queue_update_q_vector(vsi, q_idx, q_vector);
+		if (err)
+			return err;
+		break;
+	case NETDEV_QUEUE_TYPE_TX:
+		err = ice_tx_queue_update_q_vector(vsi, q_idx, q_vector);
+		if (err)
+			return err;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	snprintf(int_name, sizeof(int_name) - 1, "%s-%s",
+		 dev_driver_string(ice_pf_to_dev(pf)), vsi->netdev->name);
+	ice_vsi_rename_irq_msix(vsi, int_name);
+
+	/* Now report to the stack */
+	netif_queue_set_napi(dev, q_idx, q_type, napi);
+
+	return 0;
 }
