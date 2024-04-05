@@ -12,6 +12,8 @@
 #include "../kselftest.h"
 #include "cgroup_util.h"
 
+static bool has_miglimit;
+
 static int run_success(const char *cgroup, void *arg)
 {
 	return 0;
@@ -68,6 +70,112 @@ cleanup:
 
 	return ret;
 }
+
+/*
+ * This test checks that pids.max prevents migrating tasks over limit into the
+ * cgroup.
+ */
+static int test_pids_max_migration(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *cg_pids;
+	int pid;
+
+	if (!has_miglimit)
+		return KSFT_SKIP;
+
+	cg_pids = cg_name(root, "pids_test");
+	if (!cg_pids)
+		goto cleanup;
+
+	if (cg_create(cg_pids))
+		goto cleanup;
+
+	if (cg_write(cg_pids, "pids.max", "1"))
+		goto cleanup;
+
+	pid = cg_run_nowait(cg_pids, run_pause, NULL);
+	if (pid < 0)
+		goto cleanup;
+
+	if (cg_enter_current(cg_pids) >= 0)
+		goto cleanup;
+
+	if (kill(pid, SIGINT))
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_enter_current(root);
+	cg_destroy(cg_pids);
+	free(cg_pids);
+
+	return ret;
+}
+
+/*
+ * This test checks that pids.max does not prevent migrating existing tasks
+ * inside subtree.
+ */
+static int test_pids_max_overcommit(const char *root)
+{
+	int ret = KSFT_FAIL;
+	char *cg_parent = NULL, *cg_src = NULL, *cg_dst = NULL;
+	int pid;
+
+	if (!has_miglimit)
+		return KSFT_SKIP;
+
+	cg_parent = cg_name(root, "pids_test");
+	if (!cg_parent)
+		goto cleanup;
+	cg_src = cg_name(cg_parent, "src");
+	if (!cg_src)
+		goto cleanup;
+	cg_dst = cg_name(cg_parent, "dst");
+	if (!cg_dst)
+		goto cleanup;
+
+	if (cg_create(cg_parent))
+		goto cleanup;
+	if (cg_write(cg_parent, "cgroup.subtree_control", "+pids"))
+		goto cleanup;
+	if (cg_create(cg_src))
+		goto cleanup;
+	if (cg_create(cg_dst))
+		goto cleanup;
+
+	if (cg_enter_current(cg_src) < 0)
+		goto cleanup;
+
+	pid = cg_run_nowait(cg_src, run_pause, NULL);
+	if (pid < 0)
+		goto cleanup;
+
+	if (cg_write(cg_parent, "pids.max", "1"))
+		goto cleanup;
+
+	if (cg_enter(cg_dst, pid) < 0)
+		goto cleanup;
+
+	if (kill(pid, SIGINT))
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_enter_current(root);
+	cg_destroy(cg_dst);
+	cg_destroy(cg_src);
+	cg_destroy(cg_parent);
+	free(cg_dst);
+	free(cg_src);
+	free(cg_parent);
+
+	return ret;
+}
+
 
 /*
  * This test checks that pids.max prevents forking new children above the
@@ -145,6 +253,8 @@ struct pids_test {
 	const char *name;
 } tests[] = {
 	T(test_pids_max),
+	T(test_pids_max_migration),
+	T(test_pids_max_overcommit),
 	T(test_pids_events),
 };
 #undef T
@@ -152,7 +262,7 @@ struct pids_test {
 int main(int argc, char **argv)
 {
 	char root[PATH_MAX];
-	int i, ret = EXIT_SUCCESS;
+	int i, proc_status, ret = EXIT_SUCCESS;
 
 	if (cg_find_unified_root(root, sizeof(root)))
 		ksft_exit_skip("cgroup v2 isn't mounted\n");
@@ -167,6 +277,11 @@ int main(int argc, char **argv)
 	if (cg_read_strstr(root, "cgroup.subtree_control", "pids"))
 		if (cg_write(root, "cgroup.subtree_control", "+pids"))
 			ksft_exit_skip("Failed to set pids controller\n");
+
+	proc_status = proc_mount_contains("pids_miglimit");
+	if (proc_status < 0)
+		ksft_exit_skip("Failed to query cgroup mount option\n");
+	has_miglimit = proc_status;
 
 	for (i = 0; i < ARRAY_SIZE(tests); i++) {
 		switch (tests[i].fn(root)) {
