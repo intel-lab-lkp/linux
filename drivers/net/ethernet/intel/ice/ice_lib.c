@@ -4001,3 +4001,250 @@ ice_vsi_update_local_lb(struct ice_vsi *vsi, bool set)
 	vsi->info = ctx.info;
 	return 0;
 }
+
+/**
+ * ice_tx_queue_dis - Disable a Tx ring
+ * @vsi: VSI being configured
+ * @q_idx: Tx ring index
+ *
+ */
+static int ice_tx_queue_dis(struct ice_vsi *vsi, u16 q_idx)
+{
+	struct ice_txq_meta txq_meta = { };
+	struct ice_tx_ring *tx_ring;
+	int err;
+
+	if (q_idx >= vsi->num_txq)
+		return -EINVAL;
+
+	netif_tx_stop_queue(netdev_get_tx_queue(vsi->netdev, q_idx));
+
+	tx_ring = vsi->tx_rings[q_idx];
+	ice_fill_txq_meta(vsi, tx_ring, &txq_meta);
+	err = ice_vsi_stop_tx_ring(vsi, ICE_NO_RESET, 0, tx_ring, &txq_meta);
+	if (err)
+		return err;
+
+	ice_clean_tx_ring(tx_ring);
+
+	return 0;
+}
+
+/**
+ * ice_tx_queue_ena - Enable a Tx ring
+ * @vsi: VSI being configured
+ * @q_idx: Tx ring index
+ *
+ */
+static int ice_tx_queue_ena(struct ice_vsi *vsi, u16 q_idx)
+{
+	struct ice_q_vector *q_vector;
+	struct ice_tx_ring *tx_ring;
+	int err;
+
+	err = ice_vsi_cfg_single_txq(vsi, vsi->tx_rings, q_idx);
+	if (err)
+		return err;
+
+	tx_ring = vsi->tx_rings[q_idx];
+	q_vector = tx_ring->q_vector;
+	ice_cfg_txq_interrupt(vsi, tx_ring->reg_idx, q_vector->reg_idx,
+			      q_vector->tx.itr_idx);
+
+	netif_tx_start_queue(netdev_get_tx_queue(vsi->netdev, q_idx));
+
+	return 0;
+}
+
+/**
+ * ice_rx_ring_dis_irq - clear the queue to interrupt mapping in HW
+ * @vsi: VSI being configured
+ * @rx_ring: Rx ring that will have its IRQ disabled
+ *
+ */
+static void ice_rx_ring_dis_irq(struct ice_vsi *vsi, struct ice_rx_ring *rx_ring)
+{
+	struct ice_hw *hw = &vsi->back->hw;
+	u16 reg;
+	u32 val;
+
+	/* Clear QINT_RQCTL to clear the queue to interrupt mapping in HW */
+	reg = rx_ring->reg_idx;
+	val = rd32(hw, QINT_RQCTL(reg));
+	val &= ~QINT_RQCTL_CAUSE_ENA_M;
+	wr32(hw, QINT_RQCTL(reg), val);
+
+	ice_flush(hw);
+}
+
+/**
+ * ice_rx_queue_dis - Disable a Rx ring
+ * @vsi: VSI being configured
+ * @q_idx: Rx ring index
+ *
+ */
+static int ice_rx_queue_dis(struct ice_vsi *vsi, u16 q_idx)
+{
+	struct ice_rx_ring *rx_ring;
+	int err;
+
+	if (q_idx >= vsi->num_rxq)
+		return -EINVAL;
+
+	rx_ring = vsi->rx_rings[q_idx];
+	ice_rx_ring_dis_irq(vsi, rx_ring);
+
+	err = ice_vsi_ctrl_one_rx_ring(vsi, false, q_idx, true);
+	if (err)
+		return err;
+
+	ice_clean_rx_ring(rx_ring);
+
+	return 0;
+}
+
+/**
+ * ice_rx_queue_ena - Enable a Rx ring
+ * @vsi: VSI being configured
+ * @q_idx: Tx ring index
+ *
+ */
+static int ice_rx_queue_ena(struct ice_vsi *vsi, u16 q_idx)
+{
+	struct ice_q_vector *q_vector;
+	struct ice_rx_ring *rx_ring;
+	int err;
+
+	if (q_idx >= vsi->num_rxq)
+		return -EINVAL;
+
+	err = ice_vsi_cfg_single_rxq(vsi, q_idx);
+	if (err)
+		return err;
+
+	rx_ring = vsi->rx_rings[q_idx];
+	q_vector = rx_ring->q_vector;
+	ice_cfg_rxq_interrupt(vsi, rx_ring->reg_idx, q_vector->reg_idx,
+			      q_vector->rx.itr_idx);
+
+	err = ice_vsi_ctrl_one_rx_ring(vsi, true, q_idx, true);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+/**
+ * ice_qvec_toggle_napi - Enables/disables NAPI for a given q_vector
+ * @vsi: VSI that has netdev
+ * @q_vector: q_vector that has NAPI context
+ * @enable: true for enable, false for disable
+ */
+void
+ice_qvec_toggle_napi(struct ice_vsi *vsi, struct ice_q_vector *q_vector,
+		     bool enable)
+{
+	if (!vsi->netdev || !q_vector)
+		return;
+
+	if (enable)
+		napi_enable(&q_vector->napi);
+	else
+		napi_disable(&q_vector->napi);
+}
+
+/**
+ * ice_qvec_ena_irq - Enable IRQ for given queue vector
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+void ice_qvec_ena_irq(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_pf *pf = vsi->back;
+	struct ice_hw *hw = &pf->hw;
+
+	ice_irq_dynamic_ena(hw, vsi, q_vector);
+
+	ice_flush(hw);
+}
+
+/**
+ * ice_qvec_configure - Setup initial interrupt configuration
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+static void ice_qvec_configure(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_hw *hw = &vsi->back->hw;
+
+	ice_cfg_itr(hw, q_vector);
+	ice_init_moderation(q_vector);
+}
+
+/**
+ * ice_q_vector_dis - Disable a vector and all queues on it
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+static int __maybe_unused
+ice_q_vector_dis(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_hw *hw = &vsi->back->hw;
+	struct ice_rx_ring *rx_ring;
+	struct ice_tx_ring *tx_ring;
+	int err;
+
+	/* Disable the vector */
+	wr32(hw, GLINT_DYN_CTL(q_vector->reg_idx), 0);
+	ice_flush(hw);
+	synchronize_irq(q_vector->irq.virq);
+
+	ice_qvec_toggle_napi(vsi, q_vector, false);
+
+	/* Disable all rings on this vector */
+	ice_for_each_rx_ring(rx_ring, q_vector->rx) {
+		err = ice_rx_queue_dis(vsi, rx_ring->q_index);
+		if (err)
+			return err;
+	}
+
+	ice_for_each_tx_ring(tx_ring, q_vector->tx) {
+		err = ice_tx_queue_dis(vsi, tx_ring->q_index);
+		if (err)
+			return err;
+	}
+	return 0;
+}
+
+/**
+ * ice_q_vector_ena - Enable a vector and all queues on it
+ * @vsi: the VSI that contains queue vector
+ * @q_vector: queue vector
+ */
+static int __maybe_unused
+ice_q_vector_ena(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
+{
+	struct ice_rx_ring *rx_ring;
+	struct ice_tx_ring *tx_ring;
+	int err;
+
+	ice_qvec_configure(vsi, q_vector);
+
+	/* enable all rings on this vector */
+	ice_for_each_rx_ring(rx_ring, q_vector->rx) {
+		err = ice_rx_queue_ena(vsi, rx_ring->q_index);
+		if (err)
+			return err;
+	}
+
+	ice_for_each_tx_ring(tx_ring, q_vector->tx) {
+		err = ice_tx_queue_ena(vsi, tx_ring->q_index);
+		if (err)
+			return err;
+	}
+
+	ice_qvec_toggle_napi(vsi, q_vector, true);
+	ice_qvec_ena_irq(vsi, q_vector);
+
+	return 0;
+}

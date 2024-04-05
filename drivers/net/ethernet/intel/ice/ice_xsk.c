@@ -60,25 +60,6 @@ static void ice_qp_clean_rings(struct ice_vsi *vsi, u16 q_idx)
 }
 
 /**
- * ice_qvec_toggle_napi - Enables/disables NAPI for a given q_vector
- * @vsi: VSI that has netdev
- * @q_vector: q_vector that has NAPI context
- * @enable: true for enable, false for disable
- */
-static void
-ice_qvec_toggle_napi(struct ice_vsi *vsi, struct ice_q_vector *q_vector,
-		     bool enable)
-{
-	if (!vsi->netdev || !q_vector)
-		return;
-
-	if (enable)
-		napi_enable(&q_vector->napi);
-	else
-		napi_disable(&q_vector->napi);
-}
-
-/**
  * ice_qvec_dis_irq - Mask off queue interrupt generation on given ring
  * @vsi: the VSI that contains queue vector being un-configured
  * @rx_ring: Rx ring that will have its IRQ disabled
@@ -131,21 +112,6 @@ ice_qvec_cfg_msix(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
 	ice_for_each_rx_ring(rx_ring, q_vector->rx)
 		ice_cfg_rxq_interrupt(vsi, rx_ring->reg_idx, reg_idx,
 				      q_vector->rx.itr_idx);
-
-	ice_flush(hw);
-}
-
-/**
- * ice_qvec_ena_irq - Enable IRQ for given queue vector
- * @vsi: the VSI that contains queue vector
- * @q_vector: queue vector
- */
-static void ice_qvec_ena_irq(struct ice_vsi *vsi, struct ice_q_vector *q_vector)
-{
-	struct ice_pf *pf = vsi->back;
-	struct ice_hw *hw = &pf->hw;
-
-	ice_irq_dynamic_ena(hw, vsi, q_vector);
 
 	ice_flush(hw);
 }

@@ -6514,7 +6514,7 @@ static void ice_rx_dim_work(struct work_struct *work)
  * dynamic moderation mode or not in order to make sure hardware is in a known
  * state.
  */
-static void ice_init_moderation(struct ice_q_vector *q_vector)
+void ice_init_moderation(struct ice_q_vector *q_vector)
 {
 	struct ice_ring_container *rc;
 	bool tx_dynamic, rx_dynamic;

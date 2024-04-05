@@ -1010,4 +1010,5 @@ static inline void ice_clear_rdma_cap(struct ice_pf *pf)
 }
 
 extern const struct xdp_metadata_ops ice_xdp_md_ops;
+void ice_init_moderation(struct ice_q_vector *q_vector);
 #endif /* _ICE_H_ */
