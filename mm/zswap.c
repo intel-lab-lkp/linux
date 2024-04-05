@@ -1404,6 +1404,7 @@ bool zswap_store(struct folio *folio)
 	struct zswap_entry *entry, *old;
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
+	bool same_filled = false;
 	unsigned long value;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
@@ -1427,7 +1428,8 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	if (zswap_check_full())
+	same_filled = zswap_is_folio_same_filled(folio, &value);
+	if (!same_filled && zswap_check_full())
 		goto reject;
 
 	/* allocate entry */
@@ -1437,7 +1439,7 @@ bool zswap_store(struct folio *folio)
 		goto reject;
 	}
 
-	if (zswap_is_folio_same_filled(folio, &value)) {
+	if (same_filled) {
 		entry->length = 0;
 		entry->value = value;
 		atomic_inc(&zswap_same_filled_pages);
