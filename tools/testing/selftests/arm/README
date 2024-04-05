@@ -1,0 +1,31 @@
+KSelfTest ARM
+===============
+
+- This is a series of compatibility tests, wherein the source files are
+  built statically into a 32 bit ELF; they should pass on both 32 and 64
+  bit kernels. They are not built or run but just skipped completely when
+  env-variable ARCH is found to be different than 'arm64' or 'arm' and
+  `uname -m` reports other than 'aarch64', 'armv7l' or 'armv8l'.
+
+- Please ensure that the test kernel is built with CONFIG_COMPAT enabled.
+
+- Holding true the above, ARM KSFT tests can be run within the KSelfTest
+  framework using standard Linux top-level-makefile targets. Please set
+  $(CROSS_COMPILE) to 'arm-linux-gnueabi-' or 'arm-linux-gnueabihf-'.
+
+      $ make TARGETS=arm kselftest-clean
+      $ make $(CROSS_COMPILE) TARGETS=arm kselftest
+
+      or
+
+      $ make $(CROSS_COMPILE) -C tools/testing/selftests TARGETS=arm \
+		INSTALL_PATH=<your-installation-path> install
+
+      or, alternatively, only specific arm/ subtargets can be picked:
+
+      $ make $(CROSS_COMPILE) -C tools/testing/selftests TARGETS=arm \
+		ARM_SUBTARGETS="signal" INSTALL_PATH=<your-installation-path> \
+			install
+
+   Further details on building and running KFST can be found in:
+     Documentation/dev-tools/kselftest.rst

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 TARGETS += alsa
 TARGETS += amd-pstate
+TARGETS += arm
 TARGETS += arm64
 TARGETS += bpf
 TARGETS += breakpoints
