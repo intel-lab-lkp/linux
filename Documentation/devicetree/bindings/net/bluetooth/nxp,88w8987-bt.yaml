@@ -31,6 +31,13 @@ properties:
       This property depends on the module vendor's
       configuration.
 
+  firmware-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Specify firmware file name, prepended with nxp/.
+      This property overrides the firmware names hardcoded
+      in the driver source code.
+
 required:
   - compatible
 
@@ -42,5 +49,6 @@ examples:
         bluetooth {
             compatible = "nxp,88w8987-bt";
             fw-init-baudrate = <3000000>;
+            firmware-name = "nxp/uartuart8987_bt_v0.bin";
         };
     };
