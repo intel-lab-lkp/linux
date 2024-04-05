@@ -2202,6 +2202,7 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ SYS_DESC(SYS_MDSCR_EL1), trap_debug_regs, reset_val, MDSCR_EL1, 0 },
 	DBG_BCR_BVR_WCR_WVR_EL1(2),
 	DBG_BCR_BVR_WCR_WVR_EL1(3),
+	{ SYS_DESC(SYS_MDSELR_EL1), undef_access },
 	DBG_BCR_BVR_WCR_WVR_EL1(4),
 	DBG_BCR_BVR_WCR_WVR_EL1(5),
 	DBG_BCR_BVR_WCR_WVR_EL1(6),
