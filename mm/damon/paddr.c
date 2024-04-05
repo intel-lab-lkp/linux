@@ -229,6 +229,7 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 
 enum migration_mode {
 	MIG_PAGEOUT,
+	MIG_MIGRATE_HOT,
 	MIG_MIGRATE_COLD,
 };
 
@@ -375,8 +376,10 @@ static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 		if (damos_pa_filter_out(s, folio))
 			goto put_folio;
 
-		folio_clear_referenced(folio);
-		folio_test_clear_young(folio);
+		if (mm != MIG_MIGRATE_HOT) {
+			folio_clear_referenced(folio);
+			folio_test_clear_young(folio);
+		}
 		if (!folio_isolate_lru(folio))
 			goto put_folio;
 		/*
@@ -394,6 +397,7 @@ put_folio:
 	case MIG_PAGEOUT:
 		applied = reclaim_pages(&folio_list);
 		break;
+	case MIG_MIGRATE_HOT:
 	case MIG_MIGRATE_COLD:
 		applied = damon_pa_migrate_pages(&folio_list, mm,
 						 s->target_nid);
@@ -454,6 +458,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		return damon_pa_mark_accessed(r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_pa_deactivate_pages(r, scheme);
+	case DAMOS_MIGRATE_HOT:
+		return damon_pa_migrate(r, scheme, MIG_MIGRATE_HOT);
 	case DAMOS_MIGRATE_COLD:
 		return damon_pa_migrate(r, scheme, MIG_MIGRATE_COLD);
 	case DAMOS_STAT:
@@ -476,6 +482,8 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 		return damon_hot_score(context, r, scheme);
 	case DAMOS_LRU_DEPRIO:
 		return damon_cold_score(context, r, scheme);
+	case DAMOS_MIGRATE_HOT:
+		return damon_hot_score(context, r, scheme);
 	case DAMOS_MIGRATE_COLD:
 		return damon_cold_score(context, r, scheme);
 	default:

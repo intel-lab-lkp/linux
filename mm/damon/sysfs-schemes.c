@@ -1406,6 +1406,7 @@ static const char * const damon_sysfs_damos_action_strs[] = {
 	"nohugepage",
 	"lru_prio",
 	"lru_deprio",
+	"migrate_hot",
 	"migrate_cold",
 	"stat",
 };
@@ -1660,7 +1661,8 @@ static ssize_t target_nid_store(struct kobject *kobj,
 			struct damon_sysfs_scheme, kobj);
 	int err = 0;
 
-        if (scheme->action != DAMOS_MIGRATE_COLD)
+        if (scheme->action != DAMOS_MIGRATE_HOT &&
+            scheme->action != DAMOS_MIGRATE_COLD)
                 return -EINVAL;
 
 	/* TODO: error handling for target_nid range. */
