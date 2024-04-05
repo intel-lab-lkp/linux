@@ -2186,6 +2186,18 @@ PID Interface Files
 	The number of processes currently in the cgroup and its
 	descendants.
 
+  pids.events
+	A read-only flat-keyed file which exists on non-root cgroups.  Unless
+	specified otherwise, a value change in this file generates a file modified
+	event. The following entries are defined.
+
+	  max
+		The number of times the limit of the cgroup was hit.
+
+	  max.imposed
+		The number of times fork failed in the cgroup because of self
+		or ancestor limit.
+
 Organisational operations are not blocked by cgroup policies, so it is
 possible to have pids.current > pids.max.  This can be done by either
 setting the limit to be smaller than pids.current, or attaching enough

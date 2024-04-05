@@ -38,6 +38,14 @@
 #define PIDS_MAX (PID_MAX_LIMIT + 1ULL)
 #define PIDS_MAX_STR "max"
 
+enum pidcg_event {
+	/* Fork failed in subtree because this pids_cgroup limit was hit. */
+	PIDCG_MAX,
+	/* Fork failed in this pids_cgroup because ancestor limit was hit. */
+	PIDCG_MAX_IMPOSED,
+	NR_PIDCG_EVENTS,
+};
+
 struct pids_cgroup {
 	struct cgroup_subsys_state	css;
 
@@ -52,8 +60,7 @@ struct pids_cgroup {
 	/* Handle for "pids.events" */
 	struct cgroup_file		events_file;
 
-	/* Number of times fork failed because limit was hit. */
-	atomic64_t			events_limit;
+	atomic64_t			events[NR_PIDCG_EVENTS];
 };
 
 static struct pids_cgroup *css_pids(struct cgroup_subsys_state *css)
@@ -148,12 +155,13 @@ static void pids_charge(struct pids_cgroup *pids, int num)
  * pids_try_charge - hierarchically try to charge the pid count
  * @pids: the pid cgroup state
  * @num: the number of pids to charge
+ * @fail: storage of pid cgroup causing the fail
  *
  * This function follows the set limit. It will fail if the charge would cause
  * the new value to exceed the hierarchical limit. Returns 0 if the charge
  * succeeded, otherwise -EAGAIN.
  */
-static int pids_try_charge(struct pids_cgroup *pids, int num)
+static int pids_try_charge(struct pids_cgroup *pids, int num, struct pids_cgroup **fail)
 {
 	struct pids_cgroup *p, *q;
 
@@ -166,9 +174,10 @@ static int pids_try_charge(struct pids_cgroup *pids, int num)
 		 * p->limit is %PIDS_MAX then we know that this test will never
 		 * fail.
 		 */
-		if (new > limit)
+		if (new > limit) {
+			*fail = p;
 			goto revert;
-
+		}
 		/*
 		 * Not technically accurate if we go over limit somewhere up
 		 * the hierarchy, but that's tolerable for the watermark.
@@ -236,7 +245,7 @@ static void pids_cancel_attach(struct cgroup_taskset *tset)
 static int pids_can_fork(struct task_struct *task, struct css_set *cset)
 {
 	struct cgroup_subsys_state *css;
-	struct pids_cgroup *pids;
+	struct pids_cgroup *pids, *pids_over_limit;
 	int err;
 
 	if (cset)
@@ -244,15 +253,23 @@ static int pids_can_fork(struct task_struct *task, struct css_set *cset)
 	else
 		css = task_css_check(current, pids_cgrp_id, true);
 	pids = css_pids(css);
-	err = pids_try_charge(pids, 1);
+	err = pids_try_charge(pids, 1, &pids_over_limit);
 	if (err) {
-		/* Only log the first time events_limit is incremented. */
-		if (atomic64_inc_return(&pids->events_limit) == 1) {
+		/* compatibility on v1 where events were notified in leaves. */
+		if (!cgroup_subsys_on_dfl(pids_cgrp_subsys))
+			pids_over_limit = pids;
+
+		/* Only log the first time limit is hit. */
+		if (atomic64_inc_return(&pids->events[PIDCG_MAX_IMPOSED]) == 1) {
 			pr_info("cgroup: fork rejected by pids controller in ");
-			pr_cont_cgroup_path(css->cgroup);
+			pr_cont_cgroup_path(pids->css.cgroup);
 			pr_cont("\n");
 		}
+		atomic64_inc(&pids_over_limit->events[PIDCG_MAX]);
+
 		cgroup_file_notify(&pids->events_file);
+		if (pids_over_limit != pids)
+			cgroup_file_notify(&pids_over_limit->events_file);
 	}
 	return err;
 }
@@ -341,7 +358,16 @@ static int pids_events_show(struct seq_file *sf, void *v)
 {
 	struct pids_cgroup *pids = css_pids(seq_css(sf));
 
-	seq_printf(sf, "max %lld\n", (s64)atomic64_read(&pids->events_limit));
+	seq_printf(sf, "max %lld\n", (s64)atomic64_read(&pids->events[PIDCG_MAX]));
+	seq_printf(sf, "max.imposed %lld\n", (s64)atomic64_read(&pids->events[PIDCG_MAX_IMPOSED]));
+	return 0;
+}
+
+static int pids_events_show_legacy(struct seq_file *sf, void *v)
+{
+	struct pids_cgroup *pids = css_pids(seq_css(sf));
+
+	seq_printf(sf, "max%lld\n", (s64)atomic64_read(&pids->events[PIDCG_MAX_IMPOSED]));
 	return 0;
 }
 
@@ -371,6 +397,27 @@ static struct cftype pids_files[] = {
 	{ }	/* terminate */
 };
 
+static struct cftype pids_files_legacy[] = {
+	{
+		.name = "max",
+		.write = pids_max_write,
+		.seq_show = pids_max_show,
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{
+		.name = "current",
+		.read_s64 = pids_current_read,
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{
+		.name = "events",
+		.seq_show = pids_events_show_legacy,
+		.file_offset = offsetof(struct pids_cgroup, events_file),
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{ }	/* terminate */
+};
+
 struct cgroup_subsys pids_cgrp_subsys = {
 	.css_alloc	= pids_css_alloc,
 	.css_free	= pids_css_free,
@@ -379,7 +426,7 @@ struct cgroup_subsys pids_cgrp_subsys = {
 	.can_fork	= pids_can_fork,
 	.cancel_fork	= pids_cancel_fork,
 	.release	= pids_release,
-	.legacy_cftypes	= pids_files,
 	.dfl_cftypes	= pids_files,
+	.legacy_cftypes	= pids_files_legacy,
 	.threaded	= true,
 };
