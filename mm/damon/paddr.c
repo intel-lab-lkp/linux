@@ -235,10 +235,23 @@ enum migration_mode {
 
 static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 				       struct pglist_data *pgdat,
+				       enum migration_mode mm,
 				       int target_nid)
 {
 	unsigned int nr_succeeded;
 	nodemask_t allowed_mask = NODE_MASK_NONE;
+	enum node_stat_item node_stat;
+
+	switch (mm) {
+	case MIG_MIGRATE_HOT:
+		node_stat = DAMON_MIGRATE_HOT;
+		break;
+	case MIG_MIGRATE_COLD:
+		node_stat = DAMON_MIGRATE_COLD;
+		break;
+	default:
+		return 0;
+	}
 
 	struct migration_target_control mtc = {
 		/*
@@ -262,6 +275,8 @@ static unsigned int migrate_folio_list(struct list_head *migrate_folios,
 	migrate_pages(migrate_folios, alloc_migrate_folio, NULL,
 		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DAMON,
 		      &nr_succeeded);
+
+	mod_node_page_state(pgdat, node_stat, nr_succeeded);
 
 	return nr_succeeded;
 }
@@ -302,7 +317,7 @@ keep:
 	/* 'folio_list' is always empty here */
 
 	/* Migrate folios selected for migration */
-	nr_migrated += migrate_folio_list(&migrate_folios, pgdat, target_nid);
+	nr_migrated += migrate_folio_list(&migrate_folios, pgdat, mm, target_nid);
 	/* Folios that could not be migrated are still in @migrate_folios */
 	if (!list_empty(&migrate_folios)) {
 		/* Folios which weren't migrated go back on @folio_list */
