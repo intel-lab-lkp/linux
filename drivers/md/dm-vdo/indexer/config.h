@@ -25,8 +25,8 @@ enum {
 
 /* A set of configuration parameters for the indexer. */
 struct uds_configuration {
-	/* Storage device for the index */
-	struct block_device *bdev;
+	/* File of opened storage device for the index */
+	struct file *bdev_file;
 
 	/* The maximum allowable size of the index */
 	size_t size;

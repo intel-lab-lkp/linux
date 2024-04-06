@@ -2191,7 +2191,7 @@ static int initialize_index(struct vdo *vdo, struct hash_zones *zones)
 	uds_offset = ((vdo_get_index_region_start(geometry) -
 		       geometry.bio_offset) * VDO_BLOCK_SIZE);
 	zones->parameters = (struct uds_parameters) {
-		.bdev = vdo->device_config->owned_device->bdev,
+		.bdev_file = vdo->device_config->owned_device->bdev_file,
 		.offset = uds_offset,
 		.size = (vdo_get_index_region_size(geometry) * VDO_BLOCK_SIZE),
 		.memory_size = geometry.index_config.mem,
@@ -2582,8 +2582,9 @@ static void resume_index(void *context, struct vdo_completion *parent)
 	struct device_config *config = parent->vdo->device_config;
 	int result;
 
-	zones->parameters.bdev = config->owned_device->bdev;
-	result = uds_resume_index_session(zones->index_session, zones->parameters.bdev);
+	zones->parameters.bdev_file = config->owned_device->bdev_file;
+	result = uds_resume_index_session(zones->index_session,
+					  zones->parameters.bdev_file);
 	if (result != UDS_SUCCESS)
 		vdo_log_error_strerror(result, "Error resuming dedupe index");
 

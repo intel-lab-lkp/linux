@@ -344,7 +344,7 @@ int uds_make_configuration(const struct uds_parameters *params,
 	config->volume_index_mean_delta = DEFAULT_VOLUME_INDEX_MEAN_DELTA;
 	config->sparse_sample_rate = (params->sparse ? DEFAULT_SPARSE_SAMPLE_RATE : 0);
 	config->nonce = params->nonce;
-	config->bdev = params->bdev;
+	config->bdev_file = params->bdev_file;
 	config->offset = params->offset;
 	config->size = params->size;
 

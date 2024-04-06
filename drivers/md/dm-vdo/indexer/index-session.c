@@ -335,7 +335,7 @@ int uds_open_index(enum uds_open_index_type open_type,
 		vdo_log_error("missing required parameters");
 		return -EINVAL;
 	}
-	if (parameters->bdev == NULL) {
+	if (parameters->bdev_file == NULL) {
 		vdo_log_error("missing required block device");
 		return -EINVAL;
 	}
@@ -349,7 +349,7 @@ int uds_open_index(enum uds_open_index_type open_type,
 		return uds_status_to_errno(result);
 
 	session->parameters = *parameters;
-	format_dev_t(name, parameters->bdev->bd_dev);
+	format_dev_t(name, file_bdev(parameters->bdev_file)->bd_dev);
 	vdo_log_info("%s: %s", get_open_type_string(open_type), name);
 
 	result = initialize_index_session(session, open_type);
@@ -460,15 +460,16 @@ int uds_suspend_index_session(struct uds_index_session *session, bool save)
 	return uds_status_to_errno(result);
 }
 
-static int replace_device(struct uds_index_session *session, struct block_device *bdev)
+static int replace_device(struct uds_index_session *session,
+			  struct file *bdev_file)
 {
 	int result;
 
-	result = uds_replace_index_storage(session->index, bdev);
+	result = uds_replace_index_storage(session->index, bdev_file);
 	if (result != UDS_SUCCESS)
 		return result;
 
-	session->parameters.bdev = bdev;
+	session->parameters.bdev_file = bdev_file;
 	return UDS_SUCCESS;
 }
 
@@ -477,7 +478,7 @@ static int replace_device(struct uds_index_session *session, struct block_device
  * device differs from the current backing store, the index will start using the new backing store.
  */
 int uds_resume_index_session(struct uds_index_session *session,
-			     struct block_device *bdev)
+			     struct file *bdev_file)
 {
 	int result = UDS_SUCCESS;
 	bool no_work = false;
@@ -502,8 +503,9 @@ int uds_resume_index_session(struct uds_index_session *session,
 	if (no_work)
 		return result;
 
-	if ((session->index != NULL) && (bdev != session->parameters.bdev)) {
-		result = replace_device(session, bdev);
+	if (session->index != NULL &&
+	    bdev_file != session->parameters.bdev_file) {
+		result = replace_device(session, bdev_file);
 		if (result != UDS_SUCCESS) {
 			mutex_lock(&session->request_mutex);
 			session->state &= ~IS_FLAG_WAITING;

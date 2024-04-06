@@ -809,7 +809,7 @@ void vdo_load_super_block(struct vdo *vdo, struct vdo_completion *parent)
  */
 struct block_device *vdo_get_backing_device(const struct vdo *vdo)
 {
-	return vdo->device_config->owned_device->bdev;
+	return file_bdev(vdo->device_config->owned_device->bdev_file);
 }
 
 /**

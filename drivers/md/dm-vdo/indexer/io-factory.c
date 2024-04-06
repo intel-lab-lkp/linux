@@ -22,7 +22,7 @@
  * make helper structures that can be used to access sections of the index.
  */
 struct io_factory {
-	struct block_device *bdev;
+	struct file *bdev_file;
 	atomic_t ref_count;
 };
 
@@ -59,7 +59,7 @@ static void uds_get_io_factory(struct io_factory *factory)
 	atomic_inc(&factory->ref_count);
 }
 
-int uds_make_io_factory(struct block_device *bdev, struct io_factory **factory_ptr)
+int uds_make_io_factory(struct file *bdev_file, struct io_factory **factory_ptr)
 {
 	int result;
 	struct io_factory *factory;
@@ -68,16 +68,16 @@ int uds_make_io_factory(struct block_device *bdev, struct io_factory **factory_p
 	if (result != VDO_SUCCESS)
 		return result;
 
-	factory->bdev = bdev;
+	factory->bdev_file = bdev_file;
 	atomic_set_release(&factory->ref_count, 1);
 
 	*factory_ptr = factory;
 	return UDS_SUCCESS;
 }
 
-int uds_replace_storage(struct io_factory *factory, struct block_device *bdev)
+int uds_replace_storage(struct io_factory *factory, struct file *bdev_file)
 {
-	factory->bdev = bdev;
+	factory->bdev_file = bdev_file;
 	return UDS_SUCCESS;
 }
 
@@ -90,7 +90,7 @@ void uds_put_io_factory(struct io_factory *factory)
 
 size_t uds_get_writable_size(struct io_factory *factory)
 {
-	return i_size_read(factory->bdev->bd_inode);
+	return i_size_read(file_inode(factory->bdev_file));
 }
 
 /* Create a struct dm_bufio_client for an index region starting at offset. */
@@ -99,8 +99,9 @@ int uds_make_bufio(struct io_factory *factory, off_t block_offset, size_t block_
 {
 	struct dm_bufio_client *client;
 
-	client = dm_bufio_client_create(factory->bdev, block_size, reserved_buffers, 0,
-					NULL, NULL, 0);
+	client = dm_bufio_client_create(file_bdev(factory->bdev_file),
+					block_size, reserved_buffers,
+					0, NULL, NULL, 0);
 	if (IS_ERR(client))
 		return -PTR_ERR(client);
 

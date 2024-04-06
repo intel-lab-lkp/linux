@@ -1668,7 +1668,7 @@ static int create_layout_factory(struct index_layout *layout,
 	size_t writable_size;
 	struct io_factory *factory = NULL;
 
-	result = uds_make_io_factory(config->bdev, &factory);
+	result = uds_make_io_factory(config->bdev_file, &factory);
 	if (result != UDS_SUCCESS)
 		return result;
 
@@ -1741,9 +1741,9 @@ void uds_free_index_layout(struct index_layout *layout)
 }
 
 int uds_replace_index_layout_storage(struct index_layout *layout,
-				     struct block_device *bdev)
+				     struct file *bdev_file)
 {
-	return uds_replace_storage(layout->factory, bdev);
+	return uds_replace_storage(layout->factory, bdev_file);
 }
 
 /* Obtain a dm_bufio_client for the volume region. */
