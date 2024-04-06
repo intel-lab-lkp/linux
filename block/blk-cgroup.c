@@ -949,6 +949,23 @@ void blkg_conf_exit(struct blkg_conf_ctx *ctx)
 }
 EXPORT_SYMBOL_GPL(blkg_conf_exit);
 
+/*
+ * blkg_conf_exit_blkg - like blkg_conf_exit() but only release queue_lock.
+ * @ctx: blkg_conf_ctx initialized with blkg_conf_init()
+ *
+ * This function must be called on all blkg_conf_ctx's initialized with
+ * blkg_conf_init().
+ */
+void blkg_conf_exit_blkg(struct blkg_conf_ctx *ctx)
+	__releases(&ctx->bdev->bd_queue->queue_lock)
+{
+	if (ctx->blkg) {
+		spin_unlock_irq(&bdev_get_queue(ctx->bdev)->queue_lock);
+		ctx->blkg = NULL;
+	}
+}
+EXPORT_SYMBOL_GPL(blkg_conf_exit_blkg);
+
 static void blkg_iostat_set(struct blkg_iostat *dst, struct blkg_iostat *src)
 {
 	int i;
