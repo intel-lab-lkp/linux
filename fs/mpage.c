@@ -472,7 +472,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 	struct block_device *bdev = NULL;
 	int boundary = 0;
 	sector_t boundary_block = 0;
-	struct block_device *boundary_bdev = NULL;
+	struct file *boundary_bdev_file = NULL;
 	size_t length;
 	struct buffer_head map_bh;
 	loff_t i_size = i_size_read(inode);
@@ -513,7 +513,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 			boundary = buffer_boundary(bh);
 			if (boundary) {
 				boundary_block = bh->b_blocknr;
-				boundary_bdev = bh->b_bdev;
+				boundary_bdev_file = bh->b_bdev_file;
 			}
 			bdev = bh_bdev(bh);
 		} while ((bh = bh->b_this_page) != head);
@@ -555,7 +555,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 			clean_bdev_bh_alias(&map_bh);
 		if (buffer_boundary(&map_bh)) {
 			boundary_block = map_bh.b_blocknr;
-			boundary_bdev = map_bh.b_bdev;
+			boundary_bdev_file = map_bh.b_bdev_file;
 		}
 		if (page_block) {
 			if (map_bh.b_blocknr != first_block + page_block)
@@ -628,7 +628,7 @@ alloc_new:
 	if (boundary || (first_unmapped != blocks_per_page)) {
 		bio = mpage_bio_submit_write(bio);
 		if (boundary_block) {
-			write_boundary_block(boundary_bdev,
+			write_boundary_block(boundary_bdev_file,
 					boundary_block, 1 << blkbits);
 		}
 	} else {

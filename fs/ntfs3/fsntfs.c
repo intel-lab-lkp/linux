@@ -1033,14 +1033,14 @@ struct buffer_head *ntfs_bread(struct super_block *sb, sector_t block)
 
 int ntfs_sb_read(struct super_block *sb, u64 lbo, size_t bytes, void *buffer)
 {
-	struct block_device *bdev = sb->s_bdev;
 	u32 blocksize = sb->s_blocksize;
 	u64 block = lbo >> sb->s_blocksize_bits;
 	u32 off = lbo & (blocksize - 1);
 	u32 op = blocksize - off;
 
 	for (; bytes; block += 1, off = 0, op = blocksize) {
-		struct buffer_head *bh = __bread(bdev, block, blocksize);
+		struct buffer_head *bh = __bread(sb->s_bdev_file, block,
+						 blocksize);
 
 		if (!bh)
 			return -EIO;
@@ -1063,7 +1063,7 @@ int ntfs_sb_write(struct super_block *sb, u64 lbo, size_t bytes,
 		  const void *buf, int wait)
 {
 	u32 blocksize = sb->s_blocksize;
-	struct block_device *bdev = sb->s_bdev;
+	struct file *bdev_file = sb->s_bdev_file;
 	sector_t block = lbo >> sb->s_blocksize_bits;
 	u32 off = lbo & (blocksize - 1);
 	u32 op = blocksize - off;
@@ -1077,14 +1077,14 @@ int ntfs_sb_write(struct super_block *sb, u64 lbo, size_t bytes,
 			op = bytes;
 
 		if (op < blocksize) {
-			bh = __bread(bdev, block, blocksize);
+			bh = __bread(bdev_file, block, blocksize);
 			if (!bh) {
 				ntfs_err(sb, "failed to read block %llx",
 					 (u64)block);
 				return -EIO;
 			}
 		} else {
-			bh = __getblk(bdev, block, blocksize);
+			bh = __getblk(bdev_file, block, blocksize);
 			if (!bh)
 				return -ENOMEM;
 		}

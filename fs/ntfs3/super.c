@@ -1627,7 +1627,7 @@ out:
 void ntfs_unmap_meta(struct super_block *sb, CLST lcn, CLST len)
 {
 	struct ntfs_sb_info *sbi = sb->s_fs_info;
-	struct block_device *bdev = sb->s_bdev;
+	struct file *bdev_file = sb->s_bdev_file;
 	sector_t devblock = (u64)lcn * sbi->blocks_per_cluster;
 	unsigned long blocks = (u64)len * sbi->blocks_per_cluster;
 	unsigned long cnt = 0;
@@ -1642,9 +1642,9 @@ void ntfs_unmap_meta(struct super_block *sb, CLST lcn, CLST len)
 		limit >>= 1;
 
 	while (blocks--) {
-		clean_bdev_aliases(bdev, devblock++, 1);
+		clean_bdev_aliases(bdev_file, devblock++, 1);
 		if (cnt++ >= limit) {
-			sync_blockdev(bdev);
+			filemap_write_and_wait(bdev_file->f_mapping);
 			cnt = 0;
 		}
 	}

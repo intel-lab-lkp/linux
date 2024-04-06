@@ -107,7 +107,8 @@ static int nilfs_compute_checksum(struct the_nilfs *nilfs,
 		do {
 			struct buffer_head *bh;
 
-			bh = __bread(nilfs->ns_bdev, ++start, blocksize);
+			bh = __bread(nilfs->ns_sb->s_bdev_file, ++start,
+				     blocksize);
 			if (!bh)
 				return -EIO;
 			check_bytes -= size;
@@ -136,7 +137,8 @@ int nilfs_read_super_root_block(struct the_nilfs *nilfs, sector_t sr_block,
 	int ret;
 
 	*pbh = NULL;
-	bh_sr = __bread(nilfs->ns_bdev, sr_block, nilfs->ns_blocksize);
+	bh_sr = __bread(nilfs->ns_sb->s_bdev_file, sr_block,
+			nilfs->ns_blocksize);
 	if (unlikely(!bh_sr)) {
 		ret = NILFS_SEG_FAIL_IO;
 		goto failed;
@@ -183,7 +185,8 @@ nilfs_read_log_header(struct the_nilfs *nilfs, sector_t start_blocknr,
 {
 	struct buffer_head *bh_sum;
 
-	bh_sum = __bread(nilfs->ns_bdev, start_blocknr, nilfs->ns_blocksize);
+	bh_sum = __bread(nilfs->ns_sb->s_bdev_file, start_blocknr,
+			 nilfs->ns_blocksize);
 	if (bh_sum)
 		*sum = (struct nilfs_segment_summary *)bh_sum->b_data;
 	return bh_sum;
@@ -250,7 +253,7 @@ static void *nilfs_read_summary_info(struct the_nilfs *nilfs,
 	if (bytes > (*pbh)->b_size - *offset) {
 		blocknr = (*pbh)->b_blocknr;
 		brelse(*pbh);
-		*pbh = __bread(nilfs->ns_bdev, blocknr + 1,
+		*pbh = __bread(nilfs->ns_sb->s_bdev_file, blocknr + 1,
 			       nilfs->ns_blocksize);
 		if (unlikely(!*pbh))
 			return NULL;
@@ -289,7 +292,7 @@ static void nilfs_skip_summary_info(struct the_nilfs *nilfs,
 		*offset = bytes * (count - (bcnt - 1) * nitem_per_block);
 
 		brelse(*pbh);
-		*pbh = __bread(nilfs->ns_bdev, blocknr + bcnt,
+		*pbh = __bread(nilfs->ns_sb->s_bdev_file, blocknr + bcnt,
 			       nilfs->ns_blocksize);
 	}
 }
@@ -318,7 +321,8 @@ static int nilfs_scan_dsync_log(struct the_nilfs *nilfs, sector_t start_blocknr,
 
 	sumbytes = le32_to_cpu(sum->ss_sumbytes);
 	blocknr = start_blocknr + DIV_ROUND_UP(sumbytes, nilfs->ns_blocksize);
-	bh = __bread(nilfs->ns_bdev, start_blocknr, nilfs->ns_blocksize);
+	bh = __bread(nilfs->ns_sb->s_bdev_file, start_blocknr,
+		     nilfs->ns_blocksize);
 	if (unlikely(!bh))
 		goto out;
 
@@ -478,7 +482,8 @@ static int nilfs_recovery_copy_block(struct the_nilfs *nilfs,
 	size_t from = pos & ~PAGE_MASK;
 	void *kaddr;
 
-	bh_org = __bread(nilfs->ns_bdev, rb->blocknr, nilfs->ns_blocksize);
+	bh_org = __bread(nilfs->ns_sb->s_bdev_file, rb->blocknr,
+			 nilfs->ns_blocksize);
 	if (unlikely(!bh_org))
 		return -EIO;
 
@@ -697,7 +702,8 @@ static void nilfs_finish_roll_forward(struct the_nilfs *nilfs,
 	    nilfs_get_segnum_of_block(nilfs, ri->ri_super_root))
 		return;
 
-	bh = __getblk(nilfs->ns_bdev, ri->ri_lsegs_start, nilfs->ns_blocksize);
+	bh = __getblk(nilfs->ns_sb->s_bdev_file, ri->ri_lsegs_start,
+		      nilfs->ns_blocksize);
 	BUG_ON(!bh);
 	memset(bh->b_data, 0, bh->b_size);
 	set_buffer_dirty(bh);
@@ -823,7 +829,8 @@ int nilfs_search_super_root(struct the_nilfs *nilfs,
 	/* Read ahead segment */
 	b = seg_start;
 	while (b <= seg_end)
-		__breadahead(nilfs->ns_bdev, b++, nilfs->ns_blocksize);
+		__breadahead(nilfs->ns_sb->s_bdev_file, b++,
+			     nilfs->ns_blocksize);
 
 	for (;;) {
 		brelse(bh_sum);
@@ -869,7 +876,7 @@ int nilfs_search_super_root(struct the_nilfs *nilfs,
 		if (pseg_start == seg_start) {
 			nilfs_get_segment_range(nilfs, nextnum, &b, &end);
 			while (b <= end)
-				__breadahead(nilfs->ns_bdev, b++,
+				__breadahead(nilfs->ns_sb->s_bdev_file, b++,
 					     nilfs->ns_blocksize);
 		}
 		if (!(flags & NILFS_SS_SR)) {

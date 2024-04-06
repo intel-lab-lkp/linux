@@ -69,7 +69,7 @@ struct buffer_head {
 	size_t b_size;			/* size of mapping */
 	char *b_data;			/* pointer to data within the page */
 
-	struct block_device *b_bdev;
+	struct file *b_bdev_file;
 	bh_end_io_t *b_end_io;		/* I/O completion */
  	void *b_private;		/* reserved for b_end_io */
 	struct list_head b_assoc_buffers; /* associated with another mapping */
@@ -140,18 +140,18 @@ BUFFER_FNS(Defer_Completion, defer_completion)
 static __always_inline void bh_set_bdev_file(struct buffer_head *bh,
 					     struct file *bdev_file)
 {
-	bh->b_bdev = bdev_file ? file_bdev(bdev_file) : NULL;
+	bh->b_bdev_file = bdev_file;
 }
 
 static __always_inline void bh_copy_bdev_file(struct buffer_head *dbh,
 					      struct buffer_head *sbh)
 {
-	dbh->b_bdev = sbh->b_bdev;
+	dbh->b_bdev_file = sbh->b_bdev_file;
 }
 
 static __always_inline struct block_device *bh_bdev(struct buffer_head *bh)
 {
-	return bh->b_bdev;
+	return bh->b_bdev_file ? file_bdev(bh->b_bdev_file) : NULL;
 }
 
 static __always_inline void set_buffer_uptodate(struct buffer_head *bh)
@@ -230,25 +230,24 @@ int generic_buffers_fsync_noflush(struct file *file, loff_t start, loff_t end,
 				  bool datasync);
 int generic_buffers_fsync(struct file *file, loff_t start, loff_t end,
 			  bool datasync);
-void clean_bdev_aliases(struct block_device *bdev, sector_t block,
-			sector_t len);
+void clean_bdev_aliases(struct file *bdev_file, sector_t block, sector_t len);
 static inline void clean_bdev_bh_alias(struct buffer_head *bh)
 {
-	clean_bdev_aliases(bh->b_bdev, bh->b_blocknr, 1);
+	clean_bdev_aliases(bh->b_bdev_file, bh->b_blocknr, 1);
 }
 
 void mark_buffer_async_write(struct buffer_head *bh);
 void __wait_on_buffer(struct buffer_head *);
 wait_queue_head_t *bh_waitq_head(struct buffer_head *bh);
-struct buffer_head *__find_get_block(struct block_device *bdev, sector_t block,
-			unsigned size);
-struct buffer_head *bdev_getblk(struct block_device *bdev, sector_t block,
-		unsigned size, gfp_t gfp);
+struct buffer_head *__find_get_block(struct file *bdev_file, sector_t block,
+				     unsigned int size);
+struct buffer_head *bdev_getblk(struct file *bdev_file, sector_t block,
+				unsigned int size, gfp_t gfp);
 void __brelse(struct buffer_head *);
 void __bforget(struct buffer_head *);
-void __breadahead(struct block_device *, sector_t block, unsigned int size);
-struct buffer_head *__bread_gfp(struct block_device *,
-				sector_t block, unsigned size, gfp_t gfp);
+void __breadahead(struct file *bdev_file, sector_t block, unsigned int size);
+struct buffer_head *__bread_gfp(struct file *bdev_file, sector_t block,
+				unsigned int size, gfp_t gfp);
 struct buffer_head *alloc_buffer_head(gfp_t gfp_flags);
 void free_buffer_head(struct buffer_head * bh);
 void unlock_buffer(struct buffer_head *bh);
@@ -257,8 +256,8 @@ int sync_dirty_buffer(struct buffer_head *bh);
 int __sync_dirty_buffer(struct buffer_head *bh, blk_opf_t op_flags);
 void write_dirty_buffer(struct buffer_head *bh, blk_opf_t op_flags);
 void submit_bh(blk_opf_t, struct buffer_head *);
-void write_boundary_block(struct block_device *bdev,
-			sector_t bblock, unsigned blocksize);
+void write_boundary_block(struct file *bdev_file, sector_t bblock,
+			  unsigned int blocksize);
 int bh_uptodate_or_lock(struct buffer_head *bh);
 int __bh_read(struct buffer_head *bh, blk_opf_t op_flags, bool wait);
 void __bh_read_batch(int nr, struct buffer_head *bhs[],
@@ -336,59 +335,61 @@ static inline void bforget(struct buffer_head *bh)
 static inline struct buffer_head *
 sb_bread(struct super_block *sb, sector_t block)
 {
-	return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE);
+	return __bread_gfp(sb->s_bdev_file, block, sb->s_blocksize,
+			   __GFP_MOVABLE);
 }
 
 static inline struct buffer_head *
 sb_bread_unmovable(struct super_block *sb, sector_t block)
 {
-	return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, 0);
+	return __bread_gfp(sb->s_bdev_file, block, sb->s_blocksize, 0);
 }
 
 static inline void
 sb_breadahead(struct super_block *sb, sector_t block)
 {
-	__breadahead(sb->s_bdev, block, sb->s_blocksize);
+	__breadahead(sb->s_bdev_file, block, sb->s_blocksize);
 }
 
-static inline struct buffer_head *getblk_unmovable(struct block_device *bdev,
-		sector_t block, unsigned size)
+static inline struct buffer_head *getblk_unmovable(struct file *bdev_file,
+						   sector_t block,
+						   unsigned int size)
 {
 	gfp_t gfp;
 
-	gfp = mapping_gfp_constraint(bdev->bd_inode->i_mapping, ~__GFP_FS);
+	gfp = mapping_gfp_constraint(bdev_file->f_mapping, ~__GFP_FS);
 	gfp |= __GFP_NOFAIL;
 
-	return bdev_getblk(bdev, block, size, gfp);
+	return bdev_getblk(bdev_file, block, size, gfp);
 }
 
-static inline struct buffer_head *__getblk(struct block_device *bdev,
-		sector_t block, unsigned size)
+static inline struct buffer_head *__getblk(struct file *bdev_file,
+					   sector_t block, unsigned int size)
 {
 	gfp_t gfp;
 
-	gfp = mapping_gfp_constraint(bdev->bd_inode->i_mapping, ~__GFP_FS);
+	gfp = mapping_gfp_constraint(bdev_file->f_mapping, ~__GFP_FS);
 	gfp |= __GFP_MOVABLE | __GFP_NOFAIL;
 
-	return bdev_getblk(bdev, block, size, gfp);
+	return bdev_getblk(bdev_file, block, size, gfp);
 }
 
 static inline struct buffer_head *sb_getblk(struct super_block *sb,
 		sector_t block)
 {
-	return __getblk(sb->s_bdev, block, sb->s_blocksize);
+	return __getblk(sb->s_bdev_file, block, sb->s_blocksize);
 }
 
 static inline struct buffer_head *sb_getblk_gfp(struct super_block *sb,
 		sector_t block, gfp_t gfp)
 {
-	return bdev_getblk(sb->s_bdev, block, sb->s_blocksize, gfp);
+	return bdev_getblk(sb->s_bdev_file, block, sb->s_blocksize, gfp);
 }
 
 static inline struct buffer_head *
 sb_find_get_block(struct super_block *sb, sector_t block)
 {
-	return __find_get_block(sb->s_bdev, block, sb->s_blocksize);
+	return __find_get_block(sb->s_bdev_file, block, sb->s_blocksize);
 }
 
 static inline void
@@ -456,7 +457,7 @@ static inline void bh_readahead_batch(int nr, struct buffer_head *bhs[],
 
 /**
  *  __bread() - reads a specified block and returns the bh
- *  @bdev: the block_device to read from
+ *  @bdev_file: the opened block_device to read from
  *  @block: number of block
  *  @size: size (in bytes) to read
  *
@@ -465,9 +466,9 @@ static inline void bh_readahead_batch(int nr, struct buffer_head *bhs[],
  *  It returns NULL if the block was unreadable.
  */
 static inline struct buffer_head *
-__bread(struct block_device *bdev, sector_t block, unsigned size)
+__bread(struct file *bdev_file, sector_t block, unsigned int size)
 {
-	return __bread_gfp(bdev, block, size, __GFP_MOVABLE);
+	return __bread_gfp(bdev_file, block, size, __GFP_MOVABLE);
 }
 
 /**

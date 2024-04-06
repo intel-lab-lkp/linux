@@ -92,7 +92,8 @@ static int do_readahead(journal_t *journal, unsigned int start)
 			goto failed;
 		}
 
-		bh = __getblk(journal->j_dev, blocknr, journal->j_blocksize);
+		bh = __getblk(journal->j_dev_file, blocknr,
+			      journal->j_blocksize);
 		if (!bh) {
 			err = -ENOMEM;
 			goto failed;
@@ -148,7 +149,7 @@ static int jread(struct buffer_head **bhp, journal_t *journal,
 		return err;
 	}
 
-	bh = __getblk(journal->j_dev, blocknr, journal->j_blocksize);
+	bh = __getblk(journal->j_dev_file, blocknr, journal->j_blocksize);
 	if (!bh)
 		return -ENOMEM;
 
@@ -370,7 +371,7 @@ int jbd2_journal_skip_recovery(journal_t *journal)
 		journal->j_head = journal->j_first;
 	} else {
 #ifdef CONFIG_JBD2_DEBUG
-		int dropped = info.end_transaction - 
+		int dropped = info.end_transaction -
 			be32_to_cpu(journal->j_superblock->s_sequence);
 		jbd2_debug(1,
 			  "JBD2: ignoring %d transaction%s from the journal.\n",
@@ -672,7 +673,7 @@ static int do_one_pass(journal_t *journal,
 
 					/* Find a buffer for the new
 					 * data being restored */
-					nbh = __getblk(journal->j_fs_dev,
+					nbh = __getblk(journal->j_fs_dev_file,
 							blocknr,
 							journal->j_blocksize);
 					if (nbh == NULL) {

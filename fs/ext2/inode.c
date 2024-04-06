@@ -744,7 +744,7 @@ static int ext2_get_blocks(struct inode *inode,
 		 * We must unmap blocks before zeroing so that writeback cannot
 		 * overwrite zeros with stale data from block device page cache.
 		 */
-		clean_bdev_aliases(inode->i_sb->s_bdev,
+		clean_bdev_aliases(inode->i_sb->s_bdev_file,
 				   le32_to_cpu(chain[depth-1].key),
 				   count);
 		/*
