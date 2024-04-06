@@ -832,6 +832,20 @@ static void bdev_yield_write_access(struct file *bdev_file)
 		bdev->bd_writers--;
 }
 
+static void init_bdev_file(struct file *bdev_file, struct block_device *bdev,
+			   blk_mode_t mode, void *holder)
+{
+	bdev_file->f_flags |= O_LARGEFILE;
+	bdev_file->f_mode |= FMODE_CAN_ODIRECT;
+	if (bdev_nowait(bdev))
+		bdev_file->f_mode |= FMODE_NOWAIT;
+	if (mode & BLK_OPEN_RESTRICT_WRITES)
+		bdev_file->f_mode |= FMODE_WRITE_RESTRICTED;
+	bdev_file->f_mapping = bdev_mapping(bdev);
+	bdev_file->f_wb_err = filemap_sample_wb_err(bdev_file->f_mapping);
+	bdev_file->private_data = holder;
+}
+
 /**
  * bdev_open - open a block device
  * @bdev: block device to open
@@ -905,15 +919,7 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	if (unblock_events)
 		disk_unblock_events(disk);
 
-	bdev_file->f_flags |= O_LARGEFILE;
-	bdev_file->f_mode |= FMODE_CAN_ODIRECT;
-	if (bdev_nowait(bdev))
-		bdev_file->f_mode |= FMODE_NOWAIT;
-	if (mode & BLK_OPEN_RESTRICT_WRITES)
-		bdev_file->f_mode |= FMODE_WRITE_RESTRICTED;
-	bdev_file->f_mapping = bdev_mapping(bdev);
-	bdev_file->f_wb_err = filemap_sample_wb_err(bdev_file->f_mapping);
-	bdev_file->private_data = holder;
+	init_bdev_file(bdev_file, bdev, mode, holder);
 
 	return 0;
 put_module:
