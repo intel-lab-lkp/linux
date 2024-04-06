@@ -97,7 +97,7 @@ struct iomap {
 	u64			length;	/* length of mapping, bytes */
 	u16			type;	/* type of mapping */
 	u16			flags;	/* flags for mapping */
-	struct block_device	*bdev;	/* block device for I/O */
+	struct file		*bdev_file; /* block device for I/O */
 	struct dax_device	*dax_dev; /* dax_dev for dax operations */
 	void			*inline_data;
 	void			*private; /* filesystem private */
@@ -107,13 +107,13 @@ struct iomap {
 
 static inline struct block_device *iomap_bdev(const struct iomap *iomap)
 {
-	return iomap->bdev;
+	return iomap->bdev_file ? file_bdev(iomap->bdev_file) : NULL;
 }
 
 static inline void iomap_set_bdev_file(struct iomap *iomap,
 				       struct file *bdev_file)
 {
-	iomap->bdev = bdev_file ? file_bdev(bdev_file) : NULL;
+	iomap->bdev_file = bdev_file;
 }
 
 static inline sector_t iomap_sector(const struct iomap *iomap, loff_t pos)
