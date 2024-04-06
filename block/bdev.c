@@ -846,6 +846,101 @@ static void init_bdev_file(struct file *bdev_file, struct block_device *bdev,
 	bdev_file->private_data = holder;
 }
 
+/*
+ * If BLK_OPEN_WRITE_IOCTL is set then this is a historical quirk
+ * associated with the floppy driver where it has allowed ioctls if the
+ * file was opened for writing, but does not allow reads or writes.
+ * Make sure that this quirk is reflected in @f_flags.
+ *
+ * It can also happen if a block device is opened as O_RDWR | O_WRONLY.
+ */
+static unsigned blk_to_file_flags(blk_mode_t mode)
+{
+	unsigned int flags = 0;
+
+	if ((mode & (BLK_OPEN_READ | BLK_OPEN_WRITE)) ==
+	    (BLK_OPEN_READ | BLK_OPEN_WRITE))
+		flags |= O_RDWR;
+	else if (mode & BLK_OPEN_WRITE_IOCTL)
+		flags |= O_RDWR | O_WRONLY;
+	else if (mode & BLK_OPEN_WRITE)
+		flags |= O_WRONLY;
+	else if (mode & BLK_OPEN_READ)
+		flags |= O_RDONLY; /* homeopathic, because O_RDONLY is 0 */
+	else
+		WARN_ON_ONCE(true);
+
+	if (mode & BLK_OPEN_NDELAY)
+		flags |= O_NDELAY;
+
+	return flags;
+}
+
+static int __stash_bdev_file(struct block_device *bdev)
+{
+	struct inode *inode = bdev_inode(bdev);
+	unsigned int flags = blk_to_file_flags(BLK_OPEN_READ | BLK_OPEN_WRITE);
+	struct file *file;
+	static struct file_operations stash_fops;
+
+	file = inode->i_private;
+	if (!file) {
+		/*
+		 * This file is used for iomap/buffer_head for raw block_device
+		 * read/write operations to access block_device.
+		 */
+		file = alloc_file_pseudo_noaccount(bdev_inode(bdev),
+				blockdev_mnt, "", flags | O_LARGEFILE,
+				&stash_fops);
+
+		if (IS_ERR(file))
+			return PTR_ERR(file);
+
+		ihold(inode);
+		init_bdev_file(file, bdev, 0, NULL);
+
+		inode->i_private = file;
+		WARN_ON_ONCE(bdev->stash_count != 0);
+	}
+
+	bdev->stash_count++;
+	return 0;
+}
+
+static void __unstash_bdev_file(struct block_device *bdev)
+{
+
+	WARN_ON_ONCE(bdev->stash_count <= 0);
+	if (--bdev->stash_count == 0) {
+		struct inode *inode = bdev_inode(bdev);
+		struct file *file = inode->i_private;
+
+		inode->i_private = NULL;
+		fput(file);
+	}
+}
+
+static int stash_bdev_file(struct block_device *bdev)
+{
+	int ret = __stash_bdev_file(bdev);
+
+	if (ret || !bdev_is_partition(bdev))
+		return ret;
+
+	ret = __stash_bdev_file(bdev_whole(bdev));
+	if (ret)
+		__unstash_bdev_file(bdev);
+
+	return ret;
+}
+
+static void unstash_bdev_file(struct block_device *bdev)
+{
+	__unstash_bdev_file(bdev);
+	if (bdev_is_partition(bdev))
+		__unstash_bdev_file(bdev_whole(bdev));
+}
+
 /**
  * bdev_open - open a block device
  * @bdev: block device to open
@@ -891,12 +986,17 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	ret = -EBUSY;
 	if (!bdev_may_open(bdev, mode))
 		goto put_module;
+
+	ret = stash_bdev_file(bdev);
+	if (ret)
+		goto put_module;
+
 	if (bdev_is_partition(bdev))
 		ret = blkdev_get_part(bdev, mode);
 	else
 		ret = blkdev_get_whole(bdev, mode);
 	if (ret)
-		goto put_module;
+		goto unstash_bdev_file;
 	bdev_claim_write_access(bdev, mode);
 	if (holder) {
 		bd_finish_claiming(bdev, holder, hops);
@@ -922,6 +1022,9 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	init_bdev_file(bdev_file, bdev, mode, holder);
 
 	return 0;
+
+unstash_bdev_file:
+	unstash_bdev_file(bdev);
 put_module:
 	module_put(disk->fops->owner);
 abort_claiming:
@@ -930,36 +1033,6 @@ abort_claiming:
 	mutex_unlock(&disk->open_mutex);
 	disk_unblock_events(disk);
 	return ret;
-}
-
-/*
- * If BLK_OPEN_WRITE_IOCTL is set then this is a historical quirk
- * associated with the floppy driver where it has allowed ioctls if the
- * file was opened for writing, but does not allow reads or writes.
- * Make sure that this quirk is reflected in @f_flags.
- *
- * It can also happen if a block device is opened as O_RDWR | O_WRONLY.
- */
-static unsigned blk_to_file_flags(blk_mode_t mode)
-{
-	unsigned int flags = 0;
-
-	if ((mode & (BLK_OPEN_READ | BLK_OPEN_WRITE)) ==
-	    (BLK_OPEN_READ | BLK_OPEN_WRITE))
-		flags |= O_RDWR;
-	else if (mode & BLK_OPEN_WRITE_IOCTL)
-		flags |= O_RDWR | O_WRONLY;
-	else if (mode & BLK_OPEN_WRITE)
-		flags |= O_WRONLY;
-	else if (mode & BLK_OPEN_READ)
-		flags |= O_RDONLY; /* homeopathic, because O_RDONLY is 0 */
-	else
-		WARN_ON_ONCE(true);
-
-	if (mode & BLK_OPEN_NDELAY)
-		flags |= O_NDELAY;
-
-	return flags;
 }
 
 struct file *bdev_file_open_by_dev(dev_t dev, blk_mode_t mode, void *holder,
@@ -1073,6 +1146,8 @@ void bdev_release(struct file *bdev_file)
 		blkdev_put_part(bdev);
 	else
 		blkdev_put_whole(bdev);
+
+	unstash_bdev_file(bdev);
 	mutex_unlock(&disk->open_mutex);
 
 	module_put(disk->fops->owner);
