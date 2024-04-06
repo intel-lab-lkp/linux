@@ -18,7 +18,6 @@
 #include "blk-rq-qos.h"
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
-#include "blk-throttle.h"
 
 struct queue_sysfs_entry {
 	struct attribute attr;

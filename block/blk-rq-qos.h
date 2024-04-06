@@ -14,6 +14,7 @@
 struct blk_mq_debugfs_attr;
 
 enum rq_qos_id {
+	RQ_QOS_THROTTLE,
 	RQ_QOS_WBT,
 	RQ_QOS_LATENCY,
 	RQ_QOS_COST,
@@ -35,6 +36,7 @@ struct rq_qos {
 };
 
 struct rq_qos_ops {
+	bool (*throttle_bio)(struct rq_qos *, struct bio *);
 	void (*throttle)(struct rq_qos *, struct bio *);
 	void (*track)(struct rq_qos *, struct request *, struct bio *);
 	void (*merge)(struct rq_qos *, struct request *, struct bio *);
@@ -104,6 +106,7 @@ void __rq_qos_cleanup(struct rq_qos *rqos, struct bio *bio);
 void __rq_qos_done(struct rq_qos *rqos, struct request *rq);
 void __rq_qos_issue(struct rq_qos *rqos, struct request *rq);
 void __rq_qos_requeue(struct rq_qos *rqos, struct request *rq);
+bool __rq_qos_throttle_bio(struct rq_qos *rqos, struct bio *bio);
 void __rq_qos_throttle(struct rq_qos *rqos, struct bio *bio);
 void __rq_qos_track(struct rq_qos *rqos, struct request *rq, struct bio *bio);
 void __rq_qos_merge(struct rq_qos *rqos, struct request *rq, struct bio *bio);
@@ -142,6 +145,14 @@ static inline void rq_qos_done_bio(struct bio *bio)
 		if (q->rq_qos)
 			__rq_qos_done_bio(q->rq_qos, bio);
 	}
+}
+
+static inline bool rq_qos_throttle_bio(struct request_queue *q, struct bio *bio)
+{
+	if (q->rq_qos)
+		return __rq_qos_throttle_bio(q->rq_qos, bio);
+
+	return false;
 }
 
 static inline void rq_qos_throttle(struct request_queue *q, struct bio *bio)

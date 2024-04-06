@@ -32,7 +32,6 @@
 #include "blk.h"
 #include "blk-cgroup.h"
 #include "blk-ioprio.h"
-#include "blk-throttle.h"
 
 static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu);
 
@@ -1473,7 +1472,6 @@ err_unlock:
 void blkcg_exit_disk(struct gendisk *disk)
 {
 	blkg_destroy_all(disk);
-	blk_throtl_exit(disk);
 }
 
 static void blkcg_exit(struct task_struct *tsk)

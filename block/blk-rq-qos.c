@@ -59,6 +59,19 @@ void __rq_qos_requeue(struct rq_qos *rqos, struct request *rq)
 	} while (rqos);
 }
 
+bool __rq_qos_throttle_bio(struct rq_qos *rqos, struct bio *bio)
+{
+	do {
+		if (rqos->ops->throttle_bio &&
+		    rqos->ops->throttle_bio(rqos, bio))
+			return true;
+
+		rqos = rqos->next;
+	} while (rqos);
+
+	return false;
+}
+
 void __rq_qos_throttle(struct rq_qos *rqos, struct bio *bio)
 {
 	do {

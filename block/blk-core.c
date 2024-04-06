@@ -48,7 +48,7 @@
 #include "blk-mq-sched.h"
 #include "blk-pm.h"
 #include "blk-cgroup.h"
-#include "blk-throttle.h"
+#include "blk-rq-qos.h"
 #include "blk-ioprio.h"
 
 struct dentry *blk_debugfs_root;
@@ -832,7 +832,7 @@ void submit_bio_noacct(struct bio *bio)
 		goto not_supported;
 	}
 
-	if (blk_throtl_bio(bio))
+	if (rq_qos_throttle_bio(q, bio))
 		return;
 	submit_bio_noacct_nocheck(bio);
 	return;

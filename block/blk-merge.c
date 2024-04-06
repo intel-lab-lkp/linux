@@ -14,9 +14,9 @@
 #include <trace/events/block.h>
 
 #include "blk.h"
+#include "blk-cgroup.h"
 #include "blk-mq-sched.h"
 #include "blk-rq-qos.h"
-#include "blk-throttle.h"
 
 static inline void bio_get_first_bvec(struct bio *bio, struct bio_vec *bv)
 {
