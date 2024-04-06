@@ -17,6 +17,7 @@
 #include <linux/sysfs.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/intel_tcc.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
@@ -404,6 +405,8 @@ static ssize_t show_temp(struct device *dev,
 	tjmax = get_tjmax(tdata, dev);
 	/* Check whether the time interval has elapsed */
 	if (time_after(jiffies, tdata->last_updated + HZ)) {
+		u32 mask = intel_tcc_get_temp_mask(is_pkg_temp_data(tdata));
+
 		rdmsr_on_cpu(tdata->cpu, tdata->status_reg, &eax, &edx);
 		/*
 		 * Ignore the valid bit. In all observed cases the register
@@ -411,7 +414,7 @@ static ssize_t show_temp(struct device *dev,
 		 * Return it instead of reporting an error which doesn't
 		 * really help at all.
 		 */
-		tdata->temp = tjmax - ((eax >> 16) & 0x7f) * 1000;
+		tdata->temp = tjmax - ((eax >> 16) & mask) * 1000;
 		tdata->last_updated = jiffies;
 	}
 
@@ -838,4 +841,5 @@ module_exit(coretemp_exit)
 
 MODULE_AUTHOR("Rudolf Marek <r.marek@assembler.cz>");
 MODULE_DESCRIPTION("Intel Core temperature monitor");
+MODULE_IMPORT_NS(INTEL_TCC);
 MODULE_LICENSE("GPL");
