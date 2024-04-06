@@ -378,6 +378,7 @@ enum {
 struct erofs_map_dev {
 	struct erofs_fscache *m_fscache;
 	struct block_device *m_bdev;
+	struct file *m_bdev_file;
 	struct dax_device *m_daxdev;
 	u64 m_dax_part_off;
 

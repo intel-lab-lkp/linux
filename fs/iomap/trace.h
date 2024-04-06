@@ -134,7 +134,8 @@ DECLARE_EVENT_CLASS(iomap_class,
 		__entry->length = iomap->length;
 		__entry->type = iomap->type;
 		__entry->flags = iomap->flags;
-		__entry->bdev = iomap->bdev ? iomap->bdev->bd_dev : 0;
+		__entry->bdev = iomap_bdev(iomap) ?
+				iomap_bdev(iomap)->bd_dev : 0;
 	),
 	TP_printk("dev %d:%d ino 0x%llx bdev %d:%d addr 0x%llx offset 0x%llx "
 		  "length 0x%llx type %s flags %s",
@@ -181,7 +182,8 @@ TRACE_EVENT(iomap_writepage_map,
 		__entry->length = iomap->length;
 		__entry->type = iomap->type;
 		__entry->flags = iomap->flags;
-		__entry->bdev = iomap->bdev ? iomap->bdev->bd_dev : 0;
+		__entry->bdev = iomap_bdev(iomap) ?
+				iomap_bdev(iomap)->bd_dev : 0;
 	),
 	TP_printk("dev %d:%d ino 0x%llx bdev %d:%d pos 0x%llx dirty len 0x%llx "
 		  "addr 0x%llx offset 0x%llx length 0x%llx type %s flags %s",

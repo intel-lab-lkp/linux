@@ -129,7 +129,7 @@ xfs_bmbt_to_iomap(
 	if (mapping_flags & IOMAP_DAX)
 		iomap->dax_dev = target->bt_daxdev;
 	else
-		iomap->bdev = target->bt_bdev;
+		iomap_set_bdev_file(iomap, target->bt_bdev_file);
 	iomap->flags = iomap_flags;
 
 	if (xfs_ipincount(ip) &&
@@ -154,7 +154,7 @@ xfs_hole_to_iomap(
 	iomap->type = IOMAP_HOLE;
 	iomap->offset = XFS_FSB_TO_B(ip->i_mount, offset_fsb);
 	iomap->length = XFS_FSB_TO_B(ip->i_mount, end_fsb - offset_fsb);
-	iomap->bdev = target->bt_bdev;
+	iomap_set_bdev_file(iomap, target->bt_bdev_file);
 	iomap->dax_dev = target->bt_daxdev;
 }
 

@@ -105,6 +105,17 @@ struct iomap {
 	u64			validity_cookie; /* used with .iomap_valid() */
 };
 
+static inline struct block_device *iomap_bdev(const struct iomap *iomap)
+{
+	return iomap->bdev;
+}
+
+static inline void iomap_set_bdev_file(struct iomap *iomap,
+				       struct file *bdev_file)
+{
+	iomap->bdev = bdev_file ? file_bdev(bdev_file) : NULL;
+}
+
 static inline sector_t iomap_sector(const struct iomap *iomap, loff_t pos)
 {
 	return (iomap->addr + pos - iomap->offset) >> SECTOR_SHIFT;

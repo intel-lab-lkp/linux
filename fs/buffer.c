@@ -2005,7 +2005,7 @@ iomap_to_bh(struct inode *inode, sector_t block, struct buffer_head *bh,
 {
 	loff_t offset = (loff_t)block << inode->i_blkbits;
 
-	bh->b_bdev = iomap->bdev;
+	bh->b_bdev = iomap_bdev(iomap);
 
 	/*
 	 * Block points to offset in file we need to map, iomap contains

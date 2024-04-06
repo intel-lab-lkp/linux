@@ -699,6 +699,7 @@ struct extent_tree_info {
 
 struct f2fs_map_blocks {
 	struct block_device *m_bdev;	/* for multi-device dio */
+	struct file *m_bdev_file;	/* for multi-device dio */
 	block_t m_pblk;
 	block_t m_lblk;
 	unsigned int m_len;

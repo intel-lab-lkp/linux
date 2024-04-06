@@ -842,7 +842,7 @@ static int ext2_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	if (flags & IOMAP_DAX)
 		iomap->dax_dev = sbi->s_daxdev;
 	else
-		iomap->bdev = inode->i_sb->s_bdev;
+		iomap_set_bdev_file(iomap, inode->i_sb->s_bdev_file);
 
 	if (ret == 0) {
 		/*

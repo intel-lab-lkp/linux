@@ -1499,10 +1499,12 @@ static bool f2fs_map_blocks_cached(struct inode *inode,
 		struct f2fs_dev_info *dev = &sbi->devs[bidx];
 
 		map->m_bdev = dev->bdev;
+		map->m_bdev_file = dev->bdev_file;
 		map->m_pblk -= dev->start_blk;
 		map->m_len = min(map->m_len, dev->end_blk + 1 - map->m_pblk);
 	} else {
 		map->m_bdev = inode->i_sb->s_bdev;
+		map->m_bdev_file = inode->i_sb->s_bdev_file;
 	}
 	return true;
 }
@@ -1534,6 +1536,7 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map, int flag)
 		goto out;
 
 	map->m_bdev = inode->i_sb->s_bdev;
+	map->m_bdev_file = inode->i_sb->s_bdev_file;
 	map->m_multidev_dio =
 		f2fs_allow_multi_device_dio(F2FS_I_SB(inode), flag);
 
@@ -1651,8 +1654,10 @@ next_block:
 		map->m_pblk = blkaddr;
 		map->m_len = 1;
 
-		if (map->m_multidev_dio)
+		if (map->m_multidev_dio) {
 			map->m_bdev = FDEV(bidx).bdev;
+			map->m_bdev_file = FDEV(bidx).bdev_file;
+		}
 	} else if ((map->m_pblk != NEW_ADDR &&
 			blkaddr == (map->m_pblk + ofs)) ||
 			(map->m_pblk == NEW_ADDR && blkaddr == NEW_ADDR) ||
@@ -1725,6 +1730,7 @@ sync_out:
 			bidx = f2fs_target_device_index(sbi, map->m_pblk);
 
 			map->m_bdev = FDEV(bidx).bdev;
+			map->m_bdev_file = FDEV(bidx).bdev_file;
 			map->m_pblk -= FDEV(bidx).start_blk;
 
 			if (map->m_may_create)
@@ -4189,7 +4195,7 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		iomap->length = blks_to_bytes(inode, map.m_len);
 		iomap->type = IOMAP_MAPPED;
 		iomap->flags |= IOMAP_F_MERGED;
-		iomap->bdev = map.m_bdev;
+		iomap_set_bdev_file(iomap, map.m_bdev_file);
 		iomap->addr = blks_to_bytes(inode, map.m_pblk);
 	} else {
 		if (flags & IOMAP_WRITE)
