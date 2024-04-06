@@ -2289,7 +2289,7 @@ static int check_dev_super(struct btrfs_device *dev)
 		return 0;
 
 	/* Only need to check the primary super block. */
-	sb = btrfs_read_dev_one_super(dev->bdev, 0, true);
+	sb = btrfs_read_dev_one_super(dev->bdev_file, 0, true);
 	if (IS_ERR(sb))
 		return PTR_ERR(sb);
 

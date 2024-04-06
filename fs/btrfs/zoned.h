@@ -61,7 +61,7 @@ void btrfs_destroy_dev_zone_info(struct btrfs_device *device);
 struct btrfs_zoned_device_info *btrfs_clone_dev_zone_info(struct btrfs_device *orig_dev);
 int btrfs_check_zoned_mode(struct btrfs_fs_info *fs_info);
 int btrfs_check_mountopts_zoned(struct btrfs_fs_info *info, unsigned long *mount_opt);
-int btrfs_sb_log_location_bdev(struct block_device *bdev, int mirror, int rw,
+int btrfs_sb_log_location_bdev(struct file *bdev_file, int mirror, int rw,
 			       u64 *bytenr_ret);
 int btrfs_sb_log_location(struct btrfs_device *device, int mirror, int rw,
 			  u64 *bytenr_ret);
@@ -142,7 +142,7 @@ static inline int btrfs_check_mountopts_zoned(struct btrfs_fs_info *info,
 	return 0;
 }
 
-static inline int btrfs_sb_log_location_bdev(struct block_device *bdev,
+static inline int btrfs_sb_log_location_bdev(struct file *bdev_file,
 					     int mirror, int rw, u64 *bytenr_ret)
 {
 	*bytenr_ret = btrfs_sb_offset(mirror);

@@ -81,7 +81,7 @@ static int copy_zone_info_cb(struct blk_zone *zone, unsigned int idx, void *data
 	return 0;
 }
 
-static int sb_write_pointer(struct block_device *bdev, struct blk_zone *zones,
+static int sb_write_pointer(struct file *bdev_file, struct blk_zone *zones,
 			    u64 *wp_ret)
 {
 	bool empty[BTRFS_NR_SB_LOG_ZONES];
@@ -118,7 +118,7 @@ static int sb_write_pointer(struct block_device *bdev, struct blk_zone *zones,
 		return -ENOENT;
 	} else if (full[0] && full[1]) {
 		/* Compare two super blocks */
-		struct address_space *mapping = bdev->bd_inode->i_mapping;
+		struct address_space *mapping = bdev_file->f_mapping;
 		struct page *page[BTRFS_NR_SB_LOG_ZONES];
 		struct btrfs_super_block *super[BTRFS_NR_SB_LOG_ZONES];
 		int i;
@@ -562,7 +562,7 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 		    BLK_ZONE_TYPE_CONVENTIONAL)
 			continue;
 
-		ret = sb_write_pointer(device->bdev,
+		ret = sb_write_pointer(device->bdev_file,
 				       &zone_info->sb_zones[sb_pos], &sb_wp);
 		if (ret != -ENOENT && ret) {
 			btrfs_err_in_rcu(device->fs_info,
@@ -798,7 +798,7 @@ int btrfs_check_mountopts_zoned(struct btrfs_fs_info *info, unsigned long *mount
 	return 0;
 }
 
-static int sb_log_location(struct block_device *bdev, struct blk_zone *zones,
+static int sb_log_location(struct file *bdev_file, struct blk_zone *zones,
 			   int rw, u64 *bytenr_ret)
 {
 	u64 wp;
@@ -809,7 +809,7 @@ static int sb_log_location(struct block_device *bdev, struct blk_zone *zones,
 		return 0;
 	}
 
-	ret = sb_write_pointer(bdev, zones, &wp);
+	ret = sb_write_pointer(bdev_file, zones, &wp);
 	if (ret != -ENOENT && ret < 0)
 		return ret;
 
@@ -827,7 +827,8 @@ static int sb_log_location(struct block_device *bdev, struct blk_zone *zones,
 			ASSERT(sb_zone_is_full(reset));
 
 			nofs_flags = memalloc_nofs_save();
-			ret = blkdev_zone_mgmt(bdev, REQ_OP_ZONE_RESET,
+			ret = blkdev_zone_mgmt(file_bdev(bdev_file),
+					       REQ_OP_ZONE_RESET,
 					       reset->start, reset->len);
 			memalloc_nofs_restore(nofs_flags);
 			if (ret)
@@ -859,10 +860,11 @@ static int sb_log_location(struct block_device *bdev, struct blk_zone *zones,
 
 }
 
-int btrfs_sb_log_location_bdev(struct block_device *bdev, int mirror, int rw,
+int btrfs_sb_log_location_bdev(struct file *bdev_file, int mirror, int rw,
 			       u64 *bytenr_ret)
 {
 	struct blk_zone zones[BTRFS_NR_SB_LOG_ZONES];
+	struct block_device *bdev = file_bdev(bdev_file);
 	sector_t zone_sectors;
 	u32 sb_zone;
 	int ret;
@@ -896,7 +898,7 @@ int btrfs_sb_log_location_bdev(struct block_device *bdev, int mirror, int rw,
 	if (ret != BTRFS_NR_SB_LOG_ZONES)
 		return -EIO;
 
-	return sb_log_location(bdev, zones, rw, bytenr_ret);
+	return sb_log_location(bdev_file, zones, rw, bytenr_ret);
 }
 
 int btrfs_sb_log_location(struct btrfs_device *device, int mirror, int rw,
@@ -920,7 +922,7 @@ int btrfs_sb_log_location(struct btrfs_device *device, int mirror, int rw,
 	if (zone_num + 1 >= zinfo->nr_zones)
 		return -ENOENT;
 
-	return sb_log_location(device->bdev,
+	return sb_log_location(device->bdev_file,
 			       &zinfo->sb_zones[BTRFS_NR_SB_LOG_ZONES * mirror],
 			       rw, bytenr_ret);
 }
