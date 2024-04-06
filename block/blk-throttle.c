@@ -28,6 +28,7 @@
 
 /* A workqueue to queue throttle related work */
 static struct workqueue_struct *kthrotld_workqueue;
+static DECLARE_WAIT_QUEUE_HEAD(destroy_wait);
 
 #define rb_entry_tg(node)	rb_entry((node), struct throtl_grp, rb_node)
 
@@ -906,6 +907,11 @@ static void start_parent_slice_with_credit(struct throtl_grp *child_tg,
 
 }
 
+static bool td_has_io(struct throtl_data *td)
+{
+	return td->nr_queued[READ] + td->nr_queued[WRITE] != 0;
+}
+
 static void tg_dispatch_one_bio(struct throtl_grp *tg, bool rw)
 {
 	struct throtl_service_queue *sq = &tg->service_queue;
@@ -941,6 +947,8 @@ static void tg_dispatch_one_bio(struct throtl_grp *tg, bool rw)
 				     &parent_sq->queued[rw]);
 		BUG_ON(tg->td->nr_queued[rw] <= 0);
 		tg->td->nr_queued[rw]--;
+		if (!td_has_io(tg->td))
+			wake_up(&destroy_wait);
 	}
 
 	throtl_trim_slice(tg, rw);
@@ -1268,6 +1276,31 @@ out:
 	return ret;
 }
 
+void blk_throtl_exit(struct gendisk *disk)
+{
+	struct request_queue *q = disk->queue;
+
+	if (!q->td)
+		return;
+
+	del_timer_sync(&q->td->service_queue.pending_timer);
+	cancel_work_sync(&q->td->dispatch_work);
+	blkcg_deactivate_policy(disk, &blkcg_policy_throtl);
+	kfree(q->td);
+	q->td = NULL;
+}
+
+static void blk_throtl_destroy(struct gendisk *disk)
+{
+	struct throtl_data *td = disk->queue->td;
+
+	/*
+	 * There are no rules, all throttled BIO should be dispatched
+	 * immediately.
+	 */
+	wait_event(destroy_wait, !td_has_io(td));
+	blk_throtl_exit(disk);
+}
 
 static ssize_t tg_set_conf(struct kernfs_open_file *of,
 			   char *buf, size_t nbytes, loff_t off, bool is_u64)
@@ -1308,7 +1341,11 @@ static ssize_t tg_set_conf(struct kernfs_open_file *of,
 	else
 		*(unsigned int *)((void *)tg + of_cft(of)->private) = v;
 
-	tg_conf_updated(tg, false);
+	blkg_conf_exit_blkg(&ctx);
+
+	if (!tg_conf_updated(tg, false))
+		blk_throtl_destroy(ctx.bdev->bd_disk);
+
 	ret = 0;
 out_finish:
 	blkg_conf_exit(&ctx);
@@ -1516,7 +1553,11 @@ static ssize_t tg_set_limit(struct kernfs_open_file *of,
 	tg->iops[READ] = v[2];
 	tg->iops[WRITE] = v[3];
 
-	tg_conf_updated(tg, false);
+	blkg_conf_exit_blkg(&ctx);
+
+	if (!tg_conf_updated(tg, false))
+		blk_throtl_destroy(ctx.bdev->bd_disk);
+
 	ret = 0;
 out_finish:
 	blkg_conf_exit(&ctx);
@@ -1532,13 +1573,6 @@ static struct cftype throtl_files[] = {
 	},
 	{ }	/* terminate */
 };
-
-static void throtl_shutdown_wq(struct request_queue *q)
-{
-	struct throtl_data *td = q->td;
-
-	cancel_work_sync(&td->dispatch_work);
-}
 
 struct blkcg_policy blkcg_policy_throtl = {
 	.dfl_cftypes		= throtl_files,
@@ -1686,19 +1720,6 @@ out_unlock:
 
 	rcu_read_unlock();
 	return throttled;
-}
-
-void blk_throtl_exit(struct gendisk *disk)
-{
-	struct request_queue *q = disk->queue;
-
-	if (!q->td)
-		return;
-
-	del_timer_sync(&q->td->service_queue.pending_timer);
-	throtl_shutdown_wq(q);
-	blkcg_deactivate_policy(disk, &blkcg_policy_throtl);
-	kfree(q->td);
 }
 
 static int __init throtl_init(void)
