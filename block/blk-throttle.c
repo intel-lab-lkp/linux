@@ -320,9 +320,10 @@ static void throtl_pd_init(struct blkg_policy_data *pd)
  * This doesn't require walking up to the top of the hierarchy as the
  * parent's has_rules[] is guaranteed to be correct.
  */
-static void tg_update_has_rules(struct throtl_grp *tg)
+static bool tg_update_has_rules(struct throtl_grp *tg)
 {
 	struct throtl_grp *parent_tg = sq_to_tg(tg->service_queue.parent_sq);
+	bool has_rules = false;
 	int rw;
 
 	for (rw = READ; rw <= WRITE; rw++) {
@@ -332,7 +333,11 @@ static void tg_update_has_rules(struct throtl_grp *tg)
 		tg->has_rules_bps[rw] =
 			(parent_tg && parent_tg->has_rules_bps[rw]) ||
 			tg_bps_limit(tg, rw) != U64_MAX;
+		if (tg->has_rules_iops[rw] || tg->has_rules_bps[rw])
+			has_rules = true;
 	}
+
+	return has_rules;
 }
 
 static void throtl_pd_online(struct blkg_policy_data *pd)
@@ -1163,11 +1168,12 @@ static int tg_print_conf_uint(struct seq_file *sf, void *v)
 	return 0;
 }
 
-static void tg_conf_updated(struct throtl_grp *tg, bool global)
+static bool tg_conf_updated(struct throtl_grp *tg, bool global)
 {
 	struct throtl_service_queue *sq = &tg->service_queue;
 	struct cgroup_subsys_state *pos_css;
 	struct blkcg_gq *blkg;
+	bool has_rules = false;
 
 	throtl_log(&tg->service_queue,
 		   "limit change rbps=%llu wbps=%llu riops=%u wiops=%u",
@@ -1187,7 +1193,8 @@ static void tg_conf_updated(struct throtl_grp *tg, bool global)
 		struct throtl_grp *this_tg = blkg_to_tg(blkg);
 		struct throtl_grp *parent_tg;
 
-		tg_update_has_rules(this_tg);
+		if (tg_update_has_rules(this_tg))
+			has_rules = true;
 		/* ignore root/second level */
 		if (!cgroup_subsys_on_dfl(io_cgrp_subsys) || !blkg->parent ||
 		    !blkg->parent->parent)
@@ -1211,6 +1218,8 @@ static void tg_conf_updated(struct throtl_grp *tg, bool global)
 		tg_update_disptime(tg);
 		throtl_schedule_next_dispatch(sq->parent_sq, true);
 	}
+
+	return has_rules;
 }
 
 static int blk_throtl_init(struct gendisk *disk)
