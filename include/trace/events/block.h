@@ -26,7 +26,7 @@ DECLARE_EVENT_CLASS(block_buffer,
 	),
 
 	TP_fast_assign(
-		__entry->dev		= bh->b_bdev->bd_dev;
+		__entry->dev		= bh_bdev(bh)->bd_dev;
 		__entry->sector		= bh->b_blocknr;
 		__entry->size		= bh->b_size;
 	),

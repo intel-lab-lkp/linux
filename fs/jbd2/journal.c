@@ -434,7 +434,7 @@ repeat:
 
 	folio_set_bh(new_bh, new_folio, new_offset);
 	new_bh->b_size = bh_in->b_size;
-	new_bh->b_bdev = journal->j_dev;
+	bh_set_bdev_file(new_bh, journal->j_dev_file);
 	new_bh->b_blocknr = blocknr;
 	new_bh->b_private = bh_in;
 	set_buffer_mapped(new_bh);

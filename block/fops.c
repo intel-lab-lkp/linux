@@ -407,7 +407,7 @@ static const struct iomap_ops blkdev_iomap_ops = {
 static int blkdev_get_block(struct inode *inode, sector_t iblock,
 		struct buffer_head *bh, int create)
 {
-	bh->b_bdev = I_BDEV(inode);
+	bh_set_bdev_file(bh, inode->i_private);
 	bh->b_blocknr = iblock;
 	set_buffer_mapped(bh);
 	return 0;

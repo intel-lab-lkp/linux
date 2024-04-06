@@ -384,7 +384,7 @@ skip:
 
 	BUILD_BUG_ON(sizeof(mmp->mmp_bdevname) < BDEVNAME_SIZE);
 	snprintf(mmp->mmp_bdevname, sizeof(mmp->mmp_bdevname),
-		 "%pg", bh->b_bdev);
+		 "%pg", bh_bdev(bh));
 
 	/*
 	 * Start a kernel thread to update the MMP block periodically.

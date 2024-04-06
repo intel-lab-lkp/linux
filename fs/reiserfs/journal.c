@@ -618,7 +618,7 @@ static void reiserfs_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 	if (buffer_journaled(bh)) {
 		reiserfs_warning(NULL, "clm-2084",
 				 "pinned buffer %lu:%pg sent to disk",
-				 bh->b_blocknr, bh->b_bdev);
+				 bh->b_blocknr, bh_bdev(bh));
 	}
 	if (uptodate)
 		set_buffer_uptodate(bh);

@@ -10,6 +10,7 @@
 
 #include <linux/types.h>
 #include <linux/blk_types.h>
+#include <linux/blkdev.h>
 #include <linux/fs.h>
 #include <linux/linkage.h>
 #include <linux/pagemap.h>
@@ -135,6 +136,23 @@ BUFFER_FNS(Unwritten, unwritten)
 BUFFER_FNS(Meta, meta)
 BUFFER_FNS(Prio, prio)
 BUFFER_FNS(Defer_Completion, defer_completion)
+
+static __always_inline void bh_set_bdev_file(struct buffer_head *bh,
+					     struct file *bdev_file)
+{
+	bh->b_bdev = bdev_file ? file_bdev(bdev_file) : NULL;
+}
+
+static __always_inline void bh_copy_bdev_file(struct buffer_head *dbh,
+					      struct buffer_head *sbh)
+{
+	dbh->b_bdev = sbh->b_bdev;
+}
+
+static __always_inline struct block_device *bh_bdev(struct buffer_head *bh)
+{
+	return bh->b_bdev;
+}
 
 static __always_inline void set_buffer_uptodate(struct buffer_head *bh)
 {
@@ -377,7 +395,7 @@ static inline void
 map_bh(struct buffer_head *bh, struct super_block *sb, sector_t block)
 {
 	set_buffer_mapped(bh);
-	bh->b_bdev = sb->s_bdev;
+	bh_set_bdev_file(bh, sb->s_bdev_file);
 	bh->b_blocknr = block;
 	bh->b_size = sb->s_blocksize;
 }

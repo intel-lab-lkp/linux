@@ -80,7 +80,7 @@
 	} while (0)
 # define ea_bdebug(bh, f...) do { \
 		printk(KERN_DEBUG "block %pg:%lu: ", \
-			bh->b_bdev, (unsigned long) bh->b_blocknr); \
+			bh_bdev(bh), (unsigned long) bh->b_blocknr); \
 		printk(f); \
 		printk("\n"); \
 	} while (0)

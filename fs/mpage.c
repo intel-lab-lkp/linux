@@ -126,7 +126,7 @@ static void map_buffer_to_folio(struct folio *folio, struct buffer_head *bh,
 	do {
 		if (block == page_block) {
 			page_bh->b_state = bh->b_state;
-			page_bh->b_bdev = bh->b_bdev;
+			bh_copy_bdev_file(page_bh, bh);
 			page_bh->b_blocknr = bh->b_blocknr;
 			break;
 		}
@@ -216,7 +216,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			page_block++;
 			block_in_file++;
 		}
-		bdev = map_bh->b_bdev;
+		bdev = bh_bdev(map_bh);
 	}
 
 	/*
@@ -272,7 +272,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			page_block++;
 			block_in_file++;
 		}
-		bdev = map_bh->b_bdev;
+		bdev = bh_bdev(map_bh);
 	}
 
 	if (first_hole != blocks_per_page) {
@@ -515,7 +515,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 				boundary_block = bh->b_blocknr;
 				boundary_bdev = bh->b_bdev;
 			}
-			bdev = bh->b_bdev;
+			bdev = bh_bdev(bh);
 		} while ((bh = bh->b_this_page) != head);
 
 		if (first_unmapped)
@@ -565,7 +565,7 @@ static int __mpage_writepage(struct folio *folio, struct writeback_control *wbc,
 		}
 		page_block++;
 		boundary = buffer_boundary(&map_bh);
-		bdev = map_bh.b_bdev;
+		bdev = bh_bdev(&map_bh);
 		if (block_in_file == last_block)
 			break;
 		block_in_file++;

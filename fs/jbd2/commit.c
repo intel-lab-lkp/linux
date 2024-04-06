@@ -1014,7 +1014,7 @@ restart_loop:
 				clear_buffer_mapped(bh);
 				clear_buffer_new(bh);
 				clear_buffer_req(bh);
-				bh->b_bdev = NULL;
+				bh_set_bdev_file(bh, NULL);
 			}
 		}
 

@@ -129,7 +129,7 @@ static void buffer_io_error(struct buffer_head *bh, char *msg)
 	if (!test_bit(BH_Quiet, &bh->b_state))
 		printk_ratelimited(KERN_ERR
 			"Buffer I/O error on dev %pg, logical block %llu%s\n",
-			bh->b_bdev, (unsigned long long)bh->b_blocknr, msg);
+			bh_bdev(bh), (unsigned long long)bh->b_blocknr, msg);
 }
 
 /*
@@ -1367,7 +1367,7 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 	for (i = 0; i < BH_LRU_SIZE; i++) {
 		struct buffer_head *bh = __this_cpu_read(bh_lrus.bhs[i]);
 
-		if (bh && bh->b_blocknr == block && bh->b_bdev == bdev &&
+		if (bh && bh->b_blocknr == block && bh_bdev(bh) == bdev &&
 		    bh->b_size == size) {
 			if (i) {
 				while (i) {
@@ -1564,7 +1564,7 @@ static void discard_buffer(struct buffer_head * bh)
 
 	lock_buffer(bh);
 	clear_buffer_dirty(bh);
-	bh->b_bdev = NULL;
+	bh_set_bdev_file(bh, NULL);
 	b_state = READ_ONCE(bh->b_state);
 	do {
 	} while (!try_cmpxchg(&bh->b_state, &b_state,
@@ -2005,7 +2005,7 @@ iomap_to_bh(struct inode *inode, sector_t block, struct buffer_head *bh,
 {
 	loff_t offset = (loff_t)block << inode->i_blkbits;
 
-	bh->b_bdev = iomap_bdev(iomap);
+	bh_set_bdev_file(bh, iomap->bdev_file);
 
 	/*
 	 * Block points to offset in file we need to map, iomap contains
@@ -2781,7 +2781,7 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 	if (buffer_prio(bh))
 		opf |= REQ_PRIO;
 
-	bio = bio_alloc(bh->b_bdev, 1, opf, GFP_NOIO);
+	bio = bio_alloc(bh_bdev(bh), 1, opf, GFP_NOIO);
 
 	fscrypt_set_bio_crypt_ctx_bh(bio, bh, GFP_NOIO);
 
