@@ -97,9 +97,11 @@ static __always_inline bool pcpu_rcu_preempt_count_dec_and_test(void)
 			       __percpu_arg([var]));
 }
 
+extern asmlinkage void rcu_read_unlock_special_thunk(void);
+
 #define pcpu_rcu_read_unlock_special()						\
 do {										\
-	rcu_read_unlock_special();						\
+	asm volatile ("call rcu_read_unlock_special_thunk" : ASM_CALL_CONSTRAINT);\
 } while (0)
 
 #endif // #ifdef CONFIG_PCPU_RCU_PREEMPT_COUNT
