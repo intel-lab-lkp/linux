@@ -1434,7 +1434,7 @@ static void dotest(void (*testcase_fn)(void), int expected, int lockclass_mask)
 #ifdef CONFIG_SMP
 	int saved_mgd_count = current->migration_disabled;
 #endif
-	int saved_rcu_count = current->rcu_read_lock_nesting;
+	int saved_rcu_count = rcu_preempt_depth();
 #endif
 
 	WARN_ON(irqs_disabled());
@@ -1476,9 +1476,9 @@ static void dotest(void (*testcase_fn)(void), int expected, int lockclass_mask)
 		migrate_enable();
 #endif
 
-	while (current->rcu_read_lock_nesting > saved_rcu_count)
+	while (rcu_preempt_depth() > saved_rcu_count)
 		rcu_read_unlock();
-	WARN_ON_ONCE(current->rcu_read_lock_nesting < saved_rcu_count);
+	WARN_ON_ONCE(rcu_preempt_depth() < saved_rcu_count);
 #endif
 
 #ifdef CONFIG_TRACE_IRQFLAGS
