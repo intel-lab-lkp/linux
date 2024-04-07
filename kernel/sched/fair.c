@@ -3200,7 +3200,16 @@ enqueue_throttle:
 	hrtick_update(rq);
 }
 
-static void set_next_buddy(struct sched_entity *se);
+static void set_next_pick(struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		if (SCHED_WARN_ON(!se->on_rq))
+			return;
+		if (se_is_idle(se))
+			return;
+		cfs_rq_of(se)->next = se;
+	}
+}
 
 /*
  * The dequeue_task method is called before nr_running is
@@ -3240,7 +3249,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			 * p is sleeping when it is within its sched_slice.
 			 */
 			if (task_sleep && se && !throttled_hierarchy(cfs_rq))
-				set_next_buddy(se);
+				set_next_pick(se);
 			break;
 		}
 		flags |= DEQUEUE_SLEEP;
@@ -4631,17 +4640,6 @@ balance_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 static inline void set_task_max_allowed_capacity(struct task_struct *p) {}
 #endif /* CONFIG_SMP */
 
-static void set_next_buddy(struct sched_entity *se)
-{
-	for_each_sched_entity(se) {
-		if (SCHED_WARN_ON(!se->on_rq))
-			return;
-		if (se_is_idle(se))
-			return;
-		cfs_rq_of(se)->next = se;
-	}
-}
-
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -4769,7 +4767,7 @@ again:
 		goto simple;
 
 	/*
-	 * Because of the set_next_buddy() in dequeue_task_fair() it is rather
+	 * Because of the set_next_pick() in dequeue_task_fair() it is rather
 	 * likely that a next task is from the same cgroup as the current.
 	 *
 	 * Therefore attempt to avoid putting and setting the entire cgroup
@@ -4957,7 +4955,7 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 		return false;
 
 	/* Tell the scheduler that we'd really like se to run next. */
-	set_next_buddy(se);
+	set_next_pick(se);
 
 	yield_task_fair(rq);
 
