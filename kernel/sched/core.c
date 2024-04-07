@@ -8337,6 +8337,7 @@ void __init sched_init(void)
 	balance_push_set(smp_processor_id(), false);
 #endif
 	init_sched_fair_class();
+	init_sched_fair_class_balance();
 
 	psi_init();
 

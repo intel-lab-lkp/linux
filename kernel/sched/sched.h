@@ -2502,6 +2502,7 @@ extern void update_max_interval(void);
 extern void init_sched_dl_class(void);
 extern void init_sched_rt_class(void);
 extern void init_sched_fair_class(void);
+extern void init_sched_fair_class_balance(void);
 
 extern void reweight_task(struct task_struct *p, int prio);
 
@@ -3088,6 +3089,11 @@ static inline unsigned long cpu_util_rt(struct rq *rq)
 {
 	return READ_ONCE(rq->avg_rt.util_avg);
 }
+
+extern unsigned long cpu_load_without(struct rq *rq, struct task_struct *p);
+extern unsigned long cpu_runnable_without(struct rq *rq, struct task_struct *p);
+extern unsigned long cpu_util_without(int cpu, struct task_struct *p);
+
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -3592,6 +3598,256 @@ static inline void balance_callbacks(struct rq *rq, struct balance_callback *hea
 {
 }
 
+#endif
+
+#ifdef CONFIG_SMP
+int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf);
+extern struct sched_group *
+sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int this_cpu);
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+extern unsigned long task_h_load(struct task_struct *p);
+#else
+static unsigned long task_h_load(struct task_struct *p)
+{
+	return p->se.avg.load_avg;
+}
+#endif
+
+#else /* !CONFIG_SMP: */
+static inline int sched_balance_newidle(struct rq *rq, struct rq_flags *rf)
+{
+	return 0;
+}
+#endif /* !CONFIG_SMP */
+
+extern __latent_entropy void sched_balance_softirq(struct softirq_action *h);
+
+#ifdef CONFIG_CFS_BANDWIDTH
+extern int throttled_lb_pair(struct task_group *tg, int src_cpu, int dest_cpu);
+#else
+static inline int throttled_lb_pair(struct task_group *tg,
+				    int src_cpu, int dest_cpu)
+{
+	return 0;
+}
+#endif
+
+extern void cfs_rq_util_change(struct cfs_rq *cfs_rq, int flags);
+
+#ifdef CONFIG_SMP
+
+static inline unsigned long task_util(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_avg);
+}
+
+static inline unsigned long _task_util_est(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_est) & ~UTIL_AVG_UNCHANGED;
+}
+
+static inline unsigned long task_util_est(struct task_struct *p)
+{
+	return max(task_util(p), _task_util_est(p));
+}
+
+/*
+ * Optional action to be done while updating the load average
+ */
+#define UPDATE_TG	0x1
+#define SKIP_AGE_LOAD	0x2
+#define DO_ATTACH	0x4
+#define DO_DETACH	0x8
+
+extern void update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags);
+
+static inline unsigned long cfs_rq_load_avg(struct cfs_rq *cfs_rq)
+{
+	return cfs_rq->avg.load_avg;
+}
+
+static inline unsigned long cpu_load(struct rq *rq)
+{
+	return cfs_rq_load_avg(&rq->cfs);
+}
+
+#else /* !CONFIG_SMP: */
+
+#define UPDATE_TG	0x0
+#define SKIP_AGE_LOAD	0x0
+#define DO_ATTACH	0x0
+#define DO_DETACH	0x0
+
+static inline void update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int not_used1)
+{
+	cfs_rq_util_change(cfs_rq, 0);
+}
+
+#endif /* !CONFIG_SMP */
+
+#ifdef CONFIG_SMP
+extern void enqueue_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se);
+extern void dequeue_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se);
+extern void check_update_overutilized_status(struct rq *rq);
+extern void util_est_enqueue(struct cfs_rq *cfs_rq, struct task_struct *p);
+extern void util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p);
+extern void util_est_update(struct cfs_rq *cfs_rq, struct task_struct *p, bool task_sleep);
+#else
+static inline void enqueue_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) { }
+static inline void dequeue_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) { }
+static inline void check_update_overutilized_status(struct rq *rq) { }
+static inline void util_est_enqueue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
+static inline void util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
+static inline void util_est_update(struct cfs_rq *cfs_rq, struct task_struct *p, bool task_sleep) {}
+#endif
+
+#ifdef CONFIG_SMP
+/*
+ * Signed add and clamp on underflow.
+ *
+ * Explicitly do a load-store to ensure the intermediate value never hits
+ * memory. This allows lockless observations without ever seeing the negative
+ * values.
+ */
+#define add_positive(_ptr, _val) do {                           \
+	typeof(_ptr) ptr = (_ptr);                              \
+	typeof(_val) val = (_val);                              \
+	typeof(*ptr) res, var = READ_ONCE(*ptr);                \
+								\
+	res = var + val;                                        \
+								\
+	if (val < 0 && res > var)                               \
+		res = 0;                                        \
+								\
+	WRITE_ONCE(*ptr, res);                                  \
+} while (0)
+
+/*
+ * Unsigned subtract and clamp on underflow.
+ *
+ * Explicitly do a load-store to ensure the intermediate value never hits
+ * memory. This allows lockless observations without ever seeing the negative
+ * values.
+ */
+#define sub_positive(_ptr, _val) do {				\
+	typeof(_ptr) ptr = (_ptr);				\
+	typeof(*ptr) val = (_val);				\
+	typeof(*ptr) res, var = READ_ONCE(*ptr);		\
+	res = var - val;					\
+	if (res > var)						\
+		res = 0;					\
+	WRITE_ONCE(*ptr, res);					\
+} while (0)
+
+/*
+ * Remove and clamp on negative, from a local variable.
+ *
+ * A variant of sub_positive(), which does not use explicit load-store
+ * and is thus optimized for local variable updates.
+ */
+#define lsub_positive(_ptr, _val) do {				\
+	typeof(_ptr) ptr = (_ptr);				\
+	*ptr -= min_t(typeof(*ptr), *ptr, _val);		\
+} while (0)
+
+extern void sync_entity_load_avg(struct sched_entity *se);
+
+extern
+int util_fits_cpu(unsigned long util,
+		  unsigned long uclamp_min,
+		  unsigned long uclamp_max,
+		  int cpu);
+
+/*
+ * overutilized value make sense only if EAS is enabled
+ */
+static inline bool is_rd_overutilized(struct root_domain *rd)
+{
+	return !sched_energy_enabled() || READ_ONCE(rd->overutilized);
+}
+
+#ifdef CONFIG_NO_HZ_COMMON
+extern void migrate_se_pelt_lag(struct sched_entity *se);
+#else
+static inline void migrate_se_pelt_lag(struct sched_entity *se) {}
+#endif
+
+extern void clear_tg_offline_cfs_rqs(struct rq *rq);
+
+DECLARE_PER_CPU(cpumask_var_t, select_rq_mask);
+
+extern void update_tg_load_avg(struct cfs_rq *cfs_rq);
+
+static inline unsigned long capacity_of(int cpu)
+{
+	return cpu_rq(cpu)->cpu_capacity;
+}
+
+extern bool is_core_idle(int cpu);
+
+extern unsigned long cpu_runnable(struct rq *rq);
+
+extern int sched_idle_cpu(int cpu);
+
+#else /* !CONFIG_SMP: */
+
+static inline void update_tg_load_avg(struct cfs_rq *cfs_rq) { }
+
+#endif /* !CONFIG_SMP */
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+
+/* Iterate through all leaf cfs_rq's on a runqueue */
+#define for_each_leaf_cfs_rq_safe(rq, cfs_rq, pos)			\
+	list_for_each_entry_safe(cfs_rq, pos, &rq->leaf_cfs_rq_list,	\
+				 leaf_cfs_rq_list)
+
+extern void list_del_leaf_cfs_rq(struct cfs_rq *cfs_rq);
+
+/* Walk up scheduling entities hierarchy */
+
+#define for_each_sched_entity(se) \
+		for (; se; se = se->parent)
+
+extern bool cfs_rq_is_decayed(struct cfs_rq *cfs_rq);
+
+#else /* !CONFIG_FAIR_GROUP_SCHED: */
+
+#define for_each_leaf_cfs_rq_safe(rq, cfs_rq, pos)	\
+		for (cfs_rq = &rq->cfs, pos = NULL; cfs_rq; cfs_rq = pos)
+
+static inline void list_del_leaf_cfs_rq(struct cfs_rq *cfs_rq) { }
+
+#define for_each_sched_entity(se) \
+		for (; se; se = NULL)
+
+static inline bool cfs_rq_is_decayed(struct cfs_rq *cfs_rq)
+{
+	return !cfs_rq->nr_running;
+}
+
+#endif /* !CONFIG_FAIR_GROUP_SCHED */
+
+#ifdef CONFIG_NUMA
+extern long adjust_numa_imbalance(int imbalance, int dst_running, int imb_numa_nr);
+#endif
+
+#ifdef CONFIG_NUMA_BALANCING
+extern unsigned long task_weight(struct task_struct *p, int nid, int dist);
+extern unsigned long group_weight(struct task_struct *p, int nid, int dist);
+#endif
+
+#ifdef CONFIG_SMP
+extern void update_misfit_status(struct task_struct *p, struct rq *rq);
+extern void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se);
+extern void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se);
+extern void remove_entity_load_avg(struct sched_entity *se);
+#else
+static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
+static inline void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+static inline void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+static inline void remove_entity_load_avg(struct sched_entity *se) {}
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
