@@ -104,7 +104,6 @@ static void __init rcu_bootup_announce_oddness(void)
 
 static void rcu_report_exp_rnp(struct rcu_node *rnp, bool wake);
 static bool sync_rcu_exp_done(struct rcu_node *rnp);
-static void rcu_read_unlock_special(struct task_struct *t);
 
 #define set_rcu_preempt_special(reason)	do {				\
 	WRITE_ONCE(current->rcu_read_unlock_special.b.reason, true);	\
@@ -427,7 +426,7 @@ void __rcu_read_unlock(void)
 	if (rcu_preempt_read_exit() == 0) {
 		barrier();  // critical-section exit before .s check.
 		if (unlikely(READ_ONCE(t->rcu_read_unlock_special.s)))
-			rcu_read_unlock_special(t);
+			rcu_read_unlock_special();
 	}
 	if (IS_ENABLED(CONFIG_PROVE_LOCKING)) {
 		int rrln = rcu_preempt_depth();
@@ -627,8 +626,9 @@ static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
  * notify RCU core processing or task having blocked during the RCU
  * read-side critical section.
  */
-static void rcu_read_unlock_special(struct task_struct *t)
+void rcu_read_unlock_special(void)
 {
+	struct task_struct *t = current;
 	unsigned long flags;
 	bool irqs_were_disabled;
 	bool preempt_bh_were_disabled =
@@ -684,6 +684,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 	}
 	rcu_preempt_deferred_qs_irqrestore(t, flags);
 }
+EXPORT_SYMBOL_GPL(rcu_read_unlock_special);
 
 /*
  * Check that the list of blocked tasks for the newly completed grace
