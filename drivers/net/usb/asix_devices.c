@@ -838,7 +838,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	ret = usbnet_get_endpoints(dev, intf);
 	if (ret)
-		return ret;
+		goto mdio_err;
 
 	/* Maybe the boot loader passed the MAC address via device tree */
 	if (!eth_platform_get_mac_address(&dev->udev->dev, buf)) {
@@ -862,7 +862,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 		if (ret < 0) {
 			netdev_dbg(dev->net, "Failed to read MAC address: %d\n",
 				   ret);
-			return ret;
+			goto mdio_err;
 		}
 	}
 
@@ -875,7 +875,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	ret = asix_read_phy_addr(dev, true);
 	if (ret < 0)
-		return ret;
+		goto mdio_err;
 
 	priv->phy_addr = ret;
 	priv->embd_phy = ((priv->phy_addr & 0x1f) == AX_EMBD_PHY_ADDR);
@@ -884,7 +884,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 			    &priv->chipcode, 0);
 	if (ret < 0) {
 		netdev_dbg(dev->net, "Failed to read STATMNGSTS_REG: %d\n", ret);
-		return ret;
+		goto mdio_err;
 	}
 
 	priv->chipcode &= AX_CHIPCODE_MASK;
@@ -899,7 +899,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 	ret = priv->reset(dev, 0);
 	if (ret < 0) {
 		netdev_dbg(dev->net, "Failed to reset AX88772: %d\n", ret);
-		return ret;
+		goto mdio_err;
 	}
 
 	/* Asix framing packs multiple eth frames into a 2K usb bulk transfer */
