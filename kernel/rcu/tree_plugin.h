@@ -107,10 +107,13 @@ static bool sync_rcu_exp_done(struct rcu_node *rnp);
 
 #define set_rcu_preempt_special(reason)	do {				\
 	WRITE_ONCE(current->rcu_read_unlock_special.b.reason, true);	\
+	pcpu_rcu_preempt_special_set();					\
 	} while (0)
 
 #define clear_rcu_preempt_special(reason)	do {			\
 	WRITE_ONCE(current->rcu_read_unlock_special.b.reason, false);	\
+	if (!current->rcu_read_unlock_special.s)			\
+		pcpu_rcu_preempt_special_clear();			\
 	} while (0)
 
 /*
@@ -379,6 +382,8 @@ static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
 	return READ_ONCE(rnp->gp_tasks) != NULL;
 }
 
+#ifndef CONFIG_PCPU_RCU_PREEMPT_COUNT
+
 /* limit value for ->rcu_read_lock_nesting. */
 #define RCU_NEST_PMAX (INT_MAX / 2)
 
@@ -436,6 +441,8 @@ void __rcu_read_unlock(void)
 }
 EXPORT_SYMBOL_GPL(__rcu_read_unlock);
 
+#endif /* #ifndef CONFIG_PCPU_RCU_PREEMPT_COUNT */
+
 /*
  * Advance a ->blkd_tasks-list pointer to the next entry, instead
  * returning NULL if at the end of the list.
@@ -489,6 +496,7 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		return;
 	}
 	t->rcu_read_unlock_special.s = 0;
+	pcpu_rcu_preempt_special_clear();
 	if (special.b.need_qs) {
 		if (IS_ENABLED(CONFIG_RCU_STRICT_GRACE_PERIOD)) {
 			rdp->cpu_no_qs.b.norm = false;

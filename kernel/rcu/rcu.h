@@ -671,6 +671,10 @@ static inline int rcu_stall_notifier_call_chain(unsigned long val, void *v) { re
 static inline void
 rcu_preempt_switch(struct task_struct *prev, struct task_struct *next)
 {
+#ifdef CONFIG_PCPU_RCU_PREEMPT_COUNT
+	prev->rcu_read_lock_nesting = rcu_preempt_depth();
+	pcpu_rcu_preempt_switch(next->rcu_read_lock_nesting, next->rcu_read_unlock_special.s);
+#endif // #ifdef CONFIG_PCPU_RCU_PREEMPT_COUNT
 }
 
 #endif /* __KERNEL_RCU_H */
