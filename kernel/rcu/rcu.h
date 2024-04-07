@@ -668,4 +668,9 @@ int rcu_stall_notifier_call_chain(unsigned long val, void *v);
 static inline int rcu_stall_notifier_call_chain(unsigned long val, void *v) { return NOTIFY_DONE; }
 #endif // #else // #if defined(CONFIG_RCU_STALL_COMMON) && defined(CONFIG_RCU_CPU_STALL_NOTIFIER)
 
+static inline void
+rcu_preempt_switch(struct task_struct *prev, struct task_struct *next)
+{
+}
+
 #endif /* __KERNEL_RCU_H */
