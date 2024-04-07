@@ -80,8 +80,14 @@ static void fuse_file_cached_io_release(struct fuse_file *ff,
 	spin_unlock(&fi->lock);
 }
 
-/* Start strictly uncached io mode where cache access is not allowed */
-int fuse_inode_uncached_io_start(struct fuse_inode *fi, struct fuse_backing *fb)
+/*
+ * Start strictly uncached io mode where cache access is not allowed.
+ *
+ * With @keep_fb true, the backing file reference is expected to be dropped
+ * on inode evict.
+ */
+int fuse_inode_uncached_io_start(struct fuse_inode *fi, struct fuse_backing *fb,
+				 bool keep_fb)
 {
 	struct fuse_backing *oldfb;
 	int err = 0;
@@ -103,6 +109,8 @@ int fuse_inode_uncached_io_start(struct fuse_inode *fi, struct fuse_backing *fb)
 	if (fb && !oldfb) {
 		oldfb = fuse_inode_backing_set(fi, fb);
 		WARN_ON_ONCE(oldfb != NULL);
+		if (keep_fb)
+			set_bit(FUSE_I_BACKING, &fi->state);
 	} else {
 		fuse_backing_put(fb);
 	}
@@ -119,7 +127,7 @@ static int fuse_file_uncached_io_open(struct inode *inode,
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	int err;
 
-	err = fuse_inode_uncached_io_start(fi, fb);
+	err = fuse_inode_uncached_io_start(fi, fb, false);
 	if (err)
 		return err;
 
