@@ -3608,7 +3608,7 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 #ifdef CONFIG_FAIR_GROUP_SCHED
 extern unsigned long task_h_load(struct task_struct *p);
 #else
-static unsigned long task_h_load(struct task_struct *p)
+static inline unsigned long task_h_load(struct task_struct *p)
 {
 	return p->se.avg.load_avg;
 }
@@ -3848,6 +3848,44 @@ static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
 static inline void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static inline void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static inline void remove_entity_load_avg(struct sched_entity *se) {}
+#endif
+
+#ifdef CONFIG_NUMA_BALANCING
+extern void task_tick_numa(struct rq *rq, struct task_struct *curr);
+extern void account_numa_enqueue(struct rq *rq, struct task_struct *p);
+extern void account_numa_dequeue(struct rq *rq, struct task_struct *p);
+extern void update_scan_period(struct task_struct *p, int new_cpu);
+
+extern unsigned int sysctl_numa_balancing_promote_rate_limit;
+
+#else
+static inline void task_tick_numa(struct rq *rq, struct task_struct *curr) { }
+static inline void account_numa_enqueue(struct rq *rq, struct task_struct *p) { }
+static inline void account_numa_dequeue(struct rq *rq, struct task_struct *p) { }
+static inline void update_scan_period(struct task_struct *p, int new_cpu) { }
+#endif
+
+
+#ifdef CONFIG_SCHED_SMT
+
+static inline bool test_idle_cores(int cpu)
+{
+	struct sched_domain_shared *sds;
+
+	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	if (sds)
+		return READ_ONCE(sds->has_idle_cores);
+
+	return false;
+}
+
+#else
+
+static inline bool test_idle_cores(int cpu)
+{
+	return false;
+}
+
 #endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
