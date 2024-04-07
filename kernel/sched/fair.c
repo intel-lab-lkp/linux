@@ -1901,13 +1901,6 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 static struct sched_entity *
 pick_next_entity(struct cfs_rq *cfs_rq)
 {
-	/*
-	 * Enabling NEXT_BUDDY will affect latency but not fairness.
-	 */
-	if (sched_feat(NEXT_BUDDY) &&
-	    cfs_rq->next && entity_eligible(cfs_rq, cfs_rq->next))
-		return cfs_rq->next;
-
 	return pick_eevdf(cfs_rq);
 }
 
@@ -4670,10 +4663,6 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	 */
 	if (unlikely(throttled_hierarchy(cfs_rq_of(pse))))
 		return;
-
-	if (sched_feat(NEXT_BUDDY) && !(wake_flags & WF_FORK)) {
-		set_next_buddy(pse);
-	}
 
 	/*
 	 * We can come here with TIF_NEED_RESCHED already set from new task

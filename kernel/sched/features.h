@@ -9,13 +9,6 @@ SCHED_FEAT(PLACE_DEADLINE_INITIAL, true)
 SCHED_FEAT(RUN_TO_PARITY, true)
 
 /*
- * Prefer to schedule the task we woke last (assuming it failed
- * wakeup-preemption), since its likely going to consume data we
- * touched, increases cache locality.
- */
-SCHED_FEAT(NEXT_BUDDY, false)
-
-/*
  * Consider buddies to be cache hot, decreases the likeliness of a
  * cache buddy being migrated away, increases cache locality.
  */
