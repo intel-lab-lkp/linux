@@ -60,8 +60,8 @@ int brcms_led_register(struct brcms_info *wl)
 		&sprom->gpio1,
 		&sprom->gpio2,
 		&sprom->gpio3 };
+	unsigned long lflags = GPIO_ACTIVE_HIGH;
 	int hwnum = -1;
-	enum gpio_lookup_flags lflags = GPIO_ACTIVE_HIGH;
 
 	/* find radio enabled LED */
 	for (i = 0; i < BRCMS_LED_NO; i++) {

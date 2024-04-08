@@ -31,7 +31,6 @@ struct gpio_chip;
 struct gpio_desc;
 struct gpio_device;
 
-enum gpio_lookup_flags;
 enum gpiod_flags;
 
 union gpio_irq_fwspec {
@@ -789,7 +788,7 @@ gpiochip_remove_pin_ranges(struct gpio_chip *gc)
 struct gpio_desc *gpiochip_request_own_desc(struct gpio_chip *gc,
 					    unsigned int hwnum,
 					    const char *label,
-					    enum gpio_lookup_flags lflags,
+					    unsigned long lflags,
 					    enum gpiod_flags dflags);
 void gpiochip_free_own_desc(struct gpio_desc *desc);
 

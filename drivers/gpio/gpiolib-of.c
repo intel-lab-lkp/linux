@@ -434,7 +434,7 @@ int of_get_named_gpio(const struct device_node *np, const char *propname,
 }
 EXPORT_SYMBOL_GPL(of_get_named_gpio);
 
-/* Converts gpio_lookup_flags into bitmask of GPIO_* values */
+/* Converts of_gpio_flags into bitmask of GPIO_* values */
 static unsigned long of_convert_gpio_flags(enum of_gpio_flags flags)
 {
 	unsigned long lflags = GPIO_LOOKUP_FLAGS_DEFAULT;
@@ -708,8 +708,7 @@ struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
  * @chip:	GPIO chip whose hog is parsed
  * @idx:	Index of the GPIO to parse
  * @name:	GPIO line name
- * @lflags:	bitmask of gpio_lookup_flags GPIO_* values - returned from
- *		of_find_gpio() or of_parse_own_gpio()
+ * @lflags:	bitmask of GPIO_* values - returned from *_find_gpio()
  * @dflags:	gpiod_flags - optional GPIO initialization flags
  *
  * Returns GPIO descriptor to use with Linux GPIO API, or one of the errno
