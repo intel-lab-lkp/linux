@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <linux/landlock.h>
 #include <linux/prctl.h>
+#include <linux/socket.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +56,10 @@ static inline int landlock_restrict_self(const int ruleset_fd,
 #define ENV_FS_RW_NAME "LL_FS_RW"
 #define ENV_TCP_BIND_NAME "LL_TCP_BIND"
 #define ENV_TCP_CONNECT_NAME "LL_TCP_CONNECT"
+#define ENV_SOCKET_CREATE_NAME "LL_SOCKET_CREATE"
 #define ENV_DELIMITER ":"
+
+#define ENV_TOKEN_INTERNAL_DELIMITER "."
 
 static int parse_path(char *env_path, const char ***const path_list)
 {
@@ -84,6 +88,49 @@ static int parse_path(char *env_path, const char ***const path_list)
 	LANDLOCK_ACCESS_FS_TRUNCATE)
 
 /* clang-format on */
+
+#define CHECK_DOMAIN(domain_variant) \
+	do { \
+		if (strcmp(strdomain, #domain_variant) == 0) { \
+			protocol->domain = domain_variant; \
+			domain_parsed = 1; \
+			goto domain_check; \
+		} \
+	} while (0)
+
+#define CHECK_TYPE(type_variant) \
+	do { \
+		if (strcmp(strtype, #type_variant) == 0) { \
+			protocol->type = type_variant; \
+			type_parsed = 1; \
+			goto type_check; \
+		} \
+	} while (0)
+
+static int get_socket_protocol(char *strdomain, char *strtype,
+				struct landlock_socket_attr *protocol)
+{
+	int domain_parsed = 0, type_parsed = 0;
+
+	CHECK_DOMAIN(AF_UNIX);
+	CHECK_DOMAIN(AF_INET);
+	CHECK_DOMAIN(AF_INET6);
+
+domain_check:
+	if (!domain_parsed)
+		return 1;
+
+	CHECK_TYPE(SOCK_STREAM);
+	CHECK_TYPE(SOCK_DGRAM);
+
+type_check:
+	if (!type_parsed)
+		return 1;
+	return 0;
+}
+
+#undef CHECK_DOMAIN
+#undef CHECK_TYPE
 
 static int populate_ruleset_fs(const char *const env_var, const int ruleset_fd,
 			       const __u64 allowed_access)
@@ -182,6 +229,58 @@ out_free_name:
 	return ret;
 }
 
+static int populate_ruleset_socket(const char *const env_var,
+				const int ruleset_fd, const __u64 allowed_access)
+{
+	int ret = 1;
+	char *env_protocol_name, *env_protocol_name_next;
+	char *strprotocol, *strdomain, *strtype;
+	struct landlock_socket_attr protocol = {
+		.allowed_access = allowed_access,
+		.domain = 0,
+		.type = 0,
+	};
+
+	env_protocol_name = getenv(env_var);
+	if (!env_protocol_name)
+		return 0;
+	env_protocol_name = strdup(env_protocol_name);
+	unsetenv(env_var);
+
+	env_protocol_name_next = env_protocol_name;
+	while ((strprotocol = strsep(&env_protocol_name_next, ENV_DELIMITER))) {
+		strdomain = strsep(&strprotocol, ENV_TOKEN_INTERNAL_DELIMITER);
+		strtype   = strsep(&strprotocol, ENV_TOKEN_INTERNAL_DELIMITER);
+
+		if (!strtype) {
+			fprintf(stderr, "Failed to extract socket protocol with "
+							"unspecified type value\n");
+			goto out_free_name;
+		}
+
+		if (get_socket_protocol(strdomain, strtype, &protocol)) {
+			fprintf(stderr, "Failed to extract socket protocol with "
+							"domain: \"%s\", type: \"%s\"\n",
+				strdomain, strtype);
+			goto out_free_name;
+		}
+
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				      &protocol, 0)) {
+			fprintf(stderr,
+				"Failed to update the ruleset with "
+				"domain \"%s\" and type \"%s\": %s\n",
+				strdomain, strtype, strerror(errno));
+			goto out_free_name;
+		}
+	}
+	ret = 0;
+
+out_free_name:
+	free(env_protocol_name);
+	return ret;
+}
+
 /* clang-format off */
 
 #define ACCESS_FS_ROUGHLY_READ ( \
@@ -205,14 +304,14 @@ out_free_name:
 
 /* clang-format on */
 
-#define LANDLOCK_ABI_LAST 4
+#define LANDLOCK_ABI_LAST 5
 
 int main(const int argc, char *const argv[], char *const *const envp)
 {
 	const char *cmd_path;
 	char *const *cmd_argv;
 	int ruleset_fd, abi;
-	char *env_port_name;
+	char *env_optional_name;
 	__u64 access_fs_ro = ACCESS_FS_ROUGHLY_READ,
 	      access_fs_rw = ACCESS_FS_ROUGHLY_READ | ACCESS_FS_ROUGHLY_WRITE;
 
@@ -220,18 +319,19 @@ int main(const int argc, char *const argv[], char *const *const envp)
 		.handled_access_fs = access_fs_rw,
 		.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP |
 				      LANDLOCK_ACCESS_NET_CONNECT_TCP,
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
 	};
 
 	if (argc < 2) {
 		fprintf(stderr,
-			"usage: %s=\"...\" %s=\"...\" %s=\"...\" %s=\"...\"%s "
+			"usage: %s=\"...\" %s=\"...\" %s=\"...\" %s=\"...\" %s=\"...\"%s "
 			"<cmd> [args]...\n\n",
 			ENV_FS_RO_NAME, ENV_FS_RW_NAME, ENV_TCP_BIND_NAME,
-			ENV_TCP_CONNECT_NAME, argv[0]);
+			ENV_TCP_CONNECT_NAME, ENV_SOCKET_CREATE_NAME, argv[0]);
 		fprintf(stderr,
 			"Execute a command in a restricted environment.\n\n");
 		fprintf(stderr,
-			"Environment variables containing paths and ports "
+			"Environment variables containing paths, ports and protocols "
 			"each separated by a colon:\n");
 		fprintf(stderr,
 			"* %s: list of paths allowed to be used in a read-only way.\n",
@@ -240,7 +340,7 @@ int main(const int argc, char *const argv[], char *const *const envp)
 			"* %s: list of paths allowed to be used in a read-write way.\n\n",
 			ENV_FS_RW_NAME);
 		fprintf(stderr,
-			"Environment variables containing ports are optional "
+			"Environment variables containing ports or protocols are optional "
 			"and could be skipped.\n");
 		fprintf(stderr,
 			"* %s: list of ports allowed to bind (server).\n",
@@ -249,21 +349,24 @@ int main(const int argc, char *const argv[], char *const *const envp)
 			"* %s: list of ports allowed to connect (client).\n",
 			ENV_TCP_CONNECT_NAME);
 		fprintf(stderr,
+			"* %s: list of socket protocols allowed to be created.\n",
+			ENV_SOCKET_CREATE_NAME);
+		fprintf(stderr,
 			"\nexample:\n"
 			"%s=\"${PATH}:/lib:/usr:/proc:/etc:/dev/urandom\" "
 			"%s=\"/dev/null:/dev/full:/dev/zero:/dev/pts:/tmp\" "
 			"%s=\"9418\" "
 			"%s=\"80:443\" "
+			"%s=\"AF_INET6.SOCK_STREAM:AF_UNIX.SOCK_STREAM\" "
 			"%s bash -i\n\n",
 			ENV_FS_RO_NAME, ENV_FS_RW_NAME, ENV_TCP_BIND_NAME,
-			ENV_TCP_CONNECT_NAME, argv[0]);
+			ENV_TCP_CONNECT_NAME, ENV_SOCKET_CREATE_NAME, argv[0]);
 		fprintf(stderr,
 			"This sandboxer can use Landlock features "
 			"up to ABI version %d.\n",
 			LANDLOCK_ABI_LAST);
 		return 1;
 	}
-
 	abi = landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
 	if (abi < 0) {
 		const int err = errno;
@@ -325,6 +428,16 @@ int main(const int argc, char *const argv[], char *const *const envp)
 			"provided by ABI version %d (instead of %d).\n",
 			LANDLOCK_ABI_LAST, abi);
 		__attribute__((fallthrough));
+	case 4:
+		/* Removes socket support for ABI < 5 */
+		ruleset_attr.handled_access_socket &=
+			~LANDLOCK_ACCESS_SOCKET_CREATE;
+		fprintf(stderr,
+			"Hint: You should update the running kernel "
+			"to leverage Landlock features "
+			"provided by ABI version %d (instead of %d).\n",
+			LANDLOCK_ABI_LAST, abi);
+		__attribute__((fallthrough));
 	case LANDLOCK_ABI_LAST:
 		break;
 	default:
@@ -338,18 +451,23 @@ int main(const int argc, char *const argv[], char *const *const envp)
 	access_fs_rw &= ruleset_attr.handled_access_fs;
 
 	/* Removes bind access attribute if not supported by a user. */
-	env_port_name = getenv(ENV_TCP_BIND_NAME);
-	if (!env_port_name) {
+	env_optional_name = getenv(ENV_TCP_BIND_NAME);
+	if (!env_optional_name) {
 		ruleset_attr.handled_access_net &=
 			~LANDLOCK_ACCESS_NET_BIND_TCP;
 	}
 	/* Removes connect access attribute if not supported by a user. */
-	env_port_name = getenv(ENV_TCP_CONNECT_NAME);
-	if (!env_port_name) {
+	env_optional_name = getenv(ENV_TCP_CONNECT_NAME);
+	if (!env_optional_name) {
 		ruleset_attr.handled_access_net &=
 			~LANDLOCK_ACCESS_NET_CONNECT_TCP;
 	}
-
+	/* Removes socket create access attribute if not supported by a user. */
+	env_optional_name = getenv(ENV_SOCKET_CREATE_NAME);
+	if (!env_optional_name) {
+		ruleset_attr.handled_access_socket &=
+			~LANDLOCK_ACCESS_SOCKET_CREATE;
+	}
 	ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
 	if (ruleset_fd < 0) {
@@ -370,6 +488,11 @@ int main(const int argc, char *const argv[], char *const *const envp)
 	}
 	if (populate_ruleset_net(ENV_TCP_CONNECT_NAME, ruleset_fd,
 				 LANDLOCK_ACCESS_NET_CONNECT_TCP)) {
+		goto err_close_ruleset;
+	}
+
+	if (populate_ruleset_socket(ENV_SOCKET_CREATE_NAME, ruleset_fd,
+				 LANDLOCK_ACCESS_SOCKET_CREATE)) {
 		goto err_close_ruleset;
 	}
 
