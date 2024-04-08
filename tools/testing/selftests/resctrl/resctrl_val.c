@@ -306,13 +306,23 @@ static int perf_open_imc_mem_bw(int cpu_no)
 	for (imc = 0; imc < imcs; imc++) {
 		ret = open_perf_event(imc, cpu_no, READ);
 		if (ret)
-			return -1;
+			goto close_fds;
 		ret = open_perf_event(imc, cpu_no, WRITE);
 		if (ret)
-			return -1;
+			goto close_read_fd;
 	}
 
 	return 0;
+
+close_read_fd:
+	close(imc_counters_config[imc][READ].fd);
+close_fds:
+	while (imc--) {
+		close(imc_counters_config[imc][READ].fd);
+		close(imc_counters_config[imc][WRITE].fd);
+	}
+
+	return -1;
 }
 
 /*
