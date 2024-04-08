@@ -10,6 +10,7 @@
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <net/ipv6.h>
+#include <net/tcp.h>
 
 #include "common.h"
 #include "cred.h"
@@ -61,17 +62,36 @@ static const struct landlock_ruleset *get_current_net_domain(void)
 	return dom;
 }
 
+static int check_access_socket(const struct landlock_ruleset *const dom,
+			  __be16 port,
+			  access_mask_t access_request)
+{
+	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
+	const struct landlock_rule *rule;
+	struct landlock_id id = {
+		.type = LANDLOCK_KEY_NET_PORT,
+	};
+
+	id.key.data = (__force uintptr_t)port;
+	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
+
+	rule = landlock_find_rule(dom, id);
+	access_request = landlock_init_layer_masks(
+		dom, access_request, &layer_masks, LANDLOCK_KEY_NET_PORT);
+
+	if (landlock_unmask_layers(rule, access_request, &layer_masks,
+				   ARRAY_SIZE(layer_masks)))
+		return 0;
+
+	return -EACCES;
+}
+
 static int current_check_access_socket(struct socket *const sock,
 				       struct sockaddr *const address,
 				       const int addrlen,
 				       access_mask_t access_request)
 {
 	__be16 port;
-	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
-	const struct landlock_rule *rule;
-	struct landlock_id id = {
-		.type = LANDLOCK_KEY_NET_PORT,
-	};
 	const struct landlock_ruleset *const dom = get_current_net_domain();
 
 	if (!dom)
@@ -159,17 +179,7 @@ static int current_check_access_socket(struct socket *const sock,
 			return -EINVAL;
 	}
 
-	id.key.data = (__force uintptr_t)port;
-	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
-
-	rule = landlock_find_rule(dom, id);
-	access_request = landlock_init_layer_masks(
-		dom, access_request, &layer_masks, LANDLOCK_KEY_NET_PORT);
-	if (landlock_unmask_layers(rule, access_request, &layer_masks,
-				   ARRAY_SIZE(layer_masks)))
-		return 0;
-
-	return -EACCES;
+	return check_access_socket(dom, port, access_request);
 }
 
 static int hook_socket_bind(struct socket *const sock,
@@ -187,9 +197,71 @@ static int hook_socket_connect(struct socket *const sock,
 					   LANDLOCK_ACCESS_NET_CONNECT_TCP);
 }
 
+/*
+ * Check that socket state and attributes are correct for listen.
+ * It is required to not wrongfully return -EACCES instead of -EINVAL.
+ */
+static int check_tcp_socket_can_listen(struct socket *const sock)
+{
+	struct sock *sk = sock->sk;
+	unsigned char cur_sk_state = sk->sk_state;
+	const struct inet_connection_sock *icsk;
+
+	/* Allow only unconnected TCP socket to listen(cf. inet_listen). */
+	if (sock->state != SS_UNCONNECTED)
+		return -EINVAL;
+
+	/* Check sock state consistency. */
+	if (!((1 << cur_sk_state) & (TCPF_CLOSE | TCPF_LISTEN)))
+		return -EINVAL;
+
+	/* Sockets can listen only if ULP control hook has clone method. */
+	icsk = inet_csk(sk);
+	if (icsk->icsk_ulp_ops && !icsk->icsk_ulp_ops->clone)
+		return -EINVAL;
+	return 0;
+}
+
+static int hook_socket_listen(struct socket *const sock,
+			  const int backlog)
+{
+	int err;
+	int family;
+	const struct landlock_ruleset *const dom = get_current_net_domain();
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+
+	/*
+	 * listen() on a TCP socket without pre-binding is allowed only
+	 * if binding to port 0 is allowed.
+	 */
+	family = sock->sk->__sk_common.skc_family;
+
+	if (family == AF_INET || family == AF_INET6) {
+		/* Checks if it's a (potential) TCP socket. */
+		if (sock->type != SOCK_STREAM)
+			return 0;
+
+		/* Socket is alredy binded to some port. */
+		if (inet_sk(sock->sk)->inet_num != 0)
+			return 0;
+
+		err = check_tcp_socket_can_listen(sock);
+		if (unlikely(err))
+			return err;
+
+		return check_access_socket(dom, 0, LANDLOCK_ACCESS_NET_BIND_TCP);
+	}
+	return 0;
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(socket_bind, hook_socket_bind),
 	LSM_HOOK_INIT(socket_connect, hook_socket_connect),
+	LSM_HOOK_INIT(socket_listen, hook_socket_listen),
 };
 
 __init void landlock_add_net_hooks(void)
