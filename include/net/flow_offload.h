@@ -471,6 +471,19 @@ static inline bool flow_rule_no_unsupp_control_flags(const u32 supp_flags,
 	return false;
 }
 
+/**
+ * flow_rule_no_control_flags() - check for presence of any control flags
+ * @flags: flags present in rule
+ * @extack: The netlink extended ACK for reporting errors.
+ *
+ * Returns true if no control flags are set, false otherwise.
+ */
+static inline bool flow_rule_no_control_flags(const u32 flags,
+					      struct netlink_ext_ack *extack)
+{
+	return flow_rule_no_unsupp_control_flags(0, flags, extack);
+}
+
 struct flow_stats {
 	u64	pkts;
 	u64	bytes;
