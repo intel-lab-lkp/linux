@@ -294,22 +294,15 @@ static int initialize_mem_bw_imc(void)
 }
 
 /*
- * get_mem_bw_imc:	Memory band width as reported by iMC counters
- * @cpu_no:		CPU number that the benchmark PID is binded to
- * @bw_report:		Bandwidth report type (reads, writes)
- *
- * Memory B/W utilized by a process on a socket can be calculated using
- * iMC counters. Perf events are used to read these counters.
+ * perf_open_imc_mem_bw - Open perf fds for IMCs
+ * @cpu_no: CPU number that the benchmark PID is binded to
  *
  * Return: = 0 on success. < 0 on failure.
  */
-static int get_mem_bw_imc(int cpu_no, char *bw_report, float *bw_imc)
+static int perf_open_imc_mem_bw(int cpu_no)
 {
-	float reads, writes, of_mul_read, of_mul_write;
 	int imc, ret;
 
-	/* Start all iMC counters to log values (both read and write) */
-	reads = 0, writes = 0, of_mul_read = 1, of_mul_write = 1;
 	for (imc = 0; imc < imcs; imc++) {
 		ret = open_perf_event(imc, cpu_no, READ);
 		if (ret)
@@ -317,7 +310,22 @@ static int get_mem_bw_imc(int cpu_no, char *bw_report, float *bw_imc)
 		ret = open_perf_event(imc, cpu_no, WRITE);
 		if (ret)
 			return -1;
+	}
 
+	return 0;
+}
+
+/*
+ * do_mem_bw_test - Perform memory bandwidth test
+ *
+ * Runs memory bandwidth test over one second period. Also, handles starting
+ * and stopping of the IMC perf counters around the test.
+ */
+static void do_imc_mem_bw_test(void)
+{
+	int imc;
+
+	for (imc = 0; imc < imcs; imc++) {
 		membw_ioctl_perf_event_ioc_reset_enable(imc, READ);
 		membw_ioctl_perf_event_ioc_reset_enable(imc, WRITE);
 	}
@@ -329,6 +337,24 @@ static int get_mem_bw_imc(int cpu_no, char *bw_report, float *bw_imc)
 		membw_ioctl_perf_event_ioc_disable(imc, READ);
 		membw_ioctl_perf_event_ioc_disable(imc, WRITE);
 	}
+}
+
+/*
+ * get_mem_bw_imc - Memory band width as reported by iMC counters
+ * @bw_report: Bandwidth report type (reads, writes)
+ *
+ * Memory B/W utilized by a process on a socket can be calculated using
+ * iMC counters. Perf events are used to read these counters.
+ *
+ * Return: = 0 on success. < 0 on failure.
+ */
+static int get_mem_bw_imc(char *bw_report, float *bw_imc)
+{
+	float reads, writes, of_mul_read, of_mul_write;
+	int imc;
+
+	/* Start all iMC counters to log values (both read and write) */
+	reads = 0, writes = 0, of_mul_read = 1, of_mul_write = 1;
 
 	/*
 	 * Get results which are stored in struct type imc_counter_config
@@ -600,10 +626,9 @@ static void initialize_llc_occu_resctrl(const char *ctrlgrp, const char *mongrp,
 }
 
 static int measure_vals(const struct user_params *uparams,
-			struct resctrl_val_param *param,
-			unsigned long *bw_resc_start)
+			struct resctrl_val_param *param)
 {
-	unsigned long bw_resc, bw_resc_end;
+	unsigned long bw_resc, bw_resc_start, bw_resc_end;
 	float bw_imc;
 	int ret;
 
@@ -614,22 +639,27 @@ static int measure_vals(const struct user_params *uparams,
 	 * Compare the two values to validate resctrl value.
 	 * It takes 1sec to measure the data.
 	 */
-	ret = get_mem_bw_imc(uparams->cpu, param->bw_report, &bw_imc);
+	ret = perf_open_imc_mem_bw(uparams->cpu);
 	if (ret < 0)
 		return ret;
+
+	ret = get_mem_bw_resctrl(&bw_resc_start);
+	if (ret < 0)
+		return ret;
+
+	do_imc_mem_bw_test();
 
 	ret = get_mem_bw_resctrl(&bw_resc_end);
 	if (ret < 0)
 		return ret;
 
-	bw_resc = (bw_resc_end - *bw_resc_start) / MB;
-	ret = print_results_bw(param->filename, bm_pid, bw_imc, bw_resc);
-	if (ret)
+	ret = get_mem_bw_imc(param->bw_report, &bw_imc);
+	if (ret < 0)
 		return ret;
 
-	*bw_resc_start = bw_resc_end;
+	bw_resc = (bw_resc_end - bw_resc_start) / MB;
 
-	return 0;
+	return print_results_bw(param->filename, bm_pid, bw_imc, bw_resc);
 }
 
 /*
@@ -703,7 +733,6 @@ int resctrl_val(const struct resctrl_test *test,
 		struct resctrl_val_param *param)
 {
 	char *resctrl_val = param->resctrl_val;
-	unsigned long bw_resc_start = 0;
 	struct sigaction sigact;
 	int ret = 0, pipefd[2];
 	char pipe_message = 0;
@@ -845,7 +874,7 @@ int resctrl_val(const struct resctrl_test *test,
 
 		if (!strncmp(resctrl_val, MBM_STR, sizeof(MBM_STR)) ||
 		    !strncmp(resctrl_val, MBA_STR, sizeof(MBA_STR))) {
-			ret = measure_vals(uparams, param, &bw_resc_start);
+			ret = measure_vals(uparams, param);
 			if (ret)
 				break;
 		} else if (!strncmp(resctrl_val, CMT_STR, sizeof(CMT_STR))) {
