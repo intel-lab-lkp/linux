@@ -646,15 +646,24 @@ enum ovs_flow_attr {
  * %UINT32_MAX samples all packets and intermediate values sample intermediate
  * fractions of packets.
  * @OVS_SAMPLE_ATTR_ACTIONS: Set of actions to execute in sampling event.
- * Actions are passed as nested attributes.
+ * Actions are passed as nested attributes. Optional if OVS_SAMPLE_ATTR_PSAMPLE
+ * is not set.
+ * @OVS_SAMPLE_ATTR_PSAMPLE: Arguments to be passed to psample. Optional if
+ * OVS_SAMPLE_ATTR_ACTIONS is not set.
  *
- * Executes the specified actions with the given probability on a per-packet
- * basis.
+ * Either OVS_SAMPLE_ATTR_USER_COOKIE or OVS_SAMPLE_ATTR_USER_COOKIE must be
+ * specified.
+ *
+ * Executes the specified actions and/or sends the packet to psample
+ * with the given probability on a per-packet basis.
  */
 enum ovs_sample_attr {
 	OVS_SAMPLE_ATTR_UNSPEC,
 	OVS_SAMPLE_ATTR_PROBABILITY, /* u32 number */
 	OVS_SAMPLE_ATTR_ACTIONS,     /* Nested OVS_ACTION_ATTR_* attributes. */
+	OVS_SAMPLE_ATTR_PSAMPLE,     /* struct ovs_psample followed
+				      * by the user-provided cookie.
+				      */
 	__OVS_SAMPLE_ATTR_MAX,
 
 #ifdef __KERNEL__
@@ -674,6 +683,13 @@ struct sample_arg {
 				      */
 };
 #endif
+
+#define OVS_PSAMPLE_COOKIE_MAX_SIZE 16
+struct ovs_psample {
+	__u32 group_id;		/* The group used for packet sampling. */
+	__u32 user_cookie_len;	/* The length of the user-provided cookie. */
+	__u8 user_cookie[];	/* The user-provided cookie. */
+};
 
 /**
  * enum ovs_userspace_attr - Attributes for %OVS_ACTION_ATTR_USERSPACE action.

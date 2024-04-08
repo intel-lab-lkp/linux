@@ -24,6 +24,7 @@
 #include <net/checksum.h>
 #include <net/dsfield.h>
 #include <net/mpls.h>
+#include <net/psample.h>
 #include <net/sctp/checksum.h>
 
 #include "datapath.h"
@@ -1025,6 +1026,31 @@ static int dec_ttl_exception_handler(struct datapath *dp, struct sk_buff *skb,
 	return 0;
 }
 
+static int ovs_psample_packet(struct datapath *dp, struct sw_flow_key *key,
+			      struct ovs_psample *psample, struct sk_buff *skb,
+			      u32 rate)
+{
+	struct psample_group psample_group = {};
+	struct psample_metadata md = {};
+	struct vport *input_vport;
+
+	psample_group.group_num = psample->group_id;
+	psample_group.net = ovs_dp_get_net(dp);
+
+	input_vport = ovs_vport_rcu(dp, key->phy.in_port);
+	if (!input_vport)
+		input_vport = ovs_vport_rcu(dp, OVSP_LOCAL);
+
+	md.in_ifindex = input_vport->dev->ifindex;
+	md.user_cookie = psample->user_cookie;
+	md.user_cookie_len = psample->user_cookie_len;
+	md.trunc_size = skb->len;
+
+	psample_sample_packet(&psample_group, skb, rate, &md);
+
+	return 0;
+}
+
 /* When 'last' is true, sample() should always consume the 'skb'.
  * Otherwise, sample() should keep 'skb' intact regardless what
  * actions are executed within sample().
@@ -1033,16 +1059,17 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 		  struct sw_flow_key *key, const struct nlattr *attr,
 		  bool last)
 {
-	struct nlattr *actions;
+	const struct sample_arg *arg;
 	struct nlattr *sample_arg;
 	int rem = nla_len(attr);
-	const struct sample_arg *arg;
+	struct nlattr *next;
 	bool clone_flow_key;
+	int ret;
 
 	/* The first action is always 'OVS_SAMPLE_ATTR_ARG'. */
 	sample_arg = nla_data(attr);
 	arg = nla_data(sample_arg);
-	actions = nla_next(sample_arg, &rem);
+	next = nla_next(sample_arg, &rem);
 
 	if ((arg->probability != U32_MAX) &&
 	    (!arg->probability || get_random_u32() > arg->probability)) {
@@ -1051,9 +1078,22 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 		return 0;
 	}
 
-	clone_flow_key = !arg->exec;
-	return clone_execute(dp, skb, key, 0, actions, rem, last,
-			     clone_flow_key);
+	if (next->nla_type == OVS_SAMPLE_ATTR_PSAMPLE) {
+		ret = ovs_psample_packet(dp, key, nla_data(next), skb,
+					 arg->probability);
+		if (last)
+			ovs_kfree_skb_reason(skb, OVS_DROP_LAST_ACTION);
+		if (ret)
+			return ret;
+		next = nla_next(next, &rem);
+	}
+
+	if (nla_ok(next, rem)) {
+		clone_flow_key = !arg->exec;
+		ret = clone_execute(dp, skb, key, 0, next, rem, last,
+				    clone_flow_key);
+	}
+	return ret;
 }
 
 /* When 'last' is true, clone() should always consume the 'skb'.

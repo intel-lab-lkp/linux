@@ -976,7 +976,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	struct sw_flow_match match;
 	u32 ufid_flags = ovs_nla_get_ufid_flags(a[OVS_FLOW_ATTR_UFID_FLAGS]);
 	int error;
-	bool log = !a[OVS_FLOW_ATTR_PROBE];
+	bool log = true;
 
 	/* Must have key and actions. */
 	error = -EINVAL;
