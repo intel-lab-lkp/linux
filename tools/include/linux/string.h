@@ -44,6 +44,8 @@ static inline bool strstarts(const char *str, const char *prefix)
 
 size_t str_has_suffix(const char *str, const char *suffix);
 
+size_t str_has_prefix(const char *str, const char *prefix);
+
 extern char * __must_check skip_spaces(const char *);
 
 extern char *strim(char *);

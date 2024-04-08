@@ -252,3 +252,19 @@ size_t str_has_suffix(const char *str, const char *suffix)
 
 	return suffix_len;
 }
+
+/**
+ * str_has_prefix - Test is a string has a given prefix
+ * @str: The string to be tested
+ * @prefix: The string to see if @str starts with
+ *
+ * Returns:
+ * * strlen(@prefix) if @str starts with @prefix
+ * * 0 if @str does not start with @prefix
+ */
+size_t str_has_prefix(const char *str, const char *prefix)
+{
+	size_t prefix_len = strlen(prefix);
+
+	return strncmp(str, prefix, prefix_len) == 0 ? prefix_len : 0;
+}
