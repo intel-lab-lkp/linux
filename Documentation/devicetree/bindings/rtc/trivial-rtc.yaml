@@ -83,6 +83,8 @@ properties:
       - sii,s35390a
       # ST SPEAr Real-time Clock
       - st,spear600-rtc
+      # VIA/Wondermedia VT8500 Real-time Clock
+      - via,vt8500-rtc
       # I2C bus SERIAL INTERFACE REAL-TIME CLOCK IC
       - whwave,sd3078
       # Xircom X1205 I2C RTC
