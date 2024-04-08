@@ -161,6 +161,7 @@ static size_t tgid_map_max;
 
 #define SAVED_CMDLINES_DEFAULT 128
 #define NO_CMDLINE_MAP UINT_MAX
+#define PID_MAP_SIZE (CONFIG_BASE_SMALL ? 0x1000 : 0x8000)
 /*
  * Preemption must be disabled before acquiring trace_cmdline_lock.
  * The various trace_arrays' max_lock must be acquired in a context
@@ -168,7 +169,7 @@ static size_t tgid_map_max;
  */
 static arch_spinlock_t trace_cmdline_lock = __ARCH_SPIN_LOCK_UNLOCKED;
 struct saved_cmdlines_buffer {
-	unsigned map_pid_to_cmdline[PID_MAX_DEFAULT+1];
+	unsigned map_pid_to_cmdline[PID_MAP_SIZE];
 	unsigned *map_cmdline_to_pid;
 	unsigned cmdline_num;
 	int cmdline_idx;
@@ -248,7 +249,7 @@ int trace_save_cmdline(struct task_struct *tsk)
 	if (!tsk->pid)
 		return 1;
 
-	tpid = tsk->pid & (PID_MAX_DEFAULT - 1);
+	tpid = tsk->pid % PID_MAP_SIZE;
 
 	/*
 	 * It's not the end of the world if we don't get
@@ -294,7 +295,7 @@ static void __trace_find_cmdline(int pid, char comm[])
 		return;
 	}
 
-	tpid = pid & (PID_MAX_DEFAULT - 1);
+	tpid = pid % PID_MAP_SIZE;
 	map = savedcmd->map_pid_to_cmdline[tpid];
 	if (map != NO_CMDLINE_MAP) {
 		tpid = savedcmd->map_cmdline_to_pid[map];
@@ -645,8 +646,8 @@ tracing_saved_cmdlines_size_write(struct file *filp, const char __user *ubuf,
 	if (ret)
 		return ret;
 
-	/* must have at least 1 entry or less than PID_MAX_DEFAULT */
-	if (!val || val > PID_MAX_DEFAULT)
+	/* must have at least 1 entry or fit into map_pid_to_cmdline */
+	if (!val || val >= PID_MAP_SIZE)
 		return -EINVAL;
 
 	ret = tracing_resize_saved_cmdlines((unsigned int)val);
