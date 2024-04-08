@@ -98,13 +98,84 @@ static int psample_nl_cmd_get_group_dumpit(struct sk_buff *msg,
 	return msg->len;
 }
 
-static const struct genl_small_ops psample_nl_ops[] = {
+struct psample_obj_desc {
+	struct rcu_head rcu;
+	u32 group_num;
+	bool group_num_valid;
+};
+
+struct psample_nl_sock_priv {
+	struct psample_obj_desc __rcu *flt;
+	spinlock_t flt_lock; /* Protects flt. */
+};
+
+static void psample_nl_sock_priv_init(void *priv)
+{
+	struct psample_nl_sock_priv *sk_priv = priv;
+
+	spin_lock_init(&sk_priv->flt_lock);
+}
+
+static void psample_nl_sock_priv_destroy(void *priv)
+{
+	struct psample_nl_sock_priv *sk_priv = priv;
+	struct psample_obj_desc *flt;
+
+	flt = rcu_dereference_protected(sk_priv->flt, true);
+	kfree_rcu(flt, rcu);
+}
+
+static int psample_nl_sample_filter_set_doit(struct sk_buff *skb,
+					     struct genl_info *info)
+{
+	struct psample_nl_sock_priv *sk_priv;
+	struct nlattr **attrs = info->attrs;
+	struct psample_obj_desc *flt;
+
+	flt = kzalloc(sizeof(*flt), GFP_KERNEL);
+
+	if (attrs[PSAMPLE_ATTR_SAMPLE_GROUP]) {
+		flt->group_num = nla_get_u32(attrs[PSAMPLE_ATTR_SAMPLE_GROUP]);
+		flt->group_num_valid = true;
+	}
+
+	if (!flt->group_num_valid) {
+		kfree(flt);
+		flt = NULL;
+	}
+
+	sk_priv = genl_sk_priv_get(&psample_nl_family, NETLINK_CB(skb).sk);
+	if (IS_ERR(sk_priv)) {
+		kfree(flt);
+		return PTR_ERR(sk_priv);
+	}
+
+	spin_lock(&sk_priv->flt_lock);
+	flt = rcu_replace_pointer(sk_priv->flt, flt,
+				  lockdep_is_held(&sk_priv->flt_lock));
+	spin_unlock(&sk_priv->flt_lock);
+	kfree_rcu(flt, rcu);
+	return 0;
+}
+
+static const struct nla_policy
+	psample_sample_filter_set_policy[PSAMPLE_ATTR_SAMPLE_GROUP + 1] = {
+	[PSAMPLE_ATTR_SAMPLE_GROUP] = { .type = NLA_U32, },
+};
+
+static const struct genl_ops psample_nl_ops[] = {
 	{
 		.cmd = PSAMPLE_CMD_GET_GROUP,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.dumpit = psample_nl_cmd_get_group_dumpit,
 		/* can be retrieved by unprivileged users */
-	}
+	},
+	{
+		.cmd		= PSAMPLE_CMD_SAMPLE_FILTER_SET,
+		.doit		= psample_nl_sample_filter_set_doit,
+		.policy		= psample_sample_filter_set_policy,
+		.flags		= 0,
+	},
 };
 
 static struct genl_family psample_nl_family __ro_after_init = {
@@ -114,10 +185,13 @@ static struct genl_family psample_nl_family __ro_after_init = {
 	.netnsok	= true,
 	.module		= THIS_MODULE,
 	.mcgrps		= psample_nl_mcgrps,
-	.small_ops	= psample_nl_ops,
-	.n_small_ops	= ARRAY_SIZE(psample_nl_ops),
+	.ops		= psample_nl_ops,
+	.n_ops		= ARRAY_SIZE(psample_nl_ops),
 	.resv_start_op	= PSAMPLE_CMD_GET_GROUP + 1,
 	.n_mcgrps	= ARRAY_SIZE(psample_nl_mcgrps),
+	.sock_priv_size		= sizeof(struct psample_nl_sock_priv),
+	.sock_priv_init		= psample_nl_sock_priv_init,
+	.sock_priv_destroy	= psample_nl_sock_priv_destroy,
 };
 
 static void psample_group_notify(struct psample_group *group,
@@ -360,6 +434,42 @@ static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 }
 #endif
 
+static inline void psample_nl_obj_desc_init(struct psample_obj_desc *desc,
+					    u32 group_num)
+{
+	memset(desc, 0, sizeof(*desc));
+	desc->group_num = group_num;
+	desc->group_num_valid = true;
+}
+
+static bool psample_obj_desc_match(struct psample_obj_desc *desc,
+				   struct psample_obj_desc *flt)
+{
+	if (desc->group_num_valid && flt->group_num_valid &&
+	    desc->group_num != flt->group_num)
+		return false;
+	return true;
+}
+
+static int psample_nl_sample_filter(struct sock *dsk, struct sk_buff *skb,
+				    void *data)
+{
+	struct psample_obj_desc *desc = data;
+	struct psample_nl_sock_priv *sk_priv;
+	struct psample_obj_desc *flt;
+	int ret = 0;
+
+	rcu_read_lock();
+	sk_priv = __genl_sk_priv_get(&psample_nl_family, dsk);
+	if (!IS_ERR_OR_NULL(sk_priv)) {
+		flt = rcu_dereference(sk_priv->flt);
+		if (flt)
+			ret = !psample_obj_desc_match(desc, flt);
+	}
+	rcu_read_unlock();
+	return ret;
+}
+
 void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 			   u32 sample_rate, const struct psample_metadata *md)
 {
@@ -370,6 +480,7 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 #ifdef CONFIG_INET
 	struct ip_tunnel_info *tun_info;
 #endif
+	struct psample_obj_desc desc;
 	struct sk_buff *nl_skb;
 	int data_len;
 	int meta_len;
@@ -487,8 +598,12 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 #endif
 
 	genlmsg_end(nl_skb, data);
-	genlmsg_multicast_netns(&psample_nl_family, group->net, nl_skb, 0,
-				PSAMPLE_NL_MCGRP_SAMPLE, GFP_ATOMIC);
+	psample_nl_obj_desc_init(&desc, group->group_num);
+	genlmsg_multicast_netns_filtered(&psample_nl_family,
+					 group->net, nl_skb, 0,
+					 PSAMPLE_NL_MCGRP_SAMPLE,
+					 GFP_ATOMIC, psample_nl_sample_filter,
+					 &desc);
 
 	return;
 error:
