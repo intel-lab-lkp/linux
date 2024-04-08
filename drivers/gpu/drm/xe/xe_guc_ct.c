@@ -21,6 +21,7 @@
 #include "xe_gt.h"
 #include "xe_gt_pagefault.h"
 #include "xe_gt_printk.h"
+#include "xe_gt_sriov_pf_control.h"
 #include "xe_gt_tlb_invalidation.h"
 #include "xe_guc.h"
 #include "xe_guc_relay.h"
@@ -145,18 +146,22 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
 
 	xe_assert(xe, !(guc_ct_size() % PAGE_SIZE));
 
-	drmm_mutex_init(&xe->drm, &ct->lock);
 	spin_lock_init(&ct->fast_lock);
 	xa_init(&ct->fence_lookup);
 	INIT_WORK(&ct->g2h_worker, g2h_worker_func);
 	init_waitqueue_head(&ct->wq);
 	init_waitqueue_head(&ct->g2h_fence_wq);
 
+	err = drmm_mutex_init(&xe->drm, &ct->lock);
+	if (err)
+		return err;
+
 	primelockdep(ct);
 
 	bo = xe_managed_bo_create_pin_map(xe, tile, guc_ct_size(),
-					  XE_BO_CREATE_SYSTEM_BIT |
-					  XE_BO_CREATE_GGTT_BIT);
+					  XE_BO_FLAG_SYSTEM |
+					  XE_BO_FLAG_GGTT |
+					  XE_BO_FLAG_GGTT_INVALIDATE);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
@@ -1004,6 +1009,7 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
 {
 	struct xe_device *xe = ct_to_xe(ct);
 	struct xe_guc *guc = ct_to_guc(ct);
+	struct xe_gt *gt = ct_to_gt(ct);
 	u32 hxg_len = msg_len_to_hxg_len(len);
 	u32 *hxg = msg_to_hxg(msg);
 	u32 action, adj_len;
@@ -1058,6 +1064,9 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
 		break;
 	case XE_GUC_ACTION_GUC2VF_RELAY_FROM_PF:
 		ret = xe_guc_relay_process_guc2vf(&guc->relay, payload, adj_len);
+		break;
+	case GUC_ACTION_GUC2PF_VF_STATE_NOTIFY:
+		ret = xe_gt_sriov_pf_control_process_guc2pf(gt, hxg, hxg_len);
 		break;
 	default:
 		drm_err(&xe->drm, "unexpected action 0x%04x\n", action);
