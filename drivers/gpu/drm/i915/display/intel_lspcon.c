@@ -240,6 +240,13 @@ static bool lspcon_wake_native_aux_ch(struct intel_lspcon *lspcon)
 	return true;
 }
 
+static
+enum drm_lspcon_mode lspcon_get_expected_mode(struct intel_lspcon *lspcon)
+{
+	return lspcon_wake_native_aux_ch(lspcon) ?
+		DRM_LSPCON_MODE_PCON : DRM_LSPCON_MODE_LS;
+}
+
 static bool lspcon_probe(struct intel_lspcon *lspcon)
 {
 	int retry;
@@ -249,9 +256,7 @@ static bool lspcon_probe(struct intel_lspcon *lspcon)
 	struct i2c_adapter *ddc = &intel_dp->aux.ddc;
 	enum drm_lspcon_mode expected_mode;
 
-	expected_mode = lspcon_wake_native_aux_ch(lspcon) ?
-			DRM_LSPCON_MODE_PCON : DRM_LSPCON_MODE_LS;
-
+	expected_mode = lspcon_get_expected_mode(lspcon);
 	/* Lets probe the adaptor and check its type */
 	for (retry = 0; retry < 6; retry++) {
 		if (retry)
@@ -713,12 +718,9 @@ void lspcon_resume(struct intel_digital_port *dig_port)
 		}
 	}
 
-	if (lspcon_wake_native_aux_ch(lspcon)) {
-		expected_mode = DRM_LSPCON_MODE_PCON;
+	expected_mode = lspcon_get_expected_mode(lspcon);
+	if (expected_mode == DRM_LSPCON_MODE_PCON)
 		lspcon_resume_in_pcon_wa(lspcon);
-	} else {
-		expected_mode = DRM_LSPCON_MODE_LS;
-	}
 
 	if (lspcon_wait_mode(lspcon, expected_mode) == DRM_LSPCON_MODE_PCON)
 		return;
