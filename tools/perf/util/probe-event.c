@@ -564,7 +564,7 @@ static struct debuginfo *open_debuginfo(const char *module, struct nsinfo *nsi,
 	ret = debuginfo__new(path);
 	if (!ret && !silent) {
 		pr_warning("The %s file has no debug information.\n", path);
-		if (!module || !strtailcmp(path, ".ko"))
+		if (!module || !str_has_suffix(path, ".ko"))
 			pr_warning("Rebuild with CONFIG_DEBUG_INFO=y, ");
 		else
 			pr_warning("Rebuild with -g, ");
