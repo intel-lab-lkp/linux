@@ -467,7 +467,4 @@ int drm_edid_connector_update(struct drm_connector *connector,
 int drm_edid_connector_add_modes(struct drm_connector *connector);
 bool drm_edid_is_digital(const struct drm_edid *drm_edid);
 
-const u8 *drm_find_edid_extension(const struct drm_edid *drm_edid,
-				  int ext_id, int *ext_index);
-
 #endif /* __DRM_EDID_H__ */
