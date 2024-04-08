@@ -3263,20 +3263,6 @@ static struct script_desc *script_desc__findnew(const char *name)
 	return s;
 }
 
-static const char *ends_with(const char *str, const char *suffix)
-{
-	size_t suffix_len = strlen(suffix);
-	const char *p = str;
-
-	if (strlen(str) > suffix_len) {
-		p = str + strlen(str) - suffix_len;
-		if (!strncmp(p, suffix, suffix_len))
-			return p;
-	}
-
-	return NULL;
-}
-
 static int read_script_info(struct script_desc *desc, const char *filename)
 {
 	char line[BUFSIZ], *p;
@@ -3320,19 +3306,21 @@ static int read_script_info(struct script_desc *desc, const char *filename)
 
 static char *get_script_root(struct dirent *script_dirent, const char *suffix)
 {
-	char *script_root, *str;
+	char *script_root;
+	size_t script_len, suffix_len;
 
 	script_root = strdup(script_dirent->d_name);
 	if (!script_root)
 		return NULL;
 
-	str = (char *)ends_with(script_root, suffix);
-	if (!str) {
+	script_len = strlen(script_root);
+	suffix_len = str_has_suffix(script_root, suffix);
+	if (!suffix_len) {
 		free(script_root);
 		return NULL;
 	}
 
-	*str = '\0';
+	script_root[script_len - suffix_len] = '\0';
 	return script_root;
 }
 
@@ -3608,7 +3596,7 @@ static char *get_script_path(const char *script_root, const char *suffix)
 
 static bool is_top_script(const char *script_path)
 {
-	return ends_with(script_path, "top") != NULL;
+	return str_has_suffix(script_path, "top") != 0;
 }
 
 static int has_required_arg(char *script_path)
