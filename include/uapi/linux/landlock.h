@@ -37,6 +37,13 @@ struct landlock_ruleset_attr {
 	 * rule explicitly allow them.
 	 */
 	__u64 handled_access_net;
+
+	/**
+	 * @handled_access_net: Bitmask of actions (cf. `Socket flags`_)
+	 * that is handled by this ruleset and should then be forbidden if no
+	 * rule explicitly allow them.
+	 */
+	__u64 handled_access_socket;
 };
 
 /*
@@ -65,6 +72,11 @@ enum landlock_rule_type {
 	 * landlock_net_port_attr .
 	 */
 	LANDLOCK_RULE_NET_PORT,
+	/**
+	 * @LANDLOCK_RULE_SOCKET: Type of a &struct
+	 * landlock_socket_attr .
+	 */
+	LANDLOCK_RULE_SOCKET,
 };
 
 /**
@@ -113,6 +125,27 @@ struct landlock_net_port_attr {
 	 * on the related port range.
 	 */
 	__u64 port;
+};
+
+/**
+ * struct landlock_socket_attr - Socket definition
+ *
+ * Argument of sys_landlock_add_rule().
+ */
+struct landlock_socket_attr {
+	/**
+	 * @allowed_access: Bitmask of allowed access for a socket
+	 * (cf. `Socket flags`_).
+	 */
+	__u64 allowed_access;
+	/**
+	 * @domain: Protocol family used for communication (see socket(2)).
+	 */
+	int domain;
+	/**
+	 * @type: Socket type (see socket(2)).
+	 */
+	int type;
 };
 
 /**
@@ -243,5 +276,21 @@ struct landlock_net_port_attr {
 /* clang-format off */
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
+/* clang-format on */
+
+/**
+ * DOC: socket_acess
+ *
+ * Socket flags
+ * ~~~~~~~~~~~~~~~~
+ *
+ * These flags enable to restrict a sandboxed process to a set of
+ * socket-related actions for specific protocols. This is supported
+ * since the Landlock ABI version 5.
+ *
+ * - %LANDLOCK_ACCESS_SOCKET_CREATE: Create a socket
+ */
+/* clang-format off */
+#define LANDLOCK_ACCESS_SOCKET_CREATE			(1ULL << 0)
 /* clang-format on */
 #endif /* _UAPI_LINUX_LANDLOCK_H */

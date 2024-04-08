@@ -159,7 +159,7 @@ static int current_check_access_socket(struct socket *const sock,
 			return -EINVAL;
 	}
 
-	id.key.data = (__force uintptr_t)port;
+	id.key.data = (__force u64)port;
 	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
 
 	rule = landlock_find_rule(dom, id);
