@@ -18,8 +18,8 @@
 
 static inline int is_android_lib(const char *filename)
 {
-	return strstarts(filename, "/data/app-lib/") ||
-	       strstarts(filename, "/system/lib/");
+	return str_has_prefix(filename, "/data/app-lib/") ||
+	       str_has_prefix(filename, "/system/lib/");
 }
 
 static inline bool replace_android_lib(const char *filename, char *newfilename)
@@ -39,7 +39,7 @@ static inline bool replace_android_lib(const char *filename, char *newfilename)
 
 	app_abi_length = strlen(app_abi);
 
-	if (strstarts(filename, "/data/app-lib/")) {
+	if (str_has_prefix(filename, "/data/app-lib/")) {
 		char *apk_path;
 
 		if (!app_abi_length)
@@ -63,7 +63,7 @@ static inline bool replace_android_lib(const char *filename, char *newfilename)
 		return true;
 	}
 
-	if (strstarts(filename, "/system/lib/")) {
+	if (str_has_prefix(filename, "/system/lib/")) {
 		char *ndk, *app;
 		const char *arch;
 		int ndk_length, app_length;

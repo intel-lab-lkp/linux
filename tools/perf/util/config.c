@@ -473,22 +473,22 @@ static int perf_stat_config(const char *var, const char *value)
 int perf_default_config(const char *var, const char *value,
 			void *dummy __maybe_unused)
 {
-	if (strstarts(var, "core."))
+	if (str_has_prefix(var, "core."))
 		return perf_default_core_config(var, value);
 
-	if (strstarts(var, "hist."))
+	if (str_has_prefix(var, "hist."))
 		return perf_hist_config(var, value);
 
-	if (strstarts(var, "ui."))
+	if (str_has_prefix(var, "ui."))
 		return perf_ui_config(var, value);
 
-	if (strstarts(var, "call-graph."))
+	if (str_has_prefix(var, "call-graph."))
 		return perf_callchain_config(var, value);
 
-	if (strstarts(var, "buildid."))
+	if (str_has_prefix(var, "buildid."))
 		return perf_buildid_config(var, value);
 
-	if (strstarts(var, "stat."))
+	if (str_has_prefix(var, "stat."))
 		return perf_stat_config(var, value);
 
 	/* Add other config variables here. */

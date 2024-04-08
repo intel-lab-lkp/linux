@@ -46,7 +46,7 @@ int pmu_name_len_no_suffix(const char *str, unsigned long *num)
 	orig_len = len = strlen(str);
 
 	/* Non-uncore PMUs have their full length, for example, i915. */
-	if (!strstarts(str, "uncore_"))
+	if (!str_has_prefix(str, "uncore_"))
 		return len;
 
 	/*

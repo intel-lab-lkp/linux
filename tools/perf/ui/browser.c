@@ -577,7 +577,7 @@ static int ui_browser__color_config(const char *var, const char *value,
 	int i;
 
 	/* same dir for all commands */
-	if (!strstarts(var, "colors.") != 0)
+	if (!str_has_prefix(var, "colors.") != 0)
 		return 0;
 
 	for (i = 0; ui_browser__colorsets[i].name != NULL; ++i) {

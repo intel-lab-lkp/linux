@@ -19,7 +19,7 @@ void evlist__init_trace_event_sample_raw(struct evlist *evlist)
 	if (arch_pf && !strcmp("s390", arch_pf))
 		evlist->trace_event_sample_raw = evlist__s390_sample_raw;
 	else if (arch_pf && !strcmp("x86", arch_pf) &&
-		 cpuid && strstarts(cpuid, "AuthenticAMD") &&
+		 cpuid && str_has_prefix(cpuid, "AuthenticAMD") &&
 		 evlist__has_amd_ibs(evlist)) {
 		evlist->trace_event_sample_raw = evlist__amd_sample_raw;
 	}

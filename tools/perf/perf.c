@@ -103,7 +103,7 @@ struct pager_config {
 static bool same_cmd_with_prefix(const char *var, struct pager_config *c,
 				  const char *header)
 {
-	return (strstarts(var, header) && !strcmp(var + strlen(header), c->cmd));
+	return (str_has_prefix(var, header) && !strcmp(var + strlen(header), c->cmd));
 }
 
 static int pager_command_config(const char *var, const char *value, void *data)
@@ -232,7 +232,7 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 		/*
 		 * Check remaining flags.
 		 */
-		if (strstarts(cmd, CMD_EXEC_PATH)) {
+		if (str_has_prefix(cmd, CMD_EXEC_PATH)) {
 			cmd += strlen(CMD_EXEC_PATH);
 			if (*cmd == '=')
 				set_argv_exec_path(cmd + 1);
@@ -269,7 +269,7 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 				*envchanged = 1;
 			(*argv)++;
 			(*argc)--;
-		} else if (strstarts(cmd, CMD_DEBUGFS_DIR)) {
+		} else if (str_has_prefix(cmd, CMD_DEBUGFS_DIR)) {
 			tracing_path_set(cmd + strlen(CMD_DEBUGFS_DIR));
 			fprintf(stderr, "dir: %s\n", tracing_path_mount());
 			if (envchanged)
@@ -496,7 +496,7 @@ int main(int argc, const char **argv)
 	 * that contains a dash in its name. To handle this scenario, we just
 	 * fall through and ignore the "xxxx" part of the command string.
 	 */
-	if (strstarts(cmd, "perf-")) {
+	if (str_has_prefix(cmd, "perf-")) {
 		cmd += 5;
 		argv[0] = cmd;
 		handle_internal_command(argc, argv);
@@ -507,7 +507,7 @@ int main(int argc, const char **argv)
 		cmd -= 5;
 		argv[0] = cmd;
 	}
-	if (strstarts(cmd, "trace")) {
+	if (str_has_prefix(cmd, "trace")) {
 #ifndef HAVE_LIBTRACEEVENT
 		fprintf(stderr,
 			"trace command not available: missing libtraceevent devel package at build time.\n");
@@ -529,7 +529,7 @@ int main(int argc, const char **argv)
 	commit_pager_choice();
 
 	if (argc > 0) {
-		if (strstarts(argv[0], "--"))
+		if (str_has_prefix(argv[0], "--"))
 			argv[0] += 2;
 	} else {
 		/* The user didn't specify a command; give them help */

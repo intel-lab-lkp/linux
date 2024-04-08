@@ -63,7 +63,7 @@ static int scripts_config(const char *var, const char *value, void *data)
 {
 	struct script_config *c = data;
 
-	if (!strstarts(var, "scripts."))
+	if (!str_has_prefix(var, "scripts."))
 		return -1;
 	if (c->index >= SCRIPT_MAX_NO)
 		return -1;

@@ -216,7 +216,7 @@ static int server_config(const char *var, const char *value, void *cb)
 {
 	struct daemon *daemon = cb;
 
-	if (strstarts(var, "session-")) {
+	if (str_has_prefix(var, "session-")) {
 		return session_config(daemon, var, value);
 	} else if (!strcmp(var, "daemon.base") && !daemon->base_user) {
 		if (daemon->base && strcmp(daemon->base, value)) {

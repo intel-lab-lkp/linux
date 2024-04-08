@@ -1368,8 +1368,8 @@ static u64 max_text_section(Elf *elf, GElf_Ehdr *ehdr)
 		/* .init and .exit sections are not placed with .text */
 		sec_name = elf_strptr(elf, ehdr->e_shstrndx, shdr.sh_name);
 		if (!sec_name ||
-		    strstarts(sec_name, ".init") ||
-		    strstarts(sec_name, ".exit"))
+		    str_has_prefix(sec_name, ".init") ||
+		    str_has_prefix(sec_name, ".exit"))
 			break;
 
 		/* Must be next to previous, assumes .text is first */

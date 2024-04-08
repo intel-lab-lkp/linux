@@ -2673,9 +2673,9 @@ int cmd_lock(int argc, const char **argv)
 	if (!argc)
 		usage_with_options(lock_usage, lock_options);
 
-	if (strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (strlen(argv[0]) > 2 && str_has_prefix("record", argv[0])) {
 		return __cmd_record(argc, argv);
-	} else if (strlen(argv[0]) > 2 && strstarts("report", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("report", argv[0])) {
 		trace_handler = &report_lock_ops;
 		if (argc) {
 			argc = parse_options(argc, argv,
@@ -2697,7 +2697,7 @@ int cmd_lock(int argc, const char **argv)
 		/* recycling report_lock_ops */
 		trace_handler = &report_lock_ops;
 		rc = __cmd_report(true);
-	} else if (strlen(argv[0]) > 2 && strstarts("contention", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("contention", argv[0])) {
 		trace_handler = &contention_lock_ops;
 		sort_key = "wait_total";
 		output_fields = "contended,wait_total,wait_max,avg_wait";

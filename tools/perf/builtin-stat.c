@@ -2556,11 +2556,11 @@ int cmd_stat(int argc, const char **argv)
 	} else
 		stat_config.csv_sep = DEFAULT_SEPARATOR;
 
-	if (argc && strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (argc && strlen(argv[0]) > 2 && str_has_prefix("record", argv[0])) {
 		argc = __cmd_record(argc, argv);
 		if (argc < 0)
 			return -1;
-	} else if (argc && strlen(argv[0]) > 2 && strstarts("report", argv[0]))
+	} else if (argc && strlen(argv[0]) > 2 && str_has_prefix("report", argv[0]))
 		return __cmd_report(argc, argv);
 
 	interval = stat_config.interval;

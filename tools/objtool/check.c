@@ -2535,7 +2535,7 @@ static int classify_symbols(struct objtool_file *file)
 	struct symbol *func;
 
 	for_each_sym(file, func) {
-		if (func->type == STT_NOTYPE && strstarts(func->name, ".L"))
+		if (func->type == STT_NOTYPE && str_has_prefix(func->name, ".L"))
 			func->local_label = true;
 
 		if (func->bind != STB_GLOBAL)

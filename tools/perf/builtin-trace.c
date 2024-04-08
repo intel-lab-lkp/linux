@@ -3121,7 +3121,7 @@ static bool evlist__add_vfs_getname(struct evlist *evlist)
 		return false;
 
 	evlist__for_each_entry_safe(evlist, evsel, tmp) {
-		if (!strstarts(evsel__name(evsel), "probe:vfs_getname"))
+		if (!str_has_prefix(evsel__name(evsel), "probe:vfs_getname"))
 			continue;
 
 		if (evsel__field(evsel, "pathname")) {
@@ -3587,7 +3587,7 @@ static int trace__set_filter_loop_pids(struct trace *trace)
 			break;
 
 		if (!strcmp(thread__comm_str(parent), "sshd") ||
-		    strstarts(thread__comm_str(parent), "gnome-terminal")) {
+		    str_has_prefix(thread__comm_str(parent), "gnome-terminal")) {
 			pids[nr++] = thread__tid(parent);
 			break;
 		}
@@ -4990,7 +4990,7 @@ skip_augmentation:
 				evsel->handler = trace__sys_enter;
 			}
 
-			if (strstarts(evsel__name(evsel), "syscalls:sys_exit_")) {
+			if (str_has_prefix(evsel__name(evsel), "syscalls:sys_exit_")) {
 				struct syscall_tp *sc;
 init_augmented_syscall_tp:
 				if (evsel__init_augmented_syscall_tp(evsel, evsel))

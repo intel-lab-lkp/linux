@@ -3420,7 +3420,7 @@ static int annotation__config(const char *var, const char *value, void *data)
 {
 	struct annotation_options *opt = data;
 
-	if (!strstarts(var, "annotate."))
+	if (!str_has_prefix(var, "annotate."))
 		return 0;
 
 	if (!strcmp(var, "annotate.offset_level")) {

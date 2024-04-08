@@ -2037,10 +2037,10 @@ static int kvm_cmd_stat(const char *file_name, int argc, const char **argv)
 		goto perf_stat;
 	}
 
-	if (strlen(argv[1]) > 2 && strstarts("record", argv[1]))
+	if (strlen(argv[1]) > 2 && str_has_prefix("record", argv[1]))
 		return kvm_events_record(&kvm, argc - 1, argv + 1);
 
-	if (strlen(argv[1]) > 2 && strstarts("report", argv[1]))
+	if (strlen(argv[1]) > 2 && str_has_prefix("report", argv[1]))
 		return kvm_events_report(&kvm, argc - 1 , argv + 1);
 
 #if defined(HAVE_TIMERFD_SUPPORT) && defined(HAVE_LIBTRACEEVENT)
@@ -2170,18 +2170,18 @@ int cmd_kvm(int argc, const char **argv)
 		}
 	}
 
-	if (strlen(argv[0]) > 2 && strstarts("record", argv[0]))
+	if (strlen(argv[0]) > 2 && str_has_prefix("record", argv[0]))
 		return __cmd_record(file_name, argc, argv);
-	else if (strlen(argv[0]) > 2 && strstarts("report", argv[0]))
+	else if (strlen(argv[0]) > 2 && str_has_prefix("report", argv[0]))
 		return __cmd_report(file_name, argc, argv);
-	else if (strlen(argv[0]) > 2 && strstarts("diff", argv[0]))
+	else if (strlen(argv[0]) > 2 && str_has_prefix("diff", argv[0]))
 		return cmd_diff(argc, argv);
 	else if (!strcmp(argv[0], "top"))
 		return cmd_top(argc, argv);
-	else if (strlen(argv[0]) > 2 && strstarts("buildid-list", argv[0]))
+	else if (strlen(argv[0]) > 2 && str_has_prefix("buildid-list", argv[0]))
 		return __cmd_buildid_list(file_name, argc, argv);
 #if defined(HAVE_KVM_STAT_SUPPORT) && defined(HAVE_LIBTRACEEVENT)
-	else if (strlen(argv[0]) > 2 && strstarts("stat", argv[0]))
+	else if (strlen(argv[0]) > 2 && str_has_prefix("stat", argv[0]))
 		return kvm_cmd_stat(file_name, argc, argv);
 #endif
 	else

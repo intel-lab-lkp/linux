@@ -32,16 +32,6 @@ char *str_error_r(int errnum, char *buf, size_t buflen);
 
 char *strreplace(char *s, char old, char new);
 
-/**
- * strstarts - does @str start with @prefix?
- * @str: string to examine
- * @prefix: prefix to look for.
- */
-static inline bool strstarts(const char *str, const char *prefix)
-{
-	return strncmp(str, prefix, strlen(prefix)) == 0;
-}
-
 size_t str_has_suffix(const char *str, const char *suffix);
 
 size_t str_has_prefix(const char *str, const char *prefix);

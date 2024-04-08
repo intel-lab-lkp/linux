@@ -145,7 +145,7 @@ static int subdivided_dso_cb(struct dso *dso, struct machine *machine __maybe_un
 {
 	struct dso *text_dso = d;
 
-	if (dso != text_dso && strstarts(dso->short_name, text_dso->short_name))
+	if (dso != text_dso && str_has_prefix(dso->short_name, text_dso->short_name))
 		if (test_dso(dso) != TEST_OK)
 			return -1;
 

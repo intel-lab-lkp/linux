@@ -12,7 +12,7 @@ bool x86__is_amd_cpu(void)
 		goto ret;
 
 	perf_env__cpuid(&env);
-	is_amd = env.cpuid && strstarts(env.cpuid, "AuthenticAMD") ? 1 : -1;
+	is_amd = env.cpuid && str_has_prefix(env.cpuid, "AuthenticAMD") ? 1 : -1;
 	perf_env__exit(&env);
 ret:
 	return is_amd >= 1 ? true : false;

@@ -2470,10 +2470,10 @@ int cmd_kwork(int argc, const char **argv)
 
 	sort_dimension__add(&kwork, "id", &kwork.cmp_id);
 
-	if (strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (strlen(argv[0]) > 2 && str_has_prefix("record", argv[0])) {
 		setup_event_list(&kwork, kwork_options, kwork_usage);
 		return perf_kwork__record(&kwork, argc, argv);
-	} else if (strlen(argv[0]) > 2 && strstarts("report", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("report", argv[0])) {
 		kwork.sort_order = default_report_sort_order;
 		if (argc > 1) {
 			argc = parse_options(argc, argv, report_options, report_usage, 0);
@@ -2484,7 +2484,7 @@ int cmd_kwork(int argc, const char **argv)
 		setup_sorting(&kwork, report_options, report_usage);
 		setup_event_list(&kwork, kwork_options, kwork_usage);
 		return perf_kwork__report(&kwork);
-	} else if (strlen(argv[0]) > 2 && strstarts("latency", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("latency", argv[0])) {
 		kwork.sort_order = default_latency_sort_order;
 		if (argc > 1) {
 			argc = parse_options(argc, argv, latency_options, latency_usage, 0);
@@ -2495,7 +2495,7 @@ int cmd_kwork(int argc, const char **argv)
 		setup_sorting(&kwork, latency_options, latency_usage);
 		setup_event_list(&kwork, kwork_options, kwork_usage);
 		return perf_kwork__report(&kwork);
-	} else if (strlen(argv[0]) > 2 && strstarts("timehist", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("timehist", argv[0])) {
 		if (argc > 1) {
 			argc = parse_options(argc, argv, timehist_options, timehist_usage, 0);
 			if (argc)
@@ -2504,7 +2504,7 @@ int cmd_kwork(int argc, const char **argv)
 		kwork.report = KWORK_REPORT_TIMEHIST;
 		setup_event_list(&kwork, kwork_options, kwork_usage);
 		return perf_kwork__timehist(&kwork);
-	} else if (strlen(argv[0]) > 2 && strstarts("top", argv[0])) {
+	} else if (strlen(argv[0]) > 2 && str_has_prefix("top", argv[0])) {
 		kwork.sort_order = default_top_sort_order;
 		if (argc > 1) {
 			argc = parse_options(argc, argv, top_options, top_usage, 0);

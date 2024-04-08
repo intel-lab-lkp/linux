@@ -79,7 +79,7 @@ static int show_spec_config(struct perf_config_set *set, const char *var)
 		return -1;
 
 	perf_config_items__for_each_entry(&set->sections, section) {
-		if (!strstarts(var, section->name))
+		if (!str_has_prefix(var, section->name))
 			continue;
 
 		perf_config_items__for_each_entry(&section->items, item) {

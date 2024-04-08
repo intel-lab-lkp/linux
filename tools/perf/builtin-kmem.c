@@ -1991,7 +1991,7 @@ int cmd_kmem(int argc, const char **argv)
 			kmem_page = 1;
 	}
 
-	if (strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (strlen(argv[0]) > 2 && str_has_prefix("record", argv[0])) {
 		symbol__init(NULL);
 		return __cmd_record(argc, argv);
 	}

@@ -320,9 +320,9 @@ bool evlist__has_amd_ibs(struct evlist *evlist)
 	while (nr_pmu_mappings--) {
 		ret = sscanf(pmu_mapping, "%u:%9s", &type, name);
 		if (ret == 2) {
-			if (strstarts(name, "ibs_op"))
+			if (str_has_prefix(name, "ibs_op"))
 				ibs_op_type = type;
-			else if (strstarts(name, "ibs_fetch"))
+			else if (str_has_prefix(name, "ibs_fetch"))
 				ibs_fetch_type = type;
 		}
 		pmu_mapping += strlen(pmu_mapping) + 1 /* '\0' */;

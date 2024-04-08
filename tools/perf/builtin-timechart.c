@@ -2014,7 +2014,7 @@ int cmd_timechart(int argc, const char **argv)
 		goto out;
 	}
 
-	if (argc && strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
+	if (argc && strlen(argv[0]) > 2 && str_has_prefix("record", argv[0])) {
 		argc = parse_options(argc, argv, timechart_record_options,
 				     timechart_record_usage,
 				     PARSE_OPT_STOP_AT_NON_OPTION);

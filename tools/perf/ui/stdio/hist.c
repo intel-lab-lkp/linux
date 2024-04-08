@@ -237,7 +237,7 @@ static size_t callchain__fprintf_graph(FILE *fp, struct rb_root *root,
 			 * displayed twice.
 			 */
 			if (!i++ && field_order == NULL &&
-			    sort_order && strstarts(sort_order, "sym"))
+			    sort_order && str_has_prefix(sort_order, "sym"))
 				continue;
 
 			if (!printed) {
