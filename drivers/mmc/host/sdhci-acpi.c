@@ -80,7 +80,8 @@ struct sdhci_acpi_host {
 enum {
 	DMI_QUIRK_RESET_SD_SIGNAL_VOLT_ON_SUSP			= BIT(0),
 	DMI_QUIRK_SD_NO_WRITE_PROTECT				= BIT(1),
-	DMI_QUIRK_SD_CD_ACTIVE_HIGH				= BIT(2),
+	DMI_QUIRK_SD_NO_1_8_V					= BIT(2),
+	DMI_QUIRK_SD_CD_ACTIVE_HIGH				= BIT(3),
 };
 
 static inline void *sdhci_acpi_priv(struct sdhci_acpi_host *c)
@@ -751,12 +752,15 @@ static const struct dmi_system_id sdhci_acpi_quirks[] = {
 	{
 		/*
 		 * Lenovo Yoga Tablet 2 Pro 1380F/L (13" Android version) this
-		 * has broken WP reporting and an inverted CD signal.
+		 * has broken WP reporting, an inverted CD signal and claims
+		 * to support UHS modes but they do not work.
 		 * Note this has more or less the same BIOS as the Lenovo Yoga
 		 * Tablet 2 830F/L or 1050F/L (8" and 10" Android), but unlike
 		 * the 830 / 1050 models which share the same mainboard this
 		 * model has a different mainboard and the inverted CD and
 		 * broken WP are unique to this board.
+		 * This match for the 13" model MUST come before the 8" + 10"
+		 * match since that one will also match the 13" model!
 		 */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Intel Corp."),
@@ -766,7 +770,23 @@ static const struct dmi_system_id sdhci_acpi_quirks[] = {
 			DMI_MATCH(DMI_BIOS_VERSION, "BLADE_21.X64.0005.R00.1504101516"),
 		},
 		.driver_data = (void *)(DMI_QUIRK_SD_NO_WRITE_PROTECT |
-					DMI_QUIRK_SD_CD_ACTIVE_HIGH),
+					DMI_QUIRK_SD_CD_ACTIVE_HIGH |
+					DMI_QUIRK_SD_NO_1_8_V),
+	},
+	{
+		/*
+		 * Lenovo Yoga Tablet 2 830F/L or 1050F/L (The 8" and 10"
+		 * Lenovo Yoga Tablet 2 use the same mainboard) These claim
+		 * to support UHS modes but they do not work.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Intel Corp."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "VALLEYVIEW C0 PLATFORM"),
+			DMI_MATCH(DMI_BOARD_NAME, "BYT-T FFD8"),
+			/* Partial match on beginning of BIOS version */
+			DMI_MATCH(DMI_BIOS_VERSION, "BLADE_21"),
+		},
+		.driver_data = (void *)DMI_QUIRK_SD_NO_1_8_V,
 	},
 	{
 		/*
@@ -904,6 +924,9 @@ static int sdhci_acpi_probe(struct platform_device *pdev)
 
 		if (quirks & DMI_QUIRK_SD_NO_WRITE_PROTECT)
 			host->mmc->caps2 |= MMC_CAP2_NO_WRITE_PROTECT;
+
+		if (quirks & DMI_QUIRK_SD_NO_1_8_V)
+			host->quirks2 |= SDHCI_QUIRK2_NO_1_8_V;
 	}
 
 	err = sdhci_setup_host(host);
