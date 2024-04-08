@@ -413,6 +413,18 @@ attribute-sets:
       -
         name: combined-count
         type: u32
+   -
+     name: profile
+     attributes:
+       -
+         name: usec
+         type: u16
+       -
+         name: pkts
+         type: u16
+       -
+         name: comps
+         type: u16
 
   -
     name: coalesce
@@ -502,6 +514,23 @@ attribute-sets:
       -
         name: tx-aggr-time-usecs
         type: u32
+      -
+        name: rx-eqe-profs
+        type: nest
+        nested-attributes: profile
+      -
+        name: rx-cqe-profs
+        type: nest
+        nested-attributes: profile
+      -
+        name: tx-eqe-profs
+        type: nest
+        nested-attributes: profile
+      -
+        name: tx-cqe-profs
+        type: nest
+        nested-attributes: profile
+
   -
     name: pause-stat
     attributes:
