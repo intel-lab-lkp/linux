@@ -56,8 +56,8 @@
 
 #define UPPER_MASK	(UPPER_MAX - 1)
 
-/* According to linux/thread.h pids can not be bigger than or equal to 1 << 30 */
-#define MAX_PID		(1 << 30)
+/* Structure can hold only pids strictly below this limit */
+#define MAX_PID		(1 << (UPPER_BITS + UPPER_BITS + LOWER_BITS))
 
 /* Just keep 6 chunks of both upper and lower in the cache on alloc */
 #define CHUNK_ALLOC 6

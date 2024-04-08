@@ -93,7 +93,7 @@ static inline bool upper_empty(union upper_chunk *chunk)
 static inline int pid_split(unsigned int pid, unsigned int *upper1,
 			     unsigned int *upper2, unsigned int *lower)
 {
-	/* MAX_PID should cover all pids */
+	/* MAX_PID must cover all possible pids */
 	BUILD_BUG_ON(MAX_PID < PID_MAX_LIMIT);
 
 	/* In case a bad pid is passed in, then fail */
@@ -413,8 +413,8 @@ struct trace_pid_list *trace_pid_list_alloc(void)
 	struct trace_pid_list *pid_list;
 	int i;
 
-	/* According to linux/thread.h, pids can be no bigger that 30 bits */
-	WARN_ON_ONCE(pid_max > (1 << 30));
+	/* See pid_split(), equal to pid_max > PID_MAX_LIMIT */
+	WARN_ON_ONCE(pid_max > MAX_PID);
 
 	pid_list = kzalloc(sizeof(*pid_list), GFP_KERNEL);
 	if (!pid_list)
