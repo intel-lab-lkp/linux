@@ -885,7 +885,8 @@ struct intel_tv_connector_state {
 	bool bypass_vfilter;
 };
 
-#define to_intel_tv_connector_state(x) container_of(x, struct intel_tv_connector_state, base)
+#define to_intel_tv_connector_state(conn_state) \
+	container_of_const((conn_state), struct intel_tv_connector_state, base)
 
 static struct drm_connector_state *
 intel_tv_connector_duplicate_state(struct drm_connector *connector)
@@ -967,9 +968,6 @@ intel_tv_mode_valid(struct drm_connector *connector,
 	status = intel_cpu_transcoder_mode_valid(i915, mode);
 	if (status != MODE_OK)
 		return status;
-
-	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
-		return MODE_NO_DBLESCAN;
 
 	if (mode->clock > max_dotclk)
 		return MODE_CLOCK_HIGH;

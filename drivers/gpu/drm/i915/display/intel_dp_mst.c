@@ -1302,8 +1302,13 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 	if (*status != MODE_OK)
 		return 0;
 
-	if (mode->flags & DRM_MODE_FLAG_DBLSCAN) {
-		*status = MODE_NO_DBLESCAN;
+	if (mode->flags & DRM_MODE_FLAG_DBLCLK) {
+		*status = MODE_H_ILLEGAL;
+		return 0;
+	}
+
+	if (mode->clock < 10000) {
+		*status = MODE_CLOCK_LOW;
 		return 0;
 	}
 
@@ -1335,17 +1340,6 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
-
-	if (mode->clock < 10000) {
-		*status = MODE_CLOCK_LOW;
-		return 0;
-	}
-
-	if (mode->flags & DRM_MODE_FLAG_DBLCLK) {
-		*status = MODE_H_ILLEGAL;
-		return 0;
-	}
-
 	if (intel_dp_need_bigjoiner(intel_dp, mode->hdisplay, target_clock)) {
 		bigjoiner = true;
 		max_dotclk *= 2;
