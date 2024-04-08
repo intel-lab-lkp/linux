@@ -42,6 +42,8 @@ static inline bool strstarts(const char *str, const char *prefix)
 	return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
+size_t str_has_suffix(const char *str, const char *suffix);
+
 extern char * __must_check skip_spaces(const char *);
 
 extern char *strim(char *);

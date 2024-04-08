@@ -226,3 +226,29 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 
 	return check_bytes8(start, value, bytes % 8);
 }
+
+/**
+ * str_has_suffix - Test is a string has a given suffix
+ * @str: The string to be tested
+ * @suffix: The string to see if @str ends with
+ *
+ * Returns:
+ * * strlen(@suffix) if @str ends with @suffix
+ * * 0 if @str does not end with @suffix
+ */
+size_t str_has_suffix(const char *str, const char *suffix)
+{
+	size_t i;
+	size_t str_len = strlen(str);
+	size_t suffix_len = strlen(suffix);
+
+	if (str_len < suffix_len)
+		return 0;
+
+	for (i = 0; i < suffix_len ; i++) {
+		if (str[str_len  - i - 1] != suffix[suffix_len - i - 1])
+			return 0;
+	}
+
+	return suffix_len;
+}
