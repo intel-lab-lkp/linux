@@ -501,7 +501,7 @@ struct xe_device {
 	struct mutex sb_lock;
 
 	/* Should be in struct intel_display */
-	u32 skl_preferred_vco_freq, max_dotclk_freq;
+	u32 max_dotclk_freq;
 
 	union {
 		/* only to allow build, not used functionally */
