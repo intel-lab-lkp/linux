@@ -194,8 +194,21 @@ static void acpi_processor_hotplug_delay_init(struct acpi_processor *pr)
 	pr_info("CPU%d has been hot-added\n", pr->id);
 	pr->flags.need_hotplug_init = 1;
 }
+static int acpi_processor_hotplug_map_cpu(struct acpi_processor *pr)
+{
+	return acpi_map_cpu(pr->handle, pr->phys_id, pr->acpi_id, &pr->id);
+}
+static void acpi_processor_hotplug_unmap_cpu(struct acpi_processor *pr)
+{
+	acpi_unmap_cpu(pr->id);
+}
 #else
 static void acpi_processor_hotplug_delay_init(struct acpi_processor *pr) {}
+static int acpi_processor_hotplug_map_cpu(struct acpi_processor *pr)
+{
+	return 0;
+}
+static void acpi_processor_hotplug_unmap_cpu(struct acpi_processor *pr) {}
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
 
 /* Enumerate extra CPUs */
@@ -215,13 +228,13 @@ static int acpi_processor_enumerate_extra(struct acpi_processor *pr)
 	cpu_maps_update_begin();
 	cpus_write_lock();
 
-	ret = acpi_map_cpu(pr->handle, pr->phys_id, pr->acpi_id, &pr->id);
+	ret = acpi_processor_hotplug_map_cpu(pr);
 	if (ret)
 		goto out;
 
 	ret = arch_register_cpu(pr->id);
 	if (ret) {
-		acpi_unmap_cpu(pr->id);
+		acpi_processor_hotplug_unmap_cpu(pr);
 		goto out;
 	}
 
