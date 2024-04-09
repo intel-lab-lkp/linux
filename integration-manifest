@@ -1,0 +1,30 @@
+drm drm-fixes 718c4fb221dbeff9072810841b949413c5ffc345
+	nouveau: fix devinit paths to only handle display on GSP.
+drm-misc drm-misc-fixes 3eadd887dbac1df8f25f701e5d404d1b90fd0fea
+	drm/client: Fully protect modes[] with dev->mode_config.mutex
+drm-intel drm-intel-fixes fec50db7033ea478773b159e0e2efb135270e3b7
+	Linux 6.9-rc3
+drm-xe drm-xe-fixes 77a011012d7d8b98368a763bf74317c6d5ce00f1
+	drm/xe: Use ordered wq for preempt fence waiting
+drm drm-next 1f913730e7c7904595cd899659c9a46f27eda07c
+	Merge tag 'drm-misc-next-2024-04-05' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 5d4e8ae6e57b025802aadf55a4775c55cceb75f1
+	nouveau/gsp: don't check devinit disable on GSP.
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes 4cece764965020c22cff7665b18a012006359095
+	Linux 6.9-rc1
+drm-misc drm-misc-next 935a92a1c400285545198ca2800a4c6c519c650a
+	drm: bridge: cdns-mhdp8546: Fix possible null pointer dereference
+drm-intel drm-intel-next fdac5a10b407c9c454154432d62deafead0f7ef1
+	drm/i915: use check_add_overflow() and drop local variants
+drm-intel drm-intel-gt-next 3563d855312acedcd445a3767f0cb07906f1c26f
+	drm/i915/guc: Fix the fix for reset lock confusion
+drm-xe drm-xe-next c151ff5c9053338ca9c7fc6fa6435e210cfd5ca7
+	drm/xe/lnl: Enable GuC Wa_14019882105
+drm-intel topic/core-for-CI 44909e5ed2f8e95a9a8576f44d570c68c76c44d6
+	ASoC: SOF: Core: Add remove_late() to  sof_init_environment failure path
+drm-xe topic/xe-for-CI ddb9be6feae2523fd4069482e44729e211f34219
+	drm/xe/huc: Define LNL HuC
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
