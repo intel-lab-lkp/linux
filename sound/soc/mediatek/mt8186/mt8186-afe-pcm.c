@@ -2729,7 +2729,7 @@ static int mt8186_afe_runtime_resume(struct device *dev)
 	struct mtk_base_afe *afe = dev_get_drvdata(dev);
 	struct mt8186_afe_private *afe_priv = afe->platform_priv;
 	int ret;
-
+pr_err("mt8186 afe runtime_resume\n");
 	ret = mt8186_afe_enable_clock(afe);
 	if (ret)
 		return ret;
@@ -2739,7 +2739,7 @@ static int mt8186_afe_runtime_resume(struct device *dev)
 		return ret;
 
 	if (!afe->regmap || afe_priv->pm_runtime_bypass_reg_ctl)
-		goto skip_regmap;
+		return 0;
 
 	regcache_cache_only(afe->regmap, false);
 	regcache_sync(afe->regmap);
@@ -2758,13 +2758,20 @@ static int mt8186_afe_runtime_resume(struct device *dev)
 	/* enable AFE */
 	regmap_update_bits(afe->regmap, AFE_DAC_CON0, AUDIO_AFE_ON_MASK_SFT, BIT(0));
 
-skip_regmap:
 	return 0;
 }
 
 static int mt8186_afe_component_probe(struct snd_soc_component *component)
 {
-	mtk_afe_add_sub_dai_control(component);
+	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
+	int ret;
+
+	snd_soc_component_init_regmap(component, afe->regmap);
+
+	ret = mtk_afe_add_sub_dai_control(component);
+	if (ret)
+		return ret;
+
 	mt8186_add_misc_control(component);
 
 	return 0;
@@ -2928,6 +2935,10 @@ static int mt8186_afe_pcm_dev_probe(struct platform_device *pdev)
 		ret = PTR_ERR(afe->regmap);
 		goto err_pm_disable;
 	}
+
+	ret = regmap_reinit_cache(afe->regmap, &mt8186_afe_regmap_config);
+	if (ret)
+		return dev_err_probe(dev, ret, "regmap_reinit_cache fail\n");
 
 	/* others */
 	afe->mtk_afe_hardware = &mt8186_afe_hardware;
