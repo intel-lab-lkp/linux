@@ -36,13 +36,15 @@ static void vmgenid_notify(struct device *device)
 	kobject_uevent_env(&device->kobj, KOBJ_CHANGE, envp);
 }
 
-static void vmgenid_acpi_handler(acpi_handle __always_unused handle,
-				 u32 __always_unused event, void *dev)
+static void __maybe_unused
+vmgenid_acpi_handler(acpi_handle __always_unused handle,
+		     u32 __always_unused event, void *dev)
 {
 	vmgenid_notify(dev);
 }
 
-static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
+static int __maybe_unused
+setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 {
 	if (IS_ERR(next_id))
 		return PTR_ERR(next_id);
@@ -53,9 +55,10 @@ static int setup_vmgenid_state(struct vmgenid_state *state, u8 *next_id)
 	return 0;
 }
 
-static int vmgenid_add_acpi(struct device *dev,
-			    struct vmgenid_state *state)
+static int vmgenid_add_acpi(struct device __maybe_unused *dev,
+			    struct vmgenid_state __maybe_unused *state)
 {
+#if IS_ENABLED(CONFIG_ACPI)
 	struct acpi_device *device = ACPI_COMPANION(dev);
 	struct acpi_buffer parsed = { ACPI_ALLOCATE_BUFFER };
 	union acpi_object *obj;
@@ -98,6 +101,9 @@ static int vmgenid_add_acpi(struct device *dev,
 out:
 	ACPI_FREE(parsed.pointer);
 	return ret;
+#else
+	return -EINVAL;
+#endif
 }
 
 static int vmgenid_add(struct platform_device *pdev)
