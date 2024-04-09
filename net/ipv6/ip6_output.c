@@ -1493,7 +1493,7 @@ emsgsize:
 	    rt->dst.dev->features & (NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM))
 		csummode = CHECKSUM_PARTIAL;
 
-	if ((flags & MSG_ZEROCOPY) && length) {
+	if (((flags & MSG_ZEROCOPY) || (flags & MSG_ZEROCOPY_UARG)) && length) {
 		struct msghdr *msg = from;
 
 		if (getfrag == ip_generic_getfrag && msg->msg_ubuf) {
@@ -1510,7 +1510,8 @@ emsgsize:
 				uarg = msg->msg_ubuf;
 			}
 		} else if (sock_flag(sk, SOCK_ZEROCOPY)) {
-			uarg = msg_zerocopy_realloc(sk, length, skb_zcopy(skb));
+			uarg = msg_zerocopy_realloc(sk, length, skb_zcopy(skb),
+						    flags & MSG_ZEROCOPY_UARG);
 			if (!uarg)
 				return -ENOBUFS;
 			extra_uref = !skb_zcopy(skb);	/* only ref on new uarg */

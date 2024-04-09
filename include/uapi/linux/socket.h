@@ -35,4 +35,21 @@ struct __kernel_sockaddr_storage {
 #define SOCK_TXREHASH_DISABLED	0
 #define SOCK_TXREHASH_ENABLED	1
 
+/*
+ * Given the fact that MSG_ZEROCOPY_UARG tries to copy notifications
+ * back to user as soon as possible, 8 should be sufficient.
+ */
+#define SOCK_USR_ZC_INFO_MAX 8
+
+struct tx_msg_zcopy_info {
+	__u32 lo;
+	__u32 hi;
+	__u8 zerocopy;
+};
+
+struct tx_usr_zcopy_info {
+	int length;
+	struct tx_msg_zcopy_info info[SOCK_USR_ZC_INFO_MAX];
+};
+
 #endif /* _UAPI_LINUX_SOCKET_H */

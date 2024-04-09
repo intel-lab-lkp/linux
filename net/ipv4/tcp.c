@@ -465,6 +465,8 @@ void tcp_init_sock(struct sock *sk)
 
 	set_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);
 	sk_sockets_allocated_inc(sk);
+
+	tx_message_zcopy_queue_init(&tp->tx_zcopy_queue);
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
@@ -1053,14 +1055,15 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 
 	flags = msg->msg_flags;
 
-	if ((flags & MSG_ZEROCOPY) && size) {
+	if (((flags & MSG_ZEROCOPY) || (flags & MSG_ZEROCOPY_UARG)) && size) {
 		if (msg->msg_ubuf) {
 			uarg = msg->msg_ubuf;
 			if (sk->sk_route_caps & NETIF_F_SG)
 				zc = MSG_ZEROCOPY;
 		} else if (sock_flag(sk, SOCK_ZEROCOPY)) {
+			bool zc_uarg = flags & MSG_ZEROCOPY_UARG;
 			skb = tcp_write_queue_tail(sk);
-			uarg = msg_zerocopy_realloc(sk, size, skb_zcopy(skb));
+			uarg = msg_zerocopy_realloc(sk, size, skb_zcopy(skb), zc_uarg);
 			if (!uarg) {
 				err = -ENOBUFS;
 				goto out_err;

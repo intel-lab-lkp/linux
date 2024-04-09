@@ -544,6 +544,23 @@ struct sock {
 	netns_tracker		ns_tracker;
 };
 
+struct tx_msg_zcopy_node {
+	struct list_head node;
+	struct tx_msg_zcopy_info info;
+	struct sk_buff *skb;
+};
+
+struct tx_msg_zcopy_queue {
+	struct list_head head;
+	spinlock_t lock; /* protects head queue */
+};
+
+static inline void tx_message_zcopy_queue_init(struct tx_msg_zcopy_queue *q)
+{
+	spin_lock_init(&q->lock);
+	INIT_LIST_HEAD(&q->head);
+}
+
 enum sk_pacing {
 	SK_PACING_NONE		= 0,
 	SK_PACING_NEEDED	= 1,

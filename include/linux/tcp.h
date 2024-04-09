@@ -501,6 +501,9 @@ struct tcp_sock {
 	 */
 	struct request_sock __rcu *fastopen_rsk;
 	struct saved_syn *saved_syn;
+
+/* TCP MSG_ZEROCOPY_UARG related information */
+	struct tx_msg_zcopy_queue tx_zcopy_queue;
 };
 
 enum tsq_enum {

@@ -1672,11 +1672,13 @@ static inline void skb_set_end_offset(struct sk_buff *skb, unsigned int offset)
 #endif
 
 struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
-				       struct ubuf_info *uarg);
+				       struct ubuf_info *uarg, bool user_args_notification);
 
 void msg_zerocopy_put_abort(struct ubuf_info *uarg, bool have_uref);
 
 void msg_zerocopy_callback(struct sk_buff *skb, struct ubuf_info *uarg,
+			   bool success);
+void msg_zerocopy_uarg_callback(struct sk_buff *skb, struct ubuf_info *uarg,
 			   bool success);
 
 int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
@@ -1772,7 +1774,8 @@ static inline void net_zcopy_put(struct ubuf_info *uarg)
 static inline void net_zcopy_put_abort(struct ubuf_info *uarg, bool have_uref)
 {
 	if (uarg) {
-		if (uarg->callback == msg_zerocopy_callback)
+		if (uarg->callback == msg_zerocopy_callback ||
+			uarg->callback == msg_zerocopy_uarg_callback)
 			msg_zerocopy_put_abort(uarg, have_uref);
 		else if (have_uref)
 			net_zcopy_put(uarg);

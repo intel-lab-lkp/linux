@@ -1133,6 +1133,15 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		if (ipc.opt)
 			free = 1;
 		connected = 0;
+
+		/* If len is zero and flag MSG_ZEROCOPY_UARG is set,
+		 * it means this call just wants to get zcopy notifications
+		 * instead of sending packets. It is useful when users
+		 * finish sending and want to get trailing notifications.
+		 */
+		if ((msg->msg_flags & MSG_ZEROCOPY_UARG) &&
+		    sock_flag(sk, SOCK_ZEROCOPY) && len == 0)
+			return 0;
 	}
 	if (!ipc.opt) {
 		struct ip_options_rcu *inet_opt;

@@ -1667,6 +1667,16 @@ void mm_unaccount_pinned_pages(struct mmpin *mmp)
 }
 EXPORT_SYMBOL_GPL(mm_unaccount_pinned_pages);
 
+static void init_ubuf_info_msgzc(struct ubuf_info_msgzc *uarg, struct sock *sk, size_t size)
+{
+	uarg->id = ((u32)atomic_inc_return(&sk->sk_zckey)) - 1;
+	uarg->len = 1;
+	uarg->bytelen = size;
+	uarg->zerocopy = 1;
+	uarg->ubuf.flags = SKBFL_ZEROCOPY_FRAG | SKBFL_DONT_ORPHAN;
+	refcount_set(&uarg->ubuf.refcnt, 1);
+}
+
 static struct ubuf_info *msg_zerocopy_alloc(struct sock *sk, size_t size)
 {
 	struct ubuf_info_msgzc *uarg;
@@ -1688,12 +1698,38 @@ static struct ubuf_info *msg_zerocopy_alloc(struct sock *sk, size_t size)
 	}
 
 	uarg->ubuf.callback = msg_zerocopy_callback;
-	uarg->id = ((u32)atomic_inc_return(&sk->sk_zckey)) - 1;
-	uarg->len = 1;
-	uarg->bytelen = size;
-	uarg->zerocopy = 1;
-	uarg->ubuf.flags = SKBFL_ZEROCOPY_FRAG | SKBFL_DONT_ORPHAN;
-	refcount_set(&uarg->ubuf.refcnt, 1);
+	init_ubuf_info_msgzc(uarg, sk, size);
+	sock_hold(sk);
+
+	return &uarg->ubuf;
+}
+
+static struct ubuf_info *msg_zerocopy_uarg_alloc(struct sock *sk, size_t size)
+{
+	struct sk_buff *skb;
+	struct ubuf_info_msgzc *uarg;
+	struct tx_msg_zcopy_node *zcopy_node_p;
+
+	WARN_ON_ONCE(!in_task());
+
+	skb = sock_omalloc(sk, sizeof(*zcopy_node_p), GFP_KERNEL);
+	if (!skb)
+		return NULL;
+
+	BUILD_BUG_ON(sizeof(*uarg) > sizeof(skb->cb));
+	uarg = (void *)skb->cb;
+	uarg->mmp.user = NULL;
+	zcopy_node_p = (struct tx_msg_zcopy_node *)skb_put(skb, sizeof(*zcopy_node_p));
+
+	if (mm_account_pinned_pages(&uarg->mmp, size)) {
+		kfree_skb(skb);
+		return NULL;
+	}
+
+	INIT_LIST_HEAD(&zcopy_node_p->node);
+	zcopy_node_p->skb = skb;
+	uarg->ubuf.callback = msg_zerocopy_uarg_callback;
+	init_ubuf_info_msgzc(uarg, sk, size);
 	sock_hold(sk);
 
 	return &uarg->ubuf;
@@ -1705,7 +1741,7 @@ static inline struct sk_buff *skb_from_uarg(struct ubuf_info_msgzc *uarg)
 }
 
 struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
-				       struct ubuf_info *uarg)
+				       struct ubuf_info *uarg, bool usr_arg_notification)
 {
 	if (uarg) {
 		struct ubuf_info_msgzc *uarg_zc;
@@ -1713,7 +1749,8 @@ struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
 		u32 bytelen, next;
 
 		/* there might be non MSG_ZEROCOPY users */
-		if (uarg->callback != msg_zerocopy_callback)
+		if (uarg->callback != msg_zerocopy_callback &&
+		    uarg->callback != msg_zerocopy_uarg_callback)
 			return NULL;
 
 		/* realloc only when socket is locked (TCP, UDP cork),
@@ -1750,6 +1787,8 @@ struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
 	}
 
 new_alloc:
+	if (usr_arg_notification)
+		return msg_zerocopy_uarg_alloc(sk, size);
 	return msg_zerocopy_alloc(sk, size);
 }
 EXPORT_SYMBOL_GPL(msg_zerocopy_realloc);
@@ -1836,6 +1875,86 @@ void msg_zerocopy_callback(struct sk_buff *skb, struct ubuf_info *uarg,
 }
 EXPORT_SYMBOL_GPL(msg_zerocopy_callback);
 
+static bool skb_zerocopy_uarg_notify_extend(struct tx_msg_zcopy_node *node, u32 lo, u16 len)
+{
+	u32 old_lo, old_hi;
+	u64 sum_len;
+
+	old_lo = node->info.lo;
+	old_hi = node->info.hi;
+	sum_len = old_hi - old_lo + 1ULL + len;
+
+	if (sum_len >= (1ULL << 32))
+		return false;
+
+	if (lo != old_hi + 1)
+		return false;
+
+	node->info.hi += len;
+	return true;
+}
+
+static void __msg_zerocopy_uarg_callback(struct ubuf_info_msgzc *uarg)
+{
+	struct sk_buff *skb = skb_from_uarg(uarg);
+	struct sock *sk = skb->sk;
+	struct tx_msg_zcopy_node *zcopy_node_p, *tail;
+	struct tx_msg_zcopy_queue *zcopy_queue;
+	unsigned long flags;
+	u32 lo, hi;
+	u16 len;
+
+	mm_unaccount_pinned_pages(&uarg->mmp);
+
+	/* if !len, there was only 1 call, and it was aborted
+	 * so do not queue a completion notification
+	 */
+	if (!uarg->len || sock_flag(sk, SOCK_DEAD))
+		goto release;
+
+	/* only support TCP and UCP currently */
+	if (sk_is_tcp(sk)) {
+		zcopy_queue = &tcp_sk(sk)->tx_zcopy_queue;
+	} else if (sk_is_udp(sk)) {
+		zcopy_queue = &udp_sk(sk)->tx_zcopy_queue;
+	} else {
+		pr_warn("MSG_ZEROCOPY_UARG only support TCP && UDP sockets");
+		goto release;
+	}
+
+	len = uarg->len;
+	lo = uarg->id;
+	hi = uarg->id + len - 1;
+
+	zcopy_node_p = (struct tx_msg_zcopy_node *)skb->data;
+	zcopy_node_p->info.lo = lo;
+	zcopy_node_p->info.hi = hi;
+	zcopy_node_p->info.zerocopy = uarg->zerocopy;
+
+	spin_lock_irqsave(&zcopy_queue->lock, flags);
+	tail = list_last_entry(&zcopy_queue->head, struct tx_msg_zcopy_node, node);
+	if (!tail || !skb_zerocopy_uarg_notify_extend(tail, lo, len)) {
+		list_add_tail(&zcopy_node_p->node, &zcopy_queue->head);
+		skb = NULL;
+	}
+	spin_unlock_irqrestore(&zcopy_queue->lock, flags);
+release:
+	consume_skb(skb);
+	sock_put(sk);
+}
+
+void msg_zerocopy_uarg_callback(struct sk_buff *skb, struct ubuf_info *uarg,
+				bool success)
+{
+	struct ubuf_info_msgzc *uarg_zc = uarg_to_msgzc(uarg);
+
+	uarg_zc->zerocopy = uarg_zc->zerocopy & success;
+
+	if (refcount_dec_and_test(&uarg->refcnt))
+		__msg_zerocopy_uarg_callback(uarg_zc);
+}
+EXPORT_SYMBOL_GPL(msg_zerocopy_uarg_callback);
+
 void msg_zerocopy_put_abort(struct ubuf_info *uarg, bool have_uref)
 {
 	struct sock *sk = skb_from_uarg(uarg_to_msgzc(uarg))->sk;
@@ -1844,7 +1963,7 @@ void msg_zerocopy_put_abort(struct ubuf_info *uarg, bool have_uref)
 	uarg_to_msgzc(uarg)->len--;
 
 	if (have_uref)
-		msg_zerocopy_callback(NULL, uarg, true);
+		uarg->callback(NULL, uarg, true);
 }
 EXPORT_SYMBOL_GPL(msg_zerocopy_put_abort);
 

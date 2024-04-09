@@ -2842,6 +2842,56 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
 		break;
+	case SO_ZEROCOPY_NOTIFICATION:
+		if (sock_flag(sk, SOCK_ZEROCOPY)) {
+			int i = 0;
+			struct tx_usr_zcopy_info sys_zcopy_info;
+			struct tx_msg_zcopy_node *zcopy_node_p, *tmp;
+			struct tx_msg_zcopy_queue *zcopy_queue;
+			struct tx_msg_zcopy_node *zcopy_node_ps[SOCK_USR_ZC_INFO_MAX];
+			unsigned long flags;
+
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(void *)))
+				return -EINVAL;
+
+			if (sk_is_tcp(sk))
+				zcopy_queue = &tcp_sk(sk)->tx_zcopy_queue;
+			else if (sk_is_udp(sk))
+				zcopy_queue = &udp_sk(sk)->tx_zcopy_queue;
+			else
+				return -EINVAL;
+
+			spin_lock_irqsave(&zcopy_queue->lock, flags);
+			list_for_each_entry_safe(zcopy_node_p, tmp, &zcopy_queue->head, node) {
+				sys_zcopy_info.info[i].lo = zcopy_node_p->info.lo;
+				sys_zcopy_info.info[i].hi = zcopy_node_p->info.hi;
+				sys_zcopy_info.info[i].zerocopy = zcopy_node_p->info.zerocopy;
+				list_del(&zcopy_node_p->node);
+				zcopy_node_ps[i++] = zcopy_node_p;
+				if (i == SOCK_USR_ZC_INFO_MAX)
+					break;
+			}
+			spin_unlock_irqrestore(&zcopy_queue->lock, flags);
+
+			if (i > 0) {
+				sys_zcopy_info.length = i;
+				if (unlikely(copy_to_user(*(void **)CMSG_DATA(cmsg),
+							  &sys_zcopy_info,
+							  sizeof(sys_zcopy_info))
+					)) {
+					spin_lock_irqsave(&zcopy_queue->lock, flags);
+					while (i > 0)
+						list_add(&zcopy_node_ps[--i]->node,
+							 &zcopy_queue->head);
+					spin_unlock_irqrestore(&zcopy_queue->lock, flags);
+					return -EFAULT;
+				}
+
+				while (i > 0)
+					consume_skb(zcopy_node_ps[--i]->skb);
+			}
+		}
+		break;
 	default:
 		return -EINVAL;
 	}

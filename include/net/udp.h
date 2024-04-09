@@ -182,6 +182,7 @@ static inline void udp_lib_init_sock(struct sock *sk)
 	skb_queue_head_init(&up->reader_queue);
 	up->forward_threshold = sk->sk_rcvbuf >> 2;
 	set_bit(SOCK_CUSTOM_SOCKOPT, &sk->sk_socket->flags);
+	tx_message_zcopy_queue_init(&up->tx_zcopy_queue);
 }
 
 /* hash routines shared between UDPv4/6 and UDP-Litev4/6 */

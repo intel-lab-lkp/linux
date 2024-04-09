@@ -1490,6 +1490,15 @@ do_udp_sendmsg:
 		if (!(opt->opt_nflen|opt->opt_flen))
 			opt = NULL;
 		connected = false;
+
+		/* If len is zero and flag MSG_ZEROCOPY_UARG is set,
+		 * it means this call just wants to get zcopy notifications
+		 * instead of sending packets. It is useful when users
+		 * finish sending and want to get trailing notifications.
+		 */
+		if ((msg->msg_flags & MSG_ZEROCOPY_UARG) &&
+		    sock_flag(sk, SOCK_ZEROCOPY) && len == 0)
+			return 0;
 	}
 	if (!opt) {
 		opt = txopt_get(np);
