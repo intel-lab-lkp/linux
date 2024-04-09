@@ -120,6 +120,13 @@ static bool vmf_orig_pte_uffd_wp(struct vm_fault *vmf)
 	return pte_marker_uffd_wp(vmf->orig_pte);
 }
 
+int __init __weak memmap_named(const char *name, u64 *start, u64 *size)
+{
+	pr_info("Kernel command line: memmap=nn*align:name not supported on this kernel");
+	/* zero means not found */
+	return 0;
+}
+
 /*
  * A number of key systems in x86 including ioremap() rely on the assumption
  * that high_memory defines the upper bound on direct map memory, then end

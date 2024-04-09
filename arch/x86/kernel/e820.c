@@ -64,6 +64,61 @@ struct e820_table *e820_table __refdata			= &e820_table_init;
 struct e820_table *e820_table_kexec __refdata		= &e820_table_kexec_init;
 struct e820_table *e820_table_firmware __refdata	= &e820_table_firmware_init;
 
+/* For wildcard memory requests, have a table to find them later */
+#define E820_MAX_MAPS		8
+#define E820_MAP_NAME_SIZE	16
+struct e820_mmap_map {
+	char			name[E820_MAP_NAME_SIZE];
+	u64			start;
+	u64			size;
+};
+static struct e820_mmap_map e820_mmap_list[E820_MAX_MAPS] __initdata;
+static int e820_mmap_size				__initdata;
+
+/* Add wildcard region with a lookup name */
+static int __init e820_add_mmap(u64 start, u64 size, const char *name)
+{
+	struct e820_mmap_map *map;
+
+	if (!name || !name[0] || strlen(name) >= E820_MAP_NAME_SIZE)
+		return -EINVAL;
+
+	if (e820_mmap_size >= E820_MAX_MAPS)
+		return -1;
+
+	map = &e820_mmap_list[e820_mmap_size++];
+	map->start = start;
+	map->size = size;
+	strcpy(map->name, name);
+	return 0;
+}
+
+/**
+ * memmap_named - Find a wildcard region with a given name
+ * @name: The name that is attached to a wildcard region
+ * @start: If found, holds the start address
+ * @size: If found, holds the size of the address.
+ *
+ * Returns: 1 if found or 0 if not found.
+ */
+int __init memmap_named(const char *name, u64 *start, u64 *size)
+{
+	struct e820_mmap_map *map;
+	int i;
+
+	for (i = 0; i < e820_mmap_size; i++) {
+		map = &e820_mmap_list[i];
+		if (!map->size)
+			continue;
+		if (strcmp(name, map->name) == 0) {
+			*start = map->start;
+			*size = map->size;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* For PCI or other memory-mapped resources */
 unsigned long pci_mem_start = 0xaeedbabe;
 #ifdef CONFIG_PCI
@@ -198,6 +253,29 @@ static void __init e820_print_type(enum e820_type type)
 	case E820_TYPE_PRAM:		pr_cont("persistent (type %u)", type);	break;
 	default:			pr_cont("type %u", type);		break;
 	}
+}
+
+/*
+ * Search for usable ram that can be reserved for a wildcard.
+ * Start at the highest memory and work down to lower memory.
+ */
+static s64 e820__region(u64 size, u64 align)
+{
+	u64 start;
+	int i;
+
+	for (i = e820_table->nr_entries; i >= 0; i--) {
+		if (e820_table->entries[i].type != E820_TYPE_RAM &&
+		    e820_table->entries[i].type != E820_TYPE_RESERVED_KERN)
+			continue;
+
+		start = e820_table->entries[i].addr + e820_table->entries[i].size;
+		start -= size;
+		start = ALIGN_DOWN(start, align);
+		if (start >= e820_table->entries[i].addr)
+			return start;
+	}
+	return -1;
 }
 
 void __init e820__print_table(char *who)
@@ -943,6 +1021,19 @@ static int __init parse_memmap_one(char *p)
 		e820__range_add(start_at, mem_size, E820_TYPE_ACPI);
 	} else if (*p == '$') {
 		start_at = memparse(p+1, &p);
+		e820__range_add(start_at, mem_size, E820_TYPE_RESERVED);
+	} else if (*p == '*') {
+		u64 align;
+		/* Followed by alignment and ':' then the name */
+		align = memparse(p+1, &p);
+		start_at = e820__region(mem_size, align);
+		if ((s64)start_at < 0)
+			return -EINVAL;
+		if (*p != ':')
+			return -EINVAL;
+		p++;
+		e820_add_mmap(start_at, mem_size, p);
+		p += strlen(p);
 		e820__range_add(start_at, mem_size, E820_TYPE_RESERVED);
 	} else if (*p == '!') {
 		start_at = memparse(p+1, &p);

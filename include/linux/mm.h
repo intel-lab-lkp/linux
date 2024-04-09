@@ -4182,4 +4182,6 @@ static inline bool pfn_is_unaccepted_memory(unsigned long pfn)
 	return range_contains_unaccepted_memory(paddr, paddr + PAGE_SIZE);
 }
 
+int memmap_named(const char *name, u64 *start, u64 *size);
+
 #endif /* _LINUX_MM_H */
