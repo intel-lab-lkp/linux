@@ -17,6 +17,8 @@
 #include "gpiolib.h"
 #include "gpiolib-swnode.h"
 
+#define GPIOLIB_SWNODE_UNDEFINED_NAME "swnode-gpio-undefined"
+
 static void swnode_format_propname(const char *con_id, char *propname,
 				   size_t max_size)
 {
@@ -39,6 +41,13 @@ static struct gpio_device *swnode_get_gpio_device(struct fwnode_handle *fwnode)
 	gdev_node = to_software_node(fwnode);
 	if (!gdev_node || !gdev_node->name)
 		return ERR_PTR(-EINVAL);
+
+	/*
+	 * Check for special node that identifies undefined GPIOs, this is
+	 * primarily used as a key for internal chip selects in SPI bindings.
+	 */
+	if (!strcmp(gdev_node->name, GPIOLIB_SWNODE_UNDEFINED_NAME))
+		return ERR_PTR(-ENOENT);
 
 	gdev = gpio_device_find_by_label(gdev_node->name);
 	return gdev ?: ERR_PTR(-EPROBE_DEFER);
@@ -121,3 +130,32 @@ int swnode_gpio_count(const struct fwnode_handle *fwnode, const char *con_id)
 
 	return count ?: -ENOENT;
 }
+
+#if IS_ENABLED(CONFIG_GPIO_SWNODE_UNDEFINED)
+/*
+ * A special node that identifies undefined GPIOs, this is primarily used as
+ * a key for internal chip selects in SPI bindings.
+ */
+const struct software_node swnode_gpio_undefined = {
+	.name = GPIOLIB_SWNODE_UNDEFINED_NAME,
+};
+EXPORT_SYMBOL_NS_GPL(swnode_gpio_undefined, GPIO_SWNODE);
+
+static int __init swnode_gpio_init(void)
+{
+	int ret;
+
+	ret = software_node_register(&swnode_gpio_undefined);
+	if (ret < 0)
+		pr_err("gpiolib: failed to register swnode: %d\n", ret);
+
+	return ret;
+}
+subsys_initcall(swnode_gpio_init);
+
+static void __exit swnode_gpio_cleanup(void)
+{
+	software_node_unregister(&swnode_gpio_undefined);
+}
+__exitcall(swnode_gpio_cleanup);
+#endif
