@@ -413,6 +413,18 @@ attribute-sets:
       -
         name: combined-count
         type: u32
+  -
+    name: moderation
+    attributes:
+      -
+        name: usec
+        type: u16
+      -
+        name: pkts
+        type: u16
+      -
+        name: comps
+        type: u16
 
   -
     name: coalesce
@@ -502,6 +514,23 @@ attribute-sets:
       -
         name: tx-aggr-time-usecs
         type: u32
+      -
+        name: rx-eqe-profile
+        type: nest
+        nested-attributes: moderation
+      -
+        name: rx-cqe-profile
+        type: nest
+        nested-attributes: moderation
+      -
+        name: tx-eqe-profile
+        type: nest
+        nested-attributes: moderation
+      -
+        name: tx-cqe-profile
+        type: nest
+        nested-attributes: moderation
+
   -
     name: pause-stat
     attributes:
@@ -1313,6 +1342,10 @@ operations:
             - tx-aggr-max-bytes
             - tx-aggr-max-frames
             - tx-aggr-time-usecs
+            - rx-eqe-profile
+            - rx-cqe-profile
+            - tx-eqe-profile
+            - tx-cqe-profile
       dump: *coalesce-get-op
     -
       name: coalesce-set
