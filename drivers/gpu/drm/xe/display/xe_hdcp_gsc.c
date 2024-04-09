@@ -19,6 +19,7 @@
 #include "xe_map.h"
 #include "xe_pm.h"
 #include "xe_uc_fw.h"
+#include "i915_drv.h"
 
 #define HECI_MEADDRESS_HDCP 18
 
