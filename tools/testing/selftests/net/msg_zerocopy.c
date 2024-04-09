@@ -1,4 +1,5 @@
-/* Evaluate MSG_ZEROCOPY
+// SPDX-License-Identifier: GPL-2.0
+/* Evaluate MSG_ZEROCOPY && MSG_ZEROCOPY_UARG
  *
  * Send traffic between two processes over one of the supported
  * protocols and modes:
@@ -66,13 +67,28 @@
 #define SO_ZEROCOPY	60
 #endif
 
+#ifndef SO_ZEROCOPY_NOTIFICATION
+#define SO_ZEROCOPY_NOTIFICATION	78
+#endif
+
 #ifndef SO_EE_CODE_ZEROCOPY_COPIED
 #define SO_EE_CODE_ZEROCOPY_COPIED	1
+#endif
+
+#ifndef MSG_ZEROCOPY_UARG
+#define MSG_ZEROCOPY_UARG	0x2000000
 #endif
 
 #ifndef MSG_ZEROCOPY
 #define MSG_ZEROCOPY	0x4000000
 #endif
+
+#ifndef SOCK_USR_ZC_INFO_MAX
+#define SOCK_USR_ZC_INFO_MAX	8
+#endif
+
+#define ZEROCOPY_MSGERR_NOTIFICATION 1
+#define ZEROCOPY_USER_ARG_NOTIFICATION 2
 
 static int  cfg_cork;
 static bool cfg_cork_mixed;
@@ -87,7 +103,7 @@ static int  cfg_verbose;
 static int  cfg_waittime_ms	= 500;
 static bool cfg_notification_order_check;
 static int  cfg_notification_limit = 32;
-static bool cfg_zerocopy;
+static int  cfg_zerocopy;           /* 1 for MSG_ZEROCOPY, 2 for MSG_ZEROCOPY_UARG */
 
 static socklen_t cfg_alen;
 static struct sockaddr_storage cfg_dst_addr;
@@ -169,6 +185,19 @@ static int do_accept(int fd)
 	return fd;
 }
 
+static void add_zcopy_user_arg(struct msghdr *msg, void *usr_addr)
+{
+	struct cmsghdr *cm;
+
+	if (!msg->msg_control)
+		error(1, errno, "NULL user arg");
+	cm = (void *)msg->msg_control;
+	cm->cmsg_len = CMSG_LEN(sizeof(void *));
+	cm->cmsg_level = SOL_SOCKET;
+	cm->cmsg_type = SO_ZEROCOPY_NOTIFICATION;
+	memcpy(CMSG_DATA(cm), &usr_addr, sizeof(usr_addr));
+}
+
 static void add_zcopy_cookie(struct msghdr *msg, uint32_t cookie)
 {
 	struct cmsghdr *cm;
@@ -182,18 +211,55 @@ static void add_zcopy_cookie(struct msghdr *msg, uint32_t cookie)
 	memcpy(CMSG_DATA(cm), &cookie, sizeof(cookie));
 }
 
-static bool do_sendmsg(int fd, struct msghdr *msg, bool do_zerocopy, int domain)
+static void do_recv_completion_user_arg(void *p)
+{
+	int i;
+	__u32 hi, lo, range;
+	__u8 zerocopy;
+	struct tx_usr_zcopy_info *zc_info_p = (struct tx_usr_zcopy_info *)p;
+
+	for (i = 0; i < zc_info_p->length; ++i) {
+		struct tx_msg_zcopy_info elem = zc_info_p->info[i];
+
+		hi = elem.hi;
+		lo = elem.lo;
+		zerocopy = elem.zerocopy;
+		range = hi - lo + 1;
+
+		if (cfg_notification_order_check && lo != next_completion)
+			fprintf(stderr, "gap: %u..%u does not append to %u\n",
+				lo, hi, next_completion);
+		next_completion = hi + 1;
+
+		if (zerocopied == -1)
+			zerocopied = zerocopy;
+		else if (zerocopied != zerocopy) {
+			fprintf(stderr, "serr: inconsistent\n");
+			zerocopied = zerocopy;
+		}
+
+		completions += range;
+
+		if (cfg_verbose >= 2)
+			fprintf(stderr, "completed: %u (h=%u l=%u)\n",
+				range, hi, lo);
+	}
+}
+
+static bool do_sendmsg(int fd, struct msghdr *msg, int do_zerocopy, int domain)
 {
 	int ret, len, i, flags;
 	static uint32_t cookie;
-	char ckbuf[CMSG_SPACE(sizeof(cookie))];
+	/* ckbuf is used to either hold uint32_t cookie or void *pointer */
+	char ckbuf[CMSG_SPACE(sizeof(void *))];
+	struct tx_usr_zcopy_info zc_info;
 
 	len = 0;
 	for (i = 0; i < msg->msg_iovlen; i++)
 		len += msg->msg_iov[i].iov_len;
 
 	flags = MSG_DONTWAIT;
-	if (do_zerocopy) {
+	if (do_zerocopy == ZEROCOPY_MSGERR_NOTIFICATION) {
 		flags |= MSG_ZEROCOPY;
 		if (domain == PF_RDS) {
 			memset(&msg->msg_control, 0, sizeof(msg->msg_control));
@@ -201,6 +267,12 @@ static bool do_sendmsg(int fd, struct msghdr *msg, bool do_zerocopy, int domain)
 			msg->msg_control = (struct cmsghdr *)ckbuf;
 			add_zcopy_cookie(msg, ++cookie);
 		}
+	} else if (do_zerocopy == ZEROCOPY_USER_ARG_NOTIFICATION) {
+		flags |= MSG_ZEROCOPY_UARG;
+		memset(&zc_info, 0, sizeof(zc_info));
+		msg->msg_controllen = CMSG_SPACE(sizeof(void *));
+		msg->msg_control = (struct cmsghdr *)ckbuf;
+		add_zcopy_user_arg(msg, &zc_info);
 	}
 
 	ret = sendmsg(fd, msg, flags);
@@ -211,13 +283,16 @@ static bool do_sendmsg(int fd, struct msghdr *msg, bool do_zerocopy, int domain)
 	if (cfg_verbose && ret != len)
 		fprintf(stderr, "send: ret=%u != %u\n", ret, len);
 
+	if (do_zerocopy == ZEROCOPY_USER_ARG_NOTIFICATION)
+		do_recv_completion_user_arg(&zc_info);
+
 	if (len) {
 		packets++;
 		bytes += ret;
 		if (do_zerocopy && ret)
 			expected_completions++;
 	}
-	if (do_zerocopy && domain == PF_RDS) {
+	if (msg->msg_control) {
 		msg->msg_control = NULL;
 		msg->msg_controllen = 0;
 	}
@@ -480,6 +555,36 @@ static void do_recv_remaining_completions(int fd, int domain)
 			completions, expected_completions);
 }
 
+static void do_new_recv_remaining_completions(int fd, struct msghdr *msg)
+{
+	int ret, flags;
+	struct tx_usr_zcopy_info zc_info;
+	int64_t tstop = gettimeofday_ms() + cfg_waittime_ms;
+	char ckbuf[CMSG_SPACE(sizeof(void *))];
+
+	flags = MSG_DONTWAIT | MSG_ZEROCOPY_UARG;
+	msg->msg_iovlen = 0;
+	msg->msg_controllen = CMSG_SPACE(sizeof(void *));
+	msg->msg_control = (struct cmsghdr *)ckbuf;
+	add_zcopy_user_arg(msg, &zc_info);
+
+	while (completions < expected_completions &&
+			gettimeofday_ms() < tstop) {
+		memset(&zc_info, 0, sizeof(zc_info));
+		ret = sendmsg(fd, msg, flags);
+		if (ret == -1 && errno == EAGAIN)
+			return;
+		if (ret == -1)
+			error(1, errno, "send");
+
+		do_recv_completion_user_arg(&zc_info);
+	}
+
+	if (completions < expected_completions)
+		fprintf(stderr, "missing notifications: %lu < %lu\n",
+			completions, expected_completions);
+}
+
 static void do_tx(int domain, int type, int protocol)
 {
 	struct iovec iov[3] = { {0} };
@@ -552,13 +657,14 @@ static void do_tx(int domain, int type, int protocol)
 			do_sendmsg(fd, &msg, cfg_zerocopy, domain);
 		sendmsg_counter++;
 
-		if (sendmsg_counter == cfg_notification_limit && cfg_zerocopy) {
+		if (sendmsg_counter == cfg_notification_limit &&
+			cfg_zerocopy == ZEROCOPY_MSGERR_NOTIFICATION) {
 			do_recv_completions(fd, domain);
 			sendmsg_counter = 0;
 		}
 
 		while (!do_poll(fd, POLLOUT)) {
-			if (cfg_zerocopy) {
+			if (cfg_zerocopy == ZEROCOPY_MSGERR_NOTIFICATION) {
 				do_recv_completions(fd, domain);
 				sendmsg_counter = 0;
 			}
@@ -566,8 +672,10 @@ static void do_tx(int domain, int type, int protocol)
 
 	} while (gettimeofday_ms() < tstop);
 
-	if (cfg_zerocopy)
+	if (cfg_zerocopy == ZEROCOPY_MSGERR_NOTIFICATION)
 		do_recv_remaining_completions(fd, domain);
+	else if (cfg_zerocopy == ZEROCOPY_USER_ARG_NOTIFICATION)
+		do_new_recv_remaining_completions(fd, &msg);
 
 	if (close(fd))
 		error(1, errno, "close");
@@ -718,7 +826,7 @@ static void parse_opts(int argc, char **argv)
 
 	cfg_payload_len = max_payload_len;
 
-	while ((c = getopt(argc, argv, "46c:C:D:i:mp:rs:S:t:vzol:")) != -1) {
+	while ((c = getopt(argc, argv, "46c:C:D:i:mp:rs:S:t:vzol:n")) != -1) {
 		switch (c) {
 		case '4':
 			if (cfg_family != PF_UNSPEC)
@@ -768,13 +876,16 @@ static void parse_opts(int argc, char **argv)
 			cfg_verbose++;
 			break;
 		case 'z':
-			cfg_zerocopy = true;
+			cfg_zerocopy = ZEROCOPY_MSGERR_NOTIFICATION;
 			break;
 		case 'o':
 			cfg_notification_order_check = true;
 			break;
 		case 'l':
 			cfg_notification_limit = strtoul(optarg, NULL, 0);
+			break;
+		case 'n':
+			cfg_zerocopy = ZEROCOPY_USER_ARG_NOTIFICATION;
 			break;
 		}
 	}
