@@ -321,6 +321,11 @@ EXPORT_SYMBOL(drm_plane_create_rotation_property);
  * transforms the hardware supports, this function may not
  * be able to produce a supported transform, so the caller should
  * check the result afterwards.
+ *
+ * If the rotation is not fully supported, this function will add a rotation of 180
+ * (ROTATE_90 would become ROTATE_270) and add a reflection on X and Y.
+ * The resulting transformation is the same (REFLECT_X | REFLECT_Y | ROTATE_180
+ * is a no-op), but some unsupported flags are removed.
  */
 unsigned int drm_rotation_simplify(unsigned int rotation,
 				   unsigned int supported_rotations)
