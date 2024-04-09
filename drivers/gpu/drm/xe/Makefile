@@ -97,6 +97,7 @@ xe-y += xe_bb.o \
 	xe_guc_db_mgr.o \
 	xe_guc_debugfs.o \
 	xe_guc_hwconfig.o \
+	xe_guc_id_mgr.o \
 	xe_guc_log.o \
 	xe_guc_pc.o \
 	xe_guc_submit.o \
@@ -155,6 +156,7 @@ xe-y += \
 	xe_sriov.o
 
 xe-$(CONFIG_PCI_IOV) += \
+	xe_gt_sriov_pf_control.o \
 	xe_lmtt.o \
 	xe_lmtt_2l.o \
 	xe_lmtt_ml.o
@@ -254,6 +256,7 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
 	i915-display/intel_global_state.o \
 	i915-display/intel_gmbus.o \
 	i915-display/intel_hdcp.o \
+	i915-display/intel_hdcp_gsc_message.o \
 	i915-display/intel_hdmi.o \
 	i915-display/intel_hotplug.o \
 	i915-display/intel_hotplug_irq.o \
