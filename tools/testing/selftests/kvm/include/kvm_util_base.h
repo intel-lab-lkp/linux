@@ -1126,4 +1126,7 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm);
 
 bool vm_is_gpa_protected(struct kvm_vm *vm, vm_paddr_t paddr);
 
+int kvm_arch_vm_additional_pages_required(struct vm_shape shape,
+					  uint64_t page_size);
+
 #endif /* SELFTEST_KVM_UTIL_BASE_H */
