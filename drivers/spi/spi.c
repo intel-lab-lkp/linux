@@ -598,9 +598,15 @@ EXPORT_SYMBOL_GPL(spi_alloc_device);
 static void spi_dev_set_name(struct spi_device *spi)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&spi->dev);
+	struct fwnode_handle *fwnode = dev_fwnode(&spi->dev);
 
 	if (adev) {
 		dev_set_name(&spi->dev, "spi-%s", acpi_dev_name(adev));
+		return;
+	}
+
+	if (is_software_node(fwnode)) {
+		dev_set_name(&spi->dev, "spi-%s", fwnode_get_name(fwnode));
 		return;
 	}
 
