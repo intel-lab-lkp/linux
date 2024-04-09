@@ -12,7 +12,7 @@
 
 static __always_inline s64 arch_atomic64_read(const atomic64_t *v)
 {
-	return __READ_ONCE((v)->counter);
+	return __READ_ONCE(v->counter);
 }
 
 static __always_inline void arch_atomic64_set(atomic64_t *v, s64 i)
@@ -126,10 +126,10 @@ static __always_inline void arch_atomic64_and(s64 i, atomic64_t *v)
 
 static __always_inline s64 arch_atomic64_fetch_and(s64 i, atomic64_t *v)
 {
-	s64 val = arch_atomic64_read(v);
+	s64 val = __READ_ONCE(v->counter);
 
-	do {
-	} while (!arch_atomic64_try_cmpxchg(v, &val, val & i));
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val & i));
+
 	return val;
 }
 #define arch_atomic64_fetch_and arch_atomic64_fetch_and
@@ -144,10 +144,10 @@ static __always_inline void arch_atomic64_or(s64 i, atomic64_t *v)
 
 static __always_inline s64 arch_atomic64_fetch_or(s64 i, atomic64_t *v)
 {
-	s64 val = arch_atomic64_read(v);
+	s64 val = __READ_ONCE(v->counter);
 
-	do {
-	} while (!arch_atomic64_try_cmpxchg(v, &val, val | i));
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val | i));
+
 	return val;
 }
 #define arch_atomic64_fetch_or arch_atomic64_fetch_or
@@ -162,10 +162,10 @@ static __always_inline void arch_atomic64_xor(s64 i, atomic64_t *v)
 
 static __always_inline s64 arch_atomic64_fetch_xor(s64 i, atomic64_t *v)
 {
-	s64 val = arch_atomic64_read(v);
+	s64 val = __READ_ONCE(v->counter);
 
-	do {
-	} while (!arch_atomic64_try_cmpxchg(v, &val, val ^ i));
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val ^ i));
+
 	return val;
 }
 #define arch_atomic64_fetch_xor arch_atomic64_fetch_xor

@@ -20,7 +20,7 @@ static __always_inline int arch_atomic_read(const atomic_t *v)
 	 * Note for KASAN: we deliberately don't use READ_ONCE_NOCHECK() here,
 	 * it's non-inlined function that increases binary size and stack usage.
 	 */
-	return __READ_ONCE((v)->counter);
+	return __READ_ONCE(v->counter);
 }
 
 static __always_inline void arch_atomic_set(atomic_t *v, int i)
@@ -132,7 +132,7 @@ static __always_inline void arch_atomic_and(int i, atomic_t *v)
 
 static __always_inline int arch_atomic_fetch_and(int i, atomic_t *v)
 {
-	int val = arch_atomic_read(v);
+	int val = __READ_ONCE(v->counter);
 
 	do { } while (!arch_atomic_try_cmpxchg(v, &val, val & i));
 
@@ -150,7 +150,7 @@ static __always_inline void arch_atomic_or(int i, atomic_t *v)
 
 static __always_inline int arch_atomic_fetch_or(int i, atomic_t *v)
 {
-	int val = arch_atomic_read(v);
+	int val = __READ_ONCE(v->counter);
 
 	do { } while (!arch_atomic_try_cmpxchg(v, &val, val | i));
 
@@ -168,7 +168,7 @@ static __always_inline void arch_atomic_xor(int i, atomic_t *v)
 
 static __always_inline int arch_atomic_fetch_xor(int i, atomic_t *v)
 {
-	int val = arch_atomic_read(v);
+	int val = __READ_ONCE(v->counter);
 
 	do { } while (!arch_atomic_try_cmpxchg(v, &val, val ^ i));
 
