@@ -58,6 +58,44 @@ struct drm_mode_fb_cmd2;
 
 /**
  * struct drm_format_info - information about a DRM format
+ *
+ * A drm_format_info describes how planes and pixels are stored in memory.
+ *
+ * Some format like YUV can have multiple planes, counted in @num_planes. It
+ * means that a full pixel can be stored in multiple non-continuous buffers.
+ * For example, NV12 is a YUV format using two planes: one for the Y values and
+ * one for the UV values.
+ *
+ * On each plane, the "pixel" unit can be different in case of subsampling. For
+ * example with the NV12 format, a pixel in the UV plane is used for four pixels
+ * in the Y plane.
+ * The fields @hsub and @vsub are the relation between the size of the main
+ * plane and the size of the subsampled planes in pixels:
+ *	plane[0] width = hsub * plane[1] width
+ *	plane[0] height = vsub * plane[1] height
+ *
+ * In some formats, pixels are not independent in memory. It can be a packed
+ * representation to store more pixels per byte (for example P030 uses 4 bytes
+ * for three 10 bit pixels). It can also be used to represent tiled formats,
+ * where a continuous buffer in memory can represent a rectangle of pixels (for
+ * example, in DRM_FORMAT_Y0L0, a buffer of 8 bytes represents a 2x2 pixel
+ * region of the picture).
+ *	The field @char_per_block is the size of a block on a specific plane, in
+ *	bytes.
+ *	The fields @block_w and @block_h are the size of a block in pixels.
+ *
+ * The older format representation (which only uses @cpp, kept for historical
+ * reasons because there are a lot of places in drivers where it's used) is
+ * assuming that a block is always 1x1 pixel.
+ *
+ * To keep the compatibility with older format representations and treat block
+ * and non-block formats in the same way one should use:
+ *	- @char_per_block to access the size of a block on a specific plane, in
+ *	bytes.
+ *	- drm_format_info_block_width() to access the width of a block of a
+ *	specific plane, in pixels.
+ *	- drm_format_info_block_height() to access the height of a block of a
+ *	specific plane, in pixels.
  */
 struct drm_format_info {
 	/** @format: 4CC format identifier (DRM_FORMAT_*) */
@@ -96,13 +134,6 @@ struct drm_format_info {
 		 * in tiled formats or to describe groups of pixels in packed
 		 * formats for which the memory needed for a single pixel is not
 		 * byte aligned.
-		 *
-		 * @cpp has been kept for historical reasons because there are
-		 * a lot of places in drivers where it's used. In drm core for
-		 * generic code paths the preferred way is to use
-		 * @char_per_block, drm_format_info_block_width() and
-		 * drm_format_info_block_height() which allows handling both
-		 * block and non-block formats in the same way.
 		 *
 		 * For formats that are intended to be used only with non-linear
 		 * modifiers both @cpp and @char_per_block must be 0 in the
