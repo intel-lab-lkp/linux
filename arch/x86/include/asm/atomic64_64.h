@@ -124,16 +124,6 @@ static __always_inline void arch_atomic64_and(s64 i, atomic64_t *v)
 			: "memory");
 }
 
-static __always_inline s64 arch_atomic64_fetch_and(s64 i, atomic64_t *v)
-{
-	s64 val = __READ_ONCE(v->counter);
-
-	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val & i));
-
-	return val;
-}
-#define arch_atomic64_fetch_and arch_atomic64_fetch_and
-
 static __always_inline void arch_atomic64_or(s64 i, atomic64_t *v)
 {
 	asm volatile(LOCK_PREFIX "orq %1,%0"
@@ -142,16 +132,6 @@ static __always_inline void arch_atomic64_or(s64 i, atomic64_t *v)
 			: "memory");
 }
 
-static __always_inline s64 arch_atomic64_fetch_or(s64 i, atomic64_t *v)
-{
-	s64 val = __READ_ONCE(v->counter);
-
-	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val | i));
-
-	return val;
-}
-#define arch_atomic64_fetch_or arch_atomic64_fetch_or
-
 static __always_inline void arch_atomic64_xor(s64 i, atomic64_t *v)
 {
 	asm volatile(LOCK_PREFIX "xorq %1,%0"
@@ -159,15 +139,5 @@ static __always_inline void arch_atomic64_xor(s64 i, atomic64_t *v)
 			: "er" (i)
 			: "memory");
 }
-
-static __always_inline s64 arch_atomic64_fetch_xor(s64 i, atomic64_t *v)
-{
-	s64 val = __READ_ONCE(v->counter);
-
-	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val ^ i));
-
-	return val;
-}
-#define arch_atomic64_fetch_xor arch_atomic64_fetch_xor
 
 #endif /* _ASM_X86_ATOMIC64_64_H */

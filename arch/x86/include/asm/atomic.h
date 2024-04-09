@@ -182,4 +182,34 @@ static __always_inline int arch_atomic_fetch_xor(int i, atomic_t *v)
 # include <asm/atomic64_64.h>
 #endif
 
+static __always_inline s64 arch_atomic64_fetch_and(s64 i, atomic64_t *v)
+{
+	s64 val = __READ_ONCE(v->counter);
+
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val & i));
+
+	return val;
+}
+#define arch_atomic64_fetch_and arch_atomic64_fetch_and
+
+static __always_inline s64 arch_atomic64_fetch_or(s64 i, atomic64_t *v)
+{
+	s64 val = __READ_ONCE(v->counter);
+
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val | i));
+
+	return val;
+}
+#define arch_atomic64_fetch_or arch_atomic64_fetch_or
+
+static __always_inline s64 arch_atomic64_fetch_xor(s64 i, atomic64_t *v)
+{
+	s64 val = __READ_ONCE(v->counter);
+
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val ^ i));
+
+	return val;
+}
+#define arch_atomic64_fetch_xor arch_atomic64_fetch_xor
+
 #endif /* _ASM_X86_ATOMIC_H */
