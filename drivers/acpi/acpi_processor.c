@@ -230,15 +230,59 @@ static inline int acpi_processor_hotadd_init(struct acpi_processor *pr)
 }
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
 
+static int acpi_evaluate_processor(struct acpi_device *device,
+				   struct acpi_processor *pr,
+				   union acpi_object *object,
+				   int *device_declaration)
+{
+	struct acpi_buffer buffer = { sizeof(union acpi_object), object };
+	acpi_status status = AE_OK;
+	unsigned long long value;
+
+	/*
+	 * Declarations via the ASL "Processor" statement are deprecated.
+	 */
+	if (!strcmp(acpi_device_hid(device), ACPI_PROCESSOR_OBJECT_HID)) {
+		/* Declared with "Processor" statement; match ProcessorID */
+		status = acpi_evaluate_object(pr->handle, NULL, NULL, &buffer);
+		if (ACPI_FAILURE(status)) {
+			dev_err(&device->dev,
+				"Failed to evaluate processor object (0x%x)\n",
+				status);
+			return -ENODEV;
+		}
+
+		value = object->processor.proc_id;
+		goto out;
+	}
+
+	/*
+	 * Declared with "Device" statement; match _UID.
+	 */
+	status = acpi_evaluate_integer(pr->handle, METHOD_NAME__UID,
+					NULL, &value);
+	if (ACPI_FAILURE(status)) {
+		dev_err(&device->dev,
+			"Failed to evaluate processor _UID (0x%x)\n",
+			status);
+		return -ENODEV;
+	}
+
+	*device_declaration = 1;
+out:
+	pr->acpi_id = value;
+	return 0;
+}
+
 static int acpi_processor_get_info(struct acpi_device *device)
 {
 	union acpi_object object = { 0 };
-	struct acpi_buffer buffer = { sizeof(union acpi_object), &object };
 	struct acpi_processor *pr = acpi_driver_data(device);
 	int device_declaration = 0;
 	acpi_status status = AE_OK;
 	static int cpu0_initialized;
 	unsigned long long value;
+	int ret;
 
 	acpi_processor_errata();
 
@@ -252,32 +296,12 @@ static int acpi_processor_get_info(struct acpi_device *device)
 	} else
 		dev_dbg(&device->dev, "No bus mastering arbitration control\n");
 
-	if (!strcmp(acpi_device_hid(device), ACPI_PROCESSOR_OBJECT_HID)) {
-		/* Declared with "Processor" statement; match ProcessorID */
-		status = acpi_evaluate_object(pr->handle, NULL, NULL, &buffer);
-		if (ACPI_FAILURE(status)) {
-			dev_err(&device->dev,
-				"Failed to evaluate processor object (0x%x)\n",
-				status);
-			return -ENODEV;
-		}
-
-		pr->acpi_id = object.processor.proc_id;
-	} else {
-		/*
-		 * Declared with "Device" statement; match _UID.
-		 */
-		status = acpi_evaluate_integer(pr->handle, METHOD_NAME__UID,
-						NULL, &value);
-		if (ACPI_FAILURE(status)) {
-			dev_err(&device->dev,
-				"Failed to evaluate processor _UID (0x%x)\n",
-				status);
-			return -ENODEV;
-		}
-		device_declaration = 1;
-		pr->acpi_id = value;
-	}
+	/*
+	 * Evaluate processor declaration.
+	 */
+	ret = acpi_evaluate_processor(device, pr, &object, &device_declaration);
+	if (ret)
+		return ret;
 
 	if (acpi_duplicate_processor_id(pr->acpi_id)) {
 		if (pr->acpi_id == 0xff)
