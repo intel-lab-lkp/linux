@@ -189,3 +189,14 @@ struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t policy, void *guest_code,
 
 	return vm;
 }
+
+bool is_sev_enabled(void)
+{
+	return rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_ENABLED;
+}
+
+bool is_sev_es_enabled(void)
+{
+	return is_sev_enabled() &&
+	       rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_ES_ENABLED;
+}

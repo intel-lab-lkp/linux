@@ -106,4 +106,7 @@ static inline void sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
 	vm_sev_ioctl(vm, KVM_SEV_LAUNCH_UPDATE_DATA, &update_data);
 }
 
+bool is_sev_enabled(void);
+bool is_sev_es_enabled(void);
+
 #endif /* SELFTEST_KVM_SEV_H */
