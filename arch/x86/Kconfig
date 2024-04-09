@@ -2493,10 +2493,14 @@ menuconfig SPECULATION_MITIGATIONS
 	default y
 	help
 	  Say Y here to enable options which enable mitigations for
-	  speculative execution hardware vulnerabilities.
+	  speculative execution hardware vulnerabilities.  Mitigations can
+	  be disabled or restricted to SMT systems at runtime via the
+	  "mitigations" kernel parameter.
 
-	  If you say N, all mitigations will be disabled. You really
-	  should know what you are doing to say so.
+	  If you say N, all mitigations will be disabled.  This CANNOT be
+	  overridden at runtime.
+
+	  Say 'Y', unless you really know what you are doing.
 
 if SPECULATION_MITIGATIONS
 

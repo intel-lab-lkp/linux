@@ -3214,6 +3214,8 @@ static int __init mitigations_parse_cmdline(char *arg)
 {
 	if (!strcmp(arg, "off"))
 		cpu_mitigations = CPU_MITIGATIONS_OFF;
+	else if (!IS_ENABLED(CONFIG_SPECULATION_MITIGATIONS))
+		pr_crit("Kernel compiled without mitigations, system may still be vulnerable\n");
 	else if (!strcmp(arg, "auto"))
 		cpu_mitigations = CPU_MITIGATIONS_AUTO;
 	else if (!strcmp(arg, "auto,nosmt"))
