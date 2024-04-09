@@ -199,6 +199,18 @@ static __always_inline s64 arch_atomic64_dec_if_positive(atomic64_t *v)
 #undef alternative_atomic64
 #undef __alternative_atomic64
 
+static __always_inline s64 arch_atomic64_fetch_add(s64 i, atomic64_t *v)
+{
+	s64 val = __READ_ONCE(v->counter);
+
+	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val + i));
+
+	return val;
+}
+#define arch_atomic64_fetch_add arch_atomic64_fetch_add
+
+#define arch_atomic64_fetch_sub(i, v) arch_atomic64_fetch_add(-(i), v)
+
 static __always_inline void arch_atomic64_and(s64 i, atomic64_t *v)
 {
 	s64 val = __READ_ONCE(v->counter);
@@ -219,16 +231,5 @@ static __always_inline void arch_atomic64_xor(s64 i, atomic64_t *v)
 
 	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val ^ i));
 }
-
-static __always_inline s64 arch_atomic64_fetch_add(s64 i, atomic64_t *v)
-{
-	s64 val = __READ_ONCE(v->counter);
-
-	do { } while (!arch_atomic64_try_cmpxchg(v, &val, val + i));
-	return val;
-}
-#define arch_atomic64_fetch_add arch_atomic64_fetch_add
-
-#define arch_atomic64_fetch_sub(i, v)	arch_atomic64_fetch_add(-(i), (v))
 
 #endif /* _ASM_X86_ATOMIC64_32_H */
