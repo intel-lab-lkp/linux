@@ -1308,7 +1308,9 @@ EXPORT_SYMBOL(get_tree_keyed);
 
 static int set_bdev_super(struct super_block *s, void *data)
 {
-	s->s_dev = *(dev_t *)data;
+	u64 devno = (u64)data;
+
+	s->s_dev = (dev_t)devno;
 	return 0;
 }
 
@@ -1319,8 +1321,10 @@ static int super_s_dev_set(struct super_block *s, struct fs_context *fc)
 
 static int super_s_dev_test(struct super_block *s, struct fs_context *fc)
 {
+	u64 devno = (u64)fc->sget_key;
+
 	return !(s->s_iflags & SB_I_RETIRED) &&
-		s->s_dev == *(dev_t *)fc->sget_key;
+		s->s_dev == (dev_t)devno;
 }
 
 /**
@@ -1345,7 +1349,9 @@ static int super_s_dev_test(struct super_block *s, struct fs_context *fc)
  */
 struct super_block *sget_dev(struct fs_context *fc, dev_t dev)
 {
-	fc->sget_key = &dev;
+	u64 devno = (u64)dev;
+
+	fc->sget_key = (void *)devno;
 	return sget_fc(fc, super_s_dev_test, super_s_dev_set);
 }
 EXPORT_SYMBOL(sget_dev);
@@ -1637,13 +1643,15 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	struct super_block *s;
 	int error;
 	dev_t dev;
+	u64 devno;
 
 	error = lookup_bdev(dev_name, &dev);
 	if (error)
 		return ERR_PTR(error);
 
+	devno = (u64)dev;
 	flags |= SB_NOSEC;
-	s = sget(fs_type, test_bdev_super, set_bdev_super, flags, &dev);
+	s = sget(fs_type, test_bdev_super, set_bdev_super, flags, (void *)devno);
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 
