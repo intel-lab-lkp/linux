@@ -502,6 +502,8 @@ static inline void pnp_unregister_driver(struct pnp_driver *drv) { }
 
 #endif /* CONFIG_PNP */
 
+#define dev_is_pnp(d) ((d)->bus == &pnp_bus_type)
+
 /**
  * module_pnp_driver() - Helper macro for registering a PnP driver
  * @__pnp_driver: pnp_driver struct
