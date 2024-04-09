@@ -459,4 +459,4 @@ static int __init sram_init(void)
 	return platform_driver_register(&sram_driver);
 }
 
-postcore_initcall(sram_init);
+device_initcall(sram_init);
