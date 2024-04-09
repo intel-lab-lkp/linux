@@ -29,6 +29,17 @@
 #include "intel_runtime_pm.h"
 #include <linux/pm_runtime.h>
 
+/*
+ * Transitional macro to optionally convert struct xe_device * to struct
+ * intel_display *, also accepting the latter.
+ */
+#define __to_intel_display(p)						\
+	_Generic(p,							\
+		 const struct xe_device *: (&((const struct xe_device *)(p))->display), \
+		 struct xe_device *: (&((struct xe_device *)(p))->display), \
+		 const struct intel_display *: (p),			\
+		 struct intel_display *: (p))
+
 static inline struct drm_i915_private *to_i915(const struct drm_device *dev)
 {
 	return container_of(dev, struct drm_i915_private, drm);
