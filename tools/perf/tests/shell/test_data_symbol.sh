@@ -16,6 +16,12 @@ skip_if_no_mem_event() {
 	return 2
 }
 
+# Skip on Arm N1 due to errata 1694299. Bias exists in SPE sampling
+# which can cause the load and store instructions to be skipped
+# entirely. This comes and goes randomly depending on the offset the
+# linker places the datasym loop at in the Perf binary.
+lscpu | grep -q "Neoverse-N1" && exit 2
+
 skip_if_no_mem_event || exit 2
 
 skip_test_missing_symbol buf1
