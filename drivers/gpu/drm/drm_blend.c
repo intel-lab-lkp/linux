@@ -104,6 +104,9 @@
  *	Without this property the rectangle is only scaled, but not rotated or
  *	reflected.
  *
+ *	See drm_plane_create_rotation_property() for details about the expected rotation and
+ *	reflection behavior.
+ *
  *	Possbile values:
  *
  *	"rotate-<degrees>":
@@ -113,18 +116,6 @@
  *	"reflect-<axis>":
  *		Signals that the contents of a drm plane is reflected along the
  *		<axis> axis, in the same way as mirroring.
- *
- *	reflect-x::
- *
- *			|o |    | o|
- *			|  | -> |  |
- *			| v|    |v |
- *
- *	reflect-y::
- *
- *			|o |    | ^|
- *			|  | -> |  |
- *			| v|    |o |
  *
  * zpos:
  *	Z position is set up with drm_plane_create_zpos_immutable_property() and
@@ -266,8 +257,41 @@ EXPORT_SYMBOL(drm_plane_create_alpha_property);
  *
  * Rotation is the specified amount in degrees in counter clockwise direction,
  * the X and Y axis are within the source rectangle, i.e.  the X/Y axis before
- * rotation. After reflection, the rotation is applied to the image sampled from
- * the source rectangle, before scaling it to fit the destination rectangle.
+ * rotation.
+ *
+ * Here are some examples of rotation and reflections:
+ *
+ * |o  +|  REFLECT_X  |+  o|
+ * |    |  ========>  |    |
+ * |    |             |    |
+ *
+ * |o   |  REFLECT_Y  |+   |
+ * |    |  ========>  |    |
+ * |+   |             |o   |
+ *
+ * |o  +|  ROTATE_90  |+   |
+ * |    |  ========>  |    |
+ * |    |             |o   |
+ *
+ * |o   |  ROTATE_180 |   +|
+ * |    |  ========>  |    |
+ * |+   |             |   o|
+ *
+ * |o   |  ROTATE_270 |+  o|
+ * |    |  ========>  |    |
+ * |+   |             |    |
+ *
+ * Rotation and reflection can be combined to handle more situations. In this condition, the
+ * reflection is applied first and the rotation in second.
+ *
+ * For example the expected result for DRM_MODE_ROTATE_90 | DRM_MODE_REFLECT_X is:
+ *
+ * |o  +|  REFLECT_X  |+  o|  ROTATE_90  |o   |
+ * |    |  ========>  |    |  ========>  |    |
+ * |    |             |    |             |+   |
+ *
+ * It is not possible to pass multiple rotation at the same time. (i.e ROTATE_90 | ROTATE_180 is
+ * not the same as ROTATE_270 and is not accepted).
  */
 int drm_plane_create_rotation_property(struct drm_plane *plane,
 				       unsigned int rotation,
