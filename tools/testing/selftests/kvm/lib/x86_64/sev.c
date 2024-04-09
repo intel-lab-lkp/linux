@@ -8,11 +8,18 @@
 #include "svm.h"
 #include "svm_util.h"
 
+#define IOIO_TYPE_STR (1 << 2)
+#define IOIO_SEG_DS (1 << 11 | 1 << 10)
+#define IOIO_DATA_8 (1 << 4)
+#define IOIO_REP (1 << 3)
+
+#define SW_EXIT_CODE_IOIO 0x7b
+
 struct ghcb_entry {
 	struct ghcb ghcb;
 
 	/* Guest physical address of this GHCB. */
-	void *gpa;
+	uint64_t gpa;
 
 	/* Host virtual address of this struct. */
 	struct ghcb_entry *hva;
@@ -45,16 +52,22 @@ void ghcb_init(struct kvm_vm *vm)
 	for (i = 0; i < KVM_MAX_VCPUS; ++i) {
 		entry = &hdr->ghcbs[i];
 		entry->hva = entry;
-		entry->gpa = addr_hva2gpa(vm, &entry->ghcb);
+		entry->gpa = (uint64_t)addr_hva2gpa(vm, &entry->ghcb);
 	}
 
 	write_guest_global(vm, ghcb_pool, (struct ghcb_header *)vaddr);
+}
+
+static void sev_es_terminate(void)
+{
+	wrmsr(MSR_AMD64_SEV_ES_GHCB, GHCB_MSR_TERM_REQ);
 }
 
 static struct ghcb_entry *ghcb_alloc(void)
 {
 	return &ghcb_pool->ghcbs[0];
 	struct ghcb_entry *entry;
+	struct ghcb *ghcb;
 	int i;
 
 	if (!ghcb_pool)
@@ -63,12 +76,18 @@ static struct ghcb_entry *ghcb_alloc(void)
 	for (i = 0; i < KVM_MAX_VCPUS; ++i) {
 		if (!test_and_set_bit(i, ghcb_pool->in_use)) {
 			entry = &ghcb_pool->ghcbs[i];
-			memset(&entry->ghcb, 0, sizeof(entry->ghcb));
+			ghcb = &entry->ghcb;
+
+			memset(&ghcb, 0, sizeof(*ghcb));
+			ghcb->ghcb_usage = 0;
+			ghcb->protocol_version = 1;
+
 			return entry;
 		}
 	}
 
 ucall_failed:
+	sev_es_terminate();
 	return NULL;
 }
 
@@ -199,4 +218,46 @@ bool is_sev_es_enabled(void)
 {
 	return is_sev_enabled() &&
 	       rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_ES_ENABLED;
+}
+
+static uint64_t setup_exitinfo1_portio(uint32_t port)
+{
+	uint64_t exitinfo1 = 0;
+
+	exitinfo1 |= IOIO_TYPE_STR;
+	exitinfo1 |= ((port & 0xffff) << 16);
+	exitinfo1 |= IOIO_SEG_DS;
+	exitinfo1 |= IOIO_DATA_8;
+	exitinfo1 |= IOIO_REP;
+
+	return exitinfo1;
+}
+
+static void do_vmg_exit(uint64_t ghcb_gpa)
+{
+	wrmsr(MSR_AMD64_SEV_ES_GHCB, ghcb_gpa);
+	__asm__ __volatile__("rep; vmmcall");
+}
+
+void sev_es_ucall_port_write(uint32_t port, uint64_t data)
+{
+	struct ghcb_entry *entry;
+	struct ghcb *ghcb;
+	const uint64_t exitinfo1 = setup_exitinfo1_portio(port);
+
+	entry = ghcb_alloc();
+	ghcb = &entry->ghcb;
+
+	ghcb_set_sw_exit_code(ghcb, SW_EXIT_CODE_IOIO);
+	ghcb_set_sw_exit_info_1(ghcb, exitinfo1);
+	ghcb_set_sw_exit_info_2(ghcb, sizeof(data));
+
+	// Setup the SW Stratch buffer pointer.
+	ghcb_set_sw_scratch(ghcb,
+			    entry->gpa + offsetof(struct ghcb, shared_buffer));
+	memcpy(&ghcb->shared_buffer, &data, sizeof(data));
+
+	do_vmg_exit(entry->gpa);
+
+	ghcb_free(entry);
 }

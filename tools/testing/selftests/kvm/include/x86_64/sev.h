@@ -109,4 +109,6 @@ static inline void sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
 bool is_sev_enabled(void);
 bool is_sev_es_enabled(void);
 
+void sev_es_ucall_port_write(uint32_t port, uint64_t data);
+
 #endif /* SELFTEST_KVM_SEV_H */

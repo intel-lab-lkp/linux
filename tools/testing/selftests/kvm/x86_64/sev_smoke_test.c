@@ -18,12 +18,7 @@ static void guest_sev_es_code(void)
 	/* TODO: Check CPUID after GHCB-based hypercall support is added. */
 	GUEST_ASSERT(is_sev_es_enabled());
 
-	/*
-	 * TODO: Add GHCB and ucall support for SEV-ES guests.  For now, simply
-	 * force "termination" to signal "done" via the GHCB MSR protocol.
-	 */
-	wrmsr(MSR_AMD64_SEV_ES_GHCB, GHCB_MSR_TERM_REQ);
-	__asm__ __volatile__("rep; vmmcall");
+	GUEST_DONE();
 }
 
 static void guest_sev_code(void)
@@ -44,16 +39,6 @@ static void test_sev(void *guest_code, uint64_t policy)
 
 	for (;;) {
 		vcpu_run(vcpu);
-
-		if (policy & SEV_POLICY_ES) {
-			TEST_ASSERT(vcpu->run->exit_reason == KVM_EXIT_SYSTEM_EVENT,
-				    "Wanted SYSTEM_EVENT, got %s",
-				    exit_reason_str(vcpu->run->exit_reason));
-			TEST_ASSERT_EQ(vcpu->run->system_event.type, KVM_SYSTEM_EVENT_SEV_TERM);
-			TEST_ASSERT_EQ(vcpu->run->system_event.ndata, 1);
-			TEST_ASSERT_EQ(vcpu->run->system_event.data[0], GHCB_MSR_TERM_REQ);
-			break;
-		}
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_SYNC:
