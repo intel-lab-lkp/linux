@@ -85,6 +85,8 @@ static bool cfg_rx;
 static int  cfg_runtime_ms	= 4200;
 static int  cfg_verbose;
 static int  cfg_waittime_ms	= 500;
+static bool cfg_notification_order_check;
+static int  cfg_notification_limit = 32;
 static bool cfg_zerocopy;
 
 static socklen_t cfg_alen;
@@ -435,7 +437,7 @@ static bool do_recv_completion(int fd, int domain)
 	/* Detect notification gaps. These should not happen often, if at all.
 	 * Gaps can occur due to drops, reordering and retransmissions.
 	 */
-	if (lo != next_completion)
+	if (cfg_notification_order_check && lo != next_completion)
 		fprintf(stderr, "gap: %u..%u does not append to %u\n",
 			lo, hi, next_completion);
 	next_completion = hi + 1;
@@ -489,7 +491,7 @@ static void do_tx(int domain, int type, int protocol)
 		struct iphdr iph;
 	} nh;
 	uint64_t tstop;
-	int fd;
+	int fd, sendmsg_counter = 0;
 
 	fd = do_setup_tx(domain, type, protocol);
 
@@ -548,10 +550,18 @@ static void do_tx(int domain, int type, int protocol)
 			do_sendmsg_corked(fd, &msg);
 		else
 			do_sendmsg(fd, &msg, cfg_zerocopy, domain);
+		sendmsg_counter++;
+
+		if (sendmsg_counter == cfg_notification_limit && cfg_zerocopy) {
+			do_recv_completions(fd, domain);
+			sendmsg_counter = 0;
+		}
 
 		while (!do_poll(fd, POLLOUT)) {
-			if (cfg_zerocopy)
+			if (cfg_zerocopy) {
 				do_recv_completions(fd, domain);
+				sendmsg_counter = 0;
+			}
 		}
 
 	} while (gettimeofday_ms() < tstop);
@@ -708,7 +718,7 @@ static void parse_opts(int argc, char **argv)
 
 	cfg_payload_len = max_payload_len;
 
-	while ((c = getopt(argc, argv, "46c:C:D:i:mp:rs:S:t:vz")) != -1) {
+	while ((c = getopt(argc, argv, "46c:C:D:i:mp:rs:S:t:vzol:")) != -1) {
 		switch (c) {
 		case '4':
 			if (cfg_family != PF_UNSPEC)
@@ -759,6 +769,12 @@ static void parse_opts(int argc, char **argv)
 			break;
 		case 'z':
 			cfg_zerocopy = true;
+			break;
+		case 'o':
+			cfg_notification_order_check = true;
+			break;
+		case 'l':
+			cfg_notification_limit = strtoul(optarg, NULL, 0);
 			break;
 		}
 	}
