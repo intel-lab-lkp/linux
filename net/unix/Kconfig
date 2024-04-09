@@ -17,9 +17,9 @@ config UNIX
 	  Say Y unless you know what you are doing.
 
 config	AF_UNIX_OOB
-	bool
+	bool "Unix MSG_OOB support"
 	depends on UNIX
-	default y
+	default n
 
 config UNIX_DIAG
 	tristate "UNIX: socket monitoring interface"

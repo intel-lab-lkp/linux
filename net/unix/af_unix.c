@@ -2253,6 +2253,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 	err = -EOPNOTSUPP;
 	if (msg->msg_flags & MSG_OOB) {
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
+		pr_warn_once("MSG_OOB support will be removed in 2025.\n");
+
 		if (len)
 			len--;
 		else
