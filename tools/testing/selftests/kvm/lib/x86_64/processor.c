@@ -584,6 +584,14 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm)
 		sev_es_vm_init(vm);
 }
 
+int kvm_arch_vm_additional_pages_required(struct vm_shape shape, uint64_t page_size)
+{
+	if (shape.subtype == VM_SUBTYPE_SEV_ES)
+		return  ghcb_nr_pages_required(page_size);
+
+	return 0;
+}
+
 void vcpu_arch_set_entry_point(struct kvm_vcpu *vcpu, void *guest_code)
 {
 	struct kvm_regs regs;
