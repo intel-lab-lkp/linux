@@ -184,7 +184,22 @@ static void __init acpi_pcc_cpufreq_init(void) {}
 
 /* Initialization */
 #ifdef CONFIG_ACPI_HOTPLUG_CPU
-static int acpi_processor_hotadd_init(struct acpi_processor *pr)
+static void acpi_processor_hotplug_delay_init(struct acpi_processor *pr)
+{
+	/*
+	 * CPU got hot-added, but cpu_data is not initialized yet.  Set a flag
+	 * to delay cpu_idle/throttling initialization and do it when the CPU
+	 * gets online for the first time.
+	 */
+	pr_info("CPU%d has been hot-added\n", pr->id);
+	pr->flags.need_hotplug_init = 1;
+}
+#else
+static void acpi_processor_hotplug_delay_init(struct acpi_processor *pr) {}
+#endif /* CONFIG_ACPI_HOTPLUG_CPU */
+
+/* Enumerate extra CPUs */
+static int acpi_processor_enumerate_extra(struct acpi_processor *pr)
 {
 	unsigned long long sta;
 	acpi_status status;
@@ -210,25 +225,12 @@ static int acpi_processor_hotadd_init(struct acpi_processor *pr)
 		goto out;
 	}
 
-	/*
-	 * CPU got hot-added, but cpu_data is not initialized yet.  Set a flag
-	 * to delay cpu_idle/throttling initialization and do it when the CPU
-	 * gets online for the first time.
-	 */
-	pr_info("CPU%d has been hot-added\n", pr->id);
-	pr->flags.need_hotplug_init = 1;
-
+	acpi_processor_hotplug_delay_init(pr);
 out:
 	cpus_write_unlock();
 	cpu_maps_update_done();
 	return ret;
 }
-#else
-static inline int acpi_processor_hotadd_init(struct acpi_processor *pr)
-{
-	return -ENODEV;
-}
-#endif /* CONFIG_ACPI_HOTPLUG_CPU */
 
 static int acpi_evaluate_processor(struct acpi_device *device,
 				   struct acpi_processor *pr,
@@ -347,7 +349,7 @@ static int acpi_processor_get_info(struct acpi_device *device)
 	 *  because cpuid <-> apicid mapping is persistent now.
 	 */
 	if (invalid_logical_cpuid(pr->id) || !cpu_present(pr->id)) {
-		int ret = acpi_processor_hotadd_init(pr);
+		int ret = acpi_processor_enumerate_extra(pr);
 
 		if (ret)
 			return ret;
