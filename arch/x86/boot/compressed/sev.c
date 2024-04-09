@@ -134,6 +134,11 @@ bool sev_snp_enabled(void)
 	return sev_status & MSR_AMD64_SEV_SNP_ENABLED;
 }
 
+bool sev_es_enabled(void)
+{
+	return sev_status & MSR_AMD64_SEV_ES_ENABLED;
+}
+
 static void __page_state_change(unsigned long paddr, enum psc_op op)
 {
 	u64 val;
