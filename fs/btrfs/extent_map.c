@@ -1064,6 +1064,7 @@ static unsigned long btrfs_scan_inode(struct btrfs_inode *inode,
 			btrfs_set_inode_full_sync(inode);
 
 		remove_extent_mapping(inode, em);
+		trace_btrfs_extent_map_shrinker_remove_em(inode, em);
 		/* Drop the reference for the tree. */
 		free_extent_map(em);
 		nr_dropped++;
@@ -1156,6 +1157,12 @@ static unsigned long btrfs_extent_maps_scan(struct shrinker *shrinker,
 	unsigned long scanned = 0;
 	u64 next_root_id = 0;
 
+	if (trace_btrfs_extent_map_shrinker_scan_enter_enabled()) {
+		s64 nr = percpu_counter_sum_positive(&fs_info->evictable_extent_maps);
+
+		trace_btrfs_extent_map_shrinker_scan_enter(fs_info, sc->nr_to_scan, nr);
+	}
+
 	while (scanned < sc->nr_to_scan) {
 		struct btrfs_root *root;
 		unsigned long count;
@@ -1180,6 +1187,12 @@ static unsigned long btrfs_extent_maps_scan(struct shrinker *shrinker,
 		btrfs_put_root(root);
 	}
 
+	if (trace_btrfs_extent_map_shrinker_scan_exit_enabled()) {
+		s64 nr = percpu_counter_sum_positive(&fs_info->evictable_extent_maps);
+
+		trace_btrfs_extent_map_shrinker_scan_exit(fs_info, nr_dropped, nr);
+	}
+
 	return nr_dropped;
 }
 
@@ -1188,6 +1201,8 @@ static unsigned long btrfs_extent_maps_count(struct shrinker *shrinker,
 {
 	struct btrfs_fs_info *fs_info = shrinker->private_data;
 	const s64 total = percpu_counter_sum_positive(&fs_info->evictable_extent_maps);
+
+	trace_btrfs_extent_map_shrinker_count(fs_info, sc->nr_to_scan, total);
 
 	/* The unsigned long type is 32 bits on 32 bits platforms. */
 #if BITS_PER_LONG == 32
