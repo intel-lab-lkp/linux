@@ -2390,7 +2390,7 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 		exec_control &= TERTIARY_EXEC_SPEC_CTRL_SHADOW;
 		if (exec_control & TERTIARY_EXEC_SPEC_CTRL_SHADOW)
 			vmcs_write64(IA32_SPEC_CTRL_MASK,
-				     vmx->vcpu.kvm->arch.force_spec_ctrl_mask);
+				     vmx->force_spec_ctrl_mask);
 
 		tertiary_exec_controls_set(vmx, exec_control);
 	}

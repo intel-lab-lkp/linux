@@ -2161,7 +2161,7 @@ static void vmx_set_spec_ctrl(struct kvm_vcpu *vcpu, u64 val)
 		vmx->spec_ctrl_shadow = val;
 		vmcs_write64(IA32_SPEC_CTRL_SHADOW, val);
 
-		vmx->spec_ctrl |= vcpu->kvm->arch.force_spec_ctrl_value;
+		vmx->spec_ctrl |= vmx->force_spec_ctrl_value;
 	}
 }
 
@@ -4803,6 +4803,9 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 	if (cpu_has_vmx_xsaves())
 		vmcs_write64(XSS_EXIT_BITMAP, VMX_XSS_EXIT_BITMAP);
 
+	vmx->force_spec_ctrl_mask = kvm->arch.force_spec_ctrl_mask;
+	vmx->force_spec_ctrl_value = kvm->arch.force_spec_ctrl_value;
+
 	if (cpu_has_spec_ctrl_shadow()) {
 		vmx->spec_ctrl_shadow = 0;
 		vmcs_write64(IA32_SPEC_CTRL_SHADOW, 0);
@@ -4816,7 +4819,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		 * guest modify other bits at will, without triggering VM-Exits.
 		 */
 		if (kvm->arch.force_spec_ctrl_mask)
-			vmcs_write64(IA32_SPEC_CTRL_MASK, kvm->arch.force_spec_ctrl_mask);
+			vmcs_write64(IA32_SPEC_CTRL_MASK, vmx->force_spec_ctrl_mask);
 		else
 			vmcs_write64(IA32_SPEC_CTRL_MASK, 0);
 	}
@@ -7251,8 +7254,8 @@ void noinstr vmx_spec_ctrl_restore_host(struct vcpu_vmx *vmx,
 		if (cpu_has_spec_ctrl_shadow()) {
 			vmx->spec_ctrl_shadow = vmcs_read64(IA32_SPEC_CTRL_SHADOW);
 			vmx->spec_ctrl = (vmx->spec_ctrl_shadow &
-					~vmx->vcpu.kvm->arch.force_spec_ctrl_mask) |
-					 vmx->vcpu.kvm->arch.force_spec_ctrl_value;
+					~vmx->force_spec_ctrl_mask) |
+					 vmx->force_spec_ctrl_value;
 		} else {
 			vmx->spec_ctrl = __rdmsr(MSR_IA32_SPEC_CTRL);
 		}

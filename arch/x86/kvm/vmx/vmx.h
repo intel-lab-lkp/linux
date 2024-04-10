@@ -287,6 +287,13 @@ struct vcpu_vmx {
 	 */
 	u64		      spec_ctrl_shadow;
 
+	/*
+	 * Mask and value of SPEC_CTRL MSR bits which the guest is not allowed to
+	 * change.
+	 */
+	u64		      force_spec_ctrl_mask;
+	u64		      force_spec_ctrl_value;
+
 	u32		      msr_ia32_umwait_control;
 
 	/*
