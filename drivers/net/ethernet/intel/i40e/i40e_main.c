@@ -3457,6 +3457,58 @@ static struct xsk_buff_pool *i40e_xsk_pool(struct i40e_ring *ring)
 }
 
 /**
+ * __i40e_queue_set_napi - Set the napi instance for the queue
+ * @dev: device to which NAPI and queue belong
+ * @queue_index: Index of queue
+ * @type: queue type as RX or TX
+ * @napi: NAPI context
+ * @locked: is the rtnl_lock already held
+ *
+ * Set the napi instance for the queue. Caller indicates the lock status.
+ */
+static void
+__i40e_queue_set_napi(struct net_device *dev, unsigned int queue_index,
+		      enum netdev_queue_type type, struct napi_struct *napi,
+		      bool locked)
+{
+	if (!locked)
+		rtnl_lock();
+	netif_queue_set_napi(dev, queue_index, type, napi);
+	if (!locked)
+		rtnl_unlock();
+}
+
+/**
+ * i40e_queue_set_napi - Set the napi instance for the queue
+ * @vsi: VSI being configured
+ * @queue_index: Index of queue
+ * @type: queue type as RX or TX
+ * @napi: NAPI context
+ *
+ * Set the napi instance for the queue. The rtnl lock state is derived from the
+ * execution path.
+ */
+void
+i40e_queue_set_napi(struct i40e_vsi *vsi, unsigned int queue_index,
+		    enum netdev_queue_type type, struct napi_struct *napi)
+{
+	struct i40e_pf *pf = vsi->back;
+
+	if (!vsi->netdev)
+		return;
+
+	if (current_work() == &pf->service_task ||
+	    test_bit(__I40E_PF_RESET_REQUESTED, pf->state) ||
+	    test_bit(__I40E_DOWN, pf->state) ||
+	    test_bit(__I40E_SUSPENDED, pf->state))
+		__i40e_queue_set_napi(vsi->netdev, queue_index, type, napi,
+				      false);
+	else
+		__i40e_queue_set_napi(vsi->netdev, queue_index, type, napi,
+				      true);
+}
+
+/**
  * i40e_configure_tx_ring - Configure a transmit ring context and rest
  * @ring: The Tx ring to configure
  *
@@ -3566,6 +3618,8 @@ static int i40e_configure_tx_ring(struct i40e_ring *ring)
 	/* cache tail off for easier writes later */
 	ring->tail = hw->hw_addr + I40E_QTX_TAIL(pf_q);
 
+	i40e_queue_set_napi(vsi, ring->queue_index, NETDEV_QUEUE_TYPE_TX,
+			    &ring->q_vector->napi);
 	return 0;
 }
 
@@ -3724,6 +3778,8 @@ skip:
 			 ring->queue_index, pf_q);
 	}
 
+	i40e_queue_set_napi(vsi, ring->queue_index, NETDEV_QUEUE_TYPE_RX,
+			    &ring->q_vector->napi);
 	return 0;
 }
 
@@ -4186,6 +4242,8 @@ static int i40e_vsi_request_irq_msix(struct i40e_vsi *vsi, char *basename)
 		q_vector->affinity_notify.notify = i40e_irq_affinity_notify;
 		q_vector->affinity_notify.release = i40e_irq_affinity_release;
 		irq_set_affinity_notifier(irq_num, &q_vector->affinity_notify);
+		netif_napi_set_irq(&q_vector->napi, q_vector->irq_num);
+
 		/* Spread affinity hints out across online CPUs.
 		 *
 		 * get_cpu_mask returns a static constant mask with

@@ -821,6 +821,8 @@ void i40e_clean_tx_ring(struct i40e_ring *tx_ring)
 void i40e_free_tx_resources(struct i40e_ring *tx_ring)
 {
 	i40e_clean_tx_ring(tx_ring);
+	i40e_queue_set_napi(tx_ring->vsi, tx_ring->queue_index,
+			    NETDEV_QUEUE_TYPE_TX, NULL);
 	kfree(tx_ring->tx_bi);
 	tx_ring->tx_bi = NULL;
 
@@ -1528,6 +1530,8 @@ skip_free:
 void i40e_free_rx_resources(struct i40e_ring *rx_ring)
 {
 	i40e_clean_rx_ring(rx_ring);
+	i40e_queue_set_napi(rx_ring->vsi, rx_ring->queue_index,
+			    NETDEV_QUEUE_TYPE_RX, NULL);
 	if (rx_ring->vsi->type == I40E_VSI_MAIN)
 		xdp_rxq_info_unreg(&rx_ring->xdp_rxq);
 	rx_ring->xdp_prog = NULL;
