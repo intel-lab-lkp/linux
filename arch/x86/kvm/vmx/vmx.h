@@ -294,6 +294,8 @@ struct vcpu_vmx {
 	u64		      force_spec_ctrl_mask;
 	u64		      force_spec_ctrl_value;
 
+	u64                   msr_virtual_enumeration;
+
 	u32		      msr_ia32_umwait_control;
 
 	/*

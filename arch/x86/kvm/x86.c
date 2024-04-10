@@ -1564,6 +1564,7 @@ static const u32 emulated_msrs_all[] = {
 
 	MSR_K7_HWCR,
 	MSR_KVM_POLL_CONTROL,
+	MSR_VIRTUAL_ENUMERATION,
 };
 
 static u32 emulated_msrs[ARRAY_SIZE(emulated_msrs_all)];
@@ -1579,6 +1580,7 @@ static const u32 msr_based_features_all_except_vmx[] = {
 	MSR_IA32_UCODE_REV,
 	MSR_IA32_ARCH_CAPABILITIES,
 	MSR_IA32_PERF_CAPABILITIES,
+	MSR_VIRTUAL_ENUMERATION,
 };
 
 static u32 msr_based_features[ARRAY_SIZE(msr_based_features_all_except_vmx) +
@@ -1621,7 +1623,8 @@ static bool kvm_is_immutable_feature_msr(u32 msr)
 	 ARCH_CAP_PSCHANGE_MC_NO | ARCH_CAP_TSX_CTRL_MSR | ARCH_CAP_TAA_NO | \
 	 ARCH_CAP_SBDR_SSDP_NO | ARCH_CAP_FBSDP_NO | ARCH_CAP_PSDP_NO | \
 	 ARCH_CAP_FB_CLEAR | ARCH_CAP_RRSBA | ARCH_CAP_PBRSB_NO | ARCH_CAP_GDS_NO | \
-	 ARCH_CAP_RFDS_NO | ARCH_CAP_RFDS_CLEAR | ARCH_CAP_BHI_NO)
+	 ARCH_CAP_RFDS_NO | ARCH_CAP_RFDS_CLEAR | ARCH_CAP_BHI_NO | \
+	 ARCH_CAP_VIRTUAL_ENUM)
 
 static u64 kvm_get_arch_capabilities(void)
 {
@@ -1634,6 +1637,17 @@ static u64 kvm_get_arch_capabilities(void)
 	 * L1 guests, so it need not worry about its own (L2) guests.
 	 */
 	data |= ARCH_CAP_PSCHANGE_MC_NO;
+
+	/*
+	 * Virtual enumeration is a paravirt feature. The only usage for now
+	 * is to bridge the gap caused by microarchitecture changes between
+	 * different Intel processors. And its usage is linked to "virtualize
+	 * IA32_SPEC_CTRL" which is a VMX feature. Whether AMD SVM can benefit
+	 * from the same usage and how to implement it is still unclear. Limit
+	 * virtual enumeration to VMX.
+	 */
+	if (static_call(kvm_x86_has_emulated_msr)(NULL, MSR_VIRTUAL_ENUMERATION))
+		data |= ARCH_CAP_VIRTUAL_ENUM;
 
 	/*
 	 * If we're doing cache flushes (either "always" or "cond")

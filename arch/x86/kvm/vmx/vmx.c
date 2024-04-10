@@ -1955,6 +1955,8 @@ static inline bool is_vmx_feature_control_msr_valid(struct vcpu_vmx *vmx,
 	return !(msr->data & ~valid_bits);
 }
 
+#define VIRTUAL_ENUMERATION_VALID_BITS	0ULL
+
 static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 {
 	switch (msr->index) {
@@ -1962,6 +1964,9 @@ static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 		if (!nested)
 			return 1;
 		return vmx_get_vmx_msr(&vmcs_config.nested, msr->index, &msr->data);
+	case MSR_VIRTUAL_ENUMERATION:
+		msr->data = VIRTUAL_ENUMERATION_VALID_BITS;
+		return 0;
 	default:
 		return KVM_MSR_RET_INVALID;
 	}
@@ -2112,6 +2117,12 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case MSR_IA32_DEBUGCTLMSR:
 		msr_info->data = vmcs_read64(GUEST_IA32_DEBUGCTL);
+		break;
+	case MSR_VIRTUAL_ENUMERATION:
+		if (!msr_info->host_initiated &&
+		    !(vcpu->arch.arch_capabilities & ARCH_CAP_VIRTUAL_ENUM))
+			return 1;
+		msr_info->data = vmx->msr_virtual_enumeration;
 		break;
 	default:
 	find_uret_msr:
@@ -2456,6 +2467,14 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 				return 1;
 		}
 		ret = kvm_set_msr_common(vcpu, msr_info);
+		break;
+	case MSR_VIRTUAL_ENUMERATION:
+		if (!msr_info->host_initiated)
+			return 1;
+		if (data & ~VIRTUAL_ENUMERATION_VALID_BITS)
+			return 1;
+
+		vmx->msr_virtual_enumeration = data;
 		break;
 
 	default:
