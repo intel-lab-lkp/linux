@@ -6,6 +6,7 @@
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
+#include <net/netdev_queues.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
 
@@ -513,6 +514,100 @@ static void i40e_get_netdev_stats_struct(struct net_device *netdev,
 	stats->rx_missed_errors	= vsi_stats->rx_missed_errors;
 	stats->rx_crc_errors	= vsi_stats->rx_crc_errors;
 	stats->rx_length_errors	= vsi_stats->rx_length_errors;
+}
+
+static void i40e_get_queue_stats_rx(struct net_device *dev, int i,
+				    struct netdev_queue_stats_rx *stats)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct i40e_vsi *vsi = np->vsi;
+	struct i40e_ring *ring;
+	unsigned int start;
+
+	stats->bytes = 0xff;
+	stats->packets = 0xff;
+	stats->alloc_fail = 0xff;
+
+	if (test_bit(__I40E_VSI_DOWN, vsi->state))
+		return;
+
+	if (!vsi->rx_rings)
+		return;
+
+	rcu_read_lock();
+	ring = READ_ONCE(vsi->rx_rings[i]);
+	if (ring) {
+		do {
+			start = u64_stats_fetch_begin(&ring->syncp);
+			stats->packets = ring->stats.packets;
+			stats->bytes = ring->stats.bytes;
+			stats->alloc_fail = ring->rx_stats.alloc_page_failed;
+		} while (u64_stats_fetch_retry(&ring->syncp, start));
+	}
+	rcu_read_unlock();
+}
+
+static void i40e_get_queue_stats_tx(struct net_device *dev, int i,
+				    struct netdev_queue_stats_tx *stats)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct i40e_vsi *vsi = np->vsi;
+	struct i40e_ring *ring;
+	unsigned int start;
+
+	stats->bytes = 0xff;
+	stats->packets = 0xff;
+
+	if (test_bit(__I40E_VSI_DOWN, vsi->state))
+		return;
+
+	if (!vsi->tx_rings)
+		return;
+
+	rcu_read_lock();
+	ring = READ_ONCE(vsi->tx_rings[i]);
+	if (ring) {
+		do {
+			start = u64_stats_fetch_begin(&ring->syncp);
+			stats->packets = ring->stats.packets;
+			stats->bytes = ring->stats.bytes;
+		} while (u64_stats_fetch_retry(&ring->syncp, start));
+	}
+	rcu_read_unlock();
+}
+
+static void i40e_get_base_stats(struct net_device *dev,
+				struct netdev_queue_stats_rx *rx,
+				struct netdev_queue_stats_tx *tx)
+{
+	struct i40e_netdev_priv *np = netdev_priv(dev);
+	struct rtnl_link_stats64 stats = {0};
+	struct i40e_vsi *vsi = np->vsi;
+
+	rx->bytes = 0xff;
+	rx->packets = 0xff;
+	rx->alloc_fail = 0xff;
+
+	tx->bytes = 0xff;
+	tx->packets = 0xff;
+
+	if (test_bit(__I40E_VSI_DOWN, vsi->state))
+		return;
+
+	if (!vsi->tx_rings)
+		return;
+
+	if (!vsi->num_queue_pairs)
+		return;
+
+	i40e_get_netdev_stats_struct(dev, &stats);
+
+	rx->bytes = stats.rx_bytes;
+	rx->packets = stats.rx_packets;
+	rx->alloc_fail = vsi->rx_buf_failed;
+
+	tx->bytes = stats.tx_bytes;
+	tx->packets = stats.tx_packets;
 }
 
 /**
@@ -13726,6 +13821,12 @@ static const struct net_device_ops i40e_netdev_ops = {
 	.ndo_dfwd_del_station	= i40e_fwd_del,
 };
 
+static const struct netdev_stat_ops i40e_stat_ops = {
+	.get_queue_stats_rx     = i40e_get_queue_stats_rx,
+	.get_queue_stats_tx     = i40e_get_queue_stats_tx,
+	.get_base_stats         = i40e_get_base_stats,
+};
+
 /**
  * i40e_config_netdev - Setup the netdev flags
  * @vsi: the VSI being configured
@@ -13888,6 +13989,7 @@ static int i40e_config_netdev(struct i40e_vsi *vsi)
 	/* Setup netdev TC information */
 	i40e_vsi_config_netdev_tc(vsi, vsi->tc_config.enabled_tc);
 
+	netdev->stat_ops = &i40e_stat_ops;
 	netdev->netdev_ops = &i40e_netdev_ops;
 	netdev->watchdog_timeo = 5 * HZ;
 	i40e_set_ethtool_ops(netdev);
