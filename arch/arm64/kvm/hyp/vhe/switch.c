@@ -4,6 +4,7 @@
  * Author: Marc Zyngier <marc.zyngier@arm.com>
  */
 
+#include <hyp/cfi.h>
 #include <hyp/switch.h>
 
 #include <linux/arm-smccc.h>
@@ -221,6 +222,9 @@ static int __kvm_vcpu_run_vhe(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *guest_ctxt;
 	u64 exit_code;
 
+	if (IS_ENABLED(CONFIG_HYP_SUPPORTS_CFI_TEST) && unlikely(hyp_test_host_ctxt_cfi))
+		hyp_test_host_ctxt_cfi();
+
 	host_ctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
 	host_ctxt->__hyp_running_vcpu = vcpu;
 	guest_ctxt = &vcpu->arch.ctxt;
@@ -244,6 +248,9 @@ static int __kvm_vcpu_run_vhe(struct kvm_vcpu *vcpu)
 		vcpu_set_flag(vcpu, VCPU_HYP_CONTEXT);
 	else
 		vcpu_clear_flag(vcpu, VCPU_HYP_CONTEXT);
+
+	if (IS_ENABLED(CONFIG_HYP_SUPPORTS_CFI_TEST) && unlikely(hyp_test_guest_ctxt_cfi))
+		hyp_test_guest_ctxt_cfi();
 
 	do {
 		/* Jump in the fire! */
