@@ -1956,8 +1956,8 @@ static inline bool is_vmx_feature_control_msr_valid(struct vcpu_vmx *vmx,
 }
 
 #define VIRTUAL_ENUMERATION_VALID_BITS	VIRT_ENUM_MITIGATION_CTRL_SUPPORT
-#define MITI_ENUM_VALID_BITS		0ULL
-#define MITI_CTRL_VALID_BITS		0ULL
+#define MITI_ENUM_VALID_BITS		MITI_ENUM_BHB_CLEAR_SEQ_S_SUPPORT
+#define MITI_CTRL_VALID_BITS		MITI_CTRL_BHB_CLEAR_SEQ_S_USED
 
 static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 {
@@ -2204,7 +2204,7 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	struct vmx_uret_msr *msr;
 	int ret = 0;
 	u32 msr_index = msr_info->index;
-	u64 data = msr_info->data;
+	u64 data = msr_info->data, spec_ctrl_mask = 0;
 	u32 index;
 
 	switch (msr_index) {
@@ -2507,6 +2507,31 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		if (data & ~MITI_CTRL_VALID_BITS)
 			return 1;
+
+		if (data & MITI_CTRL_BHB_CLEAR_SEQ_S_USED &&
+		    kvm_cpu_cap_has(X86_FEATURE_BHI_CTRL) &&
+		    !(host_arch_capabilities & ARCH_CAP_BHI_NO))
+			spec_ctrl_mask |= SPEC_CTRL_BHI_DIS_S;
+
+		/*
+		 * Intercept IA32_SPEC_CTRL to disallow guest from changing
+		 * certain bits if "virtualize IA32_SPEC_CTRL" isn't supported
+		 * e.g., in nested case.
+		 */
+		if (spec_ctrl_mask && !cpu_has_spec_ctrl_shadow())
+			vmx_enable_intercept_for_msr(vcpu, MSR_IA32_SPEC_CTRL, MSR_TYPE_RW);
+
+		/*
+		 * KVM_CAP_FORCE_SPEC_CTRL takes precedence over
+		 * MSR_VIRTUAL_MITIGATION_CTRL.
+		 */
+		spec_ctrl_mask &= ~vmx->vcpu.kvm->arch.force_spec_ctrl_mask;
+
+		vmx->force_spec_ctrl_mask = vmx->vcpu.kvm->arch.force_spec_ctrl_mask |
+					    spec_ctrl_mask;
+		vmx->force_spec_ctrl_value = vmx->vcpu.kvm->arch.force_spec_ctrl_value |
+					    spec_ctrl_mask;
+		vmx_set_spec_ctrl(&vmx->vcpu, vmx->spec_ctrl_shadow);
 
 		vmx->msr_virtual_mitigation_ctrl = data;
 		break;
