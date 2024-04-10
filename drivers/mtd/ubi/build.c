@@ -1380,12 +1380,13 @@ static int __init ubi_init(void)
 	if (ubi_is_module()) {
 		err = ubi_init_attach();
 		if (err)
-			goto out_mtd_notifier;
+			goto out_block_exit;
 	}
 
 	return 0;
 
-out_mtd_notifier:
+out_block_exit:
+	ubiblock_exit();
 	unregister_mtd_user(&ubi_mtd_notifier);
 out_debugfs:
 	ubi_debugfs_exit();
