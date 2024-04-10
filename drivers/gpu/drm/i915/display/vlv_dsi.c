@@ -93,7 +93,7 @@ void vlv_dsi_wait_for_fifo_empty(struct intel_dsi *intel_dsi, enum port port)
 	mask = LP_CTRL_FIFO_EMPTY | HS_CTRL_FIFO_EMPTY |
 		LP_DATA_FIFO_EMPTY | HS_DATA_FIFO_EMPTY;
 
-	if (intel_de_wait_for_set(dev_priv, MIPI_GEN_FIFO_STAT(port),
+	if (intel_de_wait_for_set(dev_priv, MIPI_GEN_FIFO_STAT(dev_priv, port),
 				  mask, 100))
 		drm_err(&dev_priv->drm, "DPI FIFOs are not empty\n");
 }
@@ -148,20 +148,20 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 	header = packet.header;
 
 	if (msg->flags & MIPI_DSI_MSG_USE_LPM) {
-		data_reg = MIPI_LP_GEN_DATA(port);
+		data_reg = MIPI_LP_GEN_DATA(dev_priv, port);
 		data_mask = LP_DATA_FIFO_FULL;
-		ctrl_reg = MIPI_LP_GEN_CTRL(port);
+		ctrl_reg = MIPI_LP_GEN_CTRL(dev_priv, port);
 		ctrl_mask = LP_CTRL_FIFO_FULL;
 	} else {
-		data_reg = MIPI_HS_GEN_DATA(port);
+		data_reg = MIPI_HS_GEN_DATA(dev_priv, port);
 		data_mask = HS_DATA_FIFO_FULL;
-		ctrl_reg = MIPI_HS_GEN_CTRL(port);
+		ctrl_reg = MIPI_HS_GEN_CTRL(dev_priv, port);
 		ctrl_mask = HS_CTRL_FIFO_FULL;
 	}
 
 	/* note: this is never true for reads */
 	if (packet.payload_length) {
-		if (intel_de_wait_for_clear(dev_priv, MIPI_GEN_FIFO_STAT(port),
+		if (intel_de_wait_for_clear(dev_priv, MIPI_GEN_FIFO_STAT(dev_priv, port),
 					    data_mask, 50))
 			drm_err(&dev_priv->drm,
 				"Timeout waiting for HS/LP DATA FIFO !full\n");
@@ -171,11 +171,11 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 	}
 
 	if (msg->rx_len) {
-		intel_de_write(dev_priv, MIPI_INTR_STAT(port),
+		intel_de_write(dev_priv, MIPI_INTR_STAT(dev_priv, port),
 			       GEN_READ_DATA_AVAIL);
 	}
 
-	if (intel_de_wait_for_clear(dev_priv, MIPI_GEN_FIFO_STAT(port),
+	if (intel_de_wait_for_clear(dev_priv, MIPI_GEN_FIFO_STAT(dev_priv, port),
 				    ctrl_mask, 50)) {
 		drm_err(&dev_priv->drm,
 			"Timeout waiting for HS/LP CTRL FIFO !full\n");
@@ -187,7 +187,7 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 	/* ->rx_len is set only for reads */
 	if (msg->rx_len) {
 		data_mask = GEN_READ_DATA_AVAIL;
-		if (intel_de_wait_for_set(dev_priv, MIPI_INTR_STAT(port),
+		if (intel_de_wait_for_set(dev_priv, MIPI_INTR_STAT(dev_priv, port),
 					  data_mask, 50))
 			drm_err(&dev_priv->drm,
 				"Timeout waiting for read data.\n");
@@ -237,17 +237,17 @@ static int dpi_send_cmd(struct intel_dsi *intel_dsi, u32 cmd, bool hs,
 		cmd |= DPI_LP_MODE;
 
 	/* clear bit */
-	intel_de_write(dev_priv, MIPI_INTR_STAT(port), SPL_PKT_SENT_INTERRUPT);
+	intel_de_write(dev_priv, MIPI_INTR_STAT(dev_priv, port), SPL_PKT_SENT_INTERRUPT);
 
 	/* XXX: old code skips write if control unchanged */
-	if (cmd == intel_de_read(dev_priv, MIPI_DPI_CONTROL(port)))
+	if (cmd == intel_de_read(dev_priv, MIPI_DPI_CONTROL(dev_priv, port)))
 		drm_dbg_kms(&dev_priv->drm,
 			    "Same special packet %02x twice in a row.\n", cmd);
 
-	intel_de_write(dev_priv, MIPI_DPI_CONTROL(port), cmd);
+	intel_de_write(dev_priv, MIPI_DPI_CONTROL(dev_priv, port), cmd);
 
 	mask = SPL_PKT_SENT_INTERRUPT;
-	if (intel_de_wait_for_set(dev_priv, MIPI_INTR_STAT(port), mask, 100))
+	if (intel_de_wait_for_set(dev_priv, MIPI_INTR_STAT(dev_priv, port), mask, 100))
 		drm_err(&dev_priv->drm,
 			"Video mode command 0x%08x send failed.\n", cmd);
 
@@ -338,21 +338,21 @@ static bool glk_dsi_enable_io(struct intel_encoder *encoder)
 	 * Power ON MIPI IO first and then write into IO reset and LP wake bits
 	 */
 	for_each_dsi_port(port, intel_dsi->ports)
-		intel_de_rmw(dev_priv, MIPI_CTRL(port), 0, GLK_MIPIIO_ENABLE);
+		intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port), 0, GLK_MIPIIO_ENABLE);
 
 	/* Put the IO into reset */
-	intel_de_rmw(dev_priv, MIPI_CTRL(PORT_A), GLK_MIPIIO_RESET_RELEASED, 0);
+	intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, PORT_A), GLK_MIPIIO_RESET_RELEASED, 0);
 
 	/* Program LP Wake */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		u32 tmp = intel_de_read(dev_priv, MIPI_DEVICE_READY(port));
-		intel_de_rmw(dev_priv, MIPI_CTRL(port),
+		u32 tmp = intel_de_read(dev_priv, MIPI_DEVICE_READY(dev_priv, port));
+		intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port),
 			     GLK_LP_WAKE, (tmp & DEVICE_READY) ? GLK_LP_WAKE : 0);
 	}
 
 	/* Wait for Pwr ACK */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(dev_priv, port),
 					  GLK_MIPIIO_PORT_POWERED, 20))
 			drm_err(&dev_priv->drm, "MIPIO port is powergated\n");
 	}
@@ -360,7 +360,7 @@ static bool glk_dsi_enable_io(struct intel_encoder *encoder)
 	/* Check for cold boot scenario */
 	for_each_dsi_port(port, intel_dsi->ports) {
 		cold_boot |=
-			!(intel_de_read(dev_priv, MIPI_DEVICE_READY(port)) & DEVICE_READY);
+			!(intel_de_read(dev_priv, MIPI_DEVICE_READY(dev_priv, port)) & DEVICE_READY);
 	}
 
 	return cold_boot;
@@ -374,46 +374,46 @@ static void glk_dsi_device_ready(struct intel_encoder *encoder)
 
 	/* Wait for MIPI PHY status bit to set */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(dev_priv, port),
 					  GLK_PHY_STATUS_PORT_READY, 20))
 			drm_err(&dev_priv->drm, "PHY is not ON\n");
 	}
 
 	/* Get IO out of reset */
-	intel_de_rmw(dev_priv, MIPI_CTRL(PORT_A), 0, GLK_MIPIIO_RESET_RELEASED);
+	intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, PORT_A), 0, GLK_MIPIIO_RESET_RELEASED);
 
 	/* Get IO out of Low power state*/
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (!(intel_de_read(dev_priv, MIPI_DEVICE_READY(port)) & DEVICE_READY)) {
-			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(port),
+		if (!(intel_de_read(dev_priv, MIPI_DEVICE_READY(dev_priv, port)) & DEVICE_READY)) {
+			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 				     ULPS_STATE_MASK, DEVICE_READY);
 			usleep_range(10, 15);
 		} else {
 			/* Enter ULPS */
-			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(port),
+			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 				     ULPS_STATE_MASK, ULPS_STATE_ENTER | DEVICE_READY);
 
 			/* Wait for ULPS active */
-			if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(port),
+			if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(dev_priv, port),
 						    GLK_ULPS_NOT_ACTIVE, 20))
 				drm_err(&dev_priv->drm, "ULPS not active\n");
 
 			/* Exit ULPS */
-			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(port),
+			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 				     ULPS_STATE_MASK, ULPS_STATE_EXIT | DEVICE_READY);
 
 			/* Enter Normal Mode */
-			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(port),
+			intel_de_rmw(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 				     ULPS_STATE_MASK,
 				     ULPS_STATE_NORMAL_OPERATION | DEVICE_READY);
 
-			intel_de_rmw(dev_priv, MIPI_CTRL(port), GLK_LP_WAKE, 0);
+			intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port), GLK_LP_WAKE, 0);
 		}
 	}
 
 	/* Wait for Stop state */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_set(dev_priv, MIPI_CTRL(dev_priv, port),
 					  GLK_DATA_LANE_STOP_STATE, 20))
 			drm_err(&dev_priv->drm,
 				"Date lane not in STOP state\n");
@@ -445,12 +445,12 @@ static void bxt_dsi_device_ready(struct intel_encoder *encoder)
 
 	/* Clear ULPS and set device ready */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		val = intel_de_read(dev_priv, MIPI_DEVICE_READY(port));
+		val = intel_de_read(dev_priv, MIPI_DEVICE_READY(dev_priv, port));
 		val &= ~ULPS_STATE_MASK;
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port), val);
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port), val);
 		usleep_range(2000, 2500);
 		val |= DEVICE_READY;
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port), val);
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port), val);
 	}
 }
 
@@ -473,7 +473,7 @@ static void vlv_dsi_device_ready(struct intel_encoder *encoder)
 
 	for_each_dsi_port(port, intel_dsi->ports) {
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       ULPS_STATE_ENTER);
 		usleep_range(2500, 3000);
 
@@ -484,11 +484,11 @@ static void vlv_dsi_device_ready(struct intel_encoder *encoder)
 		intel_de_rmw(dev_priv, VLV_MIPI_PORT_CTRL(PORT_A), 0, LP_OUTPUT_HOLD);
 		usleep_range(1000, 1500);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       ULPS_STATE_EXIT);
 		usleep_range(2500, 3000);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       DEVICE_READY);
 		usleep_range(2500, 3000);
 	}
@@ -514,19 +514,19 @@ static void glk_dsi_enter_low_power_mode(struct intel_encoder *encoder)
 
 	/* Enter ULPS */
 	for_each_dsi_port(port, intel_dsi->ports)
-		intel_de_rmw(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_rmw(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			     ULPS_STATE_MASK, ULPS_STATE_ENTER | DEVICE_READY);
 
 	/* Wait for MIPI PHY status bit to unset */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(dev_priv, port),
 					    GLK_PHY_STATUS_PORT_READY, 20))
 			drm_err(&dev_priv->drm, "PHY is not turning OFF\n");
 	}
 
 	/* Wait for Pwr ACK bit to unset */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(dev_priv, port),
 					    GLK_MIPIIO_PORT_POWERED, 20))
 			drm_err(&dev_priv->drm,
 				"MIPI IO Port is not powergated\n");
@@ -540,18 +540,18 @@ static void glk_dsi_disable_mipi_io(struct intel_encoder *encoder)
 	enum port port;
 
 	/* Put the IO into reset */
-	intel_de_rmw(dev_priv, MIPI_CTRL(PORT_A), GLK_MIPIIO_RESET_RELEASED, 0);
+	intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, PORT_A), GLK_MIPIIO_RESET_RELEASED, 0);
 
 	/* Wait for MIPI PHY status bit to unset */
 	for_each_dsi_port(port, intel_dsi->ports) {
-		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(port),
+		if (intel_de_wait_for_clear(dev_priv, MIPI_CTRL(dev_priv, port),
 					    GLK_PHY_STATUS_PORT_READY, 20))
 			drm_err(&dev_priv->drm, "PHY is not turning OFF\n");
 	}
 
 	/* Clear MIPI mode */
 	for_each_dsi_port(port, intel_dsi->ports)
-		intel_de_rmw(dev_priv, MIPI_CTRL(port), GLK_MIPIIO_ENABLE, 0);
+		intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port), GLK_MIPIIO_ENABLE, 0);
 }
 
 static void glk_dsi_clear_device_ready(struct intel_encoder *encoder)
@@ -578,15 +578,15 @@ static void vlv_dsi_clear_device_ready(struct intel_encoder *encoder)
 		i915_reg_t port_ctrl = IS_BROXTON(dev_priv) ?
 			BXT_MIPI_PORT_CTRL(port) : VLV_MIPI_PORT_CTRL(PORT_A);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       DEVICE_READY | ULPS_STATE_ENTER);
 		usleep_range(2000, 2500);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       DEVICE_READY | ULPS_STATE_EXIT);
 		usleep_range(2000, 2500);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port),
 			       DEVICE_READY | ULPS_STATE_ENTER);
 		usleep_range(2000, 2500);
 
@@ -603,7 +603,7 @@ static void vlv_dsi_clear_device_ready(struct intel_encoder *encoder)
 		intel_de_rmw(dev_priv, port_ctrl, LP_OUTPUT_HOLD, 0);
 		usleep_range(1000, 1500);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port), 0x00);
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port), 0x00);
 		usleep_range(2000, 2500);
 	}
 }
@@ -621,7 +621,7 @@ static void intel_dsi_port_enable(struct intel_encoder *encoder,
 
 		if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) {
 			for_each_dsi_port(port, intel_dsi->ports)
-				intel_de_rmw(dev_priv, MIPI_CTRL(port),
+				intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port),
 					     BXT_PIXEL_OVERLAP_CNT_MASK,
 					     temp << BXT_PIXEL_OVERLAP_CNT_SHIFT);
 		} else {
@@ -798,7 +798,7 @@ static void intel_dsi_pre_enable(struct intel_atomic_state *state,
 	if (is_cmd_mode(intel_dsi)) {
 		for_each_dsi_port(port, intel_dsi->ports)
 			intel_de_write(dev_priv,
-				       MIPI_MAX_RETURN_PKT_SIZE(port), 8 * 4);
+				       MIPI_MAX_RETURN_PKT_SIZE(dev_priv, port), 8 * 4);
 		intel_dsi_vbt_exec_sequence(intel_dsi, MIPI_SEQ_TEAR_ON);
 		intel_dsi_vbt_exec_sequence(intel_dsi, MIPI_SEQ_DISPLAY_ON);
 	} else {
@@ -973,18 +973,18 @@ static bool intel_dsi_get_hw_state(struct intel_encoder *encoder,
 		/* Try command mode if video mode not enabled */
 		if (!enabled) {
 			u32 tmp = intel_de_read(dev_priv,
-						MIPI_DSI_FUNC_PRG(port));
+						MIPI_DSI_FUNC_PRG(dev_priv, port));
 			enabled = tmp & CMD_MODE_DATA_WIDTH_MASK;
 		}
 
 		if (!enabled)
 			continue;
 
-		if (!(intel_de_read(dev_priv, MIPI_DEVICE_READY(port)) & DEVICE_READY))
+		if (!(intel_de_read(dev_priv, MIPI_DEVICE_READY(dev_priv, port)) & DEVICE_READY))
 			continue;
 
 		if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) {
-			u32 tmp = intel_de_read(dev_priv, MIPI_CTRL(port));
+			u32 tmp = intel_de_read(dev_priv, MIPI_CTRL(dev_priv, port));
 			tmp &= BXT_PIPE_SELECT_MASK;
 			tmp >>= BXT_PIPE_SELECT_SHIFT;
 
@@ -1036,7 +1036,7 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 			break;
 	}
 
-	fmt = intel_de_read(dev_priv, MIPI_DSI_FUNC_PRG(port)) & VID_MODE_FORMAT_MASK;
+	fmt = intel_de_read(dev_priv, MIPI_DSI_FUNC_PRG(dev_priv, port)) & VID_MODE_FORMAT_MASK;
 	bpp = mipi_dsi_pixel_format_to_bpp(
 			pixel_format_from_register_bits(fmt));
 
@@ -1058,14 +1058,14 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 				              BXT_MIPI_TRANS_VTOTAL(port));
 
 	hactive = adjusted_mode->crtc_hdisplay;
-	hfp = intel_de_read(dev_priv, MIPI_HFP_COUNT(port));
+	hfp = intel_de_read(dev_priv, MIPI_HFP_COUNT(dev_priv, port));
 
 	/*
 	 * Meaningful for video mode non-burst sync pulse mode only,
 	 * can be zero for non-burst sync events and burst modes
 	 */
-	hsync = intel_de_read(dev_priv, MIPI_HSYNC_PADDING_COUNT(port));
-	hbp = intel_de_read(dev_priv, MIPI_HBP_COUNT(port));
+	hsync = intel_de_read(dev_priv, MIPI_HSYNC_PADDING_COUNT(dev_priv, port));
+	hbp = intel_de_read(dev_priv, MIPI_HBP_COUNT(dev_priv, port));
 
 	/* harizontal values are in terms of high speed byte clock */
 	hfp = pixels_from_txbyteclkhs(hfp, bpp, lane_count,
@@ -1082,8 +1082,8 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 	}
 
 	/* vertical values are in terms of lines */
-	vfp = intel_de_read(dev_priv, MIPI_VFP_COUNT(port));
-	vsync = intel_de_read(dev_priv, MIPI_VSYNC_PADDING_COUNT(port));
+	vfp = intel_de_read(dev_priv, MIPI_VFP_COUNT(dev_priv, port));
+	vsync = intel_de_read(dev_priv, MIPI_VSYNC_PADDING_COUNT(dev_priv, port));
 
 	adjusted_mode->crtc_htotal = hactive + hfp + hsync + hbp;
 	adjusted_mode->crtc_hsync_start = hfp + adjusted_mode->crtc_hdisplay;
@@ -1263,21 +1263,21 @@ static void set_dsi_timings(struct drm_encoder *encoder,
 				       adjusted_mode->crtc_vtotal);
 		}
 
-		intel_de_write(dev_priv, MIPI_HACTIVE_AREA_COUNT(port),
+		intel_de_write(dev_priv, MIPI_HACTIVE_AREA_COUNT(dev_priv, port),
 			       hactive);
-		intel_de_write(dev_priv, MIPI_HFP_COUNT(port), hfp);
+		intel_de_write(dev_priv, MIPI_HFP_COUNT(dev_priv, port), hfp);
 
 		/* meaningful for video mode non-burst sync pulse mode only,
 		 * can be zero for non-burst sync events and burst modes */
-		intel_de_write(dev_priv, MIPI_HSYNC_PADDING_COUNT(port),
+		intel_de_write(dev_priv, MIPI_HSYNC_PADDING_COUNT(dev_priv, port),
 			       hsync);
-		intel_de_write(dev_priv, MIPI_HBP_COUNT(port), hbp);
+		intel_de_write(dev_priv, MIPI_HBP_COUNT(dev_priv, port), hbp);
 
 		/* vertical values are in terms of lines */
-		intel_de_write(dev_priv, MIPI_VFP_COUNT(port), vfp);
-		intel_de_write(dev_priv, MIPI_VSYNC_PADDING_COUNT(port),
+		intel_de_write(dev_priv, MIPI_VFP_COUNT(dev_priv, port), vfp);
+		intel_de_write(dev_priv, MIPI_VSYNC_PADDING_COUNT(dev_priv, port),
 			       vsync);
-		intel_de_write(dev_priv, MIPI_VBP_COUNT(port), vbp);
+		intel_de_write(dev_priv, MIPI_VBP_COUNT(dev_priv, port), vbp);
 	}
 }
 
@@ -1328,31 +1328,31 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 			 * escape clock divider, 20MHz, shared for A and C.
 			 * device ready must be off when doing this! txclkesc?
 			 */
-			tmp = intel_de_read(dev_priv, MIPI_CTRL(PORT_A));
+			tmp = intel_de_read(dev_priv, MIPI_CTRL(dev_priv, PORT_A));
 			tmp &= ~ESCAPE_CLOCK_DIVIDER_MASK;
-			intel_de_write(dev_priv, MIPI_CTRL(PORT_A),
+			intel_de_write(dev_priv, MIPI_CTRL(dev_priv, PORT_A),
 				       tmp | ESCAPE_CLOCK_DIVIDER_1);
 
 			/* read request priority is per pipe */
-			tmp = intel_de_read(dev_priv, MIPI_CTRL(port));
+			tmp = intel_de_read(dev_priv, MIPI_CTRL(dev_priv, port));
 			tmp &= ~READ_REQUEST_PRIORITY_MASK;
-			intel_de_write(dev_priv, MIPI_CTRL(port),
+			intel_de_write(dev_priv, MIPI_CTRL(dev_priv, port),
 				       tmp | READ_REQUEST_PRIORITY_HIGH);
 		} else if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) {
 			enum pipe pipe = crtc->pipe;
 
-			intel_de_rmw(dev_priv, MIPI_CTRL(port),
+			intel_de_rmw(dev_priv, MIPI_CTRL(dev_priv, port),
 				     BXT_PIPE_SELECT_MASK, BXT_PIPE_SELECT(pipe));
 		}
 
 		/* XXX: why here, why like this? handling in irq handler?! */
-		intel_de_write(dev_priv, MIPI_INTR_STAT(port), 0xffffffff);
-		intel_de_write(dev_priv, MIPI_INTR_EN(port), 0xffffffff);
+		intel_de_write(dev_priv, MIPI_INTR_STAT(dev_priv, port), 0xffffffff);
+		intel_de_write(dev_priv, MIPI_INTR_EN(dev_priv, port), 0xffffffff);
 
-		intel_de_write(dev_priv, MIPI_DPHY_PARAM(port),
+		intel_de_write(dev_priv, MIPI_DPHY_PARAM(dev_priv, port),
 			       intel_dsi->dphy_reg);
 
-		intel_de_write(dev_priv, MIPI_DPI_RESOLUTION(port),
+		intel_de_write(dev_priv, MIPI_DPI_RESOLUTION(dev_priv, port),
 			       adjusted_mode->crtc_vdisplay << VERTICAL_ADDRESS_SHIFT | mode_hdisplay << HORIZONTAL_ADDRESS_SHIFT);
 	}
 
@@ -1380,7 +1380,7 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 	}
 
 	for_each_dsi_port(port, intel_dsi->ports) {
-		intel_de_write(dev_priv, MIPI_DSI_FUNC_PRG(port), val);
+		intel_de_write(dev_priv, MIPI_DSI_FUNC_PRG(dev_priv, port), val);
 
 		/* timeouts for recovery. one frame IIUC. if counter expires,
 		 * EOT and stop state. */
@@ -1401,23 +1401,23 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 
 		if (is_vid_mode(intel_dsi) &&
 			intel_dsi->video_mode == BURST_MODE) {
-			intel_de_write(dev_priv, MIPI_HS_TX_TIMEOUT(port),
+			intel_de_write(dev_priv, MIPI_HS_TX_TIMEOUT(dev_priv, port),
 				       txbyteclkhs(adjusted_mode->crtc_htotal, bpp, intel_dsi->lane_count, intel_dsi->burst_mode_ratio) + 1);
 		} else {
-			intel_de_write(dev_priv, MIPI_HS_TX_TIMEOUT(port),
+			intel_de_write(dev_priv, MIPI_HS_TX_TIMEOUT(dev_priv, port),
 				       txbyteclkhs(adjusted_mode->crtc_vtotal * adjusted_mode->crtc_htotal, bpp, intel_dsi->lane_count, intel_dsi->burst_mode_ratio) + 1);
 		}
-		intel_de_write(dev_priv, MIPI_LP_RX_TIMEOUT(port),
+		intel_de_write(dev_priv, MIPI_LP_RX_TIMEOUT(dev_priv, port),
 			       intel_dsi->lp_rx_timeout);
-		intel_de_write(dev_priv, MIPI_TURN_AROUND_TIMEOUT(port),
+		intel_de_write(dev_priv, MIPI_TURN_AROUND_TIMEOUT(dev_priv, port),
 			       intel_dsi->turn_arnd_val);
-		intel_de_write(dev_priv, MIPI_DEVICE_RESET_TIMER(port),
+		intel_de_write(dev_priv, MIPI_DEVICE_RESET_TIMER(dev_priv, port),
 			       intel_dsi->rst_timer_val);
 
 		/* dphy stuff */
 
 		/* in terms of low power clock */
-		intel_de_write(dev_priv, MIPI_INIT_COUNT(port),
+		intel_de_write(dev_priv, MIPI_INIT_COUNT(dev_priv, port),
 			       txclkesc(intel_dsi->escape_clk_div, 100));
 
 		if ((IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv)) &&
@@ -1429,15 +1429,15 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 			 * if not in dual link mode.
 			 */
 			intel_de_write(dev_priv,
-				       MIPI_INIT_COUNT(port == PORT_A ? PORT_C : PORT_A),
+				       MIPI_INIT_COUNT(dev_priv, port == PORT_A ? PORT_C : PORT_A),
 				       intel_dsi->init_count);
 		}
 
 		/* recovery disables */
-		intel_de_write(dev_priv, MIPI_EOT_DISABLE(port), tmp);
+		intel_de_write(dev_priv, MIPI_EOT_DISABLE(dev_priv, port), tmp);
 
 		/* in terms of low power clock */
-		intel_de_write(dev_priv, MIPI_INIT_COUNT(port),
+		intel_de_write(dev_priv, MIPI_INIT_COUNT(dev_priv, port),
 			       intel_dsi->init_count);
 
 		/* in terms of txbyteclkhs. actual high to low switch +
@@ -1445,7 +1445,7 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 		 *
 		 * XXX: write MIPI_STOP_STATE_STALL?
 		 */
-		intel_de_write(dev_priv, MIPI_HIGH_LOW_SWITCH_COUNT(port),
+		intel_de_write(dev_priv, MIPI_HIGH_LOW_SWITCH_COUNT(dev_priv, port),
 			       intel_dsi->hs_to_lp_count);
 
 		/* XXX: low power clock equivalence in terms of byte clock.
@@ -1454,14 +1454,14 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 		 * txclkesc time / txbyteclk time * (105 + MIPI_STOP_STATE_STALL
 		 * ) / 105.???
 		 */
-		intel_de_write(dev_priv, MIPI_LP_BYTECLK(port),
+		intel_de_write(dev_priv, MIPI_LP_BYTECLK(dev_priv, port),
 			       intel_dsi->lp_byte_clk);
 
 		if (IS_GEMINILAKE(dev_priv)) {
-			intel_de_write(dev_priv, MIPI_TLPX_TIME_COUNT(port),
+			intel_de_write(dev_priv, MIPI_TLPX_TIME_COUNT(dev_priv, port),
 				       intel_dsi->lp_byte_clk);
 			/* Shadow of DPHY reg */
-			intel_de_write(dev_priv, MIPI_CLK_LANE_TIMING(port),
+			intel_de_write(dev_priv, MIPI_CLK_LANE_TIMING(dev_priv, port),
 				       intel_dsi->dphy_reg);
 		}
 
@@ -1470,10 +1470,10 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 		 * this register in terms of byte clocks. based on dsi transfer
 		 * rate and the number of lanes configured the time taken to
 		 * transmit 16 long packets in a dsi stream varies. */
-		intel_de_write(dev_priv, MIPI_DBI_BW_CTRL(port),
+		intel_de_write(dev_priv, MIPI_DBI_BW_CTRL(dev_priv, port),
 			       intel_dsi->bw_timer);
 
-		intel_de_write(dev_priv, MIPI_CLK_LANE_SWITCH_TIME_CNT(port),
+		intel_de_write(dev_priv, MIPI_CLK_LANE_SWITCH_TIME_CNT(dev_priv, port),
 			       intel_dsi->clk_lp_to_hs_count << LP_HS_SSW_CNT_SHIFT | intel_dsi->clk_hs_to_lp_count << HS_LP_PWR_SW_CNT_SHIFT);
 
 		if (is_vid_mode(intel_dsi)) {
@@ -1501,7 +1501,7 @@ static void intel_dsi_prepare(struct intel_encoder *intel_encoder,
 				break;
 			}
 
-			intel_de_write(dev_priv, MIPI_VIDEO_MODE_FORMAT(port), fmt);
+			intel_de_write(dev_priv, MIPI_VIDEO_MODE_FORMAT(dev_priv, port), fmt);
 		}
 	}
 }
@@ -1517,17 +1517,17 @@ static void intel_dsi_unprepare(struct intel_encoder *encoder)
 
 	for_each_dsi_port(port, intel_dsi->ports) {
 		/* Panel commands can be sent when clock is in LP11 */
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port), 0x0);
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port), 0x0);
 
 		if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv))
 			bxt_dsi_reset_clocks(encoder, port);
 		else
 			vlv_dsi_reset_clocks(encoder, port);
-		intel_de_write(dev_priv, MIPI_EOT_DISABLE(port), CLOCKSTOP);
+		intel_de_write(dev_priv, MIPI_EOT_DISABLE(dev_priv, port), CLOCKSTOP);
 
-		intel_de_rmw(dev_priv, MIPI_DSI_FUNC_PRG(port), VID_MODE_FORMAT_MASK, 0);
+		intel_de_rmw(dev_priv, MIPI_DSI_FUNC_PRG(dev_priv, port), VID_MODE_FORMAT_MASK, 0);
 
-		intel_de_write(dev_priv, MIPI_DEVICE_READY(port), 0x1);
+		intel_de_write(dev_priv, MIPI_DEVICE_READY(dev_priv, port), 0x1);
 	}
 }
 

@@ -369,9 +369,9 @@ void vlv_dsi_reset_clocks(struct intel_encoder *encoder, enum port port)
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 
-	temp = intel_de_read(dev_priv, MIPI_CTRL(port));
+	temp = intel_de_read(dev_priv, MIPI_CTRL(dev_priv, port));
 	temp &= ~ESCAPE_CLOCK_DIVIDER_MASK;
-	intel_de_write(dev_priv, MIPI_CTRL(port),
+	intel_de_write(dev_priv, MIPI_CTRL(dev_priv, port),
 		       temp | intel_dsi->escape_clk_div << ESCAPE_CLOCK_DIVIDER_SHIFT);
 }
 
@@ -587,7 +587,7 @@ void bxt_dsi_reset_clocks(struct intel_encoder *encoder, enum port port)
 
 		intel_de_rmw(dev_priv, MIPIO_TXESC_CLK_DIV2, GLK_TX_ESC_CLK_DIV2_MASK, 0);
 	}
-	intel_de_write(dev_priv, MIPI_EOT_DISABLE(port), CLOCKSTOP);
+	intel_de_write(dev_priv, MIPI_EOT_DISABLE(dev_priv, port), CLOCKSTOP);
 }
 
 static void assert_dsi_pll(struct drm_i915_private *i915, bool state)

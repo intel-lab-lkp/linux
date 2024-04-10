@@ -3767,7 +3767,7 @@ static bool bxt_get_dsi_transcoder_state(struct intel_crtc *crtc,
 		if (!(tmp & DPI_ENABLE))
 			continue;
 
-		tmp = intel_de_read(dev_priv, MIPI_CTRL(port));
+		tmp = intel_de_read(dev_priv, MIPI_CTRL(dev_priv, port));
 		if ((tmp & BXT_PIPE_SELECT_MASK) != BXT_PIPE_SELECT(crtc->pipe))
 			continue;
 
