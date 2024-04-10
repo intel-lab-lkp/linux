@@ -1188,6 +1188,7 @@
 
 #define MSR_VIRTUAL_MITIGATION_ENUM		0x50000001
 #define MITI_ENUM_BHB_CLEAR_SEQ_S_SUPPORT	BIT(0)	/* VMM supports BHI_DIS_S */
+#define MITI_ENUM_RETPOLINE_S_SUPPORT		BIT(1)	/* VMM supports RRSBA_DIS_S */
 
 #define MSR_VIRTUAL_MITIGATION_CTRL		0x50000002
 #define MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT	0	/*
@@ -1195,6 +1196,11 @@
 							 * BHI_DIS_S mitigation
 							 */
 #define MITI_CTRL_BHB_CLEAR_SEQ_S_USED		BIT(MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT)
+#define MITI_CTRL_RETPOLINE_S_USED_BIT		1	/*
+							 * Request VMM to deploy
+							 * RRSBA_DIS_S mitigation
+							 */
+#define MITI_CTRL_RETPOLINE_S_USED		BIT(MITI_CTRL_RETPOLINE_S_USED_BIT)
 
 /* AMD-V MSRs */
 #define MSR_VM_CR                       0xc0010114

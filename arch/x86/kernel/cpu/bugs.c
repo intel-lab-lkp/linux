@@ -1704,6 +1704,13 @@ void virt_mitigation_ctrl_init(void)
 		else
 			msr_clear_bit(MSR_VIRTUAL_MITIGATION_CTRL, MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT);
 	}
+	if (msr_mitigation_enum & MITI_ENUM_RETPOLINE_S_SUPPORT) {
+		/* When retpoline is being used, request RRSBA_DIS_S */
+		if (boot_cpu_has(X86_FEATURE_RETPOLINE))
+			msr_set_bit(MSR_VIRTUAL_MITIGATION_CTRL, MITI_CTRL_RETPOLINE_S_USED_BIT);
+		else
+			msr_clear_bit(MSR_VIRTUAL_MITIGATION_CTRL, MITI_CTRL_RETPOLINE_S_USED_BIT);
+	}
 }
 
 static void __init spectre_v2_select_mitigation(void)
