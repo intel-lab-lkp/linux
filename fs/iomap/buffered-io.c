@@ -43,6 +43,23 @@ struct iomap_folio_state {
 
 static struct bio_set iomap_ioend_bioset;
 
+/*
+ * Simple submit_bio() wrapper. Set ->bi_status to trigger error completion.
+ */
+static inline int iomap_submit_bio(struct bio *bio, bool wait)
+{
+	int ret = 0;
+
+	if (bio->bi_status)
+		bio_endio(bio);
+	else if (wait)
+		ret = submit_bio_wait(bio);
+	else
+		submit_bio(bio);
+
+	return ret;
+}
+
 static inline bool ifs_is_fully_uptodate(struct folio *folio,
 		struct iomap_folio_state *ifs)
 {
@@ -411,7 +428,7 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 		unsigned int nr_vecs = DIV_ROUND_UP(length, PAGE_SIZE);
 
 		if (ctx->bio)
-			submit_bio(ctx->bio);
+			iomap_submit_bio(ctx->bio, false);
 
 		if (ctx->rac) /* same as readahead_gfp_mask */
 			gfp |= __GFP_NORETRY | __GFP_NOWARN;
@@ -464,7 +481,7 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 		folio_set_error(folio);
 
 	if (ctx.bio) {
-		submit_bio(ctx.bio);
+		iomap_submit_bio(ctx.bio, false);
 		WARN_ON_ONCE(!ctx.cur_folio_in_bio);
 	} else {
 		WARN_ON_ONCE(ctx.cur_folio_in_bio);
@@ -537,7 +554,7 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 		iter.processed = iomap_readahead_iter(&iter, &ctx);
 
 	if (ctx.bio)
-		submit_bio(ctx.bio);
+		iomap_submit_bio(ctx.bio, false);
 	if (ctx.cur_folio) {
 		if (!ctx.cur_folio_in_bio)
 			folio_unlock(ctx.cur_folio);
@@ -665,7 +682,7 @@ static int iomap_read_folio_sync(loff_t block_start, struct folio *folio,
 	bio_init(&bio, iomap->bdev, &bvec, 1, REQ_OP_READ);
 	bio.bi_iter.bi_sector = iomap_sector(iomap, block_start);
 	bio_add_folio_nofail(&bio, folio, plen, poff);
-	return submit_bio_wait(&bio);
+	return iomap_submit_bio(&bio, true);
 }
 
 static int __iomap_write_begin(const struct iomap_iter *iter, loff_t pos,
@@ -1667,12 +1684,9 @@ static int iomap_submit_ioend(struct iomap_writepage_ctx *wpc, int error)
 	if (wpc->ops->prepare_ioend)
 		error = wpc->ops->prepare_ioend(wpc->ioend, error);
 
-	if (error) {
+	if (error)
 		wpc->ioend->io_bio.bi_status = errno_to_blk_status(error);
-		bio_endio(&wpc->ioend->io_bio);
-	} else {
-		submit_bio(&wpc->ioend->io_bio);
-	}
+	iomap_submit_bio(&wpc->ioend->io_bio, false);
 
 	wpc->ioend = NULL;
 	return error;
