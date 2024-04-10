@@ -38,6 +38,8 @@ properties:
       - starry,ili9882t
         # Boe nv110wum-l60 11.0" WUXGA TFT LCD panel
       - boe,nv110wum-l60
+        # Ivo t109nw41 11.0" WUXGA TFT LCD panel
+      - ivo,t109nw41
 
   reg:
     description: the virtual channel number of a DSI peripheral
