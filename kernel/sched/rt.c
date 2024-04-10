@@ -1018,7 +1018,9 @@ static void update_curr_rt(struct rq *rq)
 		struct rt_rq *rt_rq = rt_rq_of_se(rt_se);
 		int exceeded;
 
-		if (sched_rt_runtime(rt_rq) != RUNTIME_INF) {
+		if (sched_rt_runtime(rt_rq) != RUNTIME_INF &&
+				!(curr->policy == SCHED_FIFO &&
+					curr->flags & PF_IDLE)) {
 			raw_spin_lock(&rt_rq->rt_runtime_lock);
 			rt_rq->rt_time += delta_exec;
 			exceeded = sched_rt_runtime_exceeded(rt_rq);
