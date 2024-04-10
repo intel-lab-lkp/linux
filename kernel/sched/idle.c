@@ -384,6 +384,11 @@ static enum hrtimer_restart idle_inject_timer_fn(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+/*
+ * This function runs idle loops on a cpu, whose policy is set as SCHED_FIFO.
+ * Despite being a rt thread, runtime for it is not accounted, thus preventing
+ * its preemption due to rt-throttling
+ */
 void play_idle_precise(u64 duration_ns, u64 latency_ns)
 {
 	struct idle_timer it;
