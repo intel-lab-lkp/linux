@@ -427,6 +427,9 @@ replay_abort:
 
 	nfnl_unlock(subsys_id);
 
+	if (nlh->nlmsg_flags & NLM_F_ACK)
+		nfnl_err_add(&err_list, nlh, 0, &extack);
+
 	while (skb->len >= nlmsg_total_size(0)) {
 		int msglen, type;
 
@@ -463,6 +466,8 @@ replay_abort:
 			goto done;
 		} else if (type == NFNL_MSG_BATCH_END) {
 			status |= NFNL_BATCH_DONE;
+			if (nlh->nlmsg_flags & NLM_F_ACK)
+				nfnl_err_add(&err_list, nlh, 0, &extack);
 			goto done;
 		} else if (type < NLMSG_MIN_TYPE) {
 			err = -EINVAL;
