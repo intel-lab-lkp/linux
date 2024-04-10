@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright (c) 2020 MediaTek Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/i2c/giantec,gt97xx.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Giantec Semiconductor, Crop. GT97xx Voice Coil Motor (VCM)
+
+maintainers:
+  - Zhi Mao <zhi.mao@mediatek.com>
+
+description: |-
+  The Giantec GT97xx is a 10-bit DAC with current sink capability.
+  The DAC is controlled via I2C bus that operates at clock rates up to 1MHz.
+  This chip integrates Advanced Actuator Control (AAC) technology
+  and is intended for driving voice coil lens in camera modules.
+
+properties:
+  compatible:
+    enum:
+      - giantec,gt9768 # for GT9768 VCM
+      - giantec,gt9769 # for GT9769 VCM
+
+  reg:
+    maxItems: 1
+
+  vin-supply: true
+
+  vdd-supply: true
+
+  giantec,aac-mode:
+    description:
+      Indication of AAC mode select.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 1    #  AAC2 mode(operation time# 0.48 x Tvib)
+      - 2    #  AAC3 mode(operation time# 0.70 x Tvib)
+      - 3    #  AAC4 mode(operation time# 0.75 x Tvib)
+      - 5    #  AAC8 mode(operation time# 1.13 x Tvib)
+    default: 2
+
+  giantec,aac-timing:
+    description:
+      Number of AAC Timing count that controlled by one 6-bit period of
+      vibration register AACT[5:0], the unit of which is 100 us.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x20
+    minimum: 0x00
+    maximum: 0x3f
+
+  giantec,clock-presc:
+    description:
+      Indication of VCM internal clock dividing rate select, as one multiple
+      factor to calculate VCM ring periodic time Tvib.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 0    #  Dividing Rate -  2
+      - 1    #  Dividing Rate -  1
+      - 2    #  Dividing Rate -  1/2
+      - 3    #  Dividing Rate -  1/4
+      - 4    #  Dividing Rate -  8
+      - 5    #  Dividing Rate -  4
+    default: 1
+
+required:
+  - compatible
+  - reg
+  - vin-supply
+  - vdd-supply
+
+additionalProperties: false
+
+examples:
+  - |
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        vcm@c {
+            compatible = "giantec,gt9768";
+            reg = <0x0c>;
+
+            vin-supply = <&gt97xx_vin>;
+            vdd-supply = <&gt97xx_vdd>;
+            giantec,aac-timing = <0x20>;
+        };
+    };
+
+...
