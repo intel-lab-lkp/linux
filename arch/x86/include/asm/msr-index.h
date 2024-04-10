@@ -196,6 +196,7 @@
 						 * IA32_XAPIC_DISABLE_STATUS MSR
 						 * supported
 						 */
+#define ARCH_CAP_VIRTUAL_ENUM		BIT_ULL(63) /* MSR_VIRTUAL_ENUMERATION supported */
 
 #define MSR_IA32_FLUSH_CMD		0x0000010b
 #define L1D_FLUSH			BIT(0)	/*
@@ -1177,6 +1178,23 @@
 #define MSR_IA32_VMX_MISC_INTEL_PT                 (1ULL << 14)
 #define MSR_IA32_VMX_MISC_VMWRITE_SHADOW_RO_FIELDS (1ULL << 29)
 #define MSR_IA32_VMX_MISC_PREEMPTION_TIMER_SCALE   0x1F
+
+/* Intel virtual MSRs */
+#define MSR_VIRTUAL_ENUMERATION			0x50000000
+#define VIRT_ENUM_MITIGATION_CTRL_SUPPORT	BIT(0)	/*
+							 * Mitigation ctrl via virtual
+							 * MSRs supported
+							 */
+
+#define MSR_VIRTUAL_MITIGATION_ENUM		0x50000001
+#define MITI_ENUM_BHB_CLEAR_SEQ_S_SUPPORT	BIT(0)	/* VMM supports BHI_DIS_S */
+
+#define MSR_VIRTUAL_MITIGATION_CTRL		0x50000002
+#define MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT	0	/*
+							 * Request VMM to deploy
+							 * BHI_DIS_S mitigation
+							 */
+#define MITI_CTRL_BHB_CLEAR_SEQ_S_USED		BIT(MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT)
 
 /* AMD-V MSRs */
 #define MSR_VM_CR                       0xc0010114

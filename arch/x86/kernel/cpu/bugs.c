@@ -50,6 +50,8 @@ static void __init l1d_flush_select_mitigation(void);
 static void __init srso_select_mitigation(void);
 static void __init gds_select_mitigation(void);
 
+void virt_mitigation_ctrl_init(void);
+
 /* The base value of the SPEC_CTRL MSR without task-specific bits set */
 u64 x86_spec_ctrl_base;
 EXPORT_SYMBOL_GPL(x86_spec_ctrl_base);
@@ -171,6 +173,8 @@ void __init cpu_select_mitigations(void)
 	 */
 	srso_select_mitigation();
 	gds_select_mitigation();
+
+	virt_mitigation_ctrl_init();
 }
 
 /*
@@ -1678,6 +1682,28 @@ static void __init bhi_select_mitigation(void)
 	/* Mitigate syscalls when the mitigation is forced =on */
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP);
 	pr_info("Spectre BHI mitigation: SW BHB clearing on syscall\n");
+}
+
+void virt_mitigation_ctrl_init(void)
+{
+	u64 msr_virt_enum, msr_mitigation_enum;
+
+	if (!(x86_read_arch_cap_msr() & ARCH_CAP_VIRTUAL_ENUM))
+		return;
+
+	rdmsrl(MSR_VIRTUAL_ENUMERATION, msr_virt_enum);
+	if (!(msr_virt_enum & VIRT_ENUM_MITIGATION_CTRL_SUPPORT))
+		return;
+
+	rdmsrl(MSR_VIRTUAL_MITIGATION_ENUM, msr_mitigation_enum);
+
+	if (msr_mitigation_enum & MITI_ENUM_BHB_CLEAR_SEQ_S_SUPPORT) {
+		/* When BHI short seq is being used, request BHI_DIS_S */
+		if (boot_cpu_has(X86_FEATURE_CLEAR_BHB_LOOP))
+			msr_set_bit(MSR_VIRTUAL_MITIGATION_CTRL, MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT);
+		else
+			msr_clear_bit(MSR_VIRTUAL_MITIGATION_CTRL, MITI_CTRL_BHB_CLEAR_SEQ_S_USED_BIT);
+	}
 }
 
 static void __init spectre_v2_select_mitigation(void)
