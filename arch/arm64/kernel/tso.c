@@ -3,6 +3,7 @@
  * Copyright © 2024 Apple Inc. All rights reserved.
  */
 
+#include <linux/sched.h>
 #include <linux/types.h>
 
 #include <asm/cputype.h>
@@ -47,6 +48,14 @@ int modify_tso_enable(bool tso_enable)
 		return -EOPNOTSUPP;
 
 	return 0;
+}
+
+void tso_thread_switch(struct task_struct *next)
+{
+	if (tso_supported()) {
+		current->thread.tso = tso_enabled();
+		modify_tso_enable(next->thread.tso);
+	}
 }
 
 #endif /* CONFIG_ARM64_TSO */

@@ -5,6 +5,7 @@
  * Original Copyright (C) 1995  Linus Torvalds
  * Copyright (C) 1996-2000 Russell King - Converted to ARM.
  * Copyright (C) 2012 ARM Ltd.
+ * Copyright © 2024 Apple Inc. All rights reserved.
  */
 #include <linux/compat.h>
 #include <linux/efi.h>
@@ -55,6 +56,7 @@
 #include <asm/stacktrace.h>
 #include <asm/switch_to.h>
 #include <asm/system_misc.h>
+#include <asm/tso.h>
 
 #if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
 #include <linux/stackprotector.h>
@@ -530,6 +532,9 @@ struct task_struct *__switch_to(struct task_struct *prev,
 	ssbs_thread_switch(next);
 	erratum_1418040_thread_switch(next);
 	ptrauth_thread_switch_user(next);
+#ifdef CONFIG_ARM64_TSO
+	tso_thread_switch(next);
+#endif
 
 	/*
 	 * Complete any pending TLB or cache maintenance on this CPU in case
@@ -651,6 +656,10 @@ void arch_setup_new_exec(void)
 		arch_prctl_spec_ctrl_set(current, PR_SPEC_STORE_BYPASS,
 					 PR_SPEC_ENABLE);
 	}
+
+#ifdef CONFIG_ARM64_TSO
+	modify_tso_enable(false);
+#endif
 }
 
 #ifdef CONFIG_ARM64_TAGGED_ADDR_ABI

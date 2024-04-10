@@ -4,6 +4,7 @@
  *
  * Copyright (C) 1995-1999 Russell King
  * Copyright (C) 2012 ARM Ltd.
+ * Copyright © 2024 Apple Inc. All rights reserved.
  */
 #ifndef __ASM_PROCESSOR_H
 #define __ASM_PROCESSOR_H
@@ -184,6 +185,9 @@ struct thread_struct {
 	u64			sctlr_user;
 	u64			svcr;
 	u64			tpidr2_el0;
+#ifdef CONFIG_ARM64_TSO
+	bool        tso;
+#endif
 };
 
 static inline unsigned int thread_get_vl(struct thread_struct *thread,
