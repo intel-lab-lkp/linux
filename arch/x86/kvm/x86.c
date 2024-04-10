@@ -4836,6 +4836,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		if (kvm_is_vm_type_supported(KVM_X86_SW_PROTECTED_VM))
 			r |= BIT(KVM_X86_SW_PROTECTED_VM);
 		break;
+	case KVM_CAP_FORCE_SPEC_CTRL:
+		r = !!kvm_caps.supported_force_spec_ctrl;
+		break;
 	default:
 		break;
 	}
@@ -4988,6 +4991,13 @@ long kvm_arch_dev_ioctl(struct file *filp,
 		if (copy_from_user(&attr, (void __user *)arg, sizeof(attr)))
 			break;
 		r = kvm_x86_dev_has_attr(&attr);
+		break;
+	}
+	case KVM_GET_SUPPORTED_FORCE_SPEC_CTRL: {
+		r = 0;
+		if (copy_to_user(argp, &kvm_caps.supported_force_spec_ctrl,
+				 sizeof(kvm_caps.supported_force_spec_ctrl)))
+			r = -EFAULT;
 		break;
 	}
 	default:
@@ -6725,6 +6735,26 @@ split_irqchip_unlock:
 		mutex_lock(&kvm->lock);
 		if (!kvm->created_vcpus) {
 			kvm->arch.disable_nx_huge_pages = true;
+			r = 0;
+		}
+		mutex_unlock(&kvm->lock);
+		break;
+	case KVM_CAP_FORCE_SPEC_CTRL:
+		r = -EINVAL;
+
+		mutex_lock(&kvm->lock);
+
+		/*
+		 * Note, only the value is restricted to known bits that KVM
+		 * can force on.  Userspace is allowed to set any mask bits,
+		 * i.e. can prevent the guest from setting a bit, even if KVM
+		 * doesn't support the bit.
+		 */
+		if (kvm_caps.supported_force_spec_ctrl && !kvm->created_vcpus &&
+		    !(~kvm_caps.supported_force_spec_ctrl & cap->args[1]) &&
+		    !(~cap->args[0] & cap->args[1])) {
+			kvm->arch.force_spec_ctrl_mask = cap->args[0];
+			kvm->arch.force_spec_ctrl_value = cap->args[1];
 			r = 0;
 		}
 		mutex_unlock(&kvm->lock);

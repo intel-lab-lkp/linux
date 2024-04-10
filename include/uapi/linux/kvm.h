@@ -917,6 +917,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_MEMORY_ATTRIBUTES 233
 #define KVM_CAP_GUEST_MEMFD 234
 #define KVM_CAP_VM_TYPES 235
+#define KVM_CAP_FORCE_SPEC_CTRL 236
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1242,6 +1243,9 @@ struct kvm_vfio_spapr_tce {
 #define KVM_SET_DEVICE_ATTR	  _IOW(KVMIO,  0xe1, struct kvm_device_attr)
 #define KVM_GET_DEVICE_ATTR	  _IOW(KVMIO,  0xe2, struct kvm_device_attr)
 #define KVM_HAS_DEVICE_ATTR	  _IOW(KVMIO,  0xe3, struct kvm_device_attr)
+
+/* Available with KVM_CAP_FORCE_SPEC_CTRL */
+#define KVM_GET_SUPPORTED_FORCE_SPEC_CTRL _IOR(KVMIO,  0xe4, __u64)
 
 /*
  * ioctls for vcpu fds

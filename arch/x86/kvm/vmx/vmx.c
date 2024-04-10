@@ -2008,7 +2008,10 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		    !guest_has_spec_ctrl_msr(vcpu))
 			return 1;
 
-		msr_info->data = to_vmx(vcpu)->spec_ctrl;
+		if (cpu_has_spec_ctrl_shadow())
+			msr_info->data = vmcs_read64(IA32_SPEC_CTRL_SHADOW);
+		else
+			msr_info->data = to_vmx(vcpu)->spec_ctrl;
 		break;
 	case MSR_IA32_SYSENTER_CS:
 		msr_info->data = vmcs_read32(GUEST_SYSENTER_CS);
@@ -2148,6 +2151,19 @@ static u64 vmx_get_supported_debugctl(struct kvm_vcpu *vcpu, bool host_initiated
 	return debugctl;
 }
 
+static void vmx_set_spec_ctrl(struct kvm_vcpu *vcpu, u64 val)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
+	vmx->spec_ctrl = val;
+
+	if (cpu_has_spec_ctrl_shadow()) {
+		vmcs_write64(IA32_SPEC_CTRL_SHADOW, val);
+
+		vmx->spec_ctrl |= vcpu->kvm->arch.force_spec_ctrl_value;
+	}
+}
+
 /*
  * Writes msr value into the appropriate "register".
  * Returns 0 on success, non-0 otherwise.
@@ -2273,7 +2289,8 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (kvm_spec_ctrl_test_value(data))
 			return 1;
 
-		vmx->spec_ctrl = data;
+		vmx_set_spec_ctrl(vcpu, data);
+
 		if (!data)
 			break;
 
@@ -4785,6 +4802,23 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 	if (cpu_has_vmx_xsaves())
 		vmcs_write64(XSS_EXIT_BITMAP, VMX_XSS_EXIT_BITMAP);
 
+	if (cpu_has_spec_ctrl_shadow()) {
+		vmcs_write64(IA32_SPEC_CTRL_SHADOW, 0);
+
+		/*
+		 * Note, IA32_SPEC_CTRL_{SHADOW,MASK} subtly behave *very*
+		 * differently than other shadow+mask combinations.  Attempts
+		 * to modify bits in MASK are silently ignored and do NOT cause
+		 * a VM-Exit.  This allows the host to force bits to be set or
+		 * cleared on behalf of the guest, while still allowing the
+		 * guest modify other bits at will, without triggering VM-Exits.
+		 */
+		if (kvm->arch.force_spec_ctrl_mask)
+			vmcs_write64(IA32_SPEC_CTRL_MASK, kvm->arch.force_spec_ctrl_mask);
+		else
+			vmcs_write64(IA32_SPEC_CTRL_MASK, 0);
+	}
+
 	if (enable_pml) {
 		vmcs_write64(PML_ADDRESS, page_to_phys(vmx->pml_pg));
 		vmcs_write16(GUEST_PML_INDEX, PML_ENTITY_NUM - 1);
@@ -4853,7 +4887,7 @@ static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		__vmx_vcpu_reset(vcpu);
 
 	vmx->rmode.vm86_active = 0;
-	vmx->spec_ctrl = 0;
+	vmx_set_spec_ctrl(vcpu, 0);
 
 	vmx->msr_ia32_umwait_control = 0;
 
@@ -7211,8 +7245,14 @@ void noinstr vmx_spec_ctrl_restore_host(struct vcpu_vmx *vmx,
 	if (!cpu_feature_enabled(X86_FEATURE_MSR_SPEC_CTRL))
 		return;
 
-	if (flags & VMX_RUN_SAVE_SPEC_CTRL)
-		vmx->spec_ctrl = __rdmsr(MSR_IA32_SPEC_CTRL);
+	if (flags & VMX_RUN_SAVE_SPEC_CTRL) {
+		if (cpu_has_spec_ctrl_shadow())
+			vmx->spec_ctrl = (vmcs_read64(IA32_SPEC_CTRL_SHADOW) &
+					~vmx->vcpu.kvm->arch.force_spec_ctrl_mask) |
+					 vmx->vcpu.kvm->arch.force_spec_ctrl_value;
+		else
+			vmx->spec_ctrl = __rdmsr(MSR_IA32_SPEC_CTRL);
+	}
 
 	/*
 	 * If the guest/host SPEC_CTRL values differ, restore the host value.
@@ -8598,6 +8638,24 @@ static __init int hardware_setup(void)
 	kvm_caps.tsc_scaling_ratio_frac_bits = 48;
 	kvm_caps.has_bus_lock_exit = cpu_has_vmx_bus_lock_detection();
 	kvm_caps.has_notify_vmexit = cpu_has_notify_vmexit();
+	kvm_caps.supported_force_spec_ctrl = 0;
+
+	if (cpu_has_spec_ctrl_shadow()) {
+		kvm_caps.supported_force_spec_ctrl |= SPEC_CTRL_IBRS;
+
+		if (boot_cpu_has(X86_FEATURE_STIBP))
+			kvm_caps.supported_force_spec_ctrl |= SPEC_CTRL_STIBP;
+
+		if (boot_cpu_has(X86_FEATURE_SSBD))
+			kvm_caps.supported_force_spec_ctrl |= SPEC_CTRL_SSBD;
+
+		if (boot_cpu_has(X86_FEATURE_RRSBA_CTRL) &&
+		    (host_arch_capabilities & ARCH_CAP_RRSBA))
+			kvm_caps.supported_force_spec_ctrl |= SPEC_CTRL_RRSBA_DIS_S;
+
+		if (boot_cpu_has(X86_FEATURE_BHI_CTRL))
+			kvm_caps.supported_force_spec_ctrl |= SPEC_CTRL_BHI_DIS_S;
+	}
 
 	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
 

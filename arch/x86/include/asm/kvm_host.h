@@ -1404,6 +1404,10 @@ struct kvm_arch {
 
 	u32 notify_window;
 	u32 notify_vmexit_flags;
+
+	u64 force_spec_ctrl_mask;
+	u64 force_spec_ctrl_value;
+
 	/*
 	 * If exit_on_emulation_error is set, and the in-kernel instruction
 	 * emulator fails to emulate an instruction, allow userspace

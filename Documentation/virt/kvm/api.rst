@@ -6352,6 +6352,19 @@ a single guest_memfd file, but the bound ranges must not overlap).
 
 See KVM_SET_USER_MEMORY_REGION2 for additional details.
 
+4.143 KVM_GET_SUPPORTED_FORCE_SPEC_CTRL
+---------------------------------------
+
+:Capability: KVM_CAP_FORCE_SPEC_CTRL
+:Architectures: x86
+:Type: vm ioctl
+:Parameters: u64 supported_bitmask (out)
+:Returns: 0 on success, -EFAULT if supported_bitmap cannot be accessed
+
+Returns a bitmask of SPEC_CTRL MSR bits which can be forced on. All bits can be
+forced to 0 (i.e., prevent guest from setting it) even if KVM doesn't support
+the bit.
+
 5. The kvm_run structure
 ========================
 
@@ -8062,6 +8075,32 @@ KVM_RUN are encouraged to guard against repeatedly receiving the same
 error/annotated fault.
 
 See KVM_EXIT_MEMORY_FAULT for more information.
+
+7.35 KVM_CAP_FORCE_SPEC_CTRL
+----------------------------
+
+:Architectures: x86
+:Parameters: args[0] contains the bitmask to prevent guests from modifying those
+	     bits
+	     args[1] contains the desired value to set in IA32_SPEC_CTRL for the
+	     masked bits
+:Returns: 0 on success, -EINVAL if args[0] or args[1] contain invalid values
+
+This capability allows userspace to configure the value of IA32_SPEC_CTRL and
+what bits the VM can and cannot access. This is especially useful when a VM is
+migrated to newer hardware with hardware based speculation mitigations not
+provided to the VM previously.
+
+IA32_SPEC_CTRL virtualization works by introducing the IA32_SPEC_CTRL shadow
+and mask fields. When a guest writes to IA32_SPEC_CTRL when it is virtualized
+the value written is:
+
+(GUEST_WRMSR_VAL & ~MASK) | (REAL_MSR_VAL & MASK).
+
+No bit that is masked can be modified by the guest.
+
+The shadow field contains the value the guest wrote to the MSR and is what is
+returned to the guest when the virtualized MSR is read.
 
 8. Other capabilities.
 ======================
