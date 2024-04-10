@@ -2009,7 +2009,7 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 
 		if (cpu_has_spec_ctrl_shadow())
-			msr_info->data = vmcs_read64(IA32_SPEC_CTRL_SHADOW);
+			msr_info->data = to_vmx(vcpu)->spec_ctrl_shadow;
 		else
 			msr_info->data = to_vmx(vcpu)->spec_ctrl;
 		break;
@@ -2158,6 +2158,7 @@ static void vmx_set_spec_ctrl(struct kvm_vcpu *vcpu, u64 val)
 	vmx->spec_ctrl = val;
 
 	if (cpu_has_spec_ctrl_shadow()) {
+		vmx->spec_ctrl_shadow = val;
 		vmcs_write64(IA32_SPEC_CTRL_SHADOW, val);
 
 		vmx->spec_ctrl |= vcpu->kvm->arch.force_spec_ctrl_value;
@@ -4803,6 +4804,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		vmcs_write64(XSS_EXIT_BITMAP, VMX_XSS_EXIT_BITMAP);
 
 	if (cpu_has_spec_ctrl_shadow()) {
+		vmx->spec_ctrl_shadow = 0;
 		vmcs_write64(IA32_SPEC_CTRL_SHADOW, 0);
 
 		/*
@@ -7246,12 +7248,14 @@ void noinstr vmx_spec_ctrl_restore_host(struct vcpu_vmx *vmx,
 		return;
 
 	if (flags & VMX_RUN_SAVE_SPEC_CTRL) {
-		if (cpu_has_spec_ctrl_shadow())
-			vmx->spec_ctrl = (vmcs_read64(IA32_SPEC_CTRL_SHADOW) &
+		if (cpu_has_spec_ctrl_shadow()) {
+			vmx->spec_ctrl_shadow = vmcs_read64(IA32_SPEC_CTRL_SHADOW);
+			vmx->spec_ctrl = (vmx->spec_ctrl_shadow &
 					~vmx->vcpu.kvm->arch.force_spec_ctrl_mask) |
 					 vmx->vcpu.kvm->arch.force_spec_ctrl_value;
-		else
+		} else {
 			vmx->spec_ctrl = __rdmsr(MSR_IA32_SPEC_CTRL);
+		}
 	}
 
 	/*

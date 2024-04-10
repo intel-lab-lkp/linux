@@ -281,6 +281,12 @@ struct vcpu_vmx {
 #endif
 
 	u64		      spec_ctrl;
+	/*
+	 * Cache IA32_SPEC_CTRL_SHADOW field of VMCS, i.e., the value of
+	 * MSR_IA32_SPEC_CTRL in guest's view.
+	 */
+	u64		      spec_ctrl_shadow;
+
 	u32		      msr_ia32_umwait_control;
 
 	/*
