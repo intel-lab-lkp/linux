@@ -8,6 +8,7 @@
 #include "extent_map.h"
 #include "compression.h"
 #include "btrfs_inode.h"
+#include "disk-io.h"
 
 
 static struct kmem_cache *extent_map_cache;
@@ -1025,4 +1026,203 @@ out_unlock:
 out_free_pre:
 	free_extent_map(split_pre);
 	return ret;
+}
+
+static unsigned long btrfs_scan_inode(struct btrfs_inode *inode,
+				      unsigned long *scanned,
+				      unsigned long nr_to_scan)
+{
+	struct extent_map_tree *tree = &inode->extent_tree;
+	unsigned long nr_dropped = 0;
+	struct rb_node *node;
+
+	/*
+	 * Take the mmap lock so that we serialize with the inode logging phase
+	 * of fsync because we may need to set the full sync flag on the inode,
+	 * in case we have to remove extent maps in the tree's list of modified
+	 * extents. If we set the full sync flag in the inode while an fsync is
+	 * in progress, we may risk missing new extents because before the flag
+	 * is set, fsync decides to only wait for writeback to complete and then
+	 * during inode logging it sees the flag set and uses the subvolume tree
+	 * to find new extents, which may not be there yet because ordered
+	 * extents haven't completed yet.
+	 */
+	down_read(&inode->i_mmap_lock);
+	write_lock(&tree->lock);
+	node = rb_first_cached(&tree->map);
+	while (node) {
+		struct extent_map *em;
+
+		em = rb_entry(node, struct extent_map, rb_node);
+		node = rb_next(node);
+		(*scanned)++;
+
+		if (em->flags & EXTENT_FLAG_PINNED)
+			goto next;
+
+		if (!list_empty(&em->list))
+			btrfs_set_inode_full_sync(inode);
+
+		remove_extent_mapping(inode, em);
+		/* Drop the reference for the tree. */
+		free_extent_map(em);
+		nr_dropped++;
+next:
+		if (*scanned >= nr_to_scan)
+			break;
+
+		/*
+		 * Restart if we had to resched, and any extent maps that were
+		 * pinned before may have become unpinned after we released the
+		 * lock and took it again.
+		 */
+		if (cond_resched_rwlock_write(&tree->lock))
+			node = rb_first_cached(&tree->map);
+	}
+	write_unlock(&tree->lock);
+	up_read(&inode->i_mmap_lock);
+
+	return nr_dropped;
+}
+
+static unsigned long btrfs_scan_root(struct btrfs_root *root,
+				     unsigned long *scanned,
+				     unsigned long nr_to_scan)
+{
+	unsigned long nr_dropped = 0;
+	u64 ino = 0;
+
+	while (*scanned < nr_to_scan) {
+		struct rb_node *node;
+		struct rb_node *prev = NULL;
+		struct btrfs_inode *inode;
+		bool stop_search = true;
+
+		spin_lock(&root->inode_lock);
+		node = root->inode_tree.rb_node;
+
+		while (node) {
+			prev = node;
+			inode = rb_entry(node, struct btrfs_inode, rb_node);
+			if (ino < btrfs_ino(inode))
+				node = node->rb_left;
+			else if (ino > btrfs_ino(inode))
+				node = node->rb_right;
+			else
+				break;
+		}
+
+		if (!node) {
+			while (prev) {
+				inode = rb_entry(prev, struct btrfs_inode, rb_node);
+				if (ino <= btrfs_ino(inode)) {
+					node = prev;
+					break;
+				}
+				prev = rb_next(prev);
+			}
+		}
+
+		while (node) {
+			inode = rb_entry(node, struct btrfs_inode, rb_node);
+			ino = btrfs_ino(inode) + 1;
+			if (igrab(&inode->vfs_inode)) {
+				spin_unlock(&root->inode_lock);
+				stop_search = false;
+
+				nr_dropped += btrfs_scan_inode(inode, scanned,
+							       nr_to_scan);
+				iput(&inode->vfs_inode);
+				cond_resched();
+				break;
+			}
+			node = rb_next(node);
+		}
+
+		if (stop_search) {
+			spin_unlock(&root->inode_lock);
+			break;
+		}
+	}
+
+	return nr_dropped;
+}
+
+static unsigned long btrfs_extent_maps_scan(struct shrinker *shrinker,
+					    struct shrink_control *sc)
+{
+	struct btrfs_fs_info *fs_info = shrinker->private_data;
+	unsigned long nr_dropped = 0;
+	unsigned long scanned = 0;
+	u64 next_root_id = 0;
+
+	while (scanned < sc->nr_to_scan) {
+		struct btrfs_root *root;
+		unsigned long count;
+
+		spin_lock(&fs_info->fs_roots_radix_lock);
+		count = radix_tree_gang_lookup(&fs_info->fs_roots_radix,
+					       (void **)&root, next_root_id, 1);
+		if (count == 0) {
+			spin_unlock(&fs_info->fs_roots_radix_lock);
+			break;
+		}
+		next_root_id = btrfs_root_id(root) + 1;
+		root = btrfs_grab_root(root);
+		spin_unlock(&fs_info->fs_roots_radix_lock);
+
+		if (!root)
+			continue;
+
+		if (is_fstree(btrfs_root_id(root)))
+			nr_dropped += btrfs_scan_root(root, &scanned, sc->nr_to_scan);
+
+		btrfs_put_root(root);
+	}
+
+	return nr_dropped;
+}
+
+static unsigned long btrfs_extent_maps_count(struct shrinker *shrinker,
+					     struct shrink_control *sc)
+{
+	struct btrfs_fs_info *fs_info = shrinker->private_data;
+	const s64 total = percpu_counter_sum_positive(&fs_info->evictable_extent_maps);
+
+	/* The unsigned long type is 32 bits on 32 bits platforms. */
+#if BITS_PER_LONG == 32
+	if (total > ULONG_MAX)
+		return ULONG_MAX;
+#endif
+	return total;
+}
+
+int btrfs_register_extent_map_shrinker(struct btrfs_fs_info *fs_info)
+{
+	int ret;
+
+	ret = percpu_counter_init(&fs_info->evictable_extent_maps, 0, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	fs_info->extent_map_shrinker = shrinker_alloc(0, "em-btrfs:%s", fs_info->sb->s_id);
+	if (!fs_info->extent_map_shrinker) {
+		percpu_counter_destroy(&fs_info->evictable_extent_maps);
+		return -ENOMEM;
+	}
+
+	fs_info->extent_map_shrinker->scan_objects = btrfs_extent_maps_scan;
+	fs_info->extent_map_shrinker->count_objects = btrfs_extent_maps_count;
+	fs_info->extent_map_shrinker->private_data = fs_info;
+
+	shrinker_register(fs_info->extent_map_shrinker);
+
+	return 0;
+}
+
+void btrfs_unregister_extent_map_shrinker(struct btrfs_fs_info *fs_info)
+{
+	shrinker_free(fs_info->extent_map_shrinker);
+	ASSERT(percpu_counter_sum_positive(&fs_info->evictable_extent_maps) == 0);
+	percpu_counter_destroy(&fs_info->evictable_extent_maps);
 }

@@ -1266,11 +1266,10 @@ static void free_global_roots(struct btrfs_fs_info *fs_info)
 
 void btrfs_free_fs_info(struct btrfs_fs_info *fs_info)
 {
+	btrfs_unregister_extent_map_shrinker(fs_info);
 	percpu_counter_destroy(&fs_info->dirty_metadata_bytes);
 	percpu_counter_destroy(&fs_info->delalloc_bytes);
 	percpu_counter_destroy(&fs_info->ordered_bytes);
-	ASSERT(percpu_counter_sum_positive(&fs_info->evictable_extent_maps) == 0);
-	percpu_counter_destroy(&fs_info->evictable_extent_maps);
 	percpu_counter_destroy(&fs_info->dev_replace.bio_counter);
 	btrfs_free_csum_hash(fs_info);
 	btrfs_free_stripe_hash_table(fs_info);
@@ -2846,11 +2845,11 @@ static int init_mount_fs_info(struct btrfs_fs_info *fs_info, struct super_block 
 	sb->s_blocksize = BTRFS_BDEV_BLOCKSIZE;
 	sb->s_blocksize_bits = blksize_bits(BTRFS_BDEV_BLOCKSIZE);
 
-	ret = percpu_counter_init(&fs_info->ordered_bytes, 0, GFP_KERNEL);
+	ret = btrfs_register_extent_map_shrinker(fs_info);
 	if (ret)
 		return ret;
 
-	ret = percpu_counter_init(&fs_info->evictable_extent_maps, 0, GFP_KERNEL);
+	ret = percpu_counter_init(&fs_info->ordered_bytes, 0, GFP_KERNEL);
 	if (ret)
 		return ret;
 

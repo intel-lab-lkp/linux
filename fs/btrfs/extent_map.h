@@ -140,5 +140,7 @@ void btrfs_drop_extent_map_range(struct btrfs_inode *inode,
 int btrfs_replace_extent_map_range(struct btrfs_inode *inode,
 				   struct extent_map *new_em,
 				   bool modified);
+int btrfs_register_extent_map_shrinker(struct btrfs_fs_info *fs_info);
+void btrfs_unregister_extent_map_shrinker(struct btrfs_fs_info *fs_info);
 
 #endif
