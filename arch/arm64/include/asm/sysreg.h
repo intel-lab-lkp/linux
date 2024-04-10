@@ -4,6 +4,8 @@
  *
  * Copyright (C) 2014 ARM Ltd.
  * Author: Catalin Marinas <catalin.marinas@arm.com>
+ *
+ * Copyright © 2024 Apple Inc. All rights reserved.
  */
 
 #ifndef __ASM_SYSREG_H
@@ -277,6 +279,9 @@
 #define SYS_REVIDR_EL1			sys_reg(3, 0, 0, 0, 6)
 
 #define SYS_ACTLR_EL1			sys_reg(3, 0, 1, 0, 1)
+#define SYS_ACTLR_EL1_TSOEN_SHIFT       1
+#define SYS_ACTLR_EL1_TSOEN_MASK        (1 << SYS_ACTLR_EL1_TSOEN_SHIFT)
+
 #define SYS_RGSR_EL1			sys_reg(3, 0, 1, 0, 5)
 #define SYS_GCR_EL1			sys_reg(3, 0, 1, 0, 6)
 
@@ -394,6 +399,8 @@
 #define SYS_CNTKCTL_EL1			sys_reg(3, 0, 14, 1, 0)
 
 #define SYS_AIDR_EL1			sys_reg(3, 1, 0, 0, 7)
+#define SYS_AIDR_EL1_TSO_SHIFT          9
+#define SYS_AIDR_EL1_TSO_MASK           (1 << SYS_AIDR_EL1_TSO_SHIFT)
 
 #define SYS_RNDR_EL0			sys_reg(3, 3, 2, 4, 0)
 #define SYS_RNDRRS_EL0			sys_reg(3, 3, 2, 4, 1)

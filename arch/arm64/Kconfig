@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
+# Copyright © 2024 Apple Inc. All rights reserved.
 config ARM64
 	def_bool y
 	select ACPI_APMT if ACPI
@@ -2078,6 +2079,18 @@ config ARM64_MTE
 	  described in:
 
 	  Documentation/arch/arm64/memory-tagging-extension.rst.
+
+config ARM64_TSO
+	bool "ARM64 Apple Silicon TSO support"
+	default y
+	help
+	  Apple Silicon TSO mode allows the CPU's memory model to be
+	  dynamically switched between the default ARM64 memory model
+	  and x86_64's memory model (TSO).
+
+	  Selecting this option allows the feature to be detected at
+	  runtime. If the CPU doesn't implement TSO mode, then this
+	  feature will be disabled.
 
 endmenu # "ARMv8.5 architectural features"
 
