@@ -13,6 +13,7 @@
 
 int modify_tso_enable(bool tso_enable);
 void tso_thread_switch(struct task_struct *next);
+int arch_set_mem_model(struct task_struct *task, int memory_model);
 
 #endif /* CONFIG_ARM64_TSO */
 #endif /* __ASM_TSO_H */

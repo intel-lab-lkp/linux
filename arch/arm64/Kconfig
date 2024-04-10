@@ -2088,9 +2088,15 @@ config ARM64_TSO
 	  dynamically switched between the default ARM64 memory model
 	  and x86_64's memory model (TSO).
 
+	  This option enables the support for toggling TSO mode for
+	  userspace threads.
+
 	  Selecting this option allows the feature to be detected at
 	  runtime. If the CPU doesn't implement TSO mode, then this
 	  feature will be disabled.
+
+	  Userspace threads that want to use this feature must
+	  explicitly opt in via a prctl().
 
 endmenu # "ARMv8.5 architectural features"
 

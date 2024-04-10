@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/*
+ * Copyright © 2024 Apple Inc. All rights reserved.
+ */
+
 #ifndef _LINUX_PRCTL_H
 #define _LINUX_PRCTL_H
 
@@ -305,5 +309,10 @@ struct prctl_mm_map {
 # define PR_RISCV_V_VSTATE_CTRL_CUR_MASK	0x3
 # define PR_RISCV_V_VSTATE_CTRL_NEXT_MASK	0xc
 # define PR_RISCV_V_VSTATE_CTRL_MASK		0x1f
+
+/* Set the CPU memory model */
+#define PR_SET_MEM_MODEL		71
+# define PR_SET_MEM_MODEL_DEFAULT	0
+# define PR_SET_MEM_MODEL_TSO		1
 
 #endif /* _LINUX_PRCTL_H */

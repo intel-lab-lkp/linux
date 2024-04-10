@@ -763,3 +763,55 @@ int arch_elf_adjust_prot(int prot, const struct arch_elf_state *state,
 	return prot;
 }
 #endif
+
+static int arch_set_mem_model_default(struct task_struct *task)
+{
+	int return_error = 0;
+
+#ifdef CONFIG_ARM64_TSO
+	int modify_tso_enable_error = modify_tso_enable(false);
+
+	if (modify_tso_enable_error == -EOPNOTSUPP)
+		// TSO is the only other memory model on arm64.
+		// If TSO is not supported, then the default memory
+		// model must already be set.
+		return_error = 0;
+	else
+		return_error = modify_tso_enable_error;
+
+	if (!return_error)
+		task->thread.tso = false;
+
+	return return_error;
+#endif
+
+	return return_error;
+}
+
+#ifdef CONFIG_ARM64_TSO
+
+static int arch_set_mem_model_tso(struct task_struct *task)
+{
+	int error = modify_tso_enable(true);
+
+	if (!error)
+		task->thread.tso = true;
+
+	return error;
+}
+
+#endif /* CONFIG_ARM64_TSO */
+
+int arch_set_mem_model(struct task_struct *task, int memory_model)
+{
+	switch (memory_model) {
+	case PR_SET_MEM_MODEL_DEFAULT:
+		return arch_set_mem_model_default(task);
+#ifdef CONFIG_ARM64_TSO
+	case PR_SET_MEM_MODEL_TSO:
+		return arch_set_mem_model_tso(task);
+#endif /* CONFIG_ARM64_TSO */
+	default:
+		return -EINVAL;
+	}
+}

@@ -3,6 +3,7 @@
  *  linux/kernel/sys.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright © 2024 Apple Inc. All rights reserved.
  */
 
 #include <linux/export.h>
@@ -2315,6 +2316,11 @@ int __weak arch_prctl_spec_ctrl_set(struct task_struct *t, unsigned long which,
 	return -EINVAL;
 }
 
+int __weak arch_set_mem_model(struct task_struct *task, int memory_model)
+{
+	return -EINVAL;
+}
+
 #define PR_IO_FLUSHER (PF_MEMALLOC_NOIO | PF_LOCAL_THROTTLE)
 
 #ifdef CONFIG_ANON_VMA_NAME
@@ -2759,6 +2765,11 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		break;
 	case PR_RISCV_V_GET_CONTROL:
 		error = RISCV_V_GET_CONTROL();
+		break;
+	case PR_SET_MEM_MODEL:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = arch_set_mem_model(current, arg2);
 		break;
 	default:
 		error = -EINVAL;

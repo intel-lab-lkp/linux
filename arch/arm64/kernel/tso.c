@@ -58,4 +58,5 @@ void tso_thread_switch(struct task_struct *next)
 	}
 }
 
+
 #endif /* CONFIG_ARM64_TSO */
