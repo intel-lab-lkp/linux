@@ -2382,6 +2382,20 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 	}
 
 	/*
+	 * TERTIARY EXEC CONTROLS
+	 */
+	if (cpu_has_tertiary_exec_ctrls()) {
+		exec_control = __tertiary_exec_controls_get(vmcs01);
+
+		exec_control &= TERTIARY_EXEC_SPEC_CTRL_SHADOW;
+		if (exec_control & TERTIARY_EXEC_SPEC_CTRL_SHADOW)
+			vmcs_write64(IA32_SPEC_CTRL_MASK,
+				     vmx->vcpu.kvm->arch.force_spec_ctrl_mask);
+
+		tertiary_exec_controls_set(vmx, exec_control);
+	}
+
+	/*
 	 * ENTRY CONTROLS
 	 *
 	 * vmcs12's VM_{ENTRY,EXIT}_LOAD_IA32_EFER and VM_ENTRY_IA32E_MODE
@@ -2624,6 +2638,19 @@ static int prepare_vmcs02(struct kvm_vcpu *vcpu, struct vmcs12 *vmcs12,
 	vmcs_write64(TSC_OFFSET, vcpu->arch.tsc_offset);
 	if (kvm_caps.has_tsc_control)
 		vmcs_write64(TSC_MULTIPLIER, vcpu->arch.tsc_scaling_ratio);
+
+	/*
+	 * L2 after nested VM-entry should observe the same value of
+	 * IA32_SPEC_CTRL MSR as L1 unless:
+	 *	a. L1 loads IA32_SPEC_CTRL via MSR-load area.
+	 *	b. L1 enables IA32_SPEC_CTRL virtualization. this cannot
+	 *	   happen since KVM doesn't expose this feature to L1.
+	 *
+	 * Propagate spec_ctrl_shadow (the value guest will get via RDMSR)
+	 * to vmcs02. Later nested_vmx_load_msr() will take care of case a.
+	 */
+	if (vmx->nested.nested_run_pending && cpu_has_spec_ctrl_shadow())
+		vmcs_write64(IA32_SPEC_CTRL_SHADOW, vmx->spec_ctrl_shadow);
 
 	nested_vmx_transition_tlb_flush(vcpu, vmcs12, true);
 
@@ -4882,6 +4909,9 @@ void nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 		vmx->nested.update_vmcs01_cpu_dirty_logging = false;
 		vmx_update_cpu_dirty_logging(vcpu);
 	}
+
+	if (cpu_has_spec_ctrl_shadow())
+		vmcs_write64(IA32_SPEC_CTRL_SHADOW, vmx->spec_ctrl_shadow);
 
 	/* Unpin physical memory we referred to in vmcs02 */
 	kvm_vcpu_unmap(vcpu, &vmx->nested.apic_access_page_map, false);
