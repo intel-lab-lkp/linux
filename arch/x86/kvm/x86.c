@@ -1565,6 +1565,8 @@ static const u32 emulated_msrs_all[] = {
 	MSR_K7_HWCR,
 	MSR_KVM_POLL_CONTROL,
 	MSR_VIRTUAL_ENUMERATION,
+	MSR_VIRTUAL_MITIGATION_ENUM,
+	MSR_VIRTUAL_MITIGATION_CTRL,
 };
 
 static u32 emulated_msrs[ARRAY_SIZE(emulated_msrs_all)];
@@ -1581,6 +1583,7 @@ static const u32 msr_based_features_all_except_vmx[] = {
 	MSR_IA32_ARCH_CAPABILITIES,
 	MSR_IA32_PERF_CAPABILITIES,
 	MSR_VIRTUAL_ENUMERATION,
+	MSR_VIRTUAL_MITIGATION_ENUM,
 };
 
 static u32 msr_based_features[ARRAY_SIZE(msr_based_features_all_except_vmx) +

@@ -4289,6 +4289,8 @@ static bool svm_has_emulated_msr(struct kvm *kvm, u32 index)
 	switch (index) {
 	case MSR_IA32_MCG_EXT_CTL:
 	case MSR_VIRTUAL_ENUMERATION:
+	case MSR_VIRTUAL_MITIGATION_ENUM:
+	case MSR_VIRTUAL_MITIGATION_CTRL:
 	case KVM_FIRST_EMULATED_VMX_MSR ... KVM_LAST_EMULATED_VMX_MSR:
 		return false;
 	case MSR_IA32_SMBASE:

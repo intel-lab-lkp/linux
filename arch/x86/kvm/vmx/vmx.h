@@ -296,6 +296,9 @@ struct vcpu_vmx {
 
 	u64                   msr_virtual_enumeration;
 
+	u64                   msr_virtual_mitigation_enum;
+	u64                   msr_virtual_mitigation_ctrl;
+
 	u32		      msr_ia32_umwait_control;
 
 	/*

@@ -1955,7 +1955,9 @@ static inline bool is_vmx_feature_control_msr_valid(struct vcpu_vmx *vmx,
 	return !(msr->data & ~valid_bits);
 }
 
-#define VIRTUAL_ENUMERATION_VALID_BITS	0ULL
+#define VIRTUAL_ENUMERATION_VALID_BITS	VIRT_ENUM_MITIGATION_CTRL_SUPPORT
+#define MITI_ENUM_VALID_BITS		0ULL
+#define MITI_CTRL_VALID_BITS		0ULL
 
 static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 {
@@ -1966,6 +1968,9 @@ static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 		return vmx_get_vmx_msr(&vmcs_config.nested, msr->index, &msr->data);
 	case MSR_VIRTUAL_ENUMERATION:
 		msr->data = VIRTUAL_ENUMERATION_VALID_BITS;
+		return 0;
+	case MSR_VIRTUAL_MITIGATION_ENUM:
+		msr->data = MITI_ENUM_VALID_BITS;
 		return 0;
 	default:
 		return KVM_MSR_RET_INVALID;
@@ -2123,6 +2128,18 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		    !(vcpu->arch.arch_capabilities & ARCH_CAP_VIRTUAL_ENUM))
 			return 1;
 		msr_info->data = vmx->msr_virtual_enumeration;
+		break;
+	case MSR_VIRTUAL_MITIGATION_ENUM:
+		if (!msr_info->host_initiated &&
+		    !(vmx->msr_virtual_enumeration & VIRT_ENUM_MITIGATION_CTRL_SUPPORT))
+			return 1;
+		msr_info->data = vmx->msr_virtual_mitigation_enum;
+		break;
+	case MSR_VIRTUAL_MITIGATION_CTRL:
+		if (!msr_info->host_initiated &&
+		    !(vmx->msr_virtual_enumeration & VIRT_ENUM_MITIGATION_CTRL_SUPPORT))
+			return 1;
+		msr_info->data = vmx->msr_virtual_mitigation_ctrl;
 		break;
 	default:
 	find_uret_msr:
@@ -2476,7 +2493,23 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 		vmx->msr_virtual_enumeration = data;
 		break;
+	case MSR_VIRTUAL_MITIGATION_ENUM:
+		if (!msr_info->host_initiated)
+			return 1;
+		if (data & ~MITI_ENUM_VALID_BITS)
+			return 1;
 
+		vmx->msr_virtual_mitigation_enum = data;
+		break;
+	case MSR_VIRTUAL_MITIGATION_CTRL:
+		if (!msr_info->host_initiated &&
+		    !(vmx->msr_virtual_enumeration & VIRT_ENUM_MITIGATION_CTRL_SUPPORT))
+			return 1;
+		if (data & ~MITI_CTRL_VALID_BITS)
+			return 1;
+
+		vmx->msr_virtual_mitigation_ctrl = data;
+		break;
 	default:
 	find_uret_msr:
 		msr = vmx_find_uret_msr(vmx, msr_index);
@@ -4901,6 +4934,7 @@ static void __vmx_vcpu_reset(struct kvm_vcpu *vcpu)
 	 */
 	vmx->pi_desc.nv = POSTED_INTR_VECTOR;
 	vmx->pi_desc.sn = 1;
+	vmx->msr_virtual_mitigation_ctrl = 0;
 }
 
 static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
