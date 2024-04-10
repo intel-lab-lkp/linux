@@ -126,8 +126,34 @@ static void strscpy_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, strscpy(dest, "This is too long", ARRAY_SIZE(dest)), -E2BIG);
 }
 
+static void memtostr_test(struct kunit *test)
+{
+	char nonstring[7] = { 'a', 'b', 'c', 'd', 'e', 'f', 'g' };
+	char nonstring_small[3] = { 'a', 'b', 'c' };
+	char dest[sizeof(nonstring) + 1];
+
+	/* Copy in a non-NUL-terminated string into exactly right-sized dest. */
+	KUNIT_EXPECT_EQ(test, sizeof(dest), sizeof(nonstring) + 1);
+	memset(dest, 'X', sizeof(dest));
+	memtostr(dest, nonstring);
+	KUNIT_EXPECT_STREQ(test, dest, "abcdefg");
+	memset(dest, 'X', sizeof(dest));
+	memtostr(dest, nonstring_small);
+	KUNIT_EXPECT_STREQ(test, dest, "abc");
+	KUNIT_EXPECT_EQ(test, dest[7], 'X');
+
+	memset(dest, 'X', sizeof(dest));
+	memtostr_pad(dest, nonstring);
+	KUNIT_EXPECT_STREQ(test, dest, "abcdefg");
+	memset(dest, 'X', sizeof(dest));
+	memtostr_pad(dest, nonstring_small);
+	KUNIT_EXPECT_STREQ(test, dest, "abc");
+	KUNIT_EXPECT_EQ(test, dest[7], '\0');
+}
+
 static struct kunit_case strscpy_test_cases[] = {
 	KUNIT_CASE(strscpy_test),
+	KUNIT_CASE(memtostr_test),
 	{}
 };
 
