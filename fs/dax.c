@@ -71,6 +71,11 @@ static unsigned long dax_to_pfn(void *entry)
 	return xa_to_value(entry) >> DAX_SHIFT;
 }
 
+static struct folio *dax_to_folio(void *entry)
+{
+	return page_folio(pfn_to_page(dax_to_pfn(entry)));
+}
+
 static void *dax_make_entry(pfn_t pfn, unsigned long flags)
 {
 	return xa_mk_value(flags | (pfn_t_to_pfn(pfn) << DAX_SHIFT));
@@ -318,7 +323,44 @@ static unsigned long dax_end_pfn(void *entry)
  */
 #define for_each_mapped_pfn(entry, pfn) \
 	for (pfn = dax_to_pfn(entry); \
-			pfn < dax_end_pfn(entry); pfn++)
+		pfn < dax_end_pfn(entry); pfn++)
+
+static void dax_device_folio_init(struct folio *folio, int order)
+{
+	int orig_order = folio_order(folio);
+	int i;
+
+	if (orig_order != order) {
+		for (i = 0; i < (1UL << orig_order); i++)
+			ClearPageHead(folio_page(folio, i));
+	}
+
+	if (order > 0) {
+		prep_compound_page(&folio->page, order);
+		if (order > 1) {
+			VM_BUG_ON_FOLIO(folio_order(folio) < 2, folio);
+			INIT_LIST_HEAD(&folio->_deferred_list);
+		}
+	}
+}
+
+static void dax_associate_new_entry(void *entry, struct address_space *mapping, pgoff_t index)
+{
+	unsigned long order = dax_entry_order(entry);
+	struct folio *folio = dax_to_folio(entry);
+
+	if (!dax_entry_size(entry))
+		return;
+
+	// We don't hold a reference for the DAX pagecache entry for the page. But we
+	// need to initialise the folio so we can hand it out. Nothing else should have
+	// a reference if it's zeroed either.
+	WARN_ON_ONCE(folio_ref_count(folio));
+	WARN_ON_ONCE(folio->mapping);
+	dax_device_folio_init(folio, order);
+	folio->mapping = mapping;
+	folio->index = index;
+}
 
 static struct page *dax_busy_page(void *entry)
 {
@@ -327,7 +369,7 @@ static struct page *dax_busy_page(void *entry)
 	for_each_mapped_pfn(entry, pfn) {
 		struct page *page = pfn_to_page(pfn);
 
-		if (page_ref_count(page) > 1)
+		if (page_ref_count(page))
 			return page;
 	}
 	return NULL;
@@ -346,10 +388,10 @@ dax_entry_t dax_lock_page(struct page *page)
 	XA_STATE(xas, NULL, 0);
 	void *entry;
 
-	/* Ensure page->mapping isn't freed while we look at it */
+	/* Ensure page_folio(page)->mapping isn't freed while we look at it */
 	rcu_read_lock();
 	for (;;) {
-		struct address_space *mapping = READ_ONCE(page->mapping);
+		struct address_space *mapping = READ_ONCE(page_folio(page)->mapping);
 
 		entry = NULL;
 		if (!mapping || !dax_mapping(mapping))
@@ -368,7 +410,7 @@ dax_entry_t dax_lock_page(struct page *page)
 
 		xas.xa = &mapping->i_pages;
 		xas_lock_irq(&xas);
-		if (mapping != page->mapping) {
+		if (mapping != page_folio(page)->mapping) {
 			xas_unlock_irq(&xas);
 			continue;
 		}
@@ -390,7 +432,7 @@ dax_entry_t dax_lock_page(struct page *page)
 
 void dax_unlock_page(struct page *page, dax_entry_t cookie)
 {
-	struct address_space *mapping = page->mapping;
+	struct address_space *mapping = page_folio(page)->mapping;
 	XA_STATE(xas, &mapping->i_pages, page->index);
 
 	if (S_ISCHR(mapping->host->i_mode))
@@ -662,8 +704,8 @@ struct page *dax_layout_busy_page(struct address_space *mapping)
 }
 EXPORT_SYMBOL_GPL(dax_layout_busy_page);
 
-static int __dax_invalidate_entry(struct address_space *mapping,
-					  pgoff_t index, bool trunc)
+int __dax_invalidate_entry(struct address_space *mapping,
+				  pgoff_t index, bool trunc)
 {
 	XA_STATE(xas, &mapping->i_pages, index);
 	int ret = 0;
@@ -812,6 +854,11 @@ static void *dax_insert_entry(struct xa_state *xas, struct vm_fault *vmf,
 	xas_lock_irq(xas);
 	if (shared || dax_is_zero_entry(entry) || dax_is_empty_entry(entry)) {
 		void *old;
+
+		if (!shared) {
+			dax_associate_new_entry(new_entry, mapping,
+				linear_page_index(vmf->vma, vmf->address));
+		}
 
 		/*
 		 * Only swap our new entry into the page cache if the current
@@ -1000,9 +1047,7 @@ static int dax_iomap_direct_access(const struct iomap *iomap, loff_t pos,
 		goto out;
 	if (pfn_t_to_pfn(*pfnp) & (PHYS_PFN(size)-1))
 		goto out;
-	/* For larger pages we need devmap */
-	if (length > 1 && !pfn_t_devmap(*pfnp))
-		goto out;
+
 	rc = 0;
 
 out_check_addr:
@@ -1109,7 +1154,7 @@ static vm_fault_t dax_load_hole(struct xa_state *xas, struct vm_fault *vmf,
 
 	*entry = dax_insert_entry(xas, vmf, iter, *entry, pfn, DAX_ZERO_PAGE);
 
-	ret = vmf_insert_mixed(vmf->vma, vaddr, pfn);
+	ret = dax_insert_pfn(vmf->vma, vaddr, pfn, false);
 	trace_dax_load_hole(inode, vmf, ret);
 	return ret;
 }
@@ -1602,12 +1647,10 @@ static vm_fault_t dax_fault_iter(struct vm_fault *vmf,
 
 	/* insert PMD pfn */
 	if (pmd)
-		return vmf_insert_pfn_pmd(vmf, pfn, write);
+		return dax_insert_pfn_pmd(vmf, pfn, write);
 
 	/* insert PTE pfn */
-	if (write)
-		return vmf_insert_mixed_mkwrite(vmf->vma, vmf->address, pfn);
-	return vmf_insert_mixed(vmf->vma, vmf->address, pfn);
+	return dax_insert_pfn(vmf->vma, vmf->address, pfn, write);
 }
 
 static vm_fault_t dax_iomap_pte_fault(struct vm_fault *vmf, pfn_t *pfnp,
@@ -1864,10 +1907,10 @@ dax_insert_pfn_mkwrite(struct vm_fault *vmf, pfn_t pfn, unsigned int order)
 	dax_lock_entry(&xas, entry);
 	xas_unlock_irq(&xas);
 	if (order == 0)
-		ret = vmf_insert_mixed_mkwrite(vmf->vma, vmf->address, pfn);
+		ret = dax_insert_pfn(vmf->vma, vmf->address, pfn, true);
 #ifdef CONFIG_FS_DAX_PMD
 	else if (order == PMD_ORDER)
-		ret = vmf_insert_pfn_pmd(vmf, pfn, FAULT_FLAG_WRITE);
+		ret = dax_insert_pfn_pmd(vmf, pfn, FAULT_FLAG_WRITE);
 #endif
 	else
 		ret = VM_FAULT_FALLBACK;
@@ -1984,6 +2027,18 @@ EXPORT_SYMBOL_GPL(dax_remap_file_range_prep);
 
 void dax_page_free(struct page *page)
 {
+	/*
+	 * Set trunc to true because we want to remove the entry from the DAX
+	 * page-cache.
+	 */
+	__dax_invalidate_entry(page->mapping, page->index, true);
+
+	/*
+	 * Make sure we flush any cached data to the page now that it's free.
+	 */
+	if (PageDirty(page))
+		dax_flush(NULL, page_address(page), 1);
+
 	wake_up_var(page);
 }
 EXPORT_SYMBOL_GPL(dax_page_free);

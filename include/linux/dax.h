@@ -217,9 +217,13 @@ static inline int dax_wait_page_idle(struct page *page,
 				void (cb)(struct inode *),
 				struct inode *inode)
 {
+	int i = 0;
 	int ret;
 
-	ret = ___wait_var_event(page, page_ref_count(page) == 1,
+	/*
+	 * Wait for the pgmap->ops->page_free callback.
+	 */
+	ret = ___wait_var_event(page, !page_ref_count(page) || i++,
 				TASK_INTERRUPTIBLE, 0, 0, cb(inode));
 	return ret;
 }
