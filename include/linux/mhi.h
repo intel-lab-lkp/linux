@@ -435,6 +435,7 @@ struct mhi_controller {
 	void (*write_reg)(struct mhi_controller *mhi_cntrl, void __iomem *addr,
 			  u32 val);
 	void (*reset)(struct mhi_controller *mhi_cntrl);
+	int (*edl_trigger)(struct mhi_controller *mhi_cntrl);
 
 	size_t buffer_len;
 	int index;
