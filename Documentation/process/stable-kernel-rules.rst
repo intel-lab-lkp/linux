@@ -117,6 +117,12 @@ comment to pass arbitrary or predefined notes:
    Note, such tagging is unnecessary if the stable team can derive the
    appropriate versions from Fixes: tags.
 
+ * Prevent semi-automatic backporting of changes carrying a 'Fixes:' tag:
+
+   .. code-block:: none
+
+     Cc: <stable@vger.kernel.org> # no semi-automatic backport
+
  * Delay pick up of patches:
 
    .. code-block:: none
