@@ -479,7 +479,6 @@
 
 	gpio-keys {
 		compatible = "gpio-keys";
-
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_key_gpio_default>;
 
@@ -516,7 +515,6 @@
 
 	vddin_3v3: fixed-regulator-vddin_3v3 {
 		compatible = "regulator-fixed";
-
 		regulator-name = "VDDIN_3V3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
@@ -527,7 +525,6 @@
 
 	vddana: fixed-regulator-vddana {
 		compatible = "regulator-fixed";
-
 		regulator-name = "VDDANA";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
@@ -539,7 +536,6 @@
 
 	advref: fixed-regulator-advref {
 		compatible = "regulator-fixed";
-
 		regulator-name = "advref";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
