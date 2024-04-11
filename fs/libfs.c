@@ -295,6 +295,17 @@ int simple_offset_add(struct offset_ctx *octx, struct dentry *dentry)
 	return 0;
 }
 
+/*
+ * Internal helper for use when it is known that the tree entry at
+ * @index is already NULL.
+ */
+static int simple_offset_store(struct offset_ctx *octx, struct dentry *dentry,
+			       long index)
+{
+	offset_set(dentry, index);
+	return mtree_store(&octx->mt, index, dentry, GFP_KERNEL);
+}
+
 /**
  * simple_offset_remove - Remove an entry to a directory's offset map
  * @octx: directory offset ctx to be updated
@@ -346,11 +357,43 @@ int simple_offset_empty(struct dentry *dentry)
 }
 
 /**
+ * simple_offset_rename - handle directory offsets for rename
+ * @old_dir: parent directory of source entry
+ * @old_dentry: dentry of source entry
+ * @new_dir: parent_directory of destination entry
+ * @new_dentry: dentry of destination
+ *
+ * Caller provides appropriate serialization.
+ *
+ * Returns zero on success, a negative errno value on failure.
+ */
+int simple_offset_rename(struct inode *old_dir, struct dentry *old_dentry,
+			 struct inode *new_dir, struct dentry *new_dentry)
+{
+	struct offset_ctx *old_ctx = old_dir->i_op->get_offset_ctx(old_dir);
+	struct offset_ctx *new_ctx = new_dir->i_op->get_offset_ctx(new_dir);
+	long new_index = dentry2offset(new_dentry);
+
+	simple_offset_remove(old_ctx, old_dentry);
+
+	/*
+	 * When the destination entry already exists, user space expects
+	 * its directory offset value to be unchanged after the rename.
+	 */
+	if (new_index)
+		return simple_offset_store(new_ctx, old_dentry, new_index);
+	return simple_offset_add(new_ctx, old_dentry);
+}
+
+/**
  * simple_offset_rename_exchange - exchange rename with directory offsets
  * @old_dir: parent of dentry being moved
  * @old_dentry: dentry being moved
  * @new_dir: destination parent
  * @new_dentry: destination dentry
+ *
+ * This API preserves the directory offset values. Caller provides
+ * appropriate serialization.
  *
  * Returns zero on success. Otherwise a negative errno is returned and the
  * rename is rolled back.
@@ -369,11 +412,11 @@ int simple_offset_rename_exchange(struct inode *old_dir,
 	simple_offset_remove(old_ctx, old_dentry);
 	simple_offset_remove(new_ctx, new_dentry);
 
-	ret = simple_offset_add(new_ctx, old_dentry);
+	ret = simple_offset_store(new_ctx, old_dentry, new_index);
 	if (ret)
 		goto out_restore;
 
-	ret = simple_offset_add(old_ctx, new_dentry);
+	ret = simple_offset_store(old_ctx, new_dentry, old_index);
 	if (ret) {
 		simple_offset_remove(new_ctx, old_dentry);
 		goto out_restore;
@@ -388,10 +431,8 @@ int simple_offset_rename_exchange(struct inode *old_dir,
 	return 0;
 
 out_restore:
-	offset_set(old_dentry, old_index);
-	mtree_store(&old_ctx->mt, old_index, old_dentry, GFP_KERNEL);
-	offset_set(new_dentry, new_index);
-	mtree_store(&new_ctx->mt, new_index, new_dentry, GFP_KERNEL);
+	(void)simple_offset_store(old_ctx, old_dentry, old_index);
+	(void)simple_offset_store(new_ctx, new_dentry, new_index);
 	return ret;
 }
 
