@@ -444,6 +444,7 @@ static int pmem_pagemap_memory_failure(struct dev_pagemap *pgmap,
 
 static const struct dev_pagemap_ops fsdax_pagemap_ops = {
 	.memory_failure		= pmem_pagemap_memory_failure,
+	.page_free      	= dax_page_free,
 };
 
 static int pmem_attach_disk(struct device *dev,

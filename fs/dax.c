@@ -1981,3 +1981,9 @@ int dax_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 					       pos_out, len, remap_flags, ops);
 }
 EXPORT_SYMBOL_GPL(dax_remap_file_range_prep);
+
+void dax_page_free(struct page *page)
+{
+	wake_up_var(page);
+}
+EXPORT_SYMBOL_GPL(dax_page_free);

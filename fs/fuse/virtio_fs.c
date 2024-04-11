@@ -795,6 +795,10 @@ static void virtio_fs_cleanup_dax(void *data)
 	put_dax(dax_dev);
 }
 
+static const struct dev_pagemap_ops fsdax_pagemap_ops = {
+	.page_free = dax_page_free,
+};
+
 static int virtio_fs_setup_dax(struct virtio_device *vdev, struct virtio_fs *fs)
 {
 	struct virtio_shm_region cache_reg;
@@ -827,6 +831,7 @@ static int virtio_fs_setup_dax(struct virtio_device *vdev, struct virtio_fs *fs)
 		return -ENOMEM;
 
 	pgmap->type = MEMORY_DEVICE_FS_DAX;
+	pgmap->ops = &fsdax_pagemap_ops;
 
 	/* Ideally we would directly use the PCI BAR resource but
 	 * devm_memremap_pages() wants its own copy in pgmap.  So
