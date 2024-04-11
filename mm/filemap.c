@@ -3512,6 +3512,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 	struct page *page = folio_page(folio, start);
 	unsigned int count = 0;
 	pte_t *old_ptep = vmf->pte;
+	int type;
 
 	do {
 		if (PageHWPoison(page + count))
@@ -3539,7 +3540,8 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 		continue;
 skip:
 		if (count) {
-			set_pte_range(vmf, folio, page, count, addr);
+			type = set_pte_range(vmf, folio, page, count, addr);
+			add_mm_counter(vmf->vma->vm_mm, type, count);
 			folio_ref_add(folio, count);
 			if (in_range(vmf->address, addr, count * PAGE_SIZE))
 				ret = VM_FAULT_NOPAGE;
@@ -3553,7 +3555,8 @@ skip:
 	} while (--nr_pages > 0);
 
 	if (count) {
-		set_pte_range(vmf, folio, page, count, addr);
+		type = set_pte_range(vmf, folio, page, count, addr);
+		add_mm_counter(vmf->vma->vm_mm, type, count);
 		folio_ref_add(folio, count);
 		if (in_range(vmf->address, addr, count * PAGE_SIZE))
 			ret = VM_FAULT_NOPAGE;
@@ -3589,7 +3592,8 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	if (vmf->address == addr)
 		ret = VM_FAULT_NOPAGE;
 
-	set_pte_range(vmf, folio, page, 1, addr);
+	add_mm_counter(vmf->vma->vm_mm,
+		       set_pte_range(vmf, folio, page, 1, addr), 1);
 	folio_ref_inc(folio);
 
 	return ret;

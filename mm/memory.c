@@ -4701,15 +4701,18 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
  * @page: The first page to create a PTE for.
  * @nr: The number of PTEs to create.
  * @addr: The first address to create a PTE for.
+ *
+ * Return: type of MM_COUNTERS to be updated
  */
-void set_pte_range(struct vm_fault *vmf, struct folio *folio,
-		struct page *page, unsigned int nr, unsigned long addr)
+int set_pte_range(struct vm_fault *vmf, struct folio *folio,
+		  struct page *page, unsigned int nr, unsigned long addr)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	bool uffd_wp = vmf_orig_pte_uffd_wp(vmf);
 	bool write = vmf->flags & FAULT_FLAG_WRITE;
 	bool prefault = in_range(vmf->address, addr, nr * PAGE_SIZE);
 	pte_t entry;
+	int type;
 
 	flush_icache_pages(vma, page, nr);
 	entry = mk_pte(page, vma->vm_page_prot);
@@ -4725,18 +4728,20 @@ void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 		entry = pte_mkuffd_wp(entry);
 	/* copy-on-write page */
 	if (write && !(vma->vm_flags & VM_SHARED)) {
-		add_mm_counter(vma->vm_mm, MM_ANONPAGES, nr);
+		type = MM_ANONPAGES;
 		VM_BUG_ON_FOLIO(nr != 1, folio);
 		folio_add_new_anon_rmap(folio, vma, addr);
 		folio_add_lru_vma(folio, vma);
 	} else {
-		add_mm_counter(vma->vm_mm, mm_counter_file(folio), nr);
+		type = mm_counter_file(folio);
 		folio_add_file_rmap_ptes(folio, page, nr, vma);
 	}
 	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr);
 
 	/* no need to invalidate: a not-present page won't be cached */
 	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr);
+
+	return type;
 }
 
 static bool vmf_pte_changed(struct vm_fault *vmf)
@@ -4805,8 +4810,9 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 	/* Re-check under ptl */
 	if (likely(!vmf_pte_changed(vmf))) {
 		struct folio *folio = page_folio(page);
+		int type = set_pte_range(vmf, folio, page, 1, vmf->address);
 
-		set_pte_range(vmf, folio, page, 1, vmf->address);
+		add_mm_counter(vmf->vma->vm_mm, type, 1);
 		ret = 0;
 	} else {
 		update_mmu_tlb(vma, vmf->address, vmf->pte);
