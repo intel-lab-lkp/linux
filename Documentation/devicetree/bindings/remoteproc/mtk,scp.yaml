@@ -22,7 +22,7 @@ properties:
       - mediatek,mt8192-scp
       - mediatek,mt8195-scp
       - mediatek,mt8195-scp-dual
-
+      - mediatek,mt8188-scp-dual
   reg:
     description:
       Should contain the address ranges for memory regions SRAM, CFG, and,
@@ -195,6 +195,7 @@ allOf:
         compatible:
           enum:
             - mediatek,mt8195-scp-dual
+            - mediatek,mt8188-scp-dual
     then:
       properties:
         reg:
