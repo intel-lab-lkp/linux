@@ -260,11 +260,13 @@ static struct lock_class_key simple_offset_lock_class;
 
 /**
  * simple_offset_init - initialize an offset_ctx
- * @octx: directory offset map to be initialized
+ * @dir: directory to be initialized
  *
  */
-void simple_offset_init(struct offset_ctx *octx)
+void simple_offset_init(struct inode *dir)
 {
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
+
 	mt_init_flags(&octx->mt, MT_FLAGS_ALLOC_RANGE);
 	lockdep_set_class(&octx->mt.ma_lock, &simple_offset_lock_class);
 	octx->next_offset = DIR_OFFSET_MIN;
@@ -272,14 +274,15 @@ void simple_offset_init(struct offset_ctx *octx)
 
 /**
  * simple_offset_add - Add an entry to a directory's offset map
- * @octx: directory offset ctx to be updated
+ * @dir: directory to be updated
  * @dentry: new dentry being added
  *
- * Returns zero on success. @octx and the dentry's offset are updated.
+ * Returns zero on success. @dir and the dentry's offset are updated.
  * Otherwise, a negative errno value is returned.
  */
-int simple_offset_add(struct offset_ctx *octx, struct dentry *dentry)
+int simple_offset_add(struct inode *dir, struct dentry *dentry)
 {
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
 	unsigned long offset;
 	int ret;
 
@@ -299,21 +302,24 @@ int simple_offset_add(struct offset_ctx *octx, struct dentry *dentry)
  * Internal helper for use when it is known that the tree entry at
  * @index is already NULL.
  */
-static int simple_offset_store(struct offset_ctx *octx, struct dentry *dentry,
+static int simple_offset_store(struct inode *dir, struct dentry *dentry,
 			       long index)
 {
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
+
 	offset_set(dentry, index);
 	return mtree_store(&octx->mt, index, dentry, GFP_KERNEL);
 }
 
 /**
  * simple_offset_remove - Remove an entry to a directory's offset map
- * @octx: directory offset ctx to be updated
+ * @dir: directory to be updated
  * @dentry: dentry being removed
  *
  */
-void simple_offset_remove(struct offset_ctx *octx, struct dentry *dentry)
+void simple_offset_remove(struct inode *dir, struct dentry *dentry)
 {
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
 	long offset;
 
 	offset = dentry2offset(dentry);
@@ -370,19 +376,17 @@ int simple_offset_empty(struct dentry *dentry)
 int simple_offset_rename(struct inode *old_dir, struct dentry *old_dentry,
 			 struct inode *new_dir, struct dentry *new_dentry)
 {
-	struct offset_ctx *old_ctx = old_dir->i_op->get_offset_ctx(old_dir);
-	struct offset_ctx *new_ctx = new_dir->i_op->get_offset_ctx(new_dir);
 	long new_index = dentry2offset(new_dentry);
 
-	simple_offset_remove(old_ctx, old_dentry);
+	simple_offset_remove(old_dir, old_dentry);
 
 	/*
 	 * When the destination entry already exists, user space expects
 	 * its directory offset value to be unchanged after the rename.
 	 */
 	if (new_index)
-		return simple_offset_store(new_ctx, old_dentry, new_index);
-	return simple_offset_add(new_ctx, old_dentry);
+		return simple_offset_store(new_dir, old_dentry, new_index);
+	return simple_offset_add(new_dir, old_dentry);
 }
 
 /**
@@ -403,48 +407,48 @@ int simple_offset_rename_exchange(struct inode *old_dir,
 				  struct inode *new_dir,
 				  struct dentry *new_dentry)
 {
-	struct offset_ctx *old_ctx = old_dir->i_op->get_offset_ctx(old_dir);
-	struct offset_ctx *new_ctx = new_dir->i_op->get_offset_ctx(new_dir);
 	long old_index = dentry2offset(old_dentry);
 	long new_index = dentry2offset(new_dentry);
 	int ret;
 
-	simple_offset_remove(old_ctx, old_dentry);
-	simple_offset_remove(new_ctx, new_dentry);
+	simple_offset_remove(old_dir, old_dentry);
+	simple_offset_remove(new_dir, new_dentry);
 
-	ret = simple_offset_store(new_ctx, old_dentry, new_index);
+	ret = simple_offset_store(new_dir, old_dentry, new_index);
 	if (ret)
 		goto out_restore;
 
-	ret = simple_offset_store(old_ctx, new_dentry, old_index);
+	ret = simple_offset_store(old_dir, new_dentry, old_index);
 	if (ret) {
-		simple_offset_remove(new_ctx, old_dentry);
+		simple_offset_remove(new_dir, old_dentry);
 		goto out_restore;
 	}
 
 	ret = simple_rename_exchange(old_dir, old_dentry, new_dir, new_dentry);
 	if (ret) {
-		simple_offset_remove(new_ctx, old_dentry);
-		simple_offset_remove(old_ctx, new_dentry);
+		simple_offset_remove(new_dir, old_dentry);
+		simple_offset_remove(old_dir, new_dentry);
 		goto out_restore;
 	}
 	return 0;
 
 out_restore:
-	(void)simple_offset_store(old_ctx, old_dentry, old_index);
-	(void)simple_offset_store(new_ctx, new_dentry, new_index);
+	(void)simple_offset_store(old_dir, old_dentry, old_index);
+	(void)simple_offset_store(new_dir, new_dentry, new_index);
 	return ret;
 }
 
 /**
  * simple_offset_destroy - Release offset map
- * @octx: directory offset ctx that is about to be destroyed
+ * @dir: directory that is about to be destroyed
  *
  * During fs teardown (eg. umount), a directory's offset map might still
  * contain entries. xa_destroy() cleans out anything that remains.
  */
-void simple_offset_destroy(struct offset_ctx *octx)
+void simple_offset_destroy(struct inode *dir)
 {
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
+
 	mtree_destroy(&octx->mt);
 }
 

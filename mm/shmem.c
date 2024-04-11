@@ -2548,7 +2548,7 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 		inode->i_size = 2 * BOGO_DIRENT_SIZE;
 		inode->i_op = &shmem_dir_inode_operations;
 		inode->i_fop = &simple_offset_dir_operations;
-		simple_offset_init(shmem_get_offset_ctx(inode));
+		simple_offset_init(inode);
 		break;
 	case S_IFLNK:
 		/*
@@ -3277,7 +3277,7 @@ shmem_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error && error != -EOPNOTSUPP)
 		goto out_iput;
 
-	error = simple_offset_add(shmem_get_offset_ctx(dir), dentry);
+	error = simple_offset_add(dir, dentry);
 	if (error)
 		goto out_iput;
 
@@ -3361,7 +3361,7 @@ static int shmem_link(struct dentry *old_dentry, struct inode *dir,
 			goto out;
 	}
 
-	ret = simple_offset_add(shmem_get_offset_ctx(dir), dentry);
+	ret = simple_offset_add(dir, dentry);
 	if (ret) {
 		if (inode->i_nlink)
 			shmem_free_inode(inode->i_sb, 0);
@@ -3387,7 +3387,7 @@ static int shmem_unlink(struct inode *dir, struct dentry *dentry)
 	if (inode->i_nlink > 1 && !S_ISDIR(inode->i_mode))
 		shmem_free_inode(inode->i_sb, 0);
 
-	simple_offset_remove(shmem_get_offset_ctx(dir), dentry);
+	simple_offset_remove(dir, dentry);
 
 	dir->i_size -= BOGO_DIRENT_SIZE;
 	inode_set_mtime_to_ts(dir,
@@ -3511,7 +3511,7 @@ static int shmem_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	if (error && error != -EOPNOTSUPP)
 		goto out_iput;
 
-	error = simple_offset_add(shmem_get_offset_ctx(dir), dentry);
+	error = simple_offset_add(dir, dentry);
 	if (error)
 		goto out_iput;
 
@@ -3544,7 +3544,7 @@ static int shmem_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	return 0;
 
 out_remove_offset:
-	simple_offset_remove(shmem_get_offset_ctx(dir), dentry);
+	simple_offset_remove(dir, dentry);
 out_iput:
 	iput(inode);
 	return error;
@@ -4483,7 +4483,7 @@ static void shmem_destroy_inode(struct inode *inode)
 	if (S_ISREG(inode->i_mode))
 		mpol_free_shared_policy(&SHMEM_I(inode)->policy);
 	if (S_ISDIR(inode->i_mode))
-		simple_offset_destroy(shmem_get_offset_ctx(inode));
+		simple_offset_destroy(inode);
 }
 
 static void shmem_init_inode(void *foo)
