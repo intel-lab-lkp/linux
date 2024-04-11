@@ -48,6 +48,7 @@
 #include <uapi/linux/netdev.h>
 #include <linux/hashtable.h>
 #include <linux/rbtree.h>
+#include <linux/dim.h>
 #include <net/net_trackers.h>
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
@@ -1649,6 +1650,9 @@ struct net_device_ops {
  * @IFF_SEE_ALL_HWTSTAMP_REQUESTS: device wants to see calls to
  *	ndo_hwtstamp_set() for all timestamp requests regardless of source,
  *	even if those aren't HWTSTAMP_SOURCE_NETDEV.
+ * @IFF_PROFILE_USEC: device supports adjusting the DIM profile's usec field
+ * @IFF_PROFILE_PKTS: device supports adjusting the DIM profile's pkts field
+ * @IFF_PROFILE_COMPS: device supports adjusting the DIM profile's comps field
  */
 enum netdev_priv_flags {
 	IFF_802_1Q_VLAN			= 1<<0,
@@ -1685,6 +1689,9 @@ enum netdev_priv_flags {
 	IFF_TX_SKB_NO_LINEAR		= BIT_ULL(31),
 	IFF_CHANGE_PROTO_DOWN		= BIT_ULL(32),
 	IFF_SEE_ALL_HWTSTAMP_REQUESTS	= BIT_ULL(33),
+	IFF_PROFILE_USEC		= BIT_ULL(34),
+	IFF_PROFILE_PKTS		= BIT_ULL(35),
+	IFF_PROFILE_COMPS		= BIT_ULL(36),
 };
 
 #define IFF_802_1Q_VLAN			IFF_802_1Q_VLAN
@@ -2399,6 +2406,14 @@ struct net_device {
 #if IS_ENABLED(CONFIG_PAGE_POOL)
 	/** @page_pools: page pools created for this netdevice */
 	struct hlist_head	page_pools;
+#endif
+
+#if IS_ENABLED(CONFIG_DIMLIB)
+	/* DIM profile lists for different dim cq modes */
+	struct dim_cq_moder *rx_eqe_profile;
+	struct dim_cq_moder *rx_cqe_profile;
+	struct dim_cq_moder *tx_eqe_profile;
+	struct dim_cq_moder *tx_cqe_profile;
 #endif
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)

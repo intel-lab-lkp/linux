@@ -154,6 +154,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/prandom.h>
 #include <linux/once_lite.h>
+#include <linux/ethtool.h>
 #include <net/netdev_rx_queue.h>
 #include <net/page_pool/types.h>
 #include <net/page_pool/helpers.h>
@@ -10229,6 +10230,42 @@ static void netdev_do_free_pcpu_stats(struct net_device *dev)
 	}
 }
 
+static int dev_dim_profile_init(struct net_device *dev)
+{
+	int length = NET_DIM_PARAMS_NUM_PROFILES * sizeof(*dev->rx_eqe_profile);
+	u32 supported = dev->ethtool_ops->supported_coalesce_params;
+
+	if (!(dev->priv_flags & (IFF_PROFILE_USEC | IFF_PROFILE_PKTS | IFF_PROFILE_COMPS)))
+		return 0;
+
+	if (supported & ETHTOOL_COALESCE_RX_EQE_PROFILE) {
+		dev->rx_eqe_profile = kzalloc(length, GFP_KERNEL);
+		if (!dev->rx_eqe_profile)
+			return -ENOMEM;
+		memcpy(dev->rx_eqe_profile, rx_profile[0], length);
+	}
+	if (supported & ETHTOOL_COALESCE_RX_CQE_PROFILE) {
+		dev->rx_cqe_profile = kzalloc(length, GFP_KERNEL);
+		if (!dev->rx_cqe_profile)
+			return -ENOMEM;
+		memcpy(dev->rx_cqe_profile, rx_profile[1], length);
+	}
+	if (supported & ETHTOOL_COALESCE_TX_EQE_PROFILE) {
+		dev->tx_eqe_profile = kzalloc(length, GFP_KERNEL);
+		if (!dev->tx_eqe_profile)
+			return -ENOMEM;
+		memcpy(dev->tx_eqe_profile, tx_profile[0], length);
+	}
+	if (supported & ETHTOOL_COALESCE_TX_CQE_PROFILE) {
+		dev->tx_cqe_profile = kzalloc(length, GFP_KERNEL);
+		if (!dev->tx_cqe_profile)
+			return -ENOMEM;
+		memcpy(dev->tx_cqe_profile, tx_profile[1], length);
+	}
+
+	return 0;
+}
+
 /**
  * register_netdevice() - register a network device
  * @dev: device to register
@@ -10255,6 +10292,10 @@ int register_netdevice(struct net_device *dev)
 	BUG_ON(!net);
 
 	ret = ethtool_check_ops(dev->ethtool_ops);
+	if (ret)
+		return ret;
+
+	ret = dev_dim_profile_init(dev);
 	if (ret)
 		return ret;
 
@@ -11011,6 +11052,26 @@ free_dev:
 }
 EXPORT_SYMBOL(alloc_netdev_mqs);
 
+static void netif_free_profile(struct net_device *dev)
+{
+	u32 supported = dev->ethtool_ops->supported_coalesce_params;
+
+	if (!(dev->priv_flags & (IFF_PROFILE_USEC | IFF_PROFILE_PKTS | IFF_PROFILE_COMPS)))
+		return;
+
+	if (supported & ETHTOOL_COALESCE_RX_EQE_PROFILE)
+		kfree(dev->rx_eqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_RX_CQE_PROFILE)
+		kfree(dev->rx_cqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_TX_EQE_PROFILE)
+		kfree(dev->tx_eqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_TX_CQE_PROFILE)
+		kfree(dev->tx_cqe_profile);
+}
+
 /**
  * free_netdev - free network device
  * @dev: device
@@ -11035,6 +11096,8 @@ void free_netdev(struct net_device *dev)
 		dev->needs_free_netdev = true;
 		return;
 	}
+
+	netif_free_profile(dev);
 
 	netif_free_tx_queues(dev);
 	netif_free_rx_queues(dev);
