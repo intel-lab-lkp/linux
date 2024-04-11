@@ -91,6 +91,9 @@ properties:
       RCC clock instead of ETH_CLK125.
     type: boolean
 
+  phy-supply:
+    description: PHY regulator
+
   st,eth-clk-sel:
     description:
       set this property in RGMII PHY when you want to select RCC clock instead of ETH_CLK125.
