@@ -6,6 +6,7 @@
  * Author Mel Gorman <mel@csn.ul.ie>
  *
  */
+#include "linux/memremap.h"
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/kobject.h>
@@ -1006,7 +1007,8 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 	 * which will set the page count to 1 when allocating the page.
 	 */
 	if (pgmap->type == MEMORY_DEVICE_PRIVATE ||
-	    pgmap->type == MEMORY_DEVICE_COHERENT)
+	    pgmap->type == MEMORY_DEVICE_COHERENT ||
+	    pgmap->type == MEMORY_DEVICE_PCI_P2PDMA)
 		set_page_count(page, 0);
 }
 

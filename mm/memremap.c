@@ -508,15 +508,15 @@ void free_zone_device_page(struct page *page)
 	page->mapping = NULL;
 	page->pgmap->ops->page_free(page);
 
-	if (page->pgmap->type != MEMORY_DEVICE_PRIVATE &&
-	    page->pgmap->type != MEMORY_DEVICE_COHERENT)
+	if (page->pgmap->type == MEMORY_DEVICE_PRIVATE ||
+	    page->pgmap->type == MEMORY_DEVICE_COHERENT)
+		put_dev_pagemap(page->pgmap);
+	else if (page->pgmap->type != MEMORY_DEVICE_PCI_P2PDMA)
 		/*
 		 * Reset the page count to 1 to prepare for handing out the page
 		 * again.
 		 */
 		set_page_count(page, 1);
-	else
-		put_dev_pagemap(page->pgmap);
 }
 
 void zone_device_page_init(struct page *page)
