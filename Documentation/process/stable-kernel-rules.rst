@@ -68,22 +68,17 @@ Option 1
 ********
 
 To have a patch you submit for mainline inclusion later automatically picked up
-for stable trees, add the tag
-
-.. code-block:: none
+for stable trees, add this tag in the sign-off area::
 
      Cc: stable@vger.kernel.org
 
-in the sign-off area. Once the patch is mainlined it will be applied to the
-stable tree without anything else needing to be done by the author or
-subsystem maintainer.
+Once the patch is mainlined it will be applied to the stable tree without
+anything else needing to be done by the author or subsystem maintainer.
 
 To sent additional instructions to the stable team, use a shell-style inline
 comment to pass arbitrary or predefined notes:
 
- * Specify any additional patch prerequisites for cherry picking:
-
-   .. code-block:: none
+ * Specify any additional patch prerequisites for cherry picking::
 
      Cc: <stable@vger.kernel.org> # 3.3.x: a1f84a3: sched: Check for idle
      Cc: <stable@vger.kernel.org> # 3.3.x: 1b9508f: sched: Rate-limit newidle
@@ -91,24 +86,18 @@ comment to pass arbitrary or predefined notes:
      Cc: <stable@vger.kernel.org> # 3.3.x
      Signed-off-by: Ingo Molnar <mingo@elte.hu>
 
-   The tag sequence has the meaning of:
-
-   .. code-block:: none
+   The tag sequence has the meaning of::
 
      git cherry-pick a1f84a3
      git cherry-pick 1b9508f
      git cherry-pick fd21073
      git cherry-pick <this commit>
 
- * Point out kernel version prerequisites:
-
-   .. code-block:: none
+ * Point out kernel version prerequisites::
 
      Cc: <stable@vger.kernel.org> # 3.3.x
 
-   The tag has the meaning of:
-
-   .. code-block:: none
+   The tag has the meaning of::
 
      git cherry-pick <this commit>
 
@@ -129,9 +118,7 @@ comment to pass arbitrary or predefined notes:
 
      Cc: <stable@vger.kernel.org> # after 6 weeks in a stable mainline release
 
- * Point out known problems:
-
-   .. code-block:: none
+ * Point out known problems::
 
      Cc: <stable@vger.kernel.org> # see patch description, needs adjustments for <= 6.3
 
@@ -153,15 +140,11 @@ Option 3
 Send the patch, after verifying that it follows the above rules, to
 stable@vger.kernel.org and mention the kernel versions you wish it to be applied
 to. When doing so, you must note the upstream commit ID in the changelog of your
-submission with a separate line above the commit text, like this:
-
-.. code-block:: none
+submission with a separate line above the commit text, like this::
 
     commit <sha1> upstream.
 
-or alternatively:
-
-.. code-block:: none
+Or alternatively::
 
     [ Upstream commit <sha1> ]
 
