@@ -162,10 +162,12 @@ int scp_ipi_send(struct mtk_scp *scp, u32 id, void *buf, unsigned int len,
 	struct mtk_share_obj __iomem *send_obj = scp->send_buf;
 	u32 val;
 	int ret;
+	size_t share_buf_offset;
+	void __iomem *share_buf_io_address;
 
 	if (WARN_ON(id <= SCP_IPI_INIT) || WARN_ON(id >= SCP_IPI_MAX) ||
 	    WARN_ON(id == SCP_IPI_NS_SERVICE) ||
-	    WARN_ON(len > sizeof(send_obj->share_buf)) || WARN_ON(!buf))
+	    WARN_ON(len > scp->data->ipi_buffer_size) || WARN_ON(!buf))
 		return -EINVAL;
 
 	ret = clk_prepare_enable(scp->clk);
@@ -184,7 +186,10 @@ int scp_ipi_send(struct mtk_scp *scp, u32 id, void *buf, unsigned int len,
 		goto unlock_mutex;
 	}
 
-	scp_memcpy_aligned(send_obj->share_buf, buf, len);
+	share_buf_offset = offsetof(struct mtk_share_obj, share_buf);
+	share_buf_io_address = (void __iomem *)((uintptr_t)scp->send_buf + share_buf_offset);
+
+	scp_memcpy_aligned(share_buf_io_address, buf, len);
 
 	writel(len, &send_obj->len);
 	writel(id, &send_obj->id);
