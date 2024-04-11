@@ -103,6 +103,9 @@ config GPIO_REGMAP
 	select REGMAP
 	tristate
 
+config GPIO_SWNODE_UNDEFINED
+	bool
+
 # put drivers in the right section, in alphabetical order
 
 # This symbol is selected by both I2C and SPI expanders
