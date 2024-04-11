@@ -305,6 +305,94 @@ static int exar_ee_read(struct exar8250 *priv, uint8_t ee_addr)
 	return data;
 }
 
+/**
+ * exar_mpio_config() - Configure an EXar MPIO as input or output
+ * @priv: Device's private structure
+ * @mpio_num: MPIO number/offset to configure
+ * @output: Configure as output if true, inout if false
+ *
+ * Configure a single MPIO as an input or output and disable trisate.
+ * If configuring as output it is reccomended to set value with
+ * exar_mpio_set prior to calling this function to ensure default state.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int exar_mpio_config(struct exar8250 *priv,
+			unsigned int mpio_num, bool output)
+{
+	uint8_t sel_reg; //MPIO Select register (input/output)
+	uint8_t tri_reg; //MPIO Tristate register
+	uint8_t value;
+	unsigned int bit;
+
+	if (mpio_num < 8) {
+		sel_reg = UART_EXAR_MPIOSEL_7_0;
+		tri_reg = UART_EXAR_MPIO3T_7_0;
+		bit = mpio_num;
+	} else if (mpio_num >= 8 && mpio_num < 16) {
+		sel_reg = UART_EXAR_MPIOSEL_15_8;
+		tri_reg = UART_EXAR_MPIO3T_15_8;
+		bit = mpio_num - 8;
+	} else {
+		return -EINVAL;
+	}
+
+	//Disable MPIO pin tri-state
+	value = exar_read_reg(priv, tri_reg);
+	value &= ~(BIT(bit));
+	exar_write_reg(priv, tri_reg, value);
+
+	value = exar_read_reg(priv, sel_reg);
+	//Set MPIO as input (1) or output (0)
+	if (output)
+		value &= ~(BIT(bit));
+	else
+		value |= BIT(bit);
+
+	exar_write_reg(priv, sel_reg, value);
+
+	return 0;
+}
+/**
+ * exar_mpio_set() - Set an Exar MPIO output high or low
+ * @priv: Device's private structure
+ * @mpio_num: MPIO number/offset to set
+ * @high: Set MPIO high if true, low if false
+ *
+ * Set a single MPIO high or low. exar_mpio_config must also be called
+ * to configure the pin as an output.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int exar_mpio_set(struct exar8250 *priv,
+		unsigned int mpio_num, bool high)
+{
+	uint8_t reg;
+	uint8_t value;
+	unsigned int bit;
+
+	if (mpio_num < 8) {
+		reg = UART_EXAR_MPIOSEL_7_0;
+		bit = mpio_num;
+	} else if (mpio_num >= 8 && mpio_num < 16) {
+		reg = UART_EXAR_MPIOSEL_15_8;
+		bit = mpio_num - 8;
+	} else {
+		return -EINVAL;
+	}
+
+	value = exar_read_reg(priv, reg);
+
+	if (high)
+		value |= BIT(bit);
+	else
+		value &= ~(BIT(bit));
+
+	exar_write_reg(priv, reg, value);
+
+	return 0;
+}
+
 static void exar_pm(struct uart_port *port, unsigned int state, unsigned int old)
 {
 	/*
