@@ -50,6 +50,7 @@ module_param(napi_tx, bool, 0644);
 
 #define page_chain_next(p)	((struct page *)((p)->pp))
 #define page_chain_add(p, n)	((p)->pp = (void *)n)
+#define page_dma_addr(p)	((p)->dma_addr)
 
 /* RX packet size EWMA. The average packet size is used to determine the packet
  * buffer size when refilling RX rings. As the entire RX ring may be refilled
@@ -434,12 +435,59 @@ skb_vnet_common_hdr(struct sk_buff *skb)
 	return (struct virtio_net_common_hdr *)skb->cb;
 }
 
+static void sg_fill_dma(struct scatterlist *sg, dma_addr_t addr, u32 len)
+{
+	sg->dma_address = addr;
+	sg->length = len;
+}
+
+static void page_chain_unmap(struct receive_queue *rq, struct page *p)
+{
+	virtqueue_dma_unmap_page_attrs(rq->vq, page_dma_addr(p), PAGE_SIZE,
+				       DMA_FROM_DEVICE, 0);
+
+	page_dma_addr(p) = DMA_MAPPING_ERROR;
+}
+
+static int page_chain_map(struct receive_queue *rq, struct page *p)
+{
+	dma_addr_t addr;
+
+	addr = virtqueue_dma_map_page_attrs(rq->vq, p, 0, PAGE_SIZE, DMA_FROM_DEVICE, 0);
+	if (virtqueue_dma_mapping_error(rq->vq, addr))
+		return -ENOMEM;
+
+	page_dma_addr(p) = addr;
+	return 0;
+}
+
+static void page_chain_release(struct receive_queue *rq)
+{
+	struct page *p, *n;
+
+	for (p = rq->pages; p; p = n) {
+		n = page_chain_next(p);
+
+		page_chain_unmap(rq, p);
+		__free_pages(p, 0);
+	}
+
+	rq->pages = NULL;
+}
+
 /*
  * put the whole most recent used list in the beginning for reuse
  */
 static void give_pages(struct receive_queue *rq, struct page *page)
 {
 	struct page *end;
+
+	if (page_dma_addr(page) == DMA_MAPPING_ERROR) {
+		if (page_chain_map(rq, page)) {
+			__free_pages(page, 0);
+			return;
+		}
+	}
 
 	/* Find end of list, sew whole thing into vi->rq.pages. */
 	for (end = page; page_chain_next(end); end = page_chain_next(end));
@@ -456,8 +504,15 @@ static struct page *get_a_page(struct receive_queue *rq, gfp_t gfp_mask)
 		rq->pages = page_chain_next(p);
 		/* clear chain here, it is used to chain pages */
 		page_chain_add(p, NULL);
-	} else
+	} else {
 		p = alloc_page(gfp_mask);
+
+		if (page_chain_map(rq, p)) {
+			__free_pages(p, 0);
+			return NULL;
+		}
+	}
+
 	return p;
 }
 
@@ -613,8 +668,6 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 			return NULL;
 
 		page = page_chain_next(page);
-		if (page)
-			give_pages(rq, page);
 		goto ok;
 	}
 
@@ -640,6 +693,7 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 			skb_add_rx_frag(skb, 0, page, offset, len, truesize);
 		else
 			page_to_free = page;
+		page = NULL;
 		goto ok;
 	}
 
@@ -657,6 +711,11 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 	BUG_ON(offset >= PAGE_SIZE);
 	while (len) {
 		unsigned int frag_size = min((unsigned)PAGE_SIZE - offset, len);
+
+		/* unmap the page before using it. */
+		if (!offset)
+			page_chain_unmap(rq, page);
+
 		skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags, page, offset,
 				frag_size, truesize);
 		len -= frag_size;
@@ -664,14 +723,14 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 		offset = 0;
 	}
 
-	if (page)
-		give_pages(rq, page);
-
 ok:
 	hdr = skb_vnet_common_hdr(skb);
 	memcpy(hdr, hdr_p, hdr_len);
 	if (page_to_free)
 		put_page(page_to_free);
+
+	if (page)
+		give_pages(rq, page);
 
 	return skb;
 }
@@ -823,7 +882,8 @@ static void virtnet_rq_unmap_free_buf(struct virtqueue *vq, void *buf)
 
 	rq = &vi->rq[i];
 
-	if (rq->do_dma)
+	/* Skip the unmap for big mode. */
+	if (!vi->big_packets || vi->mergeable_rx_bufs)
 		virtnet_rq_unmap(rq, buf, 0);
 
 	virtnet_rq_free_buf(vi, rq, buf);
@@ -1346,8 +1406,12 @@ static struct sk_buff *receive_big(struct net_device *dev,
 				   struct virtnet_rq_stats *stats)
 {
 	struct page *page = buf;
-	struct sk_buff *skb =
-		page_to_skb(vi, rq, page, 0, len, PAGE_SIZE, 0);
+	struct sk_buff *skb;
+
+	/* Unmap first page. The follow code may read this page. */
+	page_chain_unmap(rq, page);
+
+	skb = page_to_skb(vi, rq, page, 0, len, PAGE_SIZE, 0);
 
 	u64_stats_add(&stats->bytes, len - vi->hdr_len);
 	if (unlikely(!skb))
@@ -1896,7 +1960,7 @@ static int add_recvbuf_big(struct virtnet_info *vi, struct receive_queue *rq,
 			   gfp_t gfp)
 {
 	struct page *first, *list = NULL;
-	char *p;
+	dma_addr_t p;
 	int i, err, offset;
 
 	sg_init_table(rq->sg, vi->big_packets_num_skbfrags + 2);
@@ -1909,7 +1973,7 @@ static int add_recvbuf_big(struct virtnet_info *vi, struct receive_queue *rq,
 				give_pages(rq, list);
 			return -ENOMEM;
 		}
-		sg_set_buf(&rq->sg[i], page_address(first), PAGE_SIZE);
+		sg_fill_dma(&rq->sg[i], page_dma_addr(first), PAGE_SIZE);
 
 		/* chain new page in list head to match sg */
 		page_chain_add(first, list);
@@ -1921,15 +1985,16 @@ static int add_recvbuf_big(struct virtnet_info *vi, struct receive_queue *rq,
 		give_pages(rq, list);
 		return -ENOMEM;
 	}
-	p = page_address(first);
+
+	p = page_dma_addr(first);
 
 	/* rq->sg[0], rq->sg[1] share the same page */
 	/* a separated rq->sg[0] for header - required in case !any_header_sg */
-	sg_set_buf(&rq->sg[0], p, vi->hdr_len);
+	sg_fill_dma(&rq->sg[0], p, vi->hdr_len);
 
 	/* rq->sg[1] for data packet, from offset */
 	offset = sizeof(struct padded_vnet_hdr);
-	sg_set_buf(&rq->sg[1], p + offset, PAGE_SIZE - offset);
+	sg_fill_dma(&rq->sg[1], p + offset, PAGE_SIZE - offset);
 
 	/* chain first in list head */
 	page_chain_add(first, list);
@@ -2131,7 +2196,7 @@ static int virtnet_receive(struct receive_queue *rq, int budget,
 		}
 	} else {
 		while (packets < budget &&
-		       (buf = virtnet_rq_get_buf(rq, &len, NULL)) != NULL) {
+		       (buf = virtqueue_get_buf(rq->vq, &len)) != NULL) {
 			receive_buf(vi, rq, buf, len, NULL, xdp_xmit, &stats);
 			packets++;
 		}
@@ -4252,8 +4317,7 @@ static void _free_receive_bufs(struct virtnet_info *vi)
 	int i;
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
-		while (vi->rq[i].pages)
-			__free_pages(get_a_page(&vi->rq[i], GFP_KERNEL), 0);
+		page_chain_release(&vi->rq[i]);
 
 		old_prog = rtnl_dereference(vi->rq[i].xdp_prog);
 		RCU_INIT_POINTER(vi->rq[i].xdp_prog, NULL);
