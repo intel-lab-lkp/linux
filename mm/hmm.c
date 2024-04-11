@@ -411,9 +411,6 @@ static inline unsigned long pud_to_hmm_pfn_flags(struct hmm_range *range,
 static int hmm_vma_walk_pud(pud_t *pudp, unsigned long start, unsigned long end,
 		struct mm_walk *walk)
 {
-	struct hmm_vma_walk *hmm_vma_walk = walk->private;
-	struct hmm_range *range = hmm_vma_walk->range;
-	unsigned long addr = start;
 	pud_t pud;
 	spinlock_t *ptl = pud_trans_huge_lock(pudp, walk->vma);
 
@@ -429,39 +426,9 @@ static int hmm_vma_walk_pud(pud_t *pudp, unsigned long start, unsigned long end,
 		return hmm_vma_walk_hole(start, end, -1, walk);
 	}
 
-	if (pud_huge(pud) && pud_devmap(pud)) {
-		unsigned long i, npages, pfn;
-		unsigned int required_fault;
-		unsigned long *hmm_pfns;
-		unsigned long cpu_flags;
-
-		if (!pud_present(pud)) {
-			spin_unlock(ptl);
-			return hmm_vma_walk_hole(start, end, -1, walk);
-		}
-
-		i = (addr - range->start) >> PAGE_SHIFT;
-		npages = (end - addr) >> PAGE_SHIFT;
-		hmm_pfns = &range->hmm_pfns[i];
-
-		cpu_flags = pud_to_hmm_pfn_flags(range, pud);
-		required_fault = hmm_range_need_fault(hmm_vma_walk, hmm_pfns,
-						      npages, cpu_flags);
-		if (required_fault) {
-			spin_unlock(ptl);
-			return hmm_vma_fault(addr, end, required_fault, walk);
-		}
-
-		pfn = pud_pfn(pud) + ((addr & ~PUD_MASK) >> PAGE_SHIFT);
-		for (i = 0; i < npages; ++i, ++pfn)
-			hmm_pfns[i] = pfn | cpu_flags;
-		goto out_unlock;
-	}
-
 	/* Ask for the PUD to be split */
 	walk->action = ACTION_SUBTREE;
 
-out_unlock:
 	spin_unlock(ptl);
 	return 0;
 }
