@@ -128,6 +128,16 @@
 #define UART_EXAR_DLD			0x02 /* Divisor Fractional */
 #define UART_EXAR_DLD_485_POLARITY	0x80 /* RS-485 Enable Signal Polarity */
 
+/* EEPROM registers */
+#define UART_EXAR_REGB                  0x8e
+#define UART_EXAR_REGB_EECK             BIT(4)
+#define UART_EXAR_REGB_EECS             BIT(5)
+#define UART_EXAR_REGB_EEDI             BIT(6)
+#define UART_EXAR_REGB_EEDO             BIT(7)
+#define UART_EXAR_REGB_EE_ADDR_SIZE     6
+#define UART_EXAR_REGB_EE_DATA_SIZE     16
+
+
 /*
  * IOT2040 MPIO wiring semantics:
  *
@@ -194,6 +204,106 @@ struct exar8250 {
 	void __iomem		*virt;
 	int			line[];
 };
+
+static inline void exar_write_reg(struct exar8250 *priv,
+				unsigned int reg, uint8_t value)
+{
+	if (!priv || !priv->virt)
+		return;
+
+	writeb(value, priv->virt + reg);
+}
+
+static inline uint8_t exar_read_reg(struct exar8250 *priv, unsigned int reg)
+{
+	if (!priv || !priv->virt)
+		return 0;
+
+	return readb(priv->virt + reg);
+}
+
+static inline void exar_ee_select(struct exar8250 *priv, bool enable)
+{
+	uint8_t value = 0x00;
+
+	if (enable)
+		value |= UART_EXAR_REGB_EECS;
+
+	exar_write_reg(priv, UART_EXAR_REGB, value);
+	udelay(2);
+}
+
+static inline void exar_ee_write_bit(struct exar8250 *priv, int bit)
+{
+	uint8_t value = UART_EXAR_REGB_EECS;
+
+	if (bit)
+		value |= UART_EXAR_REGB_EEDI;
+
+	//Clock out the bit on the i2c interface
+	exar_write_reg(priv, UART_EXAR_REGB, value);
+	udelay(2);
+
+	value |= UART_EXAR_REGB_EECK;
+
+	exar_write_reg(priv, UART_EXAR_REGB, value);
+	udelay(2);
+}
+
+static inline uint8_t exar_ee_read_bit(struct exar8250 *priv)
+{
+	uint8_t regb;
+	uint8_t value = UART_EXAR_REGB_EECS;
+
+	//Clock in the bit on the i2c interface
+	exar_write_reg(priv, UART_EXAR_REGB, value);
+	udelay(2);
+
+	value |= UART_EXAR_REGB_EECK;
+
+	exar_write_reg(priv, UART_EXAR_REGB, value);
+	udelay(2);
+
+	regb = exar_read_reg(priv, UART_EXAR_REGB);
+
+	return (regb & UART_EXAR_REGB_EEDO ? 1 : 0);
+}
+
+/**
+ * exar_ee_read() - Read a word from the EEPROM
+ * @priv: Device's private structure
+ * @ee_addr: Offset of EEPROM to read word from
+ *
+ * Read a single 16bit word from an Exar UART's EEPROM
+ *
+ * Return: EEPROM word on success, negative error code on failure
+ */
+static int exar_ee_read(struct exar8250 *priv, uint8_t ee_addr)
+{
+	int i;
+	int data = 0;
+
+	exar_ee_select(priv, true);
+
+	//Send read command (opcode 110)
+	exar_ee_write_bit(priv, 1);
+	exar_ee_write_bit(priv, 1);
+	exar_ee_write_bit(priv, 0);
+
+	//Send address to read from
+	for (i = 1 << (UART_EXAR_REGB_EE_ADDR_SIZE - 1); i; i >>= 1)
+		exar_ee_write_bit(priv, (ee_addr & i));
+
+	//Read data 1 bit at a time
+	for (i = 0; i <= UART_EXAR_REGB_EE_DATA_SIZE; i++) {
+		data <<= 1;
+		data |= exar_ee_read_bit(priv);
+	}
+
+	exar_ee_select(priv, false);
+
+	return data;
+}
 
 static void exar_pm(struct uart_port *port, unsigned int state, unsigned int old)
 {
