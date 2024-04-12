@@ -500,3 +500,49 @@ Description:
 		console drivers from the device.  Raw users of pci-sysfs
 		resourceN attributes must be terminated prior to resizing.
 		Success of the resizing operation is not guaranteed.
+
+What:		/sys/bus/pci/devices/.../authenticated
+Date:		March 2024
+Contact:	linux-pci@vger.kernel.org
+Description:
+		This file contains 1 if the device authenticated successfully.
+		It contains 0 if the device failed authentication (and may thus
+		be malicious). There are 2 potential authentication methods:
+		native PCI CMA (Component Measurement and Authentication) and
+		PCI TSM (TEE Security Manager). In the PCI TSM case the device's
+		PCI CMA interface is subsumed by the TSM driver. A TSM
+		implementation uses its own private certificate store + keys to
+		authenticate the device. Without a TSM the kernel can
+		authenticate using its own certificate chain.
+
+		In the TSM case, "authenticated" is read-only (0444) and the
+		"tsm/connect" attribute reflects whether the device is TSM
+		"connected" which includes not only CMA authentication, but
+		optionally IDE (link Integrity and Data encryption) if the TSM
+		deems that is necessary. When the device is disconnected from
+		the TSM the kernel may attempt authentication with its own
+		certificate chain. See
+		Documentation/ABI/testing/sysfs-devices-spdm.
+
+		The file is not visible if authentication is unsupported by the
+		device, or if PCI CMA support is disabled and the TSM
+		driver has no available authentication methods for the device.
+
+What:		/sys/bus/pci/devices/.../tsm/
+Date:		March 2024
+Contact:	linux-coco@lists.linux.dev
+Description:
+		This directory only appears if a device supports CMA and IDE,
+		and only after a TSM driver has loaded and evaluated this
+		PCI device. All present devices shall be dispositioned
+		after the 'add' event for /sys/class/tsm/tsm0 triggers.
+
+What:		/sys/bus/pci/devices/.../tsm/connect
+Date:		March 2024
+Contact:	linux-coco@lists.linux.dev
+Description:
+		(RW) Writing "1" to this file triggers the TSM to establish a
+		connection with the device. This typically includes an SPDM
+		(DMTF Security Protocols and Data Models) session over PCIe DOE
+		(Data Object Exchange) and may also include PCIe IDE (Integrity
+		and Data Encryption) establishment.

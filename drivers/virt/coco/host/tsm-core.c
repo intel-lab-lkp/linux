@@ -8,11 +8,13 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/cleanup.h>
+#include <linux/pci-tsm.h>
 
 static DECLARE_RWSEM(tsm_core_rwsem);
 static struct class *tsm_class;
 static struct tsm_subsys {
 	struct device dev;
+	const struct pci_tsm_ops *pci_ops;
 } *tsm_subsys;
 
 static struct tsm_subsys *
@@ -40,7 +42,8 @@ static void put_tsm_subsys(struct tsm_subsys *subsys)
 DEFINE_FREE(put_tsm_subsys, struct tsm_subsys *,
 	    if (!IS_ERR_OR_NULL(_T)) put_tsm_subsys(_T))
 struct tsm_subsys *tsm_register(struct device *parent,
-				const struct attribute_group **groups)
+				const struct attribute_group **groups,
+				const struct pci_tsm_ops *pci_ops)
 {
 	struct device *dev;
 	int rc;
@@ -62,10 +65,20 @@ struct tsm_subsys *tsm_register(struct device *parent,
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = device_add(dev);
-	if (rc)
+	rc = pci_tsm_register(pci_ops);
+	if (rc) {
+		dev_err(parent, "PCI initialization failure: %pe\n",
+			ERR_PTR(rc));
 		return ERR_PTR(rc);
+	}
 
+	rc = device_add(dev);
+	if (rc) {
+		pci_tsm_unregister(pci_ops);
+		return ERR_PTR(rc);
+	}
+
+	subsys->pci_ops = pci_ops;
 	tsm_subsys = no_free_ptr(subsys);
 
 	return tsm_subsys;
@@ -74,13 +87,18 @@ EXPORT_SYMBOL_GPL(tsm_register);
 
 void tsm_unregister(struct tsm_subsys *subsys)
 {
+	const struct pci_tsm_ops *pci_ops;
+
 	guard(rwsem_write)(&tsm_core_rwsem);
 	if (!tsm_subsys || subsys != tsm_subsys) {
 		pr_warn("failed to unregister, not currently registered\n");
 		return;
 	}
 
+	pci_ops = subsys->pci_ops;
 	device_unregister(&subsys->dev);
+
+	pci_tsm_unregister(pci_ops);
 	tsm_subsys = NULL;
 }
 EXPORT_SYMBOL_GPL(tsm_unregister);

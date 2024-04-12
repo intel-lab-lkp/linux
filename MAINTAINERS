@@ -22466,8 +22466,10 @@ M:	Dan Williams <dan.j.williams@intel.com>
 L:	linux-coco@lists.linux.dev
 S:	Maintained
 F:	Documentation/ABI/testing/configfs-tsm
+F:	drivers/pci/tsm.c
 F:	drivers/virt/coco/guest/tsm_report.c
 F:	drivers/virt/coco/host/
+F:	include/linux/pci-tsm.h
 F:	include/linux/tsm.h
 
 TTY LAYER AND SERIAL DRIVERS

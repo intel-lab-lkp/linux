@@ -516,6 +516,9 @@ struct pci_dev {
 #ifdef CONFIG_PCI_DOE
 	struct xarray	doe_mbs;	/* Data Object Exchange mailboxes */
 #endif
+#ifdef CONFIG_PCI_TSM
+	struct pci_tsm *tsm;		/* TSM operation state */
+#endif
 	u16		acs_cap;	/* ACS Capability offset */
 	phys_addr_t	rom;		/* Physical address if not from BAR */
 	size_t		romlen;		/* Length if not from BAR */
@@ -550,6 +553,12 @@ static inline int pci_channel_offline(struct pci_dev *pdev)
 	return (pdev->error_state != pci_channel_io_normal);
 }
 
+/* id resources that may be shared across host-bridges */
+struct pci_hb_id_pool {
+	int nr_stream_ids;
+	int nr_cxl_cache_ids;
+};
+
 /*
  * Currently in ACPI spec, for each PCI host bridge, PCI Segment
  * Group number is limited to a 16-bit value, therefore (int)-1 is
@@ -568,6 +577,8 @@ struct pci_host_bridge {
 	void		*sysdata;
 	int		busnr;
 	int		domain_nr;
+	struct pci_hb_id_pool __pool;
+	struct pci_hb_id_pool *pool;	/* &self->__pool, unless shared */
 	struct list_head windows;	/* resource_entry */
 	struct list_head dma_ranges;	/* dma ranges resource list */
 	u8 (*swizzle_irq)(struct pci_dev *, u8 *); /* Platform IRQ swizzler */
