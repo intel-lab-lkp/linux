@@ -4,6 +4,7 @@
 
 #include <linux/sizes.h>
 #include <linux/types.h>
+#include <linux/device.h>
 
 #define TSM_REPORT_INBLOB_MAX 64
 #define TSM_REPORT_OUTBLOB_MAX SZ_32K
@@ -66,4 +67,8 @@ extern const struct config_item_type tsm_report_extra_type;
 int tsm_report_register(const struct tsm_report_ops *ops, void *priv,
 			const struct config_item_type *type);
 int tsm_report_unregister(const struct tsm_report_ops *ops);
+struct tsm_subsys;
+struct tsm_subsys *tsm_register(struct device *parent,
+				const struct attribute_group **groups);
+void tsm_unregister(struct tsm_subsys *subsys);
 #endif /* __TSM_H */
