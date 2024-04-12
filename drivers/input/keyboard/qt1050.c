@@ -355,21 +355,21 @@ static int qt1050_parse_fw(struct qt1050_priv *ts)
 		if (fwnode_property_read_u32(child, "linux,code",
 					     &button.keycode)) {
 			dev_err(dev, "Button without keycode\n");
-			goto err;
+			return -EINVAL;
 		}
 		if (button.keycode >= KEY_MAX) {
 			dev_err(dev, "Invalid keycode 0x%x\n",
 				button.keycode);
-			goto err;
+			return -EINVAL;
 		}
 
 		if (fwnode_property_read_u32(child, "reg",
 					     &button.num)) {
 			dev_err(dev, "Button without pad number\n");
-			goto err;
+			return -EINVAL;
 		}
 		if (button.num < 0 || button.num > QT1050_MAX_KEYS - 1)
-			goto err;
+			return -EINVAL;
 
 		ts->reg_keys |= BIT(button.num);
 
@@ -419,10 +419,6 @@ static int qt1050_parse_fw(struct qt1050_priv *ts)
 	}
 
 	return 0;
-
-err:
-	fwnode_handle_put(child);
-	return -EINVAL;
 }
 
 static int qt1050_probe(struct i2c_client *client)
