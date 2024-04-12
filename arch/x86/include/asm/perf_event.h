@@ -628,4 +628,9 @@ static __always_inline void perf_lopwr_cb(bool lopwr_in)
 
 #define arch_perf_out_copy_user copy_from_user_nmi
 
+#ifdef CONFIG_HAVE_PERF_USER_TLS_DUMP
+struct perf_tls;
+extern void arch_perf_user_tls_pointer(struct perf_tls *tls);
+#endif
+
 #endif /* _ASM_X86_PERF_EVENT_H */

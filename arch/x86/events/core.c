@@ -41,6 +41,7 @@
 #include <asm/desc.h>
 #include <asm/ldt.h>
 #include <asm/unwind.h>
+#include <asm/elf.h>
 
 #include "perf_event.h"
 
@@ -3002,3 +3003,16 @@ u64 perf_get_hw_event_config(int hw_event)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(perf_get_hw_event_config);
+
+#ifdef CONFIG_X86_64
+void arch_perf_user_tls_pointer(struct perf_tls *tls)
+{
+	if (!mmap_is_ia32()) {
+		tls->base = current->thread.fsbase;
+		tls->size = sizeof(u64);
+	} else {
+		tls->base = current->thread.gsbase;
+		tls->size = sizeof(u32);
+	}
+}
+#endif
