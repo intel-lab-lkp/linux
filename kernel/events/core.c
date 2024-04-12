@@ -6912,7 +6912,13 @@ static void perf_sample_regs_intr(struct perf_regs *regs_intr,
  */
 static u64 perf_ustack_task_size(struct pt_regs *regs)
 {
-	unsigned long addr = perf_user_stack_pointer(regs);
+	unsigned long addr;
+
+	/* No regs, no stack pointer, no dump. */
+	if (!regs)
+		return 0;
+
+	addr = perf_user_stack_pointer(regs);
 
 	if (!addr || addr >= TASK_SIZE)
 		return 0;
@@ -6921,42 +6927,35 @@ static u64 perf_ustack_task_size(struct pt_regs *regs)
 }
 
 static u16
-perf_sample_ustack_size(u16 stack_size, u16 header_size,
-			struct pt_regs *regs)
+perf_sample_dump_size(u16 dump_size, u16 header_size, u64 task_size)
 {
-	u64 task_size;
-
-	/* No regs, no stack pointer, no dump. */
-	if (!regs)
-		return 0;
-
 	/*
-	 * Check if we fit in with the requested stack size into the:
+	 * Check if we fit in with the requested dump size into the:
 	 * - TASK_SIZE
 	 *   If we don't, we limit the size to the TASK_SIZE.
 	 *
 	 * - remaining sample size
-	 *   If we don't, we customize the stack size to
+	 *   If we don't, we customize the dump size to
 	 *   fit in to the remaining sample size.
 	 */
 
-	task_size  = min((u64) USHRT_MAX, perf_ustack_task_size(regs));
-	stack_size = min(stack_size, (u16) task_size);
+	task_size  = min((u64) USHRT_MAX, task_size);
+	dump_size = min(dump_size, (u16) task_size);
 
 	/* Current header size plus static size and dynamic size. */
 	header_size += 2 * sizeof(u64);
 
-	/* Do we fit in with the current stack dump size? */
-	if ((u16) (header_size + stack_size) < header_size) {
+	/* Do we fit in with the current dump size? */
+	if ((u16) (header_size + dump_size) < header_size) {
 		/*
 		 * If we overflow the maximum size for the sample,
-		 * we customize the stack dump size to fit in.
+		 * we customize the dump size to fit in.
 		 */
-		stack_size = USHRT_MAX - header_size - sizeof(u64);
-		stack_size = round_up(stack_size, sizeof(u64));
+		dump_size = USHRT_MAX - header_size - sizeof(u64);
+		dump_size = round_up(dump_size, sizeof(u64));
 	}
 
-	return stack_size;
+	return dump_size;
 }
 
 static void
@@ -7648,6 +7647,32 @@ static __always_inline u64 __cond_set(u64 flags, u64 s, u64 d)
 	return d * !!(flags & s);
 }
 
+static inline u16
+perf_prepare_dump_data(struct perf_sample_data *data,
+		       struct perf_event *event,
+		       struct pt_regs *regs,
+		       u16 dump_size,
+		       u64 task_size)
+{
+	u16 header_size = perf_sample_data_size(data, event);
+	u16 size = sizeof(u64);
+
+	dump_size = perf_sample_dump_size(dump_size, header_size,
+					  task_size);
+
+	/*
+	 * If there is something to dump, add space for the dump
+	 * itself and for the field that tells the dynamic size,
+	 * which is how many have been actually dumped.
+	 */
+	if (dump_size)
+		size += sizeof(u64) + dump_size;
+
+	data->dyn_size += size;
+
+	return dump_size;
+}
+
 void perf_prepare_sample(struct perf_sample_data *data,
 			 struct perf_event *event,
 			 struct pt_regs *regs)
@@ -7725,22 +7750,12 @@ void perf_prepare_sample(struct perf_sample_data *data,
 		 * up the rest of the sample size.
 		 */
 		u16 stack_size = event->attr.sample_stack_user;
-		u16 header_size = perf_sample_data_size(data, event);
-		u16 size = sizeof(u64);
+		u64 task_size = perf_ustack_task_size(regs);
 
-		stack_size = perf_sample_ustack_size(stack_size, header_size,
-						     data->regs_user.regs);
-
-		/*
-		 * If there is something to dump, add space for the dump
-		 * itself and for the field that tells the dynamic size,
-		 * which is how many have been actually dumped.
-		 */
-		if (stack_size)
-			size += sizeof(u64) + stack_size;
+		stack_size = perf_prepare_dump_data(data, event, regs,
+						    stack_size, task_size);
 
 		data->stack_user_size = stack_size;
-		data->dyn_size += size;
 		data->sample_flags |= PERF_SAMPLE_STACK_USER;
 	}
 
