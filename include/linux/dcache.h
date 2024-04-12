@@ -128,6 +128,7 @@ enum dentry_d_lock_class
 enum d_real_type {
 	D_REAL_DATA,
 	D_REAL_METADATA,
+	D_REAL_FILEDATA,
 };
 
 struct dentry_operations {

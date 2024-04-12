@@ -36,6 +36,7 @@ static struct dentry *ovl_d_real(struct dentry *dentry, enum d_real_type type)
 	switch (type) {
 	case D_REAL_DATA:
 	case D_REAL_METADATA:
+	case D_REAL_FILEDATA:
 		break;
 	default:
 		goto bug;
@@ -47,6 +48,11 @@ static struct dentry *ovl_d_real(struct dentry *dentry, enum d_real_type type)
 	}
 
 	upper = ovl_dentry_upper(dentry);
+	if (type == D_REAL_FILEDATA) {
+		if (ovl_has_upperdata(d_inode(dentry)))
+			return upper;
+		return ovl_dentry_lower(dentry);
+	}
 	if (upper && (type == D_REAL_METADATA ||
 		      ovl_has_upperdata(d_inode(dentry))))
 		return upper;
