@@ -4,3 +4,5 @@
 
 obj-$(CONFIG_TSM) += tsm.o
 tsm-y := tsm-core.o
+
+obj-$(CONFIG_TDX_TSM) += tdx_tsm.o

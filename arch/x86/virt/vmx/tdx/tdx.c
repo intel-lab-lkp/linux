@@ -1099,9 +1099,16 @@ static int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	return 0;
 }
 
-static const struct bus_type tdx_subsys = {
+static int tdx_uevent(const struct device *dev, struct kobj_uevent_env *env)
+{
+	return add_uevent_var(env, "MODALIAS=%s", dev_name(dev));
+}
+
+const struct bus_type tdx_subsys = {
 	.name = "tdx",
+	.uevent = tdx_uevent,
 };
+EXPORT_SYMBOL_NS_GPL(tdx_subsys, TDX);
 
 struct tdx_tsm {
 	struct device dev;

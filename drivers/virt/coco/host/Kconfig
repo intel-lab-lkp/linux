@@ -4,3 +4,9 @@
 #
 config TSM
 	tristate
+
+config TDX_TSM
+	depends on INTEL_TDX_HOST
+	select PCI_TSM
+	select TSM
+	tristate

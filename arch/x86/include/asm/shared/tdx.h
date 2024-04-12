@@ -132,5 +132,8 @@ static __always_inline u64 hcall_func(u64 exit_reason)
         return exit_reason;
 }
 
+/* tdx_tsm driver interfaces */
+extern const struct bus_type tdx_subsys;
+
 #endif /* !__ASSEMBLY__ */
 #endif /* _ASM_X86_SHARED_TDX_H */
