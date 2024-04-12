@@ -87,6 +87,29 @@
 #define RISCV_ISA_EXT_MAX		128
 #define RISCV_ISA_EXT_INVALID		U32_MAX
 
+/*
+ * These macros represent the logical IDs of each vendor RISC-V ISA extension
+ * and are used in each vendor ISA bitmap. The logical IDs start from
+ * RISCV_ISA_VENDOR_EXT_BASE, which allows the 0-0x7999 range to be
+ * reserved for non-vendor extensions. The maximum, RISCV_ISA_VENDOR_EXT_MAX,
+ * is defined in order to allocate the bitmap and may be increased when
+ * necessary.
+ *
+ * Values are expected to overlap between vendors.
+ *
+ * New extensions should just be added to the bottom of the respective vendor,
+ * rather than added alphabetically, in order to avoid unnecessary shuffling.
+ *
+ */
+#define RISCV_ISA_VENDOR_EXT_BASE		0x8000
+
+/* THead Vendor Extensions */
+#define RISCV_ISA_VENDOR_EXT_XTHEADVECTOR	0x8000
+
+#define RISCV_ISA_VENDOR_EXT_MAX		0x8080
+#define RISCV_ISA_VENDOR_EXT_SIZE		(RISCV_ISA_VENDOR_EXT_MAX - RISCV_ISA_VENDOR_EXT_BASE)
+#define RISCV_ISA_VENDOR_EXT_INVALID		U32_MAX
+
 #ifdef CONFIG_RISCV_M_MODE
 #define RISCV_ISA_EXT_SxAIA		RISCV_ISA_EXT_SMAIA
 #else

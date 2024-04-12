@@ -32,8 +32,14 @@ unsigned long elf_hwcap __read_mostly;
 /* Host ISA bitmap */
 static DECLARE_BITMAP(riscv_isa, RISCV_ISA_EXT_MAX) __read_mostly;
 
+/* Host ISA vendor bitmap */
+static DECLARE_BITMAP(riscv_isa_vendor, RISCV_ISA_VENDOR_EXT_SIZE) __read_mostly;
+
 /* Per-cpu ISA extensions. */
 struct riscv_isainfo hart_isa[NR_CPUS];
+
+/* Per-cpu ISA vendor extensions. */
+struct riscv_isainfo hart_isa_vendor[NR_CPUS];
 
 /**
  * riscv_isa_extension_base() - Get base extension word
@@ -309,8 +315,15 @@ const struct riscv_isa_ext_data riscv_isa_ext[] = {
 
 const size_t riscv_isa_ext_count = ARRAY_SIZE(riscv_isa_ext);
 
+const struct riscv_isa_ext_data riscv_isa_vendor_ext_thead[] = {
+	__RISCV_ISA_EXT_DATA(xtheadvector, RISCV_ISA_VENDOR_EXT_XTHEADVECTOR),
+};
+
+const size_t riscv_isa_vendor_ext_count_thead = ARRAY_SIZE(riscv_isa_vendor_ext_thead);
+
 static void __init match_isa_ext(const struct riscv_isa_ext_data *ext, const char *name,
-				 const char *name_end, struct riscv_isainfo *isainfo)
+				 const char *name_end, struct riscv_isainfo *isainfo,
+				 unsigned int id_offset)
 {
 	if ((name_end - name == strlen(ext->name)) &&
 	     !strncasecmp(name, ext->name, name_end - name)) {
@@ -321,7 +334,7 @@ static void __init match_isa_ext(const struct riscv_isa_ext_data *ext, const cha
 		if (ext->subset_ext_size) {
 			for (int i = 0; i < ext->subset_ext_size; i++) {
 				if (riscv_isa_extension_check(ext->subset_ext_ids[i]))
-					set_bit(ext->subset_ext_ids[i], isainfo->isa);
+					set_bit(ext->subset_ext_ids[i] - id_offset, isainfo->isa);
 			}
 		}
 
@@ -330,12 +343,34 @@ static void __init match_isa_ext(const struct riscv_isa_ext_data *ext, const cha
 		 * (rejected by riscv_isa_extension_check()).
 		 */
 		if (riscv_isa_extension_check(ext->id))
-			set_bit(ext->id, isainfo->isa);
+			set_bit(ext->id - id_offset, isainfo->isa);
 	}
 }
 
+static bool __init get_isa_vendor_ext(unsigned long vendorid,
+				      const struct riscv_isa_ext_data **isa_vendor_ext,
+				      size_t *count)
+{
+	bool found_vendor = true;
+
+	switch (vendorid) {
+	case THEAD_VENDOR_ID:
+		*isa_vendor_ext = riscv_isa_vendor_ext_thead;
+		*count = riscv_isa_vendor_ext_count_thead;
+		break;
+	default:
+		*isa_vendor_ext = NULL;
+		*count = 0;
+		found_vendor = false;
+		break;
+	}
+
+	return found_vendor;
+}
+
 static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct riscv_isainfo *isainfo,
-					  unsigned long *isa2hwcap, const char *isa)
+					struct riscv_isainfo *isavendorinfo, unsigned long vendorid,
+					unsigned long *isa2hwcap, const char *isa)
 {
 	/*
 	 * For all possible cpus, we have already validated in
@@ -349,8 +384,30 @@ static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct risc
 		const char *ext = isa++;
 		const char *ext_end = isa;
 		bool ext_long = false, ext_err = false;
+		struct riscv_isainfo *selected_isainfo = isainfo;
+		const struct riscv_isa_ext_data *selected_riscv_isa_ext = riscv_isa_ext;
+		size_t selected_riscv_isa_ext_count = riscv_isa_ext_count;
+		unsigned int id_offset = 0;
 
 		switch (*ext) {
+		case 'x':
+		case 'X':
+			bool found;
+
+			found = get_isa_vendor_ext(vendorid,
+						   &selected_riscv_isa_ext,
+						   &selected_riscv_isa_ext_count);
+			selected_isainfo = isavendorinfo;
+			id_offset = RISCV_ISA_VENDOR_EXT_BASE;
+			if (!found) {
+				pr_warn("No associated vendor extensions with vendor id: %lx\n",
+					vendorid);
+				for (; *isa && *isa != '_'; ++isa)
+					;
+				ext_err = true;
+				break;
+			}
+			fallthrough;
 		case 's':
 			/*
 			 * Workaround for invalid single-letter 's' & 'u' (QEMU).
@@ -366,8 +423,6 @@ static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct risc
 			}
 			fallthrough;
 		case 'S':
-		case 'x':
-		case 'X':
 		case 'z':
 		case 'Z':
 			/*
@@ -476,8 +531,10 @@ static void __init riscv_parse_isa_string(unsigned long *this_hwcap, struct risc
 				set_bit(nr, isainfo->isa);
 			}
 		} else {
-			for (int i = 0; i < riscv_isa_ext_count; i++)
-				match_isa_ext(&riscv_isa_ext[i], ext, ext_end, isainfo);
+			for (int i = 0; i < selected_riscv_isa_ext_count; i++)
+				match_isa_ext(&selected_riscv_isa_ext[i], ext,
+					      ext_end, selected_isainfo,
+					      id_offset);
 		}
 	}
 }
@@ -490,8 +547,8 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 	struct acpi_table_header *rhct;
 	acpi_status status;
 	unsigned int cpu;
-	u64 boot_vendorid;
-	u64 boot_archid;
+	u64 boot_vendorid = ULL(-1), vendorid;
+	u64 boot_archid = ULL(-1);
 
 	if (!acpi_disabled) {
 		status = acpi_get_table(ACPI_SIG_RHCT, 0, &rhct);
@@ -499,11 +556,9 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 			return;
 	}
 
-	boot_vendorid = riscv_get_mvendorid();
-	boot_archid = riscv_get_marchid();
-
 	for_each_possible_cpu(cpu) {
 		struct riscv_isainfo *isainfo = &hart_isa[cpu];
+		struct riscv_isainfo *isavendorinfo = &hart_isa_vendor[cpu];
 		unsigned long this_hwcap = 0;
 		u64 this_vendorid;
 		u64 this_archid;
@@ -523,11 +578,19 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 			}
 			if (of_property_read_u64(node, "riscv,vendorid", &this_vendorid) < 0) {
 				pr_warn("Unable to find \"riscv,vendorid\" devicetree entry, using boot hart mvendorid instead\n");
+
+				if (boot_vendorid == -1)
+					this_vendorid = riscv_get_mvendorid();
+
 				this_vendorid = boot_vendorid;
 			}
 
 			if (of_property_read_u64(node, "riscv,archid", &this_archid) < 0) {
 				pr_warn("Unable to find \"riscv,vendorid\" devicetree entry, using boot hart marchid instead\n");
+
+				if (boot_archid == -1)
+					boot_archid = riscv_get_marchid();
+
 				this_archid = boot_archid;
 			}
 		} else {
@@ -540,7 +603,8 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 			this_archid = boot_archid;
 		}
 
-		riscv_parse_isa_string(&this_hwcap, isainfo, isa2hwcap, isa);
+		riscv_parse_isa_string(&this_hwcap, isainfo, isavendorinfo,
+				       this_vendorid, isa2hwcap, isa);
 
 		/*
 		 * These ones were as they were part of the base ISA when the
@@ -582,20 +646,76 @@ static void __init riscv_fill_hwcap_from_isa_string(unsigned long *isa2hwcap)
 			bitmap_copy(riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
 		else
 			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
+
+		/*
+		 * All harts must have the same vendor to have compatible
+		 * vendor extensions.
+		 */
+		if (bitmap_empty(riscv_isa_vendor, RISCV_ISA_VENDOR_EXT_SIZE)) {
+			vendorid = this_vendorid;
+			bitmap_copy(riscv_isa_vendor, isavendorinfo->isa,
+				    RISCV_ISA_VENDOR_EXT_SIZE);
+		} else if (vendorid != this_vendorid) {
+			vendorid = -1ULL;
+			bitmap_clear(riscv_isa_vendor, 0, RISCV_ISA_VENDOR_EXT_SIZE);
+		} else {
+			bitmap_and(riscv_isa_vendor, riscv_isa_vendor,
+				   isavendorinfo->isa,
+				   RISCV_ISA_VENDOR_EXT_SIZE);
+		}
 	}
 
 	if (!acpi_disabled && rhct)
 		acpi_put_table((struct acpi_table_header *)rhct);
 }
 
+static void __init riscv_add_cpu_ext(struct device_node *cpu_node,
+				     unsigned long *this_hwcap,
+				     unsigned long *isa2hwcap,
+				     const struct riscv_isa_ext_data *riscv_isa_ext_data,
+				     struct riscv_isainfo *isainfo,
+				     unsigned int id_offset,
+				     size_t riscv_isa_ext_count)
+{
+	for (int i = 0; i < riscv_isa_ext_count; i++) {
+		const struct riscv_isa_ext_data ext = riscv_isa_ext_data[i];
+
+		if (of_property_match_string(cpu_node, "riscv,isa-extensions",
+					     ext.property) < 0)
+			continue;
+
+		if (ext.subset_ext_size) {
+			for (int j = 0; j < ext.subset_ext_size; j++) {
+				if (riscv_isa_extension_check(ext.subset_ext_ids[j]))
+					set_bit(ext.subset_ext_ids[j] - id_offset, isainfo->isa);
+			}
+		}
+
+		if (riscv_isa_extension_check(ext.id)) {
+			set_bit(ext.id - id_offset, isainfo->isa);
+
+			/* Only single letter extensions get set in hwcap */
+			if (strnlen(ext.name, 2) == 1)
+				*this_hwcap |= isa2hwcap[ext.id];
+		}
+	}
+}
+
 static int __init riscv_fill_hwcap_from_ext_list(unsigned long *isa2hwcap)
 {
 	unsigned int cpu;
+	u64 boot_vendorid, vendorid;
 
 	for_each_possible_cpu(cpu) {
 		unsigned long this_hwcap = 0;
 		struct device_node *cpu_node;
 		struct riscv_isainfo *isainfo = &hart_isa[cpu];
+
+		struct riscv_isainfo *isavendorinfo = &hart_isa_vendor[cpu];
+		size_t riscv_isa_vendor_ext_count;
+		const struct riscv_isa_ext_data *riscv_isa_vendor_ext;
+		u64 this_vendorid;
+		bool found_vendor;
 
 		cpu_node = of_cpu_device_node_get(cpu);
 		if (!cpu_node) {
@@ -608,28 +728,28 @@ static int __init riscv_fill_hwcap_from_ext_list(unsigned long *isa2hwcap)
 			continue;
 		}
 
-		for (int i = 0; i < riscv_isa_ext_count; i++) {
-			const struct riscv_isa_ext_data *ext = &riscv_isa_ext[i];
+		riscv_add_cpu_ext(cpu_node, &this_hwcap, isa2hwcap,
+				  riscv_isa_ext, isainfo, 0,
+				  riscv_isa_ext_count);
 
-			if (of_property_match_string(cpu_node, "riscv,isa-extensions",
-						     ext->property) < 0)
-				continue;
-
-			if (ext->subset_ext_size) {
-				for (int j = 0; j < ext->subset_ext_size; j++) {
-					if (riscv_isa_extension_check(ext->subset_ext_ids[j]))
-						set_bit(ext->subset_ext_ids[j], isainfo->isa);
-				}
-			}
-
-			if (riscv_isa_extension_check(ext->id)) {
-				set_bit(ext->id, isainfo->isa);
-
-				/* Only single letter extensions get set in hwcap */
-				if (strnlen(riscv_isa_ext[i].name, 2) == 1)
-					this_hwcap |= isa2hwcap[riscv_isa_ext[i].id];
-			}
+		if (of_property_read_u64(cpu_node, "riscv,vendorid", &this_vendorid) < 0) {
+			pr_warn("Unable to find \"riscv,vendorid\" devicetree entry, using boot hart mvendorid instead\n");
+			if (boot_vendorid == -1)
+				boot_vendorid = riscv_get_mvendorid();
+			this_vendorid = boot_vendorid;
 		}
+
+		found_vendor = get_isa_vendor_ext(this_vendorid,
+						  &riscv_isa_vendor_ext,
+						  &riscv_isa_vendor_ext_count);
+
+		if (found_vendor)
+			riscv_add_cpu_ext(cpu_node, &this_hwcap, isa2hwcap,
+					  riscv_isa_vendor_ext, isavendorinfo,
+					  RISCV_ISA_VENDOR_EXT_BASE, riscv_isa_vendor_ext_count);
+		else
+			pr_warn("No associated vendor extensions with vendor id: %llx\n",
+				vendorid);
 
 		of_node_put(cpu_node);
 
@@ -646,6 +766,23 @@ static int __init riscv_fill_hwcap_from_ext_list(unsigned long *isa2hwcap)
 			bitmap_copy(riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
 		else
 			bitmap_and(riscv_isa, riscv_isa, isainfo->isa, RISCV_ISA_EXT_MAX);
+
+		/*
+		 * All harts must have the same vendorid to have compatible
+		 * vendor extensions.
+		 */
+		if (bitmap_empty(riscv_isa_vendor, RISCV_ISA_VENDOR_EXT_SIZE)) {
+			vendorid = this_vendorid;
+			bitmap_copy(riscv_isa_vendor, isavendorinfo->isa,
+				    RISCV_ISA_VENDOR_EXT_SIZE);
+		} else if (vendorid != this_vendorid) {
+			vendorid = -1ULL;
+			bitmap_clear(riscv_isa_vendor, 0,
+				     RISCV_ISA_VENDOR_EXT_SIZE);
+		} else {
+			bitmap_and(riscv_isa_vendor, riscv_isa_vendor,
+				   isavendorinfo->isa, RISCV_ISA_VENDOR_EXT_SIZE);
+		}
 	}
 
 	if (bitmap_empty(riscv_isa, RISCV_ISA_EXT_MAX))
