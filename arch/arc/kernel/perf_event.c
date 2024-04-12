@@ -788,6 +788,7 @@ static int arc_pmu_device_probe(struct platform_device *pdev)
 	arc_pmu->attr_groups[ARCPMU_ATTR_GR_FORMATS] = &arc_pmu_format_attr_gr;
 
 	arc_pmu->pmu = (struct pmu) {
+		.parent		= &pdev->dev,
 		.pmu_enable	= arc_pmu_enable,
 		.pmu_disable	= arc_pmu_disable,
 		.event_init	= arc_pmu_event_init,
