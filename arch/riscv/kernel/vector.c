@@ -33,10 +33,24 @@ int riscv_v_setup_vsize(void)
 {
 	unsigned long this_vsize;
 
-	/* There are 32 vector registers with vlenb length. */
-	riscv_v_enable();
-	this_vsize = csr_read(CSR_VLENB) * 32;
-	riscv_v_disable();
+	/*
+	 * This is called before alternatives have been patched so can't use
+	 * riscv_has_vendor_extension_unlikely
+	 */
+	if (__riscv_isa_vendor_extension_available(NULL, RISCV_ISA_VENDOR_EXT_XTHEADVECTOR)) {
+		/*
+		 * Although xtheadvector states that th.vlenb exists and
+		 * overlaps with the vector 1.0 extension overlaps, an illegal
+		 * instruction is raised if read. These systems all currently
+		 * have a fixed vector length of 128, so hardcode that value.
+		 */
+		this_vsize = 128;
+	} else {
+		/* There are 32 vector registers with vlenb length. */
+		riscv_v_enable();
+		this_vsize = csr_read(CSR_VLENB) * 32;
+		riscv_v_disable();
+	}
 
 	if (!riscv_v_vsize) {
 		riscv_v_vsize = this_vsize;
