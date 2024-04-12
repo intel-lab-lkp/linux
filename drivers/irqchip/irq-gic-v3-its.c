@@ -3826,7 +3826,7 @@ static int its_vpe_set_affinity(struct irq_data *d,
 				bool force)
 {
 	struct its_vpe *vpe = irq_data_get_irq_chip_data(d);
-	struct cpumask common, *table_mask;
+	struct cpumask *table_mask;
 	unsigned long flags;
 	int from, cpu;
 
@@ -3850,8 +3850,11 @@ static int its_vpe_set_affinity(struct irq_data *d,
 	 * If we are offered another CPU in the same GICv4.1 ITS
 	 * affinity, pick this one. Otherwise, any CPU will do.
 	 */
-	if (table_mask && cpumask_and(&common, mask_val, table_mask))
-		cpu = cpumask_test_cpu(from, &common) ? from : cpumask_first(&common);
+	if (table_mask && cpumask_intersects(mask_val, table_mask)) {
+		cpu = cpumask_test_cpu(from, mask_val) &&
+		      cpumask_test_cpu(from, table_mask) ?
+		      from : cpumask_first_and(mask_val, table_mask);
+	}
 	else
 		cpu = cpumask_first(mask_val);
 
