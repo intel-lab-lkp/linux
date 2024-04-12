@@ -5,25 +5,25 @@
 #include <linux/sizes.h>
 #include <linux/types.h>
 
-#define TSM_INBLOB_MAX 64
-#define TSM_OUTBLOB_MAX SZ_32K
+#define TSM_REPORT_INBLOB_MAX 64
+#define TSM_REPORT_OUTBLOB_MAX SZ_32K
 
 /*
  * Privilege level is a nested permission concept to allow confidential
  * guests to partition address space, 4-levels are supported.
  */
-#define TSM_PRIVLEVEL_MAX 3
+#define TSM_REPORT_PRIVLEVEL_MAX 3
 
 /**
- * struct tsm_desc - option descriptor for generating tsm report blobs
+ * struct tsm_report_desc - option descriptor for generating tsm report blobs
  * @privlevel: optional privilege level to associate with @outblob
  * @inblob_len: sizeof @inblob
  * @inblob: arbitrary input data
  */
-struct tsm_desc {
+struct tsm_report_desc {
 	unsigned int privlevel;
 	size_t inblob_len;
-	u8 inblob[TSM_INBLOB_MAX];
+	u8 inblob[TSM_REPORT_INBLOB_MAX];
 };
 
 /**
@@ -35,7 +35,7 @@ struct tsm_desc {
  * @auxblob: (optional) auxiliary data to the report (e.g. certificate data)
  */
 struct tsm_report {
-	struct tsm_desc desc;
+	struct tsm_report_desc desc;
 	size_t outblob_len;
 	u8 *outblob;
 	size_t auxblob_len;
@@ -43,7 +43,7 @@ struct tsm_report {
 };
 
 /**
- * struct tsm_ops - attributes and operations for tsm instances
+ * struct tsm_report_ops - attributes and operations for tsm_report instances
  * @name: tsm id reflected in /sys/kernel/config/tsm/report/$report/provider
  * @privlevel_floor: convey base privlevel for nested scenarios
  * @report_new: Populate @report with the report blob and auxblob
@@ -52,7 +52,7 @@ struct tsm_report {
  * Implementation specific ops, only one is expected to be registered at
  * a time i.e. only one of "sev-guest", "tdx-guest", etc.
  */
-struct tsm_ops {
+struct tsm_report_ops {
 	const char *name;
 	const unsigned int privlevel_floor;
 	int (*report_new)(struct tsm_report *report, void *data);
@@ -63,7 +63,7 @@ extern const struct config_item_type tsm_report_default_type;
 /* publish @privlevel, @privlevel_floor, and @auxblob attributes */
 extern const struct config_item_type tsm_report_extra_type;
 
-int tsm_register(const struct tsm_ops *ops, void *priv,
-		 const struct config_item_type *type);
-int tsm_unregister(const struct tsm_ops *ops);
+int tsm_report_register(const struct tsm_report_ops *ops, void *priv,
+			const struct config_item_type *type);
+int tsm_report_unregister(const struct tsm_report_ops *ops);
 #endif /* __TSM_H */
