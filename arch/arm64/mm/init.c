@@ -370,7 +370,9 @@ void __init bootmem_init(void)
  */
 void __init mem_init(void)
 {
-	bool swiotlb = max_pfn > PFN_DOWN(arm64_dma_phys_limit);
+	bool swiotlb = (max_pfn > PFN_DOWN(arm64_dma_phys_limit));
+
+	swiotlb |= is_realm_world();
 
 	if (IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) && !swiotlb) {
 		/*
@@ -383,7 +385,12 @@ void __init mem_init(void)
 		swiotlb = true;
 	}
 
-	swiotlb_init(swiotlb, SWIOTLB_VERBOSE);
+	if (is_realm_world()) {
+		swiotlb_init(swiotlb, SWIOTLB_VERBOSE | SWIOTLB_FORCE);
+		swiotlb_update_mem_attributes();
+	} else {
+		swiotlb_init(swiotlb, SWIOTLB_VERBOSE);
+	}
 
 	/* this will put all unused low memory onto the freelists */
 	memblock_free_all();
