@@ -329,6 +329,122 @@ static const char *ath12k_mac_phymode_str(enum wmi_phy_mode mode)
 	return "<unknown>";
 }
 
+enum nl80211_he_ru_alloc ath12k_mac_he_ru_tones_to_nl80211_he_ru_alloc(u16 ru_tones)
+{
+	enum nl80211_he_ru_alloc ret;
+
+	switch (ru_tones) {
+	case 26:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_26;
+		break;
+	case 52:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_52;
+		break;
+	case 106:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_106;
+		break;
+	case 242:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_242;
+		break;
+	case 484:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_484;
+		break;
+	case 996:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_996;
+		break;
+	case (996 * 2):
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_2x996;
+		break;
+	default:
+		ret = NL80211_RATE_INFO_HE_RU_ALLOC_26;
+		break;
+	}
+
+	return ret;
+}
+
+enum nl80211_eht_gi ath12k_mac_eht_gi_to_nl80211_eht_gi(u8 sgi)
+{
+	enum nl80211_eht_gi ret;
+
+	switch (sgi) {
+	case RX_MSDU_START_SGI_0_8_US:
+		ret = NL80211_RATE_INFO_EHT_GI_0_8;
+		break;
+	case RX_MSDU_START_SGI_1_6_US:
+		ret = NL80211_RATE_INFO_EHT_GI_1_6;
+		break;
+	case RX_MSDU_START_SGI_3_2_US:
+		ret = NL80211_RATE_INFO_EHT_GI_3_2;
+		break;
+	default:
+		ret = NL80211_RATE_INFO_EHT_GI_0_8;
+		break;
+	}
+
+	return ret;
+}
+
+enum nl80211_eht_ru_alloc ath12k_mac_eht_ru_tones_to_nl80211_eht_ru_alloc(u16 ru_tones)
+{
+	enum nl80211_eht_ru_alloc ret;
+
+	switch (ru_tones) {
+	case 26:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_26;
+		break;
+	case 52:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_52;
+		break;
+	case (52 + 26):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_52P26;
+		break;
+	case 106:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_106;
+		break;
+	case (106 + 26):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_106P26;
+		break;
+	case 242:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_242;
+		break;
+	case 484:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_484;
+		break;
+	case (484 + 242):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_484P242;
+		break;
+	case 996:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_996;
+		break;
+	case (996 + 484):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_996P484;
+		break;
+	case (996 + 484 + 242):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_996P484P242;
+		break;
+	case (2 * 996):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_2x996;
+		break;
+	case (2 * 996 + 484):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_2x996P484;
+		break;
+	case (3 * 996):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_3x996;
+		break;
+	case (3 * 996 + 484):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_3x996P484;
+		break;
+	case (4 * 996):
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_4x996;
+		break;
+	default:
+		ret = NL80211_RATE_INFO_EHT_RU_ALLOC_26;
+	}
+
+	return ret;
+}
+
 enum rate_info_bw
 ath12k_mac_bw_to_mac80211_bw(enum ath12k_supported_bw bw)
 {
@@ -2418,7 +2534,11 @@ static void ath12k_peer_assoc_prepare(struct ath12k *ar,
 				      struct ath12k_wmi_peer_assoc_arg *arg,
 				      bool reassoc)
 {
+	struct ath12k_sta *arsta;
+
 	lockdep_assert_held(&ar->conf_mutex);
+
+	arsta = ath12k_sta_to_arsta(sta);
 
 	memset(arg, 0, sizeof(*arg));
 
@@ -2435,6 +2555,8 @@ static void ath12k_peer_assoc_prepare(struct ath12k *ar,
 	ath12k_peer_assoc_h_qos(ar, vif, sta, arg);
 	ath12k_peer_assoc_h_phymode(ar, vif, sta, arg);
 	ath12k_peer_assoc_h_smps(sta, arg);
+
+	arsta->peer_nss = arg->peer_nss;
 
 	/* TODO: amsdu_disable req? */
 }
@@ -7923,6 +8045,8 @@ static void ath12k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 		sinfo->txrate.he_gi = arsta->txrate.he_gi;
 		sinfo->txrate.he_dcm = arsta->txrate.he_dcm;
 		sinfo->txrate.he_ru_alloc = arsta->txrate.he_ru_alloc;
+		sinfo->txrate.eht_gi = arsta->txrate.eht_gi;
+		sinfo->txrate.eht_ru_alloc = arsta->txrate.eht_ru_alloc;
 	}
 	sinfo->txrate.flags = arsta->txrate.flags;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
