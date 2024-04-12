@@ -477,6 +477,7 @@ static void idxd_pmu_init(struct idxd_pmu *idxd_pmu)
 	}
 
 	idxd_pmu->pmu.name		= idxd_pmu->name;
+	idxd_pmu->pmu.parent		= &idxd_pmu->idxd->pdev->dev;
 	idxd_pmu->pmu.attr_groups	= perfmon_attr_groups;
 	idxd_pmu->pmu.task_ctx_nr	= perf_invalid_context;
 	idxd_pmu->pmu.event_init	= perfmon_pmu_event_init;
