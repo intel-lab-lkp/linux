@@ -10,6 +10,11 @@
 
 #include <asm/rsi_smc.h>
 
+enum ripas {
+	RSI_RIPAS_EMPTY,
+	RSI_RIPAS_RAM,
+};
+
 static inline void invoke_rsi_fn_smc_with_res(unsigned long function_id,
 					      unsigned long arg0,
 					      unsigned long arg1,
@@ -41,6 +46,23 @@ static inline unsigned long rsi_get_realm_config(struct realm_config *cfg)
 	struct arm_smccc_res res;
 
 	invoke_rsi_fn_smc_with_res(SMC_RSI_REALM_CONFIG, virt_to_phys(cfg), 0, 0, 0, &res);
+	return res.a0;
+}
+
+static inline unsigned long rsi_set_addr_range_state(phys_addr_t start,
+						     phys_addr_t end,
+						     enum ripas state,
+						     phys_addr_t *top)
+{
+	struct arm_smccc_res res;
+
+	invoke_rsi_fn_smc_with_res(SMC_RSI_IPA_STATE_SET,
+				   start, end, state, RSI_NO_CHANGE_DESTROYED,
+				   &res);
+
+	if (top)
+		*top = res.a1;
+
 	return res.a0;
 }
 
