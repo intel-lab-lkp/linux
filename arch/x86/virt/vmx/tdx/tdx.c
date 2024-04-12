@@ -28,6 +28,8 @@
 #include <linux/acpi.h>
 #include <linux/suspend.h>
 #include <linux/acpi.h>
+#include <linux/device.h>
+#include <linux/cleanup.h>
 #include <asm/page.h>
 #include <asm/special_insns.h>
 #include <asm/msr-index.h>
@@ -1097,9 +1099,56 @@ static int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	return 0;
 }
 
+static const struct bus_type tdx_subsys = {
+	.name = "tdx",
+};
+
+struct tdx_tsm {
+	struct device dev;
+};
+
+static struct tdx_tsm *alloc_tdx_tsm(void)
+{
+	struct tdx_tsm *tsm = kzalloc(sizeof(*tsm), GFP_KERNEL);
+	struct device *dev;
+
+	if (!tsm)
+		return ERR_PTR(-ENOMEM);
+
+	dev = &tsm->dev;
+	dev->bus = &tdx_subsys;
+	device_initialize(dev);
+
+	return tsm;
+}
+
+DEFINE_FREE(tdx_tsm_put, struct tdx_tsm *,
+	    if (!IS_ERR_OR_NULL(_T)) put_device(&_T->dev))
+static struct tdx_tsm *init_tdx_tsm(void)
+{
+	struct device *dev;
+	int ret;
+
+	struct tdx_tsm *tsm __free(tdx_tsm_put) = alloc_tdx_tsm();
+	if (IS_ERR(tsm))
+		return tsm;
+
+	dev = &tsm->dev;
+	ret = dev_set_name(dev, "tdx_tsm");
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = device_add(dev);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return no_free_ptr(tsm);
+}
+
 static int init_tdx_module(void)
 {
 	struct tdx_tdmr_sysinfo tdmr_sysinfo;
+	struct tdx_tsm *tsm;
 	int ret;
 
 	/*
@@ -1122,10 +1171,15 @@ static int init_tdx_module(void)
 	if (ret)
 		goto err_free_tdxmem;
 
+	/* Establish subsystem for global TDX module attributes */
+	ret = subsys_virtual_register(&tdx_subsys, NULL);
+	if (ret)
+		goto err_free_tdxmem;
+
 	/* Allocate enough space for constructing TDMRs */
 	ret = alloc_tdmr_list(&tdx_tdmr_list, &tdmr_sysinfo);
 	if (ret)
-		goto err_free_tdxmem;
+		goto err_unregister_subsys;
 
 	/* Cover all TDX-usable memory regions in TDMRs */
 	ret = construct_tdmrs(&tdx_memlist, &tdx_tdmr_list, &tdmr_sysinfo);
@@ -1148,6 +1202,11 @@ static int init_tdx_module(void)
 		goto err_reset_pamts;
 
 	pr_info("%lu KB allocated for PAMT\n", tdmrs_count_pamt_kb(&tdx_tdmr_list));
+
+	/* Register 'tdx_tsm' for driving optional TDX Connect functionality */
+	tsm = init_tdx_tsm();
+	if (IS_ERR(tsm))
+		pr_err("failed to initialize TSM device (%pe)\n", tsm);
 
 out_put_tdxmem:
 	/*
@@ -1177,6 +1236,8 @@ err_free_pamts:
 	tdmrs_free_pamt_all(&tdx_tdmr_list);
 err_free_tdmrs:
 	free_tdmr_list(&tdx_tdmr_list);
+err_unregister_subsys:
+	bus_unregister(&tdx_subsys);
 err_free_tdxmem:
 	free_tdx_memlist(&tdx_memlist);
 	goto out_put_tdxmem;
