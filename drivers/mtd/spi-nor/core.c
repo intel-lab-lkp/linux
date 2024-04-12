@@ -3312,6 +3312,7 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 						       const char *name)
 {
 	const struct flash_info *jinfo = NULL, *info = NULL;
+	const char *deprecated = NULL;
 
 	if (name)
 		info = spi_nor_match_name(nor, name);
@@ -3325,6 +3326,17 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 		if (IS_ERR(jinfo))
 			return jinfo;
 	}
+
+	if (info && (info->flags & SPI_NOR_DEPRECATED))
+		deprecated = info->name;
+	else if (jinfo && (jinfo->flags & SPI_NOR_DEPRECATED))
+		deprecated = jinfo->name;
+
+	if (deprecated)
+		pr_warn("Your board or device tree is using a SPI NOR flash (%s) with\n"
+			"deprecated driver support. It will be removed in future kernel\n"
+			"version. If you feel this shouldn't be the case, please contact\n"
+			"us at linux-mtd@lists.infradead.org\n", deprecated);
 
 	/*
 	 * If caller has specified name of flash model that can normally be
