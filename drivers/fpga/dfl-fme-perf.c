@@ -912,6 +912,7 @@ static int fme_perf_pmu_register(struct platform_device *pdev,
 
 	fme_perf_setup_hardware(priv);
 
+	pmu->parent =		&pdev->dev;
 	pmu->task_ctx_nr =	perf_invalid_context;
 	pmu->attr_groups =	fme_perf_groups;
 	pmu->attr_update =	fme_perf_events_groups;
