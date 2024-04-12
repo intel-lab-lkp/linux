@@ -1259,6 +1259,10 @@ static inline bool kvm_vm_is_protected(struct kvm *kvm)
 	return false;
 }
 
+#ifdef CONFIG_KVM_PRIVATE_MEM
+bool kvm_arch_has_private_mem(struct kvm *kvm);
+#endif
+
 int kvm_arm_vcpu_finalize(struct kvm_vcpu *vcpu, int feature);
 bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu);
 
