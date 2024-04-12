@@ -6926,6 +6926,45 @@ static u64 perf_ustack_task_size(struct pt_regs *regs)
 	return TASK_SIZE - addr;
 }
 
+/*
+ * Get remaining task size from user tls pointer.
+ *
+ * Outputs the address to use for the dump to avoid doing
+ * this twice (prepare and output).
+ */
+static u64
+perf_utls_task_size(struct pt_regs *regs, u64 dump_size, u64 *tls_addr)
+{
+	struct perf_tls tls;
+	unsigned long addr;
+
+	*tls_addr = 0;
+
+	/* No regs, no tls pointer, no dump. */
+	if (!regs)
+		return 0;
+
+	perf_user_tls_pointer(&tls);
+
+	if (WARN_ONCE(tls.size > sizeof(addr), "perf: Bad TLS size.\n"))
+		return 0;
+
+	addr = 0;
+	arch_perf_out_copy_user(&addr, (void *)tls.base, tls.size);
+
+	if (addr < dump_size)
+		return 0;
+
+	addr -= dump_size;
+
+	if (!addr || addr >= TASK_SIZE)
+		return 0;
+
+	*tls_addr = addr;
+
+	return TASK_SIZE - addr;
+}
+
 static u16
 perf_sample_dump_size(u16 dump_size, u16 header_size, u64 task_size)
 {
@@ -6988,6 +7027,43 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 		/* Data. */
 		sp = perf_user_stack_pointer(regs);
 		rem = __output_copy_user(handle, (void *) sp, dump_size);
+		dyn_size = dump_size - rem;
+
+		perf_output_skip(handle, rem);
+
+		/* Dynamic size. */
+		perf_output_put(handle, dyn_size);
+	}
+}
+
+static void
+perf_output_sample_utls(struct perf_output_handle *handle, u64 addr,
+			u64 dump_size, struct pt_regs *regs)
+{
+	/* Case of a kernel thread, nothing to dump */
+	if (!regs) {
+		u64 size = 0;
+		perf_output_put(handle, size);
+	} else {
+		unsigned int rem;
+		u64 dyn_size;
+
+		/*
+		 * We dump:
+		 * static size
+		 *   - the size requested by user or the best one we can fit
+		 *     in to the sample max size
+		 * data
+		 *   - user tls dump data
+		 * dynamic size
+		 *   - the actual dumped size
+		 */
+
+		/* Static size. */
+		perf_output_put(handle, dump_size);
+
+		/* Data. */
+		rem = __output_copy_user(handle, (void *)addr, dump_size);
 		dyn_size = dump_size - rem;
 
 		perf_output_skip(handle, rem);
@@ -7474,6 +7550,13 @@ void perf_output_sample(struct perf_output_handle *handle,
 	if (sample_type & PERF_SAMPLE_CODE_PAGE_SIZE)
 		perf_output_put(handle, data->code_page_size);
 
+	if (sample_type & PERF_SAMPLE_TLS_USER) {
+		perf_output_sample_utls(handle,
+					data->tls_addr,
+					data->tls_user_size,
+					data->regs_user.regs);
+	}
+
 	if (sample_type & PERF_SAMPLE_AUX) {
 		perf_output_put(handle, data->aux_size);
 
@@ -7757,6 +7840,19 @@ void perf_prepare_sample(struct perf_sample_data *data,
 
 		data->stack_user_size = stack_size;
 		data->sample_flags |= PERF_SAMPLE_STACK_USER;
+	}
+
+	if (filtered_sample_type & PERF_SAMPLE_TLS_USER) {
+		u16 tls_size = event->attr.sample_tls_user;
+		u64 task_size = perf_utls_task_size(data->regs_user.regs,
+						    tls_size,
+						    &data->tls_addr);
+
+		tls_size = perf_prepare_dump_data(data, event, regs,
+						  tls_size, task_size);
+
+		data->tls_user_size = tls_size;
+		data->sample_flags |= PERF_SAMPLE_TLS_USER;
 	}
 
 	if (filtered_sample_type & PERF_SAMPLE_WEIGHT_TYPE) {
@@ -12159,7 +12255,7 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 
 	attr->size = size;
 
-	if (attr->__reserved_1 || attr->__reserved_2 || attr->__reserved_3)
+	if (attr->__reserved_1 || attr->__reserved_3)
 		return -EINVAL;
 
 	if (attr->sample_type & ~(PERF_SAMPLE_MAX-1))
@@ -12222,6 +12318,13 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 		if (attr->sample_stack_user >= USHRT_MAX)
 			return -EINVAL;
 		else if (!IS_ALIGNED(attr->sample_stack_user, sizeof(u64)))
+			return -EINVAL;
+	}
+
+	if (attr->sample_type & PERF_SAMPLE_TLS_USER) {
+		if (!arch_perf_have_user_tls_dump())
+			return -ENOSYS;
+		else if (!IS_ALIGNED(attr->sample_tls_user, sizeof(u64)))
 			return -EINVAL;
 	}
 

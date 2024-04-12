@@ -1202,7 +1202,14 @@ struct perf_sample_data {
 	u64				data_page_size;
 	u64				code_page_size;
 	u64				aux_size;
+	u64				tls_addr;
+	u64				tls_user_size;
 } ____cacheline_aligned;
+
+struct perf_tls {
+	unsigned long base; /* Base address for TLS */
+	unsigned long size; /* Size of base address */
+};
 
 /* default value for data source */
 #define PERF_MEM_NA (PERF_MEM_S(OP, NA)   |\
