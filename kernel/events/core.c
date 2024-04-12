@@ -6998,47 +6998,10 @@ perf_sample_dump_size(u16 dump_size, u16 header_size, u64 task_size)
 }
 
 static void
-perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
-			  struct pt_regs *regs)
-{
-	/* Case of a kernel thread, nothing to dump */
-	if (!regs) {
-		u64 size = 0;
-		perf_output_put(handle, size);
-	} else {
-		unsigned long sp;
-		unsigned int rem;
-		u64 dyn_size;
-
-		/*
-		 * We dump:
-		 * static size
-		 *   - the size requested by user or the best one we can fit
-		 *     in to the sample max size
-		 * data
-		 *   - user stack dump data
-		 * dynamic size
-		 *   - the actual dumped size
-		 */
-
-		/* Static size. */
-		perf_output_put(handle, dump_size);
-
-		/* Data. */
-		sp = perf_user_stack_pointer(regs);
-		rem = __output_copy_user(handle, (void *) sp, dump_size);
-		dyn_size = dump_size - rem;
-
-		perf_output_skip(handle, rem);
-
-		/* Dynamic size. */
-		perf_output_put(handle, dyn_size);
-	}
-}
-
-static void
-perf_output_sample_utls(struct perf_output_handle *handle, u64 addr,
-			u64 dump_size, struct pt_regs *regs)
+perf_output_sample_udump(struct perf_output_handle *handle,
+			 unsigned long addr,
+			 u64 dump_size,
+			 struct pt_regs *regs)
 {
 	/* Case of a kernel thread, nothing to dump */
 	if (!regs) {
@@ -7054,7 +7017,7 @@ perf_output_sample_utls(struct perf_output_handle *handle, u64 addr,
 		 *   - the size requested by user or the best one we can fit
 		 *     in to the sample max size
 		 * data
-		 *   - user tls dump data
+		 *   - user dump data
 		 * dynamic size
 		 *   - the actual dumped size
 		 */
@@ -7507,9 +7470,16 @@ void perf_output_sample(struct perf_output_handle *handle,
 	}
 
 	if (sample_type & PERF_SAMPLE_STACK_USER) {
-		perf_output_sample_ustack(handle,
-					  data->stack_user_size,
-					  data->regs_user.regs);
+		struct pt_regs *regs = data->regs_user.regs;
+		unsigned long sp = 0;
+
+		if (regs)
+			sp = perf_user_stack_pointer(regs);
+
+		perf_output_sample_udump(handle,
+					 sp,
+					 data->stack_user_size,
+					 regs);
 	}
 
 	if (sample_type & PERF_SAMPLE_WEIGHT_TYPE)
@@ -7551,10 +7521,10 @@ void perf_output_sample(struct perf_output_handle *handle,
 		perf_output_put(handle, data->code_page_size);
 
 	if (sample_type & PERF_SAMPLE_TLS_USER) {
-		perf_output_sample_utls(handle,
-					data->tls_addr,
-					data->tls_user_size,
-					data->regs_user.regs);
+		perf_output_sample_udump(handle,
+					 data->tls_addr,
+					 data->tls_user_size,
+					 data->regs_user.regs);
 	}
 
 	if (sample_type & PERF_SAMPLE_AUX) {
