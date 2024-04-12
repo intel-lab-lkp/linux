@@ -292,6 +292,7 @@ int register_nvdimm_pmu(struct nvdimm_pmu *nd_pmu, struct platform_device *pdev)
 	 * device data in events functions.
 	 */
 	nd_pmu->dev = &pdev->dev;
+	nd_pmu->pmu.parent = &pdev->dev;
 
 	/* Fill attribute groups for the nvdimm pmu device */
 	nd_pmu->pmu.attr_groups[NVDIMM_PMU_FORMAT_ATTR] = &nvdimm_pmu_format_group;
