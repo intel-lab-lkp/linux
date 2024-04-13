@@ -175,7 +175,7 @@ enum {
 struct ad7192_chip_info {
 	unsigned int			chip_id;
 	const char			*name;
-	const struct iio_chan_spec	*channels;
+	struct iio_chan_spec		*channels;
 	u8				num_channels;
 	const struct iio_info		*info;
 };
@@ -186,6 +186,7 @@ struct ad7192_state {
 	struct regulator		*vref;
 	struct clk			*mclk;
 	u16				int_vref_mv;
+	u16				aincom_mv;
 	u32				fclk;
 	u32				mode;
 	u32				conf;
@@ -745,6 +746,9 @@ static int ad7192_read_raw(struct iio_dev *indio_dev,
 		/* Kelvin to Celsius */
 		if (chan->type == IIO_TEMP)
 			*val -= 273 * ad7192_get_temp_scale(unipolar);
+		else if (st->aincom_mv && chan->channel2 == -1)
+			*val += DIV_ROUND_CLOSEST_ULL((u64)st->aincom_mv * 1000000000,
+						      st->scale_avail[gain][1]);
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		*val = DIV_ROUND_CLOSEST(ad7192_get_f_adc(st), 1024);
@@ -982,7 +986,7 @@ static const struct iio_info ad7195_info = {
 #define AD7193_CHANNEL(_si, _channel1, _address) \
 	AD7193_DIFF_CHANNEL(_si, _channel1, -1, _address)
 
-static const struct iio_chan_spec ad7192_channels[] = {
+static struct iio_chan_spec ad7192_channels[] = {
 	AD719x_DIFF_CHANNEL(0, 1, 2, AD7192_CH_AIN1P_AIN2M),
 	AD719x_DIFF_CHANNEL(1, 3, 4, AD7192_CH_AIN3P_AIN4M),
 	AD719x_TEMP_CHANNEL(2, AD7192_CH_TEMP),
@@ -994,7 +998,7 @@ static const struct iio_chan_spec ad7192_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(8),
 };
 
-static const struct iio_chan_spec ad7193_channels[] = {
+static struct iio_chan_spec ad7193_channels[] = {
 	AD7193_DIFF_CHANNEL(0, 1, 2, AD7193_CH_AIN1P_AIN2M),
 	AD7193_DIFF_CHANNEL(1, 3, 4, AD7193_CH_AIN3P_AIN4M),
 	AD7193_DIFF_CHANNEL(2, 5, 6, AD7193_CH_AIN5P_AIN6M),
@@ -1048,11 +1052,27 @@ static void ad7192_reg_disable(void *reg)
 	regulator_disable(reg);
 }
 
+static int ad7192_config_channels(struct ad7192_state *st)
+{
+	struct iio_chan_spec *channels = st->chip_info->channels;
+	int i;
+
+	if (!st->aincom_mv)
+		for (i = 0; i < st->chip_info->num_channels; i++)
+			if (channels[i].channel2 == -1) {
+				channels[i].differential = 1;
+				channels[i].channel2 = 0;
+			}
+
+	return 0;
+}
+
 static int ad7192_probe(struct spi_device *spi)
 {
 	struct ad7192_state *st;
 	struct iio_dev *indio_dev;
-	int ret;
+	struct regulator *aincom;
+	int ret = 0;
 
 	if (!spi->irq) {
 		dev_err(&spi->dev, "no IRQ?\n");
@@ -1066,6 +1086,26 @@ static int ad7192_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	mutex_init(&st->lock);
+
+	aincom = devm_regulator_get_optional(&spi->dev, "aincom");
+	if (!IS_ERR(aincom)) {
+		ret = regulator_enable(aincom);
+		if (ret) {
+			dev_err(&spi->dev, "Failed to enable specified AINCOM supply\n");
+			return ret;
+		}
+
+		ret = devm_add_action_or_reset(&spi->dev, ad7192_reg_disable, aincom);
+		if (ret)
+			return ret;
+
+		ret = regulator_get_voltage(aincom);
+		if (ret < 0)
+			return dev_err_probe(&spi->dev, ret,
+					     "Device tree error, AINCOM voltage undefined\n");
+	}
+
+	st->aincom_mv = ret / 1000;
 
 	st->avdd = devm_regulator_get(&spi->dev, "avdd");
 	if (IS_ERR(st->avdd))
@@ -1113,6 +1153,11 @@ static int ad7192_probe(struct spi_device *spi)
 	st->int_vref_mv = ret / 1000;
 
 	st->chip_info = spi_get_device_match_data(spi);
+
+	ret = ad7192_config_channels(st);
+	if (ret)
+		return ret;
+
 	indio_dev->name = st->chip_info->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = st->chip_info->channels;
