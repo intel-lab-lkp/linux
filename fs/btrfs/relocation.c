@@ -1162,7 +1162,7 @@ int replace_file_extents(struct btrfs_trans_handle *trans,
 		key.offset -= btrfs_file_extent_offset(leaf, fi);
 		ref.action = BTRFS_ADD_DELAYED_REF;
 		ref.bytenr = new_bytenr;
-		ref.len = num_bytes;
+		ref.num_bytes = num_bytes;
 		ref.parent = parent;
 		ref.owning_root = root->root_key.objectid;
 		ref.ref_root = btrfs_header_owner(leaf);
@@ -1176,7 +1176,7 @@ int replace_file_extents(struct btrfs_trans_handle *trans,
 
 		ref.action = BTRFS_DROP_DELAYED_REF;
 		ref.bytenr = bytenr;
-		ref.len = num_bytes;
+		ref.num_bytes = num_bytes;
 		ref.parent = parent;
 		ref.owning_root = root->root_key.objectid;
 		ref.ref_root = btrfs_header_owner(leaf);
@@ -1392,7 +1392,7 @@ again:
 
 		ref.action = BTRFS_ADD_DELAYED_REF;
 		ref.bytenr = old_bytenr;
-		ref.len = blocksize;
+		ref.num_bytes = blocksize;
 		ref.parent = path->nodes[level]->start;
 		ref.owning_root = src->root_key.objectid;
 		ref.ref_root = src->root_key.objectid;
@@ -1405,7 +1405,7 @@ again:
 
 		ref.action = BTRFS_ADD_DELAYED_REF;
 		ref.bytenr = new_bytenr;
-		ref.len = blocksize;
+		ref.num_bytes = blocksize;
 		ref.parent = 0;
 		ref.owning_root = dest->root_key.objectid;
 		ref.ref_root = dest->root_key.objectid;
@@ -1419,7 +1419,7 @@ again:
 		/* We don't know the real owning_root, use 0. */
 		ref.action = BTRFS_DROP_DELAYED_REF;
 		ref.bytenr = new_bytenr;
-		ref.len = blocksize;
+		ref.num_bytes = blocksize;
 		ref.parent = path->nodes[level]->start;
 		ref.owning_root = 0;
 		ref.ref_root = src->root_key.objectid;
@@ -1433,7 +1433,7 @@ again:
 		/* We don't know the real owning_root, use 0. */
 		ref.action = BTRFS_DROP_DELAYED_REF;
 		ref.bytenr = old_bytenr;
-		ref.len = blocksize;
+		ref.num_bytes = blocksize;
 		ref.parent = 0;
 		ref.owning_root = 0;
 		ref.ref_root = dest->root_key.objectid;
@@ -2537,7 +2537,7 @@ static int do_relocation(struct btrfs_trans_handle *trans,
 			struct btrfs_ref ref = {
 				.action = BTRFS_ADD_DELAYED_REF,
 				.bytenr = node->eb->start,
-				.len = blocksize,
+				.num_bytes = blocksize,
 				.parent = upper->eb->start,
 				.owning_root = btrfs_header_owner(upper->eb),
 				.ref_root = btrfs_header_owner(upper->eb),
