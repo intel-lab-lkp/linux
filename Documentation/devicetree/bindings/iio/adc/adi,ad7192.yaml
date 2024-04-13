@@ -41,6 +41,14 @@ properties:
   interrupts:
     maxItems: 1
 
+  aincom-supply:
+    description: |
+      Optional AINCOM voltage supply. If present and it has a non-zero voltage,
+      the pseudo-differential channels are configured as single-ended channels
+      with the AINCOM voltage as offset. Otherwise, the pseudo-differential
+      channels are configured as differential channels: voltageX-voltage0, with
+      AINCOM as the negative input.
+
   dvdd-supply:
     description: DVdd voltage supply
 
@@ -117,6 +125,7 @@ examples:
             clock-names = "mclk";
             interrupts = <25 0x2>;
             interrupt-parent = <&gpio>;
+            aincom-supply = <&aincom>;
             dvdd-supply = <&dvdd>;
             avdd-supply = <&avdd>;
             vref-supply = <&vref>;
