@@ -384,6 +384,7 @@ MODULE_DEVICE_TABLE(i2c, tpm_tis_i2c_id);
 static const struct of_device_id of_tis_i2c_match[] = {
 	{ .compatible = "infineon,slb9673", },
 	{ .compatible = "nuvoton,npct75x", },
+	{ .compatible = "st,st33ktpm2xi2c", },
 	{ .compatible = "tcg,tpm-tis-i2c", },
 	{}
 };
