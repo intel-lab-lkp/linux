@@ -628,6 +628,9 @@ static int qcom_swrm_enumerate(struct sdw_bus *bus)
 			}
 		}
 
+		if (ctrl->version <= SWRM_VERSION_1_3_0)
+			ctrl->clock_stop_not_supported = true;
+
 		if (!found) {
 			qcom_swrm_set_slave_dev_num(bus, NULL, i);
 			sdw_slave_add(bus, &id, NULL);
