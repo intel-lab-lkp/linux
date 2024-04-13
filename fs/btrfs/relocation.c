@@ -1165,8 +1165,8 @@ int replace_file_extents(struct btrfs_trans_handle *trans,
 		ref.len = num_bytes;
 		ref.parent = parent;
 		ref.owning_root = root->root_key.objectid;
-		btrfs_init_data_ref(&ref, btrfs_header_owner(leaf),
-				    key.objectid, key.offset,
+		ref.ref_root = btrfs_header_owner(leaf);
+		btrfs_init_data_ref(&ref, key.objectid, key.offset,
 				    root->root_key.objectid, false);
 		ret = btrfs_inc_extent_ref(trans, &ref);
 		if (ret) {
@@ -1179,8 +1179,8 @@ int replace_file_extents(struct btrfs_trans_handle *trans,
 		ref.len = num_bytes;
 		ref.parent = parent;
 		ref.owning_root = root->root_key.objectid;
-		btrfs_init_data_ref(&ref, btrfs_header_owner(leaf),
-				    key.objectid, key.offset,
+		ref.ref_root = btrfs_header_owner(leaf);
+		btrfs_init_data_ref(&ref, key.objectid, key.offset,
 				    root->root_key.objectid, false);
 		ret = btrfs_free_extent(trans, &ref);
 		if (ret) {
@@ -1395,8 +1395,8 @@ again:
 		ref.len = blocksize;
 		ref.parent = path->nodes[level]->start;
 		ref.owning_root = src->root_key.objectid;
-		btrfs_init_tree_ref(&ref, level - 1, src->root_key.objectid,
-				    0, true);
+		ref.ref_root = src->root_key.objectid;
+		btrfs_init_tree_ref(&ref, level - 1, 0, true);
 		ret = btrfs_inc_extent_ref(trans, &ref);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
@@ -1408,8 +1408,8 @@ again:
 		ref.len = blocksize;
 		ref.parent = 0;
 		ref.owning_root = dest->root_key.objectid;
-		btrfs_init_tree_ref(&ref, level - 1, dest->root_key.objectid, 0,
-				    true);
+		ref.ref_root = dest->root_key.objectid;
+		btrfs_init_tree_ref(&ref, level - 1, 0, true);
 		ret = btrfs_inc_extent_ref(trans, &ref);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
@@ -1422,8 +1422,8 @@ again:
 		ref.len = blocksize;
 		ref.parent = path->nodes[level]->start;
 		ref.owning_root = 0;
-		btrfs_init_tree_ref(&ref, level - 1, src->root_key.objectid,
-				    0, true);
+		ref.ref_root = src->root_key.objectid;
+		btrfs_init_tree_ref(&ref, level - 1, 0, true);
 		ret = btrfs_free_extent(trans, &ref);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
@@ -1436,8 +1436,8 @@ again:
 		ref.len = blocksize;
 		ref.parent = 0;
 		ref.owning_root = 0;
-		btrfs_init_tree_ref(&ref, level - 1, dest->root_key.objectid,
-				    0, true);
+		ref.ref_root = dest->root_key.objectid;
+		btrfs_init_tree_ref(&ref, level - 1, 0, true);
 		ret = btrfs_free_extent(trans, &ref);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
@@ -2540,6 +2540,7 @@ static int do_relocation(struct btrfs_trans_handle *trans,
 				.len = blocksize,
 				.parent = upper->eb->start,
 				.owning_root = btrfs_header_owner(upper->eb),
+				.ref_root = btrfs_header_owner(upper->eb),
 			};
 
 			btrfs_set_node_blockptr(upper->eb, slot,
@@ -2549,7 +2550,6 @@ static int do_relocation(struct btrfs_trans_handle *trans,
 			btrfs_mark_buffer_dirty(trans, upper->eb);
 
 			btrfs_init_tree_ref(&ref, node->level,
-					    btrfs_header_owner(upper->eb),
 					    root->root_key.objectid, false);
 			ret = btrfs_inc_extent_ref(trans, &ref);
 			if (!ret)
