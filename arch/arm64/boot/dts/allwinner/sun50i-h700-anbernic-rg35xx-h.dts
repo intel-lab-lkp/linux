@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * Copyright (C) 2024 Andre Przywara <andre.przywara@arm.com>.
+ * Copyright (C) 2024 Ryan Walklin <ryan@testtoast.com>.
+ * Copyright (C) 2024 Chris Morgan <macroalpha82@gmail.com>.
+ */
+
+
+/dts-v1/;
+#include "sun50i-h700-anbernic-rg35xx-plus.dts"
+
+/ {
+    model = "Anbernic RG35XX H";
+    compatible = "anbernic,rg35xx-h", "allwinner,sun50i-h700";
+
+    gpio-keys: gpio-keys-thumb {
+       compatible = "gpio-keys";
+
+        keyThumbLeft {
+            label = "GPIO Thumb Left";
+            gpios = <&pio 4 8 GPIO_ACTIVE_LOW>; /* PE8 */
+            linux,input-type = <EV_KEY>;
+            linux,code = <BTN_THUMBL>;
+        };
+
+        keyThumbRight {
+            label = "GPIO Thumb Right";
+            gpios = <&pio 4 9 GPIO_ACTIVE_LOW>; /* PE9 */
+            linux,input-type = <EV_KEY>;
+            linux,code = <BTN_THUMBR>;
+        };
+    };
+};
+
+&usbotg {
+    dr_mode = "peripheral";
+    status = "okay";
+};
