@@ -448,6 +448,7 @@ struct ath12k_sta {
 	struct ath12k_wbm_tx_stats *wbm_tx_stats;
 	u32 bw_prev;
 	u32 peer_nss;
+	s8 rssi_beacon;
 };
 
 #define ATH12K_MIN_5G_FREQ 4150
@@ -631,6 +632,8 @@ struct ath12k {
 
 	u32 freq_low;
 	u32 freq_high;
+
+	struct completion fw_stats_complete;
 };
 
 struct ath12k_hw {
