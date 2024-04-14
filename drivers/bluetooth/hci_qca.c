@@ -1883,8 +1883,12 @@ static int qca_setup(struct hci_uart *hu)
 		soc_name = "wcn7850";
 		break;
 
+	case QCA_QCA6390:
+		soc_name = "QCA6390";
+		break;
+
 	default:
-		soc_name = "ROME/QCA6390";
+		soc_name = "ROME";
 	}
 	bt_dev_info(hdev, "setting up %s", soc_name);
 
@@ -2281,18 +2285,33 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 	if (!qcadev)
 		return -ENOMEM;
 
+#ifdef CONFIG_GPIOLIB
+	BT_INFO("%s: CONFIG_GPIOLIB is defined", __func__);
+#else
+	BT_INFO("%s: CONFIG_GPIOLIB is Undefined", __func__);
+#endif
+
 	qcadev->serdev_hu.serdev = serdev;
 	data = device_get_match_data(&serdev->dev);
 	serdev_device_set_drvdata(serdev, qcadev);
 	device_property_read_string(&serdev->dev, "firmware-name",
 					 &qcadev->firmware_name);
+	if (qcadev->firmware_name)
+		BT_INFO("%s: firmware-name is \"%s\"", __func__, qcadev->firmware_name);
+
 	device_property_read_u32(&serdev->dev, "max-speed",
 				 &qcadev->oper_speed);
+	BT_INFO("%s: max-speed(%d)", __func__, qcadev->oper_speed);
 	if (!qcadev->oper_speed)
 		BT_DBG("UART will pick default operating speed");
 
 	qcadev->bdaddr_property_broken = device_property_read_bool(&serdev->dev,
 			"qcom,local-bd-address-broken");
+	BT_INFO("%s: bdaddr_property_broken(%d)", __func__, (int)qcadev->bdaddr_property_broken);
+	if (data) {
+		BT_INFO("%s: soc_type(%d)", __func__, (int)data->soc_type);
+		BT_INFO("%s: capabilities(%#x)", __func__, data->capabilities);
+	}
 
 	if (data)
 		qcadev->btsoc_type = data->soc_type;
@@ -2320,11 +2339,29 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 			BT_ERR("Failed to init regulators:%d", err);
 			return err;
 		}
+		{
+			int i;
+
+			BT_INFO("%s: num_vregs(%d)", __func__, (int)data->num_vregs);
+			for (i = 0; i < data->num_vregs; i++)
+				BT_INFO("%s: %d regulator %s I(%duA) is %p",
+					__func__, i,
+					qcadev->bt_power->vreg_bulk[i].supply,
+					data->vregs[i].load_uA,
+					qcadev->bt_power->vreg_bulk[i].consumer);
+		}
+
 
 		qcadev->bt_power->vregs_on = false;
 
 		qcadev->bt_en = devm_gpiod_get_optional(&serdev->dev, "enable",
 					       GPIOD_OUT_LOW);
+		if (IS_ERR(qcadev->bt_en))
+			BT_ERR("%s: Get enable gpio ERROR", __func__);
+		else if (qcadev->bt_en)
+			BT_INFO("%s: Got enable gpio(%d) ", __func__, desc_to_gpio(qcadev->bt_en));
+		else
+			BT_INFO("%s: qcadev->bt_en(nullptr)", __func__);
 		if (IS_ERR(qcadev->bt_en) &&
 		    (data->soc_type == QCA_WCN6750 ||
 		     data->soc_type == QCA_WCN6855)) {
@@ -2333,7 +2370,14 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 		}
 
 		qcadev->sw_ctrl = devm_gpiod_get_optional(&serdev->dev, "swctrl",
-					       GPIOD_IN);
+							  GPIOD_IN);
+		if (IS_ERR(qcadev->sw_ctrl))
+			BT_ERR("%s: Get sw_ctrl gpio ERROR", __func__);
+		else if (qcadev->sw_ctrl)
+			BT_INFO("%s: Got sw_ctrl gpio(%d) ", __func__,
+				desc_to_gpio(qcadev->sw_ctrl));
+		else
+			BT_INFO("%s: qcadev->sw_ctrl(nullptr)", __func__);
 		if (IS_ERR(qcadev->sw_ctrl) &&
 		    (data->soc_type == QCA_WCN6750 ||
 		     data->soc_type == QCA_WCN6855 ||
@@ -2341,6 +2385,10 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 			dev_warn(&serdev->dev, "failed to acquire SW_CTRL gpio\n");
 
 		qcadev->susclk = devm_clk_get_optional(&serdev->dev, NULL);
+		if (IS_ERR(qcadev->susclk))
+			BT_ERR("%s: Get clock ERROR", __func__);
+		else
+			BT_INFO("%s: susclk(%p)", __func__, qcadev->susclk);
 		if (IS_ERR(qcadev->susclk)) {
 			dev_err(&serdev->dev, "failed to acquire clk\n");
 			return PTR_ERR(qcadev->susclk);
@@ -2355,13 +2403,24 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 
 	default:
 		qcadev->bt_en = devm_gpiod_get_optional(&serdev->dev, "enable",
-					       GPIOD_OUT_LOW);
+							GPIOD_OUT_LOW);
+		if (IS_ERR(qcadev->bt_en))
+			BT_ERR("%s: default Get enable gpio ERROR", __func__);
+		else if (qcadev->bt_en)
+			BT_INFO("%s: default Got enable gpio(%d) ",
+				__func__, desc_to_gpio(qcadev->bt_en));
+		else
+			BT_INFO("%s: default qcadev->bt_en(nullptr)", __func__);
 		if (IS_ERR(qcadev->bt_en)) {
 			dev_warn(&serdev->dev, "failed to acquire enable gpio\n");
 			power_ctrl_enabled = false;
 		}
 
 		qcadev->susclk = devm_clk_get_optional(&serdev->dev, NULL);
+		if (IS_ERR(qcadev->susclk))
+			BT_ERR("%s: default Get clock ERROR", __func__);
+		else
+			BT_INFO("%s: default susclk(%p)", __func__, qcadev->susclk);
 		if (IS_ERR(qcadev->susclk)) {
 			dev_warn(&serdev->dev, "failed to acquire clk\n");
 			return PTR_ERR(qcadev->susclk);
@@ -2384,6 +2443,7 @@ static int qca_serdev_probe(struct serdev_device *serdev)
 
 	hdev = qcadev->serdev_hu.hdev;
 
+	BT_INFO("%s: power_ctrl_enabled(%d)", __func__, (int)power_ctrl_enabled);
 	if (power_ctrl_enabled) {
 		set_bit(HCI_QUIRK_NON_PERSISTENT_SETUP, &hdev->quirks);
 		hdev->shutdown = qca_power_off;
@@ -2448,6 +2508,7 @@ static void qca_serdev_shutdown(struct device *dev)
 		    !test_bit(HCI_RUNNING, &hdev->flags))
 			return;
 
+		BT_INFO("%s: Start to send EDL_RESET_REQ", __func__);
 		serdev_device_write_flush(serdev);
 		ret = serdev_device_write_buf(serdev, ibs_wake_cmd,
 					      sizeof(ibs_wake_cmd));
