@@ -103,7 +103,7 @@ static struct generic_pm_domain *ti_sci_pd_xlate(
 		return ERR_PTR(-ENOENT);
 
 	genpd_to_ti_sci_pd(genpd_data->domains[idx])->exclusive =
-		genpdspec->args[1];
+		genpdspec->args[1] & TI_SCI_PD_EXCLUSIVE;
 
 	return genpd_data->domains[idx];
 }
@@ -161,6 +161,8 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 				break;
 
 			if (args.args_count >= 1 && args.np == dev->of_node) {
+				bool is_on = false;
+
 				if (args.args[0] > max_id) {
 					max_id = args.args[0];
 				} else {
@@ -189,7 +191,28 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 				pd->idx = args.args[0];
 				pd->parent = pd_provider;
 
-				pm_genpd_init(&pd->pd, NULL, true);
+				/*
+				 * If TI_SCI_PD_KEEP_BOOT_STATE is set and the
+				 * PD has been enabled by the bootloader, set
+				 * the PD to GENPD_FLAG_ALWAYS_ON. This will
+				 * make sure the PD stays enabled until a driver
+				 * takes over and clears the GENPD_FLAG_ALWAYS_ON
+				 * flag.
+				 */
+				if (args.args_count > 1 &&
+				    args.args[1] & TI_SCI_PD_KEEP_BOOT_STATE) {
+					/*
+					 * We ignore any error here, and in case
+					 * of error just assume the PD is off.
+					 */
+					pd_provider->ti_sci->ops.dev_ops.is_on(pd_provider->ti_sci,
+						pd->idx, NULL, &is_on);
+
+					if (is_on)
+						pd->pd.flags |= GENPD_FLAG_ALWAYS_ON;
+				}
+
+				pm_genpd_init(&pd->pd, NULL, !is_on);
 
 				list_add(&pd->node, &pd_provider->pd_list);
 			}
