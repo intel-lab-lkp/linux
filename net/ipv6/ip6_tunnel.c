@@ -1424,14 +1424,17 @@ ip6_tnl_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	u8 ipproto;
 	int ret;
 
-	if (!pskb_inet_may_pull(skb))
-		goto tx_err;
-
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
+		if (!pskb_network_may_pull(skb, sizeof(struct iphdr)))
+			goto tx_err;
+
 		ipproto = IPPROTO_IPIP;
 		break;
 	case htons(ETH_P_IPV6):
+		if (!pskb_network_may_pull(skb, sizeof(struct ipv6hdr)))
+			goto tx_err;
+
 		if (ip6_tnl_addr_conflict(t, ipv6_hdr(skb)))
 			goto tx_err;
 		ipproto = IPPROTO_IPV6;
