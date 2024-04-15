@@ -7,6 +7,7 @@
 #include <linux/crc32.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
+#include <linux/ethtool.h>
 #include <linux/firmware.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
@@ -19,6 +20,7 @@
 #include <linux/phy.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 
 #include "tn40_regs.h"
@@ -98,6 +100,33 @@ struct txd_fifo {
 	struct fifo m; /* The minimal set of variables used by all fifos */
 };
 
+struct rxf_fifo {
+	struct fifo m; /* The minimal set of variables used by all fifos */
+};
+
+struct rxd_fifo {
+	struct fifo m; /* The minimal set of variables used by all fifos */
+};
+
+struct bdx_page {
+	struct page *page;
+	u64 dma;
+};
+
+struct rx_map {
+	struct bdx_page bdx_page;
+	u64 dma;
+	u32 off;
+	u32 size; /* Mapped area (i.e. page) size */
+};
+
+struct rxdb {
+	int *stack;
+	struct rx_map *elems;
+	int nelem;
+	int top;
+};
+
 union bdx_dma_addr {
 	dma_addr_t dma;
 	struct sk_buff *skb;
@@ -121,10 +150,23 @@ struct txdb {
 	int size; /* Number of elements in the db */
 };
 
+struct bdx_rx_page_table {
+	int page_size;
+	int buf_size;
+	struct bdx_page bdx_pages;
+};
+
 struct bdx_priv {
 	struct net_device *ndev;
 	struct pci_dev *pdev;
 
+	struct napi_struct napi;
+	/* RX FIFOs: 1 for data (full) descs, and 2 for free descs */
+	struct rxd_fifo rxd_fifo0;
+	struct rxf_fifo rxf_fifo0;
+	struct rxdb *rxdb0; /* Rx dbs to store skb pointers */
+	int napi_stop;
+	struct vlan_group *vlgrp;
 	/* Tx FIFOs: 1 for data desc, 1 for empty (acks) desc */
 	struct txd_fifo txd_fifo0;
 	struct txf_fifo txf_fifo0;
@@ -153,6 +195,41 @@ struct bdx_priv {
 	u32 b0_len;
 	dma_addr_t b0_dma; /* Physical address of buffer */
 	char *b0_va; /* Virtual address of buffer */
+
+	struct bdx_rx_page_table rx_page_table;
+};
+
+/* RX FREE descriptor - 64bit */
+struct rxf_desc {
+	u32 info; /* Buffer Count + Info - described below */
+	u32 va_lo; /* VAdr[31:0] */
+	u32 va_hi; /* VAdr[63:32] */
+	u32 pa_lo; /* PAdr[31:0] */
+	u32 pa_hi; /* PAdr[63:32] */
+	u32 len; /* Buffer Length */
+};
+
+#define GET_RXD_BC(x) GET_BITS_SHIFT((x), 5, 0)
+#define GET_RXD_RXFQ(x) GET_BITS_SHIFT((x), 2, 8)
+#define GET_RXD_TO(x) GET_BITS_SHIFT((x), 1, 15)
+#define GET_RXD_TYPE(x) GET_BITS_SHIFT((x), 4, 16)
+#define GET_RXD_ERR(x) GET_BITS_SHIFT((x), 6, 21)
+#define GET_RXD_RXP(x) GET_BITS_SHIFT((x), 1, 27)
+#define GET_RXD_PKT_ID(x) GET_BITS_SHIFT((x), 3, 28)
+#define GET_RXD_VTAG(x) GET_BITS_SHIFT((x), 1, 31)
+#define GET_RXD_VLAN_ID(x) GET_BITS_SHIFT((x), 12, 0)
+#define GET_RXD_VLAN_TCI(x) GET_BITS_SHIFT((x), 16, 0)
+#define GET_RXD_CFI(x) GET_BITS_SHIFT((x), 1, 12)
+#define GET_RXD_PRIO(x) GET_BITS_SHIFT((x), 3, 13)
+
+struct rxd_desc {
+	u32 rxd_val1;
+	u16 len;
+	u16 rxd_vlan;
+	u32 va_lo;
+	u32 va_hi;
+	u32 rss_lo;
+	u32 rss_hash;
 };
 
 #define MAX_PBL (19)
