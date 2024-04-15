@@ -9,6 +9,8 @@
 #include <linux/pci.h>
 #include <linux/version.h>
 
+#include "tn40_regs.h"
+
 #define BDX_DRV_NAME "tn40xx"
 #define BDX_DRV_VERSION "0.3.6.17.2"
 
