@@ -372,6 +372,15 @@ static unsigned int update_balloon_stats(struct virtio_balloon *vb)
 	stall += events[ALLOCSTALL_MOVABLE];
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_ALLOC_STALL, stall);
 
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_SCAN_ASYNC,
+				pages_to_bytes(events[PGSCAN_KSWAPD]));
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_SCAN_DIRECT,
+				pages_to_bytes(events[PGSCAN_DIRECT]));
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_RECLAIM_ASYNC,
+				pages_to_bytes(events[PGSTEAL_KSWAPD]));
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_RECLAIM_DIRECT,
+				pages_to_bytes(events[PGSTEAL_DIRECT]));
+
 	return idx;
 }
 
