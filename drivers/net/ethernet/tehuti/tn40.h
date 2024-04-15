@@ -197,6 +197,9 @@ struct bdx_priv {
 	char *b0_va; /* Virtual address of buffer */
 
 	struct bdx_rx_page_table rx_page_table;
+
+	struct mii_bus *mdio;
+	struct phy_device *phydev;
 };
 
 /* RX FREE descriptor - 64bit */
@@ -282,5 +285,7 @@ static inline void write_reg(struct bdx_priv *priv, u32 reg, u32 val)
 {
 	writel(val, priv->regs + reg);
 }
+
+int bdx_mdiobus_init(struct bdx_priv *priv);
 
 #endif /* _TN40XX_H */

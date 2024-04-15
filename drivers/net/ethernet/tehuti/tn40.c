@@ -1285,18 +1285,26 @@ static void bdx_link_changed(struct bdx_priv *priv)
 		if (priv->link_loop_cnt++ > LINK_LOOP_MAX) {
 			/* MAC reset */
 			bdx_set_link_speed(priv, 0);
+			bdx_set_link_speed(priv, priv->phydev->speed);
 			priv->link_loop_cnt = 0;
 		}
 		write_reg(priv, 0x5150, 1000000);
 		return;
 	}
+
+	if (!netif_carrier_ok(priv->ndev)) {
+		netif_wake_queue(priv->ndev);
+		phy_print_status(priv->phydev);
+	}
 	priv->link = link;
+	netif_carrier_on(priv->ndev);
 }
 
 static inline void bdx_isr_extra(struct bdx_priv *priv, u32 isr)
 {
 	if (isr & (IR_LNKCHG0 | IR_LNKCHG1 | IR_TMR0)) {
 		netdev_dbg(priv->ndev, "isr = 0x%x\n", isr);
+		phy_mac_interrupt(priv->phydev);
 		bdx_link_changed(priv);
 	}
 }
@@ -1580,10 +1588,16 @@ static int bdx_close(struct net_device *ndev)
 
 	bdx_disable_interrupts(priv);
 	free_irq(priv->pdev->irq, priv->ndev);
+	phy_stop(priv->phydev);
+	phy_disconnect(priv->phydev);
 	bdx_sw_reset(priv);
 	destroy_rx_ring(priv);
 	destroy_tx_ring(priv);
 	return 0;
+}
+
+static void phy_handler(struct net_device *_dev)
+{
 }
 
 static int bdx_open(struct net_device *dev)
@@ -1592,11 +1606,24 @@ static int bdx_open(struct net_device *dev)
 	int ret;
 
 	bdx_sw_reset(priv);
+
+	ret = phy_connect_direct(priv->ndev, priv->phydev, phy_handler, PHY_INTERFACE_MODE_XAUI);
+	if (ret) {
+		netdev_err(dev, "failed to connect to phy %d\n", ret);
+		return ret;
+	}
+	phy_attached_info(priv->phydev);
+	phy_start(priv->phydev);
+
 	ret = bdx_start(priv);
 	if (ret) {
 		netdev_err(dev, "failed to start %d\n", ret);
+		phy_stop(priv->phydev);
+		phy_disconnect(priv->phydev);
 		return ret;
 	}
+	napi_enable(&priv->napi);
+	netif_start_queue(priv->ndev);
 	return 0;
 }
 
@@ -1872,6 +1899,11 @@ static int bdx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	priv->stats_flag = ((read_reg(priv, FPGA_VER) & 0xFFF) != 308);
 
+	ret = bdx_mdiobus_init(priv);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to find PHY.\n");
+		goto err_free_irq;
+	}
 	priv->isr_mask =
 	    IR_RX_FREE_0 | IR_LNKCHG0 | IR_PSE | IR_TMR0 | IR_RX_DESC_0 |
 	    IR_TX_FREE_0 | IR_TMR1;
