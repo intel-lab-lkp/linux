@@ -321,7 +321,7 @@ static unsigned int update_balloon_stats(struct virtio_balloon *vb)
 	unsigned long events[NR_VM_EVENT_ITEMS];
 	struct sysinfo i;
 	unsigned int idx = 0;
-	long available;
+	long available, stall = 0;
 	unsigned long caches;
 
 	all_vm_events(events);
@@ -354,6 +354,23 @@ static unsigned int update_balloon_stats(struct virtio_balloon *vb)
 				pages_to_bytes(caches));
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_OOM_KILL,
 				events[OOM_KILL]);
+
+	/* sum all the stall event */
+#ifdef CONFIG_ZONE_DMA
+	stall += events[ALLOCSTALL_DMA];
+#endif
+#ifdef CONFIG_ZONE_DMA32
+	stall += events[ALLOCSTALL_DMA32];
+#endif
+#ifdef CONFIG_HIGHMEM
+	stall += events[ALLOCSTALL_HIGH];
+#endif
+#ifdef CONFIG_ZONE_DEVICE
+	stall += events[ALLOCSTALL_DEVICE];
+#endif
+	stall += events[ALLOCSTALL_NORMAL];
+	stall += events[ALLOCSTALL_MOVABLE];
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_ALLOC_STALL, stall);
 
 	return idx;
 }
