@@ -557,13 +557,13 @@ vti6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct flowi fl;
 	int ret;
 
-	if (!pskb_inet_may_pull(skb))
-		goto tx_err;
-
 	memset(&fl, 0, sizeof(fl));
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IPV6):
+		if (!pskb_network_may_pull(skb, sizeof(struct ipv6hdr)))
+			goto tx_err;
+
 		if ((t->parms.proto != IPPROTO_IPV6 && t->parms.proto != 0) ||
 		    vti6_addr_conflict(t, ipv6_hdr(skb)))
 			goto tx_err;
@@ -572,6 +572,9 @@ vti6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 		xfrm_decode_session(dev_net(dev), skb, &fl, AF_INET6);
 		break;
 	case htons(ETH_P_IP):
+		if (!pskb_network_may_pull(skb, sizeof(struct iphdr)))
+			goto tx_err;
+
 		memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 		xfrm_decode_session(dev_net(dev), skb, &fl, AF_INET);
 		break;
