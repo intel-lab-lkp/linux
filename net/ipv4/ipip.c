@@ -278,11 +278,11 @@ static netdev_tx_t ipip_tunnel_xmit(struct sk_buff *skb,
 	const struct iphdr  *tiph = &tunnel->parms.iph;
 	u8 ipproto;
 
-	if (!pskb_inet_may_pull(skb))
-		goto tx_error;
-
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
+		if (!pskb_network_may_pull(skb, sizeof(struct iphdr)))
+			goto tx_error;
+
 		ipproto = IPPROTO_IPIP;
 		break;
 #if IS_ENABLED(CONFIG_MPLS)
