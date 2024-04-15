@@ -102,6 +102,9 @@ void __init mem_encrypt_setup_arch(void)
 	phys_addr_t total_mem = memblock_phys_mem_size();
 	unsigned long size;
 
+	if (cpu_feature_enabled(X86_FEATURE_SEV_SNP))
+		snp_rmptable_e820_fixup();
+
 	if (!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
 		return;
 

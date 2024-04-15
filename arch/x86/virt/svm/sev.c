@@ -164,6 +164,50 @@ bool snp_probe_rmptable_info(void)
 }
 
 /*
+ * Callback to do any RMP table fixups, needs to be called
+ * after e820__memory_setup(), after the e820 tables are
+ * setup/populated and before e820__reserve_resources(), before
+ * the e820 map has been converted to the standard Linux memory
+ * resources and e820 map is no longer used and modifying it
+ * has no effect.
+ */
+void __init snp_rmptable_e820_fixup(void)
+{
+	u64 pa;
+
+	/*
+	 * Handle cases where the RMP table placement in the BIOS is not 2M aligned
+	 * and then the kexec kernel could try to allocate from within that chunk
+	 * and that causes a fatal RMP fault. Check if RMP table start & end
+	 * physical range in e820_table is not aligned to 2MB and in that case use
+	 * e820__range_update() to map this range to reserved, e820__range_update()
+	 * nicely handles partial range update and also merges any consecutive
+	 * ranges of the same type.
+	 */
+	pa = probed_rmp_base;
+	if (!IS_ALIGNED(pa, PMD_SIZE)) {
+		pa = ALIGN_DOWN(pa, PMD_SIZE);
+		if (e820__mapped_any(pa, pa + PMD_SIZE, E820_TYPE_RAM)) {
+			pr_info("Reserving start of RMP table on a 2MB boundary [0x%016llx]\n", pa);
+			e820__range_update(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+			e820__range_update_kexec(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+			e820__range_update_firmware(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+		}
+	}
+
+	pa = probed_rmp_base + probed_rmp_size;
+	if (!IS_ALIGNED(pa, PMD_SIZE)) {
+		pa = ALIGN_DOWN(pa, PMD_SIZE);
+		if (e820__mapped_any(pa, pa + PMD_SIZE, E820_TYPE_RAM)) {
+			pr_info("Reserving end of RMP table on a 2MB boundary [0x%016llx]\n", pa);
+			e820__range_update(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+			e820__range_update_kexec(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+			e820__range_update_firmware(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+		}
+	}
+}
+
+/*
  * Do the necessary preparations which are verified by the firmware as
  * described in the SNP_INIT_EX firmware command description in the SNP
  * firmware ABI spec.
