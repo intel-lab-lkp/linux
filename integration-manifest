@@ -1,0 +1,30 @@
+drm drm-fixes 0bbac3facb5d6cc0171c45c9873a2dc96bea9680
+	Linux 6.9-rc4
+drm-misc drm-misc-fixes 4c08f01934ab67d1d283d5cbaa52b923abcfe4cd
+	drm/vmwgfx: Enable DMA mappings with SEV
+drm-intel drm-intel-fixes dcd8992e47f13afb5c11a61e8d9c141c35e23751
+	drm/i915/vrr: Disable VRR when using bigjoiner
+drm-xe drm-xe-fixes f76646c83f028c62853c23dac49204232e903597
+	drm/xe: Label RING_CONTEXT_CONTROL as masked
+drm drm-next 6e1f415e7129f7cd4c2394af83b35cdcdd40baf7
+	Merge tag 'drm-misc-next-2024-04-10' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 5d4e8ae6e57b025802aadf55a4775c55cceb75f1
+	nouveau/gsp: don't check devinit disable on GSP.
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes 4cece764965020c22cff7665b18a012006359095
+	Linux 6.9-rc1
+drm-misc drm-misc-next a57e191ebbaa0363dbf352cc37447c2230573e29
+	drm: fix DRM_DISPLAY_DP_HELPER dependencies, part 2
+drm-intel drm-intel-next 578ff98403cef6284430934616bc4debf3017d0f
+	drm/i915: Allow bigjoiner for MST
+drm-intel drm-intel-gt-next 2af231e1b8f374895d5d6db2517804c4848d3161
+	drm/i915/guc: Remove usage of the deprecated ida_simple_xx() API
+drm-xe drm-xe-next 48b05e3c3dbbac4275c3e94bed68a36bec6bddfe
+	drm/xe/pf: Add support to configure GuC SR-IOV policies
+drm-intel topic/core-for-CI 2a98d28ec03c27c1a64ded62ddd5049316d88b2a
+	iommu/vt-d: Fix WARN_ON in iommu probe path
+drm-xe topic/xe-for-CI ddb9be6feae2523fd4069482e44729e211f34219
+	drm/xe/huc: Define LNL HuC
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
