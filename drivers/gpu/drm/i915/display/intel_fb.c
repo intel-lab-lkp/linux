@@ -431,9 +431,19 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 	 * Separate AuxCCS and Flat CCS modifiers to be run only on platforms
 	 * where supported.
 	 */
-	if (intel_fb_is_ccs_modifier(md->modifier) &&
-	    HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
-		return false;
+	if (intel_fb_is_ccs_modifier(md->modifier)) {
+
+		/*
+		 * There is no need for CCS format modifiers for Xe2_HPD, as
+		 * there is no support of AuxCCS and the FlatCCS is configured
+		 * usign PAT index in the page table mappings
+		 */
+		if (DISPLAY_VER_FULL(i915) == IP_VER(14, 1))
+			return false;
+
+		if (HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
+			return false;
+	}
 
 	return true;
 }
