@@ -64,6 +64,7 @@ config RUST_PHYLIB_ABSTRACTIONS
         bool "Rust PHYLIB abstractions support"
         depends on RUST
         depends on PHYLIB=y
+        depends on FW_LOADER=y
         help
           Adds support needed for PHY drivers written in Rust. It provides
           a wrapper around the C phylib core.

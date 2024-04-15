@@ -9,6 +9,51 @@
 use crate::{bindings, error::*, prelude::*, str::CStr, types::Opaque};
 
 use core::marker::PhantomData;
+use core::ptr::{self, NonNull};
+
+/// A pointer to the kernel's `struct firmware`.
+///
+/// # Invariants
+///
+/// The pointer points at a `struct firmware`, and has ownership over the object.
+pub struct Firmware(NonNull<bindings::firmware>);
+
+impl Firmware {
+    /// Loads a firmware.
+    pub fn new(name: &CStr, dev: &Device) -> Result<Firmware> {
+        let phydev = dev.0.get();
+        let mut ptr: *mut bindings::firmware = ptr::null_mut();
+        let p_ptr: *mut *mut bindings::firmware = &mut ptr;
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Device`.
+        // So it's just an FFI call.
+        let ret = unsafe {
+            bindings::request_firmware(
+                p_ptr as *mut *const bindings::firmware,
+                name.as_char_ptr().cast(),
+                &mut (*phydev).mdio.dev,
+            )
+        };
+        let fw = NonNull::new(ptr).ok_or_else(|| Error::from_errno(ret))?;
+        // INVARIANT: We checked that the firmware was successfully loaded.
+        Ok(Firmware(fw))
+    }
+
+    /// Accesses the firmware contents.
+    pub fn data(&self) -> &[u8] {
+        // SAFETY: The type invariants guarantee that `self.0.as_ptr()` is valid.
+        // They also guarantee that `self.0.as_ptr().data` pointers to
+        // a valid memory region of size `self.0.as_ptr().size`.
+        unsafe { core::slice::from_raw_parts((*self.0.as_ptr()).data, (*self.0.as_ptr()).size) }
+    }
+}
+
+impl Drop for Firmware {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariants, `self.0.as_ptr()` is valid and
+        // we have ownership of the object so can free it.
+        unsafe { bindings::release_firmware(self.0.as_ptr()) }
+    }
+}
 
 /// PHY state machine states.
 ///
