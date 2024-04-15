@@ -203,6 +203,43 @@ impl Device {
         })
     }
 
+    /// Reads a given C45 PHY register.
+    /// This function reads a hardware register and updates the stats so takes `&mut self`.
+    pub fn c45_read(&mut self, devad: u8, regnum: u16) -> Result<u16> {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        let ret = unsafe {
+            bindings::mdiobus_c45_read(
+                (*phydev).mdio.bus,
+                (*phydev).mdio.addr,
+                devad as i32,
+                regnum.into(),
+            )
+        };
+        if ret < 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(ret as u16)
+        }
+    }
+
+    /// Writes a given C45 PHY register.
+    pub fn c45_write(&mut self, devad: u8, regnum: u16, val: u16) -> Result {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        to_result(unsafe {
+            bindings::mdiobus_c45_write(
+                (*phydev).mdio.bus,
+                (*phydev).mdio.addr,
+                devad as i32,
+                regnum.into(),
+                val,
+            )
+        })
+    }
+
     /// Reads a paged register.
     pub fn read_paged(&mut self, page: u16, regnum: u16) -> Result<u16> {
         let phydev = self.0.get();
@@ -270,6 +307,19 @@ impl Device {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
         let ret = unsafe { bindings::genphy_read_status(phydev) };
+        if ret < 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(ret as u16)
+        }
+    }
+
+    /// Checks the link status and updates current link state via C45 registers.
+    pub fn genphy_c45_read_status(&mut self) -> Result<u16> {
+        let phydev = self.0.get();
+        // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
+        // So it's just an FFI call.
+        let ret = unsafe { bindings::genphy_c45_read_status(phydev) };
         if ret < 0 {
             Err(Error::from_errno(ret))
         } else {
