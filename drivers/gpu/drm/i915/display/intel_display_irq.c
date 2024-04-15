@@ -852,6 +852,13 @@ gen8_de_misc_irq_handler(struct drm_i915_private *dev_priv, u32 iir)
 {
 	bool found = false;
 
+	if (iir & GEN8_DE_RM_TIMEOUT) {
+		u32 val = intel_uncore_read(&dev_priv->uncore,
+				RMTIMEOUTREG_CAPTURE);
+		drm_warn(&dev_priv->drm, "Register access timeout for offset = 0x%x\n", val);
+		found = true;
+	}
+
 	if (DISPLAY_VER(dev_priv) >= 14) {
 		if (iir & (XELPDP_PMDEMAND_RSP |
 			   XELPDP_PMDEMAND_RSPTOUT_ERR)) {
@@ -1666,6 +1673,9 @@ void gen8_de_irq_postinstall(struct drm_i915_private *dev_priv)
 		if (intel_bios_is_dsi_present(dev_priv, &port))
 			de_port_masked |= DSI0_TE | DSI1_TE;
 	}
+
+	if (DISPLAY_VER(dev_priv) >= 14)
+		de_misc_masked |= GEN8_DE_RM_TIMEOUT;
 
 	de_pipe_enables = de_pipe_masked |
 		GEN8_PIPE_VBLANK |
