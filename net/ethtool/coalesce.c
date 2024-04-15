@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <linux/dim.h>
 #include "netlink.h"
 #include "common.h"
 
@@ -51,6 +52,10 @@ __CHECK_SUPPORTED_OFFSET(COALESCE_RX_MAX_FRAMES_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_TX_USECS_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_TX_MAX_FRAMES_HIGH);
 __CHECK_SUPPORTED_OFFSET(COALESCE_RATE_SAMPLE_INTERVAL);
+__CHECK_SUPPORTED_OFFSET(COALESCE_RX_EQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_RX_CQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_TX_EQE_PROFILE);
+__CHECK_SUPPORTED_OFFSET(COALESCE_TX_CQE_PROFILE);
 
 const struct nla_policy ethnl_coalesce_get_policy[] = {
 	[ETHTOOL_A_COALESCE_HEADER]		=
@@ -82,6 +87,14 @@ static int coalesce_prepare_data(const struct ethnl_req_info *req_base,
 static int coalesce_reply_size(const struct ethnl_req_info *req_base,
 			       const struct ethnl_reply_data *reply_base)
 {
+	int modersz = nla_total_size(0) + /* _MODERATIONS_MODERATION, nest */
+		      nla_total_size(sizeof(u32)) + /* _MODERATION_USEC */
+		      nla_total_size(sizeof(u32)) + /* _MODERATION_PKTS */
+		      nla_total_size(sizeof(u32));  /* _MODERATION_COMPS */
+
+	int total_modersz = nla_total_size(0) +  /* _{R,T}X_{E,C}QE_PROFILE, nest */
+			modersz * NET_DIM_PARAMS_NUM_PROFILES;
+
 	return nla_total_size(sizeof(u32)) +	/* _RX_USECS */
 	       nla_total_size(sizeof(u32)) +	/* _RX_MAX_FRAMES */
 	       nla_total_size(sizeof(u32)) +	/* _RX_USECS_IRQ */
@@ -108,7 +121,8 @@ static int coalesce_reply_size(const struct ethnl_req_info *req_base,
 	       nla_total_size(sizeof(u8)) +	/* _USE_CQE_MODE_RX */
 	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_MAX_BYTES */
 	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_MAX_FRAMES */
-	       nla_total_size(sizeof(u32));	/* _TX_AGGR_TIME_USECS */
+	       nla_total_size(sizeof(u32)) +	/* _TX_AGGR_TIME_USECS */
+	       total_modersz * 4;		/* _{R,T}X_{E,C}QE_PROFILE */
 }
 
 static bool coalesce_put_u32(struct sk_buff *skb, u16 attr_type, u32 val,
@@ -127,6 +141,62 @@ static bool coalesce_put_bool(struct sk_buff *skb, u16 attr_type, u32 val,
 	return nla_put_u8(skb, attr_type, !!val);
 }
 
+#if IS_ENABLED(CONFIG_DIMLIB)
+/**
+ * coalesce_put_profile - fill reply with a nla nest with four child nla nests.
+ * @skb: socket buffer the message is stored in
+ * @attr_type: nest attr type ETHTOOL_A_COALESCE_*X_*QE_PROFILE
+ * @profile: data passed to userspace
+ * @supported_params: modifiable parameters supported by the driver
+ *
+ * Put a dim profile nest attribute. Refer to ETHTOOL_A_MODERATIONS_MODERATION.
+ *
+ * Returns false to indicate successful placement or no placement, and
+ * returns true to pass the -EMSGSIZE error to the wrapper.
+ */
+static bool coalesce_put_profile(struct sk_buff *skb, u16 attr_type,
+				 const struct dim_cq_moder *profile,
+				 u32 supported_params)
+{
+	struct nlattr *profile_attr, *moder_attr;
+	bool emsg = !!-EMSGSIZE;
+	int i;
+
+	if (!profile)
+		return false;
+
+	if (!(supported_params & attr_to_mask(attr_type)))
+		return false;
+
+	profile_attr = nla_nest_start(skb, attr_type);
+	if (!profile_attr)
+		return emsg;
+
+	for (i = 0; i < NET_DIM_PARAMS_NUM_PROFILES; i++) {
+		moder_attr = nla_nest_start(skb, ETHTOOL_A_MODERATIONS_MODERATION);
+		if (!moder_attr)
+			goto nla_cancel_profile;
+
+		if (nla_put_u32(skb, ETHTOOL_A_MODERATION_USEC, profile[i].usec) ||
+		    nla_put_u32(skb, ETHTOOL_A_MODERATION_PKTS, profile[i].pkts) ||
+		    nla_put_u32(skb, ETHTOOL_A_MODERATION_COMPS, profile[i].comps))
+			goto nla_cancel_moder;
+
+		nla_nest_end(skb, moder_attr);
+	}
+
+	nla_nest_end(skb, profile_attr);
+
+	return 0;
+
+nla_cancel_moder:
+	nla_nest_cancel(skb, moder_attr);
+nla_cancel_profile:
+	nla_nest_cancel(skb, profile_attr);
+	return emsg;
+}
+#endif
+
 static int coalesce_fill_reply(struct sk_buff *skb,
 			       const struct ethnl_req_info *req_base,
 			       const struct ethnl_reply_data *reply_base)
@@ -134,6 +204,9 @@ static int coalesce_fill_reply(struct sk_buff *skb,
 	const struct coalesce_reply_data *data = COALESCE_REPDATA(reply_base);
 	const struct kernel_ethtool_coalesce *kcoal = &data->kernel_coalesce;
 	const struct ethtool_coalesce *coal = &data->coalesce;
+#if IS_ENABLED(CONFIG_DIMLIB)
+	struct net_device *dev = req_base->dev;
+#endif
 	u32 supported = data->supported_params;
 
 	if (coalesce_put_u32(skb, ETHTOOL_A_COALESCE_RX_USECS,
@@ -192,6 +265,21 @@ static int coalesce_fill_reply(struct sk_buff *skb,
 			     kcoal->tx_aggr_time_usecs, supported))
 		return -EMSGSIZE;
 
+#if IS_ENABLED(CONFIG_DIMLIB)
+	if (!(dev->moderation->flags & (NETDEV_PROFILE_USEC | NETDEV_PROFILE_PKTS |
+					NETDEV_PROFILE_COMPS)))
+		return 0;
+
+	if (coalesce_put_profile(skb, ETHTOOL_A_COALESCE_RX_EQE_PROFILE,
+				 dev->moderation->rx_eqe_profile, supported) ||
+	    coalesce_put_profile(skb, ETHTOOL_A_COALESCE_RX_CQE_PROFILE,
+				 dev->moderation->rx_cqe_profile, supported) ||
+	    coalesce_put_profile(skb, ETHTOOL_A_COALESCE_TX_EQE_PROFILE,
+				 dev->moderation->tx_eqe_profile, supported) ||
+	    coalesce_put_profile(skb, ETHTOOL_A_COALESCE_TX_CQE_PROFILE,
+				 dev->moderation->tx_cqe_profile, supported))
+		return -EMSGSIZE;
+#endif
 	return 0;
 }
 
@@ -227,7 +315,19 @@ const struct nla_policy ethnl_coalesce_set_policy[] = {
 	[ETHTOOL_A_COALESCE_TX_AGGR_MAX_BYTES] = { .type = NLA_U32 },
 	[ETHTOOL_A_COALESCE_TX_AGGR_MAX_FRAMES] = { .type = NLA_U32 },
 	[ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS] = { .type = NLA_U32 },
+	[ETHTOOL_A_COALESCE_RX_EQE_PROFILE]     = { .type = NLA_NESTED },
+	[ETHTOOL_A_COALESCE_RX_CQE_PROFILE]     = { .type = NLA_NESTED },
+	[ETHTOOL_A_COALESCE_TX_EQE_PROFILE]     = { .type = NLA_NESTED },
+	[ETHTOOL_A_COALESCE_TX_CQE_PROFILE]     = { .type = NLA_NESTED },
 };
+
+#if IS_ENABLED(CONFIG_DIMLIB)
+static const struct nla_policy coalesce_set_profile_policy[] = {
+	[ETHTOOL_A_MODERATION_USEC]	= {.type = NLA_U32},
+	[ETHTOOL_A_MODERATION_PKTS]	= {.type = NLA_U32},
+	[ETHTOOL_A_MODERATION_COMPS]	= {.type = NLA_U32},
+};
+#endif
 
 static int
 ethnl_set_coalesce_validate(struct ethnl_req_info *req_info,
@@ -252,6 +352,76 @@ ethnl_set_coalesce_validate(struct ethnl_req_info *req_info,
 
 	return 1;
 }
+
+#if IS_ENABLED(CONFIG_DIMLIB)
+/**
+ * ethnl_update_profile - get a nla nest with four child nla nests from userspace.
+ * @dev: netdevice to update the profile
+ * @dst: data get from the driver and modified by ethnl_update_profile.
+ * @nests: nest attr ETHTOOL_A_COALESCE_*X_*QE_PROFILE to set driver's profile.
+ * @extack: Netlink extended ack
+ *
+ * Layout of nests:
+ *   Nested ETHTOOL_A_COALESCE_*X_*QE_PROFILE attr
+ *     Nested ETHTOOL_A_MODERATIONS_MODERATION attr
+ *       ETHTOOL_A_MODERATION_USEC attr
+ *       ETHTOOL_A_MODERATION_PKTS attr
+ *       ETHTOOL_A_MODERATION_COMPS attr
+ *     ...
+ *     Nested ETHTOOL_A_MODERATIONS_MODERATION attr
+ *       ETHTOOL_A_MODERATION_USEC attr
+ *       ETHTOOL_A_MODERATION_PKTS attr
+ *       ETHTOOL_A_MODERATION_COMPS attr
+ *
+ * Returns 0 on success or a negative error code.
+ */
+static inline int ethnl_update_profile(struct net_device *dev,
+				       struct dim_cq_moder *dst,
+				       const struct nlattr *nests,
+				       struct netlink_ext_ack *extack)
+{
+	struct nlattr *tb_moder[ARRAY_SIZE(coalesce_set_profile_policy)];
+	struct dim_cq_moder profile[NET_DIM_PARAMS_NUM_PROFILES];
+	struct netdev_profile_moder *moder = dev->moderation;
+	struct nlattr *nest;
+	int ret, rem, i = 0;
+
+	if (!nests)
+		return 0;
+
+	if (!dst)
+		return -EOPNOTSUPP;
+
+	nla_for_each_nested_type(nest, ETHTOOL_A_MODERATIONS_MODERATION, nests, rem) {
+		ret = nla_parse_nested(tb_moder,
+				       ARRAY_SIZE(coalesce_set_profile_policy) - 1,
+				       nest, coalesce_set_profile_policy,
+				       extack);
+		if (ret)
+			return ret;
+
+		if (NL_REQ_ATTR_CHECK(extack, nest, tb_moder, ETHTOOL_A_MODERATION_USEC) ||
+		    NL_REQ_ATTR_CHECK(extack, nest, tb_moder, ETHTOOL_A_MODERATION_PKTS) ||
+		    NL_REQ_ATTR_CHECK(extack, nest, tb_moder, ETHTOOL_A_MODERATION_COMPS))
+			return -EINVAL;
+
+		profile[i].usec = nla_get_u32(tb_moder[ETHTOOL_A_MODERATION_USEC]);
+		profile[i].pkts = nla_get_u32(tb_moder[ETHTOOL_A_MODERATION_PKTS]);
+		profile[i].comps = nla_get_u32(tb_moder[ETHTOOL_A_MODERATION_COMPS]);
+
+		if ((dst[i].usec != profile[i].usec && !(moder->flags & NETDEV_PROFILE_USEC)) ||
+		    (dst[i].pkts != profile[i].pkts && !(moder->flags & NETDEV_PROFILE_PKTS)) ||
+		    (dst[i].comps != profile[i].comps && !(moder->flags & NETDEV_PROFILE_COMPS)))
+			return -EOPNOTSUPP;
+
+		i++;
+	}
+
+	memcpy(dst, profile, sizeof(profile));
+
+	return 0;
+}
+#endif
 
 static int
 __ethnl_set_coalesce(struct ethnl_req_info *req_info, struct genl_info *info,
@@ -317,6 +487,35 @@ __ethnl_set_coalesce(struct ethnl_req_info *req_info, struct genl_info *info,
 	ethnl_update_u32(&kernel_coalesce.tx_aggr_time_usecs,
 			 tb[ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS], &mod);
 
+#if IS_ENABLED(CONFIG_DIMLIB)
+	ret = ethnl_update_profile(dev, dev->moderation->rx_eqe_profile,
+				   tb[ETHTOOL_A_COALESCE_RX_EQE_PROFILE],
+				   info->extack);
+	if (ret < 0)
+		return ret;
+	ret = ethnl_update_profile(dev, dev->moderation->rx_cqe_profile,
+				   tb[ETHTOOL_A_COALESCE_RX_CQE_PROFILE],
+				   info->extack);
+	if (ret < 0)
+		return ret;
+	ret = ethnl_update_profile(dev, dev->moderation->tx_eqe_profile,
+				   tb[ETHTOOL_A_COALESCE_TX_EQE_PROFILE],
+				   info->extack);
+	if (ret < 0)
+		return ret;
+	ret = ethnl_update_profile(dev, dev->moderation->tx_cqe_profile,
+				   tb[ETHTOOL_A_COALESCE_TX_CQE_PROFILE],
+				   info->extack);
+	if (ret < 0)
+		return ret;
+#else
+	if (tb[ETHTOOL_A_COALESCE_RX_EQE_PROFILE] ||
+	    tb[ETHTOOL_A_COALESCE_RX_CQE_PROFILE] ||
+	    tb[ETHTOOL_A_COALESCE_TX_EQE_PROFILE] ||
+	    tb[ETHTOOL_A_COALESCE_TX_CQE_PROFILE])
+		return -EOPNOTSUPP;
+
+#endif
 	/* Update operation modes */
 	ethnl_update_bool32(&coalesce.use_adaptive_rx_coalesce,
 			    tb[ETHTOOL_A_COALESCE_USE_ADAPTIVE_RX], &mod_mode);
