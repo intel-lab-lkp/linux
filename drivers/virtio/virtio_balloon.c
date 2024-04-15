@@ -352,6 +352,8 @@ static unsigned int update_balloon_stats(struct virtio_balloon *vb)
 				pages_to_bytes(available));
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_CACHES,
 				pages_to_bytes(caches));
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_OOM_KILL,
+				events[OOM_KILL]);
 
 	return idx;
 }
