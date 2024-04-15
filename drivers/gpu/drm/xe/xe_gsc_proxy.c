@@ -446,6 +446,15 @@ int xe_gsc_proxy_init(struct xe_gsc *gsc)
 
 	mutex_init(&gsc->proxy.mutex);
 
+	/*
+	 * FIXME: mei support for LNL hasn't been merged yet so we can't use the
+	 * GSC proxy component yet.
+	 */
+	if (xe->info.platform == XE_LUNARLAKE) {
+		xe_gt_info(gt, "skipping GSC proxy init due to missing LNL mei support\n");
+		return -ENODEV;
+	}
+
 	if (!IS_ENABLED(CONFIG_INTEL_MEI_GSC_PROXY)) {
 		xe_gt_info(gt, "can't init GSC proxy due to missing mei component\n");
 		return -ENODEV;
