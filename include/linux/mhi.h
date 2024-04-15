@@ -816,4 +816,11 @@ int mhi_queue_skb(struct mhi_device *mhi_dev, enum dma_data_direction dir,
  */
 bool mhi_queue_is_full(struct mhi_device *mhi_dev, enum dma_data_direction dir);
 
+/**
+ * mhi_get_channel_doorbell - read channel doorbell offset register to get
+ *                            channel doorbell address
+ * @mhi_cntrl: MHI controller
+ * @chdb_offset: channel doorbell address
+ */
+int mhi_get_channel_doorbell(struct mhi_controller *mhi_cntrl, u32 *chdb_offset);
 #endif /* _MHI_H_ */
