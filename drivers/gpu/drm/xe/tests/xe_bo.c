@@ -6,6 +6,8 @@
 #include <kunit/test.h>
 #include <kunit/visibility.h>
 
+#include <uapi/linux/sysinfo.h>
+
 #include "tests/xe_bo_test.h"
 #include "tests/xe_pci_test.h"
 #include "tests/xe_test.h"
@@ -350,3 +352,119 @@ void xe_bo_evict_kunit(struct kunit *test)
 	xe_call_for_each_device(evict_test_run_device);
 }
 EXPORT_SYMBOL_IF_KUNIT(xe_bo_evict_kunit);
+
+struct xe_bo_link {
+	struct list_head link;
+	struct xe_bo *bo;
+};
+
+#define XE_BO_SHRINK_SIZE ((unsigned long)SZ_64M)
+
+/*
+ * Try to create system bos corresponding to twice the amount
+ * of available system memory to test shrinker functionality.
+ * If no swap space is available to accommodate the
+ * memory overcommit, mark bos purgeable.
+ */
+static int shrink_test_run_device(struct xe_device *xe)
+{
+	struct kunit *test = xe_cur_kunit();
+	LIST_HEAD(bos);
+	struct xe_bo_link *link, *next;
+	struct sysinfo si;
+	size_t total, alloced;
+	unsigned int interrupted = 0, successful = 0;
+
+	si_meminfo(&si);
+	total = si.freeram * si.mem_unit;
+
+	kunit_info(test, "Free ram is %lu bytes. Will allocate twice of that.\n",
+		   total);
+
+	total <<= 1;
+	for (alloced = 0; alloced < total ; alloced += XE_BO_SHRINK_SIZE) {
+		struct xe_bo *bo;
+		unsigned int mem_type;
+
+		link = kzalloc(sizeof(*link), GFP_KERNEL);
+		if (!link) {
+			KUNIT_FAIL(test, "Unexpeced link allocation failure\n");
+			break;
+		}
+
+		INIT_LIST_HEAD(&link->link);
+
+		/* We can create bos using WC caching here. But it is slower. */
+		bo = xe_bo_create_user(xe, NULL, NULL, XE_BO_SHRINK_SIZE,
+				       DRM_XE_GEM_CPU_CACHING_WB,
+				       ttm_bo_type_device,
+				       XE_BO_FLAG_SYSTEM);
+		if (IS_ERR(bo)) {
+			if (bo != ERR_PTR(-ENOMEM) && bo != ERR_PTR(-ENOSPC) &&
+			    bo != ERR_PTR(-EINTR) && bo != ERR_PTR(-ERESTARTSYS))
+				KUNIT_FAIL(test, "Error creating bo: %pe\n", bo);
+			kfree(link);
+			break;
+		}
+		link->bo = bo;
+		list_add_tail(&link->link, &bos);
+		xe_bo_lock(bo, false);
+
+		/*
+		 * If we're low on swap entries, we can't shrink unless the bo
+		 * is marked purgeable.
+		 */
+		if (get_nr_swap_pages() < (XE_BO_SHRINK_SIZE >> PAGE_SHIFT) * 128) {
+			struct xe_ttm_tt *xe_tt =
+				container_of(bo->ttm.ttm, typeof(*xe_tt), ttm);
+			long num_pages = xe_tt->ttm.num_pages;
+
+			xe_tt->purgeable = true;
+			xe_shrinker_mod_pages(xe->mem.shrinker, -num_pages,
+					      num_pages);
+		}
+
+		mem_type = bo->ttm.resource->mem_type;
+		xe_bo_unlock(bo);
+		if (mem_type != XE_PL_TT)
+			KUNIT_FAIL(test, "Bo in incorrect memory type: %u\n",
+				   bo->ttm.resource->mem_type);
+		cond_resched();
+		if (signal_pending(current))
+			break;
+	}
+
+	/* Read back and destroy bos */
+	list_for_each_entry_safe_reverse(link, next, &bos, link) {
+		static struct ttm_operation_ctx ctx = {.interruptible = true};
+		struct xe_bo *bo = link->bo;
+		int ret;
+
+		if (!signal_pending(current)) {
+			xe_bo_lock(bo, NULL);
+			ret = ttm_bo_validate(&bo->ttm, &tt_placement, &ctx);
+			xe_bo_unlock(bo);
+			if (ret && ret != -EINTR)
+				KUNIT_FAIL(test, "Validation failed: %pe\n",
+					   ERR_PTR(ret));
+			else if (ret)
+				interrupted++;
+			else
+				successful++;
+		}
+		xe_bo_put(link->bo);
+		list_del(&link->link);
+		kfree(link);
+		cond_resched();
+	}
+	kunit_info(test, "Readbacks interrupted: %u successful: %u\n",
+		   interrupted, successful);
+
+	return 0;
+}
+
+void xe_bo_shrink_kunit(struct kunit *test)
+{
+	xe_call_for_each_device(shrink_test_run_device);
+}
+EXPORT_SYMBOL_IF_KUNIT(xe_bo_shrink_kunit);

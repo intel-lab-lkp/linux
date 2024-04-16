@@ -41,6 +41,9 @@ struct xe_ttm_lru_walk {
 	struct drm_exec *exec;
 };
 
+long xe_ttm_bo_try_shrink(struct xe_ttm_lru_walk *walk, struct ttm_buffer_object *bo,
+			  bool purge, bool writeback);
+
 long xe_ttm_lru_walk_for_evict(struct xe_ttm_lru_walk *walk, struct ttm_device *bdev,
 			       struct ttm_resource_manager *man, unsigned int mem_type,
 			       long target);
