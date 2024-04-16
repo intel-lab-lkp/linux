@@ -132,6 +132,7 @@ MODULE_PARM_DESC(use_mcq_mode, "Control MCQ mode for controllers starting from U
 } while (0)
 
 #define SERIALIZE_HOST_IRQSAVE(hba) guard(spinlock_irqsave)(hba->host->host_lock)
+#define SERIALIZE_HOST(hba) guard(spinlock)(hba->host->host_lock)
 
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		     const char *prefix)
@@ -2291,11 +2292,11 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag,
 		struct utp_transfer_req_desc *src = lrbp->utr_descriptor_ptr;
 		struct utp_transfer_req_desc *dest;
 
-		spin_lock(&hwq->sq_lock);
-		dest = hwq->sqe_base_addr + hwq->sq_tail_slot;
-		memcpy(dest, src, utrd_size);
-		ufshcd_inc_sq_tail(hwq);
-		spin_unlock(&hwq->sq_lock);
+		scoped_guard(spinlock, &hwq->sq_lock) {
+			dest = hwq->sqe_base_addr + hwq->sq_tail_slot;
+			memcpy(dest, src, utrd_size);
+			ufshcd_inc_sq_tail(hwq);
+		}
 	} else {
 		scoped_guard(spinlock_irqsave, &hba->outstanding_lock) {
 			if (hba->vops && hba->vops->setup_xfer_req)
@@ -5430,7 +5431,8 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 {
 	irqreturn_t retval = IRQ_NONE;
 
-	spin_lock(hba->host->host_lock);
+	SERIALIZE_HOST(hba);
+
 	if (ufshcd_is_auto_hibern8_error(hba, intr_status))
 		hba->errors |= (UFSHCD_UIC_HIBERN8_MASK & intr_status);
 
@@ -5454,7 +5456,6 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 	if (retval == IRQ_HANDLED)
 		ufshcd_add_uic_command_trace(hba, hba->active_uic_cmd,
 					     UFS_CMD_COMP);
-	spin_unlock(hba->host->host_lock);
 	return retval;
 }
 
@@ -6770,7 +6771,8 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba, u32 intr_status)
 	bool queue_eh_work = false;
 	irqreturn_t retval = IRQ_NONE;
 
-	spin_lock(hba->host->host_lock);
+	SERIALIZE_HOST(hba);
+
 	hba->errors |= UFSHCD_ERROR_MASK & intr_status;
 
 	if (hba->errors & INT_FATAL_ERRORS) {
@@ -6829,7 +6831,7 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba, u32 intr_status)
 	 */
 	hba->errors = 0;
 	hba->uic_error = 0;
-	spin_unlock(hba->host->host_lock);
+
 	return retval;
 }
 
