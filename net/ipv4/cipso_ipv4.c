@@ -2012,12 +2012,21 @@ static int cipso_v4_delopt(struct ip_options_rcu __rcu **opt_ptr)
 		 * from there we can determine the new total option length */
 		iter = 0;
 		optlen_new = 0;
-		while (iter < opt->opt.optlen)
-			if (opt->opt.__data[iter] != IPOPT_NOP) {
-				iter += opt->opt.__data[iter + 1];
-				optlen_new = iter;
-			} else
+		while (iter < opt->opt.optlen) {
+			if (opt->opt.__data[iter] == IPOPT_END) {
+				break;
+			} else if (opt->opt.__data[iter] == IPOPT_NOP) {
 				iter++;
+			} else {
+				if (WARN_ON(opt->opt.__data[iter + 1] < 2))
+					iter += 2;
+				else
+					iter += opt->opt.__data[iter + 1];
+				optlen_new = iter;
+			}
+		}
+		if (WARN_ON(optlen_new > opt->opt.optlen))
+			optlen_new = opt->opt.optlen;
 		hdr_delta = opt->opt.optlen;
 		opt->opt.optlen = (optlen_new + 3) & ~3;
 		hdr_delta -= opt->opt.optlen;
