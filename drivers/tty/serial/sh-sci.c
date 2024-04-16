@@ -1324,8 +1324,6 @@ static void sci_dma_rx_complete(void *arg)
 	if (active >= 0)
 		count = sci_dma_rx_push(s, s->rx_buf[active], s->buf_len_rx);
 
-	start_hrtimer_us(&s->rx_timer, s->rx_timeout);
-
 	if (count)
 		tty_flip_buffer_push(&port->state->port);
 
@@ -1344,6 +1342,8 @@ static void sci_dma_rx_complete(void *arg)
 	s->active_rx = s->cookie_rx[!active];
 
 	dma_async_issue_pending(chan);
+
+	start_hrtimer_us(&s->rx_timer, s->rx_timeout);
 
 	uart_port_unlock_irqrestore(port, flags);
 	dev_dbg(port->dev, "%s: cookie %d #%d, new active cookie %d\n",
