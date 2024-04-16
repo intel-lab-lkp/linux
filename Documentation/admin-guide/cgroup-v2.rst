@@ -241,7 +241,7 @@ cgroup v2 currently supports the following mount options.
 
   pid_localevents
         Represent fork failures inside cgroup's pids.events:max (not its limit
-        being hit).
+        being hit) and exclude subtree events from pids.events.
 
 
 Organizing Processes and Threads
