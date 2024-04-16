@@ -28,6 +28,22 @@ MODULE_DESCRIPTION(DRV_STRING);
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, rvu_rep_id_table);
 
+static int rvu_eswitch_config(struct otx2_nic *priv, u8 ena)
+{
+	struct esw_cfg_req *req;
+
+	mutex_lock(&priv->mbox.lock);
+	req = otx2_mbox_alloc_msg_esw_cfg(&priv->mbox);
+	if (!req) {
+		mutex_unlock(&priv->mbox.lock);
+		return -ENOMEM;
+	}
+	req->ena = ena;
+	otx2_sync_mbox_msg(&priv->mbox);
+	mutex_unlock(&priv->mbox.lock);
+	return 0;
+}
+
 static netdev_tx_t rvu_rep_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct rep_dev *rep = netdev_priv(dev);
@@ -170,6 +186,8 @@ static void rvu_rep_free_netdev(struct otx2_nic *priv)
 
 void rvu_rep_destroy(struct otx2_nic *priv)
 {
+	/* Remove mcam rules */
+	rvu_eswitch_config(priv, false);
 	rvu_rep_free_cq_rsrc(priv);
 	rvu_rep_free_netdev(priv);
 }
@@ -221,6 +239,7 @@ int rvu_rep_create(struct otx2_nic *priv)
 	if (err)
 		goto exit;
 
+	rvu_eswitch_config(priv, true);
 	return 0;
 exit:
 	rvu_rep_free_netdev(priv);
