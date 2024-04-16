@@ -90,11 +90,18 @@ struct nsim_ethtool {
 	struct ethtool_fecparam fec;
 };
 
+struct nsim_rq {
+	struct napi_struct napi;
+	struct list_head skb_queue;
+	struct page_pool *page_pool;
+};
+
 struct netdevsim {
 	struct net_device *netdev;
 	struct nsim_dev *nsim_dev;
 	struct nsim_dev_port *nsim_dev_port;
 	struct mock_phc *phc;
+	struct nsim_rq *rq;
 
 	u64 tx_packets;
 	u64 tx_bytes;
