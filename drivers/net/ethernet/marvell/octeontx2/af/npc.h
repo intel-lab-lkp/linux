@@ -245,6 +245,7 @@ enum key_fields {
 	NPC_VLAN_TAG2,
 	/* inner vlan tci for double tagged frame */
 	NPC_VLAN_TAG3,
+	NPC_SQ_ID,
 	/* other header fields programmed to extract but not of our interest */
 	NPC_UNKNOWN,
 	NPC_KEY_FIELDS_MAX,

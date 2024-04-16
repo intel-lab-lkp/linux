@@ -289,6 +289,23 @@ static void nix_rx_sync(struct rvu *rvu, int blkaddr)
 		dev_err(rvu->dev, "SYNC2: NIX RX software sync failed\n");
 }
 
+static int nix_get_tx_link(struct rvu *rvu, u16 pcifunc)
+{
+	struct rvu_hwinfo *hw = rvu->hw;
+	int pf = rvu_get_pf(pcifunc);
+	u8 cgx_id = 0, lmac_id = 0;
+
+	if (is_lbk_vf(rvu, pcifunc)) {/* LBK links */
+		return hw->cgx_links;
+	} else if (is_pf_cgxmapped(rvu, pf)) {
+		rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
+		return (cgx_id * hw->lmac_per_cgx) + lmac_id;
+	}
+
+	/* SDP link */
+	return hw->cgx_links + hw->lbk_links;
+}
+
 static bool is_valid_txschq(struct rvu *rvu, int blkaddr,
 			    int lvl, u16 pcifunc, u16 schq)
 {
@@ -1984,23 +2001,6 @@ static void nix_clear_tx_xoff(struct rvu *rvu, int blkaddr,
 	rvu_write64(rvu, blkaddr, reg, 0x0);
 }
 
-static int nix_get_tx_link(struct rvu *rvu, u16 pcifunc)
-{
-	struct rvu_hwinfo *hw = rvu->hw;
-	int pf = rvu_get_pf(pcifunc);
-	u8 cgx_id = 0, lmac_id = 0;
-
-	if (is_lbk_vf(rvu, pcifunc)) {/* LBK links */
-		return hw->cgx_links;
-	} else if (is_pf_cgxmapped(rvu, pf)) {
-		rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
-		return (cgx_id * hw->lmac_per_cgx) + lmac_id;
-	}
-
-	/* SDP link */
-	return hw->cgx_links + hw->lbk_links;
-}
-
 static void nix_get_txschq_range(struct rvu *rvu, u16 pcifunc,
 				 int link, int *start, int *end)
 {
@@ -2949,6 +2949,7 @@ static int nix_tx_vtag_alloc(struct rvu *rvu, int blkaddr,
 	mutex_unlock(&vlan->rsrc_lock);
 
 	regval = size ? vtag : vtag << 32;
+	regval |= (vtag & ~GENMASK_ULL(47, 0)) << 48;
 
 	rvu_write64(rvu, blkaddr,
 		    NIX_AF_TX_VTAG_DEFX_DATA(index), regval);
