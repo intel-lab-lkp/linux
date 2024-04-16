@@ -114,6 +114,7 @@ struct gpy_priv {
 	 * is enabled.
 	 */
 	u64 lb_dis_to;
+	bool sgmii_match_tpi_speed;
 };
 
 static const struct {
@@ -262,7 +263,16 @@ out:
 
 static int gpy_config_init(struct phy_device *phydev)
 {
+	struct gpy_priv *priv = phydev->priv;
 	int ret;
+
+	/* Disalbe SGMII Autoneg if we want to match SGMII to TPI speed */
+	if (priv->sgmii_match_tpi_speed) {
+		ret = phy_modify_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_SGMII_CTRL,
+				     VSPEC1_SGMII_CTRL_ANEN, 0);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* Mask all interrupts */
 	ret = phy_write(phydev, PHY_IMASK, 0);
@@ -303,6 +313,9 @@ static int gpy_probe(struct phy_device *phydev)
 
 	if (!device_property_present(dev, "maxlinear,use-broken-interrupts"))
 		phydev->dev_flags |= PHY_F_NO_IRQ;
+
+	priv->sgmii_match_tpi_speed =
+		device_property_present(dev, "maxlinear,sgmii-match-tpi-speed");
 
 	fw_version = phy_read(phydev, PHY_FWV);
 	if (fw_version < 0)
@@ -516,6 +529,7 @@ static int gpy_update_mdix(struct phy_device *phydev)
 
 static int gpy_update_interface(struct phy_device *phydev)
 {
+	struct gpy_priv *priv = phydev->priv;
 	int ret;
 
 	/* Interface mode is fixed for USXGMII and integrated PHY */
@@ -529,6 +543,8 @@ static int gpy_update_interface(struct phy_device *phydev)
 	switch (phydev->speed) {
 	case SPEED_2500:
 		phydev->interface = PHY_INTERFACE_MODE_2500BASEX;
+		if (!gpy_sgmii_aneg_en(phydev))
+			break;
 		ret = phy_modify_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_SGMII_CTRL,
 				     VSPEC1_SGMII_CTRL_ANEN, 0);
 		if (ret < 0) {
@@ -542,7 +558,7 @@ static int gpy_update_interface(struct phy_device *phydev)
 	case SPEED_100:
 	case SPEED_10:
 		phydev->interface = PHY_INTERFACE_MODE_SGMII;
-		if (gpy_sgmii_aneg_en(phydev))
+		if (gpy_sgmii_aneg_en(phydev) || priv->sgmii_match_tpi_speed)
 			break;
 		/* Enable and restart SGMII ANEG for 10/100/1000Mbps link speed
 		 * if ANEG is disabled (in 2500-BaseX mode).
