@@ -72,29 +72,6 @@ configure_stack(void)
 	return true;
 }
 
-static in_port_t
-get_port(int fd)
-{
-	struct sockaddr_storage ss;
-	socklen_t slen = sizeof(ss);
-	in_port_t port = 0;
-
-	if (CHECK_FAIL(getsockname(fd, (struct sockaddr *)&ss, &slen)))
-		return port;
-
-	switch (ss.ss_family) {
-	case AF_INET:
-		port = ((struct sockaddr_in *)&ss)->sin_port;
-		break;
-	case AF_INET6:
-		port = ((struct sockaddr_in6 *)&ss)->sin6_port;
-		break;
-	default:
-		CHECK(1, "Invalid address family", "%d\n", ss.ss_family);
-	}
-	return port;
-}
-
 static ssize_t
 rcv_msg(int srv_client, int type)
 {
@@ -138,7 +115,7 @@ run_test(int server_fd, const struct sockaddr *addr, socklen_t len, int type)
 		goto out;
 	}
 
-	port = get_port(srv_client);
+	port = get_socket_local_port(srv_client);
 	if (CHECK_FAIL(!port))
 		goto out;
 	/* SOCK_STREAM is connected via accept(), so the server's local address
