@@ -2066,7 +2066,10 @@ static void wait_for_lsr(struct uart_8250_port *up, int bits)
 {
 	unsigned int status, tmout = 10000;
 
-	/* Wait up to 10ms for the character(s) to be sent. */
+	/* Wait for a time relative to buffer size and baud */
+	if (up->fifo_enable && up->port.timeout)
+		tmout = jiffies_to_usecs(up->port.timeout);
+
 	for (;;) {
 		status = serial_lsr_in(up);
 
