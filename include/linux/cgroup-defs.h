@@ -509,6 +509,7 @@ struct cgroup {
 	 * cgroup_rstat_flush_locked() and protected by cgroup_rstat_lock.
 	 */
 	struct cgroup	*rstat_flush_next;
+	unsigned long	rstat_flush_last_time;
 
 	/* cgroup basic resource statistics */
 	struct cgroup_base_stat last_bstat;

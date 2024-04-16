@@ -193,6 +193,7 @@ static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
 	/* Push @root to the list first before pushing the children */
 	head = root;
 	root->rstat_flush_next = NULL;
+	root->rstat_flush_last_time = jiffies;
 	child = rstatc->updated_children;
 	rstatc->updated_children = root;
 	if (child != root)
@@ -261,12 +262,15 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 
 	lockdep_assert_held(&cgroup_rstat_lock);
 
+	cgrp->rstat_flush_last_time = jiffies;
+
 	for_each_possible_cpu(cpu) {
 		struct cgroup *pos = cgroup_rstat_updated_list(cgrp, cpu);
 
 		for (; pos; pos = pos->rstat_flush_next) {
 			struct cgroup_subsys_state *css;
 
+			pos->rstat_flush_last_time = jiffies;
 			cgroup_base_stat_flush(pos, cpu);
 			bpf_rstat_flush(pos, cgroup_parent(pos), cpu);
 
@@ -309,6 +313,49 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
 	__cgroup_rstat_unlock(cgrp, -1);
 }
 
+#define FLUSH_TIME	msecs_to_jiffies(50)
+
+/**
+ * cgroup_rstat_flush_ratelimited - limit pressure on global lock (cgroup_rstat_lock)
+ * @cgrp: target cgroup
+ *
+ * Trade accuracy for less pressure on global lock. Only use this when caller
+ * don't need 100% up-to-date stats.
+ *
+ * Userspace stats tools spawn threads reading io.stat, cpu.stat and memory.stat
+ * from same cgroup, but kernel side they share same global lock.  This also
+ * limit malicious userspace from hurting kernel by reading these stat files in
+ * a tight loop.
+ *
+ * This function exit early if flush recently happened.
+ *
+ * Returns 1 if flush happened
+ */
+int cgroup_rstat_flush_ratelimited(struct cgroup *cgrp)
+{
+	int res = 0;
+
+	might_sleep();
+
+	/* Outside lock: check if this flush and lock can be skipped */
+	if (time_before(jiffies,
+			READ_ONCE(cgrp->rstat_flush_last_time) + FLUSH_TIME))
+		return 0;
+
+	__cgroup_rstat_lock(cgrp, -1);
+
+	/* Recheck inside lock, do flush after enough time have passed */
+	if (time_after(jiffies,
+		       cgrp->rstat_flush_last_time + FLUSH_TIME)) {
+		cgroup_rstat_flush_locked(cgrp);
+		res = 1;
+	}
+
+	__cgroup_rstat_unlock(cgrp, -1);
+
+	return res;
+}
+
 /**
  * cgroup_rstat_flush_hold - flush stats in @cgrp's subtree and hold
  * @cgrp: target cgroup
@@ -317,13 +364,22 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
  * paired with cgroup_rstat_flush_release().
  *
  * This function may block.
+ *
+ * Returns 1 if flush happened
  */
-void cgroup_rstat_flush_hold(struct cgroup *cgrp)
+int cgroup_rstat_flush_hold(struct cgroup *cgrp)
 	__acquires(&cgroup_rstat_lock)
 {
 	might_sleep();
 	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
+
+	/* Only do expensive flush after enough time have passed */
+	if (time_after(jiffies,
+		       cgrp->rstat_flush_last_time + FLUSH_TIME)) {
+		cgroup_rstat_flush_locked(cgrp);
+		return 1;
+	}
+	return 0;
 }
 
 /**
