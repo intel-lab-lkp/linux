@@ -148,24 +148,19 @@ prepare_addr(struct sockaddr *addr, int family, __u16 port, bool rewrite_addr)
 {
 	struct sockaddr_in *addr4;
 	struct sockaddr_in6 *addr6;
+	socklen_t len;
+
+	make_sockaddr(family, family == AF_INET ? "127.0.0.1" : "::1",
+		      port, (struct sockaddr_storage *)addr, &len);
 
 	switch (family) {
 	case AF_INET:
 		addr4 = (struct sockaddr_in *)addr;
-		memset(addr4, 0, sizeof(*addr4));
-		addr4->sin_family = family;
-		addr4->sin_port = htons(port);
 		if (rewrite_addr)
 			addr4->sin_addr.s_addr = htonl(TEST_DADDR);
-		else
-			addr4->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		break;
 	case AF_INET6:
 		addr6 = (struct sockaddr_in6 *)addr;
-		memset(addr6, 0, sizeof(*addr6));
-		addr6->sin6_family = family;
-		addr6->sin6_port = htons(port);
-		addr6->sin6_addr = in6addr_loopback;
 		if (rewrite_addr)
 			addr6->sin6_addr.s6_addr32[3] = htonl(TEST_DADDR);
 		break;
