@@ -6293,10 +6293,9 @@ void ufshcd_schedule_eh_work(struct ufs_hba *hba)
 
 static void ufshcd_force_error_recovery(struct ufs_hba *hba)
 {
-	spin_lock_irq(hba->host->host_lock);
+	guard(spinlock_irq)(hba->host->host_lock);
 	hba->force_reset = true;
 	ufshcd_schedule_eh_work(hba);
-	spin_unlock_irq(hba->host->host_lock);
 }
 
 static void ufshcd_clk_scaling_allow(struct ufs_hba *hba, bool allow)
