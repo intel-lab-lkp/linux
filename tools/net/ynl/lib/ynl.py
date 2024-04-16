@@ -390,7 +390,7 @@ class NetlinkProtocol:
         msg = self._decode(nl_msg)
         fixed_header_size = 0
         if ynl:
-            op = ynl.rsp_by_value[msg.cmd()]
+            op = ynl.get_op_by_value(msg.cmd())
             fixed_header_size = ynl._struct_size(op.fixed_header)
         msg.raw_attrs = NlAttrs(msg.raw, fixed_header_size)
         return msg

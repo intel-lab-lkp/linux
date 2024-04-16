@@ -567,6 +567,18 @@ class SpecFamily(SpecElement):
           return op
       return None
 
+    def get_op_by_value(self, value):
+        """
+        For a given operation value, look up operation spec. Search
+        by response value first then fall back to request value. This
+        is required for handling failure cases.
+        """
+        if value in self.rsp_by_value:
+            return self.rsp_by_value[value]
+        if self.msg_id_model == 'directional' and value in self.req_by_value:
+            return self.req_by_value[value]
+        return None
+
     def resolve(self):
         self.resolve_up(super())
 
