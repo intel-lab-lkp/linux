@@ -4224,7 +4224,8 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 	int ret;
 	bool reenable_intr = false;
 
-	mutex_lock(&hba->uic_cmd_mutex);
+	guard(mutex)(&hba->uic_cmd_mutex);
+
 	ufshcd_add_delay_before_dme_cmd(hba);
 
 	scoped_guard(spinlock_irqsave, hba->host->host_lock) {
@@ -4293,8 +4294,6 @@ out:
 			ufshcd_schedule_eh_work(hba);
 		}
 	}
-
-	mutex_unlock(&hba->uic_cmd_mutex);
 
 	return ret;
 }
@@ -5666,9 +5665,8 @@ int ufshcd_write_ee_control(struct ufs_hba *hba)
 {
 	int err;
 
-	mutex_lock(&hba->ee_ctrl_mutex);
+	guard(mutex)(&hba->ee_ctrl_mutex);
 	err = __ufshcd_write_ee_control(hba, hba->ee_ctrl_mask);
-	mutex_unlock(&hba->ee_ctrl_mutex);
 	if (err)
 		dev_err(hba->dev, "%s: failed to write ee control %d\n",
 			__func__, err);
@@ -5681,7 +5679,7 @@ int ufshcd_update_ee_control(struct ufs_hba *hba, u16 *mask,
 	u16 new_mask, ee_ctrl_mask;
 	int err = 0;
 
-	mutex_lock(&hba->ee_ctrl_mutex);
+	guard(mutex)(&hba->ee_ctrl_mutex);
 	new_mask = (*mask & ~clr) | set;
 	ee_ctrl_mask = new_mask | *other_mask;
 	if (ee_ctrl_mask != hba->ee_ctrl_mask)
@@ -5691,7 +5689,6 @@ int ufshcd_update_ee_control(struct ufs_hba *hba, u16 *mask,
 		hba->ee_ctrl_mask = ee_ctrl_mask;
 		*mask = new_mask;
 	}
-	mutex_unlock(&hba->ee_ctrl_mutex);
 	return err;
 }
 
@@ -6300,11 +6297,10 @@ static void ufshcd_force_error_recovery(struct ufs_hba *hba)
 
 static void ufshcd_clk_scaling_allow(struct ufs_hba *hba, bool allow)
 {
-	mutex_lock(&hba->wb_mutex);
+	guard(mutex)(&hba->wb_mutex);
 	down_write(&hba->clk_scaling_lock);
 	hba->clk_scaling.is_allowed = allow;
 	up_write(&hba->clk_scaling_lock);
-	mutex_unlock(&hba->wb_mutex);
 }
 
 static void ufshcd_clk_scaling_suspend(struct ufs_hba *hba, bool suspend)
