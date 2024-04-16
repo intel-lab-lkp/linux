@@ -220,21 +220,9 @@ void test_bpf_ip_check_defrag_ok(bool ipv6)
 	nstoken = open_netns(NS0);
 	if (!ASSERT_OK_PTR(nstoken, "setns ns0"))
 		goto out;
-	if (ipv6) {
-		struct sockaddr_in6 *c = (struct sockaddr_in6 *)&caddr;
-
-		c->sin6_family = AF_INET6;
-		inet_pton(AF_INET6, VETH0_ADDR6, &c->sin6_addr);
-		c->sin6_port = htons(CLIENT_PORT);
-		err = bind(client_rx_fd, (struct sockaddr *)c, sizeof(*c));
-	} else {
-		struct sockaddr_in *c = (struct sockaddr_in *)&caddr;
-
-		c->sin_family = AF_INET;
-		inet_pton(AF_INET, VETH0_ADDR, &c->sin_addr);
-		c->sin_port = htons(CLIENT_PORT);
-		err = bind(client_rx_fd, (struct sockaddr *)c, sizeof(*c));
-	}
+	make_sockaddr(ipv6 ? AF_INET6 : AF_INET, ipv6 ? VETH0_ADDR6 : VETH0_ADDR,
+		      CLIENT_PORT, &caddr, &caddr_len);
+	err = bind(client_rx_fd, (struct sockaddr *)&caddr, sizeof(caddr));
 	close_netns(nstoken);
 	if (!ASSERT_OK(err, "bind"))
 		goto out;
