@@ -31,10 +31,7 @@
 #define REG_BCRM_REG_ADDR_R				CCI_REG16(0x0014)
 
 #define REG_BCRM_FEATURE_INQUIRY_R			REG_BCRM_V4L2_64BIT(0x0008)
-#define REG_BCRM_DEVICE_FW_SPEC_VERSION_R		REG_BCRM_V4L2_8BIT(0x0010)
-#define REG_BCRM_DEVICE_FW_MAJOR_VERSION_R		REG_BCRM_V4L2_8BIT(0x0011)
-#define REG_BCRM_DEVICE_FW_MINOR_VERSION_R		REG_BCRM_V4L2_16BIT(0x0012)
-#define REG_BCRM_DEVICE_FW_PATCH_VERSION_R		REG_BCRM_V4L2_32BIT(0x0014)
+#define REG_BCRM_DEVICE_FW				REG_BCRM_V4L2_64BIT(0x0010)
 #define REG_BCRM_WRITE_HANDSHAKE_RW			REG_BCRM_V4L2_8BIT(0x0018)
 
 /* Streaming Control Registers */
@@ -274,6 +271,16 @@ enum alvium_av_mipi_bit {
 	ALVIUM_BIT_RAW14,
 	ALVIUM_BIT_JPEG,
 	ALVIUM_NUM_SUPP_MIPI_DATA_BIT
+};
+
+union alvium_fw_version {
+	struct {
+		u8 special;
+		u8 major;
+		u16 minor;
+		u32 patch;
+	} alvium_fw_ver;
+	u64 value;
 };
 
 struct alvium_avail_feat {
