@@ -6250,6 +6250,10 @@ enum skl_power_gate {
 #define  SFUSE_STRAP_DDIC_DETECTED	(1 << 1)
 #define  SFUSE_STRAP_DDID_DETECTED	(1 << 0)
 
+/* SCLKGATE_DIS */
+#define SCLKGATE_DIS			_MMIO(0xc2014)
+#define  DPLS_GATING_DISABLE		REG_BIT(29)
+
 #define WM_MISC				_MMIO(0x45260)
 #define  WM_MISC_DATA_PARTITION_5_6	(1 << 0)
 
