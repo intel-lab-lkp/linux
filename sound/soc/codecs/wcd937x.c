@@ -1359,7 +1359,40 @@ static bool wcd937x_swap_gnd_mic(struct snd_soc_component *component, bool activ
 	return true;
 }
 
+static int wcd937x_codec_hw_params(struct snd_pcm_substream *substream,
+				   struct snd_pcm_hw_params *params,
+				   struct snd_soc_dai *dai)
+{
+	struct wcd937x_priv *wcd937x = dev_get_drvdata(dai->dev);
+	struct wcd937x_sdw_priv *wcd = wcd937x->sdw_priv[dai->id];
+
+	return wcd937x_sdw_hw_params(wcd, substream, params, dai);
+}
+
+static int wcd937x_codec_free(struct snd_pcm_substream *substream,
+			      struct snd_soc_dai *dai)
+{
+	struct wcd937x_priv *wcd937x = dev_get_drvdata(dai->dev);
+	struct wcd937x_sdw_priv *wcd = wcd937x->sdw_priv[dai->id];
+
+	return sdw_stream_remove_slave(wcd->sdev, wcd->sruntime);
+}
+
+static int wcd937x_codec_set_sdw_stream(struct snd_soc_dai *dai,
+					void *stream, int direction)
+{
+	struct wcd937x_priv *wcd937x = dev_get_drvdata(dai->dev);
+	struct wcd937x_sdw_priv *wcd = wcd937x->sdw_priv[dai->id];
+
+	wcd->sruntime = stream;
+
+	return 0;
+}
+
 static const struct snd_soc_dai_ops wcd937x_sdw_dai_ops = {
+	.hw_params = wcd937x_codec_hw_params,
+	.hw_free = wcd937x_codec_free,
+	.set_stream = wcd937x_codec_set_sdw_stream,
 };
 
 static struct snd_soc_dai_driver wcd937x_dais[] = {
@@ -1405,11 +1438,65 @@ static int wcd937x_bind(struct device *dev)
 		return ret;
 	}
 
+	wcd937x->rxdev = wcd937x_sdw_device_get(wcd937x->rxnode);
+	if (!wcd937x->rxdev) {
+		dev_err(dev, "could not find slave with matching of node\n");
+		return -EINVAL;
+	}
+
+	wcd937x->sdw_priv[AIF1_PB] = dev_get_drvdata(wcd937x->rxdev);
+	wcd937x->sdw_priv[AIF1_PB]->wcd937x = wcd937x;
+
+	wcd937x->txdev = wcd937x_sdw_device_get(wcd937x->txnode);
+	if (!wcd937x->txdev) {
+		dev_err(dev, "could not find txslave with matching of node\n");
+		return -EINVAL;
+	}
+
+	wcd937x->sdw_priv[AIF1_CAP] = dev_get_drvdata(wcd937x->txdev);
+	wcd937x->sdw_priv[AIF1_CAP]->wcd937x = wcd937x;
+	wcd937x->tx_sdw_dev = dev_to_sdw_dev(wcd937x->txdev);
+	if (!wcd937x->tx_sdw_dev) {
+		dev_err(dev, "could not get txslave with matching of dev\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * As TX is the main CSR reg interface, which should not be suspended first.
+	 * expicilty add the dependency link
+	 */
+	if (!device_link_add(wcd937x->rxdev, wcd937x->txdev,
+			     DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME)) {
+		dev_err(dev, "Could not devlink TX and RX\n");
+		return -EINVAL;
+	}
+
+	if (!device_link_add(dev, wcd937x->txdev,
+			     DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME)) {
+		dev_err(dev, "Could not devlink WCD and TX\n");
+		return -EINVAL;
+	}
+
+	if (!device_link_add(dev, wcd937x->rxdev,
+			     DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME)) {
+		dev_err(dev, "Could not devlink WCD and RX\n");
+		return -EINVAL;
+	}
+
+	wcd937x->regmap = dev_get_regmap(&wcd937x->tx_sdw_dev->dev, NULL);
+	if (!wcd937x->regmap) {
+		dev_err(dev, "could not get TX device regmap\n");
+		return -EINVAL;
+	}
+
 	ret = wcd937x_irq_init(wcd937x, dev);
 	if (ret) {
 		dev_err(dev, "IRQ init failed: %d\n", ret);
 		return ret;
 	}
+
+	wcd937x->sdw_priv[AIF1_PB]->slave_irq = wcd937x->virq;
+	wcd937x->sdw_priv[AIF1_CAP]->slave_irq = wcd937x->virq;
 
 	ret = wcd937x_set_micbias_data(wcd937x);
 	if (ret < 0) {
@@ -1429,6 +1516,9 @@ static void wcd937x_unbind(struct device *dev)
 {
 	struct wcd937x_priv *wcd937x = dev_get_drvdata(dev);
 
+	device_link_remove(dev, wcd937x->txdev);
+	device_link_remove(dev, wcd937x->rxdev);
+	device_link_remove(wcd937x->rxdev, wcd937x->txdev);
 	snd_soc_unregister_component(dev);
 	component_unbind_all(dev, wcd937x);
 	mutex_destroy(&wcd937x->micb_lock);

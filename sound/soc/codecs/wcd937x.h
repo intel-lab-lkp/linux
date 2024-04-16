@@ -532,6 +532,44 @@ struct wcd937x_sdw_priv {
 	struct regmap *regmap;
 };
 
+#if IS_ENABLED(CONFIG_SND_SOC_WCD937X_SDW)
+int wcd937x_sdw_free(struct wcd937x_sdw_priv *wcd,
+		     struct snd_pcm_substream *substream,
+		     struct snd_soc_dai *dai);
+int wcd937x_sdw_set_sdw_stream(struct wcd937x_sdw_priv *wcd,
+			       struct snd_soc_dai *dai,
+			       void *stream, int direction);
+int wcd937x_sdw_hw_params(struct wcd937x_sdw_priv *wcd,
+			  struct snd_pcm_substream *substream,
+			  struct snd_pcm_hw_params *params,
+			  struct snd_soc_dai *dai);
+
+struct device *wcd937x_sdw_device_get(struct device_node *np);
+
+#else
+int wcd937x_sdw_free(struct wcd937x_sdw_priv *wcd,
+		     struct snd_pcm_substream *substream,
+		     struct snd_soc_dai *dai)
+{
+	return -EOPNOTSUPP;
+}
+
+int wcd937x_sdw_set_sdw_stream(struct wcd937x_sdw_priv *wcd,
+			       struct snd_soc_dai *dai,
+			       void *stream, int direction)
+{
+	return -EOPNOTSUPP;
+}
+
+int wcd937x_sdw_hw_params(struct wcd937x_sdw_priv *wcd,
+			  struct snd_pcm_substream *substream,
+			  struct snd_pcm_hw_params *params,
+			  struct snd_soc_dai *dai)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 enum {
 	WCD_RX1,
 	WCD_RX2,
