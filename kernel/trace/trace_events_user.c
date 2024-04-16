@@ -1990,6 +1990,92 @@ static int user_event_set_tp_name(struct user_event *user)
 }
 
 /*
+ * Counts how many ';' without a trailing space are in the args.
+ */
+static int count_semis_no_space(char *args)
+{
+	int count = 0;
+
+	while ((args = strchr(args, ';'))) {
+		args++;
+
+		if (!isspace(*args))
+			count++;
+	}
+
+	return count;
+}
+
+/*
+ * Copies the arguments while ensuring all ';' have a trailing space.
+ */
+static char *fix_semis_no_space(char *args, int count)
+{
+	char *fixed, *pos;
+	char c, last;
+	int len;
+
+	len = strlen(args) + count;
+	fixed = kmalloc(len + 1, GFP_KERNEL);
+
+	if (!fixed)
+		return NULL;
+
+	pos = fixed;
+	last = '\0';
+
+	while (len > 0) {
+		c = *args++;
+
+		if (last == ';' && !isspace(c)) {
+			*pos++ = ' ';
+			len--;
+		}
+
+		if (len > 0) {
+			*pos++ = c;
+			len--;
+		}
+
+		last = c;
+	}
+
+	/*
+	 * len is the length of the copy excluding the null.
+	 * This ensures we always have room for a null.
+	 */
+	*pos = '\0';
+
+	return fixed;
+}
+
+static char **user_event_argv_split(char *args, int *argc)
+{
+	/* Count how many ';' without a trailing space */
+	int count = count_semis_no_space(args);
+
+	if (count) {
+		/* We must fixup 'field;field' to 'field; field' */
+		char *fixed = fix_semis_no_space(args, count);
+		char **split;
+
+		if (!fixed)
+			return NULL;
+
+		/* We do a normal split afterwards */
+		split = argv_split(GFP_KERNEL, fixed, argc);
+
+		/* We can free since argv_split makes a copy */
+		kfree(fixed);
+
+		return split;
+	}
+
+	/* No fixup is required */
+	return argv_split(GFP_KERNEL, args, argc);
+}
+
+/*
  * Parses the event name, arguments and flags then registers if successful.
  * The name buffer lifetime is owned by this method for success cases only.
  * Upon success the returned user_event has its ref count increased by 1.
@@ -2012,7 +2098,7 @@ static int user_event_parse(struct user_event_group *group, char *name,
 		return -EPERM;
 
 	if (args) {
-		argv = argv_split(GFP_KERNEL, args, &argc);
+		argv = user_event_argv_split(args, &argc);
 
 		if (!argv)
 			return -ENOMEM;
