@@ -13,6 +13,7 @@
 #include <bpf/bpf.h>
 
 #include "cgroup_helpers.h"
+#include "network_helpers.h"
 #include <bpf/bpf_endian.h>
 #include "bpf_util.h"
 
@@ -414,8 +415,6 @@ static int bind_sock(int domain, int type, const char *ip,
 		     unsigned short port, unsigned short port_retry)
 {
 	struct sockaddr_storage addr;
-	struct sockaddr_in6 *addr6;
-	struct sockaddr_in *addr4;
 	int sockfd = -1;
 	socklen_t len;
 	int res = SUCCESS;
@@ -424,25 +423,8 @@ static int bind_sock(int domain, int type, const char *ip,
 	if (sockfd < 0)
 		goto err;
 
-	memset(&addr, 0, sizeof(addr));
-
-	if (domain == AF_INET) {
-		len = sizeof(struct sockaddr_in);
-		addr4 = (struct sockaddr_in *)&addr;
-		addr4->sin_family = domain;
-		addr4->sin_port = htons(port);
-		if (inet_pton(domain, ip, (void *)&addr4->sin_addr) != 1)
-			goto err;
-	} else if (domain == AF_INET6) {
-		len = sizeof(struct sockaddr_in6);
-		addr6 = (struct sockaddr_in6 *)&addr;
-		addr6->sin6_family = domain;
-		addr6->sin6_port = htons(port);
-		if (inet_pton(domain, ip, (void *)&addr6->sin6_addr) != 1)
-			goto err;
-	} else {
+	if (make_sockaddr(domain, ip, port, &addr, &len))
 		goto err;
-	}
 
 	if (bind(sockfd, (const struct sockaddr *)&addr, len) == -1) {
 		/* sys_bind() may fail for different reasons, errno has to be
@@ -458,10 +440,8 @@ static int bind_sock(int domain, int type, const char *ip,
 
 	goto out;
 retry:
-	if (domain == AF_INET)
-		addr4->sin_port = htons(port_retry);
-	else
-		addr6->sin6_port = htons(port_retry);
+	if (make_sockaddr(domain, ip, port_retry, &addr, &len))
+		goto err;
 	if (bind(sockfd, (const struct sockaddr *)&addr, len) == -1) {
 		if (errno != EPERM)
 			goto err;
