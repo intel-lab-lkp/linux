@@ -919,6 +919,7 @@ void intel_pps_on_unlocked(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	u32 pp;
 	i915_reg_t pp_ctrl_reg;
+	int dis_ver = DISPLAY_VER(dev_priv);
 
 	lockdep_assert_held(&dev_priv->display.pps.mutex);
 
@@ -948,6 +949,13 @@ void intel_pps_on_unlocked(struct intel_dp *intel_dp)
 		intel_de_posting_read(dev_priv, pp_ctrl_reg);
 	}
 
+	/* WA: 16023567976
+	 * Disable DPLS gating around power sequence.
+	 */
+	if (dis_ver >= 12 && dis_ver <= 14)
+		intel_de_rmw(dev_priv, SCLKGATE_DIS,
+			     DPLS_GATING_DISABLE, 1);
+
 	pp |= PANEL_POWER_ON;
 	if (!IS_IRONLAKE(dev_priv))
 		pp |= PANEL_POWER_RESET;
@@ -957,6 +965,10 @@ void intel_pps_on_unlocked(struct intel_dp *intel_dp)
 
 	wait_panel_on(intel_dp);
 	intel_dp->pps.last_power_on = jiffies;
+
+	if (dis_ver >= 12 && dis_ver <= 14)
+		intel_de_rmw(dev_priv, SCLKGATE_DIS,
+			     DPLS_GATING_DISABLE, 0);
 
 	if (IS_IRONLAKE(dev_priv)) {
 		pp |= PANEL_POWER_RESET; /* restore panel reset bit */
