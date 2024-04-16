@@ -414,6 +414,9 @@ uart_update_timeout(struct uart_port *port, unsigned int cflag,
 
 	temp *= NSEC_PER_SEC;
 	port->frame_time = (unsigned int)DIV64_U64_ROUND_UP(temp, baud);
+
+	if (port->fifosize > 1)
+		port->timeout = uart_fifo_timeout(port);
 }
 EXPORT_SYMBOL(uart_update_timeout);
 
