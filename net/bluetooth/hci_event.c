@@ -6987,6 +6987,8 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 
 		if (!ev->status) {
 			conn->state = BT_CONNECTED;
+			conn->iso_qos.bcast.out.latency =
+				DIV_ROUND_CLOSEST(get_unaligned_le24(ev->transport_delay), 1000);
 			set_bit(HCI_CONN_BIG_CREATED, &conn->flags);
 			rcu_read_unlock();
 			hci_debugfs_create_conn(conn);
@@ -7033,7 +7035,6 @@ static void hci_le_big_sync_established_evt(struct hci_dev *hdev, void *data,
 
 	for (i = 0; i < ev->num_bis; i++) {
 		u16 handle = le16_to_cpu(ev->bis[i]);
-		__le32 interval;
 
 		bis = hci_conn_hash_lookup_handle(hdev, handle);
 		if (!bis) {
@@ -7048,11 +7049,10 @@ static void hci_le_big_sync_established_evt(struct hci_dev *hdev, void *data,
 			set_bit(HCI_CONN_PA_SYNC, &bis->flags);
 
 		bis->iso_qos.bcast.big = ev->handle;
-		memset(&interval, 0, sizeof(interval));
-		memcpy(&interval, ev->latency, sizeof(ev->latency));
-		bis->iso_qos.bcast.in.interval = le32_to_cpu(interval);
-		/* Convert ISO Interval (1.25 ms slots) to latency (ms) */
-		bis->iso_qos.bcast.in.latency = le16_to_cpu(ev->interval) * 125 / 100;
+		/* Convert Transport Latency (us) to Latency (msec) */
+		bis->iso_qos.bcast.in.latency =
+			DIV_ROUND_CLOSEST(get_unaligned_le24(ev->latency),
+					  1000);
 		bis->iso_qos.bcast.in.sdu = le16_to_cpu(ev->max_pdu);
 
 		if (!ev->status) {
