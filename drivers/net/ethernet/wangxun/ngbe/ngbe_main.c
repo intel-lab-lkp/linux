@@ -499,6 +499,7 @@ static const struct net_device_ops ngbe_netdev_ops = {
 	.ndo_start_xmit         = wx_xmit_frame,
 	.ndo_set_rx_mode        = wx_set_rx_mode,
 	.ndo_set_features       = wx_set_features,
+	.ndo_fix_features       = wx_fix_features,
 	.ndo_validate_addr      = eth_validate_addr,
 	.ndo_set_mac_address    = wx_set_mac,
 	.ndo_get_stats64        = wx_get_stats64,
@@ -584,7 +585,10 @@ static int ngbe_probe(struct pci_dev *pdev,
 			   NETIF_F_RXHASH | NETIF_F_RXCSUM;
 	netdev->features |= NETIF_F_SCTP_CRC | NETIF_F_TSO_MANGLEID;
 	netdev->vlan_features |= netdev->features;
-	netdev->features |= NETIF_F_IPV6_CSUM | NETIF_F_VLAN_FEATURES;
+	netdev->features |= NETIF_F_IPV6_CSUM;
+	netdev->features |= NETIF_F_HW_VLAN_CTAG_FILTER |
+			    NETIF_F_HW_VLAN_CTAG_RX |
+			    NETIF_F_HW_VLAN_CTAG_TX;
 	/* copy netdev features into list of user selectable features */
 	netdev->hw_features |= netdev->features | NETIF_F_RXALL;
 	netdev->hw_features |= NETIF_F_NTUPLE | NETIF_F_HW_TC;

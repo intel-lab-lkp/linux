@@ -2701,6 +2701,28 @@ int wx_set_features(struct net_device *netdev, netdev_features_t features)
 }
 EXPORT_SYMBOL(wx_set_features);
 
+netdev_features_t wx_fix_features(struct net_device *netdev,
+				  netdev_features_t features)
+{
+	if (features & NETIF_F_HW_VLAN_CTAG_FILTER)
+		features |= NETIF_F_HW_VLAN_STAG_FILTER;
+	else
+		features &= ~NETIF_F_HW_VLAN_STAG_FILTER;
+
+	if (features & NETIF_F_HW_VLAN_CTAG_RX)
+		features |= NETIF_F_HW_VLAN_STAG_RX;
+	else
+		features &= ~NETIF_F_HW_VLAN_STAG_RX;
+
+	if (features & NETIF_F_HW_VLAN_CTAG_TX)
+		features |= NETIF_F_HW_VLAN_STAG_TX;
+	else
+		features &= ~NETIF_F_HW_VLAN_STAG_TX;
+
+	return features;
+}
+EXPORT_SYMBOL(wx_fix_features);
+
 void wx_set_ring(struct wx *wx, u32 new_tx_count,
 		 u32 new_rx_count, struct wx_ring *temp_ring)
 {
