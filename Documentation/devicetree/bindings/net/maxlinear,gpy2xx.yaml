@@ -27,6 +27,12 @@ properties:
       Affected PHYs (as far as known) are GPY215B and GPY215C.
     type: boolean
 
+  maxlinear,sgmii-match-tpi-speed:
+    description: |
+      When this property is present, the SGMII speed is set to the twisted
+      pair interface (tpi) speed.
+    type: boolean
+
 dependencies:
   maxlinear,use-broken-interrupts: [ interrupts ]
 
