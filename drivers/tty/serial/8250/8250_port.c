@@ -3392,6 +3392,8 @@ void serial8250_console_write(struct uart_8250_port *up, const char *s,
 		 */
 		!(up->port.flags & UPF_CONS_FLOW);
 
+	up->fifo_enable = use_fifo;
+
 	if (likely(use_fifo))
 		serial8250_console_fifo_write(up, s, count);
 	else
