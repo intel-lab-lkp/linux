@@ -421,13 +421,69 @@ int txgbe_setup_tc(struct net_device *dev, u8 tc)
 	return 0;
 }
 
+static void txgbe_reinit_locked(struct wx *wx)
+{
+	u8 timeout = 50;
+
+	netif_trans_update(wx->netdev);
+
+	while (test_and_set_bit(WX_STATE_RESETTING, wx->state)) {
+		timeout--;
+		if (!timeout) {
+			wx_err(wx, "wait device reset timeout\n");
+			goto clear_reset;
+		}
+		usleep_range(1000, 2000);
+	}
+
+	txgbe_down(wx);
+	txgbe_up(wx);
+
+clear_reset:
+	clear_bit(WX_STATE_RESETTING, wx->state);
+}
+
+static void txgbe_do_reset(struct net_device *netdev)
+{
+	struct wx *wx = netdev_priv(netdev);
+
+	if (netif_running(netdev))
+		txgbe_reinit_locked(wx);
+	else
+		txgbe_reset(wx);
+}
+
+static int txgbe_set_features(struct net_device *netdev, netdev_features_t features)
+{
+	netdev_features_t changed = netdev->features ^ features;
+	struct wx *wx = netdev_priv(netdev);
+
+	if (features & NETIF_F_RXHASH) {
+		wr32m(wx, WX_RDB_RA_CTL, WX_RDB_RA_CTL_RSS_EN,
+		      WX_RDB_RA_CTL_RSS_EN);
+		wx->rss_enabled = true;
+	} else {
+		wr32m(wx, WX_RDB_RA_CTL, WX_RDB_RA_CTL_RSS_EN, 0);
+		wx->rss_enabled = false;
+	}
+
+	netdev->features = features;
+
+	if (changed & NETIF_F_HW_VLAN_CTAG_RX)
+		txgbe_do_reset(netdev);
+	else if (changed & NETIF_F_HW_VLAN_CTAG_FILTER)
+		wx_set_rx_mode(netdev);
+
+	return 0;
+}
+
 static const struct net_device_ops txgbe_netdev_ops = {
 	.ndo_open               = txgbe_open,
 	.ndo_stop               = txgbe_close,
 	.ndo_change_mtu         = wx_change_mtu,
 	.ndo_start_xmit         = wx_xmit_frame,
 	.ndo_set_rx_mode        = wx_set_rx_mode,
-	.ndo_set_features       = wx_set_features,
+	.ndo_set_features       = txgbe_set_features,
 	.ndo_fix_features       = wx_fix_features,
 	.ndo_validate_addr      = eth_validate_addr,
 	.ndo_set_mac_address    = wx_set_mac,
