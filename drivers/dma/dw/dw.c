@@ -64,6 +64,15 @@ static size_t dw_dma_block2bytes(struct dw_dma_chan *dwc, u32 block, u32 width)
 	return DWC_CTLH_BLOCK_TS(block) << width;
 }
 
+static inline u8 dw_dma_encode_maxburst(u32 maxburst)
+{
+	/*
+	 * Fix burst size according to dw_dmac. We need to convert them as:
+	 * 1 -> 0, 4 -> 1, 8 -> 2, 16 -> 3.
+	 */
+	return maxburst > 1 ? fls(maxburst) - 2 : 0;
+}
+
 static u32 dw_dma_prepare_ctllo(struct dw_dma_chan *dwc)
 {
 	struct dma_slave_config	*sconfig = &dwc->dma_sconfig;
@@ -73,10 +82,10 @@ static u32 dw_dma_prepare_ctllo(struct dw_dma_chan *dwc)
 		sms = dwc->dws.m_master;
 		smsize = 0;
 		dms = dwc->dws.p_master;
-		dmsize = sconfig->dst_maxburst;
+		dmsize = dw_dma_encode_maxburst(sconfig->dst_maxburst);
 	} else if (dwc->direction == DMA_DEV_TO_MEM) {
 		sms = dwc->dws.p_master;
-		smsize = sconfig->src_maxburst;
+		smsize = dw_dma_encode_maxburst(sconfig->src_maxburst);
 		dms = dwc->dws.m_master;
 		dmsize = 0;
 	} else /* DMA_MEM_TO_MEM */ {
@@ -89,15 +98,6 @@ static u32 dw_dma_prepare_ctllo(struct dw_dma_chan *dwc)
 	return DWC_CTLL_LLP_D_EN | DWC_CTLL_LLP_S_EN |
 	       DWC_CTLL_DST_MSIZE(dmsize) | DWC_CTLL_SRC_MSIZE(smsize) |
 	       DWC_CTLL_DMS(dms) | DWC_CTLL_SMS(sms);
-}
-
-static void dw_dma_encode_maxburst(struct dw_dma_chan *dwc, u32 *maxburst)
-{
-	/*
-	 * Fix burst size according to dw_dmac. We need to convert them as:
-	 * 1 -> 0, 4 -> 1, 8 -> 2, 16 -> 3.
-	 */
-	*maxburst = *maxburst > 1 ? fls(*maxburst) - 2 : 0;
 }
 
 static void dw_dma_set_device_name(struct dw_dma *dw, int id)
@@ -128,7 +128,6 @@ int dw_dma_probe(struct dw_dma_chip *chip)
 	dw->suspend_chan = dw_dma_suspend_chan;
 	dw->resume_chan = dw_dma_resume_chan;
 	dw->prepare_ctllo = dw_dma_prepare_ctllo;
-	dw->encode_maxburst = dw_dma_encode_maxburst;
 	dw->bytes2block = dw_dma_bytes2block;
 	dw->block2bytes = dw_dma_block2bytes;
 
