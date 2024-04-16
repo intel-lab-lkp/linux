@@ -12,6 +12,7 @@
 #include <asm/processor.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
+#include <asm/module.h>
 
 #define __HAVE_ARCH_PGD_FREE
 #define __HAVE_ARCH_PUD_FREE
@@ -119,6 +120,12 @@ static inline void __pmd_populate(pmd_t *pmdp, phys_addr_t ptep,
 	set_pmd(pmdp, __pmd(__phys_to_pmd_val(ptep) | prot));
 }
 
+static inline bool vaddr_is_data(unsigned long vaddr)
+{
+	return ((vaddr + PMD_SIZE < MODULES_ASLR_START || vaddr >= MODULES_ASLR_END) &&
+		(vaddr + PMD_SIZE < (unsigned long) _text || vaddr >= (unsigned long) _etext));
+}
+
 /*
  * Populate the pmdp entry with a pointer to the pte.  This pmd is part
  * of the mm address space.
@@ -127,8 +134,11 @@ static inline void
 pmd_populate_kernel(struct mm_struct *mm, pmd_t *pmdp, pte_t *ptep,
 		    unsigned long vaddr)
 {
+	pmdval_t pmd = PMD_TYPE_TABLE | PMD_TABLE_UXN;
 	VM_BUG_ON(mm && mm != &init_mm);
-	__pmd_populate(pmdp, __pa(ptep), PMD_TYPE_TABLE | PMD_TABLE_UXN);
+	if (vaddr_is_data(vaddr))
+		pmd |= PMD_TABLE_PXN;
+	__pmd_populate(pmdp, __pa(ptep), pmd);
 }
 
 static inline void
