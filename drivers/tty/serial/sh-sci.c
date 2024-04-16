@@ -1261,6 +1261,7 @@ static void sci_dma_rx_chan_invalidate(struct sci_port *s)
 {
 	unsigned int i;
 
+	hrtimer_cancel(&s->rx_timer);
 	s->chan_rx = NULL;
 	for (i = 0; i < ARRAY_SIZE(s->cookie_rx); i++)
 		s->cookie_rx[i] = -EINVAL;
@@ -2240,14 +2241,6 @@ static void sci_shutdown(struct uart_port *port)
 	sci_serial_out(port, SCSCR,
 		       scr & (SCSCR_CKE1 | SCSCR_CKE0 | s->hscif_tot));
 	uart_port_unlock_irqrestore(port, flags);
-
-#ifdef CONFIG_SERIAL_SH_SCI_DMA
-	if (s->chan_rx_saved) {
-		dev_dbg(port->dev, "%s(%d) deleting rx_timer\n", __func__,
-			port->line);
-		hrtimer_cancel(&s->rx_timer);
-	}
-#endif
 
 	if (s->rx_trigger > 1 && s->rx_fifo_timeout > 0)
 		del_timer_sync(&s->rx_fifo_timer);
