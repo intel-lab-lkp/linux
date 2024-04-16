@@ -11,9 +11,10 @@ all times. It is independent of other kernel power management frameworks
 and, as such, can easily co-exist with them.
 
 DAPM is also completely transparent to all user space applications as
-all power switching is done within the ASoC core. No code changes or
-recompiling are required for user space applications. DAPM makes power
-switching decisions based upon any audio stream (capture/playback)
+all power switching is done internally to the ASoC core. For this reason
+DAPM does not expose a kernel API to user space and no code changes or
+recompiling are required for user space applications to use it. DAPM makes
+power switching decisions based upon any audio stream (capture/playback)
 activity and audio mixer settings within the device.
 
 DAPM spans the whole machine. It covers power control within the entire
