@@ -239,6 +239,10 @@ cgroup v2 currently supports the following mount options.
           will not be tracked by the memory controller (even if cgroup
           v2 is remounted later on).
 
+  pid_localevents
+        Represent fork failures inside cgroup's pids.events:max (not its limit
+        being hit).
+
 
 Organizing Processes and Threads
 --------------------------------
@@ -2185,6 +2189,14 @@ PID Interface Files
 
 	The number of processes currently in the cgroup and its
 	descendants.
+
+  pids.events
+	A read-only flat-keyed file which exists on non-root cgroups.  Unless
+	specified otherwise, a value change in this file generates a file modified
+	event. The following entries are defined.
+
+	  max
+		The number of times the limit of the cgroup was hit.
 
 Organisational operations are not blocked by cgroup policies, so it is
 possible to have pids.current > pids.max.  This can be done by either
