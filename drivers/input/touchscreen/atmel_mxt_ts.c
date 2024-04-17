@@ -317,6 +317,7 @@ struct mxt_data {
 	struct gpio_desc *reset_gpio;
 	struct gpio_desc *wake_gpio;
 	bool use_retrigen_workaround;
+	bool poweroff_sleep;
 
 	/* Cached parameters from object table */
 	u16 T5_address;
@@ -2277,6 +2278,19 @@ static void mxt_config_cb(const struct firmware *cfg, void *ctx)
 	release_firmware(cfg);
 }
 
+static int mxt_initialize_after_resume(struct mxt_data *data)
+{
+	const struct firmware *fw;
+
+	mxt_acquire_irq(data);
+
+	firmware_request_nowarn(&fw, MXT_CFG_NAME, &data->client->dev);
+
+	mxt_config_cb(fw, data);
+
+	return 0;
+}
+
 static void mxt_debug_init(struct mxt_data *data);
 
 static int mxt_device_register(struct mxt_data *data)
@@ -2341,17 +2355,23 @@ static int mxt_initialize(struct mxt_data *data)
 	if (error)
 		return error;
 
-	error = mxt_acquire_irq(data);
-	if (error)
-		return error;
+	if (data->poweroff_sleep) {
+		error = mxt_device_register(data);
+		if (error)
+			return error;
+	} else {
+		error = mxt_acquire_irq(data);
+		if (error)
+			return error;
 
-	error = request_firmware_nowait(THIS_MODULE, true, MXT_CFG_NAME,
-					&client->dev, GFP_KERNEL, data,
-					mxt_config_cb);
-	if (error) {
-		dev_err(&client->dev, "Failed to invoke firmware loader: %d\n",
-			error);
-		return error;
+		error = request_firmware_nowait(THIS_MODULE, true, MXT_CFG_NAME,
+						&client->dev, GFP_KERNEL, data,
+						mxt_config_cb);
+		if (error) {
+			dev_err(&client->dev, "Failed to invoke firmware loader: %d\n",
+				error);
+			return error;
+		}
 	}
 
 	return 0;
@@ -3089,6 +3109,9 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 	struct mxt_data *data = dev_get_drvdata(dev);
 	int error;
 
+	if (data->poweroff_sleep && !data->in_bootloader)
+		mxt_power_on(data);
+
 	error = mxt_load_fw(dev, MXT_FW_NAME);
 	if (error) {
 		dev_err(dev, "The firmware update failed(%d)\n", error);
@@ -3100,6 +3123,9 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 		if (error)
 			return error;
 	}
+
+	if (data->poweroff_sleep && !data->in_bootloader)
+		mxt_power_off(data);
 
 	return count;
 }
@@ -3123,7 +3149,12 @@ static const struct attribute_group mxt_attr_group = {
 
 static void mxt_start(struct mxt_data *data)
 {
-	mxt_wakeup_toggle(data->client, true, false);
+	if (data->poweroff_sleep) {
+		mxt_power_on(data);
+		mxt_initialize_after_resume(data);
+	} else {
+		mxt_wakeup_toggle(data->client, true, false);
+	}
 
 	switch (data->suspend_mode) {
 	case MXT_SUSPEND_T9_CTRL:
@@ -3160,7 +3191,12 @@ static void mxt_stop(struct mxt_data *data)
 		break;
 	}
 
-	mxt_wakeup_toggle(data->client, false, false);
+	if (data->poweroff_sleep) {
+		disable_irq(data->irq);
+		mxt_power_off(data);
+	} else {
+		mxt_wakeup_toggle(data->client, false, false);
+	}
 }
 
 static int mxt_input_open(struct input_dev *dev)
@@ -3357,6 +3393,8 @@ static int mxt_probe(struct i2c_client *client)
 	if (error)
 		return error;
 
+	data->poweroff_sleep = device_property_read_bool(&client->dev,
+							 "atmel,poweroff-sleep");
 	/*
 	 * Controllers like mXT1386 have a dedicated WAKE line that could be
 	 * connected to a GPIO or to I2C SCL pin, or permanently asserted low.
@@ -3387,6 +3425,9 @@ static int mxt_probe(struct i2c_client *client)
 		goto err_free_object;
 	}
 
+	if (data->poweroff_sleep && !data->in_bootloader)
+		mxt_power_off(data);
+
 	return 0;
 
 err_free_object:
@@ -3406,7 +3447,8 @@ static void mxt_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
-	mxt_power_off(data);
+	if (!data->poweroff_sleep)
+		mxt_power_off(data);
 }
 
 static int mxt_suspend(struct device *dev)
@@ -3439,7 +3481,8 @@ static int mxt_resume(struct device *dev)
 	if (!input_dev)
 		return 0;
 
-	enable_irq(data->irq);
+	if (!data->poweroff_sleep)
+		enable_irq(data->irq);
 
 	mutex_lock(&input_dev->mutex);
 
