@@ -243,6 +243,47 @@ static int rtl8211e_config_intr(struct phy_device *phydev)
 	return err;
 }
 
+static int rtl8211e_get_timesync_data_path_delays(struct phy_device *phydev,
+						  struct phy_timesync_delay *tsd)
+{
+	phydev_warn(phydev, "Time stamping is not supported\n");
+
+	switch (phydev->interface) {
+	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+		/* The values are measured with RTL8211E and LAN8841 as link
+		 * partners and confirmed with i211 to be in sane range.
+		 */
+		if (phydev->speed == SPEED_1000) {
+			tsd->tx_min_delay_ns = 326;
+			tsd->rx_min_delay_ns = 406;
+			return 0;
+		} else if (phydev->speed == SPEED_100) {
+			tsd->tx_min_delay_ns = 703;
+			tsd->rx_min_delay_ns = 621;
+			return 0;
+		} else if (phydev->speed == SPEED_10) {
+			/* This value is suspiciously big, with atypical
+			 * shift to Egress side. This value is confirmed
+			 * by measuring RGMII-PHY-PHY-RGMII path delay.
+			 * Similar results are confirmed with LAN8841 and i211
+			 * as link partners.
+			 */
+			tsd->tx_min_delay_ns = 920231;
+			tsd->rx_min_delay_ns = 1674;
+			return 0;
+		}
+	default:
+		break;
+	}
+
+	phydev_warn(phydev, "Not tested or not supported modes for path delay values\n");
+
+	return -EOPNOTSUPP;
+}
+
 static int rtl8211f_config_intr(struct phy_device *phydev)
 {
 	u16 val;
@@ -1179,6 +1220,7 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		.get_timesync_data_path_delays = rtl8211e_get_timesync_data_path_delays,
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc916),
 		.name		= "RTL8211F Gigabit Ethernet",
