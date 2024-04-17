@@ -1097,8 +1097,23 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 	if (priv->dma_cap.fpesel)
 		stmmac_fpe_link_state_handle(priv, true);
 
-	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
+	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY) {
+		int ret = 0;
+
+		if (phy)
+			ret = phy_get_timesync_data_path_delays(phy,
+								&priv->phy_tx_delay_ns,
+								&priv->phy_rx_delay_ns);
+		if (!phy || ret) {
+			if (ret != -EOPNOTSUPP)
+				netdev_err(priv->dev, "Failed to get PHY delay: %pe\n",
+					   ERR_PTR(ret));
+			priv->phy_tx_delay_ns = 0;
+			priv->phy_rx_delay_ns = 0;
+		}
+
 		stmmac_hwtstamp_correct_latency(priv, priv);
+	}
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
