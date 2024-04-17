@@ -434,7 +434,6 @@ struct binder_proc {
 	spinlock_t inner_lock;
 	spinlock_t outer_lock;
 	struct dentry *binderfs_entry;
-	bool oneway_spam_detection_enabled;
 };
 
 /**

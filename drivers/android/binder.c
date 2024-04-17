@@ -4486,8 +4486,8 @@ retry:
 		case BINDER_WORK_TRANSACTION_COMPLETE:
 		case BINDER_WORK_TRANSACTION_PENDING:
 		case BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT: {
-			if (proc->oneway_spam_detection_enabled &&
-				   w->type == BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT)
+			if (proc->flags & PF_SPAM_DETECTION &&
+			    w->type == BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT)
 				cmd = BR_ONEWAY_SPAM_SUSPECT;
 			else if (w->type == BINDER_WORK_TRANSACTION_PENDING)
 				cmd = BR_TRANSACTION_PENDING_FROZEN;
@@ -5553,7 +5553,8 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			goto err;
 		}
 		binder_inner_proc_lock(proc);
-		proc->oneway_spam_detection_enabled = (bool)enable;
+		proc->flags &= ~PF_SPAM_DETECTION;
+		proc->flags |= enable & PF_SPAM_DETECTION;
 		binder_inner_proc_unlock(proc);
 		break;
 	}

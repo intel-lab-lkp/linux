@@ -253,7 +253,9 @@ struct binder_extended_error {
 
 /* Used with BINDER_SET_PROC_FLAGS ioctl */
 enum proc_flags {
-	PF_SUPPORTED_FLAGS_MASK,
+	PF_SPAM_DETECTION	= (1 << 0), /* enable oneway spam detection */
+
+	PF_SUPPORTED_FLAGS_MASK = PF_SPAM_DETECTION,
 };
 
 enum {
@@ -269,9 +271,11 @@ enum {
 	BINDER_SET_CONTEXT_MGR_EXT	= _IOW('b', 13, struct flat_binder_object),
 	BINDER_FREEZE			= _IOW('b', 14, struct binder_freeze_info),
 	BINDER_GET_FROZEN_INFO		= _IOWR('b', 15, struct binder_frozen_status_info),
-	BINDER_ENABLE_ONEWAY_SPAM_DETECTION	= _IOW('b', 16, __u32),
 	BINDER_GET_EXTENDED_ERROR	= _IOWR('b', 17, struct binder_extended_error),
 	BINDER_SET_PROC_FLAGS		= _IOWR('b', 18, __u32),
+
+	/* This is deprecated, use BINDER_SET_PROC_FLAGS instead. */
+	BINDER_ENABLE_ONEWAY_SPAM_DETECTION	= _IOW('b', 16, __u32),
 };
 
 /*
