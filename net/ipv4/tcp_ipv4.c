@@ -602,7 +602,8 @@ int tcp_v4_err(struct sk_buff *skb, u32 info)
 		if (fastopen && !fastopen->sk)
 			break;
 
-		ip_icmp_error(sk, skb, err, th->dest, info, (u8 *)th);
+		if (inet_test_bit(RECVERR, sk))
+			ip_icmp_error(sk, skb, err, th->dest, info, (u8 *)th);
 
 		if (!sock_owned_by_user(sk)) {
 			WRITE_ONCE(sk->sk_err, err);
