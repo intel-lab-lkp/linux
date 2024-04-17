@@ -230,13 +230,46 @@ mcp251xfd_regmap_crc_gather_write(void *context,
 }
 
 static int
+mcp251xfd_regmap_crc_write_iocon(void *context, const void *data, size_t count)
+{
+	const size_t data_offset = sizeof(__be16) +
+		mcp251xfd_regmap_crc.pad_bits / BITS_PER_BYTE;
+	u16 reg = *(u16 *)data;
+
+	/* Never write to bits 16..23 of IOCON register to avoid clearing of LAT0/LAT1
+	 *
+	 * According to Errata DS80000789E 5 writing IOCON register using one
+	 * SPI write command clears LAT0/LAT1.
+	 *
+	 * Errata Fix/Work Around suggests to write registers with single byte
+	 * write instructions. However, it seems that the byte at 0xe06(IOCON[23:16])
+	 * is for read-only access and writing to it causes the cleraing of LAT0/LAT1.
+	 */
+
+	/* Write IOCON[15:0] */
+	mcp251xfd_regmap_crc_gather_write(context, &reg, 1,
+					  data + data_offset, 2);
+	reg += 3;
+	/* Write IOCON[31:24] */
+	mcp251xfd_regmap_crc_gather_write(context, &reg, 1,
+					  data + data_offset + 3, 1);
+
+	return 0;
+}
+
+static int
 mcp251xfd_regmap_crc_write(void *context,
 			   const void *data, size_t count)
 {
 	const size_t data_offset = sizeof(__be16) +
 		mcp251xfd_regmap_crc.pad_bits / BITS_PER_BYTE;
+	u16 reg = *(u16 *)data;
 
-	return mcp251xfd_regmap_crc_gather_write(context,
+	if (reg == MCP251XFD_REG_IOCON)
+		return mcp251xfd_regmap_crc_write_iocon(context,
+						 data, count);
+	else
+		return mcp251xfd_regmap_crc_gather_write(context,
 						 data, data_offset,
 						 data + data_offset,
 						 count - data_offset);
