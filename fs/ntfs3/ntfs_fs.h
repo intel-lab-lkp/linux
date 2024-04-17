@@ -907,22 +907,6 @@ static inline bool ntfs_is_meta_file(struct ntfs_sb_info *sbi, CLST rno)
 	       rno == sbi->usn_jrnl_no;
 }
 
-static inline void ntfs_unmap_page(struct page *page)
-{
-	kunmap(page);
-	put_page(page);
-}
-
-static inline struct page *ntfs_map_page(struct address_space *mapping,
-					 unsigned long index)
-{
-	struct page *page = read_mapping_page(mapping, index, NULL);
-
-	if (!IS_ERR(page))
-		kmap(page);
-	return page;
-}
-
 static inline size_t wnd_zone_bit(const struct wnd_bitmap *wnd)
 {
 	return wnd->zone_bit;
