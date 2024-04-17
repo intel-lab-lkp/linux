@@ -47,6 +47,8 @@ $(linux-tarballs): .tmp_HEAD FORCE
 # rpm-pkg srcrpm-pkg binrpm-pkg
 # ---------------------------------------------------------------------------
 
+export KBUILD_RPM_WITH_DEVEL ?= 0
+
 quiet_cmd_mkspec = GEN     $@
       cmd_mkspec = $(srctree)/scripts/package/mkspec $@
 
@@ -71,7 +73,8 @@ rpm-pkg srcrpm-pkg binrpm-pkg: rpmbuild/SPECS/kernel.spec
 	+$(strip rpmbuild -b$(build-type) rpmbuild/SPECS/kernel.spec \
 	--define='_topdir $(abspath rpmbuild)' \
 	$(if $(filter a b, $(build-type)), \
-		--target $(UTS_MACHINE)-linux --build-in-place --noprep --define='_smp_mflags %{nil}' \
+		--target $(UTS_MACHINE)-linux --build-in-place --noprep \
+		--define='_smp_mflags %{nil}' --define='with_devel $(KBUILD_RPM_WITH_DEVEL)' \
 		$$(rpm -q rpm >/dev/null 2>&1 || echo --nodeps)) \
 	$(RPMOPTS))
 
