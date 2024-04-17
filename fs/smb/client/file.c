@@ -4828,7 +4828,7 @@ read_complete:
 static int cifs_read_folio(struct file *file, struct folio *folio)
 {
 	struct page *page = &folio->page;
-	loff_t offset = page_file_offset(page);
+	loff_t offset = page_offset(page);
 	int rc = -EACCES;
 	unsigned int xid;
 
