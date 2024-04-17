@@ -9999,7 +9999,20 @@ static void kvm_apicv_init(struct kvm *kvm)
 
 	init_rwsem(&kvm->arch.apicv_update_lock);
 
-	set_or_clear_apicv_inhibit(inhibits, APICV_INHIBIT_REASON_ABSENT, true);
+	/*
+	 * Unconditionally inhibiting APICv due to the absence of in-kernel
+	 * local APIC can lead to a scenario where APICV_INHIBIT_REASON_ABSENT
+	 * remains set in the apicv_inhibit_reasons after a local APIC has been
+	 * created by either KVM_CREATE_IRQCHIP or the enabling of
+	 * KVM_CAP_IRQCHIP_SPLIT.
+	 * Hardware support and module parameters governing APICv enablement
+	 * have already been evaluated and the initial status is available in
+	 * enable_apicv, so it can be used here to determine if an inhibit needs
+	 * to be set.
+	 */
+	if (enable_apicv)
+		set_or_clear_apicv_inhibit(inhibits,
+					   APICV_INHIBIT_REASON_ABSENT, true);
 
 	if (!enable_apicv)
 		set_or_clear_apicv_inhibit(inhibits,
