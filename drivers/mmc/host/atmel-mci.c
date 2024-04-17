@@ -2548,7 +2548,7 @@ static int atmci_probe(struct platform_device *pdev)
 	}
 
 	if (!nr_slots) {
-		dev_err(dev, "init failed: no slot defined\n");
+		dev_err_probe(dev, ret, "init failed: no slot defined\n");
 		goto err_init_slot;
 	}
 
@@ -2557,8 +2557,7 @@ static int atmci_probe(struct platform_device *pdev)
 		                                  &host->buf_phys_addr,
 						  GFP_KERNEL);
 		if (!host->buffer) {
-			ret = -ENOMEM;
-			dev_err(dev, "buffer allocation failed\n");
+			ret = dev_err_probe(dev, -ENOMEM, "buffer allocation failed\n");
 			goto err_dma_alloc;
 		}
 	}
