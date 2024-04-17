@@ -1667,6 +1667,8 @@ static int mxcnd_probe(struct platform_device *pdev)
 	if (err)
 		goto escan;
 
+	this->options &= ~NAND_SUBPAGE_READ;
+
 	/* Register the partitions */
 	err = mtd_device_parse_register(mtd, part_probes, NULL, NULL, 0);
 	if (err)
