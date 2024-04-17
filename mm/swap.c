@@ -112,11 +112,24 @@ static void page_cache_release(struct folio *folio)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
 }
 
-static void __folio_put_small(struct folio *folio)
+static void __folio_put_small(struct folio *folio, unsigned short int mgen)
 {
 	page_cache_release(folio);
 	mem_cgroup_uncharge(folio);
-	free_unref_page(&folio->page, 0);
+	free_unref_page(&folio->page, 0, mgen);
+}
+
+void __folio_put_mgen(struct folio *folio, unsigned short int mgen)
+{
+	if (unlikely(folio_is_zone_device(folio)))
+		WARN_ON(1);
+	else if (unlikely(folio_test_large(folio)))
+		WARN_ON(1);
+	/*
+	 * For now, migrc supports this case only.
+	 */
+	else
+		__folio_put_small(folio, mgen);
 }
 
 static void __folio_put_large(struct folio *folio)
@@ -139,7 +152,7 @@ void __folio_put(struct folio *folio)
 	else if (unlikely(folio_test_large(folio)))
 		__folio_put_large(folio);
 	else
-		__folio_put_small(folio);
+		__folio_put_small(folio, 0);
 }
 EXPORT_SYMBOL(__folio_put);
 

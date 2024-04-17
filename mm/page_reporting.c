@@ -221,6 +221,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		/* release lock before waiting on report processing */
 		spin_unlock_irq(&zone->lock);
 
+		/*
+		 * Check and flush before using the isolated pages.
+		 */
+		check_flush_task_mgen();
+
 		/* begin processing pages in local list */
 		err = prdev->report(prdev, sgl, PAGE_REPORTING_CAPACITY);
 
@@ -252,6 +257,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		list_rotate_to_front(&next->lru, list);
 
 	spin_unlock_irq(&zone->lock);
+
+	/*
+	 * Check and flush before using the isolated pages.
+	 */
+	check_flush_task_mgen();
 
 	return err;
 }
