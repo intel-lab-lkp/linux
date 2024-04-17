@@ -212,6 +212,7 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 	u32 sectorsize = fs_info->sectorsize;
 	u32 item_size = btrfs_item_size(leaf, slot);
 	u64 extent_end;
+	u8 compression;
 
 	if (unlikely(!IS_ALIGNED(key->offset, sectorsize))) {
 		file_extent_err(leaf, slot,
@@ -251,16 +252,15 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 		return -EUCLEAN;
 	}
 
+	compression = btrfs_file_extent_compression(leaf, fi);
 	/*
 	 * Support for new compression/encryption must introduce incompat flag,
 	 * and must be caught in open_ctree().
 	 */
-	if (unlikely(btrfs_file_extent_compression(leaf, fi) >=
-		     BTRFS_NR_COMPRESS_TYPES)) {
+	if (unlikely(compression >= BTRFS_NR_COMPRESS_TYPES)) {
 		file_extent_err(leaf, slot,
 	"invalid compression for file extent, have %u expect range [0, %u]",
-			btrfs_file_extent_compression(leaf, fi),
-			BTRFS_NR_COMPRESS_TYPES - 1);
+			compression, BTRFS_NR_COMPRESS_TYPES - 1);
 		return -EUCLEAN;
 	}
 	if (unlikely(btrfs_file_extent_encryption(leaf, fi))) {
@@ -279,8 +279,7 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 		}
 
 		/* Compressed inline extent has no on-disk size, skip it */
-		if (btrfs_file_extent_compression(leaf, fi) !=
-		    BTRFS_COMPRESS_NONE)
+		if (compression != BTRFS_COMPRESS_NONE)
 			return 0;
 
 		/* Uncompressed inline extent size must match item size */
@@ -318,6 +317,30 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 				btrfs_file_extent_num_bytes(leaf, fi));
 		return -EUCLEAN;
 	}
+
+	/*
+	 * If it's a uncompressed regular extents, its ram size should match
+	 * disk_num_bytes. But for now we have several call sites that doesn't
+	 * properly update @ram_bytes, so at least make sure
+	 * @ram_bytes <= @disk_num_bytes.
+	 *
+	 * However we had a bug related to @ram_bytes update, causing
+	 * all zoned and regular DIO to be affected.
+	 * Thankfully the ram_bytes is not critical for non-compressed file extents.
+	 * So here we hide the check behind DEBUG builds for developers only.
+	 */
+#ifdef CONFIG_BTRFS_DEBUG
+	if (unlikely(compression == BTRFS_COMPRESS_NONE &&
+		     btrfs_file_extent_disk_bytenr(leaf, fi) &&
+		     btrfs_file_extent_ram_bytes(leaf, fi) >
+		     btrfs_file_extent_disk_num_bytes(leaf, fi))) {
+		file_extent_err(leaf, slot,
+				"invalid ram_bytes, have %llu expect <= %llu",
+				btrfs_file_extent_ram_bytes(leaf, fi),
+				btrfs_file_extent_disk_num_bytes(leaf, fi));
+		return -EUCLEAN;
+	}
+#endif
 
 	/*
 	 * Check that no two consecutive file extent items, in the same leaf,
