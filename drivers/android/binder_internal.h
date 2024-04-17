@@ -337,6 +337,8 @@ struct binder_ref {
  *                        (protected by @outer_lock)
  * @refs_by_node:         rbtree of refs ordered by ref->node
  *                        (protected by @outer_lock)
+ * @next_ref_desc:        monotonic wrap-around counter to get the next handle
+ *                        (protected by @outer_lock)
  * @waiting_threads:      threads currently waiting for proc work
  *                        (protected by @inner_lock)
  * @pid                   PID of group_leader of process
@@ -407,6 +409,7 @@ struct binder_proc {
 	struct rb_root nodes;
 	struct rb_root refs_by_desc;
 	struct rb_root refs_by_node;
+	u32 next_ref_desc;
 	struct list_head waiting_threads;
 	int pid;
 	struct task_struct *tsk;

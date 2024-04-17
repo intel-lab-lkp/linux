@@ -1045,6 +1045,35 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 	return NULL;
 }
 
+static u32 next_ref_desc(struct binder_proc *proc, struct binder_node *node)
+{
+	struct binder_ref *ref;
+	struct rb_node *n;
+	u32 desc;
+
+	/* Handle 0 is reserved for context manager refs */
+	if (node == proc->context->binder_context_mgr_node)
+		return 0;
+
+	/* Get the next handle (non-zero) */
+	if (proc->flags & PF_LARGE_HANDLES)
+		return proc->next_ref_desc++ ? : proc->next_ref_desc++;
+
+	/*
+	 * Userspace doesn't support large handles. Find the smallest
+	 * unused descriptor by doing an in-order traversal (slow).
+	 */
+	desc = 1;
+	for (n = rb_first(&proc->refs_by_desc); n; n = rb_next(n)) {
+		ref = rb_entry(n, struct binder_ref, rb_node_desc);
+		if (ref->data.desc > desc)
+			break;
+		desc = ref->data.desc + 1;
+	}
+
+	return desc;
+}
+
 /**
  * binder_get_ref_for_node_olocked() - get the ref associated with given node
  * @proc:	binder_proc that owns the ref
@@ -1068,11 +1097,9 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 					struct binder_node *node,
 					struct binder_ref *new_ref)
 {
-	struct binder_context *context = proc->context;
 	struct rb_node **p = &proc->refs_by_node.rb_node;
 	struct rb_node *parent = NULL;
 	struct binder_ref *ref;
-	struct rb_node *n;
 
 	while (*p) {
 		parent = *p;
@@ -1095,14 +1122,8 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 	rb_link_node(&new_ref->rb_node_node, parent, p);
 	rb_insert_color(&new_ref->rb_node_node, &proc->refs_by_node);
 
-	new_ref->data.desc = (node == context->binder_context_mgr_node) ? 0 : 1;
-	for (n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
-		ref = rb_entry(n, struct binder_ref, rb_node_desc);
-		if (ref->data.desc > new_ref->data.desc)
-			break;
-		new_ref->data.desc = ref->data.desc + 1;
-	}
-
+retry:
+	new_ref->data.desc = next_ref_desc(proc, node);
 	p = &proc->refs_by_desc.rb_node;
 	while (*p) {
 		parent = *p;
@@ -1112,6 +1133,8 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 			p = &(*p)->rb_left;
 		else if (new_ref->data.desc > ref->data.desc)
 			p = &(*p)->rb_right;
+		else if (proc->flags & PF_LARGE_HANDLES)
+			goto retry;
 		else
 			BUG();
 	}
@@ -5663,6 +5686,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	get_task_struct(current->group_leader);
 	proc->tsk = current->group_leader;
 	proc->cred = get_cred(filp->f_cred);
+	proc->next_ref_desc = 1;
 	INIT_LIST_HEAD(&proc->todo);
 	init_waitqueue_head(&proc->freeze_wait);
 	proc->default_priority = task_nice(current);

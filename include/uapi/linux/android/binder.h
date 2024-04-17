@@ -254,8 +254,9 @@ struct binder_extended_error {
 /* Used with BINDER_SET_PROC_FLAGS ioctl */
 enum proc_flags {
 	PF_SPAM_DETECTION	= (1 << 0), /* enable oneway spam detection */
+	PF_LARGE_HANDLES	= (1 << 1), /* use large reference handles */
 
-	PF_SUPPORTED_FLAGS_MASK = PF_SPAM_DETECTION,
+	PF_SUPPORTED_FLAGS_MASK = (PF_SPAM_DETECTION | PF_LARGE_HANDLES),
 };
 
 enum {
