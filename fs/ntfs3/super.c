@@ -1493,26 +1493,23 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto put_inode_out;
 	}
 
-	for (idx = 0; idx < (0x10000 * sizeof(short) >> PAGE_SHIFT); idx++) {
-		const __le16 *src;
+	idx = 0;
+	while (idx < (0x10000 * sizeof(u16) >> PAGE_SHIFT)) {
 		u16 *dst = Add2Ptr(sbi->upcase, idx << PAGE_SHIFT);
-		struct page *page = ntfs_map_page(inode->i_mapping, idx);
+		struct folio *folio = read_mapping_folio(inode->i_mapping,
+				idx, NULL);
+		size_t limit = 0x10000 * sizeof(u16) - idx * PAGE_SIZE;
 
-		if (IS_ERR(page)) {
-			err = PTR_ERR(page);
+		if (IS_ERR(folio)) {
+			err = PTR_ERR(folio);
 			ntfs_err(sb, "Failed to read $UpCase (%d).", err);
 			goto put_inode_out;
 		}
 
-		src = page_address(page);
-
-#ifdef __BIG_ENDIAN
-		for (i = 0; i < PAGE_SIZE / sizeof(u16); i++)
-			*dst++ = le16_to_cpu(*src++);
-#else
-		memcpy(dst, src, PAGE_SIZE);
-#endif
-		ntfs_unmap_page(page);
+		memcpy_from_folio_le16(dst, folio, 0,
+				min(limit, folio_size(folio)));
+		idx += folio_nr_pages(folio);
+		folio_put(folio);
 	}
 
 	shared = ntfs_set_shared(sbi->upcase, 0x10000 * sizeof(short));

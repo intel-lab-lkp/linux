@@ -467,6 +467,37 @@ static inline void memcpy_from_folio(char *to, struct folio *folio,
 	} while (len > 0);
 }
 
+#ifdef __BIG_ENDIAN
+static inline void memcpy_from_folio_le16(u16 *to, struct folio *folio,
+		size_t offset, size_t len)
+{
+	VM_BUG_ON(offset + len > folio_size(folio));
+
+	do {
+		const __le16 *from = kmap_local_folio(folio, offset);
+		size_t chunk = len;
+
+		if (folio_test_highmem(folio) &&
+		    chunk > PAGE_SIZE - offset_in_page(offset))
+			chunk = PAGE_SIZE - offset_in_page(offset);
+
+		for (i = 0; i < chunk / sizeof(*to); i++)
+			*to++ = le16_to_cpu(*from++);
+		kunmap_local(from);
+
+		to += chunk / sizeof(*to);
+		offset += chunk;
+		len -= chunk;
+	} while (len > 0);
+}
+#else
+static inline void memcpy_from_folio_le16(u16 *to, struct folio *folio,
+		size_t offset, size_t len)
+{
+	memcpy_from_folio((char *)to, folio, offset, len);
+}
+#endif
+
 /**
  * memcpy_to_folio - Copy a range of bytes to a folio.
  * @folio: The folio to write to.
