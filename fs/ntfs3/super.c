@@ -1429,18 +1429,22 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto put_inode_out;
 	}
 
-	for (done = idx = 0; done < bytes; done += PAGE_SIZE, idx++) {
+	done = idx = 0;
+	while (done < bytes) {
 		unsigned long tail = bytes - done;
-		struct page *page = ntfs_map_page(inode->i_mapping, idx);
+		struct folio *folio = read_mapping_folio(inode->i_mapping,
+				idx, NULL);
 
-		if (IS_ERR(page)) {
-			err = PTR_ERR(page);
+		if (IS_ERR(folio)) {
+			err = PTR_ERR(folio);
 			ntfs_err(sb, "Failed to read $AttrDef (%d).", err);
 			goto put_inode_out;
 		}
-		memcpy(Add2Ptr(t, done), page_address(page),
-		       min(PAGE_SIZE, tail));
-		ntfs_unmap_page(page);
+		memcpy_from_folio(Add2Ptr(t, done), folio, 0,
+				min(tail, folio_size(folio)));
+		done += folio_size(folio);
+		idx += folio_nr_pages(folio);
+		folio_put(folio);
 
 		if (!idx && ATTR_STD != t->type) {
 			ntfs_err(sb, "$AttrDef is corrupted.");
