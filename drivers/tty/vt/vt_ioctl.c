@@ -479,6 +479,19 @@ static int vt_k_ioctl(struct tty_struct *tty, unsigned int cmd,
 		break;
 	}
 
+	case KDFONTINFO: {
+		struct console_font_info fnt_info;
+
+		memset(&fnt_info, 0, sizeof(fnt_info));
+
+		ret = con_font_info(vc, &fnt_info);
+		if (ret)
+			return ret;
+		if (copy_to_user(up, &fnt_info, sizeof(fnt_info)))
+			return -EFAULT;
+		break;
+	}
+
 	default:
 		return -ENOIOCTLCMD;
 	}
