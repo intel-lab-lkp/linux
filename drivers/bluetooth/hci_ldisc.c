@@ -506,6 +506,7 @@ static int hci_uart_tty_open(struct tty_struct *tty)
 	/* disable alignment support by default */
 	hu->alignment = 1;
 	hu->padding = 0;
+	hu->proto_data = 0;
 
 	INIT_WORK(&hu->init_ready, hci_uart_init_work);
 	INIT_WORK(&hu->write_work, hci_uart_write_work);
@@ -793,6 +794,15 @@ static int hci_uart_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 
 	case HCIUARTGETFLAGS:
 		err = hu->hdev_flags;
+		break;
+
+	case HCIUARTSETPROTODATA:
+		if (test_bit(HCI_UART_PROTO_SET, &hu->flags)) {
+			err = -EBUSY;
+		} else {
+			hu->proto_data = arg;
+			BT_DBG("HCIUARTSETPROTODATA %lu okay.", arg);
+		}
 		break;
 
 	default:
