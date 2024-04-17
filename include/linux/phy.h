@@ -894,6 +894,24 @@ struct phy_led {
 #define to_phy_led(d) container_of(d, struct phy_led, led_cdev)
 
 /**
+ * struct phy_timesync_delay - PHY time sync delay values
+ * @tx_max_delay_ns: Maximum delay for transmit path in nanoseconds. Corresponds
+ * to IEEE 802.3 2022 - 30.13.1.3 aTimeSyncDelayTXmax.
+ * @tx_min_delay_ns: Minimum delay for transmit path in nanoseconds. Corresponds
+ * to IEEE 802.3 2022 - 30.13.1.4 aTimeSyncDelayTXmin.
+ * @rx_max_delay_ns: Maximum delay for receive path in nanoseconds. Corresponds
+ * to IEEE 802.3 2022 - 30.13.1.5 aTimeSyncDelayRXmax
+ * @rx_min_delay_ns: Minimum delay for receive path in nanoseconds. Corresponds
+ * to IEEE 802.3 2022 - 30.13.1.6 aTimeSyncDelayRXmin.
+ */
+struct phy_timesync_delay {
+	u64 tx_max_delay_ns;
+	u64 tx_min_delay_ns;
+	u64 rx_max_delay_ns;
+	u64 rx_min_delay_ns;
+};
+
+/**
  * struct phy_driver - Driver structure for a particular PHY type
  *
  * @mdiodrv: Data common to all MDIO devices
@@ -1182,6 +1200,16 @@ struct phy_driver {
 	 */
 	int (*led_polarity_set)(struct phy_device *dev, int index,
 				unsigned long modes);
+
+	/**
+	 * @get_timesync_data_path_delays: Get the PHY time sync delay values
+	 * @dev: PHY device
+	 * @tsd: PHY time sync delay values
+	 *
+	 * Returns 0 on success, or an error code.
+	 */
+	int (*get_timesync_data_path_delays)(struct phy_device *dev,
+					     struct phy_timesync_delay *tsd);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -1990,6 +2018,9 @@ void phy_get_pause(struct phy_device *phydev, bool *tx_pause, bool *rx_pause);
 
 s32 phy_get_internal_delay(struct phy_device *phydev, struct device *dev,
 			   const int *delay_values, int size, bool is_rx);
+
+int phy_get_timesync_data_path_delays(struct phy_device *phydev,
+				      u64 *tx_delay_ns, u64 *rx_delay_ns);
 
 void phy_resolve_pause(unsigned long *local_adv, unsigned long *partner_adv,
 		       bool *tx_pause, bool *rx_pause);

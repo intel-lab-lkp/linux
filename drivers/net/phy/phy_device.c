@@ -3216,6 +3216,63 @@ s32 phy_get_internal_delay(struct phy_device *phydev, struct device *dev,
 }
 EXPORT_SYMBOL(phy_get_internal_delay);
 
+/**
+ * phy_get_timesync_data_path_delays - get the TimeSync data path ingress/egress
+ *                                     delays
+ * @phydev: phy_device struct
+ * @tx_delay_ns: pointer to the transmit delay in nanoseconds
+ * @rx_delay_ns: pointer to the receive delay in nanoseconds
+ *
+ * This function is used to get the TimeSync data path ingress/egress delays
+ * as described in IEEE 802.3-2022 sections:
+ * 30.13.1.3 aTimeSyncDelayTXmax, 30.13.1.4 aTimeSyncDelayTXmin,
+ * 30.13.1.5 aTimeSyncDelayRXmax and 30.13.1.6 aTimeSyncDelayRXmin.
+ *
+ * The delays are returned in nanoseconds and can be used to compensate time
+ * added by the PHY to the PTP packets.
+ *
+ * Returns 0 on success, negative value on failure.
+ */
+int phy_get_timesync_data_path_delays(struct phy_device *phydev,
+				      u64 *tx_delay_ns, u64 *rx_delay_ns)
+{
+	struct phy_timesync_delay tsd = { 0 };
+	int err;
+
+	if (!phydev->drv->get_timesync_data_path_delays)
+		return -EOPNOTSUPP;
+
+	if (!tx_delay_ns || !rx_delay_ns)
+		return -EINVAL;
+
+	err = phydev->drv->get_timesync_data_path_delays(phydev, &tsd);
+	if (err)
+		return err;
+
+	if ((!tsd.tx_max_delay_ns && !tsd.tx_min_delay_ns) ||
+	    (!tsd.rx_max_delay_ns && !tsd.rx_min_delay_ns)) {
+		phydev_err(phydev, "Invalid TimeSync data path delays\n");
+		return -EINVAL;
+	}
+
+	if (tsd.tx_max_delay_ns && tsd.tx_min_delay_ns)
+		*tx_delay_ns = (tsd.tx_max_delay_ns + tsd.tx_min_delay_ns) / 2;
+	else if (tsd.tx_max_delay_ns)
+		*tx_delay_ns = tsd.tx_max_delay_ns;
+	else
+		*tx_delay_ns = tsd.tx_min_delay_ns;
+
+	if (tsd.rx_max_delay_ns && tsd.rx_min_delay_ns)
+		*rx_delay_ns = (tsd.rx_max_delay_ns + tsd.rx_min_delay_ns) / 2;
+	else if (tsd.rx_max_delay_ns)
+		*rx_delay_ns = tsd.rx_max_delay_ns;
+	else
+		*rx_delay_ns = tsd.rx_min_delay_ns;
+
+	return 0;
+}
+EXPORT_SYMBOL(phy_get_timesync_data_path_delays);
+
 static int phy_led_set_brightness(struct led_classdev *led_cdev,
 				  enum led_brightness value)
 {
