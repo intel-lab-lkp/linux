@@ -5334,6 +5334,26 @@ static int binder_ioctl_get_extended_error(struct binder_thread *thread,
 	return 0;
 }
 
+static int binder_ioctl_set_proc_flags(struct binder_proc *proc,
+				       u32 __user *user)
+{
+	u32 flags;
+
+	if (get_user(flags, user))
+		return -EFAULT;
+
+	binder_inner_proc_lock(proc);
+	flags &= PF_SUPPORTED_FLAGS_MASK;
+	proc->flags = flags;
+	binder_inner_proc_unlock(proc);
+
+	/* confirm supported flags with user */
+	if (put_user(flags, user))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -5539,6 +5559,11 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 	case BINDER_GET_EXTENDED_ERROR:
 		ret = binder_ioctl_get_extended_error(thread, ubuf);
+		if (ret < 0)
+			goto err;
+		break;
+	case BINDER_SET_PROC_FLAGS:
+		ret = binder_ioctl_set_proc_flags(proc, ubuf);
 		if (ret < 0)
 			goto err;
 		break;

@@ -346,6 +346,8 @@ struct binder_ref {
  * @cred                  struct cred associated with the `struct file`
  *                        in binder_open()
  *                        (invariant after initialized)
+ * @flags:                enum proc_flags set via BINDER_SET_PROC_FLAGS.
+ *                        (protected by @inner_lock)
  * @deferred_work_node:   element for binder_deferred_list
  *                        (protected by binder_deferred_lock)
  * @deferred_work:        bitmap of deferred work to perform
@@ -409,6 +411,7 @@ struct binder_proc {
 	int pid;
 	struct task_struct *tsk;
 	const struct cred *cred;
+	u32 flags;
 	struct hlist_node deferred_work_node;
 	int deferred_work;
 	int outstanding_txns;
@@ -417,7 +420,6 @@ struct binder_proc {
 	bool sync_recv;
 	bool async_recv;
 	wait_queue_head_t freeze_wait;
-
 	struct list_head todo;
 	struct binder_stats stats;
 	struct list_head delivered_death;
