@@ -14,6 +14,7 @@
 #include <linux/can/core.h>
 #include <linux/can/dev.h>
 #include <linux/can/rx-offload.h>
+#include <linux/gpio/driver.h>
 #include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
@@ -660,6 +661,9 @@ struct mcp251xfd_priv {
 
 	struct mcp251xfd_devtype_data devtype_data;
 	struct can_berr_counter bec;
+#ifdef CONFIG_GPIOLIB
+	struct gpio_chip gc;
+#endif
 };
 
 #define MCP251XFD_IS(_model) \

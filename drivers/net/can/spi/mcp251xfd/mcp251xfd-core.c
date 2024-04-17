@@ -16,6 +16,7 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/device.h>
+#include <linux/gpio/driver.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
@@ -366,6 +367,8 @@ static int mcp251xfd_chip_wake(const struct mcp251xfd_priv *priv)
 
 static inline int mcp251xfd_chip_sleep(const struct mcp251xfd_priv *priv)
 {
+	int ret;
+
 	if (priv->pll_enable) {
 		u32 osc;
 		int err;
@@ -381,13 +384,20 @@ static inline int mcp251xfd_chip_sleep(const struct mcp251xfd_priv *priv)
 		priv->spi->max_speed_hz = priv->spi_max_speed_hz_slow;
 	}
 
-	return mcp251xfd_chip_set_mode(priv, MCP251XFD_REG_CON_MODE_SLEEP);
+	ret = mcp251xfd_chip_set_mode(priv, MCP251XFD_REG_CON_MODE_SLEEP);
+
+	regcache_cache_only(priv->map_reg, true);
+	regcache_mark_dirty(priv->map_reg);
+
+	return ret;
 }
 
 static int mcp251xfd_chip_softreset_do(const struct mcp251xfd_priv *priv)
 {
 	const __be16 cmd = mcp251xfd_cmd_reset();
 	int err;
+
+	regcache_cache_only(priv->map_reg, false);
 
 	/* The Set Mode and SPI Reset command only works if the
 	 * controller is not in Sleep Mode.
@@ -401,7 +411,12 @@ static int mcp251xfd_chip_softreset_do(const struct mcp251xfd_priv *priv)
 		return err;
 
 	/* spi_write_then_read() works with non DMA-safe buffers */
-	return spi_write_then_read(priv->spi, &cmd, sizeof(cmd), NULL, 0);
+	err = spi_write_then_read(priv->spi, &cmd, sizeof(cmd), NULL, 0);
+	if (err)
+		return err;
+
+	/* After reset restore cached register values to hardware */
+	return regcache_sync(priv->map_reg);
 }
 
 static int mcp251xfd_chip_softreset_check(const struct mcp251xfd_priv *priv)
@@ -1772,6 +1787,119 @@ static int mcp251xfd_register_check_rx_int(struct mcp251xfd_priv *priv)
 	return 0;
 }
 
+static const char * const mcp251xfd_gpio_names[] = {"GPIO0", "GPIO1"};
+
+static int mcp251xfd_gpio_request(struct gpio_chip *chip, unsigned int offset)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 pin_mask = MCP251XFD_REG_IOCON_PM0 << offset;
+
+	return regmap_update_bits(priv->map_reg, MCP251XFD_REG_IOCON,
+				  pin_mask, pin_mask);
+}
+
+static int mcp251xfd_gpio_get_direction(struct gpio_chip *chip,
+					unsigned int offset)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 mask = MCP251XFD_REG_IOCON_TRIS0 << offset;
+	u32 val;
+
+	regmap_read(priv->map_reg, MCP251XFD_REG_IOCON, &val);
+
+	if (mask & val)
+		return GPIO_LINE_DIRECTION_IN;
+
+	return GPIO_LINE_DIRECTION_OUT;
+}
+
+static int mcp251xfd_gpio_get(struct gpio_chip *chip, unsigned int offset)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 mask = MCP251XFD_REG_IOCON_GPIO0 << offset;
+	u32 val;
+
+	regcache_drop_region(priv->map_reg, MCP251XFD_REG_IOCON, MCP251XFD_REG_IOCON);
+	regmap_read(priv->map_reg, MCP251XFD_REG_IOCON, &val);
+
+	return !!(mask & val);
+}
+
+static int mcp251xfd_gpio_direction_output(struct gpio_chip *chip,
+					   unsigned int offset, int value)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 dir_mask = MCP251XFD_REG_IOCON_TRIS0 << offset;
+	u32 val_mask = MCP251XFD_REG_IOCON_LAT0 << offset;
+	u32 val;
+
+	if (value)
+		val = val_mask;
+	else
+		val = 0;
+
+	return regmap_update_bits(priv->map_reg, MCP251XFD_REG_IOCON,
+				  dir_mask | val_mask, val);
+}
+
+static int mcp251xfd_gpio_direction_input(struct gpio_chip *chip,
+					  unsigned int offset)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 dir_mask = MCP251XFD_REG_IOCON_TRIS0 << offset;
+
+	return regmap_update_bits(priv->map_reg, MCP251XFD_REG_IOCON,
+				  dir_mask, dir_mask);
+}
+
+static void mcp251xfd_gpio_set(struct gpio_chip *chip, unsigned int offset,
+			       int value)
+{
+	struct mcp251xfd_priv *priv = gpiochip_get_data(chip);
+	u32 val_mask = MCP251XFD_REG_IOCON_LAT0 << offset;
+	u32 val;
+	int ret;
+
+	if (value)
+		val = val_mask;
+	else
+		val = 0;
+
+	ret = regmap_update_bits(priv->map_reg, MCP251XFD_REG_IOCON,
+				 val_mask, val);
+	if (ret)
+		dev_warn(&priv->spi->dev,
+			 "Failed to set GPIO %u: %d\n", offset, ret);
+}
+
+static int mcp251fdx_gpio_setup(struct mcp251xfd_priv *priv)
+{
+	struct gpio_chip *gc = &priv->gc;
+
+	if (!device_property_present(&priv->spi->dev, "gpio-controller"))
+		return 0;
+
+	if (priv->rx_int)
+		return dev_err_probe(&priv->spi->dev, -EINVAL,
+				     "Can't configure gpio-controller with RX-INT!\n");
+
+	gc->label = dev_name(&priv->spi->dev);
+	gc->parent = &priv->spi->dev;
+	gc->owner = THIS_MODULE;
+	gc->request = mcp251xfd_gpio_request;
+	gc->get_direction = mcp251xfd_gpio_get_direction;
+	gc->direction_output = mcp251xfd_gpio_direction_output;
+	gc->direction_input = mcp251xfd_gpio_direction_input;
+	gc->get = mcp251xfd_gpio_get;
+	gc->set = mcp251xfd_gpio_set;
+	gc->base = -1;
+	gc->can_sleep = true;
+	gc->ngpio = ARRAY_SIZE(mcp251xfd_gpio_names);
+	gc->names = mcp251xfd_gpio_names;
+
+	return devm_gpiochip_add_data(&priv->spi->dev, gc, priv);
+}
+
 static int
 mcp251xfd_register_get_dev_id(const struct mcp251xfd_priv *priv, u32 *dev_id,
 			      u32 *effective_speed_hz_slow,
@@ -2141,6 +2269,12 @@ static int mcp251xfd_probe(struct spi_device *spi)
 					MCP251XFD_NAPI_WEIGHT);
 	if (err)
 		goto out_free_candev;
+
+	err = mcp251fdx_gpio_setup(priv);
+	if (err) {
+		dev_err_probe(&spi->dev, err, "Failed to register gpio-controller.\n");
+		goto out_free_candev;
+	}
 
 	err = mcp251xfd_register(priv);
 	if (err) {

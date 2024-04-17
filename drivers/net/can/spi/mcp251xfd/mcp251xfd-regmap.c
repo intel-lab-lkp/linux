@@ -447,6 +447,21 @@ static const struct regmap_access_table mcp251xfd_reg_table = {
 	.n_yes_ranges = ARRAY_SIZE(mcp251xfd_reg_table_yes_range),
 };
 
+static bool mcp251xfd_volatile_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case MCP251XFD_REG_ECCCON:
+	case MCP251XFD_REG_DEVID:
+	case MCP251XFD_REG_NBTCFG:
+	case MCP251XFD_REG_DBTCFG:
+	case MCP251XFD_REG_TDC:
+	case MCP251XFD_REG_TSCON:
+	case MCP251XFD_REG_IOCON:
+		return false;
+	}
+	return true;
+}
+
 static const struct regmap_config mcp251xfd_regmap_nocrc = {
 	.name = "nocrc",
 	.reg_bits = 16,
@@ -456,7 +471,8 @@ static const struct regmap_config mcp251xfd_regmap_nocrc = {
 	.max_register = 0xffc,
 	.wr_table = &mcp251xfd_reg_table,
 	.rd_table = &mcp251xfd_reg_table,
-	.cache_type = REGCACHE_NONE,
+	.cache_type = REGCACHE_MAPLE,
+	.volatile_reg = mcp251xfd_volatile_reg,
 	.read_flag_mask = (__force unsigned long)
 		cpu_to_be16(MCP251XFD_SPI_INSTRUCTION_READ),
 	.write_flag_mask = (__force unsigned long)
@@ -483,7 +499,8 @@ static const struct regmap_config mcp251xfd_regmap_crc = {
 	.max_register = 0xffc,
 	.wr_table = &mcp251xfd_reg_table,
 	.rd_table = &mcp251xfd_reg_table,
-	.cache_type = REGCACHE_NONE,
+	.cache_type = REGCACHE_MAPLE,
+	.volatile_reg = mcp251xfd_volatile_reg,
 };
 
 static const struct regmap_bus mcp251xfd_bus_crc = {
