@@ -186,6 +186,7 @@ struct ad7192_state {
 	struct regulator		*vref;
 	struct clk			*mclk;
 	u16				int_vref_mv;
+	u32				aincom_mv;
 	u32				fclk;
 	u32				mode;
 	u32				conf;
@@ -742,10 +743,19 @@ static int ad7192_read_raw(struct iio_dev *indio_dev,
 			*val = -(1 << (chan->scan_type.realbits - 1));
 		else
 			*val = 0;
+		switch (chan->type) {
+		case IIO_VOLTAGE:
+			if (st->aincom_mv && !chan->differential)
+				*val += DIV_ROUND_CLOSEST_ULL((u64)st->aincom_mv * 1000000000,
+							      st->scale_avail[gain][1]);
+			return IIO_VAL_INT;
 		/* Kelvin to Celsius */
-		if (chan->type == IIO_TEMP)
+		case IIO_TEMP:
 			*val -= 273 * ad7192_get_temp_scale(unipolar);
-		return IIO_VAL_INT;
+			return IIO_VAL_INT;
+		default:
+			return -EINVAL;
+		}
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		*val = DIV_ROUND_CLOSEST(ad7192_get_f_adc(st), 1024);
 		return IIO_VAL_INT;
@@ -1052,6 +1062,7 @@ static int ad7192_probe(struct spi_device *spi)
 {
 	struct ad7192_state *st;
 	struct iio_dev *indio_dev;
+	struct regulator *aincom;
 	int ret;
 
 	if (!spi->irq) {
@@ -1066,6 +1077,27 @@ static int ad7192_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	mutex_init(&st->lock);
+
+	aincom = devm_regulator_get_optional(&spi->dev, "aincom");
+	if (!IS_ERR(aincom)) {
+		ret = regulator_enable(aincom);
+		if (ret) {
+			dev_err(&spi->dev, "Failed to enable specified AINCOM supply\n");
+			return ret;
+		}
+
+		ret = devm_add_action_or_reset(&spi->dev, ad7192_reg_disable, aincom);
+		if (ret)
+			return ret;
+
+		ret = regulator_get_voltage(aincom);
+		if (ret < 0)
+			return dev_err_probe(&spi->dev, ret,
+					     "Device tree error, AINCOM voltage undefined\n");
+		st->aincom_mv = ret / 1000;
+	} else {
+		st->aincom_mv = 0;
+	}
 
 	st->avdd = devm_regulator_get(&spi->dev, "avdd");
 	if (IS_ERR(st->avdd))
@@ -1113,6 +1145,7 @@ static int ad7192_probe(struct spi_device *spi)
 	st->int_vref_mv = ret / 1000;
 
 	st->chip_info = spi_get_device_match_data(spi);
+
 	indio_dev->name = st->chip_info->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = st->chip_info->channels;
