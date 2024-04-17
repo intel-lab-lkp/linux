@@ -3738,6 +3738,20 @@ static int lan8814_probe(struct phy_device *phydev)
 #define LAN8841_BTRX_POWER_DOWN_BTRX_CH_C	BIT(5)
 #define LAN8841_BTRX_POWER_DOWN_BTRX_CH_D	BIT(7)
 #define LAN8841_ADC_CHANNEL_MASK		198
+#define LAN8841_PTP_RX_LATENCY_10M		328
+#define LAN8841_PTP_TX_LATENCY_10M		329
+#define LAN8841_PTP_RX_LATENCY_100M		330
+#define LAN8841_PTP_TX_LATENCY_100M		331
+#define LAN8841_PTP_RX_LATENCY_1000M		332
+#define LAN8841_PTP_TX_LATENCY_1000M		333
+
+#define LAN8841_PTP_RX_LATENCY_10M_VAL		5803
+#define LAN8841_PTP_TX_LATENCY_10M_VAL		3880
+#define LAN8841_PTP_RX_LATENCY_100M_VAL		443
+#define LAN8841_PTP_TX_LATENCY_100M_VAL		95
+#define LAN8841_PTP_RX_LATENCY_1000M_VAL	377
+#define LAN8841_PTP_TX_LATENCY_1000M_VAL	85
+
 #define LAN8841_PTP_RX_PARSE_L2_ADDR_EN		370
 #define LAN8841_PTP_RX_PARSE_IP_ADDR_EN		371
 #define LAN8841_PTP_RX_VERSION			374
@@ -3753,6 +3767,45 @@ static int lan8814_probe(struct phy_device *phydev)
 #define LAN8841_PTP_RX_MODE			381
 #define LAN8841_PTP_INSERT_TS_EN		BIT(0)
 #define LAN8841_PTP_INSERT_TS_32BIT		BIT(1)
+
+static int lan8841_ptp_latency_init(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			    LAN8841_PTP_RX_LATENCY_10M,
+			    LAN8841_PTP_RX_LATENCY_10M_VAL);
+	if (ret)
+		return ret;
+
+	ret = phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			    LAN8841_PTP_TX_LATENCY_10M,
+			    LAN8841_PTP_TX_LATENCY_10M_VAL);
+	if (ret)
+		return ret;
+
+	ret = phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			    LAN8841_PTP_RX_LATENCY_100M,
+			    LAN8841_PTP_RX_LATENCY_100M_VAL);
+	if (ret)
+		return ret;
+
+	ret = phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			    LAN8841_PTP_TX_LATENCY_100M,
+			    LAN8841_PTP_TX_LATENCY_100M_VAL);
+	if (ret)
+		return ret;
+
+	ret = phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			    LAN8841_PTP_RX_LATENCY_1000M,
+			    LAN8841_PTP_RX_LATENCY_1000M_VAL);
+	if (ret)
+		return ret;
+
+	return phy_write_mmd(phydev, KSZ9131RN_MMD_COMMON_CTRL_REG,
+			     LAN8841_PTP_TX_LATENCY_1000M,
+			     LAN8841_PTP_TX_LATENCY_1000M_VAL);
+}
 
 static int lan8841_config_init(struct phy_device *phydev)
 {
@@ -3833,7 +3886,7 @@ static int lan8841_config_init(struct phy_device *phydev)
 		      LAN8841_MMD0_REGISTER_17_DROP_OPT(2) |
 		      LAN8841_MMD0_REGISTER_17_XMIT_TOG_TX_DIS);
 
-	return 0;
+	return lan8841_ptp_latency_init(phydev);
 }
 
 #define LAN8841_OUTPUT_CTRL			25
