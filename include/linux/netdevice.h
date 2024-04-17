@@ -80,6 +80,25 @@ struct xdp_frame;
 struct xdp_metadata_ops;
 struct xdp_md;
 
+#if IS_ENABLED(CONFIG_DIMLIB)
+struct dim_cq_moder;
+
+#define NETDEV_PROFILE_USEC	BIT(0)	/* device supports usec field modification */
+#define NETDEV_PROFILE_PKTS	BIT(1)	/* device supports pkts field modification */
+#define NETDEV_PROFILE_COMPS	BIT(2)	/* device supports comps field modification */
+
+struct netdev_profile_moder {
+	/* See NETDEV_PROFILE_* */
+	unsigned int flags;
+
+	/* DIM profile lists for different dim cq modes */
+	struct dim_cq_moder *rx_eqe_profile;
+	struct dim_cq_moder *rx_cqe_profile;
+	struct dim_cq_moder *tx_eqe_profile;
+	struct dim_cq_moder *tx_cqe_profile;
+};
+#endif
+
 typedef u32 xdp_features_t;
 
 void synchronize_net(void);
@@ -2399,6 +2418,11 @@ struct net_device {
 #if IS_ENABLED(CONFIG_PAGE_POOL)
 	/** @page_pools: page pools created for this netdevice */
 	struct hlist_head	page_pools;
+#endif
+
+#if IS_ENABLED(CONFIG_DIMLIB)
+	/** @moderation: dim tunable parameters for this netdevice */
+	struct netdev_profile_moder	*moderation;
 #endif
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)

@@ -96,6 +96,7 @@
 #include <linux/kthread.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
+#include <linux/dim.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/busy_poll.h>
@@ -10229,6 +10230,57 @@ static void netdev_do_free_pcpu_stats(struct net_device *dev)
 	}
 }
 
+static int dev_dim_profile_init(struct net_device *dev)
+{
+#if IS_ENABLED(CONFIG_DIMLIB)
+	u32 supported = dev->ethtool_ops->supported_coalesce_params;
+	struct netdev_profile_moder *moder;
+	int length;
+
+	dev->moderation = kzalloc(sizeof(*dev->moderation), GFP_KERNEL);
+	if (!dev->moderation)
+		goto err_moder;
+
+	moder = dev->moderation;
+	length = NET_DIM_PARAMS_NUM_PROFILES * sizeof(*moder->rx_eqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_RX_EQE_PROFILE) {
+		moder->rx_eqe_profile = kmemdup(dim_rx_profile[0], length, GFP_KERNEL);
+		if (!moder->rx_eqe_profile)
+			goto err_rx_eqe;
+	}
+	if (supported & ETHTOOL_COALESCE_RX_CQE_PROFILE) {
+		moder->rx_cqe_profile = kmemdup(dim_rx_profile[1], length, GFP_KERNEL);
+		if (!moder->rx_cqe_profile)
+			goto err_rx_cqe;
+	}
+	if (supported & ETHTOOL_COALESCE_TX_EQE_PROFILE) {
+		moder->tx_eqe_profile = kmemdup(dim_tx_profile[0], length, GFP_KERNEL);
+		if (!moder->tx_eqe_profile)
+			goto err_tx_eqe;
+	}
+	if (supported & ETHTOOL_COALESCE_TX_CQE_PROFILE) {
+		moder->tx_cqe_profile = kmemdup(dim_tx_profile[1], length, GFP_KERNEL);
+		if (!moder->tx_cqe_profile)
+			goto err_tx_cqe;
+	}
+#endif
+	return 0;
+
+#if IS_ENABLED(CONFIG_DIMLIB)
+err_tx_cqe:
+	kfree(moder->tx_eqe_profile);
+err_tx_eqe:
+	kfree(moder->rx_cqe_profile);
+err_rx_cqe:
+	kfree(moder->rx_eqe_profile);
+err_rx_eqe:
+	kfree(moder);
+err_moder:
+	return -ENOMEM;
+#endif
+}
+
 /**
  * register_netdevice() - register a network device
  * @dev: device to register
@@ -10255,6 +10307,10 @@ int register_netdevice(struct net_device *dev)
 	BUG_ON(!net);
 
 	ret = ethtool_check_ops(dev->ethtool_ops);
+	if (ret)
+		return ret;
+
+	ret = dev_dim_profile_init(dev);
 	if (ret)
 		return ret;
 
@@ -11011,6 +11067,27 @@ free_dev:
 }
 EXPORT_SYMBOL(alloc_netdev_mqs);
 
+static void netif_free_profile(struct net_device *dev)
+{
+#if IS_ENABLED(CONFIG_DIMLIB)
+	u32 supported = dev->ethtool_ops->supported_coalesce_params;
+
+	if (supported & ETHTOOL_COALESCE_RX_EQE_PROFILE)
+		kfree(dev->moderation->rx_eqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_RX_CQE_PROFILE)
+		kfree(dev->moderation->rx_cqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_TX_EQE_PROFILE)
+		kfree(dev->moderation->tx_eqe_profile);
+
+	if (supported & ETHTOOL_COALESCE_TX_CQE_PROFILE)
+		kfree(dev->moderation->tx_cqe_profile);
+
+	kfree(dev->moderation);
+#endif
+}
+
 /**
  * free_netdev - free network device
  * @dev: device
@@ -11035,6 +11112,8 @@ void free_netdev(struct net_device *dev)
 		dev->needs_free_netdev = true;
 		return;
 	}
+
+	netif_free_profile(dev);
 
 	netif_free_tx_queues(dev);
 	netif_free_rx_queues(dev);
