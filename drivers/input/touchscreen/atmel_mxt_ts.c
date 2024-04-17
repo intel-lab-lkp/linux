@@ -2277,6 +2277,28 @@ static void mxt_config_cb(const struct firmware *cfg, void *ctx)
 	release_firmware(cfg);
 }
 
+static void mxt_debug_init(struct mxt_data *data);
+
+static int mxt_device_register(struct mxt_data *data)
+{
+	int error;
+
+	/* If input device is not already registered */
+	if (!data->input_dev) {
+		if (data->multitouch) {
+			error = mxt_initialize_input_device(data);
+			if (error)
+				return error;
+		} else {
+			dev_warn(&data->client->dev, "No touch object detected\n");
+		}
+
+		mxt_debug_init(data);
+	}
+
+	return 0;
+}
+
 static int mxt_initialize(struct mxt_data *data)
 {
 	struct i2c_client *client = data->client;
@@ -2831,15 +2853,9 @@ static int mxt_configure_objects(struct mxt_data *data,
 			dev_warn(dev, "Error %d updating config\n", error);
 	}
 
-	if (data->multitouch) {
-		error = mxt_initialize_input_device(data);
-		if (error)
-			return error;
-	} else {
-		dev_warn(dev, "No touch object detected\n");
-	}
-
-	mxt_debug_init(data);
+	error = mxt_device_register(data);
+	if (error)
+		return error;
 
 	return 0;
 }
