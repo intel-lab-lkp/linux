@@ -310,6 +310,12 @@ These two variables allow to override the user@host string displayed during
 boot and in /proc/version. The default value is the output of the commands
 whoami and host, respectively.
 
+KBUILD_RPM_WITH_DEVEL
+---------------------
+This variable dictates weather creating an RPM package also builds a `-devel`
+package or not. Set to 1 if you want a `-devel` package. The default value
+is 0.
+
 LLVM
 ----
 If this variable is set to 1, Kbuild will use Clang and LLVM utilities instead
