@@ -49,6 +49,8 @@ properties:
       Must be half or less of "clocks" frequency.
     maximum: 20000000
 
+  gpio-controller: true
+
 required:
   - compatible
   - reg
