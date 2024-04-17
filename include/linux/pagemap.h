@@ -780,7 +780,7 @@ static inline struct page *grab_cache_page_nowait(struct address_space *mapping,
 			mapping_gfp_mask(mapping));
 }
 
-#define swapcache_index(folio)	__page_file_index(&(folio)->page)
+extern pgoff_t __folio_swap_cache_index(struct folio *folio);
 
 /**
  * folio_index - File index of a folio.
@@ -795,9 +795,9 @@ static inline struct page *grab_cache_page_nowait(struct address_space *mapping,
  */
 static inline pgoff_t folio_index(struct folio *folio)
 {
-        if (unlikely(folio_test_swapcache(folio)))
-                return swapcache_index(folio);
-        return folio->index;
+	if (unlikely(folio_test_swapcache(folio)))
+		return __folio_swap_cache_index(folio);
+	return folio->index;
 }
 
 /**
@@ -920,11 +920,6 @@ static inline loff_t page_offset(struct page *page)
 	return ((loff_t)page->index) << PAGE_SHIFT;
 }
 
-static inline loff_t page_file_offset(struct page *page)
-{
-	return ((loff_t)page_index(page)) << PAGE_SHIFT;
-}
-
 /**
  * folio_pos - Returns the byte position of this folio in its file.
  * @folio: The folio.
@@ -933,6 +928,8 @@ static inline loff_t folio_pos(struct folio *folio)
 {
 	return page_offset(&folio->page);
 }
+
+extern loff_t __folio_swap_file_pos(struct folio *folio);
 
 /**
  * folio_file_pos - Returns the byte position of this folio in its file.
@@ -943,7 +940,9 @@ static inline loff_t folio_pos(struct folio *folio)
  */
 static inline loff_t folio_file_pos(struct folio *folio)
 {
-	return page_file_offset(&folio->page);
+	if (unlikely(folio_test_swapcache(folio)))
+		return __folio_swap_file_pos(folio);
+	return ((loff_t)folio->index << PAGE_SHIFT);
 }
 
 /*

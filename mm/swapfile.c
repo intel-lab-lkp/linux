@@ -3419,12 +3419,17 @@ struct address_space *swapcache_mapping(struct folio *folio)
 }
 EXPORT_SYMBOL_GPL(swapcache_mapping);
 
-pgoff_t __page_file_index(struct page *page)
+pgoff_t __folio_swap_cache_index(struct folio *folio)
 {
-	swp_entry_t swap = page_swap_entry(page);
-	return swp_offset(swap);
+	return swp_offset(folio->swap);
 }
-EXPORT_SYMBOL_GPL(__page_file_index);
+EXPORT_SYMBOL_GPL(__folio_swap_cache_index);
+
+loff_t __folio_swap_file_pos(struct folio *folio)
+{
+	return swap_file_pos(folio->swap);
+}
+EXPORT_SYMBOL_GPL(__folio_swap_file_pos);
 
 /*
  * add_swap_count_continuation - called when a swap count is duplicated
