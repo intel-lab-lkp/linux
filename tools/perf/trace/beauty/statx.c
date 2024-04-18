@@ -30,6 +30,7 @@ size_t syscall_arg__scnprintf_statx_flags(char *bf, size_t size, struct syscall_
 	P_FLAG(SYMLINK_FOLLOW);
 	P_FLAG(NO_AUTOMOUNT);
 	P_FLAG(EMPTY_PATH);
+	P_FLAG(STATX_SYNC_AS_STAT);
 	P_FLAG(STATX_FORCE_SYNC);
 	P_FLAG(STATX_DONT_SYNC);
 
