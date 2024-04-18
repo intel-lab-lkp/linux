@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <sound/hda_codec.h>
+#include <linux/irq.h>
 #include <sound/soc.h>
 #include <linux/pm_runtime.h>
 #include <linux/spi/spi.h>
@@ -1511,6 +1512,14 @@ static int cs35l41_hda_apply_properties(struct cs35l41_hda *cs35l41)
 	irq_pol = cs35l41_gpio_config(cs35l41->regmap, hw_cfg);
 
 	if (cs35l41->irq && using_irq) {
+		struct irq_data *irq_data;
+
+		irq_data = irq_get_irq_data(cs35l41->irq);
+		if (irq_data && irqd_trigger_type_was_set(irq_data)) {
+			irq_pol = irqd_get_trigger_type(irq_data);
+			dev_info(cs35l41->dev, "Using configured IRQ Polarity: %d\n", irq_pol);
+		}
+
 		ret = devm_regmap_add_irq_chip(cs35l41->dev, cs35l41->regmap, cs35l41->irq,
 					       IRQF_ONESHOT | IRQF_SHARED | irq_pol,
 					       0, &cs35l41_regmap_irq_chip, &cs35l41->irq_data);
