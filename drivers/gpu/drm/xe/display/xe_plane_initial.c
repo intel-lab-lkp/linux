@@ -18,6 +18,7 @@
 #include "intel_fb_pin.h"
 #include "intel_frontbuffer.h"
 #include "intel_plane_initial.h"
+#include "xe_fb_pin.h"
 
 static bool
 intel_reuse_initial_plane_obj(struct intel_crtc *this,
@@ -63,7 +64,7 @@ initial_plane_bo(struct xe_device *xe,
 	if (plane_config->size == 0)
 		return NULL;
 
-	flags = XE_BO_FLAG_PINNED | XE_BO_FLAG_SCANOUT | XE_BO_FLAG_GGTT;
+	flags = XE_BO_FLAG_PINNED | XE_BO_FLAG_SCANOUT;
 
 	base = round_down(plane_config->base, page_size);
 	if (IS_DGFX(xe)) {
@@ -193,6 +194,7 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 		to_intel_crtc_state(crtc->base.state);
 	struct drm_framebuffer *fb;
 	struct i915_vma *vma;
+	u64 ggtt_start = 0;
 
 	/*
 	 * TODO:
@@ -202,17 +204,20 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	if (!plane_config->fb)
 		return;
 
-	if (intel_alloc_initial_plane_obj(crtc, plane_config))
+	if (intel_alloc_initial_plane_obj(crtc, plane_config)) {
 		fb = &plane_config->fb->base;
-	else if (!intel_reuse_initial_plane_obj(crtc, plane_configs, &fb))
+
+		/* Ensure that new GGTT mapping is not overwriting the original mapping */
+		ggtt_start = plane_config->base + intel_fb_obj(fb)->ttm.base.size;
+	} else if (!intel_reuse_initial_plane_obj(crtc, plane_configs, &fb)) {
 		goto nofb;
+	}
 
 	plane_state->uapi.rotation = plane_config->rotation;
 	intel_fb_fill_view(to_intel_framebuffer(fb),
 			   plane_state->uapi.rotation, &plane_state->view);
 
-	vma = intel_pin_and_fence_fb_obj(fb, false, &plane_state->view.gtt,
-					 false, &plane_state->flags);
+	vma = xe_pin_and_fence_fb_obj_initial(fb, &plane_state->view.gtt, ggtt_start);
 	if (IS_ERR(vma))
 		goto nofb;
 

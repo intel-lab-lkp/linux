@@ -8,6 +8,7 @@
 #include "intel_dpt.h"
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
+#include "xe_fb_pin.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
 
@@ -119,12 +120,11 @@ static void xe_fb_dpt_free(struct i915_vma *vma, struct intel_framebuffer *fb)
 	vma->dpt = NULL;
 }
 
-static int xe_fb_dpt_map_ggtt(struct xe_bo *dpt)
+static int xe_fb_dpt_map_ggtt(struct xe_bo *dpt, u64 ggtt_start)
 {
 	struct xe_device *xe = xe_bo_device(dpt);
 	struct xe_tile *tile0 = xe_device_get_root_tile(xe);
 	struct xe_ggtt *ggtt = tile0->mem.ggtt;
-	u64 start = 0, end = U64_MAX;
 	u64 alignment = XE_PAGE_SIZE;
 	int err;
 
@@ -139,8 +139,9 @@ static int xe_fb_dpt_map_ggtt(struct xe_bo *dpt)
 	if (err)
 		goto out_put;
 
-	err = drm_mm_insert_node_in_range(&ggtt->mm, &dpt->ggtt_node, dpt->size,
-					  alignment, 0, start, end, 0);
+	err = xe_ggtt_insert_special_node_locked(ggtt, &dpt->ggtt_node, dpt->size,
+						 alignment, ggtt_start, U64_MAX,
+						 ggtt_start ? DRM_MM_INSERT_HIGH : 0);
 	if (!err)
 		xe_ggtt_map_bo(ggtt, dpt);
 	mutex_unlock(&ggtt->lock);
@@ -188,7 +189,7 @@ static void xe_fb_dpt_unpin_free(struct i915_vma *vma, struct intel_framebuffer 
 
 static int __xe_pin_fb_vma_dpt(struct intel_framebuffer *fb,
 			       const struct i915_gtt_view *view,
-			       struct i915_vma *vma)
+			       struct i915_vma *vma, u64 ggtt_start)
 {
 	struct xe_device *xe = to_xe_device(fb->base.dev);
 	struct xe_tile *tile0 = xe_device_get_root_tile(xe);
@@ -237,7 +238,7 @@ static int __xe_pin_fb_vma_dpt(struct intel_framebuffer *fb,
 					  rot_info->plane[i].dst_stride);
 	}
 
-	ret = xe_fb_dpt_map_ggtt(dpt);
+	ret = xe_fb_dpt_map_ggtt(dpt, ggtt_start);
 	if (ret)
 		xe_fb_dpt_unpin_free(vma, fb);
 	return ret;
@@ -269,7 +270,7 @@ write_ggtt_rotated(struct xe_bo *bo, struct xe_ggtt *ggtt, u32 *ggtt_ofs, u32 bo
 
 static int __xe_pin_fb_vma_ggtt(struct intel_framebuffer *fb,
 				const struct i915_gtt_view *view,
-				struct i915_vma *vma)
+				struct i915_vma *vma, u64 ggtt_start)
 {
 	struct xe_bo *bo = intel_fb_obj(&fb->base);
 	struct xe_device *xe = to_xe_device(fb->base.dev);
@@ -295,7 +296,8 @@ static int __xe_pin_fb_vma_ggtt(struct intel_framebuffer *fb,
 		u32 x, size = bo->ttm.base.size;
 
 		ret = xe_ggtt_insert_special_node_locked(ggtt, &vma->node, size,
-							 align, 0);
+							 align, ggtt_start, U64_MAX,
+							 ggtt_start ? DRM_MM_INSERT_HIGH : 0);
 		if (ret)
 			goto out_unlock;
 
@@ -313,7 +315,7 @@ static int __xe_pin_fb_vma_ggtt(struct intel_framebuffer *fb,
 		u32 size = intel_rotation_info_size(rot_info) * XE_PAGE_SIZE;
 
 		ret = xe_ggtt_insert_special_node_locked(ggtt, &vma->node, size,
-							 align, 0);
+							 align, ggtt_start, U64_MAX, 0);
 		if (ret)
 			goto out_unlock;
 
@@ -336,7 +338,8 @@ out:
 }
 
 static struct i915_vma *__xe_pin_fb_vma(struct intel_framebuffer *fb,
-					const struct i915_gtt_view *view)
+					const struct i915_gtt_view *view,
+					u64 ggtt_start)
 {
 	struct drm_device *dev = fb->base.dev;
 	struct xe_device *xe = to_xe_device(dev);
@@ -384,9 +387,9 @@ static struct i915_vma *__xe_pin_fb_vma(struct intel_framebuffer *fb,
 
 	vma->bo = bo;
 	if (intel_fb_uses_dpt(&fb->base))
-		ret = __xe_pin_fb_vma_dpt(fb, view, vma);
+		ret = __xe_pin_fb_vma_dpt(fb, view, vma, ggtt_start);
 	else
-		ret = __xe_pin_fb_vma_ggtt(fb, view, vma);
+		ret = __xe_pin_fb_vma_ggtt(fb, view, vma, ggtt_start);
 	if (ret)
 		goto err_unpin;
 
@@ -430,7 +433,16 @@ intel_pin_and_fence_fb_obj(struct drm_framebuffer *fb,
 {
 	*out_flags = 0;
 
-	return __xe_pin_fb_vma(to_intel_framebuffer(fb), view);
+	return __xe_pin_fb_vma(to_intel_framebuffer(fb), view, 0);
+}
+
+
+struct i915_vma *
+xe_pin_and_fence_fb_obj_initial(struct drm_framebuffer *fb,
+				const struct i915_gtt_view *view,
+				u64 ggtt_start)
+{
+	return __xe_pin_fb_vma(to_intel_framebuffer(fb), view, ggtt_start);
 }
 
 void intel_unpin_fb_vma(struct i915_vma *vma, unsigned long flags)
@@ -447,7 +459,7 @@ int intel_plane_pin_fb(struct intel_plane_state *plane_state)
 	/* We reject creating !SCANOUT fb's, so this is weird.. */
 	drm_WARN_ON(bo->ttm.base.dev, !(bo->flags & XE_BO_FLAG_SCANOUT));
 
-	vma = __xe_pin_fb_vma(to_intel_framebuffer(fb), &plane_state->view.gtt);
+	vma = __xe_pin_fb_vma(to_intel_framebuffer(fb), &plane_state->view.gtt, 0);
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
 
