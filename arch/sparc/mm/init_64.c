@@ -1438,7 +1438,7 @@ static int __init numa_attach_mlgroup(struct mdesc_handle *md, u64 grp,
 static int __init numa_parse_mdesc_group(struct mdesc_handle *md, u64 grp,
 					 int index)
 {
-	cpumask_t mask;
+	static cpumask_t mask __initdata;
 	int cpu;
 
 	numa_parse_mdesc_group_cpus(md, grp, &mask);
