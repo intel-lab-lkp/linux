@@ -455,7 +455,9 @@ static const struct drm_panel_funcs panel_simple_funcs = {
 	.get_timings = panel_simple_get_timings,
 };
 
-static struct panel_desc panel_dpi;
+static struct panel_desc panel_dpi = {
+	.connector_type = DRM_MODE_CONNECTOR_DPI
+};
 
 static int panel_dpi_probe(struct device *dev,
 			   struct panel_simple *panel)
@@ -471,6 +473,8 @@ static int panel_dpi_probe(struct device *dev,
 	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
+	if (panel->desc)
+		*desc = *panel->desc;
 
 	timing = devm_kzalloc(dev, sizeof(*timing), GFP_KERNEL);
 	if (!timing)
@@ -503,6 +507,20 @@ static int panel_dpi_probe(struct device *dev,
 	return 0;
 }
 
+static int panel_dsi_probe(struct device *dev,
+			   struct panel_simple *panel)
+{
+	int ret;
+
+	ret = panel_dpi_probe(dev, panel);
+	if (panel->desc) {
+		struct panel_desc *desc = (struct panel_desc *)panel->desc;
+
+		desc->connector_type = DRM_MODE_CONNECTOR_DSI;
+	}
+	return ret;
+}
+
 #define PANEL_SIMPLE_BOUNDS_CHECK(to_check, bounds, field) \
 	(to_check->field.typ >= bounds->field.min && \
 	 to_check->field.typ <= bounds->field.max)
@@ -533,11 +551,16 @@ static void panel_simple_parse_panel_timing_node(struct device *dev,
 		    !PANEL_SIMPLE_BOUNDS_CHECK(ot, dt, vactive) ||
 		    !PANEL_SIMPLE_BOUNDS_CHECK(ot, dt, vfront_porch) ||
 		    !PANEL_SIMPLE_BOUNDS_CHECK(ot, dt, vback_porch) ||
-		    !PANEL_SIMPLE_BOUNDS_CHECK(ot, dt, vsync_len))
+		    !PANEL_SIMPLE_BOUNDS_CHECK(ot, dt, vsync_len)) {
+			dev_warn(dev, "timing bounds failed\n");
 			continue;
+		}
 
-		if (ot->flags != dt->flags)
+		/* Allow mismatch in flags for last entry */
+		if (i + 1 < panel->desc->num_timings && ot->flags != dt->flags) {
+			dev_warn(dev, "flags mismatch: ot %x vs dt %x\n", ot->flags, dt->flags);
 			continue;
+		}
 
 		videomode_from_timing(ot, &vm);
 		drm_display_mode_from_videomode(&vm, &panel->override_mode);
@@ -4752,6 +4775,39 @@ struct panel_desc_dsi {
 	unsigned int lanes;
 };
 
+static const struct display_timing generic_800x480_timing = {
+	.pixelclock = { 16400000, 864 * 490 * 60, (1920 + 512) * (1920 + 512) * 60 },
+	.hactive = { 400, 800, 1920 },
+	.hfront_porch = { 2, 16, 512 },
+	.hback_porch = { 2, 16, 512 },
+	.hsync_len = { 1, 10, 40 },
+	.vactive = { 400, 480, 1920 },
+	.vfront_porch = { 2, 5, 512 },
+	.vback_porch = { 2, 5, 512 },
+	.vsync_len = { 1, 10, 20 },
+	.flags = DISPLAY_FLAGS_HSYNC_LOW | DISPLAY_FLAGS_VSYNC_LOW |
+		 DISPLAY_FLAGS_SYNC_POSEDGE
+};
+
+static struct panel_desc_dsi panel_dsi = {
+	.desc = {
+		.timings = &generic_800x480_timing,
+		.num_timings = 1,
+		.bpc = 8,
+		.size = {
+			.width = 152,
+			.height = 91,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	 },
+	.flags = MIPI_DSI_MODE_VIDEO |
+		 MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+		 MIPI_DSI_MODE_VIDEO_HSE | /* Needed to generate Hsync End Short package */
+		 MIPI_DSI_MODE_VIDEO_NO_HBP,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 2,
+};
+
 static const struct drm_display_mode auo_b080uan01_mode = {
 	.clock = 154500,
 	.hdisplay = 1200,
@@ -4977,6 +5033,9 @@ static const struct of_device_id dsi_of_match[] = {
 		.compatible = "osddisplays,osd101t2045-53ts",
 		.data = &osd101t2045_53ts
 	}, {
+		.compatible = "panel-dsi",
+		.data = &panel_dsi,
+	}, {
 		/* sentinel */
 	}
 };
@@ -4992,17 +5051,28 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 		return -ENODEV;
 
 	err = panel_simple_probe(&dsi->dev, &desc->desc);
+	if (err)
+		dev_err(&dsi->dev, "%s: err %i\n", __func__, err);
+
+	if (desc == &panel_dsi) {
+		struct panel_simple *panel = mipi_dsi_get_drvdata(dsi);
+		/* Handle the generic panel-dsi binding */
+		err = panel_dsi_probe(&dsi->dev, panel);
+	}
+
 	if (err < 0)
 		return err;
 
 	dsi->mode_flags = desc->flags;
 	dsi->format = desc->format;
 	dsi->lanes = desc->lanes;
+	of_property_read_u32(dsi->dev.of_node, "lanes", &dsi->lanes);
 
 	err = mipi_dsi_attach(dsi);
 	if (err) {
 		struct panel_simple *panel = mipi_dsi_get_drvdata(dsi);
 
+		dev_err(&dsi->dev, "probe attach err: %i", err);
 		drm_panel_remove(&panel->base);
 	}
 
