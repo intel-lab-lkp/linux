@@ -119,10 +119,8 @@ static struct kunit_device *kunit_device_register_internal(struct kunit *test,
 	kunit_dev->owner = test;
 
 	err = dev_set_name(&kunit_dev->dev, "%s.%s", test->name, name);
-	if (err) {
-		kfree(kunit_dev);
-		return ERR_PTR(err);
-	}
+	if (err)
+		goto error;
 
 	kunit_dev->dev.release = kunit_device_release;
 	kunit_dev->dev.bus = &kunit_bus_type;
@@ -131,7 +129,7 @@ static struct kunit_device *kunit_device_register_internal(struct kunit *test,
 	err = device_register(&kunit_dev->dev);
 	if (err) {
 		put_device(&kunit_dev->dev);
-		return ERR_PTR(err);
+		goto error;
 	}
 
 	kunit_dev->dev.dma_mask = &kunit_dev->dev.coherent_dma_mask;
@@ -140,6 +138,9 @@ static struct kunit_device *kunit_device_register_internal(struct kunit *test,
 	kunit_add_action(test, device_unregister_wrapper, &kunit_dev->dev);
 
 	return kunit_dev;
+error:
+	kfree(kunit_dev);
+	return ERR_PTR(err);
 }
 
 /*
