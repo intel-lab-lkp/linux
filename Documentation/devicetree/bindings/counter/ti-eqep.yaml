@@ -14,19 +14,23 @@ properties:
     const: ti,am3352-eqep
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
 
   interrupts:
     description: The eQEP event interrupt
     maxItems: 1
 
   clocks:
-    description: The clock that determines the SYSCLKOUT rate for the eQEP
+    description: The clock that determines the clock rate for the eQEP
       peripheral.
     maxItems: 1
 
   clock-names:
-    const: sysclkout
+    maxItems: 1
+
+  power-domains:
+    maxItems: 1
 
 required:
   - compatible
