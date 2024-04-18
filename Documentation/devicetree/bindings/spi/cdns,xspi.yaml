@@ -20,22 +20,81 @@ allOf:
 
 properties:
   compatible:
-    const: cdns,xspi-nor
+    oneOf:
+      - description: Vanilla Cadence xSPI controller
+        items:
+          - const: cdns,xspi-nor
+      - description: Cadence xSPI controller with v2 Marvell overlay
+        items:
+          - const: mrvl,xspi-nor
+
 
   reg:
+    minItems: 3
     items:
       - description: address and length of the controller register set
       - description: address and length of the Slave DMA data port
       - description: address and length of the auxiliary registers
+      - description: address and length of the xfer registers
 
   reg-names:
+    minItems: 3
     items:
       - const: io
       - const: sdma
       - const: aux
+      - const: xferbase
 
   interrupts:
     maxItems: 1
+
+  cdns,dll-phy-control:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x707
+
+  cdns,rfile-phy-control:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x40000
+
+  cdns,rfile-phy-tsel:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0
+
+  cdns,phy-dq-timing:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x101
+
+  cdns,phy-dqs-timing:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x700404
+
+  cdns,phy-gate-lpbk-ctrl:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x200030
+
+  cdns,phy-dll-master-ctrl:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x00800000
+
+  cdns,phy-dll-slave-ctrl:
+    description: |
+      PHY config register. Valid only for cdns,mrvl-xspi-nor
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x0000ff01
 
 required:
   - compatible
@@ -59,6 +118,37 @@ examples:
                   <0x0 0xb0000000 0x0 0x1000>,
                   <0x0 0xa0020000 0x0 0x100>;
             reg-names = "io", "sdma", "aux";
+            interrupts = <0 90 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&gic>;
+
+            flash@0 {
+                compatible = "jedec,spi-nor";
+                spi-max-frequency = <75000000>;
+                reg = <0>;
+            };
+
+            flash@1 {
+                compatible = "jedec,spi-nor";
+                spi-max-frequency = <75000000>;
+                reg = <1>;
+            };
+        };
+    };
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        mrvl_xspi: spi@d0010000 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            compatible = "mrvl,xspi-nor";
+            reg = <0x0 0xa0010000 0x0 0x1040>,
+                  <0x0 0xb0000000 0x0 0x1000>,
+                  <0x0 0xa0020000 0x0 0x100>,
+                  <0x0 0xa0090000 0x0 0x100>;
+            reg-names = "io", "sdma", "aux", "xferbase";
             interrupts = <0 90 IRQ_TYPE_LEVEL_HIGH>;
             interrupt-parent = <&gic>;
 
