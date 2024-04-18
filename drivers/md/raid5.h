@@ -696,6 +696,26 @@ struct r5conf {
 	struct r5pending_data	*next_pending_data;
 };
 
+static inline void active_aligned_reads_inc(struct r5conf *conf)
+{
+	atomic_inc(&conf->active_aligned_reads);
+}
+
+static inline void active_aligned_reads_dec(struct r5conf *conf)
+{
+	atomic_dec(&conf->active_aligned_reads);
+}
+
+static inline bool active_aligned_reads_is_zero(struct r5conf *conf)
+{
+	return atomic_read(&conf->active_aligned_reads) == 0;
+}
+
+static inline bool active_aligned_reads_dec_and_test(struct r5conf *conf)
+{
+	return atomic_dec_and_test(&conf->active_aligned_reads);
+}
+
 #if PAGE_SIZE == DEFAULT_STRIPE_SIZE
 #define RAID5_STRIPE_SIZE(conf)	STRIPE_SIZE
 #define RAID5_STRIPE_SHIFT(conf)	STRIPE_SHIFT
