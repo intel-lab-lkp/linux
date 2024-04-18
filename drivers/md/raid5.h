@@ -621,7 +621,7 @@ struct r5conf {
 	unsigned int		retry_read_offset; /* sector offset into retry_read_aligned */
 	struct bio		*retry_read_aligned_list; /* aligned bios retry list  */
 	atomic_t		preread_active_stripes; /* stripes with scheduled io */
-	atomic_t		active_aligned_reads;
+	struct percpu_ref	active_aligned_reads;
 	atomic_t		pending_full_writes; /* full write backlog */
 	int			bypass_count; /* bypassed prereads */
 	int			bypass_threshold; /* preread nice */
@@ -698,22 +698,17 @@ struct r5conf {
 
 static inline void active_aligned_reads_inc(struct r5conf *conf)
 {
-	atomic_inc(&conf->active_aligned_reads);
+	percpu_ref_get(&conf->active_aligned_reads);
 }
 
 static inline void active_aligned_reads_dec(struct r5conf *conf)
 {
-	atomic_dec(&conf->active_aligned_reads);
+	percpu_ref_put(&conf->active_aligned_reads);
 }
 
 static inline bool active_aligned_reads_is_zero(struct r5conf *conf)
 {
-	return atomic_read(&conf->active_aligned_reads) == 0;
-}
-
-static inline bool active_aligned_reads_dec_and_test(struct r5conf *conf)
-{
-	return atomic_dec_and_test(&conf->active_aligned_reads);
+	return percpu_ref_is_zero(&conf->active_aligned_reads);
 }
 
 #if PAGE_SIZE == DEFAULT_STRIPE_SIZE
