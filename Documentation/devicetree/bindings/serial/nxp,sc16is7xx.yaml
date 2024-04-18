@@ -18,6 +18,7 @@ properties:
       - nxp,sc16is752
       - nxp,sc16is760
       - nxp,sc16is762
+      - exar,xr20m1172
 
   reg:
     maxItems: 1
