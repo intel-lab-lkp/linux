@@ -126,9 +126,27 @@ void __folio_put(struct folio *folio)
 	if (folio_test_large(folio) && folio_test_large_rmappable(folio))
 		folio_undo_large_rmappable(folio);
 	mem_cgroup_uncharge(folio);
-	free_unref_page(&folio->page, folio_order(folio));
+	free_unref_page(&folio->page, folio_order(folio), 0);
 }
 EXPORT_SYMBOL(__folio_put);
+
+void __folio_put_mgen(struct folio *folio, unsigned short int mgen)
+{
+	if (unlikely(folio_is_zone_device(folio)))
+		WARN_ON(1);
+	else if (unlikely(folio_test_hugetlb(folio)))
+		WARN_ON(1);
+	else if (unlikely(folio_test_large(folio)))
+		WARN_ON(1);
+	/*
+	 * For now, migrc supports this case only.
+	 */
+	else {
+		page_cache_release(folio);
+		mem_cgroup_uncharge(folio);
+		free_unref_page(&folio->page, 0, mgen);
+	}
+}
 
 /**
  * put_pages_list() - release a list of pages

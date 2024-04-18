@@ -638,7 +638,7 @@ extern bool free_pages_prepare(struct page *page, unsigned int order);
 
 extern int user_min_free_kbytes;
 
-void free_unref_page(struct page *page, unsigned int order);
+void free_unref_page(struct page *page, unsigned int order, unsigned short int mgen);
 void free_unref_folios(struct folio_batch *fbatch);
 
 extern void zone_pcp_reset(struct zone *zone);
@@ -1516,4 +1516,43 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
+#if defined(CONFIG_MIGRATION) && defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+static inline unsigned short int mgen_latest(unsigned short int a, unsigned short int b)
+{
+	if (!a || !b)
+		return a + b;
+
+	/*
+	 * The mgen is wrapped around so let's use this trick.
+	 */
+	if ((short int)(a - b) < 0)
+		return b;
+	else
+		return a;
+}
+
+static inline void update_task_mgen(unsigned short int mgen)
+{
+	current->mgen = mgen_latest(current->mgen, mgen);
+}
+
+static inline unsigned int hand_over_task_mgen(void)
+{
+	return xchg(&current->mgen, 0);
+}
+
+static inline void check_flush_task_mgen(void)
+{
+	/*
+	 * XXX: migrc mechanism will handle this. For now, do nothing
+	 * but reset current's mgen to finalize this turn.
+	 */
+	current->mgen = 0;
+}
+#else /* CONFIG_MIGRATION && CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
+static inline unsigned short int mgen_latest(unsigned short int a, unsigned short int b) { return 0; }
+static inline void update_task_mgen(unsigned short int mgen) {}
+static inline unsigned int hand_over_task_mgen(void) { return 0; }
+static inline void check_flush_task_mgen(void) {}
+#endif
 #endif	/* __MM_INTERNAL_H */
