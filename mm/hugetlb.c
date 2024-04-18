@@ -1642,7 +1642,7 @@ static void __remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 	if (hstate_is_gigantic(h) && !gigantic_page_runtime_supported())
 		return;
 
-	list_del(&folio->lru);
+	list_del_init(&folio->lru);
 
 	if (folio_test_hugetlb_freed(folio)) {
 		h->free_huge_pages--;
