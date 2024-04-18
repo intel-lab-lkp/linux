@@ -784,6 +784,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		if (ctl.readable_disks++ == 1)
 			set_bit(R1BIO_FailFast, &r1_bio->state);
 
+		WARN_ON_ONCE(nr_pending_is_percpu_mode(rdev));
 		pending = nr_pending_read(rdev);
 		dist = abs(r1_bio->sector - conf->mirrors[disk].head_position);
 
@@ -1930,6 +1931,7 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 			if (err)
 				return err;
 
+			percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 			raid1_add_conf(conf, rdev, mirror, false);
 			/* As all devices are equivalent, we don't need a full recovery
 			 * if this was recently any drive of the array
@@ -1949,6 +1951,7 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		set_bit(Replacement, &rdev->flags);
 		raid1_add_conf(conf, rdev, repl_slot, true);
 		err = 0;
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
 		conf->fullsync = 1;
 	}
 
@@ -3208,6 +3211,7 @@ static void raid1_free(struct mddev *mddev, void *priv);
 static int raid1_run(struct mddev *mddev)
 {
 	struct r1conf *conf;
+	struct md_rdev *rdev;
 	int i;
 	int ret;
 
@@ -3269,6 +3273,9 @@ static int raid1_run(struct mddev *mddev)
 	/*
 	 * Ok, everything is just fine now
 	 */
+	rdev_for_each(rdev, mddev) {
+		percpu_ref_switch_to_atomic_sync(&rdev->nr_pending);
+	}
 	rcu_assign_pointer(mddev->thread, conf->thread);
 	rcu_assign_pointer(conf->thread, NULL);
 	mddev->private = conf;
