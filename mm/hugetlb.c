@@ -1788,7 +1788,8 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 		destroy_compound_gigantic_folio(folio, huge_page_order(h));
 		free_gigantic_folio(folio, huge_page_order(h));
 	} else {
-		INIT_LIST_HEAD(&folio->_deferred_list);
+		if (!folio_test_hugetlb(folio))
+			INIT_LIST_HEAD(&folio->_deferred_list);
 		folio_put(folio);
 	}
 }
