@@ -581,7 +581,7 @@ static void update_read_sectors(struct r1conf *conf, int disk,
 {
 	struct raid1_info *info = &conf->mirrors[disk];
 
-	atomic_inc(&info->rdev->nr_pending);
+	nr_pending_inc(info->rdev);
 	if (info->next_seq_sect != this_sector)
 		info->seq_start = this_sector;
 	info->next_seq_sect = this_sector + len;
@@ -784,7 +784,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		if (ctl.readable_disks++ == 1)
 			set_bit(R1BIO_FailFast, &r1_bio->state);
 
-		pending = atomic_read(&rdev->nr_pending);
+		pending = nr_pending_read(rdev);
 		dist = abs(r1_bio->sector - conf->mirrors[disk].head_position);
 
 		/* Don't change to another disk for sequential reads */
@@ -1495,7 +1495,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 			write_behind = true;
 
 		if (rdev && unlikely(test_bit(Blocked, &rdev->flags))) {
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			blocked_rdev = rdev;
 			break;
 		}
@@ -1506,7 +1506,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 			continue;
 		}
 
-		atomic_inc(&rdev->nr_pending);
+		nr_pending_inc(rdev);
 		if (test_bit(WriteErrorSeen, &rdev->flags)) {
 			sector_t first_bad;
 			int bad_sectors;
@@ -1879,7 +1879,7 @@ static bool raid1_remove_conf(struct r1conf *conf, int disk)
 	struct md_rdev *rdev = info->rdev;
 
 	if (!rdev || test_bit(In_sync, &rdev->flags) ||
-	    atomic_read(&rdev->nr_pending))
+	    nr_pending_is_not_zero(rdev))
 		return false;
 
 	/* Only remove non-faulty devices if recovery is not possible. */
@@ -1987,7 +1987,7 @@ static int raid1_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 			struct md_rdev *repl =
 				conf->mirrors[conf->raid_disks + number].rdev;
 			freeze_array(conf, 0);
-			if (atomic_read(&repl->nr_pending)) {
+			if (nr_pending_is_not_zero(repl)) {
 				/* It means that some queued IO of retry_list
 				 * hold repl. Thus, we cannot set replacement
 				 * as NULL, avoiding rdev NULL pointer
@@ -2403,7 +2403,7 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 			     (!test_bit(Faulty, &rdev->flags) &&
 			      rdev->recovery_offset >= sect + s)) &&
 			    rdev_has_badblock(rdev, sect, s) == 0) {
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				if (sync_page_io(rdev, sect, s<<9,
 					 conf->tmppage, REQ_OP_READ, false))
 					success = 1;
@@ -2433,7 +2433,7 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 			rdev = conf->mirrors[d].rdev;
 			if (rdev &&
 			    !test_bit(Faulty, &rdev->flags)) {
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				r1_sync_page_io(rdev, sect, s,
 						conf->tmppage, REQ_OP_WRITE);
 				rdev_dec_pending(rdev, mddev);
@@ -2447,7 +2447,7 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 			rdev = conf->mirrors[d].rdev;
 			if (rdev &&
 			    !test_bit(Faulty, &rdev->flags)) {
-				atomic_inc(&rdev->nr_pending);
+				nr_pending_inc(rdev);
 				if (r1_sync_page_io(rdev, sect, s,
 						conf->tmppage, REQ_OP_READ)) {
 					atomic_add(s, &rdev->corrected_errors);
@@ -2909,7 +2909,7 @@ static sector_t raid1_sync_request(struct mddev *mddev, sector_t sector_nr,
 			}
 		}
 		if (rdev && bio->bi_end_io) {
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			bio->bi_iter.bi_sector = sector_nr + rdev->data_offset;
 			bio_set_dev(bio, rdev->bdev);
 			if (test_bit(FailFast, &rdev->flags))

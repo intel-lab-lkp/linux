@@ -190,7 +190,7 @@ static struct md_rdev *next_active_rdev(struct md_rdev *rdev, struct mddev *mdde
 		if (rdev->raid_disk >= 0 &&
 		    !test_bit(Faulty, &rdev->flags)) {
 			/* this is a usable devices */
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			rcu_read_unlock();
 			return rdev;
 		}

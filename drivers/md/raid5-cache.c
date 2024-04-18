@@ -1892,7 +1892,7 @@ r5l_recovery_replay_one_stripe(struct r5conf *conf,
 		/* in case device is broken */
 		rdev = conf->disks[disk_index].rdev;
 		if (rdev) {
-			atomic_inc(&rdev->nr_pending);
+			nr_pending_inc(rdev);
 			sync_page_io(rdev, sh->sector, PAGE_SIZE,
 				     sh->dev[disk_index].page, REQ_OP_WRITE,
 				     false);
@@ -1900,7 +1900,7 @@ r5l_recovery_replay_one_stripe(struct r5conf *conf,
 		}
 		rrdev = conf->disks[disk_index].replacement;
 		if (rrdev) {
-			atomic_inc(&rrdev->nr_pending);
+			nr_pending_inc(rrdev);
 			sync_page_io(rrdev, sh->sector, PAGE_SIZE,
 				     sh->dev[disk_index].page, REQ_OP_WRITE,
 				     false);
