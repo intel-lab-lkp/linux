@@ -107,10 +107,10 @@ struct md_rdev {
 					 */
 	};
 
-	atomic_t	nr_pending;	/* number of pending requests.
-					 * only maintained for arrays that
-					 * support hot removal
-					 */
+	struct percpu_ref	nr_pending;	/* number of pending requests.
+						 * only maintained for arrays that
+						 * support hot removal
+						 */
 	atomic_t	read_errors;	/* number of consecutive read errors that
 					 * we have tried to ignore.
 					 */
@@ -213,27 +213,27 @@ enum flag_bits {
 
 static inline void nr_pending_inc(struct md_rdev *rdev)
 {
-	atomic_inc(&rdev->nr_pending);
+	percpu_ref_get(&rdev->nr_pending);
 }
 
 static inline void nr_pending_dec(struct md_rdev *rdev)
 {
-	atomic_dec(&rdev->nr_pending);
+	percpu_ref_put(&rdev->nr_pending);
 }
 
 static inline bool nr_pending_is_zero(struct md_rdev *rdev)
 {
-	return atomic_read(&rdev->nr_pending) == 0;
+	return percpu_ref_is_zero(&rdev->nr_pending);
 }
 
 static inline bool nr_pending_is_not_zero(struct md_rdev *rdev)
 {
-	return atomic_read(&rdev->nr_pending) != 0;
+	return !percpu_ref_is_zero(&rdev->nr_pending);
 }
 
 static inline unsigned long nr_pending_read(struct md_rdev *rdev)
 {
-	return (unsigned long)atomic_read(&rdev->nr_pending);
+	return atomic_long_read(&rdev->nr_pending.data->count);
 }
 
 static inline int is_badblock(struct md_rdev *rdev, sector_t s, int sectors,
