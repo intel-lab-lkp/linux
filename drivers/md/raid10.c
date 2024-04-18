@@ -733,7 +733,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 	int do_balance;
 	int best_dist_slot, best_pending_slot;
 	bool has_nonrot_disk = false;
-	unsigned int min_pending;
+	unsigned long min_pending;
 	struct geom *geo = &conf->geo;
 
 	raid10_find_phys(conf, r10_bio);
@@ -753,7 +753,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 		sector_t first_bad;
 		int bad_sectors;
 		sector_t dev_sector;
-		unsigned int pending;
+		unsigned long pending;
 		bool nonrot;
 
 		if (r10_bio->devs[slot].bio == IO_BLOCKED)
