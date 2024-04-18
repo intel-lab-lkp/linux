@@ -198,6 +198,22 @@
 		ranges = <0x0 0x0 0x0 0x40000000>,
 			 <0x60000000 0x0 0x60000000 0x1000000>;
 
+		dsp: dsp@21170000 {
+			compatible = "fsl,imx8ulp-hifi4";
+			reg = <0x21170000 0x20000>;
+			clocks = <&cgc2 IMX8ULP_CLK_LPAV_BUS_DIV>,
+				 <&cgc2 IMX8ULP_CLK_HIFI_DIVPLAT>,
+				 <&cgc2 IMX8ULP_CLK_HIFI_DIVCORE>,
+				 <&pcc5 IMX8ULP_CLK_MU3_B>;
+			clock-names = "ipg", "ocram", "core", "mu";
+			power-domains = <&scmi_devpd IMX8ULP_PD_HIFI4>;
+			firmware-name = "imx/dsp/hifi4.bin";
+			mbox-names = "tx", "rx", "rxdb";
+			mboxes = <&mu3 0 0>, <&mu3 1 0>, <&mu3 3 0>;
+			fsl,dsp-ctrl = <&avd_sim>;
+			status = "disabled";
+		};
+
 		s4muap: mailbox@27020000 {
 			compatible = "fsl,imx8ulp-mu-s4";
 			reg = <0x27020000 0x10000>;
@@ -519,6 +535,12 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
+
+			avd_sim: syscon@2da50000 {
+				compatible = "fsl,imx8ulp-avd-sim", "syscon", "simple-mfd";
+				reg = <0x2da50000 0x38>;
+				clocks = <&pcc5 IMX8ULP_CLK_AVD_SIM>;
+			};
 
 			cgc2: clock-controller@2da60000 {
 				compatible = "fsl,imx8ulp-cgc2";
