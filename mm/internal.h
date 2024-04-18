@@ -1517,6 +1517,39 @@ void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
 #if defined(CONFIG_MIGRATION) && defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+void check_migrc_flush(unsigned short int mgen);
+void migrc_flush(void);
+void rmap_flush_start(void);
+void rmap_flush_end(struct tlbflush_unmap_batch *batch);
+
+/*
+ * Reset the indicator indicating there are no writable mappings at the
+ * beginning of every rmap traverse for unmap.  migrc can work only when
+ * all the mappings are read-only.
+ */
+static inline void can_migrc_init(void)
+{
+	current->can_migrc = true;
+}
+
+/*
+ * Mark the folio is not applicable to migrc once it found a writble or
+ * dirty pte during rmap traverse for unmap.
+ */
+static inline void can_migrc_fail(void)
+{
+	current->can_migrc = false;
+}
+
+/*
+ * Check if all the mappings are read-only and read-only mappings even
+ * exist.
+ */
+static inline bool can_migrc_test(void)
+{
+	return current->can_migrc && current->tlb_ubc_ro.flush_required;
+}
+
 static inline unsigned short int mgen_latest(unsigned short int a, unsigned short int b)
 {
 	if (!a || !b)
@@ -1543,13 +1576,16 @@ static inline unsigned int hand_over_task_mgen(void)
 
 static inline void check_flush_task_mgen(void)
 {
-	/*
-	 * XXX: migrc mechanism will handle this. For now, do nothing
-	 * but reset current's mgen to finalize this turn.
-	 */
-	current->mgen = 0;
+	check_migrc_flush(xchg(&current->mgen, 0));
 }
 #else /* CONFIG_MIGRATION && CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
+static inline void check_migrc_flush(unsigned short int mgen) {}
+static inline void migrc_flush(void) {}
+static inline void rmap_flush_start(void) {}
+static inline void rmap_flush_end(struct tlbflush_unmap_batch *batch) {}
+static inline void can_migrc_init(void) {}
+static inline void can_migrc_fail(void) {}
+static inline bool can_migrc_test(void) { return false; }
 static inline unsigned short int mgen_latest(unsigned short int a, unsigned short int b) { return 0; }
 static inline void update_task_mgen(unsigned short int mgen) {}
 static inline unsigned int hand_over_task_mgen(void) { return 0; }

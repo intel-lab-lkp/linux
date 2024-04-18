@@ -57,6 +57,279 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+static struct tlbflush_unmap_batch migrc_ubc;
+static DEFINE_SPINLOCK(migrc_lock);
+
+/*
+ * Don't be zero to distinguish from invalid mgen, 0.
+ */
+static unsigned short int mgen_next(unsigned short int a)
+{
+	return a + 1 ?: a + 2;
+}
+
+static bool mgen_before(unsigned short int a, unsigned short int b)
+{
+	return (short int)(a - b) < 0;
+}
+
+static void init_tlb_ubc(struct tlbflush_unmap_batch *ubc)
+{
+	arch_tlbbatch_clear(&ubc->arch);
+	ubc->flush_required = false;
+	ubc->writable = false;
+}
+
+/*
+ * Need to synchronize between tlb flush and managing pending CPUs in
+ * migrc_ubc.  Take a look at the following scenario, where CPU0 is in
+ * try_to_unmap_flush() and CPU1 is in migrate_pages_batch():
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	tlb flush
+ *				unmap folios (needing tlb flush)
+ *				add pending CPUs to migrc_ubc
+ *				<-- not performed tlb flush needed by
+ *				    the unmap above yet but the request
+ *				    will be cleared by CPU0 shortly. bug!
+ *	clear the CPUs from migrc_ubc
+ *
+ * The pending CPUs added in CPU1 should not be cleared from migrc_ubc
+ * in CPU0 because the tlb flush for migrc_ubc added in CPU1 has not
+ * been performed this turn.  To avoid this, using 'on_flushing'
+ * variable, prevent adding pending CPUs to migrc_ubc and give up migrc
+ * mechanism if someone is in the middle of tlb flush, like:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	on_flushing++
+ *	tlb flush
+ *				unmap folios (needing tlb flush)
+ *				if on_flushing == 0:
+ *				   add pending CPUs to migrc_ubc
+ *				else: <-- hit
+ *				   give up migrc mechanism
+ *	clear the CPUs from migrc_ubc
+ *	on_flushing--
+ *
+ * Only the following case would be allowed for migrc mechanism to work:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *				unmap folios (needing tlb flush)
+ *				if on_flushing == 0: <-- hit
+ *				   add pending CPUs to migrc_ubc
+ *				else:
+ *				   give up migrc mechanism
+ *	on_flushing++
+ *	tlb flush
+ *	clear the CPUs from migrc_ubc
+ *	on_flushing--
+ */
+static int on_flushing;
+
+/*
+ * When more than one thread enter check_migrc_flush() at the same
+ * time, each should wait for the request on progress to be done to
+ * avoid the following scenario, where the both CPUs are in
+ * check_migrc_flush():
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	if !migrc_ubc.flush_required:
+ *	   return
+ *	migrc_ubc.flush_required = false
+ *				if !migrc_ubc.flush_requied: <-- hit
+ *				   return <-- not performed tlb flush
+ *				              needed yet but return. bug!
+ *				migrc_ubc.flush_required = false
+ *				try_to_unmap_flush()
+ *				finalize
+ *	try_to_unmap_flush() <-- performs tlb flush needed
+ *	finalize
+ *
+ * So it should be handled:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	atomically execute {
+ *	   if migrc_on_flushing:
+ *	      wait for the completion
+ *	      return
+ *	   if !migrc_ubc.flush_required:
+ *	      return
+ *	   migrc_ubc.flush_required = false
+ *	   migrc_on_flushing = true
+ *	}
+ *				atomically execute {
+ *				   if migrc_on_flushing: <-- hit
+ *				      wait for the completion
+ *				      return <-- tlb flush needed is done
+ *				   if !migrc_ubc.flush_requied:
+ *				      return
+ *				   migrc_ubc.flush_required = false
+ *				   migrc_on_flushing = true
+ *				}
+ *
+ *				try_to_unmap_flush()
+ *				migrc_on_flushing = false
+ *				finalize
+ *	try_to_unmap_flush() <-- performs tlb flush needed
+ *	migrc_on_flushing = false
+ *	finalize
+ */
+static bool migrc_on_flushing;
+
+/*
+ * Generation number for the current request of deferred tlb flush.
+ */
+static unsigned short int migrc_gen;
+
+/*
+ * Generation number for the next request.
+ */
+static unsigned short int migrc_gen_next = 1;
+
+/*
+ * Generation number for the latest request handled.
+ */
+static unsigned short int migrc_gen_done;
+
+static unsigned short int migrc_add_pending_ubc(struct tlbflush_unmap_batch *ubc)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	unsigned long flags;
+	unsigned short int mgen;
+
+	spin_lock_irqsave(&migrc_lock, flags);
+	if (on_flushing || migrc_on_flushing) {
+		spin_unlock_irqrestore(&migrc_lock, flags);
+
+		/*
+		 * Give up migrc mechanism.  Just let tlb flush needed
+		 * handled by try_to_unmap_flush() at the caller side.
+		 */
+		fold_ubc(tlb_ubc, ubc);
+		return 0;
+	}
+	fold_ubc(&migrc_ubc, ubc);
+	mgen = migrc_gen = migrc_gen_next;
+	spin_unlock_irqrestore(&migrc_lock, flags);
+
+	return mgen;
+}
+
+void rmap_flush_start(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&migrc_lock, flags);
+	on_flushing++;
+	spin_unlock_irqrestore(&migrc_lock, flags);
+}
+
+void rmap_flush_end(struct tlbflush_unmap_batch *batch)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&migrc_lock, flags);
+	if (arch_tlbbatch_done(&migrc_ubc.arch, &batch->arch)) {
+		migrc_ubc.flush_required = false;
+		migrc_ubc.writable = false;
+	}
+	on_flushing--;
+	spin_unlock_irqrestore(&migrc_lock, flags);
+}
+
+/*
+ * Even if multiple contexts are requesting tlb flush at the same time,
+ * it must guarantee to have completed tlb flush requested on return.
+ */
+void check_migrc_flush(unsigned short int mgen)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	unsigned long flags;
+
+	/*
+	 * Nothing has been requested.  We are done.
+	 */
+	if (!mgen)
+		return;
+retry:
+	/*
+	 * We can see a larger value than or equal to migrc_gen_done,
+	 * which means the tlb flush we need has been done.
+	 */
+	if (!mgen_before(READ_ONCE(migrc_gen_done), mgen))
+		return;
+
+	spin_lock_irqsave(&migrc_lock, flags);
+
+	/*
+	 * With migrc_lock held, we might read migrc_gen_done updated.
+	 */
+	if (mgen_next(migrc_gen_done) != mgen) {
+		spin_unlock_irqrestore(&migrc_lock, flags);
+		return;
+	}
+
+	/*
+	 * Others are already working for us.
+	 */
+	if (migrc_on_flushing) {
+		spin_unlock_irqrestore(&migrc_lock, flags);
+		goto retry;
+	}
+
+	if (!migrc_ubc.flush_required) {
+		spin_unlock_irqrestore(&migrc_lock, flags);
+		return;
+	}
+
+	fold_ubc(tlb_ubc, &migrc_ubc);
+	migrc_gen_next = mgen_next(migrc_gen);
+	migrc_on_flushing = true;
+	spin_unlock_irqrestore(&migrc_lock, flags);
+
+	try_to_unmap_flush();
+
+	spin_lock_irqsave(&migrc_lock, flags);
+	migrc_on_flushing = false;
+
+	/*
+	 * migrc_gen_done can be read by another with migrc_lock not
+	 * held so use WRITE_ONCE() to prevent tearing.
+	 */
+	WRITE_ONCE(migrc_gen_done, mgen);
+	spin_unlock_irqrestore(&migrc_lock, flags);
+}
+
+void migrc_flush(void)
+{
+	unsigned long flags;
+	unsigned short int mgen;
+
+	/*
+	 * Obtain the latest mgen number.
+	 */
+	spin_lock_irqsave(&migrc_lock, flags);
+	mgen = migrc_gen;
+	spin_unlock_irqrestore(&migrc_lock, flags);
+
+	check_migrc_flush(mgen);
+}
+#else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
+static void init_tlb_ubc(struct tlbflush_unmap_batch *ubc)
+{
+}
+static unsigned int migrc_add_pending_ubc(struct tlbflush_unmap_batch *ubc)
+{
+	return 0;
+}
+#endif
+
 bool isolate_movable_page(struct page *page, isolate_mode_t mode)
 {
 	struct folio *folio = folio_get_nontail_page(page);
@@ -1090,7 +1363,8 @@ static void migrate_folio_undo_dst(struct folio *dst, bool locked,
 
 /* Cleanup src folio upon migration success */
 static void migrate_folio_done(struct folio *src,
-			       enum migrate_reason reason)
+			       enum migrate_reason reason,
+			       unsigned short int mgen)
 {
 	/*
 	 * Compaction can migrate also non-LRU pages which are
@@ -1101,8 +1375,15 @@ static void migrate_folio_done(struct folio *src,
 		mod_node_page_state(folio_pgdat(src), NR_ISOLATED_ANON +
 				    folio_is_file_lru(src), -folio_nr_pages(src));
 
-	if (reason != MR_MEMORY_FAILURE)
-		/* We release the page in page_handle_poison. */
+	/* We release the page in page_handle_poison. */
+	if (reason == MR_MEMORY_FAILURE) {
+		check_migrc_flush(mgen);
+		return;
+	}
+
+	if (mgen)
+		folio_put_mgen(src, mgen);
+	else
 		folio_put(src);
 }
 
@@ -1126,7 +1407,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 		folio_clear_unevictable(src);
 		/* free_pages_prepare() will clear PG_isolated. */
 		list_del(&src->lru);
-		migrate_folio_done(src, reason);
+		migrate_folio_done(src, reason, 0);
 		return MIGRATEPAGE_SUCCESS;
 	}
 
@@ -1272,7 +1553,7 @@ out:
 static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 			      struct folio *src, struct folio *dst,
 			      enum migrate_mode mode, enum migrate_reason reason,
-			      struct list_head *ret)
+			      struct list_head *ret, unsigned short int mgen)
 {
 	int rc;
 	int old_page_state = 0;
@@ -1322,11 +1603,12 @@ out_unlock_both:
 	 * and will be freed.
 	 */
 	list_del(&src->lru);
+
 	/* Drop an anon_vma reference if we took one */
 	if (anon_vma)
 		put_anon_vma(anon_vma);
 	folio_unlock(src);
-	migrate_folio_done(src, reason);
+	migrate_folio_done(src, reason, mgen);
 
 	return rc;
 out:
@@ -1616,7 +1898,7 @@ static void migrate_folios_move(struct list_head *src_folios,
 		struct list_head *ret_folios,
 		struct migrate_pages_stats *stats,
 		int *retry, int *thp_retry, int *nr_failed,
-		int *nr_retry_pages)
+		int *nr_retry_pages, unsigned short int mgen)
 {
 	struct folio *folio, *folio2, *dst, *dst2;
 	bool is_thp;
@@ -1633,7 +1915,7 @@ static void migrate_folios_move(struct list_head *src_folios,
 
 		rc = migrate_folio_move(put_new_folio, private,
 				folio, dst, mode,
-				reason, ret_folios);
+				reason, ret_folios, mgen);
 		/*
 		 * The rules are:
 		 *	Success: folio will be freed
@@ -1706,14 +1988,23 @@ static int migrate_pages_batch(struct list_head *from,
 	int pass = 0;
 	bool is_thp = false;
 	bool is_large = false;
+	bool is_zone_device = false;
 	struct folio *folio, *folio2, *dst = NULL;
 	int rc, rc_saved = 0, nr_pages;
 	LIST_HEAD(unmap_folios);
 	LIST_HEAD(dst_folios);
+	LIST_HEAD(unmap_folios_migrc);
+	LIST_HEAD(dst_folios_migrc);
 	bool nosplit = (reason == MR_NUMA_MISPLACED);
+	struct tlbflush_unmap_batch pending_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	unsigned short int mgen;
 
 	VM_WARN_ON_ONCE(mode != MIGRATE_ASYNC &&
 			!list_empty(from) && !list_is_singular(from));
+
+	init_tlb_ubc(&pending_ubc);
 
 	for (pass = 0; pass < nr_pass && retry; pass++) {
 		retry = 0;
@@ -1721,9 +2012,12 @@ static int migrate_pages_batch(struct list_head *from,
 		nr_retry_pages = 0;
 
 		list_for_each_entry_safe(folio, folio2, from, lru) {
+			bool can_migrc;
+
 			is_large = folio_test_large(folio);
 			is_thp = is_large && folio_test_pmd_mappable(folio);
 			nr_pages = folio_nr_pages(folio);
+			is_zone_device = folio_is_zone_device(folio);
 
 			cond_resched();
 
@@ -1773,9 +2067,25 @@ static int migrate_pages_batch(struct list_head *from,
 				continue;
 			}
 
+			can_migrc_init();
 			rc = migrate_folio_unmap(get_new_folio, put_new_folio,
 					private, folio, &dst, mode, reason,
 					ret_folios);
+			can_migrc = can_migrc_test();
+
+			/*
+			 * XXX: No way to handle zone device folio after
+			 * freeing.  Remove the following constraint
+			 * once migrc can handle it.
+			 */
+			can_migrc = can_migrc && likely(!is_zone_device);
+
+			/*
+			 * XXX: Remove the following constraint once
+			 * migrc handles large folio.
+			 */
+			can_migrc = can_migrc && likely(!is_large);
+
 			/*
 			 * The rules are:
 			 *	Success: folio will be freed
@@ -1821,7 +2131,8 @@ static int migrate_pages_batch(struct list_head *from,
 				/* nr_failed isn't updated for not used */
 				stats->nr_thp_failed += thp_retry;
 				rc_saved = rc;
-				if (list_empty(&unmap_folios))
+				if (list_empty(&unmap_folios) &&
+				    list_empty(&unmap_folios_migrc))
 					goto out;
 				else
 					goto move;
@@ -1835,8 +2146,19 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_thp_succeeded += is_thp;
 				break;
 			case MIGRATEPAGE_UNMAP:
-				list_move_tail(&folio->lru, &unmap_folios);
-				list_add_tail(&dst->lru, &dst_folios);
+				if (can_migrc) {
+					list_move_tail(&folio->lru, &unmap_folios_migrc);
+					list_add_tail(&dst->lru, &dst_folios_migrc);
+
+					/*
+					 * Gather ro batch data to add
+					 * to migrc_ubc after unmap.
+					 */
+					fold_ubc(&pending_ubc, tlb_ubc_ro);
+				} else {
+					list_move_tail(&folio->lru, &unmap_folios);
+					list_add_tail(&dst->lru, &dst_folios);
+				}
 				break;
 			default:
 				/*
@@ -1850,12 +2172,19 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_failed_pages += nr_pages;
 				break;
 			}
+			/*
+			 * Done with the current folio.  Fold the ro
+			 * batch data gathered to the normal batch.
+			 */
+			fold_ubc(tlb_ubc, tlb_ubc_ro);
 		}
 	}
 	nr_failed += retry;
 	stats->nr_thp_failed += thp_retry;
 	stats->nr_failed_pages += nr_retry_pages;
 move:
+	/* Should be before try_to_unmap_flush() */
+	mgen = migrc_add_pending_ubc(&pending_ubc);
 	/* Flush TLBs for all unmapped folios */
 	try_to_unmap_flush();
 
@@ -1869,7 +2198,11 @@ move:
 		migrate_folios_move(&unmap_folios, &dst_folios,
 				put_new_folio, private, mode, reason,
 				ret_folios, stats, &retry, &thp_retry,
-				&nr_failed, &nr_retry_pages);
+				&nr_failed, &nr_retry_pages, 0);
+		migrate_folios_move(&unmap_folios_migrc, &dst_folios_migrc,
+				put_new_folio, private, mode, reason,
+				ret_folios, stats, &retry, &thp_retry,
+				&nr_failed, &nr_retry_pages, mgen);
 	}
 	nr_failed += retry;
 	stats->nr_thp_failed += thp_retry;
@@ -1879,6 +2212,8 @@ move:
 out:
 	/* Cleanup remaining folios */
 	migrate_folios_undo(&unmap_folios, &dst_folios,
+			put_new_folio, private, ret_folios);
+	migrate_folios_undo(&unmap_folios_migrc, &dst_folios_migrc,
 			put_new_folio, private, ret_folios);
 
 	return rc;
