@@ -30,22 +30,12 @@ properties:
     maxItems: 1
 
   clocks:
-    items:
-      - description: ipg clock
-      - description: ocram clock
-      - description: core clock
-      - description: debug interface clock
-      - description: message unit clock
     minItems: 3
+    maxItems: 5
 
   clock-names:
-    items:
-      - const: ipg
-      - const: ocram
-      - const: core
-      - const: debug
-      - const: mu
     minItems: 3
+    maxItems: 5
 
   power-domains:
     description:
@@ -93,6 +83,43 @@ required:
   - memory-region
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx8ulp-hifi4
+    then:
+      properties:
+        clocks:
+          items:
+            - description: ipg clock
+            - description: ocram clock
+            - description: core clock
+            - description: message unit clock
+        clock-names:
+          items:
+            - const: ipg
+            - const: ocram
+            - const: core
+            - const: mu
+    else:
+      properties:
+        clocks:
+          items:
+            - description: ipg clock
+            - description: ocram clock
+            - description: core clock
+            - description: debug interface clock
+            - description: message unit clock
+          minItems: 3
+        clock-names:
+          items:
+            - const: ipg
+            - const: ocram
+            - const: core
+            - const: debug
+            - const: mu
+          minItems: 3
   - if:
       properties:
         compatible:
