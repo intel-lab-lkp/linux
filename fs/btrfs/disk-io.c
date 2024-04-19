@@ -251,6 +251,8 @@ int btrfs_read_extent_buffer(struct extent_buffer *eb,
 	if (failed && !ret && failed_mirror)
 		btrfs_repair_eb_io_failure(eb, failed_mirror);
 
+	if (!ret)
+		ret = btrfs_check_eb_owner(eb, check->owner_root);
 	return ret;
 }
 
@@ -634,10 +636,6 @@ struct extent_buffer *read_tree_block(struct btrfs_fs_info *fs_info, u64 bytenr,
 	if (ret) {
 		free_extent_buffer_stale(buf);
 		return ERR_PTR(ret);
-	}
-	if (btrfs_check_eb_owner(buf, check->owner_root)) {
-		free_extent_buffer_stale(buf);
-		return ERR_PTR(-EUCLEAN);
 	}
 	return buf;
 
