@@ -19,6 +19,7 @@
 #define sys_ioperm sys_ni_syscall
 
 #define __SYSCALL(nr, sym) extern asmlinkage long sym(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+#define __SYSCALL_NORETURN __SYSCALL
 #include <asm/syscalls_64.h>
 
 #undef __SYSCALL

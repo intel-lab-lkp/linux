@@ -24,6 +24,7 @@
 #define __SYSCALL_WITH_COMPAT(nr, native, compat)	__SYSCALL(nr, native)
 
 #define __SYSCALL(nr, sym) extern asmlinkage long sym(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+#define __SYSCALL_NORETURN __SYSCALL
 #include <asm/syscalls_32.h>
 
 #undef __SYSCALL
