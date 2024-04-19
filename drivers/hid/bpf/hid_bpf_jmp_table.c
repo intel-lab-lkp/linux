@@ -404,6 +404,13 @@ __hid_bpf_attach_prog(struct hid_device *hdev, enum hid_bpf_prog_type prog_type,
 
 	mutex_lock(&hid_bpf_attach_lock);
 
+	if (!jmp_table.map) {
+		err = hid_bpf_preload_skel();
+		WARN_ONCE(err, "error while preloading HID BPF dispatcher: %d", err);
+		if (err)
+			goto err_unlock;
+	}
+
 	link = kzalloc(sizeof(*link), GFP_USER);
 	if (!link) {
 		err = -ENOMEM;
