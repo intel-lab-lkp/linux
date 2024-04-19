@@ -3294,39 +3294,36 @@ static const struct flash_info *spi_nor_match_name(struct spi_nor *nor,
 static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 						       const char *name)
 {
-	const struct flash_info *info = NULL;
+	const struct flash_info *jinfo = NULL, *info = NULL;
 
 	if (name)
 		info = spi_nor_match_name(nor, name);
-	/* Try to auto-detect if chip name wasn't specified or not found */
-	if (!info)
-		return spi_nor_detect(nor);
+	/*
+	 * Auto-detect if chip name wasn't specified or not found, or the chip
+	 * has an ID. If the chip supposedly has an ID, we also do an
+	 * auto-detection to compare it later.
+	 */
+	if (!info || info->id) {
+		jinfo = spi_nor_detect(nor);
+		if (IS_ERR(jinfo))
+			return jinfo;
+	}
 
 	/*
 	 * If caller has specified name of flash model that can normally be
 	 * detected using JEDEC, let's verify it.
 	 */
-	if (name && info->id) {
-		const struct flash_info *jinfo;
+	if (info && jinfo && jinfo != info)
+		dev_warn(nor->dev, "found %s, expected %s\n",
+			 jinfo->name, info->name);
 
-		jinfo = spi_nor_detect(nor);
-		if (IS_ERR(jinfo)) {
-			return jinfo;
-		} else if (jinfo != info) {
-			/*
-			 * JEDEC knows better, so overwrite platform ID. We
-			 * can't trust partitions any longer, but we'll let
-			 * mtd apply them anyway, since some partitions may be
-			 * marked read-only, and we don't want to loose that
-			 * information, even if it's not 100% accurate.
-			 */
-			dev_warn(nor->dev, "found %s, expected %s\n",
-				 jinfo->name, info->name);
-			info = jinfo;
-		}
-	}
-
-	return info;
+	/*
+	 * JEDEC knows better, so overwrite platform ID. We can't trust
+	 * partitions any longer, but we'll let mtd apply them anyway, since
+	 * some partitions may be marked read-only, and we don't want to loose
+	 * that information, even if it's not 100% accurate.
+	 */
+	return jinfo ?: info;
 }
 
 static u32
