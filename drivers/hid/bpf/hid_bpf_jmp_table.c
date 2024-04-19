@@ -521,7 +521,7 @@ void hid_bpf_free_links_and_skel(void)
 
 #define ATTACH_AND_STORE_LINK(__name) do {					\
 	err = entrypoints_bpf__##__name##__attach(skel);			\
-	if (err)								\
+	if (err < 0)								\
 		goto out;							\
 										\
 	links[idx] = bpf_link_get_from_fd(skel->links.__name##_fd);		\
