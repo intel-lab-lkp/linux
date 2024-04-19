@@ -1689,7 +1689,6 @@ xfs_dialloc_good_ag(
 {
 	struct xfs_mount	*mp = tp->t_mountp;
 	xfs_extlen_t		ineed;
-	xfs_extlen_t		longest = 0;
 	int			needspace;
 	int			error;
 
@@ -1717,12 +1716,7 @@ xfs_dialloc_good_ag(
 
 	/*
 	 * Check that there is enough free space for the file plus a chunk of
-	 * inodes if we need to allocate some. If this is the first pass across
-	 * the AGs, take into account the potential space needed for alignment
-	 * of inode chunks when checking the longest contiguous free space in
-	 * the AG - this prevents us from getting ENOSPC because we have free
-	 * space larger than ialloc_blks but alignment constraints prevent us
-	 * from using it.
+	 * inodes if we need to allocate some.
 	 *
 	 * If we can't find an AG with space for full alignment slack to be
 	 * taken into account, we must be near ENOSPC in all AGs.  Hence we
@@ -1742,12 +1736,9 @@ xfs_dialloc_good_ag(
 	ineed = M_IGEO(mp)->ialloc_min_blks;
 	if (flags && ineed > 1)
 		ineed += M_IGEO(mp)->cluster_align;
-	longest = pag->pagf_longest;
-	if (!longest)
-		longest = pag->pagf_flcount > 0;
 	needspace = S_ISDIR(mode) || S_ISREG(mode) || S_ISLNK(mode);
 
-	if (pag->pagf_freeblks < needspace + ineed || longest < ineed)
+	if (pag->pagf_freeblks < needspace + ineed)
 		return false;
 	return true;
 }
