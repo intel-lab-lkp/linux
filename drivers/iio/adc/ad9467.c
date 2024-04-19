@@ -117,6 +117,7 @@ struct ad9467_state {
 	struct iio_backend		*back;
 	struct spi_device		*spi;
 	struct clk			*clk;
+	unsigned long			sample_rate;
 	unsigned int			output_mode;
 	unsigned int                    (*scales)[2];
 
@@ -331,7 +332,7 @@ static int ad9467_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 		return ad9467_get_scale(st, val, val2);
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		*val = clk_get_rate(st->clk);
+		*val = st->sample_rate;
 
 		return IIO_VAL_INT;
 	default:
@@ -346,6 +347,7 @@ static int ad9467_write_raw(struct iio_dev *indio_dev,
 	struct ad9467_state *st = iio_priv(indio_dev);
 	const struct ad9467_chip_info *info = st->info;
 	long r_clk;
+	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
@@ -358,7 +360,12 @@ static int ad9467_write_raw(struct iio_dev *indio_dev,
 			return -EINVAL;
 		}
 
-		return clk_set_rate(st->clk, r_clk);
+		ret = clk_set_rate(st->clk, r_clk);
+		if (ret)
+			return ret;
+
+		st->sample_rate = r_clk;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -542,6 +549,8 @@ static int ad9467_probe(struct spi_device *spi)
 	st->clk = devm_clk_get_enabled(&spi->dev, "adc-clk");
 	if (IS_ERR(st->clk))
 		return PTR_ERR(st->clk);
+
+	st->sample_rate = clk_get_rate(st->clk);
 
 	st->pwrdown_gpio = devm_gpiod_get_optional(&spi->dev, "powerdown",
 						   GPIOD_OUT_LOW);
