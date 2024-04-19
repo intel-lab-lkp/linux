@@ -1665,6 +1665,12 @@ static void __init bhi_select_mitigation(void)
 	if (!IS_ENABLED(CONFIG_X86_64))
 		return;
 
+	/*
+	 * There's no HW mitigation in place.  Mark indirect branches as
+	 * "not OK".
+	 */
+	setup_clear_cpu_cap(X86_FEATURE_INDIRECT_BRANCH_OK);
+
 	/* Mitigate KVM by default */
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
 	pr_info("Spectre BHI mitigation: SW BHB clearing on vm exit\n");
@@ -1678,6 +1684,28 @@ static void __init spectre_v2_select_mitigation(void)
 {
 	enum spectre_v2_mitigation_cmd cmd = spectre_v2_parse_cmdline();
 	enum spectre_v2_mitigation mode = SPECTRE_V2_NONE;
+
+	/*
+	 * X86_FEATURE_INDIRECT_BRANCH_OK indicates that indirect calls are
+	 * "OK" to use due to (at least) one of the following being true:
+	 *
+	 *   - the CPU isn't vulnerable to Spectre v2, BHI, etc;
+	 *
+	 *   - a HW mitigation is in place (e.g., IBRS, eIBRS+BHI_DIS_S); or
+	 *
+	 *   - the user disabled mitigations.
+	 *
+	 * Clearing the bit enables certain indirect branch "easy targets" [*]
+	 * to be converted to a series of direct branches.
+	 *
+	 * Assume innocence until proven guilty: set it now and clear it later
+	 * if/when needed.
+	 *
+	 * [*] The closer the indirect branch is to kernel entry, and the more
+	 *     user-controlled registers there are, the easier target it may be
+	 *     for future Spectre v2 variants.
+	 */
+	setup_force_cpu_cap(X86_FEATURE_INDIRECT_BRANCH_OK);
 
 	/*
 	 * If the CPU is not affected and the command line mode is NONE or AUTO
@@ -1765,11 +1793,16 @@ static void __init spectre_v2_select_mitigation(void)
 		break;
 
 	case SPECTRE_V2_LFENCE:
+		setup_clear_cpu_cap(X86_FEATURE_INDIRECT_BRANCH_OK);
+		fallthrough;
 	case SPECTRE_V2_EIBRS_LFENCE:
 		setup_force_cpu_cap(X86_FEATURE_RETPOLINE_LFENCE);
-		fallthrough;
+		setup_force_cpu_cap(X86_FEATURE_RETPOLINE);
+		break;
 
 	case SPECTRE_V2_RETPOLINE:
+		setup_clear_cpu_cap(X86_FEATURE_INDIRECT_BRANCH_OK);
+		fallthrough;
 	case SPECTRE_V2_EIBRS_RETPOLINE:
 		setup_force_cpu_cap(X86_FEATURE_RETPOLINE);
 		break;
