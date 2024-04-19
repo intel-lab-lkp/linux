@@ -1859,6 +1859,39 @@ out:
 	return ret;
 }
 
+int btrfs_qgroup_cleanup_dropped_subvolume(struct btrfs_fs_info *fs_info,
+					   u64 subvolid)
+{
+	struct btrfs_trans_handle *trans;
+	int ret;
+
+	if (!is_fstree(subvolid) || !btrfs_qgroup_enabled(fs_info) ||
+	    !fs_info->quota_root)
+		return 0;
+
+	/*
+	 * If our qgroup is consistent, commit current transaction to make sure
+	 * all the rfer/excl numbers get updated to 0 before deleting.
+	 */
+	if (!(fs_info->qgroup_flags & BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT)) {
+		trans = btrfs_start_transaction(fs_info->quota_root, 0);
+		if (IS_ERR(trans))
+			return PTR_ERR(trans);
+
+		ret = btrfs_commit_transaction(trans);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Start new trans to delete the qgroup info and limit items. */
+	trans = btrfs_start_transaction(fs_info->quota_root, 2);
+	if (IS_ERR(trans))
+		return PTR_ERR(trans);
+	ret = btrfs_remove_qgroup(trans, subvolid);
+	btrfs_end_transaction(trans);
+	return ret;
+}
+
 int btrfs_limit_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid,
 		       struct btrfs_qgroup_limit *limit)
 {
@@ -4877,7 +4910,11 @@ int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 	spin_lock(&fs_info->qgroup_lock);
 	qgroup = find_qgroup_rb(fs_info, root);
 	if (!qgroup) {
-		ret = -ENOENT;
+		/*
+		 * The qgroup can be auto deleted by subvolume deleting.
+		 * In that case do not consider it an error.
+		 */
+		ret = 0;
 		goto out;
 	}
 
