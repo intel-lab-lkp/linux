@@ -46,6 +46,30 @@ void qcom_pcie_common_set_16gt_eq_settings(struct dw_pcie *pci)
 }
 EXPORT_SYMBOL_GPL(qcom_pcie_common_set_16gt_eq_settings);
 
+void qcom_pcie_common_set_16gt_rx_margining_settings(struct dw_pcie *pci)
+{
+	u32 reg;
+
+	reg = dw_pcie_readl_dbi(pci, GEN4_LANE_MARGINING_1_OFF);
+	reg = MARGINING_MAX_VOLTAGE_OFFSET(0x24) |
+		MARGINING_NUM_VOLTAGE_STEPS(0x78) |
+		MARGINING_MAX_TIMING_OFFSET(0x32) |
+		MARGINING_NUM_TIMING_STEPS(0x10);
+	dw_pcie_writel_dbi(pci, GEN4_LANE_MARGINING_1_OFF, reg);
+
+	reg = dw_pcie_readl_dbi(pci, GEN4_LANE_MARGINING_2_OFF);
+	reg = MARGINING_IND_ERROR_SAMPLER(1) |
+		MARGINING_SAMPLE_REPORTING_METHOD(1) |
+		MARGINING_IND_LEFT_RIGHT_TIMING(1) |
+		MARGINING_VOLTAGE_SUPPORTED(1) |
+		MARGINING_IND_UP_DOWN_VOLTAGE(0) |
+		MARGINING_MAXLANES(pci->num_lanes) |
+		MARGINING_SAMPLE_RATE_TIMING(0x3f) |
+		MARGINING_SAMPLE_RATE_VOLTAGE(0x3f);
+	dw_pcie_writel_dbi(pci, GEN4_LANE_MARGINING_2_OFF, reg);
+}
+EXPORT_SYMBOL_GPL(qcom_pcie_common_set_16gt_rx_margining_settings);
+
 int qcom_pcie_common_icc_get_resource(struct dw_pcie *pci, struct icc_path **icc_mem_p)
 {
 	*icc_mem_p = devm_of_icc_get(pci->dev, "pcie-mem");
