@@ -447,6 +447,8 @@ struct spi_nor_id {
  * @id:   pointer to struct spi_nor_id or NULL, which means "no ID" (mostly
  *        older chips).
  * @name: (obsolete) the name of the flash. Do not set it for new additions.
+ * @deprecation_version:      the kernel version after which the support for
+ *	                      this flash will be removed.
  * @size:           the size of the flash in bytes.
  * @sector_size:    (optional) the size listed here is what works with
  *                  SPINOR_OP_SE, which isn't necessarily called a "sector" by
@@ -504,6 +506,7 @@ struct spi_nor_id {
 struct flash_info {
 	char *name;
 	const struct spi_nor_id *id;
+	const char *deprecation_version;
 	size_t size;
 	unsigned sector_size;
 	u16 page_size;

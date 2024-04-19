@@ -3323,7 +3323,16 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
 	 * some partitions may be marked read-only, and we don't want to loose
 	 * that information, even if it's not 100% accurate.
 	 */
-	return jinfo ?: info;
+	if (jinfo)
+		info = jinfo;
+
+	if (info && info->deprecation_version)
+		pr_warn("Your board is using a SPI NOR flash (%s) with deprecated driver\n"
+			"support. It will be removed after kernel version %s.\n"
+			"If you feel this shouldn't be the case, please contact us at\n"
+			"linux-mtd@lists.infradead.org\n",
+			info->name, info->deprecation_version);
+	return info;
 }
 
 static u32
