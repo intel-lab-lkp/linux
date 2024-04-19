@@ -2802,14 +2802,16 @@ xfs_alloc_fix_freelist(
 	/* deferred ops (AGFL block frees) require permanent transactions */
 	ASSERT(tp->t_flags & XFS_TRANS_PERM_LOG_RES);
 
-	if (!xfs_perag_initialised_agf(pag)) {
-		error = xfs_alloc_read_agf(pag, tp, alloc_flags, &agbp);
-		if (error) {
-			/* Couldn't lock the AGF so skip this AG. */
-			if (error == -EAGAIN)
-				error = 0;
-			goto out_no_agbp;
-		}
+	/*
+	 * Get the a.g. freespace buffer.
+	 * Can fail if we're not blocking on locks, and it's held.
+	 */
+	error = xfs_alloc_read_agf(pag, tp, alloc_flags, &agbp);
+	if (error) {
+		/* Couldn't lock the AGF so skip this AG. */
+		if (error == -EAGAIN)
+			error = 0;
+		goto out_no_agbp;
 	}
 
 	/*
@@ -2828,20 +2830,6 @@ xfs_alloc_fix_freelist(
 	if (!xfs_alloc_space_available(args, need, alloc_flags |
 			XFS_ALLOC_FLAG_CHECK))
 		goto out_agbp_relse;
-
-	/*
-	 * Get the a.g. freespace buffer.
-	 * Can fail if we're not blocking on locks, and it's held.
-	 */
-	if (!agbp) {
-		error = xfs_alloc_read_agf(pag, tp, alloc_flags, &agbp);
-		if (error) {
-			/* Couldn't lock the AGF so skip this AG. */
-			if (error == -EAGAIN)
-				error = 0;
-			goto out_no_agbp;
-		}
-	}
 
 	/* reset a padding mismatched agfl before final free space check */
 	if (xfs_perag_agfl_needs_reset(pag))
