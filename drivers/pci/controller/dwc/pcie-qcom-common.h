@@ -10,3 +10,4 @@
 int qcom_pcie_common_icc_get_resource(struct dw_pcie *pci, struct icc_path **icc_mem_p);
 int qcom_pcie_common_icc_init(struct dw_pcie *pci, struct icc_path *icc_mem);
 void qcom_pcie_common_icc_update(struct dw_pcie *pci, struct icc_path *icc_mem);
+void qcom_pcie_common_set_16gt_eq_settings(struct dw_pcie *pci);

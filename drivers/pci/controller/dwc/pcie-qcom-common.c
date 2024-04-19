@@ -16,6 +16,36 @@
 #define QCOM_PCIE_LINK_SPEED_TO_BW(speed) \
 		Mbps_to_icc(PCIE_SPEED2MBS_ENC(pcie_link_speed[speed]))
 
+void qcom_pcie_common_set_16gt_eq_settings(struct dw_pcie *pci)
+{
+	u32 reg;
+
+	/*
+	 * GEN3_RELATED_OFF is repurposed to be used with GEN4(16GT/s) rate
+	 * as well based on RATE_SHADOW_SEL_MASK settings on this register.
+	 */
+	reg = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
+	reg &= ~GEN3_RELATED_OFF_GEN3_ZRXDC_NONCOMPL;
+	reg &= ~GEN3_RELATED_OFF_RATE_SHADOW_SEL_MASK;
+	reg |= (0x1 << GEN3_RELATED_OFF_RATE_SHADOW_SEL_SHIFT);
+	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, reg);
+
+	reg = dw_pcie_readl_dbi(pci, GEN3_EQ_FB_MODE_DIR_CHANGE_OFF);
+	reg = GEN3_EQ_FMDC_T_MIN_PHASE23(0) |
+		GEN3_EQ_FMDC_N_EVALS(0xD) |
+		GEN3_EQ_FMDC_MAX_PRE_CUSROR_DELTA(0x5) |
+		GEN3_EQ_FMDC_MAX_POST_CUSROR_DELTA(0x5);
+	dw_pcie_writel_dbi(pci, GEN3_EQ_FB_MODE_DIR_CHANGE_OFF, reg);
+
+	reg = dw_pcie_readl_dbi(pci, GEN3_EQ_CONTROL_OFF);
+	reg = GEN3_EQ_CONTROL_OFF_FB_MODE(0) |
+		GEN3_EQ_CONTROL_OFF_PHASE23_EXIT_MODE(0) |
+		GEN3_EQ_CONTROL_OFF_FOM_INC_INITIAL_EVAL(0) |
+		GEN3_EQ_CONTROL_OFF_PSET_REQ_VEC(0);
+	dw_pcie_writel_dbi(pci, GEN3_EQ_CONTROL_OFF, reg);
+}
+EXPORT_SYMBOL_GPL(qcom_pcie_common_set_16gt_eq_settings);
+
 int qcom_pcie_common_icc_get_resource(struct dw_pcie *pci, struct icc_path **icc_mem_p)
 {
 	*icc_mem_p = devm_of_icc_get(pci->dev, "pcie-mem");
