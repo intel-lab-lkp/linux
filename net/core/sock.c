@@ -2809,6 +2809,13 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 		     struct sockcm_cookie *sockc)
 {
 	u32 tsflags;
+	int ret, zc_info_size, i = 0;
+	unsigned long flags;
+	struct sk_buff_head *q, local_q;
+	struct sk_buff *skb, *tmp;
+	struct sock_exterr_skb *serr;
+	struct zc_info_usr *zc_info_usr_p, *zc_info_kern_p;
+	void __user	*usr_addr;
 
 	switch (cmsg->cmsg_type) {
 	case SO_MARK:
@@ -2841,6 +2848,69 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	/* SCM_RIGHTS and SCM_CREDENTIALS are semantically in SOL_UNIX. */
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
+		break;
+	case SO_ZC_NOTIFICATION:
+		if (!sock_flag(sk, SOCK_ZEROCOPY) || sk->sk_family == PF_RDS)
+			return -EINVAL;
+
+		zc_info_usr_p = (struct zc_info_usr *)CMSG_DATA(cmsg);
+		if (zc_info_usr_p->length <= 0 || zc_info_usr_p->length > SOCK_ZC_INFO_MAX)
+			return -EINVAL;
+
+		zc_info_size = struct_size(zc_info_usr_p, info, zc_info_usr_p->length);
+		if (cmsg->cmsg_len != CMSG_LEN(zc_info_size))
+			return -EINVAL;
+
+		usr_addr = (void *)(uintptr_t)(zc_info_usr_p->usr_addr);
+		if (!access_ok(usr_addr, zc_info_size))
+			return -EFAULT;
+
+		zc_info_kern_p = kmalloc(zc_info_size, GFP_KERNEL);
+		if (!zc_info_kern_p)
+			return -ENOMEM;
+
+		q = &sk->sk_error_queue;
+		skb_queue_head_init(&local_q);
+		spin_lock_irqsave(&q->lock, flags);
+		skb = skb_peek(q);
+		while (skb && i < zc_info_usr_p->length) {
+			struct sk_buff *skb_next = skb_peek_next(skb, q);
+
+			serr = SKB_EXT_ERR(skb);
+			if (serr->ee.ee_errno == 0 &&
+			    serr->ee.ee_origin == SO_EE_ORIGIN_ZEROCOPY) {
+				zc_info_kern_p->info[i].hi = serr->ee.ee_data;
+				zc_info_kern_p->info[i].lo = serr->ee.ee_info;
+				zc_info_kern_p->info[i].zerocopy = !(serr->ee.ee_code
+								& SO_EE_CODE_ZEROCOPY_COPIED);
+				__skb_unlink(skb, q);
+				__skb_queue_tail(&local_q, skb);
+				i++;
+			}
+			skb = skb_next;
+		}
+		spin_unlock_irqrestore(&q->lock, flags);
+
+		zc_info_kern_p->usr_addr = zc_info_usr_p->usr_addr;
+		zc_info_kern_p->length = i;
+
+		ret = copy_to_user(usr_addr,
+				   zc_info_kern_p,
+					struct_size(zc_info_kern_p, info, i));
+		kfree(zc_info_kern_p);
+
+		if (unlikely(ret)) {
+			spin_lock_irqsave(&q->lock, flags);
+			skb_queue_reverse_walk_safe(&local_q, skb, tmp) {
+				__skb_unlink(skb, &local_q);
+				__skb_queue_head(q, skb);
+			}
+			spin_unlock_irqrestore(&q->lock, flags);
+			return -EFAULT;
+		}
+
+		while ((skb = __skb_dequeue(&local_q)))
+			consume_skb(skb);
 		break;
 	default:
 		return -EINVAL;

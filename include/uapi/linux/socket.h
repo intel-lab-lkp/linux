@@ -2,6 +2,8 @@
 #ifndef _UAPI_LINUX_SOCKET_H
 #define _UAPI_LINUX_SOCKET_H
 
+#include <linux/types.h>
+
 /*
  * Desired design of maximum size and alignment (see RFC2553)
  */
@@ -34,5 +36,19 @@ struct __kernel_sockaddr_storage {
 #define SOCK_TXREHASH_DEFAULT	255
 #define SOCK_TXREHASH_DISABLED	0
 #define SOCK_TXREHASH_ENABLED	1
+
+#define SOCK_ZC_INFO_MAX 256
+
+struct zc_info_elem {
+	__u32 lo;
+	__u32 hi;
+	__u8 zerocopy;
+};
+
+struct zc_info_usr {
+	__u64 usr_addr;
+	unsigned int length;
+	struct zc_info_elem info[];
+};
 
 #endif /* _UAPI_LINUX_SOCKET_H */
