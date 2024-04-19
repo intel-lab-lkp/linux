@@ -1029,15 +1029,17 @@ config SERIAL_SC16IS7XX_CORE
 	select SERIAL_SC16IS7XX_SPI if SPI_MASTER
 	select SERIAL_SC16IS7XX_I2C if I2C
 	help
-	  Core driver for NXP SC16IS7xx UARTs.
+	  Core driver for NXP SC16IS7xx-compatible UARTs.
 	  Supported ICs are:
-
-	    SC16IS740
-	    SC16IS741
-	    SC16IS750
-	    SC16IS752
-	    SC16IS760
-	    SC16IS762
+		NXP:
+	    	SC16IS740
+	    	SC16IS741
+	    	SC16IS750
+	    	SC16IS752
+	    	SC16IS760
+	    	SC16IS762
+		EXAR:
+			XR20M1172
 
 	  The driver supports both I2C and SPI interfaces.
 
