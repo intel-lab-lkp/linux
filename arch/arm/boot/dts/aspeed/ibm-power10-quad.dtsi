@@ -22,7 +22,7 @@
 			};
 
 			sbefifo100: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -50,7 +50,7 @@
 			};
 
 			sbefifo101: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -78,7 +78,7 @@
 			};
 
 			sbefifo110: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -106,7 +106,7 @@
 			};
 
 			sbefifo111: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -134,7 +134,7 @@
 			};
 
 			sbefifo112: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -162,7 +162,7 @@
 			};
 
 			sbefifo113: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -190,7 +190,7 @@
 			};
 
 			sbefifo114: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -218,7 +218,7 @@
 			};
 
 			sbefifo115: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -246,7 +246,7 @@
 			};
 
 			sbefifo202: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -274,7 +274,7 @@
 			};
 
 			sbefifo203: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -302,7 +302,7 @@
 			};
 
 			sbefifo210: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -330,7 +330,7 @@
 			};
 
 			sbefifo211: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -358,7 +358,7 @@
 			};
 
 			sbefifo214: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -386,7 +386,7 @@
 			};
 
 			sbefifo215: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -414,7 +414,7 @@
 			};
 
 			sbefifo216: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -442,7 +442,7 @@
 			};
 
 			sbefifo217: sbefifo@2400 {
-				compatible = "ibm,p9-sbefifo";
+				compatible = "ibm,odyssey-sbefifo";
 				reg = <0x2400 0x400>;
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -492,7 +492,7 @@
 						};
 
 						sbefifo300: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -524,7 +524,7 @@
 						};
 
 						sbefifo301: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -556,7 +556,7 @@
 						};
 
 						sbefifo310: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -588,7 +588,7 @@
 						};
 
 						sbefifo311: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -620,7 +620,7 @@
 						};
 
 						sbefifo312: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -652,7 +652,7 @@
 						};
 
 						sbefifo313: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -684,7 +684,7 @@
 						};
 
 						sbefifo314: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -716,7 +716,7 @@
 						};
 
 						sbefifo315: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -865,7 +865,7 @@
 						};
 
 						sbefifo402: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -897,7 +897,7 @@
 						};
 
 						sbefifo403: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -929,7 +929,7 @@
 						};
 
 						sbefifo410: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -961,7 +961,7 @@
 						};
 
 						sbefifo411: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -993,7 +993,7 @@
 						};
 
 						sbefifo414: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -1025,7 +1025,7 @@
 						};
 
 						sbefifo415: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -1057,7 +1057,7 @@
 						};
 
 						sbefifo416: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -1089,7 +1089,7 @@
 						};
 
 						sbefifo417: sbefifo@2400 {
-							compatible = "ibm,p9-sbefifo";
+							compatible = "ibm,odyssey-sbefifo";
 							reg = <0x2400 0x400>;
 							#address-cells = <1>;
 							#size-cells = <0>;
