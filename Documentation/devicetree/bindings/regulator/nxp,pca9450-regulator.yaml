@@ -35,6 +35,9 @@ properties:
   interrupts:
     maxItems: 1
 
+  priority:
+    $ref: /schemas/power/reset/restart-handler.yaml#
+
   regulators:
     type: object
     description: |
