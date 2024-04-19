@@ -16,6 +16,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/pca9450.h>
+#include <linux/reboot.h>
 
 struct pc9450_dvs_config {
 	unsigned int run_reg; /* dvs0 */
@@ -33,6 +34,7 @@ struct pca9450 {
 	struct device *dev;
 	struct regmap *regmap;
 	struct gpio_desc *sd_vsel_gpio;
+	struct notifier_block restart_handler;
 	enum pca9450_chip_type type;
 	unsigned int rcnt;
 	int irq;
@@ -700,6 +702,34 @@ static irqreturn_t pca9450_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int pca9450_restart(struct notifier_block *nb,
+			   unsigned long mode, void *cmd)
+{
+	struct pca9450 *pmic = container_of(nb, struct pca9450,
+					    restart_handler);
+	struct i2c_client *client = container_of(pmic->dev,
+						 struct i2c_client, dev);
+	int ret = 0;
+	u32 rtype;
+
+	switch (mode) {
+	case REBOOT_WARM:
+		/* Warm reset (Toggle POR_B for 20 ms) */
+		rtype = 0x35;
+		break;
+	default:
+		/* Cold reset (Power recycle all regulators) */
+		rtype = 0x64;
+	}
+
+	ret = i2c_smbus_write_byte_data(client, PCA9450_REG_SWRST, rtype);
+	if (ret < 0)
+		dev_alert(pmic->dev, "Failed to shutdown (err = %d)\n", ret);
+
+	mdelay(500);
+	return NOTIFY_DONE;
+}
+
 static int pca9450_i2c_probe(struct i2c_client *i2c)
 {
 	enum pca9450_chip_type type = (unsigned int)(uintptr_t)
@@ -845,10 +875,33 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 		return PTR_ERR(pca9450->sd_vsel_gpio);
 	}
 
+	/* Register I2C restart handler if one is defined by device tree */
+	if (!of_property_read_u32(i2c->dev.of_node, "priority",
+				  &pca9450->restart_handler.priority)) {
+		pca9450->restart_handler.notifier_call = pca9450_restart;
+
+		ret = register_restart_handler(&pca9450->restart_handler);
+		if (ret)
+			return dev_err_probe(&i2c->dev, ret,
+					     "cannot register restart handler.\n");
+		else
+			dev_info(&i2c->dev,
+				 "registered restart handler with priority %d.\n",
+				 pca9450->restart_handler.priority);
+	}
+
 	dev_info(&i2c->dev, "%s probed.\n",
 		type == PCA9450_TYPE_PCA9450A ? "pca9450a" : "pca9450bc");
 
 	return 0;
+}
+
+static void pca9450_i2c_remove(struct i2c_client *i2c)
+{
+	struct pca9450 *pca9450 = dev_get_drvdata(&i2c->dev);
+
+	if (pca9450->restart_handler.notifier_call)
+		unregister_restart_handler(&pca9450->restart_handler);
 }
 
 static const struct of_device_id pca9450_of_match[] = {
@@ -875,6 +928,7 @@ static struct i2c_driver pca9450_i2c_driver = {
 		.of_match_table = pca9450_of_match,
 	},
 	.probe = pca9450_i2c_probe,
+	.remove = pca9450_i2c_remove,
 };
 
 module_i2c_driver(pca9450_i2c_driver);

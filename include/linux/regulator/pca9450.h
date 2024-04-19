@@ -226,6 +226,13 @@ enum {
 #define WDOG_B_CFG_COLD_LDO12		0x80
 #define WDOG_B_CFG_COLD			0xC0
 
+/* PCA9450_REG_SWRST bits */
+#define SW_RST_NONE			0x00
+#define SW_RST_DEFAULTS			0x05
+#define SW_RST_COLD_LDO12_CLK32		0x14
+#define SW_RST_WARM			0x35
+#define SW_RST_COLD			0x64
+
 /* PCA9450_REG_CONFIG2 bits */
 #define I2C_LT_MASK			0x03
 #define I2C_LT_FORCE_DISABLE		0x00
