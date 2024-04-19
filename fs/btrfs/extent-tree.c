@@ -5229,6 +5229,7 @@ struct walk_control {
 	int reada_slot;
 	int reada_count;
 	int restarted;
+	int lookup_info;
 };
 
 #define DROP_REFERENCE	1
@@ -5325,7 +5326,7 @@ reada:
 static noinline int walk_down_proc(struct btrfs_trans_handle *trans,
 				   struct btrfs_root *root,
 				   struct btrfs_path *path,
-				   struct walk_control *wc, int lookup_info)
+				   struct walk_control *wc)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	int level = wc->level;
@@ -5340,7 +5341,7 @@ static noinline int walk_down_proc(struct btrfs_trans_handle *trans,
 	 * when reference count of tree block is 1, it won't increase
 	 * again. once full backref flag is set, we never clear it.
 	 */
-	if (lookup_info &&
+	if (wc->lookup_info &&
 	    ((wc->stage == DROP_REFERENCE && wc->refs[level] != 1) ||
 	     (wc->stage == UPDATE_BACKREF && !(wc->flags[level] & flag)))) {
 		BUG_ON(!path->locks[level]);
@@ -5432,7 +5433,7 @@ static int check_ref_exists(struct btrfs_trans_handle *trans,
 static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 				 struct btrfs_root *root,
 				 struct btrfs_path *path,
-				 struct walk_control *wc, int *lookup_info)
+				 struct walk_control *wc)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	u64 bytenr;
@@ -5454,7 +5455,7 @@ static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 	 */
 	if (wc->stage == UPDATE_BACKREF &&
 	    generation <= root->root_key.offset) {
-		*lookup_info = 1;
+		wc->lookup_info = 1;
 		return 1;
 	}
 
@@ -5486,7 +5487,7 @@ static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 		ret = -EIO;
 		goto out_unlock;
 	}
-	*lookup_info = 0;
+	wc->lookup_info = 0;
 
 	if (wc->stage == DROP_REFERENCE) {
 		if (wc->refs[level - 1] > 1) {
@@ -5524,7 +5525,7 @@ static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 			return ret;
 		}
 		btrfs_tree_lock(next);
-		*lookup_info = 1;
+		wc->lookup_info = 1;
 	}
 
 	level--;
@@ -5613,7 +5614,7 @@ skip:
 			goto out_unlock;
 	}
 no_delete:
-	*lookup_info = 1;
+	wc->lookup_info = 1;
 	ret = 1;
 
 out_unlock:
@@ -5747,11 +5748,11 @@ static noinline int walk_down_tree(struct btrfs_trans_handle *trans,
 				   struct walk_control *wc)
 {
 	int level = wc->level;
-	int lookup_info = 1;
 	int ret = 0;
 
+	wc->lookup_info = 1;
 	while (level >= 0) {
-		ret = walk_down_proc(trans, root, path, wc, lookup_info);
+		ret = walk_down_proc(trans, root, path, wc);
 		if (ret)
 			break;
 
@@ -5762,7 +5763,7 @@ static noinline int walk_down_tree(struct btrfs_trans_handle *trans,
 		    btrfs_header_nritems(path->nodes[level]))
 			break;
 
-		ret = do_walk_down(trans, root, path, wc, &lookup_info);
+		ret = do_walk_down(trans, root, path, wc);
 		if (ret > 0) {
 			path->slots[level]++;
 			continue;
