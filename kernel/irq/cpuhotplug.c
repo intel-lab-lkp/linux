@@ -130,6 +130,19 @@ static bool migrate_one_irq(struct irq_desc *desc)
 	 * CPU.
 	 */
 	err = irq_do_set_affinity(d, affinity, false);
+
+	if (err == -ENOSPC &&
+	    !irqd_affinity_is_managed(d) &&
+	    affinity != cpu_online_mask) {
+		affinity = cpu_online_mask;
+		brokeaff = true;
+
+		pr_debug("IRQ%u: set affinity failed for %*pbl, re-try with all online CPUs\n",
+			 d->irq, cpumask_pr_args(affinity));
+
+		err = irq_do_set_affinity(d, affinity, false);
+	}
+
 	if (err) {
 		pr_warn_ratelimited("IRQ%u: set affinity failed(%d).\n",
 				    d->irq, err);
