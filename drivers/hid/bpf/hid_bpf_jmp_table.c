@@ -19,10 +19,10 @@
 #include "hid_bpf_dispatch.h"
 #include "entrypoints/entrypoints.lskel.h"
 
-#define HID_BPF_MAX_PROGS 1024 /* keep this in sync with preloaded bpf,
-				* needs to be a power of 2 as we use it as
-				* a circular buffer
-				*/
+/* keep this in sync with preloaded bpf,
+ * needs to be a power of 2 as we use it as a circular buffer
+ */
+#define HID_BPF_MAX_PROGS 1024
 
 #define NEXT(idx) (((idx) + 1) & (HID_BPF_MAX_PROGS - 1))
 #define PREV(idx) (((idx) - 1) & (HID_BPF_MAX_PROGS - 1))
