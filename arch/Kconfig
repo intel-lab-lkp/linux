@@ -11,6 +11,16 @@ source "arch/$(SRCARCH)/Kconfig"
 
 menu "General architecture-dependent options"
 
+config CPU_MITIGATIONS
+	bool "Mitigations for CPU speculative execution vulnerabilities"
+	default y
+	help
+	  Say Y here to enable mitigations for CPU speculative execution
+	  vulnerabilities.
+
+	  If you say N, all mitigations will be disabled. You really
+	  should know what you are doing to say so.
+
 config ARCH_HAS_SUBPAGE_FAULTS
 	bool
 	help
