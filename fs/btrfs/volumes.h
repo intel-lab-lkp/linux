@@ -92,6 +92,9 @@ enum btrfs_raid_types {
 #define BTRFS_DEV_STATE_FLUSH_SENT	(4)
 #define BTRFS_DEV_STATE_NO_READA	(5)
 
+/* We'll never have this many superblocks */
+#define BTRFS_DEV_PRIMARY_ERROR		(INT_MAX / 2)
+
 struct btrfs_fs_devices;
 
 struct btrfs_device {
@@ -141,6 +144,8 @@ struct btrfs_device {
 	u32 io_width;
 	/* type and info about this device */
 	u64 type;
+
+	atomic_t sb_wb_errors;
 
 	/* minimal io size for this device */
 	u32 sector_size;
