@@ -28,6 +28,7 @@ extern const struct sc16is7xx_devtype sc16is750_devtype;
 extern const struct sc16is7xx_devtype sc16is752_devtype;
 extern const struct sc16is7xx_devtype sc16is760_devtype;
 extern const struct sc16is7xx_devtype sc16is762_devtype;
+extern const struct sc16is7xx_devtype xr20m1172_devtype;
 
 const char *sc16is7xx_regmap_name(u8 port_id);
 
