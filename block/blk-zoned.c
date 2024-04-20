@@ -526,6 +526,8 @@ static void disk_free_zone_wplug_rcu(struct rcu_head *rcu_head)
 	struct blk_zone_wplug *zwplug =
 		container_of(rcu_head, struct blk_zone_wplug, rcu_head);
 
+	flush_work(&zwplug->bio_work);
+
 	mempool_free(zwplug, zwplug->disk->zone_wplugs_pool);
 }
 
