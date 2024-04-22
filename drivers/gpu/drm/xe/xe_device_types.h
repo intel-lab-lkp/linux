@@ -465,6 +465,9 @@ struct xe_device {
 	/** @pci_state: PCI state of device */
 	struct pci_saved_state *pci_state;
 
+	/** @pci_device_is_reset: device went through PCIe FLR */
+	bool pci_device_is_reset;
+
 	/* private: */
 
 #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
