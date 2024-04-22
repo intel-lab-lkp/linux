@@ -122,7 +122,9 @@ static void ima_rdwr_violation_check(struct file *file,
 				     char *filename)
 {
 	struct inode *inode = file_inode(file);
+	struct dentry *fd_dentry, *d;
 	fmode_t mode = file->f_mode;
+	struct inode *fd_inode;
 	bool send_tomtou = false, send_writers = false;
 
 	if (mode & FMODE_WRITE) {
@@ -134,11 +136,20 @@ static void ima_rdwr_violation_check(struct file *file,
 						&iint->atomic_flags))
 				send_tomtou = true;
 		}
-	} else {
-		if (must_measure)
-			set_bit(IMA_MUST_MEASURE, &iint->atomic_flags);
-		if (inode_is_open_for_write(inode) && must_measure)
-			send_writers = true;
+	} else if (must_measure) {
+		set_bit(IMA_MUST_MEASURE, &iint->atomic_flags);
+
+		d = d_real(file_dentry(file), D_REAL_FILEDATA);
+		do {
+			fd_dentry = d;
+			fd_inode = d_inode(fd_dentry);
+			if (inode_is_open_for_write(fd_inode)) {
+				send_writers = true;
+				break;
+			}
+			/* next layer of stacked fs */
+			d = d_real(fd_dentry, D_REAL_FILEDATA);
+		} while (d != fd_dentry);
 	}
 
 	if (!send_tomtou && !send_writers)
