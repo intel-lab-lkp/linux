@@ -57,6 +57,7 @@ int devm_cxl_add_passthrough_decoder(struct cxl_port *port)
 	if (IS_ERR(cxlsd))
 		return PTR_ERR(cxlsd);
 
+	cxlsd->passthrough = true;
 	device_lock_assert(&port->dev);
 
 	xa_for_each(&port->dports, index, dport)

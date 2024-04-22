@@ -415,6 +415,7 @@ struct cxl_endpoint_decoder {
  * struct cxl_switch_decoder - Switch specific CXL HDM Decoder
  * @cxld: base cxl_decoder object
  * @nr_targets: number of elements in @target
+ * @passthrough: indicate whether the decoder is passthrough
  * @target: active ordered target list in current decoder configuration
  *
  * The 'switch' decoder type represents the decoder instances of cxl_port's that
@@ -426,6 +427,7 @@ struct cxl_endpoint_decoder {
 struct cxl_switch_decoder {
 	struct cxl_decoder cxld;
 	int nr_targets;
+	bool passthrough;
 	struct cxl_dport *target[];
 };
 
