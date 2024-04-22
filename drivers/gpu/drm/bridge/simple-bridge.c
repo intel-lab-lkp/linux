@@ -308,3 +308,4 @@ module_platform_driver(simple_bridge_driver);
 MODULE_AUTHOR("Maxime Ripard <maxime.ripard@free-electrons.com>");
 MODULE_DESCRIPTION("Simple DRM bridge driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:simple-bridge");
