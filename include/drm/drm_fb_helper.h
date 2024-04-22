@@ -261,6 +261,7 @@ void drm_fb_helper_deferred_io(struct fb_info *info, struct list_head *pagerefli
 void drm_fb_helper_set_suspend(struct drm_fb_helper *fb_helper, bool suspend);
 void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper,
 					bool suspend);
+void drm_fb_helper_emergency_disable(struct drm_fb_helper *fb_helper);
 
 int drm_fb_helper_setcmap(struct fb_cmap *cmap, struct fb_info *info);
 
@@ -375,6 +376,10 @@ static inline void drm_fb_helper_set_suspend(struct drm_fb_helper *fb_helper,
 
 static inline void
 drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper, bool suspend)
+{
+}
+
+static inline void drm_fb_helper_emergency_disable(struct drm_fb_helper *fb_helper)
 {
 }
 

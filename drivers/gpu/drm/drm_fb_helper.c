@@ -798,6 +798,23 @@ void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper,
 }
 EXPORT_SYMBOL(drm_fb_helper_set_suspend_unlocked);
 
+/**
+ * drm_fb_helper_emergency_disable - disable fb output in panic situation
+ * @fb_helper: driver-allocated fbdev helper, can be NULL
+ *
+ * A wrapper around fb_set_suspend, to disable fb emulation when a panic occurs.
+ */
+void drm_fb_helper_emergency_disable(struct drm_fb_helper *fb_helper)
+{
+	if (fb_helper && fb_helper->info && fb_helper->info->state == FBINFO_STATE_RUNNING) {
+		if (console_trylock()) {
+			fb_set_suspend(fb_helper->info, FBINFO_STATE_SUSPENDED);
+			console_unlock();
+		}
+	}
+}
+EXPORT_SYMBOL(drm_fb_helper_emergency_disable);
+
 static int setcmap_pseudo_palette(struct fb_cmap *cmap, struct fb_info *info)
 {
 	u32 *palette = (u32 *)info->pseudo_palette;
