@@ -624,11 +624,13 @@ static int xpsgtr_phy_power_on(struct phy *phy)
 	if (!xpsgtr_phy_init_required(gtr_phy))
 		return ret;
 	/*
-	 * Wait for the PLL to lock. For DP, only wait on DP0 to avoid
-	 * cumulating waits for both lanes. The user is expected to initialize
-	 * lane 0 last.
+	 * Wait for the PLL to lock. For DP and PCIe, only wait on instance 0
+	 * to avoid cumulative waits for both lanes. The user is expected to
+	 * initialize lane 0 last.
 	 */
-	if (gtr_phy->protocol != ICM_PROTOCOL_DP || !gtr_phy->instance)
+	if ((gtr_phy->protocol != ICM_PROTOCOL_DP &&
+	     gtr_phy->protocol != ICM_PROTOCOL_PCIE) ||
+	    !gtr_phy->instance)
 		ret = xpsgtr_wait_pll_lock(phy);
 
 	return ret;
