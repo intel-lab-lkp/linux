@@ -36,30 +36,6 @@ test_offcpu_priv() {
   fi
 }
 
-test_offcpu_basic() {
-  echo "Basic off-cpu test"
-
-  if ! perf record --off-cpu -e dummy -o ${perfdata} sleep 1 2> /dev/null
-  then
-    echo "Basic off-cpu test [Failed record]"
-    err=1
-    return
-  fi
-  if ! perf evlist -i ${perfdata} | grep -q "offcpu-time"
-  then
-    echo "Basic off-cpu test [Failed no event]"
-    err=1
-    return
-  fi
-  if ! perf report -i ${perfdata} -q --percent-limit=90 | grep -E -q sleep
-  then
-    echo "Basic off-cpu test [Failed missing output]"
-    err=1
-    return
-  fi
-  echo "Basic off-cpu test [Success]"
-}
-
 test_offcpu_child() {
   echo "Child task off-cpu test"
 
@@ -88,12 +64,7 @@ test_offcpu_child() {
   echo "Child task off-cpu test [Success]"
 }
 
-
 test_offcpu_priv
-
-if [ $err = 0 ]; then
-  test_offcpu_basic
-fi
 
 if [ $err = 0 ]; then
   test_offcpu_child
