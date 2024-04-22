@@ -323,6 +323,8 @@ static inline unsigned int update_balloon_vm_stats(struct virtio_balloon *vb,
 #ifdef CONFIG_VM_EVENT_COUNTERS
 	unsigned long events[NR_VM_EVENT_ITEMS];
 	unsigned int idx = start;
+	unsigned int zid;
+	unsigned long stall = 0;
 
 	all_vm_events(events);
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_SWAP_IN,
@@ -332,6 +334,12 @@ static inline unsigned int update_balloon_vm_stats(struct virtio_balloon *vb,
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_MAJFLT, events[PGMAJFAULT]);
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_MINFLT, events[PGFAULT]);
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_OOM_KILL, events[OOM_KILL]);
+
+	/* sum all the stall events */
+	for (zid = 0; zid < MAX_NR_ZONES; zid++)
+		stall += events[ALLOCSTALL_NORMAL - ZONE_NORMAL + zid];
+
+	update_stat(vb, idx++, VIRTIO_BALLOON_S_ALLOC_STALL, stall);
 
 #ifdef CONFIG_HUGETLB_PAGE
 	update_stat(vb, idx++, VIRTIO_BALLOON_S_HTLB_PGALLOC,
