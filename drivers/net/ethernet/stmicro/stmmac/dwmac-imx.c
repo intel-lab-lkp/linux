@@ -37,6 +37,9 @@
 #define MX93_GPR_ENET_QOS_INTF_SEL_RGMII	(0x1 << 1)
 #define MX93_GPR_ENET_QOS_CLK_GEN_EN		(0x1 << 0)
 
+#define MX93_GPR_ENET_QOS_TX_CLK_SEL_MASK	GENMASK(1, 1)
+#define MX93_GPR_ENET_QOS_TX_CLK_SEL		(0x1 << 1)
+
 #define DMA_BUS_MODE			0x00001000
 #define DMA_BUS_MODE_SFT_RESET		(0x1 << 0)
 #define RMII_RESET_SPEED		(0x3 << 14)
@@ -57,7 +60,9 @@ struct imx_priv_data {
 	struct clk *clk_tx;
 	struct clk *clk_mem;
 	struct regmap *intf_regmap;
+	struct regmap *enet_clk_regmap;
 	u32 intf_reg_off;
+	u32 enet_clk_reg_off;
 	bool rmii_refclk_ext;
 	void __iomem *base_addr;
 
@@ -116,6 +121,18 @@ static int imx93_set_intf_mode(struct plat_stmmacenet_data *plat_dat)
 		break;
 	case PHY_INTERFACE_MODE_RMII:
 		val = MX93_GPR_ENET_QOS_INTF_SEL_RMII;
+
+		/* According to NXP AN14149, the direction of the
+		 * TX_CLK must be set to output in RMII mode.
+		 */
+		if (dwmac->enet_clk_regmap)
+			regmap_update_bits(dwmac->enet_clk_regmap,
+					   dwmac->enet_clk_reg_off,
+					   MX93_GPR_ENET_QOS_TX_CLK_SEL_MASK,
+					   MX93_GPR_ENET_QOS_TX_CLK_SEL);
+		else
+			dev_warn(dwmac->dev, "TX_CLK can't be set to output mode.\n");
+
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
 	case PHY_INTERFACE_MODE_RGMII_ID:
@@ -308,6 +325,16 @@ imx_dwmac_parse_dt(struct imx_priv_data *dwmac, struct device *dev)
 		err = of_property_read_u32_index(np, "intf_mode", 1, &dwmac->intf_reg_off);
 		if (err) {
 			dev_err(dev, "Can't get intf mode reg offset (%d)\n", err);
+			return err;
+		}
+
+		dwmac->enet_clk_regmap = syscon_regmap_lookup_by_phandle(np, "enet_clk_sel");
+		if (IS_ERR(dwmac->enet_clk_regmap))
+			return PTR_ERR(dwmac->enet_clk_regmap);
+
+		err = of_property_read_u32_index(np, "enet_clk_sel", 1, &dwmac->enet_clk_reg_off);
+		if (err) {
+			dev_err(dev, "Can't get enet clk sel reg offset (%d)\n", err);
 			return err;
 		}
 	}
