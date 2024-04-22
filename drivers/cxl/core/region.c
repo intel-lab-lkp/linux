@@ -1210,6 +1210,60 @@ static int check_last_peer(struct cxl_endpoint_decoder *cxled,
 	return 0;
 }
 
+static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
+{
+	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	struct cxl_switch_decoder *cxlsd;
+	unsigned int interleave_mask;
+	u8 eiw;
+	u16 eig;
+	int rc, high_pos, low_pos;
+
+	if (is_switch_decoder(&cxld->dev)) {
+		cxlsd = to_cxl_switch_decoder(&cxld->dev);
+		if (cxlsd->passthrough)
+			return 0;
+	}
+
+	rc = ways_to_eiw(iw, &eiw);
+	if (rc)
+		return rc;
+
+	if (!(cxlhdm->iw_cap_mask & BIT(iw)))
+		return -EOPNOTSUPP;
+
+	rc = granularity_to_eig(ig, &eig);
+	if (rc)
+		return rc;
+
+	/*
+	 * Per CXL specification (8.2.3.20.13 Decoder Protection in r3.1)
+	 * if IW < 8, the interleave bits start at bit position IG + 8, and
+	 * end at IG + IW + 8 - 1.
+	 * if IW >= 8, the interleave bits start at bit position IG + 8, and
+	 * end at IG + IW - 1.
+	 */
+	if (eiw >= 8)
+		high_pos = eiw + eig - 1;
+	else
+		high_pos = eiw + eig + 7;
+	low_pos = eig + 8;
+	/*
+	 * when the IW is 0 or 8 (interlave way is 1 or 3), the low_pos is
+	 * larger than high_pos, since the target is in the target list of a
+	 * passthrough decoder, the following check is ignored.
+	 */
+	if (low_pos > high_pos)
+		return 0;
+
+	interleave_mask = GENMASK(high_pos, low_pos);
+	if (interleave_mask & ~cxlhdm->interleave_mask)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
 static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled)
@@ -1360,6 +1414,14 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 			return -ENXIO;
 		}
 	} else {
+		rc = check_interleave_cap(cxld, iw, ig);
+		if (rc) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s iw: %d ig: %d is not supported\n",
+				dev_name(port->uport_dev),
+				dev_name(&port->dev), iw, ig);
+			return rc;
+		}
 		cxld->interleave_ways = iw;
 		cxld->interleave_granularity = ig;
 		cxld->hpa_range = (struct range) {
@@ -1796,6 +1858,14 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	struct cxl_dport *dport;
 	int rc = -ENXIO;
 
+	rc = check_interleave_cap(&cxled->cxld, p->interleave_ways,
+				  p->interleave_granularity);
+	if (rc) {
+		dev_dbg(&cxlr->dev, "%s iw: %d ig: %d is not supported\n",
+			dev_name(&cxled->cxld.dev), p->interleave_ways,
+			p->interleave_granularity);
+		return rc;
+	}
 	if (cxled->mode != cxlr->mode) {
 		dev_dbg(&cxlr->dev, "%s region mode: %d mismatch: %d\n",
 			dev_name(&cxled->cxld.dev), cxlr->mode, cxled->mode);
