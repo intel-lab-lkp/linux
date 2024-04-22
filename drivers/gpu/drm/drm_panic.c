@@ -15,6 +15,7 @@
 #include <linux/types.h>
 
 #include <drm/drm_drv.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_format_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
@@ -469,6 +470,9 @@ static void draw_panic_plane(struct drm_plane *plane)
 	struct drm_scanout_buffer sb;
 	int ret;
 	unsigned long flags;
+
+	/* Prevent fbcon from overwriting the panic screen */
+	drm_fb_helper_emergency_disable(plane->dev->fb_helper);
 
 	if (!drm_panic_trylock(plane->dev, flags))
 		return;
