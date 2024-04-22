@@ -61,6 +61,14 @@ properties:
   interrupt-map:
     maxItems: 4
 
+  phys:
+    maxItems: 4
+
+  phy-names:
+    maxItems: 4
+    items:
+      - pattern: '^pcie-phy[0-3]$'
+
   power-domains:
     maxItems: 1
 
