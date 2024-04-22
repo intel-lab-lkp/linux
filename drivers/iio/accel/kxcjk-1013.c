@@ -637,8 +637,8 @@ static int kxcjk1013_set_power_state(struct kxcjk1013_data *data, bool on)
 }
 
 #ifdef CONFIG_ACPI
-static bool kxj_acpi_orientation(struct device *dev,
-				 struct iio_mount_matrix *orientation)
+static bool kxj1009_apply_acpi_orientation(struct device *dev,
+					   struct iio_mount_matrix *orientation)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 	struct acpi_device *adev = ACPI_COMPANION(dev);
@@ -648,7 +648,7 @@ static bool kxj_acpi_orientation(struct device *dev,
 	int i, j, val[3];
 	bool ret = false;
 
-	if (!acpi_has_method(adev->handle, "ROTM"))
+	if (!adev || !acpi_has_method(adev->handle, "ROTM"))
 		return false;
 
 	status = acpi_evaluate_object(adev->handle, "ROTM", NULL, &buffer);
@@ -694,17 +694,6 @@ static bool kxj_acpi_orientation(struct device *dev,
 out_free_buffer:
 	kfree(buffer.pointer);
 	return ret;
-}
-
-static bool kxj1009_apply_acpi_orientation(struct device *dev,
-					  struct iio_mount_matrix *orientation)
-{
-	struct acpi_device *adev = ACPI_COMPANION(dev);
-
-	if (adev && acpi_dev_hid_uid_match(adev, "KIOX000A", NULL))
-		return kxj_acpi_orientation(dev, orientation);
-
-	return false;
 }
 #else
 static bool kxj1009_apply_acpi_orientation(struct device *dev,
