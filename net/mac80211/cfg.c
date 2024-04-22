@@ -4824,27 +4824,56 @@ void ieee80211_color_collision_detection_work(struct work_struct *work)
 					     link->link_id);
 }
 
-void ieee80211_color_change_finish(struct ieee80211_vif *vif)
+void ieee80211_color_change_finish(struct ieee80211_vif *vif, u8 link_id)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+	struct ieee80211_link_data *link;
+
+	if (WARN_ON(link_id >= IEEE80211_MLD_MAX_NUM_LINKS))
+		return;
+
+	rcu_read_lock();
+
+	link = rcu_dereference(sdata->link[link_id]);
+	if (WARN_ON(!link)) {
+		rcu_read_unlock();
+		return;
+	}
 
 	wiphy_work_queue(sdata->local->hw.wiphy,
-			 &sdata->deflink.color_change_finalize_work);
+			 &link->color_change_finalize_work);
+
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(ieee80211_color_change_finish);
 
 void
 ieee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
-				      u64 color_bitmap)
+				      u64 color_bitmap, u8 link_id)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_link_data *link = &sdata->deflink;
+	struct ieee80211_link_data *link;
 
-	if (sdata->vif.bss_conf.color_change_active || sdata->vif.bss_conf.csa_active)
+	if (WARN_ON(link_id >= IEEE80211_MLD_MAX_NUM_LINKS))
 		return;
 
-	if (delayed_work_pending(&link->color_collision_detect_work))
+	rcu_read_lock();
+
+	link = rcu_dereference(sdata->link[link_id]);
+	if (WARN_ON(!link)) {
+		rcu_read_unlock();
 		return;
+	}
+
+	if (link->conf->color_change_active || link->conf->csa_active) {
+		rcu_read_unlock();
+		return;
+	}
+
+	if (delayed_work_pending(&link->color_collision_detect_work)) {
+		rcu_read_unlock();
+		return;
+	}
 
 	link->color_bitmap = color_bitmap;
 	/* queue the color collision detection event every 500 ms in order to
@@ -4853,6 +4882,8 @@ ieee80211_obss_color_collision_notify(struct ieee80211_vif *vif,
 	ieee80211_queue_delayed_work(&sdata->local->hw,
 				     &link->color_collision_detect_work,
 				     msecs_to_jiffies(500));
+
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(ieee80211_obss_color_collision_notify);
 
