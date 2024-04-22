@@ -13,6 +13,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -121,6 +122,15 @@
 #define ICM_PROTOCOL_USB		0x3
 #define ICM_PROTOCOL_DP			0x4
 #define ICM_PROTOCOL_SGMII		0x5
+
+static const char *const xpsgtr_icm_str[] = {
+	[ICM_PROTOCOL_PD] = "powered down",
+	[ICM_PROTOCOL_PCIE] = "PCIe",
+	[ICM_PROTOCOL_SATA] = "SATA",
+	[ICM_PROTOCOL_USB] = "USB",
+	[ICM_PROTOCOL_DP] = "DisplayPort",
+	[ICM_PROTOCOL_SGMII] = "SGMII",
+};
 
 /* Test Mode common reset control  parameters */
 #define TM_CMN_RST			0x10018
@@ -769,6 +779,48 @@ static struct phy *xpsgtr_xlate(struct device *dev,
 }
 
 /*
+ * DebugFS
+ */
+
+static int xpsgtr_status_read(struct seq_file *seq, void *data)
+{
+	struct xpsgtr_phy *gtr_phy = seq->private;
+	struct clk *clk;
+	u32 pll_status;
+
+	mutex_lock(&gtr_phy->phy->mutex);
+	pll_status = xpsgtr_read_phy(gtr_phy, L0_PLL_STATUS_READ_1);
+	clk = gtr_phy->dev->clk[gtr_phy->refclk];
+
+	seq_printf(seq, "Lane:            %u\n", gtr_phy->lane);
+	seq_printf(seq, "Protocol:        %s\n",
+		   xpsgtr_icm_str[gtr_phy->protocol]);
+	seq_printf(seq, "Instance:        %u\n", gtr_phy->instance);
+	seq_printf(seq, "Reference clock: %u (%pC)\n", gtr_phy->refclk, clk);
+	seq_printf(seq, "Reference rate:  %lu\n", clk_get_rate(clk));
+	seq_printf(seq, "PLL locked:      %s\n",
+		   pll_status & PLL_STATUS_LOCKED ? "yes" : "no");
+
+	mutex_unlock(&gtr_phy->phy->mutex);
+	return 0;
+}
+
+static int xpsgtr_status_open(struct inode *inode, struct file *f)
+{
+	struct xpsgtr_phy *gtr_phy = inode->i_private;
+
+	return single_open(f, xpsgtr_status_read, gtr_phy);
+}
+
+static const struct file_operations xpsgtr_status_ops = {
+	.owner = THIS_MODULE,
+	.open = xpsgtr_status_open,
+	.release = single_release,
+	.read = seq_read,
+	.llseek = seq_lseek
+};
+
+/*
  * Power Management
  */
 
@@ -917,6 +969,8 @@ static int xpsgtr_probe(struct platform_device *pdev)
 
 		gtr_phy->phy = phy;
 		phy_set_drvdata(phy, gtr_phy);
+		debugfs_create_file("status", 0444, phy->debugfs, gtr_phy,
+				    &xpsgtr_status_ops);
 	}
 
 	/* Register the PHY provider. */
