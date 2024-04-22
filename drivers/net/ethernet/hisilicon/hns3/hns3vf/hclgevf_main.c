@@ -2849,6 +2849,8 @@ static int hclgevf_init_hdev(struct hclgevf_dev *hdev)
 	if (ret)
 		goto err_devlink_init;
 
+	devl_lock(hdev->devlink);
+
 	ret = hclge_comm_cmd_queue_init(hdev->pdev, &hdev->hw.hw);
 	if (ret)
 		goto err_cmd_queue_init;
@@ -2950,6 +2952,7 @@ static int hclgevf_init_hdev(struct hclgevf_dev *hdev)
 	hclgevf_task_schedule(hdev, round_jiffies_relative(HZ));
 	timer_setup(&hdev->reset_timer, hclgevf_reset_timer, 0);
 
+	devl_unlock(hdev->devlink);
 	return 0;
 
 err_config:
@@ -2960,6 +2963,7 @@ err_misc_irq_init:
 err_cmd_init:
 	hclge_comm_cmd_uninit(hdev->ae_dev, &hdev->hw.hw);
 err_cmd_queue_init:
+	devl_unlock(hdev->devlink);
 	hclgevf_devlink_uninit(hdev);
 err_devlink_init:
 	hclgevf_pci_uninit(hdev);
