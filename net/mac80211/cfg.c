@@ -3918,13 +3918,13 @@ static int ieee80211_set_csa_beacon(struct ieee80211_link_data *link_data,
 	return 0;
 }
 
-static void ieee80211_color_change_abort(struct ieee80211_sub_if_data  *sdata)
+static void ieee80211_color_change_abort(struct ieee80211_link_data *link)
 {
-	sdata->vif.bss_conf.color_change_active = false;
+	link->conf->color_change_active = false;
 
-	ieee80211_free_next_beacon(&sdata->deflink);
+	ieee80211_free_next_beacon(link);
 
-	cfg80211_color_change_aborted_notify(sdata->dev, 0);
+	cfg80211_color_change_aborted_notify(link->sdata->dev, link->link_id);
 }
 
 static int
@@ -4008,7 +4008,7 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 	/* if there is a color change in progress, abort it */
 	if (link_conf->color_change_active)
-		ieee80211_color_change_abort(sdata);
+		ieee80211_color_change_abort(link_data);
 
 	err = ieee80211_set_csa_beacon(link_data, params, &changed);
 	if (err) {
@@ -4737,16 +4737,18 @@ ieee80211_set_color_change_beacon(struct ieee80211_link_data *link,
 }
 
 static void
-ieee80211_color_change_bss_config_notify(struct ieee80211_sub_if_data *sdata,
+ieee80211_color_change_bss_config_notify(struct ieee80211_link_data *link,
 					 u8 color, int enable, u64 changed)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
+
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
-	sdata->vif.bss_conf.he_bss_color.color = color;
-	sdata->vif.bss_conf.he_bss_color.enabled = enable;
+	link->conf->he_bss_color.color = color;
+	link->conf->he_bss_color.enabled = enable;
 	changed |= BSS_CHANGED_HE_BSS_COLOR;
 
-	ieee80211_link_info_change_notify(sdata, &sdata->deflink, changed);
+	ieee80211_link_info_change_notify(sdata, link, changed);
 
 	if (!sdata->vif.bss_conf.nontransmitted && sdata->vif.mbssid_tx_vif) {
 		struct ieee80211_sub_if_data *child;
@@ -4779,7 +4781,7 @@ static int ieee80211_color_change_finalize(struct ieee80211_sub_if_data *sdata)
 		return err;
 	}
 
-	ieee80211_color_change_bss_config_notify(sdata,
+	ieee80211_color_change_bss_config_notify(&sdata->deflink,
 						 sdata->vif.bss_conf.color_change_color,
 						 1, changed);
 	cfg80211_color_change_notify(sdata->dev, 0);
@@ -4883,7 +4885,7 @@ ieee80211_color_change(struct wiphy *wiphy, struct net_device *dev,
 	cfg80211_color_change_started_notify(sdata->dev, params->count, 0);
 
 	if (changed)
-		ieee80211_color_change_bss_config_notify(sdata, 0, 0, changed);
+		ieee80211_color_change_bss_config_notify(&sdata->deflink, 0, 0, changed);
 	else
 		/* if the beacon didn't change, we can finalize immediately */
 		ieee80211_color_change_finalize(sdata);
