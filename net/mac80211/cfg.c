@@ -4666,20 +4666,22 @@ static int ieee80211_set_sar_specs(struct wiphy *wiphy,
 }
 
 static int
-ieee80211_set_after_color_change_beacon(struct ieee80211_sub_if_data *sdata,
+ieee80211_set_after_color_change_beacon(struct ieee80211_link_data *link,
 					u64 *changed)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
+
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_AP: {
 		int ret;
 
-		if (!sdata->deflink.u.ap.next_beacon)
+		if (!link->u.ap.next_beacon)
 			return -EINVAL;
 
-		ret = ieee80211_assign_beacon(sdata, &sdata->deflink,
-					      sdata->deflink.u.ap.next_beacon,
+		ret = ieee80211_assign_beacon(sdata, link,
+					      link->u.ap.next_beacon,
 					      NULL, NULL, changed);
-		ieee80211_free_next_beacon(&sdata->deflink);
+		ieee80211_free_next_beacon(link);
 
 		if (ret < 0)
 			return ret;
@@ -4695,18 +4697,19 @@ ieee80211_set_after_color_change_beacon(struct ieee80211_sub_if_data *sdata,
 }
 
 static int
-ieee80211_set_color_change_beacon(struct ieee80211_sub_if_data *sdata,
+ieee80211_set_color_change_beacon(struct ieee80211_link_data *link,
 				  struct cfg80211_color_change_settings *params,
 				  u64 *changed)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_color_change_settings color_change = {};
 	int err;
 
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_AP:
-		sdata->deflink.u.ap.next_beacon =
+		link->u.ap.next_beacon =
 			cfg80211_beacon_dup(&params->beacon_next);
-		if (!sdata->deflink.u.ap.next_beacon)
+		if (!link->u.ap.next_beacon)
 			return -ENOMEM;
 
 		if (params->count <= 1)
@@ -4718,11 +4721,11 @@ ieee80211_set_color_change_beacon(struct ieee80211_sub_if_data *sdata,
 			params->counter_offset_presp;
 		color_change.count = params->count;
 
-		err = ieee80211_assign_beacon(sdata, &sdata->deflink,
+		err = ieee80211_assign_beacon(sdata, link,
 					      &params->beacon_color_change,
 					      NULL, &color_change, changed);
 		if (err < 0) {
-			ieee80211_free_next_beacon(&sdata->deflink);
+			ieee80211_free_next_beacon(link);
 			return err;
 		}
 		break;
@@ -4770,7 +4773,7 @@ static int ieee80211_color_change_finalize(struct ieee80211_sub_if_data *sdata)
 
 	sdata->vif.bss_conf.color_change_active = false;
 
-	err = ieee80211_set_after_color_change_beacon(sdata, &changed);
+	err = ieee80211_set_after_color_change_beacon(&sdata->deflink, &changed);
 	if (err) {
 		cfg80211_color_change_aborted_notify(sdata->dev, 0);
 		return err;
@@ -4870,7 +4873,7 @@ ieee80211_color_change(struct wiphy *wiphy, struct net_device *dev,
 		goto out;
 	}
 
-	err = ieee80211_set_color_change_beacon(sdata, params, &changed);
+	err = ieee80211_set_color_change_beacon(&sdata->deflink, params, &changed);
 	if (err)
 		goto out;
 
