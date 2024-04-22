@@ -1103,25 +1103,23 @@ int ntfs_flush_inodes(struct super_block *sb, struct inode *i1,
  */
 int inode_read_data(struct inode *inode, void *data, size_t bytes)
 {
-	pgoff_t idx;
+	pgoff_t idx = 0;
 	struct address_space *mapping = inode->i_mapping;
 
-	for (idx = 0; bytes; idx++) {
-		size_t op = bytes > PAGE_SIZE ? PAGE_SIZE : bytes;
-		struct page *page = read_mapping_page(mapping, idx, NULL);
-		void *kaddr;
+	while (bytes) {
+		struct folio *folio = read_mapping_folio(mapping, idx, NULL);
+		size_t nr;
 
-		if (IS_ERR(page))
-			return PTR_ERR(page);
+		if (IS_ERR(folio))
+			return PTR_ERR(folio);
 
-		kaddr = kmap_atomic(page);
-		memcpy(data, kaddr, op);
-		kunmap_atomic(kaddr);
+		nr = min(bytes, folio_size(folio));
+		memcpy_from_folio(data, folio, 0, nr);
+		data += folio_size(folio);
+		idx += folio_nr_pages(folio);
+		folio_put(folio);
 
-		put_page(page);
-
-		bytes -= op;
-		data = Add2Ptr(data, PAGE_SIZE);
+		bytes -= nr;
 	}
 	return 0;
 }
