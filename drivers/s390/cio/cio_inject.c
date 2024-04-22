@@ -95,10 +95,11 @@ static ssize_t crw_inject_write(struct file *file, const char __user *buf,
 		return -EINVAL;
 	}
 
-	buffer = vmemdup_user(buf, lbuf);
+	buffer = vmemdup_user(buf, lbuf + 1);
 	if (IS_ERR(buffer))
 		return -ENOMEM;
 
+	buffer[lbuf] = '\0';
 	rc = sscanf(buffer, "%x %x %x %x %x %x %x", &slct, &oflw, &chn, &rsc, &anc,
 		    &erc, &rsid);
 
