@@ -17,9 +17,13 @@
 
 #define MAX_STACKS   32
 #define MAX_ENTRIES  102400
+#define MAX_CPUS  4096
+#define MAX_OFFCPU_LEN 128
+
+/* minimum offcpu time to trigger output */
+#define OUTPUT_THRESHOLD 0ULL
 
 struct tstamp_data {
-	__u32 stack_id;
 	__u32 state;
 	__u64 timestamp;
 };
@@ -27,17 +31,17 @@ struct tstamp_data {
 struct offcpu_key {
 	__u32 pid;
 	__u32 tgid;
-	__u32 stack_id;
 	__u32 state;
 	__u64 cgroup_id;
 };
 
-struct {
-	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
-	__uint(key_size, sizeof(__u32));
-	__uint(value_size, MAX_STACKS * sizeof(__u64));
-	__uint(max_entries, MAX_ENTRIES);
-} stacks SEC(".maps");
+struct offcpu_array {
+	u64 array[MAX_OFFCPU_LEN];
+};
+
+struct stack_array {
+	u64 array[MAX_STACKS];
+};
 
 struct {
 	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
@@ -45,13 +49,6 @@ struct {
 	__type(key, int);
 	__type(value, struct tstamp_data);
 } tstamp SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(key_size, sizeof(struct offcpu_key));
-	__uint(value_size, sizeof(__u64));
-	__uint(max_entries, MAX_ENTRIES);
-} off_cpu SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -74,6 +71,34 @@ struct {
 	__uint(max_entries, 1);
 } cgroup_filter SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(__u32));
+	__uint(max_entries, MAX_CPUS);
+} offcpu_output SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(struct offcpu_array));
+	__uint(max_entries, 1);
+} offcpu_data SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(struct stack_array));
+	__uint(max_entries, 1);
+} stack_frame SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__type(key, int);
+	__type(value, struct stack_array);
+} stack_save SEC(".maps");
+
 /* new kernel task_struct definition */
 struct task_struct___new {
 	long __state;
@@ -95,6 +120,8 @@ const volatile bool needs_cgroup = false;
 const volatile bool uses_cgroup_v1 = false;
 
 int perf_subsys_id = -1;
+
+u64 sample_id, sample_type;
 
 /*
  * Old kernel used to call it task_struct->state and now it's '__state'.
@@ -182,50 +209,130 @@ static inline int can_record(struct task_struct *t, int state)
 	return 1;
 }
 
+static inline bool check_bounds(int index)
+{
+	if (index >= 0 && index < MAX_OFFCPU_LEN)
+		return true;
+
+	return false;
+}
+
+static inline int copy_stack(struct stack_array *from,
+			     struct offcpu_array *to, int n)
+{
+	int max_stacks = MAX_STACKS, len = 0;
+
+	if (!from)
+		return len;
+
+	for (int i = 0; i < max_stacks && from->array[i]; ++i) {
+		if (check_bounds(n + 2 + i)) {
+			to->array[n + 2 + i] = from->array[i];
+			++len;
+		}
+	}
+	return len;
+}
+
 static int off_cpu_stat(u64 *ctx, struct task_struct *prev,
 			struct task_struct *next, int state)
 {
 	__u64 ts;
-	__u32 stack_id;
 	struct tstamp_data *pelem;
-
+	struct stack_array *frame, *stack_save_p;
 	ts = bpf_ktime_get_ns();
+	int zero = 0, len = 0, size;
 
 	if (!can_record(prev, state))
 		goto next;
 
-	stack_id = bpf_get_stackid(ctx, &stacks,
-				   BPF_F_FAST_STACK_CMP | BPF_F_USER_STACK);
+	frame = bpf_map_lookup_elem(&stack_frame, &zero);
+	if (frame)
+		len = bpf_get_stack(ctx, frame->array, MAX_STACKS * sizeof(u64),
+				    BPF_F_USER_STACK) / sizeof(u64);
+
+	/* save stacks if collectable */
+	if (len > 0) {
+		stack_save_p = bpf_task_storage_get(&stack_save, prev, NULL,
+						    BPF_LOCAL_STORAGE_GET_F_CREATE);
+		if (stack_save_p)
+			for (int i = 0; i < len && i < MAX_STACKS; ++i)
+				stack_save_p->array[i] = frame->array[i];
+	}
 
 	pelem = bpf_task_storage_get(&tstamp, prev, NULL,
 				     BPF_LOCAL_STORAGE_GET_F_CREATE);
+
 	if (!pelem)
 		goto next;
 
 	pelem->timestamp = ts;
 	pelem->state = state;
-	pelem->stack_id = stack_id;
 
 next:
 	pelem = bpf_task_storage_get(&tstamp, next, NULL, 0);
+
+	stack_save_p = bpf_task_storage_get(&stack_save, next, NULL, 0);
 
 	if (pelem && pelem->timestamp) {
 		struct offcpu_key key = {
 			.pid = next->pid,
 			.tgid = next->tgid,
-			.stack_id = pelem->stack_id,
 			.state = pelem->state,
 			.cgroup_id = needs_cgroup ? get_cgroup_id(next) : 0,
 		};
+
 		__u64 delta = ts - pelem->timestamp;
-		__u64 *total;
 
-		total = bpf_map_lookup_elem(&off_cpu, &key);
-		if (total)
-			*total += delta;
-		else
-			bpf_map_update_elem(&off_cpu, &key, &delta, BPF_ANY);
+		struct offcpu_array *data = bpf_map_lookup_elem(&offcpu_data, &zero);
 
+		if (data && delta >= OUTPUT_THRESHOLD) {
+			int n = 0;
+			int ip_pos = -1;
+
+			if (sample_type & PERF_SAMPLE_IDENTIFIER && check_bounds(n))
+				data->array[n++] = sample_id;
+			if (sample_type & PERF_SAMPLE_IP && check_bounds(n)) {
+				ip_pos = n;
+				data->array[n++] = 0;  /* will be updated */
+			}
+			if (sample_type & PERF_SAMPLE_TID && check_bounds(n))
+				data->array[n++] = (u64)key.pid << 32 | key.tgid;
+			if (sample_type & PERF_SAMPLE_TIME && check_bounds(n))
+				data->array[n++] = pelem->timestamp;
+			if (sample_type & PERF_SAMPLE_ID && check_bounds(n))
+				data->array[n++] = sample_id;
+			if (sample_type & PERF_SAMPLE_CPU && check_bounds(n))
+				data->array[n++] = 0;
+			if (sample_type & PERF_SAMPLE_PERIOD && check_bounds(n))
+				data->array[n++] = delta;
+			if (sample_type & PERF_SAMPLE_CALLCHAIN && check_bounds(n + 2)) {
+				len = 0;
+
+				/* data->array[n] is callchain->nr (updated later) */
+				data->array[n + 1] = PERF_CONTEXT_USER;
+				data->array[n + 2] = 0;
+
+				len = copy_stack(stack_save_p, data, n);
+
+				/* update length of callchain */
+				data->array[n] = len + 1;
+
+				/* update sample ip with the first callchain entry */
+				if (ip_pos >= 0)
+					data->array[ip_pos] = data->array[n + 2];
+
+				/* calculate sample callchain data->array length */
+				n += len + 2;
+			}
+			if (sample_type & PERF_SAMPLE_CGROUP && check_bounds(n))
+				data->array[n++] = key.cgroup_id;
+
+			size = n * sizeof(u64);
+			if (size >= 0 && size <= MAX_OFFCPU_LEN * sizeof(u64))
+				bpf_perf_event_output(ctx, &offcpu_output, BPF_F_CURRENT_CPU,
+						      data, size);
+		}
 		/* prevent to reuse the timestamp later */
 		pelem->timestamp = 0;
 	}
