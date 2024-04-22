@@ -714,6 +714,19 @@ static int devm_drm_dev_init(struct device *parent,
 					devm_drm_dev_init_release, dev);
 }
 
+/**
+ * devm_drm_dev_release_action - Call the final release action of the device
+ * @dev: DRM device
+ *
+ * In scenarios where drm_dev_put is directly called by driver we want to release
+ * devm_drm_dev_init_release action associated with struct drm_device.
+ */
+void devm_drm_dev_release_action(struct drm_device *dev)
+{
+	devm_release_action(dev->dev, devm_drm_dev_init_release, dev);
+}
+EXPORT_SYMBOL(devm_drm_dev_release_action);
+
 void *__devm_drm_dev_alloc(struct device *parent,
 			   const struct drm_driver *driver,
 			   size_t size, size_t offset)
