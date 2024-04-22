@@ -19456,7 +19456,7 @@ EXPORT_SYMBOL(cfg80211_ch_switch_started_notify);
 
 int cfg80211_bss_color_notify(struct net_device *dev,
 			      enum nl80211_commands cmd, u8 count,
-			      u64 color_bitmap)
+			      u64 color_bitmap, u8 link_id)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wiphy *wiphy = wdev->wiphy;
@@ -19477,6 +19477,10 @@ int cfg80211_bss_color_notify(struct net_device *dev,
 		goto nla_put_failure;
 
 	if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, dev->ifindex))
+		goto nla_put_failure;
+
+	if (wdev->valid_links &&
+	    nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
 		goto nla_put_failure;
 
 	if (cmd == NL80211_CMD_COLOR_CHANGE_STARTED &&
