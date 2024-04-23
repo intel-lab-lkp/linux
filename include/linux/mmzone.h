@@ -166,9 +166,6 @@ enum node_stat_item {
 	NR_UNEVICTABLE,		/*  "     "     "   "       "         */
 	NR_SLAB_RECLAIMABLE_B,
 	NR_SLAB_UNRECLAIMABLE_B,
-	NR_ISOLATED_ANON,	/* Temporary isolated pages from anon lru */
-	NR_ISOLATED_FILE,	/* Temporary isolated pages from file lru */
-	WORKINGSET_NODES,
 	WORKINGSET_REFAULT_BASE,
 	WORKINGSET_REFAULT_ANON = WORKINGSET_REFAULT_BASE,
 	WORKINGSET_REFAULT_FILE,
@@ -179,38 +176,42 @@ enum node_stat_item {
 	WORKINGSET_RESTORE_ANON = WORKINGSET_RESTORE_BASE,
 	WORKINGSET_RESTORE_FILE,
 	WORKINGSET_NODERECLAIM,
+	NR_PAGETABLE,		/* used for pagetables */
+	NR_SECONDARY_PAGETABLE, /* secondary pagetables, KVM & IOMMU */
+	NR_KERNEL_STACK_KB,	/* measured in KiB */
 	NR_ANON_MAPPED,	/* Mapped anonymous pages */
 	NR_FILE_MAPPED,	/* pagecache pages mapped into pagetables.
 			   only modified from process context */
 	NR_FILE_PAGES,
+#ifdef CONFIG_SWAP
+	NR_SWAPCACHE,
+#endif
 	NR_FILE_DIRTY,
 	NR_WRITEBACK,
-	NR_WRITEBACK_TEMP,	/* Writeback using temporary buffers */
 	NR_SHMEM,		/* shmem pages (included tmpfs/GEM pages) */
 	NR_SHMEM_THPS,
-	NR_SHMEM_PMDMAPPED,
 	NR_FILE_THPS,
-	NR_FILE_PMDMAPPED,
 	NR_ANON_THPS,
+	/* No memcg stats for the following fields. */
+	NR_SHMEM_PMDMAPPED,
+	NR_FILE_PMDMAPPED,
+	NR_WRITEBACK_TEMP,	/* Writeback using temporary buffers */
 	NR_VMSCAN_WRITE,
 	NR_VMSCAN_IMMEDIATE,	/* Prioritise for reclaim when writeback ends */
+	NR_ISOLATED_ANON,	/* Temporary isolated pages from anon lru */
+	NR_ISOLATED_FILE,	/* Temporary isolated pages from file lru */
+	WORKINGSET_NODES,
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
 	NR_THROTTLED_WRITTEN,	/* NR_WRITTEN while reclaim throttled */
 	NR_KERNEL_MISC_RECLAIMABLE,	/* reclaimable non-slab kernel pages */
 	NR_FOLL_PIN_ACQUIRED,	/* via: pin_user_page(), gup flag: FOLL_PIN */
 	NR_FOLL_PIN_RELEASED,	/* pages returned via unpin_user_page() */
-	NR_KERNEL_STACK_KB,	/* measured in KiB */
 #if IS_ENABLED(CONFIG_SHADOW_CALL_STACK)
 	NR_KERNEL_SCS_KB,	/* measured in KiB */
 #endif
-	NR_PAGETABLE,		/* used for pagetables */
-	NR_SECONDARY_PAGETABLE, /* secondary pagetables, KVM & IOMMU */
 #ifdef CONFIG_IOMMU_SUPPORT
 	NR_IOMMU_PAGES,		/* # of pages allocated by IOMMU */
-#endif
-#ifdef CONFIG_SWAP
-	NR_SWAPCACHE,
 #endif
 #ifdef CONFIG_NUMA_BALANCING
 	PGPROMOTE_SUCCESS,	/* promote successfully */
