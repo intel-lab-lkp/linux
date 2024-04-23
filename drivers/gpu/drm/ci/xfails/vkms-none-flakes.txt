@@ -1,0 +1,21 @@
+# Board Name: vkms
+# Bug Report: https://lore.kernel.org/dri-devel/005da8f1-8050-bffd-653c-2a87ae6376f7@collabora.com/T/#u
+# Failure Rate: 50
+# IGT Version: 1.28-g7d1841317
+# Linux Version: 6.9.0-rc4
+# Reported by deqp-runner
+kms_flip@blocking-wf_vblank
+kms_flip@flip-vs-expired-vblank
+kms_flip@plain-flip-fb-recreate
+kms_flip@plain-flip-fb-recreate-interruptible
+kms_flip@plain-flip-ts-check
+kms_flip@plain-flip-ts-check-interruptible
+kms_pipe_crc_basic@nonblocking-crc
+kms_pipe_crc_basic@nonblocking-crc-frame-sequence
+kms_flip@flip-vs-absolute-wf_vblank
+
+# The below test shows inconsistency across multiple runs, giving
+# results of Pass and Fail.
+kms_flip@basic-flip-vs-wf_vblank
+kms_flip@flip-vs-blocking-wf-vblank
+kms_flip@flip-vs-wf_vblank-interruptible

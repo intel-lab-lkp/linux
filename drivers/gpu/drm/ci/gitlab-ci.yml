@@ -112,6 +112,7 @@ stages:
   - msm
   - rockchip
   - virtio-gpu
+  - software-driver
 
 # YAML anchors for rule conditions
 # --------------------------------
