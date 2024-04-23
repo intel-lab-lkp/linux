@@ -486,7 +486,10 @@ provided such comments, you may optionally add a ``Cc:`` tag to the patch.
 This is the only tag which might be added without an explicit action by the
 person it names - but it should indicate that this person was copied on the
 patch.  This tag documents that potentially interested parties
-have been included in the discussion.
+have been included in the discussion. Note that other formal tags are
+automatically converted to the Cc: email header and you do not need to
+have an explicit ``Cc:`` tag, if the person is already mentioned by another
+tag.
 
 Co-developed-by: states that the patch was co-created by multiple developers;
 it is used to give attribution to co-authors (in addition to the author

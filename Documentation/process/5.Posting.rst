@@ -267,7 +267,9 @@ The tags in common use are:
    being reported.
 
  - Cc: the named person received a copy of the patch and had the
-   opportunity to comment on it.
+   opportunity to comment on it. Note that other formal tags are automatically
+   converted to the ``Cc:`` email header and you do not need to have an
+   explicit Cc: tag, if the person is already mentioned by another tag.
 
 Be careful in the addition of tags to your patches, as only Cc: is appropriate
 for addition without the explicit permission of the person named; using
