@@ -859,8 +859,6 @@ void __mod_memcg_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 		case NR_ANON_MAPPED:
 		case NR_FILE_MAPPED:
 		case NR_ANON_THPS:
-		case NR_SHMEM_PMDMAPPED:
-		case NR_FILE_PMDMAPPED:
 			if (WARN_ON_ONCE(!in_task()))
 				pr_warn("stat item index: %d\n", idx);
 			break;
@@ -898,7 +896,7 @@ void __mod_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 	__mod_node_page_state(lruvec_pgdat(lruvec), idx, val);
 
 	/* Update memcg and lruvec */
-	if (!mem_cgroup_disabled())
+	if (!mem_cgroup_disabled() && idx < NR_VM_NODE_MEMCG_STAT_ITEMS)
 		__mod_memcg_lruvec_state(lruvec, idx, val);
 }
 
