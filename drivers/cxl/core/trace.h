@@ -14,6 +14,28 @@
 #include <cxlmem.h>
 #include "core.h"
 
+#ifndef __CXL_EVENTS_DECLARE_ONCE_ONLY
+#define __CXL_EVENTS_DECLARE_ONCE_ONLY
+static inline
+void store_region_info(const struct cxl_memdev *cxlmd, u64 dpa, uuid_t *uuid,
+		       u64 *hpa)
+{
+	struct cxl_region *cxlr;
+
+	cxlr = cxl_dpa_to_region(cxlmd, dpa);
+	if (cxlr) {
+		uuid_copy(uuid, &cxlr->params.uuid);
+		*hpa = cxl_trace_hpa(cxlr, cxlmd, dpa);
+	} else {
+		uuid_copy(uuid, &uuid_null);
+		*hpa = ULLONG_MAX;
+	}
+}
+#endif /* __CXL_EVENTS_DECLARE_ONCE_ONLY */
+
+#define rec_pa_to_dpa(record)						\
+	(le64_to_cpu(rec->phys_addr) & CXL_DPA_MASK)
+
 #define CXL_RAS_UC_CACHE_DATA_PARITY	BIT(0)
 #define CXL_RAS_UC_CACHE_ADDR_PARITY	BIT(1)
 #define CXL_RAS_UC_CACHE_BE_PARITY	BIT(2)
@@ -330,10 +352,14 @@ TRACE_EVENT(cxl_general_media,
 		__field(u8, channel)
 		__field(u32, device)
 		__array(u8, comp_id, CXL_EVENT_GEN_MED_COMP_ID_SIZE)
-		__field(u16, validity_flags)
 		/* Following are out of order to pack trace record */
+		__field(u64, hpa)
+		__field_struct(uuid_t, region_uuid)
+		__field(u16, validity_flags)
 		__field(u8, rank)
 		__field(u8, dpa_flags)
+		__string(region_name,
+			 cxl_trace_to_region_name(cxlmd, rec_pa_to_dpa(record)))
 	),
 
 	TP_fast_assign(
@@ -354,18 +380,24 @@ TRACE_EVENT(cxl_general_media,
 		memcpy(__entry->comp_id, &rec->component_id,
 			CXL_EVENT_GEN_MED_COMP_ID_SIZE);
 		__entry->validity_flags = get_unaligned_le16(&rec->validity_flags);
+		__assign_str(region_name,
+			     cxl_trace_to_region_name(cxlmd, __entry->dpa));
+		store_region_info(cxlmd, __entry->dpa, &__entry->region_uuid,
+				  &__entry->hpa);
 	),
 
 	CXL_EVT_TP_printk("dpa=%llx dpa_flags='%s' " \
 		"descriptor='%s' type='%s' transaction_type='%s' channel=%u rank=%u " \
-		"device=%x comp_id=%s validity_flags='%s'",
+		"device=%x comp_id=%s validity_flags='%s' " \
+		"hpa=%llx region=%s region_uuid=%pUb",
 		__entry->dpa, show_dpa_flags(__entry->dpa_flags),
 		show_event_desc_flags(__entry->descriptor),
 		show_mem_event_type(__entry->type),
 		show_trans_type(__entry->transaction_type),
 		__entry->channel, __entry->rank, __entry->device,
 		__print_hex(__entry->comp_id, CXL_EVENT_GEN_MED_COMP_ID_SIZE),
-		show_valid_flags(__entry->validity_flags)
+		show_valid_flags(__entry->validity_flags),
+		__entry->hpa, __get_str(region_name), &__entry->region_uuid
 	)
 );
 
@@ -417,10 +449,14 @@ TRACE_EVENT(cxl_dram,
 		__field(u32, nibble_mask)
 		__field(u32, row)
 		__array(u8, cor_mask, CXL_EVENT_DER_CORRECTION_MASK_SIZE)
+		__field(u64, hpa)
+		__field_struct(uuid_t, region_uuid)
 		__field(u8, rank)	/* Out of order to pack trace record */
 		__field(u8, bank_group)	/* Out of order to pack trace record */
 		__field(u8, bank)	/* Out of order to pack trace record */
 		__field(u8, dpa_flags)	/* Out of order to pack trace record */
+		__string(region_name,
+			 cxl_trace_to_region_name(cxlmd, rec_pa_to_dpa(record)))
 	),
 
 	TP_fast_assign(
@@ -444,12 +480,17 @@ TRACE_EVENT(cxl_dram,
 		__entry->column = get_unaligned_le16(rec->column);
 		memcpy(__entry->cor_mask, &rec->correction_mask,
 			CXL_EVENT_DER_CORRECTION_MASK_SIZE);
+		__assign_str(region_name,
+			     cxl_trace_to_region_name(cxlmd, __entry->dpa));
+		store_region_info(cxlmd, __entry->dpa, &__entry->region_uuid,
+				  &__entry->hpa);
 	),
 
 	CXL_EVT_TP_printk("dpa=%llx dpa_flags='%s' descriptor='%s' type='%s' " \
 		"transaction_type='%s' channel=%u rank=%u nibble_mask=%x " \
 		"bank_group=%u bank=%u row=%u column=%u cor_mask=%s " \
-		"validity_flags='%s'",
+		"validity_flags='%s' " \
+		"hpa=%llx region=%s region_uuid=%pUb",
 		__entry->dpa, show_dpa_flags(__entry->dpa_flags),
 		show_event_desc_flags(__entry->descriptor),
 		show_mem_event_type(__entry->type),
@@ -458,7 +499,8 @@ TRACE_EVENT(cxl_dram,
 		__entry->bank_group, __entry->bank,
 		__entry->row, __entry->column,
 		__print_hex(__entry->cor_mask, CXL_EVENT_DER_CORRECTION_MASK_SIZE),
-		show_dram_valid_flags(__entry->validity_flags)
+		show_dram_valid_flags(__entry->validity_flags),
+		__entry->hpa, __get_str(region_name), &__entry->region_uuid
 	)
 );
 
