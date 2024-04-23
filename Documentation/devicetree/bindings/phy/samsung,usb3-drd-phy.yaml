@@ -25,6 +25,7 @@ description: |
 properties:
   compatible:
     enum:
+      - google,gs101-usb31drd-phy
       - samsung,exynos5250-usbdrd-phy
       - samsung,exynos5420-usbdrd-phy
       - samsung,exynos5433-usbdrd-phy
@@ -57,7 +58,18 @@ properties:
       the OF graph bindings specified.
 
   reg:
-    maxItems: 1
+    minItems: 1
+    items:
+      - description: PHY register base address.
+      - description: PCS register base address.
+      - description: PMA register base address.
+
+  reg-names:
+    minItems: 1
+    items:
+      - const: phy
+      - const: pcs
+      - const: pma
 
   samsung,pmu-syscon:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -85,30 +97,62 @@ allOf:
       properties:
         compatible:
           contains:
-            enum:
-              - samsung,exynos5433-usbdrd-phy
-              - samsung,exynos7-usbdrd-phy
+            const: google,gs101-usb31drd-phy
     then:
       properties:
         clocks:
-          minItems: 5
-          maxItems: 5
+          items:
+            - description: Gate of main PHY clock
+            - description: Gate of PHY reference clock
+            - description: Gate of control interface AXI clock
+            - description: Gate of control interface APB clock
+            - description: Gate of SCL APB clock
         clock-names:
           items:
             - const: phy
             - const: ref
-            - const: phy_utmi
-            - const: phy_pipe
-            - const: itp
+            - const: ctrl_aclk
+            - const: ctrl_pclk
+            - const: scl_pclk
+        reg:
+          minItems: 3
+        reg-names:
+          minItems: 3
+      required:
+        - reg-names
     else:
-      properties:
-        clocks:
-          minItems: 2
-          maxItems: 2
-        clock-names:
-          items:
-            - const: phy
-            - const: ref
+      if:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - samsung,exynos5433-usbdrd-phy
+                - samsung,exynos7-usbdrd-phy
+      then:
+        properties:
+          clocks:
+            minItems: 5
+            maxItems: 5
+          clock-names:
+            items:
+              - const: phy
+              - const: ref
+              - const: phy_utmi
+              - const: phy_pipe
+              - const: itp
+          reg:
+            maxItems: 1
+      else:
+        properties:
+          clocks:
+            minItems: 2
+            maxItems: 2
+          clock-names:
+            items:
+              - const: phy
+              - const: ref
+          reg:
+            maxItems: 1
 
 additionalProperties: false
 
