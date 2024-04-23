@@ -491,6 +491,11 @@ automatically converted to the Cc: email header and you do not need to
 have an explicit ``Cc:`` tag, if the person is already mentioned by another
 tag.
 
+It's recommended to locate the additional ``Cc:`` tags after the cutter '---' line
+in the patches as it makes sure the commit message won't be polluted with them.
+At the same time they will be available via email headers on the mail archives,
+such as https://lore.kernel.org.
+
 Co-developed-by: states that the patch was co-created by multiple developers;
 it is used to give attribution to co-authors (in addition to the author
 attributed by the From: tag) when several people work on a single patch.  Since

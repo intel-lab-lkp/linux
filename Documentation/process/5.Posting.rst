@@ -276,6 +276,10 @@ for addition without the explicit permission of the person named; using
 Reported-by: is fine most of the time as well, but ask for permission if
 the bug was reported in private.
 
+It's recommended to locate the additional Cc: tags after the cutter '---' line
+in the patches as it makes sure the commit message won't be polluted with them.
+At the same time they will be available via email headers on the mail archives,
+such as https://lore.kernel.org.
 
 Sending the patch
 -----------------
