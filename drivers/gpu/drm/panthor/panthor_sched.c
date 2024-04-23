@@ -93,6 +93,9 @@
 #define MIN_CSGS				3
 #define MAX_CSG_PRIO				0xf
 
+#define NUM_INSTRS_PER_SLOT			32
+#define SLOTSIZE				(NUM_INSTRS_PER_SLOT * sizeof(u64))
+
 struct panthor_group;
 
 /**
@@ -466,6 +469,9 @@ struct panthor_queue {
 		 */
 		struct list_head in_flight_jobs;
 	} fence_ctx;
+
+	/** @time_offset: Offset of panthor_job_times structs in group's syncobj bo. */
+	unsigned long time_offset;
 };
 
 /**
@@ -580,7 +586,17 @@ struct panthor_group {
 	 * One sync object per queue. The position of the sync object is
 	 * determined by the queue index.
 	 */
-	struct panthor_kernel_bo *syncobjs;
+
+	struct {
+		/** @bo: Kernel BO holding the sync objects. */
+		struct panthor_kernel_bo *bo;
+
+		/**
+		 * @times_offset: Beginning of panthor_job_times struct samples after
+		 * the group's array of sync objects.
+		 */
+		size_t times_offset;
+	} syncobjs;
 
 	/** @state: Group state. */
 	enum panthor_group_state state;
@@ -637,6 +653,18 @@ struct panthor_group {
 	 * panthor_group::groups::waiting list.
 	 */
 	struct list_head wait_node;
+};
+
+struct panthor_job_times {
+	struct {
+		u64 before;
+		u64 after;
+	} cycles;
+
+	struct {
+		u64 before;
+		u64 after;
+	} time;
 };
 
 /**
@@ -717,6 +745,9 @@ struct panthor_job {
 
 	/** @queue_idx: Index of the queue inside @group. */
 	u32 queue_idx;
+
+	/** @ringbuf_idx: Index of the ringbuffer inside @queue. */
+	u32 ringbuf_idx;
 
 	/** @call_info: Information about the userspace command stream call. */
 	struct {
@@ -833,7 +864,7 @@ static void group_release_work(struct work_struct *work)
 
 	panthor_kernel_bo_destroy(panthor_fw_vm(ptdev), group->suspend_buf);
 	panthor_kernel_bo_destroy(panthor_fw_vm(ptdev), group->protm_suspend_buf);
-	panthor_kernel_bo_destroy(group->vm, group->syncobjs);
+	panthor_kernel_bo_destroy(group->vm, group->syncobjs.bo);
 
 	panthor_vm_put(group->vm);
 	kfree(group);
@@ -1924,8 +1955,6 @@ tick_ctx_init(struct panthor_scheduler *sched,
 	}
 }
 
-#define NUM_INSTRS_PER_SLOT		16
-
 static void
 group_term_post_processing(struct panthor_group *group)
 {
@@ -1962,7 +1991,7 @@ group_term_post_processing(struct panthor_group *group)
 		spin_unlock(&queue->fence_ctx.lock);
 
 		/* Manually update the syncobj seqno to unblock waiters. */
-		syncobj = group->syncobjs->kmap + (i * sizeof(*syncobj));
+		syncobj = group->syncobjs.bo->kmap + (i * sizeof(*syncobj));
 		syncobj->status = ~0;
 		syncobj->seqno = atomic64_read(&queue->fence_ctx.seqno);
 		sched_queue_work(group->ptdev->scheduler, sync_upd);
@@ -2729,7 +2758,7 @@ static void group_sync_upd_work(struct work_struct *work)
 		if (!queue)
 			continue;
 
-		syncobj = group->syncobjs->kmap + (queue_idx * sizeof(*syncobj));
+		syncobj = group->syncobjs.bo->kmap + (queue_idx * sizeof(*syncobj));
 
 		spin_lock(&queue->fence_ctx.lock);
 		list_for_each_entry_safe(job, job_tmp, &queue->fence_ctx.in_flight_jobs, node) {
@@ -2764,14 +2793,22 @@ queue_run_job(struct drm_sched_job *sched_job)
 	struct panthor_scheduler *sched = ptdev->scheduler;
 	u32 ringbuf_size = panthor_kernel_bo_size(queue->ringbuf);
 	u32 ringbuf_insert = queue->iface.input->insert & (ringbuf_size - 1);
+	u32 ringbuf_index = ringbuf_insert / (SLOTSIZE);
 	u64 addr_reg = ptdev->csif_info.cs_reg_count -
 		       ptdev->csif_info.unpreserved_cs_reg_count;
 	u64 val_reg = addr_reg + 2;
-	u64 sync_addr = panthor_kernel_bo_gpuva(group->syncobjs) +
-			job->queue_idx * sizeof(struct panthor_syncobj_64b);
+	u64 cycle_reg = addr_reg;
+	u64 time_reg = val_reg;
+	u64 sync_addr = panthor_kernel_bo_gpuva(group->syncobjs.bo) +
+		job->queue_idx * sizeof(struct panthor_syncobj_64b);
+	u64 times_addr = panthor_kernel_bo_gpuva(group->syncobjs.bo) + queue->time_offset +
+		(ringbuf_index * sizeof(struct panthor_job_times));
+
 	u32 waitall_mask = GENMASK(sched->sb_slot_count - 1, 0);
 	struct dma_fence *done_fence;
 	int ret;
+
+	drm_WARN_ON(&ptdev->base, ringbuf_insert >= ringbuf_size);
 
 	u64 call_instrs[NUM_INSTRS_PER_SLOT] = {
 		/* MOV32 rX+2, cs.latest_flush */
@@ -2779,6 +2816,18 @@ queue_run_job(struct drm_sched_job *sched_job)
 
 		/* FLUSH_CACHE2.clean_inv_all.no_wait.signal(0) rX+2 */
 		(36ull << 56) | (0ull << 48) | (val_reg << 40) | (0 << 16) | 0x233,
+
+		/* MOV48 rX:rX+1, cycles_offset */
+		(1ull << 56) | (cycle_reg << 48) | (times_addr + offsetof(struct panthor_job_times, cycles.before)),
+
+		/* MOV48 rX:rX+1, time_offset */
+		(1ull << 56) | (time_reg << 48) | (times_addr + offsetof(struct panthor_job_times, time.before)),
+
+		/* STORE_STATE cycles */
+		(40ull << 56) |  (cycle_reg << 40) | (1ll << 32),
+
+		/* STORE_STATE timer */
+		(40ull << 56) |  (time_reg << 40) | (0ll << 32),
 
 		/* MOV48 rX:rX+1, cs.start */
 		(1ull << 56) | (addr_reg << 48) | job->call_info.start,
@@ -2791,6 +2840,18 @@ queue_run_job(struct drm_sched_job *sched_job)
 
 		/* CALL rX:rX+1, rX+2 */
 		(32ull << 56) | (addr_reg << 40) | (val_reg << 32),
+
+		/* MOV48 rX:rX+1, cycles_offset */
+		(1ull << 56) | (cycle_reg << 48) | (times_addr + offsetof(struct panthor_job_times, cycles.after)),
+
+		/* MOV48 rX:rX+1, time_offset */
+		(1ull << 56) | (time_reg << 48) | (times_addr + offsetof(struct panthor_job_times, time.after)),
+
+		/* STORE_STATE cycles */
+		(40ull << 56) |  (cycle_reg << 40) | (1ll << 32),
+
+		/* STORE_STATE timer */
+		(40ull << 56) |  (time_reg << 40) | (0ll << 32),
 
 		/* MOV48 rX:rX+1, sync_addr */
 		(1ull << 56) | (addr_reg << 48) | sync_addr,
@@ -2846,6 +2907,7 @@ queue_run_job(struct drm_sched_job *sched_job)
 
 	job->ringbuf.start = queue->iface.input->insert;
 	job->ringbuf.end = job->ringbuf.start + sizeof(call_instrs);
+	job->ringbuf_idx = ringbuf_index;
 
 	/* Make sure the ring buffer is updated before the INSERT
 	 * register.
@@ -2936,7 +2998,8 @@ static const struct drm_sched_backend_ops panthor_queue_sched_ops = {
 
 static struct panthor_queue *
 group_create_queue(struct panthor_group *group,
-		   const struct drm_panthor_queue_create *args)
+		   const struct drm_panthor_queue_create *args,
+		   unsigned int slots_so_far)
 {
 	struct drm_gpu_scheduler *drm_sched;
 	struct panthor_queue *queue;
@@ -2987,9 +3050,12 @@ group_create_queue(struct panthor_group *group,
 		goto err_free_queue;
 	}
 
+	queue->time_offset = group->syncobjs.times_offset +
+		(slots_so_far * sizeof(struct panthor_job_times));
+
 	ret = drm_sched_init(&queue->scheduler, &panthor_queue_sched_ops,
 			     group->ptdev->scheduler->wq, 1,
-			     args->ringbuf_size / (NUM_INSTRS_PER_SLOT * sizeof(u64)),
+			     args->ringbuf_size / SLOTSIZE,
 			     0, msecs_to_jiffies(JOB_TIMEOUT_MS),
 			     group->ptdev->reset.wq,
 			     NULL, "panthor-queue", group->ptdev->base.dev);
@@ -3017,7 +3083,9 @@ int panthor_group_create(struct panthor_file *pfile,
 	struct panthor_scheduler *sched = ptdev->scheduler;
 	struct panthor_fw_csg_iface *csg_iface = panthor_fw_get_csg_iface(ptdev, 0);
 	struct panthor_group *group = NULL;
+	unsigned int total_slots;
 	u32 gid, i, suspend_size;
+	size_t syncobj_bo_size;
 	int ret;
 
 	if (group_args->pad)
@@ -3083,33 +3151,75 @@ int panthor_group_create(struct panthor_file *pfile,
 		goto err_put_group;
 	}
 
-	group->syncobjs = panthor_kernel_bo_create(ptdev, group->vm,
-						   group_args->queues.count *
-						   sizeof(struct panthor_syncobj_64b),
-						   DRM_PANTHOR_BO_NO_MMAP,
-						   DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC |
-						   DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED,
-						   PANTHOR_VM_KERNEL_AUTO_VA);
-	if (IS_ERR(group->syncobjs)) {
-		ret = PTR_ERR(group->syncobjs);
+	/*
+	 * Need to add size for the panthor_job_times structs, as many as the sum
+	 * of the number of job slots for every single queue ringbuffer.
+	 */
+	for (i = 0, total_slots = 0; i < group_args->queues.count; i++)
+		total_slots += (queue_args[i].ringbuf_size / (SLOTSIZE));
+
+	syncobj_bo_size = (group_args->queues.count * sizeof(struct panthor_syncobj_64b))
+		+ (total_slots * sizeof(struct panthor_job_times));
+
+	/*
+	 * Memory layout of group's syncobjs BO
+	 * group->syncobjs.bo {
+	 *	struct panthor_syncobj_64b sync1;
+	 *	struct panthor_syncobj_64b sync2;
+	 *		...
+	 *		As many as group_args->queues.count
+	 *		...
+	 *	struct panthor_syncobj_64b syncn;
+	 *	struct panthor_job_times queue1_slot1
+	 *	struct panthor_job_times queue1_slot2
+	 *		...
+	 *		As many as queue[i].ringbuf_size / SLOTSIZE
+	 *		...
+	 *	struct panthor_job_times queue1_slotP
+	 *		...
+	 *		As many as group_args->queues.count
+	 *		...
+	 *	struct panthor_job_times queueN_slot1
+	 *	struct panthor_job_times queueN_slot2
+	 *		...
+	 *		As many as queue[n].ringbuf_size / SLOTSIZE
+	 *	struct panthor_job_times queueN_slotQ
+	 *
+	 *	Linearly, group->syncobjs.bo = {syncojb1,..,syncobjN,
+	 *	{queue1 = {js1,..,jsP},..,queueN = {js1,..,jsQ}}}
+	 * }
+	 *
+	 */
+
+	group->syncobjs.bo = panthor_kernel_bo_create(ptdev, group->vm,
+						      syncobj_bo_size,
+						      DRM_PANTHOR_BO_NO_MMAP,
+						      DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC |
+						      DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED,
+						      PANTHOR_VM_KERNEL_AUTO_VA);
+	if (IS_ERR(group->syncobjs.bo)) {
+		ret = PTR_ERR(group->syncobjs.bo);
 		goto err_put_group;
 	}
 
-	ret = panthor_kernel_bo_vmap(group->syncobjs);
+	ret = panthor_kernel_bo_vmap(group->syncobjs.bo);
 	if (ret)
 		goto err_put_group;
 
-	memset(group->syncobjs->kmap, 0,
-	       group_args->queues.count * sizeof(struct panthor_syncobj_64b));
+	memset(group->syncobjs.bo->kmap, 0, syncobj_bo_size);
 
-	for (i = 0; i < group_args->queues.count; i++) {
-		group->queues[i] = group_create_queue(group, &queue_args[i]);
+	group->syncobjs.times_offset =
+		group_args->queues.count * sizeof(struct panthor_syncobj_64b);
+
+	for (i = 0, total_slots = 0; i < group_args->queues.count; i++) {
+		group->queues[i] = group_create_queue(group, &queue_args[i], total_slots);
 		if (IS_ERR(group->queues[i])) {
 			ret = PTR_ERR(group->queues[i]);
 			group->queues[i] = NULL;
 			goto err_put_group;
 		}
 
+		total_slots += (queue_args[i].ringbuf_size / (SLOTSIZE));
 		group->queue_count++;
 	}
 
