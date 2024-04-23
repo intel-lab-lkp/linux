@@ -120,6 +120,7 @@ struct stk3310_data {
 	struct regmap_field *reg_flag_psint;
 	struct regmap_field *reg_flag_nf;
 	struct regulator *vdd_reg;
+	struct regulator *led_reg;
 };
 
 static const struct iio_event_spec stk3310_events[] = {
@@ -614,6 +615,10 @@ static int stk3310_probe(struct i2c_client *client)
 	if (IS_ERR(data->vdd_reg))
 		return dev_err_probe(&client->dev, ret, "get regulator vdd failed\n");
 
+	data->led_reg = devm_regulator_get(&client->dev, "leda");
+	if (IS_ERR(data->led_reg))
+		return dev_err_probe(&client->dev, ret, "get regulator led failed\n");
+
 	ret = stk3310_regmap_init(data);
 	if (ret < 0)
 		return ret;
@@ -629,12 +634,18 @@ static int stk3310_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, ret,
 				     "regulator vdd enable failed\n");
 
+	ret = regulator_enable(data->led_reg);
+	if (ret) {
+		dev_err_probe(&client->dev, ret, "regulator led enable failed\n");
+		goto err_vdd_disable;
+	}
+
 	/* we need a short delay to allow the chip time to power on */
 	fsleep(1000);
 
 	ret = stk3310_init(indio_dev);
 	if (ret < 0)
-		goto err_vdd_disable;
+		goto err_led_disable;
 
 	if (client->irq > 0) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
@@ -660,6 +671,8 @@ static int stk3310_probe(struct i2c_client *client)
 
 err_standby:
 	stk3310_set_state(data, STK3310_STATE_STANDBY);
+err_led_disable:
+	regulator_disable(data->led_reg);
 err_vdd_disable:
 	regulator_disable(data->vdd_reg);
 	return ret;
@@ -672,6 +685,7 @@ static void stk3310_remove(struct i2c_client *client)
 
 	iio_device_unregister(indio_dev);
 	stk3310_set_state(iio_priv(indio_dev), STK3310_STATE_STANDBY);
+	regulator_disable(data->led_reg);
 	regulator_disable(data->vdd_reg);
 }
 
@@ -687,6 +701,7 @@ static int stk3310_suspend(struct device *dev)
 		return ret;
 
 	regcache_mark_dirty(data->regmap);
+	regulator_disable(data->led_reg);
 	regulator_disable(data->vdd_reg);
 
 	return 0;
@@ -703,6 +718,12 @@ static int stk3310_resume(struct device *dev)
 	ret = regulator_enable(data->vdd_reg);
 	if (ret) {
 		dev_err(dev, "Failed to re-enable regulator vdd\n");
+		return ret;
+	}
+
+	ret = regulator_enable(data->led_reg);
+	if (ret) {
+		dev_err(dev, "Failed to re-enable regulator led\n");
 		return ret;
 	}
 
