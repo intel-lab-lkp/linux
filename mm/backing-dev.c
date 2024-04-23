@@ -172,7 +172,11 @@ static void wb_stats_show(struct seq_file *m, struct bdi_writeback *wb,
 		   "b_more_io:         %10lu\n"
 		   "b_dirty_time:      %10lu\n"
 		   "state:             %10lx\n\n",
+#ifdef CONFIG_CGROUP_WRITEBACK
 		   cgroup_ino(wb->memcg_css->cgroup),
+#else
+		   1ul,
+#endif
 		   K(stats->nr_writeback),
 		   K(stats->nr_reclaimable),
 		   K(stats->wb_thresh),
@@ -192,7 +196,6 @@ static int cgwb_debug_stats_show(struct seq_file *m, void *v)
 	unsigned long background_thresh;
 	unsigned long dirty_thresh;
 	struct bdi_writeback *wb;
-	struct wb_stats stats;
 
 	global_dirty_limits(&background_thresh, &dirty_thresh);
 
