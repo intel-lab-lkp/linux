@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/spi/nxp,sc18is602.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: NXP SC18IS602/602B/603 I2C to SPI bridge
+title: NXP SC18IS602/602B/603/606 I2C to SPI bridge
 
 maintainers:
   - Alvin Šipraga <alsi@bang-olufsen.dk>
@@ -15,6 +15,7 @@ properties:
       - nxp,sc18is602
       - nxp,sc18is602b
       - nxp,sc18is603
+      - nxp,sc18is606
 
   reg:
     maxItems: 1
