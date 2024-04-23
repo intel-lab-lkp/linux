@@ -2554,14 +2554,11 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 {
 	struct vring_desc desc;
 	unsigned int i, head, found = 0;
-	u16 last_avail_idx;
 	__virtio16 avail_idx;
 	__virtio16 ring_head;
 	int ret, access;
 
 	/* Check it isn't doing very strange things with descriptor numbers. */
-	last_avail_idx = vq->last_avail_idx;
-
 	if (vq->avail_idx == vq->last_avail_idx) {
 		if (unlikely(vhost_get_avail_idx(vq, &avail_idx))) {
 			vq_err(vq, "Failed to access avail idx at %p\n",
@@ -2570,16 +2567,16 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		}
 		vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
 
-		if (unlikely((u16)(vq->avail_idx - last_avail_idx) > vq->num)) {
+		if (unlikely((u16)(vq->avail_idx - vq->last_avail_idx) > vq->num)) {
 			vq_err(vq, "Guest moved avail index from %u to %u",
-				last_avail_idx, vq->avail_idx);
+				vq->last_avail_idx, vq->avail_idx);
 			return -EFAULT;
 		}
 
 		/* If there's nothing new since last we looked, return
 		 * invalid.
 		 */
-		if (vq->avail_idx == last_avail_idx)
+		if (vq->avail_idx == vq->last_avail_idx)
 			return vq->num;
 
 		/* Only get avail ring entries after they have been
@@ -2590,10 +2587,10 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 
 	/* Grab the next descriptor number they're advertising, and increment
 	 * the index we've seen. */
-	if (unlikely(vhost_get_avail_head(vq, &ring_head, last_avail_idx))) {
+	if (unlikely(vhost_get_avail_head(vq, &ring_head, vq->last_avail_idx))) {
 		vq_err(vq, "Failed to read head: idx %d address %p\n",
-		       last_avail_idx,
-		       &vq->avail->ring[last_avail_idx % vq->num]);
+		       vq->last_avail_idx,
+		       &vq->avail->ring[vq->last_avail_idx % vq->num]);
 		return -EFAULT;
 	}
 
