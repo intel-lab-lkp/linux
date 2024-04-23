@@ -2099,9 +2099,9 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 			    !trace->show_zeros &&
 			    !(sc->arg_fmt &&
 			      (sc->arg_fmt[arg.idx].show_zero ||
-			       sc->arg_fmt[arg.idx].scnprintf == SCA_STRARRAY ||
-			       sc->arg_fmt[arg.idx].scnprintf == SCA_STRARRAYS) &&
-			      sc->arg_fmt[arg.idx].parm))
+			        ((sc->arg_fmt[arg.idx].scnprintf == SCA_STRARRAY ||
+			          sc->arg_fmt[arg.idx].scnprintf == SCA_STRARRAYS) &&
+			         sc->arg_fmt[arg.idx].parm))))
 				continue;
 
 			printed += scnprintf(bf + printed, size - printed, "%s", printed ? ", " : "");
@@ -2803,8 +2803,8 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct evsel *evsel,
 		 */
 		if (val == 0 &&
 		    !trace->show_zeros &&
-		    !((arg->show_zero ||
-		       arg->scnprintf == SCA_STRARRAY ||
+		    !arg->show_zero &&
+		    !((arg->scnprintf == SCA_STRARRAY ||
 		       arg->scnprintf == SCA_STRARRAYS) &&
 		      arg->parm))
 			continue;
