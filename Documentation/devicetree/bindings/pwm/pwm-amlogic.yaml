@@ -37,6 +37,7 @@ properties:
       - enum:
           - amlogic,meson8-pwm-v2
           - amlogic,meson-s4-pwm
+          - amlogic,meson-a1-pwm
       - items:
           - enum:
               - amlogic,meson8b-pwm-v2
@@ -126,6 +127,7 @@ allOf:
           contains:
             enum:
               - amlogic,meson-s4-pwm
+              - amlogic,meson-a1-pwm
     then:
       properties:
         clocks:
