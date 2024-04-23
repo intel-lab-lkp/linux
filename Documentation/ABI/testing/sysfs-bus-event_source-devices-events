@@ -37,6 +37,12 @@ Description:	Per-pmu performance monitoring events specific to the running syste
 		performance monitoring event supported by the <pmu>. The name
 		of the file is the name of the event.
 
+		As performance monitoring event names are case
+		insensitive in the perf tool, the perf tool only looks
+		for lower case event names in sysfs to avoid scanning
+		the directory. It is therefore required the name of
+		the event here is lower case.
+
 		File contents:
 
 			<term>[=<value>][,<term>[=<value>]]...
