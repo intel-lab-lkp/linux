@@ -60,10 +60,10 @@
 		data->reg_##name =					    \
 			devm_regmap_field_alloc(&client->dev, regmap,	    \
 				stk3310_reg_field_##name);		    \
-		if (IS_ERR(data->reg_##name)) {				    \
-			dev_err(&client->dev, "reg field alloc failed.\n"); \
-			return PTR_ERR(data->reg_##name);		    \
-		}							    \
+		if (IS_ERR(data->reg_##name))				    \
+			return dev_err_probe(&client->dev,		    \
+				PTR_ERR(data->reg_##name),		    \
+				"reg field alloc failed.\n");		    \
 	} while (0)
 
 static const struct reg_field stk3310_reg_field_state =
@@ -480,22 +480,20 @@ static int stk3310_init(struct iio_dev *indio_dev)
 	if (chipid != STK3310_CHIP_ID_VAL &&
 	    chipid != STK3311_CHIP_ID_VAL &&
 	    chipid != STK3311X_CHIP_ID_VAL &&
-	    chipid != STK3335_CHIP_ID_VAL) {
-		dev_err(&client->dev, "invalid chip id: 0x%x\n", chipid);
-		return -ENODEV;
-	}
+	    chipid != STK3335_CHIP_ID_VAL)
+		return dev_err_probe(&client->dev, -ENODEV,
+				     "invalid chip id: 0x%x\n", chipid);
 
 	state = STK3310_STATE_EN_ALS | STK3310_STATE_EN_PS;
 	ret = stk3310_set_state(data, state);
-	if (ret < 0) {
-		dev_err(&client->dev, "failed to enable sensor");
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&client->dev, ret, "failed to enable sensor\n");
 
 	/* Enable PS interrupts */
 	ret = regmap_field_write(data->reg_int_ps, STK3310_PSINT_EN);
 	if (ret < 0)
-		dev_err(&client->dev, "failed to enable interrupts!\n");
+		return dev_err_probe(&client->dev, ret,
+				     "failed to enable interrupts!\n");
 
 	return ret;
 }
@@ -530,10 +528,10 @@ static int stk3310_regmap_init(struct stk3310_data *data)
 
 	client = data->client;
 	regmap = devm_regmap_init_i2c(client, &stk3310_regmap_config);
-	if (IS_ERR(regmap)) {
-		dev_err(&client->dev, "regmap initialization failed.\n");
-		return PTR_ERR(regmap);
-	}
+	if (IS_ERR(regmap))
+		return dev_err_probe(&client->dev, PTR_ERR(regmap),
+				     "regmap initialization failed.\n");
+
 	data->regmap = regmap;
 
 	STK3310_REGFIELD(state);
@@ -597,10 +595,8 @@ static int stk3310_probe(struct i2c_client *client)
 	struct stk3310_data *data;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
-	if (!indio_dev) {
-		dev_err(&client->dev, "iio allocation failed!\n");
-		return -ENOMEM;
-	}
+	if (!indio_dev)
+		return dev_err_probe(&client->dev, -ENOMEM, "iio allocation failed!\n");
 
 	data = iio_priv(indio_dev);
 	data->client = client;
@@ -655,15 +651,15 @@ static int stk3310_probe(struct i2c_client *client)
 						IRQF_ONESHOT,
 						STK3310_EVENT, indio_dev);
 		if (ret < 0) {
-			dev_err(&client->dev, "request irq %d failed\n",
-				client->irq);
+			dev_err_probe(&client->dev, ret, "request irq %d failed\n",
+				      client->irq);
 			goto err_standby;
 		}
 	}
 
 	ret = iio_device_register(indio_dev);
 	if (ret < 0) {
-		dev_err(&client->dev, "device_register failed\n");
+		dev_err_probe(&client->dev, ret, "device_register failed\n");
 		goto err_standby;
 	}
 
