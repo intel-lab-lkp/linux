@@ -111,3 +111,6 @@ XfrmOutPolError:
 
 XfrmOutStateInvalid:
 	State is invalid, perhaps expired
+
+XfrmOutStateDirError:
+        State direction output mismatched with lookup path direction
