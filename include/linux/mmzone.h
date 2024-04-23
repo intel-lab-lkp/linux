@@ -192,8 +192,12 @@ enum node_stat_item {
 	NR_SHMEM_THPS,
 	NR_FILE_THPS,
 	NR_ANON_THPS,
-	/* No memcg stats for the following fields. */
-	NR_SHMEM_PMDMAPPED,
+	/*
+	 * No memcg stats for the following fields. Please add stats which have
+	 * memcg counterpart above NR_VM_NODE_MEMCG_STAT_ITEMS.
+	 */
+	NR_VM_NODE_MEMCG_STAT_ITEMS,
+	NR_SHMEM_PMDMAPPED = NR_VM_NODE_MEMCG_STAT_ITEMS,
 	NR_FILE_PMDMAPPED,
 	NR_WRITEBACK_TEMP,	/* Writeback using temporary buffers */
 	NR_VMSCAN_WRITE,

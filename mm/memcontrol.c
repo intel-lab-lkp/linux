@@ -1647,6 +1647,9 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 {
 	int i;
 
+	/* Reduce by 1 for MEMCG_SWAP as that is not exposed in v2. */
+	BUILD_BUG_ON(ARRAY_SIZE(memory_stats) != MEMCG_NR_STAT - 1);
+
 	/*
 	 * Provide statistics on the state of the memory subsystem as
 	 * well as cumulative event counters that show past behavior.
@@ -5870,7 +5873,7 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 
 		lstatc = per_cpu_ptr(pn->lruvec_stats_percpu, cpu);
 
-		for (i = 0; i < NR_VM_NODE_STAT_ITEMS; i++) {
+		for (i = 0; i < NR_VM_NODE_MEMCG_STAT_ITEMS; i++) {
 			delta = pn->lruvec_stats.state_pending[i];
 			if (delta)
 				pn->lruvec_stats.state_pending[i] = 0;
