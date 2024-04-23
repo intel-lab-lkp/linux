@@ -1,1 +1,14 @@
-kms_async_flips@async-flip-with-page-flip-events
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report: https://lore.kernel.org/dri-devel/903b01f7-3f0d-18b7-a4b7-301c118c9321@collabora.com/T/#u
+# IGT Version: 1.28-g7d1841317
+# Linux Version: 6.9.0-rc4
+# Reported by deqp-runner
+device_reset@unbind-reset-rebind
+kms_plane@pixel-format-source-clamping
+
+# The below test shows inconsistency across multiple runs, giving
+# results of Pass and Fail.
+amdgpu/amd_abm@abm_enabled
+amdgpu/amd_plane@mpo-swizzle-toggle
+kms_addfb_basic@bad-pitch-65536
+kms_async_flips@crc

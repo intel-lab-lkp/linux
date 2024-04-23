@@ -1,8 +1,6 @@
-# Suspend to RAM seems to be broken on this machine
-.*suspend.*
-
 # Skip driver specific tests
 ^amdgpu.*
+msm_.*
 nouveau_.*
 panfrost_.*
 ^v3d.*
@@ -13,6 +11,3 @@ panfrost_.*
 gem_.*
 i915_.*
 xe_.*
-
-# Skip these tests as core_getrevision fails
-core_hotunplug.*

@@ -1,6 +1,6 @@
-# Board Name: rk3399-gru-kevin
+# Board Name: acer-cp514-2h-1130g7-volteer
 # Bug Report: TBD
 # IGT Version: 1.28-g7d1841317
 # Linux Version: 6.9.0-rc4
 # Reported by deqp-runner
-core_hotunplug
+kms_cursor_edge_walk@64x64-top-bottom

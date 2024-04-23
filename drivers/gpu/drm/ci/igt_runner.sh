@@ -59,25 +59,24 @@ fi
 
 curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -s ${FDO_HTTP_CACHE_URI:-}$PIPELINE_ARTIFACTS_BASE/$ARCH/igt.tar.gz | tar --zstd -v -x -C /
 
-
 # If the job is parallel at the gitab job level, take the corresponding fraction
 # of the caselist.
 if [ -n "$CI_NODE_INDEX" ]; then
-    sed -ni $CI_NODE_INDEX~$CI_NODE_TOTAL"p" /install/testlist.txt
+    sed -ni $CI_NODE_INDEX~$CI_NODE_TOTAL"p" /igt/libexec/igt-gpu-tools/testlist.txt
 fi
 
 # core_getversion checks if the driver is loaded and probed correctly
 # so run it in all shards
-if ! grep -q "core_getversion" /install/testlist.txt; then
+if ! grep -q "core_getversion" /igt/libexec/igt-gpu-tools/testlist.txt; then
     # Add the line to the file
-    echo "core_getversion" >> /install/testlist.txt
+    echo "core_getversion" >> /igt/libexec/igt-gpu-tools/testlist.txt
 fi
 
 set +e
 igt-runner \
     run \
     --igt-folder /igt/libexec/igt-gpu-tools \
-    --caselist /install/testlist.txt \
+    --caselist /igt/libexec/igt-gpu-tools/testlist.txt \
     --output /results \
     $IGT_SKIPS \
     $IGT_FLAKES \

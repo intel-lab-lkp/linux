@@ -26,6 +26,29 @@ meson build $MESON_OPTIONS $EXTRA_MESON_ARGS
 ninja -C build -j${FDO_CI_CONCURRENT:-4} || ninja -C build -j 1
 ninja -C build install
 
+set +ex
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/igt/lib64
+while read -r line; do
+    if [ "$line" = "TESTLIST" ] || [ "$line" = "END TESTLIST" ]; then
+        continue
+    fi
+
+    tests=$(echo "$line" | tr ' ' '\n')
+
+    for test in $tests; do
+        output=$(/igt/libexec/igt-gpu-tools/"$test" --list-subtests)
+
+        if [ -z "$output" ]; then
+            echo "$test"
+        else
+            echo "$output" | while read -r subtest; do
+                echo "$test@$subtest"
+            done
+        fi
+    done
+done < /igt/libexec/igt-gpu-tools/test-list.txt > /igt/libexec/igt-gpu-tools/testlist.txt
+set -ex
+
 mkdir -p artifacts/
 tar -cf artifacts/igt.tar /igt
 

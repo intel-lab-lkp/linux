@@ -1,6 +1,3 @@
-# Suspend to RAM seems to be broken on this machine
-.*suspend.*
-
 # Skip driver specific tests
 ^amdgpu.*
 nouveau_.*

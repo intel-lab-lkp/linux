@@ -1,2 +1,6 @@
+device_reset,Fail
+dumb_buffer,Fail
 kms_3d,Fail
-kms_addfb_basic@addfb25-bad-modifier,Fail
+kms_addfb_basic,Fail
+kms_lease,Fail
+tools_test,Fail

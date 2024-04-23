@@ -1,2 +1,117 @@
 # Whole machine hangs
 kms_cursor_legacy@all-pipes-torture-move
+
+# Skip driver specific tests
+^amdgpu.*
+nouveau_.*
+panfrost_.*
+^v3d.*
+^vc4.*
+^vmwgfx*
+
+# Skip intel specific tests
+gem_.*
+i915_.*
+xe_.*
+
+# Skip these tests as core_getrevision fails
+core_hotunplug.*
+
+# Detected kernel soft lockup
+# [   80.510306] [IGT] msm_mapping: starting subtest shadow
+# [   80.518371] *** gpu fault: ttbr0=00000001021e3000 iova=0000000001074000 dir=WRITE type=PERMISSION source=1f030000 (0,0,0,0)
+# [   84.189326] msm_mdp 901000.display-controller: RBBM | ME master split | status=0x701000B0
+# [  106.518026] rcu: INFO: rcu_preempt self-detected stall on CPU
+# [  106.518075] rcu: 	0-....: (1 GPs behind) idle=a9b4/1/0x4000000000000000 softirq=12019/12020 fqs=3141
+# [  106.522827] rcu: 	(t=6500 jiffies g=23805 q=641 ncpus=2)
+# [  106.531972] CPU: 0 PID: 76 Comm: kworker/u16:5 Tainted: G        W          6.9.0-rc2-gbe07f970bd8b #1
+# [  106.537267] Hardware name: Qualcomm Technologies, Inc. DB820c (DT)
+# [  106.546387] Workqueue: ring0 drm_sched_run_job_work
+# [  106.552539] pstate: 60000005 (nZCv daif -PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+# [  106.557313] pc : __do_softirq+0xe8/0x52c
+# [  106.564255] lr : __do_softirq+0xe4/0x52c
+# [  106.568422] sp : ffff800080003f20
+# [  106.572328] x29: ffff800080003f20 x28: ffff000082105280 x27: ffff800082aa0da8
+# [  106.575543] x26: ffff80008222d008 x25: ffff0000823bef00 x24: ffff0000822fa4d0
+# [  106.582661] x23: 0000000060000005 x22: 0000000000000200 x21: ffff800084ff3ae0
+# [  106.589780] x20: ffff800080090178 x19: ffff800082242ec0 x18: 0000000000000006
+# [  106.596896] x17: ffff80007b883000 x16: ffff800080000000 x15: 0000000000000001
+# [  106.604015] x14: 00000000001d7e33 x13: 0000000000000003 x12: 0000000000000000
+# [  106.611134] x11: 0000000000000001 x10: 0000000000000000 x9 : ffff8000837f6000
+# [  106.618252] x8 : ffff000082105280 x7 : 000000000002d738 x6 : 00000000041f23d2
+# [  106.625369] x5 : 0000000000000000 x4 : 0000000000000003 x3 : 0000000000000000
+# [  106.632487] x2 : 0000000000000001 x1 : ffff80008222fad8 x0 : 000000000007aee8
+# [  106.639607] Call trace:
+# [  106.646719]  __do_softirq+0xe8/0x52c
+# [  106.648977]  ____do_softirq+0x10/0x1c
+# [  106.652797]  call_on_irq_stack+0x24/0x4c
+# [  106.656357]  do_softirq_own_stack+0x1c/0x28
+# [  106.660348]  __irq_exit_rcu+0x154/0x178
+# [  106.664255]  irq_exit_rcu+0x10/0x38
+# [  106.668074]  el1_interrupt+0x38/0x64
+# [  106.671547]  el1h_64_irq_handler+0x18/0x24
+# [  106.675367]  el1h_64_irq+0x64/0x68
+# [  106.679272]  preempt_schedule_irq+0x38/0x9c
+# [  106.682658]  el1_interrupt+0x4c/0x64
+# [  106.686738]  el1h_64_irq_handler+0x18/0x24
+# [  106.690557]  el1h_64_irq+0x64/0x68
+# [  106.694463]  __pm_runtime_idle+0x0/0x8c
+# [  106.697848]  msm_job_run+0xa4/0x120
+# [  106.701580]  drm_sched_run_job_work+0x278/0x4d0
+# [  106.705054]  process_one_work+0x218/0x620
+# [  106.709568]  worker_thread+0x1ac/0x37c
+# [  106.713734]  kthread+0x114/0x118
+# [  106.717379]  ret_from_fork+0x10/0x20
+# [  132.134018] watchdog: BUG: soft lockup - CPU#0 stuck for 49s! [kworker/u16:5:76]
+# [0;31mDetected kernel soft lockup, abandoning run.[0m
+
+# [   77.916756] [IGT] msm_mapping: starting subtest ring
+# [   77.921867] *** gpu fault: ttbr0=00000001021c4000 iova=0000000001003000 dir=WRITE type=PERMISSION source=1f030000 (0,0,0,0)
+# [   77.929173] [IGT] msm_mapping: finished subtest ring, SUCCESS
+# [   77.934458] [IGT] msm_mapping: starting subtest sqefw
+# [   77.940278] [IGT] msm_mapping: finished subtest sqefw, SKIP
+# [   77.945212] [IGT] msm_mapping: starting subtest shadow
+# [   77.952360] *** gpu fault: ttbr0=00000001021c4000 iova=0000000001074000 dir=WRITE type=PERMISSION source=1f030000 (0,0,0,0)
+# [   78.905412] sched: RT throttling activated
+# [   81.623221] msm_mdp 901000.display-controller: RBBM | ME master split | status=0x701000B0
+# [  103.957418] rcu: INFO: rcu_preempt self-detected stall on CPU
+# [  103.957454] rcu: 	0-....: (1 GPs behind) idle=f884/1/0x4000000000000000 softirq=10784/10785 fqs=3131
+# [  103.962148] rcu: 	(t=6501 jiffies g=19809 q=481 ncpus=2)
+# [  103.971352] CPU: 0 PID: 51 Comm: kworker/u16:4 Tainted: G        W          6.9.0-rc4-gf081c1a04275 #1
+# [  103.976644] Hardware name: Qualcomm Technologies, Inc. DB820c (DT)
+# [  103.985757] Workqueue: ring0 drm_sched_run_job_work
+# [  103.991919] pstate: 60000005 (nZCv daif -PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+# [  103.996693] pc : __do_softirq+0xe8/0x52c
+# [  104.003635] lr : __do_softirq+0xe4/0x52c
+# [  104.007802] sp : ffff800080003f20
+# [  104.011707] x29: ffff800080003f20 x28: ffff000080355280 x27: ffff800082ab0da8
+# [  104.014922] x26: ffff80008222d008 x25: ffff000085d07800 x24: ffff0000828030d0
+# [  104.022040] x23: 0000000000000005 x22: 0000000000000282 x21: ffff80008428bc80
+# [  104.029158] x20: ffff800080090178 x19: ffff800082242ec0 x18: 0000000000000000
+# [  104.036276] x17: ffff80007b883000 x16: ffff800080000000 x15: 0000000000000001
+# [  104.043395] x14: 000000000088353c x13: 0000000000000000 x12: 00000000000001d7
+# [  104.050512] x11: 0000000000000001 x10: 0000000000000001 x9 : ffff800082ab51c0
+# [  104.057631] x8 : 0000001225d30e00 x7 : 7fffffffffffffff x6 : 0000000003cb8b54
+# [  104.064748] x5 : 0000000000000000 x4 : ffff800080000000 x3 : 0000000000000000
+# [  104.071866] x2 : 0000000000000000 x1 : ffff800082ab3000 x0 : 0000000000000000
+# [  104.078987] Call trace:
+# [  104.086099]  __do_softirq+0xe8/0x52c
+# [  104.088358]  ____do_softirq+0x10/0x1c
+# [  104.092177]  call_on_irq_stack+0x24/0x4c
+# [  104.095736]  do_softirq_own_stack+0x1c/0x28
+# [  104.099729]  __irq_exit_rcu+0x154/0x178
+# [  104.103635]  irq_exit_rcu+0x10/0x38
+# [  104.107454]  el1_interrupt+0x38/0x64
+# [  104.110926]  el1h_64_irq_handler+0x18/0x24
+# [  104.114746]  el1h_64_irq+0x64/0x68
+# [  104.118652]  hangcheck_timer_reset+0x0/0x50
+# [  104.122037]  msm_job_run+0xa4/0x120
+# [  104.126116]  drm_sched_run_job_work+0x278/0x4d0
+# [  104.129590]  process_one_work+0x218/0x620
+# [  104.134103]  worker_thread+0x1ac/0x37c
+# [  104.138270]  kthread+0x114/0x118
+# [  128.025415] watchdog: BUG: soft lockup - CPU#0 stuck for 49s! [kworker/u16:4:51]
+# Detected kernel soft lockup, abandoning run.␛[0m
+# [  128.025456] Modules linked in:
+# [  128.031885] irq event stamp: 50
+msm_mapping@*

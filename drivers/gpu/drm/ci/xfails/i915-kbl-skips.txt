@@ -3,3 +3,35 @@
 
 # This is generating kernel oops with divide error
 kms_plane_scaling@invalid-parameters
+
+# Skip driver specific tests
+^amdgpu.*
+msm_.*
+nouveau_.*
+panfrost_.*
+^v3d.*
+^vc4.*
+^vmwgfx*
+
+# GEM tests takes ~1000 hours, so skip it
+gem_.*
+
+# Hangs the machine and timeout occurs
+i915_pm_rc6_residency@*
+i915_suspend@*
+
+# Kernel panic
+drm_fdinfo@*
+kms_content_protection@*
+kms_frontbuffer_tracking@*
+kms_cursor_crc@*
+kms_psr@*
+kms_big_fb@*
+api_intel_allocator@*
+kms_bw@*
+xe_vm@*
+xe_exec_threads@*
+kms_color@*
+
+# Test timeout
+kms_feature_discovery@*

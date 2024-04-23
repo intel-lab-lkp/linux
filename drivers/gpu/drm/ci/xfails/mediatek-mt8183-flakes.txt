@@ -1,4 +1,4 @@
-# Board Name: rk3399-gru-kevin
+# Board Name: mt8183-kukui-jacuzzi-juniper-sku16
 # Bug Report: TBD
 # IGT Version: 1.28-g7d1841317
 # Linux Version: 6.9.0-rc4

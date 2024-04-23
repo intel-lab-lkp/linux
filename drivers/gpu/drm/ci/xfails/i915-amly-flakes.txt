@@ -1,0 +1,9 @@
+# Board Name: asus-C433TA-AJ0005-rammus
+# Bug Report: TBD
+# IGT Version: 1.28-g7d1841317
+# Linux Version: 6.9.0-rc4
+# Reported by deqp-runner
+i915_hangman@gt-engine-error
+kms_pm_rpm@modeset-lpsp-stress
+kms_universal_plane@cursor-fb-leak
+perf_pmu@frequency

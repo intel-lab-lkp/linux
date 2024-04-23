@@ -1,10 +1,11 @@
-# Board Name: sdm845-cheza-r3
+# Board Name: sc7180-trogdor-lazor-limozeen
 # Bug Report: TBD
 # IGT Version: 1.28-g7d1841317
 # Linux Version: 6.9.0-rc4
 # Reported by deqp-runner
-msm_shrink
+kms_sequence
+kms_cursor_legacy
 
 # The below test shows inconsistency across multiple runs, giving
 # results of Pass and Fail.
-kms_rmfb
+testdisplay

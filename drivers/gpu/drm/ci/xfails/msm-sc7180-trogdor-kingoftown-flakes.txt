@@ -1,6 +1,6 @@
-# Board Name: rk3399-gru-kevin
+# Board Name: sc7180-trogdor-kingoftown
 # Bug Report: TBD
 # IGT Version: 1.28-g7d1841317
 # Linux Version: 6.9.0-rc4
 # Reported by deqp-runner
-core_hotunplug
+kms_cursor_legacy
