@@ -462,6 +462,33 @@ static int meson_pwm_init_channels_meson8b_v2(struct pwm_chip *chip)
 	return meson_pwm_init_clocks_meson8b(chip, mux_parent_data);
 }
 
+static int meson_pwm_init_channels_ext_clock(struct pwm_chip *chip)
+{
+	struct device *dev = pwmchip_parent(chip);
+	struct meson_pwm *meson = to_meson_pwm(chip);
+	struct meson_pwm_channel *channels = meson->channels;
+	struct clk_bulk_data *clks = NULL;
+	unsigned int i;
+	int res;
+
+	res = devm_clk_bulk_get_all(dev, &clks);
+	if (res < 0) {
+		dev_err(dev, "can't get device clocks\n");
+		return res;
+	}
+
+	if (res != MESON_NUM_PWMS) {
+		dev_err(dev, "clock count must be %d, got %d\n",
+			MESON_NUM_PWMS, res);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < MESON_NUM_PWMS; i++)
+		channels[i].clk = clks[i].clk;
+
+	return 0;
+}
+
 static const struct meson_pwm_data pwm_meson8b_data = {
 	.parent_names = { "xtal", NULL, "fclk_div4", "fclk_div3" },
 	.channels_init = meson_pwm_init_channels_meson8b_legacy,
@@ -500,10 +527,18 @@ static const struct meson_pwm_data pwm_meson8_v2_data = {
 	.channels_init = meson_pwm_init_channels_meson8b_v2,
 };
 
+static const struct meson_pwm_data pwm_meson_ext_clock_data = {
+	.channels_init = meson_pwm_init_channels_ext_clock,
+};
+
 static const struct of_device_id meson_pwm_matches[] = {
 	{
 		.compatible = "amlogic,meson8-pwm-v2",
 		.data = &pwm_meson8_v2_data
+	},
+	{
+		.compatible = "amlogic,meson-a1-pwm",
+		.data = &pwm_meson_ext_clock_data
 	},
 	/* The following compatibles are obsolete */
 	{
