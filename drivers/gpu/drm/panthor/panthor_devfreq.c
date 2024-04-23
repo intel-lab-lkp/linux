@@ -91,6 +91,7 @@ static int panthor_devfreq_get_dev_status(struct device *dev,
 	spin_lock_irqsave(&pdevfreq->lock, irqflags);
 
 	panthor_devfreq_update_utilization(pdevfreq);
+	ptdev->current_frequency = status->current_frequency;
 
 	status->total_time = ktime_to_ns(ktime_add(pdevfreq->busy_time,
 						   pdevfreq->idle_time));
@@ -130,6 +131,7 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	struct panthor_devfreq *pdevfreq;
 	struct dev_pm_opp *opp;
 	unsigned long cur_freq;
+	unsigned long freq = ULONG_MAX;
 	int ret;
 
 	pdevfreq = drmm_kzalloc(&ptdev->base, sizeof(*ptdev->devfreq), GFP_KERNEL);
@@ -201,6 +203,14 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 		DRM_DEV_ERROR(dev, "Couldn't set recommended OPP\n");
 		return ret;
 	}
+
+	dev_pm_opp_put(opp);
+
+	/* Find the fastest defined rate  */
+	opp = dev_pm_opp_find_freq_floor(dev, &freq);
+	if (IS_ERR(opp))
+		return PTR_ERR(opp);
+	ptdev->fast_rate = freq;
 
 	dev_pm_opp_put(opp);
 
