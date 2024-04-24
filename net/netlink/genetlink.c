@@ -726,6 +726,7 @@ void *__genl_sk_priv_get(struct genl_family *family, struct sock *sk)
 		return ERR_PTR(-EINVAL);
 	return xa_load(family->sock_privs, (unsigned long) sk);
 }
+EXPORT_SYMBOL(__genl_sk_priv_get);
 
 /**
  * genl_sk_priv_get - Get family private pointer for socket
@@ -764,6 +765,7 @@ void *genl_sk_priv_get(struct genl_family *family, struct sock *sk)
 	}
 	return priv;
 }
+EXPORT_SYMBOL(genl_sk_priv_get);
 
 /**
  * genl_register_family - register a generic netlink family
