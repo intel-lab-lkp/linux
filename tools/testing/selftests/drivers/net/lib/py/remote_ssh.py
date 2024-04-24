@@ -20,7 +20,7 @@ class Remote:
             self._tmpdir = None
 
     def cmd(self, comm):
-        return subprocess.Popen(["ssh", "-q", self.name, comm],
+        return subprocess.Popen(["ssh", "-t", "-q", self.name, comm],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _mktmp(self):
