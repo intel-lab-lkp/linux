@@ -27,6 +27,7 @@
 
 #include "i915_drv.h"
 #include "i915_reg.h"
+#include "intel_darkscreen.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
 #include "intel_display_trace.h"
@@ -438,6 +439,7 @@ void intel_cpu_fifo_underrun_irq_handler(struct drm_i915_private *dev_priv,
 	}
 
 	intel_fbc_handle_fifo_underrun_irq(dev_priv);
+	intel_darkscreen_schedule_work(crtc);
 }
 
 /**
