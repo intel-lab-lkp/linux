@@ -10,6 +10,8 @@
 #ifndef __ASM_ATOMIC_LSE_H
 #define __ASM_ATOMIC_LSE_H
 
+#include <linux/overflow.h>
+
 #define ATOMIC_OP(op, asm_op)						\
 static __always_inline void						\
 __lse_atomic_##op(int i, atomic_t *v)					\
@@ -82,13 +84,13 @@ ATOMIC_FETCH_OP_SUB(        )
 static __always_inline int						\
 __lse_atomic_add_return##name(int i, atomic_t *v)			\
 {									\
-	return __lse_atomic_fetch_add##name(i, v) + i;			\
+	return wrapping_add(int, __lse_atomic_fetch_add##name(i, v), i);\
 }									\
 									\
 static __always_inline int						\
 __lse_atomic_sub_return##name(int i, atomic_t *v)			\
 {									\
-	return __lse_atomic_fetch_sub(i, v) - i;			\
+	return wrapping_sub(int, __lse_atomic_fetch_sub(i, v), i);	\
 }
 
 ATOMIC_OP_ADD_SUB_RETURN(_relaxed)
@@ -189,13 +191,13 @@ ATOMIC64_FETCH_OP_SUB(        )
 static __always_inline long						\
 __lse_atomic64_add_return##name(s64 i, atomic64_t *v)			\
 {									\
-	return __lse_atomic64_fetch_add##name(i, v) + i;		\
+	return wrapping_add(s64, __lse_atomic64_fetch_add##name(i, v), i); \
 }									\
 									\
 static __always_inline long						\
 __lse_atomic64_sub_return##name(s64 i, atomic64_t *v)			\
 {									\
-	return __lse_atomic64_fetch_sub##name(i, v) - i;		\
+	return wrapping_sub(s64, __lse_atomic64_fetch_sub##name(i, v), i); \
 }
 
 ATOMIC64_OP_ADD_SUB_RETURN(_relaxed)
