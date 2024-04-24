@@ -50,6 +50,7 @@
 #include "i915_vma.h"
 #include "i915_vma_types.h"
 #include "intel_bios.h"
+#include "intel_darkscreen.h"
 #include "intel_display.h"
 #include "intel_display_limits.h"
 #include "intel_display_power.h"
@@ -1510,6 +1511,8 @@ struct intel_crtc {
 
 	/* for loading single buffered registers during vblank */
 	struct pm_qos_request vblank_pm_qos;
+
+	struct intel_darkscreen dark_screen;
 
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
