@@ -825,6 +825,12 @@ attribute-sets:
         name: actions
         type: nest
         nested-attributes: action-attrs
+      -
+        name: psample_group
+        type: u32
+      -
+        name: psample_cookie
+        type: binary
   -
     name: userspace-attrs
     enum-name: ovs-userspace-attr

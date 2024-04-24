@@ -2561,6 +2561,9 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 				  u32 mpls_label_count, bool log,
 				  u32 depth);
 
+static int copy_action(const struct nlattr *from,
+		       struct sw_flow_actions **sfa, bool log);
+
 static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 				    const struct sw_flow_key *key,
 				    struct sw_flow_actions **sfa,
@@ -2569,10 +2572,10 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 				    u32 depth)
 {
 	const struct nlattr *attrs[OVS_SAMPLE_ATTR_MAX + 1];
-	const struct nlattr *probability, *actions;
+	const struct nlattr *probability, *actions, *group, *cookie;
+	struct sample_arg arg = {};
 	const struct nlattr *a;
 	int rem, start, err;
-	struct sample_arg arg;
 
 	memset(attrs, 0, sizeof(attrs));
 	nla_for_each_nested(a, attr, rem) {
@@ -2589,7 +2592,19 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 		return -EINVAL;
 
 	actions = attrs[OVS_SAMPLE_ATTR_ACTIONS];
-	if (!actions || (nla_len(actions) && nla_len(actions) < NLA_HDRLEN))
+	if (actions && (!nla_len(actions) || nla_len(actions) < NLA_HDRLEN))
+		return -EINVAL;
+
+	group = attrs[OVS_SAMPLE_ATTR_PSAMPLE_GROUP];
+	if (group && nla_len(group) != sizeof(u32))
+		return -EINVAL;
+
+	cookie = attrs[OVS_SAMPLE_ATTR_PSAMPLE_COOKIE];
+	if (cookie &&
+	    (!group || nla_len(cookie) > OVS_PSAMPLE_COOKIE_MAX_SIZE))
+		return -EINVAL;
+
+	if (!group && !actions)
 		return -EINVAL;
 
 	/* validation done, copy sample action. */
@@ -2608,7 +2623,19 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 	 * If the sample is the last action, it can always be excuted
 	 * rather than deferred.
 	 */
-	arg.exec = last || !actions_may_change_flow(actions);
+	if (actions && (last || !actions_may_change_flow(actions)))
+		arg.flags |= OVS_SAMPLE_ARG_FLAG_EXEC;
+
+	if (group) {
+		arg.flags |= OVS_SAMPLE_ARG_FLAG_PSAMPLE;
+		arg.group_id = nla_get_u32(group);
+	}
+
+	if (cookie) {
+		memcpy(&arg.cookie[0], nla_data(cookie), nla_len(cookie));
+		arg.cookie_len = nla_len(cookie);
+	}
+
 	arg.probability = nla_get_u32(probability);
 
 	err = ovs_nla_add_action(sfa, OVS_SAMPLE_ATTR_ARG, &arg, sizeof(arg),
@@ -2616,12 +2643,13 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 	if (err)
 		return err;
 
-	err = __ovs_nla_copy_actions(net, actions, key, sfa,
-				     eth_type, vlan_tci, mpls_label_count, log,
-				     depth + 1);
-
-	if (err)
-		return err;
+	if (actions) {
+		err = __ovs_nla_copy_actions(net, actions, key, sfa,
+					     eth_type, vlan_tci,
+					     mpls_label_count, log, depth + 1);
+		if (err)
+			return err;
+	}
 
 	add_nested_action_end(*sfa, start);
 
@@ -3553,20 +3581,38 @@ static int sample_action_to_attr(const struct nlattr *attr,
 		goto out;
 	}
 
-	ac_start = nla_nest_start_noflag(skb, OVS_SAMPLE_ATTR_ACTIONS);
-	if (!ac_start) {
-		err = -EMSGSIZE;
-		goto out;
+	if (arg->flags & OVS_SAMPLE_ARG_FLAG_PSAMPLE) {
+		if (nla_put_u32(skb, OVS_SAMPLE_ATTR_PSAMPLE_GROUP,
+				arg->group_id)) {
+			err = -EMSGSIZE;
+			goto out;
+		}
+
+		if (arg->cookie_len &&
+		    nla_put(skb, OVS_SAMPLE_ATTR_PSAMPLE_COOKIE,
+			    arg->cookie_len, &arg->cookie[0])) {
+			err = -EMSGSIZE;
+			goto out;
+		}
 	}
 
-	err = ovs_nla_put_actions(actions, rem, skb);
+	if (nla_ok(actions, rem)) {
+		ac_start = nla_nest_start_noflag(skb, OVS_SAMPLE_ATTR_ACTIONS);
+		if (!ac_start) {
+			err = -EMSGSIZE;
+			goto out;
+		}
+		err = ovs_nla_put_actions(actions, rem, skb);
+	}
 
 out:
 	if (err) {
-		nla_nest_cancel(skb, ac_start);
+		if (ac_start)
+			nla_nest_cancel(skb, ac_start);
 		nla_nest_cancel(skb, start);
 	} else {
-		nla_nest_end(skb, ac_start);
+		if (ac_start)
+			nla_nest_end(skb, ac_start);
 		nla_nest_end(skb, start);
 	}
 

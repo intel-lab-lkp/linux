@@ -639,6 +639,7 @@ enum ovs_flow_attr {
 #define OVS_UFID_F_OMIT_MASK     (1 << 1)
 #define OVS_UFID_F_OMIT_ACTIONS  (1 << 2)
 
+#define OVS_PSAMPLE_COOKIE_MAX_SIZE 16
 /**
  * enum ovs_sample_attr - Attributes for %OVS_ACTION_ATTR_SAMPLE action.
  * @OVS_SAMPLE_ATTR_PROBABILITY: 32-bit fraction of packets to sample with
@@ -646,15 +647,27 @@ enum ovs_flow_attr {
  * %UINT32_MAX samples all packets and intermediate values sample intermediate
  * fractions of packets.
  * @OVS_SAMPLE_ATTR_ACTIONS: Set of actions to execute in sampling event.
- * Actions are passed as nested attributes.
+ * Actions are passed as nested attributes. Optional if
+ * OVS_SAMPLE_ATTR_PSAMPLE_GROUP is set.
+ * @OVS_SAMPLE_ATTR_PSAMPLE_GROUP: A 32-bit number to be used as psample group.
+ * Optional if OVS_SAMPLE_ATTR_ACTIONS is set.
+ * @OVS_SAMPLE_ATTR_PSAMPLE_COOKIE: A variable-length binary cookie that, if
+ * provided, will be copied to the psample cookie.
  *
- * Executes the specified actions with the given probability on a per-packet
- * basis.
+ * Either OVS_SAMPLE_ATTR_PSAMPLE_GROUP or OVS_SAMPLE_ATTR_ACTIONS must be
+ * specified.
+ *
+ * Executes the specified actions and/or sends the packet to psample
+ * with the given probability on a per-packet basis.
  */
 enum ovs_sample_attr {
 	OVS_SAMPLE_ATTR_UNSPEC,
-	OVS_SAMPLE_ATTR_PROBABILITY, /* u32 number */
-	OVS_SAMPLE_ATTR_ACTIONS,     /* Nested OVS_ACTION_ATTR_* attributes. */
+	OVS_SAMPLE_ATTR_PROBABILITY,	/* u32 number */
+	OVS_SAMPLE_ATTR_ACTIONS,	/* Nested OVS_ACTION_ATTR_
+					 * attributes.
+					 */
+	OVS_SAMPLE_ATTR_PSAMPLE_GROUP,	/* u32 number */
+	OVS_SAMPLE_ATTR_PSAMPLE_COOKIE,	/* binary */
 	__OVS_SAMPLE_ATTR_MAX,
 
 #ifdef __KERNEL__
@@ -665,13 +678,27 @@ enum ovs_sample_attr {
 #define OVS_SAMPLE_ATTR_MAX (__OVS_SAMPLE_ATTR_MAX - 1)
 
 #ifdef __KERNEL__
+
+/* Definition for flags in struct sample_arg. */
+enum {
+	/* When set, actions in sample will not change the flows. */
+	OVS_SAMPLE_ARG_FLAG_EXEC = 1 << 0,
+	/* When set, the packet will be sent to psample. */
+	OVS_SAMPLE_ARG_FLAG_PSAMPLE = 1 << 1,
+};
+
 struct sample_arg {
-	bool exec;                   /* When true, actions in sample will not
-				      * change flow keys. False otherwise.
-				      */
-	u32  probability;            /* Same value as
-				      * 'OVS_SAMPLE_ATTR_PROBABILITY'.
-				      */
+	u16 flags;		/* Flags that modify the behavior of the
+				 * action. See SAMPLE_ARG_FLAG_*.
+				 */
+	u32  probability;       /* Same value as
+				 * 'OVS_SAMPLE_ATTR_PROBABILITY'.
+				 */
+	u32  group_id;		/* Same value as
+				 * 'OVS_SAMPLE_ATTR_PSAMPLE_GROUP'.
+				 */
+	u8  cookie_len;		/* Length of psample cookie. */
+	char cookie[OVS_PSAMPLE_COOKIE_MAX_SIZE]; /* psample cookie data. */
 };
 #endif
 
