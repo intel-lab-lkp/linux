@@ -30,5 +30,6 @@ Video4Linux (V4L) driver-specific documentation
 	si476x
 	starfive_camss
 	vimc
+	visconti-viif
 	visl
 	vivid

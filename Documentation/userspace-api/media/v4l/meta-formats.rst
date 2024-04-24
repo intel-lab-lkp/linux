@@ -18,4 +18,5 @@ These formats are used for the :ref:`metadata` interface only.
     metafmt-uvc
     metafmt-vsp1-hgo
     metafmt-vsp1-hgt
+    metafmt-visconti-viif
     metafmt-vivid

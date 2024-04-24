@@ -1,0 +1,18 @@
+digraph board {
+        rankdir=TB
+        n00000001 [label="{{<port0> 0} | visconti-viif:csi2rx\n/dev/v4l-subdev0 | {<port1> 1}}", shape=Mrecord, style=filled, fillcolor=green]
+        n00000001:port1 -> n00000004:port0
+        n00000004 [label="{{<port0> 0 | <port4> 4} | visconti-viif:isp\n/dev/v4l-subdev1 | {<port1> 1 | <port2> 2 | <port3> 3 | <port5> 5}}", shape=Mrecord, style=filled, fillcolor=green]
+        n00000004:port1 -> n0000000b
+        n00000004:port2 -> n0000000f
+        n00000004:port3 -> n00000013
+        n00000004:port5 -> n0000001b
+        n0000000b [label="viif_capture_post0\n/dev/video0", shape=box, style=filled, fillcolor=yellow]
+        n0000000f [label="viif_capture_post1\n/dev/video1", shape=box, style=filled, fillcolor=yellow]
+        n00000013 [label="viif_capture_sub\n/dev/video2", shape=box, style=filled, fillcolor=yellow]
+        n00000017 [label="viif_params\n/dev/video3", shape=box, style=filled, fillcolor=yellow]
+        n00000017 -> n00000004:port4
+        n0000001b [label="viif_stats\n/dev/video4", shape=box, style=filled, fillcolor=yellow]
+        n0000002b [label="{{} | imx219 1-0010\n/dev/v4l-subdev2 | {<port0> 0}}", shape=Mrecord, style=filled, fillcolor=green]
+        n0000002b:port0 -> n00000001:port0
+}
