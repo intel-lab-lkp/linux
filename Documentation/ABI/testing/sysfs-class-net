@@ -352,3 +352,19 @@ Description:
 		0  threaded mode disabled for this dev
 		1  threaded mode enabled for this dev
 		== ==================================
+
+What:           /sys/class/net/<iface>/max_mtu
+Date:           April 2024
+KernelVersion:  6.10
+Contact:        netdev@vger.kernel.org
+Description:
+                Indicates the interface's maximum supported MTU value, in
+                bytes, and in decimal format.
+
+What:           /sys/class/net/<iface>/min_mtu
+Date:           April 2024
+KernelVersion:  6.10
+Contact:        netdev@vger.kernel.org
+Description:
+                Indicates the interface's minimum supported MTU value, in
+                bytes, and in decimal format.
