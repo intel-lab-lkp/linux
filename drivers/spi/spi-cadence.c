@@ -111,6 +111,7 @@
  * @dev_busy:		Device busy flag
  * @is_decoded_cs:	Flag for decoder property set or not
  * @tx_fifo_depth:	Depth of the TX FIFO
+ * @rstc:		Optional reset control for SPI controller
  */
 struct cdns_spi {
 	void __iomem *regs;
@@ -125,6 +126,7 @@ struct cdns_spi {
 	u8 dev_busy;
 	u32 is_decoded_cs;
 	unsigned int tx_fifo_depth;
+	struct reset_control *rstc;
 };
 
 /* Macros for the SPI controller read/write */
@@ -587,6 +589,16 @@ static int cdns_spi_probe(struct platform_device *pdev)
 		ret = PTR_ERR(xspi->pclk);
 		goto remove_ctlr;
 	}
+
+	xspi->rstc = devm_reset_control_get_optional_exclusive(&pdev->dev, NULL);
+	if (IS_ERR(xspi->rstc)) {
+		ret = PTR_ERR(xspi->rstc);
+		dev_err(&pdev->dev, "Cannot get SPI reset.\n");
+		goto remove_ctlr;
+	}
+
+	reset_control_assert(xspi->rstc);
+	reset_control_deassert(xspi->rstc);
 
 	if (!spi_controller_is_target(ctlr)) {
 		xspi->ref_clk = devm_clk_get_enabled(&pdev->dev, "ref_clk");
