@@ -20,7 +20,9 @@ struct record_opts;
 #ifdef HAVE_BPF_SKEL
 int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		    struct record_opts *opts);
-int off_cpu_write(struct perf_session *session);
+ssize_t off_cpu_strip(struct evlist *evlist, struct mmap *mp,
+		      char *dst, size_t size);
+int off_cpu_prepare_parse(struct evlist *evlist);
 #else
 static inline int off_cpu_prepare(struct evlist *evlist __maybe_unused,
 				  struct target *target __maybe_unused,
@@ -28,8 +30,14 @@ static inline int off_cpu_prepare(struct evlist *evlist __maybe_unused,
 {
 	return -1;
 }
-
-static inline int off_cpu_write(struct perf_session *session __maybe_unused)
+static inline ssize_t off_cpu_strip(struct evlist *evlist __maybe_unused,
+				    struct mmap *mp __maybe_unused,
+				    char *dst __maybe_unused,
+				    size_t size __maybe_unused)
+{
+	return -1;
+}
+static inline int off_cpu_prepare_parse(struct evlist *evlist __maybe_unused)
 {
 	return -1;
 }

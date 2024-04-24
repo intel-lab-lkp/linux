@@ -12,6 +12,9 @@
 #include "util/thread_map.h"
 #include "util/cgroup.h"
 #include "util/strlist.h"
+#include "util/mmap.h"
+#include "util/sample.h"
+#include <perf/mmap.h>
 #include <bpf/bpf.h>
 
 #include "bpf_skel/off_cpu.skel.h"
@@ -22,51 +25,6 @@
 #define OFF_CPU_TIMESTAMP  (~0ull << 32)
 
 static struct off_cpu_bpf *skel;
-
-struct off_cpu_key {
-	u32 pid;
-	u32 tgid;
-	u32 stack_id;
-	u32 state;
-	u64 cgroup_id;
-};
-
-union off_cpu_data {
-	struct perf_event_header hdr;
-	u64 array[1024 / sizeof(u64)];
-};
-
-static int off_cpu_config(struct evlist *evlist)
-{
-	struct evsel *evsel;
-	struct perf_event_attr attr = {
-		.type	= PERF_TYPE_SOFTWARE,
-		.config = PERF_COUNT_SW_BPF_OUTPUT,
-		.size	= sizeof(attr), /* to capture ABI version */
-	};
-	char *evname = strdup(OFFCPU_EVENT);
-
-	if (evname == NULL)
-		return -ENOMEM;
-
-	evsel = evsel__new(&attr);
-	if (!evsel) {
-		free(evname);
-		return -ENOMEM;
-	}
-
-	evsel->core.attr.freq = 1;
-	evsel->core.attr.sample_period = 1;
-	/* off-cpu analysis depends on stack trace */
-	evsel->core.attr.sample_type = PERF_SAMPLE_CALLCHAIN;
-
-	evlist__add(evlist, evsel);
-
-	free(evsel->name);
-	evsel->name = evname;
-
-	return 0;
-}
 
 static void off_cpu_start(void *arg)
 {
@@ -125,18 +83,29 @@ cleanup:
 	btf__free(btf);
 }
 
+int off_cpu_prepare_parse(struct evlist *evlist)
+{
+	struct evsel *evsel;
+
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT);
+	if (evsel == NULL)
+		return -1;
+
+	evsel->core.attr.sample_type = OFFCPU_SAMPLE_TYPES;
+
+	return 0;
+}
+
 int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		    struct record_opts *opts)
 {
 	int err, fd, i;
 	int ncpus = 1, ntasks = 1, ncgrps = 1;
+	u64 sid = 0;
 	struct strlist *pid_slist = NULL;
 	struct str_node *pos;
-
-	if (off_cpu_config(evlist) < 0) {
-		pr_err("Failed to config off-cpu BPF event\n");
-		return -1;
-	}
+	struct evsel *evsel;
+	struct perf_cpu pcpu;
 
 	skel = off_cpu_bpf__open();
 	if (!skel) {
@@ -250,7 +219,6 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 	}
 
 	if (evlist__first(evlist)->cgrp) {
-		struct evsel *evsel;
 		u8 val = 1;
 
 		skel->bss->has_cgroup = 1;
@@ -272,6 +240,25 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		}
 	}
 
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT);
+	if (evsel == NULL) {
+		pr_err("%s evsel not found\n", OFFCPU_EVENT);
+		goto out;
+	}
+
+	if (evsel->core.id)
+		sid = evsel->core.id[0];
+
+	skel->bss->sample_id = sid;
+	skel->bss->sample_type = OFFCPU_SAMPLE_TYPES;
+
+	perf_cpu_map__for_each_cpu(pcpu, i, evsel->core.cpus) {
+		bpf_map__update_elem(skel->maps.offcpu_output,
+				     &pcpu.cpu, sizeof(int),
+				     xyarray__entry(evsel->core.fd, pcpu.cpu, 0),
+				     sizeof(__u32), BPF_ANY);
+	}
+
 	err = off_cpu_bpf__attach(skel);
 	if (err) {
 		pr_err("Failed to attach off-cpu BPF skeleton\n");
@@ -279,7 +266,7 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 	}
 
 	if (perf_hooks__set_hook("record_start", off_cpu_start, evlist) ||
-	    perf_hooks__set_hook("record_end", off_cpu_finish, evlist)) {
+	    perf_hooks__set_hook("record_done", off_cpu_finish, evlist)) {
 		pr_err("Failed to attach off-cpu skeleton\n");
 		goto out;
 	}
@@ -291,105 +278,88 @@ out:
 	return -1;
 }
 
-int off_cpu_write(struct perf_session *session)
+ssize_t off_cpu_strip(struct evlist *evlist, struct mmap *mp, char *dst, size_t size)
 {
-	int bytes = 0, size;
-	int fd, stack;
-	u64 sample_type, val, sid = 0;
+	/*
+	 * In this function, we read events one by one,
+	 * stripping actual samples from raw data.
+	 */
+
+	union perf_event *event, tmp;
+	u64 sample_type = OFFCPU_SAMPLE_TYPES;
+	size_t written = 0, event_sz, write_sz, raw_sz_aligned, offset = 0;
+	void *src;
+	int err = 0, n = 0;
+	struct perf_sample sample;
 	struct evsel *evsel;
-	struct perf_data_file *file = &session->data->file;
-	struct off_cpu_key prev, key;
-	union off_cpu_data data = {
-		.hdr = {
-			.type = PERF_RECORD_SAMPLE,
-			.misc = PERF_RECORD_MISC_USER,
-		},
-	};
-	u64 tstamp = OFF_CPU_TIMESTAMP;
 
-	skel->bss->enabled = 0;
-
-	evsel = evlist__find_evsel_by_str(session->evlist, OFFCPU_EVENT);
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT);
 	if (evsel == NULL) {
 		pr_err("%s evsel not found\n", OFFCPU_EVENT);
-		return 0;
-	}
-
-	sample_type = evsel->core.attr.sample_type;
-
-	if (sample_type & ~OFFCPU_SAMPLE_TYPES) {
-		pr_err("not supported sample type: %llx\n",
-		       (unsigned long long)sample_type);
 		return -1;
 	}
 
-	if (sample_type & (PERF_SAMPLE_ID | PERF_SAMPLE_IDENTIFIER)) {
-		if (evsel->core.id)
-			sid = evsel->core.id[0];
+	/* for writing sample time*/
+	if (sample_type & PERF_SAMPLE_IDENTIFIER)
+		++n;
+	if (sample_type & PERF_SAMPLE_IP)
+		++n;
+	if (sample_type & PERF_SAMPLE_TID)
+		++n;
+
+	/* no need for perf_mmap__consume(), it will be handled by perf_mmap__push() */
+	while ((event = perf_mmap__read_event(&mp->core)) != NULL) {
+		event_sz = event->header.size;
+		write_sz = event_sz;
+		src = event;
+
+		if (event->header.type == PERF_RECORD_SAMPLE) {
+			err = evlist__parse_sample(evlist, event, &sample);
+			if (err) {
+				pr_err("Failed to parse off-cpu sample\n");
+				return -1;
+			}
+
+			if (sample.raw_data && evsel->core.id) {
+				bool flag = false;
+
+				for (u32 i = 0; i < evsel->core.ids; i++) {
+					if (sample.id == evsel->core.id[i]) {
+						flag = true;
+						break;
+					}
+				}
+				if (flag) {
+					memcpy(&tmp, event, event_sz);
+
+					/* raw data has extra bits for alignment, discard them */
+					raw_sz_aligned = sample.raw_size - sizeof(u32);
+					memcpy(tmp.sample.array, sample.raw_data, raw_sz_aligned);
+
+					write_sz = sizeof(struct perf_event_header) +
+							  raw_sz_aligned;
+
+					/* without this we'll have out of order events */
+					if (sample_type & PERF_SAMPLE_TIME)
+						tmp.sample.array[n] = sample.time;
+
+					tmp.header.size = write_sz;
+					tmp.header.type = PERF_RECORD_SAMPLE;
+					tmp.header.misc = PERF_RECORD_MISC_USER;
+
+					src = &tmp;
+				}
+			}
+		}
+		if (offset + event_sz > size || written + write_sz > size)
+			break;
+
+		memcpy(dst, src, write_sz);
+
+		dst += write_sz;
+		written += write_sz;
+		offset += event_sz;
 	}
 
-	fd = bpf_map__fd(skel->maps.off_cpu);
-	stack = bpf_map__fd(skel->maps.stacks);
-	memset(&prev, 0, sizeof(prev));
-
-	while (!bpf_map_get_next_key(fd, &prev, &key)) {
-		int n = 1;  /* start from perf_event_header */
-		int ip_pos = -1;
-
-		bpf_map_lookup_elem(fd, &key, &val);
-
-		if (sample_type & PERF_SAMPLE_IDENTIFIER)
-			data.array[n++] = sid;
-		if (sample_type & PERF_SAMPLE_IP) {
-			ip_pos = n;
-			data.array[n++] = 0;  /* will be updated */
-		}
-		if (sample_type & PERF_SAMPLE_TID)
-			data.array[n++] = (u64)key.pid << 32 | key.tgid;
-		if (sample_type & PERF_SAMPLE_TIME)
-			data.array[n++] = tstamp;
-		if (sample_type & PERF_SAMPLE_ID)
-			data.array[n++] = sid;
-		if (sample_type & PERF_SAMPLE_CPU)
-			data.array[n++] = 0;
-		if (sample_type & PERF_SAMPLE_PERIOD)
-			data.array[n++] = val;
-		if (sample_type & PERF_SAMPLE_CALLCHAIN) {
-			int len = 0;
-
-			/* data.array[n] is callchain->nr (updated later) */
-			data.array[n + 1] = PERF_CONTEXT_USER;
-			data.array[n + 2] = 0;
-
-			bpf_map_lookup_elem(stack, &key.stack_id, &data.array[n + 2]);
-			while (data.array[n + 2 + len])
-				len++;
-
-			/* update length of callchain */
-			data.array[n] = len + 1;
-
-			/* update sample ip with the first callchain entry */
-			if (ip_pos >= 0)
-				data.array[ip_pos] = data.array[n + 2];
-
-			/* calculate sample callchain data array length */
-			n += len + 2;
-		}
-		if (sample_type & PERF_SAMPLE_CGROUP)
-			data.array[n++] = key.cgroup_id;
-
-		size = n * sizeof(u64);
-		data.hdr.size = size;
-		bytes += size;
-
-		if (perf_data_file__write(file, &data, size) < 0) {
-			pr_err("failed to write perf data, error: %m\n");
-			return bytes;
-		}
-
-		prev = key;
-		/* increase dummy timestamp to sort later samples */
-		tstamp++;
-	}
-	return bytes;
+	return written;
 }
