@@ -20,7 +20,8 @@ tests="
 	nat_related_v4				ip4-nat-related: ICMP related matches work with SNAT
 	netlink_checks				ovsnl: validate netlink attrs and settings
 	upcall_interfaces			ovs: test the upcall interfaces
-	drop_reason				drop: test drop reasons are emitted"
+	drop_reason				drop: test drop reasons are emitted
+	psample					psample: Sampling packets with psample"
 
 info() {
     [ $VERBOSE = 0 ] || echo $*
@@ -170,6 +171,19 @@ ovs_drop_reason_count()
 	return `echo "$perf_output" | grep "$pattern" | wc -l`
 }
 
+ovs_test_flow_fails () {
+	ERR_MSG="Flow actions may not be safe on all matching packets"
+
+	PRE_TEST=$(dmesg | grep -c "${ERR_MSG}")
+    ovs_add_flow $@ &> /dev/null $@ && return 1
+	POST_TEST=$(dmesg | grep -c "${ERR_MSG}")
+
+	if [ "$PRE_TEST" == "$POST_TEST" ]; then
+		return 1
+	fi
+    return 0
+}
+
 usage() {
 	echo
 	echo "$0 [OPTIONS] [TEST]..."
@@ -182,6 +196,87 @@ usage() {
 	echo
 	echo "Available tests${tests}"
 	exit 1
+}
+
+
+# psample test
+# - samples packets with psample
+test_psample() {
+	sbx_add "test_psample" || return $?
+
+	# Add a datapath with per-vport dispatching.
+	ovs_add_dp "test_psample" psample -V 2:1 || return 1
+
+	info "create namespaces"
+	ovs_add_netns_and_veths "test_psample" "psample" \
+		client c0 c1 172.31.110.10/24 -u || return 1
+	ovs_add_netns_and_veths "test_psample" "psample" \
+		server s0 s1 172.31.110.20/24 -u || return 1
+
+	# Check if psample actions can be configured.
+	ovs_add_flow "test_psample" psample \
+	'in_port(1),eth(),eth_type(0x0806),arp()' 'sample(sample=100%,group_id=1,cookie=0102)'
+	if [ $? == 1 ]; then
+		info "no support for psample - skipping"
+		ovs_exit_sig
+		return $ksft_skip
+	fi
+
+	ovs_del_flows "test_psample" psample
+
+	# Allow ARP
+	ovs_add_flow "test_psample" psample \
+		'in_port(1),eth(),eth_type(0x0806),arp()' '2' || return 1
+	ovs_add_flow "test_psample" psample \
+		'in_port(2),eth(),eth_type(0x0806),arp()' '1' || return 1
+
+    # Test action verification.
+	OLDIFS=$IFS
+	IFS='*'
+	min_key='in_port(1),eth(),eth_type(0x800),ipv4()'
+	for testcase in \
+		"cookie to large"*"sample(sample=100%,group_id=1,cookie=1615141312111009080706050403020100)" \
+		"no group or action"*"sample(sample=100%)" \
+		"no group or action with cookie"*"sample(sample=100%,cookie=deadbeef)";
+	do
+		set -- $testcase;
+		ovs_test_flow_fails "test_psample" psample $min_key $2
+		if [ $? == 1 ]; then
+			info "failed - $1"
+			return 1
+		fi
+	done
+	IFS=$OLDIFS
+
+	# Sample all traffic. In this case the sample action only has psample
+	# arguments.
+	ovs_add_flow "test_psample" psample \
+	"in_port(1),eth(),eth_type(0x0800),ipv4(src=172.31.110.10,proto=1),icmp()" "sample(sample=100%,group_id=1,cookie=c0ffee),2"
+
+	# Sample all traffic. In this case the sample action has both psample
+	# arguments and an upcall emulating simultaneous psample and
+	# sFlow / IPFIX.
+	nlpid=$(grep -E "listening on upcall packet handler" $ovs_dir/s0.out | cut -d ":" -f 2 | tr -d ' ')
+	ovs_add_flow "test_psample" psample \
+	"in_port(2),eth(),eth_type(0x0800),ipv4(src=172.31.110.20,proto=1),icmp()" "sample(sample=100%,group_id=2,cookie=eeff0c,actions(userspace(pid=${nlpid},userdata=eeff0c))),1"
+
+	# Record psample data.
+	python3 $ovs_base/ovs-dpctl.py psample  >$ovs_dir/psample.out 2>$ovs_dir/psample.err &
+	pid=$!
+	on_exit "ovs_sbx test_psample kill -TERM $pid 2>/dev/null"
+
+	# Send a single ping.
+	sleep 1
+	ovs_sbx "test_psample" ip netns exec client ping -I c1 172.31.110.20 -c 1 || return 1
+	sleep 1
+
+	# We should have received one userspace action upcall and 2 psample packets.
+	grep -E "userspace action command" $ovs_dir/s0.out >/dev/null 2>&1 || return 1
+
+	grep -E "rate:1,group:1,cookie:c0ffee" $ovs_dir/psample.out >/dev/null 2>&1 || return 1
+	grep -E "rate:1,group:2,cookie:eeff0c" $ovs_dir/psample.out >/dev/null 2>&1 || return 1
+
+	return 0
 }
 
 # drop_reason test
