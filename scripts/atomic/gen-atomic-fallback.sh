@@ -297,6 +297,7 @@ cat << EOF
 #define _LINUX_ATOMIC_FALLBACK_H
 
 #include <linux/compiler.h>
+#include <linux/overflow.h>
 
 EOF
 

@@ -19,13 +19,13 @@ extern s64 generic_atomic64_read(const atomic64_t *v);
 extern void generic_atomic64_set(atomic64_t *v, s64 i);
 
 #define ATOMIC64_OP(op)							\
-extern void generic_atomic64_##op(s64 a, atomic64_t *v);
+extern void __signed_wrap generic_atomic64_##op(s64 a, atomic64_t *v);
 
 #define ATOMIC64_OP_RETURN(op)						\
-extern s64 generic_atomic64_##op##_return(s64 a, atomic64_t *v);
+extern s64 __signed_wrap generic_atomic64_##op##_return(s64 a, atomic64_t *v);
 
 #define ATOMIC64_FETCH_OP(op)						\
-extern s64 generic_atomic64_fetch_##op(s64 a, atomic64_t *v);
+extern s64 __signed_wrap generic_atomic64_fetch_##op(s64 a, atomic64_t *v);
 
 #define ATOMIC64_OPS(op)	ATOMIC64_OP(op) ATOMIC64_OP_RETURN(op) ATOMIC64_FETCH_OP(op)
 

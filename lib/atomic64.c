@@ -67,7 +67,7 @@ void generic_atomic64_set(atomic64_t *v, s64 i)
 EXPORT_SYMBOL(generic_atomic64_set);
 
 #define ATOMIC64_OP(op, c_op)						\
-void generic_atomic64_##op(s64 a, atomic64_t *v)			\
+void __signed_wrap generic_atomic64_##op(s64 a, atomic64_t *v)		\
 {									\
 	unsigned long flags;						\
 	raw_spinlock_t *lock = lock_addr(v);				\
@@ -79,7 +79,7 @@ void generic_atomic64_##op(s64 a, atomic64_t *v)			\
 EXPORT_SYMBOL(generic_atomic64_##op);
 
 #define ATOMIC64_OP_RETURN(op, c_op)					\
-s64 generic_atomic64_##op##_return(s64 a, atomic64_t *v)		\
+s64 __signed_wrap generic_atomic64_##op##_return(s64 a, atomic64_t *v)	\
 {									\
 	unsigned long flags;						\
 	raw_spinlock_t *lock = lock_addr(v);				\
@@ -93,7 +93,7 @@ s64 generic_atomic64_##op##_return(s64 a, atomic64_t *v)		\
 EXPORT_SYMBOL(generic_atomic64_##op##_return);
 
 #define ATOMIC64_FETCH_OP(op, c_op)					\
-s64 generic_atomic64_fetch_##op(s64 a, atomic64_t *v)			\
+s64 __signed_wrap generic_atomic64_fetch_##op(s64 a, atomic64_t *v)	\
 {									\
 	unsigned long flags;						\
 	raw_spinlock_t *lock = lock_addr(v);				\
@@ -135,7 +135,7 @@ s64 generic_atomic64_dec_if_positive(atomic64_t *v)
 	s64 val;
 
 	raw_spin_lock_irqsave(lock, flags);
-	val = v->counter - 1;
+	val = wrapping_sub(typeof(val), v->counter, 1);
 	if (val >= 0)
 		v->counter = val;
 	raw_spin_unlock_irqrestore(lock, flags);
@@ -181,7 +181,7 @@ s64 generic_atomic64_fetch_add_unless(atomic64_t *v, s64 a, s64 u)
 	raw_spin_lock_irqsave(lock, flags);
 	val = v->counter;
 	if (val != u)
-		v->counter += a;
+		wrapping_assign_add(v->counter, a);
 	raw_spin_unlock_irqrestore(lock, flags);
 
 	return val;

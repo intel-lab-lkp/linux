@@ -15,6 +15,7 @@
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/instrumented.h>
+#include <linux/overflow.h>
 
 /**
  * atomic_read() - atomic load with relaxed ordering
@@ -5050,4 +5051,4 @@ atomic_long_dec_if_positive(atomic_long_t *v)
 
 
 #endif /* _LINUX_ATOMIC_INSTRUMENTED_H */
-// ce5b65e0f1f8a276268b667194581d24bed219d4
+// b9cd8314e11c4c818fb469dbd18c7390fcaf9b3c

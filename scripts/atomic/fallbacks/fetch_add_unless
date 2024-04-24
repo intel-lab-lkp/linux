@@ -4,7 +4,7 @@ cat << EOF
 	do {
 		if (unlikely(c == u))
 			break;
-	} while (!raw_${atomic}_try_cmpxchg(v, &c, c + a));
+	} while (!raw_${atomic}_try_cmpxchg(v, &c, wrapping_add(${int}, c, a)));
 
 	return c;
 EOF

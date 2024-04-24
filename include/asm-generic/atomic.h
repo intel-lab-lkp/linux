@@ -55,7 +55,7 @@ static inline int generic_atomic_fetch_##op(int i, atomic_t *v)		\
 #include <linux/irqflags.h>
 
 #define ATOMIC_OP(op, c_op)						\
-static inline void generic_atomic_##op(int i, atomic_t *v)		\
+static inline void __signed_wrap generic_atomic_##op(int i, atomic_t *v)\
 {									\
 	unsigned long flags;						\
 									\
@@ -65,7 +65,7 @@ static inline void generic_atomic_##op(int i, atomic_t *v)		\
 }
 
 #define ATOMIC_OP_RETURN(op, c_op)					\
-static inline int generic_atomic_##op##_return(int i, atomic_t *v)	\
+static inline int __signed_wrap generic_atomic_##op##_return(int i, atomic_t *v)\
 {									\
 	unsigned long flags;						\
 	int ret;							\
@@ -78,7 +78,7 @@ static inline int generic_atomic_##op##_return(int i, atomic_t *v)	\
 }
 
 #define ATOMIC_FETCH_OP(op, c_op)					\
-static inline int generic_atomic_fetch_##op(int i, atomic_t *v)		\
+static inline int __signed_wrap generic_atomic_fetch_##op(int i, atomic_t *v)\
 {									\
 	unsigned long flags;						\
 	int ret;							\

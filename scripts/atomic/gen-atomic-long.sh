@@ -75,6 +75,7 @@ cat << EOF
 #define _LINUX_ATOMIC_LONG_H
 
 #include <linux/compiler.h>
+#include <linux/overflow.h>
 #include <asm/types.h>
 
 #ifdef CONFIG_64BIT

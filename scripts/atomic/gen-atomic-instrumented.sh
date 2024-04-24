@@ -146,6 +146,7 @@ cat << EOF
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/instrumented.h>
+#include <linux/overflow.h>
 
 EOF
 
