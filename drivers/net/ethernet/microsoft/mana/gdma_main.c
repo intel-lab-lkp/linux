@@ -1471,6 +1471,37 @@ static bool mana_is_pf(unsigned short dev_id)
 	return dev_id == MANA_PF_DEVICE_ID;
 }
 
+static ssize_t num_ports_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct gdma_context *gc = pci_get_drvdata(pdev);
+	struct mana_context *ac = gc->mana.driver_data;
+
+	return sysfs_emit(buf, "%d\n", ac->num_ports);
+}
+
+static DEVICE_ATTR_RO(num_ports);
+
+static ssize_t max_num_msix_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct gdma_context *gc = pci_get_drvdata(pdev);
+
+	return sysfs_emit(buf, "%d\n", gc->max_num_msix);
+}
+
+static DEVICE_ATTR_RO(max_num_msix);
+
+static struct attribute *mana_gd_device_attrs[] = {
+	&dev_attr_num_ports.attr,
+	&dev_attr_max_num_msix.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(mana_gd_device);
+
 static int mana_gd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct gdma_context *gc;
@@ -1613,6 +1644,7 @@ static const struct pci_device_id mana_id_table[] = {
 };
 
 static struct pci_driver mana_driver = {
+	.dev_groups	= mana_gd_device_groups,
 	.name		= "mana",
 	.id_table	= mana_id_table,
 	.probe		= mana_gd_probe,
