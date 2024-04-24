@@ -475,6 +475,22 @@ anon_swpout_fallback
 	Usually because failed to allocate some continuous swap space
 	for the huge page.
 
+split_page
+	is incremented every time a huge page is split into base
+	pages. This can happen for a variety of reasons but a common
+	reason is that a huge page is old and is being reclaimed.
+	This action implies splitting all PMD/PTE mapped with the huge page.
+
+split_page_failed
+	is incremented if kernel fails to split huge
+	page. This can happen if the page was pinned by somebody.
+
+deferred_split_page
+	is incremented when a huge page is put onto split
+	queue. This happens when a huge page is partially unmapped and
+	splitting it would free up some memory. Pages on split queue are
+	going to be split under memory pressure.
+
 As the system ages, allocating huge pages may be expensive as the
 system uses memory compaction to copy data around memory to free a
 huge page for use. There are some counters in ``/proc/vmstat`` to help
