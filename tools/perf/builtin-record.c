@@ -389,6 +389,8 @@ struct record_aio {
 static int record__aio_pushfn(struct mmap *map, void *to, void *buf, size_t size)
 {
 	struct record_aio *aio = to;
+	char *bf_stripped = NULL;
+	size_t stripped;
 
 	/*
 	 * map->core.base data pointed by buf is copied into free map->aio.data[] buffer
@@ -403,6 +405,31 @@ static int record__aio_pushfn(struct mmap *map, void *to, void *buf, size_t size
 	 * part of data from map->start till the upper bound and then the reminder
 	 * from the beginning of the kernel buffer till the end of the data chunk.
 	 */
+
+	if (aio->rec->off_cpu) {
+		if (size == 0)
+			return 0;
+
+		map->core.start -= size;
+		size = map->core.end - map->core.start;
+
+		bf_stripped = malloc(size);
+
+		if (bf_stripped == NULL) {
+			pr_err("Failed to allocate off-cpu strip buffer\n");
+			return -ENOMEM;
+		}
+
+		stripped = off_cpu_strip(aio->rec->evlist, map, bf_stripped, size);
+
+		if (stripped < 0) {
+			size = (int)stripped;
+			goto out;
+		}
+
+		size = stripped;
+		buf = bf_stripped;
+	}
 
 	if (record__comp_enabled(aio->rec)) {
 		ssize_t compressed = zstd_compress(aio->rec->session, NULL, aio->data + aio->size,
@@ -431,6 +458,9 @@ static int record__aio_pushfn(struct mmap *map, void *to, void *buf, size_t size
 	}
 
 	aio->size += size;
+
+out:
+	free(bf_stripped);
 
 	return size;
 }
@@ -635,6 +665,38 @@ static int process_locked_synthesized_event(struct perf_tool *tool,
 static int record__pushfn(struct mmap *map, void *to, void *bf, size_t size)
 {
 	struct record *rec = to;
+	int err;
+	char *bf_stripped = NULL;
+	size_t stripped;
+
+	if (rec->off_cpu) {
+		/*
+		 * We'll read all the events at once without masking.
+		 * When reading the remainder from a map, the size is 0, because
+		 * start is shifted to the end so no more data is to be read.
+		 */
+		if (size == 0)
+			return 0;
+
+		map->core.start -= size;
+		/* size in total */
+		size = map->core.end - map->core.start;
+
+		bf_stripped = malloc(size);
+
+		if (bf_stripped == NULL) {
+			pr_err("Failed to allocate off-cpu strip buffer\n");
+			return -ENOMEM;
+		}
+
+		stripped = off_cpu_strip(rec->evlist, map, bf_stripped, size);
+
+		if (stripped < 0)
+			return (int)stripped;
+
+		size = stripped;
+		bf = bf_stripped;
+	}
 
 	if (record__comp_enabled(rec)) {
 		ssize_t compressed = zstd_compress(rec->session, map, map->data,
@@ -648,7 +710,11 @@ static int record__pushfn(struct mmap *map, void *to, void *bf, size_t size)
 	}
 
 	thread->samples++;
-	return record__write(rec, map, bf, size);
+	err = record__write(rec, map, bf, size);
+
+	free(bf_stripped);
+
+	return err;
 }
 
 static volatile sig_atomic_t signr = -1;
@@ -1790,6 +1856,7 @@ record__finish_output(struct record *rec)
 		if (rec->buildid_all)
 			perf_session__dsos_hit_all(rec->session);
 	}
+
 	perf_session__write_header(rec->session, rec->evlist, fd, true);
 
 	return;
@@ -2501,6 +2568,14 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		}
 	}
 
+	if (rec->off_cpu) {
+		err = record__config_off_cpu(rec);
+		if (err) {
+			pr_err("record__config_off_cpu failed, error %d\n", err);
+			goto out_free_threads;
+		}
+	}
+
 	/*
 	 * Normally perf_session__new would do this, but it doesn't have the
 	 * evlist.
@@ -2764,6 +2839,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		 * disable events in this case.
 		 */
 		if (done && !disabled && !target__none(&opts->target)) {
+			perf_hooks__invoke_record_done();
 			trigger_off(&auxtrace_snapshot_trigger);
 			evlist__disable(rec->evlist);
 			disabled = true;
@@ -2827,13 +2903,16 @@ out_free_threads:
 	} else
 		status = err;
 
-	if (rec->off_cpu)
-		rec->bytes_written += off_cpu_write(rec->session);
-
 	record__read_lost_samples(rec);
 	record__synthesize(rec, true);
 	/* this will be recalculated during process_buildids() */
 	rec->samples = 0;
+
+	/* change to the correct sample type for parsing */
+	if (rec->off_cpu && off_cpu_prepare_parse(rec->evlist)) {
+		pr_err("ERROR: Failed to change sample type for off-cpu event\n");
+		goto out_delete_session;
+	}
 
 	if (!err) {
 		if (!rec->timestamp_filename) {
@@ -3198,7 +3277,7 @@ static int switch_output_setup(struct record *rec)
 	unsigned long val;
 
 	/*
-	 * If we're using --switch-output-events, then we imply its 
+	 * If we're using --switch-output-events, then we imply its
 	 * --switch-output=signal, as we'll send a SIGUSR2 from the side band
 	 *  thread to its parent.
 	 */
@@ -4221,9 +4300,14 @@ int cmd_record(int argc, const char **argv)
 	}
 
 	if (rec->off_cpu) {
-		err = record__config_off_cpu(rec);
+		char off_cpu_event[64];
+
+		snprintf(off_cpu_event, sizeof(off_cpu_event),
+			 "bpf-output/no-inherit=1,name=%s/", OFFCPU_EVENT);
+
+		err = parse_event(rec->evlist, off_cpu_event);
 		if (err) {
-			pr_err("record__config_off_cpu failed, error %d\n", err);
+			pr_err("Failed to open off-cpu event\n");
 			goto out;
 		}
 	}
