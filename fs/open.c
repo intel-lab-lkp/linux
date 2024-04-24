@@ -1225,7 +1225,7 @@ inline int build_open_flags(const struct open_how *how, struct open_flags *op)
 	 * values before calling build_open_flags(), but openat2(2) checks all
 	 * of its arguments.
 	 */
-	if (flags & ~VALID_OPEN_FLAGS)
+	if (flags & ~VALID_OPENAT2_FLAGS)
 		return -EINVAL;
 	if (how->resolve & ~VALID_RESOLVE_FLAGS)
 		return -EINVAL;
@@ -1324,6 +1324,14 @@ inline int build_open_flags(const struct open_how *how, struct open_flags *op)
 		if (flags & (O_TRUNC | O_CREAT | __O_TMPFILE))
 			return -EAGAIN;
 		lookup_flags |= LOOKUP_CACHED;
+	}
+
+	if (flags & OA2_INHERIT_CRED) {
+		/* Inherit creds only with scoped look-up modes. */
+		if (!(lookup_flags & LOOKUP_IS_SCOPED))
+			return -EPERM;
+		/* Reject /proc "magic" links if inheriting creds. */
+		lookup_flags |= LOOKUP_NO_MAGICLINKS;
 	}
 
 	op->lookup_flags = lookup_flags;

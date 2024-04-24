@@ -586,6 +586,9 @@ struct nameidata {
 	int		dfd;
 	vfsuid_t	dir_vfsuid;
 	umode_t		dir_mode;
+	kuid_t		dir_open_fsuid;
+	kgid_t		dir_open_fsgid;
+	struct group_info *dir_open_groups;
 } __randomize_layout;
 
 #define ND_ROOT_PRESET 1
@@ -695,6 +698,8 @@ static void terminate_walk(struct nameidata *nd)
 	nd->depth = 0;
 	nd->path.mnt = NULL;
 	nd->path.dentry = NULL;
+	if (nd->dir_open_groups)
+		put_group_info(nd->dir_open_groups);
 }
 
 /* path_put is needed afterwards regardless of success or failure */
@@ -2414,6 +2419,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
+		nd->dir_open_fsuid = current_cred()->fsuid;
+		nd->dir_open_fsgid = current_cred()->fsgid;
+		nd->dir_open_groups = get_current_groups();
 	} else {
 		/* Caller must check execute permissions on the starting path component */
 		struct fd f = fdget_raw(nd->dfd);
@@ -2437,6 +2445,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			path_get(&nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
+		nd->dir_open_fsuid = f.file->f_cred->fsuid;
+		nd->dir_open_fsgid = f.file->f_cred->fsgid;
+		nd->dir_open_groups = get_group_info(
+				f.file->f_cred->group_info);
 		fdput(f);
 	}
 
@@ -3776,6 +3788,29 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	return error;
 }
 
+static const struct cred *openat2_override_creds(struct nameidata *nd)
+{
+	const struct cred *old_cred;
+	struct cred *override_cred;
+
+	override_cred = prepare_creds();
+	if (!override_cred)
+		return NULL;
+
+	override_cred->fsuid = nd->dir_open_fsuid;
+	override_cred->fsgid = nd->dir_open_fsgid;
+	override_cred->group_info = nd->dir_open_groups;
+
+	override_cred->non_rcu = 1;
+
+	old_cred = override_creds(override_cred);
+
+	/* override_cred() gets its own ref */
+	put_cred(override_cred);
+
+	return old_cred;
+}
+
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
@@ -3793,8 +3828,23 @@ static struct file *path_openat(struct nameidata *nd,
 			error = do_o_path(nd, flags, file);
 	} else {
 		const char *s = path_init(nd, flags);
-		file = alloc_empty_file(open_flags, current_cred());
-		error = PTR_ERR_OR_ZERO(file);
+		const struct cred *old_cred = NULL;
+
+		error = 0;
+		if (open_flags & OA2_INHERIT_CRED) {
+			/* Only work with O_CLOEXEC dirs. */
+			if (!get_close_on_exec(nd->dfd))
+				error = -EPERM;
+
+			if (!error)
+				old_cred = openat2_override_creds(nd);
+		}
+		if (!error) {
+			file = alloc_empty_file(open_flags, current_cred());
+			error = PTR_ERR_OR_ZERO(file);
+		} else {
+			file = ERR_PTR(error);
+		}
 		if (!error) {
 			while (!(error = link_path_walk(s, nd)) &&
 			       (s = open_last_lookups(nd, file, op)) != NULL)
@@ -3802,6 +3852,8 @@ static struct file *path_openat(struct nameidata *nd,
 		}
 		if (!error)
 			error = do_open(nd, file, op);
+		if (old_cred)
+			revert_creds(old_cred);
 		terminate_walk(nd);
 		if (IS_ERR(file))
 			return file;
