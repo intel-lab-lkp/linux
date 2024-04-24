@@ -361,6 +361,9 @@ static int ucsi_register_altmode(struct ucsi_connector *con,
 		switch (desc->svid) {
 		case USB_TYPEC_DP_SID:
 			alt = ucsi_register_displayport(con, override, i, desc);
+			if (IS_ERR(alt) && PTR_ERR(alt) == -EOPNOTSUPP)
+				alt = typec_port_register_altmode(con->port, desc);
+
 			break;
 		case USB_TYPEC_NVIDIA_VLINK_SID:
 			if (desc->vdo == USB_TYPEC_NVIDIA_VLINK_DBG_VDO)
