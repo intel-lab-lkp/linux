@@ -55,6 +55,11 @@ properties:
   label:
     description: Descriptive name of the SPI controller.
 
+  resets:
+    description: |
+      Optional entry to specify the reset controller to the SPI
+    maxItems: 1
+
 required:
   - compatible
   - reg
