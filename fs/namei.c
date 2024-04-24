@@ -3781,23 +3781,30 @@ static struct file *path_openat(struct nameidata *nd,
 {
 	struct file *file;
 	int error;
+	u64 open_flags = op->open_flag;
 
-	file = alloc_empty_file(op->open_flag, current_cred());
-	if (IS_ERR(file))
-		return file;
-
-	if (unlikely(file->f_flags & __O_TMPFILE)) {
-		error = do_tmpfile(nd, flags, op, file);
-	} else if (unlikely(file->f_flags & O_PATH)) {
-		error = do_o_path(nd, flags, file);
+	if (unlikely(open_flags & (__O_TMPFILE | O_PATH))) {
+		file = alloc_empty_file(open_flags, current_cred());
+		if (IS_ERR(file))
+			return file;
+		if (open_flags & __O_TMPFILE)
+			error = do_tmpfile(nd, flags, op, file);
+		else
+			error = do_o_path(nd, flags, file);
 	} else {
 		const char *s = path_init(nd, flags);
-		while (!(error = link_path_walk(s, nd)) &&
-		       (s = open_last_lookups(nd, file, op)) != NULL)
-			;
+		file = alloc_empty_file(open_flags, current_cred());
+		error = PTR_ERR_OR_ZERO(file);
+		if (!error) {
+			while (!(error = link_path_walk(s, nd)) &&
+			       (s = open_last_lookups(nd, file, op)) != NULL)
+				;
+		}
 		if (!error)
 			error = do_open(nd, file, op);
 		terminate_walk(nd);
+		if (IS_ERR(file))
+			return file;
 	}
 	if (likely(!error)) {
 		if (likely(file->f_mode & FMODE_OPENED))
