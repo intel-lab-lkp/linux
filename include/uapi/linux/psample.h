@@ -28,6 +28,7 @@ enum psample_command {
 	PSAMPLE_CMD_GET_GROUP,
 	PSAMPLE_CMD_NEW_GROUP,
 	PSAMPLE_CMD_DEL_GROUP,
+	PSAMPLE_CMD_SET_FILTER,
 };
 
 enum psample_tunnel_key_attr {
