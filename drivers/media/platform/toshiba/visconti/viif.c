@@ -19,6 +19,8 @@
 #include "viif.h"
 #include "viif_capture.h"
 #include "viif_csi2rx.h"
+#include "viif_params.h"
+#include "viif_stats.h"
 #include "viif_common.h"
 #include "viif_isp.h"
 #include "viif_regs.h"
@@ -177,6 +179,8 @@ static void viif_vsync_irq_handler_w_isp(struct viif_device *viif_dev)
 
 	/* Delayed Vsync of MAIN unit */
 	if (event_main & MASK_INT_M_SYNC_LINES_DELAY_INT2) {
+		unsigned int seq0 = viif_dev->cap_dev0.sequence;
+
 		/* unmask timeout error of gamma table */
 		viif_main_status_err_set_irq_mask(viif_dev, MASK_INT_M_DELAY_INT_ERROR);
 		viif_dev->masked_gamma_path = 0;
@@ -195,6 +199,8 @@ static void viif_vsync_irq_handler_w_isp(struct viif_device *viif_dev)
 						    l2_transfer_status, ts);
 		visconti_viif_capture_switch_buffer(&viif_dev->cap_dev1, status_err,
 						    l2_transfer_status, ts);
+		visconti_viif_stats_isr(viif_dev, seq0, ts);
+		visconti_viif_params_isr(viif_dev);
 	}
 
 	/* Delayed Vsync of SUB unit */
@@ -539,16 +545,32 @@ static int visconti_viif_probe(struct platform_device *pdev)
 		goto error_isp_unregister;
 	}
 
+	ret = visconti_viif_params_register(viif_dev);
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to register parameter node\n");
+		goto error_capture_unregister;
+	}
+
+	ret = visconti_viif_stats_register(viif_dev);
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to register stat node\n");
+		goto error_params_unregister;
+	}
+
 	ret = visconti_viif_create_links(viif_dev);
 	if (ret)
-		goto error_capture_unregister;
+		goto error_stats_unregister;
 
 	visconti_viif_subdev_notifier_register(viif_dev);
 	if (ret)
-		goto error_capture_unregister;
+		goto error_stats_unregister;
 
 	return 0;
 
+error_stats_unregister:
+	visconti_viif_stats_unregister(viif_dev);
+error_params_unregister:
+	visconti_viif_params_unregister(viif_dev);
 error_capture_unregister:
 	visconti_viif_capture_unregister(viif_dev);
 error_isp_unregister:
@@ -573,6 +595,8 @@ static int visconti_viif_remove(struct platform_device *pdev)
 	v4l2_async_nf_unregister(&viif_dev->notifier);
 	v4l2_async_nf_cleanup(&viif_dev->notifier);
 	visconti_viif_capture_unregister(viif_dev);
+	visconti_viif_params_unregister(viif_dev);
+	visconti_viif_stats_unregister(viif_dev);
 	visconti_viif_isp_unregister(viif_dev);
 	visconti_viif_csi2rx_unregister(viif_dev);
 	media_device_unregister(&viif_dev->media_dev);

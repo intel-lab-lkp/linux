@@ -13,6 +13,7 @@
 #include "viif.h"
 #include "viif_common.h"
 #include "viif_isp.h"
+#include "viif_params.h"
 #include "viif_regs.h"
 
 /* disable CSI2 capture at viif_mux_start() */
@@ -744,6 +745,10 @@ int visconti_viif_isp_main_set_unit(struct viif_device *viif_dev)
 	/* Enable regbuf */
 	hwd_viif_isp_set_regbuf_auto_transmission(viif_dev);
 
+	/* L2 UNDIST Enable through mode as default  */
+	ret = visconti_viif_l2_undist_through(viif_dev);
+	if (ret)
+		dev_err(viif_dev->dev, "l2_set_undist error. %d\n", ret);
 	return ret;
 }
 
@@ -797,6 +802,8 @@ static int visconti_viif_isp_s_stream(struct v4l2_subdev *sd, int enable)
 	}
 
 	/* enabling: start ISP, MUX -> start CSI2RX, sensor */
+	// prepare ISP parameters
+	visconti_viif_params_eval_queue(viif_dev);
 	// start ISP
 	viif_dev->masked_gamma_path = 0;
 	viif_mux_start(viif_dev, 0, 0);
