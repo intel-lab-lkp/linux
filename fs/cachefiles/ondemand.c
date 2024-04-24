@@ -404,51 +404,65 @@ static int cachefiles_ondemand_send_req(struct cachefiles_object *object,
 	if (ret)
 		goto out;
 
-	do {
-		/*
-		 * Stop enqueuing the request when daemon is dying. The
-		 * following two operations need to be atomic as a whole.
-		 *   1) check cache state, and
-		 *   2) enqueue request if cache is alive.
-		 * Otherwise the request may be enqueued after xarray has been
-		 * flushed, leaving the orphan request never being completed.
-		 *
-		 * CPU 1			CPU 2
-		 * =====			=====
-		 *				test CACHEFILES_DEAD bit
-		 * set CACHEFILES_DEAD bit
-		 * flush requests in the xarray
-		 *				enqueue the request
-		 */
-		xas_lock(&xas);
+retry:
+	/*
+	 * Stop enqueuing the request when daemon is dying. The
+	 * following two operations need to be atomic as a whole.
+	 *   1) check cache state, and
+	 *   2) enqueue request if cache is alive.
+	 * Otherwise the request may be enqueued after xarray has been
+	 * flushed, leaving the orphan request never being completed.
+	 *
+	 * CPU 1			CPU 2
+	 * =====			=====
+	 *				test CACHEFILES_DEAD bit
+	 * set CACHEFILES_DEAD bit
+	 * flush requests in the xarray
+	 *				enqueue the request
+	 */
+	xas_lock(&xas);
 
-		if (test_bit(CACHEFILES_DEAD, &cache->flags) ||
-		    cachefiles_ondemand_object_is_dropping(object)) {
-			xas_unlock(&xas);
-			ret = -EIO;
-			goto out;
-		}
+	if (test_bit(CACHEFILES_DEAD, &cache->flags) ||
+	    cachefiles_ondemand_object_is_dropping(object)) {
+		xas_unlock(&xas);
+		ret = -EIO;
+		goto out;
+	}
 
-		/* coupled with the barrier in cachefiles_flush_reqs() */
-		smp_mb();
+	/* coupled with the barrier in cachefiles_flush_reqs() */
+	smp_mb();
 
-		if (opcode == CACHEFILES_OP_CLOSE &&
-			!cachefiles_ondemand_object_is_open(object)) {
-			WARN_ON_ONCE(object->ondemand->ondemand_id == 0);
-			xas_unlock(&xas);
-			ret = -EIO;
-			goto out;
-		}
+	if (opcode == CACHEFILES_OP_CLOSE &&
+		!cachefiles_ondemand_object_is_open(object)) {
+		WARN_ON_ONCE(object->ondemand->ondemand_id == 0);
+		xas_unlock(&xas);
+		ret = -EIO;
+		goto out;
+	}
 
+	/*
+	 * Cyclically find a free xas to avoid msg_id reuse that would
+	 * cause the daemon to successfully copen a stale msg_id.
+	 */
+	xas.xa_index = cache->msg_id_next;
+	xas_find_marked(&xas, UINT_MAX, XA_FREE_MARK);
+	if (xas.xa_node == XAS_RESTART) {
 		xas.xa_index = 0;
-		xas_find_marked(&xas, UINT_MAX, XA_FREE_MARK);
-		if (xas.xa_node == XAS_RESTART)
-			xas_set_err(&xas, -EBUSY);
-		xas_store(&xas, req);
+		xas_find_marked(&xas, cache->msg_id_next - 1, XA_FREE_MARK);
+	}
+	if (xas.xa_node == XAS_RESTART)
+		xas_set_err(&xas, -EBUSY);
+
+	xas_store(&xas, req);
+	if (xas_valid(&xas)) {
+		cache->msg_id_next = xas.xa_index + 1;
 		xas_clear_mark(&xas, XA_FREE_MARK);
 		xas_set_mark(&xas, CACHEFILES_REQ_NEW);
-		xas_unlock(&xas);
-	} while (xas_nomem(&xas, GFP_KERNEL));
+	}
+
+	xas_unlock(&xas);
+	if (xas_nomem(&xas, GFP_KERNEL))
+		goto retry;
 
 	ret = xas_error(&xas);
 	if (ret)
