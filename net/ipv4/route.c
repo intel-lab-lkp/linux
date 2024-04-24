@@ -458,7 +458,7 @@ static u32 *ip_tstamps __read_mostly;
  * if one generator is seldom used. This makes hard for an attacker
  * to infer how many packets were sent between two points in time.
  */
-static u32 ip_idents_reserve(u32 hash, int segs)
+static __signed_wrap u32 ip_idents_reserve(u32 hash, u32 segs)
 {
 	u32 bucket, old, now = (u32)jiffies;
 	atomic_t *p_id;
@@ -473,14 +473,14 @@ static u32 ip_idents_reserve(u32 hash, int segs)
 	if (old != now && cmpxchg(p_tstamp, old, now) == old)
 		delta = get_random_u32_below(now - old);
 
-	/* If UBSAN reports an error there, please make sure your compiler
-	 * supports -fno-strict-overflow before reporting it that was a bug
-	 * in UBSAN, and it has been fixed in GCC-8.
+	/* If UBSAN reports an error here, please make sure your arch's
+	 * atomic_add_return() implementation has been annotated with
+	 * __signed_wrap or uses wrapping_add() internally.
 	 */
 	return atomic_add_return(segs + delta, p_id) - segs;
 }
 
-void __ip_select_ident(struct net *net, struct iphdr *iph, int segs)
+void __ip_select_ident(struct net *net, struct iphdr *iph, u32 segs)
 {
 	u32 hash, id;
 

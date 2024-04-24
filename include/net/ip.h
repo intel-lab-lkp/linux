@@ -537,10 +537,10 @@ void ip_dst_metrics_put(struct dst_entry *dst)
 		kfree(p);
 }
 
-void __ip_select_ident(struct net *net, struct iphdr *iph, int segs);
+void __ip_select_ident(struct net *net, struct iphdr *iph, u32 segs);
 
 static inline void ip_select_ident_segs(struct net *net, struct sk_buff *skb,
-					struct sock *sk, int segs)
+					struct sock *sk, u32 segs)
 {
 	struct iphdr *iph = ip_hdr(skb);
 
