@@ -8,6 +8,7 @@ import argparse
 import errno
 import ipaddress
 import logging
+import math
 import multiprocessing
 import re
 import struct
@@ -58,6 +59,7 @@ OVS_FLOW_CMD_DEL = 2
 OVS_FLOW_CMD_GET = 3
 OVS_FLOW_CMD_SET = 4
 
+UINT32_MAX = 0xFFFFFFFF
 
 def macstr(mac):
     outstr = ":".join(["%02X" % i for i in mac])
@@ -285,7 +287,7 @@ class ovsactions(nla):
         ("OVS_ACTION_ATTR_SET", "none"),
         ("OVS_ACTION_ATTR_PUSH_VLAN", "none"),
         ("OVS_ACTION_ATTR_POP_VLAN", "flag"),
-        ("OVS_ACTION_ATTR_SAMPLE", "none"),
+        ("OVS_ACTION_ATTR_SAMPLE", "sample"),
         ("OVS_ACTION_ATTR_RECIRC", "uint32"),
         ("OVS_ACTION_ATTR_HASH", "none"),
         ("OVS_ACTION_ATTR_PUSH_MPLS", "none"),
@@ -305,6 +307,91 @@ class ovsactions(nla):
         ("OVS_ACTION_ATTR_DEC_TTL", "none"),
         ("OVS_ACTION_ATTR_DROP", "uint32"),
     )
+
+    class sample(nla):
+        nla_flags = NLA_F_NESTED
+
+        nla_map = (
+            ("OVS_SAMPLE_ATTR_UNSPEC", "none"),
+            ("OVS_SAMPLE_ATTR_PROBABILITY", "uint32"),
+            ("OVS_SAMPLE_ATTR_ACTIONS", "ovsactions"),
+            ("OVS_SAMPLE_ATTR_PSAMPLE_GROUP", "uint32"),
+            ("OVS_SAMPLE_ATTR_PSAMPLE_COOKIE", "array(uint8)"),
+        )
+
+        def dpstr(self, more=False):
+            args = []
+
+            args.append("sample={:.2f}%".format(
+                100 * self.get_attr("OVS_SAMPLE_ATTR_PROBABILITY") /
+                UINT32_MAX))
+
+            group = self.get_attr("OVS_SAMPLE_ATTR_PSAMPLE_GROUP")
+            cookie = self.get_attr("OVS_SAMPLE_ATTR_PSAMPLE_COOKIE")
+            actions = self.get_attr("OVS_SAMPLE_ATTR_ACTIONS")
+
+            if group:
+                args.append("group_id=%d" % group)
+            if cookie:
+                args.append("cookie=%s" %
+                            "".join(format(x, "02x") for x in cookie))
+            if actions:
+                args.append("actions(%s)" % actions.dpstr(more))
+
+            return "sample(%s)" % ",".join(args)
+
+        def parse(self, actstr):
+            """ Parses the input action string and populates the internal
+            attributes. The input string must start with "sample("
+
+            Returns the remaining action string.
+            Raises ValueError if the action string has invalid content.
+            """
+
+            def parse_nested_actions(actstr):
+                subacts = ovsactions()
+                parsed_len = subacts.parse(actstr)
+                return subacts, parsed_len
+
+            def percent_to_rate(percent):
+                percent = float(percent.strip('%'))
+                return int(math.floor(UINT32_MAX * (percent / 100.0) + .5))
+
+            for (key, attr, func) in (
+                ("sample", "OVS_SAMPLE_ATTR_PROBABILITY", percent_to_rate),
+                ("group_id", "OVS_SAMPLE_ATTR_PSAMPLE_GROUP", int),
+                ("cookie", "OVS_SAMPLE_ATTR_PSAMPLE_COOKIE",
+                    lambda x: list(bytearray.fromhex(x))),
+                ("actions", "OVS_SAMPLE_ATTR_ACTIONS", parse_nested_actions),
+            ):
+                if not actstr.startswith(key):
+                    continue
+
+                actstr = actstr[len(key) :]
+
+                if not func:
+                    self["attrs"].append([attr, None])
+                    continue
+
+                # The length of complex attributes cannot be determined
+                # beforehand and must be reported by the parsing func.
+                delim = actstr[0]
+                actstr = actstr[1:]
+                if delim == "=":
+                    pos = strcspn(actstr, ",)")
+                    datum = func(actstr[:pos])
+                elif delim == "(":
+                    datum, pos = func(actstr)
+
+                self["attrs"].append([attr, datum])
+                actstr = actstr[pos:]
+                actstr = actstr[strspn(actstr, ", ") :]
+
+            if actstr[0] != ")":
+                raise ValueError("Action str: '%s' unbalanced" % actstr)
+
+            return actstr[1:]
+
 
     class ctact(nla):
         nla_flags = NLA_F_NESTED
@@ -636,6 +723,13 @@ class ovsactions(nla):
 
                 self["attrs"].append(["OVS_ACTION_ATTR_CT", ctact])
                 parsed = True
+
+            elif parse_starts_block(actstr, "sample(", False):
+                sampleact = self.sample()
+                actstr = sampleact.parse(actstr[len("sample(") : ])
+                self["attrs"].append(["OVS_ACTION_ATTR_SAMPLE", sampleact])
+                parsed = True
+
 
             actstr = actstr[strspn(actstr, ", ") :]
             while parencount > 0:
