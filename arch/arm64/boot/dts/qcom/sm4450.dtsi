@@ -29,6 +29,14 @@
 			clock-frequency = <32000>;
 			#clock-cells = <0>;
 		};
+
+		bi_tcxo_div2: bi-tcxo-div2-clk {
+			#clock-cells = <0>;
+			compatible = "fixed-factor-clock";
+			clocks = <&rpmhcc RPMH_CXO_CLK>;
+			clock-mult = <1>;
+			clock-div = <2>;
+		};
 	};
 
 	cpus {
@@ -43,6 +51,7 @@
 			next-level-cache = <&L2_0>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_0: l2-cache {
@@ -67,6 +76,7 @@
 			next-level-cache = <&L2_100>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_100: l2-cache {
@@ -85,6 +95,7 @@
 			next-level-cache = <&L2_200>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_200: l2-cache {
@@ -103,6 +114,7 @@
 			next-level-cache = <&L2_300>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_300: l2-cache {
@@ -121,6 +133,7 @@
 			next-level-cache = <&L2_400>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_400: l2-cache {
@@ -139,6 +152,7 @@
 			next-level-cache = <&L2_500>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 0>;
 			#cooling-cells = <2>;
 
 			L2_500: l2-cache {
@@ -157,6 +171,7 @@
 			next-level-cache = <&L2_600>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 1>;
 			#cooling-cells = <2>;
 
 			L2_600: l2-cache {
@@ -175,6 +190,7 @@
 			next-level-cache = <&L2_700>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
+			qcom,freq-domain = <&cpufreq_hw 1>;
 			#cooling-cells = <2>;
 
 			L2_700: l2-cache {
@@ -526,6 +542,19 @@
 			};
 		};
 
+		cpufreq_hw: cpufreq@17d91000 {
+			compatible = "qcom,sm4450-cpufreq-epss", "qcom,cpufreq-epss";
+			reg = <0 0x17d91000 0 0x1000>,
+			      <0 0x17d92000 0 0x1000>;
+			reg-names = "freq-domain0", "freq-domain1";
+			clocks = <&bi_tcxo_div2>, <&gcc GCC_GPLL0>;
+			clock-names = "xo", "alternate";
+			interrupts = <GIC_SPI 30 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "dcvsh-irq-0", "dcvsh-irq-1";
+			#freq-domain-cells = <1>;
+			#clock-cells = <1>;
+		};
 	};
 
 	timer {
