@@ -28,6 +28,77 @@ static void tcp_gso_tstamp(struct sk_buff *skb, unsigned int ts_seq,
 	}
 }
 
+static void __tcpv4_gso_segment_csum(struct sk_buff *seg,
+				     __be32 *oldip, __be32 *newip,
+				     __be16 *oldport, __be16 *newport)
+{
+	struct tcphdr *th;
+	struct iphdr *iph;
+
+	if (*oldip == *newip && *oldport == *newport)
+		return;
+
+	th = tcp_hdr(seg);
+	iph = ip_hdr(seg);
+
+	inet_proto_csum_replace4(&th->check, seg, *oldip, *newip, true);
+	inet_proto_csum_replace2(&th->check, seg, *oldport, *newport, false);
+	*oldport = *newport;
+
+	csum_replace4(&iph->check, *oldip, *newip);
+	*oldip = *newip;
+}
+
+static struct sk_buff *__tcpv4_gso_segment_list_csum(struct sk_buff *segs)
+{
+	struct sk_buff *seg;
+	struct tcphdr *th, *th2;
+	struct iphdr *iph, *iph2;
+	__be32 flags, flags2;
+
+	seg = segs;
+	th = tcp_hdr(seg);
+	iph = ip_hdr(seg);
+	flags = tcp_flag_word(th);
+	flags2 = tcp_flag_word(tcp_hdr(seg->next));
+
+	if ((tcp_hdr(seg)->dest == tcp_hdr(seg->next)->dest) &&
+	    (tcp_hdr(seg)->source == tcp_hdr(seg->next)->source) &&
+	    (ip_hdr(seg)->daddr == ip_hdr(seg->next)->daddr) &&
+	    (ip_hdr(seg)->saddr == ip_hdr(seg->next)->saddr) &&
+	    (flags == flags2))
+		return segs;
+
+	while ((seg = seg->next)) {
+		th2 = tcp_hdr(seg);
+		iph2 = ip_hdr(seg);
+
+		__tcpv4_gso_segment_csum(seg,
+					 &iph2->saddr, &iph->saddr,
+					 &th2->source, &th->source);
+		__tcpv4_gso_segment_csum(seg,
+					 &iph2->daddr, &iph->daddr,
+					 &th2->dest, &th->dest);
+		if (flags == flags2)
+			continue;
+
+		inet_proto_csum_replace4(&th2->check, seg, flags2, flags, false);
+		tcp_flag_word(th2) = flags;
+	}
+
+	return segs;
+}
+
+static struct sk_buff *__tcp_gso_segment_list(struct sk_buff *skb,
+					      netdev_features_t features)
+{
+	skb = skb_segment_list(skb, features, skb_mac_header_len(skb));
+	if (IS_ERR(skb))
+		return skb;
+
+	return __tcpv4_gso_segment_list_csum(skb);
+}
+
 static struct sk_buff *tcp4_gso_segment(struct sk_buff *skb,
 					netdev_features_t features)
 {
@@ -36,6 +107,9 @@ static struct sk_buff *tcp4_gso_segment(struct sk_buff *skb,
 
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
 		return ERR_PTR(-EINVAL);
+
+	if (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST)
+		return __tcp_gso_segment_list(skb, features);
 
 	if (unlikely(skb->ip_summed != CHECKSUM_PARTIAL)) {
 		const struct iphdr *iph = ip_hdr(skb);

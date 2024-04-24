@@ -40,6 +40,40 @@ INDIRECT_CALLABLE_SCOPE int tcp6_gro_complete(struct sk_buff *skb, int thoff)
 	return 0;
 }
 
+static struct sk_buff *__tcpv6_gso_segment_list_csum(struct sk_buff *segs)
+{
+	struct tcphdr *th, *th2;
+	__be32 flags, flags2;
+	struct sk_buff *seg;
+
+	seg = segs;
+	th = tcp_hdr(seg);
+	flags = tcp_flag_word(th);
+	flags2 = tcp_flag_word(tcp_hdr(seg->next));
+
+	if (flags == flags2)
+		return segs;
+
+	while ((seg = seg->next)) {
+		th2 = tcp_hdr(seg);
+
+		inet_proto_csum_replace4(&th2->check, seg, flags2, flags, false);
+		tcp_flag_word(th2) = flags;
+	}
+
+	return segs;
+}
+
+static struct sk_buff *__tcp_gso_segment_list(struct sk_buff *skb,
+					      netdev_features_t features)
+{
+	skb = skb_segment_list(skb, features, skb_mac_header_len(skb));
+	if (IS_ERR(skb))
+		return skb;
+
+	return __tcpv6_gso_segment_list_csum(skb);
+}
+
 static struct sk_buff *tcp6_gso_segment(struct sk_buff *skb,
 					netdev_features_t features)
 {
@@ -50,6 +84,9 @@ static struct sk_buff *tcp6_gso_segment(struct sk_buff *skb,
 
 	if (!pskb_may_pull(skb, sizeof(*th)))
 		return ERR_PTR(-EINVAL);
+
+	if (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST)
+		return __tcp_gso_segment_list(skb, features);
 
 	if (unlikely(skb->ip_summed != CHECKSUM_PARTIAL)) {
 		const struct ipv6hdr *ipv6h = ipv6_hdr(skb);
