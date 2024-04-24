@@ -11,6 +11,16 @@
 #include "intel_dp_aux.h"
 #include "intel_psr_regs.h"
 
+bool intel_alpm_get_aux_less_status(struct intel_dp *intel_dp)
+{
+	u8 alpm_caps = 0;
+
+	if (drm_dp_dpcd_readb(&intel_dp->aux, DP_RECEIVER_ALPM_CAP,
+			      &alpm_caps) != 1)
+		return false;
+	return alpm_caps & DP_ALPM_AUX_LESS_CAP;
+}
+
 /*
  * See Bspec: 71632 for the table
  *
@@ -240,6 +250,44 @@ bool intel_alpm_compute_params(struct intel_dp *intel_dp,
 	intel_dp->alpm_parameters.fast_wake_lines = max(fast_wake_lines, 7);
 
 	return true;
+}
+
+void intel_alpm_compute_lobf_config(struct intel_dp *intel_dp,
+				    struct intel_crtc_state *crtc_state,
+				    struct drm_connector_state *conn_state)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int waketime_in_lines, first_sdp_position;
+	int context_latency, guardband;
+
+	crtc_state->has_lobf = false;
+
+	if (!intel_dp_is_edp(intel_dp))
+		return;
+
+	if (DISPLAY_VER(i915) < 20)
+		return;
+
+	if (!intel_dp_as_sdp_supported(intel_dp))
+		return;
+
+	if (crtc_state->has_psr)
+		return;
+
+	if (intel_alpm_compute_params(intel_dp, crtc_state)) {
+		context_latency = adjusted_mode->crtc_vblank_start - adjusted_mode->crtc_vdisplay;
+		guardband = adjusted_mode->crtc_vtotal -
+			    adjusted_mode->crtc_vdisplay - context_latency;
+		first_sdp_position = adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vsync_start;
+		if (intel_dp->alpm_parameters.auxless_alpm_supported)
+			waketime_in_lines = intel_dp->alpm_parameters.io_wake_lines;
+		else
+			waketime_in_lines = intel_dp->alpm_parameters.fast_wake_lines;
+
+		if ((context_latency + guardband) > (first_sdp_position + waketime_in_lines))
+			crtc_state->has_lobf = true;
+	}
 }
 
 static void lnl_alpm_configure(struct intel_dp *intel_dp)

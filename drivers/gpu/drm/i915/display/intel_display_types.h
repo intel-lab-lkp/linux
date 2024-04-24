@@ -1405,6 +1405,9 @@ struct intel_crtc_state {
 
 	/* for loading single buffered registers during vblank */
 	struct drm_vblank_work vblank_work;
+
+	/* LOBF flag */
+	bool has_lobf;
 };
 
 enum intel_pipe_crc_source {
@@ -1835,6 +1838,7 @@ struct intel_dp {
 		u8 fast_wake_lines;
 
 		/* LNL and beyond */
+		bool auxless_alpm_supported;
 		u8 check_entry_lines;
 		u8 silence_period_sym_clocks;
 		u8 lfps_half_cycle_num_of_syms;
