@@ -480,7 +480,8 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 		   nla_total_size(sizeof(u32)) +	/* group_num */
 		   nla_total_size(sizeof(u32)) +	/* seq */
 		   nla_total_size_64bit(sizeof(u64)) +	/* timestamp */
-		   nla_total_size(sizeof(u16));		/* protocol */
+		   nla_total_size(sizeof(u16)) +	/* protocol */
+		   nla_total_size(md->user_cookie_len);	/* user_cookie */
 
 #ifdef CONFIG_INET
 	tun_info = skb_tunnel_info(skb);
@@ -579,6 +580,15 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 			goto error;
 	}
 #endif
+	if (md->user_cookie && md->user_cookie_len) {
+		int nla_len = nla_total_size(md->user_cookie_len);
+		struct nlattr *nla;
+
+		nla = skb_put(nl_skb, nla_len);
+		nla->nla_type = PSAMPLE_ATTR_USER_COOKIE;
+		nla->nla_len = nla_attr_size(md->user_cookie_len);
+		memcpy(nla_data(nla), md->user_cookie, md->user_cookie_len);
+	}
 
 	genlmsg_end(nl_skb, data);
 	psample_nl_obj_desc_init(&desc, group->group_num);
