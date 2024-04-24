@@ -254,7 +254,7 @@ static __always_inline s64 arch_atomic64_fetch_add(s64 i, atomic64_t *v)
 {
 	s64 old, c = 0;
 
-	while ((old = arch_atomic64_cmpxchg(v, c, c + i)) != c)
+	while ((old = arch_atomic64_cmpxchg(v, c, wrapping_add(s64, c, i))) != c)
 		c = old;
 
 	return old;

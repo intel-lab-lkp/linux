@@ -76,7 +76,7 @@ static __always_inline bool arch_atomic64_add_negative(s64 i, atomic64_t *v)
 
 static __always_inline s64 arch_atomic64_add_return(s64 i, atomic64_t *v)
 {
-	return i + xadd(&v->counter, i);
+	return wrapping_add(s64, i, xadd(&v->counter, i));
 }
 #define arch_atomic64_add_return arch_atomic64_add_return
 
