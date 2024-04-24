@@ -530,9 +530,7 @@ static bool vp_notify_with_data(struct virtqueue *vq)
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
 				  unsigned int index,
-				  void (*callback)(struct virtqueue *vq),
-				  const char *name,
-				  bool ctx,
+				  struct virtio_vq_config *cfg,
 				  u16 msix_vec)
 {
 
@@ -563,8 +561,11 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	/* create the vring */
 	vq = vring_create_virtqueue(index, num,
 				    SMP_CACHE_BYTES, &vp_dev->vdev,
-				    true, true, ctx,
-				    notify, callback, name);
+				    true, true,
+				    cfg->ctx ? cfg->ctx[index] : false,
+				    notify,
+				    cfg->callbacks[index],
+				    cfg->names[index]);
 	if (!vq)
 		return ERR_PTR(-ENOMEM);
 
@@ -593,15 +594,11 @@ err:
 	return ERR_PTR(err);
 }
 
-static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
-			      struct virtqueue *vqs[],
-			      vq_callback_t *callbacks[],
-			      const char * const names[], const bool *ctx,
-			      struct irq_affinity *desc)
+static int vp_modern_find_vqs(struct virtio_device *vdev, struct virtio_vq_config *cfg)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct virtqueue *vq;
-	int rc = vp_find_vqs(vdev, nvqs, vqs, callbacks, names, ctx, desc);
+	int rc = vp_find_vqs(vdev, cfg);
 
 	if (rc)
 		return rc;
@@ -739,9 +736,16 @@ static bool vp_get_shm_region(struct virtio_device *vdev,
 static int vp_modern_create_avq(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	vq_callback_t *callbacks[] = { NULL };
+	struct virtio_vq_config cfg = {};
 	struct virtio_pci_admin_vq *avq;
 	struct virtqueue *vq;
+	const char *names[1];
 	u16 admin_q_num;
+
+	cfg.nvqs = 1;
+	cfg.callbacks = callbacks;
+	cfg.names = names;
 
 	if (!virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ))
 		return 0;
@@ -753,8 +757,10 @@ static int vp_modern_create_avq(struct virtio_device *vdev)
 	avq = &vp_dev->admin_vq;
 	avq->vq_index = vp_modern_avq_index(&vp_dev->mdev);
 	sprintf(avq->name, "avq.%u", avq->vq_index);
-	vq = vp_dev->setup_vq(vp_dev, &vp_dev->admin_vq.info, avq->vq_index, NULL,
-			      avq->name, NULL, VIRTIO_MSI_NO_VECTOR);
+
+	cfg.names[0] = avq->name;
+	vq = vp_dev->setup_vq(vp_dev, &vp_dev->admin_vq.info, avq->vq_index,
+			      &cfg, VIRTIO_MSI_NO_VECTOR);
 	if (IS_ERR(vq)) {
 		dev_err(&vdev->dev, "failed to setup admin virtqueue, err=%ld",
 			PTR_ERR(vq));
