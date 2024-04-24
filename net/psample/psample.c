@@ -18,6 +18,12 @@
 #include <net/ip_tunnels.h>
 #include <net/dst_metadata.h>
 
+#ifndef __CHECKER__
+#define CREATE_TRACE_POINTS
+#endif
+
+#include "trace.h"
+
 #define PSAMPLE_MAX_PACKET_SIZE 0xffff
 
 static LIST_HEAD(psample_groups_list);
@@ -469,6 +475,9 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 	int meta_len;
 	void *data;
 	int ret;
+
+	if (trace_psample_sample_packet_enabled())
+		trace_psample_sample_packet(group, skb, sample_rate, md);
 
 	meta_len = (in_ifindex ? nla_total_size(sizeof(u16)) : 0) +
 		   (out_ifindex ? nla_total_size(sizeof(u16)) : 0) +
