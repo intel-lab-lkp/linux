@@ -444,6 +444,28 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_eopnotsupp_prep,
 #endif
 	},
+	[IORING_OP_READ_META] = {
+		.needs_file		= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.iopoll_queue		= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_read_meta,
+		.issue			= io_rw_meta,
+	},
+	[IORING_OP_WRITE_META] = {
+		.needs_file		= 1,
+		.plug			= 1,
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.iopoll			= 1,
+		.iopoll_queue		= 1,
+		.async_size		= sizeof(struct io_async_rw),
+		.prep			= io_prep_write_meta,
+		.issue			= io_rw_meta,
+	},
 	[IORING_OP_READ_MULTISHOT] = {
 		.needs_file		= 1,
 		.unbound_nonreg_file	= 1,
@@ -508,6 +530,14 @@ const struct io_cold_def io_cold_defs[] = {
 	[IORING_OP_WRITEV] = {
 		.name			= "WRITEV",
 		.cleanup		= io_readv_writev_cleanup,
+		.fail			= io_rw_fail,
+	},
+	[IORING_OP_READ_META] = {
+		.name			= "READ_META",
+		.fail			= io_rw_fail,
+	},
+	[IORING_OP_WRITE_META] = {
+		.name			= "WRITE_META",
 		.fail			= io_rw_fail,
 	},
 	[IORING_OP_FSYNC] = {

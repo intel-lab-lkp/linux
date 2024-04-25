@@ -97,6 +97,12 @@ struct io_uring_sqe {
 			__u64	addr3;
 			__u64	__pad2[1];
 		};
+		struct {
+			__u64	meta_addr;
+			__u32	meta_len;
+			__u16	meta_flags;
+			__u16	apptag;
+		};
 		__u64	optval;
 		/*
 		 * If the ring is initialized with IORING_SETUP_SQE128, then
@@ -105,6 +111,13 @@ struct io_uring_sqe {
 		__u8	cmd[0];
 	};
 };
+
+/*
+ * meta io flags
+ */
+#define META_CHK_GUARD	(1U << 0)	/* guard is valid */
+#define META_CHK_APPTAG	(1U << 1)	/* app tag is valid */
+#define META_CHK_REFTAG	(1U << 2)	/* ref tag is valid */
 
 /*
  * If sqe->file_index is set to this for opcodes that instantiate a new
@@ -256,6 +269,8 @@ enum io_uring_op {
 	IORING_OP_FUTEX_WAITV,
 	IORING_OP_FIXED_FD_INSTALL,
 	IORING_OP_FTRUNCATE,
+	IORING_OP_READ_META,
+	IORING_OP_WRITE_META,
 
 	/* this goes last, obviously */
 	IORING_OP_LAST,

@@ -269,6 +269,7 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		rw->kiocb.ki_ioprio = get_current_ioprio();
 	}
 	rw->kiocb.dio_complete = NULL;
+	rw->kiocb.ki_flags = 0;
 
 	rw->addr = READ_ONCE(sqe->addr);
 	rw->len = READ_ONCE(sqe->len);
@@ -284,6 +285,41 @@ int io_prep_read(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 int io_prep_write(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	return io_prep_rw(req, sqe, ITER_SOURCE, true);
+}
+
+static int io_prep_rw_meta(struct io_kiocb *req, const struct io_uring_sqe *sqe,
+		    int ddir, bool import)
+{
+	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+	struct io_async_rw *io;
+	struct kiocb *kiocb = &rw->kiocb;
+	int ret;
+
+	ret = io_prep_rw(req, sqe, ddir, import);
+	if (unlikely(ret))
+		return ret;
+
+	io = req->async_data;
+	kiocb->ki_flags |= IOCB_USE_META;
+	io->meta.flags = READ_ONCE(sqe->meta_flags);
+	io->meta.apptag = READ_ONCE(sqe->apptag);
+	ret = import_ubuf(ddir, u64_to_user_ptr(READ_ONCE(sqe->meta_addr)),
+			     READ_ONCE(sqe->meta_len), &io->meta.iter);
+	if (unlikely(ret < 0))
+		return ret;
+
+	iov_iter_save_state(&io->meta.iter, &io->iter_meta_state);
+	return 0;
+}
+
+int io_prep_read_meta(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+{
+	return io_prep_rw_meta(req, sqe, ITER_DEST, true);
+}
+
+int io_prep_write_meta(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+{
+	return io_prep_rw_meta(req, sqe, ITER_SOURCE, true);
 }
 
 static int io_prep_rwv(struct io_kiocb *req, const struct io_uring_sqe *sqe,
@@ -587,6 +623,8 @@ static int kiocb_done(struct io_kiocb *req, ssize_t ret,
 
 		req->flags &= ~REQ_F_REISSUE;
 		iov_iter_restore(&io->iter, &io->iter_state);
+		if (unlikely(rw->kiocb.ki_flags & IOCB_USE_META))
+			iov_iter_restore(&io->meta.iter, &io->iter_meta_state);
 		return -EAGAIN;
 	}
 	return IOU_ISSUE_SKIP_COMPLETE;
@@ -768,7 +806,7 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 	if (!(req->flags & REQ_F_FIXED_FILE))
 		req->flags |= io_file_get_flags(file);
 
-	kiocb->ki_flags = file->f_iocb_flags;
+	kiocb->ki_flags |= file->f_iocb_flags;
 	ret = kiocb_set_rw_flags(kiocb, rw->flags);
 	if (unlikely(ret))
 		return ret;
@@ -787,7 +825,8 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 		if (!(kiocb->ki_flags & IOCB_DIRECT) || !file->f_op->iopoll)
 			return -EOPNOTSUPP;
 
-		kiocb->private = NULL;
+		if (likely(!(kiocb->ki_flags & IOCB_USE_META)))
+			kiocb->private = NULL;
 		kiocb->ki_flags |= IOCB_HIPRI;
 		kiocb->ki_complete = io_complete_rw_iopoll;
 		req->iopoll_completed = 0;
@@ -853,7 +892,8 @@ static int __io_read(struct io_kiocb *req, unsigned int issue_flags)
 	} else if (ret == -EIOCBQUEUED) {
 		return IOU_ISSUE_SKIP_COMPLETE;
 	} else if (ret == req->cqe.res || ret <= 0 || !force_nonblock ||
-		   (req->flags & REQ_F_NOWAIT) || !need_complete_io(req)) {
+		   (req->flags & REQ_F_NOWAIT) || !need_complete_io(req) ||
+		   (kiocb->ki_flags & IOCB_USE_META)) {
 		/* read all, failed, already did sync or don't want to retry */
 		goto done;
 	}
@@ -864,6 +904,12 @@ static int __io_read(struct io_kiocb *req, unsigned int issue_flags)
 	 * manually if we need to.
 	 */
 	iov_iter_restore(&io->iter, &io->iter_state);
+	if (unlikely(kiocb->ki_flags & IOCB_USE_META)) {
+		/* don't handle partial completion for read + meta */
+		if (ret > 0)
+			goto done;
+		iov_iter_restore(&io->meta.iter, &io->iter_meta_state);
+	}
 
 	do {
 		/*
@@ -1053,7 +1099,8 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 		if (ret2 == -EAGAIN && (req->ctx->flags & IORING_SETUP_IOPOLL))
 			goto ret_eagain;
 
-		if (ret2 != req->cqe.res && ret2 >= 0 && need_complete_io(req)) {
+		if (ret2 != req->cqe.res && ret2 >= 0 && need_complete_io(req)
+				&& !(kiocb->ki_flags & IOCB_USE_META)) {
 			trace_io_uring_short_write(req->ctx, kiocb->ki_pos - ret2,
 						req->cqe.res, ret2);
 
@@ -1074,10 +1121,31 @@ done:
 	} else {
 ret_eagain:
 		iov_iter_restore(&io->iter, &io->iter_state);
+		if (unlikely(kiocb->ki_flags & IOCB_USE_META))
+			iov_iter_restore(&io->meta.iter, &io->iter_meta_state);
 		if (kiocb->ki_flags & IOCB_WRITE)
 			io_req_end_write(req);
 		return -EAGAIN;
 	}
+}
+
+int io_rw_meta(struct io_kiocb *req, unsigned int issue_flags)
+{
+	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+	struct io_async_rw *io = req->async_data;
+	struct kiocb *kiocb = &rw->kiocb;
+	int ret;
+
+	if (!(req->file->f_flags & O_DIRECT))
+		return -EOPNOTSUPP;
+
+	kiocb->private = &io->meta;
+	if (req->opcode == IORING_OP_READ_META)
+		ret = io_read(req, issue_flags);
+	else
+		ret = io_write(req, issue_flags);
+
+	return ret;
 }
 
 void io_rw_fail(struct io_kiocb *req)
