@@ -15,16 +15,19 @@
 
 #define JUMP_LABEL_NOP_SIZE		AARCH64_INSN_SIZE
 
+#define JUMP_TABLE_ENTRY				\
+	 ".pushsection	__jump_table, \"aw\"	\n\t"	\
+	 ".align	3			\n\t"	\
+	 ".long		1b - ., %l[l_yes] - .	\n\t"	\
+	 ".quad		%c0 - .			\n\t"	\
+	 ".popsection				\n\t"
+
 static __always_inline bool arch_static_branch(struct static_key * const key,
 					       const bool branch)
 {
 	asm goto(
 		"1:	nop					\n\t"
-		 "	.pushsection	__jump_table, \"aw\"	\n\t"
-		 "	.align		3			\n\t"
-		 "	.long		1b - ., %l[l_yes] - .	\n\t"
-		 "	.quad		%c0 - .			\n\t"
-		 "	.popsection				\n\t"
+		JUMP_TABLE_ENTRY
 		 :  :  "i"(&((char *)key)[branch]) :  : l_yes);
 
 	return false;
@@ -37,11 +40,7 @@ static __always_inline bool arch_static_branch_jump(struct static_key * const ke
 {
 	asm goto(
 		"1:	b		%l[l_yes]		\n\t"
-		 "	.pushsection	__jump_table, \"aw\"	\n\t"
-		 "	.align		3			\n\t"
-		 "	.long		1b - ., %l[l_yes] - .	\n\t"
-		 "	.quad		%c0 - .			\n\t"
-		 "	.popsection				\n\t"
+		JUMP_TABLE_ENTRY
 		 :  :  "i"(&((char *)key)[branch]) :  : l_yes);
 
 	return false;
