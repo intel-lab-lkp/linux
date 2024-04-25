@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/netdevice.h>
 
 /* Number of DIM profiles and period mode. */
 #define NET_DIM_PARAMS_NUM_PROFILES 5
@@ -51,6 +52,39 @@ struct dim_cq_moder {
 	u16 pkts;
 	u16 comps;
 	u8 cq_period_mode;
+};
+
+#define DIM_PROFILE_RX		BIT(0)	/* support rx dim profile modification */
+#define DIM_PROFILE_TX		BIT(1)	/* support tx dim profile modification */
+
+#define DIM_COALESCE_USEC	BIT(0)	/* support usec field modification */
+#define DIM_COALESCE_PKTS	BIT(1)	/* support pkts field modification */
+#define DIM_COALESCE_COMPS	BIT(2)	/* support comps field modification */
+
+struct dim_irq_moder {
+	/* See DIM_PROFILE_* */
+	u8 profile_flags;
+
+	/* See DIM_COALESCE_* for Rx and Tx */
+	u8 coal_flags;
+
+	/* Rx DIM period count mode: CQE or EQE */
+	u8 dim_rx_mode;
+
+	/* Tx DIM period count mode: CQE or EQE */
+	u8 dim_tx_mode;
+
+	/* DIM profile list for Rx */
+	struct dim_cq_moder __rcu *rx_profile;
+
+	/* DIM profile list for Tx */
+	struct dim_cq_moder __rcu *tx_profile;
+
+	/* Rx DIM worker function scheduled by net_dim() */
+	void (*rx_dim_work)(struct work_struct *work);
+
+	/* Tx DIM worker function scheduled by net_dim() */
+	void (*tx_dim_work)(struct work_struct *work);
 };
 
 /**
@@ -197,6 +231,32 @@ enum dim_step_result {
 	DIM_TOO_TIRED,
 	DIM_ON_EDGE,
 };
+
+/**
+ * net_dim_init_irq_moder - collect information to initialize irq moderation
+ * @dev: target network device
+ * @profile_flags: Rx or Tx profile modification capability
+ * @coal_flags: irq moderation params flags
+ * @rx_mode: CQ period mode for Rx
+ * @tx_mode: CQ period mode for Tx
+ * void (*rx_dim_work)(struct work_struct *work);
+ *	Rx worker called after dim decision.
+ *
+ * void (*tx_dim_work)(struct work_struct *work);
+ *	Tx worker called after dim decision.
+ *
+ * Return: 0 on success or a negative error code.
+ */
+int net_dim_init_irq_moder(struct net_device *dev, u8 profile_flags,
+			   u8 coal_flags, u8 rx_mode, u8 tx_mode,
+			   void (*rx_dim_work)(struct work_struct *work),
+			   void (*tx_dim_work)(struct work_struct *work));
+
+/**
+ * net_dim_free_irq_moder - free fields for irq moderation
+ * @dev: target network device
+ */
+void net_dim_free_irq_moder(struct net_device *dev);
 
 /**
  *	dim_on_top - check if current state is a good place to stop (top location)

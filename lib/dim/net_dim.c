@@ -101,6 +101,79 @@ net_dim_get_def_tx_moderation(u8 cq_period_mode)
 }
 EXPORT_SYMBOL(net_dim_get_def_tx_moderation);
 
+int net_dim_init_irq_moder(struct net_device *dev, u8 profile_flags,
+			   u8 coal_flags, u8 rx_mode, u8 tx_mode,
+			   void (*rx_dim_work)(struct work_struct *work),
+			   void (*tx_dim_work)(struct work_struct *work))
+{
+	struct dim_cq_moder *rxp, *txp;
+	struct dim_irq_moder *moder;
+	int len;
+
+	dev->irq_moder = kzalloc(sizeof(*dev->irq_moder), GFP_KERNEL);
+	if (!dev->irq_moder)
+		goto err_moder;
+
+	moder = dev->irq_moder;
+	len = NET_DIM_PARAMS_NUM_PROFILES * sizeof(*moder->rx_profile);
+
+	moder->profile_flags = profile_flags;
+	moder->coal_flags = coal_flags;
+
+	if (profile_flags & DIM_PROFILE_RX) {
+		moder->dim_rx_mode = rx_mode;
+		moder->rx_dim_work = rx_dim_work;
+		rxp = kmemdup(rx_profile[rx_mode], len, GFP_KERNEL);
+		if (!rxp)
+			goto err_rx_profile;
+
+		rcu_assign_pointer(moder->rx_profile, rxp);
+	}
+
+	if (profile_flags & DIM_PROFILE_TX) {
+		moder->dim_tx_mode = tx_mode;
+		moder->tx_dim_work = tx_dim_work;
+		txp = kmemdup(tx_profile[tx_mode], len, GFP_KERNEL);
+		if (!txp)
+			goto err_tx_profile;
+
+		rcu_assign_pointer(moder->tx_profile, txp);
+	}
+
+	return 0;
+
+err_tx_profile:
+	kfree(rxp);
+err_rx_profile:
+	kfree(moder);
+err_moder:
+	return -ENOMEM;
+}
+EXPORT_SYMBOL(net_dim_init_irq_moder);
+
+void net_dim_free_irq_moder(struct net_device *dev)
+{
+	struct dim_cq_moder *rx_profile, *tx_profile;
+
+	if (!dev->irq_moder)
+		return;
+
+	rcu_read_lock();
+	rx_profile = rcu_dereference(dev->irq_moder->rx_profile);
+	tx_profile = rcu_dereference(dev->irq_moder->tx_profile);
+	rcu_read_unlock();
+
+	rcu_assign_pointer(dev->irq_moder->tx_profile, NULL);
+	rcu_assign_pointer(dev->irq_moder->rx_profile, NULL);
+
+	synchronize_rcu();
+
+	kfree(rx_profile);
+	kfree(tx_profile);
+	kfree(dev->irq_moder);
+}
+EXPORT_SYMBOL(net_dim_free_irq_moder);
+
 static int net_dim_step(struct dim *dim)
 {
 	if (dim->tired == (NET_DIM_PARAMS_NUM_PROFILES * 2))
