@@ -285,7 +285,7 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 		return -EINVAL;
 
 	if (hweight32(chunk_size) != 1 ||
-	    chunk_size < SZ_256K || chunk_size > SZ_2M)
+	    chunk_size < SZ_4K || chunk_size > SZ_8M)
 		return -EINVAL;
 
 	down_read(&pool->lock);
