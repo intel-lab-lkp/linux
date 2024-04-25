@@ -24,6 +24,17 @@ properties:
     items:
       - description: FSI slave address
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^spi@[0-9a-f]+$":
+    $ref: /schemas/spi/ibm,p10-spi.yaml
+    description: Child node describing underlying SPI controller
+
 required:
   - compatible
   - reg
