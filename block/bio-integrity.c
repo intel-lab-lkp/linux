@@ -119,7 +119,8 @@ static void bio_integrity_uncopy_user(struct bio_integrity_payload *bip)
 	ret = copy_to_iter(bvec_virt(&src_bvec), bytes, &iter);
 	WARN_ON_ONCE(ret != bytes);
 
-	bio_integrity_unpin_bvec(copy, nr_vecs, true);
+	if (!bio_flagged((bip->bip_bio), BIO_CLONED))
+		bio_integrity_unpin_bvec(copy, nr_vecs, true);
 }
 
 static void bio_integrity_unmap_user(struct bio_integrity_payload *bip)
@@ -129,11 +130,14 @@ static void bio_integrity_unmap_user(struct bio_integrity_payload *bip)
 	if (bip->bip_flags & BIP_COPY_USER) {
 		if (dirty)
 			bio_integrity_uncopy_user(bip);
-		kfree(bvec_virt(bip->bip_vec));
+		if (!bio_flagged((bip->bip_bio), BIO_CLONED))
+			kfree(bvec_virt(bip->bip_vec));
 		return;
 	}
 
-	bio_integrity_unpin_bvec(bip->bip_vec, bip->bip_max_vcnt, dirty);
+	if (!bio_flagged((bip->bip_bio), BIO_CLONED))
+		bio_integrity_unpin_bvec(bip->bip_vec, bip->bip_max_vcnt,
+					 dirty);
 }
 
 /**
