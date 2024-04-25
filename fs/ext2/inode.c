@@ -615,8 +615,6 @@ static void ext2_splice_branch(struct inode *inode,
  * allocations is needed - we simply release blocks and do not touch anything
  * reachable from inode.
  *
- * `handle' can be NULL if create == 0.
- *
  * return > 0, # of blocks mapped or allocated.
  * return = 0, if plain lookup failed.
  * return < 0, error case.
