@@ -331,6 +331,12 @@ enum bip_flags {
 	BIP_COPY_USER		= 1 << 6, /* Kernel bounce buffer in use */
 };
 
+struct uio_meta {
+	u16 flags;
+	u16 apptag;
+	struct iov_iter iter;
+};
+
 /*
  * bio integrity payload
  */
