@@ -495,6 +495,7 @@ void ext2_free_blocks(struct inode * inode, ext2_fsblk_t block,
 	}
 
 	ext2_debug ("freeing block(s) %lu-%lu\n", block, block + count - 1);
+	ext2_inc_i_blkseq(EXT2_I(inode));
 
 do_more:
 	overflow = 0;

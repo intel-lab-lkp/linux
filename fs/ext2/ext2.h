@@ -663,6 +663,7 @@ struct ext2_inode_info {
 	struct rw_semaphore xattr_sem;
 #endif
 	rwlock_t i_meta_lock;
+	unsigned int i_blkseq;
 
 	/*
 	 * truncate_mutex is for serialising ext2_truncate() against
@@ -696,6 +697,11 @@ struct ext2_inode_info {
 static inline struct ext2_inode_info *EXT2_I(struct inode *inode)
 {
 	return container_of(inode, struct ext2_inode_info, vfs_inode);
+}
+
+static inline void ext2_inc_i_blkseq(struct ext2_inode_info *ei)
+{
+	WRITE_ONCE(ei->i_blkseq, READ_ONCE(ei->i_blkseq) + 1);
 }
 
 /* balloc.c */

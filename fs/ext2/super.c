@@ -188,7 +188,7 @@ static struct inode *ext2_alloc_inode(struct super_block *sb)
 #ifdef CONFIG_QUOTA
 	memset(&ei->i_dquot, 0, sizeof(ei->i_dquot));
 #endif
-
+	WRITE_ONCE(ei->i_blkseq, 0);
 	return &ei->vfs_inode;
 }
 

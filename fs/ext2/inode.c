@@ -406,6 +406,8 @@ static int ext2_alloc_blocks(struct inode *inode,
 	ext2_fsblk_t current_block = 0;
 	int ret = 0;
 
+	ext2_inc_i_blkseq(EXT2_I(inode));
+
 	/*
 	 * Here we try to allocate the requested multiple blocks at once,
 	 * on a best-effort basis.
@@ -966,15 +968,62 @@ ext2_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	return mpage_writepages(mapping, wbc, ext2_get_block);
 }
 
+static bool ext2_imap_valid(struct iomap_writepage_ctx *wpc, struct inode *inode,
+			    loff_t offset)
+{
+	if (offset < wpc->iomap.offset ||
+	    offset >= wpc->iomap.offset + wpc->iomap.length)
+		return false;
+
+	if (wpc->iomap.validity_cookie != READ_ONCE(EXT2_I(inode)->i_blkseq))
+		return false;
+
+	return true;
+}
+
 static int ext2_write_map_blocks(struct iomap_writepage_ctx *wpc,
 				 struct inode *inode, loff_t offset,
 				 unsigned len)
 {
-	if (offset >= wpc->iomap.offset &&
-	    offset < wpc->iomap.offset + wpc->iomap.length)
+	loff_t maxblocks = (loff_t)INT_MAX;
+	u8 blkbits = inode->i_blkbits;
+	u32 bno;
+	bool new, boundary;
+	int ret;
+
+	if (ext2_imap_valid(wpc, inode, offset))
 		return 0;
 
-	return ext2_iomap_begin(inode, offset, inode->i_sb->s_blocksize,
+	/*
+	 * For ext2 buffered-writes, the block allocation happens at the
+	 * ->write_iter time itself. So at writeback time -
+	 * 1. We first cache the i_blkseq.
+	 * 2. Call ext2_get_blocks(, create = 0) to get the no. of blocks
+	 *    already allocated.
+	 * 3. Call ext2_get_blocks() the second time with length to be same as
+	 *    the no. of blocks we know were already allocated.
+	 * 4. Till now it means, the cached i_blkseq remains valid as no block
+	 *    allocation has happened yet.
+	 * This means the next call to ->map_blocks(), we can verify whether the
+	 * i_blkseq has raced with truncate or not. If not, then i_blkseq will
+	 * remain valid.
+	 *
+	 * In case of a hole (could happen with mmaped writes), we only allocate
+	 * 1 block at a time anyways. So even if the i_blkseq value changes, we
+	 * anyway need to allocate the next block in subsequent ->map_blocks()
+	 * call.
+	 */
+	wpc->iomap.validity_cookie = READ_ONCE(EXT2_I(inode)->i_blkseq);
+
+	ret = ext2_get_blocks(inode, offset >> blkbits, maxblocks << blkbits,
+			      &bno, &new, &boundary, 0);
+	if (ret < 0)
+		return ret;
+	/*
+	 * ret can be 0 in case of a hole which is possible for mmaped writes.
+	 */
+	ret = ret ? ret : 1;
+	return ext2_iomap_begin(inode, offset, (loff_t)ret << blkbits,
 				IOMAP_WRITE, &wpc->iomap, NULL);
 }
 
@@ -1000,7 +1049,7 @@ ext2_dax_writepages(struct address_space *mapping, struct writeback_control *wbc
 
 const struct address_space_operations ext2_file_aops = {
 	.dirty_folio		= iomap_dirty_folio,
-	.release_folio 		= iomap_release_folio,
+	.release_folio		= iomap_release_folio,
 	.invalidate_folio	= iomap_invalidate_folio,
 	.read_folio		= ext2_file_read_folio,
 	.readahead		= ext2_file_readahead,
