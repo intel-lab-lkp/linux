@@ -886,6 +886,13 @@ static blk_status_t nvme_setup_discard(struct nvme_ns *ns, struct request *req,
 	return BLK_STS_OK;
 }
 
+static void nvme_set_app_tag(struct nvme_command *cmnd, u16 apptag)
+{
+	cmnd->rw.apptag = cpu_to_le16(apptag);
+	/* use 0xfff as mask so that apptag is used in entirety*/
+	cmnd->rw.appmask = cpu_to_le16(0xffff);
+}
+
 static void nvme_set_ref_tag(struct nvme_ns *ns, struct nvme_command *cmnd,
 			      struct request *req)
 {
@@ -943,6 +950,25 @@ static inline blk_status_t nvme_setup_write_zeroes(struct nvme_ns *ns,
 	return BLK_STS_OK;
 }
 
+static inline void nvme_setup_user_integrity(struct nvme_ns *ns,
+		struct request *req, struct nvme_command *cmnd,
+		u16 *control)
+{
+	struct bio_integrity_payload *bip = bio_integrity(req->bio);
+	unsigned short bip_flags = bip->bip_flags;
+
+	if (bip_flags & BIP_USER_CHK_GUARD)
+		*control |= NVME_RW_PRINFO_PRCHK_GUARD;
+	if (bip_flags & BIP_USER_CHK_REFTAG) {
+		*control |= NVME_RW_PRINFO_PRCHK_REF;
+		nvme_set_ref_tag(ns, cmnd, req);
+	}
+	if (bip_flags & BIP_USER_CHK_APPTAG) {
+		*control |= NVME_RW_PRINFO_PRCHK_APP;
+		nvme_set_app_tag(cmnd, bip->apptag);
+	}
+}
+
 static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 		struct request *req, struct nvme_command *cmnd,
 		enum nvme_opcode op)
@@ -983,6 +1009,14 @@ static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 			if (WARN_ON_ONCE(!nvme_ns_has_pi(ns->head)))
 				return BLK_STS_NOTSUPP;
 			control |= NVME_RW_PRINFO_PRACT;
+		} else {
+			/* process user-created integrity */
+			if (bio_integrity(req->bio)->bip_flags &
+					BIP_INTEGRITY_USER) {
+				nvme_setup_user_integrity(ns, req, cmnd,
+							  &control);
+				goto out;
+			}
 		}
 
 		switch (ns->head->pi_type) {
@@ -999,7 +1033,7 @@ static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 			break;
 		}
 	}
-
+out:
 	cmnd->rw.control = cpu_to_le16(control);
 	cmnd->rw.dsmgmt = cpu_to_le32(dsmgmt);
 	return 0;
