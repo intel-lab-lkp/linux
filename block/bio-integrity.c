@@ -11,7 +11,7 @@
 #include <linux/export.h>
 #include <linux/bio.h>
 #include <linux/workqueue.h>
-#include <linux/slab.h>
+#include <uapi/linux/io_uring.h>
 #include "blk.h"
 
 static struct kmem_cache *bip_slab;
@@ -316,6 +316,35 @@ static unsigned int bvec_from_pages(struct bio_vec *bvec, struct page **pages,
 	}
 
 	return nr_bvecs;
+}
+
+int bio_integrity_map_iter(struct bio *bio, struct uio_meta *meta)
+{
+	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
+	u16 bip_flags = 0;
+	int ret;
+
+	if (!bi)
+		return -EINVAL;
+
+	if (meta->iter.count < bio_integrity_bytes(bi, bio_sectors(bio)))
+		return -EINVAL;
+
+	ret = bio_integrity_map_user(bio, &meta->iter, 0);
+	if (!ret) {
+		struct bio_integrity_payload *bip = bio_integrity(bio);
+
+		if (meta->flags & META_CHK_GUARD)
+			bip_flags |= BIP_USER_CHK_GUARD;
+		if (meta->flags & META_CHK_APPTAG)
+			bip_flags |= BIP_USER_CHK_APPTAG;
+		if (meta->flags & META_CHK_REFTAG)
+			bip_flags |= BIP_USER_CHK_REFTAG;
+
+		bip->bip_flags |= bip_flags;
+		bip->apptag = meta->apptag;
+	}
+	return ret;
 }
 
 int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter,

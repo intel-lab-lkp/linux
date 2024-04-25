@@ -329,6 +329,9 @@ enum bip_flags {
 	BIP_IP_CHECKSUM		= 1 << 4, /* IP checksum */
 	BIP_INTEGRITY_USER	= 1 << 5, /* Integrity payload is user address */
 	BIP_COPY_USER		= 1 << 6, /* Kernel bounce buffer in use */
+	BIP_USER_CHK_GUARD	= 1 << 7,
+	BIP_USER_CHK_APPTAG	= 1 << 8,
+	BIP_USER_CHK_REFTAG	= 1 << 9,
 };
 
 struct uio_meta {
@@ -348,6 +351,7 @@ struct bio_integrity_payload {
 	unsigned short		bip_vcnt;	/* # of integrity bio_vecs */
 	unsigned short		bip_max_vcnt;	/* integrity bio_vec slots */
 	unsigned short		bip_flags;	/* control flags */
+	u16			apptag;		/* apptag */
 
 	struct bvec_iter	bio_iter;	/* for rewinding parent bio */
 
@@ -729,6 +733,7 @@ static inline bool bioset_initialized(struct bio_set *bs)
 	for_each_bio(_bio)						\
 		bip_for_each_vec(_bvl, _bio->bi_integrity, _iter)
 
+int bio_integrity_map_iter(struct bio *bio, struct uio_meta *meta);
 int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter, u32 seed);
 extern struct bio_integrity_payload *bio_integrity_alloc(struct bio *, gfp_t, unsigned int);
 extern int bio_integrity_add_page(struct bio *, struct page *, unsigned int, unsigned int);
@@ -804,6 +809,11 @@ static inline int bio_integrity_add_page(struct bio *bio, struct page *page,
 static inline int bio_integrity_map_user(struct bio *bio, struct iov_iter *iter,
 					u32 seed)
 
+{
+	return -EINVAL;
+}
+
+static inline int bio_integrity_map_iter(struct bio *bio, struct uio_meta *meta)
 {
 	return -EINVAL;
 }
