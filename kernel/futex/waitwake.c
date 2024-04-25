@@ -372,6 +372,78 @@ void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
 	__set_current_state(TASK_RUNNING);
 }
 
+static inline bool task_on_cpu(struct task_struct *p)
+{
+#ifdef CONFIG_SMP
+	return !!(p->on_cpu);
+#else
+	return false;
+#endif
+}
+
+static int futex_spin(struct futex_hash_bucket *hb, struct futex_q *q,
+		       struct hrtimer_sleeper *timeout, void __user *uaddr, u32 val)
+{
+	struct task_struct *p;
+	u32 pid, uval;
+	unsigned int i = 0;
+
+	if (futex_get_value_locked(&uval, uaddr))
+		return -EFAULT;
+
+	pid = uval;
+
+	p = find_get_task_by_vpid(pid);
+	if (!p) {
+		printk("%s: no task found with PID %d\n", __func__, pid);
+		return -EAGAIN;
+	}
+
+	if (unlikely(p->flags & PF_KTHREAD)) {
+		put_task_struct(p);
+		printk("%s: can't spin in a kernel task\n", __func__);
+		return -EPERM;
+	}
+
+	futex_queue(q, hb);
+
+	if (timeout)
+		hrtimer_sleeper_start_expires(timeout, HRTIMER_MODE_ABS);
+
+	while (1) {
+		if (likely(!plist_node_empty(&q->list))) {
+			if (timeout && !timeout->task)
+				return 0;
+
+			/* spin */
+			if (task_on_cpu(p)) {
+				i++;
+				continue;
+			/* task is not running, sleep */
+			} else {
+				break;
+			}
+		} else {
+			printk("%s: woke after %d spins\n", __func__, i);
+			return 0;
+		}
+	}
+
+	printk("%s: spinned %d times, sleeping\n", __func__, i);
+
+	/* spinning didn't work, go to the normal path */
+	set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
+
+	if (likely(!plist_node_empty(&q->list))) {
+		if (!timeout || timeout->task)
+			schedule();
+	}
+
+	__set_current_state(TASK_RUNNING);
+
+	return 0;
+}
+
 /**
  * futex_unqueue_multiple - Remove various futexes from their hash bucket
  * @v:	   The list of futexes to unqueue
@@ -665,8 +737,11 @@ retry:
 	if (ret)
 		return ret;
 
-	/* futex_queue and wait for wakeup, timeout, or a signal. */
-	futex_wait_queue(hb, &q, to);
+	if (flags & FLAGS_SPIN)
+		futex_spin(hb, &q, to, uaddr, val);
+	else
+		/* futex_queue and wait for wakeup, timeout, or a signal. */
+		futex_wait_queue(hb, &q, to);
 
 	/* If we were woken (and unqueued), we succeeded, whatever. */
 	if (!futex_unqueue(&q))

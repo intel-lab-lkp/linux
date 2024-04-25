@@ -37,6 +37,7 @@
 #define FLAGS_HAS_TIMEOUT	0x0040
 #define FLAGS_NUMA		0x0080
 #define FLAGS_STRICT		0x0100
+#define FLAGS_SPIN		0x0200
 
 /* FUTEX_ to FLAGS_ */
 static inline unsigned int futex_to_flags(unsigned int op)
@@ -52,7 +53,7 @@ static inline unsigned int futex_to_flags(unsigned int op)
 	return flags;
 }
 
-#define FUTEX2_VALID_MASK (FUTEX2_SIZE_MASK | FUTEX2_PRIVATE)
+#define FUTEX2_VALID_MASK (FUTEX2_SIZE_MASK | FUTEX2_PRIVATE | FUTEX2_SPIN)
 
 /* FUTEX2_ to FLAGS_ */
 static inline unsigned int futex2_to_flags(unsigned int flags2)
@@ -64,6 +65,9 @@ static inline unsigned int futex2_to_flags(unsigned int flags2)
 
 	if (flags2 & FUTEX2_NUMA)
 		flags |= FLAGS_NUMA;
+
+	if (flags2 & FUTEX2_SPIN)
+		flags |= FLAGS_SPIN;
 
 	return flags;
 }
