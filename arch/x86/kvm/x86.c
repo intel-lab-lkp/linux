@@ -1695,7 +1695,7 @@ static int kvm_get_msr_feature(struct kvm_msr_entry *msr)
 		rdmsrl_safe(msr->index, &msr->data);
 		break;
 	default:
-		return static_call(kvm_x86_get_msr_feature)(msr);
+		return static_call(kvm_x86_get_msr_feature)(msr->index, &msr->data);
 	}
 	return 0;
 }
