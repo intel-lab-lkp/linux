@@ -64,6 +64,32 @@ setfx:
 }
 
 /*
+ * Update the value of PKRU register that was already pushed
+ * onto the signal frame.
+ */
+static inline int
+__update_pkru_in_sigframe(struct xregs_state __user *buf, u32 pkru)
+{
+	int err = -EFAULT;
+	struct _fpx_sw_bytes fx_sw;
+	struct pkru_state *pk = NULL;
+
+	if (unlikely(!check_xstate_in_sigframe((void __user *) buf, &fx_sw)))
+		goto out;
+
+	pk = get_xsave_addr_user(buf, XFEATURE_PKRU);
+	if (!pk || !user_write_access_begin(buf, sizeof(struct xregs_state)))
+		goto out;
+	unsafe_put_user(pkru, (unsigned int __user *) pk, uaccess_end);
+
+	err = 0;
+uaccess_end:
+	user_access_end();
+out:
+	return err;
+}
+
+/*
  * Signal frame handlers.
  */
 static inline bool save_fsave_header(struct task_struct *tsk, void __user *buf)

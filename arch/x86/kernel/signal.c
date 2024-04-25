@@ -225,6 +225,18 @@ setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs, u32 pkru)
 	}
 }
 
+/*
+ * Enable all pkeys to ensure that both the current stack and the alternate
+ * signal stack are always writeable.
+ */
+static inline u32 sig_prepare_pkru(void)
+{
+	u32 orig_pkru = read_pkru();
+
+	write_pkru(0);
+	return orig_pkru;
+}
+
 static void
 handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 {
