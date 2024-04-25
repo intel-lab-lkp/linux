@@ -842,14 +842,32 @@ void cxl_event_trace_record(const struct cxl_memdev *cxlmd,
 			    enum cxl_event_type event_type,
 			    const uuid_t *uuid, union cxl_event *evt)
 {
-	if (event_type == CXL_CPER_EVENT_GEN_MEDIA)
-		trace_cxl_general_media(cxlmd, type, &evt->gen_media);
-	else if (event_type == CXL_CPER_EVENT_DRAM)
-		trace_cxl_dram(cxlmd, type, &evt->dram);
-	else if (event_type == CXL_CPER_EVENT_MEM_MODULE)
+	if (event_type == CXL_CPER_EVENT_MEM_MODULE) {
 		trace_cxl_memory_module(cxlmd, type, &evt->mem_module);
-	else
+		return;
+	}
+	if (event_type == CXL_CPER_EVENT_GENERIC) {
 		trace_cxl_generic_event(cxlmd, type, uuid, &evt->generic);
+		return;
+	}
+
+	/* Protect trace events that do DPA->HPA translations */
+	guard(rwsem_read)(&cxl_region_rwsem);
+	guard(rwsem_read)(&cxl_dpa_rwsem);
+
+	if (event_type == CXL_CPER_EVENT_GEN_MEDIA &&
+	    trace_cxl_general_media_enabled()) {
+		u64 dpa = le64_to_cpu(evt->gen_media.phys_addr) & CXL_DPA_MASK;
+		struct cxl_region *cxlr = cxl_dpa_to_region(cxlmd, dpa);
+
+		trace_cxl_general_media(cxlmd, type, &evt->gen_media, cxlr);
+	} else if (event_type == CXL_CPER_EVENT_DRAM &&
+		   trace_cxl_dram_enabled()) {
+		u64 dpa = le64_to_cpu(evt->dram.phys_addr) & CXL_DPA_MASK;
+		struct cxl_region *cxlr = cxl_dpa_to_region(cxlmd, dpa);
+
+		trace_cxl_dram(cxlmd, type, &evt->dram, cxlr);
+	}
 }
 EXPORT_SYMBOL_NS_GPL(cxl_event_trace_record, CXL);
 
