@@ -328,7 +328,7 @@ static bool migrate_vma_check_page(struct page *page, struct page *fault_page)
 
 	/*
 	 * One extra ref because caller holds an extra reference, either from
-	 * isolate_lru_page() for a regular page, or migrate_vma_collect() for
+	 * folio_isolate_lru() for a regular page, or migrate_vma_collect() for
 	 * a device page.
 	 */
 	int extra = 1 + (page == fault_page);

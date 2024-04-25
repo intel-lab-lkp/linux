@@ -391,7 +391,6 @@ bool isolate_folio_to_list(struct folio *folio, struct list_head *list);
 /*
  * in mm/vmscan.c:
  */
-bool isolate_lru_page(struct page *page);
 bool folio_isolate_lru(struct folio *folio);
 void putback_lru_page(struct page *page);
 void folio_putback_lru(struct folio *folio);

@@ -230,7 +230,7 @@ In Nick's patch, he used one of the struct page LRU list link fields as a count
 of VM_LOCKED VMAs that map the page (Rik van Riel had the same idea three years
 earlier).  But this use of the link field for a count prevented the management
 of the pages on an LRU list, and thus mlocked pages were not migratable as
-isolate_lru_page() could not detect them, and the LRU list link field was not
+folio_isolate_lru() could not detect them, and the LRU list link field was not
 available to the migration subsystem.
 
 Nick resolved this by putting mlocked pages back on the LRU list before
