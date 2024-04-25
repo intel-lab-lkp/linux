@@ -22,11 +22,14 @@ properties:
   reg:
     maxItems: 1
 
+allOf:
+  - $ref: fsi-controller.yaml#
+
 required:
   - compatible
   - reg
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
