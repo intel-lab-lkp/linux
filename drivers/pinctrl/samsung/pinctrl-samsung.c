@@ -15,6 +15,7 @@
 // but provides extensions to which platform specific implementation of the gpio
 // and wakeup interrupts can be hooked to.
 
+#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
 #include <linux/init.h>
@@ -397,6 +398,11 @@ static void samsung_pinmux_setup(struct pinctrl_dev *pctldev, unsigned selector,
 		reg += 4;
 	}
 
+	if (clk_enable(drvdata->pclk)) {
+		dev_err(pctldev->dev, "failed to enable clock for setup\n");
+		return;
+	}
+
 	raw_spin_lock_irqsave(&bank->slock, flags);
 
 	data = readl(reg + type->reg_offset[PINCFG_TYPE_FUNC]);
@@ -405,6 +411,8 @@ static void samsung_pinmux_setup(struct pinctrl_dev *pctldev, unsigned selector,
 	writel(data, reg + type->reg_offset[PINCFG_TYPE_FUNC]);
 
 	raw_spin_unlock_irqrestore(&bank->slock, flags);
+
+	clk_disable(drvdata->pclk);
 }
 
 /* enable a specified pinmux by writing to registers */
@@ -436,6 +444,7 @@ static int samsung_pinconf_rw(struct pinctrl_dev *pctldev, unsigned int pin,
 	u32 data, width, pin_offset, mask, shift;
 	u32 cfg_value, cfg_reg;
 	unsigned long flags;
+	int ret;
 
 	drvdata = pinctrl_dev_get_drvdata(pctldev);
 	pin_to_reg_bank(drvdata, pin, &reg_base, &pin_offset, &bank);
@@ -446,6 +455,12 @@ static int samsung_pinconf_rw(struct pinctrl_dev *pctldev, unsigned int pin,
 
 	width = type->fld_width[cfg_type];
 	cfg_reg = type->reg_offset[cfg_type];
+
+	ret = clk_enable(drvdata->pclk);
+	if (ret) {
+		dev_err(drvdata->dev, "failed to enable clock\n");
+		return ret;
+	}
 
 	raw_spin_lock_irqsave(&bank->slock, flags);
 
@@ -465,6 +480,8 @@ static int samsung_pinconf_rw(struct pinctrl_dev *pctldev, unsigned int pin,
 	}
 
 	raw_spin_unlock_irqrestore(&bank->slock, flags);
+
+	clk_disable(drvdata->pclk);
 
 	return 0;
 }
@@ -539,16 +556,24 @@ static void samsung_gpio_set_value(struct gpio_chip *gc,
 {
 	struct samsung_pin_bank *bank = gpiochip_get_data(gc);
 	const struct samsung_pin_bank_type *type = bank->type;
+	struct samsung_pinctrl_drv_data *drvdata = bank->drvdata;
 	void __iomem *reg;
 	u32 data;
 
 	reg = bank->pctl_base + bank->pctl_offset;
+
+	if (clk_enable(drvdata->pclk)) {
+		dev_err(drvdata->dev, "failed to enable clock\n");
+		return;
+	}
 
 	data = readl(reg + type->reg_offset[PINCFG_TYPE_DAT]);
 	data &= ~(1 << offset);
 	if (value)
 		data |= 1 << offset;
 	writel(data, reg + type->reg_offset[PINCFG_TYPE_DAT]);
+
+	clk_disable(drvdata->pclk);
 }
 
 /* gpiolib gpio_set callback function */
@@ -569,12 +594,23 @@ static int samsung_gpio_get(struct gpio_chip *gc, unsigned offset)
 	u32 data;
 	struct samsung_pin_bank *bank = gpiochip_get_data(gc);
 	const struct samsung_pin_bank_type *type = bank->type;
+	struct samsung_pinctrl_drv_data *drvdata = bank->drvdata;
+	int ret;
 
 	reg = bank->pctl_base + bank->pctl_offset;
+
+	ret = clk_enable(drvdata->pclk);
+	if (ret) {
+		dev_err(drvdata->dev, "failed to enable clock\n");
+		return ret;
+	}
 
 	data = readl(reg + type->reg_offset[PINCFG_TYPE_DAT]);
 	data >>= offset;
 	data &= 1;
+
+	clk_disable(drvdata->pclk);
+
 	return data;
 }
 
@@ -591,9 +627,12 @@ static int samsung_gpio_set_direction(struct gpio_chip *gc,
 	struct samsung_pin_bank *bank;
 	void __iomem *reg;
 	u32 data, mask, shift;
+	struct samsung_pinctrl_drv_data *drvdata;
+	int ret;
 
 	bank = gpiochip_get_data(gc);
 	type = bank->type;
+	drvdata = bank->drvdata;
 
 	reg = bank->pctl_base + bank->pctl_offset
 			+ type->reg_offset[PINCFG_TYPE_FUNC];
@@ -606,11 +645,19 @@ static int samsung_gpio_set_direction(struct gpio_chip *gc,
 		reg += 4;
 	}
 
+	ret = clk_enable(drvdata->pclk);
+	if (ret) {
+		dev_err(drvdata->dev, "failed to enable clock\n");
+		return ret;
+	}
+
 	data = readl(reg);
 	data &= ~(mask << shift);
 	if (!input)
 		data |= PIN_CON_FUNC_OUTPUT << shift;
 	writel(data, reg);
+
+	clk_disable(drvdata->pclk);
 
 	return 0;
 }
@@ -1164,6 +1211,12 @@ static int samsung_pinctrl_probe(struct platform_device *pdev)
 		}
 	}
 
+	drvdata->pclk = devm_clk_get_optional_prepared(dev, "pclk");
+	if (IS_ERR(drvdata->pclk)) {
+		ret = PTR_ERR(drvdata->pclk);
+		goto err_put_banks;
+	}
+
 	ret = samsung_pinctrl_register(pdev, drvdata);
 	if (ret)
 		goto err_put_banks;
@@ -1202,6 +1255,13 @@ static int __maybe_unused samsung_pinctrl_suspend(struct device *dev)
 	struct samsung_pinctrl_drv_data *drvdata = dev_get_drvdata(dev);
 	int i;
 
+	i = clk_enable(drvdata->pclk);
+	if (i) {
+		dev_err(drvdata->dev,
+			"failed to enable clock for saving state\n");
+		return i;
+	}
+
 	for (i = 0; i < drvdata->nr_banks; i++) {
 		struct samsung_pin_bank *bank = &drvdata->pin_banks[i];
 		const void __iomem *reg = bank->pctl_base + bank->pctl_offset;
@@ -1231,6 +1291,8 @@ static int __maybe_unused samsung_pinctrl_suspend(struct device *dev)
 		}
 	}
 
+	clk_disable(drvdata->pclk);
+
 	if (drvdata->suspend)
 		drvdata->suspend(drvdata);
 	if (drvdata->retention_ctrl && drvdata->retention_ctrl->enable)
@@ -1251,6 +1313,16 @@ static int __maybe_unused samsung_pinctrl_resume(struct device *dev)
 {
 	struct samsung_pinctrl_drv_data *drvdata = dev_get_drvdata(dev);
 	int i;
+
+	/* enable clock before the callback, as we don't want to have to deal
+	 * with callback cleanup on clock failures.
+	 */
+	i = clk_enable(drvdata->pclk);
+	if (i) {
+		dev_err(drvdata->dev,
+			"failed to enable clock for restoring state\n");
+		return i;
+	}
 
 	if (drvdata->resume)
 		drvdata->resume(drvdata);
@@ -1285,6 +1357,8 @@ static int __maybe_unused samsung_pinctrl_resume(struct device *dev)
 			if (widths[type])
 				writel(bank->pm_save[type], reg + offs[type]);
 	}
+
+	clk_disable(drvdata->pclk);
 
 	if (drvdata->retention_ctrl && drvdata->retention_ctrl->disable)
 		drvdata->retention_ctrl->disable(drvdata);
