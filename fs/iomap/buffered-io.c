@@ -30,7 +30,7 @@ typedef int (*iomap_punch_t)(struct inode *inode, loff_t offset, loff_t length);
  */
 struct iomap_folio_state {
 	spinlock_t		state_lock;
-	unsigned int		read_bytes_pending;
+	size_t			read_bytes_pending;
 	atomic_t		write_bytes_pending;
 
 	/*
@@ -380,6 +380,7 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 	loff_t orig_pos = pos;
 	size_t poff, plen;
 	sector_t sector;
+	bool rbp_finished = false;
 
 	if (iomap->type == IOMAP_INLINE)
 		return iomap_read_inline_data(iter, folio);
@@ -387,21 +388,39 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 	/* zero post-eof blocks as the page may be mapped */
 	ifs = ifs_alloc(iter->inode, folio, iter->flags);
 	iomap_adjust_read_range(iter->inode, folio, &pos, length, &poff, &plen);
+
+	if (ifs) {
+		loff_t to_read = min_t(loff_t, iter->len - offset,
+			folio_size(folio) - offset_in_folio(folio, orig_pos));
+		size_t padjust;
+
+		spin_lock_irq(&ifs->state_lock);
+		if (!ifs->read_bytes_pending)
+			ifs->read_bytes_pending = to_read;
+		padjust = pos - orig_pos;
+		ifs->read_bytes_pending -= padjust;
+		if (!ifs->read_bytes_pending)
+			rbp_finished = true;
+		spin_unlock_irq(&ifs->state_lock);
+	}
+
 	if (plen == 0)
 		goto done;
 
 	if (iomap_block_needs_zeroing(iter, pos)) {
+		if (ifs) {
+			spin_lock_irq(&ifs->state_lock);
+			ifs->read_bytes_pending -= plen;
+			if (!ifs->read_bytes_pending)
+				rbp_finished = true;
+			spin_unlock_irq(&ifs->state_lock);
+		}
 		folio_zero_range(folio, poff, plen);
 		iomap_set_range_uptodate(folio, poff, plen);
 		goto done;
 	}
 
 	ctx->cur_folio_in_bio = true;
-	if (ifs) {
-		spin_lock_irq(&ifs->state_lock);
-		ifs->read_bytes_pending += plen;
-		spin_unlock_irq(&ifs->state_lock);
-	}
 
 	sector = iomap_sector(iomap, pos);
 	if (!ctx->bio ||
@@ -436,6 +455,14 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 
 done:
 	/*
+	 * If there is no bio prepared and if rbp is finished and
+	 * this was the last offset within this folio then mark
+	 * cur_folio_in_bio to false.
+	 */
+	if (!ctx->bio && rbp_finished &&
+			offset_in_folio(folio, pos + plen) == 0)
+		ctx->cur_folio_in_bio = false;
+	/*
 	 * Move the caller beyond our range so that it keeps making progress.
 	 * For that, we have to include any leading non-uptodate ranges, but
 	 * we can skip trailing ones as they will be handled in the next
@@ -459,7 +486,41 @@ static loff_t iomap_read_folio_iter(const struct iomap_iter *iter,
 			return ret;
 	}
 
+	if (ctx->bio) {
+		submit_bio(ctx->bio);
+		WARN_ON_ONCE(!ctx->cur_folio_in_bio);
+		ctx->bio = NULL;
+	}
+	if (offset_in_folio(folio, iter->pos + done) == 0 &&
+			!ctx->cur_folio_in_bio) {
+		folio_unlock(ctx->cur_folio);
+	}
+
 	return done;
+}
+
+static void iomap_handle_read_error(struct iomap_readpage_ctx *ctx,
+		struct iomap_iter *iter)
+{
+	struct folio *folio = ctx->cur_folio;
+	struct iomap_folio_state *ifs;
+	unsigned long flags;
+	bool rbp_finished = false;
+	size_t rbp_adjust = folio_size(folio) - offset_in_folio(folio,
+				iter->pos);
+	ifs = folio->private;
+	if (!ifs || !ifs->read_bytes_pending)
+		goto unlock;
+
+	spin_lock_irqsave(&ifs->state_lock, flags);
+	ifs->read_bytes_pending -= rbp_adjust;
+	if (!ifs->read_bytes_pending)
+		rbp_finished = true;
+	spin_unlock_irqrestore(&ifs->state_lock, flags);
+
+unlock:
+	if (rbp_finished || !ctx->cur_folio_in_bio)
+		folio_unlock(folio);
 }
 
 int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
@@ -479,15 +540,9 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 	while ((ret = iomap_iter(&iter, ops)) > 0)
 		iter.processed = iomap_read_folio_iter(&iter, &ctx);
 
-	if (ret < 0)
+	if (ret < 0) {
 		folio_set_error(folio);
-
-	if (ctx.bio) {
-		submit_bio(ctx.bio);
-		WARN_ON_ONCE(!ctx.cur_folio_in_bio);
-	} else {
-		WARN_ON_ONCE(ctx.cur_folio_in_bio);
-		folio_unlock(folio);
+		iomap_handle_read_error(&ctx, &iter);
 	}
 
 	/*
@@ -506,12 +561,6 @@ static loff_t iomap_readahead_iter(const struct iomap_iter *iter,
 	loff_t done, ret;
 
 	for (done = 0; done < length; done += ret) {
-		if (ctx->cur_folio &&
-		    offset_in_folio(ctx->cur_folio, iter->pos + done) == 0) {
-			if (!ctx->cur_folio_in_bio)
-				folio_unlock(ctx->cur_folio);
-			ctx->cur_folio = NULL;
-		}
 		if (!ctx->cur_folio) {
 			ctx->cur_folio = readahead_folio(ctx->rac);
 			ctx->cur_folio_in_bio = false;
@@ -519,6 +568,17 @@ static loff_t iomap_readahead_iter(const struct iomap_iter *iter,
 		ret = iomap_readpage_iter(iter, ctx, done);
 		if (ret <= 0)
 			return ret;
+		if (ctx->cur_folio && offset_in_folio(ctx->cur_folio,
+					iter->pos + done + ret) == 0) {
+			if (!ctx->cur_folio_in_bio)
+				folio_unlock(ctx->cur_folio);
+			ctx->cur_folio = NULL;
+		}
+	}
+
+	if (ctx->bio) {
+		submit_bio(ctx->bio);
+		ctx->bio = NULL;
 	}
 
 	return done;
@@ -549,18 +609,16 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 	struct iomap_readpage_ctx ctx = {
 		.rac	= rac,
 	};
+	int ret = 0;
 
 	trace_iomap_readahead(rac->mapping->host, readahead_count(rac));
 
-	while (iomap_iter(&iter, ops) > 0)
+	while ((ret = iomap_iter(&iter, ops)) > 0)
 		iter.processed = iomap_readahead_iter(&iter, &ctx);
 
-	if (ctx.bio)
-		submit_bio(ctx.bio);
-	if (ctx.cur_folio) {
-		if (!ctx.cur_folio_in_bio)
-			folio_unlock(ctx.cur_folio);
-	}
+	if (ret < 0 && ctx.cur_folio)
+		iomap_handle_read_error(&ctx, &iter);
+
 }
 EXPORT_SYMBOL_GPL(iomap_readahead);
 
