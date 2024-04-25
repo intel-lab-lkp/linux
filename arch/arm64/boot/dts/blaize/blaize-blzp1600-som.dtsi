@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2023 Blaize, Inc. All rights reserved.
+ */
+
+#include "blaize-blzp1600.dtsi"
+
+/ {
+	memory@1000 {
+		device_type = "memory";
+		reg = <0x0 0x00001000 0xfffff000>;
+	};
+};
+
+/* i2c4 bus is available only on the SoM, not on the board */
+&i2c4 {
+	clock-frequency = <100000>;
+	status = "okay";
+};
+
+&uart0 {
+	status = "okay";
+};
