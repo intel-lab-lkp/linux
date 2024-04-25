@@ -108,11 +108,15 @@ static void bio_integrity_uncopy_user(struct bio_integrity_payload *bip)
 	unsigned short nr_vecs = bip->bip_max_vcnt - 1;
 	struct bio_vec *copy = &bip->bip_vec[1];
 	size_t bytes = bip->bip_iter.bi_size;
+	struct bio_vec copy_bvec, src_bvec;
 	struct iov_iter iter;
 	int ret;
 
-	iov_iter_bvec(&iter, ITER_DEST, copy, nr_vecs, bytes);
-	ret = copy_to_iter(bvec_virt(bip->bip_vec), bytes, &iter);
+	copy_bvec = mp_bvec_iter_bvec(copy, bip->bip_iter);
+	src_bvec = mp_bvec_iter_bvec(bip->bip_vec, bip->bip_iter);
+
+	iov_iter_bvec(&iter, ITER_DEST, &copy_bvec, nr_vecs, bytes);
+	ret = copy_to_iter(bvec_virt(&src_bvec), bytes, &iter);
 	WARN_ON_ONCE(ret != bytes);
 
 	bio_integrity_unpin_bvec(copy, nr_vecs, true);
