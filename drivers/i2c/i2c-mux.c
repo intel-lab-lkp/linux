@@ -331,7 +331,6 @@ int i2c_mux_add_adapter(struct i2c_mux_core *muxc,
 	priv->adap.owner = THIS_MODULE;
 	priv->adap.algo = &priv->algo;
 	priv->adap.algo_data = priv;
-	priv->adap.dev.parent = &parent->dev;
 	priv->adap.retries = parent->retries;
 	priv->adap.timeout = parent->timeout;
 	priv->adap.quirks = parent->quirks;
@@ -347,6 +346,15 @@ int i2c_mux_add_adapter(struct i2c_mux_core *muxc,
 			chan_id);
 	else
 		priv->adap.class = class;
+
+	/*
+	 * When creating the adapter, the node devices are checked for i2c address
+	 * match with other devices on the parent adapter, among which is the mux itself.
+	 * If a match is found the node device is not probed successfully.
+	 * Allow the mux to have the same address as a child device by skipping this check.
+	 */
+	if (!(muxc->share_addr_with_children))
+		priv->adap.dev.parent = &parent->dev;
 
 	/*
 	 * Try to populate the mux adapter's of_node, expands to
