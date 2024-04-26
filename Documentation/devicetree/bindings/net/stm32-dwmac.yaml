@@ -84,6 +84,9 @@ properties:
           - description: offset of the control register
           - description: field to set mask in register
 
+  phy-supply:
+    description: PHY regulator
+
   st,eth-clk-sel:
     description:
       set this property in RGMII PHY when you want to select RCC clock instead of ETH_CLK125.
