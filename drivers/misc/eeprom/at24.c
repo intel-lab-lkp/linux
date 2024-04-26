@@ -86,6 +86,7 @@ struct at24_data {
 
 	struct nvmem_device *nvmem;
 	struct regulator *vcc_reg;
+	struct regulator *dovdd_reg;
 	void (*read_post)(unsigned int off, char *buf, size_t count);
 
 	/*
@@ -697,6 +698,14 @@ static int at24_probe(struct i2c_client *client)
 	if (IS_ERR(at24->vcc_reg))
 		return PTR_ERR(at24->vcc_reg);
 
+	at24->dovdd_reg = devm_regulator_get_optional(dev, "dovdd");
+	if (IS_ERR(at24->dovdd_reg)) {
+		if (PTR_ERR(at24->dovdd_reg) == -ENODEV)
+			at24->dovdd_reg = NULL;
+		else
+			return PTR_ERR(at24->dovdd_reg);
+	}
+
 	writable = !(flags & AT24_FLAG_READONLY);
 	if (writable) {
 		at24->write_max = min_t(unsigned int,
@@ -754,6 +763,14 @@ static int at24_probe(struct i2c_client *client)
 			return err;
 		}
 
+		if (at24->dovdd_reg != NULL) {
+			err = regulator_enable(at24->dovdd_reg);
+			if (err) {
+				dev_err(dev, "Failed to enable dovdd regulator\n");
+				return err;
+			}
+		}
+
 		pm_runtime_set_active(dev);
 	}
 	pm_runtime_enable(dev);
@@ -761,8 +778,11 @@ static int at24_probe(struct i2c_client *client)
 	at24->nvmem = devm_nvmem_register(dev, &nvmem_config);
 	if (IS_ERR(at24->nvmem)) {
 		pm_runtime_disable(dev);
-		if (!pm_runtime_status_suspended(dev))
+		if (!pm_runtime_status_suspended(dev)) {
 			regulator_disable(at24->vcc_reg);
+			if (at24->dovdd_reg != NULL)
+				regulator_disable(at24->dovdd_reg);
+		}
 		return dev_err_probe(dev, PTR_ERR(at24->nvmem),
 				     "failed to register nvmem\n");
 	}
@@ -804,8 +824,11 @@ static void at24_remove(struct i2c_client *client)
 
 	pm_runtime_disable(&client->dev);
 	if (acpi_dev_state_d0(&client->dev)) {
-		if (!pm_runtime_status_suspended(&client->dev))
+		if (!pm_runtime_status_suspended(&client->dev)) {
 			regulator_disable(at24->vcc_reg);
+			if (at24->dovdd_reg != NULL)
+				regulator_disable(at24->dovdd_reg);
+		}
 		pm_runtime_set_suspended(&client->dev);
 	}
 }
@@ -815,13 +838,23 @@ static int __maybe_unused at24_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
 
+	if (at24->dovdd_reg != NULL)
+		regulator_disable(at24->dovdd_reg);
+
 	return regulator_disable(at24->vcc_reg);
 }
 
 static int __maybe_unused at24_resume(struct device *dev)
 {
+	int err;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
+
+	if (at24->dovdd_reg != NULL) {
+		err = regulator_enable(at24->dovdd_reg);
+		if (err)
+			return err;
+	}
 
 	return regulator_enable(at24->vcc_reg);
 }
