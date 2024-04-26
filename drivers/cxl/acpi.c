@@ -74,6 +74,44 @@ static struct cxl_dport *cxl_hb_xor(struct cxl_root_decoder *cxlrd, int pos)
 	return cxlrd->cxlsd.target[n];
 }
 
+static u64 restore_xor_pos(u64 hpa, u64 map)
+{
+	int restore_value, restore_pos = 0;
+
+	/*
+	 * Restore the position bit to its value before the
+	 * xormap was applied at HPA->DPA translation.
+	 *
+	 * restore_pos is the lowest set bit in the map
+	 * restore_value is the XORALLBITS in (hpa AND map)
+	 */
+
+	while ((map & (1ULL << restore_pos)) == 0)
+		restore_pos++;
+
+	restore_value = (hweight64(hpa & map) & 1);
+	if (restore_value)
+		hpa |= (1ULL << restore_pos);
+	else
+		hpa &= ~(1ULL << restore_pos);
+
+	return hpa;
+}
+
+static u64 cxl_xor_trans(struct cxl_root_decoder *cxlrd, u64 hpa, int iw)
+{
+	struct cxl_cxims_data *cximsd = cxlrd->platform_data;
+
+	/* No xormaps for ways of 1 or 3 */
+	if (iw == 1 || iw == 3)
+		return hpa;
+
+	for (int i = 0; i < cximsd->nr_maps; i++)
+		hpa = restore_xor_pos(hpa, cximsd->xormaps[i]);
+
+	return hpa;
+}
+
 struct cxl_cxims_context {
 	struct device *dev;
 	struct cxl_root_decoder *cxlrd;
@@ -325,6 +363,7 @@ static int __cxl_parse_cfmws(struct acpi_cedt_cfmws *cfmws,
 	struct cxl_cxims_context cxims_ctx;
 	struct cxl_root_decoder *cxlrd;
 	struct device *dev = ctx->dev;
+	cxl_addr_trans_fn addr_trans;
 	cxl_calc_hb_fn cxl_calc_hb;
 	struct cxl_decoder *cxld;
 	unsigned int ways, i, ig;
@@ -365,12 +404,16 @@ static int __cxl_parse_cfmws(struct acpi_cedt_cfmws *cfmws,
 	if (rc)
 		goto err_insert;
 
-	if (cfmws->interleave_arithmetic == ACPI_CEDT_CFMWS_ARITHMETIC_MODULO)
+	if (cfmws->interleave_arithmetic == ACPI_CEDT_CFMWS_ARITHMETIC_MODULO) {
 		cxl_calc_hb = cxl_hb_modulo;
-	else
-		cxl_calc_hb = cxl_hb_xor;
+		addr_trans = NULL;
 
-	cxlrd = cxl_root_decoder_alloc(root_port, ways, cxl_calc_hb);
+	} else {
+		cxl_calc_hb = cxl_hb_xor;
+		addr_trans = cxl_xor_trans;
+	}
+
+	cxlrd = cxl_root_decoder_alloc(root_port, ways, cxl_calc_hb, addr_trans);
 	if (IS_ERR(cxlrd))
 		return PTR_ERR(cxlrd);
 

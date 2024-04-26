@@ -36,6 +36,7 @@ static bool cxl_is_hpa_in_range(u64 hpa, struct cxl_region *cxlr, int pos)
 static u64 cxl_dpa_to_hpa(u64 dpa,  struct cxl_region *cxlr,
 			  struct cxl_endpoint_decoder *cxled)
 {
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
 	u64 dpa_offset, hpa_offset, bits_upper, mask_upper, hpa;
 	struct cxl_region_params *p = &cxlr->params;
 	int pos = cxled->pos;
@@ -74,6 +75,10 @@ static u64 cxl_dpa_to_hpa(u64 dpa,  struct cxl_region *cxlr,
 
 	/* Apply the hpa_offset to the region base address */
 	hpa = hpa_offset + p->res->start;
+
+	/* An addr_trans helper is defined for XOR math */
+	if (cxlrd->addr_trans)
+		hpa = cxlrd->addr_trans(cxlrd, hpa, p->interleave_ways);
 
 	if (!cxl_is_hpa_in_range(hpa, cxlr, cxled->pos))
 		return ULLONG_MAX;
