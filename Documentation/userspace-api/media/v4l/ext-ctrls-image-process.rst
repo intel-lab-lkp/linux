@@ -55,3 +55,7 @@ Image Process Control IDs
     control value divided by e.g. 0x100, meaning that to get no
     digital gain the control value needs to be 0x100. The no-gain
     configuration is also typically the default.
+
+``V4L2_CID_CUR_LINK_FREQ (64-bit integer)``
+    The current link frequency on a data interface (e.g. parallel or
+    CSI-2). This control is read-only.
