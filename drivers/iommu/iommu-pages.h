@@ -119,7 +119,8 @@ static inline void *iommu_alloc_pages(gfp_t gfp, int order)
 }
 
 /**
- * iommu_alloc_page_node - allocate a zeroed page at specific NUMA node.
+ * iommu_alloc_page_node - allocate a zeroed page at specific NUMA node, and set
+ *                         mapcount in its struct page to 0.
  * @nid: memory NUMA node id
  * @gfp: buddy allocator flags
  *
@@ -127,18 +128,29 @@ static inline void *iommu_alloc_pages(gfp_t gfp, int order)
  */
 static inline void *iommu_alloc_page_node(int nid, gfp_t gfp)
 {
-	return iommu_alloc_pages_node(nid, gfp, 0);
+	void *virt = iommu_alloc_pages_node(nid, gfp, 0);
+
+	if (virt)
+		atomic_set(&(virt_to_page(virt))->_mapcount, 0);
+
+	return virt;
 }
 
 /**
- * iommu_alloc_page - allocate a zeroed page
+ * iommu_alloc_page - allocate a zeroed page, and set mapcount in its struct
+ *                    page to 0.
  * @gfp: buddy allocator flags
  *
  * returns the virtual address of the allocated page
  */
 static inline void *iommu_alloc_page(gfp_t gfp)
 {
-	return iommu_alloc_pages(gfp, 0);
+	void *virt = iommu_alloc_pages(gfp, 0);
+
+	if (virt)
+		atomic_set(&(virt_to_page(virt))->_mapcount, 0);
+
+	return virt;
 }
 
 /**
@@ -155,16 +167,19 @@ static inline void iommu_free_pages(void *virt, int order)
 }
 
 /**
- * iommu_free_page - free page
+ * iommu_free_page - free page, and reset mapcount
  * @virt: virtual address of the page to be freed.
  */
 static inline void iommu_free_page(void *virt)
 {
-	iommu_free_pages(virt, 0);
+	if (virt) {
+		page_mapcount_reset(virt_to_page(virt));
+		iommu_free_pages(virt, 0);
+	}
 }
 
 /**
- * iommu_put_pages_list - free a list of pages.
+ * iommu_put_pages_list - free a list of pages, and reset mapcount.
  * @page: the head of the lru list to be freed.
  *
  * There are no locking requirement for these pages, as they are going to be
@@ -177,6 +192,7 @@ static inline void iommu_put_pages_list(struct list_head *page)
 	while (!list_empty(page)) {
 		struct page *p = list_entry(page->prev, struct page, lru);
 
+		page_mapcount_reset(p);
 		list_del(&p->lru);
 		__iommu_free_account(p, 0);
 		put_page(p);
