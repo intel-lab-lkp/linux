@@ -827,21 +827,22 @@ void do_close_on_exec(struct files_struct *files)
 	/* exec unshares first */
 	spin_lock(&files->file_lock);
 	for (i = 0; ; i++) {
+		int j;
 		unsigned long set;
 		unsigned fd = i * BITS_PER_LONG;
 		fdt = files_fdtable(files);
 		if (fd >= fdt->max_fds)
 			break;
 		set = fdt->close_on_exec[i];
-		if (!set)
-			continue;
 		fdt->close_on_exec[i] = 0;
-		for ( ; set ; fd++, set >>= 1) {
-			struct file *file;
-			if (!(set & 1))
-				continue;
-			file = fdt->fd[fd];
+		for (j = 0; j < BITS_PER_LONG; j++, fd++, set >>= 1) {
+			struct file *file = fdt->fd[fd];
 			if (!file)
+				continue;
+			/* Close all cred-allow files. */
+			if (file->f_flags & O_CRED_ALLOW)
+				set |= 1;
+			if (!(set & 1))
 				continue;
 			rcu_assign_pointer(fdt->fd[fd], NULL);
 			__put_unused_fd(files, fd);
