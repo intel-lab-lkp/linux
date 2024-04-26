@@ -4623,6 +4623,46 @@ static int virtnet_validate(struct virtio_device *vdev)
 	return 0;
 }
 
+static int virtnet_get_coal_init_value(struct virtnet_info *vi,
+				       u16 _vqn, bool is_tx)
+{
+	struct virtio_net_ctrl_coal *coal = &vi->ctrl->coal_vq.coal;
+	__le16 *vqn = &vi->ctrl->coal_vq.vqn;
+	struct scatterlist sgs_in, sgs_out;
+	u32 usecs, pkts, i;
+	bool ret;
+
+	*vqn = cpu_to_le16(_vqn);
+
+	sg_init_one(&sgs_out, vqn, sizeof(*vqn));
+	sg_init_one(&sgs_in, coal, sizeof(*coal));
+	ret = virtnet_send_command_reply(vi, VIRTIO_NET_CTRL_NOTF_COAL,
+					 VIRTIO_NET_CTRL_NOTF_COAL_VQ_GET,
+					 &sgs_out, &sgs_in);
+	if (!ret)
+		return ret;
+
+	usecs = le32_to_cpu(coal->max_usecs);
+	pkts = le32_to_cpu(coal->max_packets);
+	if (is_tx) {
+		vi->intr_coal_tx.max_usecs = usecs;
+		vi->intr_coal_tx.max_packets = pkts;
+		for (i = 0; i < vi->max_queue_pairs; i++) {
+			vi->sq[i].intr_coal.max_usecs = usecs;
+			vi->sq[i].intr_coal.max_packets = pkts;
+		}
+	} else {
+		vi->intr_coal_rx.max_usecs = usecs;
+		vi->intr_coal_rx.max_packets = pkts;
+		for (i = 0; i < vi->max_queue_pairs; i++) {
+			vi->rq[i].intr_coal.max_usecs = usecs;
+			vi->rq[i].intr_coal.max_packets = pkts;
+		}
+	}
+
+	return 0;
+}
+
 static bool virtnet_check_guest_gso(const struct virtnet_info *vi)
 {
 	return virtio_has_feature(vi->vdev, VIRTIO_NET_F_GUEST_TSO4) ||
@@ -4885,13 +4925,6 @@ static int virtnet_probe(struct virtio_device *vdev)
 			vi->intr_coal_tx.max_packets = 0;
 	}
 
-	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL)) {
-		/* The reason is the same as VIRTIO_NET_F_NOTF_COAL. */
-		for (i = 0; i < vi->max_queue_pairs; i++)
-			if (vi->sq[i].napi.weight)
-				vi->sq[i].intr_coal.max_packets = 1;
-	}
-
 #ifdef CONFIG_SYSFS
 	if (vi->mergeable_rx_bufs)
 		dev->sysfs_rx_queue_group = &virtio_net_mrg_rx_group;
@@ -4925,6 +4958,27 @@ static int virtnet_probe(struct virtio_device *vdev)
 	}
 
 	virtio_device_ready(vdev);
+
+	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL)) {
+		/* The reason is the same as VIRTIO_NET_F_NOTF_COAL. */
+		for (i = 0; i < vi->max_queue_pairs; i++)
+			if (vi->sq[i].napi.weight)
+				vi->sq[i].intr_coal.max_packets = 1;
+
+		/* The loop exits if the default value from any
+		 * queue is successfully read.
+		 */
+		for (i = 0; i < vi->max_queue_pairs; i++) {
+			err = virtnet_get_coal_init_value(vi, rxq2vq(i), false);
+			if (!err)
+				break;
+		}
+		for (i = 0; i < vi->max_queue_pairs; i++) {
+			err = virtnet_get_coal_init_value(vi, txq2vq(i), true);
+			if (!err)
+				break;
+		}
+	}
 
 	_virtnet_set_queues(vi, vi->curr_queue_pairs);
 
