@@ -483,6 +483,10 @@ s64 v4l2_get_link_freq(struct v4l2_ctrl_handler *handler, unsigned int mul,
 
 		freq = qm.value;
 	} else {
+		ctrl = v4l2_ctrl_find(handler, V4L2_CID_CUR_LINK_FREQ);
+		if (ctrl)
+			return v4l2_ctrl_g_ctrl_int64(ctrl);
+
 		if (!mul || !div)
 			return -ENOENT;
 
@@ -494,7 +498,7 @@ s64 v4l2_get_link_freq(struct v4l2_ctrl_handler *handler, unsigned int mul,
 
 		pr_warn("%s: Link frequency estimated using pixel rate: result might be inaccurate\n",
 			__func__);
-		pr_warn("%s: Consider implementing support for V4L2_CID_LINK_FREQ in the transmitter driver\n",
+		pr_warn("%s: Consider implementing support for V4L2_CID_LINK_FREQ or V4L2_CID_CUR_LINK_FREQ in the transmitter driver\n",
 			__func__);
 	}
 
