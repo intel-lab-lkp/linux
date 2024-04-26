@@ -1043,6 +1043,8 @@ static int __init fcntl_init(void)
 		HWEIGHT32(
 			(VALID_OPEN_FLAGS & ~(O_NONBLOCK | O_NDELAY)) |
 			__FMODE_EXEC | __FMODE_NONOTIFY));
+	BUILD_BUG_ON(HWEIGHT32(VALID_OPENAT2_FLAGS) !=
+			HWEIGHT32(VALID_OPEN_FLAGS) + 1);
 
 	fasync_cache = kmem_cache_create("fasync_cache",
 					 sizeof(struct fasync_struct), 0,

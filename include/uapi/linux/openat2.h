@@ -40,4 +40,6 @@ struct open_how {
 					return -EAGAIN if that's not
 					possible. */
 
+#define OA2_CRED_INHERIT		(1UL << 28)
+
 #endif /* _UAPI_LINUX_OPENAT2_H */
