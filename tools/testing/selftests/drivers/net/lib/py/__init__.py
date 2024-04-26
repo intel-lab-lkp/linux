@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from .load import *
 
 KSFT_DIR = (Path(__file__).parent / "../../../..").resolve()
 
