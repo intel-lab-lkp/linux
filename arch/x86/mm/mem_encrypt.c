@@ -102,6 +102,19 @@ void __init mem_encrypt_setup_arch(void)
 	phys_addr_t total_mem = memblock_phys_mem_size();
 	unsigned long size;
 
+	/*
+	 * Invoke callback to do RMP table fixups which needs to be called
+	 * during setup_arch() after the e820 tables have been setup
+	 * in e820__memory_setup() and this function is appropriate to
+	 * invoke the callback to apply any memory encryption platform specific
+	 * quirks. The callback to do RMP table fixups cannot be invoked from
+	 * snp_init() as snp_init() is called from sme_enable() in
+	 * startup_64() which is before setup_arch() and e820 tables
+	 * have still not been setup.
+	 */
+	if (cc_platform_has(CC_ATTR_HOST_SEV_SNP))
+		snp_rmptable_e820_fixup();
+
 	if (!cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
 		return;
 

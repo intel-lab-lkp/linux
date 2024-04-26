@@ -163,6 +163,48 @@ bool snp_probe_rmptable_info(void)
 	return true;
 }
 
+static void __init __snp_e820_tables_fixup(u64 pa)
+{
+	if (IS_ALIGNED(pa, PMD_SIZE))
+		return;
+
+	/*
+	 * Check if RMP table start and end physical range
+	 * in e820_tables are not aligned to 2MB and in that case map
+	 * this range in all the three e820 tables to be reserved.
+	 * The e820_table needs to be updated as it is converted to
+	 * kernel memory resources and used by KEXEC_FILE_LOAD syscall
+	 * to load kexec segments. The e820_table_firmware needs to be
+	 * updated as it is exposed to sysfs and used by KEXEC_LOAD
+	 * syscall to load kexec segments and e820_table_kexec needs
+	 * to be updated as it passed to kexec-ed kernel.
+	 */
+	pa = ALIGN_DOWN(pa, PMD_SIZE);
+	if (e820__mapped_any(pa, pa + PMD_SIZE, E820_TYPE_RAM)) {
+		pr_info("Reserving start/end of RMP table on a 2MB boundary [0x%016llx]\n", pa);
+		e820__range_update(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+		e820__range_update_table(e820_table_kexec, pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+		e820__range_update_table(e820_table_firmware, pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
+	}
+}
+
+/*
+ * Callback to do any RMP table fixups, needs to be called
+ * after e820__memory_setup(), after the e820 tables are
+ * setup/populated and before e820__reserve_resources(), before
+ * the e820 map has been converted to the standard Linux memory
+ * resources and e820 map is no longer used and modifying it
+ * has no effect. Handle cases where the RMP table placement in
+ * the BIOS is not 2M aligned and then the kexec kernel could
+ * try to allocate from within that chunk and that causes a
+ * fatal RMP fault.
+ */
+void __init snp_rmptable_e820_fixup(void)
+{
+	__snp_e820_tables_fixup(probed_rmp_base);
+	__snp_e820_tables_fixup(probed_rmp_base + probed_rmp_size);
+}
+
 /*
  * Do the necessary preparations which are verified by the firmware as
  * described in the SNP_INIT_EX firmware command description in the SNP
