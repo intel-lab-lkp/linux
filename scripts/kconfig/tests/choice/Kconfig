@@ -18,7 +18,7 @@ config BOOL_CHOICE1
 endchoice
 
 choice
-	prompt "tristate choice"
+	tristate "tristate choice"
 	default TRI_CHOICE1
 
 config TRI_CHOICE0

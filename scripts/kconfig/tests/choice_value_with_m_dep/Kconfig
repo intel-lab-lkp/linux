@@ -9,7 +9,7 @@ config DEP
 	default m
 
 choice
-	prompt "Tristate Choice"
+	tristate "Tristate Choice"
 
 config CHOICE0
 	tristate "Choice 0"

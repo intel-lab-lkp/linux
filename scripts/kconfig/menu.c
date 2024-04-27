@@ -323,17 +323,6 @@ static void _menu_finalize(struct menu *parent, bool inside_choice)
 			is_choice = true;
 
 		if (is_choice) {
-			if (sym->type == S_UNKNOWN) {
-				/* find the first choice value to find out choice type */
-				current_entry = parent;
-				for (menu = parent->list; menu; menu = menu->next) {
-					if (menu->sym && menu->sym->type != S_UNKNOWN) {
-						menu_set_type(menu->sym->type);
-						break;
-					}
-				}
-			}
-
 			/*
 			 * Use the choice itself as the parent dependency of
 			 * the contained items. This turns the mode of the
