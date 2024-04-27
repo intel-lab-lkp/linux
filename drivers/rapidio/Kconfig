@@ -60,7 +60,7 @@ config RAPIDIO_DEBUG
 	  If you are unsure about this, say N here.
 
 choice
-	prompt "Enumeration method"
+	tristate "Enumeration method"
 	depends on RAPIDIO
 	default RAPIDIO_ENUM_BASIC
 	help
