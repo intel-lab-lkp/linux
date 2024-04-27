@@ -28,6 +28,10 @@
 #define	O_LARGEFILE 0x8000
 #endif
 
+#ifndef OA2_CRED_INHERIT
+#define OA2_CRED_INHERIT (1UL << 28)
+#endif
+
 struct open_how_ext {
 	struct open_how inner;
 	uint32_t extra1;
@@ -159,7 +163,7 @@ struct flag_test {
 	int err;
 };
 
-#define NUM_OPENAT2_FLAG_TESTS 25
+#define NUM_OPENAT2_FLAG_TESTS 27
 
 void test_openat2_flags(void)
 {
@@ -233,6 +237,12 @@ void test_openat2_flags(void)
 		{ .name = "invalid how.resolve and O_PATH",
 		  .how.flags = O_PATH,
 		  .how.resolve = 0x1337, .err = -EINVAL },
+		{ .name = "invalid how.resolve and OA2_CRED_INHERIT",
+		  .how.flags = OA2_CRED_INHERIT,
+		  .how.resolve = 0, .err = -EPERM },
+		{ .name = "invalid AT_FDCWD and OA2_CRED_INHERIT",
+		  .how.flags = OA2_CRED_INHERIT,
+		  .how.resolve = 0x08, .err = -EINVAL },
 
 		/* currently unknown upper 32 bit rejected. */
 		{ .name = "currently unknown bit (1 << 63)",

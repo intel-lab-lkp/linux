@@ -3776,6 +3776,43 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	return error;
 }
 
+static const struct cred *openat2_init_creds(int dfd)
+{
+	struct cred *cred;
+	struct fd f;
+
+	if (dfd == AT_FDCWD)
+		return ERR_PTR(-EINVAL);
+
+	f = fdget_raw(dfd);
+	if (!f.file)
+		return ERR_PTR(-EBADF);
+
+	cred = ERR_PTR(-EPERM);
+	if (!(f.file->f_flags & O_CRED_ALLOW))
+		goto done;
+
+	cred = prepare_creds();
+	if (!cred) {
+		cred = ERR_PTR(-ENOMEM);
+		goto done;
+	}
+
+	cred->fsuid = f.file->f_cred->fsuid;
+	cred->fsgid = f.file->f_cred->fsgid;
+	cred->group_info = get_group_info(f.file->f_cred->group_info);
+
+done:
+	fdput(f);
+	return cred;
+}
+
+static void openat2_done_creds(const struct cred *cred)
+{
+	put_group_info(cred->group_info);
+	put_cred(cred);
+}
+
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
@@ -3793,18 +3830,33 @@ static struct file *path_openat(struct nameidata *nd,
 			error = do_o_path(nd, flags, file);
 	} else {
 		const char *s;
+		const struct cred *old_cred = NULL, *cred = NULL;
 
-		file = alloc_empty_file(open_flags, current_cred());
-		if (IS_ERR(file))
+		if (open_flags & OA2_CRED_INHERIT) {
+			cred = openat2_init_creds(nd->dfd);
+			if (IS_ERR(cred))
+				return ERR_CAST(cred);
+		}
+		file = alloc_empty_file(open_flags, cred ?: current_cred());
+		if (IS_ERR(file)) {
+			if (cred)
+				openat2_done_creds(cred);
 			return file;
+		}
 
 		s = path_init(nd, flags);
+		if (cred)
+			old_cred = override_creds(cred);
 		while (!(error = link_path_walk(s, nd)) &&
 		       (s = open_last_lookups(nd, file, op)) != NULL)
 			;
 		if (!error)
 			error = do_open(nd, file, op);
+		if (old_cred)
+			revert_creds(old_cred);
 		terminate_walk(nd);
+		if (cred)
+			openat2_done_creds(cred);
 	}
 	if (likely(!error)) {
 		if (likely(file->f_mode & FMODE_OPENED))

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 CFLAGS += -Wall -O2 -g -fsanitize=address -fsanitize=undefined -static-libasan
-TEST_GEN_PROGS := openat2_test resolve_test rename_attack_test
+TEST_GEN_PROGS := openat2_test resolve_test rename_attack_test cred_inherit
 
 include ../lib.mk
 
