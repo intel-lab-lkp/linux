@@ -671,9 +671,11 @@ unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
 		return node_page_state(lruvec_pgdat(lruvec), idx);
 
 	i = memcg_stats_index(idx);
-	if (i >= 0) {
+	if (likely(i >= 0)) {
 		pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 		x = READ_ONCE(pn->lruvec_stats->state[i]);
+	} else {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
 	}
 #ifdef CONFIG_SMP
 	if (x < 0)
@@ -693,9 +695,11 @@ unsigned long lruvec_page_state_local(struct lruvec *lruvec,
 		return node_page_state(lruvec_pgdat(lruvec), idx);
 
 	i = memcg_stats_index(idx);
-	if (i >= 0) {
+	if (likely(i >= 0)) {
 		pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 		x = READ_ONCE(pn->lruvec_stats->state_local[i]);
+	} else {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
 	}
 #ifdef CONFIG_SMP
 	if (x < 0)
@@ -922,8 +926,10 @@ unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
 	long x;
 	int i = memcg_stats_index(idx);
 
-	if (i < 0)
+	if (unlikely(i < 0)) {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
 		return 0;
+	}
 
 	x = READ_ONCE(memcg->vmstats->state[i]);
 #ifdef CONFIG_SMP
@@ -959,8 +965,13 @@ void __mod_memcg_state(struct mem_cgroup *memcg, int idx, int val)
 {
 	int i = memcg_stats_index(idx);
 
-	if (mem_cgroup_disabled() || i < 0)
+	if (mem_cgroup_disabled())
 		return;
+
+	if (unlikely(i < 0)) {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
+		return;
+	}
 
 	__this_cpu_add(memcg->vmstats_percpu->state[i], val);
 	memcg_rstat_updated(memcg, memcg_state_val_in_pages(idx, val));
@@ -972,8 +983,10 @@ static unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 	long x;
 	int i = memcg_stats_index(idx);
 
-	if (i < 0)
+	if (unlikely(i < 0)) {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
 		return 0;
+	}
 
 	x = READ_ONCE(memcg->vmstats->state_local[i]);
 #ifdef CONFIG_SMP
@@ -991,8 +1004,10 @@ static void __mod_memcg_lruvec_state(struct lruvec *lruvec,
 	struct mem_cgroup *memcg;
 	int i = memcg_stats_index(idx);
 
-	if (i < 0)
+	if (unlikely(i < 0)) {
+		pr_warn_once("%s: stat item index: %d\n", __func__, idx);
 		return;
+	}
 
 	pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	memcg = pn->memcg;
@@ -1107,8 +1122,13 @@ void __count_memcg_events(struct mem_cgroup *memcg, enum vm_event_item idx,
 {
 	int index = memcg_events_index(idx);
 
-	if (mem_cgroup_disabled() || index < 0)
+	if (mem_cgroup_disabled())
 		return;
+
+	if (unlikely(index < 0)) {
+		pr_warn_once("%s: event item index: %d\n", __func__, idx);
+		return;
+	}
 
 	memcg_stats_lock();
 	__this_cpu_add(memcg->vmstats_percpu->events[index], count);
@@ -1120,8 +1140,11 @@ static unsigned long memcg_events(struct mem_cgroup *memcg, int event)
 {
 	int index = memcg_events_index(event);
 
-	if (index < 0)
+	if (unlikely(index < 0)) {
+		pr_warn_once("%s: event item index: %d\n", __func__, event);
 		return 0;
+	}
+
 	return READ_ONCE(memcg->vmstats->events[index]);
 }
 
@@ -1129,8 +1152,10 @@ static unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
 {
 	int index = memcg_events_index(event);
 
-	if (index < 0)
+	if (unlikely(index < 0)) {
+		pr_warn_once("%s: event item index: %d\n", __func__, event);
 		return 0;
+	}
 
 	return READ_ONCE(memcg->vmstats->events_local[index]);
 }
