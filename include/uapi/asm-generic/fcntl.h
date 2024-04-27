@@ -89,6 +89,11 @@
 #define __O_TMPFILE	020000000
 #endif
 
+#ifndef O_CRED_ALLOW
+/* On parisc bit 23 is taken. On alpha bit 24 is also taken. Try bit 25. */
+#define O_CRED_ALLOW	0200000000
+#endif
+
 /* a horrid kludge trying to make sure that this will fail on old kernels */
 #define O_TMPFILE (__O_TMPFILE | O_DIRECTORY)
 

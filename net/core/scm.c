@@ -111,6 +111,11 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 			fput(file);
 			return -EINVAL;
 		}
+		/* don't allow files with creds */
+		if (file->f_flags & O_CRED_ALLOW) {
+			fput(file);
+			return -EPERM;
+		}
 		if (unix_get_socket(file))
 			fpl->count_unix++;
 
