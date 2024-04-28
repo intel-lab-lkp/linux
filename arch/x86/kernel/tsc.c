@@ -823,7 +823,7 @@ static unsigned long pit_hpet_ptimer_calibrate_cpu(void)
 
 		/* Check the reference deviation */
 		delta = ((u64) tsc_pit_min) * 100;
-		do_div(delta, tsc_ref_min);
+		div64_ul(delta, tsc_ref_min);
 
 		/*
 		 * If both calibration results are inside a 10% window
