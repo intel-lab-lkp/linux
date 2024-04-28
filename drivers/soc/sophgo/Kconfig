@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Sophgo SoC drivers
+#
+
+config SG2042_HWMON_MCU
+	tristate "SG2042 onboard MCU support"
+	depends on RISCV
+	help
+	  Support for SG2042 onboard MCU. This mcu provides power
+	  control and some basic information for SG2042 chip.
+	  If unsure, say Y.
