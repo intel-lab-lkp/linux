@@ -177,6 +177,9 @@ struct evsel {
 	__u64 start_time;
 	/* Is the tool's fd for /proc/pid/stat or /proc/stat. */
 	bool pid_stat;
+
+	/* Used for retire_lat child process. */
+	struct xyarray *children;
 };
 
 struct perf_missing_features {

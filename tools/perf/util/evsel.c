@@ -22,6 +22,7 @@
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <perf/evsel.h>
 #include "asm/bug.h"
@@ -58,6 +59,7 @@
 #include <internal/xyarray.h>
 #include <internal/lib.h>
 #include <internal/threadmap.h>
+#include <subcmd/run-command.h>
 
 #include <linux/ctype.h>
 
@@ -492,6 +494,162 @@ out_err:
 	return ERR_PTR(err);
 }
 #endif
+
+static int evsel__start_retire_latency_cpu(struct evsel *evsel, struct perf_cpu_map *cpus,
+					  int cpu_map_idx)
+{
+	char buf[16];
+	int pipefd[2];
+	int err, i;
+	struct perf_cpu cpu = perf_cpu_map__cpu(cpus, cpu_map_idx);
+	struct child_process *child_record =
+		xyarray__entry(evsel->children, cpu_map_idx, 0);
+	struct child_process *child_report =
+		xyarray__entry(evsel->children, cpu_map_idx, 1);
+	char *event = strdup(evsel__name(evsel));
+	/* TODO: the dummy event also won't be used, but there's no option to disable. */
+	const char *record_argv[15] = {
+		[0] = "perf",
+		[1] = "record",
+		[2] = "--synth=no",
+		[3] = "--no-bpf-event",
+		[4] = "-W",
+		[5] = "-o",
+		[6] = "-",
+		[7] = "-e",
+	};
+	const char *report_argv[] = {
+		[0] = "perf",
+		[1] = "report",
+		[2] = "-i",
+		[3] = "-",
+		[4] = "-q",
+		[5] = "-F",
+		[6] = "retire_lat",
+		NULL,
+	};
+
+	if (evsel->core.attr.sample_period) /* no sampling */
+		return -EINVAL;
+
+	if (!event)
+		return -ENOMEM;
+
+	/* Change the R modifier to the maximum precision one. */
+	for (i = strlen(event) - 1; i > 0; i--) {
+		if (event[i] == 'R')
+			break;
+		if (event[i] == ':' || event[i] == '/')
+			i = 0;
+	}
+	if (i <= 0) {
+		pr_err("Expected retired latency 'R'\n");
+		return -EINVAL;
+	}
+	event[i] = 'P';
+
+	i = 8;
+	record_argv[i++] = event;
+	if (verbose) {
+		record_argv[i++] = verbose > 1 ? "-vv" : "-v";
+	}
+	if (cpu.cpu >= 0) {
+		record_argv[i++] = "-C";
+		snprintf(buf, sizeof(buf), "%d", cpu.cpu);
+		record_argv[i++] = buf;
+	} else {
+		record_argv[i++] = "-a";
+	}
+	/* TODO: use something like the control fds to control perf record behavior. */
+	record_argv[i++] = "sleep";
+	record_argv[i++] = "0.1";
+
+	if (pipe(pipefd) < 0) {
+		free(event);
+		return -errno;
+	}
+
+	child_record->argv = record_argv;
+	child_record->pid = -1;
+	child_record->no_stdin = 1;
+	if (verbose)
+		child_record->err = fileno(stderr);
+	else
+		child_record->no_stderr = 1;
+	child_record->out = pipefd[1];
+	err = start_command(child_record);
+	free(event);
+	if (err)
+		return err;
+
+	child_report->argv = report_argv;
+	child_report->pid = -1;
+	if (verbose)
+		child_report->err = fileno(stderr);
+	else
+		child_report->no_stderr = 1;
+	child_report->in = pipefd[0];
+	child_report->out = -1;
+	return start_command(child_report);
+}
+
+static int evsel__finish_retire_latency_cpu(struct evsel *evsel, int cpu_map_idx)
+{
+	struct child_process *child_record =
+		xyarray__entry(evsel->children, cpu_map_idx, 0);
+	struct child_process *child_report =
+		xyarray__entry(evsel->children, cpu_map_idx, 1);
+
+	if (child_record->pid > 0)
+		finish_command(child_record);
+	if (child_report->pid > 0)
+		finish_command(child_report);
+	return 0;
+}
+
+static int evsel__read_retire_latency(struct evsel *evsel, int cpu_map_idx, int thread)
+{
+	struct child_process *child_record = xyarray__entry(evsel->children, cpu_map_idx, 0);
+	struct child_process *child_report = xyarray__entry(evsel->children, cpu_map_idx, 1);
+	struct perf_counts_values *count = perf_counts(evsel->counts, cpu_map_idx, thread);
+	char buf[256];
+	int err;
+
+	kill(child_record->pid, SIGTERM);
+	err = read(child_report->out, buf, sizeof(buf));
+	if (err < 0 || strlen(buf) == 0)
+		return -1;
+
+	count->val = atoll(buf);
+	count->ena = 1;
+	count->run = 1;
+	count->id = 0;
+	count->lost = 0;
+
+	/*
+	 * TODO: The SIGCHLD from the children exiting will cause interval mode
+	 *       to stop, use the control fd to avoid this.
+	 */
+	err = evsel__finish_retire_latency_cpu(evsel, cpu_map_idx);
+	if (err)
+		return err;
+
+	/* Restart the counter. */
+	return evsel__start_retire_latency_cpu(evsel, evsel->core.cpus, cpu_map_idx);
+}
+
+static int evsel__finish_retire_latency(struct evsel *evsel)
+{
+	int idx;
+
+	perf_cpu_map__for_each_idx(idx, evsel->core.cpus) {
+		int err = evsel__finish_retire_latency_cpu(evsel, idx);
+
+		if (err)
+			return err;
+	}
+	return 0;
+}
 
 const char *const evsel__hw_names[PERF_COUNT_HW_MAX] = {
 	"cycles",
@@ -1465,6 +1623,10 @@ static void evsel__free_config_terms(struct evsel *evsel)
 
 void evsel__exit(struct evsel *evsel)
 {
+	if (evsel->children) {
+		evsel__finish_retire_latency(evsel);
+		zfree(&evsel->children);
+	}
 	assert(list_empty(&evsel->core.node));
 	assert(evsel->evlist == NULL);
 	bpf_counter__destroy(evsel);
@@ -1778,6 +1940,9 @@ int evsel__read_counter(struct evsel *evsel, int cpu_map_idx, int thread)
 	if (evsel__is_tool(evsel))
 		return evsel__read_tool(evsel, cpu_map_idx, thread);
 
+	if (evsel->retire_lat)
+		return evsel__read_retire_latency(evsel, cpu_map_idx, thread);
+
 	if (evsel->core.attr.read_format & PERF_FORMAT_GROUP)
 		return evsel__read_group(evsel, cpu_map_idx, thread);
 
@@ -1993,9 +2158,21 @@ static int __evsel__prepare_open(struct evsel *evsel, struct perf_cpu_map *cpus,
 		threads = empty_thread_map;
 	}
 
-	if (evsel->core.fd == NULL &&
+	if (!evsel->retire_lat && evsel->core.fd == NULL &&
 	    perf_evsel__alloc_fd(&evsel->core, perf_cpu_map__nr(cpus), nthreads) < 0)
 		return -ENOMEM;
+
+	if (evsel->retire_lat && evsel->children == NULL) {
+		/*
+		 * Use ylen of 2, [0] is the record and [1] is the report
+		 * command. Currently retirement latency doesn't support
+		 * per-thread mode.
+		 */
+		evsel->children = xyarray__new(perf_cpu_map__nr(cpus), /*ylen=*/2,
+					sizeof(struct child_process));
+		if (!evsel->children)
+			return -ENOMEM;
+	}
 
 	evsel->open_flags = PERF_FLAG_FD_CLOEXEC;
 	if (evsel->cgrp)
@@ -2208,6 +2385,13 @@ fallback_missing_features:
 	display_attr(&evsel->core.attr);
 
 	for (idx = start_cpu_map_idx; idx < end_cpu_map_idx; idx++) {
+
+		if (evsel->retire_lat) {
+			err = evsel__start_retire_latency_cpu(evsel, cpus, idx);
+			if (err)
+				goto out_close;
+			continue;
+		}
 
 		for (thread = 0; thread < nthreads; thread++) {
 			int fd, group_fd;
