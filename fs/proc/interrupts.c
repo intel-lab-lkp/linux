@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/irqnr.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
