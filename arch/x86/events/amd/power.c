@@ -64,7 +64,7 @@ static void event_update(struct perf_event *event)
 	delta *= cpu_pwr_sample_ratio * 1000;
 	tdelta = new_ptsc - prev_ptsc;
 
-	do_div(delta, tdelta);
+	div64_u64(delta, tdelta);
 	local64_add(delta, &event->count);
 }
 
