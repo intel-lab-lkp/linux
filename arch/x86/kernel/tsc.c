@@ -484,7 +484,7 @@ static unsigned long pit_calibrate_tsc(u32 latch, unsigned long ms, int loopmin)
 
 	/* Calculate the PIT value */
 	delta = t2 - t1;
-	do_div(delta, ms);
+	div64_ul(delta, ms);
 	return delta;
 }
 
