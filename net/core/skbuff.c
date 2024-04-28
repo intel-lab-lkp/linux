@@ -6097,6 +6097,12 @@ EXPORT_SYMBOL(skb_vlan_untag);
 
 int skb_ensure_writable(struct sk_buff *skb, unsigned int write_len)
 {
+	if (skb_is_gso(skb) &&
+	    (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST) &&
+	     write_len > skb_headlen(skb)) {
+		return -ENOMEM;
+	}
+
 	if (!pskb_may_pull(skb, write_len))
 		return -ENOMEM;
 
