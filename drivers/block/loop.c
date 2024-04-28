@@ -1717,6 +1717,24 @@ static int lo_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 }
 #endif
 
+static int lo_open(struct gendisk *disk, blk_mode_t mode)
+{
+        struct loop_device *lo = disk->private_data;
+        int err;
+
+        if (!lo)
+                return -ENXIO;
+
+        err = mutex_lock_killable(&lo->lo_mutex);
+        if (err)
+                return err;
+
+        if (lo->lo_state == Lo_rundown)
+                err = -ENXIO;
+        mutex_unlock(&lo->lo_mutex);
+	return err;
+}
+
 static void lo_release(struct gendisk *disk)
 {
 	struct loop_device *lo = disk->private_data;
@@ -1752,6 +1770,7 @@ static void lo_free_disk(struct gendisk *disk)
 
 static const struct block_device_operations lo_fops = {
 	.owner =	THIS_MODULE,
+	.open = 	lo_open,
 	.release =	lo_release,
 	.ioctl =	lo_ioctl,
 #ifdef CONFIG_COMPAT
