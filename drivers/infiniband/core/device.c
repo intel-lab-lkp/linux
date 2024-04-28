@@ -2235,8 +2235,7 @@ struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 		spin_lock(&pdata->netdev_lock);
 		res = rcu_dereference_protected(
 			pdata->netdev, lockdep_is_held(&pdata->netdev_lock));
-		if (res)
-			dev_hold(res);
+		dev_hold(res);
 		spin_unlock(&pdata->netdev_lock);
 	}
 
