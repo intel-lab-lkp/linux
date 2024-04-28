@@ -68,16 +68,14 @@ static int get_route_and_out_devs(struct mlx5e_priv *priv,
 	 * while holding rcu read lock. Take the net_device for correctness
 	 * sake.
 	 */
-	if (uplink_upper)
-		dev_hold(uplink_upper);
+	dev_hold(uplink_upper);
 	rcu_read_unlock();
 
 	dst_is_lag_dev = (uplink_upper &&
 			  netif_is_lag_master(uplink_upper) &&
 			  real_dev == uplink_upper &&
 			  mlx5_lag_is_sriov(priv->mdev));
-	if (uplink_upper)
-		dev_put(uplink_upper);
+	dev_put(uplink_upper);
 
 	/* if the egress device isn't on the same HW e-switch or
 	 * it's a LAG device, use the uplink
