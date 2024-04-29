@@ -8,6 +8,14 @@ mod allocator;
 pub mod box_ext;
 pub mod vec_ext;
 
+use core::{
+    alloc::{Allocator, AllocError, Layout},
+    ptr,
+    ptr::NonNull,
+};
+
+use flags::*;
+
 /// Flags to be used when allocating memory.
 ///
 /// They can be combined with the operators `|`, `&`, and `!`.
@@ -67,4 +75,17 @@ pub mod flags {
     /// use any filesystem callback.  It is very likely to fail to allocate memory, even for very
     /// small allocations.
     pub const GFP_NOWAIT: Flags = Flags(bindings::GFP_NOWAIT);
+}
+
+pub unsafe trait AllocatorWithFlags: Allocator {
+    unsafe fn alloc_flags(&self, layout: Layout, flags: Flags) -> Result<NonNull<[u8]>, AllocError>;
+    unsafe fn realloc_flags(&self, ptr: *mut u8, old_size: usize, layout: Layout, flags: Flags) -> Result<NonNull<[u8]>, AllocError>;
+
+    fn default_allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe { self.realloc_flags(ptr::null_mut(), 0, layout, GFP_KERNEL) }
+    }
+
+    fn default_allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe { self.realloc_flags(ptr::null_mut(), 0, layout, GFP_KERNEL | __GFP_ZERO) }
+    }
 }
