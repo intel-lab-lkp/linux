@@ -20,6 +20,9 @@
 #include <linux/soc/qcom/smem_state.h>
 #include <linux/spinlock.h>
 
+#define CREATE_TRACE_POINTS
+#include "trace-smp2p.h"
+
 /*
  * The Shared Memory Point to Point (SMP2P) protocol facilitates communication
  * of a single 32-bit value between two processors.  Each value has a single
@@ -191,6 +194,7 @@ static void qcom_smp2p_do_ssr_ack(struct qcom_smp2p *smp2p)
 	struct smp2p_smem_item *out = smp2p->out;
 	u32 val;
 
+	trace_smp2p_ssr_ack(smp2p->remote_pid);
 	smp2p->ssr_ack = !smp2p->ssr_ack;
 
 	val = out->flags & ~BIT(SMP2P_FLAGS_RESTART_ACK_BIT);
@@ -213,6 +217,7 @@ static void qcom_smp2p_negotiate(struct qcom_smp2p *smp2p)
 			smp2p->ssr_ack_enabled = true;
 
 		smp2p->negotiation_done = true;
+		trace_smp2p_negotiate(smp2p->remote_pid, smp2p->ssr_ack_enabled);
 	}
 }
 
@@ -250,6 +255,8 @@ static void qcom_smp2p_notify_in(struct qcom_smp2p *smp2p)
 
 		status = val ^ entry->last_value;
 		entry->last_value = val;
+
+		trace_smp2p_notify_in(smp2p->remote_pid, entry->name, status, val);
 
 		/* No changes of this entry? */
 		if (!status)
@@ -405,6 +412,9 @@ static int smp2p_update_bits(void *data, u32 mask, u32 value)
 	val |= value;
 	writel(val, entry->value);
 	spin_unlock_irqrestore(&entry->lock, flags);
+
+	trace_smp2p_update_bits(entry->smp2p->remote_pid,
+		entry->name, orig, val);
 
 	if (val != orig)
 		qcom_smp2p_kick(entry->smp2p);
