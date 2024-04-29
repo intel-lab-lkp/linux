@@ -2767,9 +2767,37 @@ int dsa_user_change_conduit(struct net_device *dev, struct net_device *conduit,
 	if (err)
 		goto out_revert_old_conduit_unlink;
 
+	/* If live-changing, we also need to uninstall the user device address
+	 * from the port FDB and the conduit interface. This has to be done
+	 * before the conduit is changed.
+	 */
+	if (dev->flags & IFF_UP)
+		dsa_user_host_uc_uninstall(dev);
+
 	err = dsa_port_change_conduit(dp, conduit, extack);
 	if (err)
-		goto out_revert_conduit_link;
+		goto out_revert_host_address;
+
+	/* If the port doesn't have its own MAC address and relies on the DSA
+	 * conduit's one, inherit it again from the new DSA conduit.
+	 */
+	if (is_zero_ether_addr(dp->mac))
+		eth_hw_addr_inherit(dev, conduit);
+
+	/* If live-changing, we need to install the user device address to the
+	 * port FDB and the conduit interface. Since the device address needs to
+	 * be installed towards the new conduit in the port FDB, this needs to
+	 * be done after the conduit is changed.
+	 */
+	if (dev->flags & IFF_UP) {
+		err = dsa_user_host_uc_install(dev, dev->dev_addr);
+		if (err) {
+			netdev_err(dev,
+				   "fatal error installing new host address: %pe\n",
+				   ERR_PTR(err));
+			return err;
+		}
+	}
 
 	/* Update the MTU of the new CPU port through cross-chip notifiers */
 	err = dsa_user_change_mtu(dev, dev->mtu);
@@ -2779,15 +2807,16 @@ int dsa_user_change_conduit(struct net_device *dev, struct net_device *conduit,
 			    ERR_PTR(err));
 	}
 
-	/* If the port doesn't have its own MAC address and relies on the DSA
-	 * conduit's one, inherit it again from the new DSA conduit.
-	 */
-	if (is_zero_ether_addr(dp->mac))
-		eth_hw_addr_inherit(dev, conduit);
-
 	return 0;
 
-out_revert_conduit_link:
+out_revert_host_address:
+	if (dev->flags & IFF_UP) {
+		err = dsa_user_host_uc_install(dev, dev->dev_addr);
+		if (err)
+			netdev_err(dev,
+				   "fatal error restoring old host address: %pe\n",
+				   ERR_PTR(err));
+	}
 	netdev_upper_dev_unlink(conduit, dev);
 out_revert_old_conduit_unlink:
 	netdev_upper_dev_link(old_conduit, dev, NULL);
