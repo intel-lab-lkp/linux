@@ -44,7 +44,7 @@ uint32_t drm_of_crtc_port_mask(struct drm_device *dev,
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_of_crtc_port_mask);
+EXPORT_SYMBOL_GPL(drm_of_crtc_port_mask);
 
 /**
  * drm_of_find_possible_crtcs - find the possible CRTCs for an encoder port
@@ -77,7 +77,7 @@ uint32_t drm_of_find_possible_crtcs(struct drm_device *dev,
 
 	return possible_crtcs;
 }
-EXPORT_SYMBOL(drm_of_find_possible_crtcs);
+EXPORT_SYMBOL_GPL(drm_of_find_possible_crtcs);
 
 /**
  * drm_of_component_match_add - Add a component helper OF node match rule
@@ -181,7 +181,7 @@ int drm_of_component_probe(struct device *dev,
 
 	return component_master_add_with_match(dev, m_ops, match);
 }
-EXPORT_SYMBOL(drm_of_component_probe);
+EXPORT_SYMBOL_GPL(drm_of_component_probe);
 
 /*
  * drm_of_encoder_active_endpoint - return the active encoder endpoint
