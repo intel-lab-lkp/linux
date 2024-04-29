@@ -59,9 +59,12 @@ static const struct wx_stats wx_gstrings_stats[] = {
 
 int wx_get_sset_count(struct net_device *netdev, int sset)
 {
+	struct wx *wx = netdev_priv(netdev);
+
 	switch (sset) {
 	case ETH_SS_STATS:
-		return WX_STATS_LEN;
+		return WX_STATS_LEN - (WX_NUM_RX_QUEUES - wx->num_tx_queues) *
+		       (sizeof(struct wx_queue_stats) / sizeof(u64)) * 2;
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -70,6 +73,7 @@ EXPORT_SYMBOL(wx_get_sset_count);
 
 void wx_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 {
+	struct wx *wx = netdev_priv(netdev);
 	u8 *p = data;
 	int i;
 
@@ -77,11 +81,11 @@ void wx_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 	case ETH_SS_STATS:
 		for (i = 0; i < WX_GLOBAL_STATS_LEN; i++)
 			ethtool_puts(&p, wx_gstrings_stats[i].stat_string);
-		for (i = 0; i < netdev->num_tx_queues; i++) {
+		for (i = 0; i < wx->num_tx_queues; i++) {
 			ethtool_sprintf(&p, "tx_queue_%u_packets", i);
 			ethtool_sprintf(&p, "tx_queue_%u_bytes", i);
 		}
-		for (i = 0; i < WX_NUM_RX_QUEUES; i++) {
+		for (i = 0; i < wx->num_rx_queues; i++) {
 			ethtool_sprintf(&p, "rx_queue_%u_packets", i);
 			ethtool_sprintf(&p, "rx_queue_%u_bytes", i);
 		}
@@ -107,7 +111,7 @@ void wx_get_ethtool_stats(struct net_device *netdev,
 			   sizeof(u64)) ? *(u64 *)p : *(u32 *)p;
 	}
 
-	for (j = 0; j < netdev->num_tx_queues; j++) {
+	for (j = 0; j < wx->num_tx_queues; j++) {
 		ring = wx->tx_ring[j];
 		if (!ring) {
 			data[i++] = 0;
@@ -122,7 +126,7 @@ void wx_get_ethtool_stats(struct net_device *netdev,
 		} while (u64_stats_fetch_retry(&ring->syncp, start));
 		i += 2;
 	}
-	for (j = 0; j < WX_NUM_RX_QUEUES; j++) {
+	for (j = 0; j < wx->num_rx_queues; j++) {
 		ring = wx->rx_ring[j];
 		if (!ring) {
 			data[i++] = 0;
@@ -177,13 +181,8 @@ void wx_get_drvinfo(struct net_device *netdev, struct ethtool_drvinfo *info)
 	strscpy(info->driver, wx->driver_name, sizeof(info->driver));
 	strscpy(info->fw_version, wx->eeprom_id, sizeof(info->fw_version));
 	strscpy(info->bus_info, pci_name(wx->pdev), sizeof(info->bus_info));
-	if (wx->num_tx_queues <= WX_NUM_TX_QUEUES) {
-		info->n_stats = WX_STATS_LEN -
-				   (WX_NUM_TX_QUEUES - wx->num_tx_queues) *
-				   (sizeof(struct wx_queue_stats) / sizeof(u64)) * 2;
-	} else {
-		info->n_stats = WX_STATS_LEN;
-	}
+	info->n_stats = WX_STATS_LEN - (WX_NUM_TX_QUEUES - wx->num_tx_queues) *
+			(sizeof(struct wx_queue_stats) / sizeof(u64)) * 2;
 }
 EXPORT_SYMBOL(wx_get_drvinfo);
 
