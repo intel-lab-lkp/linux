@@ -1738,15 +1738,9 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 				      const char *supply)
 {
 	struct regulator_map *node, *new_node;
-	int has_dev;
 
 	if (supply == NULL)
 		return -EINVAL;
-
-	if (consumer_dev_name != NULL)
-		has_dev = 1;
-	else
-		has_dev = 0;
 
 	new_node = kzalloc(sizeof(struct regulator_map), GFP_KERNEL);
 	if (new_node == NULL)
@@ -1755,7 +1749,7 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 	new_node->regulator = rdev;
 	new_node->supply = supply;
 
-	if (has_dev) {
+	if (consumer_dev_name != NULL) {
 		new_node->dev_name = kstrdup(consumer_dev_name, GFP_KERNEL);
 		if (new_node->dev_name == NULL) {
 			kfree(new_node);
