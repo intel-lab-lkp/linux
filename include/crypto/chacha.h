@@ -8,8 +8,7 @@
  *
  * The ChaCha paper specifies 20, 12, and 8-round variants.  In general, it is
  * recommended to use the 20-round variant ChaCha20.  However, the other
- * variants can be needed in some performance-sensitive scenarios.  The generic
- * ChaCha code currently allows only the 20 and 12-round variants.
+ * variants can be needed in some performance-sensitive scenarios.
  */
 
 #ifndef _CRYPTO_CHACHA_H
@@ -31,9 +30,20 @@
 #define XCHACHA_IV_SIZE		32
 
 void chacha_block_generic(u32 *state, u8 *stream, int nrounds);
+
 static inline void chacha20_block(u32 *state, u8 *stream)
 {
 	chacha_block_generic(state, stream, 20);
+}
+
+static inline void chacha12_block(u32 *state, u8 *stream)
+{
+	chacha_block_generic(state, stream, 12);
+}
+
+static inline void chacha8_block(u32 *state, u8 *stream)
+{
+	chacha_block_generic(state, stream, 8);
 }
 
 void hchacha_block_arch(const u32 *state, u32 *out, int nrounds);

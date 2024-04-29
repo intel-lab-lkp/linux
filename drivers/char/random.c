@@ -302,7 +302,7 @@ static void crng_fast_key_erasure(u8 key[CHACHA_KEY_SIZE],
 	chacha_init_consts(chacha_state);
 	memcpy(&chacha_state[4], key, CHACHA_KEY_SIZE);
 	memset(&chacha_state[12], 0, sizeof(u32) * 4);
-	chacha20_block(chacha_state, first_block);
+	chacha8_block(chacha_state, first_block);
 
 	memcpy(key, first_block, CHACHA_KEY_SIZE);
 	memcpy(random_data, first_block + CHACHA_KEY_SIZE, random_data_len);
@@ -388,13 +388,13 @@ static void _get_random_bytes(void *buf, size_t len)
 
 	while (len) {
 		if (len < CHACHA_BLOCK_SIZE) {
-			chacha20_block(chacha_state, tmp);
+			chacha8_block(chacha_state, tmp);
 			memcpy(buf, tmp, len);
 			memzero_explicit(tmp, sizeof(tmp));
 			break;
 		}
 
-		chacha20_block(chacha_state, buf);
+		chacha8_block(chacha_state, buf);
 		if (unlikely(chacha_state[12] == 0))
 			++chacha_state[13];
 		len -= CHACHA_BLOCK_SIZE;
@@ -444,7 +444,7 @@ static ssize_t get_random_bytes_user(struct iov_iter *iter)
 	}
 
 	for (;;) {
-		chacha20_block(chacha_state, block);
+		chacha8_block(chacha_state, block);
 		if (unlikely(chacha_state[12] == 0))
 			++chacha_state[13];
 
