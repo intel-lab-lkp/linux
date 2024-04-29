@@ -32,11 +32,6 @@ struct phy_device_node {
 	struct phy_device *phy;
 };
 
-struct phy_link_topology {
-	struct xarray phys;
-	u32 next_phy_index;
-};
-
 static inline struct phy_device *
 phy_link_topo_get_phy(struct phy_link_topology *topo, u32 phyindex)
 {
