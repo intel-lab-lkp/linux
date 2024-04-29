@@ -5909,30 +5909,6 @@ void *rdev_get_drvdata(struct regulator_dev *rdev)
 EXPORT_SYMBOL_GPL(rdev_get_drvdata);
 
 /**
- * regulator_get_drvdata - get regulator driver data
- * @regulator: regulator
- *
- * Get regulator driver private data. This call can be used in the consumer
- * driver context when non API regulator specific functions need to be called.
- */
-void *regulator_get_drvdata(struct regulator *regulator)
-{
-	return regulator->rdev->reg_data;
-}
-EXPORT_SYMBOL_GPL(regulator_get_drvdata);
-
-/**
- * regulator_set_drvdata - set regulator driver data
- * @regulator: regulator
- * @data: data
- */
-void regulator_set_drvdata(struct regulator *regulator, void *data)
-{
-	regulator->rdev->reg_data = data;
-}
-EXPORT_SYMBOL_GPL(regulator_set_drvdata);
-
-/**
  * rdev_get_id - get regulator ID
  * @rdev: regulator
  */
