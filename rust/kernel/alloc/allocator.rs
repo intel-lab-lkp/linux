@@ -11,6 +11,7 @@ use crate::bindings;
 use crate::alloc::AllocatorWithFlags;
 
 pub struct KernelAllocator;
+pub struct VmAllocator;
 
 pub(crate) fn aligned_size(new_layout: Layout) -> usize {
     // Customized layouts from `Layout::from_size_align()` can have size < align, so pad first.
@@ -118,6 +119,42 @@ unsafe impl AllocatorWithFlags for KernelAllocator {
         unsafe {
             let raw_ptr = krealloc(ptr, size, flags);
             let ptr = NonNull::new(raw_ptr).ok_or(AllocError)?;
+            Ok(NonNull::slice_from_raw_parts(ptr, size))
+        }
+    }
+}
+
+unsafe impl Allocator for VmAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        self.default_allocate(layout)
+    }
+
+    fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        self.default_allocate_zeroed(layout)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, _layout: Layout) {
+        unsafe { bindings::vfree(ptr.as_ptr() as *const core::ffi::c_void) }
+    }
+}
+
+unsafe impl AllocatorWithFlags for VmAllocator {
+    unsafe fn alloc_flags(&self, layout: Layout, flags: Flags) -> Result<NonNull<[u8]>, AllocError>
+    {
+        unsafe { self.realloc_flags(ptr::null_mut(), 0, layout, flags) }
+    }
+
+    unsafe fn realloc_flags(&self, src: *mut u8, old_size: usize, layout: Layout, flags: Flags) -> Result<NonNull<[u8]>, AllocError>
+    {
+        let size = aligned_size(layout);
+
+        unsafe {
+            let dst = bindings::__vmalloc(size as u64, flags.0);
+            if !src.is_null() {
+                core::ptr::copy_nonoverlapping(src, dst as *mut u8, old_size);
+                bindings::vfree(src as *const core::ffi::c_void);
+            }
+            let ptr = NonNull::new(dst as *mut u8).ok_or(AllocError)?;
             Ok(NonNull::slice_from_raw_parts(ptr, size))
         }
     }
