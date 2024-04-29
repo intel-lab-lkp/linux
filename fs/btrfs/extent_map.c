@@ -284,6 +284,66 @@ static void merge_ondisk_extents(struct extent_map *prev, struct extent_map *nex
 	next->offset = new_offset;
 }
 
+static void dump_extent_map(const char *prefix, struct extent_map *em)
+{
+	if (!IS_ENABLED(CONFIG_BTRFS_DEBUG))
+		return;
+	pr_crit("%s, start=%llu len=%llu disk_bytenr=%llu disk_num_bytes=%llu ram_bytes=%llu offset=%llu orig_start=%llu block_start=%llu block_len=%llu flags=0x%x\n",
+		prefix, em->start, em->len, em->disk_bytenr, em->disk_num_bytes,
+		em->ram_bytes, em->offset, em->orig_start, em->block_start,
+		em->block_len, em->flags);
+	ASSERT(0);
+}
+
+/* Internal sanity checks for btrfs debug builds. */
+static void validate_extent_map(struct extent_map *em)
+{
+	if (!IS_ENABLED(CONFIG_BTRFS_DEBUG))
+		return;
+	if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE) {
+		if (em->disk_num_bytes == 0)
+			dump_extent_map("zero disk_num_bytes", em);
+		if (em->offset + em->len > em->ram_bytes)
+			dump_extent_map("ram_bytes too small", em);
+		if (em->offset + em->len > em->disk_num_bytes &&
+		    !extent_map_is_compressed(em))
+			dump_extent_map("disk_num_bytes too small", em);
+
+		if (extent_map_is_compressed(em)) {
+			if (em->block_start != em->disk_bytenr)
+				dump_extent_map(
+				"mismatch block_start/disk_bytenr/offset", em);
+			if (em->disk_num_bytes != em->block_len)
+				dump_extent_map(
+				"mismatch disk_num_bytes/block_len", em);
+			/*
+			 * Here we only check the start/orig_start/offset for
+			 * compressed extents.
+			 * This is because em::offset is always based on the
+			 * referred data extent, which can be merged.
+			 *
+			 * In that case, @offset would no longer match
+			 * em::start - em::orig_start, and cause false alert.
+			 *
+			 * Thankfully only compressed extent read/encoded write
+			 * really bothers @orig_start, so we can skip
+			 * the check for non-compressed extents.
+			 */
+			if (em->orig_start != em->start - em->offset)
+				dump_extent_map(
+				"mismatch orig_start/offset/start", em);
+
+		} else {
+			if (em->block_start != em->disk_bytenr + em->offset)
+				dump_extent_map(
+				"mismatch block_start/disk_bytenr/offset", em);
+		}
+	} else {
+		if (em->offset)
+			dump_extent_map("non-zero offset for hole/inline", em);
+	}
+}
+
 static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
 {
 	struct extent_map_tree *tree = &inode->extent_tree;
@@ -320,6 +380,7 @@ static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
 				merge_ondisk_extents(merge, em);
 			em->flags |= EXTENT_FLAG_MERGED;
 
+			validate_extent_map(em);
 			rb_erase_cached(&merge->rb_node, &tree->map);
 			RB_CLEAR_NODE(&merge->rb_node);
 			free_extent_map(merge);
@@ -335,6 +396,7 @@ static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
 		em->block_len += merge->block_len;
 		if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE)
 			merge_ondisk_extents(em, merge);
+		validate_extent_map(em);
 		rb_erase_cached(&merge->rb_node, &tree->map);
 		RB_CLEAR_NODE(&merge->rb_node);
 		em->generation = max(em->generation, merge->generation);
@@ -446,6 +508,7 @@ static int add_extent_mapping(struct btrfs_inode *inode,
 
 	lockdep_assert_held_write(&tree->lock);
 
+	validate_extent_map(em);
 	ret = tree_insert(&tree->map, em);
 	if (ret)
 		return ret;
@@ -552,6 +615,9 @@ static void replace_extent_mapping(struct btrfs_inode *inode,
 	struct extent_map_tree *tree = &inode->extent_tree;
 
 	lockdep_assert_held_write(&tree->lock);
+
+	validate_extent_map(cur);
+	validate_extent_map(new);
 
 	WARN_ON(cur->flags & EXTENT_FLAG_PINNED);
 	ASSERT(extent_map_in_tree(cur));
