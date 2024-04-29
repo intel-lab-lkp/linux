@@ -2872,6 +2872,7 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 	 */
 	if (enable_apicv) {
 		apic->apicv_active = true;
+		vcpu->stat.apicv_active = apic->apicv_active;
 		kvm_make_request(KVM_REQ_APICV_UPDATE, vcpu);
 	}
 

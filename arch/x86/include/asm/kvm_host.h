@@ -1573,6 +1573,7 @@ struct kvm_vcpu_stat {
 	u64 preemption_other;
 	u64 guest_mode;
 	u64 notify_window_exits;
+	u64 apicv_active;
 };
 
 struct x86_instruction_info;
