@@ -75,6 +75,14 @@ properties:
         description:
           regulator description for ldo[1-2].
 
+        properties:
+          richtek,use-fix-dvs:
+            type: boolean
+            description: |
+              ldo vout ability is determined by this setting. If it's set, the voltage is unadjustable.
+              There is no risk-free method for software to determine whether the ldo vout is fixed or not.
+              Therefore, it can only be done in this way.
+
 required:
   - compatible
   - reg
@@ -180,6 +188,7 @@ examples:
             regulator-min-microvolt = <1200000>;
             regulator-max-microvolt = <1200000>;
             regulator-always-on;
+            richtek,use-fix-dvs;
             regulator-state-mem {
               regulator-on-in-suspend;
             };
@@ -188,6 +197,7 @@ examples:
             regulator-min-microvolt = <3300000>;
             regulator-max-microvolt = <3300000>;
             regulator-always-on;
+            richtek,use-fix-dvs;
             regulator-state-mem {
               regulator-on-in-suspend;
             };
