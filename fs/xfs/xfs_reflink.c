@@ -702,6 +702,72 @@ out:
 }
 
 /*
+ * Unmap any old data covering the COW target.
+ */
+static int
+xfs_reflink_unmap_old_data(
+	struct xfs_trans	**tpp,
+	struct xfs_inode	*ip,
+	xfs_fileoff_t		offset_fsb,
+	xfs_fileoff_t		end_fsb)
+{
+	struct xfs_ifork	*ifp = &ip->i_df;
+	struct xfs_bmbt_irec	got, del;
+	struct xfs_iext_cursor	icur;
+	unsigned int		freed;
+	int			error;
+
+	ASSERT(!xfs_need_iread_extents(ifp));
+
+restart:
+	freed = 0;
+	if (!xfs_iext_lookup_extent_before(ip, ifp, &end_fsb, &icur, &got))
+		return 0;
+
+	while (got.br_startoff + got.br_blockcount > offset_fsb) {
+		del = got;
+		xfs_trim_extent(&del, offset_fsb, end_fsb - offset_fsb);
+
+		/* Extent delete may have bumped us forward */
+		if (!del.br_blockcount)
+			goto prev_extent;
+
+		trace_xfs_reflink_cow_remap_to(ip, &del);
+		if (isnullstartblock(del.br_startblock)) {
+			xfs_bmap_del_extent_delay(ip, XFS_DATA_FORK, &icur,
+					&got, &del);
+			goto refresh;
+		}
+
+		xfs_bmap_unmap_extent(*tpp, ip, XFS_DATA_FORK, &del);
+		xfs_refcount_decrease_extent(*tpp, &del);
+		xfs_trans_mod_dquot_byino(*tpp, ip, XFS_TRANS_DQ_BCOUNT,
+				-del.br_blockcount);
+
+		/*
+		 * We can't add an unlimited number of EFIs and thus deferred
+		 * unmapped items to a transaction.  Once we've filled our
+		 * quota roll the transaction, which requires us to restart
+		 * the lookup as the deferred item processing will change the
+		 * iext tree.
+		 */
+		if (++freed == XFS_MAX_ITRUNCATE_EFIS) {
+			error = xfs_defer_finish(tpp);
+			if (error)
+				return error;
+			goto restart;
+		}
+prev_extent:
+		xfs_iext_prev(ifp, &icur);
+refresh:
+		if (!xfs_iext_get_extent(ifp, &icur, &got))
+			break;
+	}
+
+	return 0;
+}
+
+/*
  * Remap part of the CoW fork into the data fork.
  *
  * We aim to remap the range starting at @offset_fsb and ending at @end_fsb
@@ -718,16 +784,15 @@ xfs_reflink_end_cow_extent(
 	xfs_fileoff_t		end_fsb)
 {
 	struct xfs_iext_cursor	icur;
-	struct xfs_bmbt_irec	got, del, data;
+	struct xfs_bmbt_irec	got, del;
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	struct xfs_ifork	*ifp = xfs_ifork_ptr(ip, XFS_COW_FORK);
 	unsigned int		resblks;
-	int			nmaps;
 	int			error;
 
 	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
-	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_itruncate, resblks, 0,
 			XFS_TRANS_RESERVE, &tp);
 	if (error)
 		return error;
@@ -767,50 +832,18 @@ xfs_reflink_end_cow_extent(
 	}
 	del = got;
 	xfs_trim_extent(&del, *offset_fsb, end_fsb - *offset_fsb);
+	trace_xfs_reflink_cow_remap_from(ip, &del);
 
 	error = xfs_iext_count_ensure(tp, ip, XFS_DATA_FORK,
 			XFS_IEXT_REFLINK_END_COW_CNT);
 	if (error)
 		goto out_cancel;
 
-	/* Grab the corresponding mapping in the data fork. */
-	nmaps = 1;
-	error = xfs_bmapi_read(ip, del.br_startoff, del.br_blockcount, &data,
-			&nmaps, 0);
+	/* Unmap the old data. */
+	error = xfs_reflink_unmap_old_data(&tp, ip, del.br_startoff,
+			del.br_startoff + del.br_blockcount);
 	if (error)
 		goto out_cancel;
-
-	/* We can only remap the smaller of the two extent sizes. */
-	data.br_blockcount = min(data.br_blockcount, del.br_blockcount);
-	del.br_blockcount = data.br_blockcount;
-
-	trace_xfs_reflink_cow_remap_from(ip, &del);
-	trace_xfs_reflink_cow_remap_to(ip, &data);
-
-	if (xfs_bmap_is_real_extent(&data)) {
-		/*
-		 * If the extent we're remapping is backed by storage (written
-		 * or not), unmap the extent and drop its refcount.
-		 */
-		xfs_bmap_unmap_extent(tp, ip, XFS_DATA_FORK, &data);
-		xfs_refcount_decrease_extent(tp, &data);
-		xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_BCOUNT,
-				-data.br_blockcount);
-	} else if (data.br_startblock == DELAYSTARTBLOCK) {
-		int		done;
-
-		/*
-		 * If the extent we're remapping is a delalloc reservation,
-		 * we can use the regular bunmapi function to release the
-		 * incore state.  Dropping the delalloc reservation takes care
-		 * of the quota reservation for us.
-		 */
-		error = xfs_bunmapi(NULL, ip, data.br_startoff,
-				data.br_blockcount, 0, 1, &done);
-		if (error)
-			goto out_cancel;
-		ASSERT(done);
-	}
 
 	/* Free the CoW orphan record. */
 	xfs_refcount_free_cow_extent(tp, del.br_startblock, del.br_blockcount);
