@@ -2222,15 +2222,13 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 	}
 
 	if (rdev->exclusive) {
-		regulator = ERR_PTR(-EPERM);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(-EPERM);
 	}
 
 	if (get_type == EXCLUSIVE_GET && rdev->open_count) {
-		regulator = ERR_PTR(-EBUSY);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(-EBUSY);
 	}
 
 	mutex_lock(&regulator_list_mutex);
@@ -2238,32 +2236,28 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 	mutex_unlock(&regulator_list_mutex);
 
 	if (ret != 0) {
-		regulator = ERR_PTR(-EPROBE_DEFER);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	ret = regulator_resolve_supply(rdev);
 	if (ret < 0) {
-		regulator = ERR_PTR(ret);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(ret);
 	}
 
 	if (!try_module_get(rdev->owner)) {
-		regulator = ERR_PTR(-EPROBE_DEFER);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	regulator_lock(rdev);
 	regulator = create_regulator(rdev, dev, id);
 	regulator_unlock(rdev);
 	if (regulator == NULL) {
-		regulator = ERR_PTR(-ENOMEM);
 		module_put(rdev->owner);
 		put_device(&rdev->dev);
-		return regulator;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	rdev->open_count++;
